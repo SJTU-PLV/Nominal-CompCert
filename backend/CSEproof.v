@@ -822,7 +822,7 @@ Proof (Genv.find_symbol_match TRANSF).
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_match TRANSF).
+Proof. exact (Senv.senv_match TRANSF). Qed.
 
 Lemma functions_translated:
   forall (v: val) (f: RTL.fundef),

@@ -60,7 +60,7 @@ Proof (Genv.find_symbol_match (proj1 TRANSL)).
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_match (proj1 TRANSL)).
+Proof. exact (Senv.senv_match (proj1 TRANSL)). Qed.
 
 Lemma function_ptr_translated:
   forall b f,

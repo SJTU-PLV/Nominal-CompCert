@@ -40,11 +40,11 @@ Let tge := Genv.globalenv tprog.
 Lemma symbols_preserved:
   forall id,
   Genv.find_symbol tge id = Genv.find_symbol ge id.
-Proof (Genv.find_symbol_transf TRANSL).
+Proof. exact (Genv.find_symbol_transf TRANSL). Qed.
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_transf TRANSL).
+Proof. exact (Senv.senv_transf TRANSL). Qed.
 
 Lemma functions_translated:
   forall v f,
@@ -56,7 +56,7 @@ Lemma function_ptr_translated:
   forall v f,
   Genv.find_funct_ptr ge v = Some f ->
   Genv.find_funct_ptr tge v = Some (transf_fundef f).
-Proof (Genv.find_funct_ptr_transf TRANSL).
+Proof. exact (Genv.find_funct_ptr_transf TRANSL). Qed.
 
 Lemma sig_function_translated:
   forall f,

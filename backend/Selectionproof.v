@@ -124,14 +124,14 @@ Lemma symbols_preserved:
 Proof (Genv.find_symbol_match TRANSF).
 
 Lemma senv_preserved:
-  Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
-Proof (Genv.senv_match TRANSF).
+  Senv.equiv (Senv.of_genv ge) (Senv.of_genv tge).
+Proof. exact (Senv.senv_match TRANSF). Qed.
 
 Lemma function_ptr_translated:
   forall (b: block) (f: Cminor.fundef),
   Genv.find_funct_ptr ge b = Some f ->
   exists cu tf, Genv.find_funct_ptr tge b = Some tf /\ match_fundef cu f tf /\ linkorder cu prog.
-Proof (Genv.find_funct_ptr_match TRANSF).
+Proof. exact (Genv.find_funct_ptr_match TRANSF). Qed.
 
 Lemma functions_translated:
   forall (v v': val) (f: Cminor.fundef),

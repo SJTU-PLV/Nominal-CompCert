@@ -300,14 +300,14 @@ Proof (Genv.find_symbol_match TRANSF).
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_match TRANSF).
+Proof. exact (Senv.senv_match TRANSF). Qed.
 
 Lemma functions_translated:
   forall (v: val) (f: fundef),
   Genv.find_funct ge v = Some f ->
   exists tf,
   Genv.find_funct tge v = Some tf /\ transf_fundef f = OK tf.
-Proof (Genv.find_funct_transf_partial TRANSF).
+Proof. exact (Genv.find_funct_transf_partial TRANSF). Qed.
 
 Lemma function_ptr_translated:
   forall (b: block) (f: fundef),

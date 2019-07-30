@@ -154,7 +154,7 @@ Proof.
 - auto.
 - auto.
 - auto.
-- rewrite (Genv.find_invert_symbol _ _ H0). simpl in H; rewrite H.
+- setoid_rewrite (Genv.find_invert_symbol _ _ H0). simpl in H; setoid_rewrite H.
   rewrite dec_eq_true. auto. 
 Qed.
 
@@ -189,7 +189,9 @@ Proof.
 - auto.
 - auto.
 - auto.
-- simpl in *. rewrite H, H0. rewrite dec_eq_true. auto.  
+- rewrite Senv.public_symbol_of_genv in H.
+  rewrite Senv.find_symbol_of_genv in H0.
+  simpl in *. rewrite H, H0. rewrite dec_eq_true. auto.
 Qed.
 
 (** Volatile memory accesses. *)
@@ -226,10 +228,13 @@ Lemma do_volatile_load_sound:
 Proof.
   intros until v. unfold do_volatile_load. mydestr.
   destruct p as [ev w'']. mydestr.
-  split. constructor; auto. apply Genv.invert_find_symbol; auto.
+  split. constructor; auto.
+  rewrite Senv.block_is_volatile_of_genv; auto.
+  apply Genv.invert_find_symbol; auto.
   apply val_of_eventval_sound; auto.
   econstructor. constructor; eauto. constructor.
-  split. constructor; auto. constructor.
+  split. constructor; auto. rewrite Senv.block_is_volatile_of_genv; auto.
+  constructor.
 Qed.
 
 Lemma do_volatile_load_complete:
@@ -237,7 +242,8 @@ Lemma do_volatile_load_complete:
   volatile_load ge chunk m b ofs t v -> possible_trace w t w' ->
   do_volatile_load w chunk m b ofs = Some(w', t, v).
 Proof.
-  unfold do_volatile_load; intros. inv H; simpl in *.
+  unfold do_volatile_load; intros.
+  inv H; rewrite ?Senv.block_is_volatile_of_genv, ?Senv.find_symbol_of_genv in *.
   rewrite H1. rewrite (Genv.find_invert_symbol _ _ H2). inv H0. inv H8. inv H6. rewrite H9.
   rewrite (val_of_eventval_complete _ _ _ H3). auto.
   rewrite H1. rewrite H2. inv H0. auto.
@@ -249,10 +255,13 @@ Lemma do_volatile_store_sound:
   volatile_store ge chunk m b ofs v t m' /\ possible_trace w t w'.
 Proof.
   intros until m'. unfold do_volatile_store. mydestr.
-  split. constructor; auto. apply Genv.invert_find_symbol; auto.
+  split. constructor; auto.
+  rewrite Senv.block_is_volatile_of_genv; auto.
+  apply Genv.invert_find_symbol; auto.
   apply eventval_of_val_sound; auto.
   econstructor. constructor; eauto. constructor.
-  split. constructor; auto. constructor.
+  split. constructor; auto. rewrite Senv.block_is_volatile_of_genv; auto.
+  constructor.
 Qed.
 
 Lemma do_volatile_store_complete:
@@ -260,7 +269,8 @@ Lemma do_volatile_store_complete:
   volatile_store ge chunk m b ofs v t m' -> possible_trace w t w' ->
   do_volatile_store w chunk m b ofs v = Some(w', t, m').
 Proof.
-  unfold do_volatile_store; intros. inv H; simpl in *.
+  unfold do_volatile_store; intros.
+  inv H; rewrite ?Senv.block_is_volatile_of_genv, ?Senv.find_symbol_of_genv in *.
   rewrite H1. rewrite (Genv.find_invert_symbol _ _ H2).
   rewrite (eventval_of_val_complete _ _ _ H3).
   inv H0. inv H8. inv H6. rewrite H9. auto.

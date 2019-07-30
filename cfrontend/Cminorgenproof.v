@@ -45,7 +45,7 @@ Proof (Genv.find_symbol_transf_partial TRANSL).
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_transf_partial TRANSL).
+Proof. exact (Senv.senv_transf_partial TRANSL). Qed.
 
 Lemma function_ptr_translated:
   forall (b: block) (f: Csharpminor.fundef),

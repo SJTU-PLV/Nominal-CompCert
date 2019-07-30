@@ -392,7 +392,7 @@ Proof (Genv.find_symbol_match TRANSF).
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_match TRANSF).
+Proof. exact (Senv.senv_match TRANSF). Qed.
 
 Lemma functions_translated:
   forall (v: val) (f: RTL.fundef),
@@ -593,13 +593,15 @@ Proof.
   exists v'; intuition auto. constructor; auto. apply vagree_lessdef; auto.
   eapply magree_monotone; eauto. intros; eapply incl_nmem_add; eauto.
 - exists (Vptr sp (Ptrofs.add Ptrofs.zero ofs)); intuition auto with na. constructor.
-- unfold Senv.symbol_address in H; simpl in H.
+- unfold Senv.symbol_address, Genv.symbol_address in H; simpl in H.
+  rewrite Senv.find_symbol_of_genv in H.
   destruct (Genv.find_symbol ge id) as [b|] eqn:FS; simpl in H; try discriminate.
   exploit magree_load; eauto.
   intros. eapply nlive_add; eauto. constructor. apply GM; auto.
   intros (v' & A & B).
   exists v'; intuition auto.
-  constructor. simpl. unfold Senv.symbol_address; simpl; rewrite FS; auto.
+  constructor. simpl. unfold Senv.symbol_address, Genv.symbol_address.
+  rewrite Senv.find_symbol_of_genv; simpl; rewrite FS; auto.
   apply vagree_lessdef; auto.
   eapply magree_monotone; eauto. intros; eapply incl_nmem_add; eauto.
 - exists (Senv.symbol_address ge id ofs); intuition auto with na. constructor.
@@ -660,7 +662,8 @@ Proof.
   induction 1; try (econstructor; now constructor).
 - exploit LD; eauto. intros (v' & A). exists v'; constructor; auto.
 - exploit LD; eauto. intros (v' & A). exists v'; constructor.
-  unfold Senv.symbol_address, Senv.find_symbol. rewrite symbols_preserved. assumption.
+  unfold Senv.symbol_address, Genv.symbol_address.
+  rewrite Senv.find_symbol_of_genv, symbols_preserved. assumption.
 - destruct IHeval_builtin_arg1 as (v1' & A1).
   destruct IHeval_builtin_arg2 as (v2' & A2).
   exists (Val.longofwords v1' v2'); constructor; auto.

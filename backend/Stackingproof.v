@@ -1525,7 +1525,7 @@ Proof (Genv.find_symbol_match TRANSF).
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_match TRANSF).
+Proof. exact (Senv.senv_match TRANSF). Qed.
 
 Lemma functions_translated:
   forall v f,
@@ -1686,7 +1686,7 @@ Proof.
   assert (SYMB: forall id ofs, Val.inject j (Senv.symbol_address ge id ofs) (Senv.symbol_address ge id ofs)).
   { assert (G: meminj_preserves_globals ge j).
     { eapply globalenv_inject_preserves_globals. eapply sep_proj2. eapply sep_proj2. eexact SEP. }
-    intros; unfold Senv.symbol_address; simpl; unfold Genv.symbol_address.
+    intros; unfold Senv.symbol_address, Genv.symbol_address. rewrite !Senv.find_symbol_of_genv.
     destruct (Genv.find_symbol ge id) eqn:FS; auto.
     destruct G. econstructor. eauto. rewrite Ptrofs.add_zero; auto. }
 Local Opaque fe.

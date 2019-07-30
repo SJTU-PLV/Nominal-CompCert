@@ -615,6 +615,34 @@ Definition forall_rpair (A: Type) (P: A -> Prop) (p: rpair A): Prop :=
   | Twolong rhi rlo => P rhi /\ P rlo
   end.
 
+(** ** Program skeletons *)
+
+Section ERASE_PROGRAM.
+
+Variable F V: Type.
+
+Definition erase_globvar (v: globvar V): globvar unit :=
+  {|
+    gvar_info := tt;
+    gvar_init := gvar_init v;
+    gvar_readonly := gvar_readonly v;
+    gvar_volatile := gvar_volatile v;
+  |}.
+
+Definition erase_globdef (g: globdef F V) :=
+  match g with
+  | Gfun f => Gfun tt
+  | Gvar v => Gvar (erase_globvar v)
+  end.
+
+Definition erase_program (p: program F V) : program unit unit :=
+  mkprogram
+    (List.map (fun '(id, g) => (id, erase_globdef g)) p.(prog_defs))
+    p.(prog_public)
+    p.(prog_main).
+
+End ERASE_PROGRAM.
+
 (** * Arguments and results to builtin functions *)
 
 Inductive builtin_arg (A: Type) : Type :=

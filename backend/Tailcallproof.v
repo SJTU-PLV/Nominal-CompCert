@@ -236,7 +236,7 @@ Proof (Genv.find_funct_ptr_transf TRANSL).
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_transf TRANSL).
+Proof. exact (Senv.senv_transf TRANSL). Qed.
 
 Lemma sig_preserved:
   forall f, funsig (transf_fundef f) = funsig f.

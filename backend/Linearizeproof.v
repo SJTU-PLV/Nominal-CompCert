@@ -61,7 +61,7 @@ Proof (Genv.find_symbol_transf_partial TRANSF).
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_transf_partial TRANSF).
+Proof. exact (Senv.senv_transf_partial TRANSF). Qed.
 
 Lemma sig_preserved:
   forall f tf,

@@ -40,7 +40,7 @@ Proof (Genv.find_symbol_match TRANSF).
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_match TRANSF).
+Proof. exact (Senv.senv_match TRANSF). Qed.
 
 Lemma functions_translated:
   forall (v: val) (f: fundef),
@@ -428,12 +428,14 @@ Proof.
 - econstructor; split. constructor. simpl. econstructor; eauto. rewrite ! Ptrofs.add_zero_l; auto.
 - assert (Val.inject F (Senv.symbol_address ge id ofs) (Senv.symbol_address tge id ofs)).
   { unfold Senv.symbol_address; simpl; unfold Genv.symbol_address.
+    rewrite !Senv.find_symbol_of_genv.
     rewrite symbols_preserved. destruct (Genv.find_symbol ge id) as [b|] eqn:FS; auto.
     inv MG. econstructor. eauto. rewrite Ptrofs.add_zero; auto. }
   exploit Mem.loadv_inject; eauto. intros (v' & A & B).
   exists v'; eauto with barg.
 - econstructor; split. constructor.
   unfold Senv.symbol_address; simpl; unfold Genv.symbol_address.
+  rewrite !Senv.find_symbol_of_genv.
   rewrite symbols_preserved. destruct (Genv.find_symbol ge id) as [b|] eqn:FS; auto.
   inv MG. econstructor. eauto. rewrite Ptrofs.add_zero; auto.
 - destruct IHeval_builtin_arg1 as (v1' & A1 & B1).

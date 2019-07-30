@@ -593,7 +593,7 @@ Proof.
   assert (E2: Genv.genv_public tge = p.(prog_public)).
   { unfold tge; rewrite Genv.globalenv_public. eapply match_prog_public; eauto. }
   split; [|split;[|split]]; intros.
-  + simpl; unfold Genv.public_symbol; rewrite E1, E2.
+  + rewrite !Senv.public_symbol_of_genv. unfold Genv.public_symbol. rewrite E1, E2.
     destruct (Genv.find_symbol tge id) as [b'|] eqn:TFS.
     exploit symbols_inject_3; eauto. intros (b & FS & INJ). rewrite FS. auto.
     destruct (Genv.find_symbol ge id) as [b|] eqn:FS; auto.
@@ -602,14 +602,14 @@ Proof.
     eapply kept_public; eauto.
     intros (b' & TFS' & INJ). congruence.
   + eapply symbols_inject_1; eauto.
-  + simpl in *; unfold Genv.public_symbol in H0.
+  + rewrite !Senv.public_symbol_of_genv in *; unfold Genv.public_symbol in H0.
     destruct (Genv.find_symbol ge id) as [b|] eqn:FS; try discriminate.
     rewrite E1 in H0.
     destruct (in_dec ident_eq id (prog_public p)); try discriminate. inv H1.
     exploit symbols_inject_2; eauto.
     eapply kept_public; eauto.
     intros (b' & A & B); exists b'; auto.
-  + simpl. unfold Genv.block_is_volatile.
+  + rewrite !Senv.block_is_volatile_of_genv. unfold Genv.block_is_volatile.
     destruct (Genv.find_var_info ge b1) as [gv|] eqn:V1.
     rewrite Genv.find_var_info_iff in V1.
     exploit defs_inject; eauto. intros (A & B & C).
@@ -839,13 +839,13 @@ Proof.
   intros (v' & A & B). exists v'; auto with barg.
 - econstructor; split; eauto with barg. simpl. econstructor; eauto. rewrite Ptrofs.add_zero; auto.
 - assert (Val.inject j (Senv.symbol_address ge id ofs) (Senv.symbol_address tge id ofs)).
-  { unfold Senv.symbol_address; simpl; unfold Genv.symbol_address.
+  { unfold Senv.symbol_address, Genv.symbol_address. rewrite !Senv.find_symbol_of_genv.
     destruct (Genv.find_symbol ge id) as [b|] eqn:FS; auto.
     exploit symbols_inject_2; eauto. intros (b' & A & B). rewrite A.
     econstructor; eauto. rewrite Ptrofs.add_zero; auto. }
   exploit Mem.loadv_inject; eauto. intros (v' & A & B). exists v'; auto with barg.
 - econstructor; split; eauto with barg.
-  unfold Senv.symbol_address; simpl; unfold Genv.symbol_address.
+  unfold Senv.symbol_address, Genv.symbol_address. rewrite !Senv.find_symbol_of_genv.
   destruct (Genv.find_symbol ge id) as [b|] eqn:FS; auto.
   exploit symbols_inject_2; eauto. intros (b' & A & B). rewrite A.
   econstructor; eauto. rewrite Ptrofs.add_zero; auto.

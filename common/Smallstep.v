@@ -496,7 +496,7 @@ Definition Semantics {state funtype vartype: Type}
      initial_state := initial_state;
      final_state := final_state;
      globalenv := globalenv;
-     symbolenv := Genv.to_senv globalenv |}.
+     symbolenv := Senv.of_genv globalenv |}.
 
 (** Handy notations. *)
 

@@ -371,10 +371,10 @@ Proof.
   intros. unfold eventval_type, Tptr in H2. remember Archi.ptr64 as ptr64.
   inversion H; subst ev1 ty v1; clear H; destruct ev2; simpl in H2; inv H2.
 - exists (Vint i0); constructor.
-- simpl in H1; exploit Senv.public_symbol_exists; eauto. intros [b FS].
+- simpl in H1; exploit Genv.public_symbol_exists; eauto. intros [b FS].
   exists (Vptr b i1); rewrite H3. constructor; auto.
 - exists (Vlong i0); constructor.
-- simpl in H1; exploit Senv.public_symbol_exists; eauto. intros [b FS].
+- simpl in H1; exploit Genv.public_symbol_exists; eauto. intros [b FS].
   exists (Vptr b i1); rewrite H3; constructor; auto.
 - exists (Vfloat f0); constructor.
 - destruct Archi.ptr64; discriminate.
@@ -384,7 +384,7 @@ Proof.
 - exists (Vlong i); unfold Tptr; rewrite H5; constructor.
 - destruct Archi.ptr64; discriminate.
 - destruct Archi.ptr64; discriminate.
-- exploit Senv.public_symbol_exists. eexact H1. intros [b' FS].
+- exploit Genv.public_symbol_exists. eexact H1. intros [b' FS].
   exists (Vptr b' i0); constructor; auto.
 Qed.
 
@@ -1495,7 +1495,8 @@ Proof.
   + simpl in H3. exploit A; eauto. intros EQ; rewrite EQ in H; inv H. auto.
   + simpl in H3. exploit A; eauto. intros EQ; rewrite EQ in H; inv H. auto.
   + simpl in H3. exists b1; split; eauto.
-  + simpl; unfold Genv.block_is_volatile.
+  + simpl; unfold Senv.block_is_volatile, Genv.block_is_volatile.
+    rewrite !Senv.find_var_info_of_genv.
     destruct (Genv.find_var_info ge b1) as [gv1|] eqn:V1.
     * exploit B; eauto. intros EQ; rewrite EQ in H; inv H. rewrite V1; auto.
     * destruct (Genv.find_var_info ge b2) as [gv2|] eqn:V2; auto.
@@ -1600,7 +1601,8 @@ Lemma eval_builtin_arg_preserved:
   forall a v, eval_builtin_arg ge1 e sp m a v -> eval_builtin_arg ge2 e sp m a v.
 Proof.
   assert (EQ: forall id ofs, Senv.symbol_address ge2 id ofs = Senv.symbol_address ge1 id ofs).
-  { unfold Senv.symbol_address; simpl; intros. rewrite symbols_preserved; auto. }
+  { unfold Senv.symbol_address, Genv.symbol_address; simpl; intros.
+    rewrite !Senv.find_symbol_of_genv. rewrite symbols_preserved; auto. }
   induction 1; eauto with barg. rewrite <- EQ in H; eauto with barg. rewrite <- EQ; eauto with barg.
 Qed.
 

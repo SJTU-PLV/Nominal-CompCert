@@ -1015,7 +1015,7 @@ Proof (Genv.find_symbol_match TRANSL).
 
 Lemma senv_preserved:
   Senv.equiv ge tge.
-Proof (Genv.senv_match TRANSL).
+Proof. exact (Senv.senv_match TRANSL). Qed.
 
 Lemma function_ptr_translated:
   forall v f,
