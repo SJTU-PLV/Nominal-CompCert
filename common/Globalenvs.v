@@ -1909,6 +1909,77 @@ Section ERASE.
 
 End ERASE.
 
+(** ** Using Senv's to construct Genv's *)
+
+Definition valid_for {F V} {LF: Linker F} {LV: Linker V} (p: program F V) se :=
+  forall id g, In (id, g) (prog_defs p) ->
+  exists b g',
+    Senv.find_symbol se id = Some b /\
+    Genv.find_def se b = Some g' /\
+    linkorder (erase_globdef g) g'.
+
+Theorem valid_for_erase {F V} {LF: Linker F} {LV: Linker V} p se:
+  valid_for (erase_program p) se ->
+  valid_for p se.
+Proof.
+  intros H id g Hidg.
+  destruct (H id (erase_globdef g)) as (b & g' & Hb & Hg' & Hgg').
+  - apply (in_map (fun '(id, g) => (id, erase_globdef g))) in Hidg. assumption.
+  - exists b, g'. intuition auto. destruct g as [|]; auto.
+Qed.
+
+Section GLOBALENV.
+
+Context (F V : Type) (*{LF: Linker F} {LV: Linker V}*).
+
+Program Definition add_global (ge: Genv.t F V) (idg: ident * globdef F V) :=
+  match (Genv.genv_symb ge) ! (idg#1) with
+    | Some b =>
+      @Genv.mkgenv F V
+        (Genv.genv_public ge)
+        (Genv.genv_symb ge)
+        (PTree.set b idg#2 (Genv.genv_defs ge))
+        (Genv.genv_next ge)
+        _ _ _
+    | None =>
+      ge
+  end.
+Solve All Obligations with
+  destruct ge; eauto.
+Next Obligation.
+  destruct ge; simpl in *.
+  rewrite PTree.gsspec in H. destruct peq; eauto. inv H; eauto.
+Qed.
+
+Definition add_globals (ge: Genv.t F V) (gl: list (ident * globdef F V)) :=
+  List.fold_left add_global gl ge.
+
+Lemma add_globals_app:
+  forall gl2 gl1 ge,
+  add_globals ge (gl1 ++ gl2) = add_globals (add_globals ge gl1) gl2.
+Proof.
+  intros. apply fold_left_app.
+Qed.
+
+Program Definition empty_genv (se: t): Genv.t F V :=
+  @Genv.mkgenv F V
+    (Genv.genv_public se)
+    (Genv.genv_symb se)
+    (PTree.empty _)
+    (Genv.genv_next se)
+    _ _ _.
+Solve All Obligations with
+  destruct se; auto.
+Next Obligation.
+  rewrite PTree.gempty in H. discriminate.
+Qed.
+
+Definition globalenv (p: program F V) (se: t) :=
+  (* XXX check public symbols? *)
+  add_globals (empty_genv se) p.(prog_defs).
+
+End GLOBALENV.
+
 (** ** Relation to [match_program] *)
 
 Section MATCH_PROGRAMS.
