@@ -22,6 +22,7 @@ Require Import AST.
 Require Import Integers.
 Require Import Events.
 Require Import Globalenvs.
+Require Import LanguageInterface.
 Require Import Smallstep.
 Require Import Behaviors.
 
@@ -196,7 +197,7 @@ Qed.
 
 (** * Definition and properties of deterministic semantics *)
 
-Record sem_deterministic (L: semantics) := mk_deterministic {
+Record sem_deterministic (L: closed_sem) := mk_deterministic {
   det_step: forall s0 t1 s1 t2 s2,
     Step L s0 t1 s1 -> Step L s0 t2 s2 -> s1 = s2 /\ t1 = t2;
   det_initial_state: forall s1 s2,
@@ -209,12 +210,12 @@ Record sem_deterministic (L: semantics) := mk_deterministic {
 
 Section DETERM_SEM.
 
-Variable L: semantics.
+Variable L: closed_sem.
 Hypothesis DET: sem_deterministic L.
 
 Ltac use_step_deterministic :=
   match goal with
-  | [ S1: Step L _ ?t1 _, S2: Step L _ ?t2 _ |- _ ] =>
+  | [ S1: Step (csem L) _ ?t1 _, S2: Step (csem L) _ ?t2 _ |- _ ] =>
     destruct (det_step L DET _ _ _ _ _ S1 S2) as [EQ1 EQ2]; subst
   end.
 
@@ -238,7 +239,7 @@ Qed.
 
 Ltac use_star_step_diamond :=
   match goal with
-  | [ S1: Star L _ ?t1 _, S2: Star L _ ?t2 _ |- _ ] =>
+  | [ S1: Star (csem L) _ ?t1 _, S2: Star (csem L) _ ?t2 _ |- _ ] =>
     let t := fresh "t" in let P := fresh "P" in let EQ := fresh "EQ" in
     destruct (star_step_diamond _ _ _ S1 _ _ S2)
     as [t [ [P EQ] | [P EQ] ]]; subst
@@ -246,7 +247,7 @@ Ltac use_star_step_diamond :=
 
 Ltac use_nostep :=
   match goal with
-  | [ S: Step L ?s _ _, NO: Nostep L ?s |- _ ] => elim (NO _ _ S)
+  | [ S: Step (csem L) ?s _ _, NO: Nostep (csem L) ?s |- _ ] => elim (NO _ _ S)
   end.
 
 Lemma star_step_triangle:
@@ -265,7 +266,7 @@ Qed.
 
 Ltac use_star_step_triangle :=
   match goal with
-  | [ S1: Star L _ ?t1 _, S2: Star L _ ?t2 ?s2, NO: Nostep L ?s2 |- _ ] =>
+  | [ S1: Star (csem L) _ ?t1 _, S2: Star (csem L) _ ?t2 ?s2, NO: Nostep (csem L) ?s2 |- _ ] =>
     let t := fresh "t" in let P := fresh "P" in let EQ := fresh "EQ" in
     destruct (star_step_triangle _ _ _ _ _ S1 S2 NO)
     as [t [P EQ]]; subst
@@ -505,25 +506,29 @@ End DETERM_SEM.
 
 Section WORLD_SEM.
 
-Variable L: semantics.
+Variable L: closed_sem.
 Variable initial_world: world.
 
 Notation "s #1" := (fst s) (at level 9, format "s '#1'") : pair_scope.
 Notation "s #2" := (snd s) (at level 9, format "s '#2'") : pair_scope.
 Local Open Scope pair_scope.
 
-Definition world_sem : semantics := @Semantics_gen
+Definition world_sem : closed_sem := {|
+  symbolenv := symbolenv L;
+  csem := @Semantics _ _
   (state L * world)%type
   (genvtype L)
   (fun ge s t s' => step L ge s#1 t s'#1 /\ possible_trace s#2 t s'#2)
   (fun s => initial_state L s#1 /\ s#2 = initial_world)
+  (fun s q => False)
+  (fun s q s' => False)
   (fun s r => final_state L s#1 r)
-  (globalenv L)
-  (symbolenv L).
+  (globalenv L);
+|}.
 
 (** If the original semantics is determinate, the world-aware semantics is deterministic. *)
 
-Hypothesis D: determinate L.
+Hypothesis D: determinate L (symbolenv L).
 
 Theorem world_sem_deterministic: sem_deterministic world_sem.
 Proof.
