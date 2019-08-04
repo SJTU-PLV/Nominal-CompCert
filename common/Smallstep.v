@@ -497,6 +497,25 @@ Record closed_sem := {
 
 (** Handy notations. *)
 
+Notation OpenSem step initial_state at_ext after_ext final_state globalenv p :=
+  {|
+    activate se q :=
+      let ge := globalenv p se in
+      {|
+        step := step se;
+        initial_state := initial_state ge q;
+        at_external := at_ext ge;
+        after_external := after_ext;
+        final_state := final_state;
+        globalenv := ge;
+      |};
+    skel :=
+      AST.erase_program p;
+  |}.
+
+Notation OpenSem' step initial_state at_ext after_ext final_state p :=
+  (OpenSem step initial_state at_ext after_ext final_state Senv.globalenv p).
+
 Notation " 'Step' L " := (step L (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Star' L " := (star (step L) (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Plus' L " := (plus (step L) (globalenv L)) (at level 1) : smallstep_scope.

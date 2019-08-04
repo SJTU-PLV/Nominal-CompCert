@@ -23,6 +23,7 @@ Require Import Events.
 Require Import Globalenvs.
 Require Import Switch.
 Require Cminor.
+Require Import LanguageInterface.
 Require Import Smallstep.
 
 (** Abstract syntax *)
@@ -156,7 +157,7 @@ Inductive state: Type :=
              (m: mem),                  (**r current memory state *)
       state
   | Callstate:                  (**r Invocation of a function *)
-      forall (f: fundef)                (**r function to invoke *)
+      forall (vf: val)                  (**r function to invoke *)
              (args: list val)           (**r arguments provided by caller *)
              (k: cont)                  (**r what to do next  *)
              (m: mem),                  (**r memory state *)
@@ -288,6 +289,7 @@ Definition blocks_of_env (e: env) : list (block * Z * Z) :=
 
 Section RELSEM.
 
+Variable se: Senv.t.
 Variable ge: genv.
 
 (* Evaluation of the address of a variable:
@@ -388,11 +390,11 @@ Inductive step: state -> trace -> state -> Prop :=
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (State f (Scall optid sig a bl) k e le m)
-        E0 (Callstate fd vargs (Kcall optid f e le k) m)
+        E0 (Callstate vf vargs (Kcall optid f e le k) m)
 
   | step_builtin: forall f optid ef bl k e le m vargs t vres m',
       eval_exprlist e le m bl vargs ->
-      external_call ef ge vargs m t vres m' ->
+      external_call ef se vargs m t vres m' ->
       step (State f (Sbuiltin optid ef bl) k e le m)
          t (State f Sskip k e (Cminor.set_optvar optid vres le) m')
 
@@ -448,18 +450,20 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k e le m)
         E0 (State f s' k' e le m)
 
-  | step_internal_function: forall f vargs k m m1 e le,
+  | step_internal_function: forall vf f vargs k m m1 e le,
+      forall FIND: Genv.find_funct ge vf = Some (Internal f),
       list_norepet (map fst f.(fn_vars)) ->
       list_norepet f.(fn_params) ->
       list_disjoint f.(fn_params) f.(fn_temps) ->
       alloc_variables empty_env m (fn_vars f) e m1 ->
       bind_parameters f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
-      step (Callstate (Internal f) vargs k m)
+      step (Callstate vf vargs k m)
         E0 (State f f.(fn_body) k e le m1)
 
-  | step_external_function: forall ef vargs k m t vres m',
-      external_call ef ge vargs m t vres m' ->
-      step (Callstate (External ef) vargs k m)
+  | step_external_function: forall vf ef vargs k m t vres m',
+      forall FIND: Genv.find_funct ge vf = Some (External ef),
+      external_call ef se vargs m t vres m' ->
+      step (Callstate vf vargs k m)
          t (Returnstate vres k m')
 
   | step_return: forall v optid f e le k m,
@@ -473,22 +477,34 @@ End RELSEM.
   corresponding to the invocation of the ``main'' function of the program
   without arguments and with an empty continuation. *)
 
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      funsig f = signature_main ->
-      initial_state p (Callstate f nil Kstop m0).
+Inductive initial_state (ge: genv): c_query -> state -> Prop :=
+  | initial_state_intro: forall vf f vargs m,
+      Genv.find_funct ge vf = Some (Internal f) ->
+      initial_state ge
+        (cq vf (fn_sig f) vargs m)
+        (Callstate vf vargs Kstop m).
 
-(** A final state is a [Returnstate] with an empty continuation. *)
+Inductive at_external (ge: genv): state -> c_query -> Prop :=
+  | at_external_intro vf name sg vargs k m:
+      Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
+      at_external ge
+        (Callstate vf vargs k m)
+        (cq vf sg vargs m).
 
-Inductive final_state: state -> int -> Prop :=
+Inductive after_external: state -> c_reply -> state -> Prop :=
+  | after_external_intro vf vargs k m vres m':
+      after_external
+        (Callstate vf vargs k m)
+        (cr vres m')
+        (Returnstate vres k m').
+
+Inductive final_state: state -> c_reply -> Prop :=
   | final_state_intro: forall r m,
-      final_state (Returnstate (Vint r) Kstop m) r.
+      final_state
+        (Returnstate r Kstop m)
+        (cr r m).
 
 (** Wrapping up these definitions in a small-step semantics. *)
 
 Definition semantics (p: program) :=
-  Semantics step (initial_state p) final_state (Genv.globalenv p).
+  OpenSem' step initial_state at_external after_external final_state p.

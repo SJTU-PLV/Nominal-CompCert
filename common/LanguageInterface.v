@@ -1,4 +1,6 @@
 Require Import AST.
+Require Import Values.
+Require Import Memory.
 Require Import Globalenvs.
 
 (** * Semantic interface of languages *)
@@ -18,6 +20,28 @@ Definition li_null :=
   {|
     query := Empty_set;
     reply := Empty_set;
+  |}.
+
+(** ** Interface for C-like languages *)
+
+Record c_query :=
+  cq {
+    cq_vf: val;
+    cq_sg: signature;
+    cq_args: list val;
+    cq_mem: mem;
+  }.
+
+Record c_reply :=
+  cr {
+    cr_retval: val;
+    cr_mem: mem;
+  }.
+
+Canonical Structure li_c :=
+  {|
+    query := c_query;
+    reply := c_reply;
   |}.
 
 (** * Calling conventions *)

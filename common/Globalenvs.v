@@ -1930,7 +1930,7 @@ Qed.
 
 Section GLOBALENV.
 
-Context (F V : Type) (*{LF: Linker F} {LV: Linker V}*).
+Context {F V : Type}.
 
 Program Definition add_global (ge: Genv.t F V) (idg: ident * globdef F V) :=
   match (Genv.genv_symb ge) ! (idg#1) with

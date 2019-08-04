@@ -27,6 +27,7 @@ Require Import AST.
 Require Import Memory.
 Require Import Events.
 Require Import Globalenvs.
+Require Import LanguageInterface.
 Require Import Smallstep.
 Require Import Ctypes.
 Require Import Cop.
@@ -181,8 +182,8 @@ Definition program := Ctypes.program function.
 
 Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
 
-Definition globalenv (p: program) :=
-  {| genv_genv := Genv.globalenv p; genv_cenv := p.(prog_comp_env) |}.
+Definition globalenv (p: program) (se: Senv.t) :=
+  {| genv_genv := Senv.globalenv p se; genv_cenv := p.(prog_comp_env) |}.
 
 (** The local environment maps local variables to block references and
   types.  The current value of the variable is stored in the
@@ -239,6 +240,7 @@ Inductive assign_loc (ce: composite_env) (ty: type) (m: mem) (b: block) (ofs: pt
 
 Section SEMANTICS.
 
+Variable se: Senv.t.
 Variable ge: genv.
 
 (** Allocation of function-local variables.
@@ -484,7 +486,7 @@ Inductive state: Type :=
       (le: temp_env)
       (m: mem) : state
   | Callstate
-      (fd: fundef)
+      (vf: val)
       (args: list val)
       (k: cont)
       (m: mem) : state
@@ -566,11 +568,11 @@ Inductive step: state -> trace -> state -> Prop :=
       Genv.find_funct ge vf = Some fd ->
       type_of_fundef fd = Tfunction tyargs tyres cconv ->
       step (State f (Scall optid a al) k e le m)
-        E0 (Callstate fd vargs (Kcall optid f e le k) m)
+        E0 (Callstate vf vargs (Kcall optid f e le k) m)
 
   | step_builtin:   forall f optid ef tyargs al k e le m vargs t vres m',
       eval_exprlist e le m al tyargs vargs ->
-      external_call ef ge vargs m t vres m' ->
+      external_call ef se vargs m t vres m' ->
       step (State f (Sbuiltin optid ef tyargs al) k e le m)
          t (State f Sskip k e (set_opttemp optid vres le) m')
 
@@ -648,14 +650,16 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k e le m)
         E0 (State f s' k' e le m)
 
-  | step_internal_function: forall f vargs k m e le m1,
+  | step_internal_function: forall vf f vargs k m e le m1,
+      forall FIND: Genv.find_funct ge vf = Some (Internal f),
       function_entry f vargs m e le m1 ->
-      step (Callstate (Internal f) vargs k m)
+      step (Callstate vf vargs k m)
         E0 (State f f.(fn_body) k e le m1)
 
-  | step_external_function: forall ef targs tres cconv vargs k m vres t m',
-      external_call ef ge vargs m t vres m' ->
-      step (Callstate (External ef targs tres cconv) vargs k m)
+  | step_external_function: forall vf ef targs tres cconv vargs k m vres t m',
+      forall FIND: Genv.find_funct ge vf = Some (External ef targs tres cconv),
+      external_call ef se vargs m t vres m' ->
+      step (Callstate vf vargs k m)
          t (Returnstate vres k m')
 
   | step_returnstate: forall v optid f e le k m,
@@ -669,20 +673,34 @@ Inductive step: state -> trace -> state -> Prop :=
   corresponding to the invocation of the ``main'' function of the program
   without arguments and with an empty continuation. *)
 
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      type_of_fundef f = Tfunction Tnil type_int32s cc_default ->
-      initial_state p (Callstate f nil Kstop m0).
+Inductive initial_state: c_query -> state -> Prop :=
+  | initial_state_intro: forall vf f targs tres tcc vargs m,
+      Genv.find_funct ge vf = Some (Internal f) ->
+      type_of_function f = Tfunction targs tres tcc ->
+      initial_state
+        (cq vf (signature_of_type targs tres tcc) vargs m)
+        (Callstate vf vargs Kstop m).
 
-(** A final state is a [Returnstate] with an empty continuation. *)
+Inductive at_external: state -> c_query -> Prop :=
+  | at_external_intro name sg targs tres cconv vf vargs k m:
+      let f := External (EF_external name sg) targs tres cconv in
+      Genv.find_funct ge vf = Some f ->
+      at_external
+        (Callstate vf vargs k m)
+        (cq vf sg vargs m).
 
-Inductive final_state: state -> int -> Prop :=
+Inductive after_external: state -> c_reply -> state -> Prop :=
+  | after_external_intro vf vargs k m vres m':
+      after_external
+        (Callstate vf vargs k m)
+        (cr vres m')
+        (Returnstate vres k m').
+
+Inductive final_state: state -> c_reply -> Prop :=
   | final_state_intro: forall r m,
-      final_state (Returnstate (Vint r) Kstop m) r.
+      final_state
+        (Returnstate r Kstop m)
+        (cr r m).
 
 End SEMANTICS.
 
@@ -696,7 +714,7 @@ Inductive function_entry1 (ge: genv) (f: function) (vargs: list val) (m: mem) (e
       le = create_undef_temps f.(fn_temps) ->
       function_entry1 ge f vargs m e le m'.
 
-Definition step1 (ge: genv) := step ge (function_entry1 ge).
+Definition step1 (se: Senv.t) (ge: genv) := step se ge (function_entry1 ge).
 
 (** Second, parameters as temporaries. *)
 
@@ -709,27 +727,25 @@ Inductive function_entry2 (ge: genv)  (f: function) (vargs: list val) (m: mem) (
       bind_parameter_temps f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
       function_entry2 ge f vargs m e le m'.
 
-Definition step2 (ge: genv) := step ge (function_entry2 ge).
+Definition step2 (se: Senv.t) (ge: genv) := step se ge (function_entry2 ge).
 
 (** Wrapping up these definitions in two small-step semantics. *)
 
 Definition semantics1 (p: program) :=
-  let ge := globalenv p in
-  Semantics_gen step1 (initial_state p) final_state ge ge.
+  OpenSem step1 initial_state at_external after_external final_state globalenv p.
 
 Definition semantics2 (p: program) :=
-  let ge := globalenv p in
-  Semantics_gen step2 (initial_state p) final_state ge ge.
+  OpenSem step2 initial_state at_external after_external final_state globalenv p.
 
 (** This semantics is receptive to changes in events. *)
 
 Lemma semantics_receptive:
-  forall (p: program), receptive (semantics1 p).
+  forall (p: program), open_receptive (semantics1 p).
 Proof.
-  intros. unfold semantics1.
-  set (ge := globalenv p). constructor; simpl; intros.
+  intros p se q. unfold semantics1. simpl.
+  set (ge := globalenv p se). constructor; simpl; intros.
 (* receptiveness *)
-  assert (t1 = E0 -> exists s2, step1 ge s t2 s2).
+  assert (t1 = E0 -> exists s2, step1 se ge s t2 s2).
     intros. subst. inv H0. exists s1; auto.
   inversion H; subst; auto.
   (* builtin *)
