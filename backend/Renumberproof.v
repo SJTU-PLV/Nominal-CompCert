@@ -14,7 +14,7 @@
 
 Require Import Coqlib Maps Postorder.
 Require Import AST Linking.
-Require Import Values Memory Globalenvs Events Smallstep.
+Require Import Values Memory Globalenvs Events LanguageInterface Smallstep.
 Require Import Op Registers RTL Renumber.
 
 Definition match_prog (p tp: RTL.program) :=
@@ -30,45 +30,25 @@ Section PRESERVATION.
 
 Variables prog tprog: program.
 Hypothesis TRANSL: match_prog prog tprog.
-Let ge := Genv.globalenv prog.
-Let tge := Genv.globalenv tprog.
+Variable se: Senv.t.
+Let ge := Senv.globalenv prog se.
+Let tge := Senv.globalenv tprog se.
 
 Lemma functions_translated:
   forall v f,
   Genv.find_funct ge v = Some f ->
   Genv.find_funct tge v = Some (transf_fundef f).
-Proof (Genv.find_funct_transf TRANSL).
-
-Lemma function_ptr_translated:
-  forall v f,
-  Genv.find_funct_ptr ge v = Some f ->
-  Genv.find_funct_ptr tge v = Some (transf_fundef f).
-Proof (Genv.find_funct_ptr_transf TRANSL).
+Proof. exact (Senv.find_funct_transf TRANSL). Qed.
 
 Lemma symbols_preserved:
   forall id,
   Genv.find_symbol tge id = Genv.find_symbol ge id.
-Proof (Genv.find_symbol_transf TRANSL).
-
-Lemma senv_preserved:
-  Senv.equiv ge tge.
-Proof. exact (Senv.senv_transf TRANSL). Qed.
+Proof. apply Senv.find_symbol_transf; auto. Qed.
 
 Lemma sig_preserved:
   forall f, funsig (transf_fundef f) = funsig f.
 Proof.
   destruct f; reflexivity.
-Qed.
-
-Lemma find_function_translated:
-  forall ros rs fd,
-  find_function ge ros rs = Some fd ->
-  find_function tge ros rs = Some (transf_fundef fd).
-Proof.
-  unfold find_function; intros. destruct ros as [r|id].
-  eapply functions_translated; eauto.
-  rewrite symbols_preserved. destruct (Genv.find_symbol ge id); try congruence.
-  eapply function_ptr_translated; eauto.
 Qed.
 
 (** Effect of an injective renaming of nodes on a CFG. *)
@@ -146,19 +126,19 @@ Inductive match_states: RTL.state -> RTL.state -> Prop :=
         (REACH: reach f pc),
       match_states (State stk f sp pc rs m)
                    (State stk' (transf_function f) sp (renum_pc (pnum f) pc) rs m)
-  | match_callstates: forall stk f args m stk'
+  | match_callstates: forall stk vf args m stk'
         (STACKS: list_forall2 match_frames stk stk'),
-      match_states (Callstate stk f args m)
-                   (Callstate stk' (transf_fundef f) args m)
+      match_states (Callstate stk vf args m)
+                   (Callstate stk' vf args m)
   | match_returnstates: forall stk v m stk'
         (STACKS: list_forall2 match_frames stk stk'),
       match_states (Returnstate stk v m)
                    (Returnstate stk' v m).
 
 Lemma step_simulation:
-  forall S1 t S2, RTL.step ge S1 t S2 ->
+  forall S1 t S2, RTL.step se ge S1 t S2 ->
   forall S1', match_states S1 S1' ->
-  exists S2', RTL.step tge S1' t S2' /\ match_states S2 S2'.
+  exists S2', RTL.step se tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   induction 1; intros S1' MS; inv MS; try TR_AT.
 (* nop *)
@@ -167,7 +147,6 @@ Proof.
 (* op *)
   econstructor; split.
   eapply exec_Iop; eauto.
-  instantiate (1 := v). rewrite <- H0. apply eval_operation_preserved. exact symbols_preserved.
   constructor; auto. eapply reach_succ; eauto. simpl; auto.
 (* load *)
   econstructor; split.
@@ -184,20 +163,19 @@ Proof.
 (* call *)
   econstructor; split.
   eapply exec_Icall with (fd := transf_fundef fd); eauto.
-    eapply find_function_translated; eauto.
+    eapply functions_translated; eauto.
     apply sig_preserved.
   constructor. constructor; auto. constructor. eapply reach_succ; eauto. simpl; auto.
 (* tailcall *)
   econstructor; split.
   eapply exec_Itailcall with (fd := transf_fundef fd); eauto.
-    eapply find_function_translated; eauto.
+    eapply functions_translated; eauto.
     apply sig_preserved.
   constructor. auto.
 (* builtin *)
   econstructor; split.
   eapply exec_Ibuiltin; eauto.
-    eapply eval_builtin_args_preserved with (ge1 := ge); eauto. exact symbols_preserved.
-    eapply external_call_symbols_preserved; eauto. apply senv_preserved.
+    eapply eval_builtin_args_preserved with (ge1 := ge); eauto.
   constructor; auto. eapply reach_succ; eauto. simpl; auto.
 (* cond *)
   econstructor; split.
@@ -216,12 +194,13 @@ Proof.
   constructor; auto.
 (* internal function *)
   simpl. econstructor; split.
+  eapply functions_translated in FIND.
   eapply exec_function_internal; eauto.
   constructor; auto. unfold reach. constructor.
 (* external function *)
   econstructor; split.
+  eapply functions_translated in FIND.
   eapply exec_function_external; eauto.
-    eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   constructor; auto.
 (* return *)
   inv STACKS. inv H1.
@@ -230,17 +209,27 @@ Proof.
   constructor; auto.
 Qed.
 
-Lemma transf_initial_states:
-  forall S1, RTL.initial_state prog S1 ->
-  exists S2, RTL.initial_state tprog S2 /\ match_states S1 S2.
+Lemma transf_initial_states q:
+  forall S1, RTL.initial_state ge q S1 ->
+  exists S2, RTL.initial_state tge q S2 /\ match_states S1 S2.
 Proof.
   intros. inv H. econstructor; split.
+  setoid_rewrite <- (sig_preserved (Internal f)).
   econstructor.
-    eapply (Genv.init_mem_transf TRANSL); eauto.
-    rewrite symbols_preserved. rewrite (match_program_main TRANSL). eauto.
-    eapply function_ptr_translated; eauto.
-    rewrite <- H3; apply sig_preserved.
+    eapply (functions_translated _ (Internal f)); eauto.
   constructor. constructor.
+Qed.
+
+Lemma transf_external:
+  forall S R q, match_states S R -> RTL.at_external ge S q ->
+  RTL.at_external tge R q /\
+  forall r S', RTL.after_external S r S' ->
+  exists R', RTL.after_external R r R' /\ match_states S' R'.
+Proof.
+  intros S R q HSR Hq. destruct Hq; inv HSR.
+  eapply functions_translated in H. simpl in H.
+  split. econstructor; eauto. intros r S' HS'. inv HS'.
+  eexists. split; econstructor; eauto.
 Qed.
 
 Lemma transf_final_states:
@@ -249,17 +238,19 @@ Proof.
   intros. inv H0. inv H. inv STACKS. constructor.
 Qed.
 
-Theorem transf_program_correct:
-  forward_simulation (RTL.semantics prog) (RTL.semantics tprog).
-Proof.
-  eapply forward_simulation_step.
-  apply senv_preserved.
-  eexact transf_initial_states.
-  eexact transf_final_states.
-  exact step_simulation.
-Qed.
-
 End PRESERVATION.
+
+Theorem transf_program_correct prog tprog:
+  match_prog prog tprog ->
+  open_fsim cc_id cc_id (RTL.semantics prog) (RTL.semantics tprog).
+Proof.
+  intros MATCH [ ] se _ q _ [ ] [ ].
+  eapply forward_simulation_step; simpl.
+  - eauto using transf_initial_states.
+  - eauto using transf_final_states.
+  - intros. edestruct transf_external; eauto. exists tt, q1. intuition subst; eauto.
+  - eauto using step_simulation.
+Qed.
 
 
 

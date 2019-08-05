@@ -2088,11 +2088,29 @@ Qed.
 
 End TRANSFORM_PARTIAL.
 
+(** Special case for total transformations that do not depend on the compilation unit *)
+
 Section TRANSFORM_TOTAL.
 
 Context {A B V: Type} {LA: Linker A} {LV: Linker V}.
-Context {transf: A -> B} {p: program A V} {tp: program B V}.
+Context {transf: A -> B} {p: program A V} {tp: program B V} {se: t}.
 Hypothesis progmatch: match_program (fun cu f tf => tf = transf f) eq p tp.
+
+Theorem find_funct_transf:
+  forall v f,
+  Genv.find_funct (globalenv p se) v = Some f ->
+  Genv.find_funct (globalenv tp se) v = Some (transf f).
+Proof.
+  intros. exploit (find_funct_match se progmatch); eauto.
+  intros (cu & tf & P & Q & R). congruence.
+Qed.
+
+Theorem find_symbol_transf:
+  forall (s : ident),
+  Genv.find_symbol (globalenv tp se) s = Genv.find_symbol (globalenv p se) s.
+Proof.
+  intros. symmetry. eapply (find_symbol_match p tp se s).
+Qed.
 
 Theorem senv_transf:
   Senv.equiv (of_genv (Genv.globalenv p)) (of_genv (Genv.globalenv tp)).
