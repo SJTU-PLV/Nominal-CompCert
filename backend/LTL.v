@@ -129,6 +129,9 @@ Inductive stackframe : Type :=
              (sp: val)          (**r stack pointer in calling function *)
              (ls: locset)       (**r location state in calling function *)
              (bb: bblock),      (**r continuation in calling function *)
+      stackframe
+  | Stacktop:
+      forall (ls: locset),      (**r incoming location state *)
       stackframe.
 
 Inductive state : Type :=
@@ -150,7 +153,7 @@ Inductive state : Type :=
       state
   | Callstate:
       forall (stack: list stackframe) (**r call stack *)
-             (f: fundef)              (**r function to call *)
+             (vf: val)                (**r function to call *)
              (ls: locset)             (**r location state of caller *)
              (m: mem),                (**r memory state *)
       state
@@ -163,6 +166,7 @@ Inductive state : Type :=
 
 Section RELSEM.
 
+Variable se: Senv.t.
 Variable ge: genv.
 
 Definition reglist (rs: locset) (rl: list mreg) : list val :=
@@ -180,14 +184,10 @@ Definition destroyed_by_getstack (s: slot): list mreg :=
   | _        => nil
   end.
 
-Definition find_function (ros: mreg + ident) (rs: locset) : option fundef :=
+Definition ros_address (ros: mreg + ident) (rs: locset) : val :=
   match ros with
-  | inl r => Genv.find_funct ge (rs (R r))
-  | inr symb =>
-      match Genv.find_symbol ge symb with
-      | None => None
-      | Some b => Genv.find_funct_ptr ge b
-      end
+  | inl r => rs (R r)
+  | inr symb => Genv.symbol_address ge symb Ptrofs.zero
   end.
 
 (** [parent_locset cs] returns the mapping of values for locations
@@ -197,6 +197,7 @@ Definition parent_locset (stack: list stackframe) : locset :=
   match stack with
   | nil => Locmap.init Vundef
   | Stackframe f sp ls bb :: stack' => ls
+  | Stacktop ls :: stack' => ls
   end.
 
 Inductive step: state -> trace -> state -> Prop :=
@@ -230,20 +231,22 @@ Inductive step: state -> trace -> state -> Prop :=
       step (Block s f sp (Lstore chunk addr args src :: bb) rs m)
         E0 (Block s f sp bb rs' m')
   | exec_Lcall: forall s f sp sig ros bb rs m fd,
-      find_function ros rs = Some fd ->
+      let vf := ros_address ros rs in
+      Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (Block s f sp (Lcall sig ros :: bb) rs m)
-        E0 (Callstate (Stackframe f sp rs bb :: s) fd rs m)
+        E0 (Callstate (Stackframe f sp rs bb :: s) vf rs m)
   | exec_Ltailcall: forall s f sp sig ros bb rs m fd rs' m',
+      let vf := ros_address ros rs' in
       rs' = return_regs (parent_locset s) rs ->
-      find_function ros rs' = Some fd ->
+      Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       Mem.free m sp 0 f.(fn_stacksize) = Some m' ->
       step (Block s f (Vptr sp Ptrofs.zero) (Ltailcall sig ros :: bb) rs m)
-        E0 (Callstate s fd rs' m')
+        E0 (Callstate s vf rs' m')
   | exec_Lbuiltin: forall s f sp ef args res bb rs m vargs t vres rs' m',
       eval_builtin_args ge rs sp m args vargs ->
-      external_call ef ge vargs m t vres m' ->
+      external_call ef se vargs m t vres m' ->
       rs' = Locmap.setres res vres (undef_regs (destroyed_by_builtin ef) rs) ->
       step (Block s f sp (Lbuiltin ef args res :: bb) rs m)
          t (Block s f sp bb rs' m')
@@ -266,16 +269,18 @@ Inductive step: state -> trace -> state -> Prop :=
       Mem.free m sp 0 f.(fn_stacksize) = Some m' ->
       step (Block s f (Vptr sp Ptrofs.zero) (Lreturn :: bb) rs m)
         E0 (Returnstate s (return_regs (parent_locset s) rs) m')
-  | exec_function_internal: forall s f rs m m' sp rs',
+  | exec_function_internal: forall s vf f rs m m' sp rs',
+      forall FIND: Genv.find_funct ge vf = Some (Internal f),
       Mem.alloc m 0 f.(fn_stacksize) = (m', sp) ->
       rs' = undef_regs destroyed_at_function_entry (call_regs rs) ->
-      step (Callstate s (Internal f) rs m)
+      step (Callstate s vf rs m)
         E0 (State s f (Vptr sp Ptrofs.zero) f.(fn_entrypoint) rs' m')
-  | exec_function_external: forall s ef t args res rs m rs' m',
+  | exec_function_external: forall s vf ef t args res rs m rs' m',
+      forall FIND: Genv.find_funct ge vf = Some (External ef),
       args = map (fun p => Locmap.getpair p rs) (loc_arguments (ef_sig ef)) ->
-      external_call ef ge args m t res m' ->
+      external_call ef se args m t res m' ->
       rs' = Locmap.setpair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs) ->
-      step (Callstate s (External ef) rs m)
+      step (Callstate s vf rs m)
          t (Returnstate s rs' m')
   | exec_return: forall f sp rs1 bb s rs m,
       step (Returnstate (Stackframe f sp rs1 bb :: s) rs m)
@@ -288,22 +293,35 @@ End RELSEM.
   main function, to be found in the machine register dictated
   by the calling conventions. *)
 
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      funsig f = signature_main ->
-      initial_state p (Callstate nil f (Locmap.init Vundef) m0).
+Inductive initial_state (ge: genv): locset_query -> state -> Prop :=
+  | initial_state_intro: forall vf f rs m,
+      Genv.find_funct ge vf = Some (Internal f) ->
+      initial_state ge
+        (lq vf (fn_sig f) rs m)
+        (Callstate (Stacktop rs :: nil) vf rs m).
 
-Inductive final_state: state -> int -> Prop :=
-  | final_state_intro: forall rs m retcode,
-      Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
-      final_state (Returnstate nil rs m) retcode.
+Inductive at_external (ge: genv): state -> locset_query -> Prop :=
+  | at_external_intro vf name sg s rs m:
+      Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
+      at_external ge
+        (Callstate s vf rs m)
+        (lq vf sg rs m).
+
+Inductive after_external: state -> locset_reply -> state -> Prop :=
+  | after_external_intro b s rs m rs' m':
+      after_external
+        (Callstate s b rs m)
+        (lr rs' m')
+        (Returnstate s rs' m').
+
+Inductive final_state: state -> locset_reply -> Prop :=
+  | final_state_intro: forall init_rs s rs m,
+      final_state
+        (Returnstate (Stacktop init_rs :: s) rs m)
+        (lr rs m).
 
 Definition semantics (p: program) :=
-  Semantics step (initial_state p) final_state (Genv.globalenv p).
+  OpenSem' step initial_state at_external after_external final_state p.
 
 (** * Operations over LTL *)
 

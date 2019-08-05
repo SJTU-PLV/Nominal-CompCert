@@ -91,16 +91,13 @@ Fixpoint find_label (lbl: label) (c: code) {struct c} : option code :=
 
 Section RELSEM.
 
+Variable se: Senv.t.
 Variable ge: genv.
 
-Definition find_function (ros: mreg + ident) (rs: locset) : option fundef :=
+Definition ros_address (ros: mreg + ident) (rs: locset) : val :=
   match ros with
-  | inl r => Genv.find_funct ge (rs (R r))
-  | inr symb =>
-      match Genv.find_symbol ge symb with
-      | None => None
-      | Some b => Genv.find_funct_ptr ge b
-      end
+  | inl r => rs (R r)
+  | inr symb => Genv.symbol_address ge symb Ptrofs.zero
   end.
 
 (** Linear execution states. *)
@@ -111,6 +108,9 @@ Inductive stackframe: Type :=
              (sp: val)             (**r stack pointer in calling function *)
              (rs: locset)          (**r location state in calling function *)
              (c: code),            (**r program point in calling function *)
+      stackframe
+  | Stacktop:
+      forall (ls: locset),         (**r incoming location state *)
       stackframe.
 
 Inductive state: Type :=
@@ -124,7 +124,7 @@ Inductive state: Type :=
       state
   | Callstate:
       forall (stack: list stackframe) (**r call stack *)
-             (f: fundef)              (**r function to call *)
+             (vf: val)                (**r function to call *)
              (rs: locset)             (**r location state at point of call *)
              (m: mem),                (**r memory state *)
       state
@@ -140,6 +140,7 @@ Definition parent_locset (stack: list stackframe) : locset :=
   match stack with
   | nil => Locmap.init Vundef
   | Stackframe f sp ls c :: stack' => ls
+  | Stacktop ls :: stack' => ls
   end.
 
 Inductive step: state -> trace -> state -> Prop :=
@@ -175,22 +176,24 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (State s f sp b rs' m')
   | exec_Lcall:
       forall s f sp sig ros b rs m f',
-      find_function ros rs = Some f' ->
+      let vf := ros_address ros rs in
+      Genv.find_funct ge vf = Some f' ->
       sig = funsig f' ->
       step (State s f sp (Lcall sig ros :: b) rs m)
-        E0 (Callstate (Stackframe f sp rs b:: s) f' rs m)
+        E0 (Callstate (Stackframe f sp rs b:: s) vf rs m)
   | exec_Ltailcall:
       forall s f stk sig ros b rs m rs' f' m',
+      let vf := ros_address ros rs' in
       rs' = return_regs (parent_locset s) rs ->
-      find_function ros rs' = Some f' ->
+      Genv.find_funct ge vf = Some f' ->
       sig = funsig f' ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       step (State s f (Vptr stk Ptrofs.zero) (Ltailcall sig ros :: b) rs m)
-        E0 (Callstate s f' rs' m')
+        E0 (Callstate s vf rs' m')
   | exec_Lbuiltin:
       forall s f sp rs m ef args res b vargs t vres rs' m',
       eval_builtin_args ge rs sp m args vargs ->
-      external_call ef ge vargs m t vres m' ->
+      external_call ef se vargs m t vres m' ->
       rs' = Locmap.setres res vres (undef_regs (destroyed_by_builtin ef) rs) ->
       step (State s f sp (Lbuiltin ef args res :: b) rs m)
          t (State s f sp b rs' m')
@@ -230,17 +233,19 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s f (Vptr stk Ptrofs.zero) (Lreturn :: b) rs m)
         E0 (Returnstate s (return_regs (parent_locset s) rs) m')
   | exec_function_internal:
-      forall s f rs m rs' m' stk,
+      forall s vf f rs m rs' m' stk,
+      forall FIND: Genv.find_funct ge vf = Some (Internal f),
       Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
       rs' = undef_regs destroyed_at_function_entry (call_regs rs) ->
-      step (Callstate s (Internal f) rs m)
+      step (Callstate s vf rs m)
         E0 (State s f (Vptr stk Ptrofs.zero) f.(fn_code) rs' m')
   | exec_function_external:
-      forall s ef args res rs1 rs2 m t m',
+      forall s vf ef args res rs1 rs2 m t m',
+      forall FIND: Genv.find_funct ge vf = Some (External ef),
       args = map (fun p => Locmap.getpair p rs1) (loc_arguments (ef_sig ef)) ->
-      external_call ef ge args m t res m' ->
+      external_call ef se args m t res m' ->
       rs2 = Locmap.setpair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs1) ->
-      step (Callstate s (External ef) rs1 m)
+      step (Callstate s vf rs1 m)
          t (Returnstate s rs2 m')
   | exec_return:
       forall s f sp rs0 c rs m,
@@ -249,19 +254,32 @@ Inductive step: state -> trace -> state -> Prop :=
 
 End RELSEM.
 
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      funsig f = signature_main ->
-      initial_state p (Callstate nil f (Locmap.init Vundef) m0).
+Inductive initial_state (ge: genv): locset_query -> state -> Prop :=
+  | initial_state_intro: forall vf f rs m,
+      Genv.find_funct ge vf = Some (Internal f) ->
+      initial_state ge
+        (lq vf (fn_sig f) rs m)
+        (Callstate (Stacktop rs :: nil) vf rs m).
 
-Inductive final_state: state -> int -> Prop :=
-  | final_state_intro: forall rs m retcode,
-      Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
-      final_state (Returnstate nil rs m) retcode.
+Inductive at_external (ge: genv): state -> locset_query -> Prop :=
+  | at_external_intro vf name sg s rs m:
+      Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
+      at_external ge
+        (Callstate s vf rs m)
+        (lq vf sg rs m).
+
+Inductive after_external: state -> locset_reply -> state -> Prop :=
+  | after_external_intro b s rs m rs' m':
+      after_external
+        (Callstate s b rs m)
+        (lr rs' m')
+        (Returnstate s rs' m').
+
+Inductive final_state: state -> locset_reply -> Prop :=
+  | final_state_intro: forall init_rs s rs m,
+      final_state
+        (Returnstate (Stacktop init_rs :: s) rs m)
+        (lr rs m).
 
 Definition semantics (p: program) :=
-  Semantics step (initial_state p) final_state (Genv.globalenv p).
+  OpenSem' step initial_state at_external after_external final_state p.

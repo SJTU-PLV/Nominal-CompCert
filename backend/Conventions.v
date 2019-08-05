@@ -15,6 +15,9 @@
 
 Require Import Coqlib.
 Require Import AST.
+Require Import Values.
+Require Import Memory.
+Require Import LanguageInterface.
 Require Import Locations.
 Require Export Conventions1.
 
@@ -156,3 +159,58 @@ Proof.
   intros. apply locmap_get_set_loc_result. 
   red in H; destruct l; auto.
 Qed.
+
+
+(** * Language interface for locations *)
+
+(** Languages with [locset]s (currently LTL and Linear) use the
+  following interface. We need to keep the C-level signature until
+  Linear because it determines the stack layout used by the Linear
+  to Mach calling convention to map locations to memory addresses. *)
+
+Record locset_query :=
+  lq {
+    lq_vf: val;
+    lq_sg: signature;
+    lq_rs: Locmap.t;
+    lq_mem: mem;
+  }.
+
+Record locset_reply :=
+  lr {
+    lr_rs: Locmap.t;
+    lr_mem: mem;
+  }.
+
+Canonical Structure li_locset: language_interface :=
+  {|
+    query := locset_query;
+    reply := locset_reply;
+  |}.
+
+(** * Calling convention *)
+
+(** We now define the calling convention between C and locset
+  languages, which relates the C-level argument list to the contents
+  of the locations. The Kripke world keeps track of the signature and
+  initial values registers, so that the return value can be
+  interpreted in the correct way and the preservation of callee-save
+  registers can be enforced. *)
+
+Inductive cc_alloc_mq: signature * Locmap.t -> c_query -> locset_query -> Prop :=
+  cc_alloc_mq_intro vf sg args rs m:
+    args = map (fun p => Locmap.getpair p rs) (loc_arguments sg) ->
+    cc_alloc_mq (sg, rs) (cq vf sg args m) (lq vf sg rs m).
+
+Inductive cc_alloc_mr: signature * Locmap.t -> c_reply -> locset_reply -> Prop :=
+  cc_alloc_mr_intro sg rs res rs' m':
+    agree_callee_save rs rs' ->
+    Locmap.getpair (map_rpair R (loc_result sg)) rs' = res ->
+    cc_alloc_mr (sg, rs) (cr res m') (lr rs' m').
+
+Program Definition cc_alloc: callconv li_c li_locset :=
+  {|
+    match_senv w := eq;
+    match_query := cc_alloc_mq;
+    match_reply := cc_alloc_mr;
+  |}.
