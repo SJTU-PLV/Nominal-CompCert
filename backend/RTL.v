@@ -17,7 +17,7 @@
 *)
 
 Require Import Coqlib Maps.
-Require Import AST Integers Values Events Memory Globalenvs Smallstep.
+Require Import AST Integers Values Events Memory Globalenvs LanguageInterface Smallstep.
 Require Import Op Registers.
 
 (** * Abstract syntax *)
@@ -169,7 +169,7 @@ Inductive state : Type :=
       state
   | Callstate:
       forall (stack: list stackframe) (**r call stack *)
-             (f: fundef)              (**r function to call *)
+             (vf: val)                (**r function to call *)
              (args: list val)         (**r arguments to the call *)
              (m: mem),                (**r memory state *)
       state
@@ -181,17 +181,13 @@ Inductive state : Type :=
 
 Section RELSEM.
 
+Variable se: Senv.t.
 Variable ge: genv.
 
-Definition find_function
-      (ros: reg + ident) (rs: regset) : option fundef :=
+Definition ros_address (ros: reg + ident) (rs: regset) : val :=
   match ros with
-  | inl r => Genv.find_funct ge rs#r
-  | inr symb =>
-      match Genv.find_symbol ge symb with
-      | None => None
-      | Some b => Genv.find_funct_ptr ge b
-      end
+  | inl r => rs#r
+  | inr symb => Genv.symbol_address ge symb Ptrofs.zero
   end.
 
 (** The transitions are presented as an inductive predicate
@@ -227,24 +223,26 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (State s f sp pc' rs m')
   | exec_Icall:
       forall s f sp pc rs m sig ros args res pc' fd,
+      let vf := ros_address ros rs in
       (fn_code f)!pc = Some(Icall sig ros args res pc') ->
-      find_function ros rs = Some fd ->
+      Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (State s f sp pc rs m)
-        E0 (Callstate (Stackframe res f sp pc' rs :: s) fd rs##args m)
+        E0 (Callstate (Stackframe res f sp pc' rs :: s) vf rs##args m)
   | exec_Itailcall:
       forall s f stk pc rs m sig ros args fd m',
+      let vf := ros_address ros rs in
       (fn_code f)!pc = Some(Itailcall sig ros args) ->
-      find_function ros rs = Some fd ->
+      Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       step (State s f (Vptr stk Ptrofs.zero) pc rs m)
-        E0 (Callstate s fd rs##args m')
+        E0 (Callstate s vf rs##args m')
   | exec_Ibuiltin:
       forall s f sp pc rs m ef args res pc' vargs t vres m',
       (fn_code f)!pc = Some(Ibuiltin ef args res pc') ->
       eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
-      external_call ef ge vargs m t vres m' ->
+      external_call ef se vargs m t vres m' ->
       step (State s f sp pc rs m)
          t (State s f sp pc' (regmap_setres res vres rs) m')
   | exec_Icond:
@@ -268,9 +266,10 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s f (Vptr stk Ptrofs.zero) pc rs m)
         E0 (Returnstate s (regmap_optget or Vundef rs) m')
   | exec_function_internal:
-      forall s f args m m' stk,
+      forall s vf f args m m' stk,
+      forall FIND: Genv.find_funct ge vf = Some (Internal f),
       Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
-      step (Callstate s (Internal f) args m)
+      step (Callstate s vf args m)
         E0 (State s
                   f
                   (Vptr stk Ptrofs.zero)
@@ -278,9 +277,10 @@ Inductive step: state -> trace -> state -> Prop :=
                   (init_regs args f.(fn_params))
                   m')
   | exec_function_external:
-      forall s ef args res t m m',
-      external_call ef ge args m t res m' ->
-      step (Callstate s (External ef) args m)
+      forall s vf ef args res t m m',
+      forall FIND: Genv.find_funct ge vf = Some (External ef),
+      external_call ef se args m t res m' ->
+      step (Callstate s vf args m)
          t (Returnstate s res m')
   | exec_return:
       forall res f sp pc rs s vres m,
@@ -317,34 +317,46 @@ End RELSEM.
   corresponding to the invocation of the ``main'' function of the program
   without arguments and with an empty call stack. *)
 
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      funsig f = signature_main ->
-      initial_state p (Callstate nil f nil m0).
+Inductive initial_state (ge: genv): c_query -> state -> Prop :=
+  | initial_state_intro: forall vf f vargs m,
+      Genv.find_funct ge vf = Some (Internal f) ->
+      initial_state ge
+        (cq vf (fn_sig f) vargs m)
+        (Callstate nil vf vargs m).
 
-(** A final state is a [Returnstate] with an empty call stack. *)
+Inductive at_external (ge: genv): state -> c_query -> Prop :=
+  | at_external_intro s vf name sg vargs m:
+      Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
+      at_external ge
+        (Callstate s vf vargs m)
+        (cq vf sg vargs m).
 
-Inductive final_state: state -> int -> Prop :=
+Inductive after_external: state -> c_reply -> state -> Prop :=
+  | after_external_intro s vf vargs m vres m':
+      after_external
+        (Callstate s vf vargs m)
+        (cr vres m')
+        (Returnstate s vres m').
+
+Inductive final_state: state -> c_reply -> Prop :=
   | final_state_intro: forall r m,
-      final_state (Returnstate nil (Vint r) m) r.
+      final_state
+       (Returnstate nil r m)
+       (cr r m).
 
 (** The small-step semantics for a program. *)
 
 Definition semantics (p: program) :=
-  Semantics step (initial_state p) final_state (Genv.globalenv p).
+  OpenSem' step initial_state at_external after_external final_state p.
 
 (** This semantics is receptive to changes in events. *)
 
 Lemma semantics_receptive:
-  forall (p: program), receptive (semantics p).
+  forall (p: program), open_receptive (semantics p).
 Proof.
   intros. constructor; simpl; intros.
 (* receptiveness *)
-  assert (t1 = E0 -> exists s2, step (Genv.globalenv p) s t2 s2).
+  assert (t1 = E0 -> exists s2, step se (Senv.globalenv p se) s t2 s2).
     intros. subst. inv H0. exists s1; auto.
   inversion H; subst; auto.
   exploit external_call_receptive; eauto. intros [vres2 [m2 EC2]].
