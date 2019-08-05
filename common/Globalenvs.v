@@ -1930,53 +1930,35 @@ Qed.
 
 Section GLOBALENV.
 
-Context {F V : Type}.
+Context {F V : Type} (p: program F V) (se: t).
 
-Program Definition add_global (ge: Genv.t F V) (idg: ident * globdef F V) :=
-  match (Genv.genv_symb ge) ! (idg#1) with
-    | Some b =>
-      @Genv.mkgenv F V
-        (Genv.genv_public ge)
-        (Genv.genv_symb ge)
-        (PTree.set b idg#2 (Genv.genv_defs ge))
-        (Genv.genv_next ge)
-        _ _ _
-    | None =>
-      ge
+Program Definition add_global (idg: ident * globdef F V) (defs: PTree.t _) :=
+  match (Genv.genv_symb se) ! (idg#1) with
+    | Some b => PTree.set b idg#2 defs
+    | None => defs
   end.
-Solve All Obligations with
-  destruct ge; eauto.
-Next Obligation.
-  destruct ge; simpl in *.
-  rewrite PTree.gsspec in H. destruct peq; eauto. inv H; eauto.
-Qed.
 
-Definition add_globals (ge: Genv.t F V) (gl: list (ident * globdef F V)) :=
-  List.fold_left add_global gl ge.
+(** XXX: should we check public symbols and definitions matching to
+  ensure [valid_for p se]? Or just use it as a premise in whatever
+  theorems need it? *)
 
-Lemma add_globals_app:
-  forall gl2 gl1 ge,
-  add_globals ge (gl1 ++ gl2) = add_globals (add_globals ge gl1) gl2.
-Proof.
-  intros. apply fold_left_app.
-Qed.
-
-Program Definition empty_genv (se: t): Genv.t F V :=
+Program Definition globalenv: Genv.t F V :=
   @Genv.mkgenv F V
     (Genv.genv_public se)
     (Genv.genv_symb se)
-    (PTree.empty _)
+    (List.fold_right add_global (PTree.empty _) p.(prog_defs))
     (Genv.genv_next se)
     _ _ _.
 Solve All Obligations with
   destruct se; auto.
 Next Obligation.
-  rewrite PTree.gempty in H. discriminate.
+  revert H. induction (prog_defs p) as [ | idg defs IHdefs]; simpl.
+  - rewrite PTree.gempty. discriminate.
+  - unfold add_global.
+    destruct ((Genv.genv_symb se) ! (idg#1)) eqn:H; auto.
+    apply Genv.genv_symb_range in H.
+    rewrite PTree.gsspec. destruct peq; subst; eauto.
 Qed.
-
-Definition globalenv (p: program F V) (se: t) :=
-  (* XXX check public symbols? *)
-  add_globals (empty_genv se) p.(prog_defs).
 
 End GLOBALENV.
 
@@ -1990,7 +1972,86 @@ Variable match_varinfo: V1 -> V2 -> Prop.
 Variable ctx: C.
 Variable p: program F1 V1.
 Variable tp: program F2 V2.
+Variable se: t.
 Hypothesis progmatch: match_program_gen match_fundef match_varinfo ctx p tp.
+
+Lemma globalenvs_match:
+  Genv.match_genvs (match_globdef match_fundef match_varinfo ctx)
+    (globalenv p se)
+    (globalenv tp se).
+Proof.
+  constructor; simpl; intros; auto.
+  destruct progmatch as [DEFS _]. induction DEFS.
+  - rewrite !PTree.gempty. constructor.
+  - destruct H as [ID GD]. simpl. unfold add_global at 1 3.
+    rewrite ID. destruct ((Genv.genv_symb se) ! _); simpl; eauto.
+    destruct (peq b b0); subst.
+    + rewrite !PTree.gss. constructor; auto.
+    + rewrite !PTree.gso; auto.
+Qed.
+
+Theorem find_def_match_2 b:
+  option_rel (match_globdef match_fundef match_varinfo ctx)
+    (Genv.find_def (globalenv p se) b)
+    (Genv.find_def (globalenv tp se) b).
+Proof.
+  apply (Genv.mge_defs globalenvs_match).
+Qed.
+
+Theorem find_def_match:
+  forall b g,
+  Genv.find_def (globalenv p se) b = Some g ->
+  exists tg,
+    Genv.find_def (globalenv tp se) b = Some tg /\
+    match_globdef match_fundef match_varinfo ctx g tg.
+Proof.
+  intros. generalize (find_def_match_2 b). rewrite H; intros R; inv R.
+  exists y; auto.
+Qed.
+
+Theorem find_funct_ptr_match:
+  forall b f,
+  Genv.find_funct_ptr (globalenv p se) b = Some f ->
+  exists cunit tf,
+  Genv.find_funct_ptr (globalenv tp se) b = Some tf /\
+  match_fundef cunit f tf /\ linkorder cunit ctx.
+Proof.
+  intros. rewrite Genv.find_funct_ptr_iff in *. apply find_def_match in H.
+  destruct H as (tg & P & Q). inv Q.
+  exists ctx', f2; intuition auto. apply Genv.find_funct_ptr_iff; auto.
+Qed.
+
+Theorem find_funct_match:
+  forall v f,
+  Genv.find_funct (globalenv p se) v = Some f ->
+  exists cunit tf,
+  Genv.find_funct (globalenv tp se) v = Some tf /\
+  match_fundef cunit f tf /\ linkorder cunit ctx.
+Proof.
+  intros. exploit Genv.find_funct_inv; eauto. intros [b EQ]. subst v.
+  rewrite Genv.find_funct_find_funct_ptr in H.
+  rewrite Genv.find_funct_find_funct_ptr.
+  apply find_funct_ptr_match. auto.
+Qed.
+
+Theorem find_var_info_match:
+  forall b v,
+  Genv.find_var_info (globalenv p se) b = Some v ->
+  exists tv,
+  Genv.find_var_info (globalenv tp se) b = Some tv /\
+  match_globvar match_varinfo v tv.
+Proof.
+  intros. rewrite Genv.find_var_info_iff in *. apply find_def_match in H.
+  destruct H as (tg & P & Q). inv Q.
+  exists v2; split; auto. apply Genv.find_var_info_iff; auto.
+Qed.
+
+Theorem find_symbol_match:
+  forall id,
+  Genv.find_symbol (globalenv tp se) id = Genv.find_symbol (globalenv p se) id.
+Proof.
+  reflexivity.
+Qed.
 
 Theorem senv_match:
   Senv.equiv (of_genv (Genv.globalenv p)) (of_genv (Genv.globalenv tp)).
