@@ -15,7 +15,7 @@
 Require Import FSets.
 Require Import Coqlib Maps Ordered Errors Lattice Kildall Integers.
 Require Import AST Linking.
-Require Import Values Memory Events Globalenvs Smallstep.
+Require Import Values Memory Events Globalenvs LanguageInterface Smallstep.
 Require Import Op Locations LTL Linear.
 Require Import Linearize.
 
@@ -37,31 +37,21 @@ Variable tprog: Linear.program.
 
 Hypothesis TRANSF: match_prog prog tprog.
 
-Let ge := Genv.globalenv prog.
-Let tge := Genv.globalenv tprog.
+Variable se: Senv.t.
+Let ge := Senv.globalenv prog se.
+Let tge := Senv.globalenv tprog se.
 
 Lemma functions_translated:
   forall v f,
   Genv.find_funct ge v = Some f ->
   exists tf,
   Genv.find_funct tge v = Some tf /\ transf_fundef f = OK tf.
-Proof (Genv.find_funct_transf_partial TRANSF).
-
-Lemma function_ptr_translated:
-  forall v f,
-  Genv.find_funct_ptr ge v = Some f ->
-  exists tf,
-  Genv.find_funct_ptr tge v = Some tf /\ transf_fundef f = OK tf.
-Proof (Genv.find_funct_ptr_transf_partial TRANSF).
+Proof. exact (Senv.find_funct_transf_partial TRANSF). Qed.
 
 Lemma symbols_preserved:
   forall id,
   Genv.find_symbol tge id = Genv.find_symbol ge id.
-Proof (Genv.find_symbol_transf_partial TRANSF).
-
-Lemma senv_preserved:
-  Senv.equiv ge tge.
-Proof. exact (Senv.senv_transf_partial TRANSF). Qed.
+Proof. eauto using Genv.find_symbol_transf_partial. Qed.
 
 Lemma sig_preserved:
   forall f tf,
@@ -79,19 +69,6 @@ Lemma stacksize_preserved:
   Linear.fn_stacksize tf = LTL.fn_stacksize f.
 Proof.
   intros. monadInv H. auto.
-Qed.
-
-Lemma find_function_translated:
-  forall ros ls f,
-  LTL.find_function ge ros ls = Some f ->
-  exists tf,
-  find_function tge ros ls = Some tf /\ transf_fundef f = OK tf.
-Proof.
-  unfold LTL.find_function; intros; destruct ros; simpl.
-  apply functions_translated; auto.
-  rewrite symbols_preserved. destruct (Genv.find_symbol ge i).
-  apply function_ptr_translated; auto.
-  congruence.
 Qed.
 
 (** * Correctness of reachability analysis *)
@@ -252,8 +229,8 @@ Lemma starts_with_correct:
   unique_labels c2 ->
   starts_with lbl c1 = true ->
   find_label lbl c2 = Some c3 ->
-  plus step tge (State s f sp c1 ls m)
-             E0 (State s f sp c3 ls m).
+  plus (step se) tge (State s f sp c1 ls m)
+                  E0 (State s f sp c3 ls m).
 Proof.
   induction c1.
   simpl; intros; discriminate.
@@ -456,8 +433,8 @@ Lemma add_branch_correct:
   transf_function f = OK tf ->
   is_tail k tf.(fn_code) ->
   find_label lbl tf.(fn_code) = Some c ->
-  plus step tge (State s tf sp (add_branch lbl k) ls m)
-             E0 (State s tf sp c ls m).
+  plus (step se) tge (State s tf sp (add_branch lbl k) ls m)
+                  E0 (State s tf sp c ls m).
 Proof.
   intros. unfold add_branch.
   caseEq (starts_with lbl k); intro SW.
@@ -492,7 +469,12 @@ Inductive match_stackframes: LTL.stackframe -> Linear.stackframe -> Prop :=
       is_tail c tf.(fn_code) ->
       match_stackframes
         (LTL.Stackframe f sp ls bb)
-        (Linear.Stackframe tf sp ls (linearize_block bb c)).
+        (Linear.Stackframe tf sp ls (linearize_block bb c))
+  | match_stackframe_top:
+      forall rs,
+      match_stackframes
+        (LTL.Stacktop rs)
+        (Linear.Stacktop rs).
 
 Inductive match_states: LTL.state -> Linear.state -> Prop :=
   | match_states_add_branch:
@@ -529,11 +511,10 @@ Inductive match_states: LTL.state -> Linear.state -> Prop :=
       match_states (LTL.Block s f sp bb ls m)
                    (Linear.State ts tf sp (linearize_block bb c) ls m)
   | match_states_call:
-      forall s f ls m tf ts,
+      forall s vf ls m ts,
       list_forall2 match_stackframes s ts ->
-      transf_fundef f = OK tf ->
-      match_states (LTL.Callstate s f ls m)
-                   (Linear.Callstate ts tf ls m)
+      match_states (LTL.Callstate s vf ls m)
+                   (Linear.Callstate ts vf ls m)
   | match_states_return:
       forall s ls m ts,
       list_forall2 match_stackframes s ts ->
@@ -554,9 +535,9 @@ Proof.
 Qed.
 
 Theorem transf_step_correct:
-  forall s1 t s2, LTL.step ge s1 t s2 ->
+  forall s1 t s2, LTL.step se ge s1 t s2 ->
   forall s1' (MS: match_states s1 s1'),
-  (exists s2', plus Linear.step tge s1' t s2' /\ match_states s2 s2')
+  (exists s2', plus (Linear.step se) tge s1' t s2' /\ match_states s2 s2')
   \/ (measure s2 < measure s1 /\ t = E0 /\ match_states s2 s1')%nat.
 Proof.
   induction 1; intros; try (inv MS).
@@ -588,8 +569,6 @@ Proof.
   (* Lop *)
   left; econstructor; split. simpl.
   apply plus_one. econstructor; eauto.
-  instantiate (1 := v); rewrite <- H; apply eval_operation_preserved.
-  exact symbols_preserved.
   econstructor; eauto.
 
   (* Lload *)
@@ -617,14 +596,14 @@ Proof.
   econstructor; eauto.
 
   (* Lcall *)
-  exploit find_function_translated; eauto. intros [tfd [A B]].
+  exploit functions_translated; eauto. intros [tfd [A B]].
   left; econstructor; split. simpl.
   apply plus_one. econstructor; eauto.
   symmetry; eapply sig_preserved; eauto.
   econstructor; eauto. constructor; auto. econstructor; eauto.
 
   (* Ltailcall *)
-  exploit find_function_translated; eauto. intros [tfd [A B]].
+  exploit functions_translated; eauto. intros [tfd [A B]].
   left; econstructor; split. simpl.
   apply plus_one. econstructor; eauto.
   rewrite (match_parent_locset _ _ STACKS). eauto.
@@ -636,8 +615,7 @@ Proof.
   (* Lbuiltin *)
   left; econstructor; split. simpl.
   apply plus_one. eapply exec_Lbuiltin; eauto.
-  eapply eval_builtin_args_preserved with (ge1 := ge); eauto. exact symbols_preserved.
-  eapply external_call_symbols_preserved; eauto. apply senv_preserved.
+  eapply eval_builtin_args_preserved with (ge1 := ge); eauto.
   econstructor; eauto.
 
   (* Lbranch *)
@@ -684,7 +662,7 @@ Proof.
   (* internal functions *)
   assert (REACH: (reachable f)!!(LTL.fn_entrypoint f) = true).
     apply reachable_entrypoint.
-  monadInv H7.
+  apply functions_translated in FIND as (tf & FIND & MATCH). monadInv MATCH.
   left; econstructor; split.
   apply plus_one. eapply exec_function_internal; eauto.
   rewrite (stacksize_preserved _ _ EQ). eauto.
@@ -692,9 +670,9 @@ Proof.
   econstructor; eauto. simpl. eapply is_tail_add_branch. constructor.
 
   (* external function *)
-  monadInv H8. left; econstructor; split.
+  apply functions_translated in FIND as (tf & FIND & MATCH). monadInv MATCH.
+  left; econstructor; split.
   apply plus_one. eapply exec_function_external; eauto.
-  eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   econstructor; eauto.
 
   (* return *)
@@ -704,35 +682,46 @@ Proof.
   econstructor; eauto.
 Qed.
 
-Lemma transf_initial_states:
-  forall st1, LTL.initial_state prog st1 ->
-  exists st2, Linear.initial_state tprog st2 /\ match_states st1 st2.
+Lemma transf_initial_states q:
+  forall st1, LTL.initial_state ge q st1 ->
+  exists st2, Linear.initial_state tge q st2 /\ match_states st1 st2.
 Proof.
   intros. inversion H.
-  exploit function_ptr_translated; eauto. intros [tf [A B]].
-  exists (Callstate nil tf (Locmap.init Vundef) m0); split.
-  econstructor; eauto. eapply (Genv.init_mem_transf_partial TRANSF); eauto.
-  rewrite (match_program_main TRANSF).
-  rewrite symbols_preserved. eauto.
-  rewrite <- H3. apply sig_preserved. auto.
-  constructor. constructor. auto.
+  exploit functions_translated; eauto. intros [tf [A B]].
+  setoid_rewrite <- (sig_preserved (Internal f)); eauto. monadInv B.
+  eexists; split; econstructor; eauto.
+  repeat constructor; eauto.
+Qed.
+
+Lemma transf_external:
+  forall S R q, match_states S R -> LTL.at_external ge S q ->
+  Linear.at_external tge R q /\
+  forall r S', LTL.after_external S r S' ->
+  exists R', Linear.after_external R r R' /\ match_states S' R'.
+Proof.
+  intros S R q HSR Hq. destruct Hq; inv HSR.
+  eapply functions_translated in H as (tf & FIND & TF). monadInv TF.
+  split. econstructor; eauto. intros r S' HS'. inv HS'.
+  eexists. split; econstructor; eauto.
 Qed.
 
 Lemma transf_final_states:
   forall st1 st2 r,
   match_states st1 st2 -> LTL.final_state st1 r -> Linear.final_state st2 r.
 Proof.
-  intros. inv H0. inv H. inv H5. econstructor; eauto.
-Qed.
-
-Theorem transf_program_correct:
-  forward_simulation (LTL.semantics prog) (Linear.semantics tprog).
-Proof.
-  eapply forward_simulation_star.
-  apply senv_preserved.
-  eexact transf_initial_states.
-  eexact transf_final_states.
-  eexact transf_step_correct.
+  intros. inv H0. inv H. inv H4. inv H1. econstructor; eauto.
 Qed.
 
 End LINEARIZATION.
+
+Theorem transf_program_correct prog tprog:
+  match_prog prog tprog ->
+  open_fsim cc_id cc_id (LTL.semantics prog) (Linear.semantics tprog).
+Proof.
+  intros MATCH [ ] se _ q _ [ ] [ ].
+  eapply forward_simulation_star; simpl.
+  - eauto using transf_initial_states.
+  - eauto using transf_final_states.
+  - intros. edestruct transf_external; eauto. exists tt, q1. intuition subst; eauto.
+  - eauto using transf_step_correct.
+Qed.

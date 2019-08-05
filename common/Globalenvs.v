@@ -2077,8 +2077,25 @@ End MATCH_PROGRAMS.
 Section TRANSFORM_PARTIAL.
 
 Context {A B V: Type} {LA: Linker A} {LV: Linker V}.
-Context {transf: A -> res B} {p: program A V} {tp: program B V}.
+Context {transf: A -> res B} {p: program A V} {tp: program B V} {se: t}.
 Hypothesis progmatch: match_program (fun cu f tf => transf f = OK tf) eq p tp.
+
+Theorem find_funct_transf_partial:
+  forall v f,
+  Genv.find_funct (globalenv p se) v = Some f ->
+  exists tf,
+  Genv.find_funct (globalenv tp se) v = Some tf /\ transf f = OK tf.
+Proof.
+  intros. exploit (find_funct_match se progmatch); eauto.
+  intros (cu & tf & P & Q & R); exists tf; auto.
+Qed.
+
+Theorem find_symbol_transf_partial:
+  forall (s : ident),
+  Genv.find_symbol (globalenv tp se) s = Genv.find_symbol (globalenv p se) s.
+Proof.
+  reflexivity.
+Qed.
 
 Theorem senv_transf_partial:
   Senv.equiv (of_genv (Genv.globalenv p)) (of_genv (Genv.globalenv tp)).
