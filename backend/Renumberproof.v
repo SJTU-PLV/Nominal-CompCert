@@ -244,7 +244,7 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_id cc_id (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
-  intros MATCH [ ] se _ q _ [ ] [ ].
+  intros MATCH [ ] se _ q _ _ [ ] [ ].
   eapply forward_simulation_step; simpl.
   - eauto using transf_initial_states.
   - eauto using transf_final_states.

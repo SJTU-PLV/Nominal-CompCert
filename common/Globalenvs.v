@@ -92,6 +92,9 @@ Record t: Type := mkgenv {
 Definition find_symbol (ge: t) (id: ident) : option block :=
   PTree.get id ge.(genv_symb).
 
+Definition has_symbol (ge: t) (id: ident) : Prop :=
+  exists b, find_symbol ge id = Some b.
+
 (** [symbol_address ge id ofs] returns a pointer into the block associated
   with [id], at byte offset [ofs].  [Vundef] is returned if no block is associated
   to [id]. *)

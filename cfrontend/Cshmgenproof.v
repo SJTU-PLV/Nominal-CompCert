@@ -1781,7 +1781,7 @@ Theorem transl_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_id cc_id (Clight.semantics2 prog) (Csharpminor.semantics tprog).
 Proof.
-  intros MATCH [ ] se _ q _ [ ] [ ].
+  intros MATCH [ ] se _ q _ _ [ ] [ ].
   eapply forward_simulation_plus; cbn.
   - eauto using transl_initial_states.
   - eauto using transl_final_states.

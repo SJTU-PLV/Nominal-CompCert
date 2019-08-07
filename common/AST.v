@@ -272,6 +272,9 @@ Record program (F V: Type) : Type := mkprogram {
 Definition prog_defs_names (F V: Type) (p: program F V) : list ident :=
   List.map fst p.(prog_defs).
 
+Definition has_symbol {F V} (p: program F V) (id: ident) :=
+  In id (prog_defs_names p).
+
 (** The "definition map" of a program maps names of globals to their definitions.
   If several definitions have the same name, the one appearing last in [p.(prog_defs)] wins. *)
 

@@ -812,8 +812,15 @@ End FSIM.
 Arguments fsim_properties {_ _} _ {_ _} _ L1 L2 index order match_states.
 Arguments Forward_simulation {_ _ cc _ _ match_res L1 L2 index} order match_states props.
 
+Definition match_skel (se1 se2: Senv.t) (sk1 sk2: AST.program unit unit) :=
+  forall id,
+    AST.has_symbol sk1 id ->
+    (Genv.has_symbol se1 id /\
+     Genv.has_symbol se2 id <-> AST.has_symbol sk2 id).
+
 Definition open_fsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
   forall (w: ccworld ccB) (se1 se2: Senv.t) (q1: query liB1) (q2: query liB2),
+    match_skel se1 se2 (skel L1) (skel L2) ->
     match_senv ccB w se1 se2 ->
     match_query ccB w q1 q2 ->
     forward_simulation ccA (match_reply ccB w) (activate L1 se1 q1) (activate L2 se2 q2).
@@ -824,6 +831,7 @@ Definition closed_fsim (L1 L2: closed_sem) :=
 
 (** ** Composing two forward simulations *)
 
+(*
 Section COMPOSE_FORWARD_SIMULATIONS.
 
 Context {li1 li2 li3} {cc12: callconv li1 li2} {cc23: callconv li2 li3}.
@@ -908,6 +916,7 @@ Proof.
   - admit. (* eapply compose_forward_simulations; eauto. *)
   - etransitivity; eauto.
 Abort.
+*)
 
 (** * Receptiveness and determinacy *)
 
@@ -1241,6 +1250,7 @@ Arguments Backward_simulation {_ _ cc _ _ match_res L1 L2 index} order match_sta
 
 Definition open_bsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
   forall (w: ccworld ccB) (se1 se2: Senv.t) (q1: query liB1) (q2: query liB2),
+    match_skel se1 se2 (skel L1) (skel L2) ->
     match_senv ccB w se1 se2 ->
     match_query ccB w q1 q2 ->
     backward_simulation ccA (match_reply ccB w) (L1 se1 q1) (L2 se2 q2).
@@ -1251,6 +1261,7 @@ Definition closed_bsim (L1 L2: closed_sem) :=
 
 (** ** Composing two backward simulations *)
 
+(*
 Section BSIM_COMPOSE.
 
 Context {li1 li2 li3} {cc12: callconv li1 li2} {cc23: callconv li2 li3}.
@@ -1444,6 +1455,7 @@ Proof.
   - admit. (* eapply compose_backward_simulations; eauto. *)
   - etransitivity; eauto.
 Abort.
+*)
 
 (** ** Converting a forward simulation to a backward simulation *)
 
@@ -1786,7 +1798,7 @@ Lemma forward_to_backward_open_sim:
     open_determinate L2 ->
     open_bsim ccA ccB L1 L2.
 Proof.
-  intros until L2. intros H12 H1 H2 w se1 se2 q1 q2 Hse Hq.
+  intros until L2. intros H12 H1 H2 w se1 se2 q1 q2 Hsk Hse Hq.
   eapply forward_to_backward_simulation; eauto.
   eapply match_senv_public_preserved; eauto.
 Qed.
