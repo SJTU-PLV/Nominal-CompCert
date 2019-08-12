@@ -41,13 +41,13 @@ Let tge := Senv.globalenv tprog se.
 Lemma symbols_preserved:
   forall id,
   Genv.find_symbol tge id = Genv.find_symbol ge id.
-Proof. apply Senv.find_symbol_transf. Qed.
+Proof. apply Senv.find_symbol_transf_id. Qed.
 
 Lemma functions_translated:
   forall v f,
   Genv.find_funct ge v = Some f ->
   Genv.find_funct tge v = Some (transf_fundef f).
-Proof. exact (Senv.find_funct_transf TRANSL). Qed.
+Proof. exact (Senv.find_funct_transf_id TRANSL). Qed.
 
 Lemma sig_function_translated:
   forall f,
@@ -343,7 +343,7 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_id cc_id (Linear.semantics prog) (Linear.semantics tprog).
 Proof.
-  intros MATCH [ ] se _ q _ _ [ ] [ ].
+  intros MATCH [ ] se _ q _ _ _ [ ] [ ].
   eapply forward_simulation_opt; simpl.
   - eauto using transf_initial_states.
   - eauto using transf_final_states.

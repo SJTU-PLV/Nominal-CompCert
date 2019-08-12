@@ -38,12 +38,12 @@ Lemma functions_translated:
   forall v f,
   Genv.find_funct ge v = Some f ->
   Genv.find_funct tge v = Some (transf_fundef f).
-Proof. exact (Senv.find_funct_transf TRANSL). Qed.
+Proof. exact (Senv.find_funct_transf_id TRANSL). Qed.
 
 Lemma symbols_preserved:
   forall id,
   Genv.find_symbol tge id = Genv.find_symbol ge id.
-Proof. apply Senv.find_symbol_transf; auto. Qed.
+Proof. apply Senv.find_symbol_transf_id; auto. Qed.
 
 Lemma sig_preserved:
   forall f, funsig (transf_fundef f) = funsig f.
@@ -244,7 +244,7 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_id cc_id (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
-  intros MATCH [ ] se _ q _ _ [ ] [ ].
+  intros MATCH [ ] se _ q _ _ _ [ ] [ ].
   eapply forward_simulation_step; simpl.
   - eauto using transf_initial_states.
   - eauto using transf_final_states.

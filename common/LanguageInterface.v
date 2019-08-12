@@ -119,10 +119,11 @@ Canonical Structure li_c :=
 (** *** Memory extensions *)
 
 Inductive cc_ext_query: c_query -> c_query -> Prop :=
-  cc_ext_query_intro vf sg vargs1 vargs2 m1 m2:
+  cc_ext_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
+    Val.lessdef vf1 vf2 ->
     Val.lessdef_list vargs1 vargs2 ->
     Mem.extends m1 m2 ->
-    cc_ext_query (cq vf sg vargs1 m1) (cq vf sg vargs2 m2).
+    cc_ext_query (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
 
 Inductive cc_ext_reply: c_reply -> c_reply -> Prop :=
   cc_ext_reply_intro vres1 vres2 m1 m2:

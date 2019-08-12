@@ -485,14 +485,15 @@ Section CMCONSTRS.
 Variable prog: program.
 Variable hf: helper_functions.
 Hypothesis HELPERS: helper_functions_declared prog hf.
-Let ge := Genv.globalenv prog.
+Variable se: Senv.t.
+Let ge := Senv.globalenv prog se.
 Variable sp: val.
 Variable e: env.
 Variable m: mem.
 
 Lemma is_intconst_sound:
   forall v a n le,
-  is_intconst a = Some n -> eval_expr ge sp e m le a v -> v = Vint n.
+  is_intconst a = Some n -> eval_expr se ge sp e m le a v -> v = Vint n.
 Proof with (try discriminate).
   intros. unfold is_intconst in *.
   destruct a... destruct o... inv H. inv H0. destruct vl; inv H5. auto.
@@ -502,11 +503,11 @@ Lemma eval_divu_mul:
   forall le x y p M,
   divu_mul_params (Int.unsigned y) = Some(p, M) ->
   nth_error le O = Some (Vint x) ->
-  eval_expr ge sp e m le (divu_mul p M) (Vint (Int.divu x y)).
+  eval_expr se ge sp e m le (divu_mul p M) (Vint (Int.divu x y)).
 Proof.
   intros. unfold divu_mul. exploit (divu_mul_shift x); eauto. intros [A B].
-  assert (C: eval_expr ge sp e m le (Eletvar 0) (Vint x)) by (apply eval_Eletvar; eauto).
-  assert (D: eval_expr ge sp e m le (Eop (Ointconst (Int.repr M)) Enil) (Vint (Int.repr M))) by EvalOp.
+  assert (C: eval_expr se ge sp e m le (Eletvar 0) (Vint x)) by (apply eval_Eletvar; eauto).
+  assert (D: eval_expr se ge sp e m le (Eop (Ointconst (Int.repr M)) Enil) (Vint (Int.repr M))) by EvalOp.
   exploit eval_mulhu. eexact C. eexact D. intros (v & E & F). simpl in F. inv F. 
   exploit eval_shruimm. eexact E. instantiate (1 := Int.repr p).
   intros [v [P Q]]. simpl in Q.
@@ -518,9 +519,9 @@ Qed.
 
 Theorem eval_divuimm:
   forall le e1 x n2 z,
-  eval_expr ge sp e m le e1 x ->
+  eval_expr se ge sp e m le e1 x ->
   Val.divu x (Vint n2) = Some z ->
-  exists v, eval_expr ge sp e m le (divuimm e1 n2) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (divuimm e1 n2) v /\ Val.lessdef z v.
 Proof.
   unfold divuimm; intros. generalize H0; intros DIV.
   destruct x; simpl in DIV; try discriminate.
@@ -540,10 +541,10 @@ Qed.
 
 Theorem eval_divu:
   forall le a b x y z,
-  eval_expr ge sp e m le a x ->
-  eval_expr ge sp e m le b y ->
+  eval_expr se ge sp e m le a x ->
+  eval_expr se ge sp e m le b y ->
   Val.divu x y = Some z ->
-  exists v, eval_expr ge sp e m le (divu a b) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (divu a b) v /\ Val.lessdef z v.
 Proof.
   unfold divu; intros.
   destruct (is_intconst b) as [n2|] eqn:B.
@@ -559,9 +560,9 @@ Qed.
 
 Lemma eval_mod_from_div:
   forall le a n x y,
-  eval_expr ge sp e m le a (Vint y) ->
+  eval_expr se ge sp e m le a (Vint y) ->
   nth_error le O = Some (Vint x) ->
-  eval_expr ge sp e m le (mod_from_div a n) (Vint (Int.sub x (Int.mul y n))).
+  eval_expr se ge sp e m le (mod_from_div a n) (Vint (Int.sub x (Int.mul y n))).
 Proof.
   unfold mod_from_div; intros.
   exploit eval_mulimm; eauto. instantiate (1 := n). intros [v [A B]].
@@ -570,9 +571,9 @@ Qed.
 
 Theorem eval_moduimm:
   forall le e1 x n2 z,
-  eval_expr ge sp e m le e1 x ->
+  eval_expr se ge sp e m le e1 x ->
   Val.modu x (Vint n2) = Some z ->
-  exists v, eval_expr ge sp e m le (moduimm e1 n2) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (moduimm e1 n2) v /\ Val.lessdef z v.
 Proof.
   unfold moduimm; intros. generalize H0; intros MOD.
   destruct x; simpl in MOD; try discriminate.
@@ -595,10 +596,10 @@ Qed.
 
 Theorem eval_modu:
   forall le a b x y z,
-  eval_expr ge sp e m le a x ->
-  eval_expr ge sp e m le b y ->
+  eval_expr se ge sp e m le a x ->
+  eval_expr se ge sp e m le b y ->
   Val.modu x y = Some z ->
-  exists v, eval_expr ge sp e m le (modu a b) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (modu a b) v /\ Val.lessdef z v.
 Proof.
   unfold modu; intros.
   destruct (is_intconst b) as [n2|] eqn:B.
@@ -616,11 +617,11 @@ Lemma eval_divs_mul:
   forall le x y p M,
   divs_mul_params (Int.signed y) = Some(p, M) ->
   nth_error le O = Some (Vint x) ->
-  eval_expr ge sp e m le (divs_mul p M) (Vint (Int.divs x y)).
+  eval_expr se ge sp e m le (divs_mul p M) (Vint (Int.divs x y)).
 Proof.
   intros. unfold divs_mul.
-  assert (C: eval_expr ge sp e m le (Eletvar 0) (Vint x)) by (apply eval_Eletvar; eauto).
-  assert (D: eval_expr ge sp e m le (Eop (Ointconst (Int.repr M)) Enil) (Vint (Int.repr M))) by EvalOp.
+  assert (C: eval_expr se ge sp e m le (Eletvar 0) (Vint x)) by (apply eval_Eletvar; eauto).
+  assert (D: eval_expr se ge sp e m le (Eop (Ointconst (Int.repr M)) Enil) (Vint (Int.repr M))) by EvalOp.
   exploit eval_mulhs. eexact C. eexact D. intros (v & X & F). simpl in F; inv F.
   exploit eval_shruimm. eexact C. instantiate (1 := Int.repr (Int.zwordsize - 1)).
   intros [v1 [Y LD]]. simpl in LD.
@@ -648,9 +649,9 @@ Qed.
 
 Theorem eval_divsimm:
   forall le e1 x n2 z,
-  eval_expr ge sp e m le e1 x ->
+  eval_expr se ge sp e m le e1 x ->
   Val.divs x (Vint n2) = Some z ->
-  exists v, eval_expr ge sp e m le (divsimm e1 n2) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (divsimm e1 n2) v /\ Val.lessdef z v.
 Proof.
   unfold divsimm; intros. generalize H0; intros DIV.
   destruct x; simpl in DIV; try discriminate.
@@ -670,10 +671,10 @@ Qed.
 
 Theorem eval_divs:
   forall le a b x y z,
-  eval_expr ge sp e m le a x ->
-  eval_expr ge sp e m le b y ->
+  eval_expr se ge sp e m le a x ->
+  eval_expr se ge sp e m le b y ->
   Val.divs x y = Some z ->
-  exists v, eval_expr ge sp e m le (divs a b) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (divs a b) v /\ Val.lessdef z v.
 Proof.
   unfold divs; intros.
   destruct (is_intconst b) as [n2|] eqn:B.
@@ -690,9 +691,9 @@ Qed.
 
 Theorem eval_modsimm:
   forall le e1 x n2 z,
-  eval_expr ge sp e m le e1 x ->
+  eval_expr se ge sp e m le e1 x ->
   Val.mods x (Vint n2) = Some z ->
-  exists v, eval_expr ge sp e m le (modsimm e1 n2) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (modsimm e1 n2) v /\ Val.lessdef z v.
 Proof.
   unfold modsimm; intros.
   exploit Val.mods_divs; eauto. intros [y [A B]].
@@ -702,7 +703,7 @@ Proof.
             || Int.eq i (Int.repr Int.min_signed) && Int.eq n2 Int.mone) eqn:Z2; inv DIV.
   destruct (Int.is_power2 n2) as [l | ] eqn:P2.
 - destruct (Int.ltu l (Int.repr 31)) eqn:LT31.
-  + exploit (eval_shrximm ge sp e m (Vint i :: le) (Eletvar O)).
+  + exploit (eval_shrximm se ge sp e m (Vint i :: le) (Eletvar O)).
     constructor. simpl; eauto. eapply Val.divs_pow2; eauto.
     intros [v1 [X LD]]. inv LD.
     econstructor; split. econstructor. eauto.
@@ -721,10 +722,10 @@ Qed.
 
 Theorem eval_mods:
   forall le a b x y z,
-  eval_expr ge sp e m le a x ->
-  eval_expr ge sp e m le b y ->
+  eval_expr se ge sp e m le a x ->
+  eval_expr se ge sp e m le b y ->
   Val.mods x y = Some z ->
-  exists v, eval_expr ge sp e m le (mods a b) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (mods a b) v /\ Val.lessdef z v.
 Proof.
   unfold mods; intros.
   destruct (is_intconst b) as [n2|] eqn:B.
@@ -741,13 +742,13 @@ Qed.
 
 Lemma eval_modl_from_divl:
   forall le a n x y,
-  eval_expr ge sp e m le a (Vlong y) ->
+  eval_expr se ge sp e m le a (Vlong y) ->
   nth_error le O = Some (Vlong x) ->
-  eval_expr ge sp e m le (modl_from_divl a n) (Vlong (Int64.sub x (Int64.mul y n))).
+  eval_expr se ge sp e m le (modl_from_divl a n) (Vlong (Int64.sub x (Int64.mul y n))).
 Proof.
   unfold modl_from_divl; intros.
   exploit eval_mullimm; eauto. instantiate (1 := n). intros (v1 & A1 & B1).
-  assert (A0: eval_expr ge sp e m le (Eletvar O) (Vlong x)) by (constructor; auto).
+  assert (A0: eval_expr se ge sp e m le (Eletvar O) (Vlong x)) by (constructor; auto).
   exploit eval_subl ; auto ; try apply HELPERS. exact A0. exact A1.
   intros (v2 & A2 & B2).
   simpl in B1; inv B1. simpl in B2; inv B2. exact A2.
@@ -757,10 +758,10 @@ Lemma eval_divlu_mull:
   forall le x y p M,
   divlu_mul_params (Int64.unsigned y) = Some(p, M) ->
   nth_error le O = Some (Vlong x) ->
-  eval_expr ge sp e m le (divlu_mull p M) (Vlong (Int64.divu x y)).
+  eval_expr se ge sp e m le (divlu_mull p M) (Vlong (Int64.divu x y)).
 Proof.
   intros. unfold divlu_mull. exploit (divlu_mul_shift x); eauto. intros [A B].
-  assert (A0: eval_expr ge sp e m le (Eletvar O) (Vlong x)) by (constructor; auto).
+  assert (A0: eval_expr se ge sp e m le (Eletvar O) (Vlong x)) by (constructor; auto).
   exploit eval_mullhu. eauto. eexact A0. instantiate (1 := Int64.repr M). intros (v1 & A1 & B1).
   exploit eval_shrluimm. eauto. eexact A1. instantiate (1 := Int.repr p). intros (v2 & A2 & B2).
   simpl in B1; inv B1. simpl in B2. replace (Int.ltu (Int.repr p) Int64.iwordsize') with true in B2. inv B2.
@@ -771,10 +772,10 @@ Qed.
 
 Theorem eval_divlu:
   forall le a b x y z,
-  eval_expr ge sp e m le a x ->
-  eval_expr ge sp e m le b y ->
+  eval_expr se ge sp e m le a x ->
+  eval_expr se ge sp e m le b y ->
   Val.divlu x y = Some z ->
-  exists v, eval_expr ge sp e m le (divlu a b) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (divlu a b) v /\ Val.lessdef z v.
 Proof.
   unfold divlu; intros.
   destruct (is_longconst b) as [n2|] eqn:N2.
@@ -796,10 +797,10 @@ Qed.
 
 Theorem eval_modlu:
   forall le a b x y z,
-  eval_expr ge sp e m le a x ->
-  eval_expr ge sp e m le b y ->
+  eval_expr se ge sp e m le a x ->
+  eval_expr se ge sp e m le b y ->
   Val.modlu x y = Some z ->
-  exists v, eval_expr ge sp e m le (modlu a b) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (modlu a b) v /\ Val.lessdef z v.
 Proof.
   unfold modlu; intros.
   destruct (is_longconst b) as [n2|] eqn:N2.
@@ -827,10 +828,10 @@ Lemma eval_divls_mull:
   forall le x y p M,
   divls_mul_params (Int64.signed y) = Some(p, M) ->
   nth_error le O = Some (Vlong x) ->
-  eval_expr ge sp e m le (divls_mull p M) (Vlong (Int64.divs x y)).
+  eval_expr se ge sp e m le (divls_mull p M) (Vlong (Int64.divs x y)).
 Proof.
   intros. unfold divls_mull.
-  assert (A0: eval_expr ge sp e m le (Eletvar O) (Vlong x)).
+  assert (A0: eval_expr se ge sp e m le (Eletvar O) (Vlong x)).
   { constructor; auto. }
   exploit eval_mullhs. eauto. eexact A0. instantiate (1 := Int64.repr M).  intros (v1 & A1 & B1).
   exploit eval_addl; auto; try apply HELPERS. eexact A1. eexact A0. intros (v2 & A2 & B2).
@@ -839,7 +840,7 @@ Proof.
              then mullhs (Eletvar 0) (Int64.repr M)
              else addl (mullhs (Eletvar 0) (Int64.repr M)) (Eletvar 0)).
   set (v4 := if zlt M Int64.half_modulus then v1 else v2).
-  assert (A4: eval_expr ge sp e m le a4 v4).
+  assert (A4: eval_expr se ge sp e m le a4 v4).
   { unfold a4, v4; destruct (zlt M Int64.half_modulus); auto. }
   exploit eval_shrlimm. eauto. eexact A4. instantiate (1 := Int.repr p). intros (v5 & A5 & B5).
   exploit eval_addl; auto; try apply HELPERS. eexact A5. eexact A3. intros (v6 & A6 & B6).
@@ -862,10 +863,10 @@ Qed.
 
 Theorem eval_divls:
   forall le a b x y z,
-  eval_expr ge sp e m le a x ->
-  eval_expr ge sp e m le b y ->
+  eval_expr se ge sp e m le a x ->
+  eval_expr se ge sp e m le b y ->
   Val.divls x y = Some z ->
-  exists v, eval_expr ge sp e m le (divls a b) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (divls a b) v /\ Val.lessdef z v.
 Proof.
   unfold divls; intros.
   destruct (is_longconst b) as [n2|] eqn:N2.
@@ -893,10 +894,10 @@ Qed.
 
 Theorem eval_modls:
   forall le a b x y z,
-  eval_expr ge sp e m le a x ->
-  eval_expr ge sp e m le b y ->
+  eval_expr se ge sp e m le a x ->
+  eval_expr se ge sp e m le b y ->
   Val.modls x y = Some z ->
-  exists v, eval_expr ge sp e m le (modls a b) v /\ Val.lessdef z v.
+  exists v, eval_expr se ge sp e m le (modls a b) v /\ Val.lessdef z v.
 Proof.
   unfold modls; intros.
   destruct (is_longconst b) as [n2|] eqn:N2.
@@ -916,7 +917,7 @@ Proof.
   { simpl; rewrite D; auto. }
   exploit Val.divls_pow2; eauto. intros EQ.
   set (le' := Vlong i :: le).
-  assert (A: eval_expr ge sp e m le' (Eletvar O) (Vlong i)) by (constructor; auto).
+  assert (A: eval_expr se ge sp e m le' (Eletvar O) (Vlong i)) by (constructor; auto).
   exploit eval_shrxlimm; eauto. intros (v1 & A1 & B1). inv B1.
   econstructor; split.
   econstructor. eauto. eapply eval_modl_from_divl. eexact A1. reflexivity.
@@ -939,9 +940,9 @@ Qed.
 
 Theorem eval_divf:
   forall le a b x y,
-  eval_expr ge sp e m le a x ->
-  eval_expr ge sp e m le b y ->
-  exists v, eval_expr ge sp e m le (divf a b) v /\ Val.lessdef (Val.divf x y) v.
+  eval_expr se ge sp e m le a x ->
+  eval_expr se ge sp e m le b y ->
+  exists v, eval_expr se ge sp e m le (divf a b) v /\ Val.lessdef (Val.divf x y) v.
 Proof.
   intros until y. unfold divf. destruct (divf_match b); intros.
 - unfold divfimm. destruct (Float.exact_inverse n2) as [n2' | ] eqn:EINV.
@@ -955,9 +956,9 @@ Qed.
 
 Theorem eval_divfs:
   forall le a b x y,
-  eval_expr ge sp e m le a x ->
-  eval_expr ge sp e m le b y ->
-  exists v, eval_expr ge sp e m le (divfs a b) v /\ Val.lessdef (Val.divfs x y) v.
+  eval_expr se ge sp e m le a x ->
+  eval_expr se ge sp e m le b y ->
+  exists v, eval_expr se ge sp e m le (divfs a b) v /\ Val.lessdef (Val.divfs x y) v.
 Proof.
   intros until y. unfold divfs. destruct (divfs_match b); intros.
 - unfold divfsimm. destruct (Float32.exact_inverse n2) as [n2' | ] eqn:EINV.

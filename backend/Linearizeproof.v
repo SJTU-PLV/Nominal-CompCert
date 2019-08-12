@@ -46,12 +46,12 @@ Lemma functions_translated:
   Genv.find_funct ge v = Some f ->
   exists tf,
   Genv.find_funct tge v = Some tf /\ transf_fundef f = OK tf.
-Proof. exact (Senv.find_funct_transf_partial TRANSF). Qed.
+Proof. exact (Senv.find_funct_transf_partial_id TRANSF). Qed.
 
 Lemma symbols_preserved:
   forall id,
   Genv.find_symbol tge id = Genv.find_symbol ge id.
-Proof. eauto using Genv.find_symbol_transf_partial. Qed.
+Proof. eauto using Senv.find_symbol_transf_partial_id. Qed.
 
 Lemma sig_preserved:
   forall f tf,
@@ -718,7 +718,7 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_id cc_id (LTL.semantics prog) (Linear.semantics tprog).
 Proof.
-  intros MATCH [ ] se _ q _ _ [ ] [ ].
+  intros MATCH [ ] se _ q _ _ _ [ ] [ ].
   eapply forward_simulation_star; simpl.
   - eauto using transf_initial_states.
   - eauto using transf_final_states.

@@ -1013,13 +1013,13 @@ Let tge := Senv.globalenv tprog se.
 
 Lemma symbols_preserved:
   forall s, Genv.find_symbol tge s = Genv.find_symbol ge s.
-Proof. apply Senv.find_symbol_match. Qed.
+Proof. apply Senv.find_symbol_match_id. Qed.
 
 Lemma functions_translated:
   forall v f,
   Genv.find_funct ge v = Some f ->
   exists cu tf, Genv.find_funct tge v = Some tf /\ match_fundef cu f tf /\ linkorder cu prog.
-Proof. exact (Senv.find_funct_match se TRANSL). Qed.
+Proof. exact (Senv.find_funct_match_id se TRANSL). Qed.
 
 (** * Matching between environments *)
 
@@ -1781,7 +1781,7 @@ Theorem transl_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_id cc_id (Clight.semantics2 prog) (Csharpminor.semantics tprog).
 Proof.
-  intros MATCH [ ] se _ q _ _ [ ] [ ].
+  intros MATCH [ ] se _ q _ _ _ [ ] [ ].
   eapply forward_simulation_plus; cbn.
   - eauto using transl_initial_states.
   - eauto using transl_final_states.

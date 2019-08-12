@@ -1585,23 +1585,30 @@ Section MATCH_GENVS.
 
 Context {A B V W: Type} (R: globdef A V -> globdef B W -> Prop).
 
-Record match_genvs (ge1: t A V) (ge2: t B W): Prop := {
+Record match_genvs (f: meminj) (ge1: t A V) (ge2: t B W) := {
+  mge_public:
+    forall id, In id (genv_public ge2) <-> In id (genv_public ge1);
   mge_next:
-    genv_next ge2 = genv_next ge1;
+    forall b1 b2 delta, f b1 = Some (b2, delta) ->
+    Pos.lt b1 (genv_next ge1) <-> Pos.lt b2 (genv_next ge2);
   mge_symb:
-    forall id, PTree.get id (genv_symb ge2) = PTree.get id (genv_symb ge1);
+    forall id b1, (Genv.genv_symb ge1) ! id = Some b1 ->
+    exists b2, f b1 = Some (b2, 0) /\ (Genv.genv_symb ge2) ! id = Some b2;
   mge_defs:
-    forall b, option_rel R (PTree.get b (genv_defs ge1)) (PTree.get b (genv_defs ge2))
+    forall b1 b2 delta gd1, f b1 = Some (b2, delta) ->
+    ((Genv.genv_defs ge1) ! b1) = Some gd1 ->
+    exists gd2, ((Genv.genv_defs ge2) ! b2) = Some gd2 /\ R gd1 gd2 /\ delta = 0;
 }.
 
+(*
 Lemma add_global_match:
-  forall ge1 ge2 id g1 g2,
-  match_genvs ge1 ge2 ->
+  forall f ge1 ge2 id g1 g2,
+  match_genvs (Mem.flat_inj thr) ge1 ge2 ->
   R g1 g2 ->
-  match_genvs (add_global ge1 (id, g1)) (add_global ge2 (id, g2)).
+  match_genvs (Mem.flat_inj (Pos.succ thr)) (add_global ge1 (id, g1)) (add_global ge2 (id, g2)).
 Proof.
   intros. destruct H. constructor; simpl; intros.
-- congruence.
+- auto.
 - rewrite mge_next0, ! PTree.gsspec. destruct (peq id0 id); auto.
 - rewrite mge_next0, ! PTree.gsspec. destruct (peq b (genv_next ge1)).
   constructor; auto.
@@ -1619,9 +1626,13 @@ Proof.
   destruct a1 as [id1 g1]; destruct b1 as [id2 g2]; simpl in *; destruct H; subst id2.
   apply IHlist_forall2. apply add_global_match; auto.
 Qed.
+*)
 
 End MATCH_GENVS.
 
+(* XXX will need to update when we define loaders *)
+
+(*
 Section MATCH_PROGRAMS.
 
 Context {C F1 V1 F2 V2: Type} {LC: Linker C} {LF: Linker F1} {LV: Linker V1}.
@@ -1823,6 +1834,7 @@ Proof.
 Qed.
 
 End TRANSFORM_TOTAL.
+*)
 
 End Genv.
 
@@ -1915,19 +1927,25 @@ End ERASE.
 (** ** Using Senv's to construct Genv's *)
 
 Definition valid_for {F V} {LF: Linker F} {LV: Linker V} (p: program F V) se :=
-  forall id g, In (id, g) (prog_defs p) ->
+  forall id g, (prog_defmap p) ! id = Some g ->
   exists b g',
     Senv.find_symbol se id = Some b /\
     Genv.find_def se b = Some g' /\
     linkorder (erase_globdef g) g'.
 
-Theorem valid_for_erase {F V} {LF: Linker F} {LV: Linker V} p se:
+Theorem valid_for_erase {F V} {LF: Linker F} {LV: Linker V} (p: program F V) se:
   valid_for (erase_program p) se ->
   valid_for p se.
 Proof.
   intros H id g Hidg.
   destruct (H id (erase_globdef g)) as (b & g' & Hb & Hg' & Hgg').
-  - apply (in_map (fun '(id, g) => (id, erase_globdef g))) in Hidg. assumption.
+  - unfold prog_defmap, PTree_Properties.of_list in *. simpl in *.
+    revert Hidg. pattern (prog_defs p). apply rev_ind; simpl.
+    + rewrite PTree.gempty. discriminate.
+    + intros [i gd] l. rewrite !map_app, !fold_left_app. simpl.
+      intros IHl Hi. destruct (peq i id).
+      * subst. rewrite PTree.gss in *. congruence.
+      * rewrite PTree.gso in * by auto. apply IHl. auto.
   - exists b, g'. intuition auto. destruct g as [|]; auto.
 Qed.
 
@@ -1935,11 +1953,14 @@ Section GLOBALENV.
 
 Context {F V : Type} (p: program F V) (se: t).
 
-Program Definition add_global (idg: ident * globdef F V) (defs: PTree.t _) :=
+Program Definition add_global (defs: PTree.t _) (idg: ident * globdef F V) :=
   match (Genv.genv_symb se) ! (idg#1) with
     | Some b => PTree.set b idg#2 defs
     | None => defs
   end.
+
+Definition add_globals :=
+    (List.fold_left add_global p.(prog_defs) (PTree.empty _)).
 
 (** XXX: should we check public symbols and definitions matching to
   ensure [valid_for p se]? Or just use it as a premise in whatever
@@ -1949,25 +1970,200 @@ Program Definition globalenv: Genv.t F V :=
   @Genv.mkgenv F V
     (Genv.genv_public se)
     (Genv.genv_symb se)
-    (List.fold_right add_global (PTree.empty _) p.(prog_defs))
+    add_globals
     (Genv.genv_next se)
     _ _ _.
 Solve All Obligations with
   destruct se; auto.
 Next Obligation.
-  revert H. induction (prog_defs p) as [ | idg defs IHdefs]; simpl.
+  revert H. unfold add_globals. pattern (prog_defs p). apply rev_ind.
   - rewrite PTree.gempty. discriminate.
-  - unfold add_global.
+  - intros idg defs IH. rewrite fold_left_app. simpl. unfold add_global at 1.
     destruct ((Genv.genv_symb se) ! (idg#1)) eqn:H; auto.
     apply Genv.genv_symb_range in H.
     rewrite PTree.gsspec. destruct peq; subst; eauto.
+Qed.
+
+(** ** Properties *)
+
+Context {LF: Linker F} {LV: Linker V}.
+
+Lemma add_globals_ensure (P: _ -> Prop) id g:
+  (forall defs, P (add_global defs (id, g))) ->
+  (forall defs id' g', id' <> id -> P defs -> P (add_global defs (id', g'))) ->
+  (prog_defmap p) ! id = Some g ->
+  P add_globals.
+Proof.
+  unfold add_globals, prog_defmap, PTree_Properties.of_list.
+  intros Hensure Hpreserve. pattern p.(prog_defs). apply rev_ind.
+  - cbn. rewrite PTree.gempty. discriminate.
+  - intros [id' g'] l IHl. rewrite !fold_left_app; cbn.
+    destruct (peq id' id).
+    + subst. rewrite PTree.gss. inversion 1; auto.
+    + rewrite PTree.gso; auto.
+Qed.
+
+Lemma add_globals_result id g b:
+  (prog_defmap p) ! id = Some g ->
+  Genv.find_symbol se id = Some b ->
+  add_globals ! b = Some g.
+Proof.
+  intros Hg Hb.
+  eapply add_globals_ensure; eauto; intros; unfold add_global; cbn.
+  - unfold find_symbol, Genv.find_symbol in Hb.
+    destruct ((Genv.genv_symb se) ! id); try discriminate.
+    inv Hb. rewrite PTree.gss. auto.
+  - destruct ((Genv.genv_symb se) ! id') eqn:Hid'; auto.
+    rewrite PTree.gso; auto.
+    intro. subst. elim H. eapply Genv.genv_vars_inj; eauto.
+Qed.
+
+Lemma add_globals_inv b g:
+  add_globals ! b = Some g ->
+  exists id, Genv.find_symbol se id = Some b /\ (prog_defmap p) ! id = Some g.
+Proof.
+  unfold add_globals, Genv.find_symbol, prog_defmap, PTree_Properties.of_list.
+  pattern p.(prog_defs). apply rev_ind.
+  - cbn. rewrite PTree.gempty. discriminate.
+  - intros [id g'] l IHl. rewrite !fold_left_app. cbn.
+    unfold add_global at 1. cbn.
+    destruct ((Genv.genv_symb se) ! id) as [b'|] eqn:Hb'; eauto.
+    + destruct (peq b' b).
+      * subst. rewrite !PTree.gss. intros Hg'. inv Hg'.
+        exists id. rewrite !PTree.gss. auto.
+      * rewrite !PTree.gso; eauto. intros Hg.
+        edestruct IHl as (id' & Hid' & Hg'); eauto.
+        exists id'. rewrite PTree.gso by congruence. auto.
+    + intros H. apply IHl in H as (id' & Hb & Hid').
+      exists id'. rewrite PTree.gso by congruence. auto.
+Qed.
+
+Theorem find_def_symbol:
+  forall id g, valid_for p se ->
+  (prog_defmap p)!id = Some g <->
+  exists b, Genv.find_symbol globalenv id = Some b /\ Genv.find_def globalenv b = Some g.
+Proof.
+  intros id g Hse. split.
+  - intros Hg. edestruct Hse as (b & g' & Hb & Hg' & Hgg'); eauto.
+    exists b. split. assumption. unfold globalenv, Genv.find_def. cbn.
+    eapply add_globals_result; eauto.
+  - unfold Genv.find_def. cbn. intros (b & Hb & Hg).
+    edestruct add_globals_inv as (id' & ? & ?); eauto.
+    assert (id' = id) by (eapply Genv.genv_vars_inj; eauto). congruence.
 Qed.
 
 End GLOBALENV.
 
 (** ** Relation to [match_program] *)
 
+Definition match_skel (se1 se2: Senv.t) (sk1 sk2: AST.program unit unit) :=
+  forall id,
+    AST.has_symbol sk1 id ->
+    (Genv.has_symbol se1 id /\
+     Genv.has_symbol se2 id <-> AST.has_symbol sk2 id).
+
+Definition inject (f: meminj) (se1 se2: t) :=
+  Genv.match_genvs eq f se1 se2.
+
 Section MATCH_PROGRAMS.
+
+Context {C F1 V1 F2 V2: Type} {LC: Linker C}.
+Variable match_fundef: C -> F1 -> F2 -> Prop.
+Variable match_varinfo: V1 -> V2 -> Prop.
+Variable ctx: C.
+Variable p: program F1 V1.
+Variable tp: program F2 V2.
+Variable f: meminj.
+Variable se: t.
+Variable tse: t.
+Hypothesis progmatch: match_program_gen match_fundef match_varinfo ctx p tp.
+Hypothesis sematch: inject f se tse.
+
+Lemma globalenvs_match:
+  Genv.match_genvs (match_globdef match_fundef match_varinfo ctx) f
+    (globalenv p se)
+    (globalenv tp tse).
+Proof.
+  constructor; simpl; intros; auto.
+  - eapply Genv.mge_public; eauto.
+  - eapply Genv.mge_next; eauto.
+  - eapply Genv.mge_symb; eauto.
+  - eapply @add_globals_inv in H0 as (id & Hb1 & Hgd1); eauto.
+    eapply Genv.mge_symb in Hb1 as (b2' & Hb12' & Hb2'); eauto.
+    destruct ((prog_defmap tp) ! id) as [gd2|] eqn:Hgd2.
+    + exists gd2. intuition try congruence.
+      * eapply @add_globals_result with (id:=id); eauto.
+        unfold Genv.find_symbol.
+        edestruct @match_program_defmap with (id:=id); eauto; congruence.
+      * edestruct @match_program_defmap with (p1:=p) (p2:=tp) (id:=id); eauto; congruence.
+    + edestruct @match_program_defmap with (p1:=p) (p2:=tp) (id:=id); eauto; congruence.
+Qed.
+
+Theorem find_def_match:
+  forall b tb delta g,
+  f b = Some (tb, delta) ->
+  Genv.find_def (globalenv p se) b = Some g ->
+  exists tg,
+    Genv.find_def (globalenv tp tse) tb = Some tg /\
+    match_globdef match_fundef match_varinfo ctx g tg /\
+    delta = 0.
+Proof.
+  intros. eapply Genv.mge_defs; eauto using globalenvs_match.
+Qed.
+
+Theorem find_funct_ptr_match:
+  forall b tb delta fd,
+  f b = Some (tb, delta) ->
+  Genv.find_funct_ptr (globalenv p se) b = Some fd ->
+  exists cunit tfd,
+  Genv.find_funct_ptr (globalenv tp tse) tb = Some tfd /\
+  match_fundef cunit fd tfd /\ linkorder cunit ctx /\ delta = 0.
+Proof.
+  intros. rewrite Genv.find_funct_ptr_iff in *.
+  eapply find_def_match in H0 as (tg & P & Q & R); eauto. inv Q.
+  exists ctx', f2; intuition auto. apply Genv.find_funct_ptr_iff; auto.
+Qed.
+
+Theorem find_funct_match:
+  forall v tv fd,
+  Val.inject f v tv ->
+  Genv.find_funct (globalenv p se) v = Some fd ->
+  exists cunit tfd,
+  Genv.find_funct (globalenv tp tse) tv = Some tfd /\
+  match_fundef cunit fd tfd /\ linkorder cunit ctx.
+Proof.
+  intros. exploit Genv.find_funct_inv; eauto. intros [b EQ]. subst v.
+  inv H. rewrite Genv.find_funct_find_funct_ptr in H0.
+  edestruct find_funct_ptr_match as (cunit & tfd & Htfd & MATCH & Hcunit & ?); eauto.
+  subst. rewrite Genv.find_funct_find_funct_ptr. eauto.
+Qed.
+
+Theorem find_var_info_match:
+  forall b tb delta v,
+  f b = Some (tb, delta) ->
+  Genv.find_var_info (globalenv p se) b = Some v ->
+  exists tv,
+  Genv.find_var_info (globalenv tp tse) tb = Some tv /\
+  match_globvar match_varinfo v tv /\
+  delta = 0.
+Proof.
+  intros. rewrite Genv.find_var_info_iff in *.
+  eapply find_def_match in H0 as (tg & P & Q & R); eauto. inv Q.
+  exists v2; intuition auto. apply Genv.find_var_info_iff; auto.
+Qed.
+
+Theorem find_symbol_match:
+  forall id b,
+  Genv.find_symbol (globalenv p se) id = Some b ->
+  exists tb, f b = Some (tb, 0) /\ Genv.find_symbol (globalenv tp tse) id = Some tb.
+Proof.
+  eapply Genv.mge_symb.
+  eapply globalenvs_match.
+Qed.
+
+End MATCH_PROGRAMS.
+
+Section MATCH_PROGRAMS_ID.
 
 Context {C F1 V1 F2 V2: Type} {LC: Linker C}.
 Variable match_fundef: C -> F1 -> F2 -> Prop.
@@ -1978,132 +2174,76 @@ Variable tp: program F2 V2.
 Variable se: t.
 Hypothesis progmatch: match_program_gen match_fundef match_varinfo ctx p tp.
 
-Lemma globalenvs_match:
-  Genv.match_genvs (match_globdef match_fundef match_varinfo ctx)
-    (globalenv p se)
-    (globalenv tp se).
+Lemma inject_refl:
+  inject inject_id se se.
 Proof.
-  constructor; simpl; intros; auto.
-  destruct progmatch as [DEFS _]. induction DEFS.
-  - rewrite !PTree.gempty. constructor.
-  - destruct H as [ID GD]. simpl. unfold add_global at 1 3.
-    rewrite ID. destruct ((Genv.genv_symb se) ! _); simpl; eauto.
-    destruct (peq b b0); subst.
-    + rewrite !PTree.gss. constructor; auto.
-    + rewrite !PTree.gso; auto.
+  unfold inject_id. split; eauto.
+  - reflexivity.
+  - inversion 1; reflexivity.
+  - inversion 1; eauto.
 Qed.
 
-Theorem find_def_match_2 b:
-  option_rel (match_globdef match_fundef match_varinfo ctx)
-    (Genv.find_def (globalenv p se) b)
-    (Genv.find_def (globalenv tp se) b).
-Proof.
-  apply (Genv.mge_defs globalenvs_match).
-Qed.
-
-Theorem find_def_match:
-  forall b g,
-  Genv.find_def (globalenv p se) b = Some g ->
-  exists tg,
-    Genv.find_def (globalenv tp se) b = Some tg /\
-    match_globdef match_fundef match_varinfo ctx g tg.
-Proof.
-  intros. generalize (find_def_match_2 b). rewrite H; intros R; inv R.
-  exists y; auto.
-Qed.
-
-Theorem find_funct_ptr_match:
-  forall b f,
-  Genv.find_funct_ptr (globalenv p se) b = Some f ->
-  exists cunit tf,
-  Genv.find_funct_ptr (globalenv tp se) b = Some tf /\
-  match_fundef cunit f tf /\ linkorder cunit ctx.
-Proof.
-  intros. rewrite Genv.find_funct_ptr_iff in *. apply find_def_match in H.
-  destruct H as (tg & P & Q). inv Q.
-  exists ctx', f2; intuition auto. apply Genv.find_funct_ptr_iff; auto.
-Qed.
-
-Theorem find_funct_match:
-  forall v f,
-  Genv.find_funct (globalenv p se) v = Some f ->
-  exists cunit tf,
-  Genv.find_funct (globalenv tp se) v = Some tf /\
-  match_fundef cunit f tf /\ linkorder cunit ctx.
-Proof.
-  intros. exploit Genv.find_funct_inv; eauto. intros [b EQ]. subst v.
-  rewrite Genv.find_funct_find_funct_ptr in H.
-  rewrite Genv.find_funct_find_funct_ptr.
-  apply find_funct_ptr_match. auto.
-Qed.
-
-Theorem find_var_info_match:
-  forall b v,
-  Genv.find_var_info (globalenv p se) b = Some v ->
-  exists tv,
-  Genv.find_var_info (globalenv tp se) b = Some tv /\
-  match_globvar match_varinfo v tv.
-Proof.
-  intros. rewrite Genv.find_var_info_iff in *. apply find_def_match in H.
-  destruct H as (tg & P & Q). inv Q.
-  exists v2; split; auto. apply Genv.find_var_info_iff; auto.
-Qed.
-
-Theorem find_symbol_match:
-  forall id,
-  Genv.find_symbol (globalenv tp se) id = Genv.find_symbol (globalenv p se) id.
+Lemma find_symbol_match_id:
+  forall s, Genv.find_symbol (globalenv tp se) s = Genv.find_symbol (globalenv p se) s.
 Proof.
   reflexivity.
 Qed.
 
-Theorem senv_match:
-  Senv.equiv (of_genv (Genv.globalenv p)) (of_genv (Genv.globalenv tp)).
+Lemma find_funct_match_id:
+  forall v f,
+  Genv.find_funct (globalenv p se) v = Some f ->
+  exists cu tf,
+    Genv.find_funct (globalenv tp se) v = Some tf /\
+    match_fundef cu f tf /\ linkorder cu ctx.
 Proof.
-  red; simpl. repeat split.
-- eapply Genv.find_symbol_match; eauto.
-- intros. unfold public_symbol, Genv.public_symbol. simpl.
-  rewrite !find_symbol_of_genv.
-  rewrite (Genv.find_symbol_match progmatch).
-  rewrite ! Genv.globalenv_public.
-  destruct progmatch as (P & Q & R). rewrite R. auto.
-- intros. unfold block_is_volatile, Genv.block_is_volatile.
-  destruct (Genv.globalenvs_match progmatch) as [P Q R]. specialize (R b).
-  rewrite !find_var_info_of_genv.
-  unfold Genv.find_var_info, Genv.find_def.
-  inv R; auto.
-  inv H1; auto.
-  inv H2; auto.
+  intros. assert (Val.inject inject_id v v) by (apply val_inject_lessdef; auto).
+  eapply @find_funct_match; eauto using inject_refl.
 Qed.
 
-End MATCH_PROGRAMS.
+End MATCH_PROGRAMS_ID.
 
 Section TRANSFORM_PARTIAL.
 
 Context {A B V: Type} {LA: Linker A} {LV: Linker V}.
-Context {transf: A -> res B} {p: program A V} {tp: program B V} {se: t}.
+Context {transf: A -> res B} {p: program A V} {tp: program B V}.
+Context {f: meminj} {se tse: t}.
 Hypothesis progmatch: match_program (fun cu f tf => transf f = OK tf) eq p tp.
+Hypothesis sematch: inject f se tse.
 
 Theorem find_funct_transf_partial:
+  forall v tv fd,
+  Val.inject f v tv ->
+  Genv.find_funct (globalenv p se) v = Some fd ->
+  exists tfd,
+  Genv.find_funct (globalenv tp tse) tv = Some tfd /\ transf fd = OK tfd.
+Proof.
+  intros. edestruct @find_funct_match as (cu & tf & P & Q & R); eauto.
+Qed.
+
+Theorem find_symbol_transf_partial:
+  forall (s : ident) (b: block),
+  Genv.find_symbol (globalenv p se) s = Some b ->
+  exists tb, f b = Some (tb, 0) /\ Genv.find_symbol (globalenv tp tse) s = Some tb.
+Proof.
+  intros. edestruct @find_symbol_match as (tb & Htb & H'); eauto.
+Qed.
+
+Theorem find_funct_transf_partial_id:
   forall v f,
   Genv.find_funct (globalenv p se) v = Some f ->
   exists tf,
   Genv.find_funct (globalenv tp se) v = Some tf /\ transf f = OK tf.
 Proof.
-  intros. exploit (find_funct_match se progmatch); eauto.
-  intros (cu & tf & P & Q & R); exists tf; auto.
+  clear tse sematch. intros.
+  assert (Val.inject inject_id v v) by (apply val_inject_lessdef; auto).
+  edestruct @find_funct_match as (cu & tf & P & Q & R); eauto using inject_refl.
 Qed.
 
-Theorem find_symbol_transf_partial:
-  forall (s : ident),
-  Genv.find_symbol (globalenv tp se) s = Genv.find_symbol (globalenv p se) s.
+Theorem find_symbol_transf_partial_id:
+  forall id,
+  Genv.find_symbol (globalenv tp se) id = Genv.find_symbol (globalenv p se) id.
 Proof.
   reflexivity.
-Qed.
-
-Theorem senv_transf_partial:
-  Senv.equiv (of_genv (Genv.globalenv p)) (of_genv (Genv.globalenv tp)).
-Proof.
-  intros. eapply (senv_match progmatch).
 Qed.
 
 End TRANSFORM_PARTIAL.
@@ -2113,29 +2253,45 @@ End TRANSFORM_PARTIAL.
 Section TRANSFORM_TOTAL.
 
 Context {A B V: Type} {LA: Linker A} {LV: Linker V}.
-Context {transf: A -> B} {p: program A V} {tp: program B V} {se: t}.
+Context {transf: A -> B} {p: program A V} {tp: program B V}.
+Context {f: meminj} {se tse: t}.
 Hypothesis progmatch: match_program (fun cu f tf => tf = transf f) eq p tp.
+Hypothesis sematch: inject f se tse.
 
 Theorem find_funct_transf:
+  forall v tv fd,
+  Val.inject f v tv ->
+  Genv.find_funct (globalenv p se) v = Some fd ->
+  Genv.find_funct (globalenv tp tse) tv = Some (transf fd).
+Proof.
+  intros. edestruct @find_funct_match as (cu & tf & P & Q & R); eauto.
+  congruence.
+Qed.
+
+Theorem find_symbol_transf:
+  forall (s : ident) (b: block),
+  Genv.find_symbol (globalenv p se) s = Some b ->
+  exists tb, f b = Some (tb, 0) /\ Genv.find_symbol (globalenv tp tse) s = Some tb.
+Proof.
+  intros. edestruct @find_symbol_match as (tb & Htb & H'); eauto.
+Qed.
+
+Theorem find_funct_transf_id:
   forall v f,
   Genv.find_funct (globalenv p se) v = Some f ->
   Genv.find_funct (globalenv tp se) v = Some (transf f).
 Proof.
-  intros. exploit (find_funct_match se progmatch); eauto.
-  intros (cu & tf & P & Q & R). congruence.
+  clear tse sematch. intros.
+  assert (Val.inject inject_id v v) by (apply val_inject_lessdef; auto).
+  edestruct @find_funct_match as (cu & tf & P & Q & R); eauto using inject_refl.
+  congruence.
 Qed.
 
-Theorem find_symbol_transf:
+Theorem find_symbol_transf_id:
   forall (s : ident),
   Genv.find_symbol (globalenv tp se) s = Genv.find_symbol (globalenv p se) s.
 Proof.
-  intros. symmetry. eapply (find_symbol_match p tp se s).
-Qed.
-
-Theorem senv_transf:
-  Senv.equiv (of_genv (Genv.globalenv p)) (of_genv (Genv.globalenv tp)).
-Proof.
-  intros. eapply (senv_match progmatch).
+  reflexivity.
 Qed.
 
 End TRANSFORM_TOTAL.

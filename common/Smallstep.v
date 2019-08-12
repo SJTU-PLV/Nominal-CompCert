@@ -820,6 +820,7 @@ Definition match_skel (se1 se2: Senv.t) (sk1 sk2: AST.program unit unit) :=
 
 Definition open_fsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
   forall (w: ccworld ccB) (se1 se2: Senv.t) (q1: query liB1) (q2: query liB2),
+    Senv.valid_for (skel L1) se1 ->
     match_skel se1 se2 (skel L1) (skel L2) ->
     match_senv ccB w se1 se2 ->
     match_query ccB w q1 q2 ->
@@ -1250,6 +1251,7 @@ Arguments Backward_simulation {_ _ cc _ _ match_res L1 L2 index} order match_sta
 
 Definition open_bsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
   forall (w: ccworld ccB) (se1 se2: Senv.t) (q1: query liB1) (q2: query liB2),
+    Senv.valid_for (skel L1) se1 ->
     match_skel se1 se2 (skel L1) (skel L2) ->
     match_senv ccB w se1 se2 ->
     match_query ccB w q1 q2 ->
@@ -1798,7 +1800,7 @@ Lemma forward_to_backward_open_sim:
     open_determinate L2 ->
     open_bsim ccA ccB L1 L2.
 Proof.
-  intros until L2. intros H12 H1 H2 w se1 se2 q1 q2 Hsk Hse Hq.
+  intros until L2. intros H12 H1 H2 w se1 se2 q1 q2 Hse1 Hsk Hse Hq.
   eapply forward_to_backward_simulation; eauto.
   eapply match_senv_public_preserved; eauto.
 Qed.
