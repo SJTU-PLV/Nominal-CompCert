@@ -151,19 +151,21 @@ Inductive cc_inj_query (f: meminj): c_query -> c_query -> Prop :=
     cc_inj_query f (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
 
 Inductive cc_inj_reply (f: meminj): c_reply -> c_reply -> Prop :=
-  cc_inj_reply_intro vres1 vres2 m1 m2:
-    Val.inject f vres1 vres2 ->
-    Mem.inject f m1 m2 ->
+  cc_inj_reply_intro f' vres1 vres2 m1 m2:
+    inject_incr f f' ->
+    Val.inject f' vres1 vres2 ->
+    Mem.inject f' m1 m2 ->
     cc_inj_reply f (cr vres1 m1) (cr vres2 m2).
 
 Program Definition cc_inj :=
   {|
-    match_senv := symbols_inject;
+    match_senv := Senv.inject;
     match_query := cc_inj_query;
     match_reply := cc_inj_reply;
   |}.
-Solve All Obligations with
-  firstorder.
+Next Obligation.
+  intros. rewrite (Genv.mge_public H); auto.
+Qed.
 
 (** *** Injections with footprint enforcement *)
 
@@ -184,14 +186,15 @@ Inductive cc_injp_reply: cc_injp_world -> c_reply -> c_reply -> Prop :=
     Mem.unchanged_on (loc_unmapped f) m1 m1' ->
     Mem.unchanged_on (loc_out_of_reach f m1) m2 m2' ->
     inject_incr f f' ->
-    inject_separated f f' m1 m1' ->
+    inject_separated f f' m1 m2 ->
     cc_injp_reply (injpw f m1 m2) (cr vres1 m1') (cr vres2 m2').
 
 Program Definition cc_injp :=
   {|
-    match_senv w := symbols_inject (injp_inj w);
+    match_senv w := Senv.inject (injp_inj w);
     match_query := cc_injp_query;
     match_reply := cc_injp_reply;
   |}.
-Solve All Obligations with
-  firstorder.
+Next Obligation.
+  intros. rewrite (Genv.mge_public H); auto.
+Qed.

@@ -1405,19 +1405,19 @@ End EVAL_LESSDEF.
 Section EVAL_INJECT.
 
 Variable F V: Type.
-Variable genv: Genv.t F V.
+Variable se tse: Senv.t.
 Variable f: meminj.
-Hypothesis globals: meminj_preserves_globals genv f.
+Hypothesis globals: Senv.inject f se tse.
 Variable sp1: block.
 Variable sp2: block.
 Variable delta: Z.
 Hypothesis sp_inj: f sp1 = Some(sp2, delta).
 
 Remark symbol_address_inject:
-  forall id ofs, Val.inject f (Genv.symbol_address genv id ofs) (Genv.symbol_address genv id ofs).
+  forall id ofs, Val.inject f (Genv.symbol_address se id ofs) (Genv.symbol_address tse id ofs).
 Proof.
-  intros. unfold Genv.symbol_address. destruct (Genv.find_symbol genv id) eqn:?; auto.
-  exploit (proj1 globals); eauto. intros.
+  intros. unfold Genv.symbol_address. destruct (Genv.find_symbol se id) eqn:?; auto.
+  edestruct @Genv.find_symbol_match as (tb & Htb & H); eauto. rewrite H.
   econstructor; eauto. rewrite Ptrofs.add_zero; auto.
 Qed.
 
@@ -1438,9 +1438,9 @@ Qed.
 Lemma eval_addressing_inject:
   forall addr vl1 vl2 v1,
   Val.inject_list f vl1 vl2 ->
-  eval_addressing genv (Vptr sp1 Ptrofs.zero) addr vl1 = Some v1 ->
+  eval_addressing se (Vptr sp1 Ptrofs.zero) addr vl1 = Some v1 ->
   exists v2,
-     eval_addressing genv (Vptr sp2 Ptrofs.zero) (shift_stack_addressing delta addr) vl2 = Some v2
+     eval_addressing tse (Vptr sp2 Ptrofs.zero) (shift_stack_addressing delta addr) vl2 = Some v2
   /\ Val.inject f v1 v2.
 Proof.
   intros.
@@ -1454,9 +1454,9 @@ Lemma eval_operation_inject:
   forall op vl1 vl2 v1 m1 m2,
   Val.inject_list f vl1 vl2 ->
   Mem.inject f m1 m2 ->
-  eval_operation genv (Vptr sp1 Ptrofs.zero) op vl1 m1 = Some v1 ->
+  eval_operation se (Vptr sp1 Ptrofs.zero) op vl1 m1 = Some v1 ->
   exists v2,
-     eval_operation genv (Vptr sp2 Ptrofs.zero) (shift_stack_operation delta op) vl2 m2 = Some v2
+     eval_operation tse (Vptr sp2 Ptrofs.zero) (shift_stack_operation delta op) vl2 m2 = Some v2
   /\ Val.inject f v1 v2.
 Proof.
   intros.

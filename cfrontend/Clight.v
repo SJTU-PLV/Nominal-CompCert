@@ -677,6 +677,8 @@ Inductive initial_state: c_query -> state -> Prop :=
   | initial_state_intro: forall vf f targs tres tcc vargs m,
       Genv.find_funct ge vf = Some (Internal f) ->
       type_of_function f = Tfunction targs tres tcc ->
+      val_casted_list vargs targs ->
+      Ple (Genv.genv_next ge) (Mem.nextblock m) ->
       initial_state
         (cq vf (signature_of_type targs tres tcc) vargs m)
         (Callstate vf vargs Kstop m).

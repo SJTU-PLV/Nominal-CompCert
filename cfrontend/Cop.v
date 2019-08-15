@@ -1517,6 +1517,13 @@ Inductive val_casted: val -> type -> Prop :=
   | val_casted_void: forall v,
       val_casted v Tvoid.
 
+Inductive val_casted_list: list val -> typelist -> Prop :=
+  | vcl_nil:
+      val_casted_list nil Tnil
+  | vcl_cons: forall v1 vl ty1 tyl,
+      val_casted v1 ty1 -> val_casted_list vl tyl ->
+      val_casted_list (v1 :: vl) (Tcons  ty1 tyl).
+
 Hint Constructors val_casted.
 
 Remark cast_int_int_idem:

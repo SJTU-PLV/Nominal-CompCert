@@ -1587,18 +1587,67 @@ Context {A B V W: Type} (R: globdef A V -> globdef B W -> Prop).
 
 Record match_genvs (f: meminj) (ge1: t A V) (ge2: t B W) := {
   mge_public:
-    forall id, In id (genv_public ge2) <-> In id (genv_public ge1);
-  mge_next:
+    forall id, Genv.public_symbol ge2 id = Genv.public_symbol ge1 id;
+  mge_dom:
+    forall b1, Pos.lt b1 (genv_next ge1) ->
+    exists b2, f b1 = Some (b2, 0); (* kept *)
+  mge_img:
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
-    Pos.lt b1 (genv_next ge1) <-> Pos.lt b2 (genv_next ge2);
+    Pos.lt b2 (genv_next ge2) -> Pos.lt b1 (genv_next ge1);
   mge_symb:
-    forall id b1, (Genv.genv_symb ge1) ! id = Some b1 ->
-    exists b2, f b1 = Some (b2, 0) /\ (Genv.genv_symb ge2) ! id = Some b2;
+    forall b1 b2 delta, f b1 = Some (b2, delta) ->
+    forall id, (Genv.genv_symb ge1) ! id = Some b1 <-> (Genv.genv_symb ge2) ! id = Some b2;
   mge_defs:
-    forall b1 b2 delta gd1, f b1 = Some (b2, delta) ->
-    ((Genv.genv_defs ge1) ! b1) = Some gd1 ->
-    exists gd2, ((Genv.genv_defs ge2) ! b2) = Some gd2 /\ R gd1 gd2 /\ delta = 0;
+    forall b1 b2 delta, f b1 = Some (b2, delta) ->
+    option_rel R ((Genv.genv_defs ge1) ! b1) ((Genv.genv_defs ge2) ! b2);
 }.
+
+Context {f ge tge} (Hge: match_genvs f ge tge).
+
+Theorem match_genvs_external_call f':
+  inject_incr f f' ->
+  (forall b1 b2 delta, f' b1 = Some (b2, delta) -> Plt b2 tge.(genv_next) -> f b1 = Some (b2, delta)) ->
+  match_genvs f' ge tge.
+Proof.
+  intros Hf' Himg. split.
+  - eapply mge_public; eauto.
+  - intros. edestruct mge_dom as (b2 & Hb2); eauto.
+  - intros. apply Himg in H; auto. eapply mge_img; eauto.
+  - intros. split.
+    + intros Hb1. edestruct mge_dom as (b2' & Hb2'); eauto. eapply genv_symb_range; eauto.
+      rewrite (Hf' _ _ _ Hb2') in H. inv H. rewrite <- mge_symb; eauto.
+    + intros Hb2. rewrite mge_symb; eauto. eapply Himg; eauto. eapply genv_symb_range; eauto.
+  - intros b1 b2 delta Hb.
+    destruct ((genv_defs tge) ! b2) eqn:Hb2.
+    + edestruct (@mge_defs f ge tge Hge b1 b2 delta); try congruence.
+      * eapply Himg; eauto. eapply genv_defs_range; eauto.
+      * constructor. congruence.
+    + destruct ((genv_defs ge) ! b1) eqn:Hb1; [ | constructor].
+      edestruct (@mge_defs f ge tge Hge b1 b2 delta); try congruence.
+      edestruct mge_dom; eauto. eapply genv_defs_range; eauto.
+      rewrite (Hf' _ _ _ H) in Hb. congruence.
+Qed.
+
+Theorem find_def_match:
+  forall b tb delta g, f b = Some (tb, delta) -> Genv.find_def ge b = Some g ->
+  exists tg, Genv.find_def tge tb = Some tg /\ R g tg /\ delta = 0.
+Proof.
+  intros. unfold Genv.find_def in *.
+  assert (Plt b (genv_next ge)) by eauto using Genv.genv_defs_range.
+  edestruct mge_dom; eauto.
+  destruct (mge_defs Hge _ H); try congruence.
+  exists y. intuition eauto; congruence.
+Qed.
+
+Theorem find_symbol_match:
+  forall id b, Genv.find_symbol ge id = Some b ->
+  exists tb, f b = Some (tb, 0) /\ Genv.find_symbol tge id = Some tb.
+Proof.
+  unfold Genv.find_symbol. intros id b Hb.
+  edestruct mge_dom as (tb & Htb); eauto.
+  - eapply genv_symb_range. eassumption.
+  - erewrite mge_symb in Hb; eauto.
+Qed.
 
 (*
 Lemma add_global_match:
@@ -2078,25 +2127,47 @@ Variable se: t.
 Variable tse: t.
 Hypothesis progmatch: match_program_gen match_fundef match_varinfo ctx p tp.
 Hypothesis sematch: inject f se tse.
+Let match_def := match_globdef match_fundef match_varinfo ctx.
+
+Lemma add_global_match b1 b2 delta defs1 defs2 id gd1 gd2:
+  f b1 = Some (b2, delta) ->
+  option_rel match_def (defs1 ! b1) (defs2 ! b2) ->
+  match_def gd1 gd2 ->
+  option_rel match_def ((add_global se defs1 (id, gd1)) ! b1) ((add_global tse defs2 (id, gd2)) ! b2).
+Proof.
+  intros Hb Hdefs Hgd. unfold add_global. cbn.
+  destruct ((Genv.genv_symb se) ! id) as [b1' | ] eqn:Hb1'.
+  - edestruct @Genv.mge_dom as (b2' & Hb'); eauto. eapply Genv.genv_symb_range; eauto.
+    pose proof Hb1' as Hb2'. erewrite Genv.mge_symb in Hb2' by eauto. rewrite Hb2'.
+    destruct (peq b1' b1); subst.
+    + assert (b2' = b2) by congruence; subst.
+      rewrite !PTree.gss. constructor; auto.
+    + assert (b2' <> b2).
+      { intro. subst. erewrite <- (Genv.mge_symb sematch b1) in Hb2' by eauto. congruence. }
+      rewrite !PTree.gso by eauto. assumption.
+  - destruct ((Genv.genv_symb tse) ! id) as [b2' | ] eqn:Hb2'; auto.
+    destruct (peq b2' b2); subst.
+    + erewrite <- Genv.mge_symb in Hb2' by eauto. congruence.
+    + rewrite PTree.gso; eauto.
+Qed.
 
 Lemma globalenvs_match:
-  Genv.match_genvs (match_globdef match_fundef match_varinfo ctx) f
-    (globalenv p se)
-    (globalenv tp tse).
+  Genv.match_genvs match_def f (globalenv p se) (globalenv tp tse).
 Proof.
   constructor; simpl; intros; auto.
-  - eapply Genv.mge_public; eauto.
-  - eapply Genv.mge_next; eauto.
+  - eapply (Genv.mge_public sematch).
+  - eapply Genv.mge_dom; eauto.
+  - eapply Genv.mge_img; eauto.
   - eapply Genv.mge_symb; eauto.
-  - eapply @add_globals_inv in H0 as (id & Hb1 & Hgd1); eauto.
-    eapply Genv.mge_symb in Hb1 as (b2' & Hb12' & Hb2'); eauto.
-    destruct ((prog_defmap tp) ! id) as [gd2|] eqn:Hgd2.
-    + exists gd2. intuition try congruence.
-      * eapply @add_globals_result with (id:=id); eauto.
-        unfold Genv.find_symbol.
-        edestruct @match_program_defmap with (id:=id); eauto; congruence.
-      * edestruct @match_program_defmap with (p1:=p) (p2:=tp) (id:=id); eauto; congruence.
-    + edestruct @match_program_defmap with (p1:=p) (p2:=tp) (id:=id); eauto; congruence.
+  - destruct progmatch as [DEFS _]. unfold add_globals.
+    cut (option_rel (match_globdef match_fundef match_varinfo ctx)
+                    ((PTree.empty (globdef F1 V1)) ! b1)
+                    ((PTree.empty (globdef F2 V2)) ! b2)).
+    + generalize (PTree.empty (globdef F1 V1)), (PTree.empty (globdef F2 V2)).
+      induction DEFS; eauto. cbn.
+      intros t1 t2 Ht. eapply IHDEFS.
+      destruct a1, b0, H0. cbn in *; subst. eapply add_global_match; eauto.
+    + rewrite !PTree.gempty. constructor.
 Qed.
 
 Theorem find_def_match:
@@ -2108,7 +2179,7 @@ Theorem find_def_match:
     match_globdef match_fundef match_varinfo ctx g tg /\
     delta = 0.
 Proof.
-  intros. eapply Genv.mge_defs; eauto using globalenvs_match.
+  intros. eapply Genv.find_def_match; eauto using globalenvs_match.
 Qed.
 
 Theorem find_funct_ptr_match:
@@ -2157,8 +2228,10 @@ Theorem find_symbol_match:
   Genv.find_symbol (globalenv p se) id = Some b ->
   exists tb, f b = Some (tb, 0) /\ Genv.find_symbol (globalenv tp tse) id = Some tb.
 Proof.
-  eapply Genv.mge_symb.
-  eapply globalenvs_match.
+  unfold Genv.find_symbol. intros id b Hb.
+  edestruct @Genv.mge_dom as (tb & Htb); eauto.
+  - eapply Genv.genv_symb_range. eassumption.
+  - erewrite Genv.mge_symb in Hb; eauto using globalenvs_match.
 Qed.
 
 End MATCH_PROGRAMS.
@@ -2178,9 +2251,9 @@ Lemma inject_refl:
   inject inject_id se se.
 Proof.
   unfold inject_id. split; eauto.
-  - reflexivity.
-  - inversion 1; reflexivity.
   - inversion 1; eauto.
+  - inversion 1; reflexivity.
+  - inversion 1; eauto. destruct (_ ! _); repeat constructor.
 Qed.
 
 Lemma find_symbol_match_id:

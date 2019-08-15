@@ -1469,19 +1469,14 @@ Qed.
 
 (** Special case of [external_call_mem_inject_gen] (for backward compatibility) *)
 
-Definition meminj_preserves_globals (F V: Type) (ge: Genv.t F V) (f: block -> option (block * Z)) : Prop :=
-     (forall id b, Genv.find_symbol ge id = Some b -> f b = Some(b, 0))
-  /\ (forall b gv, Genv.find_var_info ge b = Some gv -> f b = Some(b, 0))
-  /\ (forall b1 b2 delta gv, Genv.find_var_info ge b2 = Some gv -> f b1 = Some(b2, delta) -> b2 = b1).
-
 Lemma external_call_mem_inject:
-  forall ef F V (ge: Genv.t F V) vargs m1 t vres m2 f m1' vargs',
-  meminj_preserves_globals ge f ->
-  external_call ef ge vargs m1 t vres m2 ->
+  forall ef se tse vargs m1 t vres m2 f m1' vargs',
+  Senv.inject f se tse ->
+  external_call ef se vargs m1 t vres m2 ->
   Mem.inject f m1 m1' ->
   Val.inject_list f vargs vargs' ->
   exists f', exists vres', exists m2',
-     external_call ef ge vargs' m1' t vres' m2'
+     external_call ef tse vargs' m1' t vres' m2'
     /\ Val.inject f' vres vres'
     /\ Mem.inject f' m2 m2'
     /\ Mem.unchanged_on (loc_unmapped f) m1 m2
@@ -1489,17 +1484,15 @@ Lemma external_call_mem_inject:
     /\ inject_incr f f'
     /\ inject_separated f f' m1 m1'.
 Proof.
-  intros. destruct H as (A & B & C). eapply external_call_mem_inject_gen with (ge1 := ge); eauto.
+  intros. eapply external_call_mem_inject_gen with (ge1 := se) (ge2 := tse); eauto.
   repeat split; intros.
-  + simpl in H3. exploit A; eauto. intros EQ; rewrite EQ in H; inv H. auto.
-  + simpl in H3. exploit A; eauto. intros EQ; rewrite EQ in H; inv H. auto.
-  + simpl in H3. exists b1; split; eauto.
-  + simpl; unfold Senv.block_is_volatile, Genv.block_is_volatile.
-    rewrite !Senv.find_var_info_of_genv.
-    destruct (Genv.find_var_info ge b1) as [gv1|] eqn:V1.
-    * exploit B; eauto. intros EQ; rewrite EQ in H; inv H. rewrite V1; auto.
-    * destruct (Genv.find_var_info ge b2) as [gv2|] eqn:V2; auto.
-      exploit C; eauto. intros EQ; subst b2. congruence.
+  + apply (Genv.mge_public H); auto.
+  + edestruct @Genv.find_symbol_match as (? & ? & ?); eauto. congruence.
+  + edestruct @Genv.find_symbol_match as (? & ? & ?); eauto. unfold Senv.find_symbol. congruence.
+  + edestruct @Genv.find_symbol_match as (? & ? & ?); eauto.
+  + simpl; unfold Senv.block_is_volatile, Genv.block_is_volatile, Genv.find_var_info.
+    unfold Genv.find_def.
+    edestruct (Genv.mge_defs H _ H3); subst; reflexivity.
 Qed.
 
 (** Corollaries of [external_call_determ]. *)
