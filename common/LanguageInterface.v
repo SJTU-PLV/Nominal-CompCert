@@ -187,6 +187,8 @@ Inductive cc_injp_reply: cc_injp_world -> c_reply -> c_reply -> Prop :=
     Mem.unchanged_on (loc_out_of_reach f m1) m2 m2' ->
     inject_incr f f' ->
     inject_separated f f' m1 m2 ->
+    (forall b ofs p, Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p) ->
+    (forall b ofs p, Mem.valid_block m2 b -> Mem.perm m2' b ofs Max p -> Mem.perm m2 b ofs Max p) ->
     cc_injp_reply (injpw f m1 m2) (cr vres1 m1') (cr vres2 m2').
 
 Program Definition cc_injp :=
