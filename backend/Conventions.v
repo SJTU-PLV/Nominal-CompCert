@@ -190,7 +190,7 @@ Canonical Structure li_locset: language_interface :=
 
 (** * Calling convention *)
 
-(** We now define the calling convention between C and locset
+(** We first define the calling convention between C and locset
   languages, which relates the C-level argument list to the contents
   of the locations. The Kripke world keeps track of the signature and
   initial values registers, so that the return value can be
@@ -213,4 +213,27 @@ Program Definition cc_alloc: callconv li_c li_locset :=
     match_senv w := eq;
     match_query := cc_alloc_mq;
     match_reply := cc_alloc_mr;
+  |}.
+
+(** The extension convention is used by the Tunneling proof. *)
+
+Inductive cc_locset_ext_query: locset_query -> locset_query -> Prop :=
+  cc_locset_ext_query_intro vf1 vf2 sg ls1 ls2 m1 m2:
+    Val.lessdef vf1 vf2 ->
+    (forall l, Val.lessdef (ls1 l) (ls2 l)) ->
+    Mem.extends m1 m2 ->
+    cc_locset_ext_query (lq vf1 sg ls1 m1) (lq vf2 sg ls2 m2).
+
+Inductive cc_locset_ext_reply: locset_reply -> locset_reply -> Prop :=
+  cc_locset_ext_reply_intro ls1 ls2 m1 m2:
+    (forall l, Val.lessdef (ls1 l) (ls2 l)) ->
+    Mem.extends m1 m2 ->
+    cc_locset_ext_reply (lr ls1 m1) (lr ls2 m2).
+
+Program Definition cc_locset_ext :=
+  {|
+    ccworld := unit;
+    match_senv w := eq;
+    match_query w := cc_locset_ext_query;
+    match_reply w := cc_locset_ext_reply;
   |}.
