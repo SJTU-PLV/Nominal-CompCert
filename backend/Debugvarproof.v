@@ -369,8 +369,8 @@ Inductive match_stackframes: Linear.stackframe -> Linear.stackframe -> Prop :=
   | match_stackframe_top:
       forall ls,
       match_stackframes
-        (Stacktop ls)
-        (Stacktop ls).
+        (Stackbase ls)
+        (Stackbase ls).
 
 Inductive match_states: Linear.state ->  Linear.state -> Prop :=
   | match_states_instr:

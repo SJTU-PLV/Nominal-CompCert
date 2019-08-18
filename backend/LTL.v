@@ -130,7 +130,7 @@ Inductive stackframe : Type :=
              (ls: locset)       (**r location state in calling function *)
              (bb: bblock),      (**r continuation in calling function *)
       stackframe
-  | Stacktop:
+  | Stackbase:
       forall (ls: locset),      (**r incoming location state *)
       stackframe.
 
@@ -197,7 +197,7 @@ Definition parent_locset (stack: list stackframe) : locset :=
   match stack with
   | nil => Locmap.init Vundef
   | Stackframe f sp ls bb :: stack' => ls
-  | Stacktop ls :: stack' => ls
+  | Stackbase ls :: stack' => ls
   end.
 
 Inductive step: state -> trace -> state -> Prop :=
@@ -298,7 +298,7 @@ Inductive initial_state (ge: genv): locset_query -> state -> Prop :=
       Genv.find_funct ge vf = Some (Internal f) ->
       initial_state ge
         (lq vf (fn_sig f) rs m)
-        (Callstate (Stacktop rs :: nil) vf rs m).
+        (Callstate (Stackbase rs :: nil) vf rs m).
 
 Inductive at_external (ge: genv): state -> locset_query -> Prop :=
   | at_external_intro vf name sg s rs m:
@@ -317,7 +317,7 @@ Inductive after_external: state -> locset_reply -> state -> Prop :=
 Inductive final_state: state -> locset_reply -> Prop :=
   | final_state_intro: forall init_rs s rs m,
       final_state
-        (Returnstate (Stacktop init_rs :: s) rs m)
+        (Returnstate (Stackbase init_rs :: s) rs m)
         (lr rs m).
 
 Definition semantics (p: program) :=

@@ -473,8 +473,8 @@ Inductive match_stackframes: LTL.stackframe -> Linear.stackframe -> Prop :=
   | match_stackframe_top:
       forall rs,
       match_stackframes
-        (LTL.Stacktop rs)
-        (Linear.Stacktop rs).
+        (LTL.Stackbase rs)
+        (Linear.Stackbase rs).
 
 Inductive match_states: LTL.state -> Linear.state -> Prop :=
   | match_states_add_branch:

@@ -178,8 +178,8 @@ Inductive match_stackframes: stackframe -> stackframe -> Prop :=
   | match_stackframe_top:
       forall ls,
       match_stackframes
-        (Stacktop ls)
-        (Stacktop ls).
+        (Stackbase ls)
+        (Stackbase ls).
 
 Inductive match_states: state -> state -> Prop :=
   | match_states_intro:

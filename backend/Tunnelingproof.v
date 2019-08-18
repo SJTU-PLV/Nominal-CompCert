@@ -210,8 +210,8 @@ Inductive match_stackframes: stackframe -> stackframe -> Prop :=
       forall ls0 tls0,
       locmap_lessdef ls0 tls0 ->
       match_stackframes
-        (Stacktop ls0)
-        (Stacktop tls0).
+        (Stackbase ls0)
+        (Stackbase tls0).
 
 Inductive match_states: state -> state -> Prop :=
   | match_states_intro:
@@ -537,7 +537,7 @@ Lemma transf_initial_states:
   exists st2, initial_state tge q2 st2 /\ match_states st1 st2.
 Proof.
   intros. inv H. inv H0.
-  exists (Callstate (Stacktop ls2 :: nil) vf2 ls2 m2); split.
+  exists (Callstate (Stackbase ls2 :: nil) vf2 ls2 m2); split.
   - setoid_rewrite <- (sig_preserved (Internal f)).
     eapply functions_translated in H8; eauto.
     econstructor; eauto.
