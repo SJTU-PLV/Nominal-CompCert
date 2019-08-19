@@ -852,9 +852,9 @@ Proof.
 Qed.
 
 Lemma wt_exec_Ibuiltin:
-  forall env f ef (ge: genv) args res s vargs m t vres m' rs,
+  forall env f ef (se: Senv.t) args res s vargs m t vres m' rs,
   wt_instr f env (Ibuiltin ef args res s) ->
-  external_call ef ge vargs m t vres m' ->
+  external_call ef se vargs m t vres m' ->
   wt_regset env rs ->
   wt_regset env (regmap_setres res vres rs).
 Proof.
@@ -872,7 +872,6 @@ Qed.
 
 Inductive wt_stackframes: list stackframe -> signature -> Prop :=
   | wt_stackframes_nil: forall sg,
-      sg.(sig_res) = Some Tint ->
       wt_stackframes nil sg
   | wt_stackframes_cons:
       forall s res f sp pc rs env sg,
@@ -882,6 +881,15 @@ Inductive wt_stackframes: list stackframe -> signature -> Prop :=
       wt_stackframes s (fn_sig f) ->
       wt_stackframes (Stackframe res f sp pc rs :: s) sg.
 
+Section SUBJECT_REDUCTION.
+
+Variable p: program.
+Variable se: Senv.t.
+
+Hypothesis wt_p: wt_program p.
+
+Let ge := Senv.globalenv p se.
+
 Inductive wt_state: state -> Prop :=
   | wt_state_intro:
       forall s f sp pc rs m env
@@ -890,11 +898,12 @@ Inductive wt_state: state -> Prop :=
         (WT_RS: wt_regset env rs),
       wt_state (State s f sp pc rs m)
   | wt_state_call:
-      forall s f args m,
+      forall s vf f args m,
       wt_stackframes s (funsig f) ->
       wt_fundef f ->
       Val.has_type_list args (sig_args (funsig f)) ->
-      wt_state (Callstate s f args m)
+      Genv.find_funct ge vf = Some f ->
+      wt_state (Callstate s vf args m)
   | wt_state_return:
       forall s v m sg,
       wt_stackframes s sg ->
@@ -910,16 +919,8 @@ Proof.
 - econstructor; eauto. rewrite H3. unfold proj_sig_res. rewrite H. auto.
 Qed.
 
-Section SUBJECT_REDUCTION.
-
-Variable p: program.
-
-Hypothesis wt_p: wt_program p.
-
-Let ge := Genv.globalenv p.
-
 Lemma subject_reduction:
-  forall st1 t st2, step ge st1 t st2 ->
+  forall st1 t st2, step se ge st1 t st2 ->
   forall (WT: wt_state st1), wt_state st2.
 Proof.
   induction 1; intros; inv WT;
@@ -934,25 +935,15 @@ Proof.
   econstructor; eauto.
   (* Icall *)
   assert (wt_fundef fd).
-    destruct ros; simpl in H0.
-    pattern fd. apply Genv.find_funct_prop with fundef unit p (rs#r).
+    pattern fd. apply Senv.find_funct_prop with p se vf.
     exact wt_p. exact H0.
-    caseEq (Genv.find_symbol ge i); intros; rewrite H1 in H0.
-    pattern fd. apply Genv.find_funct_ptr_prop with fundef unit p b.
-    exact wt_p. exact H0.
-    discriminate.
   econstructor; eauto.
   econstructor; eauto. inv WTI; auto.
   inv WTI. rewrite <- H8. apply wt_regset_list. auto.
   (* Itailcall *)
   assert (wt_fundef fd).
-    destruct ros; simpl in H0.
-    pattern fd. apply Genv.find_funct_prop with fundef unit p (rs#r).
+    pattern fd. apply Senv.find_funct_prop with p se vf.
     exact wt_p. exact H0.
-    caseEq (Genv.find_symbol ge i); intros; rewrite H1 in H0.
-    pattern fd. apply Genv.find_funct_ptr_prop with fundef unit p b.
-    exact wt_p. exact H0.
-    discriminate.
   econstructor; eauto.
   inv WTI. apply wt_stackframes_change_sig with (fn_sig f); auto.
   inv WTI. rewrite <- H7. apply wt_regset_list. auto.
@@ -966,10 +957,12 @@ Proof.
   econstructor; eauto.
   inv WTI; simpl. auto. unfold proj_sig_res; rewrite H2. auto.
   (* internal function *)
+  rewrite FIND in H7. inv H7.
   simpl in *. inv H5.
   econstructor; eauto.
   inv H1. apply wt_init_regs; auto. rewrite wt_params0. auto.
   (* external function *)
+  rewrite FIND in H7. inv H7.
   econstructor; eauto. simpl.
   eapply external_call_well_typed; eauto.
   (* return *)
@@ -978,12 +971,20 @@ Proof.
 Qed.
 
 Lemma wt_initial_state:
-  forall S, initial_state p S -> wt_state S.
+  forall w q1 q2 S, cc_alloc_mq w q1 q2 -> initial_state ge q1 S -> wt_state S.
 Proof.
-  intros. inv H. constructor. constructor. rewrite H3; auto.
-  pattern f. apply Genv.find_funct_ptr_prop with fundef unit p b.
-  exact wt_p. exact H2.
-  rewrite H3. constructor.
+  intros. inv H. inv H0. econstructor; eauto.
+  constructor.
+  eapply Senv.find_funct_prop; eauto.
+  cbn. eauto.
+Qed.
+
+Lemma wt_external_state:
+  forall w q1 q2 r1 r2 S S', cc_alloc_mq w q1 q2 -> cc_alloc_mr w r1 r2 ->
+  wt_state S -> at_external ge S q1 -> after_external S r1 S' -> wt_state S'.
+Proof.
+  intros. inv H. inv H0. inv H2. inv H3. inv H1. econstructor; eauto.
+  rewrite H16 in H8; inv H8. eauto.
 Qed.
 
 Lemma wt_instr_inv:

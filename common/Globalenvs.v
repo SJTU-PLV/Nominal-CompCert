@@ -2101,6 +2101,21 @@ Proof.
     assert (id' = id) by (eapply Genv.genv_vars_inj; eauto). congruence.
 Qed.
 
+Theorem find_funct_prop:
+  forall (P: F -> Prop) v f,
+  (forall id f, In (id, Gfun f) (prog_defs p) -> P f) ->
+  Genv.find_funct globalenv v = Some f ->
+  P f.
+Proof.
+  intros P v f H.
+  unfold globalenv, Genv.find_funct, Genv.find_funct_ptr, Genv.find_def.
+  destruct v; try congruence.
+  destruct Ptrofs.eq_dec; try congruence. cbn.
+  destruct (add_globals!b) as [[|]|] eqn:Hb; try congruence. inversion 1; subst.
+  apply add_globals_inv in Hb as (id & Hid & Hf). eapply H.
+  apply in_prog_defmap; eauto.
+Qed.
+
 End GLOBALENV.
 
 (** ** Relation to [match_program] *)

@@ -235,8 +235,9 @@ Definition wt_fundef (fd: fundef) :=
   end.
 
 Inductive wt_callstack: list stackframe -> Prop :=
-  | wt_callstack_nil:
-      wt_callstack nil
+  | wt_callstack_base: forall rs,
+      wt_locset rs ->
+      wt_callstack (Stackbase rs :: nil)
   | wt_callstack_cons: forall f sp rs c s
         (WTSTK: wt_callstack s)
         (WTF: wt_function f = true)
@@ -247,10 +248,16 @@ Inductive wt_callstack: list stackframe -> Prop :=
 Lemma wt_parent_locset:
   forall s, wt_callstack s -> wt_locset (parent_locset s).
 Proof.
-  induction 1; simpl.
-- apply wt_init.
-- auto.
+  induction 1; simpl; auto.
 Qed.
+
+(** Preservation of state typing by transitions *)
+
+Section SOUNDNESS.
+
+Variable prog: program.
+Variable se: Senv.t.
+Let ge := Senv.globalenv prog se.
 
 Inductive wt_state: state -> Prop :=
   | wt_regular_state: forall s f sp c rs m
@@ -259,13 +266,14 @@ Inductive wt_state: state -> Prop :=
         (WTC: wt_code f c = true)
         (WTRS: wt_locset rs),
       wt_state (State s f sp c rs m)
-  | wt_call_state: forall s fd rs m
+  | wt_call_state: forall s vf fd rs m
+        (FIND: Genv.find_funct ge vf = Some fd)
         (WTSTK: wt_callstack s)
         (WTFD: wt_fundef fd)
         (WTRS: wt_locset rs)
         (AGCS: agree_callee_save rs (parent_locset s))
         (AGARGS: agree_outgoing_arguments (funsig fd) rs (parent_locset s)),
-      wt_state (Callstate s fd rs m)
+      wt_state (Callstate s vf rs m)
   | wt_return_state: forall s rs m
         (WTSTK: wt_callstack s)
         (WTRS: wt_locset rs)
@@ -273,32 +281,17 @@ Inductive wt_state: state -> Prop :=
         (UOUT: outgoing_undef rs),
       wt_state (Returnstate s rs m).
 
-(** Preservation of state typing by transitions *)
-
-Section SOUNDNESS.
-
-Variable prog: program.
-Let ge := Genv.globalenv prog.
-
 Hypothesis wt_prog:
   forall i fd, In (i, Gfun fd) prog.(prog_defs) -> wt_fundef fd.
 
-Lemma wt_find_function:
-  forall ros rs f, find_function ge ros rs = Some f -> wt_fundef f.
+Lemma wt_find_funct:
+  forall vf f, Genv.find_funct ge vf = Some f -> wt_fundef f.
 Proof.
-  intros.
-  assert (X: exists i, In (i, Gfun f) prog.(prog_defs)).
-  {
-    destruct ros as [r | s]; simpl in H.
-    eapply Genv.find_funct_inversion; eauto.
-    destruct (Genv.find_symbol ge s) as [b|]; try discriminate.
-    eapply Genv.find_funct_ptr_inversion; eauto.
-  }
-  destruct X as [i IN]. eapply wt_prog; eauto.
+  intros. eapply Senv.find_funct_prop; eauto.
 Qed.
 
 Theorem step_type_preservation:
-  forall S1 t S2, step ge S1 t S2 -> wt_state S1 -> wt_state S2.
+  forall S1 t S2, step se ge S1 t S2 -> wt_state S1 -> wt_state S2.
 Proof.
 Local Opaque mreg_type.
   induction 1; intros WTS; inv WTS.
@@ -339,13 +332,13 @@ Local Opaque mreg_type.
 - (* call *)
   simpl in *; InvBooleans.
   econstructor; eauto. econstructor; eauto.
-  eapply wt_find_function; eauto.
+  eapply wt_find_funct; eauto.
   red; simpl; auto.
   red; simpl; auto.
 - (* tailcall *)
   simpl in *; InvBooleans.
   econstructor; eauto.
-  eapply wt_find_function; eauto.
+  eapply wt_find_funct; eauto.
   apply wt_return_regs; auto. apply wt_parent_locset; auto.
   red; simpl; intros. destruct l; simpl in *. rewrite H3; auto. destruct sl; auto; congruence.
   red; simpl; intros. apply zero_size_arguments_tailcall_possible in H. apply H in H3. contradiction.
@@ -374,6 +367,7 @@ Local Opaque mreg_type.
   red; simpl; intros. destruct l; simpl in *. rewrite H0; auto. destruct sl; auto; congruence.
   red; simpl; intros. auto.
 - (* internal function *)
+  rewrite FIND in FIND0. inv FIND0.
   simpl in WTFD.
   econstructor. eauto. eauto. eauto.
   apply wt_undef_regs. apply wt_call_regs. auto.
@@ -390,9 +384,9 @@ Local Opaque mreg_type.
 Qed.
 
 Theorem wt_initial_state:
-  forall S, initial_state prog S -> wt_state S.
+  forall q S, initial_state ge q S -> wt_state S.
 Proof.
-  induction 1. econstructor. constructor.
+  induction 1. econstructor; eauto. constructor.
   unfold ge0 in H1. exploit Genv.find_funct_ptr_inversion; eauto.
   intros [id IN]. eapply wt_prog; eauto.
   apply wt_init.
