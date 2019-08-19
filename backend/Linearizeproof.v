@@ -615,7 +615,6 @@ Proof.
   (* Lbuiltin *)
   left; econstructor; split. simpl.
   apply plus_one. eapply exec_Lbuiltin; eauto.
-  eapply eval_builtin_args_preserved with (ge1 := ge); eauto.
   econstructor; eauto.
 
   (* Lbranch *)

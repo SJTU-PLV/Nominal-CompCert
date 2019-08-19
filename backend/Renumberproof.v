@@ -175,7 +175,6 @@ Proof.
 (* builtin *)
   econstructor; split.
   eapply exec_Ibuiltin; eauto.
-    eapply eval_builtin_args_preserved with (ge1 := ge); eauto.
   constructor; auto. eapply reach_succ; eauto. simpl; auto.
 (* cond *)
   econstructor; split.

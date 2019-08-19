@@ -393,14 +393,14 @@ Admitted.
 (** Translation of builtin arguments. *)
 
 Lemma tr_builtin_arg:
-  forall F (*bound*) ctx rs rs' sp sp' m m',
+  forall F ctx rs rs' sp sp' m m',
   Senv.inject F se tse ->
   agree_regs F ctx rs rs' ->
   F sp = Some(sp', ctx.(dstk)) ->
   Mem.inject F m m' ->
   forall a v,
-  eval_builtin_arg ge (fun r => rs#r) (Vptr sp Ptrofs.zero) m a v ->
-  exists v', eval_builtin_arg tge (fun r => rs'#r) (Vptr sp' Ptrofs.zero) m' (sbuiltinarg ctx a) v'
+  eval_builtin_arg se (fun r => rs#r) (Vptr sp Ptrofs.zero) m a v ->
+  exists v', eval_builtin_arg tse (fun r => rs'#r) (Vptr sp' Ptrofs.zero) m' (sbuiltinarg ctx a) v'
           /\ Val.inject F v v'.
 Proof.
   intros until m'; intros MG AG SP MI. induction 1; simpl.
@@ -424,9 +424,8 @@ Proof.
   exists v'; eauto with barg.
 - econstructor; split. constructor.
   unfold Senv.symbol_address; simpl; unfold Genv.symbol_address.
-  rewrite !Senv.find_symbol_of_genv.
-  destruct (Genv.find_symbol ge id) as [b|] eqn:FS; auto.
-  edestruct symbols_preserved as (tb & Htb & TFS); eauto. rewrite TFS.
+  destruct (Genv.find_symbol se id) as [b|] eqn:FS; auto.
+  edestruct @Genv.find_symbol_match as (tb & Htb & TFS); eauto. rewrite TFS.
   econstructor. eauto. rewrite Ptrofs.add_zero; auto.
 - destruct IHeval_builtin_arg1 as (v1' & A1 & B1).
   destruct IHeval_builtin_arg2 as (v2' & A2 & B2).
@@ -444,8 +443,8 @@ Lemma tr_builtin_args:
   F sp = Some(sp', ctx.(dstk)) ->
   Mem.inject F m m' ->
   forall al vl,
-  eval_builtin_args ge (fun r => rs#r) (Vptr sp Ptrofs.zero) m al vl ->
-  exists vl', eval_builtin_args tge (fun r => rs'#r) (Vptr sp' Ptrofs.zero) m' (map (sbuiltinarg ctx) al) vl'
+  eval_builtin_args se (fun r => rs#r) (Vptr sp Ptrofs.zero) m al vl ->
+  exists vl', eval_builtin_args tse (fun r => rs'#r) (Vptr sp' Ptrofs.zero) m' (map (sbuiltinarg ctx) al) vl'
           /\ Val.inject_list F vl vl'.
 Proof.
   induction 5; simpl.

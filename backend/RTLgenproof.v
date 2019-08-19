@@ -675,7 +675,7 @@ Proof.
 Qed.
 
 Remark eval_builtin_args_trivial:
-  forall (ge: RTL.genv) (rs: regset) sp m rl,
+  forall (ge: Senv.t) (rs: regset) sp m rl,
   eval_builtin_args ge (fun r => rs#r) sp m (List.map (@BA reg) rl) rs##rl.
 Proof.
   induction rl; simpl.
@@ -1000,7 +1000,7 @@ Lemma invert_eval_builtin_arg:
   eval_builtin_arg se ge sp e m a v ->
   exists vl,
      eval_exprlist se ge sp e m nil (exprlist_of_expr_list (params_of_builtin_arg a)) vl
-  /\ Events.eval_builtin_arg ge (fun v => v) sp m (fst (convert_builtin_arg a vl)) v
+  /\ Events.eval_builtin_arg se (fun v => v) sp m (fst (convert_builtin_arg a vl)) v
   /\ (forall vl', convert_builtin_arg a (vl ++ vl') = (fst (convert_builtin_arg a vl), vl')).
 Proof.
   induction 1; simpl; try (econstructor; intuition eauto with evalexpr barg; fail).
@@ -1022,7 +1022,7 @@ Lemma invert_eval_builtin_args:
   list_forall2 (eval_builtin_arg se ge sp e m) al vl ->
   exists vl',
      eval_exprlist se ge sp e m nil (exprlist_of_expr_list (params_of_builtin_args al)) vl'
-  /\ Events.eval_builtin_args ge (fun v => v) sp m (convert_builtin_args al vl') vl.
+  /\ Events.eval_builtin_args se (fun v => v) sp m (convert_builtin_args al vl') vl.
 Proof.
   induction 1; simpl.
 - exists (@nil val); split; constructor.
@@ -1036,9 +1036,9 @@ Qed.
 Lemma transl_eval_builtin_arg:
   forall rs a vl rl v,
   Val.lessdef_list vl rs##rl ->
-  Events.eval_builtin_arg ge (fun v => v) sp m (fst (convert_builtin_arg a vl)) v ->
+  Events.eval_builtin_arg se (fun v => v) sp m (fst (convert_builtin_arg a vl)) v ->
   exists v',
-     Events.eval_builtin_arg ge (fun r => rs#r) sp m (fst (convert_builtin_arg a rl)) v'
+     Events.eval_builtin_arg se (fun r => rs#r) sp m (fst (convert_builtin_arg a rl)) v'
   /\ Val.lessdef v v'
   /\ Val.lessdef_list (snd (convert_builtin_arg a vl)) rs##(snd (convert_builtin_arg a rl)).
 Proof.
@@ -1074,9 +1074,9 @@ Qed.
 Lemma transl_eval_builtin_args:
   forall rs al vl1 rl vl,
   Val.lessdef_list vl1 rs##rl ->
-  Events.eval_builtin_args ge (fun v => v) sp m (convert_builtin_args al vl1) vl ->
+  Events.eval_builtin_args se (fun v => v) sp m (convert_builtin_args al vl1) vl ->
   exists vl',
-     Events.eval_builtin_args ge (fun r => rs#r) sp m (convert_builtin_args al rl) vl'
+     Events.eval_builtin_args se (fun r => rs#r) sp m (convert_builtin_args al rl) vl'
   /\ Val.lessdef_list vl vl'.
 Proof.
   induction al; simpl; intros until vl; intros LD EV.
@@ -1417,14 +1417,13 @@ Proof.
   intros [rs' [tm' [E [F [G [J K]]]]]].
   exploit transl_eval_builtin_args; eauto.
   intros (vargs' & U & V).
-  exploit (@eval_builtin_args_lessdef _ ge (fun r => rs'#r) (fun r => rs'#r)); eauto.
+  exploit (@eval_builtin_args_lessdef _ se (fun r => rs'#r) (fun r => rs'#r)); eauto.
   intros (vargs'' & X & Y).
   assert (Z: Val.lessdef_list vl vargs'') by (eapply Val.lessdef_list_trans; eauto).
   edestruct external_call_mem_extends as [tv [tm'' [A [B [C D]]]]]; eauto.
   econstructor; split.
   left. eapply plus_right. eexact E.
   eapply exec_Ibuiltin; eauto.
-  eapply eval_builtin_args_preserved with (ge1 := ge); eauto.
   traceEq.
   econstructor; eauto. constructor.
   eapply match_env_update_res; eauto.

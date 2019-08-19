@@ -258,7 +258,6 @@ Proof.
 (* Lbuiltin *)
   left; econstructor; split.
   econstructor; eauto.
-  eapply eval_builtin_args_preserved with (ge1 := ge); eauto.
   econstructor; eauto with coqlib.
 (* Llabel *)
   case_eq (Labelset.mem lbl (labels_branched_to (fn_code f))); intros.

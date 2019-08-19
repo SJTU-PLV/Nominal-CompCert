@@ -477,7 +477,6 @@ Proof.
   exploit external_call_mem_extends; eauto. intros (tvres & tm' & A & B & C & D).
   left; simpl; econstructor; split.
   eapply exec_Lbuiltin; eauto.
-  eapply eval_builtin_args_preserved with (ge1 := ge); eauto.
   econstructor; eauto using locmap_setres_lessdef, locmap_undef_regs_lessdef.
 - (* Lbranch (preserved) *)
   left; simpl; econstructor; split.

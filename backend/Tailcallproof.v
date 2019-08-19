@@ -470,13 +470,12 @@ Proof.
 
 - (* builtin *)
   TransfInstr.
-  exploit (@eval_builtin_args_lessdef _ ge (fun r => rs#r) (fun r => rs'#r)); eauto.
+  exploit (@eval_builtin_args_lessdef _ se (fun r => rs#r) (fun r => rs'#r)); eauto.
   intros (vargs' & P & Q).
   exploit external_call_mem_extends; eauto.
   intros [v' [m'1 [A [B [C D]]]]].
   left. exists (State s' (transf_function f) (Vptr sp0 Ptrofs.zero) pc' (regmap_setres res v' rs') m'1); split.
   eapply exec_Ibuiltin; eauto.
-  eapply eval_builtin_args_preserved with (ge1 := ge); eauto.
   econstructor; eauto. apply set_res_lessdef; auto.
 
 - (* cond *)

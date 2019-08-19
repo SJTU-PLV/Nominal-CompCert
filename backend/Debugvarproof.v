@@ -321,7 +321,7 @@ Qed.
 
 Lemma can_eval_safe_arg:
   forall (rs: locset) sp m (a: builtin_arg loc),
-  safe_builtin_arg a -> exists v, eval_builtin_arg tge rs sp m a v.
+  safe_builtin_arg a -> exists v, eval_builtin_arg se rs sp m a v.
 Proof.
   induction a; simpl; intros; try contradiction;
   try (econstructor; now eauto with barg).
@@ -456,7 +456,6 @@ Proof.
   econstructor; split.
   eapply plus_left.
   econstructor; eauto.
-  eapply eval_builtin_args_preserved with (ge1 := ge); eauto.
   apply eval_add_delta_ranges. traceEq.
   constructor; auto.
 - (* label *)

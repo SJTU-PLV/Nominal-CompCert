@@ -245,7 +245,7 @@ Inductive step: state -> trace -> state -> Prop :=
       step (Block s f (Vptr sp Ptrofs.zero) (Ltailcall sig ros :: bb) rs m)
         E0 (Callstate s vf rs' m')
   | exec_Lbuiltin: forall s f sp ef args res bb rs m vargs t vres rs' m',
-      eval_builtin_args ge rs sp m args vargs ->
+      eval_builtin_args se rs sp m args vargs ->
       external_call ef se vargs m t vres m' ->
       rs' = Locmap.setres res vres (undef_regs (destroyed_by_builtin ef) rs) ->
       step (Block s f sp (Lbuiltin ef args res :: bb) rs m)
