@@ -262,7 +262,7 @@ Definition eval_condition (cond: condition) (vl: list val) (m: mem): option bool
   end.
 
 Definition eval_addressing32
-    (F V: Type) (genv: Genv.t F V) (sp: val)
+    (genv: Senv.t) (sp: val)
     (addr: addressing) (vl: list val) : option val :=
   match addr, vl with
   | Aindexed n, v1::nil =>
@@ -285,7 +285,7 @@ Definition eval_addressing32
   end.
 
 Definition eval_addressing64
-    (F V: Type) (genv: Genv.t F V) (sp: val)
+    (genv: Senv.t) (sp: val)
     (addr: addressing) (vl: list val) : option val :=
   match addr, vl with
   | Aindexed n, v1::nil =>
@@ -304,14 +304,14 @@ Definition eval_addressing64
   end.
 
 Definition eval_addressing
-    (F V: Type) (genv: Genv.t F V) (sp: val)
+    (genv: Senv.t) (sp: val)
     (addr: addressing) (vl: list val) : option val :=
   if Archi.ptr64
   then eval_addressing64 genv sp addr vl
   else eval_addressing32 genv sp addr vl.
 
 Definition eval_operation
-    (F V: Type) (genv: Genv.t F V) (sp: val)
+    (genv: Senv.t) (sp: val)
     (op: operation) (vl: list val) (m: mem): option val :=
   match op, vl with
   | Omove, v1::nil => Some v1
@@ -411,21 +411,21 @@ Definition eval_operation
   end.
 
 Remark eval_addressing_Aglobal:
-  forall (F V: Type) (genv: Genv.t F V) sp id ofs,
+  forall (genv: Senv.t) sp id ofs,
   eval_addressing genv sp (Aglobal id ofs) nil = Some (Genv.symbol_address genv id ofs).
 Proof.
   intros. unfold eval_addressing, eval_addressing32, eval_addressing64; destruct Archi.ptr64; auto.
 Qed.
 
 Remark eval_addressing_Ainstack:
-  forall (F V: Type) (genv: Genv.t F V) sp ofs,
+  forall (genv: Senv.t) sp ofs,
   eval_addressing genv sp (Ainstack ofs) nil = Some (Val.offset_ptr sp ofs).
 Proof.
   intros. unfold eval_addressing, eval_addressing32, eval_addressing64; destruct Archi.ptr64; auto.
 Qed.
 
 Remark eval_addressing_Ainstack_inv:
-  forall (F V: Type) (genv: Genv.t F V) sp ofs vl v,
+  forall (genv: Senv.t) sp ofs vl v,
   eval_addressing genv sp (Ainstack ofs) vl = Some v -> vl = nil /\ v = Val.offset_ptr sp ofs.
 Proof.
   unfold eval_addressing, eval_addressing32, eval_addressing64;
@@ -586,8 +586,7 @@ Definition type_of_operation (op: operation) : list typ * typ :=
 
 Section SOUNDNESS.
 
-Variable A V: Type.
-Variable genv: Genv.t A V.
+Variable genv: Senv.t.
 
 Remark type_add:
   forall v1 v2, Val.has_type (Val.add v1 v2) Tint.
@@ -832,7 +831,7 @@ Proof.
 Qed.
 
 Lemma eval_shift_stack_addressing32:
-  forall F V (ge: Genv.t F V) sp addr vl delta,
+  forall (ge: Senv.t) sp addr vl delta,
   eval_addressing32 ge (Vptr sp Ptrofs.zero) (shift_stack_addressing delta addr) vl =
   eval_addressing32 ge (Vptr sp (Ptrofs.repr delta)) addr vl.
 Proof.
@@ -843,7 +842,7 @@ Proof.
 Qed.
 
 Lemma eval_shift_stack_addressing64:
-  forall F V (ge: Genv.t F V) sp addr vl delta,
+  forall (ge: Senv.t) sp addr vl delta,
   eval_addressing64 ge (Vptr sp Ptrofs.zero) (shift_stack_addressing delta addr) vl =
   eval_addressing64 ge (Vptr sp (Ptrofs.repr delta)) addr vl.
 Proof.
@@ -854,7 +853,7 @@ Proof.
 Qed.
 
 Lemma eval_shift_stack_addressing:
-  forall F V (ge: Genv.t F V) sp addr vl delta,
+  forall (ge: Senv.t) sp addr vl delta,
   eval_addressing ge (Vptr sp Ptrofs.zero) (shift_stack_addressing delta addr) vl =
   eval_addressing ge (Vptr sp (Ptrofs.repr delta)) addr vl.
 Proof.
@@ -863,7 +862,7 @@ Proof.
 Qed.
 
 Lemma eval_shift_stack_operation:
-  forall F V (ge: Genv.t F V) sp op vl m delta,
+  forall (ge: Senv.t) sp op vl m delta,
   eval_operation ge (Vptr sp Ptrofs.zero) (shift_stack_operation delta op) vl m =
   eval_operation ge (Vptr sp (Ptrofs.repr delta)) op vl m.
 Proof.
@@ -892,7 +891,7 @@ Definition offset_addressing (addr: addressing) (delta: Z) : option addressing :
   if addressing_valid addr' then Some addr' else None.
 
 Lemma eval_offset_addressing_total_32:
-  forall (F V: Type) (ge: Genv.t F V) sp addr args delta v,
+  forall (ge: Senv.t) sp addr args delta v,
   eval_addressing32 ge sp addr args = Some v ->
   eval_addressing32 ge sp (offset_addressing_total addr delta) args = Some(Val.add v (Vint (Int.repr delta))).
 Proof.
@@ -912,7 +911,7 @@ Proof.
 Qed.
 
 Lemma eval_offset_addressing_total_64:
-  forall (F V: Type) (ge: Genv.t F V) sp addr args delta v,
+  forall (ge: Senv.t) sp addr args delta v,
   eval_addressing64 ge sp addr args = Some v ->
   eval_addressing64 ge sp (offset_addressing_total addr delta) args = Some(Val.addl v (Vlong (Int64.repr delta))).
 Proof.
@@ -932,7 +931,7 @@ Qed.
 (** The following lemma is used only in [Allocproof] in cases where [Archi.ptr64 = false]. *)
 
 Lemma eval_offset_addressing:
-  forall (F V: Type) (ge: Genv.t F V) sp addr args delta addr' v,
+  forall (ge: Senv.t) sp addr args delta addr' v,
   offset_addressing addr delta = Some addr' ->
   eval_addressing ge sp addr args = Some v ->
   Archi.ptr64 = false ->
@@ -968,7 +967,7 @@ Definition op_depends_on_memory (op: operation) : bool :=
   end.
 
 Lemma op_depends_on_memory_correct:
-  forall (F V: Type) (ge: Genv.t F V) sp op args m1 m2,
+  forall (ge: Senv.t) sp op args m1 m2,
   op_depends_on_memory op = false ->
   eval_operation ge sp op args m1 = eval_operation ge sp op args m2.
 Proof.
@@ -997,63 +996,12 @@ Definition globals_operation (op: operation) : list ident :=
 
 (** * Invariance and compatibility properties. *)
 
-(** [eval_operation] and [eval_addressing] depend on a global environment
-  for resolving references to global symbols.  We show that they give
-  the same results if a global environment is replaced by another that
-  assigns the same addresses to the same symbols. *)
-
-Section GENV_TRANSF.
-
-Variable F1 F2 V1 V2: Type.
-Variable ge1: Genv.t F1 V1.
-Variable ge2: Genv.t F2 V2.
-Hypothesis agree_on_symbols:
-  forall (s: ident), Genv.find_symbol ge2 s = Genv.find_symbol ge1 s.
-
-Lemma eval_addressing32_preserved:
-  forall sp addr vl,
-  eval_addressing32 ge2 sp addr vl = eval_addressing32 ge1 sp addr vl.
-Proof.
-  intros.
-  unfold eval_addressing32, Genv.symbol_address; destruct addr; try rewrite agree_on_symbols;
-  reflexivity.
-Qed.
-
-Lemma eval_addressing64_preserved:
-  forall sp addr vl,
-  eval_addressing64 ge2 sp addr vl = eval_addressing64 ge1 sp addr vl.
-Proof.
-  intros.
-  unfold eval_addressing64, Genv.symbol_address; destruct addr; try rewrite agree_on_symbols;
-  reflexivity.
-Qed.
-
-Lemma eval_addressing_preserved:
-  forall sp addr vl,
-  eval_addressing ge2 sp addr vl = eval_addressing ge1 sp addr vl.
-Proof.
-  intros.
-  unfold eval_addressing; destruct Archi.ptr64; auto using eval_addressing32_preserved, eval_addressing64_preserved.
-Qed.
-
-Lemma eval_operation_preserved:
-  forall sp op vl m,
-  eval_operation ge2 sp op vl m = eval_operation ge1 sp op vl m.
-Proof.
-  intros.
-  unfold eval_operation; destruct op; auto using eval_addressing32_preserved, eval_addressing64_preserved.
-  unfold Genv.symbol_address. rewrite agree_on_symbols. auto.
-Qed.
-
-End GENV_TRANSF.
-
 (** Compatibility of the evaluation functions with value injections. *)
 
 Section EVAL_COMPAT.
 
-Variable F1 F2 V1 V2: Type.
-Variable ge1: Genv.t F1 V1.
-Variable ge2: Genv.t F2 V2.
+Variable ge1: Senv.t.
+Variable ge2: Senv.t.
 Variable f: meminj.
 
 Variable m1: mem.
@@ -1298,8 +1246,7 @@ End EVAL_COMPAT.
 
 Section EVAL_LESSDEF.
 
-Variable F V: Type.
-Variable genv: Genv.t F V.
+Variable genv: Senv.t.
 
 Remark valid_pointer_extends:
   forall m1 m2, Mem.extends m1 m2 ->
@@ -1405,18 +1352,18 @@ End EVAL_LESSDEF.
 Section EVAL_INJECT.
 
 Variable F V: Type.
-Variable se tse: Senv.t.
+Variable ge tge: Senv.t.
 Variable f: meminj.
-Hypothesis globals: Senv.inject f se tse.
+Hypothesis globals: Senv.inject f ge tge.
 Variable sp1: block.
 Variable sp2: block.
 Variable delta: Z.
 Hypothesis sp_inj: f sp1 = Some(sp2, delta).
 
 Remark symbol_address_inject:
-  forall id ofs, Val.inject f (Genv.symbol_address se id ofs) (Genv.symbol_address tse id ofs).
+  forall id ofs, Val.inject f (Genv.symbol_address ge id ofs) (Genv.symbol_address tge id ofs).
 Proof.
-  intros. unfold Genv.symbol_address. destruct (Genv.find_symbol se id) eqn:?; auto.
+  intros. unfold Genv.symbol_address. destruct (Genv.find_symbol ge id) eqn:?; auto.
   edestruct @Genv.find_symbol_match as (tb & Htb & H); eauto. rewrite H.
   econstructor; eauto. rewrite Ptrofs.add_zero; auto.
 Qed.
@@ -1438,9 +1385,9 @@ Qed.
 Lemma eval_addressing_inject:
   forall addr vl1 vl2 v1,
   Val.inject_list f vl1 vl2 ->
-  eval_addressing se (Vptr sp1 Ptrofs.zero) addr vl1 = Some v1 ->
+  eval_addressing ge (Vptr sp1 Ptrofs.zero) addr vl1 = Some v1 ->
   exists v2,
-     eval_addressing tse (Vptr sp2 Ptrofs.zero) (shift_stack_addressing delta addr) vl2 = Some v2
+     eval_addressing tge (Vptr sp2 Ptrofs.zero) (shift_stack_addressing delta addr) vl2 = Some v2
   /\ Val.inject f v1 v2.
 Proof.
   intros.
@@ -1454,9 +1401,9 @@ Lemma eval_operation_inject:
   forall op vl1 vl2 v1 m1 m2,
   Val.inject_list f vl1 vl2 ->
   Mem.inject f m1 m2 ->
-  eval_operation se (Vptr sp1 Ptrofs.zero) op vl1 m1 = Some v1 ->
+  eval_operation ge (Vptr sp1 Ptrofs.zero) op vl1 m1 = Some v1 ->
   exists v2,
-     eval_operation tse (Vptr sp2 Ptrofs.zero) (shift_stack_operation delta op) vl2 m2 = Some v2
+     eval_operation tge (Vptr sp2 Ptrofs.zero) (shift_stack_operation delta op) vl2 m2 = Some v2
   /\ Val.inject f v1 v2.
 Proof.
   intros.

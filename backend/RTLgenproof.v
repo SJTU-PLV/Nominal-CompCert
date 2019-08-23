@@ -574,10 +574,8 @@ Proof.
   edestruct Mem.loadv_extends as [v' []]; eauto.
   exists (rs1#rd <- v'); exists tm1.
 (* Exec *)
-  split. eapply star_right. eexact EX1. eapply exec_Iload. eauto.
-  instantiate (1 := vaddr'). rewrite <- H3.
-  apply eval_addressing_preserved. exact symbols_preserved.
-  auto. traceEq.
+  split. eapply star_right. eexact EX1. eapply exec_Iload; eauto.
+  traceEq.
 (* Match-env *)
   split. eauto with rtlg.
 (* Result *)
@@ -1005,7 +1003,6 @@ Lemma invert_eval_builtin_arg:
 Proof.
   induction 1; simpl; try (econstructor; intuition eauto with evalexpr barg; fail).
 - econstructor; split; eauto with evalexpr. split. constructor. auto. 
-- econstructor; split; eauto with evalexpr. split. constructor. auto. 
 - econstructor; split; eauto with evalexpr. split. repeat constructor. auto. 
 - destruct IHeval_builtin_arg1 as (vl1 & A1 & B1 & C1).
   destruct IHeval_builtin_arg2 as (vl2 & A2 & B2 & C2).
@@ -1341,9 +1338,8 @@ Proof.
   edestruct Mem.storev_extends as [tm''' []]; eauto.
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact F. reflexivity.
-  eapply exec_Istore with (a := vaddr'). eauto.
-  rewrite <- H4. apply eval_addressing_preserved. exact symbols_preserved.
-  eauto. traceEq.
+  eapply exec_Istore with (a := vaddr'); eauto.
+  traceEq.
   econstructor; eauto. constructor.
 
   (* call *)

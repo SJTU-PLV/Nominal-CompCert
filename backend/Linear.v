@@ -156,20 +156,20 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (State s f sp b rs' m)
   | exec_Lop:
       forall s f sp op args res b rs m v rs',
-      eval_operation ge sp op (reglist rs args) m = Some v ->
+      eval_operation se sp op (reglist rs args) m = Some v ->
       rs' = Locmap.set (R res) v (undef_regs (destroyed_by_op op) rs) ->
       step (State s f sp (Lop op args res :: b) rs m)
         E0 (State s f sp b rs' m)
   | exec_Lload:
       forall s f sp chunk addr args dst b rs m a v rs',
-      eval_addressing ge sp addr (reglist rs args) = Some a ->
+      eval_addressing se sp addr (reglist rs args) = Some a ->
       Mem.loadv chunk m a = Some v ->
       rs' = Locmap.set (R dst) v (undef_regs (destroyed_by_load chunk addr) rs) ->
       step (State s f sp (Lload chunk addr args dst :: b) rs m)
         E0 (State s f sp b rs' m)
   | exec_Lstore:
       forall s f sp chunk addr args src b rs m m' a rs',
-      eval_addressing ge sp addr (reglist rs args) = Some a ->
+      eval_addressing se sp addr (reglist rs args) = Some a ->
       Mem.storev chunk m a (rs (R src)) = Some m' ->
       rs' = undef_regs (destroyed_by_store chunk addr) rs ->
       step (State s f sp (Lstore chunk addr args src :: b) rs m)

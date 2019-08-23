@@ -573,9 +573,7 @@ Proof.
 
   (* Lload *)
   left; econstructor; split. simpl.
-  apply plus_one. econstructor.
-  instantiate (1 := a). rewrite <- H; apply eval_addressing_preserved.
-  exact symbols_preserved. eauto. eauto.
+  apply plus_one. econstructor; eauto.
   econstructor; eauto.
 
   (* Lgetstack *)
@@ -590,9 +588,7 @@ Proof.
 
   (* Lstore *)
   left; econstructor; split. simpl.
-  apply plus_one. econstructor.
-  instantiate (1 := a). rewrite <- H; apply eval_addressing_preserved.
-  exact symbols_preserved. eauto. eauto.
+  apply plus_one. econstructor; eauto.
   econstructor; eauto.
 
   (* Lcall *)

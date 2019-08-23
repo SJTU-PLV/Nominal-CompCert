@@ -420,8 +420,7 @@ Proof.
   exploit Mem.loadv_extends; eauto.
   intros [v' [LOAD' VLD]].
   left. exists (State s' (transf_function f) (Vptr sp0 Ptrofs.zero) pc' (rs'#dst <- v') m'); split.
-  eapply exec_Iload with (a := a'). eauto.  rewrite <- ADDR'.
-  apply eval_addressing_preserved. exact symbols_preserved. eauto.
+  eapply exec_Iload with (a := a'); eauto.
   econstructor; eauto. apply set_reg_lessdef; auto.
 
 - (* store *)
@@ -432,9 +431,7 @@ Proof.
   exploit Mem.storev_extends. 2: eexact H1. eauto. eauto. apply RLD.
   intros [m'1 [STORE' MLD']].
   left. exists (State s' (transf_function f) (Vptr sp0 Ptrofs.zero) pc' rs' m'1); split.
-  eapply exec_Istore with (a := a'). eauto.  rewrite <- ADDR'.
-  apply eval_addressing_preserved. exact symbols_preserved. eauto.
-  destruct a; simpl in H1; try discriminate.
+  eapply exec_Istore with (a := a'); eauto.
   econstructor; eauto.
 
 - (* call *)

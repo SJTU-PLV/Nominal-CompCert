@@ -114,16 +114,16 @@ Definition binary_constructor_sound (cstr: expr -> expr -> expr) (sem: val -> va
 
 Lemma eval_Olea_ptr:
   forall a el m,
-  eval_operation ge sp (Olea_ptr a) el m = eval_addressing ge sp a el.
+  eval_operation se sp (Olea_ptr a) el m = eval_addressing se sp a el.
 Proof.
   unfold Olea_ptr, eval_addressing; intros. destruct Archi.ptr64; auto.
 Qed.
 
 Theorem eval_addrsymbol:
   forall le id ofs,
-  exists v, eval_expr se ge sp e m le (addrsymbol id ofs) v /\ Val.lessdef (Genv.symbol_address ge id ofs) v.
+  exists v, eval_expr se ge sp e m le (addrsymbol id ofs) v /\ Val.lessdef (Genv.symbol_address se id ofs) v.
 Proof.
-  intros. unfold addrsymbol. exists (Genv.symbol_address ge id ofs); split; auto.
+  intros. unfold addrsymbol. exists (Genv.symbol_address se id ofs); split; auto.
   destruct (symbol_is_external id).
   predSpec Ptrofs.eq Ptrofs.eq_spec ofs Ptrofs.zero.
   subst. EvalOp.
@@ -171,8 +171,8 @@ Proof.
   assert (A: forall x y, Int.repr (x + y) = Int.add (Int.repr x) (Int.repr y)).
   { intros; apply Int.eqm_samerepr; auto with ints. }
   assert (B: forall id ofs n, Archi.ptr64 = false ->
-             Genv.symbol_address ge id (Ptrofs.add ofs (Ptrofs.repr n)) =
-             Val.add (Genv.symbol_address ge id ofs) (Vint (Int.repr n))).
+             Genv.symbol_address se id (Ptrofs.add ofs (Ptrofs.repr n)) =
+             Val.add (Genv.symbol_address se id ofs) (Vint (Int.repr n))).
   { intros. replace (Ptrofs.repr n) with (Ptrofs.of_int (Int.repr n)) by auto with ptrofs.
     apply Genv.shift_symbol_address_32; auto. }
   red; intros until y.
@@ -923,18 +923,18 @@ Theorem eval_addressing:
   match addressing chunk a with (mode, args) =>
     exists vl,
     eval_exprlist se ge sp e m le args vl /\
-    eval_addressing ge sp mode vl = Some v
+    eval_addressing se sp mode vl = Some v
   end.
 Proof.
   intros until ofs.
-  assert (A: v = Vptr b ofs -> eval_addressing ge sp (Aindexed 0) (v :: nil) = Some v).
+  assert (A: v = Vptr b ofs -> eval_addressing se sp (Aindexed 0) (v :: nil) = Some v).
   { intros. subst v. unfold eval_addressing.
     destruct Archi.ptr64 eqn:SF; simpl; rewrite SF; rewrite Ptrofs.add_zero; auto. }
   assert (D: forall a,
              eval_expr se ge sp e m le a v ->
              v = Vptr b ofs ->
              exists vl, eval_exprlist se ge sp e m le (a ::: Enil) vl
-                     /\ eval_addressing ge sp (Aindexed 0) vl = Some v).
+                     /\ eval_addressing se sp (Aindexed 0) vl = Some v).
   { intros. exists (v :: nil); split. constructor; auto. constructor. auto. }
   unfold addressing; case (addressing_match a); intros.
 - destruct (negb Archi.ptr64 && addressing_valid addr) eqn:E.
@@ -951,7 +951,7 @@ Qed.
 Theorem eval_builtin_arg_addr:
   forall addr al vl v,
   eval_exprlist se ge sp e m nil al vl ->
-  Op.eval_addressing ge sp addr vl = Some v ->
+  Op.eval_addressing se sp addr vl = Some v ->
   CminorSel.eval_builtin_arg se ge sp e m (builtin_arg_addr addr al) v.
 Proof.
   intros until v. unfold builtin_arg_addr; case (builtin_arg_addr_match addr al); intros; InvEval.

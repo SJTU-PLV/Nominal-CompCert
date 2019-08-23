@@ -432,9 +432,7 @@ Proof.
   exploit Mem.loadv_extends. eauto. eauto. eexact LD. 
   intros (tv & LOAD & LD').
   left; simpl; econstructor; split.
-  eapply exec_Lload with (a := ta).
-  rewrite <- EV. apply eval_addressing_preserved. exact symbols_preserved.
-  eauto. eauto.
+  eapply exec_Lload with (a := ta); eauto.
   econstructor; eauto using locmap_set_lessdef, locmap_undef_regs_lessdef.
 - (* Lgetstack *)
   left; simpl; econstructor; split.
@@ -450,9 +448,7 @@ Proof.
   exploit Mem.storev_extends. eauto. eauto. eexact LD. apply LS.  
   intros (tm' & STORE & MEM').
   left; simpl; econstructor; split.
-  eapply exec_Lstore with (a := ta).
-  rewrite <- EV. apply eval_addressing_preserved. exact symbols_preserved.
-  eauto. eauto.
+  eapply exec_Lstore with (a := ta); eauto.
   econstructor; eauto using locmap_undef_regs_lessdef.
 - (* Lcall *)
   exploit ros_address_translated; eauto. intros ROS.

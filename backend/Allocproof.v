@@ -2061,9 +2061,8 @@ Proof.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
   eapply star_trans. eexact A1.
-  eapply star_left. econstructor. instantiate (1 := v'). rewrite <- F.
-  apply eval_operation_preserved. exact symbols_preserved.
-  eauto. eapply star_right. eexact A2. constructor.
+  eapply star_left. econstructor; eauto.
+  eapply star_right. eexact A2. constructor.
   eauto. eauto. eauto. traceEq.
   exploit satisf_successors; eauto. simpl; eauto. intros [enext [U V]].
   econstructor; eauto.
@@ -2090,8 +2089,7 @@ Proof.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
   eapply star_trans. eexact A1.
-  eapply star_left. econstructor. instantiate (1 := a'). rewrite <- F.
-  apply eval_addressing_preserved. exact symbols_preserved. eauto. eauto.
+  eapply star_left. econstructor; eauto.
   eapply star_right. eexact A2. constructor.
   eauto. eauto. eauto. traceEq.
   exploit satisf_successors; eauto. simpl; eauto. intros [enext [U V]].
@@ -2139,13 +2137,9 @@ Proof.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
   eapply star_trans. eexact A1.
-  eapply star_left. econstructor.
-  instantiate (1 := a1'). rewrite <- F1. apply eval_addressing_preserved. exact symbols_preserved.
-  eexact LOAD1'. instantiate (1 := ls2); auto.
+  eapply star_left. econstructor; eauto.
   eapply star_trans. eexact A3.
-  eapply star_left. econstructor.
-  instantiate (1 := a2'). rewrite <- F2. apply eval_addressing_preserved. exact symbols_preserved.
-  eexact LOAD2'. instantiate (1 := ls4); auto.
+  eapply star_left. econstructor; eauto.
   eapply star_right. eexact A5.
   constructor.
   eauto. eauto. eauto. eauto. eauto. traceEq.
@@ -2173,9 +2167,7 @@ Proof.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
   eapply star_trans. eexact A1.
-  eapply star_left. econstructor.
-  instantiate (1 := a1'). rewrite <- F1. apply eval_addressing_preserved. exact symbols_preserved.
-  eexact LOAD1'. instantiate (1 := ls2); auto.
+  eapply star_left. econstructor; eauto.
   eapply star_right. eexact A3.
   constructor.
   eauto. eauto. eauto. traceEq.
@@ -2206,9 +2198,7 @@ Proof.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
   eapply star_trans. eexact A1.
-  eapply star_left. econstructor.
-  instantiate (1 := a1'). rewrite <- F1. apply eval_addressing_preserved. exact symbols_preserved.
-  eexact LOAD2'. instantiate (1 := ls2); auto.
+  eapply star_left. econstructor; eauto.
   eapply star_right. eexact A3.
   constructor.
   eauto. eauto. eauto. traceEq.
@@ -2235,8 +2225,7 @@ Proof.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
   eapply star_trans. eexact X.
-  eapply star_two. econstructor. instantiate (1 := a'). rewrite <- F.
-  apply eval_addressing_preserved. exact symbols_preserved. eauto. eauto.
+  eapply star_two. econstructor; eauto.
   constructor. eauto. eauto. traceEq.
   exploit satisf_successors; eauto. simpl; eauto.
   eapply can_undef_satisf; eauto. eapply add_equations_satisf; eauto. intros [enext [U V]].
@@ -2261,8 +2250,6 @@ Proof.
     eapply can_undef_satisf. eauto.
     eapply add_equation_satisf. eapply add_equations_satisf; eauto.
   exploit eval_addressing_lessdef. eexact LD1. eauto. intros [a1' [F1 G1]].
-  assert (F1': eval_addressing tge sp addr (reglist ls1 args1') = Some a1').
-    rewrite <- F1. apply eval_addressing_preserved. exact symbols_preserved.
   exploit Mem.storev_extends. eauto. eexact STORE1. eexact G1. eauto.
   intros [m1' [STORE1' EXT1]].
   exploit (exec_moves mv2); eauto. intros [ls3 [U V]].
@@ -2270,8 +2257,6 @@ Proof.
   exploit add_equation_lessdef. eapply add_equations_satisf. eexact Heqo. eexact V.
   simpl. intros LD4.
   exploit eval_addressing_lessdef. eexact LD3. eauto. intros [a2' [F2 G2]].
-  assert (F2': eval_addressing tge sp addr (reglist ls3 args2') = Some a2').
-    rewrite <- F2. apply eval_addressing_preserved. exact symbols_preserved.
   exploit (eval_offset_addressing tge); eauto. intros F2''.
   assert (STOREX: exists m2', Mem.storev Mint32 m1' (Val.add a2' (Vint (Int.repr 4))) (ls3 (R src2')) = Some m2' /\ Mem.extends m' m2').
   { try discriminate;
@@ -2282,7 +2267,7 @@ Proof.
   eapply plus_left. econstructor; eauto.
   eapply star_trans. eexact X.
   eapply star_left.
-  econstructor. eexact F1'. eexact STORE1'. instantiate (1 := ls2). auto.
+  econstructor; eauto.
   eapply star_trans. eexact U.
   eapply star_two.
   eapply exec_Lstore with (m' := m2'). eexact F2''. discriminate||exact STORE2'. eauto.

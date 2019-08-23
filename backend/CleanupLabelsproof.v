@@ -233,14 +233,10 @@ Proof.
   econstructor; eauto.
   econstructor; eauto with coqlib.
 (* Lload *)
-  assert (eval_addressing tge sp addr (LTL.reglist rs args) = Some a).
-    rewrite <- H. apply eval_addressing_preserved. exact symbols_preserved.
   left; econstructor; split.
   econstructor; eauto.
   econstructor; eauto with coqlib.
 (* Lstore *)
-  assert (eval_addressing tge sp addr (LTL.reglist rs args) = Some a).
-    rewrite <- H. apply eval_addressing_preserved. exact symbols_preserved.
   left; econstructor; split.
   econstructor; eauto.
   econstructor; eauto with coqlib.
