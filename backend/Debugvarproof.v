@@ -367,10 +367,10 @@ Inductive match_stackframes: Linear.stackframe -> Linear.stackframe -> Prop :=
         (Stackframe f sp rs c)
         (Stackframe tf sp rs (add_delta_ranges before after tc))
   | match_stackframe_top:
-      forall ls,
+      forall sg ls,
       match_stackframes
-        (Stackbase ls)
-        (Stackbase ls).
+        (Stackbase sg ls)
+        (Stackbase sg ls).
 
 Inductive match_states: Linear.state ->  Linear.state -> Prop :=
   | match_states_instr:

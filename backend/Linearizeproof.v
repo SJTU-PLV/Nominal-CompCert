@@ -471,10 +471,10 @@ Inductive match_stackframes: LTL.stackframe -> Linear.stackframe -> Prop :=
         (LTL.Stackframe f sp ls bb)
         (Linear.Stackframe tf sp ls (linearize_block bb c))
   | match_stackframe_top:
-      forall rs,
+      forall sg rs,
       match_stackframes
         (LTL.Stackbase rs)
-        (Linear.Stackbase rs).
+        (Linear.Stackbase sg rs).
 
 Inductive match_states: LTL.state -> Linear.state -> Prop :=
   | match_states_add_branch:

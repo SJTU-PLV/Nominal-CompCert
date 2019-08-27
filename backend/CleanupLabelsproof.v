@@ -176,10 +176,10 @@ Inductive match_stackframes: stackframe -> stackframe -> Prop :=
         (Stackframe (transf_function f) sp ls
           (remove_unused_labels (labels_branched_to f.(fn_code)) c))
   | match_stackframe_top:
-      forall ls,
+      forall sg ls,
       match_stackframes
-        (Stackbase ls)
-        (Stackbase ls).
+        (Stackbase sg ls)
+        (Stackbase sg ls).
 
 Inductive match_states: state -> state -> Prop :=
   | match_states_intro:
