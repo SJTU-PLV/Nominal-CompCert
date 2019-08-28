@@ -635,6 +635,36 @@ Next Obligation.
   eapply Mem.valid_block_inject_2; eauto.
 Qed.
 
+Lemma minjection_incr j m1 m2 j' m1' m2' P:
+  m2 |= minjection j m1 ** P ->
+  Mem.inject j' m1' m2' ->
+  Mem.unchanged_on (loc_unmapped j) m1 m1' ->
+  Mem.unchanged_on (loc_out_of_reach j m1) m2 m2' ->
+  inject_incr j j' ->
+  inject_separated j j' m1 m2 ->
+  (forall b ofs p,
+      Mem.valid_block m1 b ->
+      Mem.perm m1' b ofs Max p ->
+      Mem.perm m1 b ofs Max p) ->
+  m2' |= minjection j' m1' ** P.
+Proof.
+  intros SEP INJ' UNCH1 UNCH2 INCR ISEP MAXPERMS.
+  destruct SEP as (A & B & C). simpl in A.
+  split; [|split].
+  - exact INJ'.
+  - apply m_invar with (m0 := m2).
+    + assumption.
+    + eapply Mem.unchanged_on_implies; eauto.
+      intros; red; intros; red; intros.
+      eelim C; eauto. simpl. exists b0, delta; auto.
+  - red; intros. destruct H as (b0 & delta & J' & E).
+    destruct (j b0) as [[b' delta'] | ] eqn:J.
+    + erewrite INCR in J' by eauto. inv J'.
+      eelim C; eauto. simpl. exists b0, delta; split; auto. apply MAXPERMS; auto.
+      eapply Mem.valid_block_inject_1; eauto.
+    + exploit ISEP; eauto. intros (X & Y). elim Y. eapply m_valid; eauto.
+Qed.
+
 Lemma loadv_parallel_rule:
   forall j m1 m2 chunk addr1 v1 addr2,
   m2 |= minjection j m1 ->
@@ -796,73 +826,50 @@ Qed.
 
 (** Preservation of a global environment by a memory injection *)
 
-Inductive globalenv_preserved {F V: Type} (ge: Genv.t F V) (j: meminj) (bound: block) : Prop :=
-  | globalenv_preserved_intro
-      (DOMAIN: forall b, Plt b bound -> j b = Some(b, 0))
-      (IMAGE: forall b1 b2 delta, j b1 = Some(b2, delta) -> Plt b2 bound -> b1 = b2)
-      (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> Plt b bound)
-      (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> Plt b bound)
-      (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> Plt b bound).
-
-Program Definition globalenv_inject {F V: Type} (ge: Genv.t F V) (j: meminj) : massert := {|
-  m_pred := fun m => exists bound, Ple bound (Mem.nextblock m) /\ globalenv_preserved ge j bound;
+Program Definition globalenv_inject (ge1 ge2: Senv.t) (j: meminj) : massert := {|
+  m_pred := fun m => Ple (Genv.genv_next ge2) (Mem.nextblock m) /\ Senv.inject j ge1 ge2;
   m_footprint := fun b ofs => False
 |}.
 Next Obligation.
-  rename H into bound. exists bound; split; auto. eapply Ple_trans; eauto. eapply Mem.unchanged_on_nextblock; eauto.
+  split; auto. eapply Ple_trans; eauto. eapply Mem.unchanged_on_nextblock; eauto.
 Qed.
 Next Obligation.
   tauto.
 Qed.
 
-Lemma globalenv_inject_preserves_globals:
-  forall (F V: Type) (ge: Genv.t F V) j m,
-  m |= globalenv_inject ge j ->
-  meminj_preserves_globals ge j.
-Proof.
-  intros. destruct H as (bound & A & B). destruct B.
-  split; [|split]; intros.
-- eauto.
-- eauto.
-- symmetry; eauto.
-Qed.
-
 Lemma globalenv_inject_incr:
-  forall j m0 (F V: Type) (ge: Genv.t F V) m j' P,
+  forall j m0 (ge1 ge2: Senv.t) m j' P,
   inject_incr j j' ->
   inject_separated j j' m0 m ->
-  m |= globalenv_inject ge j ** P ->
-  m |= globalenv_inject ge j' ** P.
+  m |= globalenv_inject ge1 ge2 j ** P ->
+  m |= globalenv_inject ge1 ge2 j' ** P.
 Proof.
-  intros. destruct H1 as (A & B & C). destruct A as (bound & D & E).
-  split; [|split]; auto.
-  exists bound; split; auto.
-  inv E; constructor; intros.
-- eauto.
-- destruct (j b1) as [[b0 delta0]|] eqn:JB1.
-+ erewrite H in H1 by eauto. inv H1. eauto.
-+ exploit H0; eauto. intros (X & Y). elim Y. apply Pos.lt_le_trans with bound; auto.
-- eauto.
-- eauto.
-- eauto.
+  intros. destruct H1 as ((D & E) & B & C).
+  simpl. intuition auto.
+  eapply Genv.match_genvs_external_call; eauto.
+  intros b1 b2 delta Hb' Hb2.
+  destruct (j b1) as [[? ?]|] eqn:Hb.
+  - apply H in Hb. congruence.
+  - specialize (H0 b1 b2 delta Hb Hb') as [_ Hb2']. elim Hb2'.
+    eapply Pos.lt_le_trans; eauto.
 Qed.
 
 Lemma external_call_parallel_rule:
-  forall (F V: Type) ef (ge: Genv.t F V) vargs1 m1 t vres1 m1' m2 j P vargs2,
-  external_call ef ge vargs1 m1 t vres1 m1' ->
-  m2 |= minjection j m1 ** globalenv_inject ge j ** P ->
+  forall ef (ge1 ge2: Senv.t) vargs1 m1 t vres1 m1' m2 j P vargs2,
+  external_call ef ge1 vargs1 m1 t vres1 m1' ->
+  m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j ** P ->
   Val.inject_list j vargs1 vargs2 ->
   exists j' vres2 m2',
-     external_call ef ge vargs2 m2 t vres2 m2'
+     external_call ef ge2 vargs2 m2 t vres2 m2'
   /\ Val.inject j' vres1 vres2
-  /\ m2' |= minjection j' m1' ** globalenv_inject ge j' ** P
+  /\ Mem.unchanged_on (loc_unmapped j) m1 m1'
+  /\ m2' |= minjection j' m1' ** globalenv_inject ge1 ge2 j' ** P
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m2.
 Proof.
   intros until vargs2; intros CALL SEP ARGS.
   destruct SEP as (A & B & C). simpl in A.
-  exploit external_call_mem_inject; eauto.
-  eapply globalenv_inject_preserves_globals. eapply sep_pick1; eauto.
+  exploit external_call_mem_inject; eauto. apply B.
   intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & INCR & ISEP).
   assert (MAXPERMS: forall b ofs p,
             Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p).
@@ -884,8 +891,8 @@ Proof.
 Qed.
 
 Lemma alloc_parallel_rule_2:
-  forall (F V: Type) (ge: Genv.t F V) m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
-  m2 |= minjection j m1 ** globalenv_inject ge j ** P ->
+  forall (ge1 ge2: Senv.t) m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
+  m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j ** P ->
   Mem.alloc m1 0 sz1 = (m1', b1) ->
   Mem.alloc m2 0 sz2 = (m2', b2) ->
   (8 | delta) ->
@@ -894,9 +901,10 @@ Lemma alloc_parallel_rule_2:
   0 <= sz2 <= Ptrofs.max_unsigned ->
   0 <= delta -> hi <= sz2 ->
   exists j',
-     m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge j' ** P
+     m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge1 ge2 j' ** P
   /\ inject_incr j j'
-  /\ j' b1 = Some(b2, delta).
+  /\ j' b1 = Some(b2, delta)
+  /\ inject_separated j j' m1 m2 .
 Proof.
   intros.
   set (j1 := fun b => if eq_block b b1 then Some(b2, delta) else j b).
@@ -916,4 +924,12 @@ Proof.
   rewrite sep_swap4 in A. rewrite sep_swap4. apply globalenv_inject_incr with j1 m1; auto.
 - red; unfold j1; intros. destruct (eq_block b b1). congruence. rewrite D; auto.
 - red; unfold j1; intros. destruct (eq_block b0 b1). congruence. rewrite D in H9 by auto. congruence.
+- split; auto.
+  split; auto.
+  red. intros b0 b3 delta0 H8 H9.
+  destruct (peq b0 b1).
+  + subst.
+    rewrite C in H9. inversion H9. subst delta0 b3.
+    eauto with mem.
+  + rewrite D in H9; congruence.
 Qed.

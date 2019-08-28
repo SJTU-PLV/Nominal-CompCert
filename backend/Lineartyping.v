@@ -23,6 +23,7 @@ Require Import Op.
 Require Import Machregs.
 Require Import Locations.
 Require Import Conventions.
+Require Import Mach.
 Require Import LTL.
 Require Import Linear.
 
@@ -235,9 +236,9 @@ Definition wt_fundef (fd: fundef) :=
   end.
 
 Inductive wt_callstack: list stackframe -> Prop :=
-  | wt_callstack_base: forall rs,
+  | wt_callstack_base: forall sg rs,
       wt_locset rs ->
-      wt_callstack (Stackbase rs :: nil)
+      wt_callstack (Stackbase sg rs :: nil)
   | wt_callstack_cons: forall f sp rs c s
         (WTSTK: wt_callstack s)
         (WTF: wt_function f = true)
@@ -384,14 +385,23 @@ Local Opaque mreg_type.
 Qed.
 
 Theorem wt_initial_state:
-  forall q S, initial_state ge q S -> wt_state S.
+  forall w q1 q2 S, cc_stacking_mq w q1 q2 -> initial_state ge q1 S -> wt_state S.
 Proof.
-  induction 1. econstructor; eauto. constructor.
-  unfold ge0 in H1. exploit Genv.find_funct_ptr_inversion; eauto.
-  intros [id IN]. eapply wt_prog; eauto.
-  apply wt_init.
-  red; auto.
-  red; auto.
+  intros. inv H. inv H0.
+  econstructor; eauto. constructor; eauto.
+  pattern (Internal f0). eapply Senv.find_funct_prop; eauto.
+  simpl. red. auto.
+  simpl. red. auto.
+Qed.
+
+Theorem wt_external_state:
+  forall w q1 q2 r1 r2 S S', cc_stacking_mq w q1 q2 -> cc_stacking_mr w r1 r2 ->
+  wt_state S -> at_external ge S q1 -> after_external S r1 S' -> wt_state S'.
+Proof.
+  intros until S'. intros Hq Hr HS Hq1 HS'.
+  inv Hq. inv Hq1. inv HS. inv Hr. inv HS'.
+  constructor; auto.
+  intros l Hl. transitivity (rs1 l); auto.
 Qed.
 
 End SOUNDNESS.
@@ -399,56 +409,57 @@ End SOUNDNESS.
 (** Properties of well-typed states that are used in [Stackingproof]. *)
 
 Lemma wt_state_getstack:
-  forall s f sp sl ofs ty rd c rs m,
-  wt_state (State s f sp (Lgetstack sl ofs ty rd :: c) rs m) ->
+  forall prog se s f sp sl ofs ty rd c rs m,
+  wt_state prog se (State s f sp (Lgetstack sl ofs ty rd :: c) rs m) ->
   slot_valid f sl ofs ty = true.
 Proof.
   intros. inv H. simpl in WTC; InvBooleans. auto.
 Qed.
 
 Lemma wt_state_setstack:
-  forall s f sp sl ofs ty r c rs m,
-  wt_state (State s f sp (Lsetstack r sl ofs ty :: c) rs m) ->
+  forall prog se s f sp sl ofs ty r c rs m,
+  wt_state prog se (State s f sp (Lsetstack r sl ofs ty :: c) rs m) ->
   slot_valid f sl ofs ty = true /\ slot_writable sl = true.
 Proof.
   intros. inv H. simpl in WTC; InvBooleans. intuition.
 Qed.
 
 Lemma wt_state_tailcall:
-  forall s f sp sg ros c rs m,
-  wt_state (State s f sp (Ltailcall sg ros :: c) rs m) ->
+  forall prog se s f sp sg ros c rs m,
+  wt_state prog se (State s f sp (Ltailcall sg ros :: c) rs m) ->
   size_arguments sg = 0.
 Proof.
   intros. inv H. simpl in WTC; InvBooleans. auto.
 Qed.
 
 Lemma wt_state_builtin:
-  forall s f sp ef args res c rs m,
-  wt_state (State s f sp (Lbuiltin ef args res :: c) rs m) ->
+  forall prog se s f sp ef args res c rs m,
+  wt_state prog se (State s f sp (Lbuiltin ef args res :: c) rs m) ->
   forallb (loc_valid f) (params_of_builtin_args args) = true.
 Proof.
   intros. inv H. simpl in WTC; InvBooleans. auto.
 Qed.
 
 Lemma wt_callstate_wt_regs:
-  forall s f rs m,
-  wt_state (Callstate s f rs m) ->
+  forall prog se s f rs m,
+  wt_state prog se (Callstate s f rs m) ->
   forall r, Val.has_type (rs (R r)) (mreg_type r).
 Proof.
   intros. inv H. apply WTRS.
 Qed.
 
 Lemma wt_callstate_agree:
-  forall s f rs m,
-  wt_state (Callstate s f rs m) ->
+  forall prog se s vf f rs m,
+  wt_state prog se (Callstate s vf rs m) ->
+  Genv.find_funct (Senv.globalenv prog se) vf = Some f ->
   agree_callee_save rs (parent_locset s) /\ agree_outgoing_arguments (funsig f) rs (parent_locset s).
 Proof.
-  intros. inv H; auto.
+  intros. inv H. rewrite FIND in H0; inv H0. auto.
 Qed.
 
 Lemma wt_returnstate_agree:
-  forall s rs m,
-  wt_state (Returnstate s rs m) ->
+  forall prog se s rs m,
+  wt_state prog se (Returnstate s rs m) ->
   agree_callee_save rs (parent_locset s) /\ outgoing_undef rs.
 Proof.
   intros. inv H; auto.
