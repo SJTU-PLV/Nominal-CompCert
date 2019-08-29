@@ -13,7 +13,7 @@
 (** Abstract syntax and semantics for IA32 assembly language *)
 
 Require Import Coqlib Maps.
-Require Import AST Integers Floats Values Memory Events Globalenvs Smallstep.
+Require Import AST Integers Floats Values Memory Events Globalenvs LanguageInterface Smallstep.
 Require Import Locations Stacklayout Conventions.
 
 (** * Abstract syntax *)
@@ -374,6 +374,17 @@ Fixpoint label_pos (lbl: label) (pos: Z) (c: code) {struct c} : option Z :=
       if is_label lbl instr then Some (pos + 1) else label_pos lbl (pos + 1) c'
   end.
 
+(** The semantics is parametrized over the value of the stack pointer
+    at module entry, which controls the behavior of the [Pret]
+    instruction.  When [RSP <> init_sp], we interpret [Pret] as a
+    usual, internal return and jump to the location pointed to by
+    [RA]. However, when [RSP = init_sp], we intepret [Pret] as a
+    top-level return to the environment, expressed as a final state
+    rather than a step.
+*)
+
+Variable init_sp: val.
+Variable se: Senv.t.
 Variable ge: genv.
 
 (** Evaluating an addressing mode *)
@@ -393,7 +404,7 @@ Definition eval_addrmode32 (a: addrmode) (rs: regset) : val :=
              end)
            (match const with
             | inl ofs => Vint (Int.repr ofs)
-            | inr(id, ofs) => Genv.symbol_address ge id ofs
+            | inr(id, ofs) => Genv.symbol_address se id ofs
             end)).
 
 Definition eval_addrmode64 (a: addrmode) (rs: regset) : val :=
@@ -411,7 +422,7 @@ Definition eval_addrmode64 (a: addrmode) (rs: regset) : val :=
              end)
            (match const with
             | inl ofs => Vlong (Int64.repr ofs)
-            | inr(id, ofs) => Genv.symbol_address ge id ofs
+            | inr(id, ofs) => Genv.symbol_address se id ofs
             end)).
 
 Definition eval_addrmode (a: addrmode) (rs: regset) : val :=
@@ -545,8 +556,10 @@ Definition eval_testcond (c: testcond) (rs: regset) : option bool :=
   or [Stuck] if the processor is stuck. *)
 
 Inductive outcome: Type :=
-  | Next: regset -> mem -> outcome
+  | Next': regset -> mem -> bool -> outcome
   | Stuck: outcome.
+
+Notation Next rs m := (Next' rs m true).
 
 (** Manipulations over the [PC] register: continuing with the next
   instruction ([nextinstr]) or branching to a label ([goto_label]).
@@ -615,7 +628,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pmovq_ri rd n =>
       Next (nextinstr_nf (rs#rd <- (Vlong n))) m
   | Pmov_rs rd id =>
-      Next (nextinstr_nf (rs#rd <- (Genv.symbol_address ge id Ptrofs.zero))) m
+      Next (nextinstr_nf (rs#rd <- (Genv.symbol_address se id Ptrofs.zero))) m
   | Pmovl_rm rd a =>
       exec_load Mint32 m a rs rd
   | Pmovq_rm rd a =>
@@ -896,7 +909,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pjmp_l lbl =>
       goto_label f lbl rs m
   | Pjmp_s id sg =>
-      Next (rs#PC <- (Genv.symbol_address ge id Ptrofs.zero)) m
+      Next (rs#PC <- (Genv.symbol_address se id Ptrofs.zero)) m
   | Pjmp_r r sg =>
       Next (rs#PC <- (rs r)) m
   | Pjcc cond lbl =>
@@ -921,11 +934,11 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
       | _ => Stuck
       end
   | Pcall_s id sg =>
-      Next (rs#RA <- (Val.offset_ptr rs#PC Ptrofs.one) #PC <- (Genv.symbol_address ge id Ptrofs.zero)) m
+      Next (rs#RA <- (Val.offset_ptr rs#PC Ptrofs.one) #PC <- (Genv.symbol_address se id Ptrofs.zero)) m
   | Pcall_r r sg =>
       Next (rs#RA <- (Val.offset_ptr rs#PC Ptrofs.one) #PC <- (rs r)) m
   | Pret =>
-      Next (rs#PC <- (rs#RA)) m
+      Next' (rs#PC <- (rs#RA)) m (if Val.eq rs#SP init_sp then false else true)
   (** Saving and restoring registers *)
   | Pmov_rm_a rd a =>
       exec_load (if Archi.ptr64 then Many64 else Many32) m a rs rd
@@ -958,7 +971,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
           | Some sp =>
               match rs#RSP with
               | Vptr stk ofs =>
-                  match Mem.free m stk 0 sz with
+                  match Mem.free m stk (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sz) with
                   | None => Stuck
                   | Some m' => Next (nextinstr (rs#RSP <- sp #RA <- ra)) m'
                   end
@@ -1090,59 +1103,95 @@ Definition loc_external_result (sg: signature) : rpair preg :=
 (** Execution of the instruction at [rs#PC]. *)
 
 Inductive state: Type :=
-  | State: regset -> mem -> state.
+  | State: regset -> mem -> bool -> state.
 
 Inductive step: state -> trace -> state -> Prop :=
   | exec_step_internal:
-      forall b ofs f i rs m rs' m',
+      forall b ofs f i rs m rs' m' live,
       rs PC = Vptr b ofs ->
       Genv.find_funct_ptr ge b = Some (Internal f) ->
       find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some i ->
-      exec_instr f i rs m = Next rs' m' ->
-      step (State rs m) E0 (State rs' m')
+      exec_instr f i rs m = Next' rs' m' live ->
+      step (State rs m true) E0 (State rs' m' live)
   | exec_step_builtin:
       forall b ofs f ef args res rs m vargs t vres rs' m',
       rs PC = Vptr b ofs ->
       Genv.find_funct_ptr ge b = Some (Internal f) ->
       find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some (Pbuiltin ef args res) ->
-      eval_builtin_args ge rs (rs RSP) m args vargs ->
-      external_call ef ge vargs m t vres m' ->
+      eval_builtin_args se rs (rs RSP) m args vargs ->
+      external_call ef se vargs m t vres m' ->
       rs' = nextinstr_nf
              (set_res res vres
                (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
-      step (State rs m) t (State rs' m')
+      step (State rs m true) t (State rs' m' true)
   | exec_step_external:
       forall b ef args res rs m t rs' m',
       rs PC = Vptr b Ptrofs.zero ->
       Genv.find_funct_ptr ge b = Some (External ef) ->
       extcall_arguments rs m (ef_sig ef) args ->
-      external_call ef ge args m t res m' ->
+      external_call ef se args m t res m' ->
       rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs)) #PC <- (rs RA) ->
-      step (State rs m) t (State rs' m').
+      let live := if Val.eq rs#SP init_sp then false else true in
+      step (State rs m true) t (State rs' m' live).
 
 End RELSEM.
 
-(** Execution of whole programs. *)
+Notation Next rs m := (Next' rs m true).
 
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall m0,
-      Genv.init_mem p = Some m0 ->
-      let ge := Genv.globalenv p in
-      let rs0 :=
-        (Pregmap.init Vundef)
-        # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
-        # RA <- Vnullptr
-        # RSP <- Vnullptr in
-      initial_state p (State rs0 m0).
+(** Since Asm does not have an explicit stack, the queries and replies
+  for assembly modules simply pass the current state across modules. *)
 
-Inductive final_state: state -> int -> Prop :=
-  | final_state_intro: forall rs m r,
-      rs#PC = Vnullptr ->
-      rs#RAX = Vint r ->
-      final_state (State rs m) r.
+Canonical Structure li_asm :=
+  {|
+    query := regset * mem;
+    reply := regset * mem;
+  |}.
 
-Definition semantics (p: program) :=
-  Semantics step (initial_state p) final_state (Genv.globalenv p).
+(** Asm does not really have a notion of control stack. However, to
+  establish the simulation with Mach, we still need to distinguish
+  between two kinds of module exits: performing an external call to
+  another module, or returning to the callee. We accomplish this by
+  remembering the values of [SP] at module entry, and modifying the
+  semantics of [Pret] accordingly: whenever [SP] holds its initial
+  value (again), instead of its usual semantics, [Pret] is interpreted
+  as a top-level return to the environment, and is executed by
+  [final_state] below instead of a [step]. *)
+
+(** With these preparations we're ready to define our semantics. *)
+
+Inductive initial_state (ge: genv): query li_asm -> state -> Prop :=
+  | initial_state_intro rs m f:
+      Genv.find_funct ge rs#PC = Some (Internal f) ->
+      rs#SP <> Vundef ->
+      rs#RA <> Vundef ->
+      initial_state ge (rs, m) (State rs m true).
+
+Inductive at_external (ge: genv): state -> query li_asm -> Prop :=
+  | at_external_intro rs m id sg:
+      Genv.find_funct ge rs#PC = Some (External (EF_external id sg)) ->
+      at_external ge (State rs m true) (rs, m).
+
+Inductive after_external init_sp (st: state): reply li_asm -> state -> Prop :=
+  | after_external_intro (rs': regset) m':
+      let live := if Val.eq rs'#SP init_sp then false else true in
+      after_external init_sp st (rs', m') (State rs' m' live).
+
+Inductive final_state: state -> reply li_asm -> Prop :=
+  | final_state_intro rs m:
+      final_state (State rs m false) (rs, m).
+
+Definition semantics (p: program): open_sem li_asm li_asm :=
+  {|
+    activate se q :=
+      let ge := Senv.globalenv p se in
+      Semantics li_asm (step (fst q SP) se)
+        (initial_state ge q)
+        (at_external ge)
+        (after_external (fst q SP))
+        final_state ge;
+    skel :=
+      erase_program p;
+  |}.
 
 (** Determinacy of the [Asm] semantics. *)
 
@@ -1168,7 +1217,7 @@ Proof.
   intros. eapply C; eauto.
 Qed.
 
-Lemma semantics_determinate: forall p, determinate (semantics p).
+Lemma semantics_determinate: forall p, open_determinate (semantics p).
 Proof.
 Ltac Equalities :=
   match goal with
@@ -1194,11 +1243,21 @@ Ltac Equalities :=
   eapply external_call_trace_length; eauto.
   eapply external_call_trace_length; eauto.
 - (* initial states *)
-  inv H; inv H0. f_equal. congruence.
+  inv H; inv H0. reflexivity.
+- (* external no step *)
+  inv H. red; intros; red; intros. inv H.
+  + rewrite H3 in H0. cbn in H0. destruct Ptrofs.eq_dec; congruence.
+  + rewrite H3 in H0. cbn in H0. destruct Ptrofs.eq_dec; congruence.
+  + rewrite H3 in H0. cbn in H0. destruct Ptrofs.eq_dec; try congruence.
+    assert (ef = EF_external id sg) by congruence; subst. contradiction.
+- (* at_external determ *)
+  inv H; inv H0; auto.
+- (* after_external determ *)
+  inv H; inv H0; auto.
 - (* final no step *)
-  assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
-  { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
-  inv H. red; intros; red; intros. inv H; rewrite H0 in *; eelim NOTNULL; eauto.
+  inv H. red; intros; red; intros. inv H.
+- (* at_external no step *)
+  inv H; inv H0.
 - (* final states *)
   inv H; inv H0. congruence.
 Qed.

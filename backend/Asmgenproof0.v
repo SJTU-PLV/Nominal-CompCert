@@ -788,6 +788,8 @@ Qed.
 
 Section STRAIGHTLINE.
 
+Variable init_sp: val.
+Variable se: Senv.t.
 Variable ge: genv.
 Variable fn: function.
 
@@ -802,12 +804,12 @@ Inductive exec_straight: code -> regset -> mem ->
                          code -> regset -> mem -> Prop :=
   | exec_straight_one:
       forall i1 c rs1 m1 rs2 m2,
-      exec_instr ge fn i1 rs1 m1 = Next rs2 m2 ->
+      exec_instr init_sp se fn i1 rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
       exec_straight (i1 :: c) rs1 m1 c rs2 m2
   | exec_straight_step:
       forall i c rs1 m1 rs2 m2 c' rs3 m3,
-      exec_instr ge fn i rs1 m1 = Next rs2 m2 ->
+      exec_instr init_sp se fn i rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
       exec_straight c rs2 m2 c' rs3 m3 ->
       exec_straight (i :: c) rs1 m1 c' rs3 m3.
@@ -825,8 +827,8 @@ Qed.
 
 Lemma exec_straight_two:
   forall i1 i2 c rs1 m1 rs2 m2 rs3 m3,
-  exec_instr ge fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr ge fn i2 rs2 m2 = Next rs3 m3 ->
+  exec_instr init_sp se fn i1 rs1 m1 = Next rs2 m2 ->
+  exec_instr init_sp se fn i2 rs2 m2 = Next rs3 m3 ->
   rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
   rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
   exec_straight (i1 :: i2 :: c) rs1 m1 c rs3 m3.
@@ -837,9 +839,9 @@ Qed.
 
 Lemma exec_straight_three:
   forall i1 i2 i3 c rs1 m1 rs2 m2 rs3 m3 rs4 m4,
-  exec_instr ge fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr ge fn i2 rs2 m2 = Next rs3 m3 ->
-  exec_instr ge fn i3 rs3 m3 = Next rs4 m4 ->
+  exec_instr init_sp se fn i1 rs1 m1 = Next rs2 m2 ->
+  exec_instr init_sp se fn i2 rs2 m2 = Next rs3 m3 ->
+  exec_instr init_sp se fn i3 rs3 m3 = Next rs4 m4 ->
   rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
   rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
   rs4#PC = Val.offset_ptr rs3#PC Ptrofs.one ->
@@ -860,7 +862,7 @@ Lemma exec_straight_steps_1:
   rs#PC = Vptr b ofs ->
   Genv.find_funct_ptr ge b = Some (Internal fn) ->
   code_tail (Ptrofs.unsigned ofs) (fn_code fn) c ->
-  plus step ge (State rs m) E0 (State rs' m').
+  plus (step init_sp se) ge (State rs m true) E0 (State rs' m' true).
 Proof.
   induction 1; intros.
   apply plus_one.
@@ -903,23 +905,66 @@ End STRAIGHTLINE.
 
 Section MATCH_STACK.
 
+Variable init_sp: val.
+Variable init_ra: val.
 Variable ge: Mach.genv.
+
+(** We maintain the invariant that successive stack frames have
+  increasing block identifiers. This allows us to prove that a new
+  stack block is distinct from all previous ones (and in particular,
+  the top-level stack block which discriminates between Asm final and
+  at_external states). *)
+
+Inductive block_lt: val -> val -> Prop :=
+  | block_lt_intro b1 ofs1 b2 ofs2:
+      Pos.lt b1 b2 ->
+      block_lt (Vptr b1 ofs1) (Vptr b2 ofs2).
 
 Inductive match_stack: list Mach.stackframe -> Prop :=
   | match_stack_nil:
-      match_stack nil
+      init_sp <> Vundef ->
+      init_ra <> Vundef ->
+      match_stack (Stackbase init_sp init_ra :: nil)
   | match_stack_cons: forall fb sp ra c s f tf tc,
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       transl_code_at_pc ge ra fb f c false tf tc ->
-      sp <> Vundef ->
+      block_lt (parent_sp s) sp ->
       match_stack s ->
-      match_stack (Stackframe fb sp ra c :: s).
+      match_stack (Stackframe (Vptr fb Ptrofs.zero) sp ra c :: s).
+
+Lemma init_sp_block_lt s sp:
+  match_stack s ->
+  block_lt (parent_sp s) sp ->
+  block_lt init_sp sp.
+Proof.
+  intros Hs. revert sp.
+  induction Hs; eauto.
+  simpl. destruct 1.
+  eapply IHHs. inv H1.
+  constructor. xomega.
+Qed.
+
+Lemma block_lt_neq p1 p2:
+  block_lt p1 p2 ->
+  p1 <> p2.
+Proof.
+  destruct 1.
+  assert (b1 <> b2) by xomega.
+  congruence.
+Qed.
+
+Lemma block_lt_def p1 p2:
+  block_lt p1 p2 ->
+  p1 <> Vundef.
+Proof.
+  destruct 1; discriminate.
+Qed.
 
 Lemma parent_sp_def: forall s, match_stack s -> parent_sp s <> Vundef.
 Proof.
   induction 1; simpl.
   unfold Vnullptr; destruct Archi.ptr64; congruence.
-  auto.
+  destruct H1; discriminate.
 Qed.
 
 Lemma parent_ra_def: forall s, match_stack s -> parent_ra s <> Vundef.

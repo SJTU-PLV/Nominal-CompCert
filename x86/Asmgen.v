@@ -32,10 +32,10 @@ All these properties are true by construction, but it is painful to track them s
 (** Extracting integer or float registers. *)
 
 Definition ireg_of (r: mreg) : res ireg :=
-  match preg_of r with IR mr => OK mr | _ => Error(msg "Asmgen.ireg_of") end.
+  match preg_of r with IR rm => OK rm | _ => Error(msg "Asmgen.ireg_of") end.
 
 Definition freg_of (r: mreg) : res freg :=
-  match preg_of r with FR mr => OK mr | _ => Error(msg "Asmgen.freg_of") end.
+  match preg_of r with FR rm => OK rm | _ => Error(msg "Asmgen.freg_of") end.
 
 (** Smart constructors for some operations. *)
 
