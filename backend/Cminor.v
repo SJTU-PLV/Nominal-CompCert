@@ -245,7 +245,6 @@ Inductive state: Type :=
 
 Section RELSEM.
 
-Variable se: Senv.t.
 Variable ge: genv.
 
 (** Evaluation of constants and operator applications.
@@ -477,7 +476,7 @@ Inductive step: state -> trace -> state -> Prop :=
 
   | step_builtin: forall f optid ef bl k sp e m vargs t vres m',
       eval_exprlist sp e m bl vargs ->
-      external_call ef se vargs m t vres m' ->
+      external_call ef ge vargs m t vres m' ->
       step (State f (Sbuiltin optid ef bl) k sp e m)
          t (State f Sskip k sp (set_optvar optid vres e) m')
 
@@ -542,7 +541,7 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m')
   | step_external_function: forall vf ef vargs k m t vres m',
       forall FIND: Genv.find_funct ge vf = Some (External ef),
-      external_call ef se vargs m t vres m' ->
+      external_call ef ge vargs m t vres m' ->
       step (Callstate vf vargs k m)
          t (Returnstate vres k m')
 
@@ -596,7 +595,7 @@ Lemma semantics_receptive:
 Proof.
   intros p se q. constructor; simpl; intros.
 (* receptiveness *)
-  assert (t1 = E0 -> exists s2, step se (Senv.globalenv p se) s t2 s2).
+  assert (t1 = E0 -> exists s2, step (Genv.globalenv se p) s t2 s2).
     intros. subst. inv H0. exists s1; auto.
   inversion H; subst; auto.
   exploit external_call_receptive; eauto. intros [vres2 [m2 EC2]].
@@ -851,8 +850,9 @@ End NATURALSEM.
 Inductive bigstep_program_terminates (p: program): trace -> int -> Prop :=
   | bigstep_program_terminates_intro:
       forall b f m0 t m r,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
+      let se := Genv.symboltbl (erase_program p) in
+      let ge := Genv.globalenv se p in
+      Genv.init_mem (erase_program p) = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       funsig f = signature_main ->
@@ -862,8 +862,9 @@ Inductive bigstep_program_terminates (p: program): trace -> int -> Prop :=
 Inductive bigstep_program_diverges (p: program): traceinf -> Prop :=
   | bigstep_program_diverges_intro:
       forall b f m0 t,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
+      let se := Genv.symboltbl (erase_program p) in
+      let ge := Genv.globalenv se p in
+      Genv.init_mem (erase_program p) = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       funsig f = signature_main ->

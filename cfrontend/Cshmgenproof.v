@@ -215,7 +215,6 @@ Section CONSTRUCTORS.
 
 Variables cunit prog: Clight.program.
 Hypothesis LINK: linkorder cunit prog.
-Variable se: Senv.t.
 Variable ge: genv.
 
 Lemma make_intconst_correct:
@@ -965,7 +964,7 @@ Lemma make_memcpy_correct:
   assign_loc prog.(prog_comp_env) ty m b ofs v m' ->
   access_mode ty = By_copy ->
   make_memcpy cunit.(prog_comp_env) dst src ty = OK s ->
-  step se ge (State f s k e le m) E0 (State f Sskip k e le m').
+  step ge (State f s k e le m) E0 (State f Sskip k e le m').
 Proof.
   intros. inv H1; try congruence.
   monadInv H3.
@@ -985,7 +984,7 @@ Lemma make_store_correct:
   eval_expr ge e le m addr (Vptr b ofs) ->
   eval_expr ge e le m rhs v ->
   assign_loc prog.(prog_comp_env) ty m b ofs v m' ->
-  step se ge (State f code k e le m) E0 (State f Sskip k e le m').
+  step ge (State f code k e le m) E0 (State f Sskip k e le m').
 Proof.
   unfold make_store. intros until k; intros MKSTORE EV1 EV2 ASSIGN.
   inversion ASSIGN; subst.
@@ -1007,19 +1006,17 @@ Variable prog: Clight.program.
 Variable tprog: Csharpminor.program.
 Hypothesis TRANSL: match_prog prog tprog.
 
-Variable se: Senv.t.
-Let ge := globalenv prog se.
-Let tge := Senv.globalenv tprog se.
-
-Lemma symbols_preserved:
-  forall s, Genv.find_symbol tge s = Genv.find_symbol ge s.
-Proof. apply Senv.find_symbol_match_id. Qed.
+Variable se: Genv.symtbl.
+Let ge := globalenv se prog.
+Let tge := Genv.globalenv se tprog.
 
 Lemma functions_translated:
   forall v f,
   Genv.find_funct ge v = Some f ->
   exists cu tf, Genv.find_funct tge v = Some tf /\ match_fundef cu f tf /\ linkorder cu prog.
-Proof. exact (Senv.find_funct_match_id se TRANSL). Qed.
+Proof.
+  apply (Genv.find_funct_match_id TRANSL).
+Qed.
 
 (** * Matching between environments *)
 
@@ -1226,7 +1223,7 @@ Proof.
 - (* var global *)
   econstructor. eapply eval_var_addr_global.
   eapply match_env_globals; eauto.
-  rewrite symbols_preserved. auto.
+  auto.
 - (* deref *)
   simpl in TR. eauto.
 - (* field struct *)
@@ -1310,7 +1307,7 @@ Inductive match_transl: stmt -> cont -> stmt -> cont -> Prop :=
 Lemma match_transl_step:
   forall ts tk ts' tk' f te le m,
   match_transl (Sblock ts) tk ts' tk' ->
-  star (step se) tge (State f ts' tk' te le m) E0 (State f ts (Kblock tk) te le m).
+  star step tge (State f ts' tk' te le m) E0 (State f ts (Kblock tk) te le m).
 Proof.
   intros. inv H.
   apply star_one. constructor.
@@ -1517,9 +1514,9 @@ Qed.
 (** The simulation proof *)
 
 Lemma transl_step:
-  forall S1 t S2, Clight.step2 se ge S1 t S2 ->
+  forall S1 t S2, Clight.step2 ge S1 t S2 ->
   forall T1, match_states S1 T1 ->
-  exists T2, plus (step se) tge T1 t T2 /\ match_states S2 T2.
+  exists T2, plus step tge T1 t T2 /\ match_states S2 T2.
 Proof.
   induction 1; intros T1 MST; inv MST.
 

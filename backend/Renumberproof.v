@@ -30,20 +30,17 @@ Section PRESERVATION.
 
 Variables prog tprog: program.
 Hypothesis TRANSL: match_prog prog tprog.
-Variable se: Senv.t.
-Let ge := Senv.globalenv prog se.
-Let tge := Senv.globalenv tprog se.
+Variable se: Genv.symtbl.
+Let ge := Genv.globalenv se prog.
+Let tge := Genv.globalenv se tprog.
 
 Lemma functions_translated:
   forall v f,
   Genv.find_funct ge v = Some f ->
   Genv.find_funct tge v = Some (transf_fundef f).
-Proof. exact (Senv.find_funct_transf_id TRANSL). Qed.
-
-Lemma symbols_preserved:
-  forall id,
-  Genv.find_symbol tge id = Genv.find_symbol ge id.
-Proof. apply Senv.find_symbol_transf_id; auto. Qed.
+Proof.
+  apply (Genv.find_funct_transf_id TRANSL).
+Qed.
 
 Lemma sig_preserved:
   forall f, funsig (transf_fundef f) = funsig f.
@@ -136,9 +133,9 @@ Inductive match_states: RTL.state -> RTL.state -> Prop :=
                    (Returnstate stk' v m).
 
 Lemma step_simulation:
-  forall S1 t S2, RTL.step se ge S1 t S2 ->
+  forall S1 t S2, RTL.step ge S1 t S2 ->
   forall S1', match_states S1 S1' ->
-  exists S2', RTL.step se tge S1' t S2' /\ match_states S2 S2'.
+  exists S2', RTL.step tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   induction 1; intros S1' MS; inv MS; try TR_AT.
 (* nop *)

@@ -36,15 +36,15 @@ Ltac EvalOp := eapply eval_Eop; eauto with evalexpr.
 
 Ltac InvEval1 :=
   match goal with
-  | [ H: (eval_expr _ _ _ _ _ _ (Eop _ Enil) _) |- _ ] =>
+  | [ H: (eval_expr _ _ _ _ _ (Eop _ Enil) _) |- _ ] =>
       inv H; InvEval1
-  | [ H: (eval_expr _ _ _ _ _ _ (Eop _ (_ ::: Enil)) _) |- _ ] =>
+  | [ H: (eval_expr _ _ _ _ _ (Eop _ (_ ::: Enil)) _) |- _ ] =>
       inv H; InvEval1
-  | [ H: (eval_expr _ _ _ _ _ _ (Eop _ (_ ::: _ ::: Enil)) _) |- _ ] =>
+  | [ H: (eval_expr _ _ _ _ _ (Eop _ (_ ::: _ ::: Enil)) _) |- _ ] =>
       inv H; InvEval1
-  | [ H: (eval_exprlist _ _ _ _ _ _ Enil _) |- _ ] =>
+  | [ H: (eval_exprlist _ _ _ _ _ Enil _) |- _ ] =>
       inv H; InvEval1
-  | [ H: (eval_exprlist _ _ _ _ _ _ (_ ::: _) _) |- _ ] =>
+  | [ H: (eval_exprlist _ _ _ _ _ (_ ::: _) _) |- _ ] =>
       inv H; InvEval1
   | _ =>
       idtac
@@ -75,7 +75,6 @@ Ltac TrivialExists :=
 
 Section CMCONSTR.
 
-Variable se: Senv.t.
 Variable ge: genv.
 Variable sp: val.
 Variable e: env.
@@ -103,27 +102,27 @@ Variable m: mem.
 
 Definition unary_constructor_sound (cstr: expr -> expr) (sem: val -> val) : Prop :=
   forall le a x,
-  eval_expr se ge sp e m le a x ->
-  exists v, eval_expr se ge sp e m le (cstr a) v /\ Val.lessdef (sem x) v.
+  eval_expr ge sp e m le a x ->
+  exists v, eval_expr ge sp e m le (cstr a) v /\ Val.lessdef (sem x) v.
 
 Definition binary_constructor_sound (cstr: expr -> expr -> expr) (sem: val -> val -> val) : Prop :=
   forall le a x b y,
-  eval_expr se ge sp e m le a x ->
-  eval_expr se ge sp e m le b y ->
-  exists v, eval_expr se ge sp e m le (cstr a b) v /\ Val.lessdef (sem x y) v.
+  eval_expr ge sp e m le a x ->
+  eval_expr ge sp e m le b y ->
+  exists v, eval_expr ge sp e m le (cstr a b) v /\ Val.lessdef (sem x y) v.
 
 Lemma eval_Olea_ptr:
   forall a el m,
-  eval_operation se sp (Olea_ptr a) el m = eval_addressing se sp a el.
+  eval_operation ge sp (Olea_ptr a) el m = eval_addressing ge sp a el.
 Proof.
   unfold Olea_ptr, eval_addressing; intros. destruct Archi.ptr64; auto.
 Qed.
 
 Theorem eval_addrsymbol:
   forall le id ofs,
-  exists v, eval_expr se ge sp e m le (addrsymbol id ofs) v /\ Val.lessdef (Genv.symbol_address se id ofs) v.
+  exists v, eval_expr ge sp e m le (addrsymbol id ofs) v /\ Val.lessdef (Genv.symbol_address ge id ofs) v.
 Proof.
-  intros. unfold addrsymbol. exists (Genv.symbol_address se id ofs); split; auto.
+  intros. unfold addrsymbol. exists (Genv.symbol_address ge id ofs); split; auto.
   destruct (symbol_is_external id).
   predSpec Ptrofs.eq Ptrofs.eq_spec ofs Ptrofs.zero.
   subst. EvalOp.
@@ -139,7 +138,7 @@ Qed.
 
 Theorem eval_addrstack:
   forall le ofs,
-  exists v, eval_expr se ge sp e m le (addrstack ofs) v /\ Val.lessdef (Val.offset_ptr sp ofs) v.
+  exists v, eval_expr ge sp e m le (addrstack ofs) v /\ Val.lessdef (Val.offset_ptr sp ofs) v.
 Proof.
   intros. unfold addrstack. TrivialExists. (*rewrite eval_Olea_ptr. apply eval_addressing_Ainstack.*)
 Qed.
@@ -171,8 +170,8 @@ Proof.
   assert (A: forall x y, Int.repr (x + y) = Int.add (Int.repr x) (Int.repr y)).
   { intros; apply Int.eqm_samerepr; auto with ints. }
   assert (B: forall id ofs n, Archi.ptr64 = false ->
-             Genv.symbol_address se id (Ptrofs.add ofs (Ptrofs.repr n)) =
-             Val.add (Genv.symbol_address se id ofs) (Vint (Int.repr n))).
+             Genv.symbol_address ge id (Ptrofs.add ofs (Ptrofs.repr n)) =
+             Val.add (Genv.symbol_address ge id ofs) (Vint (Int.repr n))).
   { intros. replace (Ptrofs.repr n) with (Ptrofs.of_int (Int.repr n)) by auto with ptrofs.
     apply Genv.shift_symbol_address_32; auto. }
   red; intros until y.
@@ -421,8 +420,8 @@ Qed.
 Remark eval_same_expr:
   forall a1 a2 le v1 v2,
   same_expr_pure a1 a2 = true ->
-  eval_expr se ge sp e m le a1 v1 ->
-  eval_expr se ge sp e m le a2 v2 ->
+  eval_expr ge sp e m le a1 v1 ->
+  eval_expr ge sp e m le a2 v2 ->
   a1 = a2 /\ v1 = v2.
 Proof.
   intros until v2.
@@ -499,49 +498,49 @@ Qed.
 
 Theorem eval_divs_base:
   forall le a b x y z,
-  eval_expr se ge sp e m le a x ->
-  eval_expr se ge sp e m le b y ->
+  eval_expr ge sp e m le a x ->
+  eval_expr ge sp e m le b y ->
   Val.divs x y = Some z ->
-  exists v, eval_expr se ge sp e m le (divs_base a b) v /\ Val.lessdef z v.
+  exists v, eval_expr ge sp e m le (divs_base a b) v /\ Val.lessdef z v.
 Proof.
   intros. unfold divs_base. exists z; split. EvalOp. auto.
 Qed.
 
 Theorem eval_divu_base:
   forall le a b x y z,
-  eval_expr se ge sp e m le a x ->
-  eval_expr se ge sp e m le b y ->
+  eval_expr ge sp e m le a x ->
+  eval_expr ge sp e m le b y ->
   Val.divu x y = Some z ->
-  exists v, eval_expr se ge sp e m le (divu_base a b) v /\ Val.lessdef z v.
+  exists v, eval_expr ge sp e m le (divu_base a b) v /\ Val.lessdef z v.
 Proof.
   intros. unfold divu_base. exists z; split. EvalOp. auto.
 Qed.
 
 Theorem eval_mods_base:
   forall le a b x y z,
-  eval_expr se ge sp e m le a x ->
-  eval_expr se ge sp e m le b y ->
+  eval_expr ge sp e m le a x ->
+  eval_expr ge sp e m le b y ->
   Val.mods x y = Some z ->
-  exists v, eval_expr se ge sp e m le (mods_base a b) v /\ Val.lessdef z v.
+  exists v, eval_expr ge sp e m le (mods_base a b) v /\ Val.lessdef z v.
 Proof.
   intros. unfold mods_base. exists z; split. EvalOp. auto.
 Qed.
 
 Theorem eval_modu_base:
   forall le a b x y z,
-  eval_expr se ge sp e m le a x ->
-  eval_expr se ge sp e m le b y ->
+  eval_expr ge sp e m le a x ->
+  eval_expr ge sp e m le b y ->
   Val.modu x y = Some z ->
-  exists v, eval_expr se ge sp e m le (modu_base a b) v /\ Val.lessdef z v.
+  exists v, eval_expr ge sp e m le (modu_base a b) v /\ Val.lessdef z v.
 Proof.
   intros. unfold modu_base. exists z; split. EvalOp. auto.
 Qed.
 
 Theorem eval_shrximm:
   forall le a n x z,
-  eval_expr se ge sp e m le a x ->
+  eval_expr ge sp e m le a x ->
   Val.shrx x (Vint n) = Some z ->
-  exists v, eval_expr se ge sp e m le (shrximm a n) v /\ Val.lessdef z v.
+  exists v, eval_expr ge sp e m le (shrximm a n) v /\ Val.lessdef z v.
 Proof.
   intros. unfold shrximm.
   predSpec Int.eq Int.eq_spec n Int.zero.
@@ -639,8 +638,8 @@ Hypothesis sem_default: forall c v n, sem c v (Vint n) = Val.of_optbool (eval_co
 
 Lemma eval_compimm:
   forall le c a n2 x,
-  eval_expr se ge sp e m le a x ->
-  exists v, eval_expr se ge sp e m le (compimm default intsem c a n2) v
+  eval_expr ge sp e m le a x ->
+  exists v, eval_expr ge sp e m le (compimm default intsem c a n2) v
          /\ Val.lessdef (sem c x (Vint n2)) v.
 Proof.
   intros until x.
@@ -697,8 +696,8 @@ Hypothesis sem_swap:
 
 Lemma eval_compimm_swap:
   forall le c a n2 x,
-  eval_expr se ge sp e m le a x ->
-  exists v, eval_expr se ge sp e m le (compimm default intsem (swap_comparison c) a n2) v
+  eval_expr ge sp e m le a x ->
+  exists v, eval_expr ge sp e m le (compimm default intsem (swap_comparison c) a n2) v
          /\ Val.lessdef (sem c (Vint n2) x) v.
 Proof.
   intros. rewrite <- sem_swap. eapply eval_compimm; eauto.
@@ -782,18 +781,18 @@ Qed.
 
 Theorem eval_intoffloat:
   forall le a x y,
-  eval_expr se ge sp e m le a x ->
+  eval_expr ge sp e m le a x ->
   Val.intoffloat x = Some y ->
-  exists v, eval_expr se ge sp e m le (intoffloat a) v /\ Val.lessdef y v.
+  exists v, eval_expr ge sp e m le (intoffloat a) v /\ Val.lessdef y v.
 Proof.
   intros; unfold intoffloat. TrivialExists.
 Qed.
 
 Theorem eval_floatofint:
   forall le a x y,
-  eval_expr se ge sp e m le a x ->
+  eval_expr ge sp e m le a x ->
   Val.floatofint x = Some y ->
-  exists v, eval_expr se ge sp e m le (floatofint a) v /\ Val.lessdef y v.
+  exists v, eval_expr ge sp e m le (floatofint a) v /\ Val.lessdef y v.
 Proof.
   intros until y; unfold floatofint. case (floatofint_match a); intros; InvEval.
   TrivialExists.
@@ -802,18 +801,18 @@ Qed.
 
 Theorem eval_intuoffloat:
   forall le a x y,
-  eval_expr se ge sp e m le a x ->
+  eval_expr ge sp e m le a x ->
   Val.intuoffloat x = Some y ->
-  exists v, eval_expr se ge sp e m le (intuoffloat a) v /\ Val.lessdef y v.
+  exists v, eval_expr ge sp e m le (intuoffloat a) v /\ Val.lessdef y v.
 Proof.
   intros. destruct x; simpl in H0; try discriminate.
   destruct (Float.to_intu f) as [n|] eqn:?; simpl in H0; inv H0.
   exists (Vint n); split; auto. unfold intuoffloat.
   set (im := Int.repr Int.half_modulus).
   set (fm := Float.of_intu im).
-  assert (eval_expr se ge sp e m (Vfloat fm :: Vfloat f :: le) (Eletvar (S O)) (Vfloat f)).
+  assert (eval_expr ge sp e m (Vfloat fm :: Vfloat f :: le) (Eletvar (S O)) (Vfloat f)).
     constructor. auto.
-  assert (eval_expr se ge sp e m (Vfloat fm :: Vfloat f :: le) (Eletvar O) (Vfloat fm)).
+  assert (eval_expr ge sp e m (Vfloat fm :: Vfloat f :: le) (Eletvar O) (Vfloat fm)).
     constructor. auto.
   econstructor. eauto.
   econstructor. instantiate (1 := Vfloat fm). EvalOp.
@@ -840,9 +839,9 @@ Qed.
 
 Theorem eval_floatofintu:
   forall le a x y,
-  eval_expr se ge sp e m le a x ->
+  eval_expr ge sp e m le a x ->
   Val.floatofintu x = Some y ->
-  exists v, eval_expr se ge sp e m le (floatofintu a) v /\ Val.lessdef y v.
+  exists v, eval_expr ge sp e m le (floatofintu a) v /\ Val.lessdef y v.
 Proof.
   intros until y; unfold floatofintu. case (floatofintu_match a); intros.
   InvEval. TrivialExists.
@@ -850,7 +849,7 @@ Proof.
   exists (Vfloat (Float.of_intu i)); split; auto.
   econstructor. eauto.
   set (fm := Float.of_intu Float.ox8000_0000).
-  assert (eval_expr se ge sp e m (Vint i :: le) (Eletvar O) (Vint i)).
+  assert (eval_expr ge sp e m (Vint i :: le) (Eletvar O) (Vint i)).
     constructor. auto.
   eapply eval_Econdition with (va := Int.ltu i Float.ox8000_0000).
   eauto with evalexpr.
@@ -868,18 +867,18 @@ Qed.
 
 Theorem eval_intofsingle:
   forall le a x y,
-  eval_expr se ge sp e m le a x ->
+  eval_expr ge sp e m le a x ->
   Val.intofsingle x = Some y ->
-  exists v, eval_expr se ge sp e m le (intofsingle a) v /\ Val.lessdef y v.
+  exists v, eval_expr ge sp e m le (intofsingle a) v /\ Val.lessdef y v.
 Proof.
   intros; unfold intofsingle. TrivialExists.
 Qed.
 
 Theorem eval_singleofint:
   forall le a x y,
-  eval_expr se ge sp e m le a x ->
+  eval_expr ge sp e m le a x ->
   Val.singleofint x = Some y ->
-  exists v, eval_expr se ge sp e m le (singleofint a) v /\ Val.lessdef y v.
+  exists v, eval_expr ge sp e m le (singleofint a) v /\ Val.lessdef y v.
 Proof.
   intros until y; unfold singleofint. case (singleofint_match a); intros; InvEval.
   TrivialExists.
@@ -888,9 +887,9 @@ Qed.
 
 Theorem eval_intuofsingle:
   forall le a x y,
-  eval_expr se ge sp e m le a x ->
+  eval_expr ge sp e m le a x ->
   Val.intuofsingle x = Some y ->
-  exists v, eval_expr se ge sp e m le (intuofsingle a) v /\ Val.lessdef y v.
+  exists v, eval_expr ge sp e m le (intuofsingle a) v /\ Val.lessdef y v.
 Proof.
   intros. destruct x; simpl in H0; try discriminate.
   destruct (Float32.to_intu f) as [n|] eqn:?; simpl in H0; inv H0.
@@ -902,9 +901,9 @@ Qed.
 
 Theorem eval_singleofintu:
   forall le a x y,
-  eval_expr se ge sp e m le a x ->
+  eval_expr ge sp e m le a x ->
   Val.singleofintu x = Some y ->
-  exists v, eval_expr se ge sp e m le (singleofintu a) v /\ Val.lessdef y v.
+  exists v, eval_expr ge sp e m le (singleofintu a) v /\ Val.lessdef y v.
 Proof.
   intros until y; unfold singleofintu. case (singleofintu_match a); intros.
   InvEval. TrivialExists.
@@ -918,23 +917,23 @@ Qed.
 
 Theorem eval_addressing:
   forall le chunk a v b ofs,
-  eval_expr se ge sp e m le a v ->
+  eval_expr ge sp e m le a v ->
   v = Vptr b ofs ->
   match addressing chunk a with (mode, args) =>
     exists vl,
-    eval_exprlist se ge sp e m le args vl /\
-    eval_addressing se sp mode vl = Some v
+    eval_exprlist ge sp e m le args vl /\
+    eval_addressing ge sp mode vl = Some v
   end.
 Proof.
   intros until ofs.
-  assert (A: v = Vptr b ofs -> eval_addressing se sp (Aindexed 0) (v :: nil) = Some v).
+  assert (A: v = Vptr b ofs -> eval_addressing ge sp (Aindexed 0) (v :: nil) = Some v).
   { intros. subst v. unfold eval_addressing.
     destruct Archi.ptr64 eqn:SF; simpl; rewrite SF; rewrite Ptrofs.add_zero; auto. }
   assert (D: forall a,
-             eval_expr se ge sp e m le a v ->
+             eval_expr ge sp e m le a v ->
              v = Vptr b ofs ->
-             exists vl, eval_exprlist se ge sp e m le (a ::: Enil) vl
-                     /\ eval_addressing se sp (Aindexed 0) vl = Some v).
+             exists vl, eval_exprlist ge sp e m le (a ::: Enil) vl
+                     /\ eval_addressing ge sp (Aindexed 0) vl = Some v).
   { intros. exists (v :: nil); split. constructor; auto. constructor. auto. }
   unfold addressing; case (addressing_match a); intros.
 - destruct (negb Archi.ptr64 && addressing_valid addr) eqn:E.
@@ -950,9 +949,9 @@ Qed.
 
 Theorem eval_builtin_arg_addr:
   forall addr al vl v,
-  eval_exprlist se ge sp e m nil al vl ->
-  Op.eval_addressing se sp addr vl = Some v ->
-  CminorSel.eval_builtin_arg se ge sp e m (builtin_arg_addr addr al) v.
+  eval_exprlist ge sp e m nil al vl ->
+  Op.eval_addressing ge sp addr vl = Some v ->
+  CminorSel.eval_builtin_arg ge sp e m (builtin_arg_addr addr al) v.
 Proof.
   intros until v. unfold builtin_arg_addr; case (builtin_arg_addr_match addr al); intros; InvEval.
 - set (v2 := if Archi.ptr64 then Vlong (Int64.repr n) else Vint (Int.repr n)).
@@ -966,8 +965,8 @@ Qed.
 
 Theorem eval_builtin_arg:
   forall a v,
-  eval_expr se ge sp e m nil a v ->
-  CminorSel.eval_builtin_arg se ge sp e m (builtin_arg a) v.
+  eval_expr ge sp e m nil a v ->
+  CminorSel.eval_builtin_arg ge sp e m (builtin_arg a) v.
 Proof.
   intros until v. unfold builtin_arg; case (builtin_arg_match a); intros; InvEval.
 - constructor.

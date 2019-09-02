@@ -37,27 +37,18 @@ Variable prog: Csharpminor.program.
 Variable tprog: program.
 Hypothesis TRANSL: match_prog prog tprog.
 Variable w: meminj.
-Variable se: Senv.t.
-Variable tse: Senv.t.
-Let ge : Csharpminor.genv := Senv.globalenv prog se.
-Let tge: genv := Senv.globalenv tprog tse.
-
-Lemma symbols_preserved (j: meminj):
-  Senv.inject j se tse ->
-  forall (s: ident) (b: block),
-    Genv.find_symbol ge s = Some b ->
-    exists tb, j b = Some (tb, 0) /\ Genv.find_symbol tge s = Some tb.
-Proof.
-  exact (Senv.find_symbol_transf_partial TRANSL).
-Qed.
+Variable se: Genv.symtbl.
+Variable tse: Genv.symtbl.
+Let ge : Csharpminor.genv := Genv.globalenv se prog.
+Let tge: genv := Genv.globalenv tse tprog.
 
 Lemma functions_translated (j: meminj):
-  Senv.inject j se tse ->
+  Genv.match_stbls j se tse ->
   forall (v tv: val) (f: Csharpminor.fundef),
   Val.inject j v tv -> Genv.find_funct ge v = Some f ->
   exists f', Genv.find_funct tge tv = Some f' /\ transl_fundef f = OK f'.
 Proof.
-  exact (Senv.find_funct_transf_partial TRANSL).
+  apply (Genv.find_funct_transf_partial TRANSL).
 Qed.
 
 Lemma sig_preserved_body:
@@ -448,7 +439,7 @@ Inductive match_callstack (f: meminj) (m: mem) (tm: mem):
   | mcs_nil:
       forall bound tbound,
       inject_incr w f ->
-      Senv.inject f se tse ->
+      Genv.match_stbls f se tse ->
       Ple (Genv.genv_next ge) bound -> Ple (Genv.genv_next tge) tbound ->
       match_callstack f m tm nil bound tbound
   | mcs_cons:
@@ -467,7 +458,7 @@ Inductive match_callstack (f: meminj) (m: mem) (tm: mem):
 Lemma match_callstack_match_globalenvs:
   forall f m tm cs bound tbound,
   match_callstack f m tm cs bound tbound ->
-  Senv.inject f se tse.
+  Genv.match_stbls f se tse.
 Proof.
   induction 1; eauto.
 Qed.
@@ -488,7 +479,7 @@ Proof.
   (* base case *)
   econstructor; eauto.
   eapply inject_incr_trans; eauto.
-  eapply Genv.match_genvs_external_call; eauto.
+  eapply Genv.match_stbls_incr; eauto.
   intros. eapply H7; eauto. eapply Pos.lt_le_trans; eauto.
   (* inductive case *)
   assert (Ple lo hi) by (eapply me_low_high; eauto).
@@ -611,7 +602,7 @@ Proof.
 (* base case *)
   apply mcs_nil; auto.
   eapply inject_incr_trans; eauto.
-  eapply Genv.match_genvs_external_call; eauto.
+  eapply Genv.match_stbls_incr; eauto.
   intros. case_eq (f1 b1).
   intros [b2' delta'] EQ. rewrite (INCR _ _ _ EQ) in H5. inv H5. eauto.
   intro EQ. exploit SEPARATED; eauto. intros [A B]. elim B. red.
@@ -1422,7 +1413,7 @@ Proof.
   congruence.
   (* global *)
   exploit match_callstack_match_globalenvs; eauto. intros MG.
-  edestruct symbols_preserved as (tb & Htb & Htid); eauto.
+  edestruct @Genv.find_symbol_match as (tb & Htb & Htid); eauto.
   exists (Vptr tb Ptrofs.zero); split.
   constructor. simpl. unfold Genv.symbol_address. 
   rewrite Htid. auto.
@@ -1618,8 +1609,8 @@ Lemma match_is_call_cont:
   match_cont k tk cenv xenv cs ->
   Csharpminor.is_call_cont k ->
   exists tk',
-    star (step tse) tge (State tfn Sskip tk sp te tm)
-                     E0 (State tfn Sskip tk' sp te tm)
+    star step tge (State tfn Sskip tk sp te tm)
+               E0 (State tfn Sskip tk' sp te tm)
     /\ is_call_cont tk'
     /\ match_cont k tk' cenv nil cs.
 Proof.
@@ -1712,7 +1703,7 @@ Lemma switch_descent:
   exists k',
   transl_lblstmt_cont cenv xenv ls k k'
   /\ (forall f sp e m,
-      plus (step tse) tge (State f s k sp e m) E0 (State f body k' sp e m)).
+      plus step tge (State f s k sp e m) E0 (State f body k' sp e m)).
 Proof.
   induction ls; intros.
 - monadInv H. econstructor; split.
@@ -1732,8 +1723,8 @@ Lemma switch_ascent:
   forall k k1,
   transl_lblstmt_cont cenv xenv ls k k1 ->
   exists k2,
-  star (step tse) tge (State f (Sexit n) k1 sp e m)
-                   E0 (State f (Sexit O) k2 sp e m)
+  star step tge (State f (Sexit n) k1 sp e m)
+             E0 (State f (Sexit O) k2 sp e m)
   /\ transl_lblstmt_cont cenv xenv ls' k k2.
 Proof.
   induction 1; intros.
@@ -1766,7 +1757,7 @@ Lemma switch_match_states:
     (MK: match_cont k tk cenv xenv cs)
     (TK: transl_lblstmt_cont cenv xenv ls tk tk'),
   exists S,
-  plus (step tse) tge (State tfn (Sexit O) tk' (Vptr sp Ptrofs.zero) te tm) E0 S
+  plus step tge (State tfn (Sexit O) tk' (Vptr sp Ptrofs.zero) te tm) E0 S
   /\ match_states (Csharpminor.State fn (seq_of_lbl_stmt ls) k e le m) S.
 Proof.
   intros. inv TK.
@@ -1911,9 +1902,9 @@ Definition measure (S: Csharpminor.state) : nat :=
   end.
 
 Lemma transl_step_correct:
-  forall S1 t S2, Csharpminor.step se ge S1 t S2 ->
+  forall S1 t S2, Csharpminor.step ge S1 t S2 ->
   forall T1, match_states S1 T1 ->
-  (exists T2, plus (step tse) tge T1 t T2 /\ match_states S2 T2)
+  (exists T2, plus step tge T1 t T2 /\ match_states S2 T2)
   \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat.
 Proof.
   induction 1; intros T1 MSTATE; inv MSTATE.
@@ -2167,7 +2158,7 @@ Opaque PTree.set.
 Qed.
 
 Lemma transl_initial_states:
-  forall q1 q2, Senv.inject w se tse -> cc_inj_query w q1 q2 ->
+  forall q1 q2, Genv.match_stbls w se tse -> cc_inj_query w q1 q2 ->
   forall S, Csharpminor.initial_state ge q1 S ->
   exists R, Cminor.initial_state tge q2 R /\ match_states S R.
 Proof.

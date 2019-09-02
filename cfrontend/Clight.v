@@ -182,8 +182,8 @@ Definition program := Ctypes.program function.
 
 Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
 
-Definition globalenv (p: program) (se: Senv.t) :=
-  {| genv_genv := Senv.globalenv p se; genv_cenv := p.(prog_comp_env) |}.
+Definition globalenv (se: Genv.symtbl) (p: program) :=
+  {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env) |}.
 
 (** The local environment maps local variables to block references and
   types.  The current value of the variable is stored in the
@@ -240,7 +240,6 @@ Inductive assign_loc (ce: composite_env) (ty: type) (m: mem) (b: block) (ofs: pt
 
 Section SEMANTICS.
 
-Variable se: Senv.t.
 Variable ge: genv.
 
 (** Allocation of function-local variables.
@@ -572,7 +571,7 @@ Inductive step: state -> trace -> state -> Prop :=
 
   | step_builtin:   forall f optid ef tyargs al k e le m vargs t vres m',
       eval_exprlist e le m al tyargs vargs ->
-      external_call ef se vargs m t vres m' ->
+      external_call ef ge vargs m t vres m' ->
       step (State f (Sbuiltin optid ef tyargs al) k e le m)
          t (State f Sskip k e (set_opttemp optid vres le) m')
 
@@ -658,7 +657,7 @@ Inductive step: state -> trace -> state -> Prop :=
 
   | step_external_function: forall vf ef targs tres cconv vargs k m vres t m',
       forall FIND: Genv.find_funct ge vf = Some (External ef targs tres cconv),
-      external_call ef se vargs m t vres m' ->
+      external_call ef ge vargs m t vres m' ->
       step (Callstate vf vargs k m)
          t (Returnstate vres k m')
 
@@ -716,7 +715,7 @@ Inductive function_entry1 (ge: genv) (f: function) (vargs: list val) (m: mem) (e
       le = create_undef_temps f.(fn_temps) ->
       function_entry1 ge f vargs m e le m'.
 
-Definition step1 (se: Senv.t) (ge: genv) := step se ge (function_entry1 ge).
+Definition step1 (ge: genv) := step ge (function_entry1 ge).
 
 (** Second, parameters as temporaries. *)
 
@@ -729,7 +728,7 @@ Inductive function_entry2 (ge: genv)  (f: function) (vargs: list val) (m: mem) (
       bind_parameter_temps f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
       function_entry2 ge f vargs m e le m'.
 
-Definition step2 (se: Senv.t) (ge: genv) := step se ge (function_entry2 ge).
+Definition step2 (ge: genv) := step ge (function_entry2 ge).
 
 (** Wrapping up these definitions in two small-step semantics. *)
 
@@ -745,9 +744,9 @@ Lemma semantics_receptive:
   forall (p: program), open_receptive (semantics1 p).
 Proof.
   intros p se q. unfold semantics1. simpl.
-  set (ge := globalenv p se). constructor; simpl; intros.
+  set (ge := globalenv se p). constructor; simpl; intros.
 (* receptiveness *)
-  assert (t1 = E0 -> exists s2, step1 se ge s t2 s2).
+  assert (t1 = E0 -> exists s2, step1 ge s t2 s2).
     intros. subst. inv H0. exists s1; auto.
   inversion H; subst; auto.
   (* builtin *)

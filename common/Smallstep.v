@@ -486,13 +486,13 @@ Record semantics li res: Type := Semantics {
 }.
 
 Record open_sem liA liB := {
-  activate :> Senv.t -> query liB -> semantics liA (reply liB);
+  activate :> Genv.symtbl -> query liB -> semantics liA (reply liB);
   skel: AST.program unit unit;
 }.
 
 Record closed_sem := {
   csem :> semantics li_null int;
-  symbolenv: Senv.t;
+  symbolenv: Genv.symtbl;
 }.
 
 (** Handy notations. *)
@@ -500,9 +500,9 @@ Record closed_sem := {
 Notation OpenSem step initial_state at_ext after_ext final_state globalenv p :=
   {|
     activate se q :=
-      let ge := globalenv p se in
+      let ge := globalenv se p in
       {|
-        step := step se;
+        step := step;
         initial_state := initial_state ge q;
         at_external := at_ext ge;
         after_external := after_ext;
@@ -514,7 +514,7 @@ Notation OpenSem step initial_state at_ext after_ext final_state globalenv p :=
   |}.
 
 Notation OpenSem' step initial_state at_ext after_ext final_state p :=
-  (OpenSem step initial_state at_ext after_ext final_state Senv.globalenv p).
+  (OpenSem step initial_state at_ext after_ext final_state (@Genv.globalenv _ _) p).
 
 Notation " 'Step' L " := (step L (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Star' L " := (star (step L) (globalenv L)) (at level 1) : smallstep_scope.
@@ -812,15 +812,15 @@ End FSIM.
 Arguments fsim_properties {_ _} _ {_ _} _ L1 L2 index order match_states.
 Arguments Forward_simulation {_ _ cc _ _ match_res L1 L2 index} order match_states props.
 
-Definition match_skel (se1 se2: Senv.t) (sk1 sk2: AST.program unit unit) :=
+Definition match_skel (se1 se2: Genv.symtbl) (sk1 sk2: AST.program unit unit) :=
   forall id,
     AST.has_symbol sk1 id ->
     (Genv.has_symbol se1 id /\
      Genv.has_symbol se2 id <-> AST.has_symbol sk2 id).
 
 Definition open_fsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
-  forall (w: ccworld ccB) (se1 se2: Senv.t) (q1: query liB1) (q2: query liB2),
-    Senv.valid_for (skel L1) se1 ->
+  forall (w: ccworld ccB) (se1 se2: Genv.symtbl) (q1: query liB1) (q2: query liB2),
+    Genv.valid_for (skel L1) se1 ->
     match_skel se1 se2 (skel L1) (skel L2) ->
     match_senv ccB w se1 se2 ->
     match_query ccB w q1 q2 ->
@@ -828,7 +828,7 @@ Definition open_fsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2
 
 Definition closed_fsim (L1 L2: closed_sem) :=
   forward_simulation cc_id eq L1 L2 /\
-  forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id.
+  forall id, Genv.public_symbol (symbolenv L2) id = Genv.public_symbol (symbolenv L1) id.
 
 (** ** Composing two forward simulations *)
 
@@ -957,7 +957,7 @@ Record determinate {li res} (L: semantics li res) se: Prop :=
 
 Section DETERMINACY.
 
-Context {li res} (L: semantics li res) (se: Senv.t).
+Context {li res} (L: semantics li res) (se: Genv.symtbl).
 Hypothesis DET: determinate L se.
 
 Lemma sd_determ_1:
@@ -1250,8 +1250,8 @@ Arguments bsim_properties {_ _} _ {_ _} _ L1 L2 index order match_states.
 Arguments Backward_simulation {_ _ cc _ _ match_res L1 L2 index} order match_states props.
 
 Definition open_bsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
-  forall (w: ccworld ccB) (se1 se2: Senv.t) (q1: query liB1) (q2: query liB2),
-    Senv.valid_for (skel L1) se1 ->
+  forall (w: ccworld ccB) (se1 se2: Genv.symtbl) (q1: query liB1) (q2: query liB2),
+    Genv.valid_for (skel L1) se1 ->
     match_skel se1 se2 (skel L1) (skel L2) ->
     match_senv ccB w se1 se2 ->
     match_query ccB w q1 q2 ->
@@ -1259,7 +1259,7 @@ Definition open_bsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2
 
 Definition closed_bsim (L1 L2: closed_sem) :=
   backward_simulation cc_id eq L1 L2 /\
-  forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id.
+  forall id, Genv.public_symbol (symbolenv L2) id = Genv.public_symbol (symbolenv L1) id.
 
 (** ** Composing two backward simulations *)
 
@@ -1465,9 +1465,9 @@ Section FORWARD_TO_BACKWARD.
 
 Context {li1 li2} (cc: callconv li1 li2).
 Context {res1 res2} (match_res: res1 -> res2 -> Prop).
-Context (se1 se2: Senv.t).
+Context (se1 se2: Genv.symtbl).
 Context L1 L2 index order match_states (FS: fsim_properties cc match_res L1 L2 index order match_states).
-Hypothesis public_preserved: forall id, Senv.public_symbol se2 id = Senv.public_symbol se1 id.
+Hypothesis public_preserved: forall id, Genv.public_symbol se2 id = Genv.public_symbol se1 id.
 Hypothesis L1_receptive: receptive L1 se1.
 Hypothesis L2_determinate: determinate L2 se2.
 
@@ -1743,7 +1743,7 @@ Lemma forward_to_backward_simulation:
   forall {li1 li2} (cc: callconv li1 li2) {res1 res2} (mr: res1 -> res2 -> Prop),
   forall se1 se2 L1 L2,
   forward_simulation cc mr L1 L2 -> receptive L1 se1 -> determinate L2 se2 ->
-  (forall id, Senv.public_symbol se2 id = Senv.public_symbol se1 id) ->
+  (forall id, Genv.public_symbol se2 id = Genv.public_symbol se1 id) ->
   backward_simulation cc mr L1 L2.
 Proof.
   intros li1 li2 cc res1 res2 mr se1 se2.

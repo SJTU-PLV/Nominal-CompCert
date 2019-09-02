@@ -32,27 +32,18 @@ Variable prog: program.
 Variable tprog: program.
 Hypothesis TRANSF: match_prog prog tprog.
 Variable w: meminj.
-Variable se: Senv.t.
-Variable tse: Senv.t.
-Let ge := Senv.globalenv prog se.
-Let tge := Senv.globalenv tprog tse.
-
-Lemma symbols_preserved (j: meminj):
-  Senv.inject j se tse ->
-  forall (s: ident) (b: block),
-    Genv.find_symbol ge s = Some b ->
-    exists tb, j b = Some (tb, 0) /\ Genv.find_symbol tge s = Some tb.
-Proof.
-  exact (Senv.find_symbol_match TRANSF).
-Qed.
+Variable se: Genv.symtbl.
+Variable tse: Genv.symtbl.
+Let ge := Genv.globalenv se prog.
+Let tge := Genv.globalenv tse tprog.
 
 Lemma functions_translated (j: meminj):
-  Senv.inject j se tse ->
+  Genv.match_stbls j se tse ->
   forall (v tv: val) (f: fundef),
-  Val.inject j v tv -> Genv.find_funct ge v = Some f ->
+  Genv.find_funct ge v = Some f -> Val.inject j v tv ->
   exists cu f', Genv.find_funct tge tv = Some f' /\ transf_fundef (funenv_program cu) f = OK f' /\ linkorder cu prog.
 Proof.
-  exact (Senv.find_funct_match TRANSF).
+  apply (Genv.find_funct_match TRANSF).
 Qed.
 
 Lemma sig_function_translated:
@@ -225,8 +216,8 @@ Lemma tr_moves_init_regs:
   (forall r, In r rdsts -> Ple r ctx2.(mreg)) ->
   list_forall2 (val_reg_charact F ctx1 rs1) vl rsrcs ->
   exists rs2,
-    star (step tse) tge (State stk f sp pc1 rs1 m)
-                     E0 (State stk f sp pc2 rs2 m)
+    star step tge (State stk f sp pc1 rs1 m)
+               E0 (State stk f sp pc2 rs2 m)
   /\ agree_regs F ctx2 (init_regs vl rdsts) rs2
   /\ forall r, Plt r ctx2.(dreg) -> rs2#r = rs1#r.
 Proof.
@@ -360,7 +351,7 @@ Qed.
 Lemma ros_address_agree:
   forall ros rs F ctx rs',
   agree_regs F ctx rs rs' ->
-  Senv.inject F se tse ->
+  Genv.match_stbls F se tse ->
   Val.inject F (ros_address ge ros rs) (ros_address tge (sros ctx ros) rs').
 Proof.
   intros. destruct ros as [r | id]; simpl in *.
@@ -370,8 +361,8 @@ Proof.
   + eapply Hlo. xomega.
 - (* symbol *)
   unfold Genv.symbol_address.
-  destruct (Genv.find_symbol ge id) eqn:Hb; eauto.
-  edestruct symbols_preserved as (b' & Hb' & H'); eauto.
+  destruct (Genv.find_symbol se id) eqn:Hb; eauto.
+  edestruct @Genv.find_symbol_match as (b' & Hb' & H'); eauto.
   rewrite H'. econstructor; eauto.
 Qed.
 
@@ -382,25 +373,26 @@ Lemma ros_address_inlined:
   fenv!id = Some f ->
   fd = Internal f.
 Proof.
+  (*
   intros.
-  apply H in H1. eapply Senv.find_def_symbol in H1. destruct H1 as (b & A & B).
+  apply H in H1. eapply Genv.find_def_symbol in H1. destruct H1 as (b & A & B).
   simpl in H0. unfold Genv.symbol_address, ge, fundef in *. rewrite A in H0.
   rewrite <- Genv.find_funct_ptr_iff in B. cbn in H0.
   destruct Ptrofs.eq_dec; congruence.
-  admit. (* Senv.valid_for *)
-Admitted.
+*)
+Admitted. (* Senv.valid_for *)
 
 (** Translation of builtin arguments. *)
 
 Lemma tr_builtin_arg:
   forall F ctx rs rs' sp sp' m m',
-  Senv.inject F se tse ->
+  Genv.match_stbls F se tse ->
   agree_regs F ctx rs rs' ->
   F sp = Some(sp', ctx.(dstk)) ->
   Mem.inject F m m' ->
   forall a v,
-  eval_builtin_arg se (fun r => rs#r) (Vptr sp Ptrofs.zero) m a v ->
-  exists v', eval_builtin_arg tse (fun r => rs'#r) (Vptr sp' Ptrofs.zero) m' (sbuiltinarg ctx a) v'
+  eval_builtin_arg ge (fun r => rs#r) (Vptr sp Ptrofs.zero) m a v ->
+  exists v', eval_builtin_arg tge (fun r => rs'#r) (Vptr sp' Ptrofs.zero) m' (sbuiltinarg ctx a) v'
           /\ Val.inject F v v'.
 Proof.
   intros until m'; intros MG AG SP MI. induction 1; simpl.
@@ -414,16 +406,15 @@ Proof.
   simpl. econstructor; eauto. rewrite Ptrofs.add_zero_l; auto.
   intros (v' & A & B). exists v'; split; auto. constructor. simpl. rewrite Ptrofs.add_zero_l; auto.
 - econstructor; split. constructor. simpl. econstructor; eauto. rewrite ! Ptrofs.add_zero_l; auto.
-- assert (Val.inject F (Senv.symbol_address ge id ofs) (Senv.symbol_address tge id ofs)).
-  { unfold Senv.symbol_address; simpl; unfold Genv.symbol_address.
-    rewrite !Senv.find_symbol_of_genv.
-    destruct (Genv.find_symbol ge id) as [b|] eqn:FS; auto.
-    edestruct symbols_preserved as (tb & Htb & TFS); eauto. rewrite TFS.
+- assert (Val.inject F (Genv.symbol_address ge id ofs) (Genv.symbol_address tge id ofs)).
+  { unfold Genv.symbol_address; simpl; unfold Genv.symbol_address.
+    destruct (Genv.find_symbol se id) as [b|] eqn:FS; auto.
+    edestruct @Genv.find_symbol_match as (tb & Htb & TFS); eauto. rewrite TFS.
     econstructor. eauto. rewrite Ptrofs.add_zero; auto. }
   exploit Mem.loadv_inject; eauto. intros (v' & A & B).
   exists v'; eauto with barg.
 - econstructor; split. constructor.
-  unfold Senv.symbol_address; simpl; unfold Genv.symbol_address.
+  unfold Genv.symbol_address.
   destruct (Genv.find_symbol se id) as [b|] eqn:FS; auto.
   edestruct @Genv.find_symbol_match as (tb & Htb & TFS); eauto. rewrite TFS.
   econstructor. eauto. rewrite Ptrofs.add_zero; auto.
@@ -438,13 +429,13 @@ Qed.
 
 Lemma tr_builtin_args:
   forall F ctx rs rs' sp sp' m m',
-  Senv.inject F se tse ->
+  Genv.match_stbls F se tse ->
   agree_regs F ctx rs rs' ->
   F sp = Some(sp', ctx.(dstk)) ->
   Mem.inject F m m' ->
   forall al vl,
-  eval_builtin_args se (fun r => rs#r) (Vptr sp Ptrofs.zero) m al vl ->
-  exists vl', eval_builtin_args tse (fun r => rs'#r) (Vptr sp' Ptrofs.zero) m' (map (sbuiltinarg ctx) al) vl'
+  eval_builtin_args ge (fun r => rs#r) (Vptr sp Ptrofs.zero) m al vl ->
+  exists vl', eval_builtin_args tge (fun r => rs'#r) (Vptr sp' Ptrofs.zero) m' (map (sbuiltinarg ctx) al) vl'
           /\ Val.inject_list F vl vl'.
 Proof.
   induction 5; simpl.
@@ -459,7 +450,7 @@ Qed.
 Inductive match_stacks (F: meminj) (m m': mem):
              list stackframe -> list stackframe -> block -> Prop :=
   | match_stacks_nil: forall bound
-        (MG: Senv.inject F se tse)
+        (MG: Genv.match_stbls F se tse)
         (INCR: inject_incr w F)
         (BELOW: Ple (Genv.genv_next tse) bound),
       match_stacks F m m' nil nil bound
@@ -520,10 +511,10 @@ Variables m m': mem.
 
 Lemma match_stacks_globalenvs:
   forall stk stk' bound,
-  match_stacks F m m' stk stk' bound -> Senv.inject F se tse
+  match_stacks F m m' stk stk' bound -> Genv.match_stbls F se tse
 with match_stacks_inside_globalenvs:
   forall stk stk' f ctx sp rs',
-  match_stacks_inside F m m' stk stk' f ctx sp rs' -> Senv.inject F se tse.
+  match_stacks_inside F m m' stk stk' f ctx sp rs' -> Genv.match_stbls F se tse.
 Proof.
   induction 1; eauto.
   induction 1; eauto.
@@ -578,7 +569,7 @@ Proof.
   induction 1; intros.
   (* nil *)
   apply match_stacks_nil; auto.
-  eapply Genv.match_genvs_external_call; eauto.
+  eapply Genv.match_stbls_incr; eauto.
   intros. eapply INJ; eauto. eapply Pos.lt_le_trans; eauto.
   eapply inject_incr_trans; eauto.
   (* cons *)
@@ -777,7 +768,7 @@ with match_stacks_inside_extcall:
 Proof.
   induction 1; intros.
   apply match_stacks_nil; auto.
-    eapply Genv.match_genvs_external_call; eauto.
+    eapply Genv.match_stbls_incr; eauto.
     intros.
     destruct (F1 b1) as [[b2' delta']|] eqn:?.
     exploit INCR; eauto. intros. congruence.
@@ -911,9 +902,9 @@ Qed.
 
 Theorem step_simulation:
   forall S1 t S2,
-  step se ge S1 t S2 ->
+  step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'),
-  (exists S2', plus (step tse) tge S1' t S2' /\ match_states S2 S2')
+  (exists S2', plus step tge S1' t S2' /\ match_states S2 S2')
   \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 S1')%nat.
 Proof.
   induction 1; intros; inv MS; try congruence.
@@ -1267,7 +1258,7 @@ Proof.
 Qed.
 
 Lemma transf_initial_states:
-  forall q1 q2, Senv.inject w se tse -> cc_inj_query w q1 q2 ->
+  forall q1 q2, Genv.match_stbls w se tse -> cc_inj_query w q1 q2 ->
   forall S, initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states S R.
 Proof.

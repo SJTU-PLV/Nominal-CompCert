@@ -215,13 +215,9 @@ Section PRESERVATION.
 Variable prog tprog: program.
 Hypothesis TRANSL: match_prog prog tprog.
 
-Variable se: Senv.t.
-Let ge := Senv.globalenv prog se.
-Let tge := Senv.globalenv tprog se.
-
-Lemma symbols_preserved:
-  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
-Proof. apply Senv.find_symbol_match_id. Qed.
+Variable se: Genv.symtbl.
+Let ge := Genv.globalenv se prog.
+Let tge := Genv.globalenv se tprog.
 
 Lemma functions_translated:
   forall (v tv: val) (f: RTL.fundef),
@@ -229,7 +225,7 @@ Lemma functions_translated:
   Genv.find_funct ge v = Some f ->
   Genv.find_funct tge tv = Some (transf_fundef f).
 Proof.
-  intros v tv f Hv Hf. apply (Senv.find_funct_transf_id TRANSL).
+  intros v tv f Hv Hf. apply (Genv.find_funct_transf_id TRANSL).
   unfold Genv.find_funct in *. destruct v; try discriminate. inv Hv. auto.
 Qed.
 
@@ -384,9 +380,9 @@ Ltac EliminatedInstr :=
   of the ``option'' kind. *)
 
 Lemma transf_step_correct:
-  forall s1 t s2, step se ge s1 t s2 ->
+  forall s1 t s2, step ge s1 t s2 ->
   forall s1' (MS: match_states s1 s1'),
-  (exists s2', step se tge s1' t s2' /\ match_states s2 s2')
+  (exists s2', step tge s1' t s2' /\ match_states s2 s2')
   \/ (measure s2 < measure s1 /\ t = E0 /\ match_states s2 s1')%nat.
 Proof.
   induction 1; intros; inv MS; EliminatedInstr.

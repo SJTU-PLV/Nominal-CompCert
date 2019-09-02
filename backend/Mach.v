@@ -210,7 +210,6 @@ Section RELSEM.
 
 Variable return_address_offset: function -> code -> ptrofs -> Prop.
 
-Variable se: Senv.t.
 Variable ge: genv.
 
 Definition ros_address (ge: genv) (ros: mreg + ident) (rs: regset) : val :=
@@ -318,20 +317,20 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (State s vf sp c rs' m)
   | exec_Mop:
       forall s f sp op args res c rs m v rs',
-      eval_operation se sp op rs##args m = Some v ->
+      eval_operation ge sp op rs##args m = Some v ->
       rs' = ((undef_regs (destroyed_by_op op) rs)#res <- v) ->
       step (State s f sp (Mop op args res :: c) rs m)
         E0 (State s f sp c rs' m)
   | exec_Mload:
       forall s f sp chunk addr args dst c rs m a v rs',
-      eval_addressing se sp addr rs##args = Some a ->
+      eval_addressing ge sp addr rs##args = Some a ->
       Mem.loadv chunk m a = Some v ->
       rs' = ((undef_regs (destroyed_by_load chunk addr) rs)#dst <- v) ->
       step (State s f sp (Mload chunk addr args dst :: c) rs m)
         E0 (State s f sp c rs' m)
   | exec_Mstore:
       forall s f sp chunk addr args src c rs m m' a rs',
-      eval_addressing se sp addr rs##args = Some a ->
+      eval_addressing ge sp addr rs##args = Some a ->
       Mem.storev chunk m a (rs src) = Some m' ->
       rs' = undef_regs (destroyed_by_store chunk addr) rs ->
       step (State s f sp (Mstore chunk addr args src :: c) rs m)
@@ -353,8 +352,8 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (Callstate s (ros_address ge ros rs) rs m')
   | exec_Mbuiltin:
       forall s f sp rs m ef args res b vargs t vres rs' m',
-      eval_builtin_args se rs sp m args vargs ->
-      external_call ef se vargs m t vres m' ->
+      eval_builtin_args ge rs sp m args vargs ->
+      external_call ef ge vargs m t vres m' ->
       rs' = set_res res vres (undef_regs (destroyed_by_builtin ef) rs) ->
       step (State s f sp (Mbuiltin ef args res :: b) rs m)
          t (State s f sp b rs' m')
@@ -409,7 +408,7 @@ Inductive step: state -> trace -> state -> Prop :=
       forall s vf rs m t rs' ef args res m',
       Genv.find_funct ge vf = Some (External ef) ->
       extcall_arguments rs m (parent_sp s) (ef_sig ef) args ->
-      external_call ef se args m t res m' ->
+      external_call ef ge args m t res m' ->
       rs' = set_pair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs) ->
       step (Callstate s vf rs m)
          t (Returnstate s rs' m')
@@ -553,7 +552,7 @@ Inductive cc_stacking_mr: cc_stk_world -> locset_reply -> mach_reply -> Prop :=
 
 Program Definition cc_stacking: callconv li_locset li_mach :=
   {|
-    match_senv w := Senv.inject (stk_inj w);
+    match_senv w := Genv.match_stbls (stk_inj w);
     match_query := cc_stacking_mq;
     match_reply := cc_stacking_mr;
   |}.
@@ -577,7 +576,6 @@ Section WF_STATES.
 
 Variable rao: function -> code -> ptrofs -> Prop.
 
-Variable se: Senv.t.
 Variable ge: genv.
 
 Inductive wf_frame: stackframe -> Prop :=
@@ -603,7 +601,7 @@ Inductive wf_state: state -> Prop :=
       wf_state (Returnstate s rs m).
 
 Lemma wf_step:
-  forall S1 t S2, step rao se ge S1 t S2 -> wf_state S1 -> wf_state S2.
+  forall S1 t S2, step rao ge S1 t S2 -> wf_state S1 -> wf_state S2.
 Proof.
   induction 1; intros WF; inv WF; try (econstructor; now eauto with coqlib).
 - (* call *)

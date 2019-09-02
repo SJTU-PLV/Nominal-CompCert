@@ -257,8 +257,8 @@ Qed.
 Section SOUNDNESS.
 
 Variable prog: program.
-Variable se: Senv.t.
-Let ge := Senv.globalenv prog se.
+Variable se: Genv.symtbl.
+Let ge := Genv.globalenv se prog.
 
 Inductive wt_state: state -> Prop :=
   | wt_regular_state: forall s f sp c rs m
@@ -288,11 +288,11 @@ Hypothesis wt_prog:
 Lemma wt_find_funct:
   forall vf f, Genv.find_funct ge vf = Some f -> wt_fundef f.
 Proof.
-  intros. eapply Senv.find_funct_prop; eauto.
+  intros. eapply Genv.find_funct_prop; eauto.
 Qed.
 
 Theorem step_type_preservation:
-  forall S1 t S2, step se ge S1 t S2 -> wt_state S1 -> wt_state S2.
+  forall S1 t S2, step ge S1 t S2 -> wt_state S1 -> wt_state S2.
 Proof.
 Local Opaque mreg_type.
   induction 1; intros WTS; inv WTS.
@@ -389,7 +389,7 @@ Theorem wt_initial_state:
 Proof.
   intros. inv H. inv H0.
   econstructor; eauto. constructor; eauto.
-  pattern (Internal f0). eapply Senv.find_funct_prop; eauto.
+  pattern (Internal f0). eapply Genv.find_funct_prop; eauto.
   simpl. red. auto.
   simpl. red. auto.
 Qed.
@@ -451,7 +451,7 @@ Qed.
 Lemma wt_callstate_agree:
   forall prog se s vf f rs m,
   wt_state prog se (Callstate s vf rs m) ->
-  Genv.find_funct (Senv.globalenv prog se) vf = Some f ->
+  Genv.find_funct (Genv.globalenv se prog) vf = Some f ->
   agree_callee_save rs (parent_locset s) /\ agree_outgoing_arguments (funsig f) rs (parent_locset s).
 Proof.
   intros. inv H. rewrite FIND in H0; inv H0. auto.

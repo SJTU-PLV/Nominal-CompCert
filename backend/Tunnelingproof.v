@@ -141,9 +141,9 @@ Section PRESERVATION.
 
 Variables prog tprog: program.
 Hypothesis TRANSL: match_prog prog tprog.
-Variable se: Senv.t.
-Let ge := Senv.globalenv prog se.
-Let tge := Senv.globalenv tprog se.
+Variable se: Genv.symtbl.
+Let ge := Genv.globalenv se prog.
+Let tge := Genv.globalenv se tprog.
 
 Lemma functions_translated:
   forall v tv f,
@@ -151,14 +151,8 @@ Lemma functions_translated:
   Genv.find_funct ge v = Some f ->
   Genv.find_funct tge tv = Some (tunnel_fundef f).
 Proof.
-  intros v tv f Hv Hf. apply (Senv.find_funct_transf_id TRANSL).
+  intros v tv f Hv Hf. apply (Genv.find_funct_transf_id TRANSL).
   unfold Genv.find_funct in *. destruct v; try discriminate. inv Hv. auto.
-Qed.
-
-Lemma symbols_preserved:
-  forall id, Genv.find_symbol tge id = Genv.find_symbol ge id.
-Proof.
-  apply Senv.find_symbol_match_id.
 Qed.
 
 Lemma sig_preserved:
@@ -397,9 +391,9 @@ Proof.
 Qed.
 
 Lemma tunnel_step_correct:
-  forall st1 t st2, step se ge st1 t st2 ->
+  forall st1 t st2, step ge st1 t st2 ->
   forall st1' (MS: match_states st1 st1'),
-  (exists st2', step se tge st1' t st2' /\ match_states st2 st2')
+  (exists st2', step tge st1' t st2' /\ match_states st2 st2')
   \/ (measure st2 < measure st1 /\ t = E0 /\ match_states st2 st1')%nat.
 Proof.
   induction 1; intros; try inv MS.
@@ -407,7 +401,7 @@ Proof.
 - (* entering a block *)
   assert (DEFAULT: branch_target f pc = pc ->
     (exists st2' : state,
-     step se tge (State ts (tunnel_function f) sp (branch_target f pc) tls tm) E0 st2'
+     step tge (State ts (tunnel_function f) sp (branch_target f pc) tls tm) E0 st2'
      /\ match_states (Block s f sp bb rs m) st2')).
   { intros. rewrite H0. econstructor; split.
     econstructor. simpl. rewrite PTree.gmap1. rewrite H. simpl. eauto.

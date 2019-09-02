@@ -1523,7 +1523,7 @@ Proof.
 Qed.
 
 Lemma add_equations_builtin_arg_lessdef:
-  forall env (ge: Senv.t) sp rs ls m arg v,
+  forall env ge sp rs ls m arg v,
   eval_builtin_arg ge (fun r => rs#r) sp m arg v ->
   forall e e' arg',
   add_equations_builtin_arg env arg arg' e = Some e' ->
@@ -1568,7 +1568,7 @@ Proof.
 Qed.
 
 Lemma add_equations_builtin_args_lessdef:
-  forall env (ge: Senv.t) sp rs ls m tm arg vl,
+  forall env ge sp rs ls m tm arg vl,
   eval_builtin_args ge (fun r => rs#r) sp m arg vl ->
   forall arg' e e',
   add_equations_builtin_args env arg arg' e = Some e' ->
@@ -1597,7 +1597,7 @@ Proof.
 Qed.
 
 Lemma add_equations_debug_args_eval:
-  forall env (ge: Senv.t) sp rs ls m tm arg vl,
+  forall env ge sp rs ls m tm arg vl,
   eval_builtin_args ge (fun r => rs#r) sp m arg vl ->
   forall arg' e e',
   add_equations_debug_args env arg arg' e = Some e' ->
@@ -1619,7 +1619,7 @@ Proof.
 Qed.
 
 Lemma add_equations_builtin_eval:
-  forall ef env args args' e1 e2 m1 m1' rs ls (ge: Senv.t) sp vargs t vres m2,
+  forall ef env args args' e1 e2 m1 m1' rs ls ge sp vargs t vres m2,
   wt_regset env rs ->
   match ef with
   | EF_debug _ _ _ => add_equations_debug_args env args args' e1
@@ -1786,19 +1786,13 @@ Variable prog: RTL.program.
 Variable tprog: LTL.program.
 Hypothesis TRANSF: match_prog prog tprog.
 
-Variable se: Senv.t.
-Let ge := Senv.globalenv prog se.
-Let tge := Senv.globalenv tprog se.
+Variable se: Genv.symtbl.
+Let ge := Genv.globalenv se prog.
+Let tge := Genv.globalenv se tprog.
 
 (** Initial locset & signature for the top-level call *)
 Variable base_sg: signature.
 Variable base_rs: locset.
-
-Lemma symbols_preserved:
-  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
-Proof.
-  eapply Senv.find_symbol_match_id.
-Qed.
 
 Lemma functions_translated:
   forall (v tv: val) (f: RTL.fundef),
@@ -1809,7 +1803,7 @@ Lemma functions_translated:
 Proof.
   intros v tv f Hf Hv.
   destruct Hv; try discriminate.
-  eapply (Senv.find_funct_transf_partial_id TRANSF); eauto.
+  eapply (Genv.find_funct_transf_partial_id TRANSF); eauto.
 Qed.
 
 Lemma sig_function_translated:
@@ -1834,7 +1828,7 @@ Proof.
   (* two regs *)
   exploit add_equation_lessdef; eauto.
   (* two symbols *)
-  unfold Genv.symbol_address. rewrite symbols_preserved. auto.
+  unfold Genv.symbol_address. auto.
 Qed.
 
 Lemma exec_moves:
@@ -1844,8 +1838,8 @@ Lemma exec_moves:
   satisf rs ls e' ->
   wt_regset env rs ->
   exists ls',
-    star (step se) tge (Block s f sp (expand_moves mv bb) ls m)
-                    E0 (Block s f sp bb ls' m)
+    star step tge (Block s f sp (expand_moves mv bb) ls m)
+               E0 (Block s f sp bb ls' m)
   /\ satisf rs ls' e.
 Proof.
 Opaque destroyed_by_op.
@@ -1905,8 +1899,8 @@ Inductive match_stackframes: list RTL.stackframe -> list LTL.stackframe -> signa
            Val.has_type v (env res) ->
            agree_callee_save ls ls1 ->
            exists ls2,
-           star (LTL.step se) tge (Block ts tf sp bb ls1 m)
-                               E0 (State ts tf sp pc ls2 m)
+           star LTL.step tge (Block ts tf sp bb ls1 m)
+                          E0 (State ts tf sp pc ls2 m)
            /\ satisf (rs#res <- v) ls2 e),
       match_stackframes
         (RTL.Stackframe res f sp pc rs :: s)
@@ -1986,9 +1980,9 @@ Qed.
     "plus" kind. *)
 
 Lemma step_simulation:
-  forall S1 t S2, RTL.step se ge S1 t S2 -> wt_state prog se S1 ->
+  forall S1 t S2, RTL.step ge S1 t S2 -> wt_state prog se S1 ->
   forall S1', match_states S1 S1' ->
-  exists S2', plus (LTL.step se) tge S1' t S2' /\ match_states S2 S2'.
+  exists S2', plus LTL.step tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   induction 1; intros WT S1' MS; inv MS; try UseShape.
 

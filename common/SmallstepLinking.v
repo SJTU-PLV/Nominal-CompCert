@@ -10,7 +10,7 @@ Require Import Classical.
 (** NB: we assume that all components are deterministic and that their
   domains are disjoint. *)
 
-Parameter (valid_query : forall {li}, Smallstep.open_sem li li -> Senv.t -> query li -> Prop).
+Parameter (valid_query : forall {li}, Smallstep.open_sem li li -> Genv.symtbl -> query li -> Prop).
 Axiom valid_query_determ:
   forall {li} (L1 L2: open_sem li li) sk se q,
     link (skel L1) (skel L2) = Some sk -> valid_query L1 se q -> valid_query L2 se q -> False.
@@ -30,7 +30,7 @@ Section LINK.
   (** * Definition *)
 
   Section WITH_SE.
-    Context (se: Senv.t).
+    Context (se: Genv.symtbl).
 
     Variant frame := st (i: I) (q: query li) (s: Smallstep.state (L i se q)).
     Notation state := (list frame).
@@ -203,7 +203,7 @@ Section FSIM.
   Context {I L1 L2} (HL: forall i:I, open_fsim cc cc (L1 i) (L2 i)).
   Context {sk1 sk2: AST.program unit unit}.
   Context {w se1 se2 q1 q2}
-    (Hsk1: forall i, Senv.valid_for (skel (L1 i)) se1)
+    (Hsk1: forall i, Genv.valid_for (skel (L1 i)) se1)
     (Hsk: forall i, match_skel se1 se2 (skel (L1 i)) (skel (L2 i)))
     (Hse: match_senv cc w se1 se2)
     (Hq: match_query cc w q1 q2).

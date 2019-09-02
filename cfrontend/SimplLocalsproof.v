@@ -38,10 +38,10 @@ Variable prog: program.
 Variable tprog: program.
 Hypothesis TRANSF: match_prog prog tprog.
 Variable w: meminj.
-Variable se: Senv.t.
-Variable tse: Senv.t.
-Let ge := globalenv prog se.
-Let tge := globalenv tprog tse.
+Variable se: Genv.symtbl.
+Variable tse: Genv.symtbl.
+Let ge := globalenv se prog.
+Let tge := globalenv tse tprog.
 
 Lemma comp_env_preserved:
   genv_cenv tge = genv_cenv ge.
@@ -49,22 +49,13 @@ Proof.
   unfold tge, ge. destruct prog, tprog; simpl. destruct TRANSF as [_ EQ]. simpl in EQ. congruence.
 Qed.
 
-Lemma symbols_preserved (j: meminj):
-  Senv.inject j se tse ->
-  forall (s: ident) (b: block),
-    Genv.find_symbol ge s = Some b ->
-    exists tb, j b = Some (tb, 0) /\ Genv.find_symbol tge s = Some tb.
-Proof.
-  exact (Senv.find_symbol_transf_partial (proj1 TRANSF)).
-Qed.
-
 Lemma functions_translated (j: meminj):
-  Senv.inject j se tse ->
+  Genv.match_stbls j se tse ->
   forall (v tv: val) (f: fundef),
   Val.inject j v tv -> Genv.find_funct ge v = Some f ->
   exists tf, Genv.find_funct tge tv = Some tf /\ transf_fundef f = OK tf.
 Proof.
-  exact (Senv.find_funct_transf_partial (proj1 TRANSF)).
+  apply (Genv.find_funct_transf_partial (proj1 TRANSF)).
 Qed.
 
 Lemma type_of_fundef_preserved:
@@ -284,8 +275,8 @@ Lemma step_Sdebug_temp:
   forall f id ty k e le m v,
   le!id = Some v ->
   val_casted v ty ->
-  step2 tse tge (State f (Sdebug_temp id ty) k e le m)
-            E0 (State f Sskip k e le m).
+  step2 tge (State f (Sdebug_temp id ty) k e le m)
+         E0 (State f Sskip k e le m).
 Proof.
   intros. unfold Sdebug_temp. eapply step_builtin with (optid := None).
   econstructor. constructor. eauto. simpl. eapply cast_typeconv; eauto. constructor.
@@ -295,8 +286,8 @@ Qed.
 Lemma step_Sdebug_var:
   forall f id ty k e le m b,
   e!id = Some(b, ty) ->
-  step2 tse tge (State f (Sdebug_var id ty) k e le m)
-            E0 (State f Sskip k e le m).
+  step2 tge (State f (Sdebug_var id ty) k e le m)
+         E0 (State f Sskip k e le m).
 Proof.
   intros. unfold Sdebug_var. eapply step_builtin with (optid := None).
   econstructor. constructor. constructor. eauto.
@@ -308,12 +299,12 @@ Lemma step_Sset_debug:
   forall f id ty a k e le m v v',
   eval_expr tge e le m a v ->
   sem_cast v (typeof a) ty m = Some v' ->
-  plus (step2 tse) tge (State f (Sset_debug id ty a) k e le m)
-                   E0 (State f Sskip k e (PTree.set id v' le) m).
+  plus step2 tge (State f (Sset_debug id ty a) k e le m)
+              E0 (State f Sskip k e (PTree.set id v' le) m).
 Proof.
   intros; unfold Sset_debug.
-  assert (forall k, step2 tse tge (State f (Sset id (make_cast a ty)) k e le m)
-                              E0 (State f Sskip k e (PTree.set id v' le) m)).
+  assert (forall k, step2 tge (State f (Sset id (make_cast a ty)) k e le m)
+                           E0 (State f Sskip k e (PTree.set id v' le) m)).
   { intros. apply step_set. eapply make_cast_correct; eauto. }
   destruct (Compopts.debug tt).
 - eapply plus_left. constructor.
@@ -328,8 +319,8 @@ Qed.
 Lemma step_add_debug_vars:
   forall f s e le m vars k,
   (forall id ty, In (id, ty) vars -> exists b, e!id = Some (b, ty)) ->
-  star (step2 tse) tge (State f (add_debug_vars vars s) k e le m)
-                   E0 (State f s k e le m).
+  star step2 tge (State f (add_debug_vars vars s) k e le m)
+              E0 (State f s k e le m).
 Proof.
   unfold add_debug_vars. destruct (Compopts.debug tt).
 - induction vars; simpl; intros.
@@ -362,8 +353,8 @@ Lemma step_add_debug_params:
   list_norepet (var_names params) ->
   list_forall2 val_casted vl (map snd params) ->
   bind_parameter_temps params vl le1 = Some le ->
-  star (step2 tse) tge (State f (add_debug_params params s) k e le m)
-                   E0 (State f s k e le m).
+  star step2 tge (State f (add_debug_params params s) k e le m)
+              E0 (State f s k e le m).
 Proof.
   unfold add_debug_params. destruct (Compopts.debug tt).
 - induction params as [ | [id ty] params ]; simpl; intros until le1; intros NR CAST BIND; inv CAST; inv NR.
@@ -1095,8 +1086,8 @@ Theorem store_params_correct:
   (forall id, ~In id (var_names params) -> tle2!id = tle1!id) ->
   (forall id, In id (var_names params) -> le!id = None) ->
   exists tle, exists tm',
-  star (step2 tse) tge (State f (store_params cenv params s) k te tle tm)
-                   E0 (State f s k te tle tm')
+  star step2 tge (State f (store_params cenv params s) k te tle tm)
+              E0 (State f s k te tle tm')
   /\ bind_parameter_temps params targs tle2 = Some tle
   /\ Mem.inject j m' tm'
   /\ match_envs j cenv e le m' lo hi te tle tlo thi
@@ -1352,7 +1343,7 @@ Variable cenv: compilenv.
 Variables lo hi tlo thi: block.
 Hypothesis MATCH: match_envs f cenv e le m lo hi te tle tlo thi.
 Hypothesis MEMINJ: Mem.inject f m tm.
-Hypothesis GLOB: Senv.inject f se tse.
+Hypothesis GLOB: Genv.match_stbls f se tse.
 
 Lemma typeof_simpl_expr:
   forall a, typeof (simpl_expr cenv a) = typeof a.
@@ -1457,7 +1448,7 @@ Proof.
 (* global var *)
   rewrite H2.
   exploit me_vars; eauto. instantiate (1 := id). intros MV. inv MV; try congruence.
-  eapply symbols_preserved in H0 as (tl & Htl & ?); eauto.
+  eapply Genv.find_symbol_match in H0 as (tl & Htl & ?); eauto.
   exists tl; exists Ptrofs.zero; split.
   apply eval_Evar_global; auto.
   econstructor; eauto.
@@ -1507,7 +1498,7 @@ End EVAL_EXPR.
 Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> block -> block -> Prop :=
   | match_Kstop: forall cenv m bound tbound,
       inject_incr w f ->
-      Senv.inject f se tse ->
+      Genv.match_stbls f se tse ->
       Ple (Genv.genv_next ge) bound ->
       Ple (Genv.genv_next tge) tbound ->
       match_cont f cenv Kstop Kstop m bound tbound
@@ -1555,7 +1546,7 @@ Proof.
   induction 1; intros LOAD INCR INJ1 INJ2; econstructor; eauto.
 (* globalenvs *)
   eapply inject_incr_trans; eauto.
-  eapply Genv.match_genvs_external_call; eauto. intros. erewrite <- INJ2; eauto.
+  eapply Genv.match_stbls_incr; eauto. intros. erewrite <- INJ2; eauto.
   eapply Plt_Ple_trans; eauto.
 (* call *)
   eapply match_envs_invariant; eauto.
@@ -1696,7 +1687,7 @@ Qed.
 Lemma match_cont_globalenv:
   forall f cenv k tk m bound tbound,
   match_cont f cenv k tk m bound tbound ->
-  Senv.inject f se tse.
+  Genv.match_stbls f se tse.
 Proof.
   induction 1; auto.
 Qed.
@@ -1963,8 +1954,8 @@ End FIND_LABEL.
 
 
 Lemma step_simulation:
-  forall S1 t S2, step1 se ge S1 t S2 ->
-  forall S1' (MS: match_states S1 S1'), exists S2', plus (step2 tse) tge S1' t S2' /\ match_states S2 S2'.
+  forall S1 t S2, step1 ge S1 t S2 ->
+  forall S1' (MS: match_states S1 S1'), exists S2', plus step2 tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   induction 1; simpl; intros; inv MS; simpl in *; try (monadInv TRS).
 
@@ -2208,7 +2199,7 @@ Proof.
 Qed.
 
 Lemma initial_states_simulation:
-  forall q1 q2, Senv.inject w se tse -> cc_inj_query w q1 q2 ->
+  forall q1 q2, Genv.match_stbls w se tse -> cc_inj_query w q1 q2 ->
   forall S, initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states S R.
 Proof.

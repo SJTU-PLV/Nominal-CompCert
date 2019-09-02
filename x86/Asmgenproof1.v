@@ -86,7 +86,7 @@ Ltac Simplifs := repeat Simplif.
 Section CONSTRUCTORS.
 
 Variable init_sp: val.
-Variable se: Senv.t.
+Variable ge: Genv.symtbl.
 Variable fn: function.
 
 (** Smart constructor for moves. *)
@@ -95,7 +95,7 @@ Lemma mk_mov_correct:
   forall rd rs k c rs1 m,
   mk_mov rd rs k = OK c ->
   exists rs2,
-     exec_straight init_sp se fn c rs1 m k rs2 m
+     exec_straight init_sp ge fn c rs1 m k rs2 m
   /\ rs2#rd = rs1#rs
   /\ forall r, data_preg r = true -> r <> rd -> rs2#r = rs1#r.
 Proof.
@@ -198,7 +198,7 @@ Lemma mk_shrximm_correct:
   mk_shrximm n k = OK c ->
   Val.shrx (rs1#RAX) (Vint n) = Some v ->
   exists rs2,
-     exec_straight init_sp se fn c rs1 m k rs2 m
+     exec_straight init_sp ge fn c rs1 m k rs2 m
   /\ rs2#RAX = v
   /\ forall r, data_preg r = true -> r <> RAX -> r <> RCX -> rs2#r = rs1#r.
 Proof.
@@ -237,7 +237,7 @@ Lemma mk_shrxlimm_correct:
   mk_shrxlimm n k = OK c ->
   Val.shrxl (rs1#RAX) (Vint n) = Some v ->
   exists rs2,
-     exec_straight init_sp se fn c rs1 m k rs2 m
+     exec_straight init_sp ge fn c rs1 m k rs2 m
   /\ rs2#RAX = v
   /\ forall r, data_preg r = true -> r <> RAX -> r <> RDX -> rs2#r = rs1#r.
 Proof.
@@ -275,9 +275,9 @@ Lemma mk_intconv_correct:
   forall mk sem rd rs k c rs1 m,
   mk_intconv mk rd rs k = OK c ->
   (forall c rd rs r m,
-   exec_instr init_sp se c (mk rd rs) r m = Next (nextinstr (r#rd <- (sem r#rs))) m) ->
+   exec_instr init_sp ge c (mk rd rs) r m = Next (nextinstr (r#rd <- (sem r#rs))) m) ->
   exists rs2,
-     exec_straight init_sp se fn c rs1 m k rs2 m
+     exec_straight init_sp ge fn c rs1 m k rs2 m
   /\ rs2#rd = sem rs1#rs
   /\ forall r, data_preg r = true -> r <> rd -> r <> RAX -> rs2#r = rs1#r.
 Proof.
@@ -295,7 +295,7 @@ Lemma addressing_mentions_correct:
   forall a r (rs1 rs2: regset),
   (forall (r': ireg), r' <> r -> rs1 r' = rs2 r') ->
   addressing_mentions a r = false ->
-  eval_addrmode32 se a rs1 = eval_addrmode32 se a rs2.
+  eval_addrmode32 ge a rs1 = eval_addrmode32 ge a rs2.
 Proof.
   intros until rs2; intro AG. unfold addressing_mentions, eval_addrmode32.
   destruct a. intros. destruct (orb_false_elim _ _ H). unfold proj_sumbool in *.
@@ -306,9 +306,9 @@ Qed.
 Lemma mk_storebyte_correct:
   forall addr r k c rs1 m1 m2,
   mk_storebyte addr r k = OK c ->
-  Mem.storev Mint8unsigned m1 (eval_addrmode se addr rs1) (rs1 r) = Some m2 ->
+  Mem.storev Mint8unsigned m1 (eval_addrmode ge addr rs1) (rs1 r) = Some m2 ->
   exists rs2,
-     exec_straight init_sp se fn c rs1 m1 k rs2 m2
+     exec_straight init_sp ge fn c rs1 m1 k rs2 m2
   /\ forall r, data_preg r = true -> preg_notin r (if Archi.ptr64 then nil else AX :: CX :: nil) -> rs2#r = rs1#r.
 Proof.
   unfold mk_storebyte; intros.
@@ -321,7 +321,7 @@ Proof.
   InvBooleans. rewrite H1; simpl. destruct (addressing_mentions addr RAX) eqn:E; monadInv H.
 (* RAX is mentioned. *)
   assert (r <> RCX). { red; intros; subst r; discriminate H2. }
-  set (rs2 := nextinstr (rs1#RCX <- (eval_addrmode32 se addr rs1))).
+  set (rs2 := nextinstr (rs1#RCX <- (eval_addrmode32 ge addr rs1))).
   set (rs3 := nextinstr (rs2#RAX <- (rs1 r))).
   econstructor; split.
   apply exec_straight_three with rs2 m1 rs3 m1.
@@ -329,12 +329,12 @@ Proof.
   simpl. replace (rs2 r) with (rs1 r). auto. symmetry. unfold rs2; Simplifs.
   simpl. unfold exec_store. unfold eval_addrmode; rewrite H1; simpl. rewrite Int.add_zero.
   change (rs3 RAX) with (rs1 r).
-  change (rs3 RCX) with (eval_addrmode32 se addr rs1).
-  replace (Val.add (eval_addrmode32 se addr rs1) (Vint Int.zero))
-     with (eval_addrmode se addr rs1).
+  change (rs3 RCX) with (eval_addrmode32 ge addr rs1).
+  replace (Val.add (eval_addrmode32 ge addr rs1) (Vint Int.zero))
+     with (eval_addrmode ge addr rs1).
   rewrite H0. eauto.
   unfold eval_addrmode in *; rewrite H1 in *.
-  destruct (eval_addrmode32 se addr rs1); simpl in H0; try discriminate H0.
+  destruct (eval_addrmode32 ge addr rs1); simpl in H0; try discriminate H0.
   simpl. rewrite H1. rewrite Ptrofs.add_zero; auto.
   auto. auto. auto.
   intros. destruct H4. Simplifs. unfold rs3; Simplifs. unfold rs2; Simplifs.
@@ -356,7 +356,7 @@ Qed.
 Remark eval_addrmode_indexed:
   forall (base: ireg) ofs (rs: regset),
   match rs#base with Vptr _ _ => True | _ => False end ->
-  eval_addrmode se (Addrmode (Some base) None (inl _ (Ptrofs.unsigned ofs))) rs = Val.offset_ptr rs#base ofs.
+  eval_addrmode ge (Addrmode (Some base) None (inl _ (Ptrofs.unsigned ofs))) rs = Val.offset_ptr rs#base ofs.
 Proof.
   intros. destruct (rs#base) eqn:BASE; try contradiction.
   intros; unfold eval_addrmode; destruct Archi.ptr64 eqn:SF; simpl; rewrite BASE; simpl; rewrite SF; simpl.
@@ -377,13 +377,13 @@ Lemma loadind_correct:
   loadind base ofs ty dst k = OK c ->
   Mem.loadv (chunk_of_type ty) m (Val.offset_ptr rs#base ofs) = Some v ->
   exists rs',
-     exec_straight init_sp se fn c rs m k rs' m
+     exec_straight init_sp ge fn c rs m k rs' m
   /\ rs'#(preg_of dst) = v
   /\ forall r, data_preg r = true -> r <> preg_of dst -> rs'#r = rs#r.
 Proof.
   unfold loadind; intros.
   set (addr := Addrmode (Some base) None (inl (ident * ptrofs) (Ptrofs.unsigned ofs))) in *.
-  assert (eval_addrmode se addr rs = Val.offset_ptr rs#base ofs).
+  assert (eval_addrmode ge addr rs = Val.offset_ptr rs#base ofs).
   { apply eval_addrmode_indexed. destruct (rs base); auto || discriminate. }
   rewrite <- H1 in H0.
   exists (nextinstr_nf (rs#(preg_of dst) <- v)); split.
@@ -396,12 +396,12 @@ Lemma storeind_correct:
   storeind src base ofs ty k = OK c ->
   Mem.storev (chunk_of_type ty) m (Val.offset_ptr rs#base ofs) (rs#(preg_of src)) = Some m' ->
   exists rs',
-     exec_straight init_sp se fn c rs m k rs' m'
+     exec_straight init_sp ge fn c rs m k rs' m'
   /\ forall r, data_preg r = true -> preg_notin r (destroyed_by_setstack ty) -> rs'#r = rs#r.
 Proof.
   unfold storeind; intros.
   set (addr := Addrmode (Some base) None (inl (ident * ptrofs) (Ptrofs.unsigned ofs))) in *.
-  assert (eval_addrmode se addr rs = Val.offset_ptr rs#base ofs).
+  assert (eval_addrmode ge addr rs = Val.offset_ptr rs#base ofs).
   { apply eval_addrmode_indexed. destruct (rs base); auto || discriminate. }
   rewrite <- H1 in H0.
   loadind_correct_solve; simpl in H0;
@@ -415,13 +415,13 @@ Qed.
 Lemma transl_addressing_mode_32_correct:
   forall addr args am (rs: regset) v,
   transl_addressing addr args = OK am ->
-  eval_addressing32 se (rs RSP) addr (List.map rs (List.map preg_of args)) = Some v ->
-  Val.lessdef v (eval_addrmode32 se am rs).
+  eval_addressing32 ge (rs RSP) addr (List.map rs (List.map preg_of args)) = Some v ->
+  Val.lessdef v (eval_addrmode32 ge am rs).
 Proof.
   assert (A: forall id ofs, Archi.ptr64 = false ->
-          Val.add (Vint Int.zero) (Genv.symbol_address se id ofs) = Genv.symbol_address se id ofs).
+          Val.add (Vint Int.zero) (Genv.symbol_address ge id ofs) = Genv.symbol_address ge id ofs).
   { intros. unfold Val.add; rewrite H. unfold Genv.symbol_address.
-    destruct (Genv.find_symbol se id); auto. rewrite Ptrofs.add_zero; auto. }
+    destruct (Genv.find_symbol ge id); auto. rewrite Ptrofs.add_zero; auto. }
   assert (C: forall v i,
     Val.lessdef (Val.mul v (Vint (Int.repr i)))
                (if zeq i 1 then v else Val.mul v (Vint (Int.repr i)))).
@@ -446,13 +446,13 @@ Qed.
 Lemma transl_addressing_mode_64_correct:
   forall addr args am (rs: regset) v,
   transl_addressing addr args = OK am ->
-  eval_addressing64 se (rs RSP) addr (List.map rs (List.map preg_of args)) = Some v ->
-  Val.lessdef v (eval_addrmode64 se am rs).
+  eval_addressing64 ge (rs RSP) addr (List.map rs (List.map preg_of args)) = Some v ->
+  Val.lessdef v (eval_addrmode64 ge am rs).
 Proof.
   assert (A: forall id ofs, Archi.ptr64 = true ->
-          Val.addl (Vlong Int64.zero) (Genv.symbol_address se id ofs) = Genv.symbol_address se id ofs).
+          Val.addl (Vlong Int64.zero) (Genv.symbol_address ge id ofs) = Genv.symbol_address ge id ofs).
   { intros. unfold Val.addl; rewrite H. unfold Genv.symbol_address.
-    destruct (Genv.find_symbol se id); auto. rewrite Ptrofs.add_zero; auto. }
+    destruct (Genv.find_symbol ge id); auto. rewrite Ptrofs.add_zero; auto. }
   assert (C: forall v i,
     Val.lessdef (Val.mull v (Vlong (Int64.repr i)))
                (if zeq i 1 then v else Val.mull v (Vlong (Int64.repr i)))).
@@ -474,8 +474,8 @@ Qed.
 Lemma transl_addressing_mode_correct:
   forall addr args am (rs: regset) v,
   transl_addressing addr args = OK am ->
-  eval_addressing se (rs RSP) addr (List.map rs (List.map preg_of args)) = Some v ->
-  Val.lessdef v (eval_addrmode se am rs).
+  eval_addressing ge (rs RSP) addr (List.map rs (List.map preg_of args)) = Some v ->
+  Val.lessdef v (eval_addrmode ge am rs).
 Proof.
   unfold eval_addressing, eval_addrmode; intros. destruct Archi.ptr64.
   eapply transl_addressing_mode_64_correct; eauto.
@@ -483,17 +483,17 @@ Proof.
 Qed.
 
 Lemma normalize_addrmode_32_correct:
-  forall am rs, eval_addrmode32 se (normalize_addrmode_32 am) rs = eval_addrmode32 se am rs.
+  forall am rs, eval_addrmode32 ge (normalize_addrmode_32 am) rs = eval_addrmode32 ge am rs.
 Proof.
   intros; destruct am as [base ofs [n|r]]; simpl; auto. rewrite Int.repr_signed. auto.
 Qed.
 
 Lemma normalize_addrmode_64_correct:
   forall am rs,
-  eval_addrmode64 se am rs =
+  eval_addrmode64 ge am rs =
   match normalize_addrmode_64 am with
-  | (am', None) => eval_addrmode64 se am' rs
-  | (am', Some delta) => Val.addl (eval_addrmode64 se am' rs) (Vlong delta)
+  | (am', None) => eval_addrmode64 ge am' rs
+  | (am', Some delta) => Val.addl (eval_addrmode64 ge am' rs) (Vlong delta)
   end.
 Proof.
   intros; destruct am as [base ofs [n|[id delta]]]; simpl.
@@ -910,7 +910,7 @@ Lemma transl_cond_correct:
   forall cond args k c rs m,
   transl_cond cond args k = OK c ->
   exists rs',
-     exec_straight init_sp se fn c rs m k rs' m
+     exec_straight init_sp ge fn c rs m k rs' m
   /\ match eval_condition cond (map rs (map preg_of args)) m with
      | None => True
      | Some b => eval_extcond (testcond_for_condition cond) rs' = Some b
@@ -1042,7 +1042,7 @@ Qed.
 Lemma mk_setcc_base_correct:
   forall cond rd k rs1 m,
   exists rs2,
-  exec_straight init_sp se fn (mk_setcc_base cond rd k) rs1 m k rs2 m
+  exec_straight init_sp ge fn (mk_setcc_base cond rd k) rs1 m k rs2 m
   /\ rs2#rd = Val.of_optbool(eval_extcond cond rs1)
   /\ forall r, data_preg r = true -> r <> RAX /\ r <> RCX -> r <> rd -> rs2#r = rs1#r.
 Proof.
@@ -1122,7 +1122,7 @@ Qed.
 Lemma mk_setcc_correct:
   forall cond rd k rs1 m,
   exists rs2,
-  exec_straight init_sp se fn (mk_setcc cond rd k) rs1 m k rs2 m
+  exec_straight init_sp ge fn (mk_setcc cond rd k) rs1 m k rs2 m
   /\ rs2#rd = Val.of_optbool(eval_extcond cond rs1)
   /\ forall r, data_preg r = true -> r <> RAX /\ r <> RCX -> r <> rd -> rs2#r = rs1#r.
 Proof.
@@ -1156,9 +1156,9 @@ Ltac TranslOp :=
 Lemma transl_op_correct:
   forall op args res k c (rs: regset) m v,
   transl_op op args res k = OK c ->
-  eval_operation se (rs#RSP) op (map rs (map preg_of args)) m = Some v ->
+  eval_operation ge (rs#RSP) op (map rs (map preg_of args)) m = Some v ->
   exists rs',
-     exec_straight init_sp se fn c rs m k rs' m
+     exec_straight init_sp ge fn c rs m k rs' m
   /\ Val.lessdef v rs'#(preg_of res)
   /\ forall r, data_preg r = true -> r <> preg_of res -> preg_notin r (destroyed_by_op op) -> rs' r = rs r.
 Proof.
@@ -1166,11 +1166,11 @@ Transparent destroyed_by_op.
   intros until v; intros TR EV.
   assert (SAME:
   (exists rs',
-     exec_straight init_sp se fn c rs m k rs' m
+     exec_straight init_sp ge fn c rs m k rs' m
   /\ rs'#(preg_of res) = v
   /\ forall r, data_preg r = true -> r <> preg_of res -> preg_notin r (destroyed_by_op op) -> rs' r = rs r) ->
   exists rs',
-     exec_straight init_sp se fn c rs m k rs' m
+     exec_straight init_sp ge fn c rs m k rs' m
   /\ Val.lessdef v rs'#(preg_of res)
   /\ forall r, data_preg r = true -> r <> preg_of res -> preg_notin r (destroyed_by_op op) -> rs' r = rs r).
   {
@@ -1345,18 +1345,18 @@ Qed.
 Lemma transl_load_correct:
   forall chunk addr args dest k c (rs: regset) m a v,
   transl_load chunk addr args dest k = OK c ->
-  eval_addressing se (rs#RSP) addr (map rs (map preg_of args)) = Some a ->
+  eval_addressing ge (rs#RSP) addr (map rs (map preg_of args)) = Some a ->
   Mem.loadv chunk m a = Some v ->
   exists rs',
-     exec_straight init_sp se fn c rs m k rs' m
+     exec_straight init_sp ge fn c rs m k rs' m
   /\ rs'#(preg_of dest) = v
   /\ forall r, data_preg r = true -> r <> preg_of dest -> rs'#r = rs#r.
 Proof.
   unfold transl_load; intros. monadInv H.
   exploit transl_addressing_mode_correct; eauto. intro EA.
-  assert (EA': eval_addrmode se x rs = a). destruct a; simpl in H1; try discriminate; inv EA; auto.
+  assert (EA': eval_addrmode ge x rs = a). destruct a; simpl in H1; try discriminate; inv EA; auto.
   set (rs2 := nextinstr_nf (rs#(preg_of dest) <- v)).
-  assert (exec_load se chunk m x rs (preg_of dest) = Next rs2 m).
+  assert (exec_load ge chunk m x rs (preg_of dest) = Next rs2 m).
     unfold exec_load. rewrite EA'. rewrite H1. auto.
   assert (rs2 PC = Val.offset_ptr (rs PC) Ptrofs.one).
     transitivity (Val.offset_ptr ((rs#(preg_of dest) <- v) PC) Ptrofs.one).
@@ -1370,28 +1370,28 @@ Qed.
 Lemma transl_store_correct:
   forall chunk addr args src k c (rs: regset) m a m',
   transl_store chunk addr args src k = OK c ->
-  eval_addressing se (rs#RSP) addr (map rs (map preg_of args)) = Some a ->
+  eval_addressing ge (rs#RSP) addr (map rs (map preg_of args)) = Some a ->
   Mem.storev chunk m a (rs (preg_of src)) = Some m' ->
   exists rs',
-     exec_straight init_sp se fn c rs m k rs' m'
+     exec_straight init_sp ge fn c rs m k rs' m'
   /\ forall r, data_preg r = true -> preg_notin r (destroyed_by_store chunk addr) -> rs'#r = rs#r.
 Proof.
   unfold transl_store; intros. monadInv H.
   exploit transl_addressing_mode_correct; eauto. intro EA.
-  assert (EA': eval_addrmode se x rs = a). destruct a; simpl in H1; try discriminate; inv EA; auto.
+  assert (EA': eval_addrmode ge x rs = a). destruct a; simpl in H1; try discriminate; inv EA; auto.
   rewrite <- EA' in H1. destruct chunk; ArgsInv.
 (* int8signed *)
   eapply mk_storebyte_correct; eauto.
-  destruct (eval_addrmode se x rs); simpl; auto. rewrite <- Mem.store_signed_unsigned_8; auto.
+  destruct (eval_addrmode ge x rs); simpl; auto. rewrite <- Mem.store_signed_unsigned_8; auto.
 (* int8unsigned *)
   eapply mk_storebyte_correct; eauto.
 (* int16signed *)
   econstructor; split.
   apply exec_straight_one. simpl. unfold exec_store.
-  replace (Mem.storev Mint16unsigned m (eval_addrmode se x rs) (rs x0))
-     with (Mem.storev Mint16signed m (eval_addrmode se x rs) (rs x0)).
+  replace (Mem.storev Mint16unsigned m (eval_addrmode ge x rs) (rs x0))
+     with (Mem.storev Mint16signed m (eval_addrmode ge x rs) (rs x0)).
   rewrite H1. eauto.
-  destruct (eval_addrmode se x rs); simpl; auto. rewrite Mem.store_signed_unsigned_16; auto.
+  destruct (eval_addrmode ge x rs); simpl; auto. rewrite Mem.store_signed_unsigned_16; auto.
   auto.
   intros. Simplifs.
 (* int16unsigned *)

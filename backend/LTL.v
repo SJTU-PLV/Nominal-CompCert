@@ -166,7 +166,6 @@ Inductive state : Type :=
 
 Section RELSEM.
 
-Variable se: Senv.t.
 Variable ge: genv.
 
 Definition reglist (rs: locset) (rl: list mreg) : list val :=
@@ -206,12 +205,12 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s f sp pc rs m)
         E0 (Block s f sp bb rs m)
   | exec_Lop: forall s f sp op args res bb rs m v rs',
-      eval_operation se sp op (reglist rs args) m = Some v ->
+      eval_operation ge sp op (reglist rs args) m = Some v ->
       rs' = Locmap.set (R res) v (undef_regs (destroyed_by_op op) rs) ->
       step (Block s f sp (Lop op args res :: bb) rs m)
         E0 (Block s f sp bb rs' m)
   | exec_Lload: forall s f sp chunk addr args dst bb rs m a v rs',
-      eval_addressing se sp addr (reglist rs args) = Some a ->
+      eval_addressing ge sp addr (reglist rs args) = Some a ->
       Mem.loadv chunk m a = Some v ->
       rs' = Locmap.set (R dst) v (undef_regs (destroyed_by_load chunk addr) rs) ->
       step (Block s f sp (Lload chunk addr args dst :: bb) rs m)
@@ -225,7 +224,7 @@ Inductive step: state -> trace -> state -> Prop :=
       step (Block s f sp (Lsetstack src sl ofs ty :: bb) rs m)
         E0 (Block s f sp bb rs' m)
   | exec_Lstore: forall s f sp chunk addr args src bb rs m a rs' m',
-      eval_addressing se sp addr (reglist rs args) = Some a ->
+      eval_addressing ge sp addr (reglist rs args) = Some a ->
       Mem.storev chunk m a (rs (R src)) = Some m' ->
       rs' = undef_regs (destroyed_by_store chunk addr) rs ->
       step (Block s f sp (Lstore chunk addr args src :: bb) rs m)
@@ -245,8 +244,8 @@ Inductive step: state -> trace -> state -> Prop :=
       step (Block s f (Vptr sp Ptrofs.zero) (Ltailcall sig ros :: bb) rs m)
         E0 (Callstate s vf rs' m')
   | exec_Lbuiltin: forall s f sp ef args res bb rs m vargs t vres rs' m',
-      eval_builtin_args se rs sp m args vargs ->
-      external_call ef se vargs m t vres m' ->
+      eval_builtin_args ge rs sp m args vargs ->
+      external_call ef ge vargs m t vres m' ->
       rs' = Locmap.setres res vres (undef_regs (destroyed_by_builtin ef) rs) ->
       step (Block s f sp (Lbuiltin ef args res :: bb) rs m)
          t (Block s f sp bb rs' m')
@@ -278,7 +277,7 @@ Inductive step: state -> trace -> state -> Prop :=
   | exec_function_external: forall s vf ef t args res rs m rs' m',
       forall FIND: Genv.find_funct ge vf = Some (External ef),
       args = map (fun p => Locmap.getpair p rs) (loc_arguments (ef_sig ef)) ->
-      external_call ef se args m t res m' ->
+      external_call ef ge args m t res m' ->
       rs' = Locmap.setpair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs) ->
       step (Callstate s vf rs m)
          t (Returnstate s rs' m')

@@ -30,14 +30,14 @@ Definition li_null :=
 Record callconv {li1 li2} :=
   mk_callconv {
     ccworld : Type;
-    match_senv: ccworld -> Senv.t -> Senv.t -> Prop;
+    match_senv: ccworld -> Genv.symtbl -> Genv.symtbl -> Prop;
     match_query: ccworld -> query li1 -> query li2 -> Prop;
     match_reply: ccworld -> reply li1 -> reply li2 -> Prop;
 
     match_senv_public_preserved:
       forall w se1 se2,
         match_senv w se1 se2 ->
-        forall id, Senv.public_symbol se2 id = Senv.public_symbol se1 id;
+        forall id, Genv.public_symbol se2 id = Genv.public_symbol se1 id;
   }.
 
 Arguments callconv: clear implicits.
@@ -159,7 +159,7 @@ Inductive cc_inj_reply (f: meminj): c_reply -> c_reply -> Prop :=
 
 Program Definition cc_inj :=
   {|
-    match_senv := Senv.inject;
+    match_senv := Genv.match_stbls;
     match_query := cc_inj_query;
     match_reply := cc_inj_reply;
   |}.
@@ -193,7 +193,7 @@ Inductive cc_injp_reply: cc_injp_world -> c_reply -> c_reply -> Prop :=
 
 Program Definition cc_injp :=
   {|
-    match_senv w := Senv.inject (injp_inj w);
+    match_senv w := Genv.match_stbls (injp_inj w);
     match_query := cc_injp_query;
     match_reply := cc_injp_reply;
   |}.

@@ -789,8 +789,7 @@ Qed.
 Section STRAIGHTLINE.
 
 Variable init_sp: val.
-Variable se: Senv.t.
-Variable ge: genv.
+Variable ge: Genv.symtbl.
 Variable fn: function.
 
 (** Straight-line code is composed of processor instructions that execute
@@ -804,12 +803,12 @@ Inductive exec_straight: code -> regset -> mem ->
                          code -> regset -> mem -> Prop :=
   | exec_straight_one:
       forall i1 c rs1 m1 rs2 m2,
-      exec_instr init_sp se fn i1 rs1 m1 = Next rs2 m2 ->
+      exec_instr init_sp ge fn i1 rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
       exec_straight (i1 :: c) rs1 m1 c rs2 m2
   | exec_straight_step:
       forall i c rs1 m1 rs2 m2 c' rs3 m3,
-      exec_instr init_sp se fn i rs1 m1 = Next rs2 m2 ->
+      exec_instr init_sp ge fn i rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
       exec_straight c rs2 m2 c' rs3 m3 ->
       exec_straight (i :: c) rs1 m1 c' rs3 m3.
@@ -827,8 +826,8 @@ Qed.
 
 Lemma exec_straight_two:
   forall i1 i2 c rs1 m1 rs2 m2 rs3 m3,
-  exec_instr init_sp se fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr init_sp se fn i2 rs2 m2 = Next rs3 m3 ->
+  exec_instr init_sp ge fn i1 rs1 m1 = Next rs2 m2 ->
+  exec_instr init_sp ge fn i2 rs2 m2 = Next rs3 m3 ->
   rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
   rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
   exec_straight (i1 :: i2 :: c) rs1 m1 c rs3 m3.
@@ -839,9 +838,9 @@ Qed.
 
 Lemma exec_straight_three:
   forall i1 i2 i3 c rs1 m1 rs2 m2 rs3 m3 rs4 m4,
-  exec_instr init_sp se fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr init_sp se fn i2 rs2 m2 = Next rs3 m3 ->
-  exec_instr init_sp se fn i3 rs3 m3 = Next rs4 m4 ->
+  exec_instr init_sp ge fn i1 rs1 m1 = Next rs2 m2 ->
+  exec_instr init_sp ge fn i2 rs2 m2 = Next rs3 m3 ->
+  exec_instr init_sp ge fn i3 rs3 m3 = Next rs4 m4 ->
   rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
   rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
   rs4#PC = Val.offset_ptr rs3#PC Ptrofs.one ->
@@ -851,18 +850,20 @@ Proof.
   eapply exec_straight_two; eauto.
 Qed.
 
+End STRAIGHTLINE.
+
 (** The following lemmas show that straight-line executions
   (predicate [exec_straight]) correspond to correct Asm executions. *)
 
 Lemma exec_straight_steps_1:
-  forall c rs m c' rs' m',
-  exec_straight c rs m c' rs' m' ->
+  forall init_sp (ge: genv) fn c rs m c' rs' m',
+  exec_straight init_sp ge fn c rs m c' rs' m' ->
   list_length_z (fn_code fn) <= Ptrofs.max_unsigned ->
   forall b ofs,
   rs#PC = Vptr b ofs ->
   Genv.find_funct_ptr ge b = Some (Internal fn) ->
   code_tail (Ptrofs.unsigned ofs) (fn_code fn) c ->
-  plus (step init_sp se) ge (State rs m true) E0 (State rs' m' true).
+  plus (step init_sp) ge (State rs m true) E0 (State rs' m' true).
 Proof.
   induction 1; intros.
   apply plus_one.
@@ -879,8 +880,8 @@ Proof.
 Qed.
 
 Lemma exec_straight_steps_2:
-  forall c rs m c' rs' m',
-  exec_straight c rs m c' rs' m' ->
+  forall init_sp (ge: genv) fn c rs m c' rs' m',
+  exec_straight init_sp ge fn c rs m c' rs' m' ->
   list_length_z (fn_code fn) <= Ptrofs.max_unsigned ->
   forall b ofs,
   rs#PC = Vptr b ofs ->
@@ -898,8 +899,6 @@ Proof.
   auto. rewrite H0. rewrite H3. reflexivity. auto.
   apply code_tail_next_int with i; auto.
 Qed.
-
-End STRAIGHTLINE.
 
 (** * Properties of the Mach call stack *)
 

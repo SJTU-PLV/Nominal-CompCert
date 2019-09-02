@@ -289,7 +289,6 @@ Definition blocks_of_env (e: env) : list (block * Z * Z) :=
 
 Section RELSEM.
 
-Variable se: Senv.t.
 Variable ge: genv.
 
 (* Evaluation of the address of a variable:
@@ -394,7 +393,7 @@ Inductive step: state -> trace -> state -> Prop :=
 
   | step_builtin: forall f optid ef bl k e le m vargs t vres m',
       eval_exprlist e le m bl vargs ->
-      external_call ef se vargs m t vres m' ->
+      external_call ef ge vargs m t vres m' ->
       step (State f (Sbuiltin optid ef bl) k e le m)
          t (State f Sskip k e (Cminor.set_optvar optid vres le) m')
 
@@ -462,7 +461,7 @@ Inductive step: state -> trace -> state -> Prop :=
 
   | step_external_function: forall vf ef vargs k m t vres m',
       forall FIND: Genv.find_funct ge vf = Some (External ef),
-      external_call ef se vargs m t vres m' ->
+      external_call ef ge vargs m t vres m' ->
       step (Callstate vf vargs k m)
          t (Returnstate vres k m')
 

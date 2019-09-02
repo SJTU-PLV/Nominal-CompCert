@@ -826,8 +826,8 @@ Qed.
 
 (** Preservation of a global environment by a memory injection *)
 
-Program Definition globalenv_inject (ge1 ge2: Senv.t) (j: meminj) : massert := {|
-  m_pred := fun m => Ple (Genv.genv_next ge2) (Mem.nextblock m) /\ Senv.inject j ge1 ge2;
+Program Definition globalenv_inject (ge1 ge2: Genv.symtbl) (j: meminj) : massert := {|
+  m_pred := fun m => Ple (Genv.genv_next ge2) (Mem.nextblock m) /\ Genv.match_stbls j ge1 ge2;
   m_footprint := fun b ofs => False
 |}.
 Next Obligation.
@@ -838,7 +838,7 @@ Next Obligation.
 Qed.
 
 Lemma globalenv_inject_incr:
-  forall j m0 (ge1 ge2: Senv.t) m j' P,
+  forall j m0 ge1 ge2 m j' P,
   inject_incr j j' ->
   inject_separated j j' m0 m ->
   m |= globalenv_inject ge1 ge2 j ** P ->
@@ -846,7 +846,7 @@ Lemma globalenv_inject_incr:
 Proof.
   intros. destruct H1 as ((D & E) & B & C).
   simpl. intuition auto.
-  eapply Genv.match_genvs_external_call; eauto.
+  eapply Genv.match_stbls_incr; eauto.
   intros b1 b2 delta Hb' Hb2.
   destruct (j b1) as [[? ?]|] eqn:Hb.
   - apply H in Hb. congruence.
@@ -855,7 +855,7 @@ Proof.
 Qed.
 
 Lemma external_call_parallel_rule:
-  forall ef (ge1 ge2: Senv.t) vargs1 m1 t vres1 m1' m2 j P vargs2,
+  forall ef ge1 ge2 vargs1 m1 t vres1 m1' m2 j P vargs2,
   external_call ef ge1 vargs1 m1 t vres1 m1' ->
   m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j ** P ->
   Val.inject_list j vargs1 vargs2 ->
@@ -891,7 +891,7 @@ Proof.
 Qed.
 
 Lemma alloc_parallel_rule_2:
-  forall (ge1 ge2: Senv.t) m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
+  forall ge1 ge2 m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
   m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j ** P ->
   Mem.alloc m1 0 sz1 = (m1', b1) ->
   Mem.alloc m2 0 sz2 = (m2', b2) ->

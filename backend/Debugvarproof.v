@@ -291,20 +291,18 @@ Variable tprog: program.
 
 Hypothesis TRANSF: match_prog prog tprog.
 
-Variable se: Senv.t.
-Let ge := Senv.globalenv prog se.
-Let tge := Senv.globalenv tprog se.
-
-Lemma symbols_preserved:
-  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
-Proof. apply Senv.find_symbol_match_id. Qed.
+Variable se: Genv.symtbl.
+Let ge := Genv.globalenv se prog.
+Let tge := Genv.globalenv se tprog.
 
 Lemma functions_translated:
   forall (v: val) (f: fundef),
   Genv.find_funct ge v = Some f ->
   exists tf,
   Genv.find_funct tge v = Some tf /\ transf_fundef f = OK tf.
-Proof. exact (Senv.find_funct_transf_partial_id TRANSF). Qed.
+Proof.
+  apply (Genv.find_funct_transf_partial_id TRANSF).
+Qed.
 
 Lemma sig_preserved:
   forall f tf,
@@ -332,8 +330,8 @@ Qed.
 
 Lemma eval_add_delta_ranges:
   forall s f sp c rs m before after,
-  star (step se) tge (State s f sp (add_delta_ranges before after c) rs m)
-                  E0 (State s f sp c rs m).
+  star step tge (State s f sp (add_delta_ranges before after c) rs m)
+             E0 (State s f sp c rs m).
 Proof.
   intros. unfold add_delta_ranges.
   destruct (delta_state before after) as [killed born].
@@ -402,9 +400,9 @@ Qed.
 (** The simulation diagram. *)
 
 Theorem transf_step_correct:
-  forall s1 t s2, step se ge s1 t s2 ->
+  forall s1 t s2, step ge s1 t s2 ->
   forall ts1 (MS: match_states s1 ts1),
-  exists ts2, plus (step se) tge ts1 t ts2 /\ match_states s2 ts2.
+  exists ts2, plus step tge ts1 t ts2 /\ match_states s2 ts2.
 Proof.
   induction 1; intros ts1 MS; inv MS; try (inv TRC).
 - (* getstack *)

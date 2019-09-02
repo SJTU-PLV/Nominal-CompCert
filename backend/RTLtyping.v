@@ -827,7 +827,7 @@ Proof.
 Qed.
 
 Lemma wt_exec_Iop:
-  forall (ge: Senv.t) env f sp op args res s rs m v,
+  forall ge env f sp op args res s rs m v,
   wt_instr f env (Iop op args res s) ->
   eval_operation ge sp op rs##args m = Some v ->
   wt_regset env rs ->
@@ -852,9 +852,9 @@ Proof.
 Qed.
 
 Lemma wt_exec_Ibuiltin:
-  forall env f ef (se: Senv.t) args res s vargs m t vres m' rs,
+  forall env f ef ge args res s vargs m t vres m' rs,
   wt_instr f env (Ibuiltin ef args res s) ->
-  external_call ef se vargs m t vres m' ->
+  external_call ef ge vargs m t vres m' ->
   wt_regset env rs ->
   wt_regset env (regmap_setres res vres rs).
 Proof.
@@ -884,11 +884,11 @@ Inductive wt_stackframes: list stackframe -> signature -> Prop :=
 Section SUBJECT_REDUCTION.
 
 Variable p: program.
-Variable se: Senv.t.
+Variable se: Genv.symtbl.
 
 Hypothesis wt_p: wt_program p.
 
-Let ge := Senv.globalenv p se.
+Let ge := Genv.globalenv se p.
 
 Inductive wt_state: state -> Prop :=
   | wt_state_intro:
@@ -920,7 +920,7 @@ Proof.
 Qed.
 
 Lemma subject_reduction:
-  forall st1 t st2, step se ge st1 t st2 ->
+  forall st1 t st2, step ge st1 t st2 ->
   forall (WT: wt_state st1), wt_state st2.
 Proof.
   induction 1; intros; inv WT;
@@ -935,14 +935,14 @@ Proof.
   econstructor; eauto.
   (* Icall *)
   assert (wt_fundef fd).
-    pattern fd. apply Senv.find_funct_prop with p se vf.
+    pattern fd. apply Genv.find_funct_prop with unit se p vf.
     exact wt_p. exact H0.
   econstructor; eauto.
   econstructor; eauto. inv WTI; auto.
   inv WTI. rewrite <- H8. apply wt_regset_list. auto.
   (* Itailcall *)
   assert (wt_fundef fd).
-    pattern fd. apply Senv.find_funct_prop with p se vf.
+    pattern fd. apply Genv.find_funct_prop with unit se p vf.
     exact wt_p. exact H0.
   econstructor; eauto.
   inv WTI. apply wt_stackframes_change_sig with (fn_sig f); auto.
@@ -975,7 +975,7 @@ Lemma wt_initial_state:
 Proof.
   intros. inv H. inv H0. econstructor; eauto.
   constructor.
-  eapply Senv.find_funct_prop; eauto.
+  eapply Genv.find_funct_prop; eauto.
   cbn. eauto.
 Qed.
 

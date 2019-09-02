@@ -384,8 +384,7 @@ Fixpoint label_pos (lbl: label) (pos: Z) (c: code) {struct c} : option Z :=
 *)
 
 Variable init_sp: val.
-Variable se: Senv.t.
-Variable ge: genv.
+Variable ge: Genv.symtbl.
 
 (** Evaluating an addressing mode *)
 
@@ -404,7 +403,7 @@ Definition eval_addrmode32 (a: addrmode) (rs: regset) : val :=
              end)
            (match const with
             | inl ofs => Vint (Int.repr ofs)
-            | inr(id, ofs) => Genv.symbol_address se id ofs
+            | inr(id, ofs) => Genv.symbol_address ge id ofs
             end)).
 
 Definition eval_addrmode64 (a: addrmode) (rs: regset) : val :=
@@ -422,7 +421,7 @@ Definition eval_addrmode64 (a: addrmode) (rs: regset) : val :=
              end)
            (match const with
             | inl ofs => Vlong (Int64.repr ofs)
-            | inr(id, ofs) => Genv.symbol_address se id ofs
+            | inr(id, ofs) => Genv.symbol_address ge id ofs
             end)).
 
 Definition eval_addrmode (a: addrmode) (rs: regset) : val :=
@@ -628,7 +627,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pmovq_ri rd n =>
       Next (nextinstr_nf (rs#rd <- (Vlong n))) m
   | Pmov_rs rd id =>
-      Next (nextinstr_nf (rs#rd <- (Genv.symbol_address se id Ptrofs.zero))) m
+      Next (nextinstr_nf (rs#rd <- (Genv.symbol_address ge id Ptrofs.zero))) m
   | Pmovl_rm rd a =>
       exec_load Mint32 m a rs rd
   | Pmovq_rm rd a =>
@@ -909,7 +908,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pjmp_l lbl =>
       goto_label f lbl rs m
   | Pjmp_s id sg =>
-      Next (rs#PC <- (Genv.symbol_address se id Ptrofs.zero)) m
+      Next (rs#PC <- (Genv.symbol_address ge id Ptrofs.zero)) m
   | Pjmp_r r sg =>
       Next (rs#PC <- (rs r)) m
   | Pjcc cond lbl =>
@@ -934,7 +933,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
       | _ => Stuck
       end
   | Pcall_s id sg =>
-      Next (rs#RA <- (Val.offset_ptr rs#PC Ptrofs.one) #PC <- (Genv.symbol_address se id Ptrofs.zero)) m
+      Next (rs#RA <- (Val.offset_ptr rs#PC Ptrofs.one) #PC <- (Genv.symbol_address ge id Ptrofs.zero)) m
   | Pcall_r r sg =>
       Next (rs#RA <- (Val.offset_ptr rs#PC Ptrofs.one) #PC <- (rs r)) m
   | Pret =>
@@ -1100,43 +1099,43 @@ Definition extcall_arguments
 Definition loc_external_result (sg: signature) : rpair preg :=
   map_rpair preg_of (loc_result sg).
 
+End RELSEM.
+
+Notation Next rs m := (Next' rs m true).
+
 (** Execution of the instruction at [rs#PC]. *)
 
 Inductive state: Type :=
   | State: regset -> mem -> bool -> state.
 
-Inductive step: state -> trace -> state -> Prop :=
+Inductive step (init_sp: val) (ge: genv): state -> trace -> state -> Prop :=
   | exec_step_internal:
       forall b ofs f i rs m rs' m' live,
       rs PC = Vptr b ofs ->
       Genv.find_funct_ptr ge b = Some (Internal f) ->
       find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some i ->
-      exec_instr f i rs m = Next' rs' m' live ->
-      step (State rs m true) E0 (State rs' m' live)
+      exec_instr init_sp ge f i rs m = Next' rs' m' live ->
+      step init_sp ge (State rs m true) E0 (State rs' m' live)
   | exec_step_builtin:
       forall b ofs f ef args res rs m vargs t vres rs' m',
       rs PC = Vptr b ofs ->
       Genv.find_funct_ptr ge b = Some (Internal f) ->
       find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some (Pbuiltin ef args res) ->
-      eval_builtin_args se rs (rs RSP) m args vargs ->
-      external_call ef se vargs m t vres m' ->
+      eval_builtin_args ge rs (rs RSP) m args vargs ->
+      external_call ef ge vargs m t vres m' ->
       rs' = nextinstr_nf
              (set_res res vres
                (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
-      step (State rs m true) t (State rs' m' true)
+      step init_sp ge (State rs m true) t (State rs' m' true)
   | exec_step_external:
       forall b ef args res rs m t rs' m',
       rs PC = Vptr b Ptrofs.zero ->
       Genv.find_funct_ptr ge b = Some (External ef) ->
       extcall_arguments rs m (ef_sig ef) args ->
-      external_call ef se args m t res m' ->
+      external_call ef ge args m t res m' ->
       rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs)) #PC <- (rs RA) ->
       let live := if Val.eq rs#SP init_sp then false else true in
-      step (State rs m true) t (State rs' m' live).
-
-End RELSEM.
-
-Notation Next rs m := (Next' rs m true).
+      step init_sp ge (State rs m true) t (State rs' m' live).
 
 (** Since Asm does not have an explicit stack, the queries and replies
   for assembly modules simply pass the current state across modules. *)
@@ -1183,8 +1182,8 @@ Inductive final_state: state -> reply li_asm -> Prop :=
 Definition semantics (p: program): open_sem li_asm li_asm :=
   {|
     activate se q :=
-      let ge := Senv.globalenv p se in
-      Semantics li_asm (step (fst q SP) se)
+      let ge := Genv.globalenv se p in
+      Semantics li_asm (step (fst q SP))
         (initial_state ge q)
         (at_external ge)
         (after_external (fst q SP))

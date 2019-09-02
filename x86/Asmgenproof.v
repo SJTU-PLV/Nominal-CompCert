@@ -62,13 +62,9 @@ Variable prog: Mach.program.
 Variable tprog: Asm.program.
 Hypothesis TRANSF: match_prog prog tprog.
 
-Variable se: Senv.t.
-Let ge := Senv.globalenv prog se.
-Let tge := Senv.globalenv tprog se.
-
-Lemma symbols_preserved:
-  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
-Proof. apply Senv.find_symbol_match_id. Qed.
+Variable se: Genv.symtbl.
+Let ge := Genv.globalenv se prog.
+Let tge := Genv.globalenv se tprog.
 
 Lemma functions_translated:
   forall vf f,
@@ -78,7 +74,7 @@ Lemma functions_translated:
 Proof.
   intros.
   destruct vf; try discriminate. simpl in H. destruct Ptrofs.eq_dec; try discriminate; subst.
-  edestruct @Senv.find_funct_transf_partial_id with (v := Vptr b Ptrofs.zero) as (? & ? & ?); eauto.
+  edestruct @Genv.find_funct_transf_partial_id with (v := Vptr b Ptrofs.zero) as (? & ? & ?); eauto.
   - cbn. destruct Ptrofs.eq_dec; eauto. congruence.
   - cbn in *. destruct Ptrofs.eq_dec; try discriminate. eauto.
 Qed.
@@ -110,8 +106,8 @@ Qed.
 Lemma exec_straight_exec:
   forall fb f c ep tf tc c' rs m rs' m',
   transl_code_at_pc ge (rs PC) fb f c ep tf tc ->
-  exec_straight (ag_sp w) se tf tc rs m c' rs' m' ->
-  plus (step (ag_sp w) se) tge (State rs m true) E0 (State rs' m' true).
+  exec_straight (ag_sp w) tge tf tc rs m c' rs' m' ->
+  plus (step (ag_sp w)) tge (State rs m true) E0 (State rs' m' true).
 Proof.
   intros. inv H.
   eapply exec_straight_steps_1; eauto.
@@ -123,7 +119,7 @@ Lemma exec_straight_at:
   forall fb f c ep tf tc c' ep' tc' rs m rs' m',
   transl_code_at_pc ge (rs PC) fb f c ep tf tc ->
   transl_code f c' ep' = OK tc' ->
-  exec_straight (ag_sp w) se tf tc rs m tc' rs' m' ->
+  exec_straight (ag_sp w) tge tf tc rs m tc' rs' m' ->
   transl_code_at_pc ge (rs' PC) fb f c' ep' tf tc'.
 Proof.
   intros. inv H.
@@ -435,7 +431,7 @@ Inductive match_states: Mach.state -> Asm.state -> Prop :=
                    (Asm.State rs m' live).
 
 Lemma exec_instr_nextblock f i rs m rs' m':
-  exec_instr (ag_sp w) se f i rs m = Next rs' m' ->
+  exec_instr (ag_sp w) tge f i rs m = Next rs' m' ->
   Ple (Mem.nextblock m) (Mem.nextblock m').
 Proof.
   destruct i; simpl;
@@ -459,7 +455,7 @@ Proof.
 Qed.
 
 Lemma exec_straight_nextblock tf c rs m k rs' m':
-  exec_straight (ag_sp w) se tf c rs m k rs' m' ->
+  exec_straight (ag_sp w) tge tf c rs m k rs' m' ->
   Ple (Mem.nextblock m) (Mem.nextblock m').
 Proof.
   induction 1; eauto using exec_instr_nextblock.
@@ -487,11 +483,11 @@ Lemma exec_straight_steps:
   Ple (ag_nb w) (Mem.nextblock m1') ->
   (forall k c (TR: transl_instr f i ep k = OK c),
    exists rs2,
-       exec_straight (ag_sp w) se tf c rs1 m1' k rs2 m2'
+       exec_straight (ag_sp w) tge tf c rs1 m1' k rs2 m2'
     /\ agree ms2 sp rs2
     /\ (it1_is_parent ep i = true -> rs2#RAX = parent_sp s)) ->
   exists st',
-  plus (step (ag_sp w) se) tge (State rs1 m1' true) E0 st' /\
+  plus (step (ag_sp w)) tge (State rs1 m1' true) E0 st' /\
   match_states (Mach.State s (Vptr fb Ptrofs.zero) sp c ms2 m2) st'.
 Proof.
   intros. inversion H2. subst. monadInv H10.
@@ -517,11 +513,11 @@ Lemma exec_straight_steps_goto:
   Ple (ag_nb w) (Mem.nextblock m1') ->
   (forall k c (TR: transl_instr f i ep k = OK c),
    exists jmp, exists k', exists rs2,
-       exec_straight (ag_sp w) se tf c rs1 m1' (jmp :: k') rs2 m2'
+       exec_straight (ag_sp w) tge tf c rs1 m1' (jmp :: k') rs2 m2'
     /\ agree ms2 sp rs2
-    /\ exec_instr (ag_sp w) se tf jmp rs2 m2' = goto_label tf lbl rs2 m2') ->
+    /\ exec_instr (ag_sp w) tge tf jmp rs2 m2' = goto_label tf lbl rs2 m2') ->
   exists st',
-  plus (step (ag_sp w) se) tge (State rs1 m1' true) E0 st' /\
+  plus (step (ag_sp w)) tge (State rs1 m1' true) E0 st' /\
   match_states (Mach.State s (Vptr fb Ptrofs.zero) sp c' ms2 m2) st'.
 Proof.
   intros. inversion H3. subst. monadInv H12.
@@ -576,9 +572,9 @@ Definition measure (s: Mach.state) : nat :=
 (** This is the simulation diagram.  We prove it by case analysis on the Mach transition. *)
 
 Theorem step_simulation:
-  forall S1 t S2, Mach.step return_address_offset se ge S1 t S2 ->
+  forall S1 t S2, Mach.step return_address_offset ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'),
-  (exists S2', plus (step (ag_sp w) se) tge S1' t S2' /\ match_states S2 S2')
+  (exists S2', plus (step (ag_sp w)) tge S1' t S2' /\ match_states S2 S2')
   \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 S1')%nat.
 Proof.
   induction 1; intros; inv MS.

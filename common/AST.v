@@ -644,6 +644,19 @@ Definition erase_program (p: program F V) : program unit unit :=
     p.(prog_public)
     p.(prog_main).
 
+Lemma erase_program_defmap p id:
+  (prog_defmap (erase_program p)) ! id =
+  option_map erase_globdef (prog_defmap p) ! id.
+Proof.
+  unfold prog_defmap, PTree_Properties.of_list. cbn.
+  pattern (prog_defs p). eapply rev_ind.
+  - rewrite !PTree.gempty. reflexivity.
+  - intros [i g] defs IHdefs. rewrite !map_app, !fold_left_app. cbn.
+    destruct (peq id i).
+    + subst. rewrite !PTree.gss. reflexivity.
+    + rewrite !PTree.gso by auto. apply IHdefs.
+Qed.
+
 End ERASE_PROGRAM.
 
 (** * Arguments and results to builtin functions *)

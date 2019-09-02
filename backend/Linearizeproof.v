@@ -37,21 +37,18 @@ Variable tprog: Linear.program.
 
 Hypothesis TRANSF: match_prog prog tprog.
 
-Variable se: Senv.t.
-Let ge := Senv.globalenv prog se.
-Let tge := Senv.globalenv tprog se.
+Variable se: Genv.symtbl.
+Let ge := Genv.globalenv se prog.
+Let tge := Genv.globalenv se tprog.
 
 Lemma functions_translated:
   forall v f,
   Genv.find_funct ge v = Some f ->
   exists tf,
   Genv.find_funct tge v = Some tf /\ transf_fundef f = OK tf.
-Proof. exact (Senv.find_funct_transf_partial_id TRANSF). Qed.
-
-Lemma symbols_preserved:
-  forall id,
-  Genv.find_symbol tge id = Genv.find_symbol ge id.
-Proof. eauto using Senv.find_symbol_transf_partial_id. Qed.
+Proof.
+  apply (Genv.find_funct_transf_partial_id TRANSF).
+Qed.
 
 Lemma sig_preserved:
   forall f tf,
@@ -229,8 +226,8 @@ Lemma starts_with_correct:
   unique_labels c2 ->
   starts_with lbl c1 = true ->
   find_label lbl c2 = Some c3 ->
-  plus (step se) tge (State s f sp c1 ls m)
-                  E0 (State s f sp c3 ls m).
+  plus step tge (State s f sp c1 ls m)
+             E0 (State s f sp c3 ls m).
 Proof.
   induction c1.
   simpl; intros; discriminate.
@@ -433,8 +430,8 @@ Lemma add_branch_correct:
   transf_function f = OK tf ->
   is_tail k tf.(fn_code) ->
   find_label lbl tf.(fn_code) = Some c ->
-  plus (step se) tge (State s tf sp (add_branch lbl k) ls m)
-                  E0 (State s tf sp c ls m).
+  plus step tge (State s tf sp (add_branch lbl k) ls m)
+             E0 (State s tf sp c ls m).
 Proof.
   intros. unfold add_branch.
   caseEq (starts_with lbl k); intro SW.
@@ -535,9 +532,9 @@ Proof.
 Qed.
 
 Theorem transf_step_correct:
-  forall s1 t s2, LTL.step se ge s1 t s2 ->
+  forall s1 t s2, LTL.step ge s1 t s2 ->
   forall s1' (MS: match_states s1 s1'),
-  (exists s2', plus (Linear.step se) tge s1' t s2' /\ match_states s2 s2')
+  (exists s2', plus Linear.step tge s1' t s2' /\ match_states s2 s2')
   \/ (measure s2 < measure s1 /\ t = E0 /\ match_states s2 s1')%nat.
 Proof.
   induction 1; intros; try (inv MS).
