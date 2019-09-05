@@ -68,6 +68,7 @@ COMMON=Errors.v AST.v Linking.v \
   Separation.v \
   LanguageInterface.v \
   SmallstepLinking.v \
+  Invariant.v \
 
 # Back-end modules (in backend/, $(ARCH)/)
 
