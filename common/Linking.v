@@ -444,6 +444,18 @@ Proof.
   intros. apply H.
 Qed.
 
+Lemma match_program_skel:
+  forall ctx p1 p2, match_program_gen ctx p1 p2 ->
+  erase_program p1 = erase_program p2.
+Proof.
+  intros ctx [defs1 main1 pub1] [defs2 main2 pub2] (DEFS & MAIN & PUB).
+  unfold erase_program. cbn in *. f_equal; auto. clear - DEFS.
+  induction DEFS as [ | [id1 g1] l1 [id2 g2] l2 H H' IH']; cbn; f_equal; auto.
+  inv H; cbn in *; subst. f_equal; auto.
+  destruct H1; cbn; auto.
+  destruct H; cbn. f_equal.
+Qed.
+
 End MATCH_PROGRAM_GENERIC.
 
 (** In many cases, the context for [match_program_gen] is the source program or

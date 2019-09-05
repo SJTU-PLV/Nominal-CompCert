@@ -1102,6 +1102,7 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_asmgen cc_asmgen (Mach.semantics return_address_offset prog) (Asm.semantics tprog).
 Proof.
-  intros MATCH w se tse q1 q2 Hse Hskel [ ] Hq.
+  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
+  intros w se tse q1 q2 Hse Hskel [ ] Hq.
   eapply transf_program_fsim; eauto.
 Qed.

@@ -59,7 +59,6 @@ Solve All Obligations with
 
 (** ** Composition *)
 
-(*
 Program Definition cc_compose {li1 li2 li3} (cc12: callconv li1 li2) (cc23: callconv li2 li3) :=
   {|
     ccworld := ccworld cc12 * ccworld cc23;
@@ -80,15 +79,8 @@ Next Obligation.
   intros li1 li2 li3 cc12 cc23 w se1 se3 (se2 & H12 & H23) id.
   etransitivity; eauto using match_senv_public_preserved.
 Qed.
-Next Obligation.
-  intros until w. intros se1 se3 id (se2 & Hse12 & Hse23).
-  rewrite @match_senv_kept by eauto.
-  rewrite @match_senv_kept by eauto.
-  tauto.
-Qed.
 
 Infix "@" := cc_compose (at level 30, right associativity) : cc_scope.
-*)
 
 (** * C-like languages *)
 

@@ -204,7 +204,7 @@ Section FSIM.
   Context {sk1 sk2: AST.program unit unit}.
   Context {w se1 se2 q1 q2}
     (Hsk1: forall i, Genv.valid_for (skel (L1 i)) se1)
-    (Hsk: forall i, match_skel se1 se2 (skel (L1 i)) (skel (L2 i)))
+    (*(Hsk: forall i, match_skel se1 se2 (skel (L1 i)) (skel (L2 i)))*)
     (Hse: match_senv cc w se1 se2)
     (Hq: match_query cc w q1 q2).
 
@@ -261,7 +261,7 @@ Section FSIM.
     - (* cross-component call *)
       inv H5; subst_dep. clear ms H2 ms1 H10.
       edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hrx); eauto.
-      edestruct (HL j wx) as [indj ordj msj Hj]; eauto. admit. (* match_senv *)
+      edestruct (proj2 (HL j) wx) as [indj ordj msj Hj]; eauto. admit. (* match_senv *)
       edestruct @fsim_match_initial_states as (idx' & s2' & Hs2' & Hs'); eauto.
       eexists (mkind ordj (fsim_order_wf Hj) idx'), _. split.
       + left. apply plus_one. eapply step_push; eauto. admit. (* valid_query *)
@@ -280,7 +280,7 @@ Section FSIM.
     exists idx s2, initial_state L2 se2 q2 s2 /\ match_states idx s1 s2.
   Proof.
     intros _ [i s1 Hq1 Hs1].
-    destruct (HL i w se1 se2 q1 q2 (Hsk1 i) (Hsk i) Hse Hq) as [ind ord ms Hms].
+    destruct (proj2 (HL i) w se1 se2 q1 q2 (Hsk1 i) Logic.I Hse Hq) as [ind ord ms Hms].
     edestruct @fsim_match_initial_states as (idx & s2 & Hs2 & Hs); eauto.
     exists (mkind ord (fsim_order_wf Hms) idx), (st L2 se2 i q2 s2 :: nil).
     split; econstructor; eauto.
@@ -364,9 +364,11 @@ Proof.
   intros Ha Hb H1 H2. cbn in *. unfold option_map in *.
   destruct (link (skel L1a) (skel L1b)) as [sk1|] eqn:Hsk1; try discriminate. inv H1.
   destruct (link (skel L2a) (skel L2b)) as [sk2|] eqn:Hsk2; try discriminate. inv H2.
-  intros w se1 se2 q1 q2. simpl. intros Hse1 Hsk Hse Hq.
+  split.
+* destruct Ha, Hb. cbn. congruence.
+* intros w se1 se2 q1 q2. simpl. intros Hse1 Hsk Hse Hq.
   econstructor. eapply semantics_simulation; eauto.
   - intros [|]; auto.
   - admit. (* Senv.valid_for vs. skeleton linking *)
-  - admit. (* match_skel vs. skeleton linking *)
+  (*- admit. (* match_skel vs. skeleton linking *)*)
 Admitted.

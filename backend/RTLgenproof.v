@@ -1582,7 +1582,8 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_ext cc_ext (CminorSel.semantics prog) (RTL.semantics tprog).
 Proof.
-  intros MATCH [ ] se _ q1 q2 _ _ [ ] Hq.
+  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
+  intros [ ] se _ q1 q2 _ _ [ ] Hq.
   eapply forward_simulation_star_wf with (order := lt_state); intros.
   eapply transl_initial_states; eauto.
   eapply transl_final_states; eauto.

@@ -2528,7 +2528,8 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_alloc cc_alloc (RTL.semantics prog) (LTL.semantics tprog).
 Proof.
-  intros MATCH [sg rs] se _ q1 q2 _ _ [ ] Hq.
+  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
+  intros [sg rs] se _ q1 q2 _ _ [ ] Hq.
   set (ms := fun s s' => wt_state prog se s /\ match_states prog tprog se sg rs s s').
   eapply forward_simulation_plus with (match_states := ms); cbn in *.
 - intros. exploit initial_states_simulation; eauto. intros [st2 [A B]].

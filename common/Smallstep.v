@@ -812,16 +812,11 @@ End FSIM.
 Arguments fsim_properties {_ _} _ {_ _} _ L1 L2 index order match_states.
 Arguments Forward_simulation {_ _ cc _ _ match_res L1 L2 index} order match_states props.
 
-Definition match_skel (se1 se2: Genv.symtbl) (sk1 sk2: AST.program unit unit) :=
-  forall id,
-    AST.has_symbol sk1 id ->
-    (Genv.has_symbol se1 id /\
-     Genv.has_symbol se2 id <-> AST.has_symbol sk2 id).
-
 Definition open_fsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
+  skel L1 = skel L2 /\
   forall (w: ccworld ccB) (se1 se2: Genv.symtbl) (q1: query liB1) (q2: query liB2),
     Genv.valid_for (skel L1) se1 ->
-    match_skel se1 se2 (skel L1) (skel L2) ->
+    True ->
     match_senv ccB w se1 se2 ->
     match_query ccB w q1 q2 ->
     forward_simulation ccA (match_reply ccB w) (activate L1 se1 q1) (activate L2 se2 q2).
@@ -832,7 +827,6 @@ Definition closed_fsim (L1 L2: closed_sem) :=
 
 (** ** Composing two forward simulations *)
 
-(*
 Section COMPOSE_FORWARD_SIMULATIONS.
 
 Context {li1 li2 li3} {cc12: callconv li1 li2} {cc23: callconv li2 li3}.
@@ -900,10 +894,12 @@ Lemma compose_open_fsim:
     open_fsim ccA23 ccB23 L2 L3 ->
     open_fsim (ccA12 @ ccA23) (ccB12 @ ccB23) L1 L3.
 Proof.
-  intros until L3.
-  intros H12 H23 w se1 se3 q1 q3 (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
-  red in H12, H23. eapply compose_forward_simulations; eauto.
-Qed.
+  intros until L3. intros [Hsk12 H12] [Hsk23 H23].
+  split. etransitivity; eauto.
+  intros w se1 se3 q1 q3 Hse1 _ (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
+  assert (Genv.valid_for (skel L2) se2) by admit. (* valid_for vs. match_senv *)
+  eapply compose_forward_simulations; eauto.
+Admitted.
 
 (** After we prove cc_id @ cc_id ≡ cc_id and that forward simulations
   are monotonic with respect to callconv refinement, we will be able
@@ -917,7 +913,6 @@ Proof.
   - admit. (* eapply compose_forward_simulations; eauto. *)
   - etransitivity; eauto.
 Abort.
-*)
 
 (** * Receptiveness and determinacy *)
 
@@ -1252,7 +1247,6 @@ Arguments Backward_simulation {_ _ cc _ _ match_res L1 L2 index} order match_sta
 Definition open_bsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
   forall (w: ccworld ccB) (se1 se2: Genv.symtbl) (q1: query liB1) (q2: query liB2),
     Genv.valid_for (skel L1) se1 ->
-    match_skel se1 se2 (skel L1) (skel L2) ->
     match_senv ccB w se1 se2 ->
     match_query ccB w q1 q2 ->
     backward_simulation ccA (match_reply ccB w) (L1 se1 q1) (L2 se2 q2).
@@ -1800,7 +1794,7 @@ Lemma forward_to_backward_open_sim:
     open_determinate L2 ->
     open_bsim ccA ccB L1 L2.
 Proof.
-  intros until L2. intros H12 H1 H2 w se1 se2 q1 q2 Hse1 Hsk Hse Hq.
+  intros until L2. intros [Hsk H12] H1 H2 w se1 se2 q1 q2 Hse1 Hse Hq.
   eapply forward_to_backward_simulation; eauto.
   eapply match_senv_public_preserved; eauto.
 Qed.

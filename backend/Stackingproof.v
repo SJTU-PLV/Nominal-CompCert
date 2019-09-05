@@ -2441,6 +2441,7 @@ Theorem transf_program_correct rao prog tprog:
    exists ofs, rao f c ofs) ->
   open_fsim cc_stacking cc_stacking (Linear.semantics prog) (Mach.semantics rao tprog).
 Proof.
-  intros PROG w se1 se2 q1 q2 Hse1 Hsk Hse Hq.
+  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
+  intros w se1 se2 q1 q2 Hse1 Hsk Hse Hq.
   eapply transf_program_fsim; eauto.
 Qed.

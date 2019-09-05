@@ -2255,7 +2255,8 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_injp cc_inj (semantics1 prog) (semantics2 tprog).
 Proof.
-  intros MATCH w se1 se2 q1 q2 Hse1 SKEL Hse Hq.
+  intros MATCH. split; [apply proj1, match_program_skel in MATCH; auto | ].
+  intros w se1 se2 q1 q2 Hse1 SKEL Hse Hq.
   eapply forward_simulation_plus.
   apply initial_states_simulation; eauto.
   apply final_states_simulation; eauto.

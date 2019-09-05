@@ -591,7 +591,8 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_ext cc_ext (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
-  intros MATCH [ ] se _ q1 q2 Hse _  [ ] Hq.
+  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
+  intros [ ] se _ q1 q2 Hse _  [ ] Hq.
   eapply forward_simulation_opt with (measure := measure); eauto; intros.
   eapply transf_initial_states; eauto.
   eapply transf_final_states; eauto.
