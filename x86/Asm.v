@@ -376,15 +376,21 @@ Fixpoint label_pos (lbl: label) (pos: Z) (c: code) {struct c} : option Z :=
 
 (** The semantics is parametrized over the value of the stack pointer
     at module entry, which controls the behavior of the [Pret]
-    instruction.  When [RSP <> init_sp], we interpret [Pret] as a
+    instruction.  When [RSP <> init_nb], we interpret [Pret] as a
     usual, internal return and jump to the location pointed to by
-    [RA]. However, when [RSP = init_sp], we intepret [Pret] as a
+    [RA]. However, when [RSP = init_nb], we intepret [Pret] as a
     top-level return to the environment, expressed as a final state
     rather than a step.
 *)
 
-Variable init_sp: val.
+Variable init_nb: block.
 Variable ge: Genv.symtbl.
+
+Definition inner_sp (sp: val) :=
+  match sp with
+    | Vptr sb _ => if plt sb init_nb then false else true
+    | _ => false
+  end.
 
 (** Evaluating an addressing mode *)
 
@@ -937,7 +943,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pcall_r r sg =>
       Next (rs#RA <- (Val.offset_ptr rs#PC Ptrofs.one) #PC <- (rs r)) m
   | Pret =>
-      Next' (rs#PC <- (rs#RA)) m (if Val.eq rs#SP init_sp then false else true)
+      Next' (rs#PC <- (rs#RA)) m (inner_sp rs#SP)
   (** Saving and restoring registers *)
   | Pmov_rm_a rd a =>
       exec_load (if Archi.ptr64 then Many64 else Many32) m a rs rd
@@ -1108,14 +1114,14 @@ Notation Next rs m := (Next' rs m true).
 Inductive state: Type :=
   | State: regset -> mem -> bool -> state.
 
-Inductive step (init_sp: val) (ge: genv): state -> trace -> state -> Prop :=
+Inductive step (init_nb: block) (ge: genv): state -> trace -> state -> Prop :=
   | exec_step_internal:
       forall b ofs f i rs m rs' m' live,
       rs PC = Vptr b ofs ->
       Genv.find_funct_ptr ge b = Some (Internal f) ->
       find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some i ->
-      exec_instr init_sp ge f i rs m = Next' rs' m' live ->
-      step init_sp ge (State rs m true) E0 (State rs' m' live)
+      exec_instr init_nb ge f i rs m = Next' rs' m' live ->
+      step init_nb ge (State rs m true) E0 (State rs' m' live)
   | exec_step_builtin:
       forall b ofs f ef args res rs m vargs t vres rs' m',
       rs PC = Vptr b ofs ->
@@ -1126,7 +1132,7 @@ Inductive step (init_sp: val) (ge: genv): state -> trace -> state -> Prop :=
       rs' = nextinstr_nf
              (set_res res vres
                (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
-      step init_sp ge (State rs m true) t (State rs' m' true)
+      step init_nb ge (State rs m true) t (State rs' m' true)
   | exec_step_external:
       forall b ef args res rs m t rs' m',
       rs PC = Vptr b Ptrofs.zero ->
@@ -1134,8 +1140,7 @@ Inductive step (init_sp: val) (ge: genv): state -> trace -> state -> Prop :=
       extcall_arguments rs m (ef_sig ef) args ->
       external_call ef ge args m t res m' ->
       rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs)) #PC <- (rs RA) ->
-      let live := if Val.eq rs#SP init_sp then false else true in
-      step init_sp ge (State rs m true) t (State rs' m' live).
+      step init_nb ge (State rs m true) t (State rs' m' (inner_sp init_nb rs#SP)).
 
 (** Since Asm does not have an explicit stack, the queries and replies
   for assembly modules simply pass the current state across modules. *)
@@ -1170,10 +1175,9 @@ Inductive at_external (ge: genv): state -> query li_asm -> Prop :=
       Genv.find_funct ge rs#PC = Some (External (EF_external id sg)) ->
       at_external ge (State rs m true) (rs, m).
 
-Inductive after_external init_sp (st: state): reply li_asm -> state -> Prop :=
+Inductive after_external init_nb (st: state): reply li_asm -> state -> Prop :=
   | after_external_intro (rs': regset) m':
-      let live := if Val.eq rs'#SP init_sp then false else true in
-      after_external init_sp st (rs', m') (State rs' m' live).
+      after_external init_nb st (rs', m') (State rs' m' (inner_sp init_nb rs'#SP)).
 
 Inductive final_state: state -> reply li_asm -> Prop :=
   | final_state_intro rs m:
@@ -1183,10 +1187,10 @@ Definition semantics (p: program): open_sem li_asm li_asm :=
   {|
     activate se q :=
       let ge := Genv.globalenv se p in
-      Semantics li_asm (step (fst q SP))
+      Semantics li_asm (step (Mem.nextblock (snd q)))
         (initial_state ge q)
         (at_external ge)
-        (after_external (fst q SP))
+        (after_external (Mem.nextblock (snd q)))
         final_state ge;
     skel :=
       erase_program p;

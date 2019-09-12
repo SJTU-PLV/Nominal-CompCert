@@ -28,6 +28,7 @@ Require Import Mach.
 Require Import Asm.
 Require Import Asmgen.
 Require Import Conventions.
+Require Import LanguageInterface.
 
 (** * Processor registers and register states *)
 
@@ -788,7 +789,7 @@ Qed.
 
 Section STRAIGHTLINE.
 
-Variable init_sp: val.
+Variable init_nb: block.
 Variable ge: Genv.symtbl.
 Variable fn: function.
 
@@ -803,12 +804,12 @@ Inductive exec_straight: code -> regset -> mem ->
                          code -> regset -> mem -> Prop :=
   | exec_straight_one:
       forall i1 c rs1 m1 rs2 m2,
-      exec_instr init_sp ge fn i1 rs1 m1 = Next rs2 m2 ->
+      exec_instr init_nb ge fn i1 rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
       exec_straight (i1 :: c) rs1 m1 c rs2 m2
   | exec_straight_step:
       forall i c rs1 m1 rs2 m2 c' rs3 m3,
-      exec_instr init_sp ge fn i rs1 m1 = Next rs2 m2 ->
+      exec_instr init_nb ge fn i rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
       exec_straight c rs2 m2 c' rs3 m3 ->
       exec_straight (i :: c) rs1 m1 c' rs3 m3.
@@ -826,8 +827,8 @@ Qed.
 
 Lemma exec_straight_two:
   forall i1 i2 c rs1 m1 rs2 m2 rs3 m3,
-  exec_instr init_sp ge fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr init_sp ge fn i2 rs2 m2 = Next rs3 m3 ->
+  exec_instr init_nb ge fn i1 rs1 m1 = Next rs2 m2 ->
+  exec_instr init_nb ge fn i2 rs2 m2 = Next rs3 m3 ->
   rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
   rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
   exec_straight (i1 :: i2 :: c) rs1 m1 c rs3 m3.
@@ -838,9 +839,9 @@ Qed.
 
 Lemma exec_straight_three:
   forall i1 i2 i3 c rs1 m1 rs2 m2 rs3 m3 rs4 m4,
-  exec_instr init_sp ge fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr init_sp ge fn i2 rs2 m2 = Next rs3 m3 ->
-  exec_instr init_sp ge fn i3 rs3 m3 = Next rs4 m4 ->
+  exec_instr init_nb ge fn i1 rs1 m1 = Next rs2 m2 ->
+  exec_instr init_nb ge fn i2 rs2 m2 = Next rs3 m3 ->
+  exec_instr init_nb ge fn i3 rs3 m3 = Next rs4 m4 ->
   rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
   rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
   rs4#PC = Val.offset_ptr rs3#PC Ptrofs.one ->
@@ -856,14 +857,14 @@ End STRAIGHTLINE.
   (predicate [exec_straight]) correspond to correct Asm executions. *)
 
 Lemma exec_straight_steps_1:
-  forall init_sp (ge: genv) fn c rs m c' rs' m',
-  exec_straight init_sp ge fn c rs m c' rs' m' ->
+  forall init_nb (ge: genv) fn c rs m c' rs' m',
+  exec_straight init_nb ge fn c rs m c' rs' m' ->
   list_length_z (fn_code fn) <= Ptrofs.max_unsigned ->
   forall b ofs,
   rs#PC = Vptr b ofs ->
   Genv.find_funct_ptr ge b = Some (Internal fn) ->
   code_tail (Ptrofs.unsigned ofs) (fn_code fn) c ->
-  plus (step init_sp) ge (State rs m true) E0 (State rs' m' true).
+  plus (step init_nb) ge (State rs m true) E0 (State rs' m' true).
 Proof.
   induction 1; intros.
   apply plus_one.
@@ -880,8 +881,8 @@ Proof.
 Qed.
 
 Lemma exec_straight_steps_2:
-  forall init_sp (ge: genv) fn c rs m c' rs' m',
-  exec_straight init_sp ge fn c rs m c' rs' m' ->
+  forall init_nb (ge: genv) fn c rs m c' rs' m',
+  exec_straight init_nb ge fn c rs m c' rs' m' ->
   list_length_z (fn_code fn) <= Ptrofs.max_unsigned ->
   forall b ofs,
   rs#PC = Vptr b ofs ->
@@ -900,13 +901,43 @@ Proof.
   apply code_tail_next_int with i; auto.
 Qed.
 
+(** * Calling convention *)
+
+Record cc_asmgen_world :=
+  asmgenw {
+    ag_sp: val;
+    ag_ra: val;
+    ag_nb: block;
+  }.
+
+Inductive cc_asmgen_mq: _ -> mach_query -> query li_asm -> Prop :=
+  | cc_asmgen_mq_intro rs1 m1 rs2 m2 sp:
+      valid_blockv (Mem.nextblock m2) sp ->
+      rs2#RA <> Vundef ->
+      agree rs1 sp rs2 ->
+      Mem.extends m1 m2 ->
+      cc_asmgen_mq (asmgenw sp rs2#RA (Mem.nextblock m2)) (mq rs2#PC sp rs2#RA rs1 m1) (rs2, m2).
+
+Definition cc_asmgen_mr: _ -> reply li_mach -> reply li_asm -> _ :=
+  fun '(asmgenw sp ra nb) '(mr rs1' m1') '(rs2', m2') =>
+    rs2'#PC = ra /\
+    agree rs1' sp rs2' /\
+    Mem.extends m1' m2' /\
+    Pos.le nb (Mem.nextblock m2').
+
+Program Definition cc_asmgen: callconv li_mach li_asm :=
+  {|
+    match_senv w := eq;
+    match_query := cc_asmgen_mq;
+    match_reply := cc_asmgen_mr;
+  |}.
+
 (** * Properties of the Mach call stack *)
 
 Section MATCH_STACK.
 
-Variable init_sp: val.
-Variable init_ra: val.
 Variable ge: Mach.genv.
+Variable w: cc_asmgen_world.
 
 (** We maintain the invariant that successive stack frames have
   increasing block identifiers. This allows us to prove that a new
@@ -919,72 +950,67 @@ Inductive block_lt: val -> val -> Prop :=
       Pos.lt b1 b2 ->
       block_lt (Vptr b1 ofs1) (Vptr b2 ofs2).
 
-Inductive match_stack: list Mach.stackframe -> Prop :=
+Inductive match_stack (bound: block): list Mach.stackframe -> Prop :=
   | match_stack_nil:
-      init_sp <> Vundef ->
-      init_ra <> Vundef ->
-      match_stack (Stackbase init_sp init_ra :: nil)
+      ag_sp w <> Vundef ->
+      ag_ra w <> Vundef ->
+      valid_blockv (ag_nb w) (ag_sp w) ->
+      Ple (ag_nb w) bound ->
+      match_stack bound (Stackbase (ag_sp w) (ag_ra w) :: nil)
   | match_stack_cons: forall fb sp ra c s f tf tc,
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       transl_code_at_pc ge ra fb f c false tf tc ->
-      block_lt (parent_sp s) sp ->
-      match_stack s ->
-      match_stack (Stackframe (Vptr fb Ptrofs.zero) sp ra c :: s).
+      inner_sp (ag_nb w) sp = true ->
+      valid_blockv bound sp ->
+      match_stack bound s ->
+      match_stack bound (Stackframe (Vptr fb Ptrofs.zero) sp ra c :: s).
 
-Lemma init_sp_block_lt s sp:
-  match_stack s ->
-  block_lt (parent_sp s) sp ->
-  block_lt init_sp sp.
+Lemma inner_sp_def p1 p2:
+  inner_sp p1 p2 = true ->
+  p2 <> Vundef.
 Proof.
-  intros Hs. revert sp.
-  induction Hs; eauto.
-  simpl. destruct 1.
-  eapply IHHs. inv H1.
-  constructor. xomega.
+  destruct p1, p2; cbn; congruence.
 Qed.
 
-Lemma block_lt_neq p1 p2:
-  block_lt p1 p2 ->
-  p1 <> p2.
+Lemma parent_sp_def: forall b s, match_stack b s -> parent_sp s <> Vundef.
 Proof.
-  destruct 1.
-  assert (b1 <> b2) by xomega.
-  congruence.
+  induction 1; simpl; eauto using inner_sp_def.
 Qed.
 
-Lemma block_lt_def p1 p2:
-  block_lt p1 p2 ->
-  p1 <> Vundef.
+Lemma parent_ra_def: forall b s, match_stack b s -> parent_ra s <> Vundef.
 Proof.
-  destruct 1; discriminate.
-Qed.
-
-Lemma parent_sp_def: forall s, match_stack s -> parent_sp s <> Vundef.
-Proof.
-  induction 1; simpl.
-  unfold Vnullptr; destruct Archi.ptr64; congruence.
-  destruct H1; discriminate.
-Qed.
-
-Lemma parent_ra_def: forall s, match_stack s -> parent_ra s <> Vundef.
-Proof.
-  induction 1; simpl.
-  unfold Vnullptr; destruct Archi.ptr64; congruence.
+  induction 1; simpl; auto.
   inv H0. congruence.
 Qed.
 
 Lemma lessdef_parent_sp:
-  forall s v,
-  match_stack s -> Val.lessdef (parent_sp s) v -> v = parent_sp s.
+  forall b s v,
+  match_stack b s -> Val.lessdef (parent_sp s) v -> v = parent_sp s.
 Proof.
   intros. inv H0. auto. exploit parent_sp_def; eauto. tauto.
 Qed.
 
 Lemma lessdef_parent_ra:
-  forall s v,
-  match_stack s -> Val.lessdef (parent_ra s) v -> v = parent_ra s.
+  forall b s v,
+  match_stack b s -> Val.lessdef (parent_ra s) v -> v = parent_ra s.
 Proof.
   intros. inv H0. auto. exploit parent_ra_def; eauto. tauto.
+Qed.
+
+Lemma match_stack_nextblock:
+  forall b s,
+  match_stack b s -> Ple (ag_nb w) b.
+Proof.
+  induction 1; auto.
+Qed.
+
+Lemma match_stack_incr_bound:
+  forall b b' s,
+  Ple b b' -> match_stack b s -> match_stack b' s.
+Proof.
+  intros b b' s Hb Hs. induction Hs.
+  - constructor; auto. xomega.
+  - econstructor; eauto using valid_blockv_nextblock.
 Qed.
 
 End MATCH_STACK.

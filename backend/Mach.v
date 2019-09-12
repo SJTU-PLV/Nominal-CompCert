@@ -455,15 +455,15 @@ Canonical Structure li_mach: language_interface :=
   qualifies. [Vnullptr] which is a [Vlint]/[Vlong] null value used in
   the original Compcert semantics as the initial stack pointer. *)
 
-Inductive valid_blockv (m: mem): val -> Prop :=
+Inductive valid_blockv (nb: block): val -> Prop :=
   | valid_blockv_intro b ofs:
-      Mem.valid_block m b ->
-      valid_blockv m (Vptr b ofs).
+      Pos.lt b nb ->
+      valid_blockv nb (Vptr b ofs).
 
-Lemma valid_blockv_nextblock m m' v:
-  valid_blockv m v ->
-  Ple (Mem.nextblock m) (Mem.nextblock m') ->
-  valid_blockv m' v.
+Lemma valid_blockv_nextblock nb nb' v:
+  valid_blockv nb v ->
+  Ple nb nb' ->
+  valid_blockv nb' v.
 Proof.
   destruct 1. constructor.
   unfold Mem.valid_block in *. xomega.
@@ -522,7 +522,7 @@ Record cc_stk_world :=
 Inductive cc_stacking_mq: cc_stk_world -> locset_query -> mach_query -> Prop :=
   cc_stacking_mq_intro f vf1 vf2 sg sp ra rs1 rs2 m1 m2:
     Val.inject f vf1 vf2 ->
-    valid_blockv m2 sp ->
+    valid_blockv (Mem.nextblock m2) sp ->
     Val.has_type ra Tptr ->
     (forall r, Val.inject f (rs1 (R r)) (rs2 r)) ->
     arguments_out_of_reach sg f m1 sp ->

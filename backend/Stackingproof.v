@@ -1345,7 +1345,7 @@ Program Definition mbase j ls sg sp :=
       loc_out_of_reach (stk_inj w) (stk_m1 w) b ofs;
     m_pred m :=
       Mem.unchanged_on (loc_out_of_reach (stk_inj w) (stk_m1 w)) (stk_m2 w) m /\
-      valid_blockv (stk_m2 w) sp /\
+      valid_blockv (Mem.nextblock (stk_m2 w)) sp /\
       arguments_out_of_reach sg (stk_inj w) (stk_m1 w) sp /\
       forall ofs ty,
         In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
