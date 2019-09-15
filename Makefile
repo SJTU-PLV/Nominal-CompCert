@@ -98,7 +98,8 @@ BACKEND=\
   Debugvar.v Debugvarproof.v \
   Mach.v \
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
-  Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v
+  Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
+  AsmLinking.v \
 
 # C front-end modules (in cfrontend/)
 
