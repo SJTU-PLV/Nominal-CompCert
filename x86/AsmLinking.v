@@ -296,6 +296,20 @@ Section FOO.
 
   End SE.
 
+  Definition measure se (s : list (frame L se)): nat :=
+    match s with
+      | nil => 0
+      | st i q (State rs m live) :: k =>
+        length k +
+        if live then
+          match Genv.find_funct (Genv.globalenv se (p_ i)) rs#PC with
+            | Some (External _) => 2
+            | _ => 0
+          end
+        else
+          4
+    end.
+
   Lemma foo:
     open_fsim cc_id cc_id
       (SmallstepLinking.semantics L (erase_program p))
@@ -304,7 +318,7 @@ Section FOO.
     split; [reflexivity | ]. cbn.
     intros [ ] se _ q _ Hse1 _ [ ] [ ].
     set (ms := match_states se (Mem.nextblock (snd q))).
-    eapply forward_simulation_star with ms (@length _); cbn.
+    eapply forward_simulation_star with ms (measure se); cbn.
     - (* initial states *)
       intros s1 Hs1. destruct Hs1 as [i S Hq HS]. cbn in *.
       exists S. destruct HS. split.
@@ -340,15 +354,17 @@ Section FOO.
         left. eexists; split; eauto 10 using plus_one.
         constructor; eauto.
       + (* push *)
-        inv H. inv H1. eapply find_internal_linkorder in H3; eauto.
-        left. exists (State rs m true). split.
-        * admit. (* XXX Need to find a measure that works for zero steps here *)
-          (* maybe PC points to external block -> +2 *)
-        * constructor; cbn; eauto using match_liveness_refl, Ple_refl.
-          constructor; eauto.
-      + (* pop *)
+        inv H. inv H1. inv H8.
         right. intuition auto.
-        inv H. inv H0. inv H5. inv H7.
+        * rewrite H3, H7. xomega.
+        * constructor; cbn; eauto using match_liveness_refl, Ple_refl.
+          econstructor; eauto.
+      + (* pop *)
+        inv H. inv H0. inv H5. right. intuition auto.
+        {
+          clear. destruct Genv.find_funct as [[|]|], inner_sp; xomega.
+        }
+        inv H7.
         * constructor; eauto using Ple_trans.
           destruct rs#SP; cbn; try constructor.
           destruct plt; try constructor.
