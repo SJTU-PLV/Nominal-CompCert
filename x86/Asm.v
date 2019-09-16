@@ -1175,9 +1175,13 @@ Inductive at_external (ge: genv): state -> query li_asm -> Prop :=
       Genv.find_funct ge rs#PC = Some (External (EF_external id sg)) ->
       at_external ge (State rs m true) (rs, m).
 
-Inductive after_external init_nb (st: state): reply li_asm -> state -> Prop :=
-  | after_external_intro (rs': regset) m':
-      after_external init_nb st (rs', m') (State rs' m' (inner_sp init_nb rs'#SP)).
+Inductive after_external init_nb: state -> reply li_asm -> state -> Prop :=
+  | after_external_intro rs m (rs': regset) m':
+      Ple (Mem.nextblock m) (Mem.nextblock m') ->
+      after_external init_nb
+        (State rs m true)
+        (rs', m')
+        (State rs' m' (inner_sp init_nb rs'#SP)).
 
 Inductive final_state: state -> reply li_asm -> Prop :=
   | final_state_intro rs m:

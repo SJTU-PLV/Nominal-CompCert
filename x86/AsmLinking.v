@@ -339,11 +339,11 @@ Section FOO.
         * inv Hl. econstructor; eauto.
         * admit. (* excluded by valid_query *)
       + intros r _ s' [ ] Hs'. inv Hs'. cbn in *. inv H7.
-        eexists. split. econstructor.
+        eexists. split. inv Hl. econstructor; eauto.
         econstructor; eauto.
         * eapply match_inner_sp.
           eapply match_stack_nextblock; eauto.
-        * admit. (* nextblock vs. external *)
+        * xomega.
     - (* simulation *)
       intros s1 t s1' Hstep1 s2 Hs. red in Hs.
       destruct Hstep1; inv Hs; cbn in *.
@@ -368,7 +368,7 @@ Section FOO.
         * constructor; eauto using Ple_trans.
           destruct rs#SP; cbn; try constructor.
           destruct plt; try constructor.
-          apply match_stack_nextblock in H4.
+          apply match_stack_nextblock in H6.
           cbn in H9. destruct plt. xomega. discriminate H9.
         * constructor; eauto using Ple_trans.
           rewrite <- H0. eapply match_inner_sp, match_stack_nextblock; eauto.
