@@ -296,6 +296,21 @@ Section FOO.
 
   End SE.
 
+  (** The measure we use for the simulation is somewhat subtle.
+    There are two kinds of stuttering steps which occur when we
+    switch between components. On cross-component calls, the PC
+    initially points to an external function, but points to an
+    internal function again once we've switched to the right
+    component. On cross-component returns, the size of the
+    activation stack will decrease. The two cases can be
+    distinguished by the fact that [live] is always true when
+    performing cross-component calls, and is at least initially
+    false when performing cross-component returns.
+
+    Together with the fact the the stack size will increase by
+    one when performing a call, we can massage these different
+    criteria together and obtain the following measure. *)
+
   Definition measure se (s : list (frame L se)): nat :=
     match s with
       | nil => 0
