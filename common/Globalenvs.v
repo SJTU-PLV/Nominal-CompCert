@@ -300,19 +300,17 @@ End GLOBALENV_PRINCIPLES.
 
 Variable se: symtbl.
 
-Definition add_globdef (defs: PTree.t _) (idg: ident * globdef F V) :=
-  match (genv_symb se) ! (idg#1) with
-    | Some b => PTree.set b idg#2 defs
+Definition add_globdef (defs: PTree.t _) (id: ident) (g: globdef F V) :=
+  match (genv_symb se) ! id with
+    | Some b => PTree.set b g defs
     | None => defs
   end.
 
-Definition add_globdefs defs :=
-  List.fold_left add_globdef defs (PTree.empty _).
-
 Program Definition globalenv (p: program F V): t :=
-  mkgenv se (add_globdefs p.(prog_defs)) _.
+  mkgenv se (PTree.fold add_globdef (prog_defmap p) (PTree.empty _)) _.
 Next Obligation.
-  revert H. unfold add_globdefs. pattern (prog_defs p). apply rev_ind.
+  revert H. rewrite PTree.fold_spec.
+  pattern (PTree.elements (prog_defmap p)). apply rev_ind.
   - rewrite PTree.gempty. discriminate.
   - intros idg defs IH. rewrite fold_left_app. simpl. unfold add_globdef at 1.
     destruct ((genv_symb se) ! (idg#1)) eqn:H; auto.
@@ -392,54 +390,42 @@ Proof.
   intros. unfold find_var_info. destruct (find_def ge b) as [[f1|v1]|]; intuition congruence.
 Qed.
 
-Lemma add_globdefs_inv p b g:
-  (add_globdefs (prog_defs p)) ! b = Some g ->
+Lemma find_def_inv p b g:
+  find_def (globalenv p) b = Some g ->
   exists id, find_symbol se id = Some b /\ (prog_defmap p) ! id = Some g.
 Proof.
-  unfold add_globdefs, find_symbol, prog_defmap, PTree_Properties.of_list.
-  pattern p.(prog_defs). apply rev_ind.
+  unfold find_def, globalenv, find_symbol. cbn. rewrite PTree.fold_spec.
+  generalize (PTree.elements_complete (prog_defmap p)).
+  pattern (PTree.elements (prog_defmap p)). apply rev_ind.
   - cbn. rewrite PTree.gempty. discriminate.
-  - intros [id g'] l IHl. rewrite !fold_left_app. cbn.
-    unfold add_globdef at 1. cbn.
+  - intros [id g'] l IHl. rewrite !fold_left_app. setoid_rewrite in_app. cbn.
+    unfold add_globdef at 1.
     destruct ((genv_symb se) ! id) as [b'|] eqn:Hb'; eauto.
-    + destruct (peq b' b).
-      * subst. rewrite !PTree.gss. intros Hg'. inv Hg'.
-        exists id. rewrite !PTree.gss. auto.
-      * rewrite !PTree.gso; eauto. intros Hg.
-        edestruct IHl as (id' & Hid' & Hg'); eauto.
-        exists id'. rewrite PTree.gso by congruence. auto.
-    + intros H. apply IHl in H as (id' & Hb & Hid').
-      exists id'. rewrite PTree.gso by congruence. auto.
+    destruct (peq b' b).
+    + subst. rewrite !PTree.gss. intros Hdm Hg'. inv Hg'.
+      exists id. eauto.
+    + rewrite !PTree.gso; eauto.
 Qed.
 
-Lemma add_globdefs_ensure (P: _ -> Prop) p id g:
-  (forall defs, P (add_globdef defs (id, g))) ->
-  (forall defs id' g', id' <> id -> P defs -> P (add_globdef defs (id', g'))) ->
-  (prog_defmap p) ! id = Some g ->
-  P (add_globdefs (prog_defs p)).
-Proof.
-  unfold add_globdefs, prog_defmap, PTree_Properties.of_list.
-  intros Hensure Hpreserve. pattern p.(prog_defs). apply rev_ind.
-  - cbn. rewrite PTree.gempty. discriminate.
-  - intros [id' g'] l IHl. rewrite !fold_left_app; cbn.
-    destruct (peq id' id).
-    + subst. rewrite PTree.gss. inversion 1; auto.
-    + rewrite PTree.gso; auto.
-Qed.
-
-Lemma add_globdefs_result p id g b:
+Lemma find_def_exists p id b g:
   (prog_defmap p) ! id = Some g ->
   find_symbol se id = Some b ->
-  (add_globdefs (prog_defs p)) ! b = Some g.
+  find_def (globalenv p) b = Some g.
 Proof.
-  intros Hg Hb.
-  eapply add_globdefs_ensure; eauto; intros; unfold add_globdef; cbn.
-  - unfold find_symbol, find_symbol in Hb.
-    destruct ((genv_symb se) ! id); try discriminate.
-    inv Hb. rewrite PTree.gss. auto.
-  - destruct ((genv_symb se) ! id') eqn:Hid'; auto.
-    rewrite PTree.gso; auto.
-    intro. subst. elim H. eapply genv_vars_inj; eauto.
+  unfold find_def. cbn.
+  eapply PTree_Properties.fold_rec; clear.
+  - intros m m' defs Hm. rewrite Hm. auto.
+  - rewrite PTree.gempty. discriminate.
+  - intros defmap defs id' g' Hid' Hg' IH Hg Hb.
+    destruct (peq id' id).
+    + subst. rewrite PTree.gss in Hg. inv Hg.
+      unfold add_globdef. setoid_rewrite Hb.
+      rewrite PTree.gss. reflexivity.
+    + rewrite PTree.gso in Hg by auto.
+      unfold add_globdef. destruct (genv_symb se)!id' eqn:?; eauto.
+      destruct (peq b0 b).
+      * subst. elim n. eapply genv_vars_inj; eauto.
+      * rewrite PTree.gso by auto. eauto.
 Qed.
 
 Theorem find_def_symbol:
@@ -449,10 +435,9 @@ Proof.
   intros p id g Hse. split.
   - intros Hg. edestruct Hse as (b & Hb & Hg'); eauto.
     rewrite erase_program_defmap. erewrite Hg. reflexivity.
-    exists b. split. assumption. unfold globalenv, find_def. cbn.
-    eapply add_globdefs_result; eauto.
-  - unfold find_def. cbn. intros (b & Hb & Hg).
-    edestruct add_globdefs_inv as (id' & ? & ?); eauto.
+    exists b. split. assumption.
+    eapply find_def_exists; eauto.
+  - intros (b & Hb & Hg). edestruct find_def_inv as (id' & ? & ?); eauto.
     assert (id' = id) by (eapply genv_vars_inj; eauto). congruence.
 Qed.
 
@@ -542,13 +527,13 @@ Theorem find_funct_prop:
   find_funct (globalenv p) v = Some f ->
   P f.
 Proof.
-  intros p v f P H.
-  unfold globalenv, find_funct, find_funct_ptr, find_def. cbn.
+  intros p v f P H. unfold find_funct, find_funct_ptr.
   destruct v; try congruence.
-  destruct Ptrofs.eq_dec; try congruence. cbn.
-  destruct (add_globdefs (prog_defs p)) ! b as [[|]|] eqn:Hb; try congruence. inversion 1; subst.
-  apply add_globdefs_inv in Hb as (id & Hid & Hf). eapply H.
-  apply in_prog_defmap; eauto.
+  destruct Ptrofs.eq_dec; try congruence.
+  destruct find_def as [[|]|] eqn:Hgd; try congruence.
+  inversion 1; subst.
+  apply find_def_inv in Hgd as (id & Hb & Hgd).
+  eauto using in_prog_defmap.
 Qed.
 
 Theorem find_symbol_injective:
@@ -1756,7 +1741,7 @@ Lemma add_globdef_match:
   f b1 = Some (b2, delta) ->
   option_rel R (defs1 ! b1) (defs2 ! b2) ->
   R gd1 gd2 ->
-  option_rel R ((add_globdef se defs1 (id, gd1)) ! b1) ((add_globdef tse defs2 (id, gd2)) ! b2).
+  option_rel R ((add_globdef se defs1 id gd1) ! b1) ((add_globdef tse defs2 id gd2) ! b2).
 Proof.
   intros until gd2. intros Hb Hdefs Hgd. unfold add_globdef. cbn.
   destruct ((genv_symb se) ! id) as [b1' | ] eqn:Hb1'.
@@ -1774,22 +1759,6 @@ Proof.
     + rewrite PTree.gso; eauto.
 Qed.
 
-Lemma add_globdefs_match:
-  forall gl1 gl2 b b' delta,
-  list_forall2 (fun idg1 idg2 => fst idg1 = fst idg2 /\ R (snd idg1) (snd idg2)) gl1 gl2 ->
-  f b = Some (b', delta) ->
-  option_rel R (add_globdefs se gl1)!b (add_globdefs tse gl2)!b'.
-Proof.
-  intros ge1 ge2 b b' delta Hgl Hb.
-  unfold add_globdefs.
-  cut (option_rel R (PTree.empty _)!b (PTree.empty _)!b').
-  - generalize (PTree.empty (globdef A V)), (PTree.empty (globdef B W)).
-    induction Hgl; auto.
-    destruct a1 as [id1 g1]; destruct b1 as [id2 g2]; simpl in *; destruct H; subst id2.
-    intros. cbn. eapply IHHgl. eapply add_globdef_match; eauto.
-  - rewrite !PTree.gempty. constructor.
-Qed.
-
 End MATCH_GENVS.
 
 Section MATCH_PROGRAMS.
@@ -1801,6 +1770,8 @@ Variable ctx: C.
 Variable p: program F1 V1.
 Variable tp: program F2 V2.
 Hypothesis progmatch: match_program_gen match_fundef match_varinfo ctx p tp.
+Notation match_idg := (match_ident_globdef match_fundef match_varinfo ctx).
+Notation match_gd := (match_globdef match_fundef match_varinfo ctx).
 
 Section INJECT.
 
@@ -1812,7 +1783,20 @@ Hypothesis sematch: match_stbls j se tse.
 Lemma globalenvs_match:
   match_genvs j (match_globdef match_fundef match_varinfo ctx) (globalenv se p) (globalenv tse tp).
 Proof.
-  intros. split; auto. intros. eapply add_globdefs_match; eauto. apply progmatch.
+  intros. split; auto. intros. cbn.
+  assert (Hd:forall i, option_rel match_gd (prog_defmap p)!i (prog_defmap tp)!i).
+  {
+    intro. eapply PTree_Properties.of_list_related. apply progmatch.
+  }
+  rewrite !PTree.fold_spec.
+  apply PTree.elements_canonical_order' in Hd. revert Hd.
+  generalize (prog_defmap p), (prog_defmap tp). intros d1 d2 Hd.
+  cut (option_rel match_gd (PTree.empty _)!b1 (PTree.empty _)!b2).
+  - generalize (PTree.empty (globdef F1 V1)), (PTree.empty (globdef F2 V2)).
+    induction Hd as [ | [id1 g1] l1 [id2 g2] l2 [Hi Hg] Hl IH]; cbn in *; eauto.
+    intros t1 t2 Ht. eapply IH; eauto. rewrite Hi.
+    eapply add_globdef_match; eauto.
+  - rewrite !PTree.gempty. constructor.
 Qed.
 
 Theorem find_def_match:

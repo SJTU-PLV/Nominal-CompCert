@@ -11,7 +11,6 @@ Require Import Values.
 Require Import Asmgenproof0.
 Require Import Asm.
 
-
 Lemma find_def_linkorder se (p p': program) b gd:
   linkorder p p' ->
   Genv.find_def (Genv.globalenv se p) b = Some gd ->
@@ -19,7 +18,11 @@ Lemma find_def_linkorder se (p p': program) b gd:
     Genv.find_def (Genv.globalenv se p') b = Some gd' /\
     linkorder gd gd'.
 Proof.
-Admitted.
+  intros (_ & _ & Hdefs) Hgd.
+  edestruct Genv.find_def_inv as (id & Hb & Hid); eauto.
+  edestruct Hdefs as (gd' & Hgd' & Hgg' & _); eauto.
+  eauto using Genv.find_def_exists.
+Qed.
 
 Lemma find_funct_ptr_linkorder se (p p': program) b fd:
   Genv.find_funct_ptr (Genv.globalenv se p) b = Some fd ->
