@@ -1,0 +1,3 @@
+[submodule "coqrel"]
+	path = coqrel
+	url = https://github.com/CertiKOS/coqrel.git

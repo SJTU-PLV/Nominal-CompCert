@@ -23,11 +23,12 @@ endif
 
 DIRS=lib common $(ARCHDIRS) backend cfrontend driver \
   flocq/Core flocq/Prop flocq/Calc flocq/Appli exportclight \
-  cparser cparser/MenhirLib
+  cparser cparser/MenhirLib cklr
 
-RECDIRS=lib common $(ARCHDIRS) backend cfrontend driver flocq exportclight cparser
+RECDIRS=lib common $(ARCHDIRS) backend cfrontend driver flocq exportclight \
+  cparser cklr
 
-COQINCLUDES=$(foreach d, $(RECDIRS), -R $(d) compcert.$(d))
+COQINCLUDES=$(foreach d, $(RECDIRS), -R $(d) compcert.$(d)) -R coqrel coqrel
 
 COQC="$(COQBIN)coqc" -q $(COQINCLUDES) $(COQCOPTS)
 COQDEP="$(COQBIN)coqdep" $(COQINCLUDES)
@@ -58,7 +59,7 @@ FLOCQ=\
 VLIB=Axioms.v Coqlib.v Intv.v Maps.v Heaps.v Lattice.v Ordered.v \
   Iteration.v Integers.v Archi.v Fappli_IEEE_extra.v Floats.v \
   Parmov.v UnionFind.v Wfsimpl.v \
-  Postorder.v FSetAVLplus.v IntvSets.v Decidableplus.v BoolEqual.v
+  Postorder.v FSetAVLplus.v IntvSets.v Decidableplus.v BoolEqual.v \
 
 # Parts common to the front-ends and the back-end (in common/)
 
@@ -69,6 +70,17 @@ COMMON=Errors.v AST.v Linking.v \
   LanguageInterface.v \
   SmallstepLinking.v \
   Invariant.v \
+
+# Compcert Kripke Logical Relations
+
+CKLR=\
+  CKLR.v CKLRAlgebra.v \
+  Extends.v ExtendsFootprint.v \
+  Inject.v InjectFootprint.v InjectNeutral.v \
+  Mapsrel.v \
+  Valuesrel.v Eventsrel.v Globalenvsrel.v \
+  Coprel.v Clightrel.v \
+  Registersrel.v RTLrel.v \
 
 # Back-end modules (in backend/, $(ARCH)/)
 
@@ -108,7 +120,7 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v Cexec.v \
   SimplExpr.v SimplExprspec.v SimplExprproof.v \
   Clight.v ClightBigstep.v SimplLocals.v SimplLocalsproof.v \
   Cshmgen.v Cshmgenproof.v \
-  Csharpminor.v Cminorgen.v Cminorgenproof.v
+  Csharpminor.v Cminorgen.v Cminorgenproof.v \
 
 # LR(1) parser validator
 
@@ -126,7 +138,7 @@ DRIVER=Compopts.v Compiler.v Complements.v
 
 # All source files
 
-FILES=$(VLIB) $(COMMON) $(BACKEND) $(CFRONTEND) $(DRIVER) $(FLOCQ) \
+FILES=$(VLIB) $(COMMON) $(CKLR) $(BACKEND) $(CFRONTEND) $(DRIVER) $(FLOCQ) \
   $(PARSERVALIDATOR) $(PARSER)
 
 # Generated source files
