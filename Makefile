@@ -290,6 +290,23 @@ check-proof: $(FILES)
 print-includes:
 	@echo $(COQINCLUDES)
 
+# Building the CompCertO artifact
+
+DIFFFLAGS= -U10
+
+compcerto: FORCE
+	rm -rf $@.n $@
+	mkdir $@.n
+	git archive HEAD | tar -C $@.n -x
+	git diff $(DIFFFLAGS) v3.5 > $@.n/compcerto.diff
+	mv $@.n $@
+
+%.tar.bz2: %
+	tar -cjf $@.n $<
+	mv $@.n $@
+
+artifact: compcerto.tar.bz2
+
 -include .depend
 
 FORCE:
