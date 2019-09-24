@@ -1089,7 +1089,8 @@ Proof.
   eexists. intuition idtac.
   - rewrite A in TFIND. inv TFIND. destruct B as (hf & Hhf & B). monadInv B.
     econstructor; eauto.
-  - econstructor; eauto.
+  - destruct LF; try discriminate.
+    econstructor; eauto.
   - destruct H. inv H0.
     eexists; split; econstructor; eauto.
 Qed.
@@ -1111,6 +1112,8 @@ Theorem transf_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros [ ] se _ q1 q2 Hse _  [ ] Hq.
+  split. { destruct Hq. eapply (Genv.is_internal_match_id MATCH); eauto.
+           destruct 1 as (hf & ? & ?). destruct f; monadInv H2; auto. }
   apply forward_simulation_opt with (match_states := match_states prog tprog se) (measure := measure); intros.
   eapply sel_initial_states; eauto.
   eapply sel_final_states; eauto.

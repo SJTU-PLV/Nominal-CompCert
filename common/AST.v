@@ -535,6 +535,16 @@ Inductive fundef (F: Type): Type :=
 
 Arguments External [F].
 
+Class FundefIsInternal F :=
+  fundef_is_internal : F -> bool.
+
+Global Instance ast_fundef_is_internal F : FundefIsInternal (fundef F) :=
+  fun f =>
+    match f with
+      | Internal _ => true
+      | _ => false
+    end.
+
 Section TRANSF_FUNDEF.
 
 Variable A B: Type.

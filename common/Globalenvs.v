@@ -168,6 +168,14 @@ Definition block_is_volatile (ge: symtbl) (b: block) : bool :=
   | _ => false
   end.
 
+(** [is_internal] identifies pointers to internal functions *)
+
+Definition is_internal `{Fii: FundefIsInternal F} (ge: t) (v: val) :=
+  match find_funct ge v with
+    | Some fd => fundef_is_internal fd
+    | None => false
+  end.
+
 (** ** Constructing symbol tables *)
 
 Program Definition add_global (ge: symtbl) (idg: ident * globdef unit unit) : symtbl :=
@@ -1825,6 +1833,43 @@ Proof.
   rewrite find_funct_find_funct_ptr. unfold find_funct_ptr. rewrite H. eauto.
 Qed.
 
+Theorem find_funct_none:
+  forall v tv,
+  find_funct (globalenv se p) v = None ->
+  Val.inject j v tv ->
+  v <> Vundef ->
+  find_funct (globalenv tse tp) tv = None.
+Proof.
+  intros v tv Hf1 INJ Hv. destruct INJ; auto; try congruence.
+  destruct (plt b1 se.(genv_next)).
+  - edestruct mge_dom; eauto. rewrite H1 in H. inv H.
+    rewrite Ptrofs.add_zero. revert Hf1.
+    unfold find_funct, find_funct_ptr, find_def.
+    destruct Ptrofs.eq_dec; auto.
+    destruct (mge_defs globalenvs_match b1 H1); auto.
+    destruct H; congruence.
+  - unfold find_funct, find_funct_ptr, find_def.
+    destruct Ptrofs.eq_dec; auto.
+    destruct PTree.get as [[|]|] eqn:Hdef; auto.
+    apply genv_defs_range in Hdef. eapply mge_img in Hdef; eauto.
+    contradiction.
+Qed.
+
+Theorem is_internal_match `{I1: FundefIsInternal F1} `{I2: FundefIsInternal F2}:
+  (forall c f tf, match_fundef c f tf ->
+   fundef_is_internal tf = fundef_is_internal f) ->
+  forall v tv,
+    Val.inject j v tv ->
+    v <> Vundef ->
+    is_internal (globalenv tse tp) tv = is_internal (globalenv se p) v.
+Proof.
+  intros Hmatch v tv INJ DEF. unfold is_internal.
+  destruct (find_funct _ v) eqn:Hf.
+  - edestruct find_funct_match as (c & tf & Htf & ? & ?); try eassumption.
+    rewrite Htf. eauto.
+  - erewrite find_funct_none; eauto.
+Qed.
+
 End INJECT.
 
 Section ID.
@@ -1850,6 +1895,16 @@ Theorem find_funct_match_id:
 Proof.
   intros. eapply find_funct_match; eauto using match_stbls_id.
   apply val_inject_id. auto.
+Qed.
+
+Theorem is_internal_match_id `{I1: FundefIsInternal F1} `{I2: FundefIsInternal F2}:
+  (forall c f tf, match_fundef c f tf ->
+   fundef_is_internal tf = fundef_is_internal f) ->
+  forall v, is_internal (globalenv se tp) v = is_internal (globalenv se p) v.
+Proof.
+  intros. destruct v; auto.
+  eapply is_internal_match; eauto using match_stbls_id.
+  apply val_inject_id; auto. congruence.
 Qed.
 
 (*
@@ -1929,6 +1984,27 @@ Proof.
   edestruct @find_funct_match as (cu & tf & P & Q & R); eauto using match_stbls_id.
 Qed.
 
+Theorem is_internal_transf_partial `{I1: FundefIsInternal A} `{I2: FundefIsInternal B}:
+  (forall f tf, transf f = OK tf ->
+   fundef_is_internal tf = fundef_is_internal f) ->
+  forall v tv,
+    Val.inject j v tv ->
+    v <> Vundef ->
+    is_internal (globalenv tse tp) tv = is_internal (globalenv se p) v.
+Proof.
+  intro. apply (is_internal_match progmatch); auto.
+Qed.
+
+Theorem is_internal_transf_partial_id `{I1: FundefIsInternal A} `{I2: FundefIsInternal B}:
+  (forall f tf, transf f = OK tf ->
+   fundef_is_internal tf = fundef_is_internal f) ->
+  forall v, is_internal (globalenv se tp) v = is_internal (globalenv se p) v.
+Proof.
+  intros. destruct v; auto.
+  eapply (is_internal_match progmatch); eauto using match_stbls_id.
+  apply val_inject_id; auto. congruence.
+Qed.
+
 End TRANSFORM_PARTIAL.
 
 (** Special case for total transformations that do not depend on the compilation unit *)
@@ -1968,6 +2044,24 @@ Proof.
   assert (Val.inject inject_id v v) by (apply val_inject_lessdef; auto).
   edestruct @find_funct_match as (cu & tf & P & Q & R); eauto using match_stbls_id.
   congruence.
+Qed.
+
+Theorem is_internal_transf `{I1: FundefIsInternal A} `{I2: FundefIsInternal B}:
+  (forall fd, fundef_is_internal (transf fd) = fundef_is_internal fd) ->
+  forall v tv, Val.inject f v tv -> v <> Vundef ->
+  is_internal (globalenv tse tp) tv = is_internal (globalenv se p) v.
+Proof.
+  intro. apply (is_internal_match progmatch); auto.
+  intros; subst; auto.
+Qed.
+
+Theorem is_internal_transf_id `{I1: FundefIsInternal A} `{I2: FundefIsInternal B}:
+  (forall fd, fundef_is_internal (transf fd) = fundef_is_internal fd) ->
+  forall v, is_internal (globalenv se tp) v = is_internal (globalenv se p) v.
+Proof.
+  intros. destruct v; auto.
+  eapply (is_internal_match progmatch); auto using match_stbls_id.
+  intros; subst; auto. apply val_inject_id; auto. congruence.
 Qed.
 
 End TRANSFORM_TOTAL.

@@ -2212,6 +2212,8 @@ Theorem transl_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros w se1 se2 q1 q2 Hse1 SKEL Hse Hq.
+  split. { destruct Hq. eapply Genv.is_internal_transf_partial; eauto.
+           intros. destruct f; monadInv H3; cbn; auto. }
   eapply forward_simulation_star; eauto.
   apply transl_initial_states; eauto.
   apply transl_final_states; eauto.

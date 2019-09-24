@@ -1145,10 +1145,14 @@ Inductive step (init_nb: block) (ge: genv): state -> trace -> state -> Prop :=
 (** Since Asm does not have an explicit stack, the queries and replies
   for assembly modules simply pass the current state across modules. *)
 
+Definition asm_entry (q: regset * mem) :=
+  (fst q) # PC.
+
 Canonical Structure li_asm :=
   {|
     query := regset * mem;
     reply := regset * mem;
+    entry := asm_entry;
   |}.
 
 (** Asm does not really have a notion of control stack. However, to
@@ -1189,6 +1193,8 @@ Inductive final_state: state -> reply li_asm -> Prop :=
 
 Definition semantics (p: program): open_sem li_asm li_asm :=
   {|
+    valid_query se q :=
+      Genv.is_internal (Genv.globalenv se p) (entry q);
     activate se q :=
       let ge := Genv.globalenv se p in
       Semantics li_asm (step (Mem.nextblock (snd q)))

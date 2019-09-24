@@ -2476,7 +2476,7 @@ Proof.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   exploit sig_function_translated; eauto. intros SIG.
   monadInv TR. subst tf. cbn in *. rewrite <- SIG.
-  exists (LTL.Callstate (Stackbase base_rs :: nil) vf2 base_rs m2).
+  exists (LTL.Callstate (Stackbase base_rs :: nil) vf base_rs m2).
   split; econstructor; eauto.
   - cbn. rewrite H2. constructor; auto.
   - cbn. red. auto.
@@ -2504,7 +2504,8 @@ Proof.
   simpl in FUN; inv FUN.
   exists (sg, ls), (lq tvf sg ls m'). intuition idtac.
   - econstructor; eauto.
-  - econstructor; eauto.
+  - destruct LF; try discriminate.
+    econstructor; eauto.
   - inv H0. inv H. eexists; split; econstructor; eauto.
     intros l Hl. transitivity (ls l); eauto.
 Qed.
@@ -2530,6 +2531,8 @@ Theorem transf_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros [sg rs] se _ q1 q2 _ _ [ ] Hq.
+  split. { destruct Hq. eapply (Genv.is_internal_transf_partial_id MATCH).
+           intros. destruct f; monadInv H2; auto. }
   set (ms := fun s s' => wt_state prog se s /\ match_states prog tprog se sg rs s s').
   eapply forward_simulation_plus with (match_states := ms); cbn in *.
 - intros. exploit initial_states_simulation; eauto. intros [st2 [A B]].

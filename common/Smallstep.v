@@ -486,6 +486,7 @@ Record semantics li res: Type := Semantics {
 }.
 
 Record open_sem liA liB := {
+  valid_query: Genv.symtbl -> query liB -> bool;
   activate :> Genv.symtbl -> query liB -> semantics liA (reply liB);
   skel: AST.program unit unit;
 }.
@@ -499,6 +500,8 @@ Record closed_sem := {
 
 Notation OpenSem step initial_state at_ext after_ext final_state globalenv p :=
   {|
+    valid_query se q :=
+      Genv.is_internal (globalenv se p) (entry q);
     activate se q :=
       let ge := globalenv se p in
       {|
@@ -819,6 +822,7 @@ Definition open_fsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2
     True ->
     match_senv ccB w se1 se2 ->
     match_query ccB w q1 q2 ->
+    valid_query L2 se2 q2 = valid_query L1 se1 q1 /\
     forward_simulation ccA (match_reply ccB w) (activate L1 se1 q1) (activate L2 se2 q2).
 
 Definition closed_fsim (L1 L2: closed_sem) :=
@@ -898,6 +902,9 @@ Proof.
   split. etransitivity; eauto.
   intros w se1 se3 q1 q3 Hse1 _ (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
   assert (Genv.valid_for (skel L2) se2) by admit. (* valid_for vs. match_senv *)
+  edestruct H12 as [H12i H12s]; eauto.
+  edestruct H23 as [H23i H23s]; eauto.
+  split; eauto.
   eapply compose_forward_simulations; eauto.
 Admitted.
 
@@ -1795,6 +1802,7 @@ Lemma forward_to_backward_open_sim:
     open_bsim ccA ccB L1 L2.
 Proof.
   intros until L2. intros [Hsk H12] H1 H2 w se1 se2 q1 q2 Hse1 Hse Hq.
+  edestruct H12 as [H12i H12s]; eauto.
   eapply forward_to_backward_simulation; eauto.
   eapply match_senv_public_preserved; eauto.
 Qed.

@@ -526,9 +526,9 @@ Lemma transf_initial_states:
   exists st2, initial_state tge q2 st2 /\ match_states st1 st2.
 Proof.
   intros. inv H. inv H0.
-  exists (Callstate (Stackbase ls2 :: nil) vf2 ls2 m2); split.
+  exists (Callstate (Stackbase ls2 :: nil) vf ls2 m2); split.
   - setoid_rewrite <- (sig_preserved (Internal f)).
-    eapply functions_translated in H8; eauto.
+    eapply functions_translated in H7; eauto.
     econstructor; eauto.
   - constructor; eauto.
     repeat constructor; eauto.
@@ -552,7 +552,7 @@ Proof.
   exploit functions_translated; eauto. cbn. intros TFIND.
   eexists (lq tvf sg tls tm); intuition idtac.
   - econstructor; eauto.
-  - econstructor; eauto.
+  - destruct LF; try discriminate. econstructor; eauto.
   - inv H0. inv H.
     eexists; split; econstructor; eauto.
 Qed.
@@ -565,6 +565,7 @@ Theorem transf_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros [ ] se _ q1 q2 _ _ [ ] Hq.
+  split. { destruct Hq. eapply (Genv.is_internal_transf_id MATCH). destruct fd; auto. }
   eapply forward_simulation_opt; cbn; intros.
   eapply transf_initial_states; eauto.
   eapply transf_final_states; eauto.

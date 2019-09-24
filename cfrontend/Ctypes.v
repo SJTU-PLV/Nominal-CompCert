@@ -1124,6 +1124,13 @@ Inductive fundef : Type :=
   | Internal: F -> fundef
   | External: external_function -> typelist -> type -> calling_convention -> fundef.
 
+Global Instance clight_fundef_is_internal : FundefIsInternal fundef :=
+  fun f =>
+    match f with
+      | Internal _ => true
+      | _ => false
+    end.
+
 (** A program, or compilation unit, is composed of:
 - a list of definitions of functions and global variables;
 - the names of functions and global variables that are public (not static);

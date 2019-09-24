@@ -1312,6 +1312,9 @@ Theorem transf_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros w se1 se2 q1 q2 Hse1 SKEL Hse Hq.
+  split. { destruct Hq. eapply (Genv.is_internal_match MATCH); eauto.
+           unfold transf_fundef. destruct f; cbn -[transf_function]; inversion 1; auto.
+           destruct (transf_function (funenv_program c)); inv H3. auto. }
   eapply forward_simulation_star.
   apply transf_initial_states; eauto.
   apply transf_final_states; eauto.

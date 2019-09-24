@@ -221,11 +221,11 @@ Let tge := Genv.globalenv se tprog.
 
 Lemma functions_translated:
   forall (v tv: val) (f: RTL.fundef),
-  Val.lessdef v tv ->
   Genv.find_funct ge v = Some f ->
+  Val.lessdef v tv ->
   Genv.find_funct tge tv = Some (transf_fundef f).
 Proof.
-  intros v tv f Hv Hf. apply (Genv.find_funct_transf_id TRANSL).
+  intros v tv f Hf Hv. apply (Genv.find_funct_transf_id TRANSL).
   unfold Genv.find_funct in *. destruct v; try discriminate. inv Hv. auto.
 Qed.
 
@@ -554,7 +554,7 @@ Lemma transf_initial_states:
 Proof.
   intros. destruct H. inv H0.
   exploit functions_translated; eauto. intro FIND.
-  exists (Callstate nil vf2 vargs2 m2); split.
+  exists (Callstate nil vf vargs2 m2); split.
   setoid_rewrite <- (sig_preserved (Internal f)). econstructor; eauto.
   constructor; auto. constructor.
 Qed.
@@ -577,7 +577,8 @@ Proof.
   exploit functions_translated; eauto. intro FIND'.
   eexists. intuition idtac.
   - econstructor; eauto.
-  - constructor; auto.
+  - destruct H6; try discriminate.
+    constructor; auto.
   - inv H1. inv H0.
     exists (Returnstate s' vres2 m2); split; constructor; eauto.
 Qed.
@@ -593,6 +594,7 @@ Theorem transf_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros [ ] se _ q1 q2 Hse _  [ ] Hq.
+  split. { destruct Hq. eapply Genv.is_internal_transf_id; eauto. destruct fd; auto. }
   eapply forward_simulation_opt with (measure := measure); eauto; intros.
   eapply transf_initial_states; eauto.
   eapply transf_final_states; eauto.

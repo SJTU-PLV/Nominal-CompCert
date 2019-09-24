@@ -1572,7 +1572,7 @@ Proof.
   monadInv TF.
   eexists; intuition idtac.
   - econstructor; eauto.
-  - econstructor; eauto.
+  - destruct LF; try discriminate. econstructor; eauto.
   - inv H0. inv H. eexists; split; constructor; eauto.
 Qed.
 
@@ -1584,6 +1584,8 @@ Theorem transf_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros [ ] se _ q1 q2 _ _ [ ] Hq.
+  split. { destruct Hq. eapply (Genv.is_internal_transf_partial_id MATCH).
+           intros. destruct f; monadInv H1; auto. }
   eapply forward_simulation_star_wf with (order := lt_state); intros.
   eapply transl_initial_states; eauto.
   eapply transl_final_states; eauto.

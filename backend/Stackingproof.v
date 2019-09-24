@@ -2331,18 +2331,18 @@ Proof.
   - monadInv TR. econstructor; eauto.
   - econstructor; eauto.
     + constructor; auto.
-      * rewrite <- H8. cbn. apply inject_incr_refl.
-      * rewrite <- H8. cbn. red. congruence.
-      * rewrite <- H8. cbn. eapply Mem.unchanged_on_refl.
-      * rewrite <- H8. cbn. auto.
-    + replace rs with (stk_rs1 w) by (rewrite <- H8; auto).
+      * rewrite <- H9. cbn. apply inject_incr_refl.
+      * rewrite <- H9. cbn. red. congruence.
+      * rewrite <- H9. cbn. eapply Mem.unchanged_on_refl.
+      * rewrite <- H9. cbn. auto.
+    + replace rs with (stk_rs1 w) by (rewrite <- H9; auto).
       constructor; eauto. destruct H5. constructor.
-    + cbn. repeat apply conj; rewrite <- ?H8; cbn; auto.
+    + cbn. repeat apply conj; rewrite <- ?H9; cbn; auto.
       * apply Mem.unchanged_on_refl.
-      * intros. edestruct H11 as (v & LD & INJ); eauto. inv LD; eauto.
+      * intros. edestruct H10 as (v & LD & INJ); eauto. inv LD; eauto.
       * admit. (* initial nextblock *)
       * red. cbn. auto.
-      * red. cbn. rewrite <- H8; cbn. intros b2 ofs [VLD LOR] [LIR | ]; auto.
+      * red. cbn. rewrite <- H9; cbn. intros b2 ofs [VLD LOR] [LIR | ]; auto.
         destruct LIR as (b1 & delta & Hb & ?). eapply LOR; eauto.
 Admitted.
 
@@ -2383,6 +2383,7 @@ Proof.
       intros. eapply transl_external_argument; eauto. apply SEP.
     + inv WTS. auto.
     + apply SEP.
+    + destruct vf; try discriminate.
   - inv H. inv H0.
     eexists. split; econstructor.
     + eapply source_invariants_step; eauto.
@@ -2443,5 +2444,7 @@ Theorem transf_program_correct rao prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros w se1 se2 q1 q2 Hse1 Hsk Hse Hq.
+  split. { destruct Hq. cbn in Hse. eapply (Genv.is_internal_transf_partial MATCH); eauto.
+           intros fd tfd Hfd. destruct fd; monadInv Hfd; auto. }
   eapply transf_program_fsim; eauto.
 Qed.

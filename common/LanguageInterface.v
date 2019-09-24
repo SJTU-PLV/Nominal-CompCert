@@ -10,7 +10,10 @@ Structure language_interface :=
   mk_language_interface {
     query: Type;
     reply: Type;
+    entry: query -> val;
   }.
+
+Arguments entry {_}.
 
 (** ** Null interface *)
 
@@ -21,6 +24,7 @@ Definition li_null :=
   {|
     query := Empty_set;
     reply := Empty_set;
+    entry q := match q with end;
   |}.
 
 (** * Calling conventions *)
@@ -104,6 +108,7 @@ Canonical Structure li_c :=
   {|
     query := c_query;
     reply := c_reply;
+    entry := cq_vf;
   |}.
 
 (** ** Simulation conventions *)
@@ -111,11 +116,10 @@ Canonical Structure li_c :=
 (** *** Memory extensions *)
 
 Inductive cc_ext_query: c_query -> c_query -> Prop :=
-  cc_ext_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
-    Val.lessdef vf1 vf2 ->
+  cc_ext_query_intro vf sg vargs1 vargs2 m1 m2:
     Val.lessdef_list vargs1 vargs2 ->
     Mem.extends m1 m2 ->
-    cc_ext_query (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
+    cc_ext_query (cq vf sg vargs1 m1) (cq vf sg vargs2 m2).
 
 Inductive cc_ext_reply: c_reply -> c_reply -> Prop :=
   cc_ext_reply_intro vres1 vres2 m1 m2:
@@ -140,6 +144,7 @@ Inductive cc_inj_query (f: meminj): c_query -> c_query -> Prop :=
     Val.inject f vf1 vf2 ->
     Val.inject_list f vargs1 vargs2 ->
     Mem.inject f m1 m2 ->
+    vf1 <> Vundef ->
     cc_inj_query f (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
 
 Inductive cc_inj_reply (f: meminj): c_reply -> c_reply -> Prop :=

@@ -984,7 +984,7 @@ Lemma wt_external_state:
   wt_state S -> at_external ge S q1 -> after_external S r1 S' -> wt_state S'.
 Proof.
   intros. inv H. inv H0. inv H2. inv H3. inv H1. econstructor; eauto.
-  rewrite H16 in H8; inv H8. eauto.
+  rewrite H15 in H7; inv H7. eauto.
 Qed.
 
 Lemma wt_instr_inv:

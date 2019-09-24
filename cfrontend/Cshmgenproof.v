@@ -1780,6 +1780,7 @@ Theorem transl_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros [ ] se _ q _ _ _ [ ] [ ].
+  split. { eapply Genv.is_internal_match_id; eauto. destruct 1; auto. }
   eapply forward_simulation_plus; cbn.
   - eauto using transl_initial_states.
   - eauto using transl_final_states.

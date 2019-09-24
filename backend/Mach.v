@@ -440,6 +440,7 @@ Canonical Structure li_mach: language_interface :=
   {|
     query := mach_query;
     reply := mach_reply;
+    entry := mq_vf;
   |}.
 
 (** The [valid_blockv] predicate is used to characterize the initial
@@ -533,6 +534,7 @@ Inductive cc_stacking_mq: cc_stk_world -> locset_query -> mach_query -> Prop :=
         Val.inject f (rs1 (S Outgoing ofs ty)) v2) ->
     (forall l, Val.has_type (rs1 l) (Loc.type l)) ->
     Mem.inject f m1 m2 ->
+    vf1 <> Vundef ->
     cc_stacking_mq (stkw f rs1 m1 m2) (lq vf1 sg rs1 m1) (mq vf2 sp ra rs2 m2).
 
 Inductive cc_stacking_mr: cc_stk_world -> locset_reply -> mach_reply -> Prop :=

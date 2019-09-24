@@ -712,6 +712,8 @@ Theorem transf_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros [ ] se _ q _ _ _ [ ] [ ].
+  split. { eapply Genv.is_internal_transf_partial_id; eauto.
+           intros. destruct f; monadInv H; auto. }
   eapply forward_simulation_star; simpl.
   - eauto using transf_initial_states.
   - eauto using transf_final_states.

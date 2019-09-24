@@ -2203,7 +2203,7 @@ Lemma initial_states_simulation:
   forall S, initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states S R.
 Proof.
-  intros _ _ Hse [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm].
+  intros _ _ Hse [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1].
   intros. inv H.
   exploit functions_translated; eauto. intros [tf [A B]].
   pose proof (type_of_fundef_preserved _ _ B) as Hsg. monadInv B. simpl in *.
@@ -2257,6 +2257,8 @@ Theorem transf_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply proj1, match_program_skel in MATCH; auto | ].
   intros w se1 se2 q1 q2 Hse1 SKEL Hse Hq.
+  split. { destruct Hq, MATCH. eapply (Genv.is_internal_match H3); eauto.
+           intros. destruct f; monadInv H5; cbn; auto. }
   eapply forward_simulation_plus.
   apply initial_states_simulation; eauto.
   apply final_states_simulation; eauto.
