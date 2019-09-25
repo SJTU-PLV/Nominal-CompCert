@@ -326,13 +326,29 @@ Next Obligation.
     rewrite PTree.gsspec. destruct peq; subst; eauto.
 Qed.
 
-(** ** Properties of the operations over global environments *)
+(** ** Compatibility between symbol tables and skeletons *)
 
 Definition valid_for (p: program unit unit) se :=
   forall id g, (prog_defmap p) ! id = Some g ->
-  exists b,
+  exists b g',
     find_symbol se id = Some b /\
-    find_info se b = Some g.
+    find_info se b = Some g' /\
+    linkorder g g'.
+
+Lemma valid_for_linkorder (p1 p2: program unit unit):
+  linkorder p1 p2 ->
+  valid_for p2 se ->
+  valid_for p1 se.
+Proof.
+  intros (_ & _ & Hp) Hp2.
+  intros id g Hg.
+  edestruct Hp as (g' & Hg' & Hgg' & _); eauto.
+  edestruct Hp2 as (b & g'' & Hb & Hbg' & ?); eauto.
+  exists b, g''. intuition auto.
+  eapply linkorder_trans; eauto.
+Qed.
+
+(** ** Properties of the operations over global environments *)
 
 Theorem public_symbol_exists:
   forall ge id, public_symbol ge id = true -> exists b, find_symbol ge id = Some b.
@@ -441,7 +457,7 @@ Theorem find_def_symbol:
   (prog_defmap p)!id = Some g <-> exists b, find_symbol (globalenv p) id = Some b /\ find_def (globalenv p) b = Some g.
 Proof.
   intros p id g Hse. split.
-  - intros Hg. edestruct Hse as (b & Hb & Hg'); eauto.
+  - intros Hg. edestruct Hse as (b & g' & Hb & Hg'); eauto.
     rewrite erase_program_defmap. erewrite Hg. reflexivity.
     exists b. split. assumption.
     eapply find_def_exists; eauto.

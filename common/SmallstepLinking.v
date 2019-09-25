@@ -366,10 +366,10 @@ Proof.
   split.
 * destruct Ha, Hb. cbn. congruence.
 * intros w se1 se2 q1 q2 Hse1 Hsk Hse Hq.
-  cbn in Hse1.
-  assert (Genv.valid_for (skel L1a) se1) by admit.
-  assert (Genv.valid_for (skel L1b) se1) by admit.
+  cbn in Hse1. destruct (link_linkorder _ _ _ Hsk1) as [Hsk1a Hsk1b].
+  assert (Genv.valid_for (skel L1a) se1) by eauto using Genv.valid_for_linkorder.
+  assert (Genv.valid_for (skel L1b) se1) by eauto using Genv.valid_for_linkorder.
   split. { cbn. destruct Ha, Hb. edestruct H2, H4; try eassumption. congruence. }
   eapply semantics_simulation; eauto.
   destruct i; eauto.
-Admitted. (* Genv.valid_for vs. linkorder *)
+Qed.
