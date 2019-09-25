@@ -2227,7 +2227,7 @@ Qed.
 
 Lemma external_states_simulation:
   forall S R q1, match_states S R -> at_external ge S q1 ->
-  exists wx q2, at_external tge R q2 /\ cc_injp_query wx q1 q2 /\
+  exists wx q2, at_external tge R q2 /\ cc_injp_query wx q1 q2 /\ Genv.match_stbls wx se tse /\
   forall r1 r2 S', cc_injp_reply wx r1 r2 -> after_external S r1 S' ->
   exists R', after_external R r2 R' /\ match_states S' R'.
 Proof.
@@ -2240,6 +2240,7 @@ Proof.
   eexists _, _. intuition idtac.
   - econstructor; eauto.
   - econstructor; eauto.
+  - eapply match_cont_globalenv with (cenv := VSet.empty); eauto.
   - inv H0. inv H. eexists. split.
     + econstructor; eauto.
     + econstructor; eauto. intro.

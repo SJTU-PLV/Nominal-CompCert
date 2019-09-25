@@ -1563,7 +1563,7 @@ Qed.
 
 Lemma transl_external_states:
   forall S R q1, match_states S R -> CminorSel.at_external ge S q1 ->
-  exists q2, RTL.at_external tge R q2 /\ cc_ext_query q1 q2 /\
+  exists q2, RTL.at_external tge R q2 /\ cc_ext_query q1 q2 /\ se = se /\
   forall r1 r2 S', cc_ext_reply r1 r2 -> CminorSel.after_external S r1 S' ->
   exists R', RTL.after_external R r2 R' /\ match_states S' R'.
 Proof.

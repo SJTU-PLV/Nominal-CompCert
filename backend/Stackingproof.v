@@ -2361,7 +2361,7 @@ Qed.
 
 Lemma transf_external_states:
   forall st1 st2 q1, wt_state prog se st1 -> match_states st1 st2 -> Linear.at_external ge st1 q1 ->
-  exists wx q2, Mach.at_external tge st2 q2 /\ cc_stacking_mq wx q1 q2 /\
+  exists wx q2, Mach.at_external tge st2 q2 /\ cc_stacking_mq wx q1 q2 /\ Genv.match_stbls wx se tse /\
   forall r1 r2 st1', cc_stacking_mr wx r1 r2 -> Linear.after_external st1 r1 st1' ->
   exists st2', Mach.after_external st2 r2 st2' /\ match_states st1' st2'.
 Proof.
@@ -2384,6 +2384,7 @@ Proof.
     + inv WTS. auto.
     + apply SEP.
     + destruct vf; try discriminate.
+  - apply SEP.
   - inv H. inv H0.
     eexists. split; econstructor.
     + eapply source_invariants_step; eauto.
@@ -2412,7 +2413,7 @@ Qed.
 Theorem transf_program_fsim q1 q2:
   Genv.match_stbls w se tse ->
   cc_stacking_mq w q1 q2 ->
-  forward_simulation cc_stacking (cc_stacking_mr w)
+  forward_simulation cc_stacking se tse (cc_stacking_mr w)
     (Linear.semantics prog se q1)
     (Mach.semantics return_address_offset tprog tse q2).
 Proof.
@@ -2423,8 +2424,8 @@ Proof.
   exists st2; split; auto. split; auto.
   eapply wt_initial_state; eauto. exact wt_prog.
 - intros. destruct H. eapply transf_final_states; eauto.
-- intros. destruct H. edestruct transf_external_states as (wx & qx2 & ? & ? & ?); eauto.
-  exists wx, qx2. intuition auto. edestruct H4 as (st2' & ? & ?); eauto.
+- intros. destruct H. edestruct transf_external_states as (wx & qx2 & ? & ? & ? & ?); eauto.
+  exists wx, qx2. intuition auto. edestruct H5 as (st2' & ? & ?); eauto.
   exists st2'. unfold ms. intuition auto.
   eapply wt_external_state; eauto.
 - intros. destruct H0.

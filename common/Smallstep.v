@@ -533,7 +533,7 @@ Open Scope smallstep_scope.
 Section FSIM.
 
 Set Universe Polymorphism.
-Context {li1 li2} (cc: callconv li1 li2).
+Context {li1 li2} (cc: callconv li1 li2) (se1 se2: Genv.symtbl).
 Context {res1 res2} (match_res: res1 -> res2 -> Prop).
 
 (** The general form of a forward simulation. *)
@@ -550,7 +550,7 @@ Record fsim_properties (L1: semantics li1 res1) (L2: semantics li2 res2) (index:
       exists r2, final_state L2 s2 r2 /\ match_res r1 r2;
     fsim_match_external:
       forall i s1 s2 q1, match_states i s1 s2 -> at_external L1 s1 q1 ->
-      exists w q2, at_external L2 s2 q2 /\ match_query cc w q1 q2 /\
+      exists w q2, at_external L2 s2 q2 /\ match_query cc w q1 q2 /\ match_senv cc w se1 se2 /\
       forall r1 r2 s1', match_reply cc w r1 r2 -> after_external L1 s1 r1 s1' ->
       exists i' s2', after_external L2 s2 r2 s2' /\ match_states i' s1' s2';
     fsim_simulation:
@@ -609,7 +609,7 @@ Hypothesis match_final_states:
 
 Hypothesis match_external:
   forall s1 s2 q1, match_states s1 s2 -> at_external L1 s1 q1 ->
-  exists w q2, at_external L2 s2 q2 /\ match_query cc w q1 q2 /\
+  exists w q2, at_external L2 s2 q2 /\ match_query cc w q1 q2 /\ match_senv cc w se1 se2 /\
   forall r1 r2 s1', match_reply cc w r1 r2 -> after_external L1 s1 r1 s1' ->
   exists s2', after_external L2 s2 r2 s2' /\ match_states s1' s2'.
 
@@ -643,7 +643,7 @@ Proof.
 - intros. exploit match_initial_states; eauto. intros [s2 [A B]].
     exists s1; exists s2; auto.
 - intros. destruct H. eapply match_final_states; eauto.
-- intros. destruct H. edestruct match_external as (w & q2 & H2 & Hq & Hr); eauto.
+- intros. destruct H. edestruct match_external as (w & q2 & H2 & Hq & Hw & Hr); eauto.
   exists w, q2. intuition auto. edestruct Hr as (s2' & Hs2' & Hs'); eauto.
 - intros. destruct H0. subst i. exploit simulation; eauto. intros [s2' [A B]].
   exists s1'; exists s2'; intuition auto.
@@ -813,8 +813,8 @@ End SIMULATION_SEQUENCES.
 
 End FSIM.
 
-Arguments fsim_properties {_ _} _ {_ _} _ L1 L2 index order match_states.
-Arguments Forward_simulation {_ _ cc _ _ match_res L1 L2 index} order match_states props.
+Arguments fsim_properties {_ _} _ _ _ {_ _} _ L1 L2 index order match_states.
+Arguments Forward_simulation {_ _ cc _ _ _ _ match_res L1 L2 index} order match_states props.
 
 Definition open_fsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
   skel L1 = skel L2 /\
@@ -824,10 +824,10 @@ Definition open_fsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2
     match_senv ccB w se1 se2 ->
     match_query ccB w q1 q2 ->
     valid_query L2 se2 q2 = valid_query L1 se1 q1 /\
-    forward_simulation ccA (match_reply ccB w) (activate L1 se1 q1) (activate L2 se2 q2).
+    forward_simulation ccA se1 se2 (match_reply ccB w) (activate L1 se1 q1) (activate L2 se2 q2).
 
 Definition closed_fsim (L1 L2: closed_sem) :=
-  forward_simulation cc_id eq L1 L2 /\
+  forward_simulation cc_id (symbolenv L1) (symbolenv L2) eq L1 L2 /\
   forall id, Genv.public_symbol (symbolenv L2) id = Genv.public_symbol (symbolenv L1) id.
 
 (** ** Composing two forward simulations *)
@@ -835,13 +835,14 @@ Definition closed_fsim (L1 L2: closed_sem) :=
 Section COMPOSE_FORWARD_SIMULATIONS.
 
 Context {li1 li2 li3} {cc12: callconv li1 li2} {cc23: callconv li2 li3}.
+Context {se1 se2 se3: Genv.symtbl}.
 Context {res1 res2 res3} {mr12: res1 -> res2 -> Prop} {mr23: res2 -> res3 -> Prop}.
 Context (L1: semantics li1 res1) (L2: semantics li2 res2) (L3: semantics li3 res3).
 
 Lemma compose_forward_simulations:
-  forward_simulation cc12 mr12 L1 L2 ->
-  forward_simulation cc23 mr23 L2 L3 ->
-  forward_simulation (cc12 @ cc23) (fun r1 r3 => exists r2, mr12 r1 r2 /\ mr23 r2 r3) L1 L3.
+  forward_simulation cc12 se1 se2 mr12 L1 L2 ->
+  forward_simulation cc23 se2 se3 mr23 L2 L3 ->
+  forward_simulation (cc12 @ cc23) se1 se3 (fun r1 r3 => exists r2, mr12 r1 r2 /\ mr23 r2 r3) L1 L3.
 Proof.
   intros S12 S23.
   destruct S12 as [index order match_states props].
@@ -865,8 +866,8 @@ Proof.
   edestruct (fsim_match_final_states props') as (r3 & Hr3 & Hr23); eauto.
 - (* external states *)
   intros. destruct H as [s3 [A B]].
-  edestruct (fsim_match_external props) as (w12 & q2 & Hq2 & Hq12 & Hk12); eauto.
-  edestruct (fsim_match_external props') as (w23 & q3 & Hq3 & Hq23 & Hk23); eauto.
+  edestruct (fsim_match_external props) as (w12 & q2 & Hq2 & Hq12 & Hw12 & Hk12); eauto.
+  edestruct (fsim_match_external props') as (w23 & q3 & Hq3 & Hq23 & Hw23 & Hk23); eauto.
   exists (w12, w23), q3. cbn; repeat apply conj; eauto.
   intros r1 r3 s1' (r2 & Hr12 & Hr23) Hs1'.
   edestruct Hk12 as (i12' & s2' & Hs2' & Hs12'); eauto.
@@ -1468,7 +1469,7 @@ Section FORWARD_TO_BACKWARD.
 Context {li1 li2} (cc: callconv li1 li2).
 Context {res1 res2} (match_res: res1 -> res2 -> Prop).
 Context (se1 se2: Genv.symtbl).
-Context L1 L2 index order match_states (FS: fsim_properties cc match_res L1 L2 index order match_states).
+Context L1 L2 index order match_states (FS: fsim_properties cc se1 se2 match_res L1 L2 index order match_states).
 Hypothesis public_preserved: forall id, Genv.public_symbol se2 id = Genv.public_symbol se1 id.
 Hypothesis L1_receptive: receptive L1 se1.
 Hypothesis L2_determinate: determinate L2 se2.
@@ -1514,7 +1515,7 @@ Proof.
   eapply f2b_trans_final; eauto.
   apply star_refl.
 - (* external call reached *)
-  edestruct @fsim_match_external as (w & q2 & Hq & Hat & Hafter); eauto.
+  edestruct @fsim_match_external as (w & q2 & Hq & Hat & Hse & Hafter); eauto.
   eapply f2b_trans_ext; eauto.
   apply star_refl.
 - (* L1 can make one step *)
@@ -1744,7 +1745,7 @@ End FORWARD_TO_BACKWARD.
 Lemma forward_to_backward_simulation:
   forall {li1 li2} (cc: callconv li1 li2) {res1 res2} (mr: res1 -> res2 -> Prop),
   forall se1 se2 L1 L2,
-  forward_simulation cc mr L1 L2 -> receptive L1 se1 -> determinate L2 se2 ->
+  forward_simulation cc se1 se2 mr L1 L2 -> receptive L1 se1 -> determinate L2 se2 ->
   (forall id, Genv.public_symbol se2 id = Genv.public_symbol se1 id) ->
   backward_simulation cc mr L1 L2.
 Proof.
@@ -1867,7 +1868,7 @@ Section FACTOR_FORWARD_SIMULATION.
 
 Variable L1: closed_sem.
 Variable L2: closed_sem.
-Context index order match_states (sim: fsim_properties cc_id eq L1 L2 index order match_states).
+Context index order match_states (sim: fsim_properties cc_id (symbolenv L1) (symbolenv L2) eq L1 L2 index order match_states).
 Hypothesis L2single: single_events L2.
 
 Inductive ffs_match: index -> (trace * state L1) -> state L2 -> Prop :=

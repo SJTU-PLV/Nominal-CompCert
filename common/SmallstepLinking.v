@@ -219,7 +219,7 @@ Section FSIM.
 
   Inductive match_topframes wk: _ -> frame L1a L1b se1 -> frame L2a L2b se2 -> Prop :=
     match_topframes_intro i ind ord q1 q2 s1 s2 ms idx:
-      forall (H: fsim_properties cc (match_reply cc wk) (L1 i se1 q1) (L2 i se2 q2) ind ord ms),
+      forall (H: fsim_properties cc se1 se2 (match_reply cc wk) (L1 i se1 q1) (L2 i se2 q2) ind ord ms),
       ms idx s1 s2 ->
       match_topframes wk
         (mkind ord (fsim_order_wf H) idx)
@@ -228,7 +228,7 @@ Section FSIM.
 
   Inductive match_contframes wk wk': frame L1a L1b se1 -> frame L2a L2b se2 -> Prop :=
     match_contframes_intro i ind ord q1 q2 s1 s2 ms:
-      forall (H: fsim_properties cc (match_reply cc wk') (L1 i se1 q1) (L2 i se2 q2) ind ord ms),
+      forall (H: fsim_properties cc se1 se2 (match_reply cc wk') (L1 i se1 q1) (L2 i se2 q2) ind ord ms),
       (forall r1 r2 s1', match_reply cc wk r1 r2 ->
        Smallstep.after_external (L1 i se1 q1) s1 r1 s1' ->
        exists idx s2', Smallstep.after_external (L2 i se2 q2) s2 r2 s2' /\ ms idx s1' s2') ->
@@ -269,8 +269,8 @@ Section FSIM.
       * econstructor; eauto. econstructor; eauto.
     - (* cross-component call *)
       inv H5; subst_dep. clear ms H2 ms1 H10.
-      edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hrx); eauto.
-      edestruct (proj2 (HL j) wx) as [Hv Hs]; eauto. admit. (* match_senv *)
+      edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & Hrx); eauto.
+      edestruct (proj2 (HL j) wx) as [Hv Hs]; eauto.
       destruct Hs as [indj ordj msj Hj]; eauto.
       edestruct @fsim_match_initial_states as (idx' & s2' & Hs2' & Hs'); eauto.
       eexists (mkind ordj (fsim_order_wf Hj) idx'), _. split.
@@ -283,7 +283,7 @@ Section FSIM.
       eexists (mkind ord0 (fsim_order_wf H6) idx'), _. split.
       + left. apply plus_one. eapply step_pop; eauto.
       + repeat (econstructor; eauto).
-  Admitted.
+  Qed.
 
   Lemma initial_states_simulation:
     forall s1, initial_state L1a L1b se1 q1 s1 ->
@@ -311,26 +311,25 @@ Section FSIM.
 
   Lemma external_simulation:
     forall idx s1 s2 qx1, match_states idx s1 s2 -> at_external L1a L1b se1 s1 qx1 ->
-    exists wx qx2, at_external L2a L2b se2 s2 qx2 /\ match_query cc wx qx1 qx2 /\
+    exists wx qx2, at_external L2a L2b se2 s2 qx2 /\ match_query cc wx qx1 qx2 /\ match_senv cc wx se1 se2 /\
     forall rx1 rx2 s1', match_reply cc wx rx1 rx2 -> after_external L1a L1b se1 s1 rx1 s1' ->
     exists idx' s2', after_external L2a L2b se2 s2 rx2 s2' /\ match_states idx' s1' s2'.
   Proof.
-    clear - HLa HLb.
+    clear - HLa HLb Hsk1.
     intros idx s1 s2 q1 Hs Hq1. destruct Hq1 as [i q1 s1 qx1 k1 Hqx1 Hvld].
     inv Hs. inv H2. subst_dep. clear ms H ms1 H7.
-    edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & H); eauto.
+    edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & H); eauto.
     exists wx, qx2. intuition idtac.
     + constructor; eauto.
       intros j. edestruct (proj2 (HL j)); eauto.
-      admit. (* valid_for *) admit. (* match_senv at external *)
     + inv H1; subst_dep.
       edestruct H as (idx' & s2' & Hs2' & Hs'); eauto.
       eexists (mkind _ (fsim_order_wf H5) idx'), _.
       split; repeat (econstructor; eauto).
-  Admitted.
+  Qed.
 
   Lemma semantics_simulation:
-    forward_simulation cc (match_reply cc w)
+    forward_simulation cc se1 se2 (match_reply cc w)
       (semantics L1a L1b sk1 se1 q1)
       (semantics L2a L2b sk2 se2 q2).
   Proof.

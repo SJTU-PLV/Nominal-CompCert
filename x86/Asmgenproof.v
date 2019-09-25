@@ -979,7 +979,7 @@ Qed.
 
 Lemma transf_external_states:
   forall w st1 st2 q1, match_states w st1 st2 -> Mach.at_external ge st1 q1 ->
-  exists wx q2, Asm.at_external tge st2 q2 /\ cc_asmgen_mq wx q1 q2 /\
+  exists wx q2, Asm.at_external tge st2 q2 /\ cc_asmgen_mq wx q1 q2 /\ se = se /\
   forall r1 r2 st1', cc_asmgen_mr wx r1 r2 -> Mach.after_external st1 r1 st1' ->
   exists st2', Asm.after_external (ag_nb w) st2 r2 st2' /\ match_states w st1' st2'.
 Proof.
@@ -1013,7 +1013,7 @@ Qed.
 
 Theorem transf_program_fsim w q1 q2:
   cc_asmgen_mq w q1 q2 ->
-  forward_simulation cc_asmgen (cc_asmgen_mr w)
+  forward_simulation cc_asmgen se se (cc_asmgen_mr w)
     (Mach.semantics return_address_offset prog se q1)
     (Asm.semantics tprog se q2).
 Proof.

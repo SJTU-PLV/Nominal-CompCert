@@ -569,7 +569,7 @@ Qed.
 
 Lemma transf_external_states:
   forall st1 st2 q1, match_states st1 st2 -> at_external ge st1 q1 ->
-  exists q2, at_external tge st2 q2 /\ cc_ext_query q1 q2 /\
+  exists q2, at_external tge st2 q2 /\ cc_ext_query q1 q2 /\ se = se /\
   forall r1 r2 st1', cc_ext_reply r1 r2 -> after_external st1 r1 st1' ->
   exists st2', after_external st2 r2 st2' /\ match_states st1' st2'.
 Proof.
