@@ -10,6 +10,28 @@ Require Import SmallstepLinking.
 Require Import Values.
 Require Import Asmgenproof0.
 Require Import Asm.
+Require Import Maps.
+
+Inductive linked {A} `{Linker A} : option A -> option A -> option A -> Prop :=
+  | linked_n : linked None None None
+  | linked_l a : linked (Some a) None (Some a)
+  | linked_r a : linked None (Some a) (Some a)
+  | linked_lr a b c : link a b = Some c -> linked (Some a) (Some b) (Some c).
+
+Lemma find_def_link se (p1 p2 p: program) b:
+  link p1 p2 = Some p ->
+  linked (Genv.find_def (Genv.globalenv se p1) b)
+         (Genv.find_def (Genv.globalenv se p2) b)
+         (Genv.find_def (Genv.globalenv se p) b).
+Proof.
+  intros Hp. apply link_prog_inv in Hp as (_ & Hdefs & Hp).
+  rewrite !Genv.find_def_spec.
+  destruct Genv.invert_symbol; try constructor.
+  subst p. rewrite prog_defmap_elements, PTree.gcombine; auto.
+  destruct (prog_defmap p1)!i eqn:H1, (prog_defmap p2)!i eqn:H2; try constructor.
+  edestruct Hdefs as (_ & _ & gd & Hgd); eauto.
+  cbn. rewrite Hgd. constructor; auto.
+Qed.
 
 Lemma find_def_linkorder se (p p': program) b gd:
   linkorder p p' ->
@@ -18,10 +40,8 @@ Lemma find_def_linkorder se (p p': program) b gd:
     Genv.find_def (Genv.globalenv se p') b = Some gd' /\
     linkorder gd gd'.
 Proof.
-  intros (_ & _ & Hdefs) Hgd.
-  edestruct Genv.find_def_inv as (id & Hb & Hid); eauto.
-  edestruct Hdefs as (gd' & Hgd' & Hgg' & _); eauto.
-  eauto using Genv.find_def_exists.
+  rewrite !Genv.find_def_spec. destruct Genv.invert_symbol; try discriminate.
+  intros (_ & _ & Hdefs) Hgd. edestruct Hdefs as (gd' & Hgd' & Hgg' & _); eauto.
 Qed.
 
 Lemma find_funct_ptr_linkorder se (p p': program) b fd:
@@ -335,6 +355,21 @@ Section FOO.
   Proof.
     split; [reflexivity | ]. cbn.
     intros [ ] se _ q _ Hse1 _ [ ] [ ].
+    split.
+    {
+      unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr.
+      destruct asm_entry; auto. destruct Ptrofs.eq_dec; auto.
+      eapply (find_def_link se p1 p2 p b) in Hp.
+      destruct Hp; rewrite ?orb_false_l, ?orb_false_r; auto.
+      Transparent Linker_def Linker_fundef. cbn in *.
+      destruct c as [[|]|], a as [[|]|], b0 as [[|]|]; inv H; try discriminate; cbn in *; auto.
+      + destruct external_function_eq; discriminate.
+      + destruct link; discriminate.
+      + destruct e1; discriminate.
+      + destruct e1; discriminate.
+      + destruct e0; discriminate.
+      + destruct e0; discriminate.
+    }
     set (ms := match_states se (Mem.nextblock (snd q))).
     eapply forward_simulation_star with ms (measure se); cbn.
     - (* initial states *)
@@ -355,7 +390,17 @@ Section FOO.
       exists tt, qx. repeat apply conj; auto.
       + inv H4. edestruct find_funct_linkorder as (? & ? & ?); eauto. inv H0.
         * inv Hl. econstructor; eauto.
-        * admit. (* excluded by valid_query *)
+        * pose proof (H5 true). pose proof (H5 false). clear - H H0 H1 Hp. cbn in *.
+          unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr in *.
+          destruct (rs PC); try discriminate.
+          destruct Ptrofs.eq_dec; try discriminate.
+          destruct (find_def_link se p1 p2 p b Hp); try discriminate.
+          -- destruct a; try discriminate. inv H. discriminate.
+          -- destruct a; try discriminate. inv H. discriminate.
+          -- destruct c; try discriminate. inv H.
+             destruct a as [[|]|], b0 as [[|]|]; cbn in *; try discriminate.
+             destruct external_function_eq; discriminate.
+             destruct (link v v0) as [|]; discriminate.
       + intros r _ s' [ ] Hs'. inv Hs'. cbn in *. inv H7.
         eexists. split. inv Hl. econstructor; eauto.
         econstructor; eauto.
@@ -390,5 +435,5 @@ Section FOO.
           cbn in H9. destruct plt. xomega. discriminate H9.
         * constructor; eauto using Ple_trans.
           rewrite <- H0. eapply match_inner_sp, match_stack_nextblock; eauto.
-  Admitted.
+  Qed.
 End FOO.

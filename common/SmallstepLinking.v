@@ -21,9 +21,8 @@ Ltac subst_dep :=
 
 Section LINK.
   (*Context {li I} (L : I -> open_sem li li).*)
-  Context {li} (La Lb : open_sem li li).
+  Context {li} (L: bool -> open_sem li li).
   Let I := bool.
-  Let L i := (match i with true => La | false => Lb end).
 
   (** * Definition *)
 
@@ -76,7 +75,7 @@ Section LINK.
   Definition semantics: open_sem li li :=
     {|
       valid_query se q :=
-        valid_query La se q || valid_query Lb se q;
+        valid_query (L true) se q || valid_query (L false) se q;
       activate se q :=
         {|
           Smallstep.step ge := step se;
@@ -217,26 +216,26 @@ Section FSIM.
     (Hse: match_senv cc w se1 se2)
     (Hq: match_query cc w q1 q2).
 
-  Inductive match_topframes wk: _ -> frame L1a L1b se1 -> frame L2a L2b se2 -> Prop :=
+  Inductive match_topframes wk: _ -> frame L1 se1 -> frame L2 se2 -> Prop :=
     match_topframes_intro i ind ord q1 q2 s1 s2 ms idx:
       forall (H: fsim_properties cc se1 se2 (match_reply cc wk) (L1 i se1 q1) (L2 i se2 q2) ind ord ms),
       ms idx s1 s2 ->
       match_topframes wk
         (mkind ord (fsim_order_wf H) idx)
-        (st L1a L1b se1 i q1 s1)
-        (st L2a L2b se2 i q2 s2).
+        (st L1 se1 i q1 s1)
+        (st L2 se2 i q2 s2).
 
-  Inductive match_contframes wk wk': frame L1a L1b se1 -> frame L2a L2b se2 -> Prop :=
+  Inductive match_contframes wk wk': frame L1 se1 -> frame L2 se2 -> Prop :=
     match_contframes_intro i ind ord q1 q2 s1 s2 ms:
       forall (H: fsim_properties cc se1 se2 (match_reply cc wk') (L1 i se1 q1) (L2 i se2 q2) ind ord ms),
       (forall r1 r2 s1', match_reply cc wk r1 r2 ->
        Smallstep.after_external (L1 i se1 q1) s1 r1 s1' ->
        exists idx s2', Smallstep.after_external (L2 i se2 q2) s2 r2 s2' /\ ms idx s1' s2') ->
       match_contframes wk wk'
-        (st L1a L1b se1 i q1 s1)
-        (st L2a L2b se2 i q2 s2).
+        (st L1 se1 i q1 s1)
+        (st L2 se2 i q2 s2).
 
-  Inductive match_states: index -> list (frame L1a L1b se1) -> list (frame L2a L2b se2) -> Prop :=
+  Inductive match_states: index -> list (frame L1 se1) -> list (frame L2 se2) -> Prop :=
     | match_states_cons wk idx f1 f2 k1 k2:
         match_topframes wk idx f1 f2 ->
         match_cont wk k1 k2 ->
@@ -252,10 +251,10 @@ Section FSIM.
   (** ** Simulation properties *)
 
   Lemma step_simulation:
-    forall idx s1 s2 t s1', match_states idx s1 s2 -> step L1a L1b se1 s1 t s1' ->
+    forall idx s1 s2 t s1', match_states idx s1 s2 -> step L1 se1 s1 t s1' ->
     exists idx' s2',
-      (plus (fun _ => step L2a L2b se2) tt s2 t s2' \/
-       star (fun _ => step L2a L2b se2) tt s2 t s2' /\ order idx' idx) /\
+      (plus (fun _ => step L2 se2) tt s2 t s2' \/
+       star (fun _ => step L2 se2) tt s2 t s2' /\ order idx' idx) /\
       match_states idx' s1' s2'.
   Proof.
     intros idx s1 s2 t s1' Hs Hs1'.
@@ -286,22 +285,22 @@ Section FSIM.
   Qed.
 
   Lemma initial_states_simulation:
-    forall s1, initial_state L1a L1b se1 q1 s1 ->
-    exists idx s2, initial_state L2a L2b se2 q2 s2 /\ match_states idx s1 s2.
+    forall s1, initial_state L1 se1 q1 s1 ->
+    exists idx s2, initial_state L2 se2 q2 s2 /\ match_states idx s1 s2.
   Proof.
     intros _ [i s1 Hq1 Hs1].
     destruct (proj2 (HL i) w se1 se2 q1 q2 (Hsk1 i) Logic.I Hse Hq) as [Hv Hs].
     destruct Hs as [ind ord ms Hms].
     edestruct @fsim_match_initial_states as (idx & s2 & Hs2 & Hs); eauto.
-    exists (mkind ord (fsim_order_wf Hms) idx), (st L2a L2b se2 i q2 s2 :: nil).
+    exists (mkind ord (fsim_order_wf Hms) idx), (st L2 se2 i q2 s2 :: nil).
     split; econstructor; eauto.
     + econstructor; eauto.
     + constructor.
   Qed.
 
   Lemma final_states_simulation:
-    forall idx s1 s2 r1, match_states idx s1 s2 -> final_state L1a L1b se1 s1 r1 ->
-    exists r2, final_state L2a L2b se2 s2 r2 /\ match_reply cc w r1 r2.
+    forall idx s1 s2 r1, match_states idx s1 s2 -> final_state L1 se1 s1 r1 ->
+    exists r2, final_state L2 se2 s2 r2 /\ match_reply cc w r1 r2.
   Proof.
     clear. intros idx s1 s2 r1 Hs Hr1. destruct Hr1 as [i q1 s1 r1 Hr1].
     inv Hs. inv H4. inv H2. subst_dep. clear ms H ms1 H6.
@@ -310,10 +309,10 @@ Section FSIM.
   Qed.
 
   Lemma external_simulation:
-    forall idx s1 s2 qx1, match_states idx s1 s2 -> at_external L1a L1b se1 s1 qx1 ->
-    exists wx qx2, at_external L2a L2b se2 s2 qx2 /\ match_query cc wx qx1 qx2 /\ match_senv cc wx se1 se2 /\
-    forall rx1 rx2 s1', match_reply cc wx rx1 rx2 -> after_external L1a L1b se1 s1 rx1 s1' ->
-    exists idx' s2', after_external L2a L2b se2 s2 rx2 s2' /\ match_states idx' s1' s2'.
+    forall idx s1 s2 qx1, match_states idx s1 s2 -> at_external L1 se1 s1 qx1 ->
+    exists wx qx2, at_external L2 se2 s2 qx2 /\ match_query cc wx qx1 qx2 /\ match_senv cc wx se1 se2 /\
+    forall rx1 rx2 s1', match_reply cc wx rx1 rx2 -> after_external L1 se1 s1 rx1 s1' ->
+    exists idx' s2', after_external L2 se2 s2 rx2 s2' /\ match_states idx' s1' s2'.
   Proof.
     clear - HLa HLb Hsk1.
     intros idx s1 s2 q1 Hs Hq1. destruct Hq1 as [i q1 s1 qx1 k1 Hqx1 Hvld].
@@ -330,8 +329,8 @@ Section FSIM.
 
   Lemma semantics_simulation:
     forward_simulation cc se1 se2 (match_reply cc w)
-      (semantics L1a L1b sk1 se1 q1)
-      (semantics L2a L2b sk2 se2 q2).
+      (semantics L1 sk1 se1 q1)
+      (semantics L2 sk2 se2 q2).
   Proof.
     apply Forward_simulation with order match_states.
     split; cbn.
@@ -350,7 +349,7 @@ Local Unset Program Cases.
 
 Definition compose {li} (La Lb: open_sem li li) :=
   let L i := match i with true => La | false => Lb end in
-  option_map (semantics La Lb) (link (skel La) (skel Lb)).
+  option_map (semantics L) (link (skel La) (skel Lb)).
 
 Lemma compose_simulation {li1 li2} (cc: callconv li1 li2) L1a L1b L1 L2a L2b L2:
   open_fsim cc cc L1a L2a ->
