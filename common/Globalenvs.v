@@ -414,152 +414,6 @@ Proof.
   intros. unfold find_var_info. destruct (find_def ge b) as [[f1|v1]|]; intuition congruence.
 Qed.
 
-Lemma find_def_inv p b g:
-  find_def (globalenv p) b = Some g ->
-  exists id, find_symbol se id = Some b /\ (prog_defmap p) ! id = Some g.
-Proof.
-  unfold find_def, globalenv, find_symbol. cbn. rewrite PTree.fold_spec.
-  generalize (PTree.elements_complete (prog_defmap p)).
-  pattern (PTree.elements (prog_defmap p)). apply rev_ind.
-  - cbn. rewrite PTree.gempty. discriminate.
-  - intros [id g'] l IHl. rewrite !fold_left_app. setoid_rewrite in_app. cbn.
-    unfold add_globdef at 1.
-    destruct ((genv_symb se) ! id) as [b'|] eqn:Hb'; eauto.
-    destruct (peq b' b).
-    + subst. rewrite !PTree.gss. intros Hdm Hg'. inv Hg'.
-      exists id. eauto.
-    + rewrite !PTree.gso; eauto.
-Qed.
-
-Lemma find_def_exists p id b g:
-  (prog_defmap p) ! id = Some g ->
-  find_symbol se id = Some b ->
-  find_def (globalenv p) b = Some g.
-Proof.
-  unfold find_def. cbn.
-  eapply PTree_Properties.fold_rec; clear.
-  - intros m m' defs Hm. rewrite Hm. auto.
-  - rewrite PTree.gempty. discriminate.
-  - intros defmap defs id' g' Hid' Hg' IH Hg Hb.
-    destruct (peq id' id).
-    + subst. rewrite PTree.gss in Hg. inv Hg.
-      unfold add_globdef. setoid_rewrite Hb.
-      rewrite PTree.gss. reflexivity.
-    + rewrite PTree.gso in Hg by auto.
-      unfold add_globdef. destruct (genv_symb se)!id' eqn:?; eauto.
-      destruct (peq b0 b).
-      * subst. elim n. eapply genv_vars_inj; eauto.
-      * rewrite PTree.gso by auto. eauto.
-Qed.
-
-Theorem find_def_symbol:
-  forall p id g, valid_for (erase_program p) se ->
-  (prog_defmap p)!id = Some g <-> exists b, find_symbol (globalenv p) id = Some b /\ find_def (globalenv p) b = Some g.
-Proof.
-  intros p id g Hse. split.
-  - intros Hg. edestruct Hse as (b & g' & Hb & Hg'); eauto.
-    rewrite erase_program_defmap. erewrite Hg. reflexivity.
-    exists b. split. assumption.
-    eapply find_def_exists; eauto.
-  - intros (b & Hb & Hg). edestruct find_def_inv as (id' & ? & ?); eauto.
-    assert (id' = id) by (eapply genv_vars_inj; eauto). congruence.
-Qed.
-
-(*
-Theorem find_symbol_exists:
-  forall p id g,
-  In (id, g) (prog_defs p) ->
-  exists b, find_symbol (globalenv p) id = Some b.
-Proof.
-  intros. unfold globalenv. eapply add_globals_ensures; eauto.
-(* preserves *)
-  intros. unfold find_symbol; simpl. rewrite PTree.gsspec. destruct (peq id id0).
-  econstructor; eauto.
-  auto.
-(* ensures *)
-  intros. unfold find_symbol; simpl. rewrite PTree.gss. econstructor; eauto.
-Qed.
-
-Theorem find_symbol_inversion : forall p x b,
-  find_symbol (globalenv p) x = Some b ->
-  In x (prog_defs_names p).
-Proof.
-  intros until b; unfold globalenv. eapply add_globals_preserves.
-(* preserves *)
-  unfold find_symbol; simpl; intros. rewrite PTree.gsspec in H1.
-  destruct (peq x id). subst x. change id with (fst (id, g)). apply List.in_map; auto.
-  auto.
-(* base *)
-  unfold find_symbol; simpl; intros. rewrite PTree.gempty in H. discriminate.
-Qed.
-
-Theorem find_def_inversion:
-  forall p b g,
-  find_def (globalenv p) b = Some g ->
-  exists id, In (id, g) (prog_defs p).
-Proof.
-  intros until g. unfold globalenv. apply add_globals_preserves.
-(* preserves *)
-  unfold find_def; simpl; intros.
-  rewrite PTree.gsspec in H1. destruct (peq b (genv_next ge)).
-  inv H1. exists id; auto.
-  auto.
-(* base *)
-  unfold find_def; simpl; intros. rewrite PTree.gempty in H. discriminate.
-Qed.
-
-Corollary find_funct_ptr_inversion:
-  forall p b f,
-  find_funct_ptr (globalenv p) b = Some f ->
-  exists id, In (id, Gfun f) (prog_defs p).
-Proof.
-  intros. apply find_def_inversion with b. apply find_funct_ptr_iff; auto.
-Qed.
-
-Corollary find_funct_inversion:
-  forall p v f,
-  find_funct (globalenv p) v = Some f ->
-  exists id, In (id, Gfun f) (prog_defs p).
-Proof.
-  intros. exploit find_funct_inv; eauto. intros [b EQ]. subst v.
-  rewrite find_funct_find_funct_ptr in H.
-  eapply find_funct_ptr_inversion; eauto.
-Qed.
-
-Theorem find_funct_ptr_prop:
-  forall (P: F -> Prop) p b f,
-  (forall id f, In (id, Gfun f) (prog_defs p) -> P f) ->
-  find_funct_ptr (globalenv p) b = Some f ->
-  P f.
-Proof.
-  intros. exploit find_funct_ptr_inversion; eauto. intros [id IN]. eauto.
-Qed.
-
-Theorem find_funct_prop:
-  forall (P: F -> Prop) p v f,
-  (forall id f, In (id, Gfun f) (prog_defs p) -> P f) ->
-  find_funct (globalenv p) v = Some f ->
-  P f.
-Proof.
-  intros. exploit find_funct_inversion; eauto. intros [id IN]. eauto.
-Qed.
-*)
-
-Theorem find_funct_prop:
-  forall p v f (P: F -> Prop),
-  (forall id f, In (id, Gfun f) (prog_defs p) -> P f) ->
-  find_funct (globalenv p) v = Some f ->
-  P f.
-Proof.
-  intros p v f P H. unfold find_funct, find_funct_ptr.
-  destruct v; try congruence.
-  destruct Ptrofs.eq_dec; try congruence.
-  destruct find_def as [[|]|] eqn:Hgd; try congruence.
-  inversion 1; subst.
-  apply find_def_inv in Hgd as (id & Hb & Hgd).
-  eauto using in_prog_defmap.
-Qed.
-
 Theorem find_symbol_injective:
   forall ge id1 id2 b,
   find_symbol ge id1 = Some b ->
@@ -612,6 +466,8 @@ Proof.
   congruence.
 Qed.
 
+(** ** Properties of [symboltbl] *)
+
 Definition advance_next (gl: list (ident * globdef unit unit)) (x: positive) :=
   List.fold_left (fun n g => Pos.succ n) gl x.
 
@@ -645,6 +501,63 @@ Proof.
   unfold block_is_volatile; intros.
   destruct PTree.get as [[|gv]|] eqn:FV; try discriminate.
   eapply genv_info_range; eauto.
+Qed.
+
+(** ** Properties of [globalenv] *)
+
+(** This characterization of [globalenv] is less computationally
+  efficient than the definition but easier to reason about. *)
+
+Lemma find_def_spec p b:
+  find_def (globalenv p) b =
+  match invert_symbol se b with
+    | Some id => (prog_defmap p) ! id
+    | None => None
+  end.
+Proof.
+  unfold find_def. cbn.
+  eapply PTree_Properties.fold_rec.
+  - intros m m' a Hm. destruct invert_symbol; congruence.
+  - destruct invert_symbol; rewrite !PTree.gempty; auto.
+  - intros defmap defs id gd Hprog_id Hdefmap_id IH. unfold add_globdef.
+    destruct invert_symbol as [id'|] eqn:Hb.
+    + apply invert_find_symbol in Hb. unfold find_symbol in Hb.
+      destruct (peq id' id).
+      * subst. rewrite Hb, !PTree.gss. auto.
+      * rewrite !PTree.gso by auto.
+        destruct (genv_symb se) ! id as [b'|] eqn:Hb'; auto.
+        rewrite PTree.gso; auto. intro. subst. eauto using genv_vars_inj.
+    + destruct (genv_symb se) ! id as [b'|] eqn:Hb'; auto.
+      apply find_invert_symbol in Hb'. rewrite PTree.gso; congruence.
+Qed.
+
+Theorem find_funct_prop:
+  forall p v f (P: F -> Prop),
+  (forall id f, In (id, Gfun f) (prog_defs p) -> P f) ->
+  find_funct (globalenv p) v = Some f ->
+  P f.
+Proof.
+  intros p v f P H. unfold find_funct, find_funct_ptr.
+  destruct v; try congruence. rewrite find_def_spec.
+  destruct Ptrofs.eq_dec; try congruence. subst.
+  destruct invert_symbol; try congruence.
+  destruct (prog_defmap p) ! i as [[fd|]|] eqn:Hgd; try congruence.
+  inversion 1; subst.
+  eauto using in_prog_defmap.
+Qed.
+
+Theorem find_def_symbol:
+  forall p id g, valid_for (erase_program p) se ->
+  (prog_defmap p)!id = Some g <-> exists b, find_symbol (globalenv p) id = Some b /\ find_def (globalenv p) b = Some g.
+Proof.
+  intros p id g Hse. split.
+  - intros Hg. edestruct Hse as (b & g' & Hb & Hg' & LO); eauto.
+    rewrite erase_program_defmap. erewrite Hg. reflexivity.
+    exists b. split. assumption.
+    rewrite find_def_spec. apply find_invert_symbol in Hb. rewrite Hb. auto.
+  - intros (b & Hb & Hg). rewrite find_def_spec in Hg.
+    destruct invert_symbol eqn:Hb'; try congruence. apply invert_find_symbol in Hb'.
+    assert (i = id) by (eapply genv_vars_inj; eauto). congruence.
 Qed.
 
 (** * Construction of the initial memory state *)
