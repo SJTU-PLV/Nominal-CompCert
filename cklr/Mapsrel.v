@@ -126,6 +126,10 @@ Global Instance ptree_elements_rel:
     (forallr R, PTreeRel.r (option_rel R) ++> list_rel (eq * R)).
 Proof.
   intros A B R tA tB Ht.
+  cut (list_forall2 (eq * R)%rel (PTree.elements tA) (PTree.elements tB)).
+  {
+    induction 1; constructor; eauto.
+  }
   eapply PTree.elements_canonical_order.
   - intros. transport H. eauto.
   - intros.

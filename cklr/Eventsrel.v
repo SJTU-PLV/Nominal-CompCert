@@ -1,41 +1,8 @@
 Require Import Maps.
 Require Import Valuesrel.
-Require Import Globalenvsrel.
+Require Import Globalenvs.
 Require Import CKLR.
 Require Export Events.
-
-
-(** * [genv_valid] vs. [symbols_inject] *)
-
-Global Instance genv_valid_symbols_inject R w:
-  Monotonic
-    (@Genv.to_senv)
-    (forallr -, forallr -, psat (genv_valid R w) ++> symbols_inject (mi R w)).
-Proof.
-  intros F V ge _ [Hge].
-  repeat apply conj; simpl.
-  - reflexivity.
-  - intros.
-    pose proof H0 as Hb. eapply genv_valid_find_symbol in Hb; eauto.
-    red in Hb. split; congruence.
-  - intros.
-    pose proof H0 as Hb. eapply genv_valid_find_symbol in Hb; eauto.
-  - intros.
-    pose proof (meminj_wf_incr _ Hge b1 b1 0) as Hb1.
-    unfold Mem.flat_inj in Hb1.
-    destruct Block.lt_dec.
-    + specialize (Hb1 eq_refl). rewrite H in Hb1. inv Hb1.
-      reflexivity.
-    + clear Hb1.
-      destruct (Block.lt_dec b2 Block.init).
-      * elim n. eapply meminj_wf_img; eauto.
-      * unfold Genv.block_is_volatile, Genv.find_var_info.
-        destruct (Genv.find_def ge b1) eqn:H1.
-        { apply Genv.genv_defs_range in H1. contradiction. }
-        destruct (Genv.find_def ge b2) eqn:H2.
-        { apply Genv.genv_defs_range in H2. contradiction. }
-        reflexivity.
-Qed.
 
 
 (** * External functions *)
@@ -77,7 +44,6 @@ Proof.
     exists x. split.
     + inv Hptr.
       constructor; eauto.
-      erewrite Hbv; eauto.
     + rauto.
 Qed.
 
@@ -351,9 +317,22 @@ Global Existing Instance external_functions_sem_rel.
 Global Existing Instance inline_assembly_sem_rel.
 
 Global Instance external_call_rel R:
-  Monotonic (@external_call) (- ==> extcall_sem_rel R).
+  Monotonic
+    (@external_call)
+    (- ==> |= Genv.match_stbls @@ [mi R] ++> Val.inject_list @@ [mi R] ++>
+     match_mem R ++> - ==> % k1 set_le (<> Val.inject @@ [mi R] * match_mem R)).
 Proof.
-  intros ef.
+  intros ef w se1 se2 Hse.
+  assert (symbols_inject (mi R w) se1 se2).
+  {
+    repeat split; intros.
+    + apply (Genv.mge_public Hse); auto.
+    + edestruct @Genv.find_symbol_match as (? & ? & ?); eauto. congruence.
+    + edestruct @Genv.find_symbol_match as (? & ? & ?); eauto. congruence.
+    + edestruct @Genv.find_symbol_match as (? & ? & ?); eauto.
+    + simpl; unfold Genv.block_is_volatile, Genv.find_var_info, Genv.find_def.
+      edestruct (Genv.mge_info Hse _ H); subst; reflexivity.
+  }
   destruct ef; simpl; try rauto.
   repeat intro. destruct a0. contradiction.
 Qed.
@@ -364,41 +343,22 @@ Hint Extern 1 (Transport _ _ _ _ _) =>
 
 (** * [eval_builtin_args] *)
 
-Global Instance genv_symbols_address_inject R w:
+Global Instance senv_symbols_address_inject R w:
   Monotonic
     (@Genv.symbol_address)
-    (forallr -, forallr -, psat (genv_valid R w) ++>
-     - ==> - ==> Val.inject (mi R w)).
+    (Genv.match_stbls (mi R w) ++> - ==> - ==> Val.inject (mi R w)).
 Proof.
-  intros F V ge1 _ [Hge] id ofs.
+  intros se1 se2 Hse id ofs.
   unfold Genv.symbol_address.
-  unfold Genv.find_symbol.
-  destruct (Genv.genv_defs ge1)!id; econstructor.
-  - eapply Hge.
-    unfold Mem.flat_inj.
-    destruct Block.lt_dec.
-    + reflexivity.
-    + elim n; eauto using Block.lt_glob_init.
-  - rewrite Ptrofs.add_zero.
-    reflexivity.
+  destruct (Genv.find_symbol se1 id) as [b1|] eqn:Hb1; auto.
+  edestruct @Genv.find_symbol_match as (b2 & Hb & Hb2); eauto.
+  rewrite Hb2. econstructor; eauto. rewrite Ptrofs.add_zero. auto.
 Qed.
 
-Global Instance senv_symbols_address_inject {F V} R w:
-  Monotonic
-    (@Senv.symbol_address)
-    ((psat (genv_valid R w)) !! (@Genv.to_senv F V) ++>
-     - ==> - ==> Val.inject (mi R w)).
-Proof.
-  intros _ _ [ge1 ge2 Hge].
-  change (Senv.symbol_address ge1) with (Genv.symbol_address ge1).
-  change (Senv.symbol_address ge2) with (Genv.symbol_address ge2).
-  rauto.
-Qed.
-
-Global Instance eval_builtin_arg_rel {F V} R w:
+Global Instance eval_builtin_arg_rel R w:
   Monotonic
     (@eval_builtin_arg)
-    (forallr -, (psat (genv_valid R w)) !! (@Genv.to_senv F V) ++>
+    (forallr -, Genv.match_stbls (mi R w) ++>
      (- ==> Val.inject (mi R w)) ++>
      Val.inject (mi R w) ++> match_mem R w ++> - ==> set_le (Val.inject (mi R w))).
 Proof.
@@ -417,10 +377,10 @@ Qed.
 Hint Extern 1 (Transport _ _ _ _ _) =>
   set_le_transport @eval_builtin_arg : typeclass_instances.
 
-Global Instance eval_builtin_args_rel {F V} R w:
+Global Instance eval_builtin_args_rel R w:
   Monotonic
     (@eval_builtin_args)
-    (forallr -, (psat (genv_valid R w)) !! (@Genv.to_senv F V) ++>
+    (forallr -, Genv.match_stbls (mi R w) ++>
      (- ==> Val.inject (mi R w)) ++>
      Val.inject (mi R w) ++> match_mem R w ++> - ==>
      set_le (Val.inject_list (mi R w))).

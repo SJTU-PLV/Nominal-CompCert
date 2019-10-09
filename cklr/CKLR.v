@@ -8,11 +8,8 @@ Require Export Integers.
 Require Export AST.
 Require Export Valuesrel.
 Require Export Memory.
-
-
-(** * Complementary injection relations *)
-
-(** XXX should this go to Valuesrel.v or something such? *)
+Require Export Globalenvs.
+Require Import LanguageInterface.
 
 
 (** * Compcert Kripke simulation relations *)
@@ -43,16 +40,6 @@ Require Export Memory.
   memory operations, so that they satisfy the relational properties
   enumerated below. *)
 
-Record meminj_wf f :=
-  {
-    meminj_wf_incr:
-      inject_incr (Mem.flat_inj Block.init) f;
-    meminj_wf_img b1 b2:
-      block_inject f b1 b2 ->
-      Block.lt b2 Block.init ->
-      Block.lt b1 Block.init;
-  }.
-
 Record cklr :=
   {
     world: Type;
@@ -62,6 +49,7 @@ Record cklr :=
 
     mi: world -> meminj;
     match_mem: klr world mem mem;
+    match_stbls: klr world Genv.symtbl Genv.symtbl;
 
     acc_preorder:
       PreOrder wacc;
@@ -69,9 +57,10 @@ Record cklr :=
     mi_acc:
       Monotonic mi (wacc ++> inject_incr);
 
-    cklr_wf w m1 m2:
-      match_mem w m1 m2 ->
-      meminj_wf (mi w);
+    match_stbls_acc:
+      Monotonic match_stbls (wacc ++> subrel);
+    match_stbls_proj w:
+      Related (match_stbls w) (Genv.match_stbls (mi w)) subrel;
 
     cklr_alloc:
       Monotonic
@@ -168,6 +157,8 @@ Global Existing Instance cklr_kf.
 Global Existing Instance acc_preorder.
 Global Existing Instance mi_acc.
 Global Instance mi_acc_params: Params (@mi) 2.
+Global Existing Instance match_stbls_acc.
+Global Instance match_stbls_params: Params (@match_stbls) 3.
 
 Global Existing Instances cklr_alloc.
 Local Existing Instances cklr_free.
@@ -984,3 +975,44 @@ Ltac eexpair :=
       let y := eval red in yv in clear yv;
       exists (x, y); simpl
   end.
+
+
+(** * Simulation conventions *)
+
+(** Every CKLR defines as simulation convention for the C language
+  interface in the following way. This is used in particular to show
+  that key languages (Clight and RTL) self-simulate under any CKLR.
+  In [some other place], we show that instances for the [inj] and
+  [injp] CKLRs are equivalent to the corresponding simulation
+  conventions used to verify the compiler. *)
+
+Inductive cc_c_query R (w: world R): relation c_query :=
+  | cc_c_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
+      Val.inject (mi R w) vf1 vf2 ->
+      Val.inject_list (mi R w) vargs1 vargs2 ->
+      match_mem R w m1 m2 ->
+      vf1 <> Vundef ->
+      cc_c_query R w (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
+
+Inductive cc_c_reply R (w: world R): relation c_reply :=
+  | cc_c_reply_intro vres1 vres2 m1 m2:
+      Val.inject (mi R w) vres1 vres2 ->
+      match_mem R w m1 m2 ->
+      cc_c_reply R w (cr vres1 m1) (cr vres2 m2).
+
+Program Definition cc_c (R: cklr): callconv li_c li_c :=
+  {|
+    ccworld := world R;
+    match_senv := match_stbls R;
+    match_query := cc_c_query R;
+    match_reply := (<> cc_c_reply R)%klr;
+  |}.
+Next Obligation.
+  intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
+Qed.
+
+(** TODO:
+  - update inj, show [cc_c inj ~ cc_inj]
+  - update injp, show [cc_c injp ~ cc_injp]
+  - figure out the convention algebra, 
+  *)

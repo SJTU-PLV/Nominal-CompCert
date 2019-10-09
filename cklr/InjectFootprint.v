@@ -36,10 +36,16 @@ Definition injp_mi :=
 Inductive injp_match_mem: injp_world -> relation mem :=
   injp_match_mem_intro f m1 m2:
     Mem.inject f m1 m2 ->
-    meminj_wf f ->
     injp_match_mem (injpw f m1 m2) m1 m2.
 
-Hint Constructors injp_match_mem.
+Inductive injp_match_stbls: injp_world -> relation Genv.symtbl :=
+  injp_match_stbls_intro f m1 m2 se1 se2:
+    Genv.match_stbls f se1 se2 ->
+    Pos.le (Genv.genv_next se1) (Mem.nextblock m1) ->
+    Pos.le (Genv.genv_next se2) (Mem.nextblock m2) ->
+    injp_match_stbls (injpw f m1 m2) se1 se2.
+
+Hint Constructors injp_match_mem injp_match_stbls.
 
 (** ** Properties *)
 
@@ -71,7 +77,7 @@ Proof.
     + red. eauto.
     + apply Mem.unchanged_on_refl.
     + apply Mem.unchanged_on_refl.
-    + reflexivity.
+    + apply inject_incr_refl.
     + intros b ofs. congruence.
   - intros w1 w2 w3 H12 H23.
     destruct H12 as [f m1 m2 f' m1' m2' Hp H1 H2 Hf Hs].
@@ -91,7 +97,7 @@ Proof.
           by (eapply Hf in Hb; split; congruence); subst.
         eapply Hptr2; eauto.
       * edestruct Hs; eauto.
-    + rauto.
+    + eapply inject_incr_trans; eauto.
     + intros b1 b2 delta Hb Hb''.
       destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
@@ -122,18 +128,33 @@ Program Definition injp: cklr :=
     wacc := injp_acc;
     mi := injp_mi;
     match_mem := injp_match_mem;
+    match_stbls := injp_match_stbls;
   |}.
 
-Next Obligation. (* meminj_wf *)
-  destruct H; auto.
+Next Obligation. (* ~> vs. match_stbls *)
+  intros w w' Hw' se1 se2 Hse.
+  destruct Hse as [f m1 m2 se1 se2 Hse Hnb1 Hnb2]. inv Hw'.
+  constructor.
+  - eapply Genv.match_stbls_incr; eauto.
+    intros b1 b2 delta Hb' Hb2.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+    + eapply H6 in Hb. congruence.
+    + specialize (H7 b1 b2 delta Hb Hb') as [Hb1 Hb2'].
+      unfold Mem.valid_block in Hb2'. xomega.
+  - apply Mem.unchanged_on_nextblock in H3. xomega.
+  - apply Mem.unchanged_on_nextblock in H4. xomega.
+Qed.
+
+Next Obligation. (* match_stbls vs. Genv.match_stbls *)
+  destruct 1; auto.
 Qed.
 
 Next Obligation. (* Mem.alloc *)
-  intros _ _ _ [f m1 m2 Hm Hwf] lo hi.
+  intros _ _ _ [f m1 m2 Hm] lo hi.
   destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:Hm1'.
   edestruct Mem.alloc_parallel_inject
     as (f' & m2' & b2 & Hm2' & Hm' & Hf' & Hb2 & Hff');
-    eauto using Zle_refl.
+    eauto using Z.le_refl.
   rewrite Hm2'.
   exists (injpw f' m1' m2'); split; repeat rstep; eauto.
   constructor.
@@ -148,30 +169,17 @@ Next Obligation. (* Mem.alloc *)
   - red. intros b b' delta Hb Hb'.
     assert (b = b1).
     {
-      destruct (Block.eq b b1); eauto.
+      destruct (peq b b1); eauto.
       rewrite Hff' in Hb'; eauto.
       congruence.
     }
     assert (b' = b2) by congruence.
     subst.
     split; eauto using Mem.fresh_block_alloc.
-  - constructor; eauto.
-    split.
-    + transitivity f; eauto.
-      apply meminj_wf_incr; auto.
-    + intros x y [d Hxy] Hy.
-      destruct (Block.eq x b1); subst.
-      * assert (y = b2) by congruence; subst.
-        eapply Mem.alloc_result in Hm2'; subst.
-        elim (Block.lt_strict Block.init).
-        eapply Block.le_lt_trans; eauto.
-        apply Mem.init_nextblock.
-      * rewrite Hff' in Hxy by eauto.
-        eapply meminj_wf_img; eauto.
 Qed.
 
 Next Obligation. (* Mem.free *)
-  intros _ _ _ [f m1 m2 Hm Hwf] [[b1 lo1] hi1] [[b2 lo2] hi2] Hr.
+  intros _ _ _ [f m1 m2 Hm] [[b1 lo1] hi1] [[b2 lo2] hi2] Hr.
   simpl. red.
   destruct (Mem.free m1 b1 lo1 hi1) as [m1'|] eqn:Hm1'; [|rauto].
   inv Hr. inv H0. simpl in H1.
@@ -191,12 +199,12 @@ Next Obligation. (* Mem.free *)
     eapply Mem.perm_implies; [ | eapply perm_any_N].
     eapply Mem.free_range_perm; eauto.
     xomega.
-  - reflexivity.
+  - apply inject_incr_refl.
   - apply inject_separated_refl.
 Qed.
 
 Next Obligation. (* Mem.load *)
-  intros _ chunk _ _ [f m1 m2 Hm Hwf] _ _ [b1 ofs1 b2 delta Hptr].
+  intros _ chunk _ _ [f m1 m2 Hm] _ _ [b1 ofs1 b2 delta Hptr].
   simpl. red.
   destruct (Mem.load chunk m1 b1 ofs1) as [v1|] eqn:Hv1; [|rauto].
   edestruct Mem.load_inject as (v2 & Hv2 & Hv); eauto.
@@ -204,7 +212,7 @@ Next Obligation. (* Mem.load *)
 Qed.
 
 Next Obligation. (* Mem.store *)
-  intros _ chunk _ _ [f m1 m2 Hm Hwf] _ _ [b1 ofs1 b2 delta Hptr] v1 v2 Hv.
+  intros _ chunk _ _ [f m1 m2 Hm] _ _ [b1 ofs1 b2 delta Hptr] v1 v2 Hv.
   simpl in *. red.
   destruct (Mem.store chunk m1 b1 ofs1 v1) as [m1'|] eqn:Hm1'; [|rauto].
   edestruct Mem.store_mapped_inject as (m2' & Hm2' & Hm'); eauto.
@@ -223,12 +231,12 @@ Next Obligation. (* Mem.store *)
     eapply Mem.perm_implies; [ | eapply perm_any_N].
     eapply H0; eauto.
     xomega.
-  - reflexivity.
+  - apply inject_incr_refl.
   - apply inject_separated_refl.
 Qed.
 
 Next Obligation. (* Mem.loadbytes *)
-  intros _ _ _ [f m1 m2 Hm Hwf] _ _ [b1 ofs1 b2 delta Hptr] sz.
+  intros _ _ _ [f m1 m2 Hm] _ _ [b1 ofs1 b2 delta Hptr] sz.
   simpl. red.
   destruct (Mem.loadbytes m1 b1 ofs1 sz) as [vs1|] eqn:Hvs1; [|rauto].
   edestruct Mem.loadbytes_inject as (vs2 & Hvs2 & Hvs); eauto.
@@ -236,7 +244,7 @@ Next Obligation. (* Mem.loadbytes *)
 Qed.
 
 Next Obligation. (* Mem.storebytes *)
-  intros _ _ _ [f m1 m2 Hm Hwf] [b1 ofs1] [b2 ofs2] Hptr vs1 vs2 Hvs.
+  intros _ _ _ [f m1 m2 Hm] [b1 ofs1] [b2 ofs2] Hptr vs1 vs2 Hvs.
   simpl. red.
   destruct (Mem.storebytes m1 _ _ _) as [m1'|] eqn:Hm1'; [|constructor].
   assert (vs1 = nil \/ vs1 <> nil) as [Hvs1|Hvs1].
@@ -271,6 +279,7 @@ Next Obligation. (* Mem.storebytes *)
     }
     inv Hptr'.
     edestruct Mem.storebytes_mapped_inject as (m2' & Hm2' & Hm'); eauto.
+    rauto.
     rewrite Hm2'. constructor.
     exists (injpw f m1' m2'); split; repeat rstep; eauto.
     constructor.
@@ -286,29 +295,29 @@ Next Obligation. (* Mem.storebytes *)
       eapply Mem.storebytes_range_perm; eauto.
       red in Hvs. rewrite Hvs.
       xomega.
-    + reflexivity.
+    + apply inject_incr_refl.
     + apply inject_separated_refl.
 Qed.
 
 Next Obligation. (* Mem.perm *)
-  intros _ _ _ [f m1 m2 Hm Hwf] _ _ [b1 ofs1 b2 delta Hb] p k H.
+  intros _ _ _ [f m1 m2 Hm] _ _ [b1 ofs1 b2 delta Hb] p k H.
   eapply Mem.perm_inject; eauto.
 Qed.
 
 Next Obligation. (* Mem.valid_block *)
-  intros _ _ _ [f m1 m2 Hm Hwf] b1 b2 [delta Hb].
+  intros _ _ _ [f m1 m2 Hm] b1 b2 [delta Hb].
   split; intro.
   - eapply Mem.valid_block_inject_2; eauto.
   - eapply Mem.valid_block_inject_1; eauto.
 Qed.
 
 Next Obligation. (* Mem.meminj_no_overlap *)
-  destruct H as [f m1 m2 Hm Hwf].
+  destruct H as [f m1 m2 Hm].
   eapply Mem.mi_no_overlap; eauto.
 Qed.
 
 Next Obligation. (* representable *)
-  destruct H as [f m1 m2 Hm Hwf].
+  destruct H as [f m1 m2 Hm].
   rewrite <- (Ptrofs.unsigned_repr ofs1) by xomega.
   eapply Mem.mi_representable; eauto.
   rewrite Ptrofs.unsigned_repr by xomega.
@@ -316,12 +325,12 @@ Next Obligation. (* representable *)
 Qed.
 
 Next Obligation.
-  destruct H as [f m1 m2 Hm Hwf].
+  destruct H as [f m1 m2 Hm].
   eapply Mem.aligned_area_inject; eauto.
 Qed.
 
 Next Obligation. 
-  destruct H as [f m1 m2 Hm Hwf].
+  destruct H as [f m1 m2 Hm].
   eapply Mem.disjoint_or_equal_inject; eauto.
 Qed.
 
@@ -345,27 +354,31 @@ Qed.
 Lemma injp_inj_injp:
   subcklr injp (injp @ inj @ injp).
 Proof.
-  intros _ _ _ [f m1 m4 Hm14 Hwf].
-  exists (injpw (meminj_dom f) m1 m1, (meminj_dom f, injpw f m1 m4)).
+  intros _ _ _ [f m1 m4 Hm14].
+  eexists (injpw (meminj_dom f) m1 m1,
+           (injw (meminj_dom f) (Mem.nextblock m1) (Mem.nextblock m1) _,
+            injpw f m1 m4)).
   simpl.
   repeat apply conj.
   - exists m1; split.
-    { constructor. eapply mem_inject_dom; eauto. apply meminj_dom_wf; auto. }
+    { constructor. eapply mem_inject_dom; eauto. }
     exists m1; split.
-    { repeat rstep; eauto using mem_inject_dom, meminj_dom_wf. }
+    { constructor; repeat rstep; eauto using mem_inject_dom. }
     constructor; eauto.
   - rewrite !meminj_dom_compose.
-    reflexivity.
-  - intros (w12' & f23 & w34') m1' m4'.
-    intros (m2' & Hm12' & m3' & [Hm23' Hwf23'] & Hm34').
+    apply inject_incr_refl.
+  - intros (w12' & w23' & w34') m1' m4'.
+    intros (m2' & Hm12' & m3' & Hm23' & Hm34').
     intros (H12 & H23 & H34). simpl in *.
-    destruct Hm12' as [f12 m1' m2' Hm12' Hwf12'].
-    destruct Hm34' as [f34 m3' m4' Hm34' Hwf34'].
+    destruct Hm12' as [f12 m1' m2' Hm12'].
+    inversion Hm23' as [f23 xm2' xm3' Hm23'']; clear Hm23'; subst.
+    destruct Hm34' as [f34 m3' m4' Hm34'].
     inv H12.
+    inv H23.
     inv H34.
     exists (injpw (compose_meminj f12 (compose_meminj f23 f34)) m1' m4').
     repeat apply conj.
-    + constructor; eauto using compose_meminj_wf.
+    + constructor; eauto.
       eauto using Mem.inject_compose.
     + constructor; eauto.
       * apply injp_max_perm_decrease_dom; eauto.
@@ -377,4 +390,5 @@ Proof.
       * (* XXX we can't actually prove this because the intermediate
           injection may map a new block into an old one, and falsify
           the composite separation property. *)
+        (* XXX now we can, if we need to. *)
 Abort.

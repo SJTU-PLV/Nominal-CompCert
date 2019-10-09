@@ -3,25 +3,30 @@ Require Import Valuesrel.
 Require Import CKLR.
 Require Export Globalenvs.
 
-
 (** * Injections and global environements *)
 
-Definition genv_valid {F V} R w (ge: Genv.t F V) :=
-  meminj_wf (mi R w).
-
-Lemma genv_valid_find_symbol {F V} R w (ge: Genv.t F V) i b:
-  genv_valid R w ge ->
-  Genv.find_symbol ge i = Some b ->
-  block_inject_sameofs (mi R w) b b.
+Instance transport_find_symbol f se1 se2 id b1:
+  Transport (Genv.match_stbls f) se1 se2
+    (Genv.find_symbol se1 id = Some b1)
+    (exists b2,
+        Genv.find_symbol se2 id = Some b2 /\
+        block_inject_sameofs f b1 b2).
 Proof.
-  intros Hge H.
-  unfold Genv.find_symbol in H.
-  destruct (Genv.genv_defs ge)!i; inv H.
-  apply Hge.
-  unfold Mem.flat_inj.
-  destruct Block.lt_dec; eauto.
-  elim n; eapply Block.lt_glob_init.
+  intros Hse Hb1. edestruct @Genv.find_symbol_match as (b2 & ? & ?); eauto.
 Qed.
+
+
+(*
+Lemma genv_valid_find_symbol f se1 se2 i b:
+  Genv.match_stbls f se1 se2 ->
+  Genv.find_symbol se1 i = Some b ->
+  block_inject_sameofs f b b.
+Proof.
+  intros. edestruct @Genv.find_symbol_match as (? & ? & ?); eauto.
+  eauto. constructor.
+  intros. eapply H; eauto.
+Qed.
+*)
 
 Lemma genv_valid_funct_ptr {F V} R w (ge: Genv.t F V) b f:
   genv_valid R w ge ->

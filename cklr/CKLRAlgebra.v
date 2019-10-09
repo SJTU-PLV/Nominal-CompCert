@@ -269,11 +269,12 @@ Lemma flat_inj_idemp thr:
 Proof.
   apply functional_extensionality; intros b.
   unfold compose_meminj, Mem.flat_inj.
-  destruct Block.lt_dec eqn:Hb; eauto.
+  destruct plt eqn:Hb; eauto.
   rewrite Hb.
   reflexivity.
 Qed.
 
+(*
 Lemma compose_meminj_wf f1 f2:
   meminj_wf f1 ->
   meminj_wf f2 ->
@@ -287,6 +288,7 @@ Proof.
     apply block_inject_compose in Hb as (bI & Hb1I & HbI2).
     eauto using meminj_wf_img.
 Qed.
+*)
 
 (** ** Definition *)
 
@@ -295,6 +297,7 @@ Program Definition cklr_compose (R1 R2: cklr): cklr :=
     world := world R1 * world R2;
     wacc := wacc R1 * wacc R2;
     mi w := compose_meminj (mi R1 (fst w)) (mi R2 (snd w));
+    match_stbls w := rel_compose (match_stbls R1 (fst w)) (match_stbls R2 (snd w));
     match_mem w := rel_compose (match_mem R1 (fst w)) (match_mem R2 (snd w));
   |}.
 
@@ -303,9 +306,13 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  destruct H as (mI & Hm1I & HmI2); simpl in *.
-  apply compose_meminj_wf; eapply cklr_wf; eauto.
+  intros [w12 w23] [w12' w23'] [H12 H23]. cbn.
+  eapply rel_compose_subrel; rauto.
 Qed.
+
+Next Obligation.
+  cbn. intros se1 se3 (se2 & Hse12 & Hse23).
+Admitted. (* Genv.match_stbls vs. compose_meminj *)
 
 Next Obligation.
   intros [w12 w23] m1 m3 (m2 & Hm12 & Hm23) lo hi.
@@ -420,7 +427,7 @@ Next Obligation. (* no overlap *)
   - edestruct (cklr_no_overlap R2 w0 mx m2); eauto.
     rewrite !Z.add_assoc.
     eauto.
-  - destruct (Block.eq ax bx); eauto.
+  - destruct (peq ax bx); eauto.
     + right. assert (dax2 = dbz2) by congruence. xomega.
     + edestruct (cklr_no_overlap R2 w0 mx m2); eauto.
       rewrite !Z.add_assoc.
