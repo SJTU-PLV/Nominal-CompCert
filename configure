@@ -633,7 +633,9 @@ echo "-R lib compcert.lib \
 -R driver compcert.driver \
 -R flocq compcert.flocq \
 -R exportclight compcert.exportclight \
--R cparser compcert.cparser" > _CoqProject
+-R cparser compcert.cparser \
+-R cklr compcert.cklr \
+-R coqrel coqrel" > _CoqProject
 case $arch in
     x86)
         echo "-R x86_${bitsize} compcert.x86_${bitsize}" >> _CoqProject
