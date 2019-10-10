@@ -1601,6 +1601,9 @@ Record match_stbls (f: meminj) (ge1: symtbl) (ge2: symtbl) := {
   mge_info:
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
     ge1.(genv_info) ! b1 = ge2.(genv_info) ! b2;
+  mge_separated:
+    forall b1 b2 delta, f b1 = Some (b2, delta) ->
+    Pos.le (genv_next ge1) b1 <-> Pos.le (genv_next ge2) b2;
 }.
 
 Record match_genvs {A B V W} (f: meminj) R (ge1: t A V) (ge2: t B W) := {
@@ -1617,31 +1620,44 @@ Proof.
   - inversion 1. auto.
   - inversion 1. reflexivity.
   - inversion 1. auto.
+  - inversion 1. reflexivity.
 Qed.
 
 Context {f se tse} (Hse: match_stbls f se tse).
 
 Theorem match_stbls_incr f':
   inject_incr f f' ->
-  (forall b1 b2 delta, f' b1 = Some (b2, delta) -> Plt b2 tse.(genv_next) -> f b1 = Some (b2, delta)) ->
+  (forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) ->
+   Pos.le se.(genv_next) b1 /\ Pos.le tse.(genv_next) b2) ->
   match_stbls f' se tse.
 Proof.
-  intros Hf' Himg. split.
+  intros Hf' SEP. split.
   - eapply mge_public; eauto.
   - intros. edestruct mge_dom as (b2 & Hb2); eauto.
-  - intros. apply Himg in H; auto. eapply mge_img; eauto.
+  - intros. destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+    + rewrite (Hf' _ _ _ Hb) in H. inv H. pose proof (mge_separated Hse b1 Hb).
+      xomega.
+    + specialize (SEP _ _ _ Hb H).
+      xomega.
   - intros. split.
     + intros Hb1. edestruct mge_dom as (b2' & Hb2'); eauto. eapply genv_symb_range; eauto.
       rewrite (Hf' _ _ _ Hb2') in H. inv H. rewrite <- mge_symb; eauto.
-    + intros Hb2. rewrite mge_symb; eauto. eapply Himg; eauto. eapply genv_symb_range; eauto.
-  - intros b1 b2 delta Hb.
-    destruct ((genv_info tse) ! b2) eqn:Hb2.
-    + edestruct (@mge_info f se tse Hse b1 b2 delta); try congruence.
-      eapply Himg; eauto. eapply genv_info_range; eauto.
-    + destruct ((genv_info se) ! b1) eqn:Hb1; [ | constructor].
-      edestruct (@mge_info f se tse Hse b1 b2 delta); try congruence.
-      edestruct mge_dom; eauto. eapply genv_info_range; eauto.
-      rewrite (Hf' _ _ _ H) in Hb. congruence.
+    + intros Hb2. destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+      * rewrite (Hf' _ _ _ Hb) in H. inv H. rewrite mge_symb; eauto.
+      * edestruct SEP; eauto. apply genv_symb_range in Hb2. xomega.
+  - intros b1 b2 delta Hb'.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+    + rewrite (Hf' _ _ _ Hb) in Hb'. inv Hb'.
+      eapply mge_info; eauto.
+    + edestruct SEP; eauto.
+      destruct (genv_info se) ! b1 eqn:H1. apply genv_info_range in H1. xomega.
+      destruct (genv_info tse) ! b2 eqn:H2. apply genv_info_range in H2. xomega.
+      reflexivity.
+  - intros b1 b2 delta Hb'.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+    + rewrite (Hf' _ _ _ Hb) in Hb'. inv Hb'.
+      eapply mge_separated; eauto.
+    + edestruct SEP; eauto. tauto.
 Qed.
 
 Theorem find_symbol_match:

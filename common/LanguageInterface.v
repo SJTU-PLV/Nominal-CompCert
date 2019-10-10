@@ -1,3 +1,4 @@
+Require Import Coqlib.
 Require Import AST.
 Require Import Values.
 Require Import Memory.
@@ -139,7 +140,29 @@ Solve All Obligations with
 
 (** *** Memory injections *)
 
-Inductive cc_inj_query (f: meminj): c_query -> c_query -> Prop :=
+(** Memory injections with thresholds *)
+
+Record meminj_thr :=
+  mit {
+    mit_meminj :> block -> option (block * Z);
+    mit_l: block;
+    mit_r: block;
+  }.
+
+Definition mit_incr (w: meminj_thr) (f: meminj): Prop :=
+  inject_incr w f /\
+  forall b1 b2 delta,
+    w b1 = None ->
+    f b1 = Some (b2, delta) ->
+    Pos.le (mit_l w) b1 /\
+    Pos.le (mit_r w) b2.
+
+Inductive cc_inj_senv: meminj_thr -> Genv.symtbl -> Genv.symtbl -> Prop :=
+  cc_inj_senv_intro f se1 se2:
+    Genv.match_stbls f se1 se2 ->
+    cc_inj_senv (mit f (Genv.genv_next se1) (Genv.genv_next se2)) se1 se2.
+
+Inductive cc_inj_query (f: meminj_thr): c_query -> c_query -> Prop :=
   cc_inj_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
     Val.inject f vf1 vf2 ->
     Val.inject_list f vargs1 vargs2 ->
@@ -147,21 +170,38 @@ Inductive cc_inj_query (f: meminj): c_query -> c_query -> Prop :=
     vf1 <> Vundef ->
     cc_inj_query f (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
 
-Inductive cc_inj_reply (f: meminj): c_reply -> c_reply -> Prop :=
+Inductive cc_inj_reply (f: meminj_thr): c_reply -> c_reply -> Prop :=
   cc_inj_reply_intro f' vres1 vres2 m1 m2:
-    inject_incr f f' ->
+    mit_incr f f' ->
     Val.inject f' vres1 vres2 ->
     Mem.inject f' m1 m2 ->
     cc_inj_reply f (cr vres1 m1) (cr vres2 m2).
 
 Program Definition cc_inj :=
   {|
-    match_senv := Genv.match_stbls;
+    match_senv := cc_inj_senv;
     match_query := cc_inj_query;
     match_reply := cc_inj_reply;
   |}.
 Next Obligation.
-  intros. rewrite (Genv.mge_public H); auto.
+  intros. destruct H. rewrite (Genv.mge_public H); auto.
+Qed.
+
+Lemma mit_incr_refl w:
+  mit_incr w w.
+Proof.
+  split.
+  - apply inject_incr_refl.
+  - congruence.
+Qed.
+
+Lemma cc_inj_match_stbls w j se1 se2:
+  cc_inj_senv w se1 se2 ->
+  mit_incr w j ->
+  Genv.match_stbls j se1 se2.
+Proof.
+  intros Hse [Hj SEP]. destruct Hse. cbn in *.
+  eapply Genv.match_stbls_incr; eauto.
 Qed.
 
 (** *** Injections with footprint enforcement *)

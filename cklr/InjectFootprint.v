@@ -136,11 +136,8 @@ Next Obligation. (* ~> vs. match_stbls *)
   destruct Hse as [f m1 m2 se1 se2 Hse Hnb1 Hnb2]. inv Hw'.
   constructor.
   - eapply Genv.match_stbls_incr; eauto.
-    intros b1 b2 delta Hb' Hb2.
-    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
-    + eapply H6 in Hb. congruence.
-    + specialize (H7 b1 b2 delta Hb Hb') as [Hb1 Hb2'].
-      unfold Mem.valid_block in Hb2'. xomega.
+    intros b1 b2 delta Hb Hb'. specialize (H7 b1 b2 delta Hb Hb').
+    unfold Mem.valid_block in H7. xomega.
   - apply Mem.unchanged_on_nextblock in H3. xomega.
   - apply Mem.unchanged_on_nextblock in H4. xomega.
 Qed.
@@ -351,6 +348,7 @@ Proof.
     eapply H; eauto.
 Qed.
 
+(*
 Lemma injp_inj_injp:
   subcklr injp (injp @ inj @ injp).
 Proof.
@@ -392,3 +390,4 @@ Proof.
           the composite separation property. *)
         (* XXX now we can, if we need to. *)
 Abort.
+*)

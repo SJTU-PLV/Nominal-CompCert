@@ -11,9 +11,11 @@ Require Export CKLR.
   CKLR [R'], meaning that any [R']-simulation is also a [R]-simulation. *)
 
 Definition subcklr (Q R: cklr) :=
-  forall wq m1 m2,
+  forall wq se1 se2 m1 m2,
+    match_stbls Q wq se1 se2 ->
     match_mem Q wq m1 m2 ->
     exists wr,
+      match_stbls R wr se1 se2 /\
       match_mem R wr m1 m2 /\
       inject_incr (mi Q wq) (mi R wr) /\
       forall wr' m1' m2',
@@ -33,9 +35,9 @@ Proof.
   split.
   - intros R w q1 q2 Hq.
     exists w; intuition eauto.
-  - intros R1 R2 R3 H12 H23 w1 ma mb Hm1.
-    destruct (H12 w1 ma mb Hm1) as (w2 & Hm2 & Hincr12 & H21); clear H12.
-    destruct (H23 w2 ma mb Hm2) as (w3 & Hm3 & Hincr23 & H32); clear H23.
+  - intros R1 R2 R3 H12 H23 w1 sea seb ma mb Hse1 Hm1.
+    destruct (H12 w1 sea seb ma mb Hse1 Hm1) as (w2 & Hse2 & Hm2 & Hincr12 & H21); clear H12.
+    destruct (H23 w2 sea seb ma mb Hse2 Hm2) as (w3 & Hse3 & Hm3 & Hincr23 & H32); clear H23.
     exists w3. repeat apply conj; eauto using inject_incr_trans.
     intros w3' ma' mb' Hm3' Hw3'.
     destruct (H32 w3' ma' mb' Hm3' Hw3') as (w2' & Hm2' & Hw2' & Hincr32).
@@ -274,22 +276,6 @@ Proof.
   reflexivity.
 Qed.
 
-(*
-Lemma compose_meminj_wf f1 f2:
-  meminj_wf f1 ->
-  meminj_wf f2 ->
-  meminj_wf (compose_meminj f1 f2).
-Proof.
-  intros [Hf1 Hi1] [Hf2 Hi2].
-  split.
-  - rewrite <- flat_inj_idemp.
-    rauto.
-  - intros b1 b2 Hb Hb2.
-    apply block_inject_compose in Hb as (bI & Hb1I & HbI2).
-    eauto using meminj_wf_img.
-Qed.
-*)
-
 (** ** Definition *)
 
 Program Definition cklr_compose (R1 R2: cklr): cklr :=
@@ -508,11 +494,12 @@ Global Instance cklr_compose_subcklr:
   Proper (subcklr ++> subcklr ++> subcklr) (@cklr_compose).
 Proof.
   intros R12 R12' H12 R23 R23' H23.
-  intros [w12 w23] m1 m3 (m2 & Hm12 & Hm23). simpl in *.
-  specialize (H12 w12 m1 m2 Hm12) as (w12' & Hm12' & Hincr12 & H12).
-  specialize (H23 w23 m2 m3 Hm23) as (w23' & Hm23' & Hincr23 & H23).
+  intros [w12 w23] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23). simpl in *.
+  specialize (H12 w12 se1 se2 m1 m2 Hse12 Hm12) as (w12' & Hse12' & Hm12' & Hincr12 & H12).
+  specialize (H23 w23 se2 se3 m2 m3 Hse23 Hm23) as (w23' & Hse23' & Hm23' & Hincr23 & H23).
   exists (w12', w23'); simpl.
   repeat apply conj; try rauto.
+  - eexists; split; eauto.
   - eexists; split; eauto.
   - intros [v12' v23'] m1' m3' (m2' & Hm'12 & Hm'23) [Hwv12 Hwv23].
     specialize (H12 v12' m1' m2' Hm'12 Hwv12) as (v12 & Hm'12' & Hwv12' & Hi12').
@@ -544,10 +531,11 @@ Qed.
 Lemma cklr_compose_assoc R1 R2 R3:
   subcklr ((R1 @ R2) @ R3) (R1 @ (R2 @ R3)).
 Proof.
-  intros [[w1 w2] w3] ma md (mb & (mc & Hm1 & Hm2) & Hm3).
+  intros [[w1 w2] w3] sea sed ma md (seb & (sec & Hse1 & Hse2) & Hse3) (mb & (mc & Hm1 & Hm2) & Hm3).
   simpl in *.
   exists (w1, (w2, w3)).
   repeat apply conj.
+  - repeat (eexists; eauto).
   - repeat (eexists; eauto).
   - rewrite compose_meminj_assoc. apply inject_incr_refl.
   - intros (w1' & w2' & w3') ma' md' (mb' & Hm1' & (mc' & Hm2' & Hm3')).
