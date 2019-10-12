@@ -1,5 +1,6 @@
 Require Import Axioms.
 Require Import Events.
+Require Import CallconvAlgebra.
 Require Import CKLR.
 Require Import CKLRAlgebra.
 Require Import LanguageInterface.
@@ -475,3 +476,27 @@ Proof.
         -- edestruct (SEP23' bi b2); eauto. 
     + cbn. rstep; auto.
 Admitted.
+
+
+(** * Connection to [cc_inj] *)
+
+Lemma cc_c_inj:
+  cceqv (cc_c inj) cc_inj.
+Proof.
+  split.
+  - red. intros [f nb1 nb2] se1 se2 q1 q2 Hse Hq. cbn in *.
+    inv Hse. inv Hq. cbn in *. inv H1.
+    eexists (mit _ _ _). repeat apply conj.
+    + constructor; eauto.
+    + constructor; eauto.
+    + intros r1 r2 Hr. inv Hr. inv H1. cbn in *.
+      eexists. split; repeat (constructor; eauto).
+  - red. intros [f nb1 nb2] se1 se2 q1 q2 Hse Hq. cbn in *.
+    inv Hse. inv Hq. cbn in *.
+    eexists. repeat apply conj.
+    + constructor; eauto.
+    + constructor; eauto.
+      constructor; eauto.
+    + intros r1 r2 (w' & Hw' & Hr). inv Hw'. inv Hr. inv H7. cbn in *.
+      eexists; eauto. constructor; eauto.
+Qed.

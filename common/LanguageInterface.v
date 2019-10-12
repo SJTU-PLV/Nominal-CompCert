@@ -62,6 +62,8 @@ Program Definition cc_id {li}: callconv li li :=
 Solve All Obligations with
   congruence.
 
+Notation "1" := cc_id : cc_scope.
+
 (** ** Composition *)
 
 Program Definition cc_compose {li1 li2 li3} (cc12: callconv li1 li2) (cc23: callconv li2 li3) :=
@@ -167,6 +169,8 @@ Inductive cc_inj_query (f: meminj_thr): c_query -> c_query -> Prop :=
     Val.inject f vf1 vf2 ->
     Val.inject_list f vargs1 vargs2 ->
     Mem.inject f m1 m2 ->
+    Pos.le (mit_l f) (Mem.nextblock m1) ->
+    Pos.le (mit_r f) (Mem.nextblock m2) ->
     vf1 <> Vundef ->
     cc_inj_query f (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
 
@@ -175,6 +179,8 @@ Inductive cc_inj_reply (f: meminj_thr): c_reply -> c_reply -> Prop :=
     mit_incr f f' ->
     Val.inject f' vres1 vres2 ->
     Mem.inject f' m1 m2 ->
+    Pos.le (mit_l f) (Mem.nextblock m1) ->
+    Pos.le (mit_r f) (Mem.nextblock m2) ->
     cc_inj_reply f (cr vres1 m1) (cr vres2 m2).
 
 Program Definition cc_inj :=
@@ -209,11 +215,19 @@ Qed.
 Record cc_injp_world :=
   injpw { injp_inj :> meminj; injp_m1: mem; injp_m2: mem }.
 
+Inductive cc_injp_stbls: cc_injp_world -> Genv.symtbl -> Genv.symtbl -> Prop :=
+  cc_injp_stbls_intro f m1 m2 se1 se2:
+    Genv.match_stbls f se1 se2 ->
+    Pos.le (Genv.genv_next se1) (Mem.nextblock m1) ->
+    Pos.le (Genv.genv_next se2) (Mem.nextblock m2) ->
+    cc_injp_stbls (injpw f m1 m2) se1 se2.
+
 Inductive cc_injp_query: cc_injp_world -> c_query -> c_query -> Prop :=
   cc_injp_query_intro f vf1 vf2 sg vargs1 vargs2 m1 m2:
     Val.inject f vf1 vf2 ->
     Val.inject_list f vargs1 vargs2 ->
     Mem.inject f m1 m2 ->
+    vf1 <> Vundef ->
     cc_injp_query (injpw f m1 m2) (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
 
 Inductive cc_injp_reply: cc_injp_world -> c_reply -> c_reply -> Prop :=
@@ -230,10 +244,10 @@ Inductive cc_injp_reply: cc_injp_world -> c_reply -> c_reply -> Prop :=
 
 Program Definition cc_injp :=
   {|
-    match_senv w := Genv.match_stbls (injp_inj w);
+    match_senv := cc_injp_stbls;
     match_query := cc_injp_query;
     match_reply := cc_injp_reply;
   |}.
 Next Obligation.
-  intros. rewrite (Genv.mge_public H); auto.
+  intros. inv H. erewrite Genv.mge_public; eauto.
 Qed.

@@ -70,6 +70,7 @@ COMMON=Errors.v AST.v Linking.v \
   LanguageInterface.v \
   SmallstepLinking.v \
   Invariant.v \
+  CallconvAlgebra.v \
 
 # Compcert Kripke Logical Relations
 

@@ -1,7 +1,8 @@
+Require Import Events.
+Require Import CallconvAlgebra.
 Require Import CKLR.
 Require Import CKLRAlgebra.
 Require Import Inject.
-Require Import Events.
 
 
 (** * Injection CKLR with footprint invariants *)
@@ -9,41 +10,41 @@ Require Import Events.
 (** ** Worlds *)
 
 Inductive injp_world :=
-  injpw (f: meminj) (m1 m2: mem).
+  injpw (f: meminj) (m1 m2: mem) (Hm: Mem.inject f m1 m2).
 
 (** In addition to the criteria in [ec_mem_inject], in order to ensure
   that [injp_acc] is transitive we will need the following property,
   which corresponds to [ec_max_perm]. *)
 
-Definition injp_max_perm_decrease (f: meminj) (m1 m1': mem) :=
-  forall b1 ofs1 x p,
-    f b1 = Some x ->
-    Mem.perm m1' b1 ofs1 Max p ->
-    Mem.perm m1 b1 ofs1 Max p.
+Definition injp_max_perm_decrease (m m': mem) :=
+  forall b ofs p,
+    Mem.valid_block m b ->
+    Mem.perm m' b ofs Max p ->
+    Mem.perm m b ofs Max p.
 
 Inductive injp_acc: relation injp_world :=
-  injp_acc_intro f m1 m2 f' m1' m2':
-    injp_max_perm_decrease f m1 m1' ->
+  injp_acc_intro f m1 m2 Hm f' m1' m2' Hm':
+    injp_max_perm_decrease m1 m1' ->
+    injp_max_perm_decrease m2 m2' ->
     Mem.unchanged_on (loc_unmapped f) m1 m1' ->
     Mem.unchanged_on (loc_out_of_reach f m1) m2 m2' ->
     inject_incr f f' ->
     inject_separated f f' m1 m2 ->
-    injp_acc (injpw f m1 m2) (injpw f' m1' m2').
+    injp_acc (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
 Definition injp_mi :=
-  fun '(injpw f _ _) => f.
+  fun '(injpw f _ _ _) => f.
 
 Inductive injp_match_mem: injp_world -> relation mem :=
-  injp_match_mem_intro f m1 m2:
-    Mem.inject f m1 m2 ->
-    injp_match_mem (injpw f m1 m2) m1 m2.
+  injp_match_mem_intro f m1 m2 Hm:
+    injp_match_mem (injpw f m1 m2 Hm) m1 m2.
 
 Inductive injp_match_stbls: injp_world -> relation Genv.symtbl :=
-  injp_match_stbls_intro f m1 m2 se1 se2:
+  injp_match_stbls_intro f m1 m2 Hm se1 se2:
     Genv.match_stbls f se1 se2 ->
     Pos.le (Genv.genv_next se1) (Mem.nextblock m1) ->
     Pos.le (Genv.genv_next se2) (Mem.nextblock m2) ->
-    injp_match_stbls (injpw f m1 m2) se1 se2.
+    injp_match_stbls (injpw f m1 m2 Hm) se1 se2.
 
 Hint Constructors injp_match_mem injp_match_stbls.
 
@@ -75,15 +76,19 @@ Proof.
   - intros [f m1 m2].
     constructor.
     + red. eauto.
+    + red. eauto.
     + apply Mem.unchanged_on_refl.
     + apply Mem.unchanged_on_refl.
     + apply inject_incr_refl.
     + intros b ofs. congruence.
   - intros w1 w2 w3 H12 H23.
-    destruct H12 as [f m1 m2 f' m1' m2' Hp H1 H2 Hf Hs].
-    inversion H23 as [? ? ? f'' m1'' m2'' Hp' H1' H2' Hf' Hs']; subst.
+    destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hp1 Hp2 H1 H2 Hf Hs].
+    inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hp1' Hp2' H1' H2' Hf' Hs']; subst.
     constructor.
-    + intros b1 ofs1 [b2 delta] p Hb H. eauto.
+    + intros b ofs p Hb ?.
+      eapply Hp1, Hp1'; eauto using Mem.valid_block_unchanged_on.
+    + intros b ofs p Hb ?.
+      eapply Hp2, Hp2'; eauto using Mem.valid_block_unchanged_on.
     + eapply mem_unchanged_on_trans_implies_valid; eauto.
       unfold loc_unmapped.
       intros b1 _ Hb Hb1.
@@ -96,6 +101,7 @@ Proof.
       * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
           by (eapply Hf in Hb; split; congruence); subst.
         eapply Hptr2; eauto.
+        eapply Hp1; eauto. eapply Mem.valid_block_inject_1; eauto.
       * edestruct Hs; eauto.
     + eapply inject_incr_trans; eauto.
     + intros b1 b2 delta Hb Hb''.
@@ -136,10 +142,10 @@ Next Obligation. (* ~> vs. match_stbls *)
   destruct Hse as [f m1 m2 se1 se2 Hse Hnb1 Hnb2]. inv Hw'.
   constructor.
   - eapply Genv.match_stbls_incr; eauto.
-    intros b1 b2 delta Hb Hb'. specialize (H7 b1 b2 delta Hb Hb').
-    unfold Mem.valid_block in H7. xomega.
-  - apply Mem.unchanged_on_nextblock in H3. xomega.
-  - apply Mem.unchanged_on_nextblock in H4. xomega.
+    intros b1 b2 delta Hb Hb'. specialize (H9 b1 b2 delta Hb Hb').
+    unfold Mem.valid_block in H9. xomega.
+  - apply Mem.unchanged_on_nextblock in H5. xomega.
+  - apply Mem.unchanged_on_nextblock in H6. xomega.
 Qed.
 
 Next Obligation. (* match_stbls vs. Genv.match_stbls *)
@@ -153,13 +159,16 @@ Next Obligation. (* Mem.alloc *)
     as (f' & m2' & b2 & Hm2' & Hm' & Hf' & Hb2 & Hff');
     eauto using Z.le_refl.
   rewrite Hm2'.
-  exists (injpw f' m1' m2'); split; repeat rstep; eauto.
+  exists (injpw f' m1' m2' Hm'); split; repeat rstep; eauto.
   constructor.
-  - intros b ofs [b' delta] p Hb Hp.
+  - intros b ofs p Hb Hp.
     eapply Mem.perm_alloc_inv in Hp; eauto.
     destruct (eq_block b b1); eauto; subst.
     eelim (Mem.fresh_block_alloc m1); eauto.
-    eapply (Mem.valid_block_inject_1 f); eauto.
+  - intros b ofs p Hb Hp.
+    eapply Mem.perm_alloc_inv in Hp; eauto.
+    destruct (eq_block b b2); eauto; subst.
+    eelim (Mem.fresh_block_alloc m2); eauto.
   - eapply Mem.alloc_unchanged_on; eauto.
   - eapply Mem.alloc_unchanged_on; eauto.
   - assumption.
@@ -183,8 +192,9 @@ Next Obligation. (* Mem.free *)
   edestruct Mem.free_parallel_inject as (m2' & Hm2' & Hm'); eauto.
   replace (lo1 + delta + sz) with (lo1 + sz + delta) by xomega.
   rewrite Hm2'. repeat rstep.
-  exists (injpw f m1' m2'); split; repeat rstep; eauto.
+  exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
   constructor.
+  - red. eauto using Mem.perm_free_3.
   - red. eauto using Mem.perm_free_3.
   - eapply Mem.free_unchanged_on; eauto.
     unfold loc_unmapped. congruence.
@@ -214,8 +224,9 @@ Next Obligation. (* Mem.store *)
   destruct (Mem.store chunk m1 b1 ofs1 v1) as [m1'|] eqn:Hm1'; [|rauto].
   edestruct Mem.store_mapped_inject as (m2' & Hm2' & Hm'); eauto.
   rewrite Hm2'. repeat rstep.
-  exists (injpw f m1' m2'); split; repeat rstep; eauto.
+  exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
   constructor.
+  - red. eauto using Mem.perm_store_2.
   - red. eauto using Mem.perm_store_2.
   - eapply Mem.store_unchanged_on; eauto.
     unfold loc_unmapped. congruence.
@@ -253,8 +264,10 @@ Next Obligation. (* Mem.storebytes *)
     }
     rewrite Hm2'.
     constructor.
-    exists (injpw f m1' m2'); split.
+    assert (Hm': Mem.inject f m1' m2') by eauto using Mem.storebytes_empty_inject.
+    exists (injpw f m1' m2' Hm'); split.
     + constructor; eauto.
+      * red. eauto using Mem.perm_storebytes_2.
       * red. eauto using Mem.perm_storebytes_2.
       * eapply Mem.storebytes_unchanged_on; eauto.
         simpl. intro. xomega.
@@ -262,7 +275,6 @@ Next Obligation. (* Mem.storebytes *)
         simpl. intro. xomega.
       * apply inject_separated_refl.
     + constructor; eauto.
-      eapply Mem.storebytes_empty_inject; eauto.
   - assert (ptr_inject f (b1, ofs1) (b2, ofs2)) as Hptr'.
     {
       destruct Hptr as [Hptr|Hptr]; eauto.
@@ -278,8 +290,9 @@ Next Obligation. (* Mem.storebytes *)
     edestruct Mem.storebytes_mapped_inject as (m2' & Hm2' & Hm'); eauto.
     rauto.
     rewrite Hm2'. constructor.
-    exists (injpw f m1' m2'); split; repeat rstep; eauto.
+    exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
     constructor.
+    + red. eauto using Mem.perm_storebytes_2.
     + red. eauto using Mem.perm_storebytes_2.
     + eapply Mem.storebytes_unchanged_on; eauto.
       unfold loc_unmapped. congruence.
@@ -334,20 +347,6 @@ Qed.
 
 (** * Properties *)
 
-Lemma injp_max_perm_decrease_dom f m m':
-  injp_max_perm_decrease (meminj_dom f) m m' <->
-  injp_max_perm_decrease f m m'.
-Proof.
-  split; repeat intro.
-  - eapply H; eauto.
-    unfold meminj_dom.
-    destruct (f b1); try discriminate.
-    reflexivity.
-  - unfold meminj_dom in *.
-    destruct (f b1) eqn:Hb1; try discriminate.
-    eapply H; eauto.
-Qed.
-
 (*
 Lemma injp_inj_injp:
   subcklr injp (injp @ inj @ injp).
@@ -391,3 +390,22 @@ Proof.
         (* XXX now we can, if we need to. *)
 Abort.
 *)
+
+
+(** * Correspondance with [cc_injp] *)
+
+Lemma cc_c_injp:
+  cceqv (cc_c injp) cc_injp.
+Proof.
+  split.
+  - red. intros w se1 se2 q1 q2 Hse Hq.
+    destruct Hq. inv H1. cbn in *. inv Hse.
+    exists (LanguageInterface.injpw f m1 m2). repeat (constructor; cbn; eauto).
+    intros r1 r2 Hr. inv Hr.
+    exists (injpw f' m1' m2' H7). repeat (constructor; cbn; eauto).
+  - red. intros w se1 se2 q1 q2 Hse Hq.
+    destruct Hq. inv Hse. cbn in *.
+    exists (injpw f m1 m2 H1). repeat (constructor; cbn; eauto).
+    intros r1 r2 (w' & Hw' & Hr). inv Hw'. inv Hr. inv H4. red in H7.
+    econstructor; eauto.
+Qed.
