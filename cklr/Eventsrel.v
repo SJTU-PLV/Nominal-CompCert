@@ -343,10 +343,10 @@ Hint Extern 1 (Transport _ _ _ _ _) =>
 
 (** * [eval_builtin_args] *)
 
-Global Instance senv_symbols_address_inject R w:
+Global Instance senv_symbols_address_inject f:
   Monotonic
     (@Genv.symbol_address)
-    (Genv.match_stbls (mi R w) ++> - ==> - ==> Val.inject (mi R w)).
+    (Genv.match_stbls f ++> - ==> - ==> Val.inject f).
 Proof.
   intros se1 se2 Hse id ofs.
   unfold Genv.symbol_address.

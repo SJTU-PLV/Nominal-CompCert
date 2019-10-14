@@ -179,15 +179,15 @@ Inductive state : Type :=
              (m: mem),                (**r memory state *)
       state.
 
-Section RELSEM.
-
-Variable ge: genv.
-
-Definition ros_address (ros: reg + ident) (rs: regset) : val :=
+Definition ros_address ge (ros: reg + ident) (rs: regset) : val :=
   match ros with
   | inl r => rs#r
   | inr symb => Genv.symbol_address ge symb Ptrofs.zero
   end.
+
+Section RELSEM.
+
+Variable ge: genv.
 
 (** The transitions are presented as an inductive predicate
   [step ge st1 t st2], where [ge] is the global environment,
@@ -222,7 +222,7 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (State s f sp pc' rs m')
   | exec_Icall:
       forall s f sp pc rs m sig ros args res pc' fd,
-      let vf := ros_address ros rs in
+      let vf := ros_address ge ros rs in
       (fn_code f)!pc = Some(Icall sig ros args res pc') ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
@@ -230,7 +230,7 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (Callstate (Stackframe res f sp pc' rs :: s) vf rs##args m)
   | exec_Itailcall:
       forall s f stk pc rs m sig ros args fd m',
-      let vf := ros_address ros rs in
+      let vf := ros_address ge ros rs in
       (fn_code f)!pc = Some(Itailcall sig ros args) ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->

@@ -1,5 +1,5 @@
 Require Import Coqlib Mapsrel.
-Require Import AST Integers Valuesrel Eventsrel CKLR Globalenvsrel Smallstep.
+Require Import AST Integers Valuesrel Eventsrel CKLR Smallstep.
 Require Import Op Registersrel.
 Require Export RTL.
 
@@ -66,7 +66,7 @@ Inductive state_rel R w: relation state :=
       Monotonic
         (@Callstate)
         (list_rel (stackframe_inject (mi R w)) ++>
-         block_inject_sameofs (mi R w) ==> Val.inject_list (mi R w) ++>
+         Val.inject (mi R w) ==> Val.inject_list (mi R w) ++>
          match_mem R w ++> state_rel R w)
   | Returnstate_rel:
       Monotonic
@@ -82,7 +82,7 @@ Global Existing Instance Returnstate_rel.
 Global Instance eval_addressing32_rel R w:
   Monotonic
     (@eval_addressing32)
-    (forallr -, forallr -, psat (genv_valid R w) ==>
+    (Genv.match_stbls (mi R w) ++>
      Val.inject (mi R w) ++> - ==>
      Val.inject_list (mi R w) ++>
      option_le (Val.inject (mi R w))).
@@ -93,7 +93,7 @@ Qed.
 Global Instance eval_addressing64_rel R w:
   Monotonic
     (@eval_addressing64)
-    (forallr -, forallr -, psat (genv_valid R w) ==>
+    (Genv.match_stbls (mi R w) ++>
      Val.inject (mi R w) ++> - ==>
      Val.inject_list (mi R w) ++>
      option_le (Val.inject (mi R w))).
@@ -104,7 +104,7 @@ Qed.
 Global Instance eval_addressing_rel R w:
   Monotonic
     (@eval_addressing)
-    (forallr -, forallr -, psat (genv_valid R w) ==>
+    (Genv.match_stbls (mi R w) ++>
      Val.inject (mi R w) ++> - ==>
      Val.inject_list (mi R w) ++>
      option_le (Val.inject (mi R w))).
@@ -124,12 +124,12 @@ Qed.
 Global Instance eval_operation_rel R w:
   Monotonic
     (@eval_operation)
-    (forallr -, forallr -, psat (genv_valid R w) ==>
+    (Genv.match_stbls (mi R w) ++>
      Val.inject (mi R w) ++> - ==>
      Val.inject_list (mi R w) ++> match_mem R w ++>
      option_le (Val.inject (mi R w))).
 Proof.
-  intros F V ge1 ge2 Hge sp1 sp2 Hsp op vl1 vl2 Hvl m1 m2 Hm.
+  intros ge1 ge2 Hge sp1 sp2 Hsp op vl1 vl2 Hvl m1 m2 Hm.
   unfold eval_operation. destruct op; try rauto.
 Qed.
 
@@ -170,62 +170,63 @@ Proof.
   firstorder.
 Qed.
 
-Global Instance block_of_inject f:
-  Monotonic (@block_of) (Val.inject f ++> option_impl (block_inject_sameofs f)).
-Proof.
-  unfold block_of. repeat rstep.
-  intros a1 a2 Ha H1.
-  red in Ha. inv H0.
-  destruct Ptrofs.eq_dec; try discriminate. inv H1. rewrite Ha in H3. inv H3.
-  rewrite Ptrofs.add_zero. destruct Ptrofs.eq_dec; congruence.
-Qed.
-
-Global Instance find_block_inject R w:
+Global Instance ros_address_inject f:
   Monotonic
-    (@find_block)
-    (psat (genv_valid R w) ++> - ==> regset_inject (mi R w) ++>
-     option_impl (block_inject_sameofs (mi R w))).
+    (@ros_address)
+    (Genv.match_stbls f ++> - ==> regset_inject f ++> Val.inject f).
 Proof.
-  intros ge _ [Hge] ros rs1 rs2 Hrs b1 b2 Hb H.
-  unfold find_block in H |- *.
-  destruct ros; eauto.
-  revert H. eapply block_of_inject; eauto.
-  cut (b1 = b2); try congruence.
-  eapply genv_valid_find_symbol in H; eauto.
-  red in Hb, H. congruence.
+  unfold ros_address. rauto.
 Qed.
 
-Global Instance genv_valid_funct_ptr_rexists {F V} R w (ge: Genv.t F V) f b:
-  RExists
-    (genv_valid R w ge /\ Genv.find_funct_ptr ge b = Some f)
-    (block_inject_sameofs (mi R w)) b b.
+Section PROG.
+
+Context (p: program).
+
+Definition genv_match R w : relation genv :=
+  (match_stbls R w) !! (fun se => Genv.globalenv se p).
+
+Lemma match_prog {C} `{!Linking.Linker C} (c: C):
+  Linking.match_program_gen (fun _ => eq) eq c p p.
 Proof.
-  intros [Hge H].
-  eapply genv_valid_funct_ptr; eauto.
+  repeat apply conj; auto.
+  induction (prog_defs p) as [ | [id [f|v]] defs IHdefs];
+  repeat (econstructor; eauto).
+  - apply Linking.linkorder_refl.
+  - destruct v; constructor; auto.
+Qed.
+
+Global Instance find_funct_inject R w ge1 v1 ge2 v2 f:
+  Transport (genv_match R w * Val.inject (mi R w)) (ge1, v1) (ge2, v2)
+    (Genv.find_funct ge1 v1 = Some f)
+    (Genv.find_funct ge2 v2 = Some f).
+Proof.
+  intros [Hge Hv] Hf. cbn in *.
+  destruct Hge. apply match_stbls_proj in H. cbn in Hf.
+  edestruct @Genv.find_funct_match as (?&?&?&?&?); eauto using (match_prog tt).
+  cbn in *. congruence.
 Qed.
 
 Global Instance step_rel R:
   Monotonic
     (@step)
-    (|= (fun w => psat (genv_valid R w)) ++> state_rel R ++> - ==>
+    (|= genv_match R ++> state_rel R ++> - ==>
      k1 set_le (<> state_rel R)).
 Proof.
-  intros w ge ge' Hge s1 s2 Hs t s1' H1.
-  pose proof Hge as Hge'. destruct Hge as [Hge].
+  intros w ge tge Hge s1 s2 Hs t s1' H1.
+  assert (Hse: match_stbls R w ge tge) by (destruct Hge; eauto).
+  assert (Hse': Genv.match_stbls (mi R w) ge tge) by (apply match_stbls_proj; eauto).
   deconstruct H1 ltac:(fun x => pose (c := x)); inv Hs.
   - transport_hyps; eexists; split; [ eapply c; eauto; fail | rauto ].
   - transport_hyps; eexists; split; [ eapply c; eauto; fail | rauto ].
   - transport_hyps; eexists; split; [ eapply c; eauto; fail | rauto ].
   - transport_hyps. eexists. split; [ eapply c; eauto; fail | ].
     exists w'. split; rauto.
-  - assert (Hfb: block_inject_sameofs (mi R w) fb fb) by rauto.
+  - subst vf.
     transport_hyps; eexists; split; [ eapply c; eauto; fail | rauto ].
-  - inv H8.
+  - subst vf. inv H8.
     transport_hyps; eexists; split; [ eapply c; eauto; fail | ].
-    assert (Hfb: block_inject_sameofs (mi R w) fb fb) by rauto.
-    assert (Hgev': psat (genv_valid R w') ge ge)
-      by (constructor; eapply cklr_wf; eauto).
-    exists w'; split; rauto.
+    exists w'; split; [rauto | ].
+    repeat rstep. eapply match_stbls_proj. rauto.
   - transport_hyps; eexists; split; [ eapply c; eauto; fail | ].
     exists w'. split; rauto.
   - transport_hyps; eexists; split; [ eapply c; eauto; fail | rauto ].
@@ -233,40 +234,21 @@ Proof.
     + specialize (H9 arg). destruct H9; congruence.
   - inv H8.
     transport_hyps; eexists; split; [ eapply c; eauto; fail | ].
-    assert (Hgev': psat (genv_valid R w') ge ge)
-      by (constructor; eapply cklr_wf; eauto).
     exists w'; split; rauto.
   - edestruct cklr_alloc as (w' & Hw' & Halloc); eauto.
-    transport e0. clear Halloc.
-    assert (Hfb: block_inject_sameofs (mi R w) fb fb) by rauto.
-    assert (y0 = fb).
-    {
-      red in Hfb.
-      congruence.
-    }
-    subst.
+    transport e. clear Halloc. transport FIND.
     eexists; split. eapply c; eauto; fail.
     exists w'; split. rauto.
     repeat rstep.
     clear - H7 Hw'.
     induction H7; constructor; rauto.
-  - assert (Hfb: block_inject_sameofs (mi R w) fb fb) by rauto.
-    assert (y0 = fb).
-    {
-      red in Hfb.
-      congruence.
-    }
-    subst.
-    transport e0.
-    eexists; split. eapply c; eauto; fail.
+  - transport_hyps; eexists; split; [ eapply c; eauto; fail | ].
     exists w'; split; rauto.
   - inv H3. inv H2.
     transport_hyps; eexists; split; [ eapply c; eauto; fail | rauto ].
 Qed.
 
-Hint Extern 1 (Transport _ _ _ _ _) =>
-  set_le_transport @step : typeclass_instances.
-
+(*
 Lemma block_inject_glob R w m1 m2 id b2:
   match_mem R w m1 m2 ->
   block_inject (mi R w) (Block.glob id) b2 ->
@@ -279,46 +261,55 @@ Proof.
   - specialize (INCR _ _ eq_refl). congruence.
   - elim n. apply Block.lt_glob_init.
 Qed.
+*)
+
+End PROG.
+
+Hint Extern 1 (Transport _ _ _ _ _) =>
+  set_le_transport @step : typeclass_instances.
 
 Global Instance semantics_rel R:
-  Monotonic (@RTL.semantics) (- ==> forward_simulation (cc_c R) (cc_c R)).
+  Monotonic (@RTL.semantics) (- ==> open_fsim (cc_c R) (cc_c R)).
 Proof.
-  intros p.
-  set (ms := fun w s1 s2 => klr_diam tt (state_rel R) w s1 s2 /\
-                            genv_valid R w (Genv.globalenv p)).
-  eapply forward_simulation_step with ms.
-  - reflexivity.
-  - destruct 1. cbn. auto.
-  - intros w _ _ [id sg vargs1 vargs2 m1 m2 Hvargs Hm].
-    intros s1 Hs1. inv Hs1. simpl in *. subst.
-    assert (genv_valid R w (Genv.globalenv p)) by (eapply cklr_wf; eauto).
-    exists (Callstate nil (Block.glob id) vargs2 m2). split.
+  intros p. split; auto.
+  intros w se1 se2 q1 q2 Hse1 _ Hse Hq. cbn -[semantics] in *.
+  split.
+  {
+    cbn. eapply (Genv.is_internal_match (ctx := p)).
+    - eapply (match_prog p).
+    - eapply match_stbls_proj; eauto.
+    - cbn. congruence.
+    - destruct Hq. cbn. auto.
+    - destruct Hq. cbn. auto.
+  }
+  eapply forward_simulation_step with (klr_diam tt (state_rel R) w).
+  - destruct 1. inv Hq. cbn.
+    eassert (Hge: genv_match p R w _ _) by (red; rauto).
+    transport H.
+    eexists; split.
     + econstructor; eauto.
-    + split; eauto. rauto.
-  - intros w s1 s2 q1 [(w' & Hw' & Hs) Hge] Hq1.
-    destruct Hq1. inv Hs.
-    eexists w', (cq _ _ y1 _). split.
-    + econstructor; simpl; eauto.
-      clear - H7; induction H7; constructor; eauto.
-    + split.
-      * assert (y0 = Block.glob id) by eauto using block_inject_glob. subst.
-        econstructor.
-        assert (Hge': genv_valid R w' (Genv.globalenv p))
-          by (eapply cklr_wf; eauto).
-        eapply find_funct_ptr_transport; eauto.
-      * intros r1 [vres2 m2'] s1' (w'' & Hw'' & Hvres & Hm') HAE. inv HAE.
-        cbn [fst snd] in *. eexists. split.
-        -- constructor.
-        -- constructor; eauto.
-           exists w''. split; rauto.
-  - intros w s1 s2 r1 [(w' & Hw' & Hs) Hge] Hr1. inv Hr1. inv Hs. inv H2.
-    eexists (_, _). simpl. split.
     + rauto.
+  - intros s1 s2 r1 (w' & Hw' & Hs) Hr1. inv Hr1. inv Hs. inv H2.
+    eexists. simpl. split.
     + constructor.
-  - intros w s1 t s1' Hstep1 s2 [(w' & Hw' & Hs) Hge].
-    assert (psat (genv_valid R w') (Genv.globalenv p) (Genv.globalenv p))
-      by (constructor; destruct Hs; eapply cklr_wf; eauto).
+    + exists w'. split; [rauto | ]. constructor; auto.
+  - intros s1 s2 qx1 (w' & Hw' & Hs) Hqx1.
+    eassert (Hge: genv_match p R w' _ _) by (red; rauto).
+    destruct Hqx1. inv Hs.
+    assert (vf <> Vundef) by (destruct vf; discriminate).
+    transport H.
+    eexists w', (LanguageInterface.cq _ _ y1 _). split.
+    + econstructor; simpl; eauto.
+    + split.
+      * econstructor; auto.
+      * split. cbn; rauto.
+        intros r1 [vres2 m2'] s1' (w'' & Hw'' & Hr) HAE. inv HAE. inv Hr.
+        eexists. split.
+        -- constructor.
+        -- exists w''. split; rauto.
+  - intros s1 t s1' Hstep1 s2 (w' & Hw' & Hs).
+    eassert (Hge: genv_match p R w' _ _) by (red; rauto).
     simpl in Hstep1.
     transport Hstep1.
-    eexists. split; eauto. split; eauto. rauto.
+    eexists. split; eauto. rauto.
 Qed.
