@@ -71,89 +71,31 @@ Proof.
   firstorder.
 Qed.
 
-(*
 (** ** Relation to forward simulations *)
 
-(** To prove [forward_simulation_ccref] below, we need the axiom of
-  choice. This is because to give the simulation relation [R'] for the
-  new forward simulation, we need to extract the target world [w']
-  from the existential in our [ccref] hypothesis. *)
-
-Require Import Basics.
-Require Import ClassicalChoice.
-
-Inductive matching_query {li1 li2} (cc: callconv li1 li2) :=
-  mqi w q1 q2: match_query cc w q1 q2 -> matching_query cc.
-
-Lemma ccref_functional {li1 li2} (cc cc': callconv li1 li2):
-  ccref cc cc' ->
-  exists (f: matching_query cc -> ccworld cc'),
-    forall w q1 q2 (Hq: match_query cc w q1 q2),
-      match_query cc' (f (mqi cc w q1 q2 Hq)) q1 q2 /\
-      forall r1 r2,
-        match_reply cc' (f (mqi cc w q1 q2 Hq)) r1 r2 ->
-        match_reply cc w r1 r2.
-Proof.
-  intros H. red in H.
-  set (R := fun '(mqi w q1 q2 Hq) w' =>
-         match_query cc' w' q1 q2 /\
-         subrel (match_reply cc' w') (match_reply cc w)).
-  assert (H': forall Q, exists w', R Q w') by (intros [w q1 q2 Hq]; eauto).
-  apply choice in H'.
-  destruct H' as (f & Hf).
-  exists f.
-  intros.
-  specialize (Hf (mqi _ w q1 q2 Hq)).
-  apply Hf.
-Qed.
-
-Global Instance forward_simulation_ccref {liA liB}:
+Global Instance open_fsim_ccref:
   Monotonic
-    (@forward_simulation liA liB)
-    (ccref ++> ccref --> subrel).
+    (@open_fsim)
+    (forallr - @ liA1, forallr - @ liA2, ccref ++>
+     forallr - @ liB1, forallr - @ liB2, ccref -->
+     subrel).
 Proof.
-  intros ccA' ccA HA ccB' ccB HB L1 L2.
-  apply ccref_functional in HA.
-  apply ccref_functional in HB.
-  revert HA HB.
-  intros [fA HA] [fB HB] [I lt R H].
-  set (R' := fun w i s1 s2 =>
-               exists q1 q2 (Hq: match_query ccB w q1 q2),
-                 R (fB (mqi _ w q1 q2 Hq)) i s1 s2 /\
-                 forall r1 r2,
-                   match_reply ccB' (fB (mqi _ w q1 q2 Hq)) r1 r2 ->
-                   match_reply ccB w r1 r2).
-  eexists I lt R'.
-  destruct H.
-  split; eauto.
-  - intros w q1 q2 Hq.
-    destruct (HB w q1 q2 Hq) as (Hq' & Hr').
-    eapply fsim_match_valid_queries; eauto.
-  - intros w q1 q2 Hq s1 Hs1.
-    destruct (HB w q1 q2 Hq) as (Hq' & Hr').
-    edestruct fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
-    exists i, s2; intuition eauto.
-    exists q1, q2; intuition eauto.
-  - intros w i s1 s2 (qB1 & qB2 & HqB & Hs & HrB) q1 Hs1.
-    subst R'. simpl in *. edestruct (HB _ _ _ HqB) as [HBq HBr]; eauto.
-    edestruct fsim_match_external as (wA' & q2 & Hq & Hs2 & Hr); eauto.
-    edestruct (HA _ _ _ Hq) as [HAq HAr]; eauto.
-    exists (fA (mqi _ wA' q1 q2 Hq)), q2.
-    intuition eauto.
-    edestruct Hr as (j & s2' & Hs2' & Hs'); eauto.
-    exists j, s2'; intuition eauto.
-  - intros w i s1 s2 r1 (q1 & q2 & Hq & Hs & HrB) Hr1.
-    edestruct (HB _ _ _ Hq) as [HBq HBr]; eauto.
-    edestruct fsim_match_final_states as (r2 & Hr & Hr2); eauto.
-  - intros w s1 t s1' Hstep i s2 (q1 & q2 & Hq & Hs & HrB).
-    subst R'. simpl in *. edestruct (HB _ _ _ Hq) as [HBq HBr]; eauto.
-    edestruct fsim_simulation as (i' & s2' & Hstep' & Hs'); eauto 10.
+  intros liA1 liA2 ccA ccA' HA liB1 liB2 ccB ccB' HB sem1 sem2 [Hps Hsem].
+  split; auto.
+  intros wB se1 se2 q1 q2 Hse1 _ Hse Hq.
+  edestruct HB as (wB' & Hse' & Hq' & Hr'); eauto.
+  edestruct Hsem as [Hvq Hsim]; eauto. split; auto.
+  destruct Hsim. exists index order match_states.
+  split.
+  - eauto using fsim_order_wf.
+  - eauto using fsim_match_initial_states.
+  - intros.
+    edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
+  - intros.
+    edestruct @fsim_match_external as (wA & qA2 & HqA2 & HqA & HseA & ?); eauto.
+    edestruct HA as (wA' & HseA' & HqA' & HrA'); eauto 10.
+  - eauto using fsim_simulation.
 Qed.
-
-Global Instance forward_simulation_ccref_params:
-  Params (@forward_simulation) 4.
-*)
-
 
 (** * Properties of [cc_compose] *)
 
@@ -368,44 +310,14 @@ Section JOIN.
 
   Hint Constructors cc_join_ms.
 
-  (*
   Lemma cc_join_fsim (ccA: callconv li li) ccB1 ccB2 L1 L2:
-    forward_simulation ccA ccB1 L1 L2 ->
-    forward_simulation ccA ccB2 L1 L2 ->
-    forward_simulation ccA (cc_join ccB1 ccB2) L1 L2.
+    open_fsim ccA ccB1 L1 L2 ->
+    open_fsim ccA ccB2 L1 L2 ->
+    open_fsim ccA (cc_join ccB1 ccB2) L1 L2.
   Proof.
-    intros [index1 order1 ms1 H1] [index2 order2 ms2 H2].
-    exists (index1 + index2)%type (order1 + order2)%rel (cc_join_ms ms1 ms2).
-    split.
-    - intros [x|x].
-      + induction (fsim_order_wf H1 x).
-        constructor. inversion 1. subst. eauto.
-      + induction (fsim_order_wf H2 x).
-        constructor. inversion 1. subst. eauto.
-    - intros [w|w] q1 q2 Hq; simpl in *; eauto using fsim_match_valid_queries.
-    - intros [w|w] q1 q2 Hq s1 Hs1; simpl in *.
-      edestruct (fsim_match_initial_states H1) as (i & s2 & Hs2 & Hs); eauto.
-      edestruct (fsim_match_initial_states H2) as (i & s2 & Hs2 & Hs); eauto.
-    - intros _ _ _ _ [w i s1 s2 Hs | w i s1 s2 Hs] q1 Hq1.
-      + edestruct (fsim_match_external H1) as (wA & q2 & ? & ? & H); eauto.
-        exists wA, q2. intuition auto.
-        edestruct H as (j & s2' & Hs2' & Hs'); eauto.
-      + edestruct (fsim_match_external H2) as (wA & q2 & ? & ? & H); eauto.
-        exists wA, q2. intuition auto.
-        edestruct H as (j & s2' & Hs2' & Hs'); eauto.
-    - intros _ _ _ _ r1 [w i s1 s2 Hs | w i s1 s2 Hs] Hs1; simpl;
-        eauto using fsim_match_final_states.
-    - intros w s1 t s1' Hstep1 i s2 Hs.
-      destruct Hs as [w i s1 s2 Hs | w i s1 s2 Hs].
-      + edestruct (fsim_simulation H1) as (i' & s2' & Hstep2 & Hs'); eauto.
-        exists (inl i'), s2'. intuition auto.
-        right. split; eauto. constructor; eauto.
-      + edestruct (fsim_simulation H2) as (i' & s2' & Hstep2 & Hs'); eauto.
-        exists (inr i'), s2'. intuition auto.
-        right. split; eauto. constructor; eauto.
-    - eauto using fsim_public_preserved.
+    intros [Hsk1 Hsim1] [Hsk2 Hsim2]. split; auto.
+    intros [w|w] se1 se2 q1 q2 Hse1 _ Hse Hq; cbn in *; eauto.
   Qed.
-   *)
 End JOIN.
 
 Infix "+" := cc_join : cc_scope.
@@ -571,154 +483,33 @@ Qed.
 
 (** *** Proving simulations *)
 
-(*
-Lemma cc_pow_fsim_intro {li ccA ccB} (L: semantics li) n:
-  forward_simulation ccA ccB L L ->
-  forward_simulation (ccA ^ n) (ccB ^ n) L L.
+Lemma cc_pow_fsim_intro {liA liB ccA ccB} (L: open_sem liA liB) n:
+  open_fsim ccA ccB L L ->
+  open_fsim (ccA ^ n) (ccB ^ n) L L.
 Proof.
   intros HL.
   induction n; simpl.
-  - eapply forward_simulation_identity.
-  - eapply compose_forward_simulations; eauto.
-Qed.
+  - admit. (* eapply forward_simulation_identity. *)
+  - eapply compose_open_fsim; eauto.
+Admitted.
 
-Lemma cc_star_pow_fsim {li ccA ccB} (L: semantics li) n:
-  forward_simulation ccA ccB L L ->
-  forward_simulation (ccA ^{*}) (ccB ^ n) L L.
+Lemma cc_star_pow_fsim {liA liB ccA ccB} (L: open_sem liA liB) n:
+  open_fsim ccA ccB L L ->
+  open_fsim (ccA ^{*}) (ccB ^ n) L L.
 Proof.
   intros HL.
   rewrite <- cc_pow_star.
   apply cc_pow_fsim_intro; eauto.
 Qed.
 
-(** The lemma proved below is the fundamental way of building
-  simulations with a [cc_star] incoming calling convention: if we can
-  show a simulation in terms of [cc_pow n] for all [n], then the
-  simulation holds for [cc_star] as well. This is simple in principle,
-  but somewhat technical to prove, and it requires dependent
-  functional choice.
-
-  This could be formulated in terms of strategy refinement instead,
-  which would make it both more general and would probably avoid much
-  of the complexity. *)
-
-Section CC_POW_STAR_FSIM.
-  Context {li} {ccA: callconv li li} {ccB: callconv li li}.
-  Context (L1: Smallstep.semantics li).
-  Context (L2: Smallstep.semantics li).
-
-  (** We will need to have packaged the components of the simulations
-    so as to feed them through our choice axiom. *)
-
-  Record simulation_components {n} :=
-    {
-      sc_index: Type;
-      sc_order: relation sc_index;
-      sc_match_states: ccworld (ccB^n) -> sc_index -> rel (state L1) (state L2);
-    }.
-
-  Arguments simulation_components : clear implicits.
-
-  Definition simulation_holds n (c: simulation_components n) :=
-    fsim_properties ccA (ccB^n) L1 L2 (sc_order c) (sc_match_states c).
-
-  (** We will use [ChoiceFacts.FunctionalDependentChoice] to obtain
-    the following data, from which we can construct the composite
-    simulation. *)
-
-  Variable (sc: forall n, simulation_components n).
-  Hypothesis (Hsc: forall n, simulation_holds n (sc n)).
-
-  (** First, we must define our index type. *)
-
-  Definition pow_star_index :=
-    { n: nat & sc_index (sc n) }.
-
-  Inductive pow_star_order: relation pow_star_index :=
-    pso_intro n x y:
-      sc_order (sc n) x y ->
-      pow_star_order (existT _ n x) (existT _ n y).
-
-  Lemma pow_star_order_wf:
-    well_founded pow_star_order.
-  Proof.
-    intros [n i].
-    assert (Acc (sc_order (sc n)) i) by eapply fsim_order_wf, Hsc.
-    induction H.
-    constructor.
-    inversion 1; subst.
-    eapply H0.
-    apply inj_pair2 in H5.
-    congruence.
-  Qed.
-
-  (** Now we can define the simulation relation and prove its properties. *)
-
-  Inductive pow_star_match: ccworld (ccB^{*}) -> pow_star_index -> rel _ _ :=
-    psms_intro n w i s1 s2:
-      sc_match_states (sc n) w i s1 s2 ->
-      pow_star_match (existT _ n w) (existT _ n i) s1 s2.
-
-  Lemma pow_star_fsim_properties:
-    fsim_properties ccA (cc_star ccB) L1 L2 pow_star_order pow_star_match.
-  Proof.
-    unfold simulation_holds in Hsc.
-    split.
-    - apply pow_star_order_wf.
-    - intros [n w] q1 q2 Hq. simpl in *.
-      eauto using fsim_match_valid_queries.
-    - intros [n w] q1 q2 Hq s1 Hs1. simpl in *.
-      edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
-      exists (existT _ n i), s2. split; auto.
-      constructor; auto.
-    - intros _ _ _ _ [n w i s1 s2 Hs] q1 Hs1.
-      edestruct @fsim_match_external as (wA & q2 & Hq & Hs2 & HAE); eauto.
-      exists wA, q2. intuition auto.
-      edestruct HAE as (j & s2' & Hs2' & Hs'); eauto.
-      exists (existT _ n j), s2'. intuition auto.
-      constructor; auto.
-    - intros _ _ _ _ r1 [n w i s1 s2 Hs] Hs1.
-      edestruct @fsim_match_final_states as (r2 & Hr & Hs2); eauto.
-      exists r2. simpl. eauto.
-    - intros nw s1 t s1' Hstep1 i s2 Hs. destruct Hs as [n w i s1 s2 Hs].
-      edestruct @fsim_simulation as (i' & s2' & Hstep2 & Hs'); eauto.
-      intuition eauto 10 using pso_intro, psms_intro.
-    - specialize (Hsc 0).
-      eapply fsim_public_preserved; eauto.
-  Qed.
-End CC_POW_STAR_FSIM.
-
-Require Import ChoiceFacts.
-Axiom AC_dep_fun: DependentFunctionalChoice.
-
-Lemma cc_pow_star_fsim {li ccA ccB} L1 L2:
-  (forall n, forward_simulation ccA (ccB ^ n) L1 L2) ->
-  @forward_simulation li li ccA (cc_star ccB) L1 L2.
+Lemma cc_star_fsim {liA liB ccA ccB} (L: open_sem liA liB):
+  open_fsim ccA ccB L L ->
+  open_fsim (cc_star ccA) (cc_star ccB) L L.
 Proof.
-  intros HL.
-  assert (forall n, exists s, simulation_holds (ccA:=ccA) (ccB:=ccB) L1 L2 n s).
-  {
-    intros n.
-    specialize (HL n) as [index order ms H].
-    exists {| sc_order := order; sc_match_states := ms |}.
-    eauto.
-  }
-  clear HL.
-  apply AC_dep_fun in H as [sc Hsc].
-  econstructor.
-  eapply pow_star_fsim_properties; eauto.
+  intros HL. split; [destruct HL; auto | ].
+  intros [n ws]. edestruct @cc_star_pow_fsim as [_ ?]; eauto.
+  intros. eapply H; eauto.
 Qed.
-
-Lemma cc_star_fsim {li ccA ccB} (L: semantics li):
-  forward_simulation ccA ccB L L ->
-  forward_simulation (cc_star ccA) (cc_star ccB) L L.
-Proof.
-  intros HL.
-  apply cc_pow_star_fsim. intros n.
-  apply cc_star_pow_fsim; eauto.
-Qed.
-*)
-
 
 (** * Invariants *)
 
