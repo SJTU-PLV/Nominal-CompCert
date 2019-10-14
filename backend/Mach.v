@@ -520,6 +520,13 @@ Record cc_stk_world :=
     stk_m2: mem;
   }.
 
+Inductive cc_stacking_st: cc_stk_world -> Genv.symtbl -> Genv.symtbl -> Prop :=
+  cc_stacking_st_intro se1 se2 f ls m1 m2:
+    Genv.match_stbls f se1 se2 ->
+    Pos.le (Genv.genv_next se1) (Mem.nextblock m1) ->
+    Pos.le (Genv.genv_next se2) (Mem.nextblock m2) ->
+    cc_stacking_st (stkw f ls m1 m2) se1 se2.
+
 Inductive cc_stacking_mq: cc_stk_world -> locset_query -> mach_query -> Prop :=
   cc_stacking_mq_intro f vf1 vf2 sg sp ra rs1 rs2 m1 m2:
     Val.inject f vf1 vf2 ->
@@ -554,12 +561,12 @@ Inductive cc_stacking_mr: cc_stk_world -> locset_reply -> mach_reply -> Prop :=
 
 Program Definition cc_stacking: callconv li_locset li_mach :=
   {|
-    match_senv w := Genv.match_stbls (stk_inj w);
+    match_senv := cc_stacking_st;
     match_query := cc_stacking_mq;
     match_reply := cc_stacking_mr;
   |}.
 Next Obligation.
-  intros. rewrite (Genv.mge_public H); auto.
+  destruct H. rewrite (Genv.mge_public H); auto.
 Qed.
 
 (** * Leaf functions *)

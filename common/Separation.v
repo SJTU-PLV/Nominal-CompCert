@@ -826,44 +826,56 @@ Qed.
 
 (** Preservation of a global environment by a memory injection *)
 
-Program Definition globalenv_inject (ge1 ge2: Genv.symtbl) (j: meminj) : massert := {|
-  m_pred := fun m => Ple (Genv.genv_next ge2) (Mem.nextblock m) /\ Genv.match_stbls j ge1 ge2;
+Program Definition globalenv_inject (ge1 ge2: Genv.symtbl) (j: meminj) (m1: mem) : massert := {|
+  m_pred := fun m =>
+    Genv.match_stbls j ge1 ge2 /\
+    Ple (Genv.genv_next ge1) (Mem.nextblock m1) /\
+    Ple (Genv.genv_next ge2) (Mem.nextblock m);
   m_footprint := fun b ofs => False
 |}.
 Next Obligation.
-  split; auto. eapply Ple_trans; eauto. eapply Mem.unchanged_on_nextblock; eauto.
+  intuition auto. eapply Ple_trans; eauto. eapply Mem.unchanged_on_nextblock; eauto.
 Qed.
 Next Obligation.
   tauto.
 Qed.
 
+Lemma globalenv_nextblock:
+  forall ge1 ge2 j m1 m1',
+  Pos.le (Mem.nextblock m1) (Mem.nextblock m1') ->
+  massert_imp (globalenv_inject ge1 ge2 j m1) (globalenv_inject ge1 ge2 j m1').
+Proof.
+  intros. split; auto. intros m2 (? & ? & ?).
+  constructor; auto. xomega.
+Qed.
+
 Lemma globalenv_inject_incr:
-  forall j m0 ge1 ge2 m j' P,
+  forall j m1 m2 ge1 ge2 j' m1' P,
   inject_incr j j' ->
-  inject_separated j j' m0 m ->
-  m |= globalenv_inject ge1 ge2 j ** P ->
-  m |= globalenv_inject ge1 ge2 j' ** P.
+  inject_separated j j' m1 m2 ->
+  m2 |= globalenv_inject ge1 ge2 j m1 ** P ->
+  Pos.le (Mem.nextblock m1) (Mem.nextblock m1') ->
+  m2 |= globalenv_inject ge1 ge2 j' m1' ** P.
 Proof.
   intros. destruct H1 as ((D & E) & B & C).
   simpl. intuition auto.
-  eapply Genv.match_stbls_incr; eauto.
-  intros b1 b2 delta Hb' Hb2.
-  destruct (j b1) as [[? ?]|] eqn:Hb.
-  - apply H in Hb. congruence.
-  - specialize (H0 b1 b2 delta Hb Hb') as [_ Hb2']. elim Hb2'.
-    eapply Pos.lt_le_trans; eauto.
+  - eapply Genv.match_stbls_incr; eauto.
+    intros b1 b2 delta Hb Hb'.
+    specialize (H0 b1 b2 delta Hb Hb') as [Hb1' Hb2'].
+    unfold Mem.valid_block in *. xomega.
+  - xomega.
 Qed.
 
 Lemma external_call_parallel_rule:
   forall ef ge1 ge2 vargs1 m1 t vres1 m1' m2 j P vargs2,
   external_call ef ge1 vargs1 m1 t vres1 m1' ->
-  m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j ** P ->
+  m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j m1 ** P ->
   Val.inject_list j vargs1 vargs2 ->
   exists j' vres2 m2',
      external_call ef ge2 vargs2 m2 t vres2 m2'
   /\ Val.inject j' vres1 vres2
   /\ Mem.unchanged_on (loc_unmapped j) m1 m1'
-  /\ m2' |= minjection j' m1' ** globalenv_inject ge1 ge2 j' ** P
+  /\ m2' |= minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m2.
 Proof.
@@ -879,6 +891,7 @@ Proof.
 - exact INJ'.
 - apply m_invar with (m0 := m2).
 + apply globalenv_inject_incr with j m1; auto.
+  eapply Mem.unchanged_on_nextblock; eauto.
 + eapply Mem.unchanged_on_implies; eauto.
   intros; red; intros; red; intros.
   eelim C; eauto. simpl. exists b0, delta; auto.
@@ -892,7 +905,7 @@ Qed.
 
 Lemma alloc_parallel_rule_2:
   forall ge1 ge2 m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
-  m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j ** P ->
+  m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j m1 ** P ->
   Mem.alloc m1 0 sz1 = (m1', b1) ->
   Mem.alloc m2 0 sz2 = (m2', b2) ->
   (8 | delta) ->
@@ -901,7 +914,7 @@ Lemma alloc_parallel_rule_2:
   0 <= sz2 <= Ptrofs.max_unsigned ->
   0 <= delta -> hi <= sz2 ->
   exists j',
-     m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge1 ge2 j' ** P
+     m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
   /\ inject_incr j j'
   /\ j' b1 = Some(b2, delta)
   /\ inject_separated j j' m1 m2 .
@@ -921,9 +934,10 @@ Proof.
   exploit alloc_parallel_rule; eauto.
   intros (j' & A & B & C & D).
   exists j'; split; auto.
-  rewrite sep_swap4 in A. rewrite sep_swap4. apply globalenv_inject_incr with j1 m1; auto.
+  rewrite sep_swap4 in A. rewrite sep_swap4. apply globalenv_inject_incr with j1 m1; eauto.
 - red; unfold j1; intros. destruct (eq_block b b1). congruence. rewrite D; auto.
 - red; unfold j1; intros. destruct (eq_block b0 b1). congruence. rewrite D in H9 by auto. congruence.
+- rewrite (Mem.nextblock_alloc m1 0 sz1 m1' b1); eauto. xomega.
 - split; auto.
   split; auto.
   red. intros b0 b3 delta0 H8 H9.
@@ -932,4 +946,5 @@ Proof.
     rewrite C in H9. inversion H9. subst delta0 b3.
     eauto with mem.
   + rewrite D in H9; congruence.
+- reflexivity.
 Qed.

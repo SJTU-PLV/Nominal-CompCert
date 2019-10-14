@@ -37,11 +37,13 @@ Section PRESERVATION.
 Variable prog: program.
 Variable tprog: program.
 Hypothesis TRANSF: match_prog prog tprog.
-Variable w: meminj.
+Variable w: meminj_thr.
 Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
 Let ge := globalenv se prog.
 Let tge := globalenv tse tprog.
+
+Hypothesis GE: cc_inj_senv w se tse.
 
 Lemma comp_env_preserved:
   genv_cenv tge = genv_cenv ge.
@@ -1301,7 +1303,6 @@ Theorem match_envs_free_blocks:
   /\ Mem.inject j m' tm'.
 Proof.
   intros.
-Local Opaque ge tge.
   assert (X: exists tm', Mem.free_list tm (blocks_of_env tge te) = Some tm').
   {
     rewrite blocks_of_env_translated. apply can_free_list.
@@ -1311,9 +1312,10 @@ Local Opaque ge tge.
     unfold block_of_binding in EQ; inv EQ.
     exploit me_mapped; eauto. eapply PTree.elements_complete; eauto.
     intros [b [A B]].
-    change 0 with (0 + 0). replace (sizeof ge ty) with (sizeof ge ty + 0) by omega.
+    change 0 with (0 + 0).
+    replace (sizeof (prog_comp_env prog) ty) with (sizeof (prog_comp_env prog) ty + 0) by omega.
     eapply Mem.range_perm_inject; eauto.
-    eapply free_blocks_of_env_perm_2; eauto.
+    eapply (free_blocks_of_env_perm_2 ge); eauto.
   - (* no overlap *)
     unfold blocks_of_env; eapply blocks_of_env_no_overlap; eauto.
     intros. eapply free_blocks_of_env_perm_2; eauto.
@@ -1328,7 +1330,7 @@ Local Opaque ge tge.
   intros [[id [b' ty]] [EQ IN]]. unfold block_of_binding in EQ. inv EQ.
   exploit me_flat; eauto. apply PTree.elements_complete; eauto.
   intros [P Q]. subst delta. eapply free_blocks_of_env_perm_1 with (m := m); eauto.
-  rewrite <- comp_env_preserved. omega.
+  rewrite <- comp_env_preserved. cbn in *. omega.
 Qed.
 
 (** Evaluation of expressions *)
@@ -1497,8 +1499,7 @@ End EVAL_EXPR.
 
 Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> block -> block -> Prop :=
   | match_Kstop: forall cenv m bound tbound,
-      inject_incr w f ->
-      Genv.match_stbls f se tse ->
+      mit_incr w f ->
       Ple (Genv.genv_next ge) bound ->
       Ple (Genv.genv_next tge) tbound ->
       match_cont f cenv Kstop Kstop m bound tbound
@@ -1545,9 +1546,13 @@ Lemma match_cont_invariant:
 Proof.
   induction 1; intros LOAD INCR INJ1 INJ2; econstructor; eauto.
 (* globalenvs *)
+  destruct H as [H SEP]. inv GE; split; cbn in *.
   eapply inject_incr_trans; eauto.
-  eapply Genv.match_stbls_incr; eauto. intros. erewrite <- INJ2; eauto.
-  eapply Plt_Ple_trans; eauto.
+  intros. destruct (f b1) as [[xb2 xdelta] | ] eqn:Hfb1.
+    eapply SEP; eauto. rewrite Hfb1. apply INCR in Hfb1. erewrite <- H4. auto.
+    destruct (plt b1 bound). erewrite INJ1 in H4; eauto.
+    destruct (plt b2 tbound). erewrite INJ2 in H4; eauto.
+    xomega.
 (* call *)
   eapply match_envs_invariant; eauto.
   intros. apply LOAD; auto. xomega.
@@ -1689,7 +1694,7 @@ Lemma match_cont_globalenv:
   match_cont f cenv k tk m bound tbound ->
   Genv.match_stbls f se tse.
 Proof.
-  induction 1; auto.
+  induction 1; eauto using cc_inj_match_stbls.
 Qed.
 
 Hint Resolve match_cont_globalenv: compat.
@@ -2199,22 +2204,23 @@ Proof.
 Qed.
 
 Lemma initial_states_simulation:
-  forall q1 q2, Genv.match_stbls w se tse -> cc_inj_query w q1 q2 ->
+  forall q1 q2, cc_inj_query w q1 q2 ->
   forall S, initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states S R.
 Proof.
-  intros _ _ Hse [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1].
+  intros _ _ [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hnb1 Hnb2 Hvf1].
   intros. inv H.
-  exploit functions_translated; eauto. intros [tf [A B]].
+  exploit functions_translated; eauto using cc_inj_match_stbls, mit_incr_refl.
+  intros [tf [A B]].
   pose proof (type_of_fundef_preserved _ _ B) as Hsg. monadInv B. simpl in *.
   econstructor; split.
   econstructor; eauto. congruence.
   { revert vargs2 Hvargs. clear - H7.
     induction H7; inversion 1; econstructor; eauto using val_casted_inject. }
-  admit. (* nextblock vs. genv_next *)
-  econstructor; eauto. econstructor; eauto.
-  admit. (* nextblock vs. genv_next *)
-Admitted.
+  inv GE. cbn in *. assumption.
+  econstructor; eauto. econstructor; eauto using mit_incr_refl.
+  inv GE. cbn in *. assumption.
+Qed.
 
 Lemma final_states_simulation:
   forall S R r1, match_states S R -> final_state S r1 ->
@@ -2223,11 +2229,13 @@ Proof.
   intros. inv H0. inv H.
   specialize (MCONT VSet.empty). inv MCONT.
   eexists. split; econstructor; eauto.
+  inv GE. cbn in *. assumption.
+  inv GE. cbn in *. assumption.
 Qed.
 
 Lemma external_states_simulation:
   forall S R q1, match_states S R -> at_external ge S q1 ->
-  exists wx q2, at_external tge R q2 /\ cc_injp_query wx q1 q2 /\ Genv.match_stbls wx se tse /\
+  exists wx q2, at_external tge R q2 /\ cc_injp_query wx q1 q2 /\ cc_injp_stbls wx se tse /\
   forall r1 r2 S', cc_injp_reply wx r1 r2 -> after_external S r1 S' ->
   exists R', after_external R r2 R' /\ match_states S' R'.
 Proof.
@@ -2235,12 +2243,16 @@ Proof.
   destruct Hq1; inv HSR.
   rewrite H in VFIND; inv VFIND. simpl in *. inv FUNTY.
   pose proof (MCONT VSet.empty) as SEINJ. apply match_cont_globalenv in SEINJ.
+  assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
   eapply functions_translated in H as (tfd & TFIND & TRFD); eauto.
   monadInv TRFD.
   eexists _, _. intuition idtac.
   - econstructor; eauto.
   - econstructor; eauto.
-  - eapply match_cont_globalenv with (cenv := VSet.empty); eauto.
+  - specialize (MCONT VSet.empty). constructor.
+    + eapply match_cont_globalenv; eauto.
+    + clear - MCONT. induction MCONT; cbn in *; eauto. destruct H0. xomega.
+    + clear - MCONT. induction MCONT; cbn in *; eauto. destruct H0. xomega.
   - inv H0. inv H. eexists. split.
     + econstructor; eauto.
     + econstructor; eauto. intro.
@@ -2258,8 +2270,9 @@ Theorem transf_program_correct prog tprog:
 Proof.
   intros MATCH. split; [apply proj1, match_program_skel in MATCH; auto | ].
   intros w se1 se2 q1 q2 Hse1 SKEL Hse Hq.
-  split. { destruct Hq, MATCH. eapply (Genv.is_internal_match H3); eauto.
-           intros. destruct f; monadInv H5; cbn; auto. }
+  split. { destruct Hq, MATCH. eapply (Genv.is_internal_match H5); eauto.
+           eauto using cc_inj_match_stbls, mit_incr_refl.
+           intros. destruct f; monadInv H7; cbn; auto. }
   eapply forward_simulation_plus.
   apply initial_states_simulation; eauto.
   apply final_states_simulation; eauto.

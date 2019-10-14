@@ -1075,7 +1075,7 @@ Lemma function_prologue_correct:
   rs1 = undef_regs destroyed_at_function_entry rs ->
   Mem.alloc m1 0 f.(Linear.fn_stacksize) = (m2, sp) ->
   Val.has_type parent Tptr -> Val.has_type ra Tptr ->
-  m1' |= minjection j m1 ** globalenv_inject se tse j ** P ->
+  m1' |= minjection j m1 ** globalenv_inject se tse j m1 ** P ->
   exists j', exists rs', exists m2', exists sp', exists m3', exists m4', exists m5',
      Mem.alloc m1' 0 tf.(fn_stacksize) = (m2', sp')
   /\ store_stack m2' (Vptr sp' Ptrofs.zero) Tptr tf.(fn_link_ofs) parent = Some m3'
@@ -1085,7 +1085,7 @@ Lemma function_prologue_correct:
       E0 (State cs fb (Vptr sp' Ptrofs.zero) k rs' m5')
   /\ agree_regs j' ls1 rs'
   /\ agree_locs ls1 ls0
-  /\ m5' |= frame_contents j' sp' ls1 ls0 parent ra ** minjection j' m2 ** globalenv_inject se tse j' ** P
+  /\ m5' |= frame_contents j' sp' ls1 ls0 parent ra ** minjection j' m2 ** globalenv_inject se tse j' m2 ** P
   /\ j' sp = Some(sp', fe.(fe_stack_data))
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m1'.
@@ -1112,7 +1112,7 @@ Local Opaque b fe.
   assert (SEPCONJ:
     m2' |= mconj (range sp' 0 (fe_stack_data fe) ** range sp' (fe_stack_data fe + bound_stack_data b) (fe_size fe))
                  (range sp' 0 (fe_stack_data fe) ** range sp' (fe_stack_data fe + bound_stack_data b) (fe_size fe))
-           ** minjection j' m2 ** globalenv_inject se tse j' ** P).
+           ** minjection j' m2 ** globalenv_inject se tse j' m2 ** P).
   { apply mconj_intro; rewrite sep_assoc; assumption. }
   (* Dividing up the frame *)
   apply (frame_env_separated b) in SEP. replace (make_env b) with fe in SEP by auto.
@@ -1150,7 +1150,7 @@ Local Opaque b fe.
   clear SEP; intros SEP.
   rewrite sep_swap in SEP.
   (* Now we frame this *)
-  assert (SEPFINAL: m5' |= frame_contents j' sp' ls1 ls0 parent ra ** minjection j' m2 ** globalenv_inject se tse j' ** P).
+  assert (SEPFINAL: m5' |= frame_contents j' sp' ls1 ls0 parent ra ** minjection j' m2 ** globalenv_inject se tse j' m2 ** P).
   { eapply frame_mconj. eexact SEPCONJ.
     rewrite chunk_of_Tptr in SEP.
     unfold frame_contents_1; rewrite ! sep_assoc. exact SEP.
@@ -1677,9 +1677,9 @@ Proof.
 Qed.
 
 Lemma find_function_translated:
-  forall j ls rs m ros f,
+  forall j ls rs m1 m ros f,
   agree_regs j ls rs ->
-  m |= globalenv_inject se tse j ->
+  m |= globalenv_inject se tse j m1 ->
   Genv.find_funct ge (Linear.ros_address ge ros ls) = Some f ->
   exists tf,
      Genv.find_funct tge (ros_address tge ros rs) = Some tf
@@ -1781,7 +1781,7 @@ Variables sp sp': block.
 Variables parent retaddr: val.
 Hypothesis INJ: j sp = Some(sp', fe.(fe_stack_data)).
 Hypothesis AGR: agree_regs j ls rs.
-Hypothesis SEP: m' |= frame_contents f j sp' ls ls0 parent retaddr ** minjection j m ** globalenv_inject se tse j.
+Hypothesis SEP: m' |= frame_contents f j sp' ls ls0 parent retaddr ** minjection j m ** globalenv_inject se tse j m.
 
 Lemma transl_builtin_arg_correct:
   forall a v,
@@ -1962,7 +1962,7 @@ Inductive match_states: Linear.state -> Mach.state -> Prop :=
         (SEP: m' |= frame_contents f j sp' ls (parent_locset cs) (parent_sp cs') (parent_ra cs')
                  ** stack_contents j cs cs'
                  ** minjection j m
-                 ** globalenv_inject se tse j),
+                 ** globalenv_inject se tse j m),
       match_states (Linear.State cs f (Vptr sp Ptrofs.zero) c ls m)
                    (Mach.State cs' fb (Vptr sp' Ptrofs.zero) (transl_code (make_env (function_bounds f)) c) rs m')
   | match_states_call:
@@ -1974,7 +1974,7 @@ Inductive match_states: Linear.state -> Mach.state -> Prop :=
         (AGREGS: agree_regs j ls rs)
         (SEP: m' |= stack_contents j cs cs'
                  ** minjection j m
-                 ** globalenv_inject se tse j),
+                 ** globalenv_inject se tse j m),
       match_states (Linear.Callstate cs vf ls m)
                    (Mach.Callstate cs' vf' rs m')
   | match_states_return:
@@ -1984,7 +1984,7 @@ Inductive match_states: Linear.state -> Mach.state -> Prop :=
         (AGREGS: agree_regs j ls rs)
         (SEP: m' |= stack_contents j cs cs'
                  ** minjection j m
-                 ** globalenv_inject se tse j),
+                 ** globalenv_inject se tse j m),
       match_states (Linear.Returnstate cs ls m)
                   (Mach.Returnstate cs' rs m').
 
@@ -2044,7 +2044,7 @@ Proof.
            /\ m'' |= frame_contents f j sp' (Locmap.set (S sl ofs ty) (rs (R src))
                                                (LTL.undef_regs (destroyed_by_setstack ty) rs))
                                             (parent_locset s) (parent_sp cs') (parent_ra cs')
-                  ** stack_contents j s cs' ** minjection j m ** globalenv_inject se tse j).
+                  ** stack_contents j s cs' ** minjection j m ** globalenv_inject se tse j m).
   { unfold ofs'; destruct sl; try discriminate.
     eapply frame_set_local; eauto.
     eapply frame_set_outgoing; eauto. }
@@ -2121,7 +2121,9 @@ Proof.
   rewrite transl_destroyed_by_store. apply agree_regs_undef_regs; auto.
   apply agree_locs_undef_locs. auto. apply destroyed_by_store_caller_save.
   auto. eauto with coqlib.
+  rewrite globalenv_nextblock in SEP.
   eapply frame_undef_regs; eauto.
+  destruct a; try discriminate. apply Mem.nextblock_store in H0. rewrite H0. reflexivity.
 
 - (* Lcall *)
   exploit find_function_translated; eauto.
@@ -2162,6 +2164,8 @@ Proof.
   apply match_stacks_change_sig with (Linear.fn_sig f); auto.
   apply zero_size_arguments_tailcall_possible. eapply wt_state_tailcall; eauto.
   destruct ros; simpl in *; eauto. eapply symbol_address_inject; eauto. apply SEP.
+  rewrite globalenv_nextblock in SEP; eauto.
+  apply Mem.nextblock_free in H2. rewrite H2. reflexivity.
 
 - (* Lbuiltin *)
   destruct BOUND as [BND1 BND2].
@@ -2251,7 +2255,9 @@ Proof.
       congruence.
     - eauto using Mem.perm_free_3.
   }
+  rewrite globalenv_nextblock in G.
   rewrite sep_swap; exact G.
+  apply Mem.nextblock_free in H. rewrite H. reflexivity.
 
 - (* internal function *)
   rewrite FIND in FIND0. inv FIND0.
@@ -2268,7 +2274,7 @@ Proof.
   eapply match_stacks_type_retaddr; eauto.
   clear SEP;
   intros (j' & rs' & m2' & sp' & m3' & m4' & m5' & A & B & C & D & E & F & SEP & J & K & L).
-  rewrite (sep_comm (globalenv_inject se tse j')) in SEP.
+  rewrite (sep_comm (globalenv_inject se tse j' m')) in SEP.
   rewrite (sep_swap (minjection j' m')) in SEP.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
@@ -2321,11 +2327,12 @@ Proof.
 Qed.
 
 Lemma transf_initial_states:
-  forall q1 q2, Genv.match_stbls w se tse -> cc_stacking_mq w q1 q2 ->
+  forall q1 q2, cc_stacking_st w se tse -> cc_stacking_mq w q1 q2 ->
   forall st1, Linear.initial_state ge q1 st1 ->
   exists st2, Mach.initial_state tge q2 st2 /\ match_states st1 st2.
 Proof.
   intros q1 q2 Hse Hq st1 Hst1. inv Hst1. inv Hq.
+  revert Hse. inversion 1. subst f1 ls m m0 se1 se2.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   econstructor; split.
   - monadInv TR. econstructor; eauto.
@@ -2340,11 +2347,10 @@ Proof.
     + cbn. repeat apply conj; rewrite <- ?H9; cbn; auto.
       * apply Mem.unchanged_on_refl.
       * intros. edestruct H10 as (v & LD & INJ); eauto. inv LD; eauto.
-      * admit. (* initial nextblock *)
       * red. cbn. auto.
       * red. cbn. rewrite <- H9; cbn. intros b2 ofs [VLD LOR] [LIR | ]; auto.
         destruct LIR as (b1 & delta & Hb & ?). eapply LOR; eauto.
-Admitted.
+Qed.
 
 Lemma transf_final_states:
   forall st1 st2 r1, wt_state prog se st1 -> match_states st1 st2 -> Linear.final_state st1 r1 ->
@@ -2361,7 +2367,7 @@ Qed.
 
 Lemma transf_external_states:
   forall st1 st2 q1, wt_state prog se st1 -> match_states st1 st2 -> Linear.at_external ge st1 q1 ->
-  exists wx q2, Mach.at_external tge st2 q2 /\ cc_stacking_mq wx q1 q2 /\ Genv.match_stbls wx se tse /\
+  exists wx q2, Mach.at_external tge st2 q2 /\ cc_stacking_mq wx q1 q2 /\ cc_stacking_st wx se tse /\
   forall r1 r2 st1', cc_stacking_mr wx r1 r2 -> Linear.after_external st1 r1 st1' ->
   exists st2', Mach.after_external st2 r2 st2' /\ match_states st1' st2'.
 Proof.
@@ -2384,7 +2390,8 @@ Proof.
     + inv WTS. auto.
     + apply SEP.
     + destruct vf; try discriminate.
-  - apply SEP.
+  - destruct SEP as (_ & (_ & (? & ? & ?) & _) & _).
+    constructor; auto.
   - inv H. inv H0.
     eexists. split; econstructor.
     + eapply source_invariants_step; eauto.
@@ -2397,6 +2404,7 @@ Proof.
       eapply globalenv_inject_incr; eauto.
       rewrite sep_comm, sep_assoc.
       assumption.
+      eapply Mem.unchanged_on_nextblock; eauto.
 Qed.
 
 Lemma wt_prog:
@@ -2411,7 +2419,7 @@ Proof.
 Qed.
 
 Theorem transf_program_fsim q1 q2:
-  Genv.match_stbls w se tse ->
+  cc_stacking_st w se tse ->
   cc_stacking_mq w q1 q2 ->
   forward_simulation cc_stacking se tse (cc_stacking_mr w)
     (Linear.semantics prog se q1)
@@ -2445,7 +2453,7 @@ Theorem transf_program_correct rao prog tprog:
 Proof.
   intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
   intros w se1 se2 q1 q2 Hse1 Hsk Hse Hq.
-  split. { destruct Hq. cbn in Hse. eapply (Genv.is_internal_transf_partial MATCH); eauto.
+  split. { destruct Hq. inv Hse. eapply (Genv.is_internal_transf_partial MATCH); eauto.
            intros fd tfd Hfd. destruct fd; monadInv Hfd; auto. }
   eapply transf_program_fsim; eauto.
 Qed.
