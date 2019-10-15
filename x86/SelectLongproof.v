@@ -30,6 +30,7 @@ Variable prog: program.
 Variable hf: helper_functions.
 Hypothesis HELPERS: helper_functions_declared prog hf.
 Variable se: Genv.symtbl.
+Hypothesis VALID: Genv.valid_for (erase_program prog) se.
 Let ge := Genv.globalenv se prog.
 Variable sp: val.
 Variable e: env.

@@ -80,6 +80,7 @@ Variable prog: program.
 Variable hf: helper_functions.
 Hypothesis HELPERS: helper_functions_declared prog hf.
 Variable se: Genv.symtbl.
+Hypothesis VALID: Genv.valid_for (erase_program prog) se.
 Let ge := Genv.globalenv se prog.
 Variable sp: val.
 Variable e: env.
@@ -95,13 +96,12 @@ Lemma eval_helper:
   external_implements name sg vargs vres ->
   eval_expr ge sp e m le (Eexternal id sg args) vres.
 Proof.
-  (*
   intros.
-  red in H0. apply Genv.find_def_symbol in H0. destruct H0 as (b & P & Q).
+  red in H0. rewrite Genv.find_def_symbol in H0 by eauto.
+  destruct H0 as (b & P & Q).
   rewrite <- Genv.find_funct_ptr_iff in Q.
   econstructor; eauto.
-   *)
-Admitted. (* Genv.find_def_symbol / valid_for *)
+Qed.
 
 Corollary eval_helper_1:
   forall le id name sg arg1 varg1 vres,

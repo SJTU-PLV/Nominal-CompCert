@@ -120,6 +120,7 @@ Let ge := Genv.globalenv se prog.
 Let tge := Genv.globalenv se tprog.
 Hypothesis TRANSF: match_prog prog tprog.
 Hypothesis SVALID: Genv.valid_for (erase_program prog) se.
+Hypothesis TVALID: Genv.valid_for (erase_program tprog) se.
 
 Lemma functions_translated:
   forall (v v': val) (f: Cminor.fundef),
@@ -1111,7 +1112,10 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   open_fsim cc_ext cc_ext (Cminor.semantics prog) (CminorSel.semantics tprog).
 Proof.
-  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
+  intros MATCH.
+  assert (SKEL: erase_program prog = erase_program tprog).
+  { apply match_program_skel in MATCH. auto. }
+  split; auto.
   intros [ ] se _ q1 q2 Hse _  [ ] Hq.
   split. { destruct Hq. eapply (Genv.is_internal_match_id MATCH); eauto.
            destruct 1 as (hf & ? & ?). destruct f; monadInv H3; auto. }
@@ -1120,6 +1124,7 @@ Proof.
   eapply sel_final_states; eauto.
   exists tt. cbn. eapply sel_external_states; eauto.
   apply sel_step_correct; eauto.
+  rewrite <- SKEL. auto.
 Qed.
 
 (** ** Commutation with linking *)
