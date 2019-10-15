@@ -117,6 +117,10 @@ Next Obligation.
   destruct 1. cbn. auto.
 Qed.
 
+Next Obligation.
+  destruct H. inv H0. eauto.
+Qed.
+
 Next Obligation. (* Mem.alloc *)
   intros [f nb1 nb2] m1 m2 Hm lo hi. cbn in *. inv Hm.
   destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:Hm1'.

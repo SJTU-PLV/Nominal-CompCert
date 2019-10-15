@@ -773,7 +773,7 @@ Proof.
       * revert vargs2 H9. clear - H1.
         induction H1; inversion 1; subst; constructor; eauto.
         eapply val_casted_inject; eauto.
-      * admit. (* nextblock, from match_mem and match_stbls *)
+      * eapply match_stbls_nextblock; eauto.
     + exists w; split; try rauto.
       repeat rstep. clear -H9. induction H9; constructor; eauto.
   - intros s1 s2 r1 (w' & Hw' & Hge & Hs) H. destruct H as [v1' m1']. cbn in *.
@@ -802,7 +802,7 @@ Proof.
     eexists; split; try rauto.
     exists w''. split; repeat rstep.
     eapply genv_match_acc; eauto.
-Admitted.
+Qed.
 
 End PROG.
 

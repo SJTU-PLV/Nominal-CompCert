@@ -94,6 +94,10 @@ Next Obligation.
 Qed.
 
 Next Obligation.
+  erewrite <- Mem.mext_next; eauto.
+Qed.
+
+Next Obligation.
   intros [ ] m1 m2 Hm lo hi.
   destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:H1.
   edestruct Mem.alloc_extends as (m2' & Hm2' & Hm'); eauto; try reflexivity.

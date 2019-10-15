@@ -61,6 +61,11 @@ Record cklr :=
       Monotonic match_stbls (wacc ++> subrel);
     match_stbls_proj w:
       Related (match_stbls w) (Genv.match_stbls (mi w)) subrel;
+    match_stbls_nextblock w se1 se2 m1 m2:
+      match_stbls w se1 se2 ->
+      match_mem w m1 m2 ->
+      Pos.le (Genv.genv_next se1) (Mem.nextblock m1) ->
+      Pos.le (Genv.genv_next se2) (Mem.nextblock m2);
 
     cklr_alloc:
       Monotonic

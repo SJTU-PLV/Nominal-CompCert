@@ -152,6 +152,10 @@ Next Obligation. (* match_stbls vs. Genv.match_stbls *)
   destruct 1; auto.
 Qed.
 
+Next Obligation.
+  destruct H. inv H0. auto.
+Qed.
+
 Next Obligation. (* Mem.alloc *)
   intros _ _ _ [f m1 m2 Hm] lo hi.
   destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:Hm1'.

@@ -306,6 +306,12 @@ Next Obligation.
 Qed.
 
 Next Obligation.
+  destruct H as (sei & Hse1i & Hsei2), H0 as (mi & Hm1i & Hmi2). cbn in *.
+  eapply (match_stbls_nextblock R2); eauto.
+  eapply (match_stbls_nextblock R1); eauto.
+Qed.
+
+Next Obligation.
   intros [w12 w23] m1 m3 (m2 & Hm12 & Hm23) lo hi.
   edestruct (cklr_alloc R1 w12 m1 m2 Hm12 lo hi)
     as (w12' & Hw12' & Hm12' & Hb12).
