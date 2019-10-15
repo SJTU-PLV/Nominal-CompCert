@@ -1,4 +1,6 @@
 Require Import Axioms.
+Require Import LanguageInterface.
+Require Import CallconvAlgebra.
 Require Export CKLR.
 
 (** Algebraic structures on CKLRs *)
@@ -546,4 +548,86 @@ Proof.
     + repeat (econstructor; eauto).
     + rauto.
     + rewrite compose_meminj_assoc. apply inject_incr_refl.
+Qed.
+
+
+(** * Properties of [cc_c] *)
+
+Global Instance cc_c_ref:
+  Monotonic (@cc_c) (subcklr ++> ccref).
+Proof.
+  intros Q R HQR. red in HQR |- *.
+  intros w se1 se2 q1 q2 Hse Hq.
+  destruct Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm].
+  specialize (HQR w se1 se2 m1 m2 Hse Hm) as (wr & HseR & HmR & Hincr & HQR').
+  exists wr. simpl in *. repeat apply conj; auto.
+  - constructor; eauto.
+  - intros r1 r2 (wr' & Hw' & Hr). destruct Hr as [v1 v2 m1' m2' Hvres Hm'].
+    specialize (HQR' wr' m1' m2' Hm' Hw') as (w' & HmQ' & HwQ' & Hincr').
+    eexists. split; eauto. constructor; eauto.
+Qed.
+
+Lemma val_inject_list_compose f g:
+  eqrel
+    (Val.inject_list (compose_meminj f g))
+    (rel_compose (Val.inject_list f) (Val.inject_list g)).
+Proof.
+  split.
+  - intros vs1 vs2 Hvs. induction Hvs.
+    + exists nil. split; constructor.
+    + apply val_inject_compose in H.
+      destruct H as (vi & ? & ?), IHHvs as (vsi & ? & ?).
+      eexists; split; constructor; eauto.
+  - intros vs1 vs3 (vs2 & Hvs12 & Hvs23). revert vs3 Hvs23.
+    induction Hvs12; inversion 1; subst.
+    + constructor.
+    + constructor; eauto.
+      apply val_inject_compose. ercompose; eauto.
+Qed.
+
+Lemma match_c_query_compose R12 R23 w12 w23:
+  eqrel
+    (cc_c_query (R12 @ R23) (w12, w23))
+    (rel_compose (cc_c_query R12 w12) (cc_c_query R23 w23)).
+Proof.
+  split.
+  - intros _ _ [vf1 vf3 sg vargs1 vargs3 m1 m3 Hvf Hvargs Hm].
+    simpl in *.
+    apply val_inject_compose in Hvf. destruct Hvf as (vf2 & Hvf12 & Hv23).
+    apply val_inject_list_compose in Hvargs. destruct Hvargs as (vargs2 & ? & ?).
+    destruct Hm as (m2 & Hm12 & Hm23).
+    exists (cq vf2 sg vargs2 m2); split; constructor; simpl; eauto.
+    destruct Hvf12; congruence.
+  - intros q1 q3 (q2 & Hq12 & Hq23).
+    destruct Hq23 as [vf1 vf2 sg vargs2 vargs3 m2 m3 Hvf Hvargs23 Hm23 Hvf1].
+    inv Hq12.
+    constructor; simpl.
+    + apply val_inject_compose. ercompose; eauto.
+    + apply val_inject_list_compose. ercompose; eauto.
+    + ercompose; eauto.
+    + auto.
+Qed.
+
+Lemma cc_c_compose R12 R23:
+  cceqv (cc_c (R12 @ R23)) (cc_c R12 @ cc_c R23).
+Proof.
+  split.
+  - intros [w12 w23] se1 se3 q1 q3 (se2 & Hse12 & Hse23) Hq.
+    apply match_c_query_compose in Hq as (q2 & Hq12 & Hq23).
+    exists (w12, w23).
+    repeat apply conj; cbn; eauto.
+    intros r1 r3 (r2 & (w12' & Hw21' & Hr12) & (w23' & Hw23' & Hr23)).
+    exists (w12', w23'). split. constructor; cbn; auto.
+    destruct Hr12; inv Hr23.
+    constructor; cbn; eauto.
+    apply val_inject_compose; eauto.
+  - intros [w12 w23] se1 se3 q1 q3 (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
+    cbn in *. exists (w12, w23). repeat apply conj; eauto.
+    + apply match_c_query_compose; eauto.
+    + intros r1 r3 ([w12' w23'] & Hw' & Hr).
+      destruct Hr. cbn in *.
+      apply val_inject_compose in H.
+      destruct Hw' as [? ?], H as (vi & ? & ?), H0 as (mi & ? & ?).
+      exists (cr vi mi).
+      split; eexists; constructor; eauto; constructor; eauto.
 Qed.

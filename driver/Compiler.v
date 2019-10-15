@@ -24,6 +24,7 @@ Require Import CKLR.
 Require Import CKLRAlgebra.
 Require Import Inject.
 Require Import InjectFootprint.
+Require Import Extends.
 Require Import Clightrel.
 Require Import RTLrel.
 
@@ -416,6 +417,7 @@ Qed.
 Definition cc_backend : callconv li_c Asm.li_asm :=
   cc_inj @
   Conventions.cc_alloc @
+  Conventions.cc_locset_ext @
   Mach.cc_stacking @
   Asmgenproof0.cc_asmgen.
 
@@ -446,8 +448,9 @@ Proof.
   assert (IB: ccref cc_backend (cc_inj @ cc_backend)).
   {
     unfold cc_backend.
-    rewrite <- !cc_c_inj.
-    admit. (* CKLR stuff *)
+    rewrite <- (cc_compose_assoc cc_inj cc_inj).
+    rewrite <- cc_c_inj, <- cc_c_compose, <- inj_inj, cc_c_inj.
+    reflexivity.
   }
   assert (ID: ccref (cc_injp @ cc_dom) cc_dom).
   {
@@ -458,7 +461,7 @@ Proof.
   - rewrite <- ID. rewrite cc_compose_assoc. reflexivity.
   - rewrite IB. reflexivity.
   - eapply compose_open_fsim; eauto.
-Admitted.
+Qed.
 
 Lemma compose_extension_pass sem bsem tsem:
   open_fsim cc_ext cc_ext sem bsem ->
@@ -466,11 +469,12 @@ Lemma compose_extension_pass sem bsem tsem:
   open_fsim (cc_dom @ cc_backend) cc_backend sem tsem.
 Proof.
   intros.
-  assert (IB: ccref cc_backend (cc_inj @ cc_backend)).
+  assert (IB: ccref cc_backend (cc_ext @ cc_backend)).
   {
     unfold cc_backend.
-    rewrite <- !cc_c_inj.
-    admit. (* CKLR stuff *)
+    rewrite <- (cc_compose_assoc cc_ext cc_inj).
+    rewrite <- cc_c_inj, <- cc_c_ext, <- cc_c_compose.
+    rewrite <- (proj2 ext_inj), cc_c_inj. reflexivity.
   }
   assert (ID: ccref (cc_ext @ cc_dom) cc_dom).
   {
@@ -481,7 +485,7 @@ Proof.
   - rewrite <- ID. rewrite cc_compose_assoc. reflexivity.
   - rewrite IB. reflexivity.
   - eapply compose_open_fsim; eauto.
-Admitted.
+Qed.
 
 Lemma compose_identity_pass {liA1 liA2 liB1 liB2} ccA ccB sem bsem tsem:
   open_fsim 1 1 sem bsem ->
@@ -527,8 +531,8 @@ Proof.
   eapply cc_join_fsim.
   - rewrite <- cc_join_ub_l. rewrite <- cc_c_injp at 1. rewrite <- cc_c_injp.
     admit. (*update: eapply Clightrel.semantics2_rel.*)
-  - rewrite <- cc_join_ub_r.
-    admit. (* cklr ext stuff *)
+  - rewrite <- cc_join_ub_r. rewrite <- cc_c_ext at 1. rewrite <- cc_c_ext.
+    admit. (*update: eapply Clightrel.semantics2_rel.*)
 Admitted.
 
 (** ** Composition of passes *)
@@ -592,10 +596,8 @@ Ltac DestructM :=
 
   eapply compose_open_fsim.
     eapply Allocproof.transf_program_correct; eassumption.
-  replace (LTL.semantics p7) with (LTL.semantics p8) by admit. (* XXX composition theorem for cc_locset_ext
-  eapply compose_identity_pass.
+  eapply compose_open_fsim.
     eapply Tunnelingproof.transf_program_correct; eassumption.
-  *)
   eapply compose_identity_pass.
     eapply Linearizeproof.transf_program_correct; eassumption.
   eapply compose_identity_pass.
@@ -612,7 +614,7 @@ Ltac DestructM :=
   apply forward_to_backward_open_sim. auto.
   apply Clight.semantics_receptive.
   apply Asm.semantics_determinate.
-Admitted.
+Qed.
 
 (*
 Theorem c_semantic_preservation:
