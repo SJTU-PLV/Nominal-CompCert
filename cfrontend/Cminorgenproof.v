@@ -2172,9 +2172,9 @@ Proof.
   econstructor; split.
   econstructor; eauto.
   eapply match_callstate with (f := w) (cs := @nil frame) (cenv := PTree.empty Z); auto.
-  apply mcs_nil; auto using mit_incr_refl. admit. admit. (* nextblock *)
+  apply mcs_nil; auto using mit_incr_refl; inv GE; cbn in *; auto.
   constructor. red; auto.
-Admitted.
+Qed.
 
 Lemma transl_final_states:
   forall S R r1, match_states S R -> Csharpminor.final_state S r1 ->
