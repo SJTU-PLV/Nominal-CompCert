@@ -17,6 +17,7 @@ Require Import LogicalRelations.
 Require Import OptionRel.
 Require Import KLR.
 Require Export Clight.
+Require Import SimplLocalsproof.
 Require Import Linking.
 
 Section PROG.
@@ -48,6 +49,16 @@ Global Instance genv_cenv_match R w:
 Proof.
   unfold genv_match. repeat rstep. destruct H.
   reflexivity.
+Qed.
+
+Lemma match_prog {C} `{!Linking.Linker C} (c: C):
+  Linking.match_program_gen (fun _ => eq) eq c p p.
+Proof.
+  repeat apply conj; auto.
+  induction (AST.prog_defs p) as [ | [id [f|v]] defs IHdefs];
+  repeat (econstructor; eauto).
+  - apply Linking.linkorder_refl.
+  - destruct v; constructor; auto.
 Qed.
 
 (** NB: we have to use [option_rel] here not [option_le], because
@@ -209,6 +220,15 @@ Hint Extern 1 (Related _ _ _) =>
 Hint Extern 1 (Transport _ _ _ _ _) =>
   set_le_transport @assign_loc : typeclass_instances.
 
+Global Instance genv_match_acc R:
+  Monotonic (genv_match R) (wacc R ++> subrel).
+Proof.
+  intros w w' Hw' _ _ [se1 se2 Hge].
+  eapply (match_stbls_acc R w w') in Hge; eauto.
+  eapply (rel_push_rintro (fun se => globalenv se p) (fun se => globalenv se p));
+    eauto.
+Qed.
+
 Global Instance alloc_variables_match R:
   Monotonic
     (@alloc_variables)
@@ -230,12 +250,7 @@ Proof.
     rewrite Hm1' in *. cbn [fst snd] in *.
     specialize (IH p' (PTree.set id (b2, ty) e2) m2').
     edestruct IH as ((e2'' & m2'') & Hvars & p'' & He'' & Hm''); eauto.
-    {
-      red. destruct Hge as [se1 se2 Hge]. eapply match_stbls_acc in Hge; eauto.
-      eapply
-        (rel_push_rintro (fun se => globalenv se p) (fun se => globalenv se p));
-        eauto.
-    }
+    eapply genv_match_acc; eauto.
     {
       (** We only have [ptree_set_le], we would need support for
         multiple instances to declare [ptree_set_rel] as well. *)
@@ -256,12 +271,12 @@ Qed.
 Global Instance bind_parameters_match R:
   Monotonic
     (@bind_parameters)
-    (|= - ==> env_match R ++> match_mem R ++> - ==>
+    (|= genv_match R ==> env_match R ++> match_mem R ++> - ==>
      k1 list_rel (Val.inject @@ [mi R]) ++>
      k1 set_le (<> match_mem R)).
 Proof.
-  intros w ge e1 e2 He m1 m2 Hm vars vl1 vl2 Hvl m1' H.
-  revert H w He vl2 m2 Hvl Hm.
+  intros w ge1 ge2 Hge e1 e2 He m1 m2 Hm vars vl1 vl2 Hvl m1' H.
+  revert H w Hge He vl2 m2 Hvl Hm.
   induction 1 as [m1 | m1 id ty params v1 vl1 b1 m1' m1'' Hb1 Hm1' Hm1'' IH].
   - intros.
     exists m2.
@@ -271,7 +286,7 @@ Proof.
   - intros.
     generalize He. intro He_.
     specialize (He id).
-    pose proof (fun m => bind_parameters_cons ge e2 m id) as Hbp_cons.
+    pose proof (fun m => bind_parameters_cons ge2 e2 m id) as Hbp_cons.
     destruct He as [[xb1 xty] [b2 yty] [Hb Hty] | ]; try discriminate.
     simpl in *.
     inversion Hb1; clear Hb1.
@@ -279,10 +294,13 @@ Proof.
     inversion Hvl as [ | xv1 v2 Hv xvl1 vl2' Hvl']; subst.
     assert (PTR: ptrbits_inject (mi R w) (b1, Ptrofs.zero) (b2, Ptrofs.zero))
       by rauto.
-    edestruct (assign_loc_match R) as (m2' & Hm2' & w' & Hw' & Hm'); eauto.
-    unfold klr_pullw in *.
+    clear Hb.
     transport_hyps.
     edestruct (IH w') as (m2'' & Hm2'' & Hm''); eauto.
+    + red. destruct Hge as [se1 se2 Hge]. eapply (match_stbls_acc R w w') in Hge; eauto.
+      eapply
+        (rel_push_rintro (fun se => globalenv se p) (fun se => globalenv se p));
+        eauto.
     + rauto.
     + rauto.
     + destruct Hm'' as (w'' & Hw'' & Hm'').
@@ -346,19 +364,6 @@ Global Instance set_opttemp_match R w:
 Proof.
   unfold set_opttemp. rauto.
 Qed.
-
-
-(*
-Instance transport_find_symbol f se1 se2 id b1:
-  Transport (Genv.match_stbls f) se1 se2
-    (Genv.find_symbol se1 id = Some b1)
-    (exists b2,
-        Genv.find_symbol se2 id = Some b2 /\
-        block_inject_sameofs f b1 b2).
-Proof.
-  intros Hse Hb1. edestruct @Genv.find_symbol_match as (b2 & ? & ?); eauto.
-Qed.
-*)
 
 Instance transport_find_symbol_genv R w ge1 ge2 id b1:
   Transport (genv_match R w) ge1 ge2
@@ -620,6 +625,30 @@ Proof.
   destruct ident_eq; rauto.
 Qed.
 
+Global Instance function_entry1_match R:
+  Monotonic
+    (@function_entry1)
+    (|= genv_match R ++> - ==> k1 list_rel (Val.inject @@ [mi R]) ++> match_mem R ++>
+     %% k1 set_le (<> env_match R * temp_env_match R * match_mem R)).
+Proof.
+  intros w ge1 ge2 Hge f vargs1 vargs2 Hvargs m1 m2 Hm [[e1 le] m1''] H.
+  simpl in *.
+  destruct H as [m1' Hfvnr Hm1' Hm1'' Hle].
+  pose proof (empty_env_match R w) as Hee.
+  destruct (alloc_variables_match R w _ _ Hge _ _ Hee _ _ Hm _ (e1, m1') Hm1')
+    as ((e2 & m2') & Hm2' & w' & Hw' & He & Hm').
+  eapply genv_match_acc in Hge; [ | eauto].
+  transport Hm1''.
+  exists (e2, le, x).
+  cbn [fst snd] in *.
+  split.
+  - econstructor; eauto.
+  - assert (temp_env_match R w'' le le).
+    { subst le. generalize (fn_temps f). clear. unfold temp_env_match.
+      induction l; cbn; rauto. }
+    exists w''. split; rauto.
+Qed.
+
 Global Instance function_entry2_match R:
   Monotonic
     (@function_entry2)
@@ -651,15 +680,19 @@ Global Instance find_funct_inject R w ge1 v1 ge2 v2 f:
 Proof.
   intros [Hge Hv] Hf. cbn in *.
   destruct Hge. apply match_stbls_proj in H. cbn in Hf.
-  edestruct @Genv.find_funct_match; eauto.
-Admitted.
+  edestruct @Genv.find_funct_match as (?&?&?&?&?); eauto using (match_prog tt).
+  cbn in *. subst. auto.
+Qed.
 
-Global Instance step2_rel R:
+Global Instance step_rel R:
   Monotonic
-    (@step2)
-    (|= genv_match R ++> state_match R ++> - ==> k1 set_le (<> state_match R)).
+    (@step)
+    (|= genv_match R ++> 
+        (- ==> k1 list_rel (Val.inject @@ [mi R]) ++> match_mem R ++>
+         %% k1 set_le (<> env_match R * temp_env_match R * match_mem R)) ++>
+        state_match R ++> - ==> k1 set_le (<> state_match R)).
 Proof.
-  intros w ge1 ge2 Hge s1 s2 Hs t s1' H1.
+  intros w ge1 ge2 Hge fe1 fe2 Hfe s1 s2 Hs t s1' H1.
   deconstruct H1 ltac:(fun x => pose (c := x)); inv Hs;
   try
     (transport_hyps;
@@ -677,9 +710,39 @@ Proof.
        eexists; split;
          [ eapply c; eauto; fail
          | eexists; split; rauto ]).
+  - eapply @transport in f0; [ | rel_curry2_set_le_transport fe1 | rauto].
+    destruct f0 as (? & ? & ? & ? & ? & ? & ?).
+    rinversion H2. inv H2l. inv H2r.
+    rinversion H3. inv H3l. inv H3r.
+    transport FIND.
+    eexists; split.
+    + eapply c; eauto.
+    + eexists; split; rauto.
 Qed.
 
-Global Instance step_rel_params:
+Global Instance step1_rel R:
+  Monotonic
+    (@step1)
+    (|= genv_match R ++> state_match R ++> - ==> k1 set_le (<> state_match R)).
+Proof.
+  unfold step1. rauto.
+Qed.
+
+Global Instance step1_rel_params:
+  Params (@step1) 3.
+
+Hint Extern 1 (Transport _ _ _ _ _) =>
+  set_le_transport @step1 : typeclass_instances.
+
+Global Instance step2_rel R:
+  Monotonic
+    (@step2)
+    (|= genv_match R ++> state_match R ++> - ==> k1 set_le (<> state_match R)).
+Proof.
+  unfold step2. rauto.
+Qed.
+
+Global Instance step2_rel_params:
   Params (@step2) 3.
 
 Hint Extern 1 (Transport _ _ _ _ _) =>
@@ -689,8 +752,8 @@ Lemma activate_rel R w se1 se2 q1 q2:
   match_stbls R w se1 se2 ->
   cc_c_query R w q1 q2 ->
   forward_simulation (cc_c R) se1 se2 (match_reply (cc_c R) w)
-    (Clight.semantics2 p se1 q1)
-    (Clight.semantics2 p se2 q2).
+    (Clight.semantics1 p se1 q1)
+    (Clight.semantics1 p se2 q2).
 Proof.
   intros Hse Hq.
   pose (ms := fun s1 s2 =>
@@ -707,10 +770,12 @@ Proof.
     transport_hyps.
     exists (Callstate vf2 vargs2 Kstop m2). split.
     + econstructor; eauto.
-      admit || eapply val_casted_list_inject; rauto.
-      admit. (* nextblock, from match_mem and match_stbls *)
+      * revert vargs2 H9. clear - H1.
+        induction H1; inversion 1; subst; constructor; eauto.
+        eapply val_casted_inject; eauto.
+      * admit. (* nextblock, from match_mem and match_stbls *)
     + exists w; split; try rauto.
-      repeat rstep. admit. (* list_rel *)
+      repeat rstep. clear -H9. induction H9; constructor; eauto.
   - intros s1 s2 r1 (w' & Hw' & Hge & Hs) H. destruct H as [v1' m1']. cbn in *.
     inv Hs. inv H4.
     eexists. split.
@@ -719,30 +784,30 @@ Proof.
       constructor; eauto.
   - intros s1 s2 qx1 (w' & Hw' & Hge & Hs) Hq1.
     destruct Hq1. cbn [fst snd] in *. inv Hs.
+    assert (vf <> Vundef) by (destruct vf; cbn in *; congruence).
     transport_hyps.
     eexists w', _. repeat apply conj.
     + econstructor.
       eassumption.
     + econstructor; simpl; eauto.
-      admit. (* list_rel *)
-      admit. (* not vundef b/c find_funct, inject *)
+      clear -H6. induction H6; constructor; eauto.
     + rauto.
     + intros r1 r2 s1' (w'' & Hw'' & Hr) Hs1'. destruct Hr. inv Hs1'.
       eexists. split.
       * constructor.
       * exists w''. split; [rauto | ].
-        repeat rstep. admit. (* genv_match vs. ~> *)
+        repeat rstep. eapply genv_match_acc; eauto.
   - intros s1 t s1' Hstep s2 (w' & Hw' & Hge & Hs). cbn [fst snd] in *.
     transport Hstep.
     eexists; split; try rauto.
     exists w''. split; repeat rstep.
-    admit. (* genv_match vs ~> *)
+    eapply genv_match_acc; eauto.
 Admitted.
 
 End PROG.
 
-Lemma semantics2_rel p R:
-  open_fsim (cc_c R) (cc_c R) (Clight.semantics2 p) (Clight.semantics2 p).
+Lemma semantics1_rel p R:
+  open_fsim (cc_c R) (cc_c R) (Clight.semantics1 p) (Clight.semantics1 p).
 Proof.
   split; auto. intros w se1 se2 q1 q2 Hse1 _ Hse Hq.
   cbn in *.

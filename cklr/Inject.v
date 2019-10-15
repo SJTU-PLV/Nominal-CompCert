@@ -6,21 +6,6 @@ Require Import CKLRAlgebra.
 Require Import LanguageInterface.
 
 
-(** * Preliminaries *)
-
-Global Instance list_forall2_rel {A B} (R: rel A B):
-  Related (list_forall2 R) (list_rel R) subrel.
-Proof.
-  induction 1; econstructor; eauto.
-Qed.
-
-Global Instance list_rel_forall2 {A B} (R: rel A B):
-  Related (list_rel R) (list_forall2 R) subrel.
-Proof.
-  induction 1; econstructor; eauto.
-Qed.
-
-
 (** * [Mem.inject] as a CKLR *)
 
 (** ** Separated injections *)

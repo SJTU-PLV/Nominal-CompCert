@@ -530,10 +530,10 @@ Proof.
   eapply cc_star_fsim.
   eapply cc_join_fsim.
   - rewrite <- cc_join_ub_l. rewrite <- cc_c_injp at 1. rewrite <- cc_c_injp.
-    admit. (*update: eapply Clightrel.semantics2_rel.*)
+    eapply Clightrel.semantics1_rel.
   - rewrite <- cc_join_ub_r. rewrite <- cc_c_ext at 1. rewrite <- cc_c_ext.
-    admit. (*update: eapply Clightrel.semantics2_rel.*)
-Admitted.
+    eapply Clightrel.semantics1_rel.
+Qed.
 
 (** ** Composition of passes *)
 
