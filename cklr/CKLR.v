@@ -1023,11 +1023,8 @@ Program Definition cc_c (R: cklr): callconv li_c li_c :=
     match_reply := (<> cc_c_reply R)%klr;
   |}.
 Next Obligation.
-  intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
+  eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
 Qed.
-
-(** TODO:
-  - update inj, show [cc_c inj ~ cc_inj]
-  - update injp, show [cc_c injp ~ cc_injp]
-  - figure out the convention algebra, 
-  *)
+Next Obligation.
+  eapply match_stbls_proj in H. eapply Genv.valid_for_match; eauto.
+Qed.

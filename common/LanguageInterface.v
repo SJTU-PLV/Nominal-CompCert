@@ -43,6 +43,11 @@ Record callconv {li1 li2} :=
       forall w se1 se2,
         match_senv w se1 se2 ->
         forall id, Genv.public_symbol se2 id = Genv.public_symbol se1 id;
+    match_senv_valid_for:
+      forall w se1 se2 sk,
+        match_senv w se1 se2 ->
+        Genv.valid_for sk se1 ->
+        Genv.valid_for sk se2;
   }.
 
 Arguments callconv: clear implicits.
@@ -60,7 +65,7 @@ Program Definition cc_id {li}: callconv li li :=
     match_reply w := eq;
   |}.
 Solve All Obligations with
-  congruence.
+  cbn; intros; subst; auto.
 
 Notation "1" := cc_id : cc_scope.
 
@@ -85,6 +90,10 @@ Program Definition cc_compose {li1 li2 li3} (cc12: callconv li1 li2) (cc23: call
 Next Obligation.
   intros li1 li2 li3 cc12 cc23 w se1 se3 (se2 & H12 & H23) id.
   etransitivity; eauto using match_senv_public_preserved.
+Qed.
+Next Obligation.
+  intros. destruct H as (? & ? & ?).
+  eauto using match_senv_valid_for.
 Qed.
 
 Infix "@" := cc_compose (at level 30, right associativity) : cc_scope.
@@ -139,7 +148,7 @@ Program Definition cc_ext :=
     match_reply w := cc_ext_reply;
   |}.
 Solve All Obligations with
-  congruence.
+  cbn; intros; subst; auto.
 
 (** *** Memory injections *)
 
@@ -192,6 +201,9 @@ Program Definition cc_inj :=
   |}.
 Next Obligation.
   intros. destruct H. rewrite (Genv.mge_public H); auto.
+Qed.
+Next Obligation.
+  intros. destruct H. eapply Genv.valid_for_match; eauto.
 Qed.
 
 Lemma mit_incr_refl w:
@@ -251,4 +263,7 @@ Program Definition cc_injp :=
   |}.
 Next Obligation.
   intros. inv H. erewrite Genv.mge_public; eauto.
+Qed.
+Next Obligation.
+  intros. inv H. eapply Genv.valid_for_match; eauto.
 Qed.

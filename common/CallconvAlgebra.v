@@ -213,6 +213,9 @@ Section JOIN.
   Next Obligation.
     destruct w; cbn in *; eauto using match_senv_public_preserved.
   Qed.
+  Next Obligation.
+    destruct w; cbn in *; eauto using match_senv_valid_for.
+  Qed.
 
   (** *** Properties *)
 
@@ -338,6 +341,9 @@ Program Definition cc_both {liA liB} (cc1 cc2: callconv liA liB): callconv liA l
 Next Obligation.
   destruct H. eapply match_senv_public_preserved; eauto.
 Qed.
+Next Obligation.
+  destruct H. eapply match_senv_valid_for; eauto.
+Qed.
 
 Global Instance cc_both_ref:
   Monotonic (@cc_both) (forallr -, forallr -, ccref ++> ccref ++> ccref).
@@ -400,6 +406,12 @@ Section STAR.
     - inv H; auto.
     - destruct H as (wi & ? & ?).
       etransitivity; eauto using match_senv_public_preserved.
+  Qed.
+  Next Obligation.
+    induction w.
+    - inv H; auto.
+    - destruct H as (wi & ? & ?).
+      eauto using match_senv_valid_for.
   Qed.
 
   (** *** Properties *)

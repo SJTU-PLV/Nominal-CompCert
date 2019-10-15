@@ -1708,6 +1708,19 @@ Proof.
   - erewrite mge_symb in Hb; eauto.
 Qed.
 
+Theorem valid_for_match sk:
+  valid_for sk se ->
+  valid_for sk tse.
+Proof.
+  intros H id g Hg.
+  edestruct H as (b1 & g' & Hb1 & Hg' & Hgg'); eauto.
+  edestruct mge_dom as (b2 & Hb); eauto.
+  - eapply genv_symb_range; eauto.
+  - unfold find_info, find_symbol in *.
+    erewrite mge_info in Hg'; eauto.
+    erewrite mge_symb in Hb1; eauto.
+Qed.
+
 Context {A B V W: Type} (R: globdef A V -> globdef B W -> Prop).
 
 Theorem find_def_match_genvs ge tge:

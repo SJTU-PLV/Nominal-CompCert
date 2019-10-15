@@ -902,12 +902,13 @@ Proof.
   intros until L3. intros [Hsk12 H12] [Hsk23 H23].
   split. etransitivity; eauto.
   intros w se1 se3 q1 q3 Hse1 _ (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
-  assert (Genv.valid_for (skel L2) se2) by admit. (* valid_for vs. match_senv *)
+  assert (Genv.valid_for (skel L2) se2).
+  { rewrite <- Hsk12. eapply match_senv_valid_for; eauto. }
   edestruct H12 as [H12i H12s]; eauto.
   edestruct H23 as [H23i H23s]; eauto.
   split; eauto.
   eapply compose_forward_simulations; eauto.
-Admitted.
+Qed.
 
 (** After we prove cc_id @ cc_id ≡ cc_id and that forward simulations
   are monotonic with respect to callconv refinement, we will be able

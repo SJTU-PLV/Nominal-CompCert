@@ -568,6 +568,9 @@ Program Definition cc_stacking: callconv li_locset li_mach :=
 Next Obligation.
   destruct H. rewrite (Genv.mge_public H); auto.
 Qed.
+Next Obligation.
+  destruct H. eapply (Genv.valid_for_match H); auto.
+Qed.
 
 (** * Leaf functions *)
 
