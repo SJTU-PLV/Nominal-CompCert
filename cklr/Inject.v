@@ -418,6 +418,18 @@ Proof.
     rewrite Z.add_0_r in H1; eauto.
 Qed.
 
+Lemma match_stbls_dom f se1 se2:
+  Genv.match_stbls f se1 se2 ->
+  Genv.match_stbls (meminj_dom f) se1 se1.
+Proof.
+  intros Hse. unfold meminj_dom. split; eauto; intros.
+  - edestruct Genv.mge_dom as (b2 & Hb2); eauto. rewrite Hb2. eauto.
+  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. auto.
+  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
+  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
+  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
+Qed.
+
 Lemma loc_unmapped_dom f b ofs:
   loc_unmapped (meminj_dom f) b ofs <->
   loc_unmapped f b ofs.
@@ -436,7 +448,8 @@ Proof.
   intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [f m1 m2 nb1 nb2 Hm].
   exists (injw (meminj_dom f) nb1 nb1, injw f nb1 nb2); simpl.
   repeat apply conj.
-  - admit. (* Genv.match_stbls vs compose *)
+  - exists se1. split; eauto.
+    inv Hse. econstructor. eapply match_stbls_dom; eauto.
   - exists m1; split; repeat rstep; eauto using inj_mem_intro, mem_inject_dom.
   - rewrite meminj_dom_compose.
     apply inject_incr_refl.
@@ -460,7 +473,7 @@ Proof.
            rewrite <- (Genv.mge_separated H10 _ Hbi). auto.
         -- edestruct (SEP23' bi b2); eauto. 
     + cbn. rstep; auto.
-Admitted.
+Qed.
 
 
 (** * Connection to [cc_inj] *)
