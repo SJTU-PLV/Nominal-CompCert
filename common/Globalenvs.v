@@ -1623,6 +1623,44 @@ Proof.
   - inversion 1. reflexivity.
 Qed.
 
+Theorem match_stbls_compose f g ge1 ge2 ge3:
+  match_stbls f ge1 ge2 ->
+  match_stbls g ge2 ge3 ->
+  match_stbls (compose_meminj f g) ge1 ge3.
+Proof.
+  intros H12 H23. split; intros.
+  - erewrite !mge_public by eauto. reflexivity.
+  - edestruct (mge_dom H12) as (b2 & Hb12); eauto.
+    assert (Plt b2 (genv_next ge2)).
+    { pose proof (mge_separated H12 _ Hb12). xomega. }
+    edestruct (mge_dom H23) as (b3 & Hb23); eauto.
+    eexists. unfold compose_meminj. rewrite Hb12, Hb23. reflexivity.
+  - unfold compose_meminj in H. rename b2 into b3.
+    destruct (f b1) as [[b2 delta12] | ] eqn:Hb12; try discriminate.
+    destruct (g b2) as [[xb3 delta23] | ] eqn:Hb23; inv H.
+    eapply mge_separated in Hb12; eauto.
+    eapply mge_separated in Hb23; eauto.
+    xomega.
+  - unfold compose_meminj in H. rename b2 into b3.
+    destruct (f b1) as [[b2 delta12] | ] eqn:Hb12; try discriminate.
+    destruct (g b2) as [[xb3 delta23] | ] eqn:Hb23; inv H.
+    eapply mge_symb in Hb12; eauto.
+    eapply mge_symb in Hb23; eauto.
+    etransitivity; eauto.
+  - unfold compose_meminj in H. rename b2 into b3.
+    destruct (f b1) as [[b2 delta12] | ] eqn:Hb12; try discriminate.
+    destruct (g b2) as [[xb3 delta23] | ] eqn:Hb23; inv H.
+    eapply mge_info in Hb12; eauto.
+    eapply mge_info in Hb23; eauto.
+    etransitivity; eauto.
+  - unfold compose_meminj in H. rename b2 into b3.
+    destruct (f b1) as [[b2 delta12] | ] eqn:Hb12; try discriminate.
+    destruct (g b2) as [[xb3 delta23] | ] eqn:Hb23; inv H.
+    eapply mge_separated in Hb12; eauto.
+    eapply mge_separated in Hb23; eauto.
+    xomega.
+Qed.
+
 Context {f se tse} (Hse: match_stbls f se tse).
 
 Theorem match_stbls_incr f':

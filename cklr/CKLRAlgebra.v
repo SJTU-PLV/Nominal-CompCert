@@ -300,7 +300,10 @@ Qed.
 
 Next Obligation.
   cbn. intros se1 se3 (se2 & Hse12 & Hse23).
-Admitted. (* Genv.match_stbls vs. compose_meminj *)
+  apply match_stbls_proj in Hse12.
+  apply match_stbls_proj in Hse23.
+  eapply Genv.match_stbls_compose; eauto.
+Qed.
 
 Next Obligation.
   intros [w12 w23] m1 m3 (m2 & Hm12 & Hm23) lo hi.
