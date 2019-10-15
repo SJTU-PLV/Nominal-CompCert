@@ -579,6 +579,7 @@ Proof.
   - econstructor; eauto.
   - destruct H6; try discriminate.
     constructor; auto.
+    destruct v; cbn in *; congruence.
   - inv H1. inv H0.
     exists (Returnstate s' vres2 m2); split; constructor; eauto.
 Qed.

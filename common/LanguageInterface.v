@@ -122,6 +122,7 @@ Inductive cc_ext_query: c_query -> c_query -> Prop :=
   cc_ext_query_intro vf sg vargs1 vargs2 m1 m2:
     Val.lessdef_list vargs1 vargs2 ->
     Mem.extends m1 m2 ->
+    vf <> Vundef ->
     cc_ext_query (cq vf sg vargs1 m1) (cq vf sg vargs2 m2).
 
 Inductive cc_ext_reply: c_reply -> c_reply -> Prop :=
