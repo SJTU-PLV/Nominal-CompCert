@@ -16,8 +16,19 @@
 Require Import String.
 Require Import Coqlib Errors.
 Require Import AST Linking Smallstep.
+
+(** Simulation convention algebra *)
+Require Import LanguageInterface.
+Require Import CallconvAlgebra.
+Require Import CKLR.
+Require Import CKLRAlgebra.
+Require Import Inject.
+Require Import InjectFootprint.
+Require Import Clightrel.
+Require Import RTLrel.
+
 (** Languages (syntax and semantics). *)
-Require Ctypes Csyntax Csem Cstrategy Cexec.
+Require Ctypes Csyntax (*Csem Cstrategy Cexec*).
 Require Clight.
 Require Csharpminor.
 Require Cminor.
@@ -28,8 +39,8 @@ Require Linear.
 Require Mach.
 Require Asm.
 (** Translation passes. *)
-Require Initializers.
-Require SimplExpr.
+(*Require Initializers.*)
+(*Require SimplExpr.*)
 Require SimplLocals.
 Require Cshmgen.
 Require Cminorgen.
@@ -38,10 +49,10 @@ Require RTLgen.
 Require Tailcall.
 Require Inlining.
 Require Renumber.
-Require Constprop.
-Require CSE.
-Require Deadcode.
-Require Unusedglob.
+(*Require Constprop.*)
+(*Require CSE.*)
+(*Require Deadcode.*)
+(*Require Unusedglob.*)
 Require Allocation.
 Require Tunneling.
 Require Linearize.
@@ -50,19 +61,19 @@ Require Debugvar.
 Require Stacking.
 Require Asmgen.
 (** Proofs of semantic preservation. *)
-Require SimplExprproof.
+(*Require SimplExprproof.*)
 Require SimplLocalsproof.
 Require Cshmgenproof.
 Require Cminorgenproof.
 Require Selectionproof.
 Require RTLgenproof.
 Require Tailcallproof.
-Require Inliningproof.
-Require Renumberproof.
-Require Constpropproof.
-Require CSEproof.
-Require Deadcodeproof.
-Require Unusedglobproof.
+(*Require Inliningproof.*)
+(*Require Renumberproof.*)
+(*Require Constpropproof.*)
+(*Require CSEproof.*)
+(*Require Deadcodeproof.*)
+(*Require Unusedglobproof.*)
 Require Allocproof.
 Require Tunnelingproof.
 Require Linearizeproof.
@@ -96,7 +107,7 @@ Definition apply_partial (A B: Type)
 
 Notation "a @@@ b" :=
    (apply_partial _ _ a b) (at level 50, left associativity).
-Notation "a @@ b" :=
+Notation "a !@@ b" :=
    (apply_total _ _ a b) (at level 50, left associativity).
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
@@ -119,8 +130,9 @@ Definition partial_if {A: Type}
 
 Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
    OK f
-   @@ print (print_RTL 0)
-   @@ total_if Compopts.optim_tailcalls (time "Tail calls" Tailcall.transf_program)
+  !@@ print (print_RTL 0)
+  !@@ total_if Compopts.optim_tailcalls (time "Tail calls" Tailcall.transf_program)
+(*
    @@ print (print_RTL 1)
   @@@ time "Inlining" Inlining.transf_program
    @@ print (print_RTL 2)
@@ -136,40 +148,45 @@ Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
    @@ print (print_RTL 7)
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 8)
+*)
   @@@ time "Register allocation" Allocation.transf_program
-   @@ print print_LTL
-   @@ time "Branch tunneling" Tunneling.tunnel_program
+  !@@ print print_LTL
+  !@@ time "Branch tunneling" Tunneling.tunnel_program
   @@@ time "CFG linearization" Linearize.transf_program
-   @@ time "Label cleanup" CleanupLabels.transf_program
+  !@@ time "Label cleanup" CleanupLabels.transf_program
   @@@ partial_if Compopts.debug (time "Debugging info for local variables" Debugvar.transf_program)
   @@@ time "Mach generation" Stacking.transf_program
-   @@ print print_Mach
+  !@@ print print_Mach
   @@@ time "Asm generation" Asmgen.transf_program.
 
 Definition transf_cminor_program (p: Cminor.program) : res Asm.program :=
    OK p
-   @@ print print_Cminor
+  !@@ print print_Cminor
   @@@ time "Instruction selection" Selection.sel_program
   @@@ time "RTL generation" RTLgen.transl_program
   @@@ transf_rtl_program.
 
 Definition transf_clight_program (p: Clight.program) : res Asm.program :=
   OK p
-   @@ print print_Clight
+  !@@ print print_Clight
   @@@ time "Simplification of locals" SimplLocals.transf_program
   @@@ time "C#minor generation" Cshmgen.transl_program
   @@@ time "Cminor generation" Cminorgen.transl_program
   @@@ transf_cminor_program.
 
+(*
 Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
   OK p
   @@@ time "Clight generation" SimplExpr.transl_program
   @@@ transf_clight_program.
+*)
 
 (** Force [Initializers] and [Cexec] to be extracted as well. *)
 
+(*
 Definition transl_init := Initializers.transl_init.
 Definition cexec_do_step := Cexec.do_step.
+*)
 
 (** The following lemmas help reason over compositions of passes. *)
 
@@ -182,7 +199,7 @@ Qed.
 
 Lemma compose_print_identity:
   forall (A: Type) (x: res A) (f: A -> unit),
-  x @@ print f = x.
+  x !@@ print f = x.
 Proof.
   intros. destruct x; simpl. rewrite print_identity. auto. auto.
 Qed.
@@ -229,13 +246,15 @@ Qed.
 Local Open Scope linking_scope.
 
 Definition CompCert's_passes :=
+(*
       mkpass SimplExprproof.match_prog
-  ::: mkpass SimplLocalsproof.match_prog
+  :::*) mkpass SimplLocalsproof.match_prog
   ::: mkpass Cshmgenproof.match_prog
   ::: mkpass Cminorgenproof.match_prog
   ::: mkpass Selectionproof.match_prog
   ::: mkpass RTLgenproof.match_prog
   ::: mkpass (match_if Compopts.optim_tailcalls Tailcallproof.match_prog)
+(*
   ::: mkpass Inliningproof.match_prog
   ::: mkpass Renumberproof.match_prog
   ::: mkpass (match_if Compopts.optim_constprop Constpropproof.match_prog)
@@ -243,6 +262,7 @@ Definition CompCert's_passes :=
   ::: mkpass (match_if Compopts.optim_CSE CSEproof.match_prog)
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
+*)
   ::: mkpass Allocproof.match_prog
   ::: mkpass Tunnelingproof.match_prog
   ::: mkpass Linearizeproof.match_prog
@@ -256,20 +276,28 @@ Definition CompCert's_passes :=
   between CompCert C sources and Asm code that characterize CompCert's
   compilation. *)
 
-Definition match_prog: Csyntax.program -> Asm.program -> Prop :=
+Definition match_prog: _ (*Csyntax.program*) -> Asm.program -> Prop :=
   pass_match (compose_passes CompCert's_passes).
 
 (** The [transf_c_program] function, when successful, produces
   assembly code that is in the [match_prog] relation with the source C program. *)
 
+(*
 Theorem transf_c_program_match:
   forall p tp,
   transf_c_program p = OK tp ->
   match_prog p tp.
+*)
+Theorem transf_clight_program_match:
+  forall p tp,
+  transf_clight_program p = OK tp ->
+  match_prog p tp.
 Proof.
-  intros p tp T.
+  intros p1 tp T.
+  (*
   unfold transf_c_program, time in T. simpl in T.
   destruct (SimplExpr.transl_program p) as [p1|e] eqn:P1; simpl in T; try discriminate.
+   *)
   unfold transf_clight_program, time in T. rewrite ! compose_print_identity in T. simpl in T.
   destruct (SimplLocals.transf_program p1) as [p2|e] eqn:P2; simpl in T; try discriminate.
   destruct (Cshmgen.transl_program p2) as [p3|e] eqn:P3; simpl in T; try discriminate.
@@ -279,6 +307,7 @@ Proof.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
   unfold transf_rtl_program, time in T. rewrite ! compose_print_identity in T. simpl in T.
   set (p7 := total_if optim_tailcalls Tailcall.transf_program p6) in *.
+  (*
   destruct (Inlining.transf_program p7) as [p8|e] eqn:P8; simpl in T; try discriminate.
   set (p9 := Renumber.transf_program p8) in *.
   set (p10 := total_if optim_constprop Constprop.transf_program p9) in *.
@@ -286,20 +315,24 @@ Proof.
   destruct (partial_if optim_CSE CSE.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
   destruct (partial_if optim_redundancy Deadcode.transf_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
   destruct (Unusedglob.transform_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
-  destruct (Allocation.transf_program p14) as [p15|e] eqn:P15; simpl in T; try discriminate.
+   *)
+  destruct (Allocation.transf_program p7) as [p15|e] eqn:P15; simpl in T; try discriminate.
   set (p16 := Tunneling.tunnel_program p15) in *.
   destruct (Linearize.transf_program p16) as [p17|e] eqn:P17; simpl in T; try discriminate.
   set (p18 := CleanupLabels.transf_program p17) in *.
   destruct (partial_if debug Debugvar.transf_program p18) as [p19|e] eqn:P19; simpl in T; try discriminate.
   destruct (Stacking.transf_program p19) as [p20|e] eqn:P20; simpl in T; try discriminate.
   unfold match_prog; simpl.
+  (*
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
+   *)
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
   exists p3; split. apply Cshmgenproof.transf_program_match; auto.
   exists p4; split. apply Cminorgenproof.transf_program_match; auto.
   exists p5; split. apply Selectionproof.transf_program_match; auto.
   exists p6; split. apply RTLgenproof.transf_program_match; auto.
   exists p7; split. apply total_if_match. apply Tailcallproof.transf_program_match.
+  (*
   exists p8; split. apply Inliningproof.transf_program_match; auto.
   exists p9; split. apply Renumberproof.transf_program_match; auto.
   exists p10; split. apply total_if_match. apply Constpropproof.transf_program_match.
@@ -307,6 +340,7 @@ Proof.
   exists p12; split. eapply partial_if_match; eauto. apply CSEproof.transf_program_match.
   exists p13; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
   exists p14; split. apply Unusedglobproof.transf_program_match; auto.
+   *)
   exists p15; split. apply Allocproof.transf_program_match; auto.
   exists p16; split. apply Tunnelingproof.transf_program_match.
   exists p17; split. apply Linearizeproof.transf_program_match; auto.
@@ -331,6 +365,7 @@ Qed.
   (composition of two backward simulations).
 *)
 
+(*
 Remark forward_simulation_identity:
   forall sem, forward_simulation sem sem.
 Proof.
@@ -349,12 +384,160 @@ Lemma match_if_simulation:
 Proof.
   intros. unfold match_if in *. destruct (flag tt). eauto. subst. apply forward_simulation_identity.
 Qed.
+*)
 
-Theorem cstrategy_semantic_preservation:
+(** ** Calling conventions *)
+
+(** Preliminaries: this should be in Coqrel. Alternatively, we could
+  define it for [ccref] alone. *)
+
+Instance po_subrel {A} (eqv R: relation A) `{!Equivalence eqv} `{!PreOrder R}:
+  PartialOrder eqv R ->
+  Related eqv R subrel.
+Proof.
+  firstorder.
+Qed.
+
+(*
+Instance po_subrel' {A} (eqv R: relation A) `{!Equivalence eqv} `{!PreOrder R}:
+  PartialOrder eqv R ->
+  Related eqv (flip R) subrel.
+Proof.
+  firstorder.
+Qed.
+*)
+
+(** This is the simulation conventions for passes Alloc through Asmgen.
+  These passes have a symmetric interface, so there is no difficulty
+  in making them compositional. Although the Debugvar pass is
+  optional, since this it is as [cc_id -> cc_id] pass this does not
+  introduce any difficulty. *)
+
+Definition cc_backend : callconv li_c Asm.li_asm :=
+  cc_inj @
+  Conventions.cc_alloc @
+  Mach.cc_stacking @
+  Asmgenproof0.cc_asmgen.
+
+(** However for passes upstream of Alloc, we need a more subtle approach.
+  In particular, while the incoming convention of theses passes are
+  easily absorbed by the [cc_inj] component of [cc_backend], their
+  outgoing conventions are more difficult to work with. However, using
+  the simulation convention algebra we can reduce them to the
+  following, self-composable convention. We can then type the backend as
+  [cc_dom @ cc_backend -> cc_backend] and pre-compose an arbitrary number
+  of extra frontend passes onto it. *)
+
+Definition cc_dom : callconv li_c li_c :=
+  (cc_injp + cc_ext)^{*}.
+
+Lemma cc_dom_idemp:
+  cceqv (cc_dom @ cc_dom) cc_dom.
+Proof.
+  apply cc_star_idemp.
+Qed.
+
+Lemma compose_injection_pass sem bsem tsem:
+  open_fsim cc_injp cc_inj sem bsem ->
+  open_fsim (cc_dom @ cc_backend) cc_backend bsem tsem ->
+  open_fsim (cc_dom @ cc_backend) cc_backend sem tsem.
+Proof.
+  intros.
+  assert (IB: ccref cc_backend (cc_inj @ cc_backend)).
+  {
+    unfold cc_backend.
+    rewrite <- !cc_c_inj.
+    admit. (* CKLR stuff *)
+  }
+  assert (ID: ccref (cc_injp @ cc_dom) cc_dom).
+  {
+    rewrite <- cc_dom_idemp at 2. repeat rstep.
+    unfold cc_dom. rewrite <- cc_one_star. apply cc_join_ub_l.
+  }
+  eapply open_fsim_ccref.
+  - rewrite <- ID. rewrite cc_compose_assoc. reflexivity.
+  - rewrite IB. reflexivity.
+  - eapply compose_open_fsim; eauto.
+Admitted.
+
+Lemma compose_extension_pass sem bsem tsem:
+  open_fsim cc_ext cc_ext sem bsem ->
+  open_fsim (cc_dom @ cc_backend) cc_backend bsem tsem ->
+  open_fsim (cc_dom @ cc_backend) cc_backend sem tsem.
+Proof.
+  intros.
+  assert (IB: ccref cc_backend (cc_inj @ cc_backend)).
+  {
+    unfold cc_backend.
+    rewrite <- !cc_c_inj.
+    admit. (* CKLR stuff *)
+  }
+  assert (ID: ccref (cc_ext @ cc_dom) cc_dom).
+  {
+    rewrite <- cc_dom_idemp at 2. repeat rstep.
+    unfold cc_dom. rewrite <- cc_one_star. apply cc_join_ub_r.
+  }
+  eapply open_fsim_ccref.
+  - rewrite <- ID. rewrite cc_compose_assoc. reflexivity.
+  - rewrite IB. reflexivity.
+  - eapply compose_open_fsim; eauto.
+Admitted.
+
+Lemma compose_identity_pass {liA1 liA2 liB1 liB2} ccA ccB sem bsem tsem:
+  open_fsim 1 1 sem bsem ->
+  open_fsim ccA ccB bsem tsem ->
+  @open_fsim liA1 liA2 ccA liB1 liB2 ccB sem tsem.
+Proof.
+  intros.
+  eapply open_fsim_ccref; [ .. | eapply compose_open_fsim; eauto].
+  - apply cc_compose_id_left.
+  - apply cc_compose_id_left.
+Qed.
+
+Lemma compose_optional_pass {A liA1 liA2 liB1 liB2 ccA ccB ccA' ccB'}:
+  (forall sem bsem tsem,
+      open_fsim ccA ccB sem bsem ->
+      open_fsim ccA' ccB' bsem tsem ->
+      @open_fsim liA1 liA2 ccA' liB1 liB2 ccB' sem tsem) ->
+  forall sem flag transf prog tprog tsem,
+    @match_if A flag transf prog tprog ->
+    (forall p tp, transf p tp -> open_fsim ccA ccB (sem p) (sem tp)) ->
+    open_fsim ccA' ccB' (sem tprog) tsem ->
+    open_fsim ccA' ccB' (sem prog) tsem.
+Proof.
+  intros. unfold match_if in *.
+  destruct (flag tt); subst; eauto.
+Qed.
+
+(** To make the whole compiler compositional, we can then introduce a
+  [cc_dom -> cc_dom] identity pass for Clight, using the parametricity
+  property proved in the cklr/Clightrel.v library. *)
+
+Definition cc_compcert : callconv li_c Asm.li_asm :=
+  cc_dom @ cc_backend.
+
+Lemma compose_clight_properties prog tsem:
+  open_fsim (cc_dom @ cc_backend) cc_backend (Clight.semantics1 prog) tsem ->
+  open_fsim cc_compcert cc_compcert (Clight.semantics1 prog) tsem.
+Proof.
+  intros H. unfold cc_compcert.
+  rewrite <- cc_dom_idemp at 1. rewrite cc_compose_assoc.
+  eapply compose_open_fsim; eauto.
+  eapply cc_star_fsim.
+  eapply cc_join_fsim.
+  - rewrite <- cc_join_ub_l. rewrite <- cc_c_injp at 1. rewrite <- cc_c_injp.
+    admit. (*update: eapply Clightrel.semantics2_rel.*)
+  - rewrite <- cc_join_ub_r.
+    admit. (* cklr ext stuff *)
+Admitted.
+
+(** ** Composition of passes *)
+
+Theorem clight_semantic_preservation:
   forall p tp,
   match_prog p tp ->
-  forward_simulation (Cstrategy.semantics p) (Asm.semantics tp)
-  /\ backward_simulation (atomic (Cstrategy.semantics p)) (Asm.semantics tp).
+  open_fsim cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp)
+  /\ open_bsim cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
 Ltac DestructM :=
@@ -364,22 +547,27 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation (Cstrategy.semantics p) (Asm.semantics p21)).
+  assert (F: open_fsim cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p13)).
   {
+  eapply compose_clight_properties.
+  (*
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
-  eapply compose_forward_simulations.
+   *)
+  eapply compose_injection_pass.
     eapply SimplLocalsproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
+  eapply compose_identity_pass.
     eapply Cshmgenproof.transl_program_correct; eassumption.
-  eapply compose_forward_simulations.
+  eapply compose_injection_pass.
     eapply Cminorgenproof.transl_program_correct; eassumption.
-  eapply compose_forward_simulations.
+  eapply compose_extension_pass.
     eapply Selectionproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
+  eapply compose_extension_pass.
     eapply RTLgenproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
-    eapply match_if_simulation. eassumption. exact Tailcallproof.transf_program_correct.
+  eapply compose_optional_pass.
+    eapply compose_extension_pass. eassumption.
+    exact Tailcallproof.transf_program_correct.
+  (*
   eapply compose_forward_simulations.
     eapply Inliningproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations. eapply Renumberproof.transf_program_correct; eassumption.
@@ -393,29 +581,40 @@ Ltac DestructM :=
     eapply match_if_simulation. eassumption. exact Deadcodeproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply Unusedglobproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
+   *)
+
+  (* To introduce the injection in the backend convention we use
+    the parametricity of RTL. *)
+  unfold cc_dom, cc_backend. rewrite <- cc_id_star, cc_compose_id_left.
+  eapply compose_open_fsim.
+    rewrite <- cc_c_inj at 1. rewrite <- cc_c_inj.
+    eapply RTLrel.semantics_rel.
+
+  eapply compose_open_fsim.
     eapply Allocproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
+  replace (LTL.semantics p7) with (LTL.semantics p8) by admit. (* XXX composition theorem for cc_locset_ext
+  eapply compose_identity_pass.
     eapply Tunnelingproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
+  *)
+  eapply compose_identity_pass.
     eapply Linearizeproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
+  eapply compose_identity_pass.
     eapply CleanupLabelsproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
-    eapply match_if_simulation. eassumption. exact Debugvarproof.transf_program_correct.
-  eapply compose_forward_simulations.
-    eapply Stackingproof.transf_program_correct with (return_address_offset := Asmgenproof0.return_address_offset).
-    exact Asmgenproof.return_address_exists.
+  eapply compose_optional_pass. eapply compose_identity_pass. eassumption.
+    exact Debugvarproof.transf_program_correct.
+  eapply compose_open_fsim.
+    eapply Stackingproof.transf_program_correct with (rao := Asmgenproof0.return_address_offset).
     eassumption.
+    exact Asmgenproof.return_address_exists.
   eapply Asmgenproof.transf_program_correct; eassumption.
   }
   split. auto.
-  apply forward_to_backward_simulation.
-  apply factor_forward_simulation. auto. eapply sd_traces. eapply Asm.semantics_determinate.
-  apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
+  apply forward_to_backward_open_sim. auto.
+  apply Clight.semantics_receptive.
   apply Asm.semantics_determinate.
-Qed.
+Admitted.
 
+(*
 Theorem c_semantic_preservation:
   forall p tp,
   match_prog p tp ->
@@ -430,6 +629,7 @@ Proof.
   eapply ssr_well_behaved; eapply Cstrategy.semantics_strongly_receptive.
   exact (proj2 (cstrategy_semantic_preservation _ _ H)).
 Qed.
+*)
 
 (** * Correctness of the CompCert compiler *)
 
@@ -445,10 +645,10 @@ Qed.
 
 Theorem transf_c_program_correct:
   forall p tp,
-  transf_c_program p = OK tp ->
-  backward_simulation (Csem.semantics p) (Asm.semantics tp).
+  transf_clight_program p = OK tp ->
+  open_bsim cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
 Proof.
-  intros. apply c_semantic_preservation. apply transf_c_program_match; auto.
+  intros. apply clight_semantic_preservation. apply transf_clight_program_match; auto.
 Qed.
 
 (** Here is the separate compilation case.  Consider a nonempty list [c_units]
@@ -465,17 +665,17 @@ Qed.
 
 Theorem separate_transf_c_program_correct:
   forall c_units asm_units c_program,
-  nlist_forall2 (fun cu tcu => transf_c_program cu = OK tcu) c_units asm_units ->
+  nlist_forall2 (fun cu tcu => transf_clight_program cu = OK tcu) c_units asm_units ->
   link_list c_units = Some c_program ->
   exists asm_program,
       link_list asm_units = Some asm_program
-   /\ backward_simulation (Csem.semantics c_program) (Asm.semantics asm_program).
+   /\ open_bsim cc_compcert cc_compcert (Clight.semantics1 c_program) (Asm.semantics asm_program).
 Proof.
   intros.
   assert (nlist_forall2 match_prog c_units asm_units).
-  { eapply nlist_forall2_imply. eauto. simpl; intros. apply transf_c_program_match; auto. }
+  { eapply nlist_forall2_imply. eauto. simpl; intros. apply transf_clight_program_match; auto. }
   assert (exists asm_program, link_list asm_units = Some asm_program /\ match_prog c_program asm_program).
   { eapply link_list_compose_passes; eauto. }
   destruct H2 as (asm_program & P & Q).
-  exists asm_program; split; auto. apply c_semantic_preservation; auto.
+  exists asm_program; split; auto. apply clight_semantic_preservation; auto.
 Qed.

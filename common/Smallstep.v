@@ -532,7 +532,6 @@ Open Scope smallstep_scope.
 
 Section FSIM.
 
-Set Universe Polymorphism.
 Context {li1 li2} (cc: callconv li1 li2) (se1 se2: Genv.symtbl).
 Context {res1 res2} (match_res: res1 -> res2 -> Prop).
 

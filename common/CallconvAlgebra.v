@@ -461,6 +461,37 @@ Section STAR.
       rewrite <- cc_join_ub_r.
       rauto.
   Qed.
+
+  Lemma cc_star_ind_l {li'} (x: callconv li li'):
+    ccref (cc @ x) x ->
+    ccref (cc_star @ x) x.
+  Proof.
+    intros H [[n ws] w] se1 se3 q1 q3 (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
+    revert se1 q1 Hse12 Hq12.
+    induction n; cbn in *; intros.
+    - subst. exists w. intuition eauto.
+    - destruct ws as [wi ws]. cbn in *.
+      destruct Hse12 as (sei & Hse1i & Hsei2).
+      destruct Hq12 as (qi & Hq1i & Hqi2).
+      edestruct IHn as (wr & Hsei3 & Hqi3 & Hri3); eauto.
+      edestruct (H (wi, wr)) as (wl & Hsexi & Hqxi & Hrxi); cbn; eauto.
+      exists wl. intuition eauto.
+      edestruct Hrxi as (ri1 & ? & ?); cbn in *; eauto.
+      edestruct Hri3 as (ri2 & ? & ?); cbn in *; eauto.
+  Qed.
+
+  Lemma cc_star_idemp:
+    cceqv (cc_star @ cc_star) cc_star.
+  Proof.
+    split.
+    - eapply cc_star_ind_l.
+      transitivity (1 + cc @ cc_star)%cc.
+      + apply cc_join_ub_r.
+      + apply cc_star_fold_l.
+    - transitivity (cc_star @ 1)%cc.
+      + rewrite cc_compose_id_right. reflexivity.
+      + repeat rstep. apply cc_id_star.
+  Qed.
 End STAR.
 
 Infix "^" := cc_pow : cc_scope.
