@@ -16,7 +16,7 @@ Structure language_interface :=
 
 Arguments entry {_}.
 
-(** ** Null interface *)
+(** ** Basic interfaces *)
 
 (** The null language interface defined below is used as the outgoing
   interface for closed semantics. *)
@@ -26,6 +26,18 @@ Definition li_null :=
     query := Empty_set;
     reply := Empty_set;
     entry q := match q with end;
+  |}.
+
+(** The whole-program interface is used as the incoming interface for
+  closed semantics and characterizes whole-program execution: the
+  query [tt : unit] invokes the [main()] function and the reply of
+  type [int] gives the program's exit status. *)
+
+Definition li_wp :=
+  {|
+    query := unit;
+    reply := Integers.int;
+    entry q := Vundef;
   |}.
 
 (** * Calling conventions *)
