@@ -3,11 +3,19 @@ import re
 
 # Returns (spec, proof) lines for the given git object
 def counts(objs):
-    c = os.popen("git show " + " ".join(objs) + " | coqwc")
+    fn = list(objs)
+    if len(fn) == 0:
+        return (0, 0, 0)
+
+    c = os.popen("git show " + " ".join(fn) + " | coqwc")
     c.readline()
-    (spec, proof) = map(int, re.split(' +', c.readline())[1:3])
+    s = c.readline()
     c.close()
-    return (spec, proof, spec+proof)
+    if s == "":
+        return (0, 0, 0)
+    else:
+        (spec, proof) = map(int, re.split(' +', s)[1:3])
+        return (spec, proof, spec+proof)
 
 def stats(fs):
     def summarize(x, y):
@@ -22,8 +30,14 @@ def stats(fs):
 #        else:
 #            return "{0:4d}/{1:4d}          ".format(y, x)
 #
-    before = counts(map("v3.5:{0}.v".format, fs));
-    after = counts(map("compcerto:{0}.v".format, fs));
+
+    def notnew(s):
+        return s[0] != '+'
+    def unnew(s):
+        return s if notnew(s) else s[1:]
+
+    before = counts(map("v3.5:{0}.v".format, filter(notnew, fs)));
+    after = counts(map("compcerto:{0}.v".format, map(unnew, fs)));
     return list(map(summarize, before, after));
 
 passes = [
@@ -61,6 +75,36 @@ passes = [
   ["backend/Mach"],
   ["backend/Asmgenproof0", "x86/Asmgenproof1", "x86/Asmgenproof"],
   ["x86/Asm"],
+  # Semantic model
+  ["common/AST",
+   #"common/Behaviors",
+   #"common/Determinism",
+   #"common/Invariant",
+   #"common/Loader",
+   "common/Events",
+   "common/Globalenvs",
+   "common/Linking",
+   "common/Smallstep",
+   "+common/LanguageInterface",
+   "+common/SmallstepLinking"],
+  ["+common/CallconvAlgebra",
+   "+cklr/CKLRAlgebra"],
+  # CKLR basics
+  ["+cklr/CKLR",
+   "+cklr/Extends",
+   "+cklr/Inject",
+   "+cklr/InjectFootprint"],
+  # Parametricity
+  ["+cklr/Clightrel",
+   "+cklr/Coprel",
+   "+cklr/Eventsrel",
+  #"cklr/Globalenvsrel",
+   "+cklr/Mapsrel",
+   "+cklr/RTLrel",
+   "+cklr/Registersrel",
+   "+cklr/Valuesrel"],
+  #"cklr/ExtendsFootprint",
+  #"cklr/InjectNeutral",
 ]
 
 for p in passes:
