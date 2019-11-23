@@ -23,7 +23,7 @@ def stats(fs):
         if x >= 10:
             return "{0:+4d} ({1:5.0f}%)".format(diff, 100 * diff / x)
         else:
-            return "{0:+4d}".format(diff)
+            return "{0:+4d}         ".format(diff)
 #        if y > 10:
 #            fmt = "{0:4d}/{1:4d} ({2:+6.0f}%)"
 #            return fmt.format(y, x, 100 * (y - x) / x)
@@ -85,7 +85,8 @@ passes = [
    "common/Globalenvs",
    "common/Linking",
    "common/Smallstep",
-   "+common/LanguageInterface",
+   "+common/LanguageInterface"],
+  ["+x86/AsmLinking",
    "+common/SmallstepLinking"],
   ["+common/CallconvAlgebra",
    "+cklr/CKLRAlgebra"],
