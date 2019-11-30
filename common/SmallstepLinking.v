@@ -109,10 +109,10 @@ Section LINK.
   (** * Receptiveness and determinacy *)
 
   Lemma semantics_receptive:
-    (forall i, open_receptive (L i)) ->
-    open_receptive semantics.
+    (forall i, receptive (L i)) ->
+    receptive semantics.
   Proof.
-    intros HL se. unfold open_receptive in HL.
+    intros HL se. unfold receptive in HL.
     constructor; cbn.
     - intros s t1 s1 t2 STEP Ht. destruct STEP.
       + edestruct @sr_receptive; eauto. eexists. eapply step_internal; eauto.
@@ -129,10 +129,10 @@ Section LINK.
       i = j.
 
   Lemma semantics_determinate:
-    (forall i, open_determinate (L i)) ->
-    open_determinate semantics.
+    (forall i, determinate (L i)) ->
+    determinate semantics.
   Proof.
-    intros HL se. unfold open_determinate in HL.
+    intros HL se. unfold determinate in HL.
     constructor; cbn.
     - destruct 1; inversion 1; subst_dep.
       + edestruct (sd_determ (HL i se) s t s' t2 s'0); intuition eauto; congruence.
@@ -282,7 +282,7 @@ Section FSIM.
     forall idx s1 s2 r1, match_states idx s1 s2 -> final_state L1 se1 s1 r1 ->
     exists r2, final_state L2 se2 s2 r2 /\ match_reply cc w r1 r2.
   Proof.
-    clear. intros idx s1 s2 r1 Hs Hr1. destruct Hr1 as [i q1 s1 r1 Hr1].
+    clear. intros idx s1 s2 r1 Hs Hr1. destruct Hr1 as [i s1 r1 Hr1].
     inv Hs. inv H4. inv H2. subst_dep. clear idx0.
     pose proof (fsim_lts (HL i) _ _ H1 H4).
     edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
@@ -296,7 +296,7 @@ Section FSIM.
     exists idx' s2', after_external L2 se2 s2 rx2 s2' /\ match_states idx' s1' s2'.
   Proof.
     clear - HL Hse1.
-    intros idx s1 s2 q1 Hs Hq1. destruct Hq1 as [i q1 s1 qx1 k1 Hqx1 Hvld].
+    intros idx s1 s2 q1 Hs Hq1. destruct Hq1 as [i s1 qx1 k1 Hqx1 Hvld].
     inv Hs. inv H2. subst_dep. clear idx0.
     pose proof (fsim_lts (HL i) _ _ H1 H5) as Hi.
     edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & H); eauto.

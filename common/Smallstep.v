@@ -907,7 +907,7 @@ End COMPOSE_FORWARD_SIMULATIONS.
 Definition single_events {li res st} (L: lts li res st) : Prop :=
   forall s t s', Step L s t s' -> (length t <= 1)%nat.
 
-Record receptive {li res st} (L: lts li res st) se: Prop :=
+Record lts_receptive {li res st} (L: lts li res st) se: Prop :=
   Receptive {
     sr_receptive: forall s t1 s1 t2,
       Step L s t1 s1 -> match_traces se t1 t2 -> exists s2, Step L s t2 s2;
@@ -915,7 +915,7 @@ Record receptive {li res st} (L: lts li res st) se: Prop :=
       single_events L
   }.
 
-Record determinate {li res st} (L: lts li res st) se: Prop :=
+Record lts_determinate {li res st} (L: lts li res st) se: Prop :=
   Determinate {
     sd_determ: forall s t1 s1 t2 s2,
       Step L s t1 s1 -> Step L s t2 s2 ->
@@ -941,7 +941,7 @@ Record determinate {li res st} (L: lts li res st) se: Prop :=
 Section DETERMINACY.
 
 Context {li res st} (L: lts li res st) (se: Genv.symtbl).
-Hypothesis DET: determinate L se.
+Hypothesis DET: lts_determinate L se.
 
 Lemma sd_determ_1:
   forall s t1 s1 t2 s2,
@@ -980,11 +980,11 @@ Qed.
 
 End DETERMINACY.
 
-Definition open_receptive {liA liB} (L: semantics liA liB) :=
-  forall se, receptive (L se) se.
+Definition receptive {liA liB} (L: semantics liA liB) :=
+  forall se, lts_receptive (L se) se.
 
-Definition open_determinate {liA liB} (L: semantics liA liB) :=
-  forall se, determinate (L se) se.
+Definition determinate {liA liB} (L: semantics liA liB) :=
+  forall se, lts_determinate (L se) se.
 
 (** * Backward simulations between two transition semantics. *)
 
@@ -1424,33 +1424,35 @@ Qed.
 
 (** ** Converting a forward simulation to a backward simulation *)
 
-(*
 Section FORWARD_TO_BACKWARD.
 
-Context {li1 li2} (cc: callconv li1 li2).
-Context {res1 res2} (match_res: res1 -> res2 -> Prop).
-Context (se1 se2: Genv.symtbl).
-Context L1 L2 index order match_states (FS: fsim_properties cc se1 se2 match_res L1 L2 index order match_states).
-Hypothesis public_preserved: forall id, Genv.public_symbol se2 id = Genv.public_symbol se1 id.
-Hypothesis L1_receptive: receptive L1 se1.
-Hypothesis L2_determinate: determinate L2 se2.
+Context {liA1 liA2} (ccA: callconv liA1 liA2).
+Context {liB1 liB2} (ccB: callconv liB1 liB2).
+Context (se1 se2: Genv.symtbl) (wB: ccworld ccB).
+Context {state1 state2} (L1: lts liA1 liB1 state1) (L2: lts liA2 liB2 state2).
+Context {index order match_states} (FS: fsim_properties ccA ccB se1 se2 wB L1 L2 index order match_states).
+Hypothesis order_wf: well_founded order.
+Hypothesis Hse: match_senv ccB wB se1 se2.
+Hypothesis L1_receptive: lts_receptive L1 se1.
+Hypothesis L2_determinate: lts_determinate L2 se2.
 
 (** Exploiting forward simulation *)
 
-Inductive f2b_transitions: state L1 -> state L2 -> Prop :=
+Inductive f2b_transitions: state1 -> state2 -> Prop :=
   | f2b_trans_final: forall s1 s2 s1' r1 r2,
       Star L1 s1 E0 s1' ->
-      match_res r1 r2 ->
+      match_reply ccB wB r1 r2 ->
       final_state L1 s1' r1 ->
       final_state L2 s2 r2 ->
       f2b_transitions s1 s2
-  | f2b_trans_ext: forall s1 s2 s1' w q1 q2,
+  | f2b_trans_ext: forall s1 s2 s1' wA q1 q2,
       Star L1 s1 E0 s1' ->
-      match_query cc w q1 q2 ->
+      match_query ccA wA q1 q2 ->
+      match_senv ccA wA se1 se2 ->
       at_external L1 s1' q1 ->
       at_external L2 s2 q2 ->
       (forall r1 r2 s1'',
-          match_reply cc w r1 r2 ->
+          match_reply ccA wA r1 r2 ->
           after_external L1 s1' r1 s1'' ->
           exists j s2',
             after_external L2 s2 r2 s2' /\
@@ -1467,8 +1469,7 @@ Inductive f2b_transitions: state L1 -> state L2 -> Prop :=
 Lemma f2b_progress:
   forall i s1 s2, match_states i s1 s2 -> safe L1 s1 -> f2b_transitions s1 s2.
 Proof.
-  intros i0; pattern i0. apply well_founded_ind with (R := order).
-  eapply fsim_order_wf; eauto.
+  intros i0; pattern i0. apply well_founded_ind with (R := order); auto.
   intros i REC s1 s2 MATCH SAFE.
   destruct (SAFE s1) as [[r FINAL] | [[q EXTERN] | [t [s1' STEP1]]]]. apply star_refl.
 - (* final state reached *)
@@ -1476,7 +1477,7 @@ Proof.
   eapply f2b_trans_final; eauto.
   apply star_refl.
 - (* external call reached *)
-  edestruct @fsim_match_external as (w & q2 & Hq & Hat & Hse & Hafter); eauto.
+  edestruct @fsim_match_external as (w & q2 & Hq & Hat & Hse' & Hafter); eauto.
   eapply f2b_trans_ext; eauto.
   apply star_refl.
 - (* L1 can make one step *)
@@ -1535,6 +1536,7 @@ Proof.
   subst. inv H1. elim H2; auto.
   right; intuition.
   eapply match_traces_preserved with (ge1 := se2); auto.
+  intro. symmetry. eapply match_senv_public_preserved; eauto.
 Qed.
 
 Lemma f2b_determinacy_star:
@@ -1582,7 +1584,7 @@ Qed.
 
 (** Constructing the backward simulation *)
 
-Inductive f2b_match_states: f2b_index -> state L1 -> state L2 -> Prop :=
+Inductive f2b_match_states: f2b_index -> state1 -> state2 -> Prop :=
   | f2b_match_at: forall i s1 s2,
       match_states i s1 s2 ->
       f2b_match_states (F2BI_after O) s1 s2
@@ -1704,18 +1706,22 @@ End FORWARD_TO_BACKWARD.
 (** The backward simulation *)
 
 Lemma forward_to_backward_simulation:
-  forall {li1 li2} (cc: callconv li1 li2) {res1 res2} (mr: res1 -> res2 -> Prop),
-  forall se1 se2 L1 L2,
-  forward_simulation cc se1 se2 mr L1 L2 -> receptive L1 se1 -> determinate L2 se2 ->
-  (forall id, Genv.public_symbol se2 id = Genv.public_symbol se1 id) ->
-  backward_simulation cc mr L1 L2.
+  forall {liA1 liA2} (ccA: callconv liA1 liA2),
+  forall {liB1 liB2} (ccB: callconv liB1 liB2),
+  forall L1 L2,
+  forward_simulation ccA ccB L1 L2 -> receptive L1 -> determinate L2 ->
+  backward_simulation ccA ccB L1 L2.
 Proof.
-  intros li1 li2 cc res1 res2 mr se1 se2.
-  intros L1 L2 FS L1_receptive L2_determinate Hse.
-  destruct FS as [index order match_states FS].
-  apply Backward_simulation with f2b_order (f2b_match_states L1 L2 match_states); constructor.
-- (* well founded *)
-  apply wf_f2b_order.
+  intros until L2. intros FS L1_receptive L2_determinate.
+  destruct FS as [index order match_states Hskel FS order_wf].
+  set (ms se1 se2 w := f2b_match_states (L1 se1) (L2 se2) (match_states := match_states se1 se2 w)).
+  eapply Backward_simulation with f2b_order ms; auto using wf_f2b_order.
+  intros se1 se2 wB Hse Hse1.
+  specialize (FS se1 se2 wB Hse Hse1).
+  specialize (L1_receptive se1). specialize (L2_determinate se2).
+  split.
+- (* valid queries *)
+  eapply fsim_match_valid_query; eauto.
 - split.
   (* initial states exist *)
   intros. exploit (fsim_match_initial_states FS); eauto. intros [i [s2 [A B]]].
@@ -1738,9 +1744,9 @@ Proof.
     intros TRANS; inv TRANS.
     * eelim (sd_final_noext L2_determinate); eauto.
     * assert (q0 = q2) by eauto using sd_at_external_determ; subst.
-      exists w, s1', q1. intuition auto. split.
-      intros. edestruct H6 as (j & s2' & Hs2' & Hs'); eauto.
-      intros. edestruct H6 as (j & s2' & Hs2' & Hs'); eauto.
+      exists wA, s1', q1. intuition auto. split.
+      intros. edestruct H7 as (j & s2' & Hs2' & Hs'); eauto.
+      intros. edestruct H7 as (j & s2' & Hs2' & Hs'); eauto.
       assert (s3 = s2') by eauto using sd_after_external_determ; subst.
       exists s0. intuition auto.
       exists (F2BI_after O). econstructor; eauto.
@@ -1756,31 +1762,6 @@ Proof.
 - (* simulation *)
   eapply f2b_simulation_step; eauto.
 Qed.
-
-Lemma forward_to_backward_open_sim:
-  forall {liA1 liA2 ccA liB1 liB2 ccB} L1 L2,
-    @open_fsim liA1 liA2 ccA liB1 liB2 ccB L1 L2 ->
-    open_receptive L1 ->
-    open_determinate L2 ->
-    open_bsim ccA ccB L1 L2.
-Proof.
-  intros until L2. intros [Hsk H12] H1 H2 w se1 se2 q1 q2 Hse1 Hse Hq.
-  edestruct H12 as [H12i H12s]; eauto.
-  eapply forward_to_backward_simulation; eauto.
-  eapply match_senv_public_preserved; eauto.
-Qed.
-
-Lemma forward_to_backward_closed_sim:
-  forall L1 L2,
-    closed_fsim L1 L2 ->
-    closed_receptive L1 ->
-    closed_determinate L2 ->
-    closed_bsim L1 L2.
-Proof.
-  intros L1 L2 [H Hpub] H1 H2. split; auto.
-  eapply forward_to_backward_simulation; eauto.
-Qed.
-*)
 
 (** * Transforming a semantics into a single-event, equivalent semantics *)
 
