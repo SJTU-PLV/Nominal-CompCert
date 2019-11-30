@@ -474,50 +474,43 @@ End CLOSURES.
 
 (** The general form of a transition semantics. *)
 
-Record semantics li res: Type := Semantics {
-  state: Type;
+Record lts liA liB state: Type := {
   genvtype: Type;
   step : genvtype -> state -> trace -> state -> Prop;
-  initial_state: state -> Prop;
-  at_external: state -> query li -> Prop;
-  after_external: state -> reply li -> state -> Prop;
-  final_state: state -> res -> Prop;
+  valid_query: query liB -> bool;
+  initial_state: query liB -> state -> Prop;
+  at_external: state -> query liA -> Prop;
+  after_external: state -> reply liA -> state -> Prop;
+  final_state: state -> reply liB -> Prop;
   globalenv: genvtype;
 }.
 
-Record open_sem liA liB := {
-  valid_query: Genv.symtbl -> query liB -> bool;
-  activate :> Genv.symtbl -> query liB -> semantics liA (reply liB);
+Record semantics liA liB := {
   skel: AST.program unit unit;
-}.
-
-Record closed_sem := {
-  csem :> semantics li_null int;
-  symbolenv: Genv.symtbl;
+  state: Type;
+  activate :> Genv.symtbl -> lts liA liB state;
 }.
 
 (** Handy notations. *)
 
-Notation OpenSem step initial_state at_ext after_ext final_state globalenv p :=
+Notation Semantics_gen step initial_state at_ext after_ext final_state globalenv p :=
   {|
-    valid_query se q :=
-      Genv.is_internal (globalenv se p) (entry q);
+    skel := AST.erase_program p;
     activate se q :=
       let ge := globalenv se p in
       {|
         step := step;
+        valid_query := Genv.is_internal (globalenv se p) (entry q);
         initial_state := initial_state ge q;
         at_external := at_ext ge;
         after_external := after_ext;
         final_state := final_state;
         globalenv := ge;
       |};
-    skel :=
-      AST.erase_program p;
   |}.
 
-Notation OpenSem' step initial_state at_ext after_ext final_state p :=
-  (OpenSem step initial_state at_ext after_ext final_state (@Genv.globalenv _ _) p).
+Notation Semantics step initial_state at_ext after_ext final_state p :=
+  (Semantics_gen step initial_state at_ext after_ext final_state (@Genv.globalenv _ _) p).
 
 Notation " 'Step' L " := (step L (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Star' L " := (star (step L) (globalenv L)) (at level 1) : smallstep_scope.
@@ -532,25 +525,29 @@ Open Scope smallstep_scope.
 
 Section FSIM.
 
-Context {li1 li2} (cc: callconv li1 li2) (se1 se2: Genv.symtbl).
-Context {res1 res2} (match_res: res1 -> res2 -> Prop).
+Context {liA1 liA2} (ccA: callconv liA1 liA2).
+Context {liB1 liB2} (ccB: callconv liB1 liB2).
+Context (se1 se2: Genv.symtbl) (wB: ccworld ccB).
+Context {state1 state2: Type}.
 
 (** The general form of a forward simulation. *)
 
-Record fsim_properties (L1: semantics li1 res1) (L2: semantics li2 res2) (index: Type)
+Record fsim_properties (L1: lts liA1 liB1 state1) (L2: lts liA2 liB2 state2) (index: Type)
                        (order: index -> index -> Prop)
-                       (match_states: index -> state L1 -> state L2 -> Prop) : Prop := {
-    fsim_order_wf: well_founded order;
+                       (match_states: index -> state1 -> state2 -> Prop) : Prop := {
+    fsim_match_valid_query:
+      forall q1 q2, match_query ccB wB q1 q2 ->
+      valid_query L1 q1 = valid_query L2 q2;
     fsim_match_initial_states:
-      forall s1, initial_state L1 s1 ->
-      exists i, exists s2, initial_state L2 s2 /\ match_states i s1 s2;
+      forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
+      exists i, exists s2, initial_state L2 q2 s2 /\ match_states i s1 s2;
     fsim_match_final_states:
       forall i s1 s2 r1, match_states i s1 s2 -> final_state L1 s1 r1 ->
-      exists r2, final_state L2 s2 r2 /\ match_res r1 r2;
+      exists r2, final_state L2 s2 r2 /\ match_reply ccB wB r1 r2;
     fsim_match_external:
       forall i s1 s2 q1, match_states i s1 s2 -> at_external L1 s1 q1 ->
-      exists w q2, at_external L2 s2 q2 /\ match_query cc w q1 q2 /\ match_senv cc w se1 se2 /\
-      forall r1 r2 s1', match_reply cc w r1 r2 -> after_external L1 s1 r1 s1' ->
+      exists w q2, at_external L2 s2 q2 /\ match_query ccA w q1 q2 /\ match_senv ccA w se1 se2 /\
+      forall r1 r2 s1', match_reply ccA w r1 r2 -> after_external L1 s1 r1 s1' ->
       exists i' s2', after_external L2 s2 r2 s2' /\ match_states i' s1' s2';
     fsim_simulation:
       forall s1 t s1', Step L1 s1 t s1' ->
@@ -560,15 +557,7 @@ Record fsim_properties (L1: semantics li1 res1) (L2: semantics li2 res2) (index:
       /\ match_states i' s1' s2';
   }.
 
-Arguments fsim_properties: clear implicits.
-
-Inductive forward_simulation (L1 L2: semantics _ _) : Prop :=
-  Forward_simulation (index: Type)
-                     (order: index -> index -> Prop)
-                     (match_states: index -> state L1 -> state L2 -> Prop)
-                     (props: fsim_properties L1 L2 index order match_states).
-
-Arguments Forward_simulation {L1 L2 index} order match_states props.
+Arguments fsim_properties : clear implicits.
 
 (** An alternate form of the simulation diagram *)
 
@@ -579,7 +568,7 @@ Lemma fsim_simulation':
   (exists i', exists s2', Plus L2 s2 t s2' /\ match_states i' s1' s2')
   \/ (exists i', order i' i /\ t = E0 /\ match_states i' s1' s2).
 Proof.
-  intros. exploit fsim_simulation; eauto.
+  intros. exploit @fsim_simulation; eauto.
   intros [i' [s2' [A B]]]. intuition.
   left; exists i'; exists s2'; auto.
   inv H3.
@@ -593,24 +582,30 @@ Qed.
 
 Section FORWARD_SIMU_DIAGRAMS.
 
-Variable L1: semantics li1 res1.
-Variable L2: semantics li2 res2.
+Variable L1: lts liA1 liB1 state1.
+Variable L2: lts liA2 liB2 state2.
 
-Variable match_states: state L1 -> state L2 -> Prop.
+Variable match_states: state1 -> state2 -> Prop.
+
+Hypothesis match_valid_query:
+  forall q1 q2, match_query ccB wB q1 q2 ->
+  valid_query L1 q1 = valid_query L2 q2.
 
 Hypothesis match_initial_states:
-  forall s1, initial_state L1 s1 ->
-  exists s2, initial_state L2 s2 /\ match_states s1 s2.
+  forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
+  exists s2, initial_state L2 q2 s2 /\ match_states s1 s2.
 
 Hypothesis match_final_states:
   forall s1 s2 r1, match_states s1 s2 -> final_state L1 s1 r1 ->
-  exists r2, final_state L2 s2 r2 /\ match_res r1 r2.
+  exists r2, final_state L2 s2 r2 /\ match_reply ccB wB r1 r2.
 
 Hypothesis match_external:
   forall s1 s2 q1, match_states s1 s2 -> at_external L1 s1 q1 ->
-  exists w q2, at_external L2 s2 q2 /\ match_query cc w q1 q2 /\ match_senv cc w se1 se2 /\
-  forall r1 r2 s1', match_reply cc w r1 r2 -> after_external L1 s1 r1 s1' ->
+  exists wA q2, at_external L2 s2 q2 /\ match_query ccA wA q1 q2 /\ match_senv ccA wA se1 se2 /\
+  forall r1 r2 s1', match_reply ccA wA r1 r2 -> after_external L1 s1 r1 s1' ->
   exists s2', after_external L2 s2 r2 s2' /\ match_states s1' s2'.
+
+Let ms idx s1 s2 := idx = s1 /\ match_states s1 s2.
 
 (** Simulation when one transition in the first program
     corresponds to zero, one or several transitions in the second program.
@@ -624,8 +619,7 @@ Section SIMULATION_STAR_WF.
   of the first semantics.  Stuttering steps must correspond
   to states that decrease w.r.t. [order]. *)
 
-Variable order: state L1 -> state L1 -> Prop.
-Hypothesis order_wf: well_founded order.
+Variable order: state1 -> state1 -> Prop.
 
 Hypothesis simulation:
   forall s1 t s1', Step L1 s1 t s1' ->
@@ -634,9 +628,10 @@ Hypothesis simulation:
   (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ order s1' s1))
   /\ match_states s1' s2'.
 
-Lemma forward_simulation_star_wf: forward_simulation L1 L2.
+Lemma forward_simulation_star_wf:
+  fsim_properties L1 L2 state1 order ms.
 Proof.
-  apply Forward_simulation with order (fun idx s1 s2 => idx = s1 /\ match_states s1 s2);
+  subst ms;
   constructor.
 - auto.
 - intros. exploit match_initial_states; eauto. intros [s2 [A B]].
@@ -656,7 +651,7 @@ Section SIMULATION_STAR.
   associated with states of the first semantics.  It must decrease when we take
   a stuttering step. *)
 
-Variable measure: state L1 -> nat.
+Variable measure: state1 -> nat.
 
 Hypothesis simulation:
   forall s1 t s1', Step L1 s1 t s1' ->
@@ -664,10 +659,10 @@ Hypothesis simulation:
   (exists s2', Plus L2 s2 t s2' /\ match_states s1' s2')
   \/ (measure s1' < measure s1 /\ t = E0 /\ match_states s1' s2)%nat.
 
-Lemma forward_simulation_star: forward_simulation L1 L2.
+Lemma forward_simulation_star:
+  fsim_properties L1 L2 state1 (ltof _ measure) ms.
 Proof.
-  apply forward_simulation_star_wf with (ltof _ measure).
-  apply well_founded_ltof.
+  apply forward_simulation_star_wf.
   intros. exploit simulation; eauto. intros [[s2' [A B]] | [A [B C]]].
   exists s2'; auto.
   exists s2; split. right; split. rewrite B. apply star_refl. auto. auto.
@@ -685,9 +680,10 @@ Hypothesis simulation:
   forall s2, match_states s1 s2 ->
   exists s2', Plus L2 s2 t s2' /\ match_states s1' s2'.
 
-Lemma forward_simulation_plus: forward_simulation L1 L2.
+Lemma forward_simulation_plus:
+  fsim_properties L1 L2 state1 (ltof _ (fun _ => O)) ms.
 Proof.
-  apply forward_simulation_star with (measure := fun _ => O).
+  apply forward_simulation_star.
   intros. exploit simulation; eauto.
 Qed.
 
@@ -703,7 +699,8 @@ Hypothesis simulation:
   forall s2, match_states s1 s2 ->
   exists s2', Step L2 s2 t s2' /\ match_states s1' s2'.
 
-Lemma forward_simulation_step: forward_simulation L1 L2.
+Lemma forward_simulation_step:
+  fsim_properties L1 L2 state1 (ltof _ (fun _ => O)) ms.
 Proof.
   apply forward_simulation_plus.
   intros. exploit simulation; eauto. intros [s2' [A B]].
@@ -720,7 +717,7 @@ End SIMULATION_STEP.
 
 Section SIMULATION_OPT.
 
-Variable measure: state L1 -> nat.
+Variable measure: state1 -> nat.
 
 Hypothesis simulation:
   forall s1 t s1', Step L1 s1 t s1' ->
@@ -728,9 +725,10 @@ Hypothesis simulation:
   (exists s2', Step L2 s2 t s2' /\ match_states s1' s2')
   \/ (measure s1' < measure s1 /\ t = E0 /\ match_states s1' s2)%nat.
 
-Lemma forward_simulation_opt: forward_simulation L1 L2.
+Lemma forward_simulation_opt:
+  fsim_properties L1 L2 state1 (ltof _ measure) ms.
 Proof.
-  apply forward_simulation_star with measure.
+  apply forward_simulation_star.
   intros. exploit simulation; eauto. intros [[s2' [A B]] | [A [B C]]].
   left; exists s2'; split; auto. apply plus_one; auto.
   right; auto.
@@ -782,6 +780,7 @@ Proof.
 Qed.
 
 Lemma simulation_forever_silent:
+  well_founded order ->
   forall i s1 s2,
   Forever_silent L1 s1 -> match_states i s1 s2 ->
   Forever_silent L2 s2.
@@ -794,7 +793,7 @@ Proof.
     destruct A as [C | [C D]].
     eapply forever_silent_N_plus; eauto.
     eapply forever_silent_N_star; eauto.
-  intros. eapply forever_silent_N_forever; eauto. eapply fsim_order_wf; eauto.
+  intros. eapply forever_silent_N_forever; eauto.
 Qed.
 
 Lemma simulation_forever_reactive:
@@ -812,71 +811,83 @@ End SIMULATION_SEQUENCES.
 
 End FSIM.
 
-Arguments fsim_properties {_ _} _ _ _ {_ _} _ L1 L2 index order match_states.
-Arguments Forward_simulation {_ _ cc _ _ _ _ match_res L1 L2 index} order match_states props.
+Arguments fsim_properties {_ _} _ {_ _} _ _ _ _ {_ _} L1 L2 index order match_states.
 
-Definition open_fsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
-  skel L1 = skel L2 /\
-  forall (w: ccworld ccB) (se1 se2: Genv.symtbl) (q1: query liB1) (q2: query liB2),
-    Genv.valid_for (skel L1) se1 ->
-    True ->
-    match_senv ccB w se1 se2 ->
-    match_query ccB w q1 q2 ->
-    valid_query L2 se2 q2 = valid_query L1 se1 q1 /\
-    forward_simulation ccA se1 se2 (match_reply ccB w) (activate L1 se1 q1) (activate L2 se2 q2).
+Record forward_simulation {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
+  Forward_simulation {
+    fsim_index: Type;
+    fsim_order: fsim_index -> fsim_index -> Prop;
+    fsim_match_states: _;
 
-Definition closed_fsim (L1 L2: closed_sem) :=
-  forward_simulation cc_id (symbolenv L1) (symbolenv L2) eq L1 L2 /\
-  forall id, Genv.public_symbol (symbolenv L2) id = Genv.public_symbol (symbolenv L1) id.
+    fsim_skel:
+      skel L1 = skel L2;
+    fsim_lts se1 se2 wB:
+      @match_senv liB1 liB2 ccB wB se1 se2 ->
+      Genv.valid_for (skel L1) se1 ->
+      fsim_properties ccA ccB se1 se2 wB (activate L1 se1) (activate L2 se2)
+        fsim_index fsim_order (fsim_match_states se1 se2 wB);
+    fsim_order_wf:
+      well_founded fsim_order;
+  }.
+
+Arguments Forward_simulation {_ _ ccA _ _ ccB L1 L2 fsim_index}.
 
 (** ** Composing two forward simulations *)
 
 Section COMPOSE_FORWARD_SIMULATIONS.
 
-Context {li1 li2 li3} {cc12: callconv li1 li2} {cc23: callconv li2 li3}.
-Context {se1 se2 se3: Genv.symtbl}.
-Context {res1 res2 res3} {mr12: res1 -> res2 -> Prop} {mr23: res2 -> res3 -> Prop}.
-Context (L1: semantics li1 res1) (L2: semantics li2 res2) (L3: semantics li3 res3).
+Context {liA1 liA2 liA3} {ccA12: callconv liA1 liA2} {ccA23: callconv liA2 liA3}.
+Context {liB1 liB2 liB3} {ccB12: callconv liB1 liB2} {ccB23: callconv liB2 liB3}.
+Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2) (L3: semantics liA3 liB3).
 
 Lemma compose_forward_simulations:
-  forward_simulation cc12 se1 se2 mr12 L1 L2 ->
-  forward_simulation cc23 se2 se3 mr23 L2 L3 ->
-  forward_simulation (cc12 @ cc23) se1 se3 (fun r1 r3 => exists r2, mr12 r1 r2 /\ mr23 r2 r3) L1 L3.
+  forward_simulation ccA12 ccB12 L1 L2 ->
+  forward_simulation ccA23 ccB23 L2 L3 ->
+  forward_simulation (ccA12 @ ccA23) (ccB12 @ ccB23) L1 L3.
 Proof.
-  intros S12 S23.
-  destruct S12 as [index order match_states props].
-  destruct S23 as [index' order' match_states' props'].
-
+  intros [index order match_states Hsk props order_wf].
+  intros [index' order' match_states' Hsk' props' order_wf'].
   set (ff_index := (index' * index)%type).
   set (ff_order := lex_ord (clos_trans _ order') order).
-  set (ff_match_states := fun (i: ff_index) (s1: state L1) (s3: state L3) =>
-                             exists s2, match_states (snd i) s1 s2 /\ match_states' (fst i) s2 s3).
-  apply Forward_simulation with ff_order ff_match_states; constructor.
-- (* well founded *)
-  unfold ff_order. apply wf_lex_ord. apply wf_clos_trans.
-  eapply fsim_order_wf; eauto. eapply fsim_order_wf; eauto.
+  set (ff_match_states :=
+         fun se1 se3 '(se2, w, w') (i: ff_index) (s1: state L1) (s3: state L3) =>
+           exists s2,
+             match_states se1 se2 w (snd i) s1 s2 /\
+             match_states' se2 se3 w' (fst i) s2 s3).
+  apply Forward_simulation with ff_order ff_match_states.
+  3: { unfold ff_order. auto using wf_lex_ord, wf_clos_trans. }
+  1: { congruence. }
+  intros se1 se3 [[se2 w] w'] (Hse12 & Hse23) Hse1. cbn in *.
+  assert (Hse2: Genv.valid_for (skel L2) se2).
+  { rewrite <- Hsk. eapply match_senv_valid_for; eauto. }
+  constructor.
+- (* valid query *)
+  intros q1 q3 (q2 & Hq12 & Hq23).
+  erewrite fsim_match_valid_query by eauto.
+  eapply fsim_match_valid_query; eauto.
 - (* initial states *)
-  intros. exploit (fsim_match_initial_states props); eauto. intros [i [s2 [A B]]].
-  exploit (fsim_match_initial_states props'); eauto. intros [i' [s3 [C D]]].
+  intros q1 q3 s1 (q2 & Hq12 & Hq23) Hs1.
+  edestruct (@fsim_match_initial_states liA1) as (i & s2 & A & B); eauto.
+  edestruct (@fsim_match_initial_states liA2) as (i' & s3 & C & D); eauto.
   exists (i', i); exists s3; split; auto. exists s2; auto.
 - (* final states *)
-  intros. destruct H as [s3 [A B]].
-  edestruct (fsim_match_final_states props) as (r2 & Hr2 & Hr12); eauto.
-  edestruct (fsim_match_final_states props') as (r3 & Hr3 & Hr23); eauto.
+  intros. cbn. destruct H as (s3 & A & B).
+  edestruct (@fsim_match_final_states liA1) as (r2 & Hr2 & Hr12); eauto.
+  edestruct (@fsim_match_final_states liA2) as (r3 & Hr3 & Hr23); eauto.
 - (* external states *)
   intros. destruct H as [s3 [A B]].
-  edestruct (fsim_match_external props) as (w12 & q2 & Hq2 & Hq12 & Hw12 & Hk12); eauto.
-  edestruct (fsim_match_external props') as (w23 & q3 & Hq3 & Hq23 & Hw23 & Hk23); eauto.
-  exists (w12, w23), q3. cbn; repeat apply conj; eauto.
+  edestruct (@fsim_match_external liA1) as (w12 & q2 & Hq2 & Hq12 & Hw12 & Hk12); eauto.
+  edestruct (@fsim_match_external liA2) as (w23 & q3 & Hq3 & Hq23 & Hw23 & Hk23); eauto.
+  exists (se2, w12, w23), q3. cbn; repeat apply conj; eauto.
   intros r1 r3 s1' (r2 & Hr12 & Hr23) Hs1'.
   edestruct Hk12 as (i12' & s2' & Hs2' & Hs12'); eauto.
   edestruct Hk23 as (i23' & s3' & Hs3' & Hs23'); eauto.
   exists (i23', i12'), s3'. split; auto. exists s2'; auto.
 - (* simulation *)
   intros. destruct H0 as [s3 [A B]]. destruct i as [i2 i1]; simpl in *.
-  exploit (fsim_simulation' props); eauto. intros [[i1' [s3' [C D]]] | [i1' [C [D E]]]].
+  edestruct (@fsim_simulation' liA1) as [(i1' & s3' & C & D) | (i1' & C & D & E)]; eauto.
 + (* L2 makes one or several steps. *)
-  exploit @simulation_plus; eauto. intros [[i2' [s2' [P Q]]] | [i2' [P [Q R]]]].
+  edestruct (@simulation_plus liA2) as [(i2' & s2' & P & Q) | (i2' & P & Q & R)]; eauto.
 * (* L3 makes one or several steps *)
   exists (i2', i1'); exists s2'; split. auto. exists s3'; auto.
 * (* L3 makes no step *)
@@ -891,44 +902,12 @@ Qed.
 
 End COMPOSE_FORWARD_SIMULATIONS.
 
-Lemma compose_open_fsim:
-  forall {liA1 liA2 liA3} {ccA12: callconv liA1 liA2} {ccA23: callconv liA2 liA3},
-  forall {liB1 liB2 liB3} {ccB12: callconv liB1 liB2} {ccB23: callconv liB2 liB3},
-  forall L1 L2 L3,
-    open_fsim ccA12 ccB12 L1 L2 ->
-    open_fsim ccA23 ccB23 L2 L3 ->
-    open_fsim (ccA12 @ ccA23) (ccB12 @ ccB23) L1 L3.
-Proof.
-  intros until L3. intros [Hsk12 H12] [Hsk23 H23].
-  split. etransitivity; eauto.
-  intros w se1 se3 q1 q3 Hse1 _ (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
-  assert (Genv.valid_for (skel L2) se2).
-  { rewrite <- Hsk12. eapply match_senv_valid_for; eauto. }
-  edestruct H12 as [H12i H12s]; eauto.
-  edestruct H23 as [H23i H23s]; eauto.
-  split; eauto.
-  eapply compose_forward_simulations; eauto.
-Qed.
-
-(** After we prove cc_id @ cc_id ≡ cc_id and that forward simulations
-  are monotonic with respect to callconv refinement, we will be able
-  to prove compositions of closed semantics. However this may not
-  be necessary if loading operates as the very last step. *)
-
-Lemma compose_closed_fsim:
-  forall L1 L2 L3, closed_fsim L1 L2 -> closed_fsim L2 L3 -> closed_fsim L1 L2.
-Proof.
-  intros L1 L2 L3 [H12 Hid12] [H23 Hid23]. split.
-  - admit. (* eapply compose_forward_simulations; eauto. *)
-  - etransitivity; eauto.
-Abort.
-
 (** * Receptiveness and determinacy *)
 
-Definition single_events {li res} (L: semantics li res) : Prop :=
+Definition single_events {li res st} (L: lts li res st) : Prop :=
   forall s t s', Step L s t s' -> (length t <= 1)%nat.
 
-Record receptive {li res} (L: semantics li res) se: Prop :=
+Record receptive {li res st} (L: lts li res st) se: Prop :=
   Receptive {
     sr_receptive: forall s t1 s1 t2,
       Step L s t1 s1 -> match_traces se t1 t2 -> exists s2, Step L s t2 s2;
@@ -936,15 +915,15 @@ Record receptive {li res} (L: semantics li res) se: Prop :=
       single_events L
   }.
 
-Record determinate {li res} (L: semantics li res) se: Prop :=
+Record determinate {li res st} (L: lts li res st) se: Prop :=
   Determinate {
     sd_determ: forall s t1 s1 t2 s2,
       Step L s t1 s1 -> Step L s t2 s2 ->
       match_traces se t1 t2 /\ (t1 = t2 -> s1 = s2);
     sd_traces:
       single_events L;
-    sd_initial_determ: forall s1 s2,
-      initial_state L s1 -> initial_state L s2 -> s1 = s2;
+    sd_initial_determ: forall q s1 s2,
+      initial_state L q s1 -> initial_state L q s2 -> s1 = s2;
     sd_at_external_nostep: forall s q,
       at_external L s q -> Nostep L s;
     sd_at_external_determ: forall s q1 q2,
@@ -961,7 +940,7 @@ Record determinate {li res} (L: semantics li res) se: Prop :=
 
 Section DETERMINACY.
 
-Context {li res} (L: semantics li res) (se: Genv.symtbl).
+Context {li res st} (L: lts li res st) (se: Genv.symtbl).
 Hypothesis DET: determinate L se.
 
 Lemma sd_determ_1:
@@ -1001,21 +980,15 @@ Qed.
 
 End DETERMINACY.
 
-Definition open_receptive {liA liB} (L: open_sem liA liB) :=
-  forall se q, receptive (L se q) se.
+Definition open_receptive {liA liB} (L: semantics liA liB) :=
+  forall se, receptive (L se) se.
 
-Definition open_determinate {liA liB} (L: open_sem liA liB) :=
-  forall se q, determinate (L se q) se.
-
-Definition closed_receptive (L: closed_sem) :=
-  receptive L (symbolenv L).
-
-Definition closed_determinate (L: closed_sem) :=
-  determinate L (symbolenv L).
+Definition open_determinate {liA liB} (L: semantics liA liB) :=
+  forall se, determinate (L se) se.
 
 (** * Backward simulations between two transition semantics. *)
 
-Definition safe {li res} (L: semantics li res) (s: state L) : Prop :=
+Definition safe {li res st} (L: lts li res st) (s: st) : Prop :=
   forall s',
   Star L s E0 s' ->
   (exists r, final_state L s' r)
@@ -1023,7 +996,7 @@ Definition safe {li res} (L: semantics li res) (s: state L) : Prop :=
   \/ (exists t, exists s'', Step L s' t s'').
 
 Lemma star_safe:
-  forall {li res} (L: semantics li res) s s',
+  forall {li res st} (L: lts li res st) s s',
   Star L s E0 s' -> safe L s -> safe L s'.
 Proof.
   intros; red; intros. apply H0. eapply star_trans; eauto.
@@ -1048,25 +1021,31 @@ Definition rex {I A B} (R: I -> A -> B -> Prop) (a: A) (b: B): Prop :=
 
 Section BSIM.
 
-Context {li1 li2} (cc: callconv li1 li2).
-Context {res1 res2} (match_res: res1 -> res2 -> Prop).
+Context {liA1 liA2} (ccA: callconv liA1 liA2).
+Context {liB1 liB2} (ccB: callconv liB1 liB2).
+Context (se1 se2: Genv.symtbl) (wB: ccworld ccB).
+Context {state1 state2: Type}.
 
 (** The general form of a backward simulation. *)
 
-Record bsim_properties (L1 L2: semantics _ _) (index: Type)
+Record bsim_properties (L1 L2: lts _ _ _) (index: Type)
                        (order: index -> index -> Prop)
-                       (match_states: index -> state L1 -> state L2 -> Prop) : Prop := {
-    bsim_order_wf: well_founded order;
+                       (match_states: index -> state1 -> state2 -> Prop) : Prop := {
+    bsim_match_valid_query:
+      forall q1 q2, match_query ccB wB q1 q2 ->
+      valid_query L1 q1 = valid_query L2 q2;
     bsim_match_initial_states:
-      bsim_match_cont (rex match_states) (initial_state L1) (initial_state L2);
+      forall q1 q2, match_query ccB wB q1 q2 ->
+      bsim_match_cont (rex match_states) (initial_state L1 q1) (initial_state L2 q2);
     bsim_match_final_states:
       forall i s1 s2 r2,
       match_states i s1 s2 -> safe L1 s1 -> final_state L2 s2 r2 ->
-      exists s1' r1, Star L1 s1 E0 s1' /\ final_state L1 s1' r1 /\ match_res r1 r2;
+      exists s1' r1, Star L1 s1 E0 s1' /\ final_state L1 s1' r1 /\ match_reply ccB wB r1 r2;
     bsim_match_external:
       forall i s1 s2 q2, match_states i s1 s2 -> safe L1 s1 -> at_external L2 s2 q2 ->
-      exists w s1' q1, Star L1 s1 E0 s1' /\ at_external L1 s1' q1 /\ match_query cc w q1 q2 /\
-      forall r1 r2, match_reply cc w r1 r2 ->
+      exists wA s1' q1, Star L1 s1 E0 s1' /\ at_external L1 s1' q1 /\
+      match_query ccA wA q1 q2 /\ match_senv ccA wA se1 se2 /\
+      forall r1 r2, match_reply ccA wA r1 r2 ->
       bsim_match_cont (rex match_states) (after_external L1 s1' r1) (after_external L2 s2 r2);
     bsim_progress:
       forall i s1 s2,
@@ -1083,14 +1062,6 @@ Record bsim_properties (L1 L2: semantics _ _) (index: Type)
   }.
 
 Arguments bsim_properties: clear implicits.
-
-Inductive backward_simulation (L1 L2: semantics _ _) : Prop :=
-  Backward_simulation (index: Type)
-                      (order: index -> index -> Prop)
-                      (match_states: index -> state L1 -> state L2 -> Prop)
-                      (props: bsim_properties L1 L2 index order match_states).
-
-Arguments Backward_simulation {L1 L2 index} order match_states props.
 
 (** An alternate form of the simulation diagram *)
 
@@ -1115,22 +1086,27 @@ Qed.
 
 Section BACKWARD_SIMU_DIAGRAMS.
 
-Variable L1: semantics li1 res1.
-Variable L2: semantics li2 res2.
+Variable L1: lts liA1 liB1 state1.
+Variable L2: lts liA2 liB2 state2.
 
-Variable match_states: state L1 -> state L2 -> Prop.
+Variable match_states: state1 -> state2 -> Prop.
+
+Hypothesis match_valid_query:
+  forall q1 q2, match_query ccB wB q1 q2 ->
+  valid_query L1 q1 = valid_query L2 q2.
 
 Hypothesis match_initial_states:
-  bsim_match_cont match_states (initial_state L1) (initial_state L2).
+  forall q1 q2, match_query ccB wB q1 q2 ->
+  bsim_match_cont match_states (initial_state L1 q1) (initial_state L2 q2).
 
 Hypothesis match_final_states:
   forall s1 s2 r2, match_states s1 s2 -> final_state L2 s2 r2 ->
-  exists r1, final_state L1 s1 r1 /\ match_res r1 r2.
+  exists r1, final_state L1 s1 r1 /\ match_reply ccB wB r1 r2.
 
 Hypothesis match_external:
   forall s1 s2 q2, match_states s1 s2 -> at_external L2 s2 q2 ->
-  exists w q1, at_external L1 s1 q1 /\ match_query cc w q1 q2 /\
-  forall r1 r2, match_reply cc w r1 r2 ->
+  exists wA q1, at_external L1 s1 q1 /\ match_query ccA wA q1 q2 /\ match_senv ccA wA se1 se2 /\
+  forall r1 r2, match_reply ccA wA r1 r2 ->
   bsim_match_cont match_states (after_external L1 s1 r1) (after_external L2 s2 r2).
 
 Hypothesis progress:
@@ -1158,17 +1134,14 @@ Proof.
   exists tt; auto.
 Qed.
 
-Lemma backward_simulation_plus: backward_simulation L1 L2.
+Lemma backward_simulation_plus:
+  bsim_properties L1 L2 unit (fun _ _ => False) (fun _ => match_states).
 Proof.
-  apply Backward_simulation with
-    (fun (x y: unit) => False)
-    (fun (i: unit) s1 s2 => match_states s1 s2);
   constructor; auto.
-- red; intros; constructor; intros. contradiction.
-- apply bsim_match_cont_unit; eauto.
+- intros. apply bsim_match_cont_unit; eauto.
 - intros. edestruct match_final_states as (r1 & Hr1 & Hr); eauto.
   exists s1, r1; split. apply star_refl. eauto.
-- intros. edestruct match_external as (w & q1 & Hq1 & Hq & Hk); eauto.
+- intros. edestruct match_external as (w & q1 & Hq1 & Hq & Hse & Hk); eauto.
   eauto 10 using bsim_match_cont_unit, star_refl.
 - intros. exploit simulation; eauto. intros [s1' [A B]].
   exists tt; exists s1'; auto.
@@ -1250,42 +1223,48 @@ End BACKWARD_SIMULATION_SEQUENCES.
 
 End BSIM.
 
-Arguments bsim_properties {_ _} _ {_ _} _ L1 L2 index order match_states.
-Arguments Backward_simulation {_ _ cc _ _ match_res L1 L2 index} order match_states props.
+Arguments bsim_properties {_ _} _ {_ _} _ _ _ _ {_ _} L1 L2 index order match_states.
 
-Definition open_bsim {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
-  forall (w: ccworld ccB) (se1 se2: Genv.symtbl) (q1: query liB1) (q2: query liB2),
-    Genv.valid_for (skel L1) se1 ->
-    match_senv ccB w se1 se2 ->
-    match_query ccB w q1 q2 ->
-    backward_simulation ccA (match_reply ccB w) (L1 se1 q1) (L2 se2 q2).
+Record backward_simulation {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
+  Backward_simulation {
+    bsim_index: Type;
+    bsim_order: bsim_index -> bsim_index -> Prop;
+    bsim_match_states: _;
 
-Definition closed_bsim (L1 L2: closed_sem) :=
-  backward_simulation cc_id eq L1 L2 /\
-  forall id, Genv.public_symbol (symbolenv L2) id = Genv.public_symbol (symbolenv L1) id.
+    bsim_skel:
+      skel L1 = skel L2;
+    bsim_lts:
+      forall se1 se2 wB,
+        @match_senv liB1 liB2 ccB wB se1 se2 ->
+        Genv.valid_for (skel L1) se1 ->
+        bsim_properties ccA ccB se1 se2 wB (activate L1 se1) (activate L2 se2)
+                        bsim_index bsim_order (bsim_match_states se1 se2 wB);
+    bsim_order_wf:
+      well_founded bsim_order;
+    }.
+
+Arguments Backward_simulation {_ _ ccA _ _ ccB L1 L2 bsim_index}.
 
 (** ** Composing two backward simulations *)
 
-(*
-Section BSIM_COMPOSE.
-
-Context {li1 li2 li3} {cc12: callconv li1 li2} {cc23: callconv li2 li3}.
-Context {res1 res2 res3} {mr12: res1 -> res2 -> Prop} {mr23: res2 -> res3 -> Prop}.
-Variable L1: semantics li1 res1.
-Variable L2: semantics li2 res2.
-Variable L3: semantics li3 res3.
-Hypothesis L3_single_events: single_events L3.
-
 Section COMPOSE_BACKWARD_SIMULATIONS.
 
-Context index order match_states (S12: bsim_properties cc12 mr12 L1 L2 index order match_states).
-Context index' order' match_states' (S23: bsim_properties cc23 mr23 L2 L3 index' order' match_states').
+Context {liA1 liA2 liA3} {ccA12: callconv liA1 liA2} {ccA23: callconv liA2 liA3}.
+Context {liB1 liB2 liB3} {ccB12: callconv liB1 liB2} {ccB23: callconv liB2 liB3}.
+Context {state1 state2 state3: Type}.
+Variable L1: lts liA1 liB1 state1.
+Variable L2: lts liA2 liB2 state2.
+Variable L3: lts liA3 liB3 state3.
+Context (se1 se2 se3: Genv.symtbl) (wB12: ccworld ccB12) (wB23: ccworld ccB23).
+Context index order match_states (S12: bsim_properties ccA12 ccB12 se1 se2 wB12 L1 L2 index order match_states).
+Context index' order' match_states' (S23: bsim_properties ccA23 ccB23 se2 se3 wB23 L2 L3 index' order' match_states').
+Hypothesis L3_single_events: single_events L3.
 
 Let bb_index : Type := (index * index')%type.
 
 Definition bb_order : bb_index -> bb_index -> Prop := lex_ord (clos_trans _ order) order'.
 
-Inductive bb_match_states: bb_index -> state L1 -> state L3 -> Prop :=
+Inductive bb_match_states: bb_index -> state1 -> state3 -> Prop :=
   | bb_match_later: forall i1 i2 s1 s3 s2x s2y,
       match_states i1 s1 s2x -> Star L2 s2x E0 s2y -> match_states' i2 s2y s3 ->
       bb_match_states (i1, i2) s1 s3.
@@ -1383,87 +1362,69 @@ Qed.
 
 End COMPOSE_BACKWARD_SIMULATIONS.
 
-Lemma compose_backward_simulation:
-  backward_simulation cc12 mr12 L1 L2 ->
-  backward_simulation cc23 mr23 L2 L3 ->
-  backward_simulation (cc12 @ cc23) (fun r1 r3 => exists r2, mr12 r1 r2 /\ mr23 r2 r3) L1 L3.
-Proof.
-  intros S12 S23.
-  destruct S12 as [index order match_states props].
-  destruct S23 as [index' order' match_states' props'].
-  apply Backward_simulation with (bb_order order order') (bb_match_states match_states match_states');
-  constructor.
-- (* well founded *)
-  unfold bb_order. apply wf_lex_ord. apply wf_clos_trans. eapply bsim_order_wf; eauto. eapply bsim_order_wf; eauto.
-- (* initial states *)
-  eauto using compose_bsim_match_cont, bsim_match_initial_states.
-- (* match final states *)
-  intros i s1 s3 r MS SAFE FIN. inv MS.
-  exploit (bsim_match_final_states props'); eauto.
-    eapply star_safe; eauto. eapply bsim_safe; eauto.
-  intros (s2' & r2 & A & B & Hr23).
-  exploit (bsim_E0_star props). eapply star_trans. eexact H0. eexact A. auto. eauto. auto.
-  intros [i1' [s1' [C D]]].
-  exploit (bsim_match_final_states props); eauto. eapply star_safe; eauto.
-  intros (s1'' & r1 & P & Q & Hr12).
-  exists s1'', r1; split; eauto. eapply star_trans; eauto.
-- (* external states *)
-  intros i s1 s3 q3 MS SAFE Hq3. destruct MS.
-  edestruct (bsim_match_external props') as (w23 & s2' & q2 & Hs2' & Hq2 & Hq23 & Hk23); eauto.
-    eapply star_safe; eauto. eapply bsim_safe; eauto.
-  edestruct (bsim_E0_star props) as (i' & s1' & Hs1' & Hs12').
-    eapply star_trans. eexact H0. eexact Hs2'. auto. eauto. auto.
-  edestruct (bsim_match_external props) as (w12 & s1'' & q1 & Hs1'' & Hq1 & Hq12 & Hk12); eauto.
-    eapply star_safe; eauto.
-  exists (w12, w23), s1'', q1. cbn. repeat apply conj; eauto using star_trans.
-  intros r1 r3 (r2 & Hr12 & Hr23).
-  eapply compose_bsim_match_cont; eauto.
-- (* progress *)
-  intros i s1 s3 MS SAFE. inv MS.
-  eapply (bsim_progress props'). eauto. eapply star_safe; eauto. eapply bsim_safe; eauto.
-- (* simulation *)
-  apply bb_simulation; auto.
-Qed.
-
-End BSIM_COMPOSE.
-
-Lemma compose_open_bsim:
+Lemma compose_backward_simulations:
   forall {liA1 liA2 liA3} {ccA12: callconv liA1 liA2} {ccA23: callconv liA2 liA3},
   forall {liB1 liB2 liB3} {ccB12: callconv liB1 liB2} {ccB23: callconv liB2 liB3},
   forall L1 L2 L3,
-    open_bsim ccA12 ccB12 L1 L2 ->
-    open_bsim ccA23 ccB23 L2 L3 ->
-    (forall se3 q3, single_events (L3 se3 q3)) ->
-    open_bsim (ccA12 @ ccA23) (ccB12 @ ccB23) L1 L3.
+    backward_simulation ccA12 ccB12 L1 L2 ->
+    backward_simulation ccA23 ccB23 L2 L3 ->
+    (forall se3, single_events (L3 se3)) ->
+    backward_simulation (ccA12 @ ccA23) (ccB12 @ ccB23) L1 L3.
 Proof.
-  intros until L3.
-  intros H12 H23 H3 w se1 se3 q1 q3 (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
-  red in H12, H23. eapply compose_backward_simulation; eauto.
+  intros until L3. intros H12 H23 H3.
+  set (ms := fun se1 se3 '(se2, w12, w23) =>
+               bb_match_states (L2 se2) (bsim_match_states H12 se1 se2 w12)
+                                        (bsim_match_states H23 se2 se3 w23)).
+  apply Backward_simulation with (bb_order (bsim_order H12) (bsim_order H23)) ms.
+  - (* skel *)
+    etransitivity; eapply bsim_skel; eauto.
+  - (* LTS *)
+    intros se1 se3 [[se2 wB12] wB23] [Hse12 Hse23] Hse1. cbn. clear ms.
+    assert (Hse2: Genv.valid_for (skel L2) se2).
+    { erewrite <- bsim_skel by eauto. eapply match_senv_valid_for; eauto. }
+    destruct H12 as [index12 order12 ms12 Hsk12 Hlts12 Hwf12]; cbn.
+    destruct H23 as [index23 order23 ms23 Hsk23 Hlts23 Hwf23]; cbn.
+    specialize (Hlts12 se1 se2 wB12 Hse12 Hse1).
+    specialize (Hlts23 se2 se3 wB23 Hse23 Hse2).
+    split.
+    + (* valid queries *)
+      intros q1 q3 (q2 & Hq12 & Hq23).
+      etransitivity; eapply bsim_match_valid_query; eauto.
+    + (* initial states *)
+      intros q1 q3 (q2 & Hq12 & Hq23).
+      eauto using compose_bsim_match_cont, bsim_match_initial_states.
+    + (* match final states *)
+      intros i s1 s3 r MS SAFE FIN. inv MS.
+      edestruct (bsim_match_final_states Hlts23) as (s2' & r2 & A & B & Hr23); eauto.
+        eapply star_safe; eauto. eapply bsim_safe; eauto.
+      edestruct (bsim_E0_star Hlts12) as (i1' & s1' & C & D).
+        eapply star_trans. eexact H0. eexact A. auto. eauto. auto.
+      edestruct (bsim_match_final_states Hlts12) as (s1'' & r1 & P & Q & Hr12); eauto.
+        eapply star_safe; eauto.
+      exists s1'', r1; cbn; split; eauto. eapply star_trans; eauto.
+    + (* external states *)
+      intros i s1 s3 q3 MS SAFE Hq3. destruct MS.
+      edestruct (bsim_match_external Hlts23) as (w23 & s2' & q2 & Hs2' & Hq2 & Hq23 & Hse23' & Hk23); eauto.
+        eapply star_safe; eauto. eapply bsim_safe; eauto.
+      edestruct (bsim_E0_star Hlts12) as (i' & s1' & Hs1' & Hs12').
+        eapply star_trans. eexact H0. eexact Hs2'. auto. eauto. auto.
+      edestruct (bsim_match_external Hlts12) as (w12 & s1'' & q1 & Hs1'' & Hq1 & Hq12 & Hse12' & Hk12); eauto.
+        eapply star_safe; eauto.
+      exists (se2, w12, w23), s1'', q1. cbn. repeat apply conj; eauto using star_trans.
+      intros r1 r3 (r2 & Hr12 & Hr23).
+      eapply compose_bsim_match_cont; eauto.
+    + (* progress *)
+      intros i s1 s3 MS SAFE. inv MS.
+      eapply (bsim_progress Hlts23). eauto. eapply star_safe; eauto. eapply bsim_safe; eauto.
+    + (* simulation *)
+      eapply bb_simulation; eauto.
+  - (* well founded *)
+    unfold bb_order. auto using wf_lex_ord, wf_clos_trans, bsim_order_wf.
 Qed.
-
-(** After we prove cc_id @ cc_id ≡ cc_id and that backward simulations
-  are monotonic with respect to callconv refinement, we will be able
-  to prove compositions of closed semantics. However this may not
-  be necessary if loading operates as the very last step. Possibly the
-  high-level Csem will remain a closed semantics only, and we'll use
-  open semantics only for Clight..Asm, in which case this theorem may
-  be helpful. *)
-
-Lemma compose_closed_bsim:
-  forall L1 L2 L3,
-    closed_bsim L1 L2 ->
-    closed_bsim L2 L3 ->
-    single_events L3 ->
-    closed_bsim L1 L2.
-Proof.
-  intros L1 L2 L3 [H12 Hid12] [H23 Hid23]. split.
-  - admit. (* eapply compose_backward_simulations; eauto. *)
-  - etransitivity; eauto.
-Abort.
-*)
 
 (** ** Converting a forward simulation to a backward simulation *)
 
+(*
 Section FORWARD_TO_BACKWARD.
 
 Context {li1 li2} (cc: callconv li1 li2).
@@ -1819,9 +1780,11 @@ Proof.
   intros L1 L2 [H Hpub] H1 H2. split; auto.
   eapply forward_to_backward_simulation; eauto.
 Qed.
+*)
 
 (** * Transforming a semantics into a single-event, equivalent semantics *)
 
+(*
 Definition well_behaved_traces {li res} (L: semantics li res) : Prop :=
   forall s t s', Step L s t s' ->
   match t with nil => True | ev :: t' => output_trace t' end.
@@ -2115,3 +2078,4 @@ Record bigstep_sound (B: bigstep_semantics) (L: closed_sem) : Prop :=
       exists s1, initial_state L s1 /\ forever (step L) (globalenv L) s1 T
 }.
 
+*)

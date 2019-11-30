@@ -85,26 +85,25 @@ Notation "1" := cc_id : cc_scope.
 
 Program Definition cc_compose {li1 li2 li3} (cc12: callconv li1 li2) (cc23: callconv li2 li3) :=
   {|
-    ccworld := ccworld cc12 * ccworld cc23;
-    match_senv w se1 se3 :=
-      exists se2,
-        match_senv cc12 (fst w) se1 se2 /\
-        match_senv cc23 (snd w) se2 se3;
-    match_query w q1 q3 :=
+    ccworld := Genv.symtbl * ccworld cc12 * ccworld cc23;
+    match_senv '(se2, w12, w23) se1 se3 :=
+      match_senv cc12 w12 se1 se2 /\
+      match_senv cc23 w23 se2 se3;
+    match_query '(se2, w12, w23) q1 q3 :=
       exists q2,
-        match_query cc12 (fst w) q1 q2 /\
-        match_query cc23 (snd w) q2 q3;
-    match_reply w r1 r3 :=
+        match_query cc12 w12 q1 q2 /\
+        match_query cc23 w23 q2 q3;
+    match_reply '(se2, w12, w23) r1 r3 :=
       exists r2,
-        match_reply cc12 (fst w) r1 r2 /\
-        match_reply cc23 (snd w) r2 r3;
+        match_reply cc12 w12 r1 r2 /\
+        match_reply cc23 w23 r2 r3;
   |}.
 Next Obligation.
-  intros li1 li2 li3 cc12 cc23 w se1 se3 (se2 & H12 & H23) id.
+  intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 (H12 & H23) id.
   etransitivity; eauto using match_senv_public_preserved.
 Qed.
 Next Obligation.
-  intros. destruct H as (? & ? & ?).
+  intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 sk [Hse12 Hse23] H.
   eauto using match_senv_valid_for.
 Qed.
 
