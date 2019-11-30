@@ -904,10 +904,10 @@ End COMPOSE_FORWARD_SIMULATIONS.
 
 (** * Receptiveness and determinacy *)
 
-Definition single_events {li res st} (L: lts li res st) : Prop :=
+Definition single_events {liA liB st} (L: lts liA liB st) : Prop :=
   forall s t s', Step L s t s' -> (length t <= 1)%nat.
 
-Record lts_receptive {li res st} (L: lts li res st) se: Prop :=
+Record lts_receptive {liA liB st} (L: lts liA liB st) se: Prop :=
   Receptive {
     sr_receptive: forall s t1 s1 t2,
       Step L s t1 s1 -> match_traces se t1 t2 -> exists s2, Step L s t2 s2;
@@ -915,7 +915,7 @@ Record lts_receptive {li res st} (L: lts li res st) se: Prop :=
       single_events L
   }.
 
-Record lts_determinate {li res st} (L: lts li res st) se: Prop :=
+Record lts_determinate {liA liB st} (L: lts liA liB st) se: Prop :=
   Determinate {
     sd_determ: forall s t1 s1 t2 s2,
       Step L s t1 s1 -> Step L s t2 s2 ->
@@ -940,7 +940,7 @@ Record lts_determinate {li res st} (L: lts li res st) se: Prop :=
 
 Section DETERMINACY.
 
-Context {li res st} (L: lts li res st) (se: Genv.symtbl).
+Context {liA liB st} (L: lts liA liB st) (se: Genv.symtbl).
 Hypothesis DET: lts_determinate L se.
 
 Lemma sd_determ_1:
@@ -988,7 +988,7 @@ Definition determinate {liA liB} (L: semantics liA liB) :=
 
 (** * Backward simulations between two transition semantics. *)
 
-Definition safe {li res st} (L: lts li res st) (s: st) : Prop :=
+Definition safe {liA liB st} (L: lts liA liB st) (s: st) : Prop :=
   forall s',
   Star L s E0 s' ->
   (exists r, final_state L s' r)
@@ -996,7 +996,7 @@ Definition safe {li res st} (L: lts li res st) (s: st) : Prop :=
   \/ (exists t, exists s'', Step L s' t s'').
 
 Lemma star_safe:
-  forall {li res st} (L: lts li res st) s s',
+  forall {liA liB st} (L: lts liA liB st) s s',
   Star L s E0 s' -> safe L s -> safe L s'.
 Proof.
   intros; red; intros. apply H0. eapply star_trans; eauto.
@@ -1765,42 +1765,41 @@ Qed.
 
 (** * Transforming a semantics into a single-event, equivalent semantics *)
 
-(*
-Definition well_behaved_traces {li res} (L: semantics li res) : Prop :=
-  forall s t s', Step L s t s' ->
+Definition well_behaved_traces {liA liB} (L: semantics liA liB) : Prop :=
+  forall se s t s', Step (L se) s t s' ->
   match t with nil => True | ev :: t' => output_trace t' end.
 
 Section ATOMIC.
 
-Context (L: closed_sem).
+Context {liA liB} (L: semantics liA liB).
 
 Hypothesis Lwb: well_behaved_traces L.
 
-Inductive atomic_step (ge: genvtype L): (trace * state L) -> trace -> (trace * state L) -> Prop :=
+Inductive atomic_step se (ge: genvtype (L se)): (trace * state L) -> trace -> (trace * state L) -> Prop :=
   | atomic_step_silent: forall s s',
-      Step L s E0 s' ->
-      atomic_step ge (E0, s) E0 (E0, s')
+      Step (L se) s E0 s' ->
+      atomic_step se ge (E0, s) E0 (E0, s')
   | atomic_step_start: forall s ev t s',
-      Step L s (ev :: t) s' ->
-      atomic_step ge (E0, s) (ev :: nil) (t, s')
+      Step (L se) s (ev :: t) s' ->
+      atomic_step se ge (E0, s) (ev :: nil) (t, s')
   | atomic_step_continue: forall ev t s,
       output_trace (ev :: t) ->
-      atomic_step ge (ev :: t, s) (ev :: nil) (t, s).
+      atomic_step se ge (ev :: t, s) (ev :: nil) (t, s).
 
-Definition atomic_sem : semantics li_null int := {|
-  state := (trace * state L)%type;
-  genvtype := genvtype L;
-  step := atomic_step;
-  initial_state := fun s => initial_state L (snd s) /\ fst s = E0;
-  at_external := fun s q => False;
-  after_external := fun s r s' => False;
-  final_state := fun s r => final_state L (snd s) r /\ fst s = E0;
-  globalenv := globalenv L;
-|}.
-
-Definition atomic : closed_sem := {|
-  csem := atomic_sem;
-  symbolenv := symbolenv L;
+Definition atomic : semantics liA liB :=
+{|
+  skel := skel L;
+  state := trace * state L;
+  activate se := {|
+    genvtype := genvtype (L se);
+    step := atomic_step se;
+    valid_query := valid_query (L se);
+    initial_state q s := initial_state (L se) q (snd s) /\ fst s = E0;
+    at_external s q := at_external (L se) (snd s) q /\ fst s = E0;
+    after_external s r s' := after_external (L se) (snd s) r (snd s') /\ fst s' = E0;
+    final_state s r := final_state (L se) (snd s) r /\ fst s = E0;
+    globalenv := globalenv (L se);
+  |};
 |}.
 
 End ATOMIC.
@@ -1810,24 +1809,28 @@ End ATOMIC.
 
 Section FACTOR_FORWARD_SIMULATION.
 
-Variable L1: closed_sem.
-Variable L2: closed_sem.
-Context index order match_states (sim: fsim_properties cc_id (symbolenv L1) (symbolenv L2) eq L1 L2 index order match_states).
-Hypothesis L2single: single_events L2.
+Context {liA1 liB1} (L1: semantics liA1 liB1).
+Context {liA2 liB2} (L2: semantics liA2 liB2).
+Context {ccA ccB} (FS: forward_simulation ccA ccB L1 L2).
+Hypothesis L2single: forall se, single_events (L2 se).
 
-Inductive ffs_match: index -> (trace * state L1) -> state L2 -> Prop :=
+Section LTS.
+Context se1 se2 w (Hse: match_senv ccB w se1 se2) (Hse1: Genv.valid_for (skel L1) se1).
+Let sim := fsim_lts FS se2 w Hse Hse1.
+
+Inductive ffs_match: fsim_index FS -> (trace * state L1) -> state L2 -> Prop :=
   | ffs_match_at: forall i s1 s2,
-      match_states i s1 s2 ->
+      fsim_match_states FS se1 se2 w i s1 s2 ->
       ffs_match i (E0, s1) s2
   | ffs_match_buffer: forall i ev t s1 s2 s2',
-      Star L2 s2 (ev :: t) s2' -> match_states i s1 s2' ->
+      Star (L2 se2) s2 (ev :: t) s2' -> fsim_match_states FS se1 se2 w i s1 s2' ->
       ffs_match i (ev :: t, s1) s2.
 
 Lemma star_non_E0_split':
-  forall s2 t s2', Star L2 s2 t s2' ->
+  forall se2 s2 t s2', Star (L2 se2) s2 t s2' ->
   match t with
   | nil => True
-  | ev :: t' => exists s2x, Plus L2 s2 (ev :: nil) s2x /\ Star L2 s2x t' s2'
+  | ev :: t' => exists s2x, Plus (L2 se2) s2 (ev :: nil) s2x /\ Star (L2 se2) s2x t' s2'
   end.
 Proof.
   induction 1. simpl. auto.
@@ -1840,10 +1843,10 @@ Proof.
 Qed.
 
 Lemma ffs_simulation:
-  forall s1 t s1', Step (atomic L1) s1 t s1' ->
+  forall s1 t s1', Step (atomic L1 se1) s1 t s1' ->
   forall i s2, ffs_match i s1 s2 ->
   exists i', exists s2',
-     (Plus L2 s2 t s2' \/ (Star L2 s2 t s2') /\ order i' i)
+     (Plus (L2 se2) s2 t s2' \/ (Star (L2 se2) s2 t s2') /\ fsim_order FS i' i)
   /\ ffs_match i' s1' s2'.
 Proof.
   induction 1; intros.
@@ -1860,7 +1863,7 @@ Proof.
 + (* single event *)
   exists i'; exists s2'; split. auto. constructor; auto.
 + (* multiple events *)
-  assert (C: Star L2 s2 (ev :: ev' :: t) s2'). intuition. apply plus_star; auto.
+  assert (C: Star (L2 se2) s2 (ev :: ev' :: t) s2'). intuition. apply plus_star; auto.
   exploit star_non_E0_split'. eauto. simpl. intros [s2x [P Q]].
   exists i'; exists s2x; split. auto. econstructor; eauto.
 - (* continue step *)
@@ -1871,53 +1874,61 @@ Proof.
   exists i; exists s2x; split. auto. econstructor; eauto.
 Qed.
 
-End FACTOR_FORWARD_SIMULATION.
+End LTS.
 
 Theorem factor_forward_simulation:
-  forall L1 L2,
-  closed_fsim L1 L2 -> single_events L2 ->
-  closed_fsim (atomic L1) L2.
+  forward_simulation ccA ccB (atomic L1) L2.
 Proof.
-  intros L1 L2 FS L2single.
-  destruct FS as [[index order match_states sim] pub]. split; auto.
-  apply Forward_simulation with order (ffs_match L1 L2 match_states); constructor.
-- (* wf *)
-  eapply fsim_order_wf; eauto.
+  apply Forward_simulation with (fsim_order FS) ffs_match; cbn; try apply FS.
+  intros se1 se2 wB Hse Hse1. pose (sim := fsim_lts FS se2 wB Hse Hse1). split; cbn.
+- (* valid query *)
+  cbn. eapply fsim_match_valid_query; eauto.
 - (* initial states *)
-  intros. destruct s1 as [t1 s1]. simpl in H. destruct H. subst.
+  intros. destruct s1 as [t1 s1]. simpl in H0. destruct H0. subst.
   exploit (fsim_match_initial_states sim); eauto. intros [i [s2 [A B]]].
   exists i; exists s2; split; auto. constructor; auto.
 - (* final states *)
   intros. destruct s1 as [t1 s1]. simpl in H0; destruct H0; subst. inv H.
   eapply (fsim_match_final_states sim); eauto.
 - (* external states *)
-  intros. destruct q1.
+  intros i [t1 s1] s2 q1 Hs [Hq1 Ht1]. cbn in *. subst. inv Hs.
+  edestruct @fsim_match_external as (wA & q2 & Hq2 & Hq & Hse' & Hk); eauto.
+  exists wA, q2. repeat apply conj; auto.
+  intros r1 r2 [t s1'] Hr [Hs1' Ht]. cbn in *. subst.
+  edestruct Hk as (i' & s2' & Hs2' & Hs'); eauto.
+  exists i', s2'. split; auto. constructor; auto.
 - (* simulation *)
   eapply ffs_simulation; eauto.
 Qed.
+
+End FACTOR_FORWARD_SIMULATION.
 
 (** Likewise, a backward simulation from a single-event semantics [L1] to a semantics [L2]
   can be "factored" as a backward simulation from [L1] to [atomic L2]. *)
 
 Section FACTOR_BACKWARD_SIMULATION.
 
-Variable L1: closed_sem.
-Variable L2: closed_sem.
-Context index order match_states (sim: bsim_properties cc_id eq L1 L2 index order match_states).
-Hypothesis L1single: single_events L1.
+Context {liA1 liB1} (L1: semantics liA1 liB1).
+Context {liA2 liB2} (L2: semantics liA2 liB2).
+Context {ccA ccB} (BS: backward_simulation ccA ccB L1 L2).
+Hypothesis L1single: forall se, single_events (L1 se).
 Hypothesis L2wb: well_behaved_traces L2.
 
-Inductive fbs_match: index -> state L1 -> (trace * state L2) -> Prop :=
+Section LTS.
+Context se1 se2 w (Hse: match_senv ccB w se1 se2) (Hse1: Genv.valid_for (skel L1) se1).
+Let sim := bsim_lts BS se2 w Hse Hse1.
+
+Inductive fbs_match: bsim_index BS -> state L1 -> (trace * state L2) -> Prop :=
   | fbs_match_intro: forall i s1 t s2 s1',
-      Star L1 s1 t s1' -> match_states i s1' s2 ->
+      Star (L1 se1) s1 t s1' -> bsim_match_states BS se1 se2 w i s1' s2 ->
       t = E0 \/ output_trace t ->
       fbs_match i s1 (t, s2).
 
 Lemma fbs_simulation:
-  forall s2 t s2', Step (atomic L2) s2 t s2' ->
-  forall i s1, fbs_match i s1 s2 -> safe L1 s1 ->
+  forall s2 t s2', Step (atomic L2 se2) s2 t s2' ->
+  forall i s1, fbs_match i s1 s2 -> safe (L1 se1) s1 ->
   exists i', exists s1',
-     (Plus L1 s1 t s1' \/ (Star L1 s1 t s1' /\ order i' i))
+     (Plus (L1 se1) s1 t s1' \/ (Star (L1 se1) s1 t s1' /\ bsim_order BS i' i))
      /\ fbs_match i' s1' s2'.
 Proof.
   induction 1; intros.
@@ -1932,25 +1943,25 @@ Proof.
   inv H0.
   exploit (bsim_simulation sim); eauto. eapply star_safe; eauto.
   intros [i' [s1'' [A B]]].
-  assert (C: Star L1 s1 (ev :: t) s1'').
+  assert (C: Star (L1 se1) s1 (ev :: t) s1'').
     eapply star_trans. eauto. destruct A as [P | [P Q]]. apply plus_star; eauto. eauto. auto.
-  exploit star_non_E0_split'; eauto. simpl. intros [s1x [P Q]].
+  exploit @star_non_E0_split'; eauto. simpl. intros [s1x [P Q]].
   exists i'; exists s1x; split.
   left; auto.
   econstructor; eauto.
   exploit L2wb; eauto.
 - (* continue step *)
   inv H0. unfold E0 in H8; destruct H8; try congruence.
-  exploit star_non_E0_split'; eauto. simpl. intros [s1x [P Q]].
+  exploit @star_non_E0_split'; eauto. simpl. intros [s1x [P Q]].
   exists i; exists s1x; split. left; auto. econstructor; eauto. simpl in H0; tauto.
 Qed.
 
 Lemma fbs_progress:
   forall i s1 s2,
-  fbs_match i s1 s2 -> safe L1 s1 ->
-  (exists r, final_state (atomic L2) s2 r) \/
-  (exists q, at_external (atomic L2) s2 q) \/
-  (exists t, exists s2', Step (atomic L2) s2 t s2').
+  fbs_match i s1 s2 -> safe (L1 se1) s1 ->
+  (exists r, final_state (atomic L2 se2) s2 r) \/
+  (exists q, at_external (atomic L2 se2) s2 q) \/
+  (exists t, exists s2', Step (atomic L2 se2) s2 t s2').
 Proof.
   intros. inv H. destruct t.
 - (* 1. no buffered events *)
@@ -1959,7 +1970,7 @@ Proof.
 + (* final state *)
   left; exists r; simpl; auto.
 + (* external state *)
-  destruct q.
+  cbn. eauto.
 + (* L2 can step *)
   destruct t.
   right; right; exists E0; exists (nil, s2'). constructor. auto.
@@ -1969,20 +1980,17 @@ Proof.
   right; right; exists (e :: nil); exists (t, s3). constructor. auto.
 Qed.
 
-End FACTOR_BACKWARD_SIMULATION.
+End LTS.
 
 Theorem factor_backward_simulation:
-  forall L1 L2,
-  closed_bsim L1 L2 -> single_events L1 -> well_behaved_traces L2 ->
-  closed_bsim L1 (atomic L2).
+  backward_simulation ccA ccB L1 (atomic L2).
 Proof.
-  intros L1 L2 BS L1single L2wb.
-  destruct BS as [[index order match_states sim] pub]. split; auto.
-  apply Backward_simulation with order (fbs_match L1 L2 match_states); constructor.
-- (* wf *)
-  eapply bsim_order_wf; eauto.
+  apply Backward_simulation with (bsim_order BS) fbs_match; cbn; try apply BS.
+  intros se1 se2 wB Hse Hse1. pose (sim := bsim_lts BS se2 wB Hse Hse1).
+  split; try apply sim; cbn.
 - (* initial states *)
-  intros. destruct (bsim_match_initial_states sim) as [He Hm]. split.
+  intros q1 q2 Hq.
+  edestruct (bsim_match_initial_states sim) as [He Hm]; eauto. split.
   + intros. exploit He; eauto. intros [s2 A].
     exists (E0, s2). simpl; auto.
   + intros. destruct s2 as [t s2]; simpl in H0; destruct H0; subst.
@@ -1991,30 +1999,41 @@ Proof.
 - (* final states match *)
   intros. destruct s2 as [t s2]; simpl in H1; destruct H1; subst.
   inv H. exploit (bsim_match_final_states sim); eauto. eapply star_safe; eauto.
-  intros (s1'' & r & A & B & ?). subst r2.
+  intros (s1'' & r & A & B & ?).
   exists s1'', r; split; auto. eapply star_trans; eauto.
 - (* external states *)
-  intros _ _ _ [ ].
+  intros i s1 [s2 t2] q2 Hs Hs1 [Hq2 Ht2]. cbn in *; subst. inv Hs.
+  edestruct (bsim_match_external sim) as (wA & s1'' & q1 & Hs1'' & Hq1 & Hq & Hse' & Hk);
+    eauto using star_safe.
+  exists wA, s1'', q1. repeat apply conj; auto.
+  + eapply star_trans; eauto.
+  + intros r1 r2 Hr. edestruct Hk as [He Hm]; eauto. split.
+    * intros. edestruct He; eauto. exists (E0, x); auto.
+    * intros ns1 [nt2 ns2] Hns1 [Hns2 Hnt2]. cbn in *; subst.
+      edestruct Hm as (? & ? & ? & ?); eauto. eexists; split; eauto. eexists.
+      econstructor; eauto using star_refl.
 - (* progress *)
   eapply fbs_progress; eauto.
 - (* simulation *)
   eapply fbs_simulation; eauto.
 Qed.
 
+End FACTOR_BACKWARD_SIMULATION.
+
 (** Receptiveness of [atomic L]. *)
 
-Record strongly_receptive (L: closed_sem): Prop :=
+Record strongly_receptive {liA liB} (L: semantics liA liB): Prop :=
   Strongly_receptive {
-    ssr_receptive: forall s ev1 t1 s1 ev2,
-      Step L s (ev1 :: t1) s1 ->
-      match_traces (symbolenv L) (ev1 :: nil) (ev2 :: nil) ->
-      exists s2, exists t2, Step L s (ev2 :: t2) s2;
+    ssr_receptive: forall se s ev1 t1 s1 ev2,
+      Step (L se) s (ev1 :: t1) s1 ->
+      match_traces se (ev1 :: nil) (ev2 :: nil) ->
+      exists s2, exists t2, Step (L se) s (ev2 :: t2) s2;
     ssr_well_behaved:
       well_behaved_traces L
   }.
 
-Theorem atomic_receptive:
-  forall L, strongly_receptive L -> closed_receptive (atomic L).
+Theorem atomic_receptive {liA liB} (L: semantics liA liB):
+  strongly_receptive L -> receptive (atomic L).
 Proof.
   intros. constructor; intros.
 (* receptive *)
@@ -2024,8 +2043,8 @@ Proof.
   (* start step *)
   assert (exists ev2, t2 = ev2 :: nil). inv H1; econstructor; eauto.
   destruct H0 as [ev2 EQ]; subst t2.
-  exploit ssr_receptive; eauto. intros [s2 [t2 P]].
-  exploit ssr_well_behaved. eauto. eexact P. simpl; intros Q.
+  exploit @ssr_receptive; eauto. intros [s2 [t2 P]].
+  exploit @ssr_well_behaved. eauto. eexact P. simpl; intros Q.
   exists (t2, s2). constructor; auto.
   (* continue step *)
   simpl in H2; destruct H2.
@@ -2047,16 +2066,17 @@ Record bigstep_semantics : Type :=
 
 (** Soundness with respect to a small-step semantics *)
 
-Record bigstep_sound (B: bigstep_semantics) (L: closed_sem) : Prop :=
+Definition load {liA liB} (L: semantics liA liB): lts liA liB (state L) :=
+  L (Genv.symboltbl (skel L)).
+
+Record bigstep_sound (B: bigstep_semantics) (L: semantics li_null li_wp) : Prop :=
   Bigstep_sound {
     bigstep_terminates_sound:
       forall t r,
       bigstep_terminates B t r ->
-      exists s1, exists s2, initial_state L s1 /\ Star L s1 t s2 /\ final_state L s2 r;
+      exists s1, exists s2, initial_state (load L) tt s1 /\ Star (load L) s1 t s2 /\ final_state (load L) s2 r;
     bigstep_diverges_sound:
       forall T,
       bigstep_diverges B T ->
-      exists s1, initial_state L s1 /\ forever (step L) (globalenv L) s1 T
+      exists s1, initial_state (load L) tt s1 /\ forever (step (load L)) (globalenv (load L)) s1 T
 }.
-
-*)
