@@ -731,9 +731,6 @@ Qed.
 Global Instance step1_rel_params:
   Params (@step1) 3.
 
-Hint Extern 1 (Transport _ _ _ _ _) =>
-  set_le_transport @step1 : typeclass_instances.
-
 Global Instance step2_rel R:
   Monotonic
     (@step2)
@@ -745,24 +742,38 @@ Qed.
 Global Instance step2_rel_params:
   Params (@step2) 3.
 
+End PROG.
+
+Hint Extern 1 (Transport _ _ _ _ _) =>
+  set_le_transport @step1 : typeclass_instances.
+
 Hint Extern 1 (Transport _ _ _ _ _) =>
   set_le_transport @step2 : typeclass_instances.
 
-Lemma activate_rel R w se1 se2 q1 q2:
-  match_stbls R w se1 se2 ->
-  cc_c_query R w q1 q2 ->
-  forward_simulation (cc_c R) se1 se2 (match_reply (cc_c R) w)
-    (Clight.semantics1 p se1 q1)
-    (Clight.semantics1 p se2 q2).
+Lemma semantics1_rel p R:
+  forward_simulation (cc_c R) (cc_c R) (Clight.semantics1 p) (Clight.semantics1 p).
 Proof.
-  intros Hse Hq.
+  constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
+  intros se1 se2 w Hse Hse1. cbn -[semantics1] in *.
   pose (ms := fun s1 s2 =>
-    klr_diam tt (genv_match R * state_match R) w
+    klr_diam tt (genv_match p R * state_match R) w
       (globalenv se1 p, s1)
       (globalenv se2 p, s2)).
-  apply forward_simulation_step with ms; cbn.
-  - intros s1 Hs1. inv Hs1. inv Hq.
-    assert (Hge: genv_match R w (globalenv se1 p) (globalenv se2 p)).
+  apply forward_simulation_step with (match_states := ms); cbn.
+  - intros _ _ [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1].
+    cbn. eapply Genv.is_internal_match; eauto.
+    + instantiate (1 := p).
+      repeat apply conj; auto.
+      induction (AST.prog_defs (_ p)) as [ | [id [f|v]] defs IHdefs];
+        repeat (econstructor; eauto).
+      * apply incl_refl.
+      * apply linkorder_refl.
+      * instantiate (1 := fun _ => eq). reflexivity.
+      * instantiate (1 := eq). destruct v; constructor; auto.
+    + eapply match_stbls_proj; eauto.
+    + cbn. congruence.
+  - intros q1 q2 s1 Hq Hs1. inv Hs1. inv Hq.
+    assert (Hge: genv_match p R w (globalenv se1 p) (globalenv se2 p)).
     {
       cut (match_stbls R w (globalenv se1 p) (globalenv se2 p)); eauto.
       eapply (rel_push_rintro (fun se=>globalenv se p) (fun se=>globalenv se p)).
@@ -802,27 +813,5 @@ Proof.
     eexists; split; try rauto.
     exists w''. split; repeat rstep.
     eapply genv_match_acc; eauto.
-Qed.
-
-End PROG.
-
-Lemma semantics1_rel p R:
-  open_fsim (cc_c R) (cc_c R) (Clight.semantics1 p) (Clight.semantics1 p).
-Proof.
-  split; auto. intros w se1 se2 q1 q2 Hse1 _ Hse Hq.
-  cbn in *.
-  cbn -[semantics2] in *. split.
-  - destruct Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1].
-    cbn. eapply Genv.is_internal_match; eauto.
-    + instantiate (1 := p).
-      repeat apply conj; auto.
-      induction (AST.prog_defs (_ p)) as [ | [id [f|v]] defs IHdefs];
-        repeat (econstructor; eauto).
-      * apply incl_refl.
-      * apply linkorder_refl.
-      * instantiate (1 := fun _ => eq). reflexivity.
-      * instantiate (1 := eq). destruct v; constructor; auto.
-    + eapply match_stbls_proj; eauto.
-    + cbn. congruence.
-  - eapply activate_rel; eauto.
+  - apply well_founded_ltof.
 Qed.

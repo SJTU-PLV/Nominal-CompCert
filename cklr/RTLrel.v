@@ -269,21 +269,18 @@ Hint Extern 1 (Transport _ _ _ _ _) =>
   set_le_transport @step : typeclass_instances.
 
 Global Instance semantics_rel R:
-  Monotonic (@RTL.semantics) (- ==> open_fsim (cc_c R) (cc_c R)).
+  Monotonic (@RTL.semantics) (- ==> forward_simulation (cc_c R) (cc_c R)).
 Proof.
-  intros p. split; auto.
-  intros w se1 se2 q1 q2 Hse1 _ Hse Hq. cbn -[semantics] in *.
-  split.
-  {
-    cbn. eapply (Genv.is_internal_match (ctx := p)).
-    - eapply (match_prog p).
-    - eapply match_stbls_proj; eauto.
-    - cbn. congruence.
-    - destruct Hq. cbn. auto.
-    - destruct Hq. cbn. auto.
-  }
-  eapply forward_simulation_step with (klr_diam tt (state_rel R) w).
-  - destruct 1. inv Hq. cbn.
+  intros p. constructor. econstructor; auto.
+  intros se1 se2 w Hse1 Hse. cbn -[semantics] in *.
+  eapply forward_simulation_step with (match_states := klr_diam tt (state_rel R) w).
+  - cbn. intros q1 q2 Hq. eapply (Genv.is_internal_match (ctx := p)).
+    + eapply (match_prog p).
+    + eapply match_stbls_proj; eauto.
+    + cbn. congruence.
+    + destruct Hq. cbn. auto.
+    + destruct Hq. cbn. auto.
+  - intros q1 q2 s1 Hq. destruct 1. inv Hq. cbn.
     eassert (Hge: genv_match p R w _ _) by (red; rauto).
     transport H.
     eexists; split.
@@ -312,4 +309,5 @@ Proof.
     simpl in Hstep1.
     transport Hstep1.
     eexists. split; eauto. rauto.
+  - auto using well_founded_ltof.
 Qed.
