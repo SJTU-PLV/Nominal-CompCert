@@ -623,14 +623,14 @@ Proof.
   split.
   - intros [w12 w23] se1 se3 q1 q3 (se2 & Hse12 & Hse23) Hq.
     apply match_c_query_compose in Hq as (q2 & Hq12 & Hq23).
-    exists (w12, w23).
+    exists (se2, w12, w23).
     repeat apply conj; cbn; eauto.
     intros r1 r3 (r2 & (w12' & Hw21' & Hr12) & (w23' & Hw23' & Hr23)).
     exists (w12', w23'). split. constructor; cbn; auto.
     destruct Hr12; inv Hr23.
     constructor; cbn; eauto.
     apply val_inject_compose; eauto.
-  - intros [w12 w23] se1 se3 q1 q3 (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
+  - intros [[se2 w12] w23] se1 se3 q1 q3 (Hse12 & Hse23) (q2 & Hq12 & Hq23).
     cbn in *. exists (w12, w23). repeat apply conj; eauto.
     + apply match_c_query_compose; eauto.
     + intros r1 r3 ([w12' w23'] & Hw' & Hr).

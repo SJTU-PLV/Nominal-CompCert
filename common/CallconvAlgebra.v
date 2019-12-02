@@ -75,26 +75,40 @@ Qed.
 
 Global Instance open_fsim_ccref:
   Monotonic
-    (@open_fsim)
+    (@forward_simulation)
     (forallr - @ liA1, forallr - @ liA2, ccref ++>
      forallr - @ liB1, forallr - @ liB2, ccref -->
      subrel).
 Proof.
-  intros liA1 liA2 ccA ccA' HA liB1 liB2 ccB ccB' HB sem1 sem2 [Hps Hsem].
-  split; auto.
-  intros wB se1 se2 q1 q2 Hse1 _ Hse Hq.
-  edestruct HB as (wB' & Hse' & Hq' & Hr'); eauto.
-  edestruct Hsem as [Hvq Hsim]; eauto. split; auto.
-  destruct Hsim. exists index order match_states.
+  intros liA1 liA2 ccA ccA' HA liB1 liB2 ccB ccB' HB sem1 sem2 [FS].
+  destruct FS as [index order match_states SKEL PROP WF].
+  constructor.
+  set (ms se1 se2 w' idx s1 s2 :=
+         exists w : ccworld ccB,
+           match_states se1 se2 w idx s1 s2 /\
+           match_senv ccB w se1 se2 /\
+           forall r1 r2, match_reply ccB w r1 r2 -> match_reply ccB' w' r1 r2).
+  eapply Forward_simulation with order ms; auto.
+  intros se1 se2 wB' Hse' Hse1.
   split.
-  - eauto using fsim_order_wf.
-  - eauto using fsim_match_initial_states.
-  - intros.
+  - intros q1 q2 Hq'.
+    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    eapply fsim_match_valid_query; eauto.
+  - intros q1 q2 s1 Hq' Hs1.
+    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
+    exists i, s2. split; auto. exists wB; auto.
+  - intros i s1 s2 r1 (wB & Hs & Hse & Hr') Hr1.
     edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
-  - intros.
+  - intros i s1 s2 qA1 (wB & Hs & Hse & Hr') HqA1.
     edestruct @fsim_match_external as (wA & qA2 & HqA2 & HqA & HseA & ?); eauto.
-    edestruct HA as (wA' & HseA' & HqA' & HrA'); eauto 10.
-  - eauto using fsim_simulation.
+    edestruct HA as (wA' & HseA' & HqA' & Hr); eauto.
+    exists wA', qA2. intuition auto.
+    edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
+    exists i', s2'. split; auto. exists wB; eauto.
+  - intros s1 t s1' Hs1' i s2 (wB & Hs & Hse & Hr').
+    edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto.
+    exists i', s2'. split; auto. exists wB; eauto.
 Qed.
 
 (** * Properties of [cc_compose] *)
@@ -106,13 +120,13 @@ Lemma cc_compose_id_left {li1 li2} (cc: callconv li1 li2):
   cceqv (cc_compose cc_id cc) cc.
 Proof.
   split.
-  - intros [[ ] w] se1 se3 q1 q3 (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
+  - intros [[se2 [ ]] w] se1 se3 q1 q3 (Hse12 & Hse23) (q2 & Hq12 & Hq23).
     simpl in *. subst.
     exists w; intuition eauto.
   - intros w se1 se2 q1 q2 Hse Hq.
-    exists (tt, w); repeat apply conj.
-    + eexists; simpl; eauto.
-    + eexists; simpl; eauto.
+    exists (se1, tt, w); repeat apply conj.
+    + cbn. eauto.
+    + cbn. eauto.
     + intros r1 r3 (r2 & Hr12 & Hr23); simpl in *.
       congruence.
 Qed.
@@ -121,13 +135,13 @@ Lemma cc_compose_id_right {li1 li2} (cc: callconv li1 li2):
   cceqv (cc_compose cc cc_id) cc.
 Proof.
   split.
-  - intros [w [ ]] se1 se3 q1 q3 (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
+  - intros [[se2 w] [ ]] se1 se3 q1 q3 (Hse12 & Hse23) (q2 & Hq12 & Hq23).
     simpl in *. subst.
     exists w; intuition eauto.
   - intros w se1 se2 q1 q2 Hse Hq.
-    exists (w, tt); repeat apply conj.
-    + eexists; simpl; eauto.
-    + eexists; simpl; eauto.
+    exists (se2, w, tt); repeat apply conj.
+    + cbn. eauto.
+    + cbn. eauto.
     + intros r1 r3 (r2 & Hr12 & Hr23); simpl in *.
       congruence.
 Qed.
@@ -138,16 +152,14 @@ Lemma cc_compose_assoc {A B C D} cc1 cc2 cc3:
     (@cc_compose A B D cc1 (cc_compose cc2 cc3)).
 Proof.
   split.
-  - intros [[w1 w2] w3] sea sed qa qd.
-    intros (sec & (seb & Hseab & Hsebc) & Hsecd).
-    intros (qc & (qb & Hqab & Hqbc) & Hqcd).
-    exists (w1, (w2, w3)). simpl in *.
+  - intros [[sec [[seb w1] w2]] w3] sea sed qa qd.
+    intros ((Hseab & Hsebc) & Hsecd) (qc & (qb & Hqab & Hqbc) & Hqcd).
+    exists (seb, w1, (sec, w2, w3)). simpl in *.
     repeat apply conj; eauto.
     intros ra rd (rb & Hrab & rc & Hrbc & Hrcd); eauto.
-  - intros [w1 [w2 w3]] sea sed qa qd.
-    intros (seb & Hseab & (sec & Hsebc & Hsecd)).
-    intros (qb & Hqab & qc & Hqbc & Hqcd).
-    exists ((w1, w2), w3). simpl in *.
+  - intros [[seb w1] [[sec w2] w3]] sea sed qa qd.
+    intros (Hseab & Hsebc & Hsecd) (qb & Hqab & qc & Hqbc & Hqcd).
+    exists (sec, (seb, w1, w2), w3). simpl in *.
     repeat apply conj; eauto.
     intros ra rd (rc & (rb & Hrab & Hrbc) & Hrcd); eauto.
 Qed.
@@ -157,12 +169,12 @@ Qed.
 Global Instance cc_compose_ref li1 li2 li3:
   Proper (ccref ++> ccref ++> ccref) (@cc_compose li1 li2 li3).
 Proof.
-  intros cc12 cc12' H12 cc23 cc23' H23 (w12, w23) se1 se3 q1 q3.
-  intros (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
+  intros cc12 cc12' H12 cc23 cc23' H23 [[se2 w12] w23] se1 se3 q1 q3.
+  intros (Hse12 & Hse23) (q2 & Hq12 & Hq23).
   simpl in *.
   edestruct (H12 w12 se1 se2 q1 q2 Hse12 Hq12) as (w12' & Hse12' & Hq12' & H12').
   edestruct (H23 w23 se2 se3 q2 q3 Hse23 Hq23) as (w23' & Hse23' & Hq23' & H23').
-  exists (w12', w23').
+  exists (se2, w12', w23').
   repeat apply conj; eauto.
   intros r1 r3 (r2 & Hr12 & Hr23); eauto.
 Qed.
@@ -312,14 +324,31 @@ Section JOIN.
         R2 a b x y -> cc_join_ms R1 R2 (inr a) (inr b) x y.
 
   Hint Constructors cc_join_ms.
+  Hint Constructors Relation_Operators.le_AsB.
 
   Lemma cc_join_fsim (ccA: callconv li li) ccB1 ccB2 L1 L2:
-    open_fsim ccA ccB1 L1 L2 ->
-    open_fsim ccA ccB2 L1 L2 ->
-    open_fsim ccA (cc_join ccB1 ccB2) L1 L2.
+    forward_simulation ccA ccB1 L1 L2 ->
+    forward_simulation ccA ccB2 L1 L2 ->
+    forward_simulation ccA (cc_join ccB1 ccB2) L1 L2.
   Proof.
-    intros [Hsk1 Hsim1] [Hsk2 Hsim2]. split; auto.
-    intros [w|w] se1 se2 q1 q2 Hse1 _ Hse Hq; cbn in *; eauto.
+    intros [[ind1 ord1 ms1 SK LTS1 WF1]] [[ind2 ord2 ms2 _ LTS2 WF2]].
+    constructor.
+    eapply Forward_simulation with
+        (Relation_Operators.le_AsB ind1 ind2 ord1 ord2)
+        (fun se1 se2 => cc_join_ms (ms1 se1 se2) (ms2 se1 se2));
+      eauto using Disjoint_Union.wf_disjoint_sum.
+    intros se1 se2 wB Hse Hse1. split.
+    - destruct wB; cbn; eapply fsim_match_valid_query; eauto.
+    - intros q1 q2 s1 H1 Hs1. destruct wB; cbn in *;
+      edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
+    - intros i s1 s2 r1 Hs Hr1. destruct wB; cbn in *; inv Hs;
+      eapply fsim_match_final_states; eauto.
+    - intros i s1 s2 q1 Hs Hq1. destruct wB; cbn in *; inv Hs;
+      edestruct @fsim_match_external as (wA & q2 & Hq2 & Hq & Hse' & Hr); eauto;
+      exists wA, q2; intuition auto; edestruct Hr as (i' & s2' & Hs2' & Hs'); eauto.
+    - intros s1 t s1' Hs1' i s2 Hs. destruct wB; cbn in *; inv Hs;
+      edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto;
+      destruct Hs2' as [? | [? ?]]; eauto 10.
   Qed.
 End JOIN.
 
@@ -404,13 +433,13 @@ Section STAR.
   Next Obligation.
     induction w.
     - inv H; auto.
-    - destruct H as (wi & ? & ?).
+    - destruct X as [[sei x1] x2], H as [? ?].
       etransitivity; eauto using match_senv_public_preserved.
   Qed.
   Next Obligation.
     induction w.
     - inv H; auto.
-    - destruct H as (wi & ? & ?).
+    - destruct X as [[sei x1] x2], H as [? ?].
       eauto using match_senv_valid_for.
   Qed.
 
@@ -419,28 +448,28 @@ Section STAR.
   Lemma cc_star_fold_l:
     ccref (1 + cc @ cc_star) cc_star.
   Proof.
-    intros [[ ] | [w [n ws]]] q1 q2 Hq; simpl in *.
+    intros [[ ] | [[se w] [n ws]]] q1 q2 Hq. simpl in *.
     - exists (existT _ O tt).
       simpl; eauto.
-    - exists (existT _ (S n) (w, ws)).
+    - exists (existT _ (S n) (se, w, ws)).
       simpl; eauto.
   Qed.
 
   Lemma cc_star_fold_r:
     ccref (1 + cc_star @ cc) cc_star.
   Proof.
-    intros [[ ] | [[n ws] w]] se1 se3 q1 q3; simpl.
+    intros [[ ] | [[se2 [n ws]] w]] se1 se3 q1 q3.
     - intros [ ] [ ].
       exists (existT _ O tt). simpl. tauto.
-    - intros (se2 & Hses & Hse) (q2 & Hqs & Hq).
+    - intros (Hses & Hse) (q2 & Hqs & Hq).
       revert se1 q1 Hses Hqs.
-      induction n as [ | n IHn]; simpl in *; intros.
-      + exists (existT _ 1%nat (w, tt)). simpl. subst.
+      induction n as [ | n IHn]; intros.
+      + exists (existT _ 1%nat (se3, w, tt)). simpl in *. subst.
         repeat apply conj; eauto.
         intros r1 r3 (r2 & Hr12 & Hr23). subst. eauto.
-      + destruct ws as [w0 ws], Hses as (seI & Hse1I & HseI2), Hqs as (qI & Hq1I & HqI2). simpl in *.
+      + destruct ws as [[seI w0] ws], Hses as [Hse1I HseI2], Hqs as (qI & Hq1I & HqI2).
         specialize (IHn ws seI qI HseI2 HqI2) as ([n' ws'] & HseI3' & HqI3' & ?). clear HseI2 HqI2.
-        exists (existT _ (S n') (w0, ws')). simpl.
+        exists (existT _ (S n') (seI, w0, ws')). simpl in *.
         repeat apply conj; eauto.
         intros r1 r3 (r2 & Hr12 & Hr23).
         edestruct H as (rI & Hr1I & HrI2); eauto.
@@ -478,15 +507,15 @@ Section STAR.
     ccref (cc @ x) x ->
     ccref (cc_star @ x) x.
   Proof.
-    intros H [[n ws] w] se1 se3 q1 q3 (se2 & Hse12 & Hse23) (q2 & Hq12 & Hq23).
+    intros H [[se2 [n ws]] w] se1 se3 q1 q3 [Hse12 Hse23] (q2 & Hq12 & Hq23).
     revert se1 q1 Hse12 Hq12.
-    induction n; cbn in *; intros.
-    - subst. exists w. intuition eauto.
-    - destruct ws as [wi ws]. cbn in *.
-      destruct Hse12 as (sei & Hse1i & Hsei2).
+    induction n; intros.
+    - cbn in *. subst. exists w. intuition eauto.
+    - destruct ws as [[sei wi] ws]. cbn in *.
+      destruct Hse12 as (Hse1i & Hsei2).
       destruct Hq12 as (qi & Hq1i & Hqi2).
       edestruct IHn as (wr & Hsei3 & Hqi3 & Hri3); eauto.
-      edestruct (H (wi, wr)) as (wl & Hsexi & Hqxi & Hrxi); cbn; eauto.
+      edestruct (H (sei, wi, wr)) as (wl & Hsexi & Hqxi & Hrxi); cbn; eauto.
       exists wl. intuition eauto.
       edestruct Hrxi as (ri1 & ? & ?); cbn in *; eauto.
       edestruct Hri3 as (ri2 & ? & ?); cbn in *; eauto.
@@ -507,7 +536,7 @@ Section STAR.
 End STAR.
 
 Infix "^" := cc_pow : cc_scope.
-Notation "cc ^{*}" := (cc_star cc) (at level 30) : cc_scope.
+Notation "cc ^ {*}" := (cc_star cc) (at level 30) : cc_scope.
 
 Global Instance cc_pow_ref:
   Monotonic (@cc_pow) (forallr -, ccref ++> - ==> ccref).
@@ -526,32 +555,60 @@ Qed.
 
 (** *** Proving simulations *)
 
-Lemma cc_pow_fsim_intro {liA liB ccA ccB} (L: open_sem liA liB) n:
-  open_fsim ccA ccB L L ->
-  open_fsim (ccA ^ n) (ccB ^ n) L L.
+Lemma cc_pow_fsim_intro {liA liB ccA ccB} (L: semantics liA liB):
+  forward_simulation ccA ccB L L ->
+  inhabited (forall n, fsim_components (ccA ^ n) (ccB ^ n) L L).
 Proof.
-  intros HL.
+  intros [HL]. constructor. intros n.
   induction n; simpl.
   - admit. (* eapply forward_simulation_identity. *)
-  - eapply compose_open_fsim; eauto.
+  - eapply compose_fsim_components; eauto.
 Admitted.
 
-Lemma cc_star_pow_fsim {liA liB ccA ccB} (L: open_sem liA liB) n:
-  open_fsim ccA ccB L L ->
-  open_fsim (ccA ^{*}) (ccB ^ n) L L.
-Proof.
-  intros HL.
-  rewrite <- cc_pow_star.
-  apply cc_pow_fsim_intro; eauto.
-Qed.
+Section CC_STAR_FSIM.
+  Context {liA liB} (L: semantics liA liB).
+  Context {ccA ccB} (FS: forall n, fsim_components (ccA^n) (ccB^n) L L).
 
-Lemma cc_star_fsim {liA liB ccA ccB} (L: open_sem liA liB):
-  open_fsim ccA ccB L L ->
-  open_fsim (cc_star ccA) (cc_star ccB) L L.
+  Inductive cc_star_ms se1 se2: ccworld (ccB^{*}) -> {n & fsim_index (FS n)} -> state L -> state L -> Prop :=
+    cc_star_ms_intro n ws idx s1 s2:
+      fsim_match_states (FS n) se1 se2 ws idx s1 s2 ->
+      cc_star_ms se1 se2 (existT _ n ws) (existT _ n idx) s1 s2.
+
+  Hint Constructors cc_star_ms.
+  Hint Constructors Relation_Operators.lexprod.
+
+  Definition cc_star_fsim_components:
+    fsim_components (ccA^{*}) (ccB^{*}) L L.
+  Proof.
+    pose proof (Eqdep_dec.inj_pair2_eq_dec nat Nat.eq_dec) as inj_pair2. 
+    eapply Forward_simulation with
+        (fsim_order := Relation_Operators.lexprod _ _ lt (fun n => fsim_order (FS n)))
+        (fsim_match_states := cc_star_ms).
+    - reflexivity.
+    - intros se1 se2 [n ws] Hse Hse1. cbn in *.
+      pose proof (fsim_lts (FS n) se2 ws Hse Hse1) as PROPS.
+      split; cbn; intros.
+      + apply PROPS; auto.
+      + edestruct (fsim_match_initial_states PROPS) as (idx & s2 & Hs2 & Hs); eauto.
+      + inv H. apply inj_pair2 in H3. subst.
+        eapply (fsim_match_final_states PROPS); eauto.
+      + inv H. apply inj_pair2 in H3. subst.
+        edestruct (fsim_match_external PROPS) as (wsA & q2 & Hq2 & Hq & Hse' & Hr); eauto.
+        exists (existT _ n wsA), q2. intuition auto.
+        edestruct Hr as (i' & s2' & Hs2' & Hs'); eauto.
+      + inv H0. apply inj_pair2 in H3. subst.
+        edestruct (fsim_simulation PROPS) as (idx' & s2' & Hs2' & Hs'); eauto.
+        exists (existT _ n idx'), s2'; intuition eauto.
+    - auto using Lexicographic_Product.wf_lexprod, lt_wf, fsim_order_wf.
+  Qed.
+End CC_STAR_FSIM.
+
+Lemma cc_star_fsim {liA liB ccA ccB} (L: semantics liA liB):
+  forward_simulation ccA ccB L L ->
+  forward_simulation (ccA ^ {*}) (ccB^ {*}) L L.
 Proof.
-  intros HL. split; [destruct HL; auto | ].
-  intros [n ws]. edestruct @cc_star_pow_fsim as [_ ?]; eauto.
-  intros. eapply H; eauto.
+  intros HL. apply cc_pow_fsim_intro in HL as [FS]. constructor.
+  apply cc_star_fsim_components; auto.
 Qed.
 
 (** * Invariants *)
