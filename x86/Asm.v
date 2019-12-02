@@ -1191,19 +1191,20 @@ Inductive final_state: state -> reply li_asm -> Prop :=
   | final_state_intro rs m:
       final_state (State rs m false) (rs, m).
 
-Definition semantics (p: program): open_sem li_asm li_asm :=
+Definition semantics (p: program): semantics li_asm li_asm :=
   {|
-    valid_query se q :=
-      Genv.is_internal (Genv.globalenv se p) (entry q);
-    activate se q :=
+    skel := erase_program p;
+    activate se :=
       let ge := Genv.globalenv se p in
-      Semantics li_asm (step (Mem.nextblock (snd q)))
-        (initial_state ge q)
-        (at_external ge)
-        (after_external (Mem.nextblock (snd q)))
-        final_state ge;
-    skel :=
-      erase_program p;
+      {|
+        Smallstep.step ge '(nb, s) t '(nb', s') := step nb ge s t s' /\ nb' = nb;
+        Smallstep.valid_query q := Genv.is_internal ge (entry q);
+        Smallstep.initial_state q '(nb, s) := initial_state ge q s /\ nb = Mem.nextblock (snd q);
+        Smallstep.at_external '(nb, s) q := at_external ge s q;
+        Smallstep.after_external '(nb, s) r '(nb', s') := after_external nb s r s' /\ nb' = nb;
+        Smallstep.final_state '(nb, s) := final_state s;
+        Smallstep.globalenv := ge;
+      |}
   |}.
 
 (** Determinacy of the [Asm] semantics. *)
@@ -1230,7 +1231,7 @@ Proof.
   intros. eapply C; eauto.
 Qed.
 
-Lemma semantics_determinate: forall p, open_determinate (semantics p).
+Lemma semantics_determinate: forall p, determinate (semantics p).
 Proof.
 Ltac Equalities :=
   match goal with
@@ -1240,6 +1241,7 @@ Ltac Equalities :=
   end.
   intros; constructor; simpl; intros.
 - (* determ *)
+  destruct s as [nb s], s1 as [nb1 s1], s2 as [nb2 s2], H, H0. subst.
   inv H; inv H0; Equalities.
 + split. constructor. auto.
 + discriminate.
@@ -1251,27 +1253,35 @@ Ltac Equalities :=
   exploit external_call_determ. eexact H4. eexact H9. intros [A B].
   split. auto. intros. destruct B; auto. subst. auto.
 - (* trace length *)
-  red; intros; inv H; simpl.
+  red; cbn. intros [nb s] t [nb' s'] [H Hnb]. inv H; simpl.
   omega.
   eapply external_call_trace_length; eauto.
   eapply external_call_trace_length; eauto.
 - (* initial states *)
+  destruct s1 as [nb1 s1], s2 as [nb2 s2], H, H0; subst.
   inv H; inv H0. reflexivity.
 - (* external no step *)
-  inv H. red; intros; red; intros. inv H.
+  destruct s as [nb s].
+  inv H. red; intros; red; intros.
+  destruct s' as [nb' s'], H as [H Hnb]. inv H.
   + rewrite H3 in H0. cbn in H0. destruct Ptrofs.eq_dec; congruence.
   + rewrite H3 in H0. cbn in H0. destruct Ptrofs.eq_dec; congruence.
   + rewrite H3 in H0. cbn in H0. destruct Ptrofs.eq_dec; try congruence.
     assert (ef = EF_external id sg) by congruence; subst. contradiction.
 - (* at_external determ *)
+  destruct s as [nb s].
   inv H; inv H0; auto.
 - (* after_external determ *)
+  destruct s as [nb s], s1 as [nb1 s1], s2 as [nb2 s2], H, H0. subst.
   inv H; inv H0; auto.
 - (* final no step *)
-  inv H. red; intros; red; intros. inv H.
+  destruct s as [nb s].
+  inv H. red; intros; red; intros. destruct s', H. inv H.
 - (* at_external no step *)
+  destruct s as [nb s].
   inv H; inv H0.
 - (* final states *)
+  destruct s as [nb s].
   inv H; inv H0. congruence.
 Qed.
 

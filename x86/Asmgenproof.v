@@ -1011,30 +1011,33 @@ Proof.
   - destruct w; cbn in *. auto.
 Qed.
 
-Theorem transf_program_fsim w q1 q2:
-  cc_asmgen_mq w q1 q2 ->
-  forward_simulation cc_asmgen se se (cc_asmgen_mr w)
-    (Mach.semantics return_address_offset prog se q1)
-    (Asm.semantics tprog se q2).
-Proof.
-  intros Hq.
-  assert (Hnb: Mem.nextblock (snd q2) = ag_nb w). { inv Hq. cbn. eauto using agree_sp. }
-  eapply forward_simulation_star with (measure := measure); intros.
-  - eapply transf_initial_states; eauto.
-  - eapply transf_final_states; eauto.
-  - cbn. rewrite Hnb. eapply transf_external_states; eauto.
-  - cbn. rewrite Hnb. eapply step_simulation; eauto.
-Qed.
-
 End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  open_fsim cc_asmgen cc_asmgen (Mach.semantics return_address_offset prog) (Asm.semantics tprog).
+  forward_simulation cc_asmgen cc_asmgen (Mach.semantics return_address_offset prog) (Asm.semantics tprog).
 Proof.
-  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
-  intros w se _ q1 q2 Hse Hskel [ ] Hq.
-  split. { cbn in *. destruct Hq. eapply (Genv.is_internal_transf_partial_id MATCH); eauto.
-           intros. destruct f; monadInv H3; auto. }
-  eapply transf_program_fsim; eauto.
+  fsim eapply forward_simulation_star with
+      (match_states := fun s1 '(nb, s2) => match_states prog se1 w s1 s2 /\ nb = ag_nb w)
+      (measure := measure); cbn in *; destruct Hse; intros.
+  - destruct H. eapply (Genv.is_internal_transf_partial_id MATCH); eauto.
+    intros [|] ? Hf; monadInv Hf; auto.
+  - edestruct transf_initial_states as (s2 & Hs2 & Hs); eauto.
+    exists (Mem.nextblock (snd q2), s2). intuition auto.
+    inv H. cbn. eauto using agree_sp.
+  - destruct s2 as [nb s2], H as [H Hnb]; subst.
+    eapply transf_final_states; eauto.
+  - destruct s2 as [nb s2], H as [H Hnb]; subst.
+    edestruct transf_external_states as (wA & q2 & Hq2 & Hq & Hse & Hr); eauto.
+    exists wA, q2. intuition auto.
+    edestruct Hr as (s2' & Hs2' & Hs'); eauto.
+    eexists (_, s2'); eauto.
+  - destruct s2 as [nb s2], H0 as [H0 Hnb]; subst.
+    edestruct step_simulation as [(s2' & Hs2' & Hs') | ?]; intuition eauto 10.
+    left. eexists (_, _). intuition eauto.
+    revert Hs2'. generalize (ag_nb w), (Genv.globalenv se1 tprog); clear; intros.
+    pattern s2, t, s2'. revert s2 t s2' Hs2'. apply plus_ind2; intros.
+    * apply plus_one. auto.
+    * eapply plus_trans; eauto.
+      apply plus_one. auto.
 Qed.
