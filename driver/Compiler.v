@@ -440,9 +440,9 @@ Proof.
 Qed.
 
 Lemma compose_injection_pass sem bsem tsem:
-  open_fsim cc_injp cc_inj sem bsem ->
-  open_fsim (cc_dom @ cc_backend) cc_backend bsem tsem ->
-  open_fsim (cc_dom @ cc_backend) cc_backend sem tsem.
+  forward_simulation cc_injp cc_inj sem bsem ->
+  forward_simulation (cc_dom @ cc_backend) cc_backend bsem tsem ->
+  forward_simulation (cc_dom @ cc_backend) cc_backend sem tsem.
 Proof.
   intros.
   assert (IB: ccref cc_backend (cc_inj @ cc_backend)).
@@ -460,13 +460,13 @@ Proof.
   eapply open_fsim_ccref.
   - rewrite <- ID. rewrite cc_compose_assoc. reflexivity.
   - rewrite IB. reflexivity.
-  - eapply compose_open_fsim; eauto.
+  - eapply compose_forward_simulations; eauto.
 Qed.
 
 Lemma compose_extension_pass sem bsem tsem:
-  open_fsim cc_ext cc_ext sem bsem ->
-  open_fsim (cc_dom @ cc_backend) cc_backend bsem tsem ->
-  open_fsim (cc_dom @ cc_backend) cc_backend sem tsem.
+  forward_simulation cc_ext cc_ext sem bsem ->
+  forward_simulation (cc_dom @ cc_backend) cc_backend bsem tsem ->
+  forward_simulation (cc_dom @ cc_backend) cc_backend sem tsem.
 Proof.
   intros.
   assert (IB: ccref cc_backend (cc_ext @ cc_backend)).
@@ -484,30 +484,30 @@ Proof.
   eapply open_fsim_ccref.
   - rewrite <- ID. rewrite cc_compose_assoc. reflexivity.
   - rewrite IB. reflexivity.
-  - eapply compose_open_fsim; eauto.
+  - eapply compose_forward_simulations; eauto.
 Qed.
 
 Lemma compose_identity_pass {liA1 liA2 liB1 liB2} ccA ccB sem bsem tsem:
-  open_fsim 1 1 sem bsem ->
-  open_fsim ccA ccB bsem tsem ->
-  @open_fsim liA1 liA2 ccA liB1 liB2 ccB sem tsem.
+  forward_simulation 1 1 sem bsem ->
+  forward_simulation ccA ccB bsem tsem ->
+  @forward_simulation liA1 liA2 ccA liB1 liB2 ccB sem tsem.
 Proof.
   intros.
-  eapply open_fsim_ccref; [ .. | eapply compose_open_fsim; eauto].
+  eapply open_fsim_ccref; [ .. | eapply compose_forward_simulations; eauto].
   - apply cc_compose_id_left.
   - apply cc_compose_id_left.
 Qed.
 
 Lemma compose_optional_pass {A liA1 liA2 liB1 liB2 ccA ccB ccA' ccB'}:
   (forall sem bsem tsem,
-      open_fsim ccA ccB sem bsem ->
-      open_fsim ccA' ccB' bsem tsem ->
-      @open_fsim liA1 liA2 ccA' liB1 liB2 ccB' sem tsem) ->
+      forward_simulation ccA ccB sem bsem ->
+      forward_simulation ccA' ccB' bsem tsem ->
+      @forward_simulation liA1 liA2 ccA' liB1 liB2 ccB' sem tsem) ->
   forall sem flag transf prog tprog tsem,
     @match_if A flag transf prog tprog ->
-    (forall p tp, transf p tp -> open_fsim ccA ccB (sem p) (sem tp)) ->
-    open_fsim ccA' ccB' (sem tprog) tsem ->
-    open_fsim ccA' ccB' (sem prog) tsem.
+    (forall p tp, transf p tp -> forward_simulation ccA ccB (sem p) (sem tp)) ->
+    forward_simulation ccA' ccB' (sem tprog) tsem ->
+    forward_simulation ccA' ccB' (sem prog) tsem.
 Proof.
   intros. unfold match_if in *.
   destruct (flag tt); subst; eauto.
@@ -521,12 +521,12 @@ Definition cc_compcert : callconv li_c Asm.li_asm :=
   cc_dom @ cc_backend.
 
 Lemma compose_clight_properties prog tsem:
-  open_fsim (cc_dom @ cc_backend) cc_backend (Clight.semantics1 prog) tsem ->
-  open_fsim cc_compcert cc_compcert (Clight.semantics1 prog) tsem.
+  forward_simulation (cc_dom @ cc_backend) cc_backend (Clight.semantics1 prog) tsem ->
+  forward_simulation cc_compcert cc_compcert (Clight.semantics1 prog) tsem.
 Proof.
   intros H. unfold cc_compcert.
   rewrite <- cc_dom_idemp at 1. rewrite cc_compose_assoc.
-  eapply compose_open_fsim; eauto.
+  eapply compose_forward_simulations; eauto.
   eapply cc_star_fsim.
   eapply cc_join_fsim.
   - rewrite <- cc_join_ub_l. rewrite <- cc_c_injp at 1. rewrite <- cc_c_injp.
@@ -540,8 +540,8 @@ Qed.
 Theorem clight_semantic_preservation:
   forall p tp,
   match_prog p tp ->
-  open_fsim cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp)
-  /\ open_bsim cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
+  forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp)
+  /\ backward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
 Ltac DestructM :=
@@ -551,7 +551,7 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: open_fsim cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p13)).
+  assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p13)).
   {
   eapply compose_clight_properties.
   (*
@@ -590,13 +590,13 @@ Ltac DestructM :=
   (* To introduce the injection in the backend convention we use
     the parametricity of RTL. *)
   unfold cc_dom, cc_backend. rewrite <- cc_id_star, cc_compose_id_left.
-  eapply compose_open_fsim.
+  eapply compose_forward_simulations.
     rewrite <- cc_c_inj at 1. rewrite <- cc_c_inj.
     eapply RTLrel.semantics_rel.
 
-  eapply compose_open_fsim.
+  eapply compose_forward_simulations.
     eapply Allocproof.transf_program_correct; eassumption.
-  eapply compose_open_fsim.
+  eapply compose_forward_simulations.
     eapply Tunnelingproof.transf_program_correct; eassumption.
   eapply compose_identity_pass.
     eapply Linearizeproof.transf_program_correct; eassumption.
@@ -604,14 +604,14 @@ Ltac DestructM :=
     eapply CleanupLabelsproof.transf_program_correct; eassumption.
   eapply compose_optional_pass. eapply compose_identity_pass. eassumption.
     exact Debugvarproof.transf_program_correct.
-  eapply compose_open_fsim.
+  eapply compose_forward_simulations.
     eapply Stackingproof.transf_program_correct with (rao := Asmgenproof0.return_address_offset).
-    eassumption.
     exact Asmgenproof.return_address_exists.
+    eassumption.
   eapply Asmgenproof.transf_program_correct; eassumption.
   }
   split. auto.
-  apply forward_to_backward_open_sim. auto.
+  apply forward_to_backward_simulation. auto.
   apply Clight.semantics_receptive.
   apply Asm.semantics_determinate.
 Qed.
@@ -648,7 +648,7 @@ Qed.
 Theorem transf_c_program_correct:
   forall p tp,
   transf_clight_program p = OK tp ->
-  open_bsim cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
+  backward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
 Proof.
   intros. apply clight_semantic_preservation. apply transf_clight_program_match; auto.
 Qed.
@@ -671,7 +671,7 @@ Theorem separate_transf_c_program_correct:
   link_list c_units = Some c_program ->
   exists asm_program,
       link_list asm_units = Some asm_program
-   /\ open_bsim cc_compcert cc_compcert (Clight.semantics1 c_program) (Asm.semantics asm_program).
+   /\ backward_simulation cc_compcert cc_compcert (Clight.semantics1 c_program) (Asm.semantics asm_program).
 Proof.
   intros.
   assert (nlist_forall2 match_prog c_units asm_units).
