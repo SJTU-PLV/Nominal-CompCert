@@ -681,3 +681,32 @@ Proof.
   destruct H2 as (asm_program & P & Q).
   exists asm_program; split; auto. apply clight_semantic_preservation; auto.
 Qed.
+
+(** An example of how the correctness theorem, horizontal composition,
+  and assembly linking proofs can be used together. *)
+
+Require Import SmallstepLinking.
+Require Import AsmLinking.
+
+Lemma compose_transf_c_program_correct:
+  forall p1 p2 spec tp1 tp2 tp,
+    compose (Clight.semantics1 p1) (Clight.semantics1 p2) = Some spec ->
+    transf_clight_program p1 = OK tp1 ->
+    transf_clight_program p2 = OK tp2 ->
+    link tp1 tp2 = Some tp ->
+    forward_simulation cc_compcert cc_compcert spec (Asm.semantics tp).
+Proof.
+  intros.
+  rewrite <- (cc_compose_id_right cc_compcert) at 1.
+  rewrite <- (cc_compose_id_right cc_compcert) at 2.
+  eapply compose_forward_simulations.
+  2: { unfold compose in H.
+       destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel; try discriminate.
+       cbn in *. inv H.
+       eapply AsmLinking.foo; eauto. }
+  eapply compose_simulation; eauto.
+  eapply clight_semantic_preservation; eauto using transf_clight_program_match.
+  eapply clight_semantic_preservation; eauto using transf_clight_program_match.
+  unfold compose. cbn.
+  admit. (* minor: need commutation property between [link] and [erase_program] *)
+Admitted.
