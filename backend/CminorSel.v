@@ -479,7 +479,7 @@ Inductive final_state: state -> c_reply -> Prop :=
        (cr r m).
 
 Definition semantics (p: program) :=
-  OpenSem' step initial_state at_external after_external final_state p.
+  Semantics step initial_state at_external after_external final_state p.
 
 Hint Constructors eval_expr eval_exprlist eval_condexpr: evalexpr.
 

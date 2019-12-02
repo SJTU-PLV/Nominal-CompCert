@@ -2527,14 +2527,13 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  open_fsim cc_alloc cc_alloc (RTL.semantics prog) (LTL.semantics tprog).
+  forward_simulation cc_alloc cc_alloc (RTL.semantics prog) (LTL.semantics tprog).
 Proof.
-  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
-  intros [sg rs] se _ q1 q2 _ _ [ ] Hq.
-  split. { destruct Hq. eapply (Genv.is_internal_transf_partial_id MATCH).
-           intros. destruct f; monadInv H2; auto. }
-  set (ms := fun s s' => wt_state prog se s /\ match_states prog tprog se sg rs s s').
-  eapply forward_simulation_plus with (match_states := ms); cbn in *.
+  set (ms := fun se '(sg, rs) s s' => wt_state prog se s /\ match_states prog tprog se sg rs s s').
+  fsim eapply forward_simulation_plus with (match_states := ms se1 w);
+    cbn in *; subst; destruct w as [sg rs].
+- intros q1 q2 Hq. destruct Hq. eapply (Genv.is_internal_transf_partial_id MATCH).
+  intros [|] ? Hf; monadInv Hf; auto.
 - intros. exploit initial_states_simulation; eauto. intros [st2 [A B]].
   exists st2; split; auto. split; auto.
   eapply wt_initial_state; eauto. eapply wt_prog; eauto.

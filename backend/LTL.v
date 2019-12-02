@@ -320,7 +320,7 @@ Inductive final_state: state -> locset_reply -> Prop :=
         (lr rs m).
 
 Definition semantics (p: program) :=
-  OpenSem' step initial_state at_external after_external final_state p.
+  Semantics step initial_state at_external after_external final_state p.
 
 (** * Operations over LTL *)
 

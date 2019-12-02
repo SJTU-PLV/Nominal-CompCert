@@ -495,7 +495,7 @@ Inductive final_state: state -> mach_reply -> Prop :=
       final_state (Returnstate (Stackbase sp ra :: s) rs m) (mr rs m).
 
 Definition semantics (rao: function -> code -> ptrofs -> Prop) (p: program) :=
-  OpenSem' (step rao) initial_state at_external after_external final_state p.
+  Semantics (step rao) initial_state at_external after_external final_state p.
 
 (** * Calling convention *)
 

@@ -2162,11 +2162,10 @@ Opaque PTree.set.
 Qed.
 
 Lemma transl_initial_states:
-  forall q1 q2, cc_inj_query w q1 q2 ->
-  forall S, Csharpminor.initial_state ge q1 S ->
+  forall q1 q2 S, cc_inj_query w q1 q2 -> Csharpminor.initial_state ge q1 S ->
   exists R, Cminor.initial_state tge q2 R /\ match_states S R.
 Proof.
-  intros _ _ [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm] S HS. inv HS.
+  intros _ _ S [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm] HS. inv HS.
   exploit functions_translated; eauto. destruct GE; auto. intros [tf [FIND TR]].
   setoid_rewrite <- (sig_preserved _ _ TR). monadInv TR. cbn.
   econstructor; split.
@@ -2218,13 +2217,11 @@ End TRANSLATION.
 
 Theorem transl_program_correct prog tprog:
   match_prog prog tprog ->
-  open_fsim cc_injp cc_inj (Csharpminor.semantics prog) (Cminor.semantics tprog).
+  forward_simulation cc_injp cc_inj (Csharpminor.semantics prog) (Cminor.semantics tprog).
 Proof.
-  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
-  intros w se1 se2 q1 q2 Hse1 SKEL Hse Hq.
-  split. { destruct Hq, Hse. eapply Genv.is_internal_transf_partial; eauto.
-           intros. destruct f0; monadInv H6; cbn; auto. }
-  eapply forward_simulation_star; eauto.
+  fsim eapply forward_simulation_star.
+  { intros _ _ [ ]. destruct Hse. eapply Genv.is_internal_transf_partial; eauto.
+    intros [|] ? Hf; monadInv Hf; cbn; auto. }
   apply transl_initial_states; eauto.
   apply transl_final_states; eauto.
   apply transl_external_states; eauto.

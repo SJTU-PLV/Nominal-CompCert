@@ -534,13 +534,10 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  open_fsim cc_id cc_id (semantics prog) (semantics tprog).
+  forward_simulation cc_id cc_id (semantics prog) (semantics tprog).
 Proof.
-  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
-  intros [ ] se _ q _ _ _ [ ] [ ].
-  split. { eapply Genv.is_internal_transf_partial_id; eauto.
-           intros. destruct f; monadInv H; auto. }
-  eapply forward_simulation_plus; simpl.
+  fsim eapply forward_simulation_plus; cbn in *; intros; subst.
+  - eapply (Genv.is_internal_transf_partial_id MATCH). intros [|] ? Hf; monadInv Hf; auto.
   - eauto using transf_initial_states.
   - eauto using transf_final_states.
   - intros. edestruct transf_external; eauto. exists tt, q1. intuition subst; eauto.

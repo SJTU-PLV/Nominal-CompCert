@@ -2204,11 +2204,10 @@ Proof.
 Qed.
 
 Lemma initial_states_simulation:
-  forall q1 q2, cc_inj_query w q1 q2 ->
-  forall S, initial_state ge q1 S ->
+  forall q1 q2 S, cc_inj_query w q1 q2 -> initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states S R.
 Proof.
-  intros _ _ [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hnb1 Hnb2 Hvf1].
+  intros _ _ ? [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hnb1 Hnb2 Hvf1].
   intros. inv H.
   exploit functions_translated; eauto using cc_inj_match_stbls, mit_incr_refl.
   intros [tf [A B]].
@@ -2266,14 +2265,12 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  open_fsim cc_injp cc_inj (semantics1 prog) (semantics2 tprog).
+  forward_simulation cc_injp cc_inj (semantics1 prog) (semantics2 tprog).
 Proof.
-  intros MATCH. split; [apply proj1, match_program_skel in MATCH; auto | ].
-  intros w se1 se2 q1 q2 Hse1 SKEL Hse Hq.
-  split. { destruct Hq, MATCH. eapply (Genv.is_internal_match H5); eauto.
-           eauto using cc_inj_match_stbls, mit_incr_refl.
-           intros. destruct f; monadInv H7; cbn; auto. }
-  eapply forward_simulation_plus.
+  fsim eapply forward_simulation_plus.
+  { intros. destruct Hse, H. cbn in *.
+    eapply (Genv.is_internal_match (proj1 MATCH)); eauto 1.
+    intros _ [|] [|] Hf; monadInv Hf; auto. }
   apply initial_states_simulation; eauto.
   apply final_states_simulation; eauto.
   apply external_states_simulation; eauto.

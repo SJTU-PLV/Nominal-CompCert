@@ -2418,42 +2418,30 @@ Proof.
 - auto.
 Qed.
 
-Theorem transf_program_fsim q1 q2:
-  cc_stacking_st w se tse ->
-  cc_stacking_mq w q1 q2 ->
-  forward_simulation cc_stacking se tse (cc_stacking_mr w)
-    (Linear.semantics prog se q1)
-    (Mach.semantics return_address_offset tprog tse q2).
-Proof.
-  intros Hse Hq.
-  set (ms := fun s s' => wt_state prog se s /\ match_states s s').
-  eapply forward_simulation_plus with (match_states := ms).
-- intros. exploit transf_initial_states; eauto. intros [st2 [A B]].
-  exists st2; split; auto. split; auto.
-  eapply wt_initial_state; eauto. exact wt_prog.
-- intros. destruct H. eapply transf_final_states; eauto.
-- intros. destruct H. edestruct transf_external_states as (wx & qx2 & ? & ? & ? & ?); eauto.
-  exists wx, qx2. intuition auto. edestruct H5 as (st2' & ? & ?); eauto.
-  exists st2'. unfold ms. intuition auto.
-  eapply wt_external_state; eauto.
-- intros. destruct H0.
-  exploit transf_step_correct; eauto. intros [s2' [A B]].
-  exists s2'; split. exact A. split.
-  eapply step_type_preservation; eauto. eexact wt_prog.
-  auto.
-Qed.
-
 End PRESERVATION.
 
 Theorem transf_program_correct rao prog tprog:
-  match_prog prog tprog ->
   (forall f sg ros c, is_tail (Mcall sg ros :: c) (fn_code f) ->
    exists ofs, rao f c ofs) ->
-  open_fsim cc_stacking cc_stacking (Linear.semantics prog) (Mach.semantics rao tprog).
+  match_prog prog tprog ->
+  forward_simulation cc_stacking cc_stacking (Linear.semantics prog) (Mach.semantics rao tprog).
 Proof.
-  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
-  intros w se1 se2 q1 q2 Hse1 Hsk Hse Hq.
-  split. { destruct Hq. inv Hse. eapply (Genv.is_internal_transf_partial MATCH); eauto.
-           intros fd tfd Hfd. destruct fd; monadInv Hfd; auto. }
-  eapply transf_program_fsim; eauto.
+  intros Hrao.
+  set (ms se1 se2 w := fun s s' => wt_state prog se1 s /\ match_states rao prog tprog w se1 se2 s s').
+  fsim eapply forward_simulation_plus with (match_states := ms se1 se2 w).
+  - intros q1 q2 Hq. destruct Hq. inv Hse.
+    eapply (Genv.is_internal_transf_partial MATCH); eauto 1.
+    intros [|] ? Hfd; monadInv Hfd; auto.
+  - intros. exploit transf_initial_states; eauto. intros [st2 [A B]].
+    exists st2; split; auto. split; eauto.
+    eapply wt_initial_state; eauto using wt_prog.
+  - intros. destruct H. eapply transf_final_states; eauto.
+  - intros. destruct H. edestruct transf_external_states as (wx & qx2 & ? & ? & ? & ?); eauto.
+    exists wx, qx2. intuition auto. edestruct H5 as (st2' & ? & ?); eauto.
+    exists st2'. unfold ms. intuition auto.
+    eapply wt_external_state; eauto.
+  - intros. destruct H0. cbn in H.
+    exploit transf_step_correct; eauto. intros [s2' [A B]].
+    exists s2'; split. exact A. split; auto.
+    eapply step_type_preservation; eauto using wt_prog.
 Qed.

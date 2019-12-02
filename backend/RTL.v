@@ -346,12 +346,12 @@ Inductive final_state: state -> c_reply -> Prop :=
 (** The small-step semantics for a program. *)
 
 Definition semantics (p: program) :=
-  OpenSem' step initial_state at_external after_external final_state p.
+  Semantics step initial_state at_external after_external final_state p.
 
 (** This semantics is receptive to changes in events. *)
 
 Lemma semantics_receptive:
-  forall (p: program), open_receptive (semantics p).
+  forall (p: program), receptive (semantics p).
 Proof.
   intros. constructor; simpl; intros.
 (* receptiveness *)

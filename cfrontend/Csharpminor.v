@@ -506,4 +506,4 @@ Inductive final_state: state -> c_reply -> Prop :=
 (** Wrapping up these definitions in a small-step semantics. *)
 
 Definition semantics (p: program) :=
-  OpenSem' step initial_state at_external after_external final_state p.
+  Semantics step initial_state at_external after_external final_state p.

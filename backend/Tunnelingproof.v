@@ -561,14 +561,12 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  open_fsim cc_locset_ext cc_locset_ext (LTL.semantics prog) (LTL.semantics tprog).
+  forward_simulation cc_locset_ext cc_locset_ext (LTL.semantics prog) (LTL.semantics tprog).
 Proof.
-  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
-  intros [ ] se _ q1 q2 _ _ [ ] Hq.
-  split. { destruct Hq. eapply (Genv.is_internal_transf_id MATCH). destruct fd; auto. }
-  eapply forward_simulation_opt; cbn; intros.
-  eapply transf_initial_states; eauto.
-  eapply transf_final_states; eauto.
-  exists tt. eapply transf_external_states; eauto.
-  eapply tunnel_step_correct; eauto.
+  fsim eapply forward_simulation_opt; destruct Hse.
+  - intros q _ []. eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
+  - eapply transf_initial_states; eauto.
+  - eapply transf_final_states; eauto.
+  - exists tt. eapply transf_external_states; eauto.
+  - eapply tunnel_step_correct; eauto.
 Qed.

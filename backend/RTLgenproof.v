@@ -1581,16 +1581,15 @@ End CORRECTNESS.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  open_fsim cc_ext cc_ext (CminorSel.semantics prog) (RTL.semantics tprog).
+  forward_simulation cc_ext cc_ext (CminorSel.semantics prog) (RTL.semantics tprog).
 Proof.
-  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
-  intros [ ] se _ q1 q2 _ _ [ ] Hq.
-  split. { destruct Hq. eapply (Genv.is_internal_transf_partial_id MATCH).
-           intros. destruct f; monadInv H2; auto. }
-  eapply forward_simulation_star_wf with (order := lt_state); intros.
+  fsim eapply forward_simulation_star_wf with (order := lt_state);
+  intros; destruct Hse.
+  { destruct H. eapply (Genv.is_internal_transf_partial_id MATCH).
+    intros [|] ? Hf; monadInv Hf; auto. }
   eapply transl_initial_states; eauto.
   eapply transl_final_states; eauto.
   exists tt. eapply transl_external_states; eauto.
-  apply lt_state_wf.
   eapply transl_step_correct; eauto.
+  apply lt_state_wf.
 Qed.

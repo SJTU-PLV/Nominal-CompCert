@@ -733,17 +733,17 @@ Definition step2 (ge: genv) := step ge (function_entry2 ge).
 (** Wrapping up these definitions in two small-step semantics. *)
 
 Definition semantics1 (p: program) :=
-  OpenSem step1 initial_state at_external after_external final_state globalenv p.
+  Semantics_gen step1 initial_state at_external after_external final_state globalenv p.
 
 Definition semantics2 (p: program) :=
-  OpenSem step2 initial_state at_external after_external final_state globalenv p.
+  Semantics_gen step2 initial_state at_external after_external final_state globalenv p.
 
 (** This semantics is receptive to changes in events. *)
 
 Lemma semantics_receptive:
-  forall (p: program), open_receptive (semantics1 p).
+  forall (p: program), receptive (semantics1 p).
 Proof.
-  intros p se q. unfold semantics1. simpl.
+  intros p se. unfold semantics1. simpl.
   set (ge := globalenv se p). constructor; simpl; intros.
 (* receptiveness *)
   assert (t1 = E0 -> exists s2, step1 ge s t2 s2).

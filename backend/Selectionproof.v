@@ -1110,21 +1110,17 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  open_fsim cc_ext cc_ext (Cminor.semantics prog) (CminorSel.semantics tprog).
+  forward_simulation cc_ext cc_ext (Cminor.semantics prog) (CminorSel.semantics tprog).
 Proof.
-  intros MATCH.
-  assert (SKEL: erase_program prog = erase_program tprog).
-  { apply match_program_skel in MATCH. auto. }
-  split; auto.
-  intros [ ] se _ q1 q2 Hse _  [ ] Hq.
-  split. { destruct Hq. eapply (Genv.is_internal_match_id MATCH); eauto.
-           destruct 1 as (hf & ? & ?). destruct f; monadInv H3; auto. }
-  apply forward_simulation_opt with (match_states := match_states prog tprog se) (measure := measure); intros.
+  fsim apply forward_simulation_opt with (match_states := match_states prog tprog se1) (measure := measure);
+  destruct Hse.
+  { intros _ _ [ ]. eapply (Genv.is_internal_match_id MATCH); eauto.
+    destruct 1 as (hf & ? & ?). destruct f; monadInv H3; auto. }
   eapply sel_initial_states; eauto.
   eapply sel_final_states; eauto.
   exists tt. cbn. eapply sel_external_states; eauto.
   apply sel_step_correct; eauto.
-  rewrite <- SKEL. auto.
+  replace (erase_program tprog) with (erase_program prog) by fsim_skel MATCH. auto.
 Qed.
 
 (** ** Commutation with linking *)

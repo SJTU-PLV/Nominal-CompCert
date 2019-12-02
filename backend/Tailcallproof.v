@@ -591,15 +591,13 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  open_fsim cc_ext cc_ext (RTL.semantics prog) (RTL.semantics tprog).
+  forward_simulation cc_ext cc_ext (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
-  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
-  intros [ ] se _ q1 q2 Hse _  [ ] Hq.
-  split. { destruct Hq. eapply Genv.is_internal_transf_id; eauto. destruct fd; auto. }
-  eapply forward_simulation_opt with (measure := measure); eauto; intros.
-  eapply transf_initial_states; eauto.
-  eapply transf_final_states; eauto.
-  exists tt. eapply transf_external_states; eauto.
-  eapply transf_step_correct; eauto.
+  fsim eapply forward_simulation_opt with (measure := measure); destruct Hse.
+  - destruct 1. cbn. eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
+  - eapply transf_initial_states; eauto.
+  - eapply transf_final_states; eauto.
+  - exists tt. eapply transf_external_states; eauto.
+  - eapply transf_step_correct; eauto.
 Qed.
 

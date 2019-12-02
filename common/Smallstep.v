@@ -496,12 +496,12 @@ Record semantics liA liB := {
 Notation Semantics_gen step initial_state at_ext after_ext final_state globalenv p :=
   {|
     skel := AST.erase_program p;
-    activate se q :=
+    activate se :=
       let ge := globalenv se p in
       {|
         step := step;
-        valid_query := Genv.is_internal (globalenv se p) (entry q);
-        initial_state := initial_state ge q;
+        valid_query q := Genv.is_internal ge (entry q);
+        initial_state := initial_state ge;
         at_external := at_ext ge;
         after_external := after_ext;
         final_state := final_state;
@@ -537,7 +537,7 @@ Record fsim_properties (L1: lts liA1 liB1 state1) (L2: lts liA2 liB2 state2) (in
                        (match_states: index -> state1 -> state2 -> Prop) : Prop := {
     fsim_match_valid_query:
       forall q1 q2, match_query ccB wB q1 q2 ->
-      valid_query L1 q1 = valid_query L2 q2;
+      valid_query L2 q2 = valid_query L1 q1;
     fsim_match_initial_states:
       forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
       exists i, exists s2, initial_state L2 q2 s2 /\ match_states i s1 s2;
@@ -589,7 +589,7 @@ Variable match_states: state1 -> state2 -> Prop.
 
 Hypothesis match_valid_query:
   forall q1 q2, match_query ccB wB q1 q2 ->
-  valid_query L1 q1 = valid_query L2 q2.
+  valid_query L2 q2 = valid_query L1 q1.
 
 Hypothesis match_initial_states:
   forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
@@ -813,7 +813,7 @@ End FSIM.
 
 Arguments fsim_properties {_ _} _ {_ _} _ _ _ _ {_ _} L1 L2 index order match_states.
 
-Record forward_simulation {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
+Record fsim_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
   Forward_simulation {
     fsim_index: Type;
     fsim_order: fsim_index -> fsim_index -> Prop;
@@ -832,6 +832,39 @@ Record forward_simulation {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB 
 
 Arguments Forward_simulation {_ _ ccA _ _ ccB L1 L2 fsim_index}.
 
+Definition forward_simulation {liA1 liA2} ccA {liB1 liB2} ccB L1 L2 :=
+  inhabited (@fsim_components liA1 liA2 ccA liB1 liB2 ccB L1 L2).
+
+(** ** Tactics for forward simulation proofs *)
+
+(** The forward simulation proofs for each compiler pass have the same
+  top-level structure, so we use the following tactics to capture the
+  patterns, and have a central place to update things when we tweak
+  our model. The idea is to use the tactic [fsim tac] on a goal of the
+  form [match_prog p tp -> forward_simulation ccA ccB L1 L2], where
+  [tac] constructs the [fsim_components] object and is expected to be
+  something like [eapply forward_simulation_plus]. *)
+
+Ltac fsim_match_prog_reduce H :=
+  lazymatch type of H with
+    | Linking.match_program_gen _ _ _ _ _ => idtac
+    | _ /\ _ => destruct H as [H _]; fsim_match_prog_reduce H
+    | _ => red in H; fsim_match_prog_reduce H
+  end.
+
+Ltac fsim_skel MATCH :=
+  fsim_match_prog_reduce MATCH;
+  apply Linking.match_program_skel in MATCH; auto; fail.
+
+Ltac fsim_tac tac :=
+  intros MATCH; constructor;
+  eapply Forward_simulation with (fsim_match_states := fun _ _ _ => _);
+  [ try fsim_skel MATCH
+  | intros se1 se2 w Hse Hse1; tac
+  | try solve [auto using well_founded_ltof]].
+
+Tactic Notation "fsim" tactic(tac) := fsim_tac tac.
+
 (** ** Composing two forward simulations *)
 
 Section COMPOSE_FORWARD_SIMULATIONS.
@@ -840,10 +873,10 @@ Context {liA1 liA2 liA3} {ccA12: callconv liA1 liA2} {ccA23: callconv liA2 liA3}
 Context {liB1 liB2 liB3} {ccB12: callconv liB1 liB2} {ccB23: callconv liB2 liB3}.
 Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2) (L3: semantics liA3 liB3).
 
-Lemma compose_forward_simulations:
-  forward_simulation ccA12 ccB12 L1 L2 ->
-  forward_simulation ccA23 ccB23 L2 L3 ->
-  forward_simulation (ccA12 @ ccA23) (ccB12 @ ccB23) L1 L3.
+Lemma compose_fsim_components:
+  fsim_components ccA12 ccB12 L1 L2 ->
+  fsim_components ccA23 ccB23 L2 L3 ->
+  fsim_components (ccA12 @ ccA23) (ccB12 @ ccB23) L1 L3.
 Proof.
   intros [index order match_states Hsk props order_wf].
   intros [index' order' match_states' Hsk' props' order_wf'].
@@ -898,6 +931,15 @@ Proof.
   exists (i2, i1'); exists s2; split.
   right; split. subst t; apply star_refl. red. right. auto.
   exists s3; auto.
+Qed.
+
+Lemma compose_forward_simulations:
+  forward_simulation ccA12 ccB12 L1 L2 ->
+  forward_simulation ccA23 ccB23 L2 L3 ->
+  forward_simulation (ccA12 @ ccA23) (ccB12 @ ccB23) L1 L3.
+Proof.
+  intros [X] [Y]. constructor.
+  apply compose_fsim_components; auto.
 Qed.
 
 End COMPOSE_FORWARD_SIMULATIONS.
@@ -1033,7 +1075,7 @@ Record bsim_properties (L1 L2: lts _ _ _) (index: Type)
                        (match_states: index -> state1 -> state2 -> Prop) : Prop := {
     bsim_match_valid_query:
       forall q1 q2, match_query ccB wB q1 q2 ->
-      valid_query L1 q1 = valid_query L2 q2;
+      valid_query L2 q2 = valid_query L1 q1;
     bsim_match_initial_states:
       forall q1 q2, match_query ccB wB q1 q2 ->
       bsim_match_cont (rex match_states) (initial_state L1 q1) (initial_state L2 q2);
@@ -1093,7 +1135,7 @@ Variable match_states: state1 -> state2 -> Prop.
 
 Hypothesis match_valid_query:
   forall q1 q2, match_query ccB wB q1 q2 ->
-  valid_query L1 q1 = valid_query L2 q2.
+  valid_query L2 q2 = valid_query L1 q1.
 
 Hypothesis match_initial_states:
   forall q1 q2, match_query ccB wB q1 q2 ->
@@ -1225,7 +1267,7 @@ End BSIM.
 
 Arguments bsim_properties {_ _} _ {_ _} _ _ _ _ {_ _} L1 L2 index order match_states.
 
-Record backward_simulation {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
+Record bsim_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
   Backward_simulation {
     bsim_index: Type;
     bsim_order: bsim_index -> bsim_index -> Prop;
@@ -1244,6 +1286,9 @@ Record backward_simulation {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB
     }.
 
 Arguments Backward_simulation {_ _ ccA _ _ ccB L1 L2 bsim_index}.
+
+Definition backward_simulation {liA1 liA2} ccA {liB1 liB2} ccB L1 L2 :=
+  inhabited (@bsim_components liA1 liA2 ccA liB1 liB2 ccB L1 L2).
 
 (** ** Composing two backward simulations *)
 
@@ -1371,10 +1416,11 @@ Lemma compose_backward_simulations:
     (forall se3, single_events (L3 se3)) ->
     backward_simulation (ccA12 @ ccA23) (ccB12 @ ccB23) L1 L3.
 Proof.
-  intros until L3. intros H12 H23 H3.
+  intros until L3. intros [H12] [H23] H3.
   set (ms := fun se1 se3 '(se2, w12, w23) =>
                bb_match_states (L2 se2) (bsim_match_states H12 se1 se2 w12)
                                         (bsim_match_states H23 se2 se3 w23)).
+  constructor.
   apply Backward_simulation with (bb_order (bsim_order H12) (bsim_order H23)) ms.
   - (* skel *)
     etransitivity; eapply bsim_skel; eauto.
@@ -1713,8 +1759,9 @@ Lemma forward_to_backward_simulation:
   backward_simulation ccA ccB L1 L2.
 Proof.
   intros until L2. intros FS L1_receptive L2_determinate.
-  destruct FS as [index order match_states Hskel FS order_wf].
+  destruct FS as [[index order match_states Hskel FS order_wf]].
   set (ms se1 se2 w := f2b_match_states (L1 se1) (L2 se2) (match_states := match_states se1 se2 w)).
+  constructor.
   eapply Backward_simulation with f2b_order ms; auto using wf_f2b_order.
   intros se1 se2 wB Hse Hse1.
   specialize (FS se1 se2 wB Hse Hse1).
@@ -1811,10 +1858,10 @@ Section FACTOR_FORWARD_SIMULATION.
 
 Context {liA1 liB1} (L1: semantics liA1 liB1).
 Context {liA2 liB2} (L2: semantics liA2 liB2).
-Context {ccA ccB} (FS: forward_simulation ccA ccB L1 L2).
-Hypothesis L2single: forall se, single_events (L2 se).
 
 Section LTS.
+Context {ccA ccB} (FS: fsim_components ccA ccB L1 L2).
+Hypothesis L2single: forall se, single_events (L2 se).
 Context se1 se2 w (Hse: match_senv ccB w se1 se2) (Hse1: Genv.valid_for (skel L1) se1).
 Let sim := fsim_lts FS se2 w Hse Hse1.
 
@@ -1876,10 +1923,13 @@ Qed.
 
 End LTS.
 
-Theorem factor_forward_simulation:
+Theorem factor_forward_simulation {ccA ccB}:
+  forward_simulation ccA ccB L1 L2 ->
+  (forall se, single_events (L2 se)) ->
   forward_simulation ccA ccB (atomic L1) L2.
 Proof.
-  apply Forward_simulation with (fsim_order FS) ffs_match; cbn; try apply FS.
+  intros [FS] L2single. constructor.
+  apply Forward_simulation with (fsim_order FS) (ffs_match FS); cbn; try apply FS.
   intros se1 se2 wB Hse Hse1. pose (sim := fsim_lts FS se2 wB Hse Hse1). split; cbn.
 - (* valid query *)
   cbn. eapply fsim_match_valid_query; eauto.
@@ -1910,11 +1960,11 @@ Section FACTOR_BACKWARD_SIMULATION.
 
 Context {liA1 liB1} (L1: semantics liA1 liB1).
 Context {liA2 liB2} (L2: semantics liA2 liB2).
-Context {ccA ccB} (BS: backward_simulation ccA ccB L1 L2).
-Hypothesis L1single: forall se, single_events (L1 se).
-Hypothesis L2wb: well_behaved_traces L2.
 
 Section LTS.
+Context {ccA ccB} (BS: bsim_components ccA ccB L1 L2).
+Hypothesis L1single: forall se, single_events (L1 se).
+Hypothesis L2wb: well_behaved_traces L2.
 Context se1 se2 w (Hse: match_senv ccB w se1 se2) (Hse1: Genv.valid_for (skel L1) se1).
 Let sim := bsim_lts BS se2 w Hse Hse1.
 
@@ -1982,10 +2032,14 @@ Qed.
 
 End LTS.
 
-Theorem factor_backward_simulation:
+Theorem factor_backward_simulation {ccA ccB}:
+  backward_simulation ccA ccB L1 L2 ->
+  (forall se, single_events (L1 se)) ->
+  well_behaved_traces L2 ->
   backward_simulation ccA ccB L1 (atomic L2).
 Proof.
-  apply Backward_simulation with (bsim_order BS) fbs_match; cbn; try apply BS.
+  intros [BS] L1single L2wb. constructor.
+  apply Backward_simulation with (bsim_order BS) (fbs_match BS); cbn; try apply BS.
   intros se1 se2 wB Hse Hse1. pose (sim := bsim_lts BS se2 wB Hse Hse1).
   split; try apply sim; cbn.
 - (* initial states *)
