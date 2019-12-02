@@ -129,13 +129,13 @@ Section FOO.
       initial value of [Mem.nextblock] for the current activation.
       ... *)
 
-    Inductive match_stack : list (frame L se) -> block -> Prop :=
+    Inductive match_stack : list (frame L) -> block -> Prop :=
       | match_stack_top :
           match_stack nil init_nb
-      | match_stack_cons i (q: query li_asm) S s b :
-          match_stack s (Mem.nextblock (snd q)) ->
-          Ple (Mem.nextblock (snd q)) b ->
-          match_stack (st L se i q S :: s) b.
+      | match_stack_cons i S s b b' :
+          match_stack s b ->
+          Ple b b' ->
+          match_stack (st L i (b, S) :: s) b'.
 
     Lemma match_stack_nextblock k b:
       match_stack k b ->
@@ -186,13 +186,13 @@ Section FOO.
       and that the top-level state be otherwise equal to the
       whole-program state. *)
 
-    Inductive match_states : list (frame L se) -> Asm.state -> Prop :=
-      | match_states_intro i q k (rs: regset) m live1 live2 :
-          match_stack k (Mem.nextblock (snd q)) ->
-          match_liveness (Mem.nextblock (snd q)) rs#SP live1 live2 ->
-          Ple (Mem.nextblock (snd q)) (Mem.nextblock m) ->
+    Inductive match_states : list (frame L) -> Asm.state -> Prop :=
+      | match_states_intro i nb k (rs: regset) m live1 live2 :
+          match_stack k nb ->
+          match_liveness nb rs#SP live1 live2 ->
+          Ple nb (Mem.nextblock m) ->
           leb (inner_sp init_nb rs#SP) live2 ->
-          match_states (st L se i q (State rs m live1) :: k) (State rs m live2).
+          match_states (st L i (nb, State rs m live1) :: k) (State rs m live2).
 
     (** ** Simulation properties *)
 
@@ -334,10 +334,10 @@ Section FOO.
     one when performing a call, we can massage these different
     criteria together and obtain the following measure. *)
 
-  Definition measure se (s : list (frame L se)): nat :=
-    match s with
-      | nil => 0
-      | st i q (State rs m live) :: k =>
+  Definition measure (S : Genv.symtbl * list (frame L)): nat :=
+    match S with
+      | (_, nil) => 0
+      | (se, st i (nb, State rs m live) :: k) =>
         length k +
         if live then
           match Genv.find_funct (Genv.globalenv se (p_ i)) rs#PC with
@@ -349,14 +349,19 @@ Section FOO.
     end.
 
   Lemma foo:
-    open_fsim cc_id cc_id
+    forward_simulation cc_id cc_id
       (SmallstepLinking.semantics L (erase_program p))
       (semantics p).
   Proof.
-    split; [reflexivity | ]. cbn.
-    intros [ ] se _ q _ Hse1 _ [ ] [ ].
-    split.
-    {
+    constructor.
+    eapply Forward_simulation with
+      (fsim_order := ltof _ measure)
+      (fsim_match_states := fun se1 se2 w idx s1 '(init_nb, s2) =>
+         idx = (se1, s1) /\ match_states init_nb s1 s2); auto.
+
+    intros se _ [ ] [ ] Hse. econstructor.
+    - (* valid queries *)
+      intros q _ [ ]. cbn. unfold valid_query. cbn.
       unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr.
       destruct asm_entry; auto. destruct Ptrofs.eq_dec; auto.
       eapply (find_def_link se p1 p2 p b) in Hp.
@@ -369,28 +374,26 @@ Section FOO.
       + destruct e1; discriminate.
       + destruct e0; discriminate.
       + destruct e0; discriminate.
-    }
-    set (ms := match_states se (Mem.nextblock (snd q))).
-    eapply forward_simulation_star with ms (measure se); cbn.
     - (* initial states *)
-      intros s1 Hs1. destruct Hs1 as [i S Hq HS]. cbn in *.
-      exists S. destruct HS. split.
+      intros q _ s1 [ ] Hs1. destruct Hs1 as [i [nb S] Hq [HS Hnb]]. cbn in *.
+      eexists _, (nb, S). destruct HS. intuition eauto.
       + econstructor; eauto using find_internal_linkorder.
       + econstructor; cbn; eauto.
         * econstructor.
         * constructor.
-        * reflexivity.
+        * subst. reflexivity.
     - (* final states *)
-      intros _ _ r [i qi k rs m l1 l2 Hk Hl Hb Hsp] Hr; inv Hr.
-      inv H4. inv Hk. inv Hl.
-      + eexists; split; eauto. constructor.
+      intros _ s1 [nb s2] r1 [_ Hs] Hr1.
+      destruct Hs as [i qi k rs m l1 l2 Hk Hl Hb Hsp].
+      inv Hr1. inv H3. inv Hk. inv Hl.
+      + eexists; split; cbn; eauto. constructor.
       + congruence.
     - (* external states *)
-      intros _ _ qx [i qi k rs m l1 l2 Hk Hl Hb Hsp] Hqx; inv Hqx; cbn in *.
+      intros idx s1 [nb s2] qx [Hidx [i qi k rs m l1 l2 Hk Hl Hb Hsp]] Hqx. inv Hqx; cbn in *.
       exists tt, qx. repeat apply conj; auto.
-      + inv H4. edestruct find_funct_linkorder as (? & ? & ?); eauto. inv H0.
+      + inv H3. edestruct find_funct_linkorder as (? & ? & ?); eauto. inv H0.
         * inv Hl. econstructor; eauto.
-        * pose proof (H5 true). pose proof (H5 false). clear - H H0 H1 Hp. cbn in *.
+        * pose proof (H4 true). pose proof (H4 false). clear - H H0 H1 Hp. cbn in *.
           unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr in *.
           destruct (rs PC); try discriminate.
           destruct Ptrofs.eq_dec; try discriminate.
@@ -401,39 +404,47 @@ Section FOO.
              destruct a as [[|]|], b0 as [[|]|]; cbn in *; try discriminate.
              destruct external_function_eq; discriminate.
              destruct (link v v0) as [|]; discriminate.
-      + intros r _ s' [ ] Hs'. inv Hs'. cbn in *. inv H7.
-        eexists. split. inv Hl. econstructor; eauto.
+      + intros r _ s' [ ] Hs'. inv Hs'. cbn in *.
+        destruct s'0 as [nb' s'], H6 as [Hae Hnb']. inv Hae.
+        eexists (se, _), (nb, _). repeat apply conj; auto. { inv Hl. econstructor; eauto. }
         econstructor; eauto.
         * eapply match_inner_sp.
           eapply match_stack_nextblock; eauto.
         * xomega.
     - (* simulation *)
-      intros s1 t s1' Hstep1 s2 Hs. red in Hs.
+      intros s1 t s1' Hstep1 idx [nb s2] [Hidx Hs]. subst. cbn in *.
       destruct Hstep1; inv Hs; cbn in *.
       + (* internal step *)
-        destruct s' as [rs' m' live1'].
+        destruct s' as [nb' [rs' m' live1']], H as [? ?]. subst.
         edestruct step_match as (live2' & Hstep2 & Hs' & Hl' & ?);
           eauto using match_stack_nextblock.
-        left. eexists; split; eauto 10 using plus_one.
+        eexists (_, _), (_, _). repeat apply conj; eauto 10 using plus_one.
         constructor; eauto.
       + (* push *)
-        inv H. inv H1. inv H8.
+        destruct s' as [nb' [rs' m' live1']], H1 as [? ?]. subst.
+        inv H. inv H1. inv H6.
+        eexists (_, _), (nb, _). repeat apply conj; auto.
         right. intuition auto.
-        * rewrite H3, H7. xomega.
+        * eapply star_refl.
+        * red. cbn. rewrite H10, H7. xomega.
         * constructor; cbn; eauto using match_liveness_refl, Ple_refl.
           econstructor; eauto.
       + (* pop *)
-        inv H. inv H0. inv H5. right. intuition auto.
+        destruct sk as [bk sk], s' as [b s'], H0 as [H0 Hb].
+        inv H. inv H0. inv H4.
+        eexists (_, _), (_, _). intuition auto.
         {
+          right. split; auto using star_refl. red. cbn.
           clear. destruct Genv.find_funct as [[|]|], inner_sp; xomega.
         }
-        inv H7.
+        inv H5.
         * constructor; eauto using Ple_trans.
           destruct rs#SP; cbn; try constructor.
           destruct plt; try constructor.
-          apply match_stack_nextblock in H6.
-          cbn in H9. destruct plt. xomega. discriminate H9.
+          apply match_stack_nextblock in H9.
+          cbn in H8. destruct plt. xomega. discriminate H8.
         * constructor; eauto using Ple_trans.
           rewrite <- H0. eapply match_inner_sp, match_stack_nextblock; eauto.
+    - apply well_founded_ltof.
   Qed.
 End FOO.

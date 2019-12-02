@@ -183,7 +183,7 @@ Section FSIM.
   Notation I := bool.
   Context (L1 : I -> Smallstep.semantics li1 li1).
   Context (L2 : I -> Smallstep.semantics li2 li2).
-  Context (HL : forall i, forward_simulation cc cc (L1 i) (L2 i)).
+  Context (HL : forall i, fsim_components cc cc (L1 i) (L2 i)).
   Context (se1 se2: Genv.symtbl) (w : ccworld cc).
   Context (Hse: match_senv cc w se1 se2).
   Context (Hse1: forall i, Genv.valid_for (skel (L1 i)) se1).
@@ -252,7 +252,7 @@ Section FSIM.
       edestruct @fsim_match_initial_states as (idx' & s2' & Hs2' & Hs'); eauto.
       eexists (existT _ j idx'), _. split.
       + left. apply plus_one. eapply step_push; eauto 1.
-        erewrite <- fsim_match_valid_query; eauto.
+        erewrite fsim_match_valid_query; eauto.
       + repeat (econstructor; eauto).
     - (* cross-component return *)
       inv H4; subst_dep. clear idx0.
@@ -273,7 +273,7 @@ Section FSIM.
     edestruct @fsim_match_initial_states as (idx & s2 & Hs2 & Hs); eauto.
     exists (existT _ i idx), (st L2 i s2 :: nil).
     split; econstructor; eauto.
-    + erewrite <- fsim_match_valid_query; eauto.
+    + erewrite fsim_match_valid_query; eauto.
     + econstructor; eauto.
     + constructor.
   Qed.
@@ -303,7 +303,7 @@ Section FSIM.
     exists wx, qx2. intuition idtac.
     + constructor. eauto.
       intros j. pose proof (fsim_lts (HL j) _ _ Hsex (Hse1 j)).
-      erewrite <- fsim_match_valid_query; eauto.
+      erewrite fsim_match_valid_query; eauto.
     + inv H2; subst_dep.
       edestruct H as (idx' & s2' & Hs2' & Hs'); eauto.
       eexists (existT _ i idx'), _.
@@ -342,12 +342,13 @@ Lemma compose_simulation {li1 li2} (cc: callconv li1 li2) L1a L1b L1 L2a L2b L2:
   compose L2a L2b = Some L2 ->
   forward_simulation cc cc L1 L2.
 Proof.
-  intros Ha Hb H1 H2. unfold compose in *. unfold option_map in *.
+  intros [Ha] [Hb] H1 H2. unfold compose in *. unfold option_map in *.
   destruct (link (skel L1a) (skel L1b)) as [sk1|] eqn:Hsk1; try discriminate. inv H1.
   destruct (link (skel L2a) (skel L2b)) as [sk2|] eqn:Hsk2; try discriminate. inv H2.
   set (L1 := fun i:bool => if i then L1a else L1b).
   set (L2 := fun i:bool => if i then L2a else L2b).
-  assert (HL: forall i, forward_simulation cc cc (L1 i) (L2 i)) by (intros [|]; auto).
+  assert (HL: forall i, fsim_components cc cc (L1 i) (L2 i)) by (intros [|]; auto).
+  constructor.
   eapply Forward_simulation with (order cc L1 L2 HL) (match_states cc L1 L2 HL).
   - destruct Ha, Hb. cbn. congruence.
   - intros se1 se2 w Hse Hse1.
