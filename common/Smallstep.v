@@ -865,6 +865,25 @@ Ltac fsim_tac tac :=
 
 Tactic Notation "fsim" tactic(tac) := fsim_tac tac.
 
+(** ** Identity simulation *)
+
+Definition identity_fsim_components {liA liB} (L: semantics liA liB):
+  fsim_components cc_id cc_id L L.
+Proof.
+  eapply Forward_simulation with _ (fun _ _ _ => _); auto.
+  - intros se _ [ ] [ ] _.
+    eapply forward_simulation_plus with (match_states := eq);
+    cbn; intros; subst; eauto 10 using plus_one.
+    exists tt, q1. intuition (subst; eauto).
+  - apply well_founded_ltof.
+Qed.
+
+Lemma identity_forward_simulation {liA liB} (L: semantics liA liB):
+  forward_simulation cc_id cc_id L L.
+Proof.
+  constructor. apply identity_fsim_components.
+Qed.
+
 (** ** Composing two forward simulations *)
 
 Section COMPOSE_FORWARD_SIMULATIONS.

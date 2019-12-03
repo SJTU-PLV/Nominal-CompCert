@@ -561,9 +561,9 @@ Lemma cc_pow_fsim_intro {liA liB ccA ccB} (L: semantics liA liB):
 Proof.
   intros [HL]. constructor. intros n.
   induction n; simpl.
-  - admit. (* eapply forward_simulation_identity. *)
+  - eapply identity_fsim_components; eauto.
   - eapply compose_fsim_components; eauto.
-Admitted.
+Qed.
 
 Section CC_STAR_FSIM.
   Context {liA liB} (L: semantics liA liB).
