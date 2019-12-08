@@ -385,6 +385,73 @@ Qed.
 
 Global Opaque Linker_prog.
 
+(** * Linking vs. program erasure *)
+
+Section LINK_ERASE.
+
+Context {F V} {LF: Linker F} {LV: Linker V}.
+Local Opaque PTree_Properties.of_list.
+
+Lemma link_erase_globdef (gd1 gd2 gd: globdef F V):
+  link gd1 gd2 = Some gd ->
+  link (erase_globdef gd1) (erase_globdef gd2) = Some (erase_globdef gd).
+Proof.
+  intros Hgd. unfold erase_globdef.
+  change link with (@link_def F V _ _) in Hgd.
+  destruct gd1 as [|[]], gd2 as [|[]], gd as [|[]]; cbn in *; try discriminate.
+  - reflexivity.
+  - destruct link in Hgd; discriminate.
+  - destruct link in Hgd; discriminate.
+  - unfold erase_globvar. cbn.
+    change (link ?x ?y) with (link_def x y). cbn.
+    change (link ?x ?y) with (link_vardef x y) in Hgd |- *.
+    unfold link_vardef in *; cbn in *.
+    change (link tt tt) with (Some tt). cbn.
+    destruct link; try discriminate.
+    destruct link; try discriminate.
+    destruct (_ && _); try discriminate.
+    inv Hgd. reflexivity.
+Qed.
+
+Lemma link_erase_program (p1 p2 p: program F V):
+  link p1 p2 = Some p ->
+  link (erase_program p1) (erase_program p2) = Some (erase_program p).
+Proof.
+  intros Hp. apply link_prog_inv in Hp as (MAIN & DEFMAP & Hp). subst.
+  setoid_rewrite link_prog_succeeds; auto.
+  - unfold erase_program at 3 4 5 6; cbn. f_equal. f_equal.
+    assert (forall (l1: list (ident * globdef unit unit)) (l2: list (ident * globdef F V)),
+             list_forall2 (fun x y => fst x = fst y /\ snd x = erase_globdef (snd y)) l1 l2 ->
+             l1 = map (fun '(a, b) => (a, erase_globdef b)) l2).
+    {
+      clear. induction 1; auto. destruct H, a1, b1. cbn in *. congruence.
+    }
+    eapply H; clear H.
+    eapply PTree.elements_canonical_order with (R := fun x y => x = erase_globdef y).
+    + intros i gd.
+      rewrite !PTree.gcombine by auto.
+      rewrite !erase_program_defmap.
+      destruct ((prog_defmap p1) ! i) eqn:H1, ((prog_defmap p2) ! i) eqn:H2; cbn;
+        try discriminate; inversion 1; subst; eauto.
+      edestruct DEFMAP as (_ & _ & gd' & Hgd'); eauto.
+      exists gd'. intuition auto.
+      apply link_erase_globdef in Hgd'. congruence.
+    + intros i gd.
+      rewrite !PTree.gcombine by auto.
+      rewrite !erase_program_defmap.
+      destruct ((prog_defmap p1) ! i) eqn:H1, ((prog_defmap p2) ! i) eqn:H2; cbn;
+        try discriminate; inversion 1; subst; eauto.
+      edestruct DEFMAP as (_ & _ & gd' & Hgd'); eauto.
+      eauto using @link_erase_globdef.
+  - intros id gd1 gd2 Hgd1 Hgd2. rewrite erase_program_defmap in *.
+    destruct (prog_defmap p1)!id eqn:H1, (prog_defmap p2)!id eqn:H2;
+      try discriminate; cbn in *.
+    inv Hgd1. inv Hgd2. edestruct DEFMAP as (? & ? & ? & ?); eauto.
+    apply link_erase_globdef in H3. intuition congruence.
+Qed.
+
+End LINK_ERASE.
+
 (** * Matching between two programs *)
 
 (** The following is a relational presentation of program transformations,

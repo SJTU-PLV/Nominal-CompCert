@@ -708,5 +708,6 @@ Proof.
   eapply clight_semantic_preservation; eauto using transf_clight_program_match.
   eapply clight_semantic_preservation; eauto using transf_clight_program_match.
   unfold compose. cbn.
-  admit. (* minor: need commutation property between [link] and [erase_program] *)
-Admitted.
+  apply link_erase_program in H2. rewrite H2. cbn. f_equal. f_equal.
+  apply Axioms.functional_extensionality. intros [|]; auto.
+Qed.
