@@ -69,8 +69,8 @@ Require Cminorgenproof.
 Require Selectionproof.
 Require RTLgenproof.
 Require Tailcallproof.
-(*Require Inliningproof.*)
-(*Require Renumberproof.*)
+Require Inliningproof.
+Require Renumberproof.
 (*Require Constpropproof.*)
 (*Require CSEproof.*)
 (*Require Deadcodeproof.*)
@@ -133,12 +133,12 @@ Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
    OK f
   !@@ print (print_RTL 0)
   !@@ total_if Compopts.optim_tailcalls (time "Tail calls" Tailcall.transf_program)
-(*
-   @@ print (print_RTL 1)
+  !@@ print (print_RTL 1)
   @@@ time "Inlining" Inlining.transf_program
-   @@ print (print_RTL 2)
-   @@ time "Renumbering" Renumber.transf_program
-   @@ print (print_RTL 3)
+  !@@ print (print_RTL 2)
+  !@@ time "Renumbering" Renumber.transf_program
+  !@@ print (print_RTL 3)
+(*
    @@ total_if Compopts.optim_constprop (time "Constant propagation" Constprop.transf_program)
    @@ print (print_RTL 4)
    @@ total_if Compopts.optim_constprop (time "Renumbering" Renumber.transf_program)
@@ -255,9 +255,9 @@ Definition CompCert's_passes :=
   ::: mkpass Selectionproof.match_prog
   ::: mkpass RTLgenproof.match_prog
   ::: mkpass (match_if Compopts.optim_tailcalls Tailcallproof.match_prog)
-(*
   ::: mkpass Inliningproof.match_prog
   ::: mkpass Renumberproof.match_prog
+(*
   ::: mkpass (match_if Compopts.optim_constprop Constpropproof.match_prog)
   ::: mkpass (match_if Compopts.optim_constprop Renumberproof.match_prog)
   ::: mkpass (match_if Compopts.optim_CSE CSEproof.match_prog)
@@ -308,16 +308,16 @@ Proof.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
   unfold transf_rtl_program, time in T. rewrite ! compose_print_identity in T. simpl in T.
   set (p7 := total_if optim_tailcalls Tailcall.transf_program p6) in *.
-  (*
   destruct (Inlining.transf_program p7) as [p8|e] eqn:P8; simpl in T; try discriminate.
   set (p9 := Renumber.transf_program p8) in *.
+  (*
   set (p10 := total_if optim_constprop Constprop.transf_program p9) in *.
   set (p11 := total_if optim_constprop Renumber.transf_program p10) in *.
   destruct (partial_if optim_CSE CSE.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
   destruct (partial_if optim_redundancy Deadcode.transf_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
   destruct (Unusedglob.transform_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
    *)
-  destruct (Allocation.transf_program p7) as [p15|e] eqn:P15; simpl in T; try discriminate.
+  destruct (Allocation.transf_program p9) as [p15|e] eqn:P15; simpl in T; try discriminate.
   set (p16 := Tunneling.tunnel_program p15) in *.
   destruct (Linearize.transf_program p16) as [p17|e] eqn:P17; simpl in T; try discriminate.
   set (p18 := CleanupLabels.transf_program p17) in *.
@@ -333,9 +333,9 @@ Proof.
   exists p5; split. apply Selectionproof.transf_program_match; auto.
   exists p6; split. apply RTLgenproof.transf_program_match; auto.
   exists p7; split. apply total_if_match. apply Tailcallproof.transf_program_match.
-  (*
   exists p8; split. apply Inliningproof.transf_program_match; auto.
   exists p9; split. apply Renumberproof.transf_program_match; auto.
+  (*
   exists p10; split. apply total_if_match. apply Constpropproof.transf_program_match.
   exists p11; split. apply total_if_match. apply Renumberproof.transf_program_match.
   exists p12; split. eapply partial_if_match; eauto. apply CSEproof.transf_program_match.
@@ -551,7 +551,7 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p13)).
+  assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p15)).
   {
   eapply compose_clight_properties.
   (*
@@ -571,10 +571,11 @@ Ltac DestructM :=
   eapply compose_optional_pass.
     eapply compose_extension_pass. eassumption.
     exact Tailcallproof.transf_program_correct.
-  (*
-  eapply compose_forward_simulations.
+  eapply compose_injection_pass.
     eapply Inliningproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations. eapply Renumberproof.transf_program_correct; eassumption.
+  eapply compose_identity_pass.
+    eapply Renumberproof.transf_program_correct; eassumption.
+  (*
   eapply compose_forward_simulations.
     eapply match_if_simulation. eassumption. exact Constpropproof.transf_program_correct.
   eapply compose_forward_simulations.

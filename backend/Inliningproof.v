@@ -31,11 +31,14 @@ Section INLINING.
 Variable prog: program.
 Variable tprog: program.
 Hypothesis TRANSF: match_prog prog tprog.
-Variable w: meminj.
+Variable w: meminj_thr.
 Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
 Let ge := Genv.globalenv se prog.
 Let tge := Genv.globalenv tse tprog.
+
+Hypothesis GE: cc_inj_senv w se tse.
+Hypothesis VALID: Genv.valid_for (erase_program prog) se.
 
 Lemma functions_translated (j: meminj):
   Genv.match_stbls j se tse ->
@@ -373,14 +376,12 @@ Lemma ros_address_inlined:
   fenv!id = Some f ->
   fd = Internal f.
 Proof.
-  (*
   intros.
-  apply H in H1. eapply Genv.find_def_symbol in H1. destruct H1 as (b & A & B).
-  simpl in H0. unfold Genv.symbol_address, ge, fundef in *. rewrite A in H0.
+  apply H in H1. eapply Genv.find_def_symbol in H1; eauto. destruct H1 as (b & A & B).
+  simpl in H0. unfold Genv.symbol_address, ge, fundef in *. setoid_rewrite A in H0.
   rewrite <- Genv.find_funct_ptr_iff in B. cbn in H0.
   destruct Ptrofs.eq_dec; congruence.
-*)
-Admitted. (* Senv.valid_for *)
+Qed.
 
 (** Translation of builtin arguments. *)
 
@@ -450,8 +451,9 @@ Qed.
 Inductive match_stacks (F: meminj) (m m': mem):
              list stackframe -> list stackframe -> block -> Prop :=
   | match_stacks_nil: forall bound
-        (MG: Genv.match_stbls F se tse)
-        (INCR: inject_incr w F)
+        (MG: mit_incr w F)
+        (NB: Ple (Genv.genv_next se) (Mem.nextblock m))
+        (TNB: Ple (Genv.genv_next tse) (Mem.nextblock m'))
         (BELOW: Ple (Genv.genv_next tse) bound),
       match_stacks F m m' nil nil bound
   | match_stacks_cons: forall res f sp pc rs stk f' sp' rs' stk' bound fenv ctx
@@ -516,7 +518,7 @@ with match_stacks_inside_globalenvs:
   forall stk stk' f ctx sp rs',
   match_stacks_inside F m m' stk stk' f ctx sp rs' -> Genv.match_stbls F se tse.
 Proof.
-  induction 1; eauto.
+  induction 1; eauto using cc_inj_match_stbls.
   induction 1; eauto.
 Qed.
 
@@ -536,10 +538,30 @@ Variable F1: meminj.
 Variables m1 m1': mem.
 Hypothesis INCR: inject_incr F F1.
 
+Lemma mit_incr_invariant bound:
+  (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> Plt b2 bound -> F b1 = Some(b2, delta)) ->
+  Ple (Genv.genv_next tse) bound ->
+  mit_incr w F ->
+  mit_incr w F1.
+Proof.
+  intros INJ BELOW [MGINCR MGSEP]. destruct GE. split; cbn in *.
+  eapply inject_incr_trans; eauto.
+  intros b1 b2 delta Hb1 Hb1'.
+  destruct (F b1) as [[xb1' xdelta]|] eqn:Hb1''.
+  rewrite (INCR _ _ _ Hb1'') in Hb1'. inv Hb1'. eauto.
+  split.
+  - destruct (plt b1 (Genv.genv_next se1)) as [?|?]; try xomega.
+    eapply Genv.mge_dom in p as [? ?]; eauto using cc_inj_match_stbls. congruence.
+  - destruct (plt b2 bound) as [Hb2|Hb2]; try xomega.
+    specialize (INJ _ _ _ Hb1' Hb2). congruence.
+Qed.
+
 Lemma match_stacks_invariant:
   forall stk stk' bound, match_stacks F m m' stk stk' bound ->
   forall (INJ: forall b1 b2 delta,
                F1 b1 = Some(b2, delta) -> Plt b2 bound -> F b1 = Some(b2, delta))
+         (NB: Ple (Mem.nextblock m) (Mem.nextblock m1))
+         (TNB: Ple (Mem.nextblock m') (Mem.nextblock m1'))
          (PERM1: forall b1 b2 delta ofs,
                F1 b1 = Some(b2, delta) -> Plt b2 bound ->
                Mem.perm m1 b1 ofs Max Nonempty -> Mem.perm m b1 ofs Max Nonempty)
@@ -554,6 +576,8 @@ with match_stacks_inside_invariant:
   match_stacks_inside F m m' stk stk' f' ctx sp' rs1 ->
   forall rs2
          (RS: forall r, Plt r ctx.(dreg) -> rs2#r = rs1#r)
+         (NB: Ple (Mem.nextblock m) (Mem.nextblock m1))
+         (TNB: Ple (Mem.nextblock m') (Mem.nextblock m1'))
          (INJ: forall b1 b2 delta,
                F1 b1 = Some(b2, delta) -> Ple b2 sp' -> F b1 = Some(b2, delta))
          (PERM1: forall b1 b2 delta ofs,
@@ -569,9 +593,8 @@ Proof.
   induction 1; intros.
   (* nil *)
   apply match_stacks_nil; auto.
-  eapply Genv.match_stbls_incr; eauto.
-  intros. eapply INJ; eauto. eapply Pos.lt_le_trans; eauto.
-  eapply inject_incr_trans; eauto.
+  eapply mit_incr_invariant; eauto.
+  xomega. xomega.
   (* cons *)
   apply match_stacks_cons with (fenv := fenv) (ctx := ctx); auto.
   eapply match_stacks_inside_invariant; eauto.
@@ -626,6 +649,21 @@ Proof.
   discriminate.
 Qed.
 
+Lemma match_stacks_nextblock:
+  forall stk stk' bound,
+  match_stacks F m m' stk stk' bound ->
+  Ple (Genv.genv_next se) (Mem.nextblock m) /\
+  Ple (Genv.genv_next tse) (Mem.nextblock m')
+with match_stacks_inside_nextblock:
+  forall stk stk' f' ctx sp' rs1,
+  match_stacks_inside F m m' stk stk' f' ctx sp' rs1 ->
+  Ple (Genv.genv_next se) (Mem.nextblock m) /\
+  Ple (Genv.genv_next tse) (Mem.nextblock m').
+Proof.
+  induction 1; eauto.
+  induction 1; eauto.
+Qed.
+
 End MATCH_STACKS.
 
 (** Preservation by assignment to a register *)
@@ -637,6 +675,7 @@ Lemma match_stacks_inside_set_reg:
 Proof.
   intros. eapply match_stacks_inside_invariant; eauto.
   intros. apply Regmap.gso. zify. unfold sreg; rewrite shiftpos_eq. xomega.
+  xomega. xomega.
 Qed.
 
 Lemma match_stacks_inside_set_res:
@@ -659,6 +698,8 @@ Lemma match_stacks_inside_store:
 Proof.
   intros.
   eapply match_stacks_inside_invariant; eauto with mem.
+  rewrite (Mem.nextblock_store _ _ _ _ _ _ H0). xomega.
+  rewrite (Mem.nextblock_store _ _ _ _ _ _ H1). xomega.
 Qed.
 
 (** Preservation by an allocation *)
@@ -681,6 +722,7 @@ Proof.
   intros. destruct (eq_block b1 b).
   subst b1. rewrite H1 in H4; inv H4. eelim Plt_strict; eauto.
   rewrite H2 in H4; auto.
+  rewrite (Mem.nextblock_alloc _ _ _ _ _ H). xomega. xomega.
   intros. exploit Mem.perm_alloc_inv; eauto. destruct (eq_block b1 b); intros; auto.
   subst b1. rewrite H1 in H4. inv H4. eelim Plt_strict; eauto.
   (* inlined *)
@@ -702,6 +744,7 @@ Lemma match_stacks_free_left:
   match_stacks F m1 m' stk stk' sp.
 Proof.
   intros. eapply match_stacks_invariant; eauto.
+  rewrite (Mem.nextblock_free _ _ _ _ _ H0). xomega. xomega.
   intros. eapply Mem.perm_free_3; eauto.
 Qed.
 
@@ -711,7 +754,8 @@ Lemma match_stacks_free_right:
   Mem.free m' sp lo hi = Some m1' ->
   match_stacks F m m1' stk stk' sp.
 Proof.
-  intros. eapply match_stacks_invariant; eauto.
+  intros. eapply match_stacks_invariant; eauto. xomega.
+  rewrite (Mem.nextblock_free _ _ _ _ _ H0). xomega.
   intros. eapply Mem.perm_free_1; eauto.
   intros. eapply Mem.perm_free_3; eauto.
 Qed.
@@ -758,22 +802,22 @@ Hypothesis SEP: inject_separated F1 F2 m1 m1'.
 Lemma match_stacks_extcall:
   forall stk stk' bound,
   match_stacks F1 m1 m1' stk stk' bound ->
+  Ple (Mem.nextblock m1) (Mem.nextblock m2) ->
   Ple bound (Mem.nextblock m1') ->
   match_stacks F2 m2 m2' stk stk' bound
 with match_stacks_inside_extcall:
   forall stk stk' f' ctx sp' rs',
   match_stacks_inside F1 m1 m1' stk stk' f' ctx sp' rs' ->
+  Ple (Mem.nextblock m1) (Mem.nextblock m2) ->
   Plt sp' (Mem.nextblock m1') ->
   match_stacks_inside F2 m2 m2' stk stk' f' ctx sp' rs'.
 Proof.
   induction 1; intros.
   apply match_stacks_nil; auto.
-    eapply Genv.match_stbls_incr; eauto.
-    intros.
-    destruct (F1 b1) as [[b2' delta']|] eqn:?.
-    exploit INCR; eauto. intros. congruence.
-    exploit SEP; eauto. intros [A B]. elim B. red. xomega.
-    eapply inject_incr_trans; eauto.
+    eapply mit_incr_invariant; eauto. intros.
+    destruct (F1 b1) as [[xb2 xdelta]|] eqn:HF1. apply INCR in HF1. congruence.
+    exploit SEP; eauto. unfold Mem.valid_block. xomega.
+    xomega. apply Mem.unchanged_on_nextblock in UNCHANGED. xomega.
   eapply match_stacks_cons; eauto.
     eapply match_stacks_inside_extcall; eauto. xomega.
     eapply agree_regs_incr; eauto.
@@ -1011,6 +1055,8 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_bound with (bound := sp').
   eapply match_stacks_invariant; eauto.
+    rewrite (Mem.nextblock_free _ _ _ _ _ H2). xomega.
+    rewrite (Mem.nextblock_free _ _ _ _ _ FREE). xomega.
     intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_1; eauto.
     intros. eapply Mem.perm_free_3; eauto.
@@ -1029,6 +1075,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_untailcall; eauto.
   eapply match_stacks_inside_invariant; eauto.
+    rewrite (Mem.nextblock_free _ _ _ _ _ H2). xomega. xomega.
     intros. eapply Mem.perm_free_3; eauto.
   eapply ros_address_agree; eauto.
   eapply agree_val_regs; eauto.
@@ -1040,6 +1087,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_inside_inlined_tailcall; eauto.
   eapply match_stacks_inside_invariant; eauto.
+    rewrite (Mem.nextblock_free _ _ _ _ _ H2). xomega. xomega.
     intros. eapply Mem.perm_free_3; eauto.
   apply agree_val_regs_gen; auto.
   eapply Mem.free_left_inject; eauto.
@@ -1060,6 +1108,7 @@ Proof.
     eapply match_stacks_inside_extcall with (F1 := F) (F2 := F1) (m1 := m) (m1' := m'0); eauto.
     intros; eapply external_call_max_perm; eauto.
     intros; eapply external_call_max_perm; eauto.
+    eapply external_call_nextblock; eauto.
   auto. eauto. auto.
   destruct res; simpl; [apply agree_set_reg;auto|idtac|idtac]; eapply agree_regs_incr; eauto.
   auto. auto.
@@ -1103,6 +1152,8 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_bound with (bound := sp').
   eapply match_stacks_invariant; eauto.
+    rewrite (Mem.nextblock_free _ _ _ _ _ H0). xomega.
+    rewrite (Mem.nextblock_free _ _ _ _ _ FREE). xomega.
     intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_1; eauto.
     intros. eapply Mem.perm_free_3; eauto.
@@ -1121,6 +1172,7 @@ Proof.
   right. split. simpl. omega. split. auto.
   econstructor; eauto.
   eapply match_stacks_inside_invariant; eauto.
+    rewrite (Mem.nextblock_free _ _ _ _ _ H0). xomega. xomega.
     intros. eapply Mem.perm_free_3; eauto.
   destruct or; simpl. apply agree_val_reg; auto. auto.
   eapply Mem.free_left_inject; eauto.
@@ -1148,6 +1200,8 @@ Proof.
     intros. destruct (eq_block b1 stk).
     subst b1. rewrite D in H8; inv H8. eelim Plt_strict; eauto.
     rewrite E in H8; auto.
+    rewrite (Mem.nextblock_alloc _ _ _ _ _ H). xomega.
+    rewrite (Mem.nextblock_alloc _ _ _ _ _ A). xomega.
     intros. exploit Mem.perm_alloc_inv. eexact H. eauto.
     destruct (eq_block b1 stk); intros; auto.
     subst b1. rewrite D in H8; inv H8. eelim Plt_strict; eauto.
@@ -1196,7 +1250,7 @@ Proof.
   econstructor.
   eapply match_stacks_inside_alloc_left; eauto.
   eapply match_stacks_inside_invariant; eauto.
-  omega.
+  xomega. xomega. omega.
   eauto. auto.
   apply agree_regs_incr with F; auto.
   auto. auto. auto.
@@ -1216,6 +1270,7 @@ Proof.
     eapply match_stacks_extcall with (F1 := F) (F2 := F1) (m1 := m) (m1' := m'0); eauto.
     intros; eapply external_call_max_perm; eauto.
     intros; eapply external_call_max_perm; eauto.
+    eapply external_call_nextblock; eauto.
     xomega.
     eapply external_call_nextblock; eauto.
     auto. auto.
@@ -1258,11 +1313,12 @@ Proof.
 Qed.
 
 Lemma transf_initial_states:
-  forall q1 q2, Genv.match_stbls w se tse -> cc_inj_query w q1 q2 ->
+  forall q1 q2, cc_inj_senv w se tse -> cc_inj_query w q1 q2 ->
   forall S, initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states S R.
 Proof.
   intros. inv H1. inv H0.
+  assert (Genv.match_stbls w se tse) by (inv H; auto).
   eapply functions_translated in H2 as (cu & tf & FIND & TR & LINK); eauto.
   setoid_rewrite <- (sig_function_translated _ _ _ TR).
   simpl in TR. destruct transf_function eqn:Hf; try discriminate. cbn in TR. inv TR.
@@ -1270,22 +1326,25 @@ Proof.
   econstructor; eauto.
   econstructor; eauto.
   apply match_stacks_nil; auto.
-  admit. (* initial memory nextblock *)
-Admitted.
+  - eapply mit_incr_refl.
+  - inv H; auto.
+  - destruct GE. cbn in *. xomega.
+  - destruct GE. cbn in *. xomega.
+Qed.
 
 Lemma transf_final_states:
   forall S R r1, match_states S R -> final_state S r1 ->
   exists r2, final_state R r2 /\ cc_inj_reply w r1 r2.
 Proof.
   intros. inv H0. inv H.
-  - exploit match_stacks_empty; eauto. intros EQ; subst. inv MS.
+  - exploit match_stacks_empty; eauto. intros EQ; subst. inv MS. inv GE.
     eexists. split; econstructor; eauto.
   - exploit match_stacks_inside_empty; eauto. intros [A B]. congruence.
 Qed.
 
 Lemma transf_external_states:
   forall S R q1, match_states S R -> at_external ge S q1 ->
-  exists wx q2, at_external tge R q2 /\ cc_injp_query wx q1 q2 /\ Genv.match_stbls wx se tse /\
+  exists wx q2, at_external tge R q2 /\ cc_injp_query wx q1 q2 /\ cc_injp_stbls wx se tse /\
   forall r1 r2 S', cc_injp_reply wx r1 r2 -> after_external S r1 S' ->
   exists R', after_external R r2 R' /\ match_states S' R'.
 Proof.
@@ -1297,10 +1356,15 @@ Proof.
   eexists _, _. intuition idtac.
   - econstructor; eauto.
   - econstructor; eauto.
-  - eapply match_stacks_globalenvs; eauto.
+    destruct FINJ; cbn in *; congruence.
+  - constructor.
+    + eapply match_stacks_globalenvs; eauto.
+    + eapply match_stacks_nextblock; eauto.
+    + eapply match_stacks_nextblock; eauto.
   - inv H1. inv H0. eexists; split; econstructor; eauto.
     eapply match_stacks_bound with (Mem.nextblock m').
     eapply match_stacks_extcall with (F1 := F) (F2 := f') (m1 := m) (m1' := m'); eauto.
+    eapply Mem.unchanged_on_nextblock; eauto.
     xomega.
     eapply Mem.unchanged_on_nextblock; eauto.
 Qed.
@@ -1309,16 +1373,16 @@ End INLINING.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  open_fsim cc_injp cc_inj (semantics prog) (semantics tprog).
+  forward_simulation cc_injp cc_inj (semantics prog) (semantics tprog).
 Proof.
-  intros MATCH. split; [apply match_program_skel in MATCH; auto | ].
-  intros w se1 se2 q1 q2 Hse1 SKEL Hse Hq.
-  split. { destruct Hq. eapply (Genv.is_internal_match MATCH); eauto.
-           unfold transf_fundef. destruct f; cbn -[transf_function]; inversion 1; auto.
-           destruct (transf_function (funenv_program c)); inv H3. auto. }
-  eapply forward_simulation_star.
-  apply transf_initial_states; eauto.
-  apply transf_final_states; eauto.
-  apply transf_external_states; eauto.
+  fsim eapply forward_simulation_star.
+  { intros. destruct Hse, H. cbn in *.
+    eapply (Genv.is_internal_match MATCH); eauto 1.
+    unfold transf_fundef, transf_partial_fundef.
+    intros ? [|] [|]; cbn -[transf_function]; inversion 1; auto.
+    destruct transf_function; inv H8. }
+  intros. eapply transf_initial_states; eauto.
+  intros. eapply transf_final_states; eauto.
+  intros. eapply transf_external_states; eauto.
   apply step_simulation; eauto.
 Qed.
