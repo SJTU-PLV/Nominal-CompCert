@@ -20,16 +20,15 @@ Require Import Smallstep.
   will describe how a given invariant impacts the queries and replies
   of the language under consideration. *)
 
-Record lts_invariant {li: language_interface} :=
+Record invariant {li: language_interface} :=
   {
-    query_inv : query li -> Prop;
-    reply_inv : reply li -> Prop;
+    inv_world : Type;
+    symtbl_inv : inv_world -> Genv.symtbl -> Prop;
+    query_inv : inv_world -> query li -> Prop;
+    reply_inv : inv_world -> reply li -> Prop;
   }.
 
-Arguments lts_invariant : clear implicits.
-
-Definition invariant li :=
-  Genv.symtbl -> lts_invariant li.
+Arguments invariant : clear implicits.
 
 (** ** Preservation *)
 
@@ -41,34 +40,31 @@ Definition invariant li :=
   returns, preserved by internal steps, and ensure the invariant
   interface is respected at external calls and final states. *)
 
-Record lts_preserves {liA liB S} (L: lts liA liB S) IA IB (IS: S -> Prop) :=
+Record lts_preserves {liA liB S} se (L: lts liA liB S) IA IB (IS: _ -> S -> Prop) w :=
   {
     preserves_step s t s':
-      IS s ->
+      IS w s ->
       Step L s t s' ->
-      IS s';
+      IS w s';
     preserves_initial_state q s:
-      query_inv IB q ->
+      query_inv IB w q ->
       initial_state L q s ->
-      IS s;
+      IS w s;
     preserves_external s q:
-      IS s ->
-      at_external L s q ->
-      query_inv IA q /\
-      forall r s',
-        reply_inv IA r ->
-        after_external L s r s' ->
-        IS s';
+      IS w s -> at_external L s q ->
+      exists wA, symtbl_inv IA wA se /\ query_inv IA wA q /\
+      forall r s', reply_inv IA wA r -> after_external L s r s' -> IS w s';
     preserves_final_state s r:
-      IS s ->
+      IS w s ->
       final_state L s r ->
-      reply_inv IB r;
+      reply_inv IB w r;
   }.
 
 Definition preserves {liA liB} (L: semantics liA liB) (IA IB: invariant _) IS :=
-  forall se,
+  forall w se,
     Genv.valid_for (skel L) se ->
-    lts_preserves (L se) (IA se) (IB se) (IS se).
+    symtbl_inv IB w se ->
+    lts_preserves se (L se) IA IB IS w.
 
 (** ** As calling conventions *)
 
@@ -82,10 +78,10 @@ Inductive rel_inv {A} (I: A -> Prop) (x: A): A -> Prop :=
 
 Program Coercion cc_inv {li} (I: invariant li): callconv li li :=
   {|
-    ccworld := Genv.symtbl;
-    match_senv se := rel_inv (eq se);
-    match_query se := rel_inv (query_inv (I se));
-    match_reply se := rel_inv (reply_inv (I se));
+    ccworld := inv_world I;
+    match_senv w := rel_inv (symtbl_inv I w);
+    match_query w := rel_inv (query_inv I w);
+    match_reply w := rel_inv (reply_inv I w);
   |}.
 Solve All Obligations with
   cbn; intros; destruct H; auto.
@@ -97,8 +93,8 @@ Lemma preserves_fsim {li res} (L: semantics li res) IA IB IS:
   preserves L IA IB IS ->
   forward_simulation (cc_inv IA) (cc_inv IB) L L.
 Proof.
-  fsim eapply forward_simulation_step with (match_states := rel_inv (IS se1));
-  destruct Hse; subst.
+  fsim (eapply forward_simulation_step with (match_states := rel_inv (IS w));
+        destruct Hse; subst).
   - reflexivity.
   - destruct 1. auto.
   - intros q _ s [Hq] Hs.
@@ -110,8 +106,8 @@ Proof.
     constructor.
     eapply preserves_final_state; eauto.
   - intros s _ q [Hs] Hq.
-    edestruct @preserves_external as (HqA & Hr); eauto.
-    exists se1, q. repeat apply conj; cbn; eauto.
+    edestruct @preserves_external as (wA & Hse & HqA & Hr); eauto.
+    exists wA, q. repeat apply conj; cbn; eauto.
     + constructor. auto.
     + constructor. auto.
     + intros r' _ s' [Hr'] Hs'.
@@ -180,99 +176,162 @@ Qed.
 
 (** ** Strengthening the source semantics *)
 
-Definition restrict_lts {liA liB S} (L: lts liA liB S) IA IB IS :=
-  {|
-    step ge s t s' :=
-      step L ge s t s' /\ IS s /\ IS s';
-    valid_query q :=
-      valid_query L q;
-    initial_state q s :=
-      initial_state L q s /\ query_inv IB q /\ IS s;
-    final_state s r :=
-      final_state L s r /\ IS s /\ reply_inv IB r;
-    at_external s q :=
-      at_external L s q /\ IS s /\ query_inv IA q;
-    after_external s r s' :=
-      after_external L s r s' /\ IS s /\ IS s' /\ reply_inv IA r;
+Section RESTRICT.
+  Context {liA liB} (L: semantics liA liB).
+  Context (IA: invariant liA) (IB: invariant liB).
+  Context (IS: inv_world IB -> state L -> Prop).
+
+  Definition restrict_lts se :=
+    {|
+      step ge s t s' :=
+        exists w,
+          symtbl_inv IB w se /\
+          step (L se) ge s t s' /\
+          IS w s /\
+          IS w s';
+      valid_query q :=
+        valid_query (L se) q;
+      initial_state q s :=
+        exists w,
+          symtbl_inv IB w se /\
+          initial_state (L se) q s /\
+          query_inv IB w q /\
+          IS w s;
+      final_state s r :=
+        exists w,
+          symtbl_inv IB w se /\
+          final_state (L se) s r /\
+          IS w s /\
+          reply_inv IB w r;
+      at_external s q :=
+        exists w wA,
+          symtbl_inv IB w se /\
+          at_external (L se) s q /\
+          IS w s /\
+          query_inv IA wA q;
+      after_external s r s' :=
+        exists w wA q,
+          symtbl_inv IB w se /\
+          at_external (L se) s q /\
+          after_external (L se) s r s' /\
+          IS w s /\
+          query_inv IA wA q /\
+          reply_inv IA wA r /\
+          IS w s';
     globalenv :=
-      globalenv L;
+      globalenv (L se);
   |}.
 
-Definition restrict {liA liB} (L: semantics liA liB) IA IB IS :=
-  {|
-    skel := skel L;
-    state := state L;
-    activate se := restrict_lts (L se) (IA se) (IB se) (IS se);
-  |}.
+  Definition restrict :=
+    {|
+      skel := skel L;
+      state := state L;
+      activate se := restrict_lts se;
+    |}.
 
-Lemma restrict_fsim {li res} (L: semantics li res) IA IB IS:
-  preserves L IA IB IS ->
-  forward_simulation (cc_inv IA) (cc_inv IB) L (restrict L IA IB IS).
-Proof.
-  set (ms x := rel_inv (IS x) : state L -> state (restrict L IA IB IS) -> Prop).
-  (fsim apply forward_simulation_step with (match_states := ms se1); destruct Hse; subst);
-  cbn; subst ms; auto.
-  - destruct 1. reflexivity.
-  - intros q _ s [Hq] Hs. exists s.
-    assert (IS se1 s) by (eapply preserves_initial_state; eauto).
-    eauto using rel_inv_intro.
-  - intros s _ r [Hs] Hr. exists r.
-    assert (reply_inv (IB se1) r) by (eapply preserves_final_state; eauto).
-    eauto using rel_inv_intro.
-  - intros s _ q [Hs] H. exists se1, q.
-    edestruct @preserves_external as [Hq Hs']; eauto.
-    intuition auto using rel_inv_intro.
-    destruct H0. exists s1'. intuition eauto using rel_inv_intro.
-  - intros s t s' STEP _ [Hs].
-    assert (IS se1 s') by (eapply preserves_step; eauto).
-    exists s'. eauto using rel_inv_intro.
-Qed.
+  Lemma restrict_fsim:
+    preserves L IA IB IS ->
+    forward_simulation (cc_inv IA) (cc_inv IB) L restrict.
+  Proof.
+    fsim (apply forward_simulation_step with (match_states := rel_inv (IS w));
+          destruct Hse; subst); cbn; auto.
+    - destruct 1. reflexivity.
+    - intros q _ s [Hq] Hs. exists s.
+      assert (IS w s) by (eapply preserves_initial_state; eauto).
+      eauto 10 using rel_inv_intro.
+    - intros s _ r [Hs] Hr. exists r.
+      assert (reply_inv IB w r) by (eapply preserves_final_state; eauto).
+      eauto 10 using rel_inv_intro.
+    - intros s _ q [Hs] Hx.
+      edestruct @preserves_external as (wA & HseA & Hq & Hk); eauto.
+      eexists wA, q. intuition eauto 10 using rel_inv_intro.
+      destruct H0. exists s1'. intuition eauto 20 using rel_inv_intro.
+    - intros s t s' STEP _ [Hs].
+      assert (IS w s') by (eapply preserves_step; eauto).
+      exists s'. eauto 10 using rel_inv_intro.
+  Qed.
+End RESTRICT.
 
 (** ** Weakening the target semantics *)
 
-Definition expand_lts {liA liB S} (L: lts liA liB S) IA IB (IS: _ -> Prop) :=
-  {|
-    valid_query q :=
-      valid_query L q;
-    step ge s t s' :=
-      IS s -> step L ge s t s';
-    initial_state q s :=
-      query_inv IB q -> initial_state L q s;
-    final_state s r :=
-      IS s -> final_state L s r;
-    at_external s q :=
-      IS s -> at_external L s q;
-    after_external s r s' :=
-      IS s -> reply_inv IA r -> after_external L s r s';
-    globalenv :=
-      globalenv L;
-  |}.
+Section EXPAND.
+  Context {liA liB} (L: semantics liA liB).
+  Context (IA: invariant liA) (IB: invariant liB).
+  Context (IS: inv_world IB -> state L -> Prop).
 
-Definition expand {liA liB} (L: semantics liA liB) IA IB IS :=
-  {|
-    skel := skel L;
-    state := state L;
-    activate se := expand_lts (L se) (IA se) (IB se) (IS se);
-  |}.
+  Definition expand_lts se :=
+    {|
+      valid_query q :=
+        valid_query (L se) q;
+      step ge s t s' :=
+        forall w, symtbl_inv IB w se -> IS w s -> step (L se) ge s t s';
+      initial_state q s :=
+        forall w, symtbl_inv IB w se -> query_inv IB w q -> initial_state (L se) q s;
+      final_state s r :=
+        forall w, symtbl_inv IB w se -> IS w s -> final_state (L se) s r;
+      at_external s q :=
+        forall w, symtbl_inv IB w se -> IS w s -> at_external (L se) s q;
+      after_external s r s' :=
+        forall w wA q, symtbl_inv IB w se -> IS w s -> at_external (L se) s q ->
+        query_inv IA wA q -> reply_inv IA wA r -> after_external (L se) s r s';
+      globalenv :=
+        globalenv (L se);
+    |}.
 
-Lemma expand_fsim {liA liB} (L: semantics liA liB) IA IB IS:
-  preserves L IA IB IS ->
-  forward_simulation (cc_inv IA) (cc_inv IB) (expand L IA IB IS) L.
-Proof.
-  set (ms x := rel_inv (IS x) : state (expand L IA IB IS) -> state L -> Prop).
-  (fsim apply forward_simulation_step with (match_states := ms se1); destruct Hse; subst);
-  cbn; subst ms; auto.
-  - destruct 1; reflexivity.
-  - intros q _ s [Hq] Hs. exists s.
-    assert (IS se1 s) by (eapply preserves_initial_state; eauto).
-    eauto using rel_inv_intro.
-  - intros s _ r [Hs] Hr.
-    assert (reply_inv (IB se1) r) by (eapply preserves_final_state; eauto).
-    eauto using rel_inv_intro.
-  - intros s _ q [Hs] H. exists se1, q.
-    edestruct @preserves_external as [Hq Hs']; eauto. intuition auto using rel_inv_intro.
-    destruct H. exists s1'. intuition eauto using rel_inv_intro.
-  - intros s t s' STEP _ [Hs].
-    assert (IS se1 s') by (eapply preserves_step; eauto).
-    exists s'. eauto using rel_inv_intro.
-Qed.
+  Definition expand :=
+    {|
+      skel := skel L;
+      state := state L;
+      activate se := expand_lts se;
+    |}.
+
+  Lemma expand_fsim:
+    preserves L IA IB IS ->
+    forward_simulation (cc_inv IA) (cc_inv IB) expand L.
+  Proof.
+    fsim (apply forward_simulation_step with (match_states := rel_inv (IS w));
+          destruct Hse; subst); cbn; auto.
+    - destruct 1; reflexivity.
+    - intros q _ s [Hq] Hs. exists s.
+      assert (IS w s) by (eapply preserves_initial_state; eauto).
+      eauto using rel_inv_intro.
+    - intros s _ r [Hs] Hr.
+      assert (reply_inv IB w r) by (eapply preserves_final_state; eauto).
+      eauto using rel_inv_intro.
+    - intros s _ q [Hs] Hk. specialize (Hk w H Hs).
+      edestruct @preserves_external as (wA & HseA & Hq & Hr); eauto.
+      exists wA, q. intuition auto using rel_inv_intro.
+      destruct H0. exists s1'. intuition eauto using rel_inv_intro.
+    - intros s t s' STEP _ [Hs].
+      assert (IS w s') by (eapply preserves_step; eauto).
+      exists s'. eauto using rel_inv_intro.
+  Qed.
+End EXPAND.
+
+(** ** Using invariants to prove simulations *)
+
+Section METHODS.
+  Context {liA1 liA2} {ccA: callconv liA1 liA2}.
+  Context {liB1 liB2} {ccB: callconv liB1 liB2}.
+  Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2).
+
+  Lemma source_invariant_fsim IA IB IS:
+    preserves L1 IA IB IS ->
+    forward_simulation ccA ccB (restrict L1 IA IB IS) L2 ->
+    forward_simulation (IA @ ccA) (IB @ ccB) L1 L2.
+  Proof.
+    intros HL1 HL.
+    eapply compose_forward_simulations; eauto.
+    apply restrict_fsim; auto.
+  Qed.
+
+  Lemma target_invariant_fsim IA IB IS:
+    preserves L2 IA IB IS ->
+    forward_simulation ccA ccB L1 (expand L2 IA IB IS) ->
+    forward_simulation (ccA @ IA) (ccB @ IB) L1 L2.
+  Proof.
+    intros HL2 HL.
+    eapply compose_forward_simulations; eauto.
+    apply expand_fsim; auto.
+  Qed.
+End METHODS.

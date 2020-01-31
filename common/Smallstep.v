@@ -863,7 +863,7 @@ Ltac fsim_tac tac :=
   | intros se1 se2 w Hse Hse1; tac
   | try solve [auto using well_founded_ltof]].
 
-Tactic Notation "fsim" tactic(tac) := fsim_tac tac.
+Tactic Notation (at level 3) "fsim" tactic3(tac) := fsim_tac tac.
 
 (** ** Identity simulation *)
 

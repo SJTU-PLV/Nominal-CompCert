@@ -1584,7 +1584,7 @@ Theorem transf_program_correct prog tprog:
   forward_simulation cc_ext cc_ext (CminorSel.semantics prog) (RTL.semantics tprog).
 Proof.
   fsim eapply forward_simulation_star_wf with (order := lt_state);
-  intros; destruct Hse.
+  intros; try destruct Hse.
   { destruct H. eapply (Genv.is_internal_transf_partial_id MATCH).
     intros [|] ? Hf; monadInv Hf; auto. }
   eapply transl_initial_states; eauto.
