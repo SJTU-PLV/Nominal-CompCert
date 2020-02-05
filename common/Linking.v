@@ -900,9 +900,9 @@ Set Implicit Arguments.
 
 (** A generic language is a type of programs and a linker. *)
 
-Structure Language := mklang { lang_prog :> Type; lang_link: Linker lang_prog }.
+Structure Language := mklang { lang_prog :> Type; (*lang_link: Linker lang_prog*) }.
 
-Canonical Structure Language_gen (A: Type) (L: Linker A) : Language := @mklang A L.
+Canonical Structure Language_gen (A: Type) (*(L: Linker A)*) : Language := @mklang A (*L*).
 
 (** A compilation pass from language [S] (source) to language [T] (target)
   is a matching relation between [S] programs and [T] programs,
@@ -911,21 +911,24 @@ Canonical Structure Language_gen (A: Type) (L: Linker A) : Language := @mklang A
 
 Record Pass (S T: Language) := mkpass {
   pass_match :> lang_prog S -> lang_prog T -> Prop;
-  pass_match_link: @TransfLink (lang_prog S) (lang_prog T) (lang_link S) (lang_link T) pass_match
+  (*pass_match_link: @TransfLink (lang_prog S) (lang_prog T) (lang_link S) (lang_link T) pass_match*)
 }.
 
-Arguments mkpass {S} {T} (pass_match) {pass_match_link}.
+Arguments mkpass {S} {T} (pass_match) (*{pass_match_link}*).
 
 Program Definition pass_identity (l: Language): Pass l l :=
   {| pass_match := fun p1 p2 => p1 = p2;
-     pass_match_link := _ |}.
+     (*pass_match_link := _*) |}.
+(*
 Next Obligation.
   red; intros. subst. exists p; auto.
 Defined.
+*)
 
 Program Definition pass_compose {l1 l2 l3: Language} (pass: Pass l1 l2) (pass': Pass l2 l3) : Pass l1 l3 :=
   {| pass_match := fun p1 p3 => exists p2, pass_match pass p1 p2 /\ pass_match pass' p2 p3;
-     pass_match_link := _ |}.
+     (*pass_match_link := _*) |}.
+(*
 Next Obligation.
   red; intros.
   destruct H0 as (p1' & A1 & B1).
@@ -933,6 +936,7 @@ Next Obligation.
   edestruct (pass_match_link pass) as (p' & A & B); eauto.
   edestruct (pass_match_link pass') as (tp & C & D); eauto.
 Defined.
+*)
 
 (** A list of compilation passes that can be composed. *)
 
@@ -974,6 +978,7 @@ Qed.
 
 (** List linking with a composition of compilation passes. *)
 
+(*
 Theorem link_list_compose_passes:
   forall (src tgt: Language) (passes: Passes src tgt)
          (src_units: nlist src) (tgt_units: nlist tgt),
@@ -993,4 +998,5 @@ Proof.
   exploit IHpasses; eauto. intros (tgt_prog & X & Y).
   exists tgt_prog; split; auto. exists interm_prog; auto.
 Qed.
+*)
 
