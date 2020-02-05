@@ -21,7 +21,7 @@ Require Import Liveness ValueDomain ValueAOp ValueAnalysis.
 Require Import ConstpropOp ConstpropOpproof Constprop.
 
 Definition match_prog (prog tprog: program) :=
-  match_program (fun cu f tf => tf = transf_fundef (romem_for cu) f) eq prog tprog.
+  match_program (fun _ f tf => tf = transf_fundef (romem_for prog) f) eq prog tprog.
 
 Lemma transf_program_match:
   forall prog, match_prog prog (transf_program prog).
@@ -33,39 +33,25 @@ Section PRESERVATION.
 
 Variable prog: program.
 Variable tprog: program.
+Variable se: Genv.symtbl.
 Hypothesis TRANSL: match_prog prog tprog.
-Let ge := Genv.globalenv prog.
-Let tge := Genv.globalenv tprog.
+Hypothesis SEVALID: Genv.valid_for (erase_program prog) se.
+Let ge := Genv.globalenv se prog.
+Let tge := Genv.globalenv se tprog.
 
 (** * Correctness of the code transformation *)
 
 (** We now show that the transformed code after constant propagation
   has the same semantics as the original code. *)
 
-Lemma symbols_preserved:
-  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
-Proof (Genv.find_symbol_match TRANSL).
-
-Lemma senv_preserved:
-  Senv.equiv ge tge.
-Proof. exact (Senv.senv_match TRANSL). Qed.
-
 Lemma functions_translated:
-  forall (v: val) (f: fundef),
+  forall (v tv: val) (f: fundef),
   Genv.find_funct ge v = Some f ->
-  exists cunit, Genv.find_funct tge v = Some (transf_fundef (romem_for cunit) f) /\ linkorder cunit prog.
+  Val.lessdef v tv ->
+  Genv.find_funct tge tv = Some (transf_fundef (romem_for prog) f).
 Proof.
-  intros. exploit (Genv.find_funct_match TRANSL); eauto.
-  intros (cu & tf & A & B & C). subst tf. exists cu; auto.
-Qed.
-
-Lemma function_ptr_translated:
-  forall (b: block) (f: fundef),
-  Genv.find_funct_ptr ge b = Some f ->
-  exists cunit, Genv.find_funct_ptr tge b = Some (transf_fundef (romem_for cunit) f) /\ linkorder cunit prog.
-Proof.
-  intros. exploit (Genv.find_funct_ptr_match TRANSL); eauto.
-  intros (cu & tf & A & B & C). subst tf. exists cu; auto.
+  intros v tv f Hf Hv. apply (Genv.find_funct_transf_id TRANSL).
+  unfold Genv.find_funct in *. destruct v; try discriminate. inv Hv. auto.
 Qed.
 
 Lemma sig_function_translated:
@@ -86,39 +72,21 @@ Proof.
   apply set_reg_lessdef; auto.
 Qed.
 
-Lemma transf_ros_correct:
-  forall bc rs ae ros f rs',
+Lemma ros_address_translated:
+  forall ros bc rs ae rs',
   genv_match bc ge ->
   ematch bc rs ae ->
-  find_function ge ros rs = Some f ->
   regs_lessdef rs rs' ->
-  exists cunit,
-     find_function tge (transf_ros ae ros) rs' = Some (transf_fundef (romem_for cunit) f)
-  /\ linkorder cunit prog.
+  Val.lessdef (ros_address ge ros rs) (ros_address tge (transf_ros ae ros) rs').
 Proof.
-  intros until rs'; intros GE EM FF RLD. destruct ros; simpl in *.
+  intros until rs'; intros GE EM RLD. destruct ros; simpl in *.
 - (* function pointer *)
   generalize (EM r); fold (areg ae r); intro VM. generalize (RLD r); intro LD.
-  assert (DEFAULT:
-    exists cunit,
-       find_function tge (inl _ r) rs' = Some (transf_fundef (romem_for cunit) f)
-    /\ linkorder cunit prog).
-  {
-    simpl. inv LD. apply functions_translated; auto. rewrite <- H0 in FF; discriminate.
-  }
   destruct (areg ae r); auto. destruct p; auto.
   predSpec Ptrofs.eq Ptrofs.eq_spec ofs Ptrofs.zero; intros; auto.
-  subst ofs. exploit vmatch_ptr_gl; eauto. intros LD'. inv LD'; try discriminate.
-  rewrite H1 in FF. unfold Genv.symbol_address in FF.
-  simpl. rewrite symbols_preserved.
-  destruct (Genv.find_symbol ge id) as [b|]; try discriminate.
-  simpl in FF. rewrite dec_eq_true in FF.
-  apply function_ptr_translated; auto.
-  rewrite <- H0 in FF; discriminate.
+  subst ofs. exploit vmatch_ptr_gl; eauto.
 - (* function symbol *)
-  rewrite symbols_preserved.
-  destruct (Genv.find_symbol ge i) as [b|]; try discriminate.
-  apply function_ptr_translated; auto.
+  apply Val.lessdef_refl.
 Qed.
 
 Lemma const_for_result_correct:
@@ -129,10 +97,7 @@ Lemma const_for_result_correct:
   genv_match bc ge ->
   exists v', eval_operation tge (Vptr sp Ptrofs.zero) op nil m = Some v' /\ Val.lessdef v v'.
 Proof.
-  intros. exploit ConstpropOpproof.const_for_result_correct; eauto. intros (v' & A & B).
-  exists v'; split.
-  rewrite <- A; apply eval_operation_preserved. exact symbols_preserved.
-  auto.
+  intros. exploit ConstpropOpproof.const_for_result_correct; eauto.
 Qed.
 
 Inductive match_pc (f: function) (rs: regset) (m: mem): nat -> node -> node -> Prop :=
@@ -283,31 +248,29 @@ Qed.
 
 Inductive match_stackframes: stackframe -> stackframe -> Prop :=
    match_stackframe_intro:
-      forall res sp pc rs f rs' cu,
-      linkorder cu prog ->
+      forall res sp pc rs f rs',
       regs_lessdef rs rs' ->
     match_stackframes
         (Stackframe res f sp pc rs)
-        (Stackframe res (transf_function (romem_for cu) f) sp pc rs').
+        (Stackframe res (transf_function (romem_for prog) f) sp pc rs').
 
 Inductive match_states: nat -> state -> state -> Prop :=
   | match_states_intro:
-      forall s sp pc rs m f s' pc' rs' m' cu n
-           (LINK: linkorder cu prog)
+      forall s sp pc rs m f s' pc' rs' m' n
            (STACKS: list_forall2 match_stackframes s s')
            (PC: match_pc f rs m n pc pc')
            (REGS: regs_lessdef rs rs')
            (MEM: Mem.extends m m'),
       match_states n (State s f sp pc rs m)
-                    (State s' (transf_function (romem_for cu) f) sp pc' rs' m')
+                    (State s' (transf_function (romem_for prog) f) sp pc' rs' m')
   | match_states_call:
-      forall s f args m s' args' m' cu
-           (LINK: linkorder cu prog)
+      forall s vf args m s' vf' args' m'
            (STACKS: list_forall2 match_stackframes s s')
+           (VF: Val.lessdef vf vf')
            (ARGS: Val.lessdef_list args args')
            (MEM: Mem.extends m m'),
-      match_states O (Callstate s f args m)
-                     (Callstate s' (transf_fundef (romem_for cu) f) args' m')
+      match_states O (Callstate s vf args m)
+                     (Callstate s' vf' args' m')
   | match_states_return:
       forall s v m s' v' m'
            (STACKS: list_forall2 match_stackframes s s')
@@ -318,13 +281,12 @@ Inductive match_states: nat -> state -> state -> Prop :=
                      (Returnstate s' v' m').
 
 Lemma match_states_succ:
-  forall s f sp pc rs m s' rs' m' cu,
-  linkorder cu prog ->
+  forall s f sp pc rs m s' rs' m',
   list_forall2 match_stackframes s s' ->
   regs_lessdef rs rs' ->
   Mem.extends m m' ->
   match_states O (State s f sp pc rs m)
-                 (State s' (transf_function (romem_for cu) f) sp pc rs' m').
+                 (State s' (transf_function (romem_for prog) f) sp pc rs' m').
 Proof.
   intros. apply match_states_intro; auto. constructor.
 Qed.
@@ -347,10 +309,10 @@ Ltac TransfInstr :=
 (** The proof of simulation proceeds by case analysis on the transition
   taken in the source code. *)
 
-Lemma transf_step_correct:
+Lemma transf_step_correct m0 bc0:
   forall s1 t s2,
   step ge s1 t s2 ->
-  forall n1 s1' (SS: sound_state prog s1) (MS: match_states n1 s1 s1'),
+  forall n1 s1' (SS: sound_state prog se m0 bc0 s1) (MS: match_states n1 s1 s1'),
   (exists n2, exists s2', step tge s1' t s2' /\ match_states n2 s2 s2')
   \/ (exists n2, n2 < n1 /\ t = E0 /\ match_states n2 s2 s1')%nat.
 Proof.
@@ -395,7 +357,6 @@ Proof.
   destruct EV'' as [v'' [EV'' LD'']].
   left; econstructor; econstructor; split.
   eapply exec_Iop; eauto.
-  erewrite eval_operation_preserved. eexact EV''. exact symbols_preserved.
   apply match_states_intro; auto.
   eapply match_successor; eauto.
   apply set_reg_lessdef; auto. eapply Val.lessdef_trans; eauto.
@@ -404,7 +365,7 @@ Proof.
   rename pc'0 into pc. TransfInstr.
   set (aa := eval_static_addressing addr (aregs ae args)).
   assert (VM1: vmatch bc a aa) by (eapply eval_static_addressing_sound; eauto with va).
-  set (av := loadv chunk (romem_for cu) am aa).
+  set (av := loadv chunk (romem_for prog) am aa).
   assert (VM2: vmatch bc v av) by (eapply loadv_sound; eauto).
   destruct (const_for_result av) as [cop|] eqn:?; intros.
 + (* constant-propagated *)
@@ -424,8 +385,6 @@ Proof.
   destruct ADDR as (a' & P & Q).
   exploit eval_addressing_lessdef. eapply regs_lessdef_regs; eauto. eexact P.
   intros (a'' & U & V).
-  assert (W: eval_addressing tge (Vptr sp0 Ptrofs.zero) addr' rs'##args' = Some a'').
-  { rewrite <- U. apply eval_addressing_preserved. exact symbols_preserved. }
   exploit Mem.loadv_extends. eauto. eauto. apply Val.lessdef_trans with a'; eauto.
   intros (v' & X & Y).
   left; econstructor; econstructor; split.
@@ -444,8 +403,6 @@ Proof.
   destruct ADDR as (a' & P & Q).
   exploit eval_addressing_lessdef. eapply regs_lessdef_regs; eauto. eexact P.
   intros (a'' & U & V).
-  assert (W: eval_addressing tge (Vptr sp0 Ptrofs.zero) addr' rs'##args' = Some a'').
-  { rewrite <- U. apply eval_addressing_preserved. exact symbols_preserved. }
   exploit Mem.storev_extends. eauto. eauto. apply Val.lessdef_trans with a'; eauto. apply REGS.
   intros (m2' & X & Y).
   left; econstructor; econstructor; split.
@@ -454,7 +411,8 @@ Proof.
 
 - (* Icall *)
   rename pc'0 into pc.
-  exploit transf_ros_correct; eauto. intros (cu' & FIND & LINK').
+  exploit (ros_address_translated ros); eauto. intros FEXT.
+  exploit functions_translated; eauto using ros_address_translated. intro FIND.
   TransfInstr; intro.
   left; econstructor; econstructor; split.
   eapply exec_Icall; eauto. apply sig_function_translated; auto.
@@ -464,7 +422,8 @@ Proof.
 
 - (* Itailcall *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
-  exploit transf_ros_correct; eauto. intros (cu' & FIND & LINK').
+  exploit (ros_address_translated ros); eauto. intros FEXT.
+  exploit functions_translated; eauto using ros_address_translated. intro FIND.
   TransfInstr; intro.
   left; econstructor; econstructor; split.
   eapply exec_Itailcall; eauto. apply sig_function_translated; auto.
@@ -482,8 +441,6 @@ Opaque builtin_strength_reduction.
   intros [v' [m2' [A [B [C D]]]]].
   left; econstructor; econstructor; split.
   eapply exec_Ibuiltin; eauto.
-  eapply eval_builtin_args_preserved. eexact symbols_preserved. eauto.
-  eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   eapply match_states_succ; eauto.
   apply set_res_lessdef; auto.
 
@@ -496,7 +453,7 @@ Opaque builtin_strength_reduction.
   generalize (cond_strength_reduction_correct bc ae rs m EM cond args (aregs ae args) (eq_refl _)).
   destruct (cond_strength_reduction cond args (aregs ae args)) as [cond' args'].
   intros EV1 TCODE.
-  left; exists O; exists (State s' (transf_function (romem_for cu) f) (Vptr sp0 Ptrofs.zero) (if b then ifso else ifnot) rs' m'); split.
+  left; exists O; exists (State s' (transf_function (romem_for prog) f) (Vptr sp0 Ptrofs.zero) (if b then ifso else ifnot) rs' m'); split.
   destruct (resolve_branch ac) eqn: RB.
   assert (b0 = b) by (eapply resolve_branch_sound; eauto). subst b0.
   destruct b; eapply exec_Inop; eauto.
@@ -511,8 +468,8 @@ Opaque builtin_strength_reduction.
 
 - (* Ijumptable *)
   rename pc'0 into pc.
-  assert (A: (fn_code (transf_function (romem_for cu) f))!pc = Some(Ijumptable arg tbl)
-             \/ (fn_code (transf_function (romem_for cu) f))!pc = Some(Inop pc')).
+  assert (A: (fn_code (transf_function (romem_for prog) f))!pc = Some(Ijumptable arg tbl)
+             \/ (fn_code (transf_function (romem_for prog) f))!pc = Some(Inop pc')).
   { TransfInstr.
     destruct (areg ae arg) eqn:A; auto.
     generalize (EM arg). fold (areg ae arg); rewrite A.
@@ -520,7 +477,7 @@ Opaque builtin_strength_reduction.
     rewrite H1. auto. }
   assert (rs'#arg = Vint n).
   { generalize (REGS arg). rewrite H0. intros LD; inv LD; auto. }
-  left; exists O; exists (State s' (transf_function (romem_for cu) f) (Vptr sp0 Ptrofs.zero) pc' rs' m'); split.
+  left; exists O; exists (State s' (transf_function (romem_for prog) f) (Vptr sp0 Ptrofs.zero) pc' rs' m'); split.
   destruct A. eapply exec_Ijumptable; eauto. eapply exec_Inop; eauto.
   eapply match_states_succ; eauto.
 
@@ -532,6 +489,7 @@ Opaque builtin_strength_reduction.
   destruct or; simpl; auto.
 
 - (* internal function *)
+  exploit functions_translated; eauto. intro FIND'.
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros [m2' [A B]].
   simpl. unfold transf_function.
@@ -542,11 +500,11 @@ Opaque builtin_strength_reduction.
   apply init_regs_lessdef; auto.
 
 - (* external function *)
+  exploit functions_translated; eauto. intro FIND'.
   exploit external_call_mem_extends; eauto.
   intros [v' [m2' [A [B [C D]]]]].
   simpl. left; econstructor; econstructor; split.
   eapply exec_function_external; eauto.
-  eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   constructor; auto.
 
 - (* return *)
@@ -556,48 +514,73 @@ Opaque builtin_strength_reduction.
   econstructor; eauto. constructor. apply set_reg_lessdef; auto.
 Qed.
 
+Require Import LanguageInterface.
+
 Lemma transf_initial_states:
-  forall st1, initial_state prog st1 ->
-  exists n, exists st2, initial_state tprog st2 /\ match_states n st1 st2.
+  forall q1 q2 st1, cc_ext_query q1 q2 -> initial_state ge q1 st1 ->
+  exists n, exists st2, initial_state tge q2 st2 /\ match_states n st1 st2.
 Proof.
-  intros. inversion H.
-  exploit function_ptr_translated; eauto. intros (cu & FIND & LINK).
-  exists O; exists (Callstate nil (transf_fundef (romem_for cu) f) nil m0); split.
-  econstructor; eauto.
-  apply (Genv.init_mem_match TRANSL); auto.
-  replace (prog_main tprog) with (prog_main prog).
-  rewrite symbols_preserved. eauto.
-  symmetry; eapply match_program_main; eauto.
-  rewrite <- H3. apply sig_function_translated.
-  constructor. auto. constructor. constructor. apply Mem.extends_refl.
+  intros. destruct H. inv H0.
+  exploit functions_translated; eauto. intros FIND.
+  exists O; exists (Callstate nil vf vargs2 m2); split.
+  - setoid_rewrite <- (sig_function_translated (romem_for prog) (Internal f)).
+    constructor; auto.
+  - constructor; auto. constructor.
 Qed.
 
 Lemma transf_final_states:
-  forall n st1 st2 r,
-  match_states n st1 st2 -> final_state st1 r -> final_state st2 r.
+  forall n st1 st2 r1,
+  match_states n st1 st2 -> final_state st1 r1 ->
+  exists r2, final_state st2 r2 /\ cc_ext_reply r1 r2.
 Proof.
-  intros. inv H0. inv H. inv STACKS. inv RES. constructor.
+  intros. inv H0. inv H. inv STACKS.
+  eexists; split; constructor; eauto.
 Qed.
+
+Lemma transf_external_states:
+  forall n st1 st2 q1, match_states n st1 st2 -> at_external ge st1 q1 ->
+  exists q2, at_external tge st2 q2 /\ cc_ext_query q1 q2 /\ se = se /\
+  forall r1 r2 st1', cc_ext_reply r1 r2 -> after_external st1 r1 st1' ->
+  exists n' st2', after_external st2 r2 st2' /\ match_states n' st1' st2'.
+Proof.
+  intros n st1 st2 q1 Hst Hq1. destruct Hq1. inv Hst.
+  exploit functions_translated; eauto. intro FIND'.
+  eexists. intuition idtac.
+  - econstructor; eauto.
+  - destruct VF; try discriminate.
+    constructor; auto.
+    destruct v; cbn in *; congruence.
+  - inv H1. inv H0.
+    eexists _, (Returnstate s' vres2 m2); split; constructor; eauto.
+Qed.
+
+End PRESERVATION.
 
 (** The preservation of the observable behavior of the program then
   follows. *)
 
-Theorem transf_program_correct:
-  forward_simulation (RTL.semantics prog) (RTL.semantics tprog).
+Require Import Invariant.
+
+Theorem transf_program_correct prog tprog:
+  match_prog prog tprog ->
+  forward_simulation (vamatch @ cc_ext) (vamatch @ cc_ext) (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
-  apply Forward_simulation with lt (fun n s1 s2 => sound_state prog s1 /\ match_states n s1 s2); constructor.
-- apply lt_wf.
-- simpl; intros. exploit transf_initial_states; eauto. intros (n & st2 & A & B).
-  exists n, st2; intuition. eapply sound_initial; eauto.
-- simpl; intros. destruct H. eapply transf_final_states; eauto.
-- simpl; intros. destruct H0.
-  assert (sound_state prog s1') by (eapply sound_step; eauto).
-  fold ge; fold tge.
+  intros MATCH. eapply source_invariant_fsim; eauto using rtl_vamatch. revert MATCH.
+  fsim (eapply Build_fsim_properties with (order := lt) (match_states := match_states prog));
+    try destruct Hse; cbn.
+- destruct 1. cbn. eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
+- intros q1 q2 s1 Hq (_ & _ & Hs1 & _).
+  eapply transf_initial_states; eauto.
+- intros n s1 s2 r1 Hs (_ & _ & Hr1 & _).
+  eapply transf_final_states; eauto.
+- intros n s1 s2 q1 Hs (_ & _ & _ & Hq1 & _).
+  edestruct transf_external_states as (q2 & Hq2 & Hq & _ & Hk); eauto.
+  exists tt, q2. repeat apply conj; eauto.
+  intros r1 r2 s1' Hr (_ & _ & _ & _ & _ & Hs1' & _). eauto.
+- intros s1 t s1' ([se bc0 m0] & Hse & STEP & Hs1 & Hs1') n s2 Hs. subst. cbn in *.
   exploit transf_step_correct; eauto.
   intros [ [n2 [s2' [A B]]] | [n2 [A [B C]]]].
   exists n2; exists s2'; split; auto. left; apply plus_one; auto.
   exists n2; exists s2; split; auto. right; split; auto. subst t; apply star_refl.
-- apply senv_preserved.
+- apply lt_wf.
 Qed.
-
-End PRESERVATION.
