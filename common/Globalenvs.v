@@ -156,8 +156,8 @@ Definition invert_symbol (ge: symtbl) (b: block) : option ident :=
 (** [find_var_info ge b] returns the information attached to the variable
    at address [b]. *)
 
-Definition find_var_info (ge: t) (b: block) : option (globvar V) :=
-  match find_def ge b with Some (Gvar v) => Some v | _ => None end.
+Definition find_var_info (ge: symtbl) (b: block) : option (globvar unit) :=
+  match find_info ge b with Some (Gvar v) => Some v | _ => None end.
 
 (** [block_is_volatile ge b] returns [true] if [b] points to a global variable
   of volatile type, [false] otherwise. *)
@@ -409,9 +409,9 @@ Proof.
 Qed.
 
 Theorem find_var_info_iff:
-  forall ge b v, find_var_info ge b = Some v <-> find_def ge b = Some (Gvar v).
+  forall ge b v, find_var_info ge b = Some v <-> find_info ge b = Some (Gvar v).
 Proof.
-  intros. unfold find_var_info. destruct (find_def ge b) as [[f1|v1]|]; intuition congruence.
+  intros. unfold find_var_info. destruct (find_info ge b) as [[f1|v1]|]; intuition congruence.
 Qed.
 
 Theorem find_symbol_injective:
@@ -501,6 +501,33 @@ Proof.
   unfold block_is_volatile; intros.
   destruct PTree.get as [[|gv]|] eqn:FV; try discriminate.
   eapply genv_info_range; eauto.
+Qed.
+
+Lemma find_info_symbol p id gd:
+  (prog_defmap p) ! id = Some gd <->
+  exists b,
+    find_symbol (symboltbl p) id = Some b /\
+    find_info (symboltbl p) b = Some gd.
+Proof.
+  unfold prog_defmap, symboltbl, add_globals, PTree_Properties.of_list.
+  generalize (prog_public p), (prog_defs p). clear. intros pub.
+  apply rev_ind.
+  - unfold empty_stbl, find_symbol, find_info. cbn. split.
+    + rewrite !PTree.gempty. discriminate.
+    + intros (? & ? & ?). rewrite !PTree.gempty in *. discriminate.
+  - intros [i g] defs IHdefs.
+    rewrite !fold_left_app. cbn.
+    unfold find_symbol, find_info in *. cbn.
+    destruct (peq id i).
+    + subst. rewrite !PTree.gss. split.
+      * inversion 1; subst. eexists. split; eauto. rewrite PTree.gss. auto.
+      * intros (b & Hb & ?). inv Hb. rewrite PTree.gss in *. auto.
+    + rewrite PTree.gso by auto. rewrite IHdefs. split.
+      * intros (b & Hb & ?). eexists. rewrite PTree.gso by auto. split; eauto.
+        rewrite PTree.gso; eauto. apply genv_symb_range in Hb. xomega.
+      * intros (b & Hb & ?). rewrite PTree.gso in * by auto.
+        eexists. split; eauto. rewrite PTree.gso in *; auto.
+        apply genv_symb_range in Hb. xomega.
 Qed.
 
 (** ** Properties of [globalenv] *)
@@ -1236,10 +1263,9 @@ Proof.
   red; intros. unfold find_info in H0; simpl in H0; rewrite PTree.gempty in H0; discriminate.
 Qed.
 
-(*
 Theorem init_mem_characterization:
   forall p b gv m,
-  find_info (symboltbl p) b = Some (Gvar gv) ->
+  find_var_info (symboltbl p) b = Some gv ->
   init_mem p = Some m ->
   Mem.range_perm m b 0 (init_data_list_size gv.(gvar_init)) Cur (perm_globvar gv)
   /\ (forall ofs k p, Mem.perm m b ofs k p ->
@@ -1252,18 +1278,6 @@ Proof.
   intros. rewrite find_var_info_iff in H.
   exploit init_mem_characterization_gen; eauto.
 Qed.
-
-Theorem init_mem_characterization_2:
-  forall p b fd m,
-  find_funct_ptr (globalenv p) b = Some fd ->
-  init_mem p = Some m ->
-  Mem.perm m b 0 Cur Nonempty
-  /\ (forall ofs k p, Mem.perm m b ofs k p -> ofs = 0 /\ p = Nonempty).
-Proof.
-  intros. rewrite find_funct_ptr_iff in H.
-  exploit init_mem_characterization_gen; eauto.
-Qed.
-*)
 
 (** ** Compatibility with memory injections *)
 

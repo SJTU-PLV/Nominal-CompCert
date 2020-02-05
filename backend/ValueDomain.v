@@ -1113,7 +1113,7 @@ Qed.
 
 (** Loading constants *)
 
-Definition genv_match (ge: genv) : Prop :=
+Definition genv_match (ge: Genv.symtbl) : Prop :=
   (forall id b, Genv.find_symbol ge id = Some b <-> bc b = BCglob id)
 /\(forall b, Plt b (Genv.genv_next ge) -> bc b <> BCinvalid /\ bc b <> BCstack).
 
@@ -4329,13 +4329,15 @@ Proof.
 Qed.
 
 Lemma inj_of_bc_preserves_globals:
-  forall bc ge, genv_match bc ge -> meminj_preserves_globals ge (inj_of_bc bc).
+  forall bc ge, genv_match bc ge -> Genv.match_stbls (inj_of_bc bc) ge ge.
 Proof.
   intros. destruct H as [A B].
-  split. intros. apply inj_of_bc_valid. rewrite A in H. congruence.
-  split. intros. apply inj_of_bc_valid. apply B.
-    rewrite Genv.find_var_info_iff in H. eapply Genv.genv_defs_range; eauto.
-  intros. exploit inj_of_bc_inv; eauto. intros (P & Q & R). auto.
+  split; eauto.
+  - intros. eexists. apply inj_of_bc_valid. apply B; auto.
+  - intros. edestruct inj_of_bc_inv as (P & Q & R); eauto. congruence.
+  - intros. edestruct inj_of_bc_inv as (P & Q & R); eauto. split; congruence.
+  - intros. edestruct inj_of_bc_inv as (P & Q & R); eauto. congruence.
+  - intros. edestruct inj_of_bc_inv as (P & Q & R); eauto. split; congruence.
 Qed.
 
 Lemma pmatch_inj_top:

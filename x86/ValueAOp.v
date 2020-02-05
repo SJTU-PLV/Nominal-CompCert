@@ -166,7 +166,7 @@ Definition eval_static_operation (op: operation) (vl: list aval): aval :=
 Section SOUNDNESS.
 
 Variable bc: block_classification.
-Variable ge: genv.
+Variable ge: Genv.symtbl.
 Hypothesis GENV: genv_match bc ge.
 Variable sp: block.
 Hypothesis STACK: bc sp = BCstack.
