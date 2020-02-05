@@ -16,12 +16,13 @@
 Require Import FunInd.
 Require Import Coqlib.
 Require Import Integers Values Memory.
+Require Import Globalenvs.
 Require Import Op RTL CSEdomain.
 Require Import CombineOp.
 
 Section COMBINE.
 
-Variable ge: genv.
+Variable ge: Genv.symtbl.
 Variable sp: val.
 Variable m: mem.
 Variable get: valnum -> option rhs.

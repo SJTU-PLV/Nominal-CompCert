@@ -51,7 +51,7 @@ Require Tailcall.
 Require Inlining.
 Require Renumber.
 Require Constprop.
-(*Require CSE.*)
+Require CSE.
 (*Require Deadcode.*)
 (*Require Unusedglob.*)
 Require Allocation.
@@ -72,7 +72,7 @@ Require Tailcallproof.
 Require Inliningproof.
 Require Renumberproof.
 Require Constpropproof.
-(*Require CSEproof.*)
+Require CSEproof.
 (*Require Deadcodeproof.*)
 (*Require Unusedglobproof.*)
 Require Allocproof.
@@ -142,9 +142,9 @@ Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
   !@@ print (print_RTL 4)
   !@@ total_if Compopts.optim_constprop (time "Renumbering" Renumber.transf_program)
   !@@ print (print_RTL 5)
-(*
   @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
-   @@ print (print_RTL 6)
+  !@@ print (print_RTL 6)
+(*
   @@@ partial_if Compopts.optim_redundancy (time "Redundancy elimination" Deadcode.transf_program)
    @@ print (print_RTL 7)
   @@@ time "Unused globals" Unusedglob.transform_program
@@ -259,8 +259,8 @@ Definition CompCert's_passes :=
   ::: mkpass Renumberproof.match_prog
   ::: mkpass (match_if Compopts.optim_constprop Constpropproof.match_prog)
   ::: mkpass (match_if Compopts.optim_constprop Renumberproof.match_prog)
-(*
   ::: mkpass (match_if Compopts.optim_CSE CSEproof.match_prog)
+(*
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
 *)
@@ -312,12 +312,12 @@ Proof.
   set (p9 := Renumber.transf_program p8) in *.
   set (p10 := total_if optim_constprop Constprop.transf_program p9) in *.
   set (p11 := total_if optim_constprop Renumber.transf_program p10) in *.
-  (*
   destruct (partial_if optim_CSE CSE.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
+  (*
   destruct (partial_if optim_redundancy Deadcode.transf_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
   destruct (Unusedglob.transform_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
    *)
-  destruct (Allocation.transf_program p11) as [p15|e] eqn:P15; simpl in T; try discriminate.
+  destruct (Allocation.transf_program p12) as [p15|e] eqn:P15; simpl in T; try discriminate.
   set (p16 := Tunneling.tunnel_program p15) in *.
   destruct (Linearize.transf_program p16) as [p17|e] eqn:P17; simpl in T; try discriminate.
   set (p18 := CleanupLabels.transf_program p17) in *.
@@ -337,8 +337,8 @@ Proof.
   exists p9; split. apply Renumberproof.transf_program_match; auto.
   exists p10; split. apply total_if_match. apply Constpropproof.transf_program_match.
   exists p11; split. apply total_if_match. apply Renumberproof.transf_program_match.
-  (*
   exists p12; split. eapply partial_if_match; eauto. apply CSEproof.transf_program_match.
+  (*
   exists p13; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
   exists p14; split. apply Unusedglobproof.transf_program_match; auto.
    *)
@@ -417,6 +417,7 @@ Qed.
 Definition cc_backend : callconv li_c Asm.li_asm :=
   cc_inj @
   ((Invariant.cc_inv ValueAnalysis.vamatch @ cc_ext) @ cc_id) @
+  (Invariant.cc_inv ValueAnalysis.vamatch @ cc_ext) @
   Conventions.cc_alloc @
   Conventions.cc_locset_ext @
   Mach.cc_stacking @
@@ -552,7 +553,7 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p17)).
+  assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p18)).
   {
   eapply compose_clight_properties.
   (*
@@ -594,9 +595,14 @@ Ltac DestructM :=
       rewrite <- cc_c_ext at 1. rewrite <- cc_c_ext.
         eapply RTLrel.semantics_rel.
         eapply identity_forward_simulation.
-  (*
   eapply compose_forward_simulations.
-    eapply match_if_simulation. eassumption. exact CSEproof.transf_program_correct.
+    red in M9. destruct optim_CSE; subst.
+    eapply CSEproof.transf_program_correct; eauto.
+    eapply compose_forward_simulations.
+      eapply Invariant.preserves_fsim. eapply ValueAnalysis.rtl_vamatch.
+      rewrite <- cc_c_ext at 1. rewrite <- cc_c_ext.
+      eapply RTLrel.semantics_rel.
+  (*
   eapply compose_forward_simulations.
     eapply match_if_simulation. eassumption. exact Deadcodeproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.

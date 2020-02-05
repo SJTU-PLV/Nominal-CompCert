@@ -18,6 +18,7 @@ Require Import Maps.
 Require Import AST.
 Require Import Values.
 Require Import Memory.
+Require Import Globalenvs.
 Require Import Op.
 Require Import Registers.
 Require Import RTL.
@@ -101,7 +102,7 @@ Hint Resolve wf_num_eqs wf_num_reg wf_num_val: cse.
 
 Definition valuation := valnum -> val.
 
-Inductive rhs_eval_to (valu: valuation) (ge: genv) (sp: val) (m: mem):
+Inductive rhs_eval_to (valu: valuation) (ge: Genv.symtbl) (sp: val) (m: mem):
                                                      rhs -> val -> Prop :=
   | op_eval_to: forall op vl v,
       eval_operation ge sp op (map valu vl) m = Some v ->
@@ -111,7 +112,7 @@ Inductive rhs_eval_to (valu: valuation) (ge: genv) (sp: val) (m: mem):
       Mem.loadv chunk m a = Some v ->
       rhs_eval_to valu ge sp m (Load chunk addr vl) v.
 
-Inductive equation_holds (valu: valuation) (ge: genv) (sp: val) (m: mem):
+Inductive equation_holds (valu: valuation) (ge: Genv.symtbl) (sp: val) (m: mem):
                                                       equation -> Prop :=
   | eq_holds_strict: forall l r,
       rhs_eval_to valu ge sp m r (valu l) ->
@@ -120,7 +121,7 @@ Inductive equation_holds (valu: valuation) (ge: genv) (sp: val) (m: mem):
       rhs_eval_to valu ge sp m r v -> Val.lessdef v (valu l) ->
       equation_holds valu ge sp m (Eq l false r).
 
-Record numbering_holds (valu: valuation) (ge: genv) (sp: val)
+Record numbering_holds (valu: valuation) (ge: Genv.symtbl) (sp: val)
                        (rs: regset) (m: mem) (n: numbering) : Prop := {
   num_holds_wf:
      wf_numbering n;
