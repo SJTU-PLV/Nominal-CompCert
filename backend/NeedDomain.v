@@ -796,7 +796,7 @@ Definition default (x: nval) :=
 
 Section DEFAULT.
 
-Variable ge: genv.
+Variable ge: Genv.symtbl.
 Variable sp: block.
 Variables m1 m2: mem.
 Hypothesis PERM: forall b ofs k p, Mem.perm m1 b ofs k p -> Mem.perm m2 b ofs k p.
@@ -874,7 +874,7 @@ Proof.
     destruct H0. inv H0; constructor; auto with na.
     inv H0; constructor; auto with na. inv H8; constructor; auto with na.
   }
-  exploit (@eval_operation_inj _ _ _ _ ge ge inject_id).
+  exploit (@eval_operation_inj ge ge inject_id).
   eassumption. auto. auto. auto.
   instantiate (1 := op). intros. apply val_inject_lessdef; auto.
   apply val_inject_lessdef. instantiate (1 := Vptr sp Ptrofs.zero). instantiate (1 := Vptr sp Ptrofs.zero). auto.
@@ -1104,7 +1104,7 @@ Inductive nmem : Type :=
 
 Section LOCATIONS.
 
-Variable ge: genv.
+Variable ge: Genv.symtbl.
 Variable sp: block.
 
 Inductive nlive: nmem -> block -> Z -> Prop :=

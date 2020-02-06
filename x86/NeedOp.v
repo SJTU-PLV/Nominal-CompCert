@@ -148,7 +148,7 @@ Ltac TrivialExists :=
 
 Section SOUNDNESS.
 
-Variable ge: genv.
+Variable ge: Genv.symtbl.
 Variable sp: block.
 Variables m m': mem.
 Hypothesis PERM: forall b ofs k p, Mem.perm m b ofs k p -> Mem.perm m' b ofs k p.
