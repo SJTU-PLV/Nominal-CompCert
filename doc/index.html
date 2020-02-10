@@ -348,5 +348,54 @@ reconstruction.
 <ADDRESS>Xavier.Leroy@inria.fr</ADDRESS>
 <HR>
 
+<H3>CompCertO</H3>
+
+The semantic model used in this version of CompCert
+has been extended to describe the behavior of individual compilation units
+and enable compositional verification.
+This is implemented in the following files:
+<UL>
+<LI> <A HREF="html/compcert.common.LanguageInterface.html">LanguageInterface</A>
+  introduces a systematic way to describe
+  calls into and out of of component.
+<LI> <A HREF="html/compcert.common.Globalenvs.html">Globalenvs</A>
+  is updated to split out <EM>symbol tables</EM> from global environments.
+  The symbol table is shared by all running components and
+  provided to the component semantics as a parameter.
+<LI> <A HREF="html/compcert.common.Smallstep.html">Smallstep</A>
+  is updated accordingly.
+<LI> <A HREF="html/compcert.common.SmallstepLinking.html">SmallstepLinking</A>
+  defines a semantic horizontal composition operator,
+  which describes component interaction and models linking.
+<LI> <A HREF="html/compcert.x86.AsmLinking.html">AsmLinking</A>
+  shows that syntactically linking assembly programs
+  implements their horizontal composition.
+<LI> <A HREF="html/compcert.common.CallconvAlgebra.html">CallconvAlgebra</A>
+  provides high-level constructions for reasoning about
+  simulation conventions.
+<LI> <A HREF="html/compcert.driver.Compiler.html">Compiler</A>
+  puts everything together.
+</UL>
+
+These compositional extensions rely on a theory of
+CompCert Kripke logical relations (CKLR),
+implemented in the following:
+<UL>
+<LI> <A HREF="html/compcert.cklr.CKLR.html">CKLR</A>
+  contains the core definitions.
+<LI> <A HREF="html/compcert.cklr.Extends.html">Extends</A>
+  describes the CKLR <TT>ext</TT>.
+<LI> <A HREF="html/compcert.cklr.Inject.html">Inject</A>
+  describes the CKLR <TT>inj</TT>.
+<LI> <A HREF="html/compcert.cklr.Extends.html">InjectFootprint</A>
+  describes the CKLR <TT>injp</TT>.
+<LI> <A HREF="html/compcert.cklr.Clightrel.html">Clightrel</A>
+  establishes the parametricity result for Clight.
+<LI> <A HREF="html/compcert.cklr.RTLrel.html">RTLrel</A>
+  establishes the parametricity result for RTL.
+<LI> <A HREF="html/compcert.cklr.CKLRAlgebra.html">CKLRAlgebra</A>
+  has results about the ways CKLRs compose and combine.
+</UL>
+
 </BODY>
 </HTML>
