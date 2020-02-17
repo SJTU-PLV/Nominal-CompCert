@@ -1,3 +1,48 @@
+# CompCertO
+
+A version of CompCert featuring an open module semantics, designed to
+target the framework of *refinement-based game semantics*.
+
+## Overview
+
+This is a modified version of CompCert v3.5. The language semantics
+and correctness proofs have been updated to describe the behavior of
+individual compilation units. Most passes from Clight to Asm have
+been update, for the x86 architecture.
+
+## Building
+
+Since our compiler uses Clight as the source language, the first few
+passes are not available and the full extracted compiler cannot be
+built. However the Coq version of the Clight to Asm compiler can be
+compiled in the following way.
+
+Build requirements are similar to that of CompCert v3.5. In addition,
+our modifications rely on the Coqrel library, which must be built
+first. We will include Coqrel in any self-contained archive we
+distribute, but if you are working in a git clone, you must first
+retreive it with the following commands:
+
+    % git submodule init
+    % git submodule update
+
+In any case, to build Coqrel, proceed in the following way:
+
+    % (cd coqrel && ./configure && make)
+
+You can then build the updated proof as follows:
+
+    % ./configure x86_64-linux
+    % make
+
+If appropriate to your setting, we recommend you use a -j option when
+invoking make so as to enable parallel compilation.
+
+The remainder of this document is the original `README.md` distributed
+with CompCert v3.5.
+
+---
+
 # CompCert
 The verified C compiler.
 
