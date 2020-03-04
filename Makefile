@@ -28,7 +28,7 @@ DIRS=lib common $(ARCHDIRS) backend cfrontend driver \
 RECDIRS=lib common $(ARCHDIRS) backend cfrontend driver flocq exportclight \
   cparser cklr
 
-COQINCLUDES=$(foreach d, $(RECDIRS), -R $(d) compcert.$(d)) -R coqrel coqrel
+COQINCLUDES=$(foreach d, $(RECDIRS), -R $(d) compcert.$(d)) -R $(COQREL) coqrel
 
 COQC="$(COQBIN)coqc" -q $(COQINCLUDES) $(COQCOPTS)
 COQDEP="$(COQBIN)coqdep" $(COQINCLUDES)
