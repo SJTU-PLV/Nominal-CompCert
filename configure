@@ -55,10 +55,12 @@ Supported targets:
   x86_64-macosx        (x86 64 bits, MacOS X)
   rv32-linux           (RISC-V 32 bits, Linux)
   rv64-linux           (RISC-V 64 bits, Linux)
+  aarch64-linux        (AArch64, i.e. ARMv8 in 64-bit mode, Linux)
   manual               (edit configuration file by hand)
 
 For x86 targets, the "x86_32-" prefix can also be written "ia32-" or "i386-".
 For x86 targets, the "x86_64-" prefix can also be written "amd64-".
+For AArch64 targets, the "aarch64-" prefix can also be written "arm64-".
 
 For PowerPC targets, the "ppc-" prefix can be refined into:
   ppc64-               PowerPC 64 bits
@@ -175,6 +177,8 @@ case "$target" in
       arch="riscV"; model="32"; endianness="little"; bitsize=32;;
   rv64-*)
       arch="riscV"; model="64"; endianness="little"; bitsize=64;;
+  aarch64-*|arm64-*)
+      arch="aarch64"; model="default"; endianness="little"; bitsize=64;;
   manual)
       ;;
   "")
@@ -428,6 +432,29 @@ if test "$arch" = "riscV"; then
   system="linux"
 fi
 
+#
+# AArch64 (ARMv8 64 bits) Target Configuration
+#
+if test "$arch" = "aarch64"; then
+  case "$target" in
+    linux)
+        abi="standard"
+        casm="${toolprefix}gcc"
+        casm_options="-c"
+        cc="${toolprefix}gcc"
+        clinker="${toolprefix}gcc"
+        clinker_options=""
+        cprepro="${toolprefix}gcc"
+        cprepro_options="-std=c99 -U__GNUC__ -E"
+        libmath="-lm"
+        system="linux";;
+    *)
+        echo "Error: invalid eabi/system '$target' for architecture AArch64." 1>&2
+        echo "$usage" 1>&2
+        exit 2;;
+  esac
+fi
+
 
 #
 # Finalize Target Configuration
@@ -503,19 +530,19 @@ missingtools=false
 echo "Testing Coq... " | tr -d '\n'
 coq_ver=$(${COQBIN}coqc -v 2>/dev/null | sed -n -e 's/The Coq Proof Assistant, version \([^ ]*\).*$/\1/p')
 case "$coq_ver" in
-  8.6.1|8.7.0|8.7.1|8.7.2|8.8.0|8.8.1|8.8.2|8.9.0)
+  8.7.0|8.7.1|8.7.2|8.8.0|8.8.1|8.8.2|8.9.0|8.9.1|8.10)
         echo "version $coq_ver -- good!";;
   ?*)
         echo "version $coq_ver -- UNSUPPORTED"
         if $ignore_coq_version; then
             echo "Warning: this version of Coq is unsupported, proceed at your own risks."
         else
-            echo "Error: CompCert requires one of the following Coq versions: 8.9.0, 8.8.2, 8.8.1, 8.8.0, 8.7.2, 8.7.1, 8.7.0, 8.6.1"
+            echo "Error: CompCert requires one of the following Coq versions: 8.10, 8.9.1, 8.9.0, 8.8.2, 8.8.1, 8.8.0, 8.7.2, 8.7.1, 8.7.0"
             missingtools=true
         fi;;
   "")
         echo "NOT FOUND"
-        echo "Error: make sure Coq version 8.9.0 is installed."
+        echo "Error: make sure Coq version 8.9.1 is installed."
         missingtools=true;;
 esac
 
@@ -553,23 +580,23 @@ else
   ocaml_opt_comp=false
 fi
 
-MENHIR_REQUIRED=20161201
-MENHIR_NEW_API=20180530
-MENHIR_MAX=20181113
-menhir_flags=''
+MENHIR_REQUIRED=20190626
 echo "Testing Menhir... " | tr -d '\n'
 menhir_ver=`menhir --version 2>/dev/null | sed -n -e 's/^.*version \([0-9]*\).*$/\1/p'`
 case "$menhir_ver" in
   20[0-9][0-9][0-9][0-9][0-9][0-9])
-      if test "$menhir_ver" -ge $MENHIR_REQUIRED -a "$menhir_ver" -le $MENHIR_MAX; then
+      if test "$menhir_ver" -ge $MENHIR_REQUIRED; then
           echo "version $menhir_ver -- good!"
-          menhir_includes="-I `menhir --suggest-menhirLib`"
-          if test "$menhir_ver" -ge $MENHIR_NEW_API; then
-              menhir_flags="--coq-lib-path compcert.cparser.MenhirLib"
+          menhir_include_dir=$(menhir --suggest-menhirLib | tr -d '\r' | tr '\\' '/')
+          if test -z "$menhir_include_dir"; then
+              echo "Error: cannot determine the location of the Menhir API library."
+              echo "This can be due to an incorrect Menhir package."
+              echo "Consider using the OPAM package for Menhir."
+              missingtools=true
           fi
       else
           echo "version $menhir_ver -- UNSUPPORTED"
-          echo "Error: CompCert requires a version of Menhir between $MENHIR_REQUIRED and $MENHIR_MAX, included."
+          echo "Error: CompCert requires a version greater or equal to $MENHIR_REQUIRED."
           missingtools=true
       fi;;
   *)
@@ -635,7 +662,8 @@ echo "-R lib compcert.lib \
 -R exportclight compcert.exportclight \
 -R cparser compcert.cparser \
 -R cklr compcert.cklr \
--R coqrel coqrel" > _CoqProject
+-R coqrel coqrel \
+-R MenhirLib compcert.MenhirLib" > _CoqProject
 case $arch in
     x86)
         echo "-R x86_${bitsize} compcert.x86_${bitsize}" >> _CoqProject
@@ -656,8 +684,7 @@ MANDIR=$sharedir/man
 SHAREDIR=$sharedir
 COQDEVDIR=$coqdevdir
 OCAML_OPT_COMP=$ocaml_opt_comp
-MENHIR_INCLUDES=$menhir_includes
-MENHIR_FLAGS=$menhir_flags
+MENHIR_INCLUDES=-I "$menhir_include_dir"
 COMPFLAGS=-bin-annot
 EOF
 
@@ -692,6 +719,8 @@ cat >> Makefile.config <<'EOF'
 # ARCH=powerpc
 # ARCH=arm
 # ARCH=x86
+# ARCH=riscV
+# ARCH=aarch6
 ARCH=
 
 # Hardware variant
@@ -705,23 +734,24 @@ ARCH=
 # MODEL=armv7m      # for ARM
 # MODEL=32sse2      # for x86 in 32-bit mode
 # MODEL=64          # for x86 in 64-bit mode
+# MODEL=default     # for others
 MODEL=
 
 # Target ABI
 # ABI=eabi          # for PowerPC / Linux and other SVR4 or EABI platforms
 # ABI=eabi          # for ARM
 # ABI=hardfloat     # for ARM
-# ABI=standard      # for x86
+# ABI=standard      # for others
 ABI=
 
 # Target bit width
-# BITSIZE=64        # for x86 in 64-bit mode
+# BITSIZE=64        # for x86 in 64-bit mode, RiscV in 64-bit mode, AArch64
 # BITSIZE=32        # otherwise
 BITSIZE=
 
 # Target endianness
 # ENDIANNESS=big     # for ARM or PowerPC
-# ENDIANNESS=little  # for ARM or x86
+# ENDIANNESS=little  # for ARM or x86 or RiscV or AArch64
 ENDIANNESS=
 
 # Target operating system and development environment
@@ -730,7 +760,7 @@ ENDIANNESS=
 # SYSTEM=linux
 # SYSTEM=diab
 #
-# Possible choices for ARM:
+# Possible choices for ARM, AArch64, RiscV:
 # SYSTEM=linux
 #
 # Possible choices for x86:

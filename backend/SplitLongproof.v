@@ -15,42 +15,13 @@
 Require Import String.
 Require Import Coqlib Maps.
 Require Import AST Errors Integers Floats.
-Require Import Values Memory Globalenvs Events Cminor Op CminorSel.
+Require Import Values Memory Globalenvs Builtins Events Cminor Op CminorSel.
 Require Import SelectOp SelectOpproof SplitLong.
 
 Local Open Scope cminorsel_scope.
 Local Open Scope string_scope.
 
-(** * Axiomatization of the helper functions *)
-
-Definition external_implements (name: string) (sg: signature) (vargs: list val) (vres: val) : Prop :=
-  forall ge m,
-  external_call (EF_runtime name sg) ge vargs m E0 vres m.
-
-Definition builtin_implements (name: string) (sg: signature) (vargs: list val) (vres: val) : Prop :=
-  forall ge m,
-  external_call (EF_builtin name sg) ge vargs m E0 vres m.
-
-Axiom i64_helpers_correct :
-    (forall x z, Val.longoffloat x = Some z -> external_implements "__compcert_i64_dtos" sig_f_l (x::nil) z)
- /\ (forall x z, Val.longuoffloat x = Some z -> external_implements "__compcert_i64_dtou" sig_f_l (x::nil) z)
- /\ (forall x z, Val.floatoflong x = Some z -> external_implements "__compcert_i64_stod" sig_l_f (x::nil) z)
- /\ (forall x z, Val.floatoflongu x = Some z -> external_implements "__compcert_i64_utod" sig_l_f (x::nil) z)
- /\ (forall x z, Val.singleoflong x = Some z -> external_implements "__compcert_i64_stof" sig_l_s (x::nil) z)
- /\ (forall x z, Val.singleoflongu x = Some z -> external_implements "__compcert_i64_utof" sig_l_s (x::nil) z)
- /\ (forall x, builtin_implements "__builtin_negl" sig_l_l (x::nil) (Val.negl x))
- /\ (forall x y, builtin_implements "__builtin_addl" sig_ll_l (x::y::nil) (Val.addl x y))
- /\ (forall x y, builtin_implements "__builtin_subl" sig_ll_l (x::y::nil) (Val.subl x y))
- /\ (forall x y, builtin_implements "__builtin_mull" sig_ii_l (x::y::nil) (Val.mull' x y))
- /\ (forall x y z, Val.divls x y = Some z -> external_implements "__compcert_i64_sdiv" sig_ll_l (x::y::nil) z)
- /\ (forall x y z, Val.divlu x y = Some z -> external_implements "__compcert_i64_udiv" sig_ll_l (x::y::nil) z)
- /\ (forall x y z, Val.modls x y = Some z -> external_implements "__compcert_i64_smod" sig_ll_l (x::y::nil) z)
- /\ (forall x y z, Val.modlu x y = Some z -> external_implements "__compcert_i64_umod" sig_ll_l (x::y::nil) z)
- /\ (forall x y, external_implements "__compcert_i64_shl" sig_li_l (x::y::nil) (Val.shll x y))
- /\ (forall x y, external_implements "__compcert_i64_shr" sig_li_l (x::y::nil) (Val.shrlu x y))
- /\ (forall x y, external_implements "__compcert_i64_sar" sig_li_l (x::y::nil) (Val.shrl x y))
- /\ (forall x y, external_implements "__compcert_i64_umulh" sig_ll_l (x::y::nil) (Val.mullhu x y))
- /\ (forall x y, external_implements "__compcert_i64_smulh" sig_ll_l (x::y::nil) (Val.mullhs x y)).
+(** * Properties of the helper functions *)
 
 Definition helper_declared {F V: Type} (p: AST.program (AST.fundef F) V) (id: ident) (name: string) (sg: signature) : Prop :=
   (prog_defmap p)!id = Some (Gfun (External (EF_runtime name sg))).
@@ -86,61 +57,68 @@ Variable sp: val.
 Variable e: env.
 Variable m: mem.
 
-Ltac UseHelper := decompose [Logic.and] i64_helpers_correct; eauto.
 Ltac DeclHelper := red in HELPERS; decompose [Logic.and] HELPERS; eauto.
 
 Lemma eval_helper:
-  forall le id name sg args vargs vres,
+  forall bf le id name sg args vargs vres,
   eval_exprlist ge sp e m le args vargs ->
   helper_declared prog id name sg  ->
-  external_implements name sg vargs vres ->
+  lookup_builtin_function name sg = Some bf ->
+  builtin_function_sem bf vargs = Some vres ->
   eval_expr ge sp e m le (Eexternal id sg args) vres.
 Proof.
   intros.
   red in H0. rewrite Genv.find_def_symbol in H0 by eauto.
   destruct H0 as (b & P & Q).
   rewrite <- Genv.find_funct_ptr_iff in Q.
-  econstructor; eauto.
+  econstructor; eauto. 
+  simpl. red. rewrite H1. constructor; auto.
 Qed.
 
 Corollary eval_helper_1:
-  forall le id name sg arg1 varg1 vres,
+  forall bf le id name sg arg1 varg1 vres,
   eval_expr ge sp e m le arg1 varg1 ->
   helper_declared prog id name sg  ->
-  external_implements name sg (varg1::nil) vres ->
+  lookup_builtin_function name sg = Some bf ->
+  builtin_function_sem bf (varg1 :: nil) = Some vres ->
   eval_expr ge sp e m le (Eexternal id sg (arg1 ::: Enil)) vres.
 Proof.
   intros. eapply eval_helper; eauto. constructor; auto. constructor.
 Qed.
 
 Corollary eval_helper_2:
-  forall le id name sg arg1 arg2 varg1 varg2 vres,
+  forall bf le id name sg arg1 arg2 varg1 varg2 vres,
   eval_expr ge sp e m le arg1 varg1 ->
   eval_expr ge sp e m le arg2 varg2 ->
   helper_declared prog id name sg  ->
-  external_implements name sg (varg1::varg2::nil) vres ->
+  lookup_builtin_function name sg = Some bf ->
+  builtin_function_sem bf (varg1 :: varg2 :: nil) = Some vres ->
   eval_expr ge sp e m le (Eexternal id sg (arg1 ::: arg2 ::: Enil)) vres.
 Proof.
   intros. eapply eval_helper; eauto. constructor; auto. constructor; auto. constructor.
 Qed.
 
 Remark eval_builtin_1:
-  forall le id sg arg1 varg1 vres,
+  forall bf le id sg arg1 varg1 vres,
   eval_expr ge sp e m le arg1 varg1 ->
-  builtin_implements id sg (varg1::nil) vres ->
+  lookup_builtin_function id sg = Some bf ->
+  builtin_function_sem bf (varg1 :: nil) = Some vres ->
   eval_expr ge sp e m le (Ebuiltin (EF_builtin id sg) (arg1 ::: Enil)) vres.
 Proof.
-  intros. econstructor. econstructor. eauto. constructor. apply H0.
+  intros. econstructor. econstructor. eauto. constructor.
+  simpl. red. rewrite H0. constructor. auto.
 Qed.
 
 Remark eval_builtin_2:
-  forall le id sg arg1 arg2 varg1 varg2 vres,
+  forall bf le id sg arg1 arg2 varg1 varg2 vres,
   eval_expr ge sp e m le arg1 varg1 ->
   eval_expr ge sp e m le arg2 varg2 ->
-  builtin_implements id sg (varg1::varg2::nil) vres ->
+  lookup_builtin_function id sg = Some bf ->
+  builtin_function_sem bf (varg1 :: varg2 :: nil) = Some vres ->
   eval_expr ge sp e m le (Ebuiltin (EF_builtin id sg) (arg1 ::: arg2 ::: Enil)) vres.
 Proof.
-  intros. econstructor. constructor; eauto. constructor; eauto. constructor. apply H1.
+  intros. econstructor. constructor; eauto. constructor; eauto. constructor.
+  simpl. red. rewrite H1. constructor. auto.
 Qed.
 
 Definition unary_constructor_sound (cstr: expr -> expr) (sem: val -> val) : Prop :=
@@ -389,9 +367,10 @@ Qed.
 Theorem eval_negl: unary_constructor_sound negl Val.negl.
 Proof.
   unfold negl; red; intros. destruct (is_longconst a) eqn:E.
-  econstructor; split. apply eval_longconst.
+- econstructor; split. apply eval_longconst.
   exploit is_longconst_sound; eauto. intros EQ; subst x. simpl. auto.
-  econstructor; split. eapply eval_builtin_1; eauto. UseHelper. auto.
+- exists (Val.negl x); split; auto.
+  eapply (eval_builtin_1 (BI_standard BI_negl)); eauto.
 Qed.
 
 Theorem eval_notl: unary_constructor_sound notl Val.notl.
@@ -413,7 +392,7 @@ Theorem eval_longoffloat:
   exists v, eval_expr ge sp e m le (longoffloat a) v /\ Val.lessdef y v.
 Proof.
   intros; unfold longoffloat. econstructor; split.
-  eapply eval_helper_1; eauto. DeclHelper. UseHelper. auto.
+  eapply (eval_helper_1 (BI_standard BI_i64_dtos)); eauto. DeclHelper. auto. auto.
 Qed.
 
 Theorem eval_longuoffloat:
@@ -423,7 +402,7 @@ Theorem eval_longuoffloat:
   exists v, eval_expr ge sp e m le (longuoffloat a) v /\ Val.lessdef y v.
 Proof.
   intros; unfold longuoffloat. econstructor; split.
-  eapply eval_helper_1; eauto. DeclHelper. UseHelper. auto.
+  eapply (eval_helper_1 (BI_standard BI_i64_dtou)); eauto. DeclHelper. auto. auto.
 Qed.
 
 Theorem eval_floatoflong:
@@ -432,8 +411,9 @@ Theorem eval_floatoflong:
   Val.floatoflong x = Some y ->
   exists v, eval_expr ge sp e m le (floatoflong a) v /\ Val.lessdef y v.
 Proof.
-  intros; unfold floatoflong. econstructor; split.
-  eapply eval_helper_1; eauto. DeclHelper. UseHelper. auto.
+  intros; unfold floatoflong. exists y; split; auto.
+  eapply (eval_helper_1 (BI_standard BI_i64_stod)); eauto. DeclHelper. auto.
+  simpl. destruct x; simpl in H0; inv H0; auto.
 Qed.
 
 Theorem eval_floatoflongu:
@@ -442,8 +422,9 @@ Theorem eval_floatoflongu:
   Val.floatoflongu x = Some y ->
   exists v, eval_expr ge sp e m le (floatoflongu a) v /\ Val.lessdef y v.
 Proof.
-  intros; unfold floatoflongu. econstructor; split.
-  eapply eval_helper_1; eauto. DeclHelper. UseHelper. auto.
+  intros; unfold floatoflongu. exists y; split; auto.
+  eapply (eval_helper_1 (BI_standard BI_i64_utod)); eauto. DeclHelper. auto.
+  simpl. destruct x; simpl in H0; inv H0; auto.
 Qed.
 
 Theorem eval_longofsingle:
@@ -480,8 +461,9 @@ Theorem eval_singleoflong:
   Val.singleoflong x = Some y ->
   exists v, eval_expr ge sp e m le (singleoflong a) v /\ Val.lessdef y v.
 Proof.
-  intros; unfold singleoflong. econstructor; split.
-  eapply eval_helper_1; eauto. DeclHelper. UseHelper. auto.
+  intros; unfold singleoflong. exists y; split; auto.
+  eapply (eval_helper_1 (BI_standard BI_i64_stof)); eauto. DeclHelper. auto.
+  simpl. destruct x; simpl in H0; inv H0; auto.
 Qed.
 
 Theorem eval_singleoflongu:
@@ -490,8 +472,9 @@ Theorem eval_singleoflongu:
   Val.singleoflongu x = Some y ->
   exists v, eval_expr ge sp e m le (singleoflongu a) v /\ Val.lessdef y v.
 Proof.
-  intros; unfold singleoflongu. econstructor; split.
-  eapply eval_helper_1; eauto. DeclHelper. UseHelper. auto.
+  intros; unfold singleoflongu. exists y; split; auto.
+  eapply (eval_helper_1 (BI_standard BI_i64_utof)); eauto. DeclHelper. auto.
+  simpl. destruct x; simpl in H0; inv H0; auto.
 Qed.
 
 Theorem eval_andl: binary_constructor_sound andl Val.andl.
@@ -618,7 +601,9 @@ Proof.
     simpl. erewrite <- Int64.decompose_shl_2. instantiate (1 := Int64.hiword i).
     rewrite Int64.ofwords_recompose. auto. auto.
   + (* n >= 64 *)
-    econstructor; split. eapply eval_helper_2; eauto. EvalOp. DeclHelper. UseHelper. auto.
+    econstructor; split.
+    eapply eval_helper_2; eauto. EvalOp. DeclHelper. reflexivity. reflexivity.
+    auto.
 Qed.
 
 Theorem eval_shll: binary_constructor_sound shll Val.shll.
@@ -629,7 +614,7 @@ Proof.
   exploit is_intconst_sound; eauto. intros EQ; subst y; clear H0.
   eapply eval_shllimm; eauto.
 - (* General case *)
-  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. UseHelper. auto.
+  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. reflexivity. reflexivity. auto.
 Qed.
 
 Lemma eval_shrluimm:
@@ -663,7 +648,9 @@ Proof.
     simpl. erewrite <- Int64.decompose_shru_2. instantiate (1 := Int64.loword i).
     rewrite Int64.ofwords_recompose. auto. auto.
   + (* n >= 64 *)
-    econstructor; split. eapply eval_helper_2; eauto. EvalOp. DeclHelper. UseHelper. auto.
+    econstructor; split.
+    eapply eval_helper_2; eauto. EvalOp. DeclHelper. reflexivity. reflexivity.
+    auto.
 Qed.
 
 Theorem eval_shrlu: binary_constructor_sound shrlu Val.shrlu.
@@ -674,7 +661,7 @@ Proof.
   exploit is_intconst_sound; eauto. intros EQ; subst y; clear H0.
   eapply eval_shrluimm; eauto.
 - (* General case *)
-  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. UseHelper. auto.
+  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. reflexivity. reflexivity. auto.
 Qed.
 
 Lemma eval_shrlimm:
@@ -712,7 +699,9 @@ Proof.
     erewrite <- Int64.decompose_shr_2. instantiate (1 := Int64.loword i).
     rewrite Int64.ofwords_recompose. auto. auto.
   + (* n >= 64 *)
-    econstructor; split. eapply eval_helper_2; eauto. EvalOp. DeclHelper. UseHelper. auto.
+    econstructor; split.
+    eapply eval_helper_2; eauto. EvalOp. DeclHelper. reflexivity. reflexivity.
+    auto.
 Qed.
 
 Theorem eval_shrl: binary_constructor_sound shrl Val.shrl.
@@ -723,7 +712,7 @@ Proof.
   exploit is_intconst_sound; eauto. intros EQ; subst y; clear H0.
   eapply eval_shrlimm; eauto.
 - (* General case *)
-  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. UseHelper. auto.
+  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. reflexivity. reflexivity. auto.
 Qed.
 
 Theorem eval_addl: Archi.ptr64 = false -> binary_constructor_sound addl Val.addl.
@@ -733,7 +722,7 @@ Proof.
   assert (DEFAULT:
     exists v, eval_expr ge sp e m le default v /\ Val.lessdef (Val.addl x y) v).
   {
-    econstructor; split. eapply eval_builtin_2; eauto. UseHelper. auto.
+    econstructor; split. eapply eval_builtin_2; eauto. reflexivity. reflexivity. auto.
   }
   destruct (is_longconst a) as [p|] eqn:LC1;
   destruct (is_longconst b) as [q|] eqn:LC2.
@@ -756,7 +745,7 @@ Proof.
   assert (DEFAULT:
     exists v, eval_expr ge sp e m le default v /\ Val.lessdef (Val.subl x y) v).
   {
-    econstructor; split. eapply eval_builtin_2; eauto. UseHelper. auto.
+    econstructor; split. eapply eval_builtin_2; eauto. reflexivity. reflexivity. auto.
   }
   destruct (is_longconst a) as [p|] eqn:LC1;
   destruct (is_longconst b) as [q|] eqn:LC2.
@@ -787,7 +776,7 @@ Proof.
   exploit eval_add. eexact E2. eexact E3. intros [v5 [E5 L5]].
   exploit eval_add. eexact E5. eexact E4. intros [v6 [E6 L6]].
   exists (Val.longofwords v6 (Val.loword p)); split.
-  EvalOp. eapply eval_builtin_2; eauto. UseHelper.
+  EvalOp. eapply eval_builtin_2; eauto. reflexivity. reflexivity. 
   intros. unfold le1, p in *; subst; simpl in *.
   inv L3. inv L4. inv L5. simpl in L6. inv L6.
   simpl. f_equal. symmetry. apply Int64.decompose_mul.
@@ -835,14 +824,14 @@ Theorem eval_mullhu:
   forall n, unary_constructor_sound (fun a => mullhu a n) (fun v => Val.mullhu v (Vlong n)).
 Proof.
   unfold mullhu; intros; red; intros. econstructor; split; eauto.
-  eapply eval_helper_2; eauto. apply eval_longconst. DeclHelper; eauto. UseHelper.
+  eapply eval_helper_2; eauto. apply eval_longconst. DeclHelper. reflexivity. reflexivity.
 Qed.
 
 Theorem eval_mullhs:
   forall n, unary_constructor_sound (fun a => mullhs a n) (fun v => Val.mullhs v (Vlong n)).
 Proof.
   unfold mullhs; intros; red; intros. econstructor; split; eauto.
-  eapply eval_helper_2; eauto. apply eval_longconst. DeclHelper; eauto. UseHelper.
+  eapply eval_helper_2; eauto. apply eval_longconst. DeclHelper. reflexivity. reflexivity.
 Qed.
 
 Theorem eval_shrxlimm:
@@ -884,7 +873,7 @@ Theorem eval_divlu_base:
   exists v, eval_expr ge sp e m le (divlu_base a b) v /\ Val.lessdef z v.
 Proof.
   intros; unfold divlu_base.
-  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. UseHelper. auto.
+  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. reflexivity. eassumption. auto.
 Qed.
 
 Theorem eval_modlu_base:
@@ -895,7 +884,7 @@ Theorem eval_modlu_base:
   exists v, eval_expr ge sp e m le (modlu_base a b) v /\ Val.lessdef z v.
 Proof.
   intros; unfold modlu_base.
-  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. UseHelper. auto.
+  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. reflexivity. eassumption. auto.
 Qed.
 
 Theorem eval_divls_base:
@@ -906,7 +895,7 @@ Theorem eval_divls_base:
   exists v, eval_expr ge sp e m le (divls_base a b) v /\ Val.lessdef z v.
 Proof.
   intros; unfold divls_base.
-  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. UseHelper. auto.
+  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. reflexivity. eassumption. auto.
 Qed.
 
 Theorem eval_modls_base:
@@ -917,7 +906,7 @@ Theorem eval_modls_base:
   exists v, eval_expr ge sp e m le (modls_base a b) v /\ Val.lessdef z v.
 Proof.
   intros; unfold modls_base.
-  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. UseHelper. auto.
+  econstructor; split. eapply eval_helper_2; eauto. DeclHelper. reflexivity. eassumption. auto.
 Qed.
 
 Remark decompose_cmpl_eq_zero:

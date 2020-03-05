@@ -18,6 +18,10 @@
 open Format
 open Commandline
 
+(* Ensure that the error formatter is flushed at exit *)
+let _ =
+  at_exit (pp_print_flush err_formatter)
+
 (* Should errors be treated as fatal *)
 let error_fatal = ref false
 
@@ -28,7 +32,7 @@ let max_error = ref 0
 let diagnostics_show_option = ref true
 
 (* Test if color diagnostics are available by testing if stderr is a tty
-   and if the environment varibale TERM is set
+   and if the environment variable TERM is set
 *)
 let color_diagnostics =
   let term = try Sys.getenv "TERM" with Not_found -> "" in
@@ -98,6 +102,7 @@ type warning_type =
   | Flexible_array_extensions
   | Tentative_incomplete_static
   | Reduced_alignment
+  | Non_linear_cond_expr
 
 (* List of active warnings *)
 let active_warnings: warning_type list ref = ref [
@@ -159,6 +164,7 @@ let string_of_warning = function
   | Flexible_array_extensions -> "flexible-array-extensions"
   | Tentative_incomplete_static -> "tentative-incomplete-static"
   | Reduced_alignment -> "reduced-alignment"
+  | Non_linear_cond_expr -> "non-linear-cond-expr"
 
 (* Activate the given warning *)
 let activate_warning w () =
@@ -212,6 +218,7 @@ let wall () =
     Flexible_array_extensions;
     Tentative_incomplete_static;
     Reduced_alignment;
+    Non_linear_cond_expr;
   ]
 
 let wnothing () =
@@ -249,6 +256,7 @@ let werror () =
     Flexible_array_extensions;
     Tentative_incomplete_static;
     Reduced_alignment;
+    Non_linear_cond_expr;
   ]
 
 (* Generate the warning key for the message *)
@@ -433,6 +441,7 @@ let warning_options =
   error_option Flexible_array_extensions @
   error_option Tentative_incomplete_static @
   error_option Reduced_alignment @
+  error_option Non_linear_cond_expr @
   [Exact ("-Wfatal-errors"), Set error_fatal;
    Exact ("-fdiagnostics-color"), Ignore; (* Either output supports it or no color *)
    Exact ("-fno-diagnostics-color"), Unset color_diagnostics;
@@ -469,7 +478,7 @@ let raise_on_errors () =
 let crash exn =
   if Version.buildnr <> "" && Version.tag <> "" then begin
     let backtrace = Printexc.get_backtrace () in
-    eprintf "%tThis is CompCert, %s, Build:%s, Tag:%s%t\n"
+    eprintf "%tThis is CompCert, Release %s, Build:%s, Tag:%s%t\n"
       bc Version.version Version.buildnr Version.tag rsc;
     eprintf "Backtrace (please include this in your support request):\n%s"
       backtrace;
@@ -488,3 +497,6 @@ let crash exn =
 let no_loc = ("", -1)
 
 let file_loc file = (file,-10)
+
+let active_warning ty =
+  fst (classify_warning ty) <> SuppressedMsg

@@ -14,7 +14,7 @@
    of the PPC assembly code. *)
 
 open Camlcoq
-open Integers
+open! Integers
 open AST
 open Asm
 open Asmexpandaux
@@ -30,20 +30,22 @@ let eref =
 
 (* Useful constants and helper functions *)
 
-let _0 = Integers.Int.zero
-let _1 = Integers.Int.one
+let _0 = Int.zero
+let _1 = Int.one
 let _2 = coqint_of_camlint 2l
 let _4 = coqint_of_camlint 4l
 let _6 = coqint_of_camlint 6l
 let _8 = coqint_of_camlint 8l
+let _16 = coqint_of_camlint 16l
 let _31 = coqint_of_camlint 31l
 let _32 = coqint_of_camlint 32l
 let _64 = coqint_of_camlint 64l
 let _m1 = coqint_of_camlint (-1l)
 let _m4 = coqint_of_camlint (-4l)
 let _m8 = coqint_of_camlint (-8l)
+let _m16 = coqint_of_camlint (-16l)
 
-let _0L = Integers.Int64.zero
+let _0L = Int64.zero
 let _32L = coqint_of_camlint64 32L
 let _64L = coqint_of_camlint64 64L
 let _m1L = coqint_of_camlint64 (-1L)
@@ -55,6 +57,15 @@ let emit_loadimm r n =
 
 let emit_addimm rd rs n =
   List.iter emit (Asmgen.addimm rd rs n [])
+
+(* Numbering of bits in the CR register *)
+
+let num_crbit = function
+  | CRbit_0 -> 0
+  | CRbit_1 -> 1
+  | CRbit_2 -> 2
+  | CRbit_3 -> 3
+  | CRbit_6 -> 6
 
 (* Handling of annotations *)
 
@@ -76,8 +87,6 @@ let expand_annot_val kind txt targ args res =
    (not so much on G5, but clearly so on Power7).
    So, use 64-bit accesses only if alignment >= 4.
    Note that lfd and stfd cannot trap on ill-formed floats. *)
-
-
 
 let offset_in_range ofs =
   Int.eq (Asmgen.high_s ofs) _0
@@ -410,9 +419,20 @@ let expand_builtin_va_start r =
 let expand_int64_arith conflict rl fn =
   if conflict then (fn GPR0; emit (Pmr(rl, GPR0))) else fn rl
 
-(* Expansion of integer conditional moves (__builtin_*sel) *)
+(* Expansion of integer conditional moves (__builtin_*sel and Pisel) *)
 (* The generated code works equally well with 32-bit integer registers
    and with 64-bit integer registers. *)
+
+let expand_integer_cond_move_1 a2 a3 res =
+  (* GPR0 is -1 (all ones) if condition is true, 0 if it is false *)
+  if res <> a3 then begin
+    emit (Pand_ (res, a2, GPR0));
+    emit (Pandc (GPR0, a3, GPR0))
+  end else begin
+    emit (Pandc (res, a3, GPR0));
+    emit (Pand_ (GPR0, a2, GPR0))
+  end;
+  emit (Por (res, res, GPR0))
 
 let expand_integer_cond_move a1 a2 a3 res =
   if a2 = a3 then
@@ -423,15 +443,37 @@ let expand_integer_cond_move a1 a2 a3 res =
   end else begin
     (* a1 has type _Bool, hence it is 0 or 1 *)
     emit (Psubfic (GPR0, a1, Cint _0));
-    (* r0 = -1 (all ones) if a1 is true, r0 = 0 if a1 is false *)
-    if res <> a3 then begin
-      emit (Pand_ (res, a2, GPR0));
-      emit (Pandc (GPR0, a3, GPR0))
-    end else begin
-      emit (Pandc (res, a3, GPR0));
-      emit (Pand_ (GPR0, a2, GPR0))
-    end;
-    emit (Por (res, res, GPR0))
+    expand_integer_cond_move_1 a2 a3 res
+  end
+
+
+(* Expansion of floating point conditional moves (Pfcmove) *)
+
+let expand_float_cond_move bit a2 a3 res =
+  emit (Pmfcr GPR0);
+  emit (Prlwinm(GPR0, GPR0, Z.of_uint (4 + num_crbit bit), _8));
+  emit (Pstfdu (a3, Cint (_m16), GPR1));
+  emit (Pcfi_adjust _16);
+  emit (Pstfd (a2, Cint (_8), GPR1));
+  emit (Plfdx (res, GPR1, GPR0));
+  emit (Paddi (GPR1, GPR1, (Cint _16)));
+  emit (Pcfi_adjust _m16)
+
+
+
+(* Symmetrically, we emulate the "isel" instruction on PPC processors
+   that do not have it. *)
+
+let expand_isel bit a2 a3 res =
+  if a2 = a3 then
+    emit (Pmr (res, a2))
+  else if eref then
+    emit (Pisel (res, a2, a3, bit))
+  else begin
+    emit (Pmfcr GPR0);
+    emit (Prlwinm(GPR0, GPR0, Z.of_uint (1 + num_crbit bit), _1));
+    emit (Psubfic (GPR0, GPR0, Cint _0));
+    expand_integer_cond_move_1 a2 a3 res
   end
 
 (* Convert integer constant into GPR with corresponding number *)
@@ -512,6 +554,26 @@ let expand_builtin_inline name args res =
       emit (Plabel lbl2)
   | "__builtin_cmpb",  [BA(IR a1); BA(IR a2)], BR(IR res) ->
       emit (Pcmpb (res,a1,a2))
+  |  "__builtin_bswap64", [BA_splitlong(BA(IR ah), BA(IR al))],
+                          BR_splitlong(BR(IR rh), BR(IR rl))->
+      assert (not Archi.ppc64);
+      emit (Pstwu(ah, Cint _m8, GPR1));
+      emit (Pcfi_adjust _8);
+      emit (Pstwu(al, Cint _m8, GPR1));
+      emit (Pcfi_adjust _8);
+      emit (Plwbrx(rh, GPR0, GPR1));
+      emit (Paddi(GPR1, GPR1, Cint _8));
+      emit (Pcfi_adjust _m8);
+      emit (Plwbrx(rl, GPR0, GPR1));
+      emit (Paddi(GPR1, GPR1, Cint _8));
+      emit (Pcfi_adjust _m8)
+  |  "__builtin_bswap64", [BA(IR a1)], BR(IR res) ->
+      assert (Archi.ppc64);
+      emit (Pstdu(a1, Cint _m8, GPR1));
+      emit (Pcfi_adjust _8);
+      emit (Pldbrx(res, GPR0, GPR1));
+      emit (Paddi(GPR1, GPR1, Cint _8));
+      emit (Pcfi_adjust _m8)
   | ("__builtin_bswap" | "__builtin_bswap32"), [BA(IR a1)], BR(IR res) ->
       emit (Pstwu(a1, Cint _m8, GPR1));
       emit (Pcfi_adjust _8);
@@ -772,13 +834,6 @@ let set_cr6 sg =
 
 (* Expand instructions *)
 
-let num_crbit = function
-  | CRbit_0 -> 0
-  | CRbit_1 -> 1
-  | CRbit_2 -> 2
-  | CRbit_3 -> 3
-  | CRbit_6 -> 6
-
 let expand_instruction instr =
   match instr with
   | Pallocframe(sz, ofs,retofs) ->
@@ -874,6 +929,10 @@ let expand_instruction instr =
       emit (Pcfi_adjust _m8);
   | Pfxdp(r1, r2) ->
       if r1 <> r2 then emit(Pfmr(r1, r2))
+  | Pisel(rd, r1, r2, bit) ->
+      expand_isel bit r1 r2 rd
+  | Pfsel_gen (rd, r1, r2, bit) ->
+      expand_float_cond_move bit r1 r2 rd
   | Plmake(r1, rhi, rlo) ->
       if r1 = rlo then
         emit (Prldimi(r1, rhi, _32L, upper32))

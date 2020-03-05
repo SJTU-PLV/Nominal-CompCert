@@ -187,6 +187,8 @@ Processing options:
   -O0            Do not optimize the compiled code
   -O1 -O2 -O3    Synonymous for -O
   -Os            Optimize for code size in preference to code speed
+  -Obranchless   Optimize to generate fewer conditional branches; try to produce
+                 branch-free instruction sequences as much as possible
   -ftailcalls    Optimize function calls in tail position [on]
   -fconst-prop   Perform global constant propagation  [on]
   -ffloat-const-prop <n>  Control constant propagation of floats
@@ -196,6 +198,7 @@ Processing options:
   -finline       Perform inlining of functions [on]
   -finline-functions-called-once Integrate functions only required by their
                  single caller [on]
+  -fif-conversion Perform if-conversion (generation of conditional moves) [on]
 Code generation options: (use -fno-<opt> to turn off -f<opt>)
   -ffpu          Use FP registers for some integer operations [on]
   -fsmall-data <n>  Set maximal size <n> for allocation in small data area
@@ -203,6 +206,7 @@ Code generation options: (use -fno-<opt> to turn off -f<opt>)
   -falign-functions <n>  Set alignment (in bytes) of function entry points
   -falign-branch-targets <n>  Set alignment (in bytes) of branch targets
   -falign-cond-branches <n>  Set alignment (in bytes) of conditional branches
+  -fcommon       Put uninitialized globals in the common section [on].
 |} ^
  target_help ^
  toolchain_help ^
@@ -249,7 +253,8 @@ let dump_mnemonics destfile =
   exit 0
 
 let optimization_options = [
-  option_ftailcalls; option_fconstprop; option_fcse; option_fredundancy; option_finline_functions_called_once;
+  option_ftailcalls; option_fifconversion; option_fconstprop; option_fcse;
+  option_fredundancy; option_finline; option_finline_functions_called_once;
 ]
 
 let set_all opts () = List.iter (fun r -> r := true) opts
@@ -262,6 +267,10 @@ let num_input_files = ref 0
 let cmdline_actions =
   let f_opt name ref =
     [Exact("-f" ^ name), Set ref; Exact("-fno-" ^ name), Unset ref] in
+  let check_align n =
+    if n <= 0 || ((n land (n - 1)) <> 0) then
+      error no_loc "requested alignment %d is not a power of 2" n
+    in
   [
 (* Getting help *)
   Exact "-help", Unit print_usage_and_exit;
@@ -294,12 +303,14 @@ let cmdline_actions =
   Exact "-O", Unit (set_all optimization_options);
   _Regexp "-O[123]$", Unit (set_all optimization_options);
   Exact "-Os", Set option_Osize;
+  Exact "-Obranchless", Set option_Obranchless;
   Exact "-fsmall-data", Integer(fun n -> option_small_data := n);
   Exact "-fsmall-const", Integer(fun n -> option_small_const := n);
-  Exact "-ffloat-const-prop", Integer(fun n -> option_ffloatconstprop := n);
-  Exact "-falign-functions", Integer(fun n -> option_falignfunctions := Some n);
-  Exact "-falign-branch-targets", Integer(fun n -> option_falignbranchtargets := n);
-  Exact "-falign-cond-branches", Integer(fun n -> option_faligncondbranchs := n);] @
+  Exact "-ffloat-const-prop", Integer(fun n -> option_ffloatconstprop := n); 
+  Exact "-falign-functions", Integer(fun n -> check_align n; option_falignfunctions := Some n);
+  Exact "-falign-branch-targets", Integer(fun n -> check_align n; option_falignbranchtargets := n);
+  Exact "-falign-cond-branches", Integer(fun n -> check_align n; option_faligncondbranchs := n);] @
+      f_opt "common" option_fcommon @
 (* Target processor options *)
   (if Configuration.arch = "arm" then
     if Configuration.model = "armv6" then
@@ -358,6 +369,7 @@ let cmdline_actions =
 (* Optimization options *)
 (* -f options: come in -f and -fno- variants *)
   @ f_opt "tailcalls" option_ftailcalls
+  @ f_opt "if-conversion" option_fifconversion
   @ f_opt "const-prop" option_fconstprop
   @ f_opt "cse" option_fcse
   @ f_opt "redundancy" option_fredundancy

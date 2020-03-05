@@ -16,16 +16,15 @@
 
 (** Formalization of floating-point numbers, using the Flocq library. *)
 
-Require Import Coqlib.
-Require Import Integers.
-Require Import Fappli_IEEE.
-Require Import Fappli_IEEE_bits.
-Require Import Fappli_IEEE_extra.
-Require Import Fcore.
+Require Import Coqlib Zbits Integers.
+(*From Flocq*)
+Require Import Binary Bits Core.
+Require Import IEEE754_extra.
 Require Import Program.
 Require Archi.
 
 Close Scope R_scope.
+Open Scope Z_scope.
 
 Definition float := binary64. (**r the type of IEE754 double-precision FP numbers *)
 Definition float32 := binary32. (**r the type of IEE754 single-precision FP numbers *)
@@ -95,10 +94,53 @@ Proof.
   destruct x as [[]|]; simpl; intros; discriminate.
 Qed.
 
+(** Normalization of NaN payloads *)
+
+Lemma normalized_nan: forall prec n p,
+  Z.of_nat n = prec - 1 -> 1 < prec ->
+  nan_pl prec (Z.to_pos (P_mod_two_p p n)) = true.
+Proof.
+  intros. unfold nan_pl. apply Z.ltb_lt. rewrite Digits.Zpos_digits2_pos.
+  set (p' := P_mod_two_p p n).
+  assert (A: 0 <= p' < 2 ^ Z.of_nat n).
+  { rewrite <- two_power_nat_equiv; apply P_mod_two_p_range. }
+  assert (B: Digits.Zdigits radix2 p' <= prec - 1).
+  { apply Digits.Zdigits_le_Zpower. rewrite <- H. rewrite Z.abs_eq; tauto. }
+  destruct (zeq p' 0).
+- rewrite e. simpl; auto.
+- rewrite Z2Pos.id by omega. omega.
+Qed.
+
+(** Transform a Nan payload to a quiet Nan payload. *)
+
+Definition quiet_nan_64_payload (p: positive) :=
+  Z.to_pos (P_mod_two_p (Pos.lor p ((iter_nat xO 51 1%positive))) 52%nat).
+
+Lemma quiet_nan_64_proof: forall p, nan_pl 53 (quiet_nan_64_payload p) = true.
+Proof. intros; apply normalized_nan; auto; omega. Qed.
+
+Definition quiet_nan_64 (sp: bool * positive) : {x :float | is_nan _ _ x = true} :=
+  let (s, p) := sp in
+  exist _ (B754_nan 53 1024 s (quiet_nan_64_payload p) (quiet_nan_64_proof p)) (eq_refl true).
+
+Definition default_nan_64 := quiet_nan_64 Archi.default_nan_64.
+
+Definition quiet_nan_32_payload (p: positive) :=
+  Z.to_pos (P_mod_two_p (Pos.lor p ((iter_nat xO 22 1%positive))) 23%nat).
+
+Lemma quiet_nan_32_proof: forall p, nan_pl 24 (quiet_nan_32_payload p) = true.
+Proof. intros; apply normalized_nan; auto; omega. Qed.
+
+Definition quiet_nan_32 (sp: bool * positive) : {x :float32 | is_nan _ _ x = true} :=
+  let (s, p) := sp in
+  exist _ (B754_nan 24 128 s (quiet_nan_32_payload p) (quiet_nan_32_proof p)) (eq_refl true).
+
+Definition default_nan_32 := quiet_nan_32 Archi.default_nan_32.
+
 Local Notation __ := (eq_refl Datatypes.Lt).
 
-Local Hint Extern 1 (Prec_gt_0 _) => exact (eq_refl Datatypes.Lt).
-Local Hint Extern 1 (_ < _) => exact (eq_refl Datatypes.Lt).
+Local Hint Extern 1 (Prec_gt_0 _) => exact (eq_refl Datatypes.Lt) : core.
+Local Hint Extern 1 (_ < _) => exact (eq_refl Datatypes.Lt) : core.
 
 (** * Double-precision FP numbers *)
 
@@ -109,97 +151,107 @@ Module Float.
 (** The following definitions are not part of the IEEE754 standard but
     apply to all architectures supported by CompCert. *)
 
-(** Transform a Nan payload to a quiet Nan payload. *)
-
-Program Definition transform_quiet_pl (pl:nan_pl 53) : nan_pl 53 :=
-  Pos.lor pl (iter_nat xO 51 xH).
-Next Obligation.
-  destruct pl.
-  simpl. rewrite Z.ltb_lt in *.
-  assert (forall x, Fcore_digits.digits2_pos x = Pos.size x).
-  { induction x0; simpl; auto; rewrite IHx0; zify; omega. }
-  rewrite H, Psize_log_inf, <- Zlog2_log_inf in *. clear H.
-  change (Z.pos (Pos.lor x 2251799813685248)) with (Z.lor (Z.pos x) 2251799813685248%Z).
-  rewrite Z.log2_lor by (zify; omega).
-  apply Z.max_case. auto. simpl. omega.
-Qed.
-
-Lemma nan_payload_fequal:
-  forall prec (p1 p2: nan_pl prec),
-  proj1_sig p1 = proj1_sig p2 -> p1 = p2.
-Proof.
-  intros. destruct p1, p2; simpl in H; subst. f_equal. apply Fcore_Zaux.eqbool_irrelevance.
-Qed.
-
-Lemma lor_idempotent:
-  forall x y, Pos.lor (Pos.lor x y) y = Pos.lor x y.
-Proof.
-  induction x; destruct y; simpl; f_equal; auto;
-  induction y; simpl; f_equal; auto.
-Qed.
-
-Lemma transform_quiet_pl_idempotent:
-  forall pl, transform_quiet_pl (transform_quiet_pl pl) = transform_quiet_pl pl.
-Proof.
-  intros. apply nan_payload_fequal; simpl. apply lor_idempotent.
-Qed.
-
 (** Nan payload operations for single <-> double conversions. *)
 
-Definition expand_pl (pl: nan_pl 24) : nan_pl 53.
+Definition expand_nan_payload (p: positive) := Pos.shiftl_nat p 29.
+
+Lemma expand_nan_proof (p : positive) :
+  nan_pl 24 p = true ->
+  nan_pl 53 (expand_nan_payload p) = true.
 Proof.
-  refine (exist _ (Pos.shiftl_nat (proj1_sig pl) 29) _).
-  abstract (
-    destruct pl; unfold proj1_sig, Pos.shiftl_nat, nat_rect, Fcore_digits.digits2_pos;
-    fold (Fcore_digits.digits2_pos x);
-    rewrite Z.ltb_lt in *;
-    zify; omega).
-Defined.
+  unfold nan_pl, expand_nan_payload. intros K.
+  rewrite Z.ltb_lt in *.
+  unfold Pos.shiftl_nat, nat_rect, Digits.digits2_pos.
+  fold (Digits.digits2_pos p).
+  zify; omega.
+Qed.
 
-Definition of_single_pl (s:bool) (pl:nan_pl 24) : (bool * nan_pl 53) :=
-  (s,
-   if Archi.float_of_single_preserves_sNaN
-   then expand_pl pl
-   else transform_quiet_pl (expand_pl pl)).
+Definition expand_nan s p H : {x | is_nan _ _ x = true} :=
+  exist _ (B754_nan 53 1024 s (expand_nan_payload p) (expand_nan_proof p H)) (eq_refl true).
 
-Definition reduce_pl (pl: nan_pl 53) : nan_pl 24.
-Proof.
-  refine (exist _ (Pos.shiftr_nat (proj1_sig pl) 29) _).
-  abstract (
-    destruct pl; unfold proj1_sig, Pos.shiftr_nat, nat_rect;
-    rewrite Z.ltb_lt in *;
-    assert (forall x, Fcore_digits.digits2_pos (Pos.div2 x) =
-                      (Fcore_digits.digits2_pos x - 1)%positive)
-      by (destruct x0; simpl; auto; rewrite Pplus_one_succ_r, Pos.add_sub; auto);
-    rewrite !H, !Pos2Z.inj_sub_max;
-    repeat (apply Z.max_lub_lt; [reflexivity |apply Z.lt_sub_lt_add_l]); auto).
-Defined.
+Definition of_single_nan (f : float32) : { x : float | is_nan _ _ x = true } :=
+  match f with
+  | B754_nan s p H =>
+    if Archi.float_of_single_preserves_sNaN
+    then expand_nan s p H
+    else quiet_nan_64 (s, expand_nan_payload p)
+  | _ => default_nan_64
+  end.
 
-Definition to_single_pl (s:bool) (pl:nan_pl 53) : (bool * nan_pl 24) :=
-  (s, reduce_pl (transform_quiet_pl pl)).
+Definition reduce_nan_payload (p: positive) :=
+  (* The [quiet_nan_64_payload p] before the right shift is redundant with
+     the [quiet_nan_32_payload p] performed after, in [to_single_nan].
+     However the former ensures that the result of the right shift is
+     not 0 and therefore representable as a positive. *)
+  Pos.shiftr_nat (quiet_nan_64_payload p) 29.
+
+Definition to_single_nan (f : float) : { x : float32 | is_nan _ _ x = true } :=
+  match f with
+  | B754_nan s p H => quiet_nan_32 (s, reduce_nan_payload p)
+  | _ => default_nan_32
+  end.
 
 (** NaN payload operations for opposite and absolute value. *)
 
-Definition neg_pl (s:bool) (pl:nan_pl 53) := (negb s, pl).
-Definition abs_pl (s:bool) (pl:nan_pl 53) := (false, pl).
+Definition neg_nan (f : float) : { x : float | is_nan _ _ x = true } :=
+  match f with
+  | B754_nan s p H => exist _ (B754_nan 53 1024 (negb s) p H) (eq_refl true)
+  | _ => default_nan_64
+  end.
 
-(** The NaN payload operations for two-argument arithmetic operations
-   are not part of the IEEE754 standard, but all architectures of
-   Compcert share a similar NaN behavior, parameterized by:
-- a "default" payload which occurs when an operation generates a NaN from
-  non-NaN arguments;
-- a choice function determining which of the payload arguments to choose,
-  when an operation is given two NaN arguments. *)
+Definition abs_nan (f : float) : { x : float | is_nan _ _ x = true } :=
+  match f with
+  | B754_nan s p H => exist _ (B754_nan 53 1024 false p H) (eq_refl true)
+  | _ => default_nan_64
+  end.
 
-Definition binop_pl (x y: binary64) : bool*nan_pl 53 :=
+(** When an arithmetic operation returns a NaN, the sign and payload
+  of this NaN are not fully specified by the IEEE standard, and vary
+  among the architectures supported by CompCert.  However, the following
+  behavior applies to all the supported architectures: the payload is either
+- a default payload, independent of the arguments, or
+- the payload of one of the NaN arguments, if any.
+
+For each supported architecture, the functions [Archi.choose_nan_64]
+and [Archi.choose_nan_32] determine the payload of the result as a
+function of the payloads of the NaN arguments.
+
+Additionally, signaling NaNs are converted to quiet NaNs, as required by the standard.
+*)
+
+Definition cons_pl (x: float) (l: list (bool * positive)) :=
+  match x with B754_nan s p _ => (s, p) :: l | _ => l end.
+
+Definition unop_nan (x: float) : {x : float | is_nan _ _ x = true} :=
+  quiet_nan_64 (Archi.choose_nan_64 (cons_pl x [])).
+
+Definition binop_nan (x y: float) : {x : float | is_nan _ _ x = true} :=
+  quiet_nan_64 (Archi.choose_nan_64 (cons_pl x (cons_pl y []))).
+
+(** For fused multiply-add, the order in which arguments are examined
+  to select a NaN payload varies across platforms.  E.g. in [fma x y z],
+  x86 considers [x] first, then [y], then [z], while ARM considers [z] first,
+  then [x], then [y].  The corresponding permutation is defined
+  for each target, as function [Archi.fma_order]. *)
+
+Definition fma_nan_1 (x y z: float) : {x : float | is_nan _ _ x = true} :=
+  let '(a, b, c) := Archi.fma_order x y z in
+  quiet_nan_64 (Archi.choose_nan_64 (cons_pl a (cons_pl b (cons_pl c [])))).
+
+(** One last wrinkle for fused multiply-add: [fma zero infinity nan]
+  can return either the quiesced [nan], or the default NaN arising out
+  of the invalid operation [zero * infinity].  Of our target platforms,
+  only ARM honors the latter case.  The choice between the default NaN
+  and [nan] is done as in the case of two-argument arithmetic operations. *)
+
+Definition fma_nan (x y z: float) : {x : float | is_nan _ _ x = true} :=
   match x, y with
-  | B754_nan s1 pl1, B754_nan s2 pl2 =>
-      if Archi.choose_binop_pl_64 s1 pl1 s2 pl2
-      then (s2, transform_quiet_pl pl2)
-      else (s1, transform_quiet_pl pl1)
-  | B754_nan s1 pl1, _ => (s1, transform_quiet_pl pl1)
-  | _, B754_nan s2 pl2 => (s2, transform_quiet_pl pl2)
-  | _, _ => Archi.default_pl_64
+  | B754_infinity _, B754_zero _ | B754_zero _, B754_infinity _ =>
+      if Archi.fma_invalid_mul_is_nan
+      then quiet_nan_64 (Archi.choose_nan_64 (Archi.default_nan_64 :: cons_pl z []))
+      else fma_nan_1 x y z
+  | _, _ =>
+      fma_nan_1 x y z
   end.
 
 (** ** Operations over double-precision floats *)
@@ -210,16 +262,20 @@ Definition eq_dec: forall (f1 f2: float), {f1 = f2} + {f1 <> f2} := Beq_dec _ _.
 
 (** Arithmetic operations *)
 
-Definition neg: float -> float := Bopp _ _ neg_pl. (**r opposite (change sign) *)
-Definition abs: float -> float := Babs _ _ abs_pl. (**r absolute value (set sign to [+]) *)
+Definition neg: float -> float := Bopp _ _ neg_nan. (**r opposite (change sign) *)
+Definition abs: float -> float := Babs _ _ abs_nan. (**r absolute value (set sign to [+]) *)
+Definition sqrt: float -> float :=
+  Bsqrt 53 1024 __ __ unop_nan mode_NE.  (**r square root *)
 Definition add: float -> float -> float :=
-  Bplus 53 1024 __ __ binop_pl mode_NE. (**r addition *)
+  Bplus 53 1024 __ __ binop_nan mode_NE. (**r addition *)
 Definition sub: float -> float -> float :=
-  Bminus 53 1024 __ __ binop_pl mode_NE. (**r subtraction *)
+  Bminus 53 1024 __ __ binop_nan mode_NE. (**r subtraction *)
 Definition mul: float -> float -> float :=
-  Bmult 53 1024 __ __ binop_pl mode_NE. (**r multiplication *)
+  Bmult 53 1024 __ __ binop_nan mode_NE. (**r multiplication *)
 Definition div: float -> float -> float :=
-  Bdiv 53 1024 __ __ binop_pl mode_NE. (**r division *)
+  Bdiv 53 1024 __ __ binop_nan mode_NE. (**r division *)
+Definition fma: float -> float -> float -> float :=
+  Bfma 53 1024 __ __ fma_nan mode_NE. (**r fused multiply-add [x * y + z] *)
 Definition compare (f1 f2: float) : option Datatypes.comparison := (**r general comparison *)
   Bcompare 53 1024 f1 f2.
 Definition cmp (c:comparison) (f1 f2: float) : bool := (**r Boolean comparison *)
@@ -229,8 +285,8 @@ Definition ordered (f1 f2: float) : bool :=
 
 (** Conversions *)
 
-Definition of_single: float32 -> float := Bconv _ _ 53 1024 __ __ of_single_pl mode_NE.
-Definition to_single: float -> float32 := Bconv _ _ 24 128 __ __ to_single_pl mode_NE.
+Definition of_single: float32 -> float := Bconv _ _ 53 1024 __ __ of_single_nan mode_NE.
+Definition to_single: float -> float32 := Bconv _ _ 24 128 __ __ to_single_nan mode_NE.
 
 Definition to_int (f:float): option int := (**r conversion to signed 32-bit int *)
   option_map Int.repr (ZofB_range _ _ f Int.min_signed Int.max_signed).
@@ -288,14 +344,14 @@ Theorem add_commut:
   forall x y, is_nan _ _ x = false \/ is_nan _ _ y = false -> add x y = add y x.
 Proof.
   intros. apply Bplus_commut.
-  destruct x, y; try reflexivity. simpl in H. intuition congruence.
+  destruct x, y; try reflexivity; now destruct H.
 Qed.
 
 Theorem mul_commut:
   forall x y, is_nan _ _ x = false \/ is_nan _ _ y = false -> mul x y = mul y x.
 Proof.
   intros. apply Bmult_commut.
-  destruct x, y; try reflexivity. simpl in H. intuition congruence.
+  destruct x, y; try reflexivity; now destruct H.
 Qed.
 
 (** Multiplication by 2 is diagonal addition. *)
@@ -304,10 +360,9 @@ Theorem mul2_add:
   forall f, add f f = mul f (of_int (Int.repr 2%Z)).
 Proof.
   intros. apply Bmult2_Bplus.
-  intros. destruct x; try discriminate. simpl.
-  transitivity (b, transform_quiet_pl n).
-  destruct Archi.choose_binop_pl_64; auto.
-  destruct y; auto || discriminate.
+  intros x y Hx Hy. unfold binop_nan.
+  destruct x; try discriminate. simpl. rewrite Archi.choose_nan_64_idem. 
+  destruct y; reflexivity || discriminate.
 Qed.
 
 (** Divisions that can be turned into multiplication by an inverse. *)
@@ -317,11 +372,10 @@ Definition exact_inverse : float -> option float := Bexact_inverse 53 1024 __ __
 Theorem div_mul_inverse:
   forall x y z, exact_inverse y = Some z -> div x y = mul x z.
 Proof.
-  intros. apply Bdiv_mult_inverse; auto.
-  intros. destruct x0; try discriminate. simpl.
-  transitivity (b, transform_quiet_pl n).
-  destruct y0; reflexivity || discriminate.
-  destruct z0; reflexivity || discriminate.
+  intros. apply Bdiv_mult_inverse. 2: easy.
+  intros x0 y0 z0 Hx Hy Hz. unfold binop_nan.
+  destruct x0; try discriminate.
+  destruct y0, z0; reflexivity || discriminate.
 Qed.
 
 (** Properties of comparisons. *)
@@ -395,6 +449,7 @@ Qed.
   to emulate the former.)   *)
 
 Definition ox8000_0000 := Int.repr Int.half_modulus.  (**r [0x8000_0000] *)
+Definition ox7FFF_FFFF := Int.repr Int.max_signed.    (**r [0x7FFF_FFFF] *)
 
 Theorem of_intu_of_int_1:
   forall x,
@@ -425,6 +480,46 @@ Proof.
   compute_this (Int.unsigned ox8000_0000); smart_omega.
 Qed.
 
+Theorem of_intu_of_int_3:
+  forall x,
+  of_intu x = sub (of_int (Int.and x ox7FFF_FFFF)) (of_int (Int.and x ox8000_0000)).
+Proof.
+  intros.
+  set (hi := Int.and x ox8000_0000).
+  set (lo := Int.and x ox7FFF_FFFF).
+  assert (R: forall n, integer_representable 53 1024 (Int.signed n)).
+  { intros. pose proof (Int.signed_range n).
+    apply integer_representable_n; auto; smart_omega. }
+  unfold sub, of_int. rewrite BofZ_minus by auto. unfold of_intu. f_equal.
+  assert (E: Int.add hi lo = x).
+  { unfold hi, lo. rewrite Int.add_is_or. 
+  - rewrite <- Int.and_or_distrib. apply Int.and_mone.
+  - rewrite Int.and_assoc. rewrite (Int.and_commut ox8000_0000). rewrite Int.and_assoc.
+    change (Int.and ox7FFF_FFFF ox8000_0000) with Int.zero. rewrite ! Int.and_zero; auto.
+  }
+  assert (RNG: 0 <= Int.unsigned lo < two_p 31).
+  { unfold lo. change ox7FFF_FFFF with (Int.repr (two_p 31 - 1)). rewrite <- Int.zero_ext_and by omega.
+    apply Int.zero_ext_range. compute_this Int.zwordsize. omega. }
+  assert (B: forall i, 0 <= i < Int.zwordsize -> Int.testbit ox8000_0000 i = if zeq i 31 then true else false).
+  { intros; unfold Int.testbit. change (Int.unsigned ox8000_0000) with (2^31).
+    destruct (zeq i 31). subst i; auto. apply Z.pow2_bits_false; auto. } 
+  assert (EITHER: hi = Int.zero \/ hi = ox8000_0000).
+  { unfold hi; destruct (Int.testbit x 31) eqn:B31; [right|left];
+    Int.bit_solve; rewrite B by auto.
+  - destruct (zeq i 31). subst i; rewrite B31; auto. apply andb_false_r.
+  - destruct (zeq i 31). subst i; rewrite B31; auto. apply andb_false_r.
+  }
+  assert (SU: - Int.signed hi = Int.unsigned hi).
+  { destruct EITHER as [EQ|EQ]; rewrite EQ; reflexivity. }
+  unfold Z.sub; rewrite SU, <- E. 
+  unfold Int.add; rewrite Int.unsigned_repr, Int.signed_eq_unsigned. omega.
+  - assert (Int.max_signed = two_p 31 - 1) by reflexivity. omega.
+  - assert (Int.unsigned hi = 0 \/ Int.unsigned hi = two_p 31)
+    by (destruct EITHER as [EQ|EQ]; rewrite EQ; [left|right]; reflexivity).
+    assert (Int.max_unsigned = two_p 31 + two_p 31 - 1) by reflexivity.
+    omega.
+Qed.
+
 Theorem to_intu_to_int_1:
   forall x n,
   cmp Clt x (of_intu ox8000_0000) = true ->
@@ -451,7 +546,7 @@ Proof.
   rewrite Bcompare_correct in CMP by auto.
   inv CMP. apply Rcompare_Lt_inv in H1. rewrite EQy in H1.
   assert (p < Int.unsigned ox8000_0000).
-  { apply lt_Z2R. eapply Rle_lt_trans; eauto. }
+  { apply lt_IZR. apply Rle_lt_trans with (1 := P) (2 := H1). }
   change Int.max_signed with (Int.unsigned ox8000_0000 - 1). omega.
 Qed.
 
@@ -471,7 +566,7 @@ Proof.
   intros (EQy & FINy & SIGNy).
   assert (FINx: is_finite _ _ x = true).
   { rewrite ZofB_correct in C. destruct (is_finite _ _ x) eqn:FINx; congruence. }
-  assert (GE: (B2R _ _ x >= Z2R (Int.unsigned ox8000_0000))%R).
+  assert (GE: (B2R _ _ x >= IZR (Int.unsigned ox8000_0000))%R).
   { rewrite <- EQy. unfold cmp, cmp_of_comparison, compare in H.
     rewrite Bcompare_correct in H by auto.
     destruct (Rcompare (B2R 53 1024 x) (B2R 53 1024 y)) eqn:CMP.
@@ -502,7 +597,6 @@ Proof.
   transitivity (split_bits 52 11 (join_bits 52 11 false (Int.unsigned x) 1075)).
   - f_equal. rewrite Int64.ofwords_add'. reflexivity.
   - apply split_join_bits.
-    compute; auto.
     generalize (Int.unsigned_range x).
     compute_this Int.modulus; compute_this (2^52); omega.
     compute_this (2^11); omega.
@@ -510,7 +604,7 @@ Qed.
 
 Lemma from_words_value:
   forall x,
-     B2R _ _ (from_words ox4330_0000 x) = (bpow radix2 52 + Z2R (Int.unsigned x))%R
+     B2R _ _ (from_words ox4330_0000 x) = (bpow radix2 52 + IZR (Int.unsigned x))%R
   /\ is_finite _ _ (from_words ox4330_0000 x) = true
   /\ Bsign _ _ (from_words ox4330_0000 x) = false.
 Proof.
@@ -520,7 +614,7 @@ Proof.
   destruct (Int.unsigned x + Z.pow_pos 2 52) eqn:?.
   exfalso; now smart_omega.
   simpl; rewrite <- Heqz;  unfold F2R; simpl. split; auto.
-  rewrite <- (Z2R_plus 4503599627370496), Rmult_1_r. f_equal. rewrite Z.add_comm. auto.
+  rewrite Rmult_1_r, plus_IZR. apply Rplus_comm.
   exfalso; now smart_omega.
 Qed.
 
@@ -533,7 +627,7 @@ Proof.
   destruct (BofZ_exact 53 1024 __ __ (2^52 + Int.unsigned x)) as (D & E & F).
   smart_omega.
   apply B2R_Bsign_inj; auto.
-  rewrite A, D. rewrite Z2R_plus. auto.
+  rewrite A, D. rewrite plus_IZR. auto.
   rewrite C, F. symmetry. apply Zlt_bool_false. smart_omega.
 Qed.
 
@@ -585,7 +679,6 @@ Proof.
   transitivity (split_bits 52 11 (join_bits 52 11 false (Int.unsigned x) 1107)).
   - f_equal. rewrite Int64.ofwords_add'. reflexivity.
   - apply split_join_bits.
-    compute; auto.
     generalize (Int.unsigned_range x).
     compute_this Int.modulus; compute_this (2^52); omega.
     compute_this (2^11); omega.
@@ -593,7 +686,7 @@ Qed.
 
 Lemma from_words_value':
   forall x,
-     B2R _ _ (from_words ox4530_0000 x) = (bpow radix2 84 + Z2R (Int.unsigned x * two_p 32))%R
+     B2R _ _ (from_words ox4530_0000 x) = (bpow radix2 84 + IZR (Int.unsigned x * two_p 32))%R
   /\ is_finite _ _ (from_words ox4530_0000 x) = true
   /\ Bsign _ _ (from_words ox4530_0000 x) = false.
 Proof.
@@ -603,8 +696,8 @@ Proof.
   destruct (Int.unsigned x + Z.pow_pos 2 52) eqn:?.
   exfalso; now smart_omega.
   simpl; rewrite <- Heqz;  unfold F2R; simpl. split; auto.
-  rewrite <- (Z2R_plus 19342813113834066795298816), <- (Z2R_mult _ 4294967296).
-  f_equal; compute_this (Z.pow_pos 2 52); compute_this (two_power_pos 32); ring.
+  rewrite plus_IZR, Rmult_plus_distr_r, <- 2!mult_IZR, Rplus_comm.
+  easy.
   assert (Zneg p < 0) by reflexivity.
   exfalso; now smart_omega.
 Qed.
@@ -620,7 +713,7 @@ Proof.
     with  ((2^52 + Int.unsigned x) * 2^32) by ring.
   apply integer_representable_n2p; auto. smart_omega. omega. omega.
   apply B2R_Bsign_inj; auto.
-  rewrite A, D. rewrite <- Z2R_Zpower by omega. rewrite <- Z2R_plus. auto.
+  rewrite A, D. rewrite <- IZR_Zpower by omega. rewrite <- plus_IZR. auto.
   rewrite C, F. symmetry. apply Zlt_bool_false.
   compute_this (2^84); compute_this (2^32); omega.
 Qed.
@@ -902,40 +995,39 @@ End Float.
 
 Module Float32.
 
-(** ** NaN payload manipulations *)
+Definition neg_nan (f : float32) : { x : float32 | is_nan _ _ x = true } :=
+  match f with
+  | B754_nan s p H => exist _ (B754_nan 24 128 (negb s) p H) (eq_refl true)
+  | _ => default_nan_32
+  end.
 
-Program Definition transform_quiet_pl (pl:nan_pl 24) : nan_pl 24 :=
-  Pos.lor pl (iter_nat xO 22 xH).
-Next Obligation.
-  destruct pl.
-  simpl. rewrite Z.ltb_lt in *.
-  assert (forall x, Fcore_digits.digits2_pos x = Pos.size x).
-  { induction x0; simpl; auto; rewrite IHx0; zify; omega. }
-  rewrite H, Psize_log_inf, <- Zlog2_log_inf in *. clear H.
-  change (Z.pos (Pos.lor x 4194304)) with (Z.lor (Z.pos x) 4194304%Z).
-  rewrite Z.log2_lor by (zify; omega).
-  apply Z.max_case. auto. simpl. omega.
-Qed.
+Definition abs_nan (f : float32) : { x : float32 | is_nan _ _ x = true } :=
+  match f with
+  | B754_nan s p H => exist _ (B754_nan 24 128 false p H) (eq_refl true)
+  | _ => default_nan_32
+  end.
 
-Lemma transform_quiet_pl_idempotent:
-  forall pl, transform_quiet_pl (transform_quiet_pl pl) = transform_quiet_pl pl.
-Proof.
-  intros []; simpl; intros. apply Float.nan_payload_fequal.
-  simpl. apply Float.lor_idempotent.
-Qed.
+Definition cons_pl (x: float32) (l: list (bool * positive)) :=
+  match x with B754_nan s p _ => (s, p) :: l | _ => l end.
 
-Definition neg_pl (s:bool) (pl:nan_pl 24) := (negb s, pl).
-Definition abs_pl (s:bool) (pl:nan_pl 24) := (false, pl).
+Definition unop_nan (x: float32) : {x : float32 | is_nan _ _ x = true} :=
+  quiet_nan_32 (Archi.choose_nan_32 (cons_pl x [])).
 
-Definition binop_pl (x y: binary32) : bool*nan_pl 24 :=
+Definition binop_nan (x y: float32) : {x : float32 | is_nan _ _ x = true} :=
+  quiet_nan_32 (Archi.choose_nan_32 (cons_pl x (cons_pl y []))).
+
+Definition fma_nan_1 (x y z: float32) : {x : float32 | is_nan _ _ x = true} :=
+  let '(a, b, c) := Archi.fma_order x y z in
+  quiet_nan_32 (Archi.choose_nan_32 (cons_pl a (cons_pl b (cons_pl c [])))).
+
+Definition fma_nan (x y z: float32) : {x : float32 | is_nan _ _ x = true} :=
   match x, y with
-  | B754_nan s1 pl1, B754_nan s2 pl2 =>
-      if Archi.choose_binop_pl_32 s1 pl1 s2 pl2
-      then (s2, transform_quiet_pl pl2)
-      else (s1, transform_quiet_pl pl1)
-  | B754_nan s1 pl1, _ => (s1, transform_quiet_pl pl1)
-  | _, B754_nan s2 pl2 => (s2, transform_quiet_pl pl2)
-  | _, _ => Archi.default_pl_32
+  | B754_infinity _, B754_zero _ | B754_zero _, B754_infinity _ =>
+      if Archi.fma_invalid_mul_is_nan
+      then quiet_nan_32 (Archi.choose_nan_32 (Archi.default_nan_32 :: cons_pl z []))
+      else fma_nan_1 x y z
+  | _, _ =>
+      fma_nan_1 x y z
   end.
 
 (** ** Operations over single-precision floats *)
@@ -946,16 +1038,20 @@ Definition eq_dec: forall (f1 f2: float32), {f1 = f2} + {f1 <> f2} := Beq_dec _ 
 
 (** Arithmetic operations *)
 
-Definition neg: float32 -> float32 := Bopp _ _ neg_pl. (**r opposite (change sign) *)
-Definition abs: float32 -> float32 := Babs _ _ abs_pl. (**r absolute value (set sign to [+]) *)
+Definition neg: float32 -> float32 := Bopp _ _ neg_nan. (**r opposite (change sign) *)
+Definition abs: float32 -> float32 := Babs _ _ abs_nan. (**r absolute value (set sign to [+]) *)
+Definition sqrt: float32 -> float32 :=
+  Bsqrt 24 128 __ __ unop_nan mode_NE.  (**r square root *)
 Definition add: float32 -> float32 -> float32 :=
-  Bplus 24 128 __ __ binop_pl mode_NE. (**r addition *)
+  Bplus 24 128 __ __ binop_nan mode_NE. (**r addition *)
 Definition sub: float32 -> float32 -> float32 :=
-  Bminus 24 128 __ __ binop_pl mode_NE. (**r subtraction *)
+  Bminus 24 128 __ __ binop_nan mode_NE. (**r subtraction *)
 Definition mul: float32 -> float32 -> float32 :=
-  Bmult 24 128 __ __ binop_pl mode_NE. (**r multiplication *)
+  Bmult 24 128 __ __ binop_nan mode_NE. (**r multiplication *)
 Definition div: float32 -> float32 -> float32 :=
-  Bdiv 24 128 __ __ binop_pl mode_NE. (**r division *)
+  Bdiv 24 128 __ __ binop_nan mode_NE. (**r division *)
+Definition fma: float32 -> float32 -> float32 -> float32 :=
+  Bfma 24 128 __ __ fma_nan mode_NE. (**r fused multiply-add [x * y + z] *)
 Definition compare (f1 f2: float32) : option Datatypes.comparison := (**r general comparison *)
   Bcompare 24 128 f1 f2.
 Definition cmp (c:comparison) (f1 f2: float32) : bool := (**r comparison *)
@@ -1003,15 +1099,15 @@ Definition of_bits (b: int): float32 := b32_of_bits (Int.unsigned b).
 Theorem add_commut:
   forall x y, is_nan _ _ x = false \/ is_nan _ _ y = false -> add x y = add y x.
 Proof.
-  intros. apply Bplus_commut.
-  destruct x, y; try reflexivity. simpl in H. intuition congruence.
+  intros. apply Bplus_commut. 
+  destruct x, y; try reflexivity; now destruct H.
 Qed.
 
 Theorem mul_commut:
   forall x y, is_nan _ _ x = false \/ is_nan _ _ y = false -> mul x y = mul y x.
 Proof.
   intros. apply Bmult_commut.
-  destruct x, y; try reflexivity. simpl in H. intuition congruence.
+  destruct x, y; try reflexivity; now destruct H.
 Qed.
 
 (** Multiplication by 2 is diagonal addition. *)
@@ -1020,10 +1116,9 @@ Theorem mul2_add:
   forall f, add f f = mul f (of_int (Int.repr 2%Z)).
 Proof.
   intros. apply Bmult2_Bplus.
-  intros. destruct x; try discriminate. simpl.
-  transitivity (b, transform_quiet_pl n).
-  destruct Archi.choose_binop_pl_32; auto.
-  destruct y; auto || discriminate.
+  intros x y Hx Hy. unfold binop_nan.
+  destruct x; try discriminate. simpl. rewrite Archi.choose_nan_32_idem. 
+  destruct y; reflexivity || discriminate.
 Qed.
 
 (** Divisions that can be turned into multiplication by an inverse. *)
@@ -1033,11 +1128,10 @@ Definition exact_inverse : float32 -> option float32 := Bexact_inverse 24 128 __
 Theorem div_mul_inverse:
   forall x y z, exact_inverse y = Some z -> div x y = mul x z.
 Proof.
-  intros. apply Bdiv_mult_inverse; auto.
-  intros. destruct x0; try discriminate. simpl.
-  transitivity (b, transform_quiet_pl n).
-  destruct y0; reflexivity || discriminate.
-  destruct z0; reflexivity || discriminate.
+  intros. apply Bdiv_mult_inverse. 2: easy.
+  intros x0 y0 z0 Hx Hy Hz. unfold binop_nan.
+  destruct x0; try discriminate.
+  destruct y0, z0; reflexivity || discriminate.
 Qed.
 
 (** Properties of comparisons. *)
@@ -1193,15 +1287,15 @@ Proof.
   set (m := n mod 2^p + (2^p-1)) in *.
   assert (C: m / 2^p = if zeq (n mod 2^p) 0 then 0 else 1).
   { unfold m. destruct (zeq (n mod 2^p) 0).
-    rewrite e. apply Zdiv_small. omega.
-    eapply Zdiv_unique with (n mod 2^p - 1). ring. omega. }
+    rewrite e. apply Z.div_small. omega.
+    eapply Coqlib.Zdiv_unique with (n mod 2^p - 1). ring. omega. }
   assert (D: Z.testbit m p = if zeq (n mod 2^p) 0 then false else true).
   { destruct (zeq (n mod 2^p) 0).
     apply Z.testbit_false; auto. rewrite C; auto.
     apply Z.testbit_true; auto. rewrite C; auto. }
   assert (E: forall i, p < i -> Z.testbit m i = false).
   { intros. apply Z.testbit_false. omega.
-    replace (m / 2^i) with 0. auto. symmetry. apply Zdiv_small.
+    replace (m / 2^i) with 0. auto. symmetry. apply Z.div_small.
     unfold m. split. omega. apply Z.lt_le_trans with (2 * 2^p). omega.
     change 2 with (2^1) at 1. rewrite <- (Zpower_plus radix2) by omega.
     apply Zpower_le. omega. }
@@ -1264,7 +1358,7 @@ Proof.
   intros.
   pose proof (Int64.unsigned_range n).
   unfold of_longu. erewrite of_long_round_odd.
-  unfold of_double, Float.to_single. instantiate (1 := Float.to_single_pl).
+  unfold of_double, Float.to_single. instantiate (1 := Float.to_single_nan).
   f_equal. unfold Float.of_longu. f_equal.
   set (n' := Z.land (Z.lor (Int64.unsigned n) (Z.land (Int64.unsigned n) 2047 + 2047)) (-2048)).
   assert (int_round_odd (Int64.unsigned n) 11 = n') by (apply int_round_odd_plus; omega).
@@ -1310,7 +1404,7 @@ Proof.
   intros.
   pose proof (Int64.signed_range n).
   unfold of_long. erewrite of_long_round_odd.
-  unfold of_double, Float.to_single. instantiate (1 := Float.to_single_pl).
+  unfold of_double, Float.to_single. instantiate (1 := Float.to_single_nan).
   f_equal. unfold Float.of_long. f_equal.
   set (n' := Z.land (Z.lor (Int64.signed n) (Z.land (Int64.signed n) 2047 + 2047)) (-2048)).
   assert (int_round_odd (Int64.signed n) 11 = n') by (apply int_round_odd_plus; omega).
@@ -1331,9 +1425,9 @@ Proof.
   rewrite Int64.testbit_repr by auto. f_equal. f_equal. unfold Int64.and.
   change (Int64.unsigned (Int64.repr 2047)) with 2047.
   change 2047 with (Z.ones 11). rewrite ! Z.land_ones by omega.
-  rewrite Int64.unsigned_repr. apply Int64.eqmod_mod_eq.
+  rewrite Int64.unsigned_repr. apply eqmod_mod_eq.
   apply Z.lt_gt. apply (Zpower_gt_0 radix2); omega.
-  apply Int64.eqmod_divides with (2^64). apply Int64.eqm_signed_unsigned.
+  apply eqmod_divides with (2^64). apply Int64.eqm_signed_unsigned.
   exists (2^(64-11)); auto.
   exploit (Z_mod_lt (Int64.unsigned n) (2^11)). compute; auto.
   assert (2^11 < Int64.max_unsigned) by (compute; auto). omega.

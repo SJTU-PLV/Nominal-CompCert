@@ -687,7 +687,7 @@ Proof.
   intros; red; intros. inv TE.
   exploit H0; eauto. intros [rs1 [tm1 [EX1 [ME1 [RR1 [RO1 EXT1]]]]]].
   exploit external_call_mem_extends; eauto.
-  intros [v' [tm2 [A [B [C [D E]]]]]].
+  intros [v' [tm2 [A [B [C D]]]]].
   exists (rs1#rd <- v'); exists tm2.
 (* Exec *)
   split. eapply star_right. eexact EX1.
@@ -718,7 +718,9 @@ Proof.
   intros; red; intros. inv TE.
   exploit H3; eauto. intros [rs1 [tm1 [EX1 [ME1 [RR1 [RO1 EXT1]]]]]].
   exploit external_call_mem_extends; eauto.
-  intros [v' [tm2 [A [B [C [D E]]]]]].
+  intros [v' [tm2 [A [B [C D]]]]].
+  rewrite <- Genv.find_funct_find_funct_ptr in H0.
+  exploit functions_translated; eauto. simpl. intros [tf [P Q]]. inv Q.
   exists (rs1#rd <- v'); exists tm2.
 (* Exec *)
   exploit (functions_translated (Vptr b Ptrofs.zero)); eauto. cbn.
@@ -901,7 +903,8 @@ Theorem transl_condexpr_correct:
   forall le a v,
   eval_condexpr ge sp e m le a v ->
   transl_condexpr_prop le a v.
-Proof
+Proof.
+  exact
   (eval_condexpr_ind3 ge sp e m
      transl_expr_prop
      transl_exprlist_prop
@@ -919,6 +922,7 @@ Proof
      transl_condexpr_CEcond_correct
      transl_condexpr_CEcondition_correct
      transl_condexpr_CElet_correct).
+Qed.
 
 (** Exit expressions. *)
 

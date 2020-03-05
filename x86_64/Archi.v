@@ -16,9 +16,9 @@
 
 (** Architecture-dependent parameters for x86 in 64-bit mode *)
 
-Require Import ZArith.
-Require Import Fappli_IEEE.
-Require Import Fappli_IEEE_bits.
+Require Import ZArith List.
+(*From Flocq*)
+Require Import Binary Bits.
 
 Definition ptr64 := true.
 
@@ -34,21 +34,33 @@ Proof.
   unfold splitlong. destruct ptr64; simpl; congruence.
 Qed.
 
-Program Definition default_pl_64 : bool * nan_pl 53 :=
-  (true, iter_nat 51 _ xO xH).
+Definition default_nan_64 := (true, iter_nat 51 _ xO xH).
+Definition default_nan_32 := (true, iter_nat 22 _ xO xH).
 
-Definition choose_binop_pl_64 (s1: bool) (pl1: nan_pl 53) (s2: bool) (pl2: nan_pl 53) :=
-  false.                        (**r always choose first NaN *)
+(* Always choose the first NaN argument, if any *)
 
-Program Definition default_pl_32 : bool * nan_pl 24 :=
-  (true, iter_nat 22 _ xO xH).
+Definition choose_nan_64 (l: list (bool * positive)) : bool * positive :=
+  match l with nil => default_nan_64 | n :: _ => n end.
 
-Definition choose_binop_pl_32 (s1: bool) (pl1: nan_pl 24) (s2: bool) (pl2: nan_pl 24) :=
-  false.                        (**r always choose first NaN *)
+Definition choose_nan_32 (l: list (bool * positive)) : bool * positive :=
+  match l with nil => default_nan_32 | n :: _ => n end.
+
+Lemma choose_nan_64_idem: forall n,
+  choose_nan_64 (n :: n :: nil) = choose_nan_64 (n :: nil).
+Proof. auto. Qed.
+
+Lemma choose_nan_32_idem: forall n,
+  choose_nan_32 (n :: n :: nil) = choose_nan_32 (n :: nil).
+Proof. auto. Qed.
+
+Definition fma_order {A: Type} (x y z: A) := (x, y, z).
+
+Definition fma_invalid_mul_is_nan := false.
 
 Definition float_of_single_preserves_sNaN := false.
 
 Global Opaque ptr64 big_endian splitlong
-              default_pl_64 choose_binop_pl_64
-              default_pl_32 choose_binop_pl_32
+              default_nan_64 choose_nan_64
+              default_nan_32 choose_nan_32
+              fma_order fma_invalid_mul_is_nan
               float_of_single_preserves_sNaN.

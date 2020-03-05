@@ -1131,7 +1131,7 @@ Qed.
 Remark val_inject_vptrofs: forall n, Val.inject f (Vptrofs n) (Vptrofs n).
 Proof. intros. unfold Vptrofs. destruct Archi.ptr64; auto. Qed.
 
-Hint Resolve val_inject_vtrue val_inject_vfalse val_inject_of_bool val_inject_vptrofs.
+Local Hint Resolve val_inject_vtrue val_inject_vfalse val_inject_of_bool val_inject_vptrofs : core.
 
 Ltac TrivialInject :=
   match goal with
@@ -1517,6 +1517,8 @@ Inductive val_casted: val -> type -> Prop :=
   | val_casted_void: forall v,
       val_casted v Tvoid.
 
+Local Hint Constructors val_casted : core.
+
 Inductive val_casted_list: list val -> typelist -> Prop :=
   | vcl_nil:
       val_casted_list nil Tnil
@@ -1585,6 +1587,27 @@ Lemma cast_idempotent:
   forall v ty ty' v' m, sem_cast v ty ty' m = Some v' -> sem_cast v' ty' ty' m = Some v'.
 Proof.
   intros. apply cast_val_casted. eapply cast_val_is_casted; eauto.
+Qed.
+
+(** Moreover, casted values belong to the machine type corresponding to the
+    C type. *)
+
+Lemma val_casted_has_type:
+  forall v ty, val_casted v ty -> ty <> Tvoid -> Val.has_type v (typ_of_type ty).
+Proof.
+  intros. inv H; simpl typ_of_type.
+- exact I.
+- exact I.
+- exact I.
+- exact I.
+- apply Val.Vptr_has_type.
+- red; unfold Tptr; rewrite H1; auto.
+- red; unfold Tptr; rewrite H1; auto.
+- red; unfold Tptr; rewrite H1; auto.
+- red; unfold Tptr; rewrite H1; auto.
+- apply Val.Vptr_has_type.
+- apply Val.Vptr_has_type.
+- congruence.
 Qed.
 
 (** Relation with the arithmetic conversions of ISO C99, section 6.3.1 *)

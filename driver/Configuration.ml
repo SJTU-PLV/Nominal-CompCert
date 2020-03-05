@@ -13,11 +13,11 @@
 open Printf
 
 let search_argv key =
-  let len = Array.length Sys.argv in
+  let len = Array.length Commandline.argv in
   let res: string option ref = ref None in
   for i = 1 to len - 2 do
-    if Sys.argv.(i) = key then
-      res := Some Sys.argv.(i + 1);
+    if Commandline.argv.(i) = key then
+      res := Some Commandline.argv.(i + 1);
   done;
   !res
 
@@ -123,7 +123,7 @@ let get_bool_config key =
 
 let arch =
   match get_config_string "arch" with
-  | "powerpc"|"arm"|"x86"|"riscV" as a -> a
+  | "powerpc"|"arm"|"x86"|"riscV"|"aarch64" as a -> a
   | v -> bad_config "arch" [v]
 let model = get_config_string "model"
 let abi = get_config_string "abi"

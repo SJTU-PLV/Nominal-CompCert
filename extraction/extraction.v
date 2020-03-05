@@ -34,7 +34,6 @@ Require Clight.
 Require Compiler.
 Require Parser.
 Require Initializers.
-Require Int31.
 
 (* Standard lib *)
 Require Import ExtrOcamlBasic.
@@ -72,6 +71,7 @@ Extract Constant Iteration.GenIter.iterate =>
 (* Selection *)
 
 Extract Constant Selection.compile_switch => "Switchaux.compile_switch".
+Extract Constant Selection.if_conversion_heuristic => "Selectionaux.if_conversion_heuristic".
 
 (* RTLgen *)
 Extract Constant RTLgen.more_likely => "RTLgenaux.more_likely".
@@ -127,7 +127,7 @@ Extract Constant Compiler.time  => "Timing.time_coq".
 (*Extraction Inline Compiler.apply_total Compiler.apply_partial.*)
 
 (* Cabs *)
-Extract Constant Cabs.cabsloc =>
+Extract Constant Cabs.loc =>
 "{ lineno : int;
    filename: string;
    byteno: int;
@@ -135,15 +135,6 @@ Extract Constant Cabs.cabsloc =>
  }".
 Extract Inlined Constant Cabs.string => "String.t".
 Extract Constant Cabs.char_code => "int64".
-
-(* Int31 *)
-Extract Inductive Int31.digits => "bool" [ "false" "true" ].
-Extract Inductive Int31.int31 => "int" [ "Camlcoq.Int31.constr" ] "Camlcoq.Int31.destr".
-Extract Constant Int31.twice => "Camlcoq.Int31.twice".
-Extract Constant Int31.twice_plus_one => "Camlcoq.Int31.twice_plus_one".
-Extract Constant Int31.compare31 => "Camlcoq.Int31.compare".
-Extract Constant Int31.On => "0".
-Extract Constant Int31.In => "1".
 
 (* Processor-specific extraction directives *)
 
@@ -153,11 +144,11 @@ Load extractionMachdep.
 Extraction Blacklist List String Int.
 
 (* Cutting the dependency to R. *)
-Extract Inlined Constant Fcore_defs.F2R => "fun _ -> assert false".
-Extract Inlined Constant Fappli_IEEE.FF2R => "fun _ -> assert false".
-Extract Inlined Constant Fappli_IEEE.B2R => "fun _ -> assert false".
-Extract Inlined Constant Fappli_IEEE.round_mode => "fun _ -> assert false".
-Extract Inlined Constant Fcalc_bracket.inbetween_loc => "fun _ -> assert false".
+Extract Inlined Constant Defs.F2R => "fun _ -> assert false".
+Extract Inlined Constant Binary.FF2R => "fun _ -> assert false".
+Extract Inlined Constant Binary.B2R => "fun _ -> assert false".
+Extract Inlined Constant Binary.round_mode => "fun _ -> assert false".
+Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 
 (* Needed in Coq 8.4 to avoid problems with Function definitions. *)
 Set Extraction AccessOpaque.
@@ -171,9 +162,10 @@ Separate Extraction
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state
    Ctypes.merge_attributes Ctypes.remove_attributes Ctypes.build_composite_env
    Initializers.transl_init Initializers.constval
-   Csyntax.Eindex Csyntax.Epreincr
+   Csyntax.Eindex Csyntax.Epreincr Csyntax.Eselection
    Ctyping.typecheck_program
    Ctyping.epostincr Ctyping.epostdecr Ctyping.epreincr Ctyping.epredecr
+   Ctyping.eselection
    Ctypes.make_program
    Clight.type_of_function
    Conventions1.callee_save_type Conventions1.is_float_reg

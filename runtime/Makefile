@@ -22,6 +22,8 @@ ifeq ($(ARCH),x86_64)
 OBJS=i64_dtou.o i64_utod.o i64_utof.o vararg.o
 else ifeq ($(ARCH),powerpc64)
 OBJS=i64_dtou.o i64_stof.o i64_utod.o i64_utof.o vararg.o
+else ifeq ($(ARCH),aarch64)
+OBJS=vararg.o
 else
 OBJS=i64_dtos.o i64_dtou.o i64_sar.o i64_sdiv.o i64_shl.o \
   i64_shr.o i64_smod.o i64_stod.o i64_stof.o \
@@ -70,16 +72,16 @@ clean::
 
 ifeq ($(strip $(HAS_RUNTIME_LIB)),true)
 install::
-	install -d $(LIBDIR)
-	install -m 0644 $(LIB) $(LIBDIR)
+	install -d $(DESTDIR)$(LIBDIR)
+	install -m 0644 $(LIB) $(DESTDIR)$(LIBDIR)
 else
 install::
 endif
 
 ifeq ($(strip $(HAS_STANDARD_HEADERS)),true)
 install::
-	install -d $(LIBDIR)/include
-	install -m 0644 $(INCLUDES) $(LIBDIR)/include
+	install -d $(DESTDIR)$(LIBDIR)/include
+	install -m 0644 $(INCLUDES) $(DESTDIR)$(LIBDIR)/include
 else
 install::
 endif

@@ -13,15 +13,9 @@
 (** Correctness of instruction selection for operators *)
 
 Require Import Coqlib.
-Require Import AST.
-Require Import Integers.
-Require Import Floats.
-Require Import Values.
-Require Import Memory.
-Require Import Globalenvs.
-Require Import Cminor.
-Require Import Op.
-Require Import CminorSel.
+Require Import AST Integers Floats.
+Require Import Values Memory Builtins Globalenvs.
+Require Import Cminor Op CminorSel.
 Require Import SelectOp.
 
 Local Open Scope cminorsel_scope.
@@ -387,9 +381,9 @@ Proof.
 - TrivialExists. simpl. rewrite Int.and_commut; auto.
 - TrivialExists. simpl. rewrite Val.and_assoc. rewrite Int.and_commut. auto.
 - rewrite Val.zero_ext_and. TrivialExists. rewrite Val.and_assoc.
-  rewrite Int.and_commut. auto. compute; auto.
+  rewrite Int.and_commut. auto. omega.
 - rewrite Val.zero_ext_and. TrivialExists. rewrite Val.and_assoc.
-  rewrite Int.and_commut. auto. compute; auto.
+  rewrite Int.and_commut. auto. omega.
 - TrivialExists.
 Qed.
 
@@ -749,7 +743,7 @@ Proof.
   red; intros until x. unfold cast8unsigned. destruct (cast8unsigned_match a); intros; InvEval.
   TrivialExists.
   subst. rewrite Val.zero_ext_and. rewrite Val.and_assoc.
-  rewrite Int.and_commut. apply eval_andimm; auto. compute; auto.
+  rewrite Int.and_commut. apply eval_andimm; auto. omega.
   TrivialExists.
 Qed.
 
@@ -765,8 +759,34 @@ Proof.
   red; intros until x. unfold cast16unsigned. destruct (cast16unsigned_match a); intros; InvEval.
   TrivialExists.
   subst. rewrite Val.zero_ext_and. rewrite Val.and_assoc.
-  rewrite Int.and_commut. apply eval_andimm; auto. compute; auto.
+  rewrite Int.and_commut. apply eval_andimm; auto. omega.
   TrivialExists.
+Qed.
+
+Theorem eval_select: 
+  forall le ty cond al vl a1 v1 a2 v2 a b,
+  select ty cond al a1 a2 = Some a ->
+  eval_exprlist ge sp e m le al vl ->
+  eval_expr ge sp e m le a1 v1 ->
+  eval_expr ge sp e m le a2 v2 ->
+  eval_condition cond vl m = Some b ->
+  exists v, 
+     eval_expr ge sp e m le a v
+  /\ Val.lessdef (Val.select (Some b) v1 v2 ty) v.
+Proof.
+  unfold select; intros. 
+  destruct (select_supported ty); try discriminate.
+  destruct (select_swap cond); inv H.
+- exists (Val.select (Some (negb b)) v2 v1 ty); split.
+  apply eval_Eop with (v2 :: v1 :: vl).
+  constructor; auto. constructor; auto.
+  simpl. rewrite eval_negate_condition, H3; auto.
+  destruct b; auto.
+- exists (Val.select (Some b) v1 v2 ty); split.
+  apply eval_Eop with (v1 :: v2 :: vl).
+  constructor; auto. constructor; auto.
+  simpl. rewrite H3; auto.
+  auto.
 Qed.
 
 Theorem eval_singleoffloat: unary_constructor_sound singleoffloat Val.singleoffloat.
@@ -808,7 +828,8 @@ Proof.
   intros. destruct x; simpl in H0; try discriminate.
   destruct (Float.to_intu f) as [n|] eqn:?; simpl in H0; inv H0.
   exists (Vint n); split; auto. unfold intuoffloat.
-  set (im := Int.repr Int.half_modulus).
+  destruct Archi.splitlong.
+- set (im := Int.repr Int.half_modulus).
   set (fm := Float.of_intu im).
   assert (eval_expr ge sp e m (Vfloat fm :: Vfloat f :: le) (Eletvar (S O)) (Vfloat f)).
     constructor. auto.
@@ -835,6 +856,11 @@ Proof.
   rewrite Int.add_neg_zero in A4.
   rewrite Int.add_zero in A4.
   auto.
+- apply Float.to_intu_to_long in Heqo. repeat econstructor. eauto.
+  simpl. rewrite Heqo; reflexivity.
+  simpl. unfold Int64.loword. rewrite Int64.unsigned_repr, Int.repr_unsigned; auto.
+  assert (Int.modulus < Int64.max_unsigned) by reflexivity. 
+  generalize (Int.unsigned_range n); omega.
 Qed.
 
 Theorem eval_floatofintu:
@@ -844,10 +870,11 @@ Theorem eval_floatofintu:
   exists v, eval_expr ge sp e m le (floatofintu a) v /\ Val.lessdef y v.
 Proof.
   intros until y; unfold floatofintu. case (floatofintu_match a); intros.
-  InvEval. TrivialExists.
-  destruct x; simpl in H0; try discriminate. inv H0.
+- InvEval. TrivialExists.
+- destruct x; simpl in H0; try discriminate. inv H0.
   exists (Vfloat (Float.of_intu i)); split; auto.
-  econstructor. eauto.
+  destruct Archi.splitlong.
++ econstructor. eauto.
   set (fm := Float.of_intu Float.ox8000_0000).
   assert (eval_expr ge sp e m (Vint i :: le) (Eletvar O) (Vint i)).
     constructor. auto.
@@ -863,6 +890,7 @@ Proof.
   constructor. EvalOp. simpl; eauto. constructor. simpl; eauto.
   fold fm. rewrite Float.of_intu_of_int_2; auto.
   rewrite Int.sub_add_opp. auto.
++ rewrite Float.of_intu_of_long. repeat econstructor. eauto. reflexivity. 
 Qed.
 
 Theorem eval_intofsingle:
@@ -982,6 +1010,18 @@ Proof.
 - inv H. InvEval. rewrite eval_addressing_Aglobal in H6. inv H6. constructor; auto.
 - inv H. InvEval. rewrite eval_addressing_Ainstack in H6. inv H6. constructor; auto.
 - constructor; auto.
+Qed.
+
+(** Platform-specific known builtins *)
+
+Theorem eval_platform_builtin:
+  forall bf al a vl v le,
+  platform_builtin bf al = Some a ->
+  eval_exprlist ge sp e m le al vl ->
+  platform_builtin_sem bf vl = Some v ->
+  exists v', eval_expr ge sp e m le a v' /\ Val.lessdef v v'.
+Proof.
+  intros. discriminate.
 Qed.
 
 End CMCONSTR.

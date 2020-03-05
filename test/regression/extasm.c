@@ -5,14 +5,16 @@ int clobbers(int x, int z)
 {
   int y;
   asm("TEST0 out:%0 in:%1" : "=r"(y) : "r"(x) : "cc"
-#if defined(__x86_64__)
+#if defined(ARCH_x86) && defined(MODEL_64)
       , "rax", "rdx", "rbx"
-#elif defined(__i386__)
+#elif defined(ARCH_x86) && !defined(MODEL_64)
       , "eax", "edx", "ebx"
-#elif defined(__arm__)
+#elif defined(ARCH_arm)
       , "r0", "r1", "r4"
-#elif defined(__PPC__)
+#elif defined(ARCH_powerpc)
       , "r0", "r3", "r4", "r31"
+#elif defined(ARCH_aarch64)
+      , "x0", "x1", "x16", "x29", "x30"
 #endif
 );
   return y + z;
@@ -21,7 +23,8 @@ int clobbers(int x, int z)
 #if (defined(ARCH_x86) && defined(MODEL_64)) \
  || (defined(ARCH_riscV) && defined(MODEL_64)) \
  || (defined(ARCH_powerpc) && defined(MODEL_ppc64)) \
- || (defined(ARCH_powerpc) && defined(MODEL_e5500))
+ || (defined(ARCH_powerpc) && defined(MODEL_e5500)) \
+ || defined(ARCH_aarch64)
 #define SIXTYFOUR
 #else
 #undef SIXTYFOUR
@@ -33,6 +36,7 @@ int main()
   void * y;
   long long z;
   double f;
+  float sf;
   char c[16];
 
   /* No inputs, no outputs */
@@ -72,6 +76,15 @@ int main()
 #ifdef FAILURES
   asm("FAIL4 a:%[a]" : "=r"(x) : [z]"i"(0));
 #endif
+  /* One argument of each type */
+  asm("TEST15 int32 %0" : : "r" (x));
+#ifdef SIXTYFOUR
+  asm("TEST15 int64 %0" : : "r" (z));
+#else
+  asm("TEST15 int64 %Q0 / %R0" : : "r" (z));
+#endif
+  asm("TEST15 float64 %0" : : "r" (f));
+  asm("TEST15 float32 %0" : : "r" (sf));
   /* Various failures */
 #ifdef FAILURES
   asm("FAIL5 out:%0,%1" : "=r"(x), "=r"(y));

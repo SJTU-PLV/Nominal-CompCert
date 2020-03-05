@@ -198,6 +198,14 @@ Proof.
   intros. destruct xc; simpl; TailNoLabel.
 Qed.
 
+Remark mk_sel_label:
+  forall xc rd r2 k c,
+  mk_sel xc rd r2 k = OK c ->
+  tail_nolabel k c.
+Proof.
+  unfold mk_sel; intros; destruct xc; inv H; TailNoLabel.
+Qed.
+
 Remark transl_cond_label:
   forall cond args k c,
   transl_cond cond args k = OK c ->
@@ -225,6 +233,9 @@ Proof.
   destruct (Float32.eq_dec n Float32.zero); TailNoLabel.
   destruct (normalize_addrmode_64 x) as [am' [delta|]]; TailNoLabel.
   eapply tail_nolabel_trans. eapply transl_cond_label; eauto. eapply mk_setcc_label.
+  unfold transl_sel in EQ2. destruct (ireg_eq x x0); monadInv EQ2.
+  TailNoLabel.
+  eapply tail_nolabel_trans. eapply transl_cond_label; eauto. eapply mk_sel_label; eauto.
 Qed.
 
 Remark transl_load_label:
@@ -766,7 +777,7 @@ Opaque loadind.
   intros. simpl in TR.
   destruct (transl_cond_correct (ag_nb w) se tf cond args _ _ rs0 m' TR)
   as [rs' [A [B C]]].
-  rewrite EC in B.
+  rewrite EC in B. destruct B as [B _].
   destruct (testcond_for_condition cond); simpl in *.
 (* simple jcc *)
   exists (Pjcc c1 lbl); exists k; exists rs'.
@@ -804,7 +815,7 @@ Opaque loadind.
   left; eapply exec_straight_steps; eauto. intros. simpl in TR.
   destruct (transl_cond_correct (ag_nb w) se tf cond args _ _ rs0 m' TR)
   as [rs' [A [B C]]].
-  rewrite EC in B.
+  rewrite EC in B. destruct B as [B _].
   destruct (testcond_for_condition cond); simpl in *.
 (* simple jcc *)
   econstructor; split.

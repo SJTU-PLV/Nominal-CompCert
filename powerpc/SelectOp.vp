@@ -38,11 +38,9 @@
 
 Require Import Coqlib.
 Require Import Compopts.
-Require Import AST.
-Require Import Integers.
-Require Import Floats.
-Require Import Op.
-Require Import CminorSel.
+Require Import AST Integers Floats Builtins.
+Require Import Op CminorSel.
+Require Archi.
 
 Local Open Scope cminorsel_scope.
 
@@ -516,6 +514,19 @@ Definition singleofintu (e: expr) :=
 Definition singleoffloat (e: expr) := Eop Osingleoffloat (e ::: Enil).
 Definition floatofsingle (e: expr) := Eop Ofloatofsingle (e ::: Enil).
 
+(** ** Selection *)
+
+Definition select (ty: typ) (cond: condition) (args: exprlist) (e1 e2: expr) :=
+  if match ty with
+     | Tint => true
+     | Tfloat => true
+     | Tsingle => true
+     | Tlong => Archi.ppc64
+     | _ => false
+     end
+  then Some (Eop (Osel cond ty) (e1 ::: e2 ::: args))
+  else None.
+
 (** ** Recognition of addressing modes for load and store operations *)
 
 Definition can_use_Aindexed2 (chunk: memory_chunk): bool :=
@@ -552,3 +563,8 @@ Nondetfunction builtin_arg (e: expr) :=
   | Eop Oadd (e1:::e2:::Enil) => BA_addptr (BA e1) (BA e2)
   | _ => BA e
   end.
+
+(** Platform-specific known builtins *)
+
+Definition platform_builtin (b: platform_builtin) (args: exprlist) : option expr :=
+  None.

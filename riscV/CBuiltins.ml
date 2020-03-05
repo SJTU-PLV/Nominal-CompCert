@@ -18,16 +18,13 @@
 open C
 
 let builtins = {
-  Builtins.typedefs = [
+  builtin_typedefs = [
     "__builtin_va_list", TPtr(TVoid [], [])
   ];
-  Builtins.functions = [
+  builtin_functions = [
     (* Synchronization *)
     "__builtin_fence",
       (TVoid [], [], false);
-    (* Integer arithmetic *)
-    "__builtin_bswap64",
-      (TInt(IULongLong, []), [TInt(IULongLong, [])], false);
     (* Float arithmetic *)
     "__builtin_fmadd",
       (TFloat(FDouble, []),

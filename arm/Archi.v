@@ -16,9 +16,9 @@
 
 (** Architecture-dependent parameters for ARM *)
 
-Require Import ZArith.
-Require Import Fappli_IEEE.
-Require Import Fappli_IEEE_bits.
+Require Import ZArith List.
+(*From Flocq*)
+Require Import Binary Bits.
 
 Definition ptr64 := false.
 
@@ -34,29 +34,57 @@ Proof.
   unfold splitlong, ptr64; congruence.
 Qed.
 
-Program Definition default_pl_64 : bool * nan_pl 53 :=
-  (false, iter_nat 51 _ xO xH).
+Definition default_nan_64 := (false, iter_nat 51 _ xO xH).
+Definition default_nan_32 := (false, iter_nat 22 _ xO xH).
 
-Definition choose_binop_pl_64 (s1: bool) (pl1: nan_pl 53) (s2: bool) (pl2: nan_pl 53) :=
-  (** Choose second NaN if pl2 is sNaN but pl1 is qNan.
-      In all other cases, choose first NaN *)
-  (Pos.testbit (proj1_sig pl1) 51 &&
-   negb (Pos.testbit (proj1_sig pl2) 51))%bool.
+(** Choose the first signaling NaN, if any;
+    otherwise choose the first NaN;
+    otherwise use default. *)
 
-Program Definition default_pl_32 : bool * nan_pl 24 :=
-  (false, iter_nat 22 _ xO xH).
+Definition choose_nan (is_signaling: positive -> bool) 
+                      (default: bool * positive)
+                      (l0: list (bool * positive)) : bool * positive :=
+  let fix choose_snan (l1: list (bool * positive)) :=
+    match l1 with
+    | nil =>
+        match l0 with nil => default | n :: _ => n end
+    | ((s, p) as n) :: l1 =>
+        if is_signaling p then n else choose_snan l1
+    end
+  in choose_snan l0.
 
-Definition choose_binop_pl_32 (s1: bool) (pl1: nan_pl 24) (s2: bool) (pl2: nan_pl 24) :=
-  (** Choose second NaN if pl2 is sNaN but pl1 is qNan.
-      In all other cases, choose first NaN *)
-  (Pos.testbit (proj1_sig pl1) 22 &&
-   negb (Pos.testbit (proj1_sig pl2) 22))%bool.
+Lemma choose_nan_idem: forall is_signaling default n,
+  choose_nan is_signaling default (n :: n :: nil) =
+  choose_nan is_signaling default (n :: nil).
+Proof.
+  intros. destruct n as [s p]; unfold choose_nan; simpl.
+  destruct (is_signaling p); auto. 
+Qed.
+
+Definition choose_nan_64 :=
+  choose_nan (fun p => negb (Pos.testbit p 51)) default_nan_64.
+
+Definition choose_nan_32 :=
+  choose_nan (fun p => negb (Pos.testbit p 22)) default_nan_32.
+
+Lemma choose_nan_64_idem: forall n,
+  choose_nan_64 (n :: n :: nil) = choose_nan_64 (n :: nil).
+Proof. intros; apply choose_nan_idem. Qed.
+
+Lemma choose_nan_32_idem: forall n,
+  choose_nan_32 (n :: n :: nil) = choose_nan_32 (n :: nil).
+Proof. intros; apply choose_nan_idem. Qed.
+
+Definition fma_order {A: Type} (x y z: A) := (z, x, y).
+
+Definition fma_invalid_mul_is_nan := true.
 
 Definition float_of_single_preserves_sNaN := false.
 
 Global Opaque ptr64 big_endian splitlong
-              default_pl_64 choose_binop_pl_64
-              default_pl_32 choose_binop_pl_32
+              default_nan_64 choose_nan_64
+              default_nan_32 choose_nan_32
+              fma_order fma_invalid_mul_is_nan
               float_of_single_preserves_sNaN.
 
 (** Which ABI to use: either the standard ARM EABI with floats passed

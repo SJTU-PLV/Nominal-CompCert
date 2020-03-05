@@ -161,7 +161,7 @@ Proof.
       + replace (sizeof _ _) with (Z.of_nat (length bytes1)).
         * eapply Mem.storebytes_range_perm; eauto.
         * erewrite (Mem.loadbytes_length m1) by eauto.
-          apply nat_of_Z_eq.
+          apply Z2Nat.id.
           omega.
       + constructor.
     }

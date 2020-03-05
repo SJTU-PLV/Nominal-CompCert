@@ -1018,6 +1018,14 @@ Proof.
   intros. eapply sd_determ; eauto.
 Qed.
 
+Lemma sd_determ_3:
+  forall s t s1 s2,
+  Step L s t s1 -> Step L s E0 s2 -> t = E0 /\ s1 = s2.
+Proof.
+  intros. exploit (sd_determ DET). eexact H. eexact H0.
+  intros [A B]. inv A. auto.
+Qed.
+
 Lemma star_determinacy:
   forall s t s', Star L s t s' ->
   forall s'', Star L s t s'' -> Star L s' E0 s'' \/ Star L s'' E0 s'.
@@ -1046,6 +1054,206 @@ Definition receptive {liA liB} (L: semantics liA liB) :=
 
 Definition determinate {liA liB} (L: semantics liA liB) :=
   forall se, lts_determinate (L se) se.
+
+(** Extra simulation diagrams for determinate languages. *)
+
+Section FORWARD_SIMU_DETERM.
+
+Context {liA1 liA2} (ccA: callconv liA1 liA2).
+Context {liB1 liB2} (ccB: callconv liB1 liB2).
+Context (se1 se2: Genv.symtbl) (wB: ccworld ccB).
+Context {state1 state2: Type}.
+
+Variable L1: lts liA1 liB1 state1.
+Variable L2: lts liA2 liB2 state2.
+
+Hypothesis L1det: lts_determinate L1 se1.
+
+Variable index: Type.
+Variable order: index -> index -> Prop.
+Hypothesis wf_order: well_founded order.
+
+Variable match_states: index -> state1 -> state2 -> Prop.
+
+Hypothesis match_valid_query:
+  forall q1 q2, match_query ccB wB q1 q2 ->
+  valid_query L2 q2 = valid_query L1 q1.
+
+Hypothesis match_initial_states:
+  forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
+  exists i s2, initial_state L2 q2 s2 /\ match_states i s1 s2.
+
+Hypothesis match_final_states:
+  forall i s1 s2 r1, match_states i s1 s2 -> final_state L1 s1 r1 ->
+  exists r2, final_state L2 s2 r2 /\ match_reply ccB wB r1 r2.
+
+Hypothesis match_external:
+  forall i s1 s2 q1, match_states i s1 s2 -> at_external L1 s1 q1 ->
+  exists wA q2, at_external L2 s2 q2 /\ match_query ccA wA q1 q2 /\ match_senv ccA wA se1 se2 /\
+  forall r1 r2 s1', match_reply ccA wA r1 r2 -> after_external L1 s1 r1 s1' ->
+  exists i' s2', after_external L2 s2 r2 s2' /\ match_states i' s1' s2'.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall i s2, match_states i s1 s2 ->
+  exists s1'' i' s2',
+      Star L1 s1' E0 s1''
+   /\ (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ order i' i))
+   /\ match_states i' s1'' s2'.
+
+Inductive match_states_later: index * nat -> state1 -> state2 -> Prop :=
+| msl_now: forall i s1 s2,
+    match_states i s1 s2 -> match_states_later (i, O) s1 s2
+| msl_later: forall i n s1 s1' s2,
+    Step L1 s1 E0 s1' -> match_states_later (i, n) s1' s2 -> match_states_later (i, S n) s1 s2.
+
+Lemma star_match_states_later:
+  forall s1 s1', Star L1 s1 E0 s1' ->
+  forall i s2, match_states i s1' s2 ->
+  exists n, match_states_later (i, n) s1 s2.
+Proof.
+  intros s10 s10' STAR0. pattern s10, s10'; eapply star_E0_ind; eauto.
+  - intros s1 i s2 M. exists O; constructor; auto.
+  - intros s1 s1' s1'' STEP IH i s2 M.
+    destruct (IH i s2 M) as (n & MS).
+    exists (S n); econstructor; eauto.
+Qed.
+
+Lemma forward_simulation_determ:
+  fsim_properties ccA ccB se1 se2 wB L1 L2 _ (lex_ord order lt) match_states_later.
+Proof.
+  constructor.
+- auto.
+- intros. exploit match_initial_states; eauto. intros (i & s2 & A & B).
+  exists (i, O), s2; auto using msl_now.
+- intros. inv H.
+  + eapply match_final_states; eauto.
+  + eelim (sd_final_nostep L1det); eauto.
+- intros i s1 s2 q1 Hs Hq1. destruct Hs.
+  + edestruct match_external as (wA & q2 & Hq2 & Hq & Hse & Hr); eauto.
+    exists wA, q2. intuition auto.
+    edestruct Hr as (i' & s2' & Hs2' & Hs'); eauto.
+    exists (i', O), s2'. split; auto. constructor; auto.
+  + eelim sd_at_external_nostep; eauto.
+- intros s1 t s1' A; destruct 1.
+  + exploit simulation; eauto. intros (s1'' & i' & s2' & B & C & D).
+    exploit star_match_states_later; eauto. intros (n & E).
+    exists (i', n), s2'; split; auto.
+    destruct C as [P | [P Q]]; auto using lex_ord_left.
+  + exploit @sd_determ_3. eauto. eexact A. eauto. intros [P Q]; subst t s1'0.
+    exists (i, n), s2; split; auto.
+    right; split. apply star_refl. apply lex_ord_right. omega.
+Qed.
+
+End FORWARD_SIMU_DETERM.
+
+(** A few useful special cases. *)
+
+Section FORWARD_SIMU_DETERM_DIAGRAMS.
+
+Context {liA1 liA2} (ccA: callconv liA1 liA2).
+Context {liB1 liB2} (ccB: callconv liB1 liB2).
+Context (se1 se2: Genv.symtbl) (wB: ccworld ccB).
+Context {state1 state2: Type}.
+
+Variable L1: lts liA1 liB1 state1.
+Variable L2: lts liA2 liB2 state2.
+
+Hypothesis L1det: lts_determinate L1 se1.
+
+Variable match_states: state1 -> state2 -> Prop.
+
+Hypothesis match_valid_query:
+  forall q1 q2, match_query ccB wB q1 q2 ->
+  valid_query L2 q2 = valid_query L1 q1.
+
+Hypothesis match_initial_states:
+  forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
+  exists s2, initial_state L2 q2 s2 /\ match_states s1 s2.
+
+Hypothesis match_final_states:
+  forall s1 s2 r1, match_states s1 s2 -> final_state L1 s1 r1 ->
+  exists r2, final_state L2 s2 r2 /\ match_reply ccB wB r1 r2.
+
+Hypothesis match_external:
+  forall s1 s2 q1, match_states s1 s2 -> at_external L1 s1 q1 ->
+  exists wA q2, at_external L2 s2 q2 /\ match_query ccA wA q1 q2 /\ match_senv ccA wA se1 se2 /\
+  forall r1 r2 s1', match_reply ccA wA r1 r2 -> after_external L1 s1 r1 s1' ->
+  exists s2', after_external L2 s2 r2 s2' /\ match_states s1' s2'.
+
+Section SIMU_DETERM_STAR.
+
+Variable measure: state1 -> nat.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2, match_states s1 s2 ->
+  exists s1'' s2',
+      Star L1 s1' E0 s1''
+   /\ (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ measure s1'' < measure s1))%nat
+   /\ match_states s1'' s2'.
+
+Lemma forward_simulation_determ_star:
+  fsim_properties ccA ccB se1 se2 wB L1 L2 _
+    (lex_ord (ltof _ measure) lt)
+    (match_states_later L1 (fun i s1 s2 => i = s1 /\ match_states s1 s2)).
+Proof.
+  apply forward_simulation_determ.
+- assumption.
+- auto.
+- intros. exploit match_initial_states; eauto. intros (s2 & A & B). 
+  exists s1, s2; auto.
+- intros. destruct H. eapply match_final_states; eauto.
+- intros. destruct H. subst.
+  edestruct match_external as (wA & q2 & Hq2 & Hq & Hse & Hr); eauto.
+  exists wA, q2. intuition auto.
+  edestruct Hr as (s2' & Hs2' & Hs'); eauto.
+- intros. destruct H0; subst i. 
+  exploit simulation; eauto. intros (s1'' & s2' & A & B & C).
+  exists s1'', s1'', s2'. auto.
+Qed.
+
+End SIMU_DETERM_STAR.
+
+Section SIMU_DETERM_PLUS.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2, match_states s1 s2 ->
+  exists s1'' s2', Star L1 s1' E0 s1'' /\ Plus L2 s2 t s2' /\ match_states s1'' s2'.
+
+Lemma forward_simulation_determ_plus:
+  fsim_properties ccA ccB se1 se2 wB L1 L2 _
+    (lex_ord (ltof _ (fun _ => O)) lt)
+    (match_states_later L1 (fun i s1 s2 => i = s1 /\ match_states s1 s2)).
+Proof.
+  apply forward_simulation_determ_star.
+  intros. exploit simulation; eauto. intros (s1'' & s2' & A & B & C).
+  exists s1'', s2'; auto.
+Qed.
+
+End SIMU_DETERM_PLUS.
+
+Section SIMU_DETERM_ONE.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2, match_states s1 s2 ->
+  exists s1'' s2', Star L1 s1' E0 s1'' /\ Step L2 s2 t s2' /\ match_states s1'' s2'.
+
+Lemma forward_simulation_determ_one:
+  fsim_properties ccA ccB se1 se2 wB L1 L2 _
+    (lex_ord (ltof _ (fun _ => O)) lt)
+    (match_states_later L1 (fun i s1 s2 => i = s1 /\ match_states s1 s2)).
+Proof.
+  apply forward_simulation_determ_plus.
+  intros. exploit simulation; eauto. intros (s1'' & s2' & A & B & C).
+  exists s1'', s2'; auto using plus_one.
+Qed.
+
+End SIMU_DETERM_ONE.
+
+End FORWARD_SIMU_DETERM_DIAGRAMS.
 
 (** * Backward simulations between two transition semantics. *)
 

@@ -229,7 +229,7 @@ Proof.
       * pose proof Hsb1 as Hrp1.
         eapply Mem.storebytes_range_perm in Hrp1.
         erewrite Mem.loadbytes_length in Hrp1 by eauto.
-        rewrite nat_of_Z_eq in Hrp1 by xomega.
+        rewrite Z2Nat.id in Hrp1 by xomega.
         intros ofs Hofs.
         eapply Mem.perm_storebytes_1; eauto.
         eapply Mem.perm_implies; eauto.
@@ -237,7 +237,7 @@ Proof.
       * eapply Mem.perm_storebytes_1; eauto.
         eapply Mem.storebytes_range_perm; eauto.
         erewrite Mem.loadbytes_length; eauto.
-        rewrite nat_of_Z_eq by xomega.
+        rewrite Z2Nat.id by xomega.
         xomega.
     + assert (sz > 0 \/ sz = 0) as [Hsz | Hsz] by xomega.
       * rewrite Hw' in H8. inv H8.
@@ -257,12 +257,12 @@ Proof.
            eapply Mem.perm_implies; eauto.
            eapply Hsb1; eauto.
            erewrite Mem.loadbytes_length; eauto.
-           rewrite nat_of_Z_eq by xomega; eauto.
+           rewrite Z2Nat.id by xomega; eauto.
            constructor.
         -- eapply Mem.perm_storebytes_1; eauto.
            eapply Mem.storebytes_range_perm; eauto.
            erewrite Mem.loadbytes_length; eauto.
-           rewrite nat_of_Z_eq by xomega; eauto.
+           rewrite Z2Nat.id by xomega; eauto.
            xomega.
         -- eapply Mem.perm_storebytes_1; eauto.
            eapply Mem.loadbytes_range_perm; eauto.
@@ -334,8 +334,10 @@ Proof.
       edestruct (Genv.mge_info Hse _ H); subst; reflexivity.
   }
   destruct ef; simpl; try rauto.
-  repeat intro. destruct a0. contradiction.
-Qed.
+  - repeat intro. destruct a0. contradiction.
+  - admit.
+  - admit.
+Admitted. (* need proofs for known_builtin_sem *)
 
 Hint Extern 1 (Transport _ _ _ _ _) =>
   rel_curry_set_le_transport @external_call : typeclass_instances.

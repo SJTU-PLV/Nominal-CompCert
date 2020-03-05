@@ -17,17 +17,10 @@
 
 (** Correctness of instruction selection for operators *)
 
-Require Import Coqlib.
-Require Import Maps.
-Require Import AST.
-Require Import Integers.
-Require Import Floats.
-Require Import Values.
-Require Import Memory.
-Require Import Globalenvs.
-Require Import Cminor.
-Require Import Op.
-Require Import CminorSel.
+Require Import Coqlib Zbits.
+Require Import AST Integers Floats.
+Require Import Values Memory Builtins Globalenvs.
+Require Import Cminor Op CminorSel.
 Require Import SelectOp.
 
 Local Open Scope cminorsel_scope.
@@ -372,7 +365,7 @@ Proof.
   change (Int.ltu (Int.repr 32) Int64.iwordsize') with true; simpl.
   apply Val.lessdef_same. f_equal. 
   transitivity (Int.repr (Z.shiftr (Int.signed i * Int.signed i0) 32)).
-  unfold Int.mulhs; f_equal. rewrite Int.Zshiftr_div_two_p by omega. reflexivity.
+  unfold Int.mulhs; f_equal. rewrite Zshiftr_div_two_p by omega. reflexivity.
   apply Int.same_bits_eq; intros n N.
   change Int.zwordsize with 32 in *.
   assert (N1: 0 <= n < 64) by omega.
@@ -400,7 +393,7 @@ Proof.
   change (Int.ltu (Int.repr 32) Int64.iwordsize') with true; simpl.
   apply Val.lessdef_same. f_equal. 
   transitivity (Int.repr (Z.shiftr (Int.unsigned i * Int.unsigned i0) 32)).
-  unfold Int.mulhu; f_equal. rewrite Int.Zshiftr_div_two_p by omega. reflexivity.
+  unfold Int.mulhu; f_equal. rewrite Zshiftr_div_two_p by omega. reflexivity.
   apply Int.same_bits_eq; intros n N.
   change Int.zwordsize with 32 in *.
   assert (N1: 0 <= n < 64) by omega.
@@ -770,7 +763,7 @@ Qed.
 Theorem eval_cast8unsigned: unary_constructor_sound cast8unsigned (Val.zero_ext 8).
 Proof.
   red; intros until x. unfold cast8unsigned.
-  rewrite Val.zero_ext_and. apply eval_andimm. compute; auto.
+  rewrite Val.zero_ext_and. apply eval_andimm. omega.
 Qed.
 
 Theorem eval_cast16signed: unary_constructor_sound cast16signed (Val.sign_ext 16).
@@ -783,7 +776,7 @@ Qed.
 Theorem eval_cast16unsigned: unary_constructor_sound cast16unsigned (Val.zero_ext 16).
 Proof.
   red; intros until x. unfold cast8unsigned.
-  rewrite Val.zero_ext_and. apply eval_andimm. compute; auto.
+  rewrite Val.zero_ext_and. apply eval_andimm. omega.
 Qed.
 
 Theorem eval_intoffloat:
@@ -872,6 +865,20 @@ Proof.
   red; intros. unfold floatofsingle. TrivialExists.
 Qed.
 
+Theorem eval_select:
+  forall le ty cond al vl a1 v1 a2 v2 a b,
+  select ty cond al a1 a2 = Some a ->
+  eval_exprlist ge sp e m le al vl ->
+  eval_expr ge sp e m le a1 v1 ->
+  eval_expr ge sp e m le a2 v2 ->
+  eval_condition cond vl m = Some b ->
+  exists v, 
+     eval_expr ge sp e m le a v
+  /\ Val.lessdef (Val.select (Some b) v1 v2 ty) v.
+Proof.
+  unfold select; intros; discriminate.
+Qed.
+
 Theorem eval_addressing:
   forall le chunk a v b ofs,
   eval_expr ge sp e m le a v ->
@@ -920,6 +927,18 @@ Proof.
   rewrite SF; auto.
 + constructor; auto.
 - constructor; auto.
+Qed.
+
+(** Platform-specific known builtins *)
+
+Theorem eval_platform_builtin:
+  forall bf al a vl v le,
+  platform_builtin bf al = Some a ->
+  eval_exprlist ge sp e m le al vl ->
+  platform_builtin_sem bf vl = Some v ->
+  exists v', eval_expr ge sp e m le a v' /\ Val.lessdef v v'.
+Proof.
+  intros. discriminate.
 Qed.
 
 End CMCONSTR.

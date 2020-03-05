@@ -11,9 +11,9 @@
 (* *********************************************************************)
 
 Require Import FunInd.
-Require Import Zwf Coqlib Maps Integers Floats Lattice.
+Require Import Zwf Coqlib Maps Zbits Integers Floats Lattice.
 Require Import Compopts AST.
-Require Import Values Memory Globalenvs Events.
+Require Import Values Memory Globalenvs Builtins Events.
 Require Import Registers RTL.
 
 (** The abstract domains for value analysis *)
@@ -1492,12 +1492,12 @@ Proof.
   inv H; auto with va.
 - apply vmatch_uns. red; intros. rewrite Int.bits_rol by auto.
   generalize (Int.unsigned_range n); intros.
-  rewrite Zmod_small by omega.
+  rewrite Z.mod_small by omega.
   apply H1. omega. omega.
 - destruct (zlt n0 Int.zwordsize); auto with va.
   apply vmatch_sgn. red; intros. rewrite ! Int.bits_rol by omega.
   generalize (Int.unsigned_range n); intros.
-  rewrite ! Zmod_small by omega.
+  rewrite ! Z.mod_small by omega.
   rewrite H1 by omega. symmetry. rewrite H1 by omega. auto.
 - destruct (zlt n0 Int.zwordsize); auto with va.
 Qed.
@@ -1670,7 +1670,7 @@ Proof.
   assert (UNS: forall i j, j <> Int.zero -> is_uns (usize j) (Int.modu i j)).
   {
     intros. apply is_uns_mon with (usize (Int.modu i j)); auto with va.
-    unfold usize, Int.size. apply Int.Zsize_monotone.
+    unfold usize, Int.size. apply Zsize_monotone.
     generalize (Int.unsigned_range_2 j); intros RANGE.
     assert (Int.unsigned j <> 0).
     { red; intros; elim H. rewrite <- (Int.repr_unsigned j). rewrite H0. auto. }
@@ -2093,6 +2093,7 @@ Proof.
 Qed.
 
 Definition sign_ext (nbits: Z) (v: aval) :=
+  if zle nbits 0 then Uns (provenance v) 0 else
   match v with
   | I i => I (Int.sign_ext nbits i)
   | Uns p n => if zlt n nbits then Uns p n else sgn p nbits
@@ -2101,18 +2102,37 @@ Definition sign_ext (nbits: Z) (v: aval) :=
   end.
 
 Lemma sign_ext_sound:
-  forall nbits v x, 0 < nbits -> vmatch v x -> vmatch (Val.sign_ext nbits v) (sign_ext nbits x).
+  forall nbits v x, vmatch v x -> vmatch (Val.sign_ext nbits v) (sign_ext nbits x).
 Proof.
   assert (DFL: forall p nbits i, 0 < nbits -> vmatch (Vint (Int.sign_ext nbits i)) (sgn p nbits)).
   {
     intros. apply vmatch_sgn. apply is_sign_ext_sgn; auto with va.
   }
-  intros. inv H0; simpl; auto with va.
-- destruct (zlt n nbits); eauto with va.
+  intros. unfold sign_ext. destruct (zle nbits 0).
+- destruct v; simpl; auto with va. constructor. omega. 
+  rewrite Int.sign_ext_below by auto. red; intros; apply Int.bits_zero.
+- inv H; simpl; auto with va.
++ destruct (zlt n nbits); eauto with va.
   constructor; auto. eapply is_sign_ext_uns; eauto with va.
-- destruct (zlt n nbits); auto with va.
-- apply vmatch_sgn. apply is_sign_ext_sgn; auto with va.
++ destruct (zlt n nbits); auto with va.
++ apply vmatch_sgn. apply is_sign_ext_sgn; auto with va.
   apply Z.min_case; auto with va.
+Qed.
+
+Definition zero_ext_l (s: Z) := unop_long (Int64.zero_ext s).
+
+Lemma zero_ext_l_sound:
+  forall s v x, vmatch v x -> vmatch (Val.zero_ext_l s v) (zero_ext_l s x).
+Proof.
+  intros s. exact (unop_long_sound (Int64.zero_ext s)).
+Qed.
+
+Definition sign_ext_l (s: Z) := unop_long (Int64.sign_ext s).
+
+Lemma sign_ext_l_sound:
+  forall s v x, vmatch v x -> vmatch (Val.sign_ext_l s v) (sign_ext_l s x).
+Proof.
+  intros s. exact (unop_long_sound (Int64.sign_ext s)).
 Qed.
 
 Definition longofint (v: aval) :=
@@ -2824,6 +2844,64 @@ Proof.
   intros. inv H; simpl in H0; congruence.
 Qed.
 
+(** Select either returns one of its arguments, or Vundef. *)
+
+Definition add_undef (x: aval) :=
+  match x with
+  | Vbot => ntop
+  | I i =>
+      if Int.lt i Int.zero
+      then sgn Pbot (ssize i)
+      else uns Pbot (usize i)
+  | L _ | F _ | FS _ => ntop
+  | _ => x
+  end.
+
+Lemma add_undef_sound:
+  forall v x, vmatch v x -> vmatch v (add_undef x).
+Proof.
+  destruct 1; simpl; auto with va.
+  destruct (Int.lt i Int.zero).
+  apply vmatch_sgn; apply is_sgn_ssize.
+  apply vmatch_uns; apply is_uns_usize.
+Qed.
+
+Lemma add_undef_undef:
+  forall x, vmatch Vundef (add_undef x).
+Proof.
+  destruct x; simpl; auto with va.
+  destruct (Int.lt n Int.zero); auto with va.
+Qed.
+
+Lemma add_undef_normalize:
+  forall v x ty, vmatch v x -> vmatch (Val.normalize v ty) (add_undef x).
+Proof.
+  intros. destruct (Val.lessdef_normalize v ty);
+  auto using add_undef_sound, add_undef_undef.
+Qed.
+
+Definition select (ab: abool) (x y: aval) :=
+  match ab with
+  | Bnone => ntop
+  | Just b | Maybe b => add_undef (if b then x else y)
+  | Btop => add_undef (vlub x y)
+  end.
+
+Lemma select_sound:
+  forall ob v w ab x y ty,
+  cmatch ob ab -> vmatch v x -> vmatch w y ->
+  vmatch (Val.select ob v w ty) (select ab x y).
+Proof.
+  unfold Val.select, select; intros. inv H.
+- auto with va.
+- apply add_undef_normalize; destruct b; auto.
+- apply add_undef_undef.
+- apply add_undef_normalize; destruct b; auto.
+- destruct ob as [b|]. 
++ apply add_undef_normalize. destruct b; [apply vmatch_lub_l|apply vmatch_lub_r]; auto.
++ apply add_undef_undef.
+Qed.
+
 (** Normalization at load time *)
 
 Definition vnormalize (chunk: memory_chunk) (v: aval) :=
@@ -2980,7 +3058,47 @@ Proof with (auto using provenance_monotone with va).
 - destruct (zlt n 16)...
 Qed.
 
-(** Abstracting memory blocks *)
+(** Analysis of known builtin functions.  All we have is a dynamic semantics
+  as a function [list val -> option val], but we can still perform 
+  some constant propagation. *)
+
+Definition val_of_aval (a: aval) : val :=
+  match a with
+  | I n => Vint n
+  | L n => Vlong n
+  | F f => Vfloat f
+  | FS f => Vsingle f
+  | _ => Vundef
+  end.
+
+Definition aval_of_val (v: val) : option aval :=
+  match v with
+  | Vint n => Some (I n)
+  | Vlong n => Some (L n)
+  | Vfloat f => Some (F f)
+  | Vsingle f => Some (FS f)
+  | _ => None
+  end.
+
+Lemma val_of_aval_sound:
+  forall v a, vmatch v a -> Val.lessdef (val_of_aval a) v.
+Proof.
+  destruct 1; simpl; auto.
+Qed.
+
+Corollary list_val_of_aval_sound:
+  forall vl al, list_forall2 vmatch vl al -> Val.lessdef_list (map val_of_aval al) vl.
+Proof.
+  induction 1; simpl; constructor; auto using val_of_aval_sound.
+Qed.
+
+Lemma aval_of_val_sound:
+  forall v a, aval_of_val v = Some a -> vmatch v a. 
+Proof.
+  intros v a E; destruct v; simpl in E; inv E; constructor.
+Qed.
+
+(** * Abstracting memory blocks *)
 
 Inductive acontent : Type :=
  | ACval (chunk: memory_chunk) (av: aval).
@@ -3134,7 +3252,7 @@ Proof.
     omega.
     intros (bytes1 & bytes2 & LOAD1 & LOAD2 & CONCAT).
     subst bytes.
-    exploit Mem.loadbytes_length. eexact LOAD1. change (nat_of_Z 1) with 1%nat. intros LENGTH1.
+    exploit Mem.loadbytes_length. eexact LOAD1. change (Z.to_nat 1) with 1%nat. intros LENGTH1.
     rewrite in_app_iff in IN. destruct IN.
   * destruct bytes1; try discriminate. destruct bytes1; try discriminate.
     simpl in H. destruct H; try contradiction. subst m0.
@@ -3492,7 +3610,7 @@ Qed.
 Lemma ablock_storebytes_sound:
   forall m b ofs bytes m' p ab sz,
   Mem.storebytes m b ofs bytes = Some m' ->
-  length bytes = nat_of_Z sz ->
+  length bytes = Z.to_nat sz ->
   (forall b' ofs' q i, In (Fragment (Vptr b' ofs') q i) bytes -> pmatch b' ofs' p) ->
   bmatch m b ab ->
   bmatch m' b (ablock_storebytes ab p ofs sz).
@@ -3509,7 +3627,7 @@ Proof.
   exploit ablock_storebytes_contents; eauto. intros [A B].
   assert (Mem.load chunk' m b ofs' = Some v').
   { rewrite <- LOAD'; symmetry. eapply Mem.load_storebytes_other; eauto.
-    rewrite U. rewrite LENGTH. rewrite nat_of_Z_max. right; omega. }
+    rewrite U. rewrite LENGTH. rewrite Z_to_nat_max. right; omega. }
   exploit BM2; eauto. unfold ablock_load. rewrite A. rewrite COMPAT. auto.
 Qed.
 
@@ -3992,7 +4110,7 @@ Theorem storebytes_sound:
   Mem.storebytes m b (Ptrofs.unsigned ofs) bytes = Some m' ->
   mmatch m am ->
   pmatch b ofs p ->
-  length bytes = nat_of_Z sz ->
+  length bytes = Z.to_nat sz ->
   (forall b' ofs' qt i, In (Fragment (Vptr b' ofs') qt i) bytes -> pmatch b' ofs' q) ->
   mmatch m' (storebytes am p sz q).
 Proof.
@@ -4616,6 +4734,7 @@ Hint Resolve cnot_sound symbol_address_sound
        negfs_sound absfs_sound
        addfs_sound subfs_sound mulfs_sound divfs_sound
        zero_ext_sound sign_ext_sound longofint_sound longofintu_sound
+       zero_ext_l_sound sign_ext_l_sound
        singleoffloat_sound floatofsingle_sound
        intoffloat_sound intuoffloat_sound floatofint_sound floatofintu_sound
        intofsingle_sound intuofsingle_sound singleofint_sound singleofintu_sound

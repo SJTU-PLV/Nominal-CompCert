@@ -62,8 +62,8 @@ let ireg64 oc r = output_string oc (int64_reg_name r)
 let ireg = if Archi.ptr64 then ireg64 else ireg32
 let freg oc r = output_string oc (float_reg_name r)
 
-let preg oc = function
-  | IR r -> ireg oc r
+let preg_asm oc ty = function
+  | IR r -> if ty = Tlong then ireg64 oc r else ireg32 oc r
   | FR r -> freg oc r
   | _    -> assert false
 
@@ -103,7 +103,7 @@ let rec log2 n =
   assert (n > 0);
   if n = 1 then 0 else 1 + log2 (n lsr 1)
 
-(* System dependend printer functions *)
+(* System dependent printer functions *)
 module type SYSTEM =
     sig
       val raw_symbol: out_channel -> string -> unit
@@ -134,9 +134,9 @@ module ELF_System : SYSTEM =
     let name_of_section = function
       | Section_text -> ".text"
       | Section_data i | Section_small_data i ->
-          if i then ".data" else "COMM"
+          if i then ".data" else common_section ()
       | Section_const i | Section_small_const i ->
-          if i then ".section	.rodata" else "COMM"
+          if i || (not !Clflags.option_fcommon) then ".section	.rodata" else "COMM"
       | Section_string -> ".section	.rodata"
       | Section_literal -> ".section	.rodata.cst8,\"aM\",@progbits,8"
       | Section_jumptable -> ".text"
@@ -192,9 +192,9 @@ module MacOS_System : SYSTEM =
     let name_of_section = function
       | Section_text -> ".text"
       | Section_data i | Section_small_data i ->
-          if i then ".data" else "COMM"
+          if i || (not !Clflags.option_fcommon) then ".data" else "COMM"
       | Section_const i  | Section_small_const i ->
-          if i then ".const" else "COMM"
+          if i || (not !Clflags.option_fcommon) then ".const" else "COMM"
       | Section_string -> ".const"
       | Section_literal -> ".literal8"
       | Section_jumptable -> ".text"  (* needed in 64 bits, not a problem in 32 bits *)
@@ -269,9 +269,9 @@ module Cygwin_System : SYSTEM =
     let name_of_section = function
       | Section_text -> ".text"
       | Section_data i | Section_small_data i ->
-          if i then ".data" else "COMM"
+          if i then ".data" else common_section ()
       | Section_const i | Section_small_const i ->
-          if i then ".section	.rdata,\"dr\"" else "COMM"
+          if i || (not !Clflags.option_fcommon) then ".section	.rdata,\"dr\"" else "COMM"
       | Section_string -> ".section	.rdata,\"dr\""
       | Section_literal -> ".section	.rdata,\"dr\""
       | Section_jumptable -> ".text"
@@ -399,7 +399,13 @@ module Target(System: SYSTEM):TARGET =
 
 (* Printing of instructions *)
 
-(* Reminder on AT&T syntax: op source, dest *)
+(* Reminder on X86 assembly syntaxes:
+                              AT&T syntax         Intel syntax
+                              (used by GNU as)    (used in reference manuals)
+   dst <- op(src)             op src, dst         op dst, src
+   dst <- op(dst, src2)       op src2, dst        op dst, src2
+   dst <- op(dst, src2, src3) op src3, src2, dst  op dst, src2, src3
+*)
 
     let print_instruction oc = function
         (* Moves *)
@@ -752,29 +758,29 @@ module Target(System: SYSTEM):TARGET =
       | Pcfi_adjust sz ->
 	 cfi_adjust oc (camlint_of_coqint sz)
       | Pfmadd132 (res,a1,a2) ->
-	 fprintf oc "	vfmadd132sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfmadd132sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfmadd213 (res,a1,a2) ->
-	 fprintf oc "	vfmadd213sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfmadd213sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfmadd231 (res,a1,a2) ->
-	 fprintf oc "	vfmadd231sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfmadd231sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfmsub132 (res,a1,a2) ->
-	 fprintf oc "	vfmsub132sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfmsub132sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfmsub213 (res,a1,a2) ->
-	 fprintf oc "	vfmsub213sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfmsub213sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfmsub231 (res,a1,a2) ->
-	 fprintf oc "	vfmsub231sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfmsub231sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfnmadd132 (res,a1,a2) ->
-	 fprintf oc "	vfnmadd132sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfnmadd132sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfnmadd213 (res,a1,a2) ->
-	 fprintf oc "	vfnmadd213sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfnmadd213sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfnmadd231 (res,a1,a2) ->
-	 fprintf oc "	vfnmadd231sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfnmadd231sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfnmsub132 (res,a1,a2) ->
-	 fprintf oc "	vfnmsub132sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfnmsub132sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfnmsub213 (res,a1,a2) ->
-	 fprintf oc "	vfnmsub213sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfnmsub213sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pfnmsub231 (res,a1,a2) ->
-	 fprintf oc "	vfnmsub231sd	%a, %a, %a\n" freg a1 freg a2 freg res
+	 fprintf oc "	vfnmsub231sd	%a, %a, %a\n" freg a2 freg a1 freg res
       | Pmaxsd (res,a1) ->
 	 fprintf oc "	maxsd	%a, %a\n" freg a1 freg res
       | Pminsd (res,a1) ->
@@ -826,7 +832,7 @@ module Target(System: SYSTEM):TARGET =
                                (P.to_int kind) (extern_atom txt) args
           | EF_inline_asm(txt, sg, clob) ->
               fprintf oc "%s begin inline assembly\n\t" comment;
-              print_inline_asm preg oc (camlstring_of_coqstring txt) sg args res;
+              print_inline_asm preg_asm oc (camlstring_of_coqstring txt) sg args res;
               fprintf oc "%s end inline assembly\n" comment
           | _ ->
               assert false

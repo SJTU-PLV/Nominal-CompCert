@@ -13,7 +13,6 @@
 
 open AST
 open Camlcoq
-open DwarfPrinter
 open PrintAsmaux
 open Printf
 open Sections
@@ -40,6 +39,7 @@ module Printer(Target:TARGET) =
 
     let print_function oc name fn =
       Hashtbl.clear current_function_labels;
+      Debug.symbol_printed (extern_atom name);
       let (text, lit, jmptbl) = Target.get_section_names name in
       Target.section oc text;
       let alignment =
@@ -117,7 +117,7 @@ module Printer(Target:TARGET) =
       match v.gvar_init with
       | [] -> ()
       | _  ->
-          Debug.variable_printed (extern_atom name);
+          Debug.symbol_printed (extern_atom name);
           let sec =
             match C2C.atom_sections name with
             | [s] -> s
@@ -176,7 +176,7 @@ module Printer(Target:TARGET) =
         let address = Target.address
       end
 
-    module DebugPrinter = DwarfPrinter (DwarfTarget)
+    module DebugPrinter = DwarfPrinter.DwarfPrinter (DwarfTarget)
   end
 
 let print_program oc p =

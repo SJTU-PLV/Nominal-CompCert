@@ -118,13 +118,22 @@ module Linux_System : SYSTEM =
     let name_of_section = function
       | Section_text -> ".text"
       | Section_data i ->
-          if i then ".data" else "COMM"
+          if i then
+            ".data"
+          else
+            common_section ~sec:".section	.bss" ()
       | Section_small_data i ->
-          if i then ".section	.sdata,\"aw\",@progbits" else "COMM"
+          if i then
+            ".section	.sdata,\"aw\",@progbits"
+          else
+            common_section ~sec:".section	.sbss,\"aw\",@nobits" ()
       | Section_const i ->
-          if i then ".rodata" else "COMM"
+          if i || (not !Clflags.option_fcommon) then ".rodata" else "COMM"
       | Section_small_const i ->
-          if i then ".section	.sdata2,\"a\",@progbits" else "COMM"
+          if i || (not !Clflags.option_fcommon) then
+            ".section	.sdata2,\"a\",@progbits"
+          else
+            "COMM"
       | Section_string -> ".rodata"
       | Section_literal -> ".section	.rodata.cst8,\"aM\",@progbits,8"
       | Section_jumptable -> ".text"
@@ -209,7 +218,7 @@ module Diab_System : SYSTEM =
 
     let name_of_section = function
       | Section_text -> ".text"
-      | Section_data i -> if i then ".data" else "COMM"
+      | Section_data i -> if i then ".data" else common_section ()
       | Section_small_data i -> if i then ".sdata" else ".sbss"
       | Section_const _ -> ".text"
       | Section_small_const _ -> ".sdata2"
@@ -331,7 +340,7 @@ module Target (System : SYSTEM):TARGET =
     let ireg_or_zero oc r =
       if r = GPR0 then output_string oc "0" else ireg oc r
 
-    let preg oc = function
+    let preg_asm oc ty = function
       | IR r -> ireg oc r
       | FR r -> freg oc r
       | _    -> assert false
@@ -604,6 +613,7 @@ module Target (System : SYSTEM):TARGET =
           fprintf oc "	fsel	%a, %a, %a, %a\n" freg r1 freg r2 freg r3 freg r4
       | Pisel (r1,r2,r3,cr) ->
           fprintf oc "	isel	%a, %a, %a, %a\n" ireg r1 ireg r2 ireg r3 crbit cr
+      | Pfsel_gen _ -> assert false
       | Picbi (r1,r2) ->
           fprintf oc "	icbi	%a, %a\n" ireg r1 ireg r2
       | Picbtls (n,r1,r2) ->
@@ -853,7 +863,7 @@ module Target (System : SYSTEM):TARGET =
                                (P.to_int kind) (extern_atom txt) args
           | EF_inline_asm(txt, sg, clob) ->
               fprintf oc "%s begin inline assembly\n\t" comment;
-              print_inline_asm preg oc (camlstring_of_coqstring txt) sg args res;
+              print_inline_asm preg_asm oc (camlstring_of_coqstring txt) sg args res;
               fprintf oc "%s end inline assembly\n" comment
           | _ ->
               assert false

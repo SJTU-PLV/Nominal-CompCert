@@ -16,6 +16,7 @@ Require Import Coqlib.
 Require Import Maps.
 Require Import IntvSets.
 Require Import AST.
+Require Import Zbits.
 Require Import Integers.
 Require Import Floats.
 Require Import Values.
@@ -300,13 +301,13 @@ Proof.
   rewrite Int.bits_ror.
   replace (((i - Int.unsigned amount) mod Int.zwordsize + Int.unsigned amount)
    mod Int.zwordsize) with i. auto.
-  apply Int.eqmod_small_eq with Int.zwordsize; auto.
-  apply Int.eqmod_trans with ((i - Int.unsigned amount) + Int.unsigned amount).
-  apply Int.eqmod_refl2; omega.
-  eapply Int.eqmod_trans. 2: apply Int.eqmod_mod; auto.
-  apply Int.eqmod_add.
-  apply Int.eqmod_mod; auto.
-  apply Int.eqmod_refl.
+  apply eqmod_small_eq with Int.zwordsize; auto.
+  apply eqmod_trans with ((i - Int.unsigned amount) + Int.unsigned amount).
+  apply eqmod_refl2; omega.
+  eapply eqmod_trans. 2: apply eqmod_mod; auto.
+  apply eqmod_add.
+  apply eqmod_mod; auto.
+  apply eqmod_refl.
   apply Z_mod_lt; auto.
   apply Z_mod_lt; auto.
 Qed.
@@ -324,16 +325,16 @@ Qed.
 
 Lemma eqmod_iagree:
   forall m x y,
-  Int.eqmod (two_p (Int.size m)) x y ->
+  eqmod (two_p (Int.size m)) x y ->
   iagree (Int.repr x) (Int.repr y) m.
 Proof.
-  intros. set (p := nat_of_Z (Int.size m)).
+  intros. set (p := Z.to_nat (Int.size m)).
   generalize (Int.size_range m); intros RANGE.
-  assert (EQ: Int.size m = Z.of_nat p). { symmetry; apply nat_of_Z_eq. omega. }
+  assert (EQ: Int.size m = Z.of_nat p). { symmetry; apply Z2Nat.id. omega. }
   rewrite EQ in H; rewrite <- two_power_nat_two_p in H.
   red; intros. rewrite ! Int.testbit_repr by auto.
   destruct (zlt i (Int.size m)).
-  eapply Int.same_bits_eqmod; eauto. omega.
+  eapply same_bits_eqmod; eauto. omega.
   assert (Int.testbit m i = false) by (eapply Int.bits_size_2; omega).
   congruence.
 Qed.
@@ -343,13 +344,13 @@ Definition complete_mask (m: int) := Int.zero_ext (Int.size m) Int.mone.
 Lemma iagree_eqmod:
   forall x y m,
   iagree x y (complete_mask m) ->
-  Int.eqmod (two_p (Int.size m)) (Int.unsigned x) (Int.unsigned y).
+  eqmod (two_p (Int.size m)) (Int.unsigned x) (Int.unsigned y).
 Proof.
-  intros. set (p := nat_of_Z (Int.size m)).
+  intros. set (p := Z.to_nat (Int.size m)).
   generalize (Int.size_range m); intros RANGE.
-  assert (EQ: Int.size m = Z.of_nat p). { symmetry; apply nat_of_Z_eq. omega. }
+  assert (EQ: Int.size m = Z.of_nat p). { symmetry; apply Z2Nat.id. omega. }
   rewrite EQ; rewrite <- two_power_nat_two_p.
-  apply Int.eqmod_same_bits. intros. apply H. omega.
+  apply eqmod_same_bits. intros. apply H. omega.
   unfold complete_mask. rewrite Int.bits_zero_ext by omega.
   rewrite zlt_true by omega. rewrite Int.bits_mone by omega. auto.
 Qed.
@@ -362,7 +363,7 @@ Proof.
 + assert (Int.unsigned m <> 0).
   { red; intros; elim n. rewrite <- (Int.repr_unsigned m). rewrite H; auto. }
   assert (0 < Int.size m).
-  { apply Int.Zsize_pos'. generalize (Int.unsigned_range m); omega. }
+  { apply Zsize_pos'. generalize (Int.unsigned_range m); omega. }
   generalize (Int.size_range m); intros.
   f_equal. apply Int.bits_size_4. tauto.
   rewrite Int.bits_zero_ext by omega. rewrite zlt_true by omega.
@@ -593,7 +594,8 @@ Proof.
 Qed.
 
 (** Modular arithmetic operations: add, mul, opposite.
-    (But not subtraction because of the pointer - pointer case. *)
+    Also subtraction, but only on 64-bit targets, otherwise
+    the pointer - pointer case does not fit. *)
 
 Definition modarith (x: nval) :=
   match x with
@@ -610,7 +612,20 @@ Proof.
   unfold modarith; intros. destruct x; simpl in *.
 - auto.
 - unfold Val.add; InvAgree.
-  apply eqmod_iagree. apply Int.eqmod_add; apply iagree_eqmod; auto.
+  apply eqmod_iagree. apply eqmod_add; apply iagree_eqmod; auto.
+- inv H; auto. inv H0; auto. destruct w1; auto.
+Qed.
+
+Lemma sub_sound:
+  forall v1 w1 v2 w2 x,
+  vagree v1 w1 (modarith x) -> vagree v2 w2 (modarith x) ->
+  Archi.ptr64 = true ->
+  vagree (Val.sub v1 v2) (Val.sub w1 w2) x.
+Proof.
+  unfold modarith; intros. destruct x; simpl in *.
+- auto.
+- unfold Val.sub; rewrite H1; InvAgree.
+  apply eqmod_iagree. apply eqmod_sub; apply iagree_eqmod; auto.
 - inv H; auto. inv H0; auto. destruct w1; auto.
 Qed.
 
@@ -626,7 +641,7 @@ Lemma mul_sound:
 Proof.
   unfold mul, add; intros. destruct x; simpl in *.
 - auto.
-- unfold Val.mul; InvAgree. apply eqmod_iagree. apply Int.eqmod_mult; apply iagree_eqmod; auto.
+- unfold Val.mul; InvAgree. apply eqmod_iagree. apply eqmod_mult; apply iagree_eqmod; auto.
 - inv H; auto. inv H0; auto. destruct w1; auto.
 Qed.
 
@@ -638,7 +653,7 @@ Proof.
   intros; destruct x; simpl in *.
 - auto.
 - unfold Val.neg; InvAgree.
-  apply eqmod_iagree. apply Int.eqmod_neg. apply iagree_eqmod; auto.
+  apply eqmod_iagree. apply eqmod_neg. apply iagree_eqmod; auto.
 - inv H; simpl; auto.
 Qed.
 
@@ -679,7 +694,7 @@ Definition sign_ext (n: Z) (x: nval) :=
 Lemma sign_ext_sound:
   forall v w x n,
   vagree v w (sign_ext n x) ->
-  0 < n < Int.zwordsize ->
+  0 < n ->
   vagree (Val.sign_ext n v) (Val.sign_ext n w) x.
 Proof.
   unfold sign_ext; intros. destruct x; simpl in *.
@@ -785,6 +800,34 @@ Proof.
   inv H0. rewrite iagree_and_eq in H. rewrite H. auto.
 Qed.
 
+(** The needs of a select *)
+
+Lemma normalize_sound:
+  forall v w x ty,
+  vagree v w x ->
+  vagree (Val.normalize v ty) (Val.normalize w ty) x.
+Proof.
+  intros. destruct x; simpl in *. 
+- auto.
+- unfold Val.normalize. destruct v. 
+  auto.
+  destruct w; try contradiction. destruct ty; auto.
+  destruct ty; auto.
+  destruct ty; auto.
+  destruct ty; auto.
+  destruct ty; destruct Archi.ptr64; auto.
+- apply Val.normalize_lessdef; auto.
+Qed.
+
+Lemma select_sound:
+  forall ob v1 v2 w1 w2 ty x,
+  vagree v1 w1 x -> vagree v2 w2 x ->
+  vagree (Val.select ob v1 v2 ty) (Val.select ob w1 w2 ty) x.
+Proof.
+  unfold Val.select; intros. destruct ob as [b|]; auto with na.
+  apply normalize_sound. destruct b; auto.
+Qed.
+
 (** The default abstraction: if the result is unused, the arguments are
   unused; otherwise, the arguments are needed in full. *)
 
@@ -860,7 +903,8 @@ Lemma default_needs_of_operation_sound:
   eval_operation ge (Vptr sp Ptrofs.zero) op args1 m1 = Some v1 ->
   vagree_list args1 args2 nil
   \/ vagree_list args1 args2 (default nv :: nil)
-  \/ vagree_list args1 args2 (default nv :: default nv :: nil) ->
+  \/ vagree_list args1 args2 (default nv :: default nv :: nil)
+  \/ vagree_list args1 args2 (default nv :: default nv :: default nv :: nil) ->
   nv <> Nothing ->
   exists v2,
      eval_operation ge (Vptr sp Ptrofs.zero) op args2 m2 = Some v2
@@ -872,7 +916,8 @@ Proof.
   {
     destruct H0. auto with na.
     destruct H0. inv H0; constructor; auto with na.
-    inv H0; constructor; auto with na. inv H8; constructor; auto with na.
+    destruct H0. inv H0. constructor. inv H8; constructor; auto with na. 
+    inv H0; constructor; auto with na. inv H8; constructor; auto with na. inv H9; constructor; auto with na.
   }
   exploit (@eval_operation_inj ge ge inject_id).
   eassumption. auto. auto. auto.
