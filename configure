@@ -19,6 +19,7 @@ prefix='/usr/local'
 bindir='$(PREFIX)/bin'
 libdir='$(PREFIX)/lib/compcert'
 coqdevdir='$(PREFIX)/lib/compcert/coq'
+coqrel='coqrel'
 toolprefix=''
 target=''
 has_runtime_lib=true
@@ -89,6 +90,7 @@ Options:
   -no-standard-headers Do not install nor use the standard .h headers
   -clightgen           Also compile and install the clightgen tool
   -install-coqdev      Also install the Coq development (implied by -clightgen)
+  -coqrel <dir>        Use Coqrel in <dir>
   -ignore-coq-version  Accept to use experimental or unsupported versions of Coq
 '
 
@@ -125,6 +127,8 @@ while : ; do
         ignore_coq_version=true;;
     -install-coqdev|--install-coqdev|-install-coq-dev|--install-coq-dev)
         install_coqdev=true;;
+    -coqrel)
+	coqrel="$2"; shift;;
     -help|--help)
         echo "$help"; exit 0;;
     -*)
@@ -662,8 +666,8 @@ echo "-R lib compcert.lib \
 -R exportclight compcert.exportclight \
 -R cparser compcert.cparser \
 -R cklr compcert.cklr \
--R coqrel coqrel \
--R MenhirLib compcert.MenhirLib" > _CoqProject
+-R MenhirLib compcert.MenhirLib \
+-R ${coqrel} coqrel" > _CoqProject
 case $arch in
     x86)
         echo "-R x86_${bitsize} compcert.x86_${bitsize}" >> _CoqProject
@@ -686,6 +690,7 @@ COQDEVDIR=$coqdevdir
 OCAML_OPT_COMP=$ocaml_opt_comp
 MENHIR_INCLUDES=-I "$menhir_include_dir"
 COMPFLAGS=-bin-annot
+COQREL=$coqrel
 EOF
 
 if test "$target" != "manual"; then
