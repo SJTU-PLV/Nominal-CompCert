@@ -26,6 +26,8 @@ Require Import Memory.
 Require Import Events.
 Require Import RTL.
 Require Import Conventions.
+Require Import LanguageInterface.
+Require Import Invariant.
 
 (** * The type system *)
 
@@ -870,21 +872,23 @@ Proof.
   intros. inv H. eauto.
 Qed.
 
-Inductive wt_stackframes: list stackframe -> signature -> Prop :=
+Inductive wt_stackframes ty: list stackframe -> signature -> Prop :=
   | wt_stackframes_nil: forall sg,
-      wt_stackframes nil sg
+      sig_res sg = ty ->
+      wt_stackframes ty nil sg
   | wt_stackframes_cons:
       forall s res f sp pc rs env sg,
       wt_function f env ->
       wt_regset env rs ->
       env res = proj_sig_res sg ->
-      wt_stackframes s (fn_sig f) ->
-      wt_stackframes (Stackframe res f sp pc rs :: s) sg.
+      wt_stackframes ty s (fn_sig f) ->
+      wt_stackframes ty (Stackframe res f sp pc rs :: s) sg.
 
 Section SUBJECT_REDUCTION.
 
 Variable p: program.
 Variable se: Genv.symtbl.
+Variable ty: option typ.
 
 Hypothesis wt_p: wt_program p.
 
@@ -893,26 +897,26 @@ Let ge := Genv.globalenv se p.
 Inductive wt_state: state -> Prop :=
   | wt_state_intro:
       forall s f sp pc rs m env
-        (WT_STK: wt_stackframes s (fn_sig f))
+        (WT_STK: wt_stackframes ty s (fn_sig f))
         (WT_FN: wt_function f env)
         (WT_RS: wt_regset env rs),
       wt_state (State s f sp pc rs m)
   | wt_state_call:
       forall s vf f args m,
-      wt_stackframes s (funsig f) ->
+      wt_stackframes ty s (funsig f) ->
       wt_fundef f ->
       Val.has_type_list args (sig_args (funsig f)) ->
       Genv.find_funct ge vf = Some f ->
       wt_state (Callstate s vf args m)
   | wt_state_return:
       forall s v m sg,
-      wt_stackframes s sg ->
+      wt_stackframes ty s sg ->
       Val.has_type v (proj_sig_res sg) ->
       wt_state (Returnstate s v m).
 
 Remark wt_stackframes_change_sig:
   forall s sg1 sg2,
-  sg1.(sig_res) = sg2.(sig_res) -> wt_stackframes s sg1 -> wt_stackframes s sg2.
+  sg1.(sig_res) = sg2.(sig_res) -> wt_stackframes ty s sg1 -> wt_stackframes ty s sg2.
 Proof.
   intros. inv H0.
 - constructor; congruence.
@@ -970,23 +974,6 @@ Proof.
   apply wt_regset_assign; auto. rewrite H10; auto.
 Qed.
 
-Lemma wt_initial_state:
-  forall w q1 q2 S, cc_alloc_mq w q1 q2 -> initial_state ge q1 S -> wt_state S.
-Proof.
-  intros. inv H. inv H0. econstructor; eauto.
-  constructor.
-  eapply Genv.find_funct_prop; eauto.
-  cbn. eauto.
-Qed.
-
-Lemma wt_external_state:
-  forall w q1 q2 r1 r2 S S', cc_alloc_mq w q1 q2 -> cc_alloc_mr w r1 r2 ->
-  wt_state S -> at_external ge S q1 -> after_external S r1 S' -> wt_state S'.
-Proof.
-  intros. inv H. inv H0. inv H2. inv H3. inv H1. econstructor; eauto.
-  rewrite H15 in H7; inv H7. eauto.
-Qed.
-
 Lemma wt_instr_inv:
   forall s f sp pc rs m i,
   wt_state (State s f sp pc rs m) ->
@@ -999,4 +986,23 @@ Qed.
 
 End SUBJECT_REDUCTION.
 
-
+Lemma rtl_wt prog:
+  wt_program prog ->
+  preserves (semantics prog) wt_c wt_c
+    (fun '(se, sg) => wt_state prog se (sig_res sg)).
+Proof.
+  intros PROG_WT [se sg] xse SE_VALID Hxse. destruct Hxse.
+  split; cbn.
+  - intros. eapply subject_reduction; eauto.
+  - intros q s [Hsg Hwt] Hq. subst. destruct Hq as [vf f vargs m Hvf]. cbn in *.
+    econstructor; eauto.
+    + constructor. reflexivity.
+    + eapply Genv.find_funct_prop; eauto.
+    + cbn. auto.
+  - intros s q Hs Hq. destruct Hq. inv Hs.
+    assert (f = External (EF_external name sg0)) by congruence. subst. cbn in *.
+    eexists (_, _); cbn. intuition eauto.
+    inv H1. econstructor; eauto.
+  - intros s r Hs Hr. destruct Hr. inv Hs. inv H1. cbn.
+    unfold proj_sig_res in *. rewrite H in H3. auto.
+Qed.

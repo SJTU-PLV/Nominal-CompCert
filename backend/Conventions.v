@@ -200,7 +200,6 @@ Inductive cc_alloc_mq: signature * Locmap.t -> c_query -> locset_query -> Prop :
   cc_alloc_mq_intro vf sg args rs m1 m2:
     Val.lessdef_list args (map (fun p => Locmap.getpair p rs) (loc_arguments sg)) ->
     Mem.extends m1 m2 ->
-    Val.has_type_list args (sig_args sg) ->
     cc_alloc_mq (sg, rs) (cq vf sg args m1) (lq vf sg rs m2).
 
 Inductive cc_alloc_mr: signature * Locmap.t -> c_reply -> locset_reply -> Prop :=
@@ -208,7 +207,6 @@ Inductive cc_alloc_mr: signature * Locmap.t -> c_reply -> locset_reply -> Prop :
     Val.lessdef res (Locmap.getpair (map_rpair R (loc_result sg)) rs') ->
     agree_callee_save rs rs' ->
     Mem.extends m1 m2 ->
-    Val.has_type res (proj_sig_res sg) ->
     cc_alloc_mr (sg, rs) (cr res m1) (lr rs' m2).
 
 Program Definition cc_alloc: callconv li_c li_locset :=

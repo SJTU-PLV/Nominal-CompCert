@@ -30,6 +30,21 @@ Record invariant {li: language_interface} :=
 
 Arguments invariant : clear implicits.
 
+(** As a core example, here is an invariant for the C language
+  interface asserting that the queries and replies are well-typed. *)
+
+Definition wt_c : invariant li_c :=
+  {|
+    symtbl_inv :=
+      fun '(se, sg) => eq se;
+    query_inv :=
+      fun '(se, sg) q =>
+        sg = cq_sg q /\ Val.has_type_list (cq_args q) (sig_args sg);
+    reply_inv :=
+      fun '(se, sg) r =>
+        Val.has_type (cr_retval r) (proj_sig_res sg);
+  |}.
+
 (** ** Preservation *)
 
 (** A small step semantics preserves an externally observable

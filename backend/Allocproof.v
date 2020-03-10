@@ -17,7 +17,8 @@ Require Import FunInd.
 Require Import FSets.
 Require Import Coqlib Ordered Maps Errors Integers Floats.
 Require Import AST Linking Lattice Kildall.
-Require Import Values Memory Globalenvs Events LanguageInterface Smallstep.
+Require Import Values Memory Globalenvs Events Smallstep.
+Require Import LanguageInterface Invariant.
 Require Archi.
 Require Import Op Registers RTL Locations Conventions RTLtyping LTL.
 Require Import Allocation.
@@ -1980,7 +1981,7 @@ Qed.
     "plus" kind. *)
 
 Lemma step_simulation:
-  forall S1 t S2, RTL.step ge S1 t S2 -> wt_state prog se S1 ->
+  forall ty S1 t S2, RTL.step ge S1 t S2 -> wt_state prog se ty S1 ->
   forall S1', match_states S1 S1' ->
   exists S2', plus LTL.step tge S1' t S2' /\ match_states S2 S2'.
 Proof.
@@ -2469,16 +2470,19 @@ Proof.
 Qed.
 
 Lemma initial_states_simulation:
-  forall q1 q2 st1, cc_alloc_mq (base_sg, base_rs) q1 q2 -> RTL.initial_state ge q1 st1 ->
+  forall q1 q2 st1,
+    cc_alloc_mq (base_sg, base_rs) q1 q2 ->
+    RTL.initial_state ge q1 st1 ->
+    Val.has_type_list (cq_args q1) (sig_args (cq_sg q1)) ->
   exists st2, LTL.initial_state tge q2 st2 /\ match_states st1 st2.
 Proof.
-  intros. inv H. inv H0.
+  intros. inv H. inv H0. cbn in *.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   exploit sig_function_translated; eauto. intros SIG.
   monadInv TR. subst tf. cbn in *. rewrite <- SIG.
   exists (LTL.Callstate (Stackbase base_rs :: nil) vf base_rs m2).
   split; econstructor; eauto.
-  - cbn. rewrite H2. constructor; auto.
+  - cbn. rewrite H3. constructor; auto.
   - cbn. red. auto.
 Qed.
 
@@ -2495,6 +2499,7 @@ Lemma external_states_simulation:
   forall st1 st2 q1, match_states st1 st2 -> RTL.at_external ge st1 q1 ->
   exists w q2, LTL.at_external tge st2 q2 /\ cc_alloc_mq w q1 q2 /\
   forall r1 r2 st1', cc_alloc_mr w r1 r2 -> RTL.after_external st1 r1 st1' ->
+    Val.has_type (cr_retval r1) (proj_sig_res (cq_sg q1)) ->
   exists st2', LTL.after_external st2 r2 st2' /\ match_states st1' st2'.
 Proof.
   intros. inv H0. inv H.
@@ -2527,24 +2532,27 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation cc_alloc cc_alloc (RTL.semantics prog) (LTL.semantics tprog).
+  forward_simulation (wt_c @ cc_alloc) (wt_c @ cc_alloc)
+    (RTL.semantics prog) (LTL.semantics tprog).
 Proof.
-  set (ms := fun se '(sg, rs) s s' => wt_state prog se s /\ match_states prog tprog se sg rs s s').
+  intros MATCH.
+  eapply source_invariant_fsim; eauto using rtl_wt, wt_prog.
+  revert MATCH.
+  set (ms := fun se '(sg, rs) s s' => match_states prog tprog se sg rs s s').
   fsim eapply forward_simulation_plus with (match_states := ms se1 w);
-    cbn in *; subst; destruct w as [sg rs].
+    cbn -[wt_c] in *; subst; destruct w as [sg rs].
 - intros q1 q2 Hq. destruct Hq. eapply (Genv.is_internal_transf_partial_id MATCH).
   intros [|] ? Hf; monadInv Hf; auto.
-- intros. exploit initial_states_simulation; eauto. intros [st2 [A B]].
-  exists st2; split; auto. split; auto.
-  eapply wt_initial_state; eauto. eapply wt_prog; eauto.
-- intros. destruct H. eapply final_states_simulation; eauto.
-- intros. destruct H. exploit external_states_simulation; eauto.
-  intros (w & qx2 & Hqx2 & Hqx & H'). exists w, qx2. intuition auto.
-  edestruct H' as (st2' & Hst2' & Hst'); eauto. exists st2'. intuition auto.
-  split; auto. eapply wt_external_state; eauto.
-- intros. destruct H0.
-  exploit step_simulation; eauto. intros [s2' [A B]].
-  exists s2'; split. exact A. split.
-  eapply subject_reduction; eauto. eapply wt_prog; eauto.
-  auto.
+- intros q1 q2 s1 Hq ([xse xsg] & Hxse & Hs1 & [Hxsg Hargs] & WT). subst.
+  eapply initial_states_simulation; eauto.
+- intros s1 s2 r1 Hs ([xse xsg] & Hxse & Hr1 & [Hs1 WTr1]). cbn in *. subst.
+  eapply final_states_simulation; eauto.
+- cbn. intros s1 s2 q1 Hs ([xse xsg] & [? ?] & ? & Hq1 & WTs1 & ? & WT). subst.
+  edestruct external_states_simulation as (wA & q2 & Hq2 & Hq & Hr); eauto.
+  exists wA, q2. repeat apply conj; eauto.
+  intros r1 r2 s1' Hr12 ([? ?] & [? ?] & ? & ? & ? & ? & ? & [? ?] & ? & ?).
+  subst. inv Hq1. inv H0. cbn in *. assert (sg1 = sg0) by congruence. subst.
+  eapply Hr; eauto.
+- cbn. intros s1 t s1' ([xse xsg] & ? & STEP & Hs1 & Hs1') s2 Hs. subst.
+  exploit step_simulation; eauto.
 Qed.

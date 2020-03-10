@@ -19,6 +19,7 @@ Require Import AST Linking Smallstep.
 
 (** Simulation convention algebra *)
 Require Import LanguageInterface.
+Require Import Invariant.
 Require Import CallconvAlgebra.
 Require Import CKLR.
 Require Import CKLRAlgebra.
@@ -27,6 +28,7 @@ Require Import InjectFootprint.
 Require Import Extends.
 Require Import Clightrel.
 Require Import RTLrel.
+Require Import ValueAnalysis.
 
 (** Languages (syntax and semantics). *)
 Require Ctypes Csyntax (*Csem Cstrategy Cexec*).
@@ -416,10 +418,10 @@ Qed.
 
 Definition cc_backend : callconv li_c Asm.li_asm :=
   cc_inj @
-  ((Invariant.cc_inv ValueAnalysis.vamatch @ cc_ext) @ cc_id) @
-  (Invariant.cc_inv ValueAnalysis.vamatch @ cc_ext) @
-  (Invariant.cc_inv ValueAnalysis.vamatch @ cc_ext) @
-  Conventions.cc_alloc @
+  ((vamatch @ cc_ext) @ cc_id) @
+  (vamatch @ cc_ext) @
+  (vamatch @ cc_ext) @
+  (wt_c @ Conventions.cc_alloc) @
   Conventions.cc_locset_ext @
   Mach.cc_stacking @
   Asmgenproof0.cc_asmgen.
