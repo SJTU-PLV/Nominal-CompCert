@@ -2,6 +2,7 @@ Require Import Maps.
 Require Import Valuesrel.
 Require Import Globalenvs.
 Require Import CKLR.
+Require Import Builtinsrel.
 Require Export Events.
 
 
@@ -307,6 +308,20 @@ Proof.
   - rauto.
 Qed.
 
+Require Import OptionRel.
+
+Global Instance known_builtin_sem_rel R:
+  Monotonic (@known_builtin_sem) (- ==> extcall_sem_rel R).
+Proof.
+  intros b w ge1 ge2 Hge vargs1 vargs2 Hvargs m1 m2 Hm t [vres1 m1'] H.
+  destruct H as [vargs1 vres1 m1 H].
+  pose proof (builtin_function_sem_rel R b) as Hbs. red in Hbs.
+  transport H.
+  eexists (_, _). simpl. split.
+  - econstructor; eauto.
+  - rauto.
+Qed.
+
 Axiom external_functions_sem_rel:
   forall R, Monotonic (@external_functions_sem) (- ==> - ==> extcall_sem_rel R).
 
@@ -315,6 +330,14 @@ Axiom inline_assembly_sem_rel:
 
 Global Existing Instance external_functions_sem_rel.
 Global Existing Instance inline_assembly_sem_rel.
+
+Global Instance builtin_or_external_sem_rel R:
+  Monotonic (@builtin_or_external_sem) (- ==> - ==> extcall_sem_rel R).
+Proof.
+  unfold builtin_or_external_sem.
+  intros name sg.
+  destruct Builtins.lookup_builtin_function; rauto.
+Qed.
 
 Global Instance external_call_rel R:
   Monotonic
@@ -335,9 +358,7 @@ Proof.
   }
   destruct ef; simpl; try rauto.
   - repeat intro. destruct a0. contradiction.
-  - admit.
-  - admit.
-Admitted. (* need proofs for known_builtin_sem *)
+Qed.
 
 Hint Extern 1 (Transport _ _ _ _ _) =>
   rel_curry_set_le_transport @external_call : typeclass_instances.

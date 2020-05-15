@@ -77,7 +77,7 @@ CKLR=\
   Extends.v ExtendsFootprint.v \
   Inject.v InjectFootprint.v InjectNeutral.v \
   Mapsrel.v \
-  Valuesrel.v Eventsrel.v Globalenvsrel.v \
+  Valuesrel.v Builtinsrel.v Eventsrel.v Globalenvsrel.v \
   Coprel.v Clightrel.v \
   Registersrel.v RTLrel.v \
 
