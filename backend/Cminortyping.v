@@ -12,6 +12,7 @@
 
 Require Import Coqlib Maps Errors.
 Require Import AST Integers Floats Values Memory Globalenvs Events Smallstep.
+Require Import Invariant.
 Require Import Cminor.
 Require Import Unityping.
 
@@ -414,56 +415,56 @@ Definition wt_env (env: typenv) (e: Cminor.env) : Prop :=
 Definition def_env (f: function) (e: Cminor.env) : Prop :=
   forall id, In id f.(fn_params) \/ In id f.(fn_vars) -> exists v, e!id = Some v.
 
-Inductive wt_cont_call: cont -> option typ -> Prop :=
-  | wt_cont_Kstop: forall tret,
-      wt_cont_call Kstop tret
+Inductive wt_cont_call (ttop: option typ): cont -> option typ -> Prop :=
+  | wt_cont_Kstop:
+      wt_cont_call ttop Kstop ttop
   | wt_cont_Kcall: forall optid f sp e k tret env
         (WT_FN: wt_function env f)
-        (WT_CONT: wt_cont env f.(fn_sig).(sig_res) k)
+        (WT_CONT: wt_cont ttop env f.(fn_sig).(sig_res) k)
         (WT_ENV: wt_env env e)
         (DEF_ENV: def_env f e)
         (WT_DEST: wt_opt_assign env optid tret),
-      wt_cont_call (Kcall optid f sp e k) tret
+      wt_cont_call ttop (Kcall optid f sp e k) tret
 
-with wt_cont: typenv -> option typ -> cont -> Prop :=
+with wt_cont (ttop: option typ): typenv -> option typ -> cont -> Prop :=
   | wt_cont_Kseq: forall env tret s k,
       wt_stmt env tret s ->
-      wt_cont env tret k ->
-      wt_cont env tret (Kseq s k)
+      wt_cont ttop env tret k ->
+      wt_cont ttop env tret (Kseq s k)
   | wt_cont_Kblock: forall env tret k,
-      wt_cont env tret k ->
-      wt_cont env tret (Kblock k)
+      wt_cont ttop env tret k ->
+      wt_cont ttop env tret (Kblock k)
   | wt_cont_other: forall env tret k,
-      wt_cont_call k tret ->
-      wt_cont env tret k.
+      wt_cont_call ttop k tret ->
+      wt_cont ttop env tret k.
 
-Inductive wt_state (ge: genv): state -> Prop :=
+Inductive wt_state (ge: genv) (ttop: option typ): state -> Prop :=
   | wt_normal_state: forall f s k sp e m env
         (WT_FN: wt_function env f)
         (WT_STMT: wt_stmt env f.(fn_sig).(sig_res) s)
-        (WT_CONT: wt_cont env f.(fn_sig).(sig_res) k)
+        (WT_CONT: wt_cont ttop env f.(fn_sig).(sig_res) k)
         (WT_ENV: wt_env env e)
         (DEF_ENV: def_env f e),
-      wt_state ge (State f s k sp e m)
+      wt_state ge ttop (State f s k sp e m)
   | wt_call_state: forall vf f args k m
         (WT_FD: wt_fundef f)
         (WT_ARGS: Val.has_type_list args (funsig f).(sig_args))
-        (WT_CONT: wt_cont_call k (funsig f).(sig_res))
+        (WT_CONT: wt_cont_call ttop k (funsig f).(sig_res))
         (WT_FIND: Genv.find_funct ge vf = Some f),
-      wt_state ge (Callstate vf args k m)
+      wt_state ge ttop (Callstate vf args k m)
   | wt_return_state: forall v k m tret
         (WT_RES: Val.has_type v (match tret with None => Tint | Some t => t end))
-        (WT_CONT: wt_cont_call k tret),
-      wt_state ge (Returnstate v k m).
+        (WT_CONT: wt_cont_call ttop k tret),
+      wt_state ge ttop (Returnstate v k m).
 
 Lemma wt_is_call_cont:
-  forall env tret k, wt_cont env tret k -> is_call_cont k -> wt_cont_call k tret.
+  forall ttop env tret k, wt_cont ttop env tret k -> is_call_cont k -> wt_cont_call ttop k tret.
 Proof.
   destruct 1; intros ICC; contradiction || auto.
 Qed.
 
 Lemma call_cont_wt:
-  forall env tret k, wt_cont env tret k -> wt_cont_call (call_cont k) tret.
+  forall ttop env tret k, wt_cont ttop env tret k -> wt_cont_call ttop (call_cont k) tret.
 Proof.
   induction 1; simpl; auto. inversion H; subst; auto.
 Qed.
@@ -523,15 +524,15 @@ Proof.
   apply IHil; intuition congruence.
 Qed.
 
-Lemma wt_find_label: forall env tret lbl s k,
-  wt_stmt env tret s -> wt_cont env tret k ->
+Lemma wt_find_label: forall ttop env tret lbl s k,
+  wt_stmt env tret s -> wt_cont ttop env tret k ->
   match find_label lbl s k with
-  | Some (s', k') => wt_stmt env tret s' /\ wt_cont env tret k'
+  | Some (s', k') => wt_stmt env tret s' /\ wt_cont ttop env tret k'
   | None => True
   end.
 Proof.
   induction s; intros k WS WK; simpl; auto.
-- inv WS. assert (wt_cont env tret (Kseq s2 k)) by (constructor; auto).
+- inv WS. assert (wt_cont ttop env tret (Kseq s2 k)) by (constructor; auto).
   specialize (IHs1 _ H1 H). destruct (find_label lbl s1 (Kseq s2 k)).
   auto. apply IHs2; auto.
 - inv WS. specialize (IHs1 _ H3 WK). destruct (find_label lbl s1 k).
@@ -633,7 +634,7 @@ Qed.
 
 Lemma subject_reduction:
   forall st1 t st2, step ge st1 t st2 ->
-  forall (WT: wt_state ge st1), wt_state ge st2.
+  forall ttop (WT: wt_state ge ttop st1), wt_state ge ttop st2.
 Proof.
   destruct 1; intros; inv WT.
 - inv WT_CONT. econstructor; eauto. inv H.
@@ -669,9 +670,9 @@ Proof.
   rewrite H2. eapply wt_eval_expr; eauto.
 - inv WT_STMT. econstructor; eauto.
 - inversion WT_FN; subst.
-  assert (WT_CK: wt_cont env (sig_res (fn_sig f)) (call_cont k)).
+  assert (WT_CK: wt_cont ttop env (sig_res (fn_sig f)) (call_cont k)).
   { constructor. eapply call_cont_wt; eauto. }
-  generalize (wt_find_label _ _ lbl _ _ H2 WT_CK).
+  generalize (wt_find_label _ _ _ lbl _ _ H2 WT_CK).
   rewrite H. intros [WT_STMT' WT_CONT']. econstructor; eauto.
 - rewrite WT_FIND in FIND. inv FIND.
   inv WT_FD. inversion H1; subst. econstructor; eauto.
@@ -689,21 +690,33 @@ Qed.
 
 Lemma subject_reduction_star:
   forall st1 t st2, star step ge st1 t st2 ->
-  forall (WT: wt_state ge st1), wt_state ge st2.
+  forall ttop (WT: wt_state ge ttop st1), wt_state ge ttop st2.
 Proof.
   induction 1; eauto using subject_reduction.
 Qed.
 
-Lemma wt_initial_state:
-  forall q S, initial_state ge q S -> wt_state ge S.
-Proof.
-  intros. inv H. econstructor; eauto.
-  - eapply Genv.find_funct_prop; eauto.
-  - admit. (* arguments are well-typed *)
-  - constructor.
-Admitted.
-
 End SUBJECT_REDUCTION.
+
+Lemma cminor_wt prog:
+  wt_program prog ->
+  preserves (semantics prog) wt_c wt_c
+    (fun '(se, sg) => wt_state (Genv.globalenv se prog) (sig_res sg)).
+Proof.
+  intros PROG_WT [se sg] xse SE_VALID Hxse. destruct Hxse.
+  split; cbn.
+  - intros. eapply subject_reduction; eauto.
+  - intros q s [Hsg Hwt] Hq. subst. destruct Hq as [vf f vargs m Hvf]. cbn in *.
+    econstructor; eauto.
+    + eapply Genv.find_funct_prop; eauto.
+    + cbn. auto.
+    + constructor.
+  - intros s q Hs Hq. destruct Hq. inv Hs.
+    assert (f = External (EF_external name sg0)) by congruence. subst. cbn in *.
+    eexists (_, _); cbn. intuition eauto.
+    inv H1. econstructor; eauto.
+  - intros s r Hs Hr. destruct Hr. inv Hs. cbn.
+    unfold proj_sig_res in *. inv WT_CONT. auto.
+Qed.
 
 (** * Safe expressions *)
 

@@ -16,7 +16,7 @@ Require Import FunInd.
 Require Import Coqlib Maps.
 Require Import AST Linking Errors Integers.
 Require Import Values Memory Builtins Events Globalenvs Smallstep.
-Require Import LanguageInterface.
+Require Import LanguageInterface Invariant.
 Require Import Switch Cminor Op CminorSel Cminortyping.
 Require Import SelectOp SelectDiv SplitLong SelectLong Selection.
 Require Import SelectOpproof SelectDivproof SplitLongproof SelectLongproof.
@@ -1228,12 +1228,12 @@ Definition measure (s: Cminor.state) : nat :=
 
 Lemma sel_step_correct:
   forall S1 t S2, Cminor.step ge S1 t S2 ->
-  forall T1, match_states S1 T1 -> wt_state ge S1 ->
+  forall ttop T1, match_states S1 T1 -> wt_state ge ttop S1 ->
   (exists T2, step tge T1 t T2 /\ match_states S2 T2)
   \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat
   \/ (exists S3 T2, star Cminor.step ge S2 E0 S3 /\ step tge T1 t T2 /\ match_states S3 T2).
 Proof.
-  induction 1; intros T1 ME WTS; inv ME; try (monadInv TS).
+  induction 1; intros ttop T1 ME WTS; inv ME; try (monadInv TS).
 - (* skip seq *)
   inv MC. left; econstructor; split. econstructor. econstructor; eauto.
   inv H.
@@ -1451,34 +1451,40 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation cc_ext cc_ext (Cminor.semantics prog) (CminorSel.semantics tprog).
+  forward_simulation (wt_c @ cc_ext) (wt_c @ cc_ext)
+    (Cminor.semantics prog)
+    (CminorSel.semantics tprog).
 Proof.
-  set (MS se := fun S T => match_states prog tprog se S T /\ wt_state (Genv.globalenv se prog) S).
+  intros MATCH.
+  eapply source_invariant_fsim; eauto using cminor_wt, wt_prog.
+  revert MATCH.
+  set (MS := match_states prog tprog).
   fsim apply forward_simulation_determ_star with (match_states := MS se1) (measure := measure);
   try destruct Hse; cbn in *.
-- apply Cminor.semantics_determinate.
+- apply (restrict_determinate (Cminor.semantics prog)).
+  apply Cminor.semantics_determinate.
 - intros _ _ [ ]. eapply (Genv.is_internal_match_id MATCH); eauto.
   destruct 1 as (hf & ? & ?). destruct f; monadInv H3; auto.
-- intros. exploit sel_initial_states; eauto. intros (T & P & Q). 
-  exists T; split; auto; split; auto. eapply wt_initial_state. eapply wt_prog; eauto. eauto.
-- intros. destruct H. eapply sel_final_states; eauto.
-- intros S1 S2 q1 [HS WT] Hq1.
+- intros q1 q2 s1 Hq (? & _).
+  eapply sel_initial_states; eauto.
+- intros S1 S2 r1 HS (Hr1 & _).
+  eapply sel_final_states; eauto.
+- intros S1 S2 q1 HS (Hq1 & _).
   edestruct sel_external_states as (q2 & Hq2 & Hq & _ & Hr); eauto.
   exists tt, q2. intuition auto.
   edestruct Hr as (s2' & Hs2' & Hs'); eauto.
-  exists s2'. split; auto. split; auto. admit. (* typing after external call *)
-- intros S1 t S2 A T1 [B C].
-  assert (wt_state _ S2) by (eapply subject_reduction; eauto using wt_prog).
-  unfold MS.
+- intros S1 t S2 (A & [? ?] & ? & WT1 & WT2) T1 B. subst.
   exploit sel_step_correct; eauto.
   replace (erase_program tprog) with (erase_program prog) by fsim_skel MATCH. auto.
   intros [(T2 & D & E) | [(D & E & F) | (S3 & T2 & D & E & F)]].
 + exists S2, T2. intuition auto using star_refl, plus_one.
 + subst t. exists S2, T1. intuition auto using star_refl.
-+ assert (wt_state _ S3) by (eapply subject_reduction_star; eauto using wt_prog).
-  exists S3, T2. intuition auto using plus_one.
-- admit. (* wf, improve tactic? *)
-Admitted.
++ exists S3, T2. intuition auto using plus_one.
+  clear - MATCH WT2 D. induction D; eauto using star_refl.
+  assert (wt_state _ _ s2) by (eapply subject_reduction; eauto using wt_prog).
+  eapply star_step; intuition eauto. eexists (_, _); eauto.
+- auto using wf_lex_ord, well_founded_ltof, lt_wf.
+Qed.
 
 (** ** Commutation with linking *)
 
