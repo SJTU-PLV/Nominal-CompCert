@@ -1240,14 +1240,14 @@ Proof.
     cbn in *; subst.
 - destruct 1. cbn. eapply (Genv.is_internal_transf_partial_id MATCH).
   intros [|] [|] TFD; monadInv TFD; auto.
-- intros q1 q2 s1 Hq (_ & _ & Hs1 & _).
+- intros q1 q2 s1 Hq (Hs1 & _).
   eapply transf_initial_states; eauto.
-- intros s1 s2 r1 Hs (_ & _ & Hr1 & _).
+- intros s1 s2 r1 Hs (Hr1 & _).
   eapply transf_final_states; eauto.
-- intros s1 s2 q1 Hs (_ & _ & _ & Hq1 & _).
+- intros s1 s2 q1 Hs (Hq1 & _).
   edestruct transf_external_states as (q2 & Hq2 & Hq & _ & Hk); eauto.
   exists tt, q2. repeat apply conj; eauto.
-  intros r1 r2 s1' Hr (_ & _ & _ & _ & _ & Hs1' & _). eauto.
-- intros s1 t s1' ([se bc0 m0] & Hse & STEP & Hs1 & Hs1') s2 Hs. subst. cbn in *.
+  intros r1 r2 s1' Hr (Hs1' & _). eauto.
+- intros s1 t s1' (STEP & [se bc0 m0] & Hse & Hs1 & Hs1') s2 Hs. subst. cbn in *.
   eapply transf_step_correct; eauto.
 Qed.

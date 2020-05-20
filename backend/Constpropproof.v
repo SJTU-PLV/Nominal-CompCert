@@ -15,6 +15,7 @@
 Require Import Coqlib Maps Integers Floats Lattice Kildall.
 Require Import AST Linking.
 Require Import Values Builtins Events Memory Globalenvs Smallstep.
+Require Import LanguageInterface.
 Require Compopts Machregs.
 Require Import Op Registers RTL.
 Require Import Liveness ValueDomain ValueAOp ValueAnalysis.
@@ -536,8 +537,6 @@ Opaque builtin_strength_reduction.
   econstructor; eauto. constructor. apply set_reg_lessdef; auto.
 Qed.
 
-Require Import LanguageInterface.
-
 Lemma transf_initial_states:
   forall q1 q2 st1, cc_ext_query q1 q2 -> initial_state ge q1 st1 ->
   exists n, exists st2, initial_state tge q2 st2 /\ match_states n st1 st2.
@@ -591,15 +590,15 @@ Proof.
   fsim (eapply Build_fsim_properties with (order := lt) (match_states := match_states prog));
     try destruct Hse; cbn.
 - destruct 1. cbn. eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
-- intros q1 q2 s1 Hq (_ & _ & Hs1 & _).
+- intros q1 q2 s1 Hq (Hs1 & _).
   eapply transf_initial_states; eauto.
-- intros n s1 s2 r1 Hs (_ & _ & Hr1 & _).
+- intros n s1 s2 r1 Hs (Hr1 & _).
   eapply transf_final_states; eauto.
-- intros n s1 s2 q1 Hs (_ & _ & _ & Hq1 & _).
+- intros n s1 s2 q1 Hs (Hq1 & _).
   edestruct transf_external_states as (q2 & Hq2 & Hq & _ & Hk); eauto.
   exists tt, q2. repeat apply conj; eauto.
-  intros r1 r2 s1' Hr (_ & _ & _ & _ & _ & Hs1' & _). eauto.
-- intros s1 t s1' ([se bc0 m0] & Hse & STEP & Hs1 & Hs1') n s2 Hs. subst. cbn in *.
+  intros r1 r2 s1' Hr (Hs1' & _). eauto.
+- intros s1 t s1' (STEP & [se bc0 m0] & Hse & Hs1 & Hs1') n s2 Hs. subst. cbn in *.
   exploit transf_step_correct; eauto.
   intros [ [n2 [s2' [A B]]] | [n2 [A [B C]]]].
   exists n2; exists s2'; split; auto. left; apply plus_one; auto.

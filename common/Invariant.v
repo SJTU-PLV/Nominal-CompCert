@@ -199,36 +199,36 @@ Section RESTRICT.
   Definition restrict_lts se :=
     {|
       step ge s t s' :=
+        step (L se) ge s t s' /\
         exists w,
           symtbl_inv IB w se /\
-          step (L se) ge s t s' /\
           IS w s /\
           IS w s';
       valid_query q :=
         valid_query (L se) q;
       initial_state q s :=
+        initial_state (L se) q s /\
         exists w,
           symtbl_inv IB w se /\
-          initial_state (L se) q s /\
           query_inv IB w q /\
           IS w s;
       final_state s r :=
+        final_state (L se) s r /\
         exists w,
           symtbl_inv IB w se /\
-          final_state (L se) s r /\
           IS w s /\
           reply_inv IB w r;
       at_external s q :=
+        at_external (L se) s q /\
         exists w wA,
           symtbl_inv IB w se /\
-          at_external (L se) s q /\
           IS w s /\
           query_inv IA wA q;
       after_external s r s' :=
+        after_external (L se) s r s' /\
         exists w wA q,
           symtbl_inv IB w se /\
           at_external (L se) s q /\
-          after_external (L se) s r s' /\
           IS w s /\
           query_inv IA wA q /\
           reply_inv IA wA r /\
@@ -264,6 +264,16 @@ Section RESTRICT.
     - intros s t s' STEP _ [Hs].
       assert (IS w s') by (eapply preserves_step; eauto).
       exists s'. eauto 10 using rel_inv_intro.
+  Qed.
+
+  Lemma restrict_determinate:
+    determinate L ->
+    determinate restrict.
+  Proof.
+    intros HL se. specialize (HL se) as [ ].
+    split; unfold nostep, not, single_events in *; cbn; intros;
+    repeat (lazymatch goal with H : _ /\ _ |- _ => destruct H as [H _] end);
+    eauto.
   Qed.
 End RESTRICT.
 

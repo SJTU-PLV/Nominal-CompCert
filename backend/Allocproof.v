@@ -2543,16 +2543,16 @@ Proof.
     cbn -[wt_c] in *; subst; destruct w as [sg rs].
 - intros q1 q2 Hq. destruct Hq. eapply (Genv.is_internal_transf_partial_id MATCH).
   intros [|] ? Hf; monadInv Hf; auto.
-- intros q1 q2 s1 Hq ([xse xsg] & Hxse & Hs1 & [Hxsg Hargs] & WT). subst.
+- intros q1 q2 s1 Hq (Hs1 & [xse xsg] & Hxse & [Hxsg Hargs] & WT). subst.
   eapply initial_states_simulation; eauto.
-- intros s1 s2 r1 Hs ([xse xsg] & Hxse & Hr1 & [Hs1 WTr1]). cbn in *. subst.
+- intros s1 s2 r1 Hs (Hs1 & [xse xsg] & Hxse & Hr1 & WTr1). cbn in *. subst.
   eapply final_states_simulation; eauto.
-- cbn. intros s1 s2 q1 Hs ([xse xsg] & [? ?] & ? & Hq1 & WTs1 & ? & WT). subst.
+- cbn. intros s1 s2 q1 Hs (Hq1 & [xse xsg] & [? ?] & ? & WTs1 & ? & WT). subst.
   edestruct external_states_simulation as (wA & q2 & Hq2 & Hq & Hr); eauto.
   exists wA, q2. repeat apply conj; eauto.
-  intros r1 r2 s1' Hr12 ([? ?] & [? ?] & ? & ? & ? & ? & ? & [? ?] & ? & ?).
-  subst. inv Hq1. inv H0. cbn in *. assert (sg1 = sg0) by congruence. subst.
+  intros r1 r2 s1' Hr12 (? & [? ?] & [? ?] & ? & ? & ? & ? & [? ?] & ? & ?).
+  subst. inv Hq1. inv H1. cbn in *. assert (sg1 = sg0) by congruence. subst.
   eapply Hr; eauto.
-- cbn. intros s1 t s1' ([xse xsg] & ? & STEP & Hs1 & Hs1') s2 Hs. subst.
+- cbn. intros s1 t s1' (STEP & [xse xsg] & ? & Hs1 & Hs1') s2 Hs. subst.
   exploit step_simulation; eauto.
 Qed.
