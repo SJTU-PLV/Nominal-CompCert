@@ -545,10 +545,10 @@ Proof.
   induction n; simpl cc_pow; rauto.
 Qed.
 
-Global Instance cc_star_ref li:
-  Proper (ccref ++> ccref) (@cc_star li).
+Global Instance cc_star_ref:
+  Monotonic (@cc_star) (forallr -, ccref ++> ccref).
 Proof.
-  intros cc cc' Hcc [n ws] se1 se2 q1 q2 Hse Hq.
+  intros li cc cc' Hcc [n ws] se1 se2 q1 q2 Hse Hq.
   destruct (cc_pow_ref li cc cc' Hcc n ws se1 se2 q1 q2 Hse Hq) as (ws' & Hq' & Hse' & H).
   exists (existT _ n ws'); simpl. eauto.
 Qed.
