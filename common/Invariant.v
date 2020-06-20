@@ -3,6 +3,8 @@ Require Import AST.
 Require Import Globalenvs.
 Require Import Events.
 Require Import LanguageInterface.
+Require Import CallconvAlgebra.
+Require Import CKLR.
 Require Import Smallstep.
 
 (** Simulation proofs sometimes rely on invariants of the source
@@ -187,7 +189,7 @@ Qed.
   same time, for an invariant-preserving language, we can easily show
   a simulation from the original to the strengthened version, and from
   the weakened to the original version, and these simulations can be
-  composed with that proved by the used to obtain the desired one. *)
+  composed with that proved by the user to obtain the desired one. *)
 
 (** ** Strengthening the source semantics *)
 
@@ -360,3 +362,244 @@ Section METHODS.
     apply expand_fsim; auto.
   Qed.
 End METHODS.
+
+(** ** Algebraic properties *)
+
+(** *** Commutativity *)
+
+Lemma inv_commute_ref {li} (I J: invariant li):
+  ccref (I @ J) (J @ I).
+Proof.
+  intros [[se2 wi] wj] se1 se3 q1 q3 [Hse12 Hse23] (q2 & Hq12 & Hq23).
+  exists (se2, wj, wi). cbn in *.
+  destruct Hse12, Hse23, Hq12, Hq23.
+  firstorder eauto using rel_inv_intro.
+  destruct H3, H4. eauto using rel_inv_intro.
+Qed.
+
+Lemma inv_commute {li} (I J: invariant li):
+  cceqv (I @ J) (J @ I).
+Proof.
+  split; auto using inv_commute_ref.
+Qed.
+
+Lemma inv_dup {li} (I: invariant li):
+  ccref I (I @ I).
+Proof.
+  intros w se _ q _ [Hse] [Hq].
+  exists (se, w, w). cbn.
+  intuition eauto 20 using rel_inv_intro.
+  destruct H as (_ & [Hr] & [_]).
+  eauto 20 using rel_inv_intro.
+Qed.
+
+(** *** Query invariant propagation *)
+
+Class PropagatesQueryInvariant {li} (cc: callconv li li) (I : invariant li) :=
+  {
+    propagates_query w w2 se1 se2 q1 q2:
+      match_senv cc w se1 se2 -> symtbl_inv I w2 se2 ->
+      match_query cc w q1 q2 -> query_inv I w2 q2 ->
+      exists w1, symtbl_inv I w1 se1 /\ query_inv I w1 q1;
+  }.
+
+Lemma inv_prop {li} cc I `{@PropagatesQueryInvariant li cc I} :
+  ccref (cc @ I) (I @ cc @ I).
+Proof.
+  intros [[se2 w] w2] se1 _ q1 _ [Hse [Hse2]] (q2 & Hq & [Hq2]).
+  edestruct propagates_query as (w1 & Hse1 & Hq1); eauto.
+  exists (se1, w1, (se2, w, w2)).
+  cbn; repeat apply conj; eauto 10 using rel_inv_intro.
+  intros r1 _ (_ & [Hr1] & r2 & Hr & [Hr2]). eauto using rel_inv_intro.
+Qed.
+
+Instance query_prop_ccref:
+  Monotonic (@PropagatesQueryInvariant) (forallr -, ccref --> - ==> impl).
+Proof.
+  intros li cc' cc Hcc I H.
+  split.
+  - intros.
+    edestruct Hcc as (w' & Hse' & Hq' & Hr'); eauto.
+    eapply propagates_query; eauto.
+Qed.
+
+Class PropagatesReplyInvariant {li} (cc: callconv li li) (I : invariant li) :=
+  {
+    propagates_reply w1 w w2 se1 se2 q1 q2 r1 r2:
+      match_senv cc w se1 se2 -> symtbl_inv I w1 se1 -> symtbl_inv I w2 se2 ->
+      match_query cc w q1 q2 -> query_inv I w1 q1 -> query_inv I w2 q2 ->
+      match_reply cc w r1 r2 -> reply_inv I w2 r2 -> reply_inv I w1 r1;
+  }.
+
+Lemma inv_drop {li} cc I `{@PropagatesReplyInvariant li cc I} :
+  ccref (I @ cc @ I) (cc @ I).
+Proof.
+  intros [[_ w1] [[se2 w] w2]] se1 _ q1 _ [[Hse1] [Hse [Hse2]]]
+         (_ & [Hq1] & q2 & Hq & [Hq2]).
+  exists (se2, w, w2). cbn; repeat apply conj; eauto using rel_inv_intro.
+  intros r1 _ (r2 & Hr & [Hr2]).
+  exists r1. split; eauto using rel_inv_intro.
+  constructor. eapply propagates_reply; eauto.
+Qed.
+
+(** Instances *)
+
+Instance id_query_prop {li} (I: invariant li):
+  PropagatesQueryInvariant cc_id I.
+Proof.
+  split; cbn.
+  - intros. subst. eauto.
+Qed.
+
+Instance inv_query_prop {li} (I J: invariant li):
+  PropagatesQueryInvariant I J.
+Proof.
+  split; cbn.
+  - intros wi wj se _ q _ [Hsei] Hsej [Hqi] Hqj. eauto.
+Qed.
+
+Lemma compose_query_prop {li} (cc12 cc23: callconv li li) (I: invariant li):
+  PropagatesQueryInvariant cc12 I ->
+  PropagatesQueryInvariant cc23 I ->
+  PropagatesQueryInvariant (cc12 @ cc23) I.
+Proof.
+  split.
+  - intros [[se2 w12] w23] w3 se1 se3 q1 q3.
+    intros [Hse12 Hse23] Hse3 (q2 & Hq12 & Hq23) Hq3.
+    edestruct (propagates_query w23) as (w2 & Hse2 & Hq2); eauto.
+    edestruct (propagates_query w12) as (w1 & Hse1 & Hq1); eauto.
+Qed.
+
+Hint Extern 2 (PropagatesQueryInvariant (_ @ _) _) =>
+  class_apply compose_query_prop : typeclass_instances.
+
+Lemma compose_reply_prop {li} (cc12 cc23: callconv li li) (I: invariant li):
+  PropagatesReplyInvariant cc12 I ->
+  PropagatesReplyInvariant cc23 I ->
+  PropagatesQueryInvariant cc23 I ->
+  PropagatesReplyInvariant (cc12 @ cc23) I.
+Proof.
+  split.
+  - intros w1 [[se2 w12] w23] w3 se1 se3 q1 q3 r1 r3.
+    intros [Hse12 Hse23] Hse1 Hse3 (q2 & Hq12 & Hq23) Hq1 Hq3 (r2 & Hr12 & Hr23) Hr3.
+    edestruct (propagates_query w23) as (w2 & Hse2 & Hq2); eauto.
+    eapply (propagates_reply w1 w12 w2); eauto.
+    eapply (propagates_reply w2 w23 w3); eauto.
+Qed.
+
+Hint Extern 2 (PropagatesReplyInvariant (_ @ _) _) =>
+  class_apply compose_reply_prop : typeclass_instances.
+
+Lemma join_query_prop {li} (cc1 cc2: callconv li li) (I: invariant li):
+  PropagatesQueryInvariant cc1 I ->
+  PropagatesQueryInvariant cc2 I ->
+  PropagatesQueryInvariant (cc1 + cc2) I.
+Proof.
+  intros H1 H2. split.
+  - intros [w|w]; cbn; apply (propagates_query w).
+Qed.
+
+Hint Extern 2 (PropagatesQueryInvariant (_ + _) _) =>
+  class_apply join_query_prop : typeclass_instances.
+
+Lemma join_reply_prop {li} (cc1 cc2: callconv li li) (I: invariant li):
+  PropagatesReplyInvariant cc1 I ->
+  PropagatesReplyInvariant cc2 I ->
+  PropagatesReplyInvariant (cc1 + cc2) I.
+Proof.
+  intros H1 H2. split.
+  - intros w1 [w|w]; cbn; apply (propagates_reply w1 w).
+Qed.
+
+Hint Extern 2 (PropagatesReplyInvariant (_ + _) _) =>
+  class_apply join_reply_prop : typeclass_instances.
+
+Lemma pow_query_prop {li} (cc: callconv li li) (I: invariant li) (n: nat):
+  PropagatesQueryInvariant cc I ->
+  PropagatesQueryInvariant (cc ^ n) I.
+Proof.
+  intros H.
+  induction n; cbn; typeclasses eauto.
+Qed.
+
+Hint Extern 2 (PropagatesQueryInvariant (cc_pow _ _) _) =>
+  class_apply pow_query_prop : typeclass_instances.
+
+Lemma star_query_prop {li} (cc: callconv li li) (I: invariant li):
+  PropagatesQueryInvariant cc I ->
+  PropagatesQueryInvariant (cc^{*}) I.
+Proof.
+  intros H. split.
+  - intros [n w12s]. cbn.
+    apply propagates_query.
+Qed.
+
+Hint Extern 2 (PropagatesQueryInvariant (cc_star _) _) =>
+  class_apply star_query_prop : typeclass_instances.
+
+Lemma pow_reply_prop {li} (cc: callconv li li) (I: invariant li) (n: nat):
+  PropagatesReplyInvariant cc_id I ->
+  PropagatesQueryInvariant cc I ->
+  PropagatesReplyInvariant cc I ->
+  PropagatesReplyInvariant (cc ^ n) I.
+Proof.
+  intros Hid HQ HR.
+  induction n; cbn; typeclasses eauto.
+Qed.
+
+Hint Extern 3 (PropagatesReplyInvariant (cc_pow _ _) _) =>
+  class_apply pow_reply_prop : typeclass_instances.
+
+Lemma star_reply_prop {li} (cc: callconv li li) (I: invariant li):
+  PropagatesReplyInvariant cc_id I ->
+  PropagatesQueryInvariant cc I ->
+  PropagatesReplyInvariant cc I ->
+  PropagatesReplyInvariant (cc^{*}) I.
+Proof.
+  intros H. split.
+  - intros w1 [n w12s]. cbn.
+    apply propagates_reply.
+Qed.
+
+Hint Extern 3 (PropagatesReplyInvariant (cc_star _) _) =>
+  class_apply star_reply_prop : typeclass_instances.
+
+Instance wt_c_query_prop R:
+  PropagatesQueryInvariant (cc_c R) wt_c.
+Proof.
+  split.
+  - intros w [se sg] se1 se2 q1 q2 Hse Hse2 Hq.
+    intros [Hsg Hq2]. subst.
+    destruct Hq; cbn in *.
+    exists (se1, sg). cbn. intuition auto.
+    revert Hq2. generalize (sig_args sg). clear - H0.
+    induction H0; auto. cbn. intros [ | t tl]; auto. intuition eauto.
+    destruct H, t; cbn in *; tauto.
+Qed.
+
+Instance wt_c_reply_prop R:
+  PropagatesReplyInvariant (cc_c R) wt_c.
+Proof.
+  split.
+  - intros [se1 sg1] w [se2 sg2] xse1 xse2 q1 q2 r1 r2.
+    intros Hse [ ] [ ] Hq [Hsg1 Hargs1] [Hsg2 Hargs2] Hr. subst.
+    destruct Hr as (w' & Hw' & Hr).
+    destruct Hq; cbn in *. destruct Hr; cbn in *. clear -H3.
+    destruct H3; auto. constructor.
+Qed.
+
+Global Instance wt_c_id_prop:
+  PropagatesReplyInvariant cc_id wt_c.
+Proof.
+  split.
+  - intros [se sg] [ ] [se1 xsg] se2 se3 q q1 r r1. cbn.
+    intros. intuition subst. auto.
+Qed.
+
+Global Instance wt_c_inv_prop I:
+  PropagatesReplyInvariant (cc_inv I) wt_c.
+Proof.
+  split.
+  - intros [se sg] w [se1 xsg] se2 se3 q q1 r r1. cbn.
+    intros [Hse] ? ? [Hq] [? Hwt_q] [? _] [Hr]. subst. auto.
+Qed.
