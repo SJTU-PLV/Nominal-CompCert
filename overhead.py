@@ -63,7 +63,7 @@ passes = [
   ["backend/Constpropproof", "x86/ConstpropOpproof"],
   ["backend/CSEproof", "x86/CombineOpproof"],
   ["backend/Deadcodeproof"],
-  ["backend/Unusedglobproof"],
+  #["backend/Unusedglobproof"],
   ["backend/Allocproof"],
   ["backend/LTL"],
   ["backend/Tunnelingproof"],
@@ -75,11 +75,17 @@ passes = [
   ["backend/Mach"],
   ["backend/Asmgenproof0", "x86/Asmgenproof1", "x86/Asmgenproof"],
   ["x86/Asm"],
+]
+
+all_passes = []
+for p in passes:
+  all_passes += p
+
+groups = passes + [
   # Semantic model
   ["common/AST",
    #"common/Behaviors",
    #"common/Determinism",
-   #"common/Invariant",
    #"common/Loader",
    "common/Events",
    "common/Globalenvs",
@@ -95,23 +101,30 @@ passes = [
    "+cklr/Extends",
    "+cklr/Inject",
    "+cklr/InjectFootprint"],
+  #"cklr/ExtendsFootprint",
+  #"cklr/InjectNeutral",
   # Parametricity
   ["+cklr/Clightrel",
    "+cklr/Coprel",
+   "+cklr/Builtinsrel",
    "+cklr/Eventsrel",
   #"cklr/Globalenvsrel",
    "+cklr/Mapsrel",
    "+cklr/RTLrel",
    "+cklr/Registersrel",
    "+cklr/Valuesrel"],
-  #"cklr/ExtendsFootprint",
-  #"cklr/InjectNeutral",
+  # Invariants proofs
+  ["+common/Invariant",
+   "backend/Cminortyping",
+   "backend/ValueAnalysis",
+   "backend/ValueDomain",
+   "backend/RTLtyping",
+   "backend/Lineartyping"],
+  # Correctness proofs
+  all_passes
 ]
 
-for p in passes:
+for p in groups:
   print(p[0] + ", etc.")
   print("  ", " & ".join(stats(p)))
-
-
-
 
