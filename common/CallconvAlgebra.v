@@ -111,6 +111,50 @@ Proof.
     exists i', s2'. split; auto. exists wB; eauto.
 Qed.
 
+Global Instance open_bsim_ccref:
+  Monotonic
+    (@backward_simulation)
+    (forallr - @ liA1, forallr - @ liA2, ccref ++>
+     forallr - @ liB1, forallr - @ liB2, ccref -->
+     subrel).
+Proof.
+  intros liA1 liA2 ccA ccA' HA liB1 liB2 ccB ccB' HB sem1 sem2 [FS].
+  destruct FS as [index order match_states SKEL PROP WF].
+  constructor.
+  set (ms se1 se2 w' idx s1 s2 :=
+         exists w : ccworld ccB,
+           match_states se1 se2 w idx s1 s2 /\
+           match_senv ccB w se1 se2 /\
+           forall r1 r2, match_reply ccB w r1 r2 -> match_reply ccB' w' r1 r2).
+  eapply Backward_simulation with order ms; auto.
+  intros se1 se2 wB' Hse' Hse1.
+  split.
+  - intros q1 q2 Hq'.
+    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    eapply bsim_match_valid_query; eauto.
+  - intros q1 q2 Hq'.
+    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    edestruct @bsim_match_initial_states as [EXIST MATCH]; eauto.
+    split; auto.
+    intros. edestruct MATCH as (s1' & Hs1' & i & Hs); eauto. 
+    exists s1'. split; auto. exists i, wB; auto.
+  - intros i s1 s2 r1 (wB & Hs & Hse & Hr') SAFE Hr1.
+    edestruct @bsim_match_final_states as (s2' & r2 & Hs2' & Hr2 & Hr); eauto 10.
+  - intros i s1 s2 qA1 (wB & Hs & Hse & Hr') SAFE HqA1.
+    edestruct @bsim_match_external as (wA & s1' & qA2 & Hs1' & HqA2 & HqA & HseA & ?); eauto.
+    edestruct HA as (wA' & HseA' & HqA' & Hr); eauto.
+    exists wA', s1', qA2. intuition auto.
+    edestruct H as [EXIST MATCH]; eauto. split; auto.
+    intros. edestruct MATCH as (s1'' & Hs1'' & j & Hs''); eauto.
+    exists s1''. split; auto.
+    exists j. red. eauto 10.
+  - intros i s1 s2 (wB & Hs & Hse & Hr') SAFE.
+    eapply bsim_progress; eauto.
+  - intros s2 t s2' Hs2' i s1 (wB & Hs & Hse & Hr') SAFE.
+    edestruct @bsim_simulation as (i' & s1' & Hs1' & Hs'); eauto.
+    exists i', s1'. split; auto. exists wB; eauto.
+Qed.
+
 (** * Properties of [cc_compose] *)
 
 (** Language interfaces and calling conventions form a category, with
