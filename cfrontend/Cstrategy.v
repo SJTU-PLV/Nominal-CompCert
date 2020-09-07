@@ -28,6 +28,7 @@ Require Import Memory.
 Require Import Events.
 Require Import Globalenvs.
 Require Import Smallstep.
+Require Import LanguageInterface.
 Require Import Ctypes.
 Require Import Cop.
 Require Import Csyntax.
@@ -370,7 +371,7 @@ Inductive estep: state -> trace -> state -> Prop :=
       Genv.find_funct ge vf = Some fd ->
       type_of_fundef fd = Tfunction targs tres cconv ->
       estep (ExprState f (C (Ecall rf rargs ty)) k e m)
-         E0 (Callstate fd vargs (Kcall f e C ty k) m)
+         E0 (Callstate vf vargs (Kcall f e C ty k) m)
 
   | step_builtin: forall f C ef tyargs rargs ty k e m vargs t vres m',
       leftcontext RV RV C ->
@@ -408,7 +409,9 @@ Local Hint Resolve context_compose contextlist_compose : core.
 
 Definition safe (s: Csem.state) : Prop :=
   forall s', star Csem.step ge s E0 s' ->
-  (exists r, final_state s' r) \/ (exists t, exists s'', Csem.step ge s' t s'').
+  (exists r, final_state s' r) \/
+  (exists q, at_external ge s' q) \/
+  (exists t, exists s'', Csem.step ge s' t s'').
 
 Lemma safe_steps:
   forall s s',
@@ -441,9 +444,10 @@ Lemma safe_imm_safe:
   imm_safe ge e K a m.
 Proof.
   intros. destruct (classic (imm_safe ge e K a m)); auto.
-  destruct (H Stuckstate).
+  destruct (H Stuckstate) as [ | [ | ]].
   apply star_one. left. econstructor; eauto.
   destruct H2 as [r F]. inv F.
+  destruct H2 as [q X]. inv X.
   destruct H2 as [t [s' S]]. inv S. inv H2. inv H2.
 Qed.
 
@@ -606,8 +610,8 @@ Proof.
 Qed.
 
 Lemma callred_invert:
-  forall r fd args ty m,
-  callred ge r m fd args ty ->
+  forall r vf args ty m,
+  callred ge r m vf args ty ->
   invert_expr_prop r m.
 Proof.
   intros. inv H. simpl.
@@ -1404,13 +1408,15 @@ Qed.
 
 Theorem progress:
   forall S,
-  safe S -> (exists r, final_state S r) \/ (exists t, exists S', step S t S').
+  safe S -> (exists r, final_state S r) \/ (exists q, at_external ge S q) \/ (exists t, exists S', step S t S').
 Proof.
-  intros. exploit H. apply star_refl. intros [FIN | [t [S' STEP]]].
+  intros. exploit H. apply star_refl. intros [FIN | [EXT | [t [S' STEP]]]].
   (* 1. Finished. *)
   auto.
-  right. destruct STEP.
-  (* 2. Expression step. *)
+  (* 2. External. *)
+  auto.
+  (* 3. Expression step. *)
+  right. right. destruct STEP.
   assert (exists t, exists S', estep S t S').
     inv H0.
     (* lred *)
@@ -1421,7 +1427,7 @@ Proof.
     eapply can_estep; eauto. inv H2; auto. inv H1; auto.
     (* stuck *)
     exploit (H Stuckstate). apply star_one. left. econstructor; eauto.
-    intros [[r F] | [t [S' R]]]. inv F. inv R. inv H0. inv H0.
+    intros [[r F] | [[q X] | [t [S' R]]]]. inv F. inv X. inv R. inv H0. inv H0.
   destruct H1 as [t' [S'' ESTEP]].
   exists t'; exists S''; left; auto.
   (* 3. Other step. *)
@@ -1433,8 +1439,7 @@ End STRATEGY.
 (** The semantics that follows the strategy. *)
 
 Definition semantics (p: program) :=
-  let ge := globalenv p in
-  Semantics_gen step (initial_state p) final_state ge ge.
+  Semantics_gen step initial_state at_external after_external final_state globalenv p.
 
 (** This semantics is receptive to changes in events. *)
 
@@ -1482,7 +1487,7 @@ Lemma semantics_strongly_receptive:
 Proof.
   intros. constructor; simpl; intros.
 (* receptiveness *)
-  set (ge := globalenv p) in *.
+  set (ge := globalenv se p) in *.
   inversion H; subst.
   inv H1.
   (* valof volatile *)
@@ -1591,22 +1596,21 @@ Qed.
 (** The main simulation result. *)
 
 Theorem strategy_simulation:
-  forall p, backward_simulation (Csem.semantics p) (semantics p).
+  forall p, backward_simulation cc_id cc_id (Csem.semantics p) (semantics p).
 Proof.
-  intros.
-  apply backward_simulation_plus with (match_states := fun (S1 S2: state) => S1 = S2); simpl.
-(* symbols *)
-  auto.
-(* initial states exist *)
-  intros. exists s1; auto.
-(* initial states match *)
-  intros. exists s2; auto.
-(* final states match *)
-  intros. subst s2. auto.
+  intros. constructor.
+  eapply Backward_simulation; auto. intros. cbn in *. subst.
+  apply backward_simulation_plus with (match_states := fun (S1 S2: state) => S1 = S2);
+    cbn; intros; subst; eauto using Build_bsim_match_cont.
+(* external states *)
+  exists tt, q2.
+  intuition subst; eauto using Build_bsim_match_cont.
 (* progress *)
-  intros. subst s2. apply progress. auto.
+  apply progress; auto.
 (* simulation *)
-  intros. subst s1. exists s2'; split; auto. apply step_simulation; auto.
+  exists s2'; split; auto. apply step_simulation; auto.
+(* well-founded *)
+  constructor. tauto.
 Qed.
 
 (** * A big-step semantics for CompCert C implementing the reduction strategy. *)
@@ -2179,6 +2183,7 @@ Proof.
   induction rl1; intros; simpl. auto. rewrite IHrl1. apply andb_assoc.
 Qed.
 
+(*
 Lemma bigstep_to_steps:
   (forall e m a t m' v,
    eval_expression e m a t m' v ->
@@ -3016,9 +3021,11 @@ Proof.
   eapply forever_N_plus. apply plus_one. right; econstructor; eauto.
   eapply COS; eauto. traceEq.
 Qed.
+*)
 
 End BIGSTEP.
 
+(*
 (** ** Whole-program behaviors, big-step style. *)
 
 Inductive bigstep_program_terminates (p: program): trace -> int -> Prop :=
@@ -3060,3 +3067,4 @@ Proof.
   apply lt_wf.
   eapply evalinf_funcall_steps; eauto.
 Qed.
+*)

@@ -16,6 +16,7 @@ Require Import FunInd.
 Require Import Coqlib Maps Errors Integers.
 Require Import AST Linking.
 Require Import Values Memory Events Globalenvs Smallstep.
+Require Import LanguageInterface.
 Require Import Ctypes Cop Csyntax Csem Cstrategy Clight.
 Require Import SimplExpr SimplExprspec.
 
@@ -42,8 +43,9 @@ Variable prog: Csyntax.program.
 Variable tprog: Clight.program.
 Hypothesis TRANSL: match_prog prog tprog.
 
-Let ge := Csem.globalenv prog.
-Let tge := Clight.globalenv tprog.
+Variable se: Genv.symtbl.
+Let ge := Csem.globalenv se prog.
+Let tge := Clight.globalenv se tprog.
 
 (** Invariance properties. *)
 
@@ -54,32 +56,15 @@ Proof.
   congruence.
 Qed.
 
-Lemma symbols_preserved:
-  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
-Proof (Genv.find_symbol_match (proj1 TRANSL)).
-
-Lemma senv_preserved:
-  Senv.equiv ge tge.
-Proof. exact (Senv.senv_match (proj1 TRANSL)). Qed.
-
-Lemma function_ptr_translated:
-  forall b f,
-  Genv.find_funct_ptr ge b = Some f ->
-  exists tf,
-  Genv.find_funct_ptr tge b = Some tf /\ tr_fundef f tf.
-Proof.
-  intros.
-  edestruct (Genv.find_funct_ptr_match (proj1 TRANSL)) as (ctx & tf & A & B & C); eauto.
-Qed.
-
 Lemma functions_translated:
   forall v f,
   Genv.find_funct ge v = Some f ->
-  exists tf,
-  Genv.find_funct tge v = Some tf /\ tr_fundef f tf.
+  exists tf, Genv.find_funct tge v = Some tf /\ tr_fundef f tf.
 Proof.
   intros.
-  edestruct (Genv.find_funct_match (proj1 TRANSL)) as (ctx & tf & A & B & C); eauto.
+  edestruct (Genv.find_funct_match_id (proj1 TRANSL)) as (ctx & tf & A & B & C).
+  - apply H.
+  - eauto.
 Qed.
 
 Lemma type_of_fundef_preserved:
@@ -183,7 +168,7 @@ Proof.
   (* By_value, not volatile *)
   rewrite H1. split; auto. eapply deref_loc_value; eauto.
   (* By_value, volatile *)
-  rewrite H0; rewrite H1. eapply volatile_load_preserved with (ge1 := ge); auto. apply senv_preserved.
+  rewrite H0; rewrite H1. auto.
   (* By reference *)
   rewrite H0. destruct (type_is_volatile ty); split; auto; eapply deref_loc_reference; eauto.
   (* By copy *)
@@ -202,7 +187,7 @@ Proof.
   (* By_value, not volatile *)
   rewrite H1. split; auto. eapply assign_loc_value; eauto.
   (* By_value, volatile *)
-  rewrite H0; rewrite H1. eapply volatile_store_preserved with (ge1 := ge); auto. apply senv_preserved.
+  rewrite H0; rewrite H1. auto.
   (* By copy *)
   rewrite H0. rewrite <- comp_env_preserved in *.
   destruct (type_is_volatile ty); split; auto; eapply assign_loc_copy; eauto.
@@ -286,7 +271,6 @@ Opaque makeif.
   split; auto. split; auto. apply eval_Evar_local; auto.
 (* var global *)
   split; auto. split; auto. apply eval_Evar_global; auto.
-    rewrite symbols_preserved; auto.
 (* deref *)
   exploit H0; eauto. intros [A [B C]]. subst sl1.
   split; auto. split. rewrite typeof_Ederef'; auto. apply eval_Ederef'; auto. 
@@ -1041,11 +1025,10 @@ Inductive match_states: Csem.state -> state -> Prop :=
       match_cont k tk ->
       match_states (Csem.State f s k e m)
                    (State tf ts tk e le m)
-  | match_callstates: forall fd args k m tfd tk,
-      tr_fundef fd tfd ->
+  | match_callstates: forall vf args k m tk,
       match_cont k tk ->
-      match_states (Csem.Callstate fd args k m)
-                   (Callstate tfd args tk m)
+      match_states (Csem.Callstate vf args k m)
+                   (Callstate vf args tk m)
   | match_returnstates: forall res k m tk,
       match_cont k tk ->
       match_states (Csem.Returnstate res k m)
@@ -1939,7 +1922,6 @@ Proof.
   econstructor; split.
   left. eapply plus_left. constructor.  apply star_one.
   econstructor; eauto.
-  eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   traceEq.
   econstructor; eauto.
   change sl2 with (nil ++ sl2). apply S. constructor. simpl; auto. auto.
@@ -1949,7 +1931,6 @@ Proof.
   econstructor; split.
   left. eapply plus_left. constructor. apply star_one.
   econstructor; eauto.
-  eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   traceEq.
   econstructor; eauto.
   change sl2 with (nil ++ sl2). apply S.
@@ -2244,20 +2225,21 @@ Proof.
   econstructor; eauto.
 
 (* internal function *)
-  inv H7. inversion H3; subst.
+  edestruct functions_translated as (tfd & FIND' & TF); eauto.
+  inv TF. inversion H3; subst.
   econstructor; split.
-  left; apply plus_one. eapply step_internal_function. econstructor.
-  rewrite H6; rewrite H7; auto.
-  rewrite H6; rewrite H7. eapply alloc_variables_preserved; eauto.
+  left; apply plus_one. eapply step_internal_function; eauto. econstructor.
+  rewrite H6; rewrite H8; auto.
+  rewrite H6; rewrite H8. eapply alloc_variables_preserved; eauto.
   rewrite H6. eapply bind_parameters_preserved; eauto.
   eauto.
   constructor; auto.
 
 (* external function *)
-  inv H5.
+  edestruct functions_translated as (tfd & FIND' & TF); eauto.
+  inv TF.
   econstructor; split.
   left; apply plus_one. econstructor; eauto.
-  eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   constructor; auto.
 
 (* return *)
@@ -2283,21 +2265,29 @@ Proof.
 Qed.
 
 Lemma transl_initial_states:
-  forall S,
-  Csem.initial_state prog S ->
-  exists S', Clight.initial_state tprog S' /\ match_states S S'.
+  forall q S,
+  Csem.initial_state ge q S ->
+  exists S', Clight.initial_state tge q S' /\ match_states S S'.
 Proof.
   intros. inv H.
-  exploit function_ptr_translated; eauto. intros [tf [FIND TR]].
+  exploit functions_translated; eauto. intros [tf [FIND TR]].
   econstructor; split.
-  econstructor.
-  eapply (Genv.init_mem_match (proj1 TRANSL)); eauto.
-  replace (prog_main tprog) with (prog_main prog).
-  rewrite symbols_preserved. eauto. 
-  destruct TRANSL. destruct H as (A & B & C). simpl in B. auto. 
-  eexact FIND.
-  rewrite <- H3. apply type_of_fundef_preserved. auto.
-  constructor. auto. constructor.
+  - inversion TR; subst.
+    econstructor; eauto.
+    rewrite <- H1. apply (type_of_fundef_preserved (Internal f) (Internal tf0)). auto.
+  - constructor. constructor.
+Qed.
+
+Lemma transl_external:
+  forall S R q, match_states S R -> Csem.at_external ge S q ->
+  at_external tge R q /\
+  forall r S', Csem.after_external S r S' ->
+  exists R', after_external R r R' /\ match_states S' R'.
+Proof.
+  intros S R q HSR Hq. destruct Hq; inv HSR.
+  edestruct functions_translated as (tfd & Htfd & TR); eauto. inv TR.
+  split. econstructor; eauto. intros r S' HS'. inv HS'.
+  eexists. split; econstructor; eauto.
 Qed.
 
 Lemma transl_final_states:
@@ -2307,18 +2297,21 @@ Proof.
   intros. inv H0. inv H. inv H4. constructor.
 Qed.
 
-Theorem transl_program_correct:
-  forward_simulation (Cstrategy.semantics prog) (Clight.semantics1 tprog).
-Proof.
-  eapply forward_simulation_star_wf with (order := ltof _ measure).
-  eapply senv_preserved.
-  eexact transl_initial_states.
-  eexact transl_final_states.
-  apply well_founded_ltof.
-  exact simulation.
-Qed.
-
 End PRESERVATION.
+
+Theorem transl_program_correct prog tprog:
+  match_prog prog tprog ->
+  forward_simulation cc_id cc_id (Cstrategy.semantics prog) (Clight.semantics1 tprog).
+Proof.
+  fsim eapply forward_simulation_star_wf with (order := ltof _ measure); cbn; destruct w, Hse.
+  - intros q _ [ ]. eapply (Genv.is_internal_match_id (ctx := program_of_program prog)); eauto.
+    + apply MATCH.
+    + destruct 1; auto.
+  - intros q _ s1 [ ]. eauto using transl_initial_states.
+  - eauto using transl_final_states.
+  - intros. edestruct transl_external; eauto. exists tt, q1. intuition subst; eauto.
+  - unfold ltof. eauto using simulation.
+Qed.
 
 (** ** Commutation with linking *)
 
