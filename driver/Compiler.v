@@ -408,7 +408,7 @@ Definition cc_backend : callconv li_c Asm.li_asm :=
   ((vamatch @ cc_ext) @ cc_id) @
   (vamatch @ cc_ext) @
   (vamatch @ cc_ext) @
-  (wt_c @ Conventions.cc_alloc) @
+  (wt_c @ cc_ext @ Conventions.cc_alloc) @
   Conventions.cc_locset_ext @
   Mach.cc_stacking @
   Asmgenproof0.cc_asmgen.

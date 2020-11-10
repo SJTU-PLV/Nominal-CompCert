@@ -197,17 +197,15 @@ Canonical Structure li_locset: language_interface :=
   registers can be enforced. *)
 
 Inductive cc_alloc_mq: signature * Locmap.t -> c_query -> locset_query -> Prop :=
-  cc_alloc_mq_intro vf sg args rs m1 m2:
-    Val.lessdef_list args (map (fun p => Locmap.getpair p rs) (loc_arguments sg)) ->
-    Mem.extends m1 m2 ->
-    cc_alloc_mq (sg, rs) (cq vf sg args m1) (lq vf sg rs m2).
+  cc_alloc_mq_intro vf sg args rs m:
+    args = (map (fun p => Locmap.getpair p rs) (loc_arguments sg)) ->
+    cc_alloc_mq (sg, rs) (cq vf sg args m) (lq vf sg rs m).
 
 Inductive cc_alloc_mr: signature * Locmap.t -> c_reply -> locset_reply -> Prop :=
-  cc_alloc_mr_intro sg rs res rs' m1 m2:
-    Val.lessdef res (Locmap.getpair (map_rpair R (loc_result sg)) rs') ->
+  cc_alloc_mr_intro sg rs res rs' m:
+    res = (Locmap.getpair (map_rpair R (loc_result sg)) rs') ->
     agree_callee_save rs rs' ->
-    Mem.extends m1 m2 ->
-    cc_alloc_mr (sg, rs) (cr res m1) (lr rs' m2).
+    cc_alloc_mr (sg, rs) (cr res m) (lr rs' m).
 
 Program Definition cc_alloc: callconv li_c li_locset :=
   {|
