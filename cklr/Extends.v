@@ -231,9 +231,10 @@ Proof.
   - intros [[ ] f] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23).
     exists f. cbn in *. repeat apply conj; eauto.
     + congruence.
-    + destruct Hm23. constructor; eauto.
-      * eapply Mem.extends_inject_compose; eauto.
-      * erewrite Mem.mext_next; eauto.
+    + destruct Hm23.
+      erewrite <- Mem.mext_next; eauto.
+      constructor; eauto.
+      eapply Mem.extends_inject_compose; eauto.
     + rewrite compose_meminj_id_left. apply inject_incr_refl.
     + intros f' m1' m3' Hm' Hincr.
       exists (tt, f'). intuition auto; cbn.
@@ -247,9 +248,10 @@ Proof.
     + rewrite compose_meminj_id_left. apply inject_incr_refl.
     + intros [[ ] f'] m1' m2' (mi & Hm1i & Hmi2) [_ Hf']. cbn in *.
       exists f'. intuition auto.
-      * destruct Hmi2; constructor; auto.
+      * destruct Hmi2.
+        erewrite <- Mem.mext_next; eauto.
+        constructor; auto.
         eapply Mem.extends_inject_compose; eauto.
-        erewrite Mem.mext_next; eauto.
       * rewrite compose_meminj_id_left. apply inject_incr_refl.
 Qed.
 
@@ -260,9 +262,10 @@ Proof.
   - intros [f [ ]] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23).
     exists f. cbn in *. repeat apply conj; eauto.
     + congruence.
-    + destruct Hm12; constructor; eauto.
+    + destruct Hm12.
+      erewrite (Mem.mext_next m2 m3); eauto.
+      constructor; eauto.
       eapply Mem.inject_extends_compose; eauto.
-      erewrite <- Mem.mext_next; eauto.
     + rewrite compose_meminj_id_right. apply inject_incr_refl.
     + intros f' m1' m3' Hm' Hincr.
       exists (f', tt). intuition auto; cbn.
@@ -276,9 +279,10 @@ Proof.
     + rewrite compose_meminj_id_right. apply inject_incr_refl.
     + intros [f' [ ]] m1' m2' (mi & Hm1i & Hmi2) [Hf' _]. cbn in *.
       exists f'. intuition auto.
-      * destruct Hm1i; constructor; auto.
+      * destruct Hm1i.
+        erewrite (Mem.mext_next m3 m2'); eauto.
+        constructor; auto.
         eapply Mem.inject_extends_compose; eauto.
-        erewrite <- Mem.mext_next; eauto.
       * rewrite compose_meminj_id_right. apply inject_incr_refl.
 Qed.
 

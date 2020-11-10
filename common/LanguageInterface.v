@@ -180,20 +180,23 @@ Definition mit_incr (w: meminj_thr) (f: meminj): Prop :=
     Pos.le (mit_l w) b1 /\
     Pos.le (mit_r w) b2.
 
-Inductive cc_inj_senv: meminj_thr -> Genv.symtbl -> Genv.symtbl -> Prop :=
-  cc_inj_senv_intro f se1 se2:
+Inductive cc_inj_senv (f: meminj_thr) (se1 se2: Genv.symtbl): Prop :=
+  cc_inj_senv_intro:
     Genv.match_stbls f se1 se2 ->
-    cc_inj_senv (mit f (Genv.genv_next se1) (Genv.genv_next se2)) se1 se2.
+    Pos.le (Genv.genv_next se1) (mit_l f) ->
+    Pos.le (Genv.genv_next se2) (mit_r f) ->
+    cc_inj_senv f se1 se2.
 
-Inductive cc_inj_query (f: meminj_thr): c_query -> c_query -> Prop :=
-  cc_inj_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
+Inductive cc_inj_query: meminj_thr -> c_query -> c_query -> Prop :=
+  cc_inj_query_intro f vf1 vf2 sg vargs1 vargs2 m1 m2:
     Val.inject f vf1 vf2 ->
     Val.inject_list f vargs1 vargs2 ->
     Mem.inject f m1 m2 ->
-    Pos.le (mit_l f) (Mem.nextblock m1) ->
-    Pos.le (mit_r f) (Mem.nextblock m2) ->
     vf1 <> Vundef ->
-    cc_inj_query f (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
+    cc_inj_query
+      (mit f (Mem.nextblock m1) (Mem.nextblock m2))
+      (cq vf1 sg vargs1 m1)
+      (cq vf2 sg vargs2 m2).
 
 Inductive cc_inj_reply (f: meminj_thr): c_reply -> c_reply -> Prop :=
   cc_inj_reply_intro f' vres1 vres2 m1 m2:
@@ -232,6 +235,7 @@ Lemma cc_inj_match_stbls w j se1 se2:
 Proof.
   intros Hse [Hj SEP]. destruct Hse. cbn in *.
   eapply Genv.match_stbls_incr; eauto.
+  intros. edestruct SEP; eauto. xomega.
 Qed.
 
 (** *** Injections with footprint enforcement *)

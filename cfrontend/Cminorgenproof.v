@@ -441,7 +441,7 @@ Inductive match_callstack (f: meminj) (m: mem) (tm: mem):
   | mcs_nil:
       forall bound tbound,
       mit_incr w f ->
-      Ple (Genv.genv_next ge) bound -> Ple (Genv.genv_next tge) tbound ->
+      Ple (mit_l w) bound -> Ple (mit_r w) tbound ->
       match_callstack f m tm nil bound tbound
   | mcs_cons:
       forall cenv tf e le te sp lo hi cs bound tbound
@@ -481,9 +481,9 @@ Proof.
   (* base case *)
   econstructor; eauto.
   destruct H as [Hf1 SEP]. split; eauto using inject_incr_trans.
-  inv GE. cbn in *. intros. destruct (f1 b1) as [[xb2 xdelta] | ] eqn:Hb1.
+  intros. destruct (f1 b1) as [[xb2 xdelta] | ] eqn:Hb1.
     eapply SEP; eauto. rewrite Hb1. apply H2 in Hb1. rewrite <- Hb1. eauto.
-    destruct (plt b1 bound). rewrite H5 in H8; eauto.
+    destruct (plt b1 bound). rewrite H5 in H7; eauto.
     destruct (plt b2 tbound). erewrite H6 in Hb1; eauto.
     xomega.
   (* inductive case *)
@@ -2165,14 +2165,20 @@ Lemma transl_initial_states:
   forall q1 q2 S, cc_inj_query w q1 q2 -> Csharpminor.initial_state ge q1 S ->
   exists R, Cminor.initial_state tge q2 R /\ match_states S R.
 Proof.
-  intros _ _ S [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm] HS. inv HS.
+  intros q1 q2 S Hq HS.
+  inversion Hq as [f vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm]. clear Hq. subst.
+  inversion HS. clear HS. subst m vargs vf.
   exploit functions_translated; eauto. destruct GE; auto. intros [tf [FIND TR]].
-  setoid_rewrite <- (sig_preserved _ _ TR). monadInv TR. cbn.
+  setoid_rewrite <- (sig_preserved _ _ TR). monadInv TR. subst tf. cbn.
   econstructor; split.
   econstructor; eauto.
-  eapply match_callstate with (f := w) (cs := @nil frame) (cenv := PTree.empty Z); auto.
-  apply mcs_nil; auto using mit_incr_refl; inv GE; cbn in *; auto.
-  constructor. red; auto.
+  eapply match_callstate with (f := f) (cs := @nil frame) (cenv := PTree.empty Z); auto.
+  apply mcs_nil.
+  - rewrite <- H0. apply mit_incr_refl.
+  - rewrite <- H0. apply Pos.le_refl.
+  - rewrite <- H0. apply Pos.le_refl.
+  - constructor.
+  - red; auto.
 Qed.
 
 Lemma transl_final_states:
@@ -2181,8 +2187,6 @@ Lemma transl_final_states:
 Proof.
   intros. inv H0. inv H. inv MK. inv MCS.
   eexists; split. constructor. econstructor; eauto.
-  inv GE; cbn in *; eauto.
-  inv GE; cbn in *; eauto.
 Qed.
 
 Lemma transl_external_states:
@@ -2201,8 +2205,10 @@ Proof.
   - econstructor; eauto.
   - econstructor; eauto.
   - constructor; eauto using match_callstack_match_globalenvs.
-    + clear - MCS. induction MCS; cbn in *; eauto. destruct MENV. xomega.
-    + clear - MCS. induction MCS; cbn in *; eauto. destruct MENV. xomega.
+    + inv GE. eapply Pos.le_trans; eauto.
+      clear - MCS. induction MCS; cbn in *; eauto. destruct MENV. xomega.
+    + inv GE. eapply Pos.le_trans; eauto.
+      clear - MCS. induction MCS; cbn in *; eauto. destruct MENV. xomega.
   - inv H1. inv H. eexists. split.
     + econstructor; eauto.
     + econstructor; eauto.
@@ -2220,7 +2226,8 @@ Theorem transl_program_correct prog tprog:
   forward_simulation cc_injp cc_inj (Csharpminor.semantics prog) (Cminor.semantics tprog).
 Proof.
   fsim eapply forward_simulation_star.
-  { intros _ _ [ ]. destruct Hse. eapply Genv.is_internal_transf_partial; eauto.
+  { intros q1 q2 Hq. destruct Hq. cbn in *. inv Hse. cbn in *.
+    eapply Genv.is_internal_transf_partial; eauto.
     intros [|] ? Hf; monadInv Hf; cbn; auto. }
   apply transl_initial_states; eauto.
   apply transl_final_states; eauto.

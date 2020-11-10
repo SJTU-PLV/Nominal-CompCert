@@ -351,6 +351,51 @@ Qed.
 
 (** * Properties *)
 
+(** Needs memory interpolation
+
+Lemma injp_injp:
+  subcklr injp (injp @ inj @ injp).
+Proof.
+  intros _ _ _ [f m1 m4 Hm14].
+  eexists (injpw (meminj_dom f) m1 m1,
+           (injw (meminj_dom f) (Mem.nextblock m1) (Mem.nextblock m1) _,
+            injpw f m1 m4)).
+  simpl.
+  repeat apply conj.
+  - exists m1; split.
+    { constructor. eapply mem_inject_dom; eauto. }
+    exists m1; split.
+    { constructor; repeat rstep; eauto using mem_inject_dom. }
+    constructor; eauto.
+  - rewrite !meminj_dom_compose.
+    apply inject_incr_refl.
+  - intros (w12' & w23' & w34') m1' m4'.
+    intros (m2' & Hm12' & m3' & Hm23' & Hm34').
+    intros (H12 & H23 & H34). simpl in *.
+    destruct Hm12' as [f12 m1' m2' Hm12'].
+    inversion Hm23' as [f23 xm2' xm3' Hm23'']; clear Hm23'; subst.
+    destruct Hm34' as [f34 m3' m4' Hm34'].
+    inv H12.
+    inv H23.
+    inv H34.
+    exists (injpw (compose_meminj f12 (compose_meminj f23 f34)) m1' m4').
+    repeat apply conj.
+    + constructor; eauto.
+      eauto using Mem.inject_compose.
+    + constructor; eauto.
+      * apply injp_max_perm_decrease_dom; eauto.
+      * eapply Mem.unchanged_on_implies; eauto.
+        intros. apply loc_unmapped_dom; eauto.
+      * rewrite <- (meminj_dom_compose f).
+        rewrite <- (meminj_dom_compose f) at 2.
+        rauto.
+      * (* XXX we can't actually prove this because the intermediate
+          injection may map a new block into an old one, and falsify
+          the composite separation property. *)
+        (* XXX now we can, if we need to. *)
+Abort.
+*)
+
 (*
 Lemma injp_inj_injp:
   subcklr injp (injp @ inj @ injp).
