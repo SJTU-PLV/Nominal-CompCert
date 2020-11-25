@@ -1439,7 +1439,7 @@ End STRATEGY.
 (** The semantics that follows the strategy. *)
 
 Definition semantics (p: program) :=
-  Semantics_gen step initial_state at_external after_external final_state globalenv p.
+  Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
 
 (** This semantics is receptive to changes in events. *)
 

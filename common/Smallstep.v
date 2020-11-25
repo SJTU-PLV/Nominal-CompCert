@@ -503,14 +503,14 @@ Notation Semantics_gen step initial_state at_ext after_ext final_state globalenv
         valid_query q := Genv.is_internal ge (entry q);
         initial_state := initial_state ge;
         at_external := at_ext ge;
-        after_external := after_ext;
-        final_state := final_state;
+        after_external := after_ext ge;
+        final_state := final_state ge;
         globalenv := ge;
       |};
   |}.
 
 Notation Semantics step initial_state at_ext after_ext final_state p :=
-  (Semantics_gen step initial_state at_ext after_ext final_state (@Genv.globalenv _ _) p).
+  (Semantics_gen step initial_state at_ext (fun _ => after_ext) (fun _ => final_state) (@Genv.globalenv _ _) p).
 
 Notation " 'Step' L " := (step L (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Star' L " := (star (step L) (globalenv L)) (at level 1) : smallstep_scope.

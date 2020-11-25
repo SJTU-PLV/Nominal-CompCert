@@ -850,7 +850,7 @@ End SEMANTICS.
 (** Wrapping up these definitions in a small-step semantics. *)
 
 Definition semantics (p: program) :=
-  Semantics_gen step initial_state at_external after_external final_state globalenv p.
+  Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
 
 (** This semantics has the single-event property. *)
 
