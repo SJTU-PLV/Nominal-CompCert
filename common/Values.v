@@ -149,6 +149,58 @@ Proof.
   auto.
 Defined.
 
+(** Ensuring values have certain types *)
+
+Definition ensure_type (v: val) (t: typ) : val :=
+  match v, t with
+  | Vundef, _ => v
+  | Vint _, Tint => v
+  | Vlong _, Tlong => v
+  | Vfloat _, Tfloat => v
+  | Vsingle _, Tsingle => v
+  | Vptr _ _, Tint => if Archi.ptr64 then Vundef else v
+  | Vptr _ _, Tlong => if Archi.ptr64 then v else Vundef
+  | (Vint _ | Vsingle _), Tany32 => v
+  | Vptr _ _, Tany32 => if Archi.ptr64 then Vundef else v
+  | _, Tany64 => v
+  | _, _ => Vundef
+  end.
+
+Fixpoint ensure_type_list (vl: list val) (tl: list typ): list val :=
+  match vl, tl with
+    | _, nil => nil
+    | nil, t::tl => Vundef :: ensure_type_list nil tl
+    | v::vl, t::tl => ensure_type v t :: ensure_type_list vl tl
+  end.
+
+(** Properties *)
+
+Lemma ensure_has_type (v: val) (t: typ) :
+  Val.has_type (ensure_type v t) t.
+Proof.
+  destruct v, t; cbn; destruct Archi.ptr64 eqn:H64; cbn; auto.
+Qed.
+
+Lemma has_type_ensure (v: val) (t: typ) :
+  Val.has_type v t -> Val.ensure_type v t = v.
+Proof.
+  intros H.
+  destruct v, t; cbn in *; destruct Archi.ptr64; cbn in *; firstorder.
+Qed.
+
+Lemma ensure_has_type_list (vl: list val) (tl: list typ) :
+  Val.has_type_list (ensure_type_list vl tl) tl.
+Proof.
+  revert vl. induction tl; cbn; destruct vl; cbn; auto using ensure_has_type.
+Qed.
+
+Lemma has_type_list_ensure (vl: list val) (tl: list typ) :
+  Val.has_type_list vl tl -> ensure_type_list vl tl = vl.
+Proof.
+  revert vl. induction tl; cbn; destruct vl; cbn; firstorder auto.
+  f_equal; auto using has_type_ensure.
+Qed.
+
 (** Truth values.  Non-zero integers are treated as [True].
   The integer 0 (also used to represent the null pointer) is [False].
   Other values are neither true nor false. *)
@@ -2160,6 +2212,20 @@ Proof.
   apply normalize_lessdef. destruct b; auto.
 Qed.
 
+Lemma ensure_type_lessdef:
+  forall v v' t, lessdef v v' -> lessdef (ensure_type v t) (ensure_type v' t).
+Proof.
+  destruct 1; auto.
+Qed.
+
+Lemma ensure_type_lessdef_list:
+  forall tl vl vl',
+    lessdef_list vl vl' ->
+    lessdef_list (ensure_type_list vl tl) (ensure_type_list vl' tl).
+Proof.
+  induction tl; inversion 1; cbn; auto using ensure_type_lessdef.
+Qed.
+
 (** * Values and memory injections *)
 
 (** A memory injection [f] is a function from addresses to either [None]
@@ -2475,6 +2541,20 @@ Proof.
 Qed.
 
 End VAL_INJ_OPS.
+
+Lemma ensure_type_inject:
+  forall f v v' t, inject f v v' -> inject f (ensure_type v t) (ensure_type v' t).
+Proof.
+  destruct 1, t; cbn; econstructor; eauto.
+Qed.
+
+Lemma ensure_type_inject_list:
+  forall f tl vl vl',
+    inject_list f vl vl' ->
+    inject_list f (ensure_type_list vl tl) (ensure_type_list vl' tl).
+Proof.
+  induction tl; inversion 1; cbn; auto using ensure_type_inject.
+Qed.
 
 End Val.
 
