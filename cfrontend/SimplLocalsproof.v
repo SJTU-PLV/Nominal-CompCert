@@ -15,8 +15,9 @@
 Require Import FSets.
 Require Import Coqlib Errors Ordered Maps Integers Floats.
 Require Import AST Linking.
-Require Import Values Memory Globalenvs Events LanguageInterface Smallstep.
+Require Import Values Memory Globalenvs Events Smallstep.
 Require Import Ctypes Cop Clight SimplLocals.
+Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.
 
 Module VSF := FSetFacts.Facts(VSet).
 Module VSP := FSetProperties.Properties(VSet).
@@ -37,13 +38,13 @@ Section PRESERVATION.
 Variable prog: program.
 Variable tprog: program.
 Hypothesis TRANSF: match_prog prog tprog.
-Variable w: meminj_thr.
+Variable w: world inj.
 Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
 Let ge := globalenv se prog.
 Let tge := globalenv tse tprog.
 
-Hypothesis GE: cc_inj_senv w se tse.
+Hypothesis GE: match_stbls inj w se tse.
 
 Lemma comp_env_preserved:
   genv_cenv tge = genv_cenv ge.
@@ -1499,9 +1500,7 @@ End EVAL_EXPR.
 
 Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> block -> block -> Prop :=
   | match_Kstop: forall cenv m bound tbound,
-      mit_incr w f ->
-      Ple (mit_l w) bound ->
-      Ple (mit_r w) tbound ->
+      inj_incr w (injw f bound tbound) ->
       match_cont f cenv Kstop Kstop m bound tbound
   | match_Kseq: forall cenv s k ts tk m bound tbound,
       simpl_stmt cenv s = OK ts ->
@@ -1546,13 +1545,10 @@ Lemma match_cont_invariant:
 Proof.
   induction 1; intros LOAD INCR INJ1 INJ2; econstructor; eauto.
 (* globalenvs *)
-  destruct H as [H SEP]. inv GE; split; cbn in *.
-  eapply inject_incr_trans; eauto.
-  intros. destruct (f b1) as [[xb2 xdelta] | ] eqn:Hfb1.
-    eapply SEP; eauto. rewrite Hfb1. apply INCR in Hfb1. erewrite <- H6. auto.
-    destruct (plt b1 bound). erewrite INJ1 in H6; eauto.
-    destruct (plt b2 tbound). erewrite INJ2 in H6; eauto.
-    xomega.
+  etransitivity; eauto. constructor; eauto using Pos.le_refl. intros.
+  destruct (plt b1 bound). erewrite INJ1 in H1; eauto. congruence.
+  destruct (plt b2 tbound). erewrite INJ2 in H1; eauto. congruence.
+  xomega.
 (* call *)
   eapply match_envs_invariant; eauto.
   intros. apply LOAD; auto. xomega.
@@ -1610,7 +1606,8 @@ Lemma match_cont_incr_bounds:
   Ple bound bound' -> Ple tbound tbound' ->
   match_cont f cenv k tk m bound' tbound'.
 Proof.
-  induction 1; intros; econstructor; eauto; xomega.
+  induction 1; intros; econstructor; eauto; try xomega.
+  etransitivity; eauto. constructor; eauto. congruence.
 Qed.
 
 (** [match_cont] and call continuations. *)
@@ -1694,7 +1691,8 @@ Lemma match_cont_globalenv:
   match_cont f cenv k tk m bound tbound ->
   Genv.match_stbls f se tse.
 Proof.
-  induction 1; eauto using cc_inj_match_stbls.
+  induction 1; eauto.
+  eapply match_stbls_acc in GE; cbn; eauto. apply GE.
 Qed.
 
 Hint Resolve match_cont_globalenv: compat.
@@ -2204,39 +2202,39 @@ Proof.
 Qed.
 
 Lemma initial_states_simulation:
-  forall q1 q2 S, cc_inj_query w q1 q2 -> initial_state ge q1 S ->
+  forall q1 q2 S, match_query (cc_c inj) w q1 q2 -> initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states S R.
 Proof.
   intros ? ? ? Hq HS.
-  inversion Hq as [f vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq. subst.
+  inversion Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq. subst.
   inversion HS. clear HS. subst vf sg vargs m.
-  exploit functions_translated; eauto using cc_inj_match_stbls, mit_incr_refl.
+  exploit functions_translated; eauto. apply GE.
   intros [tf [A B]].
-  pose proof (type_of_fundef_preserved _ _ B) as Hsg. monadInv B. subst tf. simpl in *.
+  pose proof (type_of_fundef_preserved _ _ B) as Hsg. monadInv B. simpl in *.
   econstructor; split.
   econstructor; eauto. congruence.
-  { revert vargs2 Hvargs. clear - H7.
-    induction H7; inversion 1; econstructor; eauto using val_casted_inject. }
-  inv GE. cbn in *. assumption.
+  { revert vargs2 Hvargs. clear - H6.
+    induction H6; inversion 1; econstructor; eauto using val_casted_inject. }
+  eapply (match_stbls_nextblock inj); eauto.
+  inv Hm; cbn in *.
   econstructor; eauto. econstructor.
-  - rewrite <- H. apply mit_incr_refl.
-  - rewrite <- H. cbn. reflexivity.
-  - rewrite <- H. cbn. reflexivity.
+  rewrite <- H0. reflexivity.
 Qed.
 
 Lemma final_states_simulation:
   forall S R r1, match_states S R -> final_state S r1 ->
-  exists r2, final_state R r2 /\ cc_inj_reply w r1 r2.
+  exists r2, final_state R r2 /\ match_reply (cc_c inj) w r1 r2.
 Proof.
   intros. inv H0. inv H.
   specialize (MCONT VSet.empty). inv MCONT.
-  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; split; eauto.
+  constructor; eauto. constructor; eauto.
 Qed.
 
 Lemma external_states_simulation:
   forall S R q1, match_states S R -> at_external ge S q1 ->
-  exists wx q2, at_external tge R q2 /\ cc_injp_query wx q1 q2 /\ cc_injp_stbls wx se tse /\
-  forall r1 r2 S', cc_injp_reply wx r1 r2 -> after_external S r1 S' ->
+  exists wx q2, at_external tge R q2 /\ cc_c_query injp wx q1 q2 /\ match_stbls injp wx se tse /\
+  forall r1 r2 S', match_reply (cc_c injp) wx r1 r2 -> after_external S r1 S' ->
   exists R', after_external R r2 R' /\ match_states S' R'.
 Proof.
   intros S R q1 HSR Hq1.
@@ -2246,18 +2244,18 @@ Proof.
   assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
   eapply functions_translated in H as (tfd & TFIND & TRFD); eauto.
   monadInv TRFD.
-  eexists _, _. intuition idtac.
+  eexists (injpw j m tm MINJ), _. intuition idtac.
   - econstructor; eauto.
-  - econstructor; eauto.
+  - econstructor; eauto. constructor.
   - specialize (MCONT VSet.empty). constructor.
     + eapply match_cont_globalenv; eauto.
     + inv GE. eapply Pos.le_trans; eauto.
-      clear - MCONT. induction MCONT; cbn in *; eauto. destruct H0. xomega.
+      clear - MCONT. induction MCONT; cbn in *; eauto. inv H; cbn; xomega. destruct H0. xomega.
     + inv GE. eapply Pos.le_trans; eauto.
-      clear - MCONT. induction MCONT; cbn in *; eauto. destruct H0. xomega.
-  - inv H0. inv H. eexists. split.
+      clear - MCONT. induction MCONT; cbn in *; eauto. inv H; cbn; xomega. destruct H0. xomega.
+  - inv H0. destruct H as (wx' & Hwx' & H). inv Hwx'. inv H. inv H10. eexists. split.
     + econstructor; eauto.
-    + econstructor; eauto. intro.
+    + econstructor; eauto.
       intros. apply match_cont_incr_bounds with (Mem.nextblock m) (Mem.nextblock tm).
       eapply match_cont_extcall; eauto. xomega. xomega.
       eapply Mem.unchanged_on_nextblock; eauto.
@@ -2268,7 +2266,7 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation cc_injp cc_inj (semantics1 prog) (semantics2 tprog).
+  forward_simulation (cc_c injp) (cc_c inj) (semantics1 prog) (semantics2 tprog).
 Proof.
   fsim eapply forward_simulation_plus.
   { intros. destruct Hse, H. cbn in *.
@@ -2276,7 +2274,7 @@ Proof.
     intros _ [|] [|] Hf; monadInv Hf; auto. }
   apply initial_states_simulation; eauto.
   apply final_states_simulation; eauto.
-  apply external_states_simulation; eauto.
+  intros. cbn. eapply external_states_simulation; eauto.
   apply step_simulation; eauto.
 Qed.
 

@@ -26,12 +26,12 @@ Variant inj_incr: relation inj_world :=
     Pos.le nb2 nb2' ->
     inj_incr (injw f nb1 nb2) (injw f' nb1' nb2').
 
-Variant inj_stbls: klr inj_world Genv.symtbl Genv.symtbl :=
-  inj_stbls_intro f nb1 nb2 se1 se2:
-    Genv.match_stbls f se1 se2 ->
-    Pos.le (Genv.genv_next se1) nb1 ->
-    Pos.le (Genv.genv_next se2) nb2 ->
-    inj_stbls (injw f nb1 nb2) se1 se2.
+Record inj_stbls (w: inj_world) (se1 se2: Genv.symtbl): Prop :=
+  {
+    inj_stbls_match: Genv.match_stbls (injw_meminj w) se1 se2;
+    inj_stbls_next_l: Pos.le (Genv.genv_next se1) (injw_next_l w);
+    inj_stbls_next_r: Pos.le (Genv.genv_next se2) (injw_next_r w);
+  }.
 
 Variant inj_mem: klr inj_world mem mem :=
   inj_mem_intro f m1 m2:
@@ -69,10 +69,10 @@ Global Instance inj_stbls_subrel:
   Monotonic inj_stbls (inj_incr ++> subrel).
 Proof.
   intros w w' Hw se1 se2 Hse.
-  destruct Hse; inv Hw.
-  constructor; try xomega.
+  destruct Hse; inv Hw. cbn in *.
+  constructor; cbn; try xomega.
   eapply Genv.match_stbls_incr; eauto.
-  intros. edestruct H6; eauto. xomega.
+  intros. edestruct H0; eauto. xomega.
 Qed.
 
 Instance inj_proj_incr:
@@ -123,7 +123,7 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  destruct H. inv H0. xomega.
+  destruct H. inv H0; cbn in *. xomega.
 Qed.
 
 Next Obligation. (* Mem.alloc *)
@@ -488,28 +488,4 @@ Proof.
         }
         edestruct SEP23'; eauto. 
     + cbn. rstep; auto.
-Qed.
-
-
-(** * Connection to [cc_inj] *)
-
-Lemma cc_c_inj:
-  cceqv (cc_c inj) cc_inj.
-Proof.
-  split.
-  - red. intros [f nb1 nb2] se1 se2 q1 q2 Hse Hq. cbn in *.
-    inv Hse. inv Hq. cbn in *. inv H1.
-    eexists (mit _ _ _). repeat apply conj.
-    + constructor; eauto.
-    + constructor; eauto.
-    + intros r1 r2 Hr. inv Hr. inv H1. cbn in *.
-      eexists. split; repeat (constructor; eauto).
-  - red. intros [f nb1 nb2] se1 se2 q1 q2 Hse Hq. cbn in *.
-    inv Hse. inv Hq. cbn in *.
-    eexists. repeat apply conj.
-    + constructor; eauto.
-    + constructor; eauto.
-      constructor; eauto.
-    + intros r1 r2 (w' & Hw' & Hr). inv Hw'. inv Hr. inv H3. cbn in *.
-      eexists; eauto. constructor; eauto.
 Qed.

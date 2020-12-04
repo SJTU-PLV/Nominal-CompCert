@@ -18,7 +18,7 @@ Require Import FSets.
 Require Import Coqlib Ordered Maps Errors Integers Floats.
 Require Import AST Linking Lattice Kildall.
 Require Import Values Memory Globalenvs Events Smallstep.
-Require Import LanguageInterface Invariant.
+Require Import LanguageInterface Invariant cklr.Extends.
 Require Archi.
 Require Import Op Registers RTL Locations Conventions RTLtyping LTL.
 Require Import Allocation.
@@ -2470,15 +2470,15 @@ Proof.
 Qed.
 
 Lemma initial_states_simulation:
-  forall q1 q2 st1,
-    match_query (cc_ext @ cc_alloc) (se, tt, (base_sg, base_rs)) q1 q2 ->
+  forall w q1 q2 st1,
+    match_query (cc_c ext @ cc_alloc) (se, w, (base_sg, base_rs)) q1 q2 ->
     RTL.initial_state ge q1 st1 ->
     Val.has_type_list (cq_args q1) (sig_args (cq_sg q1)) ->
   exists st2, LTL.initial_state tge q2 st2 /\ match_states st1 st2.
 Proof.
-  intros q1 q2 st1 (qi & Hq1i & Hqi2) Hst1 Hwt.
-  destruct Hq1i; cbn in *. inversion Hqi2; clear Hqi2. subst sg0 sg. subst.
-  inv Hst1.
+  intros w q1 q2 st1 (qi & Hq1i & Hqi2) Hst1 Hwt.
+  destruct Hq1i. CKLR.uncklr. destruct H as [vf|]; try congruence.
+  inversion Hqi2; clear Hqi2. subst sg0 sg. subst. inv Hst1.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   exploit sig_function_translated; eauto. intros SIG.
   monadInv TR. subst tf. cbn in *. rewrite <- SIG.
@@ -2492,18 +2492,19 @@ Lemma final_states_simulation:
   forall st1 st2 r1, match_states st1 st2 -> RTL.final_state st1 r1 ->
   exists r2,
     LTL.final_state st2 r2 /\
-    match_reply (cc_ext @ cc_alloc) (se, tt, (base_sg, base_rs)) r1 r2.
+    match_reply (cc_c ext @ cc_alloc) (se, tt, (base_sg, base_rs)) r1 r2.
 Proof.
   intros. inv H0. inv H. inv STACKS.
   destruct sg, base_sg. cbn in *. subst. auto.
   eexists; split. econstructor; eauto.
-  eexists; split; econstructor; eauto.
+  eexists; split. exists tt; split; constructor; CKLR.uncklr; eauto.
+  econstructor; eauto.
 Qed.
 
 Lemma external_states_simulation:
   forall st1 st2 q1, match_states st1 st2 -> RTL.at_external ge st1 q1 ->
-  exists w q2, LTL.at_external tge st2 q2 /\ match_query (cc_ext @ cc_alloc) w q1 q2 /\
-  forall r1 r2 st1', match_reply (cc_ext @ cc_alloc) w r1 r2 -> RTL.after_external st1 r1 st1' ->
+  exists w q2, LTL.at_external tge st2 q2 /\ match_query (cc_c ext @ cc_alloc) w q1 q2 /\
+  forall r1 r2 st1', match_reply (cc_c ext @ cc_alloc) w r1 r2 -> RTL.after_external st1 r1 st1' ->
     Val.has_type (cr_retval r1) (proj_sig_res (cq_sg q1)) ->
   exists st2', LTL.after_external st2 r2 st2' /\ match_states st1' st2'.
 Proof.
@@ -2515,10 +2516,10 @@ Proof.
   exists (se, tt, (sg, ls)), (lq tvf sg ls m'). intuition idtac; cbn in *.
   - econstructor; eauto.
   - destruct LF; try discriminate.
-    eexists; split; econstructor; eauto.
+    eexists; split; econstructor; CKLR.uncklr; eauto.
     destruct v; cbn in *; congruence.
-  - destruct H as (ri & Hr1i & Hri2).
-    inv H0. inv Hr1i. inv Hri2. eexists; split; econstructor; eauto.
+  - destruct H as (ri & ([ ] & _ & Hr1i) & Hri2).
+    inv H0. inv Hr1i. inv Hri2. eexists; split; econstructor; CKLR.uncklr; eauto.
     intros l Hl. transitivity (ls l); eauto.
 Qed.
 
@@ -2539,7 +2540,7 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (wt_c @ cc_ext @ cc_alloc) (wt_c @ cc_ext @ cc_alloc)
+  forward_simulation (wt_c @ cc_c ext @ cc_alloc) (wt_c @ cc_c ext @ cc_alloc)
     (RTL.semantics prog) (LTL.semantics tprog).
 Proof.
   intros MATCH.
@@ -2548,7 +2549,8 @@ Proof.
   set (ms := fun se '(sg, rs) s s' => match_states prog tprog se sg rs s s').
   fsim eapply forward_simulation_plus with (match_states := ms se1 (snd w));
     cbn -[wt_c] in *; subst; destruct w as [[xse [ ]] [sg rs]], Hse; subst.
-- intros q1 q2 Hq. destruct Hq as (_ & [ ] & Hqi2). inv Hqi2. cbn.
+- intros q1 q2 Hq. destruct Hq as (_ & [ ] & Hqi2). inv Hqi2.
+  CKLR.uncklr. destruct H as [vf|]; try congruence. cbn.
   eapply (Genv.is_internal_transf_partial_id MATCH).
   intros [|] ? Hf; monadInv Hf; auto.
 - intros q1 q2 s1 Hq (Hs1 & [xse xsg] & Hxse & [Hxsg Hargs] & WT). subst.
@@ -2556,7 +2558,7 @@ Proof.
 - intros s1 s2 r1 Hs (Hs1 & [xse xsg] & Hxse & Hr1 & WTr1). cbn in *. subst.
   edestruct final_states_simulation as (? & ? & ?); eauto.
 - cbn. intros s1 s2 q1 Hs (Hq1 & [xse xsg] & [? ?] & ? & WTs1 & ? & WT). subst.
-  edestruct external_states_simulation as ([[? ?] wA] & q2 & Hq2 & Hq & Hr); eauto.
+  edestruct external_states_simulation as ([[? [ ]] wA] & q2 & Hq2 & Hq & Hr); eauto.
   eexists (_, tt, wA), q2. cbn. repeat apply conj; eauto.
   intros r1 r2 s1' Hr12 (? & [? ?] & [? ?] & ? & ? & ? & ? & [? ?] & ? & ?).
   subst. inv Hq1. inv H1. cbn in *. assert (sg1 = sg0) by congruence. subst.

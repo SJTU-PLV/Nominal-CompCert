@@ -1,5 +1,5 @@
 Require Import Coqlib Mapsrel.
-Require Import AST Integers Valuesrel Eventsrel CKLR Smallstep.
+Require Import AST Integers Valuesrel Eventsrel CKLR LanguageInterface Smallstep.
 Require Import Op Registersrel.
 Require Export RTL.
 

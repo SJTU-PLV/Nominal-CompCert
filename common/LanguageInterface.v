@@ -4,6 +4,7 @@ Require Import Values.
 Require Import Memory.
 Require Import Globalenvs.
 Require Import Events.
+Require Import CKLR.
 
 (** * Semantic interface of languages *)
 
@@ -136,149 +137,37 @@ Canonical Structure li_c :=
 
 (** ** Simulation conventions *)
 
-(** *** Memory extensions *)
+(** Every CKLR defines as simulation convention for the C language
+  interface in the following way. This is used in particular to show
+  that key languages (Clight and RTL) self-simulate under any CKLR.
+  In [some other place], we show that instances for the [inj] and
+  [injp] CKLRs are equivalent to the corresponding simulation
+  conventions used to verify the compiler. *)
 
-Inductive cc_ext_query: c_query -> c_query -> Prop :=
-  cc_ext_query_intro vf sg vargs1 vargs2 m1 m2:
-    Val.lessdef_list vargs1 vargs2 ->
-    Mem.extends m1 m2 ->
-    vf <> Vundef ->
-    cc_ext_query (cq vf sg vargs1 m1) (cq vf sg vargs2 m2).
+Inductive cc_c_query R (w: world R): relation c_query :=
+  | cc_c_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
+      Val.inject (mi R w) vf1 vf2 ->
+      Val.inject_list (mi R w) vargs1 vargs2 ->
+      match_mem R w m1 m2 ->
+      vf1 <> Vundef ->
+      cc_c_query R w (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
 
-Inductive cc_ext_reply: c_reply -> c_reply -> Prop :=
-  cc_ext_reply_intro vres1 vres2 m1 m2:
-    Val.lessdef vres1 vres2 ->
-    Mem.extends m1 m2 ->
-    cc_ext_reply (cr vres1 m1) (cr vres2 m2).
+Inductive cc_c_reply R (w: world R): relation c_reply :=
+  | cc_c_reply_intro vres1 vres2 m1 m2:
+      Val.inject (mi R w) vres1 vres2 ->
+      match_mem R w m1 m2 ->
+      cc_c_reply R w (cr vres1 m1) (cr vres2 m2).
 
-Program Definition cc_ext :=
+Program Definition cc_c (R: cklr): callconv li_c li_c :=
   {|
-    ccworld := unit;
-    match_senv w := eq;
-    match_query w := cc_ext_query;
-    match_reply w := cc_ext_reply;
-  |}.
-Solve All Obligations with
-  cbn; intros; subst; auto.
-
-(** *** Memory injections *)
-
-(** Memory injections with thresholds *)
-
-Record meminj_thr :=
-  mit {
-    mit_meminj :> block -> option (block * Z);
-    mit_l: block;
-    mit_r: block;
-  }.
-
-Definition mit_incr (w: meminj_thr) (f: meminj): Prop :=
-  inject_incr w f /\
-  forall b1 b2 delta,
-    w b1 = None ->
-    f b1 = Some (b2, delta) ->
-    Pos.le (mit_l w) b1 /\
-    Pos.le (mit_r w) b2.
-
-Inductive cc_inj_senv (f: meminj_thr) (se1 se2: Genv.symtbl): Prop :=
-  cc_inj_senv_intro:
-    Genv.match_stbls f se1 se2 ->
-    Pos.le (Genv.genv_next se1) (mit_l f) ->
-    Pos.le (Genv.genv_next se2) (mit_r f) ->
-    cc_inj_senv f se1 se2.
-
-Inductive cc_inj_query: meminj_thr -> c_query -> c_query -> Prop :=
-  cc_inj_query_intro f vf1 vf2 sg vargs1 vargs2 m1 m2:
-    Val.inject f vf1 vf2 ->
-    Val.inject_list f vargs1 vargs2 ->
-    Mem.inject f m1 m2 ->
-    vf1 <> Vundef ->
-    cc_inj_query
-      (mit f (Mem.nextblock m1) (Mem.nextblock m2))
-      (cq vf1 sg vargs1 m1)
-      (cq vf2 sg vargs2 m2).
-
-Inductive cc_inj_reply (f: meminj_thr): c_reply -> c_reply -> Prop :=
-  cc_inj_reply_intro f' vres1 vres2 m1 m2:
-    mit_incr f f' ->
-    Val.inject f' vres1 vres2 ->
-    Mem.inject f' m1 m2 ->
-    Pos.le (mit_l f) (Mem.nextblock m1) ->
-    Pos.le (mit_r f) (Mem.nextblock m2) ->
-    cc_inj_reply f (cr vres1 m1) (cr vres2 m2).
-
-Program Definition cc_inj :=
-  {|
-    match_senv := cc_inj_senv;
-    match_query := cc_inj_query;
-    match_reply := cc_inj_reply;
+    ccworld := world R;
+    match_senv := match_stbls R;
+    match_query := cc_c_query R;
+    match_reply := (<> cc_c_reply R)%klr;
   |}.
 Next Obligation.
-  intros. destruct H. rewrite (Genv.mge_public H); auto.
+  intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
 Qed.
 Next Obligation.
-  intros. destruct H. eapply Genv.valid_for_match; eauto.
-Qed.
-
-Lemma mit_incr_refl w:
-  mit_incr w w.
-Proof.
-  split.
-  - apply inject_incr_refl.
-  - congruence.
-Qed.
-
-Lemma cc_inj_match_stbls w j se1 se2:
-  cc_inj_senv w se1 se2 ->
-  mit_incr w j ->
-  Genv.match_stbls j se1 se2.
-Proof.
-  intros Hse [Hj SEP]. destruct Hse. cbn in *.
-  eapply Genv.match_stbls_incr; eauto.
-  intros. edestruct SEP; eauto. xomega.
-Qed.
-
-(** *** Injections with footprint enforcement *)
-
-Record cc_injp_world :=
-  injpw { injp_inj :> meminj; injp_m1: mem; injp_m2: mem }.
-
-Inductive cc_injp_stbls: cc_injp_world -> Genv.symtbl -> Genv.symtbl -> Prop :=
-  cc_injp_stbls_intro f m1 m2 se1 se2:
-    Genv.match_stbls f se1 se2 ->
-    Pos.le (Genv.genv_next se1) (Mem.nextblock m1) ->
-    Pos.le (Genv.genv_next se2) (Mem.nextblock m2) ->
-    cc_injp_stbls (injpw f m1 m2) se1 se2.
-
-Inductive cc_injp_query: cc_injp_world -> c_query -> c_query -> Prop :=
-  cc_injp_query_intro f vf1 vf2 sg vargs1 vargs2 m1 m2:
-    Val.inject f vf1 vf2 ->
-    Val.inject_list f vargs1 vargs2 ->
-    Mem.inject f m1 m2 ->
-    vf1 <> Vundef ->
-    cc_injp_query (injpw f m1 m2) (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
-
-Inductive cc_injp_reply: cc_injp_world -> c_reply -> c_reply -> Prop :=
-  cc_injp_reply_intro f m1 m2 f' vres1 vres2 m1' m2':
-    Val.inject f' vres1 vres2 ->
-    Mem.inject f' m1' m2' ->
-    Mem.unchanged_on (loc_unmapped f) m1 m1' ->
-    Mem.unchanged_on (loc_out_of_reach f m1) m2 m2' ->
-    inject_incr f f' ->
-    inject_separated f f' m1 m2 ->
-    (forall b ofs p, Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p) ->
-    (forall b ofs p, Mem.valid_block m2 b -> Mem.perm m2' b ofs Max p -> Mem.perm m2 b ofs Max p) ->
-    cc_injp_reply (injpw f m1 m2) (cr vres1 m1') (cr vres2 m2').
-
-Program Definition cc_injp :=
-  {|
-    match_senv := cc_injp_stbls;
-    match_query := cc_injp_query;
-    match_reply := cc_injp_reply;
-  |}.
-Next Obligation.
-  intros. inv H. erewrite Genv.mge_public; eauto.
-Qed.
-Next Obligation.
-  intros. inv H. eapply Genv.valid_for_match; eauto.
+  intros. eapply match_stbls_proj in H. eapply Genv.valid_for_match; eauto.
 Qed.

@@ -16,7 +16,7 @@ Require Import FunInd.
 Require Import Coqlib Maps.
 Require Import AST Linking Errors Integers.
 Require Import Values Memory Builtins Events Globalenvs Smallstep.
-Require Import LanguageInterface Invariant.
+Require Import LanguageInterface Invariant cklr.Extends.
 Require Import Switch Cminor Op CminorSel Cminortyping.
 Require Import SelectOp SelectDiv SplitLong SelectLong Selection.
 Require Import SelectOpproof SelectDivproof SplitLongproof SelectLongproof.
@@ -1407,10 +1407,11 @@ Proof.
 Qed.
 
 Lemma sel_initial_states:
-  forall q1 q2 S, cc_ext_query q1 q2 -> Cminor.initial_state ge q1 S ->
+  forall w q1 q2 S, match_query (cc_c ext) w q1 q2 -> Cminor.initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states S R.
 Proof.
-  intros _ _ S [vf sg vargs1 vargs2 m1 m2 Hvargs Hm] Hq1. inv Hq1.
+  intros [ ] _ _ S [vf sg vargs1 vargs2 m1 m2 Hvargs Hm] Hq1. inv Hq1.
+  CKLR.uncklr.
   exploit functions_translated; eauto. intros (cu & f' & A & B & C).
   setoid_rewrite <- (sig_function_translated _ (Internal f) f'); eauto.
   econstructor; split.
@@ -1422,36 +1423,37 @@ Qed.
 
 Lemma sel_external_states:
   forall S R q1, match_states S R -> Cminor.at_external ge S q1 ->
-  exists q2, at_external tge R q2 /\ cc_ext_query q1 q2 /\ se = se /\
-  forall r1 r2 S', cc_ext_reply r1 r2 -> Cminor.after_external S r1 S' ->
+  exists wx q2, at_external tge R q2 /\ match_query (cc_c ext) wx q1 q2 /\ se = se /\
+  forall r1 r2 S', match_reply (cc_c ext) wx r1 r2 -> Cminor.after_external S r1 S' ->
   exists R', after_external R r2 R' /\ match_states S' R'.
 Proof.
   intros. inv H0. inv H.
   2: { assert (ef = EF_external name sg) by congruence; subst. discriminate. }
   eapply functions_translated in H1 as (cu & f'' & A & B & C); eauto.
-  eexists. intuition idtac.
+  eexists tt, _. intuition idtac.
   - rewrite A in TFIND. inv TFIND. destruct B as (hf & Hhf & B). monadInv B.
     econstructor; eauto.
   - destruct LF; try discriminate.
-    econstructor; eauto.
+    econstructor; CKLR.uncklr; eauto.
     destruct v; cbn in *; congruence.
-  - destruct H. inv H0.
+  - destruct H as ([ ] & _ & H). destruct H. CKLR.uncklr. inv H0.
     eexists; split; econstructor; eauto.
 Qed.
 
 Lemma sel_final_states:
-  forall S R r1, match_states S R -> Cminor.final_state S r1 ->
-  exists r2, final_state R r2 /\ cc_ext_reply r1 r2.
+  forall w S R r1, match_states S R -> Cminor.final_state S r1 ->
+  exists r2, final_state R r2 /\ match_reply (cc_c ext) w r1 r2.
 Proof.
   intros. inv H0. inv H. inv MC.
-  eexists. split; econstructor; eauto.
+  eexists. split. econstructor; eauto.
+  exists tt. split; constructor; CKLR.uncklr; auto.
 Qed.
 
 End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (wt_c @ cc_ext) (wt_c @ cc_ext)
+  forward_simulation (wt_c @ cc_c ext) (wt_c @ cc_c ext)
     (Cminor.semantics prog)
     (CminorSel.semantics tprog).
 Proof.
@@ -1463,15 +1465,16 @@ Proof.
   try destruct Hse; cbn in *.
 - apply (restrict_determinate (Cminor.semantics prog)).
   apply Cminor.semantics_determinate.
-- intros _ _ [ ]. eapply (Genv.is_internal_match_id MATCH); eauto.
+- destruct 1. CKLR.uncklr. destruct H; try congruence.
+  eapply (Genv.is_internal_match_id MATCH).
   destruct 1 as (hf & ? & ?). destruct f; monadInv H3; auto.
 - intros q1 q2 s1 Hq (? & _).
   eapply sel_initial_states; eauto.
 - intros S1 S2 r1 HS (Hr1 & _).
   eapply sel_final_states; eauto.
 - intros S1 S2 q1 HS (Hq1 & _).
-  edestruct sel_external_states as (q2 & Hq2 & Hq & _ & Hr); eauto.
-  exists tt, q2. intuition auto.
+  edestruct sel_external_states as (wx & q2 & Hq2 & Hq & _ & Hr); eauto.
+  exists wx, q2. intuition auto.
   edestruct Hr as (s2' & Hs2' & Hs'); eauto.
 - intros S1 t S2 (A & [? ?] & ? & WT1 & WT2) T1 B. subst.
   exploit sel_step_correct; eauto.

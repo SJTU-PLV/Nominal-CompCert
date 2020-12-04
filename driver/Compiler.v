@@ -404,11 +404,11 @@ Qed.
   introduce any difficulty. *)
 
 Definition cc_backend : callconv li_c Asm.li_asm :=
-  cc_inj @
-  ((vamatch @ cc_ext) @ cc_id) @
-  (vamatch @ cc_ext) @
-  (vamatch @ cc_ext) @
-  (wt_c @ cc_ext @ Conventions.cc_alloc) @
+  cc_c inj @
+  ((vamatch @ cc_c ext) @ cc_id) @
+  (vamatch @ cc_c ext) @
+  (vamatch @ cc_c ext) @
+  (wt_c @ cc_c ext @ Conventions.cc_alloc) @
   Conventions.cc_locset_ext @
   Mach.cc_stacking @
   Asmgenproof0.cc_asmgen.
@@ -418,20 +418,20 @@ Definition cc_backend : callconv li_c Asm.li_asm :=
   absorbed by the [cc_inj] component of [cc_backend], as seen here. *)
 
 Lemma cc_backend_inj:
-  ccref cc_backend (cc_inj @ cc_backend).
+  ccref cc_backend (cc_c inj @ cc_backend).
 Proof.
   unfold cc_backend.
-  rewrite <- (cc_compose_assoc cc_inj cc_inj).
-  rewrite <- cc_c_inj, <- cc_c_compose, <- inj_inj, cc_c_inj.
+  rewrite <- (cc_compose_assoc (cc_c inj) (cc_c inj)).
+  rewrite <- cc_c_compose, <- inj_inj.
   reflexivity.
 Qed.
 
 Lemma cc_backend_ext:
-  ccref cc_backend (cc_ext @ cc_backend).
+  ccref cc_backend (cc_c ext @ cc_backend).
 Proof.
   unfold cc_backend.
-  rewrite <- (cc_compose_assoc cc_ext cc_inj).
-  rewrite <- cc_c_inj, <- cc_c_ext, <- cc_c_compose.
+  rewrite <- (cc_compose_assoc (cc_c ext) (cc_c inj)).
+  rewrite <- cc_c_compose.
   rewrite <- (proj2 ext_inj). reflexivity.
 Qed.
 
@@ -444,10 +444,6 @@ Proof.
   rewrite <- !(cc_compose_assoc _ wt_c).
   rstep; try rauto.
   rewrite !(cc_compose_assoc wt_c).
-  rewrite <- cc_c_inj at 1.
-  rewrite <- cc_c_ext at 1 2 3.
-  rewrite <- (proj1 cc_c_inj).
-  rewrite <- (proj1 cc_c_ext).
   apply (inv_prop _ wt_c).
 Qed.
 
@@ -456,7 +452,7 @@ Qed.
   reduce them to the following, self-composable convention. *)
 
 Definition cc_dom : callconv li_c li_c :=
-  (cc_injp + cc_ext)^{*}.
+  (cc_c injp + cc_c ext)^{*}.
 
 Lemma cc_dom_idemp:
   cceqv (cc_dom @ cc_dom) cc_dom.
@@ -472,7 +468,7 @@ Definition cc_compcert : callconv li_c Asm.li_asm :=
   cc_dom @ cc_backend.
 
 Lemma cc_compcert_injp:
-  ccref (cc_injp @ cc_compcert) cc_compcert.
+  ccref (cc_c injp @ cc_compcert) cc_compcert.
 Proof.
   unfold cc_compcert.
   rewrite <- cc_dom_idemp at 2. rewrite cc_compose_assoc. repeat rstep.
@@ -481,7 +477,7 @@ Proof.
 Qed.
 
 Lemma cc_compcert_ext:
-  ccref (cc_ext @ cc_compcert) cc_compcert.
+  ccref (cc_c ext @ cc_compcert) cc_compcert.
 Proof.
   unfold cc_compcert.
   rewrite <- cc_dom_idemp at 2. rewrite cc_compose_assoc. repeat rstep.
@@ -499,12 +495,6 @@ Proof.
   rstep; try rauto.
   rewrite !(cc_compose_assoc wt_c).
   unfold cc_dom.
-  rewrite <- cc_c_inj at 1.
-  rewrite <- cc_c_injp at 1.
-  rewrite <- cc_c_ext at 1 2 3 4.
-  rewrite <- (proj1 cc_c_inj).
-  rewrite <- (proj1 cc_c_injp).
-  rewrite <- (proj1 cc_c_ext).
   apply (inv_drop _ wt_c).
 Qed.
 
@@ -512,7 +502,7 @@ Qed.
   variety of frontend passes. *)
 
 Lemma compose_injection_pass sem bsem tsem:
-  forward_simulation cc_injp cc_inj sem bsem ->
+  forward_simulation (cc_c injp) (cc_c inj) sem bsem ->
   forward_simulation cc_compcert cc_backend bsem tsem ->
   forward_simulation cc_compcert cc_backend sem tsem.
 Proof.
@@ -523,7 +513,7 @@ Proof.
 Qed.
 
 Lemma compose_extension_pass sem bsem tsem:
-  forward_simulation cc_ext cc_ext sem bsem ->
+  forward_simulation (cc_c ext) (cc_c ext) sem bsem ->
   forward_simulation cc_compcert cc_backend bsem tsem ->
   forward_simulation cc_compcert cc_backend sem tsem.
 Proof.
@@ -534,7 +524,7 @@ Proof.
 Qed.
 
 Lemma compose_selection_pass sem bsem tsem:
-  forward_simulation (wt_c @ cc_ext) (wt_c @ cc_ext) sem bsem ->
+  forward_simulation (wt_c @ cc_c ext) (wt_c @ cc_c ext) sem bsem ->
   forward_simulation cc_compcert cc_backend bsem tsem ->
   forward_simulation cc_compcert cc_backend sem tsem.
 Proof.
@@ -636,7 +626,6 @@ Ltac DestructM :=
   unfold cc_compcert, cc_dom, cc_backend.
   rewrite <- cc_id_star, cc_compose_id_left.
   eapply compose_forward_simulations.
-    rewrite <- cc_c_inj at 1. rewrite <- cc_c_inj.
     eapply RTLrel.semantics_rel.
 
   eapply compose_forward_simulations.
@@ -646,7 +635,6 @@ Ltac DestructM :=
       eapply Renumberproof.transf_program_correct; eassumption.
     repeat eapply compose_forward_simulations.
       eapply Invariant.preserves_fsim. eapply ValueAnalysis.rtl_vamatch.
-      rewrite <- cc_c_ext at 1. rewrite <- cc_c_ext.
         eapply RTLrel.semantics_rel.
         eapply identity_forward_simulation.
   eapply compose_forward_simulations.
@@ -654,14 +642,12 @@ Ltac DestructM :=
     eapply CSEproof.transf_program_correct; eauto.
     eapply compose_forward_simulations.
       eapply Invariant.preserves_fsim. eapply ValueAnalysis.rtl_vamatch.
-      rewrite <- cc_c_ext at 1. rewrite <- cc_c_ext.
       eapply RTLrel.semantics_rel.
   eapply compose_forward_simulations.
     red in M11. destruct optim_redundancy; subst.
     eapply Deadcodeproof.transf_program_correct; eauto.
     eapply compose_forward_simulations.
       eapply Invariant.preserves_fsim. eapply ValueAnalysis.rtl_vamatch.
-      rewrite <- cc_c_ext at 1. rewrite <- cc_c_ext.
       eapply RTLrel.semantics_rel.
   (*
   eapply compose_forward_simulations.

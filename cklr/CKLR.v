@@ -9,7 +9,6 @@ Require Export AST.
 Require Export Valuesrel.
 Require Export Memory.
 Require Export Globalenvs.
-Require Import LanguageInterface.
 
 
 (** * Compcert Kripke simulation relations *)
@@ -996,40 +995,8 @@ Proof.
   induction 1; econstructor; eauto.
 Qed.
 
+(** Translate relations expressed in terms of specific CKLRs to the
+  corresponding CompCert definition. *)
 
-(** * Simulation conventions *)
-
-(** Every CKLR defines as simulation convention for the C language
-  interface in the following way. This is used in particular to show
-  that key languages (Clight and RTL) self-simulate under any CKLR.
-  In [some other place], we show that instances for the [inj] and
-  [injp] CKLRs are equivalent to the corresponding simulation
-  conventions used to verify the compiler. *)
-
-Inductive cc_c_query R (w: world R): relation c_query :=
-  | cc_c_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
-      Val.inject (mi R w) vf1 vf2 ->
-      Val.inject_list (mi R w) vargs1 vargs2 ->
-      match_mem R w m1 m2 ->
-      vf1 <> Vundef ->
-      cc_c_query R w (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
-
-Inductive cc_c_reply R (w: world R): relation c_reply :=
-  | cc_c_reply_intro vres1 vres2 m1 m2:
-      Val.inject (mi R w) vres1 vres2 ->
-      match_mem R w m1 m2 ->
-      cc_c_reply R w (cr vres1 m1) (cr vres2 m2).
-
-Program Definition cc_c (R: cklr): callconv li_c li_c :=
-  {|
-    ccworld := world R;
-    match_senv := match_stbls R;
-    match_query := cc_c_query R;
-    match_reply := (<> cc_c_reply R)%klr;
-  |}.
-Next Obligation.
-  eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
-Qed.
-Next Obligation.
-  eapply match_stbls_proj in H. eapply Genv.valid_for_match; eauto.
-Qed.
+Ltac uncklr :=
+  autorewrite with cklr in *.

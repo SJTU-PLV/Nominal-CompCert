@@ -17,8 +17,9 @@ Require Import FSets FSetAVL Orders Mergesort.
 Require Import Coqlib Maps Ordered Errors Integers Floats.
 Require Intv.
 Require Import AST Linking.
-Require Import Values Memory Events Globalenvs LanguageInterface Smallstep.
+Require Import Values Memory Events Globalenvs Smallstep.
 Require Import Csharpminor Switch Cminor Cminorgen.
+Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.
 
 Local Open Scope error_monad_scope.
 
@@ -36,13 +37,13 @@ Section TRANSLATION.
 Variable prog: Csharpminor.program.
 Variable tprog: program.
 Hypothesis TRANSL: match_prog prog tprog.
-Variable w: meminj_thr.
+Variable w: world inj.
 Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
 Let ge : Csharpminor.genv := Genv.globalenv se prog.
 Let tge: genv := Genv.globalenv tse tprog.
 
-Hypothesis GE: cc_inj_senv w se tse.
+Hypothesis GE: match_stbls inj w se tse.
 
 Lemma functions_translated (j: meminj):
   Genv.match_stbls j se tse ->
@@ -440,8 +441,7 @@ Inductive match_callstack (f: meminj) (m: mem) (tm: mem):
                           callstack -> block -> block -> Prop :=
   | mcs_nil:
       forall bound tbound,
-      mit_incr w f ->
-      Ple (mit_l w) bound -> Ple (mit_r w) tbound ->
+      inj_incr w (injw f bound tbound) ->
       match_callstack f m tm nil bound tbound
   | mcs_cons:
       forall cenv tf e le te sp lo hi cs bound tbound
@@ -462,7 +462,7 @@ Lemma match_callstack_match_globalenvs:
   Genv.match_stbls f se tse.
 Proof.
   induction 1; eauto.
-  eapply cc_inj_match_stbls; eauto.
+  eapply match_stbls_acc in GE; cbn; eauto. apply GE.
 Qed.
 
 (** Invariance properties for [match_callstack]. *)
@@ -480,12 +480,10 @@ Proof.
   induction 1; intros.
   (* base case *)
   econstructor; eauto.
-  destruct H as [Hf1 SEP]. split; eauto using inject_incr_trans.
-  intros. destruct (f1 b1) as [[xb2 xdelta] | ] eqn:Hb1.
-    eapply SEP; eauto. rewrite Hb1. apply H2 in Hb1. rewrite <- Hb1. eauto.
-    destruct (plt b1 bound). rewrite H5 in H7; eauto.
-    destruct (plt b2 tbound). erewrite H6 in Hb1; eauto.
-    xomega.
+  etransitivity; eauto. constructor; eauto using Pos.le_refl. intros.
+  destruct (plt b1 bound). rewrite H3 in H6; eauto. congruence.
+  destruct (plt b2 tbound). erewrite H4 in H5; eauto. congruence.
+  xomega.
   (* inductive case *)
   assert (Ple lo hi) by (eapply me_low_high; eauto).
   econstructor; eauto.
@@ -510,8 +508,8 @@ Lemma match_callstack_incr_bound:
   Ple bound bound' -> Ple tbound tbound' ->
   match_callstack f m tm cs bound' tbound'.
 Proof.
-  intros. inv H.
-  econstructor; eauto. xomega. xomega.
+  intros. inv H. inv H2.
+  econstructor; eauto. rewrite <- H6. econstructor; eauto. xomega. xomega.
   constructor; auto. xomega. xomega.
 Qed.
 
@@ -606,9 +604,9 @@ Proof.
   induction 1; intros.
 (* base case *)
   apply mcs_nil; auto.
-  destruct H as [H SEP]. split. eapply inject_incr_trans; eauto.
+  inv H. constructor; eauto. eapply inject_incr_trans; eauto.
   intros. case_eq (f1 b1).
-  intros [b2' delta'] EQ. rewrite (INCR _ _ _ EQ) in H5. inv H5. eauto.
+  intros [b2' delta'] EQ. rewrite (INCR _ _ _ EQ) in H2. inv H2. eauto.
   intro EQ. exploit SEPARATED; eauto. intros [A B].
   unfold Mem.valid_block in *. inv GE; cbn in *. xomega.
 (* inductive case *)
@@ -2162,37 +2160,38 @@ Opaque PTree.set.
 Qed.
 
 Lemma transl_initial_states:
-  forall q1 q2 S, cc_inj_query w q1 q2 -> Csharpminor.initial_state ge q1 S ->
+  forall q1 q2 S, match_query (cc_c inj) w q1 q2 -> Csharpminor.initial_state ge q1 S ->
   exists R, Cminor.initial_state tge q2 R /\ match_states S R.
 Proof.
   intros q1 q2 S Hq HS.
-  inversion Hq as [f vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm]. clear Hq. subst.
+  inversion Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq. subst.
   inversion HS. clear HS. subst m vargs vf.
   exploit functions_translated; eauto. destruct GE; auto. intros [tf [FIND TR]].
-  setoid_rewrite <- (sig_preserved _ _ TR). monadInv TR. subst tf. cbn.
+  setoid_rewrite <- (sig_preserved _ _ TR). monadInv TR. cbn.
   econstructor; split.
   econstructor; eauto.
-  eapply match_callstate with (f := f) (cs := @nil frame) (cenv := PTree.empty Z); auto.
-  apply mcs_nil.
-  - rewrite <- H0. apply mit_incr_refl.
-  - rewrite <- H0. apply Pos.le_refl.
-  - rewrite <- H0. apply Pos.le_refl.
+  cbn in Hm. inv Hm; cbn in *.
+  eapply match_callstate with (f := f0) (cs := @nil frame) (cenv := PTree.empty Z); auto.
+  - apply mcs_nil. rewrite H0. reflexivity.
   - constructor.
   - red; auto.
 Qed.
 
 Lemma transl_final_states:
   forall S R r1, match_states S R -> Csharpminor.final_state S r1 ->
-  exists r2, Cminor.final_state R r2 /\ cc_inj_reply w r1 r2.
+  exists r2, Cminor.final_state R r2 /\ match_reply (cc_c inj) w r1 r2.
 Proof.
   intros. inv H0. inv H. inv MK. inv MCS.
-  eexists; split. constructor. econstructor; eauto.
+  eexists; split. constructor.
+  eexists; split; eauto.
+  econstructor; eauto.
+  econstructor; eauto.
 Qed.
 
 Lemma transl_external_states:
   forall S R q1, match_states S R -> Csharpminor.at_external ge S q1 ->
-  exists wx q2, Cminor.at_external tge R q2 /\ cc_injp_query wx q1 q2 /\ cc_injp_stbls wx se tse /\
-  forall r1 r2 S', cc_injp_reply wx r1 r2 -> Csharpminor.after_external S r1 S' ->
+  exists wx q2, Cminor.at_external tge R q2 /\ match_query (cc_c injp) wx q1 q2 /\ match_senv (cc_c injp) wx se tse /\
+  forall r1 r2 S', match_reply (cc_c injp) wx r1 r2 -> Csharpminor.after_external S r1 S' ->
   exists R', Cminor.after_external R r2 R' /\ match_states S' R'.
 Proof.
   intros S R q1 HSR Hq1.
@@ -2201,17 +2200,17 @@ Proof.
   eapply functions_translated in H as (tfd & TFIND & TRFD);
     eauto using match_callstack_match_globalenvs.
   monadInv TRFD.
-  eexists _, _. intuition idtac.
+  eexists (injpw f m tm MINJ), _. intuition idtac.
   - econstructor; eauto.
-  - econstructor; eauto.
+  - econstructor; eauto. constructor.
   - constructor; eauto using match_callstack_match_globalenvs.
     + inv GE. eapply Pos.le_trans; eauto.
-      clear - MCS. induction MCS; cbn in *; eauto. destruct MENV. xomega.
+      clear - MCS. induction MCS; cbn in *; eauto. inv H; cbn; auto. destruct MENV. xomega.
     + inv GE. eapply Pos.le_trans; eauto.
-      clear - MCS. induction MCS; cbn in *; eauto. destruct MENV. xomega.
-  - inv H1. inv H. eexists. split.
+      clear - MCS. induction MCS; cbn in *; eauto. inv H; cbn; auto. destruct MENV. xomega.
+  - destruct H as (wx' & Hwx' & H). inv Hwx'. inv H1. inv H. eexists. split.
     + econstructor; eauto.
-    + econstructor; eauto.
+    + inv H9. econstructor; eauto.
       apply match_callstack_incr_bound with (Mem.nextblock m) (Mem.nextblock tm).
       eapply match_callstack_external_call; eauto.
       xomega. xomega.
@@ -2223,7 +2222,7 @@ End TRANSLATION.
 
 Theorem transl_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation cc_injp cc_inj (Csharpminor.semantics prog) (Cminor.semantics tprog).
+  forward_simulation (cc_c injp) (cc_c inj) (Csharpminor.semantics prog) (Cminor.semantics tprog).
 Proof.
   fsim eapply forward_simulation_star.
   { intros q1 q2 Hq. destruct Hq. cbn in *. inv Hse. cbn in *.

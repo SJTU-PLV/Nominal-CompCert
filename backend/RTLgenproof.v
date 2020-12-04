@@ -13,9 +13,10 @@
 (** Correctness proof for RTL generation. *)
 
 Require Import Wellfounded Coqlib Maps AST Linking.
-Require Import Integers Values Memory Events LanguageInterface Smallstep Globalenvs.
+Require Import Integers Values Memory Events Smallstep Globalenvs.
 Require Import Switch Registers Cminor Op CminorSel RTL.
 Require Import RTLgen RTLgenspec.
+Require Import LanguageInterface cklr.CKLR cklr.Extends.
 
 (** * Correspondence between Cminor environments and RTL register sets *)
 
@@ -539,7 +540,7 @@ Proof.
   intros; red; intros. inv TE.
 (* normal case *)
   exploit H0; eauto. intros [rs1 [tm1 [EX1 [ME1 [RR1 [RO1 EXT1]]]]]].
-  edestruct eval_operation_lessdef as [v' []]; eauto.
+  edestruct eval_operation_lessdef as [v' [ ]]; eauto.
   exists (rs1#rd <- v'); exists tm1.
 (* Exec *)
   split. eapply star_right. eexact EX1.
@@ -566,8 +567,8 @@ Lemma transl_expr_Eload_correct:
 Proof.
   intros; red; intros. inv TE.
   exploit H0; eauto. intros [rs1 [tm1 [EX1 [ME1 [RES1 [OTHER1 EXT1]]]]]].
-  edestruct eval_addressing_lessdef as [vaddr' []]; eauto.
-  edestruct Mem.loadv_extends as [v' []]; eauto.
+  edestruct eval_addressing_lessdef as [vaddr' [ ]]; eauto.
+  edestruct Mem.loadv_extends as [v' [ ]]; eauto.
   exists (rs1#rd <- v'); exists tm1.
 (* Exec *)
   split. eapply star_right. eexact EX1. eapply exec_Iload; eauto.
@@ -1307,7 +1308,7 @@ Proof.
   destruct H1.
   assert (fn_stacksize tf = fn_stackspace f).
     inv TF. auto.
-  edestruct Mem.free_parallel_extends as [tm' []]; eauto.
+  edestruct Mem.free_parallel_extends as [tm' [ ]]; eauto.
   econstructor; split.
   left; apply plus_one. eapply exec_Ireturn. eauto.
   rewrite H3. eauto.
@@ -1330,8 +1331,8 @@ Proof.
   assert (Val.lessdef_list vl rs''##rl).
     replace (rs'' ## rl) with (rs' ## rl). auto.
     apply list_map_exten. intros. apply K. auto.
-  edestruct eval_addressing_lessdef as [vaddr' []]; eauto.
-  edestruct Mem.storev_extends as [tm''' []]; eauto.
+  edestruct eval_addressing_lessdef as [vaddr' [ ]]; eauto.
+  edestruct Mem.storev_extends as [tm''' [ ]]; eauto.
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact F. reflexivity.
   eapply exec_Istore with (a := vaddr'); eauto.
@@ -1376,7 +1377,7 @@ Proof.
   exploit functions_translated; eauto. intros [tf' [P Q]].
   exploit match_stacks_call_cont; eauto. intros [U V].
   assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
-  edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
+  edestruct Mem.free_parallel_extends as [tm''' [ ]]; eauto.
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
   eapply exec_Itailcall; eauto. simpl. rewrite J. eauto. simpl; auto.
@@ -1391,7 +1392,7 @@ Proof.
   exploit functions_translated; eauto. intros [tf' [P Q]].
   exploit match_stacks_call_cont; eauto. intros [U V].
   assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
-  edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
+  edestruct Mem.free_parallel_extends as [tm''' [ ]]; eauto.
   econstructor; split.
   left; eapply plus_right. eexact E.
   eapply exec_Itailcall; eauto.
@@ -1477,7 +1478,7 @@ Proof.
   inv TS.
   exploit match_stacks_call_cont; eauto. intros [U V].
   inversion TF.
-  edestruct Mem.free_parallel_extends as [tm' []]; eauto.
+  edestruct Mem.free_parallel_extends as [tm' [ ]]; eauto.
   econstructor; split.
   left; apply plus_one. eapply exec_Ireturn; eauto.
   rewrite H2; eauto.
@@ -1489,7 +1490,7 @@ Proof.
   intros [rs' [tm' [A [B [C [D E]]]]]].
   exploit match_stacks_call_cont; eauto. intros [U V].
   inversion TF.
-  edestruct Mem.free_parallel_extends as [tm'' []]; eauto.
+  edestruct Mem.free_parallel_extends as [tm'' [ ]]; eauto.
   econstructor; split.
   left; eapply plus_right. eexact A. eapply exec_Ireturn; eauto.
   rewrite H4; eauto. traceEq.
@@ -1521,7 +1522,7 @@ Proof.
     assert (map_valid init_mapping s0) by apply init_mapping_valid.
     exploit (add_vars_valid (CminorSel.fn_params f)); eauto. intros [A B].
     eapply add_vars_wf; eauto. eapply add_vars_wf; eauto. apply init_mapping_wf.
-  edestruct Mem.alloc_extends as [tm' []]; eauto; try apply Z.le_refl.
+  edestruct Mem.alloc_extends as [tm' [ ]]; eauto; try apply Z.le_refl.
   econstructor; split.
   left; apply plus_one. eapply exec_function_internal; simpl; eauto.
   simpl. econstructor; eauto.
@@ -1545,10 +1546,10 @@ Proof.
 Qed.
 
 Lemma transl_initial_states:
-  forall q1 q2 S, cc_ext_query q1 q2 -> CminorSel.initial_state ge q1 S ->
+  forall w q1 q2 S, match_query (cc_c ext) w q1 q2 -> CminorSel.initial_state ge q1 S ->
   exists R, RTL.initial_state tge q2 R /\ match_states S R.
 Proof.
-  intros. inv H0. inv H.
+  intros. inv H0. inv H. uncklr.
   exploit functions_translated; eauto. intros [tf [A B]].
   setoid_rewrite <- (sig_transl_function (Internal f)); eauto.
   monadInv B.
@@ -1558,17 +1559,18 @@ Proof.
 Qed.
 
 Lemma transl_final_states:
-  forall S R r1, match_states S R -> CminorSel.final_state S r1 ->
-  exists r2, RTL.final_state R r2 /\ cc_ext_reply r1 r2.
+  forall w S R r1, match_states S R -> CminorSel.final_state S r1 ->
+  exists r2, RTL.final_state R r2 /\ match_reply (cc_c ext) w r1 r2.
 Proof.
   intros. inv H0. inv H. inv MS.
-  eexists; split; constructor; auto.
+  eexists; split. constructor; auto.
+  exists tt. split; constructor; uncklr; auto.
 Qed.
 
 Lemma transl_external_states:
   forall S R q1, match_states S R -> CminorSel.at_external ge S q1 ->
-  exists q2, RTL.at_external tge R q2 /\ cc_ext_query q1 q2 /\ se = se /\
-  forall r1 r2 S', cc_ext_reply r1 r2 -> CminorSel.after_external S r1 S' ->
+  exists q2, RTL.at_external tge R q2 /\ match_query (cc_c ext) tt q1 q2 /\ se = se /\
+  forall r1 r2 S', match_reply (cc_c ext) tt r1 r2 -> CminorSel.after_external S r1 S' ->
   exists R', RTL.after_external R r2 R' /\ match_states S' R'.
 Proof.
   intros. inv H0. inv H.
@@ -1576,20 +1578,22 @@ Proof.
   monadInv TF.
   eexists; intuition idtac.
   - econstructor; eauto.
-  - destruct LF; try discriminate. econstructor; eauto.
+  - destruct LF; try discriminate. econstructor; uncklr; eauto.
     destruct v; cbn in *; congruence.
-  - inv H0. inv H. eexists; split; constructor; eauto.
+  - inv H0. destruct H as ([ ] & _ & H). inv H. uncklr.
+    eexists; split; constructor; eauto.
 Qed.
 
 End CORRECTNESS.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation cc_ext cc_ext (CminorSel.semantics prog) (RTL.semantics tprog).
+  forward_simulation (cc_c ext) (cc_c ext) (CminorSel.semantics prog) (RTL.semantics tprog).
 Proof.
   fsim eapply forward_simulation_star_wf with (order := lt_state);
   intros; try destruct Hse.
-  { destruct H. eapply (Genv.is_internal_transf_partial_id MATCH).
+  { destruct H. CKLR.uncklr. destruct H; try congruence.
+    eapply (Genv.is_internal_transf_partial_id MATCH).
     intros [|] ? Hf; monadInv Hf; auto. }
   eapply transl_initial_states; eauto.
   eapply transl_final_states; eauto.

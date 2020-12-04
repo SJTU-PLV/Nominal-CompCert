@@ -15,11 +15,11 @@
 Require Import Coqlib Maps Integers Floats Lattice Kildall.
 Require Import AST Linking.
 Require Import Values Builtins Events Memory Globalenvs Smallstep.
-Require Import LanguageInterface.
 Require Compopts Machregs.
 Require Import Op Registers RTL.
 Require Import Liveness ValueDomain ValueAOp ValueAnalysis.
 Require Import ConstpropOp ConstpropOpproof Constprop.
+Require Import LanguageInterface cklr.Extends.
 
 Definition match_prog (prog tprog: program) :=
   match_program (fun _ f tf => tf = transf_fundef (romem_for prog) f) eq prog tprog.
@@ -538,10 +538,10 @@ Opaque builtin_strength_reduction.
 Qed.
 
 Lemma transf_initial_states:
-  forall q1 q2 st1, cc_ext_query q1 q2 -> initial_state ge q1 st1 ->
+  forall w q1 q2 st1, match_query (cc_c ext) w q1 q2 -> initial_state ge q1 st1 ->
   exists n, exists st2, initial_state tge q2 st2 /\ match_states n st1 st2.
 Proof.
-  intros. destruct H. inv H0.
+  intros. destruct H. CKLR.uncklr. inv H0. destruct H as [vf | ]; try discriminate.
   exploit functions_translated; eauto. intros FIND.
   exists O; exists (Callstate nil vf vargs2 m2); split.
   - setoid_rewrite <- (sig_function_translated (romem_for prog) (Internal f)).
@@ -552,26 +552,27 @@ Qed.
 Lemma transf_final_states:
   forall n st1 st2 r1,
   match_states n st1 st2 -> final_state st1 r1 ->
-  exists r2, final_state st2 r2 /\ cc_ext_reply r1 r2.
+  exists r2, final_state st2 r2 /\ match_reply (cc_c ext) tt r1 r2.
 Proof.
   intros. inv H0. inv H. inv STACKS.
-  eexists; split; constructor; eauto.
+  eexists; split. constructor; eauto.
+  exists tt; split; constructor; CKLR.uncklr; eauto.
 Qed.
 
 Lemma transf_external_states:
   forall n st1 st2 q1, match_states n st1 st2 -> at_external ge st1 q1 ->
-  exists q2, at_external tge st2 q2 /\ cc_ext_query q1 q2 /\ se = se /\
-  forall r1 r2 st1', cc_ext_reply r1 r2 -> after_external st1 r1 st1' ->
+  exists q2, at_external tge st2 q2 /\ match_query (cc_c ext) tt q1 q2 /\ match_senv (cc_c ext) tt se se /\
+  forall r1 r2 st1', match_reply (cc_c ext) tt r1 r2 -> after_external st1 r1 st1' ->
   exists n' st2', after_external st2 r2 st2' /\ match_states n' st1' st2'.
 Proof.
   intros n st1 st2 q1 Hst Hq1. destruct Hq1. inv Hst.
   exploit functions_translated; eauto. intro FIND'.
-  eexists. intuition idtac.
+  eexists. cbn. intuition idtac.
   - econstructor; eauto.
   - destruct VF; try discriminate.
-    constructor; auto.
+    constructor; CKLR.uncklr; auto.
     destruct v; cbn in *; congruence.
-  - inv H1. inv H0.
+  - inv H1. destruct H0 as ([ ] & _ & H0). inv H0. CKLR.uncklr.
     eexists _, (Returnstate s' vres2 m2); split; constructor; eauto.
 Qed.
 
@@ -584,12 +585,13 @@ Require Import Invariant.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (vamatch @ cc_ext) (vamatch @ cc_ext) (RTL.semantics prog) (RTL.semantics tprog).
+  forward_simulation (vamatch @ cc_c ext) (vamatch @ cc_c ext) (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
   intros MATCH. eapply source_invariant_fsim; eauto using rtl_vamatch. revert MATCH.
   fsim (eapply Build_fsim_properties with (order := lt) (match_states := match_states prog));
     try destruct Hse; cbn.
-- destruct 1. cbn. eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
+- destruct 1. cbn. CKLR.uncklr. destruct H; try congruence.
+  eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
 - intros q1 q2 s1 Hq (Hs1 & _).
   eapply transf_initial_states; eauto.
 - intros n s1 s2 r1 Hs (Hr1 & _).

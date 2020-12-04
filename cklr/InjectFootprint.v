@@ -439,22 +439,3 @@ Proof.
         (* XXX now we can, if we need to. *)
 Abort.
 *)
-
-
-(** * Correspondance with [cc_injp] *)
-
-Lemma cc_c_injp:
-  cceqv (cc_c injp) cc_injp.
-Proof.
-  split.
-  - red. intros w se1 se2 q1 q2 Hse Hq.
-    destruct Hq. inv H1. cbn in *. inv Hse.
-    exists (LanguageInterface.injpw f m1 m2). repeat (constructor; cbn; eauto).
-    intros r1 r2 Hr. inv Hr.
-    exists (injpw f' m1' m2' H7). repeat (constructor; cbn; eauto).
-  - red. intros w se1 se2 q1 q2 Hse Hq.
-    destruct Hq. inv Hse. cbn in *.
-    exists (injpw f m1 m2 H1). repeat (constructor; cbn; eauto).
-    intros r1 r2 (w' & Hw' & Hr). inv Hw'. inv Hr. inv H4. red in H7.
-    econstructor; eauto.
-Qed.

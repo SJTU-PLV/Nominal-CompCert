@@ -179,6 +179,29 @@ Next Obligation.
 Qed.
 
 
+(** * Useful lemmas *)
+
+Lemma ext_lessdef w v1 v2:
+  Val.inject (mi ext w) v1 v2 <-> Val.lessdef v1 v2.
+Proof.
+  symmetry. apply val_inject_lessdef.
+Qed.
+
+Lemma ext_lessdef_list w vs1 vs2:
+  Val.inject_list (mi ext w) vs1 vs2 <-> Val.lessdef_list vs1 vs2.
+Proof.
+  split; induction 1; constructor; auto; apply val_inject_lessdef; auto.
+Qed.
+
+Lemma ext_extends w m1 m2:
+  match_mem ext w m1 m2 <-> Mem.extends m1 m2.
+Proof.
+  reflexivity.
+Qed.
+
+Hint Rewrite ext_lessdef ext_lessdef_list ext_extends : cklr.
+
+
 (** * Composition theorems *)
 
 Require Import CKLRAlgebra.
@@ -284,30 +307,4 @@ Proof.
         constructor; auto.
         eapply Mem.inject_extends_compose; eauto.
       * rewrite compose_meminj_id_right. apply inject_incr_refl.
-Qed.
-
-
-(** * Connection to [cc_ext] *)
-
-Lemma cc_c_ext:
-  cceqv (cc_c ext) cc_ext.
-Proof.
-  split.
-  - red. intros [ ] se1 se2 q1 q2 Hse Hq. cbn in *.
-    destruct Hq. cbn in *.
-    apply val_inject_id in H. assert (vf1 = vf2) by (destruct H; congruence); subst.
-    apply val_inject_list_lessdef in H0.
-    exists tt. repeat apply conj; auto.
-    + constructor; auto.
-    + intros r1 r2 Hr. destruct Hr.
-      apply val_inject_id in H3.
-      exists tt. split; repeat (constructor; eauto).
-  - red. intros [ ] se1 se2 q1 q2 Hse Hq. cbn in *.
-    destruct Hq. cbn in *.
-    apply val_inject_list_lessdef in H.
-    exists tt. repeat apply conj; auto.
-    + constructor; eauto. reflexivity.
-    + intros r1 r2 ([ ] & _ & Hr). destruct Hr. cbn in *.
-      apply val_inject_id in H2.
-      eexists; eauto.
 Qed.
