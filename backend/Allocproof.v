@@ -2471,7 +2471,7 @@ Qed.
 
 Lemma initial_states_simulation:
   forall w q1 q2 st1,
-    match_query (cc_c ext @ cc_alloc) (se, w, (base_sg, base_rs)) q1 q2 ->
+    match_query (cc_c ext @ cc_c_locset) (se, w, (base_sg, base_rs)) q1 q2 ->
     RTL.initial_state ge q1 st1 ->
     Val.has_type_list (cq_args q1) (sig_args (cq_sg q1)) ->
   exists st2, LTL.initial_state tge q2 st2 /\ match_states st1 st2.
@@ -2492,7 +2492,7 @@ Lemma final_states_simulation:
   forall st1 st2 r1, match_states st1 st2 -> RTL.final_state st1 r1 ->
   exists r2,
     LTL.final_state st2 r2 /\
-    match_reply (cc_c ext @ cc_alloc) (se, tt, (base_sg, base_rs)) r1 r2.
+    match_reply (cc_c ext @ cc_c_locset) (se, tt, (base_sg, base_rs)) r1 r2.
 Proof.
   intros. inv H0. inv H. inv STACKS.
   destruct sg, base_sg. cbn in *. subst. auto.
@@ -2503,8 +2503,8 @@ Qed.
 
 Lemma external_states_simulation:
   forall st1 st2 q1, match_states st1 st2 -> RTL.at_external ge st1 q1 ->
-  exists w q2, LTL.at_external tge st2 q2 /\ match_query (cc_c ext @ cc_alloc) w q1 q2 /\
-  forall r1 r2 st1', match_reply (cc_c ext @ cc_alloc) w r1 r2 -> RTL.after_external st1 r1 st1' ->
+  exists w q2, LTL.at_external tge st2 q2 /\ match_query (cc_c ext @ cc_c_locset) w q1 q2 /\
+  forall r1 r2 st1', match_reply (cc_c ext @ cc_c_locset) w r1 r2 -> RTL.after_external st1 r1 st1' ->
     Val.has_type (cr_retval r1) (proj_sig_res (cq_sg q1)) ->
   exists st2', LTL.after_external st2 r2 st2' /\ match_states st1' st2'.
 Proof.
@@ -2540,7 +2540,7 @@ End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (wt_c @ cc_c ext @ cc_alloc) (wt_c @ cc_c ext @ cc_alloc)
+  forward_simulation (wt_c @ cc_c ext @ cc_c_locset) (wt_c @ cc_c ext @ cc_c_locset)
     (RTL.semantics prog) (LTL.semantics tprog).
 Proof.
   intros MATCH.
