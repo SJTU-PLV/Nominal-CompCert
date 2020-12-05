@@ -153,10 +153,10 @@ Inductive cc_c_query R (w: world R): relation c_query :=
       cc_c_query R w (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
 
 Inductive cc_c_reply R (w: world R): relation c_reply :=
-  | cc_c_reply_intro vres1 vres2 m1 m2:
+  | cc_c_reply_intro vres1 vres2 m1' m2':
       Val.inject (mi R w) vres1 vres2 ->
-      match_mem R w m1 m2 ->
-      cc_c_reply R w (cr vres1 m1) (cr vres2 m2).
+      match_mem R w m1' m2' ->
+      cc_c_reply R w (cr vres1 m1') (cr vres2 m2').
 
 Program Definition cc_c (R: cklr): callconv li_c li_c :=
   {|

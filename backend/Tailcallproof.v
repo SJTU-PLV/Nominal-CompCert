@@ -585,7 +585,7 @@ Proof.
     constructor; CKLR.uncklr; auto.
     destruct v; cbn in *; congruence.
   - inv H1. destruct H0 as ([ ] & [ ] & H0). inv H0. CKLR.uncklr.
-    exists (Returnstate s' vres2 m2); split; constructor; eauto.
+    exists (Returnstate s' vres2 m2'); split; constructor; eauto.
 Qed.
 
 End PRESERVATION.
