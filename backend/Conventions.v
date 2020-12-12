@@ -162,7 +162,136 @@ Qed.
 
 (** * Language interface for locations *)
 
-(** Languages with [locset]s (currently LTL and Linear) use the
+(** ** External locations *)
+
+(** Locset-based languages keep independent instances of the location
+  set for each stack frame. The preservation of callee-save registers
+  is expressed as part of the semantics itself, which restores the
+  callee-save locations when they transition to [Returnstate]s
+  (see also [LTL.return_regs]). In fact, at interaction points, LTL
+  programs emitted by the Alloc pass are only sensitive to the values
+  of locations used to pass incoming arguments, and those used to
+  return the results of outgoing calls. Hence, since we don't need or
+  want to precisely model the linking of arbitrary LTL programs, we do
+  not pass the values of other locations explicitly across modules.
+  Instead, components can harmlessly approximate them with [Vundef]
+  and simulation conventions can leave them unconstrained.
+
+  For queries, the set of relevant locations is specified by the
+  following predicate. *)
+
+Inductive loc_external (sg : signature) : loc -> Prop :=
+  | loc_external_reg r:
+      loc_external sg (R r)
+  | loc_external_arg ofs ty:
+      In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
+      loc_external sg (S Outgoing ofs ty).
+
+Definition loc_is_external (sg : signature) (l : loc) : bool :=
+  match l with
+    | R _ =>
+      true
+    | S Outgoing ofs ty =>
+      if in_dec Loc.eq l (regs_of_rpairs (loc_arguments sg)) then true else false
+    | _ =>
+      false
+  end.
+
+Lemma loc_external_is sg l :
+  loc_external sg l <-> loc_is_external sg l = true.
+Proof.
+  unfold loc_is_external. split.
+  - destruct 1; auto. destruct in_dec; auto; contradiction.
+  - destruct l as [ | [ ]]; try discriminate; constructor.
+    destruct in_dec; congruence.
+Qed.
+
+(** After a query is received, the location state is initialized for
+  those locations only, using the following construction. *)
+
+Definition initial_regs (sg : signature) (ls : Locmap.t) (l : loc) : val :=
+  if loc_is_external sg l then ls l else Vundef.
+
+Lemma external_initial_regs sg rs l:
+  loc_external sg l ->
+  initial_regs sg rs l = rs l.
+Proof.
+  intros Hl. apply loc_external_is in Hl.
+  unfold initial_regs. rewrite Hl. auto.
+Qed.
+
+Lemma getpair_initial_regs sg rs p:
+  forall_rpair (loc_external sg) p ->
+  Locmap.getpair p (initial_regs sg rs) = Locmap.getpair p rs.
+Proof.
+  intros Hp. destruct p; cbn in *; auto using external_initial_regs.
+  destruct Hp. f_equal; auto using external_initial_regs.
+Qed.
+
+(** A similar phenomenon occurs when external calls return. *)
+
+Definition result_regs (sg : signature) (caller callee : Locmap.t) (l : loc) : val :=
+  match l with
+    | R r =>
+      if in_dec mreg_eq r (regs_of_rpair (loc_result sg)) then callee (R r) else
+      if is_callee_save r then caller (R r) else
+      Vundef
+    | S Outgoing _ _ =>
+      Vundef
+    | _ =>
+      caller l
+  end.
+
+Lemma get_result_regs_result sg caller callee:
+  Locmap.getpair (map_rpair R (loc_result sg)) (result_regs sg caller callee) =
+  Locmap.getpair (map_rpair R (loc_result sg)) callee.
+Proof.
+  unfold result_regs. destruct (loc_result sg); cbn [map_rpair Locmap.getpair].
+  - destruct in_dec; cbn in * |- ; intuition congruence.
+  - destruct in_dec, in_dec; cbn in * |- ; intuition congruence.
+Qed.
+
+(** With the approach outlined above, simulation conventions only need
+  to constrain external locations. The following relator is used. *)
+
+Definition loc_external_rel sg (Rv: relation val) (ls1 ls2: Locmap.t): Prop :=
+  forall l, loc_external sg l -> Rv (ls1 l) (ls2 l).
+
+Definition loc_result_rel sg (Rv: relation val) (ls1 ls2: Locmap.t): Prop :=
+  forall r, In r (regs_of_rpair (loc_result sg)) -> Rv (ls1 (R r)) (ls2 (R r)).
+
+Lemma initial_regs_inject sg j ls1 ls2 :
+  loc_external_rel sg (Val.inject j) ls1 ls2 ->
+  (forall l, Val.inject j (initial_regs sg ls1 l) (initial_regs sg ls2 l)).
+Proof.
+  intros Hls l. unfold initial_regs.
+  destruct loc_is_external eqn:Hl; auto.
+  apply loc_external_is in Hl. auto.
+Qed.
+
+Lemma result_regs_inject sg j caller1 caller2 callee1 callee2:
+  (forall l, Val.inject j (caller1 l) (caller2 l)) ->
+  loc_result_rel sg (Val.inject j) callee1 callee2 ->
+  forall l, Val.inject j (result_regs sg caller1 callee1 l) (result_regs sg caller2 callee2 l).
+Proof.
+  intros Hcaller Hcallee l. unfold result_regs.
+  destruct l; auto.
+  - destruct in_dec; auto.
+    destruct is_callee_save; auto.
+  - destruct sl; auto.
+Qed.
+
+(** This makes it much easier to to reason about locset-based
+  simulation conventions. In particular, proving the commutation of
+  [cc_locset_mach] with CKLRs involves constructing a new locset from
+  the Mach state and proving that it is related to the source locset
+  by the CKLR. The formulation we use makes it easier to avoid issues
+  with extraneous locations which don't map to the target's stack or
+  register. *)
+
+(** ** Language interface *)
+
+(** Location-based languages (currently LTL and Linear) use the
   following interface. We need to keep the C-level signature until
   Linear because it determines the stack layout used by the Linear
   to Mach calling convention to map locations to memory addresses. *)
@@ -190,6 +319,8 @@ Canonical Structure li_locset: language_interface :=
 
 (** * Calling convention *)
 
+Unset Program Cases.
+
 (** ** C-style to locset-style *)
 
 (** We first define the calling convention between C and locset
@@ -199,19 +330,19 @@ Canonical Structure li_locset: language_interface :=
   interpreted in the correct way and the preservation of callee-save
   registers can be enforced. *)
 
-Inductive cc_c_locset_mq: signature * Locmap.t -> c_query -> locset_query -> Prop :=
-  cc_c_locset_mq_intro vf sg args rs m:
+Inductive cc_c_locset_mq sg: c_query -> locset_query -> Prop :=
+  cc_c_locset_mq_intro vf args rs m:
     args = (map (fun p => Locmap.getpair p rs) (loc_arguments sg)) ->
-    cc_c_locset_mq (sg, rs) (cq vf sg args m) (lq vf sg rs m).
+    cc_c_locset_mq sg (cq vf sg args m) (lq vf sg rs m).
 
-Inductive cc_c_locset_mr: signature * Locmap.t -> c_reply -> locset_reply -> Prop :=
-  cc_c_locset_mr_intro sg rs res rs' m:
-    res = (Locmap.getpair (map_rpair R (loc_result sg)) rs') ->
-    agree_callee_save rs rs' ->
-    cc_c_locset_mr (sg, rs) (cr res m) (lr rs' m).
+Inductive cc_c_locset_mr sg: c_reply -> locset_reply -> Prop :=
+  cc_c_locset_mr_intro res rs' m':
+    res = Locmap.getpair (map_rpair R (loc_result sg)) rs' ->
+    cc_c_locset_mr sg (cr res m') (lr rs' m').
 
 Program Definition cc_c_locset: callconv li_c li_locset :=
   {|
+    ccworld := signature;
     match_senv w := eq;
     match_query := cc_c_locset_mq;
     match_reply := cc_c_locset_mr;
@@ -219,26 +350,25 @@ Program Definition cc_c_locset: callconv li_c li_locset :=
 
 (** ** Locset-style CKLR convention *)
 
-Inductive cc_locset_query R w: locset_query -> locset_query -> Prop :=
-  cc_locset_query_intro vf1 vf2 sg ls1 ls2 m1 m2:
+Inductive cc_locset_query R sg w: locset_query -> locset_query -> Prop :=
+  cc_locset_query_intro vf1 vf2 ls1 ls2 m1 m2:
     Val.inject (mi R w) vf1 vf2 ->
-    (forall l, Val.inject (mi R w) (ls1 l) (ls2 l)) ->
+    loc_external_rel sg (Val.inject (mi R w)) ls1 ls2 ->
     match_mem R w m1 m2 ->
     vf1 <> Vundef ->
-    cc_locset_query R w (lq vf1 sg ls1 m1) (lq vf2 sg ls2 m2).
+    cc_locset_query R sg w (lq vf1 sg ls1 m1) (lq vf2 sg ls2 m2).
 
-Inductive cc_locset_reply R w: locset_reply -> locset_reply -> Prop :=
-  cc_locset_reply_intro ls1 ls2 m1 m2:
-    (forall l, Val.inject (mi R w) (ls1 l) (ls2 l)) ->
-    match_mem R w m1 m2 ->
-    cc_locset_reply R w (lr ls1 m1) (lr ls2 m2).
+Inductive cc_locset_reply R sg w: locset_reply -> locset_reply -> Prop :=
+  cc_locset_reply_intro ls1' ls2' m1' m2':
+    loc_result_rel sg (Val.inject (mi R w)) ls1' ls2' ->
+    match_mem R w m1' m2' ->
+    cc_locset_reply R sg w (lr ls1' m1') (lr ls2' m2').
 
 Program Definition cc_locset R :=
   {|
-    ccworld := world R;
-    match_senv := match_stbls R;
-    match_query := cc_locset_query R;
-    match_reply := (<> (cc_locset_reply R))%klr;
+    match_senv '(sg, w) := match_stbls R w;
+    match_query '(sg, w) := cc_locset_query R sg w;
+    match_reply '(sg, w) := (<> cc_locset_reply R sg)%klr w;
   |}.
 Next Obligation.
   eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.

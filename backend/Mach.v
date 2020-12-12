@@ -25,7 +25,7 @@ Require Import Memory.
 Require Import Globalenvs.
 Require Import Events.
 Require Import Smallstep.
-Require Import LanguageInterface.
+Require Import LanguageInterface CKLR.
 Require Import Op.
 Require Import Locations.
 Require Import Conventions.
@@ -164,6 +164,12 @@ Definition set_pair (p: rpair mreg) (v: val) (rs: regset) : regset :=
   match p with
   | One r => rs#r <- v
   | Twolong rhi rlo => rs#rhi <- (Val.hiword v) #rlo <- (Val.loword v)
+  end.
+
+Definition get_pair (p : rpair mreg) (rs : regset) :=
+  match p with
+  | One r => rs r
+  | Twolong r1 r2 => Val.longofwords (rs r1) (rs r2)
   end.
 
 Fixpoint set_res (res: builtin_res mreg) (v: val) (rs: regset) : regset :=
@@ -419,7 +425,11 @@ Inductive step: state -> trace -> state -> Prop :=
 
 End RELSEM.
 
-(** Language interface. *)
+(** * Language interface *)
+
+(** Mach interactions are similar to the [li_locset] ones, but the
+  register state contains only machine registers, whereas the stack
+  slots are now stored in memory. *)
 
 Record mach_query :=
   mq {
@@ -442,6 +452,212 @@ Canonical Structure li_mach: language_interface :=
     reply := mach_reply;
     entry := mq_vf;
   |}.
+
+(** * Interaction predicates *)
+
+(** We need to constrain [sp] to point at offset zero to avoid
+  wrap-around issues with the arguments region. The [cc_mach]
+  convention must take this into account and force the injection to
+  map the stack block at offset 0. Note that in the original CompCert
+  semantics, the stack pointer is initially a zero integer, so we may
+  want to relax this condition in cases where there are no arguments
+  to be read. *)
+
+Inductive initial_state (ge: genv): query li_mach -> state -> Prop :=
+  | initial_state_intro: forall vf f sp ra rs m,
+      Genv.find_funct ge vf = Some (Internal f) ->
+      initial_state ge
+        (mq vf (Vptr sp Ptrofs.zero) ra rs m)
+        (Callstate (Stackbase (Vptr sp Ptrofs.zero) ra :: nil) vf rs m).
+
+Inductive at_external (ge: genv): state -> query li_mach -> Prop :=
+  | at_external_intro vf name sg s rs m:
+      Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
+      at_external ge
+        (Callstate s vf rs m)
+        (mq vf (parent_sp s) (parent_ra s) rs m).
+
+Inductive after_external: state -> mach_reply -> state -> Prop :=
+  | after_external_intro vf s rs m rs' m':
+      after_external (Callstate s vf rs m) (mr rs' m') (Returnstate s rs' m').
+
+Inductive final_state: state -> mach_reply -> Prop :=
+  | final_state_intro: forall sp ra s rs m,
+      final_state (Returnstate (Stackbase sp ra :: s) rs m) (mr rs m).
+
+Definition semantics (rao: function -> code -> ptrofs -> Prop) (p: program) :=
+  Semantics (step rao) initial_state at_external after_external final_state p.
+
+(** * Simulation conventions *)
+
+(** ** Calling convention from [li_locset] *)
+
+(** A key aspect concerns the encoding of arguments in the memory.
+  Arguments may be found in assembly stack frames, but the source
+  program must not have access to them. So we assert that the source
+  memory is equal to the target memory, but in the source the
+  permissions for the stack's arguments area has been removed. *)
+
+Import Stacklayout.
+
+Fixpoint loc_footprints (sp: block) (l: list loc) :=
+  match l with
+    | S Outgoing ofs ty :: l' =>
+      let lo := Ptrofs.unsigned (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) in
+      (sp, lo, lo + size_chunk (chunk_of_type ty)) :: loc_footprints sp l'
+    | _ :: l' => loc_footprints sp l'
+    | nil => nil
+  end.
+
+Definition free_args (sg: signature) (m: mem) (sp: block) :=
+  Mem.free_list m (loc_footprints sp (regs_of_rpairs (loc_arguments sg))).
+
+Definition agree_args (sg: signature) (m: mem) (sp: block) (ls: Locmap.t) :=
+  forall ofs ty,
+    let l := S Outgoing ofs ty in
+    In l (regs_of_rpairs (loc_arguments sg)) ->
+    load_stack m (Vptr sp Ptrofs.zero) ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) = Some (ls l).
+
+Inductive cc_locset_mach_mq sg rs: locset_query -> mach_query -> Prop :=
+  cc_locset_mach_mq_intro vf ls sp ra m m':
+    Mem.valid_block m sp ->
+    Val.has_type ra Tptr ->
+    (forall l, Val.has_type (ls l) (Loc.type l)) ->
+    free_args sg m sp = Some m' ->
+    (forall r, ls (R r) = rs r) ->
+    agree_args sg m sp ls ->
+    cc_locset_mach_mq sg rs (lq vf sg ls m') (mq vf (Vptr sp Ptrofs.zero) ra rs m).
+
+Inductive cc_locset_mach_mr sg rs: locset_reply -> mach_reply -> Prop :=
+  cc_locset_mach_mr_intro ls' rs' m':
+    (forall l, Val.has_type (ls' l) (Loc.type l)) ->
+    (forall r, is_callee_save r = true -> rs' r = rs r) ->
+    (forall r, In r (regs_of_rpair (loc_result sg)) -> rs' r = ls' (R r)) ->
+    cc_locset_mach_mr sg rs (lr ls' m') (mr rs' m').
+
+Program Definition cc_locset_mach: callconv li_locset li_mach :=
+  {|
+    match_senv _ := eq;
+    match_query '(sg, rs) := cc_locset_mach_mq sg rs;
+    match_reply '(sg, rs) := cc_locset_mach_mr sg rs;
+  |}.
+
+(** ** CKLR simulation conventions *)
+
+Inductive cc_mach_mq R w: mach_query -> mach_query -> Prop :=
+  cc_mach_mq_intro vf1 vf2 sp1 sp2 ra1 ra2 rs1 rs2 m1 m2:
+    Val.inject (mi R w) vf1 vf2 ->
+    mi R w sp1 = Some (sp2, 0) ->
+    Val.inject (mi R w) ra1 ra2 ->
+    (forall r, Val.inject (mi R w) (rs1 r) (rs2 r)) ->
+    match_mem R w m1 m2 ->
+    cc_mach_mq R w
+      (mq vf1 (Vptr sp1 Ptrofs.zero) ra1 rs1 m1)
+      (mq vf2 (Vptr sp2 Ptrofs.zero) ra2 rs2 m2).
+
+Inductive cc_mach_mr R w: mach_reply -> mach_reply -> Prop :=
+  cc_mach_mr_intro rs1 rs2 m1 m2:
+    (forall r, Val.inject (mi R w) (rs1 r) (rs2 r)) ->
+    match_mem R w m1 m2 ->
+    cc_mach_mr R w (mr rs1 m1) (mr rs2 m2).
+
+Program Definition cc_mach R: callconv li_mach li_mach :=
+  {|
+    match_senv := match_stbls R;
+    match_query := cc_mach_mq R;
+    match_reply := (<> cc_mach_mr R)%klr;
+  |}.
+Next Obligation.
+  eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
+Qed.
+Next Obligation.
+  eapply match_stbls_proj in H. eapply Genv.valid_for_match; eauto.
+Qed.
+
+(** ** Properties *)
+
+(** The following construction is needed both for the commutation
+  property associated with [cc_locset_mach] and [cc_mach] and in the
+  simulation proof for external calls in [Stacking]. It is used to
+  formulate an [li_locset] view of an [li_mach] query. *)
+
+Definition make_locset (rs: regset) (m: mem) (sp: val) (l: loc) : val :=
+  match l with
+    | R r => rs r
+    | S Outgoing ofs ty =>
+      let v := load_stack m sp ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) in
+      Val.maketotal v
+    | _ => Vundef
+  end.
+
+(*
+Lemma make_locset_arg rs m sp l v:
+  extcall_arg rs m sp (loc_of_x l) v ->
+  make_locset rs m sp l = v.
+Proof.
+  destruct l; inversion 1; subst; cbn [make_locset]; auto.
+  rewrite H3. auto.
+Qed.
+
+Lemma make_locset_args rs m sp sg args:
+  extcall_arguments rs m sp sg args ->
+  args = map (fun p => Locmap.getpair p (make_locset rs m sp)) (loc_arguments sg).
+Proof.
+  unfold extcall_arguments.
+  induction 1 as [ | l ll v args]; cbn; auto.
+  f_equal; auto.
+  destruct H; cbn; erewrite !make_locset_arg by eauto; auto.
+Qed.
+
+Lemma free_args_range_perm sg m sp m_ ofs ty:
+  free_args sg m sp = Some m_ ->
+  In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
+  let base := Ptrofs.unsigned (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) in
+  Mem.range_perm m sp base (base + size_chunk (chunk_of_type ty)) Cur Freeable.
+Proof.
+  intros base. revert m. unfold free_args.
+  induction regs_of_rpairs.
+  - contradiction.
+  - intros m Ha Hm. destruct Ha; subst.
+    + cbn [loc_footprints Mem.free_list] in Hm.
+      destruct Mem.free as [m'|] eqn:Hm'; try discriminate.
+      eapply Mem.free_range_perm; eauto.
+    + destruct a as [ | [ ]]; cbn [loc_footprints Mem.free_list] in Hm; auto.
+      destruct Mem.free as [m'|] eqn:Hm'; try discriminate.
+      intros i Hi.
+      eapply Mem.perm_free_3; eauto.
+      eapply IHl; eauto.
+Qed.
+*)
+
+Definition args_accessible sg m sp :=
+  forall ofs ty,
+    In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
+    let base := Ptrofs.unsigned (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) in
+    Mem.valid_access m (chunk_of_type ty) sp base Readable.
+
+Lemma agree_args_accessible sg m sp ls:
+  agree_args sg m sp ls ->
+  args_accessible sg m sp.
+Proof.
+  intros H ofs ty Hl base.
+  specialize (H ofs ty Hl). cbn -[Z.add Z.mul] in H.
+  rewrite Ptrofs.add_zero_l in H.
+  eapply Mem.load_valid_access; eauto.
+Qed.
+
+Lemma make_locset_agree_args rs m sp sg:
+  args_accessible sg m sp ->
+  agree_args sg m sp (make_locset rs m (Vptr sp Ptrofs.zero)).
+Proof.
+  intros H ofs ty l Hl. unfold l; cbn -[Z.add Z.mul].
+  rewrite Ptrofs.add_zero_l.
+  specialize (H ofs ty Hl).
+  edestruct Mem.valid_access_load as [v Hv]; eauto.
+  rewrite Hv. reflexivity.
+Qed.
+
+(** ** To relocate or remove *)
 
 (** The [valid_blockv] predicate is used to characterize the initial
   value [mq_sp] for the stack pointer. In order to maintain the
@@ -468,108 +684,6 @@ Lemma valid_blockv_nextblock nb nb' v:
 Proof.
   destruct 1. constructor.
   unfold Mem.valid_block in *. xomega.
-Qed.
-
-(** Interaction predicates. *)
-
-Inductive initial_state (ge: genv): query li_mach -> state -> Prop :=
-  | initial_state_intro: forall vf f sp ra rs m,
-      Genv.find_funct ge vf = Some (Internal f) ->
-      initial_state ge
-        (mq vf sp ra rs m)
-        (Callstate (Stackbase sp ra :: nil) vf rs m).
-
-Inductive at_external (ge: genv): state -> query li_mach -> Prop :=
-  | at_external_intro vf name sg s rs m:
-      Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
-      at_external ge
-        (Callstate s vf rs m)
-        (mq vf (parent_sp s) (parent_ra s) rs m).
-
-Inductive after_external: state -> mach_reply -> state -> Prop :=
-  | after_external_intro vf s rs m rs' m':
-      after_external (Callstate s vf rs m) (mr rs' m') (Returnstate s rs' m').
-
-Inductive final_state: state -> mach_reply -> Prop :=
-  | final_state_intro: forall sp ra s rs m,
-      final_state (Returnstate (Stackbase sp ra :: s) rs m) (mr rs m).
-
-Definition semantics (rao: function -> code -> ptrofs -> Prop) (p: program) :=
-  Semantics (step rao) initial_state at_external after_external final_state p.
-
-(** * Calling convention *)
-
-(** The following calling convention is only used for this phase.
-  It is a rectangular injection diagram, with an additional
-  requirement that any incoming slots of the top-level function mapped
-  to a stack location in the target memory state should be out of
-  reach with respect to the memory injection. *)
-
-Definition arguments_out_of_reach sg j m1 sp :=
-  forall ofs ty sb sofs i,
-    In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
-    Val.offset_ptr sp (Ptrofs.repr (Stacklayout.fe_ofs_arg + 4 * ofs)) = Vptr sb sofs ->
-    0 <= i < 4 * typesize ty ->
-    loc_out_of_reach j m1 sb (Ptrofs.unsigned sofs + i).
-
-Record cc_stk_world :=
-  stkw {
-    stk_inj :> meminj;
-    stk_rs1: Linear.locset;
-    stk_m1: mem;
-    stk_m2: mem;
-  }.
-
-Inductive cc_stacking_st: cc_stk_world -> Genv.symtbl -> Genv.symtbl -> Prop :=
-  cc_stacking_st_intro se1 se2 f ls m1 m2:
-    Genv.match_stbls f se1 se2 ->
-    Pos.le (Genv.genv_next se1) (Mem.nextblock m1) ->
-    Pos.le (Genv.genv_next se2) (Mem.nextblock m2) ->
-    cc_stacking_st (stkw f ls m1 m2) se1 se2.
-
-Inductive cc_stacking_mq: cc_stk_world -> locset_query -> mach_query -> Prop :=
-  cc_stacking_mq_intro f vf1 vf2 sg sp ra rs1 rs2 m1 m2:
-    Val.inject f vf1 vf2 ->
-    valid_blockv (Mem.nextblock m2) sp ->
-    Val.has_type ra Tptr ->
-    (forall r, Val.inject f (rs1 (R r)) (rs2 r)) ->
-    arguments_out_of_reach sg f m1 sp ->
-    (forall ofs ty,
-      In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
-      exists v2,
-        extcall_arg rs2 m2 sp (S Outgoing ofs ty) v2 /\
-        Val.inject f (rs1 (S Outgoing ofs ty)) v2) ->
-    (forall l, Val.has_type (rs1 l) (Loc.type l)) ->
-    Mem.inject f m1 m2 ->
-    vf1 <> Vundef ->
-    cc_stacking_mq (stkw f rs1 m1 m2) (lq vf1 sg rs1 m1) (mq vf2 sp ra rs2 m2).
-
-Inductive cc_stacking_mr: cc_stk_world -> locset_reply -> mach_reply -> Prop :=
-  cc_stacking_mr_intro f rs1 m1 m2 f' rs1' rs2' m1' m2':
-    (forall r, Val.inject f' (rs1' (R r)) (rs2' r)) ->
-    Mem.inject f' m1' m2' ->
-    Mem.unchanged_on (loc_unmapped f) m1 m1' ->
-    Mem.unchanged_on (loc_out_of_reach f m1) m2 m2' ->
-    inject_incr f f' ->
-    inject_separated f f' m1 m2 ->
-    (forall b ofs p, Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p) ->
-    (* typing invariants *)
-    (forall l, Val.has_type (rs1' l) (Loc.type l)) ->
-    agree_callee_save rs1' rs1 ->
-    (forall ty ofs, rs1' (S Outgoing ofs ty) = Vundef) ->
-    cc_stacking_mr (stkw f rs1 m1 m2) (lr rs1' m1') (mr rs2' m2').
-
-Program Definition cc_stacking: callconv li_locset li_mach :=
-  {|
-    match_senv := cc_stacking_st;
-    match_query := cc_stacking_mq;
-    match_reply := cc_stacking_mr;
-  |}.
-Next Obligation.
-  destruct H. rewrite (Genv.mge_public H); auto.
-Qed.
-Next Obligation.
-  destruct H. eapply (Genv.valid_for_match H); auto.
 Qed.
 
 (** * Leaf functions *)

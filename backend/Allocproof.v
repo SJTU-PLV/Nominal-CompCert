@@ -1791,9 +1791,8 @@ Variable se: Genv.symtbl.
 Let ge := Genv.globalenv se prog.
 Let tge := Genv.globalenv se tprog.
 
-(** Initial locset & signature for the top-level call *)
+(** Initial signature for the top-level call *)
 Variable base_sg: signature.
-Variable base_rs: locset.
 
 Lemma functions_translated:
   forall (v tv: val) (f: RTL.fundef),
@@ -1883,9 +1882,9 @@ Qed.
 (** The simulation relation *)
 
 Inductive match_stackframes: list RTL.stackframe -> list LTL.stackframe -> signature -> Prop :=
-  | match_stackframes_nil: forall sg,
+  | match_stackframes_nil: forall sg rs,
       sig_res sg = sig_res base_sg ->
-      match_stackframes nil (Stackbase base_rs :: nil) sg
+      match_stackframes nil (Stackbase rs :: nil) sg
   | match_stackframes_cons:
       forall res f sp pc rs s tf bb ls ts sg an e env
         (STACKS: match_stackframes s ts (fn_sig tf))
@@ -2469,36 +2468,69 @@ Proof.
   apply wt_regset_assign; auto. rewrite WTRES0; auto.
 Qed.
 
+(** XXX fold into getpair_initial_regs? *)
+Lemma loc_arguments_external sg p:
+  In p (loc_arguments sg) ->
+  forall_rpair (loc_external sg) p.
+Proof.
+  clear. intros Hp.
+  pose proof (loc_arguments_acceptable _ _ Hp).
+Admitted.
+
 Lemma initial_states_simulation:
   forall w q1 q2 st1,
-    match_query (cc_c ext @ cc_c_locset) (se, w, (base_sg, base_rs)) q1 q2 ->
+    match_query (cc_c ext @ cc_c_locset) (se, w, base_sg) q1 q2 ->
     RTL.initial_state ge q1 st1 ->
     Val.has_type_list (cq_args q1) (sig_args (cq_sg q1)) ->
   exists st2, LTL.initial_state tge q2 st2 /\ match_states st1 st2.
 Proof.
   intros w q1 q2 st1 (qi & Hq1i & Hqi2) Hst1 Hwt.
   destruct Hq1i. CKLR.uncklr. destruct H as [vf|]; try congruence.
-  inversion Hqi2; clear Hqi2. subst sg0 sg. subst. inv Hst1.
+  inversion Hqi2; clear Hqi2. subst sg. subst. inv Hst1.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   exploit sig_function_translated; eauto. intros SIG.
   monadInv TR. subst tf. cbn in *. rewrite <- SIG.
-  exists (LTL.Callstate (Stackbase base_rs :: nil) vf base_rs m2).
+  set (rs0 := initial_regs (fn_sig x) rs).
+  exists (LTL.Callstate (Stackbase rs0 :: nil) vf rs0 m2).
   split; econstructor; eauto.
   - cbn. rewrite H4. constructor; auto.
-  - cbn. red. auto.
+  - cbn. subst rs0. rewrite SIG. erewrite map_ext_in; eauto. clear.
+    intros p Hp. cbn. apply getpair_initial_regs.
+    apply loc_arguments_external; auto.
+  - intros l Hl. reflexivity.
 Qed.
 
 Lemma final_states_simulation:
   forall st1 st2 r1, match_states st1 st2 -> RTL.final_state st1 r1 ->
   exists r2,
     LTL.final_state st2 r2 /\
-    match_reply (cc_c ext @ cc_c_locset) (se, tt, (base_sg, base_rs)) r1 r2.
+    match_reply (cc_c ext @ cc_c_locset) (se, tt, base_sg) r1 r2.
 Proof.
-  intros. inv H0. inv H. inv STACKS.
-  destruct sg, base_sg. cbn in *. subst. auto.
+  intros. inv H0. inv H. inv STACKS. cbn in * |- .
   eexists; split. econstructor; eauto.
   eexists; split. exists tt; split; constructor; CKLR.uncklr; eauto.
   econstructor; eauto.
+  - destruct sg, base_sg. cbn in *. subst. auto.
+Qed.
+
+Lemma get_return_regs_result sg rs rs':
+  Locmap.getpair (map_rpair R (loc_result sg)) (return_regs rs rs') =
+  Locmap.getpair (map_rpair R (loc_result sg)) rs'.
+Proof.
+  pose proof (loc_result_caller_save sg).
+  destruct loc_result as [ | ]; cbn in *.
+  - rewrite H; auto.
+  - destruct H as [-> ->]; auto.
+Qed.
+
+Lemma result_regs_agree_callee_save sg caller callee:
+  agree_callee_save caller (result_regs sg caller callee).
+Proof.
+  intros l Hl. unfold result_regs.
+  destruct l as [ | [ ]]; cbn in *; try congruence. rewrite Hl.
+  destruct in_dec; try congruence. exfalso.
+  pose proof (loc_result_caller_save sg).
+  destruct loc_result; cbn in *; intuition congruence.
 Qed.
 
 Lemma external_states_simulation:
@@ -2506,21 +2538,24 @@ Lemma external_states_simulation:
   exists w q2, LTL.at_external tge st2 q2 /\ match_query (cc_c ext @ cc_c_locset) w q1 q2 /\
   forall r1 r2 st1', match_reply (cc_c ext @ cc_c_locset) w r1 r2 -> RTL.after_external st1 r1 st1' ->
     Val.has_type (cr_retval r1) (proj_sig_res (cq_sg q1)) ->
-  exists st2', LTL.after_external st2 r2 st2' /\ match_states st1' st2'.
+  exists st2', LTL.after_external tge st2 r2 st2' /\ match_states st1' st2'.
 Proof.
   intros. inv H0. inv H.
   rewrite FIND in H1. inv H1.
   edestruct functions_translated as (tf & TFIND & FUN); eauto.
   erewrite <- sig_function_translated in STACKS; eauto.
   simpl in FUN; inv FUN.
-  exists (se, tt, (sg, ls)), (lq tvf sg ls m'). intuition idtac; cbn in *.
+  exists (se, tt, sg), (lq tvf sg ls m'). intuition idtac; cbn in *.
   - econstructor; eauto.
   - destruct LF; try discriminate.
     eexists; split; econstructor; CKLR.uncklr; eauto.
     destruct v; cbn in *; congruence.
   - destruct H as (ri & ([ ] & _ & Hr1i) & Hri2).
     inv H0. inv Hr1i. inv Hri2. eexists; split; econstructor; CKLR.uncklr; eauto.
-    intros l Hl. transitivity (ls l); eauto.
+    + rewrite get_result_regs_result.
+      assumption.
+    + intros l Hl. transitivity (ls l); eauto.
+      apply result_regs_agree_callee_save; auto.
 Qed.
 
 Lemma wt_prog: wt_program prog.
@@ -2546,7 +2581,7 @@ Proof.
   intros MATCH.
   eapply source_invariant_fsim; eauto using rtl_wt, wt_prog.
   revert MATCH.
-  set (ms := fun se '(sg, rs) s s' => match_states prog tprog se sg rs s s').
+  set (ms := fun se sg s s' => match_states prog tprog se sg s s').
   fsim eapply forward_simulation_plus with (match_states := ms se1 (snd w));
     cbn -[wt_c] in *; subst; destruct w as [[xse [ ]] [sg rs]], Hse; subst.
 - intros q1 q2 Hq. destruct Hq as (_ & [ ] & Hqi2). inv Hqi2.

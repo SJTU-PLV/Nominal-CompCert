@@ -173,10 +173,10 @@ Inductive match_stackframes: stackframe -> stackframe -> Prop :=
         (Stackframe (transf_function f) sp ls
           (remove_unused_labels (labels_branched_to f.(fn_code)) c))
   | match_stackframe_top:
-      forall sg ls,
+      forall ls,
       match_stackframes
-        (Stackbase sg ls)
-        (Stackbase sg ls).
+        (Stackbase ls)
+        (Stackbase ls).
 
 Inductive match_states: state -> state -> Prop :=
   | match_states_intro:
@@ -313,12 +313,12 @@ Qed.
 Lemma transf_external:
   forall S R q, match_states S R -> at_external ge S q ->
   at_external tge R q /\
-  forall r S', after_external S r S' ->
-  exists R', after_external R r R' /\ match_states S' R'.
+  forall r S', after_external ge S r S' ->
+  exists R', after_external tge R r R' /\ match_states S' R'.
 Proof.
   intros S R q HSR Hq. destruct Hq; inv HSR.
-  eapply functions_translated in H.
-  split. econstructor; eauto. intros r S' HS'. inv HS'.
+  pose proof (functions_translated _ _ H).
+  split. econstructor; eauto. intros r S' HS'. inv HS'. rewrite H8 in H; inv H.
   eexists. split; econstructor; eauto.
 Qed.
 

@@ -295,9 +295,10 @@ End RELSEM.
 Inductive initial_state (ge: genv): locset_query -> state -> Prop :=
   | initial_state_intro: forall vf f rs m,
       Genv.find_funct ge vf = Some (Internal f) ->
+      let rs0 := initial_regs (fn_sig f) rs in
       initial_state ge
         (lq vf (fn_sig f) rs m)
-        (Callstate (Stackbase rs :: nil) vf rs m).
+        (Callstate (Stackbase rs0 :: nil) vf rs0 m).
 
 Inductive at_external (ge: genv): state -> locset_query -> Prop :=
   | at_external_intro vf name sg s rs m:
@@ -306,21 +307,23 @@ Inductive at_external (ge: genv): state -> locset_query -> Prop :=
         (Callstate s vf rs m)
         (lq vf sg rs m).
 
-Inductive after_external: state -> locset_reply -> state -> Prop :=
-  | after_external_intro b s rs m rs' m':
-      after_external
-        (Callstate s b rs m)
+Inductive after_external (ge: genv): state -> locset_reply -> state -> Prop :=
+  | after_external_intro vf name sg s rs m rs' m':
+      Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
+      after_external ge
+        (Callstate s vf rs m)
         (lr rs' m')
-        (Returnstate s rs' m').
+        (Returnstate s (result_regs sg rs rs') m').
 
 Inductive final_state: state -> locset_reply -> Prop :=
-  | final_state_intro: forall init_rs s rs m,
+  | final_state_intro: forall rs s rs' m',
       final_state
-        (Returnstate (Stackbase init_rs :: s) rs m)
-        (lr rs m).
+        (Returnstate (Stackbase rs :: s) rs' m')
+        (lr rs' m').
 
 Definition semantics (p: program) :=
-  Semantics step initial_state at_external after_external final_state p.
+  Semantics_gen step initial_state at_external after_external (fun _ => final_state)
+    (@Genv.globalenv _ _) p.
 
 (** * Operations over LTL *)
 

@@ -365,10 +365,10 @@ Inductive match_stackframes: Linear.stackframe -> Linear.stackframe -> Prop :=
         (Stackframe f sp rs c)
         (Stackframe tf sp rs (add_delta_ranges before after tc))
   | match_stackframe_top:
-      forall sg ls,
+      forall ls,
       match_stackframes
-        (Stackbase sg ls)
-        (Stackbase sg ls).
+        (Stackbase ls)
+        (Stackbase ls).
 
 Inductive match_states: Linear.state ->  Linear.state -> Prop :=
   | match_states_instr:
@@ -504,9 +504,9 @@ Lemma transf_initial_states q:
   forall st1, initial_state ge q st1 ->
   exists st2, initial_state tge q st2 /\ match_states st1 st2.
 Proof.
-  intros. inversion H.
+  intros. inversion H. subst rs0.
   exploit functions_translated; eauto. intros [tf [A B]].
-  setoid_rewrite <- (sig_preserved (Internal f)); eauto. monadInv B.
+  pose proof (sig_preserved _ _ B) as SIG. monadInv B. cbn in SIG. rewrite <- SIG.
   eexists; split; econstructor; eauto.
   repeat constructor; eauto.
 Qed.
@@ -514,12 +514,12 @@ Qed.
 Lemma transf_external:
   forall S R q, match_states S R -> at_external ge S q ->
   at_external tge R q /\
-  forall r S', after_external S r S' ->
-  exists R', after_external R r R' /\ match_states S' R'.
+  forall r S', after_external ge S r S' ->
+  exists R', after_external tge R r R' /\ match_states S' R'.
 Proof.
   intros S R q HSR Hq. destruct Hq; inv HSR.
-  eapply functions_translated in H as (tf & FIND & TF). monadInv TF.
-  split. econstructor; eauto. intros r S' HS'. inv HS'.
+  edestruct functions_translated as (tf & FIND & TF); eauto. monadInv TF.
+  split. econstructor; eauto. intros r S' HS'. inv HS'. rewrite H7 in H; inv H.
   eexists. split; econstructor; eauto.
 Qed.
 

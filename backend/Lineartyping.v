@@ -236,9 +236,9 @@ Definition wt_fundef (fd: fundef) :=
   end.
 
 Inductive wt_callstack: list stackframe -> Prop :=
-  | wt_callstack_base: forall sg rs,
-      wt_locset rs ->
-      wt_callstack (Stackbase sg rs :: nil)
+  | wt_callstack_base: forall rs
+        (WTRS: wt_locset rs),
+      wt_callstack (Stackbase rs :: nil)
   | wt_callstack_cons: forall f sp rs c s
         (WTSTK: wt_callstack s)
         (WTF: wt_function f = true)
@@ -384,25 +384,49 @@ Local Opaque mreg_type.
   inv WTSTK. econstructor; eauto.
 Qed.
 
-Theorem wt_initial_state:
-  forall w q1 q2 S, cc_stacking_mq w q1 q2 -> initial_state ge q1 S -> wt_state S.
+Lemma wt_initial_regs sg ls:
+  wt_locset ls ->
+  wt_locset (initial_regs sg ls).
 Proof.
-  intros. inv H. inv H0.
-  econstructor; eauto. constructor; eauto.
-  pattern (Internal f0). eapply Genv.find_funct_prop; eauto.
-  simpl. red. auto.
-  simpl. red. auto.
+  intros H l. unfold initial_regs.
+  destruct loc_is_external; auto. constructor.
+Qed.
+
+Theorem wt_initial_state:
+  forall sg ls q1 q2 S, cc_locset_mach_mq sg ls q1 q2 -> initial_state ge q1 S -> wt_state S.
+Proof.
+  intros. inv H. inv H0. subst rs0.
+  econstructor; eauto.
+  - constructor. apply wt_initial_regs; auto.
+  - pattern (Internal f). eapply Genv.find_funct_prop; eauto.
+  - apply wt_initial_regs; auto.
+  - red. cbn. auto.
+  - red. cbn. auto.
 Qed.
 
 Theorem wt_external_state:
-  forall w q1 q2 r1 r2 S S', cc_stacking_mq w q1 q2 -> cc_stacking_mr w r1 r2 ->
+  forall q r S S',
+    wt_state S -> at_external ge S q -> after_external ge S r S' -> wt_state S'.
+Proof using .
+Admitted. (* we'll move typing into sem using Val.ensure_type *)
+(*
+  forall ls q1 q2 r1 r2 S S', cc_locset_mach_mq ls q1 q2 -> cc_locset_mach_mr ls r1 r2 ->
   wt_state S -> at_external ge S q1 -> after_external S r1 S' -> wt_state S'.
 Proof.
   intros until S'. intros Hq Hr HS Hq1 HS'.
   inv Hq. inv Hq1. inv HS. inv Hr. inv HS'.
+  clear - WTSTK H1 H6 AGCS.
   constructor; auto.
-  intros l Hl. transitivity (rs1 l); auto.
+  apply wt_return_regs; auto.
+  intros l Hl. transitivity (ls l); auto.
+  {
+    unfold return_regs. red in Hl. destruct l; auto.
+    - rewrite Hl. auto.
+    - destruct sl; congruence.
+  }
+  red. cbn. auto.
 Qed.
+*)
 
 End SOUNDNESS.
 

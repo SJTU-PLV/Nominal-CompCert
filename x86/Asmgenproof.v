@@ -981,7 +981,7 @@ Proof.
   econstructor; split.
   - econstructor; eauto.
     + rewrite Hpc; eauto.
-    + erewrite (agree_sp rs1 sp rs2); eauto. eapply agree_sp_def; eauto.
+    + erewrite agree_sp by eauto. eapply agree_sp_def; eauto.
   - constructor; cbn; eauto.
     constructor; eauto.
     + eapply agree_sp_def; eauto.
