@@ -522,7 +522,6 @@ Inductive cc_locset_mach_mq sg rs: locset_query -> mach_query -> Prop :=
   cc_locset_mach_mq_intro vf ls sp ra m m':
     Mem.valid_block m sp ->
     Val.has_type ra Tptr ->
-    (forall l, Val.has_type (ls l) (Loc.type l)) ->
     free_args sg m sp = Some m' ->
     (forall r, ls (R r) = rs r) ->
     agree_args sg m sp ls ->
@@ -530,7 +529,6 @@ Inductive cc_locset_mach_mq sg rs: locset_query -> mach_query -> Prop :=
 
 Inductive cc_locset_mach_mr sg rs: locset_reply -> mach_reply -> Prop :=
   cc_locset_mach_mr_intro ls' rs' m':
-    (forall l, Val.has_type (ls' l) (Loc.type l)) ->
     (forall r, is_callee_save r = true -> rs' r = rs r) ->
     (forall r, In r (regs_of_rpair (loc_result sg)) -> rs' r = ls' (R r)) ->
     cc_locset_mach_mr sg rs (lr ls' m') (mr rs' m').

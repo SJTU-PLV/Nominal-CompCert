@@ -392,43 +392,49 @@ Proof.
   destruct loc_is_external; auto. constructor.
 Qed.
 
-Theorem wt_initial_state:
-  forall sg ls q1 q2 S, cc_locset_mach_mq sg ls q1 q2 -> initial_state ge q1 S -> wt_state S.
-Proof.
-  intros. inv H. inv H0. subst rs0.
-  econstructor; eauto.
-  - constructor. apply wt_initial_regs; auto.
-  - pattern (Internal f). eapply Genv.find_funct_prop; eauto.
-  - apply wt_initial_regs; auto.
-  - red. cbn. auto.
-  - red. cbn. auto.
-Qed.
-
-Theorem wt_external_state:
-  forall q r S S',
-    wt_state S -> at_external ge S q -> after_external ge S r S' -> wt_state S'.
-Proof using .
-Admitted. (* we'll move typing into sem using Val.ensure_type *)
-(*
-  forall ls q1 q2 r1 r2 S S', cc_locset_mach_mq ls q1 q2 -> cc_locset_mach_mr ls r1 r2 ->
-  wt_state S -> at_external ge S q1 -> after_external S r1 S' -> wt_state S'.
-Proof.
-  intros until S'. intros Hq Hr HS Hq1 HS'.
-  inv Hq. inv Hq1. inv HS. inv Hr. inv HS'.
-  clear - WTSTK H1 H6 AGCS.
-  constructor; auto.
-  apply wt_return_regs; auto.
-  intros l Hl. transitivity (ls l); auto.
-  {
-    unfold return_regs. red in Hl. destruct l; auto.
-    - rewrite Hl. auto.
-    - destruct sl; congruence.
-  }
-  red. cbn. auto.
-Qed.
-*)
-
 End SOUNDNESS.
+
+(** Invariant preservation theorem *)
+
+Require Import Invariant.
+
+Program Definition wt_loc :=
+  {|
+    symtbl_inv := eq;
+    query_inv _ '(lq vf sg ls m) := wt_locset ls;
+    reply_inv _ '(lr ls m) := wt_locset ls;
+  |}.
+
+Lemma linear_wt prog:
+  (forall i fd, In (i, Gfun fd) prog.(prog_defs) -> wt_fundef fd) ->
+  preserves (semantics prog) wt_loc wt_loc (wt_state prog).
+Proof.
+  intros wt_prog.
+  constructor; cbn in *; subst w.
+  - eauto using step_type_preservation.
+  - intros [vf sg ls m] S WTRS HS. inv HS. subst rs0.
+    econstructor; eauto.
+    + constructor. apply wt_initial_regs; auto.
+    + pattern (Internal f). eapply Genv.find_funct_prop; eauto.
+    + apply wt_initial_regs; auto.
+    + red. cbn. auto.
+    + red. cbn. auto.
+  - intros S q WTS Hq. inv Hq. inv WTS. rewrite FIND in H0. inv H0.
+    exists se. split; auto. split; auto.
+    intros r S' Hr HS'. inv HS'. rewrite H6 in FIND; inv FIND.
+    constructor; auto.
+    + unfold result_regs. intros l.
+      destruct l as [ | [ ]]; auto; try constructor.
+      destruct in_dec; auto.
+      destruct is_callee_save; auto.
+    + intros l Hl. transitivity (rs l); auto.
+      unfold result_regs. destruct l as [ | [ ]]; cbn in *; auto; try congruence.
+      rewrite Hl. destruct in_dec; auto.
+      pose proof (loc_result_caller_save sg).
+      destruct loc_result; cbn in *; intuition congruence.
+    + red. cbn. auto.
+  - intros S r HS Hr. inv Hr. inv HS. auto.
+Qed.
 
 (** Properties of well-typed states that are used in [Stackingproof]. *)
 

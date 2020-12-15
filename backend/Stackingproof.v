@@ -20,7 +20,7 @@ Require Import Values Memory Separation Events Globalenvs Smallstep.
 Require Import LTL Op Locations Linear Mach.
 Require Import Bounds Conventions Stacklayout Lineartyping.
 Require Import Stacking.
-Require Import LanguageInterface cklr.Inject cklr.InjectFootprint.
+Require Import LanguageInterface Invariant cklr.Inject cklr.InjectFootprint.
 
 Local Open Scope sep_scope.
 Local Opaque Z.add Z.mul Z.divide.
@@ -2258,11 +2258,11 @@ Let ccB : callconv li_locset li_mach := cc_locset_mach @ cc_mach inj.
 
 Lemma transf_initial_states:
   forall w q1 q2, match_senv ccB w se tse -> match_query ccB w q1 q2 ->
-  forall st1, Linear.initial_state ge q1 st1 ->
+  forall st1, Linear.initial_state ge q1 st1 -> (* wt_locset (lq_rs q1) -> *)
   exists st2, Mach.initial_state tge q2 st2 /\ match_states (fst (snd (fst w))) (snd (snd (fst w))) st1 st2.
 Proof.
-  intros [[_ [sg rs1]] ft] q1 q2 [[ ] Hse'] (q' & Hq1' & Hq2') st1 Hst1. cbn.
-  inv Hst1. inv Hq1'. inv Hq2'. destruct Hse'. inv H16. cbn in *. subst rs0.
+  intros [[_ [sg rs1]] ft] q1 q2 [[ ] Hse'] (q' & Hq1' & Hq2') st1 Hst1 (*Hq1*). cbn.
+  inv Hst1. inv Hq1'. inv Hq2'. destruct Hse'. cbn in *. subst rs0.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   econstructor; split.
   - monadInv TR. econstructor; eauto.
@@ -2271,11 +2271,11 @@ Proof.
       * admit. (* cc needs to ensure typing of ra preserved / use ensure_type *)
     + intro. unfold initial_regs.
       destruct loc_is_external eqn:Hr; auto. apply loc_external_is in Hr.
-      rewrite H9 by auto. auto.
+      rewrite H8 by auto. auto.
     + rewrite <- sep_assoc. cbn -[load_stack].
       repeat apply conj; auto.
-      * intros. specialize (H10 _ _ H1).
-        eapply Mem.load_inject in H10 as (v2 & Hv2 & Hv); eauto.
+      * intros. specialize (H9 _ _ H0).
+        eapply Mem.load_inject in H9 as (v2 & Hv2 & Hv); eauto.
         rewrite Z.add_0_r in Hv2.
         rewrite external_initial_regs; eauto.
         constructor; auto.
@@ -2340,7 +2340,6 @@ Proof.
       constructor; auto.
       * admit. (* sb valid -- btw, why? *)
       * eapply match_stacks_type_retaddr; eauto.
-      * admit. (* typing of synthesized locset -- use ensure_type in make_locset? *)
       * intros ofs ty l Hl. subst l. cbn [make_locset].
         fold (offset_arg ofs). rewrite <- Hsb.
         edestruct load_stack_arg as (v & -> & Hv); eauto.
@@ -2348,15 +2347,15 @@ Proof.
     constructor; auto.
     admit. (* free_args vs. nextblock *)
   - destruct H6 as (ri & (w' & Hw' & Hr1i) & Hri2).
-    inv Hw'. inv Hr1i. inv Hri2. inv H7. inv H8. rewrite H25 in FIND; inv FIND.
+    inv Hw'. inv Hr1i. inv Hri2. inv H7. inv H8. rewrite H24 in FIND; inv FIND.
     eexists (Returnstate _ _ m2'0).
     split. econstructor; eauto.
     eapply match_states_return with f' _.
     + eapply match_stacks_change_meminj; eauto.
     + intros r. unfold result_regs.
-      destruct in_dec; auto. { rewrite H20; auto. }
+      destruct in_dec; auto. { rewrite H19; auto. }
       destruct is_callee_save eqn:Hr; auto.
-      rewrite H18; eauto using val_inject_incr.
+      rewrite H17; eauto using val_inject_incr.
     + eapply stack_contents_change_meminj; eauto.
       rewrite sep_comm, sep_assoc.
       assert (Mem.unchanged_on (loc_out_of_reach j m) m' m2'0).
@@ -2394,34 +2393,33 @@ Theorem transf_program_correct rao prog tprog:
   (forall f sg ros c, is_tail (Mcall sg ros :: c) (fn_code f) ->
    exists ofs, rao f c ofs) ->
   match_prog prog tprog ->
-  forward_simulation (cc_locset injp @ cc_locset_mach) (cc_locset_mach @ cc_mach inj)
+  forward_simulation (wt_loc @ cc_locset injp @ cc_locset_mach)
+                     (wt_loc @ cc_locset_mach @ cc_mach inj)
                      (Linear.semantics prog) (Mach.semantics rao tprog).
 Proof.
-  intros Hrao.
-  set (ms se1 se2 (w : ccworld (cc_locset_mach @ cc_mach inj)) := fun s s' =>
-       let '(_, (sg, rs0), _) := w in
-         wt_state prog se1 s /\
-         match_states rao prog tprog se1 se2 sg rs0 s s').
+  intros Hrao MATCH.
+  eapply source_invariant_fsim; eauto using linear_wt, wt_prog.
+  revert MATCH.
+  set (ms se1 se2 (w : ccworld (cc_locset_mach @ cc_mach inj)) :=
+       let '(_, (sg, rs0), _) := w in match_states rao prog tprog se1 se2 sg rs0).
   fsim eapply forward_simulation_plus with (match_states := ms se1 se2 w).
   - destruct w as [[xse [sg rs0]] w].
-    intros q1 q2 (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. inv Hse. inv H5. inv H6.
+    intros q1 q2 (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. inv Hse. inv H4. inv H5.
     eapply (Genv.is_internal_transf_partial MATCH); eauto 1.
     intros [|] ? Hfd; monadInv Hfd; auto.
     cbn. admit. (* vf not undef *)
-  - intros.
+  - intros q1 q2 s1 Hq (Hs1 & xse & Hxse & WTQ & WTS). cbn in Hxse. subst. 
     exploit transf_initial_states; eauto. intros [st2 [A B]].
-    exists st2; split; auto. destruct w as [[se [sg rs0]] wR]. split; eauto.
-    destruct H as (qi & Hq1i & Hqi2). cbn in *.
-    eapply wt_initial_state; eauto using wt_prog.
-  - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse]. intros. destruct H.
+    exists st2; split; auto. destruct w as [[se [sg rs0]] wR]. auto.
+  - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse].
+    intros s1 s2 r1 Hs (Hr1 & xse & Hxse & WTS & WTR). cbn in Hxse. subst.
     eapply transf_final_states; eauto.
-  - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse]. intros. destruct H.
+  - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse].
+    intros s1 s2 q1 Hs (Hq1 & x & ? & Hx & WTS & WTQ). cbn in Hx. subst.
     edestruct transf_external_states as (wx & qx2 & ? & ? & ? & ?); eauto.
-    exists wx, qx2. intuition auto. edestruct H5 as (st2' & ? & ?); eauto.
-    exists st2'. unfold ms. intuition auto.
-    eapply wt_external_state; eauto.
-  - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse]. intros. destruct H0. cbn in H.
-    exploit transf_step_correct; eauto. intros [s2' [A B]].
-    exists s2'; split. exact A. split; auto.
-    eapply step_type_preservation; eauto using wt_prog.
+    exists wx, qx2. intuition auto. destruct H4 as (Hs1' & _).
+    edestruct H2 as (st2' & ? & ?); eauto.
+  - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse].
+    intros s1 t s1' (Hs1' & x & Hx & WTS & WTS') s2 Hs. cbn in Hx, Hs1', Hs. subst.
+    eapply transf_step_correct; eauto.
 Admitted.

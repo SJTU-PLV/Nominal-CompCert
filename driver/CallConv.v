@@ -121,9 +121,9 @@ Proof.
   cbn in * |- . destruct Hqi2. inv Hq1i. rename m' into m1_. rename ls into ls1.
 
   (** Synthesizing the query *)
-  transport H13. rename x into m2_.
+  transport H12. rename x into m2_.
   edestruct match_agree_args as (ls2 & Hargs2 & Hrs2 & Hls); eauto.
-  { intro r. rewrite H14. eauto. }
+  { intro r. rewrite H13. eauto. }
   set (ls2wt l := Val.ensure_type (ls2 l) (Loc.type l)).
 
   exists (se2, (sg, wR'), (sg, rs2)). repeat apply conj.
@@ -132,21 +132,19 @@ Proof.
     + econstructor; try rauto.
       * admit. (* vf1 <> Vundef -- add in upper conventions or move back to [fb] *)
     + constructor; eauto.
-      * revert H9. rstep. rstep. rstep. econstructor; eauto.
+      * revert H10. rstep. rstep. rstep. econstructor; eauto.
       * admit. (* type of RA -- need to constrain in cc_mach? *)
-      * admit. (* typing of ls2 -- need to constrain type of rs2 in cc_mach *)
   - intros r1 r2 (ri & (wR'' & HwR'' & Hr1i) & Hri2). 
     destruct Hr1i. inv Hri2. rename rs' into rs2'.
     set (rs1' r := result_regs sg ls1 ls1' (Locations.R r)).
     exists (mr rs1' m1'). split.
     + constructor; auto.
-      * admit. (* ensure type thing *)
       * intros r Hr. unfold rs1'. rewrite <- result_regs_agree_callee_save; auto.
       * intros r Hr. unfold rs1'. cbn. destruct in_dec; tauto.
     + exists wR''. split; [rauto | ]. constructor; auto.
       intro r. unfold rs1', result_regs.
-      destruct in_dec. { rewrite H18; auto. }
+      destruct in_dec. { rewrite H16; auto. }
       destruct is_callee_save eqn:Hr; auto.
-      rewrite H16 by auto. rewrite H14. generalize (H2 r).
+      rewrite H12 by auto. rewrite H13. generalize (H2 r).
       repeat rstep. change (wR ~> wR''). rauto.
 Admitted.
