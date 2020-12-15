@@ -1347,20 +1347,20 @@ Program Definition contains_init_args j sp sg ls : massert :=
       forall ofs ty,
         In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
         exists v,
-          load_stack m (Vptr sp Ptrofs.zero) ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) = Some v /\
+          load_stack m sp ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) = Some v /\
           Val.inject j (ls (S Outgoing ofs ty)) v;
     m_footprint b ofs :=
-      b = sp /\
-      exists pos ty,
+      exists sofs pos ty,
+        sp = Vptr b sofs /\
         In (S Outgoing pos ty) (regs_of_rpairs (loc_arguments sg)) /\
-        let base := Ptrofs.unsigned (Ptrofs.repr (fe_ofs_arg + 4 * pos)) in
+        let base := Ptrofs.unsigned (Ptrofs.add sofs (Ptrofs.repr (fe_ofs_arg + 4 * pos))) in
         base <= ofs < base + size_chunk (chunk_of_type ty)
   |}.
 Next Obligation.
   edestruct H as (v & Hv & INJ); eauto.
   exists v. intuition auto.
-  eapply Mem.load_unchanged_on; eauto; cbn.
-  rewrite Ptrofs.add_zero_l. eauto.
+  destruct sp as [ | | | | | sb sofs]; try discriminate.
+  eapply Mem.load_unchanged_on; eauto; cbn; eauto 10.
 Qed.
 Next Obligation.
   edestruct H as (v & Hv & INJ); eauto.
@@ -1385,7 +1385,7 @@ Qed.
 
 Fixpoint stack_contents (j: meminj) (cs: list Linear.stackframe) (cs': list Mach.stackframe) : massert :=
   match cs, cs' with
-  | Linear.Stackbase ls :: nil, Mach.Stackbase (Vptr sp _) ra :: nil =>
+  | Linear.Stackbase ls :: nil, Mach.Stackbase sp ra :: nil =>
       contains_init_args j sp init_sg ls
   | Linear.Stackframe f _ ls c :: cs, Mach.Stackframe fb (Vptr sp' _) ra c' :: cs' =>
       frame_contents f j sp' ls (parent_locset cs) (parent_sp cs') (parent_ra cs')
@@ -1402,9 +1402,10 @@ Inductive match_stacks (j: meminj):
         (TY_RA: Val.has_type ra Tptr),
       sg = init_sg \/ tailcall_possible sg ->
       (forall r, init_rs r = ls (R r)) ->
+      Val.has_type sp' Tptr ->
       match_stacks j
                    (Linear.Stackbase (initial_regs init_sg ls) :: nil)
-                   (Stackbase (Vptr sp' Ptrofs.zero) ra :: nil)
+                   (Stackbase sp' ra :: nil)
                    sg
   | match_stacks_cons: forall f sp ls c cs fb sp' ra c' cs' sg trf
         (TAIL: is_tail c (Linear.fn_code f))
@@ -1437,7 +1438,7 @@ Local Opaque sepconj.
   rewrite sep_assoc in *.
   apply frame_contents_incr with (j := j); auto.
   rewrite sep_swap. apply IHcs. rewrite sep_swap. assumption.
-- destruct cs, cs', sp; auto.
+- destruct cs, cs'; auto.
   destruct H0 as (Hloc & ?). split; auto.
   eapply contains_init_args_incr; eauto.
 Qed.
@@ -1473,7 +1474,7 @@ Lemma match_stacks_type_sp:
   match_stacks j cs cs' sg ->
   Val.has_type (parent_sp cs') Tptr.
 Proof.
-  destruct 1; constructor.
+  destruct 1; auto; constructor.
 Qed.
 
 Lemma match_stacks_type_retaddr:
@@ -2256,30 +2257,48 @@ End STEP_CORRECT.
 
 Let ccB : callconv li_locset li_mach := cc_locset_mach @ cc_mach inj.
 
+Lemma load_stack_inject j m1 m2 sp1 sp2 ty ofs v1:
+  load_stack m1 sp1 ty ofs = Some v1 ->
+  Mem.inject j m1 m2 ->
+  Val.inject j sp1 sp2 ->
+  exists v2,
+    load_stack m2 sp2 ty ofs = Some v2 /\
+    Val.inject j v1 v2.
+Proof.
+  intros Hv1 Hm Hsp.
+  destruct Hsp; try discriminate. subst.
+  edestruct Mem.load_inject as (v2 & Hv2 & Hv); eauto. eapply Hv1. cbn.
+  rewrite Ptrofs.add_commut, <- Ptrofs.add_assoc, (Ptrofs.add_commut ofs ofs1).
+  apply Mem.load_valid_access in Hv1.
+  erewrite Mem.address_inject; eauto.
+  eapply Hv1. pose proof (size_chunk_pos (chunk_of_type ty)). xomega.
+Qed.
+
 Lemma transf_initial_states:
   forall w q1 q2, match_senv ccB w se tse -> match_query ccB w q1 q2 ->
   forall st1, Linear.initial_state ge q1 st1 -> (* wt_locset (lq_rs q1) -> *)
   exists st2, Mach.initial_state tge q2 st2 /\ match_states (fst (snd (fst w))) (snd (snd (fst w))) st1 st2.
 Proof.
   intros [[_ [sg rs1]] ft] q1 q2 [[ ] Hse'] (q' & Hq1' & Hq2') st1 Hst1 (*Hq1*). cbn.
-  inv Hst1. inv Hq1'. inv Hq2'. destruct Hse'. cbn in *. subst rs0.
+  inv Hst1. inv Hq1'. inv Hq2'. destruct Hse'. cbn in *. inv H14. subst rs0.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   econstructor; split.
   - monadInv TR. econstructor; eauto.
   - econstructor; eauto.
     + constructor; auto.
       * admit. (* cc needs to ensure typing of ra preserved / use ensure_type *)
+      * destruct H11; try discriminate. constructor.
     + intro. unfold initial_regs.
       destruct loc_is_external eqn:Hr; auto. apply loc_external_is in Hr.
-      rewrite H8 by auto. auto.
+      rewrite H7 by auto. auto.
     + rewrite <- sep_assoc. cbn -[load_stack].
       repeat apply conj; auto.
-      * intros. specialize (H9 _ _ H0).
-        eapply Mem.load_inject in H9 as (v2 & Hv2 & Hv); eauto.
-        rewrite Z.add_0_r in Hv2.
+      * intros.
+        edestruct load_stack_inject as (v2 & Hv2 & Hv); eauto.
         rewrite external_initial_regs; eauto.
         constructor; auto.
-      * eapply Mem.free_list_left_inject; eauto.
+      * destruct sp; try discriminate.
+        eapply Mem.free_list_left_inject; eauto.
       * red. cbn.
         intros b ofs (Hb & pos & ty & Hpos & Hofs) (sp1 & delta & ? & ?). subst.
         admit. (* no overlap involved, but doable. *)
@@ -2298,7 +2317,7 @@ Proof.
   - cbn in SEP. destruct SEP as (BASE & (MINJ & GINJ & ?) & ?).
     exists (mr (fun r => ls (R r)) m). split.
     + constructor; auto.
-      intros r Hr. rewrite H5. apply AGCS; auto.
+      intros r Hr. rewrite H3. apply AGCS; auto.
     + exists (injw j (Mem.nextblock m) (Mem.nextblock m')). split.
       * admit. (* still need mit_incr but should not be a big deal *)
       * constructor; cbn; auto.
@@ -2320,9 +2339,11 @@ Proof.
   rewrite FIND in H4. inv H4.
   edestruct functions_translated as (tf & TFIND & TRANSL); eauto. apply SEP.
   simpl in TRANSL. inv TRANSL.
+  (*
   assert (exists sb, parent_sp cs' = Vptr sb Ptrofs.zero) as [sb Hsb].
   { inv STACKS; cbn; eauto. }
-  assert (exists m0, free_args sg m' sb = Some m0) as [m0 Hm0] by admit.
+   *)
+  assert (exists m0, free_args sg m' (parent_sp cs') = Some m0) as [m0 Hm0] by admit.
   pose proof SEP as (? & (? & (? & ? & ?) & ?) & ?). cbn in H0.
   assert (Hm: Mem.inject j m m0) by admit.  (* free_args vs. injection *)
   eexists (tse, (sg, injpw j m m0 Hm), (sg, _)), _.
@@ -2336,12 +2357,10 @@ Proof.
         inv WTS. fold ge in FIND0. rewrite FIND in FIND0. inv FIND0. cbn in *.
         rewrite AGARGS; auto.
       * destruct vf; try discriminate.
-    + rewrite Hsb.
-      constructor; auto.
-      * admit. (* sb valid -- btw, why? *)
+    + constructor; auto.
       * eapply match_stacks_type_retaddr; eauto.
       * intros ofs ty l Hl. subst l. cbn [make_locset].
-        fold (offset_arg ofs). rewrite <- Hsb.
+        fold (offset_arg ofs).
         edestruct load_stack_arg as (v & -> & Hv); eauto.
   - constructor; cbn; auto.
     constructor; auto.
@@ -2404,7 +2423,7 @@ Proof.
        let '(_, (sg, rs0), _) := w in match_states rao prog tprog se1 se2 sg rs0).
   fsim eapply forward_simulation_plus with (match_states := ms se1 se2 w).
   - destruct w as [[xse [sg rs0]] w].
-    intros q1 q2 (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. inv Hse. inv H4. inv H5.
+    intros q1 q2 (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. inv Hse. inv H3. inv H4.
     eapply (Genv.is_internal_transf_partial MATCH); eauto 1.
     intros [|] ? Hfd; monadInv Hfd; auto.
     cbn. admit. (* vf not undef *)

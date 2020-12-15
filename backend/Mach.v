@@ -467,8 +467,8 @@ Inductive initial_state (ge: genv): query li_mach -> state -> Prop :=
   | initial_state_intro: forall vf f sp ra rs m,
       Genv.find_funct ge vf = Some (Internal f) ->
       initial_state ge
-        (mq vf (Vptr sp Ptrofs.zero) ra rs m)
-        (Callstate (Stackbase (Vptr sp Ptrofs.zero) ra :: nil) vf rs m).
+        (mq vf sp ra rs m)
+        (Callstate (Stackbase sp ra :: nil) vf rs m).
 
 Inductive at_external (ge: genv): state -> query li_mach -> Prop :=
   | at_external_intro vf name sg s rs m:
@@ -500,32 +500,37 @@ Definition semantics (rao: function -> code -> ptrofs -> Prop) (p: program) :=
 
 Import Stacklayout.
 
-Fixpoint loc_footprints (sp: block) (l: list loc) :=
+Fixpoint loc_footprints (sb: block) (sofs: ptrofs) (l: list loc) :=
   match l with
     | S Outgoing ofs ty :: l' =>
-      let lo := Ptrofs.unsigned (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) in
-      (sp, lo, lo + size_chunk (chunk_of_type ty)) :: loc_footprints sp l'
-    | _ :: l' => loc_footprints sp l'
+      let lo := Ptrofs.unsigned (Ptrofs.add (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) sofs) in
+      (sb, lo, lo + size_chunk (chunk_of_type ty)) :: loc_footprints sb sofs l'
+    | _ :: l' => loc_footprints sb sofs l'
     | nil => nil
   end.
 
-Definition free_args (sg: signature) (m: mem) (sp: block) :=
-  Mem.free_list m (loc_footprints sp (regs_of_rpairs (loc_arguments sg))).
+Definition free_args (sg: signature) (m: mem) (sp: val) :=
+  match sp with
+    | Vptr sb sofs =>
+      Mem.free_list m (loc_footprints sb sofs (regs_of_rpairs (loc_arguments sg)))
+    | _ =>
+      None
+  end.
 
-Definition agree_args (sg: signature) (m: mem) (sp: block) (ls: Locmap.t) :=
+Definition agree_args (sg: signature) (m: mem) (sp: val) (ls: Locmap.t) :=
   forall ofs ty,
     let l := S Outgoing ofs ty in
     In l (regs_of_rpairs (loc_arguments sg)) ->
-    load_stack m (Vptr sp Ptrofs.zero) ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) = Some (ls l).
+    load_stack m sp ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) = Some (ls l).
 
 Inductive cc_locset_mach_mq sg rs: locset_query -> mach_query -> Prop :=
   cc_locset_mach_mq_intro vf ls sp ra m m':
-    Mem.valid_block m sp ->
+    (*Mem.valid_block m sp -> *)
     Val.has_type ra Tptr ->
     free_args sg m sp = Some m' ->
     (forall r, ls (R r) = rs r) ->
     agree_args sg m sp ls ->
-    cc_locset_mach_mq sg rs (lq vf sg ls m') (mq vf (Vptr sp Ptrofs.zero) ra rs m).
+    cc_locset_mach_mq sg rs (lq vf sg ls m') (mq vf sp ra rs m).
 
 Inductive cc_locset_mach_mr sg rs: locset_reply -> mach_reply -> Prop :=
   cc_locset_mach_mr_intro ls' rs' m':
@@ -545,13 +550,13 @@ Program Definition cc_locset_mach: callconv li_locset li_mach :=
 Inductive cc_mach_mq R w: mach_query -> mach_query -> Prop :=
   cc_mach_mq_intro vf1 vf2 sp1 sp2 ra1 ra2 rs1 rs2 m1 m2:
     Val.inject (mi R w) vf1 vf2 ->
-    mi R w sp1 = Some (sp2, 0) ->
+    Val.inject (mi R w) sp1 sp2 ->
     Val.inject (mi R w) ra1 ra2 ->
     (forall r, Val.inject (mi R w) (rs1 r) (rs2 r)) ->
     match_mem R w m1 m2 ->
     cc_mach_mq R w
-      (mq vf1 (Vptr sp1 Ptrofs.zero) ra1 rs1 m1)
-      (mq vf2 (Vptr sp2 Ptrofs.zero) ra2 rs2 m2).
+      (mq vf1 sp1 ra1 rs1 m1)
+      (mq vf2 sp2 ra2 rs2 m2).
 
 Inductive cc_mach_mr R w: mach_reply -> mach_reply -> Prop :=
   cc_mach_mr_intro rs1 rs2 m1 m2:
@@ -587,73 +592,6 @@ Definition make_locset (rs: regset) (m: mem) (sp: val) (l: loc) : val :=
       Val.maketotal v
     | _ => Vundef
   end.
-
-(*
-Lemma make_locset_arg rs m sp l v:
-  extcall_arg rs m sp (loc_of_x l) v ->
-  make_locset rs m sp l = v.
-Proof.
-  destruct l; inversion 1; subst; cbn [make_locset]; auto.
-  rewrite H3. auto.
-Qed.
-
-Lemma make_locset_args rs m sp sg args:
-  extcall_arguments rs m sp sg args ->
-  args = map (fun p => Locmap.getpair p (make_locset rs m sp)) (loc_arguments sg).
-Proof.
-  unfold extcall_arguments.
-  induction 1 as [ | l ll v args]; cbn; auto.
-  f_equal; auto.
-  destruct H; cbn; erewrite !make_locset_arg by eauto; auto.
-Qed.
-
-Lemma free_args_range_perm sg m sp m_ ofs ty:
-  free_args sg m sp = Some m_ ->
-  In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
-  let base := Ptrofs.unsigned (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) in
-  Mem.range_perm m sp base (base + size_chunk (chunk_of_type ty)) Cur Freeable.
-Proof.
-  intros base. revert m. unfold free_args.
-  induction regs_of_rpairs.
-  - contradiction.
-  - intros m Ha Hm. destruct Ha; subst.
-    + cbn [loc_footprints Mem.free_list] in Hm.
-      destruct Mem.free as [m'|] eqn:Hm'; try discriminate.
-      eapply Mem.free_range_perm; eauto.
-    + destruct a as [ | [ ]]; cbn [loc_footprints Mem.free_list] in Hm; auto.
-      destruct Mem.free as [m'|] eqn:Hm'; try discriminate.
-      intros i Hi.
-      eapply Mem.perm_free_3; eauto.
-      eapply IHl; eauto.
-Qed.
-*)
-
-Definition args_accessible sg m sp :=
-  forall ofs ty,
-    In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
-    let base := Ptrofs.unsigned (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) in
-    Mem.valid_access m (chunk_of_type ty) sp base Readable.
-
-Lemma agree_args_accessible sg m sp ls:
-  agree_args sg m sp ls ->
-  args_accessible sg m sp.
-Proof.
-  intros H ofs ty Hl base.
-  specialize (H ofs ty Hl). cbn -[Z.add Z.mul] in H.
-  rewrite Ptrofs.add_zero_l in H.
-  eapply Mem.load_valid_access; eauto.
-Qed.
-
-Lemma make_locset_agree_args rs m sp sg:
-  args_accessible sg m sp ->
-  agree_args sg m sp (make_locset rs m (Vptr sp Ptrofs.zero)).
-Proof.
-  intros H ofs ty l Hl. unfold l; cbn -[Z.add Z.mul].
-  rewrite Ptrofs.add_zero_l.
-  specialize (H ofs ty Hl).
-  edestruct Mem.valid_access_load as [v Hv]; eauto.
-  rewrite Hv. reflexivity.
-Qed.
 
 (** ** To relocate or remove *)
 
