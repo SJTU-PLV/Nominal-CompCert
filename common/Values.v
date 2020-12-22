@@ -2556,6 +2556,18 @@ Proof.
   induction tl; inversion 1; cbn; auto using ensure_type_inject.
 Qed.
 
+Lemma inject_ensure_type_l:
+  forall f v v' t, inject f v v' -> inject f (ensure_type v t) v'.
+Proof.
+  destruct 1, t; econstructor; eauto.
+Qed.
+
+Lemma inject_ensure_type_r:
+  forall f v v' t, inject f v (ensure_type v' t) -> inject f v v'.
+Proof.
+  intros. destruct t, v'; inv H; econstructor; eauto.
+Qed.
+
 End Val.
 
 Notation meminj := Val.meminj.
