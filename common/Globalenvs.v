@@ -1607,8 +1607,8 @@ Record match_stbls (f: meminj) (ge1: symtbl) (ge2: symtbl) := {
     forall b1, Plt b1 (genv_next ge1) ->
     exists b2, f b1 = Some (b2, 0); (* kept *)
   mge_img:
-    forall b1 b2 delta, f b1 = Some (b2, delta) ->
-    Plt b2 (genv_next ge2) -> Plt b1 (genv_next ge1);
+    forall b2, Plt b2 (genv_next ge2) ->
+    exists b1, f b1 = Some (b2, 0);
   mge_symb:
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
     forall id, (Genv.genv_symb ge1) ! id = Some b1 <-> (Genv.genv_symb ge2) ! id = Some b2;
@@ -1631,7 +1631,6 @@ Theorem match_stbls_id ge:
   match_stbls inject_id ge ge.
 Proof.
   unfold inject_id. split; eauto.
-  - inversion 1. auto.
   - inversion 1. reflexivity.
   - inversion 1. auto.
   - inversion 1. reflexivity.
@@ -1649,12 +1648,11 @@ Proof.
     { pose proof (mge_separated H12 _ Hb12). xomega. }
     edestruct (mge_dom H23) as (b3 & Hb23); eauto.
     eexists. unfold compose_meminj. rewrite Hb12, Hb23. reflexivity.
-  - unfold compose_meminj in H. rename b2 into b3.
-    destruct (f b1) as [[b2 delta12] | ] eqn:Hb12; try discriminate.
-    destruct (g b2) as [[xb3 delta23] | ] eqn:Hb23; inv H.
-    eapply mge_separated in Hb12; eauto.
-    eapply mge_separated in Hb23; eauto.
-    xomega.
+  - edestruct (mge_img H23) as (bi & Hbi2); eauto.
+    assert (Plt bi (genv_next ge2)).
+    { pose proof (mge_separated H23 _ Hbi2). xomega. }
+    edestruct (mge_img H12) as (b1 & Hb12); eauto.
+    eexists. unfold compose_meminj. rewrite Hb12, Hbi2. reflexivity.
   - unfold compose_meminj in H. rename b2 into b3.
     destruct (f b1) as [[b2 delta12] | ] eqn:Hb12; try discriminate.
     destruct (g b2) as [[xb3 delta23] | ] eqn:Hb23; inv H.
@@ -1686,11 +1684,7 @@ Proof.
   intros Hf' SEP. split.
   - eapply mge_public; eauto.
   - intros. edestruct mge_dom as (b2 & Hb2); eauto.
-  - intros. destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
-    + rewrite (Hf' _ _ _ Hb) in H. inv H. pose proof (mge_separated Hse b1 Hb).
-      xomega.
-    + specialize (SEP _ _ _ Hb H).
-      xomega.
+  - intros. edestruct mge_img as (bi & Hbi); eauto.
   - intros. split.
     + intros Hb1. edestruct mge_dom as (b2' & Hb2'); eauto. eapply genv_symb_range; eauto.
       rewrite (Hf' _ _ _ Hb2') in H. inv H. rewrite <- mge_symb; eauto.
@@ -1860,9 +1854,9 @@ Proof.
     destruct H; congruence.
   - unfold find_funct, find_funct_ptr, find_def.
     destruct Ptrofs.eq_dec; auto.
-    destruct PTree.get as [[|]|] eqn:Hdef; auto.
-    apply genv_defs_range in Hdef. eapply mge_img in Hdef; eauto.
-    contradiction.
+    destruct PTree.get as [[|]|] eqn:Hdef; auto. exfalso.
+    apply genv_defs_range in Hdef.
+    eapply mge_separated in H; eauto. cbn in *. xomega.
 Qed.
 
 Theorem is_internal_match `{I1: FundefIsInternal F1} `{I2: FundefIsInternal F2}:

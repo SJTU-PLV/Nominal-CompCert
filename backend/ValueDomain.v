@@ -4452,7 +4452,7 @@ Proof.
   intros. destruct H as [A B].
   split; eauto.
   - intros. eexists. apply inj_of_bc_valid. apply B; auto.
-  - intros. edestruct inj_of_bc_inv as (P & Q & R); eauto. congruence.
+  - intros. eexists. apply inj_of_bc_valid. apply B; auto.
   - intros. edestruct inj_of_bc_inv as (P & Q & R); eauto. split; congruence.
   - intros. edestruct inj_of_bc_inv as (P & Q & R); eauto. congruence.
   - intros. edestruct inj_of_bc_inv as (P & Q & R); eauto. split; congruence.

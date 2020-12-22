@@ -441,7 +441,7 @@ Lemma match_stbls_dom f se1 se2:
 Proof.
   intros Hse. unfold meminj_dom. split; eauto; intros.
   - edestruct Genv.mge_dom as (b2 & Hb2); eauto. rewrite Hb2. eauto.
-  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. auto.
+  - edestruct Genv.mge_dom as (b3 & Hb3); eauto. exists b2. rewrite Hb3. eauto.
   - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
   - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
   - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
