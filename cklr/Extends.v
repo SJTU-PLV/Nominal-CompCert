@@ -178,6 +178,11 @@ Next Obligation.
   intuition xomega.
 Qed.
 
+Next Obligation.
+  inv H0. inv H3. rewrite Z.add_0_r in H1.
+  eapply Mem.perm_extends_inv; eauto.
+Qed.
+
 
 (** * Useful lemmas *)
 

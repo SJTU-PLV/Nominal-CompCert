@@ -493,6 +493,15 @@ Next Obligation. (* disjoint_or_equal_inject *)
   - eapply (cklr_disjoint_or_equal_inject R1); eauto.
 Qed.
 
+Next Obligation. (* perm inv *)
+  simpl in *.
+  destruct H as (mi & Hm1i & Hmi2).
+  apply ptr_inject_compose in H0 as ([bi ofsi] & Hp1i & Hpi2).
+  edestruct (cklr_perm_inv R2); eauto.
+  - eapply (cklr_perm_inv R1); eauto.
+  - right. intros Hm1. apply H. revert Hm1. rauto.
+Qed.
+
 Bind Scope cklr_scope with cklr.
 Delimit Scope cklr_scope with cklr.
 Infix "@" := cklr_compose (at level 30, right associativity) : cklr_scope.

@@ -154,7 +154,14 @@ Record cklr :=
         b1' <> b2' \/
         (ofs1 + delta1 = ofs2 + delta2)%Z \/
         ofs1 + delta1 + sz <= ofs2 + delta2 \/
-        ofs2 + delta2 + sz <= ofs1 + delta1
+        ofs2 + delta2 + sz <= ofs1 + delta1;
+
+    cklr_perm_inv w m1 m2 b1 ofs1 b2 ofs2 k p:
+      match_mem w m1 m2 ->
+      ptr_inject (mi w) (b1, ofs1) (b2, ofs2) ->
+      Mem.perm m2 b2 ofs2 k p ->
+      Mem.perm m1 b1 ofs1 k p \/ ~Mem.perm m1 b1 ofs1 Max Nonempty;
+
   }.
 
 Global Existing Instance cklr_kf.

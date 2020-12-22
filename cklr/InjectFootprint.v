@@ -348,6 +348,12 @@ Next Obligation.
   eapply Mem.disjoint_or_equal_inject; eauto.
 Qed.
 
+Next Obligation.
+  destruct H as [f m1 m2 Hm].
+  inv H0. cbn in *.
+  eapply Mem.perm_inject_inv; eauto.
+Qed.
+
 
 (** * Properties *)
 
