@@ -574,7 +574,7 @@ Next Obligation.
   eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
 Qed.
 Next Obligation.
-  eapply match_stbls_proj in H. eapply Genv.valid_for_match; eauto.
+  eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
 Qed.
 
 (** ** Properties *)
