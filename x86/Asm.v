@@ -13,8 +13,9 @@
 (** Abstract syntax and semantics for IA32 assembly language *)
 
 Require Import Coqlib Maps.
-Require Import AST Integers Floats Values Memory Events Globalenvs LanguageInterface Smallstep.
+Require Import AST Integers Floats Values Memory Events Globalenvs Smallstep.
 Require Import Locations Stacklayout Conventions.
+Require Import Mach LanguageInterface CKLR.
 
 (** * Abstract syntax *)
 
@@ -1192,7 +1193,7 @@ Inductive final_state: state -> reply li_asm -> Prop :=
   | final_state_intro rs m:
       final_state (State rs m false) (rs, m).
 
-Definition semantics (p: program): semantics li_asm li_asm :=
+Definition semantics (p: program): Smallstep.semantics li_asm li_asm :=
   {|
     skel := erase_program p;
     activate se :=
@@ -1298,3 +1299,50 @@ Definition data_preg (r: preg) : bool :=
   | RA => false
   end.
 
+(** * Simulation conventions *)
+
+Unset Program Cases.
+
+(** ** Calling convention from [li_mach] *)
+
+Inductive cc_mach_asm_mq (rs: regset): block -> mach_query -> query li_asm -> Prop :=
+  cc_mach_asm_mq_intro m:
+    valid_blockv (Mem.nextblock m) rs#SP ->
+    rs#RA <> Vundef ->
+    cc_mach_asm_mq rs
+      (Mem.nextblock m)
+      (mq rs#PC rs#SP rs#RA (fun r => rs (preg_of r)) m)
+      (rs, m).
+
+Inductive cc_mach_asm_mr (rs: regset) (nb: block): mach_reply -> reply li_asm -> Prop :=
+  cc_mach_asm_mr_intro (rs': regset) m':
+    rs'#SP = rs#SP ->
+    rs'#PC = rs#RA ->
+    Pos.le nb (Mem.nextblock m') ->
+    cc_mach_asm_mr rs nb (mr (fun r => rs' (preg_of r)) m') (rs', m').
+
+Program Definition cc_mach_asm : callconv li_mach li_asm :=
+  {|
+    match_senv _ := eq;
+    match_query '(rs, nb) := cc_mach_asm_mq rs nb;
+    match_reply '(rs, nb) := cc_mach_asm_mr rs nb;
+  |}.
+
+(** ** CKLR simulation convention *)
+
+Definition cc_asm_match R w '(rs1, m1) '(rs2, m2) :=
+  (forall r: preg, Val.inject (mi R w) (rs1 r) (rs2 r)) /\
+  match_mem R w m1 m2.
+
+Program Definition cc_asm R : callconv li_asm li_asm :=
+  {|
+    match_senv := match_stbls R;
+    match_query := cc_asm_match R;
+    match_reply := (<> cc_asm_match R)%klr;
+  |}.
+Next Obligation.
+  eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
+Qed.
+Next Obligation.
+  eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+Qed.
