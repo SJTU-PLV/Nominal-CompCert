@@ -361,3 +361,87 @@ Proof.
         ++ intros Hb. apply Genv.find_invert_symbol in Hb. rewrite Hb.
            reflexivity.
 Qed.
+
+
+(** * Other properties *)
+
+Require Import CKLRAlgebra.
+
+Lemma vainj_vainj:
+  subcklr vainj (vainj @ vainj).
+Proof.
+  intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [xse1 w m1 m2 Hnb Hro Hm].
+  destruct Hse as [? Hse]. subst.
+  destruct Hm as [f m1 m2 Hm].
+  exists ((se1, injw (meminj_dom f) (Mem.nextblock m1) (Mem.nextblock m1)),
+          (se1, injw f (Mem.nextblock m1) (Mem.nextblock m2))); simpl.
+  repeat apply conj.
+  - exists se1. repeat apply conj; eauto.
+    inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
+  - exists m1; split; repeat rstep; constructor; cbn; eauto using inj_mem_intro, mem_inject_dom.
+  - rewrite meminj_dom_compose.
+    apply inject_incr_refl.
+  - intros [[? w12'] [? w23']] m1' m3' (m2' & H12' & H23') [[? Hw12'] [? Hw23']].
+    cbn in *. subst s s0.
+    inversion H12' as [? w12'' ? ? ? ? H12'']; clear H12'; subst.
+    destruct H12'' as [f12' m1' m2' Hm12'].
+    inversion H23' as [? w23'' ? ? ? ? H23'']; clear H23'; subst.
+    inversion H23'' as [f23' xm2' xm3' Hm23']. clear H23''; subst.
+    inversion Hw12' as [? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
+    inversion Hw23' as [? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
+    eexists (se1, injw (compose_meminj f12' f23') _ _).
+    repeat apply conj; cbn; auto.
+    + constructor; auto. constructor; auto. eapply Mem.inject_compose; eauto.
+    + constructor; auto.
+      * rewrite <- (meminj_dom_compose f). rauto.
+      * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
+        destruct (f12' b1) as [[bi delta12] | ] eqn:Hb1; try discriminate.
+        destruct (f23' bi) as [[xb2 delta23] | ] eqn:Hb2; try discriminate.
+        inv Hb'.
+        edestruct SEP12'; eauto. unfold meminj_dom. rewrite Hb. auto.
+        destruct (f bi) as [[? ?] | ] eqn:Hfbi.
+        {
+          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
+          red in Hfbi. xomega.
+        }
+        edestruct SEP23'; eauto.
+Qed.
+
+Lemma vainj_inj:
+  subcklr vainj (vainj @ inj).
+Proof.
+  intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [xse1 w m1 m2 Hnb Hro Hm].
+  destruct Hse as [? Hse]. subst.
+  destruct Hm as [f m1 m2 Hm].
+  exists ((se1, injw (meminj_dom f) (Mem.nextblock m1) (Mem.nextblock m1)),
+          (injw f (Mem.nextblock m1) (Mem.nextblock m2))); simpl.
+  repeat apply conj.
+  - exists se1. repeat apply conj; eauto.
+    inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
+  - exists m1; split; repeat rstep; constructor; cbn; eauto using inj_mem_intro, mem_inject_dom.
+  - rewrite meminj_dom_compose.
+    apply inject_incr_refl.
+  - intros [[? w12'] w23'] m1' m3' (m2' & H12' & H23') [[? Hw12'] Hw23'].
+    cbn in *. subst s.
+    inversion H12' as [? w12'' ? ? ? ? H12'']; clear H12'; subst.
+    destruct H12'' as [f12' m1' m2' Hm12'].
+    inversion H23' as [f23' xm2' xm3' Hm23']. clear H23'; subst.
+    inversion Hw12' as [? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
+    inversion Hw23' as [? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
+    eexists (se1, injw (compose_meminj f12' f23') _ _).
+    repeat apply conj; cbn; auto.
+    + constructor; auto. constructor; auto. eapply Mem.inject_compose; eauto.
+    + constructor; auto.
+      * rewrite <- (meminj_dom_compose f). rauto.
+      * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
+        destruct (f12' b1) as [[bi delta12] | ] eqn:Hb1; try discriminate.
+        destruct (f23' bi) as [[xb2 delta23] | ] eqn:Hb2; try discriminate.
+        inv Hb'.
+        edestruct SEP12'; eauto. unfold meminj_dom. rewrite Hb. auto.
+        destruct (f bi) as [[? ?] | ] eqn:Hfbi.
+        {
+          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
+          red in Hfbi. xomega.
+        }
+        edestruct SEP23'; eauto.
+Qed.
