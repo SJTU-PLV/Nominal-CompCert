@@ -76,6 +76,7 @@ CKLR=\
   CKLR.v CKLRAlgebra.v \
   Extends.v ExtendsFootprint.v \
   Inject.v InjectFootprint.v InjectNeutral.v \
+  VAInject.v VAExtends.v \
   Mapsrel.v \
   Valuesrel.v Builtinsrel.v Eventsrel.v Globalenvsrel.v \
   Coprel.v Clightrel.v \
@@ -133,7 +134,7 @@ MENHIRLIB=Alphabet.v Automaton.v Grammar.v Interpreter_complete.v \
 
 # Putting everything together (in driver/)
 
-DRIVER=Compopts.v Compiler.v Complements.v
+DRIVER=Compopts.v CallConv.v Compiler.v Complements.v
 
 # All source files
 
