@@ -39,14 +39,74 @@ Section PROG.
       eauto.
   Qed.
 
-  Inductive state_match R w: rel (block * Asm.state) (block * Asm.state) :=
-  | state_rel: forall (rs1 rs2: regset) m1 m2 b1 b2 nb1 nb2,
-      (forall r: preg, Val.inject (mi R w) (rs1 r) (rs2 r)) ->
-      match_mem R w m1 m2 ->
-      b1 = b2 ->
-      nb1 = Mem.nextblock m1 ->
-      nb2 = Mem.nextblock m2 ->
-      state_match R w (nb1, Asm.State rs1 m1 b1) (nb2, Asm.State rs2 m2 b2).
+  Definition regset_inject R (w: world R): rel regset regset :=
+    forallr - @ r, (Val.inject (mi R w)).
+
+  Inductive outcome_match R (w: world R): rel outcome outcome :=
+  | Next_match:
+      Monotonic
+        (@Next')
+        (regset_inject R w ++> match_mem R w ++> - ==> outcome_match R w)
+  | Stuck_match:
+      outcome_match R w Stuck Stuck.
+
+  Inductive state_match R w: rel Asm.state Asm.state :=
+  | State_rel:
+      Monotonic
+        (@Asm.State)
+        (regset_inject R w ++> match_mem R w ++> - ==> state_match R w).
+
+  Global Instance set_inject R w:
+    Monotonic
+      (@Pregmap.set val)
+      (- ==> (Val.inject (mi R w)) ++> regset_inject R w ++> regset_inject R w).
+  Proof.
+    unfold regset_inject, Pregmap.set.
+    repeat rstep.
+  Qed.
+  
+  Global Instance nextinstr_inject R w:
+    Monotonic
+      (@nextinstr)
+      (regset_inject R w ++> regset_inject R w).
+  Proof.
+    unfold nextinstr.
+    repeat rstep.
+    apply set_inject; auto.
+    apply Val.offset_ptr_inject; auto.
+  Qed.
+
+  Global Instance exec_instr_match R:
+    Monotonic
+      (@exec_instr)
+      (|= block_inject_sameofs @@ [mi R] ++>
+       genv_match R ++> - ==> - ==>
+       regset_inject R ++> match_mem R ++> 
+       (<> outcome_match R)).
+  Proof.
+    intros w b1 b2 Hb ge1 ge2 Hge f i rs1 rs2 Hrs m1 m2 Hm.
+    destruct i.
+    - cbn. exists w. split. rauto. constructor.
+      rstep. apply set_inject; auto. auto.
+    - 
+
+  
+  Global Instance step_rel R:
+    Monotonic
+      (@step)
+      (|= block_inject_sameofs @@ [mi R] ++> genv_match R ++>
+          state_match R ++> - ==> k1 set_le (<> state_match R)).
+  Proof.
+    intros w b1 b2 Hb ge1 ge2 Hge s1 s2 Hs t s1' H1.
+    inv H1.
+  Admitted.
+  Global Instance inner_sp_inject R w rs1 rs2 m1 m2 b:
+    Transport (regset_rel R w * match_mem R w) (rs1, m1) (rs2, m2)
+              (inner_sp (Mem.nextblock m1) (rs1 RSP) = b)
+              (inner_sp (Mem.nextblock m2) (rs2 RSP) = b).
+  Proof.
+  Admitted.
+  
 End PROG.
 
 Lemma semantics_asm_rel p R:
@@ -108,14 +168,22 @@ Proof.
     }
     eexists w', _. repeat apply conj.
     econstructor. apply Hff. constructor. auto. auto. rauto.
-    intros [rrs1 rm1] [rrs2 rm2] [rb1 rs1] (w'' & Hw'' & Hr) [Hae ?].
-    inv Hae.
+    intros [rrs1 rm1] [rrs2 rm2] [rb1 rs1] (w'' & Hw'' & Hr) [H H1].
+    inv H.
     eexists. repeat apply conj. instantiate (1 := (_, _)). cbn.
     split. econstructor. admit.
     reflexivity. exists w''. assert (Hw: w ~> w'). rauto.
     split. rauto.
     split; cbn.
+    eapply genv_match_acc. apply Hw''. apply Hge.
+    inv Hr. split. apply H. apply H1.
+    apply (inner_sp_match p R w'' rrs1 rrs2 m m2). apply H.
+    admit. 
     admit.                      (* external call *)
-  - admit.                      (* step *)
+    admit.
+  - intros [nb1 s1] t [nb1' s1'] [Hstep ->] [nb2 s2] (w' & Hw' & Hge & Hs).
+    cbn [fst snd] in *.
+ 
+    admit.                      (* step *)
   - apply well_founded_ltof.
     
