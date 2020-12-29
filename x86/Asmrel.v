@@ -86,9 +86,16 @@ Section PROG.
   Proof.
     intros w b1 b2 Hb ge1 ge2 Hge f i rs1 rs2 Hrs m1 m2 Hm.
     destruct i.
-    - cbn. exists w. split. rauto. constructor.
-      rstep. apply set_inject; auto. auto.
+    - cbn. exists w. split. rauto. constructor; auto.
+      rstep. apply set_inject; auto. 
+    - cbn. exists w. split. rauto. constructor; auto.
+      unfold nextinstr_nf. rstep.
+      repeat apply set_inject; constructor || auto.
+    - cbn. exists w. split. rauto. constructor; auto.
+      unfold nextinstr_nf. rstep.
+      repeat apply set_inject; constructor || auto.
     - 
+      
 
   
   Global Instance step_rel R:
