@@ -958,43 +958,13 @@ Qed.
 
 End STRAIGHTLINE_OPT.
 
-(** * Calling convention *)
-
-Record cc_asmgen_world :=
-  asmgenw {
-    ag_sp: val;
-    ag_ra: val;
-    ag_nb: block;
-  }.
-
-Inductive cc_asmgen_mq: _ -> mach_query -> query li_asm -> Prop :=
-  | cc_asmgen_mq_intro rs1 m1 rs2 m2 sp:
-      valid_blockv (Mem.nextblock m2) sp ->
-      rs2#RA <> Vundef ->
-      agree rs1 sp rs2 ->
-      Mem.extends m1 m2 ->
-      cc_asmgen_mq (asmgenw sp rs2#RA (Mem.nextblock m2)) (mq rs2#PC sp rs2#RA rs1 m1) (rs2, m2).
-
-Definition cc_asmgen_mr: _ -> reply li_mach -> reply li_asm -> _ :=
-  fun '(asmgenw sp ra nb) '(mr rs1' m1') '(rs2', m2') =>
-    rs2'#PC = ra /\
-    agree rs1' sp rs2' /\
-    Mem.extends m1' m2' /\
-    Pos.le nb (Mem.nextblock m2').
-
-Program Definition cc_asmgen: callconv li_mach li_asm :=
-  {|
-    match_senv w := eq;
-    match_query := cc_asmgen_mq;
-    match_reply := cc_asmgen_mr;
-  |}.
-
 (** * Properties of the Mach call stack *)
 
 Section MATCH_STACK.
 
 Variable ge: Mach.genv.
-Variable w: cc_asmgen_world.
+Variable init_rs: regset.
+Variable init_nb: block.
 
 (** We maintain the invariant that successive stack frames have
   increasing block identifiers. This allows us to prove that a new
@@ -1009,15 +979,15 @@ Inductive block_lt: val -> val -> Prop :=
 
 Inductive match_stack (bound: block): list Mach.stackframe -> Prop :=
   | match_stack_nil:
-      ag_sp w <> Vundef ->
-      ag_ra w <> Vundef ->
-      valid_blockv (ag_nb w) (ag_sp w) ->
-      Ple (ag_nb w) bound ->
-      match_stack bound (Stackbase (ag_sp w) (ag_ra w) :: nil)
+      init_rs#SP <> Vundef ->
+      init_rs#RA <> Vundef ->
+      valid_blockv init_nb init_rs#SP ->
+      Ple init_nb bound ->
+      match_stack bound (Stackbase init_rs#SP init_rs#RA :: nil)
   | match_stack_cons: forall fb sp ra c s f tf tc,
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       transl_code_at_pc ge ra fb f c false tf tc ->
-      inner_sp (ag_nb w) sp = true ->
+      inner_sp init_nb sp = true ->
       valid_blockv bound sp ->
       match_stack bound s ->
       match_stack bound (Stackframe (Vptr fb Ptrofs.zero) sp ra c :: s).
@@ -1056,7 +1026,7 @@ Qed.
 
 Lemma match_stack_nextblock:
   forall b s,
-  match_stack b s -> Ple (ag_nb w) b.
+  match_stack b s -> Ple init_nb b.
 Proof.
   induction 1; auto.
 Qed.

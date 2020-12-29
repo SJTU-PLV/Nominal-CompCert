@@ -385,11 +385,13 @@ Local Opaque mreg_type.
 Qed.
 
 Lemma wt_initial_regs sg ls:
-  wt_locset ls ->
+  (forall l, loc_external sg l -> Val.has_type (ls l) (Loc.type l)) ->
   wt_locset (initial_regs sg ls).
 Proof.
   intros H l. unfold initial_regs.
-  destruct loc_is_external; auto. constructor.
+  destruct loc_is_external eqn:Hl.
+  - apply loc_external_is in Hl; auto.
+  - constructor.
 Qed.
 
 End SOUNDNESS.
@@ -397,22 +399,34 @@ End SOUNDNESS.
 (** Invariant preservation theorem *)
 
 Require Import Invariant.
+Unset Program Cases.
+
+Inductive wt_loc_query sg: locset_query -> Prop :=
+  | wt_loc_query_intro vf ls m:
+      (forall l, loc_external sg l -> Val.has_type (ls l) (Loc.type l)) ->
+      wt_loc_query sg (lq vf sg ls m).
+
+Inductive wt_loc_reply sg: locset_reply -> Prop :=
+  | wt_loc_reply_intro ls' m':
+      (forall r, In r (regs_of_rpair (loc_result sg)) ->
+                 Val.has_type (ls' (R r)) (mreg_type r)) ->
+      wt_loc_reply sg (lr ls' m').
 
 Program Definition wt_loc :=
   {|
-    symtbl_inv := eq;
-    query_inv _ '(lq vf sg ls m) := wt_locset ls;
-    reply_inv _ '(lr ls m) := wt_locset ls;
+    symtbl_inv '(se, sg) := eq se;
+    query_inv '(se, sg) := wt_loc_query sg;
+    reply_inv '(se, sg) := wt_loc_reply sg;
   |}.
 
 Lemma linear_wt prog:
   (forall i fd, In (i, Gfun fd) prog.(prog_defs) -> wt_fundef fd) ->
-  preserves (semantics prog) wt_loc wt_loc (wt_state prog).
+  preserves (semantics prog) wt_loc wt_loc (fun '(se, sg) => wt_state prog se).
 Proof.
   intros wt_prog.
-  constructor; cbn in *; subst w.
+  constructor; cbn in *; destruct w as [xse sg]; subst xse.
   - eauto using step_type_preservation.
-  - intros [vf sg ls m] S WTRS HS. inv HS. subst rs0.
+  - intros _ S [vf ls m WTRS] HS. inv HS. subst rs0.
     econstructor; eauto.
     + constructor. apply wt_initial_regs; auto.
     + pattern (Internal f). eapply Genv.find_funct_prop; eauto.
@@ -420,20 +434,20 @@ Proof.
     + red. cbn. auto.
     + red. cbn. auto.
   - intros S q WTS Hq. inv Hq. inv WTS. rewrite FIND in H0. inv H0.
-    exists se. split; auto. split; auto.
-    intros r S' Hr HS'. inv HS'. rewrite H6 in FIND; inv FIND.
+    exists (se, sg0). split; auto. split. constructor; auto.
+    intros r S' Hr HS'. inv HS'. rewrite H6 in FIND; inv FIND. inv Hr.
     constructor; auto.
     + unfold result_regs. intros l.
       destruct l as [ | [ ]]; auto; try constructor.
-      destruct in_dec; auto.
+      destruct in_dec; auto. apply H1. auto.
       destruct is_callee_save; auto.
     + intros l Hl. transitivity (rs l); auto.
       unfold result_regs. destruct l as [ | [ ]]; cbn in *; auto; try congruence.
       rewrite Hl. destruct in_dec; auto.
-      pose proof (loc_result_caller_save sg).
+      pose proof (loc_result_caller_save sg0).
       destruct loc_result; cbn in *; intuition congruence.
     + red. cbn. auto.
-  - intros S r HS Hr. inv Hr. inv HS. auto.
+  - intros S r HS Hr. inv Hr. inv HS. constructor. intros. apply WTRS.
 Qed.
 
 (** Properties of well-typed states that are used in [Stackingproof]. *)

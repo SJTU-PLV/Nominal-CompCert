@@ -15,7 +15,7 @@
 Require Import Coqlib Maps.
 Require Import AST Integers Floats Values Memory Events Globalenvs Smallstep.
 Require Import Locations Stacklayout Conventions.
-Require Import Mach LanguageInterface CKLR.
+Require Import Mach LanguageInterface CallconvAlgebra CKLR CKLRAlgebra.
 
 (** * Abstract syntax *)
 
@@ -1346,3 +1346,11 @@ Qed.
 Next Obligation.
   eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
 Qed.
+
+Instance cc_asm_ref:
+  Monotonic cc_asm (subcklr ++> ccref).
+Admitted.
+
+Lemma cc_asm_compose R S :
+  cceqv (cc_asm (R @ S)) (cc_asm R @ cc_asm S).
+Admitted.
