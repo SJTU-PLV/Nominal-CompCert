@@ -424,6 +424,13 @@ Qed.
 
 Infix "+" := cc_join : cc_scope.
 
+(** The following hint database can be useful to prove refinements
+  involving joins. *)
+
+Create HintDb cc.
+Hint Resolve cc_join_ub_l cc_join_ub_r cc_join_l cc_join_r : cc.
+Hint Resolve (reflexivity (R := ccref)) : cc.
+
 (** ** Superposition *)
 
 (** In addition to the union, we can define a superposition operator
@@ -641,6 +648,28 @@ Proof.
   intros li cc cc' Hcc [n ws] se1 se2 q1 q2 Hse Hq.
   destruct (cc_pow_ref li cc cc' Hcc n ws se1 se2 q1 q2 Hse Hq) as (ws' & Hq' & Hse' & H).
   exists (existT _ n ws'); simpl. eauto.
+Qed.
+
+(** *** Additional lemmas *)
+
+Lemma cc_star_absorb_l {liA liB} x y (z : callconv liA liB) :
+  ccref x y ->
+  ccref (x @ y^{*} @ z) (y^{*} @ z).
+Proof.
+  intros Hxy.
+  rewrite (cc_one_star x), Hxy.
+  rewrite <- cc_compose_assoc, cc_star_idemp.
+  reflexivity.
+Qed.
+
+Lemma cc_star_absorb_r {liA liB} x y (z : callconv liA liB) :
+  ccref x y ->
+  ccref (y^{*} @ x @ z) (y^{*} @ z).
+Proof.
+  intros Hxy.
+  rewrite (cc_one_star x), Hxy.
+  rewrite <- cc_compose_assoc, cc_star_idemp.
+  reflexivity.
 Qed.
 
 (** *** Proving simulations *)

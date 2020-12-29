@@ -357,29 +357,6 @@ Qed.
   (composition of two backward simulations).
 *)
 
-(*
-Remark forward_simulation_identity:
-  forall sem, forward_simulation sem sem.
-Proof.
-  intros. apply forward_simulation_step with (fun s1 s2 => s2 = s1); intros.
-- auto.
-- exists s1; auto.
-- subst s2; auto.
-- subst s2. exists s1'; auto.
-Qed.
-
-Lemma match_if_simulation:
-  forall (A: Type) (sem: A -> semantics) (flag: unit -> bool) (transf: A -> A -> Prop) (prog tprog: A),
-  match_if flag transf prog tprog ->
-  (forall p tp, transf p tp -> forward_simulation (sem p) (sem tp)) ->
-  forward_simulation (sem prog) (sem tprog).
-Proof.
-  intros. unfold match_if in *. destruct (flag tt). eauto. subst. apply forward_simulation_identity.
-Qed.
-*)
-
-(** ** Calling conventions *)
-
 (** Preliminaries: this should be in Coqrel. Alternatively, we could
   define it for [ccref] alone. *)
 
@@ -399,21 +376,103 @@ Proof.
 Qed.
 *)
 
-(** This is the simulation conventions for passes Alloc through Asmgen.
-  These passes have a symmetric interface, so there is no difficulty
-  in making them compositional. Although the Debugvar pass is
-  optional, since this it is as [cc_id -> cc_id] pass this does not
-  introduce any difficulty. *)
+(** ** Calling conventions *)
 
-(** However for passes upstream of Alloc, we need a more subtle approach.
-  On one hand, the incoming convention of these passes are easily
-  absorbed by the [cc_inj] component of [cc_backend], as seen here. *)
-
+Require Import Conventions Asm Mach Lineartyping.
 Require Import VAInject.
 Require Import VAExtends.
 
+(** This is the simulation convention for the whole compiler. *)
+
+Definition cc_cklrs : callconv li_c li_c :=
+  injp + inj + ext + vainj + vaext.
+
+Definition cc_compcert : callconv li_c li_asm :=
+  cc_cklrs^{*} @
+  et_c @ cc_c_locset @ et_loc @ cc_locset_mach @ cc_mach_asm @
+  cc_asm vainj.
+
+(** We show that the overall simulation convention can be
+  rewritten to match the conventions used in CompCertO's passes.
+  The following conventions give a flexible characterization for
+  early passes. *)
+
 Definition cc_cod : callconv li_c li_locset :=
   et_c @ inj @ vainj @ wt_c @ cc_c ext @ cc_c_locset.
+
+Definition cc_dom : callconv li_c li_locset :=
+  cc_cklrs^{*} @ cc_cod.
+
+Lemma cc_compcert_expand:
+  ccref
+    cc_compcert
+    (cc_dom @                                              (* Passes up to Alloc *)
+     cc_locset ext @                                       (* Tunneling *)
+     (wt_loc @ et_loc @ cc_locset_mach @ cc_mach inj) @    (* Stacking *)
+     (cc_mach_asm @ cc_asm ext) @                          (* Asmgen *)
+     cc_asm vainj).
+Proof.
+  unfold cc_compcert, cc_dom, cc_cod.
+  rewrite !cc_compose_assoc.
+  etransitivity.
+  {
+    rewrite vainj_vainj, vainj_inj, !cc_asm_compose, !cc_compose_assoc at 1.
+    (* the first [vainj] can be used to meet the requirements of frontend passes *)
+    do 4 rewrite (commute_around _ (R2 := _ vainj)).
+    rewrite vainj_vainj, cc_c_compose, cc_compose_assoc at 1.
+    rewrite vainj_inj, cc_c_compose, cc_compose_assoc at 1.
+    rewrite (commute_around _ (R2 := _ vainj)).
+    rewrite cc_star_absorb_r by eauto with cc.
+    (* we also need to duplicate et_c for alloc *)
+    rewrite <- et_et_c, cc_compose_assoc.
+    rewrite (commute_around et_c (R2 := inj)).
+    rewrite (commute_around et_c (R2 := vainj)).
+    reflexivity.
+  }
+  repeat (rstep; [rauto | ]).
+  etransitivity.
+  {
+    (* Now we can expand the intermediate [inj] for the rest *)
+    rewrite <- inj_ext, cc_asm_compose, cc_compose_assoc.
+    rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
+    rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
+    do 3 rewrite (commute_around cc_mach_asm).
+    do 2 rewrite (commute_around cc_locset_mach).
+    rewrite !(commute_around et_loc).
+    do 1 rewrite (commute_around cc_c_locset).
+    rewrite <- (cc_compose_assoc et_c ext), et_wt_c, cc_compose_assoc.
+    rewrite et_wt_et_loc, cc_compose_assoc.
+    reflexivity.
+  }
+  reflexivity.
+Qed.
+
+Lemma cc_compcert_collapse:
+  ccref
+    (cc_dom @                                     (* Passes up to Alloc *)
+     cc_locset ext @                              (* Tunneling *)
+     (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
+     (cc_mach_asm @ cc_asm ext) @                 (* Asmgen *)
+     cc_asm vainj)
+    cc_compcert.
+Proof.
+  rewrite !cc_compose_assoc.
+  rewrite (commute_around cc_mach_asm).
+  rewrite !(commute_around cc_locset_mach).
+  rewrite <- (cc_compose_assoc wt_loc), <- et_wt_loc, cc_compose_assoc.
+  rewrite !(commute_around et_loc).
+  unfold cc_dom, cc_cod. rewrite !cc_compose_assoc.
+  rewrite <- (cc_compose_assoc wt_c), <- et_wt_c, cc_compose_assoc.
+  rewrite !(commute_around cc_c_locset).
+  rewrite !(commute_around et_c).
+  rewrite !cc_star_absorb_r by eauto with cc.
+  rewrite <- (cc_compose_assoc et_c), et_et_c.
+  reflexivity.
+Qed.
+
+(** To compose the early passes in a flexible and incremental way,
+  we maintain a simulation convention of the form [cc_dom -->> cc_cod],
+  which is stable under composition with various kinds of passes. *)
 
 Lemma cc_cod_inj:
   ccref cc_cod (cc_c inj @ cc_cod).
@@ -454,44 +513,6 @@ Proof.
   reflexivity.
 Qed.
 
-(** On the other hand, the outgoing conventions are more difficult to
-  work with. However, using the simulation convention algebra we can
-  reduce them to the following, self-composable convention. *)
-
-Definition cc_cklrs : callconv li_c li_c :=
-  injp + inj + ext + vainj + vaext.
-
-Definition cc_dom : callconv li_c li_locset :=
-  cc_cklrs^{*} @ cc_cod.
-
-(** XXX move to CallconvAlgebra? *)
-
-Lemma cc_star_absorb_l {liA liB} x y (z : callconv liA liB) :
-  ccref x y ->
-  ccref (x @ y^{*} @ z) (y^{*} @ z).
-Proof.
-  intros Hxy.
-  rewrite (cc_one_star x), Hxy.
-  rewrite <- cc_compose_assoc, cc_star_idemp.
-  reflexivity.
-Qed.
-
-Lemma cc_star_absorb_r {liA liB} x y (z : callconv liA liB) :
-  ccref x y ->
-  ccref (y^{*} @ x @ z) (y^{*} @ z).
-Proof.
-  intros Hxy.
-  rewrite (cc_one_star x), Hxy.
-  rewrite <- cc_compose_assoc, cc_star_idemp.
-  reflexivity.
-Qed.
-
-Create HintDb cc.
-Hint Resolve cc_join_ub_l cc_join_ub_r cc_join_l cc_join_r : cc.
-Hint Resolve (reflexivity (R := ccref)) : cc.
-
-(** ------------------------------ *)
-
 Lemma cc_dom_injp:
   ccref (cc_c injp @ cc_dom) cc_dom.
 Proof.
@@ -522,8 +543,8 @@ Proof.
   rewrite !cc_star_absorb_l; eauto with cc.
 Qed.
 
-(** The following collection of lemmas can be used to pre-compose a
-  variety of frontend passes. *)
+(** The following collection of lemmas can then be used to pre-compose
+  a variety of passes. *)
 
 Section COMPOSE_C_PASSES.
 
@@ -640,82 +661,6 @@ Lemma compose_optional_pass {A liA1 liA2 liB1 liB2 ccA ccB ccA' ccB' sem}:
 Proof.
   intros. unfold match_if in *.
   destruct (flag tt); subst; eauto.
-Qed.
-
-(** ** Frontend simulation convention *)
-
-Import Conventions Asm Mach Lineartyping.
-
-Definition cc_compcert : callconv li_c li_asm :=
-  cc_cklrs^{*} @
-  et_c @ cc_c_locset @ et_loc @ cc_locset_mach @ cc_mach_asm @
-  cc_asm vainj.
-
-Lemma cc_compcert_expand:
-  ccref
-    cc_compcert
-    (cc_dom @                                              (* [li_c] passes *)
-     cc_locset ext @                                       (* Tunneling *)
-     (wt_loc @ et_loc @ cc_locset_mach @ cc_mach inj) @    (* Stacking *)
-     (cc_mach_asm @ cc_asm ext) @                          (* Asmgen *)
-     cc_asm vainj).
-Proof.
-  unfold cc_compcert, cc_dom, cc_cod.
-  rewrite !cc_compose_assoc.
-  etransitivity.
-  {
-    rewrite vainj_vainj, vainj_inj, !cc_asm_compose, !cc_compose_assoc at 1.
-    (* the first [vainj] can be used to meet the requirements of frontend passes *)
-    do 4 rewrite (commute_around _ (R2 := _ vainj)).
-    rewrite vainj_vainj, cc_c_compose, cc_compose_assoc at 1.
-    rewrite vainj_inj, cc_c_compose, cc_compose_assoc at 1.
-    rewrite (commute_around _ (R2 := _ vainj)).
-    rewrite cc_star_absorb_r by eauto with cc.
-    (* we also need to duplicate et_c for alloc *)
-    rewrite <- et_et_c, cc_compose_assoc.
-    rewrite (commute_around et_c (R2 := inj)).
-    rewrite (commute_around et_c (R2 := vainj)).
-    reflexivity.
-  }
-  repeat (rstep; [rauto | ]).
-  etransitivity.
-  {
-    (* Now we can expand the intermediate [inj] for the rest *)
-    rewrite <- inj_ext, cc_asm_compose, cc_compose_assoc.
-    rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
-    rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
-    do 3 rewrite (commute_around cc_mach_asm).
-    do 2 rewrite (commute_around cc_locset_mach).
-    rewrite !(commute_around et_loc).
-    do 1 rewrite (commute_around cc_c_locset).
-    rewrite <- (cc_compose_assoc et_c ext), et_wt_c, cc_compose_assoc.
-    rewrite et_wt_et_loc, cc_compose_assoc.
-    reflexivity.
-  }
-  reflexivity.
-Qed.
-
-Lemma cc_compcert_collapse:
-  ccref
-    (cc_dom @                                     (* [li_c] passes *)
-     cc_locset ext @                              (* Tunneling *)
-     (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
-     (cc_mach_asm @ cc_asm ext) @                 (* Asmgen *)
-     cc_asm vainj)
-    cc_compcert.
-Proof.
-  rewrite !cc_compose_assoc.
-  rewrite (commute_around cc_mach_asm).
-  rewrite !(commute_around cc_locset_mach).
-  rewrite <- (cc_compose_assoc wt_loc), <- et_wt_loc, cc_compose_assoc.
-  rewrite !(commute_around et_loc).
-  unfold cc_dom, cc_cod. rewrite !cc_compose_assoc.
-  rewrite <- (cc_compose_assoc wt_c), <- et_wt_c, cc_compose_assoc.
-  rewrite !(commute_around cc_c_locset).
-  rewrite !(commute_around et_c).
-  rewrite !cc_star_absorb_r by eauto with cc.
-  rewrite <- (cc_compose_assoc et_c), et_et_c.
-  reflexivity.
 Qed.
 
 (** ** Composition of passes *)
