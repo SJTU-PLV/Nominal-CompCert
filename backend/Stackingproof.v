@@ -2431,14 +2431,14 @@ Proof.
     exploit transf_initial_states; eauto. intros [st2 [A B]].
     exists st2; split; auto. destruct w as [[se [sg rs0]] wR]. auto.
   - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse].
-    intros s1 s2 r1 Hs (Hr1 & xse & Hxse & WTS & WTR). cbn in Hxse. subst.
+    intros s1 s2 r1 Hs (Hr1 & [? ?] & Hxse & WTS & WTR). cbn in Hxse. subst.
     eapply transf_final_states; eauto.
   - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse].
-    intros s1 s2 q1 Hs (Hq1 & x & ? & Hx & WTS & WTQ). cbn in Hx. subst.
+    intros s1 s2 q1 Hs (Hq1 & [? ?] & ? & Hx & WTS & WTQ). cbn in Hx. subst.
     edestruct transf_external_states as (wx & qx2 & ? & ? & ? & ?); eauto.
     exists wx, qx2. intuition auto. destruct H4 as (Hs1' & _).
     edestruct H2 as (st2' & ? & ?); eauto.
   - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse].
-    intros s1 t s1' (Hs1' & x & Hx & WTS & WTS') s2 Hs. cbn in Hx, Hs1', Hs. subst.
+    intros s1 t s1' (Hs1' & [xse ?] & Hx & WTS & WTS') s2 Hs. cbn in Hx, Hs1', Hs. subst.
     eapply transf_step_correct; eauto.
 Admitted.

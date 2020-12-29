@@ -29,6 +29,8 @@ Require Import Extends.
 Require Import Clightrel.
 Require Import RTLrel.
 Require Import ValueAnalysis.
+Require Import Conventions.
+Require Import CallConv.
 
 (** Languages (syntax and semantics). *)
 Require Ctypes Csyntax Csem Cstrategy (*Cexec*).
@@ -355,29 +357,6 @@ Qed.
   (composition of two backward simulations).
 *)
 
-(*
-Remark forward_simulation_identity:
-  forall sem, forward_simulation sem sem.
-Proof.
-  intros. apply forward_simulation_step with (fun s1 s2 => s2 = s1); intros.
-- auto.
-- exists s1; auto.
-- subst s2; auto.
-- subst s2. exists s1'; auto.
-Qed.
-
-Lemma match_if_simulation:
-  forall (A: Type) (sem: A -> semantics) (flag: unit -> bool) (transf: A -> A -> Prop) (prog tprog: A),
-  match_if flag transf prog tprog ->
-  (forall p tp, transf p tp -> forward_simulation (sem p) (sem tp)) ->
-  forward_simulation (sem prog) (sem tprog).
-Proof.
-  intros. unfold match_if in *. destruct (flag tt). eauto. subst. apply forward_simulation_identity.
-Qed.
-*)
-
-(** ** Calling conventions *)
-
 (** Preliminaries: this should be in Coqrel. Alternatively, we could
   define it for [ccref] alone. *)
 
@@ -397,142 +376,266 @@ Proof.
 Qed.
 *)
 
-(** This is the simulation conventions for passes Alloc through Asmgen.
-  These passes have a symmetric interface, so there is no difficulty
-  in making them compositional. Although the Debugvar pass is
-  optional, since this it is as [cc_id -> cc_id] pass this does not
-  introduce any difficulty. *)
+(** ** Calling conventions *)
 
-Definition cc_backend : callconv li_c Asm.li_asm :=
-  cc_c inj @
-  ((vamatch @ cc_c ext) @ cc_id) @
-  (vamatch @ cc_c ext) @
-  (vamatch @ cc_c ext) @
-  (wt_c @ cc_c ext @ Conventions.cc_c_locset) @
-  Conventions.cc_locset ext @
-  Mach.cc_stacking @
-  Asmgenproof0.cc_asmgen.
+Require Import Conventions Asm Mach Lineartyping.
+Require Import VAInject.
+Require Import VAExtends.
 
-(** However for passes upstream of Alloc, we need a more subtle approach.
-  On one hand, the incoming convention of these passes are easily
-  absorbed by the [cc_inj] component of [cc_backend], as seen here. *)
+(** This is the simulation convention for the whole compiler. *)
 
-Lemma cc_backend_inj:
-  ccref cc_backend (cc_c inj @ cc_backend).
+Definition cc_cklrs : callconv li_c li_c :=
+  injp + inj + ext + vainj + vaext.
+
+Definition cc_compcert : callconv li_c li_asm :=
+  cc_cklrs^{*} @
+  et_c @ cc_c_locset @ et_loc @ cc_locset_mach @ cc_mach_asm @
+  cc_asm vainj.
+
+(** We show that the overall simulation convention can be
+  rewritten to match the conventions used in CompCertO's passes.
+  The following conventions give a flexible characterization for
+  early passes. *)
+
+Definition cc_cod : callconv li_c li_locset :=
+  et_c @ inj @ vainj @ wt_c @ cc_c ext @ cc_c_locset.
+
+Definition cc_dom : callconv li_c li_locset :=
+  cc_cklrs^{*} @ cc_cod.
+
+Lemma cc_compcert_expand:
+  ccref
+    cc_compcert
+    (cc_dom @                                              (* Passes up to Alloc *)
+     cc_locset ext @                                       (* Tunneling *)
+     (wt_loc @ et_loc @ cc_locset_mach @ cc_mach inj) @    (* Stacking *)
+     (cc_mach_asm @ cc_asm ext) @                          (* Asmgen *)
+     cc_asm vainj).
 Proof.
-  unfold cc_backend.
-  rewrite <- (cc_compose_assoc (cc_c inj) (cc_c inj)).
-  rewrite <- cc_c_compose, <- inj_inj.
+  unfold cc_compcert, cc_dom, cc_cod.
+  rewrite !cc_compose_assoc.
+  etransitivity.
+  {
+    rewrite vainj_vainj, vainj_inj, !cc_asm_compose, !cc_compose_assoc at 1.
+    (* the first [vainj] can be used to meet the requirements of frontend passes *)
+    do 4 rewrite (commute_around _ (R2 := _ vainj)).
+    rewrite vainj_vainj, cc_c_compose, cc_compose_assoc at 1.
+    rewrite vainj_inj, cc_c_compose, cc_compose_assoc at 1.
+    rewrite (commute_around _ (R2 := _ vainj)).
+    rewrite cc_star_absorb_r by eauto with cc.
+    (* we also need to duplicate et_c for alloc *)
+    rewrite <- et_et_c, cc_compose_assoc.
+    rewrite (commute_around et_c (R2 := inj)).
+    rewrite (commute_around et_c (R2 := vainj)).
+    reflexivity.
+  }
+  repeat (rstep; [rauto | ]).
+  etransitivity.
+  {
+    (* Now we can expand the intermediate [inj] for the rest *)
+    rewrite <- inj_ext, cc_asm_compose, cc_compose_assoc.
+    rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
+    rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
+    do 3 rewrite (commute_around cc_mach_asm).
+    do 2 rewrite (commute_around cc_locset_mach).
+    rewrite !(commute_around et_loc).
+    do 1 rewrite (commute_around cc_c_locset).
+    rewrite <- (cc_compose_assoc et_c ext), et_wt_c, cc_compose_assoc.
+    rewrite et_wt_et_loc, cc_compose_assoc.
+    reflexivity.
+  }
   reflexivity.
 Qed.
 
-Lemma cc_backend_ext:
-  ccref cc_backend (cc_c ext @ cc_backend).
+Lemma cc_compcert_collapse:
+  ccref
+    (cc_dom @                                     (* Passes up to Alloc *)
+     cc_locset ext @                              (* Tunneling *)
+     (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
+     (cc_mach_asm @ cc_asm ext) @                 (* Asmgen *)
+     cc_asm vainj)
+    cc_compcert.
 Proof.
-  unfold cc_backend.
-  rewrite <- (cc_compose_assoc (cc_c ext) (cc_c inj)).
-  rewrite <- cc_c_compose.
-  rewrite <- (proj2 ext_inj). reflexivity.
+  rewrite !cc_compose_assoc.
+  rewrite (commute_around cc_mach_asm).
+  rewrite !(commute_around cc_locset_mach).
+  rewrite <- (cc_compose_assoc wt_loc), <- et_wt_loc, cc_compose_assoc.
+  rewrite !(commute_around et_loc).
+  unfold cc_dom, cc_cod. rewrite !cc_compose_assoc.
+  rewrite <- (cc_compose_assoc wt_c), <- et_wt_c, cc_compose_assoc.
+  rewrite !(commute_around cc_c_locset).
+  rewrite !(commute_around et_c).
+  rewrite !cc_star_absorb_r by eauto with cc.
+  rewrite <- (cc_compose_assoc et_c), et_et_c.
+  reflexivity.
 Qed.
 
-Lemma cc_backend_wt:
-  ccref cc_backend (wt_c @ cc_backend).
+(** To compose the early passes in a flexible and incremental way,
+  we maintain a simulation convention of the form [cc_dom -->> cc_cod],
+  which is stable under composition with various kinds of passes. *)
+
+Lemma cc_cod_inj:
+  ccref cc_cod (cc_c inj @ cc_cod).
 Proof.
-  unfold cc_backend.
-  rewrite (cc_compose_assoc wt_c).
-  rewrite <- !(cc_compose_assoc _ _ (wt_c @ _)).
-  rewrite <- !(cc_compose_assoc _ wt_c).
-  rstep; try rauto.
-  rewrite !(cc_compose_assoc wt_c).
-  apply (inv_prop _ wt_c).
+  unfold cc_cod.
+  rewrite inj_inj, cc_c_compose, cc_compose_assoc at 1.
+  rewrite (commute_around et_c).
+  reflexivity.
 Qed.
 
-(** On the other hand, the outgoing conventions are more difficult to
-  work with. However, using the simulation convention algebra we can
-  reduce them to the following, self-composable convention. *)
-
-Definition cc_dom : callconv li_c li_c :=
-  (cc_c injp + cc_c ext)^{*}.
-
-Lemma cc_dom_idemp:
-  cceqv (cc_dom @ cc_dom) cc_dom.
+Lemma cc_cod_ext:
+  ccref cc_cod (cc_c ext @ cc_cod).
 Proof.
-  apply cc_star_idemp.
+  unfold cc_cod.
+  rewrite <- ext_inj, cc_c_compose, cc_compose_assoc at 1.
+  rewrite (commute_around et_c).
+  reflexivity.
 Qed.
 
-(** Then define the compiler's overall convention is [cc_dom @ cc_backend].
-  The backend can be typed as [cc_dom @ cc_backend -> cc_backend], and we
-  can pre-compose an arbitrary number of extra frontend passes onto it. *)
-
-Definition cc_compcert : callconv li_c Asm.li_asm :=
-  cc_dom @ cc_backend.
-
-Lemma cc_compcert_injp:
-  ccref (cc_c injp @ cc_compcert) cc_compcert.
+Lemma cc_cod_wt:
+  ccref cc_cod (et_c @ cc_cod).
 Proof.
-  unfold cc_compcert.
-  rewrite <- cc_dom_idemp at 2. rewrite cc_compose_assoc. repeat rstep.
-  unfold cc_dom. rewrite <- cc_one_star.
-  auto using cc_join_l, cc_join_r, cc_join_ub_l, cc_join_ub_r.
+  unfold cc_cod.
+  rewrite <- (cc_compose_assoc et_c et_c), et_et_c.
+  reflexivity.
 Qed.
 
-Lemma cc_compcert_ext:
-  ccref (cc_c ext @ cc_compcert) cc_compcert.
+Lemma cc_cod_vamatch:
+  ccref cc_cod (inj @ vamatch @ ext @ inj @ cc_cod).
 Proof.
-  unfold cc_compcert.
-  rewrite <- cc_dom_idemp at 2. rewrite cc_compose_assoc. repeat rstep.
-  unfold cc_dom. rewrite <- cc_one_star.
-  auto using cc_join_l, cc_join_r, cc_join_ub_l, cc_join_ub_r.
+  unfold cc_cod.
+  rewrite vainj_vainj, vainj_inj, !cc_c_compose at 1.
+  rewrite !cc_compose_assoc.
+  rewrite (commute_around et_c).
+  rewrite (commute_around et_c).
+  rewrite vainj_va_inj, cc_compose_assoc at 1.
+  rewrite <- ext_inj at 2. rewrite cc_c_compose, cc_compose_assoc.
+  reflexivity.
 Qed.
 
-Lemma cc_compcert_wt:
-  ccref (wt_c @ cc_compcert) cc_compcert.
+Lemma cc_dom_injp:
+  ccref (cc_c injp @ cc_dom) cc_dom.
 Proof.
-  unfold cc_compcert, cc_backend.
-  rewrite (cc_compose_assoc wt_c).
-  rewrite <- !(cc_compose_assoc _ _ (wt_c @ _)).
-  rewrite <- !(cc_compose_assoc _ wt_c).
-  rstep; try rauto.
-  rewrite !(cc_compose_assoc wt_c).
   unfold cc_dom.
-  apply (inv_drop _ wt_c).
+  rewrite cc_star_absorb_l; eauto with cc.
 Qed.
 
-(** The following collection of lemmas can be used to pre-compose a
-  variety of frontend passes. *)
+Lemma cc_dom_ext:
+  ccref (cc_c ext @ cc_dom) cc_dom.
+Proof.
+  unfold cc_dom.
+  rewrite cc_star_absorb_l; eauto with cc.
+Qed.
+
+Lemma cc_dom_wt:
+  ccref (et_c @ cc_dom) cc_dom.
+Proof.
+  unfold cc_dom, cc_cod.
+  rewrite (commute_around et_c).
+  rewrite <- (cc_compose_assoc et_c et_c), et_et_c.
+  reflexivity.
+Qed.
+
+Lemma cc_dom_vamatch:
+  ccref (inj @ vamatch @ ext @ inj @ cc_dom) cc_dom.
+Proof.
+  rewrite <- (cc_compose_assoc vamatch), <- vaext_va_ext. unfold cc_dom.
+  rewrite !cc_star_absorb_l; eauto with cc.
+Qed.
+
+(** The following collection of lemmas can then be used to pre-compose
+  a variety of passes. *)
+
+Section COMPOSE_C_PASSES.
+
+Context {li} (ccA ccB: callconv li_locset li).
+
+Lemma compose_clight_properties prog tsem:
+  forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) (Clight.semantics1 prog) tsem ->
+  forward_simulation (cc_dom @ ccA) (cc_dom @ ccB) (Clight.semantics1 prog) tsem.
+Proof.
+  unfold cc_dom. intro.
+  rewrite <- cc_star_idemp at 1.
+  rewrite !cc_compose_assoc at 1.
+  rewrite !cc_compose_assoc in H.
+  eapply compose_forward_simulations; eauto.
+  eapply cc_star_fsim.
+  repeat eapply cc_join_fsim;
+    (eapply open_fsim_ccref;
+     [ | reflexivity | eapply Clightrel.semantics1_rel];
+     eauto with cc).
+Qed.
 
 Lemma compose_injection_pass sem bsem tsem:
   forward_simulation (cc_c injp) (cc_c inj) sem bsem ->
-  forward_simulation cc_compcert cc_backend bsem tsem ->
-  forward_simulation cc_compcert cc_backend sem tsem.
+  forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) bsem tsem ->
+  forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) sem tsem.
 Proof.
   intros.
-  rewrite <- cc_compcert_injp at 1.
-  rewrite cc_backend_inj.
+  rewrite <- cc_dom_injp, cc_cod_inj, !cc_compose_assoc.
   eapply compose_forward_simulations; eauto.
 Qed.
 
 Lemma compose_extension_pass sem bsem tsem:
   forward_simulation (cc_c ext) (cc_c ext) sem bsem ->
-  forward_simulation cc_compcert cc_backend bsem tsem ->
-  forward_simulation cc_compcert cc_backend sem tsem.
+  forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) bsem tsem ->
+  forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) sem tsem.
 Proof.
   intros.
-  rewrite <- cc_compcert_ext.
-  rewrite cc_backend_ext.
+  rewrite <- cc_dom_ext, cc_cod_ext, !cc_compose_assoc.
   eapply compose_forward_simulations; eauto.
 Qed.
 
 Lemma compose_selection_pass sem bsem tsem:
   forward_simulation (wt_c @ cc_c ext) (wt_c @ cc_c ext) sem bsem ->
-  forward_simulation cc_compcert cc_backend bsem tsem ->
-  forward_simulation cc_compcert cc_backend sem tsem.
+  forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) bsem tsem ->
+  forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) sem tsem.
 Proof.
   intros.
-  rewrite <- cc_compcert_wt, <- cc_compcert_ext, <- cc_compose_assoc.
-  rewrite cc_backend_wt, cc_backend_ext, <- cc_compose_assoc.
+  rewrite <- cc_dom_wt, cc_cod_wt, !cc_compose_assoc.
+  rewrite <- cc_dom_ext, cc_cod_ext, !cc_compose_assoc.
+  rewrite <- !(cc_compose_assoc et_c (cc_c ext)).
+  repeat rewrite et_wt_c at 1.
   eapply compose_forward_simulations; eauto.
 Qed.
+
+Lemma compose_va_pass p bp tsem:
+  let sem := RTL.semantics p in
+  let bsem := RTL.semantics bp in
+  forward_simulation (vamatch @ cc_c ext) (vamatch @ cc_c ext) sem bsem ->
+  forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) bsem tsem ->
+  forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) sem tsem.
+Proof.
+  intros.
+  rewrite <- cc_dom_vamatch, cc_cod_vamatch, !cc_compose_assoc.
+  eapply compose_forward_simulations; eauto. { eapply RTLrel.semantics_rel. }
+  rewrite <- !(cc_compose_assoc vamatch).
+  eapply compose_forward_simulations; eauto.
+  eapply compose_forward_simulations; eauto. { eapply RTLrel.semantics_rel. }
+Qed.
+
+Lemma compose_alloc_pass p bsem tsem:
+  let sem := RTL.semantics p in
+  forward_simulation (wt_c @ cc_c ext @ cc_c_locset) (wt_c @ cc_c ext @ cc_c_locset) sem bsem ->
+  forward_simulation ccA ccB bsem tsem ->
+  forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) sem tsem.
+Proof.
+  intros. unfold cc_dom, cc_cod.
+  rewrite <- cc_id_star, cc_compose_id_left.
+  eapply compose_forward_simulations; eauto.
+  rewrite <- (cc_compose_assoc inj), <- cc_c_compose at 1.
+  rewrite <- (cc_compose_assoc inj), <- cc_c_compose at 1.
+  rewrite <- (cc_compose_assoc et_c), et_wt_c, cc_compose_assoc at 1.
+  rewrite <- (cc_compose_assoc et_c), et_wt_c, cc_compose_assoc at 1.
+  rewrite <- !(cc_compose_assoc _ _ (ext @ _)) at 1.
+  rewrite <- (inv_prop _ wt_c) at 1.
+  rewrite (inv_drop _ wt_c) at 1.
+  rewrite !cc_compose_assoc at 1.
+  eapply compose_forward_simulations; eauto.
+  eapply RTLrel.semantics_rel.
+Qed.
+
+End COMPOSE_C_PASSES.
 
 Lemma compose_identity_pass {liA1 liA2 liB1 liB2} ccA ccB sem bsem tsem:
   forward_simulation 1 1 sem bsem ->
@@ -545,12 +648,12 @@ Proof.
   eapply compose_forward_simulations; eauto.
 Qed.
 
-Lemma compose_optional_pass {A liA1 liA2 liB1 liB2 ccA ccB ccA' ccB'}:
-  (forall sem bsem tsem,
-      forward_simulation ccA ccB sem bsem ->
-      forward_simulation ccA' ccB' bsem tsem ->
-      @forward_simulation liA1 liA2 ccA' liB1 liB2 ccB' sem tsem) ->
-  forall sem flag transf prog tprog tsem,
+Lemma compose_optional_pass {A liA1 liA2 liB1 liB2 ccA ccB ccA' ccB' sem}:
+  (forall prog tprog tsem,
+      forward_simulation ccA ccB (sem prog) (sem tprog) ->
+      forward_simulation ccA' ccB' (sem tprog) tsem ->
+      @forward_simulation liA1 liA2 ccA' liB1 liB2 ccB' (sem prog) tsem) ->
+  forall flag transf prog tprog tsem,
     @match_if A flag transf prog tprog ->
     (forall p tp, transf p tp -> forward_simulation ccA ccB (sem p) (sem tp)) ->
     forward_simulation ccA' ccB' (sem tprog) tsem ->
@@ -558,28 +661,6 @@ Lemma compose_optional_pass {A liA1 liA2 liB1 liB2 ccA ccB ccA' ccB'}:
 Proof.
   intros. unfold match_if in *.
   destruct (flag tt); subst; eauto.
-Qed.
-
-(** To make the whole compiler compositional, we can then introduce a
-  [cc_dom -> cc_dom] identity pass for Clight, using the parametricity
-  property proved in the cklr/Clightrel.v library. *)
-
-Lemma compose_clight_properties prog tsem:
-  forward_simulation cc_compcert cc_backend (Clight.semantics1 prog) tsem ->
-  forward_simulation cc_compcert cc_compcert (Clight.semantics1 prog) tsem.
-Proof.
-  intros H. unfold cc_compcert.
-  rewrite <- cc_dom_idemp at 1; rewrite cc_compose_assoc.
-  eapply compose_forward_simulations; eauto. clear.
-  unfold cc_dom.
-  apply cc_star_fsim.
-  apply cc_join_fsim.
-  - rewrite <- cc_join_ub_l.
-    repeat rewrite <- cc_c_injp at 1.
-    apply Clightrel.semantics1_rel.
-  - rewrite <- cc_join_ub_r.
-    repeat rewrite <- cc_c_ext at 1.
-    apply Clightrel.semantics1_rel.
 Qed.
 
 (** ** Composition of passes *)
@@ -600,6 +681,8 @@ Ltac DestructM :=
   repeat DestructM. subst tp.
   assert (F: forward_simulation cc_compcert cc_compcert (Cstrategy.semantics p) (Asm.semantics p20)).
   {
+  rewrite cc_compcert_expand at 2.
+  rewrite <- cc_compcert_collapse at 1.
   eapply compose_identity_pass.
     eapply SimplExprproof.transl_program_correct; eassumption.
   eapply compose_clight_properties.
@@ -613,48 +696,21 @@ Ltac DestructM :=
     eapply Selectionproof.transf_program_correct; eassumption.
   eapply compose_extension_pass.
     eapply RTLgenproof.transf_program_correct; eassumption.
-  eapply compose_optional_pass.
-    eapply compose_extension_pass. eassumption.
+  eapply compose_optional_pass; eauto using compose_extension_pass.
     exact Tailcallproof.transf_program_correct.
   eapply compose_injection_pass.
     eapply Inliningproof.transf_program_correct; eassumption.
   eapply compose_identity_pass.
     eapply Renumberproof.transf_program_correct; eassumption.
-
-  (* To introduce the injection in the backend convention we use
-    the parametricity of RTL. *)
-  unfold cc_compcert, cc_dom, cc_backend.
-  rewrite <- cc_id_star, cc_compose_id_left.
-  eapply compose_forward_simulations.
-    eapply RTLrel.semantics_rel.
-
-  eapply compose_forward_simulations.
-    red in M8, M9. destruct optim_constprop; subst.
-    eapply compose_forward_simulations.
-      eapply Constpropproof.transf_program_correct; eauto.
-      eapply Renumberproof.transf_program_correct; eassumption.
-    repeat eapply compose_forward_simulations.
-      eapply Invariant.preserves_fsim. eapply ValueAnalysis.rtl_vamatch.
-        eapply RTLrel.semantics_rel.
-        eapply identity_forward_simulation.
-  eapply compose_forward_simulations.
-    red in M10. destruct optim_CSE; subst.
-    eapply CSEproof.transf_program_correct; eauto.
-    eapply compose_forward_simulations.
-      eapply Invariant.preserves_fsim. eapply ValueAnalysis.rtl_vamatch.
-      eapply RTLrel.semantics_rel.
-  eapply compose_forward_simulations.
-    red in M11. destruct optim_redundancy; subst.
-    eapply Deadcodeproof.transf_program_correct; eauto.
-    eapply compose_forward_simulations.
-      eapply Invariant.preserves_fsim. eapply ValueAnalysis.rtl_vamatch.
-      eapply RTLrel.semantics_rel.
-  (*
-  eapply compose_forward_simulations.
-    eapply Unusedglobproof.transf_program_correct; eassumption.
-   *)
-
-  eapply compose_forward_simulations.
+  eapply compose_optional_pass; eauto using compose_va_pass.
+    exact Constpropproof.transf_program_correct.
+  eapply compose_optional_pass; eauto using compose_identity_pass.
+    exact Renumberproof.transf_program_correct.
+  eapply compose_optional_pass; eauto using compose_va_pass.
+    exact CSEproof.transf_program_correct.
+  eapply compose_optional_pass; eauto using compose_va_pass.
+    exact Deadcodeproof.transf_program_correct; eauto.
+  eapply compose_alloc_pass.
     eapply Allocproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply Tunnelingproof.transf_program_correct; eassumption.
@@ -662,20 +718,23 @@ Ltac DestructM :=
     eapply Linearizeproof.transf_program_correct; eassumption.
   eapply compose_identity_pass.
     eapply CleanupLabelsproof.transf_program_correct; eassumption.
-  eapply compose_optional_pass. eapply compose_identity_pass. eassumption.
+  eapply compose_optional_pass; eauto using compose_identity_pass.
     exact Debugvarproof.transf_program_correct.
   eapply compose_forward_simulations.
+    admit. (* need to update stacking codomain convention to include et_loc
     eapply Stackingproof.transf_program_correct with (rao := Asmgenproof0.return_address_offset).
     exact Asmgenproof.return_address_exists.
-    eassumption.
-  eapply Asmgenproof.transf_program_correct; eassumption.
+    eassumption. *)
+  eapply compose_forward_simulations.
+    eapply Asmgenproof.transf_program_correct; eassumption.
+  admit. (* Asm parametricity *)
   }
   split. auto.
   apply forward_to_backward_simulation.
   apply factor_forward_simulation. auto. intro. eapply sd_traces. eapply Asm.semantics_determinate.
   apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
   apply Asm.semantics_determinate.
-Qed.
+Admitted.
 
 Theorem c_semantic_preservation:
   forall p tp,

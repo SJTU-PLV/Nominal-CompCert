@@ -317,11 +317,11 @@ Canonical Structure li_locset: language_interface :=
     entry := lq_vf;
   |}.
 
-(** * Calling convention *)
+(** * Simulation conventions *)
 
 Unset Program Cases.
 
-(** ** C-style to locset-style *)
+(** ** C- to locset-style calling convention *)
 
 (** We first define the calling convention between C and locset
   languages, which relates the C-level argument list to the contents
