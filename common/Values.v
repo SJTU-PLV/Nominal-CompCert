@@ -166,12 +166,12 @@ Definition ensure_type (v: val) (t: typ) : val :=
   | _, _ => Vundef
   end.
 
-Fixpoint ensure_type_list (vl: list val) (tl: list typ): list val :=
-  match vl, tl with
-    | _, nil => nil
-    | nil, t::tl => Vundef :: ensure_type_list nil tl
-    | v::vl, t::tl => ensure_type v t :: ensure_type_list vl tl
-  end.
+Inductive ensure_type_list : list val -> list val -> list typ -> Prop :=
+  | ensure_type_nil :
+      ensure_type_list nil nil nil
+  | ensure_type_cons v t vl_ vl tl :
+      ensure_type_list vl_ vl tl ->
+      ensure_type_list (Val.ensure_type v t :: vl_) (v :: vl) (t :: tl).
 
 (** Properties *)
 
@@ -188,17 +188,20 @@ Proof.
   destruct v, t; cbn in *; destruct Archi.ptr64; cbn in *; firstorder.
 Qed.
 
-Lemma ensure_has_type_list (vl: list val) (tl: list typ) :
-  Val.has_type_list (ensure_type_list vl tl) tl.
+Lemma ensure_has_type_list (vl_ vl: list val) (tl: list typ) :
+  ensure_type_list vl_ vl tl ->
+  Val.has_type_list vl_ tl.
 Proof.
-  revert vl. induction tl; cbn; destruct vl; cbn; auto using ensure_has_type.
+  induction 1; cbn; auto using ensure_has_type.
 Qed.
 
 Lemma has_type_list_ensure (vl: list val) (tl: list typ) :
-  Val.has_type_list vl tl -> ensure_type_list vl tl = vl.
+  Val.has_type_list vl tl -> ensure_type_list vl vl tl.
 Proof.
   revert vl. induction tl; cbn; destruct vl; cbn; firstorder auto.
-  f_equal; auto using has_type_ensure.
+  - constructor.
+  - rewrite <- (has_type_ensure v a) at 1; auto.
+    constructor; auto.
 Qed.
 
 (** Truth values.  Non-zero integers are treated as [True].
@@ -2218,12 +2221,21 @@ Proof.
   destruct 1; auto.
 Qed.
 
-Lemma ensure_type_lessdef_list:
-  forall tl vl vl',
-    lessdef_list vl vl' ->
-    lessdef_list (ensure_type_list vl tl) (ensure_type_list vl' tl).
+Lemma ensure_type_list_lessdef tl vs1_ vs1 vs2:
+  ensure_type_list vs1_ vs1 tl ->
+  Val.lessdef_list vs1 vs2 ->
+  exists vs2_,
+    Val.lessdef_list vs1_ vs2_ /\
+    ensure_type_list vs2_ vs2 tl.
 Proof.
-  induction tl; inversion 1; cbn; auto using ensure_type_lessdef.
+  intros H. revert vs2.
+  induction H; intros vs2 Hvs; inv Hvs.
+  - eauto using ensure_type_nil.
+  - edestruct IHensure_type_list as (vs2_ & Hvs_ & Hvs2_); eauto.
+    eexists (Val.ensure_type v2 t :: vs2_). split.
+    + constructor; auto.
+      apply Val.ensure_type_lessdef; auto.
+    + constructor; auto.
 Qed.
 
 (** * Values and memory injections *)
@@ -2548,12 +2560,21 @@ Proof.
   destruct 1, t; cbn; econstructor; eauto.
 Qed.
 
-Lemma ensure_type_inject_list:
-  forall f tl vl vl',
-    inject_list f vl vl' ->
-    inject_list f (ensure_type_list vl tl) (ensure_type_list vl' tl).
+Lemma ensure_type_list_inject tl f vs1_ vs1 vs2:
+  ensure_type_list vs1_ vs1 tl ->
+  Val.inject_list f vs1 vs2 ->
+  exists vs2_,
+    Val.inject_list f vs1_ vs2_ /\
+    ensure_type_list vs2_ vs2 tl.
 Proof.
-  induction tl; inversion 1; cbn; auto using ensure_type_inject.
+  intros H. revert vs2.
+  induction H; intros vs2 Hvs; inv Hvs.
+  - eauto using ensure_type_nil.
+  - edestruct IHensure_type_list as (vs2_ & Hvs_ & Hvs2_); eauto.
+    exists (Val.ensure_type v' t :: vs2_). split.
+    + constructor; auto.
+      apply Val.ensure_type_inject; auto.
+    + constructor; auto.
 Qed.
 
 Lemma inject_ensure_type_l:
