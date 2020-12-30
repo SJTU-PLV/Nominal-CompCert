@@ -2468,15 +2468,6 @@ Proof.
   apply wt_regset_assign; auto. rewrite WTRES0; auto.
 Qed.
 
-(** XXX fold into getpair_initial_regs? *)
-Lemma loc_arguments_external sg p:
-  In p (loc_arguments sg) ->
-  forall_rpair (loc_external sg) p.
-Proof.
-  clear. intros Hp.
-  pose proof (loc_arguments_acceptable _ _ Hp).
-Admitted.
-
 Lemma initial_states_simulation:
   forall w q1 q2 st1,
     match_query (cc_c ext @ cc_c_locset) (se, w, base_sg) q1 q2 ->
@@ -2495,8 +2486,7 @@ Proof.
   split; econstructor; eauto.
   - cbn. rewrite H4. constructor; auto.
   - cbn. subst rs0. rewrite SIG. erewrite map_ext_in; eauto. clear.
-    intros p Hp. cbn. apply getpair_initial_regs.
-    apply loc_arguments_external; auto.
+    intros p Hp. cbn. apply getpair_initial_regs; auto.
   - intros l Hl. reflexivity.
 Qed.
 
