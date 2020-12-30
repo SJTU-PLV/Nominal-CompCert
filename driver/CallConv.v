@@ -479,18 +479,17 @@ Proof.
   cbn in * |- . destruct Hqi2. inv Hq1i. rename m' into m1_. rename ls into ls1.
 
   (** Synthesizing the query *)
-  transport H11. rename x into m2_.
+  transport H14. rename x into m2_.
   edestruct match_agree_args as (ls2 & Hargs2 & Hrs2 & Hls); eauto.
-  { intro r. rewrite H12. eauto. }
+  { intro r. rewrite H15. eauto. }
   set (ls2wt l := Val.ensure_type (ls2 l) (Loc.type l)).
 
   exists (se2, (sg, wR'), (sg, rs2)). repeat apply conj.
   - cbn. split; rauto.
   - exists (lq vf2 sg ls2 m2_). split.
-    + econstructor; try rauto.
-      * admit. (* vf1 <> Vundef -- add in upper conventions or move back to [fb] *)
+    + econstructor; try rauto; auto.
     + constructor; eauto.
-      * admit. (* type of RA -- need to constrain in cc_mach? *)
+      destruct H4; cbn in *; congruence.
   - intros r1 r2 (ri & (wR'' & HwR'' & Hr1i) & Hri2). 
     destruct Hr1i. inv Hri2. rename rs' into rs2'.
     set (rs1' r := result_regs sg ls1 ls1' (Locations.R r)).
@@ -500,11 +499,11 @@ Proof.
       * intros r Hr. unfold rs1'. cbn. destruct in_dec; tauto.
     + exists wR''. split; [rauto | ]. constructor; auto.
       intro r. unfold rs1', result_regs.
-      destruct in_dec. { rewrite H15; auto. }
+      destruct in_dec. { rewrite H18; auto. }
       destruct is_callee_save eqn:Hr; auto.
-      rewrite H11 by auto. rewrite H12. generalize (H2 r).
+      rewrite H14 by auto. rewrite H15. generalize (H5 r).
       repeat rstep. change (wR ~> wR''). rauto.
-Admitted.
+Qed.
 
 (** ** [cc_mach_asm] *)
 
@@ -516,9 +515,12 @@ Proof.
   exists (se2, wR, (rs2, Mem.nextblock m2)). cbn. repeat apply conj; auto.
   - exists (mq rs2#PC rs2#SP rs2#RA (fun r => rs2 (preg_of r)) m2). split.
     + constructor; auto.
-    + constructor.
-      * specialize (Hrs SP). destruct Hrs; inv H. constructor.
-        revert H4.
+      * destruct H0; congruence.
+      * setoid_rewrite H2. eauto.
+    + constructor; auto.
+      * destruct (Hrs PC); cbn in *; congruence.
+      * specialize (Hrs SP). destruct Hrs; inv H0. constructor.
+        revert H6.
         change (b1 < _)%positive with (Mem.valid_block m1 b1).
         change (b2 < _)%positive with (Mem.valid_block m2 b2).
         rstep. rstep. rstep. rstep. red. eauto.

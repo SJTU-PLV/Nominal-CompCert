@@ -2280,14 +2280,13 @@ Lemma transf_initial_states:
   exists st2, Mach.initial_state tge q2 st2 /\ match_states (fst (snd (fst w))) (snd (snd (fst w))) st1 st2.
 Proof.
   intros [[_ [sg rs1]] ft] q1 q2 [[ ] Hse'] (q' & Hq1' & Hq2') st1 Hst1 (*Hq1*). cbn.
-  inv Hst1. inv Hq1'. inv Hq2'. destruct Hse'. cbn in *. inv H14. subst rs0.
+  inv Hst1. inv Hq1'. inv Hq2'. destruct Hse'. cbn in *. inv H15. subst rs0.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   econstructor; split.
   - monadInv TR. econstructor; eauto.
   - econstructor; eauto.
     + constructor; auto.
-      * admit. (* cc needs to ensure typing of ra preserved / use ensure_type *)
-      * destruct H11; try discriminate. constructor.
+      * destruct H12; try discriminate. constructor.
     + intro. unfold initial_regs.
       destruct loc_is_external eqn:Hr; auto. apply loc_external_is in Hr.
       rewrite H7 by auto. auto.
@@ -2426,7 +2425,6 @@ Proof.
     intros q1 q2 (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. inv Hse. inv H3. inv H4.
     eapply (Genv.is_internal_transf_partial MATCH); eauto 1.
     intros [|] ? Hfd; monadInv Hfd; auto.
-    cbn. admit. (* vf not undef *)
   - intros q1 q2 s1 Hq (Hs1 & xse & Hxse & WTQ & WTS). cbn in Hxse. subst. 
     exploit transf_initial_states; eauto. intros [st2 [A B]].
     exists st2; split; auto. destruct w as [[se [sg rs0]] wR]. auto.
@@ -2441,4 +2439,4 @@ Proof.
   - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse].
     intros s1 t s1' (Hs1' & [xse ?] & Hx & WTS & WTS') s2 Hs. cbn in Hx, Hs1', Hs. subst.
     eapply transf_step_correct; eauto.
-Admitted.
+Qed.

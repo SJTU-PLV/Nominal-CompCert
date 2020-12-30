@@ -1306,20 +1306,23 @@ Unset Program Cases.
 (** ** Calling convention from [li_mach] *)
 
 Inductive cc_mach_asm_mq (rs: regset): block -> mach_query -> query li_asm -> Prop :=
-  cc_mach_asm_mq_intro m:
+  cc_mach_asm_mq_intro (mrs: Mach.regset) m:
+    rs#PC <> Vundef ->
     valid_blockv (Mem.nextblock m) rs#SP ->
     rs#RA <> Vundef ->
+    (forall r, mrs r = rs (preg_of r)) ->
     cc_mach_asm_mq rs
       (Mem.nextblock m)
-      (mq rs#PC rs#SP rs#RA (fun r => rs (preg_of r)) m)
+      (mq rs#PC rs#SP rs#RA mrs m)
       (rs, m).
 
 Inductive cc_mach_asm_mr (rs: regset) (nb: block): mach_reply -> reply li_asm -> Prop :=
-  cc_mach_asm_mr_intro (rs': regset) m':
+  cc_mach_asm_mr_intro (mrs': Mach.regset) (rs': regset) m':
     rs'#SP = rs#SP ->
     rs'#PC = rs#RA ->
     Pos.le nb (Mem.nextblock m') ->
-    cc_mach_asm_mr rs nb (mr (fun r => rs' (preg_of r)) m') (rs', m').
+    (forall r, mrs' r = rs' (preg_of r)) ->
+    cc_mach_asm_mr rs nb (mr mrs' m') (rs', m').
 
 Program Definition cc_mach_asm : callconv li_mach li_asm :=
   {|

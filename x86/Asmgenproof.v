@@ -973,108 +973,119 @@ Qed.
 
 End WITH_WORLD.
 
-Let cc : callconv li_mach li_asm := cc_mach_asm @ cc_asm ext.
+Let cc : callconv li_mach li_asm := cc_mach ext @ cc_mach_asm.
 
 Lemma transf_initial_states:
-  forall rs0 nb0 q1 q2 st1, match_query cc (se, (rs0, nb0), tt) q1 q2 -> Mach.initial_state ge q1 st1 ->
+  forall rs0 nb0 q1 q2 st1, match_query cc (se, tt, (rs0, nb0)) q1 q2 -> Mach.initial_state ge q1 st1 ->
   exists st2, Asm.initial_state tge q2 st2 /\ match_states rs0 nb0 st1 st2.
 Proof.
-  intros. destruct H as (qi & Hq1i & Hqi2). inv H0. inv Hq1i.
-  destruct q2 as [rs2 m2], Hqi2 as [Hrs Hm]. CKLR.uncklr. setoid_rewrite ext_lessdef in Hrs.
+  intros. destruct H as (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. inv H0.
+  CKLR.uncklr. setoid_rewrite ext_lessdef in H6.
   edestruct functions_translated as (b & tf & ? & Htf & Hpc1); eauto.
-  pose proof (Hrs PC) as Hpc. rewrite Hpc1 in Hpc. inv Hpc.
+  inversion H1; try congruence.
+  inversion H3; try congruence.
+  inversion H5; try congruence.
+  subst.
   monadInv Htf.
   econstructor; split.
   - econstructor; eauto.
-    + rewrite <- H3. eauto.
-    + specialize (Hrs SP). destruct H7. inv Hrs. congruence.
-    + specialize (Hrs RA). destruct Hrs; congruence.
+    rewrite <- H9. eauto.
   - constructor; cbn; eauto.
-    constructor; eauto.
-    + destruct H7. congruence.
-    + erewrite Mem.mext_next; eauto. reflexivity.
+    + constructor; eauto.
+      reflexivity.
     + split; auto.
-      * destruct (Hrs RSP); auto; inv H7.
-      * destruct H7; congruence.
-    + destruct (Hrs RA); congruence.
+      setoid_rewrite <- H18; eauto.
 Qed.
 
 Lemma transf_external_states:
   forall rs0 nb0 st1 st2 q1, match_states rs0 nb0 st1 st2 -> Mach.at_external ge st1 q1 ->
-  exists wx q2, Asm.at_external tge st2 q2 /\ match_query cc wx q1 q2 /\ se = se /\
+  exists wx q2, Asm.at_external tge st2 q2 /\ match_query cc wx q1 q2 /\ match_senv cc wx se se /\
   forall r1 r2 st1', match_reply cc wx r1 r2 -> Mach.after_external st1 r1 st1' ->
   exists st2', Asm.after_external nb0 st2 r2 st2' /\ match_states rs0 nb0 st1' st2'.
 Proof.
   intros rs0 nb0 st1 st2 q1 Hst Hq1. inv Hq1. inv Hst.
   edestruct functions_translated as (fb & tf & TFIND & Htf & ?); eauto.
   subst. inv ATPC. monadInv Htf.
-  eexists (se, (_, _), tt), (rs1, m'). intuition idtac.
+  eexists (se, tt, (rs1, Mem.nextblock m')), (rs1, m'). intuition idtac.
   - econstructor.
     rewrite <- H2. cbn. destruct Ptrofs.eq_dec; try congruence. eauto.
-  - rewrite H2. rewrite <- ATLR. erewrite <- (agree_sp _ _ _ AG). eexists. split.
-Admitted.
-(*
-    + econstructor; eauto.
-    + inv STACKS; cbn in *; auto.
-      eapply valid_blockv_nextblock; eauto.
-    + rewrite ATLR. eapply parent_ra_def; eauto.
-  - inv H1. destruct r2 as [rs2' m2']. cbn in H0. intuition idtac.
-    eexists (State rs2' m2' _). split; econstructor; eauto.
+  - eexists (mq _ _ _ (fun r => rs1 (preg_of r)) m'). split.
+    + econstructor; intros; uncklr; eauto.
+      * congruence.
+      * eapply agree_sp_def; eauto.
+      * eapply parent_ra_def; eauto.
+      * eapply agree_mregs; eauto.
+    + rewrite H2. rewrite <- ATLR. erewrite <- (agree_sp _ _ _ AG).
+      constructor; auto.
+      * congruence.
+      * erewrite agree_sp; eauto.
+        inv STACKS; cbn; eauto.
+        eapply valid_blockv_nextblock; eauto.
+      * rewrite ATLR. eapply parent_ra_def; eauto.
+  - cbn. auto.
+  - inv H1. cbn in H0. destruct H0 as (ri & ([ ] & _ & Hr1i) & Hri2).
+    inv Hri2. inv Hr1i.
+    eexists. split; econstructor; eauto.
     + eapply match_stack_incr_bound; eauto.
+    + setoid_rewrite ext_lessdef in H8. split; auto.
+      * rewrite H0. eapply agree_sp; eauto.
+      * eapply agree_sp_def; eauto.
+      * intro. rewrite <- H4. eauto.
     + congruence.
 Qed.
-*)
 
 Lemma transf_final_states:
   forall rs0 nb0 st1 st2 r1, match_states rs0 nb0 st1 st2 -> Mach.final_state st1 r1 ->
-  exists r2, Asm.final_state st2 r2 /\ match_reply cc (se, (rs0, nb0), tt) r1 r2.
+  exists r2, Asm.final_state st2 r2 /\ match_reply cc (se, tt, (rs0, nb0)) r1 r2.
 Proof.
   intros. inv H0. inv H. cbn in *.
   inv STACKS. erewrite agree_sp; eauto.
   destruct inner_sp eqn:Hsp. { destruct H4; cbn in *. destruct plt; congruence. }
   exists (rs1, m'). split.
   - constructor.
-  - eexists (_, _). split.
-Admitted.
+  - exists (mr (fun r => rs1 (preg_of r)) m'). split.
+    + exists tt. split; [rauto | ]. constructor; intros; uncklr; eauto.
+      eapply agree_mregs; eauto.
+    + constructor; eauto.
+      eapply agree_sp; eauto.
+Qed.
 
 End PRESERVATION.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (cc_mach_asm @ cc_asm ext) (cc_mach_asm @ cc_asm ext)
+  forward_simulation (cc_mach ext @ cc_mach_asm) (cc_mach ext @ cc_mach_asm)
     (Mach.semantics return_address_offset prog)
     (Asm.semantics tprog).
 Proof.
-  set (ms := fun '(se, (rs0, nb0), tt) s1 '(nb, s2) =>
+  set (ms := fun '(se, tt, (rs0, nb0)) s1 '(nb, s2) =>
                match_states prog se rs0 nb0 s1 s2 /\ nb = nb0). 
   fsim eapply forward_simulation_star with
       (match_states := ms w)
-      (measure := measure); cbn in *;
-    destruct w as [[se [rs0 nb0]] [ ]], Hse as [[ ] [ ]];
+      (measure := measure);
+    destruct w as [[se [ ]] [rs0 nb0]], Hse as [[ ] [ ]];
     intros.
-  - destruct H as (qi & Hq1i & Hqi2). destruct Hq1i, q2, Hqi2. cbn.
-    setoid_rewrite ext_lessdef in H1.
-Admitted.
-(*
+  - destruct H as (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. cbn.
+    setoid_rewrite ext_lessdef in H2. inv H2; try congruence.
+    uncklr. inv H0; try congruence.
     eapply (Genv.is_internal_transf_partial_id MATCH); eauto.
     intros [|] ? Hf; monadInv Hf; auto.
   - edestruct transf_initial_states as (s2 & Hs2 & Hs); eauto.
-    exists (Mem.nextblock (snd q2), s2). intuition auto.
-    inv H. cbn. eauto using agree_sp.
+    exists (Mem.nextblock (snd q2), s2). cbn. intuition auto.
+    destruct H as (? & ? & ?). destruct H1. auto.
   - destruct s2 as [nb s2], H as [H Hnb]; subst.
-    eapply transf_final_states; eauto.
+    edestruct transf_final_states as (? & ? & ?); cbn; eauto.
   - destruct s2 as [nb s2], H as [H Hnb]; subst.
     edestruct transf_external_states as (wA & q2 & Hq2 & Hq & Hse & Hr); eauto.
     exists wA, q2. intuition auto.
     edestruct Hr as (s2' & Hs2' & Hs'); eauto.
-    eexists (_, s2'); eauto.
+    eexists (_, s2'); cbn; eauto.
   - destruct s2 as [nb s2], H0 as [H0 Hnb]; subst.
-    edestruct step_simulation as [(s2' & Hs2' & Hs') | ?]; intuition eauto 10.
+    edestruct step_simulation as [(s2' & Hs2' & Hs') | ?]; cbn in *; intuition eauto 10.
     left. eexists (_, _). intuition eauto.
-    revert Hs2'. generalize init_nb, (Genv.globalenv se1 tprog); clear; intros.
+    revert Hs2'. generalize nb0, (Genv.globalenv se1 tprog); clear; intros.
     pattern s2, t, s2'. revert s2 t s2' Hs2'. apply plus_ind2; intros.
     * apply plus_one. auto.
     * eapply plus_trans; eauto.
       apply plus_one. auto.
 Qed.
-*)

@@ -409,7 +409,7 @@ Lemma cc_compcert_expand:
     (cc_dom @                                              (* Passes up to Alloc *)
      cc_locset ext @                                       (* Tunneling *)
      (wt_loc @ et_loc @ cc_locset_mach @ cc_mach inj) @    (* Stacking *)
-     (cc_mach_asm @ cc_asm ext) @                          (* Asmgen *)
+     (cc_mach ext @ cc_mach_asm) @                         (* Asmgen *)
      cc_asm vainj).
 Proof.
   unfold cc_compcert, cc_dom, cc_cod.
@@ -436,7 +436,7 @@ Proof.
     rewrite <- inj_ext, cc_asm_compose, cc_compose_assoc.
     rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
     rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
-    do 3 rewrite (commute_around cc_mach_asm).
+    do 4 rewrite (commute_around cc_mach_asm).
     do 2 rewrite (commute_around cc_locset_mach).
     rewrite !(commute_around et_loc).
     do 1 rewrite (commute_around cc_c_locset).
@@ -452,12 +452,11 @@ Lemma cc_compcert_collapse:
     (cc_dom @                                     (* Passes up to Alloc *)
      cc_locset ext @                              (* Tunneling *)
      (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
-     (cc_mach_asm @ cc_asm ext) @                 (* Asmgen *)
+     (cc_mach ext @ cc_mach_asm) @                (* Asmgen *)
      cc_asm vainj)
     cc_compcert.
 Proof.
   rewrite !cc_compose_assoc.
-  rewrite (commute_around cc_mach_asm).
   rewrite !(commute_around cc_locset_mach).
   rewrite <- (cc_compose_assoc wt_loc), <- et_wt_loc, cc_compose_assoc.
   rewrite !(commute_around et_loc).
