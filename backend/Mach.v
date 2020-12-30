@@ -549,9 +549,9 @@ Program Definition cc_locset_mach: callconv li_locset li_mach :=
 
 Inductive cc_mach_mq R w: mach_query -> mach_query -> Prop :=
   cc_mach_mq_intro vf1 vf2 sp1 sp2 ra1 ra2 rs1 rs2 m1 m2:
-    Val.inject (mi R w) vf1 vf2 ->
-    Val.inject (mi R w) sp1 sp2 ->
-    Val.inject (mi R w) ra1 ra2 ->
+    vf1 <> Vundef -> Val.inject (mi R w) vf1 vf2 ->
+    sp1 <> Vundef -> Val.inject (mi R w) sp1 sp2 ->
+    ra1 <> Vundef -> Val.inject (mi R w) ra1 ra2 ->
     (forall r, Val.inject (mi R w) (rs1 r) (rs2 r)) ->
     match_mem R w m1 m2 ->
     cc_mach_mq R w

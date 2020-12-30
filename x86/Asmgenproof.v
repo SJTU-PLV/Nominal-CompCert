@@ -987,15 +987,15 @@ Proof.
   econstructor; split.
   - econstructor; eauto.
     + rewrite <- H3. eauto.
-    + specialize (Hrs SP). destruct H7. inv Hrs. congruence.
+    + specialize (Hrs SP). destruct H8. inv Hrs. congruence.
     + specialize (Hrs RA). destruct Hrs; congruence.
   - constructor; cbn; eauto.
     constructor; eauto.
-    + destruct H7. congruence.
+    + destruct H8. congruence.
     + erewrite Mem.mext_next; eauto. reflexivity.
     + split; auto.
-      * destruct (Hrs RSP); auto; inv H7.
-      * destruct H7; congruence.
+      * destruct (Hrs RSP); auto; inv H8.
+      * destruct H8; congruence.
     + destruct (Hrs RA); congruence.
 Qed.
 
@@ -1053,7 +1053,7 @@ Proof.
     destruct w as [[se [rs0 nb0]] [ ]], Hse as [[ ] [ ]];
     intros.
   - destruct H as (qi & Hq1i & Hqi2). destruct Hq1i, q2, Hqi2. cbn.
-    setoid_rewrite ext_lessdef in H1.
+    setoid_rewrite ext_lessdef in H2.
 Admitted.
 (*
     eapply (Genv.is_internal_transf_partial_id MATCH); eauto.

@@ -1307,6 +1307,7 @@ Unset Program Cases.
 
 Inductive cc_mach_asm_mq (rs: regset): block -> mach_query -> query li_asm -> Prop :=
   cc_mach_asm_mq_intro m:
+    rs#PC <> Vundef ->
     valid_blockv (Mem.nextblock m) rs#SP ->
     rs#RA <> Vundef ->
     cc_mach_asm_mq rs
