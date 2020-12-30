@@ -29,6 +29,16 @@ Section PROG.
     edestruct @Genv.find_funct_match as (?&?&?&?&?); eauto using (match_prog tt).
     cbn in *. subst. auto.
   Qed.
+  Instance transport_find_symbol_genv R w ge1 ge2 id b1:
+    Transport (genv_match R w) ge1 ge2
+              (Genv.find_symbol ge1 id = Some b1)
+              (exists b2,
+                  Genv.find_symbol ge2 id = Some b2 /\
+                  block_inject_sameofs (mi R w) b1 b2).
+  Proof.
+    intros Hge Hb1. edestruct @Genv.find_symbol_match as (b2 & ? & ?); eauto.
+    destruct Hge. eapply match_stbls_proj. eauto.
+  Qed.
 
   Global Instance genv_match_acc R:
     Monotonic (genv_match R) (wacc R ++> subrel).
@@ -47,8 +57,8 @@ Section PROG.
       Monotonic
         (@Next')
         (regset_inject R w ++> match_mem R w ++> - ==> outcome_match R w)
-  | Stuck_match:
-      outcome_match R w Stuck Stuck.
+  | Stuck_match o:
+      outcome_match R w Stuck o.
 
   Inductive state_match R w: rel Asm.state Asm.state :=
   | State_rel:
@@ -76,6 +86,128 @@ Section PROG.
     apply Val.offset_ptr_inject; auto.
   Qed.
 
+  Global Instance symbol_address_inject R w:
+    Monotonic
+      (@Genv.symbol_address)
+      (genv_match R w ++> - ==> - ==> Val.inject (mi R w)).
+  Proof.
+    unfold Genv.symbol_address.
+    repeat rstep.
+    destruct (Genv.find_symbol x x0) eqn: Heq.
+    transport_hyps. rewrite H0. rauto.
+    constructor.
+  Qed.
+
+  Global Instance undef_regs_inject R:
+    Monotonic
+      (@undef_regs)
+      (|= - ==> regset_inject R ++> regset_inject R).
+  Proof.
+    repeat rstep. revert x0 y H.
+    induction x.
+    - auto.
+    - intros. cbn.
+      apply IHx. apply set_inject; auto.
+  Qed.
+  
+  Global Instance eval_addrmode32_inject R w:
+    Monotonic
+      (@eval_addrmode32)
+      (genv_match R w ++> - ==> regset_inject R w ++> Val.inject (mi R w)).
+  Proof.
+    unfold eval_addrmode32.
+    repeat rstep; auto.
+    apply symbol_address_inject; auto.
+  Qed.
+  Global Instance eval_addrmode64_inject R w:
+    Monotonic
+      (@eval_addrmode64)
+      (genv_match R w ++> - ==> regset_inject R w ++> Val.inject (mi R w)).
+  Proof.
+    unfold eval_addrmode64.
+    repeat rstep; auto.
+    apply symbol_address_inject; auto.
+  Qed.
+  Global Instance eval_addrmode_inject R w:
+    Monotonic
+      (@eval_addrmode)
+      (genv_match R w ++> - ==> regset_inject R w ++> Val.inject (mi R w)).
+  Proof.
+    unfold eval_addrmode.
+    repeat rstep.
+    - unfold eval_addrmode64.
+      repeat rstep; auto.
+      apply symbol_address_inject; auto.
+    - unfold eval_addrmode32.
+      repeat rstep; auto.
+      apply symbol_address_inject; auto.
+  Qed.
+
+  Global Instance exec_load_match R:
+    Monotonic
+      (@exec_load)
+      (|= genv_match R ++> - ==> match_mem R ++>  - ==> regset_inject R ++> - ==> outcome_match R).
+  Proof.
+    unfold exec_load.
+    repeat rstep.
+    destruct (Mem.loadv _ _ _) eqn:Heq.
+    - eapply transport in Heq.
+      2: { apply cklr_loadv; eauto. eapply eval_addrmode_inject; eauto. }
+      destruct Heq as (b & Hb & vinj).
+      rewrite Hb. constructor.
+      repeat apply set_inject; rstep.
+      repeat apply set_inject; rstep.
+      auto. auto.
+    - constructor.
+  Qed.
+
+  Global Instance regset_inject_acc:
+    Monotonic
+      (@regset_inject)
+      (forallr - @ R, acc tt ++> subrel).
+  Proof.
+    unfold regset_inject.
+    repeat rstep.
+    intros rs1 rs2 Hrs i. rauto.
+  Qed.
+  
+  Global Instance exec_store_match R:
+    Monotonic
+      (@exec_store)
+      (|= genv_match R ++> - ==> match_mem R ++> - ==> regset_inject R ++> - ==> - ==> <> outcome_match R).
+  Proof.
+    unfold exec_store.
+    repeat rstep.
+    destruct (Mem.storev _ _ _ _) eqn:Heq.
+    - eapply transport in Heq.
+      2: { apply cklr_storev. eauto. eapply eval_addrmode_inject. eauto. eauto. apply H1. }
+      destruct Heq as (b & Hb & w' & Hw' & Hmm).
+      exists w'. split. auto.
+      rewrite Hb. constructor.
+      unfold nextinstr_nf. rstep.
+      apply undef_regs_inject. apply undef_regs_inject.
+      rauto. auto.
+    - exists w. split. rauto. constructor.
+  Qed.
+
+  Ltac match_simpl :=
+    match goal with
+    | [ |- (<> outcome_match _)%klr _ (exec_store _ _ _ _ _ _ _) (exec_store _ _ _ _ _ _ _) ] =>
+      apply exec_store_match; auto
+    | [ |- (<> outcome_match _)%klr _ (exec_load _ _ _ _ _ _) (exec_load _ _ _ _ _ _) ] =>
+      eexists; split; [rauto | apply exec_load_match; auto]
+    | [ |- (<> outcome_match _)%klr _ (Next _ _) (Next _ _) ] =>
+      eexists; split; [rauto | constructor; auto]
+    | [ |- (<> outcome_match _)%klr _ Stuck _ ] =>
+      eexists; split; [rauto | constructor]
+    | [ |- (regset_inject _ _ (nextinstr _) (nextinstr _))] => rstep
+    | [ |- (regset_inject _ _ (nextinstr_nf _) (nextinstr_nf _))] => unfold nextinstr_nf; rstep
+    | [ |- (regset_inject _ _ (undef_regs _ _) (undef_regs _ _))] => apply undef_regs_inject; auto
+    | [ |- (regset_inject _ _ (_ # _ <- _) (_ # _ <- _))] => apply set_inject; auto
+    | [ |- (Val.inject _ _ _)] => rstep; auto
+    | _ => idtac
+    end.
+  
   Global Instance exec_instr_match R:
     Monotonic
       (@exec_instr)
@@ -85,18 +217,7 @@ Section PROG.
        (<> outcome_match R)).
   Proof.
     intros w b1 b2 Hb ge1 ge2 Hge f i rs1 rs2 Hrs m1 m2 Hm.
-    destruct i.
-    - cbn. exists w. split. rauto. constructor; auto.
-      rstep. apply set_inject; auto. 
-    - cbn. exists w. split. rauto. constructor; auto.
-      unfold nextinstr_nf. rstep.
-      repeat apply set_inject; constructor || auto.
-    - cbn. exists w. split. rauto. constructor; auto.
-      unfold nextinstr_nf. rstep.
-      repeat apply set_inject; constructor || auto.
-    - 
-      
-
+    destruct i; cbn; repeat match_simpl.
   
   Global Instance step_rel R:
     Monotonic
