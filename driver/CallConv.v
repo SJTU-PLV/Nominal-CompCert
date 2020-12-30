@@ -515,11 +515,12 @@ Proof.
   exists (se2, wR, (rs2, Mem.nextblock m2)). cbn. repeat apply conj; auto.
   - exists (mq rs2#PC rs2#SP rs2#RA (fun r => rs2 (preg_of r)) m2). split.
     + constructor; auto.
-      destruct H0; congruence.
-    + constructor.
+      * destruct H0; congruence.
+      * setoid_rewrite H2. eauto.
+    + constructor; auto.
       * destruct (Hrs PC); cbn in *; congruence.
       * specialize (Hrs SP). destruct Hrs; inv H0. constructor.
-        revert H5.
+        revert H6.
         change (b1 < _)%positive with (Mem.valid_block m1 b1).
         change (b2 < _)%positive with (Mem.valid_block m2 b2).
         rstep. rstep. rstep. rstep. red. eauto.
