@@ -257,6 +257,7 @@ Next Obligation.
       rewrite Pos.eqb_refl. reflexivity.
 Qed.
 
+(** Free *)
 Next Obligation.
   intros w m1 m2 Hm p p' Hptr. destruct Hm.
   assert (p = p') as Hp by (apply coreflexivity; rauto). destruct Hp.
@@ -290,7 +291,14 @@ Proof.
   eapply mmatch_below; eauto.
 Qed.
 
+Ltac dest_inj_of_bc :=
+  repeat
+    match goal with
+    | H: inj_of_bc _ _ = Some _ |- _ =>
+      apply inj_of_bc_inv in H; destruct H as (? & ? & ?)
+    end.
 
+(** Load *)
 Next Obligation.
   intros _ chunk _ _ [se bc m1 m2 H Hm] p p' Hp.
   assert (p = p') as Hp' by (eapply coreflexivity; rauto). destruct Hp'.
@@ -298,40 +306,203 @@ Next Obligation.
   destruct (Mem.load chunk m1) as [v1 | ] eqn:Hv1; [ | constructor].
   exploit vaext_wf_inj; eauto. intros Hm1.
   inv Hp. cbn in *.
-  edestruct Mem.load_inject; eauto.
-Admitted.
+  assert (delta = 0) by omega. subst delta.
 
+  assert (Hinj: Mem.inject (inj_of_bc bc) m1 m2).
+  { eapply Mem.inject_extends_compose; eauto. }
+  clear Hm1.
+  edestruct Mem.load_inject as (v2 & Hv2 & Hvinj); eauto.
+
+  rewrite Hv2. constructor.
+  assumption.
+Qed.
+
+(** Store *)
 Next Obligation.
-Admitted.
+  intros sew chunk m1 m2 Hm p p' Hptr v1 v2 Hv.
+  assert (p = p') as Hp' by (eapply coreflexivity; rauto). destruct Hp'.
+  destruct p as [b ofs]. cbn.
+  destruct (Mem.store chunk m1) as [m1' | ] eqn:Hm1'; try rauto.
+  inv Hm. inv Hptr.
+  assert (delta = 0) by omega. subst delta.
+  unfold k1.
 
+  exploit vaext_wf_inj; eauto. intros Hm1.
+  assert (Hinj: Mem.inject (inj_of_bc bc) m1 m2).
+  { eapply Mem.inject_extends_compose; eauto. }
+  clear Hm1.
+  edestruct Mem.store_mapped_inject as (m2' & Hm2' & Hvinj); eauto.
+
+  rewrite Hm2'.
+  constructor.
+  unfold klr_diam.
+
+  assert (H' : vaext_wf se bc m1').
+  {
+    destruct H.
+    constructor; auto.
+    - eapply mmatch_inj_top; eauto.
+    - intros cu Hcu. eapply romatch_store; eauto.
+  }
+
+  exists (vaextw _ _ _ H'). split.
+  - constructor; cbn; auto.
+    + apply Mem.nextblock_store in Hm1'. rewrite Hm1'. reflexivity.
+    + intros.
+      destruct (Pos.eq_dec b0 b); subst.
+      * dest_inj_of_bc. cbn in H2. contradiction.
+      * rewrite <- H7. symmetry.
+        eapply Mem.loadbytes_store_other; eauto.
+  - constructor; auto.
+    assert (Hlessdef: Val.lessdef v1 v2).
+    { unfold klr_pullw in Hv. cbn in Hv.
+      rewrite <- val_inject_id.
+      eapply Values.val_inject_incr.
+      apply inj_of_bc_id. eassumption.
+    }
+    edestruct Mem.store_within_extends as (m2'' & Hm2'' & Hext); eauto.
+    congruence.
+Qed.
+
+(** Loadbytes *)
 Next Obligation.
-Admitted.
+  intros sew m1 m2 Hm [b ofs] [b2 ofs2] Hptr n. inv Hm.
+  inv Hptr.
 
+  generalize H2.
+  dest_inj_of_bc.
+  subst b2 delta.
+  intros Hbc.
+
+  unfold k1. cbn.
+  destruct (Mem.loadbytes m1 b ofs n) as [bytes1 | ] eqn:Hbytes1; [ | constructor].
+  exploit vaext_wf_inj; eauto. intros Hm1.
+  assert (Hinj: Mem.inject (inj_of_bc bc) m1 m2).
+  { eapply Mem.inject_extends_compose; eauto. }
+  clear Hm1.
+  edestruct Mem.loadbytes_inject as (bytes2 & Hbytes2 & Hinjbytes); eauto.
+  rewrite Hbytes2.
+  constructor.
+  apply list_forall2_rel. assumption.
+Qed.
+
+(** Storebytes *)
 Next Obligation.
-Admitted.
+  intros vaw m1 m2 Hm p p' Hptr bytes1 bytes2 Hbytes. inv Hm. cbn.
+  assert (p = p') as Hp' by (eapply coreflexivity; rauto). destruct Hp'.
+  destruct p as [b ofs]. cbn.
+  destruct (Mem.storebytes m1 b ofs bytes1) as [m1' | ] eqn:Hm1'; [|constructor].
+  unfold k1.
 
+  exploit vaext_wf_inj; eauto. intros Hm1.
+  assert (Hinj: Mem.inject (inj_of_bc bc) m1 m2).
+  { eapply Mem.inject_extends_compose; eauto. }
+  clear Hm1.
+
+  unfold k1, klr_pullw in Hbytes.
+  cbn in Hbytes.
+  apply list_rel_forall2 in Hbytes.
+  assert (Hbc: inj_of_bc bc b = Some (b, 0)).
+  { destruct Hptr as [Hptr | Hptr].
+    - inv Hptr. cbn in H2.
+      replace delta with 0 in H2 by omega. auto.
+    - inv Hptr.
+      rewrite H1 in H2.
+      inv H3. cbn in H5.
+      inv H1. inv H2.
+      unfold inj_of_bc in H5. unfold inj_of_bc.
+      destruct (bc b); inv H5; reflexivity.
+  }
+  edestruct Mem.storebytes_mapped_inject as (m2' & Hm2' & Hinj'); eauto.
+  rewrite Z.add_0_r in Hm2'. rewrite Hm2'.
+  constructor.
+  
+  assert (H' : vaext_wf se bc m1').
+  {
+    destruct H.
+    constructor; auto.
+    - eapply mmatch_inj_top; eauto.
+    - intros cu Hcu. eapply romatch_storebytes; eauto.
+  }
+  
+  exists (vaextw _ _ _ H'). split.
+  - constructor; cbn; auto.
+    + apply Mem.nextblock_storebytes in Hm1'. rauto.
+    + intros.
+      destruct (Pos.eq_dec b0 b); subst.
+      * dest_inj_of_bc. contradiction.
+      * rewrite <- H5. symmetry.
+        eapply Mem.loadbytes_storebytes_other; eauto.
+  - constructor; auto.
+    assert (Hlessdef: list_forall2 memval_lessdef bytes1 bytes2).
+    { eapply list_forall2_imply. eassumption.
+      intros v1 v2 Hv1 Hv2 Hvinj.
+      eapply memval_inject_incr; eauto.
+      apply inj_of_bc_id.
+    }
+    edestruct Mem.storebytes_within_extends as (m2'' & Hm2'' & Hext); eauto.
+    congruence.
+Qed.
+
+(** Perm *)
 Next Obligation.
-Admitted.
+  intros sew m1 m2 Hm. inv Hm.
+  intros p p' Hptr P perm.
+  assert (p = p') as Hp' by (eapply coreflexivity; rauto). destruct Hp'.
+  destruct p as [b ofs].
+  exact (Mem.perm_extends _ _ _ _ _ _ H4).
+Qed.
 
+(** Valid block *)
 Next Obligation.
-Admitted.
+  intros sew m1 m2 Hm. inv Hm.
+  intros b b' Hb.
+  assert (b = b') as Hb' by (eapply coreflexivity; rauto). destruct Hb'.
+  apply Mem.valid_block_extends.
+  auto.
+Qed.
 
+(** No overlap *)
 Next Obligation.
-Admitted.
+  inv H.
+  cbn.
+  left.
+  dest_inj_of_bc. congruence.
+Qed.
 
+(** Representable *)
 Next Obligation.
-Admitted.
+  inv H.
+  dest_inj_of_bc. omega.
+Qed.
 
+(** Aligned *)
 Next Obligation.
-Admitted.
+  inv H.
+  dest_inj_of_bc.
+  subst delta.
+  rewrite Z.add_0_r.
+  assumption.
+Qed.
 
+(** Disjoint or Equal *)
 Next Obligation.
-Admitted.
+  inv H.
+  dest_inj_of_bc.
+  destruct H5 as [Hb | Hofs]; [left | right]. congruence.
+  destruct Hofs as [Hofs | Hofs]; [left | right]. congruence.
+  destruct Hofs as [Hofs | Hofs]; [left | right]. omega.
+  omega.
+Qed.
 
+(** Perm inv *)
 Next Obligation.
-Admitted.
-
-
+  inv H.
+  inv H0.
+  dest_inj_of_bc. subst. rewrite Z.add_0_r in H1.
+  cbn in H.
+  eapply Mem.mext_perm_inv in H1; eauto.
+Qed.
 
 
 (** * Other properties *)

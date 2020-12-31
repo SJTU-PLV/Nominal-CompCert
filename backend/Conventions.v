@@ -206,6 +206,25 @@ Proof.
     destruct in_dec; congruence.
 Qed.
 
+Lemma loc_arguments_external sg p :
+  In p (loc_arguments sg) ->
+  forall_rpair (loc_external sg) p.
+Proof.
+  generalize (loc_arguments_acceptable sg p).
+  generalize (loc_external_arg sg).
+  induction loc_arguments; cbn in *; try contradiction.
+  setoid_rewrite in_app.
+  intros Hext Hacc [? | ?]; eauto 10; subst.
+  specialize (Hacc (or_introl eq_refl)).
+  destruct p; cbn in *.
+  + destruct r as [ | [ ] ]; cbn in *; try contradiction;
+    eauto 10 using loc_external_reg.
+  + edestruct Hacc as [? ?].
+    destruct rlo as [ | [ ] ]; cbn in *; try contradiction;
+    destruct rhi as [ | [ ] ]; cbn in *; try contradiction;
+    eauto 10 using loc_external_reg.
+Qed.
+
 (** After a query is received, the location state is initialized for
   those locations only, using the following construction. *)
 
@@ -221,11 +240,11 @@ Proof.
 Qed.
 
 Lemma getpair_initial_regs sg rs p:
-  forall_rpair (loc_external sg) p ->
+  In p (loc_arguments sg) ->
   Locmap.getpair p (initial_regs sg rs) = Locmap.getpair p rs.
 Proof.
-  intros Hp. destruct p; cbn in *; auto using external_initial_regs.
-  destruct Hp. f_equal; auto using external_initial_regs.
+  intros Hp. apply loc_arguments_external in Hp.
+  destruct p; cbn in *; f_equal; intuition auto using external_initial_regs.
 Qed.
 
 (** A similar phenomenon occurs when external calls return. *)
