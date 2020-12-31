@@ -337,6 +337,7 @@ Proof.
     + inv H6. cbn in *.
       constructor. constructor.
       * eapply bc_of_inj_genv_match; eauto.
+      * eapply bc_of_inj_vmatch; eauto.
       * eapply bc_of_inj_args_vmatch; eauto.
       * eapply bc_of_inj_mmatch; eauto.
       * eapply bc_of_inj_nostack; eauto.

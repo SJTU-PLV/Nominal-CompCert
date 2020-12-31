@@ -538,7 +538,7 @@ Proof.
     destruct Hq. destruct Hse. cbn in * |- . inv H1. destruct H12.
     exists (se, vaw se bc m1, tt). cbn. repeat apply conj; auto using rel_inv_intro.
     + eexists; split; constructor; cbn; auto.
-      * constructor; eauto using vmatch_list_inj_top.
+      * constructor; eauto using vmatch_list_inj_top, vmatch_inj_top.
       * eapply val_inject_incr. apply inj_of_bc_id. eauto.
       * eapply val_inject_list_incr. apply inj_of_bc_id. eauto.
     + intros r1 r2 (ri & Hr1i & Hri2). destruct Hr1i, Hri2 as ([ ] & _ & ?).
@@ -560,13 +560,13 @@ Proof.
     + constructor; cbn; auto.
       * apply val_inject_id in H0.
         eapply Mem.val_inject_lessdef_compose; eauto.
-        admit. (* need something in vamatch for vf *)
+        eapply vmatch_inj; eauto.
       * apply val_inject_list_lessdef in H1.
         eapply val_inject_lessdef_list_compose; eauto.
-        clear - H10.
+        clear - H11.
         induction vargs1; constructor; eauto.
-        -- eapply vmatch_inj. eapply H10. cbn. auto.
-        -- eapply IHvargs1. intros. eapply H10. cbn. auto.
+        -- eapply vmatch_inj. eapply H11. cbn. auto.
+        -- eapply IHvargs1. intros. eapply H11. cbn. auto.
       * constructor; auto.
     + intros r1 r2 ([se' bc' m1' Hwf] & Hw' & Hr). destruct Hw'; cbn in *. subst se'.
       inv Hr. inv H4. destruct Hwf. cbn in *.
@@ -576,4 +576,4 @@ Proof.
       * exists tt. split; constructor.
         -- eapply val_inject_incr. apply inj_of_bc_id. eauto.
         -- cbn. auto.
-Admitted.
+Qed.
