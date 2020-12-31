@@ -16,6 +16,7 @@ Require Import Coqlib Maps.
 Require Import AST Integers Floats Values Memory Events Globalenvs Smallstep.
 Require Import Locations Stacklayout Conventions.
 Require Import Mach LanguageInterface CallconvAlgebra CKLR CKLRAlgebra.
+Require Import ClassicalChoice.
 
 (** * Abstract syntax *)
 
@@ -1349,8 +1350,79 @@ Qed.
 
 Instance cc_asm_ref:
   Monotonic cc_asm (subcklr ++> ccref).
-Admitted.
+Proof.
+  intros Q R HQR. red in HQR |- *.
+  intros w se1 se2 q1 q2 Hse Hq.
+  destruct q1 as [rs1 m1]. destruct q2 as [rs2 m2].
+  destruct Hq as [Hrs Hm].
+  specialize (HQR w se1 se2 m1 m2 Hse Hm) as (wr & HseR & HmR & Hincr & HQR').
+  exists wr. simpl in *. repeat apply conj; auto.
+  - intros r. specialize (Hrs r). rauto.
+  - intros [rs1' m1'] [rs2' m2'] (wr' & Hw' & Hr). destruct Hr as [? Hm'].
+    specialize (HQR' wr' m1' m2' Hm' Hw') as (w' & HmQ' & HwQ' & Hincr').
+    eexists. split; eauto. constructor; eauto.
+Qed.
+
+Lemma match_asm_query_compose R12 R23 w12 w23:
+  eqrel
+    (match_query (cc_asm (R12 @ R23)) (w12, w23))
+    (rel_compose (match_query (cc_asm R12) w12) (match_query (cc_asm R23) w23)).
+Proof.
+  split.
+  - intros [rs1 m1] [rs3 m3] [Hrs Hm]. simpl in *.
+    destruct Hm as (m2 & Hm12 & Hm23).
+    assert (exists rs2, forall r: preg, Val.inject (mi R12 w12) (rs1 r) (rs2 r) /\
+                              Val.inject (mi R23 w23) (rs2 r) (rs3 r)) as (rs2 & Hrs').
+    {
+      apply choice with (R := fun r w => Val.inject (mi R12 w12) (rs1 r) w /\ Val.inject (mi R23 w23) w (rs3 r)).
+      intros r. specialize (Hrs r).
+      apply val_inject_compose in Hrs. apply Hrs.
+    }
+    exists (rs2, m2). split; constructor; eauto; apply Hrs'.
+  - intros [rs1 m1][rs3 m3] ([rs2 m2] & [Hrs12 Hm12] & [Hrs23 Hm23]).
+    split.
+    + intros r. cbn. apply val_inject_compose.
+      eexists; split; eauto.
+    + econstructor; split; eauto.
+Qed.
+
+Lemma match_asm_reply_compose R12 R23 w12 w23:
+  eqrel
+    (match_reply (cc_asm (R12 @ R23)) (w12, w23))
+    (rel_compose (match_reply (cc_asm R12) w12) (match_reply (cc_asm R23) w23)).
+Proof.
+  split.
+  - intros [rs1 m1] [rs3 m3] ([w12' w23'] & Hw' & [Hrs Hm]).
+    destruct Hm as (m2 & Hm12 & Hm23).
+    assert (exists rs2, forall r: preg, Val.inject (mi R12 w12') (rs1 r) (rs2 r) /\
+                              Val.inject (mi R23 w23') (rs2 r) (rs3 r)) as (rs2 & Hrs').
+    {
+      apply choice with (R := fun r w => Val.inject (mi R12 w12') (rs1 r) w /\ Val.inject (mi R23 w23') w (rs3 r)).
+      intros r. specialize (Hrs r).
+      apply val_inject_compose. cbn in Hrs. apply Hrs.
+    }
+    destruct Hw' as [? ?]. cbn [fst snd] in *.
+    exists (rs2, m2). split; econstructor; split; eauto; split; eauto; apply Hrs'.
+  - intros [rs1 m1] [rs3 m3] ([rs2 m2] & (w12' & Hw12' & Hrs12 & Hm12) & (w23' & Hw23' & Hrs23 & Hm23)).
+    exists (w12', w23'). split. constructor; cbn; auto.
+    split.
+    + intros r. cbn. apply val_inject_compose.
+      eexists; split; eauto.
+    + econstructor; split; eauto.
+Qed.
 
 Lemma cc_asm_compose R S :
   cceqv (cc_asm (R @ S)) (cc_asm R @ cc_asm S).
-Admitted.
+Proof.
+  split.
+  - intros [w12 w23] se1 se3 q1 q3 (se2 & Hse12 & Hse23) Hq.
+    apply match_asm_query_compose in Hq as (q2 & Hq12 & Hq23).
+    exists (se2, w12, w23).
+    repeat apply conj; [ cbn; eauto | cbn; eauto | ].
+    apply match_asm_reply_compose.
+  - intros [[se2 w12] w23] se1 se3 q1 q3 (Hse12 & Hse23) (q2 & Hq12 & Hq23).
+    exists (w12, w23). repeat apply conj.
+    + cbn. eauto.
+    + apply match_asm_query_compose; eauto.
+    + apply match_asm_reply_compose.
+Qed.

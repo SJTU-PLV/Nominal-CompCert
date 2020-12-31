@@ -1,7 +1,7 @@
 Require Import Coqlib Maps.
 Require Import AST Integers Floats Values Memory Events Globalenvs Smallstep.
 Require Import Locations Stacklayout Conventions.
-Require Import Mach LanguageInterface CKLR.
+Require Import Mach LanguageInterface CallconvAlgebra CKLR CKLRAlgebra.
 Require Import Asm.
 
 Section PROG.
@@ -204,10 +204,34 @@ Section PROG.
     | [ |- (regset_inject _ _ (nextinstr_nf _) (nextinstr_nf _))] => unfold nextinstr_nf; rstep
     | [ |- (regset_inject _ _ (undef_regs _ _) (undef_regs _ _))] => apply undef_regs_inject; auto
     | [ |- (regset_inject _ _ (_ # _ <- _) (_ # _ <- _))] => apply set_inject; auto
-    | [ |- (Val.inject _ _ _)] => rstep; auto
+    | [ |- (Val.inject _ (Genv.symbol_address _ _ _) (Genv.symbol_address _ _ _))] =>
+      apply symbol_address_inject; auto
+    | [ |- (Val.inject _ _ _)] => auto || rstep; auto
+    | [ |- option_le _ _ _ ] => rstep
     | _ => idtac
     end.
-  
+
+  Ltac ss :=
+    eexists; split; [rauto | ].
+
+  Global Instance inner_sp_inject R w rs1 rs2 m1 m2 b r:
+    Transport (regset_inject R w * match_mem R w) (rs1, m1) (rs2, m2)
+              (inner_sp (Mem.nextblock m1) (rs1 r) = b)
+              (inner_sp (Mem.nextblock m2) (rs2 r) = b).
+  Proof.
+  Admitted.
+
+  Global Instance val_negativel_inject f:
+    Monotonic (@Val.negativel) (Val.inject f ++> Val.inject f).
+  Proof.
+    unfold Val.negativel. rauto.
+  Qed.
+  Global Instance val_subl_overflow_inject f:
+    Monotonic (@Val.subl_overflow) (Val.inject f ++> Val.inject f ++> Val.inject f).
+  Proof.
+    unfold Val.subl_overflow. rauto.
+  Qed.
+
   Global Instance exec_instr_match R:
     Monotonic
       (@exec_instr)
@@ -218,7 +242,85 @@ Section PROG.
   Proof.
     intros w b1 b2 Hb ge1 ge2 Hge f i rs1 rs2 Hrs m1 m2 Hm.
     destruct i; cbn; repeat match_simpl.
-  
+    - apply eval_addrmode32_inject; auto.
+    - apply eval_addrmode64_inject; auto.
+      Local Hint Resolve Stuck_match.
+    - ss. 
+      pose (rinj:=Hrs RDX). inv rinj; auto.
+      pose (rinj:=Hrs RAX). inv rinj; auto.
+      pose (rinj:=Hrs r1). inv rinj; auto.
+      destruct (Int.divmodu2 _ _ _) as [ [? ?] | ]; auto.
+      constructor; auto. repeat match_simpl.
+    - ss.
+      pose (rinj:=Hrs RDX). inv rinj; auto.
+      pose (rinj:=Hrs RAX). inv rinj; auto.
+      pose (rinj:=Hrs r1). inv rinj; auto.
+      destruct (Int64.divmodu2 _ _ _) as [ [? ?] | ]; auto.
+      constructor; auto. repeat match_simpl.
+    - ss.
+      pose (rinj:=Hrs RDX). inv rinj; auto.
+      pose (rinj:=Hrs RAX). inv rinj; auto.
+      pose (rinj:=Hrs r1). inv rinj; auto.
+      destruct (Int.divmods2 _ _ _) as [ [? ?] | ]; auto.
+      constructor; auto. repeat match_simpl.
+    - ss.
+      pose (rinj:=Hrs RDX). inv rinj; auto.
+      pose (rinj:=Hrs RAX). inv rinj; auto.
+      pose (rinj:=Hrs r1). inv rinj; auto.
+      destruct (Int64.divmods2 _ _ _) as [ [? ?] | ]; auto.
+      constructor; auto. repeat match_simpl.
+    - unfold compare_ints.
+      repeat match_simpl; rauto.
+    - unfold compare_longs.
+      repeat match_simpl; rauto.
+    - unfold compare_ints.
+      repeat match_simpl; rauto.
+    - unfold compare_longs.
+      repeat match_simpl; rauto.
+    - unfold compare_ints.
+      repeat match_simpl; rauto.
+    - unfold compare_longs.
+      repeat match_simpl; rauto.
+    - unfold compare_ints.
+      repeat match_simpl; rauto.
+    - unfold compare_longs.
+      repeat match_simpl; rauto.
+    - destruct (eval_testcond _ _) eqn: Heq; auto.
+      admit.                    (* eval_testcond transport from option_le*)
+    - admit.                    (* eval_testcond option_le *)
+    - unfold compare_floats.
+      pose (rinj:=Hrs r1). inv rinj; auto; try repeat match_simpl.
+      pose (rinj:=Hrs r2). inv rinj; auto; try repeat match_simpl.
+      + destruct (rs2 r2); repeat match_simpl.
+        unfold undef_regs. repeat match_simpl.
+      + destruct (rs2 r1); repeat match_simpl.
+        destruct (rs2 r2); repeat match_simpl.
+        unfold undef_regs. repeat match_simpl.
+    - unfold compare_floats32.
+      pose (rinj:=Hrs r1). inv rinj; auto; try repeat match_simpl.
+      pose (rinj:=Hrs r2). inv rinj; auto; try repeat match_simpl.
+      + destruct (rs2 r2); repeat match_simpl.
+        unfold undef_regs. repeat match_simpl.
+      + destruct (rs2 r1); repeat match_simpl.
+        destruct (rs2 r2); repeat match_simpl.
+        unfold undef_regs. repeat match_simpl.
+    - admit.                     (* goto_label *)
+    - admit.                     (* eval_testcond and goto_label *)
+    - admit.
+    - admit.
+    - ss.                       (* inner_sp *)
+      admit.
+    - auto.
+    - edestruct (cklr_alloc R w m1 m2 Hm 0 sz)
+        as (w' & Hw' & Hm' & Hb').
+      destruct (Mem.alloc m1 0 sz) as [m1' b1'].
+      destruct (Mem.alloc m2 0 sz) as [m2' b2'].
+      cbn [fst snd] in *.
+      destruct (Mem.store _ _ _ _) eqn: Heq.
+      edestruct (cklr_store R w' Mptr).
+      apply Hm'. instantiate (1 := b1').
+      
+
   Global Instance step_rel R:
     Monotonic
       (@step)
@@ -227,12 +329,6 @@ Section PROG.
   Proof.
     intros w b1 b2 Hb ge1 ge2 Hge s1 s2 Hs t s1' H1.
     inv H1.
-  Admitted.
-  Global Instance inner_sp_inject R w rs1 rs2 m1 m2 b:
-    Transport (regset_rel R w * match_mem R w) (rs1, m1) (rs2, m2)
-              (inner_sp (Mem.nextblock m1) (rs1 RSP) = b)
-              (inner_sp (Mem.nextblock m2) (rs2 RSP) = b).
-  Proof.
   Admitted.
   
 End PROG.
