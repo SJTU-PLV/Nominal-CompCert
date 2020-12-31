@@ -2299,9 +2299,9 @@ Proof.
       * destruct sp; try discriminate.
         eapply Mem.free_list_left_inject; eauto.
       * red. cbn.
-        intros b ofs (Hb & pos & ty & Hpos & Hofs) (sp1 & delta & ? & ?). subst.
+        intros sb2 ofs (sofs & pos & ty & Hpos & Hofs) (sb1 & delta & ? & ?). subst.
         admit. (* no overlap involved, but doable. *)
-      * admit. (*free_list vs. nextblock erewrite Mem.nextblock_free; eauto. *)
+      * erewrite nextblock_free_args; eauto. destruct H17; eauto.
       * red. cbn. auto.
 Admitted.
 
@@ -2363,7 +2363,7 @@ Proof.
         edestruct load_stack_arg as (v & -> & Hv); eauto.
   - constructor; cbn; auto.
     constructor; auto.
-    admit. (* free_args vs. nextblock *)
+    erewrite nextblock_free_args; eauto.
   - destruct H6 as (ri & (w' & Hw' & Hr1i) & Hri2).
     inv Hw'. inv Hr1i. inv Hri2. inv H7. inv H8. rewrite H24 in FIND; inv FIND.
     eexists (Returnstate _ _ m2'0).
@@ -2383,7 +2383,8 @@ Proof.
       }
       assert (inject_separated j f' m m').
       {
-        red. admit. (* m', m0 have same nextblock *)
+        unfold inject_separated, Mem.valid_block.
+        erewrite <- (nextblock_free_args _ m' _ m0); eauto.
       }
       clear H13 H16.
       eapply minjection_incr; eauto.
