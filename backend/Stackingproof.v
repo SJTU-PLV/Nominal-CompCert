@@ -2274,19 +2274,43 @@ Proof.
   eapply Hv1. pose proof (size_chunk_pos (chunk_of_type ty)). xomega.
 Qed.
 
+Lemma free_args_perm sg m sb sofs m' pos ty ofs:
+  free_args sg m (Vptr sb sofs) = Some m' ->
+  In (S Outgoing pos ty) (regs_of_rpairs (loc_arguments sg)) ->
+  let bofs := Ptrofs.unsigned (Ptrofs.add sofs (Ptrofs.repr (fe_ofs_arg + 4 * pos))) in
+  bofs <= ofs < bofs + size_chunk (chunk_of_type ty) ->
+  Mem.perm m sb ofs Cur Freeable /\ ~ Mem.perm m' sb ofs Max Nonempty.
+Proof.
+  clear. unfold free_args. revert m. set (x := Ptrofs.unsigned _).
+  induction regs_of_rpairs as [ | l ll IHll]; cbn; try contradiction.
+  intros m Hm' [Hl | Hll] Hofs; subst; cbn in *.
+  - destruct Mem.free eqn:Hmi; try congruence.
+    rewrite Ptrofs.add_commut in Hmi. fold x in Hmi.
+    split.
+    + eapply Mem.free_range_perm; eauto.
+    + intro.
+      eapply Mem.perm_free_list in H as [? ?]; eauto.
+      eapply Mem.perm_free_2; eauto.
+  - destruct l as [ | [ ]]; eauto 10; cbn in *.
+    destruct Mem.free eqn:Hmi; try congruence.
+    edestruct IHll; eauto. split; auto.
+    eapply Mem.perm_free_3; eauto.
+Qed.
+
 Lemma transf_initial_states:
   forall w q1 q2, match_senv ccB w se tse -> match_query ccB w q1 q2 ->
   forall st1, Linear.initial_state ge q1 st1 -> (* wt_locset (lq_rs q1) -> *)
   exists st2, Mach.initial_state tge q2 st2 /\ match_states (fst (snd (fst w))) (snd (snd (fst w))) st1 st2.
 Proof.
-  intros [[_ [sg rs1]] ft] q1 q2 [[ ] Hse'] (q' & Hq1' & Hq2') st1 Hst1 (*Hq1*). cbn.
-  inv Hst1. inv Hq1'. inv Hq2'. destruct Hse'. cbn in *. inv H15. subst rs0.
+  intros [[_ [sg rs1]] ft] q1 q2 [[ ] Hse'] (q' & Hq1' & Hq2') st1 Hst1. cbn.
+  inv Hst1. inv Hq1'. inv Hq2'. destruct Hse'. cbn in *. inv H17; cbn in *. subst rs0.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   econstructor; split.
   - monadInv TR. econstructor; eauto.
   - econstructor; eauto.
     + constructor; auto.
-      * destruct H12; try discriminate. constructor.
+      * destruct H15; try congruence; auto.
+      * destruct sp; try discriminate. inv H12. constructor.
     + intro. unfold initial_regs.
       destruct loc_is_external eqn:Hr; auto. apply loc_external_is in Hr.
       rewrite H7 by auto. auto.
@@ -2299,11 +2323,26 @@ Proof.
       * destruct sp; try discriminate.
         eapply Mem.free_list_left_inject; eauto.
       * red. cbn.
-        intros sb2 ofs (sofs & pos & ty & Hpos & Hofs) (sb1 & delta & ? & ?). subst.
-        admit. (* no overlap involved, but doable. *)
-      * erewrite nextblock_free_args; eauto. destruct H17; eauto.
+        intros sb2 ofs (sofs & pos & ty & Hpos & Harg & Hofs).
+        inv H12; try congruence. inv H5.
+        rewrite Ptrofs.add_assoc in Hofs.
+        rewrite (Ptrofs.add_commut (Ptrofs.repr delta)) in Hofs.
+        rewrite <- Ptrofs.add_assoc in Hofs.
+        edestruct free_args_perm; eauto.
+        { pose proof (size_chunk_pos (chunk_of_type ty)). split; [reflexivity | xomega]. }
+        erewrite Mem.address_inject in Hofs; eauto.
+        edestruct free_args_perm with (ofs := ofs - delta); eauto; try xomega.
+        intros (sb1' & delta' & Hsb' & Hp').
+        apply Mem.mi_no_overlap in H0. red in H0.
+        destruct (peq b1 sb1').
+        -- eapply H12. congruence.
+        -- edestruct (H0 b1 sb2 delta sb1' sb2 delta' (ofs - delta) (ofs - delta')); eauto.
+           ++ eapply Mem.perm_cur_max, Mem.perm_implies; eauto. constructor.
+           ++ eapply Mem.perm_free_list; eauto.
+           ++ xomega.
+      * erewrite nextblock_free_args; eauto.
       * red. cbn. auto.
-Admitted.
+Qed.
 
 Lemma transf_final_states:
   forall rs1 sg f, let w := (se, (sg, rs1), f) in
@@ -2428,7 +2467,7 @@ Proof.
     intros [|] ? Hfd; monadInv Hfd; auto.
   - intros q1 q2 s1 Hq (Hs1 & xse & Hxse & WTQ & WTS). cbn in Hxse. subst. 
     exploit transf_initial_states; eauto. intros [st2 [A B]].
-    exists st2; split; auto. destruct w as [[se [sg rs0]] wR]. auto.
+    exists st2; split; auto. destruct w as [[se [sg rs0]] wR]. eauto.
   - destruct w as [[? [sg rs0]] w], Hse as [[ ] Hse].
     intros s1 s2 r1 Hs (Hr1 & [? ?] & Hxse & WTS & WTR). cbn in Hxse. subst.
     eapply transf_final_states; eauto.
