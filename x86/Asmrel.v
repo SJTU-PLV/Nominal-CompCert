@@ -2,12 +2,33 @@ Require Import Coqlib Maps.
 Require Import AST Integers Floats Values Memory Events Globalenvs Smallstep.
 Require Import Locations Stacklayout Conventions.
 Require Import Mach LanguageInterface CallconvAlgebra CKLR CKLRAlgebra.
+Require Import Eventsrel.
+Require Import Linking.
 Require Import Asm.
+
+Lemma ptrofs_add_0 ofs: Ptrofs.add ofs (Ptrofs.repr 0) = ofs.
+Admitted.
 
 Section PROG.
   Context (p: program).
   Definition genv_match R w: relation genv :=
     (match_stbls R w) !! (fun se => Genv.globalenv se p).
+  Global Instance genv_genv_match R w:
+    Related
+      (genv_match R w)
+      (Genv.match_genvs (mi R w) (match_globdef (fun _ => eq) eq p))
+      subrel.
+  Proof.
+    unfold genv_match. rstep.
+    intros ge1 ge2 Hge. destruct Hge as [se1 se2].
+    eapply Genv.globalenvs_match.
+    - red. intuition auto.
+      induction (AST.prog_defs p)
+        as [ | [id [f|[ ]]] ? ?];
+        repeat (econstructor; eauto using incl_refl, linkorder_refl).
+      apply linkorder_refl.
+    - apply match_stbls_proj; auto.
+  Qed.
 
   Lemma match_prog {C} `{!Linking.Linker C} (c: C):
     Linking.match_program_gen (fun _ => eq) eq c p p.
@@ -67,8 +88,6 @@ Section PROG.
         (r <> PC -> Val.inject (mi R w) (rs1 r) (rs2 r)) /\
         (r = PC -> inject_ptr_sameofs (mi R w) (rs1 r) (rs2 r)).
 
-  Lemma max_unsigned_pos: 0 <= Ptrofs.max_unsigned.
-    Admitted.
   Global Instance regset_inj_subrel R w:
     Related
       (regset_inject' R w)
@@ -81,10 +100,7 @@ Section PROG.
     intros r. destruct (PregEq.eq r PC) as [-> | ].
     - specialize (rel PC) as [? H].
       destruct H. auto. econstructor. eauto.
-      unfold Ptrofs.add.
-      rewrite Ptrofs.unsigned_repr.
-      rewrite Z.add_0_r. rewrite Ptrofs.repr_unsigned. auto.
-      split. reflexivity. apply max_unsigned_pos.
+      symmetry. apply ptrofs_add_0.
       constructor.
     - apply rel. auto.
   Qed.
@@ -96,13 +112,6 @@ Section PROG.
         (regset_inject R w ++> match_mem R w ++> - ==> outcome_match R w)
   | Stuck_match o:
       outcome_match R w Stuck o.
-  (* Inductive outcome_match' R (w: world R): rel outcome outcome := *)
-  (* | Next_match': *)
-  (*     Monotonic *)
-  (*       (@Next') *)
-  (*       (regset_inject' R w ++> match_mem R w ++> - ==> outcome_match' R w) *)
-  (* | Stuck_match' o: *)
-  (*     outcome_match' R w Stuck o. *)
 
   Inductive state_match R w: rel Asm.state Asm.state :=
   | State_rel:
@@ -124,18 +133,6 @@ Section PROG.
     repeat rstep.
   Qed.
 
-  (* Global Instance set_inject_pc R w: *)
-  (*   Monotonic *)
-  (*     (@Pregmap.set val PC) *)
-  (*     ((inject_ptr_sameofs (mi R w)) ++> regset_inject' R w ++> regset_inject' R w). *)
-  (* Proof. *)
-  (*   unfold regset_inject', Pregmap.set. *)
-  (*   repeat rstep. *)
-  (*   split. *)
-  (*   - intros. destruct (PregEq.eq r PC). congruence. apply H0. auto. *)
-  (*   - intros. destruct (PregEq.eq r PC); congruence. *)
-  (* Qed. *)
-    
   Lemma set_inject' R w:
     forall r: PregEq.t,
       r <> PC ->
@@ -166,31 +163,6 @@ Section PROG.
     apply Val.offset_ptr_inject; auto.
   Qed.
 
-  (* Global Instance nextinstr_inject' R w: *)
-  (*   Monotonic *)
-  (*     (@nextinstr) *)
-  (*     (regset_inject' R w ++> regset_inject' R w). *)
-  (* Proof. *)
-  (*   unfold nextinstr. *)
-  (*   repeat rstep. *)
-  (*   apply set_inject_pc; auto. *)
-  (*   unfold Val.offset_ptr, regset_inject' in *. *)
-  (*   specialize (H PC). inv H. destruct H1. auto. *)
-  (*   constructor. auto. constructor. *)
-  (* Qed. *)
-
-  Global Instance symbol_address_inject R w:
-    Monotonic
-      (@Genv.symbol_address)
-      (genv_match R w ++> - ==> - ==> Val.inject (mi R w)).
-  Proof.
-    unfold Genv.symbol_address.
-    repeat rstep.
-    destruct (Genv.find_symbol x x0) eqn: Heq.
-    transport_hyps. rewrite H0. rauto.
-    constructor.
-  Qed.
-
   Global Instance undef_regs_inject R:
     Monotonic
       (@undef_regs)
@@ -203,29 +175,14 @@ Section PROG.
       apply IHx. apply set_inject; auto.
   Qed.
 
-  (* Global Instance undef_regs_inject' R: *)
-  (*   Monotonic *)
-  (*     (@undef_regs) *)
-  (*     (|= - ==> regset_inject' R ++> regset_inject' R). *)
-  (* Proof. *)
-  (*   repeat rstep. revert x0 y H. *)
-  (*   induction x. *)
-  (*   - auto. *)
-  (*   - intros. cbn. *)
-  (*     apply IHx. *)
-  (*     destruct (PregEq.eq a PC) as [ -> |]. *)
-  (*     + apply set_inject_pc. constructor. auto. *)
-  (*     + apply set_inject'; auto. *)
-  (* Qed. *)
-
   Global Instance eval_addrmode32_inject R w:
     Monotonic
       (@eval_addrmode32)
       (genv_match R w ++> - ==> regset_inject R w ++> Val.inject (mi R w)).
   Proof.
-    unfold eval_addrmode32.
-    repeat rstep; auto.
-    apply symbol_address_inject; auto.
+    unfold eval_addrmode32. 
+    repeat rstep; auto. 
+    apply genv_genv_match; auto.
   Qed.
   Global Instance eval_addrmode64_inject R w:
     Monotonic
@@ -234,7 +191,7 @@ Section PROG.
   Proof.
     unfold eval_addrmode64.
     repeat rstep; auto.
-    apply symbol_address_inject; auto.
+    apply genv_genv_match; auto.
   Qed.
   Global Instance eval_addrmode_inject R w:
     Monotonic
@@ -243,42 +200,9 @@ Section PROG.
   Proof.
     unfold eval_addrmode.
     repeat rstep.
-    - unfold eval_addrmode64.
-      repeat rstep; auto.
-      apply symbol_address_inject; auto.
-    - unfold eval_addrmode32.
-      repeat rstep; auto.
-      apply symbol_address_inject; auto.
+    apply eval_addrmode64_inject; auto.
+    apply eval_addrmode32_inject; auto.
   Qed.
-
-  (* Global Instance eval_addrmode32_inject' R w: *)
-  (*   Monotonic *)
-  (*     (@eval_addrmode32) *)
-  (*     (genv_match R w ++> - ==> regset_inject' R w ++> Val.inject (mi R w)). *)
-  (* Proof. *)
-  (*   unfold eval_addrmode32. *)
-  (*   repeat rstep; apply regset_inj_subrel in H0; auto. *)
-  (*   apply symbol_address_inject; auto. *)
-  (* Qed. *)
-  (* Global Instance eval_addrmode64_inject' R w: *)
-  (*   Monotonic *)
-  (*     (@eval_addrmode64) *)
-  (*     (genv_match R w ++> - ==> regset_inject' R w ++> Val.inject (mi R w)). *)
-  (* Proof. *)
-  (*   unfold eval_addrmode64. *)
-  (*   repeat rstep; apply regset_inj_subrel in H0; auto. *)
-  (*   apply symbol_address_inject; auto. *)
-  (* Qed. *)
-  (* Global Instance eval_addrmode_inject' R w: *)
-  (*   Monotonic *)
-  (*     (@eval_addrmode) *)
-  (*     (genv_match R w ++> - ==> regset_inject' R w ++> Val.inject (mi R w)). *)
-  (* Proof. *)
-  (*   unfold eval_addrmode. *)
-  (*   repeat rstep. *)
-  (*   apply eval_addrmode64_inject'; auto. *)
-  (*   apply eval_addrmode32_inject'; auto. *)
-  (* Qed. *)
 
   Global Instance exec_load_match R:
     Monotonic
@@ -337,21 +261,19 @@ Section PROG.
       eexists; split; [rauto | constructor; auto]
     | [ |- (<> outcome_match _)%klr _ Stuck _ ] =>
       eexists; split; [rauto | constructor]
-    | [ |- (regset_inject _ _ (nextinstr _) (nextinstr _))] => rstep
-    | [ |- (regset_inject _ _ (nextinstr_nf _) (nextinstr_nf _))] => unfold nextinstr_nf; rstep
+    | [ |- (regset_inject _ _ (nextinstr _) (nextinstr _))] => rstep; auto 
+    | [ |- (regset_inject _ _ (nextinstr_nf _) (nextinstr_nf _))] => unfold nextinstr_nf; rstep; auto
     | [ |- (regset_inject _ _ (undef_regs _ _) (undef_regs _ _))] => apply undef_regs_inject; auto
     | [ |- (regset_inject _ _ (_ # _ <- _) (_ # _ <- _))] => apply set_inject; auto
-    | [ |- (Val.inject _ (Genv.symbol_address _ _ _) (Genv.symbol_address _ _ _))] =>
-      apply symbol_address_inject; auto
+    | [ |- (Val.inject _ (Genv.symbol_address _ _ _) (Genv.symbol_address _ _ _))] => rstep; auto
     | [ |- (Val.inject _ _ _)] => auto || rstep; auto
-    | [ |- option_le _ _ _ ] => rstep
+    | [ |- option_le _ _ _ ] => rstep; auto
+    | [ |- Genv.match_stbls _ _ _ ] => apply genv_genv_match; auto
     | _ => idtac
     end.
 
   Ltac ss :=
     eexists; split; [rauto | ].
-
-
 
   Global Instance inner_sp_rel R w:
     Monotonic
@@ -425,8 +347,8 @@ Section PROG.
     exploit HPC; auto. intros [ | ]; auto.
     constructor; auto. apply set_inject; auto.
     eapply Val.inject_ptr. eauto.
-    unfold Ptrofs.add. repeat rewrite Ptrofs.unsigned_repr.
-  Admitted.
+    symmetry. apply ptrofs_add_0.
+  Qed.
   
   Global Instance exec_instr_match R:
     Monotonic
@@ -483,7 +405,6 @@ Section PROG.
       repeat match_simpl; rauto.
     - repeat rstep; auto.
     - repeat rstep; auto.
-    - auto.
     - eauto.
     - unfold compare_floats.
       pose (rinj:=Hrs r1). inv rinj; auto; try repeat match_simpl.
@@ -516,7 +437,6 @@ Section PROG.
       + transport_hyps. rewrite Hsp.
         econstructor. split. rauto.
         constructor; auto. repeat match_simpl.
-    - auto.
     - edestruct (cklr_alloc R w m1 m2 Hm 0 sz)
         as (w' & Hw' & Hm' & Hb').
       destruct (Mem.alloc m1 0 sz) as [m1' b1'].
@@ -582,6 +502,124 @@ Section PROG.
       apply set_inject. rstep.
       apply set_inject. rstep.
       eapply regset_inject_acc; eauto.
+  Admitted.
+  
+
+  Global Instance find_funct_ptr_inject R w ge1 b1 ge2 b2 f:
+    Transport (genv_match R w * block_inject_sameofs (mi R w)) (ge1, b1) (ge2, b2)
+              (Genv.find_funct_ptr ge1 b1 = Some f)
+              (Genv.find_funct_ptr ge2 b2 = Some f).
+  Proof.
+    intros [Hge Hb] Hf. cbn in *.
+    destruct Hge. apply match_stbls_proj in H. unfold Genv.find_funct_ptr in *.
+    destruct Genv.find_def as [[|]|] eqn:Hfd; try congruence. inv Hf.
+    edestruct @Genv.find_def_match as (tg &?&?&?); eauto using (match_prog tt).
+    inv H0. inv H1. rewrite H4. auto.
+  Qed.
+
+  Lemma reg_inj_strengthen R w ge1 ge2 rs1 rs2 b ofs f:
+    genv_match R w ge1 ge2 -> 
+    rs1 PC = Vptr b ofs ->
+    Genv.find_funct_ptr ge1 b = Some f ->
+    regset_inject R w rs1 rs2 ->
+    regset_inject' R w rs1 rs2.
+  Proof.
+    intros Hge Hpc Hf Hrs r'.
+    split.
+    - intros. apply Hrs.
+    - intros ->. specialize (Hrs PC). rewrite Hpc in *.
+      inv Hrs. eapply genv_genv_match in Hge.
+      unfold Genv.find_funct_ptr in Hf.
+      destruct (Genv.find_def ge1 b) eqn: Hfd; try congruence.
+      edestruct @Genv.find_def_match_genvs as (?&?&?&?); eauto.
+      rewrite H3 in *. rewrite ptrofs_add_0. constructor. auto.
+  Qed.
+
+  Global Instance set_res_inject R w:
+    Monotonic
+      (@set_res)
+      (- ==> Val.inject (mi R w) ++> regset_inject R w ++> regset_inject R w).
+  Proof.
+    unfold set_res. intros res.
+    induction res.
+    - repeat rstep. match_simpl.
+    - repeat rstep.
+    - repeat rstep.
+  Qed.
+
+  Global Instance extcall_arg_inject R w:
+    Monotonic
+      (@extcall_arg)
+      (regset_inject R w ++> match_mem R w ++> - ==> set_le (Val.inject (mi R w))).
+  Proof.
+    intros rs1 rs2 Hrs m1 m2 Hm l v Hv.
+    inv Hv.
+    - eexists. split.
+      + eapply extcall_arg_reg.
+      + auto.
+    - eapply transport in H0.
+      2: { clear H0. apply cklr_loadv; eauto. rstep. rstep.  apply Hrs. eauto. }
+      destruct H0 as (v' & Hv' & vv).
+      exists v'. split.
+      + eapply extcall_arg_stack; eauto.
+      + auto.
+  Qed.
+
+  Hint Extern 1 (Transport _ _ _ _ _) =>
+    set_le_transport @extcall_arg_inject : typeclass_instances.
+  
+  Global Instance extcall_arg_pair_inject R w:
+    Monotonic
+      (@extcall_arg_pair)
+      (regset_inject R w ++> match_mem R w ++> - ==> set_le (Val.inject (mi R w))).
+  Proof.
+    intros rs1 rs2 Hrs m1 m2 Hm lp vs Hvs.
+    inv Hvs.
+    - eapply extcall_arg_inject in H as (?&?&?); eauto.
+      eexists. split; eauto. constructor. auto.
+    - eapply extcall_arg_inject in H as (?&?&?); eauto.
+      eapply extcall_arg_inject in H0 as (?&?&?); eauto.
+      eexists. split. econstructor; eauto.
+      rstep; eauto.
+  Qed.  
+  
+  Global Instance extcall_arguments_inject R w:
+    Monotonic
+      (@extcall_arguments)
+      (regset_inject R w ++> match_mem R w ++> - ==> set_le (Val.inject_list (mi R w))).
+  Proof.
+    unfold extcall_arguments.
+    intros rs1 rs2 Hrs m1 m2 Hm sg args1 H.
+    remember (loc_arguments sg) as ls. clear Heqls.
+    induction H.
+    - exists nil. split; constructor.
+    - destruct IHlist_forall2 as (bs & IH).
+      eapply extcall_arg_pair_inject in H; eauto.
+      destruct H as (b' & Hb & bb).
+      eexists (b' :: bs). split.
+      + constructor. auto. apply IH.
+      + constructor. auto. apply IH.
+  Qed.
+
+  Global Instance set_pair_inject R w:
+    Monotonic
+      (@set_pair)
+      (- ==> Val.inject (mi R w) ++> regset_inject R w ++> regset_inject R w).
+  Proof.
+    unfold set_pair.
+    repeat rstep.
+    match_simpl.  match_simpl. rstep. auto. match_simpl. rstep. auto.
+  Qed.
+
+  Global Instance under_caller_save_regs_inject R w:
+    Monotonic
+      (@undef_caller_save_regs)
+      (regset_inject R w ++> regset_inject R w).
+  Proof.
+    unfold undef_caller_save_regs.
+    repeat rstep. intros r.
+    destruct (_ || _).
+    apply H. auto.
   Qed.
   
   Global Instance step_rel R:
@@ -591,8 +629,71 @@ Section PROG.
           state_match R ++> - ==> k1 set_le (<> state_match R)).
   Proof.
     intros w b1 b2 Hb ge1 ge2 Hge s1 s2 Hs t s1' H1.
-    inv H1.
-  Admitted.
+    destruct H1 as [ b ofs f i rs m rs' m' live HPC Hf Hi He |
+                     b ofs f ef args res rs m vargs t vres rs' m' HPC Hf Hi Hargs Hec Hnext |
+                     b ef args res rs m t rs' m' HPC Hf Hargs Hec Hnext ].
+    - destruct s2 as [rs2 m2 live2]. inv Hs.
+      assert (Hrs' := reg_inj_strengthen _ _ _ _ _ _ _ _ _ Hge HPC Hf H1).
+      destruct (exec_instr_match R w b1 b2 Hb ge1 ge2 Hge f i rs rs2 Hrs' m m2 H6) as (w' & Hw' & Ho).
+      rewrite He in Ho. inv Ho. exists (State y y0 live). split.
+      + specialize (Hrs' PC) as [? Hpc].
+        exploit Hpc. auto. intros H'. inv H'; try congruence.
+        rewrite HPC in H0. inv H0.
+        eapply exec_step_internal; eauto.
+        * eapply find_funct_ptr_inject; eauto.
+          split; cbn; eauto.
+      + exists w'. split. auto. split; auto.
+    - destruct s2 as [rs2 m2 live2]. inv Hs.
+      specialize (H1 SP) as Hsp. simpl in Hsp.
+      eapply transport in Hargs.
+      2: {
+        clear Hargs. apply eval_builtin_args_rel; eauto.
+        apply genv_genv_match. apply Hge.
+        apply H1. }
+      destruct Hargs as (vargs' & Hvargs' & Hvs).
+      eapply transport in Hec.
+      2: {
+        clear Hec. apply external_call_rel; eauto.
+        rstep. apply genv_genv_match. eauto.
+      }
+      destruct Hec as (vres' & m2' & Hec' & Hv).
+      assert (Hrs' := reg_inj_strengthen _ _ _ _ _ _ _ _ _ Hge HPC Hf H1).
+      specialize (Hrs' PC) as [H Hpc]. exploit Hpc. auto. clear H Hpc.
+      intros Hpc. inv Hpc; try congruence. rewrite HPC in H. inv H. apply symmetry in H0.
+      eapply find_funct_ptr_inject in Hf.
+      2: { split. apply Hge. apply H2. }
+      eexists. split.
+      + eapply exec_step_builtin; eauto.
+      + destruct Hv as (w' & Hw' & Hv & Hm').
+        cbn [fst snd] in *.
+        exists w'. split; auto.
+        apply State_rel; auto.
+        repeat match_simpl.
+        apply set_res_inject; auto.
+        match_simpl. eapply regset_inject_acc; eauto.
+    - destruct s2 as [rs2 m2 live2]. inv Hs.
+      eapply extcall_arguments_inject in Hargs as (args' & Hargs' & Haa); eauto.
+      eapply transport in Hec.
+      2: {
+        clear Hec. apply external_call_rel; eauto.
+        rstep. apply genv_genv_match. apply Hge.
+      }
+      destruct Hec as (vres' & m2' & Hec' & (w' & Hw' & Hv & Hm)).
+      assert (Hrs' := reg_inj_strengthen _ _ _ _ _ _ _ _ _ Hge HPC Hf H1).
+      specialize (Hrs' PC) as [H Hpc]. exploit Hpc. auto. clear H Hpc.
+      intros Hpc. inv Hpc; try congruence. rewrite HPC in H. inv H. apply symmetry in H0.
+      eapply find_funct_ptr_inject in Hf.
+      2: { split. apply Hge. apply H2. }
+      eexists. split.
+      + eapply exec_step_external; eauto.
+      + exists w'. split; auto.
+        rewrite inner_sp_rel; eauto.
+        apply State_rel; auto.
+        match_simpl. eapply regset_inject_acc; eauto.
+        apply set_pair_inject. auto.
+        apply under_caller_save_regs_inject. 
+        eapply regset_inject_acc; eauto.
+  Qed.
   
 End PROG.
 
