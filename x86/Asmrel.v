@@ -703,75 +703,72 @@ Proof.
   constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
   intros se1 se2 w Hse Hse1. cbn -[semantics] in *.
   pose (ms := fun s1 s2 =>
-                klr_diam tt (genv_match p R * state_match R)
+                klr_diam tt (genv_match p R * (block_inject_sameofs @@ [mi R] *  state_match R))
                          w
                          (Genv.globalenv se1 p, s1)
                          (Genv.globalenv se2 p, s2)).
   apply forward_simulation_step with (match_states := ms); cbn.
-  - intros [rs1 m1] [rs2 m2] [vm mm].
-    cbn. eapply Genv.is_internal_match; eauto.
+  - intros [rs1 m1] [rs2 m2] [Hrs Hm].
+    eapply Genv.is_internal_match; eauto.
     + repeat apply conj; auto.
       induction (prog_defs p) as [ | [id [f|v]] defs IHdefs]; repeat (econstructor; eauto).
       * instantiate (2 := fun _ => eq). reflexivity.
       * instantiate (1 := eq). destruct v. constructor. auto.
     + eapply match_stbls_proj; auto.
     + intros. rewrite H. auto.
-    + admit.                    (* PC <> Vundef *)
+    + admit.
   - intros [rs1 m1] [rs2 m2] [nb1 s1] Hs [Hq Hnb]. inv Hs. inv Hq.
     assert (Hge: genv_match p R w (Genv.globalenv se1 p) (Genv.globalenv se2 p)).
     {
       cut (match_stbls R w (Genv.globalenv se1 p) (Genv.globalenv se2 p)); eauto.
       eapply (rel_push_rintro (fun se => Genv.globalenv se p) (fun se => Genv.globalenv se p)).
     }
-    assert (Hs': Genv.find_funct (Genv.globalenv se2 p) (rs2 PC) = Some (Internal f)).
-    {
-      specialize (H PC).
-      transport_hyps. assumption.
-    }
-    assert (Hrsp: rs2 RSP <> Vundef).
-    {
-      specialize (H RSP).
-      destruct H; congruence.
-    }
-    assert (Hra: rs2 RA <> Vundef).
-    {
-      specialize (H RA).
-      destruct H; congruence.
-    }
+    specialize (H PC) as Hpc.
+    transport_hyps.
     exists (Mem.nextblock m2, State rs2 m2 true).
     repeat apply conj; auto.
-    + econstructor. eassumption. assumption. assumption.
+    + econstructor.
+      * eauto. 
+      * specialize (H SP) as Hsp. inv Hsp; try congruence.
+      * specialize (H RA) as Hsp. inv Hsp; try congruence.
     + cbn. esplit. split. rauto.
-      split. cbn. auto. cbn. constructor. apply H. apply H0. auto. auto. auto.
+      split; cbn; auto.
+      split; cbn.
+      rstep. unfold block_inject_sameofs. admit.
+      split; auto.
   - intros [nb1 s1] [nb2 s2] [rs1 m1] (w' & Hw' & Hge & Hs) H. cbn in *.
-    inv H. inv Hs.
-    eexists. split. econstructor.
-    exists w'. split. apply Hw'. constructor. assumption. assumption.
-  - intros [nb1 s1] [nb2 s2] qx1 (w' & Hw' & Hge & Hs) H. cbn in *.
-    inv H. inv Hs.
-    assert (Hff: Genv.find_funct (Genv.globalenv se2 p) (rs2 PC) = Some (External (EF_external id sg))).
-    {
-      specialize (H6 PC).
-      transport_hyps. auto.
-    }
+    inv H. inv Hs. inv H0. cbn in *.
+    eexists. split.
+    + subst s2. constructor.
+    + exists w'. split; auto. constructor; auto.
+  - intros [nb1 s1] [nb2 s2] qx1 (w' & Hw' & Hge & Hnb & Hs) H. cbn in *.
+    destruct Hs as [rs1 rs2 Hrs m1 m2 Hm live].
+    inv H. specialize (Hrs PC) as Hpc. simpl in Hpc.
+    transport_hyps.
     eexists w', _. repeat apply conj.
-    econstructor. apply Hff. constructor. auto. auto. rauto.
-    intros [rrs1 rm1] [rrs2 rm2] [rb1 rs1] (w'' & Hw'' & Hr) [H H1].
-    inv H.
-    eexists. repeat apply conj. instantiate (1 := (_, _)). cbn.
-    split. econstructor. admit.
-    reflexivity. exists w''. assert (Hw: w ~> w'). rauto.
-    split. rauto.
-    split; cbn.
-    eapply genv_match_acc. apply Hw''. apply Hge.
-    inv Hr. split. apply H. apply H1.
-    apply (inner_sp_match p R w'' rrs1 rrs2 m m2). apply H.
-    admit. 
-    admit.                      (* external call *)
-    admit.
-  - intros [nb1 s1] t [nb1' s1'] [Hstep ->] [nb2 s2] (w' & Hw' & Hge & Hs).
+    + econstructor. eauto.
+    + constructor; eauto.
+    + rauto.
+    + intros [rrs1 rm1] [rrs2 rm2] [rb1 rst1] (w'' & Hw'' & Hr) [H H1].
+      inv H.
+      eexists. repeat apply conj. instantiate (1 := (_, _)). cbn. split.
+      * econstructor.
+        admit.    (* nextblock *)
+      * reflexivity.
+      * exists w''. split. cbn in *. rauto.
+        split; cbn.
+        eapply genv_match_acc. apply Hw''. apply Hge.
+        inv Hr. split; cbn. rstep. rstep.
+        rewrite inner_sp_rel. apply State_rel. auto. auto.  auto.
+        2: apply H. rstep.
+  - intros [nb1 s1] t [nb1' s1'] [Hstep ->] [nb2 s2] (w' & Hw' & Hge & Hnb & Hs).
     cbn [fst snd] in *.
- 
-    admit.                      (* step *)
+    eapply step_rel in Hstep as (s2' & Hstep' & (w'' & Hw'' & ss)); eauto.
+    eexists. split.
+    + instantiate (1 := (_, _)). cbn.
+      split. eauto. reflexivity.
+    + split with (x:=w''). split; try rauto.
+      split. cbn. eapply genv_match_acc. rauto. auto.
+      split; cbn. rauto. auto.
   - apply well_founded_ltof.
-    
+Admitted.
