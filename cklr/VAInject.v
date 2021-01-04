@@ -66,6 +66,16 @@ Next Obligation.
   intros [se w] [se' w'] [Hse' Hw]. cbn in *. destruct Hse'. rauto.
 Qed.
 
+(** Acc separated *)
+Next Obligation.
+  intros b1 b2 delta Hw Hw'.
+  inv H.
+  destruct H0 as [eq_s Hinj]. cbn in eq_s, Hinj. subst s0.
+  inv Hinj. inv H7. cbn in *.
+  unfold Mem.valid_block, Plt. do 2 rewrite <- Pos.le_nlt.
+  eapply H0; eauto.
+Qed.
+
 (** Symbol table stuff *)
 Next Obligation.
   intros [se w] [se' w'] [Hse' Hw]. cbn in *. destruct Hse'.
