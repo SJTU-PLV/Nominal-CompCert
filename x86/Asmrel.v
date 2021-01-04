@@ -251,27 +251,6 @@ Section PROG.
     - exists w. split. rauto. constructor.
   Qed.
 
-  Ltac match_simpl :=
-    match goal with
-    | [ |- (<> outcome_match _)%klr _ (exec_store _ _ _ _ _ _ _) (exec_store _ _ _ _ _ _ _) ] =>
-      apply exec_store_match; auto
-    | [ |- (<> outcome_match _)%klr _ (exec_load _ _ _ _ _ _) (exec_load _ _ _ _ _ _) ] =>
-      eexists; split; [rauto | apply exec_load_match; auto]
-    | [ |- (<> outcome_match _)%klr _ (Next _ _) (Next _ _) ] =>
-      eexists; split; [rauto | constructor; auto]
-    | [ |- (<> outcome_match _)%klr _ Stuck _ ] =>
-      eexists; split; [rauto | constructor]
-    | [ |- (regset_inject _ _ (nextinstr _) (nextinstr _))] => rstep; auto 
-    | [ |- (regset_inject _ _ (nextinstr_nf _) (nextinstr_nf _))] => unfold nextinstr_nf; rstep; auto
-    | [ |- (regset_inject _ _ (undef_regs _ _) (undef_regs _ _))] => apply undef_regs_inject; auto
-    | [ |- (regset_inject _ _ (_ # _ <- _) (_ # _ <- _))] => apply set_inject; auto
-    | [ |- (Val.inject _ (Genv.symbol_address _ _ _) (Genv.symbol_address _ _ _))] => rstep; auto
-    | [ |- (Val.inject _ _ _)] => auto || rstep; auto
-    | [ |- option_le _ _ _ ] => rstep; auto
-    | [ |- Genv.match_stbls _ _ _ ] => apply genv_genv_match; auto
-    | _ => idtac
-    end.
-
   Ltac ss :=
     eexists; split; [rauto | ].
 
@@ -304,33 +283,22 @@ Section PROG.
     unfold Val.subl_overflow. rauto.
   Qed.
 
+  Ltac match_regs :=
+    match goal with
+    | [ Hrs: regset_inject _ _ _ _ |-
+        _ (match _ ?r with | _ => _ end) (match _ ?r with | _ => _ end) ] =>
+      let H := fresh "H" in
+      specialize (Hrs r) as H; inv H; try rstep
+    | _ => idtac
+    end.
+  
   Global Instance eval_testcond_le R w:
     Monotonic
       (@eval_testcond)
       (- ==> regset_inject R w ++> option_le eq).
   Proof.
     intros c rs1 rs2 Hrs.
-    unfold eval_testcond. destruct c.
-    - specialize (Hrs ZF). inv Hrs; rstep.
-    - specialize (Hrs ZF). inv Hrs; rstep.
-    - specialize (Hrs CF). inv Hrs; rstep.
-    - specialize (Hrs CF) as HCF. inv HCF; try rstep.
-      specialize (Hrs ZF) as HZF. inv HZF; rstep.
-    - specialize (Hrs CF) as HCF. inv HCF; try rstep.
-    - specialize (Hrs CF) as HCF. inv HCF; try rstep.
-      specialize (Hrs ZF) as HZF. inv HZF; rstep.
-    - specialize (Hrs OF) as HCF. inv HCF; try rstep.
-      specialize (Hrs SF) as HZF. inv HZF; rstep.
-    - specialize (Hrs OF) as HCF. inv HCF; try rstep.
-      specialize (Hrs SF) as HZF. inv HZF; try rstep.
-      specialize (Hrs ZF) as HZF. inv HZF; rstep.
-    - specialize (Hrs OF) as HCF. inv HCF; try rstep.
-      specialize (Hrs SF) as HZF. inv HZF; try rstep.
-    - specialize (Hrs OF) as HCF. inv HCF; try rstep.
-      specialize (Hrs SF) as HZF. inv HZF; try rstep.
-      specialize (Hrs ZF) as HZF. inv HZF; rstep.
-    - specialize (Hrs PF) as HZF. inv HZF; rstep.
-    - specialize (Hrs PF) as HZF. inv HZF; rstep.
+    unfold eval_testcond. destruct c; repeat match_regs.
   Qed.
   
   Local Hint Resolve Stuck_match.
@@ -349,6 +317,34 @@ Section PROG.
     eapply Val.inject_ptr. eauto.
     symmetry. apply ptrofs_add_0.
   Qed.
+
+  Ltac match_simpl :=
+    repeat
+      match goal with
+      | [ |- (<> outcome_match _)%klr _ (exec_store _ _ _ _ _ _ _) (exec_store _ _ _ _ _ _ _) ] =>
+        apply exec_store_match; auto
+      | [ |- (<> outcome_match _)%klr _ (exec_load _ _ _ _ _ _) (exec_load _ _ _ _ _ _) ] =>
+        eexists; split; [rauto | apply exec_load_match; auto]
+      | [ |- (<> outcome_match _)%klr _ (Next _ _) (Next _ _) ] =>
+        eexists; split; [rauto | constructor; auto]
+      | [ |- (<> outcome_match _)%klr _ Stuck _ ] =>
+        eexists; split; [rauto | constructor]
+      | [ |- (regset_inject _ _ (nextinstr _) (nextinstr _))] => rstep
+      | [ |- (regset_inject _ _ (nextinstr_nf _) (nextinstr_nf _))] => unfold nextinstr_nf; rstep
+      | [ |- (regset_inject _ _ (undef_regs _ _) (undef_regs _ _))] => apply undef_regs_inject
+      | [ |- (regset_inject _ _ (_ # _ <- _) (_ # _ <- _))] => apply set_inject
+      | [ |- (Val.inject _ (Genv.symbol_address _ _ _) (Genv.symbol_address _ _ _))] => rstep
+      | [ Hrs: regset_inject _ _ _ _ |-
+          _ (match _ ?r with | _ => _ end) (match _ ?r with | _ => _ end) ] =>
+        let H := fresh "H" in
+        specialize (Hrs r) as H; inv H; try repeat rstep
+      | [ |- _ (match ?x with | _ => _ end) (match ?x with | _ => _ end)] => repeat rstep
+      | [ |- regset_inject _ _ _ (match ?x with | _ => _ end)] => destruct x
+      | [ |- (Val.inject _ _ _)] => try rstep
+      | [ |- option_le _ _ _ ] => rstep
+      | [ |- Genv.match_stbls _ _ _ ] => apply genv_genv_match
+      | _ => idtac
+      end; auto.
   
   Global Instance exec_instr_match R:
     Monotonic
@@ -360,150 +356,58 @@ Section PROG.
   Proof.
     intros w b1 b2 Hb ge1 ge2 Hge f i rs1 rs2 Hrs' m1 m2 Hm.
     (* destruct i; cbn; repeat match_simpl. *)
-    destruct i; cbn; apply regset_inj_subrel in Hrs' as Hrs; repeat match_simpl.
+    destruct i; cbn; apply regset_inj_subrel in Hrs' as Hrs;
+      unfold compare_ints, compare_longs, compare_floats, compare_floats32, undef_regs;
+      match_simpl; repeat rstep; try rauto; auto; match_simpl.
     - apply eval_addrmode32_inject; auto.
     - apply eval_addrmode64_inject; auto.
-    - ss.
-      pose (rinj:=Hrs RDX). inv rinj; auto.
-      pose (rinj:=Hrs RAX). inv rinj; auto.
-      pose (rinj:=Hrs r1). inv rinj; auto.
-      destruct (Int.divmodu2 _ _ _) as [ [? ?] | ]; auto.
-      constructor; auto. repeat match_simpl.
-    - ss.
-      pose (rinj:=Hrs RDX). inv rinj; auto.
-      pose (rinj:=Hrs RAX). inv rinj; auto.
-      pose (rinj:=Hrs r1). inv rinj; auto.
-      destruct (Int64.divmodu2 _ _ _) as [ [? ?] | ]; auto.
-      constructor; auto. repeat match_simpl.
-    - ss.
-      pose (rinj:=Hrs RDX). inv rinj; auto.
-      pose (rinj:=Hrs RAX). inv rinj; auto.
-      pose (rinj:=Hrs r1). inv rinj; auto.
-      destruct (Int.divmods2 _ _ _) as [ [? ?] | ]; auto.
-      constructor; auto. repeat match_simpl.
-    - ss.
-      pose (rinj:=Hrs RDX). inv rinj; auto.
-      pose (rinj:=Hrs RAX). inv rinj; auto.
-      pose (rinj:=Hrs r1). inv rinj; auto.
-      destruct (Int64.divmods2 _ _ _) as [ [? ?] | ]; auto.
-      constructor; auto. repeat match_simpl.
-    - unfold compare_ints.
-      repeat match_simpl; rauto.
-    - unfold compare_longs.
-      repeat match_simpl; rauto.
-    - unfold compare_ints.
-      repeat match_simpl; rauto.
-    - unfold compare_longs.
-      repeat match_simpl; rauto.
-    - unfold compare_ints.
-      repeat match_simpl; rauto.
-    - unfold compare_longs.
-      repeat match_simpl; rauto.
-    - unfold compare_ints.
-      repeat match_simpl; rauto.
-    - unfold compare_longs.
-      repeat match_simpl; rauto.
-    - repeat rstep; auto.
-    - repeat rstep; auto.
-    - eauto.
-    - unfold compare_floats.
-      pose (rinj:=Hrs r1). inv rinj; auto; try repeat match_simpl.
-      pose (rinj:=Hrs r2). inv rinj; auto; try repeat match_simpl.
-      + destruct (rs2 r2); repeat match_simpl.
-        unfold undef_regs. repeat match_simpl.
-      + destruct (rs2 r1); repeat match_simpl.
-        destruct (rs2 r2); repeat match_simpl.
-        unfold undef_regs. repeat match_simpl.
-    - unfold compare_floats32.
-      pose (rinj:=Hrs r1). inv rinj; auto; try repeat match_simpl.
-      pose (rinj:=Hrs r2). inv rinj; auto; try repeat match_simpl.
-      + destruct (rs2 r2); repeat match_simpl.
-        unfold undef_regs. repeat match_simpl.
-      + destruct (rs2 r1); repeat match_simpl.
-        destruct (rs2 r2); repeat match_simpl.
-        unfold undef_regs. repeat match_simpl.
-    - rstep; auto.
-    - repeat rstep; auto; repeat match_simpl; auto.
-    - repeat rstep; auto; repeat match_simpl; auto.
-    - pose (rinj:=Hrs r). inv rinj; match_simpl.
-      destruct (list_nth_z _ _); match_simpl.
-      exists w. split. rauto. repeat rstep.
-      apply set_inject'. discriminate. auto.
-      apply set_inject'. discriminate. auto. auto.
-    - specialize (Hrs SP) as injsp. (* inner_sp *)
-      destruct (inner_sp _ _) eqn: Hsp.
-      + transport_hyps. rewrite Hsp.
-        repeat match_simpl.
-      + transport_hyps. rewrite Hsp.
-        econstructor. split. rauto.
-        constructor; auto. repeat match_simpl.
-    - edestruct (cklr_alloc R w m1 m2 Hm 0 sz)
-        as (w' & Hw' & Hm' & Hb').
-      destruct (Mem.alloc m1 0 sz) as [m1' b1'].
-      destruct (Mem.alloc m2 0 sz) as [m2' b2'].
-      cbn [fst snd] in *.
+    - eexists; split; [rauto | apply goto_label_inject; auto].
+      apply set_inject'; [discriminate | auto | ].
+      apply set_inject'; [discriminate | auto | auto ].
+    - rewrite inner_sp_rel; eauto.         (* inner_sp *)
+      eexists; split; [rauto | constructor; auto; match_simpl ].
+    - destruct m as [m1' b1']. destruct n as [m2' b2'].
+      destruct H1 as (Hw & Hm' & Hb'). cbn [fst snd] in *.
       destruct (Mem.store _ _ _ _) eqn: Hst.
-      2: { ss. auto. }
+      2: { match_simpl. }
       eapply transport in Hst as (mx & Hst' & Hmx).
-      2: {
-        clear Hst. rstep; eauto. rstep. rstep. rstep. rstep.
-        eapply regset_inject_acc in Hrs; eauto. }
-      rewrite Hst'. clear Hst'. destruct Hmx as (w'' & Hw'' & Hmx).
+      2: { clear Hst. repeat rstep. eapply regset_inject_acc; eauto. }
+      rewrite Hst'. clear Hst'. destruct Hmx as (w'' & Hw'' & Hmx). 
       destruct (Mem.store _ _ _ _) eqn: Hst.
-      2: { ss. auto. }
+      2: { match_simpl. }
       eapply transport in Hst as (my & Hst' & Hmy).
-      2: {
-        clear Hst. rstep; eauto. rstep. rstep. rstep. rstep. 
-        eapply regset_inject_acc in Hrs. eauto. rstep.
-      }
+      2: { clear Hst. repeat rstep. eapply regset_inject_acc; [ | eauto]. rauto. }
       rewrite Hst'. clear Hst'. destruct Hmy as (w''' & Hw''' & Hmy).
       exists w'''. split. rauto.
-      constructor; auto. rstep.
-      apply set_inject. eapply Val.inject_ptr. eapply block_inject_sameofs_incr in Hb'. apply Hb'.
-      rstep. cbn in *. rstep. auto.
-      apply set_inject. eapply regset_inject_acc in Hrs. apply Hrs. rstep.
-      eapply regset_inject_acc. 2: { eauto. } rstep.
-    - destruct (Mem.loadv _ _ _) as [ ra1|] eqn: Hld.
-      2: { ss. auto. }
+      constructor; [ match_simpl | rauto ].
+      + apply block_sameofs_ptrbits_inject.
+        split; auto. eapply block_inject_sameofs_incr; [ | eauto ]. rstep. cbn in *; rauto.
+      + eapply regset_inject_acc; [ | eauto ]. rauto.
+      + rauto.
+    - destruct (Mem.loadv _ _ _) as [ ra1 | ] eqn: Hld.
+      2: { match_simpl. }
       eapply transport in Hld as (ra2 & Hld' & Hra).
-      2: {
-        clear Hld. rstep; eauto. rstep. rstep; eauto.
-      }
+      2: { clear Hld. repeat rstep. eapply Hrs. }
       rewrite Hld'. clear Hld'.
       destruct (Mem.loadv _ _ _) as [| rsp1] eqn: Hld.
-      2: { ss. auto. }
+      2: { match_simpl. }
       eapply transport in Hld as (rsp2 & Hld' & Hrsp).
-      2: {
-        clear Hld. rstep; eauto. rstep. rstep; eauto.
-      }
+      2: { clear Hld. repeat rstep. eapply Hrs. }
       rewrite Hld'. clear Hld'.
-      pose (spinj:=Hrs SP). inv spinj.
-      ss; auto. ss; auto. ss; auto. ss; auto. 2: ss; auto.
-      destruct (Mem.free _ _ _) eqn: Hfree.
-      2: { ss. auto. }.
-      pose (Hf := Hfree).
-      eapply transport in Hf as (m' & Hfree' & Hm').
-      2: { clear Hf Hfree. rstep. eauto.
-           rstep. rstep. eauto.
-      }
-      replace (Ptrofs.unsigned (Ptrofs.add ofs1 (Ptrofs.repr delta))) with (Ptrofs.unsigned ofs1 + delta).
-      rewrite Hfree'.
-      2: {
-        erewrite cklr_address_inject. reflexivity.
-        eauto. 2: eauto.
-        apply Mem.free_range_perm in Hfree.
-        apply Hfree. split. omega.
-        pose proof (size_chunk_pos Mptr).
-        (* Help wanted *)
-        admit.
-      }
-      destruct Hm' as (w' & Hw' & Hm').
-      exists w'. split. rauto. constructor; auto. rstep.
-      apply set_inject. rstep.
-      apply set_inject. rstep.
-      eapply regset_inject_acc; eauto.
+      specialize (Hrs SP) as Hsp. inv Hsp; match_simpl.
+      erewrite cklr_weak_valid_pointer_address_inject; eauto.
+      + destruct (Mem.free _ _ _) eqn: Hfree.
+        2: { match_simpl. }
+        eapply transport in Hfree as (m' & Hfree' & Hm').
+        2: { clear Hfree. repeat rstep. eauto. }
+        destruct Hm' as (w' & Hw' & Hm').
+        rewrite Hfree'.
+        exists w'. split. rauto. constructor; auto. rstep.
+        apply set_inject. rstep.
+        apply set_inject. rstep.
+        eapply regset_inject_acc; eauto.
+      + admit.
   Admitted.
-  
 
   Global Instance find_funct_ptr_inject R w ge1 b1 ge2 b2 f:
     Transport (genv_match R w * block_inject_sameofs (mi R w)) (ge1, b1) (ge2, b2)
@@ -607,8 +511,7 @@ Section PROG.
       (- ==> Val.inject (mi R w) ++> regset_inject R w ++> regset_inject R w).
   Proof.
     unfold set_pair.
-    repeat rstep.
-    match_simpl.  match_simpl. rstep. auto. match_simpl. rstep. auto.
+    repeat rstep; match_simpl.
   Qed.
 
   Global Instance under_caller_save_regs_inject R w:
@@ -716,7 +619,7 @@ Proof.
       * instantiate (1 := eq). destruct v. constructor. auto.
     + eapply match_stbls_proj; auto.
     + intros. rewrite H. auto.
-    + admit.
+    + admit.                    (* PC <> Vundef *)
   - intros [rs1 m1] [rs2 m2] [nb1 s1] Hs [Hq Hnb]. inv Hs. inv Hq.
     assert (Hge: genv_match p R w (Genv.globalenv se1 p) (Genv.globalenv se2 p)).
     {
@@ -734,7 +637,7 @@ Proof.
     + cbn. esplit. split. rauto.
       split; cbn; auto.
       split; cbn.
-      rstep. unfold block_inject_sameofs. admit.
+      rstep. unfold block_inject_sameofs. admit. (* nextblock *)
       split; auto.
   - intros [nb1 s1] [nb2 s2] [rs1 m1] (w' & Hw' & Hge & Hs) H. cbn in *.
     inv H. inv Hs. inv H0. cbn in *.
