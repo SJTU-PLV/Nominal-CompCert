@@ -608,8 +608,11 @@ Section PROG.
  
 End PROG.
 
-Lemma mi_freeblocks R w m1 m2 b:
-  match_mem R w m1 m2 -> ~(Mem.valid_block m1 b) -> (mi R w) b = None.
+Lemma mi_nextblocks R w m1 m2 m1' m2':
+  match_mem R w m1 m2 ->
+  (<> match_mem R)%klr w m1' m2' ->
+  Ple (Mem.nextblock m1) (Mem.nextblock m1') ->
+  Ple (Mem.nextblock m2) (Mem.nextblock m2').
 Admitted.
 
 Lemma init_nb_match_acc R w w' nb1 nb2 m1 m2:
@@ -665,8 +668,6 @@ Proof.
   - congruence.
 Qed.
 
-
-
 Lemma exec_instr_valid_block nb ge f i rs1 m1 rs2 m2 live b:
   exec_instr nb ge f i rs1 m1 = Next' rs2 m2 live ->
   Mem.valid_block m1 b ->
@@ -682,16 +683,26 @@ Proof.
         | [ H: (match ?x with | _ => _ end) = _ |- _ ] =>
           let H' := fresh "H" in destruct x eqn: H'
         end; try congruence.
-  - 
-  - 
-Admitted.
-      | [ |- _ (match ?x with | _ => _ end) (match ?x with | _ => _ end)] => repeat rstep
+  - inv H. intros.
+    eapply Mem.store_valid_block_1. eauto.
+    eapply Mem.store_valid_block_1. eauto.
+    eapply Mem.valid_block_alloc; eauto.
+  - inv H. intros.
+    eapply Mem.valid_block_free_1; eauto.
+Qed.
+
 Lemma step_valid_block nb ge rs1 m1 live1 t rs2 m2 live2 b:
   step nb ge (State rs1 m1 live1) t (State rs2 m2 live2) ->
   Mem.valid_block m1 b ->
   Mem.valid_block m2 b.
 Proof.
-Admitted.
+  inversion 1; subst; intros.
+  - eapply exec_instr_valid_block; eauto.
+  - eapply ec_valid_block; eauto.
+    apply external_call_spec.
+  - eapply ec_valid_block; eauto.
+    apply external_call_spec.
+Qed.
 
 Lemma step_valid_block' nb ge rs1 m1 live1 t rs2 m2 live2:
   step nb ge (State rs1 m1 live1) t (State rs2 m2 live2) ->
@@ -783,7 +794,8 @@ Proof.
       inv H1. eexists (_, _). repeat apply conj.
       (* after_nexternal *)
       * econstructor.
-        -- admit.               (* folded into cklr *)
+        -- eapply mi_nextblocks; eauto.
+           eexists. split; eauto.
         (* -- remember (Mem.alloc rm1 0 0) as mres. destruct mres as [m1' b1]. *)
         (*    remember (Mem.alloc rm2 0 0) as mres. destruct mres as [m2' b2]. *)
         (*    assert (Hb1: b1 = Mem.nextblock rm1). eapply Mem.alloc_result. eauto. *)
@@ -814,17 +826,22 @@ Proof.
         (* nb1 <= nextblock m1 *)
         -- eapply Pos.le_trans; eauto.
         (* nb2 <= nextblock m2 *)
-        -- eapply Pos.le_trans; eauto. admit. (* same proof that was folded into cklr *)
+        -- eapply Pos.le_trans; eauto.
+           eapply mi_nextblocks; eauto.
+           eexists. split; eauto.
   - intros [nb1 s1] t [nb1' s1'] [Hstep ->] [nb2 s2] (w' & Hw' & Hge & Hs).
     cbn [fst snd] in *.
     inversion Hs as [? ? rs1 rs2 m1 m2 live Hb Hs' Hle1 Hle2]. subst. clear Hs.
+    destruct s1' as [rs1' m1' live'].
+    assert (Mem.nextblock m1 <= Mem.nextblock m1')%positive.
+    { eapply step_valid_block'. eauto. }
     eapply step_rel in Hstep as (s2' & Hstep' & (w'' & Hw'' & Hs)); eauto.
     eexists (_, _). split.
     (* step *)
     + split; eauto.
     (* state_match *)
     + split with (x:=w''). split. rauto.
-      inversion Hs as [rs1' rs2' Hrs' m1' m2' Hm' live' ]. subst. clear Hs.
+      inversion Hs as [? rs2' Hrs' ? m2' Hm' ? ]. subst. clear Hs.
       split; [| split]; cbn.
       (* genv_match *)
       * eapply genv_match_acc. rauto. auto.
@@ -833,8 +850,10 @@ Proof.
       (* state_match *)
       * constructor; eauto.
       (* nb1 <= nextblock m1 *)
-      * admit.
+      * eapply Pos.le_trans; eauto.
       (* nb2 <= nextblock m2 *)
-      * 
+      * eapply Pos.le_trans; eauto.
+        eapply step_valid_block'. eauto.
   - apply well_founded_ltof.
-Admitted.
+    Unshelve. exact tt. exact tt.
+Qed.
