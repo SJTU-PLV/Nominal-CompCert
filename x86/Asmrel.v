@@ -607,18 +607,114 @@ Section PROG.
   Qed.
  
 End PROG.
-  
+
+Lemma mi_freeblocks R w m1 m2 b:
+  match_mem R w m1 m2 -> ~(Mem.valid_block m1 b) -> (mi R w) b = None.
+Admitted.
+
+Lemma init_nb_match_acc R w w' nb1 nb2 m1 m2:
+  match_mem R w m1 m2 ->
+  (nb1 <= Mem.nextblock m1)%positive ->
+  (nb2 <= Mem.nextblock m2)%positive ->
+  w ~> w' ->
+  init_nb_match R w nb1 nb2 ->
+  init_nb_match R w' nb1 nb2.
+Proof.
+  intros Hm Hb1 Hb2 Hw Hb.
+  unfold init_nb_match. intros v1 v2 Hv. specialize (Hb v1 v2).
+  unfold inner_sp. inv Hv; auto.
+  destruct (mi R w b1) as [[b1' d] | ] eqn: Hmi.
+  - exploit mi_acc; [ apply Hw | apply Hmi | ].
+    intros Hmi'. rewrite Hmi' in H. clear Hmi'. inv H.
+    apply Hb. econstructor; eauto.
+  - exploit mi_acc_separated; eauto.
+    intros [Hvb1 Hvb2].
+    destruct (plt b1 nb1); destruct (plt b2 nb2);
+      try rauto; unfold Mem.valid_block in *; unfold Plt in *; exfalso.
+    + apply Hvb1. eapply Pos.lt_le_trans; eauto.
+    + apply Hvb2. eapply Pos.lt_le_trans; eauto.
+Qed.
+
+Inductive init_nb_state_match R w: rel (block * state) (block * state) :=
+| init_nb_state_match_intro nb1 nb2 rs1 rs2 m1 m2 live:
+    init_nb_match R w nb1 nb2 ->
+    state_match R w (State rs1 m1 live) (State rs2 m2 live) ->
+    (nb1 <= Mem.nextblock m1)%positive ->
+    (nb2 <= Mem.nextblock m2)%positive ->
+    init_nb_state_match R w (nb1, State rs1 m1 live) (nb2, State rs2 m2 live).
+
+Lemma exec_load_valid_block ge chunk m1 a rs1 rd rs2 m2 live b:
+  exec_load ge chunk m1 a rs1 rd = Next' rs2 m2 live ->
+  Mem.valid_block m1 b ->
+  Mem.valid_block m2 b.
+Proof.
+  unfold exec_load. destruct Mem.loadv.
+  - inversion 1. auto.
+  - congruence.
+Qed.
+
+Lemma exec_store_valid_block ge chunk m1 a rs1 rs d rs2 m2 live b:
+  exec_store ge chunk m1 a rs1 rs d = Next' rs2 m2 live ->
+  Mem.valid_block m1 b ->
+  Mem.valid_block m2 b.
+Proof.
+  unfold exec_store. destruct Mem.storev eqn: Hst.
+  - unfold Mem.storev in Hst. destruct eval_addrmode; try congruence.
+    inversion 1; subst. intros.
+    exploit Mem.store_valid_block_1; eauto.
+  - congruence.
+Qed.
+
+
+
+Lemma exec_instr_valid_block nb ge f i rs1 m1 rs2 m2 live b:
+  exec_instr nb ge f i rs1 m1 = Next' rs2 m2 live ->
+  Mem.valid_block m1 b ->
+  Mem.valid_block m2 b.
+Proof.
+  destruct i; cbn; try inversion 1;
+    first [ intros; eapply exec_load_valid_block in H; eauto |
+            intros; eapply exec_store_valid_block in H; eauto |
+            auto ];
+    unfold goto_label in H;
+    try repeat
+        match goal with
+        | [ H: (match ?x with | _ => _ end) = _ |- _ ] =>
+          let H' := fresh "H" in destruct x eqn: H'
+        end; try congruence.
+  - 
+  - 
+Admitted.
+      | [ |- _ (match ?x with | _ => _ end) (match ?x with | _ => _ end)] => repeat rstep
+Lemma step_valid_block nb ge rs1 m1 live1 t rs2 m2 live2 b:
+  step nb ge (State rs1 m1 live1) t (State rs2 m2 live2) ->
+  Mem.valid_block m1 b ->
+  Mem.valid_block m2 b.
+Proof.
+Admitted.
+
+Lemma step_valid_block' nb ge rs1 m1 live1 t rs2 m2 live2:
+  step nb ge (State rs1 m1 live1) t (State rs2 m2 live2) ->
+  Ple (Mem.nextblock m1) (Mem.nextblock m2).
+Proof.
+  intros Hstep. unfold Ple. rewrite Pos.le_nlt.
+  unfold not. intros.
+  exploit step_valid_block. eauto. apply H.
+  apply Pos.lt_irrefl.
+Qed.
+
 Lemma semantics_asm_rel p R:
   forward_simulation (cc_asm R) (cc_asm R) (Asm.semantics p) (Asm.semantics p).
 Proof.
   constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
   intros se1 se2 w Hse Hse1. cbn -[semantics] in *.
   pose (ms := fun s1 s2 =>
-                klr_diam tt (genv_match p R * (init_nb_match R * state_match R))
+                klr_diam tt (genv_match p R * init_nb_state_match R)
                          w
                          (Genv.globalenv se1 p, s1)
                          (Genv.globalenv se2 p, s2)).
   apply forward_simulation_step with (match_states := ms); cbn.
+  (* valid_query *)
   - intros [rs1 m1] [rs2 m2] [Hrs [Hpc Hm]].
     eapply Genv.is_internal_match; eauto.
     + repeat apply conj; auto.
@@ -627,6 +723,7 @@ Proof.
       * instantiate (1 := eq). destruct v. constructor. auto.
     + eapply match_stbls_proj; auto.
     + intros. rewrite H. auto.
+  (* initial_state *)
   - intros [rs1 m1] [rs2 m2] [nb1 s1] Hs [Hq Hnb]. destruct Hs as [Hrs [Hpc Hm]]. inv Hq.
     assert (Hge: genv_match p R w (Genv.globalenv se1 p) (Genv.globalenv se2 p)).
     {
@@ -637,87 +734,107 @@ Proof.
     transport_hyps.
     exists (Mem.nextblock m2, State rs2 m2 true).
     repeat apply conj; auto.
+    (* initial_state *)
     + econstructor.
       * eauto. 
       * specialize (Hrs SP) as Hsp. inv Hsp; try congruence.
       * specialize (Hrs RA) as Hsp. inv Hsp; try congruence.
+    (* match_state *)
     + cbn. esplit. split. rauto.
       split; cbn; auto.
       split; cbn; auto.
+      (* init_nb_match *)
       * unfold init_nb_match. intros v1 v2 Hv.
         unfold inner_sp. inv Hv; rstep.
         edestruct cklr_valid_block as [Hl Hr]; try rstep; eauto.
         destruct plt; destruct plt; try congruence; exfalso.
         -- apply n. apply Hl. auto.
         -- apply n. apply Hr. auto.
+      (* state_match *)
       * constructor; auto.
-  - intros [nb1 s1] [nb2 s2] [rs1 m1] (w' & Hw' & Hge & Hb & Hs) H. cbn in *.
-    inv H. inv Hs.
-    eexists. split.
+      (* nb1 <= Mem.nextblock m1 *)
+      * apply Pos.le_refl.
+      (* nb2 <= Mem.nextblock m2 *)
+      * apply Pos.le_refl.
+  (* final_state *)
+  - intros [nb1 s1] [nb2 s2] [rs1 m1] (w' & Hw' & Hge & Hs) H. cbn in *.
+    inv H. inv Hs. inv H6. eexists. split.
+    (* final_state *)
     + constructor.
-    + exists w'. split; auto. constructor; auto.
-  - intros [nb1 s1] [nb2 s2] qx1 (w' & Hw' & Hge & Hb & Hs) H. cbn [fst snd] in *.
-    inversion Hs as [rs1 rs2 Hrs m1 m2 Hm live]. subst.
+    (* match_reply *)
+    + exists w'. split; auto. constructor; eauto.
+  (* external calls *)
+  - intros [nb1 s1] [nb2 s2] qx1 (w' & Hw' & Hge & Hs) H. cbn [fst snd] in *.
+    inversion Hs as [? ? rs1 rs2 m1 m2 live Hb Hs' Hle1 Hle2]. subst. clear Hs.
+    inversion Hs' as [? ? Hrs ? ? Hm ?]. subst. clear Hs'.
     inv H. specialize (Hrs PC) as Hpc. simpl in Hpc.
+    assert (rs1#PC <> Vundef). unfold Genv.find_funct in H4. destruct (rs1 PC); congruence.
     transport_hyps.
     eexists w', _. repeat apply conj.
+    (* at_external *)
     + econstructor. eauto.
-    + repeat apply conj; eauto. admit.
+    (* match_query *)
+    + repeat apply conj; eauto.
+    (* match_stbls *)
     + rauto.
-    + intros [rrs1 rm1] [rrs2 rm2] [rb1 rst1] (w'' & Hw'' & Hr) [H H1].
-      inv H.
-      eexists (_, _). repeat apply conj.
-      * econstructor. 
-        remember (Mem.alloc rm1 0 0) as mres. destruct mres as [m1' b1].
-        remember (Mem.alloc rm2 0 0) as mres. destruct mres as [m2' b2].
-        assert (Hb1: b1 = Mem.nextblock rm1). eapply Mem.alloc_result. eauto.
-        assert (Hb2: b2 = Mem.nextblock rm2). eapply Mem.alloc_result. eauto.
-        edestruct (cklr_alloc R w'') as (w''' & Hw''' & Hmm). apply Hr.
-        rewrite <- Heqmres in Hmm. rewrite <- Heqmres0 in Hmm.
-        destruct Hmm as [Hm' Hb']. cbn [fst snd] in *.
-        unfold Ple in *. 
-        rewrite Pos.le_nlt in *.
-        assert (Hvb: ~ Mem.valid_block m1 b1). subst b1. apply H7.
-        exploit mi_acc_separated. apply Hm. rauto. 
-        assert (inject_separated (mi R w') (mi R w''') m1 m2).
-        { admit. }
-        exploit H. 2: apply Hb'.
-        eapply Mem.mi_freeblocks. admit.
-        apply Hvb. subst b2. intros. apply H0.
+    (* simulation after reply *)
+    + intros [rrs1 rm1] [rrs2 rm2] [rb1 rst1] (w'' & Hw'' & Hr) [H1 H2].
+      inversion Hr as [Hrs' Hm'].
+      inv H1. eexists (_, _). repeat apply conj.
+      (* after_nexternal *)
+      * econstructor.
+        -- admit.               (* folded into cklr *)
+        (* -- remember (Mem.alloc rm1 0 0) as mres. destruct mres as [m1' b1]. *)
+        (*    remember (Mem.alloc rm2 0 0) as mres. destruct mres as [m2' b2]. *)
+        (*    assert (Hb1: b1 = Mem.nextblock rm1). eapply Mem.alloc_result. eauto. *)
+        (*    assert (Hb2: b2 = Mem.nextblock rm2). eapply Mem.alloc_result. eauto. *)
+        (*    edestruct (cklr_alloc R w'') as (w''' & Hw''' & Hmm). apply Hr. *)
+        (*    rewrite <- Heqmres in Hmm. rewrite <- Heqmres0 in Hmm. *)
+        (*    destruct Hmm as [Hm' Hb']. cbn [fst snd] in *. *)
+        (*    unfold Ple in *. rewrite Pos.le_nlt in *. *)
+        (*    exploit (mi_acc_separated R w' w'''); *)
+        (*      [ apply Hm | cbn in *; rauto | eapply mi_freeblocks; eauto | subst b1; apply Hb' | ]. *)
+        (*    subst b2. intros Hvb. apply Hvb. *)
+           (* -- admit. *)
+        -- rewrite <- H9. specialize (Hrs' SP) as Hsp'.
+           exploit (init_nb_match_acc R w' w''); eauto.
+           intros Hisp. inv Hisp; try congruence.
+      (* nb' = nb *)
       * reflexivity.
+      (* state_match *)
       * exists w''. split. rauto.
-        assert (init_nb_match R w'' nb1 nb2).
-        {
-          unfold init_nb_match. intros v1 v2 Hv. specialize (Hb v1 v2).
-          unfold inner_sp. inv Hv; auto. simpl in Hb.
-          destruct (mi R w' b1) as [[b1' d] |] eqn: Hmi.
-          - exploit mi_acc. apply Hw''. apply Hmi. intros Hmi'. rewrite Hmi' in H. clear Hmi'. inv H.
-            exploit Hb. eapply Val.inject_ptr; eauto. auto.
-          - assert (Hsp: inject_separated (mi R w') (mi R w'') m1 m2).
-            { admit. }
-            exploit Hsp. apply Hmi. apply H. intros [Hvb1 Hvb2].
-            assert (nb1 <= Mem.nextblock m1)%positive. admit.
-            assert (nb2 <= Mem.nextblock m2)%positive. admit.
-            destruct (plt b1 nb1); destruct (plt b2 nb2);
-              auto; unfold Mem.valid_block in *; unfold Plt in *; exfalso.
-            apply Hvb1. SearchAbout Pos.lt.
-            eapply Pos.lt_le_trans. eauto. eauto.
-            apply Hvb2.
-            eapply Pos.lt_le_trans. eauto. eauto.
-        }
-        inv Hr. repeat apply conj; cbn.
+        split; [ | split].
+        (* genv_match *)
         -- eapply genv_match_acc.
            apply Hw''. apply Hge.
-        -- auto.
-        -- rewrite inner_sp_rel; try econstructor; eauto.
-  - intros [nb1 s1] t [nb1' s1'] [Hstep ->] [nb2 s2] (w' & Hw' & Hge & Hnb & Hs).
+        (* init_nb_match *)
+        -- clear Hm'. eapply init_nb_match_acc; eauto.
+        (* state_match *)
+        -- constructor; auto.
+        (* nb1 <= nextblock m1 *)
+        -- eapply Pos.le_trans; eauto.
+        (* nb2 <= nextblock m2 *)
+        -- eapply Pos.le_trans; eauto. admit. (* same proof that was folded into cklr *)
+  - intros [nb1 s1] t [nb1' s1'] [Hstep ->] [nb2 s2] (w' & Hw' & Hge & Hs).
     cbn [fst snd] in *.
-    eapply step_rel in Hstep as (s2' & Hstep' & (w'' & Hw'' & ss)); eauto.
-    eexists. split.
-    + instantiate (1 := (_, _)). cbn.
-      split. eauto. reflexivity.
-    + split with (x:=w''). split; try rauto.
-      split. cbn. eapply genv_match_acc. rauto. auto.
-      split; cbn. rauto. auto.
+    inversion Hs as [? ? rs1 rs2 m1 m2 live Hb Hs' Hle1 Hle2]. subst. clear Hs.
+    eapply step_rel in Hstep as (s2' & Hstep' & (w'' & Hw'' & Hs)); eauto.
+    eexists (_, _). split.
+    (* step *)
+    + split; eauto.
+    (* state_match *)
+    + split with (x:=w''). split. rauto.
+      inversion Hs as [rs1' rs2' Hrs' m1' m2' Hm' live' ]. subst. clear Hs.
+      split; [| split]; cbn.
+      (* genv_match *)
+      * eapply genv_match_acc. rauto. auto.
+      (* init_nb_match *)
+      * clear Hm'. eapply init_nb_match_acc; eauto. inv Hs'. auto.
+      (* state_match *)
+      * constructor; eauto.
+      (* nb1 <= nextblock m1 *)
+      * admit.
+      (* nb2 <= nextblock m2 *)
+      * 
   - apply well_founded_ltof.
 Admitted.
