@@ -388,10 +388,10 @@ Fixpoint label_pos (lbl: label) (pos: Z) (c: code) {struct c} : option Z :=
 Variable init_nb: block.
 Variable ge: Genv.symtbl.
 
-Definition inner_sp (sp: val) :=
+Definition inner_sp (sp: val) : option bool :=
   match sp with
-    | Vptr sb _ => if plt sb init_nb then false else true
-    | _ => false
+    | Vptr sb _ => Some (if plt sb init_nb then false else true)
+    | _ => None
   end.
 
 (** Evaluating an addressing mode *)
@@ -946,7 +946,10 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pcall_r r sg =>
       Next (rs#RA <- (Val.offset_ptr rs#PC Ptrofs.one) #PC <- (rs r)) m
   | Pret =>
-      Next' (rs#PC <- (rs#RA)) m (inner_sp rs#SP)
+    match inner_sp rs#SP with
+    | Some b => Next' (rs#PC <- (rs#RA)) m b
+    | None => Stuck
+    end
   (** Saving and restoring registers *)
   | Pmov_rm_a rd a =>
       exec_load (if Archi.ptr64 then Many64 else Many32) m a rs rd
@@ -1137,13 +1140,14 @@ Inductive step (init_nb: block) (ge: genv): state -> trace -> state -> Prop :=
                (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
       step init_nb ge (State rs m true) t (State rs' m' true)
   | exec_step_external:
-      forall b ef args res rs m t rs' m',
+      forall b ef args res rs m t rs' m' live,
       rs PC = Vptr b Ptrofs.zero ->
       Genv.find_funct_ptr ge b = Some (External ef) ->
       extcall_arguments rs m (ef_sig ef) args ->
       external_call ef ge args m t res m' ->
       rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs)) #PC <- (rs RA) ->
-      step init_nb ge (State rs m true) t (State rs' m' (inner_sp init_nb rs#SP)).
+      inner_sp init_nb rs#SP = Some live ->
+      step init_nb ge (State rs m true) t (State rs' m' live).
 
 (** Since Asm does not have an explicit stack, the queries and replies
   for assembly modules simply pass the current state across modules. *)
@@ -1183,12 +1187,13 @@ Inductive at_external (ge: genv): state -> query li_asm -> Prop :=
       at_external ge (State rs m true) (rs, m).
 
 Inductive after_external init_nb: state -> reply li_asm -> state -> Prop :=
-  | after_external_intro rs m (rs': regset) m':
+  | after_external_intro rs m (rs': regset) m' live:
       Ple (Mem.nextblock m) (Mem.nextblock m') ->
+      inner_sp init_nb rs'#SP = Some live ->
       after_external init_nb
         (State rs m true)
         (rs', m')
-        (State rs' m' (inner_sp init_nb rs'#SP)).
+        (State rs' m' live).
 
 Inductive final_state: state -> reply li_asm -> Prop :=
   | final_state_intro rs m:
@@ -1253,7 +1258,7 @@ Ltac Equalities :=
   exploit external_call_determ. eexact H5. eexact H11. intros [A B].
   split. auto. intros. destruct B; auto. subst. auto.
 + assert (args0 = args) by (eapply extcall_arguments_determ; eauto). subst args0.
-  exploit external_call_determ. eexact H4. eexact H9. intros [A B].
+  exploit external_call_determ. eexact H4. eexact H10. intros [A B].
   split. auto. intros. destruct B; auto. subst. auto.
 - (* trace length *)
   red; cbn. intros [nb s] t [nb' s'] [H Hnb]. inv H; simpl.
@@ -1276,7 +1281,7 @@ Ltac Equalities :=
   inv H; inv H0; auto.
 - (* after_external determ *)
   destruct s as [nb s], s1 as [nb1 s1], s2 as [nb2 s2], H, H0. subst.
-  inv H; inv H0; auto.
+  inv H; inv H0; f_equal; f_equal. rewrite H2 in H8. inv H8; auto.
 - (* final no step *)
   destruct s as [nb s].
   inv H. red; intros; red; intros. destruct s', H. inv H.
@@ -1338,10 +1343,15 @@ Definition cc_asm_match R w '(rs1, m1) '(rs2, m2) :=
   (forall r: preg, Val.inject (mi R w) (rs1 r) (rs2 r)) /\
   match_mem R w m1 m2.
 
+Definition cc_asm_match' R w '(rs1, m1) '(rs2, m2) :=
+  (forall r: preg, Val.inject (mi R w) (rs1 r) (rs2 r)) /\
+  rs1#PC <> Vundef /\
+  match_mem R w m1 m2.
+
 Program Definition cc_asm R : callconv li_asm li_asm :=
   {|
     match_senv := match_stbls R;
-    match_query := cc_asm_match R;
+    match_query := cc_asm_match' R;
     match_reply := (<> cc_asm_match R)%klr;
   |}.
 Next Obligation.
@@ -1357,7 +1367,7 @@ Proof.
   intros Q R HQR. red in HQR |- *.
   intros w se1 se2 q1 q2 Hse Hq.
   destruct q1 as [rs1 m1]. destruct q2 as [rs2 m2].
-  destruct Hq as [Hrs Hm].
+  destruct Hq as [Hrs [Hpc Hm]].
   specialize (HQR w se1 se2 m1 m2 Hse Hm) as (wr & HseR & HmR & Hincr & HQR').
   exists wr. simpl in *. repeat apply conj; auto.
   - intros r. specialize (Hrs r). rauto.
@@ -1372,7 +1382,7 @@ Lemma match_asm_query_compose R12 R23 w12 w23:
     (rel_compose (match_query (cc_asm R12) w12) (match_query (cc_asm R23) w23)).
 Proof.
   split.
-  - intros [rs1 m1] [rs3 m3] [Hrs Hm]. simpl in *.
+  - intros [rs1 m1] [rs3 m3] [Hrs [Hpc Hm]]. simpl in *.
     destruct Hm as (m2 & Hm12 & Hm23).
     assert (exists rs2, forall r: preg, Val.inject (mi R12 w12) (rs1 r) (rs2 r) /\
                               Val.inject (mi R23 w23) (rs2 r) (rs3 r)) as (rs2 & Hrs').
@@ -1381,11 +1391,14 @@ Proof.
       intros r. specialize (Hrs r).
       apply val_inject_compose in Hrs. apply Hrs.
     }
-    exists (rs2, m2). split; constructor; eauto; apply Hrs'.
-  - intros [rs1 m1][rs3 m3] ([rs2 m2] & [Hrs12 Hm12] & [Hrs23 Hm23]).
-    split.
+    exists (rs2, m2).
+    repeat apply conj; auto; try apply Hrs'.
+    specialize (Hrs' PC) as [Hpc1 ?]. inv Hpc1; congruence.
+  - intros [rs1 m1][rs3 m3] ([rs2 m2] & [Hrs12 [Hpc12 Hm12]] & [Hrs23 [Hpc23 Hm23]]).
+    repeat apply conj.
     + intros r. cbn. apply val_inject_compose.
       eexists; split; eauto.
+    + auto.
     + econstructor; split; eauto.
 Qed.
 
