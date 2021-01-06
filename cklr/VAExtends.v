@@ -109,6 +109,25 @@ Next Obligation.
   eapply vaext_mmatch; eauto.
 Qed.
 
+(** Acc separated *)
+Next Obligation.
+  intros b1 b2 delta Hw Hw'.
+  assert (~ Mem.valid_block m1 b1).
+  { unfold Mem.valid_block.
+    intros Hvb1.
+    inv H. cbn in *.
+    specialize (vaext_incr_bc _ _ H0 b1 Hvb1) as w'_bc.
+    cbn in w'_bc.
+    unfold inj_of_bc in Hw, Hw'.
+    rewrite w'_bc in Hw'. congruence.
+  }
+  split. auto.
+  contradict H1.
+  inv H.
+  apply inj_of_bc_inv in Hw'. destruct Hw' as (_ & Hb & _). subst b2.
+  erewrite Mem.valid_block_extends; eauto.
+Qed.
+
 Next Obligation.
   intros [se1 bc1 m1 H1] [se2 bc2 m2 H2] [Hse Hbc Hnb Hld]; cbn in *.
   inversion 1; clear H; subst. constructor.
@@ -538,7 +557,7 @@ Proof.
     destruct Hq. destruct Hse. cbn in * |- . inv H1. destruct H12.
     exists (se, vaw se bc m1, tt). cbn. repeat apply conj; auto using rel_inv_intro.
     + eexists; split; constructor; cbn; auto.
-      * constructor; eauto using vmatch_list_inj_top.
+      * constructor; eauto using vmatch_list_inj_top, vmatch_inj_top.
       * eapply val_inject_incr. apply inj_of_bc_id. eauto.
       * eapply val_inject_list_incr. apply inj_of_bc_id. eauto.
     + intros r1 r2 (ri & Hr1i & Hri2). destruct Hr1i, Hri2 as ([ ] & _ & ?).
@@ -560,13 +579,13 @@ Proof.
     + constructor; cbn; auto.
       * apply val_inject_id in H0.
         eapply Mem.val_inject_lessdef_compose; eauto.
-        admit. (* need something in vamatch for vf *)
+        eapply vmatch_inj; eauto.
       * apply val_inject_list_lessdef in H1.
         eapply val_inject_lessdef_list_compose; eauto.
-        clear - H10.
+        clear - H11.
         induction vargs1; constructor; eauto.
-        -- eapply vmatch_inj. eapply H10. cbn. auto.
-        -- eapply IHvargs1. intros. eapply H10. cbn. auto.
+        -- eapply vmatch_inj. eapply H11. cbn. auto.
+        -- eapply IHvargs1. intros. eapply H11. cbn. auto.
       * constructor; auto.
     + intros r1 r2 ([se' bc' m1' Hwf] & Hw' & Hr). destruct Hw'; cbn in *. subst se'.
       inv Hr. inv H4. destruct Hwf. cbn in *.
@@ -576,4 +595,4 @@ Proof.
       * exists tt. split; constructor.
         -- eapply val_inject_incr. apply inj_of_bc_id. eauto.
         -- cbn. auto.
-Admitted.
+Qed.

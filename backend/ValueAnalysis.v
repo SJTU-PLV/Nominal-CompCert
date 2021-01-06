@@ -1142,6 +1142,7 @@ Inductive sound_state: state -> Prop :=
   | sound_call_state:
       forall s fd args m bc
         (STK: sound_stack bc s m (Mem.nextblock m))
+        (VF: vmatch bc fd Vtop)
         (ARGS: forall v, In v args -> vmatch bc v Vtop)
         (RO: romatch_all bc m)
         (MM: mmatch bc m mtop)
@@ -1261,6 +1262,22 @@ Proof.
   intros. rewrite H0; auto. xomega.
 Qed.
 
+(** For compatibility with CKLRs, we show the soundness of function
+  pointers in call states. *)
+
+Lemma find_funct_sound bc vf fd:
+  genv_match bc ge ->
+  Genv.find_funct (Genv.globalenv ge prog) vf = Some fd ->
+  vmatch bc vf (Ifptr Nonstack).
+Proof.
+  intros GEMATCH Hfd.
+  destruct vf; try discriminate. cbn in *.
+  destruct Ptrofs.eq_dec; try discriminate. subst.
+  apply Genv.find_funct_ptr_iff in Hfd.
+  apply Genv.genv_defs_range in Hfd.
+  constructor. constructor; apply GEMATCH; auto.
+Qed.
+
 (** ** Preservation of the semantic invariant by one step of execution *)
 
 Hint Unfold romatch_all.
@@ -1327,6 +1344,7 @@ Proof.
     apply Ple_refl.
     eapply mmatch_below; eauto.
     eapply mmatch_stack; eauto.
+  * eauto using vmatch_top, find_funct_sound.
   * intros. exploit list_in_map_inv; eauto. intros (r & P & Q). subst v.
     apply D with (areg ae r).
     rewrite forallb_forall in H2. apply vpincl_ge.
@@ -1339,6 +1357,7 @@ Proof.
   * eapply sound_stack_public_call with (bound' := Mem.nextblock m) (bc' := bc); eauto.
     apply Ple_refl.
     eapply mmatch_below; eauto.
+  * eauto using vmatch_top, find_funct_sound.
   * intros. exploit list_in_map_inv; eauto. intros (r & P & Q). subst v.
     apply D with (areg ae r). auto with va.
 
@@ -1351,6 +1370,7 @@ Proof.
   eapply sound_stack_free; eauto.
   intros. apply C. apply Plt_ne; auto.
   apply Plt_Ple. eapply mmatch_below; eauto. congruence.
+  eauto using vmatch_top, find_funct_sound.
   intros. exploit list_in_map_inv; eauto. intros (r & P & Q). subst v.
   apply D with (areg ae r). auto with va.
   eauto using romatch_free.
@@ -1544,6 +1564,7 @@ Qed.
 Inductive sound_query bc m: c_query -> Prop :=
   sound_query_intro vf sg vargs:
     genv_match bc ge ->
+    vmatch bc vf Vtop ->
     (forall v, In v vargs -> vmatch bc v Vtop) ->
     mmatch bc m mtop ->
     bc_nostack bc ->

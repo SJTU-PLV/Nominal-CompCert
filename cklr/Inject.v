@@ -119,6 +119,15 @@ Program Definition inj : cklr :=
   |}.
 
 Next Obligation.
+  intros b1 b2 delta Hw Hw'.
+  inv H0.
+  inv H.
+  unfold Mem.valid_block. unfold Plt.
+  do 2 rewrite <- Pos.le_nlt.
+  eapply H2; eauto.
+Qed.
+
+Next Obligation.
   destruct 1. cbn. auto.
 Qed.
 

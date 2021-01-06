@@ -446,18 +446,27 @@ Instance cklr_free_args R:
     (|= - ==> match_mem R ++> Val.inject @@ [mi R] ++> k1 option_le (<> match_mem R)).
 Proof.
   intros w sg m1 m2 Hm sp1 sp2 Hsp.
-Admitted. (* need to update *)
-(*
   destruct (free_args sg m1 sp1) as [m1_ | ] eqn:H1; [ | constructor].
   unfold free_args in H1. destruct sp1 as [ | | | | | sb1 sofs1]; try discriminate.
   cut (exists w' m2_, w ~> w' /\ free_args sg m2 sp2 = Some m2_ /\ match_mem R w' m1_ m2_).
   - intros (? & ? & ? & ? & ?). rewrite H0. rauto.
-  - revert m1 m2 Hm m1_ H1. inv Hsp. cbn [free_args].
+  - revert m1 m2 Hm m1_ H1. inv Hsp. revert w H1. cbn [free_args].
     induction regs_of_rpairs.
     + cbn. intros. inv H0. exists w, m2. split; auto. reflexivity.
-    + destruct a as [
+    + destruct a as [ | [ ]]; cbn -[Z.add Z.mul acc] in *; auto.
+      intros. destruct Mem.free eqn:Hm1_ in H0; try discriminate.
+      eapply transport in Hm1_. 2: {
+        clear Hm1_. repeat rstep.
+        eapply ptrbits_ptr_inject; eauto.
+        eapply H. pose proof (size_chunk_pos (chunk_of_type ty)). xomega.
+      }
+      destruct Hm1_ as (m2_ & Hm2_ & w' & Hw' & Hm_).
+      edestruct (IHl w') as (w'' & m2__ & Hw'' & Hm2__ & Hm__); eauto.
+      { eapply mi_acc; eauto. }
+      exists w'', m2__. split; [rauto | ].
+      rewrite <- Ptrofs.add_assoc, Hm2_.
+      eauto.
 Qed.
-*)
 
 Instance bis f b1 b2:
   RExists (f b1 = Some (b2, 0)) (block_inject_sameofs f) b1 b2.

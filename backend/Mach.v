@@ -579,6 +579,17 @@ Qed.
 
 (** ** Properties *)
 
+Lemma nextblock_free_args sg m sp m':
+  free_args sg m sp = Some m' ->
+  Mem.nextblock m' = Mem.nextblock m.
+Proof.
+  destruct sp; try discriminate. cbn. revert m.
+  induction (loc_footprints b i (regs_of_rpairs (loc_arguments sg))); cbn.
+  - congruence.
+  - intros. destruct a as [[? ?] ?], Mem.free eqn:Hm'; try congruence.
+    erewrite <- (Mem.nextblock_free m _ _ _ m0); eauto.
+Qed.
+
 (** The following construction is needed both for the commutation
   property associated with [cc_locset_mach] and [cc_mach] and in the
   simulation proof for external calls in [Stacking]. It is used to

@@ -9,6 +9,7 @@ Require Export AST.
 Require Export Valuesrel.
 Require Export Memory.
 Require Export Globalenvs.
+Require Export Events.
 
 
 (** * Compcert Kripke simulation relations *)
@@ -55,6 +56,10 @@ Record cklr :=
 
     mi_acc:
       Monotonic mi (wacc ++> inject_incr);
+    mi_acc_separated w w' m1 m2:
+      match_mem w m1 m2 ->
+      wacc w w' ->
+      inject_separated (mi w) (mi w') m1 m2;
 
     match_stbls_acc:
       Monotonic match_stbls (wacc ++> subrel);
