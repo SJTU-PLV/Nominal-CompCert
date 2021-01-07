@@ -987,13 +987,13 @@ Inductive match_stack (bound: block): list Mach.stackframe -> Prop :=
   | match_stack_cons: forall fb sp ra c s f tf tc,
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       transl_code_at_pc ge ra fb f c false tf tc ->
-      inner_sp init_nb sp = true ->
+      inner_sp init_nb sp = Some true ->
       valid_blockv bound sp ->
       match_stack bound s ->
       match_stack bound (Stackframe (Vptr fb Ptrofs.zero) sp ra c :: s).
 
 Lemma inner_sp_def p1 p2:
-  inner_sp p1 p2 = true ->
+  inner_sp p1 p2 = Some true ->
   p2 <> Vundef.
 Proof.
   destruct p1, p2; cbn; congruence.
@@ -1002,6 +1002,20 @@ Qed.
 Lemma parent_sp_def: forall b s, match_stack b s -> parent_sp s <> Vundef.
 Proof.
   induction 1; simpl; eauto using inner_sp_def.
+Qed.
+
+Lemma inner_sp_ptr nb sp live:
+  inner_sp nb sp = Some live ->
+  exists b ofs, sp = Vptr b ofs.
+Proof.
+  destruct nb, sp; cbn; try congruence;
+    intros; repeat eexists.
+Qed.
+
+Lemma parent_sp_ptr: forall b s, match_stack b s -> exists b ofs, parent_sp s = Vptr b ofs.
+Proof.
+  induction 1; simpl; eauto using inner_sp_ptr.
+  inv H1. repeat eexists.
 Qed.
 
 Lemma parent_ra_def: forall b s, match_stack b s -> parent_ra s <> Vundef.
@@ -1041,4 +1055,3 @@ Proof.
 Qed.
 
 End MATCH_STACK.
-
