@@ -606,6 +606,11 @@ Definition exec_store (chunk: memory_chunk) (m: mem)
   | None => Stuck
   end.
 
+Definition free' (m: mem) (b: block) (lo hi: Z) :=
+  if zlt lo hi
+  then Mem.free m b lo hi
+  else Some m.
+
 (** Execution of a single instruction [i] in initial state
     [rs] and [m].  Return updated state.  For instructions
     that correspond to actual IA32 instructions, the cases are
@@ -982,7 +987,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
           | Some sp =>
               match rs#RSP with
               | Vptr stk ofs =>
-                  match Mem.free m stk (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sz) with
+                  match free' m stk (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sz) with
                   | None => Stuck
                   | Some m' => Next (nextinstr (rs#RSP <- sp #RA <- ra)) m'
                   end

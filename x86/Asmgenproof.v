@@ -417,6 +417,7 @@ Proof.
   try (unfold exec_load; destruct (Mem.loadv _ _ _));
   try (unfold exec_store; destruct (eval_addrmode _ _ _); simpl);
   unfold goto_label;
+  unfold free';
   repeat
     match goal with
       | |- match ?x with _ => _ end = Next _ _ -> _ =>
@@ -431,6 +432,9 @@ Proof.
   try apply Ple_refl.
   - replace (Mem.nextblock m') with (Pos.succ (Mem.nextblock m)) by congruence.
     xomega.
+  - destruct zlt.
+    + apply Mem.nextblock_free in H1. rewrite <- H1. subst. reflexivity.
+    + inv H1. reflexivity.
 Qed.
 
 Lemma exec_straight_nextblock tf c rs m k rs' m':
@@ -695,38 +699,79 @@ Opaque loadind.
   exploit Mem.free_parallel_extends; eauto. intros [m2' [E F]].
   destruct ros as [rf|fid]; simpl in H; monadInv H6.
 + (* Indirect call *)
-  generalize (code_tail_next_int _ _ _ _ NOOV H7). intro CT1.
-  left; econstructor; split.
-  eapply plus_left. eapply exec_step_internal. eauto.
-  eapply functions_transl; eauto. eapply find_instr_tail; eauto.
-  simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
-  rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG). rewrite E. eauto.
-  apply star_one. eapply exec_step_internal.
-  transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
-  eapply functions_transl; eauto. eapply find_instr_tail; eauto.
-  simpl. eauto. traceEq.
-  econstructor; eauto.
-  apply Mem.nextblock_free in E. congruence.
-  apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
-  eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
-  simpl. rewrite Pregmap.gss. rewrite <- (ireg_of_eq rf x0); eauto.
-  eapply agree_mregs. eapply agree_nextinstr; eauto.
-  eapply agree_set_other; try reflexivity. eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
+  destruct (zle (fn_stacksize f) 0).
+  * (* fn_stacksize f <= 0 *)
+    generalize (code_tail_next_int _ _ _ _ NOOV H7). intro CT1.
+    left; econstructor; split.
+    eapply plus_left. eapply exec_step_internal. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
+    rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
+    unfold free'. rewrite zlt_false by omega. eauto.
+    apply star_one. eapply exec_step_internal.
+    transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. eauto. traceEq.
+    econstructor; eauto.
+    eapply Mem.free_left_extends; eauto.
+    apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
+    eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
+    simpl. rewrite Pregmap.gss. rewrite <- (ireg_of_eq rf x0); eauto.
+    eapply agree_mregs. eapply agree_nextinstr; eauto.
+    eapply agree_set_other; try reflexivity. eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
+  * (* fn_stacksize f > 0 *)
+    generalize (code_tail_next_int _ _ _ _ NOOV H7). intro CT1.
+    left; econstructor; split.
+    eapply plus_left. eapply exec_step_internal. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
+    rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
+    unfold free'. rewrite zlt_true by omega. rewrite E. eauto.
+    apply star_one. eapply exec_step_internal.
+    transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. eauto. traceEq.
+    econstructor; eauto.
+    apply Mem.nextblock_free in E. congruence.
+    apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
+    eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
+    simpl. rewrite Pregmap.gss. rewrite <- (ireg_of_eq rf x0); eauto.
+    eapply agree_mregs. eapply agree_nextinstr; eauto.
+    eapply agree_set_other; try reflexivity. eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
 + (* Direct call *)
-  generalize (code_tail_next_int _ _ _ _ NOOV H7). intro CT1.
-  left; econstructor; split.
-  eapply plus_left. eapply exec_step_internal. eauto.
-  eapply functions_transl; eauto. eapply find_instr_tail; eauto.
-  simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
-  rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG). rewrite E. eauto.
-  apply star_one. eapply exec_step_internal.
-  transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
-  eapply functions_transl; eauto. eapply find_instr_tail; eauto.
-  simpl. eauto. traceEq.
-  econstructor; eauto.
-  apply Mem.nextblock_free in E. congruence.
-  apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
-  eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
+  destruct (zle (fn_stacksize f) 0).
+  * (* fn_stacksize f <= 0 *)
+    generalize (code_tail_next_int _ _ _ _ NOOV H7). intro CT1.
+    left; econstructor; split.
+    eapply plus_left. eapply exec_step_internal. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
+    rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
+    unfold free'. rewrite zlt_false by omega. eauto.
+    apply star_one. eapply exec_step_internal.
+    transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. eauto. traceEq.
+    econstructor; eauto.
+    eapply Mem.free_left_extends; eauto.
+    apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
+    eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
+  * (* fn_stacksize f > 0 *)
+    generalize (code_tail_next_int _ _ _ _ NOOV H7). intro CT1.
+    left; econstructor; split.
+    eapply plus_left. eapply exec_step_internal. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
+    rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
+    unfold free'. rewrite zlt_true by omega. rewrite E. eauto.
+    apply star_one. eapply exec_step_internal.
+    transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. eauto. traceEq.
+    econstructor; eauto.
+    apply Mem.nextblock_free in E. congruence.
+    apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
+    eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
 
 - (* Mbuiltin *)
   inv AT. monadInv H4.
@@ -885,19 +930,37 @@ Transparent destroyed_by_jumptable.
   exploit Mem.free_parallel_extends; eauto. intros [m2' [E F]].
   monadInv H6.
   exploit code_tail_next_int; eauto. intro CT1.
-  left; econstructor; split.
-  eapply plus_left. eapply exec_step_internal. eauto.
-  eapply functions_transl; eauto. eapply find_instr_tail; eauto.
-  simpl. rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG). rewrite E. eauto.
-  apply star_one. eapply exec_step_internal.
-  transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
-  eapply functions_transl; eauto. eapply find_instr_tail; eauto.
-  simpl. rewrite (nextinstr_inv), Pregmap.gso, Pregmap.gss by discriminate.
-  rewrite LIVE. eauto. traceEq.
-  constructor; auto.
-  apply Mem.nextblock_free in E. congruence.
-  apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
-  eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
+  destruct (zle (fn_stacksize f) 0).
+  * (* fn_stacksize f <= 0 *)
+    left; econstructor; split.
+    eapply plus_left. eapply exec_step_internal. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
+    unfold free'. rewrite zlt_false by omega. eauto.
+    apply star_one. eapply exec_step_internal.
+    transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. rewrite (nextinstr_inv), Pregmap.gso, Pregmap.gss by discriminate.
+    rewrite LIVE. eauto. traceEq.
+    constructor; auto.
+    eapply Mem.free_left_extends; eauto.
+    apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
+    eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
+  * (* fn_stacksize f > 0 *)
+    left; econstructor; split.
+    eapply plus_left. eapply exec_step_internal. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
+    unfold free'. rewrite zlt_true by omega. rewrite E. eauto.
+    apply star_one. eapply exec_step_internal.
+    transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
+    eapply functions_transl; eauto. eapply find_instr_tail; eauto.
+    simpl. rewrite (nextinstr_inv), Pregmap.gso, Pregmap.gss by discriminate.
+    rewrite LIVE. eauto. traceEq.
+    constructor; auto.
+    apply Mem.nextblock_free in E. congruence.
+    apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
+    eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
 
 - (* internal function *)
   exploit functions_translated; eauto. intros (b & tf & A & B & C). monadInv B.
