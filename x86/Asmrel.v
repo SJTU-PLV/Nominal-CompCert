@@ -4,19 +4,7 @@ Require Import Locations Stacklayout Conventions.
 Require Import Mach LanguageInterface CallconvAlgebra CKLR CKLRAlgebra.
 Require Import Eventsrel.
 Require Import Linking.
-Require Import Asm.
-
-Lemma free_same m b lo hi m':
-  Mem.free m b lo hi = Some m' ->
-  lo >= hi ->
-  m = m'.
-Proof.
-  intros H H'.
-  apply Mem.free_result in H.
-  destruct m as [cont acc next]. destruct m' as [cont' acc' next'].
-  unfold Mem.unchecked_free in H. simpl in H. inv H.
-  apply Mem.mkmem_ext; auto; clear -H'.
-Admitted.
+Require Import Asm Asmgenproof.
 
 Lemma ptrofs_add_0 ofs: Ptrofs.add ofs (Ptrofs.repr 0) = ofs.
 Admitted.
@@ -374,13 +362,11 @@ Section PROG.
       + congruence.
     - destruct m as [m1' b1']. destruct n as [m2' b2'].
       destruct H1 as (Hw & Hm' & Hb'). cbn [fst snd] in *.
-      destruct (Mem.store _ _ _ _) eqn: Hst.
-      2: { match_simpl. }
+      destruct (Mem.store _ _ _ _) eqn: Hst; match_simpl.
       eapply transport in Hst as (mx & Hst' & Hmx).
       2: { clear Hst. repeat rstep. eapply regset_inject_acc; eauto. }
       rewrite Hst'. clear Hst'. destruct Hmx as (w'' & Hw'' & Hmx).
-      destruct (Mem.store _ _ _ _) eqn: Hst.
-      2: { match_simpl. }
+      destruct (Mem.store _ _ _ _) eqn: Hst; match_simpl.
       eapply transport in Hst as (my & Hst' & Hmy).
       2: { clear Hst. repeat rstep. eapply regset_inject_acc; [ | eauto]. rauto. }
       rewrite Hst'. clear Hst'. destruct Hmy as (w''' & Hw''' & Hmy).
@@ -390,30 +376,34 @@ Section PROG.
         split; auto. eapply block_inject_sameofs_incr; [ | eauto ]. rstep. cbn in *; rauto.
       + eapply regset_inject_acc; [ | eauto ]. rauto.
       + rauto.
-    - destruct (Mem.loadv _ _ _) as [ ra1 | ] eqn: Hld.
-      2: { match_simpl. }
+    - destruct (Mem.loadv _ _ _) as [ ra1 | ] eqn: Hld; match_simpl.
       eapply transport in Hld as (ra2 & Hld' & Hra).
       2: { clear Hld. repeat rstep. eapply Hrs. }
       rewrite Hld'. clear Hld'.
-      destruct (Mem.loadv _ _ _) as [| rsp1] eqn: Hld.
-      2: { match_simpl. }
+      destruct (Mem.loadv _ _ _) as [| rsp1] eqn: Hld; match_simpl.
       eapply transport in Hld as (rsp2 & Hld' & Hrsp).
       2: { clear Hld. repeat rstep. eapply Hrs. }
       rewrite Hld'. clear Hld'.
       specialize (Hrs SP) as Hsp. inv Hsp; match_simpl.
-      erewrite cklr_weak_valid_pointer_address_inject; eauto.
-      destruct Mem.free eqn: Hfree.
-        2: { match_simpl. }
-        eapply transport in Hfree as (m' & Hfree' & Hm').
-        2: { clear Hfree. repeat rstep. eauto. }
-        destruct Hm' as (w' & Hw' & Hm').
-        rewrite Hfree'.
-        exists w'. split. rauto. constructor; auto. rstep.
-        apply set_inject. rstep.
-        apply set_inject. rstep.
-        eapply regset_inject_acc; eauto.
-      + admit.
-  Admitted.
+      destruct (zlt 0 sz).
+      + (* sz > 0 *)
+        unfold free'. repeat rewrite zlt_true by omega.
+        destruct Mem.free eqn: Hfree; match_simpl.
+        erewrite cklr_address_inject; eauto.
+        * eapply transport in Hfree as (m' & Hfree' & Hm').
+          2: { clear Hfree. repeat rstep. eauto. }
+          destruct Hm' as (w' & Hw' & Hm').
+          rewrite Hfree'.
+          exists w'. split. rauto.
+          constructor; auto. rstep.
+          match_simpl. rauto.
+        * eapply Mem.free_range_perm in Hfree. apply Hfree. omega.
+      + (* sz <= 0 *)
+        unfold free'. repeat rewrite zlt_false by omega.
+        exists w. split. rauto.
+        constructor; auto.
+        match_simpl.
+  Qed.
 
   Global Instance find_funct_ptr_inject R w ge1 b1 ge2 b2 f:
     Transport (genv_match R w * block_inject_sameofs (mi R w)) (ge1, b1) (ge2, b2)
@@ -608,13 +598,6 @@ Section PROG.
  
 End PROG.
 
-Lemma mi_nextblocks R w m1 m2 m1' m2':
-  match_mem R w m1 m2 ->
-  (<> match_mem R)%klr w m1' m2' ->
-  Ple (Mem.nextblock m1) (Mem.nextblock m1') ->
-  Ple (Mem.nextblock m2) (Mem.nextblock m2').
-Admitted.
-
 Lemma init_nb_match_acc R w w' nb1 nb2 m1 m2:
   match_mem R w m1 m2 ->
   (nb1 <= Mem.nextblock m1)%positive ->
@@ -646,73 +629,32 @@ Inductive init_nb_state_match R w: rel (block * state) (block * state) :=
     (nb2 <= Mem.nextblock m2)%positive ->
     init_nb_state_match R w (nb1, State rs1 m1 live) (nb2, State rs2 m2 live).
 
-Lemma exec_load_valid_block ge chunk m1 a rs1 rd rs2 m2 live b:
-  exec_load ge chunk m1 a rs1 rd = Next' rs2 m2 live ->
-  Mem.valid_block m1 b ->
-  Mem.valid_block m2 b.
-Proof.
-  unfold exec_load. destruct Mem.loadv.
-  - inversion 1. auto.
-  - congruence.
-Qed.
+(* Lemma step_valid_block nb ge rs1 m1 live1 t rs2 m2 live2 b: *)
+(*   step nb ge (State rs1 m1 live1) t (State rs2 m2 live2) -> *)
+(*   Mem.valid_block m1 b -> *)
+(*   Mem.valid_block m2 b. *)
+(* Proof. *)
+(*   inversion 1; subst; intros. *)
+(*   - eapply exec_instr_valid_block; eauto. *)
+(*   - eapply ec_valid_block; eauto. *)
+(*     apply external_call_spec. *)
+(*   - eapply ec_valid_block; eauto. *)
+(*     apply external_call_spec. *)
+(* Qed. *)
 
-Lemma exec_store_valid_block ge chunk m1 a rs1 rs d rs2 m2 live b:
-  exec_store ge chunk m1 a rs1 rs d = Next' rs2 m2 live ->
-  Mem.valid_block m1 b ->
-  Mem.valid_block m2 b.
-Proof.
-  unfold exec_store. destruct Mem.storev eqn: Hst.
-  - unfold Mem.storev in Hst. destruct eval_addrmode; try congruence.
-    inversion 1; subst. intros.
-    exploit Mem.store_valid_block_1; eauto.
-  - congruence.
-Qed.
 
-Lemma exec_instr_valid_block nb ge f i rs1 m1 rs2 m2 live b:
-  exec_instr nb ge f i rs1 m1 = Next' rs2 m2 live ->
-  Mem.valid_block m1 b ->
-  Mem.valid_block m2 b.
-Proof.
-  destruct i; cbn; try inversion 1;
-    first [ intros; eapply exec_load_valid_block in H; eauto |
-            intros; eapply exec_store_valid_block in H; eauto |
-            auto ];
-    unfold goto_label in H;
-    try repeat
-        match goal with
-        | [ H: (match ?x with | _ => _ end) = _ |- _ ] =>
-          let H' := fresh "H" in destruct x eqn: H'
-        end; try congruence.
-  - inv H. intros.
-    eapply Mem.store_valid_block_1. eauto.
-    eapply Mem.store_valid_block_1. eauto.
-    eapply Mem.valid_block_alloc; eauto.
-  - inv H. intros.
-    eapply Mem.valid_block_free_1; eauto.
-Qed.
 
-Lemma step_valid_block nb ge rs1 m1 live1 t rs2 m2 live2 b:
-  step nb ge (State rs1 m1 live1) t (State rs2 m2 live2) ->
-  Mem.valid_block m1 b ->
-  Mem.valid_block m2 b.
-Proof.
-  inversion 1; subst; intros.
-  - eapply exec_instr_valid_block; eauto.
-  - eapply ec_valid_block; eauto.
-    apply external_call_spec.
-  - eapply ec_valid_block; eauto.
-    apply external_call_spec.
-Qed.
-
-Lemma step_valid_block' nb ge rs1 m1 live1 t rs2 m2 live2:
-  step nb ge (State rs1 m1 live1) t (State rs2 m2 live2) ->
-  Ple (Mem.nextblock m1) (Mem.nextblock m2).
-Proof.
-  intros Hstep. unfold Ple. rewrite Pos.le_nlt.
-  unfold not. intros.
-  exploit step_valid_block. eauto. apply H.
-  apply Pos.lt_irrefl.
-Qed.
+(* Lemma step_valid_block' nb ge rs1 m1 live1 t rs2 m2 live2: *)
+(*   step nb ge (State rs1 m1 live1) t (State rs2 m2 live2) -> *)
+(*   Ple (Mem.nextblock m1) (Mem.nextblock m2). *)
+(* Proof. *)
+(*   inversion 1; subst; intros. *)
+(*   - eapply exec_instr_nextblock; eauto. *)
+(*   intros Hstep. unfold Ple. rewrite Pos.le_nlt. *)
+(*   unfold not. intros. *)
+(*   exploit step_valid_block. eauto. apply H. *)
+(*   apply Pos.lt_irrefl. *)
+(* Qed. *)
 
 Lemma semantics_asm_rel p R:
   forward_simulation (cc_asm R) (cc_asm R) (Asm.semantics p) (Asm.semantics p).
@@ -794,7 +736,7 @@ Proof.
       inv H1. eexists (_, _). repeat apply conj.
       (* after_nexternal *)
       * econstructor.
-        -- eapply mi_nextblocks; eauto.
+        -- eapply 
            eexists. split; eauto.
         (* -- remember (Mem.alloc rm1 0 0) as mres. destruct mres as [m1' b1]. *)
         (*    remember (Mem.alloc rm2 0 0) as mres. destruct mres as [m2' b2]. *)
