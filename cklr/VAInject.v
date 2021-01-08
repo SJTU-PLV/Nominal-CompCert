@@ -188,6 +188,11 @@ Next Obligation.
   inv H. eapply (cklr_perm_inv inj); eauto.
 Qed.
 
+Next Obligation.
+  inv H. eapply (cklr_nextblock_incr inj); eauto.
+  destruct H0 as (w' & Hw' & Hm). inv Hm.
+  eexists. split. apply Hw'. auto.
+Qed.
 
 (** * Correspondance with [vamatch] *)
 

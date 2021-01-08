@@ -167,6 +167,12 @@ Record cklr :=
       Mem.perm m2 b2 ofs2 k p ->
       Mem.perm m1 b1 ofs1 k p \/ ~Mem.perm m1 b1 ofs1 Max Nonempty;
 
+    cklr_nextblock_incr w m1 m2 m1' m2':
+      match_mem w m1 m2 ->
+      (<> match_mem)%klr w m1' m2' ->
+      Ple (Mem.nextblock m1) (Mem.nextblock m1') ->
+      Ple (Mem.nextblock m2) (Mem.nextblock m2');
+
   }.
 
 Global Existing Instance cklr_kf.

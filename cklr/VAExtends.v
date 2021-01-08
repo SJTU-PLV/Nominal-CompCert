@@ -523,6 +523,11 @@ Next Obligation.
   eapply Mem.mext_perm_inv in H1; eauto.
 Qed.
 
+(** nextblock incr *)
+Next Obligation.
+  inv H. destruct H0 as (?&?&?).
+  inv H0. inv H7. inv H10. congruence.
+Qed.
 
 (** * Other properties *)
 
