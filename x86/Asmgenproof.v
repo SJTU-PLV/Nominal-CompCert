@@ -409,8 +409,8 @@ Inductive match_states: Mach.state -> Asm.state -> Prop :=
       match_states (Mach.Returnstate s ms m)
                    (Asm.State rs m' live).
 
-Lemma exec_instr_nextblock f i rs m rs' m':
-  exec_instr init_nb tge f i rs m = Next rs' m' ->
+Lemma exec_instr_nextblock f i rs m rs' m' b:
+  exec_instr init_nb tge f i rs m = Next' rs' m' b ->
   Ple (Mem.nextblock m) (Mem.nextblock m').
 Proof.
   destruct i; simpl;
@@ -420,7 +420,7 @@ Proof.
   unfold free';
   repeat
     match goal with
-      | |- match ?x with _ => _ end = Next _ _ -> _ =>
+      | |- match ?x with _ => _ end = Next' _ _ _ -> _ =>
         let H := fresh in
         destruct x eqn:H;
         try apply Mem.nextblock_free in H;
