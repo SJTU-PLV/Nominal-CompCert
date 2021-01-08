@@ -311,7 +311,7 @@ Next Obligation. (* nextblock incr *)
   unfold Ple in *. rewrite Pos.le_nlt in *.
   exploit inj_acc_separated;
     [ apply H
-    | cbn in *; eapply PreOrder_Transitive; eauto
+    | cbn in *; etransitivity; eauto
     | eapply Mem.mi_freeblocks;[ apply Hm | apply H1 ]
     | apply Hb
     | ].
