@@ -106,14 +106,13 @@ Section PROG.
       (regset_inject R w)
       subrel.
   Proof.
-    repeat rstep.
-    intros rs1 rs2 rel.
+    repeat rstep. intros rs1 rs2 rel.
     unfold regset_inject', regset_inject in *.
     intros r. destruct (PregEq.eq r PC) as [-> | ].
     - specialize (rel PC) as [? H].
-      destruct H. auto. econstructor. eauto.
-      symmetry. apply Ptrofs.add_zero.
-      constructor.
+      destruct H; auto.
+      econstructor. eauto.
+      rewrite Ptrofs.add_zero; auto.
     - apply rel. auto.
   Qed.
   
@@ -138,7 +137,7 @@ Section PROG.
       (@Pregmap.set val)
       (- ==> Val.inject (mi R w) ++> regset_inject R w ++> regset_inject R w).
   Proof.
-    unfold regset_inject, Pregmap.set. repeat rstep.
+    unfold regset_inject, Pregmap.set. rauto.
   Qed.
   Instance set_params: Params (@Pregmap.set) 4.
 
@@ -147,17 +146,40 @@ Section PROG.
       (regset_inject R w rs1 rs2)
       (Val.inject (mi R w) (rs1 # r) (rs2 # r)) | 70.
   Proof.
-    intros Hrs. apply Hrs.
+    easy.
   Qed.
-  
+
+  (* this works only with params claimed *)
+  (* Global Instance regset_inject_acc R: *)
+  (*   Monotonic *)
+  (*     (@regset_inject R) *)
+  (*     (acc tt ++> subrel). *)
+  (* Proof. *)
+  (*   unfold regset_inject. repeat rstep. *)
+  (*   intros rs1 rs2 Hrs i. rauto. *)
+  (* Qed. *)
+  (* Global Instance regset_inject_params: Params (@regset_inject) 3. *)
+
+  (* this works no matter what *)
   Global Instance regset_inject_acc:
     Monotonic
       (@regset_inject)
-      (forallr - @ R, wacc R ++> subrel).
+      (forallr - @ R, acc tt ++> subrel).
   Proof.
     unfold regset_inject. repeat rstep.
     intros rs1 rs2 Hrs i. rauto.
   Qed.
+
+  (* wacc R doesn't work on composing worlds, i.e. it fails when w~> w'' but w ~> w' and w' ~> w'' are given *)
+  (* Global Instance regset_inject_acc: *)
+  (*   Monotonic *)
+  (*     (@regset_inject) *)
+  (*     (forallr - @ R, wacc R ++> subrel). *)
+  (* Proof. *)
+  (*   unfold regset_inject. repeat rstep. *)
+  (*   intros rs1 rs2 Hrs i. rauto. *)
+  (* Qed. *)
+
 
   Lemma set_inject' R w:
     forall r: PregEq.t,
@@ -171,10 +193,9 @@ Section PROG.
     intros r Hr.
     unfold regset_inject', Pregmap.set.
     intros v1 v2 Hv rs1 rs2 Hrs r'.
-    split; intros.
-    - destruct PregEq.eq; auto.
-      destruct (PregEq.eq r' PC). congruence. apply Hrs. auto.
-    - destruct PregEq.eq. congruence. apply Hrs. auto.
+    split; intros; destruct PregEq.eq; try congruence.
+    - destruct (PregEq.eq r' PC). congruence. now apply Hrs.
+    - now apply Hrs.
   Qed.
 
   Global Instance nextinstr_inject R w:
@@ -182,7 +203,7 @@ Section PROG.
       nextinstr
       (regset_inject R w ++> regset_inject R w).
   Proof.
-    unfold nextinstr. repeat rstep.  
+    unfold nextinstr. rauto.
   Qed.
   
   Global Instance undef_regs_inject R w:
@@ -192,7 +213,7 @@ Section PROG.
   Proof.
     intros regs. induction regs.
     - rauto.
-    - rstep. apply IHregs. rstep; eauto.
+    - rstep. apply IHregs. rauto.
   Qed.
 
   Global Instance nextinstr_nf_inject R w:
@@ -200,7 +221,7 @@ Section PROG.
       nextinstr_nf
       (regset_inject R w ++> regset_inject R w).
   Proof.
-    unfold nextinstr_nf. repeat rstep.
+    unfold nextinstr_nf. rauto.
   Qed.
 
   Global Instance eval_addrmode32_inject R w:
@@ -208,7 +229,7 @@ Section PROG.
       eval_addrmode32
       (Genv.match_stbls (mi R w) ++> - ==> regset_inject R w ++> Val.inject (mi R w)).
   Proof.
-    unfold eval_addrmode32. repeat rstep.
+    unfold eval_addrmode32. rauto.
   Qed.
 
   Global Instance eval_addrmode64_inject R w:
@@ -216,7 +237,7 @@ Section PROG.
       eval_addrmode64
       (Genv.match_stbls (mi R w) ++> - ==> regset_inject R w ++> Val.inject (mi R w)).
   Proof.
-    unfold eval_addrmode64. repeat rstep.
+    unfold eval_addrmode64. rauto.
   Qed.
 
   Global Instance eval_addrmode_inject R w:
@@ -224,16 +245,16 @@ Section PROG.
       eval_addrmode
       (Genv.match_stbls (mi R w) ++> - ==> regset_inject R w ++> Val.inject (mi R w)).
   Proof.
-    unfold eval_addrmode. repeat rstep.
+    unfold eval_addrmode. rauto.
   Qed.
 
-  Global Instance exec_load_match R w:
+  Global Instance exec_load_match R:
     Monotonic
       exec_load
-      (Genv.match_stbls (mi R w) ++> - ==> match_mem R w ++>
-       - ==> regset_inject R w ++> - ==> outcome_match R w).
+      (|= Genv.match_stbls @@ [mi R] ++> - ==> match_mem R ++>
+       - ==> regset_inject R ++> - ==> <> outcome_match R).
   Proof.
-    unfold exec_load. repeat rstep.
+    unfold exec_load. rauto.
   Qed.
 
   Global Instance outcome_stuck_acc R o:
@@ -250,7 +271,7 @@ Section PROG.
   Proof.
     unfold exec_store. repeat rstep.
     destruct H4 as (w'&Hw'&Hm).
-    eexists; split; repeat rstep.
+    eexists; split; rauto.
   Qed.
 
   (* TODO: These two lemma should go to Valuesrel.v *)
@@ -270,7 +291,7 @@ Section PROG.
       eval_testcond
       (- ==> regset_inject R w ++> option_le eq).
   Proof.
-    unfold eval_testcond. repeat rstep.
+    unfold eval_testcond. rauto.
   Qed.
   
   Global Instance goto_label_inject R w:
@@ -295,103 +316,54 @@ Section PROG.
   Proof.
     unfold init_nb_match. repeat rstep. eauto.
   Qed.
-
-  Ltac match_simpl :=
-    repeat
-      match goal with
-      | [ |- (<> outcome_match _)%klr _ (exec_store _ _ _ _ _ _ _) (exec_store _ _ _ _ _ _ _) ] =>
-        apply exec_store_match; auto
-      | [ |- (<> outcome_match _)%klr _ (exec_load _ _ _ _ _ _) (exec_load _ _ _ _ _ _) ] =>
-        eexists; split; [rauto | apply exec_load_match; auto]
-      | [ |- (<> outcome_match _)%klr _ (Next _ _) (Next _ _) ] =>
-        eexists; split; [rauto | constructor; auto]
-      | [ |- (<> outcome_match _)%klr _ Stuck _ ] =>
-        eexists; split; [rauto | constructor]
-      | [ |- (regset_inject _ _ (nextinstr _) (nextinstr _))] => rstep
-      | [ |- (regset_inject _ _ (nextinstr_nf _) (nextinstr_nf _))] => unfold nextinstr_nf; rstep
-      | [ |- (regset_inject _ _ (undef_regs _ _) (undef_regs _ _))] => apply undef_regs_inject
-      | [ |- (regset_inject _ _ (_ # _ <- _) (_ # _ <- _))] => apply set_inject
-      | [ |- (Val.inject _ (Genv.symbol_address _ _ _) (Genv.symbol_address _ _ _))] => rstep
-      | [ Hrs: regset_inject _ _ _ _ |-
-          _ (match _ ?r with | _ => _ end) (match _ ?r with | _ => _ end) ] =>
-        let H := fresh "H" in
-        specialize (Hrs r) as H; inv H; try repeat rstep
-      | [ |- _ (match ?x with | _ => _ end) (match ?x with | _ => _ end)] => repeat rstep
-      | [ |- regset_inject _ _ _ (match ?x with | _ => _ end)] => destruct x
-      | [ |- (Val.inject _ _ _)] => try rstep
-      | [ |- option_le _ _ _ ] => rstep
-      | [ |- Genv.match_stbls _ _ _ ] => apply genv_genv_match
-      | _ => idtac
-      end; auto.
-
   
   Global Instance exec_instr_match R:
     Monotonic
       (@exec_instr)
-      (|= init_nb_match R ++>
-       genv_match R ++> - ==> - ==>
-       regset_inject' R ++> match_mem R ++>
+      (|= init_nb_match R ++> Genv.match_stbls @@ [mi R] ++>
+       - ==> - ==> regset_inject' R ++> match_mem R ++>
        (<> outcome_match R)).
   Proof.
     intros w b1 b2 Hb ge1 ge2 Hge f i rs1 rs2 Hrs' m1 m2 Hm.
-    (* destruct i; cbn; repeat match_simpl. *)
     destruct i; cbn; apply regset_inj_subrel in Hrs' as Hrs;
       unfold compare_ints, compare_longs, compare_floats, compare_floats32, undef_regs;
-      match_simpl; repeat rstep; try rauto; auto; match_simpl.
-    - apply eval_addrmode32_inject; auto.
-    - apply eval_addrmode64_inject; auto.
-    - eexists; split; [rauto | apply goto_label_inject; auto].
+      repeat rstep.
+    - eexists. split. rauto.
+      repeat first [rstep |
+        match goal with
+        | |- regset_inject _ _ _ match ?x with | _ => _ end => destruct x
+        end]. 
+    - eexists. split. rauto.
+      repeat first [rstep |
+        match goal with
+        | |- regset_inject _ _ _ match ?x with | _ => _ end => destruct x
+        end]. 
+    - eexists. split. rauto.
+      rstep; auto.
       apply set_inject'; [discriminate | auto | ].
       apply set_inject'; [discriminate | auto | auto ].
-    - destruct inner_sp eqn: Hsp; match_simpl.
-      exploit inner_sp_rel; [eauto | specialize (Hrs SP); apply Hrs | ].
-      intros. inv H.
-      + rewrite <- H0 in Hsp. inv Hsp.
-        eexists. split. rauto. constructor. match_simpl. auto.
-      + congruence.
     - destruct m as [m1' b1']. destruct n as [m2' b2'].
       destruct H1 as (Hw & Hm' & Hb'). cbn [fst snd] in *.
-      destruct (Mem.store _ _ _ _) eqn: Hst; match_simpl.
-      eapply transport in Hst as (mx & Hst' & Hmx).
-      2: { clear Hst. repeat rstep. eapply regset_inject_acc; eauto. }
-      rewrite Hst'. clear Hst'. destruct Hmx as (w'' & Hw'' & Hmx).
-      destruct (Mem.store _ _ _ _) eqn: Hst; match_simpl.
-      eapply transport in Hst as (my & Hst' & Hmy).
-      2: { clear Hst. repeat rstep. eapply regset_inject_acc; [ | eauto]. rauto. }
-      rewrite Hst'. clear Hst'. destruct Hmy as (w''' & Hw''' & Hmy).
-      exists w'''. split. rauto.
-      constructor; [ match_simpl | rauto ].
-      + apply block_sameofs_ptrbits_inject.
-        split; auto. eapply block_inject_sameofs_incr; [ | eauto ]. rstep. cbn in *; rauto.
-      + eapply regset_inject_acc; [ | eauto ]. rauto.
-      + rauto.
-    - destruct (Mem.loadv _ _ _) as [ ra1 | ] eqn: Hld; match_simpl.
-      eapply transport in Hld as (ra2 & Hld' & Hra).
-      2: { clear Hld. repeat rstep. eapply Hrs. }
-      rewrite Hld'. clear Hld'.
-      destruct (Mem.loadv _ _ _) as [| rsp1] eqn: Hld; match_simpl.
-      eapply transport in Hld as (rsp2 & Hld' & Hrsp).
-      2: { clear Hld. repeat rstep. eapply Hrs. }
-      rewrite Hld'. clear Hld'.
-      specialize (Hrs SP) as Hsp. inv Hsp; match_simpl.
-      destruct (zlt 0 sz).
+      repeat rstep. rewrite Ptrofs.add_zero_l.
+      destruct H1 as (w2 & Hw2 & Hm2).
+      repeat rstep.
+      destruct H1 as (w3 & Hw3 & Hm3).
+      exists w3. split. rauto.
+      repeat rstep. simpl in *.
+      apply block_sameofs_ptrbits_inject; split; rauto.
+    - destruct (zlt 0 sz).
       + (* sz > 0 *)
-        unfold free'. repeat rewrite zlt_true by omega.
-        destruct Mem.free eqn: Hfree; match_simpl.
-        erewrite cklr_address_inject; eauto.
-        * eapply transport in Hfree as (m' & Hfree' & Hm').
-          2: { clear Hfree. repeat rstep. eauto. }
-          destruct Hm' as (w' & Hw' & Hm').
-          rewrite Hfree'.
-          exists w'. split. rauto.
-          constructor; auto. rstep.
-          match_simpl. rauto.
+        unfold free'. repeat rewrite zlt_true by omega.                
+        destruct Mem.free eqn: Hfree; try rauto.
+        inv H. erewrite cklr_address_inject; eauto.
+        * eapply transport in Hfree as (m' & Hfree' & Hm');
+            [ | clear Hfree; repeat rstep; eauto ].
+          destruct Hm' as (w' & Hw' & Hm'). rewrite Hfree'.
+          exists w'. split; rauto.
         * eapply Mem.free_range_perm in Hfree. apply Hfree. omega.
       + (* sz <= 0 *)
         unfold free'. repeat rewrite zlt_false by omega.
-        exists w. split. rauto.
-        constructor; auto.
-        match_simpl.
+        exists w. split; rauto.
   Qed.
 
   Lemma reg_inj_strengthen R w ge1 ge2 rs1 rs2 b ofs f:
