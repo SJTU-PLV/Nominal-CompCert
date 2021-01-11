@@ -131,7 +131,8 @@ Section PROG.
       Monotonic
         (@Asm.State)
         (regset_inject R w ++> match_mem R w ++> - ==> state_match R w).
-
+  Existing Instance State_rel.
+  
   Global Instance set_inject R w:
     Monotonic
       (@Pregmap.set val)
@@ -149,18 +150,6 @@ Section PROG.
     easy.
   Qed.
 
-  (* this works only with params claimed *)
-  (* Global Instance regset_inject_acc R: *)
-  (*   Monotonic *)
-  (*     (@regset_inject R) *)
-  (*     (acc tt ++> subrel). *)
-  (* Proof. *)
-  (*   unfold regset_inject. repeat rstep. *)
-  (*   intros rs1 rs2 Hrs i. rauto. *)
-  (* Qed. *)
-  (* Global Instance regset_inject_params: Params (@regset_inject) 3. *)
-
-  (* this works no matter what *)
   Global Instance regset_inject_acc:
     Monotonic
       (@regset_inject)
@@ -169,17 +158,6 @@ Section PROG.
     unfold regset_inject. repeat rstep.
     intros rs1 rs2 Hrs i. rauto.
   Qed.
-
-  (* wacc R doesn't work on composing worlds, i.e. it fails when w~> w'' but w ~> w' and w' ~> w'' are given *)
-  (* Global Instance regset_inject_acc: *)
-  (*   Monotonic *)
-  (*     (@regset_inject) *)
-  (*     (forallr - @ R, wacc R ++> subrel). *)
-  (* Proof. *)
-  (*   unfold regset_inject. repeat rstep. *)
-  (*   intros rs1 rs2 Hrs i. rauto. *)
-  (* Qed. *)
-
 
   Lemma set_inject' R w:
     forall r: PregEq.t,
@@ -272,18 +250,6 @@ Section PROG.
     unfold exec_store. repeat rstep.
     destruct H4 as (w'&Hw'&Hm).
     eexists; split; rauto.
-  Qed.
-
-  (* TODO: These two lemma should go to Valuesrel.v *)
-  Global Instance val_negativel_inject f:
-    Monotonic Val.negativel (Val.inject f ++> Val.inject f).
-  Proof.
-    unfold Val.negativel. rauto.
-  Qed.
-  Global Instance val_subl_overflow_inject f:
-    Monotonic Val.subl_overflow (Val.inject f ++> Val.inject f ++> Val.inject f).
-  Proof.
-    unfold Val.subl_overflow. rauto.
   Qed.
 
   Global Instance eval_testcond_le R w:
@@ -422,7 +388,7 @@ Section PROG.
     inv Hvs; transport_hyps; eexists; split; try constructor; rauto.
   Qed.
   Hint Extern 1 (Transport _ _ _ _ _) =>
-  set_le_transport @extcall_arg_pair: typeclass_instances.
+    set_le_transport @extcall_arg_pair: typeclass_instances.
   
   Global Instance extcall_arguments_inject R w:
     Monotonic
@@ -471,9 +437,8 @@ Section PROG.
     edestruct exec_instr_match; try apply Hrel.
     eexists. split. cbn in *. reflexivity.
     eexists. split; eauto. apply H0. subst o. apply H0.
-  Qed.
-  
-  Existing Instance State_rel.
+  Qed.  
+
   Global Instance step_rel R:
     Monotonic
       (@step)
@@ -488,16 +453,15 @@ Section PROG.
     inversion Hpc; [ | inversion H1; congruence ].
     assert (block_inject_sameofs (mi R w) b0 b3) by congruence.
     inversion H1; subst; replace b with b0 in * by congruence.
-    - transport H13. transport H15. inversion H6. subst.
+    - transport FIND. transport EXEC. inversion INSTR. inv H6.
       eexists. split.
       + econstructor; eauto. congruence.
       + eexists. split. rauto. easy.
-    - transport H13. transport H15. transport H16.
+    - transport FIND. transport EVAL. transport CALL.
       eexists. split.
-      + econstructor; eauto.
-        rewrite <- H14. repeat f_equal. congruence.
+      + econstructor; eauto. rewrite <- INSTR. congruence.
       + eexists. split; rauto.
-    - transport H13. transport H14. transport H15. transport H17.
+    - transport FIND. transport ARGS. transport CALL. transport ISP.
       eexists. split.
       + eapply exec_step_external; eauto. congruence.
       + eexists. split; rauto.
@@ -587,7 +551,7 @@ Proof.
     (* match_state *)
     + cbn. esplit. split. rauto.
       split; cbn; auto.
-      split; cbn; auto.
+      split; cbn; first [ reflexivity | constructor; auto | eauto ].
       (* init_nb_match *)
       * unfold init_nb_match. intros v1 v2 Hv.
         unfold inner_sp. inv Hv; rstep.
@@ -595,21 +559,16 @@ Proof.
         destruct plt; destruct plt; try congruence; exfalso.
         -- apply n. apply Hl. auto.
         -- apply n. apply Hr. auto.
-      (* state_match *)
-      * constructor; auto.
-      (* nb1 <= Mem.nextblock m1 *)
-      * apply Pos.le_refl.
-      (* nb2 <= Mem.nextblock m2 *)
-      * apply Pos.le_refl.
   (* final_state *)
-  - intros [nb1 s1] [nb2 s2] [rs1 m1] (w' & Hw' & Hge & Hs) H. cbn in *.
-    inv H. inv Hs. inv H6. eexists. split.
+  - intros [nb1 s1] [nb2 s2] [rs1 m1] (w' & Hw' & Hge & Hs) H.
+    cbn [fst snd] in *. inv H. inv Hs. inv H6. eexists. split.
     (* final_state *)
     + constructor.
     (* match_reply *)
-    + exists w'. split; auto. constructor; eauto.
+    + eexists. split; try rauto. constructor; eauto.
   (* external calls *)
-  - intros [nb1 s1] [nb2 s2] qx1 (w' & Hw' & Hge & Hs) H. cbn [fst snd] in *.
+  - intros [nb1 s1] [nb2 s2] qx1 (w' & Hw' & Hge & Hs) H.
+    cbn [fst snd] in *.
     inversion Hs as [? ? rs1 rs2 m1 m2 live Hb Hs' Hle1 Hle2]. subst. clear Hs.
     inversion Hs' as [? ? Hrs ? ? Hm ?]. subst. clear Hs'.
     inv H. specialize (Hrs PC) as Hpc. simpl in Hpc.
@@ -636,11 +595,9 @@ Proof.
       (* nb' = nb *)
       * reflexivity.
       (* state_match *)
-      * exists w''. split. rauto.
-        split; [ | split].
+      * exists w''. split. rauto. split; [ | split].
         (* genv_match *)
-        -- eapply genv_match_acc.
-           apply Hw''. apply Hge.
+        -- eapply genv_match_acc. apply Hw''. apply Hge.
         (* init_nb_match *)
         -- clear Hm'. eapply init_nb_match_acc; eauto.
         (* state_match *)

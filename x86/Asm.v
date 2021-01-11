@@ -1129,17 +1129,17 @@ Inductive step (init_nb: block) (ge: genv): state -> trace -> state -> Prop :=
   | exec_step_internal:
       forall b ofs f i rs m rs' m' live,
       rs PC = Vptr b ofs ->
-      Genv.find_funct_ptr ge b = Some (Internal f) ->
-      find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some i ->
-      exec_instr init_nb ge f i rs m = Next' rs' m' live ->
+      forall FIND: Genv.find_funct_ptr ge b = Some (Internal f),
+      forall INSTR: find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some i,
+      forall EXEC: exec_instr init_nb ge f i rs m = Next' rs' m' live,
       step init_nb ge (State rs m true) E0 (State rs' m' live)
   | exec_step_builtin:
       forall b ofs f ef args res rs m vargs t vres rs' m',
       rs PC = Vptr b ofs ->
-      Genv.find_funct_ptr ge b = Some (Internal f) ->
-      find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some (Pbuiltin ef args res) ->
-      eval_builtin_args ge rs (rs RSP) m args vargs ->
-      external_call ef ge vargs m t vres m' ->
+      forall FIND: Genv.find_funct_ptr ge b = Some (Internal f),
+      forall INSTR: find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some (Pbuiltin ef args res),
+      forall EVAL: eval_builtin_args ge rs (rs RSP) m args vargs,
+      forall CALL: external_call ef ge vargs m t vres m',
       rs' = nextinstr_nf
              (set_res res vres
                (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
@@ -1147,11 +1147,11 @@ Inductive step (init_nb: block) (ge: genv): state -> trace -> state -> Prop :=
   | exec_step_external:
       forall b ef args res rs m t rs' m' live,
       rs PC = Vptr b Ptrofs.zero ->
-      Genv.find_funct_ptr ge b = Some (External ef) ->
-      extcall_arguments rs m (ef_sig ef) args ->
-      external_call ef ge args m t res m' ->
+      forall FIND: Genv.find_funct_ptr ge b = Some (External ef),
+      forall ARGS: extcall_arguments rs m (ef_sig ef) args,
+      forall CALL: external_call ef ge args m t res m',
       rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs)) #PC <- (rs RA) ->
-      inner_sp init_nb rs#SP = Some live ->
+      forall ISP: inner_sp init_nb rs#SP = Some live,
       step init_nb ge (State rs m true) t (State rs' m' live).
 
 (** Since Asm does not have an explicit stack, the queries and replies
@@ -1260,10 +1260,10 @@ Ltac Equalities :=
 + discriminate.
 + discriminate.
 + assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0.
-  exploit external_call_determ. eexact H5. eexact H11. intros [A B].
+  exploit external_call_determ. eexact CALL. eexact CALL0. intros [A B].
   split. auto. intros. destruct B; auto. subst. auto.
 + assert (args0 = args) by (eapply extcall_arguments_determ; eauto). subst args0.
-  exploit external_call_determ. eexact H4. eexact H10. intros [A B].
+  exploit external_call_determ. eexact CALL. eexact CALL0. intros [A B].
   split. auto. intros. destruct B; auto. subst. auto.
 - (* trace length *)
   red; cbn. intros [nb s] t [nb' s'] [H Hnb]. inv H; simpl.
@@ -1277,7 +1277,7 @@ Ltac Equalities :=
   destruct s as [nb s].
   inv H. red; intros; red; intros.
   destruct s' as [nb' s'], H as [H Hnb]. inv H.
-  + rewrite H3 in H0. cbn in H0. destruct Ptrofs.eq_dec; congruence.
+  + rewrite H5 in H0. cbn in H0. destruct Ptrofs.eq_dec; congruence.
   + rewrite H3 in H0. cbn in H0. destruct Ptrofs.eq_dec; congruence.
   + rewrite H3 in H0. cbn in H0. destruct Ptrofs.eq_dec; try congruence.
     assert (ef = EF_external id sg) by congruence; subst. contradiction.

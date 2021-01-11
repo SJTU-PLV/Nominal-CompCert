@@ -1357,3 +1357,14 @@ Global Instance val_load_result_inject f:
 Proof.
   unfold Val.load_result. rauto.
 Qed.
+
+Global Instance val_negativel_inject f:
+  Monotonic Val.negativel (Val.inject f ++> Val.inject f).
+Proof.
+  unfold Val.negativel. rauto.
+Qed.
+Global Instance val_subl_overflow_inject f:
+  Monotonic Val.subl_overflow (Val.inject f ++> Val.inject f ++> Val.inject f).
+Proof.
+  unfold Val.subl_overflow. rauto.
+Qed.
