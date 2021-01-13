@@ -1483,7 +1483,7 @@ Proof.
   apply list_map_exten; intros.
   apply Locmap.getpair_exten; intros.
   assert (In l (regs_of_rpairs (loc_arguments sg))) by (eapply in_regs_of_rpairs; eauto).
-  exploit loc_arguments_acceptable_2; eauto. exploit H; eauto.
+  exploit loc_arguments_acceptable_2; eauto. exploit tailcall_possible_reg; eauto.
   destruct l; simpl; intros; try contradiction. rewrite H4; auto.
 Qed.
 

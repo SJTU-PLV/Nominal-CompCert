@@ -1464,7 +1464,7 @@ Lemma match_stacks_change_sig:
 Proof.
   induction 1; intros.
   econstructor; eauto.
-  econstructor; eauto. intros. elim (H0 _ H1).
+  econstructor; eauto. intros. elim (tailcall_possible_reg _ H0 _ H1).
 Qed.
 
 (** Typing properties of [match_stacks]. *)
@@ -1496,7 +1496,7 @@ Lemma load_stack_arg m j cs cs' sg ty ofs:
   /\ Val.inject j (parent_locset cs (S Outgoing ofs ty)) v.
 Proof.
   intros REG MS SEP. destruct MS.
-  - destruct H as [? | TCP]; [subst | elim (TCP _ REG)].
+  - destruct H as [? | TCP]; [subst | elim (tailcall_possible_reg _ TCP _ REG)].
     edestruct SEP as (v & Hload & Hv); eauto.
   - simpl in SEP. unfold parent_sp.
     eapply frame_get_outgoing; eauto 2.

@@ -342,7 +342,8 @@ Local Opaque mreg_type.
   eapply wt_find_funct; eauto.
   apply wt_return_regs; auto. apply wt_parent_locset; auto.
   red; simpl; intros. destruct l; simpl in *. rewrite H3; auto. destruct sl; auto; congruence.
-  red; simpl; intros. apply zero_size_arguments_tailcall_possible in H. apply H in H3. contradiction.
+  red; simpl; intros. apply zero_size_arguments_tailcall_possible in H.
+  apply tailcall_possible_reg in H3; auto. contradiction.
 - (* builtin *)
   simpl in *; InvBooleans.
   econstructor; eauto.

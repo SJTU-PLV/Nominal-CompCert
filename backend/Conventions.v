@@ -77,35 +77,42 @@ Qed.
 (** A tail-call is possible for a signature if the corresponding
     arguments are all passed in registers. *)
 
-(** A tail-call is possible for a signature if the corresponding
-    arguments are all passed in registers. *)
-
 Definition tailcall_possible (s: signature) : Prop :=
-  forall l, In l (regs_of_rpairs (loc_arguments s)) ->
-  match l with R _ => True | S _ _ _ => False end.
+  size_arguments s = 0.
 
 (** Decide whether a tailcall is possible. *)
 
 Definition tailcall_is_possible (sg: signature) : bool :=
-  List.forallb
-    (fun l => match l with R _ => true | S _ _ _ => false end)
-    (regs_of_rpairs (loc_arguments sg)).
+  Z.eqb (size_arguments sg) 0.
 
 Lemma tailcall_is_possible_correct:
   forall s, tailcall_is_possible s = true -> tailcall_possible s.
 Proof.
-  unfold tailcall_is_possible; intros. rewrite forallb_forall in H.
-  red; intros. apply H in H0. destruct l; [auto|discriminate].
+  unfold tailcall_is_possible. intros. rewrite Z.eqb_eq in H. auto.
+Qed.
+
+Lemma tailcall_is_possible_complete:
+  forall s, tailcall_possible s -> tailcall_is_possible s = true.
+Proof.
+  unfold tailcall_is_possible. intros. rewrite Z.eqb_eq. auto.
+Qed.
+
+Lemma tailcall_possible_reg sg:
+  tailcall_possible sg ->
+  forall l, In l (regs_of_rpairs (loc_arguments sg)) ->
+  match l with R _ => True | S _ _ _ => False end.
+Proof.
+  intros Hsg l Hl.
+  pose proof Hl as Hacc. apply loc_arguments_acceptable_2 in Hacc.
+  destruct l as [ | [ ]]; cbn in *; auto.
+  pose proof Hl as Hbnd. apply loc_arguments_bounded in Hbnd.
+  pose proof (typesize_pos ty). red in Hsg. omega.
 Qed.
 
 Lemma zero_size_arguments_tailcall_possible:
-  forall sg, size_arguments sg = 0 -> tailcall_possible sg.
+  forall sg, size_arguments sg = 0 <-> tailcall_possible sg.
 Proof.
-  intros; red; intros. exploit loc_arguments_acceptable_2; eauto.
-  unfold loc_argument_acceptable.
-  destruct l; intros. auto. destruct sl; try contradiction. destruct H1.
-  generalize (loc_arguments_bounded _ _ _ H0).
-  generalize (typesize_pos ty). omega.
+  reflexivity.
 Qed.
 
 

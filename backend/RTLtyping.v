@@ -697,8 +697,7 @@ Proof.
   rewrite A; simpl; rewrite C; simpl.
   rewrite H2; rewrite dec_eq_true.
   replace (tailcall_is_possible sig) with true; auto.
-  symmetry. unfold tailcall_is_possible. apply forallb_forall.
-  intros. apply H3 in H4. destruct x; intuition auto.
+  symmetry. apply tailcall_is_possible_complete; auto.
 - (* builtin *)
   exploit type_builtin_args_complete; eauto. instantiate (1 := args). intros [e1 [A B]].
   exploit type_builtin_res_complete; eauto. instantiate (1 := res). intros [e2 [C D]].
