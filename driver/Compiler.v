@@ -720,6 +720,7 @@ Ltac DestructM :=
   eapply compose_optional_pass; eauto using compose_identity_pass.
     exact Debugvarproof.transf_program_correct.
   eapply compose_forward_simulations.
+    rewrite <- cc_stacking_lm, cc_lm_stacking.
     admit. (* need to update stacking codomain convention to include et_loc
     eapply Stackingproof.transf_program_correct with (rao := Asmgenproof0.return_address_offset).
     exact Asmgenproof.return_address_exists.

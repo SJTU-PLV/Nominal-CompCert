@@ -490,62 +490,7 @@ Definition semantics (rao: function -> code -> ptrofs -> Prop) (p: program) :=
 
 (** * Simulation conventions *)
 
-(** ** Calling convention from [li_locset] *)
-
-(** A key aspect concerns the encoding of arguments in the memory.
-  Arguments may be found in assembly stack frames, but the source
-  program must not have access to them. So we assert that the source
-  memory is equal to the target memory, but in the source the
-  permissions for the stack's arguments area has been removed. *)
-
-Import Stacklayout.
-
-Fixpoint loc_footprints (sb: block) (sofs: ptrofs) (l: list loc) :=
-  match l with
-    | S Outgoing ofs ty :: l' =>
-      let lo := Ptrofs.unsigned (Ptrofs.add (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) sofs) in
-      (sb, lo, lo + size_chunk (chunk_of_type ty)) :: loc_footprints sb sofs l'
-    | _ :: l' => loc_footprints sb sofs l'
-    | nil => nil
-  end.
-
-Definition free_args (sg: signature) (m: mem) (sp: val) :=
-  match sp with
-    | Vptr sb sofs =>
-      Mem.free_list m (loc_footprints sb sofs (regs_of_rpairs (loc_arguments sg)))
-    | _ =>
-      None
-  end.
-
-Definition agree_args (sg: signature) (m: mem) (sp: val) (ls: Locmap.t) :=
-  forall ofs ty,
-    let l := S Outgoing ofs ty in
-    In l (regs_of_rpairs (loc_arguments sg)) ->
-    load_stack m sp ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) = Some (ls l).
-
-Inductive cc_locset_mach_mq sg rs: locset_query -> mach_query -> Prop :=
-  cc_locset_mach_mq_intro vf ls sp ra m m':
-    (*Mem.valid_block m sp -> *)
-    Val.has_type ra Tptr ->
-    free_args sg m sp = Some m' ->
-    (forall r, ls (R r) = rs r) ->
-    agree_args sg m sp ls ->
-    cc_locset_mach_mq sg rs (lq vf sg ls m') (mq vf sp ra rs m).
-
-Inductive cc_locset_mach_mr sg rs: locset_reply -> mach_reply -> Prop :=
-  cc_locset_mach_mr_intro ls' rs' m':
-    (forall r, is_callee_save r = true -> rs' r = rs r) ->
-    (forall r, In r (regs_of_rpair (loc_result sg)) -> rs' r = ls' (R r)) ->
-    cc_locset_mach_mr sg rs (lr ls' m') (mr rs' m').
-
-Program Definition cc_locset_mach: callconv li_locset li_mach :=
-  {|
-    match_senv _ := eq;
-    match_query '(sg, rs) := cc_locset_mach_mq sg rs;
-    match_reply '(sg, rs) := cc_locset_mach_mr sg rs;
-  |}.
-
-(** ** CKLR simulation conventions *)
+(** ** CKLR simulation convention *)
 
 Inductive cc_mach_mq R w: mach_query -> mach_query -> Prop :=
   cc_mach_mq_intro vf1 vf2 sp1 sp2 ra1 ra2 rs1 rs2 m1 m2:
@@ -577,32 +522,147 @@ Next Obligation.
   eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
 Qed.
 
-(** ** Properties *)
+(** ** Calling convention from [li_locset] *)
 
-Lemma nextblock_free_args sg m sp m':
-  free_args sg m sp = Some m' ->
-  Mem.nextblock m' = Mem.nextblock m.
+(** A key aspect concerns the encoding of arguments in the memory.
+  Arguments may be found in assembly stack frames, but the source
+  program must not have access to them. So we assert that the source
+  memory is equal to the target memory, but in the source the
+  permissions for the stack's arguments area has been removed. *)
+
+Require Import Stacklayout.
+
+(** One complication occurs for compatibility with CKLRs. When the
+  arguments region is non-empty, success of the source-level
+  [Mem.free] ensures that the corresponding pointer [sp + fe_ofs_arg]
+  is valid, hence injects into the target-level one. But if the
+  argument region is empty, we do not have a similar guarantee.
+  For example, for the initial invocation of [main()] with empty
+  arguments, the stack pointer is not even of the form [Vptr b ofs]
+  but is instead a zero integer.
+
+  In addition to addressing this, we must make sure that accesses to
+  the arguments region formulated in terms of concrete binary pointers
+  correspond to the range freed in terms of abstract integer addresses.
+
+  This is handled by the following construction. *)
+
+Require Import Separation.
+Local Open Scope sep_scope.
+
+Definition offset_sarg sofs ofs :=
+  Ptrofs.unsigned sofs + (fe_ofs_arg + 4 * ofs).
+
+Definition offset_fits sofs ofs :=
+  ofs >= 0 /\ offset_sarg sofs ofs <= Ptrofs.max_unsigned.
+
+Lemma access_fits sofs ofs:
+  offset_fits sofs ofs ->
+  offset_sarg sofs ofs =
+  Ptrofs.unsigned (Ptrofs.add sofs (Ptrofs.repr (fe_ofs_arg + 4 * ofs))).
 Proof.
-  destruct sp; try discriminate. cbn. revert m.
-  induction (loc_footprints b i (regs_of_rpairs (loc_arguments sg))); cbn.
-  - congruence.
-  - intros. destruct a as [[? ?] ?], Mem.free eqn:Hm'; try congruence.
-    erewrite <- (Mem.nextblock_free m _ _ _ m0); eauto.
+  unfold offset_fits, offset_sarg.
+  intros [OPOS FITS].
+  assert (fe_ofs_arg >= 0) by (unfold fe_ofs_arg; xomega).
+  pose proof (Ptrofs.unsigned_range_2 sofs).
+  rewrite !Ptrofs.add_unsigned.
+  rewrite (Ptrofs.unsigned_repr (fe_ofs_arg + _)) by xomega.
+  rewrite (Ptrofs.unsigned_repr (_ + _)) by xomega.
+  reflexivity.
 Qed.
 
-(** The following construction is needed both for the commutation
-  property associated with [cc_locset_mach] and [cc_mach] and in the
-  simulation proof for external calls in [Stacking]. It is used to
-  formulate an [li_locset] view of an [li_mach] query. *)
+Inductive loc_init_args sb sofs sz : block -> Z -> Prop :=
+  loc_init_args_intro ofs:
+    offset_sarg sofs 0 <= ofs < offset_sarg sofs sz ->
+    loc_init_args sb sofs sz sb ofs.
 
-Definition make_locset (rs: regset) (m: mem) (sp: val) (l: loc) : val :=
-  match l with
-    | R r => rs r
-    | S Outgoing ofs ty =>
-      let v := load_stack m sp ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) in
-      Val.maketotal v
-    | _ => Vundef
-  end.
+Program Definition contains_init_args sg j ls m0 sb sofs : massert :=
+  let sz := size_arguments sg in
+  {|
+    m_pred m :=
+      Mem.range_perm m sb (offset_sarg sofs 0) (offset_sarg sofs sz) Cur Freeable /\
+      Mem.unchanged_on (loc_init_args sb sofs sz) m0 m /\
+      (forall ofs, 0 <= ofs < sz -> offset_fits sofs ofs) /\
+      (forall ofs ty,
+        In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
+        exists v,
+          Mem.load (chunk_of_type ty) m sb (offset_sarg sofs ofs) = Some v /\
+          Val.inject j (ls (S Outgoing ofs ty)) v);
+    m_footprint := loc_init_args sb sofs sz;
+  |}.
+Next Obligation.
+  repeat apply conj.
+  - intros ofs Hofs. erewrite <- Mem.unchanged_on_perm; eauto.
+    + constructor; auto.
+    + eapply Mem.perm_valid_block; eauto.
+  - eapply Mem.unchanged_on_trans; eauto.
+  - auto.
+  - intros ofs ty REG. edestruct H3 as (? & ? & ?); eauto.
+    pose proof (loc_arguments_bounded _ _ _ REG).
+    pose proof (loc_arguments_acceptable_2 _ _ REG) as [? _].
+    eexists; split; eauto. eapply Mem.load_unchanged_on; eauto.
+    intros. constructor. unfold offset_sarg in *.
+    destruct ty; cbn [typesize size_chunk chunk_of_type] in *; xomega.
+Qed.
+Next Obligation.
+  destruct H0 as [ofs Hofs].
+  eapply Mem.perm_valid_block; eauto.
+Qed.
+
+Record cc_stacking_world {R} :=
+  stkw {
+    stk_w :> world R;
+    stk_sg : signature;
+    stk_ls1 : Locmap.t;
+    stk_sb2 : block;
+    stk_sofs2 : ptrofs;
+    stk_m2 : mem;
+  }.
+
+Arguments cc_stacking_world : clear implicits.
+
+Inductive cc_stacking_mq R: cc_stacking_world R -> _ -> _ -> Prop :=
+  | cc_stacking_mq_intro w vf1 vf2 sg ls1 m1 sb2 sofs2 ra2 rs2 m2:
+      vf1 <> Vundef -> Val.inject (mi R w) vf1 vf2 ->
+      (forall r, Val.inject (mi R w) (ls1 (Locations.R r)) (rs2 r)) ->
+      m2 |= contains_init_args sg (mi R w) ls1 m2 sb2 sofs2 ->
+      match_mem R w m1 m2 ->
+      (forall b ofs, loc_init_args sb2 sofs2 (size_arguments sg) b ofs ->
+                     loc_out_of_reach (mi R w) m1 b ofs) ->
+      (*ra2 <> Vundef ->*) Val.has_type ra2 Tptr ->
+      cc_stacking_mq R
+        (stkw R w sg ls1 sb2 sofs2 m2)
+        (lq vf1 sg ls1 m1)
+        (mq vf2 (Vptr sb2 sofs2) ra2 rs2 m2).
+
+Inductive cc_stacking_mr R: cc_stacking_world R -> _ -> _ -> Prop :=
+  | cc_stacking_mr_intro w w' sg ls1 ls1' m1' sb2 sofs2 m2 rs2' m2':
+    w ~> w' ->
+    (forall r,
+      In r (regs_of_rpair (loc_result sg)) ->
+      Val.inject (mi R w') (ls1' (Locations.R r)) (rs2' r)) ->
+    (forall r,
+      is_callee_save r = true ->
+      Val.inject (mi R w') (ls1 (Locations.R r)) (rs2' r)) ->
+    match_mem R w' m1' m2' ->
+    Mem.unchanged_on (loc_init_args sb2 sofs2 (size_arguments sg)) m2 m2' ->
+    cc_stacking_mr R
+      (stkw R w sg ls1 sb2 sofs2 m2)
+      (lr ls1' m1')
+      (mr rs2' m2').
+
+Program Definition cc_stacking R: callconv li_locset li_mach :=
+  {|
+    match_senv := (match_stbls R @@ [stk_w])%klr;
+    match_query := cc_stacking_mq R;
+    match_reply := cc_stacking_mr R;
+  |}.
+Next Obligation.
+  eapply (LanguageInterface.cc_c_obligation_1 R w se1 se2 H); eauto.
+Qed.
+Next Obligation.
+  eapply (LanguageInterface.cc_c_obligation_2 R w se1 se2 sk H); eauto.
+Qed.
 
 (** ** To relocate or remove *)
 

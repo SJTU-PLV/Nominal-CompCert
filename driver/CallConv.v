@@ -1,200 +1,480 @@
+(** This file defines the overall calling convention for CompCertO
+  and provides the simulation convention algebra used in the
+  [driver.Compiler] library to compose passes into the corresponding
+  correctness theorem.
+
+  The main principle before our approach is to separate the structural
+  aspect of calling conventions on one hand, which establish
+  connections between the successive language interfaces, and the
+  CKLRs used by various passes on the other hand, which can be
+  promoted to endogenous simulation conventions for each language
+  interface. Although composing the various pass correctness theorems
+  directly yields a mixture of stuctural conventions and CKLRs, we use
+  commutation properties to separate these two components.
+
+  More precisely, for a structural component [CC], we make sure that
+  the following holds for all CKLRs [R]:
+
+                    ccref (CC @ R) (R @ CC)
+
+  In the context of external calls, this allows us to propagate CKLRs
+  towards the source level, where they can be satisfied by the
+  relational parametricity property of Clight. For incoming calls,
+  this allows a target-level injection to be duplicated and propagated
+  in order to satisfy the incoming simulation convention of the
+  various compiler passes. Ultimately, we can formulate a simulation
+  convention for the whole compiler of the form:
+
+         (R1 + ... + Rn)^{*} @ (CC1 @ ... @ CCk) @ vainj
+
+  The first component expresses source-level compatibility with the
+  various CKLRs [R1], ..., [Rn] (and hence, thanks to commutation
+  properties, overall compatibility with CKLRs for incoming calls).
+  The second component encodes the structural aspects of the
+  relationship between source- and target-level calls. The last
+  component represents a minimal CKLR: a memory injection is necessary
+  since the target program will allocate stack frames instead of
+  individual memory blocks for local variable, and queries must
+  contain memory states which conform to the invariants used by the
+  ValueAnalysis passes. *)
 
 Require Import LanguageInterface CallconvAlgebra Invariant.
 Require Import CKLR Inject InjectFootprint Extends VAInject VAExtends.
 Require Import Mach Locations Conventions Asm.
 Require Import ValueAnalysis.
 Require Import Allocproof Lineartyping Asmgenproof0.
+Require Import Maps Stacklayout.
 Unset Program Cases.
 
 Coercion cc_c : cklr >-> callconv.
 
 
-(** * Calling convention *)
+(** * Stacking *)
 
-(** Ultimately we will want to reformulate (part of) the overall
-  simulation convention as a monolithic thing. For now we just use the
-  composite definition of cc_compcert found later in this file. *)
+(** The simulation conventions for most passes are simple enough that
+  we can express them directly as [R @ CC], where [R] is a CKLR
+  matching the memory relation used in the simulation proof, and
+  [CC] expresses the structural correspondance between source- and
+  target-level queries and replies. However, the Stacking pass
+  involves fairly complex invariants and it is simpler to formulate
+  the corresponding simulation convention as a monolithic one, closely
+  coupled with the corresponding simulation proof.
 
-(*
-Definition get_pair (p: rpair preg) (rs: regset) :=
-  match p with
-    | One r => rs r
-    | Twolong r1 r2 => Val.longofwords (rs r1) (rs r2)
-  end.
+  In the following we show that this simulation convention can then be
+  decoupled into a CKLR and a structural convention. This form is then
+  used as the outside interface for the pass and integrated to the
+  strategy outlined above. *)
 
-Inductive cc_compcert_mq: _ -> c_query -> query li_asm -> Prop :=
-  cc_compcert_mq_intro se f vf sg vargs mc rs vargs' ma ma_ :
+Require Import Classical.
 
-    (* Function *)
-    Val.inject f vf rs#PC ->
+(** ** Structural convention *)
 
-    (* Arguments *)
-    Asm.extcall_arguments rs ma sg vargs' ->
-    Val.inject_list f vargs vargs' ->
-    Val.has_type_list vargs (sig_args sg) ->
+(** The first step is to define the structural convention we will be
+  using between [li_locset] and [li_mach]. *)
 
-    (* Memory *)
-    free_args sg ma rs#SP = Some ma_ ->
-    Mem.inject f mc ma_ ->
-    romatch_all se (bc_of_symtbl se) mc ->
+(** *** Dealing with the arguments region *)
 
-    (* Queries *)
-    cc_compcert_mq
-      (se, sg, injw f (Mem.nextblock mc) (Mem.nextblock ma))
-      (cq vf sg vargs mc)
-      (rs, ma).
+(* One key aspect of this convention is the encoding of arguments: at
+  the source level, arguments for the call are stored in abstract
+  locations, which become either registers or in-memory stack slots at
+  the target level. Crucially, these stack slots must not be
+  accessible as memory locations in the source program, otherwise the
+  invariant relating abstract and concrete stack locations may be
+  broken through aliasing. Hence, in the structural convention the
+  source memory cannot be *equal* to the target memory, but instead
+  must be a version of the target memory where permissions on the
+  arguments region of the stack haven been removed.
 
-Inductive cc_compcert_mr: _ -> c_reply -> reply li_asm -> Prop :=
-  cc_compcert_mr_intro se sg f nbc nba f' vres mc' rs' ma' :
+  This can be obtained using the memory operation [Mem.free]. However,
+  for some of the properties we need the corresponding memory state
+  cannot be freely chosen, and we must instead use the following
+  characterization. *)
 
-    (* New injection *)
-    inject_incr f f' ->
-    (forall b1 b2 delta,
-        f b1 = None -> f' b1 = Some (b2, delta) ->
-        (nbc <= b1 /\ nba <= b2)%positive) ->
-    Pos.le nbc (Mem.nextblock mc') ->
-    Pos.le nba (Mem.nextblock ma') ->
+Definition loc_outside_range (b: block) (lo hi: Z) :=
+  fun b' ofs => b = b' -> ~ lo <= ofs < hi.
 
-    (* Result *)
-    Val.inject f' vres (get_pair (loc_external_result sg) rs') ->
-    Val.has_type vres (proj_sig_res sg) ->
+Record free_spec m b lo hi m_ :=
+  {
+    free_spec_range_perm: Mem.range_perm m b lo hi Cur Freeable;
+    free_spec_no_perm ofs k p: lo <= ofs < hi -> ~ Mem.perm m_ b ofs k p;
+    free_spec_unchanged: Mem.unchanged_on (loc_outside_range b lo hi) m m_;
+    free_spec_nextblock: Mem.nextblock m_ = Mem.nextblock m;
+  }.
 
-    (* Memory *)
-    Mem.inject f' mc' ma' ->
-    romatch_all se (bc_of_symtbl se) mc' ->
-
-    (* Replies *)
-    cc_compcert_mr
-      (se, sg, injw f' (Mem.nextblock mc') (Mem.nextblock ma'))
-      (cr vres mc')
-      (rs', ma').
-
-Program Definition cc_compcert: callconv li_c li_asm :=
-  {|
-    match_senv '(se, _, w) se1 se2 := se1 = se /\ inj_stbls w se1 se2;
-    match_query := cc_compcert_mq;
-    match_reply := cc_compcert_mr;
-  |}.
-Next Obligation. Admitted.
-Next Obligation. Admitted.
-*)
-
-(** To match the memory transformations used in the passes of
-  CompCert, we use the following strategy. For incoming calls, we will
-  expand the target-level injection to generate the appropriate [inj]
-  and [ext] components, which we can then commute over the
-  intermediate calling conventions. For outgoing calls, we keep
-  commuting them towards the front component of [cc_compcert],
-  provided by the properties of [Clight], where they can absorbed. *)
-
-(** ** Expansion *)
-
-(** To match the passes of CompCert, we first expand the convention as follows. *)
-
-(*
-Lemma cc_c_asm_expand:
-  cceqv cc_compcert (et_c @ cc_c_locset @ et_loc @ cc_locset_mach @ cc_mach_asm @ cc_asm vainj).
-Proof.
-  intros sg se _ q1 q2 [ ] Hq. destruct Hq.
-  set (mrs := fun r => rs (preg_of r)).
-  set (ls := make_locset mrs m rs#SP).
-  exists (se, (se, sg), (se, sg, (se, (se, sg), (se, (sg, mrs), (rs, Mem.nextblock m))))).
-  split; [ | split].
-  - (* Symbol tables *)
-    cbn. auto using rel_inv_intro.
-  - (* Queries *)
-    exists (cq rs#PC sg args m_). split.
-    {
-      constructor. cbn. auto.
-    }
-    exists (lq rs#PC sg ls m_). split.
-    {
-      constructor. admit. (* args read from ls *)
-    }
-    exists (lq rs#PC sg ls m_). split.
-    {
-      constructor. cbn. constructor.
-      intros l Hl. destruct l as [ | [ ]]; cbn; auto.
-      + apply H2.
-      + admit. (* typing of argument -- need to weaken wt_locset in
-        wt_loc to actual arguments and add typing constraint in cc_c_asm *)
-    }
-    exists (mq rs#PC rs#SP rs#RA (fun r => rs (preg_of r)) m). split.
-    {
-      constructor; auto.
-      + admit. (* typing of RA -- add constraint in cc_c_asm *)
-      + unfold agree_args. unfold extcall_arguments in H0.
-        clear - H0. induction H0; cbn [In regs_of_rpairs]; try contradiction.
-        intros ofs ty. rewrite in_app. intros [? | ?]; auto.
-        admit. (* reading arguments -- use extcall_arguments *)
-    }
-    idtac.
-    {
-      constructor; auto.
-      + admit. (* sp valid; can do if we use free_args + combine with inj *)
-      + admit. (* ra defined *)
-    }
-  - (* Replies *)
-    intros r1 r2 (xr1 & Hxr1 & ri & Hr1i & xri & Hxri & rj & Hrij & Hrj2).
-    destruct Hxr1 as [Hr1wt], Hxri as [Hriwt]. cbn in *.
-
-Admitted.
-*)
-
-
-(** * Triangular conventions *)
-
-(** With our new approach the following should be unnecessary and we
-  should be able to safely remove it. *)
-
-Inductive make_corefl {A} (R : relation A) (x:A) : A -> Prop :=
-  make_corefl_intro: R x x -> make_corefl R x x.
-
-Program Definition cc_tr {li} (cc : callconv li li) :=
-  {|
-    match_senv w := make_corefl (match_senv cc w);
-    match_query w := make_corefl (match_query cc w);
-    match_reply := match_reply cc;
-  |}.
-Solve All Obligations with intros; destruct H, cc; auto.
-
-Global Instance cc_tr_ccref:
-  Monotonic (@cc_tr) (forallr -, ccref ++> ccref).
-Proof.
-  intros li cc1 cc2 Hcc w se _ q _ [Hse] [Hq].
-  edestruct Hcc as (w' & Hse' & Hq' & Hr); eauto.
-  cbn. eauto 10 using make_corefl_intro.
-Qed.
-
-Global Instance cc_tr_prop {li} (cc: callconv li li) (I: invariant li):
-  PropagatesQueryInvariant (cc_tr cc) I.
-Proof.
-  constructor. cbn. intros w wI se _ q _ [Hse] HseI [Hq] HqI. eauto.
-Qed.
-
-Lemma cc_untr {li} (cc: callconv li li):
-  ccref (cc_tr cc) cc.
-Proof.
-  intros w se1 se2 q1 q2 [Hse] [Hq]. cbn. eauto.
-Qed.
-
-Lemma cc_inj_inj_tr:
-  ccref (cc_c inj) (cc_tr (cc_c inj) @ cc_c inj).
-Admitted.
-
-Lemma cc_ext_inj_tr:
-  ccref (cc_c inj) (cc_tr (cc_c ext) @ cc_c inj).
-Admitted.
-
-Lemma cc_tr_compose {li} (cc1 cc2: callconv li li):
-  cceqv (cc_tr (cc_tr cc1 @ cc2)) (cc_tr cc1 @ cc_tr cc2).
+Lemma free_free_spec m b lo hi m':
+  Mem.free m b lo hi = Some m' ->
+  free_spec m b lo hi m'.
 Proof.
   split.
-  - intros [[_ w1] w2] se _ q _ [[[Hse1] Hse2]] [(_ & [Hq1] & Hq2)].
-    exists (se, w1, w2). cbn in *. intuition (eauto using make_corefl_intro).
-  - intros [[_ w1] w2] se _ q _ [[Hse1] [Hse2]] (_ & [Hq1] & [Hq2]).
-    exists (se, w1, w2). cbn in *. intuition (eauto using make_corefl_intro).
+  - eapply Mem.free_range_perm; eauto.
+  - eapply Mem.perm_free_2; eauto.
+  - eapply Mem.free_unchanged_on; eauto.
+    unfold loc_outside_range. clear. firstorder.
+  - eapply Mem.nextblock_free; eauto.
 Qed.
+
+Lemma free_spec_perm_outside_range m b lo hi m_ b' ofs k p:
+  free_spec m b lo hi m_ ->
+  Mem.perm m_ b' ofs k p ->
+  loc_outside_range b lo hi b' ofs.
+Proof.
+  intros Hm_ Hp Hb' Hofs. subst.
+  eapply free_spec_no_perm; eauto.
+Qed.
+
+Lemma free_spec_valid_block m b lo hi m_ b':
+  free_spec m b lo hi m_ ->
+  Mem.valid_block m b' <-> Mem.valid_block m_ b'.
+Proof.
+  intro. unfold Mem.valid_block. erewrite <- free_spec_nextblock; eauto. tauto.
+Qed.
+
+Lemma free_spec_perm m b lo hi m_ b' ofs k p:
+  free_spec m b lo hi m_ ->
+  loc_outside_range b lo hi b' ofs ->
+  Mem.perm m b' ofs k p <-> Mem.perm m_ b' ofs k p.
+Proof.
+  intros; split; intro Hp;
+  eapply (Mem.unchanged_on_perm _ m m_); eauto using free_spec_unchanged;
+  eapply Mem.perm_valid_block in Hp; eauto.
+  rewrite free_spec_valid_block; eauto.
+Qed.
+
+Lemma free_spec_perm_3 m b lo hi m_ b' ofs k p:
+  free_spec m b lo hi m_ ->
+  Mem.perm m_ b' ofs k p ->
+  Mem.perm m b' ofs k p.
+Proof.
+  intros. rewrite free_spec_perm; eauto using free_spec_perm_outside_range.
+Qed.
+
+Lemma free_spec_extends m b lo hi m_:
+  free_spec m b lo hi m_ ->
+  Mem.extends m_ m.
+Proof.
+  intros Hm_.
+  split.
+  - eapply free_spec_nextblock; eauto.
+  - split; inversion 1; clear H; subst; rewrite ?Z.add_0_r.
+    + intros Hp. eapply free_spec_perm; eauto using free_spec_perm_outside_range.
+    + intros _. apply Z.divide_0_r.
+    + intros Hp. erewrite (Mem.unchanged_on_contents _ m m_).
+      * destruct ZMap.get; constructor. apply val_inject_refl.
+      * eapply free_spec_unchanged; eauto.
+      * eapply free_spec_perm_outside_range; eauto.
+      * eapply free_spec_perm_3; eauto.
+  - intros b' ofs k p Hp.
+    destruct (classic (loc_outside_range b lo hi b' ofs)).
+    + erewrite <- free_spec_perm; eauto.
+    + right. unfold loc_outside_range in H.
+      assert (b = b' /\ lo <= ofs < hi) as [Hb Hofs] by tauto. subst b'. clear H.
+      eapply free_spec_no_perm; eauto.
+Qed.
+
+Lemma free_spec_inject_inv f m1 m2 b lo hi m2_:
+  free_spec m2 b lo hi m2_ ->
+  Mem.inject f m1 m2 ->
+  (forall ofs, lo <= ofs < hi -> loc_out_of_reach f m1 b ofs) ->
+  Mem.inject f m1 m2_.
+Proof.
+  intros Hm2_ Hm Hp. destruct Hm. split; auto.
+  - destruct mi_inj. split; auto.
+    + intros b1 b2 delta ofs k p Hb Hp'. erewrite <- free_spec_perm; eauto.
+      intros Hb2 Hofs. destruct Hb2. eapply Hp; eauto.
+      replace (ofs + delta - delta) with ofs by xomega.
+      eauto 3 with mem.
+    + intros b1 ofs b2 delta Hb Hp'.
+      erewrite (Mem.unchanged_on_contents _ m2 m2_); eauto.
+      * eapply free_spec_unchanged; eauto using free_spec_perm_outside_range.
+      * eapply free_spec_perm_outside_range; eauto.
+        erewrite <- free_spec_perm; eauto.
+        intros Hb2 Hofs. subst. eapply Hp; eauto.
+        replace (ofs + delta - delta) with ofs by xomega.
+        eauto with mem.
+  - intros. erewrite <- free_spec_valid_block; eauto.
+  - eauto using free_spec_perm_3.
+Qed.
+
+Lemma free_spec_unfree m b lo hi m_:
+  Mem.range_perm m b lo hi Cur Freeable ->
+  (forall ofs k p, lo <= ofs < hi -> ~ Mem.perm m_ b ofs k p) ->
+  Pos.le (Mem.nextblock m) (Mem.nextblock m_) ->
+  exists m',
+    free_spec m' b lo hi m_ /\
+    Mem.unchanged_on (fun b' ofs => b = b' /\ lo <= ofs < hi) m m'.
+Proof.
+  (* mix m and m_ to recover the region from m in m' *)
+Admitted.
+
+Lemma free_spec_inject f m1 m2 b1 b2 delta lo hi m1_:
+  free_spec m1 b1 lo hi m1_ ->
+  Mem.inject f m1 m2 ->
+  f b1 = Some (b2, delta) ->
+  exists m2_,
+    Mem.free m2 b2 (lo + delta) (hi + delta) = Some m2_ /\
+    Mem.inject f m1_ m2_.
+Admitted.
+
+(** *** Definition *)
+
+(** We can now define the structural convention. *)
+
+Record cc_lm_world :=
+  lmw {
+    lmw_sg : signature;
+    lmw_ls : Locmap.t;
+    lmw_m : mem;
+    lmw_sb : block;
+    lmw_sofs : ptrofs;
+  }.
+
+Definition args_removed sg sb sofs m m_ :=
+  free_spec m sb (offset_sarg sofs 0) (offset_sarg sofs (size_arguments sg)) m_ /\
+  forall ofs, 0 <= ofs < size_arguments sg -> offset_fits sofs ofs.
+
+Definition args_stored sg ls m sb sofs :=
+  forall ofs ty,
+    let l := S Outgoing ofs ty in
+    In l (regs_of_rpairs (loc_arguments sg)) ->
+    Mem.load (chunk_of_type ty) m sb (offset_sarg sofs ofs) = Some (ls l).
+(* /\
+    offset_fits sofs ofs. *)
+
+Inductive cc_locset_mach_mq: cc_lm_world -> locset_query -> mach_query -> Prop :=
+  cc_locset_mach_mq_intro sg vf ls m_ rs sb sofs ra m:
+    (forall r, ls (R r) = rs r) ->
+    args_removed sg sb sofs m m_ ->
+    args_stored sg ls m sb sofs ->
+    Val.has_type ra Tptr ->
+    cc_locset_mach_mq
+      (lmw sg ls m sb sofs)
+      (lq vf sg ls m_)
+      (mq vf (Vptr sb sofs) ra rs m).
+
+Inductive cc_locset_mach_mr: cc_lm_world -> locset_reply -> mach_reply -> Prop :=
+  cc_locset_mach_mr_intro sg ls ls' m'_ sb sofs m rs' m':
+    (forall r, In r (regs_of_rpair (loc_result sg)) -> rs' r = ls' (R r)) ->
+    (forall r, is_callee_save r = true -> rs' r = (ls (R r))) ->
+    args_removed sg sb sofs m' m'_ ->
+    Mem.unchanged_on (loc_init_args sb sofs (size_arguments sg)) m m' ->
+    cc_locset_mach_mr (lmw sg ls m sb sofs) (lr ls' m'_) (mr rs' m').
+
+Program Definition cc_locset_mach: callconv li_locset li_mach :=
+  {|
+    match_senv _ := eq;
+    match_query := cc_locset_mach_mq;
+    match_reply := cc_locset_mach_mr;
+  |}.
+
+(** ** Mixing memory states *)
+
+(** For incoming calls, [Stacking] uses the simulation convention
+  [cc_locset inj @ cc_locset_mach]. However, the proof does not keep
+  track of an intermediate memory state. This means that to prove that
+  replies are related, we first need to exhibit an intermediate memory
+  state such that 1. freeing the arguments region yields the
+  source-level memory, and 2. this arguments region is unchanged with
+  respect the corresponding memory state of the query.
+
+  To achieve this we use the following construction:
+  [Mem_mix m' b lo hi m] merges the region of [m] specified by
+  [(b, lo, hi)] into [m']. The intention is that if [m'] was obtained
+  from [m] by [Mem.free], potentially followed by additional
+  operations, [Mem_mix] will "undo" the free. *)
+
+Parameter Mem_mix : mem -> block -> Z -> Z -> mem -> option mem.
+
+Axiom Mem_mix_free_spec:
+  forall m' b lo hi m m'',
+    Mem_mix m' b lo hi m = Some m'' ->
+    free_spec m'' b lo hi m'.
+
+Axiom Mem_mix_unchanged:
+  forall m' b lo hi m m'',
+    Mem_mix m' b lo hi m = Some m'' ->
+    Mem.unchanged_on (fun b1 ofs1 => ~ (b = b1 /\ lo <= ofs1 < hi)) m' m''.
+
+Axiom Mem_mix_updated:
+  forall m' b lo hi m m'',
+    Mem_mix m' b lo hi m = Some m'' ->
+    Mem.unchanged_on (fun b1 ofs1 => b = b1 /\ lo <= ofs1 < hi) m m''.
+
+Axiom Mem_nextblock_mix:
+  forall m' b lo hi m m'',
+    Mem_mix m' b lo hi m = Some m'' ->
+    Mem.nextblock m'' = Mem.nextblock m'.
+
+Axiom Mem_mix_extends:
+  forall m1' m2' b lo hi m1 m2 m2'',
+    Mem_mix m2' b lo hi m2 = Some m2'' ->
+    Mem.extends m1' m2' ->
+    Mem.extends m1 m2 ->
+    exists m1'',
+      Mem_mix m1' b lo hi m1 = Some m1'' /\
+      Mem.extends m1'' m2''.
+
+Axiom Mem_mix_inject:
+  forall f' m1' m2' b lo hi f m1 m2 m2'',
+    Mem_mix m2' b lo hi m2 = Some m2'' ->
+    Mem.inject f' m1' m2' ->
+    Mem.inject f m1 m2 ->
+    inject_incr f f' ->
+    exists m1'',
+      Mem_mix m1' b lo hi m1 = Some m1'' /\
+      Mem.inject f' m1'' m2''.
+
+Axiom Mem_mix_inject_left:
+  forall f f' m1 m2 m1' m2' b1 b2 delta lo hi m1'',
+    Mem_mix m1' b1 lo hi m1 = Some m1'' ->
+    Mem.inject f m1 m2 ->
+    Mem.inject f' m1' m2' ->
+    f b1 = Some (b2, delta) ->
+    Mem.unchanged_on (fun b ofs => b = b2 /\ lo + delta <= ofs < hi + delta) m2 m2' ->
+    Mem.inject f' m1'' m2'.
+
+(** ** Matching [cc_stacking] *)
+
+(** With this, we can prove the simulation convention refinements
+  property we need to match the Stacking proof. *)
+
+(** *** Incoming calls *)
+
+Lemma offset_sarg_inject f m1 m2 sb1 sb2 delta sofs1 sofs2 ofs sz:
+  Mem.inject f m1 m2 ->
+  Mem.range_perm m1 sb1 (offset_sarg sofs1 0) (offset_sarg sofs1 sz) Cur Freeable ->
+  (forall ofs, 0 <= ofs <= sz -> offset_fits sofs1 ofs) ->
+  0 <= ofs <= sz ->
+  f sb1 = Some (sb2, delta) ->
+  sofs2 = Ptrofs.add sofs1 (Ptrofs.repr delta) ->
+  offset_fits sofs2 ofs /\
+  offset_sarg sofs2 ofs = offset_sarg sofs1 ofs + delta.
+Proof.
+  intros Hm Hp Hofs_sz FITS Hsb Hsofs.
+  erewrite ?(access_fits sofs1 _) in * by (apply Hofs_sz; xomega).
+  unfold offset_fits, offset_sarg in *.
+Abort.
+
+Lemma cc_lm_stacking:
+  ccref (cc_locset_mach @ cc_mach inj) (cc_stacking inj).
+Proof.
+  intros [[_ wlm] w] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2). cbn in *.
+  destruct Hqi2. inv Hq1i.
+  inversion H2 as [ | | | | ? ? sb2 sofs2 sdelta Hsb Hsofs | ]; clear H2; subst.
+  exists (stkw inj w sg ls sb2 (Ptrofs.add sofs (Ptrofs.repr sdelta)) m2).
+  split; [ | split].
+  - cbn. auto.
+  - destruct H15 as [FREE FITS].
+    constructor; auto.
+    + setoid_rewrite H13. auto.
+    + cbn. repeat apply conj.
+      * admit.
+      * apply Mem.unchanged_on_refl.
+      * admit.
+      * intros ofs ty REG.
+        admit.
+    + assert (Mem.extends m_ m1) by eauto using free_spec_extends.
+      destruct H6; cbn in *. erewrite <- Mem.mext_next by eauto. constructor.
+      eapply Mem.extends_inject_compose; eauto.
+    + admit.
+    + destruct H4; cbn in *; congruence.
+  - intros r1 r2 Hr. inv Hr.
+    assert
+      (exists m1'',
+          Mem_mix m1' sb (offset_sarg sofs 0) (offset_sarg sofs (size_arguments sg)) m1 = Some m1'')
+      as [m1'' Hm1''] by admit.
+    eassert _ by (eapply Mem_mix_free_spec; eauto).
+    set (rs1' r := if is_callee_save r then ls (R r) else
+                   if in_dec mreg_eq r (regs_of_rpair (loc_result sg)) then ls1' (R r) else
+                   Vundef).
+    exists (mr rs1' m1''). split.
+    + constructor.
+      * subst rs1'. intros r REG. cbn.
+        destruct in_dec; try contradiction.
+        replace (is_callee_save r) with false; auto.
+        pose proof (loc_result_caller_save sg) as Hr.
+        destruct loc_result; cbn in *; intuition congruence.
+      * subst rs1'. intros r REG. cbn.
+        rewrite REG. congruence.
+      * destruct H15. split; auto.
+      * eapply Mem.unchanged_on_implies.
+        -- eapply Mem_mix_updated; eauto.
+        -- destruct 1; eauto.
+    + exists w'; split; auto.
+      constructor.
+      * intros r. subst rs1'. cbn.
+        destruct is_callee_save eqn:CSR; eauto.
+        destruct in_dec; eauto.
+      * destruct H6. inv H18. inv H21. cbn in *.
+        erewrite <- Mem_nextblock_mix by eauto. constructor.
+        eapply Mem_mix_inject_left; eauto.
+        eapply Mem.unchanged_on_implies; eauto.
+        intros b ofs [Hb Hofs] VLD. subst. constructor.
+        admit. (* ptr arith *)
+Admitted.
+
+(** *** Outgoing calls *)
+
+(** The following construction is needed both for the commutation
+  property associated with [cc_locset_mach] and [cc_mach] and in the
+  simulation proof for external calls in [Stacking]. It is used to
+  formulate an [li_locset] view of an [li_mach] query. *)
+
+Definition make_locset (rs: Mach.regset) (m: mem) (sp: val) (l: loc) : val :=
+  match l with
+    | R r => rs r
+    | S Outgoing ofs ty =>
+      let v := load_stack m sp ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) in
+      Val.maketotal v
+    | _ => Vundef
+  end.
+
+Lemma cc_stacking_lm:
+  ccref (cc_stacking injp) (cc_locset injp @ cc_locset_mach).
+Proof.
+  intros w se1 se2 q1 q2 Hse Hq. destruct Hq. cbn in * |- .
+  destruct H2 as (? & ? & ? & ?).
+  set (ls2 := make_locset rs2 m2 (Vptr sb2 sofs2)).
+  edestruct (Mem.range_perm_free m2) as (m2_ & Hm2_); eauto.
+  destruct H3; inv Hse; cbn in * |- .
+  eassert (Hm_ : _). {
+    eapply Mem.free_right_inject; eauto.
+    intros. eapply H4; eauto.
+    + constructor; eauto.
+    + replace (ofs + delta - delta) with ofs by xomega.
+    eapply Mem.perm_max, Mem.perm_implies; eauto. constructor.
+  }
+  exists (se2, (sg, injpw _ _ _ Hm_), lmw sg ls2 m2 sb2 sofs2). repeat apply conj.
+  - constructor; cbn; auto. constructor; auto. 
+    erewrite Mem.nextblock_free; eauto.
+  - exists (lq vf2 sg ls2 m2_). split.
+    + constructor; eauto.
+      * intros r Hr. destruct Hr; cbn -[Z.add Z.mul]; eauto.
+        edestruct H8 as (v2 & Hv2 & Hv); eauto.
+        admit. (* ptr arith *)
+      * constructor.
+    + econstructor; eauto.
+      * split; eauto using free_free_spec.
+      * intros ofs ty l REG. subst l ls2. cbn -[Z.add Z.mul].
+        edestruct H8 as (v2 & Hv2 & Hv); eauto.
+        rewrite Hv2. admit. (* ptr arith *)
+  - intros r1 r2 (ri & (w' & Hw' & Hr1i) & Hri2). cbn in *.
+    inv Hw'. inv Hr1i. inv H9. inv Hri2. destruct H28. cbn in *.
+    rename m1'0 into m1'. rename m2'0 into m2'_. rename m' into m2'. 
+    assert (Hm'' : Mem.inject f' m1' m2'). {
+      eapply Mem.inject_extends_compose; eauto.
+      eapply free_spec_extends; eauto.
+    }
+    exists (injpw f' m1' m2' Hm''); cbn.
+    + constructor; eauto.
+      * intros b ofs p Hb Hp.
+        admit. (* permission inversion on free_spec etc. *)
+      * admit. (* the unchanged_on mixing *)
+      * red. unfold Mem.valid_block. erewrite <- (Mem.nextblock_free m2); eauto.
+    + intros r REG. rewrite H26; eauto.
+    + intros r REG. rewrite H27; eauto.
+    + constructor.
+    + auto.
+Admitted.
 
 
 (** * Commutable typing constraints *)
@@ -417,6 +697,7 @@ Admitted.
 (** For queries, we need to synthesizing the target-level locset by
   extracting arguments from the memory and then removing them. *)
 
+(*
 Lemma match_agree_args R w sg m1 m2 sp1 sp2 ls1 rs2:
   agree_args sg m1 sp1 ls1 ->
   match_mem R w m1 m2 ->
@@ -467,6 +748,7 @@ Proof.
       rewrite <- Ptrofs.add_assoc, Hm2_.
       eauto.
 Qed.
+*)
 
 Instance bis f b1 b2:
   RExists (f b1 = Some (b2, 0)) (block_inject_sameofs f) b1 b2.
@@ -484,6 +766,8 @@ Qed.
 Instance commut_locset_mach R:
   Commutes cc_locset_mach (cc_locset R) (cc_mach R).
 Proof.
+Admitted.
+(*
   intros [[_ [sg ls1]] wR] se1 se2 q1 q2 [[ ] Hse2] (qi & Hq1i & Hqi2).
   cbn in * |- . destruct Hqi2. inv Hq1i. rename m' into m1_. rename ls into ls1.
 
@@ -513,6 +797,7 @@ Proof.
       rewrite H14 by auto. rewrite H15. generalize (H5 r).
       repeat rstep. change (wR ~> wR''). rauto.
 Qed.
+*)
 
 (** ** [cc_mach_asm] *)
 
