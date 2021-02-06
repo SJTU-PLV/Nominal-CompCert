@@ -485,115 +485,6 @@ Admitted.
   [Vundef] when the target values are ill-typed. The gap can then be
   absorbed into a CKLR to recover the original invariant. *)
 
-(** ** C-level typing constraints *)
-
-Inductive et_c_mq sg: c_query -> c_query -> Prop :=
-  et_c_mq_intro vf args_ args m:
-    Val.ensure_type_list args_ args (sig_args sg) ->
-    et_c_mq sg (cq vf sg args_ m) (cq vf sg args m).
-
-Inductive et_c_mr sg: c_reply -> c_reply -> Prop :=
-  et_c_mr_intro res m:
-    et_c_mr sg (cr (Val.ensure_type res (proj_sig_res sg)) m) (cr res m).
-
-Program Definition et_c : callconv li_c li_c :=
-  {|
-    match_senv _ := eq;
-    match_query := et_c_mq;
-    match_reply := et_c_mr;
-  |}.
-
-Lemma et_wt_c R:
-  cceqv (et_c @ cc_c R) (wt_c @ cc_c R).
-Proof.
-  split.
-  - intros [[_ sg] wR] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2). cbn in * |-.
-    destruct Hqi2. inv Hq1i.
-    exists (se1, (se1, sg0), wR). cbn. repeat apply conj; auto.
-    + constructor; auto.
-    + eexists; split; constructor; cbn; intuition auto.
-      * clear - H5. induction H5; cbn; eauto using Val.ensure_has_type.
-      * clear - H5 H0. revert args_ H5. generalize (sig_args sg0). clear - H0.
-        induction H0; inversion 1; subst; constructor; eauto.
-        eapply Val.inject_ensure_type_l; eauto.
-    + intros r1 r2 (ri & Hr1i & Hri2). destruct Hr1i.
-      exists r1; split; auto. destruct r1 as [res1 m1'].
-      erewrite <- (Val.has_type_ensure res1) at 1 by eauto. constructor.
-  - intros [[_ [? sg]] wR] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2). cbn in * |-.
-    destruct Hq1i. destruct H0. subst.
-    eexists (se1, cq_sg q1, wR). cbn. repeat apply conj; auto.
-    + destruct q1 as [vf1 sg vargs1 m1]. cbn in *.
-      eexists. split; eauto. econstructor.
-      revert H1. generalize (sig_args sg). clear.
-      induction vargs1, l; inversion 1; try constructor.
-      rewrite <- (Val.has_type_ensure a) at 1; eauto. constructor. auto.
-    + intros r1 r2 (ri & Hr1i & wR' & HwR' & Hri2).
-      destruct Hr1i. inv Hri2. eexists (cr _ _). split.
-      * constructor. cbn. apply Val.ensure_has_type.
-      * exists wR'. split; auto. constructor; auto.
-        eapply Val.inject_ensure_type_l; eauto.
-Qed.
-
-Lemma et_et_c:
-  cceqv (et_c @ et_c) et_c.
-Proof.
-Admitted.
-
-(** ** Locset-level typing constraints *)
-
-Inductive et_loc_mq sg: locset_query -> locset_query -> Prop :=
-  et_loc_mq_intro vf ls1 ls2 m:
-    (forall l, loc_external sg l -> ls1 l = Val.ensure_type (ls2 l) (Loc.type l)) ->
-    et_loc_mq sg (lq vf sg ls1 m) (lq vf sg ls2 m).
-
-Inductive et_loc_mr sg: locset_reply -> locset_reply -> Prop :=
-  et_loc_mr_intro ls1' ls2' m:
-    (forall r, In r (regs_of_rpair (loc_result sg)) ->
-               ls1' (R r) = Val.ensure_type (ls2' (R r)) (mreg_type r)) ->
-    et_loc_mr sg (lr ls1' m) (lr ls2' m).
-
-Program Definition et_loc :=
-  {|
-    ccworld := signature;
-    match_senv _ := eq;
-    match_query := et_loc_mq;
-    match_reply := et_loc_mr;
-  |}.
-
-Lemma et_wt_loc R:
-  cceqv (et_loc @ cc_locset R) (wt_loc @ cc_locset R).
-Proof.
-  split.
-  - intros [[_ xsg] [sg wR]] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2).
-    destruct Hqi2. inv Hq1i.
-    exists (se1, (se1, sg), (sg, wR)). cbn. repeat apply conj; auto.
-    + constructor; auto.
-    + exists (lq vf1 sg ls0 m1). split; constructor; auto.
-      * constructor. intros l Hl. rewrite H5 by auto. apply Val.ensure_has_type.
-      * intros l Hl. rewrite H5 by auto. apply Val.inject_ensure_type_l. auto.
-    + intros r1 r2 (ri & Hr1i & Hri2). destruct Hr1i.
-      exists r1; split; auto.
-      destruct H3. constructor. intros.
-      rewrite Val.has_type_ensure by eauto. reflexivity.
-  - intros [[_ [xse xsg]] [sg wR]] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2).
-    destruct Hqi2. inv Hq1i. cbn in H4. inv H4.
-    exists (se1, sg, (sg, wR)). cbn. repeat apply conj; auto.
-    + exists (lq vf1 sg ls1 m1). split; constructor; auto.
-      intros. rewrite Val.has_type_ensure; auto.
-    + intros r1 r2 (ri & Hr1i & Hri2). destruct Hr1i.
-      eexists; split; auto.
-      * constructor. constructor. intros. rewrite H4 by auto. apply Val.ensure_has_type.
-      * destruct Hri2 as (wR' & HwR' & Hri2). inv Hri2.
-        exists wR'. split; auto. constructor; auto.
-        intros l Hl. rewrite H4 by auto.
-        apply Val.inject_ensure_type_l. auto.
-Qed.
-
-Lemma et_wt_et_loc:
-  cceqv et_loc (wt_loc @ et_loc).
-Proof.
-Admitted.
-
 
 (** * Commutation properties *)
 
@@ -823,28 +714,191 @@ Proof.
     admit. (* need to synthesize return val -- just a question of preg vs. mreg *)
 Admitted.
 
-(** ** [et_c] *)
 
-Instance commut_et_c (R : cklr):
-  Commutes et_c R R.
+(** * Typing invariants *)
+
+(** On their own, the typing invariants [wt_c] and [wt_locset] do not
+  commute with CKLRs. This is because a source value may be [Vundef],
+  hence well-typed, even when the target value is defined but ill-typed.
+  However, we can recover a sufficient commutation property by
+  introducing some slack as [wt @ lessdef], where [lessdef] is a
+  simulation convention allowing values to be refined. Then we can use
+  [Val.ensure_type] to make sure that the intermediate values are
+  well-typed. *)
+
+(** ** Helper lemmas *)
+
+Lemma val_lessdef_inject_list_compose f vs_ vs1 vs2:
+  Val.lessdef_list vs_ vs1 ->
+  Val.inject_list f vs1 vs2 ->
+  Val.inject_list f vs_ vs2.
 Proof.
-  intros [[_ w] wR] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2).
-  destruct Hqi2. inv Hq1i.
-  exists (se2, wR, sg). repeat apply conj.
-  + constructor; cbn; auto.
-  + edestruct Val.ensure_type_list_inject as (vargs2_ & Hvargs_ & Hvargs2_); eauto.
-    exists (cq vf2 sg vargs2_ m2); split; constructor; auto.
-  + intros r1 r2 (ri & (wR' & HwR' & Hr1i) & Hri2).
-    destruct Hr1i. inv Hri2.
-    exists (cr vres1 m1'). split.
-    * rewrite <- (Val.has_type_ensure vres1) at 1; [ constructor | ].
-      eapply val_has_type_inject; eauto.
-      apply Val.ensure_has_type.
-    * exists wR'. split; auto. constructor; auto.
-      eapply Val.inject_ensure_type_r; eauto.
+  intros Hvs_ Hvs. revert vs2 Hvs.
+  induction Hvs_.
+  - inversion 1; constructor.
+  - inversion 1; subst; constructor; eauto.
+    eapply Mem.val_lessdef_inject_compose; eauto.
 Qed.
 
-(** Other option *)
+Lemma has_type_inject f v1 v2 t:
+  Val.has_type v1 t ->
+  Val.inject f v1 v2 ->
+  Val.inject f v1 (Val.ensure_type v2 t).
+Proof.
+  intros.
+  rewrite <- (Val.has_type_ensure v1 t) by auto.
+  apply Val.ensure_type_inject; auto.
+Qed.
+
+Lemma has_type_inject_list f vl1 vl2 tl:
+  Val.has_type_list vl1 tl ->
+  Val.inject_list f vl1 vl2 ->
+  exists vl2',
+    Val.has_type_list vl2' tl /\
+    Val.inject_list f vl1 vl2' /\
+    Val.lessdef_list vl2' vl2.
+Proof.
+  intros Htl Hv. revert tl Htl.
+  induction Hv; cbn in *.
+  - destruct tl; try contradiction. intros _.
+    exists nil. repeat constructor.
+  - destruct tl as [ | t tl]; try contradiction. intros [Ht Htl].
+    edestruct IHHv as (vl2' & Hvl2' & Hvl & Hvl2); eauto.
+    exists (Val.ensure_type v' t :: vl2'). repeat (constructor; auto).
+    + apply Val.ensure_has_type.
+    + apply has_type_inject; auto.
+    + destruct v', t; auto.
+Qed.
+
+(** ** C-level typing constraints *)
+
+Inductive lessdef_c_mq: c_query -> c_query -> Prop :=
+  lessdef_c_mq_intro vf sg args_ args m:
+    Val.lessdef_list args_ args ->
+    lessdef_c_mq (cq vf sg args_ m) (cq vf sg args m).
+
+Inductive lessdef_c_mr: c_reply -> c_reply -> Prop :=
+  lessdef_c_mr_intro res_ res m:
+    Val.lessdef res_ res ->
+    lessdef_c_mr (cr res_ m) (cr res m).
+
+Program Definition lessdef_c : callconv li_c li_c :=
+  {|
+    ccworld := unit;
+    match_senv _ := eq;
+    match_query _ := lessdef_c_mq;
+    match_reply _ := lessdef_c_mr;
+  |}.
+
+Lemma lessdef_c_cklr R:
+  cceqv (lessdef_c @ cc_c R) (cc_c R).
+Proof.
+  split.
+  - intros [[_ [ ]] wR] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2). cbn in * |-.
+    destruct Hqi2. inv Hq1i.
+    eexists wR. cbn. repeat apply conj; auto.
+    + constructor; auto. clear - H0 H5.
+      eapply val_lessdef_inject_list_compose; eauto.
+    + intros r1 r2 Hr. exists r1; split; auto.
+      destruct r1; constructor; auto.
+  - intros wR se1 se2 q1 q2 Hse Hq.
+    exists (se1, tt, wR). repeat apply conj; cbn; eauto.
+    + exists q1. split; auto. destruct q1. constructor; auto.
+      clear. induction cq_args; constructor; auto.
+    + intros r1 r2 (ri & Hr1i & wR' & HwR' & Hri2).
+      exists wR'. split; auto. destruct Hri2; inv Hr1i; constructor; auto.
+      eapply Mem.val_lessdef_inject_compose; eauto.
+Qed.
+
+Instance commut_wt_c (R : cklr):
+  Commutes (wt_c @ lessdef_c) R R.
+Proof.
+  red. rewrite cc_compose_assoc. rewrite lessdef_c_cklr.
+  intros [[_ [ ]] wR] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2).
+  destruct Hqi2. inv Hq1i. inv H4. cbn [cq_sg cq_args] in *.
+  eexists (se2, wR, (se2, (se2, sg), tt)). repeat apply conj; cbn.
+  + repeat constructor; cbn; auto.
+  + edestruct has_type_inject_list as (vl2 & Hvl2 & Hvl & Hvl'); eauto.
+    exists (cq vf2 sg vl2 m2). split.
+    * constructor; eauto.
+    * eexists. split; constructor; cbn; eauto.
+  + intros r1 r2 (ri & (wR' & HwR' & Hr1i) & rj & Hrij & Hrj2).
+    destruct Hr1i. inv Hrij. inv Hrj2. cbn in *.
+    eexists; split.
+    * constructor. cbn. eapply val_has_type_inject; eauto.
+    * exists wR'. split; auto. constructor; eauto.
+      eapply Mem.val_inject_lessdef_compose; eauto.
+Qed.
+
+(** ** Locset-level typing constraints *)
+
+Inductive lessdef_loc_mq sg: locset_query -> locset_query -> Prop :=
+  lessdef_loc_mq_intro vf ls1 ls2 m:
+    loc_external_rel sg Val.lessdef ls1 ls2 ->
+    lessdef_loc_mq sg (lq vf sg ls1 m) (lq vf sg ls2 m).
+
+Inductive lessdef_loc_mr sg: locset_reply -> locset_reply -> Prop :=
+  lessdef_loc_mr_intro ls1' ls2' m:
+    loc_result_rel sg Val.lessdef ls1' ls2' ->
+    lessdef_loc_mr sg (lr ls1' m) (lr ls2' m).
+
+Program Definition lessdef_loc :=
+  {|
+    match_senv _ := eq;
+    match_query := lessdef_loc_mq;
+    match_reply := lessdef_loc_mr;
+  |}.
+
+Lemma lessdef_loc_cklr R:
+  cceqv (lessdef_loc @ cc_locset R) (cc_locset R).
+Proof.
+  split.
+  - intros [[_ xsg] [sg wR]] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2).
+    destruct Hqi2. inv Hq1i.
+    exists (sg, wR). cbn. repeat apply conj; auto.
+    + constructor; auto. intros l Hl.
+      eapply Mem.val_lessdef_inject_compose; auto.
+    + intros r1 r2 Hr. exists r1. split; auto.
+      destruct r1. constructor. intros l Hl. auto.
+  - intros [sg wR] se1 se2 q1 q2 Hse Hq. inv Hq.
+    exists (se1, sg, (sg, wR)). repeat apply conj; cbn; auto.
+    + eexists. split; constructor; eauto. intros l Hl. auto.
+    + intros r1 r2 (ri & Hr1i & wR' & HwR' & Hri2). exists wR'. split; auto.
+      destruct Hri2. inv Hr1i. constructor; auto.
+      intros l Hl. eapply Mem.val_lessdef_inject_compose; auto.
+Qed.
+
+Instance commut_wt_loc R:
+  Commutes (wt_loc @ lessdef_loc) (cc_locset R) (cc_locset R).
+Proof.
+  red. rewrite cc_compose_assoc, lessdef_loc_cklr.
+  intros [[_ [xse xsg]] [sg wR]] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2).
+  destruct Hqi2. inv Hq1i. inv H. inv H4.
+  exists (se2, (sg, wR), (se2, (se2, sg), sg)). cbn. repeat apply conj; eauto.
+  - constructor; auto.
+  - set (ls2_ l := Val.ensure_type (ls2 l) (Loc.type l)).
+    exists (lq vf2 sg ls2_ m2). split.
+    + constructor; auto. intros l Hl. apply has_type_inject; auto.
+    + eexists. split; constructor.
+      * constructor. intros. apply Val.ensure_has_type.
+      * intros l Hl. subst ls2_; cbn. destruct (ls2 l), Loc.type; cbn; auto.
+  - intros r1 r2 (ri & (wR' & HwR' & Hr1i) & rj & Hrij & Hrj2).
+    destruct Hr1i. inv Hrij. inv Hrj2. inv H6.
+    exists (lr ls1' m1'). split.
+    + constructor. constructor. intros r Hr.
+      eapply val_has_type_inject; eauto. red. eauto.
+    + exists wR'. split; auto. constructor; auto.
+      intros r Hr. eapply Mem.val_inject_lessdef_compose; auto.
+Qed.
+
+(** ** Another option for [wt_c] *)
+
+(** An alternative approach for [wt_c] would be to formulate a typing
+  constraint on the target queries and replies, which can be
+  propagated towards the source as [ccref (cc @ wt) (wt @ cc @
+  wt)]. Then we can use the following property to make it part of the
+  source-level compatibility relations to satisfy the typing
+  requirements of other components' external calls. *)
 
 Lemma star_inv_prop {li} (R : callconv li li) (I : invariant li) :
   PropagatesReplyInvariant 1 I ->
@@ -863,29 +917,4 @@ Proof.
       reflexivity.
     + apply (inv_drop _ _).
   - repeat rstep. apply cc_join_ub_l.
-Qed.
-
-(** ** [loc_et] *)
-
-Instance commut_et_loc R:
-  Commutes et_loc (cc_locset R) (cc_locset R).
-Proof.
-  red.
-  intros [[_ xsg] [sg wR]] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2).
-  destruct Hqi2. inv Hq1i.
-  exists (se2, (sg, wR), sg). repeat apply conj; cbn; eauto.
-  - set (ls2_ l := Val.ensure_type (ls2 l) (Loc.type l)).
-    exists (lq vf2 sg ls2_ m2). split; constructor; auto.
-    intros l Hl. rewrite H5; auto. apply Val.ensure_type_inject; auto.
-  - intros r1 r2 (ri & (wR' & HwR' & Hr1i) & Hri2).
-    destruct Hr1i. inv Hri2.
-    exists (lr ls1' m1'). split.
-    + constructor; auto. intros r Hr.
-      rewrite Val.has_type_ensure; auto.
-      eapply val_has_type_inject. red. eauto.
-      rewrite H9 by auto.
-      apply Val.ensure_has_type.
-    + exists wR'. split; auto.
-      constructor; auto.
-      intros r Hr. eapply Val.inject_ensure_type_r. rewrite <- H9; eauto.
 Qed.

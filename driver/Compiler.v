@@ -389,7 +389,7 @@ Definition cc_cklrs : callconv li_c li_c :=
 
 Definition cc_compcert : callconv li_c li_asm :=
   cc_cklrs^{*} @
-  et_c @ cc_c_locset @ et_loc @ cc_locset_mach @ cc_mach_asm @
+  wt_c @ lessdef_c @ cc_c_locset @ wt_loc @ lessdef_loc @ cc_locset_mach @ cc_mach_asm @
   cc_asm vainj.
 
 (** We show that the overall simulation convention can be
@@ -398,7 +398,7 @@ Definition cc_compcert : callconv li_c li_asm :=
   early passes. *)
 
 Definition cc_cod : callconv li_c li_locset :=
-  et_c @ inj @ vainj @ wt_c @ cc_c ext @ cc_c_locset.
+  wt_c @ inj @ vainj @ wt_c @ cc_c ext @ cc_c_locset.
 
 Definition cc_dom : callconv li_c li_locset :=
   cc_cklrs^{*} @ cc_cod.
@@ -408,7 +408,7 @@ Lemma cc_compcert_expand:
     cc_compcert
     (cc_dom @                                              (* Passes up to Alloc *)
      cc_locset ext @                                       (* Tunneling *)
-     (wt_loc @ et_loc @ cc_locset_mach @ cc_mach inj) @    (* Stacking *)
+     (wt_loc @ lessdef_loc @ cc_locset_mach @ cc_mach inj) @    (* Stacking *)
      (cc_mach ext @ cc_mach_asm) @                         (* Asmgen *)
      cc_asm vainj).
 Proof.
@@ -418,30 +418,32 @@ Proof.
   {
     rewrite vainj_vainj, vainj_inj, !cc_asm_compose, !cc_compose_assoc at 1.
     (* the first [vainj] can be used to meet the requirements of frontend passes *)
+    rewrite <- (cc_compose_assoc wt_c lessdef_c).
+    rewrite <- (cc_compose_assoc wt_loc lessdef_loc).
     do 4 rewrite (commute_around _ (R2 := _ vainj)).
-    rewrite vainj_vainj, cc_c_compose, cc_compose_assoc at 1.
-    rewrite vainj_inj, cc_c_compose, cc_compose_assoc at 1.
+    rewrite vainj_vainj, cc_c_compose, (cc_compose_assoc vainj) at 1.
+    rewrite vainj_inj, cc_c_compose, (cc_compose_assoc vainj) at 1.
     rewrite (commute_around _ (R2 := _ vainj)).
     rewrite cc_star_absorb_r by eauto with cc.
-    (* we also need to duplicate et_c for alloc *)
-    rewrite <- et_et_c, cc_compose_assoc.
-    rewrite (commute_around et_c (R2 := inj)).
-    rewrite (commute_around et_c (R2 := vainj)).
+    (* we also need to duplicate wt_c for alloc *)
+    rewrite (inv_dup wt_c), (cc_compose_assoc wt_c), (cc_compose_assoc wt_c).
+    rewrite (commute_around (_ @ _) (R2 := inj)).
+    rewrite (commute_around (_ @ _) (R2 := vainj)).
     reflexivity.
   }
   repeat (rstep; [rauto | ]).
   etransitivity.
   {
     (* Now we can expand the intermediate [inj] for the rest *)
+    rewrite !cc_compose_assoc.
     rewrite <- inj_ext, cc_asm_compose, cc_compose_assoc.
     rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
     rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
     do 4 rewrite (commute_around cc_mach_asm).
     do 2 rewrite (commute_around cc_locset_mach).
-    rewrite !(commute_around et_loc).
+    rewrite <- (cc_compose_assoc wt_loc), !(commute_around (_ @ _)), cc_compose_assoc.
     do 1 rewrite (commute_around cc_c_locset).
-    rewrite <- (cc_compose_assoc et_c ext), et_wt_c, cc_compose_assoc.
-    rewrite et_wt_et_loc, cc_compose_assoc.
+    rewrite <- (cc_compose_assoc lessdef_c), lessdef_c_cklr.
     reflexivity.
   }
   reflexivity.
@@ -458,14 +460,17 @@ Lemma cc_compcert_collapse:
 Proof.
   rewrite !cc_compose_assoc.
   rewrite !(commute_around cc_locset_mach).
-  rewrite <- (cc_compose_assoc wt_loc), <- et_wt_loc, cc_compose_assoc.
-  rewrite !(commute_around et_loc).
+  rewrite <- (lessdef_loc_cklr injp), cc_compose_assoc.
+  rewrite <- (cc_compose_assoc wt_loc), !(commute_around (_ @ _)).
   unfold cc_dom, cc_cod. rewrite !cc_compose_assoc.
-  rewrite <- (cc_compose_assoc wt_c), <- et_wt_c, cc_compose_assoc.
+  rewrite <- (cc_compose_assoc inj).
+  rewrite <- (cc_compose_assoc (_ @ _)).
+  rewrite <- (cc_compose_assoc wt_c).
+  rewrite (inv_drop _ wt_c), !cc_compose_assoc.
   rewrite !(commute_around cc_c_locset).
-  rewrite !(commute_around et_c).
+  rewrite <- (lessdef_c_cklr ext), cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
+  rewrite !(commute_around (wt_c @ lessdef_c)), cc_compose_assoc.
   rewrite !cc_star_absorb_r by eauto with cc.
-  rewrite <- (cc_compose_assoc et_c), et_et_c.
   reflexivity.
 Qed.
 
@@ -478,7 +483,9 @@ Lemma cc_cod_inj:
 Proof.
   unfold cc_cod.
   rewrite inj_inj, cc_c_compose, cc_compose_assoc at 1.
-  rewrite (commute_around et_c).
+  rewrite <- (lessdef_c_cklr inj), cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
+  rewrite (commute_around (_ @ _)), cc_compose_assoc.
+  rewrite <- (cc_compose_assoc lessdef_c), lessdef_c_cklr.
   reflexivity.
 Qed.
 
@@ -487,15 +494,17 @@ Lemma cc_cod_ext:
 Proof.
   unfold cc_cod.
   rewrite <- ext_inj, cc_c_compose, cc_compose_assoc at 1.
-  rewrite (commute_around et_c).
+  rewrite <- (lessdef_c_cklr ext), cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
+  rewrite (commute_around (_ @ _)), cc_compose_assoc.
+  rewrite <- (cc_compose_assoc lessdef_c), lessdef_c_cklr.
   reflexivity.
 Qed.
 
 Lemma cc_cod_wt:
-  ccref cc_cod (et_c @ cc_cod).
+  ccref cc_cod (wt_c @ cc_cod).
 Proof.
   unfold cc_cod.
-  rewrite <- (cc_compose_assoc et_c et_c), et_et_c.
+  rewrite (inv_dup wt_c), !cc_compose_assoc at 1.
   reflexivity.
 Qed.
 
@@ -505,8 +514,9 @@ Proof.
   unfold cc_cod.
   rewrite vainj_vainj, vainj_inj, !cc_c_compose at 1.
   rewrite !cc_compose_assoc.
-  rewrite (commute_around et_c).
-  rewrite (commute_around et_c).
+  rewrite <- (lessdef_c_cklr inj), cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
+  do 2 rewrite (commute_around (_ @ _)). rewrite cc_compose_assoc.
+  rewrite <- (cc_compose_assoc lessdef_c), lessdef_c_cklr.
   rewrite vainj_va_inj, cc_compose_assoc at 1.
   rewrite <- ext_inj at 2. rewrite cc_c_compose, cc_compose_assoc.
   reflexivity.
@@ -527,11 +537,11 @@ Proof.
 Qed.
 
 Lemma cc_dom_wt:
-  ccref (et_c @ cc_dom) cc_dom.
+  ccref (wt_c @ cc_dom) cc_dom.
 Proof.
   unfold cc_dom, cc_cod.
-  rewrite (commute_around et_c).
-  rewrite <- (cc_compose_assoc et_c et_c), et_et_c.
+  do 2 rewrite <- cc_compose_assoc at 1. rewrite (cc_compose_assoc wt_c).
+  unfold cc_cklrs. rewrite (inv_drop _ wt_c), cc_compose_assoc.
   reflexivity.
 Qed.
 
@@ -593,8 +603,7 @@ Proof.
   intros.
   rewrite <- cc_dom_wt, cc_cod_wt, !cc_compose_assoc.
   rewrite <- cc_dom_ext, cc_cod_ext, !cc_compose_assoc.
-  rewrite <- !(cc_compose_assoc et_c (cc_c ext)).
-  repeat rewrite et_wt_c at 1.
+  rewrite <- !(cc_compose_assoc wt_c).
   eapply compose_forward_simulations; eauto.
 Qed.
 
@@ -619,16 +628,18 @@ Lemma compose_alloc_pass p bsem tsem:
   forward_simulation ccA ccB bsem tsem ->
   forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) sem tsem.
 Proof.
-  intros. unfold cc_dom, cc_cod.
-  rewrite <- cc_id_star, cc_compose_id_left.
+  intros.
   eapply compose_forward_simulations; eauto.
+  unfold cc_dom, cc_cod.
+  rewrite <- cc_id_star, cc_compose_id_left.
   rewrite <- (cc_compose_assoc inj), <- cc_c_compose at 1.
   rewrite <- (cc_compose_assoc inj), <- cc_c_compose at 1.
-  rewrite <- (cc_compose_assoc et_c), et_wt_c, cc_compose_assoc at 1.
-  rewrite <- (cc_compose_assoc et_c), et_wt_c, cc_compose_assoc at 1.
-  rewrite <- !(cc_compose_assoc _ _ (ext @ _)) at 1.
-  rewrite <- (inv_prop _ wt_c) at 1.
-  rewrite (inv_drop _ wt_c) at 1.
+  rewrite <- (cc_compose_assoc wt_c (cc_c (_ @ _))) at 1.
+  rewrite <- (cc_compose_assoc wt_c (cc_c (_ @ _))) at 1.
+  rewrite <- (cc_compose_assoc (wt_c @ _)) at 1.
+  rewrite <- (cc_compose_assoc (wt_c @ _)) at 1.
+  rewrite (cc_compose_assoc wt_c) at 1. rewrite <- (inv_prop _ wt_c).
+  rewrite (cc_compose_assoc wt_c) at 1. rewrite (inv_drop _ wt_c).
   rewrite !cc_compose_assoc at 1.
   eapply compose_forward_simulations; eauto.
   eapply RTLrel.semantics_rel.
