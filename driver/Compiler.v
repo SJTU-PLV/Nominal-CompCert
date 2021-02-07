@@ -389,7 +389,7 @@ Definition cc_cklrs : callconv li_c li_c :=
 
 Definition cc_compcert : callconv li_c li_asm :=
   cc_cklrs^{*} @
-  wt_c @ lessdef_c @ cc_c_locset @ wt_loc @ lessdef_loc @ cc_locset_mach @ cc_mach_asm @
+  wt_c @ lessdef_c @ cc_c_locset @ cc_locset_mach @ cc_mach_asm @
   cc_asm vainj.
 
 (** We show that the overall simulation convention can be
@@ -408,7 +408,7 @@ Lemma cc_compcert_expand:
     cc_compcert
     (cc_dom @                                              (* Passes up to Alloc *)
      cc_locset ext @                                       (* Tunneling *)
-     (wt_loc @ lessdef_loc @ cc_locset_mach @ cc_mach inj) @    (* Stacking *)
+     (wt_loc @ cc_locset_mach @ cc_mach inj) @             (* Stacking *)
      (cc_mach ext @ cc_mach_asm) @                         (* Asmgen *)
      cc_asm vainj).
 Proof.
@@ -419,8 +419,7 @@ Proof.
     rewrite vainj_vainj, vainj_inj, !cc_asm_compose, !cc_compose_assoc at 1.
     (* the first [vainj] can be used to meet the requirements of frontend passes *)
     rewrite <- (cc_compose_assoc wt_c lessdef_c).
-    rewrite <- (cc_compose_assoc wt_loc lessdef_loc).
-    do 4 rewrite (commute_around _ (R2 := _ vainj)).
+    do 3 rewrite (commute_around _ (R2 := _ vainj)).
     rewrite vainj_vainj, cc_c_compose, (cc_compose_assoc vainj) at 1.
     rewrite vainj_inj, cc_c_compose, (cc_compose_assoc vainj) at 1.
     rewrite (commute_around _ (R2 := _ vainj)).
@@ -441,9 +440,9 @@ Proof.
     rewrite <- ext_inj, cc_asm_compose, cc_compose_assoc.
     do 4 rewrite (commute_around cc_mach_asm).
     do 2 rewrite (commute_around cc_locset_mach).
-    rewrite <- (cc_compose_assoc wt_loc), !(commute_around (_ @ _)), cc_compose_assoc.
     do 1 rewrite (commute_around cc_c_locset).
     rewrite <- (cc_compose_assoc lessdef_c), lessdef_c_cklr.
+    rewrite <- wt_loc_out_of_thin_air, cc_compose_assoc.
     reflexivity.
   }
   reflexivity.
@@ -458,10 +457,13 @@ Lemma cc_compcert_collapse:
      cc_asm vainj)
     cc_compcert.
 Proof.
-  rewrite !cc_compose_assoc.
+  rewrite <- wt_loc_out_of_thin_air.
+  rewrite <- (cc_compose_assoc wt_loc) at 1.
+  rewrite <- (cc_compose_assoc (wt_loc @ _)) at 1.
+  rewrite (cc_compose_assoc wt_loc) at 1.
+  rewrite (inv_drop (cc_locset injp) wt_loc), (cc_compose_assoc _ wt_loc).
+  rewrite wt_loc_out_of_thin_air, !cc_compose_assoc.
   rewrite !(commute_around cc_locset_mach).
-  rewrite <- (lessdef_loc_cklr injp), cc_compose_assoc.
-  rewrite <- (cc_compose_assoc wt_loc), !(commute_around (_ @ _)).
   unfold cc_dom, cc_cod. rewrite !cc_compose_assoc.
   rewrite <- (cc_compose_assoc inj).
   rewrite <- (cc_compose_assoc (_ @ _)).
@@ -732,10 +734,9 @@ Ltac DestructM :=
     exact Debugvarproof.transf_program_correct.
   eapply compose_forward_simulations.
     rewrite <- cc_stacking_lm, cc_lm_stacking.
-    admit. (* need to update stacking codomain convention to include et_loc
     eapply Stackingproof.transf_program_correct with (rao := Asmgenproof0.return_address_offset).
     exact Asmgenproof.return_address_exists.
-    eassumption. *)
+    eassumption.
   eapply compose_forward_simulations.
     eapply Asmgenproof.transf_program_correct; eassumption.
   admit. (* Asm parametricity *)

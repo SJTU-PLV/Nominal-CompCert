@@ -476,6 +476,75 @@ Proof.
     + auto.
 Admitted.
 
+(** *** Typing of [cc_locset_mach] source state *)
+
+(** This only works for [Archi.ptr64 = true], in which case there are
+  no actual constraints on register typing. But we need to rely on
+  this for now because of the way callee-save register preservation is
+  formulated in the stacking proof: there is only a guarantee that the
+  original query's source-level register still inject into the reply's
+  target-level registers, but there is no guarantee that the
+  target-level registers are actually unchanged. This means that on
+  incoming calls, [cc_locset_mach] must occur first, before the [inj]
+  component, if we are to satisfy the associated preservation property.
+  But this means that the [lessdef_loc] component which we must insert
+  after [wt_loc] for commutation purposes cannot be absorbed into
+  [inj], and for similar reasons it cannot be folded into
+  [cc_stacking] either.
+
+  So we work around it using the following properties. *)
+
+Lemma type_of_chunk_of_type ty:
+  type_of_chunk (chunk_of_type ty) = ty.
+Proof.
+  destruct ty; cbn; auto.
+Qed.
+
+Lemma always_has_mreg_type v r:
+  Val.has_type v (mreg_type r).
+Proof.
+  unfold mreg_type. change Archi.ptr64 with true.
+  destruct v, r; cbn; auto.
+Qed.
+
+Lemma wt_loc_out_of_thin_air:
+  cceqv (wt_loc @ cc_locset_mach) cc_locset_mach.
+Proof.
+  split.
+  - intros [[xse [xxse sg]] w] se1 se2 q1 q2 [[Hsei] Hse] (_ & [Hq1] & Hq).
+    inv Hsei. inv Hq1. exists w; repeat apply conj; auto.
+    intros r1 r2 Hr. destruct Hr; cbn in *.
+    eexists. split; constructor; auto. constructor.
+    intros r Hr. apply always_has_mreg_type.
+  - intros w se _ q1 q2 [ ] Hq. destruct Hq.
+    exists (se, (se, sg), lmw sg ls m sb sofs). cbn. repeat apply conj; auto.
+    + constructor. auto.
+    + eexists. split; constructor; auto. constructor.
+      intros l Hl. destruct Hl.
+      * apply always_has_mreg_type.
+      * cbn. rewrite <- (type_of_chunk_of_type ty) at 2.
+        eapply Mem.load_type. eauto.
+    + intros r1 r2 (_ & [Hr1] & Hr). auto.
+Qed.
+
+Instance wt_loc_qprop R:
+  PropagatesQueryInvariant (cc_locset R) wt_loc.
+Proof.
+  constructor. cbn.
+  intros [sg wR] [? xsg] se1 se2 q1 q2 Hse Hxse Hq Hq2. subst. inv Hq. inv Hq2.
+  exists (se1, sg). split; auto. constructor.
+  intros. eapply val_has_type_inject; eauto. red. eauto.
+Qed.
+
+Instance wt_loc_rprop R:
+  PropagatesReplyInvariant (cc_locset R) wt_loc.
+Proof.
+  constructor. cbn.
+  intros [se ?] [sg wR] [? ?] se1 se2 q1 q2 r1 r2 Hse ? ? Hq Hq1 Hq2 (wR' & HwR' & Hr) Hr2.
+  subst. inv Hq. inv Hq1. inv Hq2. inv Hr. inv Hr2. constructor.
+  intros. eapply val_has_type_inject; eauto. red. eauto.
+Qed.
+
 
 (** * Commutable typing constraints *)
 
