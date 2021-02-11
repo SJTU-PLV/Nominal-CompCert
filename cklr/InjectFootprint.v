@@ -137,6 +137,17 @@ Program Definition injp: cklr :=
     match_stbls := injp_match_stbls;
   |}.
 
+(** Acc separated *)
+Next Obligation.
+  rename m1 into M1. rename m2 into M2.
+  inv H0.
+  unfold inject_separated in *.
+  intros b1 b2 delta Hw Hw'.
+  destruct (H6 _ _ _ Hw Hw') as [Hm1 Hm2].
+  inv H.
+  tauto.
+Qed.
+
 Next Obligation. (* ~> vs. match_stbls *)
   intros w w' Hw' se1 se2 Hse.
   destruct Hse as [f m1 m2 se1 se2 Hse Hnb1 Hnb2]. inv Hw'.

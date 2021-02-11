@@ -109,6 +109,25 @@ Next Obligation.
   eapply vaext_mmatch; eauto.
 Qed.
 
+(** Acc separated *)
+Next Obligation.
+  intros b1 b2 delta Hw Hw'.
+  assert (~ Mem.valid_block m1 b1).
+  { unfold Mem.valid_block.
+    intros Hvb1.
+    inv H. cbn in *.
+    specialize (vaext_incr_bc _ _ H0 b1 Hvb1) as w'_bc.
+    cbn in w'_bc.
+    unfold inj_of_bc in Hw, Hw'.
+    rewrite w'_bc in Hw'. congruence.
+  }
+  split. auto.
+  contradict H1.
+  inv H.
+  apply inj_of_bc_inv in Hw'. destruct Hw' as (_ & Hb & _). subst b2.
+  erewrite Mem.valid_block_extends; eauto.
+Qed.
+
 Next Obligation.
   intros [se1 bc1 m1 H1] [se2 bc2 m2 H2] [Hse Hbc Hnb Hld]; cbn in *.
   inversion 1; clear H; subst. constructor.
