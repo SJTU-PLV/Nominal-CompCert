@@ -28,6 +28,7 @@ Require Import InjectFootprint.
 Require Import Extends.
 Require Import Clightrel.
 Require Import RTLrel.
+Require Import Asmrel.
 Require Import ValueAnalysis.
 Require Import Conventions.
 Require Import CallConv.
@@ -739,14 +740,14 @@ Ltac DestructM :=
     eassumption.
   eapply compose_forward_simulations.
     eapply Asmgenproof.transf_program_correct; eassumption.
-  admit. (* Asm parametricity *)
+  apply semantics_asm_rel.
   }
   split. auto.
   apply forward_to_backward_simulation.
   apply factor_forward_simulation. auto. intro. eapply sd_traces. eapply Asm.semantics_determinate.
   apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
   apply Asm.semantics_determinate.
-Admitted.
+Qed.
 
 Theorem c_semantic_preservation:
   forall p tp,

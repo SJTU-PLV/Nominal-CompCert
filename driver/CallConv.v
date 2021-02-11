@@ -168,7 +168,8 @@ Instance commut_mach_asm R:
   Commutes cc_mach_asm (cc_mach R) (cc_asm R).
 Proof.
   intros [[_ [rs1 nb1]] wR] se1 se2 q1 q2 [[ ] Hse2] (qi & Hq1i & Hqi2).
-  cbn in * |- . destruct Hq1i. destruct q2 as [rs2 m2], Hqi2 as [Hrs Hm]. rename m into m1.
+  cbn in * |- . destruct Hq1i. destruct q2 as [rs2 m2], Hqi2 as (Hrs & Hpc & Hm).
+  rename m into m1.
   exists (se2, wR, (rs2, Mem.nextblock m2)). cbn. repeat apply conj; auto.
   - exists (mq rs2#PC rs2#SP rs2#RA (fun r => rs2 (preg_of r)) m2). split.
     + constructor; auto.
@@ -667,7 +668,7 @@ Proof.
     destruct Hr1i. inv Hri2. rename rs' into rs2'.
     set (rs1' r := result_regs sg (make_locset rs1 m1 sp1) ls1' (Locations.R r)).
     edestruct (result_mem R (size_arguments sg) sp1 sp2 wR m1 m2 wR'' m1' m2')
-      as (m1'' & Hm'' & ? & ?); eauto.
+      as (m1'' & Hm'' & ? & ?); eauto. etransitivity; eauto.
     exists (mr rs1' m1''). split.
     + constructor; auto.
       * intros r Hr. unfold rs1'. cbn. destruct in_dec; tauto.
