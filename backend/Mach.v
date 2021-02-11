@@ -30,6 +30,7 @@ Require Import Op.
 Require Import Locations.
 Require Import Conventions.
 Require Stacklayout.
+Local Opaque Z.add Z.mul.
 
 (** * Abstract syntax *)
 
@@ -551,61 +552,76 @@ Require Import Separation.
 Local Open Scope sep_scope.
 
 Definition offset_sarg sofs ofs :=
-  Ptrofs.unsigned sofs + (fe_ofs_arg + 4 * ofs).
+  Ptrofs.unsigned (Ptrofs.add sofs (Ptrofs.repr fe_ofs_arg)) + 4 * ofs.
 
 Definition offset_fits sofs ofs :=
+  offset_sarg sofs ofs =
+  Ptrofs.unsigned (Ptrofs.add sofs (Ptrofs.repr (fe_ofs_arg + 4 * ofs))).
+
+(*
   ofs >= 0 /\ offset_sarg sofs ofs <= Ptrofs.max_unsigned.
+*)
 
 Lemma access_fits sofs ofs:
   offset_fits sofs ofs ->
   offset_sarg sofs ofs =
   Ptrofs.unsigned (Ptrofs.add sofs (Ptrofs.repr (fe_ofs_arg + 4 * ofs))).
 Proof.
+  auto.
+(*
   unfold offset_fits, offset_sarg.
+  set (base := Ptrofs.unsigned _).
+  eassert (0 <= base <= _) by eapply Ptrofs.unsigned_range_2.
   intros [OPOS FITS].
-  assert (fe_ofs_arg >= 0) by (unfold fe_ofs_arg; xomega).
-  pose proof (Ptrofs.unsigned_range_2 sofs).
-  rewrite !Ptrofs.add_unsigned.
-  rewrite (Ptrofs.unsigned_repr (fe_ofs_arg + _)) by xomega.
-  rewrite (Ptrofs.unsigned_repr (_ + _)) by xomega.
+  rewrite add_repr, <- Ptrofs.add_assoc.
+  rewrite Ptrofs.add_unsigned.
+  rewrite (Ptrofs.unsigned_repr (4 * ofs)) by xomega. fold base.
+  rewrite Ptrofs.unsigned_repr by xomega.
   reflexivity.
+*)
 Qed.
 
-Inductive loc_init_args sb sofs sz : block -> Z -> Prop :=
-  loc_init_args_intro ofs:
+Inductive loc_init_args sz : val -> block -> Z -> Prop :=
+  loc_init_args_intro sb sofs ofs:
     offset_sarg sofs 0 <= ofs < offset_sarg sofs sz ->
-    loc_init_args sb sofs sz sb ofs.
+    loc_init_args sz (Vptr sb sofs) sb ofs.
 
-Program Definition contains_init_args sg j ls m0 sb sofs : massert :=
+Program Definition contains_init_args sg j ls m0 sp : massert :=
   let sz := size_arguments sg in
   {|
     m_pred m :=
-      Mem.range_perm m sb (offset_sarg sofs 0) (offset_sarg sofs sz) Cur Freeable /\
-      Mem.unchanged_on (loc_init_args sb sofs sz) m0 m /\
-      (forall ofs, 0 <= ofs < sz -> offset_fits sofs ofs) /\
+      Mem.unchanged_on (loc_init_args sz sp) m0 m /\
+      (forall sb sofs, sp = Vptr sb sofs ->
+         Mem.range_perm m sb (offset_sarg sofs 0) (offset_sarg sofs sz) Cur Freeable /\
+         forall ofs, 0 <= ofs < sz -> offset_fits sofs ofs) /\
       (forall ofs ty,
-        In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
-        exists v,
-          Mem.load (chunk_of_type ty) m sb (offset_sarg sofs ofs) = Some v /\
-          Val.inject j (ls (S Outgoing ofs ty)) v);
-    m_footprint := loc_init_args sb sofs sz;
+          In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
+          exists v,
+            load_stack m sp ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) = Some v /\
+            Val.inject j (ls (S Outgoing ofs ty)) v);
+    m_footprint := loc_init_args sz sp;
   |}.
 Next Obligation.
   repeat apply conj.
-  - intros ofs Hofs. erewrite <- Mem.unchanged_on_perm; eauto.
-    + constructor; auto.
-    + eapply Mem.perm_valid_block; eauto.
   - eapply Mem.unchanged_on_trans; eauto.
-  - auto.
-  - intros ofs ty REG. edestruct H3 as (? & ? & ?); eauto.
+  - intros sb sofs Hsp. edestruct H1 as [PERM FITS]; eauto. split; auto.
+    intros ofs Hofs. erewrite <- Mem.unchanged_on_perm; eauto.
+    + subst. constructor; auto.
+    + eapply Mem.perm_valid_block; eauto.
+  - intros ofs ty REG. edestruct H2 as (? & ? & ?); eauto.
+    destruct sp as [ | | | | | sb sofs]; eauto.
     pose proof (loc_arguments_bounded _ _ _ REG).
     pose proof (loc_arguments_acceptable_2 _ _ REG) as [? _].
-    eexists; split; eauto. eapply Mem.load_unchanged_on; eauto.
-    intros. constructor. unfold offset_sarg in *.
+    pose proof (typesize_pos ty).
+    eexists; split; eauto.
+    edestruct H1 as [PERM FITS]; eauto.
+    eapply Mem.load_unchanged_on; eauto. intros. constructor.
+    rewrite <- access_fits in H8 by (apply FITS; xomega). unfold offset_sarg in *.
     destruct ty; cbn [typesize size_chunk chunk_of_type] in *; xomega.
 Qed.
 Next Obligation.
-  destruct H0 as [ofs Hofs].
+  destruct H0.
+  edestruct H1 as (PERM & FITS); eauto.
   eapply Mem.perm_valid_block; eauto.
 Qed.
 
@@ -614,29 +630,29 @@ Record cc_stacking_world {R} :=
     stk_w :> world R;
     stk_sg : signature;
     stk_ls1 : Locmap.t;
-    stk_sb2 : block;
-    stk_sofs2 : ptrofs;
+    stk_sp2 : val;
     stk_m2 : mem;
   }.
 
 Arguments cc_stacking_world : clear implicits.
 
 Inductive cc_stacking_mq R: cc_stacking_world R -> _ -> _ -> Prop :=
-  | cc_stacking_mq_intro w vf1 vf2 sg ls1 m1 sb2 sofs2 ra2 rs2 m2:
+  | cc_stacking_mq_intro w vf1 vf2 sg ls1 m1 sp2 ra2 rs2 m2:
       vf1 <> Vundef -> Val.inject (mi R w) vf1 vf2 ->
       (forall r, Val.inject (mi R w) (ls1 (Locations.R r)) (rs2 r)) ->
-      m2 |= contains_init_args sg (mi R w) ls1 m2 sb2 sofs2 ->
+      m2 |= contains_init_args sg (mi R w) ls1 m2 sp2 ->
       match_mem R w m1 m2 ->
-      (forall b ofs, loc_init_args sb2 sofs2 (size_arguments sg) b ofs ->
+      (forall b ofs, loc_init_args (size_arguments sg) sp2 b ofs ->
                      loc_out_of_reach (mi R w) m1 b ofs) ->
-      (*ra2 <> Vundef ->*) Val.has_type ra2 Tptr ->
+      Val.has_type sp2 Tptr ->
+      Val.has_type ra2 Tptr ->
       cc_stacking_mq R
-        (stkw R w sg ls1 sb2 sofs2 m2)
+        (stkw R w sg ls1 sp2 m2)
         (lq vf1 sg ls1 m1)
-        (mq vf2 (Vptr sb2 sofs2) ra2 rs2 m2).
+        (mq vf2 sp2 ra2 rs2 m2).
 
 Inductive cc_stacking_mr R: cc_stacking_world R -> _ -> _ -> Prop :=
-  | cc_stacking_mr_intro w w' sg ls1 ls1' m1' sb2 sofs2 m2 rs2' m2':
+  | cc_stacking_mr_intro w w' sg ls1 ls1' m1' sp2 m2 rs2' m2':
     w ~> w' ->
     (forall r,
       In r (regs_of_rpair (loc_result sg)) ->
@@ -645,9 +661,11 @@ Inductive cc_stacking_mr R: cc_stacking_world R -> _ -> _ -> Prop :=
       is_callee_save r = true ->
       Val.inject (mi R w') (ls1 (Locations.R r)) (rs2' r)) ->
     match_mem R w' m1' m2' ->
-    Mem.unchanged_on (loc_init_args sb2 sofs2 (size_arguments sg)) m2 m2' ->
+    Mem.unchanged_on (loc_init_args (size_arguments sg) sp2) m2 m2' ->
+    (forall b ofs, loc_init_args (size_arguments sg) sp2 b ofs ->
+                   loc_out_of_reach (mi R w') m1' b ofs) ->
     cc_stacking_mr R
-      (stkw R w sg ls1 sb2 sofs2 m2)
+      (stkw R w sg ls1 sp2 m2)
       (lr ls1' m1')
       (mr rs2' m2').
 
