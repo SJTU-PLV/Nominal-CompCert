@@ -183,6 +183,10 @@ Next Obligation.
   eapply Mem.perm_extends_inv; eauto.
 Qed.
 
+Next Obligation.
+  destruct H0 as (?&?&?).
+  inv H. inv H2. congruence.
+Qed.
 
 (** * Useful lemmas *)
 

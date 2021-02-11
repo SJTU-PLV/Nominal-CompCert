@@ -109,6 +109,10 @@ Hint Resolve inj_mem_inject inj_mem_next_l inj_mem_next_r.
 
 (** ** CKLR definition *)
 
+Instance inj_cklr_kf: KripkeFrame unit inj_world.
+split. intro. exact inj_incr.
+Defined.
+
 Program Definition inj : cklr :=
   {|
     world := inj_world;
@@ -118,13 +122,20 @@ Program Definition inj : cklr :=
     match_mem := inj_mem;
   |}.
 
-Next Obligation.
-  intros b1 b2 delta Hw Hw'.
-  inv H0.
-  inv H.
+Lemma inj_acc_separated w w' m1 m2:
+  inj_mem w m1 m2 ->
+  inj_incr w w' ->
+  inject_separated w w' m1 m2.
+Proof.
+  intros Hm Hw b1 b2 delta Hnone Hsome.
+  inv Hm. inv Hw.
   unfold Mem.valid_block. unfold Plt.
   do 2 rewrite <- Pos.le_nlt.
-  eapply H2; eauto.
+  eapply H4; eauto.
+Qed.
+
+Next Obligation. (* mi_acc_separated *)
+  eapply inj_acc_separated; eauto.
 Qed.
 
 Next Obligation.
@@ -135,7 +146,9 @@ Next Obligation.
   destruct H. inv H0; cbn in *. xomega.
 Qed.
 
-Next Obligation. (* Mem.alloc *)
+Lemma inj_cklr_alloc:
+    Monotonic Mem.alloc (|= inj_mem ++> - ==> - ==> (<> inj_mem * block_inject_sameofs @@ [injw_meminj])).
+Proof.
   intros [f nb1 nb2] m1 m2 Hm lo hi. cbn in *. inv Hm.
   destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:Hm1'.
   edestruct Mem.alloc_parallel_inject
@@ -155,6 +168,10 @@ Next Obligation. (* Mem.alloc *)
     + erewrite (Mem.nextblock_alloc m2 _ _ m2'); eauto. xomega.
   - econstructor; eauto; erewrite Mem.nextblock_alloc by eauto; xomega.
   - cbn. red. auto.
+Qed.
+
+Next Obligation. (* Mem.alloc *)
+  exact inj_cklr_alloc.
 Qed.
 
 Next Obligation. (* Mem.free *)
@@ -270,6 +287,35 @@ Next Obligation. (* perm_inv *)
   destruct H as [f m1 m2 nb1 nb2 Hm Hnb1 Hnb2].
   inv H0.
   eapply Mem.perm_inject_inv; eauto.
+Qed.
+
+Lemma nextblock_inject:
+  Monotonic
+    Mem.nextblock
+    (|= inj_mem ++> (<> block_inject_sameofs @@ [injw_meminj])).
+Proof.
+  intros w m1 m2 Hm.
+  remember (Mem.alloc m1 0 0) as mb eqn: Hmb1. destruct mb as [m1' b1].
+  remember (Mem.alloc m2 0 0) as mb eqn: Hmb2. destruct mb as [m2' b2].
+  exploit Mem.alloc_result. symmetry. apply Hmb1. intros <-.
+  exploit Mem.alloc_result. symmetry. apply Hmb2. intros <-.
+  edestruct inj_cklr_alloc as (w' & Hw' & Hm'). apply Hm.
+  rewrite <- Hmb1 in Hm'. rewrite <- Hmb2 in Hm'.
+  exists w'. split; auto. apply Hm'.
+Qed.
+
+Next Obligation. (* nextblock incr *)
+  inversion H as [? ? ? Hm]. subst.
+  destruct H0 as (w' & Hw' & Hm').
+  exploit nextblock_inject. apply Hm'. intros (w'' & Hw'' & Hb).
+  unfold Ple in *. rewrite Pos.le_nlt in *.
+  exploit inj_acc_separated;
+    [ apply H
+    | cbn in *; etransitivity; eauto
+    | eapply Mem.mi_freeblocks;[ apply Hm | apply H1 ]
+    | apply Hb
+    | ].
+  intros [Hvb1 Hvb2]. apply Hvb2.
 Qed.
 
 (** * Useful theorems *)
