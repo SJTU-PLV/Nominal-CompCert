@@ -185,7 +185,7 @@ Qed.
 
 Next Obligation.
   destruct H0 as (?&?&?).
-  inv H. inv H2. congruence.
+  inv H. inv H1. split; congruence.
 Qed.
 
 (** * Useful lemmas *)

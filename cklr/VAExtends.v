@@ -525,8 +525,8 @@ Qed.
 
 (** nextblock incr *)
 Next Obligation.
-  inv H. destruct H0 as (?&?&?).
-  inv H0. inv H7. inv H10. congruence.
+  inv H. destruct H0 as (?&?&?). inv H0.
+  inv H6. inv H9. split; congruence.
 Qed.
 
 (** * Other properties *)

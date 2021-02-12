@@ -184,7 +184,72 @@ Qed.
 
 (** ** [cc_mach_asm] *)
 
-(** The commutation property for [cc_mach_asm] is straightforward. *)
+(** The commutation property for [cc_mach_asm] is straightforward.
+  The only subtlety is reconstructing the intermediate [Asm.regset]
+  from the source reply's [Mach.regset]. *)
+
+Inductive preg_class :=
+  | prc_pc
+  | prc_sp
+  | prc_preg_of (r : mreg)
+  | prc_other.
+
+Inductive preg_classify_spec : preg_class -> preg -> Prop :=
+  | prc_pc_spec : preg_classify_spec prc_pc PC
+  | prc_sp_spec : preg_classify_spec prc_sp SP
+  | prc_preg_spec m : preg_classify_spec (prc_preg_of m) (preg_of m)
+  | prc_other_spec r : preg_classify_spec prc_other r.
+
+Definition preg_classify r :=
+  match r with
+    | PC => prc_pc
+    | SP => prc_sp
+    | RAX => prc_preg_of AX
+    | RBX => prc_preg_of BX
+    | RCX => prc_preg_of CX
+    | RDX => prc_preg_of DX
+    | RSI => prc_preg_of SI
+    | RDI => prc_preg_of DI
+    | RBP => prc_preg_of BP
+    | R8 => prc_preg_of Machregs.R8
+    | R9 => prc_preg_of Machregs.R9
+    | R10 => prc_preg_of Machregs.R10
+    | R11 => prc_preg_of Machregs.R11
+    | R12 => prc_preg_of Machregs.R12
+    | R13 => prc_preg_of Machregs.R13
+    | R14 => prc_preg_of Machregs.R14
+    | R15 => prc_preg_of Machregs.R15
+    | XMM0 => prc_preg_of X0
+    | XMM1 => prc_preg_of X1
+    | XMM2 => prc_preg_of X2
+    | XMM3 => prc_preg_of X3
+    | XMM4 => prc_preg_of X4
+    | XMM5 => prc_preg_of X5
+    | XMM6 => prc_preg_of X6
+    | XMM7 => prc_preg_of X7
+    | XMM8 => prc_preg_of X8
+    | XMM9 => prc_preg_of X9
+    | XMM10 => prc_preg_of X10
+    | XMM11 => prc_preg_of X11
+    | XMM12 => prc_preg_of X12
+    | XMM13 => prc_preg_of X13
+    | XMM14 => prc_preg_of X14
+    | XMM15 => prc_preg_of X15
+    | ST0 => prc_preg_of FP0
+    | RA | CR _ => prc_other
+  end.
+
+Lemma preg_classify_preg m:
+  preg_classify (preg_of m) = prc_preg_of m.
+Proof.
+  destruct m; auto.
+Qed.
+
+Lemma preg_classify_cases r:
+  preg_classify_spec (preg_classify r) r.
+Proof.
+  destruct r as [ | [ ] | [ ] | | | ]; constructor.
+Qed.
 
 Instance commut_mach_asm R:
   Commutes cc_mach_asm (cc_mach R) (cc_asm R).
@@ -205,9 +270,26 @@ Proof.
         change (b2 < _)%positive with (Mem.valid_block m2 b2).
         rstep. rstep. rstep. rstep. red. eauto.
       * specialize (Hrs RA). destruct Hrs; congruence.
-  - intros r1 r2 (ri & (wR' & HwR' & Hr1i) & Hri2).
-    admit. (* need to synthesize return val -- just a question of preg vs. mreg *)
-Admitted.
+  - intros r1 r2 (ri & (wR' & HwR' & Hr1i) & Hri2). inv Hri2. inv Hr1i.
+    set (rs1' r :=
+           match preg_classify r with
+             | prc_pc => rs1 RA
+             | prc_sp => rs1 SP
+             | prc_preg_of m => rs0 m
+             | prc_other => Vundef
+           end).
+    exists (rs1', m0). split.
+    + constructor; eauto.
+      * eapply cklr_nextblock_incr; eauto. rauto.
+      * subst rs1'. intros r. cbn. rewrite preg_classify_preg. auto.
+    + exists wR'. split; auto. constructor; eauto.
+      intros r. subst rs1'. cbn.
+      destruct (preg_classify_cases r).
+      * rewrite H4. generalize (Hrs RA). rauto.
+      * rewrite H3. generalize (Hrs SP). rauto.
+      * rewrite <- H6. eauto.
+      * constructor.
+Qed.
 
 
 (** * Typing invariants *)

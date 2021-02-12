@@ -547,11 +547,8 @@ Next Obligation. (* nextblock incr*)
   destruct H as (mI & Hm1I & Hm2I).
   destruct H0 as ([w' w0'] & Hw' & mI' & Hm1I' & Hm2I').
   cbn [fst snd] in *. unfold Ple in *.
-  eapply cklr_nextblock_incr. apply Hm2I.
-  eexists. split. apply Hw'. apply Hm2I'.
-  eapply cklr_nextblock_incr. apply Hm1I.
-  eexists. split. apply Hw'. apply Hm1I'.
-  auto.
+  inv Hw'; cbn in *.
+  etransitivity; eapply cklr_nextblock_incr; eauto; eexists; split; eauto.
 Qed.
   
 Bind Scope cklr_scope with cklr.

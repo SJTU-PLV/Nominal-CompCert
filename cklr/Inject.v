@@ -305,17 +305,9 @@ Proof.
 Qed.
 
 Next Obligation. (* nextblock incr *)
-  inversion H as [? ? ? Hm]. subst.
   destruct H0 as (w' & Hw' & Hm').
-  exploit nextblock_inject. apply Hm'. intros (w'' & Hw'' & Hb).
-  unfold Ple in *. rewrite Pos.le_nlt in *.
-  exploit inj_acc_separated;
-    [ apply H
-    | cbn in *; etransitivity; eauto
-    | eapply Mem.mi_freeblocks;[ apply Hm | apply H1 ]
-    | apply Hb
-    | ].
-  intros [Hvb1 Hvb2]. apply Hvb2.
+  destruct H. inv Hm'. inv Hw'.
+  split; auto.
 Qed.
 
 (** * Useful theorems *)

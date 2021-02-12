@@ -366,15 +366,9 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  inv H. eapply (cklr_nextblock_incr inj); eauto.
-  constructor. apply Hm.
-  destruct H0 as (w' & Hw' & Hm'). inv Hm'. inv Hw'.
-  eexists. split. constructor.
-  - eauto.
-  - intros. do 2 rewrite Pos.le_nlt. eapply H11; eauto.
-  - inv H8. apply unchanged_on_nextblock.
-  - inv H9. apply unchanged_on_nextblock.
-  - constructor. auto.
+  destruct H0 as (w' & Hw' & Hm').
+  destruct Hw'. inv H. inv Hm'.
+  split; eauto using Mem.unchanged_on_nextblock.
 Qed.
 
 

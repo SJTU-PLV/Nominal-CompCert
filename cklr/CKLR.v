@@ -170,7 +170,7 @@ Record cklr :=
     cklr_nextblock_incr w m1 m2 m1' m2':
       match_mem w m1 m2 ->
       (<> match_mem)%klr w m1' m2' ->
-      Ple (Mem.nextblock m1) (Mem.nextblock m1') ->
+      Ple (Mem.nextblock m1) (Mem.nextblock m1') <->
       Ple (Mem.nextblock m2) (Mem.nextblock m2');
 
   }.
