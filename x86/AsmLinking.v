@@ -11,6 +11,7 @@ Require Import Values.
 Require Import Asmgenproof0.
 Require Import Asm.
 Require Import Maps.
+Require Import OptionRel.
 
 Inductive linked {A} `{Linker A} : option A -> option A -> option A -> Prop :=
   | linked_n : linked None None None
@@ -164,13 +165,13 @@ Section FOO.
       | match_liveness_refl live:
           match_liveness nb sp live live
       | match_liveness_return:
-          inner_sp nb sp = false ->
-          inner_sp init_nb sp = true ->
+          inner_sp nb sp = Some false ->
+          inner_sp init_nb sp = Some true ->
           match_liveness nb sp false true.
 
     Lemma match_inner_sp nb sp:
       Ple init_nb nb ->
-      match_liveness nb sp (inner_sp nb sp) (inner_sp init_nb sp).
+      option_le (match_liveness nb sp) (inner_sp nb sp) (inner_sp init_nb sp).
     Proof.
       intros Hnb. unfold inner_sp. destruct sp; try constructor.
       repeat destruct plt; eauto using match_liveness_refl; try xomega.
@@ -191,12 +192,18 @@ Section FOO.
           match_stack k nb ->
           match_liveness nb rs#SP live1 live2 ->
           Ple nb (Mem.nextblock m) ->
-          leb (inner_sp init_nb rs#SP) live2 ->
+          option_le leb (inner_sp init_nb rs#SP) (Some live2) ->
           match_states (st L i (nb, State rs m live1) :: k) (State rs m live2).
 
     (** ** Simulation properties *)
 
     (** *** [exec_instr] *)
+
+    Lemma liveness_top live:
+      option_le leb live (Some true).
+    Proof.
+      destruct live; constructor; auto.
+    Qed.
 
     Lemma exec_load_nextblock nb chunk m a rs rd rs' m' live:
       exec_load se chunk m a rs rd = Next' rs' m' live ->
@@ -206,12 +213,12 @@ Section FOO.
       unfold exec_load. destruct Mem.loadv; congruence.
     Qed.
 
-    Lemma exec_load_live b chunk m a rs rd rs' m' live:
-      exec_load se chunk m a rs rd = Next' rs' m' live ->
-      leb b live.
+    Lemma exec_load_live chunk m a rs rd rs' m' live live':
+      exec_load se chunk m a rs rd = Next' rs' m' live' ->
+      option_le leb live (Some live').
     Proof.
-      intros. cut (live = true); [intro; subst; auto | ].
-      unfold exec_load in *. destruct Mem.loadv; congruence.
+      unfold exec_load. destruct Mem.loadv; inversion 1.
+      destruct live; constructor; auto.
     Qed.
 
     Lemma exec_store_nextblock nb chunk m a rs rd lr rs' m' live:
@@ -225,12 +232,12 @@ Section FOO.
       apply Mem.nextblock_store in Hm'. congruence.
     Qed.
 
-    Lemma exec_store_live b chunk m a rs rd lr rs' m' live:
-      exec_store se chunk m a rs rd lr = Next' rs' m' live ->
-      leb b live.
+    Lemma exec_store_live chunk m a rs r1 rd rs' m' live live':
+      exec_store se chunk m a rs r1 rd = Next' rs' m' live' ->
+      option_le leb live (Some live').
     Proof.
-      intros. cut (live = true); [intro; subst; auto using leb_true | ].
-      unfold exec_store in *. destruct Mem.storev; congruence.
+      unfold exec_store. destruct Mem.storev; inversion 1.
+      destruct live; constructor; auto.
     Qed.
 
     Lemma goto_label_nextblock nb f l rs m rs' m' live:
@@ -244,10 +251,10 @@ Section FOO.
 
     Lemma goto_label_live b f l rs m rs' m' live:
       goto_label f l rs m = Next' rs' m' live ->
-      leb b live.
+      option_le leb b (Some live).
     Proof.
-      intros. cut (live = true); [intro; subst; auto using leb_true | ].
-      unfold goto_label in *. destruct label_pos, (rs PC); congruence.
+      unfold goto_label. destruct label_pos, (rs PC); inversion 1.
+      destruct b; constructor; auto.
     Qed.
 
     Hint Resolve
@@ -262,7 +269,7 @@ Section FOO.
         exec_instr init_nb se f instr rs m = Next' rs' m' live' /\
         match_liveness nb rs'#SP live live' /\
         Ple nb (Mem.nextblock m') /\
-        leb (inner_sp init_nb (rs' RSP)) live'.
+        option_le leb (inner_sp init_nb (rs' RSP)) (Some live').
     Proof.
       intros Hnb Hm H.
       destruct instr; cbn in H |- *;
@@ -272,15 +279,24 @@ Section FOO.
           | Stuck = _ => inv H
           | Next' _ _ _ = _ => inv H
         end;
-      eauto 10 using match_liveness_refl.
+      eauto 10 using match_liveness_refl, liveness_top.
+      - (* Pret *)
+        rewrite Pregmap.gso by congruence.
+        pose proof (match_inner_sp nb (rs # RSP) Hnb).
+        rewrite Heqo in H. inv H. exists y.
+        intuition auto. constructor. reflexivity.
       - (* Pallocframe *)
         apply Mem.nextblock_store in Heqo0. rewrite Heqo0.
         apply Mem.nextblock_store in Heqo. rewrite Heqo.
         apply Mem.nextblock_alloc in Heqp0. rewrite Heqp0.
-        eexists. intuition (eauto; xomega).
+        eexists. intuition (eauto using liveness_top; xomega).
       - (* Pfreeframe *)
-        apply Mem.nextblock_free in Heqo1. rewrite Heqo1.
-        eexists. intuition (eauto; xomega).
+        assert (Mem.nextblock m' = Mem.nextblock m). {
+          unfold free' in Heqo1. destruct zlt; try congruence.
+          eapply Mem.nextblock_free; eauto.
+        }
+        rewrite H.
+        eexists. intuition (eauto using liveness_top; xomega).
     Qed.
 
     (** *** [step] *)
@@ -294,17 +310,17 @@ Section FOO.
         step init_nb (Genv.globalenv se p) (State rs m live2) t (State rs' m' live2') /\
         Ple nb (Mem.nextblock m') /\
         match_liveness nb rs'#SP live1' live2' /\
-        leb (inner_sp init_nb rs'#SP) live2'.
+        option_le leb (inner_sp init_nb rs'#SP) (Some live2').
     Proof.
       intros H Hlive Hnb Hm. inv H; inv Hlive; subst.
       - (* instruction *)
-        eapply find_internal_ptr_linkorder in H8; eauto.
+        eapply find_internal_ptr_linkorder in FIND; eauto.
         edestruct exec_instr_match as (? & ? & ? & ? & ?); eauto.
         eauto 10 using exec_step_internal.
       - (* builtin *)
-        eapply find_internal_ptr_linkorder in H8; eauto. cbn in *.
-        exists true. intuition eauto using exec_step_builtin.
-        apply Events.external_call_nextblock in H11. xomega.
+        eapply find_internal_ptr_linkorder in FIND; eauto. cbn in *.
+        exists true. intuition eauto using exec_step_builtin, liveness_top.
+        apply Events.external_call_nextblock in CALL. xomega.
       - (* external *)
         assert (Genv.find_funct_ptr (Genv.globalenv se p) b = Some (External ef)).
         {
@@ -313,8 +329,9 @@ Section FOO.
         }
         replace (Pregmap.set _ _ _ RSP) with rs#SP
           by (destruct ef_sig, sig_res as [[]|]; reflexivity).
-        eexists. intuition eauto using exec_step_external.
-        apply Events.external_call_nextblock in H10. xomega.
+        pose proof (match_inner_sp nb (rs RSP) Hnb) as NB. rewrite ISP in NB. inv NB.
+        eexists. intuition eauto using exec_step_external, Some_le_def.
+        apply Events.external_call_nextblock in CALL. xomega.
     Qed.
 
   End SE.
@@ -382,6 +399,7 @@ Section FOO.
         * econstructor.
         * constructor.
         * subst. reflexivity.
+        * apply liveness_top.
     - (* final states *)
       intros _ s1 [nb s2] r1 [_ Hs] Hr1.
       destruct Hs as [i qi k rs m l1 l2 Hk Hl Hb Hsp].
@@ -406,11 +424,17 @@ Section FOO.
              destruct (link v v0) as [|]; discriminate.
       + intros r _ s' [ ] Hs'. inv Hs'. cbn in *.
         destruct s'0 as [nb' s'], H6 as [Hae Hnb']. inv Hae.
-        eexists (se, _), (nb, _). repeat apply conj; auto. { inv Hl. econstructor; eauto. }
+        exploit (match_inner_sp nb qi (rs' SP));
+          eauto using match_stack_nextblock; intro Hisp.
+        assert (exists live, inner_sp nb (rs' RSP) = Some live) as [live' Hlive']. {
+          destruct Hisp; try congruence; eauto.
+        }
+        eexists (se, _), (nb, _). repeat apply conj; auto.
+        { inv Hl. econstructor; eauto. }
         econstructor; eauto.
-        * eapply match_inner_sp.
-          eapply match_stack_nextblock; eauto.
+        * destruct Hisp; congruence.
         * xomega.
+        * rewrite <- Hlive'. reflexivity.
     - (* simulation *)
       intros s1 t s1' Hstep1 idx [nb s2] [Hidx Hs]. subst. cbn in *.
       destruct Hstep1; inv Hs; cbn in *.
@@ -435,16 +459,15 @@ Section FOO.
         eexists (_, _), (_, _). intuition auto.
         {
           right. split; auto using star_refl. red. cbn.
-          clear. destruct Genv.find_funct as [[|]|], inner_sp; xomega.
+          clear. destruct Genv.find_funct as [[|]|], live; xomega.
         }
         inv H5.
         * constructor; eauto using Ple_trans.
-          destruct rs#SP; cbn; try constructor.
-          destruct plt; try constructor.
-          apply match_stack_nextblock in H9.
-          cbn in H8. destruct plt. xomega. discriminate H8.
+          exploit (match_inner_sp nb bk (rs RSP)); eauto using match_stack_nextblock. intro.
+          destruct H; inv H9. inv H8. destruct y; congruence.
         * constructor; eauto using Ple_trans.
-          rewrite <- H0. eapply match_inner_sp, match_stack_nextblock; eauto.
+          exploit (match_inner_sp nb bk (rs RSP)); eauto using match_stack_nextblock. intro.
+          destruct H; inv H9. destruct H1; congruence.
     - apply well_founded_ltof.
   Qed.
 End FOO.
