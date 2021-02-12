@@ -125,6 +125,30 @@ Proof.
   apply Val.longofwords_inject; auto.
 Qed.
 
+(** For now we restrict ourselves to 64-bit x86, where no register
+  pairs are involved. Eventually we'll want to fold register typing
+  into the property below (or maybe the calling conventions
+  themselves) to ensure that split integers are the right sizes. *)
+
+Lemma loc_arguments_always_one sg p:
+  In p (loc_arguments sg) ->
+  exists l, p = One l.
+Proof.
+  cut (forall x y z, In p (loc_arguments_64 (sig_args sg) x y z) -> exists l, p = One l).
+  - intros. apply (H 0 0 0). apply H0.
+  - induction sig_args; cbn -[list_nth_z].
+    + tauto.
+    + intros x y z.
+      destruct a, list_nth_z; cbn; intros [? | ?]; eauto.
+Qed.
+
+Lemma loc_result_always_one sg:
+  exists r, loc_result sg = One r.
+Proof.
+  change loc_result with loc_result_64. unfold loc_result_64.
+  destruct sig_res as [[ ] | ]; eauto.
+Qed.
+
 Instance commut_c_locset R:
   Commutes cc_c_locset (cc_c R) (cc_locset R).
 Proof.
@@ -150,15 +174,13 @@ Proof.
     exists (lr ls1' m1'). split.
     + constructor.
       * subst ls1'. clear.
-        destruct loc_result.
-        -- cbn. rewrite Locmap.gss. reflexivity.
-        -- cbn. admit. (* register pairs, would need typing *)
+        destruct (loc_result_always_one sg) as [r ->].
+        cbn. rewrite Locmap.gss. reflexivity.
     + eexists; split; eauto.
       constructor; auto. subst ls1'. red.
-      destruct (loc_result sg) eqn:RES; cbn in *.
-      * intuition subst. rewrite Locmap.gss. auto.
-      * admit. (* loc pairs *)
-Admitted.
+      destruct (loc_result_always_one sg) as [r Hr]. rewrite Hr in *. cbn in *.
+      intuition subst. rewrite Locmap.gss. auto.
+Qed.
 
 (** ** [cc_mach_asm] *)
 
