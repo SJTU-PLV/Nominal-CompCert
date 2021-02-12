@@ -587,7 +587,7 @@ Proof.
       inv H1. eexists (_, _). repeat apply conj.
       (* after_nexternal *)
       * econstructor.
-        -- eapply cklr_nextblock_incr; eauto.
+        -- erewrite <- cklr_nextblock_incr; eauto.
            eexists. split; eauto.
         -- rewrite <- H9. specialize (Hrs' SP) as Hsp'.
            exploit (init_nb_match_acc R w' w''); eauto.
@@ -606,7 +606,7 @@ Proof.
         -- eapply Pos.le_trans; eauto.
         (* nb2 <= nextblock m2 *)
         -- eapply Pos.le_trans; eauto.
-           eapply cklr_nextblock_incr; eauto.
+           erewrite <- cklr_nextblock_incr; eauto.
            eexists. split; eauto.
   - intros [nb1 s1] t [nb1' s1'] [Hstep ->] [nb2 s2] (w' & Hw' & Hge & Hs).
     cbn [fst snd] in *.
