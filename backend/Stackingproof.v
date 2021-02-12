@@ -1509,8 +1509,12 @@ Lemma match_stacks_range_perm_args m j cs cs' sg sb sofs:
   Mem.range_perm m sb (offset_sarg sofs 0) (offset_sarg sofs (size_arguments sg)) Cur Freeable.
 Proof.
   intros MS SEP SP. destruct MS; cbn in *; inv SP.
-  - destruct H as [? | Hsg]; subst; auto.
-    + eapply SEP; auto.
+  - destruct SEP as (? & PERM & ?).
+    destruct H as [? | Hsg]; subst; auto.
+    + destruct (zlt 0 (size_arguments (stk_sg w))).
+      * edestruct PERM as (sb' & sofs' & Hsp & PERM' & FITS). xomega.
+        rewrite H4 in Hsp. inv Hsp. auto.
+      * intro. unfold offset_sarg. xomega. 
     + apply zero_size_arguments_tailcall_possible in Hsg.
       unfold offset_sarg. intro. xomega.
   - eapply mconj_proj1, sep_proj1, sep_proj2, sep_proj1 in SEP. cbn in SEP.
@@ -1530,7 +1534,8 @@ Lemma match_stacks_args_fit m j cs cs' sg ofs sb sofs:
 Proof.
   intros MS SEP SP OFS. red. destruct MS; cbn in *; inv SP.
   - destruct H as [? | Hsg]; subst; auto.
-    + eapply SEP; eauto.
+    + edestruct SEP as (? & HH & ?), HH as (sb' & sofs' & Hsp & PERM & FITS). xomega.
+      rewrite H4 in Hsp. inv Hsp. apply FITS; eauto.
     + red in Hsg. xomega.
   - eapply mconj_proj1, sep_proj1, sep_proj2, sep_proj1 in SEP. cbn in SEP.
     unfold offset_sarg. (* split; try xomega. *)
@@ -1545,10 +1550,21 @@ Lemma match_stacks_init_args j cs cs' sg m P:
   m |= contains_init_args sg j (parent_locset cs) m (parent_sp cs') ** P.
 Proof.
   intros MS SEP. split.
-  - split; eauto using Mem.unchanged_on_refl.
-    split; eauto 10 using match_stacks_range_perm_args, match_stacks_args_fit, sep_proj1.
-    intros ofs ty REG.
-    edestruct load_stack_arg as (? & ? & ?); eauto using sep_proj1.
+  - pose proof MS as MS'. destruct MS.
+    + apply sep_proj1 in SEP. cbn in SEP |- *.
+      decompose [and] SEP. repeat apply conj.
+      * apply Mem.unchanged_on_refl.
+      * destruct H; subst; auto.
+        apply zero_size_arguments_tailcall_possible in H. xomega.
+      * destruct H; subst; auto.
+        intros ? ? REG. apply tailcall_possible_reg in REG; auto. contradiction.
+    + cbn. repeat apply conj.
+      * apply Mem.unchanged_on_refl.
+      * intros Hsz. eexists _, _. split; eauto.
+        split; eauto 10 using match_stacks_range_perm_args, sep_proj1.
+        intros. eapply match_stacks_args_fit; eauto using sep_proj1. reflexivity.
+      * intros ofs ty REG.
+        edestruct load_stack_arg as (? & ? & ?); eauto using sep_proj1.
   - split; eauto using sep_proj2. destruct SEP as (SEP & _ & DISJ).
     intros b ofs Hofs Hofs'.
     destruct MS; cbn in *.

@@ -591,7 +591,7 @@ Program Definition contains_init_args sg j ls m0 sp : massert :=
   {|
     m_pred m :=
       Mem.unchanged_on (loc_init_args sz sp) m0 m /\
-      (forall sb sofs, sp = Vptr sb sofs ->
+      (sz > 0 -> exists sb sofs, sp = Vptr sb sofs /\
          Mem.range_perm m sb (offset_sarg sofs 0) (offset_sarg sofs sz) Cur Freeable /\
          forall ofs, 0 <= ofs < sz -> offset_fits sofs ofs) /\
       (forall ofs ty,
@@ -604,7 +604,8 @@ Program Definition contains_init_args sg j ls m0 sp : massert :=
 Next Obligation.
   repeat apply conj.
   - eapply Mem.unchanged_on_trans; eauto.
-  - intros sb sofs Hsp. edestruct H1 as [PERM FITS]; eauto. split; auto.
+  - intros Hsz. edestruct H1 as (sb & sofs & Hsp & PERM & FITS); eauto.
+    exists sb, sofs. intuition auto.
     intros ofs Hofs. erewrite <- Mem.unchanged_on_perm; eauto.
     + subst. constructor; auto.
     + eapply Mem.perm_valid_block; eauto.
@@ -614,15 +615,16 @@ Next Obligation.
     pose proof (loc_arguments_acceptable_2 _ _ REG) as [? _].
     pose proof (typesize_pos ty).
     eexists; split; eauto.
-    edestruct H1 as [PERM FITS]; eauto.
+    edestruct H1 as (sb' & sofs' & Hsp & PERM & FITS). xomega. inv Hsp.
     eapply Mem.load_unchanged_on; eauto. intros. constructor.
     rewrite <- access_fits in H8 by (apply FITS; xomega). unfold offset_sarg in *.
     destruct ty; cbn [typesize size_chunk chunk_of_type] in *; xomega.
 Qed.
 Next Obligation.
   destruct H0.
-  edestruct H1 as (PERM & FITS); eauto.
-  eapply Mem.perm_valid_block; eauto.
+  edestruct H1 as (sb' & sofs' & Hsp & PERM & FITS); eauto.
+  + unfold offset_sarg in *. xomega.
+  + inv Hsp. eapply Mem.perm_valid_block; eauto.
 Qed.
 
 Record cc_stacking_world {R} :=

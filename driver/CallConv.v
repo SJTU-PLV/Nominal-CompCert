@@ -805,25 +805,21 @@ Proof.
   - constructor; auto.
     + cbn -[Z.add Z.mul]. repeat apply conj.
       * apply Mem.unchanged_on_refl.
-      * intros. subst. split.
-        -- destruct H12.
-           ++ apply zero_size_arguments_tailcall_possible in H7.
-              rewrite H7. red. intros. xomega.
-           ++ inversion H2. subst.
-              eapply transport in H7 as (m2_ & Hm2_ & Hm_).
-              2: {
-                change ?x with (id x) in H7. repeat rstep.
-                eapply offset_sarg_ptrrange_inject; eauto.
-                eapply Mem.free_range_perm; eauto.
-                rewrite (offset_sarg_expand (size_arguments sg)).
-                xomega.
-              }
-              eapply Mem.free_range_perm; eauto.
-        -- intros ofs Hofs. destruct H12.
-           ++ apply zero_size_arguments_tailcall_possible in H7.
-              rewrite H7 in Hofs. xomega.
-           ++ inv H2. eapply offset_fits_inject; eauto.
-              eapply Mem.free_range_perm; eauto.
+      * intro Hsz.
+        destruct H12. { apply zero_size_arguments_tailcall_possible in H7. xomega. }
+        inv H2. eexists _, _. split; eauto. split.
+        -- eapply transport in H7 as (m2_ & Hm2_ & Hm_).
+           2: {
+             change ?x with (id x) in H7. repeat rstep.
+             eapply offset_sarg_ptrrange_inject; eauto.
+             eapply Mem.free_range_perm; eauto.
+             rewrite (offset_sarg_expand (size_arguments sg)).
+             xomega.
+           }
+           eapply Mem.free_range_perm; eauto.
+        -- intros ofs Hofs.
+           eapply offset_fits_inject; eauto.
+           eapply Mem.free_range_perm; eauto.
       * intros ofs ty REG. destruct H12.
         -- apply tailcall_possible_reg in REG; auto. contradiction.
         -- edestruct H10 as [v Hv]; eauto. rewrite Hv.
@@ -913,21 +909,28 @@ Proof.
   intros w se1 se2 q1 q2 Hse Hq. destruct Hq. cbn -[Z.add Z.mul] in * |- .
   destruct H2 as (UNCH & PERM & ARGS).
   set (ls2 := make_locset rs2 m2 sp2).
-  (* we'll deal with making sure sp has thee right form later *)
-  assert (exists sb2 sofs2, sp2 = Vptr sb2 sofs2) as (sb2 & sofs2 & Hsp2) by admit.
-  edestruct PERM as [PRNG FITS]; eauto.
-  edestruct (Mem.range_perm_free m2) as (m2_ & Hm2_); eauto.
   destruct H3; inv Hse; cbn -[Z.add Z.mul] in * |- .
-  eassert (Hm_ : _). {
-    eapply Mem.free_right_inject; eauto.
-    intros. eapply H4; eauto.
-    + constructor; eauto.
-    + replace (ofs + delta - delta) with ofs by xomega.
-    eapply Mem.perm_max, Mem.perm_implies; eauto. constructor.
+  assert (exists m2_, args_removed sg sp2 m2 m2_ /\ Mem.inject f m1 m2_) as (m2_ & Hm2_ & Hm_).
+  {
+    destruct (zlt 0 (size_arguments sg)).
+    - edestruct PERM as (sb2 & sofs2 & Hsp2 & PERM' & FITS). xomega.
+      edestruct (Mem.range_perm_free m2) as (m2_ & Hm2_); eauto.
+      exists m2_. subst. split.
+      + constructor; eauto.
+        * xomega.
+        * intros. edestruct ARGS as (? & ? & ?); eauto.
+      + eapply Mem.free_right_inject; eauto.
+        intros. eapply H4; eauto.
+        * constructor; eauto.
+        * replace (ofs + delta - delta) with ofs by xomega.
+          eapply Mem.perm_max, Mem.perm_implies; eauto. constructor.
+    - exists m2. split; auto. constructor.
+      rewrite <- zero_size_arguments_tailcall_possible.
+      pose proof (size_arguments_above sg). xomega.
   }
-  exists (se2, (sg, injpw _ _ _ Hm_), lmw sg rs2 m2 (Vptr sb2 sofs2)). repeat apply conj.
-  - constructor; cbn; auto. constructor; auto. 
-    erewrite Mem.nextblock_free; eauto.
+  exists (se2, (sg, injpw _ _ _ Hm_), lmw sg rs2 m2 sp2). repeat apply conj.
+  - constructor; cbn; auto. constructor; auto.
+    destruct Hm2_; eauto. erewrite Mem.nextblock_free; eauto.
   - exists (lq vf2 sg ls2 m2_). split.
     + constructor; eauto.
       * intros r Hr. destruct Hr; cbn -[Z.add Z.mul]; eauto.
@@ -935,9 +938,6 @@ Proof.
         rewrite Hv2. cbn. auto.
       * constructor.
     + econstructor; eauto.
-      * constructor; eauto.
-        -- admit. (* size arguments *)
-        -- intros ofs ty REG. edestruct ARGS as (v2 & Hv2 & Hv); eauto.
   - intros r1 r2 (ri & (w' & Hw' & Hr1i) & Hri2). cbn -[Z.add Z.mul] in *.
     inv Hw'. inv Hr1i. inv H3. inv Hri2. cbn -[Z.add Z.mul] in *.
     rename m1'0 into m1'. rename m2'0 into m2'_. rename m' into m2'.
@@ -946,51 +946,57 @@ Proof.
       eapply m_invar; cbn; eauto.
       eapply Mem.unchanged_on_implies; eauto.
       intros b2 ofs2 (b1 & delta & Hb & Hp) Hb2 Harg. inv Harg.
-      eapply inject_incr_separated_inv in Hb;
-        eauto using Mem.valid_block_free_1, Mem.perm_valid_block.
-      eapply H4; eauto.
+      eapply inject_incr_separated_inv in Hb; [eapply H4 | .. ]; eauto.
       * constructor; eauto.
-      * eapply H9; eauto.
-        eapply Mem.valid_block_inject_1; eauto.
+      * eauto using Mem.valid_block_inject_1.
+      * inv Hm2_.
+        -- apply zero_size_arguments_tailcall_possible in H7.
+           unfold offset_sarg in H3. xomega.
+        -- right. eapply Mem.valid_block_free_1; eauto.
+           edestruct PERM as (sb2' & sofs2' & Hsp2 & ? & ?); eauto. inv Hsp2.
+           eapply Mem.perm_valid_block; eauto.
     }
     exists (injpw f' m1' m2' Hm''); cbn.
     + constructor; eauto.
       * intros b ofs p Hb Hp.
-        destruct (classic (loc_init_args (size_arguments sg) (Vptr sb2 sofs2) b ofs)).
+        destruct (classic (loc_init_args (size_arguments sg) sp2 b ofs)).
         -- eapply Mem.perm_unchanged_on_2; eauto.
-        -- eapply Mem.perm_free_3; eauto. eapply Mem.valid_block_free_1 in Hb; eauto.
-           eapply H10; eauto. eapply Mem.valid_block_unchanged_on in Hb; eauto.
-           eapply Mem.perm_unchanged_on_2; eauto.
+        -- cut (Mem.valid_block m2_ b -> Mem.perm m2_ b ofs Max p); intros.
+           ++ destruct Hm2_; eauto using Mem.perm_free_3, Mem.valid_block_free_1.
+           ++ eapply H10; eauto.
+              eapply Mem.valid_block_unchanged_on in H7; eauto.
+              eapply Mem.perm_unchanged_on_2; eauto.
       * eapply unchanged_on_combine; eauto.
         apply Mem.unchanged_on_trans with m2_.
-        { eapply Mem.free_unchanged_on; eauto.
+        { destruct Hm2_; eauto using Mem.unchanged_on_refl.
+          eapply Mem.free_unchanged_on; eauto.
           intros i Hi [Hoor Hlia]. apply Hlia. constructor. eauto. }
         apply Mem.unchanged_on_trans with m2'_.
         { eapply Mem.unchanged_on_implies; eauto.
           tauto. }
         { eapply Mem.unchanged_on_implies; eauto.
           intros b ofs [_ ?] _. red. auto. }
-      * red. unfold Mem.valid_block. erewrite <- (Mem.nextblock_free m2); eauto.
+      * red. inv Hm2_; eauto.
+        unfold Mem.valid_block. erewrite <- (Mem.nextblock_free m2); eauto.
     + intros r REG. rewrite H22; eauto.
     + intros r REG. rewrite H23; eauto.
     + constructor.
     + auto.
     + intros b2 ofs2 Hofs2 b1 delta Hb Hp.
-      admit. (* arguments our of reach of m1' *)
-(*
-      cut (loc_out_of_reach f m1 b2 ofs2).
-      * intros Hofs2' b1 delta Hb Hp.
-        eapply (Mem.perm_inject f m1' m2'_) in Hp; eauto.
-        replace (ofs2 - delta + delta) with ofs2 in Hp by xomega.
-
-        eapply (Mem.perm_inject f' m1' m2'_) in Hp; eauto.
-        replace (ofs2 - delta + delta) with ofs2 in Hp by xomega.
- b1 delta Hb Hp. inv Hofs2.
-      erewrite <- Mem.unchanged_on_perm in Hp; eauto.
-      eapply Mem.perm_free_2; eauto.
-      * clear b1 delta Hb Hp. intros b1 delta Hb Hp.
-*)
-Admitted.
+      inv Hm2_.
+      * apply zero_size_arguments_tailcall_possible in H3.
+        destruct Hofs2. unfold offset_sarg in *. xomega.
+      * inv Hofs2.
+        eapply inject_incr_separated_inv in Hb; eauto.
+        -- eapply H9 in Hp; eauto using Mem.valid_block_inject_1.
+           eapply Mem.perm_inject in Hp; eauto.
+           replace (ofs2 - delta + delta) with ofs2 in Hp by xomega.
+           eapply Mem.perm_free_2; eauto.
+        -- right.
+           eapply Mem.valid_block_free_1; eauto.
+           eapply Mem.perm_valid_block.
+           eapply Mem.free_range_perm; eauto.
+Qed.
 
 (** *** Typing of [cc_locset_mach] source state *)
 
