@@ -592,6 +592,7 @@ Record cc_lm_world :=
 Inductive cc_locset_mach_mq: cc_lm_world -> locset_query -> mach_query -> Prop :=
   cc_locset_mach_mq_intro sg vf m_ rs sp ra m:
     args_removed sg sp m m_ ->
+    Val.has_type sp Tptr ->
     Val.has_type ra Tptr ->
     cc_locset_mach_mq
       (lmw sg rs m sp)
@@ -760,13 +761,14 @@ Instance commut_locset_mach R:
 Proof.
   intros [[_ w] wR] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2).
   destruct Hqi2. inv Hq1i. set (ls2 := make_locset rs2 m2 sp2).
-  transport H11.
+  transport H12.
   eexists (se2, (sg, wR'), lmw sg rs2 m2 _). cbn. repeat apply conj; auto.
   - eapply match_stbls_acc; eauto.
   - exists (lq vf2 sg ls2 x). split.
     + constructor; auto; try rauto.
       * intros l Hl. unfold ls2. rewrite <- HwR'. repeat rstep; auto.
     + constructor; auto.
+      * destruct H2; congruence.
       * destruct H4; congruence.
   - intros r1 r2 (ri & (wR'' & HwR'' & Hr1i) & Hri2).
     destruct Hr1i. inv Hri2. rename rs' into rs2'.
@@ -779,9 +781,9 @@ Proof.
       * intros r Hr. unfold rs1'. rewrite <- result_regs_agree_callee_save; auto.
     + exists wR''. split; [rauto | ]. constructor; auto.
       intro r. unfold rs1', result_regs.
-      destruct in_dec. { rewrite H19; auto. }
+      destruct in_dec. { rewrite H20; auto. }
       destruct is_callee_save eqn:Hr; auto.
-      rewrite H20 by auto. cbn. generalize (H5 r).
+      rewrite H21 by auto. cbn. generalize (H5 r).
       repeat rstep. change (wR ~> wR''). etransitivity; eauto.
 Qed.
 
@@ -804,7 +806,7 @@ Proof.
     + cbn -[Z.add Z.mul]. repeat apply conj.
       * apply Mem.unchanged_on_refl.
       * intros. subst. split.
-        -- destruct H11.
+        -- destruct H12.
            ++ apply zero_size_arguments_tailcall_possible in H7.
               rewrite H7. red. intros. xomega.
            ++ inversion H2. subst.
@@ -817,24 +819,46 @@ Proof.
                 xomega.
               }
               eapply Mem.free_range_perm; eauto.
-        -- intros ofs Hofs. destruct H11.
+        -- intros ofs Hofs. destruct H12.
            ++ apply zero_size_arguments_tailcall_possible in H7.
               rewrite H7 in Hofs. xomega.
            ++ inv H2. eapply offset_fits_inject; eauto.
               eapply Mem.free_range_perm; eauto.
-      * intros ofs ty REG. destruct H11.
+      * intros ofs ty REG. destruct H12.
         -- apply tailcall_possible_reg in REG; auto. contradiction.
         -- edestruct H10 as [v Hv]; eauto. rewrite Hv.
            transport Hv. rewrite H11. eauto.
-    + destruct H11 as [ | sb1 sofs1 m1 m1_ ]; auto.
+    + destruct H12 as [ | sb1 sofs1 m1 m1_ ]; auto.
       assert (Mem.extends m1_ m1) by eauto using Mem.free_left_extends, Mem.extends_refl.
       destruct H6; cbn in *. erewrite <- Mem.mext_next by eauto. constructor.
       eapply Mem.extends_inject_compose; eauto.
-    + destruct 1. intros b1 delta Hb1 Hp.
-      eapply Mem.perm_free_2; eauto.
-      admit. admit. (* things about injection overlap -- should be okay *)
-    + admit. (* type of sp *)
-    + destruct H4; cbn in *; congruence.
+    + destruct 1 as [sb2 sofs2 ofs].
+      inversion H2 as [ | | | | sb1 sofs1 | ]; clear H2; try congruence. subst b2 ofs2 sp1.
+      inversion H12; clear H12.
+      { apply zero_size_arguments_tailcall_possible in H2.
+        unfold offset_sarg in *. xomega. }
+      subst sb sofs m m_0.
+      assert (offset_sarg sofs1 0 <= ofs - delta < offset_sarg sofs1 (size_arguments sg)).
+      {
+        rewrite (offset_sarg_expand (size_arguments sg)) in *.
+        exploit (offset_sarg_inject inj w m1 m2 sb1 sofs1 sb2 sofs2 0); eauto.
+        * eapply Mem.free_range_perm; eauto. xomega.
+        * subst. eauto.
+        * inversion 1. assert (delta0 = delta) by congruence. xomega.
+      }
+      intros sb1' delta' Hsb1' Hp.
+      destruct (peq sb1 sb1').
+      { subst sb1'. assert (delta' = delta) by congruence; subst.
+        eapply Mem.perm_free_2; eauto. }
+      apply cklr_no_overlap in H6. red in H6.
+      edestruct (H6 sb1 sb2 delta sb1' sb2 delta'); eauto.
+      * eapply Mem.perm_max, Mem.perm_implies.
+        eapply Mem.free_range_perm; eauto.
+        constructor.
+      * eapply Mem.perm_free_3; eauto.
+      * xomega.
+    + destruct H2; congruence.
+    + destruct H4; congruence.
   - intros r1 r2 Hr. inv Hr.
     edestruct (result_mem inj (size_arguments sg) sp1 sp2 w m1 m2 w' m1' m2' m2')
       as (m1'' & ? & ? & ?); eauto using Mem.unchanged_on_refl.
@@ -855,7 +879,7 @@ Proof.
       * intros r. subst rs1'. cbn.
         destruct is_callee_save eqn:CSR; eauto.
         destruct in_dec; eauto.
-Admitted.
+Qed.
 
 (** *** Outgoing calls *)
 
@@ -952,7 +976,7 @@ Proof.
     + constructor.
     + auto.
     + intros b2 ofs2 Hofs2 b1 delta Hb Hp.
-      admit.
+      admit. (* arguments our of reach of m1' *)
 (*
       cut (loc_out_of_reach f m1 b2 ofs2).
       * intros Hofs2' b1 delta Hb Hp.
