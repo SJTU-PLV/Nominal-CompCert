@@ -249,9 +249,8 @@ Qed.
 
 Local Open Scope linking_scope.
 
-Definition CompCert's_passes :=
-      mkpass SimplExprproof.match_prog
-  ::: mkpass SimplLocalsproof.match_prog
+Definition CompCertO's_passes :=
+      mkpass SimplLocalsproof.match_prog
   ::: mkpass Cshmgenproof.match_prog
   ::: mkpass Cminorgenproof.match_prog
   ::: mkpass Selectionproof.match_prog
@@ -279,20 +278,27 @@ Definition CompCert's_passes :=
   between CompCert C sources and Asm code that characterize CompCert's
   compilation. *)
 
-Definition match_prog: _ (*Csyntax.program*) -> Asm.program -> Prop :=
+Definition match_prog: Clight.program -> Asm.program -> Prop :=
+  pass_match (compose_passes CompCertO's_passes).
+
+(** For CompCertO we are mostly interested in using Clight as a source
+  language, however we can still prove a correctness theorem for CompCert C. *)
+
+Definition CompCert's_passes :=
+  mkpass SimplExprproof.match_prog ::: CompCertO's_passes.
+
+Definition match_c_prog: Csyntax.program -> Asm.program -> Prop :=
   pass_match (compose_passes CompCert's_passes).
 
 (** The [transf_c_program] function, when successful, produces
   assembly code that is in the [match_prog] relation with the source C program. *)
 
-Theorem transf_c_program_match:
+Theorem transf_clight_program_match:
   forall p tp,
-  transf_c_program p = OK tp ->
+  transf_clight_program p = OK tp ->
   match_prog p tp.
 Proof.
-  intros p tp T.
-  unfold transf_c_program, time in T. simpl in T.
-  destruct (SimplExpr.transl_program p) as [p1|e] eqn:P1; simpl in T; try discriminate.
+  intros p1 tp T.
   unfold transf_clight_program, time in T. rewrite ! compose_print_identity in T. simpl in T.
   destruct (SimplLocals.transf_program p1) as [p2|e] eqn:P2; simpl in T; try discriminate.
   destruct (Cshmgen.transl_program p2) as [p3|e] eqn:P3; simpl in T; try discriminate.
@@ -318,7 +324,6 @@ Proof.
   destruct (partial_if debug Debugvar.transf_program p18) as [p19|e] eqn:P19; simpl in T; try discriminate.
   destruct (Stacking.transf_program p19) as [p20|e] eqn:P20; simpl in T; try discriminate.
   unfold match_prog; simpl.
-  exists p1; split. apply SimplExprproof.transf_program_match; auto.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
   exists p3; split. apply Cshmgenproof.transf_program_match; auto.
   exists p4; split. apply Cminorgenproof.transf_program_match; auto.
@@ -342,6 +347,20 @@ Proof.
   exists p20; split. apply Stackingproof.transf_program_match; auto.
   exists tp; split. apply Asmgenproof.transf_program_match; auto.
   reflexivity.
+Qed.
+
+Theorem transf_c_program_match:
+  forall p tp,
+  transf_c_program p = OK tp ->
+  match_c_prog p tp.
+Proof.
+  intros p tp T.
+  unfold transf_c_program, time in T. simpl in T.
+  destruct (SimplExpr.transl_program p) as [p1|e] eqn:P1; simpl in T; try discriminate.
+  destruct (transf_clight_program p1) as [p2|e] eqn:P2; simpl in T; try discriminate.
+  inv T. unfold match_c_prog. cbn -[CompCertO's_passes].
+  exists p1; split. apply SimplExprproof.transf_program_match; auto.
+  apply transf_clight_program_match; auto.
 Qed.
 
 (** * Semantic preservation *)
@@ -678,11 +697,11 @@ Qed.
 
 (** ** Composition of passes *)
 
-Theorem cstrategy_semantic_preservation:
+Theorem clight_semantic_preservation:
   forall p tp,
   match_prog p tp ->
-  forward_simulation cc_compcert cc_compcert (Cstrategy.semantics p) (Asm.semantics tp)
-  /\ backward_simulation cc_compcert cc_compcert (atomic (Cstrategy.semantics p)) (Asm.semantics tp).
+  forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp)
+  /\ backward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
 Ltac DestructM :=
@@ -692,12 +711,10 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation cc_compcert cc_compcert (Cstrategy.semantics p) (Asm.semantics p20)).
+  assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p19)).
   {
   rewrite cc_compcert_expand at 2.
   rewrite <- cc_compcert_collapse at 1.
-  eapply compose_identity_pass.
-    eapply SimplExprproof.transl_program_correct; eassumption.
   eapply compose_clight_properties.
   eapply compose_injection_pass.
     eapply SimplLocalsproof.transf_program_correct; eassumption.
@@ -743,27 +760,34 @@ Ltac DestructM :=
   apply semantics_asm_rel.
   }
   split. auto.
-  apply forward_to_backward_simulation.
-  apply factor_forward_simulation. auto. intro. eapply sd_traces. eapply Asm.semantics_determinate.
-  apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
+  apply forward_to_backward_simulation. auto.
+  apply Clight.semantics_receptive.
   apply Asm.semantics_determinate.
 Qed.
 
 Theorem c_semantic_preservation:
   forall p tp,
-  match_prog p tp ->
+  match_c_prog p tp ->
   backward_simulation cc_compcert cc_compcert (Csem.semantics p) (Asm.semantics tp).
 Proof.
-  intros.
+  intros p tp (p' & Hp' & Htp). cbn in Hp'.
   rewrite <- (cc_compose_id_left cc_compcert) at 1.
   rewrite <- (cc_compose_id_left cc_compcert) at 2.
   apply compose_backward_simulations with (atomic (Cstrategy.semantics p)).
-  apply factor_backward_simulation.
-  apply Cstrategy.strategy_simulation.
-  apply Csem.semantics_single_events.
-  eapply ssr_well_behaved; eapply Cstrategy.semantics_strongly_receptive.
-  exact (proj2 (cstrategy_semantic_preservation _ _ H)).
-  intro. eapply sd_traces; eapply Asm.semantics_determinate.
+  - apply factor_backward_simulation.
+    + apply Cstrategy.strategy_simulation.
+    + apply Csem.semantics_single_events.
+    + eapply ssr_well_behaved; eapply Cstrategy.semantics_strongly_receptive.
+  - apply forward_to_backward_simulation.
+    + apply factor_forward_simulation.
+      * eapply compose_identity_pass.
+        -- apply SimplExprproof.transl_program_correct; eauto.
+        -- apply clight_semantic_preservation; eauto.
+      * intros. eapply sd_traces. apply Asm.semantics_determinate.
+    + apply atomic_receptive.
+      apply Cstrategy.semantics_strongly_receptive.
+    + apply Asm.semantics_determinate.
+  - intros. eapply sd_traces. apply Asm.semantics_determinate.
 Qed.
 
 (** * Correctness of the CompCert compiler *)
@@ -820,30 +844,25 @@ Qed.
 (** An example of how the correctness theorem, horizontal composition,
   and assembly linking proofs can be used together. *)
 
-(*
 Require Import SmallstepLinking.
 Require Import AsmLinking.
 
 Lemma compose_transf_c_program_correct:
   forall p1 p2 spec tp1 tp2 tp,
-    compose (Csem.semantics p1) (Csem.semantics p2) = Some spec ->
-    transf_c_program p1 = OK tp1 ->
-    transf_c_program p2 = OK tp2 ->
+    compose (Clight.semantics1 p1) (Clight.semantics1 p2) = Some spec ->
+    transf_clight_program p1 = OK tp1 ->
+    transf_clight_program p2 = OK tp2 ->
     link tp1 tp2 = Some tp ->
-    backward_simulation cc_compcert cc_compcert spec (Asm.semantics tp).
+    forward_simulation cc_compcert cc_compcert spec (Asm.semantics tp).
 Proof.
   intros.
   rewrite <- (cc_compose_id_right cc_compcert) at 1.
   rewrite <- (cc_compose_id_right cc_compcert) at 2.
-  eapply compose_backward_simulations.
+  eapply compose_forward_simulations.
   2: { unfold compose in H.
        destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel; try discriminate.
        cbn in *. inv H.
-       apply forward_to_backward_simulation.
-       eapply AsmLinking.foo; eauto.
-       apply SmallstepLinking.semantics_receptive.
-       intros [|]; apply Asm.semantics_receptive.
-       apply Asm.semantics_determinate. }
+       eapply AsmLinking.foo; eauto. }
   eapply compose_simulation; eauto.
   eapply clight_semantic_preservation; eauto using transf_clight_program_match.
   eapply clight_semantic_preservation; eauto using transf_clight_program_match.
@@ -851,4 +870,3 @@ Proof.
   apply link_erase_program in H2. rewrite H2. cbn. f_equal. f_equal.
   apply Axioms.functional_extensionality. intros [|]; auto.
 Qed.
-*)
