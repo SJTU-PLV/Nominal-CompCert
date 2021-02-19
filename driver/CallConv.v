@@ -605,6 +605,10 @@ Inductive cc_locset_mach_mr: cc_lm_world -> locset_reply -> mach_reply -> Prop :
     (forall r, is_callee_save r = true -> rs' r = rs r) ->
     Mem.unchanged_on (not_init_args (size_arguments sg) sp) m'_ m' ->
     Mem.unchanged_on (loc_init_args (size_arguments sg) sp) m m' ->
+    Mem.nextblock m'_ = Mem.nextblock m' ->
+    (forall b ofs k p, loc_init_args (size_arguments sg) sp b ofs ->
+                       ~ Mem.perm m'_ b ofs k p) ->
+    (*Mem.extends m'_ m' ->*)
     cc_locset_mach_mr (lmw sg rs m sp) (lr ls' m'_) (mr rs' m').
 
 Program Definition cc_locset_mach: callconv li_locset li_mach :=
@@ -727,23 +731,186 @@ Hint Extern 1 (Transport _ _ _ _ _) =>
   original callee-save registers and results from the reply's
   locset. The following lemmas will help. *)
 
-Lemma result_mem R sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2':
-  w ~> w' ->
-  Val.inject (mi R w) sp1 sp2 ->
-  match_mem R w m1 m2 ->
-  match_mem R w' m1'_ m2'_ ->
-  Mem.unchanged_on (loc_init_args sz sp2) m2 m2' ->
-  Mem.unchanged_on (not_init_args sz sp2) m2'_ m2' ->
-  exists m1',
-    match_mem R w' m1' m2' /\
-    Mem.unchanged_on (loc_init_args sz sp1) m1 m1' /\
-    Mem.unchanged_on (not_init_args sz sp1) m1'_ m1'.
+Class Mixable (R : cklr) :=
+  result_mem sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2':
+    w ~> w' ->
+    Val.inject (mi R w) sp1 sp2 ->
+    match_mem R w m1 m2 ->
+    match_mem R w' m1'_ m2'_ ->
+    Mem.unchanged_on (loc_init_args sz sp2) m2 m2' ->
+    Mem.unchanged_on (not_init_args sz sp2) m2'_ m2' ->
+    Mem.extends m2'_ m2' ->
+    (forall b ofs,
+        loc_init_args sz sp2 b ofs ->
+        loc_out_of_reach (mi R w') m1'_ b ofs) ->
+    (2 | sz) ->
+    (sz > 0 -> valid_blockv (Mem.nextblock m1) sp1) ->
+    (sz > 0 -> forall b1 ofs1, sp1 = Vptr b1 ofs1 ->
+      Mem.range_perm m1 b1 (offset_sarg ofs1 0) (offset_sarg ofs1 sz) Cur Freeable) ->
+    exists w'' m1',
+      w ~> w'' /\
+      inject_incr (mi R w') (mi R w'') /\
+      match_mem R w'' m1' m2' /\
+      Mem.unchanged_on (loc_init_args sz sp1) m1 m1' /\
+      Mem.unchanged_on (not_init_args sz sp1) m1'_ m1' /\
+      Mem.nextblock m1' = Mem.nextblock m1'_.
+
+Instance ext_mixable:
+  Mixable ext.
 Proof.
-  (** To achieve this, we will need to define a new [Mem.mix]
-    operation of the memory model, corresponding injection and
-    extension preservation properties, and add similar conditions to
-    the definition of CKLRs. *)
-Admitted.
+  intros sz sp1 sp2 [ ] m1 m2 [ ] m1'_ m2'_ m2' _ Hsp Hm Hm'_ UPD UNCH EXT OOR _ VB.
+  uncklr.
+  destruct (classic (sz > 0 /\ exists sb1 sofs1, sp1 = Vptr sb1 sofs1)).
+  - destruct H as (SZ & sb1 & sofs1 & Hsp1). subst. inv Hsp.
+    assert (Mem.mixable m1'_ sb1 m1). {
+      split.
+      + erewrite (Mem.mext_next m1) by eauto.
+        erewrite (Mem.mext_next m1'_) by eauto.
+        erewrite (Mem.mext_next m2'_) by eauto.
+        eapply Mem.unchanged_on_nextblock; eauto.
+      + specialize (VB SZ). inv VB. auto. (* could restrict to sz > 0 case *)
+    }
+    eapply Mem.mixable_mix in H as [m1' ?].
+    exists tt, m1'. repeat apply conj.
+    + constructor.
+    + apply inject_incr_refl.
+    + cbn. eapply Mem.mix_left_extends; eauto.
+      * eapply Mem.extends_extends_compose; eauto.
+      * eapply Mem.unchanged_on_implies; eauto.
+        intros _ ofs [-> Hofs] VLD. constructor; eauto.
+    + eapply Mem.unchanged_on_implies; eauto using Mem.mix_updated.
+      inversion 1; auto.
+    + eapply Mem.unchanged_on_implies; eauto using Mem.mix_unchanged.
+      intros _ ofs NIA _ [<- Hofs]. apply NIA. constructor; auto.
+    + apply Mem.nextblock_mix in H. auto.
+  - exists tt, m1'_. repeat apply conj.
+    + constructor.
+    + apply inject_incr_refl.
+    + eapply Mem.extends_extends_compose; eauto.
+    + split.
+      * erewrite (Mem.mext_next m1) by eauto.
+        erewrite (Mem.mext_next m1'_) by eauto.
+        erewrite (Mem.mext_next m2'_) by eauto.
+        eapply Mem.unchanged_on_nextblock; eauto.
+      * destruct 1; eelim H; eauto. split; eauto.
+        unfold offset_sarg in *. xomega.
+      * destruct 1; eelim H; eauto. split; eauto.
+        unfold offset_sarg in *. xomega.
+    + apply Mem.unchanged_on_refl.
+    + reflexivity.
+Qed.
+
+Instance inj_mixable:
+  Mixable inj.
+Proof.
+  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB.
+  destruct SZ as [k Hk]; subst.
+  destruct (classic (k > 0 /\ exists sb1 sofs1, sp1 = Vptr sb1 sofs1)).
+  - destruct H as (Hk & sb1 & sofs1 & Hsp1). subst. inv Hsp.
+    assert (Mem.mixable m1'_ sb1 m1). {
+      split.
+      + destruct Hm, Hm'_. inv Hw. auto.
+      + assert (SZ: k * 2 > 0) by xomega.
+        specialize (VB SZ). inv VB. auto.
+    }
+    eapply Mem.mixable_mix in H as [m1' Hm1'].
+    instantiate (1 := offset_sarg sofs1 (k * 2)) in Hm1'.
+    instantiate (1 := offset_sarg sofs1 0) in Hm1'.
+    exists w', m1'. repeat apply conj.
+    + auto.
+    + apply inject_incr_refl.
+    + inv Hm. inv Hm'_. inv Hw. cbn -[Z.add Z.mul] in *.
+      erewrite <- (Mem.nextblock_mix m1'_); eauto.
+      erewrite (Mem.mext_next m2'_); eauto.
+      constructor. eapply Mem.mix_left_inject; eauto.
+      * eapply Mem.inject_extends_compose; eauto.
+      * eapply Mem.unchanged_on_implies; eauto.
+        intros _ ofs [-> Hofs] VLD. constructor.
+        unfold offset_sarg in *.
+        rewrite (Ptrofs.add_commut sofs1), Ptrofs.add_assoc, Ptrofs.add_commut.
+        erewrite (Mem.address_inject f m1 m2); eauto. xomega.
+        eapply H; eauto. xomega. xomega.
+      * intros b1' delta' ofs pk p Hb' Hofs Hp.
+        eapply (OOR b2 ofs); eauto.
+        -- constructor. unfold offset_sarg in *.
+           rewrite (Ptrofs.add_commut sofs1), Ptrofs.add_assoc, Ptrofs.add_commut.
+           erewrite (Mem.address_inject f m1 m2); eauto. xomega.
+           eapply H; eauto. xomega. xomega.
+        -- eapply Mem.perm_max, Mem.perm_implies; eauto. constructor.
+      * eapply Mem.mi_align with (chunk := Mint64); eauto using (Mem.mi_inj f m1 m2).
+        instantiate (2 := offset_sarg sofs1 0). intros ofs Hofs.
+        eapply Mem.perm_max, H; eauto; unfold offset_sarg in *; cbn in Hofs; xomega.
+    + eapply Mem.unchanged_on_implies; eauto using Mem.mix_updated.
+      inversion 1; auto.
+    + eapply Mem.unchanged_on_implies; eauto using Mem.mix_unchanged.
+      intros _ ofs NIA _ [<- Hofs]. apply NIA. constructor; auto.
+    + eapply Mem.nextblock_mix; eauto.
+  - inv Hm. inv Hm'_. inv Hw. cbn in *.
+    eexists (injw f0 (Mem.nextblock m1'_) (Mem.nextblock m2')), m1'_. repeat apply conj.
+    + constructor; eauto.
+      eapply Mem.unchanged_on_nextblock; eauto.
+    + apply inject_incr_refl.
+    + constructor. eapply Mem.inject_extends_compose; eauto.
+    + split.
+      * eauto.
+      * destruct 1; eelim H; eauto. split; eauto.
+        unfold offset_sarg in H3. xomega.
+      * destruct 1; eelim H; eauto. split; eauto.
+        unfold offset_sarg in H3. xomega.
+    + apply Mem.unchanged_on_refl.
+    + reflexivity.
+Qed.
+
+Instance vainj_mixable:
+  Mixable vainj.
+Proof.
+  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB RANGE.
+  destruct Hm, Hm'_. inv Hw. cbn in *. subst.
+  edestruct (result_mem (R:=inj) sz sp1 sp2 w m1 m2 w0) as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
+  exists (se0, x), x0. repeat apply conj; eauto.
+  constructor.
+  - congruence.
+  - intros cu Hcu. specialize (H3 cu Hcu).
+    intros b id ab Hab Habcu.
+    edestruct H0 as (? & ? & ?); eauto.
+    edestruct H3 as (? & ? & ?); eauto.
+    assert (forall ofs, not_init_args sz sp1 b ofs).
+    {
+      intros ofs. destruct 1.
+      eapply H14. eapply Mem.perm_max, Mem.perm_implies.
+      eapply RANGE; eauto. unfold offset_sarg in *. xomega.
+      constructor.
+    }
+    split; auto. split; auto.
+    + assert (forall ofs k p, Mem.perm x0 b ofs k p -> Mem.valid_block m0 b).
+      { unfold Mem.valid_block. rewrite <- H11. eapply Mem.perm_valid_block; eauto. }
+      destruct H16. split; auto.
+      * destruct H16. split.
+        -- intros. erewrite Mem.load_unchanged_on_1 in H22; eauto.
+           apply Mem.load_valid_access in H22 as [? ?].
+           eapply H19. eapply H22. pose proof (size_chunk_pos chunk). instantiate (1 := ofs). xomega.
+        -- intros. erewrite Mem.loadbytes_unchanged_on_1 in H22; eauto.
+           apply Mem.loadbytes_range_perm in H22.
+           eapply H19. eapply H22. instantiate (1 := ofs). xomega.
+      * intros. erewrite Mem.load_unchanged_on_1 in H21; eauto.
+        apply Mem.load_valid_access in H21 as [? ?].
+        eapply H19. eapply H21. pose proof (size_chunk_pos chunk). instantiate (1 := ofs). xomega.
+    + intros ofs Hp. eapply H17; eauto.
+      rewrite <- Mem.unchanged_on_perm in Hp; eauto.
+      unfold Mem.valid_block. rewrite <- H11. eapply Mem.perm_valid_block; eauto.
+  - auto.
+Qed.
+
+Lemma size_arguments_always_64 sg:
+  (2 | size_arguments sg).
+Proof.
+  unfold size_arguments.
+  replace Archi.ptr64 with true by reflexivity.
+  cut (forall l i j k, (2 | k) -> (2 | size_arguments_64 l i j k));
+    eauto using Z.divide_0_r.
+  induction l; cbn; auto. intros i j k Hk.
+  destruct a; repeat destruct zeq; eauto using Z.divide_add_r, Z.divide_refl.
+Qed.
 
 Instance make_locset_cklr R:
   Monotonic make_locset
@@ -754,14 +921,35 @@ Proof.
   unfold make_locset, load_stack. rauto.
 Qed.
 
+Lemma unchanged_on_extends P m m':
+  Mem.unchanged_on P m m' ->
+  Mem.nextblock m = Mem.nextblock m' ->
+  (forall b ofs k p, Mem.perm m b ofs k p -> P b ofs) ->
+  Mem.extends m m'.
+Proof.
+  intros UNCH NB PERM. split; auto.
+  - split; unfold inject_id.
+    + inversion 1; subst. replace (ofs + 0) with ofs by xomega.
+      intros Hp. erewrite <- Mem.unchanged_on_perm; eauto.
+      eapply Mem.perm_valid_block; eauto.
+    + inversion 1; subst. auto using Z.divide_0_r.
+    + inversion 1; subst. replace (ofs + 0) with ofs by xomega.
+      intros Hp. erewrite <- Mem.unchanged_on_contents; eauto.
+      destruct ZMap.get; constructor.
+      apply val_inject_id. apply Val.lessdef_refl.
+  - intros. destruct (classic (Mem.perm m b ofs Max Nonempty)); auto. left.
+    erewrite Mem.unchanged_on_perm; eauto.
+    eapply Mem.perm_valid_block; eauto.
+Qed.
+
 (** With this, we can state and prove the commutation property. *)
 
-Instance commut_locset_mach R:
+Instance commut_locset_mach R `{HR: Mixable R}:
   Commutes cc_locset_mach (cc_locset R) (cc_mach R).
 Proof.
   intros [[_ w] wR] se1 se2 q1 q2 [[ ] Hse] (qi & Hq1i & Hqi2).
   destruct Hqi2. inv Hq1i. set (ls2 := make_locset rs2 m2 sp2).
-  transport H12.
+  generalize H12. transport H12. intros ARGSm1.
   eexists (se2, (sg, wR'), lmw sg rs2 m2 _). cbn. repeat apply conj; auto.
   - eapply match_stbls_acc; eauto.
   - exists (lq vf2 sg ls2 x). split.
@@ -773,18 +961,54 @@ Proof.
   - intros r1 r2 (ri & (wR'' & HwR'' & Hr1i) & Hri2).
     destruct Hr1i. inv Hri2. rename rs' into rs2'.
     set (rs1' r := result_regs sg (make_locset rs1 m1 sp1) ls1' (Locations.R r)).
-    edestruct (result_mem R (size_arguments sg) sp1 sp2 wR m1 m2 wR'' m1' m2')
-      as (m1'' & Hm'' & ? & ?); eauto. etransitivity; eauto.
+    edestruct (result_mem (R:=R) (size_arguments sg) sp1 sp2 wR m1 m2 wR'' m1' m2')
+      as (wR''' & m1'' & HwR''' & INCR & Hm'' & ? & ? & NB); eauto.
+    { etransitivity; eauto. }
+    { eapply unchanged_on_extends; eauto.
+      intros b ofs k p ? ?. eapply H25; eauto. }
+    { destruct 1. intros b1 delta Hb Hp.
+      eapply (cklr_perm R wR'' m1' m2' H10 (b1, ofs - delta) (sb, ofs)) in Hp.
+      + cbn in Hp. eapply H25; eauto. constructor; eauto.
+      + replace (sb, ofs) with (sb, ofs - delta + delta) by (f_equal; xomega).
+        constructor; auto. }
+    { apply size_arguments_always_64. }
+    { destruct H7.
+      - apply zero_size_arguments_tailcall_possible in H7. xomega.
+      - intro. inv H2; try congruence.
+        constructor. eapply cklr_valid_block; eauto. red. red. eauto.
+        eapply Mem.perm_valid_block. eapply Mem.free_range_perm; eauto.
+        split; [reflexivity |]. unfold offset_sarg. xomega. }
+    { destruct ARGSm1.
+      - apply zero_size_arguments_tailcall_possible in H11. intros. xomega.
+      - intros. subst. inv H18. eapply Mem.free_range_perm; eauto. }
     exists (mr rs1' m1''). split.
     + constructor; auto.
       * intros r Hr. unfold rs1'. cbn. destruct in_dec; tauto.
       * intros r Hr. unfold rs1'. rewrite <- result_regs_agree_callee_save; auto.
-    + exists wR''. split; [rauto | ]. constructor; auto.
+      * destruct 1. inv H2. intro.
+        eapply (H25 b2 (ofs + delta)).
+        -- constructor. unfold offset_sarg in *.
+           rewrite (Ptrofs.add_commut sofs), Ptrofs.add_assoc, Ptrofs.add_commut.
+           assert (mi R wR''' sb = Some (b2, delta)). { eapply mi_acc; eauto. }
+           erewrite cklr_address_inject; eauto.
+           ++ xomega.
+           ++ erewrite <- (Mem.unchanged_on_perm _ m1 m1''); eauto.
+              ** inv ARGSm1.
+                 apply zero_size_arguments_tailcall_possible in H17. xomega.
+                 apply Mem.free_range_perm in H26.
+                 eapply H26. unfold offset_sarg. xomega.
+              ** constructor. unfold offset_sarg. xomega.
+              ** inv ARGSm1.
+                 apply zero_size_arguments_tailcall_possible in H17. xomega.
+                 eapply Mem.perm_valid_block.
+                 eapply Mem.free_range_perm; eauto.
+        -- eapply (cklr_perm R _ _ _ H10 (sb, ofs) (b2, ofs + delta)); eauto.
+           constructor. eapply mi_acc; eauto. eapply mi_acc; eauto.
+    + exists wR'''. split; [rauto | ]. constructor; auto.
       intro r. unfold rs1', result_regs.
-      destruct in_dec. { rewrite H20; auto. }
+      destruct in_dec. { rewrite H19; auto. eapply val_inject_incr; eauto. }
       destruct is_callee_save eqn:Hr; auto.
-      rewrite H21 by auto. cbn. generalize (H5 r).
-      repeat rstep. change (wR ~> wR''). etransitivity; eauto.
+      rewrite H20 by auto. cbn. generalize (H5 r). rauto.
 Qed.
 
 (** ** Matching [cc_stacking] *)
@@ -856,8 +1080,17 @@ Proof.
     + destruct H2; congruence.
     + destruct H4; congruence.
   - intros r1 r2 Hr. inv Hr.
-    edestruct (result_mem inj (size_arguments sg) sp1 sp2 w m1 m2 w' m1' m2' m2')
-      as (m1'' & ? & ? & ?); eauto using Mem.unchanged_on_refl.
+    edestruct (result_mem (R:=inj) (size_arguments sg) sp1 sp2 w m1 m2 w' m1' m2' m2')
+      as (w'' & m1'' & Hw'' & INCR & ? & ? & ? & NB); eauto using Mem.unchanged_on_refl.
+    { apply Mem.extends_refl. }
+    { apply size_arguments_always_64. }
+    { destruct H12. apply zero_size_arguments_tailcall_possible in H7. xomega.
+      intro. constructor. eapply Mem.perm_valid_block.
+      eapply Mem.free_range_perm; eauto. split. reflexivity.
+      unfold offset_sarg. xomega. }
+    { destruct H12.
+      + intros. apply zero_size_arguments_tailcall_possible in H7. xomega.
+      + intros. inv H12. eapply Mem.free_range_perm; eauto. }
     set (rs1' r := if is_callee_save r then rs1 r else
                    if in_dec mreg_eq r (regs_of_rpair (loc_result sg)) then ls1' (R r) else
                    Vundef).
@@ -870,7 +1103,25 @@ Proof.
         destruct loc_result; cbn in *; intuition congruence.
       * subst rs1'. intros r REG. cbn.
         rewrite REG. congruence.
-    + exists w'; split; auto.
+      * destruct 1. inv H2. intro.
+        eapply H22; eauto.
+        2: eapply mi_acc; eauto.
+        instantiate (1 := ofs + delta).
+        2: replace (ofs + delta - delta) with ofs by xomega.
+        2: eapply Mem.perm_max, Mem.perm_implies; eauto; constructor.
+        constructor. unfold offset_sarg in *.
+        rewrite (Ptrofs.add_commut sofs), Ptrofs.add_assoc, Ptrofs.add_commut.
+        erewrite cklr_address_inject; eauto. xomega.
+        2: eapply mi_acc; eauto.
+        erewrite <- (Mem.unchanged_on_perm _ m1 m1''); eauto.
+        -- inv H12.
+           ++ apply zero_size_arguments_tailcall_possible in H11. xomega.
+           ++ eapply Mem.free_range_perm; eauto. unfold offset_sarg. xomega.
+        -- constructor. unfold offset_sarg. xomega.
+        -- inv H12.
+           ++ apply zero_size_arguments_tailcall_possible in H11. xomega.
+           ++ eapply Mem.perm_valid_block, Mem.free_range_perm; eauto.
+    + exists w''; split; auto.
       constructor; auto.
       * intros r. subst rs1'. cbn.
         destruct is_callee_save eqn:CSR; eauto.
@@ -978,8 +1229,8 @@ Proof.
           intros b ofs [_ ?] _. red. auto. }
       * red. inv Hm2_; eauto.
         unfold Mem.valid_block. erewrite <- (Mem.nextblock_free m2); eauto.
+    + intros r REG. rewrite H21; eauto.
     + intros r REG. rewrite H22; eauto.
-    + intros r REG. rewrite H23; eauto.
     + constructor.
     + auto.
     + intros b2 ofs2 Hofs2 b1 delta Hb Hp.

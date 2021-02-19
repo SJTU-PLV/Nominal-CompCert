@@ -28,6 +28,7 @@
 
 Require Import Zwf.
 Require Import Axioms.
+Require Import Classical. (* for mix; could avoid *)
 Require Import Coqlib.
 Require Intv.
 Require Import Maps.
@@ -4483,6 +4484,363 @@ Proof.
 - apply unchanged_on_perm0; auto.
 - apply unchanged_on_contents0; auto.
   apply H0; auto. eapply perm_valid_block; eauto.
+Qed.
+
+(** * Memory mixing *)
+
+(** [mix m' b lo hi m] copies the region indicated by [b], [lo], [hi]
+  from [m] into [m']. *)
+
+Definition pmap_update {A} b (f : A -> A) (t : PMap.t A) : PMap.t A :=
+  PMap.set b (f (PMap.get b t)) t.
+
+Definition mix_perms lo hi (pm pm' : Z -> perm_kind -> option permission) ofs k :=
+  if zle lo ofs && zlt ofs hi then pm ofs k else pm' ofs k.
+
+Definition mixable m' b m :=
+  Pos.le (nextblock m) (nextblock m') /\
+  Mem.valid_block m b.
+
+Lemma mixable_dec m' b m :
+  {mixable m' b m} + {~ mixable m' b m}.
+Proof.
+  unfold mixable, valid_block.
+  destruct (Pos.leb (nextblock m) (nextblock m')) eqn:Hnb.
+  - apply Pos.leb_le in Hnb.
+    destruct (Pos.ltb b (nextblock m)) eqn:Hb.
+    + apply Pos.ltb_lt in Hb. left. auto.
+    + apply Pos.ltb_nlt in Hb. right. tauto.
+  - apply Pos.leb_nle in Hnb. right. tauto.
+Qed.
+
+Program Definition mix m' b lo hi m : option mem :=
+  if mixable_dec m' b m then
+    Some {|
+      mem_contents :=
+        let bytes := Mem.getN (Z.to_nat (hi - lo)) lo (PMap.get b (Mem.mem_contents m)) in
+        pmap_update b (Mem.setN bytes lo) (Mem.mem_contents m');
+      mem_access :=
+        let perms := PMap.get b (Mem.mem_access m) in
+        pmap_update b (mix_perms lo hi perms) (Mem.mem_access m');
+      nextblock :=
+        Mem.nextblock m';
+    |}
+  else
+    None.
+Next Obligation.
+  unfold pmap_update. destruct (peq b0 b); subst.
+  - rewrite PMap.gss. unfold mix_perms.
+    destruct (_ && _); apply Mem.access_max.
+  - rewrite PMap.gso; auto.
+    apply Mem.access_max.
+Qed.
+Next Obligation.
+  unfold pmap_update. destruct H as [? ?]. unfold valid_block in *.
+  rewrite PMap.gso by xomega.
+  apply Mem.nextblock_noaccess; auto.
+Qed.
+Next Obligation.
+  unfold pmap_update. destruct (peq b0 b); subst.
+  - rewrite PMap.gss. rewrite Mem.setN_default. apply Mem.contents_default.
+  - rewrite PMap.gso by auto. apply Mem.contents_default.
+Qed.
+
+(** ** Properties *)
+
+Theorem mixable_mix:
+  forall m' b lo hi m,
+  mixable m' b m ->
+  exists m'', mix m' b lo hi m = Some m''.
+Proof.
+  intros. unfold mix.
+  destruct mixable_dec; intuition eauto.
+Qed.
+
+Theorem valid_block_mix:
+  forall m' b lo hi m,
+  Ple (nextblock m) (nextblock m') ->
+  valid_block m b ->
+  exists m'', mix m' b lo hi m = Some m''.
+Proof.
+  unfold mix, valid_block. intros.
+  destruct mixable_dec; unfold mixable in *; intuition eauto.
+Qed.
+
+Theorem mix_valid_block:
+  forall m' b lo hi m m'',
+  mix m' b lo hi m = Some m'' ->
+  Mem.valid_block m b.
+Proof.
+  unfold mix. intros. destruct mixable_dec; try discriminate.
+  unfold mixable in *. apply m0.
+Qed.
+
+Theorem valid_block_mix_1:
+  forall m' b lo hi m m'',
+  mix m' b lo hi m = Some m'' ->
+  forall b, valid_block m' b -> valid_block m'' b.
+Proof.
+  unfold mix. intros. destruct mixable_dec; inv H.
+  unfold valid_block. cbn. auto.
+Qed.
+
+Theorem valid_block_mix_2:
+  forall m' b lo hi m m'',
+  mix m' b lo hi m = Some m'' ->
+  forall b, valid_block m'' b -> valid_block m' b.
+Proof.
+  unfold mix. intros. destruct mixable_dec; inv H.
+  unfold valid_block in *. cbn in *. auto.
+Qed.
+
+Theorem nextblock_mix:
+  forall m' b lo hi m m'',
+  mix m' b lo hi m = Some m'' ->
+  nextblock m'' = nextblock m'.
+Proof.
+  unfold mix. intros. destruct mixable_dec; inv H. reflexivity.
+Qed.
+
+Theorem mix_unchanged:
+  forall m' b lo hi m m'',
+  mix m' b lo hi m = Some m'' ->
+  unchanged_on (fun b1 ofs1 => ~ (b = b1 /\ lo <= ofs1 < hi)) m' m''.
+Proof.
+  intros. unfold mix in H. destruct mixable_dec as [[NB VALID] | ]; inv H.
+  constructor; cbn.
+  - reflexivity.
+  - unfold perm; cbn. intros b1 ofs1 k p H ?.
+    unfold pmap_update, mix_perms.
+    destruct (peq b1 b); subst; rewrite ?PMap.gss, ?PMap.gso; auto using iff_refl.
+    destruct zle, zlt; cbn; auto using iff_refl.
+    elim H; auto.
+  - intros b1 ofs1 H Hp.
+    unfold pmap_update.
+    destruct (peq b1 b); subst; rewrite ?PMap.gss, ?PMap.gso; auto.
+    rewrite setN_outside; auto.
+    destruct (zlt ofs1 lo); auto. right.
+    destruct (zlt ofs1 hi); try (elim H; split; auto; xomega).
+    rewrite getN_length, Z_to_nat_max, <- Z.add_max_distr_l.
+    rewrite Zmax_spec. destruct zlt; xomega.
+Qed.
+
+Lemma get_setN_getN_at lo k n x y:
+  ZMap.get (lo + Z.of_nat k) (setN (getN (k + S n) lo x) lo y) =
+  ZMap.get (lo + Z.of_nat k) x.
+Proof.
+  revert lo n x y. induction k; cbn; intros.
+  - rewrite setN_outside by xomega.
+    replace (lo + 0) with lo by xomega.
+    rewrite ZMap.gss; auto.
+  - specialize (IHk (lo + 1)).
+    rewrite Zpos_P_of_succ_nat, <- Z.add_1_r.
+    replace (lo + _) with (lo + 1 + Z.of_nat k) by xomega.
+    rewrite IHk. reflexivity.
+Qed.
+
+Lemma get_setN_getN lo hi ofs x y:
+  lo <= ofs < hi ->
+  ZMap.get ofs (setN (getN (Z.to_nat (hi - lo)) lo x) lo y) = ZMap.get ofs x.
+Proof.
+  intros Hofs.
+  set (k := Z.to_nat (ofs - lo)).
+  set (n := Z.to_nat (hi - ofs - 1)).
+  replace (Z.to_nat (hi - lo)) with (k + S n)%nat.
+  replace ofs with (lo + Z.of_nat k).
+  - apply get_setN_getN_at.
+  - subst k n.
+    rewrite Z2Nat.id; xomega.
+  - subst k n.
+    rewrite <- Z2Nat.inj_succ by xomega.
+    rewrite <- Z2Nat.inj_add by xomega.
+    f_equal. xomega.
+Qed.
+
+Theorem mix_updated:
+  forall m' b lo hi m m'',
+  mix m' b lo hi m = Some m'' ->
+  unchanged_on (fun b1 ofs1 => b = b1 /\ lo <= ofs1 < hi) m m''.
+Proof.
+  intros. unfold mix in H. destruct mixable_dec as [[NB VALID] | ]; inv H.
+  constructor; cbn.
+  - auto.
+  - intros _ ofs k p [[ ] Hofs] Hb. unfold perm; cbn.
+    unfold pmap_update, mix_perms. rewrite PMap.gss.
+    destruct zle, zlt; try xomega; cbn. reflexivity.
+  - intros _ ofs [[ ] Hofs] Hp.
+    unfold pmap_update. rewrite PMap.gss.
+    rewrite get_setN_getN; auto.
+Qed.
+
+Lemma mix_left_mem_inj:
+  forall f f' m1 m2 m1' m2' b1 b2 delta lo hi m1'',
+  mix m1' b1 lo hi m1 = Some m1'' ->
+  mem_inj f m1 m2 ->
+  mem_inj f' m1' m2' ->
+  f b1 = Some (b2, delta) ->
+  inject_incr f f' ->
+  Mem.unchanged_on (fun b ofs => b = b2 /\ lo + delta <= ofs < hi + delta) m2 m2' ->
+  valid_block m2 b2 ->
+  (8 | delta) ->
+  mem_inj f' m1'' m2'.
+Proof.
+  intros f f' m1 m2 m1' m2' b1 b2 delta lo hi m1'' Hm1'' Hm Hm' Hb Hf' Hm2'.
+  split.
+  - (* perm *)
+    intros b1' b2' delta' ofs k p Hb' Hp.
+    destruct (classic (b1 = b1' /\ lo <= ofs < hi)) as [[? ?] | ?].
+    + (* updated *)
+      subst. erewrite Hf' in Hb'; eauto. inv Hb'.
+      erewrite <- unchanged_on_perm; eauto.
+      * erewrite <- unchanged_on_perm in Hp; eauto using mix_updated.
+        -- eapply mi_perm; eauto.
+        -- cbn. auto.
+        -- eapply mix_valid_block; eauto.
+      * cbn. split; auto. xomega.
+    + (* unchanged *)
+      eapply mi_perm; eauto.
+      erewrite <- unchanged_on_perm in Hp; eauto using mix_unchanged.
+      eapply valid_block_mix_2; eauto.
+      eapply perm_valid_block; eauto.
+  - (* align *)
+    intros b1' b2' delta' chunk ofs p Hb' Hp.
+    destruct (peq b1' b1); subst.
+    + erewrite Hf' in Hb'; eauto. inv Hb'.
+      etransitivity; eauto.
+      assert (2 | 8) by (exists 4; xomega).
+      assert (4 | 8) by (exists 2; xomega).
+      destruct chunk; cbn; auto using Z.divide_1_l, Z.divide_refl.
+    + eapply mi_align with f' m1' m2' b1' b2' ofs p; eauto.
+      intros i Hi.
+      erewrite unchanged_on_perm; eauto using mix_unchanged.
+      * cbn. intros [? ?]. congruence.
+      * eapply valid_block_mix_2; eauto.
+        eapply perm_valid_block, (Hp ofs).
+        pose proof (size_chunk_pos chunk). xomega.
+  - (* contents *)
+    intros b1' ofs b2' delta' Hb' Hp.
+    destruct (classic (b1 = b1' /\ lo <= ofs < hi)) as [[? ?] | ?].
+    + (* updated *)
+      subst. erewrite Hf' in Hb'; eauto. inv Hb'.
+      erewrite <- unchanged_on_perm in Hp; eauto using mix_updated, mix_valid_block.
+      2: cbn; auto.
+      erewrite unchanged_on_contents; eauto using mix_updated.
+      2: cbn; auto.
+      erewrite unchanged_on_contents with _ m2 m2' _ _; eauto.
+      * eapply memval_inject_incr; eauto.
+        eapply mi_memval; eauto.
+      * cbn. split; auto. xomega.
+      * eapply mi_perm; eauto.
+    + (* unchanged *)
+      erewrite <- unchanged_on_perm in Hp;
+        eauto using mix_unchanged, valid_block_mix_2, perm_valid_block;
+        cbn; eauto.
+      erewrite unchanged_on_contents; eauto using mix_unchanged; cbn; eauto.
+      eapply mi_memval; eauto.
+Qed.
+
+Lemma mix_left_extends:
+  forall m1 m2 m1' m2' b lo hi m1'',
+  mix m1' b lo hi m1 = Some m1'' ->
+  extends m1 m2 ->
+  extends m1' m2' ->
+  unchanged_on (fun b' ofs => b' = b /\ lo <= ofs < hi) m2 m2' ->
+  extends m1'' m2'.
+Proof.
+  intros m1 m2 m1' m2' b lo hi m1'' Hm1'' [NB INJ PINV] [NB' INJ' PINV'] UNCH.
+  assert (valid_block m1 b) by eauto using mix_valid_block.
+  assert (valid_block m2 b) by (unfold valid_block in *; congruence).
+  constructor.
+  - erewrite nextblock_mix; eauto.
+  - eapply mix_left_mem_inj; eauto.
+    + reflexivity.
+    + replace (lo + 0) with lo by xomega.
+      replace (hi + 0) with hi by xomega.
+      auto.
+    + apply Z.divide_0_r.
+  - intros b' ofs k p Hp.
+    destruct (classic (b = b' /\ lo <= ofs < hi)) as [[? ?] | ?].
+    + subst. rewrite <- unchanged_on_perm in Hp; [ | eauto.. ]; cbn; auto.
+      erewrite <- !(unchanged_on_perm _ m1 m1''); [ | eauto using mix_updated ..]; cbn; auto.
+    + assert (valid_block m1' b') by (unfold valid_block; apply perm_valid_block in Hp; congruence).
+      erewrite <- !(unchanged_on_perm _ m1' m1''); [ | eauto using mix_unchanged ..]; cbn; auto.
+Qed.
+
+Lemma mix_left_inject:
+  forall f f' m1 m2 m1' m2' b1 b2 delta lo hi m1'',
+  mix m1' b1 lo hi m1 = Some m1'' ->
+  inject f m1 m2 ->
+  inject f' m1' m2' ->
+  f b1 = Some (b2, delta) ->
+  inject_incr f f' ->
+  Mem.unchanged_on (fun b ofs => b = b2 /\ lo + delta <= ofs < hi + delta) m2 m2' ->
+  (forall b1' delta' ofs p k,
+      f' b1' = Some (b2, delta') -> lo <= ofs - delta < hi ->
+      ~ Mem.perm m1' b1' (ofs - delta') p k) ->
+  (8 | delta) ->
+  inject f' m1'' m2'.
+Proof.
+  intros f f' m1 m2 m1' m2' b1 b2 delta lo hi m1'' Hm1'' H H' Hb Hf Hm2' OOR AL.
+  constructor.
+  - eapply mix_left_mem_inj; eauto using mi_inj.
+    eapply valid_block_inject_2; eauto.
+  - intros. eapply mi_freeblocks; eauto.
+    intro. eauto using valid_block_mix_1.
+  - eauto using mi_mappedblocks.
+  - red.
+    intros x1 x2 xd y1 y2 yd xofs yofs H1 Hx Hy Hpx Hpy.
+    assert (Mem.valid_block m1' x1) by eauto using valid_block_inject_1.
+    assert (Mem.valid_block m1' y1) by eauto using valid_block_inject_1.
+    destruct (classic (b1 = x1 /\ lo <= xofs < hi)).
+    + destruct H3; subst x1.
+      erewrite Hf in Hx; eauto. inversion Hx; clear Hx; subst x2 xd.
+      destruct (classic (b1 = y1 /\ lo <= yofs < hi)).
+      * intuition congruence.
+      * rewrite <- unchanged_on_perm in Hpy; eauto using mix_unchanged.
+        replace yofs with (yofs + yd - yd) in Hpy by xomega.
+        destruct (peq b2 y2); auto; subst y2. right.
+        intros Hofs. eapply (OOR y1 yd (yofs + yd)); eauto. xomega.
+    + rewrite <- unchanged_on_perm in Hpx; eauto using mix_unchanged.
+      destruct (classic (b1 = y1 /\ lo <= yofs < hi)).
+      * destruct H4; subst y1.
+        replace xofs with (xofs + xd - xd) in Hpx by xomega.
+        erewrite Hf in Hy; eauto. inversion Hy; clear Hy; subst y2 yd.
+        destruct (peq x2 b2); auto; subst x2. right.
+        intros Hofs. eapply (OOR x1 xd (xofs + xd)); eauto. xomega.
+      * rewrite <- unchanged_on_perm in Hpy; eauto using mix_unchanged.
+        eapply mi_no_overlap; eauto.
+  - intros b b' delta' ofs Hb' [Hp | Hp].
+    + destruct (classic (b1 = b /\ lo <= Ptrofs.unsigned ofs < hi)).
+      * assert (b1 = b) by intuition auto. subst b.
+        erewrite Hf in Hb'; eauto. inversion Hb'; clear Hb'; subst b' delta.
+        assert (Mem.valid_block m1 b1) by eauto using valid_block_inject_1.
+        rewrite <- unchanged_on_perm in Hp; eauto using mix_updated.
+        eapply (mi_representable f); eauto.
+      * assert (Mem.valid_block m1' b) by eauto using valid_block_inject_1.
+        rewrite <- unchanged_on_perm in Hp; eauto using mix_unchanged.
+        eapply (mi_representable f'); eauto.
+    + destruct (classic (b1 = b /\ lo <= Ptrofs.unsigned ofs - 1 < hi)).
+      * assert (b1 = b) by intuition auto. subst b.
+        erewrite Hf in Hb'; eauto. inversion Hb'; clear Hb'; subst b' delta.
+        assert (Mem.valid_block m1 b1) by eauto using valid_block_inject_1.
+        rewrite <- unchanged_on_perm in Hp; eauto using mix_updated.
+        eapply (mi_representable f); eauto.
+      * assert (Mem.valid_block m1' b) by eauto using valid_block_inject_1.
+        rewrite <- unchanged_on_perm in Hp; eauto using mix_unchanged.
+        eapply (mi_representable f'); eauto.
+  - intros x1 ofs x2 xd k p Hx Hp.
+    destruct (classic (b1 = x1 /\ lo <= ofs < hi)).
+    + assert (b1 = x1) by intuition auto. subst x1.
+      erewrite Hf in Hx; eauto. inversion Hx; clear Hx; subst x2 xd.
+      assert (valid_block m1 b1) by eauto using valid_block_inject_1.
+      assert (valid_block m2 b2) by eauto using valid_block_inject_2.
+      rewrite <- unchanged_on_perm in Hp; eauto; cbn; try (split; auto; xomega).
+      erewrite <- !(unchanged_on_perm _ m1 m1''); eauto using mix_updated.
+      eapply mi_perm_inv; eauto.
+    + assert (valid_block m1' x1) by eauto using valid_block_inject_1.
+      assert (valid_block m2' x2) by eauto using valid_block_inject_2.
+      erewrite <- !(unchanged_on_perm _ m1' m1''); eauto using mix_unchanged.
+      eapply mi_perm_inv; eauto.
 Qed.
 
 End Mem.
