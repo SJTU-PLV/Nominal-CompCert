@@ -17,6 +17,8 @@ a:visited {color : #416DFF; text-decoration : none; font-weight : bold}
 a:link {color : #416DFF; text-decoration : none; font-weight : bold}
 a:hover {color : Red; text-decoration : underline; }
 a:active {color : Red; text-decoration : underline; }
+.hl { background-color: #FFFF00; }
+
 </style>
 
 </HEAD>
@@ -25,6 +27,7 @@ a:active {color : Red; text-decoration : underline; }
 <H1 align="center">The CompCert verified compiler</H1>
 <H2 align="center">Commented Coq development</H2>
 <H3 align="center">Version 3.6, 2019-09-17</H3>
+<H3 align="center"><span class="hl">CompCertO version 2021-03-02</span></H3>
 
 <H2>Introduction</H2>
 
@@ -64,6 +67,18 @@ AbsInt Angewandte Informatik GmbH, and are distributed under the terms of the
 following <A HREF="LICENSE">license</A>.
 </P>
 
+<P class="hl">
+CompCertO is a version of CompCert
+developed by the <A HREF="http://flint.cs.yale.edu">Yale FLINT group</A>.
+The semantic model of CompCert
+has been extended to describe the behavior of individual compilation units
+and enable compositional verification.
+We have annotated this document
+to highlight the changes we made to the original CompCert.
+We also marked files which are <del>not used in CompCertO</del>
+and have not been updated.
+</P>
+
 <H2>Table of contents</H2>
 
 <H3>General-purpose libraries, data structures and algorithms</H3>
@@ -95,13 +110,49 @@ common elements of abstract syntaxes.
 <LI> <A HREF="html/compcert.common.Events.html">Events</A>: observable events and traces.
 <LI> <A HREF="html/compcert.common.Memory.html">Memory</A>: memory model. <BR>
 See also: <A HREF="html/compcert.common.Memdata.html">Memdata</A> (in-memory representation of data).
+  <BR><span class="hl">
+    CompCertO adds a <em>memory mixing</em> operation,
+    used to prove commutation properties of the LTL&ndash;Mach
+    calling convention.
+  </span>
 <LI> <A HREF="html/compcert.common.Globalenvs.html">Globalenvs</A>: global execution environments.
+  <BR><span class="hl">
+    We split out <EM>symbol tables</EM> from global environments.
+    The symbol table is shared by all running components and
+    provided to the component semantics as a parameter.
+  </span>
+<LI> <A HREF="html/compcert.common.LanguageInterface.html">LanguageInterface</A>
+  introduces a systematic way to describe
+  calls into and out of of component.
+  <BR><span class="hl">
+    This is new in CompCertO
+  </span>
 <LI> <A HREF="html/compcert.common.Smallstep.html">Smallstep</A>: tools for small-step semantics.
-<LI> <A HREF="html/compcert.common.Behaviors.html">Behaviors</A>: from small-step semantics to observable behaviors of programs.
-<LI> <A HREF="html/compcert.common.Determinism.html">Determinism</A>: determinism properties of small-step semantics.
-<LI> <A HREF="html/compcert.powerpc.Op.html"><I>Op</I></A>: operators, addressing modes and their
+  <BR><span class="hl">
+    Our updated definitions of simulations are in this file.
+  </span>
+<LI> <del><A HREF="html/compcert.common.Behaviors.html">Behaviors</A></del>: from small-step semantics to observable behaviors of programs.
+<LI> <del><A HREF="html/compcert.common.Determinism.html">Determinism</A></del>: determinism properties of small-step semantics.
+<LI> <A HREF="html/compcert.x86.Op.html"><I>Op</I></A>: operators, addressing modes and their
 semantics.
 <LI> <A HREF="html/compcert.common.Unityping.html">Unityping</A>: a solver for atomic unification constraints.
+</UL>
+
+<span class="hl">CompCertO also introduces the following files:</span>
+
+<UL>
+<LI> <A HREF="html/compcert.common.CallconvAlgebra.html">CallconvAlgebra</A>:
+  provides high-level constructions for reasoning about
+  simulation conventions.
+<LI> <A HREF="html/compcert.common.Invariant.html">Invariant</A>:
+  preservation of invariants at interaction points
+  and associated simulation conventions.
+<LI> <A HREF="html/compcert.common.SmallstepLinking.html">SmallstepLinking</A>:
+  defines a semantic horizontal composition operator,
+  which describes component interaction and models linking.
+<LI> <A HREF="html/compcert.x86.AsmLinking.html">AsmLinking</A>:
+  shows that syntactically linking assembly programs
+  implements their horizontal composition.
 </UL>
 
 <H3>Source, intermediate and target languages: syntax and semantics</H3>
@@ -111,10 +162,10 @@ semantics.
 <A HREF="html/compcert.cfrontend.Csyntax.html">syntax</A> and
 <A HREF="html/compcert.cfrontend.Csem.html">semantics</A> and
 <A HREF="html/compcert.cfrontend.Cstrategy.html">determinized semantics</A> and
-<A HREF="html/compcert.cfrontend.Ctyping.html">type system</A>.<BR>
+<del><A HREF="html/compcert.cfrontend.Ctyping.html">type system</A></del>.<BR>
 See also: <A HREF="html/compcert.cfrontend.Ctypes.html">type expressions</A> and
 <A HREF="html/compcert.cfrontend.Cop.html">operators (syntax and semantics)</A>.<BR>
-See also: <A HREF="html/compcert.cfrontend.Cexec.html">reference interpreter</A>.
+See also: <del><A HREF="html/compcert.cfrontend.Cexec.html">reference interpreter</A></del>.
 <LI> <A HREF="html/compcert.cfrontend.Clight.html">Clight</A>: a simpler version of CompCert C where expressions contain no side-effects.
 <LI> <A HREF="html/compcert.cfrontend.Csharpminor.html">Csharpminor</A>: low-level
  structured language.
@@ -130,13 +181,27 @@ pseudo-registers).
 code, control-flow graph of basic blocks, finitely many physical registers, infinitely
 many stack slots). <BR>
 See also: <A HREF="html/compcert.backend.Locations.html">Locations</A> (representation of
-locations) and <A HREF="html/compcert.powerpc.Machregs.html"><I>Machregs</I></A> (description of processor registers).
+locations) and <A HREF="html/compcert.x86.Machregs.html"><I>Machregs</I></A> (description of processor registers).
 <LI> <A HREF="html/compcert.backend.Linear.html">Linear</A>: like LTL, but the CFG is
 replaced by a linear list of instructions with explicit branches and labels.
 <LI> <A HREF="html/compcert.backend.Mach.html">Mach</A>: like Linear, with a more concrete
 view of the activation record.  
-<LI> <A HREF="html/compcert.powerpc.Asm.html"><I>Asm</I></A>: abstract syntax for PowerPC assembly
+<LI> <A HREF="html/compcert.x86.Asm.html"><I>Asm</I></A>: abstract syntax for PowerPC assembly
 code.
+</UL>
+
+<span class="hl">In CompCertO, each language is assigned a language interface:</span>
+<UL>
+<LI> Languages up to and including RTL use the C language interface
+  defined in <A HREF="html/compcert.common.LanguageInterface.html">LanguageInterface</A>
+<LI> The LTL and Linear languages use the Locset language interface,
+  which has been added to <A HREF="html/compcert.common.Conventions.html">Conventions</A>,
+  together with the calling convention from C to Locset.
+<LI> The Mach language has its own language interface.
+  See <A HREF="html/compcert.backend.Mach.html">Mach</A>,
+  which also describe the simulation convention for the Stacking pass.
+<LI> Likewise <A HREF="html/compcert.x86.Asm.html">Asm</A>
+  defines its own simulation convention and the calling convention from Mach.
 </UL>
 
 <H3>Compiler passes</H3>
@@ -184,13 +249,13 @@ code.
       if-conversion</TD>
   <TD>Cminor to CminorSel</TD>
   <TD><A HREF="html/compcert.backend.Selection.html">Selection</A><br>
-      <A HREF="html/compcert.powerpc.SelectOp.html"><I>SelectOp</I></A><br>
-      <A HREF="html/compcert.powerpc.SelectLong.html"><I>SelectLong</I></A><br>
+      <A HREF="html/compcert.x86.SelectOp.html"><I>SelectOp</I></A><br>
+      <A HREF="html/compcert.x86.SelectLong.html"><I>SelectLong</I></A><br>
       <A HREF="html/compcert.backend.SelectDiv.html">SelectDiv</A><br>
       <A HREF="html/compcert.backend.SplitLong.html">SplitLong</A></TD>
   <TD><A HREF="html/compcert.backend.Selectionproof.html">Selectionproof</A><br>
-      <A HREF="html/compcert.powerpc.SelectOpproof.html"><I>SelectOpproof</I></A><br>
-      <A HREF="html/compcert.powerpc.SelectLongproof.html"><I>SelectLongproof</I></A><br>
+      <A HREF="html/compcert.x86.SelectOpproof.html"><I>SelectOpproof</I></A><br>
+      <A HREF="html/compcert.x86.SelectLongproof.html"><I>SelectLongproof</I></A><br>
       <A HREF="html/compcert.backend.SelectDivproof.html">SelectDivproof</A><br>
       <A HREF="html/compcert.backend.SplitLongproof.html">SplitLongproof</A></TD>
 </TR>
@@ -229,18 +294,18 @@ code.
   <TD>Constant propagation</TD>
   <TD>RTL to RTL</TD>
   <TD><A HREF="html/compcert.backend.Constprop.html">Constprop</A><br>
-      <A HREF="html/compcert.powerpc.ConstpropOp.html"><I>ConstpropOp</I></A></TD>
+      <A HREF="html/compcert.x86.ConstpropOp.html"><I>ConstpropOp</I></A></TD>
   <TD><A HREF="html/compcert.backend.Constpropproof.html">Constpropproof</A><br>
-      <A HREF="html/compcert.powerpc.ConstpropOpproof.html"><I>ConstproppOproof</I></A></TD>
+      <A HREF="html/compcert.x86.ConstpropOpproof.html"><I>ConstproppOproof</I></A></TD>
 </TR>
 
 <TR valign="top">
   <TD>Common subexpression elimination</TD>
   <TD>RTL to RTL</TD>
   <TD><A HREF="html/compcert.backend.CSE.html">CSE</A><BR>
-      <A HREF="html/compcert.powerpc.CombineOp.html"><I>CombineOp</I></A></TD>
+      <A HREF="html/compcert.x86.CombineOp.html"><I>CombineOp</I></A></TD>
   <TD><A HREF="html/compcert.backend.CSEproof.html">CSEproof</A><BR>
-      <A HREF="html/compcert.powerpc.CombineOpproof.html"><I>CombineOpproof</I></A></TD>
+      <A HREF="html/compcert.x86.CombineOpproof.html"><I>CombineOpproof</I></A></TD>
 </TR>
 
 <TR valign="top">
@@ -253,8 +318,8 @@ code.
 <TR valign="top">
   <TD>Removal of unused static globals</TD>
   <TD>RTL to RTL</TD>
-  <TD><A HREF="html/compcert.backend.Unusedglob.html">Unusedglob</A></TD>
-  <TD><A HREF="html/compcert.backend.Unusedglobproof.html">Unusedglobproof</A></TD>
+  <TD><del><A HREF="html/compcert.backend.Unusedglob.html">Unusedglob</A></del></TD>
+  <TD><del><A HREF="html/compcert.backend.Unusedglobproof.html">Unusedglobproof</A></del></TD>
 </TR>
 
 <TR valign="top">
@@ -297,7 +362,7 @@ code.
   <TD>Linear to Mach</TD>
   <TD><A HREF="html/compcert.backend.Stacking.html">Stacking</A><BR>
       <A HREF="html/compcert.backend.Bounds.html">Bounds</A><BR>
-      <A HREF="html/compcert.powerpc.Stacklayout.html"><I>Stacklayout</I></A></TD>
+      <A HREF="html/compcert.x86.Stacklayout.html"><I>Stacklayout</I></A></TD>
   <TD><A HREF="html/compcert.backend.Stackingproof.html">Stackingproof</A><br>
       <A HREF="html/compcert.common.Separation.html">Separation</A></TD>
 </TR>
@@ -305,19 +370,25 @@ code.
 <TR valign="top">
   <TD>Emission of assembly code</TD>
   <TD>Mach to Asm</TD>
-  <TD><A HREF="html/compcert.powerpc.Asmgen.html"><I>Asmgen</I></A></TD>
+  <TD><A HREF="html/compcert.x86.Asmgen.html"><I>Asmgen</I></A></TD>
   <TD><A HREF="html/compcert.backend.Asmgenproof0.html"><I>Asmgenproof0</I></A><BR>
-      <A HREF="html/compcert.powerpc.Asmgenproof1.html"><I>Asmgenproof1</I></A><BR>
-      <A HREF="html/compcert.powerpc.Asmgenproof.html"><I>Asmgenproof</I></A></TD>
+      <A HREF="html/compcert.x86.Asmgenproof1.html"><I>Asmgenproof1</I></A><BR>
+      <A HREF="html/compcert.x86.Asmgenproof.html"><I>Asmgenproof</I></A></TD>
 </TR>
 </TABLE>
 
 <H3>All together</H3>
 
 <UL>
+<LI> <span class="hl"><A HREF="html/compcert.driver.CallConv.html">CallConv</A>:
+tools to formulate and derive the overall simulation convention
+used in CompCertO.</span>
 <LI> <A HREF="html/compcert.driver.Compiler.html">Compiler</A>: composing the passes together;
 whole-compiler semantic preservation theorems.
-<LI> <A HREF="html/compcert.driver.Complements.html">Complements</A>: interesting consequences of the semantic preservation theorems.
+  <BR><span class="hl">
+  This is updated in CompCertO to fit our open semantics framework.
+  </BR>
+<LI> <del><A HREF="html/compcert.driver.Complements.html">Complements</A></del>: interesting consequences of the semantic preservation theorems.
 </UL>
 
 <H3>Static analyses</H3>
@@ -328,55 +399,40 @@ CSE, and dead code elimination.
 <UL>
 <LI> <A HREF="html/compcert.backend.Liveness.html">Liveness</A>: liveness analysis</A>.
 <LI> <A HREF="html/compcert.backend.ValueAnalysis.html">ValueAnalysis</A>: value and alias analysis</A> <BR>
+  <span class="hl">
+    This is updated in CompCertO to connect with our
+    <A HREF="html/compcert.common.Invariant.html">Invariant</A> framework.
+  </span><BR>
 See also: <A HREF="html/compcert.backend.ValueDomain.html">ValueDomain</A>: the abstract domain for value analysis.<BR>
-See also: <A HREF="html/compcert.powerpc.ValueAOp.html"><I>ValueAOp</I></A>: processor-dependent parts of value analysis.
+See also: <A HREF="html/compcert.x86.ValueAOp.html"><I>ValueAOp</I></A>: processor-dependent parts of value analysis.
 <LI> <A HREF="html/compcert.backend.Deadcode.html">Deadcode</A>: neededness analysis</A> <BR>
 See also: <A HREF="html/compcert.backend.NeedDomain.html">NeedDomain</A>: the abstract domain for neededness analysis.<BR>
-See also: <A HREF="html/compcert.powerpc.NeedOp.html"><I>NeedOp</I></A>: processor-dependent parts of neededness analysis.
+See also: <A HREF="html/compcert.x86.NeedOp.html"><I>NeedOp</I></A>: processor-dependent parts of neededness analysis.
 </UL>
 
 <H3>Type systems</H3>
 
-The <A HREF="html/compcert.cfrontend.Ctyping.html">type system of CompCert C</A> is fully formalized.  For some intermediate languages of the back-end, simpler type systems are used to statically capture well-formedness conditions.
+The <del><A HREF="html/compcert.cfrontend.Ctyping.html">type system of CompCert C</A></del> is fully formalized.  For some intermediate languages of the back-end, simpler type systems are used to statically capture well-formedness conditions.
 <UL>
-<LI> <A HREF="html/compcert.cfrontend.Ctyping.html">Ctyping</A>: typing for CompCert C + type-checking functions.
+<LI> <del><A HREF="html/compcert.cfrontend.Ctyping.html">Ctyping</A></del>: typing for CompCert C + type-checking functions.
 <LI> <A HREF="html/compcert.backend.RTLtyping.html">RTLtyping</A>: typing for RTL + type
 reconstruction.
 <LI> <A HREF="html/compcert.backend.Lineartyping.html">Lineartyping</A>: typing for Linear.
 </UL>
+
+<span class="hl">
+In CompCertO,
+<A HREF="html/compcert.backend.RTLtyping.html">RTLtyping</A> and
+<A HREF="html/compcert.backend.Lineartyping.html">Lineartyping</A>
+are updated to connect with our
+<A HREF="html/compcert.common.Invariant.html">Invariant</A> framework.
+</span>
 
 <HR>
 <ADDRESS>Xavier.Leroy@inria.fr</ADDRESS>
 <HR>
 
 <H3>CompCertO</H3>
-
-The semantic model used in this version of CompCert
-has been extended to describe the behavior of individual compilation units
-and enable compositional verification.
-This is implemented in the following files:
-<UL>
-<LI> <A HREF="html/compcert.common.LanguageInterface.html">LanguageInterface</A>
-  introduces a systematic way to describe
-  calls into and out of of component.
-<LI> <A HREF="html/compcert.common.Globalenvs.html">Globalenvs</A>
-  is updated to split out <EM>symbol tables</EM> from global environments.
-  The symbol table is shared by all running components and
-  provided to the component semantics as a parameter.
-<LI> <A HREF="html/compcert.common.Smallstep.html">Smallstep</A>
-  is updated accordingly.
-<LI> <A HREF="html/compcert.common.SmallstepLinking.html">SmallstepLinking</A>
-  defines a semantic horizontal composition operator,
-  which describes component interaction and models linking.
-<LI> <A HREF="html/compcert.x86.AsmLinking.html">AsmLinking</A>
-  shows that syntactically linking assembly programs
-  implements their horizontal composition.
-<LI> <A HREF="html/compcert.common.CallconvAlgebra.html">CallconvAlgebra</A>
-  provides high-level constructions for reasoning about
-  simulation conventions.
-<LI> <A HREF="html/compcert.driver.Compiler.html">Compiler</A>
-  puts everything together.
-</UL>
 
 These compositional extensions rely on a theory of
 CompCert Kripke logical relations (CKLR),
