@@ -63,22 +63,25 @@ VLIB=Axioms.v Coqlib.v Intv.v Maps.v Heaps.v Lattice.v Ordered.v \
 
 COMMON=Errors.v AST.v Linking.v \
   Events.v Globalenvs.v Memdata.v Memtype.v Memory.v \
-  Values.v Smallstep.v Behaviors.v Switch.v Determinism.v Unityping.v \
+  Values.v Smallstep.v Switch.v Unityping.v \
   Separation.v Builtins0.v Builtins1.v Builtins.v \
   LanguageInterface.v \
   SmallstepLinking.v \
   Invariant.v \
   CallconvAlgebra.v \
 
+# Behaviors.v
+# Determinism.v
+
 # Compcert Kripke Logical Relations
 
 CKLR=\
   CKLR.v CKLRAlgebra.v \
-  Extends.v ExtendsFootprint.v \
-  Inject.v InjectFootprint.v InjectNeutral.v \
+  Extends.v \
+  Inject.v InjectFootprint.v \
   VAInject.v VAExtends.v \
   Mapsrel.v \
-  Valuesrel.v Builtinsrel.v Eventsrel.v Globalenvsrel.v \
+  Valuesrel.v Builtinsrel.v Eventsrel.v \
   Coprel.v Clightrel.v \
   Registersrel.v RTLrel.v \
 
@@ -100,7 +103,6 @@ BACKEND=\
   ConstpropOp.v Constprop.v ConstpropOpproof.v Constpropproof.v \
   CSEdomain.v CombineOp.v CSE.v CombineOpproof.v CSEproof.v \
   NeedDomain.v NeedOp.v Deadcode.v Deadcodeproof.v \
-  Unusedglob.v Unusedglobproof.v \
   Machregs.v Locations.v Conventions1.v Conventions.v LTL.v \
   Allocation.v Allocproof.v \
   Tunneling.v Tunnelingproof.v \
@@ -111,16 +113,24 @@ BACKEND=\
   Mach.v \
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
-  AsmLinking.v \
+  Asmrel.v AsmLinking.v \
+
+# Unusedglob.v
+# Unusedglobproof.v
 
 # C front-end modules (in cfrontend/)
 
-CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v Cexec.v \
-  Initializers.v Initializersproof.v \
+CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Cstrategy.v \
   SimplExpr.v SimplExprspec.v SimplExprproof.v \
-  Clight.v ClightBigstep.v SimplLocals.v SimplLocalsproof.v \
+  Clight.v SimplLocals.v SimplLocalsproof.v \
   Cshmgen.v Cshmgenproof.v \
   Csharpminor.v Cminorgen.v Cminorgenproof.v \
+
+# Ctyping.v
+# ClightBigstep.v
+# Initializers.v
+# Initializersproof.v
+# Cexec.v
 
 # Parser
 
@@ -134,7 +144,9 @@ MENHIRLIB=Alphabet.v Automaton.v Grammar.v Interpreter_complete.v \
 
 # Putting everything together (in driver/)
 
-DRIVER=Compopts.v CallConv.v Compiler.v Complements.v
+DRIVER=Compopts.v CallConv.v Compiler.v
+
+# Complements.v
 
 # All source files
 
@@ -151,8 +163,8 @@ GENERATED=\
 all:
 	@test -f .depend || $(MAKE) depend
 	$(MAKE) proof
-	$(MAKE) extraction
-	$(MAKE) ccomp
+	#$(MAKE) extraction
+	#$(MAKE) ccomp
 ifeq ($(HAS_RUNTIME_LIB),true)
 	$(MAKE) runtime
 endif
