@@ -21,7 +21,7 @@ compiled in the following way.
 
 Build requirements are identical to those of CompCert v3.6. We recommend
 using the `opam` package manager to set up a build environment. We have
-successfully built CompCertO with the following `opam` installation:
+tested CompCertO on Linux with the following `opam` installation:
 
     % opam list
     # Packages matching: installed
@@ -45,6 +45,22 @@ successfully built CompCertO with the following `opam` installation:
     ocaml-config    1           OCaml Switch Configuration
     ocaml-system    4.08.1      The OCaml compiler (system version, from outside of opam)
     ocamlfind       1.8.1       A library manager for OCaml
+
+You should be able to reproduce this installation with the following
+sequence of shell commands:
+
+    # Initialize opam (if you haven't used it before)
+    opam init --bare
+
+    # Create an "opam switch" dedicated to building CompCertO
+    opam switch create compcerto ocaml-base-compiler.4.08.1
+
+    # Install the necessary packages
+    opam repository add coq-released https://coq.inria.fr/opam/released
+    opam install coq.8.9.1 camlp5.7.14 menhir.20201216 coq-coq2html.1.2
+
+    # Configure the current shell to use the newly created opam switch
+    eval $(opam env)
 
 ### Build instructions
 
