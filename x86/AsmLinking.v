@@ -91,7 +91,7 @@ Proof.
   eapply find_internal_ptr_linkorder; eauto.
 Qed.
 
-Section FOO.
+Section ASM_LINKING.
   Context (p1 p2 p: program) (Hp: link p1 p2 = Some p).
   (*Context L (HL: link (semantics p1) (semantics p2) = Some L).*)
 
@@ -365,7 +365,7 @@ Section FOO.
           4
     end.
 
-  Lemma foo:
+  Lemma asm_linking:
     forward_simulation cc_id cc_id
       (SmallstepLinking.semantics L (erase_program p))
       (semantics p).
@@ -470,4 +470,4 @@ Section FOO.
           destruct H; inv H9. destruct H1; congruence.
     - apply well_founded_ltof.
   Qed.
-End FOO.
+End ASM_LINKING.

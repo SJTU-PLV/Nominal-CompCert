@@ -862,7 +862,7 @@ Proof.
   2: { unfold compose in H.
        destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel; try discriminate.
        cbn in *. inv H.
-       eapply AsmLinking.foo; eauto. }
+       eapply AsmLinking.asm_linking; eauto. }
   eapply compose_simulation; eauto.
   eapply clight_semantic_preservation; eauto using transf_clight_program_match.
   eapply clight_semantic_preservation; eauto using transf_clight_program_match.
