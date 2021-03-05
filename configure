@@ -97,7 +97,7 @@ Options:
 #
 # Check that the user has setup coqrel (CompCertO-specific)
 #
-if ! [ -e coqrel/LogicalRelations.vo ]; then
+if ! [ -e $coqrel/LogicalRelations.vo ]; then
   echo >&2 "Please setup coqrel first; see README.md for details."
   exit 1
 fi
