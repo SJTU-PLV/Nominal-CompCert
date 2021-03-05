@@ -27,7 +27,7 @@ a:active {color : Red; text-decoration : underline; }
 <H1 align="center">The CompCert verified compiler</H1>
 <H2 align="center">Commented Coq development</H2>
 <H3 align="center">Version 3.6, 2019-09-17</H3>
-<H3 align="center"><span class="hl">CompCertO version 2021-03-02</span></H3>
+<H3 align="center"><span class="hl">CompCertO version 0.1</span></H3>
 
 <H2>Introduction</H2>
 
@@ -202,6 +202,42 @@ code.
   which also describe the simulation convention for the Stacking pass.
 <LI> Likewise <A HREF="html/compcert.x86.Asm.html">Asm</A>
   defines its own simulation convention and the calling convention from Mach.
+</UL>
+
+<H3><span class="hl">CompCert Kripke logcal relations</span></H3>
+
+The compositional extensions of CompCertO rely on a theory of
+CompCert Kripke logical relations (CKLR),
+implemented in the following:
+<UL>
+<LI> <A HREF="html/compcert.cklr.CKLR.html">CKLR</A>
+  contains the core definitions.
+<LI> <A HREF="html/compcert.cklr.CKLRAlgebra.html">CKLRAlgebra</A>
+  has results about the ways CKLRs compose and combine.
+</UL>
+
+CKLR instances include:
+<UL>
+<LI> <A HREF="html/compcert.cklr.Extends.html">Extends</A>
+  describes the CKLR <TT>ext</TT>.
+<LI> <A HREF="html/compcert.cklr.Inject.html">Inject</A>
+  describes the CKLR <TT>inj</TT>.
+<LI> <A HREF="html/compcert.cklr.InjectFootprint.html">InjectFootprint</A>
+  describes the CKLR <TT>injp</TT>.
+<LI> <A HREF="html/compcert.cklr.VAExtends.html">VAExtends</A>
+  is a version of <TT>ext</TT> which enforces ValueAnalysis invariants.
+<LI> <A HREF="html/compcert.cklr.VAInject.html">VAInject</A>
+  is a version of <TT>inj</TT> which enforces ValueAnalysis invariants.
+</UL>
+
+Relational parametricity for various language semantics:
+<UL>
+<LI> <A HREF="html/compcert.cklr.Clightrel.html">Clightrel</A>
+  establishes the parametricity result for Clight.
+<LI> <A HREF="html/compcert.cklr.RTLrel.html">RTLrel</A>
+  establishes the parametricity result for RTL.
+<LI> <A HREF="html/compcert.x86.Asmrel.html">Asmrel</A>
+  establishes the parametricity result for Asm.
 </UL>
 
 <H3>Compiler passes</H3>
@@ -431,28 +467,6 @@ are updated to connect with our
 <HR>
 <ADDRESS>Xavier.Leroy@inria.fr</ADDRESS>
 <HR>
-
-<H3>CompCertO</H3>
-
-These compositional extensions rely on a theory of
-CompCert Kripke logical relations (CKLR),
-implemented in the following:
-<UL>
-<LI> <A HREF="html/compcert.cklr.CKLR.html">CKLR</A>
-  contains the core definitions.
-<LI> <A HREF="html/compcert.cklr.Extends.html">Extends</A>
-  describes the CKLR <TT>ext</TT>.
-<LI> <A HREF="html/compcert.cklr.Inject.html">Inject</A>
-  describes the CKLR <TT>inj</TT>.
-<LI> <A HREF="html/compcert.cklr.InjectFootprint.html">InjectFootprint</A>
-  describes the CKLR <TT>injp</TT>.
-<LI> <A HREF="html/compcert.cklr.Clightrel.html">Clightrel</A>
-  establishes the parametricity result for Clight.
-<LI> <A HREF="html/compcert.cklr.RTLrel.html">RTLrel</A>
-  establishes the parametricity result for RTL.
-<LI> <A HREF="html/compcert.cklr.CKLRAlgebra.html">CKLRAlgebra</A>
-  has results about the ways CKLRs compose and combine.
-</UL>
 
 </BODY>
 </HTML>

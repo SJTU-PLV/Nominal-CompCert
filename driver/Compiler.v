@@ -810,6 +810,7 @@ Proof.
   intros. apply c_semantic_preservation. apply transf_c_program_match; auto.
 Qed.
 
+(*
 (** Here is the separate compilation case.  Consider a nonempty list [c_units]
   of C source files (compilation units), [C1 ,,, Cn].  Assume that every
   C compilation unit [Ci] is successfully compiled by CompCert, obtaining
@@ -822,7 +823,6 @@ Qed.
   the dynamic semantics of [asm_program] by the dynamic semantics of [c_program].
 *)
 
-(*
 Theorem separate_transf_c_program_correct:
   forall c_units asm_units c_program,
   nlist_forall2 (fun cu tcu => transf_clight_program cu = OK tcu) c_units asm_units ->

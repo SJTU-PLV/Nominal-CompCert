@@ -1,22 +1,22 @@
 (** This file defines the overall calling convention for CompCertO
   and provides the simulation convention algebra used in the
   [driver.Compiler] library to compose passes into the corresponding
-  correctness theorem.
+  correctness theorem. *)
 
-  The main principle before our approach is to separate the structural
+(** The main principle before our approach is to separate the structural
   aspect of calling conventions on one hand, which establish
   connections between the successive language interfaces, and the
   CKLRs used by various passes on the other hand, which can be
   promoted to endogenous simulation conventions for each language
   interface. Although composing the various pass correctness theorems
   directly yields a mixture of stuctural conventions and CKLRs, we use
-  commutation properties to separate these two components.
+  commutation properties to separate these two components. *)
 
-  More precisely, for a structural component [CC], we make sure that
+(** More precisely, for a structural component [CC], we make sure that
   the following holds for all CKLRs [R]:
-
+<<
                     ccref (CC @ R) (R @ CC)
-
+>>
   In the context of external calls, this allows us to propagate CKLRs
   towards the source level, where they can be satisfied by the
   relational parametricity property of Clight. For incoming calls,
@@ -24,9 +24,9 @@
   in order to satisfy the incoming simulation convention of the
   various compiler passes. Ultimately, we can formulate a simulation
   convention for the whole compiler of the form:
-
+<<
          (R1 + ... + Rn)^{*} @ (CC1 @ ... @ CCk) @ vainj
-
+>>
   The first component expresses source-level compatibility with the
   various CKLRs [R1], ..., [Rn] (and hence, thanks to commutation
   properties, overall compatibility with CKLRs for incoming calls).
@@ -472,8 +472,8 @@ Qed.
 
 (** An alternative approach for [wt_c] would be to formulate a typing
   constraint on the target queries and replies, which can be
-  propagated towards the source as [ccref (cc @ wt) (wt @ cc @
-  wt)]. Then we can use the following property to make it part of the
+  propagated towards the source as [ccref (cc @ wt) (wt @ cc @ wt)].
+  Then we can use the following property to make it part of the
   source-level compatibility relations to satisfy the typing
   requirements of other components' external calls. *)
 
