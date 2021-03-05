@@ -36,7 +36,7 @@ def stats(fs):
     def unnew(s):
         return s if notnew(s) else s[1:]
 
-    before = counts(map("compcerto-ref:{0}.v".format, filter(notnew, fs)));
+    before = counts(map("origin/compcerto-ref:{0}.v".format, filter(notnew, fs)));
     after = counts(map("compcerto:{0}.v".format, map(unnew, fs)));
     return list(map(summarize, before, after));
 
@@ -61,7 +61,7 @@ passes = [
    "backend/Inliningproof"],
   ["backend/Renumberproof"],
   ["backend/Constpropproof", "x86/ConstpropOpproof"],
-  ["backend/CSEproof", "x86/CombineOpproof"],
+  ["backend/CSEproof", "backend/CSEdomain", "x86/CombineOpproof"],
   ["backend/Deadcodeproof"],
   #["backend/Unusedglobproof"],
   ["backend/Allocproof"],
@@ -92,27 +92,29 @@ groups = passes + [
    "common/Linking",
    "common/Smallstep",
    "+common/LanguageInterface"],
+  # Horizontal composition
   ["+x86/AsmLinking",
    "+common/SmallstepLinking"],
+  # Simulation convention algebra
   ["+common/CallconvAlgebra",
    "+cklr/CKLRAlgebra"],
   # CKLR basics
   ["+cklr/CKLR",
    "+cklr/Extends",
    "+cklr/Inject",
-   "+cklr/InjectFootprint"],
-  #"cklr/ExtendsFootprint",
-  #"cklr/InjectNeutral",
+   "+cklr/InjectFootprint",
+   "+cklr/VAExtends",
+   "+cklr/VAInject"],
   # Parametricity
   ["+cklr/Clightrel",
    "+cklr/Coprel",
    "+cklr/Builtinsrel",
    "+cklr/Eventsrel",
-  #"cklr/Globalenvsrel",
    "+cklr/Mapsrel",
    "+cklr/RTLrel",
    "+cklr/Registersrel",
-   "+cklr/Valuesrel"],
+   "+cklr/Valuesrel",
+   "+x86/Asmrel"],
   # Invariants proofs
   ["+common/Invariant",
    "backend/Cminortyping",
@@ -121,7 +123,12 @@ groups = passes + [
    "backend/RTLtyping",
    "backend/Lineartyping"],
   # Correctness proofs
-  all_passes
+  all_passes,
+  # Calling convention
+  ["+driver/CallConv",
+   "common/Memory",
+   "backend/Conventions",  # not really the right place but where is?
+   "driver/Compiler"],
 ]
 
 for p in groups:
