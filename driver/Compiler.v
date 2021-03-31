@@ -417,16 +417,17 @@ Definition cc_compcert : callconv li_c li_asm :=
   The following conventions give a flexible characterization for
   early passes. *)
 
-Definition cc_cod : callconv li_c li_locset :=
-  wt_c @ inj @ vainj @ wt_c @ cc_c ext @ cc_c_locset.
+Definition cc_cod : callconv li_c li_c :=
+  wt_c @ inj @ vainj.
 
-Definition cc_dom : callconv li_c li_locset :=
+Definition cc_dom : callconv li_c li_c :=
   cc_cklrs^{*} @ cc_cod.
 
 Lemma cc_compcert_expand:
   ccref
     cc_compcert
     (cc_dom @                                              (* Passes up to Alloc *)
+     (wt_c @ cc_c ext @ cc_c_locset) @                     (* Alloc *)
      cc_locset ext @                                       (* Tunneling *)
      (wt_loc @ cc_locset_mach @ cc_mach inj) @             (* Stacking *)
      (cc_mach ext @ cc_mach_asm) @                         (* Asmgen *)
@@ -471,6 +472,7 @@ Qed.
 Lemma cc_compcert_collapse:
   ccref
     (cc_dom @                                     (* Passes up to Alloc *)
+     (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
      cc_locset ext @                              (* Tunneling *)
      (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
      (cc_mach ext @ cc_mach_asm) @                (* Asmgen *)
@@ -579,7 +581,7 @@ Qed.
 
 Section COMPOSE_C_PASSES.
 
-Context {li} (ccA ccB: callconv li_locset li).
+Context {li} (ccA ccB: callconv li_c li).
 
 Lemma compose_clight_properties prog tsem:
   forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) (Clight.semantics1 prog) tsem ->
@@ -644,27 +646,20 @@ Proof.
   eapply compose_forward_simulations; eauto. { eapply RTLrel.semantics_rel. }
 Qed.
 
-Lemma compose_alloc_pass p bsem tsem:
+Lemma compose_backend_passes p tsem:
   let sem := RTL.semantics p in
-  forward_simulation (wt_c @ cc_c ext @ cc_c_locset) (wt_c @ cc_c ext @ cc_c_locset) sem bsem ->
-  forward_simulation ccA ccB bsem tsem ->
+  RTLtyping.wt_program p ->
+  forward_simulation ccA ccB sem tsem ->
   forward_simulation (cc_dom @ ccA) (cc_cod @ ccB) sem tsem.
 Proof.
   intros.
   eapply compose_forward_simulations; eauto.
   unfold cc_dom, cc_cod.
   rewrite <- cc_id_star, cc_compose_id_left.
-  rewrite <- (cc_compose_assoc inj), <- cc_c_compose at 1.
-  rewrite <- (cc_compose_assoc inj), <- cc_c_compose at 1.
-  rewrite <- (cc_compose_assoc wt_c (cc_c (_ @ _))) at 1.
-  rewrite <- (cc_compose_assoc wt_c (cc_c (_ @ _))) at 1.
-  rewrite <- (cc_compose_assoc (wt_c @ _)) at 1.
-  rewrite <- (cc_compose_assoc (wt_c @ _)) at 1.
-  rewrite (cc_compose_assoc wt_c) at 1. rewrite <- (inv_prop _ wt_c).
-  rewrite (cc_compose_assoc wt_c) at 1. rewrite (inv_drop _ wt_c).
-  rewrite !cc_compose_assoc at 1.
-  eapply compose_forward_simulations; eauto.
-  eapply RTLrel.semantics_rel.
+  repeat eapply compose_forward_simulations.
+  - eapply preserves_fsim, RTLtyping.rtl_wt; auto.
+  - eapply RTLrel.semantics_rel.
+  - eapply RTLrel.semantics_rel.
 Qed.
 
 End COMPOSE_C_PASSES.
@@ -740,7 +735,8 @@ Ltac DestructM :=
     exact CSEproof.transf_program_correct.
   eapply compose_optional_pass; eauto using compose_va_pass.
     exact Deadcodeproof.transf_program_correct; eauto.
-  eapply compose_alloc_pass.
+  eapply compose_backend_passes; eauto using Allocproof.wt_prog.
+  eapply compose_forward_simulations.
     eapply Allocproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply Tunnelingproof.transf_program_correct; eassumption.
