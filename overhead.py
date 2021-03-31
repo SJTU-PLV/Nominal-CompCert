@@ -37,7 +37,7 @@ def stats(fs):
         return s if notnew(s) else s[1:]
 
     before = counts(map("origin/compcerto-ref:{0}.v".format, filter(notnew, fs)));
-    after = counts(map("compcerto:{0}.v".format, map(unnew, fs)));
+    after = counts(map("HEAD:{0}.v".format, map(unnew, fs)));
     return list(map(summarize, before, after));
 
 passes = [
