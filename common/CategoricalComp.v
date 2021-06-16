@@ -143,7 +143,7 @@ Qed.
 
 Notation "L1 ≤ L2" :=  (fsim_lts L1 L2)(at level 90): lts_scope.
 Notation "L1 ≡ L2" :=  (equiv_lts L1 L2)(at level 90): lts_scope.
-Notation "L1 ∘ L2" :=  (comp_lts L1 L2)(at level 50, left associativity): lts_scope.
+Notation "L1 ∘ L2" :=  (comp_lts L1 L2)(at level 40, left associativity): lts_scope.
 Notation " 1 " :=  (id_lts): lts_scope.
 Open Scope lts_scope.
 Delimit Scope lts_scope with lts.
@@ -151,28 +151,27 @@ Delimit Scope lts_scope with lts.
 Section IDENTITY.
   Context {liA liB S} (L : lts liA liB S).
 
-  Inductive id_state_match1: @comp_state id_state S -> S -> Prop :=
-  | id_state_match_query q s:
-      initial_state L q s ->
-      id_state_match1 (st1 (st_q q)) s
-  | id_state_match_state q s:
-      id_state_match1 (st2 (st_q q) s) s
-  | id_state_match_reply r s:
-      id_state_match1 (st1 (st_r r)) s.
+  (* src q --initial_state--> ι1(ι1(q)) --step-->ι2(ι1(q),s)
 
+     tgt q --------------initial_state----------> s
+
+     There's no appropriate way to match the intermediate state in the source
+     program with the target program states *)
   Lemma identity1: 1 ∘ L ≤ L.
-  Proof.
-    eexists _, _, _. intros se.
-    eapply forward_simulation_star_wf with (match_states := id_state_match1).
-    - intros q _ [ ]. now cbn.
-    - intros q _ s1 [ ] H. inv H. inv H0.
-      (* HELP: how do we know that the query has a well defined initial state *)
   Admitted.
 
+  (* src s ------------------final_state---------------> r
+
+     tgt ι2(ι1(s)) ---step--> ι1(ι2(r)) --final_state--> r
+
+     Similar issue with `final_state` being too strict *)
+  Lemma identity2: L ≤ 1 ∘ L.
+  Admitted.
 
   Theorem categorical_comp_left_identity: 1 ∘ L ≡ L.
   Admitted.
-
+  (* Dually, the right identity law suffers from the same problem with
+     `at_external` and `after_external` being too strict *)
   Theorem categorical_comp_right_identity: L ∘ 1 ≡ L.
   Admitted.
 
@@ -191,6 +190,7 @@ Section ASSOC.
 
   Lemma assoc1: L1 ∘ (L2 ∘ L3) ≤ L1 ∘ L2 ∘ L3.
   Proof.
+    apply fsim_lts_trivial_order.
     eexists. intros se.
     eapply forward_simulation_step with (match_states := assoc_state_match).
     - intros. inv H. cbn. now rewrite orb_assoc.
@@ -218,6 +218,7 @@ Section ASSOC.
 
   Lemma assoc2: L1 ∘ L2 ∘ L3 ≤ L1 ∘ (L2 ∘ L3).
   Proof.
+    apply fsim_lts_trivial_order.
     eexists. intros se.
     eapply forward_simulation_step with (match_states := fun s1 s2 => assoc_state_match s2 s1).
     - intros. inv H. cbn. now rewrite <- orb_assoc.
@@ -248,3 +249,44 @@ Section ASSOC.
     split; [ exact assoc1 | exact assoc2 ].
   Qed.
 End ASSOC.
+
+Require Import CallConv.
+Require Import CallconvAlgebra.
+
+Section CALL_CONV_REF.
+
+  Context {li1 li2} {cc cc': callconv li1 li2} (ref: ccref cc cc').
+
+  Inductive cc_state_match (w: ccworld cc): @id_state li1 -> @id_state li2 -> Prop :=
+  | cc_match_query q1 q2:
+      match_query cc w q1 q2 ->
+      cc_state_match w (st_q q1) (st_q q2)
+  | cc_match_reply r1 r2:
+      match_reply cc w r1 r2 ->
+      cc_state_match w (st_r r1) (st_r r2).
+
+  Lemma ccref_to_fsim:
+    exists index order ms,
+    forall w se1 se2, match_senv cc w se1 se2 ->
+    Smallstep_.fsim_properties cc' cc se1 se2 w 1 1 index order (ms w se1 se2).
+  Proof.
+    exists unit%type. exists (ltof _ (fun _ => O)).
+    exists (fun w _ _ _ => cc_state_match w).
+    intros w se1 se2 Hse. constructor.
+    - intros q1 q2 Hq. now cbn.
+    - intros q1 q2 s1 Hq Hs.
+      inv Hs. exists tt. exists (st_q q2).
+      split; econstructor; eauto.
+    - intros _ s1 s2 r1 Hs Hr.
+      inv Hr. inv Hs. exists r2. split. constructor. auto.
+    - intros _ s1 s2 q1 Hs Hq. inv Hq. inv Hs.
+      specialize (ref _ _ _ _ _ Hse H0).
+      destruct ref as (w' & Hse' & Hq' & Hr).
+      exists w'. exists q2. repeat apply conj; try constructor; auto.
+      exact tt.
+      inv H1. exists (st_r r2). split. constructor.
+      constructor. apply Hr. auto.
+    - intros. inv H.
+  Qed.
+
+End CALL_CONV_REF.
