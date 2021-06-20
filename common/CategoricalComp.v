@@ -1,7 +1,7 @@
 Require Import Relations.
 Require Import List.
 Require Import Coqlib.
-Require Import LanguageInterface Events Globalenvs SmallstepLinking Smallstep_.
+Require Import LanguageInterface_ Events Globalenvs SmallstepLinking Smallstep_.
 
 Open Scope smallstep_scope.
 Delimit Scope smallstep_scope with smallstep.
@@ -250,12 +250,10 @@ Section ASSOC.
   Qed.
 End ASSOC.
 
-Require Import CallConv.
-Require Import CallconvAlgebra.
-
 Section CALL_CONV_REF.
 
-  Context {li1 li2} {cc cc': callconv li1 li2} (ref: ccref cc cc').
+  Context {li1 li2} {cc cc': LanguageInterface_.callconv li1 li2}
+          (ref: ccref cc cc').
 
   Inductive cc_state_match (w: ccworld cc): @id_state li1 -> @id_state li2 -> Prop :=
   | cc_match_query q1 q2:

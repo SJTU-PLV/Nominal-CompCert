@@ -3,14 +3,13 @@ Require Import Wellfounded.
 Require Import Coqlib.
 Require Import Events.
 Require Import Globalenvs.
-Require Import LanguageInterface.
+Require Import LanguageInterface_.
 Require Import Integers.
 Require Import Smallstep.
 
 Set Implicit Arguments.
 
-Axiom query_to_identifier: forall li, query li -> string.
-Coercion query_to_identifier: query  >-> string.
+Coercion name: query  >-> string.
 
 Record lts liA liB state: Type := {
   genvtype: Type;
