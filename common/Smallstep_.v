@@ -3,30 +3,51 @@ Require Import Wellfounded.
 Require Import Coqlib.
 Require Import Events.
 Require Import Globalenvs.
-Require Import LanguageInterface_.
+Require Import LanguageInterface.
 Require Import Integers.
 Require Import Smallstep.
+Require Import AST.
 
 Set Implicit Arguments.
 
-Coercion name: query  >-> string.
-
-Record lts liA liB state: Type := {
+Record internal state: Type := {
   genvtype: Type;
   step : genvtype -> state -> trace -> state -> Prop;
-  valid_query: string -> bool;
+  globalenv: genvtype;
+}.
+
+Record external liA liB state: Type := {
+  footprint: ident -> Prop;
   initial_state: query liB -> state -> Prop;
   at_external: state -> query liA -> Prop;
   after_external: state -> reply liA -> state -> Prop;
   final_state: state -> reply liB -> Prop;
-  globalenv: genvtype;
 }.
+
+Record lts liA liB state: Type := {
+  steps :> (ident -> Prop) -> internal state;
+  events :> external liA liB state;
+}.
+
+(* Record lts liA liB state: Type := { *)
+(*   genvtype: Type; *)
+(*   step : genvtype -> state -> trace -> state -> Prop; *)
+(*   footprint: ident -> Prop; *)
+(*   initial_state: query liB -> state -> Prop; *)
+(*   at_external: state -> query liA -> Prop; *)
+(*   after_external: state -> reply liA -> state -> Prop; *)
+(*   final_state: state -> reply liB -> Prop; *)
+(*   globalenv: genvtype; *)
+(* }. *)
 
 Record semantics liA liB := {
   skel: AST.program unit unit;
   state: Type;
   activate :> Genv.symtbl -> lts liA liB state;
 }.
+
+Definition valid_query {li liA liB S} (L: lts liA liB S) se (q: query li): Prop :=
+  exists i, footprint L i /\ Genv.symbol_address se i Ptrofs.zero = entry q.
 
 Notation " 'Step' L " := (step L (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Star' L " := (star (step L) (globalenv L)) (at level 1) : smallstep_scope.
@@ -38,15 +59,15 @@ Section FSIM.
   Context {liB1 liB2} (ccB: callconv liB1 liB2).
   Context (se1 se2: Genv.symtbl) (wB: ccworld ccB).
   Context {state1 state2: Type}.
+  Context {qset: ident -> Prop}.
 
   (** The general form of a forward simulation. *)
 
   Record fsim_properties (L1: lts liA1 liB1 state1) (L2: lts liA2 liB2 state2) (index: Type)
          (order: index -> index -> Prop)
          (match_states: index -> state1 -> state2 -> Prop) : Prop := {
-    fsim_match_valid_query:
-      forall q1 q2, match_query ccB wB q1 q2 ->
-      valid_query L2 q2 = valid_query L1 q1;
+    fsim_match_footprint:
+      forall i, footprint L1 i <-> footprint L2 i;
     fsim_match_initial_states:
       forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
       exists i, exists s2, initial_state L2 q2 s2 /\ match_states i s1 s2;
@@ -59,10 +80,10 @@ Section FSIM.
       forall r1 r2 s1', match_reply ccA w r1 r2 -> after_external L1 s1 r1 s1' ->
       exists i' s2', after_external L2 s2 r2 s2' /\ match_states i' s1' s2';
     fsim_simulation:
-      forall s1 t s1', Step L1 s1 t s1' ->
+      forall s1 t s1', Step (L1 qset) s1 t s1' ->
       forall i s2, match_states i s1 s2 ->
       exists i', exists s2',
-          (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ order i' i))
+          (Plus (L2 qset) s2 t s2' \/ (Star (L2 qset) s2 t s2' /\ order i' i))
       /\ match_states i' s1' s2';
   }.
 
@@ -75,9 +96,8 @@ Variable L2: lts liA2 liB2 state2.
 
 Variable match_states: state1 -> state2 -> Prop.
 
-Hypothesis match_valid_query:
-  forall q1 q2, match_query ccB wB q1 q2 ->
-  valid_query L2 q2 = valid_query L1 q1.
+Hypothesis match_footprint:
+  forall i, footprint L1 i <-> footprint L2 i.
 
 Hypothesis match_initial_states:
   forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
@@ -104,10 +124,10 @@ Section SIMULATION_STAR_WF.
 Variable order: state1 -> state1 -> Prop.
 
 Hypothesis simulation:
-  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s1 t s1', Step (L1 qset) s1 t s1' ->
   forall s2, match_states s1 s2 ->
   exists s2',
-  (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ order s1' s1))
+  (Plus (L2 qset) s2 t s2' \/ (Star (L2 qset) s2 t s2' /\ order s1' s1))
   /\ match_states s1' s2'.
 
 Lemma forward_simulation_star_wf:
@@ -136,9 +156,9 @@ Section SIMULATION_STAR.
 Variable measure: state1 -> nat.
 
 Hypothesis simulation:
-  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s1 t s1', Step (L1 qset) s1 t s1' ->
   forall s2, match_states s1 s2 ->
-  (exists s2', Plus L2 s2 t s2' /\ match_states s1' s2')
+  (exists s2', Plus (L2 qset) s2 t s2' /\ match_states s1' s2')
   \/ (measure s1' < measure s1 /\ t = E0 /\ match_states s1' s2)%nat.
 
 Lemma forward_simulation_star:
@@ -155,9 +175,9 @@ End SIMULATION_STAR.
 Section SIMULATION_PLUS.
 
 Hypothesis simulation:
-  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s1 t s1', Step (L1 qset) s1 t s1' ->
   forall s2, match_states s1 s2 ->
-  exists s2', Plus L2 s2 t s2' /\ match_states s1' s2'.
+  exists s2', Plus (L2 qset) s2 t s2' /\ match_states s1' s2'.
 
 Lemma forward_simulation_plus:
   fsim_properties L1 L2 state1 (ltof _ (fun _ => O)) ms.
@@ -171,9 +191,9 @@ End SIMULATION_PLUS.
 Section SIMULATION_STEP.
 
 Hypothesis simulation:
-  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s1 t s1', Step (L1 qset) s1 t s1' ->
   forall s2, match_states s1 s2 ->
-  exists s2', Step L2 s2 t s2' /\ match_states s1' s2'.
+  exists s2', Step (L2 qset) s2 t s2' /\ match_states s1' s2'.
 
 Lemma forward_simulation_step:
   fsim_properties L1 L2 state1 (ltof _ (fun _ => O)) ms.
@@ -189,7 +209,7 @@ End FORWARD_SIMU_DIAGRAMS.
 
 End FSIM.
 
-Arguments fsim_properties {_ _} _ {_ _} _ _ _ _ {_ _} L1 L2 index order match_states.
+Arguments fsim_properties {_ _} _ {_ _} _ _ _ _ {_ _} _ L1 L2 index order match_states.
 
 Record fsim_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
   Forward_simulation {
@@ -199,10 +219,10 @@ Record fsim_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 
 
     fsim_skel:
       skel L1 = skel L2;
-    fsim_lts se1 se2 wB:
+    fsim_lts se1 se2 wB qset:
       @match_senv liB1 liB2 ccB wB se1 se2 ->
       Genv.valid_for (skel L1) se1 ->
-      fsim_properties ccA ccB se1 se2 wB (activate L1 se1) (activate L2 se2)
+      fsim_properties ccA ccB se1 se2 wB qset (activate L1 se1) (activate L2 se2)
         fsim_index fsim_order (fsim_match_states se1 se2 wB);
     fsim_order_wf:
       well_founded fsim_order;
