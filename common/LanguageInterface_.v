@@ -13,11 +13,9 @@ Structure language_interface :=
       query: Type;
       reply: Type;
       entry: query -> val;
-      name: query -> string;
     }.
 
 Arguments entry {_}.
-Arguments name {_}.
 
 (** ** Basic interfaces *)
 
@@ -29,7 +27,6 @@ Definition li_null :=
   query := Empty_set;
   reply := Empty_set;
   entry q := match q with end;
-  name q := match q with end;
   |}.
 
 (** The whole-program interface is used as the incoming interface for
@@ -42,7 +39,6 @@ Definition li_wp :=
   query := unit;
   reply := Integers.int;
   entry q := Vundef;
-  name q := ("main")%string;
   |}.
 
 (** * Calling conventions *)
@@ -65,7 +61,12 @@ Record callconv {li1 li2} :=
           match_senv w se1 se2 ->
           Genv.valid_for sk se1 ->
           Genv.valid_for sk se2;
-    }.
+      match_senv_symbol_address:
+        forall w se1 se2, match_senv w se1 se2 ->
+        forall q1 q2, match_query w q1 q2 ->
+        forall i, Genv.symbol_address se1 i Ptrofs.zero = entry q1 <->
+             Genv.symbol_address se2 i Ptrofs.zero = entry q2;
+      }.
 
 Arguments callconv: clear implicits.
 Delimit Scope cc_scope with cc.
@@ -83,6 +84,9 @@ Program Definition cc_id {li}: callconv li li :=
   |}.
 Solve All Obligations with
     cbn; intros; subst; auto.
+Next Obligation.
+  intros. subst. reflexivity.
+Qed.
 
 Notation "1" := cc_id : cc_scope.
 
@@ -111,6 +115,8 @@ Next Obligation.
   intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 sk [Hse12 Hse23] H.
   eauto using match_senv_valid_for.
 Qed.
+Next Obligation.
+Admitted.
 
 Infix "@" := cc_compose (at level 30, right associativity) : cc_scope.
 
@@ -124,7 +130,6 @@ Record c_query :=
       cq_sg: signature;
       cq_args: list val;
       cq_mem: mem;
-      cq_name: string;
     }.
 
 Record c_reply :=
@@ -138,7 +143,6 @@ Canonical Structure li_c :=
   query := c_query;
   reply := c_reply;
   entry := cq_vf;
-  name := cq_name;
   |}.
 
 (** ** Simulation conventions *)
@@ -151,12 +155,12 @@ Canonical Structure li_c :=
   conventions used to verify the compiler. *)
 
 Inductive cc_c_query R (w: world R): relation c_query :=
-| cc_c_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2 n:
+| cc_c_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
     Val.inject (mi R w) vf1 vf2 ->
     Val.inject_list (mi R w) vargs1 vargs2 ->
     match_mem R w m1 m2 ->
     vf1 <> Vundef ->
-    cc_c_query R w (cq vf1 sg vargs1 m1 n) (cq vf2 sg vargs2 m2 n).
+    cc_c_query R w (cq vf1 sg vargs1 m1) (cq vf2 sg vargs2 m2).
 
 Inductive cc_c_reply R (w: world R): relation c_reply :=
 | cc_c_reply_intro vres1 vres2 m1' m2':
@@ -177,6 +181,26 @@ Qed.
 Next Obligation.
   intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
 Qed.
+Next Obligation.
+  intros. eapply match_stbls_proj in H. inv H0. cbn.
+  unfold Genv.symbol_address. split.
+  - destruct Genv.find_symbol eqn: Hx.
+    + edestruct @Genv.find_symbol_match as (b' & fb & Hb); eauto.
+      rewrite Hb. intros. subst. inv H1. rewrite fb in H6. inv H6.
+      f_equal.
+    + intros. exfalso. apply H4. easy.
+  - intros. destruct Genv.find_symbol eqn: Hx.
+    + destruct (Genv.find_symbol se1 i) eqn: Hy.
+      * subst vf2. inv H1.
+        -- edestruct @Genv.find_symbol_match as (b' & fg & Hb); eauto.
+           rewrite Hx in Hb. inv Hb.
+          admit.
+        -- exfalso. apply H4. auto.
+      * unfold Genv.find_symbol in *. subst vf2. inv H1; eauto.
+        exfalso. erewrite <- @Genv.mge_symb in Hx; eauto.
+        rewrite Hy in Hx. discriminate Hx.
+    + subst. inv H1. exfalso. apply H4. auto.
+Admitted.
 
 Definition ccref {li1 li2} (cc cc': callconv li1 li2) :=
   forall w se1 se2 q1 q2,

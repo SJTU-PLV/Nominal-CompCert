@@ -3,7 +3,7 @@ Require Import Wellfounded.
 Require Import Coqlib.
 Require Import Events.
 Require Import Globalenvs.
-Require Import LanguageInterface.
+Require Import LanguageInterface_.
 Require Import Integers.
 Require Import Smallstep.
 Require Import AST.
@@ -17,7 +17,6 @@ Record internal state: Type := {
 }.
 
 Record external liA liB state: Type := {
-  footprint: ident -> Prop;
   initial_state: query liB -> state -> Prop;
   at_external: state -> query liA -> Prop;
   after_external: state -> reply liA -> state -> Prop;
@@ -44,9 +43,10 @@ Record semantics liA liB := {
   skel: AST.program unit unit;
   state: Type;
   activate :> Genv.symtbl -> lts liA liB state;
+  footprint: ident -> Prop;
 }.
 
-Definition valid_query {li liA liB S} (L: lts liA liB S) se (q: query li): Prop :=
+Definition valid_query {li liA liB} (L: semantics liA liB) se (q: query li): Prop :=
   exists i, footprint L i /\ Genv.symbol_address se i Ptrofs.zero = entry q.
 
 Notation " 'Step' L " := (step L (globalenv L)) (at level 1) : smallstep_scope.
@@ -66,8 +66,6 @@ Section FSIM.
   Record fsim_properties (L1: lts liA1 liB1 state1) (L2: lts liA2 liB2 state2) (index: Type)
          (order: index -> index -> Prop)
          (match_states: index -> state1 -> state2 -> Prop) : Prop := {
-    fsim_match_footprint:
-      forall i, footprint L1 i <-> footprint L2 i;
     fsim_match_initial_states:
       forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
       exists i, exists s2, initial_state L2 q2 s2 /\ match_states i s1 s2;
@@ -95,9 +93,6 @@ Variable L1: lts liA1 liB1 state1.
 Variable L2: lts liA2 liB2 state2.
 
 Variable match_states: state1 -> state2 -> Prop.
-
-Hypothesis match_footprint:
-  forall i, footprint L1 i <-> footprint L2 i.
 
 Hypothesis match_initial_states:
   forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
@@ -135,9 +130,8 @@ Lemma forward_simulation_star_wf:
 Proof.
   subst ms;
   constructor.
-- auto.
 - intros. exploit match_initial_states; eauto. intros [s2 [A B]].
-    exists s1; exists s2; auto.
+  exists s1; exists s2; auto.
 - intros. destruct H. eapply match_final_states; eauto.
 - intros. destruct H. edestruct match_external as (w & q2 & H2 & Hq & Hw & Hr); eauto.
   exists w, q2. intuition auto. edestruct Hr as (s2' & Hs2' & Hs'); eauto.
@@ -219,6 +213,8 @@ Record fsim_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 
 
     fsim_skel:
       skel L1 = skel L2;
+    fsim_footprint:
+      forall i, footprint L1 i <-> footprint L2 i;
     fsim_lts se1 se2 wB qset:
       @match_senv liB1 liB2 ccB wB se1 se2 ->
       Genv.valid_for (skel L1) se1 ->
@@ -232,3 +228,20 @@ Arguments Forward_simulation {_ _ ccA _ _ ccB L1 L2 fsim_index}.
 
 Definition forward_simulation {liA1 liA2} ccA {liB1 liB2} ccB L1 L2 :=
   inhabited (@fsim_components liA1 liA2 ccA liB1 liB2 ccB L1 L2).
+
+Lemma match_valid_query {liA liA' liB liB' li li'} cc1 cc2
+      (L1: semantics liA liB) (L2: semantics liA' liB')
+      (cc: callconv li li') w se1 se2 q1 q2:
+  forward_simulation cc1 cc2 L1 L2 ->
+  match_senv cc w se1 se2 ->
+  match_query cc w q1 q2 ->
+  valid_query L1 se1 q1 <-> valid_query L2 se2 q2.
+Proof.
+  intros [] Hse Hq. split.
+  - intros (i & Hi & Hx). exists i; split.
+    + erewrite <- fsim_footprint; eauto.
+    + erewrite <- match_senv_symbol_address; eauto.
+  - intros (i & Hi & Hx). exists i; split.
+    + erewrite fsim_footprint; eauto.
+    + erewrite match_senv_symbol_address; eauto.
+Qed.
