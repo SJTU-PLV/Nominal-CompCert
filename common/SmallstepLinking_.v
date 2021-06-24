@@ -2,10 +2,12 @@ Require Import Coqlib.
 Require Import List.
 Require Import Events.
 Require Import Globalenvs.
-Require Import LanguageInterface.
+Require Import LanguageInterface_.
 Require Import Smallstep.
+Require Import Smallstep_.
 Require Import Linking.
 Require Import Classical.
+Require Import AST.
 
 (** NB: we assume that all components are deterministic and that their
   domains are disjoint. *)
@@ -26,150 +28,162 @@ Section LINK.
   (** * Definition *)
 
   Section WITH_SE.
-    Context (se: Genv.symtbl).
+    Context (se: Genv.symtbl) (qset: ident -> Prop).
 
-    Variant frame := st (i: I) (s: Smallstep.state (L i)).
+    Variant frame := st (i: I) (s: Smallstep_.state (L i)).
     Notation state := (list frame).
 
     Inductive step: state -> trace -> state -> Prop :=
       | step_internal i s t s' k :
-          Step (L i se) s t s' ->
+          Step (L i se qset) s t s' ->
           step (st i s :: k) t (st i s' :: k)
       | step_push i j s q s' k :
-          Smallstep.at_external (L i se) s q ->
-          valid_query (L j se) q = true ->
-          Smallstep.initial_state (L j se) q s' ->
+          at_external (L i se) s q ->
+          (* valid_query (L j se) q = true -> *)
+          initial_state (L j se) q s' ->
           step (st i s :: k) E0 (st j s' :: st i s :: k)
       | step_pop i j s sk r s' k :
-          Smallstep.final_state (L i se) s r ->
-          Smallstep.after_external (L j se) sk r s' ->
+          final_state (L i se) s r ->
+          after_external (L j se) sk r s' ->
           step (st i s :: st j sk :: k) E0 (st j s' :: k).
 
     Inductive initial_state (q: query li): state -> Prop :=
       | initial_state_intro i s :
-          valid_query (L i se) q = true ->
-          Smallstep.initial_state (L i se) q s ->
+          (* valid_query (L i se) q = true -> *)
+          Smallstep_.initial_state (L i se) q s ->
           initial_state q (st i s :: nil).
 
     Inductive at_external: state -> query li -> Prop :=
       | at_external_intro i s q k:
-          Smallstep.at_external (L i se) s q ->
-          (forall j, valid_query (L j se) q = false) ->
+          Smallstep_.at_external (L i se) s q ->
+          (forall j, not (valid_query (L j) se q)) ->
           at_external (st i s :: k) q.
 
     Inductive after_external: state -> reply li -> state -> Prop :=
       | after_external_intro i s r s' k:
-          Smallstep.after_external (L i se) s r s' ->
+          Smallstep_.after_external (L i se) s r s' ->
           after_external (st i s :: k) r (st i s' :: k).
 
     Inductive final_state: state -> reply li -> Prop :=
       | final_state_intro i s r :
-          Smallstep.final_state (L i se) s r ->
+          Smallstep_.final_state (L i se) s r ->
           final_state (st i s :: nil) r.
 
-    Definition valid_query q :=
-      valid_query (L true se) q || valid_query (L false se) q.
-
+    Definition lts_internal :=
+      {|
+        Smallstep_.step ge := step;
+        globalenv := tt;
+      |}.
+    Definition lts_external :=
+      {|
+        Smallstep_.initial_state := initial_state;
+        Smallstep_.at_external := at_external;
+        Smallstep_.after_external := after_external;
+        Smallstep_.final_state := final_state;
+      |}.
   End WITH_SE.
 
   Context (sk: AST.program unit unit).
 
-  Definition semantics: semantics li li :=
+  Program Definition semantics: semantics li li :=
     {|
       activate se :=
         {|
-          Smallstep.step ge := step se;
-          Smallstep.valid_query := valid_query se;
-          Smallstep.initial_state := initial_state se;
-          Smallstep.at_external := at_external se;
-          Smallstep.after_external := after_external se;
-          Smallstep.final_state := final_state se;
-          Smallstep.globalenv := tt;
+          steps p := lts_internal se p;
+          events := lts_external se;
         |};
       skel := sk;
+      footprint i := footprint (L true) i \/ footprint (L false) i;
     |}.
+  Next Obligation.
+    inv H0.
+    - apply step_internal.
+      eapply steps_monotone; eauto.
+    - eapply step_push; eauto.
+    - eapply step_pop; eauto.
+  Qed.
 
-  (** * Properties *)
+  (** * Properties  *)
 
-  Lemma star_internal se i s t s' k:
-    Star (L i se) s t s' ->
-    star (fun _ => step se) tt (st i s :: k) t (st i s' :: k).
+  Lemma star_internal se p i s t s' k:
+    Star (L i se p) s t s' ->
+    star (fun _ => step se p) tt (st i s :: k) t (st i s' :: k).
   Proof.
     induction 1; [eapply star_refl | eapply star_step]; eauto.
     constructor; auto.
   Qed.
 
-  Lemma plus_internal se i s t s' k:
-    Plus (L i se) s t s' ->
-    plus (fun _ => step se) tt (st i s :: k) t (st i s' :: k).
+  Lemma plus_internal se p i s t s' k:
+    Plus (L i se p) s t s' ->
+    plus (fun _ => step se p) tt (st i s :: k) t (st i s' :: k).
   Proof.
     destruct 1; econstructor; eauto using step_internal, star_internal.
   Qed.
 
   (** * Receptiveness and determinacy *)
 
-  Lemma semantics_receptive:
-    (forall i, receptive (L i)) ->
-    receptive semantics.
-  Proof.
-    intros HL se. unfold receptive in HL.
-    constructor; cbn.
-    - intros s t1 s1 t2 STEP Ht. destruct STEP.
-      + edestruct @sr_receptive; eauto. eexists. eapply step_internal; eauto.
-      + inversion Ht; clear Ht; subst. eexists. eapply step_push; eauto.
-      + inversion Ht; clear Ht; subst. eexists. eapply step_pop; eauto.
-    - intros s t s' STEP. destruct STEP; cbn; eauto.
-      eapply sr_traces; eauto.
-  Qed.
+  (* Lemma semantics_receptive: *)
+  (*   (forall i, receptive (L i)) -> *)
+  (*   receptive semantics. *)
+  (* Proof. *)
+  (*   intros HL se. unfold receptive in HL. *)
+  (*   constructor; cbn. *)
+  (*   - intros s t1 s1 t2 STEP Ht. destruct STEP. *)
+  (*     + edestruct @sr_receptive; eauto. eexists. eapply step_internal; eauto. *)
+  (*     + inversion Ht; clear Ht; subst. eexists. eapply step_push; eauto. *)
+  (*     + inversion Ht; clear Ht; subst. eexists. eapply step_pop; eauto. *)
+  (*   - intros s t s' STEP. destruct STEP; cbn; eauto. *)
+  (*     eapply sr_traces; eauto. *)
+  (* Qed. *)
 
-  Hypothesis valid_query_excl:
-    forall i j se q,
-      Smallstep.valid_query (L i se) q = true ->
-      Smallstep.valid_query (L j se) q = true ->
-      i = j.
+  (* Hypothesis valid_query_excl: *)
+  (*   forall i j se q, *)
+  (*     Smallstep.valid_query (L i se) q = true -> *)
+  (*     Smallstep.valid_query (L j se) q = true -> *)
+  (*     i = j. *)
 
-  Lemma semantics_determinate:
-    (forall i, determinate (L i)) ->
-    determinate semantics.
-  Proof.
-    intros HL se. unfold determinate in HL.
-    constructor; cbn.
-    - destruct 1; inversion 1; subst_dep.
-      + edestruct (sd_determ (HL i se) s t s' t2 s'0); intuition eauto; congruence.
-      + eelim sd_at_external_nostep; eauto.
-      + eelim sd_final_nostep; eauto.
-      + eelim sd_at_external_nostep; eauto.
-      + destruct (sd_at_external_determ (HL i se) s q q0); eauto.
-        assert (j0 = j) by eauto; subst.
-        destruct (sd_initial_determ (HL j se) q s' s'0); eauto.
-        intuition auto. constructor.
-      + eelim sd_final_noext; eauto.
-      + eelim sd_final_nostep; eauto.
-      + eelim sd_final_noext; eauto.
-      + edestruct (sd_final_determ (HL i se) s r r0); eauto.
-        edestruct (sd_after_external_determ (HL j se) sk0 r s' s'0); eauto.
-        intuition auto. constructor.
-    - intros s t s' STEP. destruct STEP; cbn; eauto.
-      eapply sd_traces; eauto.
-    - destruct 1; inversion 1; subst. assert (i0 = i) by eauto; subst.
-      edestruct (sd_initial_determ (HL i se) q s s0); eauto.
-    - destruct 1. inversion 1; subst_dep.
-      + eapply sd_at_external_nostep; eauto.
-      + edestruct (sd_at_external_determ (HL i se) s q q0); eauto.
-        specialize (H0 j). congruence.
-      + eapply sd_final_noext; eauto.
-    - destruct 1. inversion 1; subst_dep.
-      eapply sd_at_external_determ; eauto.
-    - destruct 1. inversion 1; subst_dep.
-      edestruct (sd_after_external_determ (HL i se) s r s' s'0); eauto.
-    - destruct 1. inversion 1; subst_dep.
-      + eapply sd_final_nostep; eauto.
-      + eapply sd_final_noext; eauto.
-    - destruct 1. inversion 1; subst_dep.
-      eapply sd_final_noext; eauto.
-    - destruct 1. inversion 1; subst_dep.
-      eapply sd_final_determ; eauto.
-  Qed.
+  (* Lemma semantics_determinate: *)
+  (*   (forall i, determinate (L i)) -> *)
+  (*   determinate semantics. *)
+  (* Proof. *)
+  (*   intros HL se. unfold determinate in HL. *)
+  (*   constructor; cbn. *)
+  (*   - destruct 1; inversion 1; subst_dep. *)
+  (*     + edestruct (sd_determ (HL i se) s t s' t2 s'0); intuition eauto; congruence. *)
+  (*     + eelim sd_at_external_nostep; eauto. *)
+  (*     + eelim sd_final_nostep; eauto. *)
+  (*     + eelim sd_at_external_nostep; eauto. *)
+  (*     + destruct (sd_at_external_determ (HL i se) s q q0); eauto. *)
+  (*       assert (j0 = j) by eauto; subst. *)
+  (*       destruct (sd_initial_determ (HL j se) q s' s'0); eauto. *)
+  (*       intuition auto. constructor. *)
+  (*     + eelim sd_final_noext; eauto. *)
+  (*     + eelim sd_final_nostep; eauto. *)
+  (*     + eelim sd_final_noext; eauto. *)
+  (*     + edestruct (sd_final_determ (HL i se) s r r0); eauto. *)
+  (*       edestruct (sd_after_external_determ (HL j se) sk0 r s' s'0); eauto. *)
+  (*       intuition auto. constructor. *)
+  (*   - intros s t s' STEP. destruct STEP; cbn; eauto. *)
+  (*     eapply sd_traces; eauto. *)
+  (*   - destruct 1; inversion 1; subst. assert (i0 = i) by eauto; subst. *)
+  (*     edestruct (sd_initial_determ (HL i se) q s s0); eauto. *)
+  (*   - destruct 1. inversion 1; subst_dep. *)
+  (*     + eapply sd_at_external_nostep; eauto. *)
+  (*     + edestruct (sd_at_external_determ (HL i se) s q q0); eauto. *)
+  (*       specialize (H0 j). congruence. *)
+  (*     + eapply sd_final_noext; eauto. *)
+  (*   - destruct 1. inversion 1; subst_dep. *)
+  (*     eapply sd_at_external_determ; eauto. *)
+  (*   - destruct 1. inversion 1; subst_dep. *)
+  (*     edestruct (sd_after_external_determ (HL i se) s r s' s'0); eauto. *)
+  (*   - destruct 1. inversion 1; subst_dep. *)
+  (*     + eapply sd_final_nostep; eauto. *)
+  (*     + eapply sd_final_noext; eauto. *)
+  (*   - destruct 1. inversion 1; subst_dep. *)
+  (*     eapply sd_final_noext; eauto. *)
+  (*   - destruct 1. inversion 1; subst_dep. *)
+  (*     eapply sd_final_determ; eauto. *)
+  (* Qed. *)
 
 End LINK.
 
@@ -181,10 +195,11 @@ Section FSIM.
   Context {li1 li2} (cc: callconv li1 li2).
 
   Notation I := bool.
-  Context (L1 : I -> Smallstep.semantics li1 li1).
-  Context (L2 : I -> Smallstep.semantics li2 li2).
+  Context (L1 : I -> Smallstep_.semantics li1 li1).
+  Context (L2 : I -> Smallstep_.semantics li2 li2).
   Context (HL : forall i, fsim_components cc cc (L1 i) (L2 i)).
   Context (se1 se2: Genv.symtbl) (w : ccworld cc).
+  Context (pset: ident -> Prop).
   Context (Hse: match_senv cc w se1 se2).
   Context (Hse1: forall i, Genv.valid_for (skel (L1 i)) se1).
   Notation index := {i & fsim_index (HL i)}.
@@ -203,9 +218,9 @@ Section FSIM.
     match_contframes_intro i s1 s2:
       match_senv cc wk' se1 se2 ->
       (forall r1 r2 s1', match_reply cc wk r1 r2 ->
-       Smallstep.after_external (L1 i se1) s1 r1 s1' ->
+       Smallstep_.after_external (L1 i se1) s1 r1 s1' ->
        exists idx s2',
-         Smallstep.after_external (L2 i se2) s2 r2 s2' /\
+         Smallstep_.after_external (L2 i se2) s2 r2 s2' /\
          fsim_match_states (HL i) se1 se2 wk' idx s1' s2') ->
       match_contframes wk wk'
         (st L1 i s1)
@@ -230,10 +245,10 @@ Section FSIM.
   (** ** Simulation properties *)
 
   Lemma step_simulation:
-    forall idx s1 s2 t s1', match_states idx s1 s2 -> step L1 se1 s1 t s1' ->
+    forall idx s1 s2 t s1', match_states idx s1 s2 -> step L1 se1 pset s1 t s1' ->
     exists idx' s2',
-      (plus (fun _ => step L2 se2) tt s2 t s2' \/
-       star (fun _ => step L2 se2) tt s2 t s2' /\ order idx' idx) /\
+      (plus (fun _ => step L2 se2 pset) tt s2 t s2' \/
+       star (fun _ => step L2 se2 pset) tt s2 t s2' /\ order idx' idx) /\
       match_states idx' s1' s2'.
   Proof.
     intros idx s1 s2 t s1' Hs Hs1'.
@@ -246,34 +261,37 @@ Section FSIM.
         constructor. auto.
       * econstructor; eauto. econstructor; eauto.
     - (* cross-component call *)
-      inv H5; subst_dep. clear idx0.
+      inv H4; subst_dep. clear idx0.
       edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & Hrx); eauto using fsim_lts.
-      pose proof (fsim_lts (HL j) _ _ Hsex (Hse1 j)).
+      pose proof (fsim_lts (HL j) _ _ pset Hsex (Hse1 j)).
       edestruct @fsim_match_initial_states as (idx' & s2' & Hs2' & Hs'); eauto.
       eexists (existT _ j idx'), _. split.
       + left. apply plus_one. eapply step_push; eauto 1.
-        erewrite fsim_match_valid_query; eauto.
+        (* erewrite fsim_match_valid_query; eauto. *)
       + repeat (econstructor; eauto).
     - (* cross-component return *)
       inv H4; subst_dep. clear idx0.
-      pose proof (fsim_lts (HL i) _ _ H3 H7).
+      pose proof (fsim_lts (HL i) _ _ pset H3 H7).
       edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
       inv H6. inv H8; subst_dep. edestruct H10 as (idx' & s2' & Hs2'& Hs'); eauto.
       eexists (existT _ j idx'), _. split.
       + left. apply plus_one. eapply step_pop; eauto.
       + repeat (econstructor; eauto).
+        Unshelve. exact pset.
   Qed.
 
   Lemma initial_states_simulation:
     forall q1 q2 s1, match_query cc w q1 q2 -> initial_state L1 se1 q1 s1 ->
     exists idx s2, initial_state L2 se2 q2 s2 /\ match_states idx s1 s2.
   Proof.
-    intros q1 q2 _ Hq [i s1 Hq1 Hs1].
-    pose proof (fsim_lts (HL i) _ _ Hse (Hse1 i)).
+    (* intros q1 q2 _ Hq [i s1 Hq1 Hs1]. *)
+    intros q1 q2 _ Hq [i s1 Hs1].
+    (* pose proof (fsim_lts (HL i) _ _ Hse (Hse1 i)). *)
+    pose proof (fsim_lts (HL i) _ _ pset Hse (Hse1 i)).
     edestruct @fsim_match_initial_states as (idx & s2 & Hs2 & Hs); eauto.
     exists (existT _ i idx), (st L2 i s2 :: nil).
     split; econstructor; eauto.
-    + erewrite fsim_match_valid_query; eauto.
+    (* + erewrite fsim_match_valid_query; eauto. *)
     + econstructor; eauto.
     + constructor.
   Qed.
@@ -282,9 +300,9 @@ Section FSIM.
     forall idx s1 s2 r1, match_states idx s1 s2 -> final_state L1 se1 s1 r1 ->
     exists r2, final_state L2 se2 s2 r2 /\ match_reply cc w r1 r2.
   Proof.
-    clear. intros idx s1 s2 r1 Hs Hr1. destruct Hr1 as [i s1 r1 Hr1].
+    clear - pset. intros idx s1 s2 r1 Hs Hr1. destruct Hr1 as [i s1 r1 Hr1].
     inv Hs. inv H4. inv H2. subst_dep. clear idx0.
-    pose proof (fsim_lts (HL i) _ _ H1 H4).
+    pose proof (fsim_lts (HL i) _ _ pset H1 H4).
     edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
     exists r2. split; eauto. constructor; eauto.
   Qed.
@@ -295,15 +313,15 @@ Section FSIM.
     forall rx1 rx2 s1', match_reply cc wx rx1 rx2 -> after_external L1 se1 s1 rx1 s1' ->
     exists idx' s2', after_external L2 se2 s2 rx2 s2' /\ match_states idx' s1' s2'.
   Proof.
-    clear - HL Hse1.
+    clear - HL Hse1 pset.
     intros idx s1 s2 q1 Hs Hq1. destruct Hq1 as [i s1 qx1 k1 Hqx1 Hvld].
     inv Hs. inv H2. subst_dep. clear idx0.
-    pose proof (fsim_lts (HL i) _ _ H1 H5) as Hi.
+    pose proof (fsim_lts (HL i) _ _ pset H1 H5) as Hi.
     edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & H); eauto.
     exists wx, qx2. intuition idtac.
     + constructor. eauto.
-      intros j. pose proof (fsim_lts (HL j) _ _ Hsex (Hse1 j)).
-      erewrite fsim_match_valid_query; eauto.
+      intros j. erewrite <- match_valid_query; eauto.
+      econstructor; eauto.
     + inv H2; subst_dep.
       edestruct H as (idx' & s2' & Hs2' & Hs'); eauto.
       eexists (existT _ i idx'), _.
@@ -311,15 +329,15 @@ Section FSIM.
   Qed.
 
   Lemma semantics_simulation sk1 sk2:
-    fsim_properties cc cc se1 se2 w
+    fsim_properties cc cc se1 se2 w pset
       (semantics L1 sk1 se1)
       (semantics L2 sk2 se2)
       index order match_states.
   Proof.
     split; cbn.
-    - intros. unfold valid_query. f_equal.
-      + eapply (fsim_lts (HL true)); eauto.
-      + eapply (fsim_lts (HL false)); eauto.
+    (* - intros. unfold valid_query. f_equal. *)
+    (*   + eapply (fsim_lts (HL true)); eauto. *)
+    (*   + eapply (fsim_lts (HL false)); eauto. *)
     - eauto using initial_states_simulation.
     - eauto using final_states_simulation.
     - eauto using external_simulation.
@@ -331,7 +349,7 @@ End FSIM.
 
 Local Unset Program Cases.
 
-Definition compose {li} (La Lb: Smallstep.semantics li li) :=
+Definition compose {li} (La Lb: Smallstep_.semantics li li) :=
   let L i := match i with true => La | false => Lb end in
   option_map (semantics L) (link (skel La) (skel Lb)).
 
@@ -351,7 +369,9 @@ Proof.
   constructor.
   eapply Forward_simulation with (order cc L1 L2 HL) (match_states cc L1 L2 HL).
   - destruct Ha, Hb. cbn. congruence.
-  - intros se1 se2 w Hse Hse1.
+  - intros i. cbn. destruct Ha, Hb.
+    rewrite fsim_footprint, fsim_footprint0. reflexivity.
+  - intros se1 se2 w qset Hse Hse1.
     eapply semantics_simulation; eauto.
     pose proof (link_linkorder _ _ _ Hsk1) as [Hsk1a Hsk1b].
     intros [|]; cbn; eapply Genv.valid_for_linkorder; eauto.

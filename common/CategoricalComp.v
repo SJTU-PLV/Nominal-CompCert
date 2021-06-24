@@ -4,12 +4,16 @@ Require Import Coqlib.
 Require Import LanguageInterface_.
 Require Import Events.
 Require Import Globalenvs.
-Require Import SmallstepLinking.
+Require Import SmallstepLinking_.
 Require Import Smallstep.
 Require Import Smallstep_.
 Require Import Integers.
 Require Import Linking.
 Require Import AST.
+
+Require Import Coq.Logic.ClassicalFacts.
+Require Import Coq.Logic.FunctionalExtensionality.
+Axiom EquivThenEqual: prop_extensionality.
 
 Open Scope smallstep_scope.
 Delimit Scope smallstep_scope with smallstep.
@@ -70,15 +74,15 @@ Section COMP.
 
   Definition comp_lts_internal :=
     {|
-    step ge := comp_step;
-    globalenv := tt;
+      step ge := comp_step;
+      globalenv := tt;
     |}.
   Definition comp_lts_external :=
     {|
-    initial_state := comp_initial_state;
-    at_external := comp_at_external;
-    after_external := comp_after_external;
-    final_state := comp_final_state;
+      initial_state := comp_initial_state;
+      at_external := comp_at_external;
+      after_external := comp_after_external;
+      final_state := comp_final_state;
     |}.
 
   Lemma star_internal1 s t s':
@@ -113,7 +117,7 @@ Section COMP.
 
 End COMP.
 
-Definition comp_semantics' {liA liB liC} (L1: semantics liB liC)
+Program Definition comp_semantics' {liA liB liC} (L1: semantics liB liC)
            (L2: semantics liA liB) sk: semantics liA liC :=
   {|
   activate se :=
@@ -124,53 +128,65 @@ Definition comp_semantics' {liA liB liC} (L1: semantics liB liC)
   skel := sk;
   footprint i := footprint L1 i \/ footprint L2 i;
   |}.
+Next Obligation.
+  inv H0.
+  - apply step1. eapply steps_monotone; eauto.
+  - apply step2. eapply steps_monotone; eauto.
+    cbn. intros i [ left | right ]; auto.
+  - eapply step_push; eauto. intros [i [Hi Hix]].
+    apply H4. exists i. split; auto.
+  - eapply step_pop; eauto.
+Qed.
 
 Definition comp_semantics {liA liB liC} (L1: semantics liB liC)
            (L2: semantics liA liB): option (semantics liA liC) :=
   option_map (comp_semantics' L1 L2) (link (skel L1) (skel L2)).
 
-(* Section ID. *)
-(*   Context {li: language_interface}. *)
-(*   Variant id_state := *)
-(*   | st_q (q: query li) *)
-(*   | st_r (r: reply li). *)
+Section ID.
+  Context {li: language_interface}.
+  Variant id_state :=
+  | st_q (q: query li)
+  | st_r (r: reply li).
 
-(*   Inductive id_step: id_state -> trace -> id_state -> Prop := . *)
+  Inductive id_step: id_state -> trace -> id_state -> Prop := .
 
-(*   Inductive id_initial_state: query li -> id_state -> Prop := *)
-(*   | id_initial_state_intro q: *)
-(*       id_initial_state q (st_q q). *)
+  Inductive id_initial_state: query li -> id_state -> Prop :=
+  | id_initial_state_intro q:
+      id_initial_state q (st_q q).
 
-(*   Inductive id_at_external: id_state -> query li -> Prop := *)
-(*   | id_at_external_intro q: *)
-(*       id_at_external (st_q q) q. *)
+  Inductive id_at_external: id_state -> query li -> Prop :=
+  | id_at_external_intro q:
+      id_at_external (st_q q) q.
 
-(*   Inductive id_after_external: id_state -> reply li -> id_state -> Prop := *)
-(*   | id_after_external_intro q r: *)
-(*       id_after_external (st_q q) r (st_r r). *)
+  Inductive id_after_external: id_state -> reply li -> id_state -> Prop :=
+  | id_after_external_intro q r:
+      id_after_external (st_q q) r (st_r r).
 
-(*   Inductive id_final_state: id_state -> reply li -> Prop := *)
-(*   | id_final_state_intro r: *)
-(*       id_final_state (st_r r) r. *)
+  Inductive id_final_state: id_state -> reply li -> Prop :=
+  | id_final_state_intro r:
+      id_final_state (st_r r) r.
+End ID.
 
-(*   Definition id_lts := *)
-(*     {| *)
-(*     step ge := id_step; *)
-(*     footprint q := False; *)
-(*     initial_state := id_initial_state; *)
-(*     at_external := id_at_external; *)
-(*     after_external := id_after_external; *)
-(*     final_state := id_final_state; *)
-(*     globalenv := tt; *)
-(*     |}. *)
-(* End ID. *)
-
-(* Definition id_semantics {li} sk: semantics li li := *)
-(*   {| *)
-(*   activate se qset := id_lts; *)
-(*   skel := sk; *)
-(*   |}. *)
-
+Program Definition id_semantics {li} sk: semantics li li :=
+  {|
+  activate se :=
+    {|
+      steps p :=
+        {|
+          step ge := id_step;
+          globalenv := tt;
+        |};
+      events :=
+        {|
+          initial_state := id_initial_state;
+          at_external := id_at_external;
+          after_external := id_after_external;
+          final_state := id_final_state;
+        |};
+    |};
+  skel := sk;
+  footprint i := False;
+  |}.
 
 (* Definition fsim_lts {liA liB S1 S2} (L1: lts liA liB S1) (L2: lts liA liB S2) := *)
 (*   exists index order ms, forall se,fsim_properties 1 1 se se tt L1 L2 index order ms. *)
@@ -199,8 +215,7 @@ Notation "L1 ≡ L2" :=  (equiv_simulation L1 L2)(at level 90): lts_scope.
 Notation "L1 ∘ L2" :=  (comp_semantics L1 L2)(at level 40, left associativity): lts_scope.
 (* Notation " 1 " :=  (id_semantics): lts_scope. *)
 
-Section IDENTITY.
-  Context {liA liB} (L : semantics liA liB).
+(* Section IDENTITY. *)
 
   (* src q --initial_state--> ι1(ι1(q)) --step-->ι2(ι1(q),s)
 
@@ -226,17 +241,13 @@ Section IDENTITY.
   (* Theorem categorical_comp_right_identity: L ∘ 1 ≡ L. *)
   (* Admitted. *)
 
-End IDENTITY.
+(* End IDENTITY. *)
 
 Lemma qset_step {liA liB S} (L: lts liA liB S) p1 p2 s t s':
   Step (L p1) s t s' -> p1 = p2 -> Step (L p2) s t s'.
 Proof.
   now intros H [ ].
 Qed.
-
-Require Import Coq.Logic.ClassicalFacts.
-Require Import Coq.Logic.FunctionalExtensionality.
-Axiom EquivThenEqual: prop_extensionality.
 
 Section ASSOC.
 
@@ -405,7 +416,7 @@ Section FSIM.
             fsim_match_states HL1 se1 se2 w i' s2 s2') ->
       match_states (index2 i1 i2) (st2 L1 L2 s1 s2) (st2 L1' L2' s1' s2').
 
-  Lemma comp_semantics_simulation sk sk':
+  Local Lemma semantics_simulation sk sk':
     fsim_properties cc1 cc3 se1 se2 w qset
                     (comp_semantics' L1 L2 sk se1)
                     (comp_semantics' L1' L2' sk' se2)
@@ -482,7 +493,7 @@ Section FSIM.
 
 End FSIM.
 
-Lemma categorical_comp_simulation
+Lemma categorical_compose_simulation
       {liA1 liA2 liB1 liB2 liC1 liC2}
       (cc1: callconv liA1 liA2) (cc2: callconv liB1 liB2) (cc3: callconv liC1 liC2)
       L1a L1b L1 L2a L2b L2:
@@ -503,7 +514,7 @@ Proof.
     rewrite fsim_footprint, fsim_footprint0. reflexivity.
   - intros se1 se2 w qset Hse Hse1.
     pose proof (link_linkorder _ _ _ Hsk1) as [Hsk1a Hsk1b].
-    eapply comp_semantics_simulation; eauto.
+    eapply semantics_simulation; eauto.
     eapply Genv.valid_for_linkorder; eauto.
     eapply Genv.valid_for_linkorder; eauto.
   - clear - Ha Hb. intros [|].
@@ -514,10 +525,46 @@ Proof.
 Qed.
 
 Section APPROX.
-  Context {liA liB liC} (L1: semantics liB liC) (L2: semantics liA liB).
+  Context {li} (L1 L2: semantics li li).
   Context (sk: AST.program unit unit).
 
+  Let L := fun i => match i with true => L1 | false => L2 end.
 
+  Inductive match_frame: comp_state L1 L2 -> list (SmallstepLinking_.frame L) -> Prop :=
+  | match_frame1 s:
+      match_frame (st1 L1 L2 s) (st L true s :: nil)
+  | match_frame2 s1 s2:
+      match_frame (st2 L1 L2 s1 s2) (st L false s2 :: st L true s1 :: nil).
+
+  Lemma categorical_compose_approximation:
+    forward_simulation 1 1 (comp_semantics' L1 L2 sk) (SmallstepLinking_.semantics L sk).
+  Proof.
+    constructor. econstructor; eauto.
+    now intros i.
+    intros se ? [ ] qset [ ] Hse.
+    instantiate (1 := fun _ _ _ => _). cbn beta.
+    apply forward_simulation_step with (match_states := match_frame).
+    - intros q ? s1 [ ] H. inv H.
+      exists (st L true s :: nil). split; constructor. auto.
+    - intros s1 s2 r Hs H. inv H. inv Hs.
+      exists r. split; constructor; auto.
+    - intros s s' q Hs H. inv H. inv Hs.
+      exists tt, q. repeat apply conj; try constructor; auto.
+      + intros [|]; auto.
+      + intros. inv H3. inv H. eexists. split; econstructor; eauto.
+    - intros s1 t s2 Hstep s1' Hs. inv Hstep; inv Hs.
+      + eexists (st L true _ :: nil). split; constructor; auto.
+      + eexists (st L false _ :: st L true _ :: nil). split; constructor.
+        eapply steps_monotone; [ | eauto ]. cbn.
+        intros. right; auto.
+      + eexists (st L false _ :: st L true _ :: nil). split.
+        eapply SmallstepLinking_.step_push; eauto.
+        constructor.
+      + eexists (st L true _ :: nil). split.
+        eapply SmallstepLinking_.step_pop; eauto.
+        constructor.
+    - apply well_founded_ltof.
+Qed.
 
 End APPROX.
 
@@ -534,28 +581,27 @@ Section CALL_CONV_REF.
       match_reply cc w r1 r2 ->
       cc_state_match w (st_r r1) (st_r r2).
 
-  Lemma ccref_to_fsim:
-    exists index order ms,
-    forall w se1 se2, match_senv cc w se1 se2 ->
-                 Smallstep_.fsim_properties cc' cc se1 se2 w 1 1 index order (ms w se1 se2).
+  Lemma ccref_to_fsim sk:
+    forward_simulation cc' cc (id_semantics sk) (id_semantics sk).
   Proof.
-    exists unit%type. exists (ltof _ (fun _ => O)).
-    exists (fun w _ _ _ => cc_state_match w).
-    intros w se1 se2 Hse. constructor.
-    - intros q1 q2 Hq. now cbn.
+    constructor. econstructor. reflexivity. reflexivity.
+    intros se1 se2 w qset Hse Hse1.
+    instantiate (1 := fun _ _ _ => _). cbn beta.
+    apply forward_simulation_step
+      with (match_states := cc_state_match w); cbn.
     - intros q1 q2 s1 Hq Hs.
-      inv Hs. exists tt. exists (st_q q2).
+      inv Hs. exists (st_q q2).
       split; econstructor; eauto.
-    - intros _ s1 s2 r1 Hs Hr.
+    - intros s1 s2 r1 Hs Hr.
       inv Hr. inv Hs. exists r2. split. constructor. auto.
-    - intros _ s1 s2 q1 Hs Hq. inv Hq. inv Hs.
+    - intros s1 s2 q1 Hs Hq. inv Hq. inv Hs.
       specialize (ref _ _ _ _ _ Hse H0).
       destruct ref as (w' & Hse' & Hq' & Hr).
       exists w'. exists q2. repeat apply conj; try constructor; auto.
-      exact tt.
-      inv H1. exists (st_r r2). split. constructor.
-      constructor. apply Hr. auto.
+      intros. inv H1. exists (st_r r2). split; constructor.
+      apply Hr. auto.
     - intros. inv H.
+    - apply well_founded_ltof.
   Qed.
 
 End CALL_CONV_REF.

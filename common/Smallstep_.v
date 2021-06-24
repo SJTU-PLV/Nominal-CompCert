@@ -12,7 +12,7 @@ Set Implicit Arguments.
 
 Record internal state: Type := {
   genvtype: Type;
-  step : genvtype -> state -> trace -> state -> Prop;
+  step :> genvtype -> state -> trace -> state -> Prop;
   globalenv: genvtype;
 }.
 
@@ -26,6 +26,10 @@ Record external liA liB state: Type := {
 Record lts liA liB state: Type := {
   steps :> (ident -> Prop) -> internal state;
   events :> external liA liB state;
+
+  steps_monotone:
+    forall (p1 p2: ident -> Prop) ge1 ge2, (forall i, p2 i -> p1 i) ->
+    forall s t s', steps p1 ge1 s t s' -> steps p2 ge2 s t s';
 }.
 
 (* Record lts liA liB state: Type := { *)
