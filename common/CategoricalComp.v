@@ -20,123 +20,119 @@ Delimit Scope smallstep_scope with smallstep.
 
 Section COMP.
   Context {liA liB liC} (Lsem1: semantics liB liC) (Lsem2: semantics liA liB).
-  Context (se: Genv.symtbl) (qset: ident -> Prop).
-  Let L1 := Lsem1 se.
-  Let Li1 := Lsem1 se qset.
-  Let L2 := Lsem2 se.
-  Let Li2 := Lsem2 se (fun i => footprint Lsem1 i \/ qset i).
+  Section WITH_SE.
+    Context (se: Genv.symtbl) (qset: ident -> Prop).
+    Let L1 := Lsem1 se.
+    Let L2 := Lsem2 se.
+    Let qset1 := qset.
+    (* The query set passed to L2 *)
+    Let qset2 := (fun i => footprint Lsem1 i \/ qset i).
 
-  Definition valid_query' {li} (q: query li): Prop :=
-    exists i, qset i /\ Genv.symbol_address se i Ptrofs.zero = entry q.
+    (* Whether the query is permitted by the inherited footprint *)
+    Definition valid_query_inh {li} (q: query li): Prop :=
+      entry q <> Values.Vundef /\
+      exists i, qset i /\ Genv.symbol_address se i Ptrofs.zero = entry q.
 
-  Variant comp_state :=
-  | st1 (s: state Lsem1) | st2 (s1: state Lsem1) (s2: state Lsem2).
+    Variant comp_state :=
+    | st1 (s: state Lsem1) | st2 (s1: state Lsem1) (s2: state Lsem2).
 
-  Inductive comp_step: comp_state -> trace -> comp_state -> Prop :=
-  | step1 s1 t s1':
-      Step Li1 s1 t s1' ->
-      comp_step (st1 s1) t (st1 s1')
-  | step2 s1 s2 t s2':
-      Step Li2 s2 t s2' ->
-      comp_step (st2 s1 s2) t (st2 s1 s2')
-  | step_push s1 q s2:
-      at_external L1 s1 q ->
-      initial_state L2 q s2 ->
-      not (valid_query Lsem1 se q) ->
-      not (valid_query' q) ->
-      comp_step (st1 s1) E0 (st2 s1 s2)
-  | step_pop s1 r s2 s1':
-      final_state L2 s2 r ->
-      after_external L1 s1 r s1' ->
-      comp_step (st2 s1 s2) E0 (st1 s1').
+    Inductive comp_step: comp_state -> trace -> comp_state -> Prop :=
+    | step1 s1 t s1':
+        Step L1 qset1 s1 t s1' ->
+        comp_step (st1 s1) t (st1 s1')
+    | step2 s1 s2 t s2':
+        Step L2 qset2 s2 t s2' ->
+        comp_step (st2 s1 s2) t (st2 s1 s2')
+    | step_push s1 q s2:
+        at_external L1 s1 q ->
+        initial_state L2 q s2 ->
+        not (valid_query Lsem1 se q) ->
+        not (valid_query_inh q) ->
+        comp_step (st1 s1) E0 (st2 s1 s2)
+    | step_pop s1 r s2 s1':
+        final_state L2 s2 r ->
+        after_external L1 s1 r s1' ->
+        comp_step (st2 s1 s2) E0 (st1 s1').
 
-  Inductive comp_initial_state (q: query liC): comp_state -> Prop :=
-  | comp_initial_state_intro s:
-      initial_state L1 q s ->
-      comp_initial_state q (st1 s).
+    Inductive comp_initial_state (q: query liC): comp_state -> Prop :=
+    | comp_initial_state_intro s:
+        initial_state L1 q s ->
+        comp_initial_state q (st1 s).
 
-  Inductive comp_at_external: comp_state -> query liA -> Prop :=
-  | comp_at_external_intro s1 s2 (q: query liA):
-      not (valid_query Lsem1 se q) ->
-      not (valid_query Lsem2 se q) ->
-      at_external L2 s2 q ->
-      comp_at_external (st2 s1 s2) q.
+    Inductive comp_at_external: comp_state -> query liA -> Prop :=
+    | comp_at_external_intro s1 s2 (q: query liA):
+        not (valid_query Lsem1 se q) ->
+        not (valid_query Lsem2 se q) ->
+        at_external L2 s2 q ->
+        comp_at_external (st2 s1 s2) q.
 
-  Inductive comp_after_external: comp_state -> reply liA -> comp_state -> Prop :=
-  | comp_after_external_intro s1 s2 r s2':
-      after_external L2 s2 r s2' ->
-      comp_after_external (st2 s1 s2) r (st2 s1 s2').
+    Inductive comp_after_external: comp_state -> reply liA -> comp_state -> Prop :=
+    | comp_after_external_intro s1 s2 r s2':
+        after_external L2 s2 r s2' ->
+        comp_after_external (st2 s1 s2) r (st2 s1 s2').
 
-  Inductive comp_final_state: comp_state -> reply liC -> Prop :=
-  | comp_final_state_intro s r:
-      final_state L1 s r ->
-      comp_final_state (st1 s) r.
+    Inductive comp_final_state: comp_state -> reply liC -> Prop :=
+    | comp_final_state_intro s r:
+        final_state L1 s r ->
+        comp_final_state (st1 s) r.
 
-  Definition comp_lts_internal :=
+    Lemma star_internal1 s t s':
+      Star L1 qset1 s t s' ->
+      star (fun _ => comp_step) tt (st1 s) t (st1 s').
+    Proof.
+      induction 1; [eapply star_refl | eapply star_step]; eauto.
+      constructor; auto.
+    Qed.
+
+    Lemma plus_internal1 s t s':
+      Plus L1 qset1 s t s' ->
+      plus (fun _ => comp_step) tt (st1 s) t (st1 s').
+    Proof.
+      destruct 1; econstructor; eauto using step1, star_internal1.
+    Qed.
+
+    Lemma star_internal2 s1 s t s':
+      Star L2 qset2 s t s' ->
+      star (fun _ => comp_step) tt (st2 s1 s) t (st2 s1 s').
+    Proof.
+      induction 1; [eapply star_refl | eapply star_step]; eauto.
+      constructor; auto.
+    Qed.
+
+    Lemma plus_internal2 s1 s t s':
+      Plus L2 qset2 s t s' ->
+      plus (fun _ => comp_step) tt (st2 s1 s) t (st2 s1 s').
+    Proof.
+      destruct 1; econstructor; eauto using step2, star_internal2.
+    Qed.
+
+  End WITH_SE.
+
+  Program Definition comp_semantics' sk: semantics liA liC :=
     {|
-      step ge := comp_step;
-      globalenv := tt;
+      activate se :=
+        {|
+          step p ge:= comp_step se p;
+          initial_state := comp_initial_state se;
+          at_external := comp_at_external se;
+          after_external := comp_after_external se;
+          final_state := comp_final_state se;
+          globalenv := tt;
+        |};
+      skel := sk;
+      footprint i := footprint Lsem1 i \/ footprint Lsem2 i;
     |}.
-  Definition comp_lts_external :=
-    {|
-      initial_state := comp_initial_state;
-      at_external := comp_at_external;
-      after_external := comp_after_external;
-      final_state := comp_final_state;
-    |}.
-
-  Lemma star_internal1 s t s':
-    Star Li1 s t s' ->
-    star (fun _ => comp_step) tt (st1 s) t (st1 s').
-  Proof.
-    induction 1; [eapply star_refl | eapply star_step]; eauto.
-    constructor; auto.
-  Qed.
-
-  Lemma plus_internal1 s t s':
-    Plus Li1 s t s' ->
-    plus (fun _ => comp_step) tt (st1 s) t (st1 s').
-  Proof.
-    destruct 1; econstructor; eauto using step1, star_internal1.
-  Qed.
-
-  Lemma star_internal2 s1 s t s':
-    Star Li2 s t s' ->
-    star (fun _ => comp_step) tt (st2 s1 s) t (st2 s1 s').
-  Proof.
-    induction 1; [eapply star_refl | eapply star_step]; eauto.
-    constructor; auto.
-  Qed.
-
-  Lemma plus_internal2 s1 s t s':
-    Plus Li2 s t s' ->
-    plus (fun _ => comp_step) tt (st2 s1 s) t (st2 s1 s').
-  Proof.
-    destruct 1; econstructor; eauto using step2, star_internal2.
+  Next Obligation.
+    inv H0.
+    - apply step1. eapply steps_monotone; eauto.
+    - apply step2. eapply steps_monotone; eauto.
+      cbn. intros i [ left | right ]; auto.
+    - eapply step_push; eauto. intros [? [i [Hi Hix]]].
+      apply H4. split; auto. exists i. split; auto.
+    - eapply step_pop; eauto.
   Qed.
 
 End COMP.
-
-Program Definition comp_semantics' {liA liB liC} (L1: semantics liB liC)
-           (L2: semantics liA liB) sk: semantics liA liC :=
-  {|
-  activate se :=
-    {|
-      steps p := comp_lts_internal L1 L2 se p;
-      events := comp_lts_external L1 L2 se;
-    |};
-  skel := sk;
-  footprint i := footprint L1 i \/ footprint L2 i;
-  |}.
-Next Obligation.
-  inv H0.
-  - apply step1. eapply steps_monotone; eauto.
-  - apply step2. eapply steps_monotone; eauto.
-    cbn. intros i [ left | right ]; auto.
-  - eapply step_push; eauto. intros [i [Hi Hix]].
-    apply H4. exists i. split; auto.
-  - eapply step_pop; eauto.
-Qed.
 
 Definition comp_semantics {liA liB liC} (L1: semantics liB liC)
            (L2: semantics liA liB): option (semantics liA liC) :=
@@ -171,38 +167,16 @@ Program Definition id_semantics {li} sk: semantics li li :=
   {|
   activate se :=
     {|
-      steps p :=
-        {|
-          step ge := id_step;
-          globalenv := tt;
-        |};
-      events :=
-        {|
-          initial_state := id_initial_state;
-          at_external := id_at_external;
-          after_external := id_after_external;
-          final_state := id_final_state;
-        |};
+      step _ _ := id_step;
+      initial_state := id_initial_state;
+      at_external := id_at_external;
+      after_external := id_after_external;
+      final_state := id_final_state;
+      globalenv := tt;
     |};
   skel := sk;
   footprint i := False;
   |}.
-
-(* Definition fsim_lts {liA liB S1 S2} (L1: lts liA liB S1) (L2: lts liA liB S2) := *)
-(*   exists index order ms, forall se,fsim_properties 1 1 se se tt L1 L2 index order ms. *)
-(* Definition equiv_lts {liA liB S1 S2} (L1: lts liA liB S1) (L2: lts liA liB S2) := *)
-(*   fsim_lts L1 L2 /\ fsim_lts L2 L1. *)
-
-(* Lemma fsim_lts_trivial_order {liA liB S1 S2} (L1: lts liA liB S1) (L2: lts liA liB S2): *)
-(*   (exists ms, forall se, fsim_properties 1 1 se se tt L1 L2 S1 (ltof _ (fun _ => O)) ms) -> fsim_lts L1 L2. *)
-(* Proof. *)
-(*   intros H. exists S1, (ltof _ (fun _ => O)). apply H. *)
-(* Qed. *)
-
-(* Definition forward_simulation' {liA liB} (L1 L2: semantics liA liB) := *)
-(*   forward_simulation 1 1 L1 L2. *)
-(* Definition equiv_simulation {liA liB} (L1 L2: semantics liA liB) := *)
-(*   forward_simulation' L1 L2 /\ forward_simulation' L2 L1. *)
 
 Notation "L1 ≤ L2" :=  (forward_simulation 1 1 L1 L2)(at level 70): lts_scope.
 Open Scope lts_scope.
@@ -213,6 +187,7 @@ Definition equiv_simulation {liA liB} (L1 L2: semantics liA liB) :=
 
 Notation "L1 ≡ L2" :=  (equiv_simulation L1 L2)(at level 90): lts_scope.
 Notation "L1 ∘ L2" :=  (comp_semantics L1 L2)(at level 40, left associativity): lts_scope.
+
 (* Notation " 1 " :=  (id_semantics): lts_scope. *)
 
 (* Section IDENTITY. *)
@@ -244,7 +219,7 @@ Notation "L1 ∘ L2" :=  (comp_semantics L1 L2)(at level 40, left associativity)
 (* End IDENTITY. *)
 
 Lemma qset_step {liA liB S} (L: lts liA liB S) p1 p2 s t s':
-  Step (L p1) s t s' -> p1 = p2 -> Step (L p2) s t s'.
+  (Step L p1) s t s' -> p1 = p2 -> (Step L p2) s t s'.
 Proof.
   now intros H [ ].
 Qed.
@@ -290,9 +265,9 @@ Section ASSOC.
           eexists. split; try repeat constructor; auto.
         - intros s1 s2 q Hs Hext. inv Hext. inv H1. inv Hs.
           eexists tt, _. repeat apply conj; try repeat constructor; auto.
-          intros [i [[Hi1 | Hi2] ?]];
-            [ apply H; eexists; split; eauto |
-              apply H2; eexists; split; eauto ].
+          intros [? [i [[Hi1 | Hi2] ?]]];
+            [ apply H; split; auto; eexists; split; eauto |
+              apply H2; split; auto; eexists; split; eauto ].
           intros r _ s1' [ ] Haft. inv Haft. inv H8.
           eexists. split; try repeat constructor; auto.
         - intros s1 t s1' Hstep s2 Hs.
@@ -308,11 +283,13 @@ Section ASSOC.
             * (* eapply step_push; try constructor; eauto. *)
               eapply step_push; eauto.
               constructor; auto.
-              -- intros [x [? ?]]. apply H3. eexists; split; eauto.
-              -- intros [x [[? | ?] ?]].
-                 apply H3. eexists; split; eauto.
-                 apply H2. eexists; split; eauto.
-              -- intros [x [? ?]]. apply H3. eexists; split; eauto.
+              -- intros [? [x [? ?]]]. apply H3.
+                 split; auto. eexists; split; eauto.
+              -- intros [? [x [[? | ?] ?]]].
+                 apply H3. split; auto; eexists; split; eauto.
+                 apply H2. split; auto; eexists; split; eauto.
+              -- intros [? [x [? ?]]].
+                 apply H3. split; auto; eexists; split; eauto.
             * eapply step_pop; try constructor; eauto.
           + inv H0. eexists; split; [ | constructor ].
             inv Hs. constructor. eapply step_push; eauto.
@@ -338,12 +315,14 @@ Section ASSOC.
           eexists; split; constructor; auto.
         - intros s1 s2 q Hs Hext. inv Hext. inv Hs.
           eexists tt, _. repeat apply conj; try repeat constructor; auto.
-          + intros [x [? ?]]. apply H. eexists; split; eauto.
+          + intros [? [x [? ?]]].
+            apply H. split; auto; eexists; split; eauto.
             left; auto.
-          + intros [x [[|]]].
-            apply H. eexists; split; eauto. right. auto.
-            apply H0. eexists; split; eauto.
-          + intros [x [? ?]].  apply H. eexists; split; eauto.
+          + intros [? [x [[|]]]].
+            apply H. split; auto; eexists; split; eauto. right. auto.
+            apply H0. split; auto; eexists; split; eauto.
+          + intros [? [x [? ?]]].
+            apply H. split; auto; eexists; split; eauto.
             right; auto.
           + intros r _ s1' [ ] Haft. inv Haft.
             eexists; split; repeat constructor; auto.
@@ -362,9 +341,9 @@ Section ASSOC.
             apply or_comm.
           + inv H. inv Hs. eexists; split; constructor.
             eapply step_push; eauto.
-            intros [x [[|]]].
-            apply H3. eexists; split; eauto.
-            apply H2. eexists; split; eauto.
+            intros [? [x [[|]]]].
+            apply H3. split; auto; eexists; split; eauto.
+            apply H2. split; auto; eexists; split; eauto.
           + inv H0. inv Hs. eexists; split; constructor.
             eapply step_pop; eauto.
       }
@@ -396,10 +375,10 @@ Section FSIM.
                    | index2: fsim_index HL1 -> fsim_index HL2 -> index.
 
   Variant order: index -> index -> Prop :=
-  | order1 i1 i1': fsim_order HL1 i1 i1' ->
-                   order (index1 i1) (index1 i1')
-  | order2 i1 i2 i2': fsim_order HL2 i2 i2' ->
-                      order (index2 i1 i2) (index2 i1 i2').
+             | order1 i1 i1': fsim_order HL1 i1 i1' ->
+                              order (index1 i1) (index1 i1')
+             | order2 i1 i2 i2': fsim_order HL2 i2 i2' ->
+                                 order (index2 i1 i2) (index2 i1 i2').
 
   Inductive match_states: index -> comp_state L1 L2 -> comp_state L1' L2' -> Prop :=
   | match_st1 i1 s1 s1':
@@ -480,7 +459,9 @@ Section FSIM.
         exists (index2 i1 i2), (st2 L1' L2' s1'0 s2'). split.
         * left. apply plus_one. eapply step_push; eauto.
           erewrite <- match_valid_query; [ | constructor; apply HL1 | .. ]; eauto.
-          intros [i [Hi Hix]]. apply H2. exists i. split; auto.
+          intros [? [i [Hi Hix]]].
+          apply H2. split. erewrite match_query_defined; eauto.
+          exists i. split; auto.
           erewrite match_senv_symbol_address; eauto.
         * econstructor; eauto.
       + pose proof (fsim_lts HL2 _ _ (fun i => footprint L1 i \/ qset i) H3 Hse2).
@@ -536,6 +517,9 @@ Section APPROX.
   | match_frame2 s1 s2:
       match_frame (st2 L1 L2 s1 s2) (st L false s2 :: st L true s1 :: nil).
 
+  Hypothesis valid_initial_state:
+    forall i se q s, initial_state (L i se) q s -> valid_query (L i) se q.
+
   Lemma categorical_compose_approximation:
     forward_simulation 1 1 (comp_semantics' L1 L2 sk) (SmallstepLinking_.semantics L sk).
   Proof.
@@ -545,7 +529,8 @@ Section APPROX.
     instantiate (1 := fun _ _ _ => _). cbn beta.
     apply forward_simulation_step with (match_states := match_frame).
     - intros q ? s1 [ ] H. inv H.
-      exists (st L true s :: nil). split; constructor. auto.
+      exists (st L true s :: nil). split; constructor.
+      eapply valid_initial_state; eauto. auto.
     - intros s1 s2 r Hs H. inv H. inv Hs.
       exists r. split; constructor; auto.
     - intros s s' q Hs H. inv H. inv Hs.
@@ -564,7 +549,7 @@ Section APPROX.
         eapply SmallstepLinking_.step_pop; eauto.
         constructor.
     - apply well_founded_ltof.
-Qed.
+  Qed.
 
 End APPROX.
 

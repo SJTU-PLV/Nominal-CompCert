@@ -1,3 +1,4 @@
+Require Import Maps.
 Require Import Relations.
 Require Import Wellfounded.
 Require Import Coqlib.
@@ -7,41 +8,95 @@ Require Import LanguageInterface_.
 Require Import Integers.
 Require Import Smallstep.
 Require Import AST.
+Require Import Values.
 
 Set Implicit Arguments.
 
-Record internal state: Type := {
-  genvtype: Type;
-  step :> genvtype -> state -> trace -> state -> Prop;
-  globalenv: genvtype;
-}.
+(* The footprint of a concrete program is the set of identifiers that correspond
+   to internal function definitions. The calls to these functions are not
+   allowed to escape to the environment. The definition, together with the valid
+   query predicate, is equivalent to old valid query in the definition of LTS *)
+Definition footprint_of_program {F G} (p: AST.program (AST.fundef F) G) (i: ident) : Prop :=
+  match (prog_defmap p) ! i with
+  | Some def =>
+    match def with
+    | Gfun f => fundef_is_internal f = true
+    | _ => False
+    end
+  | _ => False
+  end.
 
-Record external liA liB state: Type := {
-  initial_state: query liB -> state -> Prop;
-  at_external: state -> query liA -> Prop;
-  after_external: state -> reply liA -> state -> Prop;
-  final_state: state -> reply liB -> Prop;
-}.
+Lemma footprint_of_program_valid {F G} (p: AST.program (AST.fundef F) G) se {li} (q: query li):
+  (entry q <> Vundef
+   /\ exists i : ident, footprint_of_program p i /\ Genv.symbol_address se i Ptrofs.zero = entry q)
+  <-> Genv.is_internal (Genv.globalenv se p) (entry q) = true.
+Proof.
+  split.
+  - intros [Hq (i & Hi & Hx)].
+    rewrite <- Hx in *. clear Hx.
+    unfold Genv.is_internal. unfold Genv.symbol_address in *.
+    destruct Genv.find_symbol eqn:Hsymbol; try congruence; cbn.
+    destruct Ptrofs.eq_dec; try congruence; cbn.
+    unfold Genv.find_funct_ptr.
+    rewrite Genv.find_def_spec.
+    erewrite Genv.find_invert_symbol; eauto.
+    unfold footprint_of_program in Hi.
+    destruct ((prog_defmap p) ! i).
+    + destruct g; easy.
+    + inversion Hi.
+  - intros H. unfold Genv.is_internal in H.
+    destruct Genv.find_funct eqn:H1; try congruence.
+    unfold Genv.find_funct in H1.
+    destruct (entry q) eqn: Hq; try congruence.
+    split. intros X. discriminate X.
+    destruct (Ptrofs.eq_dec i Ptrofs.zero) eqn: Hi; try congruence.
+    clear Hi. subst.
+    unfold Genv.find_funct_ptr in H1.
+    destruct Genv.find_def eqn: H2; try congruence.
+    destruct g eqn: Hf; try congruence. inv H1.
+    rewrite Genv.find_def_spec in H2.
+    destruct Genv.invert_symbol eqn:H3; try congruence.
+    exists i. split.
+    + unfold footprint_of_program. now rewrite H2.
+    + unfold Genv.symbol_address.
+      erewrite Genv.invert_find_symbol; eauto.
+Qed.
 
-Record lts liA liB state: Type := {
-  steps :> (ident -> Prop) -> internal state;
-  events :> external liA liB state;
+(* Record internal state genvtype: Type := { *)
+(*   step :> genvtype -> state -> trace -> state -> Prop; *)
+(* }. *)
 
-  steps_monotone:
-    forall (p1 p2: ident -> Prop) ge1 ge2, (forall i, p2 i -> p1 i) ->
-    forall s t s', steps p1 ge1 s t s' -> steps p2 ge2 s t s';
-}.
-
-(* Record lts liA liB state: Type := { *)
-(*   genvtype: Type; *)
-(*   step : genvtype -> state -> trace -> state -> Prop; *)
-(*   footprint: ident -> Prop; *)
+(* Record external liA liB state: Type := { *)
 (*   initial_state: query liB -> state -> Prop; *)
 (*   at_external: state -> query liA -> Prop; *)
 (*   after_external: state -> reply liA -> state -> Prop; *)
 (*   final_state: state -> reply liB -> Prop; *)
-(*   globalenv: genvtype; *)
 (* }. *)
+
+(* Record lts liA liB state: Type := { *)
+(*   genvtype: Type; *)
+(*   globalenv: genvtype; *)
+(*   steps :> (ident -> Prop) -> internal state genvtype; *)
+(*   events :> external liA liB state; *)
+
+(*   steps_monotone: *)
+(*     forall (p1 p2: ident -> Prop) ge, (forall i, p2 i -> p1 i) -> *)
+(*     forall s t s', steps p1 ge s t s' -> steps p2 ge s t s'; *)
+(* }. *)
+
+Record lts liA liB state: Type := {
+  genvtype: Type;
+  step : (ident -> Prop) -> genvtype -> state -> trace -> state -> Prop;
+  initial_state: query liB -> state -> Prop;
+  at_external: state -> query liA -> Prop;
+  after_external: state -> reply liA -> state -> Prop;
+  final_state: state -> reply liB -> Prop;
+  globalenv: genvtype;
+
+  steps_monotone:
+    forall (p1 p2: ident -> Prop) ge, (forall i, p2 i -> p1 i) ->
+    forall s t s', step p1 ge s t s' -> step p2 ge s t s';
+}.
 
 Record semantics liA liB := {
   skel: AST.program unit unit;
@@ -51,11 +106,12 @@ Record semantics liA liB := {
 }.
 
 Definition valid_query {li liA liB} (L: semantics liA liB) se (q: query li): Prop :=
+  entry q <> Vundef /\
   exists i, footprint L i /\ Genv.symbol_address se i Ptrofs.zero = entry q.
 
-Notation " 'Step' L " := (step L (globalenv L)) (at level 1) : smallstep_scope.
-Notation " 'Star' L " := (star (step L) (globalenv L)) (at level 1) : smallstep_scope.
-Notation " 'Plus' L " := (plus (step L) (globalenv L)) (at level 1) : smallstep_scope.
+Notation " 'Step' L p " := (step L p (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Star' L p " := (star (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Plus' L p " := (plus (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
 
 Section FSIM.
 
@@ -82,10 +138,10 @@ Section FSIM.
       forall r1 r2 s1', match_reply ccA w r1 r2 -> after_external L1 s1 r1 s1' ->
       exists i' s2', after_external L2 s2 r2 s2' /\ match_states i' s1' s2';
     fsim_simulation:
-      forall s1 t s1', Step (L1 qset) s1 t s1' ->
+      forall s1 t s1', Step L1 qset s1 t s1' ->
       forall i s2, match_states i s1 s2 ->
       exists i', exists s2',
-          (Plus (L2 qset) s2 t s2' \/ (Star (L2 qset) s2 t s2' /\ order i' i))
+      (Plus L2 qset s2 t s2' \/ (Star L2 qset s2 t s2' /\ order i' i))
       /\ match_states i' s1' s2';
   }.
 
@@ -123,10 +179,10 @@ Section SIMULATION_STAR_WF.
 Variable order: state1 -> state1 -> Prop.
 
 Hypothesis simulation:
-  forall s1 t s1', Step (L1 qset) s1 t s1' ->
+  forall s1 t s1', Step L1 qset s1 t s1' ->
   forall s2, match_states s1 s2 ->
   exists s2',
-  (Plus (L2 qset) s2 t s2' \/ (Star (L2 qset) s2 t s2' /\ order s1' s1))
+  (Plus L2 qset s2 t s2' \/ (Star L2 qset s2 t s2' /\ order s1' s1))
   /\ match_states s1' s2'.
 
 Lemma forward_simulation_star_wf:
@@ -154,9 +210,9 @@ Section SIMULATION_STAR.
 Variable measure: state1 -> nat.
 
 Hypothesis simulation:
-  forall s1 t s1', Step (L1 qset) s1 t s1' ->
+  forall s1 t s1', Step L1 qset s1 t s1' ->
   forall s2, match_states s1 s2 ->
-  (exists s2', Plus (L2 qset) s2 t s2' /\ match_states s1' s2')
+  (exists s2', Plus L2 qset s2 t s2' /\ match_states s1' s2')
   \/ (measure s1' < measure s1 /\ t = E0 /\ match_states s1' s2)%nat.
 
 Lemma forward_simulation_star:
@@ -173,9 +229,9 @@ End SIMULATION_STAR.
 Section SIMULATION_PLUS.
 
 Hypothesis simulation:
-  forall s1 t s1', Step (L1 qset) s1 t s1' ->
+  forall s1 t s1', Step L1 qset s1 t s1' ->
   forall s2, match_states s1 s2 ->
-  exists s2', Plus (L2 qset) s2 t s2' /\ match_states s1' s2'.
+  exists s2', Plus L2 qset s2 t s2' /\ match_states s1' s2'.
 
 Lemma forward_simulation_plus:
   fsim_properties L1 L2 state1 (ltof _ (fun _ => O)) ms.
@@ -189,9 +245,9 @@ End SIMULATION_PLUS.
 Section SIMULATION_STEP.
 
 Hypothesis simulation:
-  forall s1 t s1', Step (L1 qset) s1 t s1' ->
+  forall s1 t s1', Step L1 qset s1 t s1' ->
   forall s2, match_states s1 s2 ->
-  exists s2', Step (L2 qset) s2 t s2' /\ match_states s1' s2'.
+  exists s2', Step L2 qset s2 t s2' /\ match_states s1' s2'.
 
 Lemma forward_simulation_step:
   fsim_properties L1 L2 state1 (ltof _ (fun _ => O)) ms.
@@ -242,10 +298,14 @@ Lemma match_valid_query {liA liA' liB liB' li li'} cc1 cc2
   valid_query L1 se1 q1 <-> valid_query L2 se2 q2.
 Proof.
   intros [] Hse Hq. split.
-  - intros (i & Hi & Hx). exists i; split.
+  - intros [? (i & Hi & Hx)]. split.
+    erewrite <- match_query_defined; eauto.
+    exists i; split.
     + erewrite <- fsim_footprint; eauto.
     + erewrite <- match_senv_symbol_address; eauto.
-  - intros (i & Hi & Hx). exists i; split.
+  - intros [? (i & Hi & Hx)]. split.
+    erewrite match_query_defined; eauto.
+    exists i; split.
     + erewrite fsim_footprint; eauto.
     + erewrite match_senv_symbol_address; eauto.
 Qed.

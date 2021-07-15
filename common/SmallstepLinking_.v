@@ -35,11 +35,11 @@ Section LINK.
 
     Inductive step: state -> trace -> state -> Prop :=
       | step_internal i s t s' k :
-          Step (L i se qset) s t s' ->
+          Step (L i se) qset s t s' ->
           step (st i s :: k) t (st i s' :: k)
       | step_push i j s q s' k :
           at_external (L i se) s q ->
-          (* valid_query (L j se) q = true -> *)
+          valid_query (L j) se q ->
           initial_state (L j se) q s' ->
           step (st i s :: k) E0 (st j s' :: st i s :: k)
       | step_pop i j s sk r s' k :
@@ -49,7 +49,7 @@ Section LINK.
 
     Inductive initial_state (q: query li): state -> Prop :=
       | initial_state_intro i s :
-          (* valid_query (L i se) q = true -> *)
+          valid_query (L i) se q ->
           Smallstep_.initial_state (L i se) q s ->
           initial_state q (st i s :: nil).
 
@@ -69,18 +69,6 @@ Section LINK.
           Smallstep_.final_state (L i se) s r ->
           final_state (st i s :: nil) r.
 
-    Definition lts_internal :=
-      {|
-        Smallstep_.step ge := step;
-        globalenv := tt;
-      |}.
-    Definition lts_external :=
-      {|
-        Smallstep_.initial_state := initial_state;
-        Smallstep_.at_external := at_external;
-        Smallstep_.after_external := after_external;
-        Smallstep_.final_state := final_state;
-      |}.
   End WITH_SE.
 
   Context (sk: AST.program unit unit).
@@ -89,8 +77,12 @@ Section LINK.
     {|
       activate se :=
         {|
-          steps p := lts_internal se p;
-          events := lts_external se;
+          Smallstep_.step p _ := step se p;
+          Smallstep_.initial_state := initial_state se;
+          Smallstep_.at_external := at_external se;
+          Smallstep_.after_external := after_external se;
+          Smallstep_.final_state := final_state se;
+          globalenv := tt;
         |};
       skel := sk;
       footprint i := footprint (L true) i \/ footprint (L false) i;
@@ -106,7 +98,7 @@ Section LINK.
   (** * Properties  *)
 
   Lemma star_internal se p i s t s' k:
-    Star (L i se p) s t s' ->
+    Star (L i se) p s t s' ->
     star (fun _ => step se p) tt (st i s :: k) t (st i s' :: k).
   Proof.
     induction 1; [eapply star_refl | eapply star_step]; eauto.
@@ -114,7 +106,7 @@ Section LINK.
   Qed.
 
   Lemma plus_internal se p i s t s' k:
-    Plus (L i se p) s t s' ->
+    Plus (L i se) p s t s' ->
     plus (fun _ => step se p) tt (st i s :: k) t (st i s' :: k).
   Proof.
     destruct 1; econstructor; eauto using step_internal, star_internal.
@@ -261,13 +253,14 @@ Section FSIM.
         constructor. auto.
       * econstructor; eauto. econstructor; eauto.
     - (* cross-component call *)
-      inv H4; subst_dep. clear idx0.
+      inv H5; subst_dep. clear idx0.
       edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & Hrx); eauto using fsim_lts.
       pose proof (fsim_lts (HL j) _ _ pset Hsex (Hse1 j)).
       edestruct @fsim_match_initial_states as (idx' & s2' & Hs2' & Hs'); eauto.
       eexists (existT _ j idx'), _. split.
       + left. apply plus_one. eapply step_push; eauto 1.
-        (* erewrite fsim_match_valid_query; eauto. *)
+        erewrite <- match_valid_query; eauto. constructor. apply HL.
+      (* erewrite fsim_match_valid_query; eauto. *)
       + repeat (econstructor; eauto).
     - (* cross-component return *)
       inv H4; subst_dep. clear idx0.
@@ -291,6 +284,7 @@ Section FSIM.
     edestruct @fsim_match_initial_states as (idx & s2 & Hs2 & Hs); eauto.
     exists (existT _ i idx), (st L2 i s2 :: nil).
     split; econstructor; eauto.
+    erewrite <- match_valid_query; eauto. constructor; apply HL.
     (* + erewrite fsim_match_valid_query; eauto. *)
     + econstructor; eauto.
     + constructor.

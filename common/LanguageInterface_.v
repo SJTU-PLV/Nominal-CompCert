@@ -63,10 +63,13 @@ Record callconv {li1 li2} :=
           Genv.valid_for sk se2;
       match_senv_symbol_address:
         forall w se1 se2, match_senv w se1 se2 ->
-        forall q1 q2, match_query w q1 q2 ->
-        forall i, Genv.symbol_address se1 i Ptrofs.zero = entry q1 <->
-             Genv.symbol_address se2 i Ptrofs.zero = entry q2;
-      }.
+                     forall q1 q2, match_query w q1 q2 ->
+                              forall i, Genv.symbol_address se1 i Ptrofs.zero = entry q1 <->
+                                   Genv.symbol_address se2 i Ptrofs.zero = entry q2;
+      match_query_defined:
+        forall w q1 q2, match_query w q1 q2 ->
+                   entry q1 <> Vundef <-> entry q2 <> Vundef;
+    }.
 
 Arguments callconv: clear implicits.
 Delimit Scope cc_scope with cc.
@@ -84,6 +87,9 @@ Program Definition cc_id {li}: callconv li li :=
   |}.
 Solve All Obligations with
     cbn; intros; subst; auto.
+Next Obligation.
+  intros. subst. reflexivity.
+Qed.
 Next Obligation.
   intros. subst. reflexivity.
 Qed.
@@ -116,7 +122,17 @@ Next Obligation.
   eauto using match_senv_valid_for.
 Qed.
 Next Obligation.
-Admitted.
+  intros. destruct w as [[se' w1] w2].
+  rename q2 into q3. destruct H0 as [q2 [Hq1 Hq2]].
+  destruct H. erewrite match_senv_symbol_address; eauto.
+  eapply match_senv_symbol_address; eauto.
+Qed.
+Next Obligation.
+  intros. destruct w as [[se' w1] w2].
+  rename q2 into q3. destruct H as [q2 [Hq1 Hq2]].
+  erewrite match_query_defined; eauto.
+  eapply match_query_defined; eauto.
+Qed.
 
 Infix "@" := cc_compose (at level 30, right associativity) : cc_scope.
 
@@ -194,13 +210,18 @@ Next Obligation.
       * subst vf2. inv H1.
         -- edestruct @Genv.find_symbol_match as (b' & fg & Hb); eauto.
            rewrite Hx in Hb. inv Hb.
-          admit.
+           admit.
         -- exfalso. apply H4. auto.
       * unfold Genv.find_symbol in *. subst vf2. inv H1; eauto.
         exfalso. erewrite <- @Genv.mge_symb in Hx; eauto.
         rewrite Hy in Hx. discriminate Hx.
     + subst. inv H1. exfalso. apply H4. auto.
 Admitted.
+Next Obligation.
+  intros. inv H. cbn. split.
+  - intros. inv H0; congruence.
+  - intros. auto.
+Qed.
 
 Definition ccref {li1 li2} (cc cc': callconv li1 li2) :=
   forall w se1 se2 q1 q2,
