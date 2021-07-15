@@ -233,3 +233,6 @@ Definition ccref {li1 li2} (cc cc': callconv li1 li2) :=
       forall r1 r2,
         match_reply cc' w' r1 r2 ->
         match_reply cc w r1 r2.
+
+Definition cceqv {li1 li2} (cc cc': callconv li1 li2) :=
+  ccref cc cc' /\ ccref cc' cc.
