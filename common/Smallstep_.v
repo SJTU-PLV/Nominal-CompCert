@@ -16,7 +16,7 @@ Set Implicit Arguments.
    to internal function definitions. The calls to these functions are not
    allowed to escape to the environment. The definition, together with the valid
    query predicate, is equivalent to old valid query in the definition of LTS *)
-Definition footprint_of_program {F G} (p: AST.program (AST.fundef F) G) (i: ident) : Prop :=
+Definition footprint_of_program {F G} `{FundefIsInternal F} (p: AST.program F G) (i: ident) : Prop :=
   match (prog_defmap p) ! i with
   | Some def =>
     match def with
@@ -26,7 +26,8 @@ Definition footprint_of_program {F G} (p: AST.program (AST.fundef F) G) (i: iden
   | _ => False
   end.
 
-Lemma footprint_of_program_valid {F G} (p: AST.program (AST.fundef F) G) se {li} (q: query li):
+
+Lemma footprint_of_program_valid {F G} `{FundefIsInternal F} (p: AST.program F G) se {li} (q: query li):
   (entry q <> Vundef
    /\ exists i : ident, footprint_of_program p i /\ Genv.symbol_address se i Ptrofs.zero = entry q)
   <-> Genv.is_internal (Genv.globalenv se p) (entry q) = true.
@@ -44,7 +45,7 @@ Proof.
     destruct ((prog_defmap p) ! i).
     + destruct g; easy.
     + inversion Hi.
-  - intros H. unfold Genv.is_internal in H.
+  - intros Hx. unfold Genv.is_internal in Hx.
     destruct Genv.find_funct eqn:H1; try congruence.
     unfold Genv.find_funct in H1.
     destruct (entry q) eqn: Hq; try congruence.
@@ -112,6 +113,25 @@ Definition valid_query {li liA liB} (L: semantics liA liB) se (q: query li): Pro
 Notation " 'Step' L p " := (step L p (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
 Notation " 'Star' L p " := (star (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
 Notation " 'Plus' L p " := (plus (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Forever_silent' L p " := (forever_silent (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Forever_reactive' L p " := (forever_reactive (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Nostep' L p " := (nostep (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+
+Notation Semantics_gen step initial_state at_ext after_ext final_state globalenv p :=
+  {|
+  skel := AST.erase_program p;
+  activate se :=
+    let ge := globalenv se p in
+    {|
+      step _ := step;
+      initial_state := initial_state ge;
+      at_external := at_ext ge;
+      after_external := after_ext ge;
+      final_state := final_state ge;
+      globalenv := ge;
+    |};
+    footprint := footprint_of_program p;
+  |}.
 
 Section FSIM.
 
@@ -309,3 +329,95 @@ Proof.
     + erewrite fsim_footprint; eauto.
     + erewrite match_senv_symbol_address; eauto.
 Qed.
+
+(** * Receptiveness and determinacy *)
+
+Definition single_events {liA liB st} (L: lts liA liB st) : Prop :=
+  forall p s t s', Step L p s t s' -> (length t <= 1)%nat.
+
+Record lts_receptive {liA liB st} (L: lts liA liB st) se: Prop :=
+  Receptive {
+      sr_receptive: forall p s t1 s1 t2,
+        Step L p s t1 s1 -> match_traces se t1 t2 -> exists s2, Step L p s t2 s2;
+      sr_traces:
+        single_events L
+    }.
+
+Record lts_determinate {liA liB st} (L: lts liA liB st) se: Prop :=
+  Determinate {
+      sd_determ: forall p s t1 s1 t2 s2,
+        Step L p s t1 s1 -> Step L p s t2 s2 ->
+        match_traces se t1 t2 /\ (t1 = t2 -> s1 = s2);
+      sd_traces:
+        single_events L;
+      sd_initial_determ: forall q s1 s2,
+          initial_state L q s1 -> initial_state L q s2 -> s1 = s2;
+      sd_at_external_nostep: forall p s q,
+          at_external L s q -> Nostep L p s;
+      sd_at_external_determ: forall s q1 q2,
+          at_external L s q1 -> at_external L s q2 -> q1 = q2;
+      sd_after_external_determ: forall s r s1 s2,
+          after_external L s r s1 -> after_external L s r s2 -> s1 = s2;
+      sd_final_nostep: forall p s r,
+          final_state L s r -> Nostep L p s;
+      sd_final_noext: forall s r q,
+          final_state L s r -> at_external L s q -> False;
+      sd_final_determ: forall s r1 r2,
+          final_state L s r1 -> final_state L s r2 -> r1 = r2
+    }.
+
+Section DETERMINACY.
+
+  Context {liA liB st} (L: lts liA liB st) (se: Genv.symtbl).
+  Hypothesis DET: lts_determinate L se.
+
+  Lemma sd_determ_1:
+    forall p s t1 s1 t2 s2,
+      Step L p s t1 s1 -> Step L p s t2 s2 -> match_traces se t1 t2.
+  Proof.
+    intros. eapply sd_determ; eauto.
+  Qed.
+
+  Lemma sd_determ_2:
+    forall p s t s1 s2,
+      Step L p s t s1 -> Step L p s t s2 -> s1 = s2.
+  Proof.
+    intros. eapply sd_determ; eauto.
+  Qed.
+
+  Lemma sd_determ_3:
+    forall p s t s1 s2,
+      Step L p s t s1 -> Step L p s E0 s2 -> t = E0 /\ s1 = s2.
+  Proof.
+    intros. exploit (sd_determ DET). eexact H. eexact H0.
+    intros [A B]. inv A. auto.
+  Qed.
+
+  Lemma star_determinacy:
+    forall p s t s', Star L p s t s' ->
+              forall s'', Star L p s t s'' -> Star L p s' E0 s'' \/ Star L p s'' E0 s'.
+  Proof.
+    induction 1; intros.
+    auto.
+    inv H2.
+    right. eapply star_step; eauto.
+    exploit sd_determ_1. eexact H. eexact H3. intros MT.
+    exploit (sd_traces DET). eexact H. intros L1.
+    exploit (sd_traces DET). eexact H3. intros L2.
+    assert (t1 = t0 /\ t2 = t3).
+    destruct t1. inv MT. auto.
+    destruct t1; simpl in L1; try omegaContradiction.
+    destruct t0. inv MT. destruct t0; simpl in L2; try omegaContradiction.
+    simpl in H5. split. congruence. congruence.
+    destruct H1; subst.
+    assert (s2 = s4) by (eapply sd_determ_2; eauto). subst s4.
+    auto.
+  Qed.
+
+End DETERMINACY.
+
+Definition receptive {liA liB} (L: semantics liA liB) :=
+  forall se, lts_receptive (L se) se.
+
+Definition determinate {liA liB} (L: semantics liA liB) :=
+  forall se, lts_determinate (L se) se.
