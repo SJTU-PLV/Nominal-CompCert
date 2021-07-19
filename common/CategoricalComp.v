@@ -590,3 +590,144 @@ Section CALL_CONV_REF.
   Qed.
 
 End CALL_CONV_REF.
+
+Section HCOMP_IDENTITY.
+
+  Context {li} (L: semantics li li).
+  Variable (sk: AST.program unit unit).
+
+  (* I suppose this holds for Clight semantics *)
+  Hypothesis extcall_invalid:
+    forall se s q, Smallstep_.at_external (L se) s q -> ~ valid_query L se q.
+
+  Hypothesis initial_state_valid:
+    forall se q s, Smallstep_.initial_state (L se) q s -> valid_query L se q.
+
+  Let L1 := fun b => match b with | true => id_semantics sk | false => L end.
+
+  Local Inductive state_match1: list (SmallstepLinking_.frame L1) -> Smallstep_.state L -> Prop :=
+  | state_match_intro1 s:
+      state_match1 (SmallstepLinking_.st L1 false s :: nil) s.
+
+  Lemma hcomp_left_identity1: (SmallstepLinking_.semantics L1 (skel L)) ≤ L.
+  Proof.
+    constructor. econstructor. reflexivity.
+    intros i. cbn. firstorder.
+    intros se ? [ ] qset [ ] Hse.
+    instantiate (1 := fun _ _ _ => _). cbn beta.
+    apply forward_simulation_step with (match_states := state_match1).
+    - intros q _ s1 [ ] H. inv H.
+      destruct i; cbn in *.
+      + firstorder.
+      + eexists. split; try econstructor; auto.
+    - intros s1 s2 r Hs H. inv H. inv Hs.
+      SmallstepLinking_.subst_dep.
+      eexists. split; try econstructor; auto.
+    - intros s1 s2 q Hs H. inv H. inv Hs.
+      SmallstepLinking_.subst_dep.
+      eexists tt, _. repeat apply conj; try constructor; eauto.
+      intros r _ s1' [ ] H. inv H.
+      SmallstepLinking_.subst_dep.
+      eexists. split; try econstructor; eauto.
+    - intros s1 t s1' Hstep s2 Hs.
+      inv Hstep; inv Hs; SmallstepLinking_.subst_dep.
+      + eexists; split; eauto. constructor.
+      + destruct j; exfalso.
+        * firstorder.
+        * apply extcall_invalid in H. apply H. auto.
+    - apply well_founded_ltof.
+  Qed.
+
+  Lemma hcomp_left_identity2: L ≤ (SmallstepLinking_.semantics L1 (skel L)).
+  Proof.
+    constructor. econstructor. reflexivity.
+    intros i. cbn. firstorder.
+    intros se ? [ ] qset [ ] Hse.
+    instantiate (1 := fun _ _ _ => _). cbn beta.
+    apply forward_simulation_step with (match_states := fun s1 s2 => state_match1 s2 s1).
+    - intros q _ s1 [ ] H.
+      eexists; split; econstructor; eauto.
+    - intros s1 s2 r1 Hs H. inv Hs.
+      eexists; split; econstructor; eauto.
+    - intros s1 s2 q1 Hs H. inv Hs.
+      eexists tt, _. repeat apply conj; try econstructor; auto.
+      + intros j. destruct j.
+        * unfold valid_query. firstorder.
+        * apply extcall_invalid in H. apply H.
+      + inv H0. split; cbn; econstructor; auto.
+    - intros s1 t s1' Hstep s2 Hs. inv Hs.
+      eexists; split; [ | constructor].
+      cbn. apply SmallstepLinking_.step_internal. auto.
+    - apply well_founded_ltof.
+  Qed.
+
+  Lemma hcomp_left_identity: (SmallstepLinking_.semantics L1 (skel L)) ≡ L.
+  Proof.
+    split; [ exact hcomp_left_identity1 | exact hcomp_left_identity2].
+  Qed.
+
+  Let L2 := fun b => match b with | true => L | false => id_semantics sk end.
+
+  Local Inductive state_match2: list (SmallstepLinking_.frame L2) -> Smallstep_.state L -> Prop :=
+  | state_match_intro2 s:
+      state_match2 (SmallstepLinking_.st L2 true s :: nil) s.
+
+  Lemma hcomp_right_identity1: (SmallstepLinking_.semantics L2 (skel L)) ≤ L.
+  Proof.
+    constructor. econstructor. reflexivity.
+    intros i. cbn. firstorder.
+    intros se ? [ ] qset [ ] Hse.
+    instantiate (1 := fun _ _ _ => _). cbn beta.
+    apply forward_simulation_step with (match_states := state_match2).
+    - intros q ? s1 [ ] H. inv H.
+      destruct i.
+      + eexists; split; eauto. constructor.
+      + firstorder.
+    - intros s1 s2 r Hs H. inv H. inv Hs.
+      SmallstepLinking_.subst_dep.
+      eexists; split; eauto. constructor.
+    - intros s1 s2 q Hs H. inv H. inv Hs.
+      SmallstepLinking_.subst_dep.
+      eexists tt, _. repeat apply conj; try constructor. auto.
+      intros r1 r2 s1' [ ] H.
+      inv H. SmallstepLinking_.subst_dep.
+      eexists; split; eauto. constructor.
+    - intros s1 t s1' Hstep s2 Hs.
+      inv Hstep; inv Hs; SmallstepLinking_.subst_dep.
+      + eexists; split; eauto. constructor.
+      + exfalso. destruct j.
+        * apply extcall_invalid in H. firstorder.
+        * firstorder.
+    - apply well_founded_ltof.
+  Qed.
+
+  Lemma hcomp_right_identity2: L ≤ (SmallstepLinking_.semantics L2 (skel L)).
+  Proof.
+    constructor. econstructor. reflexivity.
+    intros i. cbn. firstorder.
+    intros se ? [ ] qset [ ] Hse.
+    instantiate (1 := fun _ _ _ => _). cbn beta.
+    apply forward_simulation_step with (match_states := fun s1 s2 => state_match2 s2 s1).
+    - intros q ? s1 [ ] H. eexists; split.
+      2: econstructor. constructor; auto.
+      eapply initial_state_valid; eauto.
+    - intros s1 s2 r1 Hs H. eexists; split.
+      2: econstructor. inv Hs. constructor. auto.
+    - intros s1 s2 q Hs H. inv Hs.
+      eexists tt, _. repeat apply conj; try constructor; auto.
+      + intros [|].
+        * eapply extcall_invalid; eauto.
+        * firstorder.
+      + intros r ? s [ ] Hx.
+        eexists; split; constructor; auto.
+    - intros s1 t s1' Hstep s2 Hs. inv Hs.
+      eexists; split; constructor; auto.
+    - apply well_founded_ltof.
+  Qed.
+
+  Lemma hcomp_right_identity: (SmallstepLinking_.semantics L2 (skel L)) ≡ L.
+  Proof.
+    split; [ exact hcomp_right_identity1 | exact hcomp_right_identity2].
+  Qed.
+
+End HCOMP_IDENTITY.
