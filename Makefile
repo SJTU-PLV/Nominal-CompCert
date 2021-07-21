@@ -69,6 +69,11 @@ COMMON=Errors.v AST.v Linking.v \
   SmallstepLinking.v \
   Invariant.v \
   CallconvAlgebra.v \
+  LanguageInterface_.v \
+  Smallstep_.v \
+  SmallstepLinking_.v \
+  CallconvAlgebra_.v \
+  CategoricalComp.v \
 
 # Behaviors.v
 # Determinism.v
@@ -84,6 +89,7 @@ CKLR=\
   Valuesrel.v Builtinsrel.v Eventsrel.v \
   Coprel.v Clightrel.v \
   Registersrel.v RTLrel.v \
+  Clightrel_.v \
 
 # Back-end modules (in backend/, $(ARCH)/)
 
@@ -114,6 +120,7 @@ BACKEND=\
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
   Asmrel.v AsmLinking.v \
+  Asm_.v AsmLinking_.v \
 
 # Unusedglob.v
 # Unusedglobproof.v
@@ -125,6 +132,7 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Cstrategy.v \
   Clight.v SimplLocals.v SimplLocalsproof.v \
   Cshmgen.v Cshmgenproof.v \
   Csharpminor.v Cminorgen.v Cminorgenproof.v \
+  Clight_.v \
 
 # Ctyping.v
 # ClightBigstep.v

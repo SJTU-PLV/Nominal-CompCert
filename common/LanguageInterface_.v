@@ -222,17 +222,3 @@ Next Obligation.
   - intros. inv H0; congruence.
   - intros. auto.
 Qed.
-
-Definition ccref {li1 li2} (cc cc': callconv li1 li2) :=
-  forall w se1 se2 q1 q2,
-    match_senv cc w se1 se2 ->
-    match_query cc w q1 q2 ->
-    exists w',
-      match_senv cc' w' se1 se2 /\
-      match_query cc' w' q1 q2 /\
-      forall r1 r2,
-        match_reply cc' w' r1 r2 ->
-        match_reply cc w r1 r2.
-
-Definition cceqv {li1 li2} (cc cc': callconv li1 li2) :=
-  ccref cc cc' /\ ccref cc' cc.

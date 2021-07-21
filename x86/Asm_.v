@@ -16,7 +16,7 @@ Require Import Coqlib Maps.
 Require Import AST Integers Floats Values Memory Events Globalenvs.
 Require Import Locations Stacklayout Conventions.
 Require Import Mach.
-Require Import CallconvAlgebra CKLR CKLRAlgebra.
+Require Import CallconvAlgebra_ CKLR CKLRAlgebra.
 Require Import LanguageInterface_.
 Require Import Smallstep_.
 Require Import ClassicalChoice.
@@ -1224,6 +1224,55 @@ Program Definition semantics (p: program): Smallstep_.semantics li_asm li_asm :=
       |};
     footprint := footprint_of_program p;
   |}.
+
+Lemma extcall_invalid p se s q:
+  Smallstep_.at_external ((semantics p) se) s q ->
+  ~ valid_query (semantics p) se q.
+Proof.
+  intros. destruct s as [nb s]. destruct q.
+  inversion H as [? ? ? ? Hf]. subst.
+  unfold valid_query. cbn.
+  intros [? (i & Hi & Hse)].
+  unfold Genv.find_funct in Hf.
+  destruct (r PC); try congruence.
+  destruct Ptrofs.eq_dec; try congruence.
+  unfold Genv.find_funct_ptr in Hf.
+  destruct Genv.find_def eqn: Hdef; try congruence.
+  destruct g eqn: Hg; try congruence. inv Hf.
+  (* unfold globalenv in Hdef. cbn in *. *)
+  rewrite Genv.find_def_spec in Hdef.
+  destruct Genv.invert_symbol eqn: Hs; try congruence.
+  apply Genv.invert_find_symbol in Hs.
+  unfold Genv.symbol_address in Hse.
+  destruct (Genv.find_symbol se i) eqn: Hxe; try congruence.
+  inv Hse. exploit Genv.find_symbol_injective.
+  apply Hs. apply Hxe. intros ->.
+  unfold footprint_of_program in Hi. rewrite Hdef in Hi.
+  discriminate Hi.
+Qed.
+
+Lemma initial_state_valid p se s q:
+  Smallstep_.initial_state ((semantics p) se) q s ->
+  valid_query (semantics p) se q.
+Proof.
+  intros. destruct s as [nb s]. destruct q.
+  inv H. inversion H0 as [? ? ? Hf]. subst. clear -Hf.
+  unfold valid_query. cbn.
+  unfold Genv.find_funct in Hf.
+  destruct (r PC); try congruence.
+  destruct Ptrofs.eq_dec; try congruence.
+  split. intros X. discriminate X.
+  subst. unfold Genv.find_funct_ptr in Hf.
+  destruct Genv.find_def eqn: Hdef; try congruence.
+  destruct g; try congruence. inv Hf.
+  rewrite Genv.find_def_spec in Hdef.
+  destruct Genv.invert_symbol eqn: Hse; try congruence.
+  exists i. split. unfold footprint_of_program.
+  rewrite Hdef. auto.
+  unfold Genv.symbol_address.
+  apply Genv.invert_find_symbol in Hse.
+  rewrite Hse. auto.
+Qed.
 
 (** Determinacy of the [Asm] semantics. *)
 

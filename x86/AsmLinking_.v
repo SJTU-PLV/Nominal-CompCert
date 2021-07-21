@@ -371,7 +371,7 @@ Section ASM_LINKING.
   Proof.
     intros Hvq. apply not_true_is_false.
     intros H. apply Hvq.
-    pose proof (@footprint_of_program_valid _ _ (p_ b)) as H0.
+    pose proof (@footprint_of_program_valid _ _ _ (p_ b)) as H0.
     rewrite <- H0 in H. clear H0. apply H.
   Qed.
 
@@ -462,14 +462,14 @@ Section ASM_LINKING.
         destruct s' as [nb' [rs' m' live1']], H as [? ?]. subst.
         edestruct step_match as (live2' & Hstep2 & Hs' & Hl' & ?);
           eauto using match_stack_nextblock.
-        eexists (_, _), (_, _). repeat apply conj; eauto 10 using Smallstep.plus_one.
+        eexists (_, _), (_, _). repeat apply conj; eauto 10 using plus_one.
         constructor; eauto.
       + (* push *)
         destruct s' as [nb' [rs' m' live1']], H1 as [? ?]. subst.
         inv H. inv H1. inv H6.
         eexists (_, _), (nb, _). repeat apply conj; auto.
         right. intuition auto.
-        * eapply Smallstep.star_refl.
+        * eapply star_refl.
         * red. cbn. rewrite H10, H7. xomega.
         * constructor; cbn; eauto using match_liveness_refl, Ple_refl.
           econstructor; eauto.
@@ -478,7 +478,7 @@ Section ASM_LINKING.
         inv H. inv H0. inv H4.
         eexists (_, _), (_, _). intuition auto.
         {
-          right. split; auto using Smallstep.star_refl. red. cbn.
+          right. split; auto using star_refl. red. cbn.
           clear. destruct Genv.find_funct as [[|]|], live; xomega.
         }
         inv H5.
