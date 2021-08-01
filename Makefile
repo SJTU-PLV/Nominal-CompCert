@@ -74,6 +74,7 @@ COMMON=Errors.v AST.v Linking.v \
   SmallstepLinking_.v \
   CallconvAlgebra_.v \
   CategoricalComp.v \
+  FlatComp.v \
 
 # Behaviors.v
 # Determinism.v
