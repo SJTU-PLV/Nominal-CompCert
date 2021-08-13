@@ -2,7 +2,7 @@ Require Import Relations List Coqlib.
 Require Import SmallstepLinking_.
 Require Import AST LanguageInterface_ Events Globalenvs Smallstep_.
 Require Import Linking.
-Require Import CategoricalComp.
+Require Import CategoricalComp CallconvAlgebra_.
 Require Import Coq.Logic.ClassicalFacts.
 Require Import Coq.Logic.FunctionalExtensionality.
 Axiom EquivThenEqual: prop_extensionality.
@@ -290,7 +290,12 @@ Section APPROX.
   Lemma flat_composition_approximation:
     flat_comp_semantics' L1 L2 sk ≤ SmallstepLinking_.semantics L sk.
   Proof.
-    constructor. econstructor; eauto. now intros i.
+    constructor. econstructor; eauto.
+    {
+      intros. split.
+      - intros [|]; [exists true | exists false]; eauto.
+      - intros [[|] ?]; [left | right]; eauto.
+    }
     intros se ? [ ] qset [ ] Hse.
     instantiate (1 := fun _ _ _ => _). cbn beta.
     apply forward_simulation_step with (match_states := match_frame).

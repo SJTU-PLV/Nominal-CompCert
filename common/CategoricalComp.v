@@ -178,14 +178,6 @@ Program Definition id_semantics {li} sk: semantics li li :=
   footprint i := False;
   |}.
 
-Notation "L1 ≤ L2" :=  (forward_simulation 1 1 L1 L2)(at level 70): lts_scope.
-Open Scope lts_scope.
-Delimit Scope lts_scope with lts.
-
-Definition equiv_simulation {liA liB} (L1 L2: semantics liA liB) :=
-  L1 ≤ L2 /\ L2 ≤ L1.
-
-Notation "L1 ≡ L2" :=  (equiv_simulation L1 L2)(at level 90): lts_scope.
 Notation "L1 ∘ L2" :=  (comp_semantics L1 L2)(at level 40, left associativity): lts_scope.
 
 (* Notation " 1 " :=  (id_semantics): lts_scope. *)
@@ -524,7 +516,11 @@ Section APPROX.
     forward_simulation 1 1 (comp_semantics' L1 L2 sk) (SmallstepLinking_.semantics L sk).
   Proof.
     constructor. econstructor; eauto.
-    now intros i.
+    {
+      intros i. split.
+      - intros [|]; [exists true | exists false]; firstorder.
+      - intros [[|] ?]; [left | right]; firstorder.
+    }
     intros se ? [ ] qset [ ] Hse.
     instantiate (1 := fun _ _ _ => _). cbn beta.
     apply forward_simulation_step with (match_states := match_frame).
@@ -612,7 +608,11 @@ Section HCOMP_IDENTITY.
   Lemma hcomp_left_identity1: (SmallstepLinking_.semantics L1 (skel L)) ≤ L.
   Proof.
     constructor. econstructor. reflexivity.
-    intros i. cbn. firstorder.
+    {
+      intros id. split.
+      - intros [[|] ?]; firstorder.
+      - intros. exists false. firstorder.
+    }
     intros se ? [ ] qset [ ] Hse.
     instantiate (1 := fun _ _ _ => _). cbn beta.
     apply forward_simulation_step with (match_states := state_match1).
@@ -641,7 +641,11 @@ Section HCOMP_IDENTITY.
   Lemma hcomp_left_identity2: L ≤ (SmallstepLinking_.semantics L1 (skel L)).
   Proof.
     constructor. econstructor. reflexivity.
-    intros i. cbn. firstorder.
+    {
+      intros id. split.
+      - intros. exists false. firstorder.
+      - intros [[|] ?]; firstorder.
+    }
     intros se ? [ ] qset [ ] Hse.
     instantiate (1 := fun _ _ _ => _). cbn beta.
     apply forward_simulation_step with (match_states := fun s1 s2 => state_match1 s2 s1).
@@ -675,7 +679,11 @@ Section HCOMP_IDENTITY.
   Lemma hcomp_right_identity1: (SmallstepLinking_.semantics L2 (skel L)) ≤ L.
   Proof.
     constructor. econstructor. reflexivity.
-    intros i. cbn. firstorder.
+    {
+      intros id. split.
+      - intros [[|] ?]; firstorder.
+      - intros. exists true. firstorder.
+    }
     intros se ? [ ] qset [ ] Hse.
     instantiate (1 := fun _ _ _ => _). cbn beta.
     apply forward_simulation_step with (match_states := state_match2).
@@ -704,7 +712,11 @@ Section HCOMP_IDENTITY.
   Lemma hcomp_right_identity2: L ≤ (SmallstepLinking_.semantics L2 (skel L)).
   Proof.
     constructor. econstructor. reflexivity.
-    intros i. cbn. firstorder.
+    {
+      intros id. split.
+      - intros. exists true. firstorder.
+      - intros [[|] ?]; firstorder.
+    }
     intros se ? [ ] qset [ ] Hse.
     instantiate (1 := fun _ _ _ => _). cbn beta.
     apply forward_simulation_step with (match_states := fun s1 s2 => state_match2 s2 s1).

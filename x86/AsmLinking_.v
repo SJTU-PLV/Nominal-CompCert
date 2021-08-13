@@ -389,7 +389,15 @@ Section ASM_LINKING.
     Transparent Linker_def Linker_fundef.
     {
       (* footprint *)
-      intros i. cbn. unfold footprint_of_program.
+      intros i. cbn. etransitivity.
+      instantiate (1 := footprint_of_program (p_ true) i \/
+                        footprint_of_program (p_ false) i).
+      {
+        split.
+        - intros [[|] ?]; [left | right]; auto.
+        - intros [|]; [exists true | exists false]; auto.
+      }
+      cbn. unfold footprint_of_program.
       apply link_prog_inv in Hp as (? & Hdefs & Hp). subst p.
       rewrite prog_defmap_elements, PTree.gcombine; auto.
       destruct ((_ p1) ! _) eqn:H1, ((_ p2) ! _) eqn:H2.

@@ -172,3 +172,33 @@ Qed.
 
 Global Instance cc_compose_ref_params:
   Params (@cc_compose) 2.
+
+
+(* Some handy typeclasses and notations *)
+
+Global Instance fsim_transitive {li1 li2: language_interface}:
+  Transitive (forward_simulation (@cc_id li1) (@cc_id li2)).
+Proof.
+  intros L1 L2 L3 HL1 HL2.
+  eapply open_fsim_ccref. apply cc_compose_id_left.
+  unfold flip. apply cc_compose_id_left.
+  eapply compose_forward_simulations; eauto.
+Qed.
+
+Notation "L1 ≤ L2" :=  (forward_simulation 1 1 L1 L2)(at level 70): lts_scope.
+Open Scope lts_scope.
+Delimit Scope lts_scope with lts.
+
+Definition equiv_simulation {liA liB} (L1 L2: semantics liA liB) :=
+  L1 ≤ L2 /\ L2 ≤ L1.
+
+Global Instance fsim_equivalence {li1 li2: language_interface}:
+  Equivalence (@equiv_simulation li1 li2).
+Proof.
+  split.
+  - intros L; split; apply identity_forward_simulation.
+  - intros L1 L2 [H1 H2]. split; auto.
+  - intros L1 L2 L3 [? ?] [? ?]. split; etransitivity; eauto.
+Qed.
+
+Notation "L1 ≡ L2" :=  (equiv_simulation L1 L2)(at level 90): lts_scope.
