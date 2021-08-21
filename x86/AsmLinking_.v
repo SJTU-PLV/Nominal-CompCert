@@ -417,7 +417,7 @@ Section ASM_LINKING.
       - cbn. destruct g; intuition.
       - cbn. intuition.
     }
-    intros se _ [ ] qset [ ] Hse. econstructor.
+    intros se _ [ ] [ ] Hse. econstructor.
     - (* initial states *)
       intros q _ s1 [ ] Hs1. destruct Hs1 as [i [nb S] Hq [HS Hnb]]. cbn in *.
       eexists _, (nb, S). destruct HS. intuition eauto.

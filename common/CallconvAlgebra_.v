@@ -72,7 +72,7 @@ Proof.
            match_senv ccB w se1 se2 /\
            forall r1 r2, match_reply ccB w r1 r2 -> match_reply ccB' w' r1 r2).
   eapply Forward_simulation with order ms; auto.
-  intros se1 se2 wB' qset Hse' Hse1.
+  intros se1 se2 wB' Hse' Hse1.
   split.
   (* - intros q1 q2 Hq'. *)
   (*   destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto. *)
@@ -92,7 +92,6 @@ Proof.
   - intros s1 t s1' Hs1' i s2 (wB & Hs & Hse & Hr').
     edestruct @fsim_simulation as (i' & s2' & Hs2' & Hs'); eauto.
     exists i', s2'. split; auto. exists wB; eauto.
-    Unshelve. apply qset. apply qset. apply qset.
 Qed.
 
 (** * Properties of [cc_compose] *)

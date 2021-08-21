@@ -1214,7 +1214,7 @@ Program Definition semantics (p: program): Smallstep_.semantics li_asm li_asm :=
     activate se :=
       let ge := Genv.globalenv se p in
       {|
-        Smallstep_.step _ ge '(nb, s) t '(nb', s') := step nb ge s t s' /\ nb' = nb;
+        Smallstep_.step ge '(nb, s) t '(nb', s') := step nb ge s t s' /\ nb' = nb;
         (* Smallstep.valid_query q := Genv.is_internal ge (entry q); *)
         Smallstep_.initial_state q '(nb, s) := initial_state ge q s /\ nb = Mem.nextblock (snd q);
         Smallstep_.at_external '(nb, s) q := at_external ge s q;

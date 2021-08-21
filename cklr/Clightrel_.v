@@ -770,7 +770,7 @@ Proof.
     (*   + cbn. congruence. *)
   }
   instantiate (1 := fun _ _ _ => _). cbn beta.
-  intros se1 se2 w ? Hse Hse1. cbn -[semantics1] in *.
+  intros se1 se2 w Hse Hse1. cbn -[semantics1] in *.
   pose (ms := fun s1 s2 =>
                 klr_diam tt (genv_match p R * state_match R) w
                          (globalenv se1 p, s1)

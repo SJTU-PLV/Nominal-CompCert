@@ -238,12 +238,11 @@ Section CLOSURES.
   Proof.
     intros ge P BASE IND.
     assert (forall s1 t s2, star ge s1 t s2 ->
-                       forall s0 t0, step ge s0 t0 s1 ->
-                                P s0 (t0 ** t) s2).
+            forall s0 t0, step ge s0 t0 s1 ->
+            P s0 (t0 ** t) s2).
     induction 1; intros.
     rewrite E0_right. apply BASE; auto.
     eapply IND. eauto. econstructor; eauto. subst t. eapply IHstar; eauto. auto.
-
     intros. inv H0. eauto.
   Qed.
 
@@ -466,7 +465,6 @@ Definition footprint_of_program {F G} `{FundefIsInternal F} (p: AST.program F G)
   | _ => False
   end.
 
-
 Lemma footprint_of_program_valid {F G} `{FundefIsInternal F} (p: AST.program F G) se {li} (q: query li):
   (entry q <> Vundef
    /\ exists i : ident, footprint_of_program p i /\ Genv.symbol_address se i Ptrofs.zero = entry q)
@@ -527,16 +525,12 @@ Qed.
 
 Record lts liA liB state: Type := {
   genvtype: Type;
-  step : (ident -> Prop) -> genvtype -> state -> trace -> state -> Prop;
+  step : genvtype -> state -> trace -> state -> Prop;
   initial_state: query liB -> state -> Prop;
   at_external: state -> query liA -> Prop;
   after_external: state -> reply liA -> state -> Prop;
   final_state: state -> reply liB -> Prop;
   globalenv: genvtype;
-
-  steps_monotone:
-    forall (p1 p2: ident -> Prop) ge, (forall i, p2 i -> p1 i) ->
-    forall s t s', step p1 ge s t s' -> step p2 ge s t s';
 }.
 
 Record semantics liA liB := {
@@ -550,12 +544,12 @@ Definition valid_query {li liA liB} (L: semantics liA liB) se (q: query li): Pro
   entry q <> Vundef /\
   exists i, footprint L i /\ Genv.symbol_address se i Ptrofs.zero = entry q.
 
-Notation " 'Step' L p " := (step L p (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
-Notation " 'Star' L p " := (star (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
-Notation " 'Plus' L p " := (plus (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
-Notation " 'Forever_silent' L p " := (forever_silent (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
-Notation " 'Forever_reactive' L p " := (forever_reactive (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
-Notation " 'Nostep' L p " := (nostep (step L p) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Step' L " := (step L (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Star' L " := (star (step L) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Plus' L " := (plus (step L) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Forever_silent' L " := (forever_silent (step L) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Forever_reactive' L " := (forever_reactive (step L) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
+Notation " 'Nostep' L " := (nostep (step L) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
 
 Open Scope smallstep_scope.
 
@@ -565,7 +559,7 @@ Notation Semantics_gen step initial_state at_ext after_ext final_state globalenv
   activate se :=
     let ge := globalenv se p in
     {|
-      step _ := step;
+      step := step;
       initial_state := initial_state ge;
       at_external := at_ext ge;
       after_external := after_ext ge;
@@ -581,7 +575,6 @@ Section FSIM.
   Context {liB1 liB2} (ccB: callconv liB1 liB2).
   Context (se1 se2: Genv.symtbl) (wB: ccworld ccB).
   Context {state1 state2: Type}.
-  Context {qset: ident -> Prop}.
 
   (** The general form of a forward simulation. *)
 
@@ -600,10 +593,10 @@ Section FSIM.
       forall r1 r2 s1', match_reply ccA w r1 r2 -> after_external L1 s1 r1 s1' ->
       exists i' s2', after_external L2 s2 r2 s2' /\ match_states i' s1' s2';
     fsim_simulation:
-      forall s1 t s1', Step L1 qset s1 t s1' ->
+      forall s1 t s1', Step L1 s1 t s1' ->
       forall i s2, match_states i s1 s2 ->
       exists i', exists s2',
-      (Plus L2 qset s2 t s2' \/ (Star L2 qset s2 t s2' /\ order i' i))
+      (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ order i' i))
       /\ match_states i' s1' s2';
   }.
 
@@ -613,9 +606,9 @@ Arguments fsim_properties : clear implicits.
 
 Lemma fsim_simulation':
   forall L1 L2 index order match_states, fsim_properties L1 L2 index order match_states ->
-  forall i s1 t s1', Step L1 qset s1 t s1' ->
+  forall i s1 t s1', Step L1 s1 t s1' ->
   forall s2, match_states i s1 s2 ->
-  (exists i', exists s2', Plus L2 qset s2 t s2' /\ match_states i' s1' s2')
+  (exists i', exists s2', Plus L2 s2 t s2' /\ match_states i' s1' s2')
   \/ (exists i', order i' i /\ t = E0 /\ match_states i' s1' s2).
 Proof.
   intros. exploit @fsim_simulation; eauto.
@@ -662,10 +655,10 @@ Section SIMULATION_STAR_WF.
 Variable order: state1 -> state1 -> Prop.
 
 Hypothesis simulation:
-  forall s1 t s1', Step L1 qset s1 t s1' ->
+  forall s1 t s1', Step L1 s1 t s1' ->
   forall s2, match_states s1 s2 ->
   exists s2',
-  (Plus L2 qset s2 t s2' \/ (Star L2 qset s2 t s2' /\ order s1' s1))
+  (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ order s1' s1))
   /\ match_states s1' s2'.
 
 Lemma forward_simulation_star_wf:
@@ -693,9 +686,9 @@ Section SIMULATION_STAR.
 Variable measure: state1 -> nat.
 
 Hypothesis simulation:
-  forall s1 t s1', Step L1 qset s1 t s1' ->
+  forall s1 t s1', Step L1 s1 t s1' ->
   forall s2, match_states s1 s2 ->
-  (exists s2', Plus L2 qset s2 t s2' /\ match_states s1' s2')
+  (exists s2', Plus L2 s2 t s2' /\ match_states s1' s2')
   \/ (measure s1' < measure s1 /\ t = E0 /\ match_states s1' s2)%nat.
 
 Lemma forward_simulation_star:
@@ -712,9 +705,9 @@ End SIMULATION_STAR.
 Section SIMULATION_PLUS.
 
 Hypothesis simulation:
-  forall s1 t s1', Step L1 qset s1 t s1' ->
+  forall s1 t s1', Step L1 s1 t s1' ->
   forall s2, match_states s1 s2 ->
-  exists s2', Plus L2 qset s2 t s2' /\ match_states s1' s2'.
+  exists s2', Plus L2 s2 t s2' /\ match_states s1' s2'.
 
 Lemma forward_simulation_plus:
   fsim_properties L1 L2 state1 (ltof _ (fun _ => O)) ms.
@@ -728,9 +721,9 @@ End SIMULATION_PLUS.
 Section SIMULATION_STEP.
 
 Hypothesis simulation:
-  forall s1 t s1', Step L1 qset s1 t s1' ->
+  forall s1 t s1', Step L1 s1 t s1' ->
   forall s2, match_states s1 s2 ->
-  exists s2', Step L2 qset s2 t s2' /\ match_states s1' s2'.
+  exists s2', Step L2 s2 t s2' /\ match_states s1' s2'.
 
 Lemma forward_simulation_step:
   fsim_properties L1 L2 state1 (ltof _ (fun _ => O)) ms.
@@ -751,9 +744,9 @@ Section SIMULATION_SEQUENCES.
 Context L1 L2 index order match_states (S: fsim_properties L1 L2 index order match_states).
 
 Lemma simulation_star:
-  forall s1 t s1', Star L1 qset s1 t s1' ->
+  forall s1 t s1', Star L1 s1 t s1' ->
   forall i s2, match_states i s1 s2 ->
-  exists i', exists s2', Star L2 qset s2 t s2' /\ match_states i' s1' s2'.
+  exists i', exists s2', Star L2 s2 t s2' /\ match_states i' s1' s2'.
 Proof.
   induction 1; intros.
   exists i; exists s2; split; auto. apply star_refl.
@@ -764,9 +757,9 @@ Proof.
 Qed.
 
 Lemma simulation_plus:
-  forall s1 t s1', Plus L1 qset s1 t s1' ->
+  forall s1 t s1', Plus L1 s1 t s1' ->
   forall i s2, match_states i s1 s2 ->
-  (exists i', exists s2', Plus L2 qset s2 t s2' /\ match_states i' s1' s2')
+  (exists i', exists s2', Plus L2 s2 t s2' /\ match_states i' s1' s2')
   \/ (exists i', clos_trans _ order i' i /\ t = E0 /\ match_states i' s1' s2).
 Proof.
   induction 1 using plus_ind2; intros.
@@ -789,7 +782,7 @@ End SIMULATION_SEQUENCES.
 
 End FSIM.
 
-Arguments fsim_properties {_ _} _ {_ _} _ _ _ _ {_ _} _ L1 L2 index order match_states.
+Arguments fsim_properties {_ _} _ {_ _} _ _ _ _ {_ _} L1 L2 index order match_states.
 
 Record fsim_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 L2 :=
   Forward_simulation {
@@ -801,10 +794,10 @@ Record fsim_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 
       skel L1 = skel L2;
     fsim_footprint:
       forall i, footprint L1 i <-> footprint L2 i;
-    fsim_lts se1 se2 wB qset:
+    fsim_lts se1 se2 wB:
       @match_senv liB1 liB2 ccB wB se1 se2 ->
       Genv.valid_for (skel L1) se1 ->
-      fsim_properties ccA ccB se1 se2 wB qset (activate L1 se1) (activate L2 se2)
+      fsim_properties ccA ccB se1 se2 wB (activate L1 se1) (activate L2 se2)
         fsim_index fsim_order (fsim_match_states se1 se2 wB);
     fsim_order_wf:
       well_founded fsim_order;
@@ -843,7 +836,7 @@ Definition identity_fsim_components {liA liB} (L: semantics liA liB):
 Proof.
   eapply Forward_simulation with _ (fun _ _ _ => _); auto.
   - firstorder.
-  - intros se _ [ ] qset [ ] _.
+  - intros se _ [ ] [ ] _.
     eapply forward_simulation_plus with (match_states := eq);
     cbn; intros; subst; eauto 10 using plus_one.
     exists tt, q1. intuition (subst; eauto).
@@ -882,7 +875,7 @@ Proof.
   4: { unfold ff_order. auto using wf_lex_ord, wf_clos_trans. }
   1: { congruence. }
   1: { firstorder. }
-  intros se1 se3 [[se2 w] w'] qset (Hse12 & Hse23) Hse1. cbn in *.
+  intros se1 se3 [[se2 w] w'] (Hse12 & Hse23) Hse1. cbn in *.
   assert (Hse2: Genv.valid_for (skel L2) se2).
   { rewrite <- Hsk. eapply match_senv_valid_for; eauto. }
   constructor.
@@ -923,7 +916,6 @@ Proof.
   exists (i2, i1'); exists s2; split.
   right; split. subst t; apply star_refl. red. right. auto.
   exists s3; auto.
-  Unshelve. auto. auto. auto. auto. auto. auto.
 Qed.
 
 Lemma compose_forward_simulations:
@@ -940,33 +932,33 @@ End COMPOSE_FORWARD_SIMULATIONS.
 (** * Receptiveness and determinacy *)
 
 Definition single_events {liA liB st} (L: lts liA liB st) : Prop :=
-  forall p s t s', Step L p s t s' -> (length t <= 1)%nat.
+  forall s t s', Step L s t s' -> (length t <= 1)%nat.
 
 Record lts_receptive {liA liB st} (L: lts liA liB st) se: Prop :=
   Receptive {
-      sr_receptive: forall p s t1 s1 t2,
-        Step L p s t1 s1 -> match_traces se t1 t2 -> exists s2, Step L p s t2 s2;
+      sr_receptive: forall s t1 s1 t2,
+        Step L s t1 s1 -> match_traces se t1 t2 -> exists s2, Step L s t2 s2;
       sr_traces:
         single_events L
     }.
 
 Record lts_determinate {liA liB st} (L: lts liA liB st) se: Prop :=
   Determinate {
-      sd_determ: forall p s t1 s1 t2 s2,
-        Step L p s t1 s1 -> Step L p s t2 s2 ->
+      sd_determ: forall s t1 s1 t2 s2,
+        Step L s t1 s1 -> Step L s t2 s2 ->
         match_traces se t1 t2 /\ (t1 = t2 -> s1 = s2);
       sd_traces:
         single_events L;
       sd_initial_determ: forall q s1 s2,
           initial_state L q s1 -> initial_state L q s2 -> s1 = s2;
-      sd_at_external_nostep: forall p s q,
-          at_external L s q -> Nostep L p s;
+      sd_at_external_nostep: forall s q,
+          at_external L s q -> Nostep L s;
       sd_at_external_determ: forall s q1 q2,
           at_external L s q1 -> at_external L s q2 -> q1 = q2;
       sd_after_external_determ: forall s r s1 s2,
           after_external L s r s1 -> after_external L s r s2 -> s1 = s2;
-      sd_final_nostep: forall p s r,
-          final_state L s r -> Nostep L p s;
+      sd_final_nostep: forall s r,
+          final_state L s r -> Nostep L s;
       sd_final_noext: forall s r q,
           final_state L s r -> at_external L s q -> False;
       sd_final_determ: forall s r1 r2,
@@ -979,30 +971,30 @@ Section DETERMINACY.
   Hypothesis DET: lts_determinate L se.
 
   Lemma sd_determ_1:
-    forall p s t1 s1 t2 s2,
-      Step L p s t1 s1 -> Step L p s t2 s2 -> match_traces se t1 t2.
+    forall s t1 s1 t2 s2,
+      Step L s t1 s1 -> Step L s t2 s2 -> match_traces se t1 t2.
   Proof.
     intros. eapply sd_determ; eauto.
   Qed.
 
   Lemma sd_determ_2:
-    forall p s t s1 s2,
-      Step L p s t s1 -> Step L p s t s2 -> s1 = s2.
+    forall s t s1 s2,
+      Step L s t s1 -> Step L s t s2 -> s1 = s2.
   Proof.
     intros. eapply sd_determ; eauto.
   Qed.
 
   Lemma sd_determ_3:
-    forall p s t s1 s2,
-      Step L p s t s1 -> Step L p s E0 s2 -> t = E0 /\ s1 = s2.
+    forall s t s1 s2,
+      Step L s t s1 -> Step L s E0 s2 -> t = E0 /\ s1 = s2.
   Proof.
     intros. exploit (sd_determ DET). eexact H. eexact H0.
     intros [A B]. inv A. auto.
   Qed.
 
   Lemma star_determinacy:
-    forall p s t s', Star L p s t s' ->
-              forall s'', Star L p s t s'' -> Star L p s' E0 s'' \/ Star L p s'' E0 s'.
+    forall s t s', Star L s t s' ->
+    forall s'', Star L s t s'' -> Star L s' E0 s'' \/ Star L s'' E0 s'.
   Proof.
     induction 1; intros.
     auto.

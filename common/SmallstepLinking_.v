@@ -26,14 +26,14 @@ Section LINK.
   (** * Definition *)
 
   Section WITH_SE.
-    Context (se: Genv.symtbl) (qset: ident -> Prop).
+    Context (se: Genv.symtbl).
 
     Variant frame := st (i: I) (s: Smallstep_.state (L i)).
     Notation state := (list frame).
 
     Inductive step: state -> trace -> state -> Prop :=
       | step_internal i s t s' k :
-          Step (L i se) qset s t s' ->
+          Step (L i se) s t s' ->
           step (st i s :: k) t (st i s' :: k)
       | step_push i j s q s' k :
           at_external (L i se) s q ->
@@ -75,7 +75,7 @@ Section LINK.
     {|
       activate se :=
         {|
-          Smallstep_.step p _ := step se p;
+          Smallstep_.step _ := step se;
           Smallstep_.initial_state := initial_state se;
           Smallstep_.at_external := at_external se;
           Smallstep_.after_external := after_external se;
@@ -85,27 +85,20 @@ Section LINK.
       skel := sk;
       footprint x := exists i, footprint (L i) x;
     |}.
-  Next Obligation.
-    inv H0.
-    - apply step_internal.
-      eapply steps_monotone; eauto.
-    - eapply step_push; eauto.
-    - eapply step_pop; eauto.
-  Qed.
 
   (** * Properties  *)
 
-  Lemma star_internal se p i s t s' k:
-    Star (L i se) p s t s' ->
-    star (fun _ => step se p) tt (st i s :: k) t (st i s' :: k).
+  Lemma star_internal se i s t s' k:
+    Star (L i se) s t s' ->
+    star (fun _ => step se) tt (st i s :: k) t (st i s' :: k).
   Proof.
     induction 1; [eapply star_refl | eapply star_step]; eauto.
     constructor; auto.
   Qed.
 
-  Lemma plus_internal se p i s t s' k:
-    Plus (L i se) p s t s' ->
-    plus (fun _ => step se p) tt (st i s :: k) t (st i s' :: k).
+  Lemma plus_internal se i s t s' k:
+    Plus (L i se) s t s' ->
+    plus (fun _ => step se) tt (st i s :: k) t (st i s' :: k).
   Proof.
     destruct 1; econstructor; eauto using step_internal, star_internal.
   Qed.
@@ -187,7 +180,6 @@ Section FSIM.
   Context (L2 : I -> Smallstep_.semantics li2 li2).
   Context (HL : forall i, fsim_components cc cc (L1 i) (L2 i)).
   Context (se1 se2: Genv.symtbl) (w : ccworld cc).
-  Context (pset: ident -> Prop).
   Context (Hse: match_senv cc w se1 se2).
   Context (Hse1: forall i, Genv.valid_for (skel (L1 i)) se1).
   Notation index := {i & fsim_index (HL i)}.
@@ -233,10 +225,10 @@ Section FSIM.
   (** ** Simulation properties *)
 
   Lemma step_simulation:
-    forall idx s1 s2 t s1', match_states idx s1 s2 -> step L1 se1 pset s1 t s1' ->
+    forall idx s1 s2 t s1', match_states idx s1 s2 -> step L1 se1 s1 t s1' ->
     exists idx' s2',
-      (plus (fun _ => step L2 se2 pset) tt s2 t s2' \/
-       star (fun _ => step L2 se2 pset) tt s2 t s2' /\ order idx' idx) /\
+      (plus (fun _ => step L2 se2) tt s2 t s2' \/
+       star (fun _ => step L2 se2) tt s2 t s2' /\ order idx' idx) /\
       match_states idx' s1' s2'.
   Proof.
     intros idx s1 s2 t s1' Hs Hs1'.
@@ -251,7 +243,7 @@ Section FSIM.
     - (* cross-component call *)
       inv H5; subst_dep. clear idx0.
       edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & Hrx); eauto using fsim_lts.
-      pose proof (fsim_lts (HL j) _ _ pset Hsex (Hse1 j)).
+      pose proof (fsim_lts (HL j) _ _ Hsex (Hse1 j)).
       edestruct @fsim_match_initial_states as (idx' & s2' & Hs2' & Hs'); eauto.
       eexists (existT _ j idx'), _. split.
       + left. apply plus_one. eapply step_push; eauto 1.
@@ -260,13 +252,12 @@ Section FSIM.
       + repeat (econstructor; eauto).
     - (* cross-component return *)
       inv H4; subst_dep. clear idx0.
-      pose proof (fsim_lts (HL i) _ _ pset H3 H7).
+      pose proof (fsim_lts (HL i) _ _ H3 H7).
       edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
       inv H6. inv H8; subst_dep. edestruct H10 as (idx' & s2' & Hs2'& Hs'); eauto.
       eexists (existT _ j idx'), _. split.
       + left. apply plus_one. eapply step_pop; eauto.
       + repeat (econstructor; eauto).
-        Unshelve. exact pset.
   Qed.
 
   Lemma initial_states_simulation:
@@ -276,7 +267,7 @@ Section FSIM.
     (* intros q1 q2 _ Hq [i s1 Hq1 Hs1]. *)
     intros q1 q2 _ Hq [i s1 Hs1].
     (* pose proof (fsim_lts (HL i) _ _ Hse (Hse1 i)). *)
-    pose proof (fsim_lts (HL i) _ _ pset Hse (Hse1 i)).
+    pose proof (fsim_lts (HL i) _ _ Hse (Hse1 i)).
     edestruct @fsim_match_initial_states as (idx & s2 & Hs2 & Hs); eauto.
     exists (existT _ i idx), (st L2 i s2 :: nil).
     split; econstructor; eauto.
@@ -290,9 +281,9 @@ Section FSIM.
     forall idx s1 s2 r1, match_states idx s1 s2 -> final_state L1 se1 s1 r1 ->
     exists r2, final_state L2 se2 s2 r2 /\ match_reply cc w r1 r2.
   Proof.
-    clear - pset. intros idx s1 s2 r1 Hs Hr1. destruct Hr1 as [i s1 r1 Hr1].
+    clear. intros idx s1 s2 r1 Hs Hr1. destruct Hr1 as [i s1 r1 Hr1].
     inv Hs. inv H4. inv H2. subst_dep. clear idx0.
-    pose proof (fsim_lts (HL i) _ _ pset H1 H4).
+    pose proof (fsim_lts (HL i) _ _ H1 H4).
     edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
     exists r2. split; eauto. constructor; eauto.
   Qed.
@@ -303,10 +294,10 @@ Section FSIM.
     forall rx1 rx2 s1', match_reply cc wx rx1 rx2 -> after_external L1 se1 s1 rx1 s1' ->
     exists idx' s2', after_external L2 se2 s2 rx2 s2' /\ match_states idx' s1' s2'.
   Proof.
-    clear - HL Hse1 pset.
+    clear - HL Hse1.
     intros idx s1 s2 q1 Hs Hq1. destruct Hq1 as [i s1 qx1 k1 Hqx1 Hvld].
     inv Hs. inv H2. subst_dep. clear idx0.
-    pose proof (fsim_lts (HL i) _ _ pset H1 H5) as Hi.
+    pose proof (fsim_lts (HL i) _ _ H1 H5) as Hi.
     edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & H); eauto.
     exists wx, qx2. intuition idtac.
     + constructor. eauto.
@@ -319,7 +310,7 @@ Section FSIM.
   Qed.
 
   Lemma semantics_simulation sk1 sk2:
-    fsim_properties cc cc se1 se2 w pset
+    fsim_properties cc cc se1 se2 w
       (semantics' L1 sk1 se1)
       (semantics' L2 sk2 se2)
       index order match_states.
@@ -363,7 +354,7 @@ Proof.
   - destruct Ha, Hb. cbn. congruence.
   - intros i. cbn. destruct Ha, Hb.
     split; (intros [[|] Hix]; [exists true | exists false]); cbn in *; firstorder.
-  - intros se1 se2 w qset Hse Hse1.
+  - intros se1 se2 w Hse Hse1.
     eapply semantics_simulation; eauto.
     pose proof (link_linkorder _ _ _ Hsk1) as [Hsk1a Hsk1b].
     intros [|]; cbn; eapply Genv.valid_for_linkorder; eauto.
@@ -404,7 +395,7 @@ Section LEVEL.
     - intros x. cbn. split.
       + intros [i [j H]]. exists (existT _ i j). apply H.
       + intros [ij H]. exists (projT1 ij), (projT2 ij). apply H.
-    - intros se ? [ ] qset [ ] Hse.
+    - intros se ? [ ] [ ] Hse.
       instantiate (1 := fun _ _ _ => _). cbn beta.
       eapply forward_simulation_step
         with (match_states := match_levels).
@@ -472,7 +463,7 @@ Section LEVEL.
     - intros x. cbn. split.
       + intros [ij H]. exists (projT1 ij), (projT2 ij). apply H.
       + intros [i [j H]]. exists (existT _ i j). apply H.
-    - intros se ? [ ] qset [ ] Hse.
+    - intros se ? [ ] [ ] Hse.
       instantiate (1 := fun _ _ _ => _). cbn beta.
       eapply forward_simulation_step
         with (match_states := fun s1 s2 => match_levels s2 s1).
@@ -644,7 +635,7 @@ Section MAP.
         specialize (HF i) as [x Hx].
         exists x. congruence.
       + exists (F i). auto.
-    - intros se ? [ ] qset [ ] Hse.
+    - intros se ? [ ] [ ] Hse.
       instantiate (1 := fun _ _ _ => _). cbn beta.
       apply bij_surj in HF.
       eapply forward_simulation_step with (match_states := match_bijection).
@@ -677,7 +668,7 @@ Section MAP.
       + apply bij_surj in HF.
         specialize (HF i) as [x Hx].
         exists x. congruence.
-    - intros se ? [ ] qset [ ] Hse.
+    - intros se ? [ ] [ ] Hse.
       instantiate (1 := fun _ _ _ => _). cbn beta.
       eapply forward_simulation_step
         with (match_states := fun s1 s2 => match_bijection s2 s1).
