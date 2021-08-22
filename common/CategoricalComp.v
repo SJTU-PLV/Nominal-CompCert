@@ -109,6 +109,10 @@ Section COMP.
       footprint i := footprint L1 i \/ footprint L2 i;
     |}.
 
+  Class CategoricalLinkable :=
+    categorical_linking:
+      forall se s q, at_external (L2 se) s q -> ~ valid_query L1 se q.
+
 End COMP.
 
 Definition comp_semantics {liA liB liC} (L1: semantics liB liC)
@@ -117,9 +121,7 @@ Definition comp_semantics {liA liB liC} (L1: semantics liB liC)
 
 Section ID.
   Context {li: language_interface}.
-  Variant id_state :=
-  | st_q (q: query li)
-  | st_r (r: reply li).
+  Variant id_state := | st_q (q: query li) | st_r (r: reply li).
 
   Inductive id_step: id_state -> trace -> id_state -> Prop := .
 
@@ -382,6 +384,44 @@ Section FSIM.
 
 End FSIM.
 
+Section COMP_FSIM.
+
+  Context {liA1 liA2 liB1 liB2 liC1 liC2}
+          {cc1: callconv liA1 liA2} {cc2: callconv liB1 liB2} {cc3: callconv liC1 liC2}
+          (L1a: semantics liB1 liC1) (L2a: semantics liB2 liC2)
+          (L1b: semantics liA1 liB1) (L2b: semantics liA2 liB2).
+  Hypothesis (HL1: forward_simulation cc2 cc3 L1a L2a)
+             (HL2: forward_simulation cc1 cc2 L1b L2b).
+
+  Variable (sk: AST.program unit unit).
+  Hypothesis (Hsk1: linkorder (skel L1a) sk)
+             (Hsk2: linkorder (skel L1b) sk).
+
+  Lemma categorical_compose_simulation':
+    forward_simulation cc1 cc3 (comp_semantics' L1a L1b sk)
+                       (comp_semantics' L2a L2b sk).
+  Proof.
+    destruct HL1 as [Ha]. destruct HL2 as [Hb].
+    constructor.
+    eapply Forward_simulation
+      with (order cc1 cc2 cc3 L1a L1b L2a L2b Ha Hb)
+           (match_states cc1 cc2 cc3 L1a L1b L2a L2b Ha Hb).
+    - cbn. destruct Ha, Hb. congruence.
+    - cbn. intros i. destruct Ha, Hb.
+      rewrite fsim_footprint, fsim_footprint0. reflexivity.
+    - intros se1 se2 w Hse Hse1.
+      eapply semantics_simulation; eauto.
+      eapply Genv.valid_for_linkorder. apply Hsk1. auto.
+      eapply Genv.valid_for_linkorder. apply Hsk2. auto.
+    - clear - Ha Hb. intros [|].
+      + induction (fsim_order_wf Ha f). constructor.
+        intros. inv H1. apply H0. auto.
+      + induction (fsim_order_wf Hb f0). constructor.
+        intros. inv H1. apply H0. auto.
+  Qed.
+
+End COMP_FSIM.
+
 Lemma categorical_compose_simulation
       {liA1 liA2 liB1 liB2 liC1 liC2}
       (cc1: callconv liA1 liA2) (cc2: callconv liB1 liB2) (cc3: callconv liC1 liC2)
@@ -394,27 +434,19 @@ Proof.
   intros [Ha] [Hb] H1 H2. unfold comp_semantics in *. unfold option_map in *.
   destruct (link (skel L1a) (skel L1b)) as [sk1|] eqn:Hsk1; try discriminate. inv H1.
   destruct (link (skel L2a) (skel L2b)) as [sk2|] eqn:Hsk2; try discriminate. inv H2.
-  constructor.
-  eapply Forward_simulation
-    with (order cc1 cc2 cc3 L1a L1b L2a L2b Ha Hb)
-         (match_states cc1 cc2 cc3 L1a L1b L2a L2b Ha Hb).
-  - cbn. destruct Ha, Hb. congruence.
-  - cbn. intros i. destruct Ha, Hb.
-    rewrite fsim_footprint, fsim_footprint0. reflexivity.
-  - intros se1 se2 w Hse Hse1.
-    pose proof (link_linkorder _ _ _ Hsk1) as [Hsk1a Hsk1b].
-    eapply semantics_simulation; eauto.
-    eapply Genv.valid_for_linkorder; eauto.
-    eapply Genv.valid_for_linkorder; eauto.
-  - clear - Ha Hb. intros [|].
-    + induction (fsim_order_wf Ha f). constructor.
-      intros. inv H1. apply H0. auto.
-    + induction (fsim_order_wf Hb f0). constructor.
-      intros. inv H1. apply H0. auto.
+  replace sk2 with sk1.
+  eapply categorical_compose_simulation'; eauto.
+  - constructor. eauto.
+  - constructor. eauto.
+  - pose proof (link_linkorder _ _ _ Hsk1) as [ ]. auto.
+  - pose proof (link_linkorder _ _ _ Hsk1) as [ ]. auto.
+  - destruct Ha, Hb. congruence.
 Qed.
 
 Section APPROX.
   Context {li} (L1 L2: semantics li li).
+  Context `{!CategoricalLinkable L1 L2}
+          `{!ProgramSem L1} `{!ProgramSem L2}.
   Context (sk: AST.program unit unit).
 
   Let L := fun i => match i with true => L1 | false => L2 end.
@@ -424,15 +456,6 @@ Section APPROX.
       match_frame (st1 L1 L2 s) (st L true s :: nil)
   | match_frame2 s1 s2:
       match_frame (st2 L1 L2 s1 s2) (st L false s2 :: st L true s1 :: nil).
-
-  Hypothesis valid_initial_state:
-    forall i se q s, initial_state (L i se) q s -> valid_query (L i) se q.
-
-  Hypothesis extcall_invalid:
-    forall i se s q, Smallstep_.at_external (L i se) s q -> ~ valid_query (L i) se q.
-
-  Hypothesis categorical_linking:
-    forall se s q, at_external (L2 se) s q -> ~ valid_query L1 se q.
 
   Lemma categorical_compose_approximation:
     forward_simulation 1 1 (comp_semantics' L1 L2 sk) (SmallstepLinking_.semantics L sk).
@@ -448,20 +471,21 @@ Section APPROX.
     apply forward_simulation_step with (match_states := match_frame).
     - intros q ? s1 [ ] H. inv H.
       exists (st L true s :: nil). split; constructor.
-      eapply valid_initial_state; eauto. auto.
+      eapply incoming_query_valid; eauto. auto.
     - intros s1 s2 r Hs H. inv H. inv Hs.
       exists r. split; constructor; auto.
     - intros s s' q Hs H. inv H. inv Hs.
       exists tt, q. repeat apply conj; try constructor; auto.
       + intros [|]; auto.
-        eapply categorical_linking. eauto.
-        eapply extcall_invalid. eauto.
+        eapply categorical_linking; eauto.
+        eapply outgoing_query_invalid. eauto.
       + intros. inv H1. inv H. eexists. split; econstructor; eauto.
     - intros s1 t s2 Hstep s1' Hs. inv Hstep; inv Hs.
       + eexists (st L true _ :: nil). split; constructor; auto.
       + eexists (st L false _ :: st L true _ :: nil). split; constructor. auto.
       + eexists (st L false _ :: st L true _ :: nil). split.
         eapply SmallstepLinking_.step_push; eauto.
+        eapply incoming_query_valid; eauto.
         constructor.
       + eexists (st L true _ :: nil). split.
         eapply SmallstepLinking_.step_pop; eauto.

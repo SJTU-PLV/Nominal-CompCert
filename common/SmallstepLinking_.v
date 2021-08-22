@@ -326,6 +326,49 @@ Section FSIM.
   Qed.
 End FSIM.
 
+(* Lemma inhabited_ind_dep {I: Type} {X: I -> Type} {P: Prop}: (forall i, X i -> P) -> (forall i, inhabited (X i)) -> P. *)
+(* Proof. *)
+(*   intros f Hf. *)
+(* Admitted. *)
+
+(* I believe the above induction principle is provable, so we don't really
+   need the epsilon operator. Epsilon is more handy though *)
+Require Import ClassicalEpsilon.
+
+Section HCOMP_FSIM.
+
+  Context {li1 li2} (cc: callconv li1 li2)
+          {I} (L1: I -> Smallstep_.semantics li1 li1)
+          (L2: I -> Smallstep_.semantics li2 li2).
+
+  Hypothesis (H: forall i, forward_simulation cc cc (L1 i) (L2 i)).
+  Variable (sk: AST.program unit unit).
+  Hypothesis (Hsk: forall i, linkorder (skel (L1 i)) sk).
+
+  Lemma horizontal_compose_simulation':
+    forward_simulation cc cc (semantics' L1 sk) (semantics' L2 sk).
+  Proof.
+    assert (HL: forall i, fsim_components cc cc (L1 i) (L2 i)).
+    {
+      intros i. specialize (H i).
+      apply epsilon. auto. exact (fun _ => True).
+    }
+    constructor.
+    eapply Forward_simulation with
+        (order cc L1 L2 HL) (match_states cc L1 L2 HL).
+    - reflexivity.
+    - intros id.
+      split; intros [i Hi]; exists i; rewrite (fsim_footprint (HL i)) in *; auto.
+    - intros se1 se2 w Hse Hse1.
+      eapply semantics_simulation; eauto.
+      intros; eapply Genv.valid_for_linkorder; eauto.
+    - clear - HL. intros [i x].
+      induction (fsim_order_wf (HL i) x) as [x Hx IHx].
+      constructor. intros z Hxz. inv Hxz; subst_dep. eauto.
+  Qed.
+
+End HCOMP_FSIM.
+
 (** * Linking operator *)
 
 Local Unset Program Cases.
@@ -346,21 +389,11 @@ Proof.
   intros [Ha] [Hb] H1 H2. unfold compose in *. unfold option_map in *.
   destruct (link (skel L1a) (skel L1b)) as [sk1|] eqn:Hsk1; try discriminate. inv H1.
   destruct (link (skel L2a) (skel L2b)) as [sk2|] eqn:Hsk2; try discriminate. inv H2.
-  set (L1 := fun i:bool => if i then L1a else L1b).
-  set (L2 := fun i:bool => if i then L2a else L2b).
-  assert (HL: forall i, fsim_components cc cc (L1 i) (L2 i)) by (intros [|]; auto).
-  constructor.
-  eapply Forward_simulation with (order cc L1 L2 HL) (match_states cc L1 L2 HL).
-  - destruct Ha, Hb. cbn. congruence.
-  - intros i. cbn. destruct Ha, Hb.
-    split; (intros [[|] Hix]; [exists true | exists false]); cbn in *; firstorder.
-  - intros se1 se2 w Hse Hse1.
-    eapply semantics_simulation; eauto.
-    pose proof (link_linkorder _ _ _ Hsk1) as [Hsk1a Hsk1b].
-    intros [|]; cbn; eapply Genv.valid_for_linkorder; eauto.
-  - clear - HL. intros [i x].
-    induction (fsim_order_wf (HL i) x) as [x Hx IHx].
-    constructor. intros z Hxz. inv Hxz; subst_dep. eauto.
+  replace sk2 with sk1.
+  apply horizontal_compose_simulation'.
+  - intros [|]; constructor; auto.
+  - intros [|]; pose proof (link_linkorder _ _ _ Hsk1) as [ ]; auto.
+  - destruct Ha, Hb. congruence.
 Qed.
 
 Section LEVEL.

@@ -544,6 +544,14 @@ Definition valid_query {li liA liB} (L: semantics liA liB) se (q: query li): Pro
   entry q <> Vundef /\
   exists i, footprint L i /\ Genv.symbol_address se i Ptrofs.zero = entry q.
 
+Class ProgramSem {liA liB} (L: semantics liA liB) :=
+  {
+    incoming_query_valid:
+      forall se s q, initial_state (L se) q s -> valid_query L se q;
+    outgoing_query_invalid:
+      forall se s q, at_external (L se) s q -> ~ valid_query L se q;
+  }.
+
 Notation " 'Step' L " := (step L (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
 Notation " 'Star' L " := (star (step L) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
 Notation " 'Plus' L " := (plus (step L) (globalenv L)) (at level 1, L at level 1) : smallstep_scope.
