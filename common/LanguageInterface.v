@@ -61,6 +61,15 @@ Record callconv {li1 li2} :=
         match_senv w se1 se2 ->
         Genv.valid_for sk se1 ->
         Genv.valid_for sk se2;
+    match_senv_symbol_address:
+      forall w se1 se2, match_senv w se1 se2 ->
+      forall q1 q2, match_query w q1 q2 ->
+      forall i, Genv.symbol_address se1 i Ptrofs.zero = entry q1 <->
+           Genv.symbol_address se2 i Ptrofs.zero = entry q2;
+      match_query_defined:
+        forall w q1 q2,
+          match_query w q1 q2 ->
+          entry q1 <> Vundef <-> entry q2 <> Vundef;
   }.
 
 Arguments callconv: clear implicits.
@@ -78,7 +87,7 @@ Program Definition cc_id {li}: callconv li li :=
     match_reply w := eq;
   |}.
 Solve All Obligations with
-  cbn; intros; subst; auto.
+  cbn; intros; subst; intuition auto.
 
 Notation "1" := cc_id : cc_scope.
 
@@ -106,6 +115,18 @@ Qed.
 Next Obligation.
   intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 sk [Hse12 Hse23] H.
   eauto using match_senv_valid_for.
+Qed.
+Next Obligation.
+  intros. destruct w as [[se' w1] w2].
+  rename q2 into q3. destruct H0 as [q2 [Hq1 Hq2]].
+  destruct H. erewrite match_senv_symbol_address; eauto.
+  eapply match_senv_symbol_address; eauto.
+Qed.
+Next Obligation.
+  intros. destruct w as [[se' w1] w2].
+  rename q2 into q3. destruct H as [q2 [Hq1 Hq2]].
+  erewrite match_query_defined; eauto.
+  eapply match_query_defined; eauto.
 Qed.
 
 Infix "@" := cc_compose (at level 30, right associativity) : cc_scope.
@@ -170,4 +191,29 @@ Next Obligation.
 Qed.
 Next Obligation.
   intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+Qed.
+Next Obligation.
+  intros. eapply match_stbls_proj in H. inv H0. cbn.
+  unfold Genv.symbol_address. split.
+  - destruct Genv.find_symbol eqn: Hx.
+    + edestruct @Genv.find_symbol_match as (b' & fb & Hb); eauto.
+      rewrite Hb. intros. subst. inv H1. rewrite fb in H6. inv H6.
+      f_equal.
+    + intros. exfalso. apply H4. easy.
+  - intros. destruct Genv.find_symbol eqn: Hx.
+    + destruct (Genv.find_symbol se1 i) eqn: Hy.
+      * subst vf2. inv H1.
+        -- edestruct @Genv.find_symbol_match as (b' & fg & Hb); eauto.
+           rewrite Hx in Hb. inv Hb.
+           admit.
+        -- exfalso. apply H4. auto.
+      * unfold Genv.find_symbol in *. subst vf2. inv H1; eauto.
+        exfalso. erewrite <- @Genv.mge_symb in Hx; eauto.
+        rewrite Hy in Hx. discriminate Hx.
+    + subst. inv H1. exfalso. apply H4. auto.
+Admitted.
+Next Obligation.
+  intros. inv H. cbn. split.
+  - intros. inv H0; congruence.
+  - intros. auto.
 Qed.

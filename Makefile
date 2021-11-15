@@ -69,7 +69,6 @@ COMMON=Errors.v AST.v Linking.v \
   SmallstepLinking.v \
   Invariant.v \
   CallconvAlgebra.v \
-  LanguageInterface_.v \
   Smallstep_.v \
   SmallstepLinking_.v \
   CallconvAlgebra_.v \
