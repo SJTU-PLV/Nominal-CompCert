@@ -760,3 +760,42 @@ Proof.
   eapply external_call_trace_length; eauto.
   eapply external_call_trace_length; eauto.
 Qed.
+
+Global Instance clight_program_sem p: ProgramSem (semantics1 p).
+Proof.
+  split.
+  - intros. inv H. clear -H0. unfold valid_query; cbn.
+    unfold Genv.find_funct in H0.
+    destruct vf; try congruence.
+    destruct Ptrofs.eq_dec; try congruence.
+    split. intros X. discriminate X.
+    subst. unfold Genv.find_funct_ptr in H0.
+    destruct Genv.find_def eqn: Hdef; try congruence.
+    destruct g; try congruence. inv H0.
+    unfold globalenv in Hdef; cbn in *.
+    rewrite Genv.find_def_spec in Hdef.
+    destruct Genv.invert_symbol eqn: Hse; try congruence.
+    exists i. split. unfold footprint_of_program.
+    rewrite Hdef. auto.
+    unfold Genv.symbol_address.
+    apply Genv.invert_find_symbol in Hse.
+    rewrite Hse. auto.
+  - intros. inv H. unfold valid_query. cbn.
+    intros [? (i & Hi & Hse)].
+    unfold Genv.find_funct in H0.
+    destruct vf; try congruence.
+    destruct Ptrofs.eq_dec; try congruence.
+    unfold Genv.find_funct_ptr in H0.
+    destruct Genv.find_def eqn: Hdef; try congruence.
+    destruct g eqn: Hg; try congruence. inv H0.
+    unfold globalenv in Hdef. cbn in *.
+    rewrite Genv.find_def_spec in Hdef.
+    destruct Genv.invert_symbol eqn: Hs; try congruence.
+    apply Genv.invert_find_symbol in Hs.
+    unfold Genv.symbol_address in Hse.
+    destruct (Genv.find_symbol se i) eqn: Hxe; try congruence.
+    inv Hse. exploit Genv.find_symbol_injective.
+    apply Hs. apply Hxe. intros ->.
+    unfold footprint_of_program in Hi. rewrite Hdef in Hi.
+    subst f. cbn in *. discriminate Hi.
+Qed.

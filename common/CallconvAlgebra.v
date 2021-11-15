@@ -81,7 +81,7 @@ Global Instance open_fsim_ccref:
      subrel).
 Proof.
   intros liA1 liA2 ccA ccA' HA liB1 liB2 ccB ccB' HB sem1 sem2 [FS].
-  destruct FS as [index order match_states SKEL PROP WF].
+  destruct FS as [index order match_states SKEL FP PROP WF].
   constructor.
   set (ms se1 se2 w' idx s1 s2 :=
          exists w : ccworld ccB,
@@ -91,9 +91,6 @@ Proof.
   eapply Forward_simulation with order ms; auto.
   intros se1 se2 wB' Hse' Hse1.
   split.
-  - intros q1 q2 Hq'.
-    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
-    eapply fsim_match_valid_query; eauto.
   - intros q1 q2 s1 Hq' Hs1.
     destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
     edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
@@ -131,12 +128,9 @@ Proof.
   split.
   - intros q1 q2 Hq'.
     destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
-    eapply bsim_match_valid_query; eauto.
-  - intros q1 q2 Hq'.
-    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
     edestruct @bsim_match_initial_states as [EXIST MATCH]; eauto.
     split; auto.
-    intros. edestruct MATCH as (s1' & Hs1' & i & Hs); eauto. 
+    intros. edestruct MATCH as (s1' & Hs1' & i & Hs); eauto.
     exists s1'. split; auto. exists i, wB; auto.
   - intros i s1 s2 r1 (wB & Hs & Hse & Hr') SAFE Hr1.
     edestruct @bsim_match_final_states as (s2' & r2 & Hs2' & Hr2 & Hr); eauto 10.
@@ -272,6 +266,12 @@ Section JOIN.
   Next Obligation.
     destruct w; cbn in *; eauto using match_senv_valid_for.
   Qed.
+  Next Obligation.
+    destruct w; cbn in *; eauto using match_senv_symbol_address.
+  Qed.
+  Next Obligation.
+    destruct w; cbn in *; eauto using match_query_defined.
+  Qed.
 
   (** *** Properties *)
 
@@ -382,7 +382,6 @@ Section JOIN.
         (fun se1 se2 => cc_join_ms (ms1 se1 se2) (ms2 se1 se2));
       eauto using Disjoint_Union.wf_disjoint_sum.
     intros se1 se2 wB Hse Hse1. split.
-    - destruct wB; cbn; eapply fsim_match_valid_query; eauto.
     - intros q1 q2 s1 H1 Hs1. destruct wB; cbn in *;
       edestruct @fsim_match_initial_states as (i & s2 & Hs2 & Hs); eauto.
     - intros i s1 s2 r1 Hs Hr1. destruct wB; cbn in *; inv Hs;
@@ -449,6 +448,12 @@ Next Obligation.
 Qed.
 Next Obligation.
   destruct H. eapply match_senv_valid_for; eauto.
+Qed.
+Next Obligation.
+  destruct H. destruct H0. eapply match_senv_symbol_address; eauto.
+Qed.
+Next Obligation.
+  destruct H. eapply match_query_defined; eauto.
 Qed.
 
 Global Instance cc_both_ref:
@@ -519,6 +524,10 @@ Section STAR.
     - destruct X as [[sei x1] x2], H as [? ?].
       eauto using match_senv_valid_for.
   Qed.
+  Next Obligation.
+  Admitted.
+  Next Obligation.
+  Admitted.
 
   (** *** Properties *)
 
@@ -699,15 +708,15 @@ Section CC_STAR_FSIM.
   Definition cc_star_fsim_components:
     fsim_components (ccA^{*}) (ccB^{*}) L L.
   Proof.
-    pose proof (Eqdep_dec.inj_pair2_eq_dec nat Nat.eq_dec) as inj_pair2. 
+    pose proof (Eqdep_dec.inj_pair2_eq_dec nat Nat.eq_dec) as inj_pair2.
     eapply Forward_simulation with
         (fsim_order := Relation_Operators.lexprod _ _ lt (fun n => fsim_order (FS n)))
         (fsim_match_states := cc_star_ms).
     - reflexivity.
+    - firstorder.
     - intros se1 se2 [n ws] Hse Hse1. cbn in *.
       pose proof (fsim_lts (FS n) se2 ws Hse Hse1) as PROPS.
       split; cbn; intros.
-      + apply PROPS; auto.
       + edestruct (fsim_match_initial_states PROPS) as (idx & s2 & Hs2 & Hs); eauto.
       + inv H. apply inj_pair2 in H3. subst.
         eapply (fsim_match_final_states PROPS); eauto.
@@ -1149,3 +1158,32 @@ Proof.
       eauto using Val.hiword_lessdef.
 Qed.
 *)
+
+(** Some handy typeclasses and notations *)
+
+Global Instance fsim_transitive {li1 li2: language_interface}:
+  Transitive (forward_simulation (@cc_id li1) (@cc_id li2)).
+Proof.
+  intros L1 L2 L3 HL1 HL2.
+  eapply open_fsim_ccref. apply cc_compose_id_left.
+  unfold flip. apply cc_compose_id_left.
+  eapply compose_forward_simulations; eauto.
+Qed.
+
+Notation "L1 ≤ L2" :=  (forward_simulation 1 1 L1 L2)(at level 70): lts_scope.
+Open Scope lts_scope.
+Delimit Scope lts_scope with lts.
+
+Definition equiv_simulation {liA liB} (L1 L2: semantics liA liB) :=
+  L1 ≤ L2 /\ L2 ≤ L1.
+
+Global Instance fsim_equivalence {li1 li2: language_interface}:
+  Equivalence (@equiv_simulation li1 li2).
+Proof.
+  split.
+  - intros L; split; apply identity_forward_simulation.
+  - intros L1 L2 [H1 H2]. split; auto.
+  - intros L1 L2 L3 [? ?] [? ?]. split; etransitivity; eauto.
+Qed.
+
+Notation "L1 ≡ L2" :=  (equiv_simulation L1 L2)(at level 90): lts_scope.

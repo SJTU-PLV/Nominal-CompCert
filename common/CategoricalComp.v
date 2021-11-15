@@ -1,15 +1,15 @@
 Require Import Relations.
 Require Import List.
 Require Import Coqlib.
-Require Import LanguageInterface_.
+Require Import LanguageInterface.
 Require Import Events.
 Require Import Globalenvs.
-Require Import SmallstepLinking_.
-Require Import Smallstep_.
+Require Import SmallstepLinking.
+Require Import Smallstep.
 Require Import Integers.
 Require Import Linking.
 Require Import AST.
-Require Import CallconvAlgebra_.
+Require Import CallconvAlgebra.
 
 Require Import Coq.Logic.ClassicalFacts.
 Require Import Coq.Logic.FunctionalExtensionality.
@@ -451,14 +451,14 @@ Section APPROX.
 
   Let L := fun i => match i with true => L1 | false => L2 end.
 
-  Inductive match_frame: comp_state L1 L2 -> list (SmallstepLinking_.frame L) -> Prop :=
+  Inductive match_frame: comp_state L1 L2 -> list (SmallstepLinking.frame L) -> Prop :=
   | match_frame1 s:
       match_frame (st1 L1 L2 s) (st L true s :: nil)
   | match_frame2 s1 s2:
       match_frame (st2 L1 L2 s1 s2) (st L false s2 :: st L true s1 :: nil).
 
   Lemma categorical_compose_approximation:
-    forward_simulation 1 1 (comp_semantics' L1 L2 sk) (SmallstepLinking_.semantics L sk).
+    forward_simulation 1 1 (comp_semantics' L1 L2 sk) (SmallstepLinking.semantics L sk).
   Proof.
     constructor. econstructor; eauto.
     {
@@ -484,11 +484,11 @@ Section APPROX.
       + eexists (st L true _ :: nil). split; constructor; auto.
       + eexists (st L false _ :: st L true _ :: nil). split; constructor. auto.
       + eexists (st L false _ :: st L true _ :: nil). split.
-        eapply SmallstepLinking_.step_push; eauto.
+        eapply SmallstepLinking.step_push; eauto.
         eapply incoming_query_valid; eauto.
         constructor.
       + eexists (st L true _ :: nil). split.
-        eapply SmallstepLinking_.step_pop; eauto.
+        eapply SmallstepLinking.step_pop; eauto.
         constructor.
     - apply well_founded_ltof.
   Qed.
@@ -497,7 +497,7 @@ End APPROX.
 
 Section CALL_CONV_REF.
 
-  Context {li1 li2} {cc cc': LanguageInterface_.callconv li1 li2}
+  Context {li1 li2} {cc cc': LanguageInterface.callconv li1 li2}
           (ref: ccref cc cc').
 
   Inductive cc_state_match (w: ccworld cc): @id_state li1 -> @id_state li2 -> Prop :=
@@ -539,18 +539,18 @@ Section HCOMP_IDENTITY.
   Variable (sk: AST.program unit unit).
 
   Hypothesis extcall_invalid:
-    forall se s q, Smallstep_.at_external (L se) s q -> ~ valid_query L se q.
+    forall se s q, Smallstep.at_external (L se) s q -> ~ valid_query L se q.
 
   Hypothesis initial_state_valid:
-    forall se q s, Smallstep_.initial_state (L se) q s -> valid_query L se q.
+    forall se q s, Smallstep.initial_state (L se) q s -> valid_query L se q.
 
   Let L1 := fun b => match b with | true => id_semantics sk | false => L end.
 
-  Local Inductive state_match1: list (SmallstepLinking_.frame L1) -> Smallstep_.state L -> Prop :=
+  Local Inductive state_match1: list (SmallstepLinking.frame L1) -> Smallstep.state L -> Prop :=
   | state_match_intro1 s:
-      state_match1 (SmallstepLinking_.st L1 false s :: nil) s.
+      state_match1 (SmallstepLinking.st L1 false s :: nil) s.
 
-  Lemma hcomp_left_identity1: (SmallstepLinking_.semantics L1 (skel L)) ≤ L.
+  Lemma hcomp_left_identity1: (SmallstepLinking.semantics L1 (skel L)) ≤ L.
   Proof.
     constructor. econstructor. reflexivity.
     {
@@ -566,16 +566,16 @@ Section HCOMP_IDENTITY.
       + firstorder.
       + eexists. split; try econstructor; auto.
     - intros s1 s2 r Hs H. inv H. inv Hs.
-      SmallstepLinking_.subst_dep.
+      SmallstepLinking.subst_dep.
       eexists. split; try econstructor; auto.
     - intros s1 s2 q Hs H. inv H. inv Hs.
-      SmallstepLinking_.subst_dep.
+      SmallstepLinking.subst_dep.
       eexists tt, _. repeat apply conj; try constructor; eauto.
       intros r _ s1' [ ] H. inv H.
-      SmallstepLinking_.subst_dep.
+      SmallstepLinking.subst_dep.
       eexists. split; try econstructor; eauto.
     - intros s1 t s1' Hstep s2 Hs.
-      inv Hstep; inv Hs; SmallstepLinking_.subst_dep.
+      inv Hstep; inv Hs; SmallstepLinking.subst_dep.
       + eexists; split; eauto. constructor.
       + destruct j; exfalso.
         * firstorder.
@@ -583,7 +583,7 @@ Section HCOMP_IDENTITY.
     - apply well_founded_ltof.
   Qed.
 
-  Lemma hcomp_left_identity2: L ≤ (SmallstepLinking_.semantics L1 (skel L)).
+  Lemma hcomp_left_identity2: L ≤ (SmallstepLinking.semantics L1 (skel L)).
   Proof.
     constructor. econstructor. reflexivity.
     {
@@ -606,22 +606,22 @@ Section HCOMP_IDENTITY.
       + inv H0. split; cbn; econstructor; auto.
     - intros s1 t s1' Hstep s2 Hs. inv Hs.
       eexists; split; [ | constructor].
-      cbn. apply SmallstepLinking_.step_internal. auto.
+      cbn. apply SmallstepLinking.step_internal. auto.
     - apply well_founded_ltof.
   Qed.
 
-  Lemma hcomp_left_identity: (SmallstepLinking_.semantics L1 (skel L)) ≡ L.
+  Lemma hcomp_left_identity: (SmallstepLinking.semantics L1 (skel L)) ≡ L.
   Proof.
     split; [ exact hcomp_left_identity1 | exact hcomp_left_identity2].
   Qed.
 
   Let L2 := fun b => match b with | true => L | false => id_semantics sk end.
 
-  Local Inductive state_match2: list (SmallstepLinking_.frame L2) -> Smallstep_.state L -> Prop :=
+  Local Inductive state_match2: list (SmallstepLinking.frame L2) -> Smallstep.state L -> Prop :=
   | state_match_intro2 s:
-      state_match2 (SmallstepLinking_.st L2 true s :: nil) s.
+      state_match2 (SmallstepLinking.st L2 true s :: nil) s.
 
-  Lemma hcomp_right_identity1: (SmallstepLinking_.semantics L2 (skel L)) ≤ L.
+  Lemma hcomp_right_identity1: (SmallstepLinking.semantics L2 (skel L)) ≤ L.
   Proof.
     constructor. econstructor. reflexivity.
     {
@@ -637,16 +637,16 @@ Section HCOMP_IDENTITY.
       + eexists; split; eauto. constructor.
       + firstorder.
     - intros s1 s2 r Hs H. inv H. inv Hs.
-      SmallstepLinking_.subst_dep.
+      SmallstepLinking.subst_dep.
       eexists; split; eauto. constructor.
     - intros s1 s2 q Hs H. inv H. inv Hs.
-      SmallstepLinking_.subst_dep.
+      SmallstepLinking.subst_dep.
       eexists tt, _. repeat apply conj; try constructor. auto.
       intros r1 r2 s1' [ ] H.
-      inv H. SmallstepLinking_.subst_dep.
+      inv H. SmallstepLinking.subst_dep.
       eexists; split; eauto. constructor.
     - intros s1 t s1' Hstep s2 Hs.
-      inv Hstep; inv Hs; SmallstepLinking_.subst_dep.
+      inv Hstep; inv Hs; SmallstepLinking.subst_dep.
       + eexists; split; eauto. constructor.
       + exfalso. destruct j.
         * apply extcall_invalid in H. firstorder.
@@ -654,7 +654,7 @@ Section HCOMP_IDENTITY.
     - apply well_founded_ltof.
   Qed.
 
-  Lemma hcomp_right_identity2: L ≤ (SmallstepLinking_.semantics L2 (skel L)).
+  Lemma hcomp_right_identity2: L ≤ (SmallstepLinking.semantics L2 (skel L)).
   Proof.
     constructor. econstructor. reflexivity.
     {
@@ -682,7 +682,7 @@ Section HCOMP_IDENTITY.
     - apply well_founded_ltof.
   Qed.
 
-  Lemma hcomp_right_identity: (SmallstepLinking_.semantics L2 (skel L)) ≡ L.
+  Lemma hcomp_right_identity: (SmallstepLinking.semantics L2 (skel L)) ≡ L.
   Proof.
     split; [ exact hcomp_right_identity1 | exact hcomp_right_identity2].
   Qed.

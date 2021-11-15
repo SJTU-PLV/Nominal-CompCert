@@ -69,9 +69,6 @@ COMMON=Errors.v AST.v Linking.v \
   SmallstepLinking.v \
   Invariant.v \
   CallconvAlgebra.v \
-  Smallstep_.v \
-  SmallstepLinking_.v \
-  CallconvAlgebra_.v \
   CategoricalComp.v \
   FlatComp.v \
 
@@ -132,7 +129,6 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Cstrategy.v \
   Clight.v SimplLocals.v SimplLocalsproof.v \
   Cshmgen.v Cshmgenproof.v \
   Csharpminor.v Cminorgen.v Cminorgenproof.v \
-  Clight_.v \
 
 # Ctyping.v
 # ClightBigstep.v

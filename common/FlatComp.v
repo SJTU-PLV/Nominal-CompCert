@@ -1,8 +1,8 @@
 Require Import Relations List Coqlib.
-Require Import SmallstepLinking_.
-Require Import AST LanguageInterface_ Events Globalenvs Smallstep_.
+Require Import SmallstepLinking.
+Require Import AST LanguageInterface Events Globalenvs Smallstep.
 Require Import Linking.
-Require Import CategoricalComp CallconvAlgebra_.
+Require Import CategoricalComp CallconvAlgebra.
 Require Import Coq.Logic.ClassicalFacts.
 Require Import Coq.Logic.FunctionalExtensionality.
 Axiom EquivThenEqual: prop_extensionality.
@@ -60,11 +60,11 @@ Section FLAT_COMP.
     {|
       activate se :=
         {|
-          Smallstep_.step ge:= flat_step se;
-          Smallstep_.initial_state := flat_initial_state se;
-          Smallstep_.at_external := flat_at_external se;
-          Smallstep_.after_external := flat_after_external se;
-          Smallstep_.final_state := flat_final_state se;
+          Smallstep.step ge:= flat_step se;
+          Smallstep.initial_state := flat_initial_state se;
+          Smallstep.at_external := flat_at_external se;
+          Smallstep.after_external := flat_after_external se;
+          Smallstep.final_state := flat_final_state se;
           globalenv := tt;
         |};
       skel := sk;
@@ -211,12 +211,12 @@ Section APPROX.
 
   Hypothesis I_dec: forall (i j : I), {i = j} + {i <> j}.
 
-  Inductive match_frame: flat_state L -> list (SmallstepLinking_.frame L) -> Prop :=
+  Inductive match_frame: flat_state L -> list (SmallstepLinking.frame L) -> Prop :=
   | match_frame_intro i s:
       match_frame (flat_st L i s) (st L i s :: nil).
 
   Lemma flat_composition_approximation:
-    flat_comp_semantics' L sk ≤ SmallstepLinking_.semantics' L sk.
+    flat_comp_semantics' L sk ≤ SmallstepLinking.semantics' L sk.
   Proof.
     constructor. econstructor; eauto. intros. reflexivity.
     intros se ? [ ] [ ] Hse.

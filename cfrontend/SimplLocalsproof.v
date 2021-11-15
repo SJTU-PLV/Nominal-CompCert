@@ -29,7 +29,7 @@ Definition match_prog (p tp: program) : Prop :=
 Lemma match_transf_program:
   forall p tp, transf_program p = OK tp -> match_prog p tp.
 Proof.
-  unfold transf_program; intros. monadInv H. 
+  unfold transf_program; intros. monadInv H.
   split; auto. apply match_transform_partial_program. rewrite EQ. destruct x; auto.
 Qed.
 
@@ -191,7 +191,7 @@ Proof.
 - inv H0; auto.
 - inv H0; auto.
 - inv H0; auto.
-- inv H0. unfold Mptr, Val.load_result; destruct Archi.ptr64; auto. 
+- inv H0. unfold Mptr, Val.load_result; destruct Archi.ptr64; auto.
 - inv H0. unfold Mptr, Val.load_result; rewrite H1; auto.
 - inv H0. unfold Val.load_result; rewrite H1; auto.
 - inv H0. unfold Mptr, Val.load_result; rewrite H1; auto.
@@ -2268,6 +2268,12 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (cc_c injp) (cc_c inj) (semantics1 prog) (semantics2 tprog).
 Proof.
+  intros MATCH; constructor;
+  eapply Forward_simulation with (fsim_match_states := fun _ _ _ => _);
+  [ try fsim_skel MATCH
+  | try (timeout 1 firstorder)
+  | intros se1 se2 w Hse Hse1; eapply forward_simulation_plus
+  | try solve [auto using well_founded_ltof]].
   fsim eapply forward_simulation_plus.
   { intros. destruct Hse, H. cbn in *.
     eapply (Genv.is_internal_match (proj1 MATCH)); eauto 1.
@@ -2282,7 +2288,7 @@ Qed.
 
 Instance TransfSimplLocalsLink : TransfLink match_prog.
 Proof.
-  red; intros. eapply Ctypes.link_match_program; eauto. 
+  red; intros. eapply Ctypes.link_match_program; eauto.
 - intros.
 Local Transparent Linker_fundef.
   simpl in *; unfold link_fundef in *.
@@ -2291,5 +2297,5 @@ Local Transparent Linker_fundef.
   destruct e; inv H2. exists (Internal x); split; auto. simpl; rewrite EQ; auto.
   destruct (external_function_eq e e0 && typelist_eq t t1 &&
             type_eq t0 t2 && calling_convention_eq c c0); inv H2.
-  econstructor; split; eauto. 
+  econstructor; split; eauto.
 Qed.
