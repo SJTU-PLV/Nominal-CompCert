@@ -116,6 +116,7 @@ Proof.
   fsim (eapply forward_simulation_step with (match_states := rel_inv (IS w));
         destruct Hse; subst).
   - reflexivity.
+  - firstorder.
   - intros q _ s [Hq] Hs.
     exists s. split; eauto.
     constructor.
@@ -253,6 +254,7 @@ Section RESTRICT.
   Proof.
     fsim (apply forward_simulation_step with (match_states := rel_inv (IS w));
           destruct Hse; subst); cbn; auto.
+    - firstorder.
     - intros q _ s [Hq] Hs. exists s.
       assert (IS w s) by (eapply preserves_initial_state; eauto).
       eauto 10 using rel_inv_intro.
@@ -317,6 +319,7 @@ Section EXPAND.
   Proof.
     fsim (apply forward_simulation_step with (match_states := rel_inv (IS w));
           destruct Hse; subst); cbn; auto.
+    - firstorder.
     - intros q _ s [Hq] Hs. exists s.
       assert (IS w s) by (eapply preserves_initial_state; eauto).
       eauto using rel_inv_intro.

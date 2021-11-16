@@ -2268,16 +2268,11 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (cc_c injp) (cc_c inj) (semantics1 prog) (semantics2 tprog).
 Proof.
-  intros MATCH; constructor;
-  eapply Forward_simulation with (fsim_match_states := fun _ _ _ => _);
-  [ try fsim_skel MATCH
-  | try (timeout 1 firstorder)
-  | intros se1 se2 w Hse Hse1; eapply forward_simulation_plus
-  | try solve [auto using well_founded_ltof]].
   fsim eapply forward_simulation_plus.
-  { intros. destruct Hse, H. cbn in *.
-    eapply (Genv.is_internal_match (proj1 MATCH)); eauto 1.
-    intros _ [|] [|] Hf; monadInv Hf; auto. }
+  (* { intros. destruct Hse, H. cbn in *. *)
+  (*   eapply (Genv.is_internal_match (proj1 MATCH)); eauto 1. *)
+  (*   intros _ [|] [|] Hf; monadInv Hf; auto. } *)
+  { destruct f1; monadInv H; intuition auto. }
   apply initial_states_simulation; eauto.
   apply final_states_simulation; eauto.
   intros. cbn. eapply external_states_simulation; eauto.

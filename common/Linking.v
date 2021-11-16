@@ -523,6 +523,20 @@ Proof.
   destruct H; cbn. f_equal.
 Qed.
 
+Context {IntF1: FundefIsInternal F1} {IntF2: FundefIsInternal F2}.
+Hypothesis match_internal_fundef:
+  forall c f1 f2, match_fundef c f1 f2 -> fundef_is_internal f1 = fundef_is_internal f2.
+
+Lemma match_program_footprint:
+  forall ctx p1 p2, match_program_gen ctx p1 p2 ->
+  forall i, footprint_of_program p1 i <-> footprint_of_program p2 i.
+Proof.
+  intros ctx p1 p2 H i. apply match_program_defmap with (id := i) in H.
+  unfold footprint_of_program. inv H.
+  - firstorder.
+  - inv H2; try erewrite match_internal_fundef; intuition eauto.
+Qed.
+
 End MATCH_PROGRAM_GENERIC.
 
 (** In many cases, the context for [match_program_gen] is the source program or
@@ -999,4 +1013,3 @@ Proof.
   exists tgt_prog; split; auto. exists interm_prog; auto.
 Qed.
 *)
-

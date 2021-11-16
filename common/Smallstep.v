@@ -473,58 +473,6 @@ End CLOSURES.
 
 (** * Transition semantics *)
 
-(** Footprint *)
-
-(* The footprint of a concrete program is the set of identifiers that correspond
-   to internal function definitions. The calls to these functions are not
-   allowed to escape to the environment. The definition, together with the valid
-   query predicate, is equivalent to old valid query in the definition of LTS *)
-Definition footprint_of_program {F G} `{AST.FundefIsInternal F} (p: AST.program F G) (i: AST.ident) : Prop :=
-  match (AST.prog_defmap p) ! i with
-  | Some def =>
-    match def with
-    | AST.Gfun f => AST.fundef_is_internal f = true
-    | _ => False
-    end
-  | _ => False
-  end.
-
-Lemma footprint_of_program_valid {F G} `{AST.FundefIsInternal F} (p: AST.program F G) se {li} (q: query li):
-  (entry q <> Values.Vundef
-   /\ exists i : AST.ident, footprint_of_program p i /\ Genv.symbol_address se i Ptrofs.zero = entry q)
-  <-> Genv.is_internal (Genv.globalenv se p) (entry q) = true.
-Proof.
-  split.
-  - intros [Hq (i & Hi & Hx)].
-    rewrite <- Hx in *. clear Hx.
-    unfold Genv.is_internal. unfold Genv.symbol_address in *.
-    destruct Genv.find_symbol eqn:Hsymbol; try congruence; cbn.
-    destruct Ptrofs.eq_dec; try congruence; cbn.
-    unfold Genv.find_funct_ptr.
-    rewrite Genv.find_def_spec.
-    erewrite Genv.find_invert_symbol; eauto.
-    unfold footprint_of_program in Hi.
-    destruct ((AST.prog_defmap p) ! i).
-    + destruct g; easy.
-    + inversion Hi.
-  - intros Hx. unfold Genv.is_internal in Hx.
-    destruct Genv.find_funct eqn:H1; try congruence.
-    unfold Genv.find_funct in H1.
-    destruct (entry q) eqn: Hq; try congruence.
-    split. intros X. discriminate X.
-    destruct (Ptrofs.eq_dec i Ptrofs.zero) eqn: Hi; try congruence.
-    clear Hi. subst.
-    unfold Genv.find_funct_ptr in H1.
-    destruct Genv.find_def eqn: H2; try congruence.
-    destruct g eqn: Hf; try congruence. inv H1.
-    rewrite Genv.find_def_spec in H2.
-    destruct Genv.invert_symbol eqn:H3; try congruence.
-    exists i. split.
-    + unfold footprint_of_program. now rewrite H2.
-    + unfold Genv.symbol_address.
-      erewrite Genv.invert_find_symbol; eauto.
-Qed.
-
 (** The general form of a transition semantics. *)
 
 Record lts liA liB state: Type := {
@@ -547,6 +495,41 @@ Record semantics liA liB := {
 Definition valid_query {li liA liB} (L: semantics liA liB) se (q: query li): Prop :=
   entry q <> Values.Vundef /\
   exists i, footprint L i /\ Genv.symbol_address se i Ptrofs.zero = entry q.
+
+Lemma footprint_of_program_valid {F G} `{AST.FundefIsInternal F} (p: AST.program F G) se {li} (q: query li):
+  entry q <> Values.Vundef /\ (exists i, AST.footprint_of_program p i /\ Genv.symbol_address se i Ptrofs.zero = entry q) <->
+  Genv.is_internal (Genv.globalenv se p) (entry q) = true.
+Proof.
+  split.
+  - intros [Hq (i & Hi & Hx)].
+    rewrite <- Hx in *. clear Hx.
+    unfold Genv.is_internal. unfold Genv.symbol_address in *.
+    destruct Genv.find_symbol eqn:Hsymbol; try congruence; cbn.
+    destruct Ptrofs.eq_dec; try congruence; cbn.
+    unfold Genv.find_funct_ptr.
+    rewrite Genv.find_def_spec.
+    erewrite Genv.find_invert_symbol; eauto.
+    unfold AST.footprint_of_program in Hi.
+    destruct ((AST.prog_defmap p) ! i).
+    + destruct g; easy.
+    + inversion Hi.
+  - intros Hx. unfold Genv.is_internal in Hx.
+    destruct Genv.find_funct eqn:H1; try congruence.
+    unfold Genv.find_funct in H1.
+    destruct (entry q) eqn: Hq; try congruence.
+    split. intros X. discriminate X.
+    destruct (Ptrofs.eq_dec i Ptrofs.zero) eqn: Hi; try congruence.
+    clear Hi. subst.
+    unfold Genv.find_funct_ptr in H1.
+    destruct Genv.find_def eqn: H2; try congruence.
+    destruct g eqn: Hf; try congruence. inv H1.
+    rewrite Genv.find_def_spec in H2.
+    destruct Genv.invert_symbol eqn:H3; try congruence.
+    exists i. split.
+    + unfold AST.footprint_of_program. now rewrite H2.
+    + unfold Genv.symbol_address.
+      erewrite Genv.invert_find_symbol; eauto.
+Qed.
 
 (* A class of semantics for concrete LTS like clight, asm, etc. These properties
    are useful for proving lemmas about the categorical and flat
@@ -575,7 +558,7 @@ Notation Semantics_gen step initial_state at_ext after_ext final_state globalenv
         final_state := final_state ge;
         globalenv := ge;
       |};
-    footprint := footprint_of_program p;
+    footprint := AST.footprint_of_program p;
   |}.
 
 Notation Semantics step initial_state at_ext after_ext final_state p :=
@@ -940,11 +923,17 @@ Ltac fsim_skel MATCH :=
   fsim_match_prog_reduce MATCH;
   apply Linking.match_program_skel in MATCH; auto; fail.
 
+Ltac fsim_footprint MATCH :=
+  let x := fresh "x" in
+  fsim_match_prog_reduce MATCH;
+  intros x; eapply Linking.match_program_footprint with (i := x) in MATCH;
+  intuition eauto.
+
 Ltac fsim_tac tac :=
   intros MATCH; constructor;
   eapply Forward_simulation with (fsim_match_states := fun _ _ _ => _);
   [ try fsim_skel MATCH
-  | firstorder
+  | try fsim_footprint MATCH
   | intros se1 se2 w Hse Hse1; tac
   | try solve [auto using well_founded_ltof]].
 
