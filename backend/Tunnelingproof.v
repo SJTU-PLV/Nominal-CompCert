@@ -269,7 +269,7 @@ Lemma locmap_set_undef_lessdef:
   locmap_lessdef ls1 ls2 -> locmap_lessdef (Locmap.set l Vundef ls1) ls2.
 Proof.
   intros; red; intros l'. unfold Locmap.set. destruct (Loc.eq l l').
-- destruct l; auto. destruct ty; auto. 
+- destruct l; auto. destruct ty; auto.
 - destruct (Loc.diff_dec l l'); auto.
 Qed.
 
@@ -277,14 +277,14 @@ Lemma locmap_undef_regs_lessdef:
   forall rl ls1 ls2,
   locmap_lessdef ls1 ls2 -> locmap_lessdef (undef_regs rl ls1) (undef_regs rl ls2).
 Proof.
-  induction rl as [ | r rl]; intros; simpl. auto. apply locmap_set_lessdef; auto. 
+  induction rl as [ | r rl]; intros; simpl. auto. apply locmap_set_lessdef; auto.
 Qed.
 
 Lemma locmap_undef_regs_lessdef_1:
   forall rl ls1 ls2,
   locmap_lessdef ls1 ls2 -> locmap_lessdef (undef_regs rl ls1) ls2.
 Proof.
-  induction rl as [ | r rl]; intros; simpl. auto. apply locmap_set_undef_lessdef; auto. 
+  induction rl as [ | r rl]; intros; simpl. auto. apply locmap_set_undef_lessdef; auto.
 Qed.
 
 (*
@@ -292,14 +292,14 @@ Lemma locmap_undef_lessdef:
   forall ll ls1 ls2,
   locmap_lessdef ls1 ls2 -> locmap_lessdef (Locmap.undef ll ls1) (Locmap.undef ll ls2).
 Proof.
-  induction ll as [ | l ll]; intros; simpl. auto. apply IHll. apply locmap_set_lessdef; auto. 
+  induction ll as [ | l ll]; intros; simpl. auto. apply IHll. apply locmap_set_lessdef; auto.
 Qed.
 
 Lemma locmap_undef_lessdef_1:
   forall ll ls1 ls2,
   locmap_lessdef ls1 ls2 -> locmap_lessdef (Locmap.undef ll ls1) ls2.
 Proof.
-  induction ll as [ | l ll]; intros; simpl. auto. apply IHll. apply locmap_set_undef_lessdef; auto. 
+  induction ll as [ | l ll]; intros; simpl. auto. apply IHll. apply locmap_set_undef_lessdef; auto.
 Qed.
 *)
 
@@ -336,7 +336,7 @@ Lemma locmap_undef_caller_save_regs_lessdef:
   forall ls1 ls2,
   locmap_lessdef ls1 ls2 -> locmap_lessdef (undef_caller_save_regs ls1) (undef_caller_save_regs ls2).
 Proof.
-  intros; red; intros. unfold undef_caller_save_regs. 
+  intros; red; intros. unfold undef_caller_save_regs.
   destruct l.
 - destruct (Conventions1.is_callee_save r); auto.
 - destruct sl; auto.
@@ -365,7 +365,7 @@ Proof.
   intros; red; intros. destruct l; simpl.
 - destruct (Conventions1.is_callee_save r); auto.
 - destruct sl; auto.
-Qed. 
+Qed.
 
 (** To preserve non-terminating behaviours, we show that the transformed
   code cannot take an infinity of "zero transition" cases.
@@ -416,15 +416,15 @@ Proof.
   rewrite B. econstructor; eauto.
 
 - (* Lop *)
-  exploit eval_operation_lessdef. apply reglist_lessdef; eauto. eauto. eauto. 
+  exploit eval_operation_lessdef. apply reglist_lessdef; eauto. eauto. eauto.
   intros (tv & EV & LD).
   left; simpl; econstructor; split.
   eapply exec_Lop with (v := tv); eauto.
   econstructor; eauto using locmap_set_lessdef, locmap_undef_regs_lessdef.
 - (* Lload *)
-  exploit eval_addressing_lessdef. apply reglist_lessdef; eauto. eauto. 
+  exploit eval_addressing_lessdef. apply reglist_lessdef; eauto. eauto.
   intros (ta & EV & LD).
-  exploit Mem.loadv_extends. eauto. eauto. eexact LD. 
+  exploit Mem.loadv_extends. eauto. eauto. eexact LD.
   intros (tv & LOAD & LD').
   left; simpl; econstructor; split.
   eapply exec_Lload with (a := ta); eauto.
@@ -438,9 +438,9 @@ Proof.
   econstructor; eauto.
   econstructor; eauto using locmap_set_lessdef, locmap_undef_regs_lessdef.
 - (* Lstore *)
-  exploit eval_addressing_lessdef. apply reglist_lessdef; eauto. eauto. 
+  exploit eval_addressing_lessdef. apply reglist_lessdef; eauto. eauto.
   intros (ta & EV & LD).
-  exploit Mem.storev_extends. eauto. eauto. eexact LD. apply LS.  
+  exploit Mem.storev_extends. eauto. eauto. eexact LD. apply LS.
   intros (tm' & STORE & MEM').
   left; simpl; econstructor; split.
   eapply exec_Lstore with (a := ta); eauto.
@@ -457,7 +457,7 @@ Proof.
 - (* Ltailcall *)
   exploit (ros_address_translated ros (return_regs (parent_locset s) rs)).
     eauto using return_regs_lessdef, match_parent_locset. intros ROS.
-  exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM'). 
+  exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM').
   left; simpl; econstructor; split.
   eapply exec_Ltailcall with (fd := tunnel_fundef fd); eauto.
   eapply functions_translated; eauto.
@@ -481,7 +481,7 @@ Proof.
   set (s1 := U.repr (record_gotos f) pc1). set (s2 := U.repr (record_gotos f) pc2).
   destruct (peq s1 s2).
 + left; econstructor; split.
-  eapply exec_Lbranch. 
+  eapply exec_Lbranch.
   destruct b.
 * constructor; eauto using locmap_undef_regs_lessdef_1.
 * rewrite e. constructor; eauto using locmap_undef_regs_lessdef_1.
@@ -497,14 +497,14 @@ Proof.
   eauto. rewrite list_nth_z_map. change U.elt with node. rewrite H0. reflexivity. eauto.
   econstructor; eauto using locmap_undef_regs_lessdef.
 - (* Lreturn *)
-  exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM'). 
+  exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM').
   left; simpl; econstructor; split.
   eapply exec_Lreturn; eauto.
   constructor; eauto using return_regs_lessdef, match_parent_locset.
 - (* internal function *)
   exploit functions_translated; eauto. intros TFIND.
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
-  intros (tm' & ALLOC & MEM'). 
+  intros (tm' & ALLOC & MEM').
   left; simpl; econstructor; split.
   eapply exec_function_internal; eauto.
   simpl. econstructor; eauto using locmap_undef_regs_lessdef, call_regs_lessdef.
@@ -575,9 +575,10 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (cc_locset ext) (cc_locset ext) (LTL.semantics prog) (LTL.semantics tprog).
 Proof.
-  fsim eapply forward_simulation_opt; destruct w as [sg w], Hse.
-  - intros q _ []. CKLR.uncklr. destruct H; try congruence.
-    eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
+  fsim eapply forward_simulation_opt; try destruct w as [sg w], Hse.
+  (* - intros q _ []. CKLR.uncklr. destruct H; try congruence. *)
+  (*   eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto. *)
+  - subst. destruct f1; reflexivity.
   - eapply transf_initial_states; eauto.
   - eapply transf_final_states; eauto.
   - intros. eapply transf_external_states in H0 as ([sgx wx] & ?); eauto.

@@ -597,12 +597,12 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (cc_c ext) (cc_c ext) (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
-  fsim eapply forward_simulation_opt with (measure := measure); destruct Hse.
-  - destruct 1. CKLR.uncklr. destruct H; try congruence.
-    eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
+  fsim eapply forward_simulation_opt with (measure := measure); try destruct Hse.
+  - destruct f1; subst; reflexivity.
+  (* - destruct 1. CKLR.uncklr. destruct H; try congruence. *)
+  (*   eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto. *)
   - eapply transf_initial_states; eauto.
   - eapply transf_final_states; eauto.
   - exists tt. eapply transf_external_states; eauto.
   - eapply transf_step_correct; eauto.
 Qed.
-

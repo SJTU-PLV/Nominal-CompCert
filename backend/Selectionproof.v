@@ -128,7 +128,7 @@ Lemma wt_prog : wt_program prog.
 Proof.
   red; intros. destruct TRANSF as [A _].
   exploit list_forall2_in_left; eauto.
-  intros ((i' & gd') & B & (C & D)). simpl in *. inv D. 
+  intros ((i' & gd') & B & (C & D)). simpl in *. inv D.
   destruct H2 as (hf & P & Q). destruct f; monadInv Q.
 - monadInv EQ. econstructor; apply type_function_sound; eauto.
 - constructor.
@@ -351,10 +351,10 @@ Lemma eval_sel_select:
         /\  Val.lessdef (Val.select (Some b) v2 v3 ty) v.
 Proof.
   unfold sel_select; intros.
-  specialize (eval_condition_of_expr _ _ _ _ H H2). 
+  specialize (eval_condition_of_expr _ _ _ _ H H2).
   destruct (condition_of_expr a1) as [cond args]; simpl fst; simpl snd. intros (vl & A & B).
   destruct (select ty cond args a2 a3) as [a|] eqn:SEL.
-- eapply eval_select; eauto. 
+- eapply eval_select; eauto.
 - exists (if b then v2 else v3); split.
   econstructor; eauto. eapply eval_condexpr_of_expr; eauto. destruct b; auto.
   apply Val.lessdef_normalize.
@@ -382,7 +382,7 @@ Proof.
   eapply eval_sel_select; eauto. constructor.
 + (* fabs *)
   inv ARGS; try discriminate. inv H0; try discriminate.
-  inv SEL.  
+  inv SEL.
   simpl in SEM; inv SEM. apply eval_absf; auto.
 - eapply eval_platform_builtin; eauto.
 Qed.
@@ -771,15 +771,15 @@ Lemma sel_select_opt_correct:
   env_lessdef e e' -> Mem.extends m m' ->
   exists v', eval_expr tge sp e' m' le a v' /\ Val.lessdef (Val.select (Some b) v1 v2 ty) v'.
 Proof.
-  unfold sel_select_opt; intros. 
+  unfold sel_select_opt; intros.
   destruct (condition_of_expr (sel_expr cond)) as [cnd args] eqn:C.
   exploit sel_expr_correct. eexact H0. eauto. eauto. intros (vcond' & EVC & LDC).
   exploit sel_expr_correct. eexact H1. eauto. eauto. intros (v1' & EV1 & LD1).
   exploit sel_expr_correct. eexact H2. eauto. eauto. intros (v2' & EV2 & LD2).
   assert (Val.bool_of_val vcond' b) by (inv H3; inv LDC; constructor).
   exploit eval_condition_of_expr. eexact EVC. eauto. rewrite C. intros (vargs' & EVARGS & EVCOND).
-  exploit eval_select; eauto. intros (v' & X & Y). 
-  exists v'; split; eauto. 
+  exploit eval_select; eauto. intros (v' & X & Y).
+  exists v'; split; eauto.
   eapply Val.lessdef_trans; [|eexact Y].
   apply Val.select_lessdef; auto.
 Qed.
@@ -844,7 +844,7 @@ Proof.
   econstructor; exists m2'; split.
   econstructor. eexact A. eexact D.
   split; auto. apply sel_builtin_res_correct; auto.
-Qed. 
+Qed.
 
 Lemma sel_builtin_correct:
   forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k,
@@ -857,7 +857,7 @@ Lemma sel_builtin_correct:
   /\ env_lessdef (set_optvar optid v e1) e2'
   /\ Mem.extends m2 m2'.
 Proof.
-  intros. 
+  intros.
   exploit sel_exprlist_correct; eauto. intros (vl' & A & B).
   exploit external_call_mem_extends; eauto. intros (v' & m2' & D & E & F & _).
   unfold sel_builtin.
@@ -946,7 +946,7 @@ Proof.
   apply Val.lessdef_trans with (Val.select (Some b) v1 v2 ty).
   simpl. rewrite Val.normalize_idem; auto. destruct b; auto.
   assumption.
-Qed. 
+Qed.
 
 Lemma if_conversion_correct:
   forall f env tyret cond ifso ifnot s vb b k f' k' sp e m e' m',
@@ -975,7 +975,7 @@ Proof.
   intros (a' & v1 & v2 & v' & A & B & C & D & E).
   exists (PTree.set id (if b then v1 else v2) e), (PTree.set id v' e').
   split. subst s. constructor; auto.
-  split. unfold s0; destruct b. 
+  split. unfold s0; destruct b.
   rewrite PTree.gsident by (inv B; auto). apply classify_stmt_sound_1; auto.
   eapply classify_stmt_sound_2; eauto.
   apply set_var_lessdef; auto.
@@ -983,11 +983,11 @@ Proof.
             && if_conversion_heuristic cond a (Cminor.Evar id) (env id)) eqn:B; inv IFC.
   InvBooleans.
   exploit (eval_select_safe_exprs a (Cminor.Evar id)); eauto.
-  eapply classify_stmt_wt; eauto. constructor. 
+  eapply classify_stmt_wt; eauto. constructor.
   intros (a' & v1 & v2 & v' & A & B & C & D & E).
   exists (PTree.set id (if b then v1 else v2) e), (PTree.set id v' e').
   split. subst s. constructor; auto.
-  split. unfold s0; destruct b. 
+  split. unfold s0; destruct b.
   eapply classify_stmt_sound_2; eauto.
   rewrite PTree.gsident by (inv C; auto). apply classify_stmt_sound_1; auto.
   apply set_var_lessdef; auto.
@@ -1141,7 +1141,7 @@ Proof.
   unfold if_conversion_base; intros.
   destruct (is_known ki id && safe_expr ki a1 && safe_expr ki a2 &&
             if_conversion_heuristic a a1 a2 (env id)); try discriminate.
-  destruct (sel_select_opt (env id) a a1 a2); inv H. 
+  destruct (sel_select_opt (env id) a a1 a2); inv H.
   red; auto.
 Qed.
 
@@ -1166,8 +1166,8 @@ Remark sel_builtin_nolabel:
 Proof.
   unfold sel_builtin; intros; red; intros.
   destruct optid; auto. destruct ef; auto. destruct lookup_builtin_function; auto.
-  destruct sel_known_builtin; auto. 
-Qed. 
+  destruct sel_known_builtin; auto.
+Qed.
 
 Remark find_label_commut:
   forall cunit hf ki env lbl s k s' k',
@@ -1311,7 +1311,7 @@ Proof.
   exploit if_conversion_correct; eauto.
   set (s0 := if b then s1 else s2). intros (e1 & e1' & A & B & C).
   right; right. econstructor; econstructor.
-  split. eexact B. split. eexact A. econstructor; eauto. 
+  split. eexact B. split. eexact A. econstructor; eauto.
 + exploit sel_expr_correct; eauto. intros [v' [A B]].
   assert (Val.bool_of_val v' b). inv B. auto. inv H0.
   left; exists (State f' (if b then x else x0) k' sp e' m'); split.
@@ -1374,7 +1374,7 @@ Proof.
   econstructor; eauto.
 - (* internal function *)
   assert (f0 = Internal f) by congruence; subst.
-  destruct TF as (hf & HF & TF). 
+  destruct TF as (hf & HF & TF).
   monadInv TF. generalize EQ; intros TF; monadInv TF.
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros [m2' [A B]].
@@ -1463,11 +1463,13 @@ Proof.
   set (MS := match_states prog tprog).
   fsim apply forward_simulation_determ_star with (match_states := MS se1) (measure := measure);
   try destruct Hse; cbn in *.
+- destruct H as (hf & ? & Hf).
+  destruct f1; monadInv Hf; intuition auto.
 - apply (restrict_determinate (Cminor.semantics prog)).
   apply Cminor.semantics_determinate.
-- destruct 1. CKLR.uncklr. destruct H; try congruence.
-  eapply (Genv.is_internal_match_id MATCH).
-  destruct 1 as (hf & ? & ?). destruct f; monadInv H3; auto.
+(* - destruct 1. CKLR.uncklr. destruct H; try congruence. *)
+(*   eapply (Genv.is_internal_match_id MATCH). *)
+(*   destruct 1 as (hf & ? & ?). destruct f; monadInv H3; auto. *)
 - intros q1 q2 s1 Hq (? & _).
   eapply sel_initial_states; eauto.
 - intros S1 S2 r1 HS (Hr1 & _).

@@ -525,9 +525,15 @@ Section STAR.
       eauto using match_senv_valid_for.
   Qed.
   Next Obligation.
-  Admitted.
+    induction w; intros.
+    - inv H. inv H0. intuition auto.
+    - etransitivity. eauto using match_senv_symbol_address. reflexivity.
+  Qed.
   Next Obligation.
-  Admitted.
+    induction w; intros.
+    - inv H. intuition auto.
+    - etransitivity. eauto using match_query_defined. reflexivity.
+  Qed.
 
   (** *** Properties *)
 

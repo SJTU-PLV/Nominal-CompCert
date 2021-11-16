@@ -329,8 +329,8 @@ Lemma contains_locations_exten:
               (contains_locations j sp pos bound sl ls').
 Proof.
   intros; split; simpl; intros; auto.
-  intuition auto. exploit H5; eauto. intros (v & A & B). exists v; split; auto. 
-  specialize (H ofs ty). inv H. congruence. auto. 
+  intuition auto. exploit H5; eauto. intros (v & A & B). exists v; split; auto.
+  specialize (H ofs ty). inv H. congruence. auto.
 Qed.
 
 Lemma contains_locations_incr:
@@ -693,9 +693,9 @@ Lemma agree_regs_undef_caller_save_regs:
   agree_regs j ls rs ->
   agree_regs j (LTL.undef_caller_save_regs ls) (Mach.undef_caller_save_regs rs).
 Proof.
-  intros; red; intros. 
-  unfold LTL.undef_caller_save_regs, Mach.undef_caller_save_regs. 
-  destruct (is_callee_save r); auto. 
+  intros; red; intros.
+  unfold LTL.undef_caller_save_regs, Mach.undef_caller_save_regs.
+  destruct (is_callee_save r); auto.
 Qed.
 
 (** Preservation under assignment of stack slot *)
@@ -1326,7 +1326,7 @@ Proof.
     apply CS; auto.
     rewrite NCS by auto. apply AGR.
   split. red; unfold return_regs; intros.
-    destruct l. rewrite H; auto. destruct sl; auto; contradiction. 
+    destruct l. rewrite H; auto. destruct sl; auto; contradiction.
   assumption.
 Qed.
 
@@ -1514,7 +1514,7 @@ Proof.
     + destruct (zlt 0 (size_arguments (stk_sg w))).
       * edestruct PERM as (sb' & sofs' & Hsp & PERM' & FITS). xomega.
         rewrite H4 in Hsp. inv Hsp. auto.
-      * intro. unfold offset_sarg. xomega. 
+      * intro. unfold offset_sarg. xomega.
     + apply zero_size_arguments_tailcall_possible in Hsg.
       unfold offset_sarg. intro. xomega.
   - eapply mconj_proj1, sep_proj1, sep_proj2, sep_proj1 in SEP. cbn in SEP.
@@ -2168,7 +2168,7 @@ Proof.
   econstructor; eauto with coqlib.
   unfold Val.offset_ptr. destruct fb; constructor; eauto.
   intros; red.
-    apply Z.le_trans with (size_arguments (Linear.funsig f')); auto. 
+    apply Z.le_trans with (size_arguments (Linear.funsig f')); auto.
     apply loc_arguments_bounded; auto.
   destruct ros; simpl in *; eauto. eapply symbol_address_inject; eauto. apply SEP.
   simpl. rewrite sep_assoc. exact SEP.
@@ -2317,7 +2317,7 @@ Proof.
   (*eauto using external_call_max_perm.*)
   eapply match_stacks_change_meminj; eauto.
   eapply stack_contents_nextblock; eauto. apply SEP'.
-  apply agree_regs_set_pair. apply agree_regs_undef_caller_save_regs. 
+  apply agree_regs_set_pair. apply agree_regs_undef_caller_save_regs.
   apply agree_regs_inject_incr with j; auto.
   auto.
   apply stack_contents_change_meminj with j; auto.
@@ -2332,7 +2332,7 @@ Proof.
   apply agree_locs_return with rs0; auto.
   apply frame_contents_exten with rs0 (parent_locset s); auto.
   intros; apply Val.lessdef_same; apply AGCS; red; congruence.
-  intros; rewrite (OUTU ty ofs); auto. 
+  intros; rewrite (OUTU ty ofs); auto.
 Qed.
 
 End STEP_CORRECT.
@@ -2480,9 +2480,10 @@ Proof.
   eapply source_invariant_fsim; eauto using linear_wt, wt_prog.
   revert MATCH.
   fsim eapply forward_simulation_plus with (match_states:= match_states rao prog tprog se1 se2 w).
-  - intros q1 q2 Hq. destruct Hq. inv Hse. cbn in *.
-    eapply (Genv.is_internal_transf_partial MATCH); eauto 1.
-    intros [|] ? Hfd; monadInv Hfd; auto.
+  (* - intros q1 q2 Hq. destruct Hq. inv Hse. cbn in *. *)
+  (*   eapply (Genv.is_internal_transf_partial MATCH); eauto 1. *)
+  (*   intros [|] ? Hfd; monadInv Hfd; auto. *)
+  - destruct f1; monadInv H; reflexivity.
   - cbn. intuition eauto using transf_initial_states.
   - intros s1 s2 r1 Hs  (Hr1 & [? ?] & Hxse & WTS & WTR). cbn in Hxse. subst.
     eapply transf_final_states; eauto.

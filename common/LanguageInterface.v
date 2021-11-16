@@ -66,10 +66,10 @@ Record callconv {li1 li2} :=
       forall q1 q2, match_query w q1 q2 ->
       forall i, Genv.symbol_address se1 i Ptrofs.zero = entry q1 <->
            Genv.symbol_address se2 i Ptrofs.zero = entry q2;
-      match_query_defined:
-        forall w q1 q2,
-          match_query w q1 q2 ->
-          entry q1 <> Vundef <-> entry q2 <> Vundef;
+    match_query_defined:
+      forall w q1 q2,
+        match_query w q1 q2 ->
+        entry q1 <> Vundef <-> entry q2 <> Vundef;
   }.
 
 Arguments callconv: clear implicits.
@@ -179,6 +179,33 @@ Inductive cc_c_reply R (w: world R): relation c_reply :=
       match_mem R w m1' m2' ->
       cc_c_reply R w (cr vres1 m1') (cr vres2 m2').
 
+Lemma symbol_address_match (f: meminj) i vf1 vf2 se1 se2:
+  Genv.match_stbls f se1 se2 ->
+  Val.inject f vf1 vf2 ->
+  vf1 <> Vundef ->
+  Genv.symbol_address se1 i Ptrofs.zero = vf1 <->
+  Genv.symbol_address se2 i Ptrofs.zero = vf2.
+Proof.
+  unfold Genv.symbol_address. split.
+  - destruct Genv.find_symbol eqn: Hx.
+    + edestruct @Genv.find_symbol_match as (b' & fb & Hb); eauto.
+      rewrite Hb. intros. subst. inv H0. rewrite fb in H4. inv H4.
+      f_equal.
+    + intros. exfalso. apply H1. easy.
+  - intros. destruct Genv.find_symbol eqn: Hx.
+    + subst vf2. inv H0; try congruence.
+      unfold Genv.find_symbol in Hx.
+      rewrite <- Genv.mge_symb in Hx; eauto.
+      exploit Genv.genv_symb_range. apply Hx. intros Hplt.
+      unfold Genv.find_symbol. rewrite Hx.
+      edestruct Genv.mge_dom as (bx & Hbx); eauto.
+      rewrite Hbx in H5. inv H5.
+      replace (Ptrofs.repr 0) with Ptrofs.zero in H6 by reflexivity.
+      rewrite Ptrofs.add_zero in H6. congruence.
+    + subst. inv H0. exfalso. apply H1. auto.
+Qed.
+
+
 Program Definition cc_c (R: cklr): callconv li_c li_c :=
   {|
     ccworld := world R;
@@ -193,27 +220,11 @@ Next Obligation.
   intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
 Qed.
 Next Obligation.
-  intros. eapply match_stbls_proj in H. inv H0. cbn.
-  unfold Genv.symbol_address. split.
-  - destruct Genv.find_symbol eqn: Hx.
-    + edestruct @Genv.find_symbol_match as (b' & fb & Hb); eauto.
-      rewrite Hb. intros. subst. inv H1. rewrite fb in H6. inv H6.
-      f_equal.
-    + intros. exfalso. apply H4. easy.
-  - intros. destruct Genv.find_symbol eqn: Hx.
-    + destruct (Genv.find_symbol se1 i) eqn: Hy.
-      * subst vf2. inv H1.
-        -- edestruct @Genv.find_symbol_match as (b' & fg & Hb); eauto.
-           rewrite Hx in Hb. inv Hb.
-           admit.
-        -- exfalso. apply H4. auto.
-      * unfold Genv.find_symbol in *. subst vf2. inv H1; eauto.
-        exfalso. erewrite <- @Genv.mge_symb in Hx; eauto.
-        rewrite Hy in Hx. discriminate Hx.
-    + subst. inv H1. exfalso. apply H4. auto.
-Admitted.
+  intros until i. eapply match_stbls_proj in H. inv H0. cbn.
+  eapply symbol_address_match; eauto.
+Qed.
 Next Obligation.
   intros. inv H. cbn. split.
-  - intros. inv H0; congruence.
+  - inv H0; congruence.
   - intros. auto.
 Qed.

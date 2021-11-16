@@ -86,7 +86,6 @@ CKLR=\
   Valuesrel.v Builtinsrel.v Eventsrel.v \
   Coprel.v Clightrel.v \
   Registersrel.v RTLrel.v \
-  Clightrel_.v \
 
 # Back-end modules (in backend/, $(ARCH)/)
 
@@ -117,7 +116,6 @@ BACKEND=\
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
   Asmrel.v AsmLinking.v \
-  Asm_.v AsmLinking_.v \
 
 # Unusedglob.v
 # Unusedglobproof.v

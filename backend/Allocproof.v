@@ -2573,11 +2573,12 @@ Proof.
   revert MATCH.
   set (ms := fun se sg s s' => match_states prog tprog se sg s s').
   fsim eapply forward_simulation_plus with (match_states := ms se1 (snd w));
-    cbn -[wt_c] in *; subst; destruct w as [[xse [ ]] [sg rs]], Hse; subst.
-- intros q1 q2 Hq. destruct Hq as (_ & [ ] & Hqi2). inv Hqi2.
-  CKLR.uncklr. destruct H as [vf|]; try congruence. cbn.
-  eapply (Genv.is_internal_transf_partial_id MATCH).
-  intros [|] ? Hf; monadInv Hf; auto.
+    try (cbn -[wt_c] in *; subst; destruct w as [[xse [ ]] [sg rs]], Hse; subst).
+(* - intros q1 q2 Hq. destruct Hq as (_ & [ ] & Hqi2). inv Hqi2. *)
+(*   CKLR.uncklr. destruct H as [vf|]; try congruence. cbn. *)
+(*   eapply (Genv.is_internal_transf_partial_id MATCH). *)
+(*   intros [|] ? Hf; monadInv Hf; auto. *)
+- destruct f1; monadInv H; reflexivity.
 - intros q1 q2 s1 Hq (Hs1 & [xse xsg] & Hxse & [Hxsg Hargs] & WT). subst.
   eapply initial_states_simulation; cbn; eauto.
 - intros s1 s2 r1 Hs (Hs1 & [xse xsg] & Hxse & Hr1 & WTr1). cbn in *. subst.

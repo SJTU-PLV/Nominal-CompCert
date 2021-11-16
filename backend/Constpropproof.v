@@ -460,7 +460,7 @@ Opaque builtin_strength_reduction.
   destruct (eval_static_builtin_function ae am rm bf args) as [a|] eqn:ES; auto.
   destruct (const_for_result a) as [cop|] eqn:CR; auto.
   clear DFL. simpl in H1; red in H1; rewrite LK in H1; inv H1.
-  exploit const_for_result_correct; eauto. 
+  exploit const_for_result_correct; eauto.
   eapply eval_static_builtin_function_sound; eauto.
   intros (v' & A & B).
   left; econstructor; econstructor; split.
@@ -590,8 +590,9 @@ Proof.
   intros MATCH. eapply source_invariant_fsim; eauto using rtl_vamatch. revert MATCH.
   fsim (eapply Build_fsim_properties with (order := lt) (match_states := match_states prog));
     try destruct Hse; cbn.
-- destruct 1. cbn. CKLR.uncklr. destruct H; try congruence.
-  eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
+(* - destruct 1. cbn. CKLR.uncklr. destruct H; try congruence. *)
+(*   eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto. *)
+- subst. destruct f1; reflexivity.
 - intros q1 q2 s1 Hq (Hs1 & _).
   eapply transf_initial_states; eauto.
 - intros n s1 s2 r1 Hs (Hr1 & _).

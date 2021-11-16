@@ -1211,13 +1211,13 @@ Definition semantics (p: program): Smallstep.semantics li_asm li_asm :=
       let ge := Genv.globalenv se p in
       {|
         Smallstep.step ge '(nb, s) t '(nb', s') := step nb ge s t s' /\ nb' = nb;
-        Smallstep.valid_query q := Genv.is_internal ge (entry q);
         Smallstep.initial_state q '(nb, s) := initial_state ge q s /\ nb = Mem.nextblock (snd q);
         Smallstep.at_external '(nb, s) q := at_external ge s q;
         Smallstep.after_external '(nb, s) r '(nb', s') := after_external nb s r s' /\ nb' = nb;
         Smallstep.final_state '(nb, s) := final_state s;
         Smallstep.globalenv := ge;
-      |}
+      |};
+    footprint := footprint_of_program p;
   |}.
 
 (** Determinacy of the [Asm] semantics. *)
@@ -1341,6 +1341,12 @@ Program Definition cc_mach_asm : callconv li_mach li_asm :=
     match_query '(rs, nb) := cc_mach_asm_mq rs nb;
     match_reply '(rs, nb) := cc_mach_asm_mr rs nb;
   |}.
+Next Obligation.
+  inv H0. intuition eauto.
+Qed.
+Next Obligation.
+  inv H. intuition eauto.
+Qed.
 
 (** ** CKLR simulation convention *)
 
@@ -1364,6 +1370,15 @@ Next Obligation.
 Qed.
 Next Obligation.
   eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+Qed.
+Next Obligation.
+  eapply match_stbls_proj in H. inv H0.
+  specialize (H1 PC). cbn.
+  eapply symbol_address_match; eauto. intuition auto.
+Qed.
+Next Obligation.
+  inv H. specialize (H0 PC). cbn. split; try easy.
+  intros. inv H0; congruence.
 Qed.
 
 Instance cc_asm_ref:
@@ -1446,4 +1461,46 @@ Proof.
     + cbn. eauto.
     + apply match_asm_query_compose; eauto.
     + apply match_asm_reply_compose.
+Qed.
+
+Instance asm_program_sem p: ProgramSem (semantics p).
+Proof.
+  split.
+  - intros. destruct s as [nb s]. destruct q.
+    inv H. inversion H0 as [? ? ? Hf]. subst. clear -Hf.
+    unfold valid_query. cbn.
+    unfold Genv.find_funct in Hf.
+    destruct (r PC); try congruence.
+    destruct Ptrofs.eq_dec; try congruence.
+    split. intros X. discriminate X.
+    subst. unfold Genv.find_funct_ptr in Hf.
+    destruct Genv.find_def eqn: Hdef; try congruence.
+    destruct g; try congruence. inv Hf.
+    rewrite Genv.find_def_spec in Hdef.
+    destruct Genv.invert_symbol eqn: Hse; try congruence.
+    exists i. split. unfold footprint_of_program.
+    rewrite Hdef. auto.
+    unfold Genv.symbol_address.
+    apply Genv.invert_find_symbol in Hse.
+    rewrite Hse. auto.
+  - intros. destruct s as [nb s]. destruct q.
+    inversion H as [? ? ? ? Hf]. subst.
+    unfold valid_query. cbn.
+    intros [? (i & Hi & Hse)].
+    unfold Genv.find_funct in Hf.
+    destruct (r PC); try congruence.
+    destruct Ptrofs.eq_dec; try congruence.
+    unfold Genv.find_funct_ptr in Hf.
+    destruct Genv.find_def eqn: Hdef; try congruence.
+    destruct g eqn: Hg; try congruence. inv Hf.
+    (* unfold globalenv in Hdef. cbn in *. *)
+    rewrite Genv.find_def_spec in Hdef.
+    destruct Genv.invert_symbol eqn: Hs; try congruence.
+    apply Genv.invert_find_symbol in Hs.
+    unfold Genv.symbol_address in Hse.
+    destruct (Genv.find_symbol se i) eqn: Hxe; try congruence.
+    inv Hse. exploit Genv.find_symbol_injective.
+    apply Hs. apply Hxe. intros ->.
+    unfold footprint_of_program in Hi. rewrite Hdef in Hi.
+    discriminate Hi.
 Qed.

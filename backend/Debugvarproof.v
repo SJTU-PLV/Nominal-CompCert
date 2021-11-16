@@ -537,7 +537,8 @@ Theorem transf_program_correct prog tprog:
   forward_simulation cc_id cc_id (semantics prog) (semantics tprog).
 Proof.
   fsim eapply forward_simulation_plus; cbn in *; intros; subst.
-  - eapply (Genv.is_internal_transf_partial_id MATCH). intros [|] ? Hf; monadInv Hf; auto.
+  (* - eapply (Genv.is_internal_transf_partial_id MATCH). intros [|] ? Hf; monadInv Hf; auto. *)
+  - destruct f1; monadInv H; reflexivity.
   - eauto using transf_initial_states.
   - eauto using transf_final_states.
   - intros. edestruct transf_external; eauto. exists tt, q1. intuition subst; eauto.

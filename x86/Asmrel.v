@@ -38,7 +38,7 @@ Section PROG.
     - apply Linking.linkorder_refl.
     - destruct v; constructor; auto.
   Qed.
-  
+
   Global Instance find_funct_inject R w ge1 v1 ge2 v2 f:
     Transport (genv_match R w * Val.inject (mi R w)) (ge1, v1) (ge2, v2)
               (Genv.find_funct ge1 v1 = Some f)
@@ -93,7 +93,7 @@ Section PROG.
   | inj_ptr_undef:
       forall v,
         inject_ptr_sameofs mi Vundef v.
-  
+
   Definition regset_inject' R (w: world R): rel regset regset :=
     fun rs1 rs2 =>
       forall r: preg,
@@ -115,7 +115,7 @@ Section PROG.
       rewrite Ptrofs.add_zero; auto.
     - apply rel. auto.
   Qed.
-  
+
   Inductive outcome_match R (w: world R): rel outcome outcome :=
   | Next_match:
       Monotonic
@@ -132,7 +132,7 @@ Section PROG.
         (@Asm.State)
         (regset_inject R w ++> match_mem R w ++> - ==> state_match R w).
   Existing Instance State_rel.
-  
+
   Global Instance set_inject R w:
     Monotonic
       (@Pregmap.set val)
@@ -183,7 +183,7 @@ Section PROG.
   Proof.
     unfold nextinstr. rauto.
   Qed.
-  
+
   Global Instance undef_regs_inject R w:
     Monotonic
       undef_regs
@@ -240,7 +240,7 @@ Section PROG.
   Proof.
     intros w. eexists; split; rauto.
   Qed.
-  
+
   Global Instance exec_store_match R:
     Monotonic
       exec_store
@@ -259,7 +259,7 @@ Section PROG.
   Proof.
     unfold eval_testcond. rauto.
   Qed.
-  
+
   Global Instance goto_label_inject R w:
     Monotonic
       goto_label
@@ -274,7 +274,7 @@ Section PROG.
 
   Definition init_nb_match R w: rel block block :=
     (Val.inject (mi R w) ++> option_le eq) @@ inner_sp.
-  
+
   Global Instance inner_sp_rel R w:
     Monotonic
       inner_sp
@@ -282,7 +282,7 @@ Section PROG.
   Proof.
     unfold init_nb_match. repeat rstep. eauto.
   Qed.
-  
+
   Global Instance exec_instr_match R:
     Monotonic
       (@exec_instr)
@@ -298,12 +298,12 @@ Section PROG.
       repeat first [rstep |
         match goal with
         | |- regset_inject _ _ _ match ?x with | _ => _ end => destruct x
-        end]. 
+        end].
     - eexists. split. rauto.
       repeat first [rstep |
         match goal with
         | |- regset_inject _ _ _ match ?x with | _ => _ end => destruct x
-        end]. 
+        end].
     - eexists. split. rauto.
       rstep; auto.
       apply set_inject'; [discriminate | auto | ].
@@ -319,7 +319,7 @@ Section PROG.
       apply block_sameofs_ptrbits_inject; split; rauto.
     - destruct (zlt 0 sz).
       + (* sz > 0 *)
-        unfold free'. repeat rewrite zlt_true by omega.                
+        unfold free'. repeat rewrite zlt_true by omega.
         destruct Mem.free eqn: Hfree; try rauto.
         inv H. erewrite cklr_address_inject; eauto.
         * eapply transport in Hfree as (m' & Hfree' & Hm');
@@ -333,7 +333,7 @@ Section PROG.
   Qed.
 
   Lemma reg_inj_strengthen R w ge1 ge2 rs1 rs2 b ofs f:
-    genv_match R w ge1 ge2 -> 
+    genv_match R w ge1 ge2 ->
     rs1 PC = Vptr b ofs ->
     Genv.find_funct_ptr ge1 b = Some f ->
     regset_inject R w rs1 rs2 ->
@@ -378,7 +378,7 @@ Section PROG.
   Qed.
   Hint Extern 1 (Transport _ _ _ _ _) =>
     set_le_transport @extcall_arg: typeclass_instances.
-  
+
   Global Instance extcall_arg_pair_inject R w:
     Monotonic
       (@extcall_arg_pair)
@@ -389,7 +389,7 @@ Section PROG.
   Qed.
   Hint Extern 1 (Transport _ _ _ _ _) =>
     set_le_transport @extcall_arg_pair: typeclass_instances.
-  
+
   Global Instance extcall_arguments_inject R w:
     Monotonic
       (@extcall_arguments)
@@ -406,7 +406,7 @@ Section PROG.
   Qed.
   Hint Extern 1 (Transport _ _ _ _ _) =>
     set_le_transport @extcall_arguments : typeclass_instances.
-  
+
   Global Instance set_pair_inject R w:
     Monotonic
       (@set_pair)
@@ -437,7 +437,7 @@ Section PROG.
     edestruct exec_instr_match; try apply Hrel.
     eexists. split. cbn in *. reflexivity.
     eexists. split; eauto. apply H0. subst o. apply H0.
-  Qed.  
+  Qed.
 
   Global Instance step_rel R:
     Monotonic
@@ -466,7 +466,7 @@ Section PROG.
       + eapply exec_step_external; eauto. congruence.
       + eexists. split; rauto.
   Qed.
- 
+
 End PROG.
 
 Lemma init_nb_match_acc R w w' nb1 nb2 m1 m2:
@@ -515,7 +515,9 @@ Qed.
 Lemma semantics_asm_rel p R:
   forward_simulation (cc_asm R) (cc_asm R) (Asm.semantics p) (Asm.semantics p).
 Proof.
-  constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
+  constructor. econstructor; eauto.
+  { intros i; intuition auto. }
+  instantiate (1 := fun _ _ _ => _). cbn beta.
   intros se1 se2 w Hse Hse1. cbn -[semantics] in *.
   pose (ms := fun s1 s2 =>
                 klr_diam tt (genv_match p R * init_nb_state_match R)
@@ -524,14 +526,14 @@ Proof.
                          (Genv.globalenv se2 p, s2)).
   apply forward_simulation_step with (match_states := ms); cbn.
   (* valid_query *)
-  - intros [rs1 m1] [rs2 m2] [Hrs [Hpc Hm]].
-    eapply Genv.is_internal_match; eauto.
-    + repeat apply conj; auto.
-      induction (prog_defs p) as [ | [id [f|v]] defs IHdefs]; repeat (econstructor; eauto).
-      * instantiate (2 := fun _ => eq). reflexivity.
-      * instantiate (1 := eq). destruct v. constructor. auto.
-    + eapply match_stbls_proj; auto.
-    + intros. rewrite H. auto.
+  (* - intros [rs1 m1] [rs2 m2] [Hrs [Hpc Hm]]. *)
+  (*   eapply Genv.is_internal_match; eauto. *)
+  (*   + repeat apply conj; auto. *)
+  (*     induction (prog_defs p) as [ | [id [f|v]] defs IHdefs]; repeat (econstructor; eauto). *)
+  (*     * instantiate (2 := fun _ => eq). reflexivity. *)
+  (*     * instantiate (1 := eq). destruct v. constructor. auto. *)
+  (*   + eapply match_stbls_proj; auto. *)
+  (*   + intros. rewrite H. auto. *)
   (* initial_state *)
   - intros [rs1 m1] [rs2 m2] [nb1 s1] Hs [Hq Hnb]. destruct Hs as [Hrs [Hpc Hm]]. inv Hq.
     assert (Hge: genv_match p R w (Genv.globalenv se1 p) (Genv.globalenv se2 p)).
@@ -545,7 +547,7 @@ Proof.
     repeat apply conj; auto.
     (* initial_state *)
     + econstructor.
-      * eauto. 
+      * eauto.
       * specialize (Hrs SP) as Hsp. inv Hsp; try congruence.
       * specialize (Hrs RA) as Hsp. inv Hsp; try congruence.
     (* match_state *)
@@ -634,5 +636,4 @@ Proof.
       * eapply Pos.le_trans; eauto.
         eapply step_nextblock. eauto.
   - apply well_founded_ltof.
-    Unshelve. exact tt. exact tt.
 Qed.

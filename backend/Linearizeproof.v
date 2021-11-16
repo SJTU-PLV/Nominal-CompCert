@@ -711,8 +711,9 @@ Theorem transf_program_correct prog tprog:
   forward_simulation cc_id cc_id (LTL.semantics prog) (Linear.semantics tprog).
 Proof.
   fsim eapply forward_simulation_star; cbn in *; subst.
-  - intros q _ [ ]. eapply Genv.is_internal_transf_partial_id; eauto.
-    intros [|] ? Hf; monadInv Hf; auto.
+  (* - intros q _ [ ]. eapply Genv.is_internal_transf_partial_id; eauto. *)
+  (*   intros [|] ? Hf; monadInv Hf; auto. *)
+  - destruct f1; monadInv H; reflexivity.
   - intros q _ s1 [ ]. eauto using transf_initial_states.
   - eauto using transf_final_states.
   - intros. edestruct transf_external; eauto. exists tt, q1. intuition subst; eauto.

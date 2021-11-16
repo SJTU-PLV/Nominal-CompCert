@@ -1239,9 +1239,10 @@ Proof.
   intros MATCH. eapply source_invariant_fsim; eauto using rtl_vamatch. revert MATCH.
   fsim eapply forward_simulation_step with (match_states := match_states prog se1);
     cbn in *; subst.
-- destruct 1. cbn. CKLR.uncklr. destruct H; try congruence.
-  eapply (Genv.is_internal_transf_partial_id MATCH).
-  intros [|] [|] TFD; monadInv TFD; auto.
+(* - destruct 1. cbn. CKLR.uncklr. destruct H; try congruence. *)
+(*   eapply (Genv.is_internal_transf_partial_id MATCH). *)
+(*   intros [|] [|] TFD; monadInv TFD; auto. *)
+- destruct f1; monadInv H; reflexivity.
 - intros q1 q2 s1 Hq (Hs1 & _).
   eapply transf_initial_states; eauto.
 - intros s1 s2 r1 Hs (Hr1 & _).

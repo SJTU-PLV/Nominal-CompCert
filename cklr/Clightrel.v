@@ -687,7 +687,7 @@ Qed.
 Global Instance step_rel R:
   Monotonic
     (@step)
-    (|= genv_match R ++> 
+    (|= genv_match R ++>
         (- ==> k1 list_rel (Val.inject @@ [mi R]) ++> match_mem R ++>
          %% k1 set_le (<> env_match R * temp_env_match R * match_mem R)) ++>
         state_match R ++> - ==> k1 set_le (<> state_match R)).
@@ -753,25 +753,27 @@ Hint Extern 1 (Transport _ _ _ _ _) =>
 Lemma semantics1_rel p R:
   forward_simulation (cc_c R) (cc_c R) (Clight.semantics1 p) (Clight.semantics1 p).
 Proof.
-  constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
+  constructor. econstructor; eauto.
+  { intros i; firstorder. }
+  instantiate (1 := fun _ _ _ => _). cbn beta.
   intros se1 se2 w Hse Hse1. cbn -[semantics1] in *.
   pose (ms := fun s1 s2 =>
     klr_diam tt (genv_match p R * state_match R) w
       (globalenv se1 p, s1)
       (globalenv se2 p, s2)).
   apply forward_simulation_step with (match_states := ms); cbn.
-  - intros _ _ [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1].
-    cbn. eapply Genv.is_internal_match; eauto.
-    + instantiate (1 := p).
-      repeat apply conj; auto.
-      induction (AST.prog_defs (_ p)) as [ | [id [f|v]] defs IHdefs];
-        repeat (econstructor; eauto).
-      * apply incl_refl.
-      * apply linkorder_refl.
-      * instantiate (1 := fun _ => eq). reflexivity.
-      * instantiate (1 := eq). destruct v; constructor; auto.
-    + eapply match_stbls_proj; eauto.
-    + cbn. congruence.
+  (* - intros _ _ [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. *)
+  (*   cbn. eapply Genv.is_internal_match; eauto. *)
+  (*   + instantiate (1 := p). *)
+  (*     repeat apply conj; auto. *)
+  (*     induction (AST.prog_defs (_ p)) as [ | [id [f|v]] defs IHdefs]; *)
+  (*       repeat (econstructor; eauto). *)
+  (*     * apply incl_refl. *)
+  (*     * apply linkorder_refl. *)
+  (*     * instantiate (1 := fun _ => eq). reflexivity. *)
+  (*     * instantiate (1 := eq). destruct v; constructor; auto. *)
+  (*   + eapply match_stbls_proj; eauto. *)
+  (*   + cbn. congruence. *)
   - intros q1 q2 s1 Hq Hs1. inv Hs1. inv Hq.
     assert (Hge: genv_match p R w (globalenv se1 p) (globalenv se2 p)).
     {

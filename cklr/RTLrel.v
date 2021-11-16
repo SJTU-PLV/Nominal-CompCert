@@ -272,14 +272,15 @@ Global Instance semantics_rel R:
   Monotonic (@RTL.semantics) (- ==> forward_simulation (cc_c R) (cc_c R)).
 Proof.
   intros p. constructor. econstructor; auto.
+  { intros i; intuition auto. }
   intros se1 se2 w Hse1 Hse. cbn -[semantics] in *.
   eapply forward_simulation_step with (match_states := klr_diam tt (state_rel R) w).
-  - cbn. intros q1 q2 Hq. eapply (Genv.is_internal_match (ctx := p)).
-    + eapply (match_prog p).
-    + eapply match_stbls_proj; eauto.
-    + cbn. congruence.
-    + destruct Hq. cbn. auto.
-    + destruct Hq. cbn. auto.
+  (* - cbn. intros q1 q2 Hq. eapply (Genv.is_internal_match (ctx := p)). *)
+  (*   + eapply (match_prog p). *)
+  (*   + eapply match_stbls_proj; eauto. *)
+  (*   + cbn. congruence. *)
+  (*   + destruct Hq. cbn. auto. *)
+  (*   + destruct Hq. cbn. auto. *)
   - intros q1 q2 s1 Hq. destruct 1. inv Hq. cbn.
     eassert (Hge: genv_match p R w _ _) by (red; rauto).
     transport H.
