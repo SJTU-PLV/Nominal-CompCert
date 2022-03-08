@@ -943,14 +943,14 @@ Inductive match_states: state -> state -> Prop :=
       match_states (State s f sp pc rs m)
                    (State s' (transf_function' f approx) sp pc rs' m')
   | match_states_call:
-      forall s f tf args m s' args' m' cu
+      forall s f tf args m s' args' m' cu id
              (LINK: linkorder cu prog)
              (STACKS: match_stackframes s s')
              (TFD: transf_fundef (romem_for cu) f = OK tf)
              (ARGS: Val.lessdef_list args args')
              (MEXT: Mem.extends m m'),
-      match_states (Callstate s f args m)
-                   (Callstate s' tf args' m')
+      match_states (Callstate s f args m id)
+                   (Callstate s' tf args' m' id)
   | match_states_return:
       forall s s' v v' m m'
              (STACK: match_stackframes s s')
@@ -1090,6 +1090,8 @@ Proof.
   exploit find_function_translated; eauto. intros (cu' & tf & FIND' & TRANSF' & LINK').
   econstructor; split.
   eapply exec_Icall; eauto.
+  destruct ros; simpl in *; auto.
+  generalize (RLD r). intro. inv H2. eauto. congruence. auto.
   eapply sig_preserved; eauto.
   econstructor; eauto.
   eapply match_stackframes_cons with (cu := cu); eauto.
@@ -1100,9 +1102,12 @@ Proof.
 
 - (* Itailcall *)
   exploit find_function_translated; eauto. intros (cu' & tf & FIND' & TRANSF' & LINK').
-  exploit Mem.free_parallel_extends; eauto. intros [m'' [A B]].
+  exploit Mem.free_parallel_extends; eauto. intros [m'1 [A B]].
+  exploit Mem.return_frame_parallel_extends; eauto. intros [m'2 [A' B']].
   econstructor; split.
   eapply exec_Itailcall; eauto.
+  destruct ros; simpl in *; auto.
+  generalize (RLD r). intro. inv H2. eauto. congruence. auto.
   eapply sig_preserved; eauto.
   econstructor; eauto.
   apply regs_lessdef_regs; auto.
@@ -1180,7 +1185,8 @@ Proof.
   unfold transfer; rewrite H; auto.
 
 - (* Ireturn *)
-  exploit Mem.free_parallel_extends; eauto. intros [m'' [A B]].
+  exploit Mem.free_parallel_extends; eauto. intros [m'1 [A B]].
+  exploit Mem.return_frame_parallel_extends; eauto. intros [m'2 [A' B']].
   econstructor; split.
   eapply exec_Ireturn; eauto.
   econstructor; eauto.
@@ -1189,8 +1195,9 @@ Proof.
 - (* internal function *)
   monadInv TFD. unfold transf_function in EQ. fold (analyze cu f) in EQ.
   destruct (analyze cu f) as [approx|] eqn:?; inv EQ.
+  exploit Mem.alloc_frame_extends; eauto. intros (m'1 & A & B).
   exploit Mem.alloc_extends; eauto. apply Z.le_refl. apply Z.le_refl.
-  intros (m'' & A & B).
+  intros (m'2 & A' & B').
   econstructor; split.
   eapply exec_function_internal; simpl; eauto.
   simpl. econstructor; eauto.
@@ -1220,13 +1227,14 @@ Lemma transf_initial_states:
 Proof.
   intros. inversion H.
   exploit funct_ptr_translated; eauto. intros (cu & tf & A & B & C).
-  exists (Callstate nil tf nil m0); split.
+  exists (Callstate nil tf nil m0 (prog_main tprog)); split.
   econstructor; eauto.
   eapply (Genv.init_mem_match TRANSF); eauto.
   replace (prog_main tprog) with (prog_main prog).
   rewrite symbols_preserved. eauto.
   symmetry. eapply match_program_main; eauto.
   rewrite <- H3. eapply sig_preserved; eauto.
+  rewrite (match_program_main TRANSF).
   econstructor. eauto. constructor. auto. auto. apply Mem.extends_refl.
 Qed.
 

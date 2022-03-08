@@ -49,10 +49,10 @@ Definition lookup_composite (ce: composite_env) (id: ident) : res composite :=
   | None => Error (MSG "Undefined struct or union " :: CTX id :: nil)
   end.
 
-Parameter ident_to_block : ident -> block.
-Parameter block_to_ident : block -> ident.
+(*
 Axiom ident_to_block_to_ident : forall id , block_to_ident(ident_to_block id) = id.
 Axiom block_to_ident_to_block : forall b  , ident_to_block(block_to_ident b ) = b.
+*)
 
 Fixpoint constval (ce: composite_env) (a: expr) : res val :=
   match a with
@@ -115,7 +115,7 @@ Fixpoint constval (ce: composite_env) (a: expr) : res val :=
   | Ecomma r1 r2 ty =>
       do v1 <- constval ce r1; constval ce r2
   | Evar x ty =>
-      OK(Vptr (ident_to_block x) Ptrofs.zero)
+      OK(Vptr (Global x) Ptrofs.zero)
   | Ederef r ty =>
       constval ce r
   | Efield l f ty =>
@@ -355,9 +355,10 @@ Definition transl_init_single (ce: composite_env) (ty: type) (a: expr) : res ini
   | Vlong n, Tpointer _ _ => assertion (Archi.ptr64); OK(Init_int64 n)
   | Vsingle f, Tfloat F32 _ => OK(Init_float32 f)
   | Vfloat f, Tfloat F64 _ => OK(Init_float64 f)
-  | Vptr id ofs, Tint I32 sg _ => assertion (negb Archi.ptr64); OK(Init_addrof (block_to_ident id) ofs)
-  | Vptr id ofs, Tlong _ _ => assertion (Archi.ptr64); OK(Init_addrof (block_to_ident id) ofs)
-  | Vptr id ofs, Tpointer _ _ => OK(Init_addrof (block_to_ident id) ofs)
+  | Vptr (Global id) ofs, Tint I32 sg _ => assertion (negb Archi.ptr64); OK(Init_addrof id ofs)
+  | Vptr (Global id) ofs, Tlong _ _ => assertion (Archi.ptr64); OK(Init_addrof id ofs)
+  | Vptr (Global id) ofs, Tpointer _ _ => OK(Init_addrof id ofs)
+  | Vptr (Stack _ _ _) ofs,_ => Error (msg "stack pointer in initializer")
   | Vundef, _ => Error(msg "undefined operation in initializer")
   | _, _ => Error (msg "type mismatch in initializer")
   end.

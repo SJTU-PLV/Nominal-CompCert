@@ -146,10 +146,10 @@ Inductive match_states: RTL.state -> RTL.state -> Prop :=
         (REACH: reach f pc),
       match_states (State stk f sp pc rs m)
                    (State stk' (transf_function f) sp (renum_pc (pnum f) pc) rs m)
-  | match_callstates: forall stk f args m stk'
+  | match_callstates: forall stk f args m stk' id
         (STACKS: list_forall2 match_frames stk stk'),
-      match_states (Callstate stk f args m)
-                   (Callstate stk' (transf_fundef f) args m)
+      match_states (Callstate stk f args m id)
+                   (Callstate stk' (transf_fundef f) args m id)
   | match_returnstates: forall stk v m stk'
         (STACKS: list_forall2 match_frames stk stk'),
       match_states (Returnstate stk v m)
@@ -240,6 +240,7 @@ Proof.
     rewrite symbols_preserved. rewrite (match_program_main TRANSL). eauto.
     eapply function_ptr_translated; eauto.
     rewrite <- H3; apply sig_preserved.
+    rewrite (match_program_main TRANSL).
   constructor. constructor.
 Qed.
 

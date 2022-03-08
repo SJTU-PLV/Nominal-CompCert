@@ -301,13 +301,13 @@ Inductive match_states: nat -> state -> state -> Prop :=
       match_states n (State s f sp pc rs m)
                     (State s' (transf_function (romem_for cu) f) sp pc' rs' m')
   | match_states_call:
-      forall s f args m s' args' m' cu
+      forall s f args m s' args' m' cu id
            (LINK: linkorder cu prog)
            (STACKS: list_forall2 match_stackframes s s')
            (ARGS: Val.lessdef_list args args')
            (MEM: Mem.extends m m'),
-      match_states O (Callstate s f args m)
-                     (Callstate s' (transf_fundef (romem_for cu) f) args' m')
+      match_states O (Callstate s f args m id)
+                     (Callstate s' (transf_fundef (romem_for cu) f) args' m' id)
   | match_states_return:
       forall s v m s' v' m'
            (STACKS: list_forall2 match_stackframes s s')
@@ -457,17 +457,44 @@ Proof.
   exploit transf_ros_correct; eauto. intros (cu' & FIND & LINK').
   TransfInstr; intro.
   left; econstructor; econstructor; split.
-  eapply exec_Icall; eauto. apply sig_function_translated; auto.
+  eapply exec_Icall; eauto.
+  {
+    destruct ros; simpl in *.
+    + generalize  (REGS r). intro.
+      destruct (areg ae r) eqn:?; simpl in *; inv H3; eauto; (try congruence).
+      destruct p; simpl in *; eauto; (try congruence).
+      destr; simpl in *.
+      apply areg_sound with (r := r) in EM. inv EM; (try congruence).
+      rewrite Heqa in H4. inv H4. inv H5.
+      destruct GE. apply H4 in H7. apply Genv.genv_vars_eq in H7.
+      congruence.
+    + auto.
+  }
+  apply sig_function_translated; auto.
   constructor; auto. constructor; auto.
   econstructor; eauto.
   apply regs_lessdef_regs; auto.
 
 - (* Itailcall *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
+  exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [A' B']].
   exploit transf_ros_correct; eauto. intros (cu' & FIND & LINK').
   TransfInstr; intro.
   left; econstructor; econstructor; split.
-  eapply exec_Itailcall; eauto. apply sig_function_translated; auto.
+  eapply exec_Itailcall; eauto.
+  {
+    destruct ros; simpl in *.
+    + generalize  (REGS r). intro.
+      destruct (areg ae r) eqn:?; simpl in *; inv H5; eauto; (try congruence).
+      destruct p; simpl in *; eauto; (try congruence).
+      destr; simpl in *.
+      apply areg_sound with (r := r) in EM. inv EM; (try congruence).
+      rewrite Heqa in H6. inv H6. inv H7.
+      destruct GE. apply H6 in H9. apply Genv.genv_vars_eq in H9.
+      congruence.
+    + auto.
+  }
+  apply sig_function_translated; auto.
   constructor; auto.
   apply regs_lessdef_regs; auto.
 
@@ -502,7 +529,7 @@ Opaque builtin_strength_reduction.
   destruct (eval_static_builtin_function ae am rm bf args) as [a|] eqn:ES; auto.
   destruct (const_for_result a) as [cop|] eqn:CR; auto.
   clear DFL. simpl in H1; red in H1; rewrite LK in H1; inv H1.
-  exploit const_for_result_correct; eauto. 
+  exploit const_for_result_correct; eauto.
   eapply eval_static_builtin_function_sound; eauto.
   intros (v' & A & B).
   left; econstructor; econstructor; split.
@@ -548,14 +575,16 @@ Opaque builtin_strength_reduction.
 
 - (* Ireturn *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
-  left; exists O; exists (Returnstate s' (regmap_optget or Vundef rs') m2'); split.
+  exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [A' B']].
+  left; exists O; exists (Returnstate s' (regmap_optget or Vundef rs') m2''); split.
   eapply exec_Ireturn; eauto. TransfInstr; auto.
   constructor; auto.
   destruct or; simpl; auto.
 
 - (* internal function *)
+  exploit Mem.alloc_frame_extends; eauto. intros [m2' [A B]].
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
-  intros [m2' [A B]].
+  intros [m2'' [A' B']].
   simpl. unfold transf_function.
   left; exists O; econstructor; split.
   eapply exec_function_internal; simpl; eauto.
@@ -584,13 +613,14 @@ Lemma transf_initial_states:
 Proof.
   intros. inversion H.
   exploit function_ptr_translated; eauto. intros (cu & FIND & LINK).
-  exists O; exists (Callstate nil (transf_fundef (romem_for cu) f) nil m0); split.
+  exists O; exists (Callstate nil (transf_fundef (romem_for cu) f) nil m0 tprog.(prog_main)); split.
   econstructor; eauto.
   apply (Genv.init_mem_match TRANSL); auto.
   replace (prog_main tprog) with (prog_main prog).
   rewrite symbols_preserved. eauto.
   symmetry; eapply match_program_main; eauto.
   rewrite <- H3. apply sig_function_translated.
+  rewrite (match_program_main TRANSL).
   constructor. auto. constructor. constructor. apply Mem.extends_refl.
 Qed.
 

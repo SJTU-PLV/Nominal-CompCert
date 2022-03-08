@@ -141,7 +141,8 @@ Inductive state: Type :=
       forall (f: fundef)                (**r fundef to invoke *)
              (args: list val)           (**r arguments provided by caller *)
              (k: cont)                  (**r what to do next  *)
-             (m: mem),                  (**r memory state *)
+             (m: mem)                   (**r memory state *)
+             (id: ident),
       state
   | Returnstate:
       forall (v: val)                   (**r return value *)
@@ -339,11 +340,12 @@ Inductive step: state -> trace -> state -> Prop :=
   | step_skip_block: forall f k sp e m,
       step (State f Sskip (Kblock k) sp e m)
         E0 (State f Sskip k sp e m)
-  | step_skip_call: forall f k sp e m m',
+  | step_skip_call: forall f k sp e m m' m'',
       is_call_cont k ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f Sskip k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate Vundef k m')
+        E0 (Returnstate Vundef k m'')
 
   | step_assign: forall f id a k sp e m v,
       eval_expr sp e m nil a v ->
@@ -358,22 +360,25 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sstore chunk addr al b) k sp e m)
         E0 (State f Sskip k sp e m')
 
-  | step_call: forall f optid sig a bl k sp e m vf vargs fd,
+  | step_call: forall f optid sig a bl k sp e m vf vargs fd id,
+      vf = Vptr (Global id) (Ptrofs.zero) ->
       eval_expr_or_symbol sp e m nil a vf ->
       eval_exprlist sp e m nil bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (State f (Scall optid sig a bl) k sp e m)
-        E0 (Callstate fd vargs (Kcall optid f sp e k) m)
+        E0 (Callstate fd vargs (Kcall optid f sp e k) m id)
 
-  | step_tailcall: forall f sig a bl k sp e m vf vargs fd m',
+  | step_tailcall: forall f sig a bl k sp e m vf vargs fd m' m'' id,
+      vf = Vptr (Global id) (Ptrofs.zero) ->
       eval_expr_or_symbol (Vptr sp Ptrofs.zero) e m nil a vf ->
       eval_exprlist (Vptr sp Ptrofs.zero) e m nil bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f (Stailcall sig a bl) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Callstate fd vargs (call_cont k) m')
+        E0 (Callstate fd vargs (call_cont k) m'' id)
 
   | step_builtin: forall f res ef al k sp e m vl t v m',
       list_forall2 (eval_builtin_arg sp e m) al vl ->
@@ -413,15 +418,17 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sswitch a) k sp e m)
         E0 (State f (Sexit n) k sp e m)
 
-  | step_return_0: forall f k sp e m m',
+  | step_return_0: forall f k sp e m m' m'',
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate Vundef (call_cont k) m')
-  | step_return_1: forall f a k sp e m v m',
+        E0 (Returnstate Vundef (call_cont k) m'')
+  | step_return_1: forall f a k sp e m v m' m'',
       eval_expr (Vptr sp Ptrofs.zero) e m nil a v ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate v (call_cont k) m')
+        E0 (Returnstate v (call_cont k) m'')
 
   | step_label: forall f lbl s k sp e m,
       step (State f (Slabel lbl s) k sp e m)
@@ -432,14 +439,15 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k sp e m)
         E0 (State f s' k' sp e m)
 
-  | step_internal_function: forall f vargs k m m' sp e,
-      Mem.alloc m 0 f.(fn_stackspace) = (m', sp) ->
+  | step_internal_function: forall f vargs k m m' m'' sp e id path,
+      Mem.alloc_frame m id = (m', path) ->
+      Mem.alloc m' 0 f.(fn_stackspace) = (m'', sp) ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
-      step (Callstate (Internal f) vargs k m)
-        E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m')
-  | step_external_function: forall ef vargs k m t vres m',
+      step (Callstate (Internal f) vargs k m id)
+        E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m'')
+  | step_external_function: forall ef vargs k m t vres m' id,
       external_call ef ge vargs m t vres m' ->
-      step (Callstate (External ef) vargs k m)
+      step (Callstate (External ef) vargs k m id)
          t (Returnstate vres k m')
 
   | step_return: forall v optid f sp e k m,
@@ -455,7 +463,7 @@ Inductive initial_state (p: program): state -> Prop :=
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       funsig f = signature_main ->
-      initial_state p (Callstate f nil Kstop m0).
+      initial_state p (Callstate f nil Kstop m0 p.(prog_main)).
 
 Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall r m,

@@ -1122,14 +1122,14 @@ Inductive sound_state_base: state -> Prop :=
         (SP: bc sp = BCstack),
       sound_state_base (State s f (Vptr sp Ptrofs.zero) pc e m)
   | sound_call_state:
-      forall s fd args m bc
+      forall s fd args m bc id
         (STK: sound_stack bc s m (Mem.support m))
         (ARGS: forall v, In v args -> vmatch bc v Vtop)
         (RO: romatch bc m rm)
         (MM: mmatch bc m mtop)
         (GE: genv_match bc ge)
         (NOSTK: bc_nostack bc),
-      sound_state_base (Callstate s fd args m)
+      sound_state_base (Callstate s fd args m id)
   | sound_return_state:
       forall s v m bc
         (STK: sound_stack bc s m (Mem.support m))
@@ -1321,8 +1321,8 @@ Proof.
     eapply mmatch_stack; eauto.
   * intros. exploit list_in_map_inv; eauto. intros (r & P & Q). subst v.
     apply D with (areg ae r).
-    rewrite forallb_forall in H2. apply vpincl_ge.
-    apply H2. apply in_map; auto.
+    rewrite forallb_forall in H3. apply vpincl_ge.
+    apply H3. apply in_map; auto.
     auto with va.
 + (* public call *)
   exploit analyze_successor; eauto. simpl; eauto. rewrite TR. intros SUCC.
@@ -1337,18 +1337,27 @@ Proof.
 - (* tailcall *)
   exploit anonymize_stack; eauto. intros (bc' & A & B & C & D & E & F & G).
   apply sound_call_state with bc'; auto.
-  erewrite Mem.support_free by eauto.
   apply sound_stack_new_bound with sps.
   apply sound_stack_exten with bc.
-  eapply sound_stack_free; eauto.
-  intros. apply C. intro. eapply freshness. rewrite H3 in H1. eauto.
+  apply sound_stack_ext with m. auto.
+  intros.
+  erewrite Mem.loadbytes_free_2; eauto.
+  erewrite <- Mem.loadbytes_return_frame; eauto.
+  intros. apply C. intro. eapply freshness.
+  subst. eauto.
   eapply Mem.sup_include_trans; eauto.
+  eapply Mem.sup_include_trans; eauto.
+  rewrite <- (Mem.support_free _ _ _ _ _ H3).
+  intro.
+  apply Mem.support_return_frame_1 with (b:=b) in H4.
+  apply H4.
 (*  eapply mmatch_below; eauto. congruence. *)
   intros. exploit list_in_map_inv; eauto. intros (r & P & Q). subst v.
   apply D with (areg ae r). auto with va.
+  eapply romatch_return_frame; eauto.
   eapply romatch_free; eauto.
+  eapply mmatch_return_frame; eauto.
   eapply mmatch_free; eauto.
-
 - (* builtin *)
   assert (SPVALID: sup_In (fresh_block sps) (Mem.support m)) by (eapply mmatch_below; eauto with va).
   assert (TR: transfer f rm pc ae am = transfer_builtin ae am rm ef args res).
@@ -1491,32 +1500,40 @@ Proof.
 - (* return *)
   exploit anonymize_stack; eauto. intros (bc' & A & B & C & D & E & F & G).
   apply sound_return_state with bc'; auto.
-  erewrite Mem.support_free by eauto.
   apply sound_stack_new_bound with sps.
   apply sound_stack_exten with bc.
-  eapply sound_stack_free; eauto.
-  intros. apply C. intro. rewrite H2 in H1. eapply freshness. eauto.
-  intro. intro. apply SINCR. apply Mem.sup_incr_in2. auto.
-(*  eapply mmatch_below; eauto with va. *)
+  apply sound_stack_ext with m. auto.
+  intros. erewrite Mem.loadbytes_free_2; eauto.
+  erewrite <- Mem.loadbytes_return_frame; eauto.
+  intros. apply C. intro. eapply freshness.
+  subst. eauto.
+  eapply Mem.sup_include_trans; eauto.
+  eapply Mem.sup_include_trans; eauto.
+  rewrite <- (Mem.support_free _ _ _ _ _ H0).
+  intro. apply Mem.support_return_frame_1 with (b:=b) in H1. apply H1.
   destruct or; simpl. eapply D; eauto. constructor.
-  eapply romatch_free; eauto.
-  eapply mmatch_free; eauto.
+  eapply romatch_return_frame; eauto. eapply romatch_free; eauto.
+  eapply mmatch_return_frame; eauto. eapply mmatch_free; eauto.
 
 - (* internal function *)
   exploit allocate_stack; eauto.
+  eapply romatch_alloc_frame; eauto.
+  eapply mmatch_alloc_frame; eauto.
   intros (bc' & A & B & C & D & E & F & G).
-  exploit (analyze_entrypoint rm f args m' bc'); eauto.
+  exploit (analyze_entrypoint rm f args m'' bc'); eauto.
   intros (ae & am & AN & EM & MM').
   econstructor; eauto.
   eapply Mem.alloc_result. eauto.
-  rewrite Mem.support_alloc with m 0 (fn_stacksize f) m' stk.
+  rewrite Mem.support_alloc with m' 0 (fn_stacksize f) m'' stk.
   eapply Mem.sup_include_refl.
-  eauto. auto.
-  (* erewrite Mem.alloc_result by eauto. *)
+  eauto.
   apply sound_stack_exten with bc; auto.
   apply sound_stack_inv with m; auto.
-  intros. eapply Mem.loadbytes_alloc_unchanged; eauto.
-  (*intros. apply F. erewrite Mem.alloc_result by eauto. auto. *)
+  apply sound_stack_new_bound with (Mem.support m); eauto.
+  intro. eapply Mem.support_alloc_frame_1 in H. apply H.
+  intros.
+  erewrite <- (Mem.loadbytes_alloc_frame _ _ _ _ H).
+  eapply Mem.loadbytes_alloc_unchanged; eauto.
 
 - (* external function *)
   exploit external_call_match; eauto with va.
@@ -1781,7 +1798,7 @@ Lemma alloc_global_match:
   initial_mem_match bc m' (Genv.add_global g idg).
 Proof.
   intros; red; intros. destruct idg as [id1 [fd | gv]]; simpl in *.
-- destruct (Mem.alloc m 0 1) as [m1 b1] eqn:ALLOC.
+- destruct (Mem.alloc_glob id1 m 0 1) as [m1 b1] eqn:ALLOC.
   unfold Genv.find_symbol in H2; simpl in H2.
   unfold Genv.find_var_info, Genv.find_def in H3; simpl in H3.
   rewrite PTree.gsspec in H2. destruct (peq id id1).
@@ -1789,15 +1806,17 @@ Proof.
   assert (sup_In b (Genv.genv_sup g)) by (eapply Genv.genv_symb_range; eauto).
   setoid_rewrite NMap.gso in H3.
   assert (Mem.valid_block m b) by (red; rewrite <- H; auto).
-  assert (b <> b1) by (apply Mem.valid_not_valid_diff with m; eauto with mem).
+  assert (b <> b1). apply Mem.alloc_glob_result in ALLOC.
+  apply Genv.genv_vars_eq in H2. congruence.
   apply bmatch_inv with m.
   eapply H0; eauto.
   intros. transitivity (Mem.loadbytes m1 b ofs n0).
   eapply Mem.loadbytes_drop; eauto.
-  eapply Mem.loadbytes_alloc_unchanged; eauto.
-  intro. rewrite H7 in H6. eapply freshness; eauto.
+  eapply Mem.loadbytes_alloc_glob_unchanged; eauto.
+  apply Genv.genv_vars_eq in H2. congruence.
+  apply Genv.genv_vars_eq in H2. congruence.
 - set (sz := init_data_list_size (gvar_init gv)) in *.
-  destruct (Mem.alloc m 0 sz) as [m1 b1] eqn:ALLOC.
+  destruct (Mem.alloc_glob id1 m 0 sz) as [m1 b1] eqn:ALLOC.
   destruct (store_zeros m1 b1 0 sz) as [m2 | ] eqn:STZ; try discriminate.
   destruct (Genv.store_init_data_list ge m2 b1 0 (gvar_init gv)) as [m3 | ] eqn:SIDL; try discriminate.
   unfold Genv.find_symbol in H2; simpl in H2.
@@ -1806,30 +1825,30 @@ Proof.
 + injection H2; clear H2; intro EQ.
   rewrite EQ in H3. setoid_rewrite NMap.gss in H3. injection H3; clear H3; intros EQ'; subst v.
   assert (b = b1).
-  { erewrite Mem.alloc_result by eauto.
-    rewrite H in EQ. auto. }
+  { erewrite Mem.alloc_glob_result by eauto. congruence. }
   clear EQ. subst b.
   apply bmatch_inv with m3.
   eapply store_init_data_list_sound; eauto.
   apply ablock_init_sound.
   eapply store_zeros_same; eauto.
   split; intros.
-  exploit Mem.load_alloc_same; eauto. intros EQ; subst v; constructor.
-  exploit Mem.loadbytes_alloc_same; eauto with coqlib. congruence.
+  exploit Mem.load_alloc_glob_same; eauto. intros EQ; subst v; constructor.
+  exploit Mem.loadbytes_alloc_glob_same; eauto with coqlib. congruence.
   intros. eapply Mem.loadbytes_drop; eauto.
   right; right; right. unfold Genv.perm_globvar. rewrite H4, H5. constructor.
 + assert (sup_In b (Genv.genv_sup g)) by (eapply Genv.genv_symb_range; eauto).
   setoid_rewrite NMap.gso in H3.
   assert (Mem.valid_block m b) by (red; rewrite <- H; auto).
-  assert (b <> b1) by (apply Mem.valid_not_valid_diff with m; eauto with mem).
+  assert (b <> b1). apply Genv.genv_vars_eq in H2. apply Mem.alloc_glob_result in ALLOC. congruence.
   apply bmatch_inv with m3.
   eapply store_init_data_list_other; eauto.
   eapply store_zeros_other; eauto.
   apply bmatch_inv with m.
   eapply H0; eauto.
-  intros. eapply Mem.loadbytes_alloc_unchanged; eauto.
+  intros. eapply Mem.loadbytes_alloc_glob_unchanged; eauto.
+  apply Mem.alloc_glob_result in ALLOC. congruence.
   intros. eapply Mem.loadbytes_drop; eauto.
-  intro. rewrite H7 in H6. eapply freshness; eauto.
+  apply Genv.genv_vars_eq in H2. congruence.
 Qed.
 
 Lemma alloc_globals_match:

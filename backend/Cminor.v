@@ -235,7 +235,8 @@ Inductive state: Type :=
       forall (f: fundef)                (**r function to invoke *)
              (args: list val)           (**r arguments provided by caller *)
              (k: cont)                  (**r what to do next  *)
-             (m: mem),                  (**r memory state *)
+             (m: mem)                   (**r memory state *)
+             (id: ident),
       state
   | Returnstate:                (**r Return from a function *)
       forall (v: val)                   (**r Return value *)
@@ -439,11 +440,12 @@ Inductive step: state -> trace -> state -> Prop :=
   | step_skip_block: forall f k sp e m,
       step (State f Sskip (Kblock k) sp e m)
         E0 (State f Sskip k sp e m)
-  | step_skip_call: forall f k sp e m m',
+  | step_skip_call: forall f k sp e m m' m'',
       is_call_cont k ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f Sskip k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate Vundef k m')
+        E0 (Returnstate Vundef k m'')
 
   | step_assign: forall f id a k sp e m v,
       eval_expr sp e m a v ->
@@ -457,22 +459,25 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sstore chunk addr a) k sp e m)
         E0 (State f Sskip k sp e m')
 
-  | step_call: forall f optid sig a bl k sp e m vf vargs fd,
+  | step_call: forall f optid sig a bl k sp e m vf vargs fd id,
+      vf = Vptr (Global id) Ptrofs.zero ->
       eval_expr sp e m a vf ->
       eval_exprlist sp e m bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (State f (Scall optid sig a bl) k sp e m)
-        E0 (Callstate fd vargs (Kcall optid f sp e k) m)
+        E0 (Callstate fd vargs (Kcall optid f sp e k) m id)
 
-  | step_tailcall: forall f sig a bl k sp e m vf vargs fd m',
+  | step_tailcall: forall f sig a bl k sp e m vf vargs fd m' m'' id,
+      vf = Vptr (Global id) Ptrofs.zero ->
       eval_expr (Vptr sp Ptrofs.zero) e m a vf ->
       eval_exprlist (Vptr sp Ptrofs.zero) e m bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f (Stailcall sig a bl) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Callstate fd vargs (call_cont k) m')
+        E0 (Callstate fd vargs (call_cont k) m'' id)
 
   | step_builtin: forall f optid ef bl k sp e m vargs t vres m',
       eval_exprlist sp e m bl vargs ->
@@ -514,15 +519,17 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sswitch islong a cases default) k sp e m)
         E0 (State f (Sexit (switch_target n default cases)) k sp e m)
 
-  | step_return_0: forall f k sp e m m',
+  | step_return_0: forall f k sp e m m' m'',
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate Vundef (call_cont k) m')
-  | step_return_1: forall f a k sp e m v m',
+        E0 (Returnstate Vundef (call_cont k) m'')
+  | step_return_1: forall f a k sp e m v m' m'',
       eval_expr (Vptr sp Ptrofs.zero) e m a v ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate v (call_cont k) m')
+        E0 (Returnstate v (call_cont k) m'')
 
   | step_label: forall f lbl s k sp e m,
       step (State f (Slabel lbl s) k sp e m)
@@ -533,14 +540,15 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k sp e m)
         E0 (State f s' k' sp e m)
 
-  | step_internal_function: forall f vargs k m m' sp e,
-      Mem.alloc m 0 f.(fn_stackspace) = (m', sp) ->
+  | step_internal_function: forall f vargs k m m' m'' sp e path id,
+      Mem.alloc_frame m id = (m', path) ->
+      Mem.alloc m' 0 f.(fn_stackspace) = (m'', sp) ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
-      step (Callstate (Internal f) vargs k m)
-        E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m')
-  | step_external_function: forall ef vargs k m t vres m',
+      step (Callstate (Internal f) vargs k m id)
+        E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m'')
+  | step_external_function: forall ef vargs k m t vres m' id,
       external_call ef ge vargs m t vres m' ->
-      step (Callstate (External ef) vargs k m)
+      step (Callstate (External ef) vargs k m id)
          t (Returnstate vres k m')
 
   | step_return: forall v optid f sp e k m,
@@ -561,7 +569,7 @@ Inductive initial_state (p: program): state -> Prop :=
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       funsig f = signature_main ->
-      initial_state p (Callstate f nil Kstop m0).
+      initial_state p (Callstate f nil Kstop m0 p.(prog_main)).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 
@@ -642,7 +650,7 @@ Proof.
     apply B in H; destruct H; congruence.
   + subst v0. assert (b0 = b) by (inv H2; inv H13; auto). subst b0; auto.
   + assert (n0 = n) by (inv H2; inv H14; auto). subst n0; auto.
-  + exploit external_call_determ. eexact H1. eexact H7.
+  + exploit external_call_determ. eexact H1. eexact H8.
     intros (A & B). split; intros; auto.
     apply B in H; destruct H; congruence.
 - (* single event *)
@@ -656,7 +664,7 @@ Proof.
   inv H; inv H0; auto.
 Qed.
 
-(** * Alternate operational semantics (big-step) *)
+(** * Alternate operational semantics (big-step)
 
 (** We now define another semantics for Cminor without [goto] that follows
   the ``big-step'' style of semantics, also known as natural semantics.
@@ -981,11 +989,11 @@ Proof.
 Qed.
 
 Lemma eval_funcall_exec_stmt_steps:
-  (forall m fd args t m' res,
+  (forall m fd args t m' res id,
    eval_funcall ge m fd args t m' res ->
    forall k,
    is_call_cont k ->
-   star step ge (Callstate fd args k m)
+   star step ge (Callstate fd args k m id)
               t (Returnstate res k m'))
 /\(forall f sp e m s t e' m' out,
    exec_stmt ge f sp e m s t e' m' out ->
@@ -1245,3 +1253,4 @@ Proof.
 Qed.
 
 End BIGSTEP_TO_TRANSITION.
+*)

@@ -3797,6 +3797,28 @@ Proof.
   intros. eauto with mem.
 Qed.
 
+Lemma romatch_return_frame:
+  forall m m' rm,
+  Mem.return_frame m = Some m' ->
+  romatch m rm ->
+  romatch m' rm.
+Proof.
+  intros. apply romatch_ext with m; auto.
+  intros. erewrite <- Mem.loadbytes_return_frame; eauto.
+  intros. eapply Mem.perm_return_frame; eauto.
+Qed.
+
+Lemma romatch_alloc_frame:
+  forall m id m' rm p,
+  Mem.alloc_frame m id = (m',p) ->
+  romatch m rm ->
+  romatch m' rm.
+Proof.
+  intros. apply romatch_ext with m; auto.
+  intros. erewrite <- Mem.loadbytes_alloc_frame; eauto.
+  intros. eapply Mem.perm_alloc_frame; eauto.
+Qed.
+
 Lemma romatch_alloc:
   forall m b lo hi m' rm,
   Mem.alloc m lo hi = (m', b) ->
@@ -4196,6 +4218,28 @@ Proof.
   intros. apply mmatch_ext with m; auto.
   intros. eapply Mem.loadbytes_free_2; eauto.
   erewrite <- Mem.support_free by eauto. apply Mem.sup_include_refl.
+Qed.
+
+Lemma mmatch_return_frame:
+  forall m m' am,
+  Mem.return_frame m =  Some m' ->
+  mmatch m am ->
+  mmatch m' am.
+Proof.
+  intros. apply mmatch_ext with m; auto.
+  intros. erewrite <- Mem.loadbytes_return_frame; eauto.
+  intro. eapply Mem.support_return_frame_1 in H. apply H.
+Qed.
+
+Lemma mmatch_alloc_frame:
+  forall m m' id p am,
+  Mem.alloc_frame m id = (m',p) ->
+  mmatch m am ->
+  mmatch m' am.
+Proof.
+  intros. apply mmatch_ext with m; auto.
+  intros. erewrite <- Mem.loadbytes_alloc_frame; eauto.
+  intro. eapply Mem.support_alloc_frame_1 in H. apply H.
 Qed.
 
 Lemma mmatch_top':
