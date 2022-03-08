@@ -7,10 +7,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -25,6 +26,7 @@ Import ListNotations.
 
 Close Scope R_scope.
 Open Scope Z_scope.
+Set Asymmetric Patterns.
 
 Definition float := binary64. (**r the type of IEE754 double-precision FP numbers *)
 Definition float32 := binary32. (**r the type of IEE754 single-precision FP numbers *)

@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -124,14 +125,15 @@ let rec mmap f env = function
       let (tl', env2) = mmap f env1 tl in
       (hd' :: tl', env2)
 
-let rec mmap2 f env l1 l2 =
+let rec mmap2_filter f env l1 l2 =
   match l1,l2 with
-  | [],[] -> [],env
-  | a1::l1,a2::l2 ->
-    let hd,env1 = f env a1 a2 in
-    let tl,env2 = mmap2 f env1 l1 l2 in
-    (hd::tl,env2)
-  | _, _ -> invalid_arg "mmap2"
+  | [], [] -> ([], env)
+  | a1 :: l1, a2 :: l2 ->
+      let (opt_hd, env1) = f env a1 a2 in
+      let (tl, env2) = mmap2_filter f env1 l1 l2 in
+      ((match opt_hd with Some hd -> hd :: tl | None -> tl), env2)
+  | _, _ ->
+      invalid_arg "mmap2_filter"
 
 (* To detect redefinitions within the same scope *)
 
@@ -394,34 +396,29 @@ let elab_float_constant f =
   (v, ty)
 
 let elab_char_constant loc wide chars =
+  let len = List.length chars in
   let nbits = if wide then 8 * !config.sizeof_wchar else 8 in
-  (* Treat multi-char constants as a number in base 2^nbits *)
   let max_digit = Int64.shift_left 1L nbits in
-  let max_val = Int64.shift_left 1L (64 - nbits) in
-  let v,_ =
-    List.fold_left
-      (fun (acc,err) d ->
-        if not err then begin
-          let overflow = acc < 0L || acc >= max_val
-          and out_of_range = d < 0L || d >= max_digit in
-          if overflow then
-            error loc "character constant too long for its type";
-          if out_of_range then
+  (* Treat multi-character constants as a number in base 2^nbits.
+     It must fit in type int for a normal constant and in type wchar_t
+     for a wide constant. *)
+  let v =
+    if len > (if wide then 1 else !config.sizeof_int) then begin
+      error loc "%d-character constant too long for its type" len;
+      0L
+    end else
+      List.fold_left
+        (fun acc d ->
+          if d < 0L || d >= max_digit then
             error loc "escape sequence is out of range (code 0x%LX)" d;
-          Int64.add (Int64.shift_left acc nbits) d,overflow || out_of_range
-        end else
-          Int64.add (Int64.shift_left acc nbits) d,true
-      )
-      (0L,false) chars in
-  if not (integer_representable v IInt) then
-    warning loc Unnamed "character constant too long for its type";
-  (* C99 6.4.4.4 item 10: single character -> represent at type char
-     or wchar_t *)
+          Int64.add (Int64.shift_left acc nbits) d)
+        0L chars in
+  (* C99 6.4.4.4 items 10 and 11:
+       single-character constant -> represent at type char
+       multi-character constant -> represent at type int
+       wide character constant -> represent at type wchar_t *)
   Ceval.normalize_int v
-    (if List.length chars = 1 then
-       if wide then wchar_ikind() else IChar
-     else
-       IInt)
+    (if wide then wchar_ikind() else if len = 1 then IChar else IInt)
 
 let elab_string_literal loc wide chars =
   let nbits = if wide then 8 * !config.sizeof_wchar else 8 in
@@ -626,6 +623,36 @@ let get_nontype_attrs env ty =
     | _ -> true in
   let nta = List.filter to_be_removed (attributes_of_type_no_expand ty) in
   (remove_attributes_type env nta ty, nta)
+
+(* Auxiliary for elaborating bitfield declarations. *)
+
+let check_bitfield loc env id ty ik n =
+  let max = Int64.of_int(sizeof_ikind ik * 8) in
+  if n < 0L then begin
+    error loc "bit-field '%a' has negative width (%Ld)" pp_field id n;
+    None
+  end else if n >  max then begin
+    error loc "size of bit-field '%a' (%Ld bits) exceeds its type (%Ld bits)" pp_field id n max;
+    None
+  end else if n = 0L && id <> "" then begin
+    error loc "named bit-field '%a' has zero width" pp_field id;
+    None
+  end else begin
+    begin match unroll env ty with
+    | TEnum(eid, _) ->
+      let info = wrap Env.find_enum loc env eid in
+      let w = Int64.to_int n in
+      let representable sg =
+        List.for_all (fun (_, v, _) -> Cutil.int_representable v w sg)
+                     info.Env.ei_members in
+      if not (representable false || representable true) then
+        warning loc Unnamed
+          "not all values of type 'enum %s' can be represented in bit-field '%a' (%d bits are not enough)"
+          eid.C.name pp_field id w
+    | _ -> ()
+    end;
+    Some (Int64.to_int n)
+  end
 
 (* Elaboration of a type specifier.  Returns 6-tuple:
      (storage class, "inline" flag, "noreturn" flag, "typedef" flag,
@@ -1001,7 +1028,7 @@ and elab_field_group env = function
             | TInt(ik, _) -> ik
             | TEnum(_, _) -> enum_ikind
             | _ -> ILongLong (* trigger next error message *) in
-          if integer_rank ik > integer_rank IInt then begin
+          if sizeof_ikind ik > sizeof_ikind IInt then begin
             error loc
               "the type of bit-field '%a' must be an integer type no bigger than 'int'" pp_field id;
             None,env
@@ -1009,23 +1036,11 @@ and elab_field_group env = function
             error loc "alignment specified for bit-field '%a'" pp_field id;
             None, env
           end else begin
-            let expr,env' =(!elab_expr_f loc env sz) in
+            let expr,env' = !elab_expr_f loc env sz in
             match Ceval.integer_expr env' expr with
             | Some n ->
-                if n < 0L then begin
-                  error loc "bit-field '%a' has negative width (%Ld)" pp_field id n;
-                  None,env
-                end else
-                  let max = Int64.of_int(sizeof_ikind ik * 8) in
-                  if n >  max then begin
-                    error loc "size of bit-field '%a' (%Ld bits) exceeds its type (%Ld bits)" pp_field id n max;
-                    None,env
-                end else
-                if n = 0L && id <> "" then begin
-                  error loc "named bit-field '%a' has zero width" pp_field id;
-                  None,env
-                end else
-                  Some(Int64.to_int n),env'
+                let bf = check_bitfield loc env' id ty ik n in
+                bf,env'
             | None ->
                 error loc "bit-field '%a' width not an integer constant" pp_field id;
                 None,env
@@ -1033,11 +1048,15 @@ and elab_field_group env = function
     if is_qualified_array ty then
       error loc "type qualifier used in array declarator outside of function prototype";
     let anon_composite = is_anonymous_composite ty in
-    if id = "" && not anon_composite && optbitsize = None  then
+    if id = "" && not anon_composite && optbitsize = None  then begin
       warning loc Missing_declarations "declaration does not declare anything";
-    { fld_name = id; fld_typ = ty; fld_bitfield = optbitsize'; fld_anonymous = id = "" && anon_composite},env'
+      None, env'
+    end else
+      Some { fld_name = id; fld_typ = ty; fld_bitfield = optbitsize';
+             fld_anonymous = id = "" && anon_composite},
+      env'
   in
-  (mmap2 elab_bitfield env' fieldlist names)
+  (mmap2_filter elab_bitfield env' fieldlist names)
 
 | Field_group_static_assert(exp, loc_exp, msg, loc_msg, loc) ->
     elab_static_assert env exp loc_exp msg loc_msg loc;
@@ -1396,14 +1415,18 @@ module I = struct
     | TStruct(id, _), Init_struct(id', (fld1, i1) :: flds) ->
         OK(Zstruct(z, id, [], fld1, flds), i1)
     | TUnion(id, _), Init_union(id', fld, i) ->
-        begin match (Env.find_union env id).Env.ci_members with
+      let rec first_named = function
         | [] -> NotFound
-        | fld1 :: _ ->
+        | fld1 :: fl ->
+          if fld1.fld_name = "" then
+            first_named fl
+          else begin
             OK(Zunion(z, id, fld1),
                if fld.fld_name = fld1.fld_name
                then i
                else default_init env fld1.fld_typ)
-        end
+          end in
+      first_named (Env.find_union env id).Env.ci_members
     | (TStruct _ | TUnion _), Init_single a ->
         (* This is a previous whole-struct initialization that we
            are going to overwrite.  Hard to support correctly

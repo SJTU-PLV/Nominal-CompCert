@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -303,7 +304,7 @@ Qed.
 
 (** Hints *)
 
-Hint Resolve
+Global Hint Resolve
   notin_range range_notin
   is_notempty empty_notin in_notempty
   disjoint_sym empty_disjoint_r empty_disjoint_l

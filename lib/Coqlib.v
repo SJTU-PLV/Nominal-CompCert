@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -23,8 +24,6 @@ Require Export Znumtheory.
 Require Export List.
 Require Export Bool.
 Require Export Lia.
-
-Global Set Asymmetric Patterns.
 
 (** * Useful tactics *)
 
@@ -116,7 +115,7 @@ Lemma Plt_ne:
 Proof.
   unfold Plt; intros. red; intro. subst y. eelim Pos.lt_irrefl; eauto.
 Qed.
-Hint Resolve Plt_ne: coqlib.
+Global Hint Resolve Plt_ne: coqlib.
 
 Lemma Plt_trans:
   forall (x y z: positive), Plt x y -> Plt y z -> Plt x z.
@@ -127,14 +126,14 @@ Lemma Plt_succ:
 Proof.
   unfold Plt; intros. apply Pos.lt_succ_r. apply Pos.le_refl.
 Qed.
-Hint Resolve Plt_succ: coqlib.
+Global Hint Resolve Plt_succ: coqlib.
 
 Lemma Plt_trans_succ:
   forall (x y: positive), Plt x y -> Plt x (Pos.succ y).
 Proof.
   intros. apply Plt_trans with y. assumption. apply Plt_succ.
 Qed.
-Hint Resolve Plt_succ: coqlib.
+Global Hint Resolve Plt_succ: coqlib.
 
 Lemma Plt_succ_inv:
   forall (x y: positive), Plt x (Pos.succ y) -> Plt x y \/ x = y.
@@ -175,7 +174,7 @@ Proof (Pos.lt_le_trans).
 Lemma Plt_strict: forall p, ~ Plt p p.
 Proof (Pos.lt_irrefl).
 
-Hint Resolve Ple_refl Plt_Ple Ple_succ Plt_strict: coqlib.
+Global Hint Resolve Ple_refl Plt_Ple Ple_succ Plt_strict: coqlib.
 
 Ltac extlia := unfold Plt, Ple in *; lia.
 
@@ -524,6 +523,60 @@ Proof.
   intros. unfold align. apply Z.divide_factor_r.
 Qed.
 
+Lemma align_lt: forall x y, y > 0 -> align x y < x + y.
+Proof.
+  intros. unfold align.
+  generalize (Z_div_mod_eq (x + y - 1) y H); intro.
+  generalize (Z_mod_lt (x + y - 1) y H); intro.
+  lia.
+Qed.
+
+Lemma align_same:
+  forall x y, y > 0 -> (y | x) -> align x y = x.
+Proof.
+  unfold align; intros. destruct H0 as [k E].
+  replace (x  + y - 1) with (x + (y - 1)) by lia.
+  rewrite E, Z.div_add_l, Z.div_small by lia.
+  lia.
+Qed.
+
+(** Floor: [floor n amount] returns the greatest multiple of [amount]
+    less than or equal to [n]. *)
+
+Definition floor (n: Z) (amount: Z) := (n / amount) * amount.
+
+Lemma floor_interval:
+  forall x y, y > 0 -> floor x y <= x < floor x y + y.
+Proof.
+  unfold floor; intros.
+  generalize (Z_div_mod_eq x y H) (Z_mod_lt x y H).
+  set (q := x / y). set (r := x mod y). intros. lia.
+Qed.
+
+Lemma floor_divides:
+  forall x y, y > 0 -> (y | floor x y).
+Proof.
+  unfold floor; intros. exists (x / y); auto.
+Qed.
+
+Lemma floor_same:
+  forall x y, y > 0 -> (y | x) -> floor x y = x.
+Proof.
+  unfold floor; intros. rewrite (Zdivide_Zdiv_eq y x) at 2; auto; lia.
+Qed.
+
+Lemma floor_align_interval:
+  forall x y, y > 0 ->
+  floor x y <= align x y <= floor x y + y.
+Proof.
+  unfold floor, align; intros.
+  replace (x / y * y + y) with ((x + 1 * y) / y * y).
+  assert (A: forall a b, a <= b -> a / y * y <= b / y * y).
+  { intros. apply Z.mul_le_mono_nonneg_r. lia. apply Z.div_le_mono; lia. }
+  split; apply A; lia.
+  rewrite Z.div_add by lia. lia.
+Qed.
+
 (** * Definitions and theorems on the data types [option], [sum] and [list] *)
 
 Set Implicit Arguments.
@@ -559,7 +612,7 @@ Definition sum_left_map (A B C: Type) (f: A -> B) (x: A + C) : B + C :=
 
 (** Properties of [List.nth] (n-th element of a list). *)
 
-Hint Resolve in_eq in_cons: coqlib.
+Global Hint Resolve in_eq in_cons: coqlib.
 
 Lemma nth_error_in:
   forall (A: Type) (n: nat) (l: list A) (x: A),
@@ -573,14 +626,14 @@ Proof.
     discriminate.
     apply in_cons. auto.
 Qed.
-Hint Resolve nth_error_in: coqlib.
+Global Hint Resolve nth_error_in: coqlib.
 
 Lemma nth_error_nil:
   forall (A: Type) (idx: nat), nth_error (@nil A) idx = None.
 Proof.
   induction idx; simpl; intros; reflexivity.
 Qed.
-Hint Resolve nth_error_nil: coqlib.
+Global Hint Resolve nth_error_nil: coqlib.
 
 (** Compute the length of a list, with result in [Z]. *)
 
@@ -671,7 +724,7 @@ Lemma incl_cons_inv:
 Proof.
   unfold incl; intros. apply H. apply in_cons. auto.
 Qed.
-Hint Resolve incl_cons_inv: coqlib.
+Global Hint Resolve incl_cons_inv: coqlib.
 
 Lemma incl_app_inv_l:
   forall (A: Type) (l1 l2 m: list A),
@@ -687,7 +740,7 @@ Proof.
   unfold incl; intros. apply H. apply in_or_app. right; assumption.
 Qed.
 
-Hint Resolve  incl_tl incl_refl incl_app_inv_l incl_app_inv_r: coqlib.
+Global Hint Resolve  incl_tl incl_refl incl_app_inv_l incl_app_inv_r: coqlib.
 
 Lemma incl_same_head:
   forall (A: Type) (x: A) (l1 l2: list A),
@@ -770,6 +823,32 @@ Proof.
   destruct l; simpl in H; inv H.
   exploit IHm1; eauto. intros [l1 [l2 [P [Q R]]]]. subst l.
   exists (a0 :: l1); exists l2; intuition. simpl; congruence.
+Qed.
+
+(** Properties of [List.app] (concatenation) *)
+
+Lemma list_append_injective_l:
+  forall (A: Type) (l1 l2 l1' l2': list A),
+  l1 ++ l2 = l1' ++ l2' -> List.length l1 = List.length l1' -> l1 = l1' /\ l2 = l2'.
+Proof.
+  intros until l2'. revert l1 l1'. induction l1 as [ | a l1]; destruct l1' as [ | a' l1']; simpl; intros.
+- auto.
+- discriminate.
+- discriminate.
+- destruct (IHl1 l1'). congruence. congruence. split; congruence.
+Qed.
+
+Lemma list_append_injective_r:
+  forall (A: Type) (l1 l2 l1' l2': list A),
+  l1 ++ l2 = l1' ++ l2' -> List.length l2 = List.length l2' -> l1 = l1' /\ l2 = l2'.
+Proof.
+  intros.
+  assert (X: rev l2 = rev l2' /\ rev l1 = rev l1').
+  { apply list_append_injective_l.
+    rewrite <- ! rev_app_distr. congruence.
+    rewrite ! rev_length; auto. }
+  rewrite <- (rev_involutive l1), <- (rev_involutive l1'), <- (rev_involutive l2), <- (rev_involutive l2').
+  intuition congruence.
 Qed.
 
 (** Folding a function over a list *)
@@ -1042,7 +1121,7 @@ Proof.
   constructor. constructor. constructor. auto.
 Qed.
 
-Hint Resolve is_tail_refl is_tail_cons is_tail_in is_tail_cons_left: coqlib.
+Global Hint Resolve is_tail_refl is_tail_cons is_tail_in is_tail_cons_left: coqlib.
 
 Lemma is_tail_incl:
   forall (A: Type) (l1 l2: list A), is_tail l1 l2 -> incl l1 l2.
@@ -1151,26 +1230,6 @@ Lemma list_map_drop:
 Proof.
   induction n; simpl; intros. auto.
   destruct l; simpl; auto.
-Qed.
-
-(** A list of [n] elements, all equal to [x]. *)
-
-Fixpoint list_repeat {A: Type} (n: nat) (x: A) {struct n} :=
-  match n with
-  | O => nil
-  | S m => x :: list_repeat m x
-  end.
-
-Lemma length_list_repeat:
-  forall (A: Type) n (x: A), length (list_repeat n x) = n.
-Proof.
-  induction n; simpl; intros. auto. decEq; auto.
-Qed.
-
-Lemma in_list_repeat:
-  forall (A: Type) n (x: A) y, In y (list_repeat n x) -> y = x.
-Proof.
-  induction n; simpl; intros. elim H. destruct H; auto.
 Qed.
 
 (** * Definitions and theorems over boolean types *)

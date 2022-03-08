@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -28,6 +29,6 @@ Extract Constant Archi.win64 =>
 
 Extract Constant SelectOp.symbol_is_external =>
   "match Configuration.system with
-    | ""macosx"" -> C2C.atom_is_extern
+    | ""macos"" -> C2C.atom_is_extern
     | ""cygwin"" when Archi.ptr64 -> C2C.atom_is_extern
     | _ -> (fun _ -> false)".

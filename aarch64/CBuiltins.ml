@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -35,7 +36,7 @@ let int128_type = TArray(TInt(IULong, []), Some 2L, [])
 let builtins = {
   builtin_typedefs =
   [ "__builtin_va_list", va_list_type ] @
-  (if Configuration.system = "macosx" then
+  (if Configuration.system = "macos" then
   [ "__int128_t", int128_type;
     "__uint128_t", int128_type ]
   else []);

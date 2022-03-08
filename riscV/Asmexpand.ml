@@ -170,8 +170,8 @@ let memcpy_small_arg sz arg tmp =
       assert false
 
 let expand_builtin_memcpy_small sz al src dst =
-  let (tsrc, tdst) =
-    if dst <> BA (IR X5) then (X5, X6) else (X6, X5) in
+  let tsrc = if dst <> BA (IR X5) then X5 else X6 in
+  let tdst = if src <> BA (IR X6) then X6 else X5 in
   let (rsrc, osrc) = memcpy_small_arg sz src tsrc in
   let (rdst, odst) = memcpy_small_arg sz dst tdst in
   let rec copy osrc odst sz =
@@ -646,8 +646,12 @@ let expand_builtin_inline name args res =
                         (fun rl ->
                           emit (Pmulw (rl, X a, X b));
                           emit (Pmulhuw (rh, X a, X b)))
+  (* No operation *)
   | "__builtin_nop", [], _ ->
      emit Pnop
+  (* Optimization hint *)
+  | "__builtin_unreachable", [], _ ->
+     ()
   (* Catch-all *)
   | _ ->
      raise (Error ("unrecognized builtin " ^ name))

@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -392,7 +393,7 @@ and string_literal startp accu = parse
 (* We assume gcc -E syntax but try to tolerate variations. *)
 and hash = parse
   | whitespace_char_no_newline +
-    (decimal_constant as n)
+    (digit + as n)
     whitespace_char_no_newline *
     "\"" ([^ '\n' '\"']* as file) "\""
     [^ '\n']* '\n'

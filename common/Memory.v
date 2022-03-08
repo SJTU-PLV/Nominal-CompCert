@@ -9,10 +9,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -791,7 +792,7 @@ Proof.
 Qed.
 Theorem perm_empty: forall b ofs k p, ~perm empty b ofs k p.
 Proof.
-  intros. unfold perm, empty; simpl. auto.
+  intros. unfold perm, empty; simpl. tauto.
 Qed.
 
 Theorem valid_access_empty: forall chunk b ofs p, ~valid_access empty chunk b ofs p.
@@ -4724,8 +4725,9 @@ Notation fresh_block := Mem.fresh_block.
 Notation freshness := Mem.freshness.
 Global Opaque Mem.alloc Mem.free Mem.store Mem.load Mem.storebytes Mem.loadbytes.
 
-Hint Resolve Mem.sup_incr_in1 Mem.sup_incr_in2 : core.
-Hint Resolve
+
+Global Hint Resolve Mem.sup_incr_in1 Mem.sup_incr_in2 : core.
+Global Hint Resolve
   Mem.valid_not_valid_diff
   Mem.perm_implies
   Mem.perm_cur
