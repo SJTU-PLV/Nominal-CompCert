@@ -709,10 +709,10 @@ Definition transl_instr (f: Mach.function) (i: Mach.instruction)
       OK (Pcall_s symb sig :: k)
   | Mtailcall sig (inl reg) =>
       do r <- ireg_of reg;
-      OK (Pfreeframe f.(fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) ::
+      OK (Pfreeframe f.(Mach.fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) ::
           Pjmp_r r sig :: k)
   | Mtailcall sig (inr symb) =>
-      OK (Pfreeframe f.(fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) ::
+      OK (Pfreeframe f.(Mach.fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) ::
           Pjmp_s symb sig :: k)
   | Mlabel lbl =>
       OK(Plabel lbl :: k)
@@ -723,7 +723,7 @@ Definition transl_instr (f: Mach.function) (i: Mach.instruction)
   | Mjumptable arg tbl =>
       do r <- ireg_of arg; OK (Pjmptbl r tbl :: k)
   | Mreturn =>
-      OK (Pfreeframe f.(fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) ::
+      OK (Pfreeframe f.(Mach.fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) ::
           Pret :: k)
   | Mbuiltin ef args res =>
       OK (Pbuiltin ef (List.map (map_builtin_arg preg_of) args) (map_builtin_res preg_of res) :: k)
@@ -771,18 +771,380 @@ Definition transl_code' (f: Mach.function) (il: list Mach.instruction) (axp: boo
 
 Definition transl_function (f: Mach.function) :=
   do c <- transl_code' f f.(Mach.fn_code) true;
+  if zle 0 f.(Mach.fn_stacksize) then
   OK (mkfunction f.(Mach.fn_sig)
-        (Pallocframe f.(fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) :: c)).
+        (Pallocframe f.(Mach.fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) :: c)
+        f.(Mach.fn_stacksize) f.(fn_link_ofs))
+  else Error (msg "negative function stacksize").
 
+Section INSTRSIZE.
+Variable instr_size : instruction -> Z.
 Definition transf_function (f: Mach.function) : res Asm.function :=
   do tf <- transl_function f;
-  if zlt Ptrofs.max_unsigned (list_length_z tf.(fn_code))
+  if zlt Ptrofs.max_unsigned (code_size instr_size tf.(fn_code))
   then Error (msg "code size exceeded")
   else OK tf.
+
+Lemma transl_function_stacksize :
+  forall f tf,
+    transl_function f = OK tf ->
+    Mach.fn_stacksize f = fn_stacksize tf.
+Proof.
+  intros.
+  unfold transl_function in H. unfold bind in H.
+  destr_in H. destr_in H. inv H. simpl. auto.
+Qed.
+
+Lemma transf_function_stacksize_pos :
+  forall f tf,
+    transf_function f = OK tf ->
+    0 <= Mach.fn_stacksize f.
+Proof.
+  intros. unfold transf_function in H. monadInv H.
+  unfold transl_function in EQ. destr_in EQ.
+  monadInv EQ.
+Qed.
 
 Definition transf_fundef (f: Mach.fundef) : res Asm.fundef :=
   transf_partial_fundef transf_function f.
 
 Definition transf_program (p: Mach.program) : res Asm.program :=
   transform_partial_program transf_fundef p.
+End INSTRSIZE.
 
+Section AsmgenFacts.
+
+Local Close Scope string_scope.
+Lemma mk_setcc_app:
+  forall cond x c,
+    mk_setcc cond x c = mk_setcc cond x nil ++ c.
+Proof.
+  unfold mk_setcc, mk_setcc_base.
+  intros. repeat destr.
+Qed.
+
+Lemma transl_cond_app:
+  forall a b cond lr tc,
+    transl_cond cond lr (a ++ b) = OK tc ->
+    exists tc', transl_cond cond lr a = OK tc' /\ tc = tc' ++ b.
+Proof.
+  intros a b cond lr tc TC.
+  unfold transl_cond in *.
+  repeat destr_in TC; monadInv H0; rewrite EQ, ? EQ1; simpl; eauto.
+Qed.
+
+Lemma transl_sel_app:
+  forall a b cond lr i1 i2 tc,
+    transl_sel cond lr i1 i2 (a ++ b) = OK tc ->
+    exists tc', transl_sel cond lr i1 i2  a = OK tc' /\ tc = tc' ++ b.
+Proof.
+  intros a b cond lr i1 i2 tc TC.
+  unfold transl_sel in *. destr_in TC. inv TC. eauto.
+  repeat destr_in TC; monadInv H0. unfold mk_sel in *.
+  destr_in EQ; inv EQ.
+  eapply transl_cond_app; eauto.
+  eapply transl_cond_app; eauto.
+Qed.
+
+Lemma transl_op_eq:
+  forall op lr r c tc,
+    transl_op op lr r c = OK tc ->
+    exists ti,
+      transl_op op lr r nil = OK ti /\ tc = ti ++ c.
+Proof.
+  intros op lr r c tc TO.
+  destruct op; simpl in *; repeat destr_in TO; eauto; try (monadInv H0; rewrite EQ; simpl; now eauto).
+  - unfold mk_mov in *. repeat destr_in H0; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl.
+    unfold mk_intconv in *. repeat destr_in EQ2; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl.
+    unfold mk_intconv in *. repeat destr_in EQ2; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl.
+    unfold mk_intconv in *. repeat destr_in EQ2; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl.
+    unfold mk_intconv in *. repeat destr_in EQ2; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl.
+    unfold mk_intconv in *. repeat destr_in EQ2; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl.
+    unfold mk_intconv in *. repeat destr_in EQ2; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl.
+    unfold mk_intconv in *. repeat destr_in EQ2; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl.
+    unfold mk_intconv in *. repeat destr_in EQ2; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl.
+    unfold mk_intconv in *. repeat destr_in EQ2; eauto.
+  - unfold mk_shrximm.  eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - unfold mk_shrxlimm. destr. eauto. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. repeat destr; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ.
+    rewrite mk_setcc_app in EQ0.
+    edestruct transl_cond_app as (tc' & TC & APP); eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl.
+    eapply transl_sel_app; eauto.
+Qed.
+
+Lemma transl_cond_app':
+  forall a b cond lr tc,
+    transl_cond cond lr a = OK tc ->
+    transl_cond cond lr (a ++ b) = OK (tc ++ b).
+Proof.
+  intros a b cond lr tc TC.
+  unfold transl_cond in *.
+  repeat destr_in TC; monadInv H0; rewrite EQ, ? EQ1; simpl; eauto.
+Qed.
+
+Lemma transl_sel_app':
+  forall a b cond i1 i2 lr tc,
+    transl_sel cond lr i1 i2 a = OK tc ->
+    transl_sel cond lr i1 i2 (a ++ b) = OK (tc ++ b).
+Proof.
+  intros a b cond lr i1 i2 tc TC.
+  unfold transl_sel in *. destr_in TC. inv TC. eauto.
+  repeat destr_in TC; monadInv H0. unfold mk_sel in *.
+  destr_in EQ; inv EQ.
+  simpl.
+  exploit transl_cond_app'; eauto.
+  simpl.
+  exploit transl_cond_app'. apply EQ0.
+  instantiate (1:= b). eauto.
+Qed.
+
+Lemma mk_setcc_app':
+  forall cond x c c',
+    mk_setcc cond x (c ++ c') = mk_setcc cond x c ++ c'.
+Proof.
+  unfold mk_setcc, mk_setcc_base.
+  intros. repeat destr.
+Qed.
+
+Lemma transl_op_eq':
+  forall op lr r c c' tc,
+    transl_op op lr r c = OK tc ->
+    transl_op op lr r (c ++ c') = OK (tc ++ c').
+Proof.
+  intros op lr r c c' tc TO;
+    destruct op; simpl in *;
+      repeat match goal with
+             | H: bind _ _ = _ |- _ => monadInv H
+             | H: ?a = OK ?b |- context [bind ?a _] => rewrite H; simpl; eauto
+             | H: mk_mov _ _ _ = _ |- _ => unfold mk_mov in H; repeat destr_in H
+             | H: mk_intconv _ _ _ _ = _ |- _ => unfold mk_intconv in H; inv H; eauto
+             | H: context [match ?a with _ => _ end] |- _ => repeat destr_in H
+             | H: OK _ = OK _ |- _ => inv H
+             | H: Error _ = OK _ |- _ => inv H
+             | |- _ => simpl in *; eauto
+             end; try (unfold mk_intconv; destr; eauto).
+  unfold mk_shrxlimm. destr; eauto.
+  unfold mk_shrxlimm. destr; eauto.
+  repeat destr; eauto.
+  rewrite mk_setcc_app'.
+  eapply transl_cond_app'; eauto.
+  eapply transl_sel_app'; eauto.
+Qed.
+
+Lemma transl_load_eq:
+  forall m a l m0 c tc
+    (TI : transl_load m a l m0 c = OK tc),
+  exists ti, transl_load m a l m0 nil = OK ti /\ tc = ti ++ c.
+Proof.
+  intros.
+  unfold transl_load. monadInv TI. rewrite EQ. simpl.
+  repeat destr_in EQ0; monadInv H0; rewrite EQ0; simpl; eauto.
+Qed.
+
+Lemma mk_storebyte_eq:
+  forall x x0 c tc
+    (EQ1 : mk_storebyte x x0 c = OK tc),
+  exists ti, mk_storebyte x x0 nil = OK ti /\ tc = ti ++ c.
+Proof.
+  unfold mk_storebyte.
+  intros. repeat (destr; eauto); inv EQ1; eauto.
+Qed.
+
+
+Lemma transl_store_eq:
+  forall m a l m0 c tc
+    (TI : transl_store m a l m0 c = OK tc),
+  exists ti, transl_store m a l m0 nil = OK ti /\ tc = ti ++ c.
+Proof.
+  intros.
+  unfold transl_store. monadInv TI. rewrite EQ; simpl.
+  repeat destr_in EQ0; monadInv H0; rewrite EQ0; simpl; eauto using mk_storebyte_eq.
+Qed.
+
+
+Lemma transl_load_eq':
+  forall m a l m0 c c' tc
+    (TI : transl_load m a l m0 c = OK tc),
+    transl_load m a l m0 (c ++ c') = OK (tc ++ c').
+Proof.
+  intros.
+  unfold transl_load. monadInv TI. rewrite EQ.
+  repeat destr_in EQ0; simpl; monadInv H0; rewrite EQ0; simpl; eauto.
+Qed.
+
+Lemma mk_storebyte_eq':
+  forall x x0 c c' tc
+    (EQ1 : mk_storebyte x x0 c = OK tc),
+    mk_storebyte x x0 (c ++ c') = OK (tc ++ c').
+Proof.
+  unfold mk_storebyte.
+  intros. repeat (destr; eauto); inv EQ1; eauto.
+Qed.
+
+Lemma transl_store_eq':
+  forall m a l m0 c c' tc
+    (TI : transl_store m a l m0 c = OK tc),
+    transl_store m a l m0 (c ++ c') = OK (tc ++ c').
+Proof.
+  intros.
+  unfold transl_store. monadInv TI. rewrite EQ; simpl.
+  repeat destr_in EQ0; monadInv H0; rewrite EQ0; simpl; eauto using mk_storebyte_eq'.
+Qed.
+
+
+Lemma mk_jcc_app:
+  forall cond x c,
+    mk_jcc cond x c = mk_jcc cond x nil ++ c.
+Proof.
+  unfold mk_jcc.
+  intros. repeat destr.
+Qed.
+
+Lemma loadind_eq:
+  forall r i t m c tc,
+    loadind r i t m c = OK tc ->
+    exists ti,
+      loadind r i t m nil = OK ti /\ tc = ti ++ c.
+Proof.
+  intros r i t m c tc TI. destruct i; simpl in *.
+  unfold loadind in *. repeat destr_in TI; simpl; eauto.
+Qed.
+
+Lemma loadind_split:
+  forall r i t m c1 c2 tc,
+    loadind r i t m (c1++c2) = OK tc ->
+    exists tc1, loadind r i t m c1 = OK tc1 /\ tc = tc1 ++ c2.
+Proof.
+  intros. unfold loadind in *. repeat destr_in H; simpl; eauto.
+Qed.
+
+Lemma transl_instr_eq:
+  forall f i ax c tc,
+    transl_instr f i ax c = OK tc ->
+    exists ti,
+      transl_instr f i ax nil = OK ti /\ tc = ti ++ c.
+Proof.
+  intros f i ax c tc TI.
+  destruct i; simpl in *.
+  - Transparent loadind.
+    unfold loadind in *. repeat destr_in TI; simpl; eauto.
+  - unfold storeind in *. repeat destr_in TI; simpl; eauto.
+  - destruct ax.
+    + unfold loadind in *. repeat destr_in TI; simpl; eauto.
+    + monadInv TI.
+      exploit loadind_eq. apply EQ. eauto. intros (ti1 & A & B).
+      inv B. rewrite A. simpl. eapply loadind_split; eauto.
+  - edestruct transl_op_eq as (ti & TOP & EQ); eauto.
+  - eauto using transl_load_eq.
+  - eauto using transl_store_eq.
+  - destr_in TI; monadInv TI; rewrite ? EQ; simpl; eauto.
+  - destr_in TI; monadInv TI; rewrite ? EQ; simpl; eauto.
+  - inv TI; eauto.
+  - inv TI; eauto.
+  - inv TI; eauto.
+  - eapply transl_cond_app; eauto. erewrite <- mk_jcc_app. auto.
+  - monadInv TI; rewrite EQ; simpl; eauto.
+  - inv TI. eauto.
+Qed.
+
+Lemma mk_jcc_app':
+  forall cond x c c',
+    mk_jcc cond x (c ++ c') = mk_jcc cond x c ++ c'.
+Proof.
+  unfold mk_jcc.
+  intros. repeat destr.
+Qed.
+
+Lemma loadind_app:
+      forall r i t m c tc c',
+        loadind r i t m c = OK tc ->
+        loadind r i t m (c++c') = OK (tc++c').
+Proof.
+  intros. unfold loadind in *.
+  repeat destr_in H; simpl; eauto.
+Qed.
+
+Lemma transl_instr_eq':
+  forall f i ax c c' tc,
+    transl_instr f i ax c = OK tc ->
+    transl_instr f i ax (c ++ c') = OK (tc ++ c').
+Proof.
+  intros f i ax c c' tc TI.
+  destruct i; simpl in *; repeat destr_in TI;
+    repeat match goal with
+           | H: loadind _ _ _ _ _ = _ |- _ => unfold loadind in *; monadInv H
+           | H: storeind _ _ _ _ _ = _ |- _ => unfold storeind in *; monadInv H
+           | H: bind _ _ = _ |- _ => monadInv H
+           | H: ?a = OK ?b |- context [bind ?a _] => rewrite H; simpl; eauto
+           | H: context [match ?a with _ => _ end] |- _ => repeat destr_in H
+           | H: OK _ = OK _ |- _ => inv H
+           | |- _ => simpl in *; eauto
+           end.
+  + unfold loadind in *. repeat destr_in H0; eauto.
+  + unfold storeind in *. repeat destr_in H0; eauto.
+  + unfold loadind in *. repeat destr_in H0; eauto.
+  + exploit loadind_app. apply EQ. intros. rewrite H. simpl.
+    eapply loadind_app; eauto.
+  + eapply transl_op_eq'; eauto.
+  + eapply transl_load_eq'; eauto.
+  + eapply transl_store_eq'; eauto.
+  + rewrite mk_jcc_app'. eapply transl_cond_app'; eauto.
+Qed.
+
+Lemma transl_code_app:
+  forall f l1 l2 ep1 x,
+    transl_code f (l1 ++ l2) ep1 = OK x ->
+    exists ep2 y, transl_code f l1 ep1 = OK y /\ bind (transl_code f l2 ep2) (fun k => OK (y ++ k)) = OK x.
+Proof.
+  induction l1; simpl; intros; eauto.
+  exists ep1, nil; split; auto. rewrite H. simpl. auto.
+  monadInv H.
+  edestruct IHl1 as (ep2 & y & TC1 & TC2). apply EQ.
+  rewrite TC1. simpl.
+  edestruct transl_instr_eq as (ti & TI & EQti). eauto. subst.
+  generalize (transl_instr_eq' _ _ _ _ y _ TI). simpl. intro TI2.
+  rewrite TI2.
+  monadInv TC2.
+  eexists _, _; split. eauto.
+  rewrite EQ1. simpl. rewrite app_ass. reflexivity.
+Qed.
+
+End AsmgenFacts.

@@ -15,7 +15,7 @@
 Require Import Coqlib Maps Postorder.
 Require Import AST Linking.
 Require Import Values Memory Globalenvs Events Smallstep.
-Require Import Op Registers RTL Renumber.
+Require Import Op Registers RTL RTLmach Renumber.
 
 Definition match_prog (p tp: RTL.program) :=
   match_program (fun ctx f tf => tf = transf_fundef f) eq p tp.
@@ -28,6 +28,7 @@ Qed.
 
 Section PRESERVATION.
 
+Variables fn_stack_requirements : ident -> Z.
 Variables prog tprog: program.
 Hypothesis TRANSL: match_prog prog tprog.
 Let ge := Genv.globalenv prog.
@@ -156,9 +157,9 @@ Inductive match_states: RTL.state -> RTL.state -> Prop :=
                    (Returnstate stk' v m).
 
 Lemma step_simulation:
-  forall S1 t S2, RTL.step ge S1 t S2 ->
+  forall S1 t S2, step fn_stack_requirements ge S1 t S2 ->
   forall S1', match_states S1 S1' ->
-  exists S2', RTL.step tge S1' t S2' /\ match_states S2 S2'.
+  exists S2', step fn_stack_requirements tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   induction 1; intros S1' MS; inv MS; try TR_AT.
 (* nop *)
@@ -231,27 +232,28 @@ Proof.
 Qed.
 
 Lemma transf_initial_states:
-  forall S1, RTL.initial_state prog S1 ->
-  exists S2, RTL.initial_state tprog S2 /\ match_states S1 S2.
+  forall S1, initial_state prog S1 ->
+  exists S2, initial_state tprog S2 /\ match_states S1 S2.
 Proof.
   intros. inv H. econstructor; split.
   econstructor.
     eapply (Genv.init_mem_transf TRANSL); eauto.
     rewrite symbols_preserved. rewrite (match_program_main TRANSL). eauto.
     eapply function_ptr_translated; eauto.
-    rewrite <- H3; apply sig_preserved.
+    rewrite <- H3; apply sig_preserved. eauto.
     rewrite (match_program_main TRANSL).
   constructor. constructor.
 Qed.
 
 Lemma transf_final_states:
-  forall S1 S2 r, match_states S1 S2 -> RTL.final_state S1 r -> RTL.final_state S2 r.
+  forall S1 S2 r, match_states S1 S2 -> final_state S1 r -> final_state S2 r.
 Proof.
   intros. inv H0. inv H. inv STACKS. constructor.
 Qed.
 
 Theorem transf_program_correct:
-  forward_simulation (RTL.semantics prog) (RTL.semantics tprog).
+  forward_simulation (RTLmach.semantics fn_stack_requirements prog)
+                     (RTLmach.semantics fn_stack_requirements tprog).
 Proof.
   eapply forward_simulation_step.
   apply senv_preserved.

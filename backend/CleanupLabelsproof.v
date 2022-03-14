@@ -32,6 +32,7 @@ Qed.
 
 Section CLEANUP.
 
+Variables fn_stack_requirements: ident -> Z.
 Variables prog tprog: program.
 Hypothesis TRANSL: match_prog prog tprog.
 Let ge := Genv.globalenv prog.
@@ -230,9 +231,9 @@ Proof.
 Qed.
 
 Theorem transf_step_correct:
-  forall s1 t s2, step ge s1 t s2 ->
+  forall s1 t s2, step fn_stack_requirements ge s1 t s2 ->
   forall s1' (MS: match_states s1 s1'),
-  (exists s2', step tge s1' t s2' /\ match_states s2 s2')
+  (exists s2', step fn_stack_requirements tge s1' t s2' /\ match_states s2 s2')
   \/ (measure s2 < measure s1 /\ t = E0 /\ match_states s2 s1')%nat.
 Proof.
   induction 1; intros; inv MS; try rewrite remove_unused_labels_cons.
@@ -272,7 +273,7 @@ Proof.
   econstructor. erewrite match_parent_locset; eauto. eauto.
   eapply find_function_translated; eauto.
   symmetry; apply sig_function_translated.
-  simpl. eauto. eauto.
+  simpl. eauto. eauto. eauto.
   econstructor; eauto.
 (* Lbuiltin *)
   left; econstructor; split.
@@ -335,7 +336,7 @@ Proof.
   eapply (Genv.init_mem_transf TRANSL); eauto.
   rewrite (match_program_main TRANSL), symbols_preserved; eauto.
   apply function_ptr_translated; auto.
-  rewrite sig_function_translated. auto.
+  rewrite sig_function_translated. auto. eauto.
   rewrite (match_program_main TRANSL).
   constructor; auto. constructor.
 Qed.
@@ -348,7 +349,8 @@ Proof.
 Qed.
 
 Theorem transf_program_correct:
-  forward_simulation (Linear.semantics prog) (Linear.semantics tprog).
+  forward_simulation (Linear.semantics fn_stack_requirements prog)
+                     (Linear.semantics fn_stack_requirements tprog).
 Proof.
   eapply forward_simulation_opt.
   apply senv_preserved.

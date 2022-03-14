@@ -1597,6 +1597,12 @@ Proof.
   auto.
 Qed.
 
+Axiom external_call_mem_iff:
+  forall ef ge vargs m1 t vres m2 m1',
+    Mem.iff m1 m2 ->
+    external_call ef ge vargs m1 t vres m1' ->
+    exists m2', external_call ef ge vargs m2 t vres m2' /\ Mem.iff m1' m2'.
+
 (** Axioms and Lemmas of strees in [external_call_mem_inject]*)
 Definition external_stree (s:stree) : Prop :=
   forall fid p pos , stree_In fid p pos s -> fid = None.
@@ -1615,6 +1621,10 @@ Axiom external_call_global:
   external_call ef ge vargs m1 t vres m2 ->
   Mem.global (Mem.support m1) = Mem.global (Mem.support m2).
 
+Axiom external_call_astack:
+  forall ef ge vargs m1 t vres m2,
+    external_call ef ge vargs m1 t vres m2 ->
+    Mem.astack(Mem.support m1) = Mem.astack (Mem.support m2).
 Parameter external_stree_gen : external_function -> Senv.t -> list val -> mem ->
                            option stree.
 
@@ -1629,6 +1639,13 @@ Axiom external_call_stack:
     |Some t' => add_dead_substree (Mem.stack (Mem.support m1)) t'
     |None => (Mem.stack (Mem.support m1))
   end.
+
+Axiom external_perm_stack:
+  forall ge ef m1 t res m2 vargs b o k p,
+    external_call ef ge vargs m1 t res m2 ->
+    is_stack b ->
+    sup_In b (Mem.support m1) ->
+    Mem.perm m2 b o k p <-> Mem.perm m1 b o k p.
 
 Axiom external_call_mem_inject_stree:
   forall ge1 ge2 vargs m1 f m1' vargs',
@@ -1752,6 +1769,8 @@ Proof.
   intro. rewrite H6. destr.
   apply struct_eq_add_dead_substree; eauto.
 Qed.
+
+(** Special case of [external_call_mem_inject_gen] (for backward compatibility) *)
 
 Definition meminj_preserves_globals (F V: Type) (ge: Genv.t F V) (f: block -> option (block * Z)) : Prop :=
      (forall id b, Genv.find_symbol ge id = Some b -> f b = Some(b, 0))

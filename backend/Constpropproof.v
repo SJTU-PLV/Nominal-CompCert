@@ -16,7 +16,7 @@ Require Import Coqlib Maps Integers Floats Lattice Kildall.
 Require Import AST Linking.
 Require Import Values Builtins Events Memory Globalenvs Smallstep.
 Require Compopts Machregs.
-Require Import Op Registers RTL.
+Require Import Op Registers RTL RTLmach.
 Require Import Liveness ValueDomain ValueAOp ValueAnalysis.
 Require Import ConstpropOp ConstpropOpproof Constprop.
 
@@ -31,6 +31,7 @@ Qed.
 
 Section PRESERVATION.
 
+Variable fn_stack_requirements : ident -> Z.
 Variable prog: program.
 Variable tprog: program.
 Hypothesis TRANSL: match_prog prog tprog.
@@ -349,9 +350,9 @@ Ltac TransfInstr :=
 
 Lemma transf_step_correct:
   forall s1 t s2,
-  step ge s1 t s2 ->
+  step fn_stack_requirements ge s1 t s2 ->
   forall n1 s1' (SS: sound_state prog s1) (MS: match_states n1 s1 s1'),
-  (exists n2, exists s2', step tge s1' t s2' /\ match_states n2 s2 s2')
+  (exists n2, exists s2', step fn_stack_requirements tge s1' t s2' /\ match_states n2 s2 s2')
   \/ (exists n2, n2 < n1 /\ t = E0 /\ match_states n2 s2 s1')%nat.
 Proof.
   induction 1; intros; inv MS; try InvSoundState; try (inv PC; try congruence).
@@ -478,6 +479,7 @@ Proof.
 - (* Itailcall *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
   exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [A' B']].
+  exploit Mem.pop_stage_extends; eauto. intros [m2''' [A'' B'']].
   exploit transf_ros_correct; eauto. intros (cu' & FIND & LINK').
   TransfInstr; intro.
   left; econstructor; econstructor; split.
@@ -485,12 +487,12 @@ Proof.
   {
     destruct ros; simpl in *.
     + generalize  (REGS r). intro.
-      destruct (areg ae r) eqn:?; simpl in *; inv H5; eauto; (try congruence).
+      destruct (areg ae r) eqn:?; simpl in *; inv H6; eauto; (try congruence).
       destruct p; simpl in *; eauto; (try congruence).
       destr; simpl in *.
       apply areg_sound with (r := r) in EM. inv EM; (try congruence).
-      rewrite Heqa in H6. inv H6. inv H7.
-      destruct GE. apply H6 in H9. apply Genv.genv_vars_eq in H9.
+      rewrite Heqa in H7. inv H7. inv H8.
+      destruct GE. apply H7 in H10. apply Genv.genv_vars_eq in H10.
       congruence.
     + auto.
   }
@@ -505,7 +507,7 @@ Opaque builtin_strength_reduction.
   set (rm := romem_for cu) in *.
   assert (DFL: (fn_code (transf_function rm f))!pc = Some dfl ->
           exists (n2 : nat) (s2' : state),
-            step tge
+            step fn_stack_requirements tge
              (State s' (transf_function rm f) (Vptr (fresh_block sps) Ptrofs.zero) pc rs' m'0) t s2' /\
             match_states n2
              (State s f (Vptr (fresh_block sps) Ptrofs.zero) pc' (regmap_setres res vres rs) m') s2').
@@ -576,7 +578,8 @@ Opaque builtin_strength_reduction.
 - (* Ireturn *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
   exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [A' B']].
-  left; exists O; exists (Returnstate s' (regmap_optget or Vundef rs') m2''); split.
+  exploit Mem.pop_stage_extends; eauto. intros [m2''' [A'' B'']].
+  left; exists O; exists (Returnstate s' (regmap_optget or Vundef rs') m2'''); split.
   eapply exec_Ireturn; eauto. TransfInstr; auto.
   constructor; auto.
   destruct or; simpl; auto.
@@ -585,6 +588,8 @@ Opaque builtin_strength_reduction.
   exploit Mem.alloc_frame_extends; eauto. intros [m2' [A B]].
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros [m2'' [A' B']].
+  exploit Mem.push_stage_extends; eauto. intro.
+  exploit Mem.record_frame_extends; eauto. intros [m2''' [A'' B'']].
   simpl. unfold transf_function.
   left; exists O; econstructor; split.
   eapply exec_function_internal; simpl; eauto.
@@ -613,9 +618,9 @@ Lemma transf_initial_states:
 Proof.
   intros. inversion H.
   exploit function_ptr_translated; eauto. intros (cu & FIND & LINK).
-  exists O; exists (Callstate nil (transf_fundef (romem_for cu) f) nil m0 tprog.(prog_main)); split.
+  exists O; exists (Callstate nil (transf_fundef (romem_for cu) f) nil m1 tprog.(prog_main)); split.
   econstructor; eauto.
-  apply (Genv.init_mem_match TRANSL); auto.
+  apply (Genv.init_mem_match TRANSL); auto. eauto.
   replace (prog_main tprog) with (prog_main prog).
   rewrite symbols_preserved. eauto.
   symmetry; eapply match_program_main; eauto.
@@ -635,7 +640,7 @@ Qed.
   follows. *)
 
 Theorem transf_program_correct:
-  forward_simulation (RTL.semantics prog) (RTL.semantics tprog).
+  forward_simulation (RTLmach.semantics fn_stack_requirements prog) (RTLmach.semantics fn_stack_requirements tprog).
 Proof.
   apply Forward_simulation with lt (fun n s1 s2 => sound_state prog s1 /\ match_states n s1 s2); constructor.
 - apply lt_wf.

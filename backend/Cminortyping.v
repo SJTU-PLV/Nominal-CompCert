@@ -633,8 +633,11 @@ Proof.
   intros. eapply Genv.find_funct_prop; eauto.
 Qed.
 
+Section ORACLE.
+Variable fn_stack_requirements : ident -> Z.
+
 Lemma subject_reduction:
-  forall st1 t st2, step ge st1 t st2 ->
+  forall st1 t st2, step fn_stack_requirements ge st1 t st2 ->
   forall (WT: wt_state st1), wt_state st2.
 Proof.
   destruct 1; intros; inv WT.
@@ -652,10 +655,10 @@ Proof.
 - inv WT_STMT. econstructor; eauto.
   eapply wt_find_funct; eauto.
   eapply wt_eval_exprlist; eauto.
-  rewrite H9; eapply call_cont_wt; eauto.
+  rewrite H10; eapply call_cont_wt; eauto.
 - inv WT_STMT. exploit external_call_well_typed; eauto. intros TRES.
   econstructor; eauto using wt_Sskip.
-  destruct optid; auto. apply wt_env_assign; auto. rewrite <- H5; auto.
+  destruct optid; auto. apply wt_env_assign; auto. rewrite <- H6; auto.
   destruct optid; auto. apply def_env_assign; auto.
 - inv WT_STMT. econstructor; eauto. econstructor; eauto.
 - inv WT_STMT. destruct b; econstructor; eauto.
@@ -674,10 +677,10 @@ Proof.
   { constructor. eapply call_cont_wt; eauto. }
   generalize (wt_find_label _ _ lbl _ _ H2 WT_CK).
   rewrite H. intros [WT_STMT' WT_CONT']. econstructor; eauto.
-- inv WT_FD. inversion H2; subst. econstructor; eauto.
+- inv WT_FD. inversion H3; subst. econstructor; eauto.
   constructor; auto.
-  apply wt_env_set_locals. apply wt_env_set_params. rewrite H3; auto.
-  red; intros. apply def_set_locals. destruct H5; auto. left; apply def_set_params; auto.
+  apply wt_env_set_locals. apply wt_env_set_params. rewrite H4; auto.
+  red; intros. apply def_set_locals. destruct H6; auto. left; apply def_set_params; auto.
 - exploit external_call_well_typed; eauto. intros.
   econstructor; eauto.
 - inv WT_CONT. econstructor; eauto using wt_Sskip.
@@ -687,7 +690,7 @@ Proof.
 Qed.
 
 Lemma subject_reduction_star:
-  forall st1 t st2, star step ge st1 t st2 ->
+  forall st1 t st2, star (step fn_stack_requirements) ge st1 t st2 ->
   forall (WT: wt_state st1), wt_state st2.
 Proof.
   induction 1; eauto using subject_reduction.
@@ -701,6 +704,7 @@ Proof.
   rewrite H3; constructor.
 Qed.
 
+End ORACLE.
 End SUBJECT_REDUCTION.
 
 (** * Safe expressions *)

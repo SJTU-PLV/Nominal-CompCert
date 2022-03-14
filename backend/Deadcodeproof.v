@@ -16,7 +16,7 @@ Require Import FunInd.
 Require Import Coqlib Maps Errors Integers Floats Lattice Kildall.
 Require Import AST Linking.
 Require Import Values Memory Globalenvs Events Smallstep.
-Require Import Registers Op RTL.
+Require Import Registers Op RTL RTLmach.
 Require Import ValueDomain ValueAnalysis NeedDomain NeedOp Deadcode.
 
 Definition match_prog (prog tprog: RTL.program) :=
@@ -83,6 +83,37 @@ Proof.
 - inv H0. rewrite Z.add_0_r. eauto.
 - inv H0. apply Z.divide_0_r.
 - inv H0. rewrite Z.add_0_r. eapply ma_memval0; eauto.
+Qed.
+
+Lemma magree_push_stage:
+  forall m1 m2 P,
+  magree m1 m2 P ->
+  magree (Mem.push_stage m1) (Mem.push_stage m2) P.
+Proof.
+  intros m1 m2 P MI; inv MI; constructor; eauto.
+  unfold Mem.push_stage. simpl. congruence.
+Qed.
+
+Lemma magree_pop_stage:
+  forall m1 m2 P m1',
+  magree m1 m2 P ->
+  Mem.pop_stage m1 = Some m1' ->
+  exists m2',
+    Mem.pop_stage m2 = Some m2' /\
+    magree m1' m2' P.
+Proof.
+  intros. inversion H.
+  assert ({m2':mem|Mem.pop_stage m2 = Some m2'}).
+  apply Mem.nonempty_pop_stage. rewrite ma_support0.
+  eapply Mem.pop_stage_nonempty; eauto.
+  destruct X as [m2' POP].
+  exists m2'. split. auto.
+  unfold Mem.pop_stage in *.
+  destruct (Mem.astack(Mem.support m1)) eqn:S1. discriminate.
+  destruct (Mem.astack(Mem.support m2)) eqn:S2. discriminate.
+  inv H0. inv POP.
+  constructor; eauto. simpl.
+  congruence.
 Qed.
 
 Lemma magree_loadbytes:
@@ -395,6 +426,7 @@ Qed.
 
 Section PRESERVATION.
 
+Variable fn_stack_requirements : ident -> Z.
 Variable prog: program.
 Variable tprog: program.
 Hypothesis TRANSF: match_prog prog tprog.
@@ -731,9 +763,9 @@ Qed.
 (** * The simulation diagram *)
 
 Theorem step_simulation:
-  forall S1 t S2, step ge S1 t S2 ->
+  forall S1 t S2, step fn_stack_requirements ge S1 t S2 ->
   forall S1', match_states S1 S1' -> sound_state prog S1 ->
-  exists S2', step tge S1' t S2' /\ match_states S2 S2'.
+  exists S2', step fn_stack_requirements tge S1' t S2' /\ match_states S2 S2'.
 Proof.
 
 Ltac TransfInstr :=
@@ -900,6 +932,7 @@ Ltac UseTransfer :=
   intros; eapply nlive_dead_stack; eauto.
   intros (tm' & C & D).
   exploit magree_return_frame; eauto. intros (tm'' & E & F).
+  exploit magree_pop_stage; eauto. intros (tm''' & G & I).
   econstructor; split.
   eapply exec_Itailcall; eauto.
   destruct ros; simpl in *.
@@ -1097,10 +1130,9 @@ Ltac UseTransfer :=
 - (* return *)
   TransfInstr; UseTransfer.
   exploit magree_free. eauto. eauto. instantiate (1 := nlive ge stk nmem_all).
-  intros; eapply nlive_dead_stack; eauto.
-  intros (tm' & A & B).
-  exploit magree_return_frame; eauto.
-  intros (tm'' & C & D).
+  intros; eapply nlive_dead_stack; eauto. intros (tm' & A & B).
+  exploit magree_return_frame; eauto. intros (tm'' & C & D).
+  exploit magree_pop_stage; eauto. intros (tm''' & E & F).
   econstructor; split.
   eapply exec_Ireturn; eauto.
   erewrite stacksize_translated by eauto. eexact A.
@@ -1114,6 +1146,8 @@ Ltac UseTransfer :=
   exploit Mem.alloc_frame_extends; eauto. intros (tm' & A & B).
   exploit Mem.alloc_extends; eauto. apply Z.le_refl. apply Z.le_refl.
   intros (tm'' & C & D).
+  exploit Mem.push_stage_extends; eauto. intro.
+  exploit Mem.record_frame_extends; eauto. intros (tm''' & E & F).
   econstructor; split.
   econstructor; simpl; eauto.
   simpl. econstructor; eauto.
@@ -1142,7 +1176,7 @@ Lemma transf_initial_states:
 Proof.
   intros. inversion H.
   exploit function_ptr_translated; eauto. intros (cu & tf & A & B & C).
-  exists (Callstate nil tf nil m0 (prog_main tprog)); split.
+  exists (Callstate nil tf nil m1 (prog_main tprog)); split.
   econstructor; eauto.
   eapply (Genv.init_mem_match TRANSF); eauto.
   replace (prog_main tprog) with (prog_main prog).
@@ -1163,7 +1197,8 @@ Qed.
 (** * Semantic preservation *)
 
 Theorem transf_program_correct:
-  forward_simulation (RTL.semantics prog) (RTL.semantics tprog).
+  forward_simulation (RTLmach.semantics fn_stack_requirements prog)
+                     (RTLmach.semantics fn_stack_requirements tprog).
 Proof.
   intros.
   apply forward_simulation_step with

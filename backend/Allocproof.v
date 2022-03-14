@@ -19,7 +19,7 @@ Require Import Coqlib Ordered Maps Errors Integers Floats.
 Require Import AST Linking Lattice Kildall.
 Require Import Values Memory Globalenvs Events Smallstep.
 Require Archi.
-Require Import Op Registers RTL Locations Conventions RTLtyping LTL.
+Require Import Op Registers RTL RTLmach Locations Conventions RTLtyping LTL.
 Require Import Allocation.
 
 Definition match_prog (p: RTL.program) (tp: LTL.program) :=
@@ -1782,6 +1782,7 @@ Qed.
 
 Section PRESERVATION.
 
+Variable fn_stack_requirements: ident -> Z.
 Variable prog: RTL.program.
 Variable tprog: LTL.program.
 Hypothesis TRANSF: match_prog prog tprog.
@@ -1847,7 +1848,7 @@ Lemma exec_moves:
   satisf rs ls e' ->
   wt_regset env rs ->
   exists ls',
-    star step tge (Block s f sp (expand_moves mv bb) ls m)
+    star (step fn_stack_requirements) tge (Block s f sp (expand_moves mv bb) ls m)
                E0 (Block s f sp bb ls' m)
   /\ satisf rs ls' e.
 Proof.
@@ -1908,7 +1909,7 @@ Inductive match_stackframes: list RTL.stackframe -> list LTL.stackframe -> signa
            Val.has_type v (env res) ->
            agree_callee_save ls ls1 ->
            exists ls2,
-           star LTL.step tge (Block ts tf sp bb ls1 m)
+           star (LTL.step fn_stack_requirements) tge (Block ts tf sp bb ls1 m)
                           E0 (State ts tf sp pc ls2 m)
            /\ satisf (rs#res <- v) ls2 e),
       match_stackframes
@@ -1988,9 +1989,9 @@ Qed.
     "plus" kind. *)
 
 Lemma step_simulation:
-  forall S1 t S2, RTL.step ge S1 t S2 -> wt_state S1 ->
+  forall S1 t S2, RTLmach.step fn_stack_requirements ge S1 t S2 -> wt_state S1 ->
   forall S1', match_states S1 S1' ->
-  exists S2', plus LTL.step tge S1' t S2' /\ match_states S2 S2'.
+  exists S2', plus (LTL.step fn_stack_requirements) tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   induction 1; intros WT S1' MS; inv MS; try UseShape.
 
@@ -2313,7 +2314,7 @@ Proof.
       generalize (B1 (Eq Full r (R m0))). simpl.
       inv Heqo1. simpl.
       rewrite ESF.add_iff. simpl.
-      intros A. rewrite H0 in A.
+      intros A. rewrite H in A.
       specialize (A (or_introl eq_refl)). inversion A.
       eauto.
     - congruence.
@@ -2345,6 +2346,7 @@ Proof.
   set (args' := loc_arguments sg) in *.
   exploit Mem.free_parallel_extends; eauto. intros [m'1 [P Q]].
   exploit Mem.return_frame_parallel_extends; eauto. intros [m'2 [P' Q']].
+  exploit Mem.pop_stage_extends; eauto. intros [m'3 [P'' Q'']].
   exploit (exec_moves mv); eauto. intros [ls1 [A1 B1]].
   exploit find_function_translated. eauto. eauto. eapply add_equations_args_satisf; eauto.
   intros [tfd [E F]].
@@ -2360,7 +2362,7 @@ Proof.
       generalize (B1 (Eq Full r (Locations.R m0))). simpl.
       inv Heqo. simpl.
       rewrite ESF.add_iff. simpl.
-      intros A. rewrite H0 in A.
+      intros A. rewrite H in A.
       specialize (A (or_introl eq_refl)). inversion A. subst. eauto.
     - congruence.
     - congruence.
@@ -2374,9 +2376,9 @@ Proof.
   eapply match_stackframes_change_sig; eauto. rewrite SIG. rewrite e0. decEq.
   destruct (transf_function_inv _ _ FUN); auto.
   rewrite SIG. rewrite return_regs_arg_values; auto. eapply add_equations_args_lessdef; eauto.
-  inv WTI. rewrite <- H8. apply wt_regset_list; auto.
+  inv WTI. rewrite <- H9. apply wt_regset_list; auto.
   apply return_regs_agree_callee_save.
-  rewrite SIG. inv WTI. rewrite <- H8. apply wt_regset_list; auto.
+  rewrite SIG. inv WTI. rewrite <- H9. apply wt_regset_list; auto.
 
 (* builtin *)
 - exploit (exec_moves mv1); eauto. intros [ls1 [A1 B1]].
@@ -2432,15 +2434,16 @@ Proof.
 
 (* return *)
 - destruct (transf_function_inv _ _ FUN).
-  exploit Mem.free_parallel_extends; eauto. rewrite H11. intros [m'1 [P Q]].
+  exploit Mem.free_parallel_extends; eauto. rewrite H12. intros [m'1 [P Q]].
   exploit Mem.return_frame_parallel_extends; eauto. intros [m'2 [P' Q']].
+  exploit Mem.pop_stage_extends; eauto. intros [m'3 [P'' Q'']].
   inv WTI; MonadInv.
 + (* without an argument *)
   exploit (exec_moves mv); eauto. intros [ls1 [A1 B1]].
   econstructor; split.
   eapply plus_left. econstructor; eauto.
   eapply star_right. eexact A1.
-  econstructor. eauto. eauto. eauto. traceEq.
+  econstructor. eauto. eauto. eauto. eauto. traceEq.
   simpl. econstructor; eauto.
   apply return_regs_agree_callee_save.
   constructor.
@@ -2449,35 +2452,37 @@ Proof.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
   eapply star_right. eexact A1.
-  econstructor. eauto. eauto. eauto. traceEq.
-  simpl. econstructor; eauto. rewrite <- H12.
+  econstructor. eauto. eauto. eauto. eauto. traceEq.
+  simpl. econstructor; eauto. rewrite <- H13.
   replace (Locmap.getpair (map_rpair R (loc_result (RTL.fn_sig f)))
                           (return_regs (parent_locset ts) ls1))
   with (Locmap.getpair (map_rpair R (loc_result (RTL.fn_sig f))) ls1).
   eapply add_equations_res_lessdef; eauto.
-  rewrite <- H15. apply WTRS.
+  rewrite <- H16. apply WTRS.
   generalize (loc_result_caller_save (RTL.fn_sig f)).
   destruct (loc_result (RTL.fn_sig f)); simpl.
   intros A; rewrite A; auto.
   intros [A B]; rewrite A, B; auto.
   apply return_regs_agree_callee_save.
-  rewrite <- H12, <- H15. apply WTRS.
+  rewrite <- H13, <- H16. apply WTRS.
 
 (* internal function *)
 - monadInv FUN. simpl in *.
   destruct (transf_function_inv _ _ EQ).
   exploit Mem.alloc_frame_extends; eauto. intros [m'1 [U V]].
-  exploit Mem.alloc_extends; eauto. apply Z.le_refl. rewrite H9; apply Z.le_refl.
-  intros [m'2 [U' V']].
+  exploit Mem.alloc_extends; eauto. apply Z.le_refl.
+  rewrite H10; apply Z.le_refl. intros [m'2 [U' V']].
+  exploit Mem.push_stage_extends. apply V'. intro.
+  exploit Mem.record_frame_extends. apply H12. eauto. intros [m'3 [U'' V'']].
   assert (WTRS: wt_regset env (init_regs args (fn_params f))).
-  { apply wt_init_regs. inv H0. rewrite wt_params. rewrite H10. auto. auto. }
+  { apply wt_init_regs. inv H0. rewrite wt_params. rewrite H11. auto. auto. }
   exploit (exec_moves mv). eauto. eauto.
     eapply can_undef_satisf; eauto. eapply compat_entry_satisf; eauto.
     rewrite call_regs_param_values. eexact ARGS.
     exact WTRS.
   intros [ls1 [A B]].
   econstructor; split.
-  eapply plus_left. econstructor; eauto.
+  eapply plus_left. econstructor; eauto. eauto.
   eapply star_left. econstructor; eauto.
   eapply star_right. eexact A.
   econstructor; eauto.
@@ -2515,13 +2520,13 @@ Proof.
 Qed.
 
 Lemma initial_states_simulation:
-  forall st1, RTL.initial_state prog st1 ->
+  forall st1, RTLmach.initial_state prog st1 ->
   exists st2, LTL.initial_state tprog st2 /\ match_states st1 st2.
 Proof.
   intros. inv H.
   exploit function_ptr_translated; eauto. intros [tf [FIND TR]].
   exploit sig_function_translated; eauto. intros SIG.
-  exists (LTL.Callstate nil tf (Locmap.init Vundef) m0 (prog_main tprog)); split.
+  exists (LTL.Callstate nil tf (Locmap.init Vundef) m1 (prog_main tprog)); split.
   econstructor; eauto.
   eapply (Genv.init_mem_transf_partial TRANSF); eauto.
   rewrite symbols_preserved.
@@ -2538,7 +2543,7 @@ Qed.
 
 Lemma final_states_simulation:
   forall st1 st2 r,
-  match_states st1 st2 -> RTL.final_state st1 r -> LTL.final_state st2 r.
+  match_states st1 st2 -> RTLmach.final_state st1 r -> LTL.final_state st2 r.
 Proof.
   intros. inv H0. inv H. inv STACKS.
   econstructor. rewrite <- (loc_result_exten sg). inv RES; auto.
@@ -2559,7 +2564,8 @@ Proof.
 Qed.
 
 Theorem transf_program_correct:
-  forward_simulation (RTL.semantics prog) (LTL.semantics tprog).
+  forward_simulation (RTLmach.semantics fn_stack_requirements prog)
+                     (LTL.semantics fn_stack_requirements tprog).
 Proof.
   set (ms := fun s s' => wt_state s /\ match_states s s').
   eapply forward_simulation_plus with (match_states := ms).
@@ -2571,7 +2577,7 @@ Proof.
 - intros. destruct H0.
   exploit step_simulation; eauto. intros [s2' [A B]].
   exists s2'; split. exact A. split.
-  eapply subject_reduction; eauto. eexact wt_prog. eexact H.
+  eapply subject_reduction; eauto. eexact wt_prog. eapply H.
   auto.
 Qed.
 

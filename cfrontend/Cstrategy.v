@@ -34,6 +34,10 @@ Require Import Cop.
 Require Import Csyntax.
 Require Import Csem.
 
+Section ORACLE.
+
+Variable fn_stack_requirements : ident -> Z.
+
 Section STRATEGY.
 
 Variable ge: genv.
@@ -383,7 +387,7 @@ Inductive estep: state -> trace -> state -> Prop :=
           t (ExprState f (C (Eval vres ty)) k e m').
 
 Definition step (S: state) (t: trace) (S': state) : Prop :=
-  estep S t S' \/ sstep ge S t S'.
+  estep S t S' \/ sstep fn_stack_requirements ge S t S'.
 
 (** Properties of contexts *)
 
@@ -410,12 +414,12 @@ Local Hint Resolve context_compose contextlist_compose : core.
   if it cannot get stuck by doing silent transitions only. *)
 
 Definition safe (s: Csem.state) : Prop :=
-  forall s', star Csem.step ge s E0 s' ->
-  (exists r, final_state s' r) \/ (exists t, exists s'', Csem.step ge s' t s'').
+  forall s', star (Csem.step fn_stack_requirements) ge s E0 s' ->
+  (exists r, final_state s' r) \/ (exists t, exists s'', Csem.step fn_stack_requirements ge s' t s'').
 
 Lemma safe_steps:
   forall s s',
-  safe s -> star Csem.step ge s E0 s' -> safe s'.
+  safe s -> star (Csem.step fn_stack_requirements) ge s E0 s' -> safe s'.
 Proof.
   intros; red; intros.
   eapply H. eapply star_trans; eauto.
@@ -423,16 +427,16 @@ Qed.
 
 Lemma star_safe:
   forall s1 s2 t s3,
-  safe s1 -> star Csem.step ge s1 E0 s2 -> (safe s2 -> star Csem.step ge s2 t s3) ->
-  star Csem.step ge s1 t s3.
+  safe s1 -> star (Csem.step fn_stack_requirements) ge s1 E0 s2 -> (safe s2 -> star (Csem.step fn_stack_requirements) ge s2 t s3) ->
+  star (Csem.step fn_stack_requirements) ge s1 t s3.
 Proof.
   intros. eapply star_trans; eauto. apply H1. eapply safe_steps; eauto. auto.
 Qed.
 
 Lemma plus_safe:
   forall s1 s2 t s3,
-  safe s1 -> star Csem.step ge s1 E0 s2 -> (safe s2 -> plus Csem.step ge s2 t s3) ->
-  plus Csem.step ge s1 t s3.
+  safe s1 -> star (Csem.step fn_stack_requirements) ge s1 E0 s2 -> (safe s2 -> plus (Csem.step fn_stack_requirements) ge s2 t s3) ->
+  plus (Csem.step fn_stack_requirements) ge s1 t s3.
 Proof.
   intros. eapply star_plus_trans; eauto. apply H1. eapply safe_steps; eauto. auto.
 Qed.
@@ -712,11 +716,11 @@ Variable m: mem.
 Lemma eval_simple_steps:
    (forall a v, eval_simple_rvalue e m a v ->
     forall C, context RV RV C ->
-    star Csem.step ge (ExprState f (C a) k e m)
+    star (Csem.step fn_stack_requirements) ge (ExprState f (C a) k e m)
                    E0 (ExprState f (C (Eval v (typeof a))) k e m))
 /\ (forall a b ofs bf, eval_simple_lvalue e m a b ofs bf ->
     forall C, context LV RV C ->
-    star Csem.step ge (ExprState f (C a) k e m)
+    star (Csem.step fn_stack_requirements) ge (ExprState f (C a) k e m)
                    E0 (ExprState f (C (Eloc b ofs bf (typeof a))) k e m)).
 Proof.
 
@@ -760,14 +764,14 @@ Qed.
 Lemma eval_simple_rvalue_steps:
   forall a v, eval_simple_rvalue e m a v ->
   forall C, context RV RV C ->
-  star Csem.step ge (ExprState f (C a) k e m)
+  star (Csem.step fn_stack_requirements) ge (ExprState f (C a) k e m)
                 E0 (ExprState f (C (Eval v (typeof a))) k e m).
 Proof (proj1 eval_simple_steps).
 
 Lemma eval_simple_lvalue_steps:
   forall a b ofs bf, eval_simple_lvalue e m a b ofs bf ->
   forall C, context LV RV C ->
-  star Csem.step ge (ExprState f (C a) k e m)
+  star (Csem.step fn_stack_requirements) ge (ExprState f (C a) k e m)
                 E0 (ExprState f (C (Eloc b ofs bf (typeof a))) k e m).
 Proof (proj2 eval_simple_steps).
 
@@ -987,7 +991,7 @@ Local Hint Resolve contextlist'_head contextlist'_tail : core.
 Lemma eval_simple_list_steps:
   forall rl vl, eval_simple_list' rl vl ->
   forall C, contextlist' C ->
-  star Csem.step ge (ExprState f (C rl) k e m)
+  star (Csem.step fn_stack_requirements) ge (ExprState f (C rl) k e m)
                 E0 (ExprState f (C (rval_list vl rl)) k e m).
 Proof.
   induction 1; intros.
@@ -1149,7 +1153,7 @@ End DECOMPOSITION.
 
 Lemma estep_simulation:
   forall S t S',
-  estep S t S' -> plus Csem.step ge S t S'.
+  estep S t S' -> plus (Csem.step fn_stack_requirements) ge S t S'.
 Proof.
   intros. inv H.
 (* simple *)
@@ -1403,7 +1407,7 @@ Qed.
 
 Theorem step_simulation:
   forall S1 t S2,
-  step S1 t S2 -> plus Csem.step ge S1 t S2.
+  step S1 t S2 -> plus (Csem.step fn_stack_requirements) ge S1 t S2.
 Proof.
   intros. inv H.
   apply estep_simulation; auto.
@@ -1599,7 +1603,8 @@ Qed.
 (** The main simulation result. *)
 
 Theorem strategy_simulation:
-  forall p, backward_simulation (Csem.semantics p) (semantics p).
+  forall p, backward_simulation (Csem.semantics fn_stack_requirements p)
+                            (semantics p).
 Proof.
   intros.
   apply backward_simulation_plus with (match_states := fun (S1 S2: state) => S1 = S2); simpl.
@@ -1904,16 +1909,18 @@ with exec_stmt: env -> mem -> statement -> trace -> mem -> outcome -> Prop :=
   by the call.  *)
 
 with eval_funcall: mem -> fundef -> list val -> trace -> mem -> val -> ident -> Prop :=
-  | eval_funcall_internal: forall m f vargs t e m0 m1 m2 m3 out vres m4 m5 id path,
+  | eval_funcall_internal: forall m f vargs t e m0 m1 m1' m2 m3 out vres m4 m5 m6 id path,
       list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
       Mem.alloc_frame m id = (m0,path) ->
       alloc_variables ge empty_env m0 (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-      bind_parameters ge e m1 f.(fn_params) vargs m2 ->
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id )) = Some m1' ->
+      bind_parameters ge e m1' f.(fn_params) vargs m2 ->
       exec_stmt e m2 f.(fn_body) t m3 out ->
       outcome_result_value out f.(fn_return) vres m3 ->
       Mem.free_list m3 (blocks_of_env ge e) = Some m4 ->
       Mem.return_frame m4 = Some m5 ->
-      eval_funcall m (Internal f) vargs t m5 vres id
+      Mem.pop_stage m5 = Some m6 ->
+      eval_funcall m (Internal f) vargs t m6 vres id
   | eval_funcall_external: forall m ef targs tres cconv vargs t vres m',
       external_call ef ge vargs m t vres m' ->
       eval_funcall m (External ef targs tres cconv) vargs t m' vres 1%positive.
@@ -2129,12 +2136,13 @@ with execinf_stmt: env -> mem -> statement -> traceinf -> Prop :=
   invocation of function [fd] with arguments [args].  *)
 
 with evalinf_funcall: mem -> fundef -> list val -> traceinf -> ident -> Prop :=
-  | evalinf_funcall_internal: forall m m0 f vargs t e m1 m2 id path,
+  | evalinf_funcall_internal: forall m m0 f vargs t e m1 m2 m3 id path,
       list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
       Mem.alloc_frame m id = (m0,path) ->
       alloc_variables ge empty_env m0 (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-      bind_parameters ge e m1 f.(fn_params) vargs m2 ->
-      execinf_stmt e m2 f.(fn_body) t ->
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id )) = Some m2 ->
+      bind_parameters ge e m2 f.(fn_params) vargs m3 ->
+      execinf_stmt e m3 f.(fn_body) t ->
       evalinf_funcall m (Internal f) vargs t id.
 
 (** ** Implication from big-step semantics to transition semantics *)
@@ -2603,22 +2611,22 @@ Proof.
   unfold S2. inv B1; simpl; econstructor; eauto.
 
 (* call internal *)
-  destruct (H4 f k) as [S1 [A1 B1]].
+  destruct (H5 f k) as [S1 [A1 B1]].
   eapply star_left. right; eapply step_internal_function; eauto.
   eapply star_right. eexact A1.
-  inv B1; simpl in H5; try contradiction.
+  inv B1; simpl in H4; try contradiction.
   (* Out_normal *)
   assert (fn_return f = Tvoid /\ vres = Vundef).
     destruct (fn_return f); auto || contradiction.
-  destruct H9 as [P Q]. subst vres. right; eapply step_skip_call; eauto.
+  destruct H11 as [P Q]. subst vres. right; eapply step_skip_call; eauto.
   (* Out_return None *)
   assert (fn_return f = Tvoid /\ vres = Vundef).
     destruct (fn_return f); auto || contradiction.
-  destruct H10 as [P Q]. subst vres.
-  rewrite <- (is_call_cont_call_cont k H8). rewrite <- H9.
+  destruct H12 as [P Q]. subst vres.
+  rewrite <- (is_call_cont_call_cont k H10). rewrite <- H11.
   right; eapply step_return_0; eauto.
   (* Out_return Some *)
-  destruct H5. rewrite <- (is_call_cont_call_cont k H8). rewrite <- H9.
+  destruct H6. rewrite <- (is_call_cont_call_cont k H10). rewrite <- H11.
   right; eapply step_return_2; eauto.
   reflexivity. traceEq.
 
@@ -3035,23 +3043,25 @@ End BIGSTEP.
 (** ** Whole-program behaviors, big-step style. *)
 
 Inductive bigstep_program_terminates (p: program): trace -> int -> Prop :=
-  | bigstep_program_terminates_intro: forall b f m0 m1 t r,
+  | bigstep_program_terminates_intro: forall b f m0 m1 m2 t r b0,
       let ge := globalenv p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       type_of_fundef f = Tfunction Tnil type_int32s cc_default ->
-      eval_funcall ge m0 f nil t m1 (Vint r) p.(prog_main)->
+      Mem.alloc m0 0 0 = (m1,b0) ->
+      eval_funcall ge m1 f nil t m2 (Vint r) p.(prog_main)->
       bigstep_program_terminates p t r.
 
 Inductive bigstep_program_diverges (p: program): traceinf -> Prop :=
-  | bigstep_program_diverges_intro: forall b f m0 t,
+  | bigstep_program_diverges_intro: forall b f m0 t m1 b0,
       let ge := globalenv p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       type_of_fundef f = Tfunction Tnil type_int32s cc_default ->
-      evalinf_funcall ge m0 f nil t p.(prog_main)->
+      Mem.alloc m0 0 0 = (m1,b0) ->
+      evalinf_funcall ge m1 f nil t p.(prog_main)->
       bigstep_program_diverges p t.
 
 Definition bigstep_semantics (p: program) :=
@@ -3073,3 +3083,4 @@ Proof.
   apply lt_wf.
   eapply evalinf_funcall_steps; eauto.
 Qed.
+End ORACLE.

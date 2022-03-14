@@ -247,6 +247,10 @@ Inductive assign_loc (ce: composite_env) (ty: type) (m: mem) (b: block) (ofs: pt
       store_bitfield ty sz sg pos width m (Vptr b ofs) v m' v' ->
       assign_loc ce ty m b ofs (Bits sz sg pos width) v m'.
 
+Section ORACLE.
+
+Variable fn_stack_requirements : ident -> Z.
+
 Section SEMANTICS.
 
 Variable ge: genv.
@@ -624,24 +628,27 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f Sbreak (Kloop2 s1 s2 k) e le m)
         E0 (State f Sskip k e le m)
 
-  | step_return_0: forall f k e le m m' m'',
+  | step_return_0: forall f k e le m m' m'' m''',
       Mem.free_list m (blocks_of_env e) = Some m' ->
       Mem.return_frame m' = Some m'' ->
+      Mem.pop_stage m'' = Some m''' ->
       step (State f (Sreturn None) k e le m)
-        E0 (Returnstate Vundef (call_cont k) m'')
-  | step_return_1: forall f a k e le m v v' m' m'',
+        E0 (Returnstate Vundef (call_cont k) m''')
+  | step_return_1: forall f a k e le m v v' m' m'' m''',
       eval_expr e le m a v ->
       sem_cast v (typeof a) f.(fn_return) m = Some v' ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
       Mem.return_frame m' = Some m'' ->
+      Mem.pop_stage m'' = Some m''' ->
       step (State f (Sreturn (Some a)) k e le m)
-        E0 (Returnstate v' (call_cont k) m'')
-  | step_skip_call: forall f k e le m m' m'',
+        E0 (Returnstate v' (call_cont k) m''')
+  | step_skip_call: forall f k e le m m' m'' m''',
       is_call_cont k ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
       Mem.return_frame m' = Some m'' ->
+      Mem.pop_stage m'' = Some m''' ->
       step (State f Sskip k e le m)
-        E0 (Returnstate Vundef k m'')
+        E0 (Returnstate Vundef k m''')
 
   | step_switch: forall f a sl k e le m v n,
       eval_expr e le m a v ->
@@ -687,13 +694,14 @@ Inductive step: state -> trace -> state -> Prop :=
   without arguments and with an empty continuation. *)
 
 Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
+  | initial_state_intro: forall b f m0 m1 b0,
       let ge := Genv.globalenv p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       type_of_fundef f = Tfunction Tnil type_int32s cc_default ->
-      initial_state p (Callstate f nil Kstop m0 p.(prog_main)).
+      Mem.alloc m0 0 0 = (m1,b0) ->
+      initial_state p (Callstate f nil Kstop m1 p.(prog_main)).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 
@@ -706,11 +714,12 @@ End SEMANTICS.
 (** The two semantics for function parameters.  First, parameters as local variables. *)
 
 Inductive function_entry1 (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (le: temp_env) (m': mem) (id:ident) : Prop :=
-  | function_entry1_intro: forall m0 m1 path,
+  | function_entry1_intro: forall m0 m1 m2 path,
       list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
       Mem.alloc_frame m id = (m0,path) ->
       alloc_variables ge empty_env m0 (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-      bind_parameters ge e m1 f.(fn_params) vargs m' ->
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id )) = Some m2 ->
+      bind_parameters ge e m2 f.(fn_params) vargs m' ->
       le = create_undef_temps f.(fn_temps) ->
       function_entry1 ge f vargs m e le m' id.
 
@@ -718,15 +727,16 @@ Definition step1 (ge: genv) := step ge (function_entry1 ge).
 
 (** Second, parameters as temporaries. *)
 
-Inductive function_entry2 (ge: genv)  (f: function) (vargs: list val) (m: mem) (e: env) (le: temp_env) (m': mem) (id:ident): Prop :=
-  | function_entry2_intro: forall m0 path,
+Inductive function_entry2 (ge: genv)  (f: function) (vargs: list val) (m: mem) (e: env) (le: temp_env) (m'': mem) (id:ident): Prop :=
+  | function_entry2_intro: forall m0 m' path,
       list_norepet (var_names f.(fn_vars)) ->
       list_norepet (var_names f.(fn_params)) ->
       list_disjoint (var_names f.(fn_params)) (var_names f.(fn_temps)) ->
       Mem.alloc_frame m id = (m0, path) ->
       alloc_variables ge empty_env m0 f.(fn_vars) e m' ->
+      Mem.record_frame (Mem.push_stage m') (Memory.mk_frame (fn_stack_requirements id )) = Some m'' ->
       bind_parameter_temps f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
-      function_entry2 ge f vargs m e le m' id.
+      function_entry2 ge f vargs m e le m'' id.
 
 Definition step2 (ge: genv) := step ge (function_entry2 ge).
 
@@ -762,3 +772,5 @@ Proof.
   eapply external_call_trace_length; eauto.
   eapply external_call_trace_length; eauto.
 Qed.
+
+End ORACLE.

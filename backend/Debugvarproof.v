@@ -286,6 +286,7 @@ Qed.
 
 Section PRESERVATION.
 
+Variable fn_stack_requirements: ident -> Z.
 Variable prog: program.
 Variable tprog: program.
 
@@ -355,7 +356,8 @@ Qed.
 
 Lemma eval_add_delta_ranges:
   forall s f sp c rs m before after,
-  star step tge (State s f sp (add_delta_ranges before after c) rs m)
+  star (step fn_stack_requirements)
+       tge (State s f sp (add_delta_ranges before after c) rs m)
              E0 (State s f sp c rs m).
 Proof.
   intros. unfold add_delta_ranges.
@@ -421,9 +423,9 @@ Qed.
 (** The simulation diagram. *)
 
 Theorem transf_step_correct:
-  forall s1 t s2, step ge s1 t s2 ->
+  forall s1 t s2, step fn_stack_requirements ge s1 t s2 ->
   forall ts1 (MS: match_states s1 ts1),
-  exists ts2, plus step tge ts1 t ts2 /\ match_states s2 ts2.
+  exists ts2, plus (step fn_stack_requirements) tge ts1 t ts2 /\ match_states s2 ts2.
 Proof.
   induction 1; intros ts1 MS; inv MS; try (inv TRC).
 - (* getstack *)
@@ -473,7 +475,7 @@ Proof.
   eauto. rewrite PLS.
   eexact A.
   symmetry; apply sig_preserved; auto.
-  inv TRF; eauto. eauto. traceEq.
+  inv TRF; eauto. eauto. eauto. traceEq.
   rewrite PLS. constructor; auto.
 - (* builtin *)
   econstructor; split.
@@ -509,14 +511,14 @@ Proof.
   constructor; auto.
 - (* return *)
   econstructor; split.
-  apply plus_one. econstructor. inv TRF; eauto. eauto. traceEq.
+  apply plus_one. econstructor. inv TRF; eauto. eauto. eauto. traceEq.
   rewrite (parent_locset_match _ _ STACKS). constructor; auto.
 - (* internal function *)
-  monadInv H9. rename x into tf.
+  monadInv H10. rename x into tf.
   assert (MF: match_function f tf) by (apply transf_function_match; auto).
   inversion MF; subst.
   econstructor; split.
-  apply plus_one. econstructor. simpl; eauto. eauto. reflexivity.
+  apply plus_one. econstructor. simpl; eauto. eauto. eauto. reflexivity.
   constructor; auto.
 - (* external function *)
   monadInv H9. econstructor; split.
@@ -536,7 +538,7 @@ Lemma transf_initial_states:
 Proof.
   intros. inversion H.
   exploit function_ptr_translated; eauto. intros [tf [A B]].
-  exists (Callstate nil tf (Locmap.init Vundef) m0 (prog_main tprog)); split.
+  exists (Callstate nil tf (Locmap.init Vundef) m1 (prog_main tprog)); split.
   econstructor; eauto. eapply (Genv.init_mem_transf_partial TRANSF); eauto.
   rewrite (match_program_main TRANSF), symbols_preserved. auto.
   rewrite <- H3. apply sig_preserved. auto.
@@ -552,7 +554,7 @@ Proof.
 Qed.
 
 Theorem transf_program_correct:
-  forward_simulation (semantics prog) (semantics tprog).
+  forward_simulation (semantics fn_stack_requirements prog) (semantics fn_stack_requirements tprog).
 Proof.
   eapply forward_simulation_plus.
   apply senv_preserved.

@@ -180,6 +180,9 @@ Inductive state : Type :=
              (m: mem),                (**r memory state *)
       state.
 
+Section ORACLE.
+
+Variable fn_stack_requirements : ident -> Z.
 Section RELSEM.
 
 Variable ge: genv.
@@ -239,7 +242,7 @@ Inductive step: state -> trace -> state -> Prop :=
       find_function ros rs = Some fd ->
       funsig fd = sig ->
       step (State s f sp pc rs m)
-        E0 (Callstate (Stackframe res f sp pc' rs :: s) fd rs##args m id)
+        E0 (Callstate (Stackframe res f sp pc' rs :: s) fd rs##args (Mem.push_stage m) id)
   | exec_Itailcall:
       forall s f stk pc rs m sig ros args fd m' m'' id,
       (fn_code f)!pc = Some(Itailcall sig ros args) ->
@@ -248,15 +251,17 @@ Inductive step: state -> trace -> state -> Prop :=
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       Mem.return_frame m' = Some m'' ->
+      Mem.astack (Mem.support m'') <> nil ->
       step (State s f (Vptr stk Ptrofs.zero) pc rs m)
         E0 (Callstate s fd rs##args m'' id)
   | exec_Ibuiltin:
-      forall s f sp pc rs m ef args res pc' vargs t vres m',
+      forall s f sp pc rs m ef args res pc' vargs t vres m' m'',
       (fn_code f)!pc = Some(Ibuiltin ef args res pc') ->
       eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
-      external_call ef ge vargs m t vres m' ->
+      external_call ef ge vargs (Mem.push_stage m) t vres m' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State s f sp pc rs m)
-         t (State s f sp pc' (regmap_setres res vres rs) m')
+         t (State s f sp pc' (regmap_setres res vres rs) m'')
   | exec_Icond:
       forall s f sp pc rs m cond args ifso ifnot b pc',
       (fn_code f)!pc = Some(Icond cond args ifso ifnot) ->
@@ -276,28 +281,31 @@ Inductive step: state -> trace -> state -> Prop :=
       (fn_code f)!pc = Some(Ireturn or) ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       Mem.return_frame m' = Some m'' ->
+      Mem.astack (Mem.support m'') <> nil ->
       step (State s f (Vptr stk Ptrofs.zero) pc rs m)
         E0 (Returnstate s (regmap_optget or Vundef rs) m'')
   | exec_function_internal:
-      forall s f args m m' m'' stk id path,
+      forall s f args m m' m'' stk id path m''',
       Mem.alloc_frame m id = (m', path) ->
       Mem.alloc m' 0 f.(fn_stacksize) = (m'', stk) ->
+      Mem.record_frame m'' (Memory.mk_frame (fn_stack_requirements id)) = Some m''' ->
       step (Callstate s (Internal f) args m id)
         E0 (State s
                   f
                   (Vptr stk Ptrofs.zero)
                   f.(fn_entrypoint)
                   (init_regs args f.(fn_params))
-                  m'')
+                  m''')
   | exec_function_external:
       forall s ef args res t m m' id,
       external_call ef ge args m t res m' ->
       step (Callstate s (External ef) args m id)
          t (Returnstate s res m')
   | exec_return:
-      forall res f sp pc rs s vres m,
+      forall res f sp pc rs s vres m m',
+      Mem.pop_stage m = Some m' ->
       step (Returnstate (Stackframe res f sp pc rs :: s) vres m)
-        E0 (State s f sp pc (rs#res <- vres) m).
+        E0 (State s f sp pc (rs#res <- vres) m').
 
 Lemma exec_Iop':
   forall s f sp pc rs m op args res pc' rs' v,
@@ -330,13 +338,14 @@ End RELSEM.
   without arguments and with an empty call stack. *)
 
 Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
+  | initial_state_intro: forall b f m0 m1 b0,
       let ge := Genv.globalenv p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       funsig f = signature_main ->
-      initial_state p (Callstate nil f nil m0 p.(prog_main)).
+      Mem.alloc m0 0 0 = (m1,b0) ->
+      initial_state p (Callstate nil f nil (Mem.push_stage m1) p.(prog_main)).
 
 (** A final state is a [Returnstate] with an empty call stack. *)
 
@@ -360,7 +369,12 @@ Proof.
     intros. subst. inv H0. exists s1; auto.
   inversion H; subst; auto.
   exploit external_call_receptive; eauto. intros [vres2 [m2 EC2]].
-  exists (State s0 f sp pc' (regmap_setres res vres2 rs) m2). eapply exec_Ibuiltin; eauto.
+  assert ({m3:mem | Mem.pop_stage m2 = Some m3}).
+  apply Mem.nonempty_pop_stage.
+    eapply external_call_astack in EC2.
+    rewrite <- EC2. simpl.  congruence.
+  destruct X as [m3 POP_STAGE].
+  exists (State s0 f sp pc' (regmap_setres res vres2 rs) m3). eapply exec_Ibuiltin; eauto.
   exploit external_call_receptive; eauto. intros [vres2 [m2 EC2]].
   exists (Returnstate s0 vres2 m2). econstructor; eauto.
 (* trace length *)
@@ -369,6 +383,7 @@ Proof.
   eapply external_call_trace_length; eauto.
 Qed.
 
+End ORACLE.
 (** * Operations on RTL abstract syntax *)
 
 (** Transformation of a RTL function instruction by instruction.

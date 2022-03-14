@@ -15,7 +15,7 @@
 Require Import Coqlib Maps Errors Integers Floats Lattice Kildall.
 Require Import AST Linking.
 Require Import Values Memory Builtins Events Globalenvs Smallstep.
-Require Import Op Registers RTL.
+Require Import Op Registers RTL RTLmach.
 Require Import ValueDomain ValueAOp ValueAnalysis.
 Require Import CSEdomain CombineOp CombineOpproof CSE.
 
@@ -810,6 +810,7 @@ Qed.
 
 Section PRESERVATION.
 
+Variable fn_stack_requirements : ident -> Z.
 Variable prog: program.
 Variable tprog : program.
 Hypothesis TRANSF: match_prog prog tprog.
@@ -972,9 +973,9 @@ Ltac TransfInstr :=
   in the source code. *)
 
 Lemma transf_step_correct:
-  forall s1 t s2, step ge s1 t s2 ->
+  forall s1 t s2, step fn_stack_requirements ge s1 t s2 ->
   forall s1' (MS: match_states s1 s1') (SOUND: sound_state prog s1),
-  exists s2', step tge s1' t s2' /\ match_states s2 s2'.
+  exists s2', step fn_stack_requirements tge s1' t s2' /\ match_states s2 s2'.
 Proof.
   induction 1; intros; inv MS; try (TransfInstr; intro C).
 
@@ -1096,7 +1097,7 @@ Proof.
   econstructor; eauto.
   eapply match_stackframes_cons with (cu := cu); eauto.
   intros. eapply analysis_correct_1; eauto. simpl; auto.
-  unfold transfer; rewrite H.
+  unfold transfer; rewrite H0.
   exists (fun _ => Vundef); apply empty_numbering_holds.
   apply regs_lessdef_regs; auto.
 
@@ -1104,6 +1105,7 @@ Proof.
   exploit find_function_translated; eauto. intros (cu' & tf & FIND' & TRANSF' & LINK').
   exploit Mem.free_parallel_extends; eauto. intros [m'1 [A B]].
   exploit Mem.return_frame_parallel_extends; eauto. intros [m'2 [A' B']].
+  exploit Mem.pop_stage_extends; eauto. intros [m'3 [A'' B'']].
   econstructor; split.
   eapply exec_Itailcall; eauto.
   destruct ros; simpl in *; auto.
@@ -1187,6 +1189,7 @@ Proof.
 - (* Ireturn *)
   exploit Mem.free_parallel_extends; eauto. intros [m'1 [A B]].
   exploit Mem.return_frame_parallel_extends; eauto. intros [m'2 [A' B']].
+  exploit Mem.pop_stage_extends; eauto. intros [m'3 [A'' B'']].
   econstructor; split.
   eapply exec_Ireturn; eauto.
   econstructor; eauto.
@@ -1198,6 +1201,8 @@ Proof.
   exploit Mem.alloc_frame_extends; eauto. intros (m'1 & A & B).
   exploit Mem.alloc_extends; eauto. apply Z.le_refl. apply Z.le_refl.
   intros (m'2 & A' & B').
+  exploit Mem.push_stage_extends; eauto. intros.
+  exploit Mem.record_frame_extends; eauto. intros (m'3 & A'' & B'').
   econstructor; split.
   eapply exec_function_internal; simpl; eauto.
   simpl. econstructor; eauto.
@@ -1227,7 +1232,7 @@ Lemma transf_initial_states:
 Proof.
   intros. inversion H.
   exploit funct_ptr_translated; eauto. intros (cu & tf & A & B & C).
-  exists (Callstate nil tf nil m0 (prog_main tprog)); split.
+  exists (Callstate nil tf nil m1 (prog_main tprog)); split.
   econstructor; eauto.
   eapply (Genv.init_mem_match TRANSF); eauto.
   replace (prog_main tprog) with (prog_main prog).
@@ -1246,7 +1251,8 @@ Proof.
 Qed.
 
 Theorem transf_program_correct:
-  forward_simulation (RTL.semantics prog) (RTL.semantics tprog).
+  forward_simulation (RTLmach.semantics fn_stack_requirements prog)
+                     (RTLmach.semantics fn_stack_requirements tprog).
 Proof.
   eapply forward_simulation_step with
     (match_states := fun s1 s2 => sound_state prog s1 /\ match_states s1 s2).
@@ -1255,7 +1261,8 @@ Proof.
   exists s2. split. auto. split. apply sound_initial; auto. auto.
 - intros. destruct H. eapply transf_final_states; eauto.
 - intros. destruct H0. exploit transf_step_correct; eauto.
-  intros [s2' [A B]]. exists s2'; split. auto. split. eapply sound_step; eauto. auto.
+  intros [s2' [A B]]. exists s2'; split. auto. split. eapply sound_step; eauto.
+  apply H. eauto.
 Qed.
 
 End PRESERVATION.

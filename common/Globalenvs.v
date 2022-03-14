@@ -1352,11 +1352,11 @@ End INITMEM.
 Definition init_mem (p: program F V) :=
   alloc_globals (globalenv p) Mem.empty p.(prog_defs).
 
-
 Lemma store_init_data_stack:
   forall l ge m m' b ofs,
     store_init_data ge m b ofs l = Some m' ->
-    Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+    Mem.stack (Mem.support m') = Mem.stack (Mem.support m)
+   /\ Mem.astack (Mem.support m') = Mem.astack (Mem.support m).
 Proof.
   destruct l; simpl; intros;
   try now (erewrite Mem.support_store; eauto).
@@ -1368,32 +1368,36 @@ Qed.
 Lemma store_init_data_list_stack:
   forall l ge m m' b ofs,
     store_init_data_list ge m b ofs l = Some m' ->
-    Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+    Mem.stack (Mem.support m') = Mem.stack (Mem.support m)
+   /\ Mem.astack (Mem.support m') = Mem.astack (Mem.support m).
 Proof.
   induction l; simpl; intros; eauto.
   inv H; auto.
   destruct store_init_data eqn:?; try discriminate.
-  erewrite IHl. 2: eauto.
-  eapply store_init_data_stack; eauto.
+  eapply IHl in H.
+  eapply store_init_data_stack in Heqo; eauto.
+  destruct Heqo. destruct H. split; congruence.
 Qed.
 
 Lemma store_zeros_stack:
   forall m b lo hi m',
     store_zeros m b lo hi = Some m' ->
-    Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+    Mem.stack (Mem.support m') = Mem.stack (Mem.support m)
+   /\ Mem.astack (Mem.support m') = Mem.astack (Mem.support m).
 Proof.
   intros.
   revert H.
   eapply store_zeros_ind; simpl; intros.
-  inv H; auto.
-  erewrite H, Mem.support_store; eauto.
+  inv H; auto. apply H in H0. destruct H0.
+  erewrite H0,H1, Mem.support_store; eauto.
   inv H.
 Qed.
 
 Lemma alloc_global_stack:
   forall l ge m m',
     alloc_global ge m l = Some m' ->
-    Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+    Mem.stack (Mem.support m') = Mem.stack (Mem.support m)
+   /\ Mem.astack (Mem.support m') = Mem.astack (Mem.support m).
 Proof.
   destruct l; simpl; intros.
   destruct g.
@@ -1403,19 +1407,22 @@ Proof.
   destruct store_zeros eqn:?; try discriminate.
   destruct store_init_data_list eqn:?; try discriminate.
   erewrite Mem.support_drop. 2: eauto.
-  erewrite store_init_data_list_stack. 2: eauto.
-  erewrite store_zeros_stack. 2: eauto. inv Heqp. auto.
+  exploit store_init_data_list_stack; eauto. intros [A B].
+  exploit store_zeros_stack; eauto. intros [C D].
+  rewrite A,C. rewrite B,D. inv Heqp. auto.
 Qed.
 
 Lemma alloc_globals_stack:
   forall l ge m m',
     alloc_globals ge m l = Some m' ->
-    Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+    Mem.stack (Mem.support m') = Mem.stack (Mem.support m)
+   /\ Mem.astack (Mem.support m') = Mem.astack (Mem.support m).
 Proof.
-  induction l; simpl; intros; eauto. congruence.
+  induction l; simpl; intros; eauto. split; congruence.
   destruct (alloc_global ge m a) eqn:?; try discriminate.
-  erewrite IHl. 2: eauto.
-  eapply alloc_global_stack; eauto.
+  exploit IHl; eauto. intros [A B].
+  exploit alloc_global_stack; eauto. intros [C D].
+  split; congruence.
 Qed.
 
 Lemma init_mem_stack:
@@ -1423,10 +1430,19 @@ Lemma init_mem_stack:
     init_mem p = Some m ->
     Mem.stack (Mem.support m) = (Node None nil nil None).
 Proof.
-  unfold init_mem.
-  intros.
-  erewrite alloc_globals_stack; eauto.
-  reflexivity.
+  unfold init_mem. intros.
+  exploit alloc_globals_stack; eauto. intros [A B].
+  rewrite A. reflexivity.
+Qed.
+
+Lemma init_mem_astack:
+  forall (p:AST.program F V) m,
+    init_mem p = Some m ->
+    Mem.astack (Mem.support m) = nil.
+Proof.
+  unfold init_mem. intros.
+  exploit alloc_globals_stack; eauto. intros [A B].
+  rewrite B. reflexivity.
 Qed.
 
 Lemma init_mem_genv_sup: forall p m,
@@ -1627,6 +1643,21 @@ Proof.
   intros. exploit find_symbol_not_fresh; eauto.
   apply Mem.empty_inject_neutral.
   apply Mem.sup_include_refl.
+Qed.
+Lemma init_mem_init_sp_inject: forall p m0 m1 b0,
+      init_mem p = Some m0 ->
+      Mem.alloc m0 0 0 = (m1,b0) ->
+      Mem.inject (Mem.flat_inj (Mem.support m0)) m0 m0 ->
+      Mem.inject (Mem.flat_inj (Mem.support m1)) m1 m1.
+Proof.
+  intros. exploit Mem.alloc_parallel_inject; eauto. apply Z.le_refl. apply Z.le_refl.
+  intros (f' & m1' & b0'&A& B &C& E & G). rewrite A in H0. inv H0.
+  assert (f' = Mem.flat_inj (Mem.support m1)).
+  apply Axioms.extensionality. intro b. destruct (eq_block b b0). subst.
+  unfold Mem.flat_inj. apply Mem.valid_new_block in A. destr. apply n in A. inv A.
+  rewrite G. unfold Mem.flat_inj. destr. eapply Mem.valid_block_alloc in A.
+  destr. apply n0 in A. inv A. auto. destr. eapply Mem.valid_block_alloc_inv in A; eauto.
+  inv A. congruence. apply n0 in H0. inv H0. auto. subst. auto.
 Qed.
 
 (** ** Sufficient and necessary conditions for the initial memory to exist. *)

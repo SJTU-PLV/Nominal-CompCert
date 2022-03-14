@@ -247,8 +247,6 @@ Definition extcall_arguments
 
 (** Mach execution states. *)
 
-(** Mach execution states. *)
-
 Inductive stackframe: Type :=
   | Stackframe:
       forall (f: block)       (**r pointer to calling function *)
@@ -281,7 +279,7 @@ Inductive state: Type :=
 
 Definition parent_sp (s: list stackframe) : val :=
   match s with
-  | nil => Vnullptr
+  | nil => Vptr (Stack None nil 1) Ptrofs.zero
   | Stackframe f sp ra c :: s' => sp
   end.
 
@@ -345,22 +343,25 @@ Inductive step: state -> trace -> state -> Prop :=
       forall s fb sp sig ros c rs m f f' ra id,
       f' = Global id ->
       find_function_ptr ge ros rs = Some f' ->
+      (exists fd, Genv.find_funct_ptr ge f' = Some fd) ->
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       return_address_offset f c ra ->
       step (State s fb sp (Mcall sig ros :: c) rs m)
         E0 (Callstate (Stackframe fb sp (Vptr fb ra) c :: s)
                        f' rs m id)
   | exec_Mtailcall:
-      forall s fb stk soff sig ros c rs m f f' m' m'' id,
+      forall s fb stk soff sig ros c rs m f f' m' m'' id m''',
       f' = Global id ->
       find_function_ptr ge ros rs = Some f' ->
+      (exists fd, Genv.find_funct_ptr ge f' = Some fd) ->
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra s) ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       Mem.return_frame m' = Some m'' ->
+      Mem.pop_stage m'' = Some m''' ->
       step (State s fb (Vptr stk soff) (Mtailcall sig ros :: c) rs m)
-        E0 (Callstate s f' rs m'' id)
+        E0 (Callstate s f' rs m''' id)
   | exec_Mbuiltin:
       forall s f sp rs m ef args res b vargs t vres rs' m',
       eval_builtin_args ge rs sp m args vargs ->
@@ -398,25 +399,27 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s fb sp (Mjumptable arg tbl :: c) rs m)
         E0 (State s fb sp c' rs' m)
   | exec_Mreturn:
-      forall s fb stk soff c rs m f m' m'',
+      forall s fb stk soff c rs m f m' m'' m''',
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra s) ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       Mem.return_frame m' = Some m'' ->
+      Mem.pop_stage m'' = Some m''' ->
       step (State s fb (Vptr stk soff) (Mreturn :: c) rs m)
-        E0 (Returnstate s rs m'')
+        E0 (Returnstate s rs m''')
   | exec_function_internal:
-      forall s fb rs m f m0 m1 m2 m3 stk rs' path id,
+      forall s fb rs m f m0 m1 m2 m3 m4 stk rs' path id,
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       Mem.alloc_frame m id = (m0,path) ->
       Mem.alloc m0 0 f.(fn_stacksize) = (m1, stk) ->
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stacksize f)) = Some m2 ->
       let sp := Vptr stk Ptrofs.zero in
-      store_stack m1 sp Tptr f.(fn_link_ofs) (parent_sp s) = Some m2 ->
       store_stack m2 sp Tptr f.(fn_retaddr_ofs) (parent_ra s) = Some m3 ->
+      store_stack m3 sp Tptr f.(fn_link_ofs) (parent_sp s) = Some m4 ->
       rs' = undef_regs destroyed_at_function_entry rs ->
       step (Callstate s fb rs m id)
-        E0 (State s fb sp f.(fn_code) rs' m3)
+        E0 (State s fb sp f.(fn_code) rs' m4)
   | exec_function_external:
       forall s fb rs m t rs' ef args res m' id,
       Genv.find_funct_ptr ge fb = Some (External ef) ->
@@ -429,15 +432,95 @@ Inductive step: state -> trace -> state -> Prop :=
       forall s f sp ra c rs m,
       step (Returnstate (Stackframe f sp ra c :: s) rs m)
         E0 (State s f sp c rs m).
+(* maybe use it maybe to other place *)
+Inductive callstack_function_defined : list stackframe -> Prop :=
+| cfd_empty:
+    callstack_function_defined nil
+| cfd_cons:
+    forall fb sp' ra c' cs' trf
+      (FINDF: Genv.find_funct_ptr ge fb = Some (Internal trf))
+      (CFD: callstack_function_defined cs')
+      (RAU: return_address_offset trf c' ra)
+      (TAIL: exists l sg ros, fn_code trf = l ++ (Mcall sg ros :: c')),
+      callstack_function_defined (Stackframe fb sp' (Vptr fb ra) c' :: cs').
+
+Inductive has_code: state -> Prop :=
+| has_code_intro fb f cs sp c rs m
+                 (FIND: Genv.find_funct_ptr ge fb = Some (Internal f))
+                 (CODE: exists l, fn_code f = l ++ c)
+                 (CFD: callstack_function_defined cs):
+    has_code (State cs fb sp c rs m)
+| has_code_call:
+    forall cs fb rs m id
+      (CFD: callstack_function_defined cs),
+      has_code (Callstate cs fb rs m id)
+| has_code_ret:
+    forall cs rs m
+      (CFD: callstack_function_defined cs),
+      has_code (Returnstate cs rs m).
+
+Lemma find_label_ex:
+  forall lbl c c', find_label lbl c = Some c' -> exists l, c = l ++ c'.
+Proof.
+  induction c; simpl; intros. discriminate.
+  destruct (is_label lbl a). inv H.
+  exists (a::nil); simpl. auto.
+  apply IHc in H. destruct H as (l & CODE); rewrite CODE.
+  exists (a::l); simpl. reflexivity.
+Qed.
+
+Lemma has_code_step:
+  forall s1 t s2,
+    step s1 t s2 ->
+    has_code s1 ->
+    has_code s2.
+Proof.
+  destruct 1; simpl;
+  intros HC; inv HC; try now (econstructor; eauto).
+  - destruct CODE as (l & CODE); econstructor; eauto; rewrite CODE;
+    eexists (l ++ _ :: nil); simpl; rewrite app_ass; reflexivity.
+  - destruct CODE as (l & CODE); econstructor; eauto; rewrite CODE;
+      eexists (l ++ _ :: nil); simpl; rewrite app_ass; reflexivity.
+  - destruct CODE as (l & CODE); econstructor; eauto; rewrite CODE;
+      eexists (l ++ _ :: nil); simpl; rewrite app_ass; reflexivity.
+  - destruct CODE as (l & CODE); econstructor; eauto; rewrite CODE;
+      eexists (l ++ _ :: nil); simpl; rewrite app_ass; reflexivity.
+  - destruct CODE as (l & CODE); econstructor; eauto; rewrite CODE;
+      eexists (l ++ _ :: nil); simpl; rewrite app_ass; reflexivity.
+  - destruct CODE as (l & CODE); econstructor; eauto; rewrite CODE;
+      eexists (l ++ _ :: nil); simpl; rewrite app_ass; reflexivity.
+  - destruct CODE as (l & CODE); econstructor; eauto; rewrite CODE;
+      eexists (l ++ _ :: nil); simpl; rewrite app_ass; reflexivity.
+  - destruct CODE as (l & CODE).
+    repeat econstructor; eauto. congruence.
+  - destruct CODE as (l & CODE); econstructor; eauto; rewrite CODE;
+      eexists (l ++ _ :: nil); simpl; rewrite app_ass; reflexivity.
+  - destruct CODE as (l & CODE).
+    rewrite H in FIND; inv FIND.
+    econstructor; eauto. eapply find_label_ex. eauto.
+  - destruct CODE as (l & CODE).
+    rewrite H0 in FIND; inv FIND.
+    econstructor; eauto. eapply find_label_ex. eauto.
+  - destruct CODE as (l & CODE); econstructor; eauto; rewrite CODE;
+      eexists (l ++ _ :: nil); simpl; rewrite app_ass; reflexivity.
+  - destruct CODE as (l & CODE).
+    rewrite H1 in FIND; inv FIND.
+    econstructor; eauto. eapply find_label_ex. eauto.
+  - econstructor; eauto. exists nil; simpl; auto.
+  - inv CFD. econstructor; eauto.
+    destruct TAIL as (l & sg & ros & EQ); rewrite EQ.
+    eexists (l ++ _ :: nil); simpl; rewrite app_ass; reflexivity.
+Qed.
 
 End RELSEM.
 
 Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall fb m0,
+  | initial_state_intro: forall fb m0 m1 b0,
       let ge := Genv.globalenv p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some fb ->
-      initial_state p (Callstate nil fb (Regmap.init Vundef) m0 p.(prog_main)).
+      Mem.alloc m0 0 0 = (m1,b0) ->
+      initial_state p (Callstate nil fb (Regmap.init Vundef) m1 p.(prog_main)).
 
 Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall rs m r retcode,

@@ -293,9 +293,26 @@ Inductive instruction: Type :=
   | Psubq_ri (rd: ireg) (n: int64).
 
 Definition code := list instruction.
-Record function : Type := mkfunction { fn_sig: signature; fn_code: code }.
+Record function : Type := mkfunction { fn_sig: signature; fn_code: code; fn_stacksize:Z; fn_ofs_link : ptrofs}.
 Definition fundef := AST.fundef function.
 Definition program := AST.program fundef unit.
+
+Inductive is_call: instruction -> Prop :=
+| is_calls_intro:
+    forall i sg,
+      is_call (Pcall_s i sg)
+| is_callr_intro:
+    forall r sg,
+      is_call (Pcall_r r sg).
+
+Lemma is_call_dec:
+  forall i,
+    {is_call i} + {~ is_call i}.
+Proof.
+  destruct i; try now (right; intro A; inv A).
+  left; econstructor; eauto.
+  left; econstructor; eauto.
+Qed.
 
 (** * Operational semantics *)
 
@@ -333,6 +350,12 @@ Definition set_pair (p: rpair preg) (v: val) (rs: regset) : regset :=
   | Twolong rhi rlo => rs#rhi <- (Val.hiword v) #rlo <- (Val.loword v)
   end.
 
+Definition no_rsp_pair (b: rpair preg) :=
+  match b with
+  | One r => r <> RSP
+  | Twolong hi lo => hi <> RSP /\ lo <> RSP
+  end.
+
 (** Assigning the result of a builtin *)
 
 Fixpoint set_res (res: builtin_res preg) (v: val) (rs: regset) : regset :=
@@ -342,14 +365,113 @@ Fixpoint set_res (res: builtin_res preg) (v: val) (rs: regset) : regset :=
   | BR_splitlong hi lo => set_res lo (Val.loword v) (set_res hi (Val.hiword v) rs)
   end.
 
+Definition aligned_fsz (sz:Z) := align (Z.max 0 sz) 8.
+
+Definition check_topframe (sz:Z)(astack:stackadt) : bool :=
+  match astack with
+    |nil => false
+    |top::tl => match top with
+                |fr::nil => if (zeq sz (frame_size fr)) then true else false
+                |_ => false
+              end
+  end.
+
+Fixpoint sp_of_stack' (s:stree) : list fid * path :=
+  match s with
+   |Node fid bl l None => (fid::nil,nil)
+   |Node fid bl l (Some s') =>
+    let (lf',path') := sp_of_stack' s' in let idx := length l in
+    (lf'++(fid::nil),idx::path')
+  end.
+
+Lemma sp_of_stack'_nonempty : forall s lf p, sp_of_stack' s= (lf,p) -> lf <> nil.
+Proof.
+  intros. destruct s. destruct o; simpl in H. destr_in H; inv H.
+  intro. destruct l1 in H; inv H. inv H. congruence .
+Qed.
+
+Definition sp_of_stack (s:stree) : list fid * path :=
+  let (lf,path) := (sp_of_stack' s) in (removelast lf,path).
+
+Definition parent_sp_stree (st:stree) : val :=
+  let (lf,path) := sp_of_stack st in
+  match (lf,path) with
+    |(f1::((Some id)::tl), _::(_::_)) =>
+     Vptr (Stack (Some id) (removelast path) 1%positive) Ptrofs.zero
+    |_ => Vptr (Stack None nil 1) Ptrofs.zero
+  end.
+
+Definition top_sp_stree (st:stree) : val :=
+  let (lf,path) := sp_of_stack st in
+  match (lf,path) with
+    | (((Some id)::tl), (_::_)) =>
+     Vptr (Stack (Some id) path 1%positive) Ptrofs.zero
+    |_ => Vptr (Stack None nil 1) Ptrofs.zero
+  end.
+
+Section INSTRSIZE.
+(** Since we need to eliminate the pseudo instructions to get real assembly programs, it is
+necessary to define specific size for each instruction instead of the constant 1.
+*)
+Variable instr_size : instruction -> Z.
+Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
+
 Section RELSEM.
+
+
+Fixpoint offsets_after_call (c: code) (p: Z) : list Z :=
+  match c with
+    nil => nil
+  | i::c => let r := offsets_after_call c (p + instr_size i) in
+           if is_call_dec i then (p + instr_size i)::r
+           else r
+  end.
+
+Definition is_after_call (f: fundef) (o: Z) : Prop :=
+  match f with
+    Internal f => In o (offsets_after_call (fn_code f) 0)
+  | External ef => False
+  end.
+
+Definition check_is_after_call f o : {is_after_call f o} + {~ is_after_call f o}.
+Proof.
+  unfold is_after_call.
+  destruct f; auto.
+  apply In_dec. apply zeq.
+Qed.
+
+Definition ra_after_call (ge: Genv.t fundef unit) v:=
+  v <> Vundef /\ forall b o,
+    v = Vptr b o ->
+    forall f,
+      Genv.find_funct_ptr ge b = Some f ->
+      is_after_call f (Ptrofs.unsigned o).
+
+Definition check_ra_after_call (ge': Genv.t fundef unit) v:
+  {ra_after_call ge' v} + { ~ ra_after_call ge' v}.
+Proof.
+  unfold ra_after_call.
+  destruct v; try now (left; split; intros; congruence).
+  right; intuition congruence.
+  destruct (Genv.find_funct_ptr ge' b) eqn:FFP.
+  2: left; split; [congruence|]; intros b0 o A; inv A; rewrite FFP; congruence.
+  destruct (check_is_after_call f (Ptrofs.unsigned i)).
+  left. split. congruence. intros b0 o A; inv A; rewrite FFP; congruence.
+  right; intros (B & A); specialize (A _ _ eq_refl _ FFP). congruence.
+Defined.
+
+Fixpoint code_size (c:code) : Z :=
+  match c with
+  |nil => 0
+  |i::c' => code_size c' + instr_size i
+  end.
 
 (** Looking up instructions in a code sequence by position. *)
 
 Fixpoint find_instr (pos: Z) (c: code) {struct c} : option instruction :=
   match c with
   | nil => None
-  | i :: il => if zeq pos 0 then Some i else find_instr (pos - 1) il
+  | i :: il => if zeq pos 0 then Some i else find_instr (pos - instr_size i) il
   end.
 
 (** Position corresponding to a label *)
@@ -372,8 +494,100 @@ Fixpoint label_pos (lbl: label) (pos: Z) (c: code) {struct c} : option Z :=
   match c with
   | nil => None
   | instr :: c' =>
-      if is_label lbl instr then Some (pos + 1) else label_pos lbl (pos + 1) c'
+      if is_label lbl instr then Some (pos + instr_size instr) else label_pos lbl (pos + instr_size instr) c'
   end.
+
+Lemma code_size_non_neg: forall c, 0 <= code_size c.
+Proof.
+  intros. induction c; simpl. lia. generalize (instr_size_bound a); lia.
+Qed.
+
+Lemma find_instr_pos_positive:
+  forall l o i,
+    find_instr o l = Some i -> 0 <= o.
+Proof.
+  induction l; simpl; intros; eauto. congruence.
+  destr_in H. lia. apply IHl in H.
+  generalize (instr_size_bound a). lia.
+Qed.
+
+Lemma find_instr_no_overlap:
+  forall l o1 o2 i1 i2,
+    find_instr o1 l = Some i1 ->
+    find_instr o2 l = Some i2 ->
+    o1 <> o2 ->
+    o1 + instr_size i1 <= o2 \/ o2 + instr_size i2 <= o1.
+Proof.
+  induction l; simpl; intros; eauto. congruence.
+  repeat destr_in H; repeat destr_in H0.
+  - apply find_instr_pos_positive in H2. lia.
+  - apply find_instr_pos_positive in H3. lia.
+  - specialize (IHl _ _ _ _ H3 H2). lia.
+Qed.
+
+Lemma find_instr_no_overlap':
+  forall l o1 o2 i1 i2,
+    find_instr o1 l = Some i1 ->
+    find_instr o2 l = Some i2 ->
+    i1 = i2 \/ o1 + instr_size i1 <= o2 \/ o2 + instr_size i2 <= o1.
+Proof.
+  intros l o1 o2 i1 i2 FI1 FI2.
+  destruct (zeq o1 o2). subst. rewrite FI1 in FI2; inv FI2; auto.
+  right.
+  eapply find_instr_no_overlap; eauto.
+Qed.
+
+Lemma label_pos_rng:
+  forall lbl c pos z,
+    label_pos lbl pos c = Some z ->
+    0 <= pos ->
+    0 <= z - pos <= code_size c.
+Proof.
+  induction c; simpl; intros; eauto. congruence. repeat destr_in H.
+  generalize (code_size_non_neg c) (instr_size_bound a); lia.
+  apply IHc in H2.
+  generalize(instr_size_bound a); lia.
+  generalize(instr_size_bound a); lia.
+Qed.
+
+Lemma label_pos_repr:
+  forall lbl c pos z,
+    code_size c + pos <= Ptrofs.max_unsigned ->
+    0 <= pos ->
+    label_pos lbl pos c = Some z ->
+    Ptrofs.unsigned (Ptrofs.repr (z - pos)) = z - pos.
+Proof.
+  intros.
+  apply Ptrofs.unsigned_repr.
+  generalize (label_pos_rng _ _ _ _ H1 H0). lia.
+Qed.
+
+Lemma find_instr_ofs_pos:
+  forall c o i,
+    find_instr o c = Some i ->
+    0 <= o.
+Proof.
+  induction c; simpl; intros; repeat destr_in H.
+  lia. apply IHc in H1.
+  generalize(instr_size_bound a); lia.
+Qed.
+
+Lemma label_pos_spec:
+  forall lbl c pos z,
+    code_size c + pos <= Ptrofs.max_unsigned ->
+    0 <= pos ->
+    label_pos lbl pos c = Some z ->
+    find_instr ((z - pos) - (instr_size (Plabel lbl))) c = Some (Plabel lbl).
+Proof.
+  induction c; simpl; intros; repeat destr_in H1.
+  destruct a; simpl in Heqb; try congruence. repeat destr_in Heqb.
+  apply pred_dec_true. lia.
+  generalize(instr_size_bound (Plabel lbl)).  generalize(instr_size_bound a). intro.
+  eapply IHc in H3. 3: lia. 2: lia.
+  generalize (find_instr_ofs_pos _ _ _ H3). intro.
+  rewrite pred_dec_false. 2: lia.
+  rewrite <- H3. intro. f_equal. lia.
+Qed.
 
 Variable ge: genv.
 
@@ -554,36 +768,40 @@ Inductive outcome: Type :=
   [nextinstr_nf] is a variant of [nextinstr] that sets condition flags
   to [Vundef] in addition to incrementing the [PC]. *)
 
-Definition nextinstr (rs: regset) :=
-  rs#PC <- (Val.offset_ptr rs#PC Ptrofs.one).
+Definition nextinstr (sz:ptrofs) (rs: regset):=
+  rs#PC <- (Val.offset_ptr rs#PC sz).
 
-Definition nextinstr_nf (rs: regset) : regset :=
-  nextinstr (undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs).
+Definition nextinstr_nf (sz:ptrofs) (rs: regset): regset :=
+  nextinstr sz (undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs).
 
 Definition goto_label (f: function) (lbl: label) (rs: regset) (m: mem) :=
   match label_pos lbl 0 (fn_code f) with
   | None => Stuck
   | Some pos =>
       match rs#PC with
-      | Vptr b ofs => Next (rs#PC <- (Vptr b (Ptrofs.repr pos))) m
+      | Vptr b ofs =>
+        match Genv.find_funct_ptr ge b with
+        | Some _ => Next (rs#PC <- (Vptr b (Ptrofs.repr pos))) m
+        | None => Stuck
+        end
       | _ => Stuck
     end
   end.
 
 (** Auxiliaries for memory accesses. *)
 
-Definition exec_load (chunk: memory_chunk) (m: mem)
-                     (a: addrmode) (rs: regset) (rd: preg) :=
+Definition exec_load (sz:ptrofs) (chunk: memory_chunk) (m: mem)
+                     (a: addrmode) (rs: regset) (rd: preg):=
   match Mem.loadv chunk m (eval_addrmode a rs) with
-  | Some v => Next (nextinstr_nf (rs#rd <- v)) m
+  | Some v => Next (nextinstr_nf sz (rs#rd <- v)) m
   | None => Stuck
   end.
 
-Definition exec_store (chunk: memory_chunk) (m: mem)
+Definition exec_store (sz:ptrofs) (chunk: memory_chunk) (m: mem)
                       (a: addrmode) (rs: regset) (r1: preg)
-                      (destroyed: list preg) :=
+                      (destroyed: list preg):=
   match Mem.storev chunk m (eval_addrmode a rs) (rs r1) with
-  | Some m' => Next (nextinstr_nf (undef_regs destroyed rs)) m'
+  | Some m' => Next (nextinstr_nf sz (undef_regs destroyed rs)) m'
   | None => Stuck
   end.
 
@@ -606,7 +824,29 @@ Definition exec_store (chunk: memory_chunk) (m: mem)
     but we do not need to model this precisely.
 *)
 
+
+(*ra from mem shound not be Vundef*)
+Definition loadvv chunk m v : option val:=
+  match Mem.loadv chunk m v with
+  | None | Some Vundef => None
+  | Some v => Some v
+  end.
+
+Lemma loadv_loadvv :
+  forall chunk m vp v,
+    Mem.loadv chunk m vp = Some v -> v <> Vundef ->
+    loadvv chunk m vp = Some v.
+Proof.
+  intros.
+  unfold loadvv. rewrite H. destruct v; eauto. congruence.
+Qed.
+
 Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : outcome :=
+  let sz := Ptrofs.repr (instr_size i) in
+  let nextinstr := nextinstr sz in
+  let nextinstr_nf := nextinstr_nf sz in
+  let exec_load := exec_load sz in
+  let exec_store := exec_store sz in
   match i with
   (** Moves *)
   | Pmov_rr rd r1 =>
@@ -898,9 +1138,19 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pjmp_l lbl =>
       goto_label f lbl rs m
   | Pjmp_s id sg =>
-      Next (rs#PC <- (Genv.symbol_address ge id Ptrofs.zero)) m
+    let addr := Genv.symbol_address ge id Ptrofs.zero in
+    match Genv.find_funct ge addr with
+    | Some _ =>
+      Next (rs#PC <- addr) m
+    | _ => Stuck
+    end
   | Pjmp_r r sg =>
-      Next (rs#PC <- (rs r)) m
+    let addr := (rs r) in
+    match Genv.find_funct ge addr with
+    | Some _ =>
+      Next (rs#PC <- addr) m
+    | _ => Stuck
+    end
   | Pjcc cond lbl =>
       match eval_testcond cond rs with
       | Some true => goto_label f lbl rs m
@@ -923,11 +1173,21 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
       | _ => Stuck
       end
   | Pcall_s id sg =>
-      Next (rs#RA <- (Val.offset_ptr rs#PC Ptrofs.one) #PC <- (Genv.symbol_address ge id Ptrofs.zero)) m
+    let addr := Genv.symbol_address ge id Ptrofs.zero in
+    match Genv.find_funct ge addr with
+    | Some _ =>
+      Next (rs#RA <- (Val.offset_ptr rs#PC sz) #PC <- addr) m
+    | _ => Stuck
+    end
   | Pcall_r r sg =>
-      Next (rs#RA <- (Val.offset_ptr rs#PC Ptrofs.one) #PC <- (rs r)) m
+    let addr := (rs r) in
+    match Genv.find_funct ge addr with
+    | Some _ =>
+      Next (rs#RA <- (Val.offset_ptr rs#PC sz) #PC <- addr) m
+    | _ => Stuck
+    end
   | Pret =>
-      Next (rs#PC <- (rs#RA)) m
+    if check_ra_after_call ge (rs#RA) then Next (rs#PC <- (rs#RA) #RA <- Vundef) m else Stuck
   (** Saving and restoring registers *)
   | Pmov_rm_a rd a =>
       exec_load (if Archi.ptr64 then Many64 else Many32) m a rs rd
@@ -940,24 +1200,31 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   (** Pseudo-instructions *)
   | Plabel lbl =>
       Next (nextinstr rs) m
-  | Pallocframe sz ofs_ra ofs_link =>
+  | Pallocframe fsz ofs_ra ofs_link =>
+    if zle 0 fsz then
     match rs # PC with
-      |Vptr (Global id) _  =>
-      let (m0,path) := Mem.alloc_frame m id in
-      let (m1, stk) := Mem.alloc m0 0 sz in
+    |Vptr (Global id) _
+     =>
+     let (m0,path) := Mem.alloc_frame m id in
+     let (m1, stk) := Mem.alloc m0 0 fsz in
+     match Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame fsz) with
+     |None => Stuck
+     |Some m2 =>
       let sp := Vptr stk Ptrofs.zero in
-      match Mem.storev Mptr m1 (Val.offset_ptr sp ofs_link) rs#RSP with
+      match Mem.storev Mptr m2 (Val.offset_ptr sp ofs_ra) rs#RA with
       | None => Stuck
-      | Some m2 =>
-          match Mem.storev Mptr m2 (Val.offset_ptr sp ofs_ra) rs#RA with
-          | None => Stuck
-          | Some m3 => Next (nextinstr (rs #RAX <- (rs#RSP) #RSP <- sp)) m3
-          end
+      | Some m3 =>
+        match Mem.storev Mptr m3 (Val.offset_ptr sp ofs_link) rs#RSP with
+        | None => Stuck
+        | Some m4 => Next (nextinstr_nf (rs #RAX <- (rs#RSP) #RSP <- sp)) m4
+        end
       end
-      |_ => Stuck
-    end
-  | Pfreeframe sz ofs_ra ofs_link =>
-      match Mem.loadv Mptr m (Val.offset_ptr rs#RSP ofs_ra) with
+     end
+    |_ => Stuck
+    end else Stuck
+  | Pfreeframe fsz ofs_ra ofs_link =>
+    if zle 0 fsz then
+      match loadvv Mptr m (Val.offset_ptr rs#RSP ofs_ra) with
       | None => Stuck
       | Some ra =>
           match Mem.loadv Mptr m (Val.offset_ptr rs#RSP ofs_link) with
@@ -965,18 +1232,26 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
           | Some sp =>
               match rs#RSP with
               | Vptr stk ofs =>
-                  match Mem.free m stk 0 sz with
+                  if check_topframe fsz (Mem.astack (Mem.support m)) then
+                  if Val.eq sp (parent_sp_stree (Mem.stack (Mem.support m))) then
+                  if Val.eq (Vptr stk ofs) (top_sp_stree (Mem.stack (Mem.support m))) then
+                  match Mem.free m stk 0 fsz with
                   | None => Stuck
-                  | Some m' => match Mem.return_frame m' with
-                               | None => Stuck
-                               | Some m'' =>
-                                 Next (nextinstr (rs#RSP <- sp #RA <- ra)) m''
-                              end
-                  end
+                  | Some m' =>
+                    match Mem.return_frame m' with
+                    | None => Stuck
+                    | Some m'' =>
+                      match Mem.pop_stage m'' with
+                        | None => Stuck
+                        | Some m''' =>
+                        Next (nextinstr (rs#RSP <- sp #RA <- ra)) m'''
+                      end
+                    end
+                  end else Stuck else Stuck else Stuck
               | _ => Stuck
               end
           end
-      end
+      end else Stuck
   | Pbuiltin ef args res =>
       Stuck                             (**r treated specially below *)
   (** The following instructions and directives are not generated
@@ -1104,6 +1379,13 @@ Definition loc_external_result (sg: signature) : rpair preg :=
 Inductive state: Type :=
   | State: regset -> mem -> state.
 
+Fixpoint in_builtin_res (b:builtin_res preg) (r:preg) :=
+  match b with
+    |BR b => b =r
+    |BR_none => False
+    |BR_splitlong hi lo => in_builtin_res hi r \/ in_builtin_res lo r
+  end.
+
 Inductive step: state -> trace -> state -> Prop :=
   | exec_step_internal:
       forall b ofs f i rs m rs' m',
@@ -1119,7 +1401,8 @@ Inductive step: state -> trace -> state -> Prop :=
       find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some (Pbuiltin ef args res) ->
       eval_builtin_args ge rs (rs RSP) m args vargs ->
       external_call ef ge vargs m t vres m' ->
-      rs' = nextinstr_nf
+      ~ in_builtin_res res RSP ->
+      rs' = nextinstr_nf (Ptrofs.repr (instr_size (Pbuiltin ef args res)))
              (set_res res vres
                (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
       step (State rs m) t (State rs' m')
@@ -1128,8 +1411,17 @@ Inductive step: state -> trace -> state -> Prop :=
       rs PC = Vptr b Ptrofs.zero ->
       Genv.find_funct_ptr ge b = Some (External ef) ->
       extcall_arguments rs m (ef_sig ef) args ->
+      forall (SP_TYPE: Val.has_type (rs RSP) Tptr)
+        (RA_TYPE: Val.has_type (rs RA) Tptr)
+        (SP_NOT_VUNDEF: rs RSP <> Vundef)
+        (RA_NOT_VUNDEF: rs RA <> Vundef),
       external_call ef ge args m t res m' ->
-      rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs)) #PC <- (rs RA) ->
+      no_rsp_pair (loc_external_result (ef_sig ef)) ->
+      ra_after_call ge (rs#RA)->
+      rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs))
+              #PC <- (rs RA)
+              #RA <- Vundef
+      ->
       step (State rs m) t (State rs' m').
 
 End RELSEM.
@@ -1137,15 +1429,17 @@ End RELSEM.
 (** Execution of whole programs. *)
 
 Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall m0,
+  | initial_state_intro: forall m0 m1 b0 bmain,
       Genv.init_mem p = Some m0 ->
+      Mem.alloc m0 0 0 = (m1,b0) ->
       let ge := Genv.globalenv p in
+      Genv.find_symbol ge p.(prog_main) = Some bmain ->
       let rs0 :=
         (Pregmap.init Vundef)
-        # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
+        # PC <- (Vptr bmain Ptrofs.zero)
         # RA <- Vnullptr
-        # RSP <- Vnullptr in
-      initial_state p (State rs0 m0).
+        # RSP <- (Vptr (Stack None nil 1) Ptrofs.zero) in
+      initial_state p (State rs0 m1).
 
 Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall rs m r,
@@ -1195,10 +1489,10 @@ Ltac Equalities :=
 + discriminate.
 + discriminate.
 + assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0.
-  exploit external_call_determ. eexact H5. eexact H11. intros [A B].
+  exploit external_call_determ. eexact H5. eexact H12. intros [A B].
   split. auto. intros. destruct B; auto. subst. auto.
 + assert (args0 = args) by (eapply extcall_arguments_determ; eauto). subst args0.
-  exploit external_call_determ. eexact H4. eexact H9. intros [A B].
+  exploit external_call_determ. eexact H4. eexact H11. intros [A B].
   split. auto. intros. destruct B; auto. subst. auto.
 - (* trace length *)
   red; intros; inv H; simpl.
@@ -1206,13 +1500,34 @@ Ltac Equalities :=
   eapply external_call_trace_length; eauto.
   eapply external_call_trace_length; eauto.
 - (* initial states *)
-  inv H; inv H0. f_equal. congruence.
+  inv H; inv H0. f_equal. subst ge. subst ge0. rewrite H3 in H5. inv H5. reflexivity.
+  congruence.
 - (* final no step *)
   assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
   { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
   inv H. red; intros; red; intros. inv H; rewrite H0 in *; eelim NOTNULL; eauto.
 - (* final states *)
   inv H; inv H0. congruence.
+Qed.
+
+End INSTRSIZE.
+
+(** instrsize instantiation *)
+
+Definition instr_size_1 (i : Asm.instruction) : Z := 1.
+Lemma instr_size_bound_1 : forall i, 0 < instr_size_1 i <= Ptrofs.max_unsigned.
+Proof.
+  intros. destruct i; simpl; vm_compute; split; congruence.
+Qed.
+
+Definition instr_size_real (i : Asm.instruction) :=
+  match i with
+    |Pallocframe _ _ _=> 3
+    |_ => 1
+  end.
+Lemma instr_size_bound_real : forall i, 0 < instr_size_real i <= Ptrofs.max_unsigned.
+Proof.
+  intros. destruct i; simpl; vm_compute; split; congruence.
 Qed.
 
 (** Classification functions for processor registers (used in Asmgenproof). *)
@@ -1226,4 +1541,184 @@ Definition data_preg (r: preg) : bool :=
   | CR _ => false
   | RA => false
   end.
+
+
+Definition instr_invalid (i: instruction) :=
+  match i with
+  | Pjmp_l _
+  | Pjcc _ _
+  | Pjcc2 _ _ _
+  | Pjmptbl _ _
+  | Pallocframe _ _ _
+  | Pfreeframe _ _ _ => True
+  | _ => False
+  end.
+
+Definition instr_valid i := ~instr_invalid i.
+
+Lemma instr_invalid_dec: forall i, {instr_invalid i} + {~instr_invalid i}.
+Proof.
+  destruct i; cbn; auto.
+Qed.
+
+Lemma instr_valid_dec: forall i, {instr_valid i} + {~instr_valid i}.
+Proof.
+  unfold instr_valid.
+  destruct i; cbn; auto.
+Qed.
+
+Definition def_instrs_valid (def: option (globdef fundef unit)) :=
+  match def with
+  | None => True
+  | Some (Gvar v) => True
+  | Some (Gfun f) =>
+    match f with
+    | External _ => True
+    | Internal f =>  Forall instr_valid (fn_code f)
+    end
+  end.
+
+Lemma def_instrs_valid_dec:
+  forall def, {def_instrs_valid def} + {~def_instrs_valid def}.
+Proof.
+  destruct def. destruct g.
+  - destruct f.
+    + simpl. apply Forall_dec. apply instr_valid_dec.
+    + simpl. auto.
+  - simpl. auto.
+  - simpl. auto.
+Qed.
+
+Lemma sp_of_stack_pspnull : forall st fid idx,
+    sp_of_stack st = (fid::nil,idx::nil) -> parent_sp_stree st = Vptr (Stack None nil 1) Ptrofs.zero.
+Proof.
+  intros. unfold parent_sp_stree. rewrite H. auto.
+Qed.
+
+Lemma append_nil_right : forall A (l:list A),
+    l++nil = l.
+Proof.
+  induction l. auto. simpl. congruence.
+Qed.
+
+Lemma sp_of_stack_pspsome : forall st f1 lf path idx2 idx1 id,
+    sp_of_stack st = (f1::(Some id)::lf, (path++(idx2::nil))++(idx1::nil)) ->
+    parent_sp_stree st = Vptr (Stack (Some id) (path++(idx2::nil)) 1%positive) Ptrofs.zero.
+Proof.
+  intros. unfold parent_sp_stree. rewrite H. simpl.
+  destruct path. auto. destruct path. auto. rewrite removelast_app. simpl.
+  rewrite append_nil_right. auto. congruence.
+Qed.
+
+Lemma sp_of_stack_tspsome : forall st id lf path idx,
+    sp_of_stack st = ((Some id)::lf,path++(idx::nil)) ->
+    top_sp_stree st = Vptr (Stack (Some id) (path++(idx::nil)) 1%positive) Ptrofs.zero.
+Proof.
+  intros. unfold top_sp_stree. rewrite H. simpl.
+  destr. destruct path; inv Heql.
+Qed.
+
+Lemma sp_of_stack_return' : forall st st' p' fid lf path idx root,
+    return_stree st = Some (st',p') ->
+    sp_of_stack' st = (fid::lf++(root::nil),path++(idx::nil)) ->
+    sp_of_stack' st' = (lf++(root::nil),path).
+Proof.
+  induction st. intros. destruct st. destruct o.
+  - destruct st'. destruct s. destruct o0.
+    + remember (Node f1 l3 l4 (Some s)) as st1.
+      simpl in H0. destr_in H0. destr_in H0. subst p.
+      simpl in H1. destr_in H1. inv H1.
+      destruct l5. inv H3. destruct lf; inv H5.
+      assert (l5<>nil).
+      {destruct l5.
+      simpl in Heqp. destr_in Heqp. destruct s. destruct o0; simpl in Heqp1.
+      -- destr_in Heqp1. inv Heqp1. destruct l8; inv Heqp. simpl in H5. destruct l8; inv H5.
+      -- inv Heqp1. inv Heqp.
+      -- congruence.
+      }
+      apply exists_last in H1. destruct H1 as (l' & root' & H1). subst.
+      assert (p<> nil).
+      {
+        simpl in Heqp. destr_in Heqp.
+      }
+      apply exists_last in H1. destruct H1 as (path0 & idx' & H1). subst.
+      exploit H; eauto. simpl. auto. intro.
+      inv H0. simpl. rewrite H1.
+      assert (removelast ((Datatypes.length l2 :: path0) ++ idx'::nil) = removelast (path++idx::nil)).
+      setoid_rewrite H4. auto.
+      rewrite removelast_app in H0. simpl in H0. rewrite removelast_app in H0. simpl in H0.
+      repeat rewrite append_nil_right in H0. subst.
+      assert (tl ((f2::l'++root'::nil)++f0::nil) = tl (fid::lf++root::nil)).
+      setoid_rewrite H3. auto. simpl in H0. rewrite H0. auto. congruence. congruence.
+      rewrite Heqst1 in Heqo0. inv Heqo0. repeat destr_in H3.
+    + simpl in H1. simpl in H0. inv H0.
+      simpl in *.  inv H1. destruct path; inv H4. auto.
+      destruct path; inv H2.
+  - inv H1. destruct lf; inv H4.
+Qed.
+
+Lemma sp_of_stack_return : forall m1 m2 fid lf path idx,
+    Mem.return_frame m1 = Some m2 ->
+    sp_of_stack (Mem.stack (Mem.support m1)) = (fid::lf,path++(idx::nil)) ->
+    sp_of_stack (Mem.stack (Mem.support m2)) = (lf,path).
+Proof.
+  intros. apply Mem.support_return_frame in H. unfold Mem.sup_return_frame in H.
+  destr_in H. destr_in H. unfold sp_of_stack in *. destr_in H0. inv H0.
+  destruct l. inv H2. assert (l<>nil).
+  destruct (Mem.stack (Mem.support m1)). destruct o.
+  simpl in Heqp1. destr_in Heqp1. inv Heqp1. apply sp_of_stack'_nonempty in Heqp.
+  destruct l2. congruence. inv H1. intro. destruct l2; inv H0.
+  inv Heqo.
+  apply exists_last in H0. destruct H0 as (l' & idx' & H0). subst.
+  exploit sp_of_stack_return'; eauto. intro. inv H. simpl. rewrite H0.
+  simpl in H2. destr_in H2. inv H2. auto.
+Qed.
+
+Lemma sp_of_stack_alloc' : forall st st' st'' path path0 path1 f lf pos id root,
+    next_stree st id = (st',path) ->
+    next_block_stree st' = (f,pos,path0,st'') ->
+    sp_of_stack' st = (lf++root::nil,path1) ->
+    exists idx,
+    sp_of_stack' st'' = (f::lf++root::nil,path0) /\ path0 = path1 ++ (idx::nil).
+Proof.
+  induction st. intros. destruct st. destruct o.
+  - simpl in H0. destr_in H0. inv H0. simpl in H1. repeat destr_in H1.
+    simpl in H2. destr_in H2.
+    apply sp_of_stack'_nonempty in Heqp1 as H0.
+    apply exists_last in H0. destruct H0 as (l' & a & H0). subst.
+    exploit H; eauto. simpl. auto.
+    intros (idx & A & B). exists idx. split. simpl. rewrite A.
+    inv H2. auto. inv H2. auto.
+  - simpl in H0. inv H0. simpl in H1. inv H1. simpl in H2. inv H2. simpl.
+    exists (length l0). auto.
+Qed.
+
+Lemma sp_of_stack_alloc : forall m1 m2 m3 id path lo hi b lf path',
+    Mem.alloc_frame m1 id = (m2,path) ->
+    Mem.alloc m2 lo hi = (m3,b) ->
+    sp_of_stack (Mem.stack (Mem.support m1)) = (lf,path') ->
+    exists idx, b = Stack (Some id) (path'++(idx::nil)) 1%positive /\
+    sp_of_stack (Mem.stack (Mem.support m3)) = ((Some id)::lf,path'++(idx::nil)).
+Proof.
+  intros.
+  exploit Mem.alloc_frame_alloc; eauto. intro.
+  apply Mem.path_alloc_frame in H as H'. unfold Mem.sup_npath in H'. unfold npath in H'.
+  apply Mem.support_alloc_frame in H. unfold Mem.sup_incr_frame in H.
+  destr_in H.
+  apply Mem.support_alloc in H0. unfold Mem.sup_incr in H0. destr_in H0.
+  rewrite H in Heqp0. simpl in Heqp0. destruct p0. destruct p0.
+  unfold sp_of_stack in *. destr_in H1.
+  apply sp_of_stack'_nonempty in Heqp2 as H3.
+  edestruct (exists_last H3) as (a & l' & H4). subst.
+  exploit sp_of_stack_alloc'; eauto. intros (idx & A& B).
+  exploit next_stree_next_block_stree; eauto. intros (X & Y & Z).
+  subst.
+  exists idx. split. inv H1. auto.
+  rewrite H0. simpl. rewrite A. simpl. inv H1. destr.
+Qed.
+
+(* external call will not change the active stack frames*)
+Axiom sp_of_stack_external : forall m1 m2 ge ef vargs t vres,
+      external_call ef ge vargs m1 t vres m2 ->
+      sp_of_stack (Mem.stack (Mem.support m2)) = sp_of_stack (Mem.stack (Mem.support m1)).
 

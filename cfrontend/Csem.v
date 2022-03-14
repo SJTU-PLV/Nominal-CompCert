@@ -42,6 +42,10 @@ Definition env := PTree.t (block * type). (* map variable -> location & type *)
 Definition empty_env: env := (PTree.empty (block * type)).
 
 
+Section ORACLE.
+
+Variable fn_stack_requirements : ident -> Z.
+
 Section SEMANTICS.
 
 Variable ge: genv.
@@ -758,26 +762,29 @@ Inductive sstep: state -> trace -> state -> Prop :=
       sstep (State f Sskip (Kfor4 a2 a3 s k) e m)
          E0 (State f (Sfor Sskip a2 a3 s) k e m)
 
-  | step_return_0: forall f k e m m' m'',
+  | step_return_0: forall f k e m m' m'' m''',
       Mem.free_list m (blocks_of_env e) = Some m' ->
       Mem.return_frame m' = Some m'' ->
+      Mem.pop_stage m'' = Some m''' ->
       sstep (State f (Sreturn None) k e m)
-         E0 (Returnstate Vundef (call_cont k) m'')
+         E0 (Returnstate Vundef (call_cont k) m''')
   | step_return_1: forall f x k e m,
       sstep (State f (Sreturn (Some x)) k e m)
          E0 (ExprState f x (Kreturn k) e  m)
-  | step_return_2:  forall f v1 ty k e m v2 m' m'',
+  | step_return_2:  forall f v1 ty k e m v2 m' m'' m''',
       sem_cast v1 ty f.(fn_return) m = Some v2 ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
       Mem.return_frame m' = Some m'' ->
+      Mem.pop_stage m'' = Some m''' ->
       sstep (ExprState f (Eval v1 ty) (Kreturn k) e m)
-         E0 (Returnstate v2 (call_cont k) m'')
-  | step_skip_call: forall f k e m m' m'',
+         E0 (Returnstate v2 (call_cont k) m''')
+  | step_skip_call: forall f k e m m' m'' m''',
       is_call_cont k ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
       Mem.return_frame m' = Some m'' ->
+      Mem.pop_stage m'' = Some m''' ->
       sstep (State f Sskip k e m)
-         E0 (Returnstate Vundef k m'')
+         E0 (Returnstate Vundef k m''')
 
   | step_switch: forall f x sl k e m,
       sstep (State f (Sswitch x sl) k e m)
@@ -803,13 +810,14 @@ Inductive sstep: state -> trace -> state -> Prop :=
       sstep (State f (Sgoto lbl) k e m)
          E0 (State f s' k' e m)
 
-  | step_internal_function: forall f vargs k m e m0 m1 m2 path id,
+  | step_internal_function: forall f vargs k m e m0 m1 m2 path id m3,
       list_norepet (var_names (fn_params f) ++ var_names (fn_vars f)) ->
       Mem.alloc_frame m id = (m0,path) ->
       alloc_variables empty_env m0 (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-      bind_parameters e m1 f.(fn_params) vargs m2 ->
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id)) = Some m2 ->
+      bind_parameters e m2 f.(fn_params) vargs m3 ->
       sstep (Callstate (Internal f) vargs k m id)
-         E0 (State f f.(fn_body) k e m2)
+         E0 (State f f.(fn_body) k e m3)
 
   | step_external_function: forall ef targs tres cc vargs k m vres t m' id,
       external_call ef  ge vargs m t vres m' ->
@@ -833,13 +841,14 @@ End SEMANTICS.
   without arguments and with an empty continuation. *)
 
 Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
+  | initial_state_intro: forall b f m0 m1 b0,
       let ge := globalenv p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       type_of_fundef f = Tfunction Tnil type_int32s cc_default ->
-      initial_state p (Callstate f nil Kstop m0 p.(prog_main)).
+      Mem.alloc m0 0 0 = (m1,b0) ->
+      initial_state p (Callstate f nil Kstop m1 p.(prog_main)).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 
@@ -868,3 +877,4 @@ Proof.
   eapply external_call_trace_length; eauto.
   inv H; simpl; try lia. eapply external_call_trace_length; eauto.
 Qed.
+End ORACLE.
