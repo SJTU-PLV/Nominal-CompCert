@@ -519,10 +519,10 @@ Section STAR.
       etransitivity; eauto using match_senv_public_preserved.
   Qed.
   Next Obligation.
-    induction w.
-    - inv H; auto.
-    - destruct X as [[sei x1] x2], H as [? ?].
-      eauto using match_senv_valid_for.
+    revert se1 se2 H. induction w.
+    - intros * H. inv H; reflexivity.
+    - intros * H. destruct X as [[sei x1] x2], H as [? ?].
+      rewrite @match_senv_valid_for; eauto.
   Qed.
   Next Obligation.
     induction w; intros.

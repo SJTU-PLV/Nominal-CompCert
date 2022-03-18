@@ -373,12 +373,9 @@ Program Definition cc_c_locset: callconv li_c li_locset :=
     match_query := cc_c_locset_mq;
     match_reply := cc_c_locset_mr;
   |}.
-Next Obligation.
-  inv H0. reflexivity.
-Qed.
-Next Obligation.
-  inv H. intuition.
-Qed.
+Next Obligation. reflexivity. Qed.
+Next Obligation. inv H0. reflexivity. Qed.
+Next Obligation. inv H. intuition. Qed.
 
 (** ** Locset-style CKLR convention *)
 
@@ -406,7 +403,7 @@ Next Obligation.
   eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
 Qed.
 Next Obligation.
-  eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  eapply match_stbls_proj in H. eapply Genv.valid_for_match; eauto.
 Qed.
 Next Obligation.
   eapply match_stbls_proj in H. inv H0. cbn.

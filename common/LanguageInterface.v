@@ -59,7 +59,7 @@ Record callconv {li1 li2} :=
     match_senv_valid_for:
       forall w se1 se2 sk,
         match_senv w se1 se2 ->
-        Genv.valid_for sk se1 ->
+        Genv.valid_for sk se1 <->
         Genv.valid_for sk se2;
     match_senv_symbol_address:
       forall w se1 se2, match_senv w se1 se2 ->
@@ -113,8 +113,12 @@ Next Obligation.
   etransitivity; eauto using match_senv_public_preserved.
 Qed.
 Next Obligation.
-  intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 sk [Hse12 Hse23] H.
-  eauto using match_senv_valid_for.
+  intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 sk [Hse12 Hse23].
+  split.
+  - intros H. rewrite <- @match_senv_valid_for. 2: apply Hse23.
+    rewrite <- @match_senv_valid_for; eauto.
+  - intros H. rewrite @match_senv_valid_for. 2: apply Hse12.
+    rewrite @match_senv_valid_for; eauto.
 Qed.
 Next Obligation.
   intros. destruct w as [[se' w1] w2].
@@ -217,7 +221,7 @@ Next Obligation.
   intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
 Qed.
 Next Obligation.
-  intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  intros. eapply match_stbls_proj in H. eapply Genv.valid_for_match; eauto.
 Qed.
 Next Obligation.
   intros until i. eapply match_stbls_proj in H. inv H0. cbn.
