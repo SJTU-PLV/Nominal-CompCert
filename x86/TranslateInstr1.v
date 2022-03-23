@@ -556,7 +556,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Pmov_rr rd r1 =>
     do rdbits <- encode_ireg_u3 rd;
     do r1bits <- encode_ireg_u3 r1;
-    OK (Pmovl_mr (AddrE0 rdbits) r1bits) 
+    OK (Pmovl_rm (AddrE0 r1bits) rdbits)
   | Asm.Pmovl_rm rd addr =>
     do rdbits <- encode_ireg_u3 rd;
     do a <- translate_Addrmode_AddrE addr;
@@ -572,7 +572,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pmovsd_ff rd r1 =>
     do rdbits <- encode_freg_u3 rd;
     do r1bits <- encode_freg_u3 r1;
-    OK (Pmovsd_fm (AddrE0 rdbits) r1bits)
+    OK (Pmovsd_fm (AddrE0 r1bits) rdbits)
   | Asm.Pmovsd_fm r addr =>
     do rbits <- encode_freg_u3 r;
     do a <- translate_Addrmode_AddrE addr;
@@ -612,7 +612,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pmovzb_rr rd r =>
     do rdbits <- encode_ireg_u3 rd;
     do rbits <- encode_ireg_u3 r;
-    OK (Pmovzb_rm (AddrE0 rdbits) rbits)
+    OK (Pmovzb_rm (AddrE0 rbits) rdbits)
   | Asm.Pmovzb_rm r addr =>
     do rbits <- encode_ireg_u3 r;
     do a <- translate_Addrmode_AddrE addr;
@@ -625,7 +625,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pmovzw_rr rd rs =>
      do rdbits <- encode_ireg_u3 rd;
      do rbits <- encode_ireg_u3 rs;
-     OK (Pmovzw_GvEv (AddrE0 rdbits) rbits)
+     OK (Pmovzw_GvEv (AddrE0 rbits) rdbits)
   | Asm.Pmovsb_rm rd addr =>
     do rbits <- encode_ireg_u3 rd;
     do a <- translate_Addrmode_AddrE addr;
@@ -633,7 +633,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pmovsb_rr rd rs =>
     do rdbits <- encode_ireg_u3 rd;
     do rbits <- encode_ireg_u3 rs;
-    OK (Pmovsb_GvEv (AddrE0 rdbits) rbits)
+    OK (Pmovsb_GvEv (AddrE0 rbits) rdbits)
   | Asm.Pmovw_rm rd addr =>
     do rbits <- encode_ireg_u3 rd;
     do a <- translate_Addrmode_AddrE addr;
@@ -649,7 +649,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pmovsw_rr rd rs =>
     do rdbits <- encode_ireg_u3 rd;
     do rbits <- encode_ireg_u3 rs;
-    OK (Pmovsw_GvEv (AddrE0 rdbits) rbits)
+    OK (Pmovsw_GvEv (AddrE0 rbits) rdbits)
   | Asm.Pnegl r =>
      do rbits <- encode_ireg_u3 r;
      OK (Pnegl rbits)
@@ -693,6 +693,9 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      do rdbits <- encode_ireg_u3 rd;
      do rbits <- encode_ireg_u3 r1;
      OK (Pimull_rr rdbits rbits)
+  | Asm.Pimull_r r =>
+    do rbits <- encode_ireg_u3 r;
+    OK (Pimull_rr rbits rbits)
   | Asm.Pimull_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
      do imm32 <- encode_ofs_u32 (Int.intval imm);
@@ -807,8 +810,8 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      do rbits <- encode_freg_u3 r2;
      OK (Pcomisd_ff rdbits rbits)
   | Asm.Pxorps_f rd =>
-     do rdbits <- encode_freg_u3 rd;
-     OK (Pxorps_GvEv (AddrE0 rdbits) rdbits)
+     do rbits <- encode_freg_u3 rd;
+     OK (Pxorps_GvEv (AddrE0 rbits) rbits)
   | Asm.Pxorps_fm frd addr =>
      do rdbits <- encode_freg_u3 frd;
      do a <- translate_Addrmode_AddrE addr;
@@ -821,9 +824,9 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      do imm <- encode_ofs_u32 ofs;
      OK (Pjmp_l_rel imm)
   | Asm.Pjmp_r r sg =>(*admitttttttttttttttttttttted*)
-     do rdbits <- encode_ireg_u3 r;
+     do rbits <- encode_ireg_u3 r;
      (*how to use sg*)
-     OK (Pjmp_Ev (AddrE0 rdbits))
+     OK (Pjmp_Ev (AddrE0 rbits))
   | Asm.Pjmp_m addr =>
      do a <- translate_Addrmode_AddrE addr;
      OK (Pjmp_Ev a)
@@ -894,7 +897,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pmovsq_rm rd addr =>
      do rdbits <- encode_freg_u3 rd;
      do a <- translate_Addrmode_AddrE addr;
-     OK (Pmovsq_mr a rdbits)
+     OK (Pmovsq_rm a rdbits)
   | Asm.Prep_movsl => OK(Prep_movsl)
   | Asm.Psbbl_rr  rd r2 =>
      do rdbits <- encode_ireg_u3 rd;
@@ -911,7 +914,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pmov_mr_a addr rs =>
     do a <- translate_Addrmode_AddrE addr;
     do rbits <- encode_ireg_u3 rs;
-    OK (Pmovl_rm a rbits)
+    OK (Pmovl_mr a rbits)
   | Asm.Pmov_rm_a rs addr =>
     do a <- translate_Addrmode_AddrE addr;
     do rbits <- encode_ireg_u3 rs;
@@ -941,7 +944,23 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pxorpd_fm rd addr =>
     do rdbits <- encode_freg_u3 rd;
     do a <- translate_Addrmode_AddrE addr;
-    OK (Pxorpd_GvEv a rdbits) 
+    OK (Pxorpd_GvEv a rdbits)
+  | Asm.Pmuls_ff rd rs =>
+    do rdbits <- encode_freg_u3 rd;
+    do rbits <- encode_freg_u3 rs;
+    OK (Pmuls_ff rdbits rbits)
+  | Asm.Psubs_ff rd rs =>
+    do rdbits <- encode_freg_u3 rd;
+    do rbits <- encode_freg_u3 rs;
+    OK (Psubs_ff rdbits rbits)
+  | Asm.Pcomiss_ff rd rs =>
+    do rdbits <- encode_freg_u3 rd;
+    do rbits <- encode_freg_u3 rs;
+    OK (Pcomiss_ff rdbits rbits)
+  | Asm.Padds_ff rd rs =>
+    do rdbits <- encode_freg_u3 rd;
+    do rbits <- encode_freg_u3 rs;
+    OK (Padds_ff rdbits rbits)
   (* (* 64bit *) *)
   (* | Asm.Pmovq_ri rd imm => *)
   (*   do Rrdbits <- encode_ireg_u4 rd; *)
