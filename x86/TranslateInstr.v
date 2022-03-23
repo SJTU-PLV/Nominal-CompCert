@@ -237,38 +237,135 @@ Proof.
   try apply proof_irr.                 (**r to solve e = eq_refl *)
 Qed.
 
-Program Definition encode_ofs_u8 (ofs:Z) :res u8 :=
-  let ofs8 := bytes_to_bits_opt (bytes_of_int 1 ofs) in
-  if assertLength ofs8 8 then
-    OK (exist _ ofs8 _)
-  else Error (msg "impossible").
+(** Wordsize BEGIN *)
+(** TODO: these module should not be exported *)
+
+Module Wordsize_32.
+  Definition wordsize := 32%nat.
+  Remark wordsize_not_zero: wordsize <> 0%nat.
+  Proof. unfold wordsize; congruence. Qed.
+End Wordsize_32.
+
+Module int32 := Make(Wordsize_32).
+
+Module Wordsize_16.
+  Definition wordsize := 16%nat.
+  Remark wordsize_not_zero: wordsize <> 0%nat.
+  Proof. unfold wordsize; congruence. Qed.
+End Wordsize_16.
+
+Module int16 := Make(Wordsize_16).
+
+Module Wordsize_8.
+  Definition wordsize := 8%nat.
+  Remark wordsize_not_zero: wordsize <> 0%nat.
+  Proof. unfold wordsize; congruence. Qed.
+End Wordsize_8.
+
+Module int8 := Make(Wordsize_8).
+
+Definition in_int_range_b (intval:Z) (modulus:Z) :=
+  Z.leb (-1) intval || Z.leb intval modulus. 
+
+Definition in_int_range (intval:Z) (modulus:Z) :=
+  Z.le (-1) intval /\ Z.le intval modulus. 
+
+(** Wordsize END *)
+
+Program Definition encode_ofs_u8 (ofs:int) :res u8 :=
+  let intval := Int.unsigned ofs in
+  if in_int_range_b intval int8.modulus then
+    let ofs8 := bytes_to_bits_opt (bytes_of_int 1 intval) in
+    if assertLength ofs8 8 then
+      OK (exist _ ofs8 _)
+    else Error (msg "impossible")
+  else Error (msg "Not in range").
 
 Definition decode_ofs_u8 (bs:u8) : res int :=
   let bs' := proj1_sig bs in
   let z := bits_to_Z bs' in
   OK (Int.repr z).
 
-Program Definition encode_ofs_u16 (ofs:Z) :res u16 :=
-  let ofs16 := bytes_to_bits_opt (bytes_of_int 4 ofs) in
-  if assertLength ofs16 16 then
-    OK (exist _ ofs16 _)
-  else Error (msg "impossible").
+Lemma encode_decode_ofs_u8 : forall ofs bs,
+  encode_ofs_u8 ofs = OK(bs) ->
+  decode_ofs_u8 bs = OK(ofs).
+Admitted.
+
+Lemma decode_encode_ofs_u8 : forall ofs bs,
+  decode_ofs_u8 bs = OK(ofs) ->
+  encode_ofs_u8 ofs = OK(bs).
+Admitted.
+
+Program Definition encode_ofs_u16 (ofs:int) :res u16 :=
+  let intval := Int.unsigned ofs in
+  if in_int_range_b intval int16.modulus then
+    let ofs16 := bytes_to_bits_opt (bytes_of_int 1 intval) in
+    if assertLength ofs16 16 then
+      OK (exist _ ofs16 _)
+    else Error (msg "impossible")
+  else Error (msg "Not in range").
 
 Definition decode_ofs_u16 (bs:u16) : res int :=
   let bs' := proj1_sig bs in
   let z := bits_to_Z bs' in
   OK(Int.repr z).
 
-Program Definition encode_ofs_u32 (ofs:Z) :res u32 :=
-  let ofs32 := bytes_to_bits_opt (bytes_of_int 4 ofs) in
-  if assertLength ofs32 32 then
-    OK (exist _ ofs32 _)
-  else Error (msg "impossible").
+Lemma encode_decode_ofs_u16 : forall ofs bs,
+  encode_ofs_u16 ofs = OK(bs) ->
+  decode_ofs_u16 bs = OK(ofs).
+Admitted.
+
+Lemma decode_encode_ofs_u16 : forall ofs bs,
+  decode_ofs_u16 bs = OK(ofs) ->
+  encode_ofs_u16 ofs = OK(bs).
+Admitted.
+
+Program Definition encode_ofs_u32 (ofs:int) :res u32 :=
+  let intval := Int.unsigned ofs in
+  if in_int_range_b intval int32.modulus then
+    let ofs32 := bytes_to_bits_opt (bytes_of_int 1 intval) in
+    if assertLength ofs32 32 then
+      OK (exist _ ofs32 _)
+    else Error (msg "impossible")
+  else Error (msg "Not in range").
+
+Program Definition Z_encode_ofs_u32 (ofs:Z) :res u32 :=
+  if in_int_range_b ofs int32.modulus then
+    let ofs32 := bytes_to_bits_opt (bytes_of_int 1 ofs) in
+    if assertLength ofs32 32 then
+      OK (exist _ ofs32 _)
+    else Error (msg "impossible")
+  else Error (msg "Not in range").
 
 Definition decode_ofs_u32 (bs:u32) : res int :=
   let bs' := proj1_sig bs in
   let z := bits_to_Z bs' in
   OK (Int.repr z).
+
+Definition Z_decode_ofs_u32 (bs:u32) : res Z :=
+  let bs' := proj1_sig bs in
+  let z := bits_to_Z bs' in
+  OK (z).
+
+Lemma encode_decode_ofs_u32 : forall ofs bs,
+  encode_ofs_u32 ofs = OK(bs) ->
+  decode_ofs_u32 bs = OK(ofs).
+Admitted.
+
+Lemma decode_encode_ofs_u32 : forall ofs bs,
+  decode_ofs_u32 bs = OK(ofs) ->
+  encode_ofs_u32 ofs = OK(bs).
+Admitted.
+
+Lemma Z_encode_decode_ofs_u32 : forall ofs bs,
+  Z_encode_ofs_u32 ofs = OK(bs) ->
+  Z_decode_ofs_u32 bs = OK(ofs).
+Admitted.
+
+Lemma Z_decode_encode_ofs_u32 : forall ofs bs,
+  Z_decode_ofs_u32 bs = OK(ofs) ->
+  Z_encode_ofs_u32 ofs = OK(bs).
+Admitted.
 
 Program Definition encode_testcond_u4 (c:testcond) : u4 :=
   match c with
@@ -499,7 +596,7 @@ Definition translate_Addrmode_AddrE (sofs: Z) (res_iofs: res Z) (addr:addrmode):
       do iofs <- res_iofs;
       match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with
       | None =>
-        do ofs32 <- encode_ofs_u32 ofs;
+        do ofs32 <- Z_encode_ofs_u32 ofs;
         match obase,oindex with
         | None,None =>
           OK (AddrE11 ofs32)
@@ -617,7 +714,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
     OK (Pmovl_rm a rdbits)
   | Asm.Pmovl_ri rd imm =>
     do rdbits <- encode_ireg_u3 rd;
-    do imm32 <- encode_ofs_u32 (Int.intval imm);
+    do imm32 <- encode_ofs_u32 imm;
     OK (Pmovl_ri rdbits imm32)
   | Asm.Pmovl_mr addr r =>
     do rbits <- encode_ireg_u3 r;
@@ -737,7 +834,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      OK (Pcvtsd2ss_ff rdbits rbits)
   | Asm.Paddl_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
-     do imm32 <- encode_ofs_u32 (Int.intval imm);
+     do imm32 <- encode_ofs_u32 imm;
      OK (Paddl_ri rdbits imm32)
   | Asm.Psubl_rr rd r1 =>
      do rdbits <- encode_ireg_u3 rd;
@@ -749,7 +846,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      OK (Pimull_rr rdbits rbits)
   | Asm.Pimull_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
-     do imm32 <- encode_ofs_u32 (Int.intval imm);
+     do imm32 <- encode_ofs_u32 imm;
      OK (Pimull_ri rdbits rdbits imm32)
   | Asm.Pmull_r r1 =>
      do rbits <- encode_ireg_u3 r1;
@@ -767,11 +864,11 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      OK (Pandl_rr rdbits rbits)
   | Asm.Pandl_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
-     do imm32 <- encode_ofs_u32 (Int.intval imm);
+     do imm32 <- encode_ofs_u32 imm;
      OK (Pandl_ri rdbits imm32)
   | Asm.Porl_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
-     do imm32 <- encode_ofs_u32 (Int.intval imm);
+     do imm32 <- encode_ofs_u32 imm;
      OK (Porl_ri rdbits imm32)
   | Asm.Porl_rr rd r1 =>
      do rdbits <- encode_ireg_u3 rd;
@@ -783,25 +880,25 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      OK (Pxorl_rr rdbits rbits)
   | Asm.Pxorl_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
-     do imm32 <- encode_ofs_u32 (Int.intval imm);
+     do imm32 <- encode_ofs_u32 imm;
      OK (Pxorl_ri rdbits imm32)
   | Asm.Pnotl rd =>
      do rdbits <- encode_ireg_u3 rd;
      OK (Pnotl rdbits)
   | Asm.Psall_ri rd imm =>(*define a new function*)
      do rdbits <- encode_ireg_u3 rd;
-     do imm8 <- encode_ofs_u8 (Int.intval imm);
+     do imm8 <- encode_ofs_u8 imm;
      OK (Psall_ri rdbits imm8)
   | Asm.Psall_rcl rd =>
      do rdbits <- encode_ireg_u3 rd;
      OK (Psall_rcl rdbits)
   | Asm.Pshrl_ri rd imm =>(*define a new function*)
      do rdbits <- encode_ireg_u3 rd;
-     do imm8 <- encode_ofs_u8 (Int.intval imm);
+     do imm8 <- encode_ofs_u8 imm;
      OK (Pshrl_ri rdbits imm8)
   | Asm.Psarl_ri rd imm =>(*define a new function*)
      do rdbits <- encode_ireg_u3 rd;
-     do imm8 <- encode_ofs_u8 (Int.intval imm);
+     do imm8 <- encode_ofs_u8 imm;
      OK (Psarl_ri rdbits imm8)
   | Asm.Psarl_rcl rd =>
      do rdbits <- encode_ireg_u3 rd;
@@ -809,15 +906,15 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pshld_ri rd r1 imm =>(*define a new function*)
      do rdbits <- encode_ireg_u3 rd;
      do rbits <- encode_ireg_u3 r1;
-     do imm8 <- encode_ofs_u8 (Int.intval imm);
+     do imm8 <- encode_ofs_u8 imm;
      OK (Pshld_ri rdbits rbits imm8)
   | Asm.Prolw_ri rd imm =>(*define a new function*)
      do rdbits <- encode_ireg_u3 rd;
-     do imm8 <- encode_ofs_u8 (Int.intval imm);
+     do imm8 <- encode_ofs_u8 imm;
      OK (Prolw_ri rdbits imm8)
   | Asm.Prorl_ri rd imm =>(*define a new function*)
      do rdbits <- encode_ireg_u3 rd;
-     do imm8 <- encode_ofs_u8 (Int.intval imm);
+     do imm8 <- encode_ofs_u8 imm;
      OK (Prorl_ri rdbits imm8)
   | Asm.Pcmpl_rr r1 r2 =>
      do rdbits <- encode_ireg_u3 r1;
@@ -825,11 +922,11 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      OK (Pcmpl_rr rdbits rbits)
   | Asm.Pcmpl_ri r1 imm =>
      do rdbits <- encode_ireg_u3 r1;
-     do imm32 <- encode_ofs_u32 (Int.intval imm);
+     do imm32 <- encode_ofs_u32 imm;
      OK (Pcmpl_ri rdbits imm32)
   | Asm.Ptestl_ri r1 imm =>
      do rdbits <- encode_ireg_u3 r1;
-     do imm32 <- encode_ofs_u32 (Int.intval imm);
+     do imm32 <- encode_ofs_u32 imm;
      OK (Ptestl_ri rdbits imm32)
   | Asm.Ptestl_rr r1 r2 =>
      do rdbits <- encode_ireg_u3 r1;
@@ -872,7 +969,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      do a <- translate_Addrmode_AddrE addr;
      OK (Pandps_fm a rdbits)
   | Asm.Pjmp_l_rel ofs =>(*admitttttttttttttttttttttted*)
-     do imm <- encode_ofs_u32 ofs;
+     do imm <- Z_encode_ofs_u32 ofs;
      OK (Pjmp_l_rel imm)
   | Asm.Pjmp_r r sg =>(*admitttttttttttttttttttttted*)
      do rdbits <- encode_ireg_u3 r;
@@ -888,15 +985,15 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      OK (Pcall_r rdbits)
   | Asm.Pret => OK(Pret)
   | Asm.Pret_iw imm => (*define encode_ofs_u16*)
-     do imm16 <- encode_ofs_u16 (Int.intval imm);
+     do imm16 <- encode_ofs_u16 imm;
      OK (Pret_iw imm16)
   | Asm.Pjcc_rel c ofs =>
      let cond := encode_testcond_u4 c in
-     do imm <- encode_ofs_u32 ofs;
+     do imm <- Z_encode_ofs_u32 ofs;
      OK (Pjcc_rel cond imm)
   | Asm.Padcl_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
-     do imm8 <- encode_ofs_u8 (Int.intval imm);
+     do imm8 <- encode_ofs_u8 imm;
      OK (Padcl_ri rdbits imm8)
   | Asm.Padcl_rr rd r2 =>
      do rdbits <- encode_ireg_u3 rd;
@@ -908,7 +1005,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      OK (Paddl_rr rdbits rbits)
   | Asm.Paddl_mi addr imm =>
      do a <- translate_Addrmode_AddrE addr;
-     do imm32 <- encode_ofs_u32 (Int.intval imm);
+     do imm32 <- encode_ofs_u32 imm;
      OK (Paddl_mi a imm32)
   | Asm.Pbsfl rd r1 =>
      do rdbits <- encode_ireg_u3 rd;
@@ -948,7 +1045,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      OK (Pbsqrtsd rdbits rbits)
   | Asm.Psubl_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
-     do imm32 <- encode_ofs_u32 (Int.intval imm);
+     do imm32 <- encode_ofs_u32 imm;
      OK (Psubl_ri rdbits imm32)
   | _ => Error (msg "Not exists")
   end.
@@ -1222,8 +1319,8 @@ Definition translate_Instr (ofs: Z) (i:Instruction) : res instruction :=
     do frd  <- decode_freg rdbits;
     OK (Asm.Pandps_fm frd addr)
   | Pjmp_l_rel imm =>
-    do ofs <- decode_ofs_u32 imm;
-    OK (Asm.Pjmp_l_rel (Int.unsigned ofs))
+    do ofs <- Z_decode_ofs_u32 imm;
+    OK (Asm.Pjmp_l_rel ofs)
   | Pjmp_r rdbits =>
     do r <- decode_ireg rdbits;
     (*how to use sg*)
@@ -1242,9 +1339,9 @@ Definition translate_Instr (ofs: Z) (i:Instruction) : res instruction :=
     OK (Asm.Pret_iw imm)
     (* Pjcc_rel type of ofs *)
   | Pjcc_rel cond imm =>
-    do ofs <- decode_ofs_u32 imm;
+    do ofs <- Z_decode_ofs_u32 imm;
     do c   <- decode_testcond_u4 cond;
-    OK (Asm.Pjcc_rel c (Int.unsigned ofs))
+    OK (Asm.Pjcc_rel c ofs)
   | Padcl_ri rdbits imm8 =>
     do imm <- decode_ofs_u8 imm8;
     do rd  <- decode_ireg rdbits;
@@ -1318,10 +1415,104 @@ Admitted.
 Lemma translate_instr_consistency1 : forall ofs i I,
     translate_instr ofs i = OK I ->
     translate_Instr ofs I = OK i.
+Proof.
+  intros.
+  destruct i; try discriminate;   (**r remove Err cases *)
+  simpl in H; monadInv H;         (**r unfold `do` in H *)
+  simpl; unfold bind;             (**r unfold translate_Instr in goal *)
+
+  (**r try to solve reg to reg instructions, i.e. Pmovl_rr *)
+  try (apply ireg_encode_consistency in EQ; rewrite EQ);
+  try (apply ireg_encode_consistency in EQ1; rewrite EQ1);
+  try (apply freg_encode_consistency in EQ; rewrite EQ);
+  try (apply freg_encode_consistency in EQ1; rewrite EQ1);
+
+  (**r try to solve reg to imm instructions *)
+  try (apply encode_decode_ofs_u32 in EQ; unfold decode_ofs_u32; inversion EQ);
+  try (apply encode_decode_ofs_u32 in EQ0; unfold decode_ofs_u32; inversion EQ0);
+  try (apply encode_decode_ofs_u32 in EQ1; unfold decode_ofs_u32; inversion EQ1);
+  try (apply encode_decode_ofs_u16 in EQ; unfold decode_ofs_u16; inversion EQ);
+  try (apply encode_decode_ofs_u16 in EQ0; unfold decode_ofs_u16; inversion EQ0);
+  try (apply encode_decode_ofs_u16 in EQ1; unfold decode_ofs_u16; inversion EQ1);
+  try (apply encode_decode_ofs_u8 in EQ; unfold decode_ofs_u8; inversion EQ);
+  try (apply encode_decode_ofs_u8 in EQ0; unfold decode_ofs_u8; inversion EQ0);
+  try (apply encode_decode_ofs_u8 in EQ1; unfold decode_ofs_u8; inversion EQ1);
+
+  try auto.
+
+  - (* Asm.Pmovl_rm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovl_mr *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovl_fm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovl_mf *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovss_fm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovss_mf *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pfldl_m *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pfstpl_m *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pflds_m *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pfstps_m *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovb_mr *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovw_mr *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovzb_rm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovsb_rm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovzw_rm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovsw_rm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pleal *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - rewrite testcond_encode_consistency with (c := c); auto.
+  - rewrite testcond_encode_consistency with (c := c); auto.
+  - (* Asm.Pxorps_fm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pandps_fm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pjmp_r *) admit. (** TODO: signature needed *)
+  - (* Asm.Pjmp_m *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pcall_r *) admit. (** TODO: signature needed *)
+  - (* Asm.Paddl_mi *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovb_rm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovsq_mr *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovsq_rm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - (* Asm.Pmovw_rm *) admit. (** TODO: Instr_reloc_offset is admitted, this cannot be proved *)
+  - apply Z_encode_decode_ofs_u32 in EQ. unfold Z_decode_ofs_u32. inversion EQ. subst. auto.
+  - rewrite testcond_encode_consistency with (c := c); auto; apply Z_encode_decode_ofs_u32 in EQ. unfold Z_decode_ofs_u32. inversion EQ. auto.
 Admitted.
 
 Lemma translate_Instr_consistency1 : forall ofs i I,
     translate_Instr ofs I = OK i ->
     translate_instr ofs i = OK I.
+Proof.
+  intros.
+  destruct I; try discriminate;   (**r remove Err cases *)
+  simpl in H; monadInv H;         (**r unfold `do` in H *)
+  simpl; unfold bind;             (**r unfold translate_Instr in goal *)
+
+  (**r try to solve reg to reg instructions, i.e. Pmovl_rr *)
+  try (apply ireg_decode_consistency in EQ; rewrite EQ);
+  try (apply ireg_decode_consistency in EQ1; rewrite EQ1);
+  try (apply freg_decode_consistency in EQ; rewrite EQ);
+  try (apply freg_decode_consistency in EQ1; rewrite EQ1); try auto.
+
+  - (* Psubl_ri *) rewrite decode_encode_ofs_u32 with (bs := uvar32_1); auto.
+  - (* Pbsqrtsd *) rewrite decode_encode_ofs_u8 with (bs := uvar8_1); auto.
+  - (* Pjcc_rel *) rewrite Z_decode_encode_ofs_u32 with (bs := uvar32_1); auto.
+    apply testcond_decode_consistency with (c := x) in EQ. rewrite EQ.
+    auto.
+  - (* Pret_iw *) rewrite decode_encode_ofs_u16 with (bs := uvar16_0); auto.
+  - (* Pjmp_l_rel *) rewrite Z_decode_encode_ofs_u32 with (bs := uvar32_0); auto.
+  - (* Pxorps_f *) admit. (* args are strange *)
+  - (* Psetcc *) apply testcond_decode_consistency with (c := x0) in EQ1. rewrite EQ1.
+    auto.
+  - (* Pcmov *) apply testcond_decode_consistency with (c := x1) in EQ0. rewrite EQ0.
+    auto.
+  - (* Ptestl_ri *) rewrite decode_encode_ofs_u32 with (bs := uvar32_1); auto.
+  - (* Pcmpl_ri *)  rewrite decode_encode_ofs_u32 with (bs := uvar32_1); auto.
+  - (* Prorl_ri *) rewrite decode_encode_ofs_u8 with (bs := uvar8_1); auto.
+  - (* Prolw_ri *) rewrite decode_encode_ofs_u8 with (bs := uvar8_1); auto.
+  - (* Pshld_ri *) rewrite decode_encode_ofs_u8 with (bs := uvar8_2); auto.
+  - (* Psarl_ri *) rewrite decode_encode_ofs_u8 with (bs := uvar8_1); auto.
+  - (* Pshrl_ri *) rewrite decode_encode_ofs_u8 with (bs := uvar8_1); auto.
+  - (* Psall_ri *) rewrite decode_encode_ofs_u8 with (bs := uvar8_1); auto.
+  - (* Pxorl_ri *) rewrite decode_encode_ofs_u32 with (bs := uvar32_1); auto.
+  - (* Porl_ri *) rewrite decode_encode_ofs_u32 with (bs := uvar32_1); auto.
+  - (* Pandl_ri *) rewrite decode_encode_ofs_u32 with (bs := uvar32_1); auto.
+  - (* Pimull_ri *) rewrite decode_encode_ofs_u32 with (bs := uvar32_2); auto. admit. (* args are repeated *)
+  - (* Paddl_ri *) rewrite decode_encode_ofs_u32 with (bs := uvar32_1); auto.
+  - (* Pmovl_ri *) rewrite decode_encode_ofs_u32 with (bs := uvar32_1); auto.
 Admitted.
 
