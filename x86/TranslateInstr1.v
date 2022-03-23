@@ -239,10 +239,10 @@ Definition decode_ofs_u8 (bs:u8) : res int :=
   OK (Int.repr z).
 
 Program Definition encode_ofs_u16 (ofs:Z) :res u16 :=
-  let ofs16 := bytes_to_bits_opt (bytes_of_int 4 ofs) in
+  let ofs16 := bytes_to_bits_opt (bytes_of_int 2 ofs) in
   if assertLength ofs16 16 then
     OK (exist _ ofs16 _)
-  else Error (msg "impossible").
+  else Error (msg "impossible in encode_ofs_u16").
 
 Definition decode_ofs_u16 (bs:u16) : res int :=
   let bs' := proj1_sig bs in
@@ -430,7 +430,7 @@ Definition translate_Addrmode_AddrE (sofs: Z) (res_iofs: res Z) (addr:addrmode):
           else
             OK (AddrE5 scale index breg ofs32)
         end
-      | _ => Error (msg "impossible")
+      | _ => Error (msg "impossible relocation entry in addrmode")
       end
     end
   end.
@@ -549,9 +549,9 @@ Program Definition encode_ofs_u64 (ofs:Z) : res u64 :=
     
 
 (* ccelf instruction to cav21 instruction, unfinished!!! *)
-Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
+Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
   let res_iofs := instr_reloc_offset i in
-  let translate_Addrmode_AddrE := translate_Addrmode_AddrE ofs res_iofs in
+  let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs res_iofs in
   match i with
   | Pmov_rr rd r1 =>
     do rdbits <- encode_ireg_u3 rd;
@@ -713,7 +713,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pandl_rr rd r1 =>
      do rdbits <- encode_ireg_u3 rd;
      do rbits <- encode_ireg_u3 r1;
-     OK (Pandl_rr rdbits rbits)
+     OK (Pandl_rr rbits rdbits)
   | Asm.Pandl_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
      do imm32 <- encode_ofs_u32 (Int.intval imm);
@@ -725,11 +725,11 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Porl_rr rd r1 =>
      do rdbits <- encode_ireg_u3 rd;
      do rbits <- encode_ireg_u3 r1;
-     OK (Porl_rr rdbits rbits)
+     OK (Porl_rr rbits rdbits)
   | Asm.Pxorl_rr rd r1 =>
      do rdbits <- encode_ireg_u3 rd;
      do rbits <- encode_ireg_u3 r1;
-     OK (Pxorl_rr rdbits rbits)
+     OK (Pxorl_rr rbits rdbits)
   | Asm.Pxorl_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
      do imm32 <- encode_ofs_u32 (Int.intval imm);
@@ -759,7 +759,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      do rdbits <- encode_ireg_u3 rd;
      do rbits <- encode_ireg_u3 r1;
      do imm8 <- encode_ofs_u8 (Int.intval imm);
-     OK (Pshld_ri rdbits rbits imm8)
+     OK (Pshld_ri rbits rdbits imm8)
   | Asm.Prolw_ri rd imm =>(*define a new function*)
      do rdbits <- encode_ireg_u3 rd;
      do imm8 <- encode_ofs_u8 (Int.intval imm);
@@ -784,7 +784,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Ptestl_rr r1 r2 =>
      do rdbits <- encode_ireg_u3 r1;
      do rbits <- encode_ireg_u3 r2;
-     OK (Ptestl_rr rdbits rbits)
+     OK (Ptestl_rr rbits rdbits)
   | Asm.Pcmov c rd r1 =>(*define a new function*)
      let cond := encode_testcond_u4 c in
      do rdbits <- encode_ireg_u3 rd;
@@ -823,16 +823,16 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      OK (Pandps_fm a rdbits)
   | Asm.Pjmp_l_rel ofs =>(*admitttttttttttttttttttttted*)
     (* no relocation *)
-    match ZTree.get ofs rtbl_ofs_map with
+    match ZTree.get instr_ofs rtbl_ofs_map with
     | None =>
       do imm <- encode_ofs_u32 ofs;
       OK (Pjmp_l_rel imm)
-    | _ => Error(msg "Need to relocation in Pjmp_l_rel")
+    | _ => Error[MSG"Relocation entry in Pjmp_l_rel not expected"; MSG(Z_to_hex_string 4 ofs)]
     end
   | Asm.Pjmp_s id _ =>
     if Pos.eqb id xH then
       do iofs <- res_iofs;
-      do addend <- get_instr_reloc_addend' (iofs + ofs);
+      do addend <- get_instr_reloc_addend' (iofs + instr_ofs);
       (* FIXME: different in 64bit mode? *)
       (* CSLED: need 64bit jmp instruction *)
       do imm32 <- encode_ofs_u32 addend;
@@ -854,7 +854,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
     match id with
     | xH =>
       do iofs <- res_iofs;
-      do addend <- get_instr_reloc_addend' (iofs + ofs);
+      do addend <- get_instr_reloc_addend' (iofs + instr_ofs);
       (* FIXME: different in 64bit mode? *)
       (* CSLED: need 64bit call instruction *)
       do imm32 <- encode_ofs_u32 addend;
@@ -877,11 +877,11 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Padcl_rr rd r2 =>
      do rdbits <- encode_ireg_u3 rd;
      do rbits <- encode_ireg_u3 r2;
-     OK (Padcl_rr rdbits rbits)
+     OK (Padcl_rr rbits rdbits)
   | Asm.Paddl_rr rd r2 =>
      do rdbits <- encode_ireg_u3 rd;
      do rbits <- encode_ireg_u3 r2;
-     OK (Paddl_rr rdbits rbits)
+     OK (Paddl_rr rbits rdbits)
   | Asm.Paddl_mi addr imm =>
      do a <- translate_Addrmode_AddrE addr;
      do imm32 <- encode_ofs_u32 (Int.intval imm);
@@ -917,7 +917,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Psbbl_rr  rd r2 =>
      do rdbits <- encode_ireg_u3 rd;
      do rbits <- encode_ireg_u3 r2;
-     OK (Psbbl_rr rdbits rbits)
+     OK (Psbbl_rr rbits rdbits)
   | Asm.Psqrtsd rd r1 =>
      do rdbits <- encode_freg_u3 rd;
      do rbits <- encode_freg_u3 r1;
@@ -976,6 +976,13 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
     do rdbits <- encode_freg_u3 rd;
     do rbits <- encode_freg_u3 rs;
     OK (Padds_ff rdbits rbits)
+  | Asm.Pshrl_rcl r =>
+    do rbits <- encode_ireg_u3 r;
+    OK (Pshrl_rcl rbits)
+  | Asm.Pandpd_fm rd addr =>
+    do rdbits <- encode_freg_u3 rd;
+    do a <- translate_Addrmode_AddrE addr;
+    OK (Pandpd_GvEv a rdbits)
   (* (* 64bit *) *)
   (* | Asm.Pmovq_ri rd imm => *)
   (*   do Rrdbits <- encode_ireg_u4 rd; *)
