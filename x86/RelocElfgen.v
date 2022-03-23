@@ -351,7 +351,7 @@ Definition acc_headers (symbtbl: symbtable) (shstrmap: PTree.t Z) (res_acc: res 
           if Z.eqb (Z.of_nat (length sec)) e.(symbentry_size) then
             OK (acc++[h],ofs + e.(symbentry_size))
           else
-            Error [MSG "Inconsistency, section length not equal to symbentry filed "; CTX id]
+            Error [MSG "Inconsistency, section length not equal to symbentry field "; CTX id]
         | symb_rwdata =>
           let h := gen_data_sec_header sec idx ofs in
           OK (acc++[h],ofs + e.(symbentry_size))

@@ -695,7 +695,7 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      OK (Pimull_rr rdbits rbits)
   | Asm.Pimull_r r =>
     do rbits <- encode_ireg_u3 r;
-    OK (Pimull_rr rbits rbits)
+    OK (Pimull_r rbits)
   | Asm.Pimull_ri rd imm =>
      do rdbits <- encode_ireg_u3 rd;
      do imm32 <- encode_ofs_u32 (Int.intval imm);
@@ -771,7 +771,8 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
   | Asm.Pcmpl_rr r1 r2 =>
      do rdbits <- encode_ireg_u3 r1;
      do rbits <- encode_ireg_u3 r2;
-     OK (Pcmpl_rr rdbits rbits)
+     (* bug here: fixed *)
+     OK (Pcmpl_rr rbits rdbits)
   | Asm.Pcmpl_ri r1 imm =>
      do rdbits <- encode_ireg_u3 r1;
      do imm32 <- encode_ofs_u32 (Int.intval imm);
@@ -821,8 +822,22 @@ Definition translate_instr (ofs: Z) (i:instruction) : res Instruction :=
      do a <- translate_Addrmode_AddrE addr;
      OK (Pandps_fm a rdbits)
   | Asm.Pjmp_l_rel ofs =>(*admitttttttttttttttttttttted*)
-     do imm <- encode_ofs_u32 ofs;
-     OK (Pjmp_l_rel imm)
+    (* no relocation *)
+    match ZTree.get ofs rtbl_ofs_map with
+    | None =>
+      do imm <- encode_ofs_u32 ofs;
+      OK (Pjmp_l_rel imm)
+    | _ => Error(msg "Need to relocation in Pjmp_l_rel")
+    end
+  | Asm.Pjmp_s id _ =>
+    if Pos.eqb id xH then
+      do iofs <- res_iofs;
+      do addend <- get_instr_reloc_addend' (iofs + ofs);
+      (* FIXME: different in 64bit mode? *)
+      (* CSLED: need 64bit jmp instruction *)
+      do imm32 <- encode_ofs_u32 addend;
+      OK (Pjmp_l_rel imm32)
+    else Error (msg "Id not equal to xH in Pjmp_s")               
   | Asm.Pjmp_r r sg =>(*admitttttttttttttttttttttted*)
      do rbits <- encode_ireg_u3 r;
      (*how to use sg*)
