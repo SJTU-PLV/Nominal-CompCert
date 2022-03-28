@@ -32,6 +32,28 @@ Definition encode_ireg (r: ireg) : res bits :=
   | _ => Error (msg "Encoding of register not supported")
   end.
 
+(*encode 64bit reg ,return *)
+Definition encode_ireg64 (r:ireg) :(bits*bits):=
+  match r with
+  | RAX =>  (b["0"],b[ "000"])
+  | RBX =>  (b["0"],b[ "011"])
+  | RCX =>  (b["0"],b[ "001"])
+  | RDX =>  (b["0"],b[ "010"])
+  | RSI =>  (b["0"],b[ "110"])
+  | RDI =>  (b["0"],b[ "111"])
+  | RBP =>  (b["0"],b[ "101"])
+  | RSP =>  (b["0"],b[ "100"])
+  | R8 => (b["1"],b["000"])
+  | R9 => (b["1"],b["001"])
+  | R10 =>  (b["1"],b["010"])
+  | R11 =>  (b["1"],b["011"])
+  | R12 =>  (b["1"],b["100"])
+  | R13 =>  (b["1"],b["101"])
+  | R14 => (b["1"],b["110"])
+  | R15 => (b["1"],b["111"])
+end.
+   
+
 Definition encode_freg (r: freg) : res bits :=
   match r with
   | XMM0 => OK (b["000"])
@@ -58,6 +80,9 @@ Definition encode_scale (s: Z) : res bits :=
 Program Definition zero32 : u32 :=
   bytes_to_bits_opt (bytes_of_int 4 0).
 
+Program Definition zero1: u1 :=
+  b["0"].
+
 Program Definition encode_ireg_u3 (r:ireg) : res u3 :=
   do b <- encode_ireg r;
   if assertLength b 3 then
@@ -77,6 +102,23 @@ Definition decode_ireg (bs: u3) : res ireg :=
   else if Z.eqb n 7 then OK(RDI)      (**r b["111"] *)
   else Error(msg "reg not found")
 .
+
+Program Definition encode_ireg_u4 (r:ireg) : res (u1*u3):=
+  let (R,b) := encode_ireg64 r in
+  if assertLength R 1 then
+    if assertLength b 3 then
+      OK (R,b)
+    else Error(msg"impossible")
+  else Error(msg"impossible").
+
+(* FIXME *)
+Program Definition encode_ofs_u64 (ofs:Z) : res u64 :=
+  let ofs64 := bytes_to_bits_opt (bytes_of_int 8 ofs) in
+  if assertLength ofs64 64 then
+    OK (exist _ ofs64 _)
+  else Error (msg "impossible").
+
+
 
 Lemma ireg_encode_consistency :
   forall r encoded,
@@ -352,6 +394,37 @@ Definition get_instr_reloc_addend' (ofs:Z): res Z :=
   get_reloc_addend ofs.
 
 
+Definition translate_Addrmode_AddrE_aux32 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) : res AddrE :=
+  match obase,oindex with
+  | None,None =>
+    OK (AddrE11 ofs32)
+  | Some base,None =>
+    (* some bug only fix here not fixed in reverse *)
+    do r <- encode_ireg_u3 base;
+    if ireg_eq base RSP then
+      OK (AddrE4 r ofs32)
+    else
+      OK (AddrE6 r ofs32)
+  | None,Some (idx,ss) =>
+    if ireg_eq idx RSP then
+      (* OK (AddrE7 zero32) *)
+      Error (msg "index can not be RSP")    
+    else
+      do index <- encode_ireg_u3 idx;
+      do scale <- encode_scale_u2 ss;    
+      OK (AddrE9 scale index ofs32)
+  | Some base,Some (idx,ss) =>
+    if ireg_eq idx RSP then
+      Error (msg "index can not be RSP")
+            (* OK (AddrE4 breg zero32)            *)
+    else
+      do scale <- encode_scale_u2 ss;
+      do index <- encode_ireg_u3 idx;
+      do breg <- encode_ireg_u3 base;    
+      OK (AddrE5 scale index breg ofs32)
+  end.
+
+
 (* Translate ccelf addressing mode to cav21 addr mode *)
 (* sofs: instruction ofs, res_iofs: relocated location in the instruction*)
 (* TODO: 64bit mode, the addend is placed in the relocation entry *)
@@ -367,34 +440,7 @@ Definition translate_Addrmode_AddrE (sofs: Z) (res_iofs: res Z) (addr:addrmode):
         if Z.eqb (Ptrofs.unsigned ofs) addend then
           (*32bit mode the addend placed in instruction *)
           do imm32 <- encode_ofs_u32 addend;
-          match obase,oindex with
-          | None,None =>
-            OK (AddrE11 imm32)
-          | Some base,None =>
-            (* some bug only fix here not fixed in reverse *)
-            do r <- encode_ireg_u3 base;
-            if ireg_eq base RSP then
-              OK (AddrE4 r imm32)
-            else
-              OK (AddrE6 r imm32)
-          | None,Some (idx,ss) =>
-            do index <- encode_ireg_u3 idx;
-            do scale <- encode_scale_u2 ss;
-            if ireg_eq idx RSP then
-              (* OK (AddrE7 zero32) *)
-              Error (msg "index can not be RSP")
-            else
-              OK (AddrE9 scale index imm32)
-          | Some base,Some (idx,ss) =>
-            do scale <- encode_scale_u2 ss;
-            do index <- encode_ireg_u3 idx;
-            do breg <- encode_ireg_u3 base;
-            if ireg_eq idx RSP then
-              Error (msg "index can not be RSP")
-                    (* OK (AddrE4 breg zero32)            *)
-            else
-              OK (AddrE5 scale index breg imm32)
-          end
+          translate_Addrmode_AddrE_aux32 obase oindex imm32
         else Error (msg "addend is not equal to ofs")
       | _ => Error(msg "id must be 1")
       end
@@ -403,37 +449,75 @@ Definition translate_Addrmode_AddrE (sofs: Z) (res_iofs: res Z) (addr:addrmode):
       match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with
       | None =>
         do ofs32 <- encode_ofs_u32 ofs;
-        match obase,oindex with
-        | None,None =>
-          OK (AddrE11 ofs32)
-        | Some base,None =>
-          do r <- encode_ireg_u3 base;
-          if ireg_eq base RSP then
-              OK (AddrE4 r ofs32)
-          else
-              OK (AddrE6 r ofs32)
-        | None,Some (idx,ss) =>
-          do r <- encode_ireg_u3 idx;
-          do scale <- encode_scale_u2 ss;
-          if ireg_eq idx RSP then
-            (* OK (AddrE7 ofs32) *)
-            Error (msg "index can not be RSP")
-          else
-            OK (AddrE9 scale r ofs32)
-        | Some base,Some (idx,ss) =>
-          do scale <- encode_scale_u2 ss;
-          do index <- encode_ireg_u3 idx;
-          do breg <- encode_ireg_u3 base;
-          if ireg_eq idx RSP then
-            Error (msg "index can not be RSP")
-                  (* OK (AddrE4 breg_sig ofs32) *)
-          else
-            OK (AddrE5 scale index breg ofs32)
-        end
+        translate_Addrmode_AddrE_aux32 obase oindex ofs32
       | _ => Error (msg "impossible relocation entry in addrmode")
       end
     end
   end.
+
+(* u1:X u1:B *)
+Definition translate_Addrmode_AddrE_aux64 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) : res (AddrE*u1*u1) :=
+  match obase,oindex with
+  | None,None =>
+    OK ((AddrE11 ofs32),zero1,zero1)
+  | Some base,None =>
+    (* some bug only fix here not fixed in reverse *)
+    do B_r <- encode_ireg_u4 base;
+    let (B,r) := B_r in
+    if ireg_eq base RSP then
+      OK ((AddrE4 r ofs32),zero1,B)
+    else
+      OK ((AddrE6 r ofs32),zero1,B)
+  | None,Some (idx,ss) =>
+    if ireg_eq idx RSP then
+      (* OK (AddrE7 zero32) *)
+      Error (msg "index can not be RSP")    
+    else
+      do X_index <- encode_ireg_u4 idx;
+      let (X,index) := X_index in
+      do scale <- encode_scale_u2 ss;
+      OK ((AddrE9 scale index ofs32),X,zero1)
+  | Some base,Some (idx,ss) =>
+    if ireg_eq idx RSP then
+      Error (msg "index can not be RSP")
+            (* OK (AddrE4 breg zero32)*)
+    else
+      do scale <- encode_scale_u2 ss;
+      do X_index <- encode_ireg_u4 idx;
+      do B_breg <- encode_ireg_u4 base;
+      let (X,index) := X_index in
+      let (B,breg) := B_breg in
+      OK ((AddrE5 scale index breg ofs32),X,B)
+  end.
+
+
+(* 64bit addrmode translation, u1: X, u1:B *)
+Definition translate_Addrmode_AddrE64 (sofs: Z) (res_iofs: res Z) (addr:addrmode): res (AddrE*u1*u1) :=
+  match addr with
+  | Addrmode obase oindex disp  =>
+    match disp with
+    | inr (id, ofs) =>
+      match id with
+      | xH =>
+        do iofs <- res_iofs;
+        do addend <- get_instr_reloc_addend' (iofs + sofs);
+        (* addend is the offset of id and access point *)
+        if Z.eqb (Ptrofs.unsigned ofs) addend then
+          translate_Addrmode_AddrE_aux64 obase oindex zero32
+        else Error (msg "64bit: addend is not equal to ofs")
+      | _ => Error(msg "64bit: id must be 1")
+      end
+    | inl ofs =>
+      do iofs <- res_iofs;
+      match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with
+      | None =>
+        do ofs32 <- encode_ofs_u32 ofs;
+        translate_Addrmode_AddrE_aux64 obase oindex ofs32
+      | _ => Error (msg "64bit: impossible relocation entry in addrmode")
+      end
+    end
+  end.
+
 
 (* FIXME: some bug fixed in above but not here *)
 (* Translate CAV21 addr mode to ccelf addr mode *)
@@ -510,48 +594,11 @@ Lemma translate_consistency1 : forall ofs iofs addr addrE,
 Admitted.
 
 
-
-(*encode 64bit reg ,return *)
-Definition encode_ireg64 (r:ireg) :(bits*bits):=
-  match r with
-  | RAX =>  (b["0"],b[ "000"])
-  | RBX =>  (b["0"],b[ "011"])
-  | RCX =>  (b["0"],b[ "001"])
-  | RDX =>  (b["0"],b[ "010"])
-  | RSI =>  (b["0"],b[ "110"])
-  | RDI =>  (b["0"],b[ "111"])
-  | RBP =>  (b["0"],b[ "101"])
-  | RSP =>  (b["0"],b[ "100"])
-  | R8 => (b["1"],b["000"])
-  | R9 => (b["1"],b["001"])
-  | R10 =>  (b["1"],b["010"])
-  | R11 =>  (b["1"],b["011"])
-  | R12 =>  (b["1"],b["100"])
-  | R13 =>  (b["1"],b["101"])
-  | R14 => (b["1"],b["110"])
-  | R15 => (b["1"],b["111"])
-end.
-
-Program Definition encode_ireg_u4 (r:ireg) : res (u1*u3):=
-  let (R,b) := encode_ireg64 r in
-  if assertLength R 1 then
-    if assertLength b 3 then
-      OK (R,b)
-    else Error(msg"impossible")
-  else Error(msg"impossible").
-
-(* FIXME *)
-Program Definition encode_ofs_u64 (ofs:Z) : res u64 :=
-  let ofs64 := bytes_to_bits_opt (bytes_of_int 8 ofs) in
-  if assertLength ofs64 64 then
-    OK (exist _ ofs64 _)
-  else Error (msg "impossible").
-    
-
 (* ccelf instruction to cav21 instruction, unfinished!!! *)
 Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
   let res_iofs := instr_reloc_offset i in
   let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs res_iofs in
+  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs res_iofs in
   match i with
   | Pmov_rr rd r1 =>
     do rdbits <- encode_ireg_u3 rd;
@@ -983,14 +1030,46 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
     do rdbits <- encode_freg_u3 rd;
     do a <- translate_Addrmode_AddrE addr;
     OK (Pandpd_GvEv a rdbits)
-  (* (* 64bit *) *)
-  (* | Asm.Pmovq_ri rd imm => *)
+  (* 64bit *)
+  | Asm.Pmovq_ri rd imm =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R,rdbits) := Rrdbits in
+    do imm64 <- encode_ofs_u64 (Int64.intval imm);
+    OK (Pmovq_ri R rdbits imm64)
+  | Asm.Pmovq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    (* cannot use '(addr,X,B) because X also a product type *)
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    (* alphabetical: B R X *)
+    OK (Pmovq_GvEv a B R X rdbits)
+  | Asm.Pmovq_mr addr rs =>
+    do Rrsbits <- encode_ireg_u4 rs;
+    let (R, rsbits):= Rrsbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK (Pmovq_EvGv a B R X rsbits)
+  | Asm.Pleaq rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK (Pleaq a B R X rdbits)
+  | Asm.Pnegq r =>
+    do Rrbits <- encode_ireg_u4 r;
+    let (R, rbits):= Rrbits in
+    OK (Pnegq (AddrE0 rbits) zero1 R zero1)
+  (* (* bug in csled  *) *)
+  (* | Asm.Paddq_ri rd imm => *)
   (*   do Rrdbits <- encode_ireg_u4 rd; *)
   (*   let (R,rdbits) := Rrdbits in *)
   (*   do imm64 <- encode_ofs_u64 (Int64.intval imm); *)
-  (*   OK (Pmovq_ri R rdbits imm64)        *)
-  (* | Asm.Pmovq_rm rd addr => *)
-    
+  (*   OK (Paddq_ri (AddrE0 rdbits) zero1 R zero1 imm64) *)
+  (* (* | Asm.Paddq *) *)
   | _ => Error [MSG "Not exists "; MSG (instr_to_string i)]
               
   end.
