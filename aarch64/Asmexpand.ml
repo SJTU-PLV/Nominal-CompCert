@@ -185,14 +185,15 @@ let memcpy_small_arg sz arg tmp =
   | BA_addrstack ofs ->
       if offset_in_range ofs
       && offset_in_range (Ptrofs.add ofs (Ptrofs.repr (Z.of_uint sz)))
+      && Int64.rem (Z.to_int64 ofs) 8L = 0L
       then (XSP, ofs)
       else begin expand_addimm64 (RR1 tmp) XSP ofs; (RR1 tmp, _0) end
   | _ ->
       assert false
 
 let expand_builtin_memcpy_small sz al src dst =
-  let (tsrc, tdst) =
-    if dst <> BA (IR X17) then (X17, X29) else (X29, X17) in
+  let tsrc = if dst <> BA (IR X17) then X17 else X29 in
+  let tdst = if src <> BA (IR X29) then X29 else X17 in
   let (rsrc, osrc) = memcpy_small_arg sz src tsrc in
   let (rdst, odst) = memcpy_small_arg sz dst tdst in
   let rec copy osrc odst sz =
@@ -355,8 +356,12 @@ let expand_builtin_inline name args res =
   (* Synchronization *)
   | "__builtin_membar", [], _ ->
      ()
+  (* No operation *)
   | "__builtin_nop", [], _ ->
      emit Pnop
+  (* Optimization hint *)
+  | "__builtin_unreachable", [], _ ->
+     ()
   (* Byte swap *)
   | ("__builtin_bswap" | "__builtin_bswap32"), [BA(IR a1)], BR(IR res) ->
      emit (Prev(W, res, a1))

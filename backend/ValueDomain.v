@@ -43,12 +43,12 @@ Proof.
   elim H. apply H0; auto.
 Qed.
 
-Hint Extern 2 (_ = _) => congruence : va.
-Hint Extern 2 (_ <> _) => congruence : va.
-Hint Extern 2 (_ < _) => extlia : va.
-Hint Extern 2 (_ <= _) => extlia : va.
-Hint Extern 2 (_ > _) => extlia : va.
-Hint Extern 2 (_ >= _) => extlia : va.
+Global Hint Extern 2 (_ = _) => congruence : va.
+Global Hint Extern 2 (_ <> _) => congruence : va.
+Global Hint Extern 2 (_ < _) => extlia : va.
+Global Hint Extern 2 (_ <= _) => extlia : va.
+Global Hint Extern 2 (_ > _) => extlia : va.
+Global Hint Extern 2 (_ >= _) => extlia : va.
 
 Section MATCH.
 
@@ -3438,7 +3438,7 @@ Lemma ablock_init_sound:
   forall m b p, smatch m b p -> bmatch m b (ablock_init p).
 Proof.
   intros; split; auto; intros.
-  unfold ablock_load, ablock_init; simpl. rewrite ZTree.gempty.
+  unfold ablock_load, ablock_init; simpl.
   eapply vnormalize_cast; eauto. eapply H; eauto.
 Qed.
 
@@ -4558,7 +4558,7 @@ Lemma ematch_init:
   ematch (init_regs vl rl) (einit_regs rl).
 Proof.
   induction rl; simpl; intros.
-- red; intros. rewrite Regmap.gi. simpl AE.get. rewrite PTree.gempty.
+- red; intros. rewrite Regmap.gi. simpl.
   constructor.
 - destruct vl as [ | v1 vs ].
   + assert (ematch (init_regs nil rl) (einit_regs rl)).
@@ -4711,10 +4711,10 @@ Module VA <: SEMILATTICE.
 
 End VA.
 
-Hint Constructors cmatch : va.
-Hint Constructors pmatch: va.
-Hint Constructors vmatch: va.
-Hint Resolve cnot_sound symbol_address_sound
+Global Hint Constructors cmatch : va.
+Global Hint Constructors pmatch: va.
+Global Hint Constructors vmatch: va.
+Global Hint Resolve cnot_sound symbol_address_sound
        shl_sound shru_sound shr_sound
        and_sound or_sound xor_sound notint_sound
        ror_sound rolm_sound

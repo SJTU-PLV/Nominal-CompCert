@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -113,7 +114,7 @@ Proof.
   intros P Q [[A B] [C D]]. split; auto.
 Qed.
 
-Hint Resolve massert_imp_refl massert_eqv_refl : core.
+Global Hint Resolve massert_imp_refl massert_eqv_refl : core.
 
 (** * Separating conjunction *)
 
@@ -870,7 +871,7 @@ Proof.
   exists j', vres2, m2'; intuition auto.
   split; [|split].
 - exact INJ'.
-- apply m_invar with (m0 := m2).
+- apply (m_invar _ m2).
 + apply globalenv_inject_incr with j m1; auto.
 + eapply Mem.unchanged_on_implies; eauto.
   intros; red; intros; red; intros.

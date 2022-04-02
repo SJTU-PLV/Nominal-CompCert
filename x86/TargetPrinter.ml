@@ -95,9 +95,6 @@ let z oc n = output_string oc (Z.to_string n)
 
 let data_pointer = if Archi.ptr64 then ".quad" else ".long"
 
-(* The comment deliminiter *)
-let comment = "#"
-
 (* Base-2 log of a Caml integer *)
 let rec log2 n =
   assert (n > 0);
@@ -106,6 +103,7 @@ let rec log2 n =
 (* System dependent printer functions *)
 module type SYSTEM =
     sig
+      val comment: string
       val raw_symbol: out_channel -> string -> unit
       val symbol: out_channel -> P.t -> unit
       val label: out_channel -> int -> unit
@@ -124,6 +122,9 @@ module type SYSTEM =
 module ELF_System : SYSTEM =
   struct
 
+    (* The comment delimiter *)
+    let comment = "#"
+
     let raw_symbol oc s =
       fprintf oc "%s" s
 
@@ -134,9 +135,9 @@ module ELF_System : SYSTEM =
     let name_of_section = function
       | Section_text -> ".text"
       | Section_data i | Section_small_data i ->
-          if i then ".data" else common_section ()
+          variable_section ~sec:".data" ~bss:".bss" i
       | Section_const i | Section_small_const i ->
-          if i || (not !Clflags.option_fcommon) then ".section	.rodata" else "COMM"
+          variable_section ~sec:".section	.rodata" i
       | Section_string -> ".section	.rodata"
       | Section_literal -> ".section	.rodata.cst8,\"aM\",@progbits,8"
       | Section_jumptable -> ".text"
@@ -180,6 +181,10 @@ module ELF_System : SYSTEM =
 module MacOS_System : SYSTEM =
   struct
 
+    (* The comment delimiter.
+        `##` instead of `#` to please the Clang assembler. *)
+    let comment = "##"
+
     let raw_symbol oc s =
      fprintf oc "_%s" s
 
@@ -192,11 +197,11 @@ module MacOS_System : SYSTEM =
     let name_of_section = function
       | Section_text -> ".text"
       | Section_data i | Section_small_data i ->
-          if i || (not !Clflags.option_fcommon) then ".data" else "COMM"
+          variable_section ~sec:".data" i
       | Section_const i  | Section_small_const i ->
-          if i || (not !Clflags.option_fcommon) then ".const" else "COMM"
+          variable_section ~sec:".const" ~reloc:".const_data" i
       | Section_string -> ".const"
-      | Section_literal -> ".literal8"
+      | Section_literal -> ".const"
       | Section_jumptable -> ".text"
       | Section_user(s, wr, ex) ->
           sprintf ".section	\"%s\", %s, %s"
@@ -239,6 +244,9 @@ module MacOS_System : SYSTEM =
 module Cygwin_System : SYSTEM =
   struct
 
+    (* The comment delimiter *)
+    let comment = "#"
+
     let symbol_prefix =
       if Archi.ptr64 then "" else "_"
 
@@ -254,9 +262,9 @@ module Cygwin_System : SYSTEM =
     let name_of_section = function
       | Section_text -> ".text"
       | Section_data i | Section_small_data i ->
-          if i then ".data" else common_section ()
+          variable_section ~sec:".data" ~bss:".bss" i
       | Section_const i | Section_small_const i ->
-          if i || (not !Clflags.option_fcommon) then ".section	.rdata,\"dr\"" else "COMM"
+          variable_section ~sec:".section	.rdata,\"dr\"" i
       | Section_string -> ".section	.rdata,\"dr\""
       | Section_literal -> ".section	.rdata,\"dr\""
       | Section_jumptable -> ".text"
@@ -914,8 +922,7 @@ module Target(System: SYSTEM):TARGET =
 
     let print_epilogue oc =
       if !need_masks then begin
-        section oc (Section_const true);
-        (* not Section_literal because not 8-bytes *)
+        section oc Section_literal;
         print_align oc 16;
         fprintf oc "%a:	.quad   0x8000000000000000, 0\n"
           raw_symbol "__negd_mask";
@@ -945,7 +952,7 @@ end
 let sel_target () =
  let module S = (val (match Configuration.system with
   | "linux" | "bsd" -> (module ELF_System:SYSTEM)
-  | "macosx" -> (module MacOS_System:SYSTEM)
+  | "macos" -> (module MacOS_System:SYSTEM)
   | "cygwin" -> (module Cygwin_System:SYSTEM)
   | _ -> invalid_arg ("System " ^ Configuration.system ^ " not supported")  ):SYSTEM) in
  (module Target(S):TARGET)

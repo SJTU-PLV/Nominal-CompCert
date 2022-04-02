@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -91,7 +92,7 @@ Proof.
   generalize modulus_gt_one; lia.
 Qed.
 
-Hint Resolve modulus_pos: ints.
+Global Hint Resolve modulus_pos: ints.
 
 (** * Representation of machine integers *)
 
@@ -400,45 +401,45 @@ Definition eqm := eqmod modulus.
 
 Lemma eqm_refl: forall x, eqm x x.
 Proof (eqmod_refl modulus).
-Hint Resolve eqm_refl: ints.
+Global Hint Resolve eqm_refl: ints.
 
 Lemma eqm_refl2:
   forall x y, x = y -> eqm x y.
 Proof (eqmod_refl2 modulus).
-Hint Resolve eqm_refl2: ints.
+Global Hint Resolve eqm_refl2: ints.
 
 Lemma eqm_sym: forall x y, eqm x y -> eqm y x.
 Proof (eqmod_sym modulus).
-Hint Resolve eqm_sym: ints.
+Global Hint Resolve eqm_sym: ints.
 
 Lemma eqm_trans: forall x y z, eqm x y -> eqm y z -> eqm x z.
 Proof (eqmod_trans modulus).
-Hint Resolve eqm_trans: ints.
+Global Hint Resolve eqm_trans: ints.
 
 Lemma eqm_small_eq:
   forall x y, eqm x y -> 0 <= x < modulus -> 0 <= y < modulus -> x = y.
 Proof (eqmod_small_eq modulus).
-Hint Resolve eqm_small_eq: ints.
+Global Hint Resolve eqm_small_eq: ints.
 
 Lemma eqm_add:
   forall a b c d, eqm a b -> eqm c d -> eqm (a + c) (b + d).
 Proof (eqmod_add modulus).
-Hint Resolve eqm_add: ints.
+Global Hint Resolve eqm_add: ints.
 
 Lemma eqm_neg:
   forall x y, eqm x y -> eqm (-x) (-y).
 Proof (eqmod_neg modulus).
-Hint Resolve eqm_neg: ints.
+Global Hint Resolve eqm_neg: ints.
 
 Lemma eqm_sub:
   forall a b c d, eqm a b -> eqm c d -> eqm (a - c) (b - d).
 Proof (eqmod_sub modulus).
-Hint Resolve eqm_sub: ints.
+Global Hint Resolve eqm_sub: ints.
 
 Lemma eqm_mult:
   forall a b c d, eqm a c -> eqm b d -> eqm (a * b) (c * d).
 Proof (eqmod_mult modulus).
-Hint Resolve eqm_mult: ints.
+Global Hint Resolve eqm_mult: ints.
 
 Lemma eqm_same_bits:
   forall x y,
@@ -466,7 +467,7 @@ Lemma eqm_unsigned_repr:
 Proof.
   unfold eqm; intros. rewrite unsigned_repr_eq. apply eqmod_mod. auto with ints.
 Qed.
-Hint Resolve eqm_unsigned_repr: ints.
+Global Hint Resolve eqm_unsigned_repr: ints.
 
 Lemma eqm_unsigned_repr_l:
   forall a b, eqm a b -> eqm (unsigned (repr a)) b.
@@ -474,7 +475,7 @@ Proof.
   intros. apply eqm_trans with a.
   apply eqm_sym. apply eqm_unsigned_repr. auto.
 Qed.
-Hint Resolve eqm_unsigned_repr_l: ints.
+Global Hint Resolve eqm_unsigned_repr_l: ints.
 
 Lemma eqm_unsigned_repr_r:
   forall a b, eqm a b -> eqm a (unsigned (repr b)).
@@ -482,7 +483,7 @@ Proof.
   intros. apply eqm_trans with b. auto.
   apply eqm_unsigned_repr.
 Qed.
-Hint Resolve eqm_unsigned_repr_r: ints.
+Global Hint Resolve eqm_unsigned_repr_r: ints.
 
 Lemma eqm_signed_unsigned:
   forall x, eqm (signed x) (unsigned x).
@@ -497,7 +498,7 @@ Theorem unsigned_range:
 Proof.
   destruct i. simpl. lia.
 Qed.
-Hint Resolve unsigned_range: ints.
+Global Hint Resolve unsigned_range: ints.
 
 Theorem unsigned_range_2:
   forall i, 0 <= unsigned i <= max_unsigned.
@@ -505,7 +506,7 @@ Proof.
   intro; unfold max_unsigned.
   generalize (unsigned_range i). lia.
 Qed.
-Hint Resolve unsigned_range_2: ints.
+Global Hint Resolve unsigned_range_2: ints.
 
 Theorem signed_range:
   forall i, min_signed <= signed i <= max_signed.
@@ -524,7 +525,7 @@ Proof.
   destruct i; simpl. unfold repr. apply mkint_eq.
   rewrite Z_mod_modulus_eq. apply Z.mod_small; lia.
 Qed.
-Hint Resolve repr_unsigned: ints.
+Global Hint Resolve repr_unsigned: ints.
 
 Lemma repr_signed:
   forall i, repr (signed i) = i.
@@ -532,7 +533,7 @@ Proof.
   intros. transitivity (repr (unsigned i)).
   apply eqm_samerepr. apply eqm_signed_unsigned. auto with ints.
 Qed.
-Hint Resolve repr_signed: ints.
+Global Hint Resolve repr_signed: ints.
 
 Opaque repr.
 
@@ -547,7 +548,7 @@ Proof.
   intros. rewrite unsigned_repr_eq.
   apply Z.mod_small. unfold max_unsigned in H. lia.
 Qed.
-Hint Resolve unsigned_repr: ints.
+Global Hint Resolve unsigned_repr: ints.
 
 Theorem signed_repr:
   forall z, min_signed <= z <= max_signed -> signed (repr z) = z.
@@ -2765,7 +2766,7 @@ Qed.
 
 Corollary sign_ext_shr_shl:
   forall n x,
-  0 < n < zwordsize ->
+  0 < n <= zwordsize ->
   let y := repr (zwordsize - n) in
   sign_ext n x = shr (shl x y) y.
 Proof.
@@ -2800,7 +2801,7 @@ Qed.
 Lemma sign_ext_range:
   forall n x, 0 < n < zwordsize -> -two_p (n-1) <= signed (sign_ext n x) < two_p (n-1).
 Proof.
-  intros. rewrite sign_ext_shr_shl; auto.
+  intros. rewrite sign_ext_shr_shl by lia.
   set (X := shl x (repr (zwordsize - n))).
   assert (two_p (n - 1) > 0) by (apply two_p_gt_ZERO; lia).
   assert (unsigned (repr (zwordsize - n)) = zwordsize - n).
@@ -3386,6 +3387,118 @@ Proof.
   apply two_p_monotone. split. generalize (size_range (xor a b)); lia.
   apply size_xor.
   lia.
+Qed.
+
+(** ** Accessing bit fields *)
+
+Definition unsigned_bitfield_extract (pos width: Z) (n: int) : int :=
+  zero_ext width (shru n (repr pos)).
+
+Definition signed_bitfield_extract (pos width: Z) (n: int) : int :=
+  sign_ext width (shru n (repr pos)).
+
+Definition bitfield_insert (pos width: Z) (n p: int) : int :=
+  let mask := shl (repr (two_p width - 1)) (repr pos) in
+  or (shl (zero_ext width p) (repr pos))
+     (and n (not mask)).
+
+Lemma bits_unsigned_bitfield_extract:
+  forall pos width n i,
+  0 <= pos -> 0 < width -> pos + width <= zwordsize ->
+  0 <= i < zwordsize ->
+  testbit (unsigned_bitfield_extract pos width n) i =
+  if zlt i width then testbit n (i + pos) else false.
+Proof.
+  intros. unfold unsigned_bitfield_extract. rewrite bits_zero_ext by lia.
+  destruct (zlt i width); auto.
+  rewrite bits_shru by auto. rewrite unsigned_repr, zlt_true. auto.
+  lia.
+  generalize wordsize_max_unsigned; lia.
+Qed.
+
+Lemma bits_signed_bitfield_extract:
+  forall pos width n i,
+  0 <= pos -> 0 < width -> pos + width <= zwordsize ->
+  0 <= i < zwordsize ->
+  testbit (signed_bitfield_extract pos width n) i =
+  testbit n (if zlt i width then i + pos else width - 1 + pos).
+Proof.
+  intros. unfold signed_bitfield_extract. rewrite bits_sign_ext by lia.
+  rewrite bits_shru, unsigned_repr, zlt_true.
+  destruct (zlt i width); auto.
+  destruct (zlt i width); lia.
+  generalize wordsize_max_unsigned; lia.
+  destruct (zlt i width); lia.
+Qed.
+
+Lemma bits_bitfield_insert:
+  forall pos width n p i,
+  0 <= pos -> 0 < width -> pos + width <= zwordsize ->
+  0 <= i < zwordsize ->
+  testbit (bitfield_insert pos width n p) i =
+  if zle pos i && zlt i (pos + width) then testbit p (i - pos) else testbit n i.
+Proof.
+  intros. unfold bitfield_insert.
+  assert (P: unsigned (repr pos) = pos).
+  { apply unsigned_repr. generalize wordsize_max_unsigned; lia. }
+  rewrite bits_or, bits_and, bits_not, ! bits_shl, ! P by auto.
+  destruct (zlt i pos).
+- unfold proj_sumbool; rewrite zle_false by lia. cbn. apply andb_true_r.
+- unfold proj_sumbool; rewrite zle_true by lia; cbn.
+  rewrite bits_zero_ext, testbit_repr, Ztestbit_two_p_m1 by lia.
+  destruct (zlt (i - pos) width); cbn.
++ rewrite zlt_true by lia. rewrite andb_false_r, orb_false_r. auto.
++ rewrite zlt_false by lia. apply andb_true_r.
+Qed.
+
+Lemma unsigned_bitfield_extract_by_shifts:
+  forall pos width n,
+  0 <= pos -> 0 < width -> pos + width <= zwordsize ->
+  unsigned_bitfield_extract pos width n =
+  shru (shl n (repr (zwordsize - pos - width))) (repr (zwordsize - width)).
+Proof.
+  intros. apply same_bits_eq; intros.
+  rewrite bits_unsigned_bitfield_extract by lia.
+  rewrite bits_shru by auto.
+  rewrite unsigned_repr by (generalize wordsize_max_unsigned; lia).
+  destruct (zlt i width).
+- rewrite bits_shl by lia.
+  rewrite unsigned_repr by (generalize wordsize_max_unsigned; lia).
+  rewrite zlt_true by lia. rewrite zlt_false by lia. f_equal; lia.
+- rewrite zlt_false by lia. auto.
+Qed.
+
+Lemma signed_bitfield_extract_by_shifts:
+  forall pos width n,
+  0 <= pos -> 0 < width -> pos + width <= zwordsize ->
+  signed_bitfield_extract pos width n =
+  shr (shl n (repr (zwordsize - pos - width))) (repr (zwordsize - width)).
+Proof.
+  intros. apply same_bits_eq; intros.
+  rewrite bits_signed_bitfield_extract by lia.
+  rewrite bits_shr by auto.
+  rewrite unsigned_repr by (generalize wordsize_max_unsigned; lia).
+  rewrite bits_shl.
+  rewrite unsigned_repr by (generalize wordsize_max_unsigned; lia).
+  symmetry. rewrite zlt_false. f_equal.
+  destruct (zlt i width); [rewrite zlt_true | rewrite zlt_false]; lia.
+  destruct zlt; lia.
+  destruct zlt; lia.
+Qed.
+
+Lemma bitfield_insert_alternative:
+  forall pos width n p,
+  0 <= width ->
+  bitfield_insert pos width n p =
+  let mask := shl (repr (two_p width - 1)) (repr pos) in
+  or (and (shl p (repr pos)) mask)
+     (and n (not mask)).
+Proof.
+  intros. unfold bitfield_insert. 
+  set (m1 := repr (two_p width - 1)).
+  set (m2 := shl m1 (repr pos)).
+  f_equal.
+  rewrite zero_ext_and by lia. fold m1. unfold m2. rewrite <- and_shl. auto.
 Qed.
 
 End Make.
@@ -4802,7 +4915,7 @@ Qed.
 
 End AGREE64.
 
-Hint Resolve
+Global Hint Resolve
   agree32_repr agree32_of_int agree32_of_ints agree32_of_int_eq agree32_of_ints_eq
   agree32_to_int agree32_to_int_eq agree32_neg agree32_add agree32_sub agree32_mul agree32_divs
   agree64_repr agree64_of_int agree64_of_int_eq
@@ -4816,19 +4929,22 @@ Notation ptrofs := Ptrofs.int.
 
 Global Opaque Ptrofs.repr.
 
-Hint Resolve Int.modulus_pos Int.eqm_refl Int.eqm_refl2 Int.eqm_sym Int.eqm_trans
+Global Hint Resolve
+  Int.modulus_pos Int.eqm_refl Int.eqm_refl2 Int.eqm_sym Int.eqm_trans
   Int.eqm_small_eq Int.eqm_add Int.eqm_neg Int.eqm_sub Int.eqm_mult
   Int.eqm_unsigned_repr Int.eqm_unsigned_repr_l Int.eqm_unsigned_repr_r
   Int.unsigned_range Int.unsigned_range_2
   Int.repr_unsigned Int.repr_signed Int.unsigned_repr : ints.
 
-Hint Resolve Int64.modulus_pos Int64.eqm_refl Int64.eqm_refl2 Int64.eqm_sym Int64.eqm_trans
+Global Hint Resolve
+  Int64.modulus_pos Int64.eqm_refl Int64.eqm_refl2 Int64.eqm_sym Int64.eqm_trans
   Int64.eqm_small_eq Int64.eqm_add Int64.eqm_neg Int64.eqm_sub Int64.eqm_mult
   Int64.eqm_unsigned_repr Int64.eqm_unsigned_repr_l Int64.eqm_unsigned_repr_r
   Int64.unsigned_range Int64.unsigned_range_2
   Int64.repr_unsigned Int64.repr_signed Int64.unsigned_repr : ints.
 
-Hint Resolve Ptrofs.modulus_pos Ptrofs.eqm_refl Ptrofs.eqm_refl2 Ptrofs.eqm_sym Ptrofs.eqm_trans
+Global Hint Resolve
+  Ptrofs.modulus_pos Ptrofs.eqm_refl Ptrofs.eqm_refl2 Ptrofs.eqm_sym Ptrofs.eqm_trans
   Ptrofs.eqm_small_eq Ptrofs.eqm_add Ptrofs.eqm_neg Ptrofs.eqm_sub Ptrofs.eqm_mult
   Ptrofs.eqm_unsigned_repr Ptrofs.eqm_unsigned_repr_l Ptrofs.eqm_unsigned_repr_r
   Ptrofs.unsigned_range Ptrofs.unsigned_range_2

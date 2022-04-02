@@ -40,14 +40,14 @@ Lemma ireg_of_not_R14:
 Proof.
   intros. erewrite <- ireg_of_eq; eauto with asmgen.
 Qed.
-Hint Resolve ireg_of_not_R14: asmgen.
+Global Hint Resolve ireg_of_not_R14: asmgen.
 
 Lemma ireg_of_not_R14':
   forall m r, ireg_of m = OK r -> r <> IR14.
 Proof.
   intros. generalize (ireg_of_not_R14 _ _ H). congruence.
 Qed.
-Hint Resolve ireg_of_not_R14': asmgen.
+Global Hint Resolve ireg_of_not_R14': asmgen.
 
 (** [undef_flags] and [nextinstr_nf] *)
 
@@ -75,7 +75,7 @@ Proof.
   intros; red; intros; subst; discriminate.
 Qed.
 
-Hint Resolve data_if_preg if_preg_not_PC: asmgen.
+Global Hint Resolve data_if_preg if_preg_not_PC: asmgen.
 
 Lemma nextinstr_nf_inv:
   forall r rs, if_preg r = true -> (nextinstr_nf rs)#r = rs#r.
@@ -1218,7 +1218,7 @@ Proof.
   split. unfold rs2; Simpl. unfold rs1; Simpl.
   unfold Val.shr, Val.shl; destruct (rs x0); auto.
   change (Int.ltu (Int.repr 24) Int.iwordsize) with true; simpl.
-  f_equal. symmetry. apply (Int.sign_ext_shr_shl 8). compute; auto.
+  f_equal. symmetry. apply (Int.sign_ext_shr_shl 8). compute; intuition congruence.
   intros. unfold rs2, rs1; Simpl.
   (* Ocast16signed *)
   destruct Archi.thumb2_support.
@@ -1231,7 +1231,7 @@ Proof.
   split. unfold rs2; Simpl. unfold rs1; Simpl.
   unfold Val.shr, Val.shl; destruct (rs x0); auto.
   change (Int.ltu (Int.repr 16) Int.iwordsize) with true; simpl.
-  f_equal. symmetry. apply (Int.sign_ext_shr_shl 16). compute; auto.
+  f_equal. symmetry. apply (Int.sign_ext_shr_shl 16). compute; intuition congruence.
   intros. unfold rs2, rs1; Simpl.
   (* Oaddimm *)
   generalize (addimm_correct x x0 i k rs m).

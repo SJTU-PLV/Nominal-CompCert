@@ -9,10 +9,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -4726,8 +4727,8 @@ Notation fresh_block := Mem.fresh_block.
 Notation freshness := Mem.freshness.
 Global Opaque Mem.alloc Mem.free Mem.store Mem.load Mem.storebytes Mem.loadbytes.
 
-Hint Resolve Mem.sup_add_in1 Mem.sup_add_in2 : core.
-Hint Resolve
+Global Hint Resolve Mem.sup_add_in1 Mem.sup_add_in2 : core.
+Global Hint Resolve
   Mem.valid_not_valid_diff
   Mem.perm_implies
   Mem.perm_cur
