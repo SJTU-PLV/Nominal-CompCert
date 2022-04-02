@@ -84,8 +84,8 @@ Inductive perm_kind: Type :=
   | Max: perm_kind
   | Cur: perm_kind.
 
-Module Type SUP.
-
+Module Type SUP(Block:BLOCK).
+Include Block.
 Parameter sup: Type.
 
 Parameter sup_empty : sup.
@@ -128,9 +128,9 @@ Qed.
 End SUP.
 
 
-Module Type MEM.
+Module Type MEM(Block:BLOCK).
 
-Include SUP.
+Include Memval(Block).
 (** The abstract type of memory states. *)
 Parameter mem: Type.
 
@@ -146,7 +146,7 @@ Parameter empty: mem.
   Returns a pair [(m', b)] of the updated memory state [m'] and
   the identifier [b] of the newly-allocated block.
   Note that [alloc] never fails: we are modeling an infinite memory. *)
-Parameter alloc: forall (m: mem) (lo hi: Z), mem * block.
+Parameter alloc: forall (m: mem) (lo hi: Z) (b:block), option mem.
 
 (** [free m b lo hi] frees (deallocates) the range of offsets from [lo]
   included to [hi] excluded in block [b].  Returns the updated memory
@@ -218,11 +218,13 @@ Parameter drop_perm: forall (m: mem) (b: block) (lo hi: Z) (p: permission), opti
   [nextblock] are fresh or invalid, i.e. not yet allocated.  Note that
   a block identifier remains valid after a [free] operation over this
   block. *)
+Definition sup := list block.
 
 Parameter support: mem -> sup.
-Parameter nextblock: mem -> block.
 
-Parameter valid_block: mem->block->Prop.
+(* Parameter nextblock: mem -> block. *)
+
+Parameter valid_block: mem -> block -> Prop.
 
 Axiom valid_not_valid_diff:
   forall m b b', valid_block m b -> ~(valid_block m b') -> b <> b'.
@@ -321,8 +323,10 @@ Axiom valid_pointer_implies:
 (** * Properties of the memory operations *)
 
 (** ** Properties of the initial memory state. *)
-Axiom support_empty : support empty = sup_empty.
+(* Axiom support_empty : support empty = sup_empty. *)
+
 Axiom perm_empty: forall b ofs k p, ~perm empty b ofs k p.
+
 Axiom valid_access_empty:
   forall chunk b ofs p, ~valid_access empty chunk b ofs p.
 
@@ -437,9 +441,12 @@ Axiom loadbytes_split:
   Moreover, a [store] succeeds if and only if the corresponding access
   is valid for writing. *)
 
+(*
 Axiom nextblock_store:
   forall chunk m1 b ofs v m2, store chunk m1 b ofs v = Some m2 ->
   nextblock m2 = nextblock m1.
+*)
+
 Axiom store_valid_block_1:
   forall chunk m1 b ofs v m2, store chunk m1 b ofs v = Some m2 ->
   forall b', valid_block m1 b' -> valid_block m2 b'.
@@ -585,9 +592,9 @@ Axiom storebytes_valid_access_2:
   forall m1 b ofs bytes m2, storebytes m1 b ofs bytes = Some m2 ->
   forall chunk' b' ofs' p,
   valid_access m2 chunk' b' ofs' p -> valid_access m1 chunk' b' ofs' p.
-Axiom nextblock_storebytes:
+(* Axiom nextblock_storebytes:
   forall m1 b ofs bytes m2, storebytes m1 b ofs bytes = Some m2 ->
-  nextblock m2 = nextblock m1.
+  nextblock m2 = nextblock m1.*)
 Axiom storebytes_valid_block_1:
   forall m1 b ofs bytes m2, storebytes m1 b ofs bytes = Some m2 ->
   forall b', valid_block m1 b' -> valid_block m2 b'.
@@ -648,9 +655,9 @@ Axiom storebytes_split:
 (** The identifier of the freshly allocated block is the next block
   of the initial memory state. *)
 
-Axiom alloc_result:
+(* Axiom alloc_result:
   forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
-  b = nextblock m1.
+  b = nextblock m1. *)
 
 (** Effect of [alloc] on block validity. *)
 (*
@@ -659,34 +666,34 @@ Axiom nextblock_alloc:
   nextblock m2 = Pos.succ (nextblock m1).
 *)
 Axiom valid_block_alloc:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall b', valid_block m1 b' -> valid_block m2 b'.
 Axiom fresh_block_alloc:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   ~(valid_block m1 b).
 Axiom valid_new_block:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   valid_block m2 b.
 Axiom valid_block_alloc_inv:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall b', valid_block m2 b' -> b' = b \/ valid_block m1 b'.
 
 (** Effect of [alloc] on permissions. *)
 
 Axiom perm_alloc_1:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall b' ofs k p, perm m1 b' ofs k p -> perm m2 b' ofs k p.
 Axiom perm_alloc_2:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall ofs k, lo <= ofs < hi -> perm m2 b ofs k Freeable.
 Axiom perm_alloc_3:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall ofs k p, perm m2 b ofs k p -> lo <= ofs < hi.
 Axiom perm_alloc_4:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall b' ofs k p, perm m2 b' ofs k p -> b' <> b -> perm m1 b' ofs k p.
 Axiom perm_alloc_inv:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall b' ofs k p,
   perm m2 b' ofs k p ->
   if eq_block b' b then lo <= ofs < hi else perm m1 b' ofs k p.
@@ -694,17 +701,17 @@ Axiom perm_alloc_inv:
 (** Effect of [alloc] on access validity. *)
 
 Axiom valid_access_alloc_other:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall chunk b' ofs p,
   valid_access m1 chunk b' ofs p ->
   valid_access m2 chunk b' ofs p.
 Axiom valid_access_alloc_same:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall chunk ofs,
   lo <= ofs -> ofs + size_chunk chunk <= hi -> (align_chunk chunk | ofs) ->
   valid_access m2 chunk b ofs Freeable.
 Axiom valid_access_alloc_inv:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall chunk b' ofs p,
   valid_access m2 chunk b' ofs p ->
   if eq_block b' b
@@ -714,22 +721,22 @@ Axiom valid_access_alloc_inv:
 (** Load-alloc properties. *)
 
 Axiom load_alloc_unchanged:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall chunk b' ofs,
   valid_block m1 b' ->
   load chunk m2 b' ofs = load chunk m1 b' ofs.
 Axiom load_alloc_other:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall chunk b' ofs v,
   load chunk m1 b' ofs = Some v ->
   load chunk m2 b' ofs = Some v.
 Axiom load_alloc_same:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall chunk ofs v,
   load chunk m2 b ofs = Some v ->
   v = Vundef.
 Axiom load_alloc_same':
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
+  forall m1 lo hi m2 b, alloc m1 lo hi b = Some m2 ->
   forall chunk ofs,
   lo <= ofs -> ofs + size_chunk chunk <= hi -> (align_chunk chunk | ofs) ->
   load chunk m2 b ofs = Some Vundef.
@@ -749,9 +756,9 @@ Axiom free_range_perm:
 
 (** Block validity is preserved by [free]. *)
 
-Axiom nextblock_free:
+Axiom support_free:
   forall m1 bf lo hi m2, free m1 bf lo hi = Some m2 ->
-  nextblock m2 = nextblock m1.
+  support m2 = support m1.
 Axiom valid_block_free_1:
   forall m1 bf lo hi m2, free m1 bf lo hi = Some m2 ->
   forall b, valid_block m1 b -> valid_block m2 b.
@@ -809,9 +816,9 @@ Axiom load_free:
 
 (** ** Properties of [drop_perm]. *)
 
-Axiom nextblock_drop:
+(* Axiom nextblock_drop:
   forall m b lo hi p m', drop_perm m b lo hi p = Some m' ->
-  nextblock m' = nextblock m.
+  nextblock m' = nextblock m. *)
 Axiom drop_perm_valid_block_1:
   forall m b lo hi p m', drop_perm m b lo hi p = Some m' ->
   forall b', valid_block m b' -> valid_block m' b'.
@@ -924,10 +931,10 @@ Axiom storebytes_outside_extends:
 Axiom alloc_extends:
   forall m1 m2 lo1 hi1 b m1' lo2 hi2,
   extends m1 m2 ->
-  alloc m1 lo1 hi1 = (m1', b) ->
+  alloc m1 lo1 hi1 b = Some m1' ->
   lo2 <= lo1 -> hi1 <= hi2 ->
   exists m2',
-     alloc m2 lo2 hi2 = (m2', b)
+     alloc m2 lo2 hi2 b = Some m2'
   /\ extends m1' m2'.
 
 Axiom free_left_extends:
@@ -978,7 +985,7 @@ Axiom weak_valid_pointer_extends:
 - if [f b = Some(b', ofs)], the block [b] of [m2] corresponds to
   a sub-block at offset [ofs] of the block [b'] in [m2].
 
-A memory injection [f] defines a relation [Val.inject] between values
+A memory injection [f] defines a relation [inject] between values
 that is the identity for integer and float values, and relocates pointer
 values as prescribed by [f].  (See module [Values].)
 
@@ -1171,13 +1178,13 @@ Axiom storebytes_outside_inject:
 Axiom alloc_right_inject:
   forall f m1 m2 lo hi b2 m2',
   inject f m1 m2 ->
-  alloc m2 lo hi = (m2', b2) ->
+  alloc m2 lo hi b2 = Some m2' ->
   inject f m1 m2'.
 
 Axiom alloc_left_unmapped_inject:
   forall f m1 m2 lo hi m1' b1,
   inject f m1 m2 ->
-  alloc m1 lo hi = (m1', b1) ->
+  alloc m1 lo hi b1 = Some m1' ->
   exists f',
      inject f' m1' m2
   /\ inject_incr f f'
@@ -1190,7 +1197,7 @@ Definition inj_offset_aligned (delta: Z) (size: Z) : Prop :=
 Axiom alloc_left_mapped_inject:
   forall f m1 m2 lo hi m1' b1 b2 delta,
   inject f m1 m2 ->
-  alloc m1 lo hi = (m1', b1) ->
+  alloc m1 lo hi b1 = Some m1' ->
   valid_block m2 b2 ->
   0 <= delta <= Ptrofs.max_unsigned ->
   (forall ofs k p, perm m2 b2 ofs k p -> delta = 0 \/ 0 <= ofs < Ptrofs.max_unsigned) ->
@@ -1209,10 +1216,10 @@ Axiom alloc_left_mapped_inject:
 Axiom alloc_parallel_inject:
   forall f m1 m2 lo1 hi1 m1' b1 lo2 hi2,
   inject f m1 m2 ->
-  alloc m1 lo1 hi1 = (m1', b1) ->
+  alloc m1 lo1 hi1 b1 = Some m1' ->
   lo2 <= lo1 -> hi1 <= hi2 ->
   exists f', exists m2', exists b2,
-  alloc m2 lo2 hi2 = (m2', b2)
+  alloc m2 lo2 hi2 b2 = Some m2'
   /\ inject f' m1' m2'
   /\ inject_incr f f'
   /\ f' b1 = Some(b2, 0)
@@ -1249,7 +1256,9 @@ Axiom drop_outside_inject:
 (** Memory states that inject into themselves. *)
 
 Definition flat_inj (s: sup) : meminj :=
-  fun (b: block) => if sup_dec b s then Some(b, 0) else None.
+  fun (b: block) => if in_dec eq_block b s then Some(b, 0) else None.
+
+Definition sup_include (s1 s2:sup) := forall b, In b s1 -> In b s2.
 
 Parameter inject_neutral: forall (s: sup) (m: mem), Prop.
 
@@ -1262,16 +1271,16 @@ Axiom empty_inject_neutral:
 
 Axiom alloc_inject_neutral:
   forall s m lo hi b m',
-  alloc m lo hi = (m', b) ->
+  alloc m lo hi b = Some m' ->
   inject_neutral s m ->
-  sup_include (sup_add b (support m)) s ->
+  sup_include (b::(support m)) s ->
   inject_neutral s m'.
 
 Axiom store_inject_neutral:
   forall chunk m b ofs v m' s,
   store chunk m b ofs v = Some m' ->
   inject_neutral s m ->
-  sup_In b s->
+  In b s->
   Val.inject (flat_inj s) v v ->
   inject_neutral s m'.
 
@@ -1279,7 +1288,7 @@ Axiom drop_inject_neutral:
   forall m b lo hi p m' s,
   drop_perm m b lo hi p = Some m' ->
   inject_neutral s m ->
-  sup_In b s ->
+  In b s ->
   inject_neutral s m'.
 
 End MEM.

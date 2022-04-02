@@ -36,9 +36,10 @@ Definition block := positive.
 Definition eq_block := peq.
 End Block.
 
-Definition block := Block.block.
-Definition eq_block := Block.eq_block.
-
+(* NO GLOBAL INSTANCE
+ Definition block := Block.block.
+ Definition eq_block := Block.eq_block.
+*)
 
 (** A value is either:
 - a machine integer;
@@ -48,6 +49,10 @@ Definition eq_block := Block.eq_block.
 - the [Vundef] value denoting an arbitrary bit pattern, such as the
   value of an uninitialized variable.
 *)
+
+Module VAL(Block:BLOCK).
+
+Include Block.
 
 Inductive val: Type :=
   | Vundef: val
@@ -70,13 +75,12 @@ Definition Vnullptr :=
 Definition Vptrofs (n: ptrofs) :=
   if Archi.ptr64 then Vlong (Ptrofs.to_int64 n) else Vint (Ptrofs.to_int n).
 
+Module Val.
 (** * Operations over values *)
 
 (** The module [Val] defines a number of arithmetic and logical operations
   over type [val].  Most of these operations are straightforward extensions
   of the corresponding integer or floating-point operations. *)
-
-Module Val.
 
 Definition eq (x y: val): {x=y} + {x<>y}.
 Proof.
@@ -2522,9 +2526,7 @@ Proof.
 Qed.
 
 End VAL_INJ_OPS.
-
 End Val.
-
 Notation meminj := Val.meminj.
 
 (** Monotone evolution of a memory injection. *)
@@ -2616,3 +2618,4 @@ Proof.
   unfold compose_meminj; rewrite H1; rewrite H3; eauto.
   rewrite Ptrofs.add_assoc. decEq. unfold Ptrofs.add. apply Ptrofs.eqm_samerepr. auto with ints.
 Qed.
+End VAL.

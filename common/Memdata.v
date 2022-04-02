@@ -143,6 +143,8 @@ Proof.
   intros. destruct q; [exists 3%nat | exists 7%nat]; auto.
 Qed.
 
+Module Memval(Block:BLOCK).
+Include VAL(Block).
 (** * Memory values *)
 
 (** A ``memory value'' is a byte-sized quantity that describes the current
@@ -616,7 +618,7 @@ Lemma decode_val_cast:
   | _ => True
   end.
 Proof.
-  intros. 
+  intros.
   assert (A: Val.has_rettype v (rettype_of_chunk chunk)) by apply decode_val_rettype.
   destruct chunk; auto; simpl in A; destruct v; try contradiction; simpl; congruence.
 Qed.
@@ -771,7 +773,7 @@ Proof.
 Qed.
 
 (** [decode_val], applied to lists of memory values that are pairwise
-  related by [memval_inject], returns values that are related by [Val.inject]. *)
+  related by [memval_inject], returns values that are related by [inject]. *)
 
 Lemma proj_bytes_inject:
   forall f vl vl',
@@ -871,7 +873,7 @@ Proof.
   destruct chunk; destruct Archi.ptr64; auto.
 Qed.
 
-(** Symmetrically, [encode_val], applied to values related by [Val.inject],
+(** Symmetrically, [encode_val], applied to values related by [inject],
   returns lists of memory values that are pairwise
   related by [memval_inject]. *)
 
@@ -1080,3 +1082,4 @@ Proof.
   unfold encode_int, rev_if_be. rewrite BI.
   apply bytes_of_int64.
 Qed.
+End Memval.

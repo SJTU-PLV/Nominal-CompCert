@@ -47,8 +47,9 @@ Local Open Scope error_monad_scope.
 
 Set Implicit Arguments.
 
-(** Auxiliary function for initialization of global variables. *)
 
+(** Auxiliary function for initialization of global variables. *)
+(* Where to use?
 Function store_zeros (m: mem) (b: block) (p: Z) (n: Z) {wf (Zwf 0) n}: option mem :=
   if zle n 0 then Some m else
     match Mem.store Mint8unsigned m b p Vzero with
@@ -60,7 +61,7 @@ Proof.
   apply Zwf_well_founded.
 
 Qed.
-
+*)
 (* To avoid useless definitions of inductors in extracted code. *)
 Local Unset Elimination Schemes.
 Local Unset Case Analysis Schemes.
@@ -71,15 +72,15 @@ Local Unset Case Analysis Schemes.
   focusing on symbol names and their associated blocks.  They do not
   contain mappings from blocks to function or variable definitions. *)
 
-Module Senv.
-
+Module Senv(Block:BLOCK).
+Include VAL(Block).
 Record t: Type := mksenv {
   (** Operations *)
   find_symbol: ident -> option block;
   public_symbol: ident -> bool;
   invert_symbol: block -> option ident;
   block_is_volatile: block -> bool;
-  support: sup;
+  support: list block;
   (** Properties *)
   find_symbol_injective:
     forall id1 id2 b, find_symbol id1 = Some b -> find_symbol id2 = Some b -> id1 = id2;
@@ -90,9 +91,9 @@ Record t: Type := mksenv {
   public_symbol_exists:
     forall id, public_symbol id = true -> exists b, find_symbol id = Some b;
   find_symbol_below:
-    forall id b, find_symbol id = Some b -> sup_In b support;
+    forall id b, find_symbol id = Some b -> In b support;
   block_is_volatile_below:
-    forall b, block_is_volatile b = true -> sup_In b support
+    forall b, block_is_volatile b = true -> In b support
 }.
 
 Definition symbol_address (ge: t) (id: ident) (ofs: ptrofs) : val :=
@@ -135,7 +136,11 @@ Definition equiv (se1 se2: t) : Prop :=
 
 End Senv.
 
-Module Genv.
+Module Genv(Block:BLOCK).
+
+Include VAL(Block).
+
+Module NMap := BMap(Block).
 
 (** * Global environments *)
 
@@ -150,9 +155,9 @@ Record t: Type := mkgenv {
   genv_public: list ident;              (**r which symbol names are public *)
   genv_symb: PTree.t block;             (**r mapping symbol -> block *)
   genv_defs: NMap.t (option (globdef F V));     (**r mapping block -> definition *)
-  genv_sup: sup;                     (**r symbol support *)
-  genv_symb_range: forall id b,PTree.get id genv_symb = Some b -> sup_In b genv_sup;
-  genv_defs_range: forall b g, NMap.get _ b genv_defs = Some g -> sup_In b genv_sup;
+  genv_sup: list block;                     (**r symbol support *)
+  genv_symb_range: forall id b,PTree.get id genv_symb = Some b -> In b genv_sup;
+  genv_defs_range: forall b g, NMap.get _ b genv_defs = Some g -> In b genv_sup;
   genv_vars_inj: forall id1 id2 b,
     PTree.get id1 genv_symb = Some b -> PTree.get id2 genv_symb = Some b -> id1 = id2
 }.
@@ -226,7 +231,7 @@ Definition block_is_volatile (ge: t) (b: block) : bool :=
 
 (** ** Constructing the global environment *)
 
-Program Definition add_global (ge: t) (idg: ident * globdef F V) : t :=
+Program Definition add_global (ge: t) (idg: ident * globdef F V): t :=
   @mkgenv
     ge.(genv_public)
     (PTree.set idg#1 (fresh_block ge.(genv_sup)) ge.(genv_symb))
