@@ -358,6 +358,15 @@ Inductive final_state: state -> int -> Prop :=
 Definition semantics (p: program) :=
   Semantics step (initial_state p) final_state (Genv.globalenv p).
 
+(* Define stack overflow freedom property *)
+Definition stack_overflow_free (p:program) :=
+  forall t s0 s1 stk f lv m id ge,
+    initial_state p s0 ->
+    (Genv.globalenv p) = ge ->
+    star step ge s0 t s1 ->
+    s1 = Callstate stk (Internal f) lv m id ->
+    exists s2, step ge s1 E0 s2. 
+
 (** This semantics is receptive to changes in events. *)
 
 Lemma semantics_receptive:

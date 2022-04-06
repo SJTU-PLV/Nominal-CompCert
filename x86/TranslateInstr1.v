@@ -1070,6 +1070,102 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
   (*   do imm64 <- encode_ofs_u64 (Int64.intval imm); *)
   (*   OK (Paddq_ri (AddrE0 rdbits) zero1 R zero1 imm64) *)
   (* (* | Asm.Paddq *) *)
+  (* | Asm.Psubq_ri the same problem with Paddq *)
+  | Asm.Psubq_rr rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK (Psubq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
+  (* | Asm.Pimulq_ri  same problem as above*)
+  | Asm.Pimulq_r r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK (Pimulq_r B rbits)
+  | Asm.Pimulq_rr rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK (Pimulq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
+  | Asm.Pmulq_r r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK (Pmulq_r B rbits)
+  | Asm.Pidivq r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK (Pidivq B rbits)
+  | Asm.Pdivq r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK (Pdivq B rbits)
+  (* | Asm.Pandq_ri *)
+  | Asm.Pandq_rr rs rd =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK (Pandq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
+  (* | Asm.Porq_ri *)
+  | Asm.Porq_rr rs rd =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK (Porq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
+  (* | Asm.Pxorq_ri *)
+  | Asm.Pxorq_rr rs rd =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK (Pxorq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
+  | Asm.Pxorq_r r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK (Pxorq_GvEv (AddrE0 rbits) B B zero1 rbits)
+  | Asm.Pnotq r =>
+  (* test in asm *)
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK (Pnotq (AddrE0 rbits) B zero1 zero1)
+  | Asm.Psalq_ri r imm =>
+  (* find some confusion in Asm.v semantic, must check whether imm is 8 bit *)
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK (Psalq_ri (AddrE0 rbits) B zero1 zero1 imm8)
+  | Asm.Psalq_rcl r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK (Psalq_rcl (AddrE0 rbits) B zero1 zero1)
+  | Asm.Prorq_ri r imm =>
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK (Prorq_ri (AddrE0 rbits) B zero1 zero1 imm8)
+  (* | Asm.Pcmpq_ri  *)
+  | Asm.Pcmpq_rr rs rd =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK (Pcmpq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
+  (* | Asm.Ptestq_ri *)
+  | Asm.Ptestq_rr rs rd =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK (Ptestq_EvGv (AddrE0 rdbits) B R zero1 rsbits)
   | _ => Error [MSG "Not exists "; MSG (instr_to_string i)]
               
   end.
