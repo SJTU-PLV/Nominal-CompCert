@@ -15,6 +15,8 @@ Parameter string_to_ident : list byte -> option ident.
 
 Parameter create_float_literal_ident : unit -> ident.
 
+Parameter create_int64_literal_ident : unit -> ident.
+
 Parameter create_float_mask_ident : unit -> ((ident*ident)*(ident*ident)).
 
 Parameter create_jump_table_ident : unit -> ident.

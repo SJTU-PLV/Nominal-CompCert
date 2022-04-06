@@ -1063,14 +1063,20 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
     do Rrbits <- encode_ireg_u4 r;
     let (R, rbits):= Rrbits in
     OK (Pnegq (AddrE0 rbits) zero1 R zero1)
-  (* (* bug in csled  *) *)
-  (* | Asm.Paddq_ri rd imm => *)
-  (*   do Rrdbits <- encode_ireg_u4 rd; *)
-  (*   let (R,rdbits) := Rrdbits in *)
-  (*   do imm64 <- encode_ofs_u64 (Int64.intval imm); *)
-  (*   OK (Paddq_ri (AddrE0 rdbits) zero1 R zero1 imm64) *)
-  (* (* | Asm.Paddq *) *)
-  (* | Asm.Psubq_ri the same problem with Paddq *)
+  | Asm.Paddq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK (Paddq_GvEv a B R X rdbits)
+  | Asm.Psubq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK (Psubq_GvEv a B R X rdbits)
   | Asm.Psubq_rr rd rs =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 rs;
@@ -1078,7 +1084,13 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
     let (R, rdbits) := Rrdbits in
     (* B for rs, R for rd *)
     OK (Psubq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
-  (* | Asm.Pimulq_ri  same problem as above*)
+  | Asm.Pimulq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK (Pimulq_GvEv a B R X rdbits)
   | Asm.Pimulq_r r =>
     do Brbits <- encode_ireg_u4 r;
     let (B, rbits) := Brbits in
@@ -1102,7 +1114,13 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
     do Brbits <- encode_ireg_u4 r;
     let (B, rbits) := Brbits in
     OK (Pdivq B rbits)
-  (* | Asm.Pandq_ri *)
+  | Asm.Pandq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK (Pandq_GvEv a B R X rdbits)
   | Asm.Pandq_rr rs rd =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 rs;
@@ -1110,7 +1128,13 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
     let (R, rdbits) := Rrdbits in
     (* B for rs, R for rd *)
     OK (Pandq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
-  (* | Asm.Porq_ri *)
+  | Asm.Porq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK (Porq_GvEv a B R X rdbits)
   | Asm.Porq_rr rs rd =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 rs;
@@ -1118,7 +1142,13 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
     let (R, rdbits) := Rrdbits in
     (* B for rs, R for rd *)
     OK (Porq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
-  (* | Asm.Pxorq_ri *)
+  | Asm.Pxorq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK (Pxorq_GvEv a B R X rdbits)
   | Asm.Pxorq_rr rs rd =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 rs;
@@ -1150,7 +1180,13 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
     do Brbits <- encode_ireg_u4 r;
     let (B, rbits) := Brbits in
     OK (Prorq_ri (AddrE0 rbits) B zero1 zero1 imm8)
-  (* | Asm.Pcmpq_ri  *)
+  | Asm.Pcmpq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK (Pcmpq_GvEv a B R X rdbits)
   | Asm.Pcmpq_rr rs rd =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 rs;
@@ -1158,7 +1194,13 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
     let (R, rdbits) := Rrdbits in
     (* B for rs, R for rd *)
     OK (Pcmpq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
-  (* | Asm.Ptestq_ri *)
+  | Asm.Ptestq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK (Pcmpq_GvEv a B R X rdbits)
   | Asm.Ptestq_rr rs rd =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 rs;
@@ -1166,8 +1208,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
     let (R, rdbits) := Rrdbits in
     (* B for rs, R for rd *)
     OK (Ptestq_EvGv (AddrE0 rdbits) B R zero1 rsbits)
-  | _ => Error [MSG "Not exists "; MSG (instr_to_string i)]
-              
+  | _ => Error [MSG "Not exists or unsupported"; MSG (instr_to_string i)]              
   end.
 
 End WITH_RELOC_OFS_MAP.

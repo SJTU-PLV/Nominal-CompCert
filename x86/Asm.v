@@ -302,7 +302,17 @@ Inductive instruction: Type :=
   | Pjmp_l_rel (ofs: Z)
   | Pjcc_rel (c: testcond)(ofs: Z)
   | Pjcc2_rel (c1 c2: testcond)(ofs: Z)   (**r pseudo *)
-  | Pjmptbl_rel (r: ireg) (tbl: list Z) (**r pseudo *).
+  | Pjmptbl_rel (r: ireg) (tbl: list Z) (**r pseudo *)
+(** x64: generate global denfinition for int64 *)
+  | Paddq_rm (r: ireg) (a: addrmode)
+  | Psubq_rm (r: ireg) (a: addrmode)
+  | Pimulq_rm (r: ireg) (a: addrmode)
+  | Pandq_rm (r: ireg) (a: addrmode)
+  | Porq_rm (r: ireg) (a: addrmode)
+  | Pxorq_rm (r: ireg) (a: addrmode)
+  | Pcmpq_rm (r: ireg) (a: addrmode)
+  | Ptestq_rm (r: ireg) (a: addrmode)
+.
 
 Definition code := list instruction.
 Record function : Type := mkfunction { fn_sig: signature; fn_code: code; fn_stacksize:Z; fn_ofs_link : ptrofs}.
@@ -476,6 +486,15 @@ Let instr_size' (i: instruction) : Z :=
   | Psqrtsd _ _ => 4
   | Pmaxsd _ _ => 4
   | Pminsd _ _ => 4
+  (* some x64 instr, comment for proof pass *)
+  (* | Paddq_rm  _ a => 2 + addrmode_size a *)
+  (* | Psubq_rm  _ a => 2 + addrmode_size a *)
+  (* | Pimulq_rm _ a => 2 + addrmode_size a *)
+  (* | Pandq_rm  _ a => 2 + addrmode_size a *)
+  (* | Porq_rm   _ a => 2 + addrmode_size a *)
+  (* | Pxorq_rm  _ a => 2 + addrmode_size a *)
+  (* | Pcmpq_rm  _ a => 2 + addrmode_size a *)
+  (* | Ptestq_rm _ a => 2 + addrmode_size a *)
   | _ => 1
   end.
 
@@ -1681,7 +1700,16 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | (* SANCC *) Pxorps_fm _ _
   | (* SANCC *) Pandps_fm _ _
   | (* SANCC *) Pjmp_m _
-  | (* SANCC *) Prolw_ri _ _ => Stuck
+  | (* SANCC *) Prolw_ri _ _
+  (* TODO ! *)
+  | Paddq_rm _ _
+  | Psubq_rm _ _
+  | Pimulq_rm _ _
+  | Pandq_rm _ _
+  | Porq_rm  _ _
+  | Pxorq_rm _ _
+  | Pcmpq_rm _ _                         
+  | Ptestq_rm _ _ => Stuck                                 
   end.
 
 (** Translation of the LTL/Linear/Mach view of machine registers
@@ -2305,5 +2333,13 @@ Definition instr_to_string (i:instruction) : string :=
   | Psqrtsd rd r1 => "Psqrtsd"
   | Psubl_ri rd n => "Psubl_ri"
   | Psubq_ri rd n => "Psubq_ri"
+  | Paddq_rm  rd a => "Paddq_rm"
+  | Psubq_rm  rd a => "Psubq_rm"
+  | Pimulq_rm rd a => "Pimulq_rm"
+  | Pandq_rm  rd a => "Pandq_rm"
+  | Porq_rm   rd a => "Porq_rm"
+  | Pxorq_rm  rd a => "Pxorq_r"
+  | Pcmpq_rm  rd a => "Pcmpq_rm"
+  | Ptestq_rm rd a => "Ptestq_rm"
   | _ => "Unknown instruction"
   end.
