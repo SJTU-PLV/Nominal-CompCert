@@ -4762,6 +4762,53 @@ Opaque Mem.alloc Mem.free Mem.store Mem.load Mem.storebytes Mem.loadbytes.
   Mem.unchanged_on_refl
 : mem.
 End Mem.
+
+Module Block <: BLOCK.
+
+Definition block := positive.
+Definition eq_block := peq.
+
+End Block.
+
+Module Mem1 := Mem(Block).
+
+Fixpoint find_max_pos (l: list positive) : positive :=
+  match l with
+  |nil => 1
+  |hd::tl => let m' := find_max_pos tl in
+             match plt hd m' with
+             |left _ => m'
+             |right _ => hd
+             end
+  end.
+
+Theorem Lessthan: forall p l, In p l -> Ple p (find_max_pos l).
+Proof.
+  intros.
+  induction l.
+  destruct H.
+  destruct H;simpl.
+  - destruct (plt a (find_max_pos l)); subst a.
+    + apply Plt_Ple. assumption.
+    + apply Ple_refl.
+  - destruct (plt a (find_max_pos l)); apply IHl in H.
+    + auto.
+    + eapply Ple_trans. eauto.  apply Pos.le_nlt. apply n.
+Qed.
+
+Definition fresh_ident (l: list ident ) := Pos.succ (find_max_pos l).
+
+Theorem freshness : forall s, ~In (fresh_ident s) s.
+Proof.
+  intros. unfold fresh_ident.
+  intro.
+  apply Lessthan in H.
+  assert (Plt (find_max_pos s) (Pos.succ (find_max_pos s))). apply Plt_succ.
+  assert (Plt (find_max_pos s) (find_max_pos s)). eapply Plt_Ple_trans. eauto. auto.
+  apply Plt_strict in H1.
+  auto.
+Qed.
+
 (* Notation mem := Mem.mem.
 Notation sup := Mem.sup.
 Notation sup_In := Mem.sup_In.
