@@ -20,6 +20,8 @@ Require Import String Coqlib.
 Require Import AST Integers Floats Values.
 Require Export Builtins0 Builtins1.
 
+Module Builtins(Block:BLOCK).
+Include Builtins1(Block).
 Inductive builtin_function : Type :=
   | BI_standard (b: standard_builtin)
   | BI_platform (b: platform_builtin).
@@ -39,7 +41,7 @@ Definition builtin_function_sem (b: builtin_function) : builtin_sem (sig_res (bu
 Definition lookup_builtin_function (name: string) (sg: signature) : option builtin_function :=
   match lookup_builtin standard_builtin_sig name sg standard_builtin_table with
   | Some b => Some (BI_standard b)
-  | None => 
+  | None =>
   match lookup_builtin platform_builtin_sig name sg platform_builtin_table with
   | Some b => Some (BI_platform b)
   | None => None
@@ -55,5 +57,6 @@ Proof.
   inv H. simpl. eapply lookup_builtin_sig; eauto.
   discriminate.
 Qed.
+End Builtins.
 
 

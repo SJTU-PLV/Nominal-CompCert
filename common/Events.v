@@ -265,7 +265,7 @@ Section EVENTVAL.
 
 (** Symbol environment used to translate between global variable names and their block identifiers. *)
 Variable ge: Senv.t.
-
+Import Mem1.
 (** Translation between values and event values. *)
 
 Inductive eventval_match: eventval -> typ -> val -> Prop :=
@@ -444,7 +444,7 @@ End EVENTVAL_INV.
 (** Compatibility with memory injections *)
 
 Section EVENTVAL_INJECT.
-
+Import Mem1.
 Variable f: block -> option (block * Z).
 Variable ge1 ge2: Senv.t.
 
@@ -554,7 +554,7 @@ Fixpoint output_trace (t: trace) : Prop :=
   end.
 
 (** * Semantics of volatile memory accesses *)
-
+Import Mem1.
 Inductive volatile_load (ge: Senv.t):
                    memory_chunk -> mem -> block -> ptrofs -> trace -> val -> Prop :=
   | volatile_load_vol: forall chunk m b ofs id ev v,
@@ -566,7 +566,7 @@ Inductive volatile_load (ge: Senv.t):
                       (Val.load_result chunk v)
   | volatile_load_nonvol: forall chunk m b ofs v,
       Senv.block_is_volatile ge b = false ->
-      Mem.load chunk m b (Ptrofs.unsigned ofs) = Some v ->
+      load chunk m b (Ptrofs.unsigned ofs) = Some v ->
       volatile_load ge chunk m b ofs E0 v.
 
 Inductive volatile_store (ge: Senv.t):
@@ -580,7 +580,7 @@ Inductive volatile_store (ge: Senv.t):
                       m
   | volatile_store_nonvol: forall chunk m b ofs v m',
       Senv.block_is_volatile ge b = false ->
-      Mem.store chunk m b (Ptrofs.unsigned ofs) v = Some m' ->
+      store chunk m b (Ptrofs.unsigned ofs) v = Some m' ->
       volatile_store ge chunk m b ofs v E0 m'.
 
 (** * Semantics of external functions *)
@@ -600,22 +600,22 @@ Definition extcall_sem : Type :=
 (** We now specify the expected properties of this predicate. *)
 
 Definition loc_out_of_bounds (m: mem) (b: block) (ofs: Z) : Prop :=
-  ~Mem.perm m b ofs Max Nonempty.
+  ~perm m b ofs Max Nonempty.
 
 Definition loc_not_writable (m: mem) (b: block) (ofs: Z) : Prop :=
-  ~Mem.perm m b ofs Max Writable.
+  ~perm m b ofs Max Writable.
 
 Definition loc_unmapped (f: meminj) (b: block) (ofs: Z): Prop :=
   f b = None.
 
 Definition loc_out_of_reach (f: meminj) (m: mem) (b: block) (ofs: Z): Prop :=
   forall b0 delta,
-  f b0 = Some(b, delta) -> ~Mem.perm m b0 (ofs - delta) Max Nonempty.
+  f b0 = Some(b, delta) -> ~Mem1.perm m b0 (ofs - delta) Max Nonempty.
 
 Definition inject_separated (f f': meminj) (m1 m2: mem): Prop :=
   forall b1 b2 delta,
   f b1 = None -> f' b1 = Some(b2, delta) ->
-  ~Mem.valid_block m1 b1 /\ ~Mem.valid_block m2 b2.
+  ~Mem1.valid_block m1 b1 /\ ~Mem1.valid_block m2 b2.
 
 Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
   mk_extcall_properties {
@@ -638,37 +638,37 @@ Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
   ec_valid_block:
     forall ge vargs m1 t vres m2 b,
     sem ge vargs m1 t vres m2 ->
-    Mem.valid_block m1 b -> Mem.valid_block m2 b;
+    valid_block m1 b -> valid_block m2 b;
 
 (** External calls cannot increase the max permissions of a valid block.
     They can decrease the max permissions, e.g. by freeing. *)
   ec_max_perm:
     forall ge vargs m1 t vres m2 b ofs p,
     sem ge vargs m1 t vres m2 ->
-    Mem.valid_block m1 b -> Mem.perm m2 b ofs Max p -> Mem.perm m1 b ofs Max p;
+    valid_block m1 b -> perm m2 b ofs Max p -> perm m1 b ofs Max p;
 
 (** External call cannot modify memory unless they have [Max, Writable]
    permissions. *)
   ec_readonly:
     forall ge vargs m1 t vres m2 b ofs n bytes,
     sem ge vargs m1 t vres m2 ->
-    Mem.valid_block m1 b ->
-    Mem.loadbytes m2 b ofs n = Some bytes ->
-    (forall i, ofs <= i < ofs + n -> ~Mem.perm m1 b i Max Writable) ->
-    Mem.loadbytes m1 b ofs n = Some bytes;
+    valid_block m1 b ->
+    loadbytes m2 b ofs n = Some bytes ->
+    (forall i, ofs <= i < ofs + n -> ~perm m1 b i Max Writable) ->
+    loadbytes m1 b ofs n = Some bytes;
 
 (** External calls must commute with memory extensions, in the
   following sense. *)
   ec_mem_extends:
     forall ge vargs m1 t vres m2 m1' vargs',
     sem ge vargs m1 t vres m2 ->
-    Mem.extends m1 m1' ->
+    extends m1 m1' ->
     Val.lessdef_list vargs vargs' ->
     exists vres', exists m2',
        sem ge vargs' m1' t vres' m2'
     /\ Val.lessdef vres vres'
-    /\ Mem.extends m2 m2'
-    /\ Mem.unchanged_on (loc_out_of_bounds m1) m1' m2';
+    /\ extends m2 m2'
+    /\ unchanged_on (loc_out_of_bounds m1) m1' m2';
 
 (** External calls must commute with memory injections,
   in the following sense. *)
@@ -676,14 +676,14 @@ Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
     forall ge1 ge2 vargs m1 t vres m2 f m1' vargs',
     symbols_inject f ge1 ge2 ->
     sem ge1 vargs m1 t vres m2 ->
-    Mem.inject f m1 m1' ->
+    inject f m1 m1' ->
     Val.inject_list f vargs vargs' ->
     exists f', exists vres', exists m2',
        sem ge2 vargs' m1' t vres' m2'
     /\ Val.inject f' vres vres'
-    /\ Mem.inject f' m2 m2'
-    /\ Mem.unchanged_on (loc_unmapped f) m1 m2
-    /\ Mem.unchanged_on (loc_out_of_reach f m1) m1' m2'
+    /\ inject f' m2 m2'
+    /\ unchanged_on (loc_unmapped f) m1 m2
+    /\ unchanged_on (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
     /\ inject_separated f f' m1 m1';
 
@@ -729,12 +729,12 @@ Qed.
 Lemma volatile_load_extends:
   forall ge chunk m b ofs t v m',
   volatile_load ge chunk m b ofs t v ->
-  Mem.extends m m' ->
+  extends m m' ->
   exists v', volatile_load ge chunk m' b ofs t v' /\ Val.lessdef v v'.
 Proof.
   intros. inv H.
   econstructor; split; eauto. econstructor; eauto.
-  exploit Mem.load_extends; eauto. intros [v' [A B]]. exists v'; split; auto. constructor; auto.
+  exploit load_extends; eauto. intros [v' [A B]]. exists v'; split; auto. constructor; auto.
 Qed.
 
 Lemma volatile_load_inject:
@@ -742,7 +742,7 @@ Lemma volatile_load_inject:
   symbols_inject f ge1 ge2 ->
   volatile_load ge1 chunk m b ofs t v ->
   Val.inject f (Vptr b ofs) (Vptr b' ofs') ->
-  Mem.inject f m m' ->
+  inject f m m' ->
   exists v', volatile_load ge2 chunk m' b' ofs' t v' /\ Val.inject f v v'.
 Proof.
   intros until m'; intros SI VL VI MI. generalize SI; intros (A & B & C & D).
@@ -755,7 +755,7 @@ Proof.
   erewrite D; eauto.
   apply Val.load_result_inject. auto.
 - (* normal load *)
-  exploit Mem.loadv_inject; eauto. simpl; eauto. simpl; intros (v2 & X & Y).
+  exploit loadv_inject; eauto. simpl; eauto. simpl; intros (v2 & X & Y).
   exists v2; split; auto.
   constructor; auto.
   inv VI. erewrite D; eauto.
@@ -780,7 +780,7 @@ Proof.
   intros; constructor; intros.
 (* well typed *)
 - inv H. inv H0. apply Val.load_result_rettype.
-  eapply Mem.load_rettype; eauto.
+  eapply load_rettype; eauto.
 (* symbols *)
 - inv H0. constructor. eapply volatile_load_preserved; eauto.
 (* valid blocks *)
@@ -839,52 +839,52 @@ Qed.
 
 Lemma unchanged_on_readonly:
   forall m1 m2 b ofs n bytes,
-  Mem.unchanged_on (loc_not_writable m1) m1 m2 ->
-  Mem.valid_block m1 b ->
-  Mem.loadbytes m2 b ofs n = Some bytes ->
-  (forall i, ofs <= i < ofs + n -> ~Mem.perm m1 b i Max Writable) ->
-  Mem.loadbytes m1 b ofs n = Some bytes.
+  unchanged_on (loc_not_writable m1) m1 m2 ->
+  valid_block m1 b ->
+  loadbytes m2 b ofs n = Some bytes ->
+  (forall i, ofs <= i < ofs + n -> ~perm m1 b i Max Writable) ->
+  loadbytes m1 b ofs n = Some bytes.
 Proof.
   intros.
   rewrite <- H1. symmetry.
-  apply Mem.loadbytes_unchanged_on_1 with (P := loc_not_writable m1); auto.
+  apply loadbytes_unchanged_on_1 with (P := loc_not_writable m1); auto.
 Qed.
 
 Lemma volatile_store_readonly:
   forall ge chunk1 m1 b1 ofs1 v t m2,
   volatile_store ge chunk1 m1 b1 ofs1 v t m2 ->
-  Mem.unchanged_on (loc_not_writable m1) m1 m2.
+  unchanged_on (loc_not_writable m1) m1 m2.
 Proof.
   intros. inv H.
-- apply Mem.unchanged_on_refl.
-- eapply Mem.store_unchanged_on; eauto.
-  exploit Mem.store_valid_access_3; eauto. intros [P Q].
+- apply unchanged_on_refl.
+- eapply store_unchanged_on; eauto.
+  exploit store_valid_access_3; eauto. intros [P Q].
   intros. unfold loc_not_writable. red; intros. elim H2.
-  apply Mem.perm_cur_max. apply P. auto.
+  apply perm_cur_max. apply P. auto.
 Qed.
 
 Lemma volatile_store_extends:
   forall ge chunk m1 b ofs v t m2 m1' v',
   volatile_store ge chunk m1 b ofs v t m2 ->
-  Mem.extends m1 m1' ->
+  extends m1 m1' ->
   Val.lessdef v v' ->
   exists m2',
      volatile_store ge chunk m1' b ofs v' t m2'
-  /\ Mem.extends m2 m2'
-  /\ Mem.unchanged_on (loc_out_of_bounds m1) m1' m2'.
+  /\ extends m2 m2'
+  /\ unchanged_on (loc_out_of_bounds m1) m1' m2'.
 Proof.
   intros. inv H.
 - econstructor; split. econstructor; eauto.
   eapply eventval_match_lessdef; eauto. apply Val.load_result_lessdef; auto.
   auto with mem.
-- exploit Mem.store_within_extends; eauto. intros [m2' [A B]].
+- exploit store_within_extends; eauto. intros [m2' [A B]].
   exists m2'; intuition.
 + econstructor; eauto.
-+ eapply Mem.store_unchanged_on; eauto.
++ eapply store_unchanged_on; eauto.
   unfold loc_out_of_bounds; intros.
-  assert (Mem.perm m1 b i Max Nonempty).
-  { apply Mem.perm_cur_max. apply Mem.perm_implies with Writable; auto with mem.
-    exploit Mem.store_valid_access_3. eexact H3. intros [P Q]. eauto. }
+  assert (perm m1 b i Max Nonempty).
+  { apply perm_cur_max. apply perm_implies with Writable; auto with mem.
+    exploit store_valid_access_3. eexact H3. intros [P Q]. eauto. }
   tauto.
 Qed.
 
@@ -894,12 +894,12 @@ Lemma volatile_store_inject:
   volatile_store ge1 chunk m1 b ofs v t m2 ->
   Val.inject f (Vptr b ofs) (Vptr b' ofs') ->
   Val.inject f v v' ->
-  Mem.inject f m1 m1' ->
+  inject f m1 m1' ->
   exists m2',
        volatile_store ge2 chunk m1' b' ofs' v' t m2'
-    /\ Mem.inject f m2 m2'
-    /\ Mem.unchanged_on (loc_unmapped f) m1 m2
-    /\ Mem.unchanged_on (loc_out_of_reach f m1) m1' m2'.
+    /\ inject f m2 m2'
+    /\ unchanged_on (loc_unmapped f) m1 m2
+    /\ unchanged_on (loc_out_of_reach f m1) m1' m2'.
 Proof.
   intros until v'; intros SI VS AI VI MI.
   generalize SI; intros (P & Q & R & S).
@@ -912,20 +912,20 @@ Proof.
   intuition auto with mem.
 - (* normal store *)
   inversion AI; subst.
-  assert (Mem.storev chunk m1 (Vptr b ofs) v = Some m2). simpl; auto.
-  exploit Mem.storev_mapped_inject; eauto. intros [m2' [A B]].
+  assert (storev chunk m1 (Vptr b ofs) v = Some m2). simpl; auto.
+  exploit storev_mapped_inject; eauto. intros [m2' [A B]].
   exists m2'; intuition auto.
 + constructor; auto. erewrite S; eauto.
-+ eapply Mem.store_unchanged_on; eauto.
++ eapply store_unchanged_on; eauto.
   unfold loc_unmapped; intros. inv AI; congruence.
-+ eapply Mem.store_unchanged_on; eauto.
++ eapply store_unchanged_on; eauto.
   unfold loc_out_of_reach; intros. red; intros. simpl in A.
   assert (EQ: Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr delta)) = Ptrofs.unsigned ofs + delta)
-  by (eapply Mem.address_inject; eauto with mem).
+  by (eapply address_inject; eauto with mem).
   rewrite EQ in *.
   eelim H3; eauto.
-  exploit Mem.store_valid_access_3. eexact H0. intros [X Y].
-  apply Mem.perm_cur_max. apply Mem.perm_implies with Writable; auto with mem.
+  exploit store_valid_access_3. eexact H0. intros [X Y].
+  apply perm_cur_max. apply perm_implies with Writable; auto with mem.
   apply X. lia.
 Qed.
 
@@ -978,8 +978,9 @@ Qed.
 Inductive extcall_malloc_sem (ge: Senv.t):
               list val -> mem -> trace -> val -> mem -> Prop :=
   | extcall_malloc_sem_intro: forall sz m m' b m'',
-      Mem.alloc m (- size_chunk Mptr) (Ptrofs.unsigned sz) = (m', b) ->
-      Mem.store Mptr m' b (- size_chunk Mptr) (Vptrofs sz) = Some m'' ->
+      b = fresh_ident (support m) ->
+      alloc m (- size_chunk Mptr) (Ptrofs.unsigned sz) b = Some m' ->
+      store Mptr m' b (- size_chunk Mptr) (Vptrofs sz) = Some m'' ->
       extcall_malloc_sem ge (Vptrofs sz :: nil) m E0 (Vptr b Ptrofs.zero) m''.
 
 Lemma extcall_malloc_ok:
@@ -988,16 +989,16 @@ Lemma extcall_malloc_ok:
 Proof.
   assert (UNCHANGED:
     forall (P: block -> Z -> Prop) m lo hi v m' b m'',
-    Mem.alloc m lo hi = (m', b) ->
-    Mem.store Mptr m' b lo v = Some m'' ->
-    Mem.unchanged_on P m m'').
+    alloc m lo hi b = Some m' ->
+    store Mptr m' b lo v = Some m'' ->
+    unchanged_on P m m'').
   {
     intros.
-    apply Mem.unchanged_on_implies with (fun b1 ofs1 => b1 <> b).
-    apply Mem.unchanged_on_trans with m'.
-    eapply Mem.alloc_unchanged_on; eauto.
-    eapply Mem.store_unchanged_on; eauto.
-    intros. eapply Mem.valid_not_valid_diff; eauto with mem.
+    apply unchanged_on_implies with (fun b1 ofs1 => b1 <> b).
+    apply unchanged_on_trans with m'.
+    eapply alloc_unchanged_on; eauto.
+    eapply store_unchanged_on; eauto.
+    intros. eapply valid_not_valid_diff; eauto with mem.
   }
   constructor; intros.
 (* well typed *)
@@ -1007,21 +1008,22 @@ Proof.
 (* valid block *)
 - inv H. eauto with mem.
 (* perms *)
-- inv H. exploit Mem.perm_alloc_inv. eauto. eapply Mem.perm_store_2; eauto.
+- inv H. exploit perm_alloc_inv. eauto. eapply perm_store_2; eauto.
   rewrite dec_eq_false. auto.
-  apply Mem.valid_not_valid_diff with m1; eauto with mem.
+  apply valid_not_valid_diff with m1; eauto with mem.
 (* readonly *)
-- inv H. eapply unchanged_on_readonly; eauto. 
+- inv H. eapply unchanged_on_readonly; eauto.
 (* mem extends *)
 - inv H. inv H1. inv H7.
   assert (SZ: v2 = Vptrofs sz).
   { unfold Vptrofs in *. destruct Archi.ptr64; inv H5; auto. }
   subst v2.
-  exploit Mem.alloc_extends; eauto. apply Z.le_refl. apply Z.le_refl.
+  exploit alloc_extends; eauto. apply Z.le_refl. apply Z.le_refl.
   intros [m3' [A B]].
-  exploit Mem.store_within_extends. eexact B. eauto. eauto.
+  exploit store_within_extends. eexact B. eauto. eauto.
   intros [m2' [C D]].
-  exists (Vptr b Ptrofs.zero); exists m2'; intuition.
+  inversion H0. rewrite mext_sup0 in *.
+  exists (Vptr (fresh_ident (support m1')) Ptrofs.zero); exists m2'; intuition.
   econstructor; eauto.
   eapply UNCHANGED; eauto.
 (* mem injects *)
@@ -1029,17 +1031,18 @@ Proof.
   assert (SZ: v' = Vptrofs sz).
   { unfold Vptrofs in *. destruct Archi.ptr64; inv H6; auto. }
   subst v'.
-  exploit Mem.alloc_parallel_inject; eauto. apply Z.le_refl. apply Z.le_refl.
-  intros [f' [m3' [b' [ALLOC [A [B [C D]]]]]]].
-  exploit Mem.store_mapped_inject. eexact A. eauto. eauto.
+  exploit alloc_parallel_inject; eauto. apply Z.le_refl. apply Z.le_refl.
+  instantiate (1:= fresh_ident (support m1') ). apply freshness.
+  intros [f' [m3' [ALLOC [A [B [C D]]]]]].
+  exploit store_mapped_inject. eexact A. eauto. eauto.
   instantiate (1 := Vptrofs sz). unfold Vptrofs; destruct Archi.ptr64; constructor.
   rewrite Z.add_0_r. intros [m2' [E G]].
-  exists f'; exists (Vptr b' Ptrofs.zero); exists m2'; intuition auto.
+  exists f'; exists (Vptr (fresh_ident (support m1')) Ptrofs.zero); exists m2'; intuition auto.
   econstructor; eauto.
   econstructor. eauto. auto.
   eapply UNCHANGED; eauto.
   eapply UNCHANGED; eauto.
-  red; intros. destruct (eq_block b1 b).
+  red; intros. destruct (eq_block b1 (fresh_ident (support m1))).
   subst b1. rewrite C in H2. inv H2. eauto with mem.
   rewrite D in H2 by auto. congruence.
 (* trace length *)
@@ -1050,7 +1053,7 @@ Proof.
 (* determ *)
 - inv H. simple inversion H0.
   assert (EQ2: sz0 = sz).
-  { unfold Vptrofs in H4; destruct Archi.ptr64 eqn:SF.
+  { unfold Vptrofs in H5; destruct Archi.ptr64 eqn:SF.
     rewrite <- (Ptrofs.of_int64_to_int64 SF sz0), <- (Ptrofs.of_int64_to_int64 SF sz). congruence.
     rewrite <- (Ptrofs.of_int_to_int SF sz0), <- (Ptrofs.of_int_to_int SF sz). congruence.
   }
@@ -1063,9 +1066,9 @@ Qed.
 Inductive extcall_free_sem (ge: Senv.t):
               list val -> mem -> trace -> val -> mem -> Prop :=
   | extcall_free_sem_ptr: forall b lo sz m m',
-      Mem.load Mptr m b (Ptrofs.unsigned lo - size_chunk Mptr) = Some (Vptrofs sz) ->
+      load Mptr m b (Ptrofs.unsigned lo - size_chunk Mptr) = Some (Vptrofs sz) ->
       Ptrofs.unsigned sz > 0 ->
-      Mem.free m b (Ptrofs.unsigned lo - size_chunk Mptr) (Ptrofs.unsigned lo + Ptrofs.unsigned sz) = Some m' ->
+      free m b (Ptrofs.unsigned lo - size_chunk Mptr) (Ptrofs.unsigned lo + Ptrofs.unsigned sz) = Some m' ->
       extcall_free_sem ge (Vptr b lo :: nil) m E0 Vundef m'
   | extcall_free_sem_null: forall m,
       extcall_free_sem ge (Vnullptr :: nil) m E0 Vundef m.
@@ -1082,50 +1085,50 @@ Proof.
 (* valid block *)
 - inv H; eauto with mem.
 (* perms *)
-- inv H; eauto using Mem.perm_free_3.
+- inv H; eauto using perm_free_3.
 (* readonly *)
 - eapply unchanged_on_readonly; eauto. inv H.
-+ eapply Mem.free_unchanged_on; eauto.
++ eapply free_unchanged_on; eauto.
   intros. red; intros. elim H6.
-  apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable; auto with mem.
-  eapply Mem.free_range_perm; eauto.
-+ apply Mem.unchanged_on_refl.
+  apply perm_cur_max. apply perm_implies with Freeable; auto with mem.
+  eapply free_range_perm; eauto.
++ apply unchanged_on_refl.
 (* mem extends *)
 - inv H.
 + inv H1. inv H8. inv H6.
-  exploit Mem.load_extends; eauto. intros [v' [A B]].
+  exploit load_extends; eauto. intros [v' [A B]].
   assert (v' = Vptrofs sz).
   { unfold Vptrofs in *; destruct Archi.ptr64; inv B; auto. }
   subst v'.
-  exploit Mem.free_parallel_extends; eauto. intros [m2' [C D]].
+  exploit free_parallel_extends; eauto. intros [m2' [C D]].
   exists Vundef; exists m2'; intuition auto.
   econstructor; eauto.
-  eapply Mem.free_unchanged_on; eauto.
+  eapply free_unchanged_on; eauto.
   unfold loc_out_of_bounds; intros.
-  assert (Mem.perm m1 b i Max Nonempty).
-  { apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable; auto with mem.
-    eapply Mem.free_range_perm. eexact H4. eauto. }
+  assert (perm m1 b i Max Nonempty).
+  { apply perm_cur_max. apply perm_implies with Freeable; auto with mem.
+    eapply free_range_perm. eexact H4. eauto. }
   tauto.
 + inv H1. inv H5. replace v2 with Vnullptr.
   exists Vundef; exists m1'; intuition auto.
   constructor.
-  apply Mem.unchanged_on_refl.
+  apply unchanged_on_refl.
   unfold Vnullptr in *; destruct Archi.ptr64; inv H3; auto.
 (* mem inject *)
 - inv H0.
 + inv H2. inv H7. inv H9.
-  exploit Mem.load_inject; eauto. intros [v' [A B]].
+  exploit load_inject; eauto. intros [v' [A B]].
   assert (v' = Vptrofs sz).
   { unfold Vptrofs in *; destruct Archi.ptr64; inv B; auto. }
   subst v'.
-  assert (P: Mem.range_perm m1 b (Ptrofs.unsigned lo - size_chunk Mptr) (Ptrofs.unsigned lo + Ptrofs.unsigned sz) Cur Freeable).
-    eapply Mem.free_range_perm; eauto.
-  exploit Mem.address_inject; eauto.
-    apply Mem.perm_implies with Freeable; auto with mem.
+  assert (P: range_perm m1 b (Ptrofs.unsigned lo - size_chunk Mptr) (Ptrofs.unsigned lo + Ptrofs.unsigned sz) Cur Freeable).
+    eapply free_range_perm; eauto.
+  exploit address_inject; eauto.
+    apply perm_implies with Freeable; auto with mem.
     apply P. instantiate (1 := lo).
     generalize (size_chunk_pos Mptr); lia.
   intro EQ.
-  exploit Mem.free_parallel_inject; eauto. intros (m2' & C & D).
+  exploit free_parallel_inject; eauto. intros (m2' & C & D).
   exists f, Vundef, m2'; split.
   apply extcall_free_sem_ptr with (sz := sz) (m' := m2').
     rewrite EQ. rewrite <- A. f_equal. lia.
@@ -1133,15 +1136,15 @@ Proof.
     rewrite ! EQ. rewrite <- C. f_equal; lia.
   split. auto.
   split. auto.
-  split. eapply Mem.free_unchanged_on; eauto. unfold loc_unmapped. intros; congruence.
-  split. eapply Mem.free_unchanged_on; eauto. unfold loc_out_of_reach.
+  split. eapply free_unchanged_on; eauto. unfold loc_unmapped. intros; congruence.
+  split. eapply free_unchanged_on; eauto. unfold loc_out_of_reach.
     intros. red; intros. eelim H2; eauto.
-    apply Mem.perm_cur_max. apply Mem.perm_implies with Freeable; auto with mem.
+    apply perm_cur_max. apply perm_implies with Freeable; auto with mem.
     apply P. lia.
   split. auto.
   red; intros. congruence.
 + inv H2. inv H6. replace v' with Vnullptr.
-  exists f, Vundef, m1'; intuition auto using Mem.unchanged_on_refl.
+  exists f, Vundef, m1'; intuition auto using unchanged_on_refl.
   constructor.
   red; intros; congruence.
   unfold Vnullptr in *; destruct Archi.ptr64; inv H4; auto.
@@ -1174,8 +1177,8 @@ Inductive extcall_memcpy_sem (sz al: Z) (ge: Senv.t):
       bsrc <> bdst \/ Ptrofs.unsigned osrc = Ptrofs.unsigned odst
                    \/ Ptrofs.unsigned osrc + sz <= Ptrofs.unsigned odst
                    \/ Ptrofs.unsigned odst + sz <= Ptrofs.unsigned osrc ->
-      Mem.loadbytes m bsrc (Ptrofs.unsigned osrc) sz = Some bytes ->
-      Mem.storebytes m bdst (Ptrofs.unsigned odst) bytes = Some m' ->
+      loadbytes m bsrc (Ptrofs.unsigned osrc) sz = Some bytes ->
+      storebytes m bdst (Ptrofs.unsigned odst) bytes = Some m' ->
       extcall_memcpy_sem sz al ge (Vptr bdst odst :: Vptr bsrc osrc :: nil) m E0 Vundef m'.
 
 Lemma extcall_memcpy_ok:
@@ -1191,26 +1194,26 @@ Proof.
 - (* valid blocks *)
   intros. inv H. eauto with mem.
 - (* perms *)
-  intros. inv H. eapply Mem.perm_storebytes_2; eauto.
+  intros. inv H. eapply perm_storebytes_2; eauto.
 - (* readonly *)
   intros. inv H. eapply unchanged_on_readonly; eauto. 
-  eapply Mem.storebytes_unchanged_on; eauto.
+  eapply storebytes_unchanged_on; eauto.
   intros; red; intros. elim H11.
-  apply Mem.perm_cur_max. eapply Mem.storebytes_range_perm; eauto.
+  apply perm_cur_max. eapply storebytes_range_perm; eauto.
 - (* extensions *)
   intros. inv H.
   inv H1. inv H13. inv H14. inv H10. inv H11.
-  exploit Mem.loadbytes_length; eauto. intros LEN.
-  exploit Mem.loadbytes_extends; eauto. intros [bytes2 [A B]].
-  exploit Mem.storebytes_within_extends; eauto. intros [m2' [C D]].
+  exploit loadbytes_length; eauto. intros LEN.
+  exploit loadbytes_extends; eauto. intros [bytes2 [A B]].
+  exploit storebytes_within_extends; eauto. intros [m2' [C D]].
   exists Vundef; exists m2'.
   split. econstructor; eauto.
   split. constructor.
   split. auto.
-  eapply Mem.storebytes_unchanged_on; eauto. unfold loc_out_of_bounds; intros.
-  assert (Mem.perm m1 bdst i Max Nonempty).
-  apply Mem.perm_cur_max. apply Mem.perm_implies with Writable; auto with mem.
-  eapply Mem.storebytes_range_perm; eauto.
+  eapply storebytes_unchanged_on; eauto. unfold loc_out_of_bounds; intros.
+  assert (perm m1 bdst i Max Nonempty).
+  apply perm_cur_max. apply perm_implies with Writable; auto with mem.
+  eapply storebytes_range_perm; eauto.
   erewrite list_forall2_length; eauto.
   tauto.
 - (* injections *)
@@ -1218,9 +1221,9 @@ Proof.
   destruct (zeq sz 0).
 + (* special case sz = 0 *)
   assert (bytes = nil).
-  { exploit (Mem.loadbytes_empty m1 bsrc (Ptrofs.unsigned osrc) sz). lia. congruence. }
+  { exploit (loadbytes_empty m1 bsrc (Ptrofs.unsigned osrc) sz). lia. congruence. }
   subst.
-  destruct (Mem.range_perm_storebytes m1' b0 (Ptrofs.unsigned (Ptrofs.add odst (Ptrofs.repr delta0))) nil)
+  destruct (range_perm_storebytes m1' b0 (Ptrofs.unsigned (Ptrofs.add odst (Ptrofs.repr delta0))) nil)
   as [m2' SB].
   simpl. red; intros; extlia.
   exists f, Vundef, m2'.
@@ -1228,46 +1231,46 @@ Proof.
   intros; extlia.
   intros; extlia.
   right; lia.
-  apply Mem.loadbytes_empty. lia.
+  apply loadbytes_empty. lia.
   split. auto.
-  split. eapply Mem.storebytes_empty_inject; eauto.
-  split. eapply Mem.storebytes_unchanged_on; eauto. unfold loc_unmapped; intros.
+  split. eapply storebytes_empty_inject; eauto.
+  split. eapply storebytes_unchanged_on; eauto. unfold loc_unmapped; intros.
   congruence.
-  split. eapply Mem.storebytes_unchanged_on; eauto.
+  split. eapply storebytes_unchanged_on; eauto.
   simpl; intros; extlia.
   split. apply inject_incr_refl.
   red; intros; congruence.
 + (* general case sz > 0 *)
-  exploit Mem.loadbytes_length; eauto. intros LEN.
-  assert (RPSRC: Mem.range_perm m1 bsrc (Ptrofs.unsigned osrc) (Ptrofs.unsigned osrc + sz) Cur Nonempty).
-    eapply Mem.range_perm_implies. eapply Mem.loadbytes_range_perm; eauto. auto with mem.
-  assert (RPDST: Mem.range_perm m1 bdst (Ptrofs.unsigned odst) (Ptrofs.unsigned odst + sz) Cur Nonempty).
+  exploit loadbytes_length; eauto. intros LEN.
+  assert (RPSRC: range_perm m1 bsrc (Ptrofs.unsigned osrc) (Ptrofs.unsigned osrc + sz) Cur Nonempty).
+    eapply range_perm_implies. eapply loadbytes_range_perm; eauto. auto with mem.
+  assert (RPDST: range_perm m1 bdst (Ptrofs.unsigned odst) (Ptrofs.unsigned odst + sz) Cur Nonempty).
     replace sz with (Z.of_nat (length bytes)).
-    eapply Mem.range_perm_implies. eapply Mem.storebytes_range_perm; eauto. auto with mem.
+    eapply range_perm_implies. eapply storebytes_range_perm; eauto. auto with mem.
     rewrite LEN. apply Z2Nat.id. lia.
-  assert (PSRC: Mem.perm m1 bsrc (Ptrofs.unsigned osrc) Cur Nonempty).
+  assert (PSRC: perm m1 bsrc (Ptrofs.unsigned osrc) Cur Nonempty).
     apply RPSRC. lia.
-  assert (PDST: Mem.perm m1 bdst (Ptrofs.unsigned odst) Cur Nonempty).
+  assert (PDST: perm m1 bdst (Ptrofs.unsigned odst) Cur Nonempty).
     apply RPDST. lia.
-  exploit Mem.address_inject.  eauto. eexact PSRC. eauto. intros EQ1.
-  exploit Mem.address_inject.  eauto. eexact PDST. eauto. intros EQ2.
-  exploit Mem.loadbytes_inject; eauto. intros [bytes2 [A B]].
-  exploit Mem.storebytes_mapped_inject; eauto. intros [m2' [C D]].
+  exploit address_inject.  eauto. eexact PSRC. eauto. intros EQ1.
+  exploit address_inject.  eauto. eexact PDST. eauto. intros EQ2.
+  exploit loadbytes_inject; eauto. intros [bytes2 [A B]].
+  exploit storebytes_mapped_inject; eauto. intros [m2' [C D]].
   exists f; exists Vundef; exists m2'.
   split. econstructor; try rewrite EQ1; try rewrite EQ2; eauto.
-  intros; eapply Mem.aligned_area_inject with (m := m1); eauto.
-  intros; eapply Mem.aligned_area_inject with (m := m1); eauto.
-  eapply Mem.disjoint_or_equal_inject with (m := m1); eauto.
-  apply Mem.range_perm_max with Cur; auto.
-  apply Mem.range_perm_max with Cur; auto. lia.
+  intros; eapply aligned_area_inject with (m := m1); eauto.
+  intros; eapply aligned_area_inject with (m := m1); eauto.
+  eapply disjoint_or_equal_inject with (m := m1); eauto.
+  apply range_perm_max with Cur; auto.
+  apply range_perm_max with Cur; auto. lia.
   split. constructor.
   split. auto.
-  split. eapply Mem.storebytes_unchanged_on; eauto. unfold loc_unmapped; intros.
+  split. eapply storebytes_unchanged_on; eauto. unfold loc_unmapped; intros.
   congruence.
-  split. eapply Mem.storebytes_unchanged_on; eauto. unfold loc_out_of_reach; intros. red; intros.
+  split. eapply storebytes_unchanged_on; eauto. unfold loc_out_of_reach; intros. red; intros.
   eelim H2; eauto.
-  apply Mem.perm_cur_max. apply Mem.perm_implies with Writable; auto with mem.
-  eapply Mem.storebytes_range_perm; eauto.
+  apply perm_cur_max. apply perm_implies with Writable; auto with mem.
+  eapply storebytes_range_perm; eauto.
   erewrite list_forall2_length; eauto.
   lia.
   split. apply inject_incr_refl.
@@ -1418,7 +1421,8 @@ Qed.
 (** Some built-in functions and runtime support functions have known semantics
   as defined in the [Builtin] modules.
   These built-in functions have no observable effects and do not access memory. *)
-
+Module Builtins := Builtins(Block).
+Import Builtins.
 Inductive known_builtin_sem (bf: builtin_function) (ge: Senv.t):
               list val -> mem -> trace -> val -> mem -> Prop :=
   | known_builtin_sem_intro: forall vargs vres m,
@@ -1447,7 +1451,7 @@ Proof.
   specialize (bs_inject _ bsem _ _ _ H1).
   unfold val_opt_inject; rewrite H2; intros.
   destruct (bsem vargs') as [vres'|] eqn:?; try contradiction.
-  exists vres', m1'; intuition auto using Mem.extends_refl, Mem.unchanged_on_refl.
+  exists vres', m1'; intuition auto using extends_refl, unchanged_on_refl.
   constructor; auto.
   apply val_inject_lessdef; auto.
 (* mem injects *)
@@ -1455,7 +1459,7 @@ Proof.
   specialize (bs_inject _ bsem _ _ _ H2).
   unfold val_opt_inject; rewrite H3; intros.
   destruct (bsem vargs') as [vres'|] eqn:?; try contradiction.
-  exists f, vres', m1'; intuition auto using Mem.extends_refl, Mem.unchanged_on_refl.
+  exists f, vres', m1'; intuition auto using extends_refl, unchanged_on_refl.
   constructor; auto.
   red; intros; congruence.
 (* trace length *)
@@ -1578,9 +1582,9 @@ Qed.
 Lemma external_call_support:
   forall ef ge vargs m1 t vres m2,
   external_call ef ge vargs m1 t vres m2 ->
-  Mem.sup_include (Mem.support m1) (Mem.support m2).
+  sup_include (support m1) (support m2).
 Proof.
-  intros. unfold Mem.sup_include. intros.
+  intros. unfold sup_include. intros.
   exploit external_call_valid_block. eauto. apply H0.
   auto.
 Qed.
@@ -1595,14 +1599,14 @@ Lemma external_call_mem_inject:
   forall ef F V (ge: Genv.t F V) vargs m1 t vres m2 f m1' vargs',
   meminj_preserves_globals ge f ->
   external_call ef ge vargs m1 t vres m2 ->
-  Mem.inject f m1 m1' ->
+  inject f m1 m1' ->
   Val.inject_list f vargs vargs' ->
   exists f', exists vres', exists m2',
      external_call ef ge vargs' m1' t vres' m2'
     /\ Val.inject f' vres vres'
-    /\ Mem.inject f' m2 m2'
-    /\ Mem.unchanged_on (loc_unmapped f) m1 m2
-    /\ Mem.unchanged_on (loc_out_of_reach f m1) m1' m2'
+    /\ inject f' m2 m2'
+    /\ unchanged_on (loc_unmapped f) m1 m2
+    /\ unchanged_on (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
     /\ inject_separated f f' m1 m1'.
 Proof.
@@ -1660,12 +1664,12 @@ Inductive eval_builtin_arg: builtin_arg A -> val -> Prop :=
   | eval_BA_single: forall n,
       eval_builtin_arg (BA_single n) (Vsingle n)
   | eval_BA_loadstack: forall chunk ofs v,
-      Mem.loadv chunk m (Val.offset_ptr sp ofs) = Some v ->
+      loadv chunk m (Val.offset_ptr sp ofs) = Some v ->
       eval_builtin_arg (BA_loadstack chunk ofs) v
   | eval_BA_addrstack: forall ofs,
       eval_builtin_arg (BA_addrstack ofs) (Val.offset_ptr sp ofs)
   | eval_BA_loadglobal: forall chunk id ofs v,
-      Mem.loadv chunk m (Senv.symbol_address ge id ofs) = Some v ->
+      loadv chunk m (Senv.symbol_address ge id ofs) = Some v ->
       eval_builtin_arg (BA_loadglobal chunk id ofs) v
   | eval_BA_addrglobal: forall id ofs,
       eval_builtin_arg (BA_addrglobal id ofs) (Senv.symbol_address ge id ofs)
@@ -1739,7 +1743,7 @@ Variable sp: val.
 Variables m1 m2: mem.
 
 Hypothesis env_lessdef: forall x, Val.lessdef (e1 x) (e2 x).
-Hypothesis mem_extends: Mem.extends m1 m2.
+Hypothesis mem_extends: extends m1 m2.
 
 Lemma eval_builtin_arg_lessdef:
   forall a v1, eval_builtin_arg ge e1 sp m1 a v1 ->
@@ -1751,9 +1755,9 @@ Proof.
 - econstructor; eauto with barg.
 - econstructor; eauto with barg.
 - econstructor; eauto with barg.
-- exploit Mem.loadv_extends; eauto. intros (v' & P & Q). exists v'; eauto with barg.
+- exploit loadv_extends; eauto. intros (v' & P & Q). exists v'; eauto with barg.
 - econstructor; eauto with barg.
-- exploit Mem.loadv_extends; eauto. intros (v' & P & Q). exists v'; eauto with barg.
+- exploit loadv_extends; eauto. intros (v' & P & Q). exists v'; eauto with barg.
 - econstructor; eauto with barg.
 - destruct IHeval_builtin_arg1 as (vhi' & P & Q).
   destruct IHeval_builtin_arg2 as (vlo' & R & S).

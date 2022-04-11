@@ -747,13 +747,13 @@ Proof.
     erewrite support_drop; eauto. erewrite support_alloc;eauto. inv H.
   - set (init := gvar_init v) in *.
   set (sz := init_data_list_size init) in *.
-  destruct (alloc m 0 sz b) as [m1|] eqn:?.
+  destruct (alloc m 0 sz b) as [m1|] eqn:?; try discriminate.
   destruct (store_zeros m1 b 0 sz) as [m2|] eqn:?; try discriminate.
   destruct (store_init_data_list m2 b 0 init) as [m3|] eqn:?; try discriminate.
   erewrite support_drop; eauto.
   erewrite store_init_data_list_support; eauto.
   erewrite store_zeros_support; eauto.
-  erewrite support_alloc; eauto. inv H.
+  erewrite support_alloc; eauto.
 Qed.
 
 Remark alloc_globals_support:
@@ -824,7 +824,7 @@ Proof.
   (* variable *)
   set (init := gvar_init v) in *.
   set (sz := init_data_list_size init) in *.
-  destruct (alloc m 0 sz b) as [m1|] eqn:?.
+  destruct (alloc m 0 sz b) as [m1|] eqn:?; try discriminate.
   destruct (store_zeros m1 b 0 sz) as [m2|] eqn:?; try discriminate.
   destruct (store_init_data_list m2 b 0 init) as [m3|] eqn:?; try discriminate.
   assert (b' <> b). apply valid_not_valid_diff with m; eauto with mem.
@@ -836,7 +836,7 @@ Proof.
   eapply perm_alloc_4; eauto.
   erewrite store_zeros_perm; [idtac|eauto].
   erewrite store_init_data_list_perm; [idtac|eauto].
-  eapply perm_drop_4; eauto. inversion H.
+  eapply perm_drop_4; eauto.
 Qed.
 
 Remark alloc_globals_perm:
@@ -1138,7 +1138,7 @@ Proof.
 - (* variable *)
   set (init := gvar_init v) in *.
   set (sz := init_data_list_size init) in *.
-  destruct (alloc m 0 sz b) as [m1|] eqn:?.
+  destruct (alloc m 0 sz b) as [m1|] eqn:?; try discriminate.
   destruct (store_zeros m1 b 0 sz) as [m2|] eqn:?; try discriminate.
   destruct (store_init_data_list m2 b 0 init) as [m3|] eqn:?; try discriminate.
   set (Q := fun b' (ofs: Z) => b' <> b).
@@ -1151,7 +1151,6 @@ Proof.
   eapply store_init_data_list_unchanged; eauto.
   eapply drop_perm_unchanged_on; eauto.
   intros; red. apply valid_not_valid_diff with m; eauto with mem.
-  inv H.
 Qed.
 
 Remark alloc_globals_unchanged:
@@ -1206,10 +1205,9 @@ Proof.
 - (* globals-initialized *)
   red; intros. unfold find_def in H2; simpl in H2.
   rewrite NMap.gsspec in H2. destruct (NMap.elt_eq b (fresh_block (genv_sup g))).
-+ inv H2. destruct gd0 as [f|v]; simpl in H0.
-* destruct (alloc m 0 1 (fresh_block (genv_sup g))) as [m1|] eqn:ALLOC.
-  intros RES. unfold nextblock in RES.
-  rewrite H, <- RES. split.
++ inv H2. destruct gd0 as [f|v]; simpl in H1.
+* destruct (alloc m 0 1 (fresh_block (genv_sup g))) as [m1|] eqn:ALLOC; try discriminate.
+  split.
   eapply perm_drop_1; eauto. lia.
   intros.
   assert (0 <= ofs < 1). { eapply perm_alloc_3; eauto. eapply perm_drop_4; eauto. }
@@ -1217,11 +1215,9 @@ Proof.
   split. lia. inv ORD; auto.
 * set (init := gvar_init v) in *.
   set (sz := init_data_list_size init) in *.
-  destruct (alloc m 0 sz) as [m1 b] eqn:?.
-  destruct (store_zeros m1 b 0 sz) as [m2|] eqn:?; try discriminate.
-  destruct (store_init_data_list m2 b 0 init) as [m3|] eqn:?; try discriminate.
-  exploit alloc_result; eauto. intro RES. unfold nextblock in RES.
-  replace (fresh_block(genv_sup g)) with b by congruence.
+  destruct (alloc m 0 sz (fresh_block (genv_sup g))) as [m1|] eqn:?; try discriminate.
+  destruct (store_zeros m1 (fresh_block (genv_sup g)) 0 sz) as [m2|] eqn:?; try discriminate.
+  destruct (store_init_data_list m2 (fresh_block (genv_sup g)) 0 init) as [m3|] eqn:?; try discriminate.
   split. red; intros. eapply perm_drop_1; eauto.
   split. intros.
   assert (0 <= ofs < sz).
@@ -1237,7 +1233,7 @@ Proof.
   eapply store_init_data_list_charact; eauto.
   eapply store_zeros_read_as_zero; eauto.
   intros NOTVOL.
-  transitivity (loadbytes m3 b 0 sz).
+  transitivity (loadbytes m3 (fresh_block (genv_sup g)) 0 sz).
   eapply loadbytes_drop; eauto. right; right; right.
   unfold perm_globvar. rewrite NOTVOL. destruct (gvar_readonly v); auto with mem.
   eapply store_init_data_list_loadbytes; eauto.
@@ -1245,7 +1241,7 @@ Proof.
 + assert (U: unchanged_on (fun _ _ => True) m m') by (eapply alloc_global_unchanged; eauto).
   assert (VALID: valid_block m b).
   { red. rewrite <- H. eapply genv_defs_range; eauto. }
-  exploit H1; eauto.
+  exploit H0; eauto.
   destruct gd0 as [f|v].
 * intros [A B]; split; intros.
   eapply perm_unchanged_on; eauto. exact I.
@@ -1256,7 +1252,7 @@ Proof.
   intros. apply load_store_init_data_invariant with m; auto.
   intros. eapply load_unchanged_on_1; eauto. intros; exact I.
   intros. eapply loadbytes_unchanged_on; eauto. intros; exact I.
-- simpl. unfold nextblock in NB. congruence.
+- simpl. erewrite alloc_global_support; eauto. congruence.
 Qed.
 
 Lemma alloc_globals_initialized:
@@ -1269,30 +1265,27 @@ Proof.
   induction gl; simpl; intros.
 - inv H; auto.
 - destruct a as [id g]. destruct (alloc_global m (id, g)) as [m1|] eqn:?; try discriminate.
-  exploit alloc_global_initialized; eauto. intros [P Q].
+  exploit alloc_global_initialized; eauto.
+  rewrite H0. eauto.
+  intros [P Q].
   eapply IHgl; eauto.
 Qed.
-*)
 
 End INITMEM.
 
 Definition init_mem (p: program F V) :=
-   option_map fst
-   (alloc_globals (globalenv p) empty p.(prog_defs) nil).
+   alloc_globals (globalenv p) empty p.(prog_defs).
 
 Lemma init_mem_genv_sup: forall p m,
   init_mem p = Some m ->
   genv_sup (globalenv p) = support m.
 Proof.
-Admitted.
-(*  unfold init_mem; intros.
-  unfold option_map in H. destruct (alloc_globals (globalenv p) empty (prog_defs p) nil) eqn:?. destruct p0. simpl in H. inv H.
+  unfold init_mem; intros.
   exploit alloc_globals_support; eauto. rewrite support_empty. intro.
-  generalize (genv_next_add_globals (prog_defs p) (empty_genv (prog_public p))).
+  generalize (genv_sup_add_globals (prog_defs p) (empty_genv (prog_public p))).
   fold (globalenv p). simpl genv_sup. intros. congruence.
-  inversion H.
 Qed.
-*)
+
 Theorem find_symbol_not_fresh:
   forall p id b m,
   init_mem p = Some m ->
@@ -1332,12 +1325,12 @@ Lemma init_mem_characterization_gen:
   init_mem p = Some m ->
   globals_initialized (globalenv p) (globalenv p) m.
 Proof.
-  intros. Admitted.
-  (*apply alloc_globals_initialized with empty.
+  intros.
+  apply alloc_globals_initialized with empty.
   auto.
   rewrite support_empty. auto.
   red; intros. unfold find_def in H0; simpl in H0;  discriminate.
-Qed.*)
+Qed.
 
 Theorem init_mem_characterization:
   forall p b gv m,
@@ -1451,22 +1444,20 @@ Proof.
 Qed.
 
 Lemma alloc_globals_neutral:
-  forall gl m m' s',
-  alloc_globals ge m gl nil = Some (m',s') ->
+  forall gl m m',
+  alloc_globals ge m gl = Some m' ->
   inject_neutral s m ->
   sup_include (support m') s ->
   inject_neutral s m'.
 Proof.
   induction gl; intros.
-  Admitted.
-(*  simpl in *. congruence.
+  simpl in *. congruence.
   exploit alloc_globals_support; eauto. intros EQ.
   simpl in *. destruct (alloc_global ge m a) as [m1|] eqn:E; try discriminate.
   exploit alloc_global_neutral; eauto.
   apply sup_include_trans with (support m').
   rewrite EQ. apply advance_next_le. auto.
 Qed.
-*)
 
 End INITMEM_INJ.
 
@@ -1568,7 +1559,8 @@ Proof.
   destruct H0.
 + subst idg1; simpl in A.
   set (il := gvar_init v) in *. set (sz := init_data_list_size il) in *.
-  destruct (alloc m 0 sz) as [m1 b].
+  set (b := (fresh_block (support m))) in *.
+  destruct (alloc m 0 sz b) as [m1 |]; try discriminate.
   destruct (store_zeros m1 b 0 sz) as [m2|]; try discriminate.
   destruct (store_init_data_list ge m2 b 0 il) as [m3|] eqn:B; try discriminate.
   split. eapply store_init_data_list_aligned; eauto. intros; eapply store_init_data_list_free_idents; eauto.
@@ -1640,16 +1632,20 @@ Lemma alloc_global_exists:
         init_data_list_aligned 0 v.(gvar_init)
      /\ forall i o, In (Init_addrof i o) v.(gvar_init) -> exists b, find_symbol ge i = Some b
   end ->
-  exists m', alloc_global ge m idg = Some m'.
+  exists m', alloc_global ge m idg (fresh_block (support m))= Some m'.
 Proof.
   intros m [id [f|v]]; intros; simpl.
-- destruct (alloc m 0 1) as [m1 b] eqn:ALLOC.
+  set (b:= fresh_block (support m)) in *.
+- destruct (alloc m 0 1 b) as [m1|] eqn:ALLOC; try discriminate.
   destruct (range_perm_drop_2 m1 b 0 1 Nonempty) as [m2 DROP].
   red; intros; eapply perm_alloc_2; eauto.
   exists m2; auto.
-- destruct H as [P Q].
+  unfold alloc in ALLOC. destr_in ALLOC.
+  apply fresh_ne in i. unfold b in i. congruence.
+- set (b:= fresh_block (support m)) in *.
+  destruct H as [P Q].
   set (sz := init_data_list_size (gvar_init v)).
-  destruct (alloc m 0 sz) as [m1 b] eqn:ALLOC.
+  destruct (alloc m 0 sz b) as [m1|] eqn:ALLOC.
   assert (P1: range_perm m1 b 0 sz Cur Freeable) by (red; intros; eapply perm_alloc_2; eauto).
   destruct (@store_zeros_exists m1 b 0 sz) as [m2 ZEROS].
   red; intros. apply perm_implies with Freeable; auto with mem.
@@ -1663,6 +1659,8 @@ Proof.
   { red; intros. erewrite <- store_init_data_list_perm by eauto. eauto. }
   destruct (range_perm_drop_2 m3 b 0 sz (perm_globvar v)) as [m4 DROP]; auto.
   exists m4; auto.
+  unfold alloc in ALLOC. destr_in ALLOC.
+  apply fresh_ne in i. unfold b in i. congruence.
 Qed.
 
 End INITMEM_EXISTS.
@@ -1839,13 +1837,14 @@ Proof.
   induction 1; simpl; intros.
 - auto.
 - destruct (alloc_global (globalenv p) m a1) as [m1|] eqn:?; try discriminate.
-  assert (X: alloc_global (globalenv tp) m b1 = Some m1).
+  assert (X: alloc_global (globalenv tp) m b1 (fresh_block (support m)) = Some m1).
   { destruct a1 as [id1 g1]; destruct b1 as [id2 g2]; destruct H; simpl in *.
     subst id2. inv H2.
   - auto.
   - inv H; simpl in *.
     set (sz := init_data_list_size init) in *.
-    destruct (alloc m 0 sz) as [m2 b] eqn:?.
+    set (b := fresh_block (support m)) in *.
+    destruct (alloc m 0 sz b) as [m2|] eqn:?; try discriminate.
     destruct (store_zeros m2 b 0 sz) as [m3|] eqn:?; try discriminate.
     destruct (store_init_data_list (globalenv p) m3 b 0 init) as [m4|] eqn:?; try discriminate.
     erewrite store_init_data_list_match; eauto.

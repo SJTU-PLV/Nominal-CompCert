@@ -26,7 +26,8 @@ Require Import AST Integers Floats Values Memdata.
   provides a [Builtins1] module that lists the built-ins semantics
   appropriate for the target.
 *)
-
+Module Builtins0(Block:BLOCK).
+Include Memval(Block).
 Definition val_opt_has_rettype (ov: option val) (t: rettype) : Prop :=
   match ov with Some v => Val.has_rettype v t | None => True end.
 
@@ -38,14 +39,14 @@ Definition val_opt_inject (j: meminj) (ov ov': option val) : Prop :=
   end.
 
 (** The semantics of a built-in function is a partial function
-  from list of values to values.  
+  from list of values to values.
   It must agree with the return type stated in the signature,
   and be compatible with value injections.
 *)
 
 Record builtin_sem (tret: rettype) : Type := mkbuiltin {
   bs_sem :> list val -> option val;
-  bs_well_typed: forall vl, 
+  bs_well_typed: forall vl,
     val_opt_has_rettype (bs_sem vl) tret;
   bs_inject: forall j vl vl',
     Val.inject_list j vl vl' -> val_opt_inject j (bs_sem vl) (bs_sem vl')
@@ -60,7 +61,7 @@ Record builtin_sem (tret: rettype) : Type := mkbuiltin {
 
 Local Unset Program Cases.
 
-Program Definition mkbuiltin_v1t 
+Program Definition mkbuiltin_v1t
      (tret: rettype) (f: val -> val)
      (WT: forall v1, Val.has_rettype (f v1) tret)
      (INJ: forall j v1 v1', Val.inject j v1 v1' -> Val.inject j (f v1) (f v1')) :=
@@ -69,10 +70,10 @@ Next Obligation.
   red; destruct vl; auto. destruct vl; auto.
 Qed.
 Next Obligation.
-  red; inv H; auto. inv H1; auto. 
+  red; inv H; auto. inv H1; auto.
 Qed.
 
-Program Definition mkbuiltin_v2t 
+Program Definition mkbuiltin_v2t
      (tret: rettype) (f: val -> val -> val)
      (WT: forall v1 v2, Val.has_rettype (f v1 v2) tret)
      (INJ: forall j v1 v1' v2 v2',
@@ -86,7 +87,7 @@ Next Obligation.
   red; inv H; auto. inv H1; auto. inv H2; auto.
 Qed.
 
-Program Definition mkbuiltin_v3t 
+Program Definition mkbuiltin_v3t
      (tret: rettype) (f: val -> val -> val -> val)
      (WT: forall v1 v2 v3, Val.has_rettype (f v1 v2 v3) tret)
      (INJ: forall j v1 v1' v2 v2' v3 v3',
@@ -110,7 +111,7 @@ Next Obligation.
   red; destruct vl; auto. destruct vl; auto. apply WT.
 Qed.
 Next Obligation.
-  red; inv H; auto. inv H1; auto. apply INJ; auto. 
+  red; inv H; auto. inv H1; auto. apply INJ; auto.
 Qed.
 
 Program Definition mkbuiltin_v2p
@@ -124,7 +125,7 @@ Next Obligation.
   red; destruct vl; auto. destruct vl; auto. destruct vl; auto. apply WT.
 Qed.
 Next Obligation.
-  red; inv H; auto. inv H1; auto. inv H2; auto. apply INJ; auto. 
+  red; inv H; auto. inv H1; auto. inv H2; auto. apply INJ; auto.
 Qed.
 
 (** For numerical functions, involving only integers and floating-point numbers
@@ -562,4 +563,4 @@ Qed.
 Next Obligation.
   inv H; simpl; auto. inv H0; auto. destruct Int.ltu; auto.
 Qed.
-
+End Builtins0.
