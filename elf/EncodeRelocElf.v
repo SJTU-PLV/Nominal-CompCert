@@ -29,7 +29,7 @@ Definition encode_e_ident (eh:elf_header) :=
     (map (fun _ => Byte.zero) (seq 1 9)).
   
 
-Definition encode_elf_header (eh:elf_header) :list byte := 
+Definition encode_elf_header32 (eh:elf_header) :list byte := 
   (encode_e_ident eh) ++
   (encode_elf_file_type (e_type eh)) ++
   (encode_elf_machine (e_machine eh)) ++
@@ -45,11 +45,26 @@ Definition encode_elf_header (eh:elf_header) :list byte :=
   (encode_int16 (e_shnum eh)) ++   
   (encode_int16  (e_shstrndx eh)).
 
+Definition encode_elf_header64 (eh:elf_header) :list byte := 
+  (encode_e_ident eh) ++
+  (encode_elf_file_type (e_type eh)) ++
+  (encode_elf_machine (e_machine eh)) ++
+  (encode_int32 (elf_version_value (e_version eh))) ++
+  (encode_int64 (e_entry eh)) ++
+  (encode_int64 (e_phoff eh)) ++
+  (encode_int64 (e_shoff eh)) ++
+  (encode_int32 (e_flags eh)) ++
+  (encode_int16 (e_ehsize eh)) ++
+  (encode_int16 (e_phentsize eh)) ++
+  (encode_int16 (e_phnum eh)) ++
+  (encode_int16 (e_shentsize eh))++
+  (encode_int16 (e_shnum eh)) ++   
+  (encode_int16  (e_shstrndx eh)).
 
 Definition encode_sections (ss:list section) :=
   fold_right (fun bytes r => bytes ++ r) [] ss.
 
-Definition encode_section_header (sh: section_header) :=
+Definition encode_section_header32 (sh: section_header) :=
   (encode_int32 (sh_name sh)) ++
   (encode_section_type (sh_type sh)) ++
   (encode_section_flags (sh_flags sh)) ++
@@ -61,14 +76,32 @@ Definition encode_section_header (sh: section_header) :=
   (encode_int32 (sh_addralign sh)) ++
   (encode_int32 (sh_entsize sh)).
 
+Definition encode_section_header64 (sh: section_header) :=
+  (encode_int32 (sh_name sh)) ++
+  (encode_section_type (sh_type sh)) ++
+  (encode_section_flags (sh_flags sh)) ++
+  (encode_int64 (sh_addr sh)) ++
+  (encode_int64 (sh_offset sh)) ++
+  (encode_int64 (sh_size sh)) ++
+  (encode_int32 (sh_link sh)) ++
+  (encode_int32 (sh_info sh)) ++
+  (encode_int64 (sh_addralign sh)) ++
+  (encode_int64 (sh_entsize sh)).
+
+
 Definition encode_section_headers (shs: list section_header) :=
-  fold_right (fun sh r => (encode_section_header sh) ++ r) [] shs.
+  if Archi.ptr64 then
+    fold_right (fun sh r => (encode_section_header64 sh) ++ r) [] shs
+  else
+    fold_right (fun sh r => (encode_section_header32 sh) ++ r) [] shs.
+    
 
 Definition encode_elf_file (ef: elf_file) : res (list byte * program * Globalenvs.Senv.t) :=
   if valid_elf_file_dec ef
-  then 
+  then
+    let header := if Archi.ptr64 then encode_elf_header64 (elf_head ef) else encode_elf_header32 (elf_head ef) in
   let bs :=
-      (encode_elf_header (elf_head ef)) ++
+      header ++
       (encode_sections (elf_sections ef)) ++
       (encode_section_headers (elf_section_headers ef)) in
   let p := {| AST.prog_defs   := RelocElf.prog_defs ef;

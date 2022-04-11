@@ -3,7 +3,7 @@
 (* Date Created  : Sep-22-2019 *)
 
 Require Import Coqlib Integers Maps.
-Require Import AST Asm.
+Require Import AST Asm Archi.
 Require Import Errors.
 Require Import Encode.
 Require Import Memdata.
@@ -18,11 +18,12 @@ Local Open Scope hex_scope.
 
 (** * Definition of the relocatable ELF files *)
 
-Definition elf_header_size := 52.
-Definition prog_header_size := 32.
-Definition sec_header_size  := 40.
-Definition symb_entry_size := 16.
-Definition reloc_entry_size := 8.
+Definition elf_header_size := if ptr64 then 64 else 52.
+Definition prog_header_size := if ptr64 then 56 else 32.
+Definition sec_header_size  := if ptr64 then 64 else 40.
+Definition symb_entry_size := if ptr64 then 24 else 16.
+(** for simplicity , only support SHT_REL*)
+Definition reloc_entry_size := if ptr64 then 16 else 8.
 
 
 (** ** ELF header *)
@@ -91,18 +92,21 @@ Definition encode_elf_file_type typ :=
 
 (** Machine architecture 
     We only support x86-32 for now *)
+(** Update: support x86-64 now*)
 Inductive elf_machine :Type := 
-| EM_386.
+| EM_386
+| EM_x86_64.
 
 Definition elf_machine_value m :=
   match m with
   | EM_386 => 3
+  | EM_x86_64 => 62
   end.
 
 Definition encode_elf_machine m :=
   encode_int 2 (elf_machine_value m).
 
-
+(** 32 and 64 bit have the same file header structure  *)
 Record elf_header : Type :=
 {
     e_class      : elf_file_class;
@@ -110,17 +114,18 @@ Record elf_header : Type :=
     e_version   : elf_version;
     e_type       : elf_file_type;
     e_machine    : elf_machine;
-    e_entry      : Z; (* entry point of the program *)
-    e_phoff      : Z; (* offset to the first program header *)
-    e_shoff      : Z; (* offset to the first section header *)
+    e_entry      : Z; (* entry point of the program, 4 or 8 bytes *)
+    e_phoff      : Z; (* offset to the first program header, 4 or 8 bytes*)
+    e_shoff      : Z; (* offset to the first section header , 4 or 8 bytes*)
     e_flags      : Z; 
-    e_ehsize     : Z; (* size of the elf header, i.e., 52 bytes *)
+    e_ehsize     : Z; (* size of the elf header, i.e., 52 of 64 bytes *)
     e_phentsize  : Z; (* size of a program header *)
     e_phnum      : Z; (* number of program headers *)
     e_shentsize  : Z; (* size of a section header *)
     e_shnum      : Z; (* number of section headers *)
     e_shstrndx   : Z; (* index to the section header for the string table *)
 }.
+
 
 (* indexes to the array e_ident *)
 Definition ei_mag0 := 0.
@@ -175,7 +180,10 @@ Definition section_flag_value flag :=
 Definition encode_section_flags flags :=
   let vl := map section_flag_value flags in
   let v := fold_left (fun acc v => acc + v) vl 0 in
-  encode_int32 v.
+  if ptr64 then
+    encode_int64 v
+  else
+    encode_int32 v.
 
 
 Record section_header :=

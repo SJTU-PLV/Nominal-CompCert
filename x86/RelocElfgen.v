@@ -31,6 +31,8 @@ Local Open Scope bits_scope.
 (* We create a simple ELF file with the following layout
    where every section is aligned at 4 bytes:
 
+32bit mode:
+
    1. ELF Header                                       (52 bytes)
    2. Sections
       -- .data section for each Gvar (global variables)
@@ -92,11 +94,11 @@ Definition get_elf_shoff (p:program) :=
 
   
 Definition gen_elf_header (st: elf_state) : elf_header :=
-  {| e_class        := ELFCLASS32;
+  {| e_class        := if Archi.ptr64 then ELFCLASS64 else  ELFCLASS32;
      e_encoding     := if Archi.big_endian then ELFDATA2MSB else ELFDATA2LSB;
      e_version      := EV_CURRENT;
      e_type         := ET_REL;
-     e_machine      := EM_386;
+     e_machine      := if Archi.ptr64 then EM_x86_64 else EM_386;
      e_entry        := 0;
      e_phoff        := 0;
      e_shoff        := elf_header_size + st.(e_sections_ofs);      

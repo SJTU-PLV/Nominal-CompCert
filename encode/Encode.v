@@ -9,6 +9,9 @@ Definition encode_int_big (n:nat) (i: Z) : list byte :=
 Definition encode_int_little (n:nat) (i: Z) : list byte :=
   bytes_of_int n i.
 
+Definition encode_int64 (i:Z) : list byte :=
+  encode_int 8 i.
+
 Definition encode_int32 (i:Z) : list byte :=
   encode_int 4 i.
 

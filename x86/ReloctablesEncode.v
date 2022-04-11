@@ -27,6 +27,14 @@ Local Open Scope bits_scope.
       Elf32_Addr     r_offset;
       Elf32_Word     r_info;
     }
+
+    typedef struct
+    {       
+      Elf64_Addr	r_offset;		/* Address */
+      Elf64_Xword	r_info;			/* Relocation type and symbol index */
+    } Elf64_Rel;
+    
+
 *)
 
 Definition encode_reloctype (t:reloctype) :=
@@ -44,13 +52,18 @@ Definition encode_reloc_info (t:reloctype) (symb:ident)  : res (list byte) :=
   match idxmap!symb with
   | None => Error [MSG "Relocation target symbol doesn't exist!"; CTX symb]
   | Some idx =>
-    OK (encode_int32 (idx * (Z.pow 2 8) + te))
+    if Archi.ptr64 then
+      OK (encode_int64 (idx * (Z.pow 2 32) + te))
+    else
+      OK (encode_int32 (idx * (Z.pow 2 8) + te))
   end.
 
 Definition encode_relocentry (e:relocentry) : res (list byte) :=
-  let r_offset_bytes := encode_int32 (reloc_offset e) in
-  do r_info_bytes <- encode_reloc_info (reloc_type e) (reloc_symb e);
-  OK (r_offset_bytes ++ r_info_bytes).
+  if Z.eqb (reloc_addend e) 0 then
+    let r_offset_bytes := if Archi.ptr64 then encode_int64 (reloc_offset e)  else  encode_int32 (reloc_offset e) in
+    do r_info_bytes <- encode_reloc_info (reloc_type e) (reloc_symb e);
+    OK (r_offset_bytes ++ r_info_bytes)
+  else Error [MSG "Relocation addend is not zero!";CTX (reloc_symb e)].
 
 Definition acc_reloctable  acc e :=
   do acc' <- acc;

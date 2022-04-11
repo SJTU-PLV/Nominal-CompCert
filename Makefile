@@ -127,6 +127,7 @@ BACKEND=\
   RelocBingen.v \
   SymbtableEncode.v RelocElfgen.v ReloctablesEncode.v\
   TranslateInstr1.v\
+  RemoveAddend.v
 
 # Encoding of data into bytes
 
