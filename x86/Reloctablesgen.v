@@ -26,6 +26,7 @@ Definition addrmode_reloc_offset (a:addrmode) : Z :=
 
 (** Calculate the starting offset of the bytes
     that need to be relocated in an instruction *)
+(** To support 64bit  *)
 Definition instr_reloc_offset (i:instruction) : res Z :=
   match i with
   | Pmov_rs _ _ => OK 2
@@ -65,6 +66,20 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   | Pandpd_fm _ a =>
     let aofs := addrmode_reloc_offset a in
     OK (3 + aofs)
+  (* 64bit *)
+  | Paddq_rm  _ a 
+  | Psubq_rm  _ a 
+  | Pimulq_rm _ a 
+  | Pandq_rm  _ a 
+  | Porq_rm   _ a 
+  | Pxorq_rm  _ a 
+  | Pcmpq_rm  _ a 
+  | Ptestq_rm _ a
+  | Pmovq_mr a _
+  | Pmovq_rm _ a
+  | Pleaq _ a =>
+    let aofs := addrmode_reloc_offset a in
+    OK (2 + aofs)
   | _ => Error [MSG "Calculation of relocation offset failed: Either there is no possible relocation location or the instruction ";
               MSG (instr_to_string i); MSG " is not supported yet by relocation"]
   end.
@@ -125,11 +140,11 @@ Fixpoint ok_builtin_arg {A} (ba: builtin_arg A) : bool :=
 (* why unsupported ? *)
 Definition unsupported i :=
   match i with
-  | Pmovq_rm _ _
-  | Pmovq_mr _ _
+  (* | Pmovq_rm _ _ *)
+  (* | Pmovq_mr _ _ *)
   | Pmovsd_fm_a _ _
   | Pmovsd_mf_a _ _
-  | Pleaq _ _
+  (* | Pleaq _ _ *)
     => true
   | Pbuiltin _ args _ =>
     negb (forallb ok_builtin_arg args)
@@ -255,6 +270,20 @@ Definition transl_instr (sofs:Z) (i: instruction) : res (list relocentry) :=
   (*   Error [MSG "Relocation failed:"; MSG (instr_to_string i); MSG "not supported yet"] *)
   (* | Pmovsd_mf_a a r1 =>  (**r like [Pmovsd_mf], using [Many64] chunk *) *)
   (*   Error [MSG "Relocation failed:"; MSG (instr_to_string i); MSG "not supported yet"] *)
+  (* 64bit mode *)
+  | Paddq_rm  _ (Addrmode rb ss (inr disp))
+  | Psubq_rm  _ (Addrmode rb ss (inr disp))
+  | Pimulq_rm _ (Addrmode rb ss (inr disp))
+  | Pandq_rm  _ (Addrmode rb ss (inr disp))
+  | Porq_rm   _ (Addrmode rb ss (inr disp))
+  | Pxorq_rm  _ (Addrmode rb ss (inr disp))
+  | Ptestq_rm  _ (Addrmode rb ss (inr disp))
+  | Pcmpq_rm  _ (Addrmode rb ss (inr disp))
+  | Pmovq_rm  _ (Addrmode rb ss (inr disp))
+  | Pmovq_mr (Addrmode rb ss (inr disp)) _
+  | Pleaq _ (Addrmode rb ss (inr disp)) =>
+     do e <- compute_instr_disp_relocentry sofs i disp;
+     OK [e]
   | _ =>
     OK []
   end.
@@ -430,7 +459,40 @@ Definition id_eliminate (i:instruction): instruction:=
      (Pmov_rm_a rd (Addrmode rb ss (inr (xH, ptrofs))))
   | Pmov_mr_a (Addrmode rb ss (inr disp)) rs =>   (**r like [Pmov_mr], using [Many64] chunk *)
     let '(id, ptrofs) := disp in
-     (Pmov_mr_a (Addrmode rb ss (inr (xH, ptrofs))) rs)
+    (Pmov_mr_a (Addrmode rb ss (inr (xH, ptrofs))) rs)
+  | Paddq_rm rd (Addrmode rb ss (inr disp))  =>
+    let '(id, ptrofs) := disp in
+    (Paddq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+  | Psubq_rm rd (Addrmode rb ss (inr disp))  =>
+    let '(id, ptrofs) := disp in
+    (Psubq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+  | Pimulq_rm rd (Addrmode rb ss (inr disp))  =>
+    let '(id, ptrofs) := disp in
+    (Pimulq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+  | Pandq_rm rd (Addrmode rb ss (inr disp))  =>
+    let '(id, ptrofs) := disp in
+    (Pandq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+  | Porq_rm rd (Addrmode rb ss (inr disp))  =>
+    let '(id, ptrofs) := disp in
+    (Porq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+  | Pxorq_rm rd (Addrmode rb ss (inr disp))  =>
+    let '(id, ptrofs) := disp in
+    (Pxorq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+  | Pcmpq_rm rd (Addrmode rb ss (inr disp))  =>
+    let '(id, ptrofs) := disp in
+    (Pcmpq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+  | Ptestq_rm rd (Addrmode rb ss (inr disp))  =>
+    let '(id, ptrofs) := disp in
+    (Ptestq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+  | Pmovq_rm rd (Addrmode rb ss (inr disp))  =>
+    let '(id, ptrofs) := disp in
+    (Pleal rd (Addrmode rb ss (inr (xH, ptrofs))))
+  | Pmovq_mr (Addrmode rb ss (inr disp)) rs =>
+    let '(id, ptrofs) := disp in
+    (Pmovq_mr (Addrmode rb ss (inr (xH, ptrofs))) rs)
+  | Pleaq rd (Addrmode rb ss (inr disp))  =>
+    let '(id, ptrofs) := disp in
+     (Pleaq rd (Addrmode rb ss (inr (xH, ptrofs))))
   | _ =>
      i
     end.
