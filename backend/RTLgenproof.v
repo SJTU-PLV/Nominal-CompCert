@@ -1534,9 +1534,11 @@ Proof.
     exploit (add_vars_valid (CminorSel.fn_params f)); eauto. intros [A B].
     eapply add_vars_wf; eauto. eapply add_vars_wf; eauto. apply init_mapping_wf.
   edestruct Mem.alloc_extends as [tm' []]; eauto; try apply Z.le_refl.
+  inversion MEXT. rewrite mext_sup in *.
   econstructor; split.
   left; apply plus_one. eapply exec_function_internal; simpl; eauto.
-  simpl. econstructor; eauto.
+  simpl.
+  econstructor; eauto.
   econstructor; eauto.
   inversion MS; subst; econstructor; eauto.
 

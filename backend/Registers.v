@@ -24,6 +24,9 @@ Require Import Ordered.
 Require FSetAVL.
 Require Import Values.
 
+Require Import Memstructure.
+Import MemPos.
+
 Definition reg: Type := positive.
 
 Module Reg.

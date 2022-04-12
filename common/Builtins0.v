@@ -17,7 +17,7 @@
 (** Associating semantics to built-in functions *)
 
 Require Import String Coqlib.
-Require Import AST Integers Floats Values Memdata.
+Require Import AST Integers Floats Values Memdata Memstructure.
 
 (** This module provides definitions and mechanisms to associate semantics
   with names of built-in functions.
@@ -26,8 +26,9 @@ Require Import AST Integers Floats Values Memdata.
   provides a [Builtins1] module that lists the built-ins semantics
   appropriate for the target.
 *)
-Module Builtins0(Block:BLOCK).
-Include Memval(Block).
+
+Import MemPos.
+
 Definition val_opt_has_rettype (ov: option val) (t: rettype) : Prop :=
   match ov with Some v => Val.has_rettype v t | None => True end.
 
@@ -563,4 +564,4 @@ Qed.
 Next Obligation.
   inv H; simpl; auto. inv H0; auto. destruct Int.ltu; auto.
 Qed.
-End Builtins0.
+

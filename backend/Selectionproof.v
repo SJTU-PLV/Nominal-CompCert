@@ -1387,10 +1387,11 @@ Proof.
   apply plus_one; econstructor; eauto.
   econstructor; eauto.
 - (* internal function *)
-  destruct TF as (hf & HF & TF). 
+  destruct TF as (hf & HF & TF).
   monadInv TF. generalize EQ; intros TF; monadInv TF.
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros [m2' [A B]].
+  inversion ME0. rewrite mext_sup in *.
   left; econstructor; split.
   apply plus_one; econstructor; simpl; eauto.
   econstructor; simpl; eauto.

@@ -24,6 +24,7 @@ Require Import Integers.
 Require Import Floats.
 Require Import Values.
 Require Import Memory.
+Require Import Memstructure.
 Require Import Globalenvs.
 Require Import Builtins.
 
@@ -258,14 +259,14 @@ Proof.
 Qed.
 
 (** * Relating values and event values *)
-
+Include MemPos.
 Set Implicit Arguments.
 
 Section EVENTVAL.
 
 (** Symbol environment used to translate between global variable names and their block identifiers. *)
 Variable ge: Senv.t.
-Import Mem1.
+
 (** Translation between values and event values. *)
 
 Inductive eventval_match: eventval -> typ -> val -> Prop :=
@@ -444,7 +445,6 @@ End EVENTVAL_INV.
 (** Compatibility with memory injections *)
 
 Section EVENTVAL_INJECT.
-Import Mem1.
 Variable f: block -> option (block * Z).
 Variable ge1 ge2: Senv.t.
 
@@ -554,7 +554,7 @@ Fixpoint output_trace (t: trace) : Prop :=
   end.
 
 (** * Semantics of volatile memory accesses *)
-Import Mem1.
+
 Inductive volatile_load (ge: Senv.t):
                    memory_chunk -> mem -> block -> ptrofs -> trace -> val -> Prop :=
   | volatile_load_vol: forall chunk m b ofs id ev v,
@@ -610,12 +610,12 @@ Definition loc_unmapped (f: meminj) (b: block) (ofs: Z): Prop :=
 
 Definition loc_out_of_reach (f: meminj) (m: mem) (b: block) (ofs: Z): Prop :=
   forall b0 delta,
-  f b0 = Some(b, delta) -> ~Mem1.perm m b0 (ofs - delta) Max Nonempty.
+  f b0 = Some(b, delta) -> ~perm m b0 (ofs - delta) Max Nonempty.
 
 Definition inject_separated (f f': meminj) (m1 m2: mem): Prop :=
   forall b1 b2 delta,
   f b1 = None -> f' b1 = Some(b2, delta) ->
-  ~Mem1.valid_block m1 b1 /\ ~Mem1.valid_block m2 b2.
+  ~valid_block m1 b1 /\ ~valid_block m2 b2.
 
 Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
   mk_extcall_properties {
@@ -978,7 +978,7 @@ Qed.
 Inductive extcall_malloc_sem (ge: Senv.t):
               list val -> mem -> trace -> val -> mem -> Prop :=
   | extcall_malloc_sem_intro: forall sz m m' b m'',
-      b = fresh_ident (support m) ->
+      b = fresh_block (support m) ->
       alloc m (- size_chunk Mptr) (Ptrofs.unsigned sz) b = Some m' ->
       store Mptr m' b (- size_chunk Mptr) (Vptrofs sz) = Some m'' ->
       extcall_malloc_sem ge (Vptrofs sz :: nil) m E0 (Vptr b Ptrofs.zero) m''.
@@ -1023,7 +1023,7 @@ Proof.
   exploit store_within_extends. eexact B. eauto. eauto.
   intros [m2' [C D]].
   inversion H0. rewrite mext_sup0 in *.
-  exists (Vptr (fresh_ident (support m1')) Ptrofs.zero); exists m2'; intuition.
+  exists (Vptr (fresh_block (support m1')) Ptrofs.zero); exists m2'; intuition.
   econstructor; eauto.
   eapply UNCHANGED; eauto.
 (* mem injects *)
@@ -1032,17 +1032,17 @@ Proof.
   { unfold Vptrofs in *. destruct Archi.ptr64; inv H6; auto. }
   subst v'.
   exploit alloc_parallel_inject; eauto. apply Z.le_refl. apply Z.le_refl.
-  instantiate (1:= fresh_ident (support m1') ). apply freshness.
+  instantiate (1:= fresh_block (support m1') ). apply freshness.
   intros [f' [m3' [ALLOC [A [B [C D]]]]]].
   exploit store_mapped_inject. eexact A. eauto. eauto.
   instantiate (1 := Vptrofs sz). unfold Vptrofs; destruct Archi.ptr64; constructor.
   rewrite Z.add_0_r. intros [m2' [E G]].
-  exists f'; exists (Vptr (fresh_ident (support m1')) Ptrofs.zero); exists m2'; intuition auto.
+  exists f'; exists (Vptr (fresh_block (support m1')) Ptrofs.zero); exists m2'; intuition auto.
   econstructor; eauto.
   econstructor. eauto. auto.
   eapply UNCHANGED; eauto.
   eapply UNCHANGED; eauto.
-  red; intros. destruct (eq_block b1 (fresh_ident (support m1))).
+  red; intros. destruct (eq_block b1 (fresh_block (support m1))).
   subst b1. rewrite C in H2. inv H2. eauto with mem.
   rewrite D in H2 by auto. congruence.
 (* trace length *)
@@ -1421,8 +1421,7 @@ Qed.
 (** Some built-in functions and runtime support functions have known semantics
   as defined in the [Builtin] modules.
   These built-in functions have no observable effects and do not access memory. *)
-Module Builtins := Builtins(Block).
-Import Builtins.
+
 Inductive known_builtin_sem (bf: builtin_function) (ge: Senv.t):
               list val -> mem -> trace -> val -> mem -> Prop :=
   | known_builtin_sem_intro: forall vargs vres m,

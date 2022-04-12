@@ -333,7 +333,7 @@ Qed.
 
 Lemma alloc_rule:
   forall m lo hi b m' P,
-  Mem.alloc m lo hi = (m', b) ->
+  Mem.alloc m lo hi b = Some m' ->
   0 <= lo -> hi <= Ptrofs.modulus ->
   m |= P ->
   m' |= range b lo hi ** P.
@@ -677,8 +677,8 @@ Qed.
 Lemma alloc_parallel_rule:
   forall m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
   m2 |= minjection j m1 ** P ->
-  Mem.alloc m1 0 sz1 = (m1', b1) ->
-  Mem.alloc m2 0 sz2 = (m2', b2) ->
+  Mem.alloc m1 0 sz1 b1 = Some m1' ->
+  Mem.alloc m2 0 sz2 b2 = Some m2' ->
   (8 | delta) ->
   lo = delta ->
   hi = delta + Z.max 0 sz1 ->
@@ -799,11 +799,11 @@ Qed.
 
 Inductive globalenv_preserved {F V: Type} (ge: Genv.t F V) (j: meminj) (support: sup) : Prop :=
   | globalenv_preserved_intro
-      (DOMAIN: forall b, sup_In b support -> j b = Some(b, 0))
-      (IMAGE: forall b1 b2 delta, j b1 = Some(b2, delta) -> sup_In b2 support -> b1 = b2)
-      (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> sup_In b support)
-      (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> sup_In b support)
-      (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> sup_In b support).
+      (DOMAIN: forall b, In b support -> j b = Some(b, 0))
+      (IMAGE: forall b1 b2 delta, j b1 = Some(b2, delta) -> In b2 support -> b1 = b2)
+      (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> In b support)
+      (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> In b support)
+      (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> In b support).
 
 Program Definition globalenv_inject {F V: Type} (ge: Genv.t F V) (j: meminj) : massert := {|
   m_pred := fun m => exists support, Mem.sup_include support (Mem.support m) /\ globalenv_preserved ge j support;
@@ -887,8 +887,8 @@ Qed.
 Lemma alloc_parallel_rule_2:
   forall (F V: Type) (ge: Genv.t F V) m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
   m2 |= minjection j m1 ** globalenv_inject ge j ** P ->
-  Mem.alloc m1 0 sz1 = (m1', b1) ->
-  Mem.alloc m2 0 sz2 = (m2', b2) ->
+  Mem.alloc m1 0 sz1 b1 = Some m1' ->
+  Mem.alloc m2 0 sz2 b2 = Some m2' ->
   (8 | delta) ->
   lo = delta ->
   hi = delta + Z.max 0 sz1 ->

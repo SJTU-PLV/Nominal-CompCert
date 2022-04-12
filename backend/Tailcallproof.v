@@ -536,6 +536,7 @@ Proof.
           fn_params (transf_function f) = fn_params f).
     unfold transf_function. destruct (zeq (fn_stacksize f) 0); auto.
   destruct H0 as [EQ1 [EQ2 EQ3]].
+  inversion H7. rewrite mext_sup in *.
   left. econstructor; split.
   simpl. eapply exec_function_internal; eauto. rewrite EQ1; eauto.
   rewrite EQ2. rewrite EQ3. constructor; auto.

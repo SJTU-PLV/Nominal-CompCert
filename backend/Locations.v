@@ -20,7 +20,8 @@ Require Import Ordered.
 Require Import AST.
 Require Import Values.
 Require Export Machregs.
-
+Require Import Memstructure.
+Import MemPos.
 (** * Representation of locations *)
 
 (** A location is either a processor register or (an abstract designation of)

@@ -37,7 +37,7 @@
 Require Import Recdef.
 Require Import Zwf.
 Require Import Axioms Coqlib Errors Maps AST Linking.
-Require Import Integers Floats Values Memory.
+Require Import Integers Floats Values Memory Memstructure.
 
 Notation "s #1" := (fst s) (at level 9, format "s '#1'") : pair_scope.
 Notation "s #2" := (snd s) (at level 9, format "s '#2'") : pair_scope.
@@ -46,11 +46,9 @@ Local Open Scope pair_scope.
 Local Open Scope error_monad_scope.
 
 Set Implicit Arguments.
-(*Notation mem := Mem1.mem.
-Notation block := Mem1.block.
-Notation val := Mem1.val.
-*)
-Import Mem1.
+
+Module Mem := MemPos.
+Import Mem.
 
 (** Auxiliary function for initialization of global variables. *)
 
@@ -115,20 +113,20 @@ Qed.
 Theorem shift_symbol_address_32:
   forall ge id ofs n,
   Archi.ptr64 = false ->
-  symbol_address ge id (Ptrofs.add ofs (Ptrofs.of_int n)) = Val.add (symbol_address ge id ofs) (Mem1.Vint n).
+  symbol_address ge id (Ptrofs.add ofs (Ptrofs.of_int n)) = Val.add (symbol_address ge id ofs) (Vint n).
 Proof.
   intros. unfold symbol_address. destruct (find_symbol ge id).
-- unfold Mem1.Val.add. rewrite H. auto.
+- unfold Val.add. rewrite H. auto.
 - auto.
 Qed.
 
 Theorem shift_symbol_address_64:
   forall ge id ofs n,
   Archi.ptr64 = true ->
-  symbol_address ge id (Ptrofs.add ofs (Ptrofs.of_int64 n)) = Mem1.Val.addl (symbol_address ge id ofs) (Mem1.Vlong n).
+  symbol_address ge id (Ptrofs.add ofs (Ptrofs.of_int64 n)) = Val.addl (symbol_address ge id ofs) (Vlong n).
 Proof.
   intros. unfold symbol_address. destruct (find_symbol ge id).
-- unfold Mem1.Val.addl. rewrite H. auto.
+- unfold Val.addl. rewrite H. auto.
 - auto.
 Qed.
 
@@ -177,8 +175,8 @@ Definition find_symbol (ge: t) (id: ident) : option block :=
 
 Definition symbol_address (ge: t) (id: ident) (ofs: ptrofs) : val :=
   match find_symbol ge id with
-  | Some b => Mem1.Vptr b ofs
-  | None => Mem1.Vundef
+  | Some b => Vptr b ofs
+  | None => Vundef
   end.
 
 (** [public_symbol ge id] says whether the name [id] is public and defined. *)
@@ -205,7 +203,7 @@ Definition find_funct_ptr (ge: t) (b: block) : option F :=
 
 Definition find_funct (ge: t) (v: val) : option F :=
   match v with
-  | Mem1.Vptr b ofs => if Ptrofs.eq_dec ofs Ptrofs.zero then find_funct_ptr ge b else None
+  | Vptr b ofs => if Ptrofs.eq_dec ofs Ptrofs.zero then find_funct_ptr ge b else None
   | _ => None
   end.
 
@@ -213,7 +211,7 @@ Definition find_funct (ge: t) (v: val) : option F :=
 
 Definition invert_symbol (ge: t) (b: block) : option ident :=
   PTree.fold
-    (fun res id b' => if Mem1.eq_block b b' then Some id else res)
+    (fun res id b' => if eq_block b b' then Some id else res)
     ge.(genv_symb) None.
 
 (** [find_var_info ge b] returns the information attached to the variable
@@ -232,8 +230,6 @@ Definition block_is_volatile (ge: t) (b: block) : bool :=
   end.
 
 (** ** Constructing the global environment *)
-
-Definition fresh_block := fresh_ident.
 
 Program Definition add_global (ge: t) (idg: ident * globdef F V): t :=
   @mkgenv
@@ -363,28 +359,28 @@ Qed.
 
 Theorem shift_symbol_address:
   forall ge id ofs delta,
-  symbol_address ge id (Ptrofs.add ofs delta) = Mem1.Val.offset_ptr (symbol_address ge id ofs) delta.
+  symbol_address ge id (Ptrofs.add ofs delta) = Val.offset_ptr (symbol_address ge id ofs) delta.
 Proof.
-  intros. unfold symbol_address, Mem1.Val.offset_ptr. destruct (find_symbol ge id); auto.
+  intros. unfold symbol_address, Val.offset_ptr. destruct (find_symbol ge id); auto.
 Qed.
 
 Theorem shift_symbol_address_32:
   forall ge id ofs n,
   Archi.ptr64 = false ->
-  symbol_address ge id (Ptrofs.add ofs (Ptrofs.of_int n)) = Mem1.Val.add (symbol_address ge id ofs) (Mem1.Vint n).
+  symbol_address ge id (Ptrofs.add ofs (Ptrofs.of_int n)) = Val.add (symbol_address ge id ofs) (Vint n).
 Proof.
   intros. unfold symbol_address. destruct (find_symbol ge id).
-- unfold Mem1.Val.add. rewrite H. auto.
+- unfold Val.add. rewrite H. auto.
 - auto.
 Qed.
 
 Theorem shift_symbol_address_64:
   forall ge id ofs n,
   Archi.ptr64 = true ->
-  symbol_address ge id (Ptrofs.add ofs (Ptrofs.of_int64 n)) = Mem1.Val.addl (symbol_address ge id ofs) (Mem1.Vlong n).
+  symbol_address ge id (Ptrofs.add ofs (Ptrofs.of_int64 n)) = Val.addl (symbol_address ge id ofs) (Vlong n).
 Proof.
   intros. unfold symbol_address. destruct (find_symbol ge id).
-- unfold Mem1.Val.addl. rewrite H. auto.
+- unfold Val.addl. rewrite H. auto.
 - auto.
 Qed.
 
@@ -415,13 +411,6 @@ Theorem find_var_info_iff:
   forall ge b v, find_var_info ge b = Some v <-> find_def ge b = Some (Gvar v).
 Proof.
   intros. unfold find_var_info. destruct (find_def ge b) as [[f1|v1]|]; intuition congruence.
-Qed.
-
-Lemma fresh_ne : forall (b:block)(s:sup), In b s -> b <> fresh_block s.
-Proof.
-  intros. destruct (eq_block b (fresh_block s)).
-  - rewrite e in H. apply freshness in H. destruct H.
-  - auto.
 Qed.
 
 Theorem find_def_symbol:
@@ -633,16 +622,16 @@ Variable ge: t.
 
 Definition store_init_data (m: mem) (b: block) (p: Z) (id: init_data) : option mem :=
   match id with
-  | Init_int8 n => Mem1.store Mint8unsigned m b p (Vint n)
-  | Init_int16 n => Mem1.store Mint16unsigned m b p (Vint n)
-  | Init_int32 n => Mem1.store Mint32 m b p (Vint n)
-  | Init_int64 n => Mem1.store Mint64 m b p (Vlong n)
-  | Init_float32 n => Mem1.store Mfloat32 m b p (Vsingle n)
-  | Init_float64 n => Mem1.store Mfloat64 m b p (Vfloat n)
+  | Init_int8 n => store Mint8unsigned m b p (Vint n)
+  | Init_int16 n => store Mint16unsigned m b p (Vint n)
+  | Init_int32 n => store Mint32 m b p (Vint n)
+  | Init_int64 n => store Mint64 m b p (Vlong n)
+  | Init_float32 n => store Mfloat32 m b p (Vsingle n)
+  | Init_float64 n => store Mfloat64 m b p (Vfloat n)
   | Init_addrof symb ofs =>
       match find_symbol ge symb with
       | None => None
-      | Some b' => Mem1.store Mptr m b p (Vptr b' ofs)
+      | Some b' => store Mptr m b p (Vptr b' ofs)
       end
   | Init_space n => Some m
   end.

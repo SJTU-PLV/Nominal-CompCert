@@ -17,7 +17,7 @@ Require Import AST Integers Floats.
 Require Import Values Memory Builtins Globalenvs.
 Require Import Cminor Op CminorSel.
 Require Import SelectOp.
-
+Import Mem.
 Local Open Scope cminorsel_scope.
 
 (** * Useful lemmas and tactics *)
