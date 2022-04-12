@@ -19,24 +19,9 @@ Set Implicit Arguments.
 
 Local Open Scope error_monad_scope.
 
-(* Definition jumptable : Type := (ident * option gdef) * list symbentry. *)
-
-(* Definition labelofstoSymbol (ofsLst: Z) : symbentry := *)
-(*   let id := create_label_ident tt in *)
-(*   {|symbentry_id := id; *)
-(*     symbentry_bind := bind_local; *)
-(*     symbentry_type := symb_notype; *)
-(*     symbentry_value := ofsLst; *)
-(*     symbentry_secindex := secindex_normal sec_code_id; *)
-(*     symbentry_size := 0; *)
-(*   |}. *)
-
 Definition labelofstoInitdata (fid: ident) (ofs: Z) : init_data :=
   Init_addrof fid (Ptrofs.repr ofs).
 
-
-(* Section WITH_SECS_SIZE. *)
-(*   Variables (rodata: list init_data). *)
 
 Section INSTRSIZE.
   Variable instr_size : instruction -> Z.
@@ -53,19 +38,13 @@ Definition transl_instr (i: instruction) (ofs:Z) :
   | Pjmptbl_rel r ofsLst =>
     let id := create_jump_table_ident tt in
     let addrLst := map (Zplus ((sz + ofs))) ofsLst in
+    (* absolute address *)
     let initdataLst := map (labelofstoInitdata fid) addrLst in
     let def := mkglobvar tt initdataLst true false in
     let disp := (id, Ptrofs.repr(0)) in
-    let lblMem := (Addrmode None (Some(r,4)) (inr disp)) in
+    let lblMem := if Archi.ptr64 then  (Addrmode None (Some(r,8)) (inr disp)) else (Addrmode None (Some(r,4)) (inr disp)) in
     let i' := Pjmp_m lblMem in
-    (i', Some (id, Gvar def))    
-    (* let symbLst := map labelofstoSymbol addrLst in *)
-    (* let idLst := map (fun e => symbentry_id e) symbLst in *)
-    (* let dataLst := map (fun id => Init_addrof id Ptrofs.zero) idLst in *)
-    (* let disp := (id, Ptrofs.repr(0)) in *)
-    (* let lblMem := (Addrmode None (Some(r,4)) (inr disp)) in *)
-    (* let i' := Pjmp_m lblMem in *)
-    (* OK (i', Some (id, dataLst, symbLst)) *)
+    (i', Some (id, Gvar def))
   | _ => (i, None)
   end.
 

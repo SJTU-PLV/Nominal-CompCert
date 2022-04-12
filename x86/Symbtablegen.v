@@ -358,7 +358,7 @@ Qed.
 
 
 (** The full translation *)
-Definition transf_program (instr_size: instruction -> Z) (p:Asm.program) : res program :=
+Definition transf_program (p:Asm.program) : res program :=
   if check_wellformedness p then
     let symb_tbl := gen_symb_table (AST.prog_defs p) in
     let sec_tbl := create_sec_table (AST.prog_defs p) in

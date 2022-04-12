@@ -211,9 +211,9 @@ Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
   @@@ time "Elimination of other pseudo instructions" AsmPseudoInstr.transf_program
   @@@ time "Make local jumps use offsets instead of labels" Asmlabelgen.transf_program instr_size
   @@ time "Generation of the jump table" Jumptablegen.transf_program instr_size
-  @@@ time "Generation of symbol table" Symbtablegen.transf_program
+  @@@ time "Generation of symbol table" Symbtablegen.transf_program instr_size
   @@@ time "Generation of relocation table" Reloctablesgen.transf_program instr_size
-  @@@ time "Encoding of instructions and data" RelocBingen.transf_program
+  @@@ time "Encoding of instructions and data" RelocBingen.transf_program instr_size
   @@ time "Removing addendums" RemoveAddend.transf_program
   @@@ time "Generation of the reloctable Elf" RelocElfgen.gen_reloc_elf instr_size
   @@@ time "Encoding of the reloctable Elf" EncodeRelocElf.encode_elf_file.
