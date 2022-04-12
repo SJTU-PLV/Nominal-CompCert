@@ -13,54 +13,54 @@ Import ListNotations.
 
 Local Open Scope error_monad_scope.
 
-Parameter create_long_int_ident : unit -> ident.
+(** Some 64 bit instructions with imm64 are pseudo, generate global variable for the imm64 *)
 
 Definition transf_instr (i:instruction) :  instruction* option (ident * (globdef fundef unit)) :=
   match i with
   | Paddq_ri r imm64 =>
-    let id := create_long_int_ident tt in
+    let id := create_int64_literal_ident tt in
     let var := mkglobvar tt [Init_int64 imm64] true false in
     let def := Gvar var in
     let a := Addrmode None None (inr (id, Ptrofs.zero)) in
     (Paddq_rm r a, Some (id, def))
   | Psubq_ri r imm64 =>
-    let id := create_long_int_ident tt in
+    let id := create_int64_literal_ident tt in
     let var := mkglobvar tt [Init_int64 imm64] true false in
     let def := Gvar var in
     let a := Addrmode None None (inr (id, Ptrofs.zero)) in
     (Psubq_rm r a, Some (id, def))
   | Pimulq_ri r imm64 =>
-    let id := create_long_int_ident tt in
+    let id := create_int64_literal_ident tt in
     let var := mkglobvar tt [Init_int64 imm64] true false in
     let def := Gvar var in
     let a := Addrmode None None (inr (id, Ptrofs.zero)) in
     (Pimulq_rm r a, Some (id, def))
   | Pandq_ri r imm64 =>
-    let id := create_long_int_ident tt in
+    let id := create_int64_literal_ident tt in
     let var := mkglobvar tt [Init_int64 imm64] true false in
     let def := Gvar var in
     let a := Addrmode None None (inr (id, Ptrofs.zero)) in
     (Pandq_rm r a, Some (id, def))
   | Porq_ri r imm64 =>
-    let id := create_long_int_ident tt in
+    let id := create_int64_literal_ident tt in
     let var := mkglobvar tt [Init_int64 imm64] true false in
     let def := Gvar var in
     let a := Addrmode None None (inr (id, Ptrofs.zero)) in
     (Porq_rm r a, Some (id, def))
   | Pxorq_ri r imm64 =>
-    let id := create_long_int_ident tt in
+    let id := create_int64_literal_ident tt in
     let var := mkglobvar tt [Init_int64 imm64] true false in
     let def := Gvar var in
     let a := Addrmode None None (inr (id, Ptrofs.zero)) in
     (Pxorq_rm r a, Some (id, def))
   | Pcmpq_ri r imm64 =>
-    let id := create_long_int_ident tt in
+    let id := create_int64_literal_ident tt in
     let var := mkglobvar tt [Init_int64 imm64] true false in
     let def := Gvar var in
     let a := Addrmode None None (inr (id, Ptrofs.zero)) in
     (Pcmpq_rm r a, Some (id, def))
   | Ptestq_ri r imm64 =>
-    let id := create_long_int_ident tt in
+    let id := create_int64_literal_ident tt in
     let var := mkglobvar tt [Init_int64 imm64] true false in
     let def := Gvar var in
     let a := Addrmode None None (inr (id, Ptrofs.zero)) in

@@ -303,7 +303,7 @@ Inductive instruction: Type :=
   | Pjcc_rel (c: testcond)(ofs: Z)
   | Pjcc2_rel (c1 c2: testcond)(ofs: Z)   (**r pseudo *)
   | Pjmptbl_rel (r: ireg) (tbl: list Z) (**r pseudo *)
-(** x64: generate global denfinition for int64 *)
+(** 64 mode: generated from Pxxxq_ri where immediate is 64bit, which is pseduo instruction *)
   | Paddq_rm (r: ireg) (a: addrmode)
   | Psubq_rm (r: ireg) (a: addrmode)
   | Pimulq_rm (r: ireg) (a: addrmode)
@@ -318,282 +318,6 @@ Definition code := list instruction.
 Record function : Type := mkfunction { fn_sig: signature; fn_code: code; fn_stacksize:Z; fn_ofs_link : ptrofs}.
 Definition fundef := AST.fundef function.
 Definition program := AST.program fundef unit.
-
-(*SACC:* Instruction sizes *)
-(*copy from ccelf-no-perm*)
-Section SACC_INSTR_SIZE.
-
-Definition addrmode_size_aux (a:addrmode) : Z :=
-  let '(Addrmode base ofs const) := a in
-  match ofs, base with
-  | None, None => 1
-  | None, Some rb =>
-    if ireg_eq rb RSP then 2 else 1
-  | Some _, _ => 2
-  end.
-
-Definition addrmode_size (a:addrmode) : Z :=
-  addrmode_size_aux a + 4.
-
-(* [addrmode_size] properties *)
-
-Lemma addrmode_size_aux_pos: forall a, addrmode_size_aux a > 0.
-Proof.
-  intros. unfold addrmode_size_aux. destruct a.
-  destruct ofs. lia. destruct base. 
-  destr; lia. lia.
-Qed.
-
-Lemma addrmode_size_aux_upper_bound: forall a, addrmode_size_aux a <= 2.
-Proof.
-  intros. destruct a. simpl. 
-  destruct ofs; try lia.
-  destruct base; try lia.
-  destr; lia.
-Qed.
-
-Definition amod_size_ub := 6.
-
-Lemma addrmode_size_pos: forall a, addrmode_size a > 0.
-Proof.
-  intros. unfold addrmode_size. 
-  generalize (addrmode_size_aux_pos a). lia.
-Qed.
-
-Lemma addrmode_size_upper_bound: forall a, addrmode_size a <= amod_size_ub.
-Proof.
-  intros. unfold addrmode_size. 
-  generalize (addrmode_size_aux_upper_bound a). unfold amod_size_ub. lia.
-Qed.
-
-Global Opaque addrmode_size.
-
-Let instr_size' (i: instruction) : Z :=
-  match i with
-  | Pjmp_l _ => 5
-  (* Pseduo Instruction: Pjmptbl will be transf as Pjmp_m (size: 7)*)
-  | Pjmptbl r tbl => 7
-  | Pjmptbl_rel r tbl => 7  
-  | Pjmp_m a => 1 + addrmode_size a
-  | Pjcc _ _ => 6
-  | Pjmp_l_rel _ => 5
-  | Pjcc_rel _ _ => 6
-  | Pcall_s _ _ => 5
-  | Pcall_r _ _ => 2
-  | Pjmp_s _ _ => 5
-  | Pleal _ a => 1 + addrmode_size a
-  | Pxorl_r _ => 2
-  | Paddl_ri _ _ => 6
-  | Psubl_ri _ _ => 6
-  | Psubl_rr _ _ => 2
-  | Pmovl_ri _ _ => 5
-  | Pmov_rr _ _ => 2
-  | Pmovl_rm _ a => 1 + addrmode_size a
-  | Pmovl_mr a _ => 1 + addrmode_size a
-  | Pmov_rm_a _ a => 1 + addrmode_size a
-  | Pmov_mr_a a _ => 1 + addrmode_size a
-  | Ptestl_rr _ _ => 2
-  | Pret => 1
-  | Pret_iw _ => 3
-  | Pimull_rr _ _ => 3
-  | Pcmpl_rr _ _ => 2
-  | Pcmpl_ri _ _ => 6
-  | Pcltd => 1
-  | Pidivl _ => 2
-  | Psall_ri _ _ => 3
-  | Plabel _ => 1
-  | Pmov_rs _ _ => 6
-  | Pnop => 1
-  | Pmovsd_ff frd fr1 => 4
-  | Pmovsd_fm_a frd a => 3 + addrmode_size a
-  | Pmovsd_fm frd a => 3 + addrmode_size a
-  | Pmovsd_mf_a a fr1 => 3 + addrmode_size a
-  | Pmovsd_mf a fr1 => 3 + addrmode_size a
-  | Pmovss_fm frd a => 3 + addrmode_size a
-  | Pmovss_mf a fr1 => 3 + addrmode_size a
-  | Pfldl_m a 
-  | Pfstpl_m a 
-  | Pflds_m a 
-  | Pfstps_m a => 1 + addrmode_size a
-  (* | Pxchg_rr r1 r2 => 2 *)
-  | Pmovb_mr a rs => 1 + addrmode_size a
-  | Pmovb_rm rd a => 1 + addrmode_size a
-  | Pmovw_mr a rs => 2 + addrmode_size a
-  | Pmovw_rm rd a => 2 + addrmode_size a
-  | Pmovzb_rr rd rs => 3
-  | Pmovzb_rm rd a => 2 + addrmode_size a
-  | Pmovzw_rr rd rs => 3
-  | Pmovzw_rm rd a => 2 + addrmode_size a
-  | Pmovsb_rr rd rs => 3
-  | Pmovsb_rm rd a => 2 + addrmode_size a
-  | Pmovsw_rr rd rs => 3
-  | Pmovsw_rm rd a => 2 + addrmode_size a
-  | Pmovsq_rm frd a => 3 + addrmode_size a
-  | Pmovsq_mr a frs => 3 + addrmode_size a
-  | Pcvtsd2ss_ff _ _ 
-  | Pcvtss2sd_ff _ _ 
-  | Pcvttsd2si_rf _ _ 
-  | Pcvtsi2sd_fr _ _
-  | Pcvttss2si_rf _ _ 
-  | Pcvtsi2ss_fr _ _ => 4
-  | Pnegl rd => 2
-  | Pimull_r r1 => 2
-  | Pmull_r r1 => 2
-  | Pdivl r1 => 2
-  | Pandl_rr rd r1  => 2
-  | Pandl_ri rd n => 6
-  | Porl_rr rd r1 => 2
-  | Porl_ri rd n => 6
-  | Pxorl_rr rd r1 => 2
-  | Pxorl_ri rd n => 6
-  | Pnotl rd => 2
-  | Psall_rcl rd => 2
-  | Pshrl_rcl rd => 2
-  | Pshrl_ri rd n => 3
-  | Psarl_rcl rd => 2
-  | Psarl_ri rd n => 3
-  | Pshld_ri rd r1 n => 4
-  | Prorl_ri rd n => 3
-  | Prolw_ri rd n => 4
-  | Ptestl_ri r1 n => 6
-  | Pcmov c rd r1 => 3
-  | Psetcc c rd => 3
-  | Paddd_ff frd fr1 => 4
-  | Padds_ff frd fr1 => 4
-  | Psubd_ff frd fr1 => 4
-  | Psubs_ff frd fr1 => 4
-  | Pmuld_ff frd fr1 => 4
-  | Pmuls_ff frd fr1 => 4
-  | Pdivd_ff frd fr1 => 4
-  | Pdivs_ff frd fr1 => 4
-  | Pcomisd_ff fr1 fr2 => 4
-  | Pcomiss_ff fr1 fr2 => 3
-  | Pxorpd_f frd => 4
-  | Pxorpd_fm frd a => 3 + addrmode_size a
-  | Pandpd_fm frd a => 3 + addrmode_size a
-  | Pxorps_f frd => 3
-  | Pxorps_fm frd a => 2 + addrmode_size a
-  | Pandps_fm frd a => 2 + addrmode_size a
-  | Pimull_ri rd n => 6
-  | Paddl_rr _ _ => 2
-  | Padcl_rr _ _ => 2
-  | Padcl_ri _ _ => 3
-  | Psbbl_rr _ _ => 2
-  | Prep_movsl => 2
-  | Pbswap32 _ => 2
-  | Pbsfl _ _ => 3
-  | Pbsrl _ _ => 3
-  | Psqrtsd _ _ => 4
-  | Pmaxsd _ _ => 4
-  | Pminsd _ _ => 4
-  (* some x64 instr, comment for proof pass *)
-  (* | Paddq_rm  _ a => 2 + addrmode_size a *)
-  (* | Psubq_rm  _ a => 2 + addrmode_size a *)
-  (* | Pimulq_rm _ a => 2 + addrmode_size a *)
-  (* | Pandq_rm  _ a => 2 + addrmode_size a *)
-  (* | Porq_rm   _ a => 2 + addrmode_size a *)
-  (* | Pxorq_rm  _ a => 2 + addrmode_size a *)
-  (* | Pcmpq_rm  _ a => 2 + addrmode_size a *)
-  (* | Ptestq_rm _ a => 2 + addrmode_size a *)
-  | _ => 1
-  end.
-
-Definition linear_addr reg ofs :=
-  Addrmode (Some reg) None (inl ofs).
-
-Definition Plea := if Archi.ptr64 then Pleaq else Pleal.
-Definition Padd dst src z := Plea dst (linear_addr src z).
-Definition Psub dst src z := Padd dst src (- z).
-
-(* FIXME: 64 bit not supported, Pmovq_mr size undefined *)
-Definition Pstoreptr := if Archi.ptr64 then Pmovq_mr else Pmovl_mr.
-
-Definition instr_size (i: instruction) : Z :=
-  match i with
-  | Pallocframe sz _ ofs_link =>
-    instr_size' (Padd RAX RSP (size_chunk Mptr)) +
-    instr_size' (Psub RSP RSP (align sz 8 - size_chunk Mptr)) +
-    instr_size' (Pmovl_mr (linear_addr RSP (Ptrofs.unsigned ofs_link)) RAX)
-  | Pfreeframe sz _ _ =>
-    instr_size' (Padd RSP RSP (align sz 8 - size_chunk Mptr))
-  (* | Pload_parent_pointer rd z => *)
-  (*   instr_size' (Padd rd RSP (align (Z.max 0 z) 8)) *)
-  | _ => instr_size' i
-  end.
-
-
-Lemma instr_size'_positive : forall i, 0 < instr_size' i.
-Proof.
-  intros. unfold instr_size'.
-  destruct i; try lia;
-    try (generalize (addrmode_size_pos a); lia);
-    try (destr; lia).
-  generalize (addrmode_size_pos ad). lia.
-Qed.
-
-Lemma instr_size_positive : forall i, 0 < instr_size i.
-Proof.
-  intros. unfold instr_size.
-  generalize (instr_size'_positive i).
-  destruct i; auto.
-Qed.
-
-Lemma z_le_ptrofs_max: forall n,
-    n < two_power_nat (if Archi.ptr64 then 64 else 32) ->
-    n <= Ptrofs.max_unsigned.
-Proof.
-  intros. unfold Ptrofs.max_unsigned. unfold Ptrofs.modulus.
-  unfold Ptrofs.wordsize. unfold Wordsize_Ptrofs.wordsize.
-  lia.
-Qed.
-
-Local Transparent Archi.ptr64.
-
-Lemma z_le_ptrofs_max32: forall n, 
-    n < two_power_nat 32 -> 
-    n <= Ptrofs.max_unsigned.
-Proof.
-  intros. apply z_le_ptrofs_max. unfold Archi.ptr64. assumption.
-Qed.
-
-Ltac solve_n_le_ptrofs_max :=
-  match goal with
-  | [ |- ?a <= Ptrofs.max_unsigned ] =>
-    apply z_le_ptrofs_max32; reflexivity
-  end.
-
-Ltac solve_amod_le_ptrofs_max :=
-  match goal with
-  | [ |- ?n + addrmode_size ?a <= Ptrofs.max_unsigned ] =>
-    apply Z.le_trans with (n + amod_size_ub);
-    [ generalize (addrmode_size_upper_bound a); lia | solve_n_le_ptrofs_max ]
-  end.
-
-Lemma instr_size'_repr: forall i, 0 < instr_size' i <= Ptrofs.max_unsigned.
-Proof.
-  intros. unfold instr_size'. 
-  destruct i; split; try lia; 
-  try solve_n_le_ptrofs_max;
-  try (generalize (addrmode_size_pos a); lia);
-  try solve_amod_le_ptrofs_max.
-  generalize (addrmode_size_pos ad). lia.
-  (* destr; omega. *)
-  (* destr; try solve_n_le_ptrofs_max. *)
-  (* destr; omega. *)
-  (* destr; try solve_n_le_ptrofs_max. *)
-Qed.
-
-Lemma instr_size_repr: forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
-Proof.
-  intros.
-  generalize (instr_size'_repr i).
-  unfold instr_size.
-  destruct i; auto.
-Qed.
-
-Global Opaque instr_size.
-
-End SACC_INSTR_SIZE.
 
 Inductive is_call: instruction -> Prop :=
 | is_calls_intro:
@@ -1929,6 +1653,284 @@ End INSTRSIZE.
 
 (** instrsize instantiation *)
 
+(*SACC:* Instruction sizes *)
+(*copy from ccelf-no-perm*)
+Section SACC_INSTR_SIZE.
+
+Definition addrmode_size_aux (a:addrmode) : Z :=
+  let '(Addrmode base ofs const) := a in
+  match ofs, base with
+  | None, None => 1
+  | None, Some rb =>
+    if ireg_eq rb RSP then 2 else 1
+  | Some _, _ => 2
+  end.
+
+Definition addrmode_size (a:addrmode) : Z :=
+  addrmode_size_aux a + 4.
+
+(* [addrmode_size] properties *)
+
+Lemma addrmode_size_aux_pos: forall a, addrmode_size_aux a > 0.
+Proof.
+  intros. unfold addrmode_size_aux. destruct a.
+  destruct ofs. lia. destruct base. 
+  destr; lia. lia.
+Qed.
+
+Lemma addrmode_size_aux_upper_bound: forall a, addrmode_size_aux a <= 2.
+Proof.
+  intros. destruct a. simpl. 
+  destruct ofs; try lia.
+  destruct base; try lia.
+  destr; lia.
+Qed.
+
+Definition amod_size_ub := 6.
+
+Lemma addrmode_size_pos: forall a, addrmode_size a > 0.
+Proof.
+  intros. unfold addrmode_size. 
+  generalize (addrmode_size_aux_pos a). lia.
+Qed.
+
+Lemma addrmode_size_upper_bound: forall a, addrmode_size a <= amod_size_ub.
+Proof.
+  intros. unfold addrmode_size. 
+  generalize (addrmode_size_aux_upper_bound a). unfold amod_size_ub. lia.
+Qed.
+
+Global Opaque addrmode_size.
+
+Let instr_size' (i: instruction) : Z :=
+  match i with
+  | Pjmp_l _ => 5
+  (* Pseduo Instruction: Pjmptbl will be transf as Pjmp_m (size: 7)*)
+  | Pjmptbl r tbl => 7
+  | Pjmptbl_rel r tbl => 7  
+  | Pjmp_m a => 1 + addrmode_size a
+  | Pjcc _ _ => 6
+  | Pjmp_l_rel _ => 5
+  | Pjcc_rel _ _ => 6
+  | Pcall_s _ _ => 5
+  | Pcall_r _ _ => 2
+  | Pjmp_s _ _ => 5
+  | Pleal _ a => 1 + addrmode_size a
+  | Pxorl_r _ => 2
+  | Paddl_ri _ _ => 6
+  | Psubl_ri _ _ => 6
+  | Psubl_rr _ _ => 2
+  | Pmovl_ri _ _ => 5
+  | Pmov_rr _ _ => 2
+  | Pmovl_rm _ a => 1 + addrmode_size a
+  | Pmovl_mr a _ => 1 + addrmode_size a
+  | Pmovq_mr a _ => 2 + addrmode_size a
+  | Pmov_rm_a _ a => 1 + addrmode_size a
+  | Pmov_mr_a a _ => 1 + addrmode_size a
+  | Ptestl_rr _ _ => 2
+  | Pret => 1
+  | Pret_iw _ => 3
+  | Pimull_rr _ _ => 3
+  | Pcmpl_rr _ _ => 2
+  | Pcmpl_ri _ _ => 6
+  | Pcltd => 1
+  | Pidivl _ => 2
+  | Psall_ri _ _ => 3
+  | Plabel _ => 1
+  | Pmov_rs _ _ => 6
+  | Pnop => 1
+  | Pmovsd_ff frd fr1 => 4
+  | Pmovsd_fm_a frd a => 3 + addrmode_size a
+  | Pmovsd_fm frd a => 3 + addrmode_size a
+  | Pmovsd_mf_a a fr1 => 3 + addrmode_size a
+  | Pmovsd_mf a fr1 => 3 + addrmode_size a
+  | Pmovss_fm frd a => 3 + addrmode_size a
+  | Pmovss_mf a fr1 => 3 + addrmode_size a
+  | Pfldl_m a 
+  | Pfstpl_m a 
+  | Pflds_m a 
+  | Pfstps_m a => 1 + addrmode_size a
+  (* | Pxchg_rr r1 r2 => 2 *)
+  | Pmovb_mr a rs => 1 + addrmode_size a
+  | Pmovb_rm rd a => 1 + addrmode_size a
+  | Pmovw_mr a rs => 2 + addrmode_size a
+  | Pmovw_rm rd a => 2 + addrmode_size a
+  | Pmovzb_rr rd rs => 3
+  | Pmovzb_rm rd a => 2 + addrmode_size a
+  | Pmovzw_rr rd rs => 3
+  | Pmovzw_rm rd a => 2 + addrmode_size a
+  | Pmovsb_rr rd rs => 3
+  | Pmovsb_rm rd a => 2 + addrmode_size a
+  | Pmovsw_rr rd rs => 3
+  | Pmovsw_rm rd a => 2 + addrmode_size a
+  | Pmovsq_rm frd a => 3 + addrmode_size a
+  | Pmovsq_mr a frs => 3 + addrmode_size a
+  | Pcvtsd2ss_ff _ _ 
+  | Pcvtss2sd_ff _ _ 
+  | Pcvttsd2si_rf _ _ 
+  | Pcvtsi2sd_fr _ _
+  | Pcvttss2si_rf _ _ 
+  | Pcvtsi2ss_fr _ _ => 4
+  | Pnegl rd => 2
+  | Pimull_r r1 => 2
+  | Pmull_r r1 => 2
+  | Pdivl r1 => 2
+  | Pandl_rr rd r1  => 2
+  | Pandl_ri rd n => 6
+  | Porl_rr rd r1 => 2
+  | Porl_ri rd n => 6
+  | Pxorl_rr rd r1 => 2
+  | Pxorl_ri rd n => 6
+  | Pnotl rd => 2
+  | Psall_rcl rd => 2
+  | Pshrl_rcl rd => 2
+  | Pshrl_ri rd n => 3
+  | Psarl_rcl rd => 2
+  | Psarl_ri rd n => 3
+  | Pshld_ri rd r1 n => 4
+  | Prorl_ri rd n => 3
+  | Prolw_ri rd n => 4
+  | Ptestl_ri r1 n => 6
+  | Pcmov c rd r1 => 3
+  | Psetcc c rd => 3
+  | Paddd_ff frd fr1 => 4
+  | Padds_ff frd fr1 => 4
+  | Psubd_ff frd fr1 => 4
+  | Psubs_ff frd fr1 => 4
+  | Pmuld_ff frd fr1 => 4
+  | Pmuls_ff frd fr1 => 4
+  | Pdivd_ff frd fr1 => 4
+  | Pdivs_ff frd fr1 => 4
+  | Pcomisd_ff fr1 fr2 => 4
+  | Pcomiss_ff fr1 fr2 => 3
+  | Pxorpd_f frd => 4
+  | Pxorpd_fm frd a => 3 + addrmode_size a
+  | Pandpd_fm frd a => 3 + addrmode_size a
+  | Pxorps_f frd => 3
+  | Pxorps_fm frd a => 2 + addrmode_size a
+  | Pandps_fm frd a => 2 + addrmode_size a
+  | Pimull_ri rd n => 6
+  | Paddl_rr _ _ => 2
+  | Padcl_rr _ _ => 2
+  | Padcl_ri _ _ => 3
+  | Psbbl_rr _ _ => 2
+  | Prep_movsl => 2
+  | Pbswap32 _ => 2
+  | Pbsfl _ _ => 3
+  | Pbsrl _ _ => 3
+  | Psqrtsd _ _ => 4
+  | Pmaxsd _ _ => 4
+  | Pminsd _ _ => 4
+  (* some x64 instr, comment them avoiding proof stuck *)
+  (* | Paddq_rm  _ a => 2 + addrmode_size a *)
+  (* | Psubq_rm  _ a => 2 + addrmode_size a *)
+  (* | Pimulq_rm _ a => 2 + addrmode_size a *)
+  (* | Pandq_rm  _ a => 2 + addrmode_size a *)
+  (* | Porq_rm   _ a => 2 + addrmode_size a *)
+  (* | Pxorq_rm  _ a => 2 + addrmode_size a *)
+  (* | Pcmpq_rm  _ a => 2 + addrmode_size a *)
+  (* | Ptestq_rm _ a => 2 + addrmode_size a *)
+  | _ => 1
+  end.
+
+Definition linear_addr reg ofs :=
+  Addrmode (Some reg) None (inl ofs).
+
+Definition Plea := if Archi.ptr64 then Pleaq else Pleal.
+Definition Padd dst src z := Plea dst (linear_addr src z).
+Definition Psub dst src z := Padd dst src (- z).
+
+(* FIXME: 64 bit not supported, Pmovq_mr size undefined *)
+Definition Pstoreptr := if Archi.ptr64 then Pmovq_mr else Pmovl_mr.
+
+Definition instr_size_asm (i: instruction) : Z :=
+  match i with
+  | Pallocframe sz _ ofs_link =>
+    instr_size' (Padd RAX RSP (size_chunk Mptr)) +
+    instr_size' (Psub RSP RSP (align sz 8 - size_chunk Mptr)) +
+    instr_size' (Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link)) RAX)
+  | Pfreeframe sz _ _ =>
+    instr_size' (Padd RSP RSP (align sz 8 - size_chunk Mptr))
+  (* | Pload_parent_pointer rd z => *)
+  (*   instr_size' (Padd rd RSP (align (Z.max 0 z) 8)) *)
+  | _ => instr_size' i
+  end.
+
+
+Lemma instr_size'_positive : forall i, 0 < instr_size' i.
+Proof.
+  intros. unfold instr_size'.
+  destruct i; try lia;
+    try (generalize (addrmode_size_pos a); lia);
+    try (destr; lia).
+  generalize (addrmode_size_pos ad). lia.
+Qed.
+
+Lemma instr_size_positive : forall i, 0 < instr_size_asm i.
+Proof.
+  intros. unfold instr_size_asm.
+  generalize (instr_size'_positive i).
+  destruct i; auto.
+Qed.
+
+Lemma z_le_ptrofs_max: forall n,
+    n < two_power_nat (if Archi.ptr64 then 64 else 32) ->
+    n <= Ptrofs.max_unsigned.
+Proof.
+  intros. unfold Ptrofs.max_unsigned. unfold Ptrofs.modulus.
+  unfold Ptrofs.wordsize. unfold Wordsize_Ptrofs.wordsize.
+  lia.
+Qed.
+
+Local Transparent Archi.ptr64.
+
+Lemma z_le_ptrofs_max32: forall n, 
+    n < two_power_nat 32 -> 
+    n <= Ptrofs.max_unsigned.
+Proof.
+  intros. apply z_le_ptrofs_max. unfold Archi.ptr64. assumption.
+Qed.
+
+Ltac solve_n_le_ptrofs_max :=
+  match goal with
+  | [ |- ?a <= Ptrofs.max_unsigned ] =>
+    apply z_le_ptrofs_max32; reflexivity
+  end.
+
+Ltac solve_amod_le_ptrofs_max :=
+  match goal with
+  | [ |- ?n + addrmode_size ?a <= Ptrofs.max_unsigned ] =>
+    apply Z.le_trans with (n + amod_size_ub);
+    [ generalize (addrmode_size_upper_bound a); lia | solve_n_le_ptrofs_max ]
+  end.
+
+Lemma instr_size'_repr: forall i, 0 < instr_size' i <= Ptrofs.max_unsigned.
+Proof.
+  intros. unfold instr_size'. 
+  destruct i; split; try lia; 
+  try solve_n_le_ptrofs_max;
+  try (generalize (addrmode_size_pos a); lia);
+  try solve_amod_le_ptrofs_max.
+  generalize (addrmode_size_pos ad). lia.
+  (* destr; omega. *)
+  (* destr; try solve_n_le_ptrofs_max. *)
+  (* destr; omega. *)
+  (* destr; try solve_n_le_ptrofs_max. *)
+Qed.
+
+Lemma instr_size_repr: forall i, 0 < instr_size_asm i <= Ptrofs.max_unsigned.
+Proof.
+  intros.
+  generalize (instr_size'_repr i).
+  unfold instr_size_asm.
+  destruct i; auto.
+Qed.
+
+Global Opaque instr_size_asm.
+
+End SACC_INSTR_SIZE.
+
+
 Definition instr_size_1 (i : Asm.instruction) : Z := 1.
 Lemma instr_size_bound_1 : forall i, 0 < instr_size_1 i <= Ptrofs.max_unsigned.
 Proof.
@@ -1936,7 +1938,7 @@ Proof.
 Qed.
 
 Definition instr_size_real (i : Asm.instruction) :=
-  instr_size i.
+  instr_size_asm i.
     
 Lemma instr_size_bound_real : forall i, 0 < instr_size_real i <= Ptrofs.max_unsigned.
 Proof.
