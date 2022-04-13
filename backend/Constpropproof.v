@@ -557,6 +557,7 @@ Opaque builtin_strength_reduction.
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros [m2' [A B]].
   simpl. unfold transf_function.
+  inversion MEM. rewrite mext_sup in *.
   left; exists O; econstructor; split.
   eapply exec_function_internal; simpl; eauto.
   simpl. econstructor; eauto.

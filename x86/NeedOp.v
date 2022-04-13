@@ -148,7 +148,7 @@ Ltac TrivialExists :=
   end.
 
 Section SOUNDNESS.
-
+Import Mem.
 Variable ge: genv.
 Variable sp: block.
 Variables m m': mem.

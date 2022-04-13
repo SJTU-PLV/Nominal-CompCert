@@ -169,7 +169,7 @@ Section SOUNDNESS.
 Variable bc: block_classification.
 Variable ge: genv.
 Hypothesis GENV: genv_match bc ge.
-Variable sp: block.
+Variable sp: Mem.block.
 Hypothesis STACK: bc sp = BCstack.
 
 Theorem eval_static_condition_sound:
@@ -216,7 +216,7 @@ Ltac InvHyps :=
 
 Theorem eval_static_addressing_32_sound:
   forall addr vargs vres aargs,
-  eval_addressing32 ge (Vptr sp Ptrofs.zero) addr vargs = Some vres ->
+  eval_addressing32 ge (Mem.Vptr sp Ptrofs.zero) addr vargs = Some vres ->
   list_forall2 (vmatch bc) vargs aargs ->
   vmatch bc vres (eval_static_addressing_32 addr aargs).
 Proof.
@@ -227,7 +227,7 @@ Qed.
 
 Theorem eval_static_addressing_64_sound:
   forall addr vargs vres aargs,
-  eval_addressing64 ge (Vptr sp Ptrofs.zero) addr vargs = Some vres ->
+  eval_addressing64 ge (Mem.Vptr sp Ptrofs.zero) addr vargs = Some vres ->
   list_forall2 (vmatch bc) vargs aargs ->
   vmatch bc vres (eval_static_addressing_64 addr aargs).
 Proof.
@@ -238,7 +238,7 @@ Qed.
 
 Theorem eval_static_addressing_sound:
   forall addr vargs vres aargs,
-  eval_addressing ge (Vptr sp Ptrofs.zero) addr vargs = Some vres ->
+  eval_addressing ge (Mem.Vptr sp Ptrofs.zero) addr vargs = Some vres ->
   list_forall2 (vmatch bc) vargs aargs ->
   vmatch bc vres (eval_static_addressing addr aargs).
 Proof.
@@ -248,7 +248,7 @@ Qed.
 
 Theorem eval_static_operation_sound:
   forall op vargs m vres aargs,
-  eval_operation ge (Vptr sp Ptrofs.zero) op vargs m = Some vres ->
+  eval_operation ge (Mem.Vptr sp Ptrofs.zero) op vargs m = Some vres ->
   list_forall2 (vmatch bc) vargs aargs ->
   vmatch bc vres (eval_static_operation op aargs).
 Proof.

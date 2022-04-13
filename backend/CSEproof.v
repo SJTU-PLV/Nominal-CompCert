@@ -1191,6 +1191,7 @@ Proof.
   destruct (analyze cu f) as [approx|] eqn:?; inv EQ.
   exploit Mem.alloc_extends; eauto. apply Z.le_refl. apply Z.le_refl.
   intros (m'' & A & B).
+  inversion MEXT. rewrite mext_sup in *.
   econstructor; split.
   eapply exec_function_internal; simpl; eauto.
   simpl. econstructor; eauto.

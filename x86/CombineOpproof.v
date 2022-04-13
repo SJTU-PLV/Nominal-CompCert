@@ -15,9 +15,10 @@
 
 Require Import FunInd.
 Require Import Coqlib.
-Require Import Integers Values Memory.
+Require Import Integers Values Memory Memstructure.
 Require Import Op RTL CSEdomain.
 Require Import CombineOp.
+Import MemPos.
 
 Section COMBINE.
 
@@ -44,7 +45,7 @@ Lemma combine_compimm_ne_0_sound:
   forall x cond args,
   combine_compimm_ne_0 get x = Some(cond, args) ->
   eval_condition cond (map valu args) m = Val.cmp_bool Cne (valu x) (Vint Int.zero) /\
-  eval_condition cond (map valu args) m = Val.cmpu_bool (Mem.valid_pointer m) Cne (valu x) (Vint Int.zero).
+  eval_condition cond (map valu args) m = Val.cmpu_bool (valid_pointer m) Cne (valu x) (Vint Int.zero).
 Proof.
   intros until args. functional induction (combine_compimm_ne_0 get x); intros EQ; inv EQ.
   (* of cmp *)
@@ -59,7 +60,7 @@ Lemma combine_compimm_eq_0_sound:
   forall x cond args,
   combine_compimm_eq_0 get x = Some(cond, args) ->
   eval_condition cond (map valu args) m = Val.cmp_bool Ceq (valu x) (Vint Int.zero) /\
-  eval_condition cond (map valu args) m = Val.cmpu_bool (Mem.valid_pointer m) Ceq (valu x) (Vint Int.zero).
+  eval_condition cond (map valu args) m = Val.cmpu_bool (valid_pointer m) Ceq (valu x) (Vint Int.zero).
 Proof.
   intros until args. functional induction (combine_compimm_eq_0 get x); intros EQ; inv EQ.
   (* of cmp *)
@@ -74,7 +75,7 @@ Lemma combine_compimm_eq_1_sound:
   forall x cond args,
   combine_compimm_eq_1 get x = Some(cond, args) ->
   eval_condition cond (map valu args) m = Val.cmp_bool Ceq (valu x) (Vint Int.one) /\
-  eval_condition cond (map valu args) m = Val.cmpu_bool (Mem.valid_pointer m) Ceq (valu x) (Vint Int.one).
+  eval_condition cond (map valu args) m = Val.cmpu_bool (valid_pointer m) Ceq (valu x) (Vint Int.one).
 Proof.
   intros until args. functional induction (combine_compimm_eq_1 get x); intros EQ; inv EQ.
   (* of cmp *)
@@ -86,7 +87,7 @@ Lemma combine_compimm_ne_1_sound:
   forall x cond args,
   combine_compimm_ne_1 get x = Some(cond, args) ->
   eval_condition cond (map valu args) m = Val.cmp_bool Cne (valu x) (Vint Int.one) /\
-  eval_condition cond (map valu args) m = Val.cmpu_bool (Mem.valid_pointer m) Cne (valu x) (Vint Int.one).
+  eval_condition cond (map valu args) m = Val.cmpu_bool (valid_pointer m) Cne (valu x) (Vint Int.one).
 Proof.
   intros until args. functional induction (combine_compimm_ne_1 get x); intros EQ; inv EQ.
   (* of cmp *)

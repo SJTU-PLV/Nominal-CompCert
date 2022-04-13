@@ -17,11 +17,11 @@ Require Import Coqlib.
 Require Import Maps.
 Require Import AST.
 Require Import Values.
-Require Import Memory.
+Require Import Memstructure.
 Require Import Op.
 Require Import Registers.
 Require Import RTL.
-
+Import MemPos.
 (** Value numbers are represented by positive integers.  Equations are
   of the form [valnum = rhs] or [valnum >= rhs], where the right-hand
   sides [rhs] are either arithmetic operations or memory loads, [=] is
@@ -108,7 +108,7 @@ Inductive rhs_eval_to (valu: valuation) (ge: genv) (sp: val) (m: mem):
       rhs_eval_to valu ge sp m (Op op vl) v
   | load_eval_to: forall chunk addr vl a v,
       eval_addressing ge sp addr (map valu vl) = Some a ->
-      Mem.loadv chunk m a = Some v ->
+      loadv chunk m a = Some v ->
       rhs_eval_to valu ge sp m (Load chunk addr vl) v.
 
 Inductive equation_holds (valu: valuation) (ge: genv) (sp: val) (m: mem):

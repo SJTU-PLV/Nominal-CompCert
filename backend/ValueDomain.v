@@ -34,10 +34,10 @@ Record block_classification : Type := BC {
 }.
 
 Definition bc_below (bc: block_classification) (bound: sup) : Prop :=
-  forall b, bc b <> BCinvalid -> sup_In b bound.
+  forall b, bc b <> BCinvalid -> In b bound.
 
 Lemma bc_below_invalid:
-  forall b bc bound, ~sup_In b bound -> bc_below bc bound -> bc b = BCinvalid.
+  forall b bc bound, ~In b bound -> bc_below bc bound -> bc b = BCinvalid.
 Proof.
   intros. destruct (block_class_eq (bc b) BCinvalid); auto.
   elim H. apply H0; auto.
@@ -1115,7 +1115,7 @@ Qed.
 
 Definition genv_match (ge: genv) : Prop :=
   (forall id b, Genv.find_symbol ge id = Some b <-> bc b = BCglob id)
-/\(forall b, sup_In b (Genv.genv_sup ge) -> bc b <> BCinvalid /\ bc b <> BCstack).
+/\(forall b, In b (Genv.genv_sup ge) -> bc b <> BCinvalid /\ bc b <> BCstack).
 
 Lemma symbol_address_sound:
   forall ge id ofs,
@@ -3799,7 +3799,7 @@ Qed.
 
 Lemma romatch_alloc:
   forall m b lo hi m' rm,
-  Mem.alloc m lo hi = (m', b) ->
+  Mem.alloc m lo hi b = Some m' ->
   bc_below bc (Mem.support m) ->
   romatch m rm ->
   romatch m' rm.
@@ -4414,7 +4414,7 @@ Proof.
 - (* contents *)
   intros. exploit inj_of_bc_inv; eauto. intros (A & B & C); subst.
   rewrite Z.add_0_r.
-  set (mv := ZMap.get ofs (NMap.get _ b1 (Mem.mem_contents m))).
+  set (mv := ZMap.get ofs (BMap.get _ b1 (Mem.mem_contents m))).
   assert (Mem.loadbytes m b1 ofs 1 = Some (mv :: nil)).
   {
     Local Transparent Mem.loadbytes.

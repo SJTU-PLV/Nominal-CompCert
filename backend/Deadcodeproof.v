@@ -48,8 +48,8 @@ Record magree (m1 m2: mem) (P: locset) : Prop := mk_magree {
     forall b ofs,
     Mem.perm m1 b ofs Cur Readable ->
     P b ofs ->
-    memval_lessdef (ZMap.get ofs (NMap.get _ b (Mem.mem_contents m1)))
-                   (ZMap.get ofs (NMap.get _ b (Mem.mem_contents m2)));
+    memval_lessdef (ZMap.get ofs (BMap.get _ b (Mem.mem_contents m1)))
+                   (ZMap.get ofs (BMap.get _ b (Mem.mem_contents m2)));
   ma_support:
     Mem.support m2 = Mem.support m1
 }.
@@ -165,7 +165,7 @@ Proof.
   intuition eauto using Mem.perm_storebytes_1, Mem.perm_storebytes_2.
 - rewrite (Mem.storebytes_mem_contents _ _ _ _ _ H0).
   rewrite (Mem.storebytes_mem_contents _ _ _ _ _ ST2).
-  rewrite ! NMap.gsspec. destruct (NMap.elt_eq b0 b).
+  rewrite ! BMap.gsspec. destruct (BMap.elt_eq b0 b).
 + subst b0. apply SETN with (access := fun ofs => Mem.perm m1' b ofs Cur Readable /\ Q b ofs); auto.
   intros. destruct H5. eapply ma_memval; eauto.
   eapply Mem.perm_storebytes_2; eauto.
@@ -209,7 +209,7 @@ Proof.
 - exploit ma_perm_inv; eauto.
   intuition eauto using Mem.perm_storebytes_1, Mem.perm_storebytes_2.
 - rewrite (Mem.storebytes_mem_contents _ _ _ _ _ H0).
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b).
+  rewrite BMap.gsspec. destruct (BMap.elt_eq b0 b).
 + subst b0. rewrite Mem.setN_outside. eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
   destruct (zlt ofs0 ofs); auto. destruct (zle (ofs + Z.of_nat (length bytes1)) ofs0); try lia.
   assert(ofs <= ofs0 < ofs + Z.of_nat(Datatypes.length bytes1)) by lia.
@@ -1085,6 +1085,7 @@ Ltac UseTransfer :=
   destruct (analyze (vanalyze cu f) f) as [an|] eqn:AN; inv EQ'.
   exploit Mem.alloc_extends; eauto. apply Z.le_refl. apply Z.le_refl.
   intros (tm' & A & B).
+  inversion MEM. rewrite mext_sup in *.
   econstructor; split.
   econstructor; simpl; eauto.
   simpl. econstructor; eauto.
