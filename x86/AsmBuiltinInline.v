@@ -260,6 +260,18 @@ Definition expand_builtin_va_start_32 r :=
        Pmovl_mr (linear_addr r 0) RAX]
   else
     Error [MSG "Fatal error: va_start used in non-vararg function"].
+
+Definition expand_builtin_va_start_64 r :=
+  if cc_vararg (sig_cc (fn_sig cur_func)) then
+    (* fn_stacksize correct? *)
+    let sz := align (fn_stacksize cur_func) 8 - size_chunk Mptr in
+    let t0 := Z.add sz 8 in
+    let t1 := (size_arguments (fn_sig cur_func)) in
+    let ofs := Z.add t0 t1 in
+    OK [Pleaq RAX (linear_addr RSP ofs);
+       Pmovq_mr (linear_addr r 0) RAX]
+  else
+    Error [MSG "Fatal error: va_start used in non-vararg function"].
          
 (* Expand builtin inline assembly *)
 Definition expand_builtin_inline name args res :=

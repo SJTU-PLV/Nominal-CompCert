@@ -36,8 +36,8 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   | Pleal _ a
   | Pmovl_rm _ a
   | Pmovl_mr a _
-  | Pmov_rm_a _ a
-  | Pmov_mr_a a _
+  (* | Pmov_rm_a _ a *)
+  (* | Pmov_mr_a a _ *)
   | Pfldl_m a
   | Pfstpl_m a
   | Pflds_m a
@@ -80,6 +80,13 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   | Pleaq _ a =>
     let aofs := addrmode_reloc_offset a in
     OK (2 + aofs)
+  | Pmov_rm_a _ a
+  | Pmov_mr_a a _ =>
+    let aofs := addrmode_reloc_offset a in
+    if Archi.ptr64 then
+      OK (2 + aofs)
+    else
+      OK (1 + aofs)
   | _ => Error [MSG "Calculation of relocation offset failed: Either there is no possible relocation location or the instruction ";
               MSG (instr_to_string i); MSG " is not supported yet by relocation"]
   end.
@@ -486,7 +493,7 @@ Definition id_eliminate (i:instruction): instruction:=
     (Ptestq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
   | Pmovq_rm rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-    (Pleal rd (Addrmode rb ss (inr (xH, ptrofs))))
+    (Pmovq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
   | Pmovq_mr (Addrmode rb ss (inr disp)) rs =>
     let '(id, ptrofs) := disp in
     (Pmovq_mr (Addrmode rb ss (inr (xH, ptrofs))) rs)

@@ -300,9 +300,9 @@ Record elf_file :=
 
 Record valid_elf_header (eh: elf_header) :=
   {
-    valid_entry: 0 <= e_entry eh < two_p 32;
-    valid_phoff: 0 <= e_phoff eh < two_p 32;
-    valid_shoff: 0 <= e_shoff eh < two_p 32;
+    valid_entry: 0 <= e_entry eh < two_p (if ptr64 then 64 else  32);
+    valid_phoff: 0 <= e_phoff eh < two_p (if ptr64 then 64 else  32);
+    valid_shoff: 0 <= e_shoff eh < two_p (if ptr64 then 64 else  32);
     valid_flags: 0 <= e_flags eh < two_p 32;
     valid_ehsize: 0 <= e_ehsize eh < two_p 16;
     valid_phentsize: 0 <= e_phentsize eh < two_p 16;
@@ -311,6 +311,7 @@ Record valid_elf_header (eh: elf_header) :=
     valid_shnum: 0 <= e_shnum eh < two_p 16;
     valid_shstrndx: 0 <= e_shstrndx eh < two_p 16;
   }.
+
 
 Notation " 'check' A ; B" := (if A then B else Error nil) (at level 100).
 
@@ -331,16 +332,17 @@ Inductive valid_section_flags : list section_flag -> Prop :=
 | vsf_alloc_write : valid_section_flags [SHF_ALLOC; SHF_WRITE]
 | vsf_alloc_exec : valid_section_flags [SHF_ALLOC; SHF_EXECINSTR].
 
+
 Record valid_section_header sh :=
   {
     vsh_name: 0 <= sh_name sh < two_p 32;
-    vsh_addr: 0 <= sh_addr sh < two_p 32;
-    vsh_offset: 0 <= sh_offset sh < two_p 32;
-    vsh_size: 0 <= sh_size sh < two_p 32;
+    vsh_addr: 0 <= sh_addr sh < two_p (if ptr64 then 64 else 32);
+    vsh_offset: 0 <= sh_offset sh < two_p (if ptr64 then 64 else 32);
+    vsh_size: 0 <= sh_size sh < two_p (if ptr64 then 64 else 32);
     vsh_link: 0 <= sh_link sh < two_p 32;
     vsh_info: 0 <= sh_info sh < two_p 32;
-    vsh_addralign: 0 <= sh_addralign sh < two_p 32;
-    vsh_entsize: 0 <= sh_entsize sh < two_p 32;
+    vsh_addralign: 0 <= sh_addralign sh < two_p (if ptr64 then 64 else 32);
+    vsh_entsize: 0 <= sh_entsize sh < two_p (if ptr64 then 64 else 32);
     vsh_flags: valid_section_flags (sh_flags sh);
   }.
 
@@ -348,10 +350,10 @@ Record valid_elf_file ef :=
   {
     vef_header: valid_elf_header (elf_head ef);
     vef_shs: Forall valid_section_header (elf_section_headers ef);
-    vef_shoff: e_shoff (elf_head ef) = 52 + fold_right (fun s acc => acc + Z.of_nat (length s)) 0 (elf_sections ef);
+    vef_shoff: e_shoff (elf_head ef) = elf_header_size + fold_right (fun s acc => acc + Z.of_nat (length s)) 0 (elf_sections ef);
     vef_shnum: e_shnum (elf_head ef) = Z.of_nat (length (elf_section_headers ef));
     vef_check_sizes:
-      check_sizes (tl (elf_section_headers ef)) (elf_sections ef) 52 = OK tt;
+      check_sizes (tl (elf_section_headers ef)) (elf_sections ef) elf_header_size = OK tt;
     vef_first_section_null:
       nth_error (elf_section_headers ef) O = Some null_section_header;
  }.
@@ -377,9 +379,9 @@ Defined.
 Lemma valid_elf_header_dec: forall eh, {valid_elf_header eh} + {~ valid_elf_header eh}.
 Proof.
   intros.
-  destruct (intv_dec 0 (two_p 32) (e_entry eh)). 2: right; intro A; inv A; lia.
-  destruct (intv_dec 0 (two_p 32) (e_phoff eh)). 2: right; intro A; inv A; lia.
-  destruct (intv_dec 0 (two_p 32) (e_shoff eh)). 2: right; intro A; inv A; lia.
+  destruct (intv_dec 0 (two_p (if ptr64 then 64 else 32)) (e_entry eh)). 2: right; intro A; inv A; lia.
+  destruct (intv_dec 0 (two_p (if ptr64 then 64 else 32)) (e_phoff eh)). 2: right; intro A; inv A; lia.
+  destruct (intv_dec 0 (two_p (if ptr64 then 64 else 32)) (e_shoff eh)). 2: right; intro A; inv A; lia.
   destruct (intv_dec 0 (two_p 32) (e_flags eh)). 2: right; intro A; inv A; lia.
   destruct (intv_dec 0 (two_p 16) (e_ehsize eh)). 2: right; intro A; inv A; lia.
   destruct (intv_dec 0 (two_p 16) (e_phentsize eh)). 2: right; intro A; inv A; lia.
@@ -394,13 +396,13 @@ Lemma valid_section_header_dec: forall sh, {valid_section_header sh} + {~ valid_
 Proof.
   intros.
   destruct (intv_dec 0 (two_p 32) (sh_name sh)). 2: right; intro A; inv A; lia.
-  destruct (intv_dec 0 (two_p 32) (sh_addr sh)). 2: right; intro A; inv A; lia.
-  destruct (intv_dec 0 (two_p 32) (sh_offset sh)). 2: right; intro A; inv A; lia.
-  destruct (intv_dec 0 (two_p 32) (sh_size sh)). 2: right; intro A; inv A; lia.
+  destruct (intv_dec 0 (two_p (if ptr64 then 64 else 32)) (sh_addr sh)). 2: right; intro A; inv A; lia.
+  destruct (intv_dec 0 (two_p (if ptr64 then 64 else 32)) (sh_offset sh)). 2: right; intro A; inv A; lia.
+  destruct (intv_dec 0 (two_p (if ptr64 then 64 else 32)) (sh_size sh)). 2: right; intro A; inv A; lia.
   destruct (intv_dec 0 (two_p 32) (sh_link sh)). 2: right; intro A; inv A; lia.
   destruct (intv_dec 0 (two_p 32) (sh_info sh)). 2: right; intro A; inv A; lia.
-  destruct (intv_dec 0 (two_p 32) (sh_addralign sh)). 2: right; intro A; inv A; lia.
-  destruct (intv_dec 0 (two_p 32) (sh_entsize sh)). 2: right; intro A; inv A; lia.
+  destruct (intv_dec 0 (two_p (if ptr64 then 64 else 32)) (sh_addralign sh)). 2: right; intro A; inv A; lia.
+  destruct (intv_dec 0 (two_p (if ptr64 then 64 else 32)) (sh_entsize sh)). 2: right; intro A; inv A; lia.
   destruct (valid_section_flags_dec (sh_flags sh)). 2: right; intro A; inv A; congruence.
   left; constructor; auto.
 Defined.
@@ -419,11 +421,11 @@ Proof.
   destruct (valid_elf_header_dec (elf_head ef)). 2: right; intro A; inv A; congruence.
   destruct (Forall_dec _ (valid_section_header_dec) (elf_section_headers ef)).
   2: right; intro A; inv A; congruence.
-  destruct (zeq (e_shoff (elf_head ef)) (52 + fold_right (fun s acc => acc + Z.of_nat (length s)) 0 (elf_sections ef))).
+  destruct (zeq (e_shoff (elf_head ef)) (elf_header_size + fold_right (fun s acc => acc + Z.of_nat (length s)) 0 (elf_sections ef))).
   2: right; intro A; inv A; congruence.
   destruct (zeq (e_shnum (elf_head ef)) (Z.of_nat (length (elf_section_headers ef)))).
   2: right; intro A; inv A; congruence.
-  destruct (check_sizes (tl (elf_section_headers ef)) (elf_sections ef) 52) eqn:?.
+  destruct (check_sizes (tl (elf_section_headers ef)) (elf_sections ef) elf_header_size) eqn:?.
   2: right; intro A; inv A; congruence.
   destruct u.
   destruct (nth_error (elf_section_headers ef) 0) eqn:NTH.

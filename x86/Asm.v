@@ -1660,7 +1660,9 @@ Section SACC_INSTR_SIZE.
 Definition addrmode_size_aux (a:addrmode) : Z :=
   let '(Addrmode base ofs const) := a in
   match ofs, base with
-  | None, None => 1
+  (** In 64bit mode, SIB encoding for displacement only addressing.
+      We do not use RIP-relative addressing for simplicity*)
+  | None, None => if Archi.ptr64 then 2 else 1
   | None, Some rb =>
     if ireg_eq rb RSP then 2 else 1
   | Some _, _ => 2
@@ -1675,7 +1677,7 @@ Lemma addrmode_size_aux_pos: forall a, addrmode_size_aux a > 0.
 Proof.
   intros. unfold addrmode_size_aux. destruct a.
   destruct ofs. lia. destruct base. 
-  destr; lia. lia.
+  destr; lia. try (destruct Archi.ptr64);lia.
 Qed.
 
 Lemma addrmode_size_aux_upper_bound: forall a, addrmode_size_aux a <= 2.
@@ -1684,6 +1686,7 @@ Proof.
   destruct ofs; try lia.
   destruct base; try lia.
   destr; lia.
+  try (destruct Archi.ptr64);lia.
 Qed.
 
 Definition amod_size_ub := 6.
@@ -1721,11 +1724,11 @@ Let instr_size' (i: instruction) : Z :=
   | Psubl_ri _ _ => 6
   | Psubl_rr _ _ => 2
   | Pmovl_ri _ _ => 5
-  | Pmov_rr _ _ => 2
+  | Pmov_rr _ _ => if Archi.ptr64 then 3 else 2
   | Pmovl_rm _ a => 1 + addrmode_size a
   | Pmovl_mr a _ => 1 + addrmode_size a
-  | Pmov_rm_a _ a => 1 + addrmode_size a
-  | Pmov_mr_a a _ => 1 + addrmode_size a
+  | Pmov_rm_a _ a => if Archi.ptr64 then 2 + addrmode_size a else 1 + addrmode_size a
+  | Pmov_mr_a a _ => if Archi.ptr64 then 2 + addrmode_size a else 1 + addrmode_size a
   | Ptestl_rr _ _ => 2
   | Pret => 1
   | Pret_iw _ => 3
@@ -1880,9 +1883,11 @@ Definition instr_size_asm (i: instruction) : Z :=
 Lemma instr_size'_positive : forall i, 0 < instr_size' i.
 Proof.
   intros. unfold instr_size'.
-  destruct i; try lia;
+  destruct i; try (destruct Archi.ptr64); try lia;
     try (generalize (addrmode_size_pos a); lia);
     try (destr; lia).
+  generalize (addrmode_size_pos ad). lia.
+  (* 64bit *)
   generalize (addrmode_size_pos ad). lia.
 Qed.
 

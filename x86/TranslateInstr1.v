@@ -459,7 +459,8 @@ Definition translate_Addrmode_AddrE (sofs: Z) (res_iofs: res Z) (addr:addrmode):
 Definition translate_Addrmode_AddrE_aux64 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) : res (AddrE*u1*u1) :=
   match obase,oindex with
   | None,None =>
-    OK ((AddrE11 ofs32),zero1,zero1)
+    (* do not use rip-relative addressing *)
+    OK ((AddrE7 ofs32),zero1,zero1)
   | Some base,None =>
     (* some bug only fix here not fixed in reverse *)
     do B_r <- encode_ireg_u4 base;
@@ -601,8 +602,15 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
   let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs res_iofs in
   match i with
   | Pmov_rr rd r1 =>
-    do rdbits <- encode_ireg_u3 rd;
-    do r1bits <- encode_ireg_u3 r1;
+    if Archi.ptr64 then
+      do Rrdbits <- encode_ireg_u4 rd;
+      do Brsbits <- encode_ireg_u4 r1;
+      let (B, rsbits) := Brsbits in
+      let (R, rdbits) := Rrdbits in
+      OK (Pmovq_GvEv (AddrE0 rsbits) B R zero1 rdbits)
+    else
+      do rdbits <- encode_ireg_u3 rd;
+      do r1bits <- encode_ireg_u3 r1;
     OK (Pmovl_rm (AddrE0 r1bits) rdbits)
   | Asm.Pmovl_rm rd addr =>
     do rdbits <- encode_ireg_u3 rd;
@@ -974,13 +982,29 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res Instruction :=
      do imm32 <- encode_ofs_u32 (Int.intval imm);
      OK (Psubl_ri rdbits imm32)
   | Asm.Pmov_mr_a addr rs =>
-    do a <- translate_Addrmode_AddrE addr;
-    do rbits <- encode_ireg_u3 rs;
+    if Archi.ptr64 then
+      do addr_X_B <- translate_Addrmode_AddrE64 addr;
+      let (a_X, B) := addr_X_B in
+      let (a,X) := a_X in
+      do Rrsbits <- encode_ireg_u4 rs;
+      let (R,rsbits) := Rrsbits in
+      OK (Pmovq_EvGv a B R X rsbits)
+    else
+      do a <- translate_Addrmode_AddrE addr;
+      do rbits <- encode_ireg_u3 rs;
     OK (Pmovl_mr a rbits)
-  | Asm.Pmov_rm_a rs addr =>
-    do a <- translate_Addrmode_AddrE addr;
-    do rbits <- encode_ireg_u3 rs;
-    OK (Pmovl_rm a rbits)
+  | Asm.Pmov_rm_a rd addr =>
+    if Archi.ptr64 then
+      do addr_X_B <- translate_Addrmode_AddrE64 addr;
+      let (a_X, B) := addr_X_B in
+      let (a,X) := a_X in
+      do Rrdbits <- encode_ireg_u4 rd;
+      let (R,rdbits) := Rrdbits in
+      OK (Pmovq_GvEv a B R X rdbits)
+    else
+      do a <- translate_Addrmode_AddrE addr;
+      do rbits <- encode_ireg_u3 rd;
+      OK (Pmovl_rm a rbits)
   | Asm.Pmovsd_mf_a addr rs =>
     do a <- translate_Addrmode_AddrE addr;
     do rbits <- encode_freg_u3 rs;
