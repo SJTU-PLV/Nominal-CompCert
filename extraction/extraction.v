@@ -116,6 +116,9 @@ Extract Constant Compopts.thumb =>
 Extract Constant Compopts.debug =>
   "fun _ -> !Clflags.option_g".
 
+(* Pseudo Instructions Elimination*)
+Extract Constant PseudoInstructions.coq_string_to_ident => "FindSymbolString.coq_string_to_ident".
+
 (* Strtablegen *)
 Extract Constant SymbolString.find_symbol_pos => "FindSymbolString.find_symbol_pos".
 Extract Constant SymbolString.string_to_ident => "FindSymbolString.string_to_ident".

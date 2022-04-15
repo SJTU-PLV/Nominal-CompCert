@@ -268,6 +268,11 @@ let builtins_generic = {
         (TPtr(TVoid [], []),
           [TPtr(TVoid [], []); TInt(IULong, [])],
           false);
+  (* Add 64bit mode function for Pseudo instruction elimination *)
+    "__compcert_va_saveregs",
+        (TVoid [],
+          [TVoid []],
+          false);
   (* Helper functions for int64 arithmetic *)
     "__compcert_i64_dtos",
         (TInt(ILongLong, []),

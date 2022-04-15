@@ -31,7 +31,7 @@ Section PRESERVATION.
 
   Variable instr_size: instruction -> Z.
   Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
-  Hypothesis transf_instr_size : forall i, instr_size i = code_size instr_size (transf_instr i).
+  Hypothesis transf_instr_size : forall i sg, instr_size i = code_size instr_size (transf_instr sg i).
 
   Variable prog tprog: Asm.program.
   Hypothesis TRANSF: Linking.match_program (fun _ f1 f2 => f2 = transf_fundef f1) eq prog tprog.
@@ -66,8 +66,8 @@ Section PRESERVATION.
   Qed.
 
 
-  Lemma transf_code_size: forall c,
-      code_size instr_size c = code_size instr_size (transf_code c).
+  Lemma transf_code_size: forall c sg,
+      code_size instr_size c = code_size instr_size (transf_code sg c).
   Proof.
     intros. induction c.
     - auto.
@@ -125,9 +125,9 @@ Section PRESERVATION.
   Qed.
 
   Lemma find_instr_transl:
-    forall c o i,
+    forall c o i sg,
       find_instr instr_size o c = Some i ->
-      code_at o (transf_code c) (transf_instr i).
+      code_at o (transf_code sg c) (transf_instr sg i).
   Proof.
     induction c; simpl; intros; eauto. easy.
     repeat destr_in H.
@@ -137,11 +137,12 @@ Section PRESERVATION.
       generalize (instr_size_bound i); lia.
       simpl. constructor. simpl. auto.
       simpl. apply code_at_next.
-    - specialize (IHc _ _ H1).
-      unfold transf_code. simpl. fold (transf_code c).
-      eapply code_at_shift. rewrite <- transf_instr_size; auto.
-  Qed.
-
+    - admit. (* specialize (IHc _ _ H1). *)
+  (*     unfold transf_code. simpl. fold (transf_code c). *)
+  (*     eapply code_at_shift. rewrite <- transf_instr_size; auto. *)
+  (* Qed. *)
+  Admitted.
+  
   Definition id_instr (i: instruction) : bool :=
     match i with
     | Pallocframe _ _ _
@@ -187,9 +188,9 @@ Section PRESERVATION.
   Qed.
 
   Lemma id_instr_transf:
-    forall i,
+    forall i sg,
       id_instr i = true ->
-      transf_instr i = i :: nil.
+      transf_instr sg i = i :: nil.
   Proof.
     destruct i; simpl; intros; congruence.
   Qed.  
@@ -255,12 +256,12 @@ Section PRESERVATION.
   Qed.
 
   Lemma label_pos_transf:
-    forall c l o,
+    forall c l o sg,
       label_pos instr_size l o c =
-      label_pos instr_size l o (transf_code c).
+      label_pos instr_size l o (transf_code sg c).
   Proof.
     induction c; simpl; intros; eauto.
-    unfold transf_code. simpl. fold (transf_code c).
+    unfold transf_code. simpl. fold (transf_code sg c).
     destr.
     - destruct a; simpl in Heqb; try congruence.
       destr_in Heqb. subst. simpl. rewrite peq_true. reflexivity.
@@ -272,7 +273,8 @@ Section PRESERVATION.
       simpl in *. unfold Padd, Psub, Plea in *. simpl in *. repeat destr_in IN. intuition congruence.
       unfold Padd, Psub, Plea in *. repeat destr_in H. intuition congruence. inv H0. inv H. auto. inv H.
       unfold Padd, Psub, Plea in *. repeat destr_in H. congruence. inv H0. inv H. auto.
-  Qed.
+Admitted.
+  (* Qed. *)
 
   Lemma goto_label_senv_equiv:
     forall f l rs m rs' m',
@@ -445,12 +447,12 @@ Qed.
     - exploit functions_transl. eauto. intros FFP.
       exploit find_instr_transl; eauto. intro CA.
       destruct (id_instr i) eqn:ID; [| destruct i; simpl in ID; try congruence].
-      + pose proof (id_instr_transf _ ID) as NORMAL.
-        rewrite NORMAL in CA. inv CA.  inv H8. eapply plus_one.
-        econstructor. eauto. eapply FFP. eauto.
-        erewrite <- exec_instr_senv_equiv; eauto.
-      + (* Pallocframe -> Padd;Psub;Pstoreptr*)
-        generalize (transf_instr_size (Pallocframe sz ofs_ra ofs_link)). intro PSIZE.
+      +  admit. (* pose proof (id_instr_transf _ ID) as NORMAL. *)
+        (* rewrite NORMAL in CA. inv CA.  inv H8. eapply plus_one. *)
+        (* econstructor. eauto. eapply FFP. eauto. *)
+        (* erewrite <- exec_instr_senv_equiv; eauto. *)
+      + admit. (* Pallocframe -> Padd;Psub;Pstoreptr*)
+     (*   generalize (transf_instr_size (Pallocframe sz ofs_ra ofs_link)). intro PSIZE.
         simpl in PSIZE.
         generalize (instr_size_bound (Pallocframe sz ofs_ra ofs_link)). intro PSIZEB.
         subst; simpl in *. inv H2. inv CA. inv H8. inv H10.
@@ -496,8 +498,8 @@ Qed.
           simpl_regs.
           inv INV. inv RSPPTR. destruct H2. simpl in H2. rewrite H2. rewrite H2 in Heqo.
           unfold Val.offset_ptr, Mptr in *. simpl in *.
-          repeat (rewrite PTR64 in *; simpl in *).
-          assert (
+          repeat (rewrite PTR64 in *; simpl in *)
+        (*  assert (
               (Ptrofs.unsigned
               (Ptrofs.add (Ptrofs.add x (Ptrofs.neg (Ptrofs.sub (Ptrofs.repr (align sz 8)) (Ptrofs.repr 8)))) ofs_link))
                 =
@@ -539,7 +541,7 @@ Qed.
          assert ( (Vptr bstack (Ptrofs.add x (Ptrofs.repr 8)))=
                 (Vptr bstack (Ptrofs.add x (Ptrofs.of_int64 (Int64.add Int64.zero (Int64.repr 8)))))
            ). auto.
-                  Admitted.
+    *)              Admitted.
 
                   
         (*  rewrite H4,H5 in Heqo. *)

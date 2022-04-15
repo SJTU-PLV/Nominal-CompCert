@@ -67,3 +67,12 @@ let string_to_ident (l: Byte.int list) : positive option =
   with
   | Not_found ->
     None
+
+let coq_string_to_ident (l: char list) : positive option =
+  try
+    let s = camlstring_of_coqstring l in
+    let i = Hashtbl.find  atom_of_string s in
+    Some i
+  with
+  | Not_found ->
+    None
