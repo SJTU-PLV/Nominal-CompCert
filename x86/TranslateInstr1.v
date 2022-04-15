@@ -397,7 +397,11 @@ Definition get_instr_reloc_addend' (ofs:Z): res Z :=
 Definition translate_Addrmode_AddrE_aux32 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) : res AddrE :=
   match obase,oindex with
   | None,None =>
-    OK (AddrE11 ofs32)
+    if Archi.ptr64 then
+    (* do not use rip-relative addressing *)
+      OK (AddrE7 ofs32)
+    else
+      OK (AddrE11 ofs32)
   | Some base,None =>
     (* some bug only fix here not fixed in reverse *)
     do r <- encode_ireg_u3 base;
@@ -459,8 +463,11 @@ Definition translate_Addrmode_AddrE (sofs: Z) (res_iofs: res Z) (addr:addrmode):
 Definition translate_Addrmode_AddrE_aux64 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) : res (AddrE*u1*u1) :=
   match obase,oindex with
   | None,None =>
-    (* do not use rip-relative addressing *)
-    OK ((AddrE7 ofs32),zero1,zero1)
+    if Archi.ptr64 then
+      (* do not use rip-relative addressing *)
+      OK ((AddrE7 ofs32),zero1,zero1)
+    else
+      Error (msg "Encode 64bit addrmode in 32bit mode ")
   | Some base,None =>
     (* some bug only fix here not fixed in reverse *)
     do B_r <- encode_ireg_u4 base;

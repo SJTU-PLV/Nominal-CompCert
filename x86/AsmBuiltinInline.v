@@ -261,18 +261,45 @@ Definition expand_builtin_va_start_32 r :=
   else
     Error [MSG "Fatal error: va_start used in non-vararg function"].
 
+
+Fixpoint next_arg_locations ir fr ofs l : (Z*Z*Z) :=
+  match l with
+  | [] => (ir,fr,ofs)
+  | (Tint | Tlong | Tany32 | Tany64) :: l =>
+    if Z.leb ir 6
+    then next_arg_locations (ir+1) fr ofs l
+    else next_arg_locations ir fr (ofs+8) l
+  | (Tfloat | Tsingle) :: l =>
+    if Z.leb fr 8
+    then next_arg_locations ir (fr + 1) ofs l
+    else next_arg_locations ir fr (ofs + 8) l
+  end.
+      
+
+(** follow Asmexpand.ml  *)
 Definition expand_builtin_va_start_64 r :=
   if cc_vararg (sig_cc (fn_sig cur_func)) then
-    (* fn_stacksize correct? *)
-    let sz := align (fn_stacksize cur_func) 8 - size_chunk Mptr in
-    let t0 := Z.add sz 8 in
-    let t1 := (size_arguments (fn_sig cur_func)) in
-    let ofs := Z.add t0 t1 in
-    OK [Pleaq RAX (linear_addr RSP ofs);
-       Pmovq_mr (linear_addr r 0) RAX]
+    let '(ir,fr,ofs) := next_arg_locations 0 0 0 (cur_func.(fn_sig)).(sig_args) in
+    let gp_offset := (ir * 8) in
+    let fp_offset := (6 * 8 + fr * 16) in
+    let overflow_data_area := cur_func.(fn_stacksize) + ofs in
+    let reg_save_area := cur_func.(fn_stacksize) - 192 in
+    if ireg_eq r RAX then
+      Error [MSG "Builtin_va_start_64: r = RAX"]
+    else
+    OK [Pmovl_ri RAX (Int.repr gp_offset);
+       Pmovl_mr (linear_addr r 0) RAX;
+       Pmovl_ri RAX (Int.repr fp_offset);
+       Pmovl_mr (linear_addr r 4) RAX;
+       Pmovl_ri RAX (Int.repr overflow_data_area);
+       Pmovl_mr (linear_addr r 8) RAX;
+       Pmovl_ri RAX (Int.repr reg_save_area);
+       Pmovl_mr (linear_addr r 16) RAX]
   else
     Error [MSG "Fatal error: va_start used in non-vararg function"].
-         
+
+
+    
 (* Expand builtin inline assembly *)
 Definition expand_builtin_inline name args res :=
   match name,args,res with
@@ -412,7 +439,8 @@ Definition expand_builtin_inline name args res :=
   | "__builtin_va_start"%string, [BA(IR a)], _ =>
     if (ireg_eq a RDX) then
       if Archi.ptr64
-      then Error (msg "Error vaarg in x86_64")
+      then expand_builtin_va_start_64 a
+           (* then Error (msg "Error vaarg in x86_64") *)
       else expand_builtin_va_start_32 a       
     else
       Error (msg "Error in expanding of builtin: __builtin_va_start arguments incorrect")
@@ -448,6 +476,21 @@ Definition transf_instr (i: instruction): res (list instruction) :=
       Error [MSG "Unsupported Builtin Elimination: debug"]
     | _ => Error [MSG "Unsupported Builtin Elimination: unknown"]
     end
+  (** 64bit mode variant argument ,set %al=float register number
+      follow Asmexpand.ml *)
+  | Pjmp_s _ sg
+  | Pjmp_r _ sg
+  | Pcall_s _ sg
+  | Pcall_r _ sg =>
+    let '(ir, fr, ofs) := next_arg_locations 0 0 0 sg.(sig_args) in
+    if (sg.(sig_cc)).(cc_unproto) then
+      OK [Pmovl_ri RAX (Int.repr fr);i]
+    else
+      match (sg.(sig_cc)).(cc_vararg) with
+      | Some _ =>                
+        OK [Pmovl_ri RAX (Int.repr fr);i]
+      | None => OK [i]
+      end      
   | _ => OK [i]
   end.
 
