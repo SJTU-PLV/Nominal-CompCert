@@ -1182,7 +1182,7 @@ Proof.
 - inv H0. exists te1; split. constructor. auto.
 - monadInv H2. monadInv EQ. simpl in *.
   exploit transl_sizeof. eexact H. eauto. intros SZ; rewrite SZ.
-  exploit (IHalloc_variables x0 (PTree.set id (b1, Ctypes.sizeof ge ty) te1)).
+  exploit (IHalloc_variables x0 (PTree.set id ((fresh_block(support m)), Ctypes.sizeof ge ty) te1)).
   auto.
   constructor.
     (* me_local *)

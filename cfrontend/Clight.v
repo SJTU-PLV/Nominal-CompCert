@@ -265,8 +265,9 @@ Inductive alloc_variables: env -> mem ->
       forall e m,
       alloc_variables e m nil e m
   | alloc_variables_cons:
-      forall e m id ty vars m1 b1 m2 e2,
-      Mem.alloc m 0 (sizeof ge ty) = (m1, b1) ->
+      forall e m id ty vars m1 b1 m2 e2
+      (SP: b1 = fresh_block (support m)),
+      Mem.alloc m 0 (sizeof ge ty) b1 = Some m1 ->
       alloc_variables (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
       alloc_variables e m ((id, ty) :: vars) e2 m2.
 

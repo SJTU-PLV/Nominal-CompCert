@@ -113,9 +113,9 @@ Record match_envs (f: meminj) (cenv: compilenv)
     me_inj:
       forall id1 b1 ty1 id2 b2 ty2, e!id1 = Some(b1, ty1) -> e!id2 = Some(b2, ty2) -> id1 <> id2 -> b1 <> b2;
     me_range:
-      forall id b ty, e!id = Some(b, ty) -> ~ sup_In b lo /\ sup_In b hi;
+      forall id b ty, e!id = Some(b, ty) -> ~ In b lo /\ In b hi;
     me_trange:
-      forall id b ty, te!id = Some(b, ty) -> ~ sup_In b tlo  /\ sup_In b thi;
+      forall id b ty, te!id = Some(b, ty) -> ~ In b tlo  /\ In b thi;
     me_mapped:
       forall id b' ty,
       te!id = Some(b', ty) -> exists b, f b = Some(b', 0) /\ e!id = Some(b, ty);
@@ -134,10 +134,10 @@ Lemma match_envs_invariant:
   forall f cenv e le m lo hi te tle tlo thi f' m',
   match_envs f cenv e le m lo hi te tle tlo thi ->
   (forall b chunk v,
-    f b = None -> ~ sup_In b lo /\ sup_In b hi -> Mem.load chunk m b 0 = Some v -> Mem.load chunk m' b 0 = Some v) ->
+    f b = None -> ~ In b lo /\ In b hi -> Mem.load chunk m b 0 = Some v -> Mem.load chunk m' b 0 = Some v) ->
   inject_incr f f' ->
-  (forall b, ~ sup_In b lo /\ sup_In b hi -> f' b = f b) ->
-  (forall b b' delta, f' b = Some(b', delta) -> ~ sup_In b' tlo /\ sup_In b' thi -> f' b = f b) ->
+  (forall b, ~ In b lo /\ In b hi -> f' b = f b) ->
+  (forall b b' delta, f' b = Some(b', delta) -> ~ In b' tlo /\ In b' thi -> f' b = f b) ->
   match_envs f' cenv e le m' lo hi te tle tlo thi.
 Proof.
   intros until m'; intros ME LD INCR INV1 INV2.
@@ -590,31 +590,34 @@ Lemma alloc_variables_support:
 Proof.
   induction 1.
   apply Mem.sup_include_refl.
-  eapply Mem.sup_include_trans; eauto. exploit Mem.support_alloc; eauto. intros EQ. unfold sup_incr in EQ. apply Mem.sup_include_trans with (Mem.support m1). rewrite EQ. apply Mem.sup_include_refl. apply IHalloc_variables.
+  eapply Mem.sup_include_trans; eauto. exploit Mem.support_alloc; eauto. intros EQ. apply Mem.sup_include_trans with (Mem.support m1). rewrite EQ. right. auto. apply Mem.sup_include_refl.
 Qed.
 
 Lemma alloc_variables_range:
   forall ge id b ty e m vars e' m',
   alloc_variables ge e m vars e' m' ->
-  e'!id = Some(b, ty) -> e!id = Some(b, ty) \/ ~sup_In b (Mem.support m) /\ sup_In b (Mem.support m').
+  e'!id = Some(b, ty) -> e!id = Some(b, ty) \/ ~In b (Mem.support m) /\ In b (Mem.support m').
 Proof.
   induction 1; intros.
   auto.
   exploit IHalloc_variables; eauto. rewrite PTree.gsspec. intros [A|A].
+  -
   destruct (peq id id0). inv A.
-  right. exploit Mem.alloc_result; eauto. exploit Mem.support_alloc; eauto.
-  generalize (alloc_variables_support _ _ _ _ _ _ H0). intros A B C.
-  subst b. split. apply freshness. eapply Mem.sup_include_trans; eauto. apply Mem.sup_include_refl. rewrite B. apply Mem.sup_add_in1.  auto.
-  right. exploit Mem.support_alloc; eauto. intros B. rewrite B in A.
-  destruct A.
-  split. intro. apply H2. apply Mem.sup_add_in2.  auto. auto.
+  +
+  right. exploit Mem.support_alloc; eauto.
+  generalize (alloc_variables_support _ _ _ _ _ _ H0). intros A B.
+  split. apply freshness. eapply Mem.sup_include_trans; eauto. apply Mem.sup_include_refl. rewrite B. left. auto.
+  + left. auto.
+  - destruct A.
+  right. exploit Mem.support_alloc; eauto. intros B.
+  split. intro. apply H2. rewrite B. right. auto. auto.
 Qed.
 
 Lemma alloc_variables_injective:
   forall ge id1 b1 ty1 id2 b2 ty2 e m vars e' m',
   alloc_variables ge e m vars e' m' ->
   (e!id1 = Some(b1, ty1) -> e!id2 = Some(b2, ty2) -> id1 <> id2 -> b1 <> b2) ->
-  (forall id b ty, e!id = Some(b, ty) -> sup_In b (Mem.support m)) ->
+  (forall id b ty, e!id = Some(b, ty) -> In b (Mem.support m)) ->
   (e'!id1 = Some(b1, ty1) -> e'!id2 = Some(b2, ty2) -> id1 <> id2 -> b1 <> b2).
 Proof.
   induction 1; intros.
@@ -624,9 +627,11 @@ Proof.
   destruct (peq id1 id); destruct (peq id2 id).
   congruence.
   inv H6. exploit H2; eauto. intros.
+  set (b1 := fresh_block (support m)) in *.
   apply Mem.valid_not_valid_diff with m b2 b1 in H6. auto.
   apply Mem.fresh_block_alloc in H. auto.
   inv H7. exploit H2; eauto. intros.
+  set (b2 := fresh_block (support m)) in *.
   apply Mem.valid_not_valid_diff with m b1 b2 in H7. auto.
   apply Mem.fresh_block_alloc in H. auto.
   eauto.
@@ -680,6 +685,7 @@ Proof.
   split. intros. transitivity (j1 b). apply M. eapply Mem.valid_block_alloc; eauto.
     apply D. apply Mem.valid_not_valid_diff with m; auto. eapply Mem.fresh_block_alloc; eauto.
   split. intros. transitivity (j1 b). eapply N; eauto.
+    set (b1 := fresh_block (support m)) in *.
     destruct (eq_block b b1); auto. subst.
     assert (j' b1 = j1 b1). apply M. eapply Mem.valid_new_block; eauto.
     congruence.
@@ -691,6 +697,7 @@ Proof.
       destruct H1. congruence. elim H5. unfold var_names. change id with (fst (id, ty0)). apply in_map; auto.
     subst ty0.
     exploit P; eauto. intros [X Y]. rewrite Heqb. rewrite X. rewrite Y.
+    set (b1 := fresh_block (support m)) in *.
     exists b1. split. apply PTree.gss.
     split. auto.
     rewrite M. auto. eapply Mem.valid_new_block; eauto.
@@ -702,8 +709,10 @@ Proof.
   (* variable is not lifted out of memory *)
   exploit Mem.alloc_parallel_inject.
     eauto. eauto. apply Z.le_refl. apply Z.le_refl.
-  intros [j1 [tm1 [tb1 [A [B [C [D E]]]]]]].
-  exploit IHalloc_variables; eauto. instantiate (1 := PTree.set id (tb1, ty) te).
+    instantiate (1:= fresh_block (Mem.support tm)). apply freshness.
+  intros [j1 [tm1 [A [B [C [D E]]]]]].
+  exploit IHalloc_variables; eauto.
+  (*instantiate (1 := PTree.set id (tb1, ty) te). *)
   intros [j' [te' [tm' [J [K [L [M [N [Q [O P]]]]]]]]]].
   exists j'; exists te'; exists tm'.
   split. simpl. econstructor; eauto. rewrite comp_env_preserved; auto.
@@ -712,11 +721,15 @@ Proof.
   split. intros. transitivity (j1 b). apply M. eapply Mem.valid_block_alloc; eauto.
     apply E. apply Mem.valid_not_valid_diff with m; auto. eapply Mem.fresh_block_alloc; eauto.
   split. intros. transitivity (j1 b). eapply N; eauto. eapply Mem.valid_block_alloc; eauto.
+  set (b1 := fresh_block (support m)) in *.
     destruct (eq_block b b1); auto. subst.
     assert (j' b1 = j1 b1). apply M. eapply Mem.valid_new_block; eauto.
     rewrite H4 in H1. rewrite D in H1. inv H1. eelim Mem.fresh_block_alloc; eauto.
-  split. intros. destruct (eq_block b' tb1).
+  split. intros.
+    set (tb1 := fresh_block (support tm)) in *.
+    destruct (eq_block b' tb1).
     subst b'. rewrite (N _ _ _ H1) in H1.
+    set (b1 := fresh_block (support m)) in *.
     destruct (eq_block b b1). subst b. rewrite D in H1; inv H1.
     exploit (P id); auto. intros [X Y]. exists id; exists ty.
     rewrite X; rewrite Y. repeat rewrite PTree.gss. auto.
@@ -732,6 +745,8 @@ Proof.
       destruct H1. congruence. elim H5. unfold var_names. change id with (fst (id, ty0)). apply in_map; auto.
     subst ty0.
     exploit P; eauto. intros [X Y]. rewrite Heqb. rewrite X. rewrite Y.
+    set (b1 := fresh_block (support m)) in *.
+    set (tb1 := fresh_block (support tm)) in *.
     exists b1. split. apply PTree.gss.
     exists tb1; split.
     apply PTree.gss.
@@ -1364,11 +1379,11 @@ Qed.
 
 Inductive match_globalenvs (f: meminj) (bound: sup): Prop :=
   | mk_match_globalenvs
-      (DOMAIN: forall b, sup_In b bound -> f b = Some(b, 0))
-      (IMAGE: forall b1 b2 delta, f b1 = Some(b2, delta) -> sup_In b2 bound -> b1 = b2)
-      (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> sup_In b bound)
-      (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> sup_In b bound)
-      (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> sup_In b bound).
+      (DOMAIN: forall b, In b bound -> f b = Some(b, 0))
+      (IMAGE: forall b1 b2 delta, f b1 = Some(b2, delta) -> In b2 bound -> b1 = b2)
+      (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> In b bound)
+      (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> In b bound)
+      (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> In b bound).
 
 Lemma match_globalenvs_preserves_globals:
   forall f,
@@ -1586,10 +1601,10 @@ Lemma match_cont_invariant:
   forall f' m' f cenv k tk m bound tbound,
   match_cont f cenv k tk m bound tbound ->
   (forall b chunk v,
-    f b = None -> sup_In b bound -> Mem.load chunk m b 0 = Some v -> Mem.load chunk m' b 0 = Some v) ->
+    f b = None -> In b bound -> Mem.load chunk m b 0 = Some v -> Mem.load chunk m' b 0 = Some v) ->
   inject_incr f f' ->
-  (forall b, sup_In b bound -> f' b = f b) ->
-  (forall b b' delta, f' b = Some(b', delta) -> sup_In b' tbound -> f' b = f b) ->
+  (forall b, In b bound -> f' b = f b) ->
+  (forall b b' delta, f' b = Some(b', delta) -> In b' tbound -> f' b = f b) ->
   match_cont f' cenv k tk m' bound tbound.
 Proof.
   induction 1; intros LOAD INCR INJ1 INJ2; econstructor; eauto.
@@ -1615,7 +1630,7 @@ Lemma match_cont_assign_loc:
   forall f cenv k tk m bound tbound ty loc ofs bf v m',
   match_cont f cenv k tk m bound tbound ->
   assign_loc ge ty m loc ofs bf v m' ->
-  ~ sup_In loc bound ->
+  ~ In loc bound ->
   match_cont f cenv k tk m' bound tbound.
 Proof.
   intros. eapply match_cont_invariant; eauto.

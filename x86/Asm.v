@@ -941,7 +941,10 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Plabel lbl =>
       Next (nextinstr rs) m
   | Pallocframe sz ofs_ra ofs_link =>
-      let (m1, stk) := Mem.alloc m 0 sz in
+      let stk := fresh_block (support m) in
+      match Mem.alloc m 0 sz stk with
+      | None => Stuck
+      | Some m1 =>
       let sp := Vptr stk Ptrofs.zero in
       match Mem.storev Mptr m1 (Val.offset_ptr sp ofs_link) rs#RSP with
       | None => Stuck
@@ -950,6 +953,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
           | None => Stuck
           | Some m3 => Next (nextinstr (rs #RAX <- (rs#RSP) #RSP <- sp)) m3
           end
+      end
       end
   | Pfreeframe sz ofs_ra ofs_link =>
       match Mem.loadv Mptr m (Val.offset_ptr rs#RSP ofs_ra) with

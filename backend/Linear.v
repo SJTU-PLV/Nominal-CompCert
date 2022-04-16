@@ -230,8 +230,9 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s f (Vptr stk Ptrofs.zero) (Lreturn :: b) rs m)
         E0 (Returnstate s (return_regs (parent_locset s) rs) m')
   | exec_function_internal:
-      forall s f rs m rs' m' stk,
-      Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
+      forall s f rs m rs' m' stk
+      (SP: stk = fresh_block (support m)),
+      Mem.alloc m 0 f.(fn_stacksize) stk = Some m' ->
       rs' = undef_regs destroyed_at_function_entry (call_regs rs) ->
       step (Callstate s (Internal f) rs m)
         E0 (State s f (Vptr stk Ptrofs.zero) f.(fn_code) rs' m')

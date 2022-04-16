@@ -22,9 +22,10 @@ Require Import Integers.
 Require Import Floats.
 Require Import Values.
 Require Import Memory.
+Require Import Globalenvs.
 Require Import Ctypes.
 Require Archi.
-
+Import Mem.
 (** * Syntax of operators. *)
 
 Inductive unary_operation : Type :=

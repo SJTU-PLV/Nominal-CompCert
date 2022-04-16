@@ -16,7 +16,7 @@ Require Import Coqlib.
 Require Import AST Errors Integers Floats Values Memory Globalenvs.
 Require Import Op Locations Conventions Mach Asm.
 Require Import Asmgen Asmgenproof0.
-
+Import Mem.
 Local Open Scope error_monad_scope.
 
 (** * Correspondence between Mach registers and x86 registers *)

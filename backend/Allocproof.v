@@ -2445,6 +2445,7 @@ Proof.
     rewrite call_regs_param_values. eexact ARGS.
     exact WTRS.
   intros [ls1 [A B]].
+  inversion MEM. rewrite mext_sup in *.
   econstructor; split.
   eapply plus_left. econstructor; eauto.
   eapply star_left. econstructor; eauto.

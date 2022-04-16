@@ -842,6 +842,7 @@ Transparent destroyed_by_jumptable.
   intros [m2' [F G]].
   exploit Mem.storev_extends. eexact G. eexact H2. eauto. eauto.
   intros [m3' [P Q]].
+  subst sp. inversion MEXT. rewrite mext_sup in *.
   left; econstructor; split.
   apply plus_one. econstructor; eauto.
   simpl. rewrite Ptrofs.unsigned_zero. simpl. eauto.

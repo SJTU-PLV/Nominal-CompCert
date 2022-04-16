@@ -513,7 +513,7 @@ Proof.
   assert (MF: match_function f tf) by (apply transf_function_match; auto).
   inversion MF; subst.
   econstructor; split.
-  apply plus_one. constructor. simpl; eauto. reflexivity.
+  apply plus_one. constructor. eauto. simpl; eauto. reflexivity.
   constructor; auto.
 - (* external function *)
   monadInv H8. econstructor; split.

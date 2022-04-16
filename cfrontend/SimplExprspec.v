@@ -13,8 +13,9 @@
 (** Relational specification of expression simplification. *)
 
 Require Import Coqlib Maps Errors Integers Floats.
-Require Import AST Linking Memory.
+Require Import AST Linking Memory Memstructure.
 Require Import Ctypes Cop Csyntax Clight SimplExpr.
+Import MemPos.
 
 Section SPEC.
 

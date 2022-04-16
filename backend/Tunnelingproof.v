@@ -658,7 +658,8 @@ Proof.
   constructor; eauto using return_regs_lessdef, match_parent_locset.
 - (* internal function *)
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
-  intros (tm' & ALLOC & MEM'). 
+  intros (tm' & ALLOC & MEM').
+  inversion MEM. rewrite mext_sup in *.
   left; simpl; econstructor; split.
   eapply exec_function_internal; eauto.
   simpl. econstructor; eauto using locmap_undef_regs_lessdef, call_regs_lessdef.

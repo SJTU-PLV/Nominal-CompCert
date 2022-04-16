@@ -13,8 +13,9 @@
 (** Translation from Compcert C to Clight.
     Side effects are pulled out of Compcert C expressions. *)
 
-Require Import Coqlib Maps Integers Floats Values AST Memory Errors.
+Require Import Coqlib Maps Integers Floats Values AST Memory Errors Globalenvs.
 Require Import Ctypes Cop Csyntax Clight.
+Import Mem.
 
 Local Open Scope string_scope.
 Local Open Scope list_scope.

@@ -15,7 +15,7 @@
 Require Import Coqlib Maps Errors.
 Require Import Integers Floats Values AST Memory Globalenvs.
 Require Import Ctypes Cop Csyntax.
-
+Import Mem.
 Open Scope error_monad_scope.
 
 (** * Evaluation of compile-time constant expressions *)

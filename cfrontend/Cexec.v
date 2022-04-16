@@ -492,7 +492,8 @@ Definition do_ef_malloc
   match vargs with
   | v :: nil =>
       do sz <- do_alloc_size v;
-      let (m', b) := Mem.alloc m (- size_chunk Mptr) (Ptrofs.unsigned sz) in
+      let b := fresh_block (support m) in
+      do m' <- Mem.alloc m (- size_chunk Mptr) (Ptrofs.unsigned sz) b;
       do m'' <- Mem.store Mptr m' b (- size_chunk Mptr) v;
       Some(w, E0, Vptr b Ptrofs.zero, m'')
   | _ => None
@@ -629,8 +630,10 @@ Proof with try congruence.
   exploit do_volatile_store_sound; eauto. intuition. econstructor; eauto.
 - (* EF_malloc *)
   unfold do_ef_malloc. destruct vargs... destruct vargs... mydestr.
-  destruct (Mem.alloc m (- size_chunk Mptr) (Ptrofs.unsigned i)) as [m1 b] eqn:?. mydestr.
-  split. apply SIZE in Heqo. subst v. econstructor; eauto. constructor.
+  set (b:= fresh_block (support m)) in *.
+  destruct (Mem.alloc m (- size_chunk Mptr) (Ptrofs.unsigned i) b) as [m1|] eqn:?. mydestr.
+  split. apply SIZE in Heqo. subst v. econstructor; eauto. congruence.
+  constructor. inversion Heqo0.
 - (* EF_free *)
   unfold do_ef_free. destruct vargs... destruct v... 
 + destruct vargs... mydestr; InvBooleans; subst i.
@@ -694,7 +697,7 @@ Proof.
   exploit do_volatile_store_complete; eauto. intros EQ; rewrite EQ; auto.
 - (* EF_malloc *)
   inv H; unfold do_ef_malloc.
-  inv H0. erewrite SIZE by eauto. rewrite H1, H2. auto.
+  inv H0. erewrite SIZE by eauto. rewrite H2, H3. auto.
 - (* EF_free *)
   inv H; unfold do_ef_free.
 + inv H0. rewrite H1. erewrite SIZE by eauto. rewrite zlt_true. rewrite H3. auto. lia.
@@ -1960,8 +1963,12 @@ Fixpoint do_alloc_variables (e: env) (m: mem) (l: list (ident * type)) {struct l
   match l with
   | nil => (e,m)
   | (id, ty) :: l' =>
-      let (m1,b1) := Mem.alloc m 0 (sizeof ge ty) in
+      let b1 := fresh_block (support m) in
+      match Mem.alloc m 0 (sizeof ge ty) b1 with
+      | None => (e,m)
+      | Some m1 =>
       do_alloc_variables (PTree.set id (b1, ty) e) m1 l'
+      end
 end.
 
 Lemma do_alloc_variables_sound:
@@ -1969,8 +1976,10 @@ Lemma do_alloc_variables_sound:
 Proof.
   induction l; intros; simpl.
   constructor.
-  destruct a as [id ty]. destruct (Mem.alloc m 0 (sizeof ge ty)) as [m1 b1] eqn:?; simpl.
+  destruct a as [id ty].
+  destruct (Mem.alloc m 0 (sizeof ge ty) (fresh_block (support m))) as [m1|] eqn:?; simpl.
   econstructor; eauto.
+  unfold Mem.alloc in Heqo. destr_in Heqo. apply freshness in i. inversion i.
 Qed.
 
 Lemma do_alloc_variables_complete:
@@ -1978,8 +1987,7 @@ Lemma do_alloc_variables_complete:
   do_alloc_variables e1 m1 l = (e2, m2).
 Proof.
   induction 1; simpl.
-  auto.
-  rewrite H; rewrite IHalloc_variables; auto.
+  auto. destr.
 Qed.
 
 Function sem_bind_parameters (w: world) (e: env) (m: mem) (l: list (ident * type)) (lv: list val)

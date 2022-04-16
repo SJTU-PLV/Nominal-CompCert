@@ -1043,11 +1043,12 @@ Lemma function_prologue_correct:
   (forall r, Val.has_type (ls (R r)) (mreg_type r)) ->
   ls1 = LTL.undef_regs destroyed_at_function_entry (LTL.call_regs ls) ->
   rs1 = undef_regs destroyed_at_function_entry rs ->
-  Mem.alloc m1 0 f.(Linear.fn_stacksize) = (m2, sp) ->
+  Mem.alloc m1 0 f.(Linear.fn_stacksize) sp = Some m2 ->
   Val.has_type parent Tptr -> Val.has_type ra Tptr ->
   m1' |= minjection j m1 ** globalenv_inject ge j ** P ->
   exists j', exists rs', exists m2', exists sp', exists m3', exists m4', exists m5',
-     Mem.alloc m1' 0 tf.(fn_stacksize) = (m2', sp')
+      sp' = fresh_block (support m1') 
+  /\  Mem.alloc m1' 0 tf.(fn_stacksize) sp' = Some m2'
   /\ store_stack m2' (Vptr sp' Ptrofs.zero) Tptr tf.(fn_link_ofs) parent = Some m3'
   /\ store_stack m3' (Vptr sp' Ptrofs.zero) Tptr tf.(fn_retaddr_ofs) ra = Some m4'
   /\ star step tge
@@ -1067,7 +1068,8 @@ Local Opaque b fe.
   generalize (frame_env_range b) (frame_env_aligned b). replace (make_env b) with fe by auto. simpl.
   intros LAYOUT1 LAYOUT2.
   (* Allocation step *)
-  destruct (Mem.alloc m1' 0 (fe_size fe)) as [m2' sp'] eqn:ALLOC'.
+  set (sp':= fresh_block(support m1')) in *.
+  destruct (Mem.alloc m1' 0 (fe_size fe) sp') as [m2'|] eqn:ALLOC'.
   exploit alloc_parallel_rule_2.
   eexact SEP. eexact ALLOC. eexact ALLOC'.
   instantiate (1 := fe_stack_data fe). tauto.
@@ -1136,6 +1138,7 @@ Local Opaque b fe.
 (* Conclusions *)
   exists j', rs2, m2', sp', m3', m4', m5'.
   split. auto.
+  split. auto.
   split. exact STORE_PARENT.
   split. exact STORE_RETADDR.
   split. eexact SAVE_CS.
@@ -1146,6 +1149,9 @@ Local Opaque b fe.
     unfold call_regs. apply AGARGS. apply incoming_slot_in_parameters; auto.
   split. exact SEPFINAL.
   split. exact SAME. exact INCR.
+  (*alloc_succeed*)
+  unfold Mem.alloc in ALLOC'.
+  destr_in ALLOC'. eapply freshness in i. inversion i.
 Qed.
 
 (** The following lemmas show the correctness of the register reloading
@@ -2059,7 +2065,7 @@ Proof.
   eapply match_stacks_type_sp; eauto.
   eapply match_stacks_type_retaddr; eauto.
   clear SEP;
-  intros (j' & rs' & m2' & sp' & m3' & m4' & m5' & A & B & C & D & E & F & SEP & J & K).
+  intros (j' & rs' & m2' & sp' & m3' & m4' & m5' & SP & A & B & C & D & E & F & SEP & J & K).
   rewrite (sep_comm (globalenv_inject ge j')) in SEP.
   rewrite (sep_swap (minjection j' m')) in SEP.
   econstructor; split.
