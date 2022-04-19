@@ -18,7 +18,8 @@
 
 open Format
 open Camlcoq
-open Values
+open Globalenvs
+open Mem
 open AST
 open! Ctypes
 open Cop
@@ -170,7 +171,7 @@ let rec precedence = function
 (* Expressions *)
 
 let print_pointer_hook
-   : (formatter -> Values.block * Integers.Int.int -> unit) ref
+   : (formatter -> block * Integers.Int.int -> unit) ref
    = ref (fun p (b, ofs) -> ())
 
 let print_typed_value p v ty =

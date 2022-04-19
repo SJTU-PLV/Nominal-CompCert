@@ -18,7 +18,7 @@ open C
 
 open Camlcoq
 open! Floats
-open Values
+open Globalenvs
 open Ctypes
 open Csyntax
 
@@ -383,8 +383,8 @@ let globals_for_strings globs =
 
 let constant_size_t a =
   match Initializers.constval_cast !comp_env a Ctyping.size_t with
-  | Errors.OK(Vint n) -> Some(Integers.Int.unsigned n)
-  | Errors.OK(Vlong n) -> Some(Integers.Int64.unsigned n)
+  | Errors.OK(Mem.Vint n) -> Some(Integers.Int.unsigned n)
+  | Errors.OK(Mem.Vlong n) -> Some(Integers.Int64.unsigned n)
   | _ -> None
 
 let make_builtin_memcpy args =
@@ -461,7 +461,7 @@ let make_builtin_va_arg env ty e =
         "__compcert_va_composite" ty e
   | _ ->
       unsupported "va_arg at this type";
-      Eval(Vint(coqint_of_camlint 0l), type_int32s)
+      Eval(Mem.Vint(coqint_of_camlint 0l), type_int32s)
 
 (** ** Translation functions *)
 
@@ -733,7 +733,7 @@ let check_volatile_bitfield env e =
   && List.mem AVolatile (Cutil.attributes_of_type env e.etyp) then
     warning Diagnostics.Unnamed "access to a volatile bit field, the 'volatile' qualifier is ignored"
 
-let ezero = Eval(Vint(coqint_of_camlint 0l), type_int32s)
+let ezero = Eval(Mem.Vint(coqint_of_camlint 0l), type_int32s)
 
 let ewrap = function
   | Errors.OK e -> e
