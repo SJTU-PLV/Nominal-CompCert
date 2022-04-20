@@ -47,7 +47,7 @@ Local Open Scope error_monad_scope.
 
 Set Implicit Arguments.
 
-Module Mem := MemPos.
+Module Mem := StrucMem.
 Import Mem.
 
 (** Auxiliary function for initialization of global variables. *)
