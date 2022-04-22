@@ -17,6 +17,12 @@ Local Open Scope error_monad_scope.
 
 Definition transf_instr (i:instruction) :  instruction* option (ident * (globdef fundef unit)) :=
   match i with
+  | Pmovq_ri r imm64 =>
+    let id := create_int64_literal_ident tt in
+    let var := mkglobvar tt [Init_int64 imm64] true false in
+    let def := Gvar var in
+    let a := Addrmode None None (inr (id, Ptrofs.zero)) in
+    (Pmovq_rm r a, Some (id, def))
   | Paddq_ri r imm64 =>
     let id := create_int64_literal_ident tt in
     let var := mkglobvar tt [Init_int64 imm64] true false in
@@ -73,9 +79,9 @@ Definition acc_instr (acc: code * list (ident * (globdef fundef unit))) (i: inst
   let (i', o_id_def) := transf_instr i in
   match o_id_def with
   | Some id_def =>
-    (c++[i], id_defs ++ [id_def])
+    (c++[i'], id_defs ++ [id_def])
   | None =>
-    (c++[i], id_defs)
+    (c++[i'], id_defs)
   end.
 
 Definition transf_code (c:code) :=

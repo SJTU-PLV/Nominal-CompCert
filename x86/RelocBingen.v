@@ -776,19 +776,24 @@ Definition encode_instr (ofs:Z) (i: instruction) : res (list byte) :=
 Section INSTR_SIZE.
   Variable instr_size : instruction -> Z.
 
+Definition concat_byte (acc: res (list byte)) i :=
+  do code <- acc;
+  do c <- EncDecRet.encode_Instruction i;
+  OK (code ++ c).
+  
 (* use generated encoder*)
 Definition acc_instrs r i := 
   do r' <- r;
   let '(ofs, code) := r' in
-  do i1 <- translate_instr rtbl_ofs_map ofs i;
-  do c <- EncDecRet.encode_Instruction i1;
-  OK (ofs + instr_size i, rev c ++ code).
+  do c1 <- translate_instr rtbl_ofs_map ofs i;
+  do c <- fold_left concat_byte c1 (OK []);
+  OK (ofs + instr_size i, code ++ c).
 
 (** Translation of a sequence of instructions in a function *)
 Definition transl_code (c:code) : res (list byte) :=
   do r <- fold_left acc_instrs c (OK (0, []));
   let '(_, c') := r in
-  OK (rev c').
+  OK c'.
 
 End INSTR_SIZE.
 

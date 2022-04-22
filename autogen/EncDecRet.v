@@ -278,7 +278,7 @@ Hint Unfold read_B write_B read_R write_R read_W write_W read_X write_X read_bas
 
 Hint Unfold AddrE12_bp AddrE11_bp AddrE10_bp AddrE9_bp AddrE8_bp AddrE7_bp AddrE6_bp AddrE5_bp AddrE4_bp AddrE0_bp :AddrE_bpdb.
 
-Hint Unfold REX_WRXB_bp Psubl_ri_bp Pbsqrtsd_bp Psbbl_rr_bp Prep_movsl_bp Pmovsq_rm_bp Pmovsq_mr_bp Pminsd_bp Pmaxsd_bp Pbswap32_bp Pbsrl_bp Pbsfl_bp Paddl_mi_bp Paddl_GvEv_bp Paddl_EvGv_bp Padcl_rr_bp Padcl_ri_bp Pjcc_rel_bp Pret_iw_bp Pret_bp Pcall_r_bp Pcall_ofs_bp Pnop_bp Pjmp_Ev_bp Pjmp_l_rel_bp Pandps_fm_bp Pxorps_GvEv_bp Pxorpd_GvEv_bp Pcomiss_ff_bp Pcomisd_ff_bp Pdivss_ff_bp Pdivsd_ff_bp Pmuls_ff_bp Pmuld_ff_bp Psubs_ff_bp Psubd_ff_bp Pandpd_GvEv_bp Padds_ff_bp Paddd_ff_bp Psetcc_bp Pcmov_bp Ptestl_EvGv_bp Ptestl_ri_bp Pcmpl_ri_bp Pcmpl_GvEv_bp Pcmpl_EvGv_bp Prorl_ri_bp Prolw_ri_bp Pshld_ri_bp Psarl_rcl_bp Psarl_ri_bp Pshrl_rcl_bp Pshrl_ri_bp Psall_rcl_bp Psall_ri_bp Pnotl_bp Pxorl_GvEv_bp Pxorl_EvGv_bp Pxorl_ri_bp Porl_GvEv_bp Porl_EvGv_bp Porl_ri_bp Pandl_ri_bp Pandl_GvEv_bp Pandl_EvGv_bp Pidivl_r_bp Pdivl_r_bp Pcltd_bp Pmull_r_bp Pimull_r_bp Pimull_ri_bp Pimull_GvEv_bp Psubl_GvEv_bp Psubl_EvGv_bp Paddl_ri_bp Pnegl_bp Pleal_bp Pcvttss2si_rf_bp Pcvtsi2sd_fr_bp Pcvtsi2ss_fr_bp Pcvttsd2si_rf_bp Pcvtss2sd_ff_bp Pcvtsd2ss_ff_bp Pmovsw_GvEv_bp Pmovzw_GvEv_bp Pmovsb_GvEv_bp Pmovzb_rm_bp Pmovw_rm_bp Pmovw_mr_bp Pmovb_rm_bp Pmovb_mr_bp Pxchg_rr_bp Pflds_m_bp Pfstps_m_bp Pfstpl_m_bp Pfldl_m_bp Pmovss_fm_bp Pmovss_mf_bp Pmovsd_fm_bp Pmovsd_mf_bp Pmovl_rm_bp Pmovl_mr_bp Pmovl_ri_bp :Instruction_bpdb.
+Hint Unfold REX_WRXB_bp Psubl_ri_bp Pbsqrtsd_bp Psbbl_rr_bp Prep_movsl_bp Pmovsq_rm_bp Pmovsq_mr_bp Pminsd_bp Pmaxsd_bp Pbswap32_bp Pbsrl_bp Pbsfl_bp Paddl_mi_bp Paddl_GvEv_bp Paddl_EvGv_bp Padcl_rr_bp Padcl_ri_bp Pjcc_rel_bp Pret_iw_bp Pret_bp Pcall_r_bp Pcall_ofs_bp Pnop_bp Pjmp_Ev_bp Pjmp_l_rel_bp Pandps_fm_bp Pxorps_GvEv_bp Pxorpd_GvEv_bp Pcomiss_ff_bp Pcomisd_ff_bp Pdivss_ff_bp Pdivsd_ff_bp Pmuls_ff_bp Pmuld_ff_bp Psubs_ff_bp Psubd_ff_bp Pandpd_GvEv_bp Padds_ff_bp Paddd_ff_bp Psetcc_bp Pcmov_bp Ptestl_EvGv_bp Ptestl_ri_bp Pcmpl_ri_bp Pcmpl_GvEv_bp Pcmpl_EvGv_bp Prorl_ri_bp Prolw_ri_bp Pshld_ri_bp Psarl_rcl_bp Psarl_ri_bp Pshrl_rcl_bp Pshrl_ri_bp Psall_rcl_bp Psall_ri_bp Pnotl_bp Pxorl_GvEv_bp Pxorl_EvGv_bp Pxorl_ri_bp Porl_GvEv_bp Porl_EvGv_bp Porl_ri_bp Pandl_ri_bp Pandl_GvEv_bp Pandl_EvGv_bp Pidivl_r_bp Pdivl_r_bp Pcltd_bp Pmull_r_bp Pimull_r_bp Pimull_ri_bp Pimull_GvEv_bp Psubl_GvEv_bp Psubl_EvGv_bp Paddl_ri_bp Pnegl_bp Pleal_bp Pcvttss2si_rf_bp Pcvtsi2sd_fr_bp Pcvtsi2ss_fr_bp Pcvttsd2si_rf_bp Pcvtss2sd_ff_bp Pcvtsd2ss_ff_bp Pmovsxd_GvEv_bp Pmovsw_GvEv_bp Pmovzw_GvEv_bp Pmovsb_GvEv_bp Pmovzb_rm_bp Pmovw_rm_bp Pmovw_mr_bp Pmovb_rm_bp Pmovb_mr_bp Pxchg_rr_bp Pflds_m_bp Pfstps_m_bp Pfstpl_m_bp Pfldl_m_bp Pmovss_fm_bp Pmovss_mf_bp Pmovsd_fm_bp Pmovsd_mf_bp Pmovl_rm_bp Pmovl_mr_bp Pmovl_ri_bp :Instruction_bpdb.
 Lemma AddrE_bp_in_list0: 
 In AddrE12_bp AddrE_bp_list.
 Proof.
@@ -745,101 +745,106 @@ Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list83: 
-In Pmovsw_GvEv_bp Instruction_bp_list.
+In Pmovsxd_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list84: 
-In Pmovzw_GvEv_bp Instruction_bp_list.
+In Pmovsw_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list85: 
-In Pmovsb_GvEv_bp Instruction_bp_list.
+In Pmovzw_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list86: 
-In Pmovzb_rm_bp Instruction_bp_list.
+In Pmovsb_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list87: 
-In Pmovw_rm_bp Instruction_bp_list.
+In Pmovzb_rm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list88: 
-In Pmovw_mr_bp Instruction_bp_list.
+In Pmovw_rm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list89: 
-In Pmovb_rm_bp Instruction_bp_list.
+In Pmovw_mr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list90: 
-In Pmovb_mr_bp Instruction_bp_list.
+In Pmovb_rm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list91: 
-In Pxchg_rr_bp Instruction_bp_list.
+In Pmovb_mr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list92: 
-In Pflds_m_bp Instruction_bp_list.
+In Pxchg_rr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list93: 
-In Pfstps_m_bp Instruction_bp_list.
+In Pflds_m_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list94: 
-In Pfstpl_m_bp Instruction_bp_list.
+In Pfstps_m_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list95: 
-In Pfldl_m_bp Instruction_bp_list.
+In Pfstpl_m_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list96: 
-In Pmovss_fm_bp Instruction_bp_list.
+In Pfldl_m_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list97: 
-In Pmovss_mf_bp Instruction_bp_list.
+In Pmovss_fm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list98: 
-In Pmovsd_fm_bp Instruction_bp_list.
+In Pmovss_mf_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list99: 
-In Pmovsd_mf_bp Instruction_bp_list.
+In Pmovsd_fm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list100: 
-In Pmovl_rm_bp Instruction_bp_list.
+In Pmovsd_mf_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list101: 
-In Pmovl_mr_bp Instruction_bp_list.
+In Pmovl_rm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list102: 
+In Pmovl_mr_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list103: 
 In Pmovl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
@@ -1251,6 +1256,7 @@ Inductive Instruction: Type :=
 | Pcvttsd2si_rf(uvar3_0:u3)(uvar3_1:u3)
 | Pcvtss2sd_ff(uvar3_0:u3)(uvar3_1:u3)
 | Pcvtsd2ss_ff(uvar3_0:u3)(uvar3_1:u3)
+| Pmovsxd_GvEv(AddrE:AddrE)(uvar3_0:u3)
 | Pmovsw_GvEv(AddrE:AddrE)(uvar3_0:u3)
 | Pmovzw_GvEv(AddrE:AddrE)(uvar3_0:u3)
 | Pmovsb_GvEv(AddrE:AddrE)(uvar3_0:u3)
@@ -1355,6 +1361,7 @@ Inductive Instruction_op: Type :=
 | Pcvttsd2si_rf_op
 | Pcvtss2sd_ff_op
 | Pcvtsd2ss_ff_op
+| Pmovsxd_GvEv_op
 | Pmovsw_GvEv_op
 | Pmovzw_GvEv_op
 | Pmovsb_GvEv_op
@@ -1460,6 +1467,7 @@ Definition Instruction_to_op element  :=
 | Pcvttsd2si_rf _ _ => Pcvttsd2si_rf_op
 | Pcvtss2sd_ff _ _ => Pcvtss2sd_ff_op
 | Pcvtsd2ss_ff _ _ => Pcvtsd2ss_ff_op
+| Pmovsxd_GvEv _ _ => Pmovsxd_GvEv_op
 | Pmovsw_GvEv _ _ => Pmovsw_GvEv_op
 | Pmovzw_GvEv _ _ => Pmovzw_GvEv_op
 | Pmovsb_GvEv _ _ => Pmovsb_GvEv_op
@@ -1566,6 +1574,7 @@ Definition Instruction_op_to_bp element  :=
 | Pcvttsd2si_rf_op => Pcvttsd2si_rf_bp
 | Pcvtss2sd_ff_op => Pcvtss2sd_ff_bp
 | Pcvtsd2ss_ff_op => Pcvtsd2ss_ff_bp
+| Pmovsxd_GvEv_op => Pmovsxd_GvEv_bp
 | Pmovsw_GvEv_op => Pmovsw_GvEv_bp
 | Pmovzw_GvEv_op => Pmovzw_GvEv_bp
 | Pmovsb_GvEv_op => Pmovsb_GvEv_bp
@@ -2350,6 +2359,13 @@ let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
 let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
 let result3 := [byte33] in
 OK (result0 ++ result1 ++ result2 ++ result3)
+| Pmovsxd_GvEv AddrE uvar3_0 => let byte01 := HB["63"] in
+let result0 := [byte01] in
+let byte10 := HB["00"] in
+let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
+do byte12 <- encode_AddrE AddrE byte11;
+let result1 := byte12 in
+OK (result0 ++ result1)
 | Pmovsw_GvEv AddrE uvar3_0 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
 let byte11 := HB["BF"] in
@@ -3663,6 +3679,18 @@ if assertLength uvar3_1 3 then
 do bytes4 <- try_skip_n bytes3 1;
 OK ((Pcvtsd2ss_ff (uvar3_0) (uvar3_1)), 4)
 else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if Pmovsxd_GvEv_bp bin then
+let bytes0 := code in
+do bytes1 <- try_skip_n bytes0 1;
+do byte0 <- try_get_n bytes1 0;
+let uvar3_0 := read_reg_op byte0 in
+if assertLength uvar3_0 3 then
+do (AddrE, localLength0) <- decode_AddrE bytes1;
+do bytes2 <- try_skip_n bytes1 localLength0;
+OK ((Pmovsxd_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
