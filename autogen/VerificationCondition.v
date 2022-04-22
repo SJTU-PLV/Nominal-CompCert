@@ -535,7 +535,7 @@ Definition Pcmov_bp code : bool :=
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
-Definition Ptestq_EvGv_bp code : bool :=
+Definition Ptestl_EvGv_bp code : bool :=
 	let blen := 8 <=? (length code) in
 	let bmask0 := b["11111111"] in
 	let bresult0 := b["10000101"] in
@@ -556,14 +556,14 @@ Definition Pcmpl_ri_bp code : bool :=
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
-Definition Pcmpq_GvEv_bp code : bool :=
+Definition Pcmpl_GvEv_bp code : bool :=
 	let blen := 8 <=? (length code) in
 	let bmask0 := b["11111111"] in
 	let bresult0 := b["00111011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
-Definition Pcmpq_EvGv_bp code : bool :=
+Definition Pcmpl_EvGv_bp code : bool :=
 	let blen := 8 <=? (length code) in
 	let bmask0 := b["11111111"] in
 	let bresult0 := b["00111001"] in
@@ -640,14 +640,14 @@ Definition Pnotl_bp code : bool :=
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
-Definition Pxorq_GvEv_bp code : bool :=
+Definition Pxorl_GvEv_bp code : bool :=
 	let blen := 8 <=? (length code) in
 	let bmask0 := b["11111111"] in
 	let bresult0 := b["00110011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
-Definition Pxorq_EvGv_bp code : bool :=
+Definition Pxorl_EvGv_bp code : bool :=
 	let blen := 8 <=? (length code) in
 	let bmask0 := b["11111111"] in
 	let bresult0 := b["00110001"] in
@@ -661,14 +661,14 @@ Definition Pxorl_ri_bp code : bool :=
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
-Definition Porq_GvEv_bp code : bool :=
+Definition Porl_GvEv_bp code : bool :=
 	let blen := 8 <=? (length code) in
 	let bmask0 := b["11111111"] in
 	let bresult0 := b["00001011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
-Definition Porq_EvGv_bp code : bool :=
+Definition Porl_EvGv_bp code : bool :=
 	let blen := 8 <=? (length code) in
 	let bmask0 := b["11111111"] in
 	let bresult0 := b["00001001"] in
@@ -968,7 +968,7 @@ Definition Pmovl_ri_bp code : bool :=
 	let bresult0 := b["10111000"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
-Definition Instruction_bp_list := [REX_WRXB_bp; Psubl_ri_bp; Pbsqrtsd_bp; Psbbl_rr_bp; Prep_movsl_bp; Pmovsq_rm_bp; Pmovsq_mr_bp; Pminsd_bp; Pmaxsd_bp; Pbswap32_bp; Pbsrl_bp; Pbsfl_bp; Paddl_mi_bp; Paddl_GvEv_bp; Paddl_EvGv_bp; Padcl_rr_bp; Padcl_ri_bp; Pjcc_rel_bp; Pret_iw_bp; Pret_bp; Pcall_r_bp; Pcall_ofs_bp; Pnop_bp; Pjmp_Ev_bp; Pjmp_l_rel_bp; Pandps_fm_bp; Pxorps_GvEv_bp; Pxorpd_GvEv_bp; Pcomiss_ff_bp; Pcomisd_ff_bp; Pdivss_ff_bp; Pdivsd_ff_bp; Pmuls_ff_bp; Pmuld_ff_bp; Psubs_ff_bp; Psubd_ff_bp; Pandpd_GvEv_bp; Padds_ff_bp; Paddd_ff_bp; Psetcc_bp; Pcmov_bp; Ptestq_EvGv_bp; Ptestl_ri_bp; Pcmpl_ri_bp; Pcmpq_GvEv_bp; Pcmpq_EvGv_bp; Prorl_ri_bp; Prolw_ri_bp; Pshld_ri_bp; Psarl_rcl_bp; Psarl_ri_bp; Pshrl_rcl_bp; Pshrl_ri_bp; Psall_rcl_bp; Psall_ri_bp; Pnotl_bp; Pxorq_GvEv_bp; Pxorq_EvGv_bp; Pxorl_ri_bp; Porq_GvEv_bp; Porq_EvGv_bp; Porl_ri_bp; Pandl_ri_bp; Pandl_GvEv_bp; Pandl_EvGv_bp; Pidivl_r_bp; Pdivl_r_bp; Pcltd_bp; Pmull_r_bp; Pimull_r_bp; Pimull_ri_bp; Pimull_GvEv_bp; Psubl_GvEv_bp; Psubl_EvGv_bp; Paddl_ri_bp; Pnegl_bp; Pleal_bp; Pcvttss2si_rf_bp; Pcvtsi2sd_fr_bp; Pcvtsi2ss_fr_bp; Pcvttsd2si_rf_bp; Pcvtss2sd_ff_bp; Pcvtsd2ss_ff_bp; Pmovsw_GvEv_bp; Pmovzw_GvEv_bp; Pmovsb_GvEv_bp; Pmovzb_rm_bp; Pmovw_rm_bp; Pmovw_mr_bp; Pmovb_rm_bp; Pmovb_mr_bp; Pxchg_rr_bp; Pflds_m_bp; Pfstps_m_bp; Pfstpl_m_bp; Pfldl_m_bp; Pmovss_fm_bp; Pmovss_mf_bp; Pmovsd_fm_bp; Pmovsd_mf_bp; Pmovl_rm_bp; Pmovl_mr_bp; Pmovl_ri_bp].
+Definition Instruction_bp_list := [REX_WRXB_bp; Psubl_ri_bp; Pbsqrtsd_bp; Psbbl_rr_bp; Prep_movsl_bp; Pmovsq_rm_bp; Pmovsq_mr_bp; Pminsd_bp; Pmaxsd_bp; Pbswap32_bp; Pbsrl_bp; Pbsfl_bp; Paddl_mi_bp; Paddl_GvEv_bp; Paddl_EvGv_bp; Padcl_rr_bp; Padcl_ri_bp; Pjcc_rel_bp; Pret_iw_bp; Pret_bp; Pcall_r_bp; Pcall_ofs_bp; Pnop_bp; Pjmp_Ev_bp; Pjmp_l_rel_bp; Pandps_fm_bp; Pxorps_GvEv_bp; Pxorpd_GvEv_bp; Pcomiss_ff_bp; Pcomisd_ff_bp; Pdivss_ff_bp; Pdivsd_ff_bp; Pmuls_ff_bp; Pmuld_ff_bp; Psubs_ff_bp; Psubd_ff_bp; Pandpd_GvEv_bp; Padds_ff_bp; Paddd_ff_bp; Psetcc_bp; Pcmov_bp; Ptestl_EvGv_bp; Ptestl_ri_bp; Pcmpl_ri_bp; Pcmpl_GvEv_bp; Pcmpl_EvGv_bp; Prorl_ri_bp; Prolw_ri_bp; Pshld_ri_bp; Psarl_rcl_bp; Psarl_ri_bp; Pshrl_rcl_bp; Pshrl_ri_bp; Psall_rcl_bp; Psall_ri_bp; Pnotl_bp; Pxorl_GvEv_bp; Pxorl_EvGv_bp; Pxorl_ri_bp; Porl_GvEv_bp; Porl_EvGv_bp; Porl_ri_bp; Pandl_ri_bp; Pandl_GvEv_bp; Pandl_EvGv_bp; Pidivl_r_bp; Pdivl_r_bp; Pcltd_bp; Pmull_r_bp; Pimull_r_bp; Pimull_ri_bp; Pimull_GvEv_bp; Psubl_GvEv_bp; Psubl_EvGv_bp; Paddl_ri_bp; Pnegl_bp; Pleal_bp; Pcvttss2si_rf_bp; Pcvtsi2sd_fr_bp; Pcvtsi2ss_fr_bp; Pcvttsd2si_rf_bp; Pcvtss2sd_ff_bp; Pcvtsd2ss_ff_bp; Pmovsw_GvEv_bp; Pmovzw_GvEv_bp; Pmovsb_GvEv_bp; Pmovzb_rm_bp; Pmovw_rm_bp; Pmovw_mr_bp; Pmovb_rm_bp; Pmovb_mr_bp; Pxchg_rr_bp; Pflds_m_bp; Pfstps_m_bp; Pfstpl_m_bp; Pfldl_m_bp; Pmovss_fm_bp; Pmovss_mf_bp; Pmovsd_fm_bp; Pmovsd_mf_bp; Pmovl_rm_bp; Pmovl_mr_bp; Pmovl_ri_bp].
 Axiom Instruction_bp_neq0_1: 
 bpt_neq REX_WRXB_bp Psubl_ri_bp.
 
@@ -1090,7 +1090,7 @@ Axiom Instruction_bp_neq0_40:
 bpt_neq REX_WRXB_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq0_41: 
-bpt_neq REX_WRXB_bp Ptestq_EvGv_bp.
+bpt_neq REX_WRXB_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq0_42: 
 bpt_neq REX_WRXB_bp Ptestl_ri_bp.
@@ -1099,10 +1099,10 @@ Axiom Instruction_bp_neq0_43:
 bpt_neq REX_WRXB_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq0_44: 
-bpt_neq REX_WRXB_bp Pcmpq_GvEv_bp.
+bpt_neq REX_WRXB_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq0_45: 
-bpt_neq REX_WRXB_bp Pcmpq_EvGv_bp.
+bpt_neq REX_WRXB_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq0_46: 
 bpt_neq REX_WRXB_bp Prorl_ri_bp.
@@ -1135,19 +1135,19 @@ Axiom Instruction_bp_neq0_55:
 bpt_neq REX_WRXB_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq0_56: 
-bpt_neq REX_WRXB_bp Pxorq_GvEv_bp.
+bpt_neq REX_WRXB_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq0_57: 
-bpt_neq REX_WRXB_bp Pxorq_EvGv_bp.
+bpt_neq REX_WRXB_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq0_58: 
 bpt_neq REX_WRXB_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq0_59: 
-bpt_neq REX_WRXB_bp Porq_GvEv_bp.
+bpt_neq REX_WRXB_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq0_60: 
-bpt_neq REX_WRXB_bp Porq_EvGv_bp.
+bpt_neq REX_WRXB_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq0_61: 
 bpt_neq REX_WRXB_bp Porl_ri_bp.
@@ -1393,7 +1393,7 @@ Axiom Instruction_bp_neq1_40:
 bpt_neq Psubl_ri_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq1_41: 
-bpt_neq Psubl_ri_bp Ptestq_EvGv_bp.
+bpt_neq Psubl_ri_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq1_42: 
 bpt_neq Psubl_ri_bp Ptestl_ri_bp.
@@ -1402,10 +1402,10 @@ Axiom Instruction_bp_neq1_43:
 bpt_neq Psubl_ri_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq1_44: 
-bpt_neq Psubl_ri_bp Pcmpq_GvEv_bp.
+bpt_neq Psubl_ri_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq1_45: 
-bpt_neq Psubl_ri_bp Pcmpq_EvGv_bp.
+bpt_neq Psubl_ri_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq1_46: 
 bpt_neq Psubl_ri_bp Prorl_ri_bp.
@@ -1438,19 +1438,19 @@ Axiom Instruction_bp_neq1_55:
 bpt_neq Psubl_ri_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq1_56: 
-bpt_neq Psubl_ri_bp Pxorq_GvEv_bp.
+bpt_neq Psubl_ri_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq1_57: 
-bpt_neq Psubl_ri_bp Pxorq_EvGv_bp.
+bpt_neq Psubl_ri_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq1_58: 
 bpt_neq Psubl_ri_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq1_59: 
-bpt_neq Psubl_ri_bp Porq_GvEv_bp.
+bpt_neq Psubl_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq1_60: 
-bpt_neq Psubl_ri_bp Porq_EvGv_bp.
+bpt_neq Psubl_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq1_61: 
 bpt_neq Psubl_ri_bp Porl_ri_bp.
@@ -1693,7 +1693,7 @@ Axiom Instruction_bp_neq2_40:
 bpt_neq Pbsqrtsd_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq2_41: 
-bpt_neq Pbsqrtsd_bp Ptestq_EvGv_bp.
+bpt_neq Pbsqrtsd_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq2_42: 
 bpt_neq Pbsqrtsd_bp Ptestl_ri_bp.
@@ -1702,10 +1702,10 @@ Axiom Instruction_bp_neq2_43:
 bpt_neq Pbsqrtsd_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq2_44: 
-bpt_neq Pbsqrtsd_bp Pcmpq_GvEv_bp.
+bpt_neq Pbsqrtsd_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq2_45: 
-bpt_neq Pbsqrtsd_bp Pcmpq_EvGv_bp.
+bpt_neq Pbsqrtsd_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq2_46: 
 bpt_neq Pbsqrtsd_bp Prorl_ri_bp.
@@ -1738,19 +1738,19 @@ Axiom Instruction_bp_neq2_55:
 bpt_neq Pbsqrtsd_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq2_56: 
-bpt_neq Pbsqrtsd_bp Pxorq_GvEv_bp.
+bpt_neq Pbsqrtsd_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq2_57: 
-bpt_neq Pbsqrtsd_bp Pxorq_EvGv_bp.
+bpt_neq Pbsqrtsd_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq2_58: 
 bpt_neq Pbsqrtsd_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq2_59: 
-bpt_neq Pbsqrtsd_bp Porq_GvEv_bp.
+bpt_neq Pbsqrtsd_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq2_60: 
-bpt_neq Pbsqrtsd_bp Porq_EvGv_bp.
+bpt_neq Pbsqrtsd_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq2_61: 
 bpt_neq Pbsqrtsd_bp Porl_ri_bp.
@@ -1990,7 +1990,7 @@ Axiom Instruction_bp_neq3_40:
 bpt_neq Psbbl_rr_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq3_41: 
-bpt_neq Psbbl_rr_bp Ptestq_EvGv_bp.
+bpt_neq Psbbl_rr_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq3_42: 
 bpt_neq Psbbl_rr_bp Ptestl_ri_bp.
@@ -1999,10 +1999,10 @@ Axiom Instruction_bp_neq3_43:
 bpt_neq Psbbl_rr_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq3_44: 
-bpt_neq Psbbl_rr_bp Pcmpq_GvEv_bp.
+bpt_neq Psbbl_rr_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq3_45: 
-bpt_neq Psbbl_rr_bp Pcmpq_EvGv_bp.
+bpt_neq Psbbl_rr_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq3_46: 
 bpt_neq Psbbl_rr_bp Prorl_ri_bp.
@@ -2035,19 +2035,19 @@ Axiom Instruction_bp_neq3_55:
 bpt_neq Psbbl_rr_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq3_56: 
-bpt_neq Psbbl_rr_bp Pxorq_GvEv_bp.
+bpt_neq Psbbl_rr_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq3_57: 
-bpt_neq Psbbl_rr_bp Pxorq_EvGv_bp.
+bpt_neq Psbbl_rr_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq3_58: 
 bpt_neq Psbbl_rr_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq3_59: 
-bpt_neq Psbbl_rr_bp Porq_GvEv_bp.
+bpt_neq Psbbl_rr_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq3_60: 
-bpt_neq Psbbl_rr_bp Porq_EvGv_bp.
+bpt_neq Psbbl_rr_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq3_61: 
 bpt_neq Psbbl_rr_bp Porl_ri_bp.
@@ -2284,7 +2284,7 @@ Axiom Instruction_bp_neq4_40:
 bpt_neq Prep_movsl_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq4_41: 
-bpt_neq Prep_movsl_bp Ptestq_EvGv_bp.
+bpt_neq Prep_movsl_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq4_42: 
 bpt_neq Prep_movsl_bp Ptestl_ri_bp.
@@ -2293,10 +2293,10 @@ Axiom Instruction_bp_neq4_43:
 bpt_neq Prep_movsl_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq4_44: 
-bpt_neq Prep_movsl_bp Pcmpq_GvEv_bp.
+bpt_neq Prep_movsl_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq4_45: 
-bpt_neq Prep_movsl_bp Pcmpq_EvGv_bp.
+bpt_neq Prep_movsl_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq4_46: 
 bpt_neq Prep_movsl_bp Prorl_ri_bp.
@@ -2329,19 +2329,19 @@ Axiom Instruction_bp_neq4_55:
 bpt_neq Prep_movsl_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq4_56: 
-bpt_neq Prep_movsl_bp Pxorq_GvEv_bp.
+bpt_neq Prep_movsl_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq4_57: 
-bpt_neq Prep_movsl_bp Pxorq_EvGv_bp.
+bpt_neq Prep_movsl_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq4_58: 
 bpt_neq Prep_movsl_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq4_59: 
-bpt_neq Prep_movsl_bp Porq_GvEv_bp.
+bpt_neq Prep_movsl_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq4_60: 
-bpt_neq Prep_movsl_bp Porq_EvGv_bp.
+bpt_neq Prep_movsl_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq4_61: 
 bpt_neq Prep_movsl_bp Porl_ri_bp.
@@ -2575,7 +2575,7 @@ Axiom Instruction_bp_neq5_40:
 bpt_neq Pmovsq_rm_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq5_41: 
-bpt_neq Pmovsq_rm_bp Ptestq_EvGv_bp.
+bpt_neq Pmovsq_rm_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq5_42: 
 bpt_neq Pmovsq_rm_bp Ptestl_ri_bp.
@@ -2584,10 +2584,10 @@ Axiom Instruction_bp_neq5_43:
 bpt_neq Pmovsq_rm_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq5_44: 
-bpt_neq Pmovsq_rm_bp Pcmpq_GvEv_bp.
+bpt_neq Pmovsq_rm_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq5_45: 
-bpt_neq Pmovsq_rm_bp Pcmpq_EvGv_bp.
+bpt_neq Pmovsq_rm_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq5_46: 
 bpt_neq Pmovsq_rm_bp Prorl_ri_bp.
@@ -2620,19 +2620,19 @@ Axiom Instruction_bp_neq5_55:
 bpt_neq Pmovsq_rm_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq5_56: 
-bpt_neq Pmovsq_rm_bp Pxorq_GvEv_bp.
+bpt_neq Pmovsq_rm_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq5_57: 
-bpt_neq Pmovsq_rm_bp Pxorq_EvGv_bp.
+bpt_neq Pmovsq_rm_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq5_58: 
 bpt_neq Pmovsq_rm_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq5_59: 
-bpt_neq Pmovsq_rm_bp Porq_GvEv_bp.
+bpt_neq Pmovsq_rm_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq5_60: 
-bpt_neq Pmovsq_rm_bp Porq_EvGv_bp.
+bpt_neq Pmovsq_rm_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq5_61: 
 bpt_neq Pmovsq_rm_bp Porl_ri_bp.
@@ -2863,7 +2863,7 @@ Axiom Instruction_bp_neq6_40:
 bpt_neq Pmovsq_mr_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq6_41: 
-bpt_neq Pmovsq_mr_bp Ptestq_EvGv_bp.
+bpt_neq Pmovsq_mr_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq6_42: 
 bpt_neq Pmovsq_mr_bp Ptestl_ri_bp.
@@ -2872,10 +2872,10 @@ Axiom Instruction_bp_neq6_43:
 bpt_neq Pmovsq_mr_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq6_44: 
-bpt_neq Pmovsq_mr_bp Pcmpq_GvEv_bp.
+bpt_neq Pmovsq_mr_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq6_45: 
-bpt_neq Pmovsq_mr_bp Pcmpq_EvGv_bp.
+bpt_neq Pmovsq_mr_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq6_46: 
 bpt_neq Pmovsq_mr_bp Prorl_ri_bp.
@@ -2908,19 +2908,19 @@ Axiom Instruction_bp_neq6_55:
 bpt_neq Pmovsq_mr_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq6_56: 
-bpt_neq Pmovsq_mr_bp Pxorq_GvEv_bp.
+bpt_neq Pmovsq_mr_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq6_57: 
-bpt_neq Pmovsq_mr_bp Pxorq_EvGv_bp.
+bpt_neq Pmovsq_mr_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq6_58: 
 bpt_neq Pmovsq_mr_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq6_59: 
-bpt_neq Pmovsq_mr_bp Porq_GvEv_bp.
+bpt_neq Pmovsq_mr_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq6_60: 
-bpt_neq Pmovsq_mr_bp Porq_EvGv_bp.
+bpt_neq Pmovsq_mr_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq6_61: 
 bpt_neq Pmovsq_mr_bp Porl_ri_bp.
@@ -3148,7 +3148,7 @@ Axiom Instruction_bp_neq7_40:
 bpt_neq Pminsd_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq7_41: 
-bpt_neq Pminsd_bp Ptestq_EvGv_bp.
+bpt_neq Pminsd_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq7_42: 
 bpt_neq Pminsd_bp Ptestl_ri_bp.
@@ -3157,10 +3157,10 @@ Axiom Instruction_bp_neq7_43:
 bpt_neq Pminsd_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq7_44: 
-bpt_neq Pminsd_bp Pcmpq_GvEv_bp.
+bpt_neq Pminsd_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq7_45: 
-bpt_neq Pminsd_bp Pcmpq_EvGv_bp.
+bpt_neq Pminsd_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq7_46: 
 bpt_neq Pminsd_bp Prorl_ri_bp.
@@ -3193,19 +3193,19 @@ Axiom Instruction_bp_neq7_55:
 bpt_neq Pminsd_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq7_56: 
-bpt_neq Pminsd_bp Pxorq_GvEv_bp.
+bpt_neq Pminsd_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq7_57: 
-bpt_neq Pminsd_bp Pxorq_EvGv_bp.
+bpt_neq Pminsd_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq7_58: 
 bpt_neq Pminsd_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq7_59: 
-bpt_neq Pminsd_bp Porq_GvEv_bp.
+bpt_neq Pminsd_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq7_60: 
-bpt_neq Pminsd_bp Porq_EvGv_bp.
+bpt_neq Pminsd_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq7_61: 
 bpt_neq Pminsd_bp Porl_ri_bp.
@@ -3430,7 +3430,7 @@ Axiom Instruction_bp_neq8_40:
 bpt_neq Pmaxsd_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq8_41: 
-bpt_neq Pmaxsd_bp Ptestq_EvGv_bp.
+bpt_neq Pmaxsd_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq8_42: 
 bpt_neq Pmaxsd_bp Ptestl_ri_bp.
@@ -3439,10 +3439,10 @@ Axiom Instruction_bp_neq8_43:
 bpt_neq Pmaxsd_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq8_44: 
-bpt_neq Pmaxsd_bp Pcmpq_GvEv_bp.
+bpt_neq Pmaxsd_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq8_45: 
-bpt_neq Pmaxsd_bp Pcmpq_EvGv_bp.
+bpt_neq Pmaxsd_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq8_46: 
 bpt_neq Pmaxsd_bp Prorl_ri_bp.
@@ -3475,19 +3475,19 @@ Axiom Instruction_bp_neq8_55:
 bpt_neq Pmaxsd_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq8_56: 
-bpt_neq Pmaxsd_bp Pxorq_GvEv_bp.
+bpt_neq Pmaxsd_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq8_57: 
-bpt_neq Pmaxsd_bp Pxorq_EvGv_bp.
+bpt_neq Pmaxsd_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq8_58: 
 bpt_neq Pmaxsd_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq8_59: 
-bpt_neq Pmaxsd_bp Porq_GvEv_bp.
+bpt_neq Pmaxsd_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq8_60: 
-bpt_neq Pmaxsd_bp Porq_EvGv_bp.
+bpt_neq Pmaxsd_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq8_61: 
 bpt_neq Pmaxsd_bp Porl_ri_bp.
@@ -3709,7 +3709,7 @@ Axiom Instruction_bp_neq9_40:
 bpt_neq Pbswap32_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq9_41: 
-bpt_neq Pbswap32_bp Ptestq_EvGv_bp.
+bpt_neq Pbswap32_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq9_42: 
 bpt_neq Pbswap32_bp Ptestl_ri_bp.
@@ -3718,10 +3718,10 @@ Axiom Instruction_bp_neq9_43:
 bpt_neq Pbswap32_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq9_44: 
-bpt_neq Pbswap32_bp Pcmpq_GvEv_bp.
+bpt_neq Pbswap32_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq9_45: 
-bpt_neq Pbswap32_bp Pcmpq_EvGv_bp.
+bpt_neq Pbswap32_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq9_46: 
 bpt_neq Pbswap32_bp Prorl_ri_bp.
@@ -3754,19 +3754,19 @@ Axiom Instruction_bp_neq9_55:
 bpt_neq Pbswap32_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq9_56: 
-bpt_neq Pbswap32_bp Pxorq_GvEv_bp.
+bpt_neq Pbswap32_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq9_57: 
-bpt_neq Pbswap32_bp Pxorq_EvGv_bp.
+bpt_neq Pbswap32_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq9_58: 
 bpt_neq Pbswap32_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq9_59: 
-bpt_neq Pbswap32_bp Porq_GvEv_bp.
+bpt_neq Pbswap32_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq9_60: 
-bpt_neq Pbswap32_bp Porq_EvGv_bp.
+bpt_neq Pbswap32_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq9_61: 
 bpt_neq Pbswap32_bp Porl_ri_bp.
@@ -3985,7 +3985,7 @@ Axiom Instruction_bp_neq10_40:
 bpt_neq Pbsrl_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq10_41: 
-bpt_neq Pbsrl_bp Ptestq_EvGv_bp.
+bpt_neq Pbsrl_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq10_42: 
 bpt_neq Pbsrl_bp Ptestl_ri_bp.
@@ -3994,10 +3994,10 @@ Axiom Instruction_bp_neq10_43:
 bpt_neq Pbsrl_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq10_44: 
-bpt_neq Pbsrl_bp Pcmpq_GvEv_bp.
+bpt_neq Pbsrl_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq10_45: 
-bpt_neq Pbsrl_bp Pcmpq_EvGv_bp.
+bpt_neq Pbsrl_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq10_46: 
 bpt_neq Pbsrl_bp Prorl_ri_bp.
@@ -4030,19 +4030,19 @@ Axiom Instruction_bp_neq10_55:
 bpt_neq Pbsrl_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq10_56: 
-bpt_neq Pbsrl_bp Pxorq_GvEv_bp.
+bpt_neq Pbsrl_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq10_57: 
-bpt_neq Pbsrl_bp Pxorq_EvGv_bp.
+bpt_neq Pbsrl_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq10_58: 
 bpt_neq Pbsrl_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq10_59: 
-bpt_neq Pbsrl_bp Porq_GvEv_bp.
+bpt_neq Pbsrl_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq10_60: 
-bpt_neq Pbsrl_bp Porq_EvGv_bp.
+bpt_neq Pbsrl_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq10_61: 
 bpt_neq Pbsrl_bp Porl_ri_bp.
@@ -4258,7 +4258,7 @@ Axiom Instruction_bp_neq11_40:
 bpt_neq Pbsfl_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq11_41: 
-bpt_neq Pbsfl_bp Ptestq_EvGv_bp.
+bpt_neq Pbsfl_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq11_42: 
 bpt_neq Pbsfl_bp Ptestl_ri_bp.
@@ -4267,10 +4267,10 @@ Axiom Instruction_bp_neq11_43:
 bpt_neq Pbsfl_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq11_44: 
-bpt_neq Pbsfl_bp Pcmpq_GvEv_bp.
+bpt_neq Pbsfl_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq11_45: 
-bpt_neq Pbsfl_bp Pcmpq_EvGv_bp.
+bpt_neq Pbsfl_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq11_46: 
 bpt_neq Pbsfl_bp Prorl_ri_bp.
@@ -4303,19 +4303,19 @@ Axiom Instruction_bp_neq11_55:
 bpt_neq Pbsfl_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq11_56: 
-bpt_neq Pbsfl_bp Pxorq_GvEv_bp.
+bpt_neq Pbsfl_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq11_57: 
-bpt_neq Pbsfl_bp Pxorq_EvGv_bp.
+bpt_neq Pbsfl_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq11_58: 
 bpt_neq Pbsfl_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq11_59: 
-bpt_neq Pbsfl_bp Porq_GvEv_bp.
+bpt_neq Pbsfl_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq11_60: 
-bpt_neq Pbsfl_bp Porq_EvGv_bp.
+bpt_neq Pbsfl_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq11_61: 
 bpt_neq Pbsfl_bp Porl_ri_bp.
@@ -4528,7 +4528,7 @@ Axiom Instruction_bp_neq12_40:
 bpt_neq Paddl_mi_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq12_41: 
-bpt_neq Paddl_mi_bp Ptestq_EvGv_bp.
+bpt_neq Paddl_mi_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq12_42: 
 bpt_neq Paddl_mi_bp Ptestl_ri_bp.
@@ -4537,10 +4537,10 @@ Axiom Instruction_bp_neq12_43:
 bpt_neq Paddl_mi_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq12_44: 
-bpt_neq Paddl_mi_bp Pcmpq_GvEv_bp.
+bpt_neq Paddl_mi_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq12_45: 
-bpt_neq Paddl_mi_bp Pcmpq_EvGv_bp.
+bpt_neq Paddl_mi_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq12_46: 
 bpt_neq Paddl_mi_bp Prorl_ri_bp.
@@ -4573,19 +4573,19 @@ Axiom Instruction_bp_neq12_55:
 bpt_neq Paddl_mi_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq12_56: 
-bpt_neq Paddl_mi_bp Pxorq_GvEv_bp.
+bpt_neq Paddl_mi_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq12_57: 
-bpt_neq Paddl_mi_bp Pxorq_EvGv_bp.
+bpt_neq Paddl_mi_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq12_58: 
 bpt_neq Paddl_mi_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq12_59: 
-bpt_neq Paddl_mi_bp Porq_GvEv_bp.
+bpt_neq Paddl_mi_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq12_60: 
-bpt_neq Paddl_mi_bp Porq_EvGv_bp.
+bpt_neq Paddl_mi_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq12_61: 
 bpt_neq Paddl_mi_bp Porl_ri_bp.
@@ -4795,7 +4795,7 @@ Axiom Instruction_bp_neq13_40:
 bpt_neq Paddl_GvEv_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq13_41: 
-bpt_neq Paddl_GvEv_bp Ptestq_EvGv_bp.
+bpt_neq Paddl_GvEv_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq13_42: 
 bpt_neq Paddl_GvEv_bp Ptestl_ri_bp.
@@ -4804,10 +4804,10 @@ Axiom Instruction_bp_neq13_43:
 bpt_neq Paddl_GvEv_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq13_44: 
-bpt_neq Paddl_GvEv_bp Pcmpq_GvEv_bp.
+bpt_neq Paddl_GvEv_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq13_45: 
-bpt_neq Paddl_GvEv_bp Pcmpq_EvGv_bp.
+bpt_neq Paddl_GvEv_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq13_46: 
 bpt_neq Paddl_GvEv_bp Prorl_ri_bp.
@@ -4840,19 +4840,19 @@ Axiom Instruction_bp_neq13_55:
 bpt_neq Paddl_GvEv_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq13_56: 
-bpt_neq Paddl_GvEv_bp Pxorq_GvEv_bp.
+bpt_neq Paddl_GvEv_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq13_57: 
-bpt_neq Paddl_GvEv_bp Pxorq_EvGv_bp.
+bpt_neq Paddl_GvEv_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq13_58: 
 bpt_neq Paddl_GvEv_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq13_59: 
-bpt_neq Paddl_GvEv_bp Porq_GvEv_bp.
+bpt_neq Paddl_GvEv_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq13_60: 
-bpt_neq Paddl_GvEv_bp Porq_EvGv_bp.
+bpt_neq Paddl_GvEv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq13_61: 
 bpt_neq Paddl_GvEv_bp Porl_ri_bp.
@@ -5059,7 +5059,7 @@ Axiom Instruction_bp_neq14_40:
 bpt_neq Paddl_EvGv_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq14_41: 
-bpt_neq Paddl_EvGv_bp Ptestq_EvGv_bp.
+bpt_neq Paddl_EvGv_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq14_42: 
 bpt_neq Paddl_EvGv_bp Ptestl_ri_bp.
@@ -5068,10 +5068,10 @@ Axiom Instruction_bp_neq14_43:
 bpt_neq Paddl_EvGv_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq14_44: 
-bpt_neq Paddl_EvGv_bp Pcmpq_GvEv_bp.
+bpt_neq Paddl_EvGv_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq14_45: 
-bpt_neq Paddl_EvGv_bp Pcmpq_EvGv_bp.
+bpt_neq Paddl_EvGv_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq14_46: 
 bpt_neq Paddl_EvGv_bp Prorl_ri_bp.
@@ -5104,19 +5104,19 @@ Axiom Instruction_bp_neq14_55:
 bpt_neq Paddl_EvGv_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq14_56: 
-bpt_neq Paddl_EvGv_bp Pxorq_GvEv_bp.
+bpt_neq Paddl_EvGv_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq14_57: 
-bpt_neq Paddl_EvGv_bp Pxorq_EvGv_bp.
+bpt_neq Paddl_EvGv_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq14_58: 
 bpt_neq Paddl_EvGv_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq14_59: 
-bpt_neq Paddl_EvGv_bp Porq_GvEv_bp.
+bpt_neq Paddl_EvGv_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq14_60: 
-bpt_neq Paddl_EvGv_bp Porq_EvGv_bp.
+bpt_neq Paddl_EvGv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq14_61: 
 bpt_neq Paddl_EvGv_bp Porl_ri_bp.
@@ -5320,7 +5320,7 @@ Axiom Instruction_bp_neq15_40:
 bpt_neq Padcl_rr_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq15_41: 
-bpt_neq Padcl_rr_bp Ptestq_EvGv_bp.
+bpt_neq Padcl_rr_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq15_42: 
 bpt_neq Padcl_rr_bp Ptestl_ri_bp.
@@ -5329,10 +5329,10 @@ Axiom Instruction_bp_neq15_43:
 bpt_neq Padcl_rr_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq15_44: 
-bpt_neq Padcl_rr_bp Pcmpq_GvEv_bp.
+bpt_neq Padcl_rr_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq15_45: 
-bpt_neq Padcl_rr_bp Pcmpq_EvGv_bp.
+bpt_neq Padcl_rr_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq15_46: 
 bpt_neq Padcl_rr_bp Prorl_ri_bp.
@@ -5365,19 +5365,19 @@ Axiom Instruction_bp_neq15_55:
 bpt_neq Padcl_rr_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq15_56: 
-bpt_neq Padcl_rr_bp Pxorq_GvEv_bp.
+bpt_neq Padcl_rr_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq15_57: 
-bpt_neq Padcl_rr_bp Pxorq_EvGv_bp.
+bpt_neq Padcl_rr_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq15_58: 
 bpt_neq Padcl_rr_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq15_59: 
-bpt_neq Padcl_rr_bp Porq_GvEv_bp.
+bpt_neq Padcl_rr_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq15_60: 
-bpt_neq Padcl_rr_bp Porq_EvGv_bp.
+bpt_neq Padcl_rr_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq15_61: 
 bpt_neq Padcl_rr_bp Porl_ri_bp.
@@ -5578,7 +5578,7 @@ Axiom Instruction_bp_neq16_40:
 bpt_neq Padcl_ri_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq16_41: 
-bpt_neq Padcl_ri_bp Ptestq_EvGv_bp.
+bpt_neq Padcl_ri_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq16_42: 
 bpt_neq Padcl_ri_bp Ptestl_ri_bp.
@@ -5587,10 +5587,10 @@ Axiom Instruction_bp_neq16_43:
 bpt_neq Padcl_ri_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq16_44: 
-bpt_neq Padcl_ri_bp Pcmpq_GvEv_bp.
+bpt_neq Padcl_ri_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq16_45: 
-bpt_neq Padcl_ri_bp Pcmpq_EvGv_bp.
+bpt_neq Padcl_ri_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq16_46: 
 bpt_neq Padcl_ri_bp Prorl_ri_bp.
@@ -5623,19 +5623,19 @@ Axiom Instruction_bp_neq16_55:
 bpt_neq Padcl_ri_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq16_56: 
-bpt_neq Padcl_ri_bp Pxorq_GvEv_bp.
+bpt_neq Padcl_ri_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq16_57: 
-bpt_neq Padcl_ri_bp Pxorq_EvGv_bp.
+bpt_neq Padcl_ri_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq16_58: 
 bpt_neq Padcl_ri_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq16_59: 
-bpt_neq Padcl_ri_bp Porq_GvEv_bp.
+bpt_neq Padcl_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq16_60: 
-bpt_neq Padcl_ri_bp Porq_EvGv_bp.
+bpt_neq Padcl_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq16_61: 
 bpt_neq Padcl_ri_bp Porl_ri_bp.
@@ -5833,7 +5833,7 @@ Axiom Instruction_bp_neq17_40:
 bpt_neq Pjcc_rel_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq17_41: 
-bpt_neq Pjcc_rel_bp Ptestq_EvGv_bp.
+bpt_neq Pjcc_rel_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq17_42: 
 bpt_neq Pjcc_rel_bp Ptestl_ri_bp.
@@ -5842,10 +5842,10 @@ Axiom Instruction_bp_neq17_43:
 bpt_neq Pjcc_rel_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq17_44: 
-bpt_neq Pjcc_rel_bp Pcmpq_GvEv_bp.
+bpt_neq Pjcc_rel_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq17_45: 
-bpt_neq Pjcc_rel_bp Pcmpq_EvGv_bp.
+bpt_neq Pjcc_rel_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq17_46: 
 bpt_neq Pjcc_rel_bp Prorl_ri_bp.
@@ -5878,19 +5878,19 @@ Axiom Instruction_bp_neq17_55:
 bpt_neq Pjcc_rel_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq17_56: 
-bpt_neq Pjcc_rel_bp Pxorq_GvEv_bp.
+bpt_neq Pjcc_rel_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq17_57: 
-bpt_neq Pjcc_rel_bp Pxorq_EvGv_bp.
+bpt_neq Pjcc_rel_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq17_58: 
 bpt_neq Pjcc_rel_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq17_59: 
-bpt_neq Pjcc_rel_bp Porq_GvEv_bp.
+bpt_neq Pjcc_rel_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq17_60: 
-bpt_neq Pjcc_rel_bp Porq_EvGv_bp.
+bpt_neq Pjcc_rel_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq17_61: 
 bpt_neq Pjcc_rel_bp Porl_ri_bp.
@@ -6085,7 +6085,7 @@ Axiom Instruction_bp_neq18_40:
 bpt_neq Pret_iw_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq18_41: 
-bpt_neq Pret_iw_bp Ptestq_EvGv_bp.
+bpt_neq Pret_iw_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq18_42: 
 bpt_neq Pret_iw_bp Ptestl_ri_bp.
@@ -6094,10 +6094,10 @@ Axiom Instruction_bp_neq18_43:
 bpt_neq Pret_iw_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq18_44: 
-bpt_neq Pret_iw_bp Pcmpq_GvEv_bp.
+bpt_neq Pret_iw_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq18_45: 
-bpt_neq Pret_iw_bp Pcmpq_EvGv_bp.
+bpt_neq Pret_iw_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq18_46: 
 bpt_neq Pret_iw_bp Prorl_ri_bp.
@@ -6130,19 +6130,19 @@ Axiom Instruction_bp_neq18_55:
 bpt_neq Pret_iw_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq18_56: 
-bpt_neq Pret_iw_bp Pxorq_GvEv_bp.
+bpt_neq Pret_iw_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq18_57: 
-bpt_neq Pret_iw_bp Pxorq_EvGv_bp.
+bpt_neq Pret_iw_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq18_58: 
 bpt_neq Pret_iw_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq18_59: 
-bpt_neq Pret_iw_bp Porq_GvEv_bp.
+bpt_neq Pret_iw_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq18_60: 
-bpt_neq Pret_iw_bp Porq_EvGv_bp.
+bpt_neq Pret_iw_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq18_61: 
 bpt_neq Pret_iw_bp Porl_ri_bp.
@@ -6334,7 +6334,7 @@ Axiom Instruction_bp_neq19_40:
 bpt_neq Pret_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq19_41: 
-bpt_neq Pret_bp Ptestq_EvGv_bp.
+bpt_neq Pret_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq19_42: 
 bpt_neq Pret_bp Ptestl_ri_bp.
@@ -6343,10 +6343,10 @@ Axiom Instruction_bp_neq19_43:
 bpt_neq Pret_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq19_44: 
-bpt_neq Pret_bp Pcmpq_GvEv_bp.
+bpt_neq Pret_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq19_45: 
-bpt_neq Pret_bp Pcmpq_EvGv_bp.
+bpt_neq Pret_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq19_46: 
 bpt_neq Pret_bp Prorl_ri_bp.
@@ -6379,19 +6379,19 @@ Axiom Instruction_bp_neq19_55:
 bpt_neq Pret_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq19_56: 
-bpt_neq Pret_bp Pxorq_GvEv_bp.
+bpt_neq Pret_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq19_57: 
-bpt_neq Pret_bp Pxorq_EvGv_bp.
+bpt_neq Pret_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq19_58: 
 bpt_neq Pret_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq19_59: 
-bpt_neq Pret_bp Porq_GvEv_bp.
+bpt_neq Pret_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq19_60: 
-bpt_neq Pret_bp Porq_EvGv_bp.
+bpt_neq Pret_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq19_61: 
 bpt_neq Pret_bp Porl_ri_bp.
@@ -6580,7 +6580,7 @@ Axiom Instruction_bp_neq20_40:
 bpt_neq Pcall_r_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq20_41: 
-bpt_neq Pcall_r_bp Ptestq_EvGv_bp.
+bpt_neq Pcall_r_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq20_42: 
 bpt_neq Pcall_r_bp Ptestl_ri_bp.
@@ -6589,10 +6589,10 @@ Axiom Instruction_bp_neq20_43:
 bpt_neq Pcall_r_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq20_44: 
-bpt_neq Pcall_r_bp Pcmpq_GvEv_bp.
+bpt_neq Pcall_r_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq20_45: 
-bpt_neq Pcall_r_bp Pcmpq_EvGv_bp.
+bpt_neq Pcall_r_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq20_46: 
 bpt_neq Pcall_r_bp Prorl_ri_bp.
@@ -6625,19 +6625,19 @@ Axiom Instruction_bp_neq20_55:
 bpt_neq Pcall_r_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq20_56: 
-bpt_neq Pcall_r_bp Pxorq_GvEv_bp.
+bpt_neq Pcall_r_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq20_57: 
-bpt_neq Pcall_r_bp Pxorq_EvGv_bp.
+bpt_neq Pcall_r_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq20_58: 
 bpt_neq Pcall_r_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq20_59: 
-bpt_neq Pcall_r_bp Porq_GvEv_bp.
+bpt_neq Pcall_r_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq20_60: 
-bpt_neq Pcall_r_bp Porq_EvGv_bp.
+bpt_neq Pcall_r_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq20_61: 
 bpt_neq Pcall_r_bp Porl_ri_bp.
@@ -6823,7 +6823,7 @@ Axiom Instruction_bp_neq21_40:
 bpt_neq Pcall_ofs_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq21_41: 
-bpt_neq Pcall_ofs_bp Ptestq_EvGv_bp.
+bpt_neq Pcall_ofs_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq21_42: 
 bpt_neq Pcall_ofs_bp Ptestl_ri_bp.
@@ -6832,10 +6832,10 @@ Axiom Instruction_bp_neq21_43:
 bpt_neq Pcall_ofs_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq21_44: 
-bpt_neq Pcall_ofs_bp Pcmpq_GvEv_bp.
+bpt_neq Pcall_ofs_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq21_45: 
-bpt_neq Pcall_ofs_bp Pcmpq_EvGv_bp.
+bpt_neq Pcall_ofs_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq21_46: 
 bpt_neq Pcall_ofs_bp Prorl_ri_bp.
@@ -6868,19 +6868,19 @@ Axiom Instruction_bp_neq21_55:
 bpt_neq Pcall_ofs_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq21_56: 
-bpt_neq Pcall_ofs_bp Pxorq_GvEv_bp.
+bpt_neq Pcall_ofs_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq21_57: 
-bpt_neq Pcall_ofs_bp Pxorq_EvGv_bp.
+bpt_neq Pcall_ofs_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq21_58: 
 bpt_neq Pcall_ofs_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq21_59: 
-bpt_neq Pcall_ofs_bp Porq_GvEv_bp.
+bpt_neq Pcall_ofs_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq21_60: 
-bpt_neq Pcall_ofs_bp Porq_EvGv_bp.
+bpt_neq Pcall_ofs_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq21_61: 
 bpt_neq Pcall_ofs_bp Porl_ri_bp.
@@ -7063,7 +7063,7 @@ Axiom Instruction_bp_neq22_40:
 bpt_neq Pnop_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq22_41: 
-bpt_neq Pnop_bp Ptestq_EvGv_bp.
+bpt_neq Pnop_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq22_42: 
 bpt_neq Pnop_bp Ptestl_ri_bp.
@@ -7072,10 +7072,10 @@ Axiom Instruction_bp_neq22_43:
 bpt_neq Pnop_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq22_44: 
-bpt_neq Pnop_bp Pcmpq_GvEv_bp.
+bpt_neq Pnop_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq22_45: 
-bpt_neq Pnop_bp Pcmpq_EvGv_bp.
+bpt_neq Pnop_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq22_46: 
 bpt_neq Pnop_bp Prorl_ri_bp.
@@ -7108,19 +7108,19 @@ Axiom Instruction_bp_neq22_55:
 bpt_neq Pnop_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq22_56: 
-bpt_neq Pnop_bp Pxorq_GvEv_bp.
+bpt_neq Pnop_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq22_57: 
-bpt_neq Pnop_bp Pxorq_EvGv_bp.
+bpt_neq Pnop_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq22_58: 
 bpt_neq Pnop_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq22_59: 
-bpt_neq Pnop_bp Porq_GvEv_bp.
+bpt_neq Pnop_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq22_60: 
-bpt_neq Pnop_bp Porq_EvGv_bp.
+bpt_neq Pnop_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq22_61: 
 bpt_neq Pnop_bp Porl_ri_bp.
@@ -7300,7 +7300,7 @@ Axiom Instruction_bp_neq23_40:
 bpt_neq Pjmp_Ev_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq23_41: 
-bpt_neq Pjmp_Ev_bp Ptestq_EvGv_bp.
+bpt_neq Pjmp_Ev_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq23_42: 
 bpt_neq Pjmp_Ev_bp Ptestl_ri_bp.
@@ -7309,10 +7309,10 @@ Axiom Instruction_bp_neq23_43:
 bpt_neq Pjmp_Ev_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq23_44: 
-bpt_neq Pjmp_Ev_bp Pcmpq_GvEv_bp.
+bpt_neq Pjmp_Ev_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq23_45: 
-bpt_neq Pjmp_Ev_bp Pcmpq_EvGv_bp.
+bpt_neq Pjmp_Ev_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq23_46: 
 bpt_neq Pjmp_Ev_bp Prorl_ri_bp.
@@ -7345,19 +7345,19 @@ Axiom Instruction_bp_neq23_55:
 bpt_neq Pjmp_Ev_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq23_56: 
-bpt_neq Pjmp_Ev_bp Pxorq_GvEv_bp.
+bpt_neq Pjmp_Ev_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq23_57: 
-bpt_neq Pjmp_Ev_bp Pxorq_EvGv_bp.
+bpt_neq Pjmp_Ev_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq23_58: 
 bpt_neq Pjmp_Ev_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq23_59: 
-bpt_neq Pjmp_Ev_bp Porq_GvEv_bp.
+bpt_neq Pjmp_Ev_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq23_60: 
-bpt_neq Pjmp_Ev_bp Porq_EvGv_bp.
+bpt_neq Pjmp_Ev_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq23_61: 
 bpt_neq Pjmp_Ev_bp Porl_ri_bp.
@@ -7534,7 +7534,7 @@ Axiom Instruction_bp_neq24_40:
 bpt_neq Pjmp_l_rel_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq24_41: 
-bpt_neq Pjmp_l_rel_bp Ptestq_EvGv_bp.
+bpt_neq Pjmp_l_rel_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq24_42: 
 bpt_neq Pjmp_l_rel_bp Ptestl_ri_bp.
@@ -7543,10 +7543,10 @@ Axiom Instruction_bp_neq24_43:
 bpt_neq Pjmp_l_rel_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq24_44: 
-bpt_neq Pjmp_l_rel_bp Pcmpq_GvEv_bp.
+bpt_neq Pjmp_l_rel_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq24_45: 
-bpt_neq Pjmp_l_rel_bp Pcmpq_EvGv_bp.
+bpt_neq Pjmp_l_rel_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq24_46: 
 bpt_neq Pjmp_l_rel_bp Prorl_ri_bp.
@@ -7579,19 +7579,19 @@ Axiom Instruction_bp_neq24_55:
 bpt_neq Pjmp_l_rel_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq24_56: 
-bpt_neq Pjmp_l_rel_bp Pxorq_GvEv_bp.
+bpt_neq Pjmp_l_rel_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq24_57: 
-bpt_neq Pjmp_l_rel_bp Pxorq_EvGv_bp.
+bpt_neq Pjmp_l_rel_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq24_58: 
 bpt_neq Pjmp_l_rel_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq24_59: 
-bpt_neq Pjmp_l_rel_bp Porq_GvEv_bp.
+bpt_neq Pjmp_l_rel_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq24_60: 
-bpt_neq Pjmp_l_rel_bp Porq_EvGv_bp.
+bpt_neq Pjmp_l_rel_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq24_61: 
 bpt_neq Pjmp_l_rel_bp Porl_ri_bp.
@@ -7765,7 +7765,7 @@ Axiom Instruction_bp_neq25_40:
 bpt_neq Pandps_fm_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq25_41: 
-bpt_neq Pandps_fm_bp Ptestq_EvGv_bp.
+bpt_neq Pandps_fm_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq25_42: 
 bpt_neq Pandps_fm_bp Ptestl_ri_bp.
@@ -7774,10 +7774,10 @@ Axiom Instruction_bp_neq25_43:
 bpt_neq Pandps_fm_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq25_44: 
-bpt_neq Pandps_fm_bp Pcmpq_GvEv_bp.
+bpt_neq Pandps_fm_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq25_45: 
-bpt_neq Pandps_fm_bp Pcmpq_EvGv_bp.
+bpt_neq Pandps_fm_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq25_46: 
 bpt_neq Pandps_fm_bp Prorl_ri_bp.
@@ -7810,19 +7810,19 @@ Axiom Instruction_bp_neq25_55:
 bpt_neq Pandps_fm_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq25_56: 
-bpt_neq Pandps_fm_bp Pxorq_GvEv_bp.
+bpt_neq Pandps_fm_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq25_57: 
-bpt_neq Pandps_fm_bp Pxorq_EvGv_bp.
+bpt_neq Pandps_fm_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq25_58: 
 bpt_neq Pandps_fm_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq25_59: 
-bpt_neq Pandps_fm_bp Porq_GvEv_bp.
+bpt_neq Pandps_fm_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq25_60: 
-bpt_neq Pandps_fm_bp Porq_EvGv_bp.
+bpt_neq Pandps_fm_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq25_61: 
 bpt_neq Pandps_fm_bp Porl_ri_bp.
@@ -7993,7 +7993,7 @@ Axiom Instruction_bp_neq26_40:
 bpt_neq Pxorps_GvEv_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq26_41: 
-bpt_neq Pxorps_GvEv_bp Ptestq_EvGv_bp.
+bpt_neq Pxorps_GvEv_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq26_42: 
 bpt_neq Pxorps_GvEv_bp Ptestl_ri_bp.
@@ -8002,10 +8002,10 @@ Axiom Instruction_bp_neq26_43:
 bpt_neq Pxorps_GvEv_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq26_44: 
-bpt_neq Pxorps_GvEv_bp Pcmpq_GvEv_bp.
+bpt_neq Pxorps_GvEv_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq26_45: 
-bpt_neq Pxorps_GvEv_bp Pcmpq_EvGv_bp.
+bpt_neq Pxorps_GvEv_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq26_46: 
 bpt_neq Pxorps_GvEv_bp Prorl_ri_bp.
@@ -8038,19 +8038,19 @@ Axiom Instruction_bp_neq26_55:
 bpt_neq Pxorps_GvEv_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq26_56: 
-bpt_neq Pxorps_GvEv_bp Pxorq_GvEv_bp.
+bpt_neq Pxorps_GvEv_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq26_57: 
-bpt_neq Pxorps_GvEv_bp Pxorq_EvGv_bp.
+bpt_neq Pxorps_GvEv_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq26_58: 
 bpt_neq Pxorps_GvEv_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq26_59: 
-bpt_neq Pxorps_GvEv_bp Porq_GvEv_bp.
+bpt_neq Pxorps_GvEv_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq26_60: 
-bpt_neq Pxorps_GvEv_bp Porq_EvGv_bp.
+bpt_neq Pxorps_GvEv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq26_61: 
 bpt_neq Pxorps_GvEv_bp Porl_ri_bp.
@@ -8218,7 +8218,7 @@ Axiom Instruction_bp_neq27_40:
 bpt_neq Pxorpd_GvEv_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq27_41: 
-bpt_neq Pxorpd_GvEv_bp Ptestq_EvGv_bp.
+bpt_neq Pxorpd_GvEv_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq27_42: 
 bpt_neq Pxorpd_GvEv_bp Ptestl_ri_bp.
@@ -8227,10 +8227,10 @@ Axiom Instruction_bp_neq27_43:
 bpt_neq Pxorpd_GvEv_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq27_44: 
-bpt_neq Pxorpd_GvEv_bp Pcmpq_GvEv_bp.
+bpt_neq Pxorpd_GvEv_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq27_45: 
-bpt_neq Pxorpd_GvEv_bp Pcmpq_EvGv_bp.
+bpt_neq Pxorpd_GvEv_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq27_46: 
 bpt_neq Pxorpd_GvEv_bp Prorl_ri_bp.
@@ -8263,19 +8263,19 @@ Axiom Instruction_bp_neq27_55:
 bpt_neq Pxorpd_GvEv_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq27_56: 
-bpt_neq Pxorpd_GvEv_bp Pxorq_GvEv_bp.
+bpt_neq Pxorpd_GvEv_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq27_57: 
-bpt_neq Pxorpd_GvEv_bp Pxorq_EvGv_bp.
+bpt_neq Pxorpd_GvEv_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq27_58: 
 bpt_neq Pxorpd_GvEv_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq27_59: 
-bpt_neq Pxorpd_GvEv_bp Porq_GvEv_bp.
+bpt_neq Pxorpd_GvEv_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq27_60: 
-bpt_neq Pxorpd_GvEv_bp Porq_EvGv_bp.
+bpt_neq Pxorpd_GvEv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq27_61: 
 bpt_neq Pxorpd_GvEv_bp Porl_ri_bp.
@@ -8440,7 +8440,7 @@ Axiom Instruction_bp_neq28_40:
 bpt_neq Pcomiss_ff_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq28_41: 
-bpt_neq Pcomiss_ff_bp Ptestq_EvGv_bp.
+bpt_neq Pcomiss_ff_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq28_42: 
 bpt_neq Pcomiss_ff_bp Ptestl_ri_bp.
@@ -8449,10 +8449,10 @@ Axiom Instruction_bp_neq28_43:
 bpt_neq Pcomiss_ff_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq28_44: 
-bpt_neq Pcomiss_ff_bp Pcmpq_GvEv_bp.
+bpt_neq Pcomiss_ff_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq28_45: 
-bpt_neq Pcomiss_ff_bp Pcmpq_EvGv_bp.
+bpt_neq Pcomiss_ff_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq28_46: 
 bpt_neq Pcomiss_ff_bp Prorl_ri_bp.
@@ -8485,19 +8485,19 @@ Axiom Instruction_bp_neq28_55:
 bpt_neq Pcomiss_ff_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq28_56: 
-bpt_neq Pcomiss_ff_bp Pxorq_GvEv_bp.
+bpt_neq Pcomiss_ff_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq28_57: 
-bpt_neq Pcomiss_ff_bp Pxorq_EvGv_bp.
+bpt_neq Pcomiss_ff_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq28_58: 
 bpt_neq Pcomiss_ff_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq28_59: 
-bpt_neq Pcomiss_ff_bp Porq_GvEv_bp.
+bpt_neq Pcomiss_ff_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq28_60: 
-bpt_neq Pcomiss_ff_bp Porq_EvGv_bp.
+bpt_neq Pcomiss_ff_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq28_61: 
 bpt_neq Pcomiss_ff_bp Porl_ri_bp.
@@ -8659,7 +8659,7 @@ Axiom Instruction_bp_neq29_40:
 bpt_neq Pcomisd_ff_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq29_41: 
-bpt_neq Pcomisd_ff_bp Ptestq_EvGv_bp.
+bpt_neq Pcomisd_ff_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq29_42: 
 bpt_neq Pcomisd_ff_bp Ptestl_ri_bp.
@@ -8668,10 +8668,10 @@ Axiom Instruction_bp_neq29_43:
 bpt_neq Pcomisd_ff_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq29_44: 
-bpt_neq Pcomisd_ff_bp Pcmpq_GvEv_bp.
+bpt_neq Pcomisd_ff_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq29_45: 
-bpt_neq Pcomisd_ff_bp Pcmpq_EvGv_bp.
+bpt_neq Pcomisd_ff_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq29_46: 
 bpt_neq Pcomisd_ff_bp Prorl_ri_bp.
@@ -8704,19 +8704,19 @@ Axiom Instruction_bp_neq29_55:
 bpt_neq Pcomisd_ff_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq29_56: 
-bpt_neq Pcomisd_ff_bp Pxorq_GvEv_bp.
+bpt_neq Pcomisd_ff_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq29_57: 
-bpt_neq Pcomisd_ff_bp Pxorq_EvGv_bp.
+bpt_neq Pcomisd_ff_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq29_58: 
 bpt_neq Pcomisd_ff_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq29_59: 
-bpt_neq Pcomisd_ff_bp Porq_GvEv_bp.
+bpt_neq Pcomisd_ff_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq29_60: 
-bpt_neq Pcomisd_ff_bp Porq_EvGv_bp.
+bpt_neq Pcomisd_ff_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq29_61: 
 bpt_neq Pcomisd_ff_bp Porl_ri_bp.
@@ -8875,7 +8875,7 @@ Axiom Instruction_bp_neq30_40:
 bpt_neq Pdivss_ff_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq30_41: 
-bpt_neq Pdivss_ff_bp Ptestq_EvGv_bp.
+bpt_neq Pdivss_ff_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq30_42: 
 bpt_neq Pdivss_ff_bp Ptestl_ri_bp.
@@ -8884,10 +8884,10 @@ Axiom Instruction_bp_neq30_43:
 bpt_neq Pdivss_ff_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq30_44: 
-bpt_neq Pdivss_ff_bp Pcmpq_GvEv_bp.
+bpt_neq Pdivss_ff_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq30_45: 
-bpt_neq Pdivss_ff_bp Pcmpq_EvGv_bp.
+bpt_neq Pdivss_ff_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq30_46: 
 bpt_neq Pdivss_ff_bp Prorl_ri_bp.
@@ -8920,19 +8920,19 @@ Axiom Instruction_bp_neq30_55:
 bpt_neq Pdivss_ff_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq30_56: 
-bpt_neq Pdivss_ff_bp Pxorq_GvEv_bp.
+bpt_neq Pdivss_ff_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq30_57: 
-bpt_neq Pdivss_ff_bp Pxorq_EvGv_bp.
+bpt_neq Pdivss_ff_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq30_58: 
 bpt_neq Pdivss_ff_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq30_59: 
-bpt_neq Pdivss_ff_bp Porq_GvEv_bp.
+bpt_neq Pdivss_ff_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq30_60: 
-bpt_neq Pdivss_ff_bp Porq_EvGv_bp.
+bpt_neq Pdivss_ff_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq30_61: 
 bpt_neq Pdivss_ff_bp Porl_ri_bp.
@@ -9088,7 +9088,7 @@ Axiom Instruction_bp_neq31_40:
 bpt_neq Pdivsd_ff_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq31_41: 
-bpt_neq Pdivsd_ff_bp Ptestq_EvGv_bp.
+bpt_neq Pdivsd_ff_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq31_42: 
 bpt_neq Pdivsd_ff_bp Ptestl_ri_bp.
@@ -9097,10 +9097,10 @@ Axiom Instruction_bp_neq31_43:
 bpt_neq Pdivsd_ff_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq31_44: 
-bpt_neq Pdivsd_ff_bp Pcmpq_GvEv_bp.
+bpt_neq Pdivsd_ff_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq31_45: 
-bpt_neq Pdivsd_ff_bp Pcmpq_EvGv_bp.
+bpt_neq Pdivsd_ff_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq31_46: 
 bpt_neq Pdivsd_ff_bp Prorl_ri_bp.
@@ -9133,19 +9133,19 @@ Axiom Instruction_bp_neq31_55:
 bpt_neq Pdivsd_ff_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq31_56: 
-bpt_neq Pdivsd_ff_bp Pxorq_GvEv_bp.
+bpt_neq Pdivsd_ff_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq31_57: 
-bpt_neq Pdivsd_ff_bp Pxorq_EvGv_bp.
+bpt_neq Pdivsd_ff_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq31_58: 
 bpt_neq Pdivsd_ff_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq31_59: 
-bpt_neq Pdivsd_ff_bp Porq_GvEv_bp.
+bpt_neq Pdivsd_ff_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq31_60: 
-bpt_neq Pdivsd_ff_bp Porq_EvGv_bp.
+bpt_neq Pdivsd_ff_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq31_61: 
 bpt_neq Pdivsd_ff_bp Porl_ri_bp.
@@ -9298,7 +9298,7 @@ Axiom Instruction_bp_neq32_40:
 bpt_neq Pmuls_ff_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq32_41: 
-bpt_neq Pmuls_ff_bp Ptestq_EvGv_bp.
+bpt_neq Pmuls_ff_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq32_42: 
 bpt_neq Pmuls_ff_bp Ptestl_ri_bp.
@@ -9307,10 +9307,10 @@ Axiom Instruction_bp_neq32_43:
 bpt_neq Pmuls_ff_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq32_44: 
-bpt_neq Pmuls_ff_bp Pcmpq_GvEv_bp.
+bpt_neq Pmuls_ff_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq32_45: 
-bpt_neq Pmuls_ff_bp Pcmpq_EvGv_bp.
+bpt_neq Pmuls_ff_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq32_46: 
 bpt_neq Pmuls_ff_bp Prorl_ri_bp.
@@ -9343,19 +9343,19 @@ Axiom Instruction_bp_neq32_55:
 bpt_neq Pmuls_ff_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq32_56: 
-bpt_neq Pmuls_ff_bp Pxorq_GvEv_bp.
+bpt_neq Pmuls_ff_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq32_57: 
-bpt_neq Pmuls_ff_bp Pxorq_EvGv_bp.
+bpt_neq Pmuls_ff_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq32_58: 
 bpt_neq Pmuls_ff_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq32_59: 
-bpt_neq Pmuls_ff_bp Porq_GvEv_bp.
+bpt_neq Pmuls_ff_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq32_60: 
-bpt_neq Pmuls_ff_bp Porq_EvGv_bp.
+bpt_neq Pmuls_ff_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq32_61: 
 bpt_neq Pmuls_ff_bp Porl_ri_bp.
@@ -9505,7 +9505,7 @@ Axiom Instruction_bp_neq33_40:
 bpt_neq Pmuld_ff_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq33_41: 
-bpt_neq Pmuld_ff_bp Ptestq_EvGv_bp.
+bpt_neq Pmuld_ff_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq33_42: 
 bpt_neq Pmuld_ff_bp Ptestl_ri_bp.
@@ -9514,10 +9514,10 @@ Axiom Instruction_bp_neq33_43:
 bpt_neq Pmuld_ff_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq33_44: 
-bpt_neq Pmuld_ff_bp Pcmpq_GvEv_bp.
+bpt_neq Pmuld_ff_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq33_45: 
-bpt_neq Pmuld_ff_bp Pcmpq_EvGv_bp.
+bpt_neq Pmuld_ff_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq33_46: 
 bpt_neq Pmuld_ff_bp Prorl_ri_bp.
@@ -9550,19 +9550,19 @@ Axiom Instruction_bp_neq33_55:
 bpt_neq Pmuld_ff_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq33_56: 
-bpt_neq Pmuld_ff_bp Pxorq_GvEv_bp.
+bpt_neq Pmuld_ff_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq33_57: 
-bpt_neq Pmuld_ff_bp Pxorq_EvGv_bp.
+bpt_neq Pmuld_ff_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq33_58: 
 bpt_neq Pmuld_ff_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq33_59: 
-bpt_neq Pmuld_ff_bp Porq_GvEv_bp.
+bpt_neq Pmuld_ff_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq33_60: 
-bpt_neq Pmuld_ff_bp Porq_EvGv_bp.
+bpt_neq Pmuld_ff_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq33_61: 
 bpt_neq Pmuld_ff_bp Porl_ri_bp.
@@ -9709,7 +9709,7 @@ Axiom Instruction_bp_neq34_40:
 bpt_neq Psubs_ff_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq34_41: 
-bpt_neq Psubs_ff_bp Ptestq_EvGv_bp.
+bpt_neq Psubs_ff_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq34_42: 
 bpt_neq Psubs_ff_bp Ptestl_ri_bp.
@@ -9718,10 +9718,10 @@ Axiom Instruction_bp_neq34_43:
 bpt_neq Psubs_ff_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq34_44: 
-bpt_neq Psubs_ff_bp Pcmpq_GvEv_bp.
+bpt_neq Psubs_ff_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq34_45: 
-bpt_neq Psubs_ff_bp Pcmpq_EvGv_bp.
+bpt_neq Psubs_ff_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq34_46: 
 bpt_neq Psubs_ff_bp Prorl_ri_bp.
@@ -9754,19 +9754,19 @@ Axiom Instruction_bp_neq34_55:
 bpt_neq Psubs_ff_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq34_56: 
-bpt_neq Psubs_ff_bp Pxorq_GvEv_bp.
+bpt_neq Psubs_ff_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq34_57: 
-bpt_neq Psubs_ff_bp Pxorq_EvGv_bp.
+bpt_neq Psubs_ff_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq34_58: 
 bpt_neq Psubs_ff_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq34_59: 
-bpt_neq Psubs_ff_bp Porq_GvEv_bp.
+bpt_neq Psubs_ff_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq34_60: 
-bpt_neq Psubs_ff_bp Porq_EvGv_bp.
+bpt_neq Psubs_ff_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq34_61: 
 bpt_neq Psubs_ff_bp Porl_ri_bp.
@@ -9910,7 +9910,7 @@ Axiom Instruction_bp_neq35_40:
 bpt_neq Psubd_ff_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq35_41: 
-bpt_neq Psubd_ff_bp Ptestq_EvGv_bp.
+bpt_neq Psubd_ff_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq35_42: 
 bpt_neq Psubd_ff_bp Ptestl_ri_bp.
@@ -9919,10 +9919,10 @@ Axiom Instruction_bp_neq35_43:
 bpt_neq Psubd_ff_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq35_44: 
-bpt_neq Psubd_ff_bp Pcmpq_GvEv_bp.
+bpt_neq Psubd_ff_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq35_45: 
-bpt_neq Psubd_ff_bp Pcmpq_EvGv_bp.
+bpt_neq Psubd_ff_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq35_46: 
 bpt_neq Psubd_ff_bp Prorl_ri_bp.
@@ -9955,19 +9955,19 @@ Axiom Instruction_bp_neq35_55:
 bpt_neq Psubd_ff_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq35_56: 
-bpt_neq Psubd_ff_bp Pxorq_GvEv_bp.
+bpt_neq Psubd_ff_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq35_57: 
-bpt_neq Psubd_ff_bp Pxorq_EvGv_bp.
+bpt_neq Psubd_ff_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq35_58: 
 bpt_neq Psubd_ff_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq35_59: 
-bpt_neq Psubd_ff_bp Porq_GvEv_bp.
+bpt_neq Psubd_ff_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq35_60: 
-bpt_neq Psubd_ff_bp Porq_EvGv_bp.
+bpt_neq Psubd_ff_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq35_61: 
 bpt_neq Psubd_ff_bp Porl_ri_bp.
@@ -10108,7 +10108,7 @@ Axiom Instruction_bp_neq36_40:
 bpt_neq Pandpd_GvEv_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq36_41: 
-bpt_neq Pandpd_GvEv_bp Ptestq_EvGv_bp.
+bpt_neq Pandpd_GvEv_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq36_42: 
 bpt_neq Pandpd_GvEv_bp Ptestl_ri_bp.
@@ -10117,10 +10117,10 @@ Axiom Instruction_bp_neq36_43:
 bpt_neq Pandpd_GvEv_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq36_44: 
-bpt_neq Pandpd_GvEv_bp Pcmpq_GvEv_bp.
+bpt_neq Pandpd_GvEv_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq36_45: 
-bpt_neq Pandpd_GvEv_bp Pcmpq_EvGv_bp.
+bpt_neq Pandpd_GvEv_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq36_46: 
 bpt_neq Pandpd_GvEv_bp Prorl_ri_bp.
@@ -10153,19 +10153,19 @@ Axiom Instruction_bp_neq36_55:
 bpt_neq Pandpd_GvEv_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq36_56: 
-bpt_neq Pandpd_GvEv_bp Pxorq_GvEv_bp.
+bpt_neq Pandpd_GvEv_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq36_57: 
-bpt_neq Pandpd_GvEv_bp Pxorq_EvGv_bp.
+bpt_neq Pandpd_GvEv_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq36_58: 
 bpt_neq Pandpd_GvEv_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq36_59: 
-bpt_neq Pandpd_GvEv_bp Porq_GvEv_bp.
+bpt_neq Pandpd_GvEv_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq36_60: 
-bpt_neq Pandpd_GvEv_bp Porq_EvGv_bp.
+bpt_neq Pandpd_GvEv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq36_61: 
 bpt_neq Pandpd_GvEv_bp Porl_ri_bp.
@@ -10303,7 +10303,7 @@ Axiom Instruction_bp_neq37_40:
 bpt_neq Padds_ff_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq37_41: 
-bpt_neq Padds_ff_bp Ptestq_EvGv_bp.
+bpt_neq Padds_ff_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq37_42: 
 bpt_neq Padds_ff_bp Ptestl_ri_bp.
@@ -10312,10 +10312,10 @@ Axiom Instruction_bp_neq37_43:
 bpt_neq Padds_ff_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq37_44: 
-bpt_neq Padds_ff_bp Pcmpq_GvEv_bp.
+bpt_neq Padds_ff_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq37_45: 
-bpt_neq Padds_ff_bp Pcmpq_EvGv_bp.
+bpt_neq Padds_ff_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq37_46: 
 bpt_neq Padds_ff_bp Prorl_ri_bp.
@@ -10348,19 +10348,19 @@ Axiom Instruction_bp_neq37_55:
 bpt_neq Padds_ff_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq37_56: 
-bpt_neq Padds_ff_bp Pxorq_GvEv_bp.
+bpt_neq Padds_ff_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq37_57: 
-bpt_neq Padds_ff_bp Pxorq_EvGv_bp.
+bpt_neq Padds_ff_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq37_58: 
 bpt_neq Padds_ff_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq37_59: 
-bpt_neq Padds_ff_bp Porq_GvEv_bp.
+bpt_neq Padds_ff_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq37_60: 
-bpt_neq Padds_ff_bp Porq_EvGv_bp.
+bpt_neq Padds_ff_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq37_61: 
 bpt_neq Padds_ff_bp Porl_ri_bp.
@@ -10495,7 +10495,7 @@ Axiom Instruction_bp_neq38_40:
 bpt_neq Paddd_ff_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq38_41: 
-bpt_neq Paddd_ff_bp Ptestq_EvGv_bp.
+bpt_neq Paddd_ff_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq38_42: 
 bpt_neq Paddd_ff_bp Ptestl_ri_bp.
@@ -10504,10 +10504,10 @@ Axiom Instruction_bp_neq38_43:
 bpt_neq Paddd_ff_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq38_44: 
-bpt_neq Paddd_ff_bp Pcmpq_GvEv_bp.
+bpt_neq Paddd_ff_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq38_45: 
-bpt_neq Paddd_ff_bp Pcmpq_EvGv_bp.
+bpt_neq Paddd_ff_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq38_46: 
 bpt_neq Paddd_ff_bp Prorl_ri_bp.
@@ -10540,19 +10540,19 @@ Axiom Instruction_bp_neq38_55:
 bpt_neq Paddd_ff_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq38_56: 
-bpt_neq Paddd_ff_bp Pxorq_GvEv_bp.
+bpt_neq Paddd_ff_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq38_57: 
-bpt_neq Paddd_ff_bp Pxorq_EvGv_bp.
+bpt_neq Paddd_ff_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq38_58: 
 bpt_neq Paddd_ff_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq38_59: 
-bpt_neq Paddd_ff_bp Porq_GvEv_bp.
+bpt_neq Paddd_ff_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq38_60: 
-bpt_neq Paddd_ff_bp Porq_EvGv_bp.
+bpt_neq Paddd_ff_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq38_61: 
 bpt_neq Paddd_ff_bp Porl_ri_bp.
@@ -10684,7 +10684,7 @@ Axiom Instruction_bp_neq39_40:
 bpt_neq Psetcc_bp Pcmov_bp.
 
 Axiom Instruction_bp_neq39_41: 
-bpt_neq Psetcc_bp Ptestq_EvGv_bp.
+bpt_neq Psetcc_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq39_42: 
 bpt_neq Psetcc_bp Ptestl_ri_bp.
@@ -10693,10 +10693,10 @@ Axiom Instruction_bp_neq39_43:
 bpt_neq Psetcc_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq39_44: 
-bpt_neq Psetcc_bp Pcmpq_GvEv_bp.
+bpt_neq Psetcc_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq39_45: 
-bpt_neq Psetcc_bp Pcmpq_EvGv_bp.
+bpt_neq Psetcc_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq39_46: 
 bpt_neq Psetcc_bp Prorl_ri_bp.
@@ -10729,19 +10729,19 @@ Axiom Instruction_bp_neq39_55:
 bpt_neq Psetcc_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq39_56: 
-bpt_neq Psetcc_bp Pxorq_GvEv_bp.
+bpt_neq Psetcc_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq39_57: 
-bpt_neq Psetcc_bp Pxorq_EvGv_bp.
+bpt_neq Psetcc_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq39_58: 
 bpt_neq Psetcc_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq39_59: 
-bpt_neq Psetcc_bp Porq_GvEv_bp.
+bpt_neq Psetcc_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq39_60: 
-bpt_neq Psetcc_bp Porq_EvGv_bp.
+bpt_neq Psetcc_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq39_61: 
 bpt_neq Psetcc_bp Porl_ri_bp.
@@ -10870,7 +10870,7 @@ Axiom Instruction_bp_neq39_102:
 bpt_neq Psetcc_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq40_41: 
-bpt_neq Pcmov_bp Ptestq_EvGv_bp.
+bpt_neq Pcmov_bp Ptestl_EvGv_bp.
 
 Axiom Instruction_bp_neq40_42: 
 bpt_neq Pcmov_bp Ptestl_ri_bp.
@@ -10879,10 +10879,10 @@ Axiom Instruction_bp_neq40_43:
 bpt_neq Pcmov_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq40_44: 
-bpt_neq Pcmov_bp Pcmpq_GvEv_bp.
+bpt_neq Pcmov_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq40_45: 
-bpt_neq Pcmov_bp Pcmpq_EvGv_bp.
+bpt_neq Pcmov_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq40_46: 
 bpt_neq Pcmov_bp Prorl_ri_bp.
@@ -10915,19 +10915,19 @@ Axiom Instruction_bp_neq40_55:
 bpt_neq Pcmov_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq40_56: 
-bpt_neq Pcmov_bp Pxorq_GvEv_bp.
+bpt_neq Pcmov_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq40_57: 
-bpt_neq Pcmov_bp Pxorq_EvGv_bp.
+bpt_neq Pcmov_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq40_58: 
 bpt_neq Pcmov_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq40_59: 
-bpt_neq Pcmov_bp Porq_GvEv_bp.
+bpt_neq Pcmov_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq40_60: 
-bpt_neq Pcmov_bp Porq_EvGv_bp.
+bpt_neq Pcmov_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq40_61: 
 bpt_neq Pcmov_bp Porl_ri_bp.
@@ -11056,196 +11056,196 @@ Axiom Instruction_bp_neq40_102:
 bpt_neq Pcmov_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq41_42: 
-bpt_neq Ptestq_EvGv_bp Ptestl_ri_bp.
+bpt_neq Ptestl_EvGv_bp Ptestl_ri_bp.
 
 Axiom Instruction_bp_neq41_43: 
-bpt_neq Ptestq_EvGv_bp Pcmpl_ri_bp.
+bpt_neq Ptestl_EvGv_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq41_44: 
-bpt_neq Ptestq_EvGv_bp Pcmpq_GvEv_bp.
+bpt_neq Ptestl_EvGv_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq41_45: 
-bpt_neq Ptestq_EvGv_bp Pcmpq_EvGv_bp.
+bpt_neq Ptestl_EvGv_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq41_46: 
-bpt_neq Ptestq_EvGv_bp Prorl_ri_bp.
+bpt_neq Ptestl_EvGv_bp Prorl_ri_bp.
 
 Axiom Instruction_bp_neq41_47: 
-bpt_neq Ptestq_EvGv_bp Prolw_ri_bp.
+bpt_neq Ptestl_EvGv_bp Prolw_ri_bp.
 
 Axiom Instruction_bp_neq41_48: 
-bpt_neq Ptestq_EvGv_bp Pshld_ri_bp.
+bpt_neq Ptestl_EvGv_bp Pshld_ri_bp.
 
 Axiom Instruction_bp_neq41_49: 
-bpt_neq Ptestq_EvGv_bp Psarl_rcl_bp.
+bpt_neq Ptestl_EvGv_bp Psarl_rcl_bp.
 
 Axiom Instruction_bp_neq41_50: 
-bpt_neq Ptestq_EvGv_bp Psarl_ri_bp.
+bpt_neq Ptestl_EvGv_bp Psarl_ri_bp.
 
 Axiom Instruction_bp_neq41_51: 
-bpt_neq Ptestq_EvGv_bp Pshrl_rcl_bp.
+bpt_neq Ptestl_EvGv_bp Pshrl_rcl_bp.
 
 Axiom Instruction_bp_neq41_52: 
-bpt_neq Ptestq_EvGv_bp Pshrl_ri_bp.
+bpt_neq Ptestl_EvGv_bp Pshrl_ri_bp.
 
 Axiom Instruction_bp_neq41_53: 
-bpt_neq Ptestq_EvGv_bp Psall_rcl_bp.
+bpt_neq Ptestl_EvGv_bp Psall_rcl_bp.
 
 Axiom Instruction_bp_neq41_54: 
-bpt_neq Ptestq_EvGv_bp Psall_ri_bp.
+bpt_neq Ptestl_EvGv_bp Psall_ri_bp.
 
 Axiom Instruction_bp_neq41_55: 
-bpt_neq Ptestq_EvGv_bp Pnotl_bp.
+bpt_neq Ptestl_EvGv_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq41_56: 
-bpt_neq Ptestq_EvGv_bp Pxorq_GvEv_bp.
+bpt_neq Ptestl_EvGv_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq41_57: 
-bpt_neq Ptestq_EvGv_bp Pxorq_EvGv_bp.
+bpt_neq Ptestl_EvGv_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq41_58: 
-bpt_neq Ptestq_EvGv_bp Pxorl_ri_bp.
+bpt_neq Ptestl_EvGv_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq41_59: 
-bpt_neq Ptestq_EvGv_bp Porq_GvEv_bp.
+bpt_neq Ptestl_EvGv_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq41_60: 
-bpt_neq Ptestq_EvGv_bp Porq_EvGv_bp.
+bpt_neq Ptestl_EvGv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq41_61: 
-bpt_neq Ptestq_EvGv_bp Porl_ri_bp.
+bpt_neq Ptestl_EvGv_bp Porl_ri_bp.
 
 Axiom Instruction_bp_neq41_62: 
-bpt_neq Ptestq_EvGv_bp Pandl_ri_bp.
+bpt_neq Ptestl_EvGv_bp Pandl_ri_bp.
 
 Axiom Instruction_bp_neq41_63: 
-bpt_neq Ptestq_EvGv_bp Pandl_GvEv_bp.
+bpt_neq Ptestl_EvGv_bp Pandl_GvEv_bp.
 
 Axiom Instruction_bp_neq41_64: 
-bpt_neq Ptestq_EvGv_bp Pandl_EvGv_bp.
+bpt_neq Ptestl_EvGv_bp Pandl_EvGv_bp.
 
 Axiom Instruction_bp_neq41_65: 
-bpt_neq Ptestq_EvGv_bp Pidivl_r_bp.
+bpt_neq Ptestl_EvGv_bp Pidivl_r_bp.
 
 Axiom Instruction_bp_neq41_66: 
-bpt_neq Ptestq_EvGv_bp Pdivl_r_bp.
+bpt_neq Ptestl_EvGv_bp Pdivl_r_bp.
 
 Axiom Instruction_bp_neq41_67: 
-bpt_neq Ptestq_EvGv_bp Pcltd_bp.
+bpt_neq Ptestl_EvGv_bp Pcltd_bp.
 
 Axiom Instruction_bp_neq41_68: 
-bpt_neq Ptestq_EvGv_bp Pmull_r_bp.
+bpt_neq Ptestl_EvGv_bp Pmull_r_bp.
 
 Axiom Instruction_bp_neq41_69: 
-bpt_neq Ptestq_EvGv_bp Pimull_r_bp.
+bpt_neq Ptestl_EvGv_bp Pimull_r_bp.
 
 Axiom Instruction_bp_neq41_70: 
-bpt_neq Ptestq_EvGv_bp Pimull_ri_bp.
+bpt_neq Ptestl_EvGv_bp Pimull_ri_bp.
 
 Axiom Instruction_bp_neq41_71: 
-bpt_neq Ptestq_EvGv_bp Pimull_GvEv_bp.
+bpt_neq Ptestl_EvGv_bp Pimull_GvEv_bp.
 
 Axiom Instruction_bp_neq41_72: 
-bpt_neq Ptestq_EvGv_bp Psubl_GvEv_bp.
+bpt_neq Ptestl_EvGv_bp Psubl_GvEv_bp.
 
 Axiom Instruction_bp_neq41_73: 
-bpt_neq Ptestq_EvGv_bp Psubl_EvGv_bp.
+bpt_neq Ptestl_EvGv_bp Psubl_EvGv_bp.
 
 Axiom Instruction_bp_neq41_74: 
-bpt_neq Ptestq_EvGv_bp Paddl_ri_bp.
+bpt_neq Ptestl_EvGv_bp Paddl_ri_bp.
 
 Axiom Instruction_bp_neq41_75: 
-bpt_neq Ptestq_EvGv_bp Pnegl_bp.
+bpt_neq Ptestl_EvGv_bp Pnegl_bp.
 
 Axiom Instruction_bp_neq41_76: 
-bpt_neq Ptestq_EvGv_bp Pleal_bp.
+bpt_neq Ptestl_EvGv_bp Pleal_bp.
 
 Axiom Instruction_bp_neq41_77: 
-bpt_neq Ptestq_EvGv_bp Pcvttss2si_rf_bp.
+bpt_neq Ptestl_EvGv_bp Pcvttss2si_rf_bp.
 
 Axiom Instruction_bp_neq41_78: 
-bpt_neq Ptestq_EvGv_bp Pcvtsi2sd_fr_bp.
+bpt_neq Ptestl_EvGv_bp Pcvtsi2sd_fr_bp.
 
 Axiom Instruction_bp_neq41_79: 
-bpt_neq Ptestq_EvGv_bp Pcvtsi2ss_fr_bp.
+bpt_neq Ptestl_EvGv_bp Pcvtsi2ss_fr_bp.
 
 Axiom Instruction_bp_neq41_80: 
-bpt_neq Ptestq_EvGv_bp Pcvttsd2si_rf_bp.
+bpt_neq Ptestl_EvGv_bp Pcvttsd2si_rf_bp.
 
 Axiom Instruction_bp_neq41_81: 
-bpt_neq Ptestq_EvGv_bp Pcvtss2sd_ff_bp.
+bpt_neq Ptestl_EvGv_bp Pcvtss2sd_ff_bp.
 
 Axiom Instruction_bp_neq41_82: 
-bpt_neq Ptestq_EvGv_bp Pcvtsd2ss_ff_bp.
+bpt_neq Ptestl_EvGv_bp Pcvtsd2ss_ff_bp.
 
 Axiom Instruction_bp_neq41_83: 
-bpt_neq Ptestq_EvGv_bp Pmovsw_GvEv_bp.
+bpt_neq Ptestl_EvGv_bp Pmovsw_GvEv_bp.
 
 Axiom Instruction_bp_neq41_84: 
-bpt_neq Ptestq_EvGv_bp Pmovzw_GvEv_bp.
+bpt_neq Ptestl_EvGv_bp Pmovzw_GvEv_bp.
 
 Axiom Instruction_bp_neq41_85: 
-bpt_neq Ptestq_EvGv_bp Pmovsb_GvEv_bp.
+bpt_neq Ptestl_EvGv_bp Pmovsb_GvEv_bp.
 
 Axiom Instruction_bp_neq41_86: 
-bpt_neq Ptestq_EvGv_bp Pmovzb_rm_bp.
+bpt_neq Ptestl_EvGv_bp Pmovzb_rm_bp.
 
 Axiom Instruction_bp_neq41_87: 
-bpt_neq Ptestq_EvGv_bp Pmovw_rm_bp.
+bpt_neq Ptestl_EvGv_bp Pmovw_rm_bp.
 
 Axiom Instruction_bp_neq41_88: 
-bpt_neq Ptestq_EvGv_bp Pmovw_mr_bp.
+bpt_neq Ptestl_EvGv_bp Pmovw_mr_bp.
 
 Axiom Instruction_bp_neq41_89: 
-bpt_neq Ptestq_EvGv_bp Pmovb_rm_bp.
+bpt_neq Ptestl_EvGv_bp Pmovb_rm_bp.
 
 Axiom Instruction_bp_neq41_90: 
-bpt_neq Ptestq_EvGv_bp Pmovb_mr_bp.
+bpt_neq Ptestl_EvGv_bp Pmovb_mr_bp.
 
 Axiom Instruction_bp_neq41_91: 
-bpt_neq Ptestq_EvGv_bp Pxchg_rr_bp.
+bpt_neq Ptestl_EvGv_bp Pxchg_rr_bp.
 
 Axiom Instruction_bp_neq41_92: 
-bpt_neq Ptestq_EvGv_bp Pflds_m_bp.
+bpt_neq Ptestl_EvGv_bp Pflds_m_bp.
 
 Axiom Instruction_bp_neq41_93: 
-bpt_neq Ptestq_EvGv_bp Pfstps_m_bp.
+bpt_neq Ptestl_EvGv_bp Pfstps_m_bp.
 
 Axiom Instruction_bp_neq41_94: 
-bpt_neq Ptestq_EvGv_bp Pfstpl_m_bp.
+bpt_neq Ptestl_EvGv_bp Pfstpl_m_bp.
 
 Axiom Instruction_bp_neq41_95: 
-bpt_neq Ptestq_EvGv_bp Pfldl_m_bp.
+bpt_neq Ptestl_EvGv_bp Pfldl_m_bp.
 
 Axiom Instruction_bp_neq41_96: 
-bpt_neq Ptestq_EvGv_bp Pmovss_fm_bp.
+bpt_neq Ptestl_EvGv_bp Pmovss_fm_bp.
 
 Axiom Instruction_bp_neq41_97: 
-bpt_neq Ptestq_EvGv_bp Pmovss_mf_bp.
+bpt_neq Ptestl_EvGv_bp Pmovss_mf_bp.
 
 Axiom Instruction_bp_neq41_98: 
-bpt_neq Ptestq_EvGv_bp Pmovsd_fm_bp.
+bpt_neq Ptestl_EvGv_bp Pmovsd_fm_bp.
 
 Axiom Instruction_bp_neq41_99: 
-bpt_neq Ptestq_EvGv_bp Pmovsd_mf_bp.
+bpt_neq Ptestl_EvGv_bp Pmovsd_mf_bp.
 
 Axiom Instruction_bp_neq41_100: 
-bpt_neq Ptestq_EvGv_bp Pmovl_rm_bp.
+bpt_neq Ptestl_EvGv_bp Pmovl_rm_bp.
 
 Axiom Instruction_bp_neq41_101: 
-bpt_neq Ptestq_EvGv_bp Pmovl_mr_bp.
+bpt_neq Ptestl_EvGv_bp Pmovl_mr_bp.
 
 Axiom Instruction_bp_neq41_102: 
-bpt_neq Ptestq_EvGv_bp Pmovl_ri_bp.
+bpt_neq Ptestl_EvGv_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq42_43: 
 bpt_neq Ptestl_ri_bp Pcmpl_ri_bp.
 
 Axiom Instruction_bp_neq42_44: 
-bpt_neq Ptestl_ri_bp Pcmpq_GvEv_bp.
+bpt_neq Ptestl_ri_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq42_45: 
-bpt_neq Ptestl_ri_bp Pcmpq_EvGv_bp.
+bpt_neq Ptestl_ri_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq42_46: 
 bpt_neq Ptestl_ri_bp Prorl_ri_bp.
@@ -11278,19 +11278,19 @@ Axiom Instruction_bp_neq42_55:
 bpt_neq Ptestl_ri_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq42_56: 
-bpt_neq Ptestl_ri_bp Pxorq_GvEv_bp.
+bpt_neq Ptestl_ri_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq42_57: 
-bpt_neq Ptestl_ri_bp Pxorq_EvGv_bp.
+bpt_neq Ptestl_ri_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq42_58: 
 bpt_neq Ptestl_ri_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq42_59: 
-bpt_neq Ptestl_ri_bp Porq_GvEv_bp.
+bpt_neq Ptestl_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq42_60: 
-bpt_neq Ptestl_ri_bp Porq_EvGv_bp.
+bpt_neq Ptestl_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq42_61: 
 bpt_neq Ptestl_ri_bp Porl_ri_bp.
@@ -11419,10 +11419,10 @@ Axiom Instruction_bp_neq42_102:
 bpt_neq Ptestl_ri_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq43_44: 
-bpt_neq Pcmpl_ri_bp Pcmpq_GvEv_bp.
+bpt_neq Pcmpl_ri_bp Pcmpl_GvEv_bp.
 
 Axiom Instruction_bp_neq43_45: 
-bpt_neq Pcmpl_ri_bp Pcmpq_EvGv_bp.
+bpt_neq Pcmpl_ri_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq43_46: 
 bpt_neq Pcmpl_ri_bp Prorl_ri_bp.
@@ -11455,19 +11455,19 @@ Axiom Instruction_bp_neq43_55:
 bpt_neq Pcmpl_ri_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq43_56: 
-bpt_neq Pcmpl_ri_bp Pxorq_GvEv_bp.
+bpt_neq Pcmpl_ri_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq43_57: 
-bpt_neq Pcmpl_ri_bp Pxorq_EvGv_bp.
+bpt_neq Pcmpl_ri_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq43_58: 
 bpt_neq Pcmpl_ri_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq43_59: 
-bpt_neq Pcmpl_ri_bp Porq_GvEv_bp.
+bpt_neq Pcmpl_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq43_60: 
-bpt_neq Pcmpl_ri_bp Porq_EvGv_bp.
+bpt_neq Pcmpl_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq43_61: 
 bpt_neq Pcmpl_ri_bp Porl_ri_bp.
@@ -11596,349 +11596,349 @@ Axiom Instruction_bp_neq43_102:
 bpt_neq Pcmpl_ri_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq44_45: 
-bpt_neq Pcmpq_GvEv_bp Pcmpq_EvGv_bp.
+bpt_neq Pcmpl_GvEv_bp Pcmpl_EvGv_bp.
 
 Axiom Instruction_bp_neq44_46: 
-bpt_neq Pcmpq_GvEv_bp Prorl_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Prorl_ri_bp.
 
 Axiom Instruction_bp_neq44_47: 
-bpt_neq Pcmpq_GvEv_bp Prolw_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Prolw_ri_bp.
 
 Axiom Instruction_bp_neq44_48: 
-bpt_neq Pcmpq_GvEv_bp Pshld_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Pshld_ri_bp.
 
 Axiom Instruction_bp_neq44_49: 
-bpt_neq Pcmpq_GvEv_bp Psarl_rcl_bp.
+bpt_neq Pcmpl_GvEv_bp Psarl_rcl_bp.
 
 Axiom Instruction_bp_neq44_50: 
-bpt_neq Pcmpq_GvEv_bp Psarl_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Psarl_ri_bp.
 
 Axiom Instruction_bp_neq44_51: 
-bpt_neq Pcmpq_GvEv_bp Pshrl_rcl_bp.
+bpt_neq Pcmpl_GvEv_bp Pshrl_rcl_bp.
 
 Axiom Instruction_bp_neq44_52: 
-bpt_neq Pcmpq_GvEv_bp Pshrl_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Pshrl_ri_bp.
 
 Axiom Instruction_bp_neq44_53: 
-bpt_neq Pcmpq_GvEv_bp Psall_rcl_bp.
+bpt_neq Pcmpl_GvEv_bp Psall_rcl_bp.
 
 Axiom Instruction_bp_neq44_54: 
-bpt_neq Pcmpq_GvEv_bp Psall_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Psall_ri_bp.
 
 Axiom Instruction_bp_neq44_55: 
-bpt_neq Pcmpq_GvEv_bp Pnotl_bp.
+bpt_neq Pcmpl_GvEv_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq44_56: 
-bpt_neq Pcmpq_GvEv_bp Pxorq_GvEv_bp.
+bpt_neq Pcmpl_GvEv_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq44_57: 
-bpt_neq Pcmpq_GvEv_bp Pxorq_EvGv_bp.
+bpt_neq Pcmpl_GvEv_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq44_58: 
-bpt_neq Pcmpq_GvEv_bp Pxorl_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq44_59: 
-bpt_neq Pcmpq_GvEv_bp Porq_GvEv_bp.
+bpt_neq Pcmpl_GvEv_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq44_60: 
-bpt_neq Pcmpq_GvEv_bp Porq_EvGv_bp.
+bpt_neq Pcmpl_GvEv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq44_61: 
-bpt_neq Pcmpq_GvEv_bp Porl_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Porl_ri_bp.
 
 Axiom Instruction_bp_neq44_62: 
-bpt_neq Pcmpq_GvEv_bp Pandl_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Pandl_ri_bp.
 
 Axiom Instruction_bp_neq44_63: 
-bpt_neq Pcmpq_GvEv_bp Pandl_GvEv_bp.
+bpt_neq Pcmpl_GvEv_bp Pandl_GvEv_bp.
 
 Axiom Instruction_bp_neq44_64: 
-bpt_neq Pcmpq_GvEv_bp Pandl_EvGv_bp.
+bpt_neq Pcmpl_GvEv_bp Pandl_EvGv_bp.
 
 Axiom Instruction_bp_neq44_65: 
-bpt_neq Pcmpq_GvEv_bp Pidivl_r_bp.
+bpt_neq Pcmpl_GvEv_bp Pidivl_r_bp.
 
 Axiom Instruction_bp_neq44_66: 
-bpt_neq Pcmpq_GvEv_bp Pdivl_r_bp.
+bpt_neq Pcmpl_GvEv_bp Pdivl_r_bp.
 
 Axiom Instruction_bp_neq44_67: 
-bpt_neq Pcmpq_GvEv_bp Pcltd_bp.
+bpt_neq Pcmpl_GvEv_bp Pcltd_bp.
 
 Axiom Instruction_bp_neq44_68: 
-bpt_neq Pcmpq_GvEv_bp Pmull_r_bp.
+bpt_neq Pcmpl_GvEv_bp Pmull_r_bp.
 
 Axiom Instruction_bp_neq44_69: 
-bpt_neq Pcmpq_GvEv_bp Pimull_r_bp.
+bpt_neq Pcmpl_GvEv_bp Pimull_r_bp.
 
 Axiom Instruction_bp_neq44_70: 
-bpt_neq Pcmpq_GvEv_bp Pimull_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Pimull_ri_bp.
 
 Axiom Instruction_bp_neq44_71: 
-bpt_neq Pcmpq_GvEv_bp Pimull_GvEv_bp.
+bpt_neq Pcmpl_GvEv_bp Pimull_GvEv_bp.
 
 Axiom Instruction_bp_neq44_72: 
-bpt_neq Pcmpq_GvEv_bp Psubl_GvEv_bp.
+bpt_neq Pcmpl_GvEv_bp Psubl_GvEv_bp.
 
 Axiom Instruction_bp_neq44_73: 
-bpt_neq Pcmpq_GvEv_bp Psubl_EvGv_bp.
+bpt_neq Pcmpl_GvEv_bp Psubl_EvGv_bp.
 
 Axiom Instruction_bp_neq44_74: 
-bpt_neq Pcmpq_GvEv_bp Paddl_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Paddl_ri_bp.
 
 Axiom Instruction_bp_neq44_75: 
-bpt_neq Pcmpq_GvEv_bp Pnegl_bp.
+bpt_neq Pcmpl_GvEv_bp Pnegl_bp.
 
 Axiom Instruction_bp_neq44_76: 
-bpt_neq Pcmpq_GvEv_bp Pleal_bp.
+bpt_neq Pcmpl_GvEv_bp Pleal_bp.
 
 Axiom Instruction_bp_neq44_77: 
-bpt_neq Pcmpq_GvEv_bp Pcvttss2si_rf_bp.
+bpt_neq Pcmpl_GvEv_bp Pcvttss2si_rf_bp.
 
 Axiom Instruction_bp_neq44_78: 
-bpt_neq Pcmpq_GvEv_bp Pcvtsi2sd_fr_bp.
+bpt_neq Pcmpl_GvEv_bp Pcvtsi2sd_fr_bp.
 
 Axiom Instruction_bp_neq44_79: 
-bpt_neq Pcmpq_GvEv_bp Pcvtsi2ss_fr_bp.
+bpt_neq Pcmpl_GvEv_bp Pcvtsi2ss_fr_bp.
 
 Axiom Instruction_bp_neq44_80: 
-bpt_neq Pcmpq_GvEv_bp Pcvttsd2si_rf_bp.
+bpt_neq Pcmpl_GvEv_bp Pcvttsd2si_rf_bp.
 
 Axiom Instruction_bp_neq44_81: 
-bpt_neq Pcmpq_GvEv_bp Pcvtss2sd_ff_bp.
+bpt_neq Pcmpl_GvEv_bp Pcvtss2sd_ff_bp.
 
 Axiom Instruction_bp_neq44_82: 
-bpt_neq Pcmpq_GvEv_bp Pcvtsd2ss_ff_bp.
+bpt_neq Pcmpl_GvEv_bp Pcvtsd2ss_ff_bp.
 
 Axiom Instruction_bp_neq44_83: 
-bpt_neq Pcmpq_GvEv_bp Pmovsw_GvEv_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovsw_GvEv_bp.
 
 Axiom Instruction_bp_neq44_84: 
-bpt_neq Pcmpq_GvEv_bp Pmovzw_GvEv_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovzw_GvEv_bp.
 
 Axiom Instruction_bp_neq44_85: 
-bpt_neq Pcmpq_GvEv_bp Pmovsb_GvEv_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovsb_GvEv_bp.
 
 Axiom Instruction_bp_neq44_86: 
-bpt_neq Pcmpq_GvEv_bp Pmovzb_rm_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovzb_rm_bp.
 
 Axiom Instruction_bp_neq44_87: 
-bpt_neq Pcmpq_GvEv_bp Pmovw_rm_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovw_rm_bp.
 
 Axiom Instruction_bp_neq44_88: 
-bpt_neq Pcmpq_GvEv_bp Pmovw_mr_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovw_mr_bp.
 
 Axiom Instruction_bp_neq44_89: 
-bpt_neq Pcmpq_GvEv_bp Pmovb_rm_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovb_rm_bp.
 
 Axiom Instruction_bp_neq44_90: 
-bpt_neq Pcmpq_GvEv_bp Pmovb_mr_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovb_mr_bp.
 
 Axiom Instruction_bp_neq44_91: 
-bpt_neq Pcmpq_GvEv_bp Pxchg_rr_bp.
+bpt_neq Pcmpl_GvEv_bp Pxchg_rr_bp.
 
 Axiom Instruction_bp_neq44_92: 
-bpt_neq Pcmpq_GvEv_bp Pflds_m_bp.
+bpt_neq Pcmpl_GvEv_bp Pflds_m_bp.
 
 Axiom Instruction_bp_neq44_93: 
-bpt_neq Pcmpq_GvEv_bp Pfstps_m_bp.
+bpt_neq Pcmpl_GvEv_bp Pfstps_m_bp.
 
 Axiom Instruction_bp_neq44_94: 
-bpt_neq Pcmpq_GvEv_bp Pfstpl_m_bp.
+bpt_neq Pcmpl_GvEv_bp Pfstpl_m_bp.
 
 Axiom Instruction_bp_neq44_95: 
-bpt_neq Pcmpq_GvEv_bp Pfldl_m_bp.
+bpt_neq Pcmpl_GvEv_bp Pfldl_m_bp.
 
 Axiom Instruction_bp_neq44_96: 
-bpt_neq Pcmpq_GvEv_bp Pmovss_fm_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovss_fm_bp.
 
 Axiom Instruction_bp_neq44_97: 
-bpt_neq Pcmpq_GvEv_bp Pmovss_mf_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovss_mf_bp.
 
 Axiom Instruction_bp_neq44_98: 
-bpt_neq Pcmpq_GvEv_bp Pmovsd_fm_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovsd_fm_bp.
 
 Axiom Instruction_bp_neq44_99: 
-bpt_neq Pcmpq_GvEv_bp Pmovsd_mf_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovsd_mf_bp.
 
 Axiom Instruction_bp_neq44_100: 
-bpt_neq Pcmpq_GvEv_bp Pmovl_rm_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovl_rm_bp.
 
 Axiom Instruction_bp_neq44_101: 
-bpt_neq Pcmpq_GvEv_bp Pmovl_mr_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovl_mr_bp.
 
 Axiom Instruction_bp_neq44_102: 
-bpt_neq Pcmpq_GvEv_bp Pmovl_ri_bp.
+bpt_neq Pcmpl_GvEv_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq45_46: 
-bpt_neq Pcmpq_EvGv_bp Prorl_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Prorl_ri_bp.
 
 Axiom Instruction_bp_neq45_47: 
-bpt_neq Pcmpq_EvGv_bp Prolw_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Prolw_ri_bp.
 
 Axiom Instruction_bp_neq45_48: 
-bpt_neq Pcmpq_EvGv_bp Pshld_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Pshld_ri_bp.
 
 Axiom Instruction_bp_neq45_49: 
-bpt_neq Pcmpq_EvGv_bp Psarl_rcl_bp.
+bpt_neq Pcmpl_EvGv_bp Psarl_rcl_bp.
 
 Axiom Instruction_bp_neq45_50: 
-bpt_neq Pcmpq_EvGv_bp Psarl_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Psarl_ri_bp.
 
 Axiom Instruction_bp_neq45_51: 
-bpt_neq Pcmpq_EvGv_bp Pshrl_rcl_bp.
+bpt_neq Pcmpl_EvGv_bp Pshrl_rcl_bp.
 
 Axiom Instruction_bp_neq45_52: 
-bpt_neq Pcmpq_EvGv_bp Pshrl_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Pshrl_ri_bp.
 
 Axiom Instruction_bp_neq45_53: 
-bpt_neq Pcmpq_EvGv_bp Psall_rcl_bp.
+bpt_neq Pcmpl_EvGv_bp Psall_rcl_bp.
 
 Axiom Instruction_bp_neq45_54: 
-bpt_neq Pcmpq_EvGv_bp Psall_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Psall_ri_bp.
 
 Axiom Instruction_bp_neq45_55: 
-bpt_neq Pcmpq_EvGv_bp Pnotl_bp.
+bpt_neq Pcmpl_EvGv_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq45_56: 
-bpt_neq Pcmpq_EvGv_bp Pxorq_GvEv_bp.
+bpt_neq Pcmpl_EvGv_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq45_57: 
-bpt_neq Pcmpq_EvGv_bp Pxorq_EvGv_bp.
+bpt_neq Pcmpl_EvGv_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq45_58: 
-bpt_neq Pcmpq_EvGv_bp Pxorl_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq45_59: 
-bpt_neq Pcmpq_EvGv_bp Porq_GvEv_bp.
+bpt_neq Pcmpl_EvGv_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq45_60: 
-bpt_neq Pcmpq_EvGv_bp Porq_EvGv_bp.
+bpt_neq Pcmpl_EvGv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq45_61: 
-bpt_neq Pcmpq_EvGv_bp Porl_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Porl_ri_bp.
 
 Axiom Instruction_bp_neq45_62: 
-bpt_neq Pcmpq_EvGv_bp Pandl_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Pandl_ri_bp.
 
 Axiom Instruction_bp_neq45_63: 
-bpt_neq Pcmpq_EvGv_bp Pandl_GvEv_bp.
+bpt_neq Pcmpl_EvGv_bp Pandl_GvEv_bp.
 
 Axiom Instruction_bp_neq45_64: 
-bpt_neq Pcmpq_EvGv_bp Pandl_EvGv_bp.
+bpt_neq Pcmpl_EvGv_bp Pandl_EvGv_bp.
 
 Axiom Instruction_bp_neq45_65: 
-bpt_neq Pcmpq_EvGv_bp Pidivl_r_bp.
+bpt_neq Pcmpl_EvGv_bp Pidivl_r_bp.
 
 Axiom Instruction_bp_neq45_66: 
-bpt_neq Pcmpq_EvGv_bp Pdivl_r_bp.
+bpt_neq Pcmpl_EvGv_bp Pdivl_r_bp.
 
 Axiom Instruction_bp_neq45_67: 
-bpt_neq Pcmpq_EvGv_bp Pcltd_bp.
+bpt_neq Pcmpl_EvGv_bp Pcltd_bp.
 
 Axiom Instruction_bp_neq45_68: 
-bpt_neq Pcmpq_EvGv_bp Pmull_r_bp.
+bpt_neq Pcmpl_EvGv_bp Pmull_r_bp.
 
 Axiom Instruction_bp_neq45_69: 
-bpt_neq Pcmpq_EvGv_bp Pimull_r_bp.
+bpt_neq Pcmpl_EvGv_bp Pimull_r_bp.
 
 Axiom Instruction_bp_neq45_70: 
-bpt_neq Pcmpq_EvGv_bp Pimull_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Pimull_ri_bp.
 
 Axiom Instruction_bp_neq45_71: 
-bpt_neq Pcmpq_EvGv_bp Pimull_GvEv_bp.
+bpt_neq Pcmpl_EvGv_bp Pimull_GvEv_bp.
 
 Axiom Instruction_bp_neq45_72: 
-bpt_neq Pcmpq_EvGv_bp Psubl_GvEv_bp.
+bpt_neq Pcmpl_EvGv_bp Psubl_GvEv_bp.
 
 Axiom Instruction_bp_neq45_73: 
-bpt_neq Pcmpq_EvGv_bp Psubl_EvGv_bp.
+bpt_neq Pcmpl_EvGv_bp Psubl_EvGv_bp.
 
 Axiom Instruction_bp_neq45_74: 
-bpt_neq Pcmpq_EvGv_bp Paddl_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Paddl_ri_bp.
 
 Axiom Instruction_bp_neq45_75: 
-bpt_neq Pcmpq_EvGv_bp Pnegl_bp.
+bpt_neq Pcmpl_EvGv_bp Pnegl_bp.
 
 Axiom Instruction_bp_neq45_76: 
-bpt_neq Pcmpq_EvGv_bp Pleal_bp.
+bpt_neq Pcmpl_EvGv_bp Pleal_bp.
 
 Axiom Instruction_bp_neq45_77: 
-bpt_neq Pcmpq_EvGv_bp Pcvttss2si_rf_bp.
+bpt_neq Pcmpl_EvGv_bp Pcvttss2si_rf_bp.
 
 Axiom Instruction_bp_neq45_78: 
-bpt_neq Pcmpq_EvGv_bp Pcvtsi2sd_fr_bp.
+bpt_neq Pcmpl_EvGv_bp Pcvtsi2sd_fr_bp.
 
 Axiom Instruction_bp_neq45_79: 
-bpt_neq Pcmpq_EvGv_bp Pcvtsi2ss_fr_bp.
+bpt_neq Pcmpl_EvGv_bp Pcvtsi2ss_fr_bp.
 
 Axiom Instruction_bp_neq45_80: 
-bpt_neq Pcmpq_EvGv_bp Pcvttsd2si_rf_bp.
+bpt_neq Pcmpl_EvGv_bp Pcvttsd2si_rf_bp.
 
 Axiom Instruction_bp_neq45_81: 
-bpt_neq Pcmpq_EvGv_bp Pcvtss2sd_ff_bp.
+bpt_neq Pcmpl_EvGv_bp Pcvtss2sd_ff_bp.
 
 Axiom Instruction_bp_neq45_82: 
-bpt_neq Pcmpq_EvGv_bp Pcvtsd2ss_ff_bp.
+bpt_neq Pcmpl_EvGv_bp Pcvtsd2ss_ff_bp.
 
 Axiom Instruction_bp_neq45_83: 
-bpt_neq Pcmpq_EvGv_bp Pmovsw_GvEv_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovsw_GvEv_bp.
 
 Axiom Instruction_bp_neq45_84: 
-bpt_neq Pcmpq_EvGv_bp Pmovzw_GvEv_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovzw_GvEv_bp.
 
 Axiom Instruction_bp_neq45_85: 
-bpt_neq Pcmpq_EvGv_bp Pmovsb_GvEv_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovsb_GvEv_bp.
 
 Axiom Instruction_bp_neq45_86: 
-bpt_neq Pcmpq_EvGv_bp Pmovzb_rm_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovzb_rm_bp.
 
 Axiom Instruction_bp_neq45_87: 
-bpt_neq Pcmpq_EvGv_bp Pmovw_rm_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovw_rm_bp.
 
 Axiom Instruction_bp_neq45_88: 
-bpt_neq Pcmpq_EvGv_bp Pmovw_mr_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovw_mr_bp.
 
 Axiom Instruction_bp_neq45_89: 
-bpt_neq Pcmpq_EvGv_bp Pmovb_rm_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovb_rm_bp.
 
 Axiom Instruction_bp_neq45_90: 
-bpt_neq Pcmpq_EvGv_bp Pmovb_mr_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovb_mr_bp.
 
 Axiom Instruction_bp_neq45_91: 
-bpt_neq Pcmpq_EvGv_bp Pxchg_rr_bp.
+bpt_neq Pcmpl_EvGv_bp Pxchg_rr_bp.
 
 Axiom Instruction_bp_neq45_92: 
-bpt_neq Pcmpq_EvGv_bp Pflds_m_bp.
+bpt_neq Pcmpl_EvGv_bp Pflds_m_bp.
 
 Axiom Instruction_bp_neq45_93: 
-bpt_neq Pcmpq_EvGv_bp Pfstps_m_bp.
+bpt_neq Pcmpl_EvGv_bp Pfstps_m_bp.
 
 Axiom Instruction_bp_neq45_94: 
-bpt_neq Pcmpq_EvGv_bp Pfstpl_m_bp.
+bpt_neq Pcmpl_EvGv_bp Pfstpl_m_bp.
 
 Axiom Instruction_bp_neq45_95: 
-bpt_neq Pcmpq_EvGv_bp Pfldl_m_bp.
+bpt_neq Pcmpl_EvGv_bp Pfldl_m_bp.
 
 Axiom Instruction_bp_neq45_96: 
-bpt_neq Pcmpq_EvGv_bp Pmovss_fm_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovss_fm_bp.
 
 Axiom Instruction_bp_neq45_97: 
-bpt_neq Pcmpq_EvGv_bp Pmovss_mf_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovss_mf_bp.
 
 Axiom Instruction_bp_neq45_98: 
-bpt_neq Pcmpq_EvGv_bp Pmovsd_fm_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovsd_fm_bp.
 
 Axiom Instruction_bp_neq45_99: 
-bpt_neq Pcmpq_EvGv_bp Pmovsd_mf_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovsd_mf_bp.
 
 Axiom Instruction_bp_neq45_100: 
-bpt_neq Pcmpq_EvGv_bp Pmovl_rm_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovl_rm_bp.
 
 Axiom Instruction_bp_neq45_101: 
-bpt_neq Pcmpq_EvGv_bp Pmovl_mr_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovl_mr_bp.
 
 Axiom Instruction_bp_neq45_102: 
-bpt_neq Pcmpq_EvGv_bp Pmovl_ri_bp.
+bpt_neq Pcmpl_EvGv_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq46_47: 
 bpt_neq Prorl_ri_bp Prolw_ri_bp.
@@ -11968,19 +11968,19 @@ Axiom Instruction_bp_neq46_55:
 bpt_neq Prorl_ri_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq46_56: 
-bpt_neq Prorl_ri_bp Pxorq_GvEv_bp.
+bpt_neq Prorl_ri_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq46_57: 
-bpt_neq Prorl_ri_bp Pxorq_EvGv_bp.
+bpt_neq Prorl_ri_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq46_58: 
 bpt_neq Prorl_ri_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq46_59: 
-bpt_neq Prorl_ri_bp Porq_GvEv_bp.
+bpt_neq Prorl_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq46_60: 
-bpt_neq Prorl_ri_bp Porq_EvGv_bp.
+bpt_neq Prorl_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq46_61: 
 bpt_neq Prorl_ri_bp Porl_ri_bp.
@@ -12133,19 +12133,19 @@ Axiom Instruction_bp_neq47_55:
 bpt_neq Prolw_ri_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq47_56: 
-bpt_neq Prolw_ri_bp Pxorq_GvEv_bp.
+bpt_neq Prolw_ri_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq47_57: 
-bpt_neq Prolw_ri_bp Pxorq_EvGv_bp.
+bpt_neq Prolw_ri_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq47_58: 
 bpt_neq Prolw_ri_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq47_59: 
-bpt_neq Prolw_ri_bp Porq_GvEv_bp.
+bpt_neq Prolw_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq47_60: 
-bpt_neq Prolw_ri_bp Porq_EvGv_bp.
+bpt_neq Prolw_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq47_61: 
 bpt_neq Prolw_ri_bp Porl_ri_bp.
@@ -12295,19 +12295,19 @@ Axiom Instruction_bp_neq48_55:
 bpt_neq Pshld_ri_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq48_56: 
-bpt_neq Pshld_ri_bp Pxorq_GvEv_bp.
+bpt_neq Pshld_ri_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq48_57: 
-bpt_neq Pshld_ri_bp Pxorq_EvGv_bp.
+bpt_neq Pshld_ri_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq48_58: 
 bpt_neq Pshld_ri_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq48_59: 
-bpt_neq Pshld_ri_bp Porq_GvEv_bp.
+bpt_neq Pshld_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq48_60: 
-bpt_neq Pshld_ri_bp Porq_EvGv_bp.
+bpt_neq Pshld_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq48_61: 
 bpt_neq Pshld_ri_bp Porl_ri_bp.
@@ -12454,19 +12454,19 @@ Axiom Instruction_bp_neq49_55:
 bpt_neq Psarl_rcl_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq49_56: 
-bpt_neq Psarl_rcl_bp Pxorq_GvEv_bp.
+bpt_neq Psarl_rcl_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq49_57: 
-bpt_neq Psarl_rcl_bp Pxorq_EvGv_bp.
+bpt_neq Psarl_rcl_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq49_58: 
 bpt_neq Psarl_rcl_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq49_59: 
-bpt_neq Psarl_rcl_bp Porq_GvEv_bp.
+bpt_neq Psarl_rcl_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq49_60: 
-bpt_neq Psarl_rcl_bp Porq_EvGv_bp.
+bpt_neq Psarl_rcl_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq49_61: 
 bpt_neq Psarl_rcl_bp Porl_ri_bp.
@@ -12610,19 +12610,19 @@ Axiom Instruction_bp_neq50_55:
 bpt_neq Psarl_ri_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq50_56: 
-bpt_neq Psarl_ri_bp Pxorq_GvEv_bp.
+bpt_neq Psarl_ri_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq50_57: 
-bpt_neq Psarl_ri_bp Pxorq_EvGv_bp.
+bpt_neq Psarl_ri_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq50_58: 
 bpt_neq Psarl_ri_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq50_59: 
-bpt_neq Psarl_ri_bp Porq_GvEv_bp.
+bpt_neq Psarl_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq50_60: 
-bpt_neq Psarl_ri_bp Porq_EvGv_bp.
+bpt_neq Psarl_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq50_61: 
 bpt_neq Psarl_ri_bp Porl_ri_bp.
@@ -12763,19 +12763,19 @@ Axiom Instruction_bp_neq51_55:
 bpt_neq Pshrl_rcl_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq51_56: 
-bpt_neq Pshrl_rcl_bp Pxorq_GvEv_bp.
+bpt_neq Pshrl_rcl_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq51_57: 
-bpt_neq Pshrl_rcl_bp Pxorq_EvGv_bp.
+bpt_neq Pshrl_rcl_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq51_58: 
 bpt_neq Pshrl_rcl_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq51_59: 
-bpt_neq Pshrl_rcl_bp Porq_GvEv_bp.
+bpt_neq Pshrl_rcl_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq51_60: 
-bpt_neq Pshrl_rcl_bp Porq_EvGv_bp.
+bpt_neq Pshrl_rcl_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq51_61: 
 bpt_neq Pshrl_rcl_bp Porl_ri_bp.
@@ -12913,19 +12913,19 @@ Axiom Instruction_bp_neq52_55:
 bpt_neq Pshrl_ri_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq52_56: 
-bpt_neq Pshrl_ri_bp Pxorq_GvEv_bp.
+bpt_neq Pshrl_ri_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq52_57: 
-bpt_neq Pshrl_ri_bp Pxorq_EvGv_bp.
+bpt_neq Pshrl_ri_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq52_58: 
 bpt_neq Pshrl_ri_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq52_59: 
-bpt_neq Pshrl_ri_bp Porq_GvEv_bp.
+bpt_neq Pshrl_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq52_60: 
-bpt_neq Pshrl_ri_bp Porq_EvGv_bp.
+bpt_neq Pshrl_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq52_61: 
 bpt_neq Pshrl_ri_bp Porl_ri_bp.
@@ -13060,19 +13060,19 @@ Axiom Instruction_bp_neq53_55:
 bpt_neq Psall_rcl_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq53_56: 
-bpt_neq Psall_rcl_bp Pxorq_GvEv_bp.
+bpt_neq Psall_rcl_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq53_57: 
-bpt_neq Psall_rcl_bp Pxorq_EvGv_bp.
+bpt_neq Psall_rcl_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq53_58: 
 bpt_neq Psall_rcl_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq53_59: 
-bpt_neq Psall_rcl_bp Porq_GvEv_bp.
+bpt_neq Psall_rcl_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq53_60: 
-bpt_neq Psall_rcl_bp Porq_EvGv_bp.
+bpt_neq Psall_rcl_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq53_61: 
 bpt_neq Psall_rcl_bp Porl_ri_bp.
@@ -13204,19 +13204,19 @@ Axiom Instruction_bp_neq54_55:
 bpt_neq Psall_ri_bp Pnotl_bp.
 
 Axiom Instruction_bp_neq54_56: 
-bpt_neq Psall_ri_bp Pxorq_GvEv_bp.
+bpt_neq Psall_ri_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq54_57: 
-bpt_neq Psall_ri_bp Pxorq_EvGv_bp.
+bpt_neq Psall_ri_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq54_58: 
 bpt_neq Psall_ri_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq54_59: 
-bpt_neq Psall_ri_bp Porq_GvEv_bp.
+bpt_neq Psall_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq54_60: 
-bpt_neq Psall_ri_bp Porq_EvGv_bp.
+bpt_neq Psall_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq54_61: 
 bpt_neq Psall_ri_bp Porl_ri_bp.
@@ -13345,19 +13345,19 @@ Axiom Instruction_bp_neq54_102:
 bpt_neq Psall_ri_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq55_56: 
-bpt_neq Pnotl_bp Pxorq_GvEv_bp.
+bpt_neq Pnotl_bp Pxorl_GvEv_bp.
 
 Axiom Instruction_bp_neq55_57: 
-bpt_neq Pnotl_bp Pxorq_EvGv_bp.
+bpt_neq Pnotl_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq55_58: 
 bpt_neq Pnotl_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq55_59: 
-bpt_neq Pnotl_bp Porq_GvEv_bp.
+bpt_neq Pnotl_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq55_60: 
-bpt_neq Pnotl_bp Porq_EvGv_bp.
+bpt_neq Pnotl_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq55_61: 
 bpt_neq Pnotl_bp Porl_ri_bp.
@@ -13486,283 +13486,283 @@ Axiom Instruction_bp_neq55_102:
 bpt_neq Pnotl_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq56_57: 
-bpt_neq Pxorq_GvEv_bp Pxorq_EvGv_bp.
+bpt_neq Pxorl_GvEv_bp Pxorl_EvGv_bp.
 
 Axiom Instruction_bp_neq56_58: 
-bpt_neq Pxorq_GvEv_bp Pxorl_ri_bp.
+bpt_neq Pxorl_GvEv_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq56_59: 
-bpt_neq Pxorq_GvEv_bp Porq_GvEv_bp.
+bpt_neq Pxorl_GvEv_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq56_60: 
-bpt_neq Pxorq_GvEv_bp Porq_EvGv_bp.
+bpt_neq Pxorl_GvEv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq56_61: 
-bpt_neq Pxorq_GvEv_bp Porl_ri_bp.
+bpt_neq Pxorl_GvEv_bp Porl_ri_bp.
 
 Axiom Instruction_bp_neq56_62: 
-bpt_neq Pxorq_GvEv_bp Pandl_ri_bp.
+bpt_neq Pxorl_GvEv_bp Pandl_ri_bp.
 
 Axiom Instruction_bp_neq56_63: 
-bpt_neq Pxorq_GvEv_bp Pandl_GvEv_bp.
+bpt_neq Pxorl_GvEv_bp Pandl_GvEv_bp.
 
 Axiom Instruction_bp_neq56_64: 
-bpt_neq Pxorq_GvEv_bp Pandl_EvGv_bp.
+bpt_neq Pxorl_GvEv_bp Pandl_EvGv_bp.
 
 Axiom Instruction_bp_neq56_65: 
-bpt_neq Pxorq_GvEv_bp Pidivl_r_bp.
+bpt_neq Pxorl_GvEv_bp Pidivl_r_bp.
 
 Axiom Instruction_bp_neq56_66: 
-bpt_neq Pxorq_GvEv_bp Pdivl_r_bp.
+bpt_neq Pxorl_GvEv_bp Pdivl_r_bp.
 
 Axiom Instruction_bp_neq56_67: 
-bpt_neq Pxorq_GvEv_bp Pcltd_bp.
+bpt_neq Pxorl_GvEv_bp Pcltd_bp.
 
 Axiom Instruction_bp_neq56_68: 
-bpt_neq Pxorq_GvEv_bp Pmull_r_bp.
+bpt_neq Pxorl_GvEv_bp Pmull_r_bp.
 
 Axiom Instruction_bp_neq56_69: 
-bpt_neq Pxorq_GvEv_bp Pimull_r_bp.
+bpt_neq Pxorl_GvEv_bp Pimull_r_bp.
 
 Axiom Instruction_bp_neq56_70: 
-bpt_neq Pxorq_GvEv_bp Pimull_ri_bp.
+bpt_neq Pxorl_GvEv_bp Pimull_ri_bp.
 
 Axiom Instruction_bp_neq56_71: 
-bpt_neq Pxorq_GvEv_bp Pimull_GvEv_bp.
+bpt_neq Pxorl_GvEv_bp Pimull_GvEv_bp.
 
 Axiom Instruction_bp_neq56_72: 
-bpt_neq Pxorq_GvEv_bp Psubl_GvEv_bp.
+bpt_neq Pxorl_GvEv_bp Psubl_GvEv_bp.
 
 Axiom Instruction_bp_neq56_73: 
-bpt_neq Pxorq_GvEv_bp Psubl_EvGv_bp.
+bpt_neq Pxorl_GvEv_bp Psubl_EvGv_bp.
 
 Axiom Instruction_bp_neq56_74: 
-bpt_neq Pxorq_GvEv_bp Paddl_ri_bp.
+bpt_neq Pxorl_GvEv_bp Paddl_ri_bp.
 
 Axiom Instruction_bp_neq56_75: 
-bpt_neq Pxorq_GvEv_bp Pnegl_bp.
+bpt_neq Pxorl_GvEv_bp Pnegl_bp.
 
 Axiom Instruction_bp_neq56_76: 
-bpt_neq Pxorq_GvEv_bp Pleal_bp.
+bpt_neq Pxorl_GvEv_bp Pleal_bp.
 
 Axiom Instruction_bp_neq56_77: 
-bpt_neq Pxorq_GvEv_bp Pcvttss2si_rf_bp.
+bpt_neq Pxorl_GvEv_bp Pcvttss2si_rf_bp.
 
 Axiom Instruction_bp_neq56_78: 
-bpt_neq Pxorq_GvEv_bp Pcvtsi2sd_fr_bp.
+bpt_neq Pxorl_GvEv_bp Pcvtsi2sd_fr_bp.
 
 Axiom Instruction_bp_neq56_79: 
-bpt_neq Pxorq_GvEv_bp Pcvtsi2ss_fr_bp.
+bpt_neq Pxorl_GvEv_bp Pcvtsi2ss_fr_bp.
 
 Axiom Instruction_bp_neq56_80: 
-bpt_neq Pxorq_GvEv_bp Pcvttsd2si_rf_bp.
+bpt_neq Pxorl_GvEv_bp Pcvttsd2si_rf_bp.
 
 Axiom Instruction_bp_neq56_81: 
-bpt_neq Pxorq_GvEv_bp Pcvtss2sd_ff_bp.
+bpt_neq Pxorl_GvEv_bp Pcvtss2sd_ff_bp.
 
 Axiom Instruction_bp_neq56_82: 
-bpt_neq Pxorq_GvEv_bp Pcvtsd2ss_ff_bp.
+bpt_neq Pxorl_GvEv_bp Pcvtsd2ss_ff_bp.
 
 Axiom Instruction_bp_neq56_83: 
-bpt_neq Pxorq_GvEv_bp Pmovsw_GvEv_bp.
+bpt_neq Pxorl_GvEv_bp Pmovsw_GvEv_bp.
 
 Axiom Instruction_bp_neq56_84: 
-bpt_neq Pxorq_GvEv_bp Pmovzw_GvEv_bp.
+bpt_neq Pxorl_GvEv_bp Pmovzw_GvEv_bp.
 
 Axiom Instruction_bp_neq56_85: 
-bpt_neq Pxorq_GvEv_bp Pmovsb_GvEv_bp.
+bpt_neq Pxorl_GvEv_bp Pmovsb_GvEv_bp.
 
 Axiom Instruction_bp_neq56_86: 
-bpt_neq Pxorq_GvEv_bp Pmovzb_rm_bp.
+bpt_neq Pxorl_GvEv_bp Pmovzb_rm_bp.
 
 Axiom Instruction_bp_neq56_87: 
-bpt_neq Pxorq_GvEv_bp Pmovw_rm_bp.
+bpt_neq Pxorl_GvEv_bp Pmovw_rm_bp.
 
 Axiom Instruction_bp_neq56_88: 
-bpt_neq Pxorq_GvEv_bp Pmovw_mr_bp.
+bpt_neq Pxorl_GvEv_bp Pmovw_mr_bp.
 
 Axiom Instruction_bp_neq56_89: 
-bpt_neq Pxorq_GvEv_bp Pmovb_rm_bp.
+bpt_neq Pxorl_GvEv_bp Pmovb_rm_bp.
 
 Axiom Instruction_bp_neq56_90: 
-bpt_neq Pxorq_GvEv_bp Pmovb_mr_bp.
+bpt_neq Pxorl_GvEv_bp Pmovb_mr_bp.
 
 Axiom Instruction_bp_neq56_91: 
-bpt_neq Pxorq_GvEv_bp Pxchg_rr_bp.
+bpt_neq Pxorl_GvEv_bp Pxchg_rr_bp.
 
 Axiom Instruction_bp_neq56_92: 
-bpt_neq Pxorq_GvEv_bp Pflds_m_bp.
+bpt_neq Pxorl_GvEv_bp Pflds_m_bp.
 
 Axiom Instruction_bp_neq56_93: 
-bpt_neq Pxorq_GvEv_bp Pfstps_m_bp.
+bpt_neq Pxorl_GvEv_bp Pfstps_m_bp.
 
 Axiom Instruction_bp_neq56_94: 
-bpt_neq Pxorq_GvEv_bp Pfstpl_m_bp.
+bpt_neq Pxorl_GvEv_bp Pfstpl_m_bp.
 
 Axiom Instruction_bp_neq56_95: 
-bpt_neq Pxorq_GvEv_bp Pfldl_m_bp.
+bpt_neq Pxorl_GvEv_bp Pfldl_m_bp.
 
 Axiom Instruction_bp_neq56_96: 
-bpt_neq Pxorq_GvEv_bp Pmovss_fm_bp.
+bpt_neq Pxorl_GvEv_bp Pmovss_fm_bp.
 
 Axiom Instruction_bp_neq56_97: 
-bpt_neq Pxorq_GvEv_bp Pmovss_mf_bp.
+bpt_neq Pxorl_GvEv_bp Pmovss_mf_bp.
 
 Axiom Instruction_bp_neq56_98: 
-bpt_neq Pxorq_GvEv_bp Pmovsd_fm_bp.
+bpt_neq Pxorl_GvEv_bp Pmovsd_fm_bp.
 
 Axiom Instruction_bp_neq56_99: 
-bpt_neq Pxorq_GvEv_bp Pmovsd_mf_bp.
+bpt_neq Pxorl_GvEv_bp Pmovsd_mf_bp.
 
 Axiom Instruction_bp_neq56_100: 
-bpt_neq Pxorq_GvEv_bp Pmovl_rm_bp.
+bpt_neq Pxorl_GvEv_bp Pmovl_rm_bp.
 
 Axiom Instruction_bp_neq56_101: 
-bpt_neq Pxorq_GvEv_bp Pmovl_mr_bp.
+bpt_neq Pxorl_GvEv_bp Pmovl_mr_bp.
 
 Axiom Instruction_bp_neq56_102: 
-bpt_neq Pxorq_GvEv_bp Pmovl_ri_bp.
+bpt_neq Pxorl_GvEv_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq57_58: 
-bpt_neq Pxorq_EvGv_bp Pxorl_ri_bp.
+bpt_neq Pxorl_EvGv_bp Pxorl_ri_bp.
 
 Axiom Instruction_bp_neq57_59: 
-bpt_neq Pxorq_EvGv_bp Porq_GvEv_bp.
+bpt_neq Pxorl_EvGv_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq57_60: 
-bpt_neq Pxorq_EvGv_bp Porq_EvGv_bp.
+bpt_neq Pxorl_EvGv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq57_61: 
-bpt_neq Pxorq_EvGv_bp Porl_ri_bp.
+bpt_neq Pxorl_EvGv_bp Porl_ri_bp.
 
 Axiom Instruction_bp_neq57_62: 
-bpt_neq Pxorq_EvGv_bp Pandl_ri_bp.
+bpt_neq Pxorl_EvGv_bp Pandl_ri_bp.
 
 Axiom Instruction_bp_neq57_63: 
-bpt_neq Pxorq_EvGv_bp Pandl_GvEv_bp.
+bpt_neq Pxorl_EvGv_bp Pandl_GvEv_bp.
 
 Axiom Instruction_bp_neq57_64: 
-bpt_neq Pxorq_EvGv_bp Pandl_EvGv_bp.
+bpt_neq Pxorl_EvGv_bp Pandl_EvGv_bp.
 
 Axiom Instruction_bp_neq57_65: 
-bpt_neq Pxorq_EvGv_bp Pidivl_r_bp.
+bpt_neq Pxorl_EvGv_bp Pidivl_r_bp.
 
 Axiom Instruction_bp_neq57_66: 
-bpt_neq Pxorq_EvGv_bp Pdivl_r_bp.
+bpt_neq Pxorl_EvGv_bp Pdivl_r_bp.
 
 Axiom Instruction_bp_neq57_67: 
-bpt_neq Pxorq_EvGv_bp Pcltd_bp.
+bpt_neq Pxorl_EvGv_bp Pcltd_bp.
 
 Axiom Instruction_bp_neq57_68: 
-bpt_neq Pxorq_EvGv_bp Pmull_r_bp.
+bpt_neq Pxorl_EvGv_bp Pmull_r_bp.
 
 Axiom Instruction_bp_neq57_69: 
-bpt_neq Pxorq_EvGv_bp Pimull_r_bp.
+bpt_neq Pxorl_EvGv_bp Pimull_r_bp.
 
 Axiom Instruction_bp_neq57_70: 
-bpt_neq Pxorq_EvGv_bp Pimull_ri_bp.
+bpt_neq Pxorl_EvGv_bp Pimull_ri_bp.
 
 Axiom Instruction_bp_neq57_71: 
-bpt_neq Pxorq_EvGv_bp Pimull_GvEv_bp.
+bpt_neq Pxorl_EvGv_bp Pimull_GvEv_bp.
 
 Axiom Instruction_bp_neq57_72: 
-bpt_neq Pxorq_EvGv_bp Psubl_GvEv_bp.
+bpt_neq Pxorl_EvGv_bp Psubl_GvEv_bp.
 
 Axiom Instruction_bp_neq57_73: 
-bpt_neq Pxorq_EvGv_bp Psubl_EvGv_bp.
+bpt_neq Pxorl_EvGv_bp Psubl_EvGv_bp.
 
 Axiom Instruction_bp_neq57_74: 
-bpt_neq Pxorq_EvGv_bp Paddl_ri_bp.
+bpt_neq Pxorl_EvGv_bp Paddl_ri_bp.
 
 Axiom Instruction_bp_neq57_75: 
-bpt_neq Pxorq_EvGv_bp Pnegl_bp.
+bpt_neq Pxorl_EvGv_bp Pnegl_bp.
 
 Axiom Instruction_bp_neq57_76: 
-bpt_neq Pxorq_EvGv_bp Pleal_bp.
+bpt_neq Pxorl_EvGv_bp Pleal_bp.
 
 Axiom Instruction_bp_neq57_77: 
-bpt_neq Pxorq_EvGv_bp Pcvttss2si_rf_bp.
+bpt_neq Pxorl_EvGv_bp Pcvttss2si_rf_bp.
 
 Axiom Instruction_bp_neq57_78: 
-bpt_neq Pxorq_EvGv_bp Pcvtsi2sd_fr_bp.
+bpt_neq Pxorl_EvGv_bp Pcvtsi2sd_fr_bp.
 
 Axiom Instruction_bp_neq57_79: 
-bpt_neq Pxorq_EvGv_bp Pcvtsi2ss_fr_bp.
+bpt_neq Pxorl_EvGv_bp Pcvtsi2ss_fr_bp.
 
 Axiom Instruction_bp_neq57_80: 
-bpt_neq Pxorq_EvGv_bp Pcvttsd2si_rf_bp.
+bpt_neq Pxorl_EvGv_bp Pcvttsd2si_rf_bp.
 
 Axiom Instruction_bp_neq57_81: 
-bpt_neq Pxorq_EvGv_bp Pcvtss2sd_ff_bp.
+bpt_neq Pxorl_EvGv_bp Pcvtss2sd_ff_bp.
 
 Axiom Instruction_bp_neq57_82: 
-bpt_neq Pxorq_EvGv_bp Pcvtsd2ss_ff_bp.
+bpt_neq Pxorl_EvGv_bp Pcvtsd2ss_ff_bp.
 
 Axiom Instruction_bp_neq57_83: 
-bpt_neq Pxorq_EvGv_bp Pmovsw_GvEv_bp.
+bpt_neq Pxorl_EvGv_bp Pmovsw_GvEv_bp.
 
 Axiom Instruction_bp_neq57_84: 
-bpt_neq Pxorq_EvGv_bp Pmovzw_GvEv_bp.
+bpt_neq Pxorl_EvGv_bp Pmovzw_GvEv_bp.
 
 Axiom Instruction_bp_neq57_85: 
-bpt_neq Pxorq_EvGv_bp Pmovsb_GvEv_bp.
+bpt_neq Pxorl_EvGv_bp Pmovsb_GvEv_bp.
 
 Axiom Instruction_bp_neq57_86: 
-bpt_neq Pxorq_EvGv_bp Pmovzb_rm_bp.
+bpt_neq Pxorl_EvGv_bp Pmovzb_rm_bp.
 
 Axiom Instruction_bp_neq57_87: 
-bpt_neq Pxorq_EvGv_bp Pmovw_rm_bp.
+bpt_neq Pxorl_EvGv_bp Pmovw_rm_bp.
 
 Axiom Instruction_bp_neq57_88: 
-bpt_neq Pxorq_EvGv_bp Pmovw_mr_bp.
+bpt_neq Pxorl_EvGv_bp Pmovw_mr_bp.
 
 Axiom Instruction_bp_neq57_89: 
-bpt_neq Pxorq_EvGv_bp Pmovb_rm_bp.
+bpt_neq Pxorl_EvGv_bp Pmovb_rm_bp.
 
 Axiom Instruction_bp_neq57_90: 
-bpt_neq Pxorq_EvGv_bp Pmovb_mr_bp.
+bpt_neq Pxorl_EvGv_bp Pmovb_mr_bp.
 
 Axiom Instruction_bp_neq57_91: 
-bpt_neq Pxorq_EvGv_bp Pxchg_rr_bp.
+bpt_neq Pxorl_EvGv_bp Pxchg_rr_bp.
 
 Axiom Instruction_bp_neq57_92: 
-bpt_neq Pxorq_EvGv_bp Pflds_m_bp.
+bpt_neq Pxorl_EvGv_bp Pflds_m_bp.
 
 Axiom Instruction_bp_neq57_93: 
-bpt_neq Pxorq_EvGv_bp Pfstps_m_bp.
+bpt_neq Pxorl_EvGv_bp Pfstps_m_bp.
 
 Axiom Instruction_bp_neq57_94: 
-bpt_neq Pxorq_EvGv_bp Pfstpl_m_bp.
+bpt_neq Pxorl_EvGv_bp Pfstpl_m_bp.
 
 Axiom Instruction_bp_neq57_95: 
-bpt_neq Pxorq_EvGv_bp Pfldl_m_bp.
+bpt_neq Pxorl_EvGv_bp Pfldl_m_bp.
 
 Axiom Instruction_bp_neq57_96: 
-bpt_neq Pxorq_EvGv_bp Pmovss_fm_bp.
+bpt_neq Pxorl_EvGv_bp Pmovss_fm_bp.
 
 Axiom Instruction_bp_neq57_97: 
-bpt_neq Pxorq_EvGv_bp Pmovss_mf_bp.
+bpt_neq Pxorl_EvGv_bp Pmovss_mf_bp.
 
 Axiom Instruction_bp_neq57_98: 
-bpt_neq Pxorq_EvGv_bp Pmovsd_fm_bp.
+bpt_neq Pxorl_EvGv_bp Pmovsd_fm_bp.
 
 Axiom Instruction_bp_neq57_99: 
-bpt_neq Pxorq_EvGv_bp Pmovsd_mf_bp.
+bpt_neq Pxorl_EvGv_bp Pmovsd_mf_bp.
 
 Axiom Instruction_bp_neq57_100: 
-bpt_neq Pxorq_EvGv_bp Pmovl_rm_bp.
+bpt_neq Pxorl_EvGv_bp Pmovl_rm_bp.
 
 Axiom Instruction_bp_neq57_101: 
-bpt_neq Pxorq_EvGv_bp Pmovl_mr_bp.
+bpt_neq Pxorl_EvGv_bp Pmovl_mr_bp.
 
 Axiom Instruction_bp_neq57_102: 
-bpt_neq Pxorq_EvGv_bp Pmovl_ri_bp.
+bpt_neq Pxorl_EvGv_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq58_59: 
-bpt_neq Pxorl_ri_bp Porq_GvEv_bp.
+bpt_neq Pxorl_ri_bp Porl_GvEv_bp.
 
 Axiom Instruction_bp_neq58_60: 
-bpt_neq Pxorl_ri_bp Porq_EvGv_bp.
+bpt_neq Pxorl_ri_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq58_61: 
 bpt_neq Pxorl_ri_bp Porl_ri_bp.
@@ -13891,259 +13891,259 @@ Axiom Instruction_bp_neq58_102:
 bpt_neq Pxorl_ri_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq59_60: 
-bpt_neq Porq_GvEv_bp Porq_EvGv_bp.
+bpt_neq Porl_GvEv_bp Porl_EvGv_bp.
 
 Axiom Instruction_bp_neq59_61: 
-bpt_neq Porq_GvEv_bp Porl_ri_bp.
+bpt_neq Porl_GvEv_bp Porl_ri_bp.
 
 Axiom Instruction_bp_neq59_62: 
-bpt_neq Porq_GvEv_bp Pandl_ri_bp.
+bpt_neq Porl_GvEv_bp Pandl_ri_bp.
 
 Axiom Instruction_bp_neq59_63: 
-bpt_neq Porq_GvEv_bp Pandl_GvEv_bp.
+bpt_neq Porl_GvEv_bp Pandl_GvEv_bp.
 
 Axiom Instruction_bp_neq59_64: 
-bpt_neq Porq_GvEv_bp Pandl_EvGv_bp.
+bpt_neq Porl_GvEv_bp Pandl_EvGv_bp.
 
 Axiom Instruction_bp_neq59_65: 
-bpt_neq Porq_GvEv_bp Pidivl_r_bp.
+bpt_neq Porl_GvEv_bp Pidivl_r_bp.
 
 Axiom Instruction_bp_neq59_66: 
-bpt_neq Porq_GvEv_bp Pdivl_r_bp.
+bpt_neq Porl_GvEv_bp Pdivl_r_bp.
 
 Axiom Instruction_bp_neq59_67: 
-bpt_neq Porq_GvEv_bp Pcltd_bp.
+bpt_neq Porl_GvEv_bp Pcltd_bp.
 
 Axiom Instruction_bp_neq59_68: 
-bpt_neq Porq_GvEv_bp Pmull_r_bp.
+bpt_neq Porl_GvEv_bp Pmull_r_bp.
 
 Axiom Instruction_bp_neq59_69: 
-bpt_neq Porq_GvEv_bp Pimull_r_bp.
+bpt_neq Porl_GvEv_bp Pimull_r_bp.
 
 Axiom Instruction_bp_neq59_70: 
-bpt_neq Porq_GvEv_bp Pimull_ri_bp.
+bpt_neq Porl_GvEv_bp Pimull_ri_bp.
 
 Axiom Instruction_bp_neq59_71: 
-bpt_neq Porq_GvEv_bp Pimull_GvEv_bp.
+bpt_neq Porl_GvEv_bp Pimull_GvEv_bp.
 
 Axiom Instruction_bp_neq59_72: 
-bpt_neq Porq_GvEv_bp Psubl_GvEv_bp.
+bpt_neq Porl_GvEv_bp Psubl_GvEv_bp.
 
 Axiom Instruction_bp_neq59_73: 
-bpt_neq Porq_GvEv_bp Psubl_EvGv_bp.
+bpt_neq Porl_GvEv_bp Psubl_EvGv_bp.
 
 Axiom Instruction_bp_neq59_74: 
-bpt_neq Porq_GvEv_bp Paddl_ri_bp.
+bpt_neq Porl_GvEv_bp Paddl_ri_bp.
 
 Axiom Instruction_bp_neq59_75: 
-bpt_neq Porq_GvEv_bp Pnegl_bp.
+bpt_neq Porl_GvEv_bp Pnegl_bp.
 
 Axiom Instruction_bp_neq59_76: 
-bpt_neq Porq_GvEv_bp Pleal_bp.
+bpt_neq Porl_GvEv_bp Pleal_bp.
 
 Axiom Instruction_bp_neq59_77: 
-bpt_neq Porq_GvEv_bp Pcvttss2si_rf_bp.
+bpt_neq Porl_GvEv_bp Pcvttss2si_rf_bp.
 
 Axiom Instruction_bp_neq59_78: 
-bpt_neq Porq_GvEv_bp Pcvtsi2sd_fr_bp.
+bpt_neq Porl_GvEv_bp Pcvtsi2sd_fr_bp.
 
 Axiom Instruction_bp_neq59_79: 
-bpt_neq Porq_GvEv_bp Pcvtsi2ss_fr_bp.
+bpt_neq Porl_GvEv_bp Pcvtsi2ss_fr_bp.
 
 Axiom Instruction_bp_neq59_80: 
-bpt_neq Porq_GvEv_bp Pcvttsd2si_rf_bp.
+bpt_neq Porl_GvEv_bp Pcvttsd2si_rf_bp.
 
 Axiom Instruction_bp_neq59_81: 
-bpt_neq Porq_GvEv_bp Pcvtss2sd_ff_bp.
+bpt_neq Porl_GvEv_bp Pcvtss2sd_ff_bp.
 
 Axiom Instruction_bp_neq59_82: 
-bpt_neq Porq_GvEv_bp Pcvtsd2ss_ff_bp.
+bpt_neq Porl_GvEv_bp Pcvtsd2ss_ff_bp.
 
 Axiom Instruction_bp_neq59_83: 
-bpt_neq Porq_GvEv_bp Pmovsw_GvEv_bp.
+bpt_neq Porl_GvEv_bp Pmovsw_GvEv_bp.
 
 Axiom Instruction_bp_neq59_84: 
-bpt_neq Porq_GvEv_bp Pmovzw_GvEv_bp.
+bpt_neq Porl_GvEv_bp Pmovzw_GvEv_bp.
 
 Axiom Instruction_bp_neq59_85: 
-bpt_neq Porq_GvEv_bp Pmovsb_GvEv_bp.
+bpt_neq Porl_GvEv_bp Pmovsb_GvEv_bp.
 
 Axiom Instruction_bp_neq59_86: 
-bpt_neq Porq_GvEv_bp Pmovzb_rm_bp.
+bpt_neq Porl_GvEv_bp Pmovzb_rm_bp.
 
 Axiom Instruction_bp_neq59_87: 
-bpt_neq Porq_GvEv_bp Pmovw_rm_bp.
+bpt_neq Porl_GvEv_bp Pmovw_rm_bp.
 
 Axiom Instruction_bp_neq59_88: 
-bpt_neq Porq_GvEv_bp Pmovw_mr_bp.
+bpt_neq Porl_GvEv_bp Pmovw_mr_bp.
 
 Axiom Instruction_bp_neq59_89: 
-bpt_neq Porq_GvEv_bp Pmovb_rm_bp.
+bpt_neq Porl_GvEv_bp Pmovb_rm_bp.
 
 Axiom Instruction_bp_neq59_90: 
-bpt_neq Porq_GvEv_bp Pmovb_mr_bp.
+bpt_neq Porl_GvEv_bp Pmovb_mr_bp.
 
 Axiom Instruction_bp_neq59_91: 
-bpt_neq Porq_GvEv_bp Pxchg_rr_bp.
+bpt_neq Porl_GvEv_bp Pxchg_rr_bp.
 
 Axiom Instruction_bp_neq59_92: 
-bpt_neq Porq_GvEv_bp Pflds_m_bp.
+bpt_neq Porl_GvEv_bp Pflds_m_bp.
 
 Axiom Instruction_bp_neq59_93: 
-bpt_neq Porq_GvEv_bp Pfstps_m_bp.
+bpt_neq Porl_GvEv_bp Pfstps_m_bp.
 
 Axiom Instruction_bp_neq59_94: 
-bpt_neq Porq_GvEv_bp Pfstpl_m_bp.
+bpt_neq Porl_GvEv_bp Pfstpl_m_bp.
 
 Axiom Instruction_bp_neq59_95: 
-bpt_neq Porq_GvEv_bp Pfldl_m_bp.
+bpt_neq Porl_GvEv_bp Pfldl_m_bp.
 
 Axiom Instruction_bp_neq59_96: 
-bpt_neq Porq_GvEv_bp Pmovss_fm_bp.
+bpt_neq Porl_GvEv_bp Pmovss_fm_bp.
 
 Axiom Instruction_bp_neq59_97: 
-bpt_neq Porq_GvEv_bp Pmovss_mf_bp.
+bpt_neq Porl_GvEv_bp Pmovss_mf_bp.
 
 Axiom Instruction_bp_neq59_98: 
-bpt_neq Porq_GvEv_bp Pmovsd_fm_bp.
+bpt_neq Porl_GvEv_bp Pmovsd_fm_bp.
 
 Axiom Instruction_bp_neq59_99: 
-bpt_neq Porq_GvEv_bp Pmovsd_mf_bp.
+bpt_neq Porl_GvEv_bp Pmovsd_mf_bp.
 
 Axiom Instruction_bp_neq59_100: 
-bpt_neq Porq_GvEv_bp Pmovl_rm_bp.
+bpt_neq Porl_GvEv_bp Pmovl_rm_bp.
 
 Axiom Instruction_bp_neq59_101: 
-bpt_neq Porq_GvEv_bp Pmovl_mr_bp.
+bpt_neq Porl_GvEv_bp Pmovl_mr_bp.
 
 Axiom Instruction_bp_neq59_102: 
-bpt_neq Porq_GvEv_bp Pmovl_ri_bp.
+bpt_neq Porl_GvEv_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq60_61: 
-bpt_neq Porq_EvGv_bp Porl_ri_bp.
+bpt_neq Porl_EvGv_bp Porl_ri_bp.
 
 Axiom Instruction_bp_neq60_62: 
-bpt_neq Porq_EvGv_bp Pandl_ri_bp.
+bpt_neq Porl_EvGv_bp Pandl_ri_bp.
 
 Axiom Instruction_bp_neq60_63: 
-bpt_neq Porq_EvGv_bp Pandl_GvEv_bp.
+bpt_neq Porl_EvGv_bp Pandl_GvEv_bp.
 
 Axiom Instruction_bp_neq60_64: 
-bpt_neq Porq_EvGv_bp Pandl_EvGv_bp.
+bpt_neq Porl_EvGv_bp Pandl_EvGv_bp.
 
 Axiom Instruction_bp_neq60_65: 
-bpt_neq Porq_EvGv_bp Pidivl_r_bp.
+bpt_neq Porl_EvGv_bp Pidivl_r_bp.
 
 Axiom Instruction_bp_neq60_66: 
-bpt_neq Porq_EvGv_bp Pdivl_r_bp.
+bpt_neq Porl_EvGv_bp Pdivl_r_bp.
 
 Axiom Instruction_bp_neq60_67: 
-bpt_neq Porq_EvGv_bp Pcltd_bp.
+bpt_neq Porl_EvGv_bp Pcltd_bp.
 
 Axiom Instruction_bp_neq60_68: 
-bpt_neq Porq_EvGv_bp Pmull_r_bp.
+bpt_neq Porl_EvGv_bp Pmull_r_bp.
 
 Axiom Instruction_bp_neq60_69: 
-bpt_neq Porq_EvGv_bp Pimull_r_bp.
+bpt_neq Porl_EvGv_bp Pimull_r_bp.
 
 Axiom Instruction_bp_neq60_70: 
-bpt_neq Porq_EvGv_bp Pimull_ri_bp.
+bpt_neq Porl_EvGv_bp Pimull_ri_bp.
 
 Axiom Instruction_bp_neq60_71: 
-bpt_neq Porq_EvGv_bp Pimull_GvEv_bp.
+bpt_neq Porl_EvGv_bp Pimull_GvEv_bp.
 
 Axiom Instruction_bp_neq60_72: 
-bpt_neq Porq_EvGv_bp Psubl_GvEv_bp.
+bpt_neq Porl_EvGv_bp Psubl_GvEv_bp.
 
 Axiom Instruction_bp_neq60_73: 
-bpt_neq Porq_EvGv_bp Psubl_EvGv_bp.
+bpt_neq Porl_EvGv_bp Psubl_EvGv_bp.
 
 Axiom Instruction_bp_neq60_74: 
-bpt_neq Porq_EvGv_bp Paddl_ri_bp.
+bpt_neq Porl_EvGv_bp Paddl_ri_bp.
 
 Axiom Instruction_bp_neq60_75: 
-bpt_neq Porq_EvGv_bp Pnegl_bp.
+bpt_neq Porl_EvGv_bp Pnegl_bp.
 
 Axiom Instruction_bp_neq60_76: 
-bpt_neq Porq_EvGv_bp Pleal_bp.
+bpt_neq Porl_EvGv_bp Pleal_bp.
 
 Axiom Instruction_bp_neq60_77: 
-bpt_neq Porq_EvGv_bp Pcvttss2si_rf_bp.
+bpt_neq Porl_EvGv_bp Pcvttss2si_rf_bp.
 
 Axiom Instruction_bp_neq60_78: 
-bpt_neq Porq_EvGv_bp Pcvtsi2sd_fr_bp.
+bpt_neq Porl_EvGv_bp Pcvtsi2sd_fr_bp.
 
 Axiom Instruction_bp_neq60_79: 
-bpt_neq Porq_EvGv_bp Pcvtsi2ss_fr_bp.
+bpt_neq Porl_EvGv_bp Pcvtsi2ss_fr_bp.
 
 Axiom Instruction_bp_neq60_80: 
-bpt_neq Porq_EvGv_bp Pcvttsd2si_rf_bp.
+bpt_neq Porl_EvGv_bp Pcvttsd2si_rf_bp.
 
 Axiom Instruction_bp_neq60_81: 
-bpt_neq Porq_EvGv_bp Pcvtss2sd_ff_bp.
+bpt_neq Porl_EvGv_bp Pcvtss2sd_ff_bp.
 
 Axiom Instruction_bp_neq60_82: 
-bpt_neq Porq_EvGv_bp Pcvtsd2ss_ff_bp.
+bpt_neq Porl_EvGv_bp Pcvtsd2ss_ff_bp.
 
 Axiom Instruction_bp_neq60_83: 
-bpt_neq Porq_EvGv_bp Pmovsw_GvEv_bp.
+bpt_neq Porl_EvGv_bp Pmovsw_GvEv_bp.
 
 Axiom Instruction_bp_neq60_84: 
-bpt_neq Porq_EvGv_bp Pmovzw_GvEv_bp.
+bpt_neq Porl_EvGv_bp Pmovzw_GvEv_bp.
 
 Axiom Instruction_bp_neq60_85: 
-bpt_neq Porq_EvGv_bp Pmovsb_GvEv_bp.
+bpt_neq Porl_EvGv_bp Pmovsb_GvEv_bp.
 
 Axiom Instruction_bp_neq60_86: 
-bpt_neq Porq_EvGv_bp Pmovzb_rm_bp.
+bpt_neq Porl_EvGv_bp Pmovzb_rm_bp.
 
 Axiom Instruction_bp_neq60_87: 
-bpt_neq Porq_EvGv_bp Pmovw_rm_bp.
+bpt_neq Porl_EvGv_bp Pmovw_rm_bp.
 
 Axiom Instruction_bp_neq60_88: 
-bpt_neq Porq_EvGv_bp Pmovw_mr_bp.
+bpt_neq Porl_EvGv_bp Pmovw_mr_bp.
 
 Axiom Instruction_bp_neq60_89: 
-bpt_neq Porq_EvGv_bp Pmovb_rm_bp.
+bpt_neq Porl_EvGv_bp Pmovb_rm_bp.
 
 Axiom Instruction_bp_neq60_90: 
-bpt_neq Porq_EvGv_bp Pmovb_mr_bp.
+bpt_neq Porl_EvGv_bp Pmovb_mr_bp.
 
 Axiom Instruction_bp_neq60_91: 
-bpt_neq Porq_EvGv_bp Pxchg_rr_bp.
+bpt_neq Porl_EvGv_bp Pxchg_rr_bp.
 
 Axiom Instruction_bp_neq60_92: 
-bpt_neq Porq_EvGv_bp Pflds_m_bp.
+bpt_neq Porl_EvGv_bp Pflds_m_bp.
 
 Axiom Instruction_bp_neq60_93: 
-bpt_neq Porq_EvGv_bp Pfstps_m_bp.
+bpt_neq Porl_EvGv_bp Pfstps_m_bp.
 
 Axiom Instruction_bp_neq60_94: 
-bpt_neq Porq_EvGv_bp Pfstpl_m_bp.
+bpt_neq Porl_EvGv_bp Pfstpl_m_bp.
 
 Axiom Instruction_bp_neq60_95: 
-bpt_neq Porq_EvGv_bp Pfldl_m_bp.
+bpt_neq Porl_EvGv_bp Pfldl_m_bp.
 
 Axiom Instruction_bp_neq60_96: 
-bpt_neq Porq_EvGv_bp Pmovss_fm_bp.
+bpt_neq Porl_EvGv_bp Pmovss_fm_bp.
 
 Axiom Instruction_bp_neq60_97: 
-bpt_neq Porq_EvGv_bp Pmovss_mf_bp.
+bpt_neq Porl_EvGv_bp Pmovss_mf_bp.
 
 Axiom Instruction_bp_neq60_98: 
-bpt_neq Porq_EvGv_bp Pmovsd_fm_bp.
+bpt_neq Porl_EvGv_bp Pmovsd_fm_bp.
 
 Axiom Instruction_bp_neq60_99: 
-bpt_neq Porq_EvGv_bp Pmovsd_mf_bp.
+bpt_neq Porl_EvGv_bp Pmovsd_mf_bp.
 
 Axiom Instruction_bp_neq60_100: 
-bpt_neq Porq_EvGv_bp Pmovl_rm_bp.
+bpt_neq Porl_EvGv_bp Pmovl_rm_bp.
 
 Axiom Instruction_bp_neq60_101: 
-bpt_neq Porq_EvGv_bp Pmovl_mr_bp.
+bpt_neq Porl_EvGv_bp Pmovl_mr_bp.
 
 Axiom Instruction_bp_neq60_102: 
-bpt_neq Porq_EvGv_bp Pmovl_ri_bp.
+bpt_neq Porl_EvGv_bp Pmovl_ri_bp.
 
 Axiom Instruction_bp_neq61_62: 
 bpt_neq Porl_ri_bp Pandl_ri_bp.
