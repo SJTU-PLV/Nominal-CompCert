@@ -1703,125 +1703,219 @@ Qed.
 
 Global Opaque addrmode_size.
 
+(** REX prefix size *)
+Definition check_extend_reg (r: ireg): bool :=
+  match r with
+  | RAX
+  | RBX
+  | RCX
+  | RDX
+  | RSI
+  | RDI
+  | RBP
+  | RSP => true
+  | R8 
+  | R9 
+  | R10
+  | R11
+  | R12
+  | R13
+  | R14
+  | R15 => false
+  end.
+
+Definition check_extend_freg (fr: freg) : bool :=
+  match fr with
+  | XMM0 
+  | XMM1 
+  | XMM2 
+  | XMM3 
+  | XMM4 
+  | XMM5 
+  | XMM6 
+  | XMM7 => true
+  | XMM8 
+  | XMM9 
+  | XMM10
+  | XMM11
+  | XMM12
+  | XMM13
+  | XMM14
+  | XMM15 => false
+  end.
+
+Definition check_extend_addrmode (a:addrmode) : bool :=
+  let '(Addrmode base ofs const) := a in
+  match base,ofs with
+  | None,None => true
+  | Some b, None => check_extend_reg b
+  | None, Some (r, _ ) => check_extend_reg r
+  | Some b, Some (r, _) => check_extend_reg b && check_extend_reg r
+  end.
+
+
+Definition rex_prefix_check_rr (rd rs:ireg) :=
+  if Archi.ptr64 then 
+    if check_extend_reg rd && check_extend_reg rs then 0 else 1
+  else 0.
+
+Definition rex_prefix_check_r (r:ireg) :=
+  if Archi.ptr64 then
+    if check_extend_reg r then 0 else 1
+  else 0.
+
+Definition rex_prefix_check_frr (rd rs:freg) :=
+  if Archi.ptr64 then 
+    if check_extend_freg rd && check_extend_freg rs then 0 else 1
+  else 0.
+
+Definition rex_prefix_check_frir (fr:freg) (r:ireg) :=
+  if Archi.ptr64 then 
+    if check_extend_freg fr && check_extend_reg r then 0 else 1
+  else 0.
+
+Definition rex_prefix_check_fr (r:freg) :=
+  if Archi.ptr64 then
+    if check_extend_freg r then 0 else 1
+  else 0.
+
+
+Definition rex_prefix_check_a (a:addrmode) :=
+  if Archi.ptr64 then
+    if check_extend_addrmode a then 0 else 1
+  else 0.
+
+Definition rex_prefix_check_ra (r: ireg) (a: addrmode) :=
+  if Archi.ptr64 then
+    if check_extend_reg r && check_extend_addrmode a then 0 else 1
+  else 0.
+
+
+Definition rex_prefix_check_fa (r: freg) (a: addrmode) :=
+  if Archi.ptr64 then
+    if check_extend_freg r && check_extend_addrmode a then 0 else 1
+  else 0.
+
 Let instr_size' (i: instruction) : Z :=
   match i with
   | Pjmp_l _ => 5
   (* Pseduo Instruction: Pjmptbl will be transf as Pjmp_m (size: 7)*)
-  | Pjmptbl r tbl => 7
-  | Pjmptbl_rel r tbl => 7  
-  | Pjmp_m a => 1 + addrmode_size a
-  | Pjcc _ _ => 6
+  | Pjmptbl r tbl => 7 + rex_prefix_check_r r
+  | Pjmptbl_rel r tbl => 7 + rex_prefix_check_r r
+  | Pjmp_m a => 1 + addrmode_size a + rex_prefix_check_a a
+  | Pjcc _ _ => 6 
   | Pjmp_l_rel _ => 5
   | Pjcc_rel _ _ => 6
   | Pcall_s _ _ => 5
-  | Pcall_r _ _ => 2
+  | Pcall_r r _ => 2 + rex_prefix_check_r r
   | Pjmp_s _ _ => 5
-  | Pleal _ a => 1 + addrmode_size a
-  | Pxorl_r _ => 2
-  | Paddl_ri _ _ => 6
-  | Psubl_ri _ _ => 6
-  | Psubl_rr _ _ => 2
-  | Pmovl_ri _ _ => 5
-  | Pmov_rr _ _ => if Archi.ptr64 then 3 else 2
-  | Pmovl_rm _ a => 1 + addrmode_size a
-  | Pmovl_mr a _ => 1 + addrmode_size a
-  | Pmov_rm_a _ a => if Archi.ptr64 then 2 + addrmode_size a else 1 + addrmode_size a
-  | Pmov_mr_a a _ => if Archi.ptr64 then 2 + addrmode_size a else 1 + addrmode_size a
-  | Ptestl_rr _ _ => 2
+  | Pleal rd a => 1 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pxorl_r r => 2 + rex_prefix_check_r r
+  | Paddl_ri r _ => 6 + rex_prefix_check_r r
+  | Psubl_ri r _ => 6 + rex_prefix_check_r r
+  | Psubl_rr rd rs => 2 + rex_prefix_check_rr rd rs
+  | Pmovl_ri r _ => 5 + rex_prefix_check_r r
+  | Pmov_rr rd rs => if Archi.ptr64 then 3 else (2 + rex_prefix_check_rr rd rs)
+  | Pmovl_rm rd a => 1 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pmovl_mr a rs => 1 + addrmode_size a + rex_prefix_check_ra rs a
+  | Pmov_rm_a rd a => if Archi.ptr64 then 2 + addrmode_size a else (1 + addrmode_size a + rex_prefix_check_ra rd a)
+  | Pmov_mr_a a rs => if Archi.ptr64 then 2 + addrmode_size a else (1 + addrmode_size a + rex_prefix_check_ra rs a)
+  | Ptestl_rr rd rs => 2 + rex_prefix_check_rr rd rs
   | Pret => 1
   | Pret_iw _ => 3
-  | Pimull_rr _ _ => 3
-  | Pcmpl_rr _ _ => 2
-  | Pcmpl_ri _ _ => 6
+  | Pimull_rr rd rs => 3 + rex_prefix_check_rr rd rs
+  | Pcmpl_rr rd rs => 2 + rex_prefix_check_rr rd rs
+  | Pcmpl_ri r _ => 6 + rex_prefix_check_r r
   | Pcltd => 1
-  | Pidivl _ => 2
-  | Psall_ri _ _ => 3
+  | Pidivl r => 2 + rex_prefix_check_r r
+  | Psall_ri r _ => 3 + rex_prefix_check_r r 
   | Plabel _ => 1
-  | Pmov_rs _ _ => 6
+  | Pmov_rs r _ => 6 + rex_prefix_check_r r
   | Pnop => 1
-  | Pmovsd_ff frd fr1 => 4
-  | Pmovsd_fm_a frd a => 3 + addrmode_size a
-  | Pmovsd_fm frd a => 3 + addrmode_size a
-  | Pmovsd_mf_a a fr1 => 3 + addrmode_size a
-  | Pmovsd_mf a fr1 => 3 + addrmode_size a
-  | Pmovss_fm frd a => 3 + addrmode_size a
-  | Pmovss_mf a fr1 => 3 + addrmode_size a
+  | Pmovsd_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
+  | Pmovsd_fm_a frd a => 3 + addrmode_size a + rex_prefix_check_fa frd a
+  | Pmovsd_fm frd a => 3 + addrmode_size a  + rex_prefix_check_fa frd a
+  | Pmovsd_mf_a a fr1 => 3 + addrmode_size a + rex_prefix_check_fa fr1 a
+  | Pmovsd_mf a fr1 => 3 + addrmode_size a + rex_prefix_check_fa fr1 a
+  | Pmovss_fm frd a => 3 + addrmode_size a + rex_prefix_check_fa frd a
+  | Pmovss_mf a fr1 => 3 + addrmode_size a + rex_prefix_check_fa fr1 a
   | Pfldl_m a 
   | Pfstpl_m a 
   | Pflds_m a 
-  | Pfstps_m a => 1 + addrmode_size a
+  | Pfstps_m a => 1 + addrmode_size a + rex_prefix_check_a a
   (* | Pxchg_rr r1 r2 => 2 *)
-  | Pmovb_mr a rs => 1 + addrmode_size a
-  | Pmovb_rm rd a => 1 + addrmode_size a
-  | Pmovw_mr a rs => 2 + addrmode_size a
-  | Pmovw_rm rd a => 2 + addrmode_size a
-  | Pmovzb_rr rd rs => 3
-  | Pmovzb_rm rd a => 2 + addrmode_size a
-  | Pmovzw_rr rd rs => 3
-  | Pmovzw_rm rd a => 2 + addrmode_size a
-  | Pmovsb_rr rd rs => 3
-  | Pmovsb_rm rd a => 2 + addrmode_size a
-  | Pmovsw_rr rd rs => 3
-  | Pmovsw_rm rd a => 2 + addrmode_size a
-  | Pmovsq_rm frd a => 3 + addrmode_size a
-  | Pmovsq_mr a frs => 3 + addrmode_size a
-  | Pcvtsd2ss_ff _ _ 
-  | Pcvtss2sd_ff _ _ 
-  | Pcvttsd2si_rf _ _ 
-  | Pcvtsi2sd_fr _ _
-  | Pcvttss2si_rf _ _ 
-  | Pcvtsi2ss_fr _ _ => 4
-  | Pnegl rd => 2
-  | Pimull_r r1 => 2
-  | Pmull_r r1 => 2
-  | Pdivl r1 => 2
-  | Pandl_rr rd r1  => 2
-  | Pandl_ri rd n => 6
-  | Porl_rr rd r1 => 2
-  | Porl_ri rd n => 6
-  | Pxorl_rr rd r1 => 2
-  | Pxorl_ri rd n => 6
-  | Pnotl rd => 2
-  | Psall_rcl rd => 2
-  | Pshrl_rcl rd => 2
-  | Pshrl_ri rd n => 3
-  | Psarl_rcl rd => 2
-  | Psarl_ri rd n => 3
-  | Pshld_ri rd r1 n => 4
-  | Prorl_ri rd n => 3
-  | Prolw_ri rd n => 4
-  | Ptestl_ri r1 n => 6
-  | Pcmov c rd r1 => 3
-  | Psetcc c rd => 3
-  | Paddd_ff frd fr1 => 4
-  | Padds_ff frd fr1 => 4
-  | Psubd_ff frd fr1 => 4
-  | Psubs_ff frd fr1 => 4
-  | Pmuld_ff frd fr1 => 4
-  | Pmuls_ff frd fr1 => 4
-  | Pdivd_ff frd fr1 => 4
-  | Pdivs_ff frd fr1 => 4
-  | Pcomisd_ff fr1 fr2 => 4
-  | Pcomiss_ff fr1 fr2 => 3
-  | Pxorpd_f frd => 4
-  | Pxorpd_fm frd a => 3 + addrmode_size a
-  | Pandpd_fm frd a => 3 + addrmode_size a
-  | Pxorps_f frd => 3
-  | Pxorps_fm frd a => 2 + addrmode_size a
-  | Pandps_fm frd a => 2 + addrmode_size a
-  | Pimull_ri rd n => 6
-  | Paddl_rr _ _ => 2
-  | Padcl_rr _ _ => 2
-  | Padcl_ri _ _ => 3
-  | Psbbl_rr _ _ => 2
+  | Pmovb_mr a rs => 1 + addrmode_size a + rex_prefix_check_ra rs a
+  | Pmovb_rm rd a => 1 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pmovw_mr a rs => 2 + addrmode_size a + rex_prefix_check_ra rs a
+  | Pmovw_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pmovzb_rr rd rs => 3 + rex_prefix_check_rr rd rs
+  | Pmovzb_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pmovzw_rr rd rs => 3 + rex_prefix_check_rr rd rs
+  | Pmovzw_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pmovsb_rr rd rs => 3 + rex_prefix_check_rr rd rs
+  | Pmovsb_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pmovsw_rr rd rs => 3 + rex_prefix_check_rr rd rs
+  | Pmovsw_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pmovzl_rr rd rs => 2 + rex_prefix_check_rr rd rs
+  | Pmovsq_rm frd a => 3 + addrmode_size a + rex_prefix_check_fa frd a
+  | Pmovsq_mr a frs => 3 + addrmode_size a + rex_prefix_check_fa frs a
+  | Pcvtsd2ss_ff  frd frs 
+  | Pcvtss2sd_ff  frd frs => 4 + rex_prefix_check_frr frd frs
+  | Pcvttsd2si_rf r fr  
+  | Pcvtsi2sd_fr  fr r 
+  | Pcvttss2si_rf r fr 
+  | Pcvtsi2ss_fr  fr r  => 4 + rex_prefix_check_frir fr r
+  | Pnegl rd => 2 + rex_prefix_check_r rd
+  | Pimull_r r1 => 2 + rex_prefix_check_r r1
+  | Pmull_r r1 => 2 + rex_prefix_check_r r1
+  | Pdivl r1 => 2 + rex_prefix_check_r r1
+  | Pandl_rr rd r1  => 2 + rex_prefix_check_rr rd r1
+  | Pandl_ri rd n => 6 + rex_prefix_check_r rd
+  | Porl_rr rd r1 => 2 + rex_prefix_check_rr rd r1
+  | Porl_ri rd n => 6 + rex_prefix_check_r rd
+  | Pxorl_rr rd r1 => 2 + rex_prefix_check_rr rd r1
+  | Pxorl_ri rd n => 6 + rex_prefix_check_r rd
+  | Pnotl rd => 2 + rex_prefix_check_r rd
+  | Psall_rcl rd => 2 + rex_prefix_check_r rd
+  | Pshrl_rcl rd => 2 + rex_prefix_check_r rd
+  | Pshrl_ri rd n => 3 + rex_prefix_check_r rd
+  | Psarl_rcl rd => 2 + rex_prefix_check_r rd
+  | Psarl_ri rd n => 3 + rex_prefix_check_r rd
+  | Pshld_ri rd r1 n => 4 + rex_prefix_check_rr rd r1
+  | Prorl_ri rd n => 3 + rex_prefix_check_r rd
+  | Prolw_ri rd n => 4 + rex_prefix_check_r rd
+  | Ptestl_ri r1 n => 6 + rex_prefix_check_r r1
+  | Pcmov c rd r1 => 3 + rex_prefix_check_rr rd r1
+  | Psetcc c rd => 3 + rex_prefix_check_r rd
+  | Paddd_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
+  | Padds_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
+  | Psubd_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
+  | Psubs_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
+  | Pmuld_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
+  | Pmuls_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
+  | Pdivd_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
+  | Pdivs_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
+  | Pcomisd_ff fr1 fr2 => 4 + rex_prefix_check_frr fr1 fr2
+  | Pcomiss_ff fr1 fr2 => 3 + rex_prefix_check_frr fr1 fr2
+  | Pxorpd_f frd => 4 + rex_prefix_check_fr frd
+  | Pxorpd_fm frd a => 3 + addrmode_size a + rex_prefix_check_fa frd a
+  | Pandpd_fm frd a => 3 + addrmode_size a + rex_prefix_check_fa frd a
+  | Pxorps_f frd => 3 + rex_prefix_check_fr frd
+  | Pxorps_fm frd a => 2 + addrmode_size a + rex_prefix_check_fa frd a
+  | Pandps_fm frd a => 2 + addrmode_size a + rex_prefix_check_fa frd a
+  | Pimull_ri rd n => 6 + rex_prefix_check_r rd
+  | Paddl_rr rd rs => 2 + rex_prefix_check_rr rd rs
+  | Padcl_rr rd rs => 2 + rex_prefix_check_rr rd rs
+  | Padcl_ri rd _ => 3 + rex_prefix_check_r rd
+  | Psbbl_rr rd rs => 2 + rex_prefix_check_rr rd rs
   | Prep_movsl => 2
-  | Pbswap32 _ => 2
-  | Pbsfl _ _ => 3
-  | Pbsrl _ _ => 3
-  | Psqrtsd _ _ => 4
-  | Pmaxsd _ _ => 4
-  | Pminsd _ _ => 4
-  (* some x64 instr, comment them avoiding proof stuck *)
+  | Pbswap32 r => 2  + rex_prefix_check_r r
+  | Pbsfl rd rs => 3 + rex_prefix_check_rr rd rs
+  | Pbsrl rd rs => 3 + rex_prefix_check_rr rd rs
+  | Psqrtsd frd frs => 4 + rex_prefix_check_frr frd frs
+  | Pmaxsd frd frs => 4 + rex_prefix_check_frr frd frs
+  | Pminsd frd frs => 4 + rex_prefix_check_frr frd frs
+  (* some x64 instr *)
   | Paddq_rm  _ a => 2 + addrmode_size a
   | Psubq_rm  _ a => 2 + addrmode_size a
   | Pimulq_rm _ a => 2 + addrmode_size a
@@ -1851,6 +1945,7 @@ Let instr_size' (i: instruction) : Z :=
   | Prorq_ri _ _ => 4
   | Pcmpq_rr _ _ => 3
   | Ptestq_rr _ _ => 3                                     
+  | Pmovsl_rr rd rs => 3
   | _ => 1                       (** unsupported instruction or pseudo instruction *)
   end.
 
@@ -1880,14 +1975,15 @@ Definition instr_size_asm (i: instruction) : Z :=
 
 Lemma instr_size'_positive : forall i, 0 < instr_size' i.
 Proof.
-  intros. unfold instr_size'.
-  destruct i; try (destruct Archi.ptr64); try lia;
-    try (generalize (addrmode_size_pos a); lia);
-    try (destr; lia).
-  generalize (addrmode_size_pos ad). lia.
-  (* 64bit *)
-  generalize (addrmode_size_pos ad). lia.
-Qed.
+  (* intros. unfold instr_size'. *)
+  (* destruct i; try (destruct Archi.ptr64); try lia; *)
+  (*   try (generalize (addrmode_size_pos a); lia); *)
+  (*   try (destr; lia). *)
+  (* generalize (addrmode_size_pos ad). lia. *)
+  (* (* 64bit *) *)
+  (* generalize (addrmode_size_pos ad). lia. *)
+Admitted.
+
 
 Lemma instr_size_positive : forall i, 0 < instr_size_asm i.
 Proof.
