@@ -15,19 +15,6 @@ Local Open Scope nat_scope.
 
 
 
-Definition AddrE12_bp code : bool :=
-	let blen := 8 <=? (length code) in
-	let bmask0 := b["00000111"] in
-	let bresult0 := b["00000100"] in
-	let bmatch0 := bp_neq(bp_and bmask0 code) bresult0 in
-	let bmask1 := b["00000111"] in
-	let bresult1 := b["00000101"] in
-	let bmatch1 := bp_neq(bp_and bmask1 code) bresult1 in
-	let bmask2 := b["11000000"] in
-	let bresult2 := b["00000000"] in
-	let bmatch2 := bp_eq(bp_and bmask2 code) bresult2 in
-	true && blen && bmatch0 && bmatch1 && bmatch2.
-
 Definition AddrE11_bp code : bool :=
 	let blen := 8 <=? (length code) in
 	let bmask0 := b["11000111"] in
@@ -35,70 +22,17 @@ Definition AddrE11_bp code : bool :=
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
-Definition AddrE10_bp code : bool :=
-	let blen := 16 <=? (length code) in
-	let bmask0 := b["0000000000000111"] in
-	let bresult0 := b["0000000000000101"] in
-	let bmatch0 := bp_neq(bp_and bmask0 code) bresult0 in
-	let bmask1 := b["0000000000111000"] in
-	let bresult1 := b["0000000000100000"] in
-	let bmatch1 := bp_neq(bp_and bmask1 code) bresult1 in
-	let bmask2 := b["11000111"] in
-	let bresult2 := b["00000100"] in
-	let bmatch2 := bp_eq(bp_and bmask2 code) bresult2 in
-	true && blen && bmatch0 && bmatch1 && bmatch2.
-
 Definition AddrE9_bp code : bool :=
 	let blen := 16 <=? (length code) in
-	let bmask0 := b["0000000000111000"] in
-	let bresult0 := b["0000000000100000"] in
-	let bmatch0 := bp_neq(bp_and bmask0 code) bresult0 in
-	let bmask1 := b["1100011100000111"] in
-	let bresult1 := b["0000010000000101"] in
-	let bmatch1 := bp_eq(bp_and bmask1 code) bresult1 in
-	true && blen && bmatch0 && bmatch1.
-
-Definition AddrE8_bp code : bool :=
-	let blen := 16 <=? (length code) in
-	let bmask0 := b["0000000000000111"] in
-	let bresult0 := b["0000000000000101"] in
-	let bmatch0 := bp_neq(bp_and bmask0 code) bresult0 in
-	let bmask1 := b["1100011111111000"] in
-	let bresult1 := b["0000010000100000"] in
-	let bmatch1 := bp_eq(bp_and bmask1 code) bresult1 in
-	true && blen && bmatch0 && bmatch1.
-
-Definition AddrE7_bp code : bool :=
-	let blen := 16 <=? (length code) in
-	let bmask0 := b["1100011111111111"] in
-	let bresult0 := b["0000010000100101"] in
+	let bmask0 := b["1100011100000111"] in
+	let bresult0 := b["0000010000000101"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
-Definition AddrE6_bp code : bool :=
-	let blen := 8 <=? (length code) in
-	let bmask0 := b["00000111"] in
-	let bresult0 := b["00000100"] in
-	let bmatch0 := bp_neq(bp_and bmask0 code) bresult0 in
-	let bmask1 := b["11000000"] in
-	let bresult1 := b["10000000"] in
-	let bmatch1 := bp_eq(bp_and bmask1 code) bresult1 in
-	true && blen && bmatch0 && bmatch1.
-
 Definition AddrE5_bp code : bool :=
-	let blen := 16 <=? (length code) in
-	let bmask0 := b["0000000000111000"] in
-	let bresult0 := b["0000000000100000"] in
-	let bmatch0 := bp_neq(bp_and bmask0 code) bresult0 in
-	let bmask1 := b["11000111"] in
-	let bresult1 := b["10000100"] in
-	let bmatch1 := bp_eq(bp_and bmask1 code) bresult1 in
-	true && blen && bmatch0 && bmatch1.
-
-Definition AddrE4_bp code : bool :=
-	let blen := 16 <=? (length code) in
-	let bmask0 := b["1100011111111000"] in
-	let bresult0 := b["1000010000100000"] in
+	let blen := 8 <=? (length code) in
+	let bmask0 := b["11000111"] in
+	let bresult0 := b["10000100"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
@@ -108,144 +42,27 @@ Definition AddrE0_bp code : bool :=
 	let bresult0 := b["11000000"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
-Definition AddrE_bp_list := [AddrE12_bp; AddrE11_bp; AddrE10_bp; AddrE9_bp; AddrE8_bp; AddrE7_bp; AddrE6_bp; AddrE5_bp; AddrE4_bp; AddrE0_bp].
+Definition AddrE_bp_list := [AddrE11_bp; AddrE9_bp; AddrE5_bp; AddrE0_bp].
 Axiom AddrE_bp_neq0_1: 
-bpt_neq AddrE12_bp AddrE11_bp.
-
-Axiom AddrE_bp_neq0_2: 
-bpt_neq AddrE12_bp AddrE10_bp.
-
-Axiom AddrE_bp_neq0_3: 
-bpt_neq AddrE12_bp AddrE9_bp.
-
-Axiom AddrE_bp_neq0_4: 
-bpt_neq AddrE12_bp AddrE8_bp.
-
-Axiom AddrE_bp_neq0_5: 
-bpt_neq AddrE12_bp AddrE7_bp.
-
-Axiom AddrE_bp_neq0_6: 
-bpt_neq AddrE12_bp AddrE6_bp.
-
-Axiom AddrE_bp_neq0_7: 
-bpt_neq AddrE12_bp AddrE5_bp.
-
-Axiom AddrE_bp_neq0_8: 
-bpt_neq AddrE12_bp AddrE4_bp.
-
-Axiom AddrE_bp_neq0_9: 
-bpt_neq AddrE12_bp AddrE0_bp.
-
-Axiom AddrE_bp_neq1_2: 
-bpt_neq AddrE11_bp AddrE10_bp.
-
-Axiom AddrE_bp_neq1_3: 
 bpt_neq AddrE11_bp AddrE9_bp.
 
-Axiom AddrE_bp_neq1_4: 
-bpt_neq AddrE11_bp AddrE8_bp.
-
-Axiom AddrE_bp_neq1_5: 
-bpt_neq AddrE11_bp AddrE7_bp.
-
-Axiom AddrE_bp_neq1_6: 
-bpt_neq AddrE11_bp AddrE6_bp.
-
-Axiom AddrE_bp_neq1_7: 
+Axiom AddrE_bp_neq0_2: 
 bpt_neq AddrE11_bp AddrE5_bp.
 
-Axiom AddrE_bp_neq1_8: 
-bpt_neq AddrE11_bp AddrE4_bp.
-
-Axiom AddrE_bp_neq1_9: 
+Axiom AddrE_bp_neq0_3: 
 bpt_neq AddrE11_bp AddrE0_bp.
 
-Axiom AddrE_bp_neq2_3: 
-bpt_neq AddrE10_bp AddrE9_bp.
-
-Axiom AddrE_bp_neq2_4: 
-bpt_neq AddrE10_bp AddrE8_bp.
-
-Axiom AddrE_bp_neq2_5: 
-bpt_neq AddrE10_bp AddrE7_bp.
-
-Axiom AddrE_bp_neq2_6: 
-bpt_neq AddrE10_bp AddrE6_bp.
-
-Axiom AddrE_bp_neq2_7: 
-bpt_neq AddrE10_bp AddrE5_bp.
-
-Axiom AddrE_bp_neq2_8: 
-bpt_neq AddrE10_bp AddrE4_bp.
-
-Axiom AddrE_bp_neq2_9: 
-bpt_neq AddrE10_bp AddrE0_bp.
-
-Axiom AddrE_bp_neq3_4: 
-bpt_neq AddrE9_bp AddrE8_bp.
-
-Axiom AddrE_bp_neq3_5: 
-bpt_neq AddrE9_bp AddrE7_bp.
-
-Axiom AddrE_bp_neq3_6: 
-bpt_neq AddrE9_bp AddrE6_bp.
-
-Axiom AddrE_bp_neq3_7: 
+Axiom AddrE_bp_neq1_2: 
 bpt_neq AddrE9_bp AddrE5_bp.
 
-Axiom AddrE_bp_neq3_8: 
-bpt_neq AddrE9_bp AddrE4_bp.
-
-Axiom AddrE_bp_neq3_9: 
+Axiom AddrE_bp_neq1_3: 
 bpt_neq AddrE9_bp AddrE0_bp.
 
-Axiom AddrE_bp_neq4_5: 
-bpt_neq AddrE8_bp AddrE7_bp.
-
-Axiom AddrE_bp_neq4_6: 
-bpt_neq AddrE8_bp AddrE6_bp.
-
-Axiom AddrE_bp_neq4_7: 
-bpt_neq AddrE8_bp AddrE5_bp.
-
-Axiom AddrE_bp_neq4_8: 
-bpt_neq AddrE8_bp AddrE4_bp.
-
-Axiom AddrE_bp_neq4_9: 
-bpt_neq AddrE8_bp AddrE0_bp.
-
-Axiom AddrE_bp_neq5_6: 
-bpt_neq AddrE7_bp AddrE6_bp.
-
-Axiom AddrE_bp_neq5_7: 
-bpt_neq AddrE7_bp AddrE5_bp.
-
-Axiom AddrE_bp_neq5_8: 
-bpt_neq AddrE7_bp AddrE4_bp.
-
-Axiom AddrE_bp_neq5_9: 
-bpt_neq AddrE7_bp AddrE0_bp.
-
-Axiom AddrE_bp_neq6_7: 
-bpt_neq AddrE6_bp AddrE5_bp.
-
-Axiom AddrE_bp_neq6_8: 
-bpt_neq AddrE6_bp AddrE4_bp.
-
-Axiom AddrE_bp_neq6_9: 
-bpt_neq AddrE6_bp AddrE0_bp.
-
-Axiom AddrE_bp_neq7_8: 
-bpt_neq AddrE5_bp AddrE4_bp.
-
-Axiom AddrE_bp_neq7_9: 
+Axiom AddrE_bp_neq2_3: 
 bpt_neq AddrE5_bp AddrE0_bp.
 
-Axiom AddrE_bp_neq8_9: 
-bpt_neq AddrE4_bp AddrE0_bp.
 
-
-Hint Resolve AddrE_bp_neq0_1 AddrE_bp_neq0_2 AddrE_bp_neq0_3 AddrE_bp_neq0_4 AddrE_bp_neq0_5 AddrE_bp_neq0_6 AddrE_bp_neq0_7 AddrE_bp_neq0_8 AddrE_bp_neq0_9 AddrE_bp_neq1_2 AddrE_bp_neq1_3 AddrE_bp_neq1_4 AddrE_bp_neq1_5 AddrE_bp_neq1_6 AddrE_bp_neq1_7 AddrE_bp_neq1_8 AddrE_bp_neq1_9 AddrE_bp_neq2_3 AddrE_bp_neq2_4 AddrE_bp_neq2_5 AddrE_bp_neq2_6 AddrE_bp_neq2_7 AddrE_bp_neq2_8 AddrE_bp_neq2_9 AddrE_bp_neq3_4 AddrE_bp_neq3_5 AddrE_bp_neq3_6 AddrE_bp_neq3_7 AddrE_bp_neq3_8 AddrE_bp_neq3_9 AddrE_bp_neq4_5 AddrE_bp_neq4_6 AddrE_bp_neq4_7 AddrE_bp_neq4_8 AddrE_bp_neq4_9 AddrE_bp_neq5_6 AddrE_bp_neq5_7 AddrE_bp_neq5_8 AddrE_bp_neq5_9 AddrE_bp_neq6_7 AddrE_bp_neq6_8 AddrE_bp_neq6_9 AddrE_bp_neq7_8 AddrE_bp_neq7_9 AddrE_bp_neq8_9:bpneq. 
+Hint Resolve AddrE_bp_neq0_1 AddrE_bp_neq0_2 AddrE_bp_neq0_3 AddrE_bp_neq1_2 AddrE_bp_neq1_3 AddrE_bp_neq2_3:bpneq. 
 
 
 Definition REX_WRXB_bp code : bool :=

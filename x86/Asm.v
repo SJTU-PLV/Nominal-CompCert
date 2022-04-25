@@ -1663,8 +1663,7 @@ Definition addrmode_size_aux (a:addrmode) : Z :=
   (** In 64bit mode, SIB encoding for displacement only addressing.
       We do not use RIP-relative addressing for simplicity*)
   | None, None => if Archi.ptr64 then 2 else 1
-  | None, Some rb =>
-    if ireg_eq rb RSP then 2 else 1
+  | None, Some rb => 2
   | Some _, _ => 2
   end.
 
@@ -1677,7 +1676,7 @@ Lemma addrmode_size_aux_pos: forall a, addrmode_size_aux a > 0.
 Proof.
   intros. unfold addrmode_size_aux. destruct a.
   destruct ofs. lia. destruct base. 
-  destr; lia. try (destruct Archi.ptr64);lia.
+  lia. try (destruct Archi.ptr64);lia.
 Qed.
 
 Lemma addrmode_size_aux_upper_bound: forall a, addrmode_size_aux a <= 2.
@@ -1686,7 +1685,6 @@ Proof.
   destruct ofs; try lia.
   destruct base; try lia.
   destr; lia.
-  try (destruct Archi.ptr64);lia.
 Qed.
 
 Definition amod_size_ub := 6.

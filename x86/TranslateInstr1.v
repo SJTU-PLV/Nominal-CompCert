@@ -116,6 +116,8 @@ Program Definition zero1: u1 :=
 Program Definition one1: u1 :=
   b["1"].
 
+Program Definition zero2: u2 :=
+  b["00"].
 
 Program Definition encode_ireg_u3 (r:ireg) : res u3 :=
   do b <- encode_ireg r;
@@ -432,17 +434,15 @@ Definition translate_Addrmode_AddrE_aux32 (obase: option ireg) (oindex: option (
   match obase,oindex with
   | None,None =>
     if Archi.ptr64 then
+      do rsp <- encode_ireg_u3 RSP;
     (* do not use rip-relative addressing *)
-      OK (AddrE7 ofs32)
+      OK (AddrE9 zero2 rsp ofs32)
     else
       OK (AddrE11 ofs32)
   | Some base,None =>
-    (* some bug only fix here not fixed in reverse *)
     do r <- encode_ireg_u3 base;
-    if ireg_eq base RSP then
-      OK (AddrE4 r ofs32)
-    else
-      OK (AddrE6 r ofs32)
+    do rsp <- encode_ireg_u3 RSP;
+    OK (AddrE5 zero2 rsp r ofs32)
   | None,Some (idx,ss) =>
     if ireg_eq idx RSP then
       (* OK (AddrE7 zero32) *)
@@ -498,18 +498,20 @@ Definition translate_Addrmode_AddrE_aux64 (obase: option ireg) (oindex: option (
   match obase,oindex with
   | None,None =>
     if Archi.ptr64 then
+      do rsp <- encode_ireg_u3 RSP;
       (* do not use rip-relative addressing *)
-      OK ((AddrE7 ofs32),zero1,zero1)
+      OK ((AddrE9 zero2 rsp ofs32),zero1,zero1)
     else
       Error (msg "Encode 64bit addrmode in 32bit mode ")
   | Some base,None =>
-    (* some bug only fix here not fixed in reverse *)
     do B_r <- encode_ireg_u4 base;
     let (B,r) := B_r in
-    if ireg_eq base RSP then
-      OK ((AddrE4 r ofs32),zero1,B)
-    else
-      OK ((AddrE6 r ofs32),zero1,B)
+    do rsp <- encode_ireg_u3 RSP;
+    OK ((AddrE5 zero2 rsp r ofs32),zero1,B)
+    (* if ireg_eq base RSP then *)
+    (*   OK ((AddrE4 r ofs32),zero1,B) *)
+    (* else *)
+    (*   OK ((AddrE6 r ofs32),zero1,B) *)
   | None,Some (idx,ss) =>
     if ireg_eq idx RSP then
       (* OK (AddrE7 zero32) *)
@@ -563,77 +565,68 @@ Definition translate_Addrmode_AddrE64 (sofs: Z) (res_iofs: res Z) (addr:addrmode
 
 (* FIXME: some bug fixed in above but not here *)
 (* Translate CAV21 addr mode to ccelf addr mode *)
-Definition translate_AddrE_Addrmode (sofs: Z) (res_iofs : res Z) (addr:AddrE) : res addrmode :=
-  (* need to relocate? *)
-  do iofs <- res_iofs;
-  match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with
-  | None =>
-    match addr with
-    | AddrE11 disp =>
-      OK (Addrmode None None (inl (bits_to_Z (proj1_sig disp))))
-    | AddrE9 ss idx disp =>
-      do index <- decode_ireg idx;
-      if ireg_eq index RSP then
-        Error (msg "index can not be RSP")
-      else
-        OK (Addrmode None (Some (index,(bits_to_Z (proj1_sig ss)))) (inl (bits_to_Z (proj1_sig disp))) )
-    | AddrE6 base disp =>
-      do b <- decode_ireg base;
-      OK (Addrmode (Some b) None (inl (bits_to_Z (proj1_sig disp))) )
-    (* | AddrE4 base disp => *)
-    (*   do b <- decode_ireg (proj1_sig base); *)
-    (*   OK (Addr) *)
-    | AddrE5 ss idx base disp =>
-      do index <- decode_ireg idx;
-      do b <- decode_ireg base;
-      if ireg_eq index RSP then
-        Error (msg "index can not be RSP")
-      else OK (Addrmode (Some b) (Some (index,(bits_to_Z (proj1_sig ss)))) (inl (bits_to_Z (proj1_sig disp))) )
-    | _ => Error (msg "unsupported or impossible")
-    end
-  | Some _ =>
-    do addend <- get_instr_reloc_addend' (* rtbl_ofs_map *) (iofs + sofs);
-    match addr with
-    | AddrE11 _ =>
-      OK (Addrmode None None (inr (xH,Ptrofs.repr addend)))
-    | AddrE9 ss idx disp =>
-      do index <- decode_ireg idx;
-      OK (Addrmode None (Some (index,(bits_to_Z (proj1_sig ss)))) (inr (xH,Ptrofs.repr addend)) )
-    | AddrE6 base disp =>
-      do b <- decode_ireg base;
-      OK (Addrmode (Some b) None (inr (xH,Ptrofs.repr addend)))
-    (* | AddrE4 base disp => *)
-    (*   do b <- decode_ireg (proj1_sig base); *)
-    (*   OK (Addr) *)
-    | AddrE5 ss idx base disp =>
-      do index <- decode_ireg idx;
-      do b <- decode_ireg base;
-      if ireg_eq index RSP then
-        Error (msg "index can not be RSP")
-      else OK (Addrmode (Some b) (Some (index,(bits_to_Z (proj1_sig ss)))) (inr (xH,Ptrofs.repr addend)) )
-    | _ => Error (msg "unsupported or impossible")
-    end
-  end.
+(* Definition translate_AddrE_Addrmode (sofs: Z) (res_iofs : res Z) (addr:AddrE) : res addrmode := *)
+(*   (* need to relocate? *) *)
+(*   do iofs <- res_iofs; *)
+(*   match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with *)
+(*   | None => *)
+(*     match addr with *)
+(*     | AddrE11 disp => *)
+(*       OK (Addrmode None None (inl (bits_to_Z (proj1_sig disp)))) *)
+(*     | AddrE9 ss idx disp => *)
+(*       do index <- decode_ireg idx; *)
+(*       if ireg_eq index RSP then *)
+(*         Error (msg "index can not be RSP") *)
+(*       else *)
+(*         OK (Addrmode None (Some (index,(bits_to_Z (proj1_sig ss)))) (inl (bits_to_Z (proj1_sig disp))) ) *)
+(*     | AddrE6 base disp => *)
+(*       do b <- decode_ireg base; *)
+(*       OK (Addrmode (Some b) None (inl (bits_to_Z (proj1_sig disp))) ) *)
+(*     (* | AddrE4 base disp => *) *)
+(*     (*   do b <- decode_ireg (proj1_sig base); *) *)
+(*     (*   OK (Addr) *) *)
+(*     | AddrE5 ss idx base disp => *)
+(*       do index <- decode_ireg idx; *)
+(*       do b <- decode_ireg base; *)
+(*       if ireg_eq index RSP then *)
+(*         Error (msg "index can not be RSP") *)
+(*       else OK (Addrmode (Some b) (Some (index,(bits_to_Z (proj1_sig ss)))) (inl (bits_to_Z (proj1_sig disp))) ) *)
+(*     | _ => Error (msg "unsupported or impossible") *)
+(*     end *)
+(*   | Some _ => *)
+(*     do addend <- get_instr_reloc_addend' (* rtbl_ofs_map *) (iofs + sofs); *)
+(*     match addr with *)
+(*     | AddrE11 _ => *)
+(*       OK (Addrmode None None (inr (xH,Ptrofs.repr addend))) *)
+(*     | AddrE9 ss idx disp => *)
+(*       do index <- decode_ireg idx; *)
+(*       OK (Addrmode None (Some (index,(bits_to_Z (proj1_sig ss)))) (inr (xH,Ptrofs.repr addend)) ) *)
+(*     | AddrE6 base disp => *)
+(*       do b <- decode_ireg base; *)
+(*       OK (Addrmode (Some b) None (inr (xH,Ptrofs.repr addend))) *)
+(*     (* | AddrE4 base disp => *) *)
+(*     (*   do b <- decode_ireg (proj1_sig base); *) *)
+(*     (*   OK (Addr) *) *)
+(*     | AddrE5 ss idx base disp => *)
+(*       do index <- decode_ireg idx; *)
+(*       do b <- decode_ireg base; *)
+(*       if ireg_eq index RSP then *)
+(*         Error (msg "index can not be RSP") *)
+(*       else OK (Addrmode (Some b) (Some (index,(bits_to_Z (proj1_sig ss)))) (inr (xH,Ptrofs.repr addend)) ) *)
+(*     | _ => Error (msg "unsupported or impossible") *)
+(*     end *)
+(*   end. *)
 
 (* 64bit addrmode translation *)
 (* TODO *)
 
 (* consistency proof *)
-Lemma translate_consistency1 : forall ofs iofs addr addrE,
-    translate_Addrmode_AddrE ofs iofs addr = OK addrE ->
-    translate_AddrE_Addrmode ofs iofs addrE = OK addr.
-  intros. destruct addr.
-  unfold translate_Addrmode_AddrE in H.
-  unfold translate_AddrE_Addrmode.
-  (* destruct base;destruct (ZTree.get);try destruct p;destruct const;try congruence. *)
-  (* - monadInv H. *)
-  (*   rewrite EQ. *)
-  (*   cbn [bind].     *)
-  (*   destruct (ZTree.get (x + ofs)%Z rtbl_ofs_map);try congruence. *)
-  (*   monadInv EQ0. *)
-  (*   destruct (ireg_eq i1 RSP);try congruence. *)
-  (*   monadInv EQ5. *)
-Admitted.
+(* Lemma translate_consistency1 : forall ofs iofs addr addrE, *)
+(*     translate_Addrmode_AddrE ofs iofs addr = OK addrE -> *)
+(*     translate_AddrE_Addrmode ofs iofs addrE = OK addr. *)
+(*   intros. destruct addr. *)
+(*   unfold translate_Addrmode_AddrE in H. *)
+(*   unfold translate_AddrE_Addrmode. *)
 
 
 Definition encode_rex_prefix_r (r: ireg) : res (list Instruction * u3) :=

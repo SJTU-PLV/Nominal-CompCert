@@ -276,55 +276,25 @@ Qed.
 Hint Resolve read_write_B read_write_R read_write_W read_write_X read_write_base read_write_cccode read_write_col read_write_cprefix read_write_index read_write_mod read_write_page read_write_reg_op read_write_rm read_write_rmagic read_write_row read_write_scale:bitfields.
 Hint Unfold read_B write_B read_R write_R read_W write_W read_X write_X read_base write_base read_cccode write_cccode read_col write_col read_cprefix write_cprefix read_index write_index read_mod write_mod read_page write_page read_reg_op write_reg_op read_rm write_rm read_rmagic write_rmagic read_row write_row read_scale write_scale:bitfields.
 
-Hint Unfold AddrE12_bp AddrE11_bp AddrE10_bp AddrE9_bp AddrE8_bp AddrE7_bp AddrE6_bp AddrE5_bp AddrE4_bp AddrE0_bp :AddrE_bpdb.
+Hint Unfold AddrE11_bp AddrE9_bp AddrE5_bp AddrE0_bp :AddrE_bpdb.
 
 Hint Unfold REX_WRXB_bp Psubl_ri_bp Pbsqrtsd_bp Psbbl_rr_bp Prep_movsl_bp Pmovsq_rm_bp Pmovsq_mr_bp Pminsd_bp Pmaxsd_bp Pbswap32_bp Pbsrl_bp Pbsfl_bp Paddl_mi_bp Paddl_GvEv_bp Paddl_EvGv_bp Padcl_rr_bp Padcl_ri_bp Pjcc_rel_bp Pret_iw_bp Pret_bp Pcall_r_bp Pcall_ofs_bp Pnop_bp Pjmp_Ev_bp Pjmp_l_rel_bp Pandps_fm_bp Pxorps_GvEv_bp Pxorpd_GvEv_bp Pcomiss_ff_bp Pcomisd_ff_bp Pdivss_ff_bp Pdivsd_ff_bp Pmuls_ff_bp Pmuld_ff_bp Psubs_ff_bp Psubd_ff_bp Pandpd_GvEv_bp Padds_ff_bp Paddd_ff_bp Psetcc_bp Pcmov_bp Ptestl_EvGv_bp Ptestl_ri_bp Pcmpl_ri_bp Pcmpl_GvEv_bp Pcmpl_EvGv_bp Prorl_ri_bp Prolw_ri_bp Pshld_ri_bp Psarl_rcl_bp Psarl_ri_bp Pshrl_rcl_bp Pshrl_ri_bp Psall_rcl_bp Psall_ri_bp Pnotl_bp Pxorl_GvEv_bp Pxorl_EvGv_bp Pxorl_ri_bp Porl_GvEv_bp Porl_EvGv_bp Porl_ri_bp Pandl_ri_bp Pandl_GvEv_bp Pandl_EvGv_bp Pidivl_r_bp Pdivl_r_bp Pcltd_bp Pmull_r_bp Pimull_r_bp Pimull_ri_bp Pimull_GvEv_bp Psubl_GvEv_bp Psubl_EvGv_bp Paddl_ri_bp Pnegl_bp Pleal_bp Pcvttss2si_rf_bp Pcvtsi2sd_fr_bp Pcvtsi2ss_fr_bp Pcvttsd2si_rf_bp Pcvtss2sd_ff_bp Pcvtsd2ss_ff_bp Pmovsxd_GvEv_bp Pmovsw_GvEv_bp Pmovzw_GvEv_bp Pmovsb_GvEv_bp Pmovzb_rm_bp Pmovw_rm_bp Pmovw_mr_bp Pmovb_rm_bp Pmovb_mr_bp Pxchg_rr_bp Pflds_m_bp Pfstps_m_bp Pfstpl_m_bp Pfldl_m_bp Pmovss_fm_bp Pmovss_mf_bp Pmovsd_fm_bp Pmovsd_mf_bp Pmovl_rm_bp Pmovl_mr_bp Pmovl_ri_bp :Instruction_bpdb.
 Lemma AddrE_bp_in_list0: 
-In AddrE12_bp AddrE_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma AddrE_bp_in_list1: 
 In AddrE11_bp AddrE_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma AddrE_bp_in_list2: 
-In AddrE10_bp AddrE_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma AddrE_bp_in_list3: 
+Lemma AddrE_bp_in_list1: 
 In AddrE9_bp AddrE_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma AddrE_bp_in_list4: 
-In AddrE8_bp AddrE_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma AddrE_bp_in_list5: 
-In AddrE7_bp AddrE_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma AddrE_bp_in_list6: 
-In AddrE6_bp AddrE_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma AddrE_bp_in_list7: 
+Lemma AddrE_bp_in_list2: 
 In AddrE5_bp AddrE_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma AddrE_bp_in_list8: 
-In AddrE4_bp AddrE_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma AddrE_bp_in_list9: 
+Lemma AddrE_bp_in_list3: 
 In AddrE0_bp AddrE_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
@@ -850,68 +820,31 @@ Proof.
 simpl; goOver; auto. Qed.
 
 Inductive AddrE: Type :=
-| AddrE12(uvar3_0:u3)
 | AddrE11(uvar32_0:u32)
-| AddrE10(uvar2_0:u2)(uvar3_1:u3)(uvar3_2:u3)
 | AddrE9(uvar2_0:u2)(uvar3_1:u3)(uvar32_2:u32)
-| AddrE8(uvar3_0:u3)
-| AddrE7(uvar32_0:u32)
-| AddrE6(uvar3_0:u3)(uvar32_1:u32)
 | AddrE5(uvar2_0:u2)(uvar3_1:u3)(uvar3_2:u3)(uvar32_3:u32)
-| AddrE4(uvar3_0:u3)(uvar32_1:u32)
 | AddrE0(uvar3_0:u3).
 Inductive AddrE_op: Type :=
-| AddrE12_op
 | AddrE11_op
-| AddrE10_op
 | AddrE9_op
-| AddrE8_op
-| AddrE7_op
-| AddrE6_op
 | AddrE5_op
-| AddrE4_op
 | AddrE0_op.
 Definition AddrE_to_op element  :=
 	match element with
-| AddrE12 _ => AddrE12_op
 | AddrE11 _ => AddrE11_op
-| AddrE10 _ _ _ => AddrE10_op
 | AddrE9 _ _ _ => AddrE9_op
-| AddrE8 _ => AddrE8_op
-| AddrE7 _ => AddrE7_op
-| AddrE6 _ _ => AddrE6_op
 | AddrE5 _ _ _ _ => AddrE5_op
-| AddrE4 _ _ => AddrE4_op
 | AddrE0 _ => AddrE0_op
 end.
 Definition AddrE_op_to_bp element  :=
 	match element with
-| AddrE12_op => AddrE12_bp
 | AddrE11_op => AddrE11_bp
-| AddrE10_op => AddrE10_bp
 | AddrE9_op => AddrE9_bp
-| AddrE8_op => AddrE8_bp
-| AddrE7_op => AddrE7_bp
-| AddrE6_op => AddrE6_bp
 | AddrE5_op => AddrE5_bp
-| AddrE4_op => AddrE4_bp
 | AddrE0_op => AddrE0_bp
 end.
 Definition encode_AddrE element  inByte  :=
 	match element with
-| AddrE12 uvar3_0 => if builtin_eq_dec (proj1_sig uvar3_0)b["100"] then
-Error(msg"Constraint Failed")
-else
-
-if builtin_eq_dec (proj1_sig uvar3_0)b["101"] then
-Error(msg"Constraint Failed")
-else
-
-let byte00 := inByte in
-let byte01 := write_mod byte00 b["00"] in
-let byte02 := write_rm byte01 (proj1_sig uvar3_0) in
-let result0 := [byte02] in
-OK (result0)
 | AddrE11 uvar32_0 => let byte00 := inByte in
 let byte01 := write_mod byte00 b["00"] in
 let byte02 := write_rm byte01 b["101"] in
@@ -919,29 +852,7 @@ let result0 := [byte02] in
 do byte11 <- bits_to_bytes (proj1_sig uvar32_0);
 let result1 := byte11 in
 OK (result0 ++ result1)
-| AddrE10 uvar2_0 uvar3_1 uvar3_2 => if builtin_eq_dec (proj1_sig uvar3_2)b["101"] then
-Error(msg"Constraint Failed")
-else
-
-if builtin_eq_dec (proj1_sig uvar3_1)b["100"] then
-Error(msg"Constraint Failed")
-else
-
-let byte00 := inByte in
-let byte01 := write_mod byte00 b["00"] in
-let byte02 := write_rm byte01 b["100"] in
-let result0 := [byte02] in
-let byte10 := HB["00"] in
-let byte11 := write_scale byte10 (proj1_sig uvar2_0) in
-let byte12 := write_index byte11 (proj1_sig uvar3_1) in
-let byte13 := write_base byte12 (proj1_sig uvar3_2) in
-let result1 := [byte13] in
-OK (result0 ++ result1)
-| AddrE9 uvar2_0 uvar3_1 uvar32_2 => if builtin_eq_dec (proj1_sig uvar3_1)b["100"] then
-Error(msg"Constraint Failed")
-else
-
-let byte00 := inByte in
+| AddrE9 uvar2_0 uvar3_1 uvar32_2 => let byte00 := inByte in
 let byte01 := write_mod byte00 b["00"] in
 let byte02 := write_rm byte01 b["100"] in
 let result0 := [byte02] in
@@ -953,48 +864,7 @@ let result1 := [byte13] in
 do byte21 <- bits_to_bytes (proj1_sig uvar32_2);
 let result2 := byte21 in
 OK (result0 ++ result1 ++ result2)
-| AddrE8 uvar3_0 => if builtin_eq_dec (proj1_sig uvar3_0)b["101"] then
-Error(msg"Constraint Failed")
-else
-
-let byte00 := inByte in
-let byte01 := write_mod byte00 b["00"] in
-let byte02 := write_rm byte01 b["100"] in
-let result0 := [byte02] in
-let byte10 := HB["00"] in
-let byte11 := write_scale byte10 b["00"] in
-let byte12 := write_index byte11 b["100"] in
-let byte13 := write_base byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-OK (result0 ++ result1)
-| AddrE7 uvar32_0 => let byte00 := inByte in
-let byte01 := write_mod byte00 b["00"] in
-let byte02 := write_rm byte01 b["100"] in
-let result0 := [byte02] in
-let byte10 := HB["00"] in
-let byte11 := write_scale byte10 b["00"] in
-let byte12 := write_index byte11 b["100"] in
-let byte13 := write_base byte12 b["101"] in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_0);
-let result2 := byte21 in
-OK (result0 ++ result1 ++ result2)
-| AddrE6 uvar3_0 uvar32_1 => if builtin_eq_dec (proj1_sig uvar3_0)b["100"] then
-Error(msg"Constraint Failed")
-else
-
-let byte00 := inByte in
-let byte01 := write_mod byte00 b["10"] in
-let byte02 := write_rm byte01 (proj1_sig uvar3_0) in
-let result0 := [byte02] in
-do byte11 <- bits_to_bytes (proj1_sig uvar32_1);
-let result1 := byte11 in
-OK (result0 ++ result1)
-| AddrE5 uvar2_0 uvar3_1 uvar3_2 uvar32_3 => if builtin_eq_dec (proj1_sig uvar3_1)b["100"] then
-Error(msg"Constraint Failed")
-else
-
-let byte00 := inByte in
+| AddrE5 uvar2_0 uvar3_1 uvar3_2 uvar32_3 => let byte00 := inByte in
 let byte01 := write_mod byte00 b["10"] in
 let byte02 := write_rm byte01 b["100"] in
 let result0 := [byte02] in
@@ -1006,18 +876,6 @@ let result1 := [byte13] in
 do byte21 <- bits_to_bytes (proj1_sig uvar32_3);
 let result2 := byte21 in
 OK (result0 ++ result1 ++ result2)
-| AddrE4 uvar3_0 uvar32_1 => let byte00 := inByte in
-let byte01 := write_mod byte00 b["10"] in
-let byte02 := write_rm byte01 b["100"] in
-let result0 := [byte02] in
-let byte10 := HB["00"] in
-let byte11 := write_scale byte10 b["00"] in
-let byte12 := write_index byte11 b["100"] in
-let byte13 := write_base byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
-let result2 := byte21 in
-OK (result0 ++ result1 ++ result2)
 | AddrE0 uvar3_0 => let byte00 := inByte in
 let byte01 := write_mod byte00 b["11"] in
 let byte02 := write_rm byte01 (proj1_sig uvar3_0) in
@@ -1027,16 +885,6 @@ end.
 
 Program Definition decode_AddrE code : res (AddrE*nat) :=
 	let bin := bytes_to_bits_opt code in
-	if AddrE12_bp bin then
-let bytes0 := code in
-do byte0 <- try_get_n bytes0 0;
-let uvar3_0 := read_rm byte0 in
-if assertLength uvar3_0 3 then
-do bytes1 <- try_skip_n bytes0 1;
-OK ((AddrE12 (uvar3_0)), 1)
-else Error(msg"impossible")
-else
-
 	if AddrE11_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
@@ -1045,23 +893,6 @@ let uvar32_0 := bytes_to_bits_opt byte_seq0 in
 if assertLength uvar32_0 32 then
 do bytes2 <- try_skip_n bytes1 4;
 OK ((AddrE11 (uvar32_0)), 5)
-else Error(msg"impossible")
-else
-
-	if AddrE10_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar2_0 := read_scale byte0 in
-if assertLength uvar2_0 2 then
-let uvar3_1 := read_index byte0 in
-if assertLength uvar3_1 3 then
-let uvar3_2 := read_base byte0 in
-if assertLength uvar3_2 3 then
-do bytes2 <- try_skip_n bytes1 1;
-OK ((AddrE10 (uvar2_0) (uvar3_1) (uvar3_2)), 2)
-else Error(msg"impossible")
-else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
@@ -1084,44 +915,6 @@ else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if AddrE8_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_base byte0 in
-if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-OK ((AddrE8 (uvar3_0)), 2)
-else Error(msg"impossible")
-else
-
-	if AddrE7_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq0 <- try_first_n bytes2 4;
-let uvar32_0 := bytes_to_bits_opt byte_seq0 in
-if assertLength uvar32_0 32 then
-do bytes3 <- try_skip_n bytes2 4;
-OK ((AddrE7 (uvar32_0)), 6)
-else Error(msg"impossible")
-else
-
-	if AddrE6_bp bin then
-let bytes0 := code in
-do byte0 <- try_get_n bytes0 0;
-let uvar3_0 := read_rm byte0 in
-if assertLength uvar3_0 3 then
-do bytes1 <- try_skip_n bytes0 1;
-do byte_seq1 <- try_first_n bytes1 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
-if assertLength uvar32_1 32 then
-do bytes2 <- try_skip_n bytes1 4;
-OK ((AddrE6 (uvar3_0) (uvar32_1)), 5)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
 	if AddrE5_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
@@ -1140,22 +933,6 @@ do bytes3 <- try_skip_n bytes2 4;
 OK ((AddrE5 (uvar2_0) (uvar3_1) (uvar3_2) (uvar32_3)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if AddrE4_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_base byte0 in
-if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
-if assertLength uvar32_1 32 then
-do bytes3 <- try_skip_n bytes2 4;
-OK ((AddrE4 (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
