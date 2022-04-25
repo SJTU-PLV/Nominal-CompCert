@@ -11,7 +11,7 @@ Require Export Memtype.
 Require Export Memory.
 
 (* To avoid useless definitions of inductors in extracted code. *)
-Local Unset Elimination Schemes. 
+Local Unset Elimination Schemes.
 Local Unset Case Analysis Schemes.
 
 Module Pos_Block <: BLOCK.
@@ -71,7 +71,8 @@ Qed.
 
 End MemPos.
 
-Opaque MemPos.alloc MemPos.free MemPos.store MemPos.load MemPos.storebytes MemPos.loadbytes.
+(*
+ Opaque MemPos.alloc MemPos.free MemPos.store MemPos.load MemPos.storebytes MemPos.loadbytes.
 
  Hint Resolve
   MemPos.valid_not_valid_diff
@@ -126,7 +127,7 @@ Opaque MemPos.alloc MemPos.free MemPos.store MemPos.load MemPos.storebytes MemPo
   MemPos.valid_access_free_inv_1
   MemPos.valid_access_free_inv_2
   MemPos.unchanged_on_refl
-: mem.
+: mem. *)
 
 (** * Difinition of Nominal Memory Model with Structured Memory Space **)
 
@@ -927,10 +928,73 @@ Record mems : Type := mkmems{
 Program Definition mems_empty := mkmems struc_empty empty _.
 Next Obligation.
 intro. simpl. generalize empty_in.
-intro. split. intro. apply H in H0. auto. intro. inversion H0.
+vintro. split. intro. apply H in H0. auto. intro. inversion H0.
 Qed.
 
 End StrucMem.
+
+ Opaque StrucMem.alloc StrucMem.free StrucMem.store StrucMem.load StrucMem.storebytes StrucMem.loadbytes.
+
+ Hint Resolve
+  StrucMem.valid_not_valid_diff
+  StrucMem.perm_implies
+  StrucMem.perm_cur
+  StrucMem.perm_max
+  StrucMem.perm_valid_block
+  StrucMem.range_perm_implies
+  StrucMem.range_perm_cur
+  StrucMem.range_perm_max
+  StrucMem.valid_access_implies
+  StrucMem.valid_access_valid_block
+  StrucMem.valid_access_perm
+  StrucMem.valid_access_load
+  StrucMem.load_valid_access
+  StrucMem.loadbytes_range_perm
+  StrucMem.valid_access_store
+  StrucMem.perm_store_1
+  StrucMem.perm_store_2
+  StrucMem.store_valid_block_1
+  StrucMem.store_valid_block_2
+  StrucMem.store_valid_access_1
+  StrucMem.store_valid_access_2
+  StrucMem.store_valid_access_3
+  StrucMem.storebytes_range_perm
+  StrucMem.perm_storebytes_1
+  StrucMem.perm_storebytes_2
+  StrucMem.storebytes_valid_access_1
+  StrucMem.storebytes_valid_access_2
+  StrucMem.storebytes_valid_block_1
+  StrucMem.storebytes_valid_block_2
+  StrucMem.valid_block_alloc
+  StrucMem.fresh_block_alloc
+  StrucMem.valid_new_block
+  StrucMem.perm_alloc_1
+  StrucMem.perm_alloc_2
+  StrucMem.perm_alloc_3
+  StrucMem.perm_alloc_4
+  StrucMem.perm_alloc_inv
+  StrucMem.valid_access_alloc_other
+  StrucMem.valid_access_alloc_same
+  StrucMem.valid_access_alloc_inv
+  StrucMem.range_perm_free
+  StrucMem.free_range_perm
+  StrucMem.valid_block_free_1
+  StrucMem.valid_block_free_2
+  StrucMem.perm_free_1
+  StrucMem.perm_free_2
+  StrucMem.perm_free_3
+  StrucMem.valid_access_free_1
+  StrucMem.valid_access_free_2
+  StrucMem.valid_access_free_inv_1
+  StrucMem.valid_access_free_inv_2
+  StrucMem.unchanged_on_refl
+: mem.
+
+
+
+
+
+
 
 
 

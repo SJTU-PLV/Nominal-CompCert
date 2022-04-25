@@ -27,7 +27,7 @@ Require Import AST Integers Floats Values Memdata Memstructure.
   appropriate for the target.
 *)
 
-Import MemPos.
+Import StrucMem.
 
 Definition val_opt_has_rettype (ov: option val) (t: rettype) : Prop :=
   match ov with Some v => Val.has_rettype v t | None => True end.

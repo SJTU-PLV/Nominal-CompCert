@@ -1138,12 +1138,12 @@ Inductive match_states: Csem.state -> state -> Prop :=
       (MK: match_cont cu.(prog_comp_env) k tk),
       match_states (Csem.State f s k e m)
                    (State tf ts tk e le m)
-  | match_callstates: forall fd args k m tfd tk cu
+  | match_callstates: forall fd args k m tfd tk cu id
       (LINK: linkorder cu prog)
       (TR: tr_fundef cu fd tfd)
       (MK: forall ce, match_cont ce k tk),
-      match_states (Csem.Callstate fd args k m)
-                   (Callstate tfd args tk m)
+      match_states (Csem.Callstate fd args k m id)
+                   (Callstate tfd args tk m id)
   | match_returnstates: forall res k m tk
       (MK: forall ce, match_cont ce k tk),
       match_states (Csem.Returnstate res k m)
@@ -2016,8 +2016,7 @@ Ltac NOTIN :=
 - (* call *)
   exploit tr_top_leftcontext; eauto. clear TR.
   intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
-  inv P. inv H5.
-+ (* for effects *)
+  inv P. inv H.
   exploit tr_simple_rvalue; eauto. intros [SL1 [TY1 EV1]].
   exploit tr_simple_exprlist; eauto. intros [SL2 EV2].
   subst. simpl Kseqlist.
@@ -2043,8 +2042,8 @@ Ltac NOTIN :=
   econstructor. eexact L. eauto. econstructor. eexact LINK. auto. auto.
   intros. apply S.
   destruct dst'; constructor.
-  auto. intros. constructor. rewrite H5; auto. apply PTree.gss.
-  auto. intros. constructor. rewrite H5; auto. apply PTree.gss.
+  auto. intros. constructor. rewrite H; auto. apply PTree.gss.
+  auto. intros. constructor. rewrite H; auto. apply PTree.gss.
   intros. apply PTree.gso. intuition congruence.
   auto. auto.
 
@@ -2297,7 +2296,6 @@ Proof.
   econstructor; split.
   left. apply plus_one. constructor.
   econstructor; eauto. constructor; auto.
-
 - (* return none *)
   inv TR. econstructor; split.
   left. apply plus_one. econstructor; eauto. rewrite blocks_of_env_preserved; eauto.
@@ -2317,9 +2315,8 @@ Proof.
   inv TR.
   assert (is_call_cont tk). { inv MK; simpl in *; auto. }
   econstructor; split.
-  left. apply plus_one. apply step_skip_call; eauto. rewrite blocks_of_env_preserved; eauto.
+  left. apply plus_one. eapply step_skip_call; eauto. rewrite blocks_of_env_preserved; eauto.
   econstructor. intros; eapply match_cont_is_call_cont; eauto.
-
 - (* switch *)
   inv TR. inv H1.
   econstructor; split.
@@ -2362,14 +2359,14 @@ Proof.
   econstructor; eauto.
 
 - (* internal function *)
-  inv TR. inversion H3; subst.
+  inv TR. inversion H4; subst.
   econstructor; split.
   left; apply plus_one. eapply step_internal_function. econstructor.
-  rewrite H6; rewrite H7; auto.
-  rewrite H6; rewrite H7. eapply alloc_variables_preserved; eauto.
-  rewrite H6. eapply bind_parameters_preserved; eauto.
+  rewrite H7; rewrite H8; eauto. eauto.
+  rewrite H7; rewrite H8. eapply alloc_variables_preserved; eauto.
+  rewrite H7. eapply bind_parameters_preserved; eauto.
   eauto.
-  econstructor; eauto. 
+  econstructor; eauto.
 
 - (* external function *)
   inv TR.
@@ -2407,14 +2404,15 @@ Lemma transl_initial_states:
 Proof.
   intros. inv H.
   exploit function_ptr_translated; eauto. intros (cu & tf & FIND & TR & L).
+  destruct TRANSL. destruct H as (A & B & C).
   econstructor; split.
   econstructor.
   eapply (Genv.init_mem_match (proj1 TRANSL)); eauto.
-  replace (prog_main tprog) with (prog_main prog).
-  rewrite symbols_preserved. eauto. 
-  destruct TRANSL. destruct H as (A & B & C). simpl in B. auto. 
+  setoid_rewrite B.
+  rewrite symbols_preserved. eauto.
   eexact FIND.
   rewrite <- H3. eapply type_of_fundef_preserved; eauto.
+  setoid_rewrite B.
   econstructor; eauto. intros; constructor.
 Qed.
 

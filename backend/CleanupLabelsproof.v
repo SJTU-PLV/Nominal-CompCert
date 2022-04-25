@@ -205,10 +205,10 @@ Inductive match_states: state -> state -> Prop :=
       match_states (State s f sp c ls m)
                    (State ts (transf_function f) sp (remove_unused_labels (labels_branched_to f.(fn_code)) c) ls m)
   | match_states_call:
-      forall s f ls m ts,
+      forall s f ls m ts id,
       list_forall2 match_stackframes s ts ->
-      match_states (Callstate s f ls m)
-                   (Callstate ts (transf_fundef f) ls m)
+      match_states (Callstate s f ls m id)
+                   (Callstate ts (transf_fundef f) ls m id)
   | match_states_return:
       forall s ls m ts,
       list_forall2 match_stackframes s ts ->
@@ -263,14 +263,16 @@ Proof.
   econstructor; eauto with coqlib.
 (* Lcall *)
   left; econstructor; split.
-  econstructor. eapply find_function_translated; eauto.
+  econstructor. eauto.
+  eapply find_function_translated; eauto.
   symmetry; apply sig_function_translated.
   econstructor; eauto. constructor; auto. constructor; eauto with coqlib.
 (* Ltailcall *)
   left; econstructor; split.
-  econstructor. erewrite match_parent_locset; eauto. eapply find_function_translated; eauto.
+  econstructor. erewrite match_parent_locset; eauto. eauto.
+  eapply find_function_translated; eauto.
   symmetry; apply sig_function_translated.
-  simpl. eauto.
+  simpl. eauto. eauto.
   econstructor; eauto.
 (* Lbuiltin *)
   left; econstructor; split.
@@ -334,6 +336,7 @@ Proof.
   rewrite (match_program_main TRANSL), symbols_preserved; eauto.
   apply function_ptr_translated; auto.
   rewrite sig_function_translated. auto.
+  rewrite (match_program_main TRANSL).
   constructor; auto. constructor.
 Qed.
 

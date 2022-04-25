@@ -1389,7 +1389,6 @@ Proof.
   induction 1; simpl; intros; constructor; auto.
 Qed.
 
-
 Ltac clean_destr :=
   match goal with
   | H: _ = left _ |- _ => clear H

@@ -449,11 +449,11 @@ Inductive wt_state: state -> Prop :=
         (WT_ENV: wt_env env e)
         (DEF_ENV: def_env f e),
       wt_state (State f s k sp e m)
-  | wt_call_state: forall f args k m
+  | wt_call_state: forall f args k m id
         (WT_FD: wt_fundef f)
         (WT_ARGS: Val.has_type_list args (funsig f).(sig_args))
         (WT_CONT: wt_cont_call k (funsig f).(sig_res)),
-      wt_state (Callstate f args k m)
+      wt_state (Callstate f args k m id)
   | wt_return_state: forall v k m tret
         (WT_RES: Val.has_type v (proj_rettype tret))
         (WT_CONT: wt_cont_call k tret),
@@ -652,7 +652,7 @@ Proof.
 - inv WT_STMT. econstructor; eauto.
   eapply wt_find_funct; eauto.
   eapply wt_eval_exprlist; eauto.
-  rewrite H8; eapply call_cont_wt; eauto.
+  rewrite H9; eapply call_cont_wt; eauto.
 - inv WT_STMT. exploit external_call_well_typed; eauto. intros TRES.
   econstructor; eauto using wt_Sskip.
   destruct optid; auto. apply wt_env_assign; auto. rewrite <- H5; auto.
@@ -674,10 +674,10 @@ Proof.
   { constructor. eapply call_cont_wt; eauto. }
   generalize (wt_find_label _ _ lbl _ _ H2 WT_CK).
   rewrite H. intros [WT_STMT' WT_CONT']. econstructor; eauto.
-- inv WT_FD. inversion H1; subst. econstructor; eauto.
+- inv WT_FD. inversion H2; subst. econstructor; eauto.
   constructor; auto.
-  apply wt_env_set_locals. apply wt_env_set_params. rewrite H2; auto.
-  red; intros. apply def_set_locals. destruct H4; auto. left; apply def_set_params; auto.
+  apply wt_env_set_locals. apply wt_env_set_params. rewrite H3; auto.
+  red; intros. apply def_set_locals. destruct H5; auto. left; apply def_set_params; auto.
 - exploit external_call_well_typed; eauto. intros.
   econstructor; eauto.
 - inv WT_CONT. econstructor; eauto using wt_Sskip.

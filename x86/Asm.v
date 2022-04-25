@@ -941,10 +941,17 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Plabel lbl =>
       Next (nextinstr rs) m
   | Pallocframe sz ofs_ra ofs_link =>
+<<<<<<< HEAD
       let stk := fresh_block (support m) in
       match Mem.alloc m 0 sz stk with
       | None => Stuck
       | Some m1 =>
+=======
+    match rs # PC with
+      |Vptr (Global id) _  =>
+      let (m0,path) := Mem.alloc_frame m id in
+      let (m1, stk) := Mem.alloc m0 0 sz in
+>>>>>>> a091c4
       let sp := Vptr stk Ptrofs.zero in
       match Mem.storev Mptr m1 (Val.offset_ptr sp ofs_link) rs#RSP with
       | None => Stuck
@@ -954,7 +961,12 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
           | Some m3 => Next (nextinstr (rs #RAX <- (rs#RSP) #RSP <- sp)) m3
           end
       end
+<<<<<<< HEAD
       end
+=======
+      |_ => Stuck
+    end
+>>>>>>> a091c4
   | Pfreeframe sz ofs_ra ofs_link =>
       match Mem.loadv Mptr m (Val.offset_ptr rs#RSP ofs_ra) with
       | None => Stuck
@@ -966,7 +978,11 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
               | Vptr stk ofs =>
                   match Mem.free m stk 0 sz with
                   | None => Stuck
-                  | Some m' => Next (nextinstr (rs#RSP <- sp #RA <- ra)) m'
+                  | Some m' => match Mem.return_frame m' with
+                               | None => Stuck
+                               | Some m'' =>
+                                 Next (nextinstr (rs#RSP <- sp #RA <- ra)) m''
+                              end
                   end
               | _ => Stuck
               end

@@ -893,11 +893,11 @@ Inductive wt_state: state -> Prop :=
         (WT_RS: wt_regset env rs),
       wt_state (State s f sp pc rs m)
   | wt_state_call:
-      forall s f args m,
+      forall s f args m id,
       wt_stackframes s (funsig f) ->
       wt_fundef f ->
       Val.has_type_list args (sig_args (funsig f)) ->
-      wt_state (Callstate s f args m)
+      wt_state (Callstate s f args m id)
   | wt_state_return:
       forall s v m sg,
       wt_stackframes s sg ->
@@ -937,28 +937,28 @@ Proof.
   econstructor; eauto.
   (* Icall *)
   assert (wt_fundef fd).
-    destruct ros; simpl in H0.
+    destruct ros; simpl in H1.
     pattern fd. apply Genv.find_funct_prop with fundef unit p (rs#r).
-    exact wt_p. exact H0.
-    caseEq (Genv.find_symbol ge i); intros; rewrite H1 in H0.
+    exact wt_p. exact H1.
+    caseEq (Genv.find_symbol ge i); intros; rewrite H2 in H1.
     pattern fd. apply Genv.find_funct_ptr_prop with fundef unit p b.
-    exact wt_p. exact H0.
+    exact wt_p. exact H1.
     discriminate.
   econstructor; eauto.
   econstructor; eauto. inv WTI; auto.
-  inv WTI. rewrite <- H8. apply wt_regset_list. auto.
+  inv WTI. rewrite <- H9. apply wt_regset_list. auto.
   (* Itailcall *)
   assert (wt_fundef fd).
-    destruct ros; simpl in H0.
+    destruct ros; simpl in H1.
     pattern fd. apply Genv.find_funct_prop with fundef unit p (rs#r).
-    exact wt_p. exact H0.
-    caseEq (Genv.find_symbol ge i); intros; rewrite H1 in H0.
+    exact wt_p. exact H1.
+    caseEq (Genv.find_symbol ge i); intros; rewrite H2 in H1.
     pattern fd. apply Genv.find_funct_ptr_prop with fundef unit p b.
-    exact wt_p. exact H0.
+    exact wt_p. exact H1.
     discriminate.
   econstructor; eauto.
   inv WTI. apply wt_stackframes_change_sig with (fn_sig f); auto.
-  inv WTI. rewrite <- H7. apply wt_regset_list. auto.
+  inv WTI. rewrite <- H9. apply wt_regset_list. auto.
   (* Ibuiltin *)
   econstructor; eauto. eapply wt_exec_Ibuiltin; eauto.
   (* Icond *)
@@ -967,11 +967,11 @@ Proof.
   econstructor; eauto.
   (* Ireturn *)
   econstructor; eauto.
-  inv WTI; simpl. auto. rewrite <- H3. auto.
+  inv WTI; simpl. auto. rewrite <- H4. auto.
   (* internal function *)
-  simpl in *. inv H5.
+  simpl in *. inv H7.
   econstructor; eauto.
-  inv H1. apply wt_init_regs; auto. rewrite wt_params0. auto.
+  inv H2. apply wt_init_regs; auto. rewrite wt_params0. auto.
   (* external function *)
   econstructor; eauto.
   eapply external_call_well_typed; eauto.

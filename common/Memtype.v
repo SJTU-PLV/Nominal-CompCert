@@ -97,18 +97,16 @@ Parameter sup_dec : forall b s, {sup_In b s}+{~sup_In b s}.
 Parameter fresh_block : sup -> block.
 Parameter freshness : forall s, ~sup_In (fresh_block s) s.
 
-Parameter sup_add : block -> sup -> sup.
-
-Definition sup_incr(s:sup) := sup_add (fresh_block s) s.
+Parameter sup_incr : sup -> sup.
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
-Parameter sup_add_in : forall b s b', sup_In b' (sup_add b s) <-> b' = b \/ sup_In b' s.
+Parameter sup_incr_in : forall b s, sup_In b (sup_incr s) <-> b = (fresh_block s) \/ sup_In b s.
 
-Theorem sup_add_in1 : forall b s, sup_In b (sup_add b s).
-Proof. intros. apply sup_add_in. left. auto. Qed.
-Theorem sup_add_in2 : forall b s, sup_include s (sup_add b s).
-Proof. intros. intro. intro. apply sup_add_in. right. auto. Qed.
+Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
+Proof. intros. apply sup_incr_in. left. auto. Qed.
+Theorem sup_incr_in2 : forall s, sup_include s (sup_incr s).
+Proof. intros. intro. intro. apply sup_incr_in. right. auto. Qed.
 
 Lemma sup_include_refl : forall s:sup, sup_include s s.
 Proof. intro. intro. auto. Qed.
@@ -120,9 +118,9 @@ Proof.
 Qed.
 
 Lemma sup_include_incr:
-  forall s b, sup_include s (sup_add b s).
+  forall s, sup_include s (sup_incr s).
 Proof.
-  intros. apply sup_add_in2.
+  intros. apply sup_incr_in2.
 Qed.
 
 End SUP.
