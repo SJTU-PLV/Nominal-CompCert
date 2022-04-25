@@ -155,9 +155,11 @@ Record t: Type := mkgenv {
   genv_public: list ident;              (**r which symbol names are public *)
   genv_symb: PTree.t block;             (**r mapping symbol -> block *)
   genv_defs: NMap.t (option (globdef F V));     (**r mapping block -> definition *)
-  genv_sup: list block;                     (**r symbol support *)
+  genv_sup: sup;                     (**r symbol support *)
+  genv_sup_glob : forall b, In b genv_sup -> exists id, b = Global id;
   genv_symb_range: forall id b,PTree.get id genv_symb = Some b -> In b genv_sup;
   genv_defs_range: forall b g, NMap.get _ b genv_defs = Some g -> In b genv_sup;
+  genv_vars_eq: forall id b, PTree.get id genv_symb = Some b -> b = Global id;
   genv_vars_inj: forall id1 id2 b,
     PTree.get id1 genv_symb = Some b -> PTree.get id2 genv_symb = Some b -> id1 = id2
 }.
@@ -234,27 +236,36 @@ Definition block_is_volatile (ge: t) (b: block) : bool :=
 Program Definition add_global (ge: t) (idg: ident * globdef F V): t :=
   @mkgenv
     ge.(genv_public)
-    (PTree.set idg#1 (fresh_block ge.(genv_sup)) ge.(genv_symb))
-    (NMap.set _ (fresh_block ge.(genv_sup)) (Some (idg#2)) ge.(genv_defs))
-    (fresh_block (ge.(genv_sup))::(ge.(genv_sup)))
-    _ _ _.
+    (PTree.set idg#1 (Global idg#1) ge.(genv_symb))
+    (NMap.set _ (Global idg#1) (Some (idg#2)) ge.(genv_defs))
+    ((Global idg#1)::(ge.(genv_sup)))
+    _ _ _ _ _.
 Next Obligation.
-  destruct ge; simpl in *.
-  rewrite PTree.gsspec in H. destruct (peq id i). inv H.
-  left. auto. eauto.
+  simpl in H.
+  inv H. eauto. eapply genv_sup_glob; eauto.
 Qed.
 Next Obligation.
   destruct ge; simpl in *.
-  rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (fresh_block genv_sup0)).
+  rewrite PTree.gsspec in H. destruct (peq id i). inv H. left. auto.
+  eauto.
+Qed.
+Next Obligation.
+  destruct ge; simpl in *.
+  rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (Global i)).
   inv H; eauto. eauto.
+Qed.
+Next Obligation.
+  inv H. rewrite PTree.gsspec in H1.
+  destruct (peq id i). congruence.
+  eapply genv_vars_eq; eauto.
 Qed.
 Next Obligation.
   destruct ge; simpl in *.
   rewrite PTree.gsspec in H. rewrite PTree.gsspec in H0.
   destruct (peq id1 i); destruct (peq id2 i).
   congruence.
-  inv H. apply genv_symb_range0 in H0. apply freshness in H0. destruct H0.
-  inv H. inv H0. apply genv_symb_range0 in H2. apply freshness in H2. destruct H2.
+  inv H. apply genv_vars_eq0 in H0. congruence.
+  inv H. apply genv_vars_eq0 in H2. congruence.
   eauto.
 Qed.
 
@@ -269,7 +280,10 @@ Proof.
 Qed.
 
 Program Definition empty_genv (pub: list ident): t :=
-  @mkgenv pub (PTree.empty _) (NMap.init _ None) nil _ _ _.
+  @mkgenv pub (PTree.empty _) (NMap.init _ None) nil _ _ _ _ _.
+Next Obligation.
+  inversion H.
+Qed.
 
 Definition globalenv (p: program F V) :=
   add_globals (empty_genv p.(prog_public)) p.(prog_defs).

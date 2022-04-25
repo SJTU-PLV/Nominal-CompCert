@@ -193,8 +193,11 @@ End Sup.
 *)
 
 Module Mem (Block:BLOCK).
-Include Memval(Block).
+Module Memval := Memval(Block).
+Include Memval.
+
 Module BMap := BMap(Block).
+
 Local Notation "a # b" := (BMap.get _ b a) (at level 1).
 
 Definition perm_order' (po: option permission) (p: permission) :=

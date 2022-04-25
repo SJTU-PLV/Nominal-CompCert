@@ -144,7 +144,8 @@ Proof.
 Qed.
 
 Module Memval(Block:BLOCK).
-Include VAL(Block).
+Module VAL := VAL(Block).
+Include VAL.
 (** * Memory values *)
 
 (** A ``memory value'' is a byte-sized quantity that describes the current

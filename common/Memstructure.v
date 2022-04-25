@@ -11,7 +11,7 @@ Require Export Memtype.
 Require Export Memory.
 
 (* To avoid useless definitions of inductors in extracted code. *)
-Local Unset Elimination Schemes.
+Local Unset Elimination Schemes. 
 Local Unset Case Analysis Schemes.
 
 Module Pos_Block <: BLOCK.
@@ -22,7 +22,8 @@ Definition eq_block := peq.
 End Pos_Block.
 
 Module MemPos.
-Include Mem(Pos_Block).
+Module Mem := Mem(Pos_Block).
+Include Mem.
 
 Fixpoint find_max_pos (l: list positive) : positive :=
   match l with
@@ -730,8 +731,10 @@ Qed.
 End STREE.
 
 Module StrucMem.
-Include Mem(Struc_Block).
-Import Struc_Block.
+
+Module Mem := Mem(Struc_Block).
+Include Mem.
+Export Struc_Block.
 
 Record struc' : Type := mkstruc {
   stack : stree;
