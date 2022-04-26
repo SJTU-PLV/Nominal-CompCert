@@ -316,6 +316,11 @@ Fixpoint next_block_stree (t:stree) : (fid * positive * path * stree) :=
    end
   end.
 
+Definition next_block_stree' (s:stree) :=
+  match next_block_stree s with
+    |(fid,pos,p,s') => (Struc_Block.Stack fid p pos,s')
+  end.
+
 Fixpoint return_stree (t: stree) : option (stree * path):=
   match t with
   | Node _ bl l None =>
@@ -919,16 +924,36 @@ Proof. intros. intro. intro. apply struc_incr_glob_in. right. auto. Qed.
 Definition match_struc_sup (s:struc) (m:mem) : Prop :=
   forall b, struc_In b s <-> In b (support m).
 
-Record mems : Type := mkmems{
+(** Things to define: *)
+(*
+Globalenvs : init of struc
+Events: operations of memorys
+Cminor:
+
+memory + mem structure =?
+
+*)
+
+Definition is_stack (b:block) : Prop :=
+  match b with
+    | Stack _ _ _ => True
+    |  _ => False
+  end.
+
+Definition incr_without_glob (j j' : meminj) : Prop :=
+  forall b b' delta, j b = None -> j' b = Some (b',delta) ->
+       is_stack b /\ is_stack b'.
+
+Record smem : Type := mksmem{
   structure : struc;
   memory: mem;
   match_struc_mem : match_struc_sup structure memory
 }.
 
-Program Definition mems_empty := mkmems struc_empty empty _.
+Program Definition smem_empty := mksmem struc_empty empty _.
 Next Obligation.
 intro. simpl. generalize empty_in.
-vintro. split. intro. apply H in H0. auto. intro. inversion H0.
+intro. split. intro. apply H in H0. auto. intro. inversion H0.
 Qed.
 
 End StrucMem.

@@ -1311,7 +1311,8 @@ Proof.
   exists (Vlong i); auto.
   inv H4; simpl in H1; inv H1. simpl. TrivialExists.
   subst v1. destruct (eval_condition cond vl1 m1) eqn:?.
-  exploit eval_condition_inj; eauto. intros EQ; rewrite EQ.
+  exploit eval_condition_inj. eauto. eauto.
+  intros EQ; rewrite EQ.
   destruct b; simpl; constructor.
   simpl; constructor.
   apply Val.select_inject; auto.  
@@ -1444,7 +1445,7 @@ Remark symbol_address_inject:
   forall id ofs, Val.inject f (Genv.symbol_address genv id ofs) (Genv.symbol_address genv id ofs).
 Proof.
   intros. unfold Genv.symbol_address. destruct (Genv.find_symbol genv id) eqn:?; auto.
-  exploit (proj1 globals); eauto. intros.
+  exploit (proj1 globals). eauto. intros.
   econstructor; eauto. rewrite Ptrofs.add_zero; auto.
 Qed.
 
@@ -1472,9 +1473,9 @@ Lemma eval_addressing_inject:
 Proof.
   intros.
   rewrite eval_shift_stack_addressing.
-  eapply eval_addressing_inj with (sp1 := Vptr sp1 Ptrofs.zero); eauto.
+  eapply eval_addressing_inj with (sp1 := Vptr sp1 Ptrofs.zero).
   intros. apply symbol_address_inject.
-  econstructor; eauto. rewrite Ptrofs.add_zero_l; auto.
+  econstructor; eauto. rewrite Ptrofs.add_zero_l; auto. eauto. eauto.
 Qed.
 
 Lemma eval_operation_inject:
@@ -1488,13 +1489,13 @@ Lemma eval_operation_inject:
 Proof.
   intros.
   rewrite eval_shift_stack_operation. simpl.
-  eapply eval_operation_inj with (sp1 := Vptr sp1 Ptrofs.zero) (m1 := m1); eauto.
+  eapply eval_operation_inj with (sp1 := Vptr sp1 Ptrofs.zero) (m1 := m1).
   intros; eapply Mem.valid_pointer_inject_val; eauto.
   intros; eapply Mem.weak_valid_pointer_inject_val; eauto.
   intros; eapply Mem.weak_valid_pointer_inject_no_overflow; eauto.
   intros; eapply Mem.different_pointers_inject; eauto.
   intros. apply symbol_address_inject.
-  econstructor; eauto. rewrite Ptrofs.add_zero_l; auto.
+  econstructor; eauto. rewrite Ptrofs.add_zero_l; auto. eauto. eauto.
 Qed.
 
 End EVAL_INJECT.

@@ -25,7 +25,7 @@ Require FSetAVL.
 Require Import Values.
 
 Require Import Memstructure.
-Import MemPos.
+Import StrucMem.
 
 Definition reg: Type := positive.
 

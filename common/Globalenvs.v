@@ -1463,6 +1463,9 @@ End INITMEM.
 
 Definition init_mem (p: program F V) :=
    alloc_globals (globalenv p) empty p.(prog_defs).
+
+(* Definition init_structure (p:program F V):=
+  mkstruc empty_stree (prog_public p). *)
 (*
 Lemma store_init_data_stack:
   forall l ge m m' b ofs,

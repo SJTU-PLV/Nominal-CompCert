@@ -24,6 +24,7 @@ Require Import Floats.
 Require Import Events.
 Require Import Values.
 Require Import Memory.
+Require Import Memstructure.
 Require Import Globalenvs.
 Require Import Smallstep.
 Require Import Switch.
@@ -230,21 +231,21 @@ Inductive state: Type :=
              (sp: val)                  (**r current stack pointer *)
              (e: env)                   (**r current local environment *)
              (m: mem)                   (**r current memory state *)
-             (s: struc),                 (**r current memory structure *)
+             (s: stree),                 (**r current memory structure *)
       state
   | Callstate:                  (**r Invocation of a function *)
       forall (f: fundef)                (**r function to invoke *)
              (args: list val)           (**r arguments provided by caller *)
              (k: cont)                  (**r what to do next  *)
              (m: mem)                   (**r memory state *)
-             (s: struc)                 (**r current memory structure *)
+             (s: stree)                 (**r current memory structure *)
              (id: ident),
       state
   | Returnstate:                (**r Return from a function *)
       forall (v: val)                   (**r Return value *)
              (k: cont)                  (**r what to do next *)
              (m: mem)                   (**r memory state *)
-             (s: struc),                 (**r current memory structure *)
+             (s: stree),                 (**r current memory structure *)
       state.
 
 Section RELSEM.
@@ -434,135 +435,128 @@ Fixpoint find_label (lbl: label) (s: stmt) (k: cont)
   end.
 
 (** One step of execution *)
-Search struc.
+
 Inductive step: state -> trace -> state -> Prop :=
 
   | step_skip_seq: forall f s k sp e m st,
-      step (State f Sskip (Kseq s k) sp e m)
-        E0 (State f s k sp e m)
-  | step_skip_block: forall f k sp e m,
-      step (State f Sskip (Kblock k) sp e m)
-        E0 (State f Sskip k sp e m)
-  | step_skip_call: forall f k sp e m m' m'',
+      step (State f Sskip (Kseq s k) sp e m st)
+        E0 (State f s k sp e m st)
+  | step_skip_block: forall f k sp e m st,
+      step (State f Sskip (Kblock k) sp e m st)
+        E0 (State f Sskip k sp e m st)
+  | step_skip_call: forall f k sp e m p st st' m',
       is_call_cont k ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-      Mem.return_frame m' = Some m'' ->
-      step (State f Sskip k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate Vundef k m'')
-
-  | step_assign: forall f id a k sp e m v,
+      return_stree st  = Some (st',p) ->
+      step (State f Sskip k (Vptr sp Ptrofs.zero) e m st)
+        E0 (Returnstate Vundef k m' st')
+  | step_assign: forall f id a k sp e m st v,
       eval_expr sp e m a v ->
-      step (State f (Sassign id a) k sp e m)
-        E0 (State f Sskip k sp (PTree.set id v e) m)
+      step (State f (Sassign id a) k sp e m st)
+        E0 (State f Sskip k sp (PTree.set id v e) m st)
 
-  | step_store: forall f chunk addr a k sp e m vaddr v m',
+  | step_store: forall f chunk addr a k sp e m st vaddr v m',
       eval_expr sp e m addr vaddr ->
       eval_expr sp e m a v ->
       Mem.storev chunk m vaddr v = Some m' ->
-      step (State f (Sstore chunk addr a) k sp e m)
-        E0 (State f Sskip k sp e m')
+      step (State f (Sstore chunk addr a) k sp e m st)
+        E0 (State f Sskip k sp e m' st)
 
-  | step_call: forall f optid sig a bl k sp e m vf vargs fd id,
+  | step_call: forall f optid sig a bl k sp e m st vf vargs fd id,
       vf = Vptr (Global id) Ptrofs.zero ->
       eval_expr sp e m a vf ->
       eval_exprlist sp e m bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
-      step (State f (Scall optid sig a bl) k sp e m)
-        E0 (Callstate fd vargs (Kcall optid f sp e k) m id)
+      step (State f (Scall optid sig a bl) k sp e m st)
+        E0 (Callstate fd vargs (Kcall optid f sp e k) m st id)
 
-  | step_tailcall: forall f sig a bl k sp e m vf vargs fd m' m'' id,
+  | step_tailcall: forall f sig a bl k sp e m st vf vargs fd m' st' p id,
       vf = Vptr (Global id) Ptrofs.zero ->
       eval_expr (Vptr sp Ptrofs.zero) e m a vf ->
       eval_exprlist (Vptr sp Ptrofs.zero) e m bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-      Mem.return_frame m' = Some m'' ->
-      step (State f (Stailcall sig a bl) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Callstate fd vargs (call_cont k) m'' id)
+      return_stree st = Some (st',p) ->
+      step (State f (Stailcall sig a bl) k (Vptr sp Ptrofs.zero) e m st)
+        E0 (Callstate fd vargs (call_cont k) m' st' id)
 
-  | step_builtin: forall f optid ef bl k sp e m vargs t vres m',
+  | step_builtin: forall f optid ef bl k sp e m vargs t vres m' st,
       eval_exprlist sp e m bl vargs ->
       external_call ef ge vargs m t vres m' ->
-      step (State f (Sbuiltin optid ef bl) k sp e m)
-         t (State f Sskip k sp (set_optvar optid vres e) m')
+      step (State f (Sbuiltin optid ef bl) k sp e m st)
+         t (State f Sskip k sp (set_optvar optid vres e) m' st)
 
-  | step_seq: forall f s1 s2 k sp e m,
-      step (State f (Sseq s1 s2) k sp e m)
-        E0 (State f s1 (Kseq s2 k) sp e m)
+  | step_seq: forall f s1 s2 k sp e m st,
+      step (State f (Sseq s1 s2) k sp e m st)
+        E0 (State f s1 (Kseq s2 k) sp e m st)
 
-  | step_ifthenelse: forall f a s1 s2 k sp e m v b,
+  | step_ifthenelse: forall f a s1 s2 k sp e m st v b,
       eval_expr sp e m a v ->
       Val.bool_of_val v b ->
-      step (State f (Sifthenelse a s1 s2) k sp e m)
-        E0 (State f (if b then s1 else s2) k sp e m)
+      step (State f (Sifthenelse a s1 s2) k sp e m st)
+        E0 (State f (if b then s1 else s2) k sp e m st)
 
-  | step_loop: forall f s k sp e m,
-      step (State f (Sloop s) k sp e m)
-        E0 (State f s (Kseq (Sloop s) k) sp e m)
+  | step_loop: forall f s k sp e m st,
+      step (State f (Sloop s) k sp e m st)
+        E0 (State f s (Kseq (Sloop s) k) sp e m st)
 
-  | step_block: forall f s k sp e m,
-      step (State f (Sblock s) k sp e m)
-        E0 (State f s (Kblock k) sp e m)
+  | step_block: forall f s k sp e m st,
+      step (State f (Sblock s) k sp e m st)
+        E0 (State f s (Kblock k) sp e m st)
 
-  | step_exit_seq: forall f n s k sp e m,
-      step (State f (Sexit n) (Kseq s k) sp e m)
-        E0 (State f (Sexit n) k sp e m)
-  | step_exit_block_0: forall f k sp e m,
-      step (State f (Sexit O) (Kblock k) sp e m)
-        E0 (State f Sskip k sp e m)
-  | step_exit_block_S: forall f n k sp e m,
-      step (State f (Sexit (S n)) (Kblock k) sp e m)
-        E0 (State f (Sexit n) k sp e m)
+  | step_exit_seq: forall f n s k sp e m st,
+      step (State f (Sexit n) (Kseq s k) sp e m st)
+        E0 (State f (Sexit n) k sp e m st)
+  | step_exit_block_0: forall f k sp e m st,
+      step (State f (Sexit O) (Kblock k) sp e m st)
+        E0 (State f Sskip k sp e m st)
+  | step_exit_block_S: forall f n k sp e m st,
+      step (State f (Sexit (S n)) (Kblock k) sp e m st)
+        E0 (State f (Sexit n) k sp e m st)
 
-  | step_switch: forall f islong a cases default k sp e m v n,
+  | step_switch: forall f islong a cases default k sp e m st v n,
       eval_expr sp e m a v ->
       switch_argument islong v n ->
-      step (State f (Sswitch islong a cases default) k sp e m)
-        E0 (State f (Sexit (switch_target n default cases)) k sp e m)
+      step (State f (Sswitch islong a cases default) k sp e m st)
+        E0 (State f (Sexit (switch_target n default cases)) k sp e m st)
 
-  | step_return_0: forall f k sp e m m' m'',
+  | step_return_0: forall f k sp e m m' st st' p,
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-      Mem.return_frame m' = Some m'' ->
-      step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate Vundef (call_cont k) m'')
-  | step_return_1: forall f a k sp e m v m' m'',
+      return_stree st = Some (st',p) ->
+      step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m st)
+        E0 (Returnstate Vundef (call_cont k) m' st')
+  | step_return_1: forall f a k sp e m v m' st st' p,
       eval_expr (Vptr sp Ptrofs.zero) e m a v ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-      Mem.return_frame m' = Some m'' ->
-      step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
-        E0 (Returnstate v (call_cont k) m'')
+      return_stree st = Some (st',p) ->
+      step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m st)
+        E0 (Returnstate v (call_cont k) m' st')
 
-  | step_label: forall f lbl s k sp e m,
-      step (State f (Slabel lbl s) k sp e m)
-        E0 (State f s k sp e m)
+  | step_label: forall f lbl s k sp e m st,
+      step (State f (Slabel lbl s) k sp e m st)
+        E0 (State f s k sp e m st)
 
-  | step_goto: forall f lbl k sp e m s' k',
+  | step_goto: forall f lbl k sp e m s' k' st,
       find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
-      step (State f (Sgoto lbl) k sp e m)
-        E0 (State f s' k' sp e m)
-
-<<<<<<< HEAD
-  | step_internal_function: forall f vargs k m m' sp e
-      (SP: sp = fresh_block (support m)),
-      Mem.alloc m 0 f.(fn_stackspace) sp  = Some m' ->
-=======
-  | step_internal_function: forall f vargs k m m' m'' sp e path id,
-      Mem.alloc_frame m id = (m', path) ->
-      Mem.alloc m' 0 f.(fn_stackspace) = (m'', sp) ->
->>>>>>> a091c4
+      step (State f (Sgoto lbl) k sp e m st)
+        E0 (State f s' k' sp e m st)
+  | step_internal_function: forall f vargs k m m' sp e path id st st' st'',
+      next_stree st id = (st',path) ->
+      next_block_stree' st' = (sp,st'') ->
+      Mem.alloc m 0 f.(fn_stackspace) sp = Some m' ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
-      step (Callstate (Internal f) vargs k m id)
-        E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m'')
-  | step_external_function: forall ef vargs k m t vres m' id,
+      step (Callstate (Internal f) vargs k m st id)
+        E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m' st'')
+  | step_external_function: forall ef vargs k m t vres m' id st,
       external_call ef ge vargs m t vres m' ->
-      step (Callstate (External ef) vargs k m id)
-         t (Returnstate vres k m')
+      step (Callstate (External ef) vargs k m st id)
+         t (Returnstate vres k m' st)
 
-  | step_return: forall v optid f sp e k m,
-      step (Returnstate v (Kcall optid f sp e k) m)
-        E0 (State f Sskip k sp (set_optvar optid v e) m).
+  | step_return: forall v optid f sp e k m st,
+      step (Returnstate v (Kcall optid f sp e k) m st)
+        E0 (State f Sskip k sp (set_optvar optid v e) m st).
 
 End RELSEM.
 
@@ -578,13 +572,13 @@ Inductive initial_state (p: program): state -> Prop :=
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       funsig f = signature_main ->
-      initial_state p (Callstate f nil Kstop m0 p.(prog_main)).
+      initial_state p (Callstate f nil Kstop m0 empty_stree p.(prog_main)).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 
 Inductive final_state: state -> int -> Prop :=
-  | final_state_intro: forall r m,
-      final_state (Returnstate (Vint r) Kstop m) r.
+  | final_state_intro: forall r m s,
+      final_state (Returnstate (Vint r) Kstop m s) r.
 
 (** The corresponding small-step semantics. *)
 
@@ -602,9 +596,9 @@ Proof.
     intros. subst. inv H0. exists s1; auto.
   inversion H; subst; auto.
   exploit external_call_receptive; eauto. intros [vres2 [m2 EC2]].
-  exists (State f Sskip k sp (set_optvar optid vres2 e) m2). econstructor; eauto.
+  exists (State f Sskip k sp (set_optvar optid vres2 e) m2 st). econstructor; eauto.
   exploit external_call_receptive; eauto. intros [vres2 [m2 EC2]].
-  exists (Returnstate vres2 k m2). econstructor; eauto.
+  exists (Returnstate vres2 k m2 st). econstructor; eauto.
 (* trace length *)
   red; intros; inv H; simpl; try lia; eapply external_call_trace_length; eauto.
 Qed.
@@ -654,12 +648,12 @@ Proof.
   intros. constructor; set (ge := Genv.globalenv p); simpl; intros.
 - (* determ *)
   inv H; inv H0; Determ.
-  + subst vargs0. exploit external_call_determ. eexact H2. eexact H13.
+  + subst vargs0. exploit external_call_determ. eexact H2. eexact H14.
     intros (A & B). split; intros; auto.
     apply B in H; destruct H; congruence.
-  + subst v0. assert (b0 = b) by (inv H2; inv H13; auto). subst b0; auto.
-  + assert (n0 = n) by (inv H2; inv H14; auto). subst n0; auto.
-  + exploit external_call_determ. eexact H1. eexact H8.
+  + subst v0. assert (b0 = b) by (inv H2; inv H14; auto). subst b0; auto.
+  + assert (n0 = n) by (inv H2; inv H15; auto). subst n0; auto.
+  + exploit external_call_determ. eexact H1. eexact H9.
     intros (A & B). split; intros; auto.
     apply B in H; destruct H; congruence.
 - (* single event *)

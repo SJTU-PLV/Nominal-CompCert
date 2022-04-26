@@ -243,12 +243,12 @@ Proof.
 Qed.
 
 Lemma eval_store:
-  forall chunk a1 a2 v1 v2 f k m',
+  forall chunk a1 a2 v1 v2 f k m' st,
   eval_expr tge sp e m nil a1 v1 ->
   eval_expr tge sp e m nil a2 v2 ->
   Mem.storev chunk m v1 v2 = Some m' ->
-  step tge (State f (store chunk a1 a2) k sp e m)
-        E0 (State f Sskip k sp e m').
+  step tge (State f (store chunk a1 a2) k sp e m st)
+        E0 (State f Sskip k sp e m' st).
 Proof.
   intros. generalize H1; destruct v1; simpl; intro; try discriminate.
   unfold store.
@@ -842,13 +842,13 @@ Proof.
 Qed.
 
 Lemma sel_builtin_default_correct:
-  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k,
+  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k st,
   Cminor.eval_exprlist ge sp e1 m1 al vl ->
   external_call ef ge vl m1 t v m2 ->
   env_lessdef e1 e1' -> Mem.extends m1 m1' ->
   exists e2' m2',
-     plus step tge (State f (sel_builtin_default optid ef al) k sp e1' m1')
-                 t (State f Sskip k sp e2' m2')
+     plus step tge (State f (sel_builtin_default optid ef al) k sp e1' m1' st)
+                 t (State f Sskip k sp e2' m2' st)
   /\ env_lessdef (set_optvar optid v e1) e2'
   /\ Mem.extends m2 m2'.
 Proof.
@@ -859,16 +859,16 @@ Proof.
   apply plus_one.
   econstructor. eexact A. eapply external_call_symbols_preserved. eexact senv_preserved. eexact D.
   split; auto. apply sel_builtin_res_correct; auto.
-Qed. 
+Qed.
 
 Lemma sel_builtin_correct:
-  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k,
+  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k st,
   Cminor.eval_exprlist ge sp e1 m1 al vl ->
   external_call ef ge vl m1 t v m2 ->
   env_lessdef e1 e1' -> Mem.extends m1 m1' ->
   exists e2' m2',
-     plus step tge (State f (sel_builtin optid ef al) k sp e1' m1')
-                 t (State f Sskip k sp e2' m2')
+     plus step tge (State f (sel_builtin optid ef al) k sp e1' m1' st)
+                 t (State f Sskip k sp e2' m2' st)
   /\ env_lessdef (set_optvar optid v e1) e2'
   /\ Mem.extends m2 m2'.
 Proof.
@@ -887,15 +887,15 @@ Proof.
   split; auto. apply set_var_lessdef; auto. apply Val.lessdef_trans with v'; auto.
 - exists e1', m2'; split.
   eapply plus_two. constructor. constructor. auto.
-  simpl; auto.  
+  simpl; auto.
 Qed.
 
 (** If-conversion *)
 
 Lemma classify_stmt_sound_1:
-  forall f sp e m s k,
+  forall f sp e m s k st,
   classify_stmt s = SCskip ->
-  star Cminor.step ge (Cminor.State f s k sp e m) E0 (Cminor.State f Cminor.Sskip k sp e m).
+  star Cminor.step ge (Cminor.State f s k sp e m st) E0 (Cminor.State f Cminor.Sskip k sp e m st).
 Proof.
   intros until s; functional induction (classify_stmt s); intros; try discriminate.
   - apply star_refl.
@@ -907,11 +907,11 @@ Proof.
 Qed.
 
 Lemma classify_stmt_sound_2:
-  forall f sp e m a id v,
+  forall f sp e m a id v st,
   Cminor.eval_expr ge sp e m a v ->
   forall s k,
   classify_stmt s = SCassign id a ->
-  star Cminor.step ge (Cminor.State f s k sp e m) E0 (Cminor.State f Cminor.Sskip k sp (PTree.set id v e) m).
+  star Cminor.step ge (Cminor.State f s k sp e m st) E0 (Cminor.State f Cminor.Sskip k sp (PTree.set id v e) m st).
 Proof.
   intros until s; functional induction (classify_stmt s); intros; try discriminate.
   - inv H0. apply star_one. constructor; auto.
@@ -964,10 +964,10 @@ Proof.
   apply Val.lessdef_trans with (Val.select (Some b) v1 v2 ty).
   simpl. rewrite Val.normalize_idem; auto. destruct b; auto.
   assumption.
-Qed. 
+Qed.
 
 Lemma if_conversion_correct:
-  forall f env tyret cond ifso ifnot s vb b k f' k' sp e m e' m',
+  forall f env tyret cond ifso ifnot s vb b k f' k' sp e m e' m' st,
   if_conversion (known_id f) env cond ifso ifnot = Some s ->
   def_env f e -> wt_env env e ->
   wt_stmt env tyret ifso ->
@@ -976,11 +976,11 @@ Lemma if_conversion_correct:
   env_lessdef e e' -> Mem.extends m m' ->
   let s0 := if b then ifso else ifnot in
   exists e1 e1',
-     step tge (State f' s k' sp e' m') E0 (State f' Sskip k' sp e1' m')
-  /\ star Cminor.step ge (Cminor.State f s0 k sp e m) E0 (Cminor.State f Cminor.Sskip k sp e1 m)
+     step tge (State f' s k' sp e' m' st) E0 (State f' Sskip k' sp e1' m' st)
+  /\ star Cminor.step ge (Cminor.State f s0 k sp e m st) E0 (Cminor.State f Cminor.Sskip k sp e1 m st)
   /\ env_lessdef e1 e1'.
 Proof.
-  unfold if_conversion; intros until m'; intros IFC DE WTE WT1 WT2 EVC BOV ELD MEXT.
+  unfold if_conversion; intros until st; intros IFC DE WTE WT1 WT2 EVC BOV ELD MEXT.
   set (s0 := if b then ifso else ifnot). set (ki := known_id f) in *.
   destruct (classify_stmt ifso) eqn:IFSO; try discriminate;
   destruct (classify_stmt ifnot) eqn:IFNOT; try discriminate;
@@ -993,7 +993,7 @@ Proof.
   intros (a' & v1 & v2 & v' & A & B & C & D & E).
   exists (PTree.set id (if b then v1 else v2) e), (PTree.set id v' e').
   split. subst s. constructor; auto.
-  split. unfold s0; destruct b. 
+  split. unfold s0; destruct b.
   rewrite PTree.gsident by (inv B; auto). apply classify_stmt_sound_1; auto.
   eapply classify_stmt_sound_2; eauto.
   apply set_var_lessdef; auto.
@@ -1001,11 +1001,11 @@ Proof.
             && if_conversion_heuristic cond a (Cminor.Evar id) (env id)) eqn:B; inv IFC.
   InvBooleans.
   exploit (eval_select_safe_exprs a (Cminor.Evar id)); eauto.
-  eapply classify_stmt_wt; eauto. constructor. 
+  eapply classify_stmt_wt; eauto. constructor.
   intros (a' & v1 & v2 & v' & A & B & C & D & E).
   exists (PTree.set id (if b then v1 else v2) e), (PTree.set id v' e').
   split. subst s. constructor; auto.
-  split. unfold s0; destruct b. 
+  split. unfold s0; destruct b.
   eapply classify_stmt_sound_2; eauto.
   rewrite PTree.gsident by (inv C; auto). apply classify_stmt_sound_1; auto.
   apply set_var_lessdef; auto.
@@ -1051,7 +1051,7 @@ with match_call_cont: Cminor.cont -> CminorSel.cont -> Prop :=
       match_call_cont (Cminor.Kcall id f sp e k) (Kcall id f' sp e' k').
 
 Inductive match_states: Cminor.state -> CminorSel.state -> Prop :=
-  | match_state: forall cunit hf f f' s k s' k' sp e m e' m' env
+  | match_state: forall cunit hf f f' s k s' k' sp e m e' m' env st
         (LINK: linkorder cunit prog)
         (HF: helper_functions_declared cunit hf)
         (TF: sel_function (prog_defmap cunit) hf f = OK f')
@@ -1061,25 +1061,25 @@ Inductive match_states: Cminor.state -> CminorSel.state -> Prop :=
         (LD: env_lessdef e e')
         (ME: Mem.extends m m'),
       match_states
-        (Cminor.State f s k sp e m)
-        (State f' s' k' sp e' m')
-  | match_callstate: forall cunit f f' args args' k k' m m' id
+        (Cminor.State f s k sp e m st)
+        (State f' s' k' sp e' m' st)
+  | match_callstate: forall cunit f f' args args' k k' m m' id st
         (LINK: linkorder cunit prog)
         (TF: match_fundef cunit f f')
         (MC: match_call_cont k k')
         (LD: Val.lessdef_list args args')
         (ME: Mem.extends m m'),
       match_states
-        (Cminor.Callstate f args k m id)
-        (Callstate f' args' k' m' id)
-  | match_returnstate: forall v v' k k' m m'
+        (Cminor.Callstate f args k m id st)
+        (Callstate f' args' k' m' id st)
+  | match_returnstate: forall v v' k k' m m' st
         (MC: match_call_cont k k')
         (LD: Val.lessdef v v')
         (ME: Mem.extends m m'),
       match_states
-        (Cminor.Returnstate v k m)
-        (Returnstate v' k' m')
-  | match_builtin_1: forall cunit hf ef args optid f sp e k m al f' e' k' m' env id
+        (Cminor.Returnstate v k m st)
+        (Returnstate v' k' m' st)
+  | match_builtin_1: forall cunit hf ef args optid f sp e k m al f' e' k' m' env id st
         (LINK: linkorder cunit prog)
         (HF: helper_functions_declared cunit hf)
         (TF: sel_function (prog_defmap cunit) hf f = OK f')
@@ -1089,9 +1089,9 @@ Inductive match_states: Cminor.state -> CminorSel.state -> Prop :=
         (LDE: env_lessdef e e')
         (ME: Mem.extends m m'),
       match_states
-        (Cminor.Callstate (External ef) args (Cminor.Kcall optid f sp e k) m id)
-        (State f' (sel_builtin optid ef al) k' sp e' m')
-  | match_builtin_2: forall cunit hf v v' optid f sp e k m f' e' m' k' env
+        (Cminor.Callstate (External ef) args (Cminor.Kcall optid f sp e k) m st id)
+        (State f' (sel_builtin optid ef al) k' sp e' m' st)
+  | match_builtin_2: forall cunit hf v v' optid f sp e k m f' e' m' k' env st
         (LINK: linkorder cunit prog)
         (HF: helper_functions_declared cunit hf)
         (TF: sel_function (prog_defmap cunit) hf f = OK f')
@@ -1101,8 +1101,8 @@ Inductive match_states: Cminor.state -> CminorSel.state -> Prop :=
         (LDE: env_lessdef (set_optvar optid v e) e')
         (ME: Mem.extends m m'),
       match_states
-        (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m)
-        (State f' Sskip k' sp e' m').
+        (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m st)
+        (State f' Sskip k' sp e' m' st).
 
 Remark call_cont_commut:
   forall cunit hf ki env k k',
@@ -1154,7 +1154,7 @@ Proof.
   unfold if_conversion_base; intros.
   destruct (is_known ki id && safe_expr ki a1 && safe_expr ki a2 &&
             if_conversion_heuristic a a1 a2 (env id)); try discriminate.
-  destruct (sel_select_opt (env id) a a1 a2); inv H. 
+  destruct (sel_select_opt (env id) a a1 a2); inv H.
   red; auto.
 Qed.
 
@@ -1179,8 +1179,8 @@ Remark sel_builtin_nolabel:
 Proof.
   unfold sel_builtin; intros; red; intros.
   destruct ef; auto. destruct lookup_builtin_function; auto.
-  destruct optid; auto. destruct sel_known_builtin; auto. 
-Qed. 
+  destruct optid; auto. destruct sel_known_builtin; auto.
+Qed.
 
 Remark find_label_commut:
   forall cunit hf ki env lbl s k s' k',
@@ -1234,9 +1234,9 @@ Qed.
 
 Definition measure (s: Cminor.state) : nat :=
   match s with
-  | Cminor.Callstate _ _ _ _ _ => 0%nat
-  | Cminor.State _ _ _ _ _ _ => 1%nat
-  | Cminor.Returnstate _ _ _ => 2%nat
+  | Cminor.Callstate _ _ _ _ _ _ => 0%nat
+  | Cminor.State _ _ _ _ _ _ _ => 1%nat
+  | Cminor.Returnstate _ _ _ _ => 2%nat
   end.
 
 Lemma sel_step_correct:
@@ -1255,7 +1255,6 @@ Proof.
   inv H.
 - (* skip call *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
-  exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [C D]].
   left; econstructor; split.
   apply plus_one; econstructor. eapply match_is_call_cont; eauto.
   erewrite stackspace_function_translated; eauto. eauto.
@@ -1299,7 +1298,6 @@ Proof.
   right; left; split. simpl; lia. split; auto. econstructor; eauto.
 - (* Stailcall *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
-  exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [P' Q']].
   erewrite <- stackspace_function_translated in P by eauto.
   exploit sel_expr_correct; eauto. intros [vf' [A B]]. inv B.
   exploit sel_exprlist_correct; eauto. intros [vargs' [C D]].
@@ -1331,7 +1329,7 @@ Proof.
   split. eexact B. split. eexact A. econstructor; eauto. 
 + exploit sel_expr_correct; eauto. intros [v' [A B]].
   assert (Val.bool_of_val v' b). inv B. auto. inv H0.
-  left; exists (State f' (if b then x else x0) k' sp e' m'); split.
+  left; exists (State f' (if b then x else x0) k' sp e' m' st); split.
   apply plus_one; econstructor; eauto. eapply eval_condexpr_of_expr; eauto.
   econstructor; eauto. destruct b; auto.
 - (* Sloop *)
@@ -1364,14 +1362,12 @@ Proof.
   econstructor; eauto.
 - (* Sreturn None *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
-  exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [P' Q']].
   erewrite <- stackspace_function_translated in P by eauto.
   left; econstructor; split.
   apply plus_one; econstructor. simpl; eauto. eauto.
   econstructor; eauto. eapply call_cont_commut; eauto.
 - (* Sreturn Some *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
-  exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [P' Q']].
   erewrite <- stackspace_function_translated in P by eauto.
   exploit sel_expr_correct; eauto. intros [v' [A B]].
   left; econstructor; split.
@@ -1394,14 +1390,8 @@ Proof.
 - (* internal function *)
   destruct TF as (hf & HF & TF).
   monadInv TF. generalize EQ; intros TF; monadInv TF.
-  exploit Mem.alloc_frame_extends; eauto. intros [m2' [A B]].
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
-<<<<<<< HEAD
   intros [m2' [A B]].
-  inversion ME0. rewrite mext_sup in *.
-=======
-  intros [m2'' [A' B']].
->>>>>>> a091c4
   left; econstructor; split.
   apply plus_one; econstructor; simpl; eauto.
   econstructor; simpl; eauto.
