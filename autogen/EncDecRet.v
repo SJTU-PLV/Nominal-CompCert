@@ -278,7 +278,7 @@ Hint Unfold read_B write_B read_R write_R read_W write_W read_X write_X read_bas
 
 Hint Unfold AddrE11_bp AddrE9_bp AddrE5_bp AddrE0_bp :AddrE_bpdb.
 
-Hint Unfold REX_WRXB_bp Psubl_ri_bp Pbsqrtsd_bp Psbbl_rr_bp Prep_movsl_bp Pmovsq_rm_bp Pmovsq_mr_bp Pminsd_bp Pmaxsd_bp Pbswap32_bp Pbsrl_bp Pbsfl_bp Paddl_mi_bp Paddl_GvEv_bp Paddl_EvGv_bp Padcl_rr_bp Padcl_ri_bp Pjcc_rel_bp Pret_iw_bp Pret_bp Pcall_r_bp Pcall_ofs_bp Pnop_bp Pjmp_Ev_bp Pjmp_l_rel_bp Pandps_fm_bp Pxorps_GvEv_bp Pxorpd_GvEv_bp Pcomiss_ff_bp Pcomisd_ff_bp Pdivss_ff_bp Pdivsd_ff_bp Pmuls_ff_bp Pmuld_ff_bp Psubs_ff_bp Psubd_ff_bp Pandpd_GvEv_bp Padds_ff_bp Paddd_ff_bp Psetcc_bp Pcmov_bp Ptestl_EvGv_bp Ptestl_ri_bp Pcmpl_ri_bp Pcmpl_GvEv_bp Pcmpl_EvGv_bp Prorl_ri_bp Prolw_ri_bp Pshld_ri_bp Psarl_rcl_bp Psarl_ri_bp Pshrl_rcl_bp Pshrl_ri_bp Psall_rcl_bp Psall_ri_bp Pnotl_bp Pxorl_GvEv_bp Pxorl_EvGv_bp Pxorl_ri_bp Porl_GvEv_bp Porl_EvGv_bp Porl_ri_bp Pandl_ri_bp Pandl_GvEv_bp Pandl_EvGv_bp Pidivl_r_bp Pdivl_r_bp Pcltd_bp Pmull_r_bp Pimull_r_bp Pimull_ri_bp Pimull_GvEv_bp Psubl_GvEv_bp Psubl_EvGv_bp Paddl_ri_bp Pnegl_bp Pleal_bp Pcvttss2si_rf_bp Pcvtsi2sd_fr_bp Pcvtsi2ss_fr_bp Pcvttsd2si_rf_bp Pcvtss2sd_ff_bp Pcvtsd2ss_ff_bp Pmovsxd_GvEv_bp Pmovsw_GvEv_bp Pmovzw_GvEv_bp Pmovsb_GvEv_bp Pmovzb_rm_bp Pmovw_rm_bp Pmovw_mr_bp Pmovb_rm_bp Pmovb_mr_bp Pxchg_rr_bp Pflds_m_bp Pfstps_m_bp Pfstpl_m_bp Pfldl_m_bp Pmovss_fm_bp Pmovss_mf_bp Pmovsd_fm_bp Pmovsd_mf_bp Pmovl_rm_bp Pmovl_mr_bp Pmovl_ri_bp :Instruction_bpdb.
+Hint Unfold REX_WRXB_bp Override_bp REP_bp REPNZ_bp Psubl_ri_bp Pbsqrtsd_bp Psbbl_rr_bp Prep_movsl_bp Pmovsq_rm_bp Pmovsq_mr_bp Pminsd_bp Pmaxsd_bp Pbswap32_bp Pbsrl_bp Pbsfl_bp Paddl_mi_bp Paddl_GvEv_bp Paddl_EvGv_bp Padcl_rr_bp Padcl_ri_bp Pjcc_rel_bp Pret_iw_bp Pret_bp Pcall_r_bp Pcall_ofs_bp Pnop_bp Pjmp_Ev_bp Pjmp_l_rel_bp Pxorps_d_GvEv_bp Pcomiss_d_ff_bp Pdivss_d_ff_bp Pmuls_d_ff_bp Psubs_d_ff_bp Pandps_d_fm_bp Padds_d_ff_bp Psetcc_bp Pcmov_bp Ptestl_EvGv_bp Ptestl_ri_bp Pcmpl_ri_bp Pcmpl_GvEv_bp Pcmpl_EvGv_bp Prorl_ri_bp Prolw_ri_bp Pshld_ri_bp Psarl_rcl_bp Psarl_ri_bp Pshrl_rcl_bp Pshrl_ri_bp Psall_rcl_bp Psall_ri_bp Pnotl_bp Pxorl_GvEv_bp Pxorl_EvGv_bp Pxorl_ri_bp Porl_GvEv_bp Porl_EvGv_bp Porl_ri_bp Pandl_ri_bp Pandl_GvEv_bp Pandl_EvGv_bp Pidivl_r_bp Pdivl_r_bp Pcltd_bp Pmull_r_bp Pimull_r_bp Pimull_ri_bp Pimull_GvEv_bp Psubl_GvEv_bp Psubl_EvGv_bp Paddl_ri_bp Pnegl_bp Pleal_bp Pcvtsi2ss_d_fr_bp Pcvttss_d_2si_rf_bp Pcvtsd2ss_d_ff_bp Pmovsxd_GvEv_bp Pmovsw_GvEv_bp Pmovzw_GvEv_bp Pmovsb_GvEv_bp Pmovzb_rm_bp Pmovb_rm_bp Pmovb_mr_bp Pxchg_rr_bp Pflds_m_bp Pfstps_m_bp Pfstpl_m_bp Pfldl_m_bp Pmovss_d_fm_bp Pmovss_d_mf_bp Pmovl_rm_bp Pmovl_mr_bp Pmovl_ri_bp :Instruction_bpdb.
 Lemma AddrE_bp_in_list0: 
 In AddrE11_bp AddrE_bp_list.
 Proof.
@@ -305,516 +305,461 @@ Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list1: 
-In Psubl_ri_bp Instruction_bp_list.
+In Override_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list2: 
-In Pbsqrtsd_bp Instruction_bp_list.
+In REP_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list3: 
-In Psbbl_rr_bp Instruction_bp_list.
+In REPNZ_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list4: 
-In Prep_movsl_bp Instruction_bp_list.
+In Psubl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list5: 
-In Pmovsq_rm_bp Instruction_bp_list.
+In Pbsqrtsd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list6: 
-In Pmovsq_mr_bp Instruction_bp_list.
+In Psbbl_rr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list7: 
-In Pminsd_bp Instruction_bp_list.
+In Prep_movsl_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list8: 
-In Pmaxsd_bp Instruction_bp_list.
+In Pmovsq_rm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list9: 
-In Pbswap32_bp Instruction_bp_list.
+In Pmovsq_mr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list10: 
-In Pbsrl_bp Instruction_bp_list.
+In Pminsd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list11: 
-In Pbsfl_bp Instruction_bp_list.
+In Pmaxsd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list12: 
-In Paddl_mi_bp Instruction_bp_list.
+In Pbswap32_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list13: 
-In Paddl_GvEv_bp Instruction_bp_list.
+In Pbsrl_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list14: 
-In Paddl_EvGv_bp Instruction_bp_list.
+In Pbsfl_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list15: 
-In Padcl_rr_bp Instruction_bp_list.
+In Paddl_mi_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list16: 
-In Padcl_ri_bp Instruction_bp_list.
+In Paddl_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list17: 
-In Pjcc_rel_bp Instruction_bp_list.
+In Paddl_EvGv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list18: 
-In Pret_iw_bp Instruction_bp_list.
+In Padcl_rr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list19: 
-In Pret_bp Instruction_bp_list.
+In Padcl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list20: 
-In Pcall_r_bp Instruction_bp_list.
+In Pjcc_rel_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list21: 
-In Pcall_ofs_bp Instruction_bp_list.
+In Pret_iw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list22: 
-In Pnop_bp Instruction_bp_list.
+In Pret_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list23: 
-In Pjmp_Ev_bp Instruction_bp_list.
+In Pcall_r_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list24: 
-In Pjmp_l_rel_bp Instruction_bp_list.
+In Pcall_ofs_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list25: 
-In Pandps_fm_bp Instruction_bp_list.
+In Pnop_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list26: 
-In Pxorps_GvEv_bp Instruction_bp_list.
+In Pjmp_Ev_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list27: 
-In Pxorpd_GvEv_bp Instruction_bp_list.
+In Pjmp_l_rel_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list28: 
-In Pcomiss_ff_bp Instruction_bp_list.
+In Pxorps_d_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list29: 
-In Pcomisd_ff_bp Instruction_bp_list.
+In Pcomiss_d_ff_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list30: 
-In Pdivss_ff_bp Instruction_bp_list.
+In Pdivss_d_ff_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list31: 
-In Pdivsd_ff_bp Instruction_bp_list.
+In Pmuls_d_ff_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list32: 
-In Pmuls_ff_bp Instruction_bp_list.
+In Psubs_d_ff_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list33: 
-In Pmuld_ff_bp Instruction_bp_list.
+In Pandps_d_fm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list34: 
-In Psubs_ff_bp Instruction_bp_list.
+In Padds_d_ff_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list35: 
-In Psubd_ff_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list36: 
-In Pandpd_GvEv_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list37: 
-In Padds_ff_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list38: 
-In Paddd_ff_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list39: 
 In Psetcc_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list40: 
+Lemma Instruction_bp_in_list36: 
 In Pcmov_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list41: 
+Lemma Instruction_bp_in_list37: 
 In Ptestl_EvGv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list42: 
+Lemma Instruction_bp_in_list38: 
 In Ptestl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list43: 
+Lemma Instruction_bp_in_list39: 
 In Pcmpl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list44: 
+Lemma Instruction_bp_in_list40: 
 In Pcmpl_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list45: 
+Lemma Instruction_bp_in_list41: 
 In Pcmpl_EvGv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list46: 
+Lemma Instruction_bp_in_list42: 
 In Prorl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list47: 
+Lemma Instruction_bp_in_list43: 
 In Prolw_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list48: 
+Lemma Instruction_bp_in_list44: 
 In Pshld_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list49: 
+Lemma Instruction_bp_in_list45: 
 In Psarl_rcl_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list50: 
+Lemma Instruction_bp_in_list46: 
 In Psarl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list51: 
+Lemma Instruction_bp_in_list47: 
 In Pshrl_rcl_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list52: 
+Lemma Instruction_bp_in_list48: 
 In Pshrl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list53: 
+Lemma Instruction_bp_in_list49: 
 In Psall_rcl_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list54: 
+Lemma Instruction_bp_in_list50: 
 In Psall_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list55: 
+Lemma Instruction_bp_in_list51: 
 In Pnotl_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list56: 
+Lemma Instruction_bp_in_list52: 
 In Pxorl_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list57: 
+Lemma Instruction_bp_in_list53: 
 In Pxorl_EvGv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list58: 
+Lemma Instruction_bp_in_list54: 
 In Pxorl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list59: 
+Lemma Instruction_bp_in_list55: 
 In Porl_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list60: 
+Lemma Instruction_bp_in_list56: 
 In Porl_EvGv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list61: 
+Lemma Instruction_bp_in_list57: 
 In Porl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list62: 
+Lemma Instruction_bp_in_list58: 
 In Pandl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list63: 
+Lemma Instruction_bp_in_list59: 
 In Pandl_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list64: 
+Lemma Instruction_bp_in_list60: 
 In Pandl_EvGv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list65: 
+Lemma Instruction_bp_in_list61: 
 In Pidivl_r_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list66: 
+Lemma Instruction_bp_in_list62: 
 In Pdivl_r_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list67: 
+Lemma Instruction_bp_in_list63: 
 In Pcltd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list68: 
+Lemma Instruction_bp_in_list64: 
 In Pmull_r_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list69: 
+Lemma Instruction_bp_in_list65: 
 In Pimull_r_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list70: 
+Lemma Instruction_bp_in_list66: 
 In Pimull_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list71: 
+Lemma Instruction_bp_in_list67: 
 In Pimull_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list72: 
+Lemma Instruction_bp_in_list68: 
 In Psubl_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list73: 
+Lemma Instruction_bp_in_list69: 
 In Psubl_EvGv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list74: 
+Lemma Instruction_bp_in_list70: 
 In Paddl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list75: 
+Lemma Instruction_bp_in_list71: 
 In Pnegl_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list76: 
+Lemma Instruction_bp_in_list72: 
 In Pleal_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list77: 
-In Pcvttss2si_rf_bp Instruction_bp_list.
+Lemma Instruction_bp_in_list73: 
+In Pcvtsi2ss_d_fr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list78: 
-In Pcvtsi2sd_fr_bp Instruction_bp_list.
+Lemma Instruction_bp_in_list74: 
+In Pcvttss_d_2si_rf_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list79: 
-In Pcvtsi2ss_fr_bp Instruction_bp_list.
+Lemma Instruction_bp_in_list75: 
+In Pcvtsd2ss_d_ff_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list80: 
-In Pcvttsd2si_rf_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list81: 
-In Pcvtss2sd_ff_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list82: 
-In Pcvtsd2ss_ff_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list83: 
+Lemma Instruction_bp_in_list76: 
 In Pmovsxd_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list84: 
+Lemma Instruction_bp_in_list77: 
 In Pmovsw_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list85: 
+Lemma Instruction_bp_in_list78: 
 In Pmovzw_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list86: 
+Lemma Instruction_bp_in_list79: 
 In Pmovsb_GvEv_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list87: 
+Lemma Instruction_bp_in_list80: 
 In Pmovzb_rm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list88: 
-In Pmovw_rm_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list89: 
-In Pmovw_mr_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list90: 
+Lemma Instruction_bp_in_list81: 
 In Pmovb_rm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list91: 
+Lemma Instruction_bp_in_list82: 
 In Pmovb_mr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list92: 
+Lemma Instruction_bp_in_list83: 
 In Pxchg_rr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list93: 
+Lemma Instruction_bp_in_list84: 
 In Pflds_m_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list94: 
+Lemma Instruction_bp_in_list85: 
 In Pfstps_m_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list95: 
+Lemma Instruction_bp_in_list86: 
 In Pfstpl_m_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list96: 
+Lemma Instruction_bp_in_list87: 
 In Pfldl_m_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list97: 
-In Pmovss_fm_bp Instruction_bp_list.
+Lemma Instruction_bp_in_list88: 
+In Pmovss_d_fm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list98: 
-In Pmovss_mf_bp Instruction_bp_list.
+Lemma Instruction_bp_in_list89: 
+In Pmovss_d_mf_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list99: 
-In Pmovsd_fm_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list100: 
-In Pmovsd_mf_bp Instruction_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma Instruction_bp_in_list101: 
+Lemma Instruction_bp_in_list90: 
 In Pmovl_rm_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list102: 
+Lemma Instruction_bp_in_list91: 
 In Pmovl_mr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Lemma Instruction_bp_in_list103: 
+Lemma Instruction_bp_in_list92: 
 In Pmovl_ri_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
@@ -951,6 +896,9 @@ else
 
 Inductive Instruction: Type :=
 | REX_WRXB(uvar1_0:u1)(uvar1_1:u1)(uvar1_2:u1)(uvar1_3:u1)
+| Override
+| REP
+| REPNZ
 | Psubl_ri(uvar3_0:u3)(uvar32_1:u32)
 | Pbsqrtsd(uvar3_0:u3)(uvar3_1:u3)
 | Psbbl_rr(uvar3_0:u3)(uvar3_1:u3)
@@ -975,20 +923,13 @@ Inductive Instruction: Type :=
 | Pnop
 | Pjmp_Ev(AddrE:AddrE)
 | Pjmp_l_rel(uvar32_0:u32)
-| Pandps_fm(AddrE:AddrE)(uvar3_0:u3)
-| Pxorps_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Pxorpd_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Pcomiss_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pcomisd_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pdivss_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pdivsd_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pmuls_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pmuld_ff(uvar3_0:u3)(uvar3_1:u3)
-| Psubs_ff(uvar3_0:u3)(uvar3_1:u3)
-| Psubd_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pandpd_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Padds_ff(uvar3_0:u3)(uvar3_1:u3)
-| Paddd_ff(uvar3_0:u3)(uvar3_1:u3)
+| Pxorps_d_GvEv(AddrE:AddrE)(uvar3_0:u3)
+| Pcomiss_d_ff(uvar3_0:u3)(uvar3_1:u3)
+| Pdivss_d_ff(uvar3_0:u3)(uvar3_1:u3)
+| Pmuls_d_ff(uvar3_0:u3)(uvar3_1:u3)
+| Psubs_d_ff(uvar3_0:u3)(uvar3_1:u3)
+| Pandps_d_fm(AddrE:AddrE)(uvar3_0:u3)
+| Padds_d_ff(uvar3_0:u3)(uvar3_1:u3)
 | Psetcc(uvar4_0:u4)(uvar3_1:u3)
 | Pcmov(uvar4_0:u4)(uvar3_1:u3)(uvar3_2:u3)
 | Ptestl_EvGv(AddrE:AddrE)(uvar3_0:u3)
@@ -1027,19 +968,14 @@ Inductive Instruction: Type :=
 | Paddl_ri(uvar3_0:u3)(uvar32_1:u32)
 | Pnegl(uvar3_0:u3)
 | Pleal(AddrE:AddrE)(uvar3_0:u3)
-| Pcvttss2si_rf(uvar3_0:u3)(uvar3_1:u3)
-| Pcvtsi2sd_fr(uvar3_0:u3)(uvar3_1:u3)
-| Pcvtsi2ss_fr(uvar3_0:u3)(uvar3_1:u3)
-| Pcvttsd2si_rf(uvar3_0:u3)(uvar3_1:u3)
-| Pcvtss2sd_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pcvtsd2ss_ff(uvar3_0:u3)(uvar3_1:u3)
+| Pcvtsi2ss_d_fr(uvar3_0:u3)(uvar3_1:u3)
+| Pcvttss_d_2si_rf(uvar3_0:u3)(uvar3_1:u3)
+| Pcvtsd2ss_d_ff(uvar3_0:u3)(uvar3_1:u3)
 | Pmovsxd_GvEv(AddrE:AddrE)(uvar3_0:u3)
 | Pmovsw_GvEv(AddrE:AddrE)(uvar3_0:u3)
 | Pmovzw_GvEv(AddrE:AddrE)(uvar3_0:u3)
 | Pmovsb_GvEv(AddrE:AddrE)(uvar3_0:u3)
 | Pmovzb_rm(AddrE:AddrE)(uvar3_0:u3)
-| Pmovw_rm(AddrE:AddrE)(uvar3_0:u3)
-| Pmovw_mr(AddrE:AddrE)(uvar3_0:u3)
 | Pmovb_rm(AddrE:AddrE)(uvar3_0:u3)
 | Pmovb_mr(AddrE:AddrE)(uvar3_0:u3)
 | Pxchg_rr(uvar3_0:u3)(uvar3_1:u3)
@@ -1047,15 +983,16 @@ Inductive Instruction: Type :=
 | Pfstps_m(AddrE:AddrE)
 | Pfstpl_m(AddrE:AddrE)
 | Pfldl_m(AddrE:AddrE)
-| Pmovss_fm(AddrE:AddrE)(uvar3_0:u3)
-| Pmovss_mf(AddrE:AddrE)(uvar3_0:u3)
-| Pmovsd_fm(AddrE:AddrE)(uvar3_0:u3)
-| Pmovsd_mf(AddrE:AddrE)(uvar3_0:u3)
+| Pmovss_d_fm(AddrE:AddrE)(uvar3_0:u3)
+| Pmovss_d_mf(AddrE:AddrE)(uvar3_0:u3)
 | Pmovl_rm(AddrE:AddrE)(uvar3_0:u3)
 | Pmovl_mr(AddrE:AddrE)(uvar3_0:u3)
 | Pmovl_ri(uvar3_0:u3)(uvar32_1:u32).
 Inductive Instruction_op: Type :=
 | REX_WRXB_op
+| Override_op
+| REP_op
+| REPNZ_op
 | Psubl_ri_op
 | Pbsqrtsd_op
 | Psbbl_rr_op
@@ -1080,20 +1017,13 @@ Inductive Instruction_op: Type :=
 | Pnop_op
 | Pjmp_Ev_op
 | Pjmp_l_rel_op
-| Pandps_fm_op
-| Pxorps_GvEv_op
-| Pxorpd_GvEv_op
-| Pcomiss_ff_op
-| Pcomisd_ff_op
-| Pdivss_ff_op
-| Pdivsd_ff_op
-| Pmuls_ff_op
-| Pmuld_ff_op
-| Psubs_ff_op
-| Psubd_ff_op
-| Pandpd_GvEv_op
-| Padds_ff_op
-| Paddd_ff_op
+| Pxorps_d_GvEv_op
+| Pcomiss_d_ff_op
+| Pdivss_d_ff_op
+| Pmuls_d_ff_op
+| Psubs_d_ff_op
+| Pandps_d_fm_op
+| Padds_d_ff_op
 | Psetcc_op
 | Pcmov_op
 | Ptestl_EvGv_op
@@ -1132,19 +1062,14 @@ Inductive Instruction_op: Type :=
 | Paddl_ri_op
 | Pnegl_op
 | Pleal_op
-| Pcvttss2si_rf_op
-| Pcvtsi2sd_fr_op
-| Pcvtsi2ss_fr_op
-| Pcvttsd2si_rf_op
-| Pcvtss2sd_ff_op
-| Pcvtsd2ss_ff_op
+| Pcvtsi2ss_d_fr_op
+| Pcvttss_d_2si_rf_op
+| Pcvtsd2ss_d_ff_op
 | Pmovsxd_GvEv_op
 | Pmovsw_GvEv_op
 | Pmovzw_GvEv_op
 | Pmovsb_GvEv_op
 | Pmovzb_rm_op
-| Pmovw_rm_op
-| Pmovw_mr_op
 | Pmovb_rm_op
 | Pmovb_mr_op
 | Pxchg_rr_op
@@ -1152,16 +1077,17 @@ Inductive Instruction_op: Type :=
 | Pfstps_m_op
 | Pfstpl_m_op
 | Pfldl_m_op
-| Pmovss_fm_op
-| Pmovss_mf_op
-| Pmovsd_fm_op
-| Pmovsd_mf_op
+| Pmovss_d_fm_op
+| Pmovss_d_mf_op
 | Pmovl_rm_op
 | Pmovl_mr_op
 | Pmovl_ri_op.
 Definition Instruction_to_op element  :=
 	match element with
 | REX_WRXB _ _ _ _ => REX_WRXB_op
+| Override => Override_op
+| REP => REP_op
+| REPNZ => REPNZ_op
 | Psubl_ri _ _ => Psubl_ri_op
 | Pbsqrtsd _ _ => Pbsqrtsd_op
 | Psbbl_rr _ _ => Psbbl_rr_op
@@ -1186,20 +1112,13 @@ Definition Instruction_to_op element  :=
 | Pnop => Pnop_op
 | Pjmp_Ev _ => Pjmp_Ev_op
 | Pjmp_l_rel _ => Pjmp_l_rel_op
-| Pandps_fm _ _ => Pandps_fm_op
-| Pxorps_GvEv _ _ => Pxorps_GvEv_op
-| Pxorpd_GvEv _ _ => Pxorpd_GvEv_op
-| Pcomiss_ff _ _ => Pcomiss_ff_op
-| Pcomisd_ff _ _ => Pcomisd_ff_op
-| Pdivss_ff _ _ => Pdivss_ff_op
-| Pdivsd_ff _ _ => Pdivsd_ff_op
-| Pmuls_ff _ _ => Pmuls_ff_op
-| Pmuld_ff _ _ => Pmuld_ff_op
-| Psubs_ff _ _ => Psubs_ff_op
-| Psubd_ff _ _ => Psubd_ff_op
-| Pandpd_GvEv _ _ => Pandpd_GvEv_op
-| Padds_ff _ _ => Padds_ff_op
-| Paddd_ff _ _ => Paddd_ff_op
+| Pxorps_d_GvEv _ _ => Pxorps_d_GvEv_op
+| Pcomiss_d_ff _ _ => Pcomiss_d_ff_op
+| Pdivss_d_ff _ _ => Pdivss_d_ff_op
+| Pmuls_d_ff _ _ => Pmuls_d_ff_op
+| Psubs_d_ff _ _ => Psubs_d_ff_op
+| Pandps_d_fm _ _ => Pandps_d_fm_op
+| Padds_d_ff _ _ => Padds_d_ff_op
 | Psetcc _ _ => Psetcc_op
 | Pcmov _ _ _ => Pcmov_op
 | Ptestl_EvGv _ _ => Ptestl_EvGv_op
@@ -1238,19 +1157,14 @@ Definition Instruction_to_op element  :=
 | Paddl_ri _ _ => Paddl_ri_op
 | Pnegl _ => Pnegl_op
 | Pleal _ _ => Pleal_op
-| Pcvttss2si_rf _ _ => Pcvttss2si_rf_op
-| Pcvtsi2sd_fr _ _ => Pcvtsi2sd_fr_op
-| Pcvtsi2ss_fr _ _ => Pcvtsi2ss_fr_op
-| Pcvttsd2si_rf _ _ => Pcvttsd2si_rf_op
-| Pcvtss2sd_ff _ _ => Pcvtss2sd_ff_op
-| Pcvtsd2ss_ff _ _ => Pcvtsd2ss_ff_op
+| Pcvtsi2ss_d_fr _ _ => Pcvtsi2ss_d_fr_op
+| Pcvttss_d_2si_rf _ _ => Pcvttss_d_2si_rf_op
+| Pcvtsd2ss_d_ff _ _ => Pcvtsd2ss_d_ff_op
 | Pmovsxd_GvEv _ _ => Pmovsxd_GvEv_op
 | Pmovsw_GvEv _ _ => Pmovsw_GvEv_op
 | Pmovzw_GvEv _ _ => Pmovzw_GvEv_op
 | Pmovsb_GvEv _ _ => Pmovsb_GvEv_op
 | Pmovzb_rm _ _ => Pmovzb_rm_op
-| Pmovw_rm _ _ => Pmovw_rm_op
-| Pmovw_mr _ _ => Pmovw_mr_op
 | Pmovb_rm _ _ => Pmovb_rm_op
 | Pmovb_mr _ _ => Pmovb_mr_op
 | Pxchg_rr _ _ => Pxchg_rr_op
@@ -1258,10 +1172,8 @@ Definition Instruction_to_op element  :=
 | Pfstps_m _ => Pfstps_m_op
 | Pfstpl_m _ => Pfstpl_m_op
 | Pfldl_m _ => Pfldl_m_op
-| Pmovss_fm _ _ => Pmovss_fm_op
-| Pmovss_mf _ _ => Pmovss_mf_op
-| Pmovsd_fm _ _ => Pmovsd_fm_op
-| Pmovsd_mf _ _ => Pmovsd_mf_op
+| Pmovss_d_fm _ _ => Pmovss_d_fm_op
+| Pmovss_d_mf _ _ => Pmovss_d_mf_op
 | Pmovl_rm _ _ => Pmovl_rm_op
 | Pmovl_mr _ _ => Pmovl_mr_op
 | Pmovl_ri _ _ => Pmovl_ri_op
@@ -1269,6 +1181,9 @@ end.
 Definition Instruction_op_to_bp element  :=
 	match element with
 | REX_WRXB_op => REX_WRXB_bp
+| Override_op => Override_bp
+| REP_op => REP_bp
+| REPNZ_op => REPNZ_bp
 | Psubl_ri_op => Psubl_ri_bp
 | Pbsqrtsd_op => Pbsqrtsd_bp
 | Psbbl_rr_op => Psbbl_rr_bp
@@ -1293,20 +1208,13 @@ Definition Instruction_op_to_bp element  :=
 | Pnop_op => Pnop_bp
 | Pjmp_Ev_op => Pjmp_Ev_bp
 | Pjmp_l_rel_op => Pjmp_l_rel_bp
-| Pandps_fm_op => Pandps_fm_bp
-| Pxorps_GvEv_op => Pxorps_GvEv_bp
-| Pxorpd_GvEv_op => Pxorpd_GvEv_bp
-| Pcomiss_ff_op => Pcomiss_ff_bp
-| Pcomisd_ff_op => Pcomisd_ff_bp
-| Pdivss_ff_op => Pdivss_ff_bp
-| Pdivsd_ff_op => Pdivsd_ff_bp
-| Pmuls_ff_op => Pmuls_ff_bp
-| Pmuld_ff_op => Pmuld_ff_bp
-| Psubs_ff_op => Psubs_ff_bp
-| Psubd_ff_op => Psubd_ff_bp
-| Pandpd_GvEv_op => Pandpd_GvEv_bp
-| Padds_ff_op => Padds_ff_bp
-| Paddd_ff_op => Paddd_ff_bp
+| Pxorps_d_GvEv_op => Pxorps_d_GvEv_bp
+| Pcomiss_d_ff_op => Pcomiss_d_ff_bp
+| Pdivss_d_ff_op => Pdivss_d_ff_bp
+| Pmuls_d_ff_op => Pmuls_d_ff_bp
+| Psubs_d_ff_op => Psubs_d_ff_bp
+| Pandps_d_fm_op => Pandps_d_fm_bp
+| Padds_d_ff_op => Padds_d_ff_bp
 | Psetcc_op => Psetcc_bp
 | Pcmov_op => Pcmov_bp
 | Ptestl_EvGv_op => Ptestl_EvGv_bp
@@ -1345,19 +1253,14 @@ Definition Instruction_op_to_bp element  :=
 | Paddl_ri_op => Paddl_ri_bp
 | Pnegl_op => Pnegl_bp
 | Pleal_op => Pleal_bp
-| Pcvttss2si_rf_op => Pcvttss2si_rf_bp
-| Pcvtsi2sd_fr_op => Pcvtsi2sd_fr_bp
-| Pcvtsi2ss_fr_op => Pcvtsi2ss_fr_bp
-| Pcvttsd2si_rf_op => Pcvttsd2si_rf_bp
-| Pcvtss2sd_ff_op => Pcvtss2sd_ff_bp
-| Pcvtsd2ss_ff_op => Pcvtsd2ss_ff_bp
+| Pcvtsi2ss_d_fr_op => Pcvtsi2ss_d_fr_bp
+| Pcvttss_d_2si_rf_op => Pcvttss_d_2si_rf_bp
+| Pcvtsd2ss_d_ff_op => Pcvtsd2ss_d_ff_bp
 | Pmovsxd_GvEv_op => Pmovsxd_GvEv_bp
 | Pmovsw_GvEv_op => Pmovsw_GvEv_bp
 | Pmovzw_GvEv_op => Pmovzw_GvEv_bp
 | Pmovsb_GvEv_op => Pmovsb_GvEv_bp
 | Pmovzb_rm_op => Pmovzb_rm_bp
-| Pmovw_rm_op => Pmovw_rm_bp
-| Pmovw_mr_op => Pmovw_mr_bp
 | Pmovb_rm_op => Pmovb_rm_bp
 | Pmovb_mr_op => Pmovb_mr_bp
 | Pxchg_rr_op => Pxchg_rr_bp
@@ -1365,10 +1268,8 @@ Definition Instruction_op_to_bp element  :=
 | Pfstps_m_op => Pfstps_m_bp
 | Pfstpl_m_op => Pfstpl_m_bp
 | Pfldl_m_op => Pfldl_m_bp
-| Pmovss_fm_op => Pmovss_fm_bp
-| Pmovss_mf_op => Pmovss_mf_bp
-| Pmovsd_fm_op => Pmovsd_fm_bp
-| Pmovsd_mf_op => Pmovsd_mf_bp
+| Pmovss_d_fm_op => Pmovss_d_fm_bp
+| Pmovss_d_mf_op => Pmovss_d_mf_bp
 | Pmovl_rm_op => Pmovl_rm_bp
 | Pmovl_mr_op => Pmovl_mr_bp
 | Pmovl_ri_op => Pmovl_ri_bp
@@ -1383,6 +1284,15 @@ let byte04 := write_X byte03 (proj1_sig uvar1_2) in
 let byte05 := write_B byte04 (proj1_sig uvar1_3) in
 let result0 := [byte05] in
 OK (result0)
+| Override => let byte01 := HB["66"] in
+let result0 := [byte01] in
+OK (result0)
+| REP => let byte01 := HB["F3"] in
+let result0 := [byte01] in
+OK (result0)
+| REPNZ => let byte01 := HB["F2"] in
+let result0 := [byte01] in
+OK (result0)
 | Psubl_ri uvar3_0 uvar32_1 => let byte01 := HB["81"] in
 let result0 := [byte01] in
 let byte10 := HB["00"] in
@@ -1393,18 +1303,16 @@ let result1 := [byte13] in
 do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
 let result2 := byte21 in
 OK (result0 ++ result1 ++ result2)
-| Pbsqrtsd uvar3_0 uvar3_1 => let byte01 := HB["F2"] in
+| Pbsqrtsd uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["51"] in
 let result1 := [byte11] in
-let byte21 := HB["51"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
+let byte20 := HB["00"] in
+let byte21 := write_mod byte20 b["11"] in
+let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
+let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
+let result2 := [byte23] in
+OK (result0 ++ result1 ++ result2)
 | Psbbl_rr uvar3_0 uvar3_1 => let byte01 := HB["19"] in
 let result0 := [byte01] in
 let byte10 := HB["00"] in
@@ -1413,57 +1321,47 @@ let byte12 := write_reg_op byte11 (proj1_sig uvar3_0) in
 let byte13 := write_rm byte12 (proj1_sig uvar3_1) in
 let result1 := [byte13] in
 OK (result0 ++ result1)
-| Prep_movsl => let byte01 := HB["F3"] in
+| Prep_movsl => let byte01 := HB["A5"] in
 let result0 := [byte01] in
-let byte11 := HB["A5"] in
-let result1 := [byte11] in
-OK (result0 ++ result1)
-| Pmovsq_rm AddrE uvar3_0 => let byte01 := HB["F3"] in
+OK (result0)
+| Pmovsq_rm AddrE uvar3_0 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["7E"] in
 let result1 := [byte11] in
-let byte21 := HB["7E"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_reg_op byte30 (proj1_sig uvar3_0) in
-do byte32 <- encode_AddrE AddrE byte31;
-let result3 := byte32 in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pmovsq_mr AddrE uvar3_0 => let byte01 := HB["66"] in
+let byte20 := HB["00"] in
+let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
+do byte22 <- encode_AddrE AddrE byte21;
+let result2 := byte22 in
+OK (result0 ++ result1 ++ result2)
+| Pmovsq_mr AddrE uvar3_0 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["D6"] in
 let result1 := [byte11] in
-let byte21 := HB["D6"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_reg_op byte30 (proj1_sig uvar3_0) in
-do byte32 <- encode_AddrE AddrE byte31;
-let result3 := byte32 in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pminsd uvar3_0 uvar3_1 => let byte01 := HB["F2"] in
+let byte20 := HB["00"] in
+let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
+do byte22 <- encode_AddrE AddrE byte21;
+let result2 := byte22 in
+OK (result0 ++ result1 ++ result2)
+| Pminsd uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["5D"] in
 let result1 := [byte11] in
-let byte21 := HB["5D"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pmaxsd uvar3_0 uvar3_1 => let byte01 := HB["F2"] in
+let byte20 := HB["00"] in
+let byte21 := write_mod byte20 b["11"] in
+let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
+let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
+let result2 := [byte23] in
+OK (result0 ++ result1 ++ result2)
+| Pmaxsd uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["5F"] in
 let result1 := [byte11] in
-let byte21 := HB["5F"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
+let byte20 := HB["00"] in
+let byte21 := write_mod byte20 b["11"] in
+let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
+let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
+let result2 := [byte23] in
+OK (result0 ++ result1 ++ result2)
 | Pbswap32 uvar3_0 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
 let byte10 := HB["00"] in
@@ -1580,16 +1478,7 @@ let result0 := [byte01] in
 do byte11 <- bits_to_bytes (proj1_sig uvar32_0);
 let result1 := byte11 in
 OK (result0 ++ result1)
-| Pandps_fm AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["58"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
-OK (result0 ++ result1 ++ result2)
-| Pxorps_GvEv AddrE uvar3_0 => let byte01 := HB["0F"] in
+| Pxorps_d_GvEv AddrE uvar3_0 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
 let byte11 := HB["57"] in
 let result1 := [byte11] in
@@ -1598,18 +1487,7 @@ let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
 do byte22 <- encode_AddrE AddrE byte21;
 let result2 := byte22 in
 OK (result0 ++ result1 ++ result2)
-| Pxorpd_GvEv AddrE uvar3_0 => let byte01 := HB["66"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["57"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_reg_op byte30 (proj1_sig uvar3_0) in
-do byte32 <- encode_AddrE AddrE byte31;
-let result3 := byte32 in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pcomiss_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
+| Pcomiss_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
 let byte11 := HB["2F"] in
 let result1 := [byte11] in
@@ -1619,125 +1497,55 @@ let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
 let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
 let result2 := [byte23] in
 OK (result0 ++ result1 ++ result2)
-| Pcomisd_ff uvar3_0 uvar3_1 => let byte01 := HB["66"] in
+| Pdivss_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["5E"] in
 let result1 := [byte11] in
-let byte21 := HB["2F"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pdivss_ff uvar3_0 uvar3_1 => let byte01 := HB["F3"] in
+let byte20 := HB["00"] in
+let byte21 := write_mod byte20 b["11"] in
+let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
+let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
+let result2 := [byte23] in
+OK (result0 ++ result1 ++ result2)
+| Pmuls_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["59"] in
 let result1 := [byte11] in
-let byte21 := HB["5E"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pdivsd_ff uvar3_0 uvar3_1 => let byte01 := HB["F2"] in
+let byte20 := HB["00"] in
+let byte21 := write_mod byte20 b["11"] in
+let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
+let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
+let result2 := [byte23] in
+OK (result0 ++ result1 ++ result2)
+| Psubs_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["5C"] in
 let result1 := [byte11] in
-let byte21 := HB["5E"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pmuls_ff uvar3_0 uvar3_1 => let byte01 := HB["F3"] in
+let byte20 := HB["00"] in
+let byte21 := write_mod byte20 b["11"] in
+let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
+let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
+let result2 := [byte23] in
+OK (result0 ++ result1 ++ result2)
+| Pandps_d_fm AddrE uvar3_0 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["54"] in
 let result1 := [byte11] in
-let byte21 := HB["59"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pmuld_ff uvar3_0 uvar3_1 => let byte01 := HB["F2"] in
+let byte20 := HB["00"] in
+let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
+do byte22 <- encode_AddrE AddrE byte21;
+let result2 := byte22 in
+OK (result0 ++ result1 ++ result2)
+| Padds_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["58"] in
 let result1 := [byte11] in
-let byte21 := HB["59"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Psubs_ff uvar3_0 uvar3_1 => let byte01 := HB["F3"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["5C"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Psubd_ff uvar3_0 uvar3_1 => let byte01 := HB["F2"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["5C"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pandpd_GvEv AddrE uvar3_0 => let byte01 := HB["66"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["58"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_reg_op byte30 (proj1_sig uvar3_0) in
-do byte32 <- encode_AddrE AddrE byte31;
-let result3 := byte32 in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Padds_ff uvar3_0 uvar3_1 => let byte01 := HB["F3"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["58"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Paddd_ff uvar3_0 uvar3_1 => let byte01 := HB["F2"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["58"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
+let byte20 := HB["00"] in
+let byte21 := write_mod byte20 b["11"] in
+let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
+let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
+let result2 := [byte23] in
+OK (result0 ++ result1 ++ result2)
 | Psetcc uvar4_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
 let byte10 := HB["00"] in
@@ -1813,18 +1621,16 @@ let result1 := [byte13] in
 do byte21 <- bits_to_bytes (proj1_sig uvar8_1);
 let result2 := byte21 in
 OK (result0 ++ result1 ++ result2)
-| Prolw_ri uvar3_0 uvar8_1 => let byte01 := HB["66"] in
+| Prolw_ri uvar3_0 uvar8_1 => let byte01 := HB["C1"] in
 let result0 := [byte01] in
-let byte11 := HB["C1"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 b["000"] in
-let byte23 := write_rm byte22 (proj1_sig uvar3_0) in
-let result2 := [byte23] in
-do byte31 <- bits_to_bytes (proj1_sig uvar8_1);
-let result3 := byte31 in
-OK (result0 ++ result1 ++ result2 ++ result3)
+let byte10 := HB["00"] in
+let byte11 := write_mod byte10 b["11"] in
+let byte12 := write_reg_op byte11 b["000"] in
+let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
+let result1 := [byte13] in
+do byte21 <- bits_to_bytes (proj1_sig uvar8_1);
+let result2 := byte21 in
+OK (result0 ++ result1 ++ result2)
 | Pshld_ri uvar3_0 uvar3_1 uvar8_2 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
 let byte11 := HB["A4"] in
@@ -2064,78 +1870,36 @@ let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
 do byte12 <- encode_AddrE AddrE byte11;
 let result1 := byte12 in
 OK (result0 ++ result1)
-| Pcvttss2si_rf uvar3_0 uvar3_1 => let byte01 := HB["F3"] in
+| Pcvtsi2ss_d_fr uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["2A"] in
 let result1 := [byte11] in
-let byte21 := HB["2C"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pcvtsi2sd_fr uvar3_0 uvar3_1 => let byte01 := HB["F2"] in
+let byte20 := HB["00"] in
+let byte21 := write_mod byte20 b["11"] in
+let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
+let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
+let result2 := [byte23] in
+OK (result0 ++ result1 ++ result2)
+| Pcvttss_d_2si_rf uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["2C"] in
 let result1 := [byte11] in
-let byte21 := HB["2A"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pcvtsi2ss_fr uvar3_0 uvar3_1 => let byte01 := HB["F3"] in
+let byte20 := HB["00"] in
+let byte21 := write_mod byte20 b["11"] in
+let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
+let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
+let result2 := [byte23] in
+OK (result0 ++ result1 ++ result2)
+| Pcvtsd2ss_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["5A"] in
 let result1 := [byte11] in
-let byte21 := HB["2A"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pcvttsd2si_rf uvar3_0 uvar3_1 => let byte01 := HB["F2"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["2C"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pcvtss2sd_ff uvar3_0 uvar3_1 => let byte01 := HB["F3"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["5A"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pcvtsd2ss_ff uvar3_0 uvar3_1 => let byte01 := HB["F2"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["5A"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_mod byte30 b["11"] in
-let byte32 := write_reg_op byte31 (proj1_sig uvar3_0) in
-let byte33 := write_rm byte32 (proj1_sig uvar3_1) in
-let result3 := [byte33] in
-OK (result0 ++ result1 ++ result2 ++ result3)
+let byte20 := HB["00"] in
+let byte21 := write_mod byte20 b["11"] in
+let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
+let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
+let result2 := [byte23] in
+OK (result0 ++ result1 ++ result2)
 | Pmovsxd_GvEv AddrE uvar3_0 => let byte01 := HB["63"] in
 let result0 := [byte01] in
 let byte10 := HB["00"] in
@@ -2173,24 +1937,6 @@ OK (result0 ++ result1 ++ result2)
 | Pmovzb_rm AddrE uvar3_0 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
 let byte11 := HB["B6"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
-OK (result0 ++ result1 ++ result2)
-| Pmovw_rm AddrE uvar3_0 => let byte01 := HB["66"] in
-let result0 := [byte01] in
-let byte11 := HB["8B"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
-OK (result0 ++ result1 ++ result2)
-| Pmovw_mr AddrE uvar3_0 => let byte01 := HB["66"] in
-let result0 := [byte01] in
-let byte11 := HB["89"] in
 let result1 := [byte11] in
 let byte20 := HB["00"] in
 let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
@@ -2247,50 +1993,24 @@ let byte11 := write_reg_op byte10 b["000"] in
 do byte12 <- encode_AddrE AddrE byte11;
 let result1 := byte12 in
 OK (result0 ++ result1)
-| Pmovss_fm AddrE uvar3_0 => let byte01 := HB["F3"] in
+| Pmovss_d_fm AddrE uvar3_0 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["10"] in
 let result1 := [byte11] in
-let byte21 := HB["10"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_reg_op byte30 (proj1_sig uvar3_0) in
-do byte32 <- encode_AddrE AddrE byte31;
-let result3 := byte32 in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pmovss_mf AddrE uvar3_0 => let byte01 := HB["F3"] in
+let byte20 := HB["00"] in
+let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
+do byte22 <- encode_AddrE AddrE byte21;
+let result2 := byte22 in
+OK (result0 ++ result1 ++ result2)
+| Pmovss_d_mf AddrE uvar3_0 => let byte01 := HB["0F"] in
 let result0 := [byte01] in
-let byte11 := HB["0F"] in
+let byte11 := HB["11"] in
 let result1 := [byte11] in
-let byte21 := HB["11"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_reg_op byte30 (proj1_sig uvar3_0) in
-do byte32 <- encode_AddrE AddrE byte31;
-let result3 := byte32 in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pmovsd_fm AddrE uvar3_0 => let byte01 := HB["F2"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["10"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_reg_op byte30 (proj1_sig uvar3_0) in
-do byte32 <- encode_AddrE AddrE byte31;
-let result3 := byte32 in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Pmovsd_mf AddrE uvar3_0 => let byte01 := HB["F2"] in
-let result0 := [byte01] in
-let byte11 := HB["0F"] in
-let result1 := [byte11] in
-let byte21 := HB["11"] in
-let result2 := [byte21] in
-let byte30 := HB["00"] in
-let byte31 := write_reg_op byte30 (proj1_sig uvar3_0) in
-do byte32 <- encode_AddrE AddrE byte31;
-let result3 := byte32 in
-OK (result0 ++ result1 ++ result2 ++ result3)
+let byte20 := HB["00"] in
+let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
+do byte22 <- encode_AddrE AddrE byte21;
+let result2 := byte22 in
+OK (result0 ++ result1 ++ result2)
 | Pmovl_rm AddrE uvar3_0 => let byte01 := HB["8B"] in
 let result0 := [byte01] in
 let byte10 := HB["00"] in
@@ -2336,6 +2056,24 @@ else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
+	if Override_bp bin then
+let bytes0 := code in
+do bytes1 <- try_skip_n bytes0 1;
+OK ((Override), 1)
+else
+
+	if REP_bp bin then
+let bytes0 := code in
+do bytes1 <- try_skip_n bytes0 1;
+OK ((REP), 1)
+else
+
+	if REPNZ_bp bin then
+let bytes0 := code in
+do bytes1 <- try_skip_n bytes0 1;
+OK ((REPNZ), 1)
+else
+
 	if Psubl_ri_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
@@ -2356,14 +2094,13 @@ else
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
+do byte0 <- try_get_n bytes2 0;
 let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
 let uvar3_1 := read_rm byte0 in
 if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pbsqrtsd (uvar3_0) (uvar3_1)), 4)
+do bytes3 <- try_skip_n bytes2 1;
+OK ((Pbsqrtsd (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2385,21 +2122,19 @@ else
 	if Prep_movsl_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-OK ((Prep_movsl), 2)
+OK ((Prep_movsl), 1)
 else
 
 	if Pmovsq_rm_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
+do byte0 <- try_get_n bytes2 0;
 let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes3;
-do bytes4 <- try_skip_n bytes3 localLength0;
-OK ((Pmovsq_rm AddrE (uvar3_0)), 3 + localLength0)
+do (AddrE, localLength0) <- decode_AddrE bytes2;
+do bytes3 <- try_skip_n bytes2 localLength0;
+OK ((Pmovsq_rm AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
@@ -2407,13 +2142,12 @@ else
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
+do byte0 <- try_get_n bytes2 0;
 let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes3;
-do bytes4 <- try_skip_n bytes3 localLength0;
-OK ((Pmovsq_mr AddrE (uvar3_0)), 3 + localLength0)
+do (AddrE, localLength0) <- decode_AddrE bytes2;
+do bytes3 <- try_skip_n bytes2 localLength0;
+OK ((Pmovsq_mr AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
@@ -2421,14 +2155,13 @@ else
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
+do byte0 <- try_get_n bytes2 0;
 let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
 let uvar3_1 := read_rm byte0 in
 if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pminsd (uvar3_0) (uvar3_1)), 4)
+do bytes3 <- try_skip_n bytes2 1;
+OK ((Pminsd (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2437,14 +2170,13 @@ else
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
+do byte0 <- try_get_n bytes2 0;
 let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
 let uvar3_1 := read_rm byte0 in
 if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pmaxsd (uvar3_0) (uvar3_1)), 4)
+do bytes3 <- try_skip_n bytes2 1;
+OK ((Pmaxsd (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2637,7 +2369,7 @@ OK ((Pjmp_l_rel (uvar32_0)), 5)
 else Error(msg"impossible")
 else
 
-	if Pandps_fm_bp bin then
+	if Pxorps_d_GvEv_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
@@ -2646,11 +2378,71 @@ let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
 do (AddrE, localLength0) <- decode_AddrE bytes2;
 do bytes3 <- try_skip_n bytes2 localLength0;
-OK ((Pandps_fm AddrE (uvar3_0)), 2 + localLength0)
+OK ((Pxorps_d_GvEv AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pxorps_GvEv_bp bin then
+	if Pcomiss_d_ff_bp bin then
+let bytes0 := code in
+do bytes1 <- try_skip_n bytes0 1;
+do bytes2 <- try_skip_n bytes1 1;
+do byte0 <- try_get_n bytes2 0;
+let uvar3_0 := read_reg_op byte0 in
+if assertLength uvar3_0 3 then
+let uvar3_1 := read_rm byte0 in
+if assertLength uvar3_1 3 then
+do bytes3 <- try_skip_n bytes2 1;
+OK ((Pcomiss_d_ff (uvar3_0) (uvar3_1)), 3)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if Pdivss_d_ff_bp bin then
+let bytes0 := code in
+do bytes1 <- try_skip_n bytes0 1;
+do bytes2 <- try_skip_n bytes1 1;
+do byte0 <- try_get_n bytes2 0;
+let uvar3_0 := read_reg_op byte0 in
+if assertLength uvar3_0 3 then
+let uvar3_1 := read_rm byte0 in
+if assertLength uvar3_1 3 then
+do bytes3 <- try_skip_n bytes2 1;
+OK ((Pdivss_d_ff (uvar3_0) (uvar3_1)), 3)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if Pmuls_d_ff_bp bin then
+let bytes0 := code in
+do bytes1 <- try_skip_n bytes0 1;
+do bytes2 <- try_skip_n bytes1 1;
+do byte0 <- try_get_n bytes2 0;
+let uvar3_0 := read_reg_op byte0 in
+if assertLength uvar3_0 3 then
+let uvar3_1 := read_rm byte0 in
+if assertLength uvar3_1 3 then
+do bytes3 <- try_skip_n bytes2 1;
+OK ((Pmuls_d_ff (uvar3_0) (uvar3_1)), 3)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if Psubs_d_ff_bp bin then
+let bytes0 := code in
+do bytes1 <- try_skip_n bytes0 1;
+do bytes2 <- try_skip_n bytes1 1;
+do byte0 <- try_get_n bytes2 0;
+let uvar3_0 := read_reg_op byte0 in
+if assertLength uvar3_0 3 then
+let uvar3_1 := read_rm byte0 in
+if assertLength uvar3_1 3 then
+do bytes3 <- try_skip_n bytes2 1;
+OK ((Psubs_d_ff (uvar3_0) (uvar3_1)), 3)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if Pandps_d_fm_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
@@ -2659,25 +2451,11 @@ let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
 do (AddrE, localLength0) <- decode_AddrE bytes2;
 do bytes3 <- try_skip_n bytes2 localLength0;
-OK ((Pxorps_GvEv AddrE (uvar3_0)), 2 + localLength0)
+OK ((Pandps_d_fm AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pxorpd_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes3;
-do bytes4 <- try_skip_n bytes3 localLength0;
-OK ((Pxorpd_GvEv AddrE (uvar3_0)), 3 + localLength0)
-else Error(msg"impossible")
-else
-
-	if Pcomiss_ff_bp bin then
+	if Padds_d_ff_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
@@ -2687,165 +2465,7 @@ if assertLength uvar3_0 3 then
 let uvar3_1 := read_rm byte0 in
 if assertLength uvar3_1 3 then
 do bytes3 <- try_skip_n bytes2 1;
-OK ((Pcomiss_ff (uvar3_0) (uvar3_1)), 3)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Pcomisd_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pcomisd_ff (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Pdivss_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pdivss_ff (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Pdivsd_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pdivsd_ff (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Pmuls_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pmuls_ff (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Pmuld_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pmuld_ff (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Psubs_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Psubs_ff (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Psubd_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Psubd_ff (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Pandpd_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes3;
-do bytes4 <- try_skip_n bytes3 localLength0;
-OK ((Pandpd_GvEv AddrE (uvar3_0)), 3 + localLength0)
-else Error(msg"impossible")
-else
-
-	if Padds_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Padds_ff (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Paddd_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Paddd_ff (uvar3_0) (uvar3_1)), 4)
+OK ((Padds_d_ff (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2972,16 +2592,15 @@ else
 	if Prolw_ri_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
+do byte0 <- try_get_n bytes1 0;
 let uvar3_0 := read_rm byte0 in
 if assertLength uvar3_0 3 then
-do bytes3 <- try_skip_n bytes2 1;
-do byte_seq1 <- try_first_n bytes3 1;
+do bytes2 <- try_skip_n bytes1 1;
+do byte_seq1 <- try_first_n bytes2 1;
 let uvar8_1 := bytes_to_bits_opt byte_seq1 in
 if assertLength uvar8_1 8 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Prolw_ri (uvar3_0) (uvar8_1)), 4)
+do bytes3 <- try_skip_n bytes2 1;
+OK ((Prolw_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -3363,98 +2982,47 @@ OK ((Pleal AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pcvttss2si_rf_bp bin then
+	if Pcvtsi2ss_d_fr_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
+do byte0 <- try_get_n bytes2 0;
 let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
 let uvar3_1 := read_rm byte0 in
 if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pcvttss2si_rf (uvar3_0) (uvar3_1)), 4)
+do bytes3 <- try_skip_n bytes2 1;
+OK ((Pcvtsi2ss_d_fr (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pcvtsi2sd_fr_bp bin then
+	if Pcvttss_d_2si_rf_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
+do byte0 <- try_get_n bytes2 0;
 let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
 let uvar3_1 := read_rm byte0 in
 if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pcvtsi2sd_fr (uvar3_0) (uvar3_1)), 4)
+do bytes3 <- try_skip_n bytes2 1;
+OK ((Pcvttss_d_2si_rf (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pcvtsi2ss_fr_bp bin then
+	if Pcvtsd2ss_d_ff_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
+do byte0 <- try_get_n bytes2 0;
 let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
 let uvar3_1 := read_rm byte0 in
 if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pcvtsi2ss_fr (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Pcvttsd2si_rf_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
 do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pcvttsd2si_rf (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Pcvtss2sd_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pcvtss2sd_ff (uvar3_0) (uvar3_1)), 4)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Pcvtsd2ss_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
-if assertLength uvar3_1 3 then
-do bytes4 <- try_skip_n bytes3 1;
-OK ((Pcvtsd2ss_ff (uvar3_0) (uvar3_1)), 4)
+OK ((Pcvtsd2ss_d_ff (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -3520,32 +3088,6 @@ if assertLength uvar3_0 3 then
 do (AddrE, localLength0) <- decode_AddrE bytes2;
 do bytes3 <- try_skip_n bytes2 localLength0;
 OK ((Pmovzb_rm AddrE (uvar3_0)), 2 + localLength0)
-else Error(msg"impossible")
-else
-
-	if Pmovw_rm_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
-OK ((Pmovw_rm AddrE (uvar3_0)), 2 + localLength0)
-else Error(msg"impossible")
-else
-
-	if Pmovw_mr_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
-OK ((Pmovw_mr AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
@@ -3619,59 +3161,29 @@ do bytes2 <- try_skip_n bytes1 localLength0;
 OK ((Pfldl_m AddrE), 1 + localLength0)
 else
 
-	if Pmovss_fm_bp bin then
+	if Pmovss_d_fm_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
+do byte0 <- try_get_n bytes2 0;
 let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes3;
-do bytes4 <- try_skip_n bytes3 localLength0;
-OK ((Pmovss_fm AddrE (uvar3_0)), 3 + localLength0)
+do (AddrE, localLength0) <- decode_AddrE bytes2;
+do bytes3 <- try_skip_n bytes2 localLength0;
+OK ((Pmovss_d_fm AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pmovss_mf_bp bin then
+	if Pmovss_d_mf_bp bin then
 let bytes0 := code in
 do bytes1 <- try_skip_n bytes0 1;
 do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
+do byte0 <- try_get_n bytes2 0;
 let uvar3_0 := read_reg_op byte0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes3;
-do bytes4 <- try_skip_n bytes3 localLength0;
-OK ((Pmovss_mf AddrE (uvar3_0)), 3 + localLength0)
-else Error(msg"impossible")
-else
-
-	if Pmovsd_fm_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes3;
-do bytes4 <- try_skip_n bytes3 localLength0;
-OK ((Pmovsd_fm AddrE (uvar3_0)), 3 + localLength0)
-else Error(msg"impossible")
-else
-
-	if Pmovsd_mf_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do bytes3 <- try_skip_n bytes2 1;
-do byte0 <- try_get_n bytes3 0;
-let uvar3_0 := read_reg_op byte0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes3;
-do bytes4 <- try_skip_n bytes3 localLength0;
-OK ((Pmovsd_mf AddrE (uvar3_0)), 3 + localLength0)
+do (AddrE, localLength0) <- decode_AddrE bytes2;
+do bytes3 <- try_skip_n bytes2 localLength0;
+OK ((Pmovss_d_mf AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
