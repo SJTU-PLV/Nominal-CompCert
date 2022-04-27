@@ -1212,7 +1212,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     do rex_rr <- encode_rex_prefix_ff rd r1;
     let (oREX_rdbits, r1bits) := rex_rr in
     let (orex, rdbits) := oREX_rdbits in
-    OK ([REPNZ] ++ orex ++ [Pcomiss_d_ff rdbits r1bits])
+    OK ([Override] ++ orex ++ [Pcomiss_d_ff rdbits r1bits])
   | Asm.Pcomiss_ff rd rs =>
     do rex_rr <- encode_rex_prefix_ff rd rs;
     let (oREX_rdbits, r1bits) := rex_rr in

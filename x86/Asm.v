@@ -1924,7 +1924,8 @@ Let instr_size' (i: instruction) : Z :=
   | Pxorq_rm  _ a => 2 + addrmode_size a
   | Pcmpq_rm  _ a => 2 + addrmode_size a
   | Ptestq_rm _ a => 2 + addrmode_size a
-  | Pmovq_ri _ _ => 10
+  (* not support, convert to movq_rm *)
+  | Pmovq_ri _ _ => 3
   | Pmovq_rm _ a => 2 + addrmode_size a
   | Pmovq_mr a _ => 2 + addrmode_size a
   | Pleaq _ a => 2 + addrmode_size a
