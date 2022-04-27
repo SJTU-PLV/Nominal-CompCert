@@ -128,8 +128,7 @@ BACKEND=\
   SymbtableEncode.v RelocElfgen.v ReloctablesEncode.v\
   TranslateInstr1.v\
   RemoveAddend.v\
-  AsmLongInt.v\
-  InstrSize.v\
+  AsmLongInt.v
 
 # Encoding of data into bytes
 

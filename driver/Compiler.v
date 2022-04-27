@@ -93,7 +93,6 @@ Require Reloctablesgen.
 Require RelocBingen.
 Require RemoveAddend.
 Require AsmLongInt.
-Require InstrSize.
 (* ELF generation *)
 Require RelocElfgen.
 Require EncodeRelocElf.
@@ -143,8 +142,8 @@ Definition partial_if {A: Type}
   pretty-printing and assembling. *)
 
 
-Definition instr_size := InstrSize.instr_size_real.
-Definition instr_size_bound := InstrSize.instr_size_bound_real.
+Definition instr_size := Asm.instr_size_real.
+Definition instr_size_bound := Asm.instr_size_bound_real.
 
 Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
    OK f
@@ -214,7 +213,7 @@ Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
   @@ time "Generation of the jump table" Jumptablegen.transf_program instr_size
   @@@ time "Generation of symbol table" Symbtablegen.transf_program instr_size
   @@@ time "Generation of relocation table" Reloctablesgen.transf_program instr_size
-  @@@ time "Encoding of instructions and data" RelocBingen.transf_program
+  @@@ time "Encoding of instructions and data" RelocBingen.transf_program instr_size
   @@ time "Removing addendums" RemoveAddend.transf_program
   @@@ time "Generation of the reloctable Elf" RelocElfgen.gen_reloc_elf instr_size
   @@@ time "Encoding of the reloctable Elf" EncodeRelocElf.encode_elf_file.
