@@ -1274,7 +1274,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     do orex_a <- encode_rex_prefix_addr addr;
     let (orex, a) := orex_a in
     OK (orex ++ [Pjmp_Ev a])
-  | Asm.Pnop | Asm.Plabel _ =>
+  | Asm.Pnop | Asm.Plabel _ | Asm.Pmovls_rr _ =>
      OK [Pnop]
   | Asm.Pcall_r r sg =>
     do rex_r <- encode_rex_prefix_r r;
@@ -1585,6 +1585,24 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     do Brbits <- encode_ireg_u4 r;
     let (B, rbits) := Brbits in
     OK ([REX_WRXB one1 zero1 zero1 B; Psall_rcl rbits])
+  | Asm.Psarq_ri r imm =>
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Psarl_ri rbits imm8])
+  | Asm.Psarq_rcl r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Psarl_rcl rbits])
+  | Asm.Pshrq_ri r imm =>
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pshrl_ri rbits imm8])
+  | Asm.Pshrq_rcl r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pshrl_rcl rbits])
   | Asm.Prorq_ri r imm =>
     do imm8 <- encode_ofs_u8 (Int.intval imm);
     do Brbits <- encode_ireg_u4 r;
