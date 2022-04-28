@@ -780,20 +780,29 @@ Definition concat_byte (acc: res (list byte)) i :=
   do code <- acc;
   do c <- EncDecRet.encode_Instruction i;
   OK (code ++ c).
-  
+
+Definition encode_instruction (ofs: Z) (i: instruction) :res (list byte) :=
+  do c1 <- translate_instr rtbl_ofs_map ofs i;
+  do c <- fold_left concat_byte c1 (OK []);
+  OK c.
+
 (* use generated encoder*)
 Definition acc_instrs r i := 
   do r' <- r;
   let '(ofs, code) := r' in
-  do c1 <- translate_instr rtbl_ofs_map ofs i;
-  do c <- fold_left concat_byte c1 (OK []);
-  OK (ofs + instr_size i, code ++ c).
+  do c <- encode_instruction ofs i;
+  (** check instr_size eqaul to encoded instuction size *)
+  if Z.eqb (Z.of_nat (length c)) (instr_size i) then
+    OK (ofs + instr_size i, code ++ c)
+  else
+    Error [MSG "Inconsistent instruction size for: ";
+          MSG (instr_to_string i)].
 
 (** Translation of a sequence of instructions in a function *)
 Definition transl_code (c:code) : res (list byte) :=
   do r <- fold_left acc_instrs c (OK (0, []));
   let '(_, c') := r in
-  OK c'.
+  OK c'.                                                           
 
 End INSTR_SIZE.
 
