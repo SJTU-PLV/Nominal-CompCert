@@ -30,6 +30,7 @@ Require Import Integers.
 Require Import Floats.
 Require Import Values.
 Require Import Memory.
+Require Import Memstructure.
 Require Import Globalenvs.
 Require Import Events.
 
@@ -243,7 +244,7 @@ Definition addressing_valid (a: addressing) : bool :=
   to lists of values.  Return [None] when the computation can trigger an
   error, e.g. integer division by zero.  [eval_condition] returns a boolean,
   [eval_operation] and [eval_addressing] return a value. *)
-
+Import Mem.
 Definition eval_condition (cond: condition) (vl: list val) (m: mem): option bool :=
   match cond, vl with
   | Ccomp c, v1 :: v2 :: nil => Val.cmp_bool c v1 v2
@@ -1519,4 +1520,4 @@ Definition builtin_arg_ok
   match ba with
   | (BA _ | BA_splitlong (BA _) (BA _)) => true
   | _ => builtin_arg_ok_1 ba c
-  end.  
+  end.

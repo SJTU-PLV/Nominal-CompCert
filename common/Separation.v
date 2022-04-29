@@ -32,8 +32,8 @@
 
 Require Import Setoid Program.Basics.
 Require Import Coqlib Decidableplus.
-Require Import AST Integers Values Memory Events Globalenvs.
-
+Require Import AST Integers Values Memory Memstructure Events Globalenvs.
+Import Struc_Mem.
 (** * Assertions about memory *)
 
 (** An assertion is composed of:
@@ -620,7 +620,7 @@ Next Obligation.
     replace (ofs + delta - delta) with ofs by lia.
     eauto with mem. }
   destruct H. constructor.
-- destruct mi_inj. constructor; intros.
+- destruct mi_inj0. constructor; intros.
 + eapply Mem.perm_unchanged_on; eauto.
 + eauto.
 + rewrite (Mem.unchanged_on_contents _ _ _ H0); eauto.
@@ -629,7 +629,7 @@ Next Obligation.
 - assumption.
 - assumption.
 - intros. destruct (Mem.perm_dec m0 b1 ofs Max Nonempty); auto.
-  eapply mi_perm_inv; eauto.
+  eapply mi_perm_inv0; eauto.
   eapply Mem.perm_unchanged_on_2; eauto.
 Qed.
 Next Obligation.

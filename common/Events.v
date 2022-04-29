@@ -27,7 +27,7 @@ Require Import Memory.
 Require Import Memstructure.
 Require Import Globalenvs.
 Require Import Builtins.
-
+Import Mem.
 (** * Events and traces *)
 
 (** The observable behaviour of programs is stated in terms of
@@ -260,7 +260,6 @@ Proof.
 Qed.
 
 (** * Relating values and event values *)
-Include StrucMem.
 Set Implicit Arguments.
 
 Section EVENTVAL.

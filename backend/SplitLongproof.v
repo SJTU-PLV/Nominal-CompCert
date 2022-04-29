@@ -15,7 +15,8 @@
 Require Import String.
 Require Import Coqlib Maps.
 Require Import AST Errors Integers Floats.
-Require Import Values Memory Globalenvs Builtins Events Cminor Op CminorSel.
+Require Import Values Memory Memstructure Globalenvs Builtins Events.
+Require Import Cminor Op CminorSel.
 Require Import SelectOp SelectOpproof SplitLong.
 
 Local Open Scope cminorsel_scope.

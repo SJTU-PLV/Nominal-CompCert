@@ -13,7 +13,7 @@
 (** Correctness of instruction selection for integer division *)
 
 Require Import Zquot Coqlib Zbits.
-Require Import AST Integers Floats Values Memory Globalenvs Events.
+Require Import AST Integers Floats Values Memory Memstructure Globalenvs Events.
 Require Import Cminor Op CminorSel.
 Require Import SelectOp SelectOpproof SplitLong SplitLongproof SelectLong SelectLongproof SelectDiv.
 

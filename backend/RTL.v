@@ -19,7 +19,7 @@
 Require Import Coqlib Maps.
 Require Import AST Integers Values Events Memory Memstructure Globalenvs Smallstep.
 Require Import Op Registers.
-
+Import Mem.
 (** * Abstract syntax *)
 
 (** RTL is organized as instructions, functions and programs.
@@ -166,21 +166,21 @@ Inductive state : Type :=
              (pc: node)               (**r current program point in [c] *)
              (rs: regset)             (**r register state *)
              (m: mem)                 (**r memory state *)
-             (st: stree),
+             (st: struc),
       state
   | Callstate:
       forall (stack: list stackframe) (**r call stack *)
              (f: fundef)              (**r function to call *)
              (args: list val)         (**r arguments to the call *)
              (m: mem)                 (**r memory state *)
-             (st: stree)
+             (st: struc)
              (id: ident),
       state
   | Returnstate:
       forall (stack: list stackframe) (**r call stack *)
              (v: val)                 (**r return value for the call *)
              (m: mem)                 (**r memory state *)
-             (st: stree),
+             (st: struc),
       state.
 
 Section RELSEM.
@@ -244,13 +244,13 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s f sp pc rs m st)
         E0 (Callstate (Stackframe res f sp pc' rs :: s) fd rs##args m st id)
   | exec_Itailcall:
-      forall s f stk pc rs m sig ros args fd m' st st' id p,
+      forall s f stk pc rs m sig ros args fd m' st st' id,
       (fn_code f)!pc = Some(Itailcall sig ros args) ->
       ros_is_ident ros rs id ->
       find_function ros rs = Some fd ->
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      return_stree st = Some (st',p) ->
+      struc_return_frame st = Some st' ->
       step (State s f (Vptr stk Ptrofs.zero) pc rs m st)
         E0 (Callstate s fd rs##args m' st' id)
   | exec_Ibuiltin:
@@ -275,16 +275,16 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s f sp pc rs m st)
         E0 (State s f sp pc' rs m st)
   | exec_Ireturn:
-      forall s f stk pc rs m or m' st st' p,
+      forall s f stk pc rs m or m' st st',
       (fn_code f)!pc = Some(Ireturn or) ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      return_stree st = Some (st', p) ->
+      struc_return_frame st = Some st' ->
       step (State s f (Vptr stk Ptrofs.zero) pc rs m st)
         E0 (Returnstate s (regmap_optget or Vundef rs) m' st')
   | exec_function_internal:
-      forall s f args m m' st st' st'' stk id path sp,
-      next_stree st id = (st',path) ->
-      next_block_stree' st' = (sp,st'') ->
+      forall s f args m m' st st' st'' stk id sp,
+      struc_incr_frame st id = st' ->
+      struc_alloc_stack st' = (st'',sp) ->
       Mem.alloc m 0 f.(fn_stacksize) sp = Some m' ->
       step (Callstate s (Internal f) args m st id)
         E0 (State s
@@ -336,11 +336,12 @@ End RELSEM.
 Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall b f m0,
       let ge := Genv.globalenv p in
+      let st := Genv.init_struc p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       funsig f = signature_main ->
-      initial_state p (Callstate nil f nil m0 empty_stree p.(prog_main)).
+      initial_state p (Callstate nil f nil m0 st p.(prog_main)).
 
 (** A final state is a [Returnstate] with an empty call stack. *)
 

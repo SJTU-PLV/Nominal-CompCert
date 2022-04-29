@@ -15,7 +15,7 @@
 Require Import FunInd.
 Require Import Coqlib Maps.
 Require Import AST Linking Errors Integers.
-Require Import Values Memory Builtins Events Globalenvs Smallstep.
+Require Import Values Memory Memstructure Builtins Events Globalenvs Smallstep.
 Require Import Switch Cminor Op CminorSel Cminortyping.
 Require Import SelectOp SelectDiv SplitLong SelectLong Selection.
 Require Import SelectOpproof SelectDivproof SplitLongproof SelectLongproof.
@@ -1430,6 +1430,8 @@ Proof.
   eexact A.
   rewrite <- H2. eapply sig_function_translated; eauto.
   rewrite (match_program_main TRANSF).
+  apply Genv.init_struc_match in TRANSF as ST.
+  rewrite <- ST. unfold st.
   econstructor; eauto. constructor. apply Mem.extends_refl.
 Qed.
 
@@ -1447,8 +1449,8 @@ Proof.
   apply forward_simulation_determ_star with (match_states := MS) (measure := measure).
 - apply Cminor.semantics_determinate.
 - apply senv_preserved.
-- intros. exploit sel_initial_states; eauto. intros (T & P & Q). 
-  exists T; split; auto; split; auto. eapply wt_initial_state. eexact wt_prog. auto. 
+- intros. exploit sel_initial_states; eauto. intros (T & P & Q).
+  exists T; split; auto; split; auto. eapply wt_initial_state. eexact wt_prog. auto.
 - intros. destruct H. eapply sel_final_states; eauto.
 - intros S1 t S2 A T1 [B C].
   assert (wt_state S2) by (eapply subject_reduction; eauto using wt_prog).

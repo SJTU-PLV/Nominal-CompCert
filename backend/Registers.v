@@ -23,9 +23,8 @@ Require Import Maps.
 Require Import Ordered.
 Require FSetAVL.
 Require Import Values.
-
 Require Import Memstructure.
-Import StrucMem.
+Import Mem.
 
 Definition reg: Type := positive.
 

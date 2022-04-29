@@ -28,7 +28,7 @@ Require Import Memstructure.
 Require Import Globalenvs.
 Require Import Smallstep.
 Require Import Switch.
-
+Export Mem.
 (** * Abstract syntax *)
 
 (** Cminor is a low-level imperative language structured in expressions,
@@ -231,21 +231,21 @@ Inductive state: Type :=
              (sp: val)                  (**r current stack pointer *)
              (e: env)                   (**r current local environment *)
              (m: mem)                   (**r current memory state *)
-             (s: stree),                 (**r current memory structure *)
+             (s: struc),                 (**r current memory structure *)
       state
   | Callstate:                  (**r Invocation of a function *)
       forall (f: fundef)                (**r function to invoke *)
              (args: list val)           (**r arguments provided by caller *)
              (k: cont)                  (**r what to do next  *)
              (m: mem)                   (**r memory state *)
-             (s: stree)                 (**r current memory structure *)
+             (s: struc)                 (**r current memory structure *)
              (id: ident),
       state
   | Returnstate:                (**r Return from a function *)
       forall (v: val)                   (**r Return value *)
              (k: cont)                  (**r what to do next *)
              (m: mem)                   (**r memory state *)
-             (s: stree),                 (**r current memory structure *)
+             (s: struc),                 (**r current memory structure *)
       state.
 
 Section RELSEM.
@@ -444,10 +444,10 @@ Inductive step: state -> trace -> state -> Prop :=
   | step_skip_block: forall f k sp e m st,
       step (State f Sskip (Kblock k) sp e m st)
         E0 (State f Sskip k sp e m st)
-  | step_skip_call: forall f k sp e m p st st' m',
+  | step_skip_call: forall f k sp e m st st' m',
       is_call_cont k ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-      return_stree st  = Some (st',p) ->
+      struc_return_frame st  = Some st' ->
       step (State f Sskip k (Vptr sp Ptrofs.zero) e m st)
         E0 (Returnstate Vundef k m' st')
   | step_assign: forall f id a k sp e m st v,
@@ -471,14 +471,14 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Scall optid sig a bl) k sp e m st)
         E0 (Callstate fd vargs (Kcall optid f sp e k) m st id)
 
-  | step_tailcall: forall f sig a bl k sp e m st vf vargs fd m' st' p id,
+  | step_tailcall: forall f sig a bl k sp e m st vf vargs fd m' st' id,
       vf = Vptr (Global id) Ptrofs.zero ->
       eval_expr (Vptr sp Ptrofs.zero) e m a vf ->
       eval_exprlist (Vptr sp Ptrofs.zero) e m bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-      return_stree st = Some (st',p) ->
+      struc_return_frame st = Some st' ->
       step (State f (Stailcall sig a bl) k (Vptr sp Ptrofs.zero) e m st)
         E0 (Callstate fd vargs (call_cont k) m' st' id)
 
@@ -522,15 +522,15 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sswitch islong a cases default) k sp e m st)
         E0 (State f (Sexit (switch_target n default cases)) k sp e m st)
 
-  | step_return_0: forall f k sp e m m' st st' p,
+  | step_return_0: forall f k sp e m m' st st',
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-      return_stree st = Some (st',p) ->
+      struc_return_frame st = Some st' ->
       step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m st)
         E0 (Returnstate Vundef (call_cont k) m' st')
-  | step_return_1: forall f a k sp e m v m' st st' p,
+  | step_return_1: forall f a k sp e m v m' st st',
       eval_expr (Vptr sp Ptrofs.zero) e m a v ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-      return_stree st = Some (st',p) ->
+      struc_return_frame st = Some st' ->
       step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m st)
         E0 (Returnstate v (call_cont k) m' st')
 
@@ -542,9 +542,9 @@ Inductive step: state -> trace -> state -> Prop :=
       find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
       step (State f (Sgoto lbl) k sp e m st)
         E0 (State f s' k' sp e m st)
-  | step_internal_function: forall f vargs k m m' sp e path id st st' st'',
-      next_stree st id = (st',path) ->
-      next_block_stree' st' = (sp,st'') ->
+  | step_internal_function: forall f vargs k m m' sp e id st st' st'',
+      struc_incr_frame st id = st' ->
+      struc_alloc_stack st' = (st'',sp) ->
       Mem.alloc m 0 f.(fn_stackspace) sp = Some m' ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
       step (Callstate (Internal f) vargs k m st id)
@@ -568,11 +568,12 @@ End RELSEM.
 Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall b f m0,
       let ge := Genv.globalenv p in
+      let st := Genv.init_struc p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
       funsig f = signature_main ->
-      initial_state p (Callstate f nil Kstop m0 empty_stree p.(prog_main)).
+      initial_state p (Callstate f nil Kstop m0 st p.(prog_main)).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 
@@ -660,7 +661,7 @@ Proof.
   red; simpl. destruct 1; simpl; try lia;
   eapply external_call_trace_length; eauto.
 - (* initial states *)
-  inv H; inv H0. unfold ge0, ge1 in *. congruence.
+  inv H; inv H0. unfold ge0, ge1,st,st0 in *. congruence.
 - (* nostep final state *)
   red; intros; red; intros. inv H; inv H0.
 - (* final states *)

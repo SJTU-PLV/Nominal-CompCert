@@ -14,7 +14,7 @@
 
 Require Import Coqlib.
 Require Import AST Integers Floats.
-Require Import Values Memory Builtins Globalenvs.
+Require Import Values Memory Memstructure Builtins Globalenvs.
 Require Import Cminor Op CminorSel.
 Require Import SelectOp.
 Import Mem.

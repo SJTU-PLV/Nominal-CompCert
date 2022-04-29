@@ -47,7 +47,6 @@ Local Open Scope error_monad_scope.
 
 Set Implicit Arguments.
 
-Module Mem := StrucMem.
 Import Mem.
 
 (** Auxiliary function for initialization of global variables. *)
@@ -288,6 +287,19 @@ Qed.
 Definition globalenv (p: program F V) :=
   add_globals (empty_genv p.(prog_public)) p.(prog_defs).
 
+(*Theorem globalenv_genv_sup: forall p id,
+    let ge := globalenv p in
+    In (Global id) (genv_sup ge) <-> In id (prog_defs_names p).
+Proof.
+  intros. subst ge.
+  unfold globalenv. simpl.
+  unfold prog_defs_names. induction (prog_defs p).
+  - simpl. reflexivity.
+  - simpl.
+    split.
+    + intro. destruct a. simpl in *.
+      destruct (peq i id). left. auto.
+      right. eapply IHl. apply H. *)
 (** Proof principles *)
 
 Section GLOBALENV_PRINCIPLES.
@@ -1464,8 +1476,8 @@ End INITMEM.
 Definition init_mem (p: program F V) :=
    alloc_globals (globalenv p) empty p.(prog_defs).
 
-(* Definition init_structure (p:program F V):=
-  mkstruc empty_stree (prog_public p). *)
+Definition init_struc (p:program F V) :=
+  mkstruc empty_stree (prog_defs_names p).
 (*
 Lemma store_init_data_stack:
   forall l ge m m' b ofs,
@@ -1553,6 +1565,19 @@ Proof.
   generalize (genv_sup_add_globals (prog_defs p) (empty_genv (prog_public p))).
   fold (globalenv p). simpl genv_sup. intros. congruence.
 Qed.
+
+Theorem init_match_struc_mem (s:struc) (m:mem) :
+  forall p, init_mem p = Some m ->
+       match_struc_mem (init_struc p) m.
+Proof.
+  intros. intro. erewrite <- init_mem_genv_sup; eauto.
+  destruct b.
+  - simpl. split; intro.
+    exfalso. eapply empty_stree_In; eauto.
+    exfalso. eapply genv_sup_glob in H0; eauto. destruct H0. congruence.
+  - simpl. split; intro.
+    eapply genv_symb_range; eauto.
+Admitted.
 
 Theorem find_symbol_not_fresh:
   forall p id b m,
@@ -2134,6 +2159,13 @@ Proof.
   unfold init_mem; intros.
   eapply alloc_globals_match; eauto. apply progmatch.
 Qed.
+
+Theorem init_struc_match:
+  init_struc p = init_struc tp.
+Proof.
+  unfold init_struc. destruct progmatch as (P&Q&R).
+  Admitted.
+
 
 End MATCH_PROGRAMS.
 

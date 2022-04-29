@@ -11,10 +11,9 @@
 (* *********************************************************************)
 
 Require Import Coqlib Maps Errors.
-Require Import AST Integers Floats Values Memory Globalenvs Events Smallstep.
+Require Import AST Integers Floats Values Memory Memstructure Globalenvs Events Smallstep.
 Require Import Cminor.
 Require Import Unityping.
-
 Local Open Scope string_scope.
 Local Open Scope error_monad_scope.
 
@@ -674,10 +673,10 @@ Proof.
   { constructor. eapply call_cont_wt; eauto. }
   generalize (wt_find_label _ _ lbl _ _ H2 WT_CK).
   rewrite H. intros [WT_STMT' WT_CONT']. econstructor; eauto.
-- inv WT_FD. inversion H3; subst. econstructor; eauto.
+- inv WT_FD. inversion H2; subst. econstructor; eauto.
   constructor; auto.
-  apply wt_env_set_locals. apply wt_env_set_params. rewrite H4; auto.
-  red; intros. apply def_set_locals. destruct H6; auto. left; apply def_set_params; auto.
+  apply wt_env_set_locals. apply wt_env_set_params. rewrite H3; auto.
+  red; intros. apply def_set_locals. destruct H5; auto. left; apply def_set_params; auto.
 - exploit external_call_well_typed; eauto. intros.
   econstructor; eauto.
 - inv WT_CONT. econstructor; eauto using wt_Sskip.

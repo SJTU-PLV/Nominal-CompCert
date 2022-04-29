@@ -13,7 +13,7 @@
 (** Correctness proof for RTL generation. *)
 
 Require Import Wellfounded Coqlib Maps AST Linking.
-Require Import Integers Values Memory Events Smallstep Globalenvs.
+Require Import Integers Values Memory Memstructure Events Smallstep Globalenvs.
 Require Import Switch Registers Cminor Op CminorSel RTL.
 Require Import RTLgen RTLgenspec.
 
@@ -1576,6 +1576,7 @@ Proof.
   eexact A.
   rewrite <- H2. apply sig_transl_function; auto.
   setoid_rewrite (match_program_main TRANSL).
+  setoid_rewrite <- (Genv.init_struc_match TRANSL).
   constructor. auto. constructor.
   constructor. apply Mem.extends_refl.
 Qed.

@@ -26,8 +26,7 @@ Require Import AST Integers Floats Values Memdata Memstructure.
   provides a [Builtins1] module that lists the built-ins semantics
   appropriate for the target.
 *)
-
-Import StrucMem.
+Import Mem.
 
 Definition val_opt_has_rettype (ov: option val) (t: rettype) : Prop :=
   match ov with Some v => Val.has_rettype v t | None => True end.

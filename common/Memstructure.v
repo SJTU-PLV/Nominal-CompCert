@@ -163,7 +163,9 @@ Proof.
   + left. congruence.
 Qed.
 
-Module Struc_Block <: BLOCK.
+Module Struc_Mem.
+
+Module Struc_Block.
 
 Inductive block' :=
   |Stack : fid -> path -> positive -> block'
@@ -348,6 +350,14 @@ Fixpoint stree_In (fid:option ident)(p:path) (pos:positive) (t:stree) :=
        |None => False
      end
   end.
+
+Theorem empty_stree_In :
+  forall fid p pos,
+    ~ stree_In fid p pos empty_stree.
+Proof.
+  intros. destruct p; simpl. intro. inv H. inv H1.
+  destruct n; simpl; auto.
+Qed.
 
 Lemma node_Indec :
   forall (f f0:fid) (p:positive) (l: list positive), {f=f0 /\ In p l}+{~(f=f0/\ In p l)}.
@@ -736,10 +746,8 @@ Qed.
 
 End STREE.
 
-Module StrucMem.
+Include Mem(Struc_Block).
 
-Module Mem := Mem(Struc_Block).
-Include Mem.
 Export Struc_Block.
 
 Record struc' : Type := mkstruc {
@@ -794,6 +802,19 @@ Definition struc_incr (s:struc):struc :=
   let (pp,t') := next_block_stree (stack s) in
   mkstruc t' (global s).
 
+Definition struc_incr_frame (s:struc)(id:ident):struc :=
+  let (t',p) := next_stree (stack s) id in
+  mkstruc t' (global s).
+
+Definition struc_return_frame (s:struc) : option struc :=
+  match return_stree (stack s) with
+    |Some (t',p) => Some (mkstruc t' (global s))
+    |None => None
+  end.
+
+Definition struc_alloc_stack (s:struc) : (struc * block) :=
+  (struc_incr s,fresh_block s).
+
 Definition struc_include(s1 s2:struc) := forall b, struc_In b s1 -> struc_In b s2.
 
 Theorem struc_incr_in : forall b s,
@@ -835,9 +856,6 @@ Proof.
 Qed.
 
 (* struc_incr_frame *)
-Definition struc_incr_frame (s:struc)(id:ident):struc :=
-  let (t',p) := next_stree (stack s) id in
-  mkstruc t' (global s).
 
 Theorem struc_incr_frame_in : forall s b id,
     struc_In b s <-> struc_In b (struc_incr_frame s id).
@@ -853,11 +871,6 @@ Proof.
 Qed.
 
 (* struc_return_frame *)
-Definition struc_return_frame (s:struc) : option struc :=
-  match return_stree (stack s) with
-    |Some (t',p) => Some (mkstruc t' (global s))
-    |None => None
-  end.
 
 Definition struc_return_frame' (s:struc) : struc :=
   match struc_return_frame s with
@@ -921,7 +934,7 @@ Proof. intros. apply struc_incr_glob_in. left. auto. Qed.
 Theorem struc_incr_glob_in2 : forall i s, struc_include s (struc_incr_glob i s).
 Proof. intros. intro. intro. apply struc_incr_glob_in. right. auto. Qed.
 
-Definition match_struc_sup (s:struc) (m:mem) : Prop :=
+Definition match_struc_mem (s:struc) (m:mem) : Prop :=
   forall b, struc_In b s <-> In b (support m).
 
 (** Things to define: *)
@@ -943,7 +956,8 @@ Definition is_stack (b:block) : Prop :=
 Definition incr_without_glob (j j' : meminj) : Prop :=
   forall b b' delta, j b = None -> j' b = Some (b',delta) ->
        is_stack b /\ is_stack b'.
-
+(*
+No need for now
 Record smem : Type := mksmem{
   structure : struc;
   memory: mem;
@@ -955,70 +969,67 @@ Next Obligation.
 intro. simpl. generalize empty_in.
 intro. split. intro. apply H in H0. auto. intro. inversion H0.
 Qed.
+*)
+End Struc_Mem.
 
-End StrucMem.
-
- Opaque StrucMem.alloc StrucMem.free StrucMem.store StrucMem.load StrucMem.storebytes StrucMem.loadbytes.
+ Opaque Struc_Mem.alloc Struc_Mem.free Struc_Mem.store Struc_Mem.load Struc_Mem.storebytes Struc_Mem.loadbytes.
 
  Hint Resolve
-  StrucMem.valid_not_valid_diff
-  StrucMem.perm_implies
-  StrucMem.perm_cur
-  StrucMem.perm_max
-  StrucMem.perm_valid_block
-  StrucMem.range_perm_implies
-  StrucMem.range_perm_cur
-  StrucMem.range_perm_max
-  StrucMem.valid_access_implies
-  StrucMem.valid_access_valid_block
-  StrucMem.valid_access_perm
-  StrucMem.valid_access_load
-  StrucMem.load_valid_access
-  StrucMem.loadbytes_range_perm
-  StrucMem.valid_access_store
-  StrucMem.perm_store_1
-  StrucMem.perm_store_2
-  StrucMem.store_valid_block_1
-  StrucMem.store_valid_block_2
-  StrucMem.store_valid_access_1
-  StrucMem.store_valid_access_2
-  StrucMem.store_valid_access_3
-  StrucMem.storebytes_range_perm
-  StrucMem.perm_storebytes_1
-  StrucMem.perm_storebytes_2
-  StrucMem.storebytes_valid_access_1
-  StrucMem.storebytes_valid_access_2
-  StrucMem.storebytes_valid_block_1
-  StrucMem.storebytes_valid_block_2
-  StrucMem.valid_block_alloc
-  StrucMem.fresh_block_alloc
-  StrucMem.valid_new_block
-  StrucMem.perm_alloc_1
-  StrucMem.perm_alloc_2
-  StrucMem.perm_alloc_3
-  StrucMem.perm_alloc_4
-  StrucMem.perm_alloc_inv
-  StrucMem.valid_access_alloc_other
-  StrucMem.valid_access_alloc_same
-  StrucMem.valid_access_alloc_inv
-  StrucMem.range_perm_free
-  StrucMem.free_range_perm
-  StrucMem.valid_block_free_1
-  StrucMem.valid_block_free_2
-  StrucMem.perm_free_1
-  StrucMem.perm_free_2
-  StrucMem.perm_free_3
-  StrucMem.valid_access_free_1
-  StrucMem.valid_access_free_2
-  StrucMem.valid_access_free_inv_1
-  StrucMem.valid_access_free_inv_2
-  StrucMem.unchanged_on_refl
+  Struc_Mem.valid_not_valid_diff
+  Struc_Mem.perm_implies
+  Struc_Mem.perm_cur
+  Struc_Mem.perm_max
+  Struc_Mem.perm_valid_block
+  Struc_Mem.range_perm_implies
+  Struc_Mem.range_perm_cur
+  Struc_Mem.range_perm_max
+  Struc_Mem.valid_access_implies
+  Struc_Mem.valid_access_valid_block
+  Struc_Mem.valid_access_perm
+  Struc_Mem.valid_access_load
+  Struc_Mem.load_valid_access
+  Struc_Mem.loadbytes_range_perm
+  Struc_Mem.valid_access_store
+  Struc_Mem.perm_store_1
+  Struc_Mem.perm_store_2
+  Struc_Mem.store_valid_block_1
+  Struc_Mem.store_valid_block_2
+  Struc_Mem.store_valid_access_1
+  Struc_Mem.store_valid_access_2
+  Struc_Mem.store_valid_access_3
+  Struc_Mem.storebytes_range_perm
+  Struc_Mem.perm_storebytes_1
+  Struc_Mem.perm_storebytes_2
+  Struc_Mem.storebytes_valid_access_1
+  Struc_Mem.storebytes_valid_access_2
+  Struc_Mem.storebytes_valid_block_1
+  Struc_Mem.storebytes_valid_block_2
+  Struc_Mem.valid_block_alloc
+  Struc_Mem.fresh_block_alloc
+  Struc_Mem.valid_new_block
+  Struc_Mem.perm_alloc_1
+  Struc_Mem.perm_alloc_2
+  Struc_Mem.perm_alloc_3
+  Struc_Mem.perm_alloc_4
+  Struc_Mem.perm_alloc_inv
+  Struc_Mem.valid_access_alloc_other
+  Struc_Mem.valid_access_alloc_same
+  Struc_Mem.valid_access_alloc_inv
+  Struc_Mem.range_perm_free
+  Struc_Mem.free_range_perm
+  Struc_Mem.valid_block_free_1
+  Struc_Mem.valid_block_free_2
+  Struc_Mem.perm_free_1
+  Struc_Mem.perm_free_2
+  Struc_Mem.perm_free_3
+  Struc_Mem.valid_access_free_1
+  Struc_Mem.valid_access_free_2
+  Struc_Mem.valid_access_free_inv_1
+  Struc_Mem.valid_access_free_inv_2
+  Struc_Mem.unchanged_on_refl
 : mem.
 
-
-
-
-
+Module Mem := Struc_Mem.
 
 
 
