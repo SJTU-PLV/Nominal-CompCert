@@ -353,29 +353,20 @@ Definition acc_headers (symbtbl: symbtable) (shstrmap: PTree.t Z) (res_acc: res 
           if Z.eqb (Z.of_nat (length sec)) e.(symbentry_size) then
             OK (acc++[h],ofs + e.(symbentry_size))
           else
-            Error [MSG "Inconsistency, code section length not equal to symbentry field: "; CTX id; MSG "  Section: "; MSG (Z_to_hex_string 4%nat (Z.of_nat (length sec))); MSG "  Symbol entry: "; MSG (Z_to_hex_string 4 e.(symbentry_size))]
+            Error [MSG "Inconsistency, section length not equal to symbentry field "; CTX id]
         | symb_rwdata =>
           let h := gen_data_sec_header sec idx ofs in
-          (* consistency checking *)
-          if Z.eqb (Z.of_nat (length sec)) e.(symbentry_size) then
-            OK (acc++[h],ofs + e.(symbentry_size))
-          else
-            Error [MSG "Inconsistency, read-write data section length not equal to symbentry field: "; CTX id; MSG "  Section: "; MSG (Z_to_hex_string 4%nat (Z.of_nat (length sec))); MSG "  Symbol entry: "; MSG (Z_to_hex_string 4 e.(symbentry_size))]
+          OK (acc++[h],ofs + e.(symbentry_size))
         (* read-only infomation in symb table *)
         | symb_rodata =>
           let h := gen_rodata_sec_header sec idx ofs in
-          (* consistency checking *)
-          if Z.eqb (Z.of_nat (length sec)) e.(symbentry_size) then
-            OK (acc++[h],ofs + e.(symbentry_size))
-          else
-            Error [MSG "Inconsistency, read-only data section length not equal to symbentry field: "; CTX id; MSG "  Section: "; MSG (Z_to_hex_string 4%nat (Z.of_nat (length sec))); MSG "  Symbol entry: "; MSG (Z_to_hex_string 4 e.(symbentry_size))]
+          OK (acc++[h],ofs + e.(symbentry_size))
         |  _ => Error [MSG "Impossible: no type for section "; CTX id]
         end
       end
     end
   | _ => Error [MSG "Section haven't been encoded"; CTX id]
   end.
-
 
 (* return section headers and the size of sections *)
 Definition gen_section_header (idl_sectbl: list (ident * RelocProgram.section)) (symbtbl: symbtable) (shstrmap: PTree.t Z) : res (list section_header * Z) :=
