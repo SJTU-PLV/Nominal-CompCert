@@ -1532,7 +1532,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (a_X, B) := addr_X_B in
     let (a,X) := a_X in
     OK ([REX_WRXB one1 R X B; Pandl_GvEv a rdbits])
-  | Asm.Pandq_rr rs rd =>
+  | Asm.Pandq_rr rd rs =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 rs;
     let (B, rsbits) := Brsbits in
@@ -1546,7 +1546,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (a_X, B) := addr_X_B in
     let (a,X) := a_X in
     OK ([REX_WRXB one1 R X B; Porl_GvEv a rdbits])
-  | Asm.Porq_rr rs rd =>
+  | Asm.Porq_rr rd rs =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 rs;
     let (B, rsbits) := Brsbits in
@@ -1560,7 +1560,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (a_X, B) := addr_X_B in
     let (a,X) := a_X in
     OK ([REX_WRXB one1 R X B; Pxorl_GvEv a rdbits])
-  | Asm.Pxorq_rr rs rd =>
+  | Asm.Pxorq_rr rd rs =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 rs;
     let (B, rsbits) := Brsbits in
@@ -1630,7 +1630,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (a_X, B) := addr_X_B in
     let (a,X) := a_X in
     OK ([REX_WRXB one1 R X B; Ptestl_EvGv a rdbits])
-  | Asm.Ptestq_rr rs rd =>
+  | Asm.Ptestq_rr rd rs =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 rs;
     let (B, rsbits) := Brsbits in
