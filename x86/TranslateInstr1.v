@@ -1230,7 +1230,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     do rex_rr <- encode_rex_prefix_rr r1 rd;
     let (orex_r1bits, rdbits) := rex_rr in
     let (orex, r1bits) := orex_r1bits in        
-    OK ([Ptestl_EvGv (AddrE0 rdbits) r1bits])
+    OK (orex ++ [Ptestl_EvGv (AddrE0 rdbits) r1bits])
   | Asm.Pcmov c rd r1 =>
     let cond := encode_testcond_u4 c in
     do rex_rr <- encode_rex_prefix_rr rd r1;

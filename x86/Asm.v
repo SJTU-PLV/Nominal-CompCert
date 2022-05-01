@@ -1923,7 +1923,7 @@ Let instr_size' (i: instruction) : Z :=
   (* some x64 instr *)
   | Paddq_rm  _ a => 2 + addrmode_size a
   | Psubq_rm  _ a => 2 + addrmode_size a
-  | Pimulq_rm _ a => 2 + addrmode_size a
+  | Pimulq_rm _ a => 3 + addrmode_size a
   | Pandq_rm  _ a => 2 + addrmode_size a
   | Porq_rm   _ a => 2 + addrmode_size a
   | Pxorq_rm  _ a => 2 + addrmode_size a
