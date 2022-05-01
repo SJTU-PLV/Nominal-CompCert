@@ -1799,6 +1799,7 @@ Definition rex_prefix_check_fa (r: freg) (a: addrmode) :=
 Let instr_size' (i: instruction) : Z :=
   match i with
   | Pjmp_l _ => 5
+  | Pjmp_r r _ => 2 + rex_prefix_check_r r
   (* Pseduo Instruction: Pjmptbl will be transf as Pjmp_m (size: 7)*)
   | Pjmptbl r tbl => 7 + rex_prefix_check_r r
   | Pjmptbl_rel r tbl => 7 + rex_prefix_check_r r
@@ -1827,6 +1828,7 @@ Let instr_size' (i: instruction) : Z :=
   | Pcmpl_rr rd rs => 2 + rex_prefix_check_rr rd rs
   | Pcmpl_ri r _ => 6 + rex_prefix_check_r r
   | Pcltd => 1
+  | Pcqto => 2 
   | Pidivl r => 2 + rex_prefix_check_r r
   | Psall_ri r _ => 3 + rex_prefix_check_r r 
   | Plabel _ => 1
@@ -1914,6 +1916,7 @@ Let instr_size' (i: instruction) : Z :=
   | Psbbl_rr rd rs => 2 + rex_prefix_check_rr rd rs
   | Prep_movsl => 2
   | Pbswap32 r => 2  + rex_prefix_check_r r
+  | Pbswap64 _ => 3
   | Pbsfl rd rs => 3 + rex_prefix_check_rr rd rs
   | Pbsrl rd rs => 3 + rex_prefix_check_rr rd rs
   | Psqrtsd frd frs => 4 + rex_prefix_check_frr frd frs

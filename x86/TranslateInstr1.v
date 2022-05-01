@@ -1127,6 +1127,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (orex, rbits) := rex_r in
     OK (orex ++ [Pmull_r rbits])
   | Asm.Pcltd => OK [Pcltd]
+  | Asm.Pcqto => OK [REX_WRXB one1 zero1 zero1 zero1; Pcltd]
   | Asm.Pdivl r1 =>
     do rex_r <- encode_rex_prefix_r r1;
     let (orex, rbits) := rex_r in
@@ -1405,7 +1406,10 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     do rex_r <- encode_rex_prefix_r rd;
     let (orex, rdbits) := rex_r in
     OK (orex ++ [Pbswap32 rdbits])
-
+  | Asm.Pbswap64 rd =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R,rdbits) := Rrdbits in
+    OK ([REX_WRXB one1 R zero1 zero1; Pbswap32 rdbits])
   | Asm.Pmaxsd rd r1 =>
     do rex_rr <- encode_rex_prefix_ff rd rd;
     let (oREX_rdbits, r1bits) := rex_rr in
@@ -1427,7 +1431,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (orex_rdbits, a) := rex_ra in
     let (orex, rdbits) := orex_rdbits in
     OK ([REP] ++ orex ++ [Pmovsq_rm a rdbits])
-  | Asm.Prep_movsl => OK ([Prep_movsl])
+  | Asm.Prep_movsl => OK ([REP; Prep_movsl])
   | Asm.Psbbl_rr rd r1 =>
     do rex_rr <- encode_rex_prefix_rr rd r1;
     let (orex_rdbits, r1bits) := rex_rr in
