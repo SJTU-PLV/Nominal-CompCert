@@ -33,13 +33,19 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   | Pcall_s _ _ => OK 1
   | Pjmp_s _ _ => OK 1
   | Pleal r a
-  | Pmovb_mr a r
-  | Pmovb_rm r a
   | Pmovl_rm r a
   | Pmovl_mr a r =>
     let aofs := addrmode_reloc_offset a in
     let rex := rex_prefix_check_ra r a in
-    OK (1 + aofs + rex)             
+    OK (1 + aofs + rex)
+  | Pmovb_mr a r
+  | Pmovb_rm r a =>
+    let aofs := addrmode_reloc_offset a in
+    let rex := rex_prefix_check_ra r a in
+    if Archi.ptr64 then
+      OK (2 + aofs)
+    else
+      OK (1 + aofs + rex)
   (* | Pmov_rm_a _ a *)
   (* | Pmov_mr_a a _ *)
   | Pjmp_m a 
@@ -52,13 +58,19 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
     OK (1 + aofs + rex)
   | Pmovw_mr a r
   | Pmovw_rm r a
-  | Pmovzb_rm r a
-  | Pmovsb_rm r a
   | Pmovzw_rm r a
   | Pmovsw_rm r a =>
     let aofs := addrmode_reloc_offset a in
     let rex := rex_prefix_check_ra r a in
     OK (2 + aofs + rex)
+  | Pmovzb_rm r a
+  | Pmovsb_rm r a =>
+    let aofs := addrmode_reloc_offset a in
+    let rex := rex_prefix_check_ra r a in
+    if Archi.ptr64 then
+      OK (3 + aofs)
+    else
+      OK (2 + aofs + rex)
   | Pxorps_fm r a
   | Pandps_fm r a =>
     let aofs := addrmode_reloc_offset a in

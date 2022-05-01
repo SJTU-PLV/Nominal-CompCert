@@ -1844,16 +1844,16 @@ Let instr_size' (i: instruction) : Z :=
   | Pflds_m a 
   | Pfstps_m a => 1 + addrmode_size a + rex_prefix_check_a a
   (* | Pxchg_rr r1 r2 => 2 *)
-  | Pmovb_mr a rs => 1 + addrmode_size a + rex_prefix_check_ra rs a
-  | Pmovb_rm rd a => 1 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pmovb_mr a rs => if Archi.ptr64 then 2 + addrmode_size a else 1 + addrmode_size a + rex_prefix_check_ra rs a
+  | Pmovb_rm rd a => if Archi.ptr64 then 2 +  addrmode_size a else 1 + addrmode_size a + rex_prefix_check_ra rd a
   | Pmovw_mr a rs => 2 + addrmode_size a + rex_prefix_check_ra rs a
   | Pmovw_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
-  | Pmovzb_rr rd rs => 3 + rex_prefix_check_rr rd rs
-  | Pmovzb_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pmovzb_rr rd rs => if Archi.ptr64 then 4 else 3 + rex_prefix_check_rr rd rs
+  | Pmovzb_rm rd a => if Archi.ptr64 then 3 + addrmode_size a else 2 + addrmode_size a + rex_prefix_check_ra rd a
   | Pmovzw_rr rd rs => 3 + rex_prefix_check_rr rd rs
   | Pmovzw_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
   | Pmovsb_rr rd rs => 3 + rex_prefix_check_rr rd rs
-  | Pmovsb_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
+  | Pmovsb_rm rd a => if Archi.ptr64 then 3 + addrmode_size a else 2 + addrmode_size a + rex_prefix_check_ra rd a
   | Pmovsw_rr rd rs => 3 + rex_prefix_check_rr rd rs
   | Pmovsw_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
   | Pmovzl_rr rd rs => 2 + rex_prefix_check_rr rd rs
@@ -1861,10 +1861,14 @@ Let instr_size' (i: instruction) : Z :=
   | Pmovsq_mr a frs => 3 + addrmode_size a + rex_prefix_check_fa frs a
   | Pcvtsd2ss_ff  frd frs 
   | Pcvtss2sd_ff  frd frs => 4 + rex_prefix_check_frr frd frs
-  | Pcvttsd2si_rf r fr  
-  | Pcvtsi2sd_fr  fr r 
-  | Pcvttss2si_rf r fr 
-  | Pcvtsi2ss_fr  fr r  => 4 + rex_prefix_check_frir fr r
+  | Pcvttsd2si_rf r fr
+  | Pcvtsi2sd_fr  fr r
+  | Pcvttss2si_rf r fr
+  | Pcvtsi2ss_fr  fr r  
+  | Pcvttsd2sl_rf r fr
+  | Pcvtsl2sd_fr fr r
+  | Pcvttss2sl_rf r fr
+  | Pcvtsl2ss_fr fr r => 4 + rex_prefix_check_frir fr r
   | Pnegl rd => 2 + rex_prefix_check_r rd
   | Pimull_r r1 => 2 + rex_prefix_check_r r1
   | Pmull_r r1 => 2 + rex_prefix_check_r r1
@@ -1886,7 +1890,7 @@ Let instr_size' (i: instruction) : Z :=
   | Prolw_ri rd n => 4 + rex_prefix_check_r rd
   | Ptestl_ri r1 n => 6 + rex_prefix_check_r r1
   | Pcmov c rd r1 => 3 + rex_prefix_check_rr rd r1
-  | Psetcc c rd => 3 + rex_prefix_check_r rd
+  | Psetcc c rd => if Archi.ptr64 then 4 else 3 + rex_prefix_check_r rd
   | Paddd_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
   | Padds_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1
   | Psubd_ff frd fr1 => 4 + rex_prefix_check_frr frd fr1

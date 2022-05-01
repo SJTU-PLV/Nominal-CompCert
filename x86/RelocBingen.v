@@ -819,7 +819,11 @@ Definition transl_init_data (dofs:Z) (d:init_data) : res (list byte) :=
   | Init_space n => OK (zero_bytes (Z.to_nat n))
   | Init_addrof id ofs => 
     do addend <- get_reloc_addend dofs;
-    OK (encode_int32 addend)
+    (* address is 32bit in 32/64bit mode*)
+    if Archi.ptr64 then
+      OK ((encode_int32 addend) ++ (encode_int32 0))
+    else
+      OK (encode_int32 addend)
   end.
 
 Definition acc_init_data r d := 
