@@ -90,7 +90,6 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   (* 64bit *)
   | Paddq_rm  _ a 
   | Psubq_rm  _ a 
-  | Pimulq_rm _ a 
   | Pandq_rm  _ a 
   | Porq_rm   _ a 
   | Pxorq_rm  _ a 
@@ -101,6 +100,9 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   | Pleaq _ a =>
     let aofs := addrmode_reloc_offset a in
     OK (2 + aofs)
+  | Pimulq_rm _ a =>
+    let aofs := addrmode_reloc_offset a in
+    OK (3 + aofs)
   | Pmov_rm_a r a
   | Pmov_mr_a a r =>
     let aofs := addrmode_reloc_offset a in

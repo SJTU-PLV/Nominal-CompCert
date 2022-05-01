@@ -1864,11 +1864,11 @@ Let instr_size' (i: instruction) : Z :=
   | Pcvttsd2si_rf r fr
   | Pcvtsi2sd_fr  fr r
   | Pcvttss2si_rf r fr
-  | Pcvtsi2ss_fr  fr r  
-  | Pcvttsd2sl_rf r fr
+  | Pcvtsi2ss_fr  fr r => 4 + rex_prefix_check_frir fr r
+  | Pcvttsd2sl_rf r fr 
   | Pcvtsl2sd_fr fr r
   | Pcvttss2sl_rf r fr
-  | Pcvtsl2ss_fr fr r => 4 + rex_prefix_check_frir fr r
+  | Pcvtsl2ss_fr fr r => 5
   | Pnegl rd => 2 + rex_prefix_check_r rd
   | Pimull_r r1 => 2 + rex_prefix_check_r r1
   | Pmull_r r1 => 2 + rex_prefix_check_r r1
