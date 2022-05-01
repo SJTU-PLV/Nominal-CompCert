@@ -38,7 +38,9 @@ Definition addressing_of_builtin_arg (arg: builtin_arg preg) :res addrmode :=
   | BA_addrstack ofs => OK (linear_addr RSP (Ptrofs.unsigned ofs))
   | BA_addrglobal id ofs => OK (global_addr id ofs)
   | BA_addptr (BA (IR r)) (BA_int n) => OK (linear_addr r (Int.unsigned n) )
-  | _ => Error (msg "addressing_of_builtin_arg: builtin argument not supported")
+  | BA_addptr (BA (IR r)) (BA_long n) => OK (linear_addr r (Int64.unsigned n) )
+  | _ => Error (msg "addressing_of_builtin_arg: builtin argument not sup
+ported")
   end.
 
 Definition offset_addressing a delta :=
