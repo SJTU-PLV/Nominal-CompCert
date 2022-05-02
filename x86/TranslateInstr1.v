@@ -547,7 +547,8 @@ Definition translate_Addrmode_AddrE64 (sofs: Z) (res_iofs: res Z) (addr:addrmode
         do addend <- get_instr_reloc_addend' (iofs + sofs);
         (* addend is the offset of id and access point *)
         if Z.eqb (Ptrofs.unsigned ofs) addend then
-          translate_Addrmode_AddrE_aux64 obase oindex zero32
+          do imm32 <- encode_ofs_u32 addend;
+          translate_Addrmode_AddrE_aux64 obase oindex imm32
         else Error (msg "64bit: addend is not equal to ofs")
       | _ => Error(msg "64bit: id must be 1")
       end
@@ -1234,10 +1235,17 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     OK (orex ++ [Ptestl_EvGv (AddrE0 rdbits) r1bits])
   | Asm.Pcmov c rd r1 =>
     let cond := encode_testcond_u4 c in
-    do rex_rr <- encode_rex_prefix_rr rd r1;
-    let (orex_rdbits, r1bits) := rex_rr in
-    let (orex, rdbits) := orex_rdbits in
-    OK (orex ++ [Pcmov cond rdbits r1bits])
+    if Archi.ptr64 then
+      do Rrdbits <- encode_ireg_u4 rd;
+      do Brsbits <- encode_ireg_u4 r1;
+      let (B, rsbits) := Brsbits in
+      let (R, rdbits) := Rrdbits in
+      OK [REX_WRXB one1 R zero1 B; Pcmov cond rdbits rsbits]
+    else
+      do rex_rr <- encode_rex_prefix_rr rd r1;
+      let (orex_rdbits, r1bits) := rex_rr in
+      let (orex, rdbits) := orex_rdbits in
+      OK (orex ++ [Pcmov cond rdbits r1bits])
   | Asm.Psetcc c rd =>
     if Archi.ptr64 then
       do Brdbits <- encode_ireg_u4 rd;
@@ -1344,6 +1352,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (orex, rbits) := rex_r in
     OK (orex ++ [Pjmp_Ev (AddrE0 rbits)])
   | Asm.Pjmp_m addr =>
+    (* same in the 64bit and 32bit mode *)
     do orex_a <- encode_rex_prefix_addr addr;
     let (orex, a) := orex_a in
     OK (orex ++ [Pjmp_Ev a])

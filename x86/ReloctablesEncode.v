@@ -40,8 +40,8 @@ Local Open Scope bits_scope.
 Definition encode_reloctype (t:reloctype) :=
   match t with
   | reloc_null => 0     (* R_386_NONE *)
-  | reloc_abs  => 1     (* R_386_32 *)
-  | reloc_rel  => 2     (* R_386_PC32 *)
+  | reloc_abs  => 1     (* R_386_32, addend 64bit in 64bit mode*)
+  | reloc_rel  => 2     (* R_386_PC32, addend 32bit in 64bit mode*)
   end.
 
 Section WITH_IDXMAP.
