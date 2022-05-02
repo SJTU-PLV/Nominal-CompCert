@@ -965,14 +965,15 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
       let (orex, rdbits) := orex_rdbits in
       OK (orex ++ [Pmovzb_rm (AddrE0 r1bits) rdbits])
   | Asm.Pmovzb_rm rd addr =>
-    if Archi.ptr64 then
+    (* 1byte memory to 32bit register *)
+    (* if Archi.ptr64 then
       do Rrdbits <- encode_ireg_u4 rd;
       let (R, rdbits):= Rrdbits in
       do addr_X_B <- translate_Addrmode_AddrE64 addr;
       let (a_X, B) := addr_X_B in
       let (a,X) := a_X in
       OK ([REX_WRXB zero1 R X B; Pmovzb_rm a rdbits])
-    else         
+    else *)
       do rex_ra <- encode_rex_prefix_ra rd addr;
       let (orex_rdbits, a) := rex_ra in
       let (orex, rdbits) := orex_rdbits in
@@ -988,14 +989,14 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (orex, rdbits) := orex_rdbits in
      OK (orex ++ [Pmovzw_GvEv (AddrE0 r1bits) rdbits])
   | Asm.Pmovsb_rm rd addr =>
-    if Archi.ptr64 then
+    (* if Archi.ptr64 then
       do Rrdbits <- encode_ireg_u4 rd;
       let (R, rdbits):= Rrdbits in
       do addr_X_B <- translate_Addrmode_AddrE64 addr;
       let (a_X, B) := addr_X_B in
       let (a,X) := a_X in
       OK ([REX_WRXB zero1 R X B; Pmovsb_GvEv a rdbits])
-    else
+    else *)
       do rex_ra <- encode_rex_prefix_ra rd addr;
       let (orex_rdbits, a) := rex_ra in
       let (orex, rdbits) := orex_rdbits in

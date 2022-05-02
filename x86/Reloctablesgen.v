@@ -67,9 +67,10 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   | Pmovsb_rm r a =>
     let aofs := addrmode_reloc_offset a in
     let rex := rex_prefix_check_ra r a in
-    if Archi.ptr64 then
+    (* 1byte memory to 32bit register *)
+    (* if Archi.ptr64 then
       OK (3 + aofs)
-    else
+    else *)
       OK (2 + aofs + rex)
   | Pxorps_fm r a
   | Pandps_fm r a =>
