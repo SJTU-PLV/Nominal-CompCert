@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -174,6 +175,8 @@ val is_function_pointer_type : Env.t -> typ -> bool
   (* Is type a pointer to function type? *)
 val is_anonymous_composite : typ -> bool
   (* Is type an anonymous composite? *)
+val is_anonymous_type : typ -> bool
+  (* Is the type an anonymous composite or enum *)
 val is_qualified_array : typ -> bool
   (* Does the type contain a qualified array type (e.g. int[const 5])? *)
 val pointer_arithmetic_ok : Env.t -> typ -> bool

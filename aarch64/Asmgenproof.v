@@ -67,7 +67,7 @@ Lemma transf_function_no_overflow:
   transf_function f = OK tf -> list_length_z tf.(fn_code) <= Ptrofs.max_unsigned.
 Proof.
   intros. monadInv H. destruct (zlt Ptrofs.max_unsigned (list_length_z x.(fn_code))); inv EQ0.
-  omega.
+  lia.
 Qed.
 
 Lemma exec_straight_exec:
@@ -208,7 +208,7 @@ Qed.
 Remark loadsymbol_label: forall r id ofs k, tail_nolabel k (loadsymbol r id ofs k).
 Proof.
   intros; unfold loadsymbol.
-  destruct (Archi.pic_code tt); TailNoLabel. destruct Ptrofs.eq; TailNoLabel.
+  destruct (SelectOp.symbol_is_relocatable id); TailNoLabel. destruct Ptrofs.eq; TailNoLabel.
 Qed. 
 Hint Resolve loadsymbol_label: labels.
 
@@ -424,8 +424,8 @@ Proof.
   split. unfold goto_label. rewrite P. rewrite H1. auto.
   split. rewrite Pregmap.gss. constructor; auto.
   rewrite Ptrofs.unsigned_repr. replace (pos' - 0) with pos' in Q.
-  auto. omega.
-  generalize (transf_function_no_overflow _ _ H0). omega.
+  auto. lia.
+  generalize (transf_function_no_overflow _ _ H0). lia.
   intros. apply Pregmap.gso; auto.
 Qed.
 
@@ -831,13 +831,16 @@ Local Transparent destroyed_by_op.
   econstructor; eauto.
   instantiate (2 := tf); instantiate (1 := x).
   unfold nextinstr. rewrite Pregmap.gss.
-  rewrite set_res_other. rewrite undef_regs_other_2.
+  rewrite set_res_other. rewrite undef_regs_other.
   rewrite <- H1. simpl. econstructor; eauto.
   eapply code_tail_next_int; eauto.
-  rewrite preg_notin_charact. intros. auto with asmgen.
+  simpl; intros. destruct H4. congruence. destruct H4. congruence.
+  exploit list_in_map_inv; eauto. intros (mr & U & V). subst.
+  auto with asmgen.
   auto with asmgen.
   apply agree_nextinstr. eapply agree_set_res; auto.
-  eapply agree_undef_regs; eauto. intros. rewrite undef_regs_other_2; auto.
+  eapply agree_undef_regs; eauto. intros.
+  simpl. rewrite undef_regs_other_2; auto. Simpl.
   congruence.
 
 - (* Mgoto *)
@@ -879,7 +882,7 @@ Local Transparent destroyed_by_op.
   exploit functions_transl; eauto. intro FN.
   generalize (transf_function_no_overflow _ _ H5); intro NOOV.
   exploit find_label_goto_label. eauto. eauto.
-  instantiate (2 := rs0#X16 <- Vundef #X17 <- Vundef).
+  instantiate (2 := rs0#X16 <- Vundef).
   Simpl. eauto.
   eauto.
   intros [tc' [rs' [A [B C]]]].
@@ -946,10 +949,10 @@ Local Transparent destroyed_by_op.
     rewrite <- (sp_val _ _ _ AG). rewrite F. reflexivity.
     reflexivity. 
     eexact U. }
-  exploit exec_straight_steps_2; eauto using functions_transl. omega. constructor.
+  exploit exec_straight_steps_2; eauto using functions_transl. lia. constructor.
   intros (ofs' & X & Y).                    
   left; exists (State rs3 m3'); split.
-  eapply exec_straight_steps_1; eauto. omega. constructor.
+  eapply exec_straight_steps_1; eauto. lia. constructor.
   econstructor; eauto.
   rewrite X; econstructor; eauto. 
   apply agree_exten with rs2; eauto with asmgen.
@@ -978,7 +981,7 @@ Local Transparent destroyed_at_function_entry. simpl.
 
 - (* return *)
   inv STACKS. simpl in *.
-  right. split. omega. split. auto.
+  right. split. lia. split. auto.
   rewrite <- ATPC in H5.
   econstructor; eauto. congruence.
 Qed.

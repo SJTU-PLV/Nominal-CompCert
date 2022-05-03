@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -29,7 +30,7 @@ Definition builtin_function_sig (b: builtin_function) : signature :=
   | BI_platform b => platform_builtin_sig b
   end.
 
-Definition builtin_function_sem (b: builtin_function) : builtin_sem (proj_sig_res (builtin_function_sig b)) :=
+Definition builtin_function_sem (b: builtin_function) : builtin_sem (sig_res (builtin_function_sig b)) :=
   match b with
   | BI_standard b => standard_builtin_sem b
   | BI_platform b => platform_builtin_sem b

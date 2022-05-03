@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -26,8 +27,8 @@ Require Import AST Integers Floats Values Memdata.
   appropriate for the target.
 *)
 
-Definition val_opt_has_type (ov: option val) (t: typ) : Prop :=
-  match ov with Some v => Val.has_type v t | None => True end.
+Definition val_opt_has_rettype (ov: option val) (t: rettype) : Prop :=
+  match ov with Some v => Val.has_rettype v t | None => True end.
 
 Definition val_opt_inject (j: meminj) (ov ov': option val) : Prop :=
   match ov, ov' with
@@ -42,10 +43,10 @@ Definition val_opt_inject (j: meminj) (ov ov': option val) : Prop :=
   and be compatible with value injections.
 *)
 
-Record builtin_sem (tret: typ) : Type := mkbuiltin {
+Record builtin_sem (tret: rettype) : Type := mkbuiltin {
   bs_sem :> list val -> option val;
   bs_well_typed: forall vl, 
-    val_opt_has_type (bs_sem vl) tret;
+    val_opt_has_rettype (bs_sem vl) tret;
   bs_inject: forall j vl vl',
     Val.inject_list j vl vl' -> val_opt_inject j (bs_sem vl) (bs_sem vl')
 }.
@@ -60,8 +61,8 @@ Record builtin_sem (tret: typ) : Type := mkbuiltin {
 Local Unset Program Cases.
 
 Program Definition mkbuiltin_v1t 
-     (tret: typ) (f: val -> val)
-     (WT: forall v1, Val.has_type (f v1) tret)
+     (tret: rettype) (f: val -> val)
+     (WT: forall v1, Val.has_rettype (f v1) tret)
      (INJ: forall j v1 v1', Val.inject j v1 v1' -> Val.inject j (f v1) (f v1')) :=
   mkbuiltin tret (fun vl => match vl with v1 :: nil => Some (f v1) | _ => None end) _ _.
 Next Obligation.
@@ -72,8 +73,8 @@ Next Obligation.
 Qed.
 
 Program Definition mkbuiltin_v2t 
-     (tret: typ) (f: val -> val -> val)
-     (WT: forall v1 v2, Val.has_type (f v1 v2) tret)
+     (tret: rettype) (f: val -> val -> val)
+     (WT: forall v1 v2, Val.has_rettype (f v1 v2) tret)
      (INJ: forall j v1 v1' v2 v2',
            Val.inject j v1 v1' -> Val.inject j v2 v2' ->
            Val.inject j (f v1 v2) (f v1' v2')) :=
@@ -86,8 +87,8 @@ Next Obligation.
 Qed.
 
 Program Definition mkbuiltin_v3t 
-     (tret: typ) (f: val -> val -> val -> val)
-     (WT: forall v1 v2 v3, Val.has_type (f v1 v2 v3) tret)
+     (tret: rettype) (f: val -> val -> val -> val)
+     (WT: forall v1 v2 v3, Val.has_rettype (f v1 v2 v3) tret)
      (INJ: forall j v1 v1' v2 v2' v3 v3',
            Val.inject j v1 v1' -> Val.inject j v2 v2' -> Val.inject j v3 v3' ->
            Val.inject j (f v1 v2 v3) (f v1' v2' v3')) :=
@@ -100,8 +101,8 @@ Next Obligation.
 Qed.
 
 Program Definition mkbuiltin_v1p
-     (tret: typ) (f: val -> option val)
-     (WT: forall v1, val_opt_has_type (f v1) tret)
+     (tret: rettype) (f: val -> option val)
+     (WT: forall v1, val_opt_has_rettype (f v1) tret)
      (INJ: forall j v1 v1',
         Val.inject j v1 v1' -> val_opt_inject j (f v1) (f v1')) :=
   mkbuiltin tret (fun vl => match vl with v1 :: nil => f v1 | _ => None end) _ _.
@@ -113,8 +114,8 @@ Next Obligation.
 Qed.
 
 Program Definition mkbuiltin_v2p
-     (tret: typ) (f: val -> val -> option val)
-     (WT: forall v1 v2, val_opt_has_type (f v1 v2) tret)
+     (tret: rettype) (f: val -> val -> option val)
+     (WT: forall v1 v2, val_opt_has_rettype (f v1 v2) tret)
      (INJ: forall j v1 v1' v2 v2',
         Val.inject j v1 v1' -> Val.inject j v2 v2' ->
         val_opt_inject j (f v1 v2) (f v1' v2')) :=
@@ -141,16 +142,33 @@ Definition valty (t: typ) : Type :=
   | Tany32 | Tany64 => Empty_set (**r no clear semantic meaning *)
   end.
 
-(** We can inject and project between the numerical type [valty t] and the type [val]. *)
-
-Definition inj_num (t: typ) : valty t -> val :=
+Definition valretty (t: rettype) : Type :=
   match t with
-  | Tint => Vint
-  | Tlong => Vlong
-  | Tfloat => Vfloat
-  | Tsingle => Vsingle
-  | Tany32 | Tany64 => fun _ => Vundef
+  | Tret t => valty t
+  | Tint8signed => { n: int | n = Int.sign_ext 8 n }
+  | Tint8unsigned => { n: int | n = Int.zero_ext 8 n }
+  | Tint16signed => { n: int | n = Int.sign_ext 16 n }
+  | Tint16unsigned => { n: int | n = Int.zero_ext 16 n }
+  | Tvoid => unit
   end.
+
+(** We can inject from the numerical type [valretty t] to the value type [val]. *)
+
+Definition inj_num (t: rettype) : valretty t -> val :=
+  match t with
+  | Tret Tint => Vint
+  | Tret Tlong => Vlong
+  | Tret Tfloat => Vfloat
+  | Tret Tsingle => Vsingle
+  | Tret (Tany32 | Tany64) => fun _ => Vundef
+  | Tint8signed => fun n => Vint (proj1_sig n)
+  | Tint8unsigned => fun n => Vint (proj1_sig n)
+  | Tint16signed => fun n => Vint (proj1_sig n)
+  | Tint16unsigned => fun n => Vint (proj1_sig n)
+  | Tvoid => fun _ => Vundef
+  end.
+
+(** Conversely, we can project a value to the numerical type [valty t]. *)
 
 Definition proj_num {A: Type} (t: typ) (k0: A) (v: val): (valty t -> A) -> A :=
   match t with
@@ -161,17 +179,18 @@ Definition proj_num {A: Type} (t: typ) (k0: A) (v: val): (valty t -> A) -> A :=
   | Tany32 | Tany64 => fun k1 => k0
   end.
 
-Lemma inj_num_wt: forall t x, Val.has_type (inj_num t x) t.
+Lemma inj_num_wt: forall t x, Val.has_rettype (inj_num t x) t.
 Proof.
-  destruct t; intros; exact I.
+  destruct t; intros; simpl; auto; try (apply proj2_sig).
+  destruct t; exact I.
 Qed.
 
 Lemma inj_num_inject: forall j t x, Val.inject j (inj_num t x) (inj_num t x).
 Proof.
-  destruct t; intros; constructor.
+  destruct t; intros; try constructor. destruct t; constructor.
 Qed.
 
-Lemma inj_num_opt_wt: forall t x, val_opt_has_type (option_map (inj_num t) x) t.
+Lemma inj_num_opt_wt: forall t x, val_opt_has_rettype (option_map (inj_num t) x) t.
 Proof.
   intros. destruct x; simpl. apply inj_num_wt. auto. 
 Qed.
@@ -184,10 +203,13 @@ Qed.
 
 Lemma proj_num_wt:
   forall tres t k1 v,
-  (forall x, Val.has_type (k1 x) tres) ->
-  Val.has_type (proj_num t Vundef v k1) tres.
+  (forall x, Val.has_rettype (k1 x) tres) ->
+  Val.has_rettype (proj_num t Vundef v k1) tres.
 Proof.
-  intros. destruct t; simpl; destruct v; auto; exact I.
+  intros.
+  assert (U: Val.has_rettype Vundef tres).
+  { destruct tres; exact I. }
+  intros. destruct t; simpl; destruct v; auto.
 Qed.
 
 Lemma proj_num_inject:
@@ -202,11 +224,12 @@ Qed.
 Lemma proj_num_opt_wt:
   forall tres t k0 k1 v,
   k0 = None \/ k0 = Some Vundef ->
-  (forall x, val_opt_has_type (k1 x) tres) ->
-  val_opt_has_type (proj_num t k0 v k1) tres.
+  (forall x, val_opt_has_rettype (k1 x) tres) ->
+  val_opt_has_rettype (proj_num t k0 v k1) tres.
 Proof.
   intros.
-  assert (val_opt_has_type k0 tres). { destruct H; subst k0; exact I. }
+  assert (val_opt_has_rettype k0 tres).
+  { destruct H; subst k0. exact I. hnf. destruct tres; exact I. }
   destruct t; simpl; destruct v; auto.
 Qed.
 
@@ -227,8 +250,8 @@ Qed.
  *)
 
 Program Definition mkbuiltin_n1t 
-    (targ1: typ) (tres: typ)
-    (f: valty targ1 -> valty tres) :=
+    (targ1: typ) (tres: rettype)
+    (f: valty targ1 -> valretty tres) :=
   mkbuiltin_v1t tres
     (fun v1 => proj_num targ1 Vundef v1 (fun x => inj_num tres (f x)))
     _ _.
@@ -240,8 +263,8 @@ Next Obligation.
 Qed.
 
 Program Definition mkbuiltin_n2t 
-    (targ1 targ2: typ) (tres: typ)
-    (f: valty targ1 -> valty targ2 -> valty tres) :=
+    (targ1 targ2: typ) (tres: rettype)
+    (f: valty targ1 -> valty targ2 -> valretty tres) :=
   mkbuiltin_v2t tres
     (fun v1 v2 =>
        proj_num targ1 Vundef v1 (fun x1 =>
@@ -255,8 +278,8 @@ Next Obligation.
 Qed.
 
 Program Definition mkbuiltin_n3t 
-    (targ1 targ2 targ3: typ) (tres: typ)
-    (f: valty targ1 -> valty targ2 -> valty targ3 -> valty tres) :=
+    (targ1 targ2 targ3: typ) (tres: rettype)
+    (f: valty targ1 -> valty targ2 -> valty targ3 -> valretty tres) :=
   mkbuiltin_v3t tres
     (fun v1 v2 v3 =>
        proj_num targ1 Vundef v1 (fun x1 =>
@@ -271,8 +294,8 @@ Next Obligation.
 Qed.
 
 Program Definition mkbuiltin_n1p
-    (targ1: typ) (tres: typ)
-    (f: valty targ1 -> option (valty tres)) :=
+    (targ1: typ) (tres: rettype)
+    (f: valty targ1 -> option (valretty tres)) :=
   mkbuiltin_v1p tres
     (fun v1 => proj_num targ1 None v1 (fun x => option_map (inj_num tres) (f x)))
     _ _.
@@ -284,8 +307,8 @@ Next Obligation.
 Qed.
 
 Program Definition mkbuiltin_n2p
-    (targ1 targ2: typ) (tres: typ)
-    (f: valty targ1 -> valty targ2 -> option (valty tres)) :=
+    (targ1 targ2: typ) (tres: rettype)
+    (f: valty targ1 -> valty targ2 -> option (valretty tres)) :=
   mkbuiltin_v2p tres
     (fun v1 v2 =>
       proj_num targ1 None v1 (fun x1 =>
@@ -332,6 +355,7 @@ End LOOKUP.
 Inductive standard_builtin : Type :=
   | BI_select (t: typ)
   | BI_fabs
+  | BI_fabsf
   | BI_fsqrt
   | BI_negl
   | BI_addl
@@ -340,6 +364,7 @@ Inductive standard_builtin : Type :=
   | BI_i16_bswap
   | BI_i32_bswap
   | BI_i64_bswap
+  | BI_unreachable
   | BI_i64_umulh
   | BI_i64_smulh
   | BI_i64_sdiv
@@ -364,7 +389,9 @@ Definition standard_builtin_table : list (string * standard_builtin) :=
  :: ("__builtin_sel", BI_select Tfloat)
  :: ("__builtin_sel", BI_select Tsingle)
  :: ("__builtin_fabs", BI_fabs)
+ :: ("__builtin_fabsf", BI_fabsf)
  :: ("__builtin_fsqrt", BI_fsqrt)
+ :: ("__builtin_sqrt", BI_fsqrt)
  :: ("__builtin_negl", BI_negl)
  :: ("__builtin_addl", BI_addl)
  :: ("__builtin_subl", BI_subl)
@@ -373,6 +400,7 @@ Definition standard_builtin_table : list (string * standard_builtin) :=
  :: ("__builtin_bswap", BI_i32_bswap)
  :: ("__builtin_bswap32", BI_i32_bswap)
  :: ("__builtin_bswap64", BI_i64_bswap)
+ :: ("__builtin_unreachable", BI_unreachable)
  :: ("__compcert_i64_umulh", BI_i64_umulh)
  :: ("__compcert_i64_smulh", BI_i64_smulh)
  :: ("__compcert_i64_sdiv", BI_i64_sdiv)
@@ -393,33 +421,37 @@ Definition standard_builtin_table : list (string * standard_builtin) :=
 Definition standard_builtin_sig (b: standard_builtin) : signature :=
   match b with
   | BI_select t =>
-      mksignature (Tint :: t :: t :: nil) (Some t) cc_default
+      mksignature (Tint :: t :: t :: nil) t cc_default
   | BI_fabs | BI_fsqrt =>
-      mksignature (Tfloat :: nil) (Some Tfloat) cc_default
+      mksignature (Tfloat :: nil) Tfloat cc_default
+  | BI_fabsf =>
+      mksignature (Tsingle :: nil) Tsingle cc_default
   | BI_negl =>
-      mksignature (Tlong :: nil) (Some Tlong) cc_default
+      mksignature (Tlong :: nil) Tlong cc_default
   | BI_addl | BI_subl | BI_i64_umulh| BI_i64_smulh 
   | BI_i64_sdiv | BI_i64_udiv | BI_i64_smod | BI_i64_umod =>
-      mksignature (Tlong :: Tlong :: nil) (Some Tlong) cc_default
+      mksignature (Tlong :: Tlong :: nil) Tlong cc_default
   | BI_mull =>
-      mksignature (Tint :: Tint :: nil) (Some Tlong) cc_default
+      mksignature (Tint :: Tint :: nil) Tlong cc_default
   | BI_i32_bswap =>
-      mksignature (Tint :: nil) (Some Tint) cc_default
+      mksignature (Tint :: nil) Tint cc_default
   | BI_i64_bswap =>
-      mksignature (Tlong :: nil) (Some Tlong) cc_default
+      mksignature (Tlong :: nil) Tlong cc_default
   | BI_i16_bswap =>
-      mksignature (Tint :: nil) (Some Tint) cc_default
+      mksignature (Tint :: nil) Tint cc_default
+  | BI_unreachable =>
+      mksignature nil Tvoid cc_default
   | BI_i64_shl  | BI_i64_shr | BI_i64_sar =>
-      mksignature (Tlong :: Tint :: nil) (Some Tlong) cc_default
+      mksignature (Tlong :: Tint :: nil) Tlong cc_default
   | BI_i64_dtos | BI_i64_dtou =>
-      mksignature (Tfloat :: nil) (Some Tlong) cc_default
+      mksignature (Tfloat :: nil) Tlong cc_default
   | BI_i64_stod | BI_i64_utod =>
-      mksignature (Tlong :: nil) (Some Tfloat) cc_default
+      mksignature (Tlong :: nil) Tfloat cc_default
   | BI_i64_stof | BI_i64_utof =>
-      mksignature (Tlong :: nil) (Some Tsingle) cc_default
+      mksignature (Tlong :: nil) Tsingle cc_default
   end.
 
-Program Definition standard_builtin_sem (b: standard_builtin) : builtin_sem (proj_sig_res (standard_builtin_sig b)) :=
+Program Definition standard_builtin_sem (b: standard_builtin) : builtin_sem (sig_res (standard_builtin_sig b)) :=
   match b with
   | BI_select t =>
       mkbuiltin t 
@@ -428,6 +460,7 @@ Program Definition standard_builtin_sem (b: standard_builtin) : builtin_sem (pro
           | _ => None
         end) _ _
   | BI_fabs => mkbuiltin_n1t Tfloat Tfloat Float.abs
+  | BI_fabsf => mkbuiltin_n1t Tsingle Tsingle Float32.abs
   | BI_fsqrt => mkbuiltin_n1t Tfloat Tfloat Float.sqrt
   | BI_negl => mkbuiltin_n1t Tlong Tlong Int64.neg
   | BI_addl => mkbuiltin_v2t Tlong Val.addl _ _ 
@@ -442,6 +475,7 @@ Program Definition standard_builtin_sem (b: standard_builtin) : builtin_sem (pro
   | BI_i64_bswap =>
     mkbuiltin_n1t Tlong Tlong
                   (fun n => Int64.repr (decode_int (List.rev (encode_int 8%nat (Int64.unsigned n)))))
+  | BI_unreachable => mkbuiltin Tvoid (fun vargs => None) _ _
   | BI_i64_umulh => mkbuiltin_n2t Tlong Tlong Tlong Int64.mulhu
   | BI_i64_smulh => mkbuiltin_n2t Tlong Tlong Tlong Int64.mulhs
   | BI_i64_sdiv => mkbuiltin_v2p Tlong Val.divls _ _

@@ -6,10 +6,11 @@
 /*                                                                     */
 /*  Copyright Institut National de Recherche en Informatique et en     */
 /*  Automatique.  All rights reserved.  This file is distributed       */
-/*  under the terms of the GNU General Public License as published by  */
-/*  the Free Software Foundation, either version 2 of the License, or  */
-/*  (at your option) any later version.  This file is also distributed */
-/*  under the terms of the INRIA Non-Commercial License Agreement.     */
+/*  under the terms of the GNU Lesser General Public License as        */
+/*  published by the Free Software Foundation, either version 2.1 of   */
+/*  the License, or  (at your option) any later version.               */
+/*  This file is also distributed under the terms of the               */
+/*  INRIA Non-Commercial License Agreement.                            */
 /*                                                                     */
 /* *********************************************************************/
 
@@ -37,7 +38,7 @@ Require Cabs.
   STRUCT UNION ENUM UNDERSCORE_BOOL PACKED ALIGNAS ATTRIBUTE ASM
 
 %token<Cabs.loc> CASE DEFAULT IF_ ELSE SWITCH WHILE DO FOR GOTO CONTINUE BREAK
-  RETURN BUILTIN_VA_ARG BUILTIN_OFFSETOF
+  RETURN BUILTIN_VA_ARG BUILTIN_OFFSETOF STATIC_ASSERT
 
 %token EOF
 
@@ -55,6 +56,8 @@ Require Cabs.
 %type<list Cabs.spec_elem> declaration_specifiers_typespec_opt
 %type<list Cabs.init_name (* Reverse order *)> init_declarator_list
 %type<Cabs.init_name> init_declarator
+%type<(Cabs.expression * Cabs.loc) * (Cabs.constant * Cabs.loc) * Cabs.loc>
+  static_assert_declaration
 %type<Cabs.storage * Cabs.loc> storage_class_specifier
 %type<Cabs.typeSpecifier * Cabs.loc> type_specifier struct_or_union_specifier enum_specifier
 %type<Cabs.structOrUnion * Cabs.loc> struct_or_union
@@ -343,6 +346,9 @@ declaration:
     { Cabs.DECDEF (fst decspec, rev' decls) (snd decspec) }
 | decspec = declaration_specifiers SEMICOLON
     { Cabs.DECDEF (fst decspec, []) (snd decspec) }
+| asrt = static_assert_declaration
+    { let '((e, loc_e), (s, loc_s), loc) := asrt in
+      Cabs.STATIC_ASSERT e loc_e s loc_s loc }
 
 declaration_specifiers_typespec_opt:
 | storage = storage_class_specifier rest = declaration_specifiers_typespec_opt
@@ -459,6 +465,10 @@ struct_declaration:
 (* Extension to C99 grammar needed to parse some GNU header files. *)
 | decspec = specifier_qualifier_list SEMICOLON
     { Cabs.Field_group (fst decspec) [(None,None)] (snd decspec) }
+(* C11 static assertions *)
+| asrt = static_assert_declaration
+    { let '((e, loc_e), (s, loc_s), loc) := asrt in
+      Cabs.Field_group_static_assert e loc_e s loc_s loc }
 
 specifier_qualifier_list:
 | typ = type_specifier rest = specifier_qualifier_list
@@ -748,6 +758,14 @@ designator:
     { Cabs.ATINDEX_INIT (fst expr) }
 | DOT id = OTHER_NAME
     { Cabs.INFIELD_INIT (fst id) }
+
+(* C11 6.7.10 *)
+
+static_assert_declaration:
+| loc = STATIC_ASSERT LPAREN expr = constant_expression
+                        COMMA str = STRING_LITERAL RPAREN SEMICOLON
+    { let '((wide, chars), locs) := str in
+      (expr, (Cabs.CONST_STRING wide chars, locs), loc) }
 
 (* 6.8 *)
 statement_dangerous:

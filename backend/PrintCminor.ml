@@ -6,17 +6,18 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
 (** Pretty-printer for Cminor *)
 
 open Format
-open !Camlcoq
+open! Camlcoq
 open Integers
 open AST
 open PrintAST
@@ -193,9 +194,7 @@ let print_sig p sg =
   List.iter
     (fun t -> fprintf p "%s ->@ " (name_of_type t))
     sg.sig_args;
-  match sg.sig_res with
-  | None -> fprintf p "void"
-  | Some ty -> fprintf p "%s" (name_of_type ty)
+  fprintf p "%s" (name_of_rettype sg.sig_res)
 
 let rec just_skips s =
   match s with

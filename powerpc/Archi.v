@@ -7,18 +7,18 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
 (** Architecture-dependent parameters for PowerPC *)
 
+From Flocq Require Import Binary Bits.
 Require Import ZArith List.
-(*From Flocq*)
-Require Import Binary Bits.
 
 Definition ptr64 := false.
 
@@ -29,6 +29,10 @@ Definition align_float64 := 8%Z.
 
 (** Can we use the 64-bit extensions to the PowerPC architecture? *)
 Parameter ppc64 : bool.
+
+(** Should single-precision FP arguments passed on stack be passed 
+    as singles or use double FP format. *)
+Parameter single_passed_as_single : bool.
 
 Definition splitlong := negb ppc64.
 

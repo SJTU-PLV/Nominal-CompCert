@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -92,6 +93,7 @@ with parameter :=
 (* The optional expression is the bitfield *)
 with field_group :=
   | Field_group : list spec_elem -> list (option name * option expression) -> loc -> field_group
+  | Field_group_static_assert : expression -> loc -> constant -> loc -> loc -> field_group
 
 (* The decl_type is in the order in which they are printed. Only the name of
  * the declared identifier is pulled out. *)
@@ -197,6 +199,7 @@ Inductive definition :=
  | FUNDEF : list spec_elem -> name -> list definition -> statement -> loc -> definition
  | DECDEF : init_name_group -> loc -> definition  (* global variable(s), or function prototype *)
  | PRAGMA : string -> loc -> definition
+ | STATIC_ASSERT : expression -> loc -> constant -> loc -> loc -> definition
 
 (*
 ** statements

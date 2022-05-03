@@ -256,7 +256,9 @@ Inductive instruction : Type :=
   (* floating point register move *)
   | Pfmv     (rd: freg) (rs: freg)                  (**r move *)
   | Pfmvxs   (rd: ireg) (rs: freg)                  (**r move FP single to integer register *)
+  | Pfmvsx   (rd: freg) (rs: ireg)                  (**r move integer register to FP single *)
   | Pfmvxd   (rd: ireg) (rs: freg)                  (**r move FP double to integer register *)
+  | Pfmvdx   (rd: freg) (rs: ireg)                  (**r move integer register to FP double *)
 
   (* 32-bit (single-precision) floating point *)
   | Pfls     (rd: freg) (ra: ireg) (ofs: offset)    (**r load float *)
@@ -969,7 +971,9 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pfence
 
   | Pfmvxs _ _
+  | Pfmvsx _ _
   | Pfmvxd _ _
+  | Pfmvdx _ _
 
   | Pfmins _ _ _
   | Pfmaxs _ _ _
@@ -1076,7 +1080,7 @@ Inductive step: state -> trace -> state -> Prop :=
       rs' = nextinstr
               (set_res res vres
                 (undef_regs (map preg_of (destroyed_by_builtin ef))
-                   (rs#X31 <- Vundef))) ->
+                   (rs #X1 <- Vundef #X31 <- Vundef))) ->
       step (State rs m) t (State rs' m')
   | exec_step_external:
       forall b ef args res rs m t rs' m',
@@ -1157,7 +1161,7 @@ Ltac Equalities :=
   split. auto. intros. destruct B; auto. subst. auto.
 - (* trace length *)
   red; intros. inv H; simpl.
-  omega.
+  lia.
   eapply external_call_trace_length; eauto.
   eapply external_call_trace_length; eauto.
 - (* initial states *)

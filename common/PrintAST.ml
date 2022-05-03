@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -26,6 +27,14 @@ let name_of_type = function
   | Tsingle -> "single"
   | Tany32 -> "any32"
   | Tany64 -> "any64"
+
+let name_of_rettype = function
+  | Tret t -> name_of_type t
+  | Tvoid -> "void"
+  | Tint8signed -> "int8s"
+  | Tint8unsigned -> "int8u"
+  | Tint16signed -> "int16s"
+  | Tint16unsigned -> "int16u"
 
 let name_of_chunk = function
   | Mint8signed -> "int8s"

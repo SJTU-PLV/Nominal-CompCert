@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -31,6 +32,9 @@ let rec local_initializer env path init k =
       let (ty_elt, sz) =
         match unroll env path.etyp with
         | TArray(ty_elt, Some sz, _) -> (ty_elt, sz)
+        (* We accept empty array initializer for flexible array members, which
+           has size zero *)
+        | TArray(ty_elt, None, _) when il = [] -> (ty_elt, 0L)
         | _ -> Diagnostics.fatal_error Diagnostics.no_loc "wrong type for array initializer" in
       let rec array_init pos il =
         if pos >= sz then k else begin

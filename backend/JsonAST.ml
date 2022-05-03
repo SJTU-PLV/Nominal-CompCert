@@ -21,14 +21,22 @@ open Sections
 let pp_storage pp static =
   pp_jstring pp (if static then "Static" else "Extern")
 
+let pp_init pp init =
+  pp_jstring pp
+    (match init with
+      | Uninit -> "Uninit"
+      | Init -> "Init"
+      | Init_reloc -> "Init_reloc")
+
 let pp_section pp sec =
   let pp_simple name =
     pp_jsingle_object pp "Section Name" pp_jstring name
   and pp_complex name init =
     pp_jobject_start pp;
     pp_jmember ~first:true pp "Section Name" pp_jstring name;
-    pp_jmember pp "Init" pp_jbool init;
+    pp_jmember pp "Init" pp_init init;
     pp_jobject_end pp in
+
   match sec with
   | Section_text -> pp_simple "Text"
   | Section_data init -> pp_complex "Data" init
@@ -106,11 +114,17 @@ let pp_program pp pp_inst prog =
   let prog_vars,prog_funs = List.fold_left (fun (vars,funs) (ident,def) ->
       match def with
       | Gfun (Internal f) ->
+        (* No assembly is generated for non static inline functions *)
         if not (atom_is_iso_inline_definition ident) then
           vars,(ident,f)::funs
         else
           vars,funs
-      | Gvar v -> (ident,v)::vars,funs
+      | Gvar v ->
+        (* No assembly is generated for variables without init *)
+        if v.gvar_init <> [] then
+          (ident,v)::vars,funs
+        else
+          vars, funs
       | _ -> vars,funs) ([],[]) prog.prog_defs in
   pp_jobject_start pp;
   pp_jmember ~first:true pp "Global Variables" (pp_jarray pp_vardef) prog_vars;

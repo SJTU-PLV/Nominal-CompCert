@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -35,6 +36,7 @@ let () =
       ("_Bool", fun loc -> UNDERSCORE_BOOL loc);
       ("_Complex", fun loc -> reserved_keyword loc "_Complex");
       ("_Imaginary", fun loc -> reserved_keyword loc "_Imaginary");
+      ("_Static_assert", fun loc -> STATIC_ASSERT loc);
       ("__alignof", fun loc -> ALIGNOF loc);
       ("__alignof__", fun loc -> ALIGNOF loc);
       ("__asm", fun loc -> ASM loc);
@@ -94,7 +96,8 @@ let () =
     (* We can ignore the __extension__ GCC keyword. *)
     ignored_keywords := SSet.add "__extension__" !ignored_keywords
 
-let init_ctx = SSet.singleton "__builtin_va_list"
+let init_ctx = SSet.of_list (List.map fst CBuiltins.builtins.C.builtin_typedefs)
+
 let types_context : SSet.t ref = ref init_ctx
 
 let _ =
@@ -177,7 +180,7 @@ let identifier_nondigit =
 let identifier = identifier_nondigit (identifier_nondigit|digit)*
 
 (* Whitespaces *)
-let whitespace_char_no_newline = [' ' '\t' '\012' '\r']
+let whitespace_char_no_newline = [' ' '\t'  '\011' '\012' '\r']
 
 (* Integer constants *)
 let nonzero_digit = ['1'-'9']
@@ -390,7 +393,7 @@ and string_literal startp accu = parse
 (* We assume gcc -E syntax but try to tolerate variations. *)
 and hash = parse
   | whitespace_char_no_newline +
-    (decimal_constant as n)
+    (digit + as n)
     whitespace_char_no_newline *
     "\"" ([^ '\n' '\"']* as file) "\""
     [^ '\n']* '\n'
@@ -577,6 +580,7 @@ and singleline_comment = parse
       | Pre_parser.SLASH loc -> loop (Parser.SLASH loc)
       | Pre_parser.STAR loc -> loop (Parser.STAR loc)
       | Pre_parser.STATIC loc -> loop (Parser.STATIC loc)
+      | Pre_parser.STATIC_ASSERT loc -> loop (Parser.STATIC_ASSERT loc)
       | Pre_parser.STRING_LITERAL (wide, str, loc) ->
           (* Merge consecutive string literals *)
           let rec doConcat wide str =

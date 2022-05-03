@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -603,7 +604,7 @@ Proof.
   exploit external_call_receptive; eauto. intros [vres2 [m2 EC2]].
   exists (Returnstate vres2 k m2). econstructor; eauto.
 (* trace length *)
-  red; intros; inv H; simpl; try omega; eapply external_call_trace_length; eauto.
+  red; intros; inv H; simpl; try lia; eapply external_call_trace_length; eauto.
 Qed.
 
 (** This semantics is determinate. *)
@@ -661,7 +662,7 @@ Proof.
     intros (A & B). split; intros; auto.
     apply B in H; destruct H; congruence.
 - (* single event *)
-  red; simpl. destruct 1; simpl; try omega;
+  red; simpl. destruct 1; simpl; try lia;
   eapply external_call_trace_length; eauto.
 - (* initial states *)
   inv H; inv H0. congruence.
@@ -701,12 +702,24 @@ Definition outcome_block (out: outcome) : outcome :=
   | out => out
   end.
 
+(*
 Definition outcome_result_value
-    (out: outcome) (retsig: option typ) (vres: val) : Prop :=
+    (out: outcome) (retsig: rettype) (vres: val) : Prop :=
   match out with
   | Out_normal => vres = Vundef
   | Out_return None => vres = Vundef
-  | Out_return (Some v) => retsig <> None /\ vres = v
+  | Out_return (Some v) => retsig <> Tvoid /\ vres = v
+  | Out_tailcall_return v => vres = v
+  | _ => False
+  end.
+*)
+
+Definition outcome_result_value
+    (out: outcome) (vres: val) : Prop :=
+  match out with
+  | Out_normal => vres = Vundef
+  | Out_return None => vres = Vundef
+  | Out_return (Some v) => vres = v
   | Out_tailcall_return v => vres = v
   | _ => False
   end.
@@ -736,7 +749,7 @@ Inductive eval_funcall:
       Mem.alloc m 0 f.(fn_stackspace) = (m1, sp) ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
       exec_stmt f (Vptr sp Ptrofs.zero) e m1 f.(fn_body) t e2 m2 out ->
-      outcome_result_value out f.(fn_sig).(sig_res) vres ->
+      outcome_result_value out vres ->
       outcome_free_mem out m2 sp f.(fn_stackspace) m3 ->
       eval_funcall m (Internal f) vargs t m3 vres
   | eval_funcall_external:
@@ -1028,7 +1041,7 @@ Proof.
   subst vres. replace k with (call_cont k') by congruence.
   apply star_one. apply step_return_0; auto.
   (* Out_return Some *)
-  destruct H3. subst vres.
+  subst vres.
   replace k with (call_cont k') by congruence.
   apply star_one. eapply step_return_1; eauto.
   (* Out_tailcall_return *)

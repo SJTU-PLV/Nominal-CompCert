@@ -7,10 +7,11 @@
 /*                                                                     */
 /*  Copyright Institut National de Recherche en Informatique et en     */
 /*  Automatique.  All rights reserved.  This file is distributed       */
-/*  under the terms of the GNU General Public License as published by  */
-/*  the Free Software Foundation, either version 2 of the License, or  */
-/*  (at your option) any later version.  This file is also distributed */
-/*  under the terms of the INRIA Non-Commercial License Agreement.     */
+/*  under the terms of the GNU Lesser General Public License as        */
+/*  published by the Free Software Foundation, either version 2.1 of   */
+/*  the License, or  (at your option) any later version.               */
+/*  This file is also distributed under the terms of the               */
+/*  INRIA Non-Commercial License Agreement.                            */
 /*                                                                     */
 /* *********************************************************************/
 
@@ -57,7 +58,7 @@
   AUTO REGISTER INLINE NORETURN CHAR SHORT INT LONG SIGNED UNSIGNED FLOAT DOUBLE
   UNDERSCORE_BOOL CONST VOLATILE VOID STRUCT UNION ENUM CASE DEFAULT IF ELSE
   SWITCH WHILE DO FOR GOTO CONTINUE BREAK RETURN BUILTIN_VA_ARG ALIGNOF
-  ATTRIBUTE ALIGNAS PACKED ASM BUILTIN_OFFSETOF
+  ATTRIBUTE ALIGNAS PACKED ASM BUILTIN_OFFSETOF STATIC_ASSERT
 
 %token EOF
 
@@ -404,6 +405,7 @@ expression:
 declaration(phantom):
 | declaration_specifiers(declaration(phantom)) init_declarator_list?    SEMICOLON
 | declaration_specifiers_typedef               typedef_declarator_list? SEMICOLON
+| static_assert_declaration
     {}
 
 init_declarator_list:
@@ -518,6 +520,7 @@ struct_declaration_list:
 
 struct_declaration:
 | specifier_qualifier_list(struct_declaration) struct_declarator_list? SEMICOLON
+| static_assert_declaration
     {}
 
 (* As in the standard, except it also encodes the constraint described
@@ -605,6 +608,10 @@ gcc_attribute_word:
 | other_identifier
 | CONST
 | PACKED
+    {}
+
+static_assert_declaration:
+|  STATIC_ASSERT LPAREN constant_expression COMMA string_literals_list RPAREN SEMICOLON
     {}
 
 function_specifier:

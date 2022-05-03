@@ -118,22 +118,16 @@ module Linux_System : SYSTEM =
     let name_of_section = function
       | Section_text -> ".text"
       | Section_data i ->
-          if i then
-            ".data"
-          else
-            common_section ~sec:".section	.bss" ()
+          variable_section ~sec:".data" ~bss:".section	.bss" i
       | Section_small_data i ->
-          if i then
-            ".section	.sdata,\"aw\",@progbits"
-          else
-            common_section ~sec:".section	.sbss,\"aw\",@nobits" ()
+          variable_section
+            ~sec:".section	.sdata,\"aw\",@progbits"
+            ~bss:".section	.sbss,\"aw\",@nobits"
+            i
       | Section_const i ->
-          if i || (not !Clflags.option_fcommon) then ".rodata" else "COMM"
+          variable_section ~sec:".rodata" i
       | Section_small_const i ->
-          if i || (not !Clflags.option_fcommon) then
-            ".section	.sdata2,\"a\",@progbits"
-          else
-            "COMM"
+          variable_section ~sec:".section	.sdata2,\"a\",@progbits" i
       | Section_string -> ".rodata"
       | Section_literal -> ".section	.rodata.cst8,\"aM\",@progbits,8"
       | Section_jumptable -> ".text"
@@ -218,8 +212,10 @@ module Diab_System : SYSTEM =
 
     let name_of_section = function
       | Section_text -> ".text"
-      | Section_data i -> if i then ".data" else common_section ()
-      | Section_small_data i -> if i then ".sdata" else ".sbss"
+      | Section_data i ->
+          variable_section ~sec:".data" ~bss:".bss" i
+      | Section_small_data i ->
+          variable_section ~sec:".sdata" ~bss:".sbss" ~common:false i
       | Section_const _ -> ".text"
       | Section_small_const _ -> ".sdata2"
       | Section_string -> ".text"
@@ -553,22 +549,16 @@ module Target (System : SYSTEM):TARGET =
           fprintf oc "	fadds	%a, %a, %a\n" freg r1 freg r2 freg r3
       | Pfcmpu(r1, r2) ->
           fprintf oc "	fcmpu	%a, %a, %a\n" creg 0 freg r1 freg r2
-      | Pfcfi(r1, r2) ->
-          assert false
       | Pfcfl(r1, r2) ->
           assert false
       | Pfcfid(r1, r2) ->
           fprintf oc "	fcfid	%a, %a\n" freg r1 freg r2
-      | Pfcfiu(r1, r2) ->
-          assert false
       | Pfcti(r1, r2) ->
           assert false
       | Pfctid(r1, r2) ->
           assert false
       | Pfctidz(r1, r2) ->
           fprintf oc "	fctidz	%a, %a\n" freg r1 freg r2
-      | Pfctiu(r1, r2) ->
-          assert false
       | Pfctiw(r1, r2) ->
           fprintf oc "	fctiw	%a, %a\n" freg r1 freg r2
       | Pfctiwz(r1, r2) ->

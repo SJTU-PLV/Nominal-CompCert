@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -23,8 +24,12 @@ open Cutil
 module StringSet = Set.Make(String)
 
 (* Functions declared noreturn by the standard *)
+(* We also add our own "__builtin_unreachable" function because, currently,
+   it is difficult to attach attributes to a built-in function. *)
+
 let std_noreturn_functions =
-   ["longjmp";"exit";"_exit";"abort";"_Exit";"quick_exit";"thrd_exit"]
+   ["longjmp";"exit";"_exit";"abort";"_Exit";"quick_exit";"thrd_exit";
+    "__builtin_unreachable"]
 
 (* Statements are abstracted as "flow transformers":
    functions from possible inputs to possible outcomes.

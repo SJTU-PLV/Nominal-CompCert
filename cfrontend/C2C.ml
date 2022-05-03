@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -33,6 +34,7 @@ type inline_status =
 
 type atom_info =
   { a_storage: C.storage;              (* storage class *)
+    a_size: int64 option;              (* size in bytes *)
     a_alignment: int option;           (* alignment *)
     a_sections: Sections.section_name list; (* in which section to put it *)
       (* 1 section for data, 3 sections (code/lit/jumptbl) for functions *)
@@ -61,15 +63,25 @@ let atom_alignof a =
   with Not_found ->
     None
 
+let atom_is_aligned a sz =
+  match atom_alignof a with
+  | None -> false
+  | Some align -> align mod (Z.to_int sz) = 0
+
 let atom_sections a =
   try
     (Hashtbl.find decl_atom a).a_sections
   with Not_found ->
     []
 
-let atom_is_small_data a ofs =
+let atom_is_small_data a ofs  =
   try
-    (Hashtbl.find decl_atom a).a_access = Sections.Access_near
+    let info = Hashtbl.find decl_atom a in
+    info.a_access = Sections.Access_near
+    && (match info.a_size with
+        | None -> false
+        | Some sz ->
+            let ofs = camlint64_of_ptrofs ofs in 0L <= ofs && ofs < sz)
   with Not_found ->
     false
 
@@ -169,11 +181,27 @@ let builtins_generic = {
       (TInt(IUInt, []), [TInt(IUInt, [])], false);
     "__builtin_bswap16",
       (TInt(IUShort, []), [TInt(IUShort, [])], false);
+    "__builtin_clz",
+      (TInt(IInt, []), [TInt(IUInt, [])], false);
+    "__builtin_clzl",
+      (TInt(IInt, []), [TInt(IULong, [])], false);
+    "__builtin_clzll",
+      (TInt(IInt, []), [TInt(IULongLong, [])], false);
+    "__builtin_ctz",
+      (TInt(IInt, []), [TInt(IUInt, [])], false);
+    "__builtin_ctzl",
+      (TInt(IInt, []), [TInt(IULong, [])], false);
+    "__builtin_ctzll",
+      (TInt(IInt, []), [TInt(IULongLong, [])], false);
     (* Floating-point absolute value *)
     "__builtin_fabs",
     (TFloat(FDouble, []), [TFloat(FDouble, [])], false);
+    "__builtin_fabsf",
+    (TFloat(FFloat, []), [TFloat(FFloat, [])], false);
     (* Float arithmetic *)
     "__builtin_fsqrt",
+    (TFloat(FDouble, []), [TFloat(FDouble, [])], false);
+    "__builtin_sqrt",
     (TFloat(FDouble, []), [TFloat(FDouble, [])], false);
     (* Block copy *)
     "__builtin_memcpy_aligned",
@@ -225,83 +253,11 @@ let builtins_generic = {
         (TVoid [],
           [TPtr(TVoid [], [])],
           false);
-    "__compcert_va_int32",
-        (TInt(IUInt, []),
-          [TPtr(TVoid [], [])],
-          false);
-    "__compcert_va_int64",
-        (TInt(IULongLong, []),
-          [TPtr(TVoid [], [])],
-          false);
-    "__compcert_va_float64",
-        (TFloat(FDouble, []),
-          [TPtr(TVoid [], [])],
-          false);
-    "__compcert_va_composite",
-        (TPtr(TVoid [], []),
-          [TPtr(TVoid [], []); TInt(IULong, [])],
-          false);
-  (* Helper functions for int64 arithmetic *)
-    "__compcert_i64_dtos",
-        (TInt(ILongLong, []),
-         [TFloat(FDouble, [])],
-         false);
-    "__compcert_i64_dtou",
-        (TInt(IULongLong, []),
-         [TFloat(FDouble, [])],
-         false);
-    "__compcert_i64_stod",
-        (TFloat(FDouble, []),
-         [TInt(ILongLong, [])],
-         false);
-    "__compcert_i64_utod",
-        (TFloat(FDouble, []),
-         [TInt(IULongLong, [])],
-         false);
-    "__compcert_i64_stof",
-        (TFloat(FFloat, []),
-         [TInt(ILongLong, [])],
-         false);
-    "__compcert_i64_utof",
-        (TFloat(FFloat, []),
-         [TInt(IULongLong, [])],
-         false);
-    "__compcert_i64_sdiv",
-        (TInt(ILongLong, []),
-         [TInt(ILongLong, []); TInt(ILongLong, [])],
-         false);
-    "__compcert_i64_udiv",
-        (TInt(IULongLong, []),
-         [TInt(IULongLong, []); TInt(IULongLong, [])],
-         false);
-    "__compcert_i64_smod",
-        (TInt(ILongLong, []),
-         [TInt(ILongLong, []); TInt(ILongLong, [])],
-         false);
-    "__compcert_i64_umod",
-        (TInt(IULongLong, []),
-         [TInt(IULongLong, []); TInt(IULongLong, [])],
-         false);
-    "__compcert_i64_shl",
-        (TInt(ILongLong, []),
-         [TInt(ILongLong, []); TInt(IInt, [])],
-         false);
-    "__compcert_i64_shr",
-        (TInt(IULongLong, []),
-         [TInt(IULongLong, []); TInt(IInt, [])],
-         false);
-    "__compcert_i64_sar",
-        (TInt(ILongLong, []),
-         [TInt(ILongLong, []); TInt(IInt, [])],
-         false);
-    "__compcert_i64_smulh",
-        (TInt(ILongLong, []),
-         [TInt(ILongLong, []); TInt(ILongLong, [])],
-         false);
-    "__compcert_i64_umulh",
-        (TInt(IULongLong, []),
-         [TInt(IULongLong, []); TInt(IULongLong, [])],
-         false)
+  (* Optimization hints *)
+    "__builtin_unreachable",
+        (TVoid [], [], false);
+    "__builtin_expect",
+        (TInt(ILong, []), [TInt(ILong, []); TInt(ILong, [])], false)
   ]
 }
 
@@ -347,6 +303,7 @@ let name_for_string_literal s =
     Hashtbl.add decl_atom id
       { a_storage = C.Storage_static;
         a_alignment = Some 1;
+        a_size = Some (Int64.of_int (String.length s + 1));
         a_sections = [Sections.for_stringlit()];
         a_access = Sections.Access_default;
         a_inline = No_specifier;
@@ -374,9 +331,12 @@ let name_for_wide_string_literal s =
     incr stringNum;
     let name = Printf.sprintf "__stringlit_%d" !stringNum in
     let id = intern_string name in
+    let wchar_size = Machine.((!config).sizeof_wchar) in
     Hashtbl.add decl_atom id
       { a_storage = C.Storage_static;
-        a_alignment = Some Machine.((!config).sizeof_wchar);
+        a_alignment = Some wchar_size;
+        a_size = Some (Int64.(mul (of_int (List.length s + 1))
+                                  (of_int wchar_size)));
         a_sections = [Sections.for_stringlit()];
         a_access = Sections.Access_default;
         a_inline = No_specifier;
@@ -521,10 +481,16 @@ let convertAttr a =
       let n = Cutil.alignas_attribute a in
       if n > 0 then Some (N.of_int (log2 n)) else None }
 
-let convertCallconv va unproto attr =
+let convertCallconv _tres targs va attr =
+  let vararg =
+    match targs with
+    | None -> None
+    | Some tl -> if va then Some (Z.of_uint (List.length tl)) else None in
   let sr =
     Cutil.find_custom_attributes ["structreturn"; "__structreturn"] attr in
-  {  AST.cc_vararg = va; cc_unproto = unproto; cc_structret = sr <> [] }
+  {  AST.cc_vararg = vararg;
+     AST.cc_unproto = (targs = None);
+     AST.cc_structret = (sr <> []) }
 
 (** Types *)
 
@@ -569,7 +535,7 @@ let checkFunctionType env tres targs =
     end
   end
 
-let rec convertTyp env t =
+let rec convertTyp env ?bitwidth t =
   match t with
   | C.TVoid a -> Tvoid
   | C.TInt(ik, a) ->
@@ -592,7 +558,7 @@ let rec convertTyp env t =
                 | Some tl -> convertParams env tl
                 end,
                 convertTyp env tres,
-                convertCallconv va (targs = None) a)
+                convertCallconv tres targs va a)
   | C.TNamed _ ->
       convertTyp env (Cutil.unroll env t)
   | C.TStruct(id, a) ->
@@ -600,7 +566,21 @@ let rec convertTyp env t =
   | C.TUnion(id, a) ->
       Tunion(intern_string id.name, convertAttr a)
   | C.TEnum(id, a) ->
-      convertIkind Cutil.enum_ikind (convertAttr a)
+      let ik =
+        match bitwidth with
+        | None -> Cutil.enum_ikind
+        | Some w ->
+            let info = Env.find_enum env id in
+            let representable sg =
+              List.for_all (fun (_, v, _) -> Cutil.int_representable v w sg)
+                           info.Env.ei_members in
+            if representable false then
+              Cutil.unsigned_ikind_of Cutil.enum_ikind
+            else if representable true then
+              Cutil.signed_ikind_of Cutil.enum_ikind
+            else
+              Cutil.enum_ikind in
+      convertIkind ik (convertAttr a)
 
 and convertParams env = function
     | [] -> Tnil
@@ -636,9 +616,16 @@ let rec convertTypAnnotArgs env = function
             convertTypAnnotArgs env el)
 
 let convertField env f =
-  if f.fld_bitfield <> None then
-    unsupported "bit field in struct or union (consider adding option [-fbitfields])";
-  (intern_string f.fld_name, convertTyp env f.fld_typ)
+  let id = intern_string f.fld_name
+  and ty = convertTyp env ?bitwidth: f.fld_bitfield f.fld_typ in
+  match f.fld_bitfield with
+  | None -> Member_plain(id, ty)
+  | Some w ->
+      match ty with
+      | Tint(sz, sg, attr) ->
+          Member_bitfield(id, sz, sg, attr, Z.of_uint w, f.fld_name = "")
+      | _ ->
+          fatal_error "bitfield must have type int"
 
 let convertCompositedef env su id attr members =
   if Cutil.find_custom_attributes ["packed";"__packed__"] attr <> [] then
@@ -741,6 +728,11 @@ let convertFloat f kind =
 
 (** Expressions *)
 
+let check_volatile_bitfield env e =
+  if Cutil.is_bitfield env e
+  && List.mem AVolatile (Cutil.attributes_of_type env e.etyp) then
+    warning Diagnostics.Unnamed "access to a volatile bit field, the 'volatile' qualifier is ignored"
+
 let ezero = Eval(Vint(coqint_of_camlint 0l), type_int32s)
 
 let ewrap = function
@@ -755,6 +747,7 @@ let rec convertExpr env e =
   | C.EUnop((C.Oderef|C.Odot _|C.Oarrow _), _)
   | C.EBinop(C.Oindex, _, _, _) ->
       let l = convertLvalue env e in
+      check_volatile_bitfield env e;
       ewrap (Ctyping.evalof l)
 
   | C.EConst(C.CInt(i, k, _)) ->
@@ -824,6 +817,7 @@ let rec convertExpr env e =
       if Cutil.is_composite_type env e2.etyp
       && List.mem AVolatile (Cutil.attributes_of_type env e2.etyp) then
         warning Diagnostics.Unnamed "assignment of a value of volatile composite type, the 'volatile' qualifier is ignored";
+      check_volatile_bitfield env e1;
       ewrap (Ctyping.eassign e1' e2')
   | C.EBinop((C.Oadd_assign|C.Osub_assign|C.Omul_assign|C.Odiv_assign|
               C.Omod_assign|C.Oand_assign|C.Oor_assign|C.Oxor_assign|
@@ -844,6 +838,7 @@ let rec convertExpr env e =
         | _ -> assert false in
       let e1' = convertLvalue env e1 in
       let e2' = convertExpr env e2 in
+      check_volatile_bitfield env e1;
       ewrap (Ctyping.eassignop op' e1' e2')
   | C.EBinop(C.Ocomma, e1, e2, _) ->
       ewrap (Ctyping.ecomma (convertExpr env e1) (convertExpr env e2))
@@ -952,13 +947,16 @@ let rec convertExpr env e =
       ewrap (Ctyping.eselection (convertExpr env arg1)
                                 (convertExpr env arg2) (convertExpr env arg3))
 
+  | C.ECall({edesc = C.EVar {name = "__builtin_expect"}}, [arg1; arg2]) ->
+      convertExpr env arg1
+
   | C.ECall({edesc = C.EVar {name = "printf"}}, args)
     when !Clflags.option_interp ->
       let targs = convertTypArgs env [] args
       and tres = convertTyp env e.etyp in
       let sg =
         signature_of_type targs tres
-           { AST.cc_vararg = true; cc_unproto = false; cc_structret = false} in
+           { AST.cc_vararg = Some (coqint_of_camlint 1l); cc_unproto = false; cc_structret = false} in
       Ebuiltin( AST.EF_external(coqstring_of_camlstring "printf", sg),
                targs, convertExprList env args, tres)
 
@@ -1218,13 +1216,15 @@ let convertFundef loc env fd =
   Hashtbl.add decl_atom id'
     { a_storage = fd.fd_storage;
       a_alignment = None;
-      a_sections = Sections.for_function env id' fd.fd_attrib;
+      a_size = None;
+      a_sections = Sections.for_function env loc id' fd.fd_attrib;
       a_access = Sections.Access_default;
       a_inline = inline;
       a_loc = loc };
   (id',  AST.Gfun(Ctypes.Internal
           {fn_return = ret;
-           fn_callconv = convertCallconv fd.fd_vararg false fd.fd_attrib;
+           fn_callconv = convertCallconv fd.fd_ret (Some fd.fd_params)
+                                         fd.fd_vararg fd.fd_attrib;
            fn_params = params;
            fn_vars = vars;
            fn_body = body'}))
@@ -1232,7 +1232,6 @@ let convertFundef loc env fd =
 (** External function declaration *)
 
 let re_builtin = Str.regexp "__builtin_"
-let re_runtime = Str.regexp "__compcert_i64_"
 
 let convertFundecl env (sto, id, ty, optinit) =
   let (args, res, cconv) =
@@ -1245,7 +1244,6 @@ let convertFundecl env (sto, id, ty, optinit) =
   let ef =
     if id.name = "malloc" then AST.EF_malloc else
     if id.name = "free" then AST.EF_free else
-    if Str.string_match re_runtime id.name 0 then  AST.EF_runtime(id'', sg) else
     if Str.string_match re_builtin id.name 0
     && List.mem_assoc id.name builtins.builtin_functions
     then AST.EF_builtin(id'', sg)
@@ -1294,8 +1292,13 @@ let convertGlobvar loc env (sto, id, ty, optinit) =
         if sto = C.Storage_extern then [] else [AST.Init_space sz]
     | Some i ->
         convertInitializer env ty i in
+  let initialized =
+    if optinit = None then Sections.Uninit else
+    if List.exists (function AST.Init_addrof _ -> true | _ -> false) init'
+    then Sections.Init_reloc
+    else Sections.Init in
   let (section, access) =
-    Sections.for_variable env id' ty (optinit <> None) in
+    Sections.for_variable env loc id' ty initialized in
   if Z.gt sz (Z.of_uint64 0xFFFF_FFFFL) then
     error "'%s' is too big (%s bytes)"
                    id.name (Z.to_string sz);
@@ -1304,6 +1307,7 @@ let convertGlobvar loc env (sto, id, ty, optinit) =
   Hashtbl.add decl_atom id'
     { a_storage = sto;
       a_alignment = Some (Z.to_int al);
+      a_size = Some (Z.to_int64 sz);
       a_sections = [section];
       a_access = access;
       a_inline = No_specifier;
@@ -1360,6 +1364,81 @@ let rec convertCompositedefs env res gl =
              (convertCompositedef env su id a m :: res) gl'
       | _ ->
           convertCompositedefs env res gl'
+
+(** Add declarations for the helper functions
+    (for varargs and for int64 arithmetic) *)
+
+let helper_functions () = [
+    "__compcert_va_int32",
+        Tint(I32, Unsigned, noattr),
+        [Tpointer(Tvoid, noattr)];
+    "__compcert_va_int64",
+        Tlong(Unsigned, noattr),
+        [Tpointer(Tvoid, noattr)];
+    "__compcert_va_float64",
+        Tfloat(F64, noattr),
+        [Tpointer(Tvoid, noattr)];
+    "__compcert_va_composite",
+        Tpointer(Tvoid, noattr),
+        [Tpointer(Tvoid, noattr); convertIkind (Cutil.size_t_ikind()) noattr];
+    "__compcert_i64_dtos",
+        Tlong(Signed, noattr),
+        [Tfloat(F64, noattr)];
+    "__compcert_i64_dtou",
+        Tlong(Unsigned, noattr),
+        [Tfloat(F64, noattr)];
+    "__compcert_i64_stod",
+        Tfloat(F64, noattr),
+        [Tlong(Signed, noattr)];
+    "__compcert_i64_utod",
+        Tfloat(F64, noattr),
+        [Tlong(Unsigned, noattr)];
+    "__compcert_i64_stof",
+        Tfloat(F32, noattr),
+        [Tlong(Signed, noattr)];
+    "__compcert_i64_utof",
+        Tfloat(F32, noattr),
+        [Tlong(Unsigned, noattr)];
+    "__compcert_i64_sdiv",
+        Tlong(Signed, noattr),
+        [Tlong(Signed, noattr); Tlong(Signed, noattr)];
+    "__compcert_i64_udiv",
+        Tlong(Unsigned, noattr),
+        [Tlong(Unsigned, noattr); Tlong(Unsigned, noattr)];
+    "__compcert_i64_smod",
+        Tlong(Signed, noattr),
+        [Tlong(Signed, noattr); Tlong(Signed, noattr)];
+    "__compcert_i64_umod",
+        Tlong(Unsigned, noattr),
+        [Tlong(Unsigned, noattr); Tlong(Unsigned, noattr)];
+    "__compcert_i64_shl",
+        Tlong(Signed, noattr),
+        [Tlong(Signed, noattr); Tint(I32, Signed, noattr)];
+    "__compcert_i64_shr",
+        Tlong(Unsigned, noattr),
+        [Tlong(Unsigned, noattr); Tint(I32, Signed, noattr)];
+    "__compcert_i64_sar",
+        Tlong(Signed, noattr),
+        [Tlong(Signed, noattr); Tint(I32, Signed, noattr)];
+    "__compcert_i64_smulh",
+        Tlong(Signed, noattr),
+        [Tlong(Signed, noattr); Tlong(Signed, noattr)];
+    "__compcert_i64_umulh",
+        Tlong(Unsigned, noattr),
+        [Tlong(Unsigned, noattr); Tlong(Unsigned, noattr)]
+]
+
+let helper_function_declaration (name, tyres, tyargs) =
+  let tyargs =
+    List.fold_right (fun t tl -> Tcons(t, tl)) tyargs Tnil in
+  let ef =
+    AST.EF_runtime(coqstring_of_camlstring name,
+                   signature_of_type tyargs tyres AST.cc_default) in
+  (intern_string name,
+   AST.Gfun (Ctypes.External(ef, tyargs, tyres, AST.cc_default)))
+
+let add_helper_functions globs =
+  List.map helper_function_declaration (helper_functions()) @ globs
 
 (** Build environment of typedefs, structs, unions and enums *)
 
@@ -1458,11 +1537,12 @@ let convertProgram p =
         comp_env := ce;
         let gl1 = convertGlobdecls env [] p in
         let gl2 = globals_for_strings gl1 in
+        let gl3 = add_helper_functions gl2 in
         comp_env := Maps.PTree.empty;
         let p' =
-          { prog_defs = gl2;
-            prog_public = public_globals gl2;
-            prog_main = intern_string "main";
+          { prog_defs = gl3;
+            prog_public = public_globals gl3;
+            prog_main = intern_string !Clflags.main_function_name;
             prog_types = typs;
             prog_comp_env = ce } in
         Diagnostics.check_errors ();

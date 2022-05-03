@@ -98,7 +98,7 @@ with CompCert v3.6.
 ---
 
 # CompCert
-The verified C compiler.
+The formally-verified C compiler.
 
 ## Overview
 The CompCert C verified compiler is a compiler for a large subset of the
@@ -112,14 +112,14 @@ source C code.
 
 For more information on CompCert (supported platforms, supported C
 features, installation instructions, using the compiler, etc), please
-refer to the [Web site](http://compcert.inria.fr/) and especially
-the [user's manual](http://compcert.inria.fr/man/).
+refer to the [Web site](https://compcert.org/) and especially
+the [user's manual](https://compcert.org/man/).
 
 ## License
 CompCert is not free software.  This non-commercial release can only
 be used for evaluation, research, educational and personal purposes.
 A commercial version of CompCert, without this restriction and with
-professional support, can be purchased from
+professional support and extra features, can be purchased from
 [AbsInt](https://www.absint.com).  See the file `LICENSE` for more
 information.
 

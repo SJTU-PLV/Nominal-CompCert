@@ -281,6 +281,7 @@ Inductive instruction: Type :=
   | Pmaxsd (rd: freg) (r2: freg)
   | Pminsd (rd: freg) (r2: freg)
   | Pmovb_rm (rd: ireg) (a: addrmode)
+  | Pmovq_rf (rd: ireg) (r1: freg)
   | Pmovsq_mr  (a: addrmode) (rs: freg)
   | Pmovsq_rm (rd: freg) (a: addrmode)
   | Pmovsb
@@ -1026,6 +1027,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pmaxsd _ _
   | Pminsd _ _
   | Pmovb_rm _ _
+  | Pmovq_rf _ _
   | Pmovsq_rm _ _
   | Pmovsq_mr _ _
   | Pmovsb
@@ -1267,7 +1269,7 @@ Ltac Equalities :=
   split. auto. intros. destruct B; auto. subst. auto.
 - (* trace length *)
   red; cbn. intros [nb s] t [nb' s'] [H Hnb]. inv H; simpl.
-  omega.
+  lia.
   eapply external_call_trace_length; eauto.
   eapply external_call_trace_length; eauto.
 - (* initial states *)

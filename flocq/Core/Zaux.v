@@ -17,8 +17,12 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 COPYING file for more details.
 *)
 
-Require Import ZArith Omega.
-Require Import Zquot.
+From Coq Require Import ZArith Lia Zquot.
+
+Require Import SpecFloatCompat.
+
+Notation cond_Zopp := cond_Zopp (only parsing).
+Notation iter_pos := iter_pos (only parsing).
 
 Section Zmissing.
 
@@ -262,7 +266,7 @@ apply Z.le_refl.
 split.
 easy.
 apply Zpower_gt_1.
-clear -He ; omega.
+clear -He ; lia.
 apply Zle_minus_le_0.
 now apply Zlt_le_weak.
 revert H1.
@@ -282,7 +286,7 @@ apply Znot_gt_le.
 intros H.
 apply Zlt_not_le with (1 := He).
 apply Zpower_le.
-clear -H ; omega.
+clear -H ; lia.
 Qed.
 
 Theorem Zpower_gt_id :
@@ -302,7 +306,7 @@ clear.
 apply Zlt_0_minus_lt.
 replace (r * (Z_of_nat n0 + 1) - (Z_of_nat n0 + 1))%Z with ((r - 1) * (Z_of_nat n0 + 1))%Z by ring.
 apply Zmult_lt_0_compat.
-cut (2 <= r)%Z. omega.
+cut (2 <= r)%Z. lia.
 apply Zle_bool_imp_le.
 apply r.
 apply (Zle_lt_succ 0).
@@ -323,18 +327,10 @@ Theorem Zmod_mod_mult :
   forall n a b, (0 < a)%Z -> (0 <= b)%Z ->
   Zmod (Zmod n (a * b)) b = Zmod n b.
 Proof.
-intros n a [|b|b] Ha Hb.
-now rewrite 2!Zmod_0_r.
-rewrite (Zmod_eq n (a * Zpos b)).
-rewrite Zmult_assoc.
-unfold Zminus.
-rewrite Zopp_mult_distr_l.
-apply Z_mod_plus.
-easy.
-apply Zmult_gt_0_compat.
-now apply Z.lt_gt.
-easy.
-now elim Hb.
+  intros n a b Ha Hb. destruct (Zle_lt_or_eq _ _ Hb) as [H'b|H'b].
+  - rewrite (Z.mul_comm a b), Z.rem_mul_r, Z.add_mod, Z.mul_mod, Z.mod_same,
+      Z.mul_0_l, Z.mod_0_l, Z.add_0_r, !Z.mod_mod; lia.
+  - subst. now rewrite Z.mul_0_r, !Zmod_0_r.
 Qed.
 
 Theorem ZOmod_eq :
@@ -366,24 +362,14 @@ Theorem Zdiv_mod_mult :
   (Z.div (Zmod n (a * b)) a) = Zmod (Z.div n a) b.
 Proof.
 intros n a b Ha Hb.
-destruct (Zle_lt_or_eq _ _ Ha) as [Ha'|Ha'].
-destruct (Zle_lt_or_eq _ _ Hb) as [Hb'|Hb'].
-rewrite (Zmod_eq n (a * b)).
-rewrite (Zmult_comm a b) at 2.
-rewrite Zmult_assoc.
-unfold Zminus.
-rewrite Zopp_mult_distr_l.
-rewrite Z_div_plus by now apply Z.lt_gt.
-rewrite <- Zdiv_Zdiv by easy.
-apply sym_eq.
-apply Zmod_eq.
-now apply Z.lt_gt.
-now apply Zmult_gt_0_compat ; apply Z.lt_gt.
-rewrite <- Hb'.
-rewrite Zmult_0_r, 2!Zmod_0_r.
-apply Zdiv_0_l.
-rewrite <- Ha'.
-now rewrite 2!Zdiv_0_r, Zmod_0_l.
+destruct (Zle_lt_or_eq _ _ Ha) as [Ha'|<-].
+- destruct (Zle_lt_or_eq _ _ Hb) as [Hb'|<-].
+  + rewrite Z.rem_mul_r, Z.add_comm, Z.mul_comm, Z.div_add_l by lia.
+    rewrite (Zdiv_small (Zmod n a)).
+    apply Z.add_0_r.
+    now apply Z.mod_pos_bound.
+  + now rewrite Z.mul_0_r, !Zmod_0_r, ?Zdiv_0_l.
+- now rewrite Z.mul_0_l, !Zdiv_0_r, Zmod_0_l.
 Qed.
 
 Theorem ZOdiv_mod_mult :
@@ -420,7 +406,7 @@ apply Z.opp_inj.
 rewrite <- Zquot_opp_l, Z.opp_0.
 apply Z.quot_small.
 generalize (Zabs_non_eq a).
-omega.
+lia.
 Qed.
 
 Theorem ZOmod_small_abs :
@@ -437,7 +423,7 @@ apply Z.opp_inj.
 rewrite <- Zrem_opp_l.
 apply Z.rem_small.
 generalize (Zabs_non_eq a).
-omega.
+lia.
 Qed.
 
 Theorem ZOdiv_plus :
@@ -702,8 +688,6 @@ End Zcompare.
 
 Section cond_Zopp.
 
-Definition cond_Zopp (b : bool) m := if b then Z.opp m else m.
-
 Theorem cond_Zopp_negb :
   forall x y, cond_Zopp (negb x) y = Z.opp (cond_Zopp x y).
 Proof.
@@ -854,7 +838,7 @@ Definition Zfast_div_eucl (a b : Z) :=
   | Z0 => (0, 0)%Z
   | Zpos a' =>
     match b with
-    | Z0 => (0, 0)%Z
+    | Z0 => (0, (match (1 mod 0) with | 0 => 0 | _ => a end))%Z
     | Zpos b' => Zpos_div_eucl_aux a' b'
     | Zneg b' =>
       let (q, r) := Zpos_div_eucl_aux a' b' in
@@ -866,7 +850,7 @@ Definition Zfast_div_eucl (a b : Z) :=
     end
   | Zneg a' =>
     match b with
-    | Z0 => (0, 0)%Z
+    | Z0 => (0, (match (1 mod 0) with | 0 => 0 | _ => a end))%Z
     | Zpos b' =>
       let (q, r) := Zpos_div_eucl_aux a' b' in
       match r with
@@ -921,16 +905,9 @@ intros x.
 apply IHp.
 Qed.
 
-Fixpoint iter_pos (n : positive) (x : A) {struct n} : A :=
-  match n with
-  | xI n' => iter_pos n' (iter_pos n' (f x))
-  | xO n' => iter_pos n' (iter_pos n' x)
-  | xH => f x
-  end.
-
 Lemma iter_pos_nat :
   forall (p : positive) (x : A),
-  iter_pos p x = iter_nat (Pos.to_nat p) x.
+  iter_pos f p x = iter_nat (Pos.to_nat p) x.
 Proof.
 induction p ; intros x.
 rewrite Pos2Nat.inj_xI.

@@ -7,18 +7,18 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
 (** Architecture-dependent parameters for x86 in 64-bit mode *)
 
+From Flocq Require Import Binary Bits.
 Require Import ZArith List.
-(*From Flocq*)
-Require Import Binary Bits.
 
 Definition ptr64 := true.
 
@@ -58,6 +58,9 @@ Definition fma_order {A: Type} (x y z: A) := (x, y, z).
 Definition fma_invalid_mul_is_nan := false.
 
 Definition float_of_single_preserves_sNaN := false.
+
+(** Which ABI to use. *)
+Parameter win64: bool.
 
 Global Opaque ptr64 big_endian splitlong
               default_nan_64 choose_nan_64

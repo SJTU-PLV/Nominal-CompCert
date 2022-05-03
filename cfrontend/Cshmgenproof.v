@@ -15,7 +15,7 @@
 Require Import Coqlib Errors Maps Integers Floats.
 Require Import AST Linking.
 Require Import Values Events Memory Globalenvs LanguageInterface Smallstep.
-Require Import Ctypes Cop Clight Cminor Csharpminor.
+Require Import Ctypes Ctyping Cop Clight Cminor Csharpminor.
 Require Import Cshmgen.
 
 (** * Relational specification of the transformation *)
@@ -115,6 +115,21 @@ Proof.
   destruct (prog_comp_env cunit)!i as [co|] eqn:X; try discriminate; erewrite H1 by eauto; auto.
 Qed.
 
+Lemma union_field_offset_stable:
+  forall (cunit prog: Clight.program) id co f,
+  linkorder cunit prog ->
+  cunit.(prog_comp_env)!id = Some co ->
+  prog.(prog_comp_env)!id = Some co /\
+  union_field_offset prog.(prog_comp_env) f (co_members co) = union_field_offset cunit.(prog_comp_env) f (co_members co).
+Proof.
+  intros.
+  assert (C: composite_consistent cunit.(prog_comp_env) co).
+  { apply build_composite_env_consistent with cunit.(prog_types) id; auto.
+    apply prog_comp_env_eq. }
+  destruct H as [_ A].
+  split. auto. apply Ctypes.union_field_offset_stable; eauto using co_consistent_complete.
+Qed.
+
 Lemma field_offset_stable:
   forall (cunit prog: Clight.program) id co f,
   linkorder cunit prog ->
@@ -127,37 +142,10 @@ Proof.
   { apply build_composite_env_consistent with cunit.(prog_types) id; auto.
     apply prog_comp_env_eq. }
   destruct H as [_ A].
-  split. auto. generalize (co_consistent_complete _ _ C).
-  unfold field_offset. generalize 0. induction (co_members co) as [ | [f1 t1] m]; simpl; intros.
-- auto.
-- InvBooleans.
-  rewrite ! (alignof_stable _ _ A) by auto.
-  rewrite ! (sizeof_stable _ _ A) by auto.
-  destruct (ident_eq f f1); eauto.
+  split. auto. apply Ctypes.field_offset_stable; eauto using co_consistent_complete.
 Qed.
 
 (** * Properties of the translation functions *)
-
-(** Transformation of expressions and statements. *)
-
-Lemma transl_expr_lvalue:
-  forall ge e le m a loc ofs ce ta,
-  Clight.eval_lvalue ge e le m a loc ofs ->
-  transl_expr ce a = OK ta ->
-  (exists tb, transl_lvalue ce a = OK tb /\ make_load tb (typeof a) = OK ta).
-Proof.
-  intros until ta; intros EVAL TR. inv EVAL; simpl in TR.
-  (* var local *)
-  exists (Eaddrof id); auto.
-  (* var global *)
-  exists (Eaddrof id); auto.
-  (* deref *)
-  monadInv TR. exists x; auto.
-  (* field struct *)
-  monadInv TR. exists x0; split; auto. simpl; rewrite EQ; auto.
-  (* field union *)
-  monadInv TR. exists x0; split; auto. simpl; rewrite EQ; auto.
-Qed.
 
 (** Properties of labeled statements *)
 
@@ -689,32 +677,32 @@ Proof.
   destruct (zlt 0 sz); try discriminate.
   destruct (zle sz Ptrofs.max_signed); simpl in SEM; inv SEM.
   assert (E1: Ptrofs.signed (Ptrofs.repr sz) = sz).
-  { apply Ptrofs.signed_repr. generalize Ptrofs.min_signed_neg; omega. }
+  { apply Ptrofs.signed_repr. generalize Ptrofs.min_signed_neg; lia. }
   destruct Archi.ptr64 eqn:SF; inversion EQ0; clear EQ0; subst c.
 + assert (E: Int64.signed (Int64.repr sz) = sz).
   { apply Int64.signed_repr.
     replace Int64.max_signed with Ptrofs.max_signed.
-    generalize Int64.min_signed_neg; omega.
+    generalize Int64.min_signed_neg; lia.
     unfold Ptrofs.max_signed, Ptrofs.half_modulus; rewrite Ptrofs.modulus_eq64 by auto. reflexivity. }
   econstructor; eauto with cshm.
   rewrite SF, dec_eq_true. simpl.
   predSpec Int64.eq Int64.eq_spec (Int64.repr sz) Int64.zero.
-  rewrite H in E; rewrite Int64.signed_zero in E; omegaContradiction.
+  rewrite H in E; rewrite Int64.signed_zero in E; extlia.
   predSpec Int64.eq Int64.eq_spec (Int64.repr sz) Int64.mone.
-  rewrite H0 in E; rewrite Int64.signed_mone in E; omegaContradiction.
+  rewrite H0 in E; rewrite Int64.signed_mone in E; extlia.
   rewrite andb_false_r; simpl. unfold Vptrofs; rewrite SF. apply f_equal.
   apply f_equal. symmetry. auto with ptrofs.
 + assert (E: Int.signed (Int.repr sz) = sz).
   { apply Int.signed_repr.
     replace Int.max_signed with Ptrofs.max_signed.
-    generalize Int.min_signed_neg; omega.
+    generalize Int.min_signed_neg; lia.
     unfold Ptrofs.max_signed, Ptrofs.half_modulus, Ptrofs.modulus, Ptrofs.wordsize, Wordsize_Ptrofs.wordsize. rewrite SF. reflexivity.
   }
   econstructor; eauto with cshm. rewrite SF, dec_eq_true. simpl.
   predSpec Int.eq Int.eq_spec (Int.repr sz) Int.zero.
-  rewrite H in E; rewrite Int.signed_zero in E; omegaContradiction.
+  rewrite H in E; rewrite Int.signed_zero in E; extlia.
   predSpec Int.eq Int.eq_spec (Int.repr sz) Int.mone.
-  rewrite H0 in E; rewrite Int.signed_mone in E; omegaContradiction.
+  rewrite H0 in E; rewrite Int.signed_mone in E; extlia.
   rewrite andb_false_r; simpl. unfold Vptrofs; rewrite SF. apply f_equal. apply f_equal.
   symmetry. auto with ptrofs.
 - destruct Archi.ptr64 eqn:SF; inv EQ0; rewrite (transl_sizeof _ _ _ _ LINK EQ).
@@ -772,7 +760,7 @@ Proof.
   assert (Int64.unsigned i = Int.unsigned (Int64.loword i)).
   {
     unfold Int64.loword. rewrite Int.unsigned_repr; auto.
-    comput Int.max_unsigned; omega.
+    comput Int.max_unsigned; lia.
   }
   split; auto. unfold Int.ltu. apply zlt_true. rewrite <- H0. tauto.
 Qed.
@@ -786,7 +774,7 @@ Proof.
   assert (Int64.unsigned i = Int.unsigned (Int64.loword i)).
   {
     unfold Int64.loword. rewrite Int.unsigned_repr; auto.
-    comput Int.max_unsigned; omega.
+    comput Int.max_unsigned; lia.
   }
   unfold Int.ltu. apply zlt_true. rewrite <- H0. tauto.
 Qed.
@@ -797,7 +785,7 @@ Lemma small_shift_amount_3:
   Int64.unsigned (Int64.repr (Int.unsigned i)) = Int.unsigned i.
 Proof.
   intros. apply Int.ltu_inv in H. comput (Int.unsigned Int64.iwordsize').
-  apply Int64.unsigned_repr. comput Int64.max_unsigned; omega.
+  apply Int64.unsigned_repr. comput Int64.max_unsigned; lia.
 Qed.
 
 Lemma make_shl_correct: shift_constructor_correct make_shl sem_shl.
@@ -940,28 +928,83 @@ Proof.
   eapply make_cmp_correct; eauto.
 Qed.
 
+Remark int_ltu_true:
+  forall x, 0 <= x < Int.zwordsize -> Int.ltu (Int.repr x) Int.iwordsize = true.
+Proof.
+  intros. unfold Int.ltu. rewrite Int.unsigned_repr_wordsize, Int.unsigned_repr, zlt_true by (generalize Int.wordsize_max_unsigned; lia).
+  auto.
+Qed.
+
+Remark first_bit_range: forall sz pos width,
+  0 <= pos -> 0 < width -> pos + width <= bitsize_carrier sz ->
+     0 <= first_bit sz pos width < Int.zwordsize
+  /\ 0 <= Int.zwordsize - first_bit sz pos width - width < Int.zwordsize.
+Proof.
+  intros.
+  assert (bitsize_carrier sz <= Int.zwordsize) by (destruct sz; compute; congruence).
+  unfold first_bit; destruct Archi.big_endian; lia.
+Qed.
+
 Lemma make_load_correct:
-  forall addr ty code b ofs v e le m,
-  make_load addr ty = OK code ->
+  forall addr ty bf code b ofs v e le m,
+  make_load addr ty bf = OK code ->
   eval_expr ge e le m addr (Vptr b ofs) ->
-  deref_loc ty m b ofs v ->
+  deref_loc ty m b ofs bf v ->
   eval_expr ge e le m code v.
 Proof.
   unfold make_load; intros until m; intros MKLOAD EVEXP DEREF.
   inv DEREF.
-  (* scalar *)
+- (* scalar *)
   rewrite H in MKLOAD. inv MKLOAD. apply eval_Eload with (Vptr b ofs); auto.
-  (* by reference *)
+- (* by reference *)
   rewrite H in MKLOAD. inv MKLOAD. auto.
-  (* by copy *)
+- (* by copy *)
   rewrite H in MKLOAD. inv MKLOAD. auto.
+- (* by bitfield *)
+  inv H.
+  unfold make_extract_bitfield in MKLOAD. unfold bitfield_extract.
+  exploit (first_bit_range sz pos width); eauto. lia. intros [A1 A2].
+  set (amount1 := Int.repr (Int.zwordsize - first_bit sz pos width - width)) in MKLOAD.
+  set (amount2 := Int.repr (Int.zwordsize - width)) in MKLOAD.
+  destruct (zle 0 pos && zlt 0 width && zle (pos + width) (bitsize_carrier sz)); inv MKLOAD.
+  set (e1 := Eload (chunk_for_carrier sz) addr).
+  assert (E1: eval_expr ge e le m e1 (Vint c)) by (econstructor; eauto).
+  set (e2 := Ebinop Oshl e1 (make_intconst amount1)).
+  assert (E2: eval_expr ge e le m e2 (Vint (Int.shl c amount1))).
+  { econstructor; eauto using make_intconst_correct. cbn.
+    unfold amount1 at 1; rewrite int_ltu_true by lia. auto. } 
+  econstructor; eauto using make_intconst_correct.
+  destruct (Ctypes.intsize_eq sz IBool || Ctypes.signedness_eq sg Unsigned); cbn.
+  + unfold amount2 at 1; rewrite int_ltu_true by lia. 
+    rewrite Int.unsigned_bitfield_extract_by_shifts by lia. auto.
+  + unfold amount2 at 1; rewrite int_ltu_true by lia. 
+    rewrite Int.signed_bitfield_extract_by_shifts by lia. auto.
+Qed.
+
+Lemma make_store_bitfield_correct: 
+  forall f sz sg pos width dst src ty k e le m b ofs v m' s,
+  eval_expr ge e le m dst (Vptr b ofs) ->
+  eval_expr ge e le m src v ->
+  assign_loc prog.(prog_comp_env) ty m b ofs (Bits sz sg pos width) v m' ->
+  make_store_bitfield sz sg pos width dst src = OK s ->
+  step ge (State f s k e le m) E0 (State f Sskip k e le m').
+Proof.
+  intros until s; intros DST SRC ASG MK.
+  inv ASG. inv H5. unfold make_store_bitfield in MK.
+  destruct (zle 0 pos && zlt 0 width && zle (pos + width) (bitsize_carrier sz)); inv MK.
+  econstructor; eauto.
+  exploit (first_bit_range sz pos width); eauto. lia. intros [A1 A2].
+  rewrite Int.bitfield_insert_alternative by lia.
+  set (amount := first_bit sz pos width).
+  set (mask := Int.shl (Int.repr (two_p width - 1)) (Int.repr amount)).
+  repeat econstructor; eauto. cbn. rewrite int_ltu_true by lia. auto. 
 Qed.
 
 Lemma make_memcpy_correct:
   forall f dst src ty k e le m b ofs v m' s,
   eval_expr ge e le m dst (Vptr b ofs) ->
   eval_expr ge e le m src v ->
-  assign_loc prog.(prog_comp_env) ty m b ofs v m' ->
+  assign_loc prog.(prog_comp_env) ty m b ofs Full v m' ->
   access_mode ty = By_copy ->
   make_memcpy cunit.(prog_comp_env) dst src ty = OK s ->
   step ge (State f s k e le m) E0 (State f Sskip k e le m').
@@ -979,21 +1022,43 @@ Proof.
 Qed.
 
 Lemma make_store_correct:
-  forall addr ty rhs code e le m b ofs v m' f k,
-  make_store cunit.(prog_comp_env) addr ty rhs = OK code ->
+  forall addr ty bf rhs code e le m b ofs v m' f k,
+  make_store cunit.(prog_comp_env) addr ty bf rhs = OK code ->
   eval_expr ge e le m addr (Vptr b ofs) ->
   eval_expr ge e le m rhs v ->
-  assign_loc prog.(prog_comp_env) ty m b ofs v m' ->
+  assign_loc prog.(prog_comp_env) ty m b ofs bf v m' ->
   step ge (State f code k e le m) E0 (State f Sskip k e le m').
 Proof.
   unfold make_store. intros until k; intros MKSTORE EV1 EV2 ASSIGN.
   inversion ASSIGN; subst.
-  (* nonvolatile scalar *)
+- (* nonvolatile scalar *)
   rewrite H in MKSTORE; inv MKSTORE.
   econstructor; eauto.
-  (* by copy *)
+- (* by copy *)
   rewrite H in MKSTORE.
   eapply make_memcpy_correct with (b := b) (v := Vptr b' ofs'); eauto.
+- (* bitfield *)
+  eapply make_store_bitfield_correct; eauto.
+Qed.
+
+Lemma make_normalization_correct:
+  forall e le m a v t,
+  eval_expr ge e le m a v ->
+  wt_val v t ->
+  eval_expr ge e le m (make_normalization t a) v.
+Proof.
+  intros. destruct t; simpl; auto. inv H0.
+- destruct i; simpl in H3.
+  + destruct s; econstructor; eauto; simpl; congruence.
+  + destruct s; econstructor; eauto; simpl; congruence.
+  + auto.
+  + econstructor; eauto; simpl; congruence.
+- auto.
+- destruct i.
+  + destruct s; econstructor; eauto. 
+  + destruct s; econstructor; eauto.
+  + auto.
+  + econstructor; eauto.
 Qed.
 
 End CONSTRUCTORS.
@@ -1181,15 +1246,51 @@ Variable m: mem.
 Variable te: Csharpminor.env.
 Hypothesis MENV: match_env e te.
 
+Lemma transl_expr_lvalue:
+  forall a loc ofs bf ta,
+  Clight.eval_lvalue ge e le m a loc ofs bf ->
+  transl_expr cunit.(prog_comp_env) a = OK ta ->
+  exists tb, transl_lvalue cunit.(prog_comp_env) a = OK (tb, bf)
+          /\ make_load tb (typeof a) bf = OK ta.
+Proof.
+  intros until ta; intros EVAL TR. inv EVAL; simpl in TR.
+- (* var local *)
+  exists (Eaddrof id); auto.
+- (* var global *)
+  exists (Eaddrof id); auto.
+- (* deref *)
+  monadInv TR. cbn; rewrite EQ. exists x; auto.
+- (* field struct *)
+  monadInv TR.
+  assert (x1 = bf).
+  { rewrite H0 in EQ1. unfold make_field_access in EQ1.
+    destruct ((prog_comp_env cunit)!id) as [co'|] eqn:E; try discriminate.
+    monadInv EQ1.
+    exploit field_offset_stable. eexact LINK. eauto. instantiate (1 := i). intros [A B].
+    simpl in H1, H2. congruence. }
+  subst x1.
+  exists x0; split; auto. simpl; rewrite EQ; auto.
+- (* field union *)
+  monadInv TR.
+  assert (x1 = bf).
+  { rewrite H0 in EQ1. unfold make_field_access in EQ1.
+    destruct ((prog_comp_env cunit)!id) as [co'|] eqn:E; try discriminate.
+    monadInv EQ1.
+    exploit union_field_offset_stable. eexact LINK. eauto. instantiate (1 := i). intros [A B].
+    simpl in H1, H2. congruence. }
+  subst x1.
+  exists x0; split; auto. simpl; rewrite EQ; auto.
+Qed.
+
 Lemma transl_expr_lvalue_correct:
   (forall a v,
    Clight.eval_expr ge e le m a v ->
    forall ta (TR: transl_expr cunit.(prog_comp_env) a = OK ta) ,
    Csharpminor.eval_expr tge te le m ta v)
-/\(forall a b ofs,
-   Clight.eval_lvalue ge e le m a b ofs ->
-   forall ta (TR: transl_lvalue cunit.(prog_comp_env) a = OK ta),
-   Csharpminor.eval_expr tge te le m ta (Vptr b ofs)).
+/\(forall a b ofs bf,
+   Clight.eval_lvalue ge e le m a b ofs bf ->
+   forall ta bf' (TR: transl_lvalue cunit.(prog_comp_env) a = OK (ta, bf')),
+   bf = bf' /\ Csharpminor.eval_expr tge te le m ta (Vptr b ofs)).
 Proof.
   apply eval_expr_lvalue_ind; intros; try (monadInv TR).
 - (* const int *)
@@ -1203,7 +1304,7 @@ Proof.
 - (* temp var *)
   constructor; auto.
 - (* addrof *)
-  simpl in TR. auto.
+  destruct x0; inv EQ0. apply H0 in EQ. destruct EQ. auto.
 - (* unop *)
   eapply transl_unop_correct; eauto.
 - (* binop *)
@@ -1216,31 +1317,43 @@ Proof.
   rewrite (transl_alignof _ _ _ _ LINK EQ). apply make_ptrofsconst_correct.
 - (* rvalue out of lvalue *)
   exploit transl_expr_lvalue; eauto. intros [tb [TRLVAL MKLOAD]].
+  apply H0 in TRLVAL; destruct TRLVAL. 
   eapply make_load_correct; eauto.
 - (* var local *)
   exploit (me_local _ _ MENV); eauto. intros EQ.
-  econstructor. eapply eval_var_addr_local. eauto.
+  split; auto. econstructor. eapply eval_var_addr_local. eauto.
 - (* var global *)
-  econstructor. eapply eval_var_addr_global.
+  split; auto. econstructor. eapply eval_var_addr_global.
   eapply match_env_globals; eauto.
   auto.
 - (* deref *)
-  simpl in TR. eauto.
+  eauto.
 - (* field struct *)
   unfold make_field_access in EQ0. rewrite H1 in EQ0.
-  destruct (prog_comp_env cunit)!id as [co'|] eqn:CO; monadInv EQ0.
+  destruct (prog_comp_env cunit)!id as [co'|] eqn:CO; try discriminate; monadInv EQ0.
   exploit field_offset_stable. eexact LINK. eauto. instantiate (1 := i). intros [A B].
-  rewrite <- B in EQ1.
+  rewrite <- B in EQ1. 
   assert (x0 = delta) by (unfold ge in *; simpl in *; congruence).
-  subst x0.
+  assert (bf' = bf) by (unfold ge in *; simpl in *; congruence).
+  subst x0 bf'. split; auto.
   destruct Archi.ptr64 eqn:SF.
 + eapply eval_Ebinop; eauto using make_longconst_correct.
   simpl. rewrite SF. apply f_equal. apply f_equal. apply f_equal. auto with ptrofs.
 + eapply eval_Ebinop; eauto using make_intconst_correct.
   simpl. rewrite SF. apply f_equal. apply f_equal. apply f_equal. auto with ptrofs.
 - (* field union *)
-  unfold make_field_access in EQ0; rewrite H1 in EQ0; monadInv EQ0.
-  auto.
+  unfold make_field_access in EQ0. rewrite H1 in EQ0.
+  destruct (prog_comp_env cunit)!id as [co'|] eqn:CO; try discriminate; monadInv EQ0.
+  exploit union_field_offset_stable. eexact LINK. eauto. instantiate (1 := i). intros [A B].
+  rewrite <- B in EQ1. 
+  assert (x0 = delta) by (unfold ge in *; simpl in *; congruence).
+  assert (bf' = bf) by (unfold ge in *; simpl in *; congruence).
+  subst x0 bf'. split; auto.
+  destruct Archi.ptr64 eqn:SF.
++ eapply eval_Ebinop; eauto using make_longconst_correct.
+  simpl. rewrite SF. apply f_equal. apply f_equal. apply f_equal. auto with ptrofs.
++ eapply eval_Ebinop; eauto using make_intconst_correct.
+  simpl. rewrite SF. apply f_equal. apply f_equal. apply f_equal. auto with ptrofs.
 Qed.
 
 Lemma transl_expr_correct:
@@ -1251,10 +1364,10 @@ Lemma transl_expr_correct:
 Proof (proj1 transl_expr_lvalue_correct).
 
 Lemma transl_lvalue_correct:
-   forall a b ofs,
-   Clight.eval_lvalue ge e le m a b ofs ->
-   forall ta, transl_lvalue cunit.(prog_comp_env) a = OK ta ->
-   Csharpminor.eval_expr tge te le m ta (Vptr b ofs).
+   forall a b ofs bf,
+   Clight.eval_lvalue ge e le m a b ofs bf ->
+   forall ta bf', transl_lvalue cunit.(prog_comp_env) a = OK (ta, bf') ->
+   bf = bf' /\ Csharpminor.eval_expr tge te le m ta (Vptr b ofs).
 Proof (proj2 transl_expr_lvalue_correct).
 
 Lemma transl_arglist_correct:
@@ -1349,7 +1462,16 @@ Inductive match_cont: composite_env -> type -> nat -> nat -> Clight.cont -> Csha
       match_cont cu.(prog_comp_env) (Clight.fn_return f) nbrk' ncnt' k tk ->
       match_cont ce tyret nbrk ncnt
                  (Clight.Kcall id f e le k)
-                 (Kcall id tf te le tk).
+                 (Kcall id tf te le tk)
+  | match_Kcall_normalize: forall ce tyret nbrk ncnt nbrk' ncnt' f e k id a tf te le tk cu,
+      linkorder cu prog ->
+      transl_function cu.(prog_comp_env) f = OK tf ->
+      match_env e te ->
+      match_cont cu.(prog_comp_env) (Clight.fn_return f) nbrk' ncnt' k tk ->
+      (forall v e le m, wt_val v tyret -> le!id = Some v -> eval_expr tge e le m a v) ->
+      match_cont ce tyret nbrk ncnt
+                 (Clight.Kcall (Some id) f e le k)
+                 (Kcall (Some id) tf te le (Kseq (Sset id a) tk)).
 
 Inductive match_states: Clight.state -> Csharpminor.state -> Prop :=
   | match_state:
@@ -1368,14 +1490,15 @@ Inductive match_states: Clight.state -> Csharpminor.state -> Prop :=
           (FT: Genv.find_funct tge vf = Some tfd)
           (LINK: linkorder cu prog)
           (TR: match_fundef cu fd tfd)
-          (MK: match_cont ce Tvoid 0%nat 0%nat k tk)
+          (MK: match_cont ce tres 0%nat 0%nat k tk)
           (ISCC: Clight.is_call_cont k)
           (TY: type_of_fundef fd = Tfunction targs tres cconv),
       match_states (Clight.Callstate vf args k m)
                    (Callstate vf args tk m)
   | match_returnstate:
-      forall res k m tk ce
-          (MK: match_cont ce Tvoid 0%nat 0%nat k tk),
+      forall res tres k m tk ce
+          (MK: match_cont ce tres 0%nat 0%nat k tk)
+          (WT: wt_val res tres),
       match_states (Clight.Returnstate res k m)
                    (Returnstate res tk m).
 
@@ -1429,11 +1552,17 @@ Proof.
   auto.
 - (* assign *)
   unfold make_store, make_memcpy in EQ3.
+  destruct x0.
   destruct (access_mode (typeof e)); monadInv EQ3; auto.
+  unfold make_store_bitfield in EQ3.
+  destruct (zle 0 pos && zlt 0 width && zle (pos + width) (bitsize_carrier sz));
+  monadInv EQ3; auto.
 - (* set *)
   auto.
 - (* call *)
-  simpl in TR. destruct (classify_fun (typeof e)); monadInv TR. auto.
+  simpl in TR. destruct (classify_fun (typeof e)); monadInv TR.
+  unfold make_funcall.
+  destruct o; auto; destruct Conventions1.return_value_needs_normalization; auto.
 - (* builtin *)
   auto.
 - (* seq *)
@@ -1491,24 +1620,26 @@ End FIND_LABEL.
 (** Properties of call continuations *)
 
 Lemma match_cont_call_cont:
-  forall ce' tyret' nbrk' ncnt' ce tyret nbrk ncnt k tk,
+  forall ce' nbrk' ncnt' ce tyret nbrk ncnt k tk,
   match_cont ce tyret nbrk ncnt k tk ->
-  match_cont ce' tyret' nbrk' ncnt' (Clight.call_cont k) (call_cont tk).
+  match_cont ce' tyret nbrk' ncnt' (Clight.call_cont k) (call_cont tk).
 Proof.
   induction 1; simpl; auto.
-  constructor.
-  econstructor; eauto.
+- apply match_Kstop.
+- eapply match_Kcall; eauto.
+- eapply match_Kcall_normalize; eauto.
 Qed.
 
 Lemma match_cont_is_call_cont:
-  forall ce tyret nbrk ncnt k tk ce' tyret' nbrk' ncnt',
+  forall ce tyret nbrk ncnt k tk ce' nbrk' ncnt',
   match_cont ce tyret nbrk ncnt k tk ->
   Clight.is_call_cont k ->
-  match_cont ce' tyret' nbrk' ncnt' k tk /\ is_call_cont tk.
+  match_cont ce' tyret nbrk' ncnt' k tk /\ is_call_cont tk.
 Proof.
   intros. inv H; simpl in H0; try contradiction; simpl.
-  split; auto; constructor.
-  split; auto; econstructor; eauto.
+  split; auto; apply match_Kstop.
+  split; auto; eapply match_Kcall; eauto.
+  split; auto; eapply match_Kcall_normalize; eauto.
 Qed.
 
 (** The simulation proof *)
@@ -1525,11 +1656,17 @@ Proof.
   assert (SAME: ts' = ts /\ tk' = tk).
   { inversion MTR. auto.
     subst ts. unfold make_store, make_memcpy in EQ3.
-    destruct (access_mode (typeof a1)); monadInv EQ3; auto. }
+    destruct x0.
+    destruct (access_mode (typeof a1)); monadInv EQ3; auto.
+    unfold make_store_bitfield in EQ3.
+    destruct (zle 0 pos && zlt 0 width && zle (pos + width) (bitsize_carrier sz));
+    monadInv EQ3; auto.
+  }
   destruct SAME; subst ts' tk'.
+  exploit transl_lvalue_correct; eauto. intros [A B]; subst x0.
   econstructor; split.
   apply plus_one. eapply make_store_correct; eauto.
-  eapply transl_lvalue_correct; eauto. eapply make_cast_correct; eauto.
+  eapply make_cast_correct; eauto.
   eapply transl_expr_correct; eauto.
   eapply match_states_skip; eauto.
 
@@ -1540,19 +1677,44 @@ Proof.
 
 - (* call *)
   revert TR. simpl. case_eq (classify_fun (typeof a)); try congruence.
-  intros targs tres cc CF TR. monadInv TR. inv MTR.
+  intros targs tres cc CF TR. monadInv TR.
   exploit functions_translated; eauto. intros (cu' & tfd & FIND & TFD & LINK').
   rewrite H in CF. simpl in CF. inv CF.
-  econstructor; split.
-  apply plus_one. econstructor; eauto.
-  eapply transl_expr_correct with (cunit := cu); eauto.
-  eapply transl_arglist_correct with (cunit := cu); eauto.
-  erewrite typlist_of_arglist_eq by eauto.
-  eapply transl_fundef_sig1; eauto.
-  rewrite H3. auto.
-  econstructor; eauto.
-  eapply match_Kcall with (ce := prog_comp_env cu') (cu := cu); eauto.
-  simpl. auto.
+  set (sg := {| sig_args := typlist_of_arglist al targs;
+                sig_res := rettype_of_type tres;
+                sig_cc := cc |}) in *.
+  assert (SIG: funsig tfd = sg).
+  { unfold sg; erewrite typlist_of_arglist_eq by eauto.
+    eapply transl_fundef_sig1; eauto. rewrite H3; auto. }
+  assert (EITHER: tk' = tk /\ ts' = Scall optid sg x x0
+               \/ exists id, optid = Some id /\
+                  tk' = tk /\ ts' = Sseq (Scall optid sg x x0)
+                                         (Sset id (make_normalization tres (Evar id)))).
+  { unfold make_funcall in MTR.
+    destruct optid. destruct Conventions1.return_value_needs_normalization.
+    inv MTR. right; exists i; auto.
+    inv MTR; auto.
+    inv MTR; auto. }
+  destruct EITHER as [(EK & ES) | (id & EI & EK & ES)]; rewrite EK, ES.
+  + (* without normalization of return value *)
+    econstructor; split.
+    apply plus_one. eapply step_call; eauto.
+    eapply transl_expr_correct with (cunit := cu); eauto.
+    eapply transl_arglist_correct with (cunit := cu); eauto.
+    econstructor; eauto.
+    eapply match_Kcall with (ce := prog_comp_env cu') (cu := cu); eauto.
+    exact I.
+  + (* with normalization of return value *)
+    subst optid.
+    econstructor; split.
+    eapply plus_two. apply step_seq. eapply step_call; eauto. 
+    eapply transl_expr_correct with (cunit := cu); eauto.
+    eapply transl_arglist_correct with (cunit := cu); eauto.
+    traceEq.
+    econstructor; eauto.
+    eapply match_Kcall_normalize  with (ce := prog_comp_env cu') (cu := cu); eauto.
+    intros. eapply make_normalization_correct; eauto. constructor; eauto.
+    exact I.
 
 - (* builtin *)
   monadInv TR. inv MTR.
@@ -1648,6 +1810,7 @@ Proof.
   eapply match_env_free_blocks; eauto.
   eapply match_returnstate with (ce := prog_comp_env cu); eauto.
   eapply match_cont_call_cont. eauto.
+  constructor.
 
 - (* return some *)
   monadInv TR. inv MTR.
@@ -1657,6 +1820,7 @@ Proof.
   eapply match_env_free_blocks; eauto.
   eapply match_returnstate with (ce := prog_comp_env cu); eauto.
   eapply match_cont_call_cont. eauto.
+  apply wt_val_casted. eapply cast_val_is_casted; eauto.
 
 - (* skip call *)
   monadInv TR. inv MTR.
@@ -1665,6 +1829,7 @@ Proof.
   apply plus_one. apply step_skip_call. auto.
   eapply match_env_free_blocks; eauto.
   eapply match_returnstate with (ce := prog_comp_env cu); eauto.
+  constructor.
 
 - (* switch *)
   monadInv TR.
@@ -1726,6 +1891,8 @@ Proof.
   simpl. econstructor; eauto.
   unfold transl_function. rewrite EQ; simpl. rewrite EQ1; simpl. auto.
   constructor.
+  replace (fn_return f) with tres. eassumption.
+  simpl in TY. unfold type_of_function in TY. congruence. 
 
 - (* external function *)
   rewrite FS in FIND. inv FIND.
@@ -1734,12 +1901,23 @@ Proof.
   econstructor; split.
   apply plus_one. econstructor; eauto.
   eapply match_returnstate with (ce := ce); eauto.
+  apply has_rettype_wt_val. 
+  replace (rettype_of_type tres0) with (sig_res (ef_sig ef)).
+  eapply external_call_well_typed_gen; eauto.
+  rewrite H5. simpl. simpl in TY. congruence.
 
 - (* returnstate *)
   inv MK.
-  econstructor; split.
-  apply plus_one. constructor.
-  econstructor; eauto. simpl; reflexivity. constructor.
+  + (* without normalization *)
+    econstructor; split.
+    apply plus_one. constructor.
+    econstructor; eauto. simpl; reflexivity. constructor.
+  + (* with normalization *)
+    econstructor; split.
+    eapply plus_three. econstructor. econstructor. constructor.
+    simpl. apply H13. eauto. apply PTree.gss.
+    traceEq.
+    simpl. rewrite PTree.set2. econstructor; eauto. simpl; reflexivity. constructor.
 Qed.
 
 Lemma transl_initial_states:
@@ -1788,7 +1966,7 @@ Qed.
 
 (** ** Commutation with linking *)
 
-Instance TransfCshmgenLink : TransfLink match_prog.
+Global Instance TransfCshmgenLink : TransfLink match_prog.
 Proof.
   red; intros. destruct (link_linkorder _ _ _ H) as (LO1 & LO2).
   generalize H.

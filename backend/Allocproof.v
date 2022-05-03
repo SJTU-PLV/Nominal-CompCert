@@ -549,7 +549,7 @@ Proof.
   unfold select_reg_l; intros. destruct H.
   red in H. congruence.
   rewrite Pos.leb_le in *. red in H. destruct H as [A | [A B]].
-  red in A. zify; omega.
+  red in A. zify; lia.
   rewrite <- A; auto.
 Qed.
 
@@ -561,7 +561,7 @@ Proof.
   unfold select_reg_h; intros. destruct H.
   red in H. congruence.
   rewrite Pos.leb_le in *. red in H. destruct H as [A | [A B]].
-  red in A. zify; omega.
+  red in A. zify; lia.
   rewrite A; auto.
 Qed.
 
@@ -569,7 +569,7 @@ Remark select_reg_charact:
   forall r q, select_reg_l r q = true /\ select_reg_h r q = true <-> ereg q = r.
 Proof.
   unfold select_reg_l, select_reg_h; intros; split.
-  rewrite ! Pos.leb_le. unfold reg; zify; omega.
+  rewrite ! Pos.leb_le. unfold reg; zify; lia.
   intros. rewrite H. rewrite ! Pos.leb_refl; auto.
 Qed.
 
@@ -1302,10 +1302,10 @@ Proof.
 Qed.
 
 Lemma add_equations_res_lessdef:
-  forall r oty l e e' rs ls,
-  add_equations_res r oty l e = Some e' ->
+  forall r ty l e e' rs ls,
+  add_equations_res r ty l e = Some e' ->
   satisf rs ls e' ->
-  Val.has_type rs#r (match oty with Some ty => ty | None => Tint end) ->
+  Val.has_type rs#r ty ->
   Val.lessdef rs#r (Locmap.getpair (map_rpair R l) ls).
 Proof.
   intros. functional inversion H; simpl.
@@ -2406,13 +2406,13 @@ Proof.
                           (return_regs (parent_locset ts) ls1))
   with (Locmap.getpair (map_rpair R (loc_result (RTL.fn_sig f))) ls1).
   eapply add_equations_res_lessdef; eauto.
-  rewrite H13. apply WTRS.
+  rewrite <- H14. apply WTRS.
   generalize (loc_result_caller_save (RTL.fn_sig f)).
   destruct (loc_result (RTL.fn_sig f)); simpl.
   intros A; rewrite A; auto.
   intros [A B]; rewrite A, B; auto.
   apply return_regs_agree_callee_save.
-  unfold proj_sig_res. rewrite <- H11; rewrite H13. apply WTRS.
+  rewrite <- H11, <- H14. apply WTRS.
 
 (* internal function *)
 - rewrite FIND in FIND0. inv FIND0.
@@ -2449,7 +2449,8 @@ Proof.
   simpl. destruct (loc_result (ef_sig ef)) eqn:RES; simpl.
   rewrite Locmap.gss; auto.
   generalize (loc_result_pair (ef_sig ef)); rewrite RES; intros (A & B & C & D & E).
-  exploit external_call_well_typed; eauto. unfold proj_sig_res; rewrite B. intros WTRES'.
+  assert (WTRES': Val.has_type v' Tlong).
+  { rewrite <- B. eapply external_call_well_typed; eauto. }
   rewrite Locmap.gss. rewrite Locmap.gso by (red; auto). rewrite Locmap.gss.
   rewrite val_longofwords_eq_1 by auto. auto.
   red; intros. rewrite (AG l H0).

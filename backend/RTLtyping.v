@@ -153,11 +153,12 @@ Inductive wt_instr : instruction -> Prop :=
       list_length_z tbl * 4 <= Int.max_unsigned ->
       wt_instr (Ijumptable arg tbl)
   | wt_Ireturn_none:
-      funct.(fn_sig).(sig_res) = None ->
+      funct.(fn_sig).(sig_res) = Tvoid ->
       wt_instr (Ireturn None)
   | wt_Ireturn_some:
       forall arg ty,
-      funct.(fn_sig).(sig_res) = Some ty ->
+      funct.(fn_sig).(sig_res) <> Tvoid ->
+      env arg = proj_sig_res funct.(fn_sig) ->
       env arg = ty ->
       wt_instr (Ireturn (Some arg)).
 
@@ -300,7 +301,7 @@ Definition type_instr (e: S.typenv) (i: instruction) : res S.typenv :=
   | Itailcall sig ros args =>
       do e1 <- type_ros e ros;
       do e2 <- S.set_list e1 args sig.(sig_args);
-      if opt_typ_eq sig.(sig_res) f.(fn_sig).(sig_res) then
+      if rettype_eq sig.(sig_res) f.(fn_sig).(sig_res) then
         if tailcall_is_possible sig
         then OK e2
         else Error(msg "tailcall not possible")
@@ -325,9 +326,9 @@ Definition type_instr (e: S.typenv) (i: instruction) : res S.typenv :=
       then OK e1
       else Error(msg "jumptable too big")
   | Ireturn optres =>
-      match optres, f.(fn_sig).(sig_res) with
-      | None, None => OK e
-      | Some r, Some t => S.set e r t
+      match optres, rettype_eq f.(fn_sig).(sig_res) Tvoid with
+      | None, left _ => OK e
+      | Some r, right _ => S.set e r (proj_sig_res f.(fn_sig))
       | _, _ => Error(msg "bad return")
       end
   end.
@@ -470,7 +471,7 @@ Proof.
   destruct l; try discriminate. destruct l; monadInv EQ0. eauto with ty.
   destruct (type_of_operation o) as [targs tres] eqn:TYOP. monadInv EQ0. eauto with ty.
 - (* tailcall *)
-  destruct (opt_typ_eq (sig_res s) (sig_res (fn_sig f))); try discriminate.
+  destruct (rettype_eq (sig_res s) (sig_res (fn_sig f))); try discriminate.
   destruct (tailcall_is_possible s) eqn:TCIP; inv EQ2.
   eauto with ty.
 - (* builtin *)
@@ -479,7 +480,8 @@ Proof.
   destruct (zle (list_length_z l * 4) Int.max_unsigned); inv EQ2.
   eauto with ty.
 - (* return *)
-  simpl in H. destruct o as [r|] eqn: RET; destruct (sig_res (fn_sig f)) as [t|] eqn: RES; try discriminate.
+  simpl in H.
+  destruct o as [r|] eqn: RET; destruct (rettype_eq (sig_res (fn_sig f)) Tvoid); try discriminate.
   eauto with ty.
   inv H; auto with ty.
 Qed.
@@ -521,7 +523,7 @@ Proof.
   eapply S.set_sound; eauto with ty.
   eauto with ty.
 - (* tailcall *)
-  destruct (opt_typ_eq (sig_res s) (sig_res (fn_sig f))); try discriminate.
+  destruct (rettype_eq (sig_res s) (sig_res (fn_sig f))); try discriminate.
   destruct (tailcall_is_possible s) eqn:TCIP; inv EQ2.
   constructor.
   eapply type_ros_sound; eauto with ty.
@@ -545,8 +547,9 @@ Proof.
   eapply check_successors_sound; eauto.
   auto.
 - (* return *)
-  simpl in H. destruct o as [r|] eqn: RET; destruct (sig_res (fn_sig f)) as [t|] eqn: RES; try discriminate.
-  econstructor. eauto. eapply S.set_sound; eauto with ty.
+  simpl in H.
+  destruct o as [r|] eqn: RET; destruct (rettype_eq (sig_res (fn_sig f)) Tvoid); try discriminate.
+  econstructor. auto. eapply S.set_sound; eauto with ty. eauto.
   inv H. constructor. auto.
 Qed.
 
@@ -722,9 +725,9 @@ Proof.
   rewrite check_successor_complete by auto; simpl.
   apply IHtbl0; intros; auto.
 - (* return none *)
-  rewrite H0. exists e; auto.
+  rewrite H0, dec_eq_true. exists e; auto.
 - (* return some *)
-  rewrite H0. apply S.set_complete; auto.
+  rewrite dec_eq_false by auto. apply S.set_complete; auto.
 Qed.
 
 Lemma type_code_complete:
@@ -958,7 +961,7 @@ Proof.
   econstructor; eauto.
   (* Ireturn *)
   econstructor; eauto.
-  inv WTI; simpl. auto. unfold proj_sig_res; rewrite H2. auto.
+  inv WTI; simpl. auto. rewrite <- H3. auto.
   (* internal function *)
   rewrite FIND in H7. inv H7.
   simpl in *. inv H5.
@@ -966,7 +969,7 @@ Proof.
   inv H1. apply wt_init_regs; auto. rewrite wt_params0. auto.
   (* external function *)
   rewrite FIND in H7. inv H7.
-  econstructor; eauto. simpl.
+  econstructor; eauto.
   eapply external_call_well_typed; eauto.
   (* return *)
   inv H1. econstructor; eauto.

@@ -6,10 +6,11 @@
 (*                                                                     *)
 (*  Copyright Institut National de Recherche en Informatique et en     *)
 (*  Automatique.  All rights reserved.  This file is distributed       *)
-(*  under the terms of the GNU General Public License as published by  *)
-(*  the Free Software Foundation, either version 2 of the License, or  *)
-(*  (at your option) any later version.  This file is also distributed *)
-(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*  under the terms of the GNU Lesser General Public License as        *)
+(*  published by the Free Software Foundation, either version 2.1 of   *)
+(*  the License, or  (at your option) any later version.               *)
+(*  This file is also distributed under the terms of the               *)
+(*  INRIA Non-Commercial License Agreement.                            *)
 (*                                                                     *)
 (* *********************************************************************)
 
@@ -271,7 +272,7 @@ let constant_expr env ty e =
   try
     match unroll env ty, cast env ty (expr env e) with
     | TInt(ik, _), I n -> Some(CInt(n, ik, ""))
-    | TPtr(_, _), I n -> Some(CInt(n, IInt, ""))
+    | TPtr(_, _), I n -> Some(CInt(n, ptr_t_ikind (), ""))
     | (TArray(_, _, _) | TPtr(_, _)), S s -> Some(CStr s)
     | (TArray(_, _, _) | TPtr(_, _)), WS s -> Some(CWStr s)
     | TEnum(_, _), I n -> Some(CInt(n, enum_ikind, ""))

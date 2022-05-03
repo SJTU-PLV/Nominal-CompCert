@@ -131,7 +131,7 @@ Definition opt_set (e: S.typenv) (optid: option ident) (ty: typ) : res S.typenv 
   | Some id => S.set e id ty
   end.
 
-Fixpoint type_stmt (tret: option typ) (e: S.typenv) (s: stmt) : res S.typenv :=
+Fixpoint type_stmt (tret: rettype) (e: S.typenv) (s: stmt) : res S.typenv :=
   match s with
   | Sskip => OK e
   | Sassign id a => type_assign e id a
@@ -142,7 +142,7 @@ Fixpoint type_stmt (tret: option typ) (e: S.typenv) (s: stmt) : res S.typenv :=
       do e2 <- type_exprlist e1 args sg.(sig_args);
       opt_set e2 optid (proj_sig_res sg)
   | Stailcall sg fn args =>
-      assertion (opt_typ_eq sg.(sig_res) tret);
+      assertion (rettype_eq sg.(sig_res) tret);
       do e1 <- type_expr e fn Tptr;
       type_exprlist e1 args sg.(sig_args)
   | Sbuiltin optid ef args =>
@@ -164,10 +164,14 @@ Fixpoint type_stmt (tret: option typ) (e: S.typenv) (s: stmt) : res S.typenv :=
   | Sswitch sz a tbl dfl =>
       type_expr e a (if sz then Tlong else Tint)
   | Sreturn opta =>
-      match opta, tret with
-      | None, _ => OK e
-      | Some a, Some t => type_expr e a t
-      | _, _ => Error (msg "inconsistent return")
+      match opta with
+      | None => OK e
+      | Some a => type_expr e a (proj_rettype tret)
+(*
+          if rettype_eq tret Tvoid
+          then Error (msg "inconsistent return")
+          else type_expr e a (proj_rettype tret)
+*)
       end
   | Slabel lbl s1 =>
       type_stmt tret e s1
@@ -187,7 +191,7 @@ Definition type_function (f: function) : res typenv :=
 Section SPEC.
 
 Variable env: ident -> typ.
-Variable tret: option typ.
+Variable tret: rettype.
 
 Inductive wt_expr: expr -> typ -> Prop :=
   | wt_Evar: forall id,
@@ -206,9 +210,9 @@ Inductive wt_expr: expr -> typ -> Prop :=
       wt_expr a1 Tptr ->
       wt_expr (Eload chunk a1) (type_of_chunk chunk).
 
-Definition wt_opt_assign (optid: option ident) (optty: option typ) : Prop :=
+Definition wt_opt_assign (optid: option ident) (ty: rettype) : Prop :=
   match optid with
-  | Some id => match optty with Some ty => ty | None => Tint end = env id
+  | Some id => proj_rettype ty = env id
   | _ => True
   end.
 
@@ -252,8 +256,8 @@ Inductive wt_stmt: stmt -> Prop :=
       wt_stmt (Sswitch sz a tbl dfl)
   | wt_Sreturn_none:
       wt_stmt (Sreturn None)
-  | wt_Sreturn_some: forall a t,
-      tret = Some t -> wt_expr a t ->
+  | wt_Sreturn_some: forall a,
+      wt_expr a (proj_rettype tret) ->
       wt_stmt (Sreturn (Some a))
   | wt_Slabel: forall lbl s1,
       wt_stmt s1 ->
@@ -287,7 +291,7 @@ Lemma expect_incr: forall te e t1 t2 e',
 Proof.
   unfold expect; intros. destruct (typ_eq t1 t2); inv H; auto.
 Qed.
-Hint Resolve expect_incr: ty.
+Global Hint Resolve expect_incr: ty.
 
 Lemma expect_sound: forall e t1 t2 e',
   expect e t1 t2 = OK e' -> t1 = t2.
@@ -302,7 +306,7 @@ Proof.
 - destruct (type_unop u) as [targ1 tres]; monadInv T; eauto with ty.
 - destruct (type_binop b) as [[targ1 targ2] tres]; monadInv T; eauto with ty.
 Qed.
-Hint Resolve type_expr_incr: ty.
+Global Hint Resolve type_expr_incr: ty.
 
 Lemma type_expr_sound: forall te a t e e',
     type_expr e a t = OK e' -> S.satisf te e' -> wt_expr te a t.
@@ -322,7 +326,7 @@ Lemma type_exprlist_incr: forall te al tl e e',
 Proof.
   induction al; destruct tl; simpl; intros until e'; intros T SAT; monadInv T; eauto with ty.
 Qed.
-Hint Resolve type_exprlist_incr: ty.
+Global Hint Resolve type_exprlist_incr: ty.
 
 Lemma type_exprlist_sound: forall te al tl e e',
     type_exprlist e al tl = OK e' -> S.satisf te e' -> list_forall2 (wt_expr te) al tl.
@@ -339,7 +343,7 @@ Proof.
 - destruct (type_unop u) as [targ1 tres]; monadInv T; eauto with ty.
 - destruct (type_binop b) as [[targ1 targ2] tres]; monadInv T; eauto with ty.
 Qed.
-Hint Resolve type_assign_incr: ty.
+Global Hint Resolve type_assign_incr: ty.
 
 Lemma type_assign_sound: forall te id a e e',
     type_assign e id a = OK e' -> S.satisf te e' -> wt_expr te a (te id).
@@ -359,7 +363,7 @@ Lemma opt_set_incr: forall te optid optty e e',
 Proof.
   unfold opt_set; intros. destruct optid, optty; try (monadInv H); eauto with ty.
 Qed.
-Hint Resolve opt_set_incr: ty.
+Global Hint Resolve opt_set_incr: ty.
 
 Lemma opt_set_sound: forall te optid sg e e',
     opt_set e optid (proj_sig_res sg) = OK e' -> S.satisf te e' ->
@@ -376,7 +380,7 @@ Proof.
   induction s; simpl; intros e1 e2 T SAT; try (monadInv T); eauto with ty.
 - destruct tret, o; try (monadInv T); eauto with ty.
 Qed.
-Hint Resolve type_stmt_incr: ty.
+Global Hint Resolve type_stmt_incr: ty.
 
 Lemma type_stmt_sound: forall te tret s e e',
     type_stmt tret e s = OK e' -> S.satisf te e' -> wt_stmt te tret s.
@@ -394,7 +398,7 @@ Proof.
 - constructor; eauto.
 - constructor.
 - constructor; eauto using type_expr_sound with ty.
-- destruct tret, o; try (monadInv T); econstructor; eauto using type_expr_sound with ty.
+- destruct o; try (monadInv T); econstructor; eauto using type_expr_sound with ty.
 - constructor; eauto.
 - constructor.
 Qed.
@@ -415,9 +419,9 @@ Definition wt_env (env: typenv) (e: Cminor.env) : Prop :=
 Definition def_env (f: function) (e: Cminor.env) : Prop :=
   forall id, In id f.(fn_params) \/ In id f.(fn_vars) -> exists v, e!id = Some v.
 
-Inductive wt_cont_call (ttop: option typ): cont -> option typ -> Prop :=
+Inductive wt_cont_call (ttop: rettype): cont -> rettype -> Prop :=
   | wt_cont_Kstop:
-      wt_cont_call ttop Kstop ttop
+      wt_cont_call Kstop ttop
   | wt_cont_Kcall: forall optid f sp e k tret env
         (WT_FN: wt_function env f)
         (WT_CONT: wt_cont ttop env f.(fn_sig).(sig_res) k)
@@ -426,7 +430,7 @@ Inductive wt_cont_call (ttop: option typ): cont -> option typ -> Prop :=
         (WT_DEST: wt_opt_assign env optid tret),
       wt_cont_call ttop (Kcall optid f sp e k) tret
 
-with wt_cont (ttop: option typ): typenv -> option typ -> cont -> Prop :=
+with wt_cont (ttop: rettype): typenv -> rettype -> cont -> Prop :=
   | wt_cont_Kseq: forall env tret s k,
       wt_stmt env tret s ->
       wt_cont ttop env tret k ->
@@ -453,7 +457,7 @@ Inductive wt_state (ge: genv) (ttop: option typ): state -> Prop :=
         (WT_FIND: Genv.find_funct ge vf = Some f),
       wt_state ge ttop (Callstate vf args k m)
   | wt_return_state: forall v k m tret
-        (WT_RES: Val.has_type v (match tret with None => Tint | Some t => t end))
+        (WT_RES: Val.has_type v (proj_rettype tret))
         (WT_CONT: wt_cont_call ttop k tret),
       wt_state ge ttop (Returnstate v k m).
 
@@ -654,9 +658,8 @@ Proof.
   rewrite H8; eapply call_cont_wt; eauto.
 - inv WT_STMT. exploit external_call_well_typed; eauto. intros TRES.
   econstructor; eauto using wt_Sskip.
-  unfold proj_sig_res in TRES; red in H5.
-  destruct optid. rewrite H5 in TRES. apply wt_env_assign; auto. assumption.
-  destruct optid. apply def_env_assign; auto. assumption.
+  destruct optid; auto. apply wt_env_assign; auto. rewrite <- H5; auto.
+  destruct optid; auto. apply def_env_assign; auto.
 - inv WT_STMT. econstructor; eauto. econstructor; eauto.
 - inv WT_STMT. destruct b; econstructor; eauto.
 - inv WT_STMT. econstructor; eauto. econstructor; eauto. constructor; auto.
@@ -667,7 +670,7 @@ Proof.
 - econstructor; eauto using wt_Sexit.
 - inv WT_STMT. econstructor; eauto using call_cont_wt. exact I.
 - inv WT_STMT. econstructor; eauto using call_cont_wt.
-  rewrite H2. eapply wt_eval_expr; eauto.
+  eapply wt_eval_expr; eauto.
 - inv WT_STMT. econstructor; eauto.
 - inversion WT_FN; subst.
   assert (WT_CK: wt_cont ttop env (sig_res (fn_sig f)) (call_cont k)).
@@ -680,7 +683,7 @@ Proof.
   apply wt_env_set_locals. apply wt_env_set_params. rewrite H2; auto.
   red; intros. apply def_set_locals. destruct H4; auto. left; apply def_set_params; auto.
 - rewrite WT_FIND in FIND. inv FIND.
-  exploit external_call_well_typed; eauto. unfold proj_sig_res. simpl in *. intros.
+  exploit external_call_well_typed; eauto. intros.
   econstructor; eauto.
 - inv WT_CONT. econstructor; eauto using wt_Sskip.
   red in WT_DEST.
