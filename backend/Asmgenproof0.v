@@ -1050,7 +1050,7 @@ Lemma match_stack_incr_bound:
   Ple b b' -> match_stack b s -> match_stack b' s.
 Proof.
   intros b b' s Hb Hs. induction Hs.
-  - constructor; auto. xomega.
+  - constructor; auto. extlia.
   - econstructor; eauto using valid_blockv_nextblock.
 Qed.
 

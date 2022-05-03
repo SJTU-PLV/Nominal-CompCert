@@ -142,7 +142,7 @@ Section ASM_LINKING.
       match_stack k b ->
       Ple init_nb b.
     Proof.
-      induction 1; xomega.
+      induction 1; extlia.
     Qed.
 
     (** Liveness of the current component vs. whole program.
@@ -174,8 +174,8 @@ Section ASM_LINKING.
       option_le (match_liveness nb sp) (inner_sp nb sp) (inner_sp init_nb sp).
     Proof.
       intros Hnb. unfold inner_sp. destruct sp; try constructor.
-      repeat destruct plt; eauto using match_liveness_refl; try xomega.
-      constructor; cbn; destruct plt; auto; xomega.
+      repeat destruct plt; eauto using match_liveness_refl; try extlia.
+      constructor; cbn; destruct plt; auto; extlia.
     Qed.
 
     Hint Constructors match_liveness.
@@ -289,14 +289,14 @@ Section ASM_LINKING.
         apply Mem.nextblock_store in Heqo0. rewrite Heqo0.
         apply Mem.nextblock_store in Heqo. rewrite Heqo.
         apply Mem.nextblock_alloc in Heqp0. rewrite Heqp0.
-        eexists. intuition (eauto using liveness_top; xomega).
+        eexists. intuition (eauto using liveness_top; extlia).
       - (* Pfreeframe *)
         assert (Mem.nextblock m' = Mem.nextblock m). {
           unfold free' in Heqo1. destruct zlt; try congruence.
           eapply Mem.nextblock_free; eauto.
         }
         rewrite H.
-        eexists. intuition (eauto using liveness_top; xomega).
+        eexists. intuition (eauto using liveness_top; extlia).
     Qed.
 
     (** *** [step] *)
@@ -320,7 +320,7 @@ Section ASM_LINKING.
       - (* builtin *)
         eapply find_internal_ptr_linkorder in FIND; eauto. cbn in *.
         exists true. intuition eauto using exec_step_builtin, liveness_top.
-        apply Events.external_call_nextblock in CALL. xomega.
+        apply Events.external_call_nextblock in CALL. extlia.
       - (* external *)
         assert (Genv.find_funct_ptr (Genv.globalenv se p) b = Some (External ef)).
         {
@@ -331,7 +331,7 @@ Section ASM_LINKING.
           by (destruct ef_sig, sig_res as [[]|]; reflexivity).
         pose proof (match_inner_sp nb (rs RSP) Hnb) as NB. rewrite ISP in NB. inv NB.
         eexists. intuition eauto using exec_step_external, Some_le_def.
-        apply Events.external_call_nextblock in CALL. xomega.
+        apply Events.external_call_nextblock in CALL. extlia.
     Qed.
 
   End SE.
@@ -433,7 +433,7 @@ Section ASM_LINKING.
         { inv Hl. econstructor; eauto. }
         econstructor; eauto.
         * destruct Hisp; congruence.
-        * xomega.
+        * extlia.
         * rewrite <- Hlive'. reflexivity.
     - (* simulation *)
       intros s1 t s1' Hstep1 idx [nb s2] [Hidx Hs]. subst. cbn in *.
@@ -450,7 +450,7 @@ Section ASM_LINKING.
         eexists (_, _), (nb, _). repeat apply conj; auto.
         right. intuition auto.
         * eapply star_refl.
-        * red. cbn. rewrite H10, H7. xomega.
+        * red. cbn. rewrite H10, H7. extlia.
         * constructor; cbn; eauto using match_liveness_refl, Ple_refl.
           econstructor; eauto.
       + (* pop *)
@@ -459,7 +459,7 @@ Section ASM_LINKING.
         eexists (_, _), (_, _). intuition auto.
         {
           right. split; auto using star_refl. red. cbn.
-          clear. destruct Genv.find_funct as [[|]|], live; xomega.
+          clear. destruct Genv.find_funct as [[|]|], live; extlia.
         }
         inv H5.
         * constructor; eauto using Ple_trans.

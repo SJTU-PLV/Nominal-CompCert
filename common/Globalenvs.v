@@ -516,10 +516,10 @@ Proof.
       * intros (b & Hb & ?). inv Hb. rewrite PTree.gss in *. auto.
     + rewrite PTree.gso by auto. rewrite IHdefs. split.
       * intros (b & Hb & ?). eexists. rewrite PTree.gso by auto. split; eauto.
-        rewrite PTree.gso; eauto. apply genv_symb_range in Hb. xomega.
+        rewrite PTree.gso; eauto. apply genv_symb_range in Hb. extlia.
       * intros (b & Hb & ?). rewrite PTree.gso in * by auto.
         eexists. split; eauto. rewrite PTree.gso in *; auto.
-        apply genv_symb_range in Hb. xomega.
+        apply genv_symb_range in Hb. extlia.
 Qed.
 
 (** ** Properties of [globalenv] *)
@@ -1637,12 +1637,12 @@ Proof.
   - erewrite !mge_public by eauto. reflexivity.
   - edestruct (mge_dom H12) as (b2 & Hb12); eauto.
     assert (Plt b2 (genv_next ge2)).
-    { pose proof (mge_separated H12 _ Hb12). xomega. }
+    { pose proof (mge_separated H12 _ Hb12). extlia. }
     edestruct (mge_dom H23) as (b3 & Hb23); eauto.
     eexists. unfold compose_meminj. rewrite Hb12, Hb23. reflexivity.
   - edestruct (mge_img H23) as (bi & Hbi2); eauto.
     assert (Plt bi (genv_next ge2)).
-    { pose proof (mge_separated H23 _ Hbi2). xomega. }
+    { pose proof (mge_separated H23 _ Hbi2). extlia. }
     edestruct (mge_img H12) as (b1 & Hb12); eauto.
     eexists. unfold compose_meminj. rewrite Hb12, Hbi2. reflexivity.
   - unfold compose_meminj in H. rename b2 into b3.
@@ -1662,7 +1662,7 @@ Proof.
     destruct (g b2) as [[xb3 delta23] | ] eqn:Hb23; inv H.
     eapply mge_separated in Hb12; eauto.
     eapply mge_separated in Hb23; eauto.
-    xomega.
+    extlia.
 Qed.
 
 Context {f se tse} (Hse: match_stbls f se tse).
@@ -1682,14 +1682,14 @@ Proof.
       rewrite (Hf' _ _ _ Hb2') in H. inv H. rewrite <- mge_symb; eauto.
     + intros Hb2. destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
       * rewrite (Hf' _ _ _ Hb) in H. inv H. rewrite mge_symb; eauto.
-      * edestruct SEP; eauto. apply genv_symb_range in Hb2. xomega.
+      * edestruct SEP; eauto. apply genv_symb_range in Hb2. extlia.
   - intros b1 b2 delta Hb'.
     destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
     + rewrite (Hf' _ _ _ Hb) in Hb'. inv Hb'.
       eapply mge_info; eauto.
     + edestruct SEP; eauto.
-      destruct (genv_info se) ! b1 eqn:H1. apply genv_info_range in H1. xomega.
-      destruct (genv_info tse) ! b2 eqn:H2. apply genv_info_range in H2. xomega.
+      destruct (genv_info se) ! b1 eqn:H1. apply genv_info_range in H1. extlia.
+      destruct (genv_info tse) ! b2 eqn:H2. apply genv_info_range in H2. extlia.
       reflexivity.
   - intros b1 b2 delta Hb'.
     destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
@@ -1856,7 +1856,7 @@ Proof.
     destruct Ptrofs.eq_dec; auto.
     destruct PTree.get as [[|]|] eqn:Hdef; auto. exfalso.
     apply genv_defs_range in Hdef.
-    eapply mge_separated in H; eauto. cbn in *. xomega.
+    eapply mge_separated in H; eauto. cbn in *. extlia.
 Qed.
 
 Theorem is_internal_match `{I1: FundefIsInternal F1} `{I2: FundefIsInternal F2}:

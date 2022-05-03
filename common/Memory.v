@@ -4537,7 +4537,7 @@ Next Obligation.
 Qed.
 Next Obligation.
   unfold pmap_update. destruct H as [? ?]. unfold valid_block in *.
-  rewrite PMap.gso by xomega.
+  rewrite PMap.gso by extlia.
   apply Mem.nextblock_noaccess; auto.
 Qed.
 Next Obligation.
@@ -4620,9 +4620,9 @@ Proof.
     destruct (peq b1 b); subst; rewrite ?PMap.gss, ?PMap.gso; auto.
     rewrite setN_outside; auto.
     destruct (zlt ofs1 lo); auto. right.
-    destruct (zlt ofs1 hi); try (elim H; split; auto; xomega).
+    destruct (zlt ofs1 hi); try (elim H; split; auto; extlia).
     rewrite getN_length, Z_to_nat_max, <- Z.add_max_distr_l.
-    rewrite Zmax_spec. destruct zlt; xomega.
+    rewrite Zmax_spec. destruct zlt; extlia.
 Qed.
 
 Lemma get_setN_getN_at lo k n x y:
@@ -4630,12 +4630,12 @@ Lemma get_setN_getN_at lo k n x y:
   ZMap.get (lo + Z.of_nat k) x.
 Proof.
   revert lo n x y. induction k; cbn; intros.
-  - rewrite setN_outside by xomega.
-    replace (lo + 0) with lo by xomega.
+  - rewrite setN_outside by extlia.
+    replace (lo + 0) with lo by extlia.
     rewrite ZMap.gss; auto.
   - specialize (IHk (lo + 1)).
     rewrite Zpos_P_of_succ_nat, <- Z.add_1_r.
-    replace (lo + _) with (lo + 1 + Z.of_nat k) by xomega.
+    replace (lo + _) with (lo + 1 + Z.of_nat k) by extlia.
     rewrite IHk. reflexivity.
 Qed.
 
@@ -4650,11 +4650,11 @@ Proof.
   replace ofs with (lo + Z.of_nat k).
   - apply get_setN_getN_at.
   - subst k n.
-    rewrite Z2Nat.id; xomega.
+    rewrite Z2Nat.id; extlia.
   - subst k n.
-    rewrite <- Z2Nat.inj_succ by xomega.
-    rewrite <- Z2Nat.inj_add by xomega.
-    f_equal. xomega.
+    rewrite <- Z2Nat.inj_succ by extlia.
+    rewrite <- Z2Nat.inj_add by extlia.
+    f_equal. extlia.
 Qed.
 
 Theorem mix_updated:
@@ -4667,7 +4667,7 @@ Proof.
   - auto.
   - intros _ ofs k p [[ ] Hofs] Hb. unfold perm; cbn.
     unfold pmap_update, mix_perms. rewrite PMap.gss.
-    destruct zle, zlt; try xomega; cbn. reflexivity.
+    destruct zle, zlt; try extlia; cbn. reflexivity.
   - intros _ ofs [[ ] Hofs] Hp.
     unfold pmap_update. rewrite PMap.gss.
     rewrite get_setN_getN; auto.
@@ -4697,7 +4697,7 @@ Proof.
         -- eapply mi_perm; eauto.
         -- cbn. auto.
         -- eapply mix_valid_block; eauto.
-      * cbn. split; auto. xomega.
+      * cbn. split; auto. extlia.
     + (* unchanged *)
       eapply mi_perm; eauto.
       erewrite <- unchanged_on_perm in Hp; eauto using mix_unchanged.
@@ -4708,8 +4708,8 @@ Proof.
     destruct (peq b1' b1); subst.
     + erewrite Hf' in Hb'; eauto. inv Hb'.
       etransitivity; eauto.
-      assert (2 | 8) by (exists 4; xomega).
-      assert (4 | 8) by (exists 2; xomega).
+      assert (2 | 8) by (exists 4; extlia).
+      assert (4 | 8) by (exists 2; extlia).
       destruct chunk; cbn; auto using Z.divide_1_l, Z.divide_refl.
     + eapply mi_align with f' m1' m2' b1' b2' ofs p; eauto.
       intros i Hi.
@@ -4717,7 +4717,7 @@ Proof.
       * cbn. intros [? ?]. congruence.
       * eapply valid_block_mix_2; eauto.
         eapply perm_valid_block, (Hp ofs).
-        pose proof (size_chunk_pos chunk). xomega.
+        pose proof (size_chunk_pos chunk). extlia.
   - (* contents *)
     intros b1' ofs b2' delta' Hb' Hp.
     destruct (classic (b1 = b1' /\ lo <= ofs < hi)) as [[? ?] | ?].
@@ -4730,7 +4730,7 @@ Proof.
       erewrite unchanged_on_contents with _ m2 m2' _ _; eauto.
       * eapply memval_inject_incr; eauto.
         eapply mi_memval; eauto.
-      * cbn. split; auto. xomega.
+      * cbn. split; auto. extlia.
       * eapply mi_perm; eauto.
     + (* unchanged *)
       erewrite <- unchanged_on_perm in Hp;
@@ -4755,8 +4755,8 @@ Proof.
   - erewrite nextblock_mix; eauto.
   - eapply mix_left_mem_inj; eauto.
     + reflexivity.
-    + replace (lo + 0) with lo by xomega.
-      replace (hi + 0) with hi by xomega.
+    + replace (lo + 0) with lo by extlia.
+      replace (hi + 0) with hi by extlia.
       auto.
     + apply Z.divide_0_r.
   - intros b' ofs k p Hp.
@@ -4798,16 +4798,16 @@ Proof.
       destruct (classic (b1 = y1 /\ lo <= yofs < hi)).
       * intuition congruence.
       * rewrite <- unchanged_on_perm in Hpy; eauto using mix_unchanged.
-        replace yofs with (yofs + yd - yd) in Hpy by xomega.
+        replace yofs with (yofs + yd - yd) in Hpy by extlia.
         destruct (peq b2 y2); auto; subst y2. right.
-        intros Hofs. eapply (OOR y1 yd (yofs + yd)); eauto. xomega.
+        intros Hofs. eapply (OOR y1 yd (yofs + yd)); eauto. extlia.
     + rewrite <- unchanged_on_perm in Hpx; eauto using mix_unchanged.
       destruct (classic (b1 = y1 /\ lo <= yofs < hi)).
       * destruct H4; subst y1.
-        replace xofs with (xofs + xd - xd) in Hpx by xomega.
+        replace xofs with (xofs + xd - xd) in Hpx by extlia.
         erewrite Hf in Hy; eauto. inversion Hy; clear Hy; subst y2 yd.
         destruct (peq x2 b2); auto; subst x2. right.
-        intros Hofs. eapply (OOR x1 xd (xofs + xd)); eauto. xomega.
+        intros Hofs. eapply (OOR x1 xd (xofs + xd)); eauto. extlia.
       * rewrite <- unchanged_on_perm in Hpy; eauto using mix_unchanged.
         eapply mi_no_overlap; eauto.
   - intros b b' delta' ofs Hb' [Hp | Hp].
@@ -4835,7 +4835,7 @@ Proof.
       erewrite Hf in Hx; eauto. inversion Hx; clear Hx; subst x2 xd.
       assert (valid_block m1 b1) by eauto using valid_block_inject_1.
       assert (valid_block m2 b2) by eauto using valid_block_inject_2.
-      rewrite <- unchanged_on_perm in Hp; eauto; cbn; try (split; auto; xomega).
+      rewrite <- unchanged_on_perm in Hp; eauto; cbn; try (split; auto; extlia).
       erewrite <- !(unchanged_on_perm _ m1 m1''); eauto using mix_updated.
       eapply mi_perm_inv; eauto.
     + assert (valid_block m1' x1) by eauto using valid_block_inject_1.

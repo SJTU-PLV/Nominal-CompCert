@@ -2279,14 +2279,14 @@ Proof.
   - specialize (MCONT VSet.empty). constructor.
     + eapply match_cont_globalenv; eauto.
     + inv GE. eapply Pos.le_trans; eauto.
-      clear - MCONT. induction MCONT; cbn in *; eauto. inv H; cbn; xomega. destruct H0. xomega.
+      clear - MCONT. induction MCONT; cbn in *; eauto. inv H; cbn; extlia. destruct H0. extlia.
     + inv GE. eapply Pos.le_trans; eauto.
-      clear - MCONT. induction MCONT; cbn in *; eauto. inv H; cbn; xomega. destruct H0. xomega.
+      clear - MCONT. induction MCONT; cbn in *; eauto. inv H; cbn; extlia. destruct H0. extlia.
   - inv H0. destruct H as (wx' & Hwx' & H). inv Hwx'. inv H. inv H10. eexists. split.
     + econstructor; eauto.
     + econstructor; eauto.
       intros. apply match_cont_incr_bounds with (Mem.nextblock m) (Mem.nextblock tm).
-      eapply match_cont_extcall; eauto. xomega. xomega.
+      eapply match_cont_extcall; eauto. extlia. extlia.
       eapply Mem.unchanged_on_nextblock; eauto.
       eapply Mem.unchanged_on_nextblock; eauto.
 Qed.

@@ -166,7 +166,7 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  xomega.
+  extlia.
 Qed.
 
 Next Obligation.
@@ -175,7 +175,7 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  intuition xomega.
+  intuition extlia.
 Qed.
 
 Next Obligation.
@@ -229,7 +229,7 @@ Proof.
   apply functional_extensionality. intros b.
   unfold compose_meminj, inject_id.
   destruct (f b) as [[b' delta] | ]; eauto.
-  replace (delta + 0) with delta by xomega; eauto.
+  replace (delta + 0) with delta by extlia; eauto.
 Qed.
 
 Lemma ext_ext :

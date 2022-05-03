@@ -575,8 +575,8 @@ Proof.
   intros [OPOS FITS].
   rewrite add_repr, <- Ptrofs.add_assoc.
   rewrite Ptrofs.add_unsigned.
-  rewrite (Ptrofs.unsigned_repr (4 * ofs)) by xomega. fold base.
-  rewrite Ptrofs.unsigned_repr by xomega.
+  rewrite (Ptrofs.unsigned_repr (4 * ofs)) by extlia. fold base.
+  rewrite Ptrofs.unsigned_repr by extlia.
   reflexivity.
 *)
 Qed.
@@ -615,15 +615,15 @@ Next Obligation.
     pose proof (loc_arguments_acceptable_2 _ _ REG) as [? _].
     pose proof (typesize_pos ty).
     eexists; split; eauto.
-    edestruct H1 as (sb' & sofs' & Hsp & PERM & FITS). xomega. inv Hsp.
+    edestruct H1 as (sb' & sofs' & Hsp & PERM & FITS). extlia. inv Hsp.
     eapply Mem.load_unchanged_on; eauto. intros. constructor.
-    rewrite <- access_fits in H8 by (apply FITS; xomega). unfold offset_sarg in *.
-    destruct ty; cbn [typesize size_chunk chunk_of_type] in *; xomega.
+    rewrite <- access_fits in H8 by (apply FITS; extlia). unfold offset_sarg in *.
+    destruct ty; cbn [typesize size_chunk chunk_of_type] in *; extlia.
 Qed.
 Next Obligation.
   destruct H0.
   edestruct H1 as (sb' & sofs' & Hsp & PERM & FITS); eauto.
-  + unfold offset_sarg in *. xomega.
+  + unfold offset_sarg in *. extlia.
   + inv Hsp. eapply Mem.perm_valid_block; eauto.
 Qed.
 
@@ -710,7 +710,7 @@ Lemma valid_blockv_nextblock nb nb' v:
   valid_blockv nb' v.
 Proof.
   destruct 1. constructor.
-  unfold Mem.valid_block in *. xomega.
+  unfold Mem.valid_block in *. extlia.
 Qed.
 
 (** * Leaf functions *)

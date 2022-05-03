@@ -640,7 +640,7 @@ Qed.
 Lemma offset_sarg_expand ofs sofs:
   offset_sarg sofs ofs = offset_sarg sofs 0 + 4 * ofs.
 Proof.
-  unfold offset_sarg. xomega.
+  unfold offset_sarg. extlia.
 Qed.
 
 Lemma offset_sarg_ptrrange_inject R w m1 m2 sb1 sofs1 sb2 sofs2 ofs:
@@ -673,8 +673,8 @@ Proof.
   rewrite <- (Z.add_assoc _ delta), (Z.add_comm delta), Z.add_assoc.
   setoid_rewrite FITS.
   erewrite <- cklr_address_inject; eauto.
-  * eapply PERM. xomega.
-  * eapply PERM. xomega.
+  * eapply PERM. extlia.
+  * eapply PERM. extlia.
 Qed.
 
 Instance load_stack_inject R:
@@ -699,7 +699,7 @@ Proof.
       ptr_inject (mi R w) (sb1, offset_sarg sofs1 ofs) (b2, offset_sarg sofs2 ofs)).
     {
       intro. eapply offset_sarg_inject; eauto.
-      + eapply Mem.free_range_perm; eauto. unfold offset_sarg. xomega.
+      + eapply Mem.free_range_perm; eauto. unfold offset_sarg. extlia.
       + constructor; auto.
     }
     assert
@@ -708,7 +708,7 @@ Proof.
                         (b2, offset_sarg sofs2 0, offset_sarg sofs2 (size_arguments sg))).
     {
       eapply ptr_ptrrange_inject; split; eauto.
-      unfold offset_sarg. xomega.
+      unfold offset_sarg. extlia.
     }
     generalize FREE. transport FREE. intros FREE.
     eexists; split.
@@ -793,9 +793,9 @@ Proof.
         erewrite (Mem.mext_next m2'_) by eauto.
         eapply Mem.unchanged_on_nextblock; eauto.
       * destruct 1; eelim H; eauto. split; eauto.
-        unfold offset_sarg in *. xomega.
+        unfold offset_sarg in *. extlia.
       * destruct 1; eelim H; eauto. split; eauto.
-        unfold offset_sarg in *. xomega.
+        unfold offset_sarg in *. extlia.
     + apply Mem.unchanged_on_refl.
     + reflexivity.
 Qed.
@@ -810,7 +810,7 @@ Proof.
     assert (Mem.mixable m1'_ sb1 m1). {
       split.
       + destruct Hm, Hm'_. inv Hw. auto.
-      + assert (SZ: k * 2 > 0) by xomega.
+      + assert (SZ: k * 2 > 0) by extlia.
         specialize (VB SZ). inv VB. auto.
     }
     eapply Mem.mixable_mix in H as [m1' Hm1'].
@@ -828,18 +828,18 @@ Proof.
         intros _ ofs [-> Hofs] VLD. constructor.
         unfold offset_sarg in *.
         rewrite (Ptrofs.add_commut sofs1), Ptrofs.add_assoc, Ptrofs.add_commut.
-        erewrite (Mem.address_inject f m1 m2); eauto. xomega.
-        eapply H; eauto. xomega. xomega.
+        erewrite (Mem.address_inject f m1 m2); eauto. extlia.
+        eapply H; eauto. extlia. extlia.
       * intros b1' delta' ofs pk p Hb' Hofs Hp.
         eapply (OOR b2 ofs); eauto.
         -- constructor. unfold offset_sarg in *.
            rewrite (Ptrofs.add_commut sofs1), Ptrofs.add_assoc, Ptrofs.add_commut.
-           erewrite (Mem.address_inject f m1 m2); eauto. xomega.
-           eapply H; eauto. xomega. xomega.
+           erewrite (Mem.address_inject f m1 m2); eauto. extlia.
+           eapply H; eauto. extlia. extlia.
         -- eapply Mem.perm_max, Mem.perm_implies; eauto. constructor.
       * eapply Mem.mi_align with (chunk := Mint64); eauto using (Mem.mi_inj f m1 m2).
         instantiate (2 := offset_sarg sofs1 0). intros ofs Hofs.
-        eapply Mem.perm_max, H; eauto; unfold offset_sarg in *; cbn in Hofs; xomega.
+        eapply Mem.perm_max, H; eauto; unfold offset_sarg in *; cbn in Hofs; extlia.
     + eapply Mem.unchanged_on_implies; eauto using Mem.mix_updated.
       inversion 1; auto.
     + eapply Mem.unchanged_on_implies; eauto using Mem.mix_unchanged.
@@ -854,9 +854,9 @@ Proof.
     + split.
       * eauto.
       * destruct 1; eelim H; eauto. split; eauto.
-        unfold offset_sarg in H3. xomega.
+        unfold offset_sarg in H3. extlia.
       * destruct 1; eelim H; eauto. split; eauto.
-        unfold offset_sarg in H3. xomega.
+        unfold offset_sarg in H3. extlia.
     + apply Mem.unchanged_on_refl.
     + reflexivity.
 Qed.
@@ -878,7 +878,7 @@ Proof.
     {
       intros ofs. destruct 1.
       eapply H14. eapply Mem.perm_max, Mem.perm_implies.
-      eapply RANGE; eauto. unfold offset_sarg in *. xomega.
+      eapply RANGE; eauto. unfold offset_sarg in *. extlia.
       constructor.
     }
     split; auto. split; auto.
@@ -888,13 +888,13 @@ Proof.
       * destruct H16. split.
         -- intros. erewrite Mem.load_unchanged_on_1 in H22; eauto.
            apply Mem.load_valid_access in H22 as [? ?].
-           eapply H19. eapply H22. pose proof (size_chunk_pos chunk). instantiate (1 := ofs). xomega.
+           eapply H19. eapply H22. pose proof (size_chunk_pos chunk). instantiate (1 := ofs). extlia.
         -- intros. erewrite Mem.loadbytes_unchanged_on_1 in H22; eauto.
            apply Mem.loadbytes_range_perm in H22.
-           eapply H19. eapply H22. instantiate (1 := ofs). xomega.
+           eapply H19. eapply H22. instantiate (1 := ofs). extlia.
       * intros. erewrite Mem.load_unchanged_on_1 in H21; eauto.
         apply Mem.load_valid_access in H21 as [? ?].
-        eapply H19. eapply H21. pose proof (size_chunk_pos chunk). instantiate (1 := ofs). xomega.
+        eapply H19. eapply H21. pose proof (size_chunk_pos chunk). instantiate (1 := ofs). extlia.
     + intros ofs Hp. eapply H17; eauto.
       rewrite <- Mem.unchanged_on_perm in Hp; eauto.
       unfold Mem.valid_block. rewrite <- H11. eapply Mem.perm_valid_block; eauto.
@@ -929,11 +929,11 @@ Lemma unchanged_on_extends P m m':
 Proof.
   intros UNCH NB PERM. split; auto.
   - split; unfold inject_id.
-    + inversion 1; subst. replace (ofs + 0) with ofs by xomega.
+    + inversion 1; subst. replace (ofs + 0) with ofs by extlia.
       intros Hp. erewrite <- Mem.unchanged_on_perm; eauto.
       eapply Mem.perm_valid_block; eauto.
     + inversion 1; subst. auto using Z.divide_0_r.
-    + inversion 1; subst. replace (ofs + 0) with ofs by xomega.
+    + inversion 1; subst. replace (ofs + 0) with ofs by extlia.
       intros Hp. erewrite <- Mem.unchanged_on_contents; eauto.
       destruct ZMap.get; constructor.
       apply val_inject_id. apply Val.lessdef_refl.
@@ -969,17 +969,17 @@ Proof.
     { destruct 1. intros b1 delta Hb Hp.
       eapply (cklr_perm R wR'' m1' m2' H10 (b1, ofs - delta) (sb, ofs)) in Hp.
       + cbn in Hp. eapply H25; eauto. constructor; eauto.
-      + replace (sb, ofs) with (sb, ofs - delta + delta) by (f_equal; xomega).
+      + replace (sb, ofs) with (sb, ofs - delta + delta) by (f_equal; extlia).
         constructor; auto. }
     { apply size_arguments_always_64. }
     { destruct H7.
-      - apply zero_size_arguments_tailcall_possible in H7. xomega.
+      - apply zero_size_arguments_tailcall_possible in H7. extlia.
       - intro. inv H2; try congruence.
         constructor. eapply cklr_valid_block; eauto. red. red. eauto.
         eapply Mem.perm_valid_block. eapply Mem.free_range_perm; eauto.
-        split; [reflexivity |]. unfold offset_sarg. xomega. }
+        split; [reflexivity |]. unfold offset_sarg. extlia. }
     { destruct ARGSm1.
-      - apply zero_size_arguments_tailcall_possible in H11. intros. xomega.
+      - apply zero_size_arguments_tailcall_possible in H11. intros. extlia.
       - intros. subst. inv H18. eapply Mem.free_range_perm; eauto. }
     exists (mr rs1' m1''). split.
     + constructor; auto.
@@ -991,15 +991,15 @@ Proof.
            rewrite (Ptrofs.add_commut sofs), Ptrofs.add_assoc, Ptrofs.add_commut.
            assert (mi R wR''' sb = Some (b2, delta)). { eapply mi_acc; eauto. }
            erewrite cklr_address_inject; eauto.
-           ++ xomega.
+           ++ extlia.
            ++ erewrite <- (Mem.unchanged_on_perm _ m1 m1''); eauto.
               ** inv ARGSm1.
-                 apply zero_size_arguments_tailcall_possible in H17. xomega.
+                 apply zero_size_arguments_tailcall_possible in H17. extlia.
                  apply Mem.free_range_perm in H26.
-                 eapply H26. unfold offset_sarg. xomega.
-              ** constructor. unfold offset_sarg. xomega.
+                 eapply H26. unfold offset_sarg. extlia.
+              ** constructor. unfold offset_sarg. extlia.
               ** inv ARGSm1.
-                 apply zero_size_arguments_tailcall_possible in H17. xomega.
+                 apply zero_size_arguments_tailcall_possible in H17. extlia.
                  eapply Mem.perm_valid_block.
                  eapply Mem.free_range_perm; eauto.
         -- eapply (cklr_perm R _ _ _ H10 (sb, ofs) (b2, ofs + delta)); eauto.
@@ -1030,7 +1030,7 @@ Proof.
     + cbn -[Z.add Z.mul]. repeat apply conj.
       * apply Mem.unchanged_on_refl.
       * intro Hsz.
-        destruct H12. { apply zero_size_arguments_tailcall_possible in H7. xomega. }
+        destruct H12. { apply zero_size_arguments_tailcall_possible in H7. extlia. }
         inv H2. eexists _, _. split; eauto. split.
         -- eapply transport in H7 as (m2_ & Hm2_ & Hm_).
            2: {
@@ -1038,7 +1038,7 @@ Proof.
              eapply offset_sarg_ptrrange_inject; eauto.
              eapply Mem.free_range_perm; eauto.
              rewrite (offset_sarg_expand (size_arguments sg)).
-             xomega.
+             extlia.
            }
            eapply Mem.free_range_perm; eauto.
         -- intros ofs Hofs.
@@ -1056,15 +1056,15 @@ Proof.
       inversion H2 as [ | | | | sb1 sofs1 | ]; clear H2; try congruence. subst b2 ofs2 sp1.
       inversion H12; clear H12.
       { apply zero_size_arguments_tailcall_possible in H2.
-        unfold offset_sarg in *. xomega. }
+        unfold offset_sarg in *. extlia. }
       subst sb sofs m m_0.
       assert (offset_sarg sofs1 0 <= ofs - delta < offset_sarg sofs1 (size_arguments sg)).
       {
         rewrite (offset_sarg_expand (size_arguments sg)) in *.
         exploit (offset_sarg_inject inj w m1 m2 sb1 sofs1 sb2 sofs2 0); eauto.
-        * eapply Mem.free_range_perm; eauto. xomega.
+        * eapply Mem.free_range_perm; eauto. extlia.
         * subst. eauto.
-        * inversion 1. assert (delta0 = delta) by congruence. xomega.
+        * inversion 1. assert (delta0 = delta) by congruence. extlia.
       }
       intros sb1' delta' Hsb1' Hp.
       destruct (peq sb1 sb1').
@@ -1076,7 +1076,7 @@ Proof.
         eapply Mem.free_range_perm; eauto.
         constructor.
       * eapply Mem.perm_free_3; eauto.
-      * xomega.
+      * extlia.
     + destruct H2; congruence.
     + destruct H4; congruence.
   - intros r1 r2 Hr. inv Hr.
@@ -1084,12 +1084,12 @@ Proof.
       as (w'' & m1'' & Hw'' & INCR & ? & ? & ? & NB); eauto using Mem.unchanged_on_refl.
     { apply Mem.extends_refl. }
     { apply size_arguments_always_64. }
-    { destruct H12. apply zero_size_arguments_tailcall_possible in H7. xomega.
+    { destruct H12. apply zero_size_arguments_tailcall_possible in H7. extlia.
       intro. constructor. eapply Mem.perm_valid_block.
       eapply Mem.free_range_perm; eauto. split. reflexivity.
-      unfold offset_sarg. xomega. }
+      unfold offset_sarg. extlia. }
     { destruct H12.
-      + intros. apply zero_size_arguments_tailcall_possible in H7. xomega.
+      + intros. apply zero_size_arguments_tailcall_possible in H7. extlia.
       + intros. inv H12. eapply Mem.free_range_perm; eauto. }
     set (rs1' r := if is_callee_save r then rs1 r else
                    if in_dec mreg_eq r (regs_of_rpair (loc_result sg)) then ls1' (R r) else
@@ -1107,19 +1107,19 @@ Proof.
         eapply H22; eauto.
         2: eapply mi_acc; eauto.
         instantiate (1 := ofs + delta).
-        2: replace (ofs + delta - delta) with ofs by xomega.
+        2: replace (ofs + delta - delta) with ofs by extlia.
         2: eapply Mem.perm_max, Mem.perm_implies; eauto; constructor.
         constructor. unfold offset_sarg in *.
         rewrite (Ptrofs.add_commut sofs), Ptrofs.add_assoc, Ptrofs.add_commut.
-        erewrite cklr_address_inject; eauto. xomega.
+        erewrite cklr_address_inject; eauto. extlia.
         2: eapply mi_acc; eauto.
         erewrite <- (Mem.unchanged_on_perm _ m1 m1''); eauto.
         -- inv H12.
-           ++ apply zero_size_arguments_tailcall_possible in H11. xomega.
-           ++ eapply Mem.free_range_perm; eauto. unfold offset_sarg. xomega.
-        -- constructor. unfold offset_sarg. xomega.
+           ++ apply zero_size_arguments_tailcall_possible in H11. extlia.
+           ++ eapply Mem.free_range_perm; eauto. unfold offset_sarg. extlia.
+        -- constructor. unfold offset_sarg. extlia.
         -- inv H12.
-           ++ apply zero_size_arguments_tailcall_possible in H11. xomega.
+           ++ apply zero_size_arguments_tailcall_possible in H11. extlia.
            ++ eapply Mem.perm_valid_block, Mem.free_range_perm; eauto.
     + exists w''; split; auto.
       constructor; auto.
@@ -1164,20 +1164,20 @@ Proof.
   assert (exists m2_, args_removed sg sp2 m2 m2_ /\ Mem.inject f m1 m2_) as (m2_ & Hm2_ & Hm_).
   {
     destruct (zlt 0 (size_arguments sg)).
-    - edestruct PERM as (sb2 & sofs2 & Hsp2 & PERM' & FITS). xomega.
+    - edestruct PERM as (sb2 & sofs2 & Hsp2 & PERM' & FITS). extlia.
       edestruct (Mem.range_perm_free m2) as (m2_ & Hm2_); eauto.
       exists m2_. subst. split.
       + constructor; eauto.
-        * xomega.
+        * extlia.
         * intros. edestruct ARGS as (? & ? & ?); eauto.
       + eapply Mem.free_right_inject; eauto.
         intros. eapply H4; eauto.
         * constructor; eauto.
-        * replace (ofs + delta - delta) with ofs by xomega.
+        * replace (ofs + delta - delta) with ofs by extlia.
           eapply Mem.perm_max, Mem.perm_implies; eauto. constructor.
     - exists m2. split; auto. constructor.
       rewrite <- zero_size_arguments_tailcall_possible.
-      pose proof (size_arguments_above sg). xomega.
+      pose proof (size_arguments_above sg). extlia.
   }
   exists (se2, (sg, injpw _ _ _ Hm_), lmw sg rs2 m2 sp2). repeat apply conj.
   - constructor; cbn; auto. constructor; auto.
@@ -1202,7 +1202,7 @@ Proof.
       * eauto using Mem.valid_block_inject_1.
       * inv Hm2_.
         -- apply zero_size_arguments_tailcall_possible in H7.
-           unfold offset_sarg in H3. xomega.
+           unfold offset_sarg in H3. extlia.
         -- right. eapply Mem.valid_block_free_1; eauto.
            edestruct PERM as (sb2' & sofs2' & Hsp2 & ? & ?); eauto. inv Hsp2.
            eapply Mem.perm_valid_block; eauto.
@@ -1236,12 +1236,12 @@ Proof.
     + intros b2 ofs2 Hofs2 b1 delta Hb Hp.
       inv Hm2_.
       * apply zero_size_arguments_tailcall_possible in H3.
-        destruct Hofs2. unfold offset_sarg in *. xomega.
+        destruct Hofs2. unfold offset_sarg in *. extlia.
       * inv Hofs2.
         eapply inject_incr_separated_inv in Hb; eauto.
         -- eapply H9 in Hp; eauto using Mem.valid_block_inject_1.
            eapply Mem.perm_inject in Hp; eauto.
-           replace (ofs2 - delta + delta) with ofs2 in Hp by xomega.
+           replace (ofs2 - delta + delta) with ofs2 in Hp by extlia.
            eapply Mem.perm_free_2; eauto.
         -- right.
            eapply Mem.valid_block_free_1; eauto.

@@ -847,7 +847,7 @@ Lemma globalenv_nextblock:
   massert_imp (globalenv_inject ge1 ge2 j m1) (globalenv_inject ge1 ge2 j m1').
 Proof.
   intros. split; auto. intros m2 (? & ? & ?).
-  constructor; auto. xomega.
+  constructor; auto. extlia.
 Qed.
 
 Lemma globalenv_inject_incr:
@@ -863,8 +863,8 @@ Proof.
   - eapply Genv.match_stbls_incr; eauto.
     intros b1 b2 delta Hb Hb'.
     specialize (H0 b1 b2 delta Hb Hb') as [Hb1' Hb2'].
-    unfold Mem.valid_block in *. xomega.
-  - xomega.
+    unfold Mem.valid_block in *. extlia.
+  - extlia.
 Qed.
 
 Lemma external_call_parallel_rule:
@@ -938,7 +938,7 @@ Proof.
   rewrite sep_swap4 in A. rewrite sep_swap4. apply globalenv_inject_incr with j1 m1; eauto.
 - red; unfold j1; intros. destruct (eq_block b b1). congruence. rewrite D; auto.
 - red; unfold j1; intros. destruct (eq_block b0 b1). congruence. rewrite D in H9 by auto. congruence.
-- rewrite (Mem.nextblock_alloc m1 0 sz1 m1' b1); eauto. xomega.
+- rewrite (Mem.nextblock_alloc m1 0 sz1 m1' b1); eauto. extlia.
 - split; auto.
   split; auto.
   red. intros b0 b3 delta0 H8 H9.

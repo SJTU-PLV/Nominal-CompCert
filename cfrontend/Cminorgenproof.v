@@ -2204,15 +2204,15 @@ Proof.
   - econstructor; eauto. constructor.
   - constructor; eauto using match_callstack_match_globalenvs.
     + inv GE. eapply Pos.le_trans; eauto.
-      clear - MCS. induction MCS; cbn in *; eauto. inv H; cbn; auto. destruct MENV. xomega.
+      clear - MCS. induction MCS; cbn in *; eauto. inv H; cbn; auto. destruct MENV. extlia.
     + inv GE. eapply Pos.le_trans; eauto.
-      clear - MCS. induction MCS; cbn in *; eauto. inv H; cbn; auto. destruct MENV. xomega.
+      clear - MCS. induction MCS; cbn in *; eauto. inv H; cbn; auto. destruct MENV. extlia.
   - destruct H as (wx' & Hwx' & H). inv Hwx'. inv H1. inv H. eexists. split.
     + econstructor; eauto.
     + inv H9. econstructor; eauto.
       apply match_callstack_incr_bound with (Mem.nextblock m) (Mem.nextblock tm).
       eapply match_callstack_external_call; eauto.
-      xomega. xomega.
+      extlia. extlia.
       eapply Mem.unchanged_on_nextblock; eauto.
       eapply Mem.unchanged_on_nextblock; eauto.
 Qed.

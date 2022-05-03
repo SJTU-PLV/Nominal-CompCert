@@ -55,10 +55,10 @@ Lemma val_load_result_idemp chunk v:
   Val.load_result chunk (Val.load_result chunk v) = Val.load_result chunk v.
 Proof.
   destruct chunk, v; simpl; try reflexivity.
-  - rewrite Int.sign_ext_widen; eauto. xomega.
-  - rewrite Int.zero_ext_widen; eauto. xomega.
-  - rewrite Int.sign_ext_widen; eauto. xomega.
-  - rewrite Int.zero_ext_widen; eauto. xomega.
+  - rewrite Int.sign_ext_widen; eauto. extlia.
+  - rewrite Int.zero_ext_widen; eauto. extlia.
+  - rewrite Int.sign_ext_widen; eauto. extlia.
+  - rewrite Int.zero_ext_widen; eauto. extlia.
 Qed.
 
 Global Instance volatile_store_rel R:
@@ -178,7 +178,7 @@ Proof.
     apply ptr_inject_shift.
     eapply ptrbits_ptr_inject; eauto.
     eapply Mem.free_range_perm in H1.
-    eapply H1. pose proof (size_chunk_pos Mptr). xomega.
+    eapply H1. pose proof (size_chunk_pos Mptr). extlia.
   }
   transport H. apply val_inject_vptrofs_inv in H4. subst.
   assert
@@ -190,7 +190,7 @@ Proof.
   {
     eapply ptr_ptrrange_inject. split.
     - rauto.
-    - xomega.
+    - extlia.
   }
   transport H1.
   eexists (_, _). simpl. split.
@@ -223,14 +223,14 @@ Proof.
         eapply Hlb1; eauto.
         constructor.
       * eapply Mem.perm_storebytes_1; eauto.
-        eapply Hlb1. xomega.
+        eapply Hlb1. extlia.
     + intro. rewrite Hw' in H8. inv H8.
       erewrite cklr_address_inject; eauto.
       eapply cklr_aligned_area_inject; eauto.
       * pose proof Hsb1 as Hrp1.
         eapply Mem.storebytes_range_perm in Hrp1.
         erewrite Mem.loadbytes_length in Hrp1 by eauto.
-        rewrite Z2Nat.id in Hrp1 by xomega.
+        rewrite Z2Nat.id in Hrp1 by extlia.
         intros ofs Hofs.
         eapply Mem.perm_storebytes_1; eauto.
         eapply Mem.perm_implies; eauto.
@@ -238,9 +238,9 @@ Proof.
       * eapply Mem.perm_storebytes_1; eauto.
         eapply Mem.storebytes_range_perm; eauto.
         erewrite Mem.loadbytes_length; eauto.
-        rewrite Z2Nat.id by xomega.
-        xomega.
-    + assert (sz > 0 \/ sz = 0) as [Hsz | Hsz] by xomega.
+        rewrite Z2Nat.id by extlia.
+        extlia.
+    + assert (sz > 0 \/ sz = 0) as [Hsz | Hsz] by extlia.
       * rewrite Hw' in H8. inv H8.
         rewrite Hw' in H9. inv H9.
         erewrite !cklr_address_inject; eauto.
@@ -258,17 +258,17 @@ Proof.
            eapply Mem.perm_implies; eauto.
            eapply Hsb1; eauto.
            erewrite Mem.loadbytes_length; eauto.
-           rewrite Z2Nat.id by xomega; eauto.
+           rewrite Z2Nat.id by extlia; eauto.
            constructor.
         -- eapply Mem.perm_storebytes_1; eauto.
            eapply Mem.storebytes_range_perm; eauto.
            erewrite Mem.loadbytes_length; eauto.
-           rewrite Z2Nat.id by xomega; eauto.
-           xomega.
+           rewrite Z2Nat.id by extlia; eauto.
+           extlia.
         -- eapply Mem.perm_storebytes_1; eauto.
            eapply Mem.loadbytes_range_perm; eauto.
-           xomega.
-      * subst. right. xomega.
+           extlia.
+      * subst. right. extlia.
   - rauto.
 Qed.
 

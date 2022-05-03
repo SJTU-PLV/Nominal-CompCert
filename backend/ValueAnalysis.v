@@ -1170,7 +1170,7 @@ Lemma sound_stack_ext:
   sound_stack bc stk m' bound.
 Proof.
   induction 1; intros INV.
-- assert (forall b, Plt b (Mem.nextblock m0) -> Plt b bound) by (intros; xomega).
+- assert (forall b, Plt b (Mem.nextblock m0) -> Plt b bound) by (intros; extlia).
   constructor; auto.
 - assert (Plt sp bound') by eauto with va.
   eapply sound_stack_public_call; eauto. apply IHsound_stack; intros.
@@ -1249,8 +1249,8 @@ Lemma sound_stack_exten:
 Proof.
   intros. inv H.
 - constructor; auto.
-  + intros. rewrite H0 by xomega. auto.
-  + intros. eapply H2; auto. rewrite <- H0; auto. xomega.
+  + intros. rewrite H0 by extlia. auto.
+  + intros. eapply H2; auto. rewrite <- H0; auto. extlia.
 - assert (Plt sp bound') by eauto with va.
   eapply sound_stack_public_call; eauto.
   rewrite H0; auto. extlia.

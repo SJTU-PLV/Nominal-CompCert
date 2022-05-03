@@ -218,8 +218,8 @@ Proof.
   rewrite Ptrofs.add_unsigned.
   rewrite !Ptrofs.unsigned_repr.
   - reflexivity.
-  - xomega.
-  - rewrite Ptrofs.unsigned_repr by xomega.
+  - extlia.
+  - rewrite Ptrofs.unsigned_repr by extlia.
     assumption.
 Qed.
 
@@ -276,8 +276,8 @@ Proof.
     + destruct k;
       intuition eauto using Mem.perm_implies, Mem.perm_cur_max, perm_any_N.
     + rewrite Ptrofs.add_unsigned.
-      rewrite (Ptrofs.unsigned_repr delta) by xomega.
-      rewrite Ptrofs.unsigned_repr by xomega.
+      rewrite (Ptrofs.unsigned_repr delta) by extlia.
+      rewrite Ptrofs.unsigned_repr by extlia.
       reflexivity.
 Qed.
 
@@ -473,7 +473,7 @@ Global Instance cklr_loadbytes_rptr R:
 Proof.
   intros w m1 m2 Hm [b1 ofs1] [b2 ofs2] Hptr sz.
   simpl.
-  assert (sz <= 0 \/ 0 < sz) as [Hsz | Hsz] by xomega.
+  assert (sz <= 0 \/ 0 < sz) as [Hsz | Hsz] by extlia.
   - rewrite !Mem.loadbytes_empty by assumption.
     rauto.
   - destruct (Mem.loadbytes m1 b1 ofs1 sz) eqn:H; [ | rauto].
@@ -483,7 +483,7 @@ Proof.
     + rauto.
     + split.
       * instantiate (2 := Mint8unsigned). simpl.
-        intros ofs Hofs. eapply H. xomega.
+        intros ofs Hofs. eapply H. extlia.
       * simpl.
         apply Z.divide_1_l.
 Qed.

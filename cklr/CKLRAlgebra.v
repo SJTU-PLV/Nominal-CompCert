@@ -466,7 +466,7 @@ Next Obligation. (* no overlap *)
     rewrite !Z.add_assoc.
     eauto.
   - destruct (peq ax bx); eauto.
-    + right. assert (dax2 = dbz2) by congruence. xomega.
+    + right. assert (dax2 = dbz2) by congruence. extlia.
     + edestruct (cklr_no_overlap R2 w0 mx m2); eauto.
       rewrite !Z.add_assoc.
       eauto.
@@ -487,9 +487,9 @@ Next Obligation. (* representable *)
     - left.
       constructor; eauto.
     - left.
-      replace (ofs1 + d1I -1) with (ofs1 - 1 + d1I) by xomega.
+      replace (ofs1 + d1I -1) with (ofs1 - 1 + d1I) by extlia.
       constructor; eauto. }
-  xomega.
+  extlia.
 Qed.
 
 Next Obligation. (* aligned_area_inject *)
@@ -502,9 +502,9 @@ Next Obligation. (* aligned_area_inject *)
   rewrite Z.add_assoc.
   eapply (cklr_aligned_area_inject R2); eauto.
   - intros x Hx.
-    assert (Mem.perm m b (x - d1I) Cur Nonempty). { eapply H3. xomega. }
+    assert (Mem.perm m b (x - d1I) Cur Nonempty). { eapply H3. extlia. }
     revert H. repeat rstep. left.
-    replace x with (x - d1I + d1I) at 2 by xomega.
+    replace x with (x - d1I + d1I) at 2 by extlia.
     constructor; eauto.
   - eapply (cklr_aligned_area_inject R1); eauto.
 Qed.
@@ -522,14 +522,14 @@ Next Obligation. (* disjoint_or_equal_inject *)
   rewrite !Z.add_assoc.
   eapply (cklr_disjoint_or_equal_inject R2); eauto.
   - intros x Hx.
-    assert (Mem.perm m b1 (x - d1) Max Nonempty). { eapply H2. xomega. }
+    assert (Mem.perm m b1 (x - d1) Max Nonempty). { eapply H2. extlia. }
     revert H. repeat rstep. left.
-    replace x with (x - d1 + d1) at 2 by xomega.
+    replace x with (x - d1 + d1) at 2 by extlia.
     constructor; eauto.
   - intros x Hx.
-    assert (Mem.perm m b2 (x - d2) Max Nonempty). { eapply H3. xomega. }
+    assert (Mem.perm m b2 (x - d2) Max Nonempty). { eapply H3. extlia. }
     revert H. repeat rstep. left.
-    replace x with (x - d2 + d2) at 2 by xomega.
+    replace x with (x - d2 + d2) at 2 by extlia.
     constructor; eauto.
   - eapply (cklr_disjoint_or_equal_inject R1); eauto.
 Qed.

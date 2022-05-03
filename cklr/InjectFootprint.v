@@ -154,9 +154,9 @@ Next Obligation. (* ~> vs. match_stbls *)
   constructor.
   - eapply Genv.match_stbls_incr; eauto.
     intros b1 b2 delta Hb Hb'. specialize (H9 b1 b2 delta Hb Hb').
-    unfold Mem.valid_block in H9. xomega.
-  - apply Mem.unchanged_on_nextblock in H5. xomega.
-  - apply Mem.unchanged_on_nextblock in H6. xomega.
+    unfold Mem.valid_block in H9. extlia.
+  - apply Mem.unchanged_on_nextblock in H5. extlia.
+  - apply Mem.unchanged_on_nextblock in H6. extlia.
 Qed.
 
 Next Obligation. (* match_stbls vs. Genv.match_stbls *)
@@ -205,7 +205,7 @@ Next Obligation. (* Mem.free *)
   destruct (Mem.free m1 b1 lo1 hi1) as [m1'|] eqn:Hm1'; [|rauto].
   inv Hr. inv H0. simpl in H1.
   edestruct Mem.free_parallel_inject as (m2' & Hm2' & Hm'); eauto.
-  replace (lo1 + delta + sz) with (lo1 + sz + delta) by xomega.
+  replace (lo1 + delta + sz) with (lo1 + sz + delta) by extlia.
   rewrite Hm2'. repeat rstep.
   exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
   constructor.
@@ -220,7 +220,7 @@ Next Obligation. (* Mem.free *)
     eapply Mem.perm_cur_max.
     eapply Mem.perm_implies; [ | eapply perm_any_N].
     eapply Mem.free_range_perm; eauto.
-    xomega.
+    extlia.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
 Qed.
@@ -253,7 +253,7 @@ Next Obligation. (* Mem.store *)
     eapply Mem.perm_cur_max.
     eapply Mem.perm_implies; [ | eapply perm_any_N].
     eapply H0; eauto.
-    xomega.
+    extlia.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
 Qed.
@@ -275,7 +275,7 @@ Next Obligation. (* Mem.storebytes *)
   - subst. inv Hvs.
     edestruct (Mem.range_perm_storebytes m2 b2 ofs2 nil) as [m2' Hm2'].
     {
-      intros ofs. simpl. xomega.
+      intros ofs. simpl. extlia.
     }
     rewrite Hm2'.
     constructor.
@@ -285,9 +285,9 @@ Next Obligation. (* Mem.storebytes *)
       * red. eauto using Mem.perm_storebytes_2.
       * red. eauto using Mem.perm_storebytes_2.
       * eapply Mem.storebytes_unchanged_on; eauto.
-        simpl. intro. xomega.
+        simpl. intro. extlia.
       * eapply Mem.storebytes_unchanged_on; eauto.
-        simpl. intro. xomega.
+        simpl. intro. extlia.
       * apply inject_separated_refl.
     + constructor; eauto.
   - assert (ptr_inject f (b1, ofs1) (b2, ofs2)) as Hptr'.
@@ -299,7 +299,7 @@ Next Obligation. (* Mem.storebytes *)
       apply Mem.storebytes_range_perm in Hm1'.
       eapply Hm1'.
       destruct vs1; try congruence.
-      simpl. xomega.
+      simpl. extlia.
     }
     inv Hptr'.
     edestruct Mem.storebytes_mapped_inject as (m2' & Hm2' & Hm'); eauto.
@@ -319,7 +319,7 @@ Next Obligation. (* Mem.storebytes *)
       eapply Mem.perm_implies; [ | eapply perm_any_N].
       eapply Mem.storebytes_range_perm; eauto.
       red in Hvs. rewrite Hvs.
-      xomega.
+      extlia.
     + apply inject_incr_refl.
     + apply inject_separated_refl.
 Qed.
@@ -343,9 +343,9 @@ Qed.
 
 Next Obligation. (* representable *)
   destruct H as [f m1 m2 Hm].
-  rewrite <- (Ptrofs.unsigned_repr ofs1) by xomega.
+  rewrite <- (Ptrofs.unsigned_repr ofs1) by extlia.
   eapply Mem.mi_representable; eauto.
-  rewrite Ptrofs.unsigned_repr by xomega.
+  rewrite Ptrofs.unsigned_repr by extlia.
   assumption.
 Qed.
 

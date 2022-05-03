@@ -62,7 +62,7 @@ Proof.
     intros b1 b2 delta Hb Hb''.
     destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
     + rewrite (H6 _ _ _ Hb') in Hb''. inv Hb''. eauto.
-    + edestruct H7; eauto. xomega.
+    + edestruct H7; eauto. extlia.
 Qed.
 
 Global Instance inj_stbls_subrel:
@@ -70,9 +70,9 @@ Global Instance inj_stbls_subrel:
 Proof.
   intros w w' Hw se1 se2 Hse.
   destruct Hse; inv Hw. cbn in *.
-  constructor; cbn; try xomega.
+  constructor; cbn; try extlia.
   eapply Genv.match_stbls_incr; eauto.
-  intros. edestruct H0; eauto. xomega.
+  intros. edestruct H0; eauto. extlia.
 Qed.
 
 Instance inj_proj_incr:
@@ -143,7 +143,7 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  destruct H. inv H0; cbn in *. xomega.
+  destruct H. inv H0; cbn in *. extlia.
 Qed.
 
 Lemma inj_cklr_alloc:
@@ -162,11 +162,11 @@ Proof.
     + assert (b2' = b2) by congruence; subst.
       apply Mem.alloc_result in Hm1'; subst.
       apply Mem.alloc_result in Hm2'; subst.
-      xomega.
+      extlia.
     + specialize (Hf'2 _ n). congruence.
-    + erewrite (Mem.nextblock_alloc m1 _ _ m1'); eauto. xomega.
-    + erewrite (Mem.nextblock_alloc m2 _ _ m2'); eauto. xomega.
-  - econstructor; eauto; erewrite Mem.nextblock_alloc by eauto; xomega.
+    + erewrite (Mem.nextblock_alloc m1 _ _ m1'); eauto. extlia.
+    + erewrite (Mem.nextblock_alloc m2 _ _ m2'); eauto. extlia.
+  - econstructor; eauto; erewrite Mem.nextblock_alloc by eauto; extlia.
   - cbn. red. auto.
 Qed.
 
@@ -180,7 +180,7 @@ Next Obligation. (* Mem.free *)
   destruct (Mem.free m1 b1 lo1 hi1) as [m1'|] eqn:Hm1'; [|rauto].
   inv Hr. cbn in H0. inv H0. inv Hm.
   edestruct Mem.free_parallel_inject as (m2' & Hm2' & Hm'); eauto.
-  replace (lo1 + delta + sz) with (lo1 + sz + delta) by xomega.
+  replace (lo1 + delta + sz) with (lo1 + sz + delta) by extlia.
   rewrite Hm2'.
   repeat (econstructor; eauto); try congruence;
     erewrite <- Mem.nextblock_free; eauto using Pos.le_refl.
@@ -221,7 +221,7 @@ Next Obligation. (* Mem.storebytes *)
   - subst. inv Hvs.
     edestruct (Mem.range_perm_storebytes m2 b2 ofs2 nil) as [m2' Hm2'].
     {
-      intros ofs. simpl. xomega.
+      intros ofs. simpl. extlia.
     }
     rewrite Hm2'.
     constructor.
@@ -239,7 +239,7 @@ Next Obligation. (* Mem.storebytes *)
       apply Mem.storebytes_range_perm in Hm1'.
       eapply Hm1'.
       destruct vs1; try congruence.
-      simpl. xomega.
+      simpl. extlia.
     }
     inv Hptr'.
     edestruct Mem.storebytes_mapped_inject as (m2' & Hm2' & Hm'); eauto. rauto.
@@ -267,9 +267,9 @@ Qed.
 
 Next Obligation. (* representable *)
   destruct H as [f m1 m2 nb1 nb2 Hm Hnb1 Hnb2].
-  rewrite <- (Ptrofs.unsigned_repr ofs1) by xomega.
+  rewrite <- (Ptrofs.unsigned_repr ofs1) by extlia.
   eapply Mem.mi_representable; eauto.
-  rewrite Ptrofs.unsigned_repr by xomega.
+  rewrite Ptrofs.unsigned_repr by extlia.
   assumption.
 Qed.
 
@@ -368,7 +368,7 @@ Proof.
   unfold compose_meminj, meminj_dom.
   destruct (f b) as [[b' ofs] | ] eqn:Hfb; eauto.
   rewrite Hfb.
-  replace (0 + ofs) with ofs by xomega.
+  replace (0 + ofs) with ofs by extlia.
   reflexivity.
 Qed.
 
@@ -443,14 +443,14 @@ Proof.
   split.
   - unfold meminj_dom. intros b1 b2 delta ofs k p Hb1 Hp.
     destruct (f b1); inv Hb1.
-    replace (ofs + 0) with ofs by xomega.
+    replace (ofs + 0) with ofs by extlia.
     auto.
   - unfold meminj_dom. intros b1 b2 delta chunk ofs p Hb1 Hrp.
     destruct (f b1) as [[b1' delta'] | ]; inv Hb1.
     eauto using Z.divide_0_r.
   - unfold meminj_dom at 1. intros b1 ofs b2 delta Hb1 Hp.
     destruct (f b1) as [[b1' delta'] | ] eqn:Hb1'; inv Hb1.
-    replace (ofs + 0) with ofs by xomega.
+    replace (ofs + 0) with ofs by extlia.
     eapply memval_inject_dom.
     eapply Mem.mi_memval; eauto.
 Qed.
@@ -474,7 +474,7 @@ Proof.
     eauto.
   - unfold meminj_dom. intros.
     destruct (f b); inv H0.
-    split; try xomega.
+    split; try extlia.
     rewrite Z.add_0_r.
     apply Ptrofs.unsigned_range_2.
   - unfold meminj_dom. intros.
@@ -536,7 +536,7 @@ Proof.
         destruct (f bi) as [[? ?] | ] eqn:Hfbi.
         {
           eapply Mem.valid_block_inject_1 in Hfbi; eauto.
-          red in Hfbi. xomega.
+          red in Hfbi. extlia.
         }
         edestruct SEP23'; eauto. 
     + cbn. rstep; auto.

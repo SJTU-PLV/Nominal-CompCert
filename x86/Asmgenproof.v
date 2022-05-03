@@ -431,7 +431,7 @@ Proof.
   try (replace (Mem.nextblock m) with (Mem.nextblock m') by congruence);
   try apply Ple_refl.
   - replace (Mem.nextblock m') with (Pos.succ (Mem.nextblock m)) by congruence.
-    xomega.
+    extlia.
   - destruct zlt.
     + apply Mem.nextblock_free in H1. rewrite <- H1. subst. reflexivity.
     + inv H1. reflexivity.
@@ -516,7 +516,7 @@ Lemma alloc_sp_fresh m lo hi m' stk ofs:
 Proof.
   intros Hm Hstk.
   apply Mem.alloc_result in Hstk. cbn. subst.
-  destruct plt; auto. xomega.
+  destruct plt; auto. extlia.
 Qed.
 
 (** We need to show that, in the simulation diagram, we cannot
@@ -990,8 +990,8 @@ Transparent destroyed_by_jumptable.
     congruence.
   }
   econstructor; eauto.
-  eapply match_stack_incr_bound; eauto. rewrite H3. xomega.
-  constructor. rewrite H3. erewrite <- Mem.alloc_result; eauto. xomega.
+  eapply match_stack_incr_bound; eauto. rewrite H3. extlia.
+  constructor. rewrite H3. erewrite <- Mem.alloc_result; eauto. extlia.
   eapply alloc_sp_fresh; eauto. eapply match_stack_nextblock; eauto.
   unfold nextinstr. rewrite Pregmap.gss. repeat rewrite Pregmap.gso; auto with asmgen.
   inv ATPC. simpl. constructor; eauto.

@@ -184,7 +184,7 @@ Proof.
     + assumption.
     + eauto using assign_loc_match_alignof_blockcopy.
     + eauto using assign_loc_match_alignof_blockcopy.
-    + assert (sizeof ce ty = 0 \/ sizeof ce ty <> 0) as [Hsz | Hsz] by xomega.
+    + assert (sizeof ce ty = 0 \/ sizeof ce ty <> 0) as [Hsz | Hsz] by extlia.
       {
         rewrite Hsz.
         right.

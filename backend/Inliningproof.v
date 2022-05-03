@@ -362,7 +362,7 @@ Proof.
 - (* register *)
   destruct H as [Hlo Hhi]. destruct (plt (mreg ctx) r).
   + rewrite Hhi by auto. constructor.
-  + eapply Hlo. xomega.
+  + eapply Hlo. extlia.
 - (* symbol *)
   unfold Genv.symbol_address.
   destruct (Genv.find_symbol se id) eqn:Hb; eauto.
@@ -546,14 +546,14 @@ Lemma mit_incr_invariant bound nb1 nb2 nb1' nb2':
   Ple nb2 nb2' ->
   inj_incr w (injw F1 nb1' nb2').
 Proof.
-  intros INJ BELOW H Hnb1' Hnb2'. inv H. split; cbn in *; eauto; try xomega.
+  intros INJ BELOW H Hnb1' Hnb2'. inv H. split; cbn in *; eauto; try extlia.
   eapply inject_incr_trans; eauto.
   intros b1 b2 delta Hb1 Hb1'.
   destruct (F b1) as [[xb1' xdelta]|] eqn:Hb1''.
   - rewrite (INCR _ _ _ Hb1'') in Hb1'. inv Hb1'. eauto.
   - destruct (plt b1 nb0); try (erewrite INJ in Hb1''; eauto; discriminate).
     destruct (plt b2 bound); try (erewrite INJ in Hb1''; eauto; discriminate).
-    xomega.
+    extlia.
 Qed.
 
 Lemma match_stacks_invariant:
@@ -674,7 +674,7 @@ Lemma match_stacks_inside_set_reg:
 Proof.
   intros. eapply match_stacks_inside_invariant; eauto.
   intros. apply Regmap.gso. zify. unfold sreg; rewrite shiftpos_eq. extlia.
-  xomega. xomega.
+  extlia. extlia.
 Qed.
 
 Lemma match_stacks_inside_set_res:
@@ -697,8 +697,8 @@ Lemma match_stacks_inside_store:
 Proof.
   intros.
   eapply match_stacks_inside_invariant; eauto with mem.
-  rewrite (Mem.nextblock_store _ _ _ _ _ _ H0). xomega.
-  rewrite (Mem.nextblock_store _ _ _ _ _ _ H1). xomega.
+  rewrite (Mem.nextblock_store _ _ _ _ _ _ H0). extlia.
+  rewrite (Mem.nextblock_store _ _ _ _ _ _ H1). extlia.
 Qed.
 
 (** Preservation by an allocation *)
@@ -721,9 +721,9 @@ Proof.
   intros. destruct (eq_block b1 b).
   subst b1. rewrite H1 in H4; inv H4.
     apply Mem.alloc_result in H. subst.
-    apply match_stacks_nextblock in MS. xomega.
+    apply match_stacks_nextblock in MS. extlia.
   rewrite H2 in H4; auto.
-  rewrite (Mem.nextblock_alloc _ _ _ _ _ H). xomega. xomega.
+  rewrite (Mem.nextblock_alloc _ _ _ _ _ H). extlia. extlia.
   intros. exploit Mem.perm_alloc_inv; eauto. destruct (eq_block b1 b); intros; auto.
   subst b1. rewrite H1 in H4. inv H4. eelim Plt_strict; eauto.
   (* inlined *)
@@ -745,7 +745,7 @@ Lemma match_stacks_free_left:
   match_stacks F m1 m' stk stk' sp.
 Proof.
   intros. eapply match_stacks_invariant; eauto.
-  rewrite (Mem.nextblock_free _ _ _ _ _ H0). xomega. xomega.
+  rewrite (Mem.nextblock_free _ _ _ _ _ H0). extlia. extlia.
   intros. eapply Mem.perm_free_3; eauto.
 Qed.
 
@@ -755,8 +755,8 @@ Lemma match_stacks_free_right:
   Mem.free m' sp lo hi = Some m1' ->
   match_stacks F m m1' stk stk' sp.
 Proof.
-  intros. eapply match_stacks_invariant; eauto. xomega.
-  rewrite (Mem.nextblock_free _ _ _ _ _ H0). xomega.
+  intros. eapply match_stacks_invariant; eauto. extlia.
+  rewrite (Mem.nextblock_free _ _ _ _ _ H0). extlia.
   intros. eapply Mem.perm_free_1; eauto with ordered_type.
   intros. eapply Mem.perm_free_3; eauto.
 Qed.
@@ -817,7 +817,7 @@ Proof.
   apply match_stacks_nil; auto.
     eapply mit_incr_invariant; eauto. intros.
     destruct (F1 b1) as [[xb2 xdelta]|] eqn:HF1. apply INCR in HF1. congruence.
-    exploit SEP; eauto. unfold Mem.valid_block. clear - H H0 H2 MG. inv MG; cbn in *. xomega.
+    exploit SEP; eauto. unfold Mem.valid_block. clear - H H0 H2 MG. inv MG; cbn in *. extlia.
     apply Mem.unchanged_on_nextblock in UNCHANGED. extlia.
   eapply match_stacks_cons; eauto.
     eapply match_stacks_inside_extcall; eauto. extlia.
@@ -1056,8 +1056,8 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_bound with (bound := sp').
   eapply match_stacks_invariant; eauto.
-    rewrite (Mem.nextblock_free _ _ _ _ _ H2). xomega.
-    rewrite (Mem.nextblock_free _ _ _ _ _ FREE). xomega.
+    rewrite (Mem.nextblock_free _ _ _ _ _ H2). extlia.
+    rewrite (Mem.nextblock_free _ _ _ _ _ FREE). extlia.
     intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_1; eauto with ordered_type.
     intros. eapply Mem.perm_free_3; eauto.
@@ -1076,7 +1076,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_untailcall; eauto.
   eapply match_stacks_inside_invariant; eauto.
-    rewrite (Mem.nextblock_free _ _ _ _ _ H2). xomega. xomega.
+    rewrite (Mem.nextblock_free _ _ _ _ _ H2). extlia. extlia.
     intros. eapply Mem.perm_free_3; eauto.
   eapply ros_address_agree; eauto.
   eapply agree_val_regs; eauto.
@@ -1088,7 +1088,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_inside_inlined_tailcall; eauto.
   eapply match_stacks_inside_invariant; eauto.
-    rewrite (Mem.nextblock_free _ _ _ _ _ H2). xomega. xomega.
+    rewrite (Mem.nextblock_free _ _ _ _ _ H2). extlia. extlia.
     intros. eapply Mem.perm_free_3; eauto.
   apply agree_val_regs_gen; auto.
   eapply Mem.free_left_inject; eauto.
@@ -1153,8 +1153,8 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_bound with (bound := sp').
   eapply match_stacks_invariant; eauto.
-    rewrite (Mem.nextblock_free _ _ _ _ _ H0). xomega.
-    rewrite (Mem.nextblock_free _ _ _ _ _ FREE). xomega.
+    rewrite (Mem.nextblock_free _ _ _ _ _ H0). extlia.
+    rewrite (Mem.nextblock_free _ _ _ _ _ FREE). extlia.
     intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_1; eauto with ordered_type.
     intros. eapply Mem.perm_free_3; eauto.
@@ -1173,7 +1173,7 @@ Proof.
   right. split. simpl. lia. split. auto.
   econstructor; eauto.
   eapply match_stacks_inside_invariant; eauto.
-    rewrite (Mem.nextblock_free _ _ _ _ _ H0). xomega. xomega.
+    rewrite (Mem.nextblock_free _ _ _ _ _ H0). extlia. extlia.
     intros. eapply Mem.perm_free_3; eauto.
   destruct or; simpl. apply agree_val_reg; auto. auto.
   eapply Mem.free_left_inject; eauto.
@@ -1201,10 +1201,10 @@ Proof.
     intros. destruct (eq_block b1 stk).
     subst b1. rewrite D in H8; inv H8.
       apply Mem.alloc_result in H. subst.
-      apply match_stacks_nextblock in MS0. xomega.
+      apply match_stacks_nextblock in MS0. extlia.
     rewrite E in H8; auto.
-    rewrite (Mem.nextblock_alloc _ _ _ _ _ H). xomega.
-    rewrite (Mem.nextblock_alloc _ _ _ _ _ A). xomega.
+    rewrite (Mem.nextblock_alloc _ _ _ _ _ H). extlia.
+    rewrite (Mem.nextblock_alloc _ _ _ _ _ A). extlia.
     intros. exploit Mem.perm_alloc_inv. eexact H. eauto.
     destruct (eq_block b1 stk); intros; auto.
     subst b1. rewrite D in H8; inv H8. eelim Plt_strict; eauto.
@@ -1253,7 +1253,7 @@ Proof.
   econstructor.
   eapply match_stacks_inside_alloc_left; eauto.
   eapply match_stacks_inside_invariant; eauto.
-  xomega. xomega. lia.
+  extlia. extlia. lia.
   eauto. auto.
   apply agree_regs_incr with F; auto.
   auto. auto. auto.
@@ -1362,14 +1362,14 @@ Proof.
     destruct FINJ; cbn in *; congruence.
   - constructor.
     + eapply match_stacks_globalenvs; eauto.
-    + eapply match_stacks_nextblock in MS; eauto. inv GE. xomega.
-    + eapply match_stacks_nextblock in MS; eauto. inv GE. xomega.
+    + eapply match_stacks_nextblock in MS; eauto. inv GE. extlia.
+    + eapply match_stacks_nextblock in MS; eauto. inv GE. extlia.
   - inv H1. destruct H0 as (w' & Hw' & H0). inv Hw'. inv H0. inv H11.
     eexists; split; econstructor; eauto.
     eapply match_stacks_bound with (Mem.nextblock m').
     eapply match_stacks_extcall with (F1 := F) (F2 := f') (m1 := m) (m1' := m'); eauto.
     eapply Mem.unchanged_on_nextblock; eauto.
-    xomega.
+    extlia.
     eapply Mem.unchanged_on_nextblock; eauto.
 Qed.
 
