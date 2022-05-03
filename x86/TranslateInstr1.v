@@ -1120,10 +1120,11 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (orex, rbits) := rex_r in
     OK (orex ++ [Pimull_r rbits])
   | Asm.Pimull_ri rd imm =>
-    do rex_r <- encode_rex_prefix_r rd;
-    let (orex, rdbits) := rex_r in    
+    do rex_rr <- encode_rex_prefix_rr rd rd;
+    let (orex_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := orex_rdbits in
     do imm32 <- encode_ofs_u32 (Int.intval imm);
-    OK (orex ++ [Pimull_ri rdbits rdbits imm32])
+    OK (orex ++ [Pimull_ri rdbits r1bits imm32])
   | Asm.Pmull_r r =>
     do rex_r <- encode_rex_prefix_r r;
     let (orex, rbits) := rex_r in
