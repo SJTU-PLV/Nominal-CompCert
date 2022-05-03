@@ -1002,10 +1002,17 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
       let (orex, rdbits) := orex_rdbits in
       OK (orex ++ [Pmovsb_GvEv a rdbits])
   | Asm.Pmovsb_rr rd rs =>
-    do rex_rr <- encode_rex_prefix_rr rd rs;
-    let (orex_rdbits, r1bits) := rex_rr in
-    let (orex, rdbits) := orex_rdbits in
-    OK (orex ++ [Pmovsb_GvEv (AddrE0 r1bits) rdbits])
+    if Archi.ptr64 then
+      do Rrdbits <- encode_ireg_u4 rd;
+      do Brsbits <- encode_ireg_u4 rs;
+      let (B, r1bits) := Brsbits in
+      let (R, rdbits) := Rrdbits in
+      OK ([REX_WRXB zero1 R zero1 B; Pmovsb_GvEv (AddrE0 r1bits) rdbits])
+    else
+      do rex_rr <- encode_rex_prefix_rr rd rs;
+      let (orex_rdbits, r1bits) := rex_rr in
+      let (orex, rdbits) := orex_rdbits in
+      OK (orex ++ [Pmovsb_GvEv (AddrE0 r1bits) rdbits])
   | Asm.Pmovw_rm rd addr =>
     do rex_ra <- encode_rex_prefix_ra rd addr;
     let (orex_rdbits, a) := rex_ra in

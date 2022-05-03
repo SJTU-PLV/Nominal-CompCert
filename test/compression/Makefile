@@ -7,7 +7,7 @@ CFLAGS=$(CCOMPOPTS) -U__GNUC__ -stdlib ../../runtime -relf
 LIBS=
 TIME=ocaml unix.cma ../../tools/xtime.ml -mintime 2.0 -minruns 2
 
-EXE=lzw lzss
+EXE=arcode lzw lzss
 
 COMMON_OBJS=optlist.o bitfile.o
 
