@@ -293,9 +293,9 @@ Definition expand_builtin_va_start_64 r :=
        Pmovl_mr (linear_addr r 0) RAX;
        Pmovl_ri RAX (Int.repr fp_offset);
        Pmovl_mr (linear_addr r 4) RAX;
-       Pmovl_ri RAX (Int.repr overflow_data_area);
+       Pleaq RAX (linear_addr RSP (overflow_data_area));
        Pmovl_mr (linear_addr r 8) RAX;
-       Pmovl_ri RAX (Int.repr reg_save_area);
+       Pleaq RAX (linear_addr RSP (reg_save_area));
        Pmovl_mr (linear_addr r 16) RAX]
   else
     Error [MSG "Fatal error: va_start used in non-vararg function"].

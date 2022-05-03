@@ -1429,12 +1429,12 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (R,rdbits) := Rrdbits in
     OK ([REX_WRXB one1 R zero1 zero1; Pbswap32 rdbits])
   | Asm.Pmaxsd rd r1 =>
-    do rex_rr <- encode_rex_prefix_ff rd rd;
+    do rex_rr <- encode_rex_prefix_ff rd r1;
     let (oREX_rdbits, r1bits) := rex_rr in
     let (orex, rdbits) := oREX_rdbits in    
     OK ([REPNZ] ++ orex ++ [Pmaxsd rdbits r1bits])
   | Asm.Pminsd rd r1 =>
-    do rex_rr <- encode_rex_prefix_ff rd rd;
+    do rex_rr <- encode_rex_prefix_ff rd r1;
     let (oREX_rdbits, r1bits) := rex_rr in
     let (orex, rdbits) := oREX_rdbits in    
     OK ([REPNZ] ++ orex ++ [Pminsd rdbits r1bits])
