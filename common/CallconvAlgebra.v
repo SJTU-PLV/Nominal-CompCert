@@ -503,9 +503,9 @@ Section STAR.
   Program Definition cc_star: callconv li li :=
     {|
       ccworld := { n : nat & ccworld (cc_pow n) };
-      match_senv := fun '(existT n w) => match_senv (cc_pow n) w;
-      match_query := fun '(existT n w) => match_query (cc_pow n) w;
-      match_reply := fun '(existT n w) => match_reply (cc_pow n) w;
+      match_senv := fun '(existT _ n w) => match_senv (cc_pow n) w;
+      match_query := fun '(existT _ n w) => match_query (cc_pow n) w;
+      match_reply := fun '(existT _ n w) => match_reply (cc_pow n) w;
     |}.
   Next Obligation.
     induction w.

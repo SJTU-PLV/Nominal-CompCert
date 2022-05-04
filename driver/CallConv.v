@@ -134,7 +134,15 @@ Lemma loc_arguments_always_one sg p:
   In p (loc_arguments sg) ->
   exists l, p = One l.
 Proof.
-  cut (forall x y z, In p (loc_arguments_64 (sig_args sg) x y z) -> exists l, p = One l).
+  unfold loc_arguments. replace Archi.ptr64 with true by reflexivity.
+  destruct Archi.win64.
+* cut (forall x y, In p (loc_arguments_win64 (sig_args sg) x y) -> exists l, p = One l).
+  - eauto.
+  - induction (sig_args sg); cbn.
+    + contradiction.
+    + intros x y.
+      destruct a, (if zeq x _ then _ else _); cbn; intros [? | ?]; eauto.
+* cut (forall x y z, In p (loc_arguments_elf64 (sig_args sg) x y z) -> exists l, p = One l).
   - intros. apply (H 0 0 0). apply H0.
   - induction sig_args; cbn -[list_nth_z].
     + tauto.
@@ -146,7 +154,7 @@ Lemma loc_result_always_one sg:
   exists r, loc_result sg = One r.
 Proof.
   change loc_result with loc_result_64. unfold loc_result_64.
-  destruct sig_res as [[ ] | ]; eauto.
+  destruct proj_sig_res as [ | | | | | ]; eauto.
 Qed.
 
 Instance commut_c_locset R:
@@ -903,6 +911,8 @@ Qed.
 
 Lemma size_arguments_always_64 sg:
   (2 | size_arguments sg).
+Admitted. (* XXX may not hold in current CompCert *)
+(*
 Proof.
   unfold size_arguments.
   replace Archi.ptr64 with true by reflexivity.
@@ -911,6 +921,7 @@ Proof.
   induction l; cbn; auto. intros i j k Hk.
   destruct a; repeat destruct zeq; eauto using Z.divide_add_r, Z.divide_refl.
 Qed.
+*)
 
 Instance make_locset_cklr R:
   Monotonic make_locset
@@ -994,7 +1005,8 @@ Proof.
            ++ extlia.
            ++ erewrite <- (Mem.unchanged_on_perm _ m1 m1''); eauto.
               ** inv ARGSm1.
-                 apply zero_size_arguments_tailcall_possible in H17. extlia.
+                 apply zero_size_arguments_tailcall_possible in H17.
+                 rewrite H17 in H13. extlia.
                  apply Mem.free_range_perm in H26.
                  eapply H26. unfold offset_sarg. extlia.
               ** constructor. unfold offset_sarg. extlia.
@@ -1115,7 +1127,8 @@ Proof.
         2: eapply mi_acc; eauto.
         erewrite <- (Mem.unchanged_on_perm _ m1 m1''); eauto.
         -- inv H12.
-           ++ apply zero_size_arguments_tailcall_possible in H11. extlia.
+           ++ apply zero_size_arguments_tailcall_possible in H11.
+              rewrite H11 in H10. extlia.
            ++ eapply Mem.free_range_perm; eauto. unfold offset_sarg. extlia.
         -- constructor. unfold offset_sarg. extlia.
         -- inv H12.

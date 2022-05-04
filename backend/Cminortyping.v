@@ -421,7 +421,7 @@ Definition def_env (f: function) (e: Cminor.env) : Prop :=
 
 Inductive wt_cont_call (ttop: rettype): cont -> rettype -> Prop :=
   | wt_cont_Kstop:
-      wt_cont_call Kstop ttop
+      wt_cont_call ttop Kstop ttop
   | wt_cont_Kcall: forall optid f sp e k tret env
         (WT_FN: wt_function env f)
         (WT_CONT: wt_cont ttop env f.(fn_sig).(sig_res) k)
@@ -442,7 +442,7 @@ with wt_cont (ttop: rettype): typenv -> rettype -> cont -> Prop :=
       wt_cont_call ttop k tret ->
       wt_cont ttop env tret k.
 
-Inductive wt_state (ge: genv) (ttop: option typ): state -> Prop :=
+Inductive wt_state (ge: genv) (ttop: rettype): state -> Prop :=
   | wt_normal_state: forall f s k sp e m env
         (WT_FN: wt_function env f)
         (WT_STMT: wt_stmt env f.(fn_sig).(sig_res) s)

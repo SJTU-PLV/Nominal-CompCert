@@ -890,7 +890,7 @@ Section SUBJECT_REDUCTION.
 
 Variable p: program.
 Variable se: Genv.symtbl.
-Variable ty: option typ.
+Variable ty: rettype.
 
 Hypothesis wt_p: wt_program p.
 

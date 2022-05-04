@@ -1968,7 +1968,8 @@ Section PRESERVATION.
 
 Variable prog: program.
 Hypothesis WTPROG: wt_program prog.
-Let ge := globalenv prog.
+Variable se: Genv.symtbl.
+Let ge := globalenv se prog.
 Let gtenv := bind_globdef (PTree.empty _) prog.(prog_defs).
 
 Inductive wt_expr_cont: typenv -> function -> cont -> Prop :=
@@ -2078,7 +2079,7 @@ Definition fundef_return (fd: fundef) : type :=
 Lemma wt_find_funct:
   forall v fd, Genv.find_funct ge v = Some fd -> wt_fundef ge gtenv fd.
 Proof.
-  intros. apply Genv.find_funct_prop with (p := prog) (v := v); auto.
+  intros. apply Genv.find_funct_prop with (se := se) (p := prog) (v := v); auto.
   intros. inv WTPROG. apply H1 with id; auto.
 Qed.
 
@@ -2097,7 +2098,7 @@ Inductive wt_state: state -> Prop :=
         (WTK: wt_call_cont k (fundef_return fd))
         (WTFD: wt_fundef ge gtenv fd)
         (FIND: Genv.find_funct ge b = Some fd),
-      wt_state (Callstate fd vargs k m)
+      wt_state (Callstate b vargs k m)
   | wt_return_state: forall v k m ty
         (WTK: wt_call_cont k ty)
         (VAL: wt_val v ty),
@@ -2226,8 +2227,10 @@ Proof.
 - inv WTS; eauto with ty.
 - exploit wt_find_label. eexact WTB. eauto. eapply call_cont_wt'; eauto.
   intros [A B]. eauto with ty.
-- inv WTFD. inv H3. econstructor; eauto. apply wt_call_cont_stmt_cont; auto.
-- inv WTFD. econstructor; eauto.
+- assert (fd = Internal f) by congruence; subst.
+  inv WTFD. inv H3. econstructor; eauto. apply wt_call_cont_stmt_cont; auto.
+- assert (fd = External ef targs tres cc) by congruence; subst.
+  inv WTFD. econstructor; eauto.
   apply has_rettype_wt_val. simpl; rewrite <- H1.
   eapply external_call_well_typed_gen; eauto.
 - inv WTK. eauto with ty.
@@ -2240,12 +2243,11 @@ Proof.
 Qed.
 
 Theorem wt_initial_state:
-  forall S, initial_state prog S -> wt_state S.
+  forall q S, initial_state ge q S -> wt_state S.
 Proof.
-  intros. inv H. econstructor. constructor.
-  apply Genv.find_funct_ptr_prop with (p := prog) (b := b); auto.
+  intros. inv H. econstructor; eauto. constructor.
+  apply Genv.find_funct_prop with (se := se) (p := prog) (v := vf); auto.
   intros. inv WTPROG. apply H4 with id; auto.
-  instantiate (1 := (Vptr b Ptrofs.zero)). rewrite Genv.find_funct_find_funct_ptr. auto.
 Qed.
 
 End PRESERVATION.

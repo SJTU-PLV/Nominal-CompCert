@@ -62,7 +62,9 @@ Lemma functions_translated:
   Genv.find_funct ge v = Some f ->
   exists cu tf,
   Genv.find_funct tge v = Some tf /\ tr_fundef cu f tf /\ linkorder cu prog.
-Proof (Genv.find_funct_match (proj1 TRANSL)).
+Proof.
+  intros. eapply (Genv.find_funct_match_id (proj1 TRANSL)); eauto.
+Qed.
 
 Lemma type_of_fundef_preserved:
   forall cu f tf, tr_fundef cu f tf ->
@@ -1124,7 +1126,7 @@ Inductive match_states: Csem.state -> state -> Prop :=
       (MK: match_cont cu.(prog_comp_env) k tk),
       match_states (Csem.State f s k e m)
                    (State tf ts tk e le m)
-  | match_callstates: forall vf args k m tfd tk cu
+  | match_callstates: forall vf args k m tk cu
       (LINK: linkorder cu prog)
       (MK: forall ce, match_cont ce k tk),
       match_states (Csem.Callstate vf args k m)
@@ -2345,18 +2347,18 @@ Proof.
   econstructor; eauto.
 
 - (* internal function *)
-  edestruct functions_translated as (tfd & FIND' & TF); eauto.
+  edestruct functions_translated as (cu' & tfd & FIND' & TF & CU); eauto.
   inv TF. inversion H3; subst.
   econstructor; split.
   left; apply plus_one. eapply step_internal_function; eauto. econstructor.
-  rewrite H6; rewrite H8; auto.
-  rewrite H6; rewrite H8. eapply alloc_variables_preserved; eauto.
+  rewrite H6; rewrite H7; auto.
+  rewrite H6; rewrite H7. eapply alloc_variables_preserved; eauto.
   rewrite H6. eapply bind_parameters_preserved; eauto.
   eauto.
   econstructor; eauto. 
 
 - (* external function *)
-  edestruct functions_translated as (tfd & FIND' & TF); eauto.
+  edestruct functions_translated as (cu' & tfd & FIND' & TF & CU); eauto.
   inv TF.
   econstructor; split.
   left; apply plus_one. econstructor; eauto.
@@ -2390,12 +2392,12 @@ Lemma transl_initial_states:
   exists S', Clight.initial_state tge q S' /\ match_states S S'.
 Proof.
   intros. inv H.
-  exploit function_ptr_translated; eauto. intros (cu & tf & FIND & TR & L).
+  exploit functions_translated; eauto. intros (cu & tf & FIND & TR & L).
   econstructor; split.
   - inversion TR; subst.
     econstructor; eauto.
-    rewrite <- H1. apply (type_of_fundef_preserved (Internal f) (Internal tf0)). auto.
-  - constructor. constructor.
+    rewrite <- H1. apply (type_of_fundef_preserved cu (Internal f) (Internal tf0)). auto.
+  - econstructor; eauto. constructor.
 Qed.
 
 Lemma transl_external:
@@ -2405,7 +2407,7 @@ Lemma transl_external:
   exists R', after_external R r R' /\ match_states S' R'.
 Proof.
   intros S R q HSR Hq. destruct Hq; inv HSR.
-  edestruct functions_translated as (tfd & Htfd & TR); eauto. inv TR.
+  edestruct functions_translated as (cu' & tfd & Htfd & TR & L); eauto. inv TR.
   split. econstructor; eauto. intros r S' HS'. inv HS'.
   eexists. split; econstructor; eauto.
 Qed.
@@ -2424,8 +2426,8 @@ Theorem transl_program_correct prog tprog:
   forward_simulation cc_id cc_id (Cstrategy.semantics prog) (Clight.semantics1 tprog).
 Proof.
   fsim eapply forward_simulation_star_wf with (order := ltof _ measure); cbn; destruct w, Hse.
-  - intros q _ [ ]. eapply (Genv.is_internal_match_id (ctx := program_of_program prog)); eauto.
-    + apply MATCH.
+  - intros q _ [ ]. eapply (Genv.is_internal_match_id (ctx := prog)); eauto.
+    + eapply MATCH.
     + destruct 1; auto.
   - intros q _ s1 [ ]. eauto using transl_initial_states.
   - eauto using transl_final_states.

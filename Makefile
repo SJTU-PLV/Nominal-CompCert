@@ -163,13 +163,12 @@ BACKEND=\
 
 # C front-end modules (in cfrontend/)
 
-CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Cstrategy.v \
+CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v \
   SimplExpr.v SimplExprspec.v SimplExprproof.v \
   Clight.v SimplLocals.v SimplLocalsproof.v \
   Cshmgen.v Cshmgenproof.v \
   Csharpminor.v Cminorgen.v Cminorgenproof.v \
 
-# Ctyping.v
 # ClightBigstep.v
 # Initializers.v
 # Initializersproof.v

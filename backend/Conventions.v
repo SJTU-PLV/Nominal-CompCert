@@ -64,7 +64,7 @@ Remark fold_max_outgoing_above:
   forall l n, fold_left max_outgoing_2 l n >= n.
 Proof.
   assert (A: forall n l, max_outgoing_1 n l >= n).
-  { intros; unfold max_outgoing_1. destruct l as [_ | []]; extlia. }
+  { intros; unfold max_outgoing_1. destruct l as [_ | [ ]]; extlia. }
   induction l; simpl; intros. 
   - lia.
   - eapply Zge_trans. eauto.
@@ -84,7 +84,7 @@ Lemma loc_arguments_bounded:
 Proof.
   intros until ty.
   assert (A: forall n l, n <= max_outgoing_1 n l).
-  { intros; unfold max_outgoing_1. destruct l as [_ | []]; extlia. }
+  { intros; unfold max_outgoing_1. destruct l as [_ | [ ]]; extlia. }
   assert (B: forall p n,
              In (S Outgoing ofs ty) (regs_of_rpair p) ->
              ofs + typesize ty <= max_outgoing_2 n p).

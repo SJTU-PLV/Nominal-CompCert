@@ -92,7 +92,7 @@ Qed.
 Global Instance deref_loc_match R w:
   Monotonic
     (@deref_loc)
-    (- ==> match_mem R w ++> % ptrbits_inject (mi R w) ++>
+    (- ==> match_mem R w ++> % ptrbits_inject (mi R w) ++> - ==>
      set_le (Val.inject (mi R w))).
 Proof.
   repeat rstep.
@@ -106,11 +106,14 @@ Proof.
   repeat red.
   simpl in * |- * .
   inversion H1; subst; eauto using @deref_loc_reference, @deref_loc_copy.
-  generalize (cklr_loadv R w chunk _ _ H _ _ VAL).
+- generalize (cklr_loadv R w chunk _ _ H _ _ VAL).
   rewrite H4.
   inversion 1; subst.
   symmetry in H7.
   eauto using @deref_loc_value.
+- transport H3.
+  eexists; split; eauto.
+  constructor; eauto.
 Qed.
 
 Hint Extern 1 (Transport _ _ _ _ _) =>
@@ -141,11 +144,12 @@ Global Instance assign_loc_match R:
     (@assign_loc)
     (|= - ==> - ==> match_mem R ++>
      % ptrbits_inject @@ [mi R] ++>
+     - ==>
      Val.inject @@ [mi R] ++>
      k1 set_le (<> match_mem R)).
 Proof.
-  intros w ce ty m1 m2 Hm [b1 ofs1] [b2 ofs2] Hptr v1 v2 Hv m1' Hm1'.
-  destruct Hm1' as [v1 chunk m1' | b1' ofs1' bytes1 m1'].
+  intros w ce ty m1 m2 Hm [b1 ofs1] [b2 ofs2] Hptr bf v1 v2 Hv m1' Hm1'.
+  destruct Hm1' as [v1 chunk m1' | b1' ofs1' bytes1 m1' | sz sg pos width v m' v' Hmv].
   - transport_hyps.
     eexists; split; [ | rauto].
     eapply assign_loc_value; eauto.
@@ -212,6 +216,11 @@ Proof.
     + eassumption.
     + eassumption.
     + rauto.
+  - apply Vptr_inject in Hptr. cbn in *.
+    eapply (store_bitfield_match R _ _ _ _ _ w _ _ Hm _ _ Hptr _ _ Hv (_,_) ) in Hmv
+      as ([m'' v''] & H' & w' & Hw' & ? & ?).
+    eexists. split; [ | rauto].
+    econstructor; eauto.
 Qed.
 
 Hint Extern 1 (Related _ _ _) =>
@@ -421,10 +430,10 @@ Lemma eval_expr_lvalue_match R w (ge1 ge2: genv):
      exists v2,
        eval_expr ge2 e2 le2 m2 expr v2 /\
        Val.inject (mi R w) v1 v2) /\
-  (forall expr b1 ofs,
-     eval_lvalue ge1 e1 le1 m1 expr b1 ofs ->
+  (forall expr b1 ofs bf,
+     eval_lvalue ge1 e1 le1 m1 expr b1 ofs bf ->
      exists b2 ofs2,
-       eval_lvalue ge2 e2 le2 m2 expr b2 ofs2 /\
+       eval_lvalue ge2 e2 le2 m2 expr b2 ofs2 bf /\
        ptrbits_inject (mi R w) (b1, ofs) (b2, ofs2)).
 Proof.
   intros Hge e1 e2 He le1 le2 Hle m1 m2 Hm.
@@ -447,7 +456,7 @@ Proof.
     eexists; eexists; split; eauto.
     constructor; eauto.
 
-  - intros expr fid ty b1 ofs1 sid sflist satt delta H1 IH Hs Hf Hdelta.
+  - intros expr fid ty b1 ofs1 sid sflist satt delta bf H1 IH Hs Hf Hdelta.
     destruct IH as (ptr2 & H2 & Hptr).
     rinversion Hptr; inv Hptrl.
     eexists; eexists; split.
@@ -455,11 +464,11 @@ Proof.
       eapply eval_Efield_struct; eauto; rewrite <- Hce; eauto.
     + eauto using ptrbits_inject_shift.
 
-  - intros expr fid ty b1 ofs1 uid uflist uatt H1 IH Hu.
+  - intros expr fid ty b1 ofs1 uid uflist uatt ? bf H1 IH Hu.
     assert (Hce: genv_cenv ge1 = genv_cenv ge2) by rauto. rewrite Hce.
     destruct IH as (ptr2 & H2 & Hptr).
     rinversion Hptr; inv Hptrl.
-    eauto using @eval_Efield_union.
+    eauto 10 using @eval_Efield_union, ptrbits_inject_shift.
 Qed.
 
 Global Instance eval_expr_match R w:
@@ -482,19 +491,20 @@ Global Instance eval_lvalue_match R w:
     (@eval_lvalue)
     (genv_match R w ++> env_match R w ++> temp_env_match R w ++>
      match_mem R w ++> - ==>
-     % set_le (ptrbits_inject (mi R w))).
+     %% set_le (ptrbits_inject (mi R w) * eq)).
 Proof.
-  intros ge1 ge2 Hge e1 e2 He le1 le2 Hle m1 m2 Hm expr [b1 ofs] Hp1.
+  intros ge1 ge2 Hge e1 e2 He le1 le2 Hle m1 m2 Hm expr [[b1 ofs] bf] Hp1.
   simpl in *.
   edestruct eval_expr_lvalue_match as [_ H]; eauto.
   edestruct H as (b2 & ofs2 & H'); eauto.
-  exists (b2, ofs2).
+  exists ((b2, ofs2), bf).
   split_hyps.
+  split; eauto.
   split; eauto.
 Qed.
 
 Hint Extern 1 (Transport _ _ _ _ _) =>
-  rel_curry_set_le_transport @eval_lvalue : typeclass_instances.
+  rel_curry2_set_le_transport @eval_lvalue : typeclass_instances.
 
 Global Instance eval_exprlist_match R w:
   Monotonic

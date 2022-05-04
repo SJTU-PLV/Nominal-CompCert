@@ -328,7 +328,7 @@ Section ASM_LINKING.
           destruct ef; try contradiction; inv Hlo; auto.
         }
         replace (Pregmap.set _ _ _ RSP) with rs#SP
-          by (destruct ef_sig, sig_res as [[]|]; reflexivity).
+          by (destruct ef_sig, sig_res as [[ | | | | | ] | | | | | ]; reflexivity).
         pose proof (match_inner_sp nb (rs RSP) Hnb) as NB. rewrite ISP in NB. inv NB.
         eexists. intuition eauto using exec_step_external, Some_le_def.
         apply Events.external_call_nextblock in CALL. extlia.
@@ -354,7 +354,7 @@ Section ASM_LINKING.
   Definition measure (S : Genv.symtbl * list (frame L)): nat :=
     match S with
       | (_, nil) => 0
-      | (se, st i (nb, State rs m live) :: k) =>
+      | (se, st _ i (nb, State rs m live) :: k) =>
         length k +
         if live then
           match Genv.find_funct (Genv.globalenv se (p_ i)) rs#PC with

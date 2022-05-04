@@ -874,9 +874,9 @@ Lemma semantics_single_events:
 Proof.
   unfold semantics; intros; red; simpl; intros.
   set (ge := globalenv se p) in *.
-  assert (DEREF: forall chunk m b ofs t v, deref_loc ge chunk m b ofs t v -> (length t <= 1)%nat).
+  assert (DEREF: forall chunk m b ofs bf t v, deref_loc ge chunk m b ofs bf t v -> (length t <= 1)%nat).
   { intros. inv H0; simpl; try lia. inv H3; simpl; try lia. }
-  assert (ASSIGN: forall chunk m b ofs t v m', assign_loc ge chunk m b ofs v t m' -> (length t <= 1)%nat).
+  assert (ASSIGN: forall chunk m b ofs bf t v m' v', assign_loc ge chunk m b ofs bf v t m' v' -> (length t <= 1)%nat).
   { intros. inv H0; simpl; try lia. inv H3; simpl; try lia. }
   destruct H.
   inv H; simpl; try lia. inv H0; eauto; simpl; try lia.

@@ -169,7 +169,7 @@ Proof.
   intros w ge1 ge2 Hge vargs1 vargs2 Hvargs m1 m2 Hm t [vres1 m1'] H.
   simpl in *.
   destruct H.
-  inv Hvargs. inv H6.
++ inv Hvargs. inv H6.
   apply val_inject_vptr_inv in H4 as (b2 & lo2 & ? & Hptr). subst.
   assert (ptr_inject (mi R w) (b,  Ptrofs.unsigned lo  - size_chunk Mptr)
                               (b2, Ptrofs.unsigned lo2 - size_chunk Mptr)).
@@ -193,6 +193,10 @@ Proof.
     - extlia.
   }
   transport H1.
+  eexists (_, _). simpl. split.
+  - econstructor; eauto.
+  - rauto.
++ inv Hvargs. inv H1. inv H3.
   eexists (_, _). simpl. split.
   - econstructor; eauto.
   - rauto.

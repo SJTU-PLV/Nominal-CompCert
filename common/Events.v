@@ -759,8 +759,8 @@ Lemma volatile_load_ok:
 Proof.
   intros; constructor; intros.
 (* well typed *)
-- inv H. inv H0. apply Val.load_result_type.
-  eapply Mem.load_type; eauto.
+- inv H. inv H0. apply Val.load_result_rettype.
+  eapply Mem.load_rettype; eauto.
 (* valid blocks *)
 - inv H; auto.
 (* max perms *)

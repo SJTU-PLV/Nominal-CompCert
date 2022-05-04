@@ -139,3 +139,39 @@ Proof.
     }
     repeat rstep; congruence.
 Qed.
+
+Global Instance load_bitfield_match R w:
+  Monotonic
+    (@load_bitfield)
+    (- ==> - ==> - ==> - ==> - ==> match_mem R w ++> Val.inject (mi R w) ++>
+     set_le (Val.inject (mi R w))).
+Proof.
+  repeat rstep.
+  intros v Hv.
+  destruct Hv as [sz sg1 attr sg pos width m v' ? Hpos Hwidth Hpw Hsg1 Hload].
+  transport Hload. inv H2.
+  eexists; split; eauto.
+  constructor; eauto.
+Qed.
+
+Hint Extern 1 (Transport _ _ _ _ _) =>
+  set_le_transport @load_bitfield : typeclass_instances.
+
+Global Instance store_bitfield_match R:
+  Monotonic
+    (@store_bitfield)
+    (- ==> - ==> - ==> - ==> - ==>
+     |= match_mem R ++> Val.inject @@[mi R] ++> Val.inject @@[mi R] ++>
+     % k1 set_le (<> match_mem R * Val.inject @@ [mi R])).
+Proof.
+  repeat rstep.
+  intros [v m] Hv.
+  destruct Hv as [sz sg1 attr sg pos width m addr v n m' Hpos Hw Hpw Hsg1 Hload Hstore]. inv H1.
+  transport Hload. inv H2.
+  transport Hstore.
+  eexists (_, _). cbn. split; [ | rauto].
+  econstructor; eauto.
+Qed.
+
+Hint Extern 1 (Transport _ _ _ _ _) =>
+  set_le_transport @store_bitfield : typeclass_instances.
