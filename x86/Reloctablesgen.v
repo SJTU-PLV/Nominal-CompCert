@@ -157,22 +157,8 @@ Definition compute_instr_abs_relocentry (sofs:Z) (i:instruction) (addend:Z) (sym
 (** Compute the relocation entry of an instruciton with 
     an addressing mode whose displacement is (id + offset) *)
 Definition compute_instr_disp_relocentry (sofs: Z) (i:instruction) (disp: ident*ptrofs) :=
-  if Archi.ptr64 then
-    let '(symb, dofs) := disp in
-    do iofs <- instr_reloc_offset i;
-    do addend <- instr_addendum i;
-    match PTree.get symb symbtbl with
-    | None => Error [MSG "Cannot find the index for symbol: "; POS symb]
-    | Some _ =>
-      OK {| reloc_offset := sofs + iofs; 
-            reloc_type := reloc_rel;
-            reloc_symb := symb;
-            reloc_addend := addend + (Ptrofs.unsigned dofs) |}
-    end
-  else    
-    let '(symb,addend) := disp in
-    compute_instr_abs_relocentry sofs i (Ptrofs.unsigned addend) symb.
-
+  let '(symb,addend) := disp in
+  compute_instr_abs_relocentry sofs i (Ptrofs.unsigned addend) symb.
 
 (* move unsupported here *)
 Fixpoint ok_builtin_arg {A} (ba: builtin_arg A) : bool :=
