@@ -1662,7 +1662,7 @@ Definition addrmode_size_aux (a:addrmode) : Z :=
   match ofs, base with
   (** In 64bit mode, SIB encoding for displacement only addressing.
       We do not use RIP-relative addressing for simplicity*)
-  | None, None => if Archi.ptr64 then 2 else 1
+  | None, None => 1 (* if Archi.ptr64 then 2 else 1 *)
   | None, Some rb => 2
   | Some _, _ => 2
   end.
@@ -1684,7 +1684,6 @@ Proof.
   intros. destruct a. simpl. 
   destruct ofs; try lia.
   destruct base; try lia.
-  destr; lia.
 Qed.
 
 Definition amod_size_ub := 6.

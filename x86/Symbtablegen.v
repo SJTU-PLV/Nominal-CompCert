@@ -77,8 +77,8 @@ Definition get_symbentry (id:ident) (def: (AST.globdef Asm.fundef unit)) : symbe
       (** This is an external data symbol *)
       {|
         symbentry_bind := bindty;
-        symbentry_type := if gvar.(gvar_readonly) then symb_rodata
-                          else symb_rwdata;
+        symbentry_type := symb_notype; (* if gvar.(gvar_readonly) then symb_rodata
+                          else symb_rwdata *)
         symbentry_value := 0;
         symbentry_secindex := secindex_undef;
         symbentry_size := 0;

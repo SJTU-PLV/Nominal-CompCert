@@ -430,15 +430,23 @@ Definition get_instr_reloc_addend' (ofs:Z): res Z :=
   get_reloc_addend ofs.
 
 
-Definition translate_Addrmode_AddrE_aux32 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) : res AddrE :=
+Definition translate_Addrmode_AddrE_aux32 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) (rel_addr: bool): res AddrE :=
   match obase,oindex with
   | None,None =>
     if Archi.ptr64 then
-      do rsp <- encode_ireg_u3 RSP;
-    (* do not use rip-relative addressing *)
-      OK (AddrE9 zero2 rsp ofs32)
+      if rel_addr then
+        (* rip-relative addressing *)
+        OK (AddrE11 ofs32)
+      else
+        Error (msg "Not allowed absolute addressing for addrmode in 64bit mode")
     else
       OK (AddrE11 ofs32)
+  (* if Archi.ptr64 then *)
+    (*   do rsp <- encode_ireg_u3 RSP; *)
+    (* (* do not use rip-relative addressing *) *)
+    (*   OK (AddrE9 zero2 rsp ofs32) *)
+    (* else *)
+    (*   OK (AddrE11 ofs32) *)
   | Some base,None =>
     do r <- encode_ireg_u3 base;
     do rsp <- encode_ireg_u3 RSP;
@@ -466,20 +474,42 @@ Definition translate_Addrmode_AddrE_aux32 (obase: option ireg) (oindex: option (
 (* Translate ccelf addressing mode to cav21 addr mode *)
 (* sofs: instruction ofs, res_iofs: relocated location in the instruction*)
 (* TODO: 64bit mode, the addend is placed in the relocation entry *)
-Definition translate_Addrmode_AddrE (sofs: Z) (res_iofs: res Z) (addr:addrmode): res AddrE :=
+Definition translate_Addrmode_AddrE (sofs: Z) (isize: Z) (res_iofs: res Z) (addr:addrmode): res AddrE :=
   match addr with
   | Addrmode obase oindex disp  =>
     match disp with
     | inr (id, ofs) =>
       match id with
-      | xH =>
+      | xH =>        
         do iofs <- res_iofs;
-        do addend <- get_instr_reloc_addend' (iofs + sofs);
-        if Z.eqb (Ptrofs.unsigned ofs) addend then
-          (*32bit mode the addend placed in instruction *)
-          do imm32 <- encode_ofs_u32 addend;
-          translate_Addrmode_AddrE_aux32 obase oindex imm32
-        else Error (msg "addend is not equal to ofs")
+        match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with
+        | Some e =>
+          let addend := reloc_addend e in
+          match e.(reloc_type) with
+          | reloc_abs =>
+            (* do addend <- get_instr_reloc_addend' (iofs + sofs); *)
+            if Z.eqb (Ptrofs.unsigned ofs) addend then
+              (*32bit mode the addend placed in instruction *)
+              do imm32 <- encode_ofs_u32 addend;
+              translate_Addrmode_AddrE_aux32 obase oindex imm32 false
+            else Error (msg "32bit mode: addend is not equal to ofs, due to absoulute addressing in addrmode. The assertion is required in proof.")
+          | reloc_rel =>
+            (* FIXME *)
+            if Z.eqb ((Ptrofs.unsigned ofs) + (iofs - isize)) addend then
+              do imm32 <- encode_ofs_u32 addend;
+              translate_Addrmode_AddrE_aux32 obase oindex imm32 true
+            else Error (msg "relative relocation in addr32 error, due to inconsistent addend")
+          | _ => Error (msg "null type relocation in addr32 encoding")
+          end
+        | _ => Error(msg "id equal to one is not allowed without relocation")
+        end
+      (* do iofs <- res_iofs; *)
+        (* do addend <- get_instr_reloc_addend' (iofs + sofs); *)
+        (* if Z.eqb (Ptrofs.unsigned ofs) addend then *)
+        (*   (*32bit mode the addend placed in instruction *) *)
+        (*   do imm32 <- encode_ofs_u32 addend; *)
+        (*   translate_Addrmode_AddrE_aux32 obase oindex imm32 *)
+        (* else Error (msg "addend is not equal to ofs") *)
       | _ => Error(msg "id must be 1")
       end
     | inl ofs =>
@@ -487,22 +517,26 @@ Definition translate_Addrmode_AddrE (sofs: Z) (res_iofs: res Z) (addr:addrmode):
       match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with
       | None =>
         do ofs32 <- encode_ofs_u32 ofs;
-        translate_Addrmode_AddrE_aux32 obase oindex ofs32
+        translate_Addrmode_AddrE_aux32 obase oindex ofs32 false
       | _ => Error (msg "impossible relocation entry in addrmode")
       end
     end
   end.
 
 (* u1:X u1:B *)
-Definition translate_Addrmode_AddrE_aux64 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) : res (AddrE*u1*u1) :=
+Definition translate_Addrmode_AddrE_aux64 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) (rel_addr: bool) : res (AddrE*u1*u1) :=
   match obase,oindex with
   | None,None =>
-    if Archi.ptr64 then
-      do rsp <- encode_ireg_u3 RSP;
-      (* do not use rip-relative addressing *)
-      OK ((AddrE9 zero2 rsp ofs32),zero1,zero1)
+    if rel_addr then
+      (* rip-relative addressing *)
+      OK (AddrE11 ofs32, zero1, zero1)
     else
-      Error (msg "Encode 64bit addrmode in 32bit mode ")
+      Error (msg "Not allowed absolute addressing for  addrmode in 64bit mode")
+      (* do rsp <- encode_ireg_u3 RSP; *)
+      (* (* do not use rip-relative addressing *) *)
+      (* OK ((AddrE9 zero2 rsp ofs32),zero1,zero1) *)
+    (* else *)
+    (*   Error (msg "Encode 64bit addrmode in 32bit mode ") *)
   | Some base,None =>
     do B_r <- encode_ireg_u4 base;
     let (B,r) := B_r in
@@ -536,7 +570,7 @@ Definition translate_Addrmode_AddrE_aux64 (obase: option ireg) (oindex: option (
 
 
 (* 64bit addrmode translation, u1: X, u1:B *)
-Definition translate_Addrmode_AddrE64 (sofs: Z) (res_iofs: res Z) (addr:addrmode): res (AddrE*u1*u1) :=
+Definition translate_Addrmode_AddrE64 (sofs: Z) (isize: Z) (res_iofs: res Z) (addr:addrmode): res (AddrE*u1*u1) :=
   match addr with
   | Addrmode obase oindex disp  =>
     match disp with
@@ -544,20 +578,44 @@ Definition translate_Addrmode_AddrE64 (sofs: Z) (res_iofs: res Z) (addr:addrmode
       match id with
       | xH =>
         do iofs <- res_iofs;
-        do addend <- get_instr_reloc_addend' (iofs + sofs);
-        (* addend is the offset of id and access point *)
-        if Z.eqb (Ptrofs.unsigned ofs) addend then
-          do imm32 <- encode_ofs_u32 addend;
-          translate_Addrmode_AddrE_aux64 obase oindex imm32
-        else Error (msg "64bit: addend is not equal to ofs")
-      | _ => Error(msg "64bit: id must be 1")
+        (* do addend <- get_instr_reloc_addend' (iofs + sofs); *)
+        (* addend is the offset of id and access point *)       
+        match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with
+        | Some e =>
+          let addend := reloc_addend e in
+          match e.(reloc_type) with
+          | reloc_abs =>
+            if Z.eqb (Ptrofs.unsigned ofs) addend then
+              do imm32 <- encode_ofs_u32 addend;
+              translate_Addrmode_AddrE_aux64 obase oindex imm32 false
+            else Error (msg "64bit: addend is not equal to ofs, due to absoulute addressing in addrmode. The assertion is required in proof.")
+          | reloc_rel =>
+            (* FIXME: add assertion for proof *)
+            if Z.eqb ((Ptrofs.unsigned ofs) + (iofs - isize)) addend then
+              do imm32 <- encode_ofs_u32 addend;
+              (* use relative addressing *)
+              translate_Addrmode_AddrE_aux64 obase oindex imm32 true
+            else Error (msg "relative relocation in addr64 error, due to inconsistent addend")
+          | _ => Error (msg "null type relocation in addr64 encoding")
+          end
+        | _ => Error (msg "64bit: no relocation but id is one")
+        end
+        (* do iofs <- res_iofs; *)
+        (* do addend <- get_instr_reloc_addend' (iofs + sofs); *)
+        (* (* addend is the offset of id and access point *) *)
+        (* if Z.eqb (Ptrofs.unsigned ofs) addend then *)
+        (*   do imm32 <- encode_ofs_u32 addend; *)
+        (*   translate_Addrmode_AddrE_aux64 obase oindex imm32 *)
+        (* else Error (msg "64bit: addend is not equal to ofs") *)
+      | _ => Error(msg "64bit: id must be 1 if there is id")
       end
     | inl ofs =>
       do iofs <- res_iofs;
       match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with
       | None =>
         do ofs32 <- encode_ofs_u32 ofs;
-        translate_Addrmode_AddrE_aux64 obase oindex ofs32
+        (* offset only: absoulute or relative ? *)
+        translate_Addrmode_AddrE_aux64 obase oindex ofs32 false
       | _ => Error (msg "64bit: impossible relocation entry in addrmode")
       end
     end
@@ -655,9 +713,9 @@ Definition encode_rex_prefix_f (fr: freg) : res (list Instruction * u3) :=
       Error (msg "encode extend register in 32bit mode! ").
 
 
-Definition encode_rex_prefix_addr (instr_ofs: Z) (res_iofs: res Z) (addr: addrmode) : res (list Instruction * AddrE) :=
-  let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs res_iofs in
-  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs res_iofs in
+Definition encode_rex_prefix_addr (instr_ofs: Z)  (isize: Z) (res_iofs: res Z) (addr: addrmode) : res (list Instruction * AddrE) :=
+  let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs isize res_iofs in
+  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs isize res_iofs in
   if check_extend_addrmode addr then
     do a <- translate_Addrmode_AddrE addr;
     OK ([], a)
@@ -700,9 +758,9 @@ Definition encode_rex_prefix_rr  (r b: ireg) : res (list Instruction * u3 * u3) 
       else
         Error (msg "encode extend two register in 32bit mode! ").
 
-Definition encode_rex_prefix_ra (instr_ofs: Z) (res_iofs: res Z) (r: ireg) (addr: addrmode) : res (list Instruction * u3 * AddrE) :=
-  let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs res_iofs in
-  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs res_iofs in
+Definition encode_rex_prefix_ra (instr_ofs: Z) (isize: Z) (res_iofs: res Z) (r: ireg) (addr: addrmode) : res (list Instruction * u3 * AddrE) :=
+  let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs isize res_iofs in
+  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs isize res_iofs in
   if check_extend_reg r then
     if check_extend_addrmode addr then
       do rbits <- encode_ireg_u3 r;
@@ -820,9 +878,9 @@ Definition encode_rex_prefix_fr  (r: freg) (b: ireg): res (list Instruction * u3
         Error (msg "encode extend two register in 32bit mode! ").
 
 
-Definition encode_rex_prefix_fa (instr_ofs: Z) (res_iofs: res Z) (r: freg) (addr: addrmode) : res (list Instruction * u3 * AddrE) :=
-  let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs res_iofs in
-  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs res_iofs in
+Definition encode_rex_prefix_fa (instr_ofs: Z) (isize:Z) (res_iofs: res Z) (r: freg) (addr: addrmode) : res (list Instruction * u3 * AddrE) :=
+  let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs isize res_iofs in
+  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs isize res_iofs in
   if check_extend_freg r then
     if check_extend_addrmode addr then
       do rbits <- encode_freg_u3 r;
@@ -859,11 +917,13 @@ Definition encode_rex_prefix_fa (instr_ofs: Z) (res_iofs: res Z) (r: freg) (addr
 (** REX_WRXB: B R W X  *)
 Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instruction) :=
   let res_iofs := instr_reloc_offset i in
-  let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs res_iofs in
-  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs res_iofs in
-  let encode_rex_prefix_ra := encode_rex_prefix_ra instr_ofs res_iofs in
-  let encode_rex_prefix_fa := encode_rex_prefix_fa instr_ofs res_iofs in
-  let encode_rex_prefix_addr := encode_rex_prefix_addr instr_ofs res_iofs in
+  (* use real instr size *)
+  let isize := instr_size_asm i in
+  let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs isize res_iofs in
+  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs isize res_iofs in
+  let encode_rex_prefix_ra := encode_rex_prefix_ra instr_ofs isize res_iofs in
+  let encode_rex_prefix_fa := encode_rex_prefix_fa instr_ofs isize res_iofs in
+  let encode_rex_prefix_addr := encode_rex_prefix_addr instr_ofs isize res_iofs in
   match i with
   | Pmov_rr rd r1 =>
     if Archi.ptr64 then
