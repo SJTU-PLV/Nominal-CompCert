@@ -246,9 +246,9 @@ End APPROX.
 
 Section DIST.
   Context {I liA liB liC} (Li: I -> semantics liB liC) (L: semantics liA liB).
-  Context (sk: AST.program unit unit).
-  Let Lh := flat_comp_semantics' Li sk.
-  Let Lv i := comp_semantics' (Li i) L sk.
+  Context (sk skh: AST.program unit unit) (skv: I -> AST.program unit unit).
+  Let Lh := flat_comp_semantics' Li skh.
+  Let Lv i := comp_semantics' (Li i) L (skv i).
   Hypothesis non_empty: inhabited I.
 
   (* (L1 ⊎ L2 ⊎ ... ) ∘ L ≅ (L1 ∘ L) ⊎ (L2 ∘ L) ⊎ ... *)

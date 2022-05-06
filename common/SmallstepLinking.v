@@ -395,9 +395,10 @@ Section LEVEL.
   Context {li} (L: forall i, J i -> Smallstep.semantics li li).
 
   Variable (sk: AST.program unit unit).
+  Variable (ski: I -> AST.program unit unit).
 
   Let S1' i := (fun j => L i j).
-  Let S1 := (fun i => semantics' (S1' i) sk).
+  Let S1 := (fun i => semantics' (S1' i) (ski i)).
   Let S2 := (fun p => L (projT1 p) (projT2 p)).
 
   Let L1 := semantics' S1 sk.
