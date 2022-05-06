@@ -1,3 +1,6 @@
+# ccelf debug
+test_ccelf
+
 # Object files, in general
 *.vo
 *.vok

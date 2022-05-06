@@ -251,8 +251,8 @@ Definition size_arguments (s: signature) : Z :=
 
 Definition expand_builtin_va_start_32 r :=
   if cc_vararg (sig_cc (fn_sig cur_func)) then
-    (* fn_stacksize correct? *)
-    let sz := align (fn_stacksize cur_func) 8 - size_chunk Mptr in
+    (* fn_stacksize correct? set to 16 *)
+    let sz := align (fn_stacksize cur_func) 16 - size_chunk Mptr in
     let t0 := Z.add sz 4 in
     (* let t0 := Z.add (fn_stacksize cur_func) 4 in *)
     (* fix bug: typesize definition different from ccelf-no-perm!! *)
@@ -353,7 +353,8 @@ Definition expand_builtin_inline name args res :=
               [] in
     OK (i++[Pabsd ar])
   (* This ensuar that need_masks is set to true *)
-  | "__builtin_fsqrt"%string, [BA(FR a1)], BR(FR ar) =>
+  | "__builtin_fsqrt"%string, [BA(FR a1)], BR(FR ar)
+  | "__builtin_sqrt"%string, [BA(FR a1)], BR(FR ar) =>
     OK [Psqrtsd ar a1]
   | "__builtin_fmax"%string, [BA(FR a1); BA(FR a2)], BR(FR ar) =>
     let i := [Pmovsd_ff ar a1; Pmaxsd ar a2] in
@@ -492,7 +493,7 @@ Definition transf_instr (i: instruction): res (list instruction) :=
       | Some _ =>                
         OK [Pmovl_ri RAX (Int.repr fr);i]
       | None => OK [i]
-      end      
+      end
   | _ => OK [i]
   end.
 

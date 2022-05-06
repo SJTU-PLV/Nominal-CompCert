@@ -1,11 +1,11 @@
 include ../../Makefile.config
 
 CCOMP=../../ccomp
-# CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime \
-#  -dparse -dc -dclight -dasm -fall \
-#  -DARCH_$(ARCH) -DMODEL_$(MODEL)
-
 CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime \
+  -dparse -dc -dclight -dasm -fall \
+  -DARCH_$(ARCH) -DMODEL_$(MODEL)
+
+# CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime \
  -relf -fall \
  -DARCH_$(ARCH) -DMODEL_$(MODEL)
 
@@ -15,20 +15,20 @@ LIBS=$(LIBMATH)
 # Can run, both in compiled mode and in interpreter mode,
 # and have reference output in Results
 
-#FAILTESTS=floats [timecomsuming] volatile4[builtin not supported]
-TESTS=int32 int64  floats-basics floats-lit \
+#FAILTESTS=floats [timecomsuming]
+TESTS=int32 int64 floats-basics floats-lit \
   expr1 expr6 funptr2 initializers initializers2 initializers3 \
-  volatile1 volatile2 volatile3\
+  volatile1 volatile2 volatile3 volatile4\
   funct3 expr5 struct7 struct8 struct11 struct12 casts1 casts2 char1 \
   sizeof1 sizeof2 binops bool for1 for2 switch switch2 compound \
   decl1 interop1 bitfields9 ptrs3 \
   parsing krfun ifconv
 
 # Can run, but only in compiled mode, and have reference output in Results
-#FAILTESTS_COMP = builtins-common [__builtin_sqrt not supported] attribs1 alignas [alignment error] packedstruct1[alignment error]
+#FAILTESTS_COMP = attribs1 alignas [alignment error] packedstruct1[alignment error]
 TESTS_COMP= bitfields1 bitfields2 bitfields3 bitfields4 \
   bitfields5 bitfields6 bitfields7 bitfields8 \
-  builtins-$(ARCH) packedstruct2  \
+  builtins-$(ARCH) builtins-common packedstruct2  \
   varargs1 varargs2 varargs3 sections alias aligned
 
 # Can run, both in compiled mode and in interpreter mode,

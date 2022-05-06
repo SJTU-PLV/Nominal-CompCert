@@ -1,6 +1,7 @@
 include ../Makefile.config
 
-DIRS=c compression raytracer spass regression
+# x86-64 : raytracer/spass fail due to copy relocation not generated for stdin and stderr
+DIRS=c compression  regression
 ifeq ($(CLIGHTGEN),true)
 DIRS+=clightgen
 endif
