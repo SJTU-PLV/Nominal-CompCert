@@ -33,11 +33,11 @@ Record block_classification : Type := BC {
   bc_glob: forall b1 b2 id, bc_img b1 = BCglob id -> bc_img b2 = BCglob id -> b1 = b2
 }.
 
-Definition bc_below (bc: block_classification) (bound: block) : Prop :=
-  forall b, bc b <> BCinvalid -> Plt b bound.
+Definition bc_below (bc: block_classification) (bound: sup) : Prop :=
+  forall b, bc b <> BCinvalid -> sup_In b bound.
 
 Lemma bc_below_invalid:
-  forall b bc bound, ~Plt b bound -> bc_below bc bound -> bc b = BCinvalid.
+  forall b bc bound, ~sup_In b bound -> bc_below bc bound -> bc b = BCinvalid.
 Proof.
   intros. destruct (block_class_eq (bc b) BCinvalid); auto.
   elim H. apply H0; auto.
@@ -1115,7 +1115,7 @@ Qed.
 
 Definition genv_match (ge: Genv.symtbl) : Prop :=
   (forall id b, Genv.find_symbol ge id = Some b <-> bc b = BCglob id)
-/\(forall b, Plt b (Genv.genv_next ge) -> bc b <> BCinvalid /\ bc b <> BCstack).
+/\(forall b, sup_In b (Genv.genv_sup ge) -> bc b <> BCinvalid /\ bc b <> BCstack).
 
 Lemma symbol_address_sound:
   forall ge id ofs,
@@ -3800,7 +3800,7 @@ Qed.
 Lemma romatch_alloc:
   forall m b lo hi m' rm,
   Mem.alloc m lo hi = (m', b) ->
-  bc_below bc (Mem.nextblock m) ->
+  bc_below bc (Mem.support m) ->
   romatch m rm ->
   romatch m' rm.
 Proof.
@@ -3835,7 +3835,7 @@ Record mmatch (m: mem) (am: amem) : Prop := mk_mem_match {
     bc b <> BCinvalid ->
     smatch m b am.(am_top);
   mmatch_below:
-    bc_below bc (Mem.nextblock m)
+    bc_below bc (Mem.support m)
 }.
 
 Definition minit (p: aptr) :=
@@ -4057,7 +4057,7 @@ Proof.
   eapply smatch_store; eauto. eapply mmatch_top; eauto.
 
 - (* Below *)
-  erewrite Mem.nextblock_store by eauto. eapply mmatch_below; eauto.
+  erewrite Mem.support_store by eauto. eapply mmatch_below; eauto.
 Qed.
 
 Theorem storev_sound:
@@ -4169,14 +4169,14 @@ Proof.
   eapply smatch_storebytes; eauto. eapply mmatch_top; eauto.
 
 - (* Below *)
-  erewrite Mem.nextblock_storebytes by eauto. eapply mmatch_below; eauto.
+  erewrite Mem.support_storebytes by eauto. eapply mmatch_below; eauto.
 Qed.
 
 Lemma mmatch_ext:
   forall m am m',
   mmatch m am ->
   (forall b ofs n bytes, bc b <> BCinvalid -> n >= 0 -> Mem.loadbytes m' b ofs n = Some bytes -> Mem.loadbytes m b ofs n = Some bytes) ->
-  Ple (Mem.nextblock m) (Mem.nextblock m') ->
+  Mem.sup_include (Mem.support m) (Mem.support m') ->
   mmatch m' am.
 Proof.
   intros. inv H. constructor; intros.
@@ -4184,7 +4184,7 @@ Proof.
 - apply bmatch_ext with m; eauto with va.
 - apply smatch_ext with m; auto with va.
 - apply smatch_ext with m; auto with va.
-- red; intros. exploit mmatch_below0; eauto. extlia.
+- red; intros. exploit mmatch_below0; eauto.
 Qed.
 
 Lemma mmatch_free:
@@ -4195,7 +4195,7 @@ Lemma mmatch_free:
 Proof.
   intros. apply mmatch_ext with m; auto.
   intros. eapply Mem.loadbytes_free_2; eauto.
-  erewrite <- Mem.nextblock_free by eauto. extlia.
+  erewrite <- Mem.support_free by eauto. apply Mem.sup_include_refl.
 Qed.
 
 Lemma mmatch_top':
@@ -4402,7 +4402,7 @@ Proof.
 Qed.
 
 Lemma mmatch_inj:
-  forall bc m am, mmatch bc m am -> bc_below bc (Mem.nextblock m) -> Mem.inject (inj_of_bc bc) m m.
+  forall bc m am, mmatch bc m am -> bc_below bc (Mem.support m) -> Mem.inject (inj_of_bc bc) m m.
 Proof.
   intros. constructor. constructor.
 - (* perms *)
@@ -4414,7 +4414,7 @@ Proof.
 - (* contents *)
   intros. exploit inj_of_bc_inv; eauto. intros (A & B & C); subst.
   rewrite Z.add_0_r.
-  set (mv := ZMap.get ofs (PMap.get b1 (Mem.mem_contents m))).
+  set (mv := ZMap.get ofs (NMap.get _ b1 (Mem.mem_contents m))).
   assert (Mem.loadbytes m b1 ofs 1 = Some (mv :: nil)).
   {
     Local Transparent Mem.loadbytes.

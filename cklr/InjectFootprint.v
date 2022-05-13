@@ -42,8 +42,8 @@ Inductive injp_match_mem: injp_world -> relation mem :=
 Inductive injp_match_stbls: injp_world -> relation Genv.symtbl :=
   injp_match_stbls_intro f m1 m2 Hm se1 se2:
     Genv.match_stbls f se1 se2 ->
-    Pos.le (Genv.genv_next se1) (Mem.nextblock m1) ->
-    Pos.le (Genv.genv_next se2) (Mem.nextblock m2) ->
+    Mem.sup_include (Genv.genv_sup se1) (Mem.support m1) ->
+    Mem.sup_include (Genv.genv_sup se2) (Mem.support m2) ->
     injp_match_stbls (injpw f m1 m2 Hm) se1 se2.
 
 Hint Constructors injp_match_mem injp_match_stbls.
@@ -154,9 +154,9 @@ Next Obligation. (* ~> vs. match_stbls *)
   constructor.
   - eapply Genv.match_stbls_incr; eauto.
     intros b1 b2 delta Hb Hb'. specialize (H9 b1 b2 delta Hb Hb').
-    unfold Mem.valid_block in H9. extlia.
-  - apply Mem.unchanged_on_nextblock in H5. extlia.
-  - apply Mem.unchanged_on_nextblock in H6. extlia.
+    unfold Mem.valid_block in H9. split; inv H9; eauto.
+  - apply Mem.unchanged_on_support in H5. eauto.
+  - apply Mem.unchanged_on_support in H6. eauto.
 Qed.
 
 Next Obligation. (* match_stbls vs. Genv.match_stbls *)
@@ -354,7 +354,7 @@ Next Obligation.
   eapply Mem.aligned_area_inject; eauto.
 Qed.
 
-Next Obligation. 
+Next Obligation.
   destruct H as [f m1 m2 Hm].
   eapply Mem.disjoint_or_equal_inject; eauto.
 Qed.
@@ -368,7 +368,7 @@ Qed.
 Next Obligation.
   destruct H0 as (w' & Hw' & Hm').
   destruct Hw'. inv H. inv Hm'.
-  split; eauto using Mem.unchanged_on_nextblock.
+  split; eauto using Mem.unchanged_on_support.
 Qed.
 
 

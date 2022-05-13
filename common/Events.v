@@ -972,7 +972,7 @@ Proof.
   rewrite dec_eq_false. auto.
   apply Mem.valid_not_valid_diff with m1; eauto with mem.
 (* readonly *)
-- inv H. eapply unchanged_on_readonly; eauto. 
+- inv H. eapply unchanged_on_readonly; eauto.
 (* mem extends *)
 - inv H. inv H1. inv H7.
   assert (SZ: v2 = Vptrofs sz).
@@ -1518,17 +1518,15 @@ Qed.
 
 (** Corollary of [external_call_valid_block]. *)
 
-Lemma external_call_nextblock:
+Lemma external_call_support:
   forall ef ge vargs m1 t vres m2,
   external_call ef ge vargs m1 t vres m2 ->
-  Ple (Mem.nextblock m1) (Mem.nextblock m2).
+  Mem.sup_include (Mem.support m1) (Mem.support m2).
 Proof.
-  intros. destruct (plt (Mem.nextblock m2) (Mem.nextblock m1)).
-  exploit external_call_valid_block; eauto. intros.
-  eelim Plt_strict; eauto.
-  unfold Plt, Ple in *; zify; lia.
+  intros. unfold Mem.sup_include. intros.
+  exploit external_call_valid_block. eauto. apply H0.
+  auto.
 Qed.
-
 (** Special case of [external_call_mem_inject_gen] (for backward compatibility) *)
 
 Lemma external_call_mem_inject:

@@ -32,12 +32,12 @@ Next Obligation.
 Qed.
 
 Lemma bc_of_symtbl_below se thr:
-  Pos.le (Genv.genv_next se) thr ->
+  Mem.sup_include (Genv.genv_sup se) thr ->
   bc_below (bc_of_symtbl se) thr.
 Proof.
   intros Hthr b. cbn.
   destruct Genv.invert_symbol eqn:Hb; try congruence. intros _.
-  eapply Pos.lt_le_trans; eauto.
+  eapply Mem.sup_include_trans; eauto.
   apply Genv.invert_find_symbol in Hb.
   eapply Genv.genv_symb_range; eauto.
 Qed.
@@ -47,7 +47,7 @@ Qed.
 
 Inductive vainj_mem : klr (Genv.symtbl * world inj) mem mem :=
   vainj_mem_intro se w m1 m2:
-    Pos.le (Genv.genv_next se) (Mem.nextblock m1) ->
+    Mem.sup_include (Genv.genv_sup se) (Mem.support m1) ->
     romatch_all se (bc_of_symtbl se) m1 ->
     match_mem inj w m1 m2 ->
     vainj_mem (se, w) m1 m2.
@@ -72,7 +72,6 @@ Next Obligation.
   inv H.
   destruct H0 as [eq_s Hinj]. cbn in eq_s, Hinj. subst s0.
   inv Hinj. inv H7. cbn in *.
-  unfold Mem.valid_block, Plt. do 2 rewrite <- Pos.le_nlt.
   eapply H0; eauto.
 Qed.
 
@@ -87,7 +86,7 @@ Next Obligation.
 Qed.
 Next Obligation.
   inv H0.
-  eapply (match_stbls_nextblock inj); eauto.
+  eapply (match_stbls_support inj); eauto.
 Qed.
 
 (** Alloc *)
@@ -96,9 +95,6 @@ Next Obligation.
   edestruct (cklr_alloc inj w m1 m2 H2) as (w' & Hw' & Hm' & Hb).
   exists (se, w'). split; [cbn; rauto | ].
   repeat apply conj; eauto. constructor; eauto.
-  - etransitivity; eauto.
-    erewrite (Mem.nextblock_alloc m1 lo hi (fst _)); auto using surjective_pairing.
-    extlia.
   - intros cu Hcu.
     eapply romatch_alloc; eauto using surjective_pairing, bc_of_symtbl_below.
 Qed.
@@ -110,7 +106,7 @@ Next Obligation.
   generalize Hm1'. transport Hm1'. intro. rewrite H. repeat rstep.
   exists (se, w'). split; auto. rauto.
   constructor; eauto.
-  - erewrite (Mem.nextblock_free _ _ _ _ m1'); eauto.
+  - erewrite (Mem.support_free _ _ _ _ m1'); eauto.
   - intros cu Hcu.
     eapply romatch_free; eauto.
 Qed.
@@ -128,7 +124,7 @@ Next Obligation.
   generalize Hm1'. transport Hm1'. intro. rewrite H2. constructor.
   exists (se, w'). split; [rauto | ].
   constructor; eauto.
-  - erewrite Mem.nextblock_store; eauto.
+  - erewrite Mem.support_store; eauto.
   - intros cu Hcu.
     eapply romatch_store; eauto.
 Qed.
@@ -146,7 +142,7 @@ Next Obligation.
   generalize Hm1'. transport Hm1'. intro. rewrite H2. constructor.
   exists (se, w'). split; [rauto | ].
   constructor; eauto.
-  - erewrite Mem.nextblock_storebytes; eauto.
+  - erewrite Mem.support_storebytes; eauto.
   - intros cu Hcu.
     eapply romatch_storebytes; eauto.
 Qed.
@@ -189,7 +185,7 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  inv H. eapply (cklr_nextblock_incr inj); eauto.
+  inv H. eapply (cklr_sup_include inj); eauto.
   destruct H0 as (w' & Hw' & Hm). inv Hm.
   eexists. split. apply Hw'. auto.
 Qed.
@@ -367,7 +363,7 @@ Proof.
     + destruct Hr1i. destruct Hri2. inv Hw'. inv H5. inv H8. cbn in *.
       constructor; cbn; auto.
       constructor; cbn; auto.
-      * extlia.
+      * eauto.
       * clear - H11 H18 H17 H6. inv H6. cbn in *.
         intros cu Hcu. eapply romatch_exten; eauto. intros b id.
         destruct H17 as [Hglob Hdef]. rewrite <- Hglob. cbn. clear.
@@ -389,8 +385,8 @@ Proof.
   intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [xse1 w m1 m2 Hnb Hro Hm].
   destruct Hse as [? Hse]. subst.
   destruct Hm as [f m1 m2 Hm].
-  exists ((se1, injw (meminj_dom f) (Mem.nextblock m1) (Mem.nextblock m1)),
-          (se1, injw f (Mem.nextblock m1) (Mem.nextblock m2))); simpl.
+  exists ((se1, injw (meminj_dom f) (Mem.support m1) (Mem.support m1)),
+          (se1, injw f (Mem.support m1) (Mem.support m2))); simpl.
   repeat apply conj.
   - exists se1. repeat apply conj; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
@@ -418,7 +414,6 @@ Proof.
         destruct (f bi) as [[? ?] | ] eqn:Hfbi.
         {
           eapply Mem.valid_block_inject_1 in Hfbi; eauto.
-          red in Hfbi. extlia.
         }
         edestruct SEP23'; eauto.
 Qed.
@@ -429,8 +424,8 @@ Proof.
   intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [xse1 w m1 m2 Hnb Hro Hm].
   destruct Hse as [? Hse]. subst.
   destruct Hm as [f m1 m2 Hm].
-  exists ((se1, injw (meminj_dom f) (Mem.nextblock m1) (Mem.nextblock m1)),
-          (injw f (Mem.nextblock m1) (Mem.nextblock m2))); simpl.
+  exists ((se1, injw (meminj_dom f) (Mem.support m1) (Mem.support m1)),
+          (injw f (Mem.support m1) (Mem.support m2))); simpl.
   repeat apply conj.
   - exists se1. repeat apply conj; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
@@ -457,7 +452,6 @@ Proof.
         destruct (f bi) as [[? ?] | ] eqn:Hfbi.
         {
           eapply Mem.valid_block_inject_1 in Hfbi; eauto.
-          red in Hfbi. extlia.
         }
         edestruct SEP23'; eauto.
 Qed.

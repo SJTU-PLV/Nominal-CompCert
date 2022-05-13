@@ -66,7 +66,7 @@ Global Instance flat_inject_id thr:
 Proof.
   intros b1 b2 delta.
   unfold Mem.flat_inj, inject_id.
-  destruct plt; try discriminate.
+  destruct Mem.sup_dec; try discriminate.
   auto.
 Qed.
 
@@ -94,7 +94,7 @@ Next Obligation.
 Qed.
 
 Next Obligation.
-  erewrite <- Mem.mext_next; eauto.
+  erewrite <- Mem.mext_sup; eauto.
 Qed.
 
 Next Obligation.
@@ -185,7 +185,8 @@ Qed.
 
 Next Obligation.
   destruct H0 as (?&?&?).
-  inv H. inv H1. split; congruence.
+  inv H. inv H1. rewrite mext_sup. rewrite mext_sup0.
+  reflexivity.
 Qed.
 
 (** * Useful lemmas *)
@@ -264,7 +265,7 @@ Proof.
     exists f. cbn in *. repeat apply conj; eauto.
     + congruence.
     + destruct Hm23.
-      erewrite <- Mem.mext_next; eauto.
+      erewrite <- Mem.mext_sup; eauto.
       constructor; eauto.
       eapply Mem.extends_inject_compose; eauto.
     + rewrite compose_meminj_id_left. apply inject_incr_refl.
@@ -281,7 +282,7 @@ Proof.
     + intros [[ ] f'] m1' m2' (mi & Hm1i & Hmi2) [_ Hf']. cbn in *.
       exists f'. intuition auto.
       * destruct Hmi2.
-        erewrite <- Mem.mext_next; eauto.
+        erewrite <- Mem.mext_sup; eauto.
         constructor; auto.
         eapply Mem.extends_inject_compose; eauto.
       * rewrite compose_meminj_id_left. apply inject_incr_refl.
@@ -295,7 +296,7 @@ Proof.
     exists f. cbn in *. repeat apply conj; eauto.
     + congruence.
     + destruct Hm12.
-      erewrite (Mem.mext_next m2 m3); eauto.
+      erewrite (Mem.mext_sup m2 m3); eauto.
       constructor; eauto.
       eapply Mem.inject_extends_compose; eauto.
     + rewrite compose_meminj_id_right. apply inject_incr_refl.
@@ -312,7 +313,7 @@ Proof.
     + intros [f' [ ]] m1' m2' (mi & Hm1i & Hmi2) [Hf' _]. cbn in *.
       exists f'. intuition auto.
       * destruct Hm1i.
-        erewrite (Mem.mext_next m3 m2'); eauto.
+        erewrite (Mem.mext_sup m3 m2'); eauto.
         constructor; auto.
         eapply Mem.inject_extends_compose; eauto.
       * rewrite compose_meminj_id_right. apply inject_incr_refl.

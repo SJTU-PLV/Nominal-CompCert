@@ -922,7 +922,7 @@ Lemma exec_straight_opt_left:
   exec_straight_opt c2 rs2 m2 c3 rs3 m3 ->
   exec_straight init_nb ge fn c1 rs1 m1 c3 rs3 m3.
 Proof.
-  destruct 2; intros. auto. eapply exec_straight_trans; eauto. 
+  destruct 2; intros. auto. eapply exec_straight_trans; eauto.
 Qed.
 
 Lemma exec_straight_opt_right:
@@ -931,7 +931,7 @@ Lemma exec_straight_opt_right:
   exec_straight init_nb ge fn c2 rs2 m2 c3 rs3 m3 ->
   exec_straight init_nb ge fn c1 rs1 m1 c3 rs3 m3.
 Proof.
-  destruct 1; intros. auto. eapply exec_straight_trans; eauto. 
+  destruct 1; intros. auto. eapply exec_straight_trans; eauto.
 Qed.
 
 Lemma exec_straight_opt_step:
@@ -941,7 +941,7 @@ Lemma exec_straight_opt_step:
   exec_straight_opt c rs2 m2 c' rs3 m3 ->
   exec_straight init_nb ge fn (i :: c) rs1 m1 c' rs3 m3.
 Proof.
-  intros. inv H1. 
+  intros. inv H1.
 - apply exec_straight_one; auto.
 - eapply exec_straight_step; eauto.
 Qed.

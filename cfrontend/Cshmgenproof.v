@@ -1176,10 +1176,10 @@ Proof.
   constructor.
     (* me_local *)
     intros until ty0. repeat rewrite PTree.gsspec.
-    destruct (peq id0 id); intros. congruence. eapply me_local; eauto.
+    destruct (peq id0 id); intros. inv H2. auto. eapply me_local; eauto.
     (* me_local_inv *)
     intros until sz. repeat rewrite PTree.gsspec.
-    destruct (peq id0 id); intros. exists ty; congruence. eapply me_local_inv; eauto.
+    destruct (peq id0 id); intros. exists ty. inv H2. auto. eapply me_local_inv; eauto.
   intros [te2 [ALLOC MENV]].
   exists te2; split. econstructor; eauto. auto.
 Qed.

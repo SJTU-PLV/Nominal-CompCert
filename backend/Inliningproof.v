@@ -345,7 +345,7 @@ Proof.
   intros. red in SEP. destruct (F b) as [[sp1 delta1] |] eqn:?.
   exploit INCR; eauto. intros EQ; rewrite H0 in EQ; inv EQ.
   red; intros; eelim B; eauto. eapply PERM; eauto.
-  red. destruct (plt b (Mem.nextblock m1)); auto.
+  red. destruct (Mem.sup_dec b (Mem.support m1)); auto.
   exploit Mem.mi_freeblocks; eauto. congruence.
   exploit SEP; eauto. tauto.
 Qed.
@@ -357,6 +357,23 @@ Lemma ros_address_agree:
   agree_regs F ctx rs rs' ->
   Genv.match_stbls F se tse ->
   Val.inject F (ros_address ge ros rs) (ros_address tge (sros ctx ros) rs').
+(*=======
+Inductive match_globalenvs (F: meminj) (support: sup): Prop :=
+  | mk_match_globalenvs
+      (DOMAIN: forall b, sup_In b support-> F b = Some(b, 0))
+      (IMAGE: forall b1 b2 delta, F b1 = Some(b2, delta) -> sup_In b2 support -> b1 = b2)
+      (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> sup_In b support)
+      (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> sup_In b support)
+      (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> sup_In b support).
+
+Lemma find_function_agree:
+  forall ros rs fd F ctx rs' support,
+  find_function ge ros rs = Some fd ->
+  agree_regs F ctx rs rs' ->
+  match_globalenvs F support ->
+  exists cu fd',
+  find_function tge (sros ctx ros) rs' = Some fd' /\ transf_fundef (funenv_program cu) fd = OK fd' /\ linkorder cu prog.
+>>>>>>> 830b2cc *)
 Proof.
   intros. destruct ros as [r | id]; simpl in *.
 - (* register *)
@@ -389,6 +406,10 @@ Qed.
 Lemma tr_builtin_arg:
   forall F ctx rs rs' sp sp' m m',
   Genv.match_stbls F se tse ->
+(*=======
+  forall F support ctx rs rs' sp sp' m m',
+  match_globalenvs F support ->
+>>>>>>> 830b2cc *)
   agree_regs F ctx rs rs' ->
   F sp = Some(sp', ctx.(dstk)) ->
   Mem.inject F m m' ->
@@ -432,6 +453,10 @@ Qed.
 Lemma tr_builtin_args:
   forall F ctx rs rs' sp sp' m m',
   Genv.match_stbls F se tse ->
+(*=======
+  forall F support ctx rs rs' sp sp' m m',
+  match_globalenvs F support ->
+>>>>>>> 830b2cc *)
   agree_regs F ctx rs rs' ->
   F sp = Some(sp', ctx.(dstk)) ->
   Mem.inject F m m' ->
@@ -450,13 +475,14 @@ Qed.
 (** ** Relating stacks *)
 
 Inductive match_stacks (F: meminj) (m m': mem):
-             list stackframe -> list stackframe -> block -> Prop :=
-  | match_stacks_nil: forall bound
-        (MG: inj_incr w (injw F (Mem.nextblock m) (Mem.nextblock m')))
-        (BELOW: Ple (injw_next_r w) bound),
-      match_stacks F m m' nil nil bound
-  | match_stacks_cons: forall res f sp pc rs stk f' sp' rs' stk' bound fenv ctx
-        (MS: match_stacks_inside F m m' stk stk' f' ctx sp' rs')
+             list stackframe -> list stackframe -> sup -> Prop :=
+  | match_stacks_nil: forall support
+        (MG: inj_incr w (injw F (Mem.support m) (Mem.support m')))
+        (BELOW: Mem.sup_include (injw_sup_r w) support),
+      match_stacks F m m' nil nil support
+  | match_stacks_cons: forall res f sp pc rs stk f' sp' sps' rs' stk' support fenv ctx
+        (SPS': sp' = fresh_block sps')
+        (MS: match_stacks_inside F m m' stk stk' f' ctx sps' rs')
         (COMPAT: fenv_compat prog fenv)
         (FB: tr_funbody fenv f'.(fn_stacksize) ctx f f'.(fn_code))
         (AG: agree_regs F ctx rs rs')
@@ -465,32 +491,34 @@ Inductive match_stacks (F: meminj) (m m': mem):
         (SSZ1: 0 <= f'.(fn_stacksize) < Ptrofs.max_unsigned)
         (SSZ2: forall ofs, Mem.perm m' sp' ofs Max Nonempty -> 0 <= ofs <= f'.(fn_stacksize))
         (RES: Ple res ctx.(mreg))
-        (BELOW: Plt sp' bound),
+        (BELOW: Mem.sup_include (sup_incr sps') support),
       match_stacks F m m'
                    (Stackframe res f (Vptr sp Ptrofs.zero) pc rs :: stk)
                    (Stackframe (sreg ctx res) f' (Vptr sp' Ptrofs.zero) (spc ctx pc) rs' :: stk')
-                   bound
-  | match_stacks_untailcall: forall stk res f' sp' rpc rs' stk' bound ctx
-        (MS: match_stacks_inside F m m' stk stk' f' ctx sp' rs')
+                   support
+  | match_stacks_untailcall: forall stk res f' sps' sp' rpc rs' stk' support ctx
+        (SPS': sp' = fresh_block sps')
+        (MS: match_stacks_inside F m m' stk stk' f' ctx sps' rs')
         (PRIV: range_private F m m' sp' ctx.(dstk) f'.(fn_stacksize))
         (SSZ1: 0 <= f'.(fn_stacksize) < Ptrofs.max_unsigned)
         (SSZ2: forall ofs, Mem.perm m' sp' ofs Max Nonempty -> 0 <= ofs <= f'.(fn_stacksize))
         (RET: ctx.(retinfo) = Some (rpc, res))
-        (BELOW: Plt sp' bound),
+        (BELOW: Mem.sup_include (sup_incr sps') support),
       match_stacks F m m'
                    stk
                    (Stackframe res f' (Vptr sp' Ptrofs.zero) rpc rs' :: stk')
-                   bound
+                   support
 
 with match_stacks_inside (F: meminj) (m m': mem):
-        list stackframe -> list stackframe -> function -> context -> block -> regset -> Prop :=
-  | match_stacks_inside_base: forall stk stk' f' ctx sp' rs'
-        (MS: match_stacks F m m' stk stk' sp')
+        list stackframe -> list stackframe -> function -> context -> sup -> regset -> Prop :=
+  | match_stacks_inside_base: forall stk stk' f' ctx sps' rs'
+        (MS: match_stacks F m m' stk stk' sps')
         (RET: ctx.(retinfo) = None)
         (DSTK: ctx.(dstk) = 0),
-      match_stacks_inside F m m' stk stk' f' ctx sp' rs'
-  | match_stacks_inside_inlined: forall res f sp pc rs stk stk' f' fenv ctx sp' rs' ctx'
-        (MS: match_stacks_inside F m m' stk stk' f' ctx' sp' rs')
+      match_stacks_inside F m m' stk stk' f' ctx sps' rs'
+  | match_stacks_inside_inlined: forall res f sp pc rs stk stk' f' fenv ctx sps' sp' rs' ctx'
+        (SPS': sp' = fresh_block sps')
+        (MS: match_stacks_inside F m m' stk stk' f' ctx' sps' rs')
         (COMPAT: fenv_compat prog fenv)
         (FB: tr_funbody fenv f'.(fn_stacksize) ctx' f f'.(fn_code))
         (AG: agree_regs F ctx' rs rs')
@@ -501,7 +529,7 @@ with match_stacks_inside (F: meminj) (m m': mem):
         (BELOW: context_below ctx' ctx)
         (SBELOW: context_stack_call ctx' ctx),
       match_stacks_inside F m m' (Stackframe res f (Vptr sp Ptrofs.zero) pc rs :: stk)
-                                 stk' f' ctx sp' rs'.
+                                 stk' f' ctx sps' rs'.
 
 (** Properties of match_stacks *)
 
@@ -521,120 +549,137 @@ Proof.
   induction 1; eauto.
 Qed.
 
-Lemma match_stacks_bound:
-  forall stk stk' bound bound1,
-  match_stacks F m m' stk stk' bound ->
-  Ple bound bound1 ->
-  match_stacks F m m' stk stk' bound1.
+Lemma match_stacks_sup_include:
+  forall stk stk' support support1,
+  match_stacks F m m' stk stk' support ->
+  Mem.sup_include support support1 ->
+  match_stacks F m m' stk stk' support1.
 Proof.
   intros. inv H.
-  apply match_stacks_nil; auto. eapply Ple_trans; eauto.
-  eapply match_stacks_cons; eauto. eapply Pos.lt_le_trans; eauto.
-  eapply match_stacks_untailcall; eauto. eapply Pos.lt_le_trans; eauto.
+  apply match_stacks_nil; eauto.
+  eapply match_stacks_cons; eauto.
+  eapply match_stacks_untailcall; eauto.
 Qed.
 
 Variable F1: meminj.
 Variables m1 m1': mem.
 Hypothesis INCR: inject_incr F F1.
 
-Lemma mit_incr_invariant bound nb1 nb2 nb1' nb2':
-  (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> Plt b1 (injw_next_l w) \/ Plt b2 bound ->
+Lemma mit_incr_invariant bound s1 s2 s1' s2':
+  (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> sup_In b1 (injw_sup_l w) \/ sup_In b2 bound ->
                        F b1 = Some(b2, delta)) ->
-  Ple (injw_next_r w) bound ->
-  inj_incr w (injw F nb1 nb2) ->
-  Ple nb1 nb1' ->
-  Ple nb2 nb2' ->
-  inj_incr w (injw F1 nb1' nb2').
+  Mem.sup_include (injw_sup_r w) bound ->
+  inj_incr w (injw F s1 s2) ->
+  Mem.sup_include s1 s1' ->
+  Mem.sup_include s2 s2' ->
+  inj_incr w (injw F1 s1' s2').
 Proof.
-  intros INJ BELOW H Hnb1' Hnb2'. inv H. split; cbn in *; eauto; try extlia.
+  intros INJ BELOW H Hs1' Hs2'. inv H. split; cbn in *; eauto; try extlia.
   eapply inject_incr_trans; eauto.
   intros b1 b2 delta Hb1 Hb1'.
   destruct (F b1) as [[xb1' xdelta]|] eqn:Hb1''.
   - rewrite (INCR _ _ _ Hb1'') in Hb1'. inv Hb1'. eauto.
-  - destruct (plt b1 nb0); try (erewrite INJ in Hb1''; eauto; discriminate).
-    destruct (plt b2 bound); try (erewrite INJ in Hb1''; eauto; discriminate).
-    extlia.
+  - destruct (Mem.sup_dec b1 s0); try (erewrite INJ in Hb1''; eauto; discriminate).
+    destruct (Mem.sup_dec b2 bound); try (erewrite INJ in Hb1''; eauto; discriminate).
+    eauto.
 Qed.
 
 Lemma match_stacks_invariant:
-  forall stk stk' bound, match_stacks F m m' stk stk' bound ->
+  forall stk stk' support, match_stacks F m m' stk stk' support ->
   forall (INJ: forall b1 b2 delta, F1 b1 = Some(b2, delta) ->
-               Plt b1 (injw_next_l w) \/ Plt b2 bound -> F b1 = Some(b2, delta))
-         (NB: Ple (Mem.nextblock m) (Mem.nextblock m1))
-         (TNB: Ple (Mem.nextblock m') (Mem.nextblock m1'))
+               sup_In b1 (injw_sup_l w) \/ sup_In b2 support -> F b1 = Some(b2, delta))
+         (NB: Mem.sup_include (Mem.support m) (Mem.support m1))
+         (TNB: Mem.sup_include (Mem.support m') (Mem.support m1'))
+(*=======
+Lemma match_stacks_invariant:
+  forall stk stk' support, match_stacks F m m' stk stk' support ->
+  forall (INJ: forall b1 b2 delta,
+               F1 b1 = Some(b2, delta) -> sup_In b2 support -> F b1 = Some(b2, delta))
+>>>>>>> 830b2cc *)
          (PERM1: forall b1 b2 delta ofs,
-               F1 b1 = Some(b2, delta) -> Plt b2 bound ->
+               F1 b1 = Some(b2, delta) -> sup_In b2 support ->
                Mem.perm m1 b1 ofs Max Nonempty -> Mem.perm m b1 ofs Max Nonempty)
-         (PERM2: forall b ofs, Plt b bound ->
+         (PERM2: forall b ofs, sup_In b support->
                Mem.perm m' b ofs Cur Freeable -> Mem.perm m1' b ofs Cur Freeable)
-         (PERM3: forall b ofs k p, Plt b bound ->
+         (PERM3: forall b ofs k p, sup_In b support->
                Mem.perm m1' b ofs k p -> Mem.perm m' b ofs k p),
-  match_stacks F1 m1 m1' stk stk' bound
+  match_stacks F1 m1 m1' stk stk' support
 
 with match_stacks_inside_invariant:
-  forall stk stk' f' ctx sp' rs1,
-  match_stacks_inside F m m' stk stk' f' ctx sp' rs1 ->
-  forall rs2
+  forall stk stk' f' ctx sps' rs1,
+  match_stacks_inside F m m' stk stk' f' ctx sps' rs1 ->
+  forall rs2 sp'
+         (SPS: sp' = fresh_block sps')
          (RS: forall r, Plt r ctx.(dreg) -> rs2#r = rs1#r)
-         (NB: Ple (Mem.nextblock m) (Mem.nextblock m1))
-         (TNB: Ple (Mem.nextblock m') (Mem.nextblock m1'))
+         (NB: Mem.sup_include (Mem.support m) (Mem.support m1))
+         (TNB: Mem.sup_include (Mem.support m') (Mem.support m1'))
+(*
          (INJ: forall b1 b2 delta, F1 b1 = Some(b2, delta) ->
                Plt b1 (injw_next_l w) \/ Ple b2 sp' -> F b1 = Some(b2, delta))
+*)
+         (INJ: forall b1 b2 delta,
+               F1 b1 = Some(b2, delta) ->
+               sup_In b1 (injw_sup_l w) \/ sup_In b2 (sup_incr sps') -> F b1 = Some(b2, delta))
          (PERM1: forall b1 b2 delta ofs,
-               F1 b1 = Some(b2, delta) -> Ple b2 sp' ->
+               F1 b1 = Some(b2, delta) -> sup_In b2 (sup_incr sps') ->
                Mem.perm m1 b1 ofs Max Nonempty -> Mem.perm m b1 ofs Max Nonempty)
-         (PERM2: forall b ofs, Ple b sp' ->
+         (PERM2: forall b ofs, sup_In b (sup_incr sps') ->
                Mem.perm m' b ofs Cur Freeable -> Mem.perm m1' b ofs Cur Freeable)
-         (PERM3: forall b ofs k p, Ple b sp' ->
+         (PERM3: forall b ofs k p, sup_In b (sup_incr sps') ->
                Mem.perm m1' b ofs k p -> Mem.perm m' b ofs k p),
-  match_stacks_inside F1 m1 m1' stk stk' f' ctx sp' rs2.
+  match_stacks_inside F1 m1 m1' stk stk' f' ctx sps' rs2.
 
 Proof.
-  induction 1; intros.
+  induction 1; intros; subst.
   (* nil *)
   apply match_stacks_nil; auto.
   eapply mit_incr_invariant; eauto.
   (* cons *)
-  apply match_stacks_cons with (fenv := fenv) (ctx := ctx); auto.
+  apply match_stacks_cons with (fenv := fenv) (ctx := ctx) (sps' := sps'); auto.
   eapply match_stacks_inside_invariant; eauto.
-  intros; eapply INJ; eauto; extlia.
-  intros; eapply PERM1; eauto; extlia.
-  intros; eapply PERM2; eauto; extlia.
-  intros; eapply PERM3; eauto; extlia.
+  intros; eapply INJ; eauto. destruct H0; auto.
+(*  intros; eapply PERM1; eauto. apply BELOW. right. auto.
+  intros; eapply PERM2; eauto. apply BELOW. right. auto.
+  intros; eapply PERM3; eauto. apply BELOW. right. auto. *)
   eapply agree_regs_incr; eauto.
   eapply range_private_invariant; eauto.
+  intros. split. eapply INJ; eauto.
+  eapply PERM1; eauto.
   (* untailcall *)
-  apply match_stacks_untailcall with (ctx := ctx); auto.
+  apply match_stacks_untailcall with (ctx := ctx) (sps' := sps'); auto.
   eapply match_stacks_inside_invariant; eauto.
-  intros; eapply INJ; eauto; extlia.
-  intros; eapply PERM1; eauto; extlia.
-  intros; eapply PERM2; eauto; extlia.
-  intros; eapply PERM3; eauto; extlia.
+  intros; eapply INJ; eauto. destruct H0; eauto.
+(*  intros; eapply PERM1; eauto. apply BELOW. right. auto.
+  intros; eapply PERM2; eauto. apply BELOW. right. auto.
+  intros; eapply PERM3; eauto. apply BELOW. right. auto. *)
   eapply range_private_invariant; eauto.
-
+  intros. split. eapply INJ; eauto.
+  eapply PERM1; eauto.
   induction 1; intros.
   (* base *)
   eapply match_stacks_inside_base; eauto.
   eapply match_stacks_invariant; eauto.
-  intros; eapply INJ; eauto; extlia.
-  intros; eapply PERM1; eauto; extlia.
-  intros; eapply PERM2; eauto; extlia.
-  intros; eapply PERM3; eauto; extlia.
+  intros; eapply INJ; eauto. destruct H0; eauto. right.
+  apply Mem.sup_incr_in2. auto.
+  intros; eapply PERM1; eauto. apply Mem.sup_incr_in2. auto.
+  intros; eapply PERM2; eauto. apply Mem.sup_incr_in2. auto.
+  intros; eapply PERM3; eauto. apply Mem.sup_incr_in2. auto.
   (* inlined *)
-  apply match_stacks_inside_inlined with (fenv := fenv) (ctx' := ctx'); auto.
-  apply IHmatch_stacks_inside; auto.
+  subst sp'0.
+  apply match_stacks_inside_inlined with (fenv := fenv) (ctx' := ctx') (sp' := sp'); auto.
+  apply IHmatch_stacks_inside with (sp':= fresh_block sps'); auto.
   intros. apply RS. red in BELOW. extlia.
   apply agree_regs_incr with F; auto.
   apply agree_regs_invariant with rs'; auto.
   intros. apply RS. red in BELOW. extlia.
   eapply range_private_invariant; eauto.
-    intros. split. eapply INJ; eauto. extlia. eapply PERM1; eauto. extlia.
-    intros. eapply PERM2; eauto. extlia.
+    intros. split. eapply INJ; eauto. subst sp'. auto. eapply PERM1; eauto. subst sp'. auto.
+    intros. eapply PERM2; eauto. subst sp'. auto.
 Qed.
 
 Lemma match_stacks_empty:
-  forall stk stk' bound,
-  match_stacks F m m' stk stk' bound -> stk = nil -> stk' = nil
+  forall stk stk' support,
+  match_stacks F m m' stk stk' support -> stk = nil -> stk' = nil
 with match_stacks_inside_empty:
   forall stk stk' f ctx sp rs,
   match_stacks_inside F m m' stk stk' f ctx sp rs -> stk = nil -> stk' = nil /\ ctx.(retinfo) = None.
@@ -648,16 +693,16 @@ Proof.
   discriminate.
 Qed.
 
-Lemma match_stacks_nextblock:
+Lemma match_stacks_support:
   forall stk stk' bound,
   match_stacks F m m' stk stk' bound ->
-  Ple (injw_next_l w) (Mem.nextblock m) /\
-  Ple (injw_next_r w) (Mem.nextblock m')
+  Mem.sup_include (injw_sup_l w) (Mem.support m) /\
+  Mem.sup_include (injw_sup_r w) (Mem.support m')
 with match_stacks_inside_nextblock:
   forall stk stk' f' ctx sp' rs1,
   match_stacks_inside F m m' stk stk' f' ctx sp' rs1 ->
-  Ple (injw_next_l w) (Mem.nextblock m) /\
-  Ple (injw_next_r w) (Mem.nextblock m').
+  Mem.sup_include (injw_sup_l w) (Mem.support m) /\
+  Mem.sup_include (injw_sup_r w) (Mem.support m').
 Proof.
   induction 1; eauto. clear - MG. inv MG; cbn; auto.
   induction 1; eauto.
@@ -674,7 +719,6 @@ Lemma match_stacks_inside_set_reg:
 Proof.
   intros. eapply match_stacks_inside_invariant; eauto.
   intros. apply Regmap.gso. zify. unfold sreg; rewrite shiftpos_eq. extlia.
-  extlia. extlia.
 Qed.
 
 Lemma match_stacks_inside_set_res:
@@ -697,43 +741,48 @@ Lemma match_stacks_inside_store:
 Proof.
   intros.
   eapply match_stacks_inside_invariant; eauto with mem.
-  rewrite (Mem.nextblock_store _ _ _ _ _ _ H0). extlia.
-  rewrite (Mem.nextblock_store _ _ _ _ _ _ H1). extlia.
+  rewrite (Mem.support_store _ _ _ _ _ _ H0). eauto.
+  rewrite (Mem.support_store _ _ _ _ _ _ H1). eauto.
 Qed.
 
 (** Preservation by an allocation *)
 
 Lemma match_stacks_inside_alloc_left:
-  forall F m m' stk stk' f' ctx sp' rs',
-  match_stacks_inside F m m' stk stk' f' ctx sp' rs' ->
+  forall F m m' stk stk' f' ctx sps' sp' rs',
+  match_stacks_inside F m m' stk stk' f' ctx sps' rs' ->
+  sp' = fresh_block sps' ->
   forall sz m1 b F1 delta,
   Mem.alloc m 0 sz = (m1, b) ->
   inject_incr F F1 ->
   F1 b = Some(sp', delta) ->
   (forall b1, b1 <> b -> F1 b1 = F b1) ->
   delta >= ctx.(dstk) ->
-  match_stacks_inside F1 m1 m' stk stk' f' ctx sp' rs'.
+  match_stacks_inside F1 m1 m' stk stk' f' ctx sps' rs'.
 Proof.
   induction 1; intros.
   (* base *)
   eapply match_stacks_inside_base; eauto.
   eapply match_stacks_invariant; eauto.
   intros. destruct (eq_block b1 b).
-  subst b1. rewrite H1 in H4; inv H4.
-    apply Mem.alloc_result in H. subst.
-    apply match_stacks_nextblock in MS. extlia.
-  rewrite H2 in H4; auto.
-  rewrite (Mem.nextblock_alloc _ _ _ _ _ H). extlia. extlia.
+  subst b1. rewrite H2 in H5; inv H5.
+    exfalso.
+    apply Mem.alloc_result in H0. subst.
+    apply match_stacks_support in MS. eauto.
+    destruct MS.
+    destruct H6; eapply freshness; eauto.
+  rewrite H3 in H5; auto.
+  rewrite (Mem.support_alloc _ _ _ _ _ H0). eauto.
   intros. exploit Mem.perm_alloc_inv; eauto. destruct (eq_block b1 b); intros; auto.
-  subst b1. rewrite H1 in H4. inv H4. eelim Plt_strict; eauto.
+  subst b1. rewrite H2 in H5. inv H5. eelim freshness; eauto.
   (* inlined *)
+  subst sp'0. subst sp'.
   eapply match_stacks_inside_inlined; eauto.
   eapply IHmatch_stacks_inside; eauto. destruct SBELOW. lia.
   eapply agree_regs_incr; eauto.
   eapply range_private_invariant; eauto.
   intros. exploit Mem.perm_alloc_inv; eauto. destruct (eq_block b0 b); intros.
-  subst b0. rewrite H2 in H5; inv H5. elimtype False; extlia.
-  rewrite H3 in H5; auto.
+  subst b0. rewrite H3 in H0; inv H0. elimtype False; extlia.
+  rewrite H4 in H0; auto.
 Qed.
 
 (** Preservation by freeing *)
@@ -745,19 +794,21 @@ Lemma match_stacks_free_left:
   match_stacks F m1 m' stk stk' sp.
 Proof.
   intros. eapply match_stacks_invariant; eauto.
-  rewrite (Mem.nextblock_free _ _ _ _ _ H0). extlia. extlia.
+  rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
   intros. eapply Mem.perm_free_3; eauto.
 Qed.
 
 Lemma match_stacks_free_right:
-  forall F m m' stk stk' sp lo hi m1',
-  match_stacks F m m' stk stk' sp ->
+  forall F m m' stk stk' sps sp lo hi m1',
+  match_stacks F m m' stk stk' sps ->
+  sp = fresh_block sps ->
   Mem.free m' sp lo hi = Some m1' ->
-  match_stacks F m m1' stk stk' sp.
+  match_stacks F m m1' stk stk' sps.
 Proof.
-  intros. eapply match_stacks_invariant; eauto. extlia.
-  rewrite (Mem.nextblock_free _ _ _ _ _ H0). extlia.
+  intros. eapply match_stacks_invariant; eauto.
+  rewrite (Mem.support_free _ _ _ _ _ H1). eauto.
   intros. eapply Mem.perm_free_1; eauto with ordered_type.
+  left.  subst sp. intro. subst b. eapply freshness; eauto.
   intros. eapply Mem.perm_free_3; eauto.
 Qed.
 
@@ -801,39 +852,42 @@ Hypothesis INCR: inject_incr F1 F2.
 Hypothesis SEP: inject_separated F1 F2 m1 m1'.
 
 Lemma match_stacks_extcall:
-  forall stk stk' bound,
-  match_stacks F1 m1 m1' stk stk' bound ->
-  Ple (Mem.nextblock m1) (Mem.nextblock m2) ->
-  Ple bound (Mem.nextblock m1') ->
-  match_stacks F2 m2 m2' stk stk' bound
+  forall stk stk' support,
+  match_stacks F1 m1 m1' stk stk' support ->
+  Mem.sup_include (Mem.support m1) (Mem.support m2) ->
+  Mem.sup_include support (Mem.support m1') ->
+  match_stacks F2 m2 m2' stk stk' support
 with match_stacks_inside_extcall:
-  forall stk stk' f' ctx sp' rs',
-  match_stacks_inside F1 m1 m1' stk stk' f' ctx sp' rs' ->
-  Ple (Mem.nextblock m1) (Mem.nextblock m2) ->
-  Plt sp' (Mem.nextblock m1') ->
-  match_stacks_inside F2 m2 m2' stk stk' f' ctx sp' rs'.
+  forall stk stk' f' ctx sp' sps' rs',
+  match_stacks_inside F1 m1 m1' stk stk' f' ctx sps' rs' ->
+  sp' = fresh_block sps' ->
+  Mem.sup_include (Mem.support m1) (Mem.support m2) ->
+  Mem.sup_include (sup_incr sps') (Mem.support m1') ->
+  match_stacks_inside F2 m2 m2' stk stk' f' ctx sps' rs'.
 Proof.
   induction 1; intros.
   apply match_stacks_nil; auto.
     eapply mit_incr_invariant; eauto. intros.
     destruct (F1 b1) as [[xb2 xdelta]|] eqn:HF1. apply INCR in HF1. congruence.
-    exploit SEP; eauto. unfold Mem.valid_block. clear - H H0 H2 MG. inv MG; cbn in *. extlia.
-    apply Mem.unchanged_on_nextblock in UNCHANGED. extlia.
+    exploit SEP; eauto. unfold Mem.valid_block. clear - H H0 H2 MG. inv MG; cbn in *. intros [A B]. exfalso. destruct H2; eauto.
+    apply Mem.unchanged_on_support in UNCHANGED. eauto.
   eapply match_stacks_cons; eauto.
-    eapply match_stacks_inside_extcall; eauto. extlia.
+(*    eapply match_stacks_inside_extcall; eauto. eapply Mem.sup_include_trans; eauto. *)
     eapply agree_regs_incr; eauto.
-    eapply range_private_extcall; eauto. red; extlia.
-    intros. apply SSZ2; auto. apply MAXPERM'; auto. red; extlia.
+    eapply range_private_extcall; eauto. red. apply H0. subst. auto.
+    intros. apply SSZ2; auto. apply MAXPERM'; auto. red. apply H0. subst. auto.
   eapply match_stacks_untailcall; eauto.
-    eapply match_stacks_inside_extcall; eauto. extlia.
-    eapply range_private_extcall; eauto. red; extlia.
-    intros. apply SSZ2; auto. apply MAXPERM'; auto. red; extlia.
+(*    eapply match_stacks_inside_extcall; eauto. eapply Mem.sup_include_trans; eauto. *)
+    eapply range_private_extcall; eauto. red. apply H0. subst. auto.
+    intros. apply SSZ2; auto. apply MAXPERM'; auto. red. apply H0. subst. auto.
   induction 1; intros.
   eapply match_stacks_inside_base; eauto.
-    eapply match_stacks_extcall; eauto. extlia.
+(*    eapply match_stacks_extcall; eauto. eapply Mem.sup_include_trans; eauto. *)
+    subst sp'0. subst sp'.
   eapply match_stacks_inside_inlined; eauto.
     eapply agree_regs_incr; eauto.
     eapply range_private_extcall; eauto.
+    apply H2. auto.
 Qed.
 
 End EXTCALL.
@@ -846,25 +900,25 @@ Proof.
   intros. destruct H0 as [p EQ]. subst n. unfold align. decEq.
   apply Zdiv_unique with (b := amount - 1). lia. lia.
 Qed.
-
 Lemma match_stacks_inside_inlined_tailcall:
-  forall fenv F m m' stk stk' f' ctx sp' rs' ctx' f,
-  match_stacks_inside F m m' stk stk' f' ctx sp' rs' ->
+  forall fenv F m m' stk stk' f' ctx sps' sp' rs' ctx' f,
+  sp' = fresh_block sps' ->
+  match_stacks_inside F m m' stk stk' f' ctx sps' rs' ->
   context_below ctx ctx' ->
   context_stack_tailcall ctx f ctx' ->
   ctx'.(retinfo) = ctx.(retinfo) ->
   range_private F m m' sp' ctx.(dstk) f'.(fn_stacksize) ->
   tr_funbody fenv f'.(fn_stacksize) ctx' f f'.(fn_code) ->
-  match_stacks_inside F m m' stk stk' f' ctx' sp' rs'.
+  match_stacks_inside F m m' stk stk' f' ctx' sps' rs'.
 Proof.
-  intros. inv H.
+  intros. inv H0.
   (* base *)
-  eapply match_stacks_inside_base; eauto. congruence.
-  rewrite H1. rewrite DSTK. apply align_unchanged. apply min_alignment_pos. apply Z.divide_0_r.
+  eapply match_stacks_inside_base.  eauto. congruence.
+  rewrite H2. rewrite DSTK. apply align_unchanged. apply min_alignment_pos. apply Z.divide_0_r.
   (* inlined *)
-  assert (dstk ctx <= dstk ctx'). rewrite H1. apply align_le. apply min_alignment_pos.
+  assert (dstk ctx <= dstk ctx'). rewrite H2. apply align_le. apply min_alignment_pos.
   eapply match_stacks_inside_inlined; eauto.
-  red; intros. destruct (zlt ofs (dstk ctx)). apply PAD; lia. apply H3. inv H4. extlia.
+  red; intros. destruct (zlt ofs (dstk ctx)). apply PAD; lia. apply H4. inv H5. extlia.
   congruence.
   unfold context_below in *. extlia.
   unfold context_stack_call in *. lia.
@@ -873,29 +927,37 @@ Qed.
 (** ** Relating states *)
 
 Inductive match_states: RTL.state -> RTL.state -> Prop :=
-  | match_regular_states: forall stk f sp pc rs m stk' f' sp' rs' m' F fenv ctx
-        (MS: match_stacks_inside F m m' stk stk' f' ctx sp' rs')
+  | match_regular_states: forall stk f sp pc rs m stk' f' sps' sp' rs' m' F fenv ctx
+        (SPS: sp' = fresh_block sps')
+        (MS: match_stacks_inside F m m' stk stk' f' ctx sps' rs')
         (COMPAT: fenv_compat prog fenv)
         (FB: tr_funbody fenv f'.(fn_stacksize) ctx f f'.(fn_code))
         (AG: agree_regs F ctx rs rs')
         (SP: F sp = Some(sp', ctx.(dstk)))
         (MINJ: Mem.inject F m m')
-        (VB: Mem.valid_block m' sp')
+        (VB: Mem.sup_include (sup_incr sps') (Mem.support m'))
         (PRIV: range_private F m m' sp' (ctx.(dstk) + ctx.(mstk)) f'.(fn_stacksize))
         (SSZ1: 0 <= f'.(fn_stacksize) < Ptrofs.max_unsigned)
         (SSZ2: forall ofs, Mem.perm m' sp' ofs Max Nonempty -> 0 <= ofs <= f'.(fn_stacksize)),
       match_states (State stk f (Vptr sp Ptrofs.zero) pc rs m)
                    (State stk' f' (Vptr sp' Ptrofs.zero) (spc ctx pc) rs' m')
   | match_call_states: forall stk vf args m stk' vf' args' m' cunit F
-        (MS: match_stacks F m m' stk stk' (Mem.nextblock m'))
+        (MS: match_stacks F m m' stk stk' (Mem.support m'))
         (LINK: linkorder cunit prog)
         (FINJ: Val.inject F vf vf')
         (VINJ: Val.inject_list F args args')
         (MINJ: Mem.inject F m m'),
+(*<<<<<<< HEAD
       match_states (Callstate stk vf args m)
                    (Callstate stk' vf' args' m')
   | match_call_regular_states: forall stk f vf vargs m stk' f' sp' rs' m' F fenv ctx ctx' pc' pc1' rargs
         (MS: match_stacks_inside F m m' stk stk' f' ctx sp' rs')
+======= *)
+      match_states (Callstate stk vf args m)
+                   (Callstate stk' vf' args' m')
+  | match_call_regular_states: forall stk f vf vargs m stk' f' sps' sp' rs' m' F fenv ctx ctx' pc' pc1' rargs
+        (SPS: sp' = fresh_block sps')
+        (MS: match_stacks_inside F m m' stk stk' f' ctx sps' rs')
         (COMPAT: fenv_compat prog fenv)
         (FB: tr_funbody fenv f'.(fn_stacksize) ctx f f'.(fn_code))
         (BELOW: context_below ctx' ctx)
@@ -904,25 +966,26 @@ Inductive match_states: RTL.state -> RTL.state -> Prop :=
         (VFIND: Genv.find_funct ge vf = Some (Internal f))
         (VINJ: list_forall2 (val_reg_charact F ctx' rs') vargs rargs)
         (MINJ: Mem.inject F m m')
-        (VB: Mem.valid_block m' sp')
+        (VB: Mem.sup_include (sup_incr sps') (Mem.support m'))
         (PRIV: range_private F m m' sp' ctx.(dstk) f'.(fn_stacksize))
         (SSZ1: 0 <= f'.(fn_stacksize) < Ptrofs.max_unsigned)
         (SSZ2: forall ofs, Mem.perm m' sp' ofs Max Nonempty -> 0 <= ofs <= f'.(fn_stacksize)),
       match_states (Callstate stk vf vargs m)
                    (State stk' f' (Vptr sp' Ptrofs.zero) pc' rs' m')
   | match_return_states: forall stk v m stk' v' m' F
-        (MS: match_stacks F m m' stk stk' (Mem.nextblock m'))
+        (MS: match_stacks F m m' stk stk' (Mem.support m'))
         (VINJ: Val.inject F v v')
         (MINJ: Mem.inject F m m'),
       match_states (Returnstate stk v m)
                    (Returnstate stk' v' m')
-  | match_return_regular_states: forall stk v m stk' f' sp' rs' m' F ctx pc' or rinfo
-        (MS: match_stacks_inside F m m' stk stk' f' ctx sp' rs')
+  | match_return_regular_states: forall stk v m stk' f' sps' sp' rs' m' F ctx pc' or rinfo
+        (SPS' : sp' = fresh_block sps')
+        (MS: match_stacks_inside F m m' stk stk' f' ctx sps' rs')
         (RET: ctx.(retinfo) = Some rinfo)
         (AT: f'.(fn_code)!pc' = Some(inline_return ctx or rinfo))
         (VINJ: match or with None => v = Vundef | Some r => Val.inject F v rs'#(sreg ctx r) end)
         (MINJ: Mem.inject F m m')
-        (VB: Mem.valid_block m' sp')
+        (VB: Mem.sup_include (sup_incr sps') (Mem.support m'))
         (PRIV: range_private F m m' sp' ctx.(dstk) f'.(fn_stacksize))
         (SSZ1: 0 <= f'.(fn_stacksize) < Ptrofs.max_unsigned)
         (SSZ2: forall ofs, Mem.perm m' sp' ofs Max Nonempty -> 0 <= ofs <= f'.(fn_stacksize)),
@@ -1005,7 +1068,7 @@ Proof.
   destruct a'; simpl in U; try discriminate.
   econstructor; eauto.
   eapply match_stacks_inside_store; eauto.
-  eapply Mem.store_valid_block_1; eauto.
+  erewrite Mem.support_store; eauto.
   eapply range_private_invariant; eauto.
   intros; split; auto. eapply Mem.perm_store_2; eauto.
   intros; eapply Mem.perm_store_1; eauto.
@@ -1038,12 +1101,12 @@ Proof.
   exploit match_stacks_inside_globalenvs; eauto. intros SEINJ.
   edestruct functions_translated with (v := vf) as (cu & fd' & A & B & C); eauto.
   eapply ros_address_agree; eauto.
-  assert (PRIV': range_private F m' m'0 sp' (dstk ctx) f'.(fn_stacksize)).
+  assert (PRIV': range_private F m' m'0 (fresh_block sps') (dstk ctx) f'.(fn_stacksize)).
   { eapply range_private_free_left; eauto. inv FB. rewrite <- H4. auto. }
   exploit tr_funbody_inv; eauto. intros TR; inv TR.
 + (* within the original function *)
   inv MS0; try congruence.
-  assert (X: { m1' | Mem.free m'0 sp' 0 (fn_stacksize f') = Some m1'}).
+  assert (X: { m1' | Mem.free m'0 (fresh_block sps') 0 (fn_stacksize f') = Some m1'}).
     apply Mem.range_perm_free. red; intros.
     destruct (zlt ofs f.(fn_stacksize)).
     replace ofs with (ofs + dstk ctx) by lia. eapply Mem.perm_inject; eauto.
@@ -1054,14 +1117,19 @@ Proof.
   eapply plus_one. eapply exec_Itailcall; eauto.
   eapply sig_function_translated; eauto.
   econstructor; eauto.
-  eapply match_stacks_bound with (bound := sp').
+  eapply match_stacks_sup_include with (support := sps').
   eapply match_stacks_invariant; eauto.
-    rewrite (Mem.nextblock_free _ _ _ _ _ H2). extlia.
-    rewrite (Mem.nextblock_free _ _ _ _ _ FREE). extlia.
+    rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
+    rewrite (Mem.support_free _ _ _ _ _ FREE). eauto.
     intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_1; eauto with ordered_type.
+    intros. left. intro. subst b. eapply freshness; eauto.
     intros. eapply Mem.perm_free_3; eauto.
-  erewrite Mem.nextblock_free; eauto. red in VB; extlia.
+(*<<<<<<< HEAD
+  erewrite Mem.support_free; eauto. red in VB; extlia.
+  eapply ros_address_agree; eauto.
+=======*)
+  erewrite Mem.support_free; eauto.
   eapply ros_address_agree; eauto.
   eapply agree_val_regs; eauto.
   eapply Mem.free_right_inject; eauto. eapply Mem.free_left_inject; eauto.
@@ -1076,7 +1144,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_untailcall; eauto.
   eapply match_stacks_inside_invariant; eauto.
-    rewrite (Mem.nextblock_free _ _ _ _ _ H2). extlia. extlia.
+    rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
     intros. eapply Mem.perm_free_3; eauto.
   eapply ros_address_agree; eauto.
   eapply agree_val_regs; eauto.
@@ -1088,7 +1156,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_inside_inlined_tailcall; eauto.
   eapply match_stacks_inside_invariant; eauto.
-    rewrite (Mem.nextblock_free _ _ _ _ _ H2). extlia. extlia.
+    rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
     intros. eapply Mem.perm_free_3; eauto.
   apply agree_val_regs_gen; auto.
   eapply Mem.free_left_inject; eauto.
@@ -1105,20 +1173,20 @@ Proof.
   left; econstructor; split.
   eapply plus_one. eapply exec_Ibuiltin; eauto.
   econstructor.
+    eauto.
     eapply match_stacks_inside_set_res.
     eapply match_stacks_inside_extcall with (F1 := F) (F2 := F1) (m1 := m) (m1' := m'0); eauto.
     intros; eapply external_call_max_perm; eauto.
     intros; eapply external_call_max_perm; eauto.
-    eapply external_call_nextblock; eauto.
+    eapply external_call_support; eauto.
   auto. eauto. auto.
   destruct res; simpl; [apply agree_set_reg;auto|idtac|idtac]; eapply agree_regs_incr; eauto.
-  auto. auto.
-  eapply external_call_valid_block; eauto.
+  auto. auto. eapply Mem.sup_include_trans; eauto. eapply Mem.unchanged_on_support. eauto.
   eapply range_private_extcall; eauto.
     intros; eapply external_call_max_perm; eauto.
-  auto.
+  auto. apply VB. auto. auto.
   intros. apply SSZ2. eapply external_call_max_perm; eauto.
-
+  apply VB.  auto.
 - (* cond *)
   exploit tr_funbody_inv; eauto. intros TR; inv TR.
   assert (eval_condition cond rs'##(sregs ctx args) m' = Some b).
@@ -1140,7 +1208,7 @@ Proof.
   exploit tr_funbody_inv; eauto. intros TR; inv TR.
 + (* not inlined *)
   inv MS0; try congruence.
-  assert (X: { m1' | Mem.free m'0 sp' 0 (fn_stacksize f') = Some m1'}).
+  assert (X: { m1' | Mem.free m'0 (fresh_block sps') 0 (fn_stacksize f') = Some m1'}).
     apply Mem.range_perm_free. red; intros.
     destruct (zlt ofs f.(fn_stacksize)).
     replace ofs with (ofs + dstk ctx) by lia. eapply Mem.perm_inject; eauto.
@@ -1151,19 +1219,20 @@ Proof.
   left; econstructor; split.
   eapply plus_one. eapply exec_Ireturn; eauto.
   econstructor; eauto.
-  eapply match_stacks_bound with (bound := sp').
+  eapply match_stacks_sup_include with (support := sps').
   eapply match_stacks_invariant; eauto.
-    rewrite (Mem.nextblock_free _ _ _ _ _ H0). extlia.
-    rewrite (Mem.nextblock_free _ _ _ _ _ FREE). extlia.
+    rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
+    rewrite (Mem.support_free _ _ _ _ _ FREE). eauto.
     intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_1; eauto with ordered_type.
+    intros. left. intro. subst b. eapply freshness; eauto.
     intros. eapply Mem.perm_free_3; eauto.
-  erewrite Mem.nextblock_free; eauto. red in VB; extlia.
+  erewrite Mem.support_free; eauto.
   destruct or; simpl. apply agree_val_reg; auto. auto.
   eapply Mem.free_right_inject; eauto. eapply Mem.free_left_inject; eauto.
   (* show that no valid location points into the stack block being freed *)
   intros. inversion FB; subst.
-  assert (PRIV': range_private F m' m'0 sp' (dstk ctx) f'.(fn_stacksize)).
+  assert (PRIV': range_private F m' m'0 (fresh_block sps') (dstk ctx) f'.(fn_stacksize)).
     rewrite H8 in PRIV. eapply range_private_free_left; eauto.
   rewrite DSTK in PRIV'. exploit (PRIV' (ofs + delta)). lia. intros [A B].
   eelim B; eauto. replace (ofs + delta - delta) with ofs by lia.
@@ -1173,7 +1242,7 @@ Proof.
   right. split. simpl. lia. split. auto.
   econstructor; eauto.
   eapply match_stacks_inside_invariant; eauto.
-    rewrite (Mem.nextblock_free _ _ _ _ _ H0). extlia. extlia.
+    rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
     intros. eapply Mem.perm_free_3; eauto.
   destruct or; simpl. apply agree_val_reg; auto. auto.
   eapply Mem.free_left_inject; eauto.
@@ -1194,26 +1263,30 @@ Proof.
   left; econstructor; split.
   eapply plus_one. eapply exec_function_internal; eauto.
   rewrite H6. econstructor.
+  eapply Mem.alloc_result. eauto.
   instantiate (1 := F'). apply match_stacks_inside_base.
-  assert (SP: sp' = Mem.nextblock m'0) by (eapply Mem.alloc_result; eauto).
-  rewrite <- SP in MS0.
+  assert (SPS: sp' = fresh_block (Mem.support m'0)) by (eapply Mem.alloc_result; eauto).
   eapply match_stacks_invariant; eauto.
     intros. destruct (eq_block b1 stk).
     subst b1. rewrite D in H8; inv H8.
       apply Mem.alloc_result in H. subst.
-      apply match_stacks_nextblock in MS0. extlia.
+      apply match_stacks_support in MS0.
+      exfalso. destruct MS0.
+      destruct H9; eapply freshness; eauto.
     rewrite E in H8; auto.
-    rewrite (Mem.nextblock_alloc _ _ _ _ _ H). extlia.
-    rewrite (Mem.nextblock_alloc _ _ _ _ _ A). extlia.
+    rewrite (Mem.support_alloc _ _ _ _ _ H). eauto.
+    rewrite (Mem.support_alloc _ _ _ _ _ A). eauto.
     intros. exploit Mem.perm_alloc_inv. eexact H. eauto.
     destruct (eq_block b1 stk); intros; auto.
-    subst b1. rewrite D in H8; inv H8. eelim Plt_strict; eauto.
+    subst b1. rewrite D in H8; inv H8. eelim freshness; eauto.
     intros. eapply Mem.perm_alloc_1; eauto.
     intros. exploit Mem.perm_alloc_inv. eexact A. eauto.
     rewrite dec_eq_false; auto with ordered_type.
+  intro. subst b. eelim freshness. rewrite SPS in H8. eauto.
   auto. auto. auto. eauto. auto.
   rewrite H5. apply agree_regs_init_regs. eauto. auto. inv H1; auto. congruence. auto.
-  eapply Mem.valid_new_block; eauto.
+  rewrite  Mem.support_alloc with m'0 0 (fn_stacksize f') m1' sp'.
+  apply Mem.sup_include_refl. auto. auto.
   red; intros. split.
   eapply Mem.perm_alloc_2; eauto. inv H1; extlia.
   intros; red; intros. exploit Mem.perm_alloc_inv. eexact H. eauto.
@@ -1230,7 +1303,7 @@ Proof.
     eauto.
     eauto.
     (* sp' is valid *)
-    instantiate (1 := sp'). auto.
+    instantiate (1 := (fresh_block sps')). apply VB. auto.
     (* offset is representable *)
     instantiate (1 := dstk ctx). generalize (Z.le_max_r (fn_stacksize f) 0). extlia.
     (* size of target block is representable *)
@@ -1250,11 +1323,10 @@ Proof.
   exploit tr_moves_init_regs; eauto. intros [rs'' [P [Q R]]].
   left; econstructor; split.
   eapply plus_left. eapply exec_Inop; eauto. eexact P. traceEq.
-  econstructor.
+  econstructor. auto.
   eapply match_stacks_inside_alloc_left; eauto.
   eapply match_stacks_inside_invariant; eauto.
-  extlia. extlia. lia.
-  eauto. auto.
+  lia. eauto. eauto.
   apply agree_regs_incr with F; auto.
   auto. auto. auto.
   rewrite H2. eapply range_private_alloc_left; eauto.
@@ -1269,13 +1341,12 @@ Proof.
   left; econstructor; split.
   eapply plus_one. eapply exec_function_external; eauto.
   econstructor.
-    eapply match_stacks_bound with (Mem.nextblock m'0).
+    eapply match_stacks_sup_include with (Mem.support m'0).
     eapply match_stacks_extcall with (F1 := F) (F2 := F1) (m1 := m) (m1' := m'0); eauto.
     intros; eapply external_call_max_perm; eauto.
     intros; eapply external_call_max_perm; eauto.
-    eapply external_call_nextblock; eauto.
-    extlia.
-    eapply external_call_nextblock; eauto.
+    eapply external_call_support; eauto.
+    eapply external_call_support; eauto.
     auto. auto.
 
 - (* return from noninlined function *)
@@ -1291,7 +1362,7 @@ Proof.
   rewrite RET in RET0; inv RET0.
   left; econstructor; split.
   eapply plus_one. eapply exec_return.
-  eapply match_regular_states.
+  eapply match_regular_states. auto.
   eapply match_stacks_inside_set_reg; eauto.
   eauto. auto.
   apply agree_set_reg; auto.
@@ -1302,7 +1373,7 @@ Proof.
 - (* return from inlined function *)
   inv MS0; try congruence. rewrite RET0 in RET; inv RET.
   unfold inline_return in AT.
-  assert (PRIV': range_private F m m' sp' (dstk ctx' + mstk ctx') f'.(fn_stacksize)).
+  assert (PRIV': range_private F m m' (fresh_block sps') (dstk ctx' + mstk ctx') f'.(fn_stacksize)).
     red; intros. destruct (zlt ofs (dstk ctx)). apply PAD. lia. apply PRIV. lia.
   destruct or.
 + (* with a result *)
@@ -1330,7 +1401,7 @@ Proof.
   econstructor; eauto.
   apply match_stacks_nil; auto.
   - rewrite <- H1. reflexivity.
-  - rewrite <- H1. cbn. reflexivity.
+  - rewrite <- H1. cbn. eauto.
   - rewrite <- H1. auto.
 Qed.
 
@@ -1362,15 +1433,14 @@ Proof.
     destruct FINJ; cbn in *; congruence.
   - constructor.
     + eapply match_stacks_globalenvs; eauto.
-    + eapply match_stacks_nextblock in MS; eauto. inv GE. extlia.
-    + eapply match_stacks_nextblock in MS; eauto. inv GE. extlia.
+    + eapply match_stacks_support in MS; eauto. destruct MS. inv GE. eauto.
+    + eapply match_stacks_support in MS; eauto. destruct MS. inv GE. eauto.
   - inv H1. destruct H0 as (w' & Hw' & H0). inv Hw'. inv H0. inv H11.
     eexists; split; econstructor; eauto.
-    eapply match_stacks_bound with (Mem.nextblock m').
+    eapply match_stacks_sup_include with (Mem.support m').
     eapply match_stacks_extcall with (F1 := F) (F2 := f') (m1 := m) (m1' := m'); eauto.
-    eapply Mem.unchanged_on_nextblock; eauto.
-    extlia.
-    eapply Mem.unchanged_on_nextblock; eauto.
+    eapply Mem.unchanged_on_support; eauto.
+    eapply Mem.unchanged_on_support; eauto.
 Qed.
 
 End INLINING.

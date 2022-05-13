@@ -49,10 +49,10 @@ Record magree (m1 m2: mem) (P: locset) : Prop := mk_magree {
     forall b ofs,
     Mem.perm m1 b ofs Cur Readable ->
     P b ofs ->
-    memval_lessdef (ZMap.get ofs (PMap.get b (Mem.mem_contents m1)))
-                   (ZMap.get ofs (PMap.get b (Mem.mem_contents m2)));
-  ma_nextblock:
-    Mem.nextblock m2 = Mem.nextblock m1
+    memval_lessdef (ZMap.get ofs (NMap.get _ b (Mem.mem_contents m1)))
+                   (ZMap.get ofs (NMap.get _ b (Mem.mem_contents m2)));
+  ma_support:
+    Mem.support m2 = Mem.support m1
 }.
 
 Lemma magree_monotone:
@@ -166,14 +166,14 @@ Proof.
   intuition eauto using Mem.perm_storebytes_1, Mem.perm_storebytes_2.
 - rewrite (Mem.storebytes_mem_contents _ _ _ _ _ H0).
   rewrite (Mem.storebytes_mem_contents _ _ _ _ _ ST2).
-  rewrite ! PMap.gsspec. destruct (peq b0 b).
+  rewrite ! NMap.gsspec. destruct (NMap.elt_eq b0 b).
 + subst b0. apply SETN with (access := fun ofs => Mem.perm m1' b ofs Cur Readable /\ Q b ofs); auto.
   intros. destruct H5. eapply ma_memval; eauto.
   eapply Mem.perm_storebytes_2; eauto.
 + eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
-- rewrite (Mem.nextblock_storebytes _ _ _ _ _ H0).
-  rewrite (Mem.nextblock_storebytes _ _ _ _ _ ST2).
-  eapply ma_nextblock; eauto.
+- rewrite (Mem.support_storebytes _ _ _ _ _ H0).
+  rewrite (Mem.support_storebytes _ _ _ _ _ ST2).
+  eapply ma_support; eauto.
 Qed.
 
 Lemma magree_store_parallel:
@@ -210,13 +210,14 @@ Proof.
 - exploit ma_perm_inv; eauto.
   intuition eauto using Mem.perm_storebytes_1, Mem.perm_storebytes_2.
 - rewrite (Mem.storebytes_mem_contents _ _ _ _ _ H0).
-  rewrite PMap.gsspec. destruct (peq b0 b).
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b).
 + subst b0. rewrite Mem.setN_outside. eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
   destruct (zlt ofs0 ofs); auto. destruct (zle (ofs + Z.of_nat (length bytes1)) ofs0); try lia.
-  elim (H1 ofs0). lia. auto.
+  assert(ofs <= ofs0 < ofs + Z.of_nat(Datatypes.length bytes1)) by lia.
+  apply H1 in H4. congruence.
 + eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
-- rewrite (Mem.nextblock_storebytes _ _ _ _ _ H0).
-  eapply ma_nextblock; eauto.
+- rewrite (Mem.support_storebytes _ _ _ _ _ H0).
+  eapply ma_support; eauto.
 Qed.
 
 Lemma magree_store_left:
@@ -261,10 +262,10 @@ Proof.
   simpl. eapply ma_memval; eauto. eapply Mem.perm_free_3; eauto.
   apply H1; auto. destruct (eq_block b0 b); auto.
   subst b0. right. red; intros. eelim Mem.perm_free_2. eexact H0. eauto. eauto.
-- (* nextblock *)
+- (* support *)
   rewrite (Mem.free_result _ _ _ _ _ H0).
   rewrite (Mem.free_result _ _ _ _ _ FREE).
-  simpl. eapply ma_nextblock; eauto.
+  simpl. eapply ma_support; eauto.
 Qed.
 
 Lemma magree_valid_access:
@@ -938,10 +939,10 @@ Ltac UseTransfer :=
   intros (tbytes & P & Q).
   exploit magree_storebytes_parallel.
   eapply magree_monotone. eexact D2.
-  instantiate (1 := nlive ge sp0 (nmem_remove nm adst sz)).
+  instantiate (1 := nlive ge (fresh_block sps) (nmem_remove nm adst sz)).
   intros. apply incl_nmem_add; auto.
   eauto.
-  instantiate (1 := nlive ge sp0 nm).
+  instantiate (1 := nlive ge (fresh_block sps) nm).
   intros. eapply nlive_remove; eauto.
   unfold adst, vanalyze; rewrite AN; eapply aaddr_arg_sound_1; eauto.
   erewrite Mem.loadbytes_length in H1 by eauto.

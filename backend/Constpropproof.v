@@ -348,12 +348,12 @@ Proof.
   assert(OP:
      let (op', args') := op_strength_reduction op args (aregs ae args) in
      exists v',
-        eval_operation ge (Vptr sp0 Ptrofs.zero) op' rs ## args' m = Some v' /\
+        eval_operation ge (Vptr (fresh_block sps) Ptrofs.zero) op' rs ## args' m = Some v' /\
         Val.lessdef v v').
   { eapply op_strength_reduction_correct with (ae := ae); eauto with va. }
   destruct (op_strength_reduction op args (aregs ae args)) as [op' args'].
   destruct OP as [v' [EV' LD']].
-  assert (EV'': exists v'', eval_operation ge (Vptr sp0 Ptrofs.zero) op' rs'##args' m' = Some v'' /\ Val.lessdef v' v'').
+  assert (EV'': exists v'', eval_operation ge (Vptr (fresh_block sps) Ptrofs.zero) op' rs'##args' m' = Some v'' /\ Val.lessdef v' v'').
   { eapply eval_operation_lessdef; eauto. eapply regs_lessdef_regs; eauto. }
   destruct EV'' as [v'' [EV'' LD'']].
   left; econstructor; econstructor; split.
@@ -379,7 +379,7 @@ Proof.
   assert (ADDR:
      let (addr', args') := addr_strength_reduction addr args (aregs ae args) in
      exists a',
-        eval_addressing ge (Vptr sp0 Ptrofs.zero) addr' rs ## args' = Some a' /\
+        eval_addressing ge (Vptr (fresh_block sps) Ptrofs.zero) addr' rs ## args' = Some a' /\
         Val.lessdef a a').
   { eapply addr_strength_reduction_correct with (ae := ae); eauto with va. }
   destruct (addr_strength_reduction addr args (aregs ae args)) as [addr' args'].
@@ -397,7 +397,7 @@ Proof.
   assert (ADDR:
      let (addr', args') := addr_strength_reduction addr args (aregs ae args) in
      exists a',
-        eval_addressing ge (Vptr sp0 Ptrofs.zero) addr' rs ## args' = Some a' /\
+        eval_addressing ge (Vptr (fresh_block sps) Ptrofs.zero) addr' rs ## args' = Some a' /\
         Val.lessdef a a').
   { eapply addr_strength_reduction_correct with (ae := ae); eauto with va. }
   destruct (addr_strength_reduction addr args (aregs ae args)) as [addr' args'].
@@ -439,9 +439,9 @@ Opaque builtin_strength_reduction.
   assert (DFL: (fn_code (transf_function rm f))!pc = Some dfl ->
           exists (n2 : nat) (s2' : state),
             step tge
-             (State s' (transf_function rm f) (Vptr sp0 Ptrofs.zero) pc rs' m'0) t s2' /\
+             (State s' (transf_function rm f) (Vptr (fresh_block sps) Ptrofs.zero) pc rs' m'0) t s2' /\
             match_states n2
-             (State s f (Vptr sp0 Ptrofs.zero) pc' (regmap_setres res vres rs) m') s2').
+             (State s f (Vptr (fresh_block sps) Ptrofs.zero) pc' (regmap_setres res vres rs) m') s2').
   {
     exploit builtin_strength_reduction_correct; eauto. intros (vargs' & P & Q).
     exploit (@eval_builtin_args_lessdef _ ge (fun r => rs#r) (fun r => rs'#r)).
@@ -460,7 +460,7 @@ Opaque builtin_strength_reduction.
   destruct (eval_static_builtin_function ae am rm bf args) as [a|] eqn:ES; auto.
   destruct (const_for_result a) as [cop|] eqn:CR; auto.
   clear DFL. simpl in H1; red in H1; rewrite LK in H1; inv H1.
-  exploit const_for_result_correct; eauto. 
+  exploit const_for_result_correct; eauto.
   eapply eval_static_builtin_function_sound; eauto.
   intros (v' & A & B).
   left; econstructor; econstructor; split.
@@ -476,7 +476,7 @@ Opaque builtin_strength_reduction.
   generalize (cond_strength_reduction_correct bc ae rs m EM cond args (aregs ae args) (eq_refl _)).
   destruct (cond_strength_reduction cond args (aregs ae args)) as [cond' args'].
   intros EV1 TCODE.
-  left; exists O; exists (State s' (transf_function (romem_for prog) f) (Vptr sp0 Ptrofs.zero) (if b then ifso else ifnot) rs' m'); split.
+  left; exists O; exists (State s' (transf_function (romem_for prog) f) (Vptr (fresh_block sps) Ptrofs.zero) (if b then ifso else ifnot) rs' m'); split.
   destruct (resolve_branch ac) eqn: RB.
   assert (b0 = b) by (eapply resolve_branch_sound; eauto). subst b0.
   destruct b; eapply exec_Inop; eauto.
@@ -500,7 +500,7 @@ Opaque builtin_strength_reduction.
     rewrite H1. auto. }
   assert (rs'#arg = Vint n).
   { generalize (REGS arg). rewrite H0. intros LD; inv LD; auto. }
-  left; exists O; exists (State s' (transf_function (romem_for prog) f) (Vptr sp0 Ptrofs.zero) pc' rs' m'); split.
+  left; exists O; exists (State s' (transf_function (romem_for prog) f) (Vptr (fresh_block sps) Ptrofs.zero) pc' rs' m'); split.
   destruct A. eapply exec_Ijumptable; eauto. eapply exec_Inop; eauto.
   eapply match_states_succ; eauto.
 

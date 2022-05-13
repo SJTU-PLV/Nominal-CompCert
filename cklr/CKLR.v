@@ -65,11 +65,11 @@ Record cklr :=
       Monotonic match_stbls (wacc ++> subrel);
     match_stbls_proj w:
       Related (match_stbls w) (Genv.match_stbls (mi w)) subrel;
-    match_stbls_nextblock w se1 se2 m1 m2:
+    match_stbls_support w se1 se2 m1 m2:
       match_stbls w se1 se2 ->
       match_mem w m1 m2 ->
-      Pos.le (Genv.genv_next se1) (Mem.nextblock m1) ->
-      Pos.le (Genv.genv_next se2) (Mem.nextblock m2);
+      Mem.sup_include (Genv.genv_sup se1) (Mem.support m1) ->
+      Mem.sup_include (Genv.genv_sup se2) (Mem.support m2);
 
     cklr_alloc:
       Monotonic
@@ -167,11 +167,11 @@ Record cklr :=
       Mem.perm m2 b2 ofs2 k p ->
       Mem.perm m1 b1 ofs1 k p \/ ~Mem.perm m1 b1 ofs1 Max Nonempty;
 
-    cklr_nextblock_incr w m1 m2 m1' m2':
+    cklr_sup_include w m1 m2 m1' m2':
       match_mem w m1 m2 ->
       (<> match_mem)%klr w m1' m2' ->
-      Ple (Mem.nextblock m1) (Mem.nextblock m1') <->
-      Ple (Mem.nextblock m2) (Mem.nextblock m2');
+      Mem.sup_include (Mem.support m1) (Mem.support m1') <->
+      Mem.sup_include (Mem.support m2) (Mem.support m2');
 
   }.
 

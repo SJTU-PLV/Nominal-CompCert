@@ -528,6 +528,20 @@ Definition do_ef_free
   | _ => None
   end.
 
+Global Program Instance decide_block(x y:block) : Decidable (x<>y) :={
+  Decidable_witness := negb (eq_block x y);
+  Decidable_spec := _
+}.
+Next Obligation.
+split.
+intro. destruct (eq_block x y).
+- simpl in  H. congruence.
+-  auto.
+- intro. destruct (eq_block x y).
++ simpl. congruence.
++ auto.
+Qed.
+
 Definition memcpy_args_ok
   (sz al: Z) (bdst: block) (odst: Z) (bsrc: block) (osrc: Z) : Prop :=
       (al = 1 \/ al = 2 \/ al = 4 \/ al = 8)

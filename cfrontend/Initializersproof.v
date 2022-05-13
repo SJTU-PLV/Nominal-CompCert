@@ -323,7 +323,7 @@ Qed.
   [Vptr b ofs] where [Genv.find_symbol ge id = Some b]. *)
 
 Definition inj (b: block) :=
-  match Genv.find_symbol ge b with
+  match Genv.find_symbol ge (block_to_ident b) with
   | Some b' => Some (b', 0)
   | None => None
   end.
@@ -457,8 +457,8 @@ Proof.
   induction 1; intros v' CV; simpl in CV; try (monadInv CV).
   (* var local *)
   split; auto. unfold empty_env in H. rewrite PTree.gempty in H. congruence.
-  (* var_global *)
-  split; auto. econstructor. unfold inj. rewrite H0. eauto. auto.
+  split. auto.
+  econstructor. unfold inj. rewrite ident_to_block_to_ident. rewrite H0. eauto. auto.
   (* deref *)
   split; eauto.
   (* field struct *)
@@ -496,6 +496,103 @@ Proof.
   intros. exploit eval_simple_steps; eauto. eapply constval_simple; eauto.
   intros [A [B C]]. intuition. eapply constval_rvalue; eauto.
 Qed.
+
+(*
+(** * Relational specification of the translation of initializers *)
+
+Definition tr_padding (frm to: Z) : list init_data :=
+  if zlt frm to then Init_space (to - frm) :: nil else nil.
+
+Inductive tr_init: type -> initializer -> list init_data -> Prop :=
+  | tr_init_sgl: forall ty a d,
+      transl_init_single ge ty a = OK d ->
+      tr_init ty (Init_single a) (d :: nil)
+  | tr_init_arr: forall tyelt nelt attr il d,
+      tr_init_array tyelt il (Z.max 0 nelt) d ->
+      tr_init (Tarray tyelt nelt attr) (Init_array il) d
+  | tr_init_str: forall id attr il co d,
+      lookup_composite ge id = OK co -> co_su co = Struct ->
+      tr_init_struct (Tstruct id attr) (co_members co) il 0 d ->
+      tr_init (Tstruct id attr) (Init_struct il) d
+  | tr_init_uni: forall id attr f i1 co ty1 d,
+      lookup_composite ge id = OK co -> co_su co = Union -> field_type f (co_members co) = OK ty1 ->
+      tr_init ty1 i1 d ->
+      tr_init (Tunion id attr) (Init_union f i1)
+              (d ++ tr_padding (sizeof ge ty1) (sizeof ge (Tunion id attr)))
+
+with tr_init_array: type -> initializer_list -> Z -> list init_data -> Prop :=
+  | tr_init_array_nil_0: forall ty,
+      tr_init_array ty Init_nil 0 nil
+  | tr_init_array_nil_pos: forall ty sz,
+      0 < sz ->
+      tr_init_array ty Init_nil sz (Init_space (sz * sizeof ge ty) :: nil)
+  | tr_init_array_cons: forall ty i il sz d1 d2,
+      tr_init ty i d1 -> tr_init_array ty il (sz - 1) d2 ->
+      tr_init_array ty (Init_cons i il) sz (d1 ++ d2)
+
+with tr_init_struct: type -> members -> initializer_list -> Z -> list init_data -> Prop :=
+  | tr_init_struct_nil: forall ty pos,
+      tr_init_struct ty nil Init_nil pos (tr_padding pos (sizeof ge ty))
+  | tr_init_struct_cons: forall ty f1 ty1 fl i1 il pos d1 d2,
+      let pos1 := align pos (alignof ge ty1) in
+      tr_init ty1 i1 d1 ->
+      tr_init_struct ty fl il (pos1 + sizeof ge ty1) d2 ->
+      tr_init_struct ty ((f1, ty1) :: fl) (Init_cons i1 il)
+                     pos (tr_padding pos pos1 ++ d1 ++ d2).
+
+Lemma transl_padding_spec:
+  forall frm to k, padding frm to k = rev (tr_padding frm to) ++ k.
+Proof.
+  unfold padding, tr_padding; intros. 
+  destruct (zlt frm to); auto.
+Qed.
+
+Lemma transl_init_rec_spec:
+  forall i ty k res,
+  transl_init_rec ge ty i k = OK res ->
+  exists d, tr_init ty i d /\ res = rev d ++ k
+
+with transl_init_array_spec:
+  forall il ty sz k res,
+  transl_init_array ge ty il sz k = OK res ->
+  exists d, tr_init_array ty il sz d /\ res = rev d ++ k
+
+with transl_init_struct_spec:
+  forall il ty fl pos k res,
+  transl_init_struct ge ty fl il pos k = OK res ->
+  exists d, tr_init_struct ty fl il pos d /\ res = rev d ++ k.
+
+Proof.
+Local Opaque sizeof.
+- destruct i; intros until res; intros TR; simpl in TR.
++ monadInv TR. exists (x :: nil); split; auto. constructor; auto.
+
++ destruct ty; try discriminate.
+  destruct (transl_init_array_spec _ _ _ _ _ TR) as (d & A & B).
+  exists d; split; auto. constructor; auto.
++ destruct ty; try discriminate. monadInv TR. destruct (co_su x) eqn:SU; try discriminate.
+  destruct (transl_init_struct_spec _ _ _ _ _ _ EQ0) as (d & A & B).
+  exists d; split; auto. econstructor; eauto.
++ destruct ty; try discriminate.
+  monadInv TR. destruct (co_su x) eqn:SU; monadInv EQ0.
+  destruct (transl_init_rec_spec _ _ _ _ EQ0) as (d & A & B).
+  exists (d ++ tr_padding (sizeof ge x0) (sizeof ge (Tunion i0 a))); split.
+  econstructor; eauto.
+  rewrite rev_app_distr, app_ass, B. apply transl_padding_spec. 
+
+- destruct il; intros until res; intros TR; simpl in TR.
++ destruct (zeq sz 0). 
+  inv TR. exists (@nil init_data); split; auto. constructor.
+  destruct (zle 0 sz).
+  inv TR. econstructor; split. constructor. lia. auto.
+  discriminate.
++ monadInv TR. 
+  destruct (transl_init_rec_spec _ _ _ _ EQ) as (d1 & A1 & B1).
+  destruct (transl_init_array_spec _ _ _ _ _ EQ0) as (d2 & A2 & B2).
+  exists (d1 ++ d2); split. econstructor; eauto. 
+  subst res x. rewrite rev_app_distr, app_ass. auto.
+=======
+*)
 
 (** * Correctness of operations over the initialization state *)
 
@@ -1172,14 +1269,14 @@ Proof.
   destruct f1; inv EQ0; simpl in A; inv A; auto.
 - (* pointer *)
   unfold inj in H.
-  assert (X: data = Init_addrof b1 ofs1 /\ chunk = Mptr).
+  assert (data = Init_addrof (block_to_ident b1) ofs1 /\ chunk = Mptr).
   { remember Archi.ptr64 as ptr64.
     destruct ty; inversion EQ0.
     - destruct i; monadInv H2. unfold Mptr. rewrite <- Heqptr64. inv A; auto.
     - monadInv H2. unfold Mptr. rewrite <- Heqptr64. inv A; auto.
     - inv A; auto.
   }
-  destruct X; subst. destruct (Genv.find_symbol ge b1); inv H.
+  destruct H1; subst. destruct (Genv.find_symbol ge (block_to_ident b1)); inv H.
   rewrite Ptrofs.add_zero in H0. auto.
 - (* undef *)
   discriminate.
@@ -1348,3 +1445,4 @@ Proof.
   { change sz with s0.(total_size). eapply total_size_transl_init_rec; eauto. }
   rewrite <- H4. eapply init_data_list_of_state_correct; eauto; rewrite H4; auto.
 Qed.
+

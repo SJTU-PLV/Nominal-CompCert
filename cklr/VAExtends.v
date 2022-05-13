@@ -46,12 +46,12 @@ Record vaext_incr (w w' : vaext_world) : Prop :=
     vaext_incr_se :
       vaext_se w = vaext_se w';
     vaext_incr_bc b :
-      Plt b (Mem.nextblock (vaext_m1 w)) ->
+      sup_In b (Mem.support (vaext_m1 w)) ->
       vaext_bc w' b = vaext_bc w b;
     vaext_incr_nextblock :
-      Pos.le (Mem.nextblock (vaext_m1 w)) (Mem.nextblock (vaext_m1 w'));
+      Mem.sup_include (Mem.support (vaext_m1 w)) (Mem.support (vaext_m1 w'));
     vaext_incr_load b ofs n bytes :
-      Plt b (Mem.nextblock (vaext_m1 w)) ->
+      sup_In b (Mem.support (vaext_m1 w)) ->
       vaext_bc w b = BCinvalid ->
       n >= 0 ->
       Mem.loadbytes (vaext_m1 w') b ofs n = Some bytes ->
@@ -62,13 +62,13 @@ Instance vaext_incr_preo:
   PreOrder vaext_incr.
 Proof.
   split.
-  - intros [se bc m H]. constructor; cbn; auto using Pos.le_refl.
+  - intros [se bc m H]. constructor; cbn; eauto.
   - intros [se1 bc1 m1 H1] [se2 bc2 m2 H2] [se3 bc3 m3 H3].
     intros [Hse12 Hbc12 Hnb12 Hld12] [Hse23 Hbc23 Hnb23 Hld23]; cbn in *.
     constructor; cbn in *; try (etransitivity; eauto).
-    + rewrite Hbc23; auto. extlia.
-    + eapply Hld12; auto. eapply Hld23; auto.
-      * extlia.
+    + rewrite Hbc23; eauto.
+    + eauto.
+    + eapply Hld12; eauto. eapply Hld23; eauto.
       * rewrite Hbc12; auto.
 Qed.
 
@@ -141,23 +141,23 @@ Qed.
 
 Next Obligation.
   destruct H0. inv H.
-  erewrite <- Mem.mext_next; eauto.
+  erewrite <- Mem.mext_sup; eauto.
 Qed.
 
 (** Alloc *)
 
 Program Definition alloc_bc (b : block) (bc : block_classification) :=
   {|
-    bc_img x := if Pos.eqb x b then BCother else bc x;
+    bc_img x := if eq_block x b then BCother else bc x;
   |}.
 Next Obligation.
-  destruct Pos.eqb; try discriminate.
-  destruct Pos.eqb; try discriminate.
+  destruct eq_block; try discriminate.
+  destruct eq_block; try discriminate.
   eapply bc_stack; eauto.
 Qed.
 Next Obligation.
-  destruct Pos.eqb; try discriminate.
-  destruct Pos.eqb; try discriminate.
+  destruct eq_block; try discriminate.
+  destruct eq_block; try discriminate.
   eapply bc_glob; eauto.
 Qed.
 
@@ -166,12 +166,11 @@ Lemma alloc_bc_glob bc m am x id :
   bc x = BCglob id <-> alloc_bc (Mem.nextblock m) bc x = BCglob id.
 Proof.
   intros Hm. cbn.
-  destruct Pos.eqb eqn:Hx; try reflexivity.
-  apply Pos.eqb_eq in Hx; subst.
+  destruct eq_block; try reflexivity; subst.
   split; try discriminate.
   intros Hb; exfalso.
   exploit mmatch_below; eauto. rewrite Hb; discriminate.
-  extlia.
+  apply freshness.
 Qed.
 
 Lemma alloc_bc_incr bc m am :
@@ -179,9 +178,9 @@ Lemma alloc_bc_incr bc m am :
   bc_incr bc (alloc_bc (Mem.nextblock m) bc).
 Proof.
   intros Hm x VALID. cbn.
-  destruct Pos.eqb eqn:Hx; try reflexivity.
-  apply Pos.eqb_eq in Hx; subst.
-  exploit mmatch_below; eauto. extlia.
+  destruct eq_block; try reflexivity; subst.
+  exploit mmatch_below; eauto.
+  intro. apply freshness in H. inv H.
 Qed.
 
 Lemma alloc_mmatch m lo hi m' b bc am :
@@ -194,7 +193,7 @@ Proof.
   rewrite (Mem.alloc_result m lo hi m' b); auto.
   split.
   - cbn. intros x Hx.
-    destruct Pos.eqb; try discriminate.
+    destruct eq_block; try discriminate.
     eelim Hbc; eauto.
   - intros id ab x Hx Hab.
     eapply alloc_bc_glob in Hx; eauto.
@@ -204,8 +203,8 @@ Proof.
     eapply mmatch_below; eauto. congruence.
   - intros x NOSTK VALID.
     eapply smatch_incr; eauto using alloc_bc_incr.
-    cbn in *. destruct Pos.eqb eqn:Hx.
-    + apply Pos.eqb_eq in Hx; subst.
+    cbn in *. destruct eq_block.
+    + subst.
       split; intros.
       * erewrite <- Mem.alloc_result in H; eauto.
         erewrite (Mem.load_alloc_same m lo hi m' b Hm' chunk ofs v); eauto.
@@ -219,9 +218,8 @@ Proof.
       eapply mmatch_below; eauto.
   - intros x VALID.
     eapply smatch_incr; eauto using alloc_bc_incr.
-    cbn in *. destruct Pos.eqb eqn:Hx.
-    + apply Pos.eqb_eq in Hx; subst.
-      split; intros.
+    cbn in *. destruct eq_block; subst.
+    + split; intros.
       * erewrite <- Mem.alloc_result in H; eauto.
         erewrite (Mem.load_alloc_same m lo hi m' b Hm' chunk ofs v); eauto.
         constructor.
@@ -233,13 +231,13 @@ Proof.
       erewrite <- Mem.loadbytes_alloc_unchanged; eauto.
       eapply mmatch_below; eauto.
   - intros x Hx. cbn in Hx.
-    rewrite (Mem.nextblock_alloc m lo hi m' b); auto.
-    destruct Pos.eqb eqn:Hxeq.
-    + apply Pos.eqb_eq in Hxeq. extlia.
-    + etransitivity.
-      * eapply mmatch_below; eauto.
-      * extlia.
-Qed. 
+    rewrite (Mem.support_alloc m lo hi m' b); auto.
+    destruct eq_block.
+    + subst. unfold Mem.nextblock. eauto.
+    + assert (sup_In x (Mem.support m)).
+      eapply mmatch_below; eauto.
+      apply Mem.sup_include_incr in H. auto.
+Qed.
 
 Next Obligation.
   destruct 1. intros lo hi.
@@ -258,22 +256,21 @@ Next Obligation.
       intros cu Hcu.
       eapply romatch_exten; eauto using romatch_alloc, mmatch_below.
       intros. symmetry. eapply alloc_bc_glob; eauto.
-    - intros x. cbn. destruct Pos.eqb; eauto. discriminate.
+    - intros x. cbn. destruct eq_block; eauto. discriminate.
   }
   exists (vaextw se (alloc_bc b bc) m1' H1). split.
   - constructor; cbn; auto.
     + rewrite (Mem.alloc_result m1 lo hi m1' b); auto.
-      intros. destruct Pos.eqb eqn:Heq; auto.
-      apply Pos.eqb_eq in Heq. extlia.
-    + rewrite (Mem.nextblock_alloc m1 lo hi m1' b); auto.
-      extlia.
+      intros. destruct eq_block; auto. subst.
+      apply freshness in H2. inv H2.
+    + rewrite (Mem.support_alloc m1 lo hi m1' b); auto.
     + intros.
       erewrite <- Mem.loadbytes_alloc_unchanged; eauto.
   - rewrite Hm2'. repeat rstep.
     + constructor.
       edestruct (Mem.alloc_extends m1 m2 lo hi b m1' lo hi); eauto; extlia.
     + red. cbn. unfold inj_of_bc. cbn.
-      rewrite Pos.eqb_refl. reflexivity.
+      rewrite pred_dec_true; reflexivity.
 Qed.
 
 (** Free *)
@@ -291,9 +288,9 @@ Next Obligation.
     + eapply mmatch_free; eauto.
     + intros cu Hcu. eapply romatch_free; eauto.
   }
-  exists (vaextw _ _ _ H'). split. 
+  exists (vaextw _ _ _ H'). split.
   - constructor; cbn; auto.
-    + rewrite (Mem.nextblock_free m1 b lo hi m1'); eauto. reflexivity.
+    + rewrite (Mem.support_free m1 b lo hi m1'); eauto.
     + intros. red in Hptr; cbn in Hptr.
       destruct (Pos.eq_dec b0 b); subst.
       * inv Hptr. inv H6. unfold inj_of_bc in H7. rewrite H2 in H7. discriminate.
@@ -366,7 +363,7 @@ Next Obligation.
 
   exists (vaextw _ _ _ H'). split.
   - constructor; cbn; auto.
-    + apply Mem.nextblock_store in Hm1'. rewrite Hm1'. reflexivity.
+    + apply Mem.support_store in Hm1'. rewrite Hm1'. eauto.
     + intros.
       destruct (Pos.eq_dec b0 b); subst.
       * dest_inj_of_bc. cbn in H2. contradiction.
@@ -435,7 +432,7 @@ Next Obligation.
   edestruct Mem.storebytes_mapped_inject as (m2' & Hm2' & Hinj'); eauto.
   rewrite Z.add_0_r in Hm2'. rewrite Hm2'.
   constructor.
-  
+
   assert (H' : vaext_wf se bc m1').
   {
     destruct H.
@@ -443,10 +440,10 @@ Next Obligation.
     - eapply mmatch_inj_top; eauto.
     - intros cu Hcu. eapply romatch_storebytes; eauto.
   }
-  
+
   exists (vaextw _ _ _ H'). split.
   - constructor; cbn; auto.
-    + apply Mem.nextblock_storebytes in Hm1'. rauto.
+    + apply Mem.support_storebytes in Hm1'. rewrite Hm1'. eauto.
     + intros.
       destruct (Pos.eq_dec b0 b); subst.
       * dest_inj_of_bc. contradiction.
@@ -526,7 +523,7 @@ Qed.
 (** nextblock incr *)
 Next Obligation.
   inv H. destruct H0 as (?&?&?). inv H0.
-  inv H6. inv H9. split; congruence.
+  inv H6. inv H9. rewrite mext_sup, mext_sup0. reflexivity.
 Qed.
 
 (** * Other properties *)
@@ -571,7 +568,7 @@ Proof.
       exists (vaextw se bc' m' Hw'). split.
       * constructor; auto.
       * constructor; cbn; auto.
-        -- apply val_inject_id in H18. 
+        -- apply val_inject_id in H18.
            eapply Mem.val_inject_lessdef_compose; eauto.
            eapply vmatch_inj; eauto.
         -- constructor; auto.
