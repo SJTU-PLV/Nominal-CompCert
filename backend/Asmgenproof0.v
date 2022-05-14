@@ -789,7 +789,7 @@ Qed.
 
 Section STRAIGHTLINE.
 
-Variable init_nb: block.
+Variable init_sup: sup.
 Variable ge: Genv.symtbl.
 Variable fn: function.
 
@@ -804,12 +804,12 @@ Inductive exec_straight: code -> regset -> mem ->
                          code -> regset -> mem -> Prop :=
   | exec_straight_one:
       forall i1 c rs1 m1 rs2 m2,
-      exec_instr init_nb ge fn i1 rs1 m1 = Next rs2 m2 ->
+      exec_instr init_sup ge fn i1 rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
       exec_straight (i1 :: c) rs1 m1 c rs2 m2
   | exec_straight_step:
       forall i c rs1 m1 rs2 m2 c' rs3 m3,
-      exec_instr init_nb ge fn i rs1 m1 = Next rs2 m2 ->
+      exec_instr init_sup ge fn i rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
       exec_straight c rs2 m2 c' rs3 m3 ->
       exec_straight (i :: c) rs1 m1 c' rs3 m3.
@@ -827,8 +827,8 @@ Qed.
 
 Lemma exec_straight_two:
   forall i1 i2 c rs1 m1 rs2 m2 rs3 m3,
-  exec_instr init_nb ge fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr init_nb ge fn i2 rs2 m2 = Next rs3 m3 ->
+  exec_instr init_sup ge fn i1 rs1 m1 = Next rs2 m2 ->
+  exec_instr init_sup ge fn i2 rs2 m2 = Next rs3 m3 ->
   rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
   rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
   exec_straight (i1 :: i2 :: c) rs1 m1 c rs3 m3.
@@ -839,9 +839,9 @@ Qed.
 
 Lemma exec_straight_three:
   forall i1 i2 i3 c rs1 m1 rs2 m2 rs3 m3 rs4 m4,
-  exec_instr init_nb ge fn i1 rs1 m1 = Next rs2 m2 ->
-  exec_instr init_nb ge fn i2 rs2 m2 = Next rs3 m3 ->
-  exec_instr init_nb ge fn i3 rs3 m3 = Next rs4 m4 ->
+  exec_instr init_sup ge fn i1 rs1 m1 = Next rs2 m2 ->
+  exec_instr init_sup ge fn i2 rs2 m2 = Next rs3 m3 ->
+  exec_instr init_sup ge fn i3 rs3 m3 = Next rs4 m4 ->
   rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
   rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
   rs4#PC = Val.offset_ptr rs3#PC Ptrofs.one ->
@@ -857,14 +857,14 @@ End STRAIGHTLINE.
   (predicate [exec_straight]) correspond to correct Asm executions. *)
 
 Lemma exec_straight_steps_1:
-  forall init_nb (ge: genv) fn c rs m c' rs' m',
-  exec_straight init_nb ge fn c rs m c' rs' m' ->
+  forall init_sup (ge: genv) fn c rs m c' rs' m',
+  exec_straight init_sup ge fn c rs m c' rs' m' ->
   list_length_z (fn_code fn) <= Ptrofs.max_unsigned ->
   forall b ofs,
   rs#PC = Vptr b ofs ->
   Genv.find_funct_ptr ge b = Some (Internal fn) ->
   code_tail (Ptrofs.unsigned ofs) (fn_code fn) c ->
-  plus (step init_nb) ge (State rs m true) E0 (State rs' m' true).
+  plus (step init_sup) ge (State rs m true) E0 (State rs' m' true).
 Proof.
   induction 1; intros.
   apply plus_one.
@@ -881,8 +881,8 @@ Proof.
 Qed.
 
 Lemma exec_straight_steps_2:
-  forall init_nb (ge: genv) fn c rs m c' rs' m',
-  exec_straight init_nb ge fn c rs m c' rs' m' ->
+  forall init_sup (ge: genv) fn c rs m c' rs' m',
+  exec_straight init_sup ge fn c rs m c' rs' m' ->
   list_length_z (fn_code fn) <= Ptrofs.max_unsigned ->
   forall b ofs,
   rs#PC = Vptr b ofs ->
@@ -905,7 +905,7 @@ Qed.
 
 Section STRAIGHTLINE_OPT.
 
-Variable init_nb: block.
+Variable init_sup: sup.
 Variable ge: Genv.symtbl.
 Variable fn: function.
 
@@ -913,14 +913,14 @@ Inductive exec_straight_opt: code -> regset -> mem -> code -> regset -> mem -> P
   | exec_straight_opt_refl: forall c rs m,
       exec_straight_opt c rs m c rs m
   | exec_straight_opt_intro: forall c1 rs1 m1 c2 rs2 m2,
-      exec_straight init_nb ge fn c1 rs1 m1 c2 rs2 m2 ->
+      exec_straight init_sup ge fn c1 rs1 m1 c2 rs2 m2 ->
       exec_straight_opt c1 rs1 m1 c2 rs2 m2.
 
 Lemma exec_straight_opt_left:
   forall c3 rs3 m3 c1 rs1 m1 c2 rs2 m2,
-  exec_straight init_nb ge fn c1 rs1 m1 c2 rs2 m2 ->
+  exec_straight init_sup ge fn c1 rs1 m1 c2 rs2 m2 ->
   exec_straight_opt c2 rs2 m2 c3 rs3 m3 ->
-  exec_straight init_nb ge fn c1 rs1 m1 c3 rs3 m3.
+  exec_straight init_sup ge fn c1 rs1 m1 c3 rs3 m3.
 Proof.
   destruct 2; intros. auto. eapply exec_straight_trans; eauto.
 Qed.
@@ -928,18 +928,18 @@ Qed.
 Lemma exec_straight_opt_right:
   forall c3 rs3 m3 c1 rs1 m1 c2 rs2 m2,
   exec_straight_opt c1 rs1 m1 c2 rs2 m2 ->
-  exec_straight init_nb ge fn c2 rs2 m2 c3 rs3 m3 ->
-  exec_straight init_nb ge fn c1 rs1 m1 c3 rs3 m3.
+  exec_straight init_sup ge fn c2 rs2 m2 c3 rs3 m3 ->
+  exec_straight init_sup ge fn c1 rs1 m1 c3 rs3 m3.
 Proof.
   destruct 1; intros. auto. eapply exec_straight_trans; eauto.
 Qed.
 
 Lemma exec_straight_opt_step:
   forall i c rs1 m1 rs2 m2 c' rs3 m3,
-  exec_instr init_nb ge fn i rs1 m1 = Next rs2 m2 ->
+  exec_instr init_sup ge fn i rs1 m1 = Next rs2 m2 ->
   rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
   exec_straight_opt c rs2 m2 c' rs3 m3 ->
-  exec_straight init_nb ge fn (i :: c) rs1 m1 c' rs3 m3.
+  exec_straight init_sup ge fn (i :: c) rs1 m1 c' rs3 m3.
 Proof.
   intros. inv H1.
 - apply exec_straight_one; auto.
@@ -948,7 +948,7 @@ Qed.
 
 Lemma exec_straight_opt_step_opt:
   forall i c rs1 m1 rs2 m2 c' rs3 m3,
-  exec_instr init_nb ge fn i rs1 m1 = Next rs2 m2 ->
+  exec_instr init_sup ge fn i rs1 m1 = Next rs2 m2 ->
   rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
   exec_straight_opt c rs2 m2 c' rs3 m3 ->
   exec_straight_opt (i :: c) rs1 m1 c' rs3 m3.
@@ -964,7 +964,7 @@ Section MATCH_STACK.
 
 Variable ge: Mach.genv.
 Variable init_rs: regset.
-Variable init_nb: block.
+Variable init_sup: sup.
 
 (** We maintain the invariant that successive stack frames have
   increasing block identifiers. This allows us to prove that a new
@@ -972,22 +972,20 @@ Variable init_nb: block.
   the top-level stack block which discriminates between Asm final and
   at_external states). *)
 
-Inductive block_lt: val -> val -> Prop :=
-  | block_lt_intro b1 ofs1 b2 ofs2:
-      Pos.lt b1 b2 ->
-      block_lt (Vptr b1 ofs1) (Vptr b2 ofs2).
-
-Inductive match_stack (bound: block): list Mach.stackframe -> Prop :=
+Inductive match_stack (bound: sup): list Mach.stackframe -> Prop :=
   | match_stack_nil:
       init_rs#SP <> Vundef ->
       init_rs#RA <> Vundef ->
-      valid_blockv init_nb init_rs#SP ->
-      Ple init_nb bound ->
+      (* problem here? init_sup used as support
+        valid_blockv init_sup init_rs#SP ->
+      Ple init_sup bound -> *)
+      valid_blockv init_sup init_rs#SP ->
+      Mem.sup_include init_sup bound ->
       match_stack bound (Stackbase init_rs#SP init_rs#RA :: nil)
   | match_stack_cons: forall fb sp ra c s f tf tc,
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       transl_code_at_pc ge ra fb f c false tf tc ->
-      inner_sp init_nb sp = Some true ->
+      inner_sp init_sup sp = Some true ->
       valid_blockv bound sp ->
       match_stack bound s ->
       match_stack bound (Stackframe (Vptr fb Ptrofs.zero) sp ra c :: s).
@@ -1038,20 +1036,21 @@ Proof.
   intros. inv H0. auto. exploit parent_ra_def; eauto. tauto.
 Qed.
 
-Lemma match_stack_nextblock:
+Lemma match_stack_support:
   forall b s,
-  match_stack b s -> Ple init_nb b.
+  match_stack b s -> Mem.sup_include init_sup b.
 Proof.
   induction 1; auto.
 Qed.
 
 Lemma match_stack_incr_bound:
   forall b b' s,
-  Ple b b' -> match_stack b s -> match_stack b' s.
+  Mem.sup_include b b' -> match_stack b s -> match_stack b' s.
 Proof.
   intros b b' s Hb Hs. induction Hs.
-  - constructor; auto. extlia.
+  - constructor; auto. inv H1. eauto.
   - econstructor; eauto using valid_blockv_nextblock.
 Qed.
 
 End MATCH_STACK.
+(*TODO : change name of lemmas in Asmgenproof about support/nextblock*)

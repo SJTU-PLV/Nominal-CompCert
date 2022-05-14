@@ -70,4 +70,4 @@ Proof.
     inversion H0; auto.
   - contradiction.
   - eapply fsim_simulation; eauto.
-Admitted.
+Qed.

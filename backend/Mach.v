@@ -696,21 +696,21 @@ Qed.
   This version of [valid_blockv] forces the value to be both defined,
   and a [Vptr] value. We may want to switch back to a characterization
   where non-pointer values are allowed as well, so that [Vnullptr]
-  qualifies. [Vnullptr] which is a [Vlint]/[Vlong] null value used in
+  qualifies. [Vnullptr] which is a [Vint]/[Vlong] null value used in
   the original Compcert semantics as the initial stack pointer. *)
 
-Inductive valid_blockv (nb: block): val -> Prop :=
+Inductive valid_blockv (s: sup): val -> Prop :=
   | valid_blockv_intro b ofs:
-      Pos.lt b nb ->
-      valid_blockv nb (Vptr b ofs).
+      sup_In b s ->
+      valid_blockv s (Vptr b ofs).
 
-Lemma valid_blockv_nextblock nb nb' v:
-  valid_blockv nb v ->
-  Ple nb nb' ->
-  valid_blockv nb' v.
+Lemma valid_blockv_nextblock s s' v:
+  valid_blockv s v ->
+  Mem.sup_include s s' ->
+  valid_blockv s' v.
 Proof.
   destruct 1. constructor.
-  unfold Mem.valid_block in *. extlia.
+  unfold Mem.valid_block in *. eauto.
 Qed.
 
 (** * Leaf functions *)

@@ -64,7 +64,7 @@ Qed.
 
 Section WITH_WORLD.
 Variable init_rs: regset.
-Variable init_nb: block.
+Variable init_sup: sup.
 
 (** * Properties of control flow *)
 
@@ -79,8 +79,8 @@ Qed.
 Lemma exec_straight_exec:
   forall fb f c ep tf tc c' rs m rs' m',
   transl_code_at_pc ge (rs PC) fb f c ep tf tc ->
-  exec_straight init_nb tge tf tc rs m c' rs' m' ->
-  plus (step init_nb) tge (State rs m true) E0 (State rs' m' true).
+  exec_straight init_sup tge tf tc rs m c' rs' m' ->
+  plus (step init_sup) tge (State rs m true) E0 (State rs' m' true).
 Proof.
   intros. inv H.
   eapply exec_straight_steps_1; eauto.
@@ -92,7 +92,7 @@ Lemma exec_straight_at:
   forall fb f c ep tf tc c' ep' tc' rs m rs' m',
   transl_code_at_pc ge (rs PC) fb f c ep tf tc ->
   transl_code f c' ep' = OK tc' ->
-  exec_straight init_nb tge tf tc rs m tc' rs' m' ->
+  exec_straight init_sup tge tf tc rs m tc' rs' m' ->
   transl_code_at_pc ge (rs' PC) fb f c' ep' tf tc'.
 Proof.
   intros. inv H.
@@ -380,9 +380,9 @@ Qed.
 Inductive match_states: Mach.state -> Asm.state -> Prop :=
   | match_states_intro:
       forall s fb sp c ep ms m m' rs f tf tc
-        (STACKS: match_stack ge init_rs init_nb (Mem.nextblock m') s)
-        (SPVB: valid_blockv (Mem.nextblock m') sp)
-        (SPLT: inner_sp init_nb sp = Some true)
+        (STACKS: match_stack ge init_rs init_sup (Mem.support m') s)
+        (SPVB: valid_blockv (Mem.support m') sp)
+        (SPLT: inner_sp init_sup sp = Some true)
         (FIND: Genv.find_funct_ptr ge fb = Some (Internal f))
         (MEXT: Mem.extends m m')
         (AT: transl_code_at_pc ge (rs PC) fb f c ep tf tc)
@@ -392,7 +392,7 @@ Inductive match_states: Mach.state -> Asm.state -> Prop :=
                    (Asm.State rs m' true)
   | match_states_call:
       forall s vf ms m m' rs
-        (STACKS: match_stack ge init_rs init_nb (Mem.nextblock m') s)
+        (STACKS: match_stack ge init_rs init_sup (Mem.support m') s)
         (MEXT: Mem.extends m m')
         (AG: agree ms (parent_sp s) rs)
         (ATPC: Val.lessdef vf (rs PC))
@@ -401,17 +401,17 @@ Inductive match_states: Mach.state -> Asm.state -> Prop :=
                    (Asm.State rs m' true)
   | match_states_return:
       forall s ms m m' rs live
-        (STACKS: match_stack ge init_rs init_nb (Mem.nextblock m') s)
+        (STACKS: match_stack ge init_rs init_sup (Mem.support m') s)
         (MEXT: Mem.extends m m')
         (AG: agree ms (parent_sp s) rs)
         (ATPC: rs PC = parent_ra s)
-        (LIVE: inner_sp init_nb rs#SP = Some live),
+        (LIVE: inner_sp init_sup rs#SP = Some live),
       match_states (Mach.Returnstate s ms m)
                    (Asm.State rs m' live).
 
-Lemma exec_instr_nextblock f i rs m rs' m' b:
-  exec_instr init_nb tge f i rs m = Next' rs' m' b ->
-  Ple (Mem.nextblock m) (Mem.nextblock m').
+Lemma exec_instr_support f i rs m rs' m' b:
+  exec_instr init_sup tge f i rs m = Next' rs' m' b ->
+  Mem.sup_include (Mem.support m) (Mem.support m').
 Proof.
   destruct i; simpl;
   try (unfold exec_load; destruct (Mem.loadv _ _ _));
@@ -423,43 +423,42 @@ Proof.
       | |- match ?x with _ => _ end = Next' _ _ _ -> _ =>
         let H := fresh in
         destruct x eqn:H;
-        try apply Mem.nextblock_free in H;
-        try apply Mem.nextblock_store in H;
-        try apply Mem.nextblock_alloc in H
+        try apply Mem.support_free in H;
+        try apply Mem.support_store in H;
+        try apply Mem.support_alloc in H
     end;
   inversion 1;
-  try (replace (Mem.nextblock m) with (Mem.nextblock m') by congruence);
-  try apply Ple_refl.
-  - replace (Mem.nextblock m') with (Pos.succ (Mem.nextblock m)) by congruence.
-    extlia.
+  try (replace (Mem.support m) with (Mem.support m') by congruence); eauto.
+  - replace (Mem.support m') with (Mem.sup_incr (Mem.support m)) by congruence.
+    eauto.
   - destruct zlt.
-    + apply Mem.nextblock_free in H1. rewrite <- H1. subst. reflexivity.
-    + inv H1. reflexivity.
+    + apply Mem.support_free in H1. rewrite <- H1. subst. eauto.
+    + inv H1. eauto.
 Qed.
 
-Lemma exec_straight_nextblock tf c rs m k rs' m':
-  exec_straight init_nb tge tf c rs m k rs' m' ->
-  valid_blockv (Mem.nextblock m) init_rs#SP ->
-  valid_blockv (Mem.nextblock m') init_rs#SP.
+Lemma exec_straight_support tf c rs m k rs' m':
+  exec_straight init_sup tge tf c rs m k rs' m' ->
+  valid_blockv (Mem.support m) init_rs#SP ->
+  valid_blockv (Mem.support m') init_rs#SP.
 Proof.
-  induction 1; eauto using valid_blockv_nextblock, exec_instr_nextblock.
+  induction 1; eauto using valid_blockv_nextblock, exec_instr_support.
 Qed.
 
 Lemma exec_straight_steps:
   forall s fb f rs1 i c ep tf tc m1' m2 m2' sp ms2,
-  match_stack ge init_rs init_nb (Mem.nextblock m2') s ->
+  match_stack ge init_rs init_sup (Mem.support m2') s ->
   Mem.extends m2 m2' ->
   Genv.find_funct_ptr ge fb = Some (Internal f) ->
   transl_code_at_pc ge (rs1 PC) fb f (i :: c) ep tf tc ->
-  inner_sp init_nb sp = Some true ->
-  valid_blockv (Mem.nextblock m2') sp ->
+  inner_sp init_sup sp = Some true ->
+  valid_blockv (Mem.support m2') sp ->
   (forall k c (TR: transl_instr f i ep k = OK c),
    exists rs2,
-       exec_straight init_nb tge tf c rs1 m1' k rs2 m2'
+       exec_straight init_sup tge tf c rs1 m1' k rs2 m2'
     /\ agree ms2 sp rs2
     /\ (it1_is_parent ep i = true -> rs2#RAX = parent_sp s)) ->
   exists st',
-  plus (step init_nb) tge (State rs1 m1' true) E0 st' /\
+  plus (step init_sup) tge (State rs1 m1' true) E0 st' /\
   match_states (Mach.State s (Vptr fb Ptrofs.zero) sp c ms2 m2) st'.
 Proof.
   intros. inversion H2. subst. monadInv H9.
@@ -472,21 +471,21 @@ Qed.
 
 Lemma exec_straight_steps_goto:
   forall s fb f rs1 i c ep tf tc m1' m2 m2' sp ms2 lbl c',
-  match_stack ge init_rs init_nb (Mem.nextblock m2') s ->
+  match_stack ge init_rs init_sup (Mem.support m2') s ->
   Mem.extends m2 m2' ->
   Genv.find_funct_ptr ge fb = Some (Internal f) ->
   Mach.find_label lbl f.(Mach.fn_code) = Some c' ->
   transl_code_at_pc ge (rs1 PC) fb f (i :: c) ep tf tc ->
   it1_is_parent ep i = false ->
-  inner_sp init_nb sp = Some true ->
-  valid_blockv (Mem.nextblock m2') sp ->
+  inner_sp init_sup sp = Some true ->
+  valid_blockv (Mem.support m2') sp ->
   (forall k c (TR: transl_instr f i ep k = OK c),
    exists jmp, exists k', exists rs2,
-       exec_straight init_nb tge tf c rs1 m1' (jmp :: k') rs2 m2'
+       exec_straight init_sup tge tf c rs1 m1' (jmp :: k') rs2 m2'
     /\ agree ms2 sp rs2
-    /\ exec_instr init_nb tge tf jmp rs2 m2' = goto_label tf lbl rs2 m2') ->
+    /\ exec_instr init_sup tge tf jmp rs2 m2' = goto_label tf lbl rs2 m2') ->
   exists st',
-  plus (step init_nb) tge (State rs1 m1' true) E0 st' /\
+  plus (step init_sup) tge (State rs1 m1' true) E0 st' /\
   match_states (Mach.State s (Vptr fb Ptrofs.zero) sp c' ms2 m2) st'.
 Proof.
   intros. inversion H3. subst. monadInv H11.
@@ -510,13 +509,13 @@ Proof.
 Qed.
 
 Lemma alloc_sp_fresh m lo hi m' stk ofs:
-  Ple init_nb (Mem.nextblock m) ->
+  Mem.sup_include init_sup (Mem.support m) ->
   Mem.alloc m lo hi = (m', stk) ->
-  inner_sp init_nb (Vptr stk ofs) = Some true.
+  inner_sp init_sup (Vptr stk ofs) = Some true.
 Proof.
   intros Hm Hstk.
   apply Mem.alloc_result in Hstk. cbn. subst.
-  destruct plt; auto. extlia.
+  destruct Mem.sup_dec; auto. exfalso. eapply freshness; eauto.
 Qed.
 
 (** We need to show that, in the simulation diagram, we cannot
@@ -538,10 +537,10 @@ Definition measure (s: Mach.state) : nat :=
 
 Lemma nextblock_storev chunk m ptr v m':
   Mem.storev chunk m ptr v = Some m' ->
-  Mem.nextblock m' = Mem.nextblock m.
+  Mem.support m' = Mem.support m.
 Proof.
   destruct ptr; try discriminate. cbn.
-  apply Mem.nextblock_store.
+  apply Mem.support_store.
 Qed.
 
 (** This is the simulation diagram.  We prove it by case analysis on the Mach transition. *)
@@ -549,7 +548,7 @@ Qed.
 Theorem step_simulation:
   forall S1 t S2, Mach.step return_address_offset ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'),
-  (exists S2', plus (step init_nb) tge S1' t S2' /\ match_states S2 S2')
+  (exists S2', plus (step init_sup) tge S1' t S2' /\ match_states S2 S2')
   \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 S1')%nat.
 Proof.
   induction 1; intros; inv MS.
@@ -732,7 +731,7 @@ Opaque loadind.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
     simpl. eauto. traceEq.
     econstructor; eauto.
-    apply Mem.nextblock_free in E. congruence.
+    apply Mem.support_free in E. congruence.
     apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
     eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
     simpl. rewrite Pregmap.gss. rewrite <- (ireg_of_eq rf x0); eauto.
@@ -769,7 +768,7 @@ Opaque loadind.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
     simpl. eauto. traceEq.
     econstructor; eauto.
-    apply Mem.nextblock_free in E. congruence.
+    apply Mem.support_free in E. congruence.
     apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
     eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
 
@@ -785,8 +784,8 @@ Opaque loadind.
   eapply find_instr_tail; eauto.
   erewrite <- sp_val by eauto.
   eauto. eauto. eauto.
-  assert (Ple (Mem.nextblock m'0) (Mem.nextblock m2'))
-    by eauto using Mem.unchanged_on_nextblock.
+  assert (Mem.sup_include (Mem.support m'0) (Mem.support m2'))
+    by eauto using Mem.unchanged_on_support.
   econstructor; eauto.
   eapply match_stack_incr_bound; eauto.
   eapply valid_blockv_nextblock; eauto.
@@ -822,7 +821,7 @@ Opaque loadind.
   exploit eval_condition_lessdef. eapply preg_vals; eauto. eauto. eauto. intros EC.
   left; eapply exec_straight_steps_goto; eauto.
   intros. simpl in TR.
-  destruct (transl_cond_correct init_nb se tf cond args _ _ rs0 m' TR)
+  destruct (transl_cond_correct init_sup se tf cond args _ _ rs0 m' TR)
   as [rs' [A [B C]]].
   rewrite EC in B. destruct B as [B _].
   destruct (testcond_for_condition cond); simpl in *.
@@ -860,7 +859,7 @@ Opaque loadind.
 - (* Mcond false *)
   exploit eval_condition_lessdef. eapply preg_vals; eauto. eauto. eauto. intros EC.
   left; eapply exec_straight_steps; eauto. intros. simpl in TR.
-  destruct (transl_cond_correct init_nb se tf cond args _ _ rs0 m' TR)
+  destruct (transl_cond_correct init_sup se tf cond args _ _ rs0 m' TR)
   as [rs' [A [B C]]].
   rewrite EC in B. destruct B as [B _].
   destruct (testcond_for_condition cond); simpl in *.
@@ -918,7 +917,7 @@ Transparent destroyed_by_jumptable.
   inv AT.
   assert (NOOV: list_length_z tf.(fn_code) <= Ptrofs.max_unsigned).
     eapply transf_function_no_overflow; eauto.
-  assert (exists b, inner_sp init_nb (parent_sp s) = Some b) as [b LIVE].
+  assert (exists b, inner_sp init_sup (parent_sp s) = Some b) as [b LIVE].
     pose proof (parent_sp_ptr _ _ _ _ _ STACKS) as [? [? ->]].
     unfold inner_sp. eexists. eauto.
   rewrite (sp_val _ _ _ AG) in *. unfold load_stack in *.
@@ -958,7 +957,7 @@ Transparent destroyed_by_jumptable.
     simpl. rewrite (nextinstr_inv), Pregmap.gso, Pregmap.gss by discriminate.
     rewrite LIVE. eauto. traceEq.
     constructor; auto.
-    apply Mem.nextblock_free in E. congruence.
+    apply Mem.support_free in E. congruence.
     apply agree_set_other; auto. apply agree_nextinstr. apply agree_set_other; auto.
     eapply agree_change_sp; eauto. eapply parent_sp_def; eauto.
 
@@ -982,17 +981,19 @@ Transparent destroyed_by_jumptable.
   replace (chunk_of_type Tptr) with Mptr in F, P by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
   rewrite (sp_val _ _ _ AG) in F. rewrite F.
   rewrite ATLR. rewrite P. eauto.
-  assert (Mem.nextblock m3' = Pos.succ (Mem.nextblock m')).
+  assert (Mem.support m3' = Mem.sup_incr (Mem.support m')).
   {
-    apply Mem.nextblock_alloc in C.
-    apply Mem.nextblock_store in F.
-    apply Mem.nextblock_store in P.
+    apply Mem.support_alloc in C.
+    apply Mem.support_store in F.
+    apply Mem.support_store in P.
     congruence.
   }
   econstructor; eauto.
-  eapply match_stack_incr_bound; eauto. rewrite H3. extlia.
-  constructor. rewrite H3. erewrite <- Mem.alloc_result; eauto. extlia.
-  eapply alloc_sp_fresh; eauto. eapply match_stack_nextblock; eauto.
+  eapply match_stack_incr_bound. rewrite H3. eauto. eauto.
+  constructor. rewrite H3.
+  erewrite <- Mem.support_alloc; eauto.
+  eapply Mem.valid_new_block; eauto.
+  eapply alloc_sp_fresh; eauto. eapply match_stack_support; eauto.
   unfold nextinstr. rewrite Pregmap.gss. repeat rewrite Pregmap.gso; auto with asmgen.
   inv ATPC. simpl. constructor; eauto.
   unfold fn_code. eapply code_tail_next_int. simpl in g. lia.
@@ -1007,7 +1008,7 @@ Transparent destroyed_at_function_entry.
 - (* external function *)
   exploit functions_translated; eauto.
   intros (b & tf & A & B & C). simpl in B. inv B.
-  assert (exists b, inner_sp init_nb (rs0#SP) = Some b) as [? LIVE].
+  assert (exists b, inner_sp init_sup (rs0#SP) = Some b) as [? LIVE].
     inv AG. rewrite agree_sp.
     pose proof (parent_sp_ptr _ _ _ _ _ STACKS) as [? [? ->]].
     unfold inner_sp. eexists. eauto.
@@ -1018,12 +1019,12 @@ Transparent destroyed_at_function_entry.
   left; econstructor; split.
   apply plus_one. eapply exec_step_external; eauto.
   inv ATPC. auto.
-  assert (Ple (Mem.nextblock m'0) (Mem.nextblock m2'))
-    by eauto using Mem.unchanged_on_nextblock.
+  assert (Mem.sup_include (Mem.support m'0) (Mem.support m2'))
+    by eauto using Mem.unchanged_on_support.
   econstructor; eauto.
   eapply match_stack_incr_bound; eauto.
   unfold loc_external_result. apply agree_set_other; auto. apply agree_set_pair; auto.
-  apply agree_undef_caller_save_regs; auto. 
+  apply agree_undef_caller_save_regs; auto.
   rewrite Pregmap.gso by discriminate.
   unfold set_pair, loc_external_result. induction loc_result; cbn.
   unfold undef_caller_save_regs. rewrite Pregmap.gso by (destruct r; discriminate).
@@ -1062,7 +1063,6 @@ Proof.
     rewrite <- H9. eauto.
   - constructor; cbn; eauto.
     + constructor; eauto.
-      reflexivity.
     + split; auto.
       setoid_rewrite <- H18; eauto.
 Qed.
@@ -1076,7 +1076,7 @@ Proof.
   intros rs0 nb0 st1 st2 q1 Hst Hq1. inv Hq1. inv Hst.
   edestruct functions_translated as (fb & tf & TFIND & Htf & ?); eauto.
   subst. inv ATPC. monadInv Htf.
-  eexists (se, tt, (rs1, Mem.nextblock m')), (rs1, m'). intuition idtac.
+  eexists (se, tt, (rs1, Mem.support m')), (rs1, m'). intuition idtac.
   - econstructor.
     rewrite <- H2. cbn. destruct Ptrofs.eq_dec; try congruence. eauto.
   - eexists (mq _ _ _ (fun r => rs1 (preg_of r)) m'). split.
@@ -1114,7 +1114,7 @@ Lemma transf_final_states:
 Proof.
   intros. inv H0. inv H. cbn in *.
   inv STACKS. erewrite agree_sp in LIVE; eauto.
-  destruct live. { destruct H4; cbn in *. destruct plt; congruence. }
+  destruct live. { destruct H4; cbn in *. destruct Mem.sup_dec; congruence. }
   exists (rs1, m'). split.
   - constructor.
   - exists (mr (fun r => rs1 (preg_of r)) m'). split.
@@ -1145,7 +1145,7 @@ Proof.
     eapply (Genv.is_internal_transf_partial_id MATCH); eauto.
     intros [|] ? Hf; monadInv Hf; auto.
   - edestruct transf_initial_states as (s2 & Hs2 & Hs); eauto.
-    exists (Mem.nextblock (snd q2), s2). cbn. intuition auto.
+    exists (Mem.support (snd q2), s2). cbn. intuition auto.
     destruct H as (? & ? & ?). destruct H1. auto.
   - destruct s2 as [nb s2], H as [H Hnb]; subst.
     edestruct transf_final_states as (? & ? & ?); cbn; eauto.

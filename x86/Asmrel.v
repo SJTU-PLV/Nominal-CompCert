@@ -38,7 +38,7 @@ Section PROG.
     - apply Linking.linkorder_refl.
     - destruct v; constructor; auto.
   Qed.
-  
+
   Global Instance find_funct_inject R w ge1 v1 ge2 v2 f:
     Transport (genv_match R w * Val.inject (mi R w)) (ge1, v1) (ge2, v2)
               (Genv.find_funct ge1 v1 = Some f)
@@ -59,7 +59,7 @@ Section PROG.
     destruct Hge. apply match_stbls_proj in H. unfold Genv.find_funct_ptr in *.
     destruct Genv.find_def as [[|]|] eqn:Hfd; try congruence. inv Hf.
     edestruct @Genv.find_def_match as (tg &?&?&?); eauto using (match_prog tt).
-    inv H0. inv H1. rewrite H4. auto.
+    inv H0. inv H1. setoid_rewrite H4. auto.
   Qed.
 
   Instance transport_find_symbol_genv R w ge1 ge2 id b1:
@@ -259,7 +259,7 @@ Section PROG.
   Proof.
     unfold eval_testcond. rauto.
   Qed.
-  
+
   Global Instance goto_label_inject R w:
     Monotonic
       goto_label
@@ -272,9 +272,9 @@ Section PROG.
     inv H5. inv H6. split; auto.
   Qed.
 
-  Definition init_nb_match R w: rel block block :=
+  Definition init_nb_match R w: rel sup sup :=
     (Val.inject (mi R w) ++> option_le eq) @@ inner_sp.
-  
+
   Global Instance inner_sp_rel R w:
     Monotonic
       inner_sp
@@ -282,7 +282,7 @@ Section PROG.
   Proof.
     unfold init_nb_match. repeat rstep. eauto.
   Qed.
-  
+
   Global Instance exec_instr_match R:
     Monotonic
       (@exec_instr)
@@ -298,12 +298,12 @@ Section PROG.
       repeat first [rstep |
         match goal with
         | |- regset_inject _ _ _ match ?x with | _ => _ end => destruct x
-        end]. 
+        end].
     - eexists. split. rauto.
       repeat first [rstep |
         match goal with
         | |- regset_inject _ _ _ match ?x with | _ => _ end => destruct x
-        end]. 
+        end].
     - eexists. split. rauto.
       rstep; auto.
       apply set_inject'; [discriminate | auto | ].
@@ -319,7 +319,7 @@ Section PROG.
       apply block_sameofs_ptrbits_inject; split; rauto.
     - destruct (zlt 0 sz).
       + (* sz > 0 *)
-        unfold free'. repeat rewrite zlt_true by omega.                
+        unfold free'. repeat rewrite zlt_true by omega.
         destruct Mem.free eqn: Hfree; try rauto.
         inv H. erewrite cklr_address_inject; eauto.
         * eapply transport in Hfree as (m' & Hfree' & Hm');
@@ -333,7 +333,7 @@ Section PROG.
   Qed.
 
   Lemma reg_inj_strengthen R w ge1 ge2 rs1 rs2 b ofs f:
-    genv_match R w ge1 ge2 -> 
+    genv_match R w ge1 ge2 ->
     rs1 PC = Vptr b ofs ->
     Genv.find_funct_ptr ge1 b = Some f ->
     regset_inject R w rs1 rs2 ->
@@ -378,7 +378,7 @@ Section PROG.
   Qed.
   Hint Extern 1 (Transport _ _ _ _ _) =>
     set_le_transport @extcall_arg: typeclass_instances.
-  
+
   Global Instance extcall_arg_pair_inject R w:
     Monotonic
       (@extcall_arg_pair)
@@ -389,7 +389,7 @@ Section PROG.
   Qed.
   Hint Extern 1 (Transport _ _ _ _ _) =>
     set_le_transport @extcall_arg_pair: typeclass_instances.
-  
+
   Global Instance extcall_arguments_inject R w:
     Monotonic
       (@extcall_arguments)
@@ -406,7 +406,7 @@ Section PROG.
   Qed.
   Hint Extern 1 (Transport _ _ _ _ _) =>
     set_le_transport @extcall_arguments : typeclass_instances.
-  
+
   Global Instance set_pair_inject R w:
     Monotonic
       (@set_pair)
@@ -437,7 +437,7 @@ Section PROG.
     edestruct exec_instr_match; try apply Hrel.
     eexists. split. cbn in *. reflexivity.
     eexists. split; eauto. apply H0. subst o. apply H0.
-  Qed.  
+  Qed.
 
   Global Instance step_rel R:
     Monotonic
@@ -471,8 +471,8 @@ End PROG.
 
 Lemma init_nb_match_acc R w w' nb1 nb2 m1 m2:
   match_mem R w m1 m2 ->
-  (nb1 <= Mem.nextblock m1)%positive ->
-  (nb2 <= Mem.nextblock m2)%positive ->
+  Mem.sup_include nb1 (Mem.support m1) ->
+  Mem.sup_include nb2 (Mem.support m2) ->
   w ~> w' ->
   init_nb_match R w nb1 nb2 ->
   init_nb_match R w' nb1 nb2.
@@ -486,30 +486,28 @@ Proof.
     apply Hb. econstructor; eauto.
   - exploit mi_acc_separated; eauto.
     intros [Hvb1 Hvb2].
-    destruct (plt b1 nb1); destruct (plt b2 nb2);
-      try rauto; unfold Mem.valid_block in *; unfold Plt in *; exfalso.
-    + apply Hvb1. eapply Pos.lt_le_trans; eauto.
-    + apply Hvb2. eapply Pos.lt_le_trans; eauto.
+    destruct (Mem.sup_dec b1 nb1); destruct (Mem.sup_dec b2 nb2);
+      try rauto; unfold Mem.valid_block in *; exfalso.
+    + apply Hvb1. eauto.
+    + apply Hvb2. eauto.
 Qed.
 
-Inductive init_nb_state_match R w: rel (block * state) (block * state) :=
+Inductive init_nb_state_match R w: rel (sup * state) (sup * state) :=
 | init_nb_state_match_intro nb1 nb2 rs1 rs2 m1 m2 live:
     init_nb_match R w nb1 nb2 ->
     state_match R w (State rs1 m1 live) (State rs2 m2 live) ->
-    (nb1 <= Mem.nextblock m1)%positive ->
-    (nb2 <= Mem.nextblock m2)%positive ->
+    Mem.sup_include nb1 (Mem.support m1) ->
+    Mem.sup_include nb2 (Mem.support m2) ->
     init_nb_state_match R w (nb1, State rs1 m1 live) (nb2, State rs2 m2 live).
 
 Lemma step_nextblock se p nb rs1 m1 live1 t rs2 m2 live2:
   step nb (Genv.globalenv se p) (State rs1 m1 live1) t (State rs2 m2 live2) ->
-  Ple (Mem.nextblock m1) (Mem.nextblock m2).
+  Mem.sup_include (Mem.support m1) (Mem.support m2).
 Proof.
   inversion 1; subst; intros.
-  - eapply exec_instr_nextblock; eauto.
-  - rewrite Pos.le_nlt. intros H'.
-    exploit ec_valid_block; [ apply external_call_spec | eauto | apply H' | apply Pos.lt_irrefl ].
-  - rewrite Pos.le_nlt. intros H'.
-    exploit ec_valid_block; [ apply external_call_spec | eauto | apply H' | apply Pos.lt_irrefl ].
+  - eapply exec_instr_support; eauto.
+  - eapply external_call_support; eauto.
+  - eapply external_call_support; eauto.
 Qed.
 
 Lemma semantics_asm_rel p R:
@@ -541,7 +539,7 @@ Proof.
     }
     specialize (Hrs PC) as Hpc'.
     transport_hyps.
-    exists (Mem.nextblock m2, State rs2 m2 true).
+    exists (Mem.support m2, State rs2 m2 true).
     repeat apply conj; auto.
     (* initial_state *)
     + econstructor.
@@ -556,7 +554,7 @@ Proof.
       * unfold init_nb_match. intros v1 v2 Hv.
         unfold inner_sp. inv Hv; rstep.
         edestruct cklr_valid_block as [Hl Hr]; try rstep; eauto.
-        destruct plt; destruct plt; try congruence; exfalso.
+        destruct Mem.sup_dec; destruct Mem.sup_dec; try congruence; exfalso.
         -- apply n. apply Hl. auto.
         -- apply n. apply Hr. auto.
   (* final_state *)
@@ -587,7 +585,7 @@ Proof.
       inv H1. eexists (_, _). repeat apply conj.
       (* after_nexternal *)
       * econstructor.
-        -- erewrite <- cklr_nextblock_incr; eauto.
+        -- erewrite <- cklr_sup_include; eauto.
            eexists. split; eauto.
         -- rewrite <- H9. specialize (Hrs' SP) as Hsp'.
            exploit (init_nb_match_acc R w' w''); eauto.
@@ -603,16 +601,16 @@ Proof.
         (* state_match *)
         -- constructor; auto.
         (* nb1 <= nextblock m1 *)
-        -- eapply Pos.le_trans; eauto.
+        -- eauto.
         (* nb2 <= nextblock m2 *)
-        -- eapply Pos.le_trans; eauto.
-           erewrite <- cklr_nextblock_incr; eauto.
+        -- eapply Mem.sup_include_trans; eauto.
+           erewrite <- cklr_sup_include; eauto.
            eexists. split; eauto.
   - intros [nb1 s1] t [nb1' s1'] [Hstep ->] [nb2 s2] (w' & Hw' & Hge & Hs).
     cbn [fst snd] in *.
     inversion Hs as [? ? rs1 rs2 m1 m2 live Hb Hs' Hle1 Hle2]. subst. clear Hs.
     destruct s1' as [rs1' m1' live'].
-    assert (Mem.nextblock m1 <= Mem.nextblock m1')%positive.
+    assert (Mem.sup_include (Mem.support m1) (Mem.support m1')).
     { eapply step_nextblock. eauto. }
     eapply step_rel in Hstep as (s2' & Hstep' & (w'' & Hw'' & Hs)); eauto.
     eexists (_, _). split.
@@ -629,9 +627,9 @@ Proof.
       (* state_match *)
       * constructor; eauto.
       (* nb1 <= nextblock m1 *)
-      * eapply Pos.le_trans; eauto.
+      * eauto.
       (* nb2 <= nextblock m2 *)
-      * eapply Pos.le_trans; eauto.
+      * eapply Mem.sup_include_trans; eauto.
         eapply step_nextblock. eauto.
   - apply well_founded_ltof.
     Unshelve. exact tt. exact tt.

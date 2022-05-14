@@ -265,7 +265,7 @@ Proof.
   intros [[_ [rs1 nb1]] wR] se1 se2 q1 q2 [[ ] Hse2] (qi & Hq1i & Hqi2).
   cbn in * |- . destruct Hq1i. destruct q2 as [rs2 m2], Hqi2 as (Hrs & Hpc & Hm).
   rename m into m1.
-  exists (se2, wR, (rs2, Mem.nextblock m2)). cbn. repeat apply conj; auto.
+  exists (se2, wR, (rs2, Mem.support m2)). cbn. repeat apply conj; auto.
   - exists (mq rs2#PC rs2#SP rs2#RA (fun r => rs2 (preg_of r)) m2). split.
     + constructor; auto.
       * destruct H0; congruence.
@@ -274,8 +274,8 @@ Proof.
       * destruct (Hrs PC); cbn in *; congruence.
       * specialize (Hrs SP). destruct Hrs; inv H0. constructor.
         revert H6.
-        change (b1 < _)%positive with (Mem.valid_block m1 b1).
-        change (b2 < _)%positive with (Mem.valid_block m2 b2).
+        change (sup_In b1 (Mem.support m1)) with (Mem.valid_block m1 b1).
+        change (sup_In b2 (Mem.support m2)) with (Mem.valid_block m2 b2).
         rstep. rstep. rstep. rstep. red. eauto.
       * specialize (Hrs RA). destruct Hrs; congruence.
   - intros r1 r2 (ri & (wR' & HwR' & Hr1i) & Hri2). inv Hri2. inv Hr1i.
@@ -288,7 +288,7 @@ Proof.
            end).
     exists (rs1', m0). split.
     + constructor; eauto.
-      * eapply cklr_nextblock_incr; eauto. rauto.
+      * eapply cklr_sup_include; eauto. rauto.
       * subst rs1'. intros r. cbn. rewrite preg_classify_preg. auto.
     + exists wR'. split; auto. constructor; eauto.
       intros r. subst rs1'. cbn.
@@ -613,7 +613,7 @@ Inductive cc_locset_mach_mr: cc_lm_world -> locset_reply -> mach_reply -> Prop :
     (forall r, is_callee_save r = true -> rs' r = rs r) ->
     Mem.unchanged_on (not_init_args (size_arguments sg) sp) m'_ m' ->
     Mem.unchanged_on (loc_init_args (size_arguments sg) sp) m m' ->
-    Mem.nextblock m'_ = Mem.nextblock m' ->
+    Mem.support m'_ = Mem.support m' ->
     (forall b ofs k p, loc_init_args (size_arguments sg) sp b ofs ->
                        ~ Mem.perm m'_ b ofs k p) ->
     (*Mem.extends m'_ m' ->*)
@@ -752,7 +752,7 @@ Class Mixable (R : cklr) :=
         loc_init_args sz sp2 b ofs ->
         loc_out_of_reach (mi R w') m1'_ b ofs) ->
     (2 | sz) ->
-    (sz > 0 -> valid_blockv (Mem.nextblock m1) sp1) ->
+    (sz > 0 -> valid_blockv (Mem.support m1) sp1) ->
     (sz > 0 -> forall b1 ofs1, sp1 = Vptr b1 ofs1 ->
       Mem.range_perm m1 b1 (offset_sarg ofs1 0) (offset_sarg ofs1 sz) Cur Freeable) ->
     exists w'' m1',
@@ -761,7 +761,7 @@ Class Mixable (R : cklr) :=
       match_mem R w'' m1' m2' /\
       Mem.unchanged_on (loc_init_args sz sp1) m1 m1' /\
       Mem.unchanged_on (not_init_args sz sp1) m1'_ m1' /\
-      Mem.nextblock m1' = Mem.nextblock m1'_.
+      Mem.support m1' = Mem.support m1'_.
 
 Instance ext_mixable:
   Mixable ext.
@@ -772,10 +772,10 @@ Proof.
   - destruct H as (SZ & sb1 & sofs1 & Hsp1). subst. inv Hsp.
     assert (Mem.mixable m1'_ sb1 m1). {
       split.
-      + erewrite (Mem.mext_next m1) by eauto.
-        erewrite (Mem.mext_next m1'_) by eauto.
-        erewrite (Mem.mext_next m2'_) by eauto.
-        eapply Mem.unchanged_on_nextblock; eauto.
+      + erewrite (Mem.mext_sup m1) by eauto.
+        erewrite (Mem.mext_sup m1'_) by eauto.
+        erewrite (Mem.mext_sup m2'_) by eauto.
+        eapply Mem.unchanged_on_support; eauto.
       + specialize (VB SZ). inv VB. auto. (* could restrict to sz > 0 case *)
     }
     eapply Mem.mixable_mix in H as [m1' ?].
@@ -790,16 +790,16 @@ Proof.
       inversion 1; auto.
     + eapply Mem.unchanged_on_implies; eauto using Mem.mix_unchanged.
       intros _ ofs NIA _ [<- Hofs]. apply NIA. constructor; auto.
-    + apply Mem.nextblock_mix in H. auto.
+    + apply Mem.support_mix in H. auto.
   - exists tt, m1'_. repeat apply conj.
     + constructor.
     + apply inject_incr_refl.
     + eapply Mem.extends_extends_compose; eauto.
     + split.
-      * erewrite (Mem.mext_next m1) by eauto.
-        erewrite (Mem.mext_next m1'_) by eauto.
-        erewrite (Mem.mext_next m2'_) by eauto.
-        eapply Mem.unchanged_on_nextblock; eauto.
+      * erewrite (Mem.mext_sup m1) by eauto.
+        erewrite (Mem.mext_sup m1'_) by eauto.
+        erewrite (Mem.mext_sup m2'_) by eauto.
+        eapply Mem.unchanged_on_support; eauto.
       * destruct 1; eelim H; eauto. split; eauto.
         unfold offset_sarg in *. extlia.
       * destruct 1; eelim H; eauto. split; eauto.
@@ -828,8 +828,8 @@ Proof.
     + auto.
     + apply inject_incr_refl.
     + inv Hm. inv Hm'_. inv Hw. cbn -[Z.add Z.mul] in *.
-      erewrite <- (Mem.nextblock_mix m1'_); eauto.
-      erewrite (Mem.mext_next m2'_); eauto.
+      erewrite <- (Mem.support_mix m1'_); eauto.
+      erewrite (Mem.mext_sup m2'_); eauto.
       constructor. eapply Mem.mix_left_inject; eauto.
       * eapply Mem.inject_extends_compose; eauto.
       * eapply Mem.unchanged_on_implies; eauto.
@@ -852,11 +852,11 @@ Proof.
       inversion 1; auto.
     + eapply Mem.unchanged_on_implies; eauto using Mem.mix_unchanged.
       intros _ ofs NIA _ [<- Hofs]. apply NIA. constructor; auto.
-    + eapply Mem.nextblock_mix; eauto.
+    + eapply Mem.support_mix; eauto.
   - inv Hm. inv Hm'_. inv Hw. cbn in *.
-    eexists (injw f0 (Mem.nextblock m1'_) (Mem.nextblock m2')), m1'_. repeat apply conj.
+    eexists (injw f0 (Mem.support m1'_) (Mem.support m2')), m1'_. repeat apply conj.
     + constructor; eauto.
-      eapply Mem.unchanged_on_nextblock; eauto.
+      eapply Mem.unchanged_on_support; eauto.
     + apply inject_incr_refl.
     + constructor. eapply Mem.inject_extends_compose; eauto.
     + split.
@@ -877,7 +877,7 @@ Proof.
   edestruct (result_mem (R:=inj) sz sp1 sp2 w m1 m2 w0) as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
   exists (se0, x), x0. repeat apply conj; eauto.
   constructor.
-  - congruence.
+  - rewrite H11. eauto.
   - intros cu Hcu. specialize (H3 cu Hcu).
     intros b id ab Hab Habcu.
     edestruct H0 as (? & ? & ?); eauto.
@@ -934,7 +934,7 @@ Qed.
 
 Lemma unchanged_on_extends P m m':
   Mem.unchanged_on P m m' ->
-  Mem.nextblock m = Mem.nextblock m' ->
+  Mem.support m = Mem.support m' ->
   (forall b ofs k p, Mem.perm m b ofs k p -> P b ofs) ->
   Mem.extends m m'.
 Proof.
@@ -1062,7 +1062,7 @@ Proof.
            transport Hv. rewrite H11. eauto.
     + destruct H12 as [ | sb1 sofs1 m1 m1_ ]; auto.
       assert (Mem.extends m1_ m1) by eauto using Mem.free_left_extends, Mem.extends_refl.
-      destruct H6; cbn in *. erewrite <- Mem.mext_next by eauto. constructor.
+      destruct H6; cbn in *. erewrite <- Mem.mext_sup by eauto. constructor.
       eapply Mem.extends_inject_compose; eauto.
     + destruct 1 as [sb2 sofs2 ofs].
       inversion H2 as [ | | | | sb1 sofs1 | ]; clear H2; try congruence. subst b2 ofs2 sp1.
@@ -1194,7 +1194,7 @@ Proof.
   }
   exists (se2, (sg, injpw _ _ _ Hm_), lmw sg rs2 m2 sp2). repeat apply conj.
   - constructor; cbn; auto. constructor; auto.
-    destruct Hm2_; eauto. erewrite Mem.nextblock_free; eauto.
+    destruct Hm2_; eauto. erewrite Mem.support_free; eauto.
   - exists (lq vf2 sg ls2 m2_). split.
     + constructor; eauto.
       * intros r Hr. destruct Hr; cbn -[Z.add Z.mul]; eauto.
@@ -1241,7 +1241,7 @@ Proof.
         { eapply Mem.unchanged_on_implies; eauto.
           intros b ofs [_ ?] _. red. auto. }
       * red. inv Hm2_; eauto.
-        unfold Mem.valid_block. erewrite <- (Mem.nextblock_free m2); eauto.
+        unfold Mem.valid_block. erewrite <- (Mem.support_free m2); eauto.
     + intros r REG. rewrite H21; eauto.
     + intros r REG. rewrite H22; eauto.
     + constructor.

@@ -386,12 +386,12 @@ Fixpoint label_pos (lbl: label) (pos: Z) (c: code) {struct c} : option Z :=
     rather than a step.
 *)
 
-Variable init_nb: block.
+Variable init_sup: sup.
 Variable ge: Genv.symtbl.
 
 Definition inner_sp (sp: val) : option bool :=
   match sp with
-    | Vptr sb _ => Some (if plt sb init_nb then false else true)
+    | Vptr sb _ => Some (if Mem.sup_dec sb init_sup then false else true)
     | _ => None
   end.
 
@@ -1127,14 +1127,14 @@ Notation Next rs m := (Next' rs m true).
 Inductive state: Type :=
   | State: regset -> mem -> bool -> state.
 
-Inductive step (init_nb: block) (ge: genv): state -> trace -> state -> Prop :=
+Inductive step (init_sup: sup) (ge: genv): state -> trace -> state -> Prop :=
   | exec_step_internal:
       forall b ofs f i rs m rs' m' live,
       rs PC = Vptr b ofs ->
       forall FIND: Genv.find_funct_ptr ge b = Some (Internal f),
       forall INSTR: find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some i,
-      forall EXEC: exec_instr init_nb ge f i rs m = Next' rs' m' live,
-      step init_nb ge (State rs m true) E0 (State rs' m' live)
+      forall EXEC: exec_instr init_sup ge f i rs m = Next' rs' m' live,
+      step init_sup ge (State rs m true) E0 (State rs' m' live)
   | exec_step_builtin:
       forall b ofs f ef args res rs m vargs t vres rs' m',
       rs PC = Vptr b ofs ->
@@ -1145,7 +1145,7 @@ Inductive step (init_nb: block) (ge: genv): state -> trace -> state -> Prop :=
       rs' = nextinstr_nf
              (set_res res vres
                (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
-      step init_nb ge (State rs m true) t (State rs' m' true)
+      step init_sup ge (State rs m true) t (State rs' m' true)
   | exec_step_external:
       forall b ef args res rs m t rs' m' live,
       rs PC = Vptr b Ptrofs.zero ->
@@ -1153,8 +1153,8 @@ Inductive step (init_nb: block) (ge: genv): state -> trace -> state -> Prop :=
       forall ARGS: extcall_arguments rs m (ef_sig ef) args,
       forall CALL: external_call ef ge args m t res m',
       rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs)) #PC <- (rs RA) ->
-      forall ISP: inner_sp init_nb rs#SP = Some live,
-      step init_nb ge (State rs m true) t (State rs' m' live).
+      forall ISP: inner_sp init_sup rs#SP = Some live,
+      step init_sup ge (State rs m true) t (State rs' m' live).
 
 (** Since Asm does not have an explicit stack, the queries and replies
   for assembly modules simply pass the current state across modules. *)
@@ -1195,7 +1195,7 @@ Inductive at_external (ge: genv): state -> query li_asm -> Prop :=
 
 Inductive after_external init_nb: state -> reply li_asm -> state -> Prop :=
   | after_external_intro rs m (rs': regset) m' live:
-      Ple (Mem.nextblock m) (Mem.nextblock m') ->
+      Mem.sup_include (Mem.support m) (Mem.support m') ->
       inner_sp init_nb rs'#SP = Some live ->
       after_external init_nb
         (State rs m true)
@@ -1214,7 +1214,7 @@ Definition semantics (p: program): Smallstep.semantics li_asm li_asm :=
       {|
         Smallstep.step ge '(nb, s) t '(nb', s') := step nb ge s t s' /\ nb' = nb;
         Smallstep.valid_query q := Genv.is_internal ge (entry q);
-        Smallstep.initial_state q '(nb, s) := initial_state ge q s /\ nb = Mem.nextblock (snd q);
+        Smallstep.initial_state q '(nb, s) := initial_state ge q s /\ nb = Mem.support (snd q);
         Smallstep.at_external '(nb, s) q := at_external ge s q;
         Smallstep.after_external '(nb, s) r '(nb', s') := after_external nb s r s' /\ nb' = nb;
         Smallstep.final_state '(nb, s) := final_state s;
@@ -1318,24 +1318,24 @@ Unset Program Cases.
 
 (** ** Calling convention from [li_mach] *)
 
-Inductive cc_mach_asm_mq (rs: regset): block -> mach_query -> query li_asm -> Prop :=
+Inductive cc_mach_asm_mq (rs: regset): sup -> mach_query -> query li_asm -> Prop :=
   cc_mach_asm_mq_intro (mrs: Mach.regset) m:
     rs#PC <> Vundef ->
-    valid_blockv (Mem.nextblock m) rs#SP ->
+    valid_blockv (Mem.support m) rs#SP ->
     rs#RA <> Vundef ->
     (forall r, mrs r = rs (preg_of r)) ->
     cc_mach_asm_mq rs
-      (Mem.nextblock m)
+      (Mem.support m)
       (mq rs#PC rs#SP rs#RA mrs m)
       (rs, m).
 
-Inductive cc_mach_asm_mr (rs: regset) (nb: block): mach_reply -> reply li_asm -> Prop :=
+Inductive cc_mach_asm_mr (rs: regset) (s: sup): mach_reply -> reply li_asm -> Prop :=
   cc_mach_asm_mr_intro (mrs': Mach.regset) (rs': regset) m':
     rs'#SP = rs#SP ->
     rs'#PC = rs#RA ->
-    Pos.le nb (Mem.nextblock m') ->
+    Mem.sup_include s (Mem.support m') ->
     (forall r, mrs' r = rs' (preg_of r)) ->
-    cc_mach_asm_mr rs nb (mr mrs' m') (rs', m').
+    cc_mach_asm_mr rs s (mr mrs' m') (rs', m').
 
 Program Definition cc_mach_asm : callconv li_mach li_asm :=
   {|
