@@ -841,7 +841,7 @@ Next Obligation.
   tauto.
 Qed.
 
-Lemma globalenv_nextblock:
+Lemma globalenv_support:
   forall ge1 ge2 j m1 m1',
   Mem.sup_include (Mem.support m1) (Mem.support m1') ->
   massert_imp (globalenv_inject ge1 ge2 j m1) (globalenv_inject ge1 ge2 j m1').
@@ -942,7 +942,7 @@ Proof.
 - split; auto.
   split; auto.
   red. intros b0 b3 delta0 H8 H9.
-  destruct (peq b0 b1).
+  destruct (eq_block b0 b1).
   + subst.
     rewrite C in H9. inversion H9. subst delta0 b3.
     eauto with mem.

@@ -631,8 +631,7 @@ Proof.
                (find_label_ls lbl ls)
                (find_label_ls lbl ls));
   simpl; intros;
-  repeat rstep.
-  destruct ident_eq; rauto.
+  repeat rstep; try (destruct ident_eq; repeat rstep).
 Qed.
 
 Global Instance function_entry1_match R:

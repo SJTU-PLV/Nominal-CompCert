@@ -1079,7 +1079,7 @@ Proof.
         * inversion 1. assert (delta0 = delta) by congruence. extlia.
       }
       intros sb1' delta' Hsb1' Hp.
-      destruct (peq sb1 sb1').
+      destruct (eq_block sb1 sb1').
       { subst sb1'. assert (delta' = delta) by congruence; subst.
         eapply Mem.perm_free_2; eauto. }
       apply cklr_no_overlap in H6. red in H6.

@@ -698,7 +698,7 @@ Lemma match_stacks_support:
   match_stacks F m m' stk stk' bound ->
   Mem.sup_include (injw_sup_l w) (Mem.support m) /\
   Mem.sup_include (injw_sup_r w) (Mem.support m')
-with match_stacks_inside_nextblock:
+with match_stacks_inside_support:
   forall stk stk' f' ctx sp' rs1,
   match_stacks_inside F m m' stk stk' f' ctx sp' rs1 ->
   Mem.sup_include (injw_sup_l w) (Mem.support m) /\

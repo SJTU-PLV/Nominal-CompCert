@@ -190,7 +190,7 @@ Next Obligation. (* Mem.alloc *)
   - red. intros b b' delta Hb Hb'.
     assert (b = b1).
     {
-      destruct (peq b b1); eauto.
+      destruct (eq_block b b1); eauto.
       rewrite Hff' in Hb'; eauto.
       congruence.
     }

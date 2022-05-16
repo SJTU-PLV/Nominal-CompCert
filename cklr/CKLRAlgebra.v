@@ -465,7 +465,7 @@ Next Obligation. (* no overlap *)
   - edestruct (cklr_no_overlap R2 w0 mx m2); eauto.
     rewrite !Z.add_assoc.
     eauto.
-  - destruct (peq ax bx); eauto.
+  - destruct (eq_block ax bx); eauto.
     + right. assert (dax2 = dbz2) by congruence. extlia.
     + edestruct (cklr_no_overlap R2 w0 mx m2); eauto.
       rewrite !Z.add_assoc.
@@ -543,7 +543,7 @@ Next Obligation. (* perm inv *)
   - right. intros Hm1. apply H. revert Hm1. rauto.
 Qed.
 
-Next Obligation. (* nextblock incr*)
+Next Obligation. (* sup include *)
   destruct H as (mI & Hm1I & Hm2I).
   destruct H0 as ([w' w0'] & Hw' & mI' & Hm1I' & Hm2I').
   cbn [fst snd] in *. unfold Ple in *.

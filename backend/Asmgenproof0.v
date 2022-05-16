@@ -994,7 +994,7 @@ Lemma inner_sp_def p1 p2:
   inner_sp p1 p2 = Some true ->
   p2 <> Vundef.
 Proof.
-  destruct p1, p2; cbn; congruence.
+  destruct p2; cbn; congruence.
 Qed.
 
 Lemma parent_sp_def: forall b s, match_stack b s -> parent_sp s <> Vundef.
@@ -1006,7 +1006,7 @@ Lemma inner_sp_ptr nb sp live:
   inner_sp nb sp = Some live ->
   exists b ofs, sp = Vptr b ofs.
 Proof.
-  destruct nb, sp; cbn; try congruence;
+  destruct sp; cbn; try congruence;
     intros; repeat eexists.
 Qed.
 
@@ -1049,8 +1049,8 @@ Lemma match_stack_incr_bound:
 Proof.
   intros b b' s Hb Hs. induction Hs.
   - constructor; auto. inv H1. eauto.
-  - econstructor; eauto using valid_blockv_nextblock.
+  - econstructor; eauto using valid_blockv_support.
 Qed.
 
 End MATCH_STACK.
-(*TODO : change name of lemmas in Asmgenproof about support/nextblock*)
+

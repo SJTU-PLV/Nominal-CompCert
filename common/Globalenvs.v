@@ -1901,7 +1901,7 @@ Proof.
   destruct ((genv_symb se) ! id) as [b1' | ] eqn:Hb1'.
   - edestruct mge_dom as (b2' & Hb'); eauto. eapply genv_symb_range; eauto.
     pose proof Hb1' as Hb2'. erewrite mge_symb in Hb2' by eauto. rewrite Hb2'.
-    destruct (peq b1' b1); subst.
+    destruct (eq_block b1' b1); subst.
     + assert (b2' = b2) by congruence; subst.
       rewrite !NMap.gsspec.
       rewrite !pred_dec_true; auto. constructor. auto.
@@ -1909,7 +1909,7 @@ Proof.
       { intro. subst. erewrite <- (mge_symb Hse b1) in Hb2' by eauto. congruence. }
       rewrite !NMap.gsspec, !pred_dec_false. assumption. auto. auto.
   - destruct ((genv_symb tse) ! id) as [b2' | ] eqn:Hb2'; auto.
-    destruct (peq b2' b2); subst.
+    destruct (eq_block b2' b2); subst.
     + erewrite <- mge_symb in Hb2' by eauto. congruence.
     + rewrite NMap.gsspec, pred_dec_false. auto. auto.
 Qed.

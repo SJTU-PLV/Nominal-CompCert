@@ -4784,7 +4784,7 @@ Next Obligation.
   intro. subst. apply H0. apply H,H1.
 Qed.
 Next Obligation.
-  unfold pmap_update. destruct (peq b0 b); subst.
+  unfold pmap_update. destruct (eq_block b0 b); subst.
   - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
     rewrite Mem.setN_default. apply Mem.contents_default.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
@@ -4857,12 +4857,12 @@ Proof.
   - apply sup_include_refl.
   - unfold perm; cbn. intros b1 ofs1 k p H ?.
     unfold pmap_update, mix_perms.
-    destruct (peq b1 b); subst; rewrite ?NMap.gss, ?NMap.gso; auto using iff_refl.
+    destruct (eq_block b1 b); subst; rewrite ?NMap.gss, ?NMap.gso; auto using iff_refl.
     destruct zle, zlt; cbn; auto using iff_refl.
     elim H; auto.
   - intros b1 ofs1 H Hp.
     unfold pmap_update.
-    destruct (peq b1 b); subst; rewrite ?NMap.gss, ?NMap.gso; auto.
+    destruct (eq_block b1 b); subst; rewrite ?NMap.gss, ?NMap.gso; auto.
     rewrite setN_outside; auto.
     destruct (zlt ofs1 lo); auto. right.
     destruct (zlt ofs1 hi); try (elim H; split; auto; extlia).
@@ -4950,7 +4950,7 @@ Proof.
       eapply perm_valid_block; eauto.
   - (* align *)
     intros b1' b2' delta' chunk ofs p Hb' Hp.
-    destruct (peq b1' b1); subst.
+    destruct (eq_block b1' b1); subst.
     + erewrite Hf' in Hb'; eauto. inv Hb'.
       etransitivity; eauto.
       assert (2 | 8) by (exists 4; extlia).
@@ -5045,14 +5045,14 @@ Proof.
       * intuition congruence.
       * rewrite <- unchanged_on_perm in Hpy; eauto using mix_unchanged.
         replace yofs with (yofs + yd - yd) in Hpy by extlia.
-        destruct (peq b2 y2); auto; subst y2. right.
+        destruct (eq_block b2 y2); auto; subst y2. right.
         intros Hofs. eapply (OOR y1 yd (yofs + yd)); eauto. extlia.
     + rewrite <- unchanged_on_perm in Hpx; eauto using mix_unchanged.
       destruct (classic (b1 = y1 /\ lo <= yofs < hi)).
       * destruct H4; subst y1.
         replace xofs with (xofs + xd - xd) in Hpx by extlia.
         erewrite Hf in Hy; eauto. inversion Hy; clear Hy; subst y2 yd.
-        destruct (peq x2 b2); auto; subst x2. right.
+        destruct (eq_block x2 b2); auto; subst x2. right.
         intros Hofs. eapply (OOR x1 xd (xofs + xd)); eauto. extlia.
       * rewrite <- unchanged_on_perm in Hpy; eauto using mix_unchanged.
         eapply mi_no_overlap; eauto.

@@ -157,7 +157,7 @@ Proof.
   exists (injw f' (Mem.support m1') (Mem.support m2')); split; repeat rstep.
   - constructor; eauto.
     intros b1' b2' delta' Hb Hb'.
-    destruct (peq b1' b1); subst.
+    destruct (eq_block b1' b1); subst.
     + assert (b2' = b2) by congruence; subst.
       apply Mem.alloc_result in Hm1'; subst.
       apply Mem.alloc_result in Hm2'; subst.
@@ -300,7 +300,7 @@ Proof.
   exists w'. split; auto. apply Hm'.
 Qed.
 *)
-Next Obligation. (* nextblock incr *)
+Next Obligation. (* sup include *)
   destruct H0 as (w' & Hw' & Hm').
   destruct H. inv Hm'. inv Hw'.
   split; eauto.

@@ -500,7 +500,7 @@ Inductive init_nb_state_match R w: rel (sup * state) (sup * state) :=
     Mem.sup_include nb2 (Mem.support m2) ->
     init_nb_state_match R w (nb1, State rs1 m1 live) (nb2, State rs2 m2 live).
 
-Lemma step_nextblock se p nb rs1 m1 live1 t rs2 m2 live2:
+Lemma step_support se p nb rs1 m1 live1 t rs2 m2 live2:
   step nb (Genv.globalenv se p) (State rs1 m1 live1) t (State rs2 m2 live2) ->
   Mem.sup_include (Mem.support m1) (Mem.support m2).
 Proof.
@@ -600,9 +600,9 @@ Proof.
         -- clear Hm'. eapply init_nb_match_acc; eauto.
         (* state_match *)
         -- constructor; auto.
-        (* nb1 <= nextblock m1 *)
+        (* nb1 <= support m1 *)
         -- eauto.
-        (* nb2 <= nextblock m2 *)
+        (* nb2 <= support m2 *)
         -- eapply Mem.sup_include_trans; eauto.
            erewrite <- cklr_sup_include; eauto.
            eexists. split; eauto.
@@ -611,7 +611,7 @@ Proof.
     inversion Hs as [? ? rs1 rs2 m1 m2 live Hb Hs' Hle1 Hle2]. subst. clear Hs.
     destruct s1' as [rs1' m1' live'].
     assert (Mem.sup_include (Mem.support m1) (Mem.support m1')).
-    { eapply step_nextblock. eauto. }
+    { eapply step_support. eauto. }
     eapply step_rel in Hstep as (s2' & Hstep' & (w'' & Hw'' & Hs)); eauto.
     eexists (_, _). split.
     (* step *)
@@ -626,11 +626,11 @@ Proof.
       * clear Hm'. eapply init_nb_match_acc; eauto. inv Hs'. auto.
       (* state_match *)
       * constructor; eauto.
-      (* nb1 <= nextblock m1 *)
+      (* nb1 <= support m1 *)
       * eauto.
-      (* nb2 <= nextblock m2 *)
+      (* nb2 <= support m2 *)
       * eapply Mem.sup_include_trans; eauto.
-        eapply step_nextblock. eauto.
+        eapply step_support. eauto.
   - apply well_founded_ltof.
     Unshelve. exact tt. exact tt.
 Qed.

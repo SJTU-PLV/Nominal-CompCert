@@ -2152,7 +2152,7 @@ Proof.
   rewrite transl_destroyed_by_store. apply agree_regs_undef_regs; auto.
   apply agree_locs_undef_locs. auto. apply destroyed_by_store_caller_save.
   auto. eauto with coqlib.
-  rewrite globalenv_nextblock in SEP.
+  rewrite globalenv_support in SEP.
   eapply frame_undef_regs; eauto.
   destruct a; try discriminate. apply Mem.support_store in H0. rewrite H0. eauto.
 
@@ -2189,7 +2189,7 @@ Proof.
   apply match_stacks_change_sig with (Linear.fn_sig f); auto.
   apply zero_size_arguments_tailcall_possible. eapply wt_state_tailcall; eauto.
   destruct ros; simpl in *; eauto. eapply symbol_address_inject; eauto. apply SEP.
-  rewrite globalenv_nextblock in SEP; eauto.
+  rewrite globalenv_support in SEP; eauto.
   apply Mem.support_free in H2. rewrite H2. eauto.
 
 - (* Lbuiltin *)
@@ -2270,7 +2270,7 @@ Proof.
   eapply plus_right. eexact D. econstructor; eauto. traceEq.
   econstructor; eauto.
   erewrite Mem.support_free; eauto.
-  rewrite globalenv_nextblock in G.
+  rewrite globalenv_support in G.
   rewrite sep_swap; exact G.
   apply Mem.support_free in H. rewrite H. eauto.
 

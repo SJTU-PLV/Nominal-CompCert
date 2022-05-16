@@ -441,7 +441,7 @@ Lemma exec_straight_support tf c rs m k rs' m':
   valid_blockv (Mem.support m) init_rs#SP ->
   valid_blockv (Mem.support m') init_rs#SP.
 Proof.
-  induction 1; eauto using valid_blockv_nextblock, exec_instr_support.
+  induction 1; eauto using valid_blockv_support, exec_instr_support.
 Qed.
 
 Lemma exec_straight_steps:
@@ -535,7 +535,7 @@ Definition measure (s: Mach.state) : nat :=
 
 
 
-Lemma nextblock_storev chunk m ptr v m':
+Lemma support_storev chunk m ptr v m':
   Mem.storev chunk m ptr v = Some m' ->
   Mem.support m' = Mem.support m.
 Proof.
@@ -572,7 +572,7 @@ Proof.
   unfold store_stack in H.
   assert (Val.lessdef (rs src) (rs0 (preg_of src))). eapply preg_val; eauto.
   exploit Mem.storev_extends; eauto. intros [m2' [A B]].
-  erewrite <- nextblock_storev in STACKS, SPVB; eauto.
+  erewrite <- support_storev in STACKS, SPVB; eauto.
   left; eapply exec_straight_steps; eauto.
   rewrite (sp_val _ _ _ AG) in A. intros. simpl in TR.
   exploit storeind_correct; eauto. intros [rs' [P Q]].
@@ -639,7 +639,7 @@ Opaque loadind.
   intros [a' [A B]]. rewrite (sp_val _ _ _ AG) in A.
   assert (Val.lessdef (rs src) (rs0 (preg_of src))). eapply preg_val; eauto.
   exploit Mem.storev_extends; eauto. intros [m2' [C D]].
-  erewrite <- nextblock_storev in STACKS, SPVB; eauto.
+  erewrite <- support_storev in STACKS, SPVB; eauto.
   left; eapply exec_straight_steps; eauto.
   intros. simpl in TR.
   exploit transl_store_correct; eauto. intros [rs2 [P Q]].
@@ -788,7 +788,7 @@ Opaque loadind.
     by eauto using Mem.unchanged_on_support.
   econstructor; eauto.
   eapply match_stack_incr_bound; eauto.
-  eapply valid_blockv_nextblock; eauto.
+  eapply valid_blockv_support; eauto.
   instantiate (2 := tf); instantiate (1 := x).
   unfold nextinstr_nf, nextinstr. rewrite Pregmap.gss.
   rewrite undef_regs_other. rewrite set_res_other. rewrite undef_regs_other_2.
@@ -1090,7 +1090,7 @@ Proof.
       * congruence.
       * erewrite agree_sp; eauto.
         inv STACKS; cbn; eauto.
-        eapply valid_blockv_nextblock; eauto.
+        eapply valid_blockv_support; eauto.
       * rewrite ATLR. eapply parent_ra_def; eauto.
   - cbn. auto.
   - inv H1. cbn in H0. destruct H0 as (ri & ([ ] & _ & Hr1i) & Hri2).

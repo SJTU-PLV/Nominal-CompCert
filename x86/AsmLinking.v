@@ -127,7 +127,7 @@ Section ASM_LINKING.
     (** The following predicate asserts that the composite
       semantics' activation stack is well-formed, with a given
       top-level "inner block" threshold. This threshold is the
-      initial value of [Mem.nextblock] for the current activation.
+      initial value of [Mem.support] for the current activation.
       ... *)
 
     Inductive match_stack : list (frame L) -> sup -> Prop :=
@@ -138,7 +138,7 @@ Section ASM_LINKING.
           Mem.sup_include b b' ->
           match_stack (st L i (b, S) :: s) b'.
 
-    Lemma match_stack_nextblock k b:
+    Lemma match_stack_support k b:
       match_stack k b ->
       Mem.sup_include init_sup b.
     Proof.
@@ -206,7 +206,7 @@ Section ASM_LINKING.
       destruct live; constructor; auto.
     Qed.
 
-    Lemma exec_load_nextblock nb chunk m a rs rd rs' m' live:
+    Lemma exec_load_support nb chunk m a rs rd rs' m' live:
       exec_load se chunk m a rs rd = Next' rs' m' live ->
       Mem.sup_include nb (Mem.support m) ->
       Mem.sup_include nb (Mem.support m').
@@ -223,7 +223,7 @@ Section ASM_LINKING.
       destruct live; constructor; auto.
     Qed.
 
-    Lemma exec_store_nextblock nb chunk m a rs rd lr rs' m' live:
+    Lemma exec_store_support nb chunk m a rs rd lr rs' m' live:
       exec_store se chunk m a rs rd lr = Next' rs' m' live ->
       Mem.sup_include nb (Mem.support m) ->
       Mem.sup_include nb (Mem.support m').
@@ -242,7 +242,7 @@ Section ASM_LINKING.
       destruct live; constructor; auto.
     Qed.
 
-    Lemma goto_label_nextblock nb f l rs m rs' m' live:
+    Lemma goto_label_support nb f l rs m rs' m' live:
       goto_label f l rs m = Next' rs' m' live ->
       Mem.sup_include nb (Mem.support m) ->
       Mem.sup_include nb (Mem.support m').
@@ -261,7 +261,7 @@ Section ASM_LINKING.
     Qed.
 
     Hint Resolve
-      exec_load_nextblock exec_store_nextblock goto_label_nextblock
+      exec_load_support exec_store_support goto_label_support
       exec_load_live exec_store_live goto_label_live.
 
     Lemma exec_instr_match nb f instr rs m rs' m' live:
@@ -428,7 +428,7 @@ Section ASM_LINKING.
       + intros r _ s' [ ] Hs'. inv Hs'. cbn in *.
         destruct s'0 as [nb' s'], H6 as [Hae Hnb']. inv Hae.
         exploit (match_inner_sp nb qi (rs' SP));
-          eauto using match_stack_nextblock; intro Hisp.
+          eauto using match_stack_support; intro Hisp.
         assert (exists live, inner_sp nb (rs' RSP) = Some live) as [live' Hlive']. {
           destruct Hisp; try congruence; eauto.
         }
@@ -443,7 +443,7 @@ Section ASM_LINKING.
       + (* internal step *)
         destruct s' as [nb' [rs' m' live1']], H as [? ?]. subst.
         edestruct step_match as (live2' & Hstep2 & Hs' & Hl' & ?);
-          eauto using match_stack_nextblock.
+          eauto using match_stack_support.
         eexists (_, _), (_, _). repeat apply conj; eauto 10 using plus_one.
         constructor; eauto.
       + (* push *)
@@ -465,10 +465,10 @@ Section ASM_LINKING.
         }
         inv H5.
         * constructor; eauto using Mem.sup_include_trans.
-          exploit (match_inner_sp nb bk (rs RSP)); eauto using match_stack_nextblock. intro.
+          exploit (match_inner_sp nb bk (rs RSP)); eauto using match_stack_support. intro.
           destruct H; inv H9. inv H8. destruct y; congruence.
         * constructor; eauto using Mem.sup_include_trans.
-          exploit (match_inner_sp nb bk (rs RSP)); eauto using match_stack_nextblock. intro.
+          exploit (match_inner_sp nb bk (rs RSP)); eauto using match_stack_support. intro.
           destruct H; inv H9. destruct H1; congruence.
     - apply well_founded_ltof.
   Qed.

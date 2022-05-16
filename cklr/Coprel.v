@@ -50,9 +50,8 @@ Global Instance sem_cast_match R w:
     (Val.inject (mi R w) ++> - ==> - ==> match_mem R w ++>
      option_le (Val.inject (mi R w))).
 Proof.
-  unfold Cop.sem_cast. repeat rstep.
-  destruct ident_eq; rauto.
-  destruct ident_eq; rauto.
+  unfold Cop.sem_cast. repeat rstep; try
+  (destruct ident_eq; repeat rstep).
 Qed.
 
 Global Instance sem_binarith_match R w:

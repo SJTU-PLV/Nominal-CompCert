@@ -48,7 +48,7 @@ Record vaext_incr (w w' : vaext_world) : Prop :=
     vaext_incr_bc b :
       sup_In b (Mem.support (vaext_m1 w)) ->
       vaext_bc w' b = vaext_bc w b;
-    vaext_incr_nextblock :
+    vaext_incr_support :
       Mem.sup_include (Mem.support (vaext_m1 w)) (Mem.support (vaext_m1 w'));
     vaext_incr_load b ofs n bytes :
       sup_In b (Mem.support (vaext_m1 w)) ->
@@ -292,7 +292,7 @@ Next Obligation.
   - constructor; cbn; auto.
     + rewrite (Mem.support_free m1 b lo hi m1'); eauto.
     + intros. red in Hptr; cbn in Hptr.
-      destruct (Pos.eq_dec b0 b); subst.
+      destruct (eq_block b0 b); subst.
       * inv Hptr. inv H6. unfold inj_of_bc in H7. rewrite H2 in H7. discriminate.
       * eapply Mem.loadbytes_free_2; eauto.
   - constructor; auto.
@@ -365,7 +365,7 @@ Next Obligation.
   - constructor; cbn; auto.
     + apply Mem.support_store in Hm1'. rewrite Hm1'. eauto.
     + intros.
-      destruct (Pos.eq_dec b0 b); subst.
+      destruct (eq_block b0 b); subst.
       * dest_inj_of_bc. cbn in H2. contradiction.
       * rewrite <- H7. symmetry.
         eapply Mem.loadbytes_store_other; eauto.
@@ -445,7 +445,7 @@ Next Obligation.
   - constructor; cbn; auto.
     + apply Mem.support_storebytes in Hm1'. rewrite Hm1'. eauto.
     + intros.
-      destruct (Pos.eq_dec b0 b); subst.
+      destruct (eq_block b0 b); subst.
       * dest_inj_of_bc. contradiction.
       * rewrite <- H5. symmetry.
         eapply Mem.loadbytes_storebytes_other; eauto.
@@ -520,7 +520,7 @@ Next Obligation.
   eapply Mem.mext_perm_inv in H1; eauto.
 Qed.
 
-(** nextblock incr *)
+(** sup include *)
 Next Obligation.
   inv H. destruct H0 as (?&?&?). inv H0.
   inv H6. inv H9. rewrite mext_sup, mext_sup0. reflexivity.

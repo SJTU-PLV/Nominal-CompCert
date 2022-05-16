@@ -101,6 +101,8 @@ Parameter sup_incr : sup -> sup.
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
+Parameter sup_include_dec : forall s1 s2, {sup_include s1 s2} + {~sup_include s1 s2}.
+
 Parameter sup_incr_in : forall b s, sup_In b (sup_incr s) <-> b = (fresh_block s) \/ sup_In b s.
 
 Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
@@ -651,11 +653,7 @@ Axiom alloc_result:
   b = nextblock m1.
 
 (** Effect of [alloc] on block validity. *)
-(*
-Axiom nextblock_alloc:
-  forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
-  nextblock m2 = Pos.succ (nextblock m1).
-*)
+
 Axiom valid_block_alloc:
   forall m1 lo hi m2 b, alloc m1 lo hi = (m2, b) ->
   forall b', valid_block m1 b' -> valid_block m2 b'.

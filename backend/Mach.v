@@ -704,7 +704,7 @@ Inductive valid_blockv (s: sup): val -> Prop :=
       sup_In b s ->
       valid_blockv s (Vptr b ofs).
 
-Lemma valid_blockv_nextblock s s' v:
+Lemma valid_blockv_support s s' v:
   valid_blockv s v ->
   Mem.sup_include s s' ->
   valid_blockv s' v.
