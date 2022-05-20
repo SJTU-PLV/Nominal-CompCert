@@ -93,6 +93,7 @@ Require Reloctablesgen.
 Require RelocBingen.
 Require RemoveAddend.
 Require AsmLongInt.
+(* Require MergeSection. *)
 (* ELF generation *)
 Require RelocElfgen.
 Require EncodeRelocElf.
@@ -215,6 +216,7 @@ Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
   @@@ time "Generation of relocation table" Reloctablesgen.transf_program instr_size
   @@@ time "Encoding of instructions and data" RelocBingen.transf_program instr_size
   @@ time "Removing addendums" RemoveAddend.transf_program
+  (* @@@ time "Merge Sections" MergeSection.transf_program *)
   @@@ time "Generation of the reloctable Elf" RelocElfgen.gen_reloc_elf instr_size
   @@@ time "Encoding of the reloctable Elf" EncodeRelocElf.encode_elf_file.
  

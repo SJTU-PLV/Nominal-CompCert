@@ -36,8 +36,14 @@ Definition sectable := PTree.t section.
 
 (** ** Symbol table *)
 
-(* Different from the elf file format, we use read-write and read-only two type to represent data *)
+(* Different from the elf file format, we use read-write and read-only two type to represent data . Because encoding elminates the section type infomation. *)
 Inductive symbtype : Type := symb_func | symb_rwdata | symb_rodata | symb_notype.
+
+Definition symbtype_eq_dec : forall (t1 t2: symbtype), {t1 = t2} + {t1 <> t2}.
+Proof.
+  intros. destruct t1;destruct t2;auto;right;congruence.
+Qed.
+
 
 (** normal: point to a section *)
 Inductive secindex : Type :=

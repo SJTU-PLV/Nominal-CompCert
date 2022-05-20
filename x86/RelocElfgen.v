@@ -27,6 +27,7 @@ Set Implicit Arguments.
 Local Open Scope error_monad_scope.
 Local Open Scope hex_scope.
 Local Open Scope bits_scope.
+Local Open Scope string_byte_scope.
 
 (* We create a simple ELF file with the following layout
    where every section is aligned at 4 bytes:
@@ -76,10 +77,10 @@ Definition update_elf_state st secs h str secs_size h_num str_size : elf_state :
 Definition initial_elf_state :=
   {| e_sections := [];
      e_headers := [null_section_header];
-     e_shstrtbl := [HB["00"]];
+     e_shstrtbl := [];
      e_sections_ofs := 0;
      e_headers_idx := 1;
-     e_shstrtbl_ofs := 1 |}.
+     e_shstrtbl_ofs := 0 |}.
 
 
 
@@ -319,6 +320,21 @@ Definition acc_strtbl (res_acc: res (list byte * PTree.t Z * Z)) (id: ident) : r
 Definition gen_strtbl (symbols : list ident) : res (list byte * PTree.t Z * Z) :=
   fold_left acc_strtbl symbols (OK ([HB["00"]], PTree.empty Z, 1)).
 
+(* generate relocation table string .relname from relocation map*)
+Definition acc_relstrtbl (res_acc: res (list byte * PTree.t Z * Z)) (id: ident) : res (list byte * PTree.t Z * Z) :=
+  do acc <- res_acc;
+  let '(acc', strmap, ofs) := acc in
+  match find_symbol_pos id with
+  | None => Error [MSG "Cannot find the string of the symbol "; CTX id]
+  | Some n =>
+    let bytes := map (fun p => Byte.repr (Zpos p)) n in
+    let strmap' := PTree.set id ofs strmap in
+    OK (acc' ++ SB[".rel"] ++ bytes ++  [HB["00"]], strmap', ofs + Z.of_nat (length bytes) + 5 (*1 + 4*))
+  end.
+
+(* ofs is the previous section header string table offset *)
+Definition gen_relstrtbl (symbols : list ident) (ofs: Z) : res (list byte * PTree.t Z * Z) :=
+  fold_left acc_relstrtbl symbols (OK ([], PTree.empty Z, ofs)).
 
 (* ident to section index mapping *)
 Fixpoint ident_to_index_aux (idl: list ident) (idx: Z) (acc:PTree.t Z) : PTree.t Z:=
@@ -387,7 +403,6 @@ Definition acc_sections sec r :=
 Definition gen_sections (t:list (RelocProgram.section)) : res (list section) :=
   fold_right acc_sections (OK []) t.
 
-Local Open Scope string_byte_scope.
 Definition shstrtab_str := SB[".shstrtab"] ++ [HB["00"]].
 Definition strtab_str := SB[".strtab"] ++ [HB["00"]].
 Definition symtab_str := SB[".symtab"] ++ [HB["00"]].
@@ -398,6 +413,7 @@ Definition gen_text_data_sections_and_shstrtbl (p: program) (st:elf_state) : res
   let idl_sectbl := PTree.elements (prog_sectable p) in
   let secidl := map fst idl_sectbl in
   let sectbl := map snd idl_sectbl in
+  (* generate section header string table from section id*)
   let secidxmap := ident_to_index secidl 1 in
   (* generate section header string table and mapping *)
   do shstrtbl_res <- gen_strtbl secidl;
@@ -452,7 +468,7 @@ Definition acc_reloc_sections_headers acc (id_reloctbl:ident * list relocentry) 
   let '(secs, hs, ofs) := acc' in
   let (id, reloctbl) := id_reloctbl in
   match sec_idxmap ! id with
-  | None => Error [MSG "Reloction table generation: no related section header index!"; CTX id]
+  | None => Error [MSG "Reloction table generation: no related section header index! "; CTX id]
   | Some sec_h_idx  =>
     match strmap ! id with
     | None => Error [MSG "Reloction table generation: no related string for "; CTX id]
@@ -471,14 +487,20 @@ End GEN_RELOC_SECS.
 
 (* symb_idxmap: get the index in symbtbl *)
 (* sec_idxmap: get the index of header of the section that be relocated in the section header table*)
-(* strmap: we do not generate new string for reloc section, we use the related section name *)
-Definition gen_reloc_sections_and_shstrtbl (p: program) (symb_idxmap sec_idxmap :PTree.t Z) (strmap: PTree.t Z) (st: elf_state) :=
+(* REMOVED: strmap: we do not generate new string for reloc section, we use the related section name *)
+(*  *)
+Definition gen_reloc_sections_and_shstrtbl (p: program) (symb_idxmap sec_idxmap :PTree.t Z) (st: elf_state) :=
   let idl_reloctbl := PTree.elements p.(prog_reloctables) in
+  let rel_idlist := map fst idl_reloctbl in
+  (* generate relocation string table , append to shstrtbl *)
+  do r <- gen_relstrtbl rel_idlist st.(e_shstrtbl_ofs);
+  (* ofs is useless !! *)
+  let '(rel_strtbl, rel_strmap, _ ) := r in
   let sec_ofs := st.(e_sections_ofs) in
   let symbtbl_idx := st.(e_headers_idx) - 1 in
-  do r <- gen_reloc_sections_headers symb_idxmap sec_idxmap symbtbl_idx strmap idl_reloctbl sec_ofs;
+  do r <- gen_reloc_sections_headers symb_idxmap sec_idxmap symbtbl_idx rel_strmap idl_reloctbl sec_ofs;
   let '(secs, hs, sec_ofs') := r in
-  let st1 := update_elf_state st secs hs [] (sec_ofs'-sec_ofs) (Z.of_nat (length idl_reloctbl)) 0 in
+  let st1 := update_elf_state st secs hs rel_strtbl (sec_ofs'-sec_ofs) (Z.of_nat (length idl_reloctbl)) (Z.of_nat (length rel_strtbl)) in
   OK st1.
 
 (* shstrtable generation *)
@@ -501,7 +523,7 @@ Definition gen_reloc_elf (p:program) :=
   do st2_symbmap <- gen_symtbl_section_strtbl_and_shstr p secidxmap st1;
   let '(st2, symtbl_idx_map) := st2_symbmap in
   (** *Generate reloction table section and headers *)
-  do st3 <- gen_reloc_sections_and_shstrtbl p symtbl_idx_map secidxmap shstrmap st2;
+  do st3 <- gen_reloc_sections_and_shstrtbl p symtbl_idx_map secidxmap (* shstrmap *) st2;
   (** *Generate section header string table and header *)
   do st4 <- gen_shstrtbl st3;
   (* debug: check section size *)

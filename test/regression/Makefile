@@ -1,11 +1,11 @@
 include ../../Makefile.config
 
 CCOMP=../../ccomp
-CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime \
+# CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime \
   -dparse -dc -dclight -dasm -fall \
   -DARCH_$(ARCH) -DMODEL_$(MODEL)
 
-# CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime \
+CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime \
  -relf -fall \
  -DARCH_$(ARCH) -DMODEL_$(MODEL)
 

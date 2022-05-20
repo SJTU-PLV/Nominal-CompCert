@@ -25,6 +25,14 @@ Parameter create_label_ident : unit -> ident.
 
 Parameter create_section_ident: unit -> ident.
 
+(** Special Sections *)
+Parameter create_text_section_ident: unit -> ident.
+Parameter create_data_section_ident: unit -> ident.
+Parameter create_rodata_section_ident: unit -> ident.
+Parameter create_text_rel_ident: unit -> ident.
+Parameter create_data_rel_ident: unit -> ident.
+Parameter create_rodata_rel_ident: unit -> ident.
+
 Axiom string_to_ident_symbol_to_pos:
   forall s lb, find_symbol_pos s = Some lb ->
                string_to_ident (map (fun p => Byte.repr (Zpos p)) lb) = Some s.

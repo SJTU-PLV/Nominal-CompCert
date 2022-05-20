@@ -134,6 +134,14 @@ Extract Constant SymbolString.create_label_ident => "JumptableString.create_labe
 
 (* Extract Constant TablesEncode.dump_reloctables => "DumpReloctables.dump_reloctables". *)
 
+(* Section merging*)
+Extract Constant SymbolString.create_text_section_ident => "SpecialSection.create_text_section_ident".
+Extract Constant SymbolString.create_data_section_ident => "SpecialSection.create_data_section_ident".
+Extract Constant SymbolString.create_rodata_section_ident => "SpecialSection.create_rodata_section_ident".
+Extract Constant SymbolString.create_text_rel_ident => "SpecialSection.create_text_rel_ident".
+Extract Constant SymbolString.create_data_rel_ident => "SpecialSection.create_data_rel_ident".
+Extract Constant SymbolString.create_rodata_rel_ident => "SpecialSection.create_rodata_rel_ident".
+
 (* CheckDef *)
 (* Extract Constant CheckDef.is_def_builtin => "CheckDefImpl.is_def_builtin". *)
 Extract Constant CheckDef.is_def_string_literal => "CheckDefImpl.is_def_string_literal".
