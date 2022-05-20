@@ -237,7 +237,7 @@ let expand_builtin_vstore chunk args =
        (if Asmgen.addressing_mentions addr RAX then RCX else RAX)
   | _ -> assert false
 
-(* Handling of varargs *)
+(* Handling of varargs *) 
 
 let rec next_arg_locations ir fr ofs = function
   | [] ->

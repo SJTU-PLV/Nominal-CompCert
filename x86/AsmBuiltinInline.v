@@ -269,15 +269,15 @@ Fixpoint next_arg_locations ir fr ofs l : (Z*Z*Z) :=
   match l with
   | [] => (ir,fr,ofs)
   | (Tint | Tlong | Tany32 | Tany64) :: l =>
-    if Z.leb ir 6
+    if Z.ltb ir 6
     then next_arg_locations (ir+1) fr ofs l
     else next_arg_locations ir fr (ofs+8) l
   | (Tfloat | Tsingle) :: l =>
-    if Z.leb fr 8
+    if Z.ltb fr 8
     then next_arg_locations ir (fr + 1) ofs l
     else next_arg_locations ir fr (ofs + 8) l
   end.
-      
+
 
 (** follow Asmexpand.ml  *)
 Definition expand_builtin_va_start_64 r :=
