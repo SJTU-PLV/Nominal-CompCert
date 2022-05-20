@@ -1731,6 +1731,19 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (R, rdbits) := Rrdbits in
     (* B for rs, R for rd  *)
     OK ([REX_WRXB one1 R zero1 B; Ptestl_EvGv (AddrE0 rdbits) rsbits])
+  (* add Pbsrq Pbsfq for builtin pass*)
+  | Asm.Pbsfq rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    OK ([REX_WRXB one1 R zero1 B; Pbsfl rdbits rsbits])
+  | Asm.Pbsrq rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    OK ([REX_WRXB one1 R zero1 B; Pbsrl rdbits rsbits])       
   | _ => Error [MSG "Not exists or unsupported: "; MSG (instr_to_string i)]              
   end.
 

@@ -13,6 +13,7 @@ Require Import String.
 Require Import AsmLabelNew.
 Require Import Conventions1.
 Require Import Machregs.
+Require Import PseudoInstructions.
 Import ListNotations.
 
 Local Open Scope error_monad_scope.
@@ -282,10 +283,14 @@ Fixpoint next_arg_locations ir fr ofs l : (Z*Z*Z) :=
 Definition expand_builtin_va_start_64 r :=
   if cc_vararg (sig_cc (fn_sig cur_func)) then
     let '(ir,fr,ofs) := next_arg_locations 0 0 0 (cur_func.(fn_sig)).(sig_args) in
+    (* function stack size should be the same as the sz var in Pallocframe  *)
+    (* follow Asmexpand.ml: why add 8 ? I think that the size has minused 8 in sp_adjustment_elf64 *)
+    let (current_function_stacksize, _) := (sp_adjustment_elf64 cur_func.(fn_sig) cur_func.(fn_stacksize)) in
+    let current_function_stacksize := current_function_stacksize + 8 in
     let gp_offset := (ir * 8) in
     let fp_offset := (6 * 8 + fr * 16) in
-    let overflow_data_area := cur_func.(fn_stacksize) + ofs in
-    let reg_save_area := cur_func.(fn_stacksize) - 192 in
+    let overflow_data_area := current_function_stacksize + ofs in
+    let reg_save_area := current_function_stacksize - 192 in
     if ireg_eq r RAX then
       Error [MSG "Builtin_va_start_64: r = RAX"]
     else
@@ -294,9 +299,9 @@ Definition expand_builtin_va_start_64 r :=
        Pmovl_ri RAX (Int.repr fp_offset);
        Pmovl_mr (linear_addr r 4) RAX;
        Pleaq RAX (linear_addr RSP (overflow_data_area));
-       Pmovl_mr (linear_addr r 8) RAX;
+       Pmovq_mr (linear_addr r 8) RAX;
        Pleaq RAX (linear_addr RSP (reg_save_area));
-       Pmovl_mr (linear_addr r 16) RAX]
+       Pmovq_mr (linear_addr r 16) RAX]
   else
     Error [MSG "Fatal error: va_start used in non-vararg function"].
 

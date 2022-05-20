@@ -23,6 +23,7 @@ Definition sp_adjustment_elf64 (sg:signature) (sz:Z) :=
 
 (* Pstoreptr (linear addr ) (RAX) eval_addrmode32 *)
 (** Set stack alignment to 16  *)
+(* variant argument function: update stack size (left for AsmBuiltin.v) *)
 Definition transf_instr (sg:signature) (i: instruction): list instruction :=
   match i with
   | Pallocframe sz ofs_ra ofs_link =>

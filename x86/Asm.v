@@ -1959,6 +1959,8 @@ Let instr_size' (i: instruction) : Z :=
   | Pcmpq_rr _ _ => 3
   | Ptestq_rr _ _ => 3                                     
   | Pmovsl_rr rd rs => 3
+  | Pbsrq _ _ => 4
+  | Pbsfq _ _ => 4
   | _ => 1                       (** unsupported instruction or pseudo instruction *)
   end.
 
