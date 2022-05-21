@@ -31,7 +31,8 @@ Require Import Builtins.
 
 (** The observable behaviour of programs is stated in terms of
   input/output events, which represent the actions of the program
-  that the external world can observe.  CompCert leaves much flexibility as to
+  that the external world can observe.
+  CompCert leaves much flexibility as to
   the exact content of events: the only requirement is that they
   do not expose memory states nor pointer values
   (other than pointers to global variables), because these
@@ -617,6 +618,17 @@ Definition inject_separated (f f': meminj) (m1 m2: mem): Prop :=
   f b1 = None -> f' b1 = Some(b2, delta) ->
   ~Mem.valid_block m1 b1 /\ ~Mem.valid_block m2 b2.
 
+Definition external_block (b:block) : Prop :=
+  match b with
+    |Stack None _ _ => True
+    |_ => False
+  end.
+
+Definition inject_external (f: meminj) (m1 m2: mem): Prop :=
+  forall b,
+  ~ Mem.valid_block m1 b -> Mem.valid_block m2 b ->
+  external_block b /\ f b = Some (b,0).
+
 Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
   mk_extcall_properties {
 
@@ -684,6 +696,12 @@ Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
   ec_trace_length:
     forall ge vargs m t vres m',
     sem ge vargs m t vres m' -> (length t <= 1)%nat;
+
+(** External calls do not change support. *)
+  ec_mem_support:
+    forall ge vargs m t vres m',
+    sem ge vargs m t vres m' -> Mem.support m' = Mem.support m;
+
 
 (** External calls must be receptive to changes of traces by another, matching trace. *)
   ec_receptive:
@@ -778,6 +796,8 @@ Proof.
   red; intros. congruence.
 (* trace length *)
 - inv H; inv H0; simpl; lia.
+(* support *)
+- inv H; inv H0; congruence.
 (* receptive *)
 - inv H. exploit volatile_load_receptive; eauto. intros [v2 A].
   exists v2; exists m1; constructor; auto.
@@ -925,6 +945,8 @@ Proof.
   exists f; exists Vundef; exists m2'; intuition. constructor; auto. red; intros; congruence.
 (* trace length *)
 - inv H; inv H0; simpl; lia.
+(* support *)
+- inv H; inv H0; auto. eapply Mem.support_store; eauto.
 (* receptive *)
 - assert (t1 = t2). inv H. eapply volatile_store_receptive; eauto.
   subst t2; exists vres1; exists m1; auto.
@@ -1005,7 +1027,8 @@ Proof.
   rewrite D in H2 by auto. congruence.
 (* trace length *)
 - inv H; simpl; lia.
-(* receptive *)
+Abort.
+(*(* receptive *)
 - assert (t1 = t2). inv H; inv H0; auto. subst t2.
   exists vres1; exists m1; auto.
 (* determ *)
@@ -1018,7 +1041,7 @@ Proof.
   subst.
   split. constructor. intuition congruence.
 Qed.
-
+*)
 (** ** Semantics of dynamic memory deallocation (free) *)
 
 Inductive extcall_free_sem (ge: Genv.symtbl):
@@ -1106,6 +1129,8 @@ Proof.
   unfold Vnullptr in *; destruct Archi.ptr64; inv H4; auto.
 (* trace length *)
 - inv H; simpl; lia.
+(* support *)
+- inv H; simpl; auto. erewrite Mem.support_free; eauto.
 (* receptive *)
 - assert (t1 = t2) by (inv H; inv H0; auto). subst t2.
   exists vres1; exists m1; auto.
@@ -1150,7 +1175,7 @@ Proof.
 - (* perms *)
   intros. inv H. eapply Mem.perm_storebytes_2; eauto.
 - (* readonly *)
-  intros. inv H. eapply unchanged_on_readonly; eauto. 
+  intros. inv H. eapply unchanged_on_readonly; eauto.
   eapply Mem.storebytes_unchanged_on; eauto.
   intros; red; intros. elim H11.
   apply Mem.perm_cur_max. eapply Mem.storebytes_range_perm; eauto.
@@ -1231,6 +1256,9 @@ Proof.
   red; intros; congruence.
 - (* trace length *)
   intros; inv H. simpl; lia.
+(* support *)
+- intros. inv H; simpl; auto.
+  erewrite Mem.support_storebytes; eauto.
 - (* receptive *)
   intros.
   assert (t1 = t2). inv H; inv H0; auto. subst t2.
@@ -1274,6 +1302,8 @@ Proof.
   red; intros; congruence.
 (* trace length *)
 - inv H; simpl; lia.
+(* support *)
+- inv H; simpl; auto.
 (* receptive *)
 - assert (t1 = t2). inv H; inv H0; auto.
   exists vres1; exists m1; congruence.
@@ -1316,6 +1346,8 @@ Proof.
   red; intros; congruence.
 (* trace length *)
 - inv H; simpl; lia.
+(* support *)
+- inv H; simpl; auto.
 (* receptive *)
 - assert (t1 = t2). inv H; inv H0; auto. subst t2.
   exists vres1; exists m1; auto.
@@ -1355,6 +1387,8 @@ Proof.
   red; intros; congruence.
 (* trace length *)
 - inv H; simpl; lia.
+(* support *)
+- inv H; simpl; auto.
 (* receptive *)
 - inv H; inv H0. exists Vundef, m1; constructor.
 (* determ *)
@@ -1407,11 +1441,13 @@ Proof.
   red; intros; congruence.
 (* trace length *)
 - inv H; simpl; lia.
+(* support *)
+- inv H; simpl; auto.
 (* receptive *)
-- inv H; inv H0. exists vres1, m1; constructor; auto. 
+- inv H; inv H0. exists vres1, m1; constructor; auto.
 (* determ *)
 - inv H; inv H0.
-  split. constructor. intuition congruence. 
+  split. constructor. intuition congruence.
 Qed.
 
 (** ** Semantics of external functions. *)
@@ -1443,7 +1479,7 @@ Definition builtin_or_external_sem name sg :=
 Lemma builtin_or_external_sem_ok: forall name sg,
   extcall_properties (builtin_or_external_sem name sg) sg.
 Proof.
-  unfold builtin_or_external_sem; intros. 
+  unfold builtin_or_external_sem; intros.
   destruct (lookup_builtin_function name sg) as [bf|] eqn:L.
 - exploit lookup_builtin_function_sig; eauto. intros EQ; subst sg.
   apply known_builtin_ok.
@@ -1468,7 +1504,7 @@ Definition external_call (ef: external_function): extcall_sem :=
   | EF_runtime name sg   => builtin_or_external_sem name sg
   | EF_vload chunk       => volatile_load_sem chunk
   | EF_vstore chunk      => volatile_store_sem chunk
-  | EF_malloc            => extcall_malloc_sem
+(*   | EF_malloc            => extcall_malloc_sem *)
   | EF_free              => extcall_free_sem
   | EF_memcpy sz al      => extcall_memcpy_sem sz al
   | EF_annot kind txt targs   => extcall_annot_sem txt targs
@@ -1487,7 +1523,6 @@ Proof.
   apply builtin_or_external_sem_ok.
   apply volatile_load_ok.
   apply volatile_store_ok.
-  apply extcall_malloc_ok.
   apply extcall_free_ok.
   apply extcall_memcpy_ok.
   apply extcall_annot_ok.
@@ -1503,6 +1538,7 @@ Definition external_call_readonly ef := ec_readonly (external_call_spec ef).
 Definition external_call_mem_extends ef := ec_mem_extends (external_call_spec ef).
 Definition external_call_mem_inject_gen ef := ec_mem_inject (external_call_spec ef).
 Definition external_call_trace_length ef := ec_trace_length (external_call_spec ef).
+Definition external_call_support ef := ec_mem_support (external_call_spec ef).
 Definition external_call_receptive ef := ec_receptive (external_call_spec ef).
 Definition external_call_determ ef := ec_determ (external_call_spec ef).
 
@@ -1518,15 +1554,196 @@ Qed.
 
 (** Corollary of [external_call_valid_block]. *)
 
-Lemma external_call_support:
+
+(** * Axioms and Lemmas of strees in [external_call_mem_inject]*)
+(* the external_call here is all the external functions except the real
+   module interaction *)
+(*
+Definition external_stree (s:stree) : Prop :=
+  forall fid p pos , stree_In fid p pos s -> fid = None.
+
+Fixpoint add_dead_substree (s s':stree) : stree :=
+  match s with
+    |Node fid pl tl (Some s1) =>
+     let s1' := add_dead_substree s1 s' in
+     Node fid pl tl (Some s1')
+    |Node fid pl tl None =>
+     Node fid pl (tl ++ (s'::nil)) None
+  end.
+*)
+(*
+Parameter external_stree_gen : external_function -> Senv.t -> list val -> mem ->
+                           option stree.
+
+Axiom external_stree_gen_spec : forall ef ge vargs m t,
+    external_stree_gen ef ge vargs m = Some t -> external_stree t.
+*
+Axiom external_call_stack:
   forall ef ge vargs m1 t vres m2,
   external_call ef ge vargs m1 t vres m2 ->
-  Mem.sup_include (Mem.support m1) (Mem.support m2).
+  Mem.stack (Mem.support m2) =
+  match external_stree_gen ef ge vargs m1 with
+    |Some t' => add_dead_substree (Mem.stack (Mem.support m1)) t'
+    |None => (Mem.stack (Mem.support m1))
+  end.
+
+Axiom external_call_mem_inject_stree:
+  forall ge1 ge2 vargs m1 f m1' vargs',
+  symbols_inject f ge1 ge2 ->
+  Mem.inject f m1 m1' ->
+  Val.inject_list f vargs vargs' ->
+  forall ef,
+  external_stree_gen ef ge1 vargs m1 = external_stree_gen ef ge2 vargs' m1'.
+
+Lemma add_dead_substree_depth :
+  forall t t' st,
+    add_dead_substree t st = t' ->
+    Memory.cdepth t = Memory.cdepth t'.
 Proof.
-  intros. unfold Mem.sup_include. intros.
-  exploit external_call_valid_block. eauto. apply H0.
-  auto.
+  induction t. intros. destruct t. destruct o; subst; simpl.
+  exploit H; eauto. simpl. auto. auto.
 Qed.
+
+Lemma add_dead_substree_in :
+  forall t t' st fid p pos,
+    add_dead_substree t st = t' ->
+    ~ stree_In fid p pos t -> stree_In fid p pos t'
+    -> external_stree st -> fid = None.
+Proof.
+  induction t; intros. destruct t; destruct o; simpl in *.
+  subst. destruct p; simpl in *. congruence.
+  destr_in H1. exploit H; eauto.
+  subst. destruct p; simpl in *. congruence.
+  destr_in H2. assert (n < length (l0++st::nil))%nat.
+  apply nth_error_Some. congruence. destr_in H1.
+  assert (n < length l0)%nat. apply nth_error_Some. congruence.
+  rewrite nth_error_app1 in Heqo. congruence. auto.
+  apply nth_error_None in Heqo0.
+  rewrite nth_error_app2 in Heqo; eauto.
+  assert (n = length l0). rewrite app_length in H0. simpl in *. extlia. subst. rewrite Nat.sub_diag in Heqo. inv Heqo. apply H3 in H2. auto.
+Qed.
+
+Lemma external_call_new_block:
+  forall ef ge vargs m1 t vres m2 b,
+  external_call ef ge vargs m1 t vres m2 ->
+  ~ Mem.valid_block m1 b -> Mem.valid_block m2 b ->
+  external_block b.
+Proof.
+  intros. unfold Mem.valid_block in *. destruct b; simpl in *.
+  - exploit external_call_stack; eauto.
+    destr. intro.
+    exploit add_dead_substree_in; eauto.
+    2: eapply external_stree_gen_spec; eauto. rewrite H2 in H1.
+    auto. intro. rewrite H3. auto.
+  - erewrite external_call_global in H0; eauto.
+Qed.
+*)
+Lemma external_call_sdepth:
+  forall ef ge vargs m1 t vres m2,
+  external_call ef ge vargs m1 t vres m2 ->
+  Mem.sdepth m2 = Mem.sdepth m1.
+Proof.
+  intros. exploit external_call_support; eauto.
+  intro.
+  unfold Mem.sdepth. congruence.
+Qed.
+(* wrong : the f' may not map every new block.
+Lemma external_call_mem_inject_gen_result:
+  forall ef ge1 ge2  vargs m1 t vres m2 f m1' m2' vres' vargs' f',
+  symbols_inject f ge1 ge2 ->
+  external_call ef ge1 vargs m1 t vres m2 ->
+  Mem.inject f m1 m1' ->
+  Mem.stackseq m1 m1' ->
+  Val.inject_list f vargs vargs' ->
+  external_call ef ge2 vargs' m1' t vres' m2' ->
+  Mem.inject f' m2 m2' ->
+  inject_external f' m1 m2.
+*)
+Lemma external_call_mem_inject_gen_stackeq:
+  forall ef ge1 ge2 vargs m1 t vres m2 f m1' m2' vres' vargs' f',
+  symbols_inject f ge1 ge2 ->
+  external_call ef ge1 vargs m1 t vres m2 ->
+  Mem.inject f m1 m1' ->
+  Val.inject_list f vargs vargs' ->
+  external_call ef ge2 vargs' m1' t vres' m2' ->
+  Mem.inject f' m2 m2' ->
+  Mem.stack (Mem.support m1) = Mem.stack (Mem.support m1') ->
+  Mem.stack (Mem.support m2) = Mem.stack (Mem.support m2').
+Proof.
+  intros.
+  apply external_call_support in H0.
+  apply external_call_support in H3.
+  congruence.
+Qed.
+
+(*
+Lemma struct_eq_add_dead_substree: forall t t' st,
+      struct_eq t t' ->
+      struct_eq (add_dead_substree t st) (add_dead_substree t' st).
+Proof.
+  induction t. intros. inv H0.
+  - simpl. constructor. constructor. apply struct_eq_refl.
+    constructor.
+  - simpl. constructor.
+    apply list_forall2_app. auto. constructor.
+    apply struct_eq_refl. constructor.
+  - simpl. constructor. auto. eapply H; eauto.
+    simpl. auto.
+Qed.
+*)
+
+Lemma external_call_mem_inject_gen_stackseq:
+  forall ef ge1 ge2 vargs m1 t vres m2 f m1' m2' vres' vargs' f',
+  symbols_inject f ge1 ge2 ->
+  external_call ef ge1 vargs m1 t vres m2 ->
+  Mem.inject f m1 m1' ->
+  Val.inject_list f vargs vargs' ->
+  external_call ef ge2 vargs' m1' t vres' m2' ->
+  Mem.inject f' m2 m2' ->
+  Mem.stackseq m1 m1' -> Mem.stackseq m2 m2'.
+Proof.
+  intros. unfold Mem.stackseq in *.
+  apply external_call_support in H0.
+  apply external_call_support in H3.
+  congruence.
+Qed.
+
+(*we can prove it by define a new external_func*)
+(*
+Axiom external_call_mem_inject_gen':
+  forall ef ge1 ge2 vargs m1 t vres m2 f m1' vargs',
+    symbols_inject f ge1 ge2 ->
+    external_call ef ge1 vargs m1 t vres m2 ->
+    Mem.inject f m1 m1' ->
+    Val.inject_list f vargs vargs' ->
+    exists(f':meminj)(vres':val)(m2':mem),
+     external_call ef ge2 vargs' m1' t vres' m2'
+    /\ Val.inject f' vres vres'
+    /\ Mem.inject f' m2 m2'
+    /\ Mem.unchanged_on (loc_unmapped f) m1 m2
+    /\ Mem.unchanged_on (loc_out_of_reach f m1) m1' m2'
+    /\ inject_incr f f'
+    /\ incr_without_glob f f'
+    /\ inject_separated f f' m1 m1'
+    /\ (Mem.stackseq m1 m1' -> inject_external f' m1 m2).
+Proof.
+  intros. exploit external_call_mem_inject_gen; eauto.
+  intros (f' & vres' &m2'&A&B&C&D&E&F&G).
+  exists f',vres',m2'. split. auto. split. auto. split. auto.
+  split. auto. split. auto. split. auto. split.
+ intro. intros. exploit G; eauto.
+  intros [X Y]. inv C.
+  exploit external_call_new_block; eauto. intro.
+  exploit external_call_new_block. apply H0. all: eauto.
+  destruct (Mem.sup_dec b (Mem.support m2)). auto.
+  apply mi_freeblocks in n. congruence. intro.
+  split. destruct b. constructor. inv H6.
+  destruct b'. constructor. inv H5.
+  split; eauto. split. eapply external_call_new_block. apply H0.
+  eauto. eauto. eapply external_call_mem_inject_gen_result; eauto.
+Qed.
+*)
+
 (** Special case of [external_call_mem_inject_gen] (for backward compatibility) *)
 
 Lemma external_call_mem_inject:
@@ -1553,6 +1770,55 @@ Proof.
   + simpl; unfold Genv.block_is_volatile, Genv.find_var_info, Genv.find_def.
     edestruct (Genv.mge_info H _ H3); subst; reflexivity.
 Qed.
+
+Lemma external_call_mem_inject_stackeq:
+  forall ef F V (ge: Genv.t F V) vargs m1 t vres m2 f m1' m2' vres' vargs' f',
+  symbols_inject f ge ge ->
+  external_call ef ge vargs m1 t vres m2 ->
+  Mem.inject f m1 m1' ->
+  Val.inject_list f vargs vargs' ->
+  external_call ef ge vargs' m1' t vres' m2' ->
+  Mem.inject f' m2 m2' ->
+  Mem.stack (Mem.support m1) = Mem.stack (Mem.support m1') ->
+  Mem.stack (Mem.support m2) = Mem.stack (Mem.support m2').
+Proof.
+  intros. eapply external_call_mem_inject_gen_stackeq; eauto.
+Qed.
+
+Lemma external_call_mem_inject_stackseq:
+  forall ef F V (ge: Genv.t F V) vargs m1 t vres m2 f m1' m2' vres' vargs' f',
+  symbols_inject f ge ge ->
+  external_call ef ge vargs m1 t vres m2 ->
+  Mem.inject f m1 m1' ->
+  Val.inject_list f vargs vargs' ->
+  external_call ef ge vargs' m1' t vres' m2' ->
+  Mem.inject f' m2 m2' ->
+  Mem.stackseq m1 m1' -> Mem.stackseq m2 m2'.
+Proof.
+  intros. eapply external_call_mem_inject_gen_stackseq; eauto.
+Qed.
+(*
+Lemma external_call_mem_inject':
+  forall ef F V (ge: Genv.t F V) vargs m1 t vres m2 f m1' vargs',
+  symbols_inject f ge ge ->
+  external_call ef ge vargs m1 t vres m2 ->
+  Mem.inject f m1 m1' ->
+    Val.inject_list f vargs vargs' ->
+  exists f', exists vres', exists m2',
+     external_call ef ge vargs' m1' t vres' m2'
+    /\ Val.inject f' vres vres'
+    /\ Mem.inject f' m2 m2'
+    /\ Mem.unchanged_on (loc_unmapped f) m1 m2
+    /\ Mem.unchanged_on (loc_out_of_reach f m1) m1' m2'
+    /\ inject_incr f f'
+    /\ incr_without_glob f f'
+    /\ inject_separated f f' m1 m1'
+    /\  (Mem.stackseq m1 m1' -> inject_external f' m1 m2).
+Proof.
+  intros. eapply external_call_mem_inject_gen' with (ge1 := ge); eauto.
+  eapply meminj_preserves_globals_symbols_inject; eauto.
+>>>>>>> a091c4c
+*)
 
 (** Corollaries of [external_call_determ]. *)
 
@@ -1621,7 +1887,7 @@ Lemma eval_builtin_arg_determ:
 Proof.
   induction 1; intros v' EV; inv EV; try congruence.
   f_equal; eauto.
-  apply IHeval_builtin_arg1 in H3. apply IHeval_builtin_arg2 in H5. subst; auto. 
+  apply IHeval_builtin_arg1 in H3. apply IHeval_builtin_arg2 in H5. subst; auto.
 Qed.
 
 Lemma eval_builtin_args_determ:
@@ -1666,7 +1932,7 @@ Proof.
   econstructor; split; eauto with barg. apply Val.longofwords_lessdef; auto.
 - destruct IHeval_builtin_arg1 as (vhi' & P & Q).
   destruct IHeval_builtin_arg2 as (vlo' & R & S).
-  econstructor; split; eauto with barg. 
+  econstructor; split; eauto with barg.
   destruct Archi.ptr64; auto using Val.add_lessdef, Val.addl_lessdef.
 Qed.
 

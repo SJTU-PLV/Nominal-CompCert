@@ -322,14 +322,24 @@ Inductive rred: expr -> mem -> trace -> expr -> mem -> Prop :=
 (** Head reduction for function calls.
     (More exactly, identification of function calls that can reduce.) *)
 
+<<<<<<< HEAD
 Inductive callred: expr -> mem -> val -> list val -> type -> Prop :=
   | red_call: forall vf tyf m tyargs tyres cconv el ty fd vargs,
+=======
+Inductive callred: expr -> mem -> fundef -> list val -> type -> ident -> Prop :=
+  | red_call: forall vf tyf m tyargs tyres cconv el ty fd vargs id,
+      vf = Vptr (Global id) Ptrofs.zero ->
+>>>>>>> a091c4c
       Genv.find_funct ge vf = Some fd ->
       cast_arguments m el tyargs vargs ->
       type_of_fundef fd = Tfunction tyargs tyres cconv ->
       classify_fun tyf = fun_case_f tyargs tyres cconv ->
       callred (Ecall (Eval vf tyf) el ty) m
+<<<<<<< HEAD
               vf vargs ty.
+=======
+              fd vargs ty id.
+>>>>>>> a091c4c
 
 (** Reduction contexts.  In accordance with C's nondeterministic semantics,
   we allow reduction both to the left and to the right of a binary operator.
@@ -434,8 +444,8 @@ Inductive imm_safe: kind -> expr -> mem -> Prop :=
       rred e m t e' m' ->
       context RV to C ->
       imm_safe to (C e) m
-  | imm_safe_callred: forall to C e m fd args ty,
-      callred e m fd args ty ->
+  | imm_safe_callred: forall to C e m fd args ty id,
+      callred e m fd args ty id->
       context RV to C ->
       imm_safe to (C e) m.
 
@@ -577,7 +587,8 @@ Inductive state: Type :=
       (vf: val)
       (args: list val)
       (k: cont)
-      (m: mem) : state
+      (m: mem)
+      (id: ident) : state
   | Returnstate                         (**r returning from a function *)
       (res: val)
       (k: cont)
@@ -652,11 +663,19 @@ Inductive estep: state -> trace -> state -> Prop :=
       estep (ExprState f (C a) k e m)
           t (ExprState f (C a') k e m')
 
+<<<<<<< HEAD
   | step_call: forall C f a k e m vf vargs ty,
       callred a m vf vargs ty ->
       context RV RV C ->
       estep (ExprState f (C a) k e m)
          E0 (Callstate vf vargs (Kcall f e C ty k) m)
+=======
+  | step_call: forall C f a k e m fd vargs ty id,
+      callred a m fd vargs ty id ->
+      context RV RV C ->
+      estep (ExprState f (C a) k e m)
+         E0 (Callstate fd vargs (Kcall f e C ty k) m id)
+>>>>>>> a091c4c
 
   | step_stuck: forall C f a k e m K,
       context K RV C -> ~(imm_safe e K a m) ->
@@ -757,23 +776,26 @@ Inductive sstep: state -> trace -> state -> Prop :=
       sstep (State f Sskip (Kfor4 a2 a3 s k) e m)
          E0 (State f (Sfor Sskip a2 a3 s) k e m)
 
-  | step_return_0: forall f k e m m',
+  | step_return_0: forall f k e m m' m'',
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       sstep (State f (Sreturn None) k e m)
-         E0 (Returnstate Vundef (call_cont k) m')
+         E0 (Returnstate Vundef (call_cont k) m'')
   | step_return_1: forall f x k e m,
       sstep (State f (Sreturn (Some x)) k e m)
          E0 (ExprState f x (Kreturn k) e  m)
-  | step_return_2:  forall f v1 ty k e m v2 m',
+  | step_return_2:  forall f v1 ty k e m v2 m' m'',
       sem_cast v1 ty f.(fn_return) m = Some v2 ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       sstep (ExprState f (Eval v1 ty) (Kreturn k) e m)
-         E0 (Returnstate v2 (call_cont k) m')
-  | step_skip_call: forall f k e m m',
+         E0 (Returnstate v2 (call_cont k) m'')
+  | step_skip_call: forall f k e m m' m'',
       is_call_cont k ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
       sstep (State f Sskip k e m)
-         E0 (Returnstate Vundef k m')
+         E0 (Returnstate Vundef k m'')
 
   | step_switch: forall f x sl k e m,
       sstep (State f (Sswitch x sl) k e m)
@@ -799,11 +821,17 @@ Inductive sstep: state -> trace -> state -> Prop :=
       sstep (State f (Sgoto lbl) k e m)
          E0 (State f s' k' e m)
 
+<<<<<<< HEAD
   | step_internal_function: forall vf f vargs k m e m1 m2,
       forall FIND: Genv.find_funct ge vf = Some (Internal f),
+=======
+  | step_internal_function: forall f vargs k m e m0 m1 m2 path id,
+>>>>>>> a091c4c
       list_norepet (var_names (fn_params f) ++ var_names (fn_vars f)) ->
-      alloc_variables empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
+      Mem.alloc_frame m id = (m0,path) ->
+      alloc_variables empty_env m0 (f.(fn_params) ++ f.(fn_vars)) e m1 ->
       bind_parameters e m1 f.(fn_params) vargs m2 ->
+<<<<<<< HEAD
       sstep (Callstate vf vargs k m)
          E0 (State f f.(fn_body) k e m2)
 
@@ -811,6 +839,14 @@ Inductive sstep: state -> trace -> state -> Prop :=
       forall FIND: Genv.find_funct ge vf = Some (External ef targs tres cc),
       external_call ef  ge vargs m t vres m' ->
       sstep (Callstate vf vargs k m)
+=======
+      sstep (Callstate (Internal f) vargs k m id)
+         E0 (State f f.(fn_body) k e m2)
+
+  | step_external_function: forall ef targs tres cc vargs k m vres t m' id,
+      external_call ef  ge vargs m t vres m' ->
+      sstep (Callstate (External ef targs tres cc) vargs k m id)
+>>>>>>> a091c4c
           t (Returnstate vres k m')
 
   | step_returnstate: forall v f e C ty k m,
@@ -824,6 +860,7 @@ Definition step (S: state) (t: trace) (S': state) : Prop :=
 
 (** Execution of whole programs are described as sequences of transitions
   from an initial state to a final state.  An initial state is a [Callstate]
+<<<<<<< HEAD
   corresponding to the invocation of a given function of the program
   with an empty continuation. *)
 
@@ -851,6 +888,19 @@ Inductive after_external: state -> c_reply -> state -> Prop :=
         (Callstate vf vargs k m)
         (cr vres m')
         (Returnstate vres k m').
+=======
+  corresponding to the invocation of the ``main'' function of the program
+  without arguments and with an empty continuation. *)
+
+Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall b f m0,
+      let ge := globalenv p in
+      Genv.init_mem p = Some m0 ->
+      Genv.find_symbol ge p.(prog_main) = Some b ->
+      Genv.find_funct_ptr ge b = Some f ->
+      type_of_fundef f = Tfunction Tnil type_int32s cc_default ->
+      initial_state p (Callstate f nil Kstop m0 p.(prog_main)).
+>>>>>>> a091c4c
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 

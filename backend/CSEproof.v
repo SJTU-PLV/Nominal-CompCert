@@ -925,13 +925,23 @@ Inductive match_states: state -> state -> Prop :=
       match_states (State s f sp pc rs m)
                    (State s' (transf_function' f approx) sp pc rs' m')
   | match_states_call:
+<<<<<<< HEAD
       forall s vf vf' args m s' args' m'
+=======
+      forall s f tf args m s' args' m' cu id
+             (LINK: linkorder cu prog)
+>>>>>>> a091c4c
              (STACKS: match_stackframes s s')
              (VF: Val.lessdef vf vf')
              (ARGS: Val.lessdef_list args args')
              (MEXT: Mem.extends m m'),
+<<<<<<< HEAD
       match_states (Callstate s vf args m)
                    (Callstate s' vf' args' m')
+=======
+      match_states (Callstate s f args m id)
+                   (Callstate s' tf args' m' id)
+>>>>>>> a091c4c
   | match_states_return:
       forall s s' v v' m m'
              (STACK: match_stackframes s s')
@@ -1066,6 +1076,8 @@ Proof.
   intros (tf & FIND' & TRANSF').
   econstructor; split.
   eapply exec_Icall; eauto.
+  destruct ros; simpl in *; auto.
+  generalize (RLD r). intro. inv H2. eauto. congruence. auto.
   eapply sig_preserved; eauto.
   econstructor; eauto.
   eapply match_stackframes_cons; eauto.
@@ -1076,11 +1088,19 @@ Proof.
   apply regs_lessdef_regs; auto.
 
 - (* Itailcall *)
+<<<<<<< HEAD
   exploit functions_translated. eauto. eapply ros_address_translated; eauto.
   intros (tf & FIND' & TRANSF').
   exploit Mem.free_parallel_extends; eauto. intros [m'' [A B]].
+=======
+  exploit find_function_translated; eauto. intros (cu' & tf & FIND' & TRANSF' & LINK').
+  exploit Mem.free_parallel_extends; eauto. intros [m'1 [A B]].
+  exploit Mem.return_frame_parallel_extends; eauto. intros [m'2 [A' B']].
+>>>>>>> a091c4c
   econstructor; split.
   eapply exec_Itailcall; eauto.
+  destruct ros; simpl in *; auto.
+  generalize (RLD r). intro. inv H2. eauto. congruence. auto.
   eapply sig_preserved; eauto.
   econstructor; eauto.
   eapply ros_address_translated; eauto.
@@ -1157,18 +1177,25 @@ Proof.
   unfold transfer; rewrite H; auto.
 
 - (* Ireturn *)
-  exploit Mem.free_parallel_extends; eauto. intros [m'' [A B]].
+  exploit Mem.free_parallel_extends; eauto. intros [m'1 [A B]].
+  exploit Mem.return_frame_parallel_extends; eauto. intros [m'2 [A' B']].
   econstructor; split.
   eapply exec_Ireturn; eauto.
   econstructor; eauto.
   destruct or; simpl; auto.
 
 - (* internal function *)
+<<<<<<< HEAD
   exploit functions_translated; eauto. cbn. intros (tf & FIND' & TFD).
   monadInv TFD. unfold transf_function in EQ. fold (analyze prog f) in EQ.
   destruct (analyze prog f) as [approx|] eqn:?; inv EQ.
+=======
+  monadInv TFD. unfold transf_function in EQ. fold (analyze cu f) in EQ.
+  destruct (analyze cu f) as [approx|] eqn:?; inv EQ.
+  exploit Mem.alloc_frame_extends; eauto. intros (m'1 & A & B).
+>>>>>>> a091c4c
   exploit Mem.alloc_extends; eauto. apply Z.le_refl. apply Z.le_refl.
-  intros (m'' & A & B).
+  intros (m'2 & A' & B').
   econstructor; split.
   eapply exec_function_internal; simpl; eauto.
   simpl. econstructor; eauto.
@@ -1196,12 +1223,26 @@ Lemma transf_initial_states:
   forall w q1 q2 st1, match_query (cc_c ext) w q1 q2 -> initial_state ge q1 st1 ->
   exists st2, initial_state tge q2 st2 /\ match_states st1 st2.
 Proof.
+<<<<<<< HEAD
   intros. destruct H. inv H0. CKLR.uncklr. destruct H as [vf|]; try congruence.
   exploit functions_translated; eauto. intros (tf & FIND & TFD).
   exists (Callstate nil vf vargs2 m2); split.
   - setoid_rewrite <- (sig_preserved (romem_for prog) (Internal f)); eauto.
     monadInv TFD. constructor; auto.
   - constructor; auto. constructor.
+=======
+  intros. inversion H.
+  exploit funct_ptr_translated; eauto. intros (cu & tf & A & B & C).
+  exists (Callstate nil tf nil m0 (prog_main tprog)); split.
+  econstructor; eauto.
+  eapply (Genv.init_mem_match TRANSF); eauto.
+  replace (prog_main tprog) with (prog_main prog).
+  rewrite symbols_preserved. eauto.
+  symmetry. eapply match_program_main; eauto.
+  rewrite <- H3. eapply sig_preserved; eauto.
+  rewrite (match_program_main TRANSF).
+  econstructor. eauto. constructor. auto. auto. apply Mem.extends_refl.
+>>>>>>> a091c4c
 Qed.
 
 Lemma transf_final_states:

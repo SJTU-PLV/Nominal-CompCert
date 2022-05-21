@@ -1126,11 +1126,20 @@ Inductive match_states: Csem.state -> state -> Prop :=
       (MK: match_cont cu.(prog_comp_env) k tk),
       match_states (Csem.State f s k e m)
                    (State tf ts tk e le m)
+<<<<<<< HEAD
   | match_callstates: forall vf args k m tk cu
+=======
+  | match_callstates: forall fd args k m tfd tk cu id
+>>>>>>> a091c4c
       (LINK: linkorder cu prog)
       (MK: forall ce, match_cont ce k tk),
+<<<<<<< HEAD
       match_states (Csem.Callstate vf args k m)
                    (Callstate vf args tk m)
+=======
+      match_states (Csem.Callstate fd args k m id)
+                   (Callstate tfd args tk m id)
+>>>>>>> a091c4c
   | match_returnstates: forall res k m tk
       (MK: forall ce, match_cont ce k tk),
       match_states (Csem.Returnstate res k m)
@@ -2003,8 +2012,7 @@ Ltac NOTIN :=
 - (* call *)
   exploit tr_top_leftcontext; eauto. clear TR.
   intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
-  inv P. inv H5.
-+ (* for effects *)
+  inv P. inv H.
   exploit tr_simple_rvalue; eauto. intros [SL1 [TY1 EV1]].
   exploit tr_simple_exprlist; eauto. intros [SL2 EV2].
   subst. simpl Kseqlist.
@@ -2030,8 +2038,8 @@ Ltac NOTIN :=
   econstructor. eexact L. eauto. econstructor. eexact LINK. auto. auto.
   intros. apply S.
   destruct dst'; constructor.
-  auto. intros. constructor. rewrite H5; auto. apply PTree.gss.
-  auto. intros. constructor. rewrite H5; auto. apply PTree.gss.
+  auto. intros. constructor. rewrite H; auto. apply PTree.gss.
+  auto. intros. constructor. rewrite H; auto. apply PTree.gss.
   intros. apply PTree.gso. intuition congruence.
   auto. auto.
 
@@ -2282,7 +2290,6 @@ Proof.
   econstructor; split.
   left. apply plus_one. constructor.
   econstructor; eauto. constructor; auto.
-
 - (* return none *)
   inv TR. econstructor; split.
   left. apply plus_one. econstructor; eauto. rewrite blocks_of_env_preserved; eauto.
@@ -2302,9 +2309,8 @@ Proof.
   inv TR.
   assert (is_call_cont tk). { inv MK; simpl in *; auto. }
   econstructor; split.
-  left. apply plus_one. apply step_skip_call; eauto. rewrite blocks_of_env_preserved; eauto.
+  left. apply plus_one. eapply step_skip_call; eauto. rewrite blocks_of_env_preserved; eauto.
   econstructor. intros; eapply match_cont_is_call_cont; eauto.
-
 - (* switch *)
   inv TR. inv H1.
   econstructor; split.
@@ -2347,6 +2353,7 @@ Proof.
   econstructor; eauto.
 
 - (* internal function *)
+<<<<<<< HEAD
   edestruct functions_translated as (cu' & tfd & FIND' & TF & CU); eauto.
   inv TF. inversion H3; subst.
   econstructor; split.
@@ -2354,8 +2361,16 @@ Proof.
   rewrite H6; rewrite H7; auto.
   rewrite H6; rewrite H7. eapply alloc_variables_preserved; eauto.
   rewrite H6. eapply bind_parameters_preserved; eauto.
+=======
+  inv TR. inversion H4; subst.
+  econstructor; split.
+  left; apply plus_one. eapply step_internal_function. econstructor.
+  rewrite H7; rewrite H8; eauto. eauto.
+  rewrite H7; rewrite H8. eapply alloc_variables_preserved; eauto.
+  rewrite H7. eapply bind_parameters_preserved; eauto.
+>>>>>>> a091c4c
   eauto.
-  econstructor; eauto. 
+  econstructor; eauto.
 
 - (* external function *)
   edestruct functions_translated as (cu' & tfd & FIND' & TF & CU); eauto.
@@ -2392,6 +2407,7 @@ Lemma transl_initial_states:
   exists S', Clight.initial_state tge q S' /\ match_states S S'.
 Proof.
   intros. inv H.
+<<<<<<< HEAD
   exploit functions_translated; eauto. intros (cu & tf & FIND & TR & L).
   econstructor; split.
   - inversion TR; subst.
@@ -2410,6 +2426,19 @@ Proof.
   edestruct functions_translated as (cu' & tfd & Htfd & TR & L); eauto. inv TR.
   split. econstructor; eauto. intros r S' HS'. inv HS'.
   eexists. split; econstructor; eauto.
+=======
+  exploit function_ptr_translated; eauto. intros (cu & tf & FIND & TR & L).
+  destruct TRANSL. destruct H as (A & B & C).
+  econstructor; split.
+  econstructor.
+  eapply (Genv.init_mem_match (proj1 TRANSL)); eauto.
+  setoid_rewrite B.
+  rewrite symbols_preserved. eauto.
+  eexact FIND.
+  rewrite <- H3. eapply type_of_fundef_preserved; eauto.
+  setoid_rewrite B.
+  econstructor; eauto. intros; constructor.
+>>>>>>> a091c4c
 Qed.
 
 Lemma transl_final_states:

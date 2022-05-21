@@ -727,8 +727,13 @@ Proof.
   exploit (functions_translated (Vptr b Ptrofs.zero)); eauto. cbn.
   destruct Ptrofs.eq_dec; try congruence. intros (tf & TFIND & TF). inv TF.
   split. eapply star_trans. eexact EX1.
+<<<<<<< HEAD
   eapply star_left. eapply exec_Icall; eauto.
   cbn. unfold Genv.symbol_address. cbn in H. rewrite H. eauto. auto.
+=======
+  eapply star_left. eapply exec_Icall; eauto. reflexivity.
+  simpl. rewrite symbols_preserved. rewrite H. eauto. auto.
+>>>>>>> a091c4c
   eapply star_left. eapply exec_function_external.
   cbn. unfold Genv.symbol_address. cbn in H. rewrite H. eauto. eauto.
   apply star_one. apply exec_return.
@@ -1215,13 +1220,23 @@ Inductive match_states: CminorSel.state -> RTL.state -> Prop :=
       match_states (CminorSel.State f s k sp e m)
                    (RTL.State cs tf sp ns rs tm)
   | match_callstate:
+<<<<<<< HEAD
       forall vf args targs k m tm cs tvf
+=======
+      forall f args targs k m tm cs tf id
+        (TF: transl_fundef f = OK tf)
+>>>>>>> a091c4c
         (MS: match_stacks k cs)
         (LF: Val.lessdef vf tvf)
         (LD: Val.lessdef_list args targs)
         (MEXT: Mem.extends m tm),
+<<<<<<< HEAD
       match_states (CminorSel.Callstate vf args k m)
                    (RTL.Callstate cs tvf targs tm)
+=======
+      match_states (CminorSel.Callstate f args k m id)
+                   (RTL.Callstate cs tf targs tm id)
+>>>>>>> a091c4c
   | match_returnstate:
       forall v tv k m tm cs
         (MS: match_stacks k cs)
@@ -1305,13 +1320,18 @@ Proof.
   assert ((fn_code tf)!ncont = Some(Ireturn rret)
           /\ match_stacks k cs).
     inv TK; simpl in H; try contradiction; auto.
-  destruct H1.
+  destruct H2.
   assert (fn_stacksize tf = fn_stackspace f).
     inv TF. auto.
+<<<<<<< HEAD
   edestruct Mem.free_parallel_extends as [tm' [ ]]; eauto.
+=======
+  edestruct Mem.free_parallel_extends as [tm' []]; eauto.
+  edestruct Mem.return_frame_parallel_extends as [tm'' []]; eauto.
+>>>>>>> a091c4c
   econstructor; split.
   left; apply plus_one. eapply exec_Ireturn. eauto.
-  rewrite H3. eauto.
+  rewrite H4. eauto. eauto.
   constructor; auto.
 
   (* assign *)
@@ -1340,16 +1360,21 @@ Proof.
   econstructor; eauto. constructor.
 
   (* call *)
-  inv TS; inv H.
+  inv TS; inv H0.
   (* indirect *)
   exploit transl_expr_correct; eauto.
-  intros [rs' [tm' [A [B [C [D X]]]]]].
+  intros [rs' [tm' [A [B [C [D X]]]]]]. inv C.
   exploit transl_exprlist_correct; eauto.
   intros [rs'' [tm'' [E [F [G [J Y]]]]]].
   exploit functions_translated; eauto. intros [tf' [P Q]].
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
+<<<<<<< HEAD
   eapply exec_Icall; eauto. simpl. rewrite J. eauto. simpl; auto.
+=======
+  eapply exec_Icall; eauto. simpl. rewrite J. rewrite <- H3. auto. left. auto.
+  simpl. rewrite J. rewrite <- H3. eauto. left. auto.
+>>>>>>> a091c4c
   apply sig_transl_function; auto.
   traceEq.
   constructor; auto. econstructor; eauto.
@@ -1360,27 +1385,43 @@ Proof.
   exploit functions_translated; eauto. intros [tf' [P Q]].
   econstructor; split.
   left; eapply plus_right. eexact E.
+<<<<<<< HEAD
   eapply exec_Icall; eauto. simpl.
     unfold Genv.symbol_address. cbn in H4. rewrite H4. eauto.
+=======
+  eapply exec_Icall; eauto. simpl. reflexivity. simpl.
+  rewrite symbols_preserved. rewrite H5.
+    rewrite Genv.find_funct_find_funct_ptr in P. eauto.
+>>>>>>> a091c4c
   apply sig_transl_function; auto.
   traceEq.
+  apply Genv.genv_vars_eq in H5 as H6. inv H6.
   constructor; auto. econstructor; eauto.
   cbn. unfold Genv.symbol_address. cbn in H4. rewrite H4. auto.
 
   (* tailcall *)
-  inv TS; inv H.
+  inv TS; inv H0.
   (* indirect *)
   exploit transl_expr_correct; eauto.
-  intros [rs' [tm' [A [B [C [D X]]]]]].
+  intros [rs' [tm' [A [B [C [D X]]]]]]. inv C.
   exploit transl_exprlist_correct; eauto.
   intros [rs'' [tm'' [E [F [G [J Y]]]]]].
   exploit functions_translated; eauto. intros [tf' [P Q]].
   exploit match_stacks_call_cont; eauto. intros [U V].
   assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
+<<<<<<< HEAD
   edestruct Mem.free_parallel_extends as [tm''' [ ]]; eauto.
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
   eapply exec_Itailcall; eauto. simpl. rewrite J. eauto. simpl; auto.
+=======
+  edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
+  edestruct Mem.return_frame_parallel_extends as [tm'''' []]; eauto.
+  econstructor; split.
+  left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
+  eapply exec_Itailcall; eauto. simpl. rewrite J. rewrite H3. auto. left. auto.
+  simpl. rewrite J. rewrite <- H3. eauto. left. auto.
+>>>>>>> a091c4c
   apply sig_transl_function; auto.
   rewrite H; eauto.
   traceEq.
@@ -1392,14 +1433,25 @@ Proof.
   exploit functions_translated; eauto. intros [tf' [P Q]].
   exploit match_stacks_call_cont; eauto. intros [U V].
   assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
+<<<<<<< HEAD
   edestruct Mem.free_parallel_extends as [tm''' [ ]]; eauto.
   econstructor; split.
   left; eapply plus_right. eexact E.
   eapply exec_Itailcall; eauto.
   simpl. unfold Genv.symbol_address. cbn in H5. rewrite H5. eauto.
+=======
+  edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
+  edestruct Mem.return_frame_parallel_extends as [tm'''' []]; eauto.
+  econstructor; split.
+  left; eapply plus_right. eexact E.
+  eapply exec_Itailcall; eauto. simpl. reflexivity. simpl.
+  rewrite symbols_preserved. rewrite H7.
+  rewrite Genv.find_funct_find_funct_ptr in P. eauto.
+>>>>>>> a091c4c
   apply sig_transl_function; auto.
   rewrite H; eauto.
   traceEq.
+  apply Genv.genv_vars_eq in H7. inv H7.
   constructor; auto.
   simpl. unfold Genv.symbol_address. cbn in H5. rewrite H5. eauto.
 
@@ -1478,10 +1530,15 @@ Proof.
   inv TS.
   exploit match_stacks_call_cont; eauto. intros [U V].
   inversion TF.
+<<<<<<< HEAD
   edestruct Mem.free_parallel_extends as [tm' [ ]]; eauto.
+=======
+  edestruct Mem.free_parallel_extends as [tm' []]; eauto.
+  edestruct Mem.return_frame_parallel_extends as [tm'' []]; eauto.
+>>>>>>> a091c4c
   econstructor; split.
   left; apply plus_one. eapply exec_Ireturn; eauto.
-  rewrite H2; eauto.
+  rewrite H3; eauto.
   constructor; auto.
 
   (* return some *)
@@ -1490,10 +1547,15 @@ Proof.
   intros [rs' [tm' [A [B [C [D E]]]]]].
   exploit match_stacks_call_cont; eauto. intros [U V].
   inversion TF.
+<<<<<<< HEAD
   edestruct Mem.free_parallel_extends as [tm'' [ ]]; eauto.
+=======
+  edestruct Mem.free_parallel_extends as [tm'' []]; eauto.
+  edestruct Mem.return_frame_parallel_extends as [tm''' []]; eauto.
+>>>>>>> a091c4c
   econstructor; split.
   left; eapply plus_right. eexact A. eapply exec_Ireturn; eauto.
-  rewrite H4; eauto. traceEq.
+  rewrite H5; eauto. traceEq.
   simpl. constructor; auto.
 
   (* label *)
@@ -1522,7 +1584,12 @@ Proof.
     assert (map_valid init_mapping s0) by apply init_mapping_valid.
     exploit (add_vars_valid (CminorSel.fn_params f)); eauto. intros [A B].
     eapply add_vars_wf; eauto. eapply add_vars_wf; eauto. apply init_mapping_wf.
+<<<<<<< HEAD
   edestruct Mem.alloc_extends as [tm' [ ]]; eauto; try apply Z.le_refl.
+=======
+  edestruct Mem.alloc_frame_extends as [tm' []]; eauto.
+  edestruct Mem.alloc_extends as [tm'' []]; eauto; try apply Z.le_refl.
+>>>>>>> a091c4c
   econstructor; split.
   left; apply plus_one. eapply exec_function_internal; simpl; eauto.
   simpl. econstructor; eauto.
@@ -1554,8 +1621,19 @@ Proof.
   setoid_rewrite <- (sig_transl_function (Internal f)); eauto.
   monadInv B.
   econstructor; split.
+<<<<<<< HEAD
   - econstructor; eauto.
   - econstructor; eauto. constructor.
+=======
+  econstructor. apply (Genv.init_mem_transf_partial TRANSL); eauto.
+  replace (prog_main tprog) with (prog_main prog). rewrite symbols_preserved; eauto.
+  symmetry; eapply match_program_main; eauto.
+  eexact A.
+  rewrite <- H2. apply sig_transl_function; auto.
+  setoid_rewrite (match_program_main TRANSL).
+  constructor. auto. constructor.
+  constructor. apply Mem.extends_refl.
+>>>>>>> a091c4c
 Qed.
 
 Lemma transl_final_states:

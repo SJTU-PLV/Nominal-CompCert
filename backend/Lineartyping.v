@@ -267,14 +267,22 @@ Inductive wt_state: state -> Prop :=
         (WTC: wt_code f c = true)
         (WTRS: wt_locset rs),
       wt_state (State s f sp c rs m)
+<<<<<<< HEAD
   | wt_call_state: forall s vf fd rs m
         (FIND: Genv.find_funct ge vf = Some fd)
+=======
+  | wt_call_state: forall s fd rs m id
+>>>>>>> a091c4c
         (WTSTK: wt_callstack s)
         (WTFD: wt_fundef fd)
         (WTRS: wt_locset rs)
         (AGCS: agree_callee_save rs (parent_locset s))
         (AGARGS: agree_outgoing_arguments (funsig fd) rs (parent_locset s)),
+<<<<<<< HEAD
       wt_state (Callstate s vf rs m)
+=======
+      wt_state (Callstate s fd rs m id)
+>>>>>>> a091c4c
   | wt_return_state: forall s rs m
         (WTSTK: wt_callstack s)
         (WTRS: wt_locset rs)
@@ -341,9 +349,14 @@ Local Opaque mreg_type.
   econstructor; eauto.
   eapply wt_find_funct; eauto.
   apply wt_return_regs; auto. apply wt_parent_locset; auto.
+<<<<<<< HEAD
   red; simpl; intros. destruct l; simpl in *. rewrite H3; auto. destruct sl; auto; congruence.
   red; simpl; intros. apply zero_size_arguments_tailcall_possible in H.
   apply tailcall_possible_reg in H3; auto. contradiction.
+=======
+  red; simpl; intros. destruct l; simpl in *. rewrite H5; auto. destruct sl; auto; congruence.
+  red; simpl; intros. apply zero_size_arguments_tailcall_possible in H. apply H in H5. contradiction.
+>>>>>>> a091c4c
 - (* builtin *)
   simpl in *; InvBooleans.
   econstructor; eauto.
@@ -366,7 +379,7 @@ Local Opaque mreg_type.
   simpl in *. InvBooleans.
   econstructor; eauto.
   apply wt_return_regs; auto. apply wt_parent_locset; auto.
-  red; simpl; intros. destruct l; simpl in *. rewrite H0; auto. destruct sl; auto; congruence.
+  red; simpl; intros. destruct l; simpl in *. rewrite H1; auto. destruct sl; auto; congruence.
   red; simpl; intros. auto.
 - (* internal function *)
   rewrite FIND in FIND0. inv FIND0.
@@ -374,11 +387,11 @@ Local Opaque mreg_type.
   econstructor. eauto. eauto. eauto.
   apply wt_undef_regs. apply wt_call_regs. auto.
 - (* external function *)
-  econstructor. auto. apply wt_setpair. 
+  econstructor. auto. apply wt_setpair.
   eapply external_call_well_typed; eauto.
   apply wt_undef_caller_save_regs; auto.
   red; simpl; intros. destruct l; simpl in *.
-  rewrite locmap_get_set_loc_result by auto. simpl. rewrite H; auto. 
+  rewrite locmap_get_set_loc_result by auto. simpl. rewrite H; auto.
   rewrite locmap_get_set_loc_result by auto. simpl. destruct sl; auto; congruence.
   red; simpl; intros. rewrite locmap_get_set_loc_result by auto. auto.
 - (* return *)
@@ -486,17 +499,27 @@ Proof.
 Qed.
 
 Lemma wt_callstate_wt_regs:
+<<<<<<< HEAD
   forall prog se s f rs m,
   wt_state prog se (Callstate s f rs m) ->
+=======
+  forall s f rs m id,
+  wt_state (Callstate s f rs m id) ->
+>>>>>>> a091c4c
   forall r, Val.has_type (rs (R r)) (mreg_type r).
 Proof.
   intros. inv H. apply WTRS.
 Qed.
 
 Lemma wt_callstate_agree:
+<<<<<<< HEAD
   forall prog se s vf f rs m,
   wt_state prog se (Callstate s vf rs m) ->
   Genv.find_funct (Genv.globalenv se prog) vf = Some f ->
+=======
+  forall s f rs m id,
+  wt_state (Callstate s f rs m id) ->
+>>>>>>> a091c4c
   agree_callee_save rs (parent_locset s) /\ agree_outgoing_arguments (funsig f) rs (parent_locset s).
 Proof.
   intros. inv H. rewrite FIND in H0; inv H0. auto.

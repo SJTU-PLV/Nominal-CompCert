@@ -508,10 +508,18 @@ Inductive match_states: LTL.state -> Linear.state -> Prop :=
       match_states (LTL.Block s f sp bb ls m)
                    (Linear.State ts tf sp (linearize_block bb c) ls m)
   | match_states_call:
+<<<<<<< HEAD
       forall s vf ls m ts,
       list_forall2 match_stackframes s ts ->
       match_states (LTL.Callstate s vf ls m)
                    (Linear.Callstate ts vf ls m)
+=======
+      forall s f ls m tf ts id,
+      list_forall2 match_stackframes s ts ->
+      transf_fundef f = OK tf ->
+      match_states (LTL.Callstate s f ls m id)
+                   (Linear.Callstate ts tf ls m id)
+>>>>>>> a091c4c
   | match_states_return:
       forall s ls m ts,
       list_forall2 match_stackframes s ts ->
@@ -599,6 +607,8 @@ Proof.
   exploit functions_translated; eauto. intros [tfd [A B]].
   left; econstructor; split. simpl.
   apply plus_one. econstructor; eauto.
+  destruct ros; simpl in *; eauto.
+  rewrite (match_parent_locset _ _ STACKS). eauto.
   rewrite (match_parent_locset _ _ STACKS). eauto.
   symmetry; eapply sig_preserved; eauto.
   rewrite (stacksize_preserved _ _ TRF); eauto.
@@ -654,7 +664,11 @@ Proof.
   (* internal functions *)
   assert (REACH: (reachable f)!!(LTL.fn_entrypoint f) = true).
     apply reachable_entrypoint.
+<<<<<<< HEAD
   apply functions_translated in FIND as (tf & FIND & MATCH). monadInv MATCH.
+=======
+  monadInv H9.
+>>>>>>> a091c4c
   left; econstructor; split.
   apply plus_one. eapply exec_function_internal; eauto.
   rewrite (stacksize_preserved _ _ EQ). eauto.
@@ -662,8 +676,12 @@ Proof.
   econstructor; eauto. simpl. eapply is_tail_add_branch. constructor.
 
   (* external function *)
+<<<<<<< HEAD
   apply functions_translated in FIND as (tf & FIND & MATCH). monadInv MATCH.
   left; econstructor; split.
+=======
+  monadInv H9. left; econstructor; split.
+>>>>>>> a091c4c
   apply plus_one. eapply exec_function_external; eauto.
   econstructor; eauto.
 
@@ -691,10 +709,22 @@ Lemma transf_external:
   forall r S', LTL.after_external ge S r S' ->
   exists R', Linear.after_external tge R r R' /\ match_states S' R'.
 Proof.
+<<<<<<< HEAD
   intros S R q HSR Hq. destruct Hq; inv HSR.
   edestruct functions_translated as (tf & FIND & TF); eauto. monadInv TF.
   split. econstructor; eauto. intros r S' HS'. inv HS'. rewrite H7 in H; inv H.
   eexists. split; econstructor; eauto.
+=======
+  intros. inversion H.
+  exploit function_ptr_translated; eauto. intros [tf [A B]].
+  exists (Callstate nil tf (Locmap.init Vundef) m0 (prog_main tprog)); split.
+  econstructor; eauto. eapply (Genv.init_mem_transf_partial TRANSF); eauto.
+  rewrite (match_program_main TRANSF).
+  rewrite symbols_preserved. eauto.
+  rewrite <- H3. apply sig_preserved. auto.
+  rewrite (match_program_main TRANSF).
+  constructor. constructor. auto.
+>>>>>>> a091c4c
 Qed.
 
 Lemma transf_final_states:

@@ -360,13 +360,22 @@ Inductive match_states: state -> state -> Prop :=
       match_states (Block s f sp (Lcond cond args pc1 pc2 :: bb) ls m)
                    (State ts (tunnel_function f) sp (branch_target f pc1) tls tm)
   | match_states_call:
+<<<<<<< HEAD
       forall s vf ls m ts tvf tls tm
+=======
+      forall s f ls m ts tls tm id
+>>>>>>> a091c4c
         (STK: list_forall2 match_stackframes s ts)
         (LF: Val.lessdef vf tvf)
         (LS: locmap_lessdef ls tls)
         (MEM: Mem.extends m tm),
+<<<<<<< HEAD
       match_states (Callstate s vf ls m)
                    (Callstate ts tvf tls tm)
+=======
+      match_states (Callstate s f ls m id)
+                   (Callstate ts (tunnel_fundef f) tls tm id)
+>>>>>>> a091c4c
   | match_states_return:
       forall s ls m ts tls tm
         (STK: list_forall2 match_stackframes s ts)
@@ -494,7 +503,7 @@ Proof.
   intros; red; intros. destruct l; simpl.
 - destruct (Conventions1.is_callee_save r); auto.
 - destruct sl; auto.
-Qed. 
+Qed.
 
 (** To preserve non-terminating behaviours, we show that the transformed
   code cannot take an infinity of "zero transition" cases.
@@ -507,7 +516,7 @@ Definition measure (st: state) : nat :=
   | Block s f sp (Lbranch pc :: _) ls m => (count_gotos f pc * 2 + 1)%nat
   | Block s f sp (Lcond _ _ pc1 pc2 :: _) ls m => (Nat.max (count_gotos f pc1) (count_gotos f pc2) * 2 + 1)%nat
   | Block s f sp bb ls m => 0%nat
-  | Callstate s f ls m => 0%nat
+  | Callstate s f ls m id => 0%nat
   | Returnstate s ls m => 0%nat
   end.
 
@@ -519,6 +528,18 @@ Proof.
   induction 1; simpl.
 - red; auto.
 - inv H; auto.
+Qed.
+
+Lemma ros_is_ident_translated:
+  forall ros rs tls i,
+    ros_is_ident ros rs i ->
+    locmap_lessdef rs tls ->
+    ros_is_ident ros tls i.
+Proof.
+  destruct ros; simpl; intros.
+  unfold locmap_lessdef in H0.
+  generalize (H0 (R m)). intro. rewrite H in H1. inv H.
+  inv H1. eauto. eauto.
 Qed.
 
 Lemma tunnel_step_correct:
@@ -585,18 +606,35 @@ Proof.
   exploit ros_address_translated; eauto. intros ROS.
   left; simpl; econstructor; split.
   eapply exec_Lcall with (fd := tunnel_fundef fd); eauto.
+<<<<<<< HEAD
   eapply functions_translated; eauto.
+=======
+  destruct ros; simpl in *. generalize (LS (R m0)).
+  intro. inv H1. eauto. congruence. auto.
+  eapply find_function_translated; eauto.
+>>>>>>> a091c4c
   rewrite sig_preserved. auto.
   econstructor; eauto.
   constructor; auto.
   constructor; auto.
 - (* Ltailcall *)
+<<<<<<< HEAD
   exploit (ros_address_translated ros (return_regs (parent_locset s) rs)).
     eauto using return_regs_lessdef, match_parent_locset. intros ROS.
   exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM'). 
   left; simpl; econstructor; split.
   eapply exec_Ltailcall with (fd := tunnel_fundef fd); eauto.
   eapply functions_translated; eauto.
+=======
+  exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM').
+  exploit Mem.return_frame_parallel_extends; eauto. intros (tm'' & RET & MEM'').
+  left; simpl; econstructor; split.
+  eapply exec_Ltailcall with (fd := tunnel_fundef fd); eauto.
+  eapply ros_is_ident_translated; eauto.
+  eapply return_regs_lessdef; eauto.
+  eapply match_parent_locset; eauto.
+  eapply find_function_translated; eauto using return_regs_lessdef, match_parent_locset.
+>>>>>>> a091c4c
   apply sig_preserved.
   econstructor; eauto using return_regs_lessdef, match_parent_locset.
 - (* Lbuiltin *)
@@ -604,6 +642,11 @@ Proof.
   exploit external_call_mem_extends; eauto. intros (tvres & tm' & A & B & C & D).
   left; simpl; econstructor; split.
   eapply exec_Lbuiltin; eauto.
+<<<<<<< HEAD
+=======
+  eapply eval_builtin_args_preserved with (ge1 := ge); eauto. exact symbols_preserved.
+  eapply external_call_symbols_preserved. apply senv_preserved. eauto.
+>>>>>>> a091c4c
   econstructor; eauto using locmap_setres_lessdef, locmap_undef_regs_lessdef.
 - (* Lbranch (preserved) *)
   left; simpl; econstructor; split.
@@ -639,14 +682,19 @@ Proof.
   eauto. rewrite list_nth_z_map. change U.elt with node. rewrite H0. reflexivity. eauto.
   econstructor; eauto using locmap_undef_regs_lessdef.
 - (* Lreturn *)
-  exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM'). 
+  exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM').
+  exploit Mem.return_frame_parallel_extends; eauto. intros (tm'' & RET & MEM'').
   left; simpl; econstructor; split.
   eapply exec_Lreturn; eauto.
   constructor; eauto using return_regs_lessdef, match_parent_locset.
 - (* internal function *)
+<<<<<<< HEAD
   exploit functions_translated; eauto. intros TFIND.
+=======
+  exploit Mem.alloc_frame_extends; eauto. intros (tm' & ALLOCF & MEM').
+>>>>>>> a091c4c
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
-  intros (tm' & ALLOC & MEM'). 
+  intros (tm'' & ALLOC & MEM'').
   left; simpl; econstructor; split.
   eapply exec_function_internal; eauto.
   simpl. econstructor; eauto using locmap_undef_regs_lessdef, call_regs_lessdef.
@@ -668,6 +716,7 @@ Lemma transf_initial_states:
   forall w q1 q2 st1, match_query (cc_locset ext) w q1 q2 -> initial_state ge q1 st1 ->
   exists st2, initial_state tge q2 st2 /\ match_states st1 st2.
 Proof.
+<<<<<<< HEAD
   intros [w sg] q1 q2 st1 Hq Hst1. inv Hst1. inv Hq. CKLR.uncklr.
   specialize (initial_regs_inject _ _ _ _ H6).
   setoid_rewrite ext_lessdef. intro.
@@ -678,6 +727,18 @@ Proof.
     econstructor; eauto.
   - constructor; eauto.
     repeat constructor; eauto.
+=======
+  intros. inversion H.
+  exists (Callstate nil (tunnel_fundef f) (Locmap.init Vundef) m0 (prog_main tprog)); split.
+  econstructor; eauto.
+  apply (Genv.init_mem_transf TRANSL); auto.
+  rewrite (match_program_main TRANSL).
+  rewrite symbols_preserved. eauto.
+  apply function_ptr_translated; auto.
+  rewrite <- H3. apply sig_preserved.
+  rewrite (match_program_main TRANSL).
+  constructor. constructor. red; simpl; auto. apply Mem.extends_refl.
+>>>>>>> a091c4c
 Qed.
 
 Lemma transf_final_states:

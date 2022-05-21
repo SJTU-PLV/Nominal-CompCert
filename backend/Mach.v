@@ -276,7 +276,8 @@ Inductive state: Type :=
       forall (stack: list stackframe)  (**r call stack *)
              (vf: val)                 (**r pointer to function to call *)
              (rs: regset)              (**r register state *)
-             (m: mem),                 (**r memory state *)
+             (m: mem)                  (**r memory state *)
+             (id: ident),
       state
   | Returnstate:
       forall (stack: list stackframe)  (**r call stack *)
@@ -296,6 +297,12 @@ Definition parent_ra (s: list stackframe) : val :=
   | nil => Vundef
   | Stackbase sp ra :: s' => ra
   | Stackframe f sp ra c :: s' => ra
+  end.
+
+Definition ros_is_ident (ros: mreg + ident) (rs: regset) (i: ident) : Prop :=
+  match ros with
+  | inl r => rs r = Vptr (Global i) Ptrofs.zero
+  | inr symb => i = symb
   end.
 
 Inductive step: state -> trace -> state -> Prop :=
@@ -343,6 +350,7 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s f sp (Mstore chunk addr args src :: c) rs m)
         E0 (State s f sp c rs' m')
   | exec_Mcall:
+<<<<<<< HEAD
       forall s vf sp sig ros c rs m f ra,
       Genv.find_funct ge vf = Some (Internal f) ->
       return_address_offset f c ra ->
@@ -357,6 +365,27 @@ Inductive step: state -> trace -> state -> Prop :=
       Mem.free m stk (Ptrofs.unsigned soff) (Ptrofs.unsigned soff + f.(fn_stacksize)) = Some m' ->
       step (State s vf (Vptr stk soff) (Mtailcall sig ros :: c) rs m)
         E0 (Callstate s (ros_address ge ros rs) rs m')
+=======
+      forall s fb sp sig ros c rs m f f' ra id,
+      f' = Global id ->
+      find_function_ptr ge ros rs = Some f' ->
+      Genv.find_funct_ptr ge fb = Some (Internal f) ->
+      return_address_offset f c ra ->
+      step (State s fb sp (Mcall sig ros :: c) rs m)
+        E0 (Callstate (Stackframe fb sp (Vptr fb ra) c :: s)
+                       f' rs m id)
+  | exec_Mtailcall:
+      forall s fb stk soff sig ros c rs m f f' m' m'' id,
+      f' = Global id ->
+      find_function_ptr ge ros rs = Some f' ->
+      Genv.find_funct_ptr ge fb = Some (Internal f) ->
+      load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
+      load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra s) ->
+      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
+      step (State s fb (Vptr stk soff) (Mtailcall sig ros :: c) rs m)
+        E0 (Callstate s f' rs m'' id)
+>>>>>>> a091c4c
   | exec_Mbuiltin:
       forall s f sp rs m ef args res b vargs t vres rs' m',
       eval_builtin_args ge rs sp m args vargs ->
@@ -394,6 +423,7 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s vf sp (Mjumptable arg tbl :: c) rs m)
         E0 (State s vf sp c' rs' m)
   | exec_Mreturn:
+<<<<<<< HEAD
       forall s vf stk soff c rs m f m',
       Genv.find_funct ge vf = Some (Internal f) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
@@ -405,10 +435,26 @@ Inductive step: state -> trace -> state -> Prop :=
       forall s vf rs m f m1 m2 m3 stk rs',
       Genv.find_funct ge vf = Some (Internal f) ->
       Mem.alloc m 0 f.(fn_stacksize) = (m1, stk) ->
+=======
+      forall s fb stk soff c rs m f m' m'',
+      Genv.find_funct_ptr ge fb = Some (Internal f) ->
+      load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
+      load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra s) ->
+      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      Mem.return_frame m' = Some m'' ->
+      step (State s fb (Vptr stk soff) (Mreturn :: c) rs m)
+        E0 (Returnstate s rs m'')
+  | exec_function_internal:
+      forall s fb rs m f m0 m1 m2 m3 stk rs' path id,
+      Genv.find_funct_ptr ge fb = Some (Internal f) ->
+      Mem.alloc_frame m id = (m0,path) ->
+      Mem.alloc m0 0 f.(fn_stacksize) = (m1, stk) ->
+>>>>>>> a091c4c
       let sp := Vptr stk Ptrofs.zero in
       store_stack m1 sp Tptr f.(fn_link_ofs) (parent_sp s) = Some m2 ->
       store_stack m2 sp Tptr f.(fn_retaddr_ofs) (parent_ra s) = Some m3 ->
       rs' = undef_regs destroyed_at_function_entry rs ->
+<<<<<<< HEAD
       step (Callstate s vf rs m)
         E0 (State s vf sp f.(fn_code) rs' m3)
   | exec_function_external:
@@ -418,6 +464,17 @@ Inductive step: state -> trace -> state -> Prop :=
       external_call ef ge args m t res m' ->
       rs' = set_pair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs) ->
       step (Callstate s vf rs m)
+=======
+      step (Callstate s fb rs m id)
+        E0 (State s fb sp f.(fn_code) rs' m3)
+  | exec_function_external:
+      forall s fb rs m t rs' ef args res m' id,
+      Genv.find_funct_ptr ge fb = Some (External ef) ->
+      extcall_arguments rs m (parent_sp s) (ef_sig ef) args ->
+      external_call ef ge args m t res m' ->
+      rs' = set_pair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs) ->
+      step (Callstate s fb rs m id)
+>>>>>>> a091c4c
          t (Returnstate s rs' m')
   | exec_return:
       forall s f sp ra c rs m,
@@ -426,6 +483,7 @@ Inductive step: state -> trace -> state -> Prop :=
 
 End RELSEM.
 
+<<<<<<< HEAD
 (** * Language interface *)
 
 (** Mach interactions are similar to the [li_locset] ones, but the
@@ -485,6 +543,20 @@ Inductive after_external: state -> mach_reply -> state -> Prop :=
 Inductive final_state: state -> mach_reply -> Prop :=
   | final_state_intro: forall sp ra s rs m,
       final_state (Returnstate (Stackbase sp ra :: s) rs m) (mr rs m).
+=======
+Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall fb m0,
+      let ge := Genv.globalenv p in
+      Genv.init_mem p = Some m0 ->
+      Genv.find_symbol ge p.(prog_main) = Some fb ->
+      initial_state p (Callstate nil fb (Regmap.init Vundef) m0 p.(prog_main)).
+
+Inductive final_state: state -> int -> Prop :=
+  | final_state_intro: forall rs m r retcode,
+      loc_result signature_main = One r ->
+      rs r = Vint retcode ->
+      final_state (Returnstate nil rs m) retcode.
+>>>>>>> a091c4c
 
 Definition semantics (rao: function -> code -> ptrofs -> Prop) (p: program) :=
   Semantics (step rao) initial_state at_external after_external final_state p.
@@ -720,9 +792,9 @@ Qed.
 Definition is_leaf_function (f: function) : bool :=
   List.forallb
     (fun i => match i with Mcall _ _ => false | _ => true end)
-    f.(fn_code).  
+    f.(fn_code).
 
-(** Semantic characterization of leaf functions: 
+(** Semantic characterization of leaf functions:
     functions in the call stack are never leaf functions. *)
 
 Section WF_STATES.
@@ -745,10 +817,17 @@ Inductive wf_state: state -> Prop :=
         (STACK: Forall wf_frame s)
         (CODE: Genv.find_funct ge vf = Some (Internal f))
         (TAIL: is_tail c f.(fn_code)),
+<<<<<<< HEAD
       wf_state (State s vf sp c rs m)
   | wf_call_state: forall s vf rs m
         (STACK: Forall wf_frame s),
       wf_state (Callstate s vf rs m)
+=======
+      wf_state (State s fb sp c rs m)
+  | wf_call_state: forall s fb rs m id
+        (STACK: Forall wf_frame s),
+      wf_state (Callstate s fb rs m id)
+>>>>>>> a091c4c
   | wf_return_state: forall s rs m
         (STACK: Forall wf_frame s),
       wf_state (Returnstate s rs m).
@@ -762,14 +841,14 @@ Proof.
   constructor.
   constructor; auto. econstructor; eauto with coqlib.
   destruct (is_leaf_function f) eqn:E; auto.
-  unfold is_leaf_function in E; rewrite forallb_forall in E. 
+  unfold is_leaf_function in E; rewrite forallb_forall in E.
   symmetry. apply (E (Mcall sig ros)). eapply is_tail_in; eauto.
 - (* goto *)
-  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.  
+  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.
 - (* cond *)
-  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.  
+  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.
 - (* jumptable *)
-  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.  
+  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.
 - (* return *)
   inv STACK. inv H1. econstructor; eauto.
 Qed.
