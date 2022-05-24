@@ -490,6 +490,7 @@ Definition transf_instr (i: instruction): res (list instruction) :=
   | Pjmp_r _ sg
   | Pcall_s _ sg
   | Pcall_r _ sg =>
+  (*FIXME: add 64bit mode condition*)
     let '(ir, fr, ofs) := next_arg_locations 0 0 0 sg.(sig_args) in
     if (sg.(sig_cc)).(cc_unproto) then
       OK [Pmovl_ri RAX (Int.repr fr);i]
