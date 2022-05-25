@@ -1528,11 +1528,11 @@ Proof.
 - exists m; auto.
 - destruct H0. 
   destruct (@store_init_data_exists m b p i1) as (m1 & S1); eauto.
-  red; intros. apply H. generalize (init_data_list_size_pos il); omega.
+  red; intros. apply H. generalize (init_data_list_size_pos il); lia.
   (* generalize (init_data_list_size_pos il); omega. *)
   rewrite S1.
   apply IHil; eauto.
-  red; intros. erewrite <- store_init_data_perm by eauto. apply H. generalize (init_data_size_pos i1); omega.
+  red; intros. erewrite <- store_init_data_perm by eauto. apply H. generalize (init_data_size_pos i1); lia.
 Qed.
 
 End INITDATA.
@@ -1644,3 +1644,5 @@ Proof.
     eexists. eapply exec_step_external; eauto.
   - eapply reloc_prog_single_events; eauto.
 Qed.
+
+End WITH_INSTR_SIZE.

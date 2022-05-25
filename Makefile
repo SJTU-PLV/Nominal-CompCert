@@ -129,7 +129,7 @@ BACKEND=\
   TranslateInstr1.v\
   RemoveAddend.v\
   AsmLongInt.v\
-
+  RelocProgSemantics.v RelocProgSemantics1.v
 
 # Encoding of data into bytes
 
