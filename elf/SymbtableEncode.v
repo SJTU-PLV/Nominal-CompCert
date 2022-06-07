@@ -7,10 +7,9 @@
 
 (** * Encoding of the symbol table into a section *)
 
-Require Import Coqlib Integers AST Maps.
-Require Import Asm.
+Require Import Coqlib lib.Integers AST Maps.
 Require Import Errors.
-Require Import RelocProgram Encode.
+Require Import RelocProg Encode.
 Require Import Memdata.
 Require Import encode.Hex encode.Bits.
 Import Hex Bits.

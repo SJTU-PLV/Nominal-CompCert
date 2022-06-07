@@ -12,7 +12,7 @@
 
 Require Import Coqlib Maps AST Integers Values.
 Require Import Events lib.Floats Memory Smallstep.
-Require Import Asm RelocProgram Globalenvs.
+Require Import Asm RelocProg RelocProgram Globalenvs.
 Require Import Locations Stacklayout Conventions.
 Require Import Linking Errors.
 Require Import LocalLib.

@@ -9,7 +9,7 @@
 
 Require Import Coqlib Integers AST Maps.
 Require Import Errors.
-Require Import RelocProgram RelocProg Encode.
+Require Import Asm RelocProg RelocProgram Encode.
 Require Import Memdata.
 Require Import RelocElf.
 Require Import SymbolString.
@@ -88,9 +88,9 @@ Definition initial_elf_state :=
 Definition get_sections_size (t: sectable) :=
   PTree.fold1 (fun acc sec => sec_size instr_size sec + acc) t 0.
 
-Definition get_elf_shoff (p:program) :=
+Definition get_elf_shoff (p:RelocProgram.program) :=
   elf_header_size +
-  get_sections_size (prog_sectable p).
+  get_sections_size p.(prog_sectable).
 
   
 Definition gen_elf_header (st: elf_state) : elf_header :=
@@ -407,7 +407,7 @@ Definition strtab_str := SB[".strtab"] ++ [HB["00"]].
 Definition symtab_str := SB[".symtab"] ++ [HB["00"]].
 
 (* return elf_state, section id to index mapping, id to string idx in shstring table mapping *)
-Definition gen_text_data_sections_and_shstrtbl (p: program) (st:elf_state) : res (elf_state * PTree.t Z * PTree.t Z) :=
+Definition gen_text_data_sections_and_shstrtbl (p: RelocProgram.program) (st:elf_state) : res (elf_state * PTree.t Z * PTree.t Z) :=
   (* generate ident to section index mapping *)
   let idl_sectbl := PTree.elements (prog_sectable p) in
   let secidl := map fst idl_sectbl in
@@ -430,7 +430,7 @@ Definition gen_text_data_sections_and_shstrtbl (p: program) (st:elf_state) : res
 
 (* input: program, ident to section header index, state *)
 (* output: state, indet to symbol entry index mapping, ident to string index in strtbl mapping (unused and remove it)*)
-Definition gen_symtbl_section_strtbl_and_shstr (p: program) (secidxmap : PTree.t Z) (st: elf_state) :res (elf_state * PTree.t Z) :=
+Definition gen_symtbl_section_strtbl_and_shstr (p: RelocProgram.program) (secidxmap : PTree.t Z) (st: elf_state) :res (elf_state * PTree.t Z) :=
   let idl_symbtbl := PTree.elements (prog_symbtable p) in
   let idl_symbtbl' := sort_symbtable idl_symbtbl in
   let symbidl := map fst idl_symbtbl' in
@@ -531,10 +531,10 @@ Definition gen_reloc_elf (p:program) :=
   let elf_h := gen_elf_header st4 in
   (* file too big ? *)
   if zlt elf_h.(e_shoff) (two_p 32) then
-    OK {| prog_defs := RelocProgram.prog_defs p;
-          prog_public   := RelocProgram.prog_public p;
-          prog_main     := RelocProgram.prog_main p;
-          prog_senv     := RelocProgram.prog_senv p;
+    OK {| prog_defs := RelocProg.prog_defs p;
+          prog_public   := RelocProg.prog_public p;
+          prog_main     := RelocProg.prog_main p;
+          prog_senv     := RelocProg.prog_senv p;
 
           elf_head := elf_h;
           elf_sections := st4.(e_sections);
