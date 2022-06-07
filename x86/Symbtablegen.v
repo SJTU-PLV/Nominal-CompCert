@@ -9,7 +9,7 @@ Require Import Coqlib Integers AST Maps.
 Require Import Asm.
 Require Import Errors.
 Require Import Memtype.
-Require Import RelocProgram.
+Require Import RelocProg RelocProgram.
 Require Import CheckDef.
 Require Import LocalLib.
 Require Globalenvs.

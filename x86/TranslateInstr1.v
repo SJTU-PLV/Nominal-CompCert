@@ -1,6 +1,6 @@
 Require Import Coqlib Maps Integers Floats Values AST Errors.
 Require Import Axioms Globalenvs.
-Require Import Asm RelocProgram.
+Require Import Asm RelocProg RelocProgram.
 Require Import Hex compcert.encode.Bits Memdata Encode.
 Require Import Reloctablesgen.
 Require Import SymbolString.

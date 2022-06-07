@@ -11,7 +11,7 @@ Require Import Coqlib Integers AST Maps.
 Require Import Asm.
 Require Import Errors.
 Require Import Memtype.
-Require Import RelocProgram.
+Require Import RelocProg RelocProgram.
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -564,7 +564,7 @@ Definition transl_sectable' (stbl: sectable): sectable :=
   PTree.map1 transl_section' stbl.
 
 
-Definition transf_program (p:program) : res program :=
+Definition transf_program (p:RelocProgram.program) : res program :=
   let map := p.(prog_symbtable) in
   do reloc_map <- transl_sectable map (prog_sectable p);
   let sec' := transl_sectable' (prog_sectable p) in
