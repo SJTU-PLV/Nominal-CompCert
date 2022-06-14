@@ -37,6 +37,7 @@ Definition injp_mi :=
 
 Inductive injp_match_mem: injp_world -> relation mem :=
   injp_match_mem_intro f m1 m2 Hm:
+    Mem.stackseq m1 m2 ->
     injp_match_mem (injpw f m1 m2 Hm) m1 m2.
 
 Inductive injp_match_stbls: injp_world -> relation Genv.symtbl :=
@@ -197,13 +198,14 @@ Next Obligation. (* Mem.alloc *)
     assert (b' = b2) by congruence.
     subst.
     split; eauto using Mem.fresh_block_alloc.
+  - constructor. eapply Mem.alloc_parallel_stackseq; eauto.
 Qed.
 
 Next Obligation. (* Mem.free *)
   intros _ _ _ [f m1 m2 Hm] [[b1 lo1] hi1] [[b2 lo2] hi2] Hr.
   simpl. red.
   destruct (Mem.free m1 b1 lo1 hi1) as [m1'|] eqn:Hm1'; [|rauto].
-  inv Hr. inv H0. simpl in H1.
+  inv Hr. inv H1. simpl in H2.
   edestruct Mem.free_parallel_inject as (m2' & Hm2' & Hm'); eauto.
   replace (lo1 + delta + sz) with (lo1 + sz + delta) by extlia.
   rewrite Hm2'. repeat rstep.
@@ -215,12 +217,53 @@ Next Obligation. (* Mem.free *)
     unfold loc_unmapped. congruence.
   - eapply Mem.free_unchanged_on; eauto.
     unfold loc_out_of_reach.
-    intros ofs Hofs H.
-    eelim H; eauto.
+    intros ofs Hofs H'.
+    eelim H'; eauto.
     eapply Mem.perm_cur_max.
     eapply Mem.perm_implies; [ | eapply perm_any_N].
     eapply Mem.free_range_perm; eauto.
     extlia.
+  - apply inject_incr_refl.
+  - apply inject_separated_refl.
+  - constructor.
+    apply Mem.support_free in Hm1'.
+    apply Mem.support_free in Hm2'.
+    unfold Mem.stackseq in *. congruence.
+Qed.
+
+Next Obligation. (* Mem.alloc_frame *)
+  intros _ _ _ [f m1 m2 Hm] id.
+  destruct (Mem.alloc_frame m1 id) as [m1' b1] eqn:Hm1'.
+  edestruct Mem.alloc_frame_parallel_inject
+    as (m2' & path & Hm2' & Hm'); eauto.
+  edestruct Mem.alloc_frame_parallel_stackseq; eauto.
+  rewrite Hm2'.
+  exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
+  constructor.
+  - intros b ofs p Hb Hp.
+    eapply Mem.perm_alloc_frame; eauto.
+  - intros b ofs p Hb Hp.
+    eapply Mem.perm_alloc_frame; eauto.
+  - eapply Mem.alloc_frame_unchanged_on; eauto.
+  - eapply Mem.alloc_frame_unchanged_on; eauto.
+  - apply inject_incr_refl.
+  - red. intros b b' delta Hb Hb'.
+    congruence.
+Qed.
+
+Next Obligation. (* Mem.return_frame *)
+  intros _ _ _ [f m1 m2 Hm].
+  simpl. red.
+  destruct (Mem.return_frame m1) as [m1'|] eqn:Hm1'; [|rauto].
+  edestruct Mem.return_frame_parallel_stackseq as (m2' & Hm2' & SEQ); eauto.
+  exploit Mem.return_frame_inject; eauto. intro Hm'.
+  rewrite Hm2'. repeat rstep.
+  exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
+  constructor.
+  - red. intros. eapply Mem.perm_return_frame; eauto.
+  - red. intros. eapply Mem.perm_return_frame; eauto.
+  - eapply Mem.return_frame_unchanged_on; eauto.
+  - eapply Mem.return_frame_unchanged_on; eauto.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
 Qed.
@@ -247,8 +290,8 @@ Next Obligation. (* Mem.store *)
     unfold loc_unmapped. congruence.
   - eapply Mem.store_unchanged_on; eauto.
     unfold loc_out_of_reach.
-    intros ofs Hofs H.
-    eelim H; eauto.
+    intros ofs Hofs H'.
+    eelim H'; eauto.
     edestruct (Mem.store_valid_access_3 chunk m1); eauto.
     eapply Mem.perm_cur_max.
     eapply Mem.perm_implies; [ | eapply perm_any_N].
@@ -256,6 +299,10 @@ Next Obligation. (* Mem.store *)
     extlia.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
+  - constructor.
+    apply Mem.support_store in Hm1'.
+    apply Mem.support_store in Hm2'.
+    unfold Mem.stackseq in *. congruence.
 Qed.
 
 Next Obligation. (* Mem.loadbytes *)
@@ -290,6 +337,9 @@ Next Obligation. (* Mem.storebytes *)
         simpl. intro. extlia.
       * apply inject_separated_refl.
     + constructor; eauto.
+      apply Mem.support_storebytes in Hm1'.
+      apply Mem.support_storebytes in Hm2'.
+      unfold Mem.stackseq in *. congruence.
   - assert (ptr_inject f (b1, ofs1) (b2, ofs2)) as Hptr'.
     {
       destruct Hptr as [Hptr|Hptr]; eauto.
@@ -313,8 +363,8 @@ Next Obligation. (* Mem.storebytes *)
       unfold loc_unmapped. congruence.
     + eapply Mem.storebytes_unchanged_on; eauto.
       unfold loc_out_of_reach.
-      intros ofs Hofs H.
-      eelim H; eauto.
+      intros ofs Hofs H'.
+      eelim H'; eauto.
       eapply Mem.perm_cur_max.
       eapply Mem.perm_implies; [ | eapply perm_any_N].
       eapply Mem.storebytes_range_perm; eauto.
@@ -322,10 +372,14 @@ Next Obligation. (* Mem.storebytes *)
       extlia.
     + apply inject_incr_refl.
     + apply inject_separated_refl.
+    + constructor.
+      apply Mem.support_storebytes in Hm1'.
+      apply Mem.support_storebytes in Hm2'.
+      unfold Mem.stackseq in *. congruence.
 Qed.
 
 Next Obligation. (* Mem.perm *)
-  intros _ _ _ [f m1 m2 Hm] _ _ [b1 ofs1 b2 delta Hb] p k H.
+  intros _ _ _ [f m1 m2 Hm] _ _ [b1 ofs1 b2 delta Hb] p k H'.
   eapply Mem.perm_inject; eauto.
 Qed.
 

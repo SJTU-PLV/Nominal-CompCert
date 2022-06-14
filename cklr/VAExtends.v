@@ -314,6 +314,47 @@ Ltac dest_inj_of_bc :=
       apply inj_of_bc_inv in H; destruct H as (? & ? & ?)
     end.
 
+(** Alloc Frame *)
+Next Obligation.
+  destruct 1. intros id.
+  destruct (Mem.alloc_frame m1 id) as [m1' b] eqn:Hm1'.
+  edestruct Mem.alloc_frame_extends as (m2' & Hm2' & Hm'); eauto.
+  assert (vaext_wf se bc m1').
+  {
+    destruct H. split; eauto.
+    - eapply mmatch_alloc_frame; eauto.
+    - intros cu Hcu.
+      eapply romatch_alloc_frame; eauto.
+  }
+  exists (vaextw se bc m1' H1). split.
+  - constructor; cbn; auto.
+    + eapply Mem.sup_include_alloc_frame; eauto.
+    + intros.
+      erewrite <- Mem.loadbytes_alloc_frame; eauto.
+  - rewrite Hm2'. repeat rstep.
+    constructor; eauto.
+Qed.
+
+(** Return Frame *)
+Next Obligation.
+  intros w m1 m2 Hm. destruct Hm.
+  destruct (Mem.return_frame m1) as [m1' | ] eqn:Hm1'; [ | constructor].
+  edestruct Mem.return_frame_parallel_extends as (m2' & Hm2' & Hm'); eauto.
+  rewrite Hm2'. constructor.
+  assert (H' : vaext_wf se bc m1').
+  {
+    destruct H.
+    constructor; auto.
+    + eapply mmatch_return_frame; eauto.
+    + intros cu Hcu. eapply romatch_return_frame; eauto.
+  }
+  exists (vaextw _ _ _ H'). split.
+  - constructor; cbn; auto.
+    + eapply Mem.sup_include_return_frame; eauto.
+    + intros. erewrite <- Mem.loadbytes_return_frame; eauto.
+  - constructor; auto.
+Qed.
+
 (** Load *)
 Next Obligation.
   intros _ chunk _ _ [se bc m1 m2 H Hm] p p' Hp.

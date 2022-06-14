@@ -83,6 +83,17 @@ Record cklr :=
         (|= match_mem ++> %% ptrrange_inject @@ [mi] ++>
          k1 option_le (<> match_mem));
 
+    cklr_alloc_frame:
+      Monotonic
+        (@Mem.alloc_frame)
+        (|= match_mem ++> - ==>
+         <>match_mem * k eq);
+
+    cklr_return_frame:
+      Monotonic
+        (@Mem.return_frame)
+        (|= match_mem ==> k1 option_le (<>match_mem));
+
     cklr_load:
       Monotonic
         (@Mem.load)

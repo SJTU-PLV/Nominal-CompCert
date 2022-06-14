@@ -2049,7 +2049,7 @@ Inductive match_states: state -> state -> Prop :=
         (MENV: match_envs j (cenv_for f) e le m lo hi te tle tlo thi)
         (MCONT: match_cont j (cenv_for f) k tk m lo tlo)
         (MINJ: Mem.inject j m tm)
-        (VINJ: j = struct_meminj (Mem.support m))
+(*        (VINJ: j = struct_meminj (Mem.support m))*)
         (MSTK: Mem.stackseq m tm)
         (COMPAT: compat_cenv (addr_taken_stmt s) (cenv_for f))
         (BOUND: Mem.sup_include hi (Mem.support m))
@@ -2060,14 +2060,8 @@ Inductive match_states: state -> state -> Prop :=
       forall vf vargs k m tvf tvargs tk tm j fd targs tres cconv id
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (VINJVF: Val.inject j vf tvf)
-(*=======
-      forall fd vargs k m tfd tvargs tk tm j targs tres cconv id
-        (TRFD: transf_fundef fd = OK tfd)
-        (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
-        (FIND: Genv.find_funct_ptr ge (Global id) = Some fd)
->>>>>>> a091c4c *)
         (MINJ: Mem.inject j m tm)
-        (VINJ: j = struct_meminj (Mem.support m))
+(*        (VINJ: j = struct_meminj (Mem.support m)) *)
         (MSTK: Mem.stackseq m tm)
         (AINJ: Val.inject_list j vargs tvargs)
         (VFIND: Genv.find_funct ge vf = Some fd)
@@ -2079,7 +2073,7 @@ Inductive match_states: state -> state -> Prop :=
       forall v k m tv tk tm j
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (MINJ: Mem.inject j m tm)
-        (VINJ: j = struct_meminj (Mem.support m))
+(*        (VINJ: j = struct_meminj (Mem.support m)) *)
         (MSTK: Mem.stackseq m tm)
         (RINJ: Val.inject j v tv),
       match_states (Returnstate v k m)
@@ -2346,7 +2340,7 @@ Proof.
   eapply match_cont_assign_loc; eauto. exploit me_range; eauto. intros [E F]. auto.
   inv MV; try congruence. inv H2; try congruence. unfold Mem.storev in H3.
   eapply Mem.store_unmapped_inject; eauto. congruence.
-  erewrite <- assign_loc_support; eauto.
+  (* erewrite <- assign_loc_support; eauto. *)
   unfold Mem.stackseq in *. erewrite assign_loc_support; eauto.
   eauto with compat.
   erewrite assign_loc_support; eauto. eauto.
@@ -2365,7 +2359,7 @@ Proof.
   eapply match_envs_invariant; eauto.
   eapply match_cont_invariant; eauto.
   eauto.
-  erewrite <- assign_loc_support; eauto.
+  (* erewrite <- assign_loc_support; eauto.*)
   unfold Mem.stackseq in *.
   rewrite (assign_loc_support _ _  _ _ _ _ _ _ X); eauto.
   erewrite assign_loc_support; eauto.
@@ -2389,7 +2383,12 @@ Proof.
   rewrite typeof_simpl_expr. eauto.
   instantiate (1:=id).
   instantiate (1:=tvf).
-  inv B. unfold struct_meminj in H6. destr_in H6. simpl in H6. inv H6.
+  (*need this, initially from the match_query, kept by the internal execution*)
+  assert (forall id b ofs, j (Global id) = Some (b,ofs) -> b = Global id /\ ofs = 0).
+  admit.
+  inv B. apply H0 in H7. destruct H7. subst.
+  rewrite Ptrofs.add_zero. auto.
+  (* inv B. unfold struct_meminj in H6. destr_in H6. simpl in H6. inv H6.*)
   auto. eauto. eauto. eauto.
   erewrite type_of_fundef_preserved; eauto.
   econstructor; eauto.
@@ -2401,6 +2400,8 @@ Proof.
   intros [j' [tvres [tm' [P [Q [R [S [T [U V]]]]]]]]].
   econstructor; split.
   apply plus_one. econstructor; eauto.
+  apply external_call_support in H0 as S1.
+  apply external_call_support in P as S2.
   econstructor. eauto. eauto.
   eapply match_envs_set_opttemp; eauto.
   eapply match_envs_extcall; eauto.
@@ -2408,8 +2409,7 @@ Proof.
   inv MENV. eapply Mem.sup_include_trans. eauto. eauto.
   inv MENV; eapply Mem.sup_include_trans. eauto. eauto.
   eauto.
-  { admit.
-(*
+(*  {
     apply Axioms.extensionality. intro b.
     destruct ((struct_meminj (Mem.support m)) b) eqn:Z. destruct p.
     - apply U in Z as Z'. rewrite Z'. rewrite <- Z.
@@ -2423,9 +2423,10 @@ Proof.
       destruct b. destruct f0; simpl in C1. inv C1. simpl. auto. inv C1.
       apply mi_freeblocks in n. congruence.
       + unfold struct_meminj. destr. unfold struct_meminj in Z. destr_in Z.
-      exploit X; eauto. intros [C1 D1]. congruence. *)
-  } admit.
- eauto with compat.
+      exploit X; eauto. intros [C1 D1]. congruence.
+  } *)
+  unfold Mem.stackseq in *. congruence.
+  eauto with compat.
   eapply Mem.sup_include_trans; eauto. erewrite <- external_call_support; eauto.
   eapply Mem.sup_include_trans; eauto. erewrite <- external_call_support; eauto.
 
@@ -2486,8 +2487,8 @@ Proof.
   intro. eapply Mem.support_return_frame_1 in P'. apply P'.
   intros. erewrite Mem.load_return_frame; eauto.
   eauto. eauto. eauto.
-  eapply sinj_refl. erewrite <- free_list_support; eauto.
-  intro. eapply Mem.support_return_frame_1 in H0. apply H0.
+  (* eapply sinj_refl. erewrite <- free_list_support; eauto.
+  intro. eapply Mem.support_return_frame_1 in H0. apply H0. *)
 
 (* return some *)
   exploit eval_simpl_expr; eauto with compat. intros [tv [A B]].
@@ -2509,8 +2510,8 @@ Proof.
   intro. eapply Mem.support_return_frame_1 in P'. apply P'.
   intros. erewrite Mem.load_return_frame; eauto.
   eauto. eauto. eauto.
-  eapply sinj_refl. erewrite <- free_list_support; eauto.
-  intro. eapply Mem.support_return_frame_1 in H2. apply H2.
+  (* eapply sinj_refl. erewrite <- free_list_support; eauto.
+  intro. eapply Mem.support_return_frame_1 in H2. apply H2. *)
 
 (* skip call *)
   exploit match_envs_free_blocks; eauto. intros [tm'1 [P Q]].
@@ -2531,8 +2532,8 @@ Proof.
   intro. eapply Mem.support_return_frame_1 in P'. apply P'.
   intros. erewrite Mem.load_return_frame; eauto.
   eauto. eauto. eauto.
-  eapply sinj_refl. erewrite <- free_list_support; eauto.
-  intro. eapply Mem.support_return_frame_1 in H1. apply H1.
+  (* eapply sinj_refl. erewrite <- free_list_support; eauto.
+  intro. eapply Mem.support_return_frame_1 in H1. apply H1. *)
 
 (* switch *)
   exploit eval_simpl_expr; eauto with compat. intros [tv [A B]].
@@ -2562,9 +2563,9 @@ Proof.
 
 (* goto *)
   generalize TRF; intros TRF'. monadInv TRF'.
-  exploit (simpl_find_label (struct_meminj (Mem.support m)) (cenv_for f) m lo tlo lbl (fn_body f) (call_cont k) x (call_cont tk)).
+  exploit (simpl_find_label j (cenv_for f) m lo tlo lbl (fn_body f) (call_cont k) x (call_cont tk)).
     eauto. eapply match_cont_call_cont. eauto.
-    apply compat_cenv_for.
+    eapply compat_cenv_for.
   rewrite H. intros [ts' [tk' [A [B [C D]]]]].
   econstructor; split.
   apply plus_one. econstructor; eauto. simpl.
@@ -2626,7 +2627,7 @@ Proof.
   red; intros; subst b'. destruct H12. congruence.
   eapply alloc_variables_load; eauto.
   erewrite Mem.load_alloc_frame; eauto.
-{
+(*{
   apply Axioms.extensionality. intro b0.
   destruct (Mem.sup_dec b0 (Mem.support m0)).
   - rewrite E. unfold struct_meminj.
@@ -2646,8 +2647,6 @@ Proof.
       exploit nextblock_alloc_vars; eauto.
       intros (p'0 & X' & Y').
       destruct H10. subst. unfold find_func_pos.
-      admit.
-      
 (*      rewrite FIND.
       exploit I. eauto. intro.
       destruct H10 as (id0 & path0 & pos & X1 & Y1).
@@ -2655,7 +2654,8 @@ Proof.
     + inv C. rewrite mi_freeblocks; eauto. unfold struct_meminj.
       destr; try congruence.
       erewrite bind_parameters_support in n0; eauto.
-}
+}*)
+
   unfold Mem.stackseq in *. rewrite T.
   erewrite bind_parameters_support; eauto.
   eapply alloc_variables_parallel_stackseq; eauto.
@@ -2678,7 +2678,7 @@ Proof.
   intros. apply match_cont_incr_bounds with (Mem.support m) (Mem.support tm).
   eapply match_cont_extcall; eauto.
   rewrite SUP. eauto. rewrite TSUP. eauto.
-  {
+(*  {
     apply Axioms.extensionality. intro b.
     destruct ((struct_meminj (Mem.support m)) b) eqn:Z. destruct p.
     - apply U in Z as Z'. rewrite Z'. rewrite <- Z.
@@ -2692,8 +2692,8 @@ Proof.
       apply mi_freeblocks in n. congruence.
       + unfold struct_meminj. destr. unfold struct_meminj in Z. destr_in Z.
       exploit X; eauto. intros [C1 D1]. congruence. *)
-  }
-  admit.
+  } *)
+  unfold Mem.stackseq in *. congruence.
 
 (* return *)
   specialize (MCONT (cenv_for f)). inv MCONT.
@@ -2714,15 +2714,15 @@ Proof.
   intros [tf [A B]].
   pose proof (type_of_fundef_preserved _ _ B) as Hsg. monadInv B. simpl in *.
   econstructor; split.
-  econstructor; eauto. admit.  congruence.
+  econstructor; eauto. admit. (* j identity on global *)
+  congruence.
   { revert vargs2 Hvargs. clear - H7.
     induction H7; inversion 1; econstructor; eauto using val_casted_inject. }
   eapply (match_stbls_support inj); eauto.
   inv Hm; cbn in *.
   econstructor; eauto. econstructor.
-  rewrite <- H0. reflexivity.
+  rewrite <- H1. reflexivity.
   (* initial or rely : comming states are related in sinj & stackseq*)
-  admit. admit.
 Admitted.
 
 Lemma final_states_simulation:
@@ -2748,9 +2748,9 @@ Proof.
   assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
   eapply functions_translated in H as (tfd & TFIND & TRFD); eauto.
   monadInv TRFD.
-  eexists (injpw (struct_meminj (Mem.support m)) m tm MINJ), _. intuition idtac.
+  eexists (injpw j m tm MINJ), _. intuition idtac.
   - econstructor; eauto.
-  - econstructor; eauto. constructor.
+  - econstructor; eauto. constructor; eauto.
   - specialize (MCONT VSet.empty). constructor.
     + eapply match_cont_globalenv; eauto.
     + inv GE. eapply Mem.sup_include_trans; eauto.
@@ -2764,9 +2764,7 @@ Proof.
       eapply match_cont_extcall; eauto.
       eapply Mem.unchanged_on_support; eauto.
       eapply Mem.unchanged_on_support; eauto.
-      admit.
-      admit.
-Admitted.
+Qed.
 
 End PRESERVATION.
 

@@ -115,6 +115,22 @@ Next Obligation.
 Qed.
 
 Next Obligation.
+  intros [ ] m1 m2 Hm id.
+  destruct (Mem.alloc_frame m1 id) as [m1' path] eqn:H1.
+  edestruct Mem.alloc_frame_extends as (m2' & Hm2' & Hm'); eauto.
+  rewrite Hm2'.
+  exists tt; split; rauto.
+Qed.
+
+Next Obligation.
+  intros [ ] m1 m2 Hm.
+  destruct (Mem.return_frame m1) as [m1'|] eqn:Hm1'; [|constructor].
+  edestruct Mem.return_frame_parallel_extends as (m2' & Hm2' & Hm'); eauto.
+  rewrite Hm2'. constructor.
+  exists tt; split; rauto.
+Qed.
+
+Next Obligation.
   intros [ ] chunk m1 m2 Hm [b ofs] p2 Hp.
   apply coreflexivity in Hp; subst. simpl. red.
   destruct (Mem.load chunk m1 b ofs) as [v1|] eqn:Hv1; [|constructor].
@@ -268,6 +284,7 @@ Proof.
       erewrite <- Mem.mext_sup; eauto.
       constructor; eauto.
       eapply Mem.extends_inject_compose; eauto.
+      inv Hm12. unfold Mem.stackseq in *. congruence.
     + rewrite compose_meminj_id_left. apply inject_incr_refl.
     + intros f' m1' m3' Hm' Hincr.
       exists (tt, f'). intuition auto; cbn.
@@ -285,6 +302,7 @@ Proof.
         erewrite <- Mem.mext_sup; eauto.
         constructor; auto.
         eapply Mem.extends_inject_compose; eauto.
+        inv Hm1i. unfold Mem.stackseq in *. congruence.
       * rewrite compose_meminj_id_left. apply inject_incr_refl.
 Qed.
 
@@ -299,6 +317,7 @@ Proof.
       erewrite (Mem.mext_sup m2 m3); eauto.
       constructor; eauto.
       eapply Mem.inject_extends_compose; eauto.
+      inv Hm23. unfold Mem.stackseq in *. congruence.
     + rewrite compose_meminj_id_right. apply inject_incr_refl.
     + intros f' m1' m3' Hm' Hincr.
       exists (f', tt). intuition auto; cbn.
@@ -316,5 +335,6 @@ Proof.
         erewrite (Mem.mext_sup m3 m2'); eauto.
         constructor; auto.
         eapply Mem.inject_extends_compose; eauto.
+        inv Hmi2. unfold Mem.stackseq in *. congruence.
       * rewrite compose_meminj_id_right. apply inject_incr_refl.
 Qed.

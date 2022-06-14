@@ -2692,6 +2692,13 @@ Proof.
   apply sup_incr_frame_in.
 Qed.
 
+
+Lemma sup_include_alloc_frame :
+  sup_include (support m1) (support m2).
+Proof.
+  intro. apply support_alloc_frame_1.
+Qed.
+
 Lemma stack_alloc_frame :
     (stack(support m2), path) = next_stree (stack (support m1)) id.
 Proof.
@@ -6381,6 +6388,32 @@ Proof.
   eapply perm_free_3; eauto.
 - unfold free in H. destruct (range_perm_dec m b lo hi Cur Freeable); inv H.
   simpl. auto.
+Qed.
+
+Lemma alloc_frame_unchanged_on:
+  forall m id path m',
+    alloc_frame m id = (m',path) ->
+    unchanged_on m m'.
+Proof.
+  intros. inv H. constructor; simpl; eauto.
+  intro. apply sup_incr_frame_in; eauto.
+  intros. unfold perm. simpl. reflexivity.
+Qed.
+
+Lemma return_frame_unchanged_on:
+  forall m m',
+    return_frame m = Some m' ->
+    unchanged_on m m'.
+Proof.
+  intros. unfold return_frame in H. destr_in H.
+  inv H. constructor; simpl; eauto.
+  set (s := sup_return_frame' (support m)).
+  exploit sup_return_refl; eauto.
+  instantiate (1:= s).
+  intros. destruct H. exploit H0. reflexivity.
+  intro.
+  intro. exploit sup_return_frame_in; eauto. intro. apply H2.
+  intros. unfold perm. reflexivity.
 Qed.
 
 Lemma drop_perm_unchanged_on:

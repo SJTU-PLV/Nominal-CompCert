@@ -65,7 +65,7 @@ Qed.
   otherwise it is difficult to state the monotonicity property of
   [blocks_of_env] (we would have to introduce some kind of "subset"
   list relator) *)
-Definition env_match R w :=
+Definition env_match R w :rel env env :=
   PTreeRel.r (option_rel (block_inject_sameofs (mi R w) * @eq type)).
 
 Global Instance env_match_acc:
@@ -601,6 +601,7 @@ Inductive state_match R w: rel state state :=
          list_rel (Val.inject (mi R w)) ++>
          cont_match R w ++>
          match_mem R w ++>
+         - ==>
          state_match R w)
   | Returnstate_rel:
       Monotonic
@@ -634,18 +635,31 @@ Proof.
   repeat rstep; try (destruct ident_eq; repeat rstep).
 Qed.
 
+Definition rel_ident_eq : rel ident ident :=
+  fun i1 i2 => i1 = i2.
+
+Definition klr_ident_eq  (R:cklr) (r : world R):= rel_ident_eq.
+Global Instance alloc_frame_match R:
+  Monotinic
+  (@Mem.alloc_frame)
+  (|= match_mem R ++>
+      _ ==>)
 Global Instance function_entry1_match R:
   Monotonic
     (@function_entry1)
-    (|= genv_match R ++> - ==> k1 list_rel (Val.inject @@ [mi R]) ++> match_mem R ++>
-     %% k1 set_le (<> env_match R * temp_env_match R * match_mem R)).
+    (|= genv_match R ++>
+        - ==>
+        k1 list_rel (Val.inject @@ [mi R]) ++>
+        match_mem R ++>
+     %%% k1 set_le (<> env_match R * temp_env_match R * match_mem R * klr_ident_eq R )
+     ).
 Proof.
-  intros w ge1 ge2 Hge f vargs1 vargs2 Hvargs m1 m2 Hm [[e1 le] m1''] H.
+  intros w ge1 ge2 Hge f vargs1 vargs2 Hvargs m1 m2 Hm [[[e1 le] m1''] id ] H.
   simpl in *.
-  destruct H as [m1' Hfvnr Hm1' Hm1'' Hle].
+  destruct H as [m1' m2' path  Hfvnr AF Hm1' Hm1'' Hle].
   pose proof (empty_env_match R w) as Hee.
-  destruct (alloc_variables_match R w _ _ Hge _ _ Hee _ _ Hm _ (e1, m1') Hm1')
-    as ((e2 & m2') & Hm2' & w' & Hw' & He & Hm').
+  destruct (alloc_variables_match R w _ _ Hge _ _ Hee _ _ Hm _ (e1, m2') Hm1').
+    as ((e2 & m3') & Hm2' & w' & Hw' & He & Hm').
   eapply genv_match_acc in Hge; [ | eauto].
   transport Hm1''.
   exists (e2, le, x).
@@ -696,7 +710,7 @@ Qed.
 Global Instance step_rel R:
   Monotonic
     (@step)
-    (|= genv_match R ++> 
+    (|= genv_match R ++>
         (- ==> k1 list_rel (Val.inject @@ [mi R]) ++> match_mem R ++>
          %% k1 set_le (<> env_match R * temp_env_match R * match_mem R)) ++>
         state_match R ++> - ==> k1 set_le (<> state_match R)).

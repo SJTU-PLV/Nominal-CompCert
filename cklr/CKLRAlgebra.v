@@ -380,6 +380,32 @@ Next Obligation.
 Qed.
 
 Next Obligation.
+  intros [w12 w23] m1 m3 (m2 & Hm12 & Hm23) id.
+  edestruct (cklr_alloc_frame R1 w12 m1 m2 Hm12 id)
+    as (w12' & Hw12 & Hm12' & Hp12).
+  edestruct (cklr_alloc_frame R2 w23 m2 m3 Hm23 id)
+    as (w23' & Hw23 & Hm23' & Hp23).
+  exists (w12', w23'); split; [rauto | ].
+  rstep. simpl. split.
+  - eexists; split; rauto.
+  - unfold k in *. rewrite Hp12, Hp23. auto.
+Qed.
+
+Next Obligation.
+  intros [w12 w23] m1 m3 (m2 & Hm12 & Hm23).
+  simpl in *. red.
+  destruct (Mem.return_frame m1) as [m1'|] eqn:H1; [|constructor].
+  apply cklr_return_frame in Hm12. unfold k1 in Hm12.
+  rewrite H1 in Hm12. inv Hm12.
+  apply cklr_return_frame in Hm23. unfold k1 in Hm23.
+  rewrite <- H0 in Hm23. inv Hm23.
+  destruct H2 as (w12' & Hw12 & Hm12).
+  destruct H4 as (w23' & Hw23 & Hm23).
+  constructor. eexists. split. rauto.
+  econstructor. split. rauto. rauto.
+Qed.
+
+Next Obligation.
   intros [w12 w23] chunk m1 m3 (m2 & Hm12 & Hm23) [b1 ofs1] [b3 ofs3] Hptr.
   apply ptr_inject_compose in Hptr.
   destruct Hptr as ([b2 ofs2] & Hptr12 & Hptr23).

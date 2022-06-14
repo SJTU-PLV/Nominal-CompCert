@@ -111,6 +111,31 @@ Next Obligation.
     eapply romatch_free; eauto.
 Qed.
 
+(** Alloc Frame *)
+Next Obligation.
+  intros x m1 m2 H id. inv H.
+  edestruct (cklr_alloc_frame inj w m1 m2 H2) as (w' & Hw' & Hm' & Hb).
+  exists (se, w'). split; [cbn; rauto | ].
+  repeat apply conj; eauto. constructor; eauto.
+  - intros cu Hcu.
+    simpl. exploit Mem.sup_incr_frame_in.
+    intros [A B]. apply A. eauto.
+Qed.
+
+(** Return Frame *)
+Next Obligation.
+  intros x m1 m2 H. inv H. cbn. rstep.
+  destruct (Mem.return_frame m1) as [m1' | ] eqn:Hm1'; try constructor.
+  generalize Hm1'. exploit cklr_return_frame; eauto.
+  intro. unfold k1 in H. rewrite Hm1' in H. inv H.
+  intro. repeat rstep. destruct H5 as (w' & Hw & Hm).
+  exists (se, w'). split; auto. rauto.
+  constructor; eauto.
+  - eauto using Mem.sup_include_return_frame.
+  - intros cu Hcu.
+    eapply romatch_return_frame; eauto.
+Qed.
+
 (** Load *)
 Next Obligation.
   intros sew chunk m1 m2 Hm. inv Hm.
@@ -345,7 +370,7 @@ Proof.
   eexists (se1, vaw se1 (bc_of_inj f se1) m1, injw f _ _). cbn.
   repeat apply conj; eauto 10 using rel_inv_intro.
   - eexists. split.
-    + inv H6. cbn in *.
+    + inv H7. cbn in *.
       constructor. constructor.
       * eapply bc_of_inj_genv_match; eauto.
       * eapply bc_of_inj_vmatch; eauto.
@@ -360,13 +385,13 @@ Proof.
   - intros r1 r2 (ri & Hr1i & w' & Hw' & Hri2).
     exists (se1, w'). split.
     + constructor; auto.
-    + destruct Hr1i. destruct Hri2. inv Hw'. inv H5. inv H8. cbn in *.
+    + destruct Hr1i. destruct Hri2. inv Hw'. inv H5. inv H9. cbn in *.
       constructor; cbn; auto.
       constructor; cbn; auto.
       * eauto.
-      * clear - H11 H18 H17 H6. inv H6. cbn in *.
+      * clear - H12 H19 H18 H7. inv H7. cbn in *.
         intros cu Hcu. eapply romatch_exten; eauto. intros b id.
-        destruct H17 as [Hglob Hdef]. rewrite <- Hglob. cbn. clear.
+        destruct H18 as [Hglob Hdef]. rewrite <- Hglob. cbn. clear.
         split.
         ++ intros H. destruct Genv.invert_symbol eqn:Hb; inv H.
            apply Genv.invert_find_symbol; auto.
@@ -390,7 +415,8 @@ Proof.
   repeat apply conj.
   - exists se1. repeat apply conj; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
-  - exists m1; split; repeat rstep; constructor; cbn; eauto using inj_mem_intro, mem_inject_dom.
+  - exists m1; split; repeat rstep; constructor; cbn; eauto using inj_mem_intro, mem_inject_dom. constructor. eauto using mem_inject_dom.
+    apply struct_eq_refl.
   - rewrite meminj_dom_compose.
     apply inject_incr_refl.
   - intros [[? w12'] [? w23']] m1' m3' (m2' & H12' & H23') [[? Hw12'] [? Hw23']].
@@ -404,6 +430,7 @@ Proof.
     eexists (se1, injw (compose_meminj f12' f23') _ _).
     repeat apply conj; cbn; auto.
     + constructor; auto. constructor; auto. eapply Mem.inject_compose; eauto.
+      eapply struct_eq_trans; eauto.
     + constructor; auto.
       * rewrite <- (meminj_dom_compose f). rauto.
       * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
@@ -429,7 +456,7 @@ Proof.
   repeat apply conj.
   - exists se1. repeat apply conj; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
-  - exists m1; split; repeat rstep; constructor; cbn; eauto using inj_mem_intro, mem_inject_dom.
+  - exists m1; split; repeat rstep; constructor; cbn; eauto using inj_mem_intro, mem_inject_dom. constructor; eauto using mem_inject_dom. apply struct_eq_refl.
   - rewrite meminj_dom_compose.
     apply inject_incr_refl.
   - intros [[? w12'] w23'] m1' m3' (m2' & H12' & H23') [[? Hw12'] Hw23'].
@@ -442,6 +469,7 @@ Proof.
     eexists (se1, injw (compose_meminj f12' f23') _ _).
     repeat apply conj; cbn; auto.
     + constructor; auto. constructor; auto. eapply Mem.inject_compose; eauto.
+      eapply struct_eq_trans; eauto.
     + constructor; auto.
       * rewrite <- (meminj_dom_compose f). rauto.
       * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
