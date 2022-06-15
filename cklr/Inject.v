@@ -15,16 +15,19 @@ Record inj_world :=
     injw_meminj :> meminj;
     injw_sup_l: sup;
     injw_sup_r: sup;
+    injw_glob id ofs b:
+      injw_meminj (Global id) = Some (b,ofs)
+      -> b = Global id /\ (ofs = 0);
   }.
 
 Variant inj_incr: relation inj_world :=
-  inj_incr_intro f f' s1 s2 s1' s2':
+  inj_incr_intro f f' s1 s2 s1' s2' Hg Hg':
     inject_incr f f' ->
     (forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) ->
     ~sup_In b1 s1  /\ ~sup_In b2 s2) ->
     Mem.sup_include s1 s1' ->
     Mem.sup_include s2 s2' ->
-    inj_incr (injw f s1 s2) (injw f' s1' s2').
+    inj_incr (injw f s1 s2 Hg) (injw f' s1' s2' Hg').
 
 Record inj_stbls (w: inj_world) (se1 se2: Genv.symtbl): Prop :=
   {
@@ -34,10 +37,10 @@ Record inj_stbls (w: inj_world) (se1 se2: Genv.symtbl): Prop :=
   }.
 
 Variant inj_mem: klr inj_world mem mem :=
-  inj_mem_intro f m1 m2:
+  inj_mem_intro f m1 m2 Hg:
     Mem.inject f m1 m2 ->
     Mem.stackseq m1 m2 ->
-    inj_mem (injw f (Mem.support m1) (Mem.support m2)) m1 m2.
+    inj_mem (injw f (Mem.support m1) (Mem.support m2) Hg) m1 m2.
 
 (** ** Properties *)
 
@@ -134,6 +137,10 @@ Proof.
   eapply H5; eauto.
 Qed.
 
+Next Obligation.
+  eapply injw_glob; eauto.
+Qed.
+
 Next Obligation. (* mi_acc_separated *)
   eapply inj_acc_separated; eauto.
 Qed.
@@ -155,7 +162,9 @@ Proof.
     as (f' & m2' & b2 & Hm2' & Hm' & Hf'1 & Hb2 & Hf'2);
     eauto using Z.le_refl.
   rewrite Hm2'.
-  exists (injw f' (Mem.support m1') (Mem.support m2')); split; repeat rstep.
+  assert (forall id ofs b, f'(Global id) = Some (b,ofs) -> b = Global id /\ ofs = 0).
+  admit.
+  exists (injw f' (Mem.support m1') (Mem.support m2') H); split; repeat rstep.
   - constructor; eauto.
     intros b1' b2' delta' Hb Hb'.
     destruct (eq_block b1' b1); subst.
@@ -168,7 +177,7 @@ Proof.
     + erewrite (Mem.support_alloc m2 _ _ m2'); eauto.
   - econstructor; eauto. eapply Mem.alloc_parallel_stackseq; eauto.
   - cbn. red. auto.
-Qed.
+Admitted.
 
 Next Obligation. (* Mem.alloc *)
   exact inj_cklr_alloc.
@@ -187,8 +196,11 @@ Next Obligation. (* Mem.free *)
   congruence.
   replace (lo1 + delta + sz) with (lo1 + sz + delta) by extlia.
   rewrite Hm2'.
-  repeat (econstructor; eauto); try congruence;
-    erewrite <- Mem.support_free; eauto.
+  econstructor; eauto. econstructor; eauto.
+  econstructor; eauto. instantiate (1:= injw_glob0).
+  econstructor; eauto. econstructor; congruence.
+  erewrite <- Mem.support_free; eauto.
+  erewrite <- Mem.support_free; eauto.
 Qed.
 
 Next Obligation. (* Mem.alloc_frame *)
@@ -198,7 +210,7 @@ Next Obligation. (* Mem.alloc_frame *)
     as (m2' & p2 & Hm2' & Hm'); eauto.
   rewrite Hm2'.
   edestruct Mem.alloc_frame_parallel_stackseq as [SEQ PATH]; eauto.
-  exists (injw f (Mem.support m1') (Mem.support m2')); split; repeat rstep.
+  exists (injw f (Mem.support m1') (Mem.support m2') Hg0); split; repeat rstep.
   - constructor; eauto.
     intros. congruence.
     eapply Mem.sup_include_alloc_frame; eauto.
@@ -214,7 +226,10 @@ Next Obligation. (*Mem.return_frame*)
   edestruct Mem.return_frame_parallel_stackseq as (m2' & Hm2' & SEQ); eauto.
   exploit Mem.return_frame_inject; eauto. intro Hm'.
   rewrite Hm2'.
-  repeat (econstructor; eauto); try congruence;
+  econstructor; eauto. econstructor; eauto.
+  econstructor; eauto. instantiate (1:= injw_glob0).
+  econstructor; eauto. econstructor; congruence.
+  eapply Mem.sup_include_return_frame; eauto.
   eapply Mem.sup_include_return_frame; eauto.
 Qed.
 
@@ -237,8 +252,11 @@ Next Obligation. (* Mem.store *)
   rewrite (Mem.support_store _ _ _ _ _ _ Hm2').
   congruence.
   rewrite Hm2'.
-  repeat (econstructor; eauto); try congruence;
-    erewrite <- Mem.support_store; eauto.
+  econstructor; eauto. econstructor; eauto.
+  econstructor; eauto. instantiate (1:= injw_glob0).
+  econstructor; eauto. econstructor; congruence.
+  erewrite <- Mem.support_store; eauto.
+  erewrite <- Mem.support_store; eauto.
 Qed.
 
 Next Obligation. (* Mem.loadbytes *)
@@ -288,8 +306,11 @@ Next Obligation. (* Mem.storebytes *)
     erewrite (Mem.support_storebytes _ _ _ _ _ Hm1'); eauto.
     erewrite (Mem.support_storebytes _ _ _ _ _ Hm2'); eauto.
     rewrite Hm2'.
-    repeat (econstructor; eauto); try congruence;
-      erewrite <- Mem.support_storebytes; eauto.
+  econstructor; eauto. econstructor; eauto.
+  econstructor; eauto. instantiate (1:= injw_glob0).
+  econstructor; eauto. econstructor; congruence.
+  erewrite <- Mem.support_storebytes; eauto.
+  erewrite <- Mem.support_storebytes; eauto.
 Qed.
 
 Next Obligation. (* Mem.perm *)
@@ -551,8 +572,8 @@ Lemma inj_inj:
   subcklr inj (inj @ inj).
 Proof.
   intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [f m1 m2 Hm].
-  exists (injw (meminj_dom f) (Mem.support m1) (Mem.support m1),
-          injw f (Mem.support m1) (Mem.support m2)); simpl.
+  eexists (injw (meminj_dom f) (Mem.support m1) (Mem.support m1) _ ,
+          injw f (Mem.support m1) (Mem.support m2) Hm); simpl.
   repeat apply conj.
   - exists se1. split; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
@@ -564,9 +585,9 @@ Proof.
   - intros [w12' w23'] m1' m3' (m2' & H12' & H23') [Hw12' Hw23']. cbn in *.
     destruct H12' as [f12' m1' m2' Hm12'].
     inversion H23' as [f23' xm2' xm3' Hm23']. clear H23'; subst.
-    inversion Hw12' as [? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
-    inversion Hw23' as [? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
-    eexists (injw (compose_meminj f12' f23') _ _).
+    inversion Hw12' as [? ? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
+    inversion Hw23' as [? ? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
+    eexists (injw (compose_meminj f12' f23') _ _ _).
     repeat apply conj.
     + constructor; auto. eapply Mem.inject_compose; eauto.
       eapply struct_eq_trans; eauto.
@@ -579,8 +600,8 @@ Proof.
         edestruct SEP12'; eauto. unfold meminj_dom. rewrite Hb. auto.
         destruct (f bi) as [[? ?] | ] eqn:Hfbi.
         {
-          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
+          eapply Mem.valid_block_inject_1 in Hfbi; eauto. admit.
         }
-        edestruct SEP23'; eauto.
+        edestruct SEP23'; eauto. admit. admit. admit.
     + cbn. rstep; auto.
 Qed.

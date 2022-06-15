@@ -54,6 +54,9 @@ Record cklr :=
     acc_preorder:
       PreOrder wacc;
 
+    mi_glob w id b ofs:
+      mi w (Global id) = Some(b,ofs) ->
+      b = Global id /\ ofs = 0;
     mi_acc:
       Monotonic mi (wacc ++> inject_incr);
     mi_acc_separated w w' m1 m2:

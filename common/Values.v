@@ -2689,6 +2689,10 @@ End Val.
 
 Notation meminj := Val.meminj.
 
+Definition inject_glob_pid (f:meminj) : Prop :=
+  forall id delta b, f (Global id) = Some (b,delta) ->
+                b = Global id /\ delta = 0.
+
 (** Monotone evolution of a memory injection. *)
 
 Definition inject_incr (f1 f2: meminj) : Prop :=

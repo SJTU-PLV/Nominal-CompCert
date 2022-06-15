@@ -290,6 +290,13 @@ Program Definition cklr_compose (R1 R2: cklr): cklr :=
   |}.
 
 Next Obligation.
+  simpl in H. unfold compose_meminj in H.
+  destr_in H. destruct p. apply mi_glob in Heqo. destruct Heqo.
+  subst. destr_in H. destruct p. apply mi_glob in Heqo.
+  destruct Heqo. subst. inv H. auto.
+Qed.
+
+Next Obligation.
   rauto.
 Qed.
 

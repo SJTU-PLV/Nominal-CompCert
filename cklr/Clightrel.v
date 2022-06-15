@@ -635,15 +635,6 @@ Proof.
   repeat rstep; try (destruct ident_eq; repeat rstep).
 Qed.
 
-Definition rel_ident_eq : rel ident ident :=
-  fun i1 i2 => i1 = i2.
-
-Definition klr_ident_eq  (R:cklr) (r : world R):= rel_ident_eq.
-Global Instance alloc_frame_match R:
-  Monotinic
-  (@Mem.alloc_frame)
-  (|= match_mem R ++>
-      _ ==>)
 Global Instance function_entry1_match R:
   Monotonic
     (@function_entry1)
@@ -651,44 +642,57 @@ Global Instance function_entry1_match R:
         - ==>
         k1 list_rel (Val.inject @@ [mi R]) ++>
         match_mem R ++>
-     %%% k1 set_le (<> env_match R * temp_env_match R * match_mem R * klr_ident_eq R )
+     %%% k1 set_le (<> env_match R * temp_env_match R * match_mem R * k eq )
      ).
 Proof.
-  intros w ge1 ge2 Hge f vargs1 vargs2 Hvargs m1 m2 Hm [[[e1 le] m1''] id ] H.
+  intros w ge1 ge2 Hge f vargs1 vargs2 Hvargs m1 m2 Hm [[[e1 le] m1'''] id ] H.
   simpl in *.
-  destruct H as [m1' m2' path  Hfvnr AF Hm1' Hm1'' Hle].
+  destruct H as [m1' m1'' path  Hfvnr AF Hm1' Hm1'' Hle].
   pose proof (empty_env_match R w) as Hee.
-  destruct (alloc_variables_match R w _ _ Hge _ _ Hee _ _ Hm _ (e1, m2') Hm1').
-    as ((e2 & m3') & Hm2' & w' & Hw' & He & Hm').
-  eapply genv_match_acc in Hge; [ | eauto].
-  transport Hm1''.
-  exists (e2, le, x).
+  destruct (cklr_alloc_frame R w _ _ Hm id) as (w' & Hw' & Hm' & PATH).
+  rewrite AF in Hm'. destruct (Mem.alloc_frame m2 id) as (m2' & path') eqn:AF'.
+  rewrite AF in PATH.
+  unfold k in PATH. simpl in PATH. subst path'.
+  eapply genv_match_acc in Hge as Hge'; eauto.
+  eapply env_match_acc in Hee as Hee'; eauto.
+  destruct (alloc_variables_match R w' _ _ Hge' _ _ Hee' _ _ Hm' _ (e1, m1'') Hm1')
+    as ((e2 & m2'') & Hm2' & w'' & Hw'' & He & Hm'').
+  eapply genv_match_acc in Hge' as Hge'' ; [ | eauto].
+  eapply bind_parameters_match in Hm1''; eauto.
+  Focus 2. admit.
+  destruct Hm1'' as (m2''' & H & w''' & Hw''' & Hm''' ).
+  exists (e2, le, m2''',id).
   cbn [fst snd] in *.
   split.
   - econstructor; eauto.
-  - assert (temp_env_match R w'' le le).
+  - assert (temp_env_match R w''' le le).
     { subst le. generalize (fn_temps f). clear. unfold temp_env_match.
       induction l; cbn; rauto. }
-    exists w''. split; rauto.
-Qed.
+    exists w'''. split; rauto.
+Admitted.
 
 Global Instance function_entry2_match R:
   Monotonic
     (@function_entry2)
     (|= genv_match R ++> - ==> k1 list_rel (Val.inject @@ [mi R]) ++> match_mem R ++>
-     %% k1 set_le (<> env_match R * temp_env_match R * match_mem R)).
+     %%% k1 set_le (<> env_match R * temp_env_match R * match_mem R * k eq)).
 Proof.
-  intros w ge1 ge2 Hge f vargs1 vargs2 Hvargs m1 m2 Hm [[e1 le1] m1'] H.
+  intros w ge1 ge2 Hge f vargs1 vargs2 Hvargs m1 m2 Hm [[[e1 le1] m1'']id] H.
   simpl in *.
-  destruct H as [Hfvnr Hfpnr Hfvpd Hm1' Hle1].
+  destruct H as [m1' path Hfvnr Hfpnr Hfvpd AF Hm1' Hle1].
   pose proof (empty_env_match R w) as Hee.
-  destruct (alloc_variables_match R w _ _ Hge _ _ Hee _ _ Hm _ (e1, m1') Hm1')
-    as ((e2 & m2') & Hm2' & p' & Hp' & He & Hm').
+  destruct (cklr_alloc_frame R w _ _ Hm id) as (w' & Hw' & Hm' & PATH).
+  rewrite AF in Hm'. destruct (Mem.alloc_frame m2 id) as (m2' & path') eqn:AF'.
+  rewrite AF in PATH.
+  unfold k in PATH. simpl in PATH. subst path'.
+  eapply genv_match_acc in Hge as Hge'; eauto.
+  eapply env_match_acc in Hee as Hee'; eauto.
+  destruct (alloc_variables_match R w' _ _ Hge' _ _ Hee' _ _ Hm' _ (e1, m1'') Hm1')
+    as ((e2 & m2'') & Hm2' & w'' & Hw'' & He & Hm'').
   transport Hle1.
-  exists (e2, x, m2').
-  simpl in *.
+  exists (e2, x, m2'',id).
   split.
-  - constructor; eauto.
+  - econstructor; eauto.
   - rauto.
 Qed.
 
@@ -712,7 +716,7 @@ Global Instance step_rel R:
     (@step)
     (|= genv_match R ++>
         (- ==> k1 list_rel (Val.inject @@ [mi R]) ++> match_mem R ++>
-         %% k1 set_le (<> env_match R * temp_env_match R * match_mem R)) ++>
+         %%% k1 set_le (<> env_match R * temp_env_match R * match_mem R * k eq)) ++>
         state_match R ++> - ==> k1 set_le (<> state_match R)).
 Proof.
   intros w ge1 ge2 Hge fe1 fe2 Hfe s1 s2 Hs t s1' H1.
@@ -733,7 +737,15 @@ Proof.
        eexists; split;
          [ eapply c; eauto; fail
          | eexists; split; rauto ]).
-  - eapply @transport in f0; [ | rel_curry2_set_le_transport fe1 | rauto].
+  
+  - eexists; split. eapply c; eauto.
+    instantiate (1:= id).
+    exploit eval_expr_match; eauto.
+    intros (b & AA & BB). inv BB.
+    admit. admit. admit.
+    eexists; split. rauto.
+  - simpl.
+    eapply @transport in f0; [ | rel_curry2_set_le_transport fe1 | rauto].
     destruct f0 as (? & ? & ? & ? & ? & ? & ?).
     rinversion H2. inv H2l. inv H2r.
     rinversion H3. inv H3l. inv H3r.
