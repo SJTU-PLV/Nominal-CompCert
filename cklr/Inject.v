@@ -15,9 +15,8 @@ Record inj_world :=
     injw_meminj :> meminj;
     injw_sup_l: sup;
     injw_sup_r: sup;
-    injw_glob id ofs b:
-      injw_meminj (Global id) = Some (b,ofs)
-      -> b = Global id /\ (ofs = 0);
+    injw_glob:
+      same_at_glob injw_meminj;
   }.
 
 Variant inj_incr: relation inj_world :=
@@ -162,9 +161,8 @@ Proof.
     as (f' & m2' & b2 & Hm2' & Hm' & Hf'1 & Hb2 & Hf'2);
     eauto using Z.le_refl.
   rewrite Hm2'.
-  assert (forall id ofs b, f'(Global id) = Some (b,ofs) -> b = Global id /\ ofs = 0).
-  admit.
-  exists (injw f' (Mem.support m1') (Mem.support m2') H); split; repeat rstep.
+  eapply Mem.alloc_meminj_same_at_glob in Hm1' as Hg'; eauto.
+  exists (injw f' (Mem.support m1') (Mem.support m2') Hg'); split; repeat rstep.
   - constructor; eauto.
     intros b1' b2' delta' Hb Hb'.
     destruct (eq_block b1' b1); subst.
@@ -177,7 +175,7 @@ Proof.
     + erewrite (Mem.support_alloc m2 _ _ m2'); eauto.
   - econstructor; eauto. eapply Mem.alloc_parallel_stackseq; eauto.
   - cbn. red. auto.
-Admitted.
+Qed.
 
 Next Obligation. (* Mem.alloc *)
   exact inj_cklr_alloc.
@@ -326,12 +324,12 @@ Next Obligation. (* Mem.valid_block *)
 Qed.
 
 Next Obligation. (* Mem.meminj_no_overlap *)
-  destruct H as [f m1 m2 s1 s2 Hm Hs1 Hs2].
+  destruct H as [f m1 m2 s1 s2 Hm].
   eapply Mem.mi_no_overlap; eauto.
 Qed.
 
 Next Obligation. (* representable *)
-  destruct H as [f m1 m2 s1 s2 Hm Hs1 Hs2].
+  destruct H as [f m1 m2 s1 s2 Hm].
   rewrite <- (Ptrofs.unsigned_repr ofs1) by extlia.
   eapply Mem.mi_representable; eauto.
   rewrite Ptrofs.unsigned_repr by extlia.
@@ -567,12 +565,30 @@ Proof.
 Qed.
 
 (** ** CKLR composition theorems *)
+Lemma same_at_glob_compose f12 f23:
+  same_at_glob f12 ->
+  same_at_glob f23 ->
+  same_at_glob (compose_meminj f12 f23).
+Proof.
+  intros. unfold same_at_glob in *.
+  intros. unfold compose_meminj in H1.
+  destr_in H1. destruct p. apply H in Heqo. destruct Heqo. subst.
+  destr_in H1. destruct p. apply H0 in Heqo. destruct Heqo. subst.
+  inv H1. auto.
+Qed.
+
+Lemma meminj_dom_same_at_glob f:
+  same_at_glob (meminj_dom f).
+Proof.
+  unfold same_at_glob. intros. unfold meminj_dom in H.
+  destr_in H.
+Qed.
 
 Lemma inj_inj:
   subcklr inj (inj @ inj).
 Proof.
   intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [f m1 m2 Hm].
-  eexists (injw (meminj_dom f) (Mem.support m1) (Mem.support m1) _ ,
+  exists (injw (meminj_dom f) (Mem.support m1) (Mem.support m1) (meminj_dom_same_at_glob f),
           injw f (Mem.support m1) (Mem.support m2) Hm); simpl.
   repeat apply conj.
   - exists se1. split; eauto.
@@ -585,8 +601,8 @@ Proof.
   - intros [w12' w23'] m1' m3' (m2' & H12' & H23') [Hw12' Hw23']. cbn in *.
     destruct H12' as [f12' m1' m2' Hm12'].
     inversion H23' as [f23' xm2' xm3' Hm23']. clear H23'; subst.
-    inversion Hw12' as [? ? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
-    inversion Hw23' as [? ? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
+    inversion Hw12' as [? ? ? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
+    inversion Hw23' as [? ? ? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
     eexists (injw (compose_meminj f12' f23') _ _ _).
     repeat apply conj.
     + constructor; auto. eapply Mem.inject_compose; eauto.
@@ -600,8 +616,9 @@ Proof.
         edestruct SEP12'; eauto. unfold meminj_dom. rewrite Hb. auto.
         destruct (f bi) as [[? ?] | ] eqn:Hfbi.
         {
-          eapply Mem.valid_block_inject_1 in Hfbi; eauto. admit.
+          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
         }
-        edestruct SEP23'; eauto. admit. admit. admit.
-    + cbn. rstep; auto.
+        edestruct SEP23'; eauto.
+    + instantiate (1 := same_at_glob_compose f12' f23' Hm12' Hm23' ).
+      cbn. rstep; auto.
 Qed.

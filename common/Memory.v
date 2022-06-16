@@ -731,7 +731,7 @@ Lemma stree_include_dec : forall (s1 s2:stree),
 Proof.
   induction s1 using stree_ind. intro.
   destruct s1. destruct o.
-Admitted.
+Admitted. (* we can iterate the stree *)
 
 Theorem sup_include_dec : forall s1 s2, {sup_include s1 s2} + {~sup_include s1 s2}.
 Proof.
@@ -5765,6 +5765,22 @@ Proof.
   intros. apply (valid_not_valid_diff m2 b2 b2); eauto with mem.
   intros [f' [A [B [C D]]]].
   exists f'; exists m2'; exists b2; auto.
+Qed.
+
+Lemma alloc_meminj_same_at_glob:
+  forall f f' m lo hi m' b1 b2,
+    alloc m lo hi = (m',b1) ->
+    same_at_glob f ->
+    inject_incr f f' ->
+    f' b1 = Some (b2, 0) ->
+    (forall b, b <> b1 -> f' b = f b) ->
+    same_at_glob f'.
+Proof.
+  intros. unfold same_at_glob in *.
+  intros. destruct (eq_block b1 (Global id)).
+  - exploit alloc_result_stack; eauto. intro.
+    unfold is_stack in H5. subst. inv H5.
+  - rewrite H3 in H4. eauto. eauto.
 Qed.
 
 (** Preservation of [free] operations *)

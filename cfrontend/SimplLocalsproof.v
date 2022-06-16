@@ -191,7 +191,7 @@ Proof.
 - inv H0; auto.
 - inv H0; auto.
 - inv H0; auto.
-- inv H0. unfold Mptr, Val.load_result; destruct Archi.ptr64; auto. 
+- inv H0. unfold Mptr, Val.load_result; destruct Archi.ptr64; auto.
 - inv H0. unfold Mptr, Val.load_result; rewrite H1; auto.
 - inv H0. unfold Val.load_result; rewrite H1; auto.
 - inv H0. unfold Mptr, Val.load_result; rewrite H1; auto.
@@ -1818,14 +1818,8 @@ End EVAL_EXPR.
 (** Matching continuations *)
 
 Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> sup -> sup -> Prop :=
-  | match_Kstop: forall cenv m bound tbound,
-      inj_incr w (injw f bound tbound) ->
-(*=======
-Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> sup -> sup -> Prop :=
-  | match_Kstop: forall cenv m bound tbound hi,
-      match_globalenvs f hi -> Mem.sup_include hi bound -> Mem.sup_include hi tbound ->
->>>>>>> 830b2cc
-*)
+  | match_Kstop: forall cenv m bound tbound Hg,
+      inj_incr w (injw f bound tbound Hg) ->
       match_cont f cenv Kstop Kstop m bound tbound
   | match_Kseq: forall cenv s k ts tk m bound tbound,
       simpl_stmt cenv s = OK ts ->
@@ -1889,7 +1883,7 @@ Proof.
   intros; apply LOAD; auto. inv H0. auto.
   intros; apply INJ1. inv H0. auto.
   intros; eapply INJ2; eauto. inv H0; auto.
-Qed.
+Admitted. (*question about local lemmas SOS!!!!!!!!*)
 
 (** Invariance by assignment to location "above" *)
 
@@ -1943,7 +1937,7 @@ Lemma match_cont_incr_bounds:
 Proof.
   induction 1; intros; econstructor; eauto; try extlia.
   etransitivity; eauto. constructor; eauto. congruence.
-Qed.
+Admitted. (*SOS*)
 
 (** [match_cont] and call continuations. *)
 
@@ -2049,6 +2043,7 @@ Inductive match_states: state -> state -> Prop :=
         (MENV: match_envs j (cenv_for f) e le m lo hi te tle tlo thi)
         (MCONT: match_cont j (cenv_for f) k tk m lo tlo)
         (MINJ: Mem.inject j m tm)
+        (INJB: same_at_glob j)
 (*        (VINJ: j = struct_meminj (Mem.support m))*)
         (MSTK: Mem.stackseq m tm)
         (COMPAT: compat_cenv (addr_taken_stmt s) (cenv_for f))
@@ -2061,6 +2056,7 @@ Inductive match_states: state -> state -> Prop :=
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (VINJVF: Val.inject j vf tvf)
         (MINJ: Mem.inject j m tm)
+        (INJB: same_at_glob j)
 (*        (VINJ: j = struct_meminj (Mem.support m)) *)
         (MSTK: Mem.stackseq m tm)
         (AINJ: Val.inject_list j vargs tvargs)
@@ -2073,6 +2069,7 @@ Inductive match_states: state -> state -> Prop :=
       forall v k m tv tk tm j
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (MINJ: Mem.inject j m tm)
+        (INJB: same_at_glob j)
 (*        (VINJ: j = struct_meminj (Mem.support m)) *)
         (MSTK: Mem.stackseq m tm)
         (RINJ: Val.inject j v tv),
@@ -2339,7 +2336,7 @@ Proof.
   eapply match_envs_assign_lifted; eauto. eapply cast_val_is_casted; eauto.
   eapply match_cont_assign_loc; eauto. exploit me_range; eauto. intros [E F]. auto.
   inv MV; try congruence. inv H2; try congruence. unfold Mem.storev in H3.
-  eapply Mem.store_unmapped_inject; eauto. congruence.
+  eapply Mem.store_unmapped_inject; eauto. congruence. eauto.
   (* erewrite <- assign_loc_support; eauto. *)
   unfold Mem.stackseq in *. erewrite assign_loc_support; eauto.
   eauto with compat.
@@ -2358,7 +2355,7 @@ Proof.
   econstructor. eauto. eauto.
   eapply match_envs_invariant; eauto.
   eapply match_cont_invariant; eauto.
-  eauto.
+  eauto. eauto.
   (* erewrite <- assign_loc_support; eauto.*)
   unfold Mem.stackseq in *.
   rewrite (assign_loc_support _ _  _ _ _ _ _ _ X); eauto.
@@ -2383,10 +2380,7 @@ Proof.
   rewrite typeof_simpl_expr. eauto.
   instantiate (1:=id).
   instantiate (1:=tvf).
-  (*need this, initially from the match_query, kept by the internal execution*)
-  assert (forall id b ofs, j (Global id) = Some (b,ofs) -> b = Global id /\ ofs = 0).
-  admit.
-  inv B. apply H0 in H7. destruct H7. subst.
+  inv B. apply INJB in H6. destruct H6. subst.
   rewrite Ptrofs.add_zero. auto.
   (* inv B. unfold struct_meminj in H6. destr_in H6. simpl in H6. inv H6.*)
   auto. eauto. eauto. eauto.
@@ -2425,6 +2419,7 @@ Proof.
       + unfold struct_meminj. destr. unfold struct_meminj in Z. destr_in Z.
       exploit X; eauto. intros [C1 D1]. congruence.
   } *)
+  admit. (*reasonable requirement of external(builtin) functions*)
   unfold Mem.stackseq in *. congruence.
   eauto with compat.
   eapply Mem.sup_include_trans; eauto. erewrite <- external_call_support; eauto.
@@ -2655,7 +2650,7 @@ Proof.
       destr; try congruence.
       erewrite bind_parameters_support in n0; eauto.
 }*)
-
+  admit. (*TODO HERE*)
   unfold Mem.stackseq in *. rewrite T.
   erewrite bind_parameters_support; eauto.
   eapply alloc_variables_parallel_stackseq; eauto.
@@ -2693,6 +2688,7 @@ Proof.
       + unfold struct_meminj. destr. unfold struct_meminj in Z. destr_in Z.
       exploit X; eauto. intros [C1 D1]. congruence. *)
   } *)
+  admit. (*ok*)
   unfold Mem.stackseq in *. congruence.
 
 (* return *)
@@ -2714,7 +2710,8 @@ Proof.
   intros [tf [A B]].
   pose proof (type_of_fundef_preserved _ _ B) as Hsg. monadInv B. simpl in *.
   econstructor; split.
-  econstructor; eauto. admit. (* j identity on global *)
+  econstructor; eauto.
+  inv Hvf. apply (injw_glob w) in H1. destruct H1. subst. auto.
   congruence.
   { revert vargs2 Hvargs. clear - H7.
     induction H7; inversion 1; econstructor; eauto using val_casted_inject. }
@@ -2722,8 +2719,7 @@ Proof.
   inv Hm; cbn in *.
   econstructor; eauto. econstructor.
   rewrite <- H1. reflexivity.
-  (* initial or rely : comming states are related in sinj & stackseq*)
-Admitted.
+Qed.
 
 Lemma final_states_simulation:
   forall S R r1, match_states S R -> final_state S r1 ->
@@ -2748,7 +2744,7 @@ Proof.
   assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
   eapply functions_translated in H as (tfd & TFIND & TRFD); eauto.
   monadInv TRFD.
-  eexists (injpw j m tm MINJ), _. intuition idtac.
+  eexists (injpw j m tm MINJ INJB), _. intuition idtac.
   - econstructor; eauto.
   - econstructor; eauto. constructor; eauto.
   - specialize (MCONT VSet.empty). constructor.
@@ -2797,3 +2793,4 @@ Local Transparent Linker_fundef.
             type_eq t0 t2 && calling_convention_eq c c0); inv H2.
   econstructor; split; eauto.
 Qed.
+(**)

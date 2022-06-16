@@ -2689,7 +2689,7 @@ End Val.
 
 Notation meminj := Val.meminj.
 
-Definition inject_glob_pid (f:meminj) : Prop :=
+Definition same_at_glob (f:meminj) : Prop :=
   forall id delta b, f (Global id) = Some (b,delta) ->
                 b = Global id /\ delta = 0.
 

@@ -60,6 +60,9 @@ Program Definition vainj :=
     match_stbls '(se, w) se1 se2 := se = se1 /\ match_stbls inj w se1 se2;
     match_mem := vainj_mem;
   |}.
+Next Obligation.
+  destruct i. simpl in H. eauto.
+Qed.
 
 (** Monotonicity of injections *)
 Next Obligation.
@@ -367,7 +370,7 @@ Lemma vainj_va_inj:
 Proof.
   intros sew se1 se2 q1 q2 Hse Hq.
   destruct Hq. inv H1. inv H5. destruct Hse. subst. cbn in * |- .
-  eexists (se1, vaw se1 (bc_of_inj f se1) m1, injw f _ _). cbn.
+  eexists (se1, vaw se1 (bc_of_inj f se1) m1, injw f _ _ _). cbn.
   repeat apply conj; eauto 10 using rel_inv_intro.
   - eexists. split.
     + inv H7. cbn in *.
@@ -410,8 +413,8 @@ Proof.
   intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [xse1 w m1 m2 Hnb Hro Hm].
   destruct Hse as [? Hse]. subst.
   destruct Hm as [f m1 m2 Hm].
-  exists ((se1, injw (meminj_dom f) (Mem.support m1) (Mem.support m1)),
-          (se1, injw f (Mem.support m1) (Mem.support m2))); simpl.
+  exists ((se1, injw (meminj_dom f) (Mem.support m1) (Mem.support m1) (meminj_dom_same_at_glob f)),
+          (se1, injw f (Mem.support m1) (Mem.support m2) Hm)); simpl.
   repeat apply conj.
   - exists se1. repeat apply conj; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
@@ -425,9 +428,9 @@ Proof.
     destruct H12'' as [f12' m1' m2' Hm12'].
     inversion H23' as [? w23'' ? ? ? ? H23'']; clear H23'; subst.
     inversion H23'' as [f23' xm2' xm3' Hm23']. clear H23''; subst.
-    inversion Hw12' as [? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
-    inversion Hw23' as [? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
-    eexists (se1, injw (compose_meminj f12' f23') _ _).
+    inversion Hw12' as [? ? ? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
+    inversion Hw23' as [? ? ? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
+    eexists (se1, injw (compose_meminj f12' f23') _ _ (same_at_glob_compose _ _ Hm12' Hm23')).
     repeat apply conj; cbn; auto.
     + constructor; auto. constructor; auto. eapply Mem.inject_compose; eauto.
       eapply struct_eq_trans; eauto.
@@ -451,8 +454,8 @@ Proof.
   intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [xse1 w m1 m2 Hnb Hro Hm].
   destruct Hse as [? Hse]. subst.
   destruct Hm as [f m1 m2 Hm].
-  exists ((se1, injw (meminj_dom f) (Mem.support m1) (Mem.support m1)),
-          (injw f (Mem.support m1) (Mem.support m2))); simpl.
+  exists ((se1, injw (meminj_dom f) (Mem.support m1) (Mem.support m1) (meminj_dom_same_at_glob f)),
+          (injw f (Mem.support m1) (Mem.support m2) Hm)); simpl.
   repeat apply conj.
   - exists se1. repeat apply conj; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
@@ -464,9 +467,9 @@ Proof.
     inversion H12' as [? w12'' ? ? ? ? H12'']; clear H12'; subst.
     destruct H12'' as [f12' m1' m2' Hm12'].
     inversion H23' as [f23' xm2' xm3' Hm23']. clear H23'; subst.
-    inversion Hw12' as [? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
-    inversion Hw23' as [? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
-    eexists (se1, injw (compose_meminj f12' f23') _ _).
+    inversion Hw12' as [? ? ? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
+    inversion Hw23' as [? ? ? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
+    eexists (se1, injw (compose_meminj f12' f23') _ _ (same_at_glob_compose _ _ Hm12' Hm23')).
     repeat apply conj; cbn; auto.
     + constructor; auto. constructor; auto. eapply Mem.inject_compose; eauto.
       eapply struct_eq_trans; eauto.

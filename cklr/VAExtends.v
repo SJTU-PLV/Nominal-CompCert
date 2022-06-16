@@ -103,6 +103,11 @@ Proof.
 Qed.
 
 Next Obligation.
+  simpl in H. unfold vaext_bc in H.
+  unfold inj_of_bc in H. destr_in H.
+Qed.
+
+Next Obligation.
   intros [se1 bc1 m1 H1] [se2 bc2 m2 H2] [Hse Hbc Hnb Hld]; cbn in *.
   rstep. intros b Hb. apply Hbc.
   eapply mmatch_below; eauto.

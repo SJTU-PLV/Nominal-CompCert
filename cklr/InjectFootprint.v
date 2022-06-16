@@ -10,7 +10,7 @@ Require Import Inject.
 (** ** Worlds *)
 
 Inductive injp_world :=
-  injpw (f: meminj) (m1 m2: mem) (Hm: Mem.inject f m1 m2).
+  injpw (f: meminj) (m1 m2: mem) (Hm: Mem.inject f m1 m2) (Hg: same_at_glob f).
 
 (** In addition to the criteria in [ec_mem_inject], in order to ensure
   that [injp_acc] is transitive we will need the following property,
@@ -23,29 +23,29 @@ Definition injp_max_perm_decrease (m m': mem) :=
     Mem.perm m b ofs Max p.
 
 Inductive injp_acc: relation injp_world :=
-  injp_acc_intro f m1 m2 Hm f' m1' m2' Hm':
+  injp_acc_intro f m1 m2 Hm Hg f' m1' m2' Hm' Hg':
     injp_max_perm_decrease m1 m1' ->
     injp_max_perm_decrease m2 m2' ->
     Mem.unchanged_on (loc_unmapped f) m1 m1' ->
     Mem.unchanged_on (loc_out_of_reach f m1) m2 m2' ->
     inject_incr f f' ->
     inject_separated f f' m1 m2 ->
-    injp_acc (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+    injp_acc (injpw f m1 m2 Hm Hg) (injpw f' m1' m2' Hm' Hg').
 
 Definition injp_mi :=
-  fun '(injpw f _ _ _) => f.
+  fun '(injpw f _ _ _ _) => f.
 
 Inductive injp_match_mem: injp_world -> relation mem :=
-  injp_match_mem_intro f m1 m2 Hm:
+  injp_match_mem_intro f m1 m2 Hm Hg:
     Mem.stackseq m1 m2 ->
-    injp_match_mem (injpw f m1 m2 Hm) m1 m2.
+    injp_match_mem (injpw f m1 m2 Hm Hg) m1 m2.
 
 Inductive injp_match_stbls: injp_world -> relation Genv.symtbl :=
-  injp_match_stbls_intro f m1 m2 Hm se1 se2:
+  injp_match_stbls_intro f m1 m2 Hm Hg se1 se2:
     Genv.match_stbls f se1 se2 ->
     Mem.sup_include (Genv.genv_sup se1) (Mem.support m1) ->
     Mem.sup_include (Genv.genv_sup se2) (Mem.support m2) ->
-    injp_match_stbls (injpw f m1 m2 Hm) se1 se2.
+    injp_match_stbls (injpw f m1 m2 Hm Hg) se1 se2.
 
 Hint Constructors injp_match_mem injp_match_stbls.
 
@@ -83,8 +83,8 @@ Proof.
     + apply inject_incr_refl.
     + intros b ofs. congruence.
   - intros w1 w2 w3 H12 H23.
-    destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hp1 Hp2 H1 H2 Hf Hs].
-    inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hp1' Hp2' H1' H2' Hf' Hs']; subst.
+    destruct H12 as [f m1 m2 Hm Hg f' m1' m2' Hm' Hg' Hp1 Hp2 H1 H2 Hf Hs].
+    inversion H23 as [? ? ? ? ? f'' m1'' m2'' Hm'' Hg'' Hp1' Hp2' H1' H2' Hf' Hs']; subst.
     constructor.
     + intros b ofs p Hb ?.
       eapply Hp1, Hp1'; eauto using Mem.valid_block_unchanged_on.
@@ -137,6 +137,9 @@ Program Definition injp: cklr :=
     match_mem := injp_match_mem;
     match_stbls := injp_match_stbls;
   |}.
+Next Obligation.
+  destruct w. simpl in H. auto.
+Qed.
 
 (** Acc separated *)
 Next Obligation.
@@ -151,13 +154,13 @@ Qed.
 
 Next Obligation. (* ~> vs. match_stbls *)
   intros w w' Hw' se1 se2 Hse.
-  destruct Hse as [f m1 m2 se1 se2 Hse Hnb1 Hnb2]. inv Hw'.
+  destruct Hse as [f m1 m2 a b se1 se2 Hse Hnb1 Hnb2]. inv Hw'.
   constructor.
   - eapply Genv.match_stbls_incr; eauto.
-    intros b1 b2 delta Hb Hb'. specialize (H9 b1 b2 delta Hb Hb').
-    unfold Mem.valid_block in H9. split; inv H9; eauto.
+    intros b1 b2 delta Hb Hb'. specialize (H8 b1 b2 delta Hb Hb').
+    unfold Mem.valid_block in H8. split; inv H8; eauto.
+  - apply Mem.unchanged_on_support in H4. eauto.
   - apply Mem.unchanged_on_support in H5. eauto.
-  - apply Mem.unchanged_on_support in H6. eauto.
 Qed.
 
 Next Obligation. (* match_stbls vs. Genv.match_stbls *)
@@ -175,7 +178,8 @@ Next Obligation. (* Mem.alloc *)
     as (f' & m2' & b2 & Hm2' & Hm' & Hf' & Hb2 & Hff');
     eauto using Z.le_refl.
   rewrite Hm2'.
-  exists (injpw f' m1' m2' Hm'); split; repeat rstep; eauto.
+  eapply Mem.alloc_meminj_same_at_glob in Hm1' as Hg'; eauto.
+  exists (injpw f' m1' m2' Hm' Hg'); split; repeat rstep; eauto.
   constructor.
   - intros b ofs p Hb Hp.
     eapply Mem.perm_alloc_inv in Hp; eauto.
@@ -209,7 +213,7 @@ Next Obligation. (* Mem.free *)
   edestruct Mem.free_parallel_inject as (m2' & Hm2' & Hm'); eauto.
   replace (lo1 + delta + sz) with (lo1 + sz + delta) by extlia.
   rewrite Hm2'. repeat rstep.
-  exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
+  exists (injpw f m1' m2' Hm' Hg); split; repeat rstep; eauto.
   constructor.
   - red. eauto using Mem.perm_free_3.
   - red. eauto using Mem.perm_free_3.
@@ -238,7 +242,7 @@ Next Obligation. (* Mem.alloc_frame *)
     as (m2' & path & Hm2' & Hm'); eauto.
   edestruct Mem.alloc_frame_parallel_stackseq; eauto.
   rewrite Hm2'.
-  exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
+  exists (injpw f m1' m2' Hm' Hg); split; repeat rstep; eauto.
   constructor.
   - intros b ofs p Hb Hp.
     eapply Mem.perm_alloc_frame; eauto.
@@ -258,7 +262,7 @@ Next Obligation. (* Mem.return_frame *)
   edestruct Mem.return_frame_parallel_stackseq as (m2' & Hm2' & SEQ); eauto.
   exploit Mem.return_frame_inject; eauto. intro Hm'.
   rewrite Hm2'. repeat rstep.
-  exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
+  exists (injpw f m1' m2' Hm' Hg); split; repeat rstep; eauto.
   constructor.
   - red. intros. eapply Mem.perm_return_frame; eauto.
   - red. intros. eapply Mem.perm_return_frame; eauto.
@@ -282,7 +286,7 @@ Next Obligation. (* Mem.store *)
   destruct (Mem.store chunk m1 b1 ofs1 v1) as [m1'|] eqn:Hm1'; [|rauto].
   edestruct Mem.store_mapped_inject as (m2' & Hm2' & Hm'); eauto.
   rewrite Hm2'. repeat rstep.
-  exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
+  exists (injpw f m1' m2' Hm' Hg); split; repeat rstep; eauto.
   constructor.
   - red. eauto using Mem.perm_store_2.
   - red. eauto using Mem.perm_store_2.
@@ -327,7 +331,7 @@ Next Obligation. (* Mem.storebytes *)
     rewrite Hm2'.
     constructor.
     assert (Hm': Mem.inject f m1' m2') by eauto using Mem.storebytes_empty_inject.
-    exists (injpw f m1' m2' Hm'); split.
+    exists (injpw f m1' m2' Hm' Hg); split.
     + constructor; eauto.
       * red. eauto using Mem.perm_storebytes_2.
       * red. eauto using Mem.perm_storebytes_2.
@@ -355,7 +359,7 @@ Next Obligation. (* Mem.storebytes *)
     edestruct Mem.storebytes_mapped_inject as (m2' & Hm2' & Hm'); eauto.
     rauto.
     rewrite Hm2'. constructor.
-    exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
+    exists (injpw f m1' m2' Hm' Hg); split; repeat rstep; eauto.
     constructor.
     + red. eauto using Mem.perm_storebytes_2.
     + red. eauto using Mem.perm_storebytes_2.
