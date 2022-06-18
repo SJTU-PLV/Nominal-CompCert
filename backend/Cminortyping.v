@@ -449,22 +449,13 @@ Inductive wt_state (ge: genv) (ttop: rettype): state -> Prop :=
         (WT_CONT: wt_cont ttop env f.(fn_sig).(sig_res) k)
         (WT_ENV: wt_env env e)
         (DEF_ENV: def_env f e),
-<<<<<<< HEAD
       wt_state ge ttop (State f s k sp e m)
-  | wt_call_state: forall vf f args k m
+  | wt_call_state: forall vf f args k m id
         (WT_FD: wt_fundef f)
         (WT_ARGS: Val.has_type_list args (funsig f).(sig_args))
         (WT_CONT: wt_cont_call ttop k (funsig f).(sig_res))
         (WT_FIND: Genv.find_funct ge vf = Some f),
-      wt_state ge ttop (Callstate vf args k m)
-=======
-      wt_state (State f s k sp e m)
-  | wt_call_state: forall f args k m id
-        (WT_FD: wt_fundef f)
-        (WT_ARGS: Val.has_type_list args (funsig f).(sig_args))
-        (WT_CONT: wt_cont_call k (funsig f).(sig_res)),
-      wt_state (Callstate f args k m id)
->>>>>>> a091c4c
+      wt_state ge ttop (Callstate vf args k m id)
   | wt_return_state: forall v k m tret
         (WT_RES: Val.has_type v (proj_rettype tret))
         (WT_CONT: wt_cont_call ttop k tret),
@@ -686,21 +677,13 @@ Proof.
   { constructor. eapply call_cont_wt; eauto. }
   generalize (wt_find_label _ _ _ lbl _ _ H2 WT_CK).
   rewrite H. intros [WT_STMT' WT_CONT']. econstructor; eauto.
-<<<<<<< HEAD
 - rewrite WT_FIND in FIND. inv FIND.
-  inv WT_FD. inversion H1; subst. econstructor; eauto.
-  constructor; auto.
-  apply wt_env_set_locals. apply wt_env_set_params. rewrite H2; auto.
-  red; intros. apply def_set_locals. destruct H4; auto. left; apply def_set_params; auto.
-- rewrite WT_FIND in FIND. inv FIND.
-  exploit external_call_well_typed; eauto. intros.
-=======
-- inv WT_FD. inversion H2; subst. econstructor; eauto.
+  inv WT_FD. inversion H2; subst. econstructor; eauto.
   constructor; auto.
   apply wt_env_set_locals. apply wt_env_set_params. rewrite H3; auto.
   red; intros. apply def_set_locals. destruct H5; auto. left; apply def_set_params; auto.
-- exploit external_call_well_typed; eauto. intros.
->>>>>>> a091c4c
+- rewrite WT_FIND in FIND. inv FIND.
+  exploit external_call_well_typed; eauto. intros.
   econstructor; eauto.
 - inv WT_CONT. econstructor; eauto using wt_Sskip.
   red in WT_DEST.

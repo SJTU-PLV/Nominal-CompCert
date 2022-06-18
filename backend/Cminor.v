@@ -467,11 +467,7 @@ Inductive step: state -> trace -> state -> Prop :=
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (State f (Scall optid sig a bl) k sp e m)
-<<<<<<< HEAD
-        E0 (Callstate vf vargs (Kcall optid f sp e k) m)
-=======
-        E0 (Callstate fd vargs (Kcall optid f sp e k) m id)
->>>>>>> a091c4c
+        E0 (Callstate vf vargs (Kcall optid f sp e k) m id)
 
   | step_tailcall: forall f sig a bl k sp e m vf vargs fd m' m'' id,
       vf = Vptr (Global id) Ptrofs.zero ->
@@ -482,11 +478,8 @@ Inductive step: state -> trace -> state -> Prop :=
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
       Mem.return_frame m' = Some m'' ->
       step (State f (Stailcall sig a bl) k (Vptr sp Ptrofs.zero) e m)
-<<<<<<< HEAD
-        E0 (Callstate vf vargs (call_cont k) m')
-=======
-        E0 (Callstate fd vargs (call_cont k) m'' id)
->>>>>>> a091c4c
+        E0 (Callstate vf vargs (call_cont k) m'' id)
+
 
   | step_builtin: forall f optid ef bl k sp e m vargs t vres m',
       eval_exprlist sp e m bl vargs ->
@@ -549,28 +542,17 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k sp e m)
         E0 (State f s' k' sp e m)
 
-<<<<<<< HEAD
-  | step_internal_function: forall vf f vargs k m m' sp e,
+  | step_internal_function: forall vf f vargs k m m' m'' sp e path id,
       forall FIND: Genv.find_funct ge vf = Some (Internal f),
-      Mem.alloc m 0 f.(fn_stackspace) = (m', sp) ->
-      set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
-      step (Callstate vf vargs k m)
-        E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m')
-  | step_external_function: forall vf ef vargs k m t vres m',
-      forall FIND: Genv.find_funct ge vf = Some (External ef),
-      external_call ef ge vargs m t vres m' ->
-      step (Callstate vf vargs k m)
-=======
-  | step_internal_function: forall f vargs k m m' m'' sp e path id,
       Mem.alloc_frame m id = (m', path) ->
       Mem.alloc m' 0 f.(fn_stackspace) = (m'', sp) ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
-      step (Callstate (Internal f) vargs k m id)
+      step (Callstate vf vargs k m id)
         E0 (State f f.(fn_body) k (Vptr sp Ptrofs.zero) e m'')
-  | step_external_function: forall ef vargs k m t vres m' id,
+  | step_external_function: forall vf ef vargs k m t vres m' id,
+      forall FIND: Genv.find_funct ge vf = Some (External ef),
       external_call ef ge vargs m t vres m' ->
-      step (Callstate (External ef) vargs k m id)
->>>>>>> a091c4c
+      step (Callstate vf vargs k m id)
          t (Returnstate vres k m')
 
   | step_return: forall v optid f sp e k m,
@@ -584,43 +566,29 @@ End RELSEM.
   corresponding to the invocation of the ``main'' function of the program
   without arguments and with an empty continuation. *)
 
-<<<<<<< HEAD
 Inductive initial_state (ge: genv): c_query -> state -> Prop :=
-  | initial_state_intro: forall vf f vargs m,
+  | initial_state_intro: forall vf f vargs m id,
       Genv.find_funct ge vf = Some (Internal f) ->
+      vf = Vptr (Global id) Ptrofs.zero ->
       initial_state ge
         (cq vf (fn_sig f) vargs m)
-        (Callstate vf vargs Kstop m).
+        (Callstate vf vargs Kstop m id).
 
 Inductive at_external (ge: genv): state -> c_query -> Prop :=
-  | at_external_intro vf name sg vargs k m:
+  | at_external_intro vf name sg vargs k m id:
       Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
       at_external ge
-        (Callstate vf vargs k m)
+        (Callstate vf vargs k m id)
         (cq vf sg vargs m).
 
 Inductive after_external: state -> c_reply -> state -> Prop :=
-  | after_external_intro vf vargs k m vres m':
+  | after_external_intro vf vargs k m vres m' id:
       after_external
-        (Callstate vf vargs k m)
+        (Callstate vf vargs k m id)
         (cr vres m')
         (Returnstate vres k m').
 
 Inductive final_state: state -> c_reply -> Prop :=
-=======
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      funsig f = signature_main ->
-      initial_state p (Callstate f nil Kstop m0 p.(prog_main)).
-
-(** A final state is a [Returnstate] with an empty continuation. *)
-
-Inductive final_state: state -> int -> Prop :=
->>>>>>> a091c4c
   | final_state_intro: forall r m,
       final_state
        (Returnstate r Kstop m)
@@ -699,22 +667,18 @@ Proof.
     apply B in H; destruct H; congruence.
   + subst v0. assert (b0 = b) by (inv H2; inv H13; auto). subst b0; auto.
   + assert (n0 = n) by (inv H2; inv H14; auto). subst n0; auto.
-<<<<<<< HEAD
   + exploit external_call_determ. eexact H1.
-    replace ef with ef0 by congruence. eexact H7.
-=======
-  + exploit external_call_determ. eexact H1. eexact H8.
->>>>>>> a091c4c
+    replace ef with ef0 by congruence. eexact H8.
     intros (A & B). split; intros; auto.
     apply B in H; destruct H; congruence.
 - (* single event *)
   red; simpl. destruct 1; simpl; try lia;
   eapply external_call_trace_length; eauto.
 - (* initial states *)
-  inv H; inv H0. congruence.
+  inv H; inv H0. inv H7. congruence.
 - (* nostep external state *)
   red; intros; red; intros. inv H; inv H0. congruence.
-  replace ef with (EF_external name sg) in H7 by congruence. auto.
+  replace ef with (EF_external name sg) in H8 by congruence. auto.
 - (* at external *)
   inv H; inv H0. congruence.
 - (* after external *)
@@ -1324,4 +1288,5 @@ Proof.
 Qed.
 
 End BIGSTEP_TO_TRANSITION.
+*)
 *)

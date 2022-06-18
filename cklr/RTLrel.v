@@ -67,7 +67,7 @@ Inductive state_rel R w: relation state :=
         (@Callstate)
         (list_rel (stackframe_inject (mi R w)) ++>
          Val.inject (mi R w) ==> Val.inject_list (mi R w) ++>
-         match_mem R w ++> state_rel R w)
+         match_mem R w ++> - ==> state_rel R w )
   | Returnstate_rel:
       Monotonic
         (@Returnstate)
@@ -222,31 +222,40 @@ Proof.
   - transport_hyps. eexists. split; [ eapply c; eauto; fail | ].
     exists w'. split; rauto.
   - subst vf.
-    transport_hyps; eexists; split; [ eapply c; eauto; fail | rauto ].
-  - subst vf. inv H8.
+    transport_hyps; eexists; split.
+    eapply c; eauto. admit. admit.
+    rauto.
+    (* [ eapply c; eauto; fail | rauto ]. *)
+  - subst vf. inv H8. admit.
+    (*
     transport_hyps; eexists; split; [ eapply c; eauto; fail | ].
     exists w'; split; [rauto | ].
-    repeat rstep. eapply match_stbls_proj. rauto.
+    repeat rstep. eapply match_stbls_proj. rauto. *)
   - transport_hyps; eexists; split; [ eapply c; eauto; fail | ].
     exists w'. split; rauto.
   - transport_hyps; eexists; split; [ eapply c; eauto; fail | rauto ].
   - transport_hyps; eexists; split; [ eapply c; eauto | rauto ].
     + specialize (H9 arg). destruct H9; congruence.
-  - inv H8.
+  - admit. (* inv H8.
     transport_hyps; eexists; split; [ eapply c; eauto; fail | ].
-    exists w'; split; rauto.
-  - edestruct cklr_alloc as (w' & Hw' & Halloc); eauto.
-    transport e. clear Halloc. transport FIND.
+    exists w'; split; rauto. *)
+  - edestruct cklr_alloc_frame as (w' & Hw' & Halloc_frame); eauto.
+    transport e. clear Halloc_frame.
+    edestruct cklr_alloc as (w'' & Hw'' & Halloc); eauto.
+    transport e0. clear Halloc.
+    transport FIND.
     eexists; split. eapply c; eauto; fail.
-    exists w'; split. rauto.
+    exists w''; split. rauto.
     repeat rstep.
-    clear - H7 Hw'.
-    induction H7; constructor; rauto.
+    admit.
+    clear - H8 Hw' Hw''.
+    assert (w ~> w''). rauto.
+    induction H8; constructor; rauto.
   - transport_hyps; eexists; split; [ eapply c; eauto; fail | ].
     exists w'; split; rauto.
   - inv H3. inv H2.
     transport_hyps; eexists; split; [ eapply c; eauto; fail | rauto ].
-Qed.
+Admitted.
 
 (*
 Lemma block_inject_glob R w m1 m2 id b2:
@@ -283,6 +292,7 @@ Proof.
   - intros q1 q2 s1 Hq. destruct 1. inv Hq. cbn.
     eassert (Hge: genv_match p R w _ _) by (red; rauto).
     transport H.
+    inversion H5. apply (mi_glob R w) in H2. destruct H2. subst.
     eexists; split.
     + econstructor; eauto.
     + rauto.

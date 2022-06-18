@@ -657,11 +657,11 @@ Proof.
   eapply env_match_acc in Hee as Hee'; eauto.
   destruct (alloc_variables_match R w' _ _ Hge' _ _ Hee' _ _ Hm' _ (e1, m1'') Hm1')
     as ((e2 & m2'') & Hm2' & w'' & Hw'' & He & Hm'').
-  eapply genv_match_acc in Hge' as Hge'' ; [ | eauto].
-  eapply bind_parameters_match in Hm1''; eauto.
-  Focus 2. admit.
-  destruct Hm1'' as (m2''' & H & w''' & Hw''' & Hm''' ).
-  exists (e2, le, m2''',id).
+  eapply genv_match_acc in Hge'; [ | eauto].
+  assert (k1 list_rel (Val.inject @@[mi R]) w' vargs1 vargs2).
+  rstep. rauto.
+  transport Hm1''.
+  exists (e2, le, x,id).
   cbn [fst snd] in *.
   split.
   - econstructor; eauto.
@@ -669,7 +669,7 @@ Proof.
     { subst le. generalize (fn_temps f). clear. unfold temp_env_match.
       induction l; cbn; rauto. }
     exists w'''. split; rauto.
-Admitted.
+Qed.
 
 Global Instance function_entry2_match R:
   Monotonic
@@ -711,6 +711,34 @@ Proof.
   cbn in *. subst. auto.
 Qed.
 
+Lemma rel_curry3_set_le_transport {A1 A2 A3 A4 B1 B2 B3 B4} R sA sB (a1: A1) (a2: A2) (a3: A3) (a4: A4):
+  Transport (% % % set_le R) sA sB
+    (sA a1 a2 a3 a4)
+    (exists (b1: B1) (b2: B2) (b3: B3) (b4: B4), sB b1 b2 b3 b4 /\ R (a1, a2, a3, a4) (b1, b2, b3, b4)).
+Proof.
+  intros HsAB Ha.
+  destruct (HsAB (a1, a2, a3,a4)) as ([[[b1 b2] b3]b4] & Hb & Hab); eauto.
+  exists b1,b2,b3,b4. auto.
+Qed.
+
+Ltac rel_curry3_set_le_transport keyword :=
+  lazymatch goal with
+    | |- @Transport ?A ?B ?R ?a ?b ?PA ?PB =>
+      lazymatch PA with
+        | context [keyword] =>
+          let Xv := fresh "X" in evar (Xv: Type);
+          let X := eval red in Xv in clear Xv;
+          let Yv := fresh "Y" in evar (Yv: Type);
+          let Y := eval red in Yv in clear Yv;
+          let Zv := fresh "Y" in evar (Yv: Type);
+          let Z := eval red in Yv in clear Yv;
+          let Wv := fresh "Y" in evar (Yv: Type);
+          let W := eval red in Yv in clear Yv;
+          unify B (X -> Y -> Z -> W -> Prop);
+          eapply rel_curry3_set_le_transport
+      end
+  end.
+
 Global Instance step_rel R:
   Monotonic
     (@step)
@@ -737,18 +765,46 @@ Proof.
        eexists; split;
          [ eapply c; eauto; fail
          | eexists; split; rauto ]).
-  
-  - eexists; split. eapply c; eauto.
-    instantiate (1:= id).
-    exploit eval_expr_match; eauto.
-    intros (b & AA & BB). inv BB.
-    admit. admit. admit.
-    eexists; split. rauto.
-  - simpl.
-    eapply @transport in f0; [ | rel_curry2_set_le_transport fe1 | rauto].
-    destruct f0 as (? & ? & ? & ? & ? & ? & ?).
+  - transport_hyps.
+    inversion H3. apply (mi_glob R w) in H6. destruct H6. subst.
+    eexists. split. eapply c; eauto.
+    eexists; split; rauto.
+  - transport_hyps.
+    exploit cklr_return_frame. apply H0.
+    intros. rewrite e1 in H2. inv H2. destruct H5 as (w'' & Hw'' & Hm'').
+    eexists. split. eapply c; eauto.
+    eexists; split. instantiate (1:=w''). rauto.
+    constructor; eauto.
+    eapply call_cont_match; eauto.
+    eapply cont_match_le; eauto.
+    eapply cont_match_le; eauto.
+  - transport_hyps.
+    exploit cklr_return_frame. apply H0.
+    intros. rewrite e3 in H6. inv H6. destruct H13 as (w'' & Hw'' & Hm'').
+    eexists. split. eapply c; eauto.
+    eexists; split.  instantiate (1:=w''). rauto.
+    constructor; eauto.
+    eapply Values.val_inject_incr. rauto.
+    eapply Values.val_inject_incr; rauto.
+    eapply call_cont_match; eauto.
+    eapply cont_match_le; eauto.
+    eapply cont_match_le; eauto.
+  - transport_hyps.
+    exploit cklr_return_frame. apply H0.
+    intros. rewrite e1 in H2. inv H2. destruct H5 as (w'' & Hw'' & Hm'').
+    eexists. split. eapply c; eauto.
+    eexists; split. instantiate (1:=w''). rauto.
+    constructor; eauto.
+    eapply cont_match_le; eauto.
+    eapply cont_match_le; eauto.
+  -
+    eapply @transport in f0;
+    [ | rel_curry3_set_le_transport fe1 | rauto].
+    destruct f0 as (? & ? & ? & ? & ? & ? & ? & ? ).
     rinversion H2. inv H2l. inv H2r.
     rinversion H3. inv H3l. inv H3r.
+    rinversion H5. inv H5l. inv H5r.
+    inv H4.
     transport FIND.
     eexists; split.
     + eapply c; eauto.
@@ -814,10 +870,12 @@ Proof.
       eapply (rel_push_rintro (fun se=>globalenv se p) (fun se=>globalenv se p)).
     }
     transport_hyps.
-    exists (Callstate vf2 vargs2 Kstop m2). split.
+    inversion H7. apply (mi_glob R w) in H5. destruct H5. subst.
+    rewrite Ptrofs.add_zero in H7.
+    exists (Callstate (Vptr (Global id) Ptrofs.zero) vargs2 Kstop m2 id). split.
     + econstructor; eauto.
-      * revert vargs2 H9. clear - H1.
-        induction H1; inversion 1; subst; constructor; eauto.
+      * revert vargs2 H9. clear - H2.
+        induction H2; inversion 1; subst; constructor; eauto.
         eapply val_casted_inject; eauto.
       * eapply match_stbls_support; eauto.
     + exists w; split; try rauto.
@@ -836,7 +894,7 @@ Proof.
     + econstructor.
       eassumption.
     + econstructor; simpl; eauto.
-      clear -H6. induction H6; constructor; eauto.
+      clear -H7. induction H7; constructor; eauto.
     + rauto.
     + intros r1 r2 s1' (w'' & Hw'' & Hr) Hs1'. destruct Hr. inv Hs1'.
       eexists. split.
