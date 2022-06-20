@@ -267,22 +267,14 @@ Inductive wt_state: state -> Prop :=
         (WTC: wt_code f c = true)
         (WTRS: wt_locset rs),
       wt_state (State s f sp c rs m)
-<<<<<<< HEAD
-  | wt_call_state: forall s vf fd rs m
+  | wt_call_state: forall s vf fd rs m id
         (FIND: Genv.find_funct ge vf = Some fd)
-=======
-  | wt_call_state: forall s fd rs m id
->>>>>>> a091c4c
         (WTSTK: wt_callstack s)
         (WTFD: wt_fundef fd)
         (WTRS: wt_locset rs)
         (AGCS: agree_callee_save rs (parent_locset s))
         (AGARGS: agree_outgoing_arguments (funsig fd) rs (parent_locset s)),
-<<<<<<< HEAD
-      wt_state (Callstate s vf rs m)
-=======
-      wt_state (Callstate s fd rs m id)
->>>>>>> a091c4c
+      wt_state (Callstate s vf rs m id)
   | wt_return_state: forall s rs m
         (WTSTK: wt_callstack s)
         (WTRS: wt_locset rs)
@@ -349,14 +341,9 @@ Local Opaque mreg_type.
   econstructor; eauto.
   eapply wt_find_funct; eauto.
   apply wt_return_regs; auto. apply wt_parent_locset; auto.
-<<<<<<< HEAD
-  red; simpl; intros. destruct l; simpl in *. rewrite H3; auto. destruct sl; auto; congruence.
-  red; simpl; intros. apply zero_size_arguments_tailcall_possible in H.
-  apply tailcall_possible_reg in H3; auto. contradiction.
-=======
   red; simpl; intros. destruct l; simpl in *. rewrite H5; auto. destruct sl; auto; congruence.
-  red; simpl; intros. apply zero_size_arguments_tailcall_possible in H. apply H in H5. contradiction.
->>>>>>> a091c4c
+  red; simpl; intros. apply zero_size_arguments_tailcall_possible in H0.
+  apply tailcall_possible_reg in H5; auto. contradiction.
 - (* builtin *)
   simpl in *; InvBooleans.
   econstructor; eauto.
@@ -449,7 +436,7 @@ Proof.
     + red. cbn. auto.
   - intros S q WTS Hq. inv Hq. inv WTS. rewrite FIND in H0. inv H0.
     exists (se, sg0). split; auto. split. constructor; auto.
-    intros r S' Hr HS'. inv HS'. rewrite H6 in FIND; inv FIND. inv Hr.
+    intros r S' Hr HS'. inv HS'. rewrite H7 in FIND; inv FIND. inv Hr.
     constructor; auto.
     + unfold result_regs. intros l.
       destruct l as [ | [ ]]; auto; try constructor.
@@ -499,27 +486,17 @@ Proof.
 Qed.
 
 Lemma wt_callstate_wt_regs:
-<<<<<<< HEAD
-  forall prog se s f rs m,
-  wt_state prog se (Callstate s f rs m) ->
-=======
-  forall s f rs m id,
-  wt_state (Callstate s f rs m id) ->
->>>>>>> a091c4c
+  forall prog se s f rs m id,
+  wt_state prog se (Callstate s f rs m id) ->
   forall r, Val.has_type (rs (R r)) (mreg_type r).
 Proof.
   intros. inv H. apply WTRS.
 Qed.
 
 Lemma wt_callstate_agree:
-<<<<<<< HEAD
-  forall prog se s vf f rs m,
-  wt_state prog se (Callstate s vf rs m) ->
+  forall prog se s vf f rs m id,
+  wt_state prog se (Callstate s vf rs m id) ->
   Genv.find_funct (Genv.globalenv se prog) vf = Some f ->
-=======
-  forall s f rs m id,
-  wt_state (Callstate s f rs m id) ->
->>>>>>> a091c4c
   agree_callee_save rs (parent_locset s) /\ agree_outgoing_arguments (funsig f) rs (parent_locset s).
 Proof.
   intros. inv H. rewrite FIND in H0; inv H0. auto.

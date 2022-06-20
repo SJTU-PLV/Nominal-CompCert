@@ -186,17 +186,10 @@ Inductive match_states: state -> state -> Prop :=
       match_states (State s f sp c ls m)
                    (State ts (transf_function f) sp (remove_unused_labels (labels_branched_to f.(fn_code)) c) ls m)
   | match_states_call:
-<<<<<<< HEAD
-      forall s vf ls m ts,
+      forall s vf ls m ts id,
       list_forall2 match_stackframes s ts ->
-      match_states (Callstate s vf ls m)
-                   (Callstate ts vf ls m)
-=======
-      forall s f ls m ts id,
-      list_forall2 match_stackframes s ts ->
-      match_states (Callstate s f ls m id)
-                   (Callstate ts (transf_fundef f) ls m id)
->>>>>>> a091c4c
+      match_states (Callstate s vf ls m id)
+                   (Callstate ts vf ls m id)
   | match_states_return:
       forall s ls m ts,
       list_forall2 match_stackframes s ts ->
@@ -245,23 +238,13 @@ Proof.
   econstructor; eauto.
   econstructor; eauto with coqlib.
 (* Lcall *)
-  left; econstructor; split.
-<<<<<<< HEAD
-  econstructor. eapply functions_translated; eauto.
-=======
-  econstructor. eauto.
-  eapply find_function_translated; eauto.
->>>>>>> a091c4c
+  left; econstructor; split. subst vf.
+  econstructor. eauto. eapply functions_translated; eauto.
   symmetry; apply sig_function_translated.
   econstructor; eauto. constructor; auto. constructor; eauto with coqlib.
 (* Ltailcall *)
-  left; econstructor; split.
-<<<<<<< HEAD
-  econstructor. erewrite match_parent_locset; eauto. eapply functions_translated; eauto.
-=======
-  econstructor. erewrite match_parent_locset; eauto. eauto.
-  eapply find_function_translated; eauto.
->>>>>>> a091c4c
+  left; econstructor; split. subst vf.
+  econstructor. eauto. erewrite <- match_parent_locset; eauto. eapply functions_translated; eauto.
   symmetry; apply sig_function_translated.
   simpl. eauto. eauto.
   econstructor; eauto.
@@ -321,7 +304,6 @@ Lemma transf_initial_states q:
 Proof.
   intros. inv H.
   econstructor; split.
-<<<<<<< HEAD
   - apply functions_translated in H0.
     setoid_rewrite <- (sig_function_translated (Internal f)).
     constructor; eauto.
@@ -336,17 +318,8 @@ Lemma transf_external:
 Proof.
   intros S R q HSR Hq. destruct Hq; inv HSR.
   pose proof (functions_translated _ _ H).
-  split. econstructor; eauto. intros r S' HS'. inv HS'. rewrite H8 in H; inv H.
+  split. econstructor; eauto. intros r S' HS'. inv HS'. rewrite H9 in H; inv H.
   eexists. split; econstructor; eauto.
-=======
-  eapply initial_state_intro with (f := transf_fundef f).
-  eapply (Genv.init_mem_transf TRANSL); eauto.
-  rewrite (match_program_main TRANSL), symbols_preserved; eauto.
-  apply function_ptr_translated; auto.
-  rewrite sig_function_translated. auto.
-  rewrite (match_program_main TRANSL).
-  constructor; auto. constructor.
->>>>>>> a091c4c
 Qed.
 
 Lemma transf_final_states:

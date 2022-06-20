@@ -1001,7 +1001,23 @@ Proof.
     exists b0, delta; split; eauto.
     rewrite Mem.perm_alloc_frame; eauto.
 Qed.
-
+(*
+Lemma alloc_frame_parallel_rule_2:
+  forall ge1 ge2 m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
+  m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j m1 ** P ->
+  Mem.alloc m1 0 sz1 = (m1', b1) ->
+  Mem.alloc m2 0 sz2 = (m2', b2) ->
+  (8 | delta) ->
+  lo = delta ->
+  hi = delta + Z.max 0 sz1 ->
+  0 <= sz2 <= Ptrofs.max_unsigned ->
+  0 <= delta -> hi <= sz2 ->
+  exists j',
+     m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
+  /\ inject_incr j j'
+  /\ j' b1 = Some(b2, delta)
+  /\ inject_separated j j' m1 m2 .
+*)
 Lemma alloc_frame_rule_2:
   forall j m1 m2 P Q id m1' m2' path1 path2,
     m2 |= mconj (minjection j m1) Q ** P ->

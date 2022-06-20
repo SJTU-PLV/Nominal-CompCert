@@ -379,18 +379,10 @@ Inductive match_states: Linear.state ->  Linear.state -> Prop :=
       match_states (State s f sp c rs m)
                    (State ts tf sp tc rs m)
   | match_states_call:
-<<<<<<< HEAD
-      forall s vf rs m ts,
+      forall s vf rs m ts id,
       list_forall2 match_stackframes s ts ->
-      match_states (Callstate s vf rs m)
-                   (Callstate ts vf rs m)
-=======
-      forall s f rs m tf ts id,
-      list_forall2 match_stackframes s ts ->
-      transf_fundef f = OK tf ->
-      match_states (Callstate s f rs m id)
-                   (Callstate ts tf rs m id)
->>>>>>> a091c4c
+      match_states (Callstate s vf rs m id)
+                   (Callstate ts vf rs m id)
   | match_states_return:
       forall s rs m ts,
       list_forall2 match_stackframes s ts ->
@@ -451,12 +443,10 @@ Proof.
   econstructor; split.
   apply plus_one.
   econstructor. eauto.
-  destruct ros; simpl in *; eauto. rewrite PLS. eauto.
-  eauto. rewrite PLS.
-  eexact A.
+  rewrite PLS. eauto. eauto.
   symmetry; apply sig_preserved; auto.
-  inv TRF; eauto. eauto. traceEq.
-  rewrite PLS. constructor; auto.
+  inv TRF; eauto. eauto.
+  constructor; auto.
 - (* builtin *)
   econstructor; split.
   eapply plus_left.
@@ -492,27 +482,16 @@ Proof.
   apply plus_one. econstructor. inv TRF; eauto. eauto. traceEq.
   rewrite (parent_locset_match _ _ STACKS). constructor; auto.
 - (* internal function *)
-<<<<<<< HEAD
   apply functions_translated in FIND as (tf & FIND & MATCH).
   monadInv MATCH. rename x into tf.
   assert (MF: match_function f tf) by (apply transf_function_match; auto).
   inversion MF; subst.
   econstructor; split.
-  apply plus_one. constructor; simpl; eauto.
+  apply plus_one. econstructor; simpl; eauto.
   constructor; auto.
 - (* external function *)
   apply functions_translated in FIND as (tf & FIND & MATCH).
   monadInv MATCH. econstructor; split.
-=======
-  monadInv H9. rename x into tf.
-  assert (MF: match_function f tf) by (apply transf_function_match; auto).
-  inversion MF; subst.
-  econstructor; split.
-  apply plus_one. econstructor. simpl; eauto. eauto. reflexivity.
-  constructor; auto.
-- (* external function *)
-  monadInv H9. econstructor; split.
->>>>>>> a091c4c
   apply plus_one. econstructor; eauto.
   constructor; auto.
 - (* return *)
@@ -539,21 +518,10 @@ Lemma transf_external:
   forall r S', after_external ge S r S' ->
   exists R', after_external tge R r R' /\ match_states S' R'.
 Proof.
-<<<<<<< HEAD
   intros S R q HSR Hq. destruct Hq; inv HSR.
   edestruct functions_translated as (tf & FIND & TF); eauto. monadInv TF.
-  split. econstructor; eauto. intros r S' HS'. inv HS'. rewrite H7 in H; inv H.
+  split. econstructor; eauto. intros r S' HS'. inv HS'. rewrite H8 in H; inv H.
   eexists. split; econstructor; eauto.
-=======
-  intros. inversion H.
-  exploit function_ptr_translated; eauto. intros [tf [A B]].
-  exists (Callstate nil tf (Locmap.init Vundef) m0 (prog_main tprog)); split.
-  econstructor; eauto. eapply (Genv.init_mem_transf_partial TRANSF); eauto.
-  rewrite (match_program_main TRANSF), symbols_preserved. auto.
-  rewrite <- H3. apply sig_preserved. auto.
-  rewrite (match_program_main TRANSF).
-  constructor. constructor. auto.
->>>>>>> a091c4c
 Qed.
 
 Lemma transf_final_states:
