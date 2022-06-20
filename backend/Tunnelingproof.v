@@ -360,22 +360,13 @@ Inductive match_states: state -> state -> Prop :=
       match_states (Block s f sp (Lcond cond args pc1 pc2 :: bb) ls m)
                    (State ts (tunnel_function f) sp (branch_target f pc1) tls tm)
   | match_states_call:
-<<<<<<< HEAD
-      forall s vf ls m ts tvf tls tm
-=======
-      forall s f ls m ts tls tm id
->>>>>>> a091c4c
+      forall s vf ls m ts tvf tls tm id
         (STK: list_forall2 match_stackframes s ts)
         (LF: Val.lessdef vf tvf)
         (LS: locmap_lessdef ls tls)
         (MEM: Mem.extends m tm),
-<<<<<<< HEAD
-      match_states (Callstate s vf ls m)
-                   (Callstate ts tvf tls tm)
-=======
-      match_states (Callstate s f ls m id)
-                   (Callstate ts (tunnel_fundef f) tls tm id)
->>>>>>> a091c4c
+      match_states (Callstate s vf ls m id)
+                   (Callstate ts tvf tls tm id)
   | match_states_return:
       forall s ls m ts tls tm
         (STK: list_forall2 match_stackframes s ts)
@@ -606,35 +597,21 @@ Proof.
   exploit ros_address_translated; eauto. intros ROS.
   left; simpl; econstructor; split.
   eapply exec_Lcall with (fd := tunnel_fundef fd); eauto.
-<<<<<<< HEAD
+  subst vf. rewrite H in ROS. inv ROS. eauto.
   eapply functions_translated; eauto.
-=======
-  destruct ros; simpl in *. generalize (LS (R m0)).
-  intro. inv H1. eauto. congruence. auto.
-  eapply find_function_translated; eauto.
->>>>>>> a091c4c
   rewrite sig_preserved. auto.
   econstructor; eauto.
   constructor; auto.
   constructor; auto.
 - (* Ltailcall *)
-<<<<<<< HEAD
   exploit (ros_address_translated ros (return_regs (parent_locset s) rs)).
     eauto using return_regs_lessdef, match_parent_locset. intros ROS.
   exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM'). 
-  left; simpl; econstructor; split.
-  eapply exec_Ltailcall with (fd := tunnel_fundef fd); eauto.
-  eapply functions_translated; eauto.
-=======
-  exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM').
   exploit Mem.return_frame_parallel_extends; eauto. intros (tm'' & RET & MEM'').
   left; simpl; econstructor; split.
-  eapply exec_Ltailcall with (fd := tunnel_fundef fd); eauto.
-  eapply ros_is_ident_translated; eauto.
-  eapply return_regs_lessdef; eauto.
-  eapply match_parent_locset; eauto.
-  eapply find_function_translated; eauto using return_regs_lessdef, match_parent_locset.
->>>>>>> a091c4c
+  eapply exec_Ltailcall with (fd := tunnel_fundef fd). 2: eauto.
+  all: eauto. subst vf. rewrite H in ROS. inv ROS. eauto.
+  eapply functions_translated; eauto.
   apply sig_preserved.
   econstructor; eauto using return_regs_lessdef, match_parent_locset.
 - (* Lbuiltin *)
@@ -642,11 +619,6 @@ Proof.
   exploit external_call_mem_extends; eauto. intros (tvres & tm' & A & B & C & D).
   left; simpl; econstructor; split.
   eapply exec_Lbuiltin; eauto.
-<<<<<<< HEAD
-=======
-  eapply eval_builtin_args_preserved with (ge1 := ge); eauto. exact symbols_preserved.
-  eapply external_call_symbols_preserved. apply senv_preserved. eauto.
->>>>>>> a091c4c
   econstructor; eauto using locmap_setres_lessdef, locmap_undef_regs_lessdef.
 - (* Lbranch (preserved) *)
   left; simpl; econstructor; split.
@@ -688,11 +660,8 @@ Proof.
   eapply exec_Lreturn; eauto.
   constructor; eauto using return_regs_lessdef, match_parent_locset.
 - (* internal function *)
-<<<<<<< HEAD
   exploit functions_translated; eauto. intros TFIND.
-=======
   exploit Mem.alloc_frame_extends; eauto. intros (tm' & ALLOCF & MEM').
->>>>>>> a091c4c
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros (tm'' & ALLOC & MEM'').
   left; simpl; econstructor; split.
@@ -716,29 +685,17 @@ Lemma transf_initial_states:
   forall w q1 q2 st1, match_query (cc_locset ext) w q1 q2 -> initial_state ge q1 st1 ->
   exists st2, initial_state tge q2 st2 /\ match_states st1 st2.
 Proof.
-<<<<<<< HEAD
   intros [w sg] q1 q2 st1 Hq Hst1. inv Hst1. inv Hq. CKLR.uncklr.
   specialize (initial_regs_inject _ _ _ _ H6).
   setoid_rewrite ext_lessdef. intro.
-  destruct H4 as [vf|]; try congruence.
-  eexists (Callstate _ vf _ m2); split.
+  set (vf := Vptr (Global id) Integers.Ptrofs.zero).
+  eexists (Callstate _ vf2 _ m2 id); split.
   - setoid_rewrite <- (sig_preserved (Internal f)).
     eapply functions_translated in H; eauto.
     econstructor; eauto.
+    inv H4. eauto.
   - constructor; eauto.
     repeat constructor; eauto.
-=======
-  intros. inversion H.
-  exists (Callstate nil (tunnel_fundef f) (Locmap.init Vundef) m0 (prog_main tprog)); split.
-  econstructor; eauto.
-  apply (Genv.init_mem_transf TRANSL); auto.
-  rewrite (match_program_main TRANSL).
-  rewrite symbols_preserved. eauto.
-  apply function_ptr_translated; auto.
-  rewrite <- H3. apply sig_preserved.
-  rewrite (match_program_main TRANSL).
-  constructor. constructor. red; simpl; auto. apply Mem.extends_refl.
->>>>>>> a091c4c
 Qed.
 
 Lemma transf_final_states:
@@ -765,7 +722,7 @@ Proof.
     intros l _. setoid_rewrite ext_lessdef. auto.
     destruct v; cbn in *; try congruence.
   - inv H0. destruct H as ([ ] & _ & H). inv H.
-    rewrite H8 in H1; inv H1. CKLR.uncklr.
+    rewrite H9 in H1; inv H1. CKLR.uncklr.
  (*red in H3. setoid_rewrite ext_lessdef in H3. *)
     eexists; split; econstructor; eauto.
     intro. apply ext_lessdef with tt. apply result_regs_inject; auto.

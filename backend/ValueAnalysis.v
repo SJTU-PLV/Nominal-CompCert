@@ -1366,10 +1366,6 @@ Proof.
     eapply mmatch_stack; eauto.
   * eapply vmatch_top; eauto.
     eapply find_funct_sound; eauto.
-    destruct ros; simpl in *.
-    -- eauto.
-    -- subst. unfold Genv.symbol_address in vf.
-       destr_in H1.
   * intros. exploit list_in_map_inv; eauto. intros (r & P & Q). subst v.
     apply D with (areg ae r).
     rewrite forallb_forall in H3. apply vpincl_ge.
@@ -1383,10 +1379,6 @@ Proof.
     eapply mmatch_below; eauto.
   * eapply vmatch_top; eauto.
     eapply find_funct_sound; eauto.
-    destruct ros; simpl in *.
-    -- eauto.
-    -- subst. unfold Genv.symbol_address in vf.
-       destr_in H1.
   * intros. exploit list_in_map_inv; eauto. intros (r & P & Q). subst v.
     apply D with (areg ae r). auto with va.
 
@@ -1409,7 +1401,6 @@ Proof.
   apply H4.
   eapply vmatch_top; eauto.
   eapply find_funct_sound; eauto.
-  destruct ros; simpl in * ;eauto.
   subst. unfold Genv.symbol_address in vf.
   destr_in H1.
   intros. exploit list_in_map_inv; eauto. intros (r & P & Q). subst v.

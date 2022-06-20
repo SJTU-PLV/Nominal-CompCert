@@ -137,8 +137,6 @@ BACKEND=\
   SelectLongproof.v Selectionproof.v \
   Registers.v RTL.v \
   RTLgen.v RTLgenspec.v RTLgenproof.v \
-  Tailcall.v Tailcallproof.v \
-  Inlining.v Inliningspec.v Inliningproof.v \
   Renumber.v Renumberproof.v \
   RTLtyping.v \
   Kildall.v Liveness.v \
@@ -160,7 +158,8 @@ BACKEND=\
 
 # Unusedglob.v
 # Unusedglobproof.v
-
+# Tailcall.v Tailcallproof.v \
+  Inlining.v Inliningspec.v Inliningproof.v \
 # C front-end modules (in cfrontend/)
 
 CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v \

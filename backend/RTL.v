@@ -190,7 +190,7 @@ Section RELSEM.
 
 Variable ge: genv.
 
-Definition find_function
+(*Definition find_function
       (ros: reg + ident) (rs: regset) : option fundef :=
   match ros with
   | inl r => Genv.find_funct ge rs#r
@@ -206,6 +206,7 @@ Definition ros_is_ident (ros: reg + ident) (rs: regset) (i: ident) : Prop :=
   | inl r => rs # r = Vptr (Global i) Ptrofs.zero
   | inr symb => i = symb
   end.
+*)
 
 (** The transitions are presented as an inductive predicate
   [step ge st1 t st2], where [ge] is the global environment,
@@ -242,8 +243,8 @@ Inductive step: state -> trace -> state -> Prop :=
       forall s f sp pc rs m sig ros args res pc' fd id,
       let vf := ros_address ge ros rs in
       (fn_code f)!pc = Some(Icall sig ros args res pc') ->
-      ros_is_ident ros rs id ->
-      find_function ros rs = Some fd ->
+      vf = Vptr (Global id) Ptrofs.zero ->
+      Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (State s f sp pc rs m)
         E0 (Callstate (Stackframe res f sp pc' rs :: s) vf rs##args m id)
@@ -251,8 +252,8 @@ Inductive step: state -> trace -> state -> Prop :=
       forall s f stk pc rs m sig ros args fd m' m'' id,
       let vf := ros_address ge ros rs in
       (fn_code f)!pc = Some(Itailcall sig ros args) ->
-      ros_is_ident ros rs id ->
-      find_function ros rs = Some fd ->
+      vf = Vptr (Global id) Ptrofs.zero ->
+      Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       Mem.return_frame m' = Some m'' ->
