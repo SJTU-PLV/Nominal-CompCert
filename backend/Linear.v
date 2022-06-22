@@ -245,6 +245,7 @@ Inductive step: state -> trace -> state -> Prop :=
   | exec_function_internal:
       forall s vf f rs m rs' m' m'' stk id path,
       forall FIND: Genv.find_funct ge vf = Some (Internal f),
+      (* vf = Vptr (Global id) Ptrofs.zero -> *)
       Mem.alloc_frame m id = (m',path) ->
       Mem.alloc m' 0 f.(fn_stacksize) = (m'', stk) ->
       rs' = undef_regs destroyed_at_function_entry (call_regs rs) ->

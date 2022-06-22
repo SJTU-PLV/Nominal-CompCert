@@ -391,26 +391,15 @@ Inductive match_states: Mach.state -> Asm.state -> Prop :=
       match_states (Mach.State s (Vptr fb Ptrofs.zero) sp c ms m)
                    (Asm.State rs m' true)
   | match_states_call:
-<<<<<<< HEAD
-      forall s vf ms m m' rs
+      forall s vf ms m m' rs id
         (STACKS: match_stack ge init_rs init_sup (Mem.support m') s)
         (MEXT: Mem.extends m m')
         (AG: agree ms (parent_sp s) rs)
+        (VF: vf = Vptr (Global id) Ptrofs.zero)
         (ATPC: Val.lessdef vf (rs PC))
         (ATLR: rs RA = parent_ra s),
-      match_states (Mach.Callstate s vf ms m)
+      match_states (Mach.Callstate s vf ms m id)
                    (Asm.State rs m' true)
-=======
-      forall s fb ms m m' rs id
-        (STACKS: match_stack ge s)
-        (MEXT: Mem.extends m m')
-        (AG: agree ms (parent_sp s) rs)
-        (FB: fb = Global id)
-        (ATPC: rs PC = Vptr fb Ptrofs.zero)
-        (ATLR: rs RA = parent_ra s),
-      match_states (Mach.Callstate s fb ms m id)
-                   (Asm.State rs m')
->>>>>>> a091c4c
   | match_states_return:
       forall s ms m m' rs live
         (STACKS: match_stack ge init_rs init_sup (Mem.support m') s)
@@ -441,11 +430,14 @@ Proof.
     end;
   inversion 1;
   try (replace (Mem.support m) with (Mem.support m') by congruence); eauto.
-  - replace (Mem.support m') with (Mem.sup_incr (Mem.support m)) by congruence.
-    eauto.
+  - simpl in H1.
+    replace (Mem.support m') with (Mem.sup_incr (Mem.sup_incr_frame (Mem.support m)i0)) by congruence.
+    eapply Mem.sup_include_trans. 2: eauto.
+    intro. apply Mem.sup_incr_frame_in.
   - destruct zlt.
-    + apply Mem.support_free in H1. rewrite <- H1. subst. eauto.
-    + inv H1. eauto.
+    + apply Mem.support_free in H1. rewrite <- H1. subst.
+      eapply Mem.sup_include_return_frame; eauto.
+    + inv H1. eapply Mem.sup_include_return_frame; eauto.
 Qed.
 
 Lemma exec_straight_support tf c rs m k rs' m':
@@ -660,16 +652,15 @@ Opaque loadind.
   simpl; congruence.
 
 - (* Mcall *)
-  cbn in H. destruct Ptrofs.eq_dec as [_|]; try congruence.
+  cbn in H0. destruct Ptrofs.eq_dec as [_|]; try congruence.
   assert (f0 = f) by congruence.  subst f0.
   inv AT.
   assert (NOOV: list_length_z tf.(fn_code) <= Ptrofs.max_unsigned).
     eapply transf_function_no_overflow; eauto.
-<<<<<<< HEAD
-  destruct ros as [rf|fid]; simpl in H; monadInv H4.
+  destruct ros as [rf|fid]; simpl in H; monadInv H5.
 + (* Indirect call *)
-  generalize (code_tail_next_int _ _ _ _ NOOV H5). intro CT1.
-=======
+  generalize (code_tail_next_int _ _ _ _ NOOV H6). intro CT1.
+(*=======
   destruct ros as [rf|fid]; simpl in H0; monadInv H5.
 + (* Indirect call *)
   assert (rs rf = Vptr (Global id) Ptrofs.zero).
@@ -678,7 +669,7 @@ Opaque loadind.
   assert (rs0 x0 = Vptr (Global id) Ptrofs.zero).
     exploit ireg_val; eauto. rewrite H5; intros LD; inv LD; auto.
   generalize (code_tail_next_int _ _ _ _ NOOV H6). intro CT1.
->>>>>>> a091c4c
+>>>>>>> a091c4c *)
   assert (TCA: transl_code_at_pc ge (Vptr fb (Ptrofs.add ofs Ptrofs.one)) fb f c false tf x).
     econstructor; eauto.
   exploit return_address_offset_correct; eauto. intros; subst ra.
@@ -690,59 +681,48 @@ Opaque loadind.
   econstructor; eauto.
   simpl. rewrite Ptrofs.add_zero_l. eauto.
   simpl. eapply agree_exten; eauto. intros. Simplifs.
-<<<<<<< HEAD
   simpl. rewrite Pregmap.gss. rewrite <- (ireg_of_eq rf x0); eauto. eapply agree_mregs; eauto.
-  Simplifs. cbn. rewrite Ptrofs.add_zero_l. rewrite <- H1. cbn. auto.
-=======
-  Simplifs. rewrite <- H. auto.
->>>>>>> a091c4c
+  Simplifs. cbn. rewrite Ptrofs.add_zero_l. rewrite <- H2. cbn. auto.
 + (* Direct call *)
-  generalize (code_tail_next_int _ _ _ _ NOOV H5). intro CT1.
+  generalize (code_tail_next_int _ _ _ _ NOOV H6). intro CT1.
   assert (TCA: transl_code_at_pc ge (Vptr fb (Ptrofs.add ofs Ptrofs.one)) fb f c false tf x).
     econstructor; eauto.
   exploit return_address_offset_correct; eauto. intros; subst ra.
   left; econstructor; split.
   apply plus_one. eapply exec_step_internal. eauto.
   eapply functions_transl; eauto. eapply find_instr_tail; eauto.
-<<<<<<< HEAD
   reflexivity.
-=======
-  simpl. unfold Genv.symbol_address. rewrite symbols_preserved. rewrite H0. eauto.
->>>>>>> a091c4c
   econstructor; eauto.
   econstructor; eauto.
   simpl. rewrite Ptrofs.add_zero_l. eauto.
   simpl. eapply agree_exten; eauto. intros. Simplifs.
-<<<<<<< HEAD
-  Simplifs. rewrite <- H1. cbn. rewrite Ptrofs.add_zero_l. auto.
-=======
-  Simplifs. rewrite <- H. auto.
->>>>>>> a091c4c
+  Simplifs. rewrite <- H2. cbn. rewrite Ptrofs.add_zero_l. auto.
 
 - (* Mtailcall *)
-  cbn in H. destruct Ptrofs.eq_dec as [_|]; try congruence.
+  cbn in H0. destruct Ptrofs.eq_dec as [_|]; try congruence.
   assert (f0 = f) by congruence.  subst f0.
   inv AT.
   assert (NOOV: list_length_z tf.(fn_code) <= Ptrofs.max_unsigned).
     eapply transf_function_no_overflow; eauto.
   rewrite (sp_val _ _ _ AG) in *. unfold load_stack in *.
-<<<<<<< HEAD
-  exploit Mem.loadv_extends. eauto. eexact H0. auto. simpl. intros [parent' [A B]].
-  exploit Mem.loadv_extends. eauto. eexact H1. auto. simpl. intros [ra' [C D]].
+  exploit Mem.loadv_extends. eauto. eexact H1. auto. simpl. intros [parent' [A B]].
+  exploit Mem.loadv_extends. eauto. eexact H2. auto. simpl. intros [ra' [C D]].
   exploit lessdef_parent_sp; eauto. intros. subst parent'. clear B.
   exploit lessdef_parent_ra; eauto. intros. subst ra'. clear D.
   exploit Mem.free_parallel_extends; eauto. intros [m2' [E F]].
-  destruct ros as [rf|fid]; simpl in H; monadInv H6.
+  exploit Mem.return_frame_parallel_extends. exact F. eauto.intros [m2'' [G I]].
+  destruct ros as [rf|fid]; simpl in H; monadInv H8.
 + (* Indirect call *)
   destruct (zle (fn_stacksize f) 0).
-  * (* fn_stacksize f <= 0 *)
-    generalize (code_tail_next_int _ _ _ _ NOOV H7). intro CT1.
+  * (* fn_stacksize f <= 0 *) 
+    generalize (code_tail_next_int _ _ _ _ NOOV H9). intro CT1.
     left; econstructor; split.
     eapply plus_left. eapply exec_step_internal. eauto.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
     simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
     rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
     unfold free'. rewrite zlt_false by omega. eauto.
+    rewrite G.
     apply star_one. eapply exec_step_internal.
     transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
