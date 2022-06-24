@@ -57,6 +57,10 @@ Record cklr :=
     mi_glob w id b ofs:
       mi w (Global id) = Some(b,ofs) ->
       b = Global id /\ ofs = 0;
+(*    mi_stack w b b' ofs:
+      mi w b = Some (b',ofs) ->
+      is_stack b ->
+      is_stack b'; *)
     mi_acc:
       Monotonic mi (wacc ++> inject_incr);
     mi_acc_separated w w' m1 m2:

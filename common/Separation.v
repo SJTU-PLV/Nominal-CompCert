@@ -1001,23 +1001,25 @@ Proof.
     exists b0, delta; split; eauto.
     rewrite Mem.perm_alloc_frame; eauto.
 Qed.
-(*
+
 Lemma alloc_frame_parallel_rule_2:
-  forall ge1 ge2 m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
+  forall ge1 ge2 j m1 m1' m2 m2' id path1 path2 P ,
   m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j m1 ** P ->
-  Mem.alloc m1 0 sz1 = (m1', b1) ->
-  Mem.alloc m2 0 sz2 = (m2', b2) ->
-  (8 | delta) ->
-  lo = delta ->
-  hi = delta + Z.max 0 sz1 ->
-  0 <= sz2 <= Ptrofs.max_unsigned ->
-  0 <= delta -> hi <= sz2 ->
-  exists j',
-     m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
-  /\ inject_incr j j'
-  /\ j' b1 = Some(b2, delta)
-  /\ inject_separated j j' m1 m2 .
-*)
+  Mem.alloc_frame m1 id = (m1', path1) ->
+  Mem.alloc_frame m2 id = (m2', path2) ->
+  m2' |= minjection j m1' ** globalenv_inject ge1 ge2 j m1' ** P.
+Proof.
+  intros.
+  exploit alloc_frame_rule; eauto.
+  intro. destruct H2 as (A&B&C).
+  split;[|split].
+  - eauto.
+  - eapply globalenv_inject_incr ; eauto.
+    constructor. congruence. congruence.
+    eapply Mem.sup_include_alloc_frame; eauto.
+  - eauto.
+Qed.
+
 Lemma alloc_frame_rule_2:
   forall j m1 m2 P Q id m1' m2' path1 path2,
     m2 |= mconj (minjection j m1) Q ** P ->
@@ -1048,6 +1050,29 @@ Proof.
   split. auto.
   split; [|split].
   - simpl in *. auto.
+  - eapply m_invar. eauto.
+    exploit return_frame_unchanged_on. eauto.
+    intros. apply H.
+  - red; intros. eapply DISJ. 2: eauto. simpl in H |- *.
+    decompose [ex and] H.
+    repeat eexists; eauto.
+    eapply Mem.perm_return_frame; eauto.
+Qed.
+
+Lemma return_frame_parallel_rule_2:
+  forall m1 m1' m2 m2' j P,
+    m2 |= minjection j m1 ** P ->
+    Mem.return_frame m1 = Some m1' ->
+    Mem.return_frame m2 = Some m2' ->
+    m2' |= minjection j m1' ** P.
+Proof.
+  intros m1 m1' m2 m2'  j P MINJ POP1 POP2.
+  Search Mem.return_frame.
+  exploit Mem.return_frame_inject. eauto. apply MINJ. eauto. eauto.
+  intros INJ.
+  destruct MINJ as (MINJ & PM & DISJ).
+  split. auto.
+  split.
   - eapply m_invar. eauto.
     exploit return_frame_unchanged_on. eauto.
     intros. apply H.

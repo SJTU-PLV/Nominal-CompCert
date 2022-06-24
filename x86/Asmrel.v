@@ -291,6 +291,7 @@ Section PROG.
        (<> outcome_match R)).
   Proof.
     intros w b1 b2 Hb ge1 ge2 Hge f i rs1 rs2 Hrs' m1 m2 Hm.
+    Opaque Mem.alloc_frame.
     destruct i; cbn; apply regset_inj_subrel in Hrs' as Hrs;
       unfold compare_ints, compare_longs, compare_floats, compare_floats32, undef_regs;
       repeat rstep.
@@ -308,12 +309,26 @@ Section PROG.
       rstep; auto.
       apply set_inject'; [discriminate | auto | ].
       apply set_inject'; [discriminate | auto | auto ].
-    - destruct m as [m1' b1']. destruct n as [m2' b2'].
-      destruct H1 as (Hw & Hm' & Hb'). cbn [fst snd] in *.
+    - destruct m; destruct n. rauto.
+      admit. (*the mi should not map stack block to global block*)
+      apply mi_glob in H2. destr_in H2. congruence.
+      apply mi_glob in H2. destr_in H2. inv H0.
+      exploit cklr_alloc_frame; eauto. instantiate (1:= i).
+      intros (w' & Hw' & Hm' & Hd').
+      destruct (Mem.alloc_frame m1 i) as (m1' & path').
+      destruct (Mem.alloc_frame m2 i) as (m2' & path'').
+      cbn [fst snd] in *. unfold k in Hd'. subst.
+      exploit cklr_alloc; eauto.
+      instantiate (1:=sz).
+      instantiate (1:=0).
+      intros (w'' & Hw'' & Hm'' & Hd'').
+      destruct (Mem.alloc m1' 0 sz) as (m1'' & b1').
+      destruct (Mem.alloc m2' 0 sz) as (m2'' & b2').
+      cbn [fst snd] in *.
       repeat rstep. rewrite Ptrofs.add_zero_l.
-      destruct H1 as (w2 & Hw2 & Hm2).
+      destruct H2 as (w2 & Hw2 & Hm2).
       repeat rstep.
-      destruct H1 as (w3 & Hw3 & Hm3).
+      destruct H2 as (w3 & Hw3 & Hm3).
       exists w3. split. rauto.
       repeat rstep. simpl in *.
       apply block_sameofs_ptrbits_inject; split; rauto.
@@ -325,12 +340,23 @@ Section PROG.
         * eapply transport in Hfree as (m' & Hfree' & Hm');
             [ | clear Hfree; repeat rstep; eauto ].
           destruct Hm' as (w' & Hw' & Hm'). rewrite Hfree'.
+          destruct (Mem.return_frame m) eqn: Hret.
+          exploit cklr_return_frame; eauto.
+          intro. unfold k1 in H. rewrite Hret in H.
+          inv H. destruct H5 as (w'' & Hw'' & Hm'').
+          assert (w ~> w''). rauto.
+          exists w''. split; rauto.
           exists w'. split; rauto.
         * eapply Mem.free_range_perm in Hfree. apply Hfree. omega.
       + (* sz <= 0 *)
         unfold free'. repeat rewrite zlt_false by omega.
+          destruct (Mem.return_frame m1) eqn: Hret.
+          exploit cklr_return_frame; eauto.
+          intro. unfold k1 in H0. rewrite Hret in H0.
+          inv H0. destruct H5 as (w'' & Hw'' & Hm'').
+        exists w''. split; rauto.
         exists w. split; rauto.
-  Qed.
+  Admitted.
 
   Lemma reg_inj_strengthen R w ge1 ge2 rs1 rs2 b ofs f:
     genv_match R w ge1 ge2 ->
@@ -506,8 +532,8 @@ Lemma step_support se p nb rs1 m1 live1 t rs2 m2 live2:
 Proof.
   inversion 1; subst; intros.
   - eapply exec_instr_support; eauto.
-  - eapply external_call_support; eauto.
-  - eapply external_call_support; eauto.
+  - erewrite <- external_call_support; eauto.
+  - erewrite <- external_call_support; eauto.
 Qed.
 
 Lemma semantics_asm_rel p R:

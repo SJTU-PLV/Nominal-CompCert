@@ -503,16 +503,10 @@ Definition callstack : Type := list frame.
 Inductive match_callstack (f: meminj) (m: mem) (tm: mem):
                           callstack -> sup -> sup -> Prop :=
   | mcs_nil:
-<<<<<<< HEAD
-      forall bound tbound,
-      inj_incr w (injw f bound tbound) ->
+      forall bound tbound Hg,
+      inj_incr w (injw f bound tbound) Hg ->
 (*      Mem.sup_include es bound -> Mem.sup_include es tbound -> *)
-=======
-      forall es bound tbound,
-      match_globalenvs f es ->
       Mem.stackseq m tm ->
-      Mem.sup_include es bound -> Mem.sup_include es tbound ->
->>>>>>> a091c4c
       match_callstack f m tm nil bound tbound
   | mcs_cons:
       forall cenv tf e le te sp sps bes es cs bound tbound

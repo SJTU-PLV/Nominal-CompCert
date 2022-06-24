@@ -295,7 +295,13 @@ Next Obligation.
   subst. destr_in H. destruct p. apply mi_glob in Heqo.
   destruct Heqo. subst. inv H. auto.
 Qed.
-
+(*
+Next Obligation.
+  simpl in H. unfold compose_meminj in H.
+  repeat destr_in H. apply mi_stack in Heqo; eauto.
+  apply mi_stack in Heqo0; eauto.
+Qed.
+*)
 Next Obligation.
   rauto.
 Qed.

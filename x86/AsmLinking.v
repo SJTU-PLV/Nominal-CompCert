@@ -289,16 +289,19 @@ Section ASM_LINKING.
         rewrite Heqo in H. inv H. exists y.
         intuition auto. constructor. reflexivity.
       - (* Pallocframe *)
-        apply Mem.support_store in Heqo0. rewrite Heqo0.
-        apply Mem.support_store in Heqo. rewrite Heqo.
-        apply Mem.support_alloc in Heqp0. rewrite Heqp0.
+        assert (Mem.sup_include (Mem.support m) (Mem.support m')).
+        { apply Mem.support_store in Heqo0. rewrite Heqo0.
+          apply Mem.support_store in Heqo. rewrite Heqo.
+          apply Mem.support_alloc in Heqp0. rewrite Heqp0.
+          simpl in *. eapply Mem.sup_include_trans. 2: eauto.
+          intro. apply Mem.sup_incr_frame_in. }
         eexists. intuition (eauto using liveness_top; extlia).
       - (* Pfreeframe *)
-        assert (Mem.support m' = Mem.support m). {
+        assert (Mem.sup_include (Mem.support m) (Mem.support m')).
+        { eapply Mem.sup_include_trans.
+          2: eapply Mem.sup_include_return_frame; eauto.
           unfold free' in Heqo1. destruct zlt; try congruence.
-          eapply Mem.support_free; eauto.
-        }
-        rewrite H.
+          erewrite <- Mem.support_free; eauto. }
         eexists. intuition (eauto using liveness_top; extlia).
     Qed.
 
@@ -323,7 +326,7 @@ Section ASM_LINKING.
       - (* builtin *)
         eapply find_internal_ptr_linkorder in FIND; eauto. cbn in *.
         exists true. intuition eauto using exec_step_builtin, liveness_top.
-        apply Events.external_call_support in CALL. eauto.
+        apply Events.external_call_support in CALL. rewrite CALL. eauto.
       - (* external *)
         assert (Genv.find_funct_ptr (Genv.globalenv se p) b = Some (External ef)).
         {
@@ -334,7 +337,7 @@ Section ASM_LINKING.
           by (destruct ef_sig, sig_res as [[ | | | | | ] | | | | | ]; reflexivity).
         pose proof (match_inner_sp nb (rs RSP) Hnb) as NB. rewrite ISP in NB. inv NB.
         eexists. intuition eauto using exec_step_external, Some_le_def.
-        apply Events.external_call_support in CALL. eauto.
+        apply Events.external_call_support in CALL. rewrite CALL. eauto.
     Qed.
 
   End SE.

@@ -374,11 +374,7 @@ Inductive estep: state -> trace -> state -> Prop :=
       Genv.find_funct ge vf = Some fd ->
       type_of_fundef fd = Tfunction targs tres cconv ->
       estep (ExprState f (C (Ecall rf rargs ty)) k e m)
-<<<<<<< HEAD
-         E0 (Callstate vf vargs (Kcall f e C ty k) m)
-=======
-         E0 (Callstate fd vargs (Kcall f e C ty k) m id)
->>>>>>> a091c4c
+         E0 (Callstate vf vargs (Kcall f e C ty k) m id)
 
   | step_builtin: forall f C ef tyargs rargs ty k e m vargs t vres m',
       leftcontext RV RV C ->
@@ -620,13 +616,8 @@ Proof.
 Qed.
 
 Lemma callred_invert:
-<<<<<<< HEAD
-  forall r vf args ty m,
-  callred ge r m vf args ty ->
-=======
-  forall r fd args ty m id,
-  callred ge r m fd args ty id->
->>>>>>> a091c4c
+  forall r vf args ty m id,
+  callred ge r m vf args ty id->
   invert_expr_prop r m.
 Proof.
   intros. inv H. simpl.
