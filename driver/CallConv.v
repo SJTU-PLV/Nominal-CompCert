@@ -560,6 +560,14 @@ Inductive args_removed sg: val -> mem -> mem -> Prop :=
         exists v, load_stack m (Vptr sb sofs) ty (Ptrofs.repr (fe_ofs_arg + 4 * ofs)) = Some v) ->
       args_removed sg (Vptr sb sofs) m m_.
 
+Lemma args_removed_support: forall sg v m1 m2,
+    args_removed sg v m1 m2 ->
+    Mem.support m2 = Mem.support m1.
+Proof.
+  induction 1. eauto.
+  eapply Mem.support_free; eauto.
+Qed.
+
 (** This takes care of how the LTL memory state is obtained from the
   Mach-level one. In addition, the following construction reconstructs
   the LTL-level [locset] from the Mach-level [regset] by reading the
@@ -848,23 +856,28 @@ Proof.
       * eapply Mem.mi_align with (chunk := Mint64); eauto using (Mem.mi_inj f m1 m2).
         instantiate (2 := offset_sarg sofs1 0). intros ofs Hofs.
         eapply Mem.perm_max, H; eauto; unfold offset_sarg in *; cbn in Hofs; extlia.
+      * unfold Mem.stackseq in *.
+        apply Mem.support_mix in Hm1'.
+        inv EXT.
+        congruence.
     + eapply Mem.unchanged_on_implies; eauto using Mem.mix_updated.
       inversion 1; auto.
     + eapply Mem.unchanged_on_implies; eauto using Mem.mix_unchanged.
       intros _ ofs NIA _ [<- Hofs]. apply NIA. constructor; auto.
     + eapply Mem.support_mix; eauto.
   - inv Hm. inv Hm'_. inv Hw. cbn in *.
-    eexists (injw f0 (Mem.support m1'_) (Mem.support m2')), m1'_. repeat apply conj.
+    eexists (injw f0 (Mem.support m1'_) (Mem.support m2') Hg'0), m1'_. repeat apply conj.
     + constructor; eauto.
       eapply Mem.unchanged_on_support; eauto.
     + apply inject_incr_refl.
     + constructor. eapply Mem.inject_extends_compose; eauto.
+      unfold Mem.stackseq in *. inv EXT. rewrite <- mext_sup; eauto.
     + split.
       * eauto.
       * destruct 1; eelim H; eauto. split; eauto.
-        unfold offset_sarg in H3. extlia.
+        unfold offset_sarg in H5. extlia.
       * destruct 1; eelim H; eauto. split; eauto.
-        unfold offset_sarg in H3. extlia.
+        unfold offset_sarg in H5. extlia.
     + apply Mem.unchanged_on_refl.
     + reflexivity.
 Qed.
@@ -1064,6 +1077,8 @@ Proof.
       assert (Mem.extends m1_ m1) by eauto using Mem.free_left_extends, Mem.extends_refl.
       destruct H6; cbn in *. erewrite <- Mem.mext_sup by eauto. constructor.
       eapply Mem.extends_inject_compose; eauto.
+      unfold Mem.stackseq in *.
+      erewrite Mem.support_free; eauto.
     + destruct 1 as [sb2 sofs2 ofs].
       inversion H2 as [ | | | | sb1 sofs1 | ]; clear H2; try congruence. subst b2 ofs2 sp1.
       inversion H12; clear H12.
@@ -1192,7 +1207,7 @@ Proof.
       rewrite <- zero_size_arguments_tailcall_possible.
       pose proof (size_arguments_above sg). extlia.
   }
-  exists (se2, (sg, injpw _ _ _ Hm_), lmw sg rs2 m2 sp2). repeat apply conj.
+  exists (se2, (sg, injpw _ _ _ Hm_ Hg1), lmw sg rs2 m2 sp2). repeat apply conj.
   - constructor; cbn; auto. constructor; auto.
     destruct Hm2_; eauto. erewrite Mem.support_free; eauto.
   - exists (lq vf2 sg ls2 m2_). split.
@@ -1200,10 +1215,12 @@ Proof.
       * intros r Hr. destruct Hr; cbn -[Z.add Z.mul]; eauto.
         edestruct ARGS as (v2 & Hv2 & Hv); eauto.
         rewrite Hv2. cbn. auto.
-      * constructor.
+      * constructor. unfold Mem.stackseq in *.
+        apply args_removed_support in Hm2_.
+        congruence.
     + econstructor; eauto.
   - intros r1 r2 (ri & (w' & Hw' & Hr1i) & Hri2). cbn -[Z.add Z.mul] in *.
-    inv Hw'. inv Hr1i. inv H3. inv Hri2. cbn -[Z.add Z.mul] in *.
+    inv Hw'. inv Hr1i. inv H7. inv Hri2. cbn -[Z.add Z.mul] in *.
     rename m1'0 into m1'. rename m2'0 into m2'_. rename m' into m2'.
     assert (Hm'' : Mem.inject f' m1' m2'). {
       change (m_pred (minjection f' m1') m2').
@@ -1214,21 +1231,21 @@ Proof.
       * constructor; eauto.
       * eauto using Mem.valid_block_inject_1.
       * inv Hm2_.
-        -- apply zero_size_arguments_tailcall_possible in H7.
-           unfold offset_sarg in H3. extlia.
+        -- apply zero_size_arguments_tailcall_possible in H8.
+           unfold offset_sarg in H7. extlia.
         -- right. eapply Mem.valid_block_free_1; eauto.
            edestruct PERM as (sb2' & sofs2' & Hsp2 & ? & ?); eauto. inv Hsp2.
            eapply Mem.perm_valid_block; eauto.
     }
-    exists (injpw f' m1' m2' Hm''); cbn.
+    exists (injpw f' m1' m2' Hm'' Hg3); cbn.
     + constructor; eauto.
       * intros b ofs p Hb Hp.
         destruct (classic (loc_init_args (size_arguments sg) sp2 b ofs)).
         -- eapply Mem.perm_unchanged_on_2; eauto.
         -- cut (Mem.valid_block m2_ b -> Mem.perm m2_ b ofs Max p); intros.
            ++ destruct Hm2_; eauto using Mem.perm_free_3, Mem.valid_block_free_1.
-           ++ eapply H10; eauto.
-              eapply Mem.valid_block_unchanged_on in H7; eauto.
+           ++ eapply H11; eauto.
+              eapply Mem.valid_block_unchanged_on in H8; eauto.
               eapply Mem.perm_unchanged_on_2; eauto.
       * eapply unchanged_on_combine; eauto.
         apply Mem.unchanged_on_trans with m2_.
@@ -1242,17 +1259,18 @@ Proof.
           intros b ofs [_ ?] _. red. auto. }
       * red. inv Hm2_; eauto.
         unfold Mem.valid_block. erewrite <- (Mem.support_free m2); eauto.
-    + intros r REG. rewrite H21; eauto.
-    + intros r REG. rewrite H22; eauto.
+    + intros r REG. rewrite H23; eauto.
+    + intros r REG. rewrite H24; eauto.
     + constructor.
+      unfold Mem.stackseq in *. congruence.
     + auto.
     + intros b2 ofs2 Hofs2 b1 delta Hb Hp.
       inv Hm2_.
-      * apply zero_size_arguments_tailcall_possible in H3.
+      * apply zero_size_arguments_tailcall_possible in H7.
         destruct Hofs2. unfold offset_sarg in *. extlia.
       * inv Hofs2.
         eapply inject_incr_separated_inv in Hb; eauto.
-        -- eapply H9 in Hp; eauto using Mem.valid_block_inject_1.
+        -- eapply H10 in Hp; eauto using Mem.valid_block_inject_1.
            eapply Mem.perm_inject in Hp; eauto.
            replace (ofs2 - delta + delta) with ofs2 in Hp by extlia.
            eapply Mem.perm_free_2; eauto.

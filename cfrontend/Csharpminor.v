@@ -485,6 +485,7 @@ End RELSEM.
 Inductive initial_state (ge: genv): c_query -> state -> Prop :=
   | initial_state_intro: forall vf f vargs m id,
       Genv.find_funct ge vf = Some (Internal f) ->
+      vf = Vptr (Global id) Ptrofs.zero ->
       initial_state ge
         (cq vf (fn_sig f) vargs m)
         (Callstate vf vargs Kstop m id).
