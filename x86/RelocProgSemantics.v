@@ -633,8 +633,13 @@ Inductive eval_builtin_arg: builtin_arg A -> val -> Prop :=
       eval_builtin_arg (BA_addrglobal id ofs) (Genv.symbol_address ge id ofs)
   | eval_BA_splitlong: forall hi lo vhi vlo,
       eval_builtin_arg hi vhi -> eval_builtin_arg lo vlo ->
-      eval_builtin_arg (BA_splitlong hi lo) (Val.longofwords vhi vlo).
+      eval_builtin_arg (BA_splitlong hi lo) (Val.longofwords vhi vlo)
+  | eval_BA_addptr: forall a1 a2 v1 v2,
+      eval_builtin_arg a1 v1 ->
+      eval_builtin_arg a2 v2 ->
+      eval_builtin_arg (BA_addptr a1 a2) (if Archi.ptr64 then Val.addl v1 v2 else Val.add v1 v2).
 
+                       
 Definition eval_builtin_args (al: list (builtin_arg A)) (vl: list val) : Prop :=
   list_forall2 eval_builtin_arg al vl.
 
@@ -643,6 +648,7 @@ Lemma eval_builtin_arg_determ:
 Proof.
   induction 1; intros v' EV; inv EV; try congruence.
   f_equal; eauto.
+  destruct Archi.ptr64;f_equal;auto.
 Qed.
 
 Lemma eval_builtin_args_determ:
@@ -664,18 +670,17 @@ Inductive step (ge: Genv.t) : state -> trace -> state -> Prop :=
       Genv.find_instr ge (Vptr b ofs) = Some i ->
       exec_instr ge i rs m = Next rs' m' ->
       step ge (State rs m) E0 (State rs' m')
-(* | exec_step_builtin: *)
-(*     forall b ofs ef args res rs m vargs t vres rs' m', *)
-(*       rs PC = Vptr b ofs -> *)
-(*       Genv.find_ext_funct ge (Vptr b ofs) = None -> *)
-(*       Genv.find_instr ge (Vptr b ofs) = Some (Pbuiltin ef args res)  -> *)
-(*       eval_builtin_args preg ge rs (rs RSP) m args vargs -> *)
-(*       external_call ef (Genv.genv_senv ge) vargs m t vres m' -> *)
-(*         rs' = nextinstr_nf  *)
-(*                 (set_res res vres *)
-(*                          (undef_regs (map preg_of (destroyed_by_builtin ef)) rs))  *)
-(*                 (Ptrofs.repr (instr_size (Pbuiltin ef args res))) -> *)
-(*         step ge (State rs m) t (State rs' m') *)
+| exec_step_builtin:
+    forall b ofs ef args res rs m vargs t vres rs' m',
+      rs PC = Vptr b ofs ->
+      Genv.find_ext_funct ge (Vptr b ofs) = None ->
+      Genv.find_instr ge (Vptr b ofs) = Some (Pbuiltin ef args res)  ->
+      eval_builtin_args preg ge rs (rs RSP) m args vargs ->
+      external_call ef (Genv.genv_senv ge) vargs m t vres m' ->
+      rs' = nextinstr_nf (Ptrofs.repr (instr_size (Pbuiltin ef args res)))
+                         (set_res res vres
+                                  (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
+        step ge (State rs m) t (State rs' m')
 | exec_step_external:
     forall b ofs ef args res rs m t rs' m',
       rs PC = Vptr b ofs ->
@@ -1596,11 +1601,11 @@ Ltac Equalities :=
 - (* determ *)
   inv H; inv H0; Equalities.
 + split. constructor. auto.
-(* + discriminate. *)
-(* + discriminate. *)
-(* + assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0. *)
-(*   exploit external_call_determ. eexact H5. eexact H11. intros [A B]. *)
-(*   split. auto. intros. destruct B; auto. subst. auto. *)
++ discriminate.
++ discriminate.
++ assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0.
+  exploit external_call_determ. eexact H5. eexact H11. intros [A B].
+  split. auto. intros. destruct B; auto. subst. auto.
 + assert (args0 = args) by (eapply Asm.extcall_arguments_determ; eauto). subst args0.
   exploit external_call_determ. eexact H3. eexact H7. intros [A B].
   split. auto. intros. destruct B; auto. subst. auto.
@@ -1608,7 +1613,7 @@ Ltac Equalities :=
   red; intros; inv H; simpl.
   lia.
   eapply external_call_trace_length; eauto.
-  (* eapply external_call_trace_length; eauto. *)
+  eapply external_call_trace_length; eauto.
 - (* initial states *)
   inv H; inv H0. assert (m = m0) by congruence. subst. inv H2; inv H3.
   assert (m1 = m3 /\ stk = stk0) by intuition congruence. destruct H0; subst.
@@ -1628,7 +1633,7 @@ Proof.
   red. simpl. intros s t s' STEP.
   inv STEP; simpl. lia.
   eapply external_call_trace_length; eauto.
-  (* eapply external_call_trace_length; eauto. *)
+  eapply external_call_trace_length; eauto.
 Qed.
 
 Theorem reloc_prog_receptive p rs:
@@ -1639,8 +1644,8 @@ Proof.
     inv STEP.
     inv MT. eexists. eapply exec_step_internal; eauto.
     edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
-    (* eexists. eapply exec_step_builtin; eauto. *)
-    (* edestruct external_call_receptive as (vres2 & m2 & EC2); eauto. *)
+    eexists. eapply exec_step_builtin; eauto.
+    edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
     eexists. eapply exec_step_external; eauto.
   - eapply reloc_prog_single_events; eauto.
 Qed.
