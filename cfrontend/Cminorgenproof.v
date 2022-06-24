@@ -724,47 +724,27 @@ Qed.
 (** Preservation of [match_callstack] by external calls. *)
 
 Lemma match_callstack_external_call_rec:
-  forall f1 f2 m1 m2 m1' m2',
+  forall f1 m1 m2 m1' m2',
   Mem.unchanged_on (loc_unmapped f1) m1 m2 ->
   Mem.unchanged_on (loc_out_of_reach f1 m1) m1' m2' ->
-  inject_incr f1 f2 ->
-  inject_separated f1 f2 m1 m1' ->
   (forall b ofs p, Mem.valid_block m1 b -> Mem.perm m2 b ofs Max p -> Mem.perm m1 b ofs Max p) ->
   forall cs bound tbound,
   match_callstack f1 m1 m1' cs bound tbound ->
   Mem.sup_include bound (Mem.support m1) ->
   Mem.sup_include tbound (Mem.support m1') ->
-  Mem.stackseq m2 m2' ->
-  match_callstack f2 m2 m2' cs bound tbound.
-Proof.
+  Mem.stackseq m2 m2' -> 
+  match_callstack f1 m2 m2' cs bound tbound.
 Proof.
   intros until m2'.
-  intros UNMAPPED OUTOFREACH INCR SEPARATED MAXPERMS.
+  intros UNMAPPED OUTOFREACH MAXPERMS.
   induction 1; intros.
-(* base case *)
-  assert (same_at_glob f2).
-  {admit. (*we need to show inject_incr only increase stackblocks *)}
-  apply mcs_nil with H4; eauto.
-  inv H. constructor; eauto. eapply inject_incr_trans; eauto.
-  intros. case_eq (f1 b1).
-  intros [b2' delta'] EQ. rewrite (INCR _ _ _ EQ) in H5. inv H5. eauto.
-  intro EQ. exploit SEPARATED; eauto. intros [A B].
-  unfold Mem.valid_block in *. inv GE; split; eauto.
-(* inductive case *)
+  - (* base case *)
+  apply mcs_nil with Hg; eauto.
+  - (* inductive case *)
   assert (sp = fresh_block sps) by (eapply me_sps; eauto). subst.
   constructor. auto. auto.
   eapply match_temps_invariant; eauto.
   eapply match_env_invariant; eauto.
-  red in SEPARATED. intros. destruct (f1 b) as [[b' delta']|] eqn:?.
-  exploit INCR; eauto. congruence.
-  exploit SEPARATED; eauto. intros [A B]. elim B. red.
-  eapply Mem.sup_include_trans; eauto.
-  intros. assert (Mem.sup_include bes es) by (eapply me_sup_include; eauto).
-  destruct (f1 b) as [[b' delta']|] eqn:?.
-  apply INCR; auto.
-  destruct (f2 b) as [[b' delta']|] eqn:?; auto.
-  exploit SEPARATED; eauto. intros [A B]. elim A. red.
-  eapply Mem.sup_include_trans; eauto.
   eapply match_bounds_invariant; eauto.
   intros. eapply MAXPERMS; eauto. red. exploit me_bounded; eauto.
   intros [A B]. apply H0,BOUND. auto.
@@ -778,43 +758,36 @@ Proof.
   exploit me_inv; eauto. intros [id [lv B]].
   exploit BOUND0; eauto. intros C.
   apply is_reachable_intro with id b0 lv delta; auto; lia.
-  eauto with mem.
   (* induction *)
   eapply IHmatch_callstack; eauto. inv MENV.
   eapply Mem.sup_include_trans; eauto.
-Admitted.
+Qed.
 
-(*
 Lemma match_callstack_external_call:
   forall m tm vargs tvargs m' f t ef vres cs,
     Mem.inject f m tm ->
     Val.inject_list f vargs tvargs ->
-    external_call ef ge vargs m t vres m' ->
+    external_call ef se vargs m t vres m' ->
     match_callstack f m tm cs (Mem.support m) (Mem.support tm) ->
-    f = struct_meminj (Mem.support m) ->
-    exists f' vres' tm',
-      external_call ef ge tvargs tm t vres' tm'
-      /\ match_callstack f' m' tm' cs (Mem.support m') (Mem.support tm')
-      /\ Val.inject f' vres vres'
-      /\ Mem.inject f' m' tm'
-      /\ f' = struct_meminj (Mem.support m').
+    exists vres' tm',
+      external_call ef tse tvargs tm t vres' tm'
+      /\ match_callstack f m' tm' cs (Mem.support m') (Mem.support tm')
+      /\ Val.inject f vres vres'
+      /\ Mem.inject f m' tm'.
 Proof.
-  intros. exploit match_callstack_match_globalenvs; eauto. intros [hi H4].
+  intros. exploit match_callstack_match_globalenvs; eauto. intros H3.
   exploit external_call_mem_inject; eauto.
-  eapply inj_preserves_globals. eauto.
-  intros (f' & vres' & tm' & A & B & C & D & E & F & G & I & J).
-  exists f',vres',tm'. split. auto. split.
-  eapply match_callstack_incr_bound; eauto.
+  intros (vres' & tm' & A & B & C & D & E).
+  apply external_call_support in H1 as ESUP1.
+  apply external_call_support in A as ESUP2.
+  exists vres',tm'. split. auto. split.
+  rewrite ESUP1. rewrite ESUP2.
   eapply match_callstack_external_call_rec; eauto. intros.
   eapply external_call_max_perm; eauto.
-  apply Mem.sup_include_refl. apply Mem.sup_include_refl.
-  exploit external_call_mem_inject_stackseq.
-  eapply inj_preserves_globals. eauto. apply H1. eauto. eauto.
-  eauto. eauto. eapply match_callstack_stackseq; eauto. auto.
-  eapply external_call_support; eauto.
-  eapply external_call_support; eauto.
-  split. auto. split. auto. subst.
-    {
+  apply match_callstack_stackseq in H2 as SEQ1.
+  unfold Mem.stackseq in *. congruence.
+  split. auto. auto.
+(*    {
     apply Axioms.extensionality. intro b.
     destruct ((struct_meminj (Mem.support m)) b) eqn:Z. destruct p.
     - apply F in Z as Z'. rewrite Z'. rewrite <- Z.
@@ -831,9 +804,9 @@ Proof.
       + unfold struct_meminj. destr. unfold struct_meminj in Z. destr_in Z.
       exploit J; eauto. eapply match_callstack_stackseq; eauto.
       intros [C1 D1]. congruence.
-  }
+  } *)
 Qed.
-*)
+
 (** [match_callstack] and allocations *)
 
 Lemma match_callstack_alloc_right:
@@ -2461,24 +2434,11 @@ Proof.
   exploit transl_exprlist_correct; eauto.
   intros [tvargs [EVAL2 VINJ2]].
   exploit match_callstack_match_globalenvs; eauto. intros MG.
-  exploit external_call_mem_inject; eauto.
-  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR SEPARATED]]]]]]]]].
+  exploit match_callstack_external_call; eauto.
+  intros [vres' [tm' [EC [MCS' [VINJ MINJ']]]]].
   left; econstructor; split.
   apply plus_one. econstructor; eauto.
-  assert (MCS': match_callstack f' m' tm'
-                 (Frame cenv tfn e le te (fresh_block sps) sps bes es :: cs)
-                 (Mem.support m') (Mem.support tm')).
-  apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
-(*    eapply match_callstack_external_call; eauto.
-    intros. eapply external_call_max_perm; eauto.
-    eapply external_call_support; eauto.
-    eapply external_call_support; eauto. *)
-  admit. (*redefine match_callstack_external_call*)
-  simpl. erewrite <- external_call_support; eauto.
-  erewrite <- external_call_support; eauto.
   econstructor; eauto.
-  admit. (*same injection after internal external call*)
-Opaque PTree.set.
   unfold set_optvar. destruct optid; simpl.
   eapply match_callstack_set_temp; eauto.
   auto.
@@ -2620,7 +2580,7 @@ Opaque PTree.set.
   apply match_callstack_stackseq in MCS as SEQ.
   exploit Mem.alloc_frame_parallel_stackseq; eauto.
   intros [A B]. subst.
-  exploit match_callstack_function_entry. eapply H2. 
+  exploit match_callstack_function_entry. eapply H2.
   admit. (*redefine m_c_f_e*)
   eapply AF'.
   assert (sz = fn_stackspace tf). auto. rewrite H5 in BC. all:eauto.
@@ -2638,18 +2598,11 @@ Opaque PTree.set.
   exploit match_callstack_match_globalenvs; eauto. intros MG.
   exploit functions_translated; eauto. intros [tfd [TFIND TR]].
   monadInv TR.
-  exploit external_call_mem_inject; eauto.
-  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR SEPARATED]]]]]]]]].
+  exploit match_callstack_external_call; eauto.
+  intros [vres' [tm' [EC [MCS' [VINJ MINJ']]]]].
   left; econstructor; split.
   apply plus_one. econstructor; eauto.
   econstructor; eauto.
-  admit.
-  apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
-  admit.
-(*  eapply match_callstack_external_call; eauto.
-  intros. eapply external_call_max_perm; eauto. *)
-  erewrite <- external_call_support; eauto.
-  erewrite <- external_call_support; eauto.
 
 (* return *)
   inv MK. simpl.

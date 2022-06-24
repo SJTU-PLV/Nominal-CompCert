@@ -1868,12 +1868,6 @@ Proof.
   destruct (Mem.sup_dec b1 bound). erewrite INJ1 in H1; eauto. congruence.
   destruct (Mem.sup_dec b2 tbound). erewrite INJ2 in H1; eauto. congruence.
   eauto.
-(*=======
-  inv H. constructor; intros; eauto.
-  assert (f b1 = Some (b2, delta)). rewrite <- H; symmetry; eapply INJ2; eauto.
-  auto.
-  eapply IMAGE; eauto.
->>>>>>> 830b2cc*)
 (* call *)
   eapply match_envs_invariant; eauto.
   intros. apply LOAD; auto. destruct H6. auto.
@@ -1883,7 +1877,7 @@ Proof.
   intros; apply LOAD; auto. inv H0. auto.
   intros; apply INJ1. inv H0. auto.
   intros; eapply INJ2; eauto. inv H0; auto.
-Admitted. (*question about local lemmas SOS!!!!!!!!*)
+Admitted. (*preserve of s_a_g internally *)
 
 (** Invariance by assignment to location "above" *)
 
@@ -1937,7 +1931,7 @@ Lemma match_cont_incr_bounds:
 Proof.
   induction 1; intros; econstructor; eauto; try extlia.
   etransitivity; eauto. constructor; eauto. congruence.
-Admitted. (*SOS*)
+Admitted. (*preserve of s_a_g internally *)
 
 (** [match_cont] and call continuations. *)
 
@@ -2391,18 +2385,21 @@ Proof.
 (* builtin *)
   exploit eval_simpl_exprlist; eauto with compat. intros [CASTED [tvargs [C D]]].
   exploit external_call_mem_inject; eauto with compat.
-  intros [j' [tvres [tm' [P [Q [R [S [T [U V]]]]]]]]].
+  intros [tvres [tm' [P [Q [R [S T]]]]]].
   econstructor; split.
   apply plus_one. econstructor; eauto.
   apply external_call_support in H0 as S1.
   apply external_call_support in P as S2.
   econstructor. eauto. eauto.
   eapply match_envs_set_opttemp; eauto.
+  (*dummy proofs*)
   eapply match_envs_extcall; eauto.
+  constructor; congruence.
   eapply match_cont_extcall; eauto.
+  constructor; congruence.
   inv MENV. eapply Mem.sup_include_trans. eauto. eauto.
   inv MENV; eapply Mem.sup_include_trans. eauto. eauto.
-  eauto.
+  eauto. eauto.
 (*  {
     apply Axioms.extensionality. intro b.
     destruct ((struct_meminj (Mem.support m)) b) eqn:Z. destruct p.
@@ -2419,7 +2416,6 @@ Proof.
       + unfold struct_meminj. destr. unfold struct_meminj in Z. destr_in Z.
       exploit X; eauto. intros [C1 D1]. congruence.
   } *)
-  admit. (*reasonable requirement of external(builtin) functions*)
   unfold Mem.stackseq in *. congruence.
   eauto with compat.
   eapply Mem.sup_include_trans; eauto. erewrite <- external_call_support; eauto.
@@ -2650,7 +2646,8 @@ Proof.
       destr; try congruence.
       erewrite bind_parameters_support in n0; eauto.
 }*)
-  admit. (*TODO HERE*)
+  
+  admit. (*local to do, true *)
   unfold Mem.stackseq in *. rewrite T.
   erewrite bind_parameters_support; eauto.
   eapply alloc_variables_parallel_stackseq; eauto.
@@ -2664,7 +2661,7 @@ Proof.
   eapply functions_translated in FIND as (tfd & TFIND & TRFD); eauto.
   monadInv TRFD. inv FUNTY.
   exploit external_call_mem_inject; eauto.
-  intros [j' [tvres [tm' [P [Q [R [S [T [U V]]]]]]]]].
+  intros [tvres [tm' [P [Q [R [S T]]]]]].
   apply external_call_support in H as SUP.
   apply external_call_support in P as TSUP.
   econstructor; split.
@@ -2672,6 +2669,7 @@ Proof.
   econstructor; eauto.
   intros. apply match_cont_incr_bounds with (Mem.support m) (Mem.support tm).
   eapply match_cont_extcall; eauto.
+  constructor; congruence.
   rewrite SUP. eauto. rewrite TSUP. eauto.
 (*  {
     apply Axioms.extensionality. intro b.
@@ -2679,7 +2677,7 @@ Proof.
     - apply U in Z as Z'. rewrite Z'. rewrite <- Z.
       unfold struct_meminj. destr. exploit external_call_valid_block.
       apply H. eauto. intro. destr. destr.
-    - admit. (*destruct (j' b) eqn:Z1.
+    - (*destruct (j' b) eqn:Z1.
       + destruct p. exploit W; eauto.
       intros [A1 B1]. inv R. unfold struct_meminj. destr.
       exploit X; eauto. intros [C1 D1]. rewrite Z1 in D1. inv D1.
@@ -2688,7 +2686,6 @@ Proof.
       + unfold struct_meminj. destr. unfold struct_meminj in Z. destr_in Z.
       exploit X; eauto. intros [C1 D1]. congruence. *)
   } *)
-  admit. (*ok*)
   unfold Mem.stackseq in *. congruence.
 
 (* return *)

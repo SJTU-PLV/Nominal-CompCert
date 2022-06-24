@@ -872,38 +872,35 @@ Lemma external_call_parallel_rule:
   external_call ef ge1 vargs1 m1 t vres1 m1' ->
   m2 |= minjection j m1 ** globalenv_inject ge1 ge2 j m1 ** P ->
   Val.inject_list j vargs1 vargs2 ->
-  Mem.support m1 = Mem.support m2 ->
-  exists j' vres2 m2',
+  exists vres2 m2',
      external_call ef ge2 vargs2 m2 t vres2 m2'
-  /\ Val.inject j' vres1 vres2
+  /\ Val.inject j vres1 vres2
   /\ Mem.unchanged_on (loc_unmapped j) m1 m1'
-  /\ m2' |= minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
-  /\ inject_incr j j'
-  /\ inject_separated j j' m1 m2
-  /\ Mem.inject j' m1' m2'.
+  /\ m2' |= minjection j m1' ** globalenv_inject ge1 ge2 j m1' ** P
+  /\ Mem.inject j m1' m2'.
 Proof.
-  intros until vargs2; intros CALL SEP ARGS SUP.
+  intros until vargs2; intros CALL SEP ARGS.
   destruct SEP as (A & B & C). simpl in A.
   exploit external_call_mem_inject; eauto. apply B.
-  intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & INCR & ISEP).
+  intros (vres2 & m2' & CALL' & RES & INJ'& UNCH1 & UNCH2).
   assert (MAXPERMS: forall b ofs p,
             Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p).
   { intros. eapply external_call_max_perm; eauto. }
-  exists j', vres2, m2'; intuition auto.
+  exists vres2, m2'; intuition auto.
   split; [|split].
 - exact INJ'.
 - apply (m_invar _ m2).
-+ apply globalenv_inject_incr with j m1; auto.
++ rewrite globalenv_support in B; eauto.
   eapply Mem.unchanged_on_support; eauto.
 + eapply Mem.unchanged_on_implies; eauto.
   intros; red; intros; red; intros.
   eelim C; eauto. simpl. exists b0, delta; auto.
 - red; intros. destruct H as (b0 & delta & J' & E).
   destruct (j b0) as [[b' delta'] | ] eqn:J.
-+ erewrite INCR in J' by eauto. inv J'.
++ inv J'.
   eelim C; eauto. simpl. exists b0, delta; split; auto. apply MAXPERMS; auto.
   eapply Mem.valid_block_inject_1; eauto.
-+ exploit ISEP; eauto. intros (X & Y). elim Y. eapply m_valid; eauto.
++ congruence.
 Qed.
 
 Lemma alloc_parallel_rule_2:
@@ -1067,7 +1064,6 @@ Lemma return_frame_parallel_rule_2:
     m2' |= minjection j m1' ** P.
 Proof.
   intros m1 m1' m2 m2'  j P MINJ POP1 POP2.
-  Search Mem.return_frame.
   exploit Mem.return_frame_inject. eauto. apply MINJ. eauto. eauto.
   intros INJ.
   destruct MINJ as (MINJ & PM & DISJ).

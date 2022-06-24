@@ -955,7 +955,7 @@ Theorem external_call_match:
 Proof.
   intros until am; intros EC GENV ARGS MM NOSTACK.
   (* Part 1: using ec_mem_inject *)
-  exploit (@external_call_mem_inject ef ge ge vargs m t vres m' (inj_of_bc bc) m vargs).
+  exploit (@external_call_mem_inject' ef ge ge vargs m t vres m' (inj_of_bc bc) m vargs).
   apply inj_of_bc_preserves_globals; auto.
   exact EC.
   eapply mmatch_inj; eauto. eapply mmatch_below; eauto.
