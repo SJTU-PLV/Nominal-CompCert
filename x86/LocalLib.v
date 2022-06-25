@@ -10,10 +10,10 @@ Require Import CheckDef.
 Require Import Errors Memdata.
 Import ListNotations.
 
-(* CompCertELF/common/Values *)
-Inductive opt_lessdef {A:Type} : option A -> option A -> Prop :=
-| opt_lessdef_none v : opt_lessdef None v
-| opt_lessdef_some v : opt_lessdef (Some v) (Some v).
+(* (* CompCertELF/common/Values *) *)
+(* Inductive opt_lessdef {A:Type} : option A -> option A -> Prop := *)
+(* | opt_lessdef_none v : opt_lessdef None v *)
+(* | opt_lessdef_some v : opt_lessdef (Some v) (Some v). *)
 
 
 Definition alignw:Z := 16.
@@ -721,7 +721,7 @@ Proof.
 Qed.
 
 Lemma val_of_optbool_lessdef : forall j v1 v2,
-    (* NCC: *)(*Val.*)opt_lessdef v1 v2 -> Val.inject j (Val.of_optbool v1) (Val.of_optbool v2).
+    (* NCC: *)Val.opt_lessdef v1 v2 -> Val.inject j (Val.of_optbool v1) (Val.of_optbool v2).
 Proof.
   intros. destruct v1; auto.
   simpl. inv H. destruct b; constructor.

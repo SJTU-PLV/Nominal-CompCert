@@ -122,12 +122,13 @@ BACKEND=\
   Asmlabelgen.v \
   LocalLib.v Jumptablegen.v CheckDef.v\
   RelocProgram.v \
-  Symbtablegen.v \
+  Symbtablegen.v Symbtablegenproof.v\
   Reloctablesgen.v \
   RelocBingen.v \
   TranslateInstr1.v\
   AsmLongInt.v\
-  RelocProgSemantics.v RelocProgSemantics1.v
+  RelocProgSemantics.v RelocProgSemantics1.v\
+  AsmInject.v
 
 # Encoding of data into bytes
 
