@@ -690,8 +690,7 @@ Inductive step (ge: Genv.t) : state -> trace -> state -> Prop :=
         (ARGS: extcall_arguments (rs # RSP <- (Val.offset_ptr (rs RSP) (Ptrofs.repr (size_chunk Mptr)))) m (ef_sig ef) args),
         external_call ef (Genv.genv_senv ge) args m t res m' ->
           rs' = (set_pair (loc_external_result (ef_sig ef)) res
-                          (undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil)
-                                      (undef_regs (map preg_of destroyed_at_call) rs)))
+                          (undef_caller_save_regs rs))
                   #PC <- ra
                   #RA <- Vundef
                   #RSP <- (Val.offset_ptr (rs RSP) (Ptrofs.repr (size_chunk Mptr))) ->
