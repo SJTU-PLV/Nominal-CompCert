@@ -1743,188 +1743,207 @@ Lemma exec_instr_step : forall j rs1 rs2 m1 m2 rs1' m1' i ofs f b
       exec_instr instr_size tge i rs2 m2 = Next rs2' m2' /\
       match_states (State rs1' m1') (State rs2' m2').
 Proof.
-Admitted.
 
-(*   intros. *)
-(*   destruct i; inv H2; simpl in *;  *)
-(*     try first [solve_store_load | *)
-(*                solve_match_states]. *)
+  intros.
+  destruct i; inv H2; simpl in *;
+    try first [solve_store_load |
+               solve_match_states].
 
-(*   - (* Pmov_rs *) *)
-(*     apply nextinstr_nf_pres_inject. *)
-(*     apply regset_inject_expand; auto. *)
-(*     inv MATCHSMINJ. *)
-(*     unfold Globalenvs.Genv.symbol_address. *)
-(*     destruct (Globalenvs.Genv.find_symbol ge id) eqn:FINDSYM; auto. *)
-(*     exploit agree_inj_globs0; eauto. *)
-(*     intros (b1 & ofs1 & GLBL & JB). *)
-(*     erewrite Genv.find_sym_to_addr with (ofs:=ofs1); eauto. *)
-(*     rewrite <- (Ptrofs.add_zero_l ofs1). *)
-(*     eapply Val.inject_ptr; eauto. *)
-(*     rewrite Ptrofs.repr_unsigned. auto. *)
+  - (* Pmov_rs *)
+    apply nextinstr_nf_pres_inject.
+    apply regset_inject_expand; auto.
+    inv MATCHSMINJ.
+    unfold Globalenvs.Genv.symbol_address.
+    destruct (Globalenvs.Genv.find_symbol ge id) eqn:FINDSYM; auto.
+    exploit agree_inj_globs0; eauto.
+    intros (b1 & ofs1 & GLBL & JB).
+    erewrite Genv.find_sym_to_addr with (ofs:=ofs1); eauto.
+    rewrite <- (Ptrofs.add_zero_l ofs1).
+    eapply Val.inject_ptr; eauto.
+    rewrite Ptrofs.repr_unsigned. auto.
 
-(*   (* Divisions *) *)
-(*   - destr_match_outcome.  *)
-(*     generalize (RSINJ Asm.RDX). generalize (RSINJ Asm.RAX). generalize (RSINJ r1). *)
-(*     rewrite EQ, EQ0, EQ1. inversion 1; subst. inversion 1; subst. inversion 1; subst. *)
-(*     eexists; eexists. split. simpl. rewrite EQ2. auto. *)
-(*     eapply match_states_intro; eauto with inject_db. *)
+  (* Divisions *)
+  - destr_match_outcome.
+    generalize (RSINJ Asm.RDX). generalize (RSINJ Asm.RAX). generalize (RSINJ r1).
+    rewrite EQ, EQ0, EQ1. inversion 1; subst. inversion 1; subst. inversion 1; subst.
+    eexists; eexists. split. simpl. rewrite EQ2. auto.
+    eapply match_states_intro; eauto with inject_db.
 
-(*   - destr_match_outcome.  *)
-(*     generalize (RSINJ Asm.RDX). generalize (RSINJ Asm.RAX). generalize (RSINJ r1). *)
-(*     rewrite EQ, EQ0, EQ1. inversion 1; subst. inversion 1; subst. inversion 1; subst. *)
-(*     eexists; eexists. split. simpl. rewrite EQ2. auto. *)
-(*     eapply match_states_intro; eauto with inject_db. *)
+  - destr_match_outcome.
+    generalize (RSINJ Asm.RDX). generalize (RSINJ Asm.RAX). generalize (RSINJ r1).
+    rewrite EQ, EQ0, EQ1. inversion 1; subst. inversion 1; subst. inversion 1; subst.
+    eexists; eexists. split. simpl. rewrite EQ2. auto.
+    eapply match_states_intro; eauto with inject_db.
 
-(*   - destr_match_outcome.  *)
-(*     generalize (RSINJ Asm.RDX). generalize (RSINJ Asm.RAX). generalize (RSINJ r1). *)
-(*     rewrite EQ, EQ0, EQ1. inversion 1; subst. inversion 1; subst. inversion 1; subst. *)
-(*     eexists; eexists. split. simpl. rewrite EQ2. auto. *)
-(*     eapply match_states_intro; eauto with inject_db. *)
+  - destr_match_outcome.
+    generalize (RSINJ Asm.RDX). generalize (RSINJ Asm.RAX). generalize (RSINJ r1).
+    rewrite EQ, EQ0, EQ1. inversion 1; subst. inversion 1; subst. inversion 1; subst.
+    eexists; eexists. split. simpl. rewrite EQ2. auto.
+    eapply match_states_intro; eauto with inject_db.
 
-(*   - destr_match_outcome.  *)
-(*     generalize (RSINJ Asm.RDX). generalize (RSINJ Asm.RAX). generalize (RSINJ r1). *)
-(*     rewrite EQ, EQ0, EQ1. inversion 1; subst. inversion 1; subst. inversion 1; subst. *)
-(*     eexists; eexists. split. simpl. rewrite EQ2. auto. *)
-(*     eapply match_states_intro; eauto with inject_db. *)
+  - destr_match_outcome.
+    generalize (RSINJ Asm.RDX). generalize (RSINJ Asm.RAX). generalize (RSINJ r1).
+    rewrite EQ, EQ0, EQ1. inversion 1; subst. inversion 1; subst. inversion 1; subst.
+    eexists; eexists. split. simpl. rewrite EQ2. auto.
+    eapply match_states_intro; eauto with inject_db.
      
-(*   - (* Pcmov *) *)
-(*     exploit (eval_testcond_inject j c rs1 rs2); eauto. *)
-(*     intros.  *)
-(*     destr_eval_testcond; try solve_match_states. *)
-(*     destruct (Asm.eval_testcond c rs2) eqn:EQ'. destruct b0; solve_match_states. *)
-(*     solve_match_states. *)
-
-(*   - (* Pjmp_l *) *)
-(*     assert (instr_valid (Pjmp_l l)) as NJ. *)
-(*     { eapply instr_is_valid; eauto. } *)
-(*     red in NJ. cbn in NJ. contradiction. *)
-
-(*   - (* Pjmp *) *)
-(*     repeat destr_in H4. *)
-(*     destruct ros; simpl in *. *)
-(*     + do 2 eexists; split; eauto. *)
-(*       econstructor; eauto. *)
-(*       apply regset_inject_expand; auto. *)
-(*     + do 2 eexists; split; eauto. *)
-(*       econstructor; eauto. *)
-(*       apply regset_inject_expand; auto. *)
-(*       inversion MATCHSMINJ. *)
-(*       unfold Globalenvs.Genv.symbol_address. destr_match; auto. *)
-(*       exploit (agree_inj_globs0 i b0); eauto. *)
-(*       intros (b1 & ofs1 & LBLOFS & JB). *)
-(*       erewrite Genv.find_sym_to_addr with (ofs:=ofs1); eauto. *)
-(*       rewrite <- (Ptrofs.add_zero_l ofs1). *)
-(*       eapply Val.inject_ptr; eauto. *)
-(*       rewrite Ptrofs.repr_unsigned. auto. *)
-
-(*   - (* Pjcc *) *)
-(*     assert (instr_valid (Pjcc c l)) as NJ. *)
-(*     { eapply instr_is_valid; eauto. } *)
-(*     red in NJ. cbn in NJ. contradiction. *)
+  - (* Pcmov *)
+    exploit (eval_testcond_inject (Mem.flat_inj (Mem.support m1')) c rs1 rs2); eauto.
+    intros. inv H2.
+    destr_eval_testcond; try solve_match_states.
+    (* destruct (Asm.eval_testcond c rs2) eqn:EQ'. destruct b0; solve_match_states. *)
+    (* solve_match_states. *)
+    destruct v;solve_match_states.
     
-(*   - (* Pjcc2 *) *)
-(*     assert (instr_valid (Pjcc2 c1 c2 l)) as NJ. *)
-(*     { eapply instr_is_valid; eauto. } *)
-(*     red in NJ. cbn in NJ. contradiction. *)
-
-(*   - (* Pjmptbl *) *)
-(*     admit. *)
-(* (***** Remove Proofs By Chris Start ******) *)
-(* (*       *)
-(*     assert (instr_valid (Pjmptbl r tbl)) as NJ. *)
-(*     { eapply instr_is_valid; eauto. } *)
-(*     red in NJ. cbn in NJ. contradiction. *)
-(* *) *)
-(* (***** Remove Proofs By Chris End ******) *)
-(*   - (* Pcall *)     *)
-(*     repeat destr_in H4. *)
-(*     generalize (RSINJ PC). *)
-(*     edestruct storev_mapped_inject' as (m2' & ST & MINJ'). apply MINJ. eauto. *)
-(*     apply Val.offset_ptr_inject. eauto. *)
-(*     apply Val.offset_ptr_inject. eauto. *)
-(*     do 2 eexists; split; eauto. simpl. *)
-(*     rewrite ST. eauto. *)
-(*     econstructor; eauto. *)
-(*     repeat apply regset_inject_expand; auto. *)
-(*     apply Val.offset_ptr_inject. eauto. *)
-(*     destruct ros; simpl; repeat apply regset_inject_expand; auto. *)
-(*     exploit (inject_symbol_address j i Ptrofs.zero); eauto. *)
-(*     apply Val.offset_ptr_inject. eauto. *)
-(*     eapply storev_pres_glob_block_valid; eauto.  *)
- 
-(*   - (* Pret *) *)
-(*     repeat destr_in H4. simpl. *)
-(*     exploit Mem.loadv_inject; eauto. intros (v2 & LD & VI). rewrite LD. *)
-(*     eexists _, _; split; eauto. econstructor; eauto. *)
-(*     repeat apply regset_inject_expand; auto. *)
-(*     apply Val.offset_ptr_inject. eauto. *)
-
-(*   - (* Pallocframe *) *)
-(*     assert (instr_valid (Pallocframe sz ofs_ra)) as NJ. *)
-(*     { eapply instr_is_valid; eauto. } *)
-(*     red in NJ. cbn in NJ. contradiction. *)
-
-(*   - (* Pfreeframe *) *)
-(*     assert (instr_valid (Pfreeframe sz ofs_ra)) as NJ. *)
-(*     { eapply instr_is_valid; eauto. } *)
-(*     red in NJ. cbn in NJ. contradiction. *)
-
-(*   - (* Pload_parent_pointer *) *)
-(*     assert (instr_valid (Pload_parent_pointer rd sz)) as NJ. *)
-(*     { eapply instr_is_valid; eauto. } *)
-(*     red in NJ. cbn in NJ. contradiction. *)
     
-(*   - (* Pjmp_l_rel *) *)
-(*     unfold Asm.goto_ofs in H4.  *)
-(*     destruct (rs1 Asm.PC) eqn:PC1; inv H4.  *)
-(*     destruct (Globalenvs.Genv.find_funct_ptr ge b0); inv H3. *)
-(*     generalize (RSINJ PC). rewrite PC1. *)
-(*     intros INJ. inv INJ. eauto. *)
-(*     eexists; eexists. split.  *)
-(*     unfold goto_ofs.  *)
-(*     rewrite <- H4. eauto. *)
-(*     eapply match_states_intro; eauto. *)
-(*     apply regset_inject_expand; auto.  *)
-(*     rewrite H in *. inv PC1. inv H. *)
-(*     eapply Val.inject_ptr; eauto.  *)
-(*     repeat rewrite Ptrofs.add_assoc. f_equal. *)
-(*     match goal with *)
-(*     | [ |- _ = Ptrofs.add _ (Ptrofs.add ?b ?c) ] => *)
-(*       rewrite (Ptrofs.add_commut b c) *)
-(*     end. *)
-(*     match goal with *)
-(*     | [ |- _ = Ptrofs.add ?a ?b ] => *)
-(*       rewrite (Ptrofs.add_commut a b) *)
-(*     end. *)
-(*     repeat rewrite Ptrofs.add_assoc. f_equal. *)
-(*     apply Ptrofs.add_commut. *)
+  - (* Pjmp_l *)
+    assert (instr_valid (Pjmp_l l)) as NJ.
+    { eapply instr_is_valid; eauto. }
+    red in NJ. cbn in NJ. contradiction.
+
+  - (* Pjmp_s *)
+    repeat destr_in H4.    
+    do 2 eexists; split; eauto.
+    econstructor; eauto.
+    apply regset_inject_expand; auto.
+    inversion MATCHSMINJ.
+    unfold Globalenvs.Genv.symbol_address. destr_match; auto.
+    exploit (agree_inj_globs0 symb b0); eauto.
+    intros (b1 & ofs1 & LBLOFS & JB).
+    erewrite Genv.find_sym_to_addr with (ofs:=ofs1); eauto.
+    rewrite <- (Ptrofs.add_zero_l ofs1).
+    eapply Val.inject_ptr; eauto.
+    rewrite Ptrofs.repr_unsigned. auto.
+
+  - (* Pjmp_r *)
+    repeat destr_in H4.
+    do 2 eexists; split; eauto.
+    econstructor; eauto.
+    apply regset_inject_expand; auto.
+      
+  - (* Pjcc *)
+    assert (instr_valid (Pjcc c l)) as NJ.
+    { eapply instr_is_valid; eauto. }
+    red in NJ. cbn in NJ. contradiction.
     
-(*   - (* Pjcc_rel *) *)
-(*     exploit (eval_testcond_inject j c rs1 rs2); eauto. *)
-(*     intros. *)
-(*     destr_eval_testcond; try solve_match_states. *)
-(*     exploit goto_ofs_pres_mem; eauto. intros. subst. *)
-(*     generalize (goto_ofs_inject _ _ _ _ _ m1' m2 _ _ RSINJ H4). *)
-(*     intros (rs2' & GOTO & RINJ'). *)
-(*     exists rs2', m2. split; auto. *)
-(*     eapply match_states_intro; eauto. *)
+  - (* Pjcc2 *)
+    assert (instr_valid (Pjcc2 c1 c2 l)) as NJ.
+    { eapply instr_is_valid; eauto. }
+    red in NJ. cbn in NJ. contradiction.
 
-(*   - (* Pjcc2_rel *) *)
-(*     exploit (eval_testcond_inject j c1 rs1 rs2); eauto. *)
-(*     exploit (eval_testcond_inject j c2 rs1 rs2); eauto. *)
-(*     intros ELF1 ELF2. *)
-(*     destr_eval_testcond; try solve_match_states. *)
-(*     exploit goto_ofs_pres_mem; eauto. intros. subst. *)
-(*     generalize (goto_ofs_inject _ _ _ _ _ m1' m2 _ _ RSINJ H4). *)
-(*     intros (rs2' & GOTO & RINJ'). *)
-(*     exists rs2', m2. split; auto. *)
-(*     eapply match_states_intro; eauto. *)
+  - (* Pjmptbl *)
+    assert (instr_valid (Pjmptbl r tbl)) as NJ.
+    { eapply instr_is_valid; eauto. }
+    red in NJ. cbn in NJ. contradiction.
 
-(*   - (* Pjmptbl_rel *) *)
-(*     admit. *)
-(* (***** Remove Proofs By Chris Start ******) *)
-(* (*       *)
+  - (* Pcall_s *)
+    repeat destr_in H4.
+    generalize (RSINJ PC).
+    (* support after storev *)
+    exploit (Mem.support_storev). eapply Heqo. intros SUPEQ.
+    rewrite SUPEQ in *.
+    edestruct Mem.storev_mapped_inject as (m2' & ST & MINJ'). apply MINJ. eauto.
+    apply Val.offset_ptr_inject. eauto.
+    apply Val.offset_ptr_inject. eauto.
+    do 2 eexists; split; eauto. simpl.
+    rewrite ST. eauto.
+    econstructor; eauto.
+    repeat apply regset_inject_expand; auto.
+    apply Val.offset_ptr_inject. eauto.
+    (* destruct ros; simpl; repeat apply regset_inject_expand; auto. *)
+    exploit (inject_symbol_address). eapply MATCHSMINJ. eauto.
+    apply Val.offset_ptr_inject. eauto.
+    eapply storev_pres_glob_block_valid; eauto.
+    
+  - (* Pcall_r *)
+    repeat destr_in H4.
+    generalize (RSINJ PC).
+    (* support after storev *)
+    exploit (Mem.support_storev). eapply Heqo. intros SUPEQ.
+    rewrite SUPEQ in *.
+    edestruct Mem.storev_mapped_inject as (m2' & ST & MINJ'). apply MINJ. eauto.
+    apply Val.offset_ptr_inject. eauto.
+    apply Val.offset_ptr_inject. eauto.
+    do 2 eexists; split; eauto. simpl.
+    rewrite ST. eauto.
+    econstructor; eauto.
+    repeat apply regset_inject_expand; auto.
+    apply Val.offset_ptr_inject. eauto.
+    apply Val.offset_ptr_inject. eauto.
+    eapply storev_pres_glob_block_valid; eauto.
+    
+  - (* Pret *)
+    repeat destr_in H4. simpl.
+    unfold loadvv in *. destr_in Heqo. 
+    exploit Mem.loadv_inject;eauto. intros (v2 & LD & VI). rewrite LD.
+    destr_in Heqo;inv Heqo;inv VI;
+    eexists _, _; split; eauto;
+    econstructor; eauto;
+    repeat apply regset_inject_expand; auto;
+    try apply Val.offset_ptr_inject; eauto.
+    
+  - (* Pallocframe *)
+    assert (instr_valid (Pallocframe sz ofs_ra ofs_link)) as NJ.
+    { eapply instr_is_valid; eauto. }
+    red in NJ. cbn in NJ. contradiction.
+
+  - (* Pfreeframe *)
+    assert (instr_valid (Pfreeframe sz ofs_ra ofs_link)) as NJ.
+    { eapply instr_is_valid; eauto. }
+    red in NJ. cbn in NJ. contradiction.
+    
+  - (* Pjmp_l_rel *)
+    unfold Asm.goto_ofs in H4.
+    destruct (rs1 Asm.PC) eqn:PC1; inv H4.
+    destruct (Globalenvs.Genv.find_funct_ptr ge b0); inv H3.
+    generalize (RSINJ PC). rewrite PC1.
+    intros INJ. inv INJ. eauto.
+    eexists; eexists. split.
+    unfold goto_ofs.
+    rewrite <- H4. eauto.
+    eapply match_states_intro; eauto.
+    apply regset_inject_expand; auto.
+    rewrite H in *. inv PC1. inv H.
+    eapply Val.inject_ptr; eauto.
+    repeat rewrite Ptrofs.add_assoc. f_equal.
+    match goal with
+    | [ |- _ = Ptrofs.add _ (Ptrofs.add ?b ?c) ] =>
+      rewrite (Ptrofs.add_commut b c)
+    end.
+    match goal with
+    | [ |- _ = Ptrofs.add ?a ?b ] =>
+      rewrite (Ptrofs.add_commut a b)
+    end.
+    repeat rewrite Ptrofs.add_assoc. f_equal.
+    apply Ptrofs.add_commut.
+    
+  - (* Pjcc_rel *)
+    exploit (eval_testcond_inject (Mem.flat_inj (Mem.support m1)) c rs1 rs2); eauto.
+    intros.
+    destr_eval_testcond; try solve_match_states.
+    exploit goto_ofs_pres_mem; eauto. intros. subst.
+    generalize (goto_ofs_inject _ _ _ _ _ m1' m2 _ _ RSINJ H4).
+    intros (rs2' & GOTO & RINJ').
+    exists rs2', m2. split; auto.
+    eapply match_states_intro; eauto.
+
+  - (* Pjcc2_rel *)
+    exploit (eval_testcond_inject (Mem.flat_inj (Mem.support m1)) c1 rs1 rs2); eauto.
+    exploit (eval_testcond_inject (Mem.flat_inj (Mem.support m1)) c2 rs1 rs2); eauto.
+    intros ELF1 ELF2.
+    destr_eval_testcond; try solve_match_states.
+    exploit goto_ofs_pres_mem; eauto. intros. subst.
+    generalize (goto_ofs_inject _ _ _ _ _ m1' m2 _ _ RSINJ H4).
+    intros (rs2' & GOTO & RINJ').
+    exists rs2', m2. split; auto.
+    eapply match_states_intro; eauto.
+
+  - (* Pjmptbl_rel *)
+    assert (instr_valid (Pjmptbl_rel r tbl)) as NJ.
+    { eapply instr_is_valid; eauto. }
+    red in NJ. cbn in NJ. contradiction.
+(***** Remove Proofs By Chris Start ******)
+(*       *)
 (*     destruct (rs1 r) eqn:REQ; inv H4. *)
 (*     destruct (list_nth_z tbl (Int.unsigned i)) eqn:LEQ; inv H3. *)
 (*     assert (rs2 r = Vint i) by *)
@@ -1935,9 +1954,9 @@ Admitted.
 (*     exists rs2', m2. rewrite H2. rewrite LEQ. *)
 (*     split; auto. *)
 (*     eapply match_states_intro; eauto. *)
-(* *) *)
-(* (***** Remove Proofs By Chris End ******) *)
-(* Admitted. *)
+(* *)
+(***** Remove Proofs By Chris End ******)
+Qed.
 
 (* copy from SSAsmproof.v *)
 Lemma val_inject_undef_caller_save_regs:

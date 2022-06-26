@@ -439,11 +439,12 @@ Definition exec_instr (ge: Genv.t) (i: instruction) (rs: regset) (m: mem) : outc
   | Ptestq_ri r1 n =>
       Next (nextinstr (compare_longs (Val.andl (rs r1) (Vlong n)) (Vlong Int64.zero) rs m) ) m
   | Pcmov c rd r1 =>
-      match eval_testcond c rs with
-      | Some true => Next (nextinstr (rs#rd <- (rs#r1)) ) m
-      | Some false => Next (nextinstr rs ) m
-      | None => Next (nextinstr (rs#rd <- Vundef) ) m
-      end
+    let v :=
+        match eval_testcond c rs with
+        | Some b => if b then rs#r1 else rs#rd
+        | None   => Vundef
+      end in
+      Next (nextinstr (rs#rd <- v)) m
   | Psetcc c rd =>
       Next (nextinstr (rs#rd <- (Val.of_optbool (eval_testcond c rs))) ) m
   (** Arithmetic operations over double-precision floats *)
@@ -533,7 +534,7 @@ Definition exec_instr (ge: Genv.t) (i: instruction) (rs: regset) (m: mem) : outc
   (* | Pcall (inl r) sg => *)
   (*     Next (rs#RA <- (Val.offset_ptr rs#PC sz) #PC <- (rs r)) m *)
   | Pret =>
-        match Mem.loadv Mptr m rs#RSP with
+      match loadvv Mptr m rs#RSP with
       | None => Stuck
       | Some ra =>
         let sp := Val.offset_ptr (rs RSP) (Ptrofs.repr (size_chunk Mptr)) in
