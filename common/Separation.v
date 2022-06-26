@@ -913,11 +913,13 @@ Lemma alloc_parallel_rule_2:
   hi = delta + Z.max 0 sz1 ->
   0 <= sz2 <= Ptrofs.max_unsigned ->
   0 <= delta -> hi <= sz2 ->
+  same_at_glob j ->
   exists j',
      m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
   /\ inject_incr j j'
   /\ j' b1 = Some(b2, delta)
-  /\ inject_separated j j' m1 m2 .
+  /\ inject_separated j j' m1 m2
+  /\ same_at_glob j'.
 (*=======
   /\ (forall b, b <> b1 -> j' b = j b).
 >>>>>>> a091c4c
@@ -931,7 +933,7 @@ Proof.
     eapply Mem.valid_block_inject_1. eauto. apply sep_proj1 in H. eexact H. }
   assert (Y: inject_separated j j1 m1 m2).
   { unfold j1; red; intros. destruct (eq_block b0 b1).
-  - inversion H9; clear H9; subst b3 delta0 b0. split; eapply Mem.fresh_block_alloc; eauto.
+  - inversion H10; clear H10; subst b3 delta0 b0. split; eapply Mem.fresh_block_alloc; eauto.
   - congruence. }
   rewrite sep_swap in H. eapply globalenv_inject_incr with (j' := j1) in H; eauto. rewrite sep_swap in H.
   clear X Y.
@@ -940,16 +942,21 @@ Proof.
   exists j'; split; auto.
   rewrite sep_swap4 in A. rewrite sep_swap4. apply globalenv_inject_incr with j1 m1; eauto.
 - red; unfold j1; intros. destruct (eq_block b b1). congruence. rewrite D; auto.
-- red; unfold j1; intros. destruct (eq_block b0 b1). congruence. rewrite D in H9 by auto. congruence.
+- red; unfold j1; intros. destruct (eq_block b0 b1). congruence. rewrite D in H10 by auto. congruence.
 - rewrite (Mem.support_alloc m1 0 sz1 m1' b1); eauto.
 - split; auto.
   split; auto.
-  red. intros b0 b3 delta0 H8 H9.
+  split.
+  red. intros b0 b3 delta0 H9 H10.
   destruct (eq_block b0 b1).
   + subst.
-    rewrite C in H9. inversion H9. subst delta0 b3.
+    rewrite C in H10. inversion H10. subst delta0 b3.
     eauto with mem.
-  + rewrite D in H9; congruence.
+  + rewrite D in H10; congruence.
+  + unfold same_at_glob in *. intros.
+    destruct (eq_block (Global id) b1).
+    apply Mem.alloc_result_stack in H0. rewrite <- e in H0. inv H0.
+    rewrite D in H9; eauto.
 Qed.
 
 Lemma alloc_frame_unchanged_on:

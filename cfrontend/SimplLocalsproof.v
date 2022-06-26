@@ -1172,6 +1172,7 @@ Theorem match_envs_alloc_variables:
   list_norepet (var_names vars) ->
   Mem.inject j m tm ->
   Mem.stackseq m tm ->
+  same_at_glob j ->
   pe = build_penv cenv vars idx1 idx2 ->
   nextblock_pos m idx1 ->
   nextblock_pos tm idx2 ->
@@ -1184,6 +1185,7 @@ Theorem match_envs_alloc_variables:
                         te (create_undef_temps (add_lifted cenv vars temps)) (Mem.support tm) (Mem.support tm')
   /\ Mem.inject j' m' tm'
   /\ inject_incr j j'
+  /\ same_at_glob j'
   /\ (forall b, Mem.valid_block m b -> j' b = j b)
   /\ (forall b b' delta, j' b = Some(b', delta) -> Mem.valid_block tm b' -> j' b = j b)
   /\ (forall id ty, In (id, ty) vars -> VSet.mem id cenv = false -> exists b, te!id = Some(b, ty))
@@ -1202,11 +1204,11 @@ Proof.
   exploit F; eauto. intros [b [P R]].
   destruct (VSet.mem id cenv) eqn:?.
   (* local var, lifted *)
-  destruct R as [U V]. exploit H6; eauto. intros [chunk X].
+  destruct R as [U V]. exploit H7; eauto. intros [chunk X].
   eapply match_var_lifted with (v := Vundef) (tv := Vundef); eauto.
   eapply alloc_variables_initial_value; eauto.
   eapply alloc_var'_var; eauto.
-   red. unfold empty_env; intros. rewrite PTree.gempty in H8; congruence.
+   red. unfold empty_env; intros. rewrite PTree.gempty in H9; congruence.
   apply create_undef_temps_charact with ty.
   unfold add_lifted. apply in_or_app. left.
   rewrite filter_In. auto.
@@ -1231,7 +1233,7 @@ Proof.
   eapply alloc_variables_injective.
   eapply alloc_var'_var; eauto.
   rewrite PTree.gempty. congruence.
-  intros. rewrite PTree.gempty in H11. congruence.
+  intros. rewrite PTree.gempty in H12. congruence.
   eauto. eauto. auto.
 
   (* range *)
@@ -1269,7 +1271,24 @@ Proof.
   eapply alloc_variables_support; eauto.
 
   (* other properties *)
-  intuition auto. edestruct F as (b & X & Y); eauto. rewrite H9 in Y.
+  intuition auto.
+
+  (* same at glob *)
+  unfold same_at_glob in *. intros.
+  destruct (In_dec eq_block(Global id) blocks).
+  exploit Mem.nextblock_stack; eauto.
+  instantiate (1:= m).
+  intros (f & path & pos & NEXT).
+  exploit nextblock_alloc_vars; eauto.
+  intros (p' & AA & BB). congruence.
+  erewrite D in H9; eauto.
+  eapply alloc_vars_inv' with (b:= Global id) in H as H10; eauto.
+  inv B.
+  destruct (Mem.sup_dec (Global id) (Mem.support m')).
+  apply H10 in s. destruct s. auto. elim n. eauto.
+  apply mi_freeblocks in n0. congruence.
+  (* env *)
+  edestruct F as (b & X & Y); eauto. rewrite H10 in Y.
   destruct Y as (tb & U & V). exists tb; auto.
 Qed.
 
@@ -1850,6 +1869,14 @@ Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> sup -> sup
       match_cont f cenv (Kcall optid fn e le k)
                         (Kcall optid tfn te tle tk) m bound tbound.
 
+Lemma match_cont_sag:
+  forall f cenv k tk m b tb,
+    match_cont f cenv k tk m b tb ->
+    same_at_glob f.
+Proof.
+  induction 1; eauto.
+Qed.
+
 (** Invariance property by change of memory and injection *)
 
 Lemma match_cont_invariant:
@@ -1858,13 +1885,14 @@ Lemma match_cont_invariant:
   (forall b chunk v,
     f b = None -> sup_In b bound -> Mem.load chunk m b 0 = Some v -> Mem.load chunk m' b 0 = Some v) ->
   inject_incr f f' ->
+  same_at_glob f' ->
   (forall b, sup_In b bound -> f' b = f b) ->
   (forall b b' delta, f' b = Some(b', delta) -> sup_In b' tbound -> f' b = f b) ->
   match_cont f' cenv k tk m' bound tbound.
 Proof.
-  induction 1; intros LOAD INCR INJ1 INJ2; econstructor; eauto.
+  induction 1; intros LOAD INCR INJB INJ1 INJ2; econstructor; eauto.
 (* globalenvs *)
-  etransitivity; eauto. constructor; eauto. intros.
+  etransitivity; eauto. instantiate (1:= INJB). constructor; eauto. intros.
   destruct (Mem.sup_dec b1 bound). erewrite INJ1 in H1; eauto. congruence.
   destruct (Mem.sup_dec b2 tbound). erewrite INJ2 in H1; eauto. congruence.
   eauto.
@@ -1877,7 +1905,7 @@ Proof.
   intros; apply LOAD; auto. inv H0. auto.
   intros; apply INJ1. inv H0. auto.
   intros; eapply INJ2; eauto. inv H0; auto.
-Admitted. (*preserve of s_a_g internally *)
+Qed.
 
 (** Invariance by assignment to location "above" *)
 
@@ -1896,6 +1924,23 @@ Proof.
   eapply Mem.load_storebytes_other; eauto. left. congruence.
 - (* bitfield *)
   inv H5. eapply Mem.load_store_other; eauto. left. congruence.
+- eapply match_cont_sag; eauto.
+Qed.
+
+
+(** Invariance by builtin calls *)
+
+Lemma match_cont_builtin:
+  forall f cenv k tk m bound tbound tm m',
+  match_cont f cenv k tk m bound tbound ->
+  Mem.unchanged_on (loc_unmapped f) m m' ->
+  Mem.sup_include bound (Mem.support m) ->
+  Mem.sup_include tbound (Mem.support tm) ->
+  match_cont f cenv k tk m' bound tbound.
+Proof.
+  intros. eapply match_cont_invariant; eauto.
+  intros. eapply Mem.load_unchanged_on; eauto.
+  eapply match_cont_sag; eauto.
 Qed.
 
 (** Invariance by external calls *)
@@ -1906,6 +1951,7 @@ Lemma match_cont_extcall:
   Mem.unchanged_on (loc_unmapped f) m m' ->
   inject_incr f f' ->
   inject_separated f f' m tm ->
+  same_at_glob f' ->
   Mem.sup_include bound (Mem.support m) -> Mem.sup_include tbound (Mem.support tm) ->
   match_cont f' cenv k tk m' bound tbound.
 Proof.
@@ -1914,10 +1960,10 @@ Proof.
   red in H2. intros. destruct (f b) as [[b' delta] | ] eqn:?. auto.
   destruct (f' b) as [[b' delta] | ] eqn:?; auto.
   exploit H2; eauto. unfold Mem.valid_block. intros [A B].
-  apply H3 in H5. congruence.
+  apply H4 in H6. congruence.
   red in H2. intros. destruct (f b) as [[b'' delta''] | ] eqn:?. auto.
   exploit H2; eauto. unfold Mem.valid_block. intros [A B].
-  apply H4 in H6. congruence.
+  apply H5 in H7. congruence.
 Qed.
 
 (** Invariance by change of bounds *)
@@ -1930,8 +1976,9 @@ Lemma match_cont_incr_bounds:
   match_cont f cenv k tk m bound' tbound'.
 Proof.
   induction 1; intros; econstructor; eauto; try extlia.
+  instantiate (1:= Hg).
   etransitivity; eauto. constructor; eauto. congruence.
-Admitted. (*preserve of s_a_g internally *)
+Qed.
 
 (** [match_cont] and call continuations. *)
 
@@ -2008,6 +2055,7 @@ Proof.
   intros [A B]. congruence. eapply Mem.valid_access_valid_block.
   apply Mem.load_valid_access in H7. eapply Mem.valid_access_implies in H7.
   eauto. constructor.
+  eapply match_cont_sag; eauto.
   rewrite (free_list_support _ _ _ H3). inv H; auto.
   apply Mem.sup_include_trans with hi. auto. auto.
   rewrite (free_list_support _ _ _ H4). inv H; auto.
@@ -2037,7 +2085,7 @@ Inductive match_states: state -> state -> Prop :=
         (MENV: match_envs j (cenv_for f) e le m lo hi te tle tlo thi)
         (MCONT: match_cont j (cenv_for f) k tk m lo tlo)
         (MINJ: Mem.inject j m tm)
-        (INJB: same_at_glob j)
+(*        (INJB: same_at_glob j) *)
 (*        (VINJ: j = struct_meminj (Mem.support m))*)
         (MSTK: Mem.stackseq m tm)
         (COMPAT: compat_cenv (addr_taken_stmt s) (cenv_for f))
@@ -2050,7 +2098,7 @@ Inductive match_states: state -> state -> Prop :=
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (VINJVF: Val.inject j vf tvf)
         (MINJ: Mem.inject j m tm)
-        (INJB: same_at_glob j)
+(*        (INJB: same_at_glob j) *)
 (*        (VINJ: j = struct_meminj (Mem.support m)) *)
         (MSTK: Mem.stackseq m tm)
         (AINJ: Val.inject_list j vargs tvargs)
@@ -2063,7 +2111,7 @@ Inductive match_states: state -> state -> Prop :=
       forall v k m tv tk tm j
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (MINJ: Mem.inject j m tm)
-        (INJB: same_at_glob j)
+(*        (INJB: same_at_glob j) *)
 (*        (VINJ: j = struct_meminj (Mem.support m)) *)
         (MSTK: Mem.stackseq m tm)
         (RINJ: Val.inject j v tv),
@@ -2349,6 +2397,7 @@ Proof.
   econstructor. eauto. eauto.
   eapply match_envs_invariant; eauto.
   eapply match_cont_invariant; eauto.
+  eapply match_cont_sag; eauto.
   eauto. eauto.
   (* erewrite <- assign_loc_support; eauto.*)
   unfold Mem.stackseq in *.
@@ -2374,6 +2423,7 @@ Proof.
   rewrite typeof_simpl_expr. eauto.
   instantiate (1:=id).
   instantiate (1:=tvf).
+  eapply match_cont_sag in MCONT as INJB.
   inv B. apply INJB in H6. destruct H6. subst.
   rewrite Ptrofs.add_zero. auto.
   (* inv B. unfold struct_meminj in H6. destr_in H6. simpl in H6. inv H6.*)
@@ -2395,8 +2445,7 @@ Proof.
   (*dummy proofs*)
   eapply match_envs_extcall; eauto.
   constructor; congruence.
-  eapply match_cont_extcall; eauto.
-  constructor; congruence.
+  eapply match_cont_builtin; eauto.
   inv MENV. eapply Mem.sup_include_trans. eauto. eauto.
   inv MENV; eapply Mem.sup_include_trans. eauto. eauto.
   eauto. eauto.
@@ -2477,7 +2526,7 @@ Proof.
   intro. eapply Mem.support_return_frame_1 in H0. apply H0.
   intro. eapply Mem.support_return_frame_1 in P'. apply P'.
   intros. erewrite Mem.load_return_frame; eauto.
-  eauto. eauto. eauto.
+  eauto.   eapply match_cont_sag; eauto.  eauto. eauto. eauto.
   (* eapply sinj_refl. erewrite <- free_list_support; eauto.
   intro. eapply Mem.support_return_frame_1 in H0. apply H0. *)
 
@@ -2500,7 +2549,7 @@ Proof.
   intro. eapply Mem.support_return_frame_1 in H2. apply H2.
   intro. eapply Mem.support_return_frame_1 in P'. apply P'.
   intros. erewrite Mem.load_return_frame; eauto.
-  eauto. eauto. eauto.
+  eauto. eapply match_cont_sag; eauto. eauto. eauto.
   (* eapply sinj_refl. erewrite <- free_list_support; eauto.
   intro. eapply Mem.support_return_frame_1 in H2. apply H2. *)
 
@@ -2522,7 +2571,7 @@ Proof.
   intro. eapply Mem.support_return_frame_1 in H1. apply H1.
   intro. eapply Mem.support_return_frame_1 in P'. apply P'.
   intros. erewrite Mem.load_return_frame; eauto.
-  eauto. eauto. eauto.
+  eauto. eapply match_cont_sag; eauto. eauto. eauto.
   (* eapply sinj_refl. erewrite <- free_list_support; eauto.
   intro. eapply Mem.support_return_frame_1 in H1. apply H1. *)
 
@@ -2578,10 +2627,12 @@ Proof.
   exploit nextblock_pos_1; eauto. intro.
   exploit Mem.alloc_frame_parallel_stackseq; eauto. intro. inv H7.
   exploit match_envs_alloc_variables; eauto.
+    specialize (MCONT (cenv_for f)).
+    eapply match_cont_sag. eauto.
     instantiate (1 := cenv_for_gen (addr_taken_stmt f.(fn_body)) (fn_params f ++ fn_vars f)).
     intros. eapply cenv_for_gen_by_value; eauto. rewrite VSF.mem_iff. eexact H8.
     intros. eapply cenv_for_gen_domain. rewrite VSF.mem_iff. eexact H7.
-  intros [j' [te [tm'' [A [B [C [D [E [F [G I]]]]]]]]]].
+  intros [j' [te [tm'' [A [B [C [D [E [F [G [I J]]]]]]]]]]].
   assert (K: list_forall2 val_casted vargs (map snd (fn_params f))).
   { apply val_casted_list_params. unfold type_of_function in FUNTY. congruence. }
   exploit store_params_correct.
@@ -2646,8 +2697,6 @@ Proof.
       destr; try congruence.
       erewrite bind_parameters_support in n0; eauto.
 }*)
-  
-  admit. (*local to do, true *)
   unfold Mem.stackseq in *. rewrite T.
   erewrite bind_parameters_support; eauto.
   eapply alloc_variables_parallel_stackseq; eauto.
@@ -2668,8 +2717,7 @@ Proof.
   apply plus_one. econstructor; eauto.
   econstructor; eauto.
   intros. apply match_cont_incr_bounds with (Mem.support m) (Mem.support tm).
-  eapply match_cont_extcall; eauto.
-  constructor; congruence.
+  eapply match_cont_builtin; eauto.
   rewrite SUP. eauto. rewrite TSUP. eauto.
 (*  {
     apply Axioms.extensionality. intro b.
@@ -2694,7 +2742,7 @@ Proof.
   apply plus_one. econstructor.
   econstructor; eauto with compat.
   eapply match_envs_set_opttemp; eauto.
-Admitted.
+Qed.
 
 Lemma initial_states_simulation:
   forall q1 q2 S, match_query (cc_c inj) w q1 q2 -> initial_state ge q1 S ->
@@ -2741,6 +2789,9 @@ Proof.
   assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
   eapply functions_translated in H as (tfd & TFIND & TRFD); eauto.
   monadInv TRFD.
+  assert (INJB: same_at_glob j).
+  specialize (MCONT VSet.empty).
+  eapply match_cont_sag; eauto.
   eexists (injpw j m tm MINJ INJB), _. intuition idtac.
   - econstructor; eauto.
   - econstructor; eauto. constructor; eauto.
