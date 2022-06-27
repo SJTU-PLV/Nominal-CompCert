@@ -711,6 +711,8 @@ Definition sup_incr (s:sup):sup :=
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
+(** sup_include_dec *)
+
 Lemma global_include_dec : forall (l1 l2:list ident),
     {forall i, In i l1 -> In i l2} + {~(forall i, In i l1 -> In i l2)}.
 Proof.
@@ -726,11 +728,99 @@ Qed.
 Definition stree_include (s1 s2:stree) : Prop :=
   forall fid p pos, stree_In fid p pos s1 -> stree_In fid p pos s2.
 
+(*
+Definition nth_subtree (n:nat) (s:stree): option stree :=
+  match s with
+      | Node _ _ dt (Some t') =>
+          if (n =? Datatypes.length dt)%nat
+          then Some t'
+          else
+           match nth_error dt n with
+           | Some t'' => Some t''
+           | None => None
+           end
+      | Node _ _ dt None =>
+          match nth_error dt n with
+          | Some t' => Some t'
+          | None => None
+          end
+  end.
+
+(*Inductive nth_substree : nat -> stree -> stree -> Prop :=
+  |active_substree n s fid lp dt:
+     n = Datatypes.length dt ->
+     nth_substree n s (Node fid lp dt (Some s))
+  |dead_subtree n s ops fid lp dt:
+     nth_error dt n = Some s ->
+     nth_substree n s (Node fid lp dt ops). *)
+
+Inductive block_empty_stree : stree -> Prop :=
+  |block_empty_none : forall fi sl,
+      block_empty_strees sl ->
+      block_empty_stree (Node fi nil sl None)
+  |block_empty_some : forall fi sl s',
+      block_empty_strees sl ->
+      block_empty_stree s' ->
+      block_empty_stree (Node fi nil sl (Some s'))
+with
+Inductive block_empty_strees : list stree -> Prop :=
+  |bess_nil :
+      block_empty_strees nil
+  |bess_cons : forall s sl,
+      block_empty_stree s ->
+      block_empty_strees sl ->
+      block_empty_strees (s::sl).
+
+Lemma bes_dec : forall s,
+    {block_empty_stree s}+{~block_empty_stree s}.
+Proof.
+  induction s using stree_ind.
+  destruct s.
+  destruct (Forall_dec ).
+
+Definition subtree_include_i i s1 s2 : Prop :=
+  forall ss1,
+  nth_subtree i s1 = Some ss1 ->
+  block_empty_stree ss1 \/
+  exists ss2,
+    nth_subtree i s2 = Some ss2
+    /\ stree_include ss1 ss2.
+
+Definition subtree_include s1 s2 : Prop :=
+  forall i, subtree_include_i i s1 s2.
+
+Inductive local_include : stree -> stree -> Prop :=
+  |local_include_intros fid posl1 posl2 dt1 dt2 ops1 ops2:
+     (forall i, In i posl1 -> In i posl2) ->
+     local_include (Node fid posl1 dt1 ops1) (Node fid posl2 dt2 ops2).
+
+Theorem tree_include_subtree: forall s1 s2,
+    stree_include s1 s2 <->
+    subtree_include s1 s2 /\ local_include s1 s2.
+Proof.
+  intros. split; intro.
+  split.
+  unfold subtree_include. intro.
+  unfold subtree_include_i. intros.
+  
+Admitted.
+
+Lemma local_include_dec : forall (s1 s2:stree),
+    {local_include s1 s2}+{~local_include s1 s2}.
+Proof.
+  intros. destruct s1. destruct s2.
+  destruct (fid_eq f f0). subst.
+  destruct (global_include_dec l l1).
+  left. constructor. eauto.
+  right. intro. apply n. inv H. eauto.
+  right. intro. inv H. congruence.
+Qed.
+*)
+
 Lemma stree_include_dec : forall (s1 s2:stree),
     {stree_include s1 s2}+{~stree_include s1 s2}.
 Proof.
   induction s1 using stree_ind. intro.
-  destruct s1. destruct o.
 Admitted. (* we can iterate the stree *)
 
 Theorem sup_include_dec : forall s1 s2, {sup_include s1 s2} + {~sup_include s1 s2}.
