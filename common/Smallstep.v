@@ -20,6 +20,7 @@
   the one-step transition relations that are used to specify
   operational semantics in small-step style. *)
 
+Require Import Maps.
 Require Import Relations.
 Require Import Wellfounded.
 Require Import Coqlib.
@@ -478,7 +479,6 @@ End CLOSURES.
 Record lts liA liB state: Type := {
   genvtype: Type;
   step : genvtype -> state -> trace -> state -> Prop;
-  valid_query: query liB -> bool;
   initial_state: query liB -> state -> Prop;
   at_external: state -> query liA -> Prop;
   after_external: state -> reply liA -> state -> Prop;
@@ -490,7 +490,59 @@ Record semantics liA liB := {
   skel: AST.program unit unit;
   state: Type;
   activate :> Genv.symtbl -> lts liA liB state;
+  footprint: AST.ident -> Prop;
 }.
+
+Definition valid_query {li liA liB} (L: semantics liA liB) se (q: query li): Prop :=
+  entry q <> Values.Vundef /\
+  exists i, footprint L i /\ Genv.symbol_address se i Ptrofs.zero = entry q.
+
+Lemma footprint_of_program_valid {F G} `{AST.FundefIsInternal F} (p: AST.program F G) se {li} (q: query li):
+  entry q <> Values.Vundef /\ (exists i, AST.footprint_of_program p i /\ Genv.symbol_address se i Ptrofs.zero = entry q) <->
+  Genv.is_internal (Genv.globalenv se p) (entry q) = true.
+Proof.
+  split.
+  - intros [Hq (i & Hi & Hx)].
+    rewrite <- Hx in *. clear Hx.
+    unfold Genv.is_internal. unfold Genv.symbol_address in *.
+    destruct Genv.find_symbol eqn:Hsymbol; try congruence; cbn.
+    destruct Ptrofs.eq_dec; try congruence; cbn.
+    unfold Genv.find_funct_ptr.
+    rewrite Genv.find_def_spec.
+    erewrite Genv.find_invert_symbol; eauto.
+    unfold AST.footprint_of_program in Hi.
+    destruct ((AST.prog_defmap p) ! i).
+    + destruct g; easy.
+    + inversion Hi.
+  - intros Hx. unfold Genv.is_internal in Hx.
+    destruct Genv.find_funct eqn:H1; try congruence.
+    unfold Genv.find_funct in H1.
+    destruct (entry q) eqn: Hq; try congruence.
+    split. intros X. discriminate X.
+    destruct (Ptrofs.eq_dec i Ptrofs.zero) eqn: Hi; try congruence.
+    clear Hi. subst.
+    unfold Genv.find_funct_ptr in H1.
+    destruct Genv.find_def eqn: H2; try congruence.
+    destruct g eqn: Hf; try congruence. inv H1.
+    rewrite Genv.find_def_spec in H2.
+    destruct Genv.invert_symbol eqn:H3; try congruence.
+    exists i. split.
+    + unfold AST.footprint_of_program. now rewrite H2.
+    + unfold Genv.symbol_address.
+      erewrite Genv.invert_find_symbol; eauto.
+Qed.
+
+(* A class of semantics for concrete LTS like clight, asm, etc. These properties
+   are useful for proving lemmas about the categorical and flat
+   composition. Abstact semantics like the identity LTS may not enjoy these
+   properties *)
+Class ProgramSem {liA liB} (L: semantics liA liB) :=
+  {
+    incoming_query_valid:
+      forall se s q, initial_state (L se) q s -> valid_query L se q;
+    outgoing_query_invalid:
+      forall se s q, at_external (L se) s q -> ~ valid_query L se q;
+  }.
 
 (** Handy notations. *)
 
@@ -501,13 +553,13 @@ Notation Semantics_gen step initial_state at_ext after_ext final_state globalenv
       let ge := globalenv se p in
       {|
         step := step;
-        valid_query q := Genv.is_internal ge (entry q);
         initial_state := initial_state ge;
         at_external := at_ext ge;
         after_external := after_ext ge;
         final_state := final_state ge;
         globalenv := ge;
       |};
+    footprint := AST.footprint_of_program p;
   |}.
 
 Notation Semantics step initial_state at_ext after_ext final_state p :=
@@ -536,9 +588,6 @@ Context {state1 state2: Type}.
 Record fsim_properties (L1: lts liA1 liB1 state1) (L2: lts liA2 liB2 state2) (index: Type)
                        (order: index -> index -> Prop)
                        (match_states: index -> state1 -> state2 -> Prop) : Prop := {
-    fsim_match_valid_query:
-      forall q1 q2, match_query ccB wB q1 q2 ->
-      valid_query L2 q2 = valid_query L1 q1;
     fsim_match_initial_states:
       forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
       exists i, exists s2, initial_state L2 q2 s2 /\ match_states i s1 s2;
@@ -588,10 +637,6 @@ Variable L2: lts liA2 liB2 state2.
 
 Variable match_states: state1 -> state2 -> Prop.
 
-Hypothesis match_valid_query:
-  forall q1 q2, match_query ccB wB q1 q2 ->
-  valid_query L2 q2 = valid_query L1 q1.
-
 Hypothesis match_initial_states:
   forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
   exists s2, initial_state L2 q2 s2 /\ match_states s1 s2.
@@ -634,7 +679,6 @@ Lemma forward_simulation_star_wf:
 Proof.
   subst ms;
   constructor.
-- auto.
 - intros. exploit match_initial_states; eauto. intros [s2 [A B]].
     exists s1; exists s2; auto.
 - intros. destruct H. eapply match_final_states; eauto.
@@ -822,6 +866,8 @@ Record fsim_components {liA1 liA2} (ccA: callconv liA1 liA2) {liB1 liB2} ccB L1 
 
     fsim_skel:
       skel L1 = skel L2;
+    fsim_footprint:
+      forall i, footprint L1 i <-> footprint L2 i;
     fsim_lts se1 se2 wB:
       @match_senv liB1 liB2 ccB wB se1 se2 ->
       Genv.valid_for (skel L1) se1 ->
@@ -835,6 +881,27 @@ Arguments Forward_simulation {_ _ ccA _ _ ccB L1 L2 fsim_index}.
 
 Definition forward_simulation {liA1 liA2} ccA {liB1 liB2} ccB L1 L2 :=
   inhabited (@fsim_components liA1 liA2 ccA liB1 liB2 ccB L1 L2).
+
+Lemma match_valid_query {liA liA' liB liB' li li'} cc1 cc2
+      (L1: semantics liA liB) (L2: semantics liA' liB')
+      (cc: callconv li li') w se1 se2 q1 q2:
+  forward_simulation cc1 cc2 L1 L2 ->
+  match_senv cc w se1 se2 ->
+  match_query cc w q1 q2 ->
+  valid_query L1 se1 q1 <-> valid_query L2 se2 q2.
+Proof.
+  intros [] Hse Hq. split.
+  - intros [? (i & Hi & Hx)]. split.
+    erewrite <- match_query_defined; eauto.
+    exists i; split.
+    + erewrite <- fsim_footprint; eauto.
+    + erewrite <- match_senv_symbol_address; eauto.
+  - intros [? (i & Hi & Hx)]. split.
+    erewrite match_query_defined; eauto.
+    exists i; split.
+    + erewrite fsim_footprint; eauto.
+    + erewrite match_senv_symbol_address; eauto.
+Qed.
 
 (** ** Tactics for forward simulation proofs *)
 
@@ -857,10 +924,17 @@ Ltac fsim_skel MATCH :=
   fsim_match_prog_reduce MATCH;
   apply Linking.match_program_skel in MATCH; auto; fail.
 
+Ltac fsim_footprint MATCH :=
+  let x := fresh "x" in
+  fsim_match_prog_reduce MATCH;
+  intros x; eapply Linking.match_program_footprint with (i := x) in MATCH;
+  intuition eauto.
+
 Ltac fsim_tac tac :=
   intros MATCH; constructor;
   eapply Forward_simulation with (fsim_match_states := fun _ _ _ => _);
   [ try fsim_skel MATCH
+  | try fsim_footprint MATCH
   | intros se1 se2 w Hse Hse1; tac
   | try solve [auto using well_founded_ltof]].
 
@@ -872,6 +946,7 @@ Definition identity_fsim_components {liA liB} (L: semantics liA liB):
   fsim_components cc_id cc_id L L.
 Proof.
   eapply Forward_simulation with _ (fun _ _ _ => _); auto.
+  - firstorder.
   - intros se _ [ ] [ ] _.
     eapply forward_simulation_plus with (match_states := eq);
     cbn; intros; subst; eauto 10 using plus_one.
@@ -908,16 +983,13 @@ Proof.
              match_states se1 se2 w (snd i) s1 s2 /\
              match_states' se2 se3 w' (fst i) s2 s3).
   apply Forward_simulation with ff_order ff_match_states.
+  2: { firstorder. }
   3: { unfold ff_order. auto using wf_lex_ord, wf_clos_trans. }
   1: { congruence. }
   intros se1 se3 [[se2 w] w'] (Hse12 & Hse23) Hse1. cbn in *.
   assert (Hse2: Genv.valid_for (skel L2) se2).
-  { rewrite <- Hsk. eapply match_senv_valid_for; eauto. }
+  { rewrite <- Hsk. rewrite <- @match_senv_valid_for; eauto. }
   constructor.
-- (* valid query *)
-  intros q1 q3 (q2 & Hq12 & Hq23).
-  erewrite fsim_match_valid_query by eauto.
-  eapply fsim_match_valid_query; eauto.
 - (* initial states *)
   intros q1 q3 s1 (q2 & Hq12 & Hq23) Hs1.
   edestruct (@fsim_match_initial_states liA1) as (i & s2 & A & B); eauto.
@@ -1076,10 +1148,6 @@ Hypothesis wf_order: well_founded order.
 
 Variable match_states: index -> state1 -> state2 -> Prop.
 
-Hypothesis match_valid_query:
-  forall q1 q2, match_query ccB wB q1 q2 ->
-  valid_query L2 q2 = valid_query L1 q1.
-
 Hypothesis match_initial_states:
   forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
   exists i s2, initial_state L2 q2 s2 /\ match_states i s1 s2.
@@ -1124,7 +1192,6 @@ Lemma forward_simulation_determ:
   fsim_properties ccA ccB se1 se2 wB L1 L2 _ (lex_ord order lt) match_states_later.
 Proof.
   constructor.
-- auto.
 - intros. exploit match_initial_states; eauto. intros (i & s2 & A & B).
   exists (i, O), s2; auto using msl_now.
 - intros. inv H.
@@ -1164,10 +1231,6 @@ Hypothesis L1det: lts_determinate L1 se1.
 
 Variable match_states: state1 -> state2 -> Prop.
 
-Hypothesis match_valid_query:
-  forall q1 q2, match_query ccB wB q1 q2 ->
-  valid_query L2 q2 = valid_query L1 q1.
-
 Hypothesis match_initial_states:
   forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
   exists s2, initial_state L2 q2 s2 /\ match_states s1 s2.
@@ -1201,15 +1264,14 @@ Lemma forward_simulation_determ_star:
 Proof.
   apply forward_simulation_determ.
 - assumption.
-- auto.
-- intros. exploit match_initial_states; eauto. intros (s2 & A & B). 
+- intros. exploit match_initial_states; eauto. intros (s2 & A & B).
   exists s1, s2; auto.
 - intros. destruct H. eapply match_final_states; eauto.
 - intros. destruct H. subst.
   edestruct match_external as (wA & q2 & Hq2 & Hq & Hse & Hr); eauto.
   exists wA, q2. intuition auto.
   edestruct Hr as (s2' & Hs2' & Hs'); eauto.
-- intros. destruct H0; subst i. 
+- intros. destruct H0; subst i.
   exploit simulation; eauto. intros (s1'' & s2' & A & B & C).
   exists s1'', s1'', s2'. auto.
 Qed.
@@ -1301,9 +1363,6 @@ Context {state1 state2: Type}.
 Record bsim_properties (L1 L2: lts _ _ _) (index: Type)
                        (order: index -> index -> Prop)
                        (match_states: index -> state1 -> state2 -> Prop) : Prop := {
-    bsim_match_valid_query:
-      forall q1 q2, match_query ccB wB q1 q2 ->
-      valid_query L2 q2 = valid_query L1 q1;
     bsim_match_initial_states:
       forall q1 q2, match_query ccB wB q1 q2 ->
       bsim_match_cont (rex match_states) (initial_state L1 q1) (initial_state L2 q2);
@@ -1360,10 +1419,6 @@ Variable L1: lts liA1 liB1 state1.
 Variable L2: lts liA2 liB2 state2.
 
 Variable match_states: state1 -> state2 -> Prop.
-
-Hypothesis match_valid_query:
-  forall q1 q2, match_query ccB wB q1 q2 ->
-  valid_query L2 q2 = valid_query L1 q1.
 
 Hypothesis match_initial_states:
   forall q1 q2, match_query ccB wB q1 q2 ->
@@ -1655,15 +1710,12 @@ Proof.
   - (* LTS *)
     intros se1 se3 [[se2 wB12] wB23] [Hse12 Hse23] Hse1. cbn. clear ms.
     assert (Hse2: Genv.valid_for (skel L2) se2).
-    { erewrite <- bsim_skel by eauto. eapply match_senv_valid_for; eauto. }
+    { erewrite <- bsim_skel by eauto. rewrite <- @match_senv_valid_for; eauto. }
     destruct H12 as [index12 order12 ms12 Hsk12 Hlts12 Hwf12]; cbn.
     destruct H23 as [index23 order23 ms23 Hsk23 Hlts23 Hwf23]; cbn.
     specialize (Hlts12 se1 se2 wB12 Hse12 Hse1).
     specialize (Hlts23 se2 se3 wB23 Hse23 Hse2).
     split.
-    + (* valid queries *)
-      intros q1 q3 (q2 & Hq12 & Hq23).
-      etransitivity; eapply bsim_match_valid_query; eauto.
     + (* initial states *)
       intros q1 q3 (q2 & Hq12 & Hq23).
       eauto using compose_bsim_match_cont, bsim_match_initial_states.
@@ -1987,7 +2039,7 @@ Lemma forward_to_backward_simulation:
   backward_simulation ccA ccB L1 L2.
 Proof.
   intros until L2. intros FS L1_receptive L2_determinate.
-  destruct FS as [[index order match_states Hskel FS order_wf]].
+  destruct FS as [[index order match_states Hskel Hfootprint FS order_wf]].
   set (ms se1 se2 w := f2b_match_states (L1 se1) (L2 se2) (match_states := match_states se1 se2 w)).
   constructor.
   eapply Backward_simulation with f2b_order ms; auto using wf_f2b_order.
@@ -1995,8 +2047,6 @@ Proof.
   specialize (FS se1 se2 wB Hse Hse1).
   specialize (L1_receptive se1). specialize (L2_determinate se2).
   split.
-- (* valid queries *)
-  eapply fsim_match_valid_query; eauto.
 - split.
   (* initial states exist *)
   intros. exploit (fsim_match_initial_states FS); eauto. intros [i [s2 [A B]]].
@@ -2068,13 +2118,13 @@ Definition atomic : semantics liA liB :=
   activate se := {|
     genvtype := genvtype (L se);
     step := atomic_step se;
-    valid_query := valid_query (L se);
     initial_state q s := initial_state (L se) q (snd s) /\ fst s = E0;
     at_external s q := at_external (L se) (snd s) q /\ fst s = E0;
     after_external s r s' := after_external (L se) (snd s) r (snd s') /\ fst s' = E0;
     final_state s r := final_state (L se) (snd s) r /\ fst s = E0;
     globalenv := globalenv (L se);
   |};
+  footprint := footprint L;
 |}.
 
 End ATOMIC.
@@ -2159,8 +2209,6 @@ Proof.
   intros [FS] L2single. constructor.
   apply Forward_simulation with (fsim_order FS) (ffs_match FS); cbn; try apply FS.
   intros se1 se2 wB Hse Hse1. pose (sim := fsim_lts FS se2 wB Hse Hse1). split; cbn.
-- (* valid query *)
-  cbn. eapply fsim_match_valid_query; eauto.
 - (* initial states *)
   intros. destruct s1 as [t1 s1]. simpl in H0. destruct H0. subst.
   exploit (fsim_match_initial_states sim); eauto. intros [i [s2 [A B]]].

@@ -520,7 +520,14 @@ Next Obligation.
   eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
 Qed.
 Next Obligation.
-  eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  eapply match_stbls_proj in H. eapply Genv.valid_for_match; eauto.
+Qed.
+Next Obligation.
+  eapply match_stbls_proj in H. inv H0. cbn.
+  eapply symbol_address_match; eauto.
+Qed.
+Next Obligation.
+  inv H. cbn. inv H1; intuition congruence.
 Qed.
 
 (** ** Calling convention from [li_locset] *)
@@ -683,6 +690,13 @@ Qed.
 Next Obligation.
   eapply (LanguageInterface.cc_c_obligation_2 R w se1 se2 sk H); eauto.
 Qed.
+Next Obligation.
+  eapply match_stbls_proj in H. inv H0. cbn.
+  eapply symbol_address_match; eauto.
+Qed.
+Next Obligation.
+  inv H. inv H1; cbn; intuition congruence.
+Qed.
 
 (** ** To relocate or remove *)
 
@@ -720,9 +734,9 @@ Qed.
 Definition is_leaf_function (f: function) : bool :=
   List.forallb
     (fun i => match i with Mcall _ _ => false | _ => true end)
-    f.(fn_code).  
+    f.(fn_code).
 
-(** Semantic characterization of leaf functions: 
+(** Semantic characterization of leaf functions:
     functions in the call stack are never leaf functions. *)
 
 Section WF_STATES.
@@ -762,14 +776,14 @@ Proof.
   constructor.
   constructor; auto. econstructor; eauto with coqlib.
   destruct (is_leaf_function f) eqn:E; auto.
-  unfold is_leaf_function in E; rewrite forallb_forall in E. 
+  unfold is_leaf_function in E; rewrite forallb_forall in E.
   symmetry. apply (E (Mcall sig ros)). eapply is_tail_in; eauto.
 - (* goto *)
-  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.  
+  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.
 - (* cond *)
-  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.  
+  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.
 - (* jumptable *)
-  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.  
+  assert (f0 = f) by congruence. subst f0. econstructor; eauto using find_label_tail.
 - (* return *)
   inv STACK. inv H1. econstructor; eauto.
 Qed.

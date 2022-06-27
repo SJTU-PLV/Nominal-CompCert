@@ -29,7 +29,7 @@ Definition match_prog (p tp: program) : Prop :=
 Lemma match_transf_program:
   forall p tp, transf_program p = OK tp -> match_prog p tp.
 Proof.
-  unfold transf_program; intros. monadInv H. 
+  unfold transf_program; intros. monadInv H.
   split; auto. apply match_transform_partial_program. rewrite EQ. destruct x; auto.
 Qed.
 
@@ -191,7 +191,7 @@ Proof.
 - inv H0; auto.
 - inv H0; auto.
 - inv H0; auto.
-- inv H0. unfold Mptr, Val.load_result; destruct Archi.ptr64; auto. 
+- inv H0. unfold Mptr, Val.load_result; destruct Archi.ptr64; auto.
 - inv H0. unfold Mptr, Val.load_result; rewrite H1; auto.
 - inv H0. unfold Val.load_result; rewrite H1; auto.
 - inv H0. unfold Mptr, Val.load_result; rewrite H1; auto.
@@ -2342,9 +2342,10 @@ Theorem transf_program_correct prog tprog:
   forward_simulation (cc_c injp) (cc_c inj) (semantics1 prog) (semantics2 tprog).
 Proof.
   fsim eapply forward_simulation_plus.
-  { intros. destruct Hse, H. cbn in *.
-    eapply (Genv.is_internal_match (proj1 MATCH)); eauto 1.
-    intros _ [|] [|] Hf; monadInv Hf; auto. }
+  (* { intros. destruct Hse, H. cbn in *. *)
+  (*   eapply (Genv.is_internal_match (proj1 MATCH)); eauto 1. *)
+  (*   intros _ [|] [|] Hf; monadInv Hf; auto. } *)
+  { destruct f1; monadInv H; intuition auto. }
   apply initial_states_simulation; eauto.
   apply final_states_simulation; eauto.
   intros. cbn. eapply external_states_simulation; eauto.

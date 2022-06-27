@@ -1133,17 +1133,18 @@ Theorem transf_program_correct prog tprog:
     (Asm.semantics tprog).
 Proof.
   set (ms := fun '(se, tt, (rs0, nb0)) s1 '(nb, s2) =>
-               match_states prog se rs0 nb0 s1 s2 /\ nb = nb0). 
+               match_states prog se rs0 nb0 s1 s2 /\ nb = nb0).
   fsim eapply forward_simulation_star with
       (match_states := ms w)
       (measure := measure);
-    destruct w as [[se [ ]] [rs0 nb0]], Hse as [[ ] [ ]];
+    try destruct w as [[se [ ]] [rs0 nb0]], Hse as [[ ] [ ]];
     intros.
-  - destruct H as (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. cbn.
-    setoid_rewrite ext_lessdef in H2. inv H2; try congruence.
-    uncklr. inv H0; try congruence.
-    eapply (Genv.is_internal_transf_partial_id MATCH); eauto.
-    intros [|] ? Hf; monadInv Hf; auto.
+  (* - destruct H as (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. cbn. *)
+  (*   setoid_rewrite ext_lessdef in H2. inv H2; try congruence. *)
+  (*   uncklr. inv H0; try congruence. *)
+  (*   eapply (Genv.is_internal_transf_partial_id MATCH); eauto. *)
+  (*   intros [|] ? Hf; monadInv Hf; auto. *)
+  - destruct f1; monadInv H; reflexivity.
   - edestruct transf_initial_states as (s2 & Hs2 & Hs); eauto.
     exists (Mem.support (snd q2), s2). cbn. intuition auto.
     destruct H as (? & ? & ?). destruct H1. auto.

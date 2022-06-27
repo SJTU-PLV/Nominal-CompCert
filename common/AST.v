@@ -709,6 +709,31 @@ Qed.
 
 End ERASE_PROGRAM.
 
+(** ** Program footprint *)
+
+Section FOOTPRINT.
+
+Variable F V: Type.
+
+Context `{FundefIsInternal F}.
+(** The footprint of a concrete program is the set of identifiers that
+   correspond to internal function definitions. The calls to these functions are
+   not allowed to escape to the environment. The definition, together with the
+   valid query predicate, is equivalent to old valid query in the definition of
+   LTS *)
+
+Definition footprint_of_program (p: program F V) (i: ident) : Prop :=
+  match (prog_defmap p) ! i with
+  | Some def =>
+    match def with
+    | Gfun f => fundef_is_internal f = true
+    | _ => False
+    end
+  | _ => False
+  end.
+
+End FOOTPRINT.
+
 (** * Arguments and results to builtin functions *)
 
 Inductive builtin_arg (A: Type) : Type :=

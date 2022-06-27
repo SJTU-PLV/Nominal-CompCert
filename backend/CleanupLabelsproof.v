@@ -336,10 +336,10 @@ Theorem transf_program_correct prog tprog:
   forward_simulation cc_id cc_id (Linear.semantics prog) (Linear.semantics tprog).
 Proof.
   fsim eapply forward_simulation_opt; cbn in *; intros; subst.
-  - apply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
+  (* - apply (Genv.is_internal_transf_id MATCH). intros [|]; auto. *)
+  - destruct f1; reflexivity.
   - eauto using transf_initial_states.
   - eauto using transf_final_states.
   - intros. edestruct transf_external; eauto. exists tt, q1. intuition subst; eauto.
   - eauto using transf_step_correct.
 Qed.
-

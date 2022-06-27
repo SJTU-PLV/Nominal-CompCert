@@ -1430,7 +1430,7 @@ Proof.
   exploit match_callstack_match_globalenvs; eauto. intros MG.
   edestruct @Genv.find_symbol_match as (tb & Htb & Htid); eauto.
   exists (Vptr tb Ptrofs.zero); split.
-  constructor. simpl. unfold Genv.symbol_address. 
+  constructor. simpl. unfold Genv.symbol_address.
   rewrite Htid. auto.
   econstructor; eauto.
 Qed.
@@ -2239,12 +2239,12 @@ Theorem transl_program_correct prog tprog:
   forward_simulation (cc_c injp) (cc_c inj) (Csharpminor.semantics prog) (Cminor.semantics tprog).
 Proof.
   fsim eapply forward_simulation_star.
-  { intros q1 q2 Hq. destruct Hq. cbn in *. inv Hse. cbn in *.
-    eapply Genv.is_internal_transf_partial; eauto.
-    intros [|] ? Hf; monadInv Hf; cbn; auto. }
+  (* { intros q1 q2 Hq. destruct Hq. cbn in *. inv Hse. cbn in *. *)
+  (*   eapply Genv.is_internal_transf_partial; eauto. *)
+  (*   intros [|] ? Hf; monadInv Hf; cbn; auto. } *)
+  { destruct f1; monadInv H; reflexivity. }
   apply transl_initial_states; eauto.
   apply transl_final_states; eauto.
   apply transl_external_states; eauto.
   apply transl_step_correct; eauto.
 Qed.
-

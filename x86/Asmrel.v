@@ -93,7 +93,7 @@ Section PROG.
   | inj_ptr_undef:
       forall v,
         inject_ptr_sameofs mi Vundef v.
-  
+
   Definition regset_inject' R (w: world R): rel regset regset :=
     fun rs1 rs2 =>
       forall r: preg,
@@ -115,7 +115,7 @@ Section PROG.
       rewrite Ptrofs.add_zero; auto.
     - apply rel. auto.
   Qed.
-  
+
   Inductive outcome_match R (w: world R): rel outcome outcome :=
   | Next_match:
       Monotonic
@@ -132,7 +132,7 @@ Section PROG.
         (@Asm.State)
         (regset_inject R w ++> match_mem R w ++> - ==> state_match R w).
   Existing Instance State_rel.
-  
+
   Global Instance set_inject R w:
     Monotonic
       (@Pregmap.set val)
@@ -183,7 +183,7 @@ Section PROG.
   Proof.
     unfold nextinstr. rauto.
   Qed.
-  
+
   Global Instance undef_regs_inject R w:
     Monotonic
       undef_regs
@@ -240,7 +240,7 @@ Section PROG.
   Proof.
     intros w. eexists; split; rauto.
   Qed.
-  
+
   Global Instance exec_store_match R:
     Monotonic
       exec_store
@@ -466,7 +466,7 @@ Section PROG.
       + eapply exec_step_external; eauto. congruence.
       + eexists. split; rauto.
   Qed.
- 
+
 End PROG.
 
 Lemma init_nb_match_acc R w w' nb1 nb2 m1 m2:
@@ -513,7 +513,9 @@ Qed.
 Lemma semantics_asm_rel p R:
   forward_simulation (cc_asm R) (cc_asm R) (Asm.semantics p) (Asm.semantics p).
 Proof.
-  constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
+  constructor. econstructor; eauto.
+  { intros i; intuition auto. }
+  instantiate (1 := fun _ _ _ => _). cbn beta.
   intros se1 se2 w Hse Hse1. cbn -[semantics] in *.
   pose (ms := fun s1 s2 =>
                 klr_diam tt (genv_match p R * init_nb_state_match R)
@@ -522,14 +524,14 @@ Proof.
                          (Genv.globalenv se2 p, s2)).
   apply forward_simulation_step with (match_states := ms); cbn.
   (* valid_query *)
-  - intros [rs1 m1] [rs2 m2] [Hrs [Hpc Hm]].
-    eapply Genv.is_internal_match; eauto.
-    + repeat apply conj; auto.
-      induction (prog_defs p) as [ | [id [f|v]] defs IHdefs]; repeat (econstructor; eauto).
-      * instantiate (2 := fun _ => eq). reflexivity.
-      * instantiate (1 := eq). destruct v. constructor. auto.
-    + eapply match_stbls_proj; auto.
-    + intros. rewrite H. auto.
+  (* - intros [rs1 m1] [rs2 m2] [Hrs [Hpc Hm]]. *)
+  (*   eapply Genv.is_internal_match; eauto. *)
+  (*   + repeat apply conj; auto. *)
+  (*     induction (prog_defs p) as [ | [id [f|v]] defs IHdefs]; repeat (econstructor; eauto). *)
+  (*     * instantiate (2 := fun _ => eq). reflexivity. *)
+  (*     * instantiate (1 := eq). destruct v. constructor. auto. *)
+  (*   + eapply match_stbls_proj; auto. *)
+  (*   + intros. rewrite H. auto. *)
   (* initial_state *)
   - intros [rs1 m1] [rs2 m2] [nb1 s1] Hs [Hq Hnb]. destruct Hs as [Hrs [Hpc Hm]]. inv Hq.
     assert (Hge: genv_match p R w (Genv.globalenv se1 p) (Genv.globalenv se2 p)).
@@ -543,7 +545,7 @@ Proof.
     repeat apply conj; auto.
     (* initial_state *)
     + econstructor.
-      * eauto. 
+      * eauto.
       * specialize (Hrs SP) as Hsp. inv Hsp; try congruence.
       * specialize (Hrs RA) as Hsp. inv Hsp; try congruence.
     (* match_state *)
@@ -632,5 +634,4 @@ Proof.
       * eapply Mem.sup_include_trans; eauto.
         eapply step_support. eauto.
   - apply well_founded_ltof.
-    Unshelve. exact tt. exact tt.
 Qed.

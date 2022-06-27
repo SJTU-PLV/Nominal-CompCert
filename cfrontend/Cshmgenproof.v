@@ -1957,8 +1957,9 @@ Theorem transl_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation cc_id cc_id (Clight.semantics2 prog) (Csharpminor.semantics tprog).
 Proof.
-  fsim eapply forward_simulation_plus; cbn; destruct w, Hse.
-  - intros q _ [ ]. eapply Genv.is_internal_match_id; eauto. destruct 1; auto.
+  fsim eapply forward_simulation_plus; cbn; try destruct w, Hse.
+  (* - intros q _ [ ]. eapply Genv.is_internal_match_id; eauto. destruct 1; auto. *)
+  - inv H; reflexivity.
   - intros q _ s1 [ ]. eauto using transl_initial_states.
   - eauto using transl_final_states.
   - intros. edestruct transl_external; eauto. exists tt, q1. intuition subst; eauto.

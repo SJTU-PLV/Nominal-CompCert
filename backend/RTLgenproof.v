@@ -999,15 +999,15 @@ Lemma invert_eval_builtin_arg:
   /\ (forall vl', convert_builtin_arg a (vl ++ vl') = (fst (convert_builtin_arg a vl), vl')).
 Proof.
   induction 1; simpl; try (econstructor; intuition eauto with evalexpr barg; fail).
-- econstructor; split; eauto with evalexpr. split. constructor. auto. 
-- econstructor; split; eauto with evalexpr. split. repeat constructor. auto. 
+- econstructor; split; eauto with evalexpr. split. constructor. auto.
+- econstructor; split; eauto with evalexpr. split. repeat constructor. auto.
 - destruct IHeval_builtin_arg1 as (vl1 & A1 & B1 & C1).
   destruct IHeval_builtin_arg2 as (vl2 & A2 & B2 & C2).
   destruct (convert_builtin_arg a1 vl1) as [a1' rl1] eqn:E1; simpl in *.
   destruct (convert_builtin_arg a2 vl2) as [a2' rl2] eqn:E2; simpl in *.
   exists (vl1 ++ vl2); split.
   apply eval_exprlist_append; auto.
-  split. rewrite C1, E2. constructor; auto. 
+  split. rewrite C1, E2. constructor; auto.
   intros. rewrite app_ass, !C1, C2, E2. auto.
 Qed.
 
@@ -1592,9 +1592,10 @@ Theorem transf_program_correct prog tprog:
 Proof.
   fsim eapply forward_simulation_star_wf with (order := lt_state);
   intros; try destruct Hse.
-  { destruct H. CKLR.uncklr. destruct H; try congruence.
-    eapply (Genv.is_internal_transf_partial_id MATCH).
-    intros [|] ? Hf; monadInv Hf; auto. }
+  { destruct f1; monadInv H; reflexivity. }
+  (* { destruct H. CKLR.uncklr. destruct H; try congruence. *)
+  (*   eapply (Genv.is_internal_transf_partial_id MATCH). *)
+  (*   intros [|] ? Hf; monadInv Hf; auto. } *)
   eapply transl_initial_states; eauto.
   eapply transl_final_states; eauto.
   exists tt. eapply transl_external_states; eauto.

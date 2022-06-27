@@ -1450,11 +1450,17 @@ Theorem transf_program_correct prog tprog:
   forward_simulation (cc_c injp) (cc_c inj) (semantics prog) (semantics tprog).
 Proof.
   fsim eapply forward_simulation_star.
-  { intros. destruct Hse, H. cbn in *.
-    eapply (Genv.is_internal_match MATCH); eauto 1.
-    unfold transf_fundef, transf_partial_fundef.
-    intros ? [|] [|]; cbn -[transf_function]; inversion 1; auto.
-    destruct transf_function; inv H5. }
+  {
+    destruct f1; unfold transf_fundef, transf_partial_fundef in H.
+    - destruct (transf_function (funenv_program c) f); cbn in *;
+        intuition; now inv H.
+    - now inv H.
+  }
+  (* { intros. destruct Hse, H. cbn in *. *)
+  (*   eapply (Genv.is_internal_match MATCH); eauto 1. *)
+  (*   unfold transf_fundef, transf_partial_fundef. *)
+  (*   intros ? [|] [|]; cbn -[transf_function]; inversion 1; auto. *)
+  (*   destruct transf_function; inv H5. } *)
   intros. eapply transf_initial_states; eauto.
   intros. eapply transf_final_states; eauto.
   intros. eapply transf_external_states; eauto.

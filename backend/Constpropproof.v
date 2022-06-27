@@ -590,8 +590,9 @@ Proof.
   intros MATCH. eapply source_invariant_fsim; eauto using rtl_vamatch. revert MATCH.
   fsim (eapply Build_fsim_properties with (order := lt) (match_states := match_states prog));
     try destruct Hse; cbn.
-- destruct 1. cbn. CKLR.uncklr. destruct H; try congruence.
-  eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
+(* - destruct 1. cbn. CKLR.uncklr. destruct H; try congruence. *)
+(*   eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto. *)
+- subst. destruct f1; reflexivity.
 - intros q1 q2 s1 Hq (Hs1 & _).
   eapply transf_initial_states; eauto.
 - intros n s1 s2 r1 Hs (Hr1 & _).

@@ -368,6 +368,16 @@ Section ASM_LINKING.
           4
     end.
 
+  Lemma asm_invalid_query b se (q: query li_asm):
+    ~ valid_query (L b) se q ->
+    Genv.is_internal (Genv.globalenv se (p_ b)) (entry q) = false.
+  Proof.
+    intros Hvq. apply not_true_is_false.
+    intros H. apply Hvq.
+    pose proof (@footprint_of_program_valid _ _ _ (p_ b)) as H0.
+    rewrite <- H0 in H. clear H0. apply H.
+  Qed.
+
   Lemma asm_linking:
     forward_simulation cc_id cc_id
       (SmallstepLinking.semantics L (erase_program p))
@@ -379,21 +389,52 @@ Section ASM_LINKING.
       (fsim_match_states := fun se1 se2 w idx s1 '(init_sup, s2) =>
          idx = (se1, s1) /\ match_states init_sup s1 s2); auto.
 
+    Transparent Linker_def Linker_fundef.
+    {
+      (* footprint *)
+      intros i. cbn. etransitivity.
+      instantiate (1 := footprint_of_program (p_ true) i \/
+                        footprint_of_program (p_ false) i).
+      {
+        split.
+        - intros [[|] ?]; [left | right]; auto.
+        - intros [|]; [exists true | exists false]; auto.
+      }
+      cbn. unfold footprint_of_program.
+      apply link_prog_inv in Hp as (? & Hdefs & Hp). subst p.
+      rewrite prog_defmap_elements, PTree.gcombine; auto.
+      destruct ((_ p1) ! _) eqn:H1, ((_ p2) ! _) eqn:H2.
+      - specialize (Hdefs _ _ _ H1 H2) as (? & ? & [gd Hgd]).
+        destruct g; destruct g0; cbn in *.
+        + destruct link_fundef eqn: Hf; try congruence.
+          destruct f; destruct f0; cbn.
+          * inv Hf.
+          * inv Hf. destruct e; try congruence. inv H5. intuition.
+          * inv Hf. destruct e; try congruence. inv H5. intuition.
+          * inv Hf. destruct external_function_eq; try congruence.
+            inv H5. intuition.
+        + inv Hgd.
+        + inv Hgd.
+        + destruct link; intuition.
+      - cbn. destruct g; intuition.
+      - cbn. destruct g; intuition.
+      - cbn. intuition.
+    }
     intros se _ [ ] [ ] Hse. econstructor.
-    - (* valid queries *)
-      intros q _ [ ]. cbn. unfold valid_query. cbn.
-      unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr.
-      destruct asm_entry; auto. destruct Ptrofs.eq_dec; auto.
-      eapply (find_def_link se p1 p2 p b) in Hp.
-      destruct Hp; rewrite ?orb_false_l, ?orb_false_r; auto.
-      Transparent Linker_def Linker_fundef. cbn in *.
-      destruct c as [[|]|], a as [[|]|], b0 as [[|]|]; inv H; try discriminate; cbn in *; auto.
-      + destruct external_function_eq; discriminate.
-      + destruct link; discriminate.
-      + destruct e1; discriminate.
-      + destruct e1; discriminate.
-      + destruct e0; discriminate.
-      + destruct e0; discriminate.
+    (* - (* valid queries *) *)
+    (*   intros q _ [ ]. cbn. unfold valid_query. cbn. *)
+    (*   unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr. *)
+    (*   destruct asm_entry; auto. destruct Ptrofs.eq_dec; auto. *)
+    (*   eapply (find_def_link se p1 p2 p b) in Hp. *)
+    (*   destruct Hp; rewrite ?orb_false_l, ?orb_false_r; auto. *)
+    (*   Transparent Linker_def Linker_fundef. cbn in *. *)
+    (*   destruct c as [[|]|], a as [[|]|], b0 as [[|]|]; inv H; try discriminate; cbn in *; auto. *)
+    (*   + destruct external_function_eq; discriminate. *)
+    (*   + destruct link; discriminate. *)
+    (*   + destruct e1; discriminate. *)
+    (*   + destruct e1; discriminate. *)
+    (*   + destruct e0; discriminate. *)
+    (*   + destruct e0; discriminate. *)
     - (* initial states *)
       intros q _ s1 [ ] Hs1. destruct Hs1 as [i [nb S] Hq [HS Hnb]]. cbn in *.
       eexists _, (nb, S). destruct HS. intuition eauto.
@@ -415,6 +456,7 @@ Section ASM_LINKING.
       + inv H3. edestruct find_funct_linkorder as (? & ? & ?); eauto. inv H0.
         * inv Hl. econstructor; eauto.
         * pose proof (H4 true). pose proof (H4 false). clear - H H0 H1 Hp. cbn in *.
+          apply asm_invalid_query in H0. apply asm_invalid_query in H1. cbn in *.
           unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr in *.
           destruct (rs PC); try discriminate.
           destruct Ptrofs.eq_dec; try discriminate.

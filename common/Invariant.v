@@ -101,7 +101,10 @@ Program Coercion cc_inv {li} (I: invariant li): callconv li li :=
     match_reply w := rel_inv (reply_inv I w);
   |}.
 Solve All Obligations with
-  cbn; intros; destruct H; auto.
+  cbn; intros; destruct H; intuition auto.
+Next Obligation.
+  cbn; intros; destruct H; destruct H0; intuition auto.
+Qed.
 
 (** With this, an invariant preservation proof can itself be lifted
   into a self-simulation by the invariant calling conventions. *)
@@ -113,7 +116,7 @@ Proof.
   fsim (eapply forward_simulation_step with (match_states := rel_inv (IS w));
         destruct Hse; subst).
   - reflexivity.
-  - destruct 1. auto.
+  - firstorder.
   - intros q _ s [Hq] Hs.
     exists s. split; eauto.
     constructor.
@@ -206,8 +209,6 @@ Section RESTRICT.
           symtbl_inv IB w se /\
           IS w s /\
           IS w s';
-      valid_query q :=
-        valid_query (L se) q;
       initial_state q s :=
         initial_state (L se) q s /\
         exists w,
@@ -244,6 +245,7 @@ Section RESTRICT.
       skel := skel L;
       state := state L;
       activate se := restrict_lts se;
+      footprint := footprint L;
     |}.
 
   Lemma restrict_fsim:
@@ -252,7 +254,7 @@ Section RESTRICT.
   Proof.
     fsim (apply forward_simulation_step with (match_states := rel_inv (IS w));
           destruct Hse; subst); cbn; auto.
-    - destruct 1. reflexivity.
+    - firstorder.
     - intros q _ s [Hq] Hs. exists s.
       assert (IS w s) by (eapply preserves_initial_state; eauto).
       eauto 10 using rel_inv_intro.
@@ -288,8 +290,6 @@ Section EXPAND.
 
   Definition expand_lts se :=
     {|
-      valid_query q :=
-        valid_query (L se) q;
       step ge s t s' :=
         forall w, symtbl_inv IB w se -> IS w s -> step (L se) ge s t s';
       initial_state q s :=
@@ -310,6 +310,7 @@ Section EXPAND.
       skel := skel L;
       state := state L;
       activate se := expand_lts se;
+      footprint := footprint L;
     |}.
 
   Lemma expand_fsim:
@@ -318,7 +319,7 @@ Section EXPAND.
   Proof.
     fsim (apply forward_simulation_step with (match_states := rel_inv (IS w));
           destruct Hse; subst); cbn; auto.
-    - destruct 1; reflexivity.
+    - firstorder.
     - intros q _ s [Hq] Hs. exists s.
       assert (IS w s) by (eapply preserves_initial_state; eauto).
       eauto using rel_inv_intro.

@@ -329,8 +329,8 @@ Lemma contains_locations_exten:
               (contains_locations j sp pos bound sl ls').
 Proof.
   intros; split; simpl; intros; auto.
-  intuition auto. exploit H5; eauto. intros (v & A & B). exists v; split; auto. 
-  specialize (H ofs ty). inv H. congruence. auto. 
+  intuition auto. exploit H5; eauto. intros (v & A & B). exists v; split; auto.
+  specialize (H ofs ty). inv H. congruence. auto.
 Qed.
 
 Lemma contains_locations_incr:
@@ -693,9 +693,9 @@ Lemma agree_regs_undef_caller_save_regs:
   agree_regs j ls rs ->
   agree_regs j (LTL.undef_caller_save_regs ls) (Mach.undef_caller_save_regs rs).
 Proof.
-  intros; red; intros. 
-  unfold LTL.undef_caller_save_regs, Mach.undef_caller_save_regs. 
-  destruct (is_callee_save r); auto. 
+  intros; red; intros.
+  unfold LTL.undef_caller_save_regs, Mach.undef_caller_save_regs.
+  destruct (is_callee_save r); auto.
 Qed.
 
 (** Preservation under assignment of stack slot *)
@@ -1326,7 +1326,7 @@ Proof.
     apply CS; auto.
     rewrite NCS by auto. apply AGR.
   split. red; unfold return_regs; intros.
-    destruct l. rewrite H; auto. destruct sl; auto; contradiction. 
+    destruct l. rewrite H; auto. destruct sl; auto; contradiction.
   assumption.
 Qed.
 
@@ -2480,9 +2480,10 @@ Proof.
   eapply source_invariant_fsim; eauto using linear_wt, wt_prog.
   revert MATCH.
   fsim eapply forward_simulation_plus with (match_states:= match_states rao prog tprog se1 se2 w).
-  - intros q1 q2 Hq. destruct Hq. inv Hse. cbn in *.
-    eapply (Genv.is_internal_transf_partial MATCH); eauto 1.
-    intros [|] ? Hfd; monadInv Hfd; auto.
+  (* - intros q1 q2 Hq. destruct Hq. inv Hse. cbn in *. *)
+  (*   eapply (Genv.is_internal_transf_partial MATCH); eauto 1. *)
+  (*   intros [|] ? Hfd; monadInv Hfd; auto. *)
+  - destruct f1; monadInv H; reflexivity.
   - cbn. intuition eauto using transf_initial_states.
   - intros s1 s2 r1 Hs  (Hr1 & [? ?] & Hxse & WTS & WTR). cbn in Hxse. subst.
     eapply transf_final_states; eauto.
