@@ -28,7 +28,7 @@ else
 ARCHDIRS=$(ARCH)_$(BITSIZE) $(ARCH)
 endif
 
-DIRS := lib common $(ARCHDIRS) backend cfrontend driver export cparser cklr
+DIRS := lib common $(ARCHDIRS) backend cfrontend driver export cparser cklr compcertox
 
 COQINCLUDES := $(foreach d, $(DIRS), -R $(d) compcert.$(d)) -R $(COQREL) coqrel
 
@@ -204,10 +204,14 @@ else
 EXPORTLIB=
 endif
 
+# CompCertOX
+COMPCERTOX=Lifting.v AbRel.v CModule.v TensorComp.v \
+  SkelLinking.v Composition.v
+
 # All source files
 
 FILES=$(VLIB) $(COMMON) $(CKLR) $(BACKEND) $(CFRONTEND) $(DRIVER) $(FLOCQ) \
-  $(MENHIRLIB) $(PARSER) $(EXPORTLIB)
+  $(MENHIRLIB) $(PARSER) $(EXPORTLIB) $(COMPCERTOX)
 
 # Generated source files
 
