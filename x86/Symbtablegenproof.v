@@ -226,7 +226,7 @@ Qed.
 Section PRESERVATION.
 
 Variable instr_size : instruction -> Z.
-  
+Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
 (** Assumption about external calls.
     These should be merged into common properties about external calls later. *)
 Axiom external_call_inject : forall ge j vargs1 vargs2 m1 m2 m1' vres1 t ef,
@@ -381,6 +381,213 @@ Proof.
   rewrite Ptrofs.add_zero_l. auto.
 Qed.
 
+Lemma genv_pres_instr_aux4: (forall secs id ofs nmap,
+   ~ In id fst ## secs ->
+   fold_left
+     (fun (a : NMap.t (ptrofs -> option instruction))
+        (p : positive * section) =>
+        acc_code_map instr_size a (fst p) (snd p)) secs
+     nmap
+     (Global id) ofs = nmap (Global id) ofs).
+Proof.
+  induction secs.
+  simpl. auto.
+  intros. destruct a;simpl.
+  simpl in H. eapply Decidable.not_or in H.
+  destruct H.
+  erewrite IHsecs;auto.
+  unfold acc_code_map. destruct s;simpl;auto.
+  erewrite NMap.gso. auto.
+  unfold not. intros. inv H1. congruence.
+Qed.
+
+(* Lemma gen_instr_map_pres_aux1: forall c ofs1 imap, *)
+(*     (exists c', code_size instr_size c' = Ptrofs.unsigned ofs1 + code_size instr_size c /\ Ptrofs.unsigned ofs1 > 0 /\ *)
+           
+(*     ) -> *)
+(*     (snd (fold_left (acc_instr_map instr_size) c (ofs1, imap))) Ptrofs.zero = imap Ptrofs.zero. *)
+(* Proof. *)
+(*   (* intros. generalize c . *) *)
+(*   induction c. *)
+(*   simpl. auto. *)
+(*   intros. simpl. *)
+(*   erewrite IHc. destr. *)
+(*   rewrite e in H. *)
+(*   destruct H as (c' & H & H1). *)
+(*   rewrite Ptrofs.unsigned_zero in H1. *)
+(*   lia. *)
+(*   destruct H as (c' & H & H1). *)
+(*   exists (a::c'). simpl. rewrite H. *)
+(*   rewrite Ptrofs.add_unsigned. *)
+(*   erewrite Ptrofs.unsigned_repr.  *)
+  
+(*   generalize (instr_size_bound i). intro. *)
+(*   rewrite H in H0. inv H0. *)
+(*   exploit (Ptrofs.unsigned_repr 0). lia. intros. *)
+(*   rewrite H0 in H1. *)
+(*   generalize (Z.lt_irrefl 0). intros. congruence. *)
+  
+(*   destruct (zlt (Ptrofs.unsigned ofs2) (Ptrofs.unsigned ofs2)). *)
+(*   generalize (Z.lt_irrefl (Ptrofs.unsigned ofs2)). intros. *)
+(*   congruence. *)
+(*   congruence. *)
+  
+(*   eapply Ptrofs.ltu_inv in H. *)
+(*   unfold Ptrofs.ltu. destr. *)
+(*   (* size in bound *) *)
+(*   unfold match_prog in TRANSF. *)
+(*   unfold transf_program in TRANSF. *)
+(*   destr_in TRANSF. destr_in TRANSF. *)
+(*   Ptrofs.ltu *)
+  
+Lemma gen_instr_map_pres: forall c ofs i ,
+    Z.le (code_size instr_size c) Ptrofs.max_unsigned ->
+    find_instr instr_size ofs c = Some i ->
+    gen_instr_map instr_size c (Ptrofs.repr ofs) = Some i.
+Proof.
+  induction c.
+  simpl. congruence.
+  simpl. intros.
+  destruct (zeq ofs 0).
+  -
+  inv H0.
+  unfold gen_instr_map. simpl.
+  rewrite Ptrofs.add_zero_l.
+  assert (forall ofs1 imap,
+          (exists c', code_size instr_size c' = Ptrofs.unsigned ofs1 /\ Ptrofs.unsigned ofs1 > 0 /\ code_size instr_size c + Ptrofs.unsigned ofs1 <= Ptrofs.max_unsigned) -> 
+         (let '(_, map) := (fold_left (acc_instr_map instr_size) c
+                         (ofs1, imap)) in map) Ptrofs.zero = imap Ptrofs.zero ).
+  { generalize H. generalize c.
+  clear IHc H c.        
+  induction c.
+  simpl. auto.
+  simpl. intros.
+  erewrite IHc.
+  destr. destruct H0 as (c' & H0 & ? & ?).  rewrite e in H1.
+  erewrite Ptrofs.unsigned_zero in H1.
+  lia.
+  generalize (instr_size_bound a). intros.
+  lia.
+  destruct H0 as (c' & H0 & ? & ?).
+  generalize (instr_size_bound a). intros.
+  exists (a::c').
+  simpl. rewrite H0.
+  erewrite Ptrofs.add_unsigned.
+  erewrite Ptrofs.unsigned_repr.   erewrite Ptrofs.unsigned_repr.
+  split;split;auto. lia. lia.
+  lia.
+  erewrite Ptrofs.unsigned_repr. constructor. lia.
+  generalize (code_size_non_neg instr_size instr_size_bound c).
+  intro. lia. lia. }
+  
+  exploit (H0 (Ptrofs.repr (instr_size i)) (fun o : ptrofs =>
+      if Ptrofs.eq_dec Ptrofs.zero o then Some i else None)).
+  exists [i]. simpl.
+  erewrite Ptrofs.unsigned_repr. split;auto.
+  split. generalize (instr_size_bound i). intros. lia.
+  auto. generalize (instr_size_bound i). intros. lia.
+
+  intros. unfold Ptrofs.zero in *.
+  erewrite H1. auto.
+
+  - unfold gen_instr_map in *.
+    simpl. erewrite IHc.
+Lemma genv_pres_instr_aux2:  forall defs (b : block) (f : function) (ofs : Z) (i : instruction) ge sectbl
+    (MATCH: forall id f, Genv.genv_defs ge (Global id) = Some (Gfun (Internal f)) ->
+                    sectbl ! id = Some (sec_text (fn_code f))),
+    Genv.genv_defs
+    (fold_left (Genv.add_global (V:=unit)) defs
+       ge) b =
+  Some (Gfun (Internal f)) ->
+  find_instr instr_size ofs (fn_code f) = Some i ->
+  fold_left
+    (fun (a : NMap.t (ptrofs -> option instruction))
+       (p : positive * section) =>
+     acc_code_map instr_size a (fst p) (snd p))
+    (PTree.elements
+       (fold_left acc_gen_section defs
+          sectbl))
+    (NMap.init (ptrofs -> option instruction)
+       (fun _ : ptrofs => None)) b (Ptrofs.repr ofs) = 
+  Some i.
+Proof.
+  induction defs.
+  simpl. intros.
+  exploit (Genv.genv_defs_range). unfold NMap.get. eauto. intros.
+  exploit (Genv.genv_sup_glob). eauto. intros (id & ?). subst.
+  apply MATCH in H.
+  exploit PTree.elements_correct. apply H. intros.
+  generalize (PTree.elements_keys_norepet  sectbl). intros.
+  assert (.
+  admit.
+  simpl. intros.
+  eapply IHdefs. apply H.
+  auto.
+  
+Lemma genv_pres_instr_aux1:  forall defs (b : block) (f : function) (ofs : Z) (i : instruction),
+    Genv.genv_defs
+    (fold_left (Genv.add_global (V:=unit)) defs
+       (Genv.empty_genv fundef unit (AST.prog_public prog))) b =
+  Some (Gfun (Internal f)) ->
+  find_instr instr_size ofs (fn_code f) = Some i ->
+  fold_left
+    (fun (a : NMap.t (ptrofs -> option instruction))
+       (p : positive * section) =>
+     acc_code_map instr_size a (fst p) (snd p))
+    (PTree.elements
+       (fold_left acc_gen_section defs
+          (PTree.empty section)))
+    (NMap.init (ptrofs -> option instruction)
+       (fun _ : ptrofs => None)) b (Ptrofs.repr ofs) = 
+  Some i.
+Proof.
+  induction defs.
+  simpl. admit.
+  simpl.
+  (* generalize  *)
+  
+
+Lemma genv_pres_instr : forall b f ofs i,
+    Globalenvs.Genv.genv_defs ge b = Some (Gfun (Internal f)) ->
+    find_instr instr_size ofs (fn_code f) = Some i ->
+    Genv.genv_instrs tge b (Ptrofs.repr ofs) = Some i.
+Proof.
+  unfold ge. unfold tge. unfold match_prog in TRANSF.
+  unfold transf_program in TRANSF.
+  destr_in TRANSF. destr_in TRANSF.
+
+  unfold Genv.globalenv. unfold globalenv.
+  cbn [Genv.genv_instrs].
+  inv TRANSF. cbn [prog_sectable].
+
+  unfold Genv.add_globals. unfold gen_code_map.
+  unfold create_sec_table.
+  erewrite PTree.fold_spec.
+
+
+Theorem init_meminj_match_sminj : forall m,
+  Genv.init_mem prog = Some m ->
+  match_inj (Mem.flat_inj (Mem.support m)).
+Proof.
+  intros m INIT.
+  constructor.
+
+  (* agree_inj_instrs *)
+  intros b b' f ofs ofs' i FPTR FINST INITINJ.
+  unfold Mem.flat_inj in INITINJ.
+  destruct (Mem.sup_dec b (Mem.support m));try congruence.
+  inv INITINJ. 
+  exploit Genv.find_funct_ptr_inversion. apply FPTR.
+  intros (id & DEFSIN).
+  unfold Genv.find_instr.
+  assert (Globalenvs.Genv.genv_defs ge b = Some (Internal f) ->
+         Genv.genv_instrs tge b = instr_map /\ match_instr (fn_code f) instr_map)
+  admit.
+  admit.
+  admit.
+  admit.
+Admitted.
+
 Section INIT_MEM.
 
 Variables m tm: mem.
@@ -405,15 +612,6 @@ Hypothesis TIM: init_mem instr_size tprog = Some tm.
 (*         end *)
 (*       end. *)
 
-Theorem init_meminj_match_sminj :
-    match_inj (Mem.flat_inj (Mem.support m)).
-Proof.
-  constructor.
-  admit.
-  admit.
-  admit.
-  admit.
-Admitted.  
 (*   generalize TRANSF. intros TRANSF'. *)
 (*   unfold match_prog in TRANSF'. *)
 (*   unfold transf_program in TRANSF'. *)
@@ -979,12 +1177,34 @@ Proof.
      rewrite Ptrofs.add_unsigned. rewrite Ptrofs.add_zero.
      rewrite <- H6. rewrite Z.add_0_r. rewrite Ptrofs.unsigned_zero. auto.
      constructor.
-     admit.
+     cbn [Val.offset_ptr].
+     rewrite Ptrofs.sub_add_opp.
+     econstructor.
+     (* prove SSAsm.stkblock = stk' = stk *)
+     exploit (Genv.init_mem_stack). eapply H. intros.
+     exploit (init_mem_stack). eapply INITM'. intros.
+     assert (stk' = SSAsm.stkblock).
+     exploit Mem.alloc_result. eapply H0.
+     unfold Mem.nextblock. unfold Mem.fresh_block. rewrite H3.
+     simpl. intros. rewrite H5. unfold SSAsm.stkblock. auto.
+     (* prove stk' in support m2 *)
+     rewrite <- H5.
+     exploit Mem.support_storev. apply H1. intros.
+     rewrite <- H6. unfold Mem.flat_inj.
+     destruct Mem.sup_dec. eauto.
+     congruence.
+     rewrite Ptrofs.add_zero. auto.
+     (* glob block valid *)
+     
+     unfold glob_block_valid. intros.
+     exploit (Genv.find_def_not_fresh). apply H. apply H3.
+     unfold Mem.valid_block. intros.
+     exploit Mem.support_alloc. apply H0. 
+     exploit Mem.support_storev. apply H1.
+     intros. rewrite <- H5. rewrite H6.
+     exploit Mem.sup_include_incr. apply H4. auto.
+Qed.
 
-     (* glob_block_valid *)
-     admit.
-Admitted.
-  
 (* Lemma transf_initial_states : forall rs (SELF: forall j, forall r : PregEq.t, Val.inject j (rs r) (rs r)) st1, *)
 (*     RealAsm.initial_state prog rs st1  -> *)
 (*     exists st2, initial_state tprog rs st2 /\ match_states st1 st2. *)
@@ -1437,8 +1657,10 @@ Proof.
   - destruct p. 
     inject_match. inject_match.
     apply inject_symbol_address; auto.
-    destr_valinj_left H1; inv H1; auto.
-    Admitted.
+    destr_valinj_left H1;inv H1; auto.
+    destr_match;auto. destr_match;try (inv H1);auto.
+Qed.
+
     (* destr_pair_if. auto. *)
     (* eapply Val.inject_ptr; eauto. *)
     (* repeat unfold Ptrofs.of_int.  *)
@@ -1461,51 +1683,54 @@ Proof.
   destruct base, ofs, const; simpl in *.
   - destruct p. repeat apply Val.addl_inject; auto.
     destr_pair_if; auto.
-Admitted.
 
-(*     apply Val.mull_inject; auto. *)
-(*   - destruct p,p0. repeat apply Val.addl_inject; auto. *)
-(*     destr_pair_if; auto. *)
-(*     apply Val.mull_inject; auto. *)
-(*     apply inject_symbol_address. auto. *)
-(*   - repeat apply Val.addl_inject; auto. *)
-(*   - destruct p. apply Val.addl_inject; auto.  *)
-(*     inject_match. apply inject_symbol_address; auto. *)
-(*     destr_valinj_left H1; inv H1; auto. *)
-(*     (* destr_pair_if; auto. *) *)
-(*     (* eapply Val.inject_ptr; eauto.  *) *)
-(*     (* repeat rewrite Ptrofs.add_assoc.  *) *)
-(*     (* rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *) *)
-(*   - destruct p.  *)
-(*     inject_match. *)
-(*     apply Val.addl_inject; auto. *)
-(*     destr_pair_if; auto.  *)
-(*     apply Val.mull_inject; auto. *)
-(*     destr_valinj_left H1; inv H1; auto. *)
-(*     (* destr_pair_if; auto. *) *)
-(*     (* eapply Val.inject_ptr; eauto.  *) *)
-(*     (* repeat rewrite Ptrofs.add_assoc.  *) *)
-(*     (* rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *) *)
-(*   - destruct p,p0. *)
-(*     inject_match. *)
-(*     apply Val.addl_inject; auto. *)
-(*     destr_pair_if; auto.  *)
-(*     apply Val.mull_inject; auto. *)
-(*     apply inject_symbol_address; auto. *)
-(*     destr_valinj_left H1; inv H1; auto. *)
-(*     (* destr_pair_if; auto. *) *)
-(*     (* eapply Val.inject_ptr; eauto.  *) *)
-(*     (* repeat rewrite Ptrofs.add_assoc.  *) *)
-(*     (* rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *) *)
-(*   - repeat apply Val.addl_inject; auto. *)
-(*   - destruct p. inject_match. inject_match. *)
-(*     apply inject_symbol_address; auto. *)
-(*     destr_valinj_left H1; inv H1; auto. *)
-(*     destr_valinj_left H1; inv H1; auto. *)
-(*     (* eapply Val.inject_ptr; eauto.  *) *)
-(*     (* repeat rewrite Ptrofs.add_assoc.  *) *)
-(*     (* rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *)     *)
-(* Qed. *)
+    apply Val.mull_inject; auto.
+  - destruct p,p0. repeat apply Val.addl_inject; auto.
+    destr_pair_if; auto.
+    apply Val.mull_inject; auto.
+    apply inject_symbol_address. auto.
+  - repeat apply Val.addl_inject; auto.
+  - destruct p. apply Val.addl_inject; auto.
+    inject_match. apply inject_symbol_address; auto.
+    destr_valinj_left H1; inv H1; auto.
+    destruct Archi.ptr64;auto.
+    eapply Val.inject_ptr; eauto.
+    repeat rewrite Ptrofs.add_assoc.
+    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+  - destruct p.
+    inject_match.
+    apply Val.addl_inject; auto.
+    destr_pair_if; auto.
+    apply Val.mull_inject; auto.
+    destr_valinj_left H1; inv H1; auto.
+    destruct Archi.ptr64;auto.
+    eapply Val.inject_ptr; eauto.
+    repeat rewrite Ptrofs.add_assoc.
+    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+  - destruct p,p0.
+    inject_match.
+    apply Val.addl_inject; auto.
+    destr_pair_if; auto.
+    apply Val.mull_inject; auto.
+    apply inject_symbol_address; auto.
+    destr_valinj_left H1; inv H1; auto.
+    destruct Archi.ptr64;auto.
+    eapply Val.inject_ptr; eauto.
+    repeat rewrite Ptrofs.add_assoc.
+    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+  - repeat apply Val.addl_inject; auto.
+  - destruct p. inject_match. inject_match.
+    apply inject_symbol_address; auto.
+    destr_valinj_left H1; inv H1; auto.
+    destruct Archi.ptr64;auto.
+    eapply Val.inject_ptr; eauto.
+    repeat rewrite Ptrofs.add_assoc.
+    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+    repeat destr_match;auto;try (inv H1);auto.
+    repeat rewrite Ptrofs.add_assoc.
+    repeat rewrite Ptrofs.add_zero.
+    econstructor. eauto. auto.
+Qed.
 
 Lemma eval_addrmode_inject: forall j a rs1 rs2,
     match_inj j ->
@@ -1598,7 +1823,7 @@ Lemma eval_testcond_inject: forall j c rs1 rs2,
     Val.opt_lessdef (Asm.eval_testcond c rs1) (Asm.eval_testcond c rs2).
 Proof.
   intros. destruct c; simpl; try solve_opt_lessdef.
-  Admitted.
+Qed.
 
 
 Hint Resolve nextinstr_nf_pres_inject nextinstr_pres_inject regset_inject_expand

@@ -897,23 +897,23 @@ Definition acc_extfuns (idg: ident * gdef) extfuns :=
 Definition gen_extfuns (idgs: list (ident * gdef)) :=
   fold_right acc_extfuns (NMap.init _ None) idgs.
 
-(* Lemma PTree_Properteis_of_list_get_extfuns : forall defs i f, *)
-(*     list_norepet (map fst defs) -> *)
-(*     (PTree_Properties.of_list defs) ! i = (Some (Gfun (External f))) -> *)
-(*     (gen_extfuns defs) ! i = Some f. *)
-(* Proof. *)
-(*   induction defs as [|def defs]. *)
-(*   - cbn. intros. rewrite PTree.gempty in H0. congruence. *)
-(*   - intros i f NORPT OF. destruct def as (id, def). *)
-(*     inv NORPT. *)
-(*     destruct (ident_eq id i). *)
-(*     + subst. erewrite PTree_Properties_of_list_cons in OF; auto. *)
-(*       inv OF. cbn. *)
-(*       rewrite PTree.gss. auto. *)
-(*     + erewrite PTree_Properties_of_list_tail in OF; eauto. *)
-(*       cbn. repeat (destr; eauto; subst). *)
-(*       erewrite PTree.gso; auto. *)
-(* Qed. *)
+Lemma PTree_Properteis_of_list_get_extfuns : forall defs i f,
+    list_norepet (map fst defs) ->
+    (PTree_Properties.of_list defs) ! i = (Some (Gfun (External f))) ->
+    (gen_extfuns defs) (Global i) = Some f.
+Proof.
+  induction defs as [|def defs].
+  - cbn. intros. rewrite PTree.gempty in H0. congruence.
+  - intros i f NORPT OF. destruct def as (id, def).
+    inv NORPT.
+    destruct (ident_eq id i).
+    + subst. erewrite PTree_Properties_of_list_cons in OF; auto.
+      inv OF. cbn. rewrite NMap.gss. auto.
+    + erewrite PTree_Properties_of_list_tail in OF; eauto.
+      cbn. repeat (destr; eauto; subst).
+      erewrite NMap.gso;auto.
+      unfold not. intros. inv H;congruence.
+Qed.
 
 Definition globalenv (p: program) : Genv.t :=
   let symbmap := gen_symb_map (prog_symbtable p) in
@@ -1186,273 +1186,143 @@ Proof.
     exploit IHl; eauto. intros. congruence.
 Qed.
 
-(* Lemma alloc_rodata_section_nextblock: forall ge stbl m m', *)
-(*   alloc_rodata_section ge stbl m = Some m' -> Mem.nextblock m' = Pos.succ (Mem.nextblock m). *)
-(* Proof. *)
-(*   intros ge stbl m m' ALLOC. *)
-(*   unfold alloc_rodata_section in ALLOC. *)
-(*   repeat destr_in ALLOC. *)
-(*   exploit Mem.nextblock_alloc; eauto. *)
-(*   intros NB1. *)
-(*   exploit Globalenvs.Genv.store_zeros_nextblock; eauto. *)
-(*   intros NB2. *)
-(*   exploit store_init_data_list_nextblock; eauto. *)
-(*   intros NB3. *)
-(*   exploit Mem.nextblock_drop; eauto. *)
-(*   intros NB4.  *)
-(*   congruence. *)
-(* Qed. *)
+Lemma store_init_data_stack : forall v ge (m m' : mem) (b : block) (ofs : Z),
+       store_init_data ge m b ofs v = Some  m' -> Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+Proof.
+  intros v ge0 m m' b ofs H. destruct v; simpl in *;try (f_equal;now eapply Mem.support_store; eauto).
+  inv H. auto.
+Qed.
 
-(* Lemma alloc_data_section_nextblock: forall ge stbl m m', *)
-(*   alloc_data_section ge stbl m = Some m' -> Mem.nextblock m' = Pos.succ (Mem.nextblock m). *)
-(* Proof. *)
-(*   intros ge stbl m m' ALLOC. *)
-(*   unfold alloc_data_section in ALLOC. *)
-(*   repeat destr_in ALLOC. *)
-(*   exploit Mem.nextblock_alloc; eauto. *)
-(*   intros NB1. *)
-(*   exploit Globalenvs.Genv.store_zeros_nextblock; eauto. *)
-(*   intros NB2. *)
-(*   exploit store_init_data_list_nextblock; eauto. *)
-(*   intros NB3. *)
-(*   exploit Mem.nextblock_drop; eauto. *)
-(*   intros NB4.  *)
-(*   congruence. *)
-(* Qed. *)
+Lemma store_init_data_list_stack : forall l ge (m m' : mem) (b : block) (ofs : Z),
+       store_init_data_list ge m b ofs l = Some m' -> Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
+Proof.
+  induction l; intros.
+  - simpl in H. inv H. auto.
+  - simpl in H. destr_match_in H; inv H.
+    exploit store_init_data_stack; eauto.
+    exploit IHl; eauto.
+    intros. congruence.
+Qed.
 
-(* Lemma alloc_code_section_nextblock: forall stbl m m', *)
-(*   alloc_code_section stbl m = Some m' -> Mem.nextblock m' = Pos.succ (Mem.nextblock m). *)
-(* Proof. *)
-(*   intros stbl m m' ALLOC. *)
-(*   unfold alloc_code_section in ALLOC. *)
-(*   repeat destr_in ALLOC. *)
-(*   exploit Mem.nextblock_alloc; eauto. *)
-(*   intros NB1. *)
-(*   exploit Mem.nextblock_drop; eauto. *)
-(*   intros NB2. congruence. *)
-(* Qed. *)
+Lemma alloc_section_stack: forall ge symbtbl id sec m m',
+    alloc_section ge symbtbl (Some m) id sec = Some m' ->
+    Mem.stack (Mem.support m) = Mem.stack (Mem.support m').
+Proof.
+  unfold alloc_section. intros.
+  repeat destr_in H.
+  exploit Mem.support_drop;eauto.
+  exploit Mem.support_alloc_glob;eauto. intros.
+  rewrite H0. rewrite H. auto.
+  exploit Mem.support_drop;eauto.
+  exploit Mem.support_alloc_glob;eauto. intros.
+  exploit Genv.store_zeros_stack;eauto. intros (?&?).
+  exploit store_init_data_list_stack;eauto. intros.
+  rewrite H0. rewrite H4. rewrite H2.
+  rewrite H. auto.
+  exploit Mem.support_drop;eauto.
+  exploit Mem.support_alloc_glob;eauto. intros.
+  exploit Genv.store_zeros_stack;eauto. intros (?&?).
+  exploit store_init_data_list_stack;eauto. intros.
+  rewrite H0. rewrite H4. rewrite H2.
+  rewrite H. auto.
+Qed.  
 
+Definition alloc_property_aux (m: mem) (optm': option mem):=
+  forall m', optm' = Some m' ->
+        Mem.stack (Mem.support m) = Mem.stack (Mem.support m').
 
-(* Definition num_of_external_symbs (tbl:SymbTable.t) := *)
-(*   length (filter (fun s => negb (is_symbentry_internal s)) tbl). *)
+Lemma alloc_sections_stack_aux: forall ge symbtbl defs m,
+     alloc_property_aux m
+            (fold_left
+    (fun (a : option mem) (p : positive * section) =>
+     alloc_section ge symbtbl a (fst p) (snd p))
+    defs (Some m)).
+Proof.
+  intros. eapply Bounds.fold_left_preserves.
+  unfold alloc_property_aux. intros.
+  destruct a.
+  eapply alloc_section_stack in H0. rewrite <- H0.
+  eapply H. auto.
+  simpl in H0. inv H0.
+  unfold alloc_property_aux. intros. inv H. auto.
+Qed.
+  
+Lemma alloc_sections_stack: forall ge symbtbl sectbl m m',
+    alloc_sections ge symbtbl sectbl m = Some m' ->
+    Mem.stack (Mem.support m) = Mem.stack (Mem.support m').
+Proof.
+  
+  unfold alloc_sections. intros ge symbtbl sectbl m m'.
+  rewrite PTree.fold_spec. intros.
+  exploit alloc_sections_stack_aux;eauto.
+Qed.
 
-(* Lemma alloc_external_symbol_nextblock1 : forall e m m', *)
-(*   is_symbentry_internal e = false -> *)
-(*   alloc_external_symbol m e = Some m' ->  *)
-(*   Mem.nextblock m' = Pos.succ (Mem.nextblock m). *)
-(* Proof. *)
-(*   intros e m m' SI ALLOC. *)
-(*   unfold alloc_external_symbol in ALLOC. *)
-(*   repeat destr_in ALLOC. *)
-(*   - unfold is_symbentry_internal in SI. *)
-(*     rewrite Heqs0 in SI. congruence. *)
-(*   - erewrite Mem.nextblock_drop; eauto. *)
-(*     erewrite Mem.nextblock_alloc; eauto. *)
-(*   - unfold is_symbentry_internal in SI. *)
-(*     rewrite Heqs0 in SI. congruence. *)
-(*   - erewrite Mem.nextblock_drop; eauto. *)
-(*     erewrite Genv.store_zeros_nextblock; eauto. *)
-(*     erewrite Mem.nextblock_alloc; eauto. *)
-(*   - erewrite Mem.nextblock_drop; eauto. *)
-(*     erewrite Genv.store_zeros_nextblock; eauto. *)
-(*     erewrite Mem.nextblock_alloc; eauto. *)
-(*   - erewrite Mem.nextblock_alloc; eauto. *)
-(* Qed. *)
-
-(* Lemma alloc_external_symbol_nextblock2 : forall e m m', *)
-(*   is_symbentry_internal e = true -> *)
-(*   alloc_external_symbol m e = Some m' ->  *)
-(*   Mem.nextblock m' = Mem.nextblock m. *)
-(* Proof. *)
-(*   intros e m m' SI ALLOC. *)
-(*   unfold alloc_external_symbol in ALLOC. *)
-(*   repeat destr_in ALLOC. *)
-(*   - unfold is_symbentry_internal in SI. *)
-(*     rewrite Heqs0 in SI. congruence. *)
-(*   - unfold is_symbentry_internal in SI. *)
-(*     rewrite Heqs0 in SI. congruence. *)
-(*   - unfold is_symbentry_internal in SI. *)
-(*     rewrite Heqs0 in SI. congruence. *)
-(*   - unfold is_symbentry_internal in SI. *)
-(*     rewrite Heqs0 in SI. congruence. *)
-(* Qed. *)
-
-(* Lemma alloc_external_symbols_nextblock: forall tbl m1 m, *)
-(*   alloc_external_symbols m1 tbl = Some m -> *)
-(*   Mem.nextblock m = pos_advance_N (Mem.nextblock m1) (num_of_external_symbs tbl). *)
-(* Proof. *)
-(*   induction tbl; intros; inv H. *)
-(*   - auto. *)
-(*   - destr_match_in H1; inv H1. *)
-(*     simpl.  *)
-(*     exploit IHtbl; eauto. intros NB. *)
-(*     destruct (is_symbentry_internal a) eqn:SI.     *)
-(*     + exploit alloc_external_symbol_nextblock2; eauto. *)
-(*       intros NB1. *)
-(*       cbn. rewrite SI. cbn.  *)
-(*       rewrite NB. f_equal. auto. *)
-(*     + exploit alloc_external_symbol_nextblock1; eauto. *)
-(*       intros NB1. *)
-(*       cbn. rewrite SI. cbn. *)
-(*       rewrite NB. f_equal. auto. *)
-(* Qed. *)
-
-(* Lemma add_external_global_nextblock1: forall ge extfuns e, *)
-(*     is_symbentry_internal e = false -> *)
-(*     Genv.genv_next (add_external_global extfuns ge e) =  *)
-(*     Pos.succ (Genv.genv_next ge). *)
-(* Proof. *)
-(*   intros ge extfuns e SI. *)
-(*   unfold add_external_global. *)
-(*   rewrite SI. cbn. auto. *)
-(* Qed.   *)
-
-(* Lemma add_external_global_nextblock2: forall ge extfuns e, *)
-(*     is_symbentry_internal e = true -> *)
-(*     Genv.genv_next (add_external_global extfuns ge e) =  *)
-(*     Genv.genv_next ge. *)
-(* Proof. *)
-(*   intros ge extfuns e SI. *)
-(*   unfold add_external_global. *)
-(*   rewrite SI. cbn. auto. *)
-(* Qed. *)
-
-(* Lemma add_external_globals_nextblock: forall tbl ge extfuns, *)
-(*   Genv.genv_next (add_external_globals extfuns ge tbl) =  *)
-(*   pos_advance_N (Genv.genv_next ge) (num_of_external_symbs tbl). *)
-(* Proof. *)
-(*   induction tbl; intros; simpl. *)
-(*   - auto. *)
-(*   - rewrite IHtbl.  *)
-(*     destruct (is_symbentry_internal a) eqn:SI. *)
-(*     + erewrite add_external_global_nextblock2; eauto. *)
-(*       cbn. rewrite SI. cbn. auto. *)
-(*     + erewrite add_external_global_nextblock1; eauto. *)
-(*       cbn. rewrite SI. cbn. auto. *)
-(* Qed. *)
+Lemma alloc_external_symbol_stack: forall id e m m',
+    alloc_external_symbol(Some m) id e = Some m' ->
+    Mem.stack (Mem.support m) = Mem.stack (Mem.support m').
+Proof.
+  unfold alloc_external_symbol.
+  intros. repeat destr_in H.
+  exploit Mem.support_drop;eauto.
+  exploit Mem.support_alloc_glob;eauto. intros.
+  rewrite H0. rewrite H. auto.
+  exploit Mem.support_drop;eauto.
+  exploit Mem.support_alloc_glob;eauto. intros.
+  exploit Genv.store_zeros_stack;eauto. intros (?&?).
+  rewrite H0. rewrite H2. rewrite H. auto.
+  exploit Mem.support_drop;eauto.
+  exploit Mem.support_alloc_glob;eauto. intros.
+  exploit Genv.store_zeros_stack;eauto. intros (?&?).
+  rewrite H0. rewrite H2. rewrite H. auto.
+  exploit Mem.support_drop;eauto.
+  exploit Mem.support_alloc_glob;eauto. intros.
+  exploit Genv.store_zeros_stack;eauto. intros (?&?).
+  rewrite H0. rewrite H2. rewrite H. auto.
+  exploit Mem.support_drop;eauto.
+  exploit Mem.support_alloc_glob;eauto. intros.
+  exploit Genv.store_zeros_stack;eauto. intros (?&?).
+  rewrite H0. rewrite H2. rewrite H. auto.
+  exploit Mem.support_alloc_glob;eauto. intros.
+  rewrite H. auto.
+Qed.
 
 
-(* Lemma init_mem_genv_next: forall (p: program) m, *)
-(*   init_mem p = Some m -> *)
-(*   Genv.genv_next (globalenv p) = Mem.nextblock m. *)
-(* Proof. *)
-(*   unfold init_mem; intros. *)
-(*   destruct (Mem.alloc Mem.empty 0 0) eqn:ALLOC. *)
-(*   destr_match_in H; inv H. destr_in H1. destr_in H1.  *)
-(*   exploit alloc_rodata_section_nextblock; eauto. intros NB1. *)
-(*   rewrite Mem.nextblock_empty in NB1. cbn in NB1. *)
-(*   exploit alloc_data_section_nextblock; eauto. intros NB2. *)
-(*   exploit alloc_code_section_nextblock; eauto. intros NB3. *)
-(*   exploit alloc_external_symbols_nextblock; eauto. intros NB4. *)
-(*   unfold globalenv. *)
-(*   erewrite add_external_globals_nextblock. cbn. *)
-(*   rewrite NB1 in NB2. rewrite NB2 in NB3. cbn in NB3. congruence. *)
-(* Qed. *)
+
+Lemma alloc_external_symbols_stack: forall symbtbl m m',
+    alloc_external_symbols m symbtbl = Some m' ->
+    Mem.stack (Mem.support m) = Mem.stack (Mem.support m').
+Proof.
+  unfold alloc_external_symbols. intros.
+  rewrite PTree.fold_spec in H.
+  assert (alloc_property_aux m (fold_left
+        (fun (a : option mem) (p : positive * symbentry) =>
+         alloc_external_symbol a (fst p) (snd p))
+        (PTree.elements symbtbl) (Some m))).
+  eapply Bounds.fold_left_preserves.
+  unfold alloc_property_aux.
+  intros.
+  destruct a.
+  eapply alloc_external_symbol_stack in H1.
+  rewrite <- H1.  eapply H0. auto.
+  simpl in H1. congruence.
+  unfold alloc_property_aux.
+  intros. inv H0;auto.
+  unfold alloc_property_aux in H0.
+  eapply H0. auto.
+Qed.
 
 
-(* Lemma store_init_data_stack : forall v ge (m m' : mem) (b : block) (ofs : Z), *)
-(*        store_init_data ge m b ofs v = Some  m' -> Mem.stack (Mem.support m') = Mem.stack (Mem.support m). *)
-(* Proof. *)
-(*   intros v ge0 m m' b ofs H. destruct v; simpl in *; try (now eapply Mem.store_stack_unchanged; eauto). *)
-(*   inv H. auto. *)
-(* Qed. *)
-
-(* Lemma store_init_data_list_stack : forall l ge (m m' : mem) (b : block) (ofs : Z), *)
-(*        store_init_data_list ge m b ofs l = Some m' -> Mem.stack m' = Mem.stack m. *)
-(* Proof. *)
-(*   induction l; intros. *)
-(*   - simpl in H. inv H. auto. *)
-(*   - simpl in H. destr_match_in H; inv H. *)
-(*     exploit store_init_data_stack; eauto. *)
-(*     exploit IHl; eauto. *)
-(*     intros. congruence. *)
-(* Qed. *)
-
-(* Lemma alloc_external_symbol_stack: forall e m m', *)
-(*     alloc_external_symbol m e = Some m' -> Mem.stack m = Mem.stack m'. *)
-(* Proof. *)
-(*   intros e m m' ALLOC. *)
-(*   unfold alloc_external_symbol in ALLOC. *)
-(*   repeat destr_in ALLOC. *)
-(*   - exploit Mem.drop_perm_stack_unchanged; eauto. *)
-(*     exploit Mem.alloc_stack_unchanged; eauto. intros. *)
-(*     congruence. *)
-(*   - exploit Mem.drop_perm_stack_unchanged; eauto. *)
-(*     exploit Genv.store_zeros_stack; eauto. *)
-(*     exploit Mem.alloc_stack_unchanged; eauto. intros. *)
-(*     congruence. *)
-(*   - exploit Mem.drop_perm_stack_unchanged; eauto. *)
-(*     exploit Genv.store_zeros_stack; eauto. *)
-(*     exploit Mem.alloc_stack_unchanged; eauto. intros. *)
-(*     congruence. *)
-(*   - exploit Mem.alloc_stack_unchanged; eauto.  *)
-(* Qed. *)
-
-    
-(* Lemma alloc_external_symbols_stack: forall stbl m m', *)
-(*     alloc_external_symbols m stbl = Some m' -> Mem.stack m = Mem.stack m'. *)
-(* Proof. *)
-(*   induction stbl; inversion 1. *)
-(*   - inv H. auto. *)
-(*   - destr_match_in H1; inv H1. *)
-(*     exploit alloc_external_symbol_stack; eauto. *)
-(*     intros STKEQ. rewrite STKEQ. *)
-(*     erewrite IHstbl; eauto. *)
-(* Qed. *)
-
-(* Lemma alloc_rodata_section_stack: forall ge stbl m m', *)
-(*     alloc_rodata_section ge stbl m = Some m' ->  *)
-(*     Mem.stack m = Mem.stack m'. *)
-(* Proof. *)
-(*   intros ge stbl m m' ALLOC. *)
-(*   unfold alloc_rodata_section in ALLOC. *)
-(*   repeat destr_in ALLOC. *)
-(*   exploit Mem.drop_perm_stack_unchanged; eauto. *)
-(*   exploit store_init_data_list_stack; eauto. *)
-(*   exploit Genv.store_zeros_stack; eauto. *)
-(*   exploit Mem.alloc_stack_unchanged; eauto. intros. *)
-(*   congruence. *)
-(* Qed. *)
-
-(* Lemma alloc_data_section_stack: forall ge stbl m m', *)
-(*     alloc_data_section ge stbl m = Some m' ->  *)
-(*     Mem.stack m = Mem.stack m'. *)
-(* Proof. *)
-(*   intros ge stbl m m' ALLOC. *)
-(*   unfold alloc_data_section in ALLOC. *)
-(*   repeat destr_in ALLOC. *)
-(*   exploit Mem.drop_perm_stack_unchanged; eauto. *)
-(*   exploit store_init_data_list_stack; eauto. *)
-(*   exploit Genv.store_zeros_stack; eauto. *)
-(*   exploit Mem.alloc_stack_unchanged; eauto. intros. *)
-(*   congruence. *)
-(* Qed. *)
-
-(* Lemma alloc_code_section_stack: forall stbl m m', *)
-(*     alloc_code_section stbl m = Some m' ->  *)
-(*     Mem.stack m = Mem.stack m'. *)
-(* Proof. *)
-(*   intros stbl m m' ALLOC. *)
-(*   unfold alloc_code_section in ALLOC. *)
-(*   repeat destr_in ALLOC. *)
-(*   exploit Mem.drop_perm_stack_unchanged; eauto. *)
-(*   exploit Mem.alloc_stack_unchanged; eauto. intros. *)
-(*   congruence. *)
-(* Qed. *)
-
-(* Lemma init_mem_stack: *)
-(*   forall p m, *)
-(*     init_mem p = Some m -> *)
-(*     Mem.stack m = nil. *)
-(* Proof. *)
-(*   intros. unfold init_mem in H. *)
-(*   repeat destr_in H. *)
-(*   erewrite <- alloc_external_symbols_stack; eauto. *)
-(*   erewrite <- alloc_code_section_stack; eauto. *)
-(*   erewrite <- alloc_data_section_stack; eauto. *)
-(*   erewrite <- alloc_rodata_section_stack; eauto. *)
-(*   erewrite Mem.empty_stack; eauto. *)
-(* Qed. *)
+Lemma init_mem_stack:
+  forall p m,
+    init_mem p = Some m ->
+    Mem.stack (Mem.support m) = Node None nil nil None.
+Proof.
+  intros. unfold init_mem in H.
+  repeat destr_in H.
+  erewrite <- alloc_external_symbols_stack; eauto.
+  erewrite <- alloc_sections_stack; eauto.
+  simpl. auto.
+Qed.
 
 
 
