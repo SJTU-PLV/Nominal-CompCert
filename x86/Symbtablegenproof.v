@@ -439,6 +439,24 @@ Qed.
 (*   unfold transf_program in TRANSF. *)
 (*   destr_in TRANSF. destr_in TRANSF. *)
 (*   Ptrofs.ltu *)
+
+Lemma gen_instr_map_pres: forall n c ofs i,
+    Z.le (code_size instr_size c) Ptrofs.max_unsigned ->
+    Datatypes.length c = n ->
+    find_instr instr_size ofs c = Some i ->
+    gen_instr_map instr_size c (Ptrofs.repr ofs) = Some i.
+Proof.
+  induction n.
+  simpl. admit.
+  intros.
+  exploit length_S_inv. apply H0. intros (c' & a & ? & ?).
+  rewrite H2. unfold gen_instr_map.
+  erewrite fold_left_app. simpl.
+  unfold gen_instr_map in IHn.
+  destruct (acc_instr_map instr_size
+      (fold_left (acc_instr_map instr_size) c'
+                 (Ptrofs.zero, fun _ : ptrofs => None)) a) eqn:ACC.
+  unfold acc_instr_map in ACC.
   
 Lemma gen_instr_map_pres: forall c ofs i ,
     Z.le (code_size instr_size c) Ptrofs.max_unsigned ->
@@ -491,7 +509,64 @@ Proof.
   erewrite H1. auto.
 
   - unfold gen_instr_map in *.
-    simpl. erewrite IHc.
+    (* generalize (instr_size_bound a). intros.  *)
+    (* assert (code_size instr_size c <= Ptrofs.max_unsigned) by lia. *)
+    (* generalize (IHc _ _ H2 H0). intros.        *)
+    (* simpl. rewrite Ptrofs.add_zero_l. *)
+
+    assert (forall ofs1 ofs2 ofs3 imap1 imap2
+              (OFS3: Ptrofs.unsigned ofs3 >= 0 ),
+               Ptrofs.unsigned ofs3 <= Ptrofs.unsigned ofs1  ->
+               imap1 ofs2 = imap2 (Ptrofs.sub ofs2 ofs3) ->
+               code_size instr_size c + Ptrofs.unsigned ofs1 <= Ptrofs.max_unsigned ->
+               (exists c', Ptrofs.unsigned ofs1 >= 0 /\
+                      Ptrofs.unsigned ofs2 = code_size instr_size c' + Ptrofs.unsigned ofs1 /\ 
+                      Ptrofs.unsigned ofs2 <= Ptrofs.max_unsigned) ->
+               (let '(_, map) := fold_left (acc_instr_map instr_size) c (ofs1, imap1) in map) ofs2 =
+               (let '(_, map) := fold_left (acc_instr_map instr_size) c (Ptrofs.sub ofs1 ofs3, imap2) in map) (Ptrofs.sub ofs2 ofs3) ).
+    { generalize H. generalize c.
+      clear H H0 IHc.
+      induction c0.
+      simpl. intros. auto.
+      simpl. intros. 
+      destruct H3 as (c' & ? & ? & ?).
+      generalize (instr_size_bound a). intros.
+      generalize (instr_size_bound a0). intros.
+      generalize (code_size_non_neg instr_size instr_size_bound c'). intros CODESIZE'.
+      generalize (code_size_non_neg instr_size instr_size_bound c0). intros CODESIZE0.      
+      erewrite IHc0 .       
+      assert (Ptrofs.add (Ptrofs.sub ofs1 ofs3) (Ptrofs.repr (instr_size a0)) = Ptrofs.sub (Ptrofs.add ofs1 (Ptrofs.repr (instr_size a0))) ofs3).
+      { rewrite Ptrofs.sub_add_l. auto. }
+      rewrite H8. eauto. lia. lia.
+      rewrite Ptrofs.add_unsigned. repeat rewrite Ptrofs.unsigned_repr;auto.
+      lia. lia. lia. lia.
+      destr. rewrite e. destr;auto.
+      destr. unfold Ptrofs.sub in e. rewrite H4 in e.
+      generalize (Ptrofs.eq_true (Ptrofs.repr (Ptrofs.unsigned ofs1 - Ptrofs.unsigned ofs3))). intros.
+      rewrite e in H8 at 1.
+      unfold Ptrofs.eq in H8. rewrite Ptrofs.unsigned_repr in H8.
+      rewrite Ptrofs.unsigned_repr in H8. destr_in H8.
+      assert (code_size instr_size c' <> 0).
+      { unfold not. intros. rewrite H9 in H4. rewrite Z.add_0_l in H4.
+      eapply Ptrofs.eq_false in n0. unfold Ptrofs.eq in n0.
+      destr_in n0. }
+      rewrite <- Z.add_sub_assoc in e0.
+      rewrite <- Z.add_0_l in e0.
+      erewrite Z.add_cancel_r in e0. congruence.
+
+      constructor. lia. 
+      eapply Z.le_sub_le_add_l.
+      assert (Ptrofs.unsigned ofs1 <= Ptrofs.max_unsigned) by lia.
+      lia. lia.
+      rewrite Ptrofs.add_unsigned. rewrite Ptrofs.unsigned_repr.
+      rewrite Ptrofs.unsigned_repr. lia.
+      lia. rewrite Ptrofs.unsigned_repr. lia. lia.
+      
+      exists (a::c'). simpl. rewrite Ptrofs.add_unsigned. rewrite Ptrofs.unsigned_repr. rewrite Ptrofs.unsigned_repr;try lia.
+      
+      
+    simpl. admit. 
+    
 Lemma genv_pres_instr_aux2:  forall defs (b : block) (f : function) (ofs : Z) (i : instruction) ge sectbl
     (MATCH: forall id f, Genv.genv_defs ge (Global id) = Some (Gfun (Internal f)) ->
                     sectbl ! id = Some (sec_text (fn_code f))),
