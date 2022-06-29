@@ -352,33 +352,27 @@ Section TCOMP.
       apply flat_composition_simulation'. instantiate (1 := fun i => match i with true => _ | false => _ end).
       intros [|].
       - instantiate (1 := comp_semantics' (semantics M @ (Kf1 * Kf2)) (lift_layer_k Lf1) (skel Ls1)).
-        etransitivity.
-        + apply mapB_monotonicity. etransitivity.
-          * apply mapA_monotonicity. apply lift_categorical_comp1.
-          * apply mapA_comp.
-        + etransitivity.
-          * apply mapB_comp'. typeclasses eauto.
-          * eapply categorical_compose_simulation'.
-            -- apply lts_lifting_assoc.
-            -- reflexivity.
-            -- exact Hmod1.
-            -- auto.
+        etransitivity. apply map_monotonicity. apply lift_categorical_comp1.
+        etransitivity. apply map_ext_comp.
+        etransitivity. apply map_int_comp. typeclasses eauto.
+        eapply categorical_compose_simulation'.
+        + apply lts_lifting_assoc.
+        + reflexivity.
+        + exact Hmod1.
+        + exact HLsk1.
       - instantiate (1 := comp_semantics' (semantics N @ (Kf1 * Kf2)) (layer_comm (lift_layer_k Lf2)) (skel Ls2)).
-        etransitivity.
-        + apply mapB_monotonicity. etransitivity.
-          * apply mapB_monotonicity. etransitivity.
-            -- apply mapA_monotonicity. apply lift_categorical_comp1.
-            -- apply mapA_comp.
-          * apply mapB_comp'. typeclasses eauto.
-        + etransitivity.
-          * apply mapB_comp'. typeclasses eauto.
-          * eapply categorical_compose_simulation'.
-            -- etransitivity.
-               ++ apply map_both_monotonicity. apply lts_lifting_assoc.
-               ++ apply lts_lifting_comm.
-            -- reflexivity.
-            -- exact Hmod2.
-            -- auto.
+        etransitivity. apply map_monotonicity. apply map_monotonicity. apply lift_categorical_comp1.
+        etransitivity. apply map_monotonicity. apply map_ext_comp.
+        etransitivity. apply map_ext_comp.
+        etransitivity. apply map_int_comp. typeclasses eauto.
+        etransitivity. apply map_int_comp. typeclasses eauto.
+        eapply categorical_compose_simulation'.
+        + etransitivity. 2: apply lts_lifting_comm.
+          etransitivity. 2: apply map_monotonicity; apply lts_lifting_assoc.
+          reflexivity.
+        + reflexivity.
+        + exact Hmod2.
+        + exact HLsk2.
       - intros [|]; cbn.
         1-2: eapply link_linkorder in Hsks; apply Hsks.
     }

@@ -4,20 +4,68 @@
 From compcert Require Import
      AST Coqlib Maps Values Integers Cop Ctypes Errors Events
      LanguageInterface Smallstep Globalenvs Clight Memory Floats.
-From compcert.compcertox Require Import Lifting.
+From compcert Require Import
+     CategoricalComp.
+From compcert.compcertox Require Import
+     TensorComp Lifting.
 
-Record esemantics liA liB := {
+(** * State Encapsulation of CompCert LTS *)
+
+(** ** Auxiliaries *)
+(* TODO: move this to TensorComp.v and add instance priority *)
+Instance li_func_comp {liA liB liC} (F: LiFunc liA liB) (G: LiFunc liB liC): LiFunc liA liC.
+Proof. split; intros; apply F; apply G; easy. Qed.
+
+(** ** Semantics with Encapsulation *)
+Record esemantics {liA liB} := {
     pstate : Type;
     init_pstate : pstate;
-    esem : semantics (liA @ pstate) (liB @ pstate)
+    esem :> semantics (liA @ pstate) (liB @ pstate)
   }.
+Arguments esemantics : clear implicits.
 
-Definition encap_lift {liA liB} (L: semantics liA liB) :=
+Infix "+>" := esemantics (at level 70).
+
+(** *** Composition *)
+Definition comp_esem {liA liB liC} (L1: liB +> liC) (L2: liA +> liB) : option (liA +> liC) :=
+  match comp_semantics $(L1 @ pstate L2) $(L2 @ pstate L1) with
+  | Some L =>
+      Some {|
+        pstate := pstate L1 * pstate L2;
+        init_pstate := (init_pstate L1, init_pstate L2);
+        esem := L;
+      |}
+  | None => None
+  end.
+
+Definition hcomp_esem {liA} (L1: liA +> liA) (L2: liA +> liA) : option (liA +> liA) :=
+  match SmallstepLinking.compose $(L1 @ pstate L2) $( L2 @ pstate L1) with
+  | Some L =>
+      Some {|
+          pstate := pstate L1 * pstate L2;
+          init_pstate := (init_pstate L1, init_pstate L2);
+          esem := L;
+        |}
+  | None => None
+  end.
+
+(** *** Construction *)
+Definition encap_fbk {liA liB} (L: semantics liA liB) : liA +> liB :=
   {|
     init_pstate := tt;
     esem := L @ unit;
   |}.
 
+Definition encap_store {K liA liB} (k0:K) (L: liA@K +> liB@K) : liA +> liB :=
+  {|
+    pstate := pstate L * K;
+    init_pstate := (init_pstate L, k0);
+    esem := $L
+  |}.
+
+(** *** Properties *)
+
+(** ** ClightP *)
 Module ClightP.
 
   Inductive val : Type :=
@@ -165,6 +213,8 @@ Module ClightP.
     {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env) |}.
 
   Section SEM.
+    Open Scope Z_scope.
+
     Definition penv : Type := PTree.t val.
     Variable ge: genv.
 
