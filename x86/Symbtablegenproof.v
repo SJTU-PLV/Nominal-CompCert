@@ -381,7 +381,7 @@ Proof.
   rewrite Ptrofs.add_zero_l. auto.
 Qed.
 
-Lemma genv_pres_instr_aux4: (forall secs id ofs nmap,
+Lemma genv_pres_instr_aux3: (forall secs id ofs nmap,
    ~ In id fst ## secs ->
    fold_left
      (fun (a : NMap.t (ptrofs -> option instruction))
@@ -401,44 +401,6 @@ Proof.
   unfold not. intros. inv H1. congruence.
 Qed.
 
-(* Lemma gen_instr_map_pres_aux1: forall c ofs1 imap, *)
-(*     (exists c', code_size instr_size c' = Ptrofs.unsigned ofs1 + code_size instr_size c /\ Ptrofs.unsigned ofs1 > 0 /\ *)
-           
-(*     ) -> *)
-(*     (snd (fold_left (acc_instr_map instr_size) c (ofs1, imap))) Ptrofs.zero = imap Ptrofs.zero. *)
-(* Proof. *)
-(*   (* intros. generalize c . *) *)
-(*   induction c. *)
-(*   simpl. auto. *)
-(*   intros. simpl. *)
-(*   erewrite IHc. destr. *)
-(*   rewrite e in H. *)
-(*   destruct H as (c' & H & H1). *)
-(*   rewrite Ptrofs.unsigned_zero in H1. *)
-(*   lia. *)
-(*   destruct H as (c' & H & H1). *)
-(*   exists (a::c'). simpl. rewrite H. *)
-(*   rewrite Ptrofs.add_unsigned. *)
-(*   erewrite Ptrofs.unsigned_repr.  *)
-  
-(*   generalize (instr_size_bound i). intro. *)
-(*   rewrite H in H0. inv H0. *)
-(*   exploit (Ptrofs.unsigned_repr 0). lia. intros. *)
-(*   rewrite H0 in H1. *)
-(*   generalize (Z.lt_irrefl 0). intros. congruence. *)
-  
-(*   destruct (zlt (Ptrofs.unsigned ofs2) (Ptrofs.unsigned ofs2)). *)
-(*   generalize (Z.lt_irrefl (Ptrofs.unsigned ofs2)). intros. *)
-(*   congruence. *)
-(*   congruence. *)
-  
-(*   eapply Ptrofs.ltu_inv in H. *)
-(*   unfold Ptrofs.ltu. destr. *)
-(*   (* size in bound *) *)
-(*   unfold match_prog in TRANSF. *)
-(*   unfold transf_program in TRANSF. *)
-(*   destr_in TRANSF. destr_in TRANSF. *)
-(*   Ptrofs.ltu *)
 
 Lemma gen_instr_map_pres: forall n c ofs i,
     Z.le (code_size instr_size c) Ptrofs.max_unsigned ->
@@ -453,121 +415,37 @@ Proof.
   rewrite H2. unfold gen_instr_map.
   erewrite fold_left_app. simpl.
   unfold gen_instr_map in IHn.
-  destruct (acc_instr_map instr_size
-      (fold_left (acc_instr_map instr_size) c'
-                 (Ptrofs.zero, fun _ : ptrofs => None)) a) eqn:ACC.
-  unfold acc_instr_map in ACC.
-  
-Lemma gen_instr_map_pres: forall c ofs i ,
-    Z.le (code_size instr_size c) Ptrofs.max_unsigned ->
-    find_instr instr_size ofs c = Some i ->
-    gen_instr_map instr_size c (Ptrofs.repr ofs) = Some i.
+  destruct ((fold_left (acc_instr_map instr_size) c'
+                       (Ptrofs.zero, fun _ : ptrofs => None))) eqn:FOLD.
+  simpl.
+  destruct (Ptrofs.eq_dec i0 (Ptrofs.repr ofs)). admit.
+  assert (o = (let
+         '(_, map) :=
+          fold_left (acc_instr_map instr_size) c'
+                    (Ptrofs.zero, fun _ : ptrofs => None) in map)).
+  rewrite FOLD. auto.
+  subst. erewrite IHn;auto.
+  admit.
+  admit.
+Admitted.
+
+
+Remark in_norepet_unique_r:
+  forall (gl: list (ident * section)) id g,
+  In (id, g) gl -> list_norepet (map fst gl) ->
+  exists gl1 gl2, gl = gl1 ++ (id, g) :: gl2 /\ ~In id (map fst gl2).
 Proof.
-  induction c.
-  simpl. congruence.
-  simpl. intros.
-  destruct (zeq ofs 0).
-  -
-  inv H0.
-  unfold gen_instr_map. simpl.
-  rewrite Ptrofs.add_zero_l.
-  assert (forall ofs1 imap,
-          (exists c', code_size instr_size c' = Ptrofs.unsigned ofs1 /\ Ptrofs.unsigned ofs1 > 0 /\ code_size instr_size c + Ptrofs.unsigned ofs1 <= Ptrofs.max_unsigned) -> 
-         (let '(_, map) := (fold_left (acc_instr_map instr_size) c
-                         (ofs1, imap)) in map) Ptrofs.zero = imap Ptrofs.zero ).
-  { generalize H. generalize c.
-  clear IHc H c.        
-  induction c.
-  simpl. auto.
-  simpl. intros.
-  erewrite IHc.
-  destr. destruct H0 as (c' & H0 & ? & ?).  rewrite e in H1.
-  erewrite Ptrofs.unsigned_zero in H1.
-  lia.
-  generalize (instr_size_bound a). intros.
-  lia.
-  destruct H0 as (c' & H0 & ? & ?).
-  generalize (instr_size_bound a). intros.
-  exists (a::c').
-  simpl. rewrite H0.
-  erewrite Ptrofs.add_unsigned.
-  erewrite Ptrofs.unsigned_repr.   erewrite Ptrofs.unsigned_repr.
-  split;split;auto. lia. lia.
-  lia.
-  erewrite Ptrofs.unsigned_repr. constructor. lia.
-  generalize (code_size_non_neg instr_size instr_size_bound c).
-  intro. lia. lia. }
-  
-  exploit (H0 (Ptrofs.repr (instr_size i)) (fun o : ptrofs =>
-      if Ptrofs.eq_dec Ptrofs.zero o then Some i else None)).
-  exists [i]. simpl.
-  erewrite Ptrofs.unsigned_repr. split;auto.
-  split. generalize (instr_size_bound i). intros. lia.
-  auto. generalize (instr_size_bound i). intros. lia.
+  induction gl as [|[id1 g1] gl]; simpl; intros.
+  contradiction.
+  inv H0. destruct H.
+  inv H. exists nil, gl. auto.
+  exploit IHgl; eauto. intros (gl1 & gl2 & X & Y).
+  exists ((id1, g1) :: gl1), gl2; split;auto. rewrite X; auto.
+Qed.
 
-  intros. unfold Ptrofs.zero in *.
-  erewrite H1. auto.
 
-  - unfold gen_instr_map in *.
-    (* generalize (instr_size_bound a). intros.  *)
-    (* assert (code_size instr_size c <= Ptrofs.max_unsigned) by lia. *)
-    (* generalize (IHc _ _ H2 H0). intros.        *)
-    (* simpl. rewrite Ptrofs.add_zero_l. *)
-
-    assert (forall ofs1 ofs2 ofs3 imap1 imap2
-              (OFS3: Ptrofs.unsigned ofs3 >= 0 ),
-               Ptrofs.unsigned ofs3 <= Ptrofs.unsigned ofs1  ->
-               imap1 ofs2 = imap2 (Ptrofs.sub ofs2 ofs3) ->
-               code_size instr_size c + Ptrofs.unsigned ofs1 <= Ptrofs.max_unsigned ->
-               (exists c', Ptrofs.unsigned ofs1 >= 0 /\
-                      Ptrofs.unsigned ofs2 = code_size instr_size c' + Ptrofs.unsigned ofs1 /\ 
-                      Ptrofs.unsigned ofs2 <= Ptrofs.max_unsigned) ->
-               (let '(_, map) := fold_left (acc_instr_map instr_size) c (ofs1, imap1) in map) ofs2 =
-               (let '(_, map) := fold_left (acc_instr_map instr_size) c (Ptrofs.sub ofs1 ofs3, imap2) in map) (Ptrofs.sub ofs2 ofs3) ).
-    { generalize H. generalize c.
-      clear H H0 IHc.
-      induction c0.
-      simpl. intros. auto.
-      simpl. intros. 
-      destruct H3 as (c' & ? & ? & ?).
-      generalize (instr_size_bound a). intros.
-      generalize (instr_size_bound a0). intros.
-      generalize (code_size_non_neg instr_size instr_size_bound c'). intros CODESIZE'.
-      generalize (code_size_non_neg instr_size instr_size_bound c0). intros CODESIZE0.      
-      erewrite IHc0 .       
-      assert (Ptrofs.add (Ptrofs.sub ofs1 ofs3) (Ptrofs.repr (instr_size a0)) = Ptrofs.sub (Ptrofs.add ofs1 (Ptrofs.repr (instr_size a0))) ofs3).
-      { rewrite Ptrofs.sub_add_l. auto. }
-      rewrite H8. eauto. lia. lia.
-      rewrite Ptrofs.add_unsigned. repeat rewrite Ptrofs.unsigned_repr;auto.
-      lia. lia. lia. lia.
-      destr. rewrite e. destr;auto.
-      destr. unfold Ptrofs.sub in e. rewrite H4 in e.
-      generalize (Ptrofs.eq_true (Ptrofs.repr (Ptrofs.unsigned ofs1 - Ptrofs.unsigned ofs3))). intros.
-      rewrite e in H8 at 1.
-      unfold Ptrofs.eq in H8. rewrite Ptrofs.unsigned_repr in H8.
-      rewrite Ptrofs.unsigned_repr in H8. destr_in H8.
-      assert (code_size instr_size c' <> 0).
-      { unfold not. intros. rewrite H9 in H4. rewrite Z.add_0_l in H4.
-      eapply Ptrofs.eq_false in n0. unfold Ptrofs.eq in n0.
-      destr_in n0. }
-      rewrite <- Z.add_sub_assoc in e0.
-      rewrite <- Z.add_0_l in e0.
-      erewrite Z.add_cancel_r in e0. congruence.
-
-      constructor. lia. 
-      eapply Z.le_sub_le_add_l.
-      assert (Ptrofs.unsigned ofs1 <= Ptrofs.max_unsigned) by lia.
-      lia. lia.
-      rewrite Ptrofs.add_unsigned. rewrite Ptrofs.unsigned_repr.
-      rewrite Ptrofs.unsigned_repr. lia.
-      lia. rewrite Ptrofs.unsigned_repr. lia. lia.
-      
-      exists (a::c'). simpl. rewrite Ptrofs.add_unsigned. rewrite Ptrofs.unsigned_repr. rewrite Ptrofs.unsigned_repr;try lia.
-      
-      
-    simpl. admit. 
-    
 Lemma genv_pres_instr_aux2:  forall defs (b : block) (f : function) (ofs : Z) (i : instruction) ge sectbl
+    (FSIZE: code_size instr_size (fn_code f) <= Ptrofs.max_unsigned)
     (MATCH: forall id f, Genv.genv_defs ge (Global id) = Some (Gfun (Internal f)) ->
                     sectbl ! id = Some (sec_text (fn_code f))),
     Genv.genv_defs
@@ -593,13 +471,30 @@ Proof.
   apply MATCH in H.
   exploit PTree.elements_correct. apply H. intros.
   generalize (PTree.elements_keys_norepet  sectbl). intros.
-  assert (.
-  admit.
-  simpl. intros.
-  eapply IHdefs. apply H.
-  auto.
+  (* no_repeat can destruct in l1++a::l2 *)
+  exploit (in_norepet_unique_r);eauto. intros (gl1 & gl2 & SEC & NOTIN).
+  rewrite SEC. erewrite fold_left_app.
+  simpl. erewrite genv_pres_instr_aux3;eauto.
+  erewrite NMap.gss.
+  eapply gen_instr_map_pres;eauto.  
   
-Lemma genv_pres_instr_aux1:  forall defs (b : block) (f : function) (ofs : Z) (i : instruction),
+  simpl. intros.
+  eapply IHdefs;eauto. intros.
+  destruct a.
+  unfold acc_gen_section. unfold Genv.add_global in H1. simpl in H1.
+  generalize (NMap.gsspec). unfold NMap.get. intro.
+  erewrite H2 in H1. destr_in H1.
+  inv e. inv H1. eapply PTree.gss.
+  apply MATCH in H1. destruct g;auto.
+  destruct f1;auto. erewrite PTree.gso;auto.
+  unfold not. intros;subst. congruence.
+  assert (id<>i0). unfold not. intros;subst. congruence.
+  destruct (gvar_init v);auto. destruct i1;try erewrite PTree.gso;auto.
+  destruct l;auto. destruct i0;try erewrite PTree.gso;auto.
+Qed.
+
+Lemma genv_pres_instr_aux1:  forall defs (b : block) (f : function) (ofs : Z) (i : instruction)
+  (FSIZE: code_size instr_size (fn_code f) <= Ptrofs.max_unsigned),
     Genv.genv_defs
     (fold_left (Genv.add_global (V:=unit)) defs
        (Genv.empty_genv fundef unit (AST.prog_public prog))) b =
@@ -617,16 +512,23 @@ Lemma genv_pres_instr_aux1:  forall defs (b : block) (f : function) (ofs : Z) (i
   Some i.
 Proof.
   induction defs.
-  simpl. admit.
-  simpl.
-  (* generalize  *)
+  simpl. intros. unfold NMap.init in H. inv H.
+  simpl. intros.
+  erewrite genv_pres_instr_aux2;eauto.
+  destruct a. simpl. intros.
+  generalize (NMap.gsspec). unfold NMap.get. intros. erewrite H2 in H1.
+  destr_in H1. inv e. inv H1.
+  erewrite PTree.gss;auto. unfold NMap.init in H1. congruence.
+Qed.
   
 
-Lemma genv_pres_instr : forall b f ofs i,
+Lemma genv_pres_instr : forall b f ofs i
+    (FSIZE: code_size instr_size (fn_code f) <= Ptrofs.max_unsigned),
     Globalenvs.Genv.genv_defs ge b = Some (Gfun (Internal f)) ->
     find_instr instr_size ofs (fn_code f) = Some i ->
     Genv.genv_instrs tge b (Ptrofs.repr ofs) = Some i.
 Proof.
+  generalize (genv_pres_instr_aux1).
   unfold ge. unfold tge. unfold match_prog in TRANSF.
   unfold transf_program in TRANSF.
   destr_in TRANSF. destr_in TRANSF.
@@ -638,8 +540,9 @@ Proof.
   unfold Genv.add_globals. unfold gen_code_map.
   unfold create_sec_table.
   erewrite PTree.fold_spec.
-
-
+  intros. erewrite H;eauto.
+Qed.
+  
 Theorem init_meminj_match_sminj : forall m,
   Genv.init_mem prog = Some m ->
   match_inj (Mem.flat_inj (Mem.support m)).
@@ -655,8 +558,15 @@ Proof.
   exploit Genv.find_funct_ptr_inversion. apply FPTR.
   intros (id & DEFSIN).
   unfold Genv.find_instr.
-  assert (Globalenvs.Genv.genv_defs ge b = Some (Internal f) ->
-         Genv.genv_instrs tge b = instr_map /\ match_instr (fn_code f) instr_map)
+  eapply genv_pres_instr;eauto.  
+  2: eapply Genv.find_funct_ptr_iff;eauto.
+  (* code size <= max_unsigned *)
+  
+  rewrite Ptrofs.unsigned_repr. erewrite Z.add_0_r. auto.
+  constructor. lia.
+  eapply Z.ge_le. eapply  Ptrofs.max_signed_pos.
+  
+  (* agree_inj_globs *)
   admit.
   admit.
   admit.
