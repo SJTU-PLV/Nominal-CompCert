@@ -401,15 +401,31 @@ Proof.
   unfold not. intros. inv H1. congruence.
 Qed.
 
+Lemma ptrofs_repr_eq: forall ofs1 ofs2,
+    0 <= ofs1 <= Ptrofs.max_unsigned ->
+    0 <= ofs2 <= Ptrofs.max_unsigned ->
+    Ptrofs.repr ofs1 = Ptrofs.repr ofs2 ->
+    ofs1 = ofs2.
+Proof.
+  intros.
+  generalize (Ptrofs.eq_spec (Ptrofs.repr ofs1) (Ptrofs.repr ofs2)).
+  unfold Ptrofs.eq. rewrite Ptrofs.unsigned_repr;auto.
+  rewrite Ptrofs.unsigned_repr;auto.
+  destruct zeq. intros. auto.
+  intros. congruence.
+Qed.
 
-Lemma gen_instr_map_pres: forall n c ofs i,
-    Z.le (code_size instr_size c) Ptrofs.max_unsigned ->
+(** instruction map is equiv to find_instr *)
+Lemma gen_instr_map_pres: forall n c ofs i
+    (OFS:0 <= ofs <= Ptrofs.max_unsigned),
+    (code_size instr_size c) <= Ptrofs.max_unsigned ->
     Datatypes.length c = n ->
     find_instr instr_size ofs c = Some i ->
     gen_instr_map instr_size c (Ptrofs.repr ofs) = Some i.
 Proof.
   induction n.
-  simpl. admit.
+  simpl. intros. apply length_zero_iff_nil in H0. subst.
+  simpl in H1. congruence.
   intros.
   exploit length_S_inv. apply H0. intros (c' & a & ? & ?).
   rewrite H2. unfold gen_instr_map.
@@ -418,20 +434,34 @@ Proof.
   destruct ((fold_left (acc_instr_map instr_size) c'
                        (Ptrofs.zero, fun _ : ptrofs => None))) eqn:FOLD.
   simpl.
-  destruct (Ptrofs.eq_dec i0 (Ptrofs.repr ofs)). admit.
+  destruct (Ptrofs.eq_dec i0 (Ptrofs.repr ofs)).
+  assert (forall imap c, fst (fold_left (acc_instr_map instr_size) c (Ptrofs.zero, imap)) = Ptrofs.repr (code_size instr_size c)). admit. (* make sure codesize of c is less than max_unsigned *)
+  generalize (H4 (fun _ : ptrofs => None) c'). unfold fst.
+  rewrite FOLD. intros. rewrite e in H5.
+  exploit (ptrofs_repr_eq ofs (code_size instr_size c'));auto.
+  admit.                        (* code size bound *)
+  intros.
+  rewrite H6 in H1. rewrite H2 in H1.
+  rewrite find_instr_app' in H1.
+  rewrite Z.sub_diag in H1. simpl in H1. auto.
+  eapply instr_size_bound. lia.
+  
   assert (o = (let
          '(_, map) :=
           fold_left (acc_instr_map instr_size) c'
                     (Ptrofs.zero, fun _ : ptrofs => None) in map)).
   rewrite FOLD. auto.
   subst. erewrite IHn;auto.
-  admit.
+  rewrite code_size_app in H. simpl in H.
+  generalize (instr_size_bound a). intros. lia.
+  (* i0 = Ptrofs.repr code_size c' *)
+  (* code_size c' < ofs or ofs < code_size c' *)
   admit.
 Admitted.
 
 
 Remark in_norepet_unique_r:
-  forall (gl: list (ident * section)) id g,
+  forall T (gl: list (ident * T)) id g,
   In (id, g) gl -> list_norepet (map fst gl) ->
   exists gl1 gl2, gl = gl1 ++ (id, g) :: gl2 /\ ~In id (map fst gl2).
 Proof.
@@ -542,6 +572,21 @@ Proof.
   erewrite PTree.fold_spec.
   intros. erewrite H;eauto.
 Qed.
+
+(** transform program correct implies def size less than max unsigned *)
+Lemma def_size_range: forall id def,
+    In (id,def) (AST.prog_defs prog) ->
+    def_size instr_size def <= Ptrofs.max_unsigned.
+Proof.
+  unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+  destr_in TRANSF. destr_in TRANSF.
+  intros. inv w.
+  exploit in_norepet_unique_r;eauto.
+  intros (gl1 & gl2 & SPLIT & NOTIN).
+  generalize l.
+  rewrite SPLIT. unfold create_sec_table.
+  rewrite fold_left_app. 
+Admitted.
   
 Theorem init_meminj_match_sminj : forall m,
   Genv.init_mem prog = Some m ->
