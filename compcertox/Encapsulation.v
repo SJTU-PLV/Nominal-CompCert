@@ -643,7 +643,198 @@ Module ClightP.
                             globalenv p;
     |}.
 
+  Program Definition clightp2 (p : program) : esemantics li_c li_c :=
+    {|
+      pstate := penv;
+      init_pstate := add_privates empty_penv (prog_private p);
+      esem := Semantics_gen step2
+                            initial_state
+                            at_external
+                            (fun _ => after_external)
+                            (fun _ => final_state)
+                            globalenv p;
+    |}.
+
 End ClightP.
+
+(** ** Compile ClightP to Clight *)
+
+Section TRANSF.
+  Open Scope Z_scope.
+  Open Scope error_monad_scope.
+  Import ClightP.
+
+  Fixpoint transl_lvalue (a: expr) : res Clight.expr :=
+    match a with
+    | Epvar i ty => OK (Clight.Evar i ty)
+    | Eaccess e (inr f) ty =>
+        do te <- transl_lvalue e;
+        OK (Clight.Efield te f ty)
+    | Eaccess e (inl i) ty =>
+        do te <- transl_lvalue e;
+        OK (Clight.Ebinop Oadd te
+                             (Clight.Econst_int (Int.repr i) (Tint I32 Unsigned noattr))
+                             (Tpointer ty noattr))
+    | _ => Error (msg "transl_lvalue")
+    end.
+
+  Fixpoint transl_expr (a: expr) : res Clight.expr :=
+    match a with
+    | Econst_int i ty => OK (Clight.Econst_int i ty)
+    | Econst_float f ty => OK (Clight.Econst_float f ty)
+    | Econst_single s ty => OK (Clight.Econst_single s ty)
+    | Econst_long l ty => OK (Clight.Econst_long l ty)
+    | Evar i ty => OK (Clight.Evar i ty)
+    | Etempvar i ty => OK (Clight.Etempvar i ty)
+    | Ederef e ty =>
+        do te <- transl_expr e;
+        OK (Clight.Ederef te ty)
+    | Eaddrof e ty =>
+        do te <- transl_expr e;
+        OK (Clight.Eaddrof te ty)
+    | Eunop o e ty =>
+        do te <- transl_expr e;
+        OK (Clight.Eunop o te ty)
+    | Ebinop o e1 e2 ty =>
+        do te1 <- transl_expr e1;
+        do te2 <- transl_expr e2;
+        OK (Clight.Ebinop o te1 te2 ty)
+    | Ecast e ty =>
+        do te <- transl_expr e;
+        OK (Clight.Ecast te ty)
+    | Efield e f ty =>
+        do te <- transl_expr e;
+        OK (Clight.Efield te f ty)
+    | Esizeof t ty => OK (Clight.Esizeof t ty)
+    | Ealignof t ty => OK (Clight.Ealignof t ty)
+    | Epvar i ty =>
+        OK (Clight.Ederef (Clight.Evar i ty) ty)
+    | Eaccess e (inr f) ty =>
+        do te <- transl_lvalue e;
+        OK (Clight.Ederef (Clight.Efield te f ty) ty)
+    | Eaccess e (inl i) ty =>
+        do te <- transl_lvalue e;
+        OK (Clight.Ederef
+              (Clight.Ebinop Oadd te
+                             (Clight.Econst_int (Int.repr i) (Tint I32 Unsigned noattr))
+                             (Tpointer ty noattr)) ty)
+    end.
+
+  Fixpoint transl_arglist (xs: list expr): res (list Clight.expr).
+  Admitted.
+
+  Fixpoint transl_statement (s: statement) : res Clight.statement :=
+    match s with
+    | Sskip => OK Clight.Sskip
+    | Sassign b c =>
+        do tb <- transl_expr b;
+        do tc <- transl_expr c;
+        OK (Clight.Sassign tb tc)
+    | Sset x b =>
+        do tb <- transl_expr b;
+        OK (Clight.Sset x tb)
+    | Scall x b cl =>
+        do tb <- transl_expr b;
+        do tcl <- transl_arglist cl;
+        OK (Clight.Scall x tb tcl)
+    | Sbuiltin x ef tyargs bl =>
+        do tbl <- transl_arglist bl;
+        OK (Clight.Sbuiltin x ef tyargs tbl)
+    | Ssequence s1 s2 =>
+        do ts1 <- transl_statement s1;
+        do ts2 <- transl_statement s2;
+        OK (Clight.Ssequence ts1 ts2)
+    | Sifthenelse e s1 s2 =>
+        do te <- transl_expr e;
+        do ts1 <- transl_statement s1;
+        do ts2 <- transl_statement s2;
+        OK (Clight.Sifthenelse te ts1 ts2)
+    | Sloop s1 s2 =>
+        do ts1 <- transl_statement s1;
+        do ts2 <- transl_statement s2;
+        OK (Clight.Sloop ts1 ts2)
+    | Sbreak => OK (Clight.Sbreak)
+    | Scontinue => OK (Clight.Scontinue)
+    | Sreturn (Some e) =>
+        do te <- transl_expr e;
+        OK (Clight.Sreturn (Some te))
+    | Sreturn None => OK (Clight.Sreturn None)
+    | Sswitch a sl =>
+        do ta <- transl_expr a;
+        do tsl <- transl_lbl_stmt sl;
+        OK (Clight.Sswitch ta tsl)
+    | Slabel lbl s =>
+        do ts <- transl_statement s;
+        OK (Clight.Slabel lbl ts)
+    | Sgoto lbl => OK (Clight.Sgoto lbl)
+    | Supdate b c =>
+        do tb <- transl_lvalue b;
+        do tc <- transl_expr c;
+        OK (Clight.Sassign tb tc)
+    end
+  with transl_lbl_stmt (sl: labeled_statements) :=
+         match sl with
+         | LSnil => OK Clight.LSnil
+         | LScons n s sl' =>
+             do ts <- transl_statement s;
+             do tsl' <- transl_lbl_stmt sl';
+             OK (Clight.LScons n ts tsl')
+         end.
+
+  Definition transl_function (f: function) : res Clight.function :=
+    do tbody <- transl_statement (fn_body f);
+    OK ({|
+           Clight.fn_return := fn_return f;
+           Clight.fn_callconv := fn_callconv f;
+           Clight.fn_params := fn_params f;
+           Clight.fn_vars := fn_vars f;
+           Clight.fn_temps := fn_temps f;
+           Clight.fn_body := tbody
+        |}).
+
+  Definition transl_fundef (id: ident) (f: fundef) : res Clight.fundef :=
+    match f with
+    | Internal g =>
+        do tg <- transl_function g;
+        OK (Internal tg)
+    | External ef args res cconv => OK (External ef args res cconv)
+    end.
+
+  Definition transl_globvar (id: ident) (ty: type) := OK ty.
+
+  Definition val_init_data (v: val) : res (list init_data).
+  Admitted.
+
+  Definition transl_privvar {V} (v: privvar V) :=
+    do x <- val_init_data (pvar_init _ v);
+    OK {|
+        gvar_info := pvar_info _ v;
+        gvar_init := x;
+        gvar_volatile := false;
+        gvar_readonly := false;
+      |}.
+
+  Fixpoint transl_privvars {F V} (l: list (ident * privvar V)) :=
+    match l with
+    | nil => OK nil
+    | (id, pv) :: l' =>
+        do gv <- transl_privvar pv;
+        do gv' <- transl_privvars l';
+        OK ((id, Gvar (F:=F) gv) :: gv')
+    end.
+
+  Definition transl_program (p: program) : res Clight.program :=
+    do tgl <- transf_globdefs transl_fundef transl_globvar p.(prog_defs);
+    do tgv <- transl_privvars (prog_private p);
+    OK ({|
+           Ctypes.prog_defs := tgl ++ tgv;
+           Ctypes.prog_public := prog_public p;
+           Ctypes.prog_main := prog_main p;
+           Ctypes.prog_types := prog_types p;
+           Ctypes.prog_comp_env := prog_comp_env p;
+           Ctypes.prog_comp_env_eq := prog_comp_env_eq p |}).
+
+End TRANSF.
 
 Section ClightM.
 
