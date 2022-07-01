@@ -635,8 +635,43 @@ Proof.
   generalize (Genv.init_mem_genv_sup _ INIT). intros.
   unfold ge in *. rewrite H1 in H0. unfold sup_In in H0.
   unfold Mem.sup_dec. destruct (Sup.sup_dec (Global id) (Mem.support m)).
-  assert (Genv.find_symbol tge id = Some (Global id, Ptrofs.zero)) by admit.
-  auto.
+  split;auto.
+  (* find_symbol match genv_symb *)
+  unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+  repeat destr_in TRANSF. unfold tge. unfold Genv.find_symbol.
+  simpl.
+  unfold gen_symb_map.
+  erewrite PTree.gmap.
+  unfold gen_symb_table. unfold option_map.
+  exploit Genv.find_symbol_inversion. apply H. intros. 
+  inv w. unfold prog_defs_names in H2. erewrite in_map_iff in H2.
+  destruct H2 as (g & EQg & INDEFS). destruct g. simpl in EQg. subst.
+  exploit in_norepet_unique_r. eapply INDEFS. auto.
+  intros (gl1 & gl2 & SPILT & NOTIN). rewrite SPILT.
+  rewrite fold_left_app. simpl.
+  set (P:= fun (m:PTree.t symbentry) => m ! id = Some (get_symbentry instr_size id g)).
+  assert (forall ls m, ~ In id fst ## ls ->
+                 P m ->
+                 P (fold_left (acc_symb instr_size) ls m)).
+  { induction ls;simpl;intros.
+    auto.
+    apply Decidable.not_or in H2. destruct H2. destruct a.
+    eapply IHls. auto. simpl. unfold P.
+    simpl in H2. erewrite PTree.gso;auto. }
+  setoid_rewrite H2;auto. f_equal.
+
+  (* lots of destruction for variable and global function here *)
+  { unfold gen_global. destr. generalize Heqs0. clear Heqs0.
+  destruct g. destruct f.
+  simpl. intros SECEQ. inv SECEQ. auto.
+  simpl. intros SECEQ. inv SECEQ.
+  destruct v;simpl;destruct gvar_init;simpl.
+  congruence.
+  destruct i;destruct gvar_readonly;simpl;try congruence;intros SECEQ;inv SECEQ;auto.
+  destruct gvar_init;simpl in *;try congruence. inv H4. auto.
+  destruct gvar_init;simpl in *;try congruence. inv H4. auto. }
+
+  unfold P. rewrite PTree.gss. auto.  
   unfold sup_In in n. congruence.
   
   (* agree_inj_ext_funct *)
@@ -777,7 +812,7 @@ Proof.
   setoid_rewrite REC;eauto. intros.
   simpl. unfold NMap.init. auto.
   unfold P. simpl. auto.
-Admitted.
+Qed.
 
 Section INIT_MEM.
 
