@@ -416,8 +416,7 @@ Proof.
 Qed.
 
 (** instruction map is equiv to find_instr *)
-Lemma gen_instr_map_pres: forall n c ofs i
-    (OFS:0 <= ofs <= Ptrofs.max_unsigned),
+Lemma gen_instr_map_pres: forall n c ofs i,
     (code_size instr_size c) <= Ptrofs.max_unsigned ->
     Datatypes.length c = n ->
     find_instr instr_size ofs c = Some i ->
@@ -439,6 +438,10 @@ Proof.
   generalize (H4 (fun _ : ptrofs => None) c'). unfold fst.
   rewrite FOLD. intros. rewrite e in H5.
   exploit (ptrofs_repr_eq ofs (code_size instr_size c'));auto.
+  generalize (find_instr_ofs_pos instr_size instr_size_bound _ _ _ H1).
+  generalize (find_instr_bound instr_size instr_size_bound _ _ _ H1).
+  intros. constructor. lia.
+  generalize (instr_size_bound i). intros. lia.
   admit.                        (* code size bound *)
   intros.
   rewrite H6 in H1. rewrite H2 in H1.
@@ -475,6 +478,7 @@ Qed.
 
 
 Lemma genv_pres_instr_aux2:  forall defs (b : block) (f : function) (ofs : Z) (i : instruction) ge sectbl
+    (* (OFS: 0 <= ofs <= Ptrofs.max_unsigned) *)
     (FSIZE: code_size instr_size (fn_code f) <= Ptrofs.max_unsigned)
     (MATCH: forall id f, Genv.genv_defs ge (Global id) = Some (Gfun (Internal f)) ->
                     sectbl ! id = Some (sec_text (fn_code f))),
@@ -506,7 +510,7 @@ Proof.
   rewrite SEC. erewrite fold_left_app.
   simpl. erewrite genv_pres_instr_aux3;eauto.
   erewrite NMap.gss.
-  eapply gen_instr_map_pres;eauto.  
+  eapply gen_instr_map_pres;eauto.
   
   simpl. intros.
   eapply IHdefs;eauto. intros.
@@ -587,7 +591,17 @@ Proof.
   rewrite SPLIT. unfold create_sec_table.
   rewrite fold_left_app. 
 Admitted.
-  
+
+Lemma genv_defs_match: forall l id (ge1 ge2:Globalenvs.Genv.t fundef unit),
+    Genv.genv_defs ge1 (Global id) = Genv.genv_defs ge2 (Global id) -> 
+    Genv.genv_defs (Genv.add_globals ge1 l) (Global id) =
+    Genv.genv_defs (Genv.add_globals ge2 l) (Global id).
+Proof.
+  induction l;simpl;intros.
+  auto. eapply IHl. destruct a.
+  simpl. unfold NMap.set. destr.
+Qed.
+
 Theorem init_meminj_match_sminj : forall m,
   Genv.init_mem prog = Some m ->
   match_inj (Mem.flat_inj (Mem.support m)).
@@ -603,19 +617,166 @@ Proof.
   exploit Genv.find_funct_ptr_inversion. apply FPTR.
   intros (id & DEFSIN).
   unfold Genv.find_instr.
-  eapply genv_pres_instr;eauto.  
+  eapply genv_pres_instr;eauto.
   2: eapply Genv.find_funct_ptr_iff;eauto.
   (* code size <= max_unsigned *)
-  
+  eapply def_size_range in DEFSIN. auto.
   rewrite Ptrofs.unsigned_repr. erewrite Z.add_0_r. auto.
   constructor. lia.
   eapply Z.ge_le. eapply  Ptrofs.max_signed_pos.
   
   (* agree_inj_globs *)
-  admit.
-  admit.
-  admit.
-  admit.
+  intros. exists b,Ptrofs.zero.
+  unfold Globalenvs.Genv.find_symbol in H.
+  generalize (Genv.genv_vars_eq _ _ H). intros. subst.
+  generalize (Genv.genv_symb_range _ _ H). intros.
+  unfold Mem.flat_inj.
+  rewrite Ptrofs.unsigned_zero.
+  generalize (Genv.init_mem_genv_sup _ INIT). intros.
+  unfold ge in *. rewrite H1 in H0. unfold sup_In in H0.
+  unfold Mem.sup_dec. destruct (Sup.sup_dec (Global id) (Mem.support m)).
+  assert (Genv.find_symbol tge id = Some (Global id, Ptrofs.zero)) by admit.
+  auto.
+  unfold sup_In in n. congruence.
+  
+  (* agree_inj_ext_funct *)
+  unfold Genv.find_funct_ptr. unfold Genv.find_ext_funct.
+  intros. repeat destr_in H.
+  unfold Mem.flat_inj in H0. repeat destr_in H0.
+  unfold Ptrofs.zero. rewrite Ptrofs.eq_true.
+  simpl.
+  exploit Genv.init_mem_genv_sup;eauto. intros.
+  exploit Genv.genv_sup_glob;eauto. rewrite <- H in s. eauto.
+  intros (id & BLO). subst.
+  unfold Genv.find_def in Heqo. unfold NMap.get in *.
+  unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+  repeat destr_in TRANSF. inv w.
+  simpl. unfold ge in Heqo.
+  unfold Genv.globalenv in Heqo.
+  set (init_ge := (Genv.empty_genv fundef unit (AST.prog_public prog))).
+  set (P:= fun (ge:Globalenvs.Genv.t fundef unit) m  =>
+             Genv.genv_defs ge (Global id) = Some (Gfun (External f)) ->
+             m (Global id)= Some f).
+  assert (REC: forall defs m ge
+                 (UNIQUE: list_norepet fst ## defs),
+             P ge m ->
+         P (Genv.add_globals ge defs) (fold_right acc_extfuns m defs)).
+  { induction defs;intros;simpl.
+    - auto.
+    - destruct a;destruct g;simpl.
+      destruct f0;simpl.
+      + eapply IHdefs.
+        inv UNIQUE. auto.
+        unfold P in *. simpl. unfold NMap.set.
+        destruct (eq_block (Global id) (Global i)).
+        intros. inv H1.
+        auto.
+      + unfold NMap.set. unfold P.
+        destruct (eq_block (Global id) (Global i)).
+        (* id = i *)
+        inv e0. inv UNIQUE.
+        set (Q := fun (ge:Globalenvs.Genv.t fundef unit) => Genv.genv_defs ge (Global i) = Some (Gfun (External e))).
+        assert (Q (Genv.add_globals (Genv.add_global ge0 (i, Gfun (External e)))  defs)).
+        eapply Genv.add_globals_unique_preserves with (id:= i);eauto.
+        unfold Q. unfold Genv.add_global. simpl.
+        unfold NMap.set. intros. destr.
+        unfold Q. unfold Genv.add_global. simpl. 
+        unfold NMap.set. intros. destr.
+        setoid_rewrite H1. intros. inv H2. auto.
+        (* id <> i *)
+        intros.
+        setoid_rewrite IHdefs;eauto.
+        inv UNIQUE;auto.
+        unfold Genv.add_globals in *.
+        
+        set (Q:= fun (ge1 ge2:Globalenvs.Genv.t fundef unit) l =>
+                   Genv.genv_defs ge1 (Global id) = Genv.genv_defs ge2 (Global id) -> 
+                   Genv.genv_defs (fold_left
+                                     (Genv.add_global (V:=unit)) l
+                                     ge1) (Global id) =
+                   Genv.genv_defs (fold_left (Genv.add_global (V:=unit)) l
+                                             ge2) (Global id)).
+        assert (forall ls g1 g2, Q g1 g2 ls).
+        { induction ls;simpl;intros.
+        unfold Q. simpl. auto.
+        unfold Q. simpl. unfold Q in IHls. intros.
+        eapply IHls. destruct a.
+        simpl. unfold NMap.set. destr. }           
+        setoid_rewrite <- H2;eauto.
+        simpl. unfold NMap.set. destr.
+      + eapply IHdefs. inv UNIQUE;auto.
+        unfold P. simpl. unfold NMap.set. destr.
+        intros.
+        setoid_rewrite H0; auto. }
+  setoid_rewrite REC;eauto.
+  unfold P. simpl. unfold NMap.init. congruence.
+  
+  (* agree_inj_int_funct *)
+  simpl.
+  unfold Mem.flat_inj. intros. destr_in H0. inv H0.
+  destr. clear Heqb.
+  rewrite  Genv.find_funct_ptr_iff in H.
+  exploit Genv.init_mem_genv_sup;eauto. intros. rewrite <- H0 in s.
+  exploit Genv.genv_sup_glob;eauto. intros (id & GLO). subst.
+  clear s H0.
+  unfold Genv.find_def in H. unfold NMap.get in *.
+  unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+  repeat destr_in TRANSF. inv w.
+  simpl. unfold ge in H.
+  unfold Genv.globalenv in H.
+  unfold gen_extfuns.
+  set (P:= fun (ge:Globalenvs.Genv.t fundef unit) (m:NMap.t (option external_function))  =>
+             (Genv.genv_defs ge (Global id) = Some (Gfun (Internal f)) \/             Genv.genv_defs ge (Global id) = None) ->
+             m (Global id)= None).
+  assert (REC: forall defs m ge
+                 (UNIQUE: list_norepet fst ## defs),
+             (In id fst##defs -> Genv.genv_defs ge (Global id) = None) ->
+             P ge m ->
+         P (Genv.add_globals ge defs) (fold_right acc_extfuns m defs)).
+  { induction defs;simpl;intros.
+    auto.
+    destruct a;destruct g.
+    destruct f0;simpl. 
+    + eapply IHdefs. inv UNIQUE;auto. intros.
+      inv UNIQUE. simpl. unfold NMap.set. destr.
+      unfold P. simpl. unfold NMap.set. intros. destr_in H2.
+      intros. unfold P in H1. eapply H1.
+      inv e. simpl in H0. right. auto.
+      unfold P in H1. eapply H1. auto.
+    + unfold P. unfold NMap.set. destr.
+      * inv e0.
+      simpl in H0. assert (Genv.genv_defs ge0 (Global i) = None) by auto.
+      inv UNIQUE.
+      set (Q:= fun (ge:Globalenvs.Genv.t fundef unit) =>  Genv.genv_defs ge (Global i) = Some (Gfun (External e))).
+      assert (Q (Genv.add_globals (Genv.add_global ge0 (i, Gfun (External e)))
+       defs)).
+      { eapply Genv.add_globals_unique_preserves with (id:=i);auto.
+      intros. unfold Q. unfold Genv.add_global. simpl.
+      unfold NMap.set. destr.
+      unfold Q. simpl. unfold NMap.set. destr. }
+      setoid_rewrite H3. intros. destruct H4;inv H4.
+      * intros. unfold P in IHdefs. eapply IHdefs.
+        inv UNIQUE. auto. intros. apply H0. right;auto.
+        intros.
+        setoid_rewrite H1. auto. auto.
+        destruct H2.
+        ++ 
+        inv UNIQUE. left.
+        exploit (genv_defs_match defs id (Genv.add_global ge0 (i, Gfun (External e))) ge0).
+        simpl. unfold NMap.set. destr. intros.
+        rewrite <- H3. auto.
+        ++ right. exploit (genv_defs_match defs id (Genv.add_global ge0 (i, Gfun (External e))) ge0).
+           simpl. unfold NMap.set. destr. intros.
+           rewrite <- H3. auto.
+    + eapply IHdefs. inv UNIQUE;auto.
+      unfold P. simpl. unfold NMap.set. destr.
+      intros. inv e. inv UNIQUE. congruence.
+      unfold P.
+      unfold Genv.add_global. simpl. unfold NMap.set. destr.
+      intros. setoid_rewrite H1. auto. auto. }
+  setoid_rewrite REC;eauto. intros.
+  simpl. unfold NMap.init. auto.
+  unfold P. simpl. auto.
 Admitted.
 
 Section INIT_MEM.
