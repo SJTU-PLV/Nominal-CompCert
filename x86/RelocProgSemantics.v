@@ -710,163 +710,6 @@ Definition gen_symb_map (symbtbl: symbtable) : PTree.t (block * ptrofs) :=
   PTree.map gen_global symbtbl.
 
 
-(* Fixpoint add_globals (ge:Genv.t) (t: symbtable) : Genv.t := *)
-(*   match t with *)
-(*   | nil => ge *)
-(*   | (e::l) =>  *)
-(*     let ge' := add_external_global extfuns ge e in *)
-(*     add_external_globals extfuns ge' l *)
-(*   end.  *)
-
-
-
-(* Fixpoint add_external_globals (extfuns: PTree.t external_function) *)
-(*          (ge:Genv.t) (t: symbtable) : Genv.t := *)
-(*   match t with *)
-(*   | nil => ge *)
-(*   | (e::l) =>  *)
-(*     let ge' := add_external_global extfuns ge e in *)
-(*     add_external_globals extfuns ge' l *)
-(*   end.  *)
-
-
-(* Lemma genv_senv_add_external_global: *)
-(*   forall exts ge a, *)
-(*     Genv.genv_senv (add_external_global exts ge a) = *)
-(*     Genv.genv_senv ge. *)
-(* Proof. *)
-(*   unfold add_external_global. intros. destr. *)
-(* Qed. *)
-
-(* Lemma genv_senv_add_external_globals: *)
-(*   forall st exts ge, *)
-(*     Genv.genv_senv (add_external_globals exts ge st) = *)
-(*     Genv.genv_senv ge. *)
-(* Proof. *)
-(*   induction st; simpl; intros; eauto. *)
-(*   rewrite IHst. *)
-(*   apply genv_senv_add_external_global. *)
-(* Qed. *)
-
-(* Lemma add_external_global_pres_instrs : forall extfuns ge e, *)
-(*     Genv.genv_instrs (add_external_global extfuns ge e) = Genv.genv_instrs ge. *)
-(* Proof. *)
-(*   intros. unfold add_external_global. *)
-(*   cbn. auto. *)
-(* Qed. *)
-
-(* Lemma add_external_globals_pres_instrs : forall extfuns stbl ge, *)
-(*     Genv.genv_instrs (add_external_globals extfuns ge stbl) = Genv.genv_instrs ge. *)
-(* Proof. *)
-(*   induction stbl; simpl; intros. *)
-(*   - auto. *)
-(*   - etransitivity.  *)
-(*     rewrite IHstbl; eauto. *)
-(*     eapply add_external_global_pres_instrs; eauto. *)
-(* Qed. *)
-
-(* Hint Resolve in_eq in_cons. *)
-
-(* Definition only_internal_symbol i stbl :=  *)
-(*     (forall e, In e stbl -> symbentry_id e = i -> is_symbentry_internal e = true). *)
-
-(* Lemma add_external_globals_pres_find_symbol : forall extfuns stbl ge i, *)
-(*     only_internal_symbol i stbl -> *)
-(*     Genv.find_symbol (add_external_globals extfuns ge stbl) i = Genv.find_symbol ge i. *)
-(* Proof. *)
-(*   unfold only_internal_symbol. *)
-(*   induction stbl as [|e stbl]; intros; simpl. *)
-(*   - auto. *)
-(*   - etransitivity. *)
-(*     erewrite IHstbl; eauto. *)
-(*     unfold add_external_global. *)
-(*     unfold Genv.find_symbol. cbn. *)
-(*     destr; eauto. *)
-(*     destruct (peq (symbentry_id e) i). *)
-(*     + subst.  *)
-(*       generalize (H e (in_eq _ _) eq_refl). *)
-(*       congruence. *)
-(*     + erewrite PTree.gso; eauto. *)
-(* Qed. *)
-
-(* Lemma add_external_globals_pres_find_symbol' : forall extfuns stbl ge i, *)
-(*     ~ In i (get_symbentry_ids stbl) -> *)
-(*     Genv.find_symbol (add_external_globals extfuns ge stbl) i = Genv.find_symbol ge i. *)
-(* Proof. *)
-(*   intros extfuns stbl ge i NIN. *)
-(*   eapply add_external_globals_pres_find_symbol; eauto. *)
-(*   red. intros e IN EQ. subst. *)
-(*   exfalso. eapply NIN.  *)
-(*   eapply in_map; eauto. *)
-(* Qed. *)
-
-(* Lemma add_external_globals_pres_ext_funs: *)
-(*   forall (stbl : symbtable) (extfuns : PTree.t external_function) (ge : Genv.t) (i : ident), *)
-(*     Pos.lt i (Genv.genv_next ge) -> *)
-(*     (Genv.genv_ext_funs (add_external_globals extfuns ge stbl)) ! i = (Genv.genv_ext_funs ge) ! i. *)
-(* Proof. *)
-(*   induction stbl as [| e stbl]. *)
-(*   - intros extfuns ge i LT. *)
-(*     cbn. auto. *)
-(*   - intros extfuns ge i LT. *)
-(*     cbn. *)
-(*     erewrite IHstbl; eauto. *)
-(*     + unfold add_external_global; cbn. *)
-(*       repeat (destr; auto).  *)
-(*       rewrite PTree.gso; auto. *)
-(*       xomega. *)
-(*     + unfold add_external_global; cbn. *)
-(*       destr; xomega. *)
-(* Qed. *)
-
-
-(* Definition find_symbol_block_bound ge := *)
-(*   forall id b ofs, Genv.find_symbol ge id = Some (b, ofs) -> Pos.lt b (Genv.genv_next ge). *)
-
-(* Lemma add_global_pres_find_symbol_block_bound: forall extfuns ge e, *)
-(*   find_symbol_block_bound ge -> find_symbol_block_bound (add_external_global extfuns ge e). *)
-(* Proof. *)
-(*   unfold find_symbol_block_bound. intros. *)
-(*   unfold add_external_global in *. cbn in *. *)
-(*   unfold Genv.find_symbol in H0. cbn in H0. *)
-(*   destr. *)
-(*   - eapply H; eauto. *)
-(*   - destruct (peq (symbentry_id e) id). *)
-(*     + subst. rewrite PTree.gss in H0. inv H0. *)
-(*       apply Plt_succ. *)
-(*     + rewrite PTree.gso in H0; auto. *)
-(*       apply Plt_trans_succ; auto.  *)
-(*       eapply H; eauto. *)
-(* Qed. *)
-
-(* Lemma add_external_globals_pres_find_symbol_block_bound: forall stbl extfuns ge, *)
-(*   find_symbol_block_bound ge -> find_symbol_block_bound (add_external_globals extfuns ge stbl). *)
-(* Proof. *)
-(*   induction stbl; intros; simpl. *)
-(*   - auto. *)
-(*   - apply IHstbl. apply add_global_pres_find_symbol_block_bound. auto. *)
-(* Qed. *)
-
-
-(* Definition sec_index_to_block (i:N) : block := *)
-(*   match i with *)
-(*   | N0 => 1%positive *)
-(*   | Npos p => p *)
-(*   end. *)
-
-(* Definition acc_symb_map (e:symbentry) (m:PTree.t (block * ptrofs)) := *)
-(*   let id := symbentry_id e in *)
-(*   match symbentry_secindex e with *)
-(*   | secindex_normal i => *)
-(*     let b := sec_index_to_block i in *)
-(*     let ofs := Ptrofs.repr (symbentry_value e) in *)
-(*     PTree.set id (b,ofs) m *)
-(*   | _ => m *)
-(*   end. *)
-
-(* Definition gen_symb_map (t:symbtable) : PTree.t (block * ptrofs) := *)
-(*   fold_right acc_symb_map (PTree.empty (block * ptrofs)) t. *)
-
 Definition acc_instr_map r (i:instruction) :=
   let '(ofs, map) := r in
   let map' := fun o => if Ptrofs.eq_dec ofs o then Some i else (map o) in
@@ -920,18 +763,6 @@ Definition globalenv (p: program) : Genv.t :=
   let imap := gen_code_map (prog_sectable p) in
   let extfuns := gen_extfuns p.(prog_defs) in
   Genv.mkgenv symbmap extfuns imap p.(prog_senv).
-  
-(* Definition globalenv (p: program) : Genv.t := *)
-(*   let symbmap := gen_symb_map (prog_symbtable p) in *)
-(*   let imap := gen_instr_map' (SecTable.get sec_code_id (prog_sectable p)) in *)
-(*   let nextblock := 4%positive in *)
-(*   let genv := Genv.mkgenv symbmap  *)
-(*                           (PTree.empty external_function)  *)
-(*                           imap  *)
-(*                           nextblock  *)
-(*                           (prog_senv p) in *)
-(*   let extfuns := gen_extfuns p.(prog_defs) in *)
-(*   add_external_globals extfuns genv p.(prog_symbtable). *)
 
 
 
@@ -963,17 +794,18 @@ Fixpoint store_init_data_list (m: mem) (b: block) (p: Z) (idl: list init_data)
       end
   end.
 
-Definition alloc_external_symbol (r: option mem) (id: ident) (e:symbentry): option mem :=
+Definition alloc_external_comm_symbol (r: option mem) (id: ident) (e:symbentry): option mem :=
   match r with
   | None => None
   | Some m =>
   match symbentry_type e with
-  | symb_notype =>
-    match symbentry_secindex e with
-    | secindex_undef =>
-      let (m1, b) := Mem.alloc_glob id m 0 0 in Some m1
-    | _ => None
-    end
+  | symb_notype => None
+  (* impossible *)
+  (* match symbentry_secindex e with *)
+    (* | secindex_undef => *)
+    (*   let (m1, b) := Mem.alloc_glob id m 0 0 in Some m1 *)
+    (* | _ => None *)
+    (* end *)
   | symb_func =>
     match symbentry_secindex e with
     | secindex_undef =>
@@ -992,7 +824,13 @@ Definition alloc_external_symbol (r: option mem) (id: ident) (e:symbentry): opti
       match store_zeros m1 b 0 sz with
       | None => None
       | Some m2 =>
-        Mem.drop_perm m2 b 0 sz Nonempty
+        match e.(symbentry_type) with
+            | symb_rodata =>
+              Mem.drop_perm m2 b 0 sz Readable
+            | symb_rwdata =>
+              Mem.drop_perm m2 b 0 sz Writable
+            | _ => None
+      end
       end        
     | secindex_normal _ => Some m
     end
@@ -1000,45 +838,7 @@ Definition alloc_external_symbol (r: option mem) (id: ident) (e:symbentry): opti
   end.
 
 Definition alloc_external_symbols (m: mem) (t: symbtable) : option mem :=
-  PTree.fold alloc_external_symbol t (Some m).
-
-(* Definition store_internal_global (b:block) (ofs:Z) (m: mem) (idg: ident * option gdef): option (mem * Z) := *)
-(*   let '(id, gdef) := idg in *)
-(*   match gdef with *)
-(*   | Some (Gvar v) => *)
-(*     if is_var_internal v then *)
-(*       let init := gvar_init v in *)
-(*       let isz := init_data_list_size init in *)
-(*       match Globalenvs.store_zeros m b ofs isz with *)
-(*       | None => None *)
-(*       | Some m1 => *)
-(*         match store_init_data_list m1 b ofs init with *)
-(*         | None => None *)
-(*         | Some m2 =>  *)
-(*           match Mem.drop_perm m2 b ofs (ofs+isz) (Globalenvs.Genv.perm_globvar v) with *)
-(*           | None => None *)
-(*           | Some m3 => Some (m3, ofs + isz) *)
-(*           end *)
-(*         end *)
-(*       end *)
-(*     else *)
-(*       Some (m, ofs) *)
-(*   | _ => Some (m, ofs) *)
-(*   end. *)
-
-(* Definition acc_store_internal_global b r (idg: ident * option gdef) := *)
-(*   match r with *)
-(*   | None => None *)
-(*   | Some (m, ofs) => *)
-(*     store_internal_global b ofs m idg *)
-(*   end. *)
-
-(* Definition store_internal_globals (b:block) (m: mem) (gl: list (ident * option gdef))  *)
-(*   : option mem := *)
-(*   match fold_left (acc_store_internal_global b) gl (Some (m, 0)) with *)
-(*   | None => None *)
-(*   | Some (m',_) => Some m' *)
-(*   end. *)
+  PTree.fold alloc_external_comm_symbol t (Some m).
 
 Definition get_symbol_type (symbtbl: symbtable) (id: ident) :=
   match symbtbl!id with
@@ -1089,56 +889,116 @@ Definition alloc_section (symbtbl: symbtable) (r: option mem) (id: ident) (sec: 
 Definition alloc_sections (symbtbl: symbtable) (sectbl: sectable) (m:mem) :option mem :=
   PTree.fold (alloc_section symbtbl) sectbl (Some m).
 
-(* Definition alloc_rodata_section (t:sectable) (m:mem) : option mem := *)
-(*   match SecTable.get sec_rodata_id t with *)
-(*   | None => None *)
-(*   | Some sec => *)
-(*     let sz := (sec_size sec) in *)
-(*     match sec with *)
-(*     | sec_data init => *)
-(*       let '(m1, b) := Mem.alloc m 0 sz in *)
-(*       match store_zeros m1 b 0 sz with *)
-(*       | None => None *)
-(*       | Some m2 => *)
-(*         match store_init_data_list m2 b 0 init with *)
-(*         | None => None *)
-(*         | Some m3 => Mem.drop_perm m3 b 0 sz Readable *)
-(*         end *)
-(*       end *)
-(*     | _ => None *)
-(*     end *)
-(*   end. *)
+(** init data to bytes *)
+Definition bytes_of_init_data (i: init_data): list memval :=
+  match i with
+  | Init_int8 n => inj_bytes (encode_int 1%nat (Int.unsigned n))
+  | Init_int16 n => inj_bytes (encode_int 2%nat (Int.unsigned n))
+  | Init_int32 n => inj_bytes (encode_int 4%nat (Int.unsigned n))
+  | Init_int64 n => inj_bytes (encode_int 8%nat (Int64.unsigned n))
+  | Init_float32 n => inj_bytes (encode_int 4%nat (Int.unsigned (Float32.to_bits n)))
+  | Init_float64 n => inj_bytes (encode_int 8%nat (Int64.unsigned (Float.to_bits n)))
+  | Init_space n => list_repeat (Z.to_nat n) (Byte Byte.zero)
+  | Init_addrof id ofs =>
+      match Genv.find_symbol ge id with
+      | Some (b,ofs') => inj_value (if Archi.ptr64 then Q64 else Q32) (Vptr b (Ptrofs.add ofs ofs'))
+      | None   => list_repeat (if Archi.ptr64 then 8%nat else 4%nat) Undef
+      end
+  end.
 
-(* Definition alloc_data_section (t:sectable) (m:mem) : option mem := *)
-(*   match SecTable.get sec_data_id t with *)
-(*   | None => None *)
-(*   | Some sec => *)
-(*     let sz := (sec_size sec) in *)
-(*     match sec with *)
-(*     | sec_data init => *)
-(*       let '(m1, b) := Mem.alloc m 0 sz in *)
-(*       match store_zeros m1 b 0 sz with *)
-(*       | None => None *)
-(*       | Some m2 => *)
-(*         match store_init_data_list m2 b 0 init with *)
-(*         | None => None *)
-(*         | Some m3 => Mem.drop_perm m3 b 0 sz Writable *)
-(*         end *)
-(*       end *)
-(*     | _ => None *)
-(*     end *)
-(*   end. *)
+Fixpoint bytes_of_init_data_list (il: list init_data): list memval :=
+  match il with
+  | nil => nil
+  | i :: il => bytes_of_init_data i ++ bytes_of_init_data_list il
+  end.
 
-(* Definition alloc_code_section (t:sectable) (m:mem) : option mem := *)
-(*   match SecTable.get sec_code_id t with *)
-(*   | None => None *)
-(*   | Some sec => *)
-(*     let sz := sec_size sec in *)
-(*     let (m1, b) := Mem.alloc m 0 sz in *)
-(*     Mem.drop_perm m1 b 0 sz Nonempty *)
-(*   end. *)
+(** load_store_init_data *)
+Fixpoint load_store_init_data (m: mem) (b: block) (p: Z) (il: list init_data) {struct il} : Prop :=
+  match il with
+  | nil => True
+  | Init_int8 n :: il' =>
+      Mem.load Mint8unsigned m b p = Some(Vint(Int.zero_ext 8 n))
+      /\ load_store_init_data m b (p + 1) il'
+  | Init_int16 n :: il' =>
+      Mem.load Mint16unsigned m b p = Some(Vint(Int.zero_ext 16 n))
+      /\ load_store_init_data m b (p + 2) il'
+  | Init_int32 n :: il' =>
+      Mem.load Mint32 m b p = Some(Vint n)
+      /\ load_store_init_data m b (p + 4) il'
+  | Init_int64 n :: il' =>
+      Mem.load Mint64 m b p = Some(Vlong n)
+      /\ load_store_init_data m b (p + 8) il'
+  | Init_float32 n :: il' =>
+      Mem.load Mfloat32 m b p = Some(Vsingle n)
+      /\ load_store_init_data m b (p + 4) il'
+  | Init_float64 n :: il' =>
+      Mem.load Mfloat64 m b p = Some(Vfloat n)
+      /\ load_store_init_data m b (p + 8) il'
+  | Init_addrof symb ofs :: il' =>
+      (exists b' ofs', Genv.find_symbol ge symb = Some (b',ofs') /\ Mem.load Mptr m b p = Some(Vptr b' (Ptrofs.add ofs ofs')))
+      /\ load_store_init_data m b (p + size_chunk Mptr) il'
+  | Init_space n :: il' =>
+      Globalenvs.Genv.read_as_zero m b p n
+      /\ load_store_init_data m b (p + Z.max n 0) il'
+  end.
+
 
 End WITHGE1.
+
+
+(** globals_initialized *)
+Definition globals_initialized (ge: Genv.t) (prog: program) (m:mem):=
+  forall id b,
+    b = Global id ->
+    match prog.(prog_sectable) ! id with
+    | Some sec =>
+      match sec with
+      | sec_text code =>
+        Mem.perm m b 0 Cur Nonempty /\
+        let sz := code_size instr_size code in
+        (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ p = Nonempty)
+      | sec_data data =>
+        match prog.(prog_symbtable) ! id with
+        | Some e =>
+          let sz := (init_data_list_size data) in
+          match e.(symbentry_type) with
+          | symb_rodata =>
+            Mem.range_perm m b 0 sz Cur Readable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Readable p)
+          | symb_rwdata =>
+            Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
+          /\ load_store_init_data ge m b 0 data
+          /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+          | _ => False
+           end
+        | _ => False
+        end
+      | _ => False
+      end
+    | None =>
+      (* common symbol or external function *)
+      match prog.(prog_symbtable) ! id with
+      | Some e =>
+        match e.(symbentry_type),e.(symbentry_secindex) with
+        | symb_func,secindex_undef =>
+          Mem.perm m b 0 Cur Nonempty /\
+          (forall ofs k p, Mem.perm m b ofs k p -> ofs = 0 /\ p = Nonempty)
+        | symb_rodata,secindex_comm =>
+          let sz := e.(symbentry_size) in
+          let data := Init_space sz :: nil in
+          Mem.range_perm m b 0 sz Cur Readable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Readable p)
+          /\ load_store_init_data ge m b 0 data
+          /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+        | symb_rwdata,secindex_comm =>
+          let sz := e.(symbentry_size) in
+          let data := Init_space sz :: nil in
+          Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
+          /\ load_store_init_data ge m b 0 data
+          /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+        | _,_ => False
+        end
+      | _ => False
+      end
+    end.
 
 Definition init_mem (p: program) :=
   let ge := globalenv p in
@@ -1147,25 +1007,15 @@ Definition init_mem (p: program) :=
     alloc_external_symbols m1 p.(prog_symbtable)
   | None => None
   end.
-  
-(* Definition init_mem (p: program) := *)
-(*   let ge := globalenv p in *)
-(*   let stbl := prog_sectable p in *)
-(*   match alloc_rodata_section ge stbl Mem.empty with *)
-(*   | None => None *)
-(*   | Some m1 => *)
-(*     match alloc_data_section ge stbl m1 with *)
-(*     | None => None *)
-(*     | Some m2 => *)
-(*       match alloc_code_section stbl m2 with *)
-(*       | None => None *)
-(*       | Some m3 => *)
-(*         alloc_external_symbols m3 (prog_symbtable p) *)
-(*       end *)
-(*     end *)
-(*   end. *)
 
 (** Properties about init_mem *)
+Lemma init_mem_characterization_gen:
+  forall p m,
+  init_mem p = Some m ->
+  globals_initialized (globalenv p) p m.
+Proof.
+  Admitted.
+
 
 Lemma store_init_data_nextblock : forall v ge m b ofs m',
   store_init_data ge m b ofs v = Some m' ->
@@ -1258,10 +1108,10 @@ Proof.
 Qed.
 
 Lemma alloc_external_symbol_stack: forall id e m m',
-    alloc_external_symbol(Some m) id e = Some m' ->
+    alloc_external_comm_symbol(Some m) id e = Some m' ->
     Mem.stack (Mem.support m) = Mem.stack (Mem.support m').
 Proof.
-  unfold alloc_external_symbol.
+  unfold alloc_external_comm_symbol.
   intros. repeat destr_in H.
   exploit Mem.support_drop;eauto.
   exploit Mem.support_alloc_glob;eauto. intros.
@@ -1282,8 +1132,6 @@ Proof.
   exploit Mem.support_alloc_glob;eauto. intros.
   exploit Genv.store_zeros_stack;eauto. intros (?&?).
   rewrite H0. rewrite H2. rewrite H. auto.
-  exploit Mem.support_alloc_glob;eauto. intros.
-  rewrite H. auto.
 Qed.
 
 
@@ -1296,7 +1144,7 @@ Proof.
   rewrite PTree.fold_spec in H.
   assert (alloc_property_aux m (fold_left
         (fun (a : option mem) (p : positive * symbentry) =>
-         alloc_external_symbol a (fst p) (snd p))
+         alloc_external_comm_symbol a (fst p) (snd p))
         (PTree.elements symbtbl) (Some m))).
   eapply Bounds.fold_left_preserves.
   unfold alloc_property_aux.
@@ -1424,21 +1272,6 @@ Inductive initial_state_gen (p: program) (rs: regset) m: state -> Prop :=
            # RSP <- (Vptr stk (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr)))) in
       initial_state_gen p rs m (State rs0 m2).
 
-
-(** Execution of whole programs. *)
-(* Inductive initial_state_gen (p: program) (rs: regset) m: state -> Prop := *)
-(*   | initial_state_gen_intro: *)
-(*       forall m1 m2 m3 bstack m4 *)
-(*       (MALLOC: Mem.alloc (Mem.push_new_stage m) 0 (Mem.stack_limit + align (size_chunk Mptr) 8) = (m1,bstack)) *)
-(*       (MDROP: Mem.drop_perm m1 bstack 0 (Mem.stack_limit + align (size_chunk Mptr) 8) Writable = Some m2) *)
-(*       (MRSB: Mem.record_stack_blocks m2 (make_singleton_frame_adt' bstack frame_info_mono 0) = Some m3) *)
-(*       (MST: Mem.storev Mptr m3 (Vptr bstack (Ptrofs.repr (Mem.stack_limit + align (size_chunk Mptr) 8 - size_chunk Mptr))) Vnullptr = Some m4), *)
-(*       let ge := (globalenv p) in *)
-(*       let rs0 := *)
-(*         rs # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero) *)
-(*            # RA <- Vnullptr *)
-(*            # RSP <- (Vptr bstack (Ptrofs.sub (Ptrofs.repr (Mem.stack_limit + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr)))) in *)
-(*       initial_state_gen p rs m (State rs0 m4). *)
 
 Inductive initial_state (prog: program) (rs: regset) (s: state): Prop :=
 | initial_state_intro: forall m,

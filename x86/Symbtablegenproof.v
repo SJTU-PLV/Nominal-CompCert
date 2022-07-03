@@ -814,6 +814,55 @@ Proof.
   unfold P. simpl. auto.
 Qed.
 
+Definition gvar_readonly_symbtype {V: Type} (v: globvar V) :=
+  if v.(gvar_readonly) then symb_rodata else symb_rwdata.
+
+
+Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): Prop :=
+| match_text_int: forall f code,
+    gd = Gfun (Internal f) ->
+    (prog_sectable prog) ! id = Some (sec_text code) ->
+    (fn_code f) = code ->
+    match_sec_def id prog gd
+| match_data_var: forall v data e,
+    gd = Gvar v ->
+    (prog_sectable prog) ! id = Some (sec_data data) ->
+    (prog_symbtable prog) ! id = Some e ->
+    e.(symbentry_type) = gvar_readonly_symbtype v ->
+    v.(gvar_init) = data ->
+    match_sec_def id prog gd
+| match_ext_fun: forall f e,
+    gd = Gfun (External f) ->
+    (prog_symbtable prog) ! id = Some e ->
+    e.(symbentry_type) = symb_func ->
+    e.(symbentry_secindex) = secindex_undef ->
+    match_sec_def id prog gd
+| match_ext_var: forall v e,
+    gd = Gvar v ->
+    (prog_symbtable prog) ! id = Some e ->
+    e.(symbentry_type) = gvar_readonly_symbtype v ->
+    e.(symbentry_secindex) = secindex_undef ->
+    match_sec_def id prog gd
+| match_comm: forall v e sz,
+    gd = Gvar v ->
+    (prog_symbtable prog) ! id = Some e ->
+    v.(gvar_init) = [Init_space sz] ->
+    e.(symbentry_type) = gvar_readonly_symbtype v ->
+    e.(symbentry_secindex) = secindex_comm ->
+    match_sec_def id prog gd.
+
+Lemma init_meminj_invert_strong :forall m b b' delta ,
+    Genv.init_mem prog = Some m ->
+    Mem.flat_inj (Mem.support m) b = Some (b',delta) ->
+    delta = 0 /\
+    exists id gd,
+      b = Global id
+      /\ Genv.find_def ge b = Some gd
+      /\ match_sec_def id tprog gd.
+Admitted.
+
+Genv.globals_initialized
+
 Section INIT_MEM.
 
 Variables m tm: mem.
@@ -821,253 +870,18 @@ Hypothesis IM: Genv.init_mem prog = Some m.
 Hypothesis TIM: init_mem instr_size tprog = Some tm.
 
 
-(** Initial Memory Injection *)
-(* Definition init_meminj : meminj := *)
-(*   fun b => *)
-(*     (* (genv_next ge) is the stack block of the source program *) *)
-(*     match b with *)
-(*     | Stack _ _ _ => b *)
-(*     | Global id => *)
-(*     else *)
-(*       match (Globalenvs.Genv.invert_symbol ge b) with *)
-(*       | None => None *)
-(*       | Some id => *)
-(*         match Genv.find_symbol tge id with *)
-(*         | None => None *)
-(*         | Some (b,ofs) => Some (b, Ptrofs.unsigned ofs) *)
-(*         end *)
-(*       end. *)
-
-(*   generalize TRANSF. intros TRANSF'. *)
-(*   unfold match_prog in TRANSF'. *)
-(*   unfold transf_program in TRANSF'. *)
-(*   repeat destr_in TRANSF'.  *)
-(*   destruct p. inv Heqp0. monadInv TRANSF'. *)
-(*   revert H0. intros TL. *)
-(*   constructor. *)
-
-(*   - (* agree_inj_instrs *) *)
-(*     intros b b' f ofs ofs' i FPTR FINST INITINJ. *)
-(*     unfold init_meminj in INITINJ.  *)
-(*     (* revert TL. *) *)
-(*     destruct eq_block. inv INITINJ. *)
-(*     unfold ge in FPTR. exploit Genv.genv_next_find_funct_ptr_absurd; eauto. contradiction. *)
-(*     destr_match_in INITINJ; inv INITINJ. *)
-(*     destr_match_in H0; inv H0. *)
-(*     destruct p. inv H1. rewrite Ptrofs.repr_unsigned. *)
-(*     unfold globalenv in EQ0; simpl in EQ0. *)
-(*     rewrite add_external_globals_pres_find_symbol in EQ0. *)
-(*     unfold Genv.find_symbol in EQ0. cbn in EQ0. *)
-(*     apply Genv.invert_find_symbol in EQ. *)
-(*     exploit (Genv.find_symbol_funct_ptr_inversion prog); eauto. *)
-(*     intros FINPROG. *)
-(*     unfold Genv.find_instr. unfold tge. *)
-(*     cbn. *)
-(*     rewrite add_external_globals_pres_instrs. cbn. *)
-(*     unfold create_sec_table. *)
-(*     replace (Pos.to_nat 1) with 1%nat by xomega. *)
-(*     cbn. *)
-(*     unfold gen_symb_table in Heqp. *)
-(*     destr_in Heqp. destruct p. destruct p. inv Heqp. *)
-(*     exploit acc_symb_tree_entry_some; eauto. *)
-(*     { inv w. auto. } *)
-(*     { eapply PTree_Properties.of_list_norepet; eauto. *)
-(*       inv w. auto. } *)
-(*     cbn. intros GET. *)
-(*     inversion w. *)
-(*     unfold gen_symb_map in EQ0. *)
-(*     exploit symbtable_to_tree_acc_symb_map_inv; eauto. *)
-(*     erewrite <- acc_symb_pres_ids; eauto.  *)
-(*     cbn. intros (EQOFS & i' & SEC & EQB). subst. *)
-(*     inv SEC. *)
-(*     eapply pres_find_instr; eauto.  *)
-(*     exploit Genv.find_symbol_funct_ptr_inversion; eauto. *)
-(*     apply Genv.invert_find_symbol. eauto. eauto. intros IN. *)
-(*     eapply gen_symb_table_only_internal_symbol; eauto. *)
-(*     inv w; auto. *)
-(*     cbn. auto. *)
-
-(*   - (* agree_inj_globs *) *)
-(*     intros id b FSYM. *)
-(*     unfold init_meminj. *)
-(*     destruct eq_block.  *)
-(*     subst b. exfalso. eapply Genv.find_symbol_genv_next_absurd; eauto. *)
-(*     exploit Genv.find_invert_symbol; eauto. intros INV. *)
-(*     unfold ge in INV. rewrite INV. *)
-(*     assert (exists b' ofs', Genv.find_symbol tge id = Some (b', ofs')) as FIND'. *)
-(*     {  *)
-(*       unfold ge in FSYM. *)
-(*       exploit Genv.find_symbol_inversion; eauto. intros INSYM. *)
-(*       unfold prog_defs_names in INSYM. *)
-(*       apply PTree_Properties.of_list_dom in INSYM. *)
-(*       destruct INSYM as (def & GET). *)
-(*       inversion w. *)
-(*       unfold gen_symb_table in Heqp. destr_in Heqp. *)
-(*       destruct p. destruct p. inv Heqp. *)
-(*       exploit acc_symb_tree_entry_some; eauto. *)
-(*       intros GET'. *)
-(*       unfold globalenv in tge; cbn in tge. *)
-(*       cbn in GET'. *)
-(*       unfold tge. *)
-(*       unfold symbtable_to_tree in GET'. *)
-(*       apply PTree_Properties.in_of_list in GET'. *)
-(*       set (e:= get_symbentry sec_rodata_id sec_data_id sec_code_id *)
-(*                              (defs_rodata_size (defs_before id (AST.prog_defs prog))) *)
-(*                              (defs_data_size (defs_before id (AST.prog_defs prog))) *)
-(*                              (defs_code_size (defs_before id (AST.prog_defs prog))) id def) in GET'. *)
-(*       destruct (is_def_internal is_fundef_internal def) eqn:INT. *)
-(*       * *)
-(*         assert (is_symbentry_internal e = true) as INT'. *)
-(*         { subst e. *)
-(*           erewrite <- get_symbentry_pres_internal_prop; eauto. } *)
-(*         assert (In e (rev s)) as IN'. *)
-(*         { unfold symbtable_to_idlist in GET'. *)
-(*           erewrite in_map_iff in GET'.  *)
-(*           destruct GET' as (e' & EQ & IN''). inversion EQ.  subst e'. auto. *)
-(*         }  *)
-(*         erewrite acc_symb_pres_ids in wf_prog_norepet_defs; eauto. *)
-(*         generalize (acc_symb_map_get_some_int _ _ (PTree.empty _) *)
-(*                                               wf_prog_norepet_defs IN' INT'). *)
-(*         intros (b' & ofs' & GET''). *)
-(*         assert (symbentry_id e = id) as IDEQ. *)
-(*         { subst e. rewrite get_symbentry_id. auto. } *)
-        
-(*         erewrite add_external_globals_pres_find_symbol; eauto. *)
-(*         unfold Genv.find_symbol. cbn. rewrite <- IDEQ. eauto. *)
-(*         rewrite <- IDEQ. eapply norepet_only_internal_symbol; eauto. *)
-(*       *  *)
-(*         unfold symbtable_to_idlist in GET'. *)
-(*         rewrite in_map_iff in GET'. *)
-(*         destruct GET' as (e' & EQ' & IN). inversion EQ'. subst e'. *)
-(*         erewrite add_external_globals_find_symb; eauto. *)
-(*         erewrite acc_symb_pres_ids in wf_prog_norepet_defs; eauto. *)
-(*         subst e. erewrite <- get_symbentry_pres_internal_prop. auto. *)
-(*     } *)
-(*     destruct FIND' as (b' & ofs' & FIND'). *)
-(*     exists b', ofs'. split; auto. unfold tge in FIND'. rewrite FIND'. auto. *)
-
-(*   - (* agree_inj_ext_funct *) *)
-(*     intros b f ofs b' FPTR INITINJ. *)
-(*     unfold init_meminj in INITINJ.  *)
-(*     destruct eq_block. inv INITINJ. *)
-(*     unfold ge in FPTR. exploit Genv.genv_next_find_funct_ptr_absurd; eauto. contradiction. *)
-(*     destr_match_in INITINJ; try congruence. *)
-(*     destr_match_in INITINJ; try congruence. *)
-(*     destruct p. inversion INITINJ. clear INITINJ. subst b0 ofs.  *)
-(*     rewrite Ptrofs.repr_unsigned. *)
-(*     apply Genv.invert_find_symbol in EQ. *)
-(*     exploit Genv.find_symbol_funct_ptr_inversion; eauto. *)
-(*     intros IN. *)
-(*     inversion w. *)
-(*     exploit PTree_Properties.of_list_norepet; eauto. *)
-(*     intros GET. *)
-(*     unfold gen_symb_table in Heqp. destr_in Heqp. *)
-(*     destruct p. destruct p. *)
-(*     inversion Heqp. subst l z0 z. *)
-(*     exploit acc_symb_tree_entry_some; eauto. *)
-(*     intros GET'.      *)
-(*     cbn in GET'. *)
-(*     unfold globalenv in tge; cbn in tge. *)
-(*     unfold tge. *)
-(*     unfold symbtable_to_tree in GET'. *)
-(*     apply PTree_Properties.in_of_list in GET'. *)
-(*     match type of GET' with *)
-(*     | In (_, ?e') _ => set (e:= e') in GET' *)
-(*     end. *)
-(*     unfold globalenv in EQ0; simpl in EQ0. *)
-(*     replace (prog_symbtable tprog) with (rev s) in * by (subst tprog; auto). *)
-(*     replace (prog_defs tprog) with (AST.prog_defs prog) in * by (subst tprog; auto). *)
-(*     cbn. *)
-(*     unfold symbtable_to_idlist in GET'. *)
-(*     rewrite in_map_iff in GET'. *)
-(*     destruct GET' as (e' & EQ' & IN'). inversion EQ'. clear EQ'. subst e'. *)
-(*     erewrite <- H0 in EQ0. *)
-(*     erewrite add_external_globals_find_symb in EQ0; eauto.  *)
-(*     inversion EQ0; clear EQ0. subst i0 b'. *)
-(*     rewrite <- H0. *)
-(*     assert ((gen_extfuns (AST.prog_defs prog)) ! (symbentry_id e) = Some f) as EXT. *)
-(*     {  *)
-(*       rewrite H0.  *)
-(*       eapply PTree_Properteis_of_list_get_extfuns; eauto.       *)
-(*     } *)
-(*     match goal with  *)
-(*     | [ |- context [ add_external_globals _ ?ge _ ] ] => set (ige := ge) *)
-(*     end. *)
-(*     erewrite acc_symb_pres_ids in wf_prog_norepet_defs; eauto. *)
-(*     assert (is_symbentry_internal e = false) as INT by auto. *)
-(*     assert (symbentry_type e = symb_func) as TYP by auto. *)
-(*     generalize (add_external_globals_ext_funs _ _ ige _ _ wf_prog_norepet_defs IN' INT TYP EXT). *)
-(*     intros EGET. rewrite <- EGET. *)
-(*     repeat f_equal. *)
-(*     erewrite <- acc_symb_pres_ids; eauto.     *)
-
-(*   - (* agree_inj_int_funct *) *)
-(*     intros b f ofs b' ofs' FPTR INITINJ. *)
-(*     unfold init_meminj in INITINJ.  *)
-(*     destruct eq_block. inv INITINJ. *)
-(*     unfold ge in FPTR. exploit Genv.genv_next_find_funct_ptr_absurd; eauto. contradiction. *)
-(*     destr_match_in INITINJ; try congruence. *)
-(*     destr_match_in INITINJ; try congruence. *)
-(*     destruct p. inversion INITINJ. clear INITINJ. subst b0 ofs.  *)
-(*     apply Genv.invert_find_symbol in EQ. *)
-(*     exploit Genv.find_symbol_funct_ptr_inversion; eauto. *)
-(*     intros IN. *)
-(*     inversion w. *)
-(*     exploit PTree_Properties.of_list_norepet; eauto. *)
-(*     intros GET. *)
-(*     generalize Heqp. intros GENSYM. *)
-(*     unfold gen_symb_table in Heqp. destr_in Heqp. *)
-(*     destruct p. destruct p. *)
-(*     inversion Heqp. subst l z0 z z1. *)
-(*     exploit acc_symb_tree_entry_some; eauto. *)
-(*     intros GET'.      *)
-(*     cbn in GET'. *)
-(*     unfold globalenv in tge; cbn in tge. *)
-(*     unfold tge. *)
-(*     unfold symbtable_to_tree in GET'. *)
-(*     apply PTree_Properties.in_of_list in GET'. *)
-(*     match type of GET' with *)
-(*     | In (_, ?e') _ => set (e:= e') in GET' *)
-(*     end. *)
-(*     unfold globalenv in EQ0; simpl in EQ0. *)
-(*     replace (prog_symbtable tprog) with (rev s) in * by (subst tprog; auto). *)
-(*     replace (prog_defs tprog) with (AST.prog_defs prog) in * by (subst tprog; auto). *)
-(*     cbn. *)
-(*     unfold symbtable_to_idlist in GET'. *)
-(*     rewrite in_map_iff in GET'. *)
-(*     destruct GET' as (e' & EQ' & IN'). inversion EQ'. clear EQ'. subst e'. *)
-(*     erewrite <- H0 in EQ0. *)
-(*     rewrite add_external_globals_pres_find_symbol in EQ0. *)
-(*     unfold Genv.find_symbol in EQ0. cbn in EQ0. *)
-(*     erewrite add_external_globals_pres_ext_funs; eauto.  *)
-(*     cbn. rewrite PTree.gempty. auto. cbn.     *)
-(*     eapply gen_symb_map_internal_block_range; eauto.  *)
-(*     erewrite <- acc_symb_pres_ids; eauto. *)
-(*     subst e. auto.  *)
-(*     subst e. auto. *)
-(*     cbn; auto.  *)
-(*     unfold sec_code_id. xomega. *)
-(*     eapply gen_symb_table_only_internal_symbol; eauto. *)
-(*     cbn. auto. *)
-(* Qed. *)
-
-
-(** Initial memory injection for global variables (not including the stacks) *)
-(* Definition globs_meminj : meminj := *)
-(*   let ge := Genv.globalenv prog in *)
-(*   let tge := globalenv tprog in *)
-(*   fun b => *)
-(*       match (Genv.invert_symbol ge b) with *)
-(*       | None => None *)
-(*       | Some id => *)
-(*         match Genv.find_symbol tge id with *)
-(*         | None => None *)
-(*         | Some (b, ofs) => Some (b, Ptrofs.unsigned ofs) *)
-(*         end *)
-(*       end. *)
-
 Lemma init_mem_inj_1:
   Mem.mem_inj (Mem.flat_inj (Mem.support m)) m tm.
+Proof.
+  constructor;intros;
+  unfold Mem.flat_inj in H;
+  destr_in H;inv H;
+  exploit (Genv.init_mem_genv_sup);eauto;intros;rewrite <- H in s;
+  apply Genv.genv_sup_glob in s;destruct s;subst.
+  - clear H. unfold init_mem in TIM. destr_in TIM.
+    unfold Genv.init_mem in IM. unfold Mem.perm in *.
+    destruct m. simpl in *.
+    Genv.alloc_globals_initialized
 Admitted.
 
 Lemma init_mem_inj_2:
