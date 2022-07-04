@@ -834,18 +834,21 @@ Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): P
 | match_ext_fun: forall f e,
     gd = Gfun (External f) ->
     (prog_symbtable prog) ! id = Some e ->
+    (prog_sectable prog) ! id = None ->
     e.(symbentry_type) = symb_func ->
     e.(symbentry_secindex) = secindex_undef ->
     match_sec_def id prog gd
 | match_ext_var: forall v e,
     gd = Gvar v ->
     (prog_symbtable prog) ! id = Some e ->
+    (prog_sectable prog) ! id = None ->
     e.(symbentry_type) = gvar_readonly_symbtype v ->
     e.(symbentry_secindex) = secindex_undef ->
     match_sec_def id prog gd
 | match_comm: forall v e sz,
     gd = Gvar v ->
     (prog_symbtable prog) ! id = Some e ->
+    (prog_sectable prog) ! id = None ->
     v.(gvar_init) = [Init_space sz] ->
     e.(symbentry_type) = gvar_readonly_symbtype v ->
     e.(symbentry_secindex) = secindex_comm ->
@@ -857,11 +860,12 @@ Lemma init_meminj_invert_strong :forall m b b' delta ,
     delta = 0 /\
     exists id gd,
       b = Global id
+      /\ Globalenvs.Genv.find_symbol ge id = Some b
+      /\ Genv.find_symbol tge id = Some (b, Ptrofs.zero)
       /\ Genv.find_def ge b = Some gd
       /\ match_sec_def id tprog gd.
 Admitted.
 
-Genv.globals_initialized
 
 Section INIT_MEM.
 
@@ -869,23 +873,124 @@ Variables m tm: mem.
 Hypothesis IM: Genv.init_mem prog = Some m.
 Hypothesis TIM: init_mem instr_size tprog = Some tm.
 
+Lemma bytes_of_init_inject:
+  forall il,
+  list_forall2 (memval_inject (Mem.flat_inj (Mem.support m))) (Genv.bytes_of_init_data_list ge il) (bytes_of_init_data_list tge il).
+Admitted.
+  
+(** copy from Unusedglobproof *)
+Lemma Mem_getN_forall2:
+  forall (P: memval -> memval -> Prop) c1 c2 i n p,
+  list_forall2 P (Mem.getN n p c1) (Mem.getN n p c2) ->
+  p <= i -> i < p + Z.of_nat n ->
+  P (ZMap.get i c1) (ZMap.get i c2).
+Proof.
+  induction n; simpl Mem.getN; intros.
+- simpl in H1. extlia.
+- inv H. rewrite Nat2Z.inj_succ in H1. destruct (zeq i p).
++ congruence.
++ apply IHn with (p + 1); auto. lia. lia.
+Qed.
+
 
 Lemma init_mem_inj_1:
   Mem.mem_inj (Mem.flat_inj (Mem.support m)) m tm.
-Proof.
-  constructor;intros;
-  unfold Mem.flat_inj in H;
-  destr_in H;inv H;
-  exploit (Genv.init_mem_genv_sup);eauto;intros;rewrite <- H in s;
-  apply Genv.genv_sup_glob in s;destruct s;subst.
-  - clear H. unfold init_mem in TIM. destr_in TIM.
-    unfold Genv.init_mem in IM. unfold Mem.perm in *.
-    destruct m. simpl in *.
-    Genv.alloc_globals_initialized
+Proof.  
+  constructor;intros.
+  - exploit init_meminj_invert_strong;eauto.
+    intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
+    rewrite Z.add_0_r.
+    exploit (Genv.init_mem_characterization_gen);eauto. intro INIT1.
+    exploit (init_mem_characterization_gen). apply TIM. apply GDEQ.
+    intro INIT2.
+    inv MATCH.
+    + rewrite H2 in *.
+      unfold Mem.flat_inj in H. destr_in H. inv H.
+      destruct INIT2 as (PERM & OFSRANGE).
+      destruct INIT1 as (PERM1 & OFSRANGE1).
+      simpl in OFSRANGE.
+      apply OFSRANGE1 in H0. destruct H0. subst.
+      eapply Mem.perm_cur. auto.
+    + rewrite H2 in *. rewrite H3 in *. simpl in INIT2.
+      unfold gvar_readonly_symbtype in H4.
+      destruct (gvar_readonly v).
+      * rewrite H4 in INIT2.
+        admit.
+      * admit.
+    + admit.
+    + admit.
+    + admit.
+  - exploit init_meminj_invert_strong;eauto.
+    intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
+    apply Z.divide_0_r.
+  - exploit init_meminj_invert_strong;eauto.
+    intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
+    rewrite Z.add_0_r.
+    unfold Mem.flat_inj in H. destr_in H. inv H.
+    exploit (Genv.init_mem_characterization_gen);eauto. intro INIT1.
+    exploit (init_mem_characterization_gen). apply TIM. eapply (eq_refl (Global id)).
+    intro INIT2.
+    inv MATCH.
+    + rewrite H1 in *.
+      destruct INIT1. apply H2 in H0.
+      destruct H0. discriminate.
+    + rewrite H1 in *. rewrite H2 in *.
+      unfold gvar_readonly_symbtype in H3. destr_in H3;rewrite H3 in *.
+      * simpl in INIT2.
+        destruct INIT2 as (RPERM & OFSRANGE & LOADSTORE & BYTES).
+        Local Transparent Mem.loadbytes.
+        unfold Mem.loadbytes in BYTES.
+        destr_in BYTES.
+        destruct INIT1 as (RPERM1 & OFSRANGE1  & LOADSTORE1 & BYTES1).
+        apply OFSRANGE1 in H0. destruct H0.
+        assert (NO: gvar_volatile v = false).
+        { unfold Genv.perm_globvar in H0. destruct (gvar_volatile v); auto. inv H0.}
+        generalize (BYTES1 NO). unfold Mem.loadbytes. destruct Mem.range_perm_dec; intros E1; inv E1.
+        inv BYTES.
+        (* H5 and H6 *)
+        eapply Mem_getN_forall2 with (p := 0) (n := Z.to_nat (init_data_list_size (gvar_init v))).
+        rewrite H5,H6. apply bytes_of_init_inject. lia. lia.
+      * admit.
+    + admit.
+    + admit.
+    + admit.
 Admitted.
+
 
 Lemma init_mem_inj_2:
   Mem.inject (Mem.flat_inj (Mem.support m)) m tm.
+Proof.
+  constructor;intros.
+  - apply init_mem_inj_1.
+  - unfold Mem.flat_inj. destr.
+  - exploit init_meminj_invert_strong;eauto.
+    intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
+    unfold Mem.flat_inj in H. destr_in H. inv H.
+    (* need Genv.find_symbol_not_fresh for tge*)
+    admit.
+  - red;intros.
+    unfold Mem.flat_inj in *.
+    destr_in H0. destr_in H1.
+  - unfold Mem.flat_inj in *.
+    destr_in H. inv H.
+    split. lia. rewrite Z.add_0_r. apply Ptrofs.unsigned_range_2.
+  - exploit init_meminj_invert_strong;eauto.
+    intros (A & id & gd & B & C & D & E & F).
+    exploit (Genv.init_mem_characterization_gen);eauto.
+    exploit (init_mem_characterization_gen);eauto.
+    inv F.
+    + rewrite H2. simpl. intros (P2 & Q2) (P1 & Q1).
+      rewrite Z.add_0_r in H0. unfold Mem.flat_inj in H.
+      destr_in H. inv H.
+      apply Q2 in H0. destruct H0. subst.
+      inv H.
+      rewrite Z.le_lteq in H0. destruct H0.
+      right. unfold not. intros. apply Q1 in H0. destruct H0. lia.
+      left. subst. apply Mem.perm_cur. auto.
+    + admit.
+    + admit.
+    + admit.
+    + admit.
 Admitted.
 
 Lemma alloc_stack_pres_inject:
@@ -894,7 +999,67 @@ Lemma alloc_stack_pres_inject:
     Mem.alloc tm lo hi = (tm', stk') ->
     j = (Mem.flat_inj (Mem.support m')) ->
     Mem.inject j m' tm' /\ stk = stk' /\ match_inj j.
-Admitted.
+Proof.
+  intros.
+  exploit (Genv.init_mem_stack);eauto.
+  exploit (init_mem_stack);eauto.
+  exploit (Mem.alloc_result m);eauto.
+  exploit (Mem.alloc_result tm);eauto.
+  intros. subst. unfold Mem.nextblock. unfold Mem.fresh_block.
+  rewrite H4. rewrite H5. simpl.
+  generalize  init_mem_inj_2. intro INJ.
+  exploit (Mem.alloc_parallel_inject);eauto.
+  apply Z.le_refl. apply Z.le_refl.
+  (* unfold Mem.nextblock. unfold Mem.fresh_block. repeat rewrite H5. *)
+  (* simpl. *)
+  intros (f' & m2' & b2 & A & B & C & D & E).
+  rewrite H0 in A. inv A.
+  assert (f' = Mem.flat_inj (Mem.support m')).
+  { apply Axioms.functional_extensionality.
+    intros.
+    destruct (eq_block x (Mem.nextblock m)).
+    subst. rewrite D. unfold Mem.flat_inj.
+    exploit (Mem.valid_new_block). apply H.
+    unfold Mem.valid_block.
+    intros. destr. f_equal. f_equal.
+    eapply Mem.stackeq_nextblock. rewrite H4,H5.
+    auto.
+    erewrite E;auto. unfold Mem.flat_inj.
+    destruct (Mem.sup_dec x (Mem.support m)).
+    exploit Mem.sup_include_alloc. apply H. apply s.
+    intro;destr.
+    destr.
+    exploit Mem.support_alloc. apply H. intro.
+    rewrite H1 in *. apply Mem.sup_incr_in in s.
+    destruct s. unfold Mem.nextblock in n. congruence.
+    congruence. } 
+  rewrite <- H1. split;auto.
+  split;auto.
+  exploit init_meminj_match_sminj;eauto. intro MATCHINJ.
+  subst.
+  constructor.
+  - intros. eapply agree_inj_instrs;eauto.
+    unfold Mem.flat_inj in H3. destr_in H3. inv H3.
+    unfold Mem.flat_inj.
+    exploit Genv.find_funct_ptr_not_fresh;eauto.
+    unfold Mem.valid_block.
+    unfold Mem.sup_dec. intro. destr.
+  - intros. exploit agree_inj_globs;eauto.
+    intros (b' & ofs' & P & Q).
+    exists b',ofs'. split;auto.
+  - intros. eapply agree_inj_ext_funct;eauto.
+    unfold Mem.flat_inj in H2. destr_in H2. inv H2.
+    unfold Mem.flat_inj.
+    exploit Genv.find_funct_ptr_not_fresh;eauto.
+    unfold Mem.valid_block.
+    unfold Mem.sup_dec. intro. destr.
+  - intros. eapply agree_inj_int_funct;eauto.
+    unfold Mem.flat_inj in H2. destr_in H2. inv H2.
+    unfold Mem.flat_inj.
+    exploit Genv.find_funct_ptr_not_fresh;eauto.
+    unfold Mem.valid_block.
+    unfold Mem.sup_dec. intro. destr.
+Qed.
 
 
 End INIT_MEM.

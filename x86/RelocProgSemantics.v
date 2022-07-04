@@ -964,10 +964,12 @@ Definition globals_initialized (ge: Genv.t) (prog: program) (m:mem):=
           match e.(symbentry_type) with
           | symb_rodata =>
             Mem.range_perm m b 0 sz Cur Readable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Readable p)
+            /\ load_store_init_data ge m b 0 data
+            /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
           | symb_rwdata =>
             Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
-          /\ load_store_init_data ge m b 0 data
-          /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+            /\ load_store_init_data ge m b 0 data
+            /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
           | _ => False
            end
         | _ => False
