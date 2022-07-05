@@ -130,84 +130,6 @@ Proof.
   intros. apply align_divides. unfold alignw; lia.
 Qed.
 
-(* Lemma fold_left_acc_symb_acc: *)
-(*   forall defs stbl rodofs dofs cofs stbl' rodofs' dofs' cofs', *)
-(*     fold_left (acc_symb sec_rodata_id sec_data_id sec_code_id) defs (stbl, rodofs, dofs, cofs) = (stbl', rodofs', dofs', cofs') -> *)
-(*     forall se, *)
-(*       In se stbl -> In se stbl'. *)
-(* Proof. *)
-(*   induction defs; simpl; intros; eauto. inv H; auto. *)
-(*   repeat destr_in H. *)
-(*   eapply IHdefs. eauto. right. auto. *)
-(* Qed. *)
-
-(* Lemma gen_symb_table_ok: *)
-(*   forall id d defs defs1 defs2 stbl rodofs dofs cofs stbl' rodofs' dofs' cofs', *)
-(*     defs = defs1 ++ (id, d) :: defs2 -> *)
-(*     list_norepet (map fst defs) -> *)
-(*     fold_left (acc_symb sec_rodata_id sec_data_id sec_code_id) defs (stbl, rodofs, dofs, cofs) = (stbl', rodofs', dofs', cofs') -> *)
-(*     exists rodofs1 dofs1 cofs1 stbl1, *)
-(*       fold_left (acc_symb sec_rodata_id sec_data_id sec_code_id) defs1 (stbl, rodofs, dofs, cofs) = (stbl1, rodofs1, dofs1, cofs1) /\ *)
-(*       In (get_symbentry sec_rodata_id sec_data_id sec_code_id rodofs1 dofs1 cofs1 id d) stbl'. *)
-(* Proof. *)
-(*   induction defs; simpl; intros defs1 defs2 stbl rodofs dofs cofs stbl' rodofs' dofs' cofs' SPLIT NR FL; eauto. *)
-(*   - apply (f_equal (@length _)) in SPLIT. *)
-(*     rewrite app_length in SPLIT. simpl in SPLIT. omega. *)
-(*   - repeat destr_in FL. *)
-(*     destruct (ident_eq i id). *)
-(*     + subst. *)
-(*       assert (defs1 = []). destruct defs1. auto. simpl in SPLIT. inv SPLIT. *)
-(*       simpl in NR. *)
-(*       inv NR. *)
-(*       exfalso; apply H2. rewrite map_app. rewrite in_app. right. simpl. auto. subst. *)
-(*       simpl in *. inv SPLIT. *)
-(*       (do 4 eexists); split; eauto. *)
-(*       eapply fold_left_acc_symb_acc. eauto. left; auto. *)
-(*     + destruct defs1. simpl in SPLIT. inv SPLIT. congruence. *)
-(*       simpl in SPLIT. inv SPLIT. *)
-(*       edestruct IHdefs as (rodofs1 & dofs1 & cofs1 & stbl1 & FL1 & IN1). eauto. *)
-(*       inv NR. auto. eauto. *)
-(*       simpl. rewrite Heqp0. *)
-(*       setoid_rewrite FL1. *)
-(*       (do 4 eexists); split; eauto. *)
-(* Qed. *)
-
-(* Lemma symb_table_ok: *)
-(*   forall id d defs rodofs dofs cofs stbl defs1 defs2, *)
-(*     defs = defs1 ++ (id, d) :: defs2 -> *)
-(*     list_norepet (map fst defs) -> *)
-(*     gen_symb_table sec_rodata_id sec_data_id sec_code_id defs = (stbl, rodofs, dofs, cofs) -> *)
-(*     exists stbl1 rodofs1 dofs1 cofs1, *)
-(*       gen_symb_table sec_rodata_id sec_data_id sec_code_id defs1 = (stbl1, rodofs1, dofs1, cofs1) /\ *)
-(*       In (get_symbentry sec_rodata_id sec_data_id sec_code_id rodofs1 dofs1 cofs1 id d) stbl. *)
-(* Proof. *)
-(*   intros. *)
-(*   unfold gen_symb_table in H1. repeat destr_in H1. *)
-(*   setoid_rewrite <- in_rev. *)
-(*   eapply gen_symb_table_ok in Heqp; eauto. *)
-(*   destruct Heqp as (rodofs1 & dofs1 & cofs1 & stbl1 & FL1 & IN1). *)
-(*   unfold gen_symb_table. setoid_rewrite FL1. *)
-(*   (do 4 eexists); split; eauto. *)
-(* Qed. *)
-
-(** Properties about Symbol Environments *)
-(* Lemma add_external_global_pres_senv : *)
-(*   forall e (ge : Genv.t) extfuns, *)
-(*   Genv.genv_senv (add_external_global extfuns ge e) = Genv.genv_senv ge. *)
-(* Proof. *)
-(*   intros. unfold add_external_global. *)
-(*   destr. *)
-(* Qed. *)
-
-(* Lemma add_external_globals_pres_senv : *)
-(*   forall stbl (ge : Genv.t) extfuns, *)
-(*   Genv.genv_senv (add_external_globals extfuns ge stbl) = Genv.genv_senv ge. *)
-(* Proof. *)
-(*   induction stbl; intros. *)
-(*   - simpl. auto. *)
-(*   - simpl. erewrite IHstbl; eauto. *)
-(* Qed. *)
-
 Lemma transf_prog_pres_senv: forall instr_size p tp,
   transf_program instr_size p = OK tp -> 
   Globalenvs.Genv.to_senv (Globalenvs.Genv.globalenv p) = Genv.genv_senv (globalenv instr_size tp).
@@ -290,7 +212,6 @@ Proof.
 Qed.
   
 
-
 (** Transformation *)
 Variable prog: Asm.program.
 Variable tprog: program.
@@ -340,15 +261,6 @@ Definition glob_block_valid (m:mem) :=
         j b = Some (b', ofs) ->
         Genv.find_ext_funct tge (Vptr b' ofs') = None;
   }.
-
-(** Match States *)
-(* Inductive match_states: state -> state -> Prop := *)
-(* | match_states_intro: forall (j:meminj) (rs: regset) (m: mem) (rs': regset) (m':mem) *)
-(*                         (MINJ: Mem.inject j (def_frame_inj m) m m') *)
-(*                         (MATCHINJ: match_inj j) *)
-(*                         (RSINJ: regset_inject j rs rs') *)
-(*                         (GBVALID: glob_block_valid m), *)
-(*     match_states (State rs m) (State rs' m'). *)
 
 
 Inductive match_states: state -> state -> Prop :=
@@ -854,6 +766,12 @@ Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): P
     e.(symbentry_secindex) = secindex_comm ->
     match_sec_def id prog gd.
 
+Lemma transf_program_match_def: forall id gd,
+    In (id, gd) (prog.(AST.prog_defs)) ->
+    match_sec_def id tprog gd.
+Admitted.
+
+
 Lemma init_meminj_invert_strong :forall m b b' delta ,
     Genv.init_mem prog = Some m ->
     Mem.flat_inj (Mem.support m) b = Some (b',delta) ->
@@ -1070,6 +988,9 @@ Lemma storev_pres_match_inj:
     Mem.storev chunk m addr v = Some m' ->
     match_inj (Mem.flat_inj (Mem.support m)) ->
     match_inj (Mem.flat_inj (Mem.support m')).
+Proof.
+  intros. constructor.
+  intros.
 Admitted.
 
 Lemma storev_pres_inject:
@@ -1082,230 +1003,70 @@ Lemma storev_pres_inject:
     exists m2',  Mem.storev chunk m1' a' v' = Some m2' /\ Mem.inject (Mem.flat_inj (Mem.support m2)) m2 m2'.
 Admitted.
 
+
+Lemma alloc_globals_alloc_sections_exists: forall defs ge1 ge2 m1 m1' m2,
+    Genv.alloc_globals ge1 m1 defs = Some m1' ->
+    exists m2', fold_left 
+       (fun (a : option mem) (p : positive * section) =>
+            alloc_section instr_size ge2 (gen_symb_table instr_size defs) a (fst p) (snd p))
+       (PTree.elements (create_sec_table defs)) (Some m2) = Some m2'.
+Admitted.
+
+(* Proof. *)
+(*   rewrite PTree.fold_spec in *. *)
+(*   induction defs;simpl;intros. *)
+(*   - exists m2. unfold gen_symb_table,create_sec_table. simpl. *)
+(*   unfold PTree.fold. simpl. auto. *)
+(*   - rewrite PTree.fold_spec in *. *)
+
+  Lemma alloc_globals_alloc_external_exists: forall defs ge m1 m1' m2,
+      Genv.alloc_globals ge m1 defs = Some m1' ->
+      exists m2', alloc_external_symbols m2 (gen_symb_table instr_size defs) = Some m2'.
+  Admitted.
+
+
   
+
 Lemma init_mem_exists:
   forall m, Genv.init_mem prog = Some m ->
   exists tm, init_mem instr_size tprog = Some tm.
 Proof.
-Admitted.
+  unfold init_mem,Genv.init_mem.
+  intros m M1.
+  (* exploit (alloc_globals_alloc_sections_exists (AST.prog_defs prog) (Genv.globalenv prog) ((globalenv instr_size tprog)) (Mem.empty) m (Mem.empty));eauto. *)
+  (* intros (m2' & A). *)
+  destr.
+  generalize (alloc_globals_alloc_external_exists _ _ _ _ m0 M1).
+  intros (m1 & E). exists m1.
+  assert ((gen_symb_table instr_size (AST.prog_defs prog)) = (prog_symbtable tprog)).
+  { unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+    repeat destr_in TRANSF. simpl. auto. }
+  rewrite <- H. auto.
+  assert (exists m', alloc_sections instr_size (globalenv instr_size tprog)
+                               (prog_symbtable tprog) (prog_sectable tprog) Mem.empty = Some m').
+  {
+    generalize TRANSF. intros TRANSF'.
+    unfold match_prog in TRANSF'. unfold transf_program in TRANSF'.
+    destr_in TRANSF'.  destr_in TRANSF'. inversion TRANSF'.
+    simpl.
+    unfold alloc_sections. simpl.
+    rewrite PTree.fold_spec.
+    eapply alloc_globals_alloc_sections_exists;eauto. }
+   destruct H. congruence.
+Qed.
 
 
 Lemma init_mem_pres_inject :
   forall m
     (INITMEM: Genv.init_mem prog = Some m),
   exists m', init_mem instr_size tprog = Some m' /\ Mem.inject (Mem.flat_inj (Mem.support m)) m m'.
-  Admitted.
-(* Proof. *)
-(*   Admitted. *)
-(***** Remove Proofs By Chris Start ******)
-(*  
-  unfold Genv.init_mem, init_mem. intros.
-  unfold match_prog, transf_program in TRANSF.
-  destr_in TRANSF. inv w.
-  destr_in TRANSF. destruct p. destruct p.
-  destr_in TRANSF. inv TRANSF. cbn.
-  destruct (Mem.alloc Mem.empty 0 (init_data_list_size (fold_right acc_init_data [] (AST.prog_defs prog)))) eqn:IALLOC.
-  set (idata := (fold_right acc_init_data [] (AST.prog_defs prog))) in *.
-  generalize (alloc_perm_range _ _ _ _ _ Cur Freeable IALLOC).
-  intros RPERM.
-  assert (exists m1, store_zeros m0 b 0 (init_data_list_size idata) = Some m1) as STZ.
-  { 
-    eapply Genv.store_zeros_exists; eauto.
-    eapply Mem.range_perm_implies; eauto. constructor.
-    cbn. erewrite Mem.alloc_stack_blocks; eauto.
-    rewrite Mem.empty_stack. 
-    eapply stack_access_nil.
-    erewrite Mem.alloc_stack_blocks; eauto.
-    rewrite Mem.empty_stack. cbn. auto.
-  }
-  destruct STZ as (m1 & STZ).
-  rewrite STZ.
-  generalize (store_zeros_pres_range_perm _ _ _ _ _ _ _ STZ RPERM).
-  intros RPERM1.
-  
-  assert (exists m' : mem, store_init_data_list tge m1 b 0 idata = Some m') as SL.
-  {
-    eapply store_init_data_list_exists; eauto. cbn.
-    eapply Mem.range_perm_implies; eauto. constructor.
-    erewrite Genv.store_zeros_stack_access; eauto.
-    erewrite Mem.alloc_stack_blocks; eauto.
-    rewrite Mem.empty_stack.
-    apply stack_access_nil.
-    eapply acc_init_data_list_aligned; eauto.
-    eapply init_mem_data_aligned; eauto.
-    apply Z.divide_0_r.
-  }
-  destruct SL as (m2 & SL).
-  generalize SL. intros SL'.
-  unfold tge in SL'. cbn in SL'.
-  rewrite SL'. clear SL'.
-
-(*   destr. *)
-(*   destr. destr. *)
-
-(*   destruct (Mem.alloc Mem.empty 0 0) eqn:IALLOC. *)
-(*   exploit Mem.nextblock_alloc; eauto. intros NEXTBLOCK. *)
-(*   rewrite Mem.nextblock_empty in NEXTBLOCK. simpl in NEXTBLOCK. *)
-(*   exploit alloc_globals_segments_weak_inject; eauto. *)
-(*   erewrite Mem.alloc_stack_blocks; eauto. *)
-(*   erewrite Mem.empty_stack; eauto. *)
-(*   intros (m' & GALLOC & SINJ). *)
-(*   set (m1 := alloc_segments m0 (list_of_segments tprog)) in *. *)
-(*   rewrite GALLOC. *)
-(*   generalize (store_all_globals_inject). intro AAGI. *)
-(*   generalize TRANSF. intros TRANSF'. unfold match_prog in TRANSF'. *)
-(*   unfold transf_program in TRANSF'. *)
-(*   destruct (check_wellformedness prog) eqn:WF; try congruence. repeat destr_in TRANSF'. *)
-(*   unfold transl_prog_with_map in H0.  *)
-(*   destruct (transl_globdefs g (AST.prog_defs prog)) eqn: TLGLB; inversion H0.  *)
-(*   clear H0. simpl. *)
-(*   inversion UPDATE. subst g l z0 z. *)
-(*   exploit AAGI; eauto using INITMEM, SINJ, Mem.inject_ext. *)
-(*   - inv w. auto. *)
-(*   - erewrite alloc_globals_nextblock; eauto. *)
-(*     subst m1. *)
-(*     erewrite alloc_segments_nextblock; eauto. *)
-(*     erewrite Mem.nextblock_alloc; eauto.  *)
-(*     erewrite Mem.nextblock_empty. simpl.     *)
-(*     subst tprog. simpl. *)
-(*     erewrite transl_globdefs_pres_len; eauto. *)
-(*   - erewrite <- alloc_globals_stack; eauto. *)
-(*     subst m1. erewrite alloc_segments_stack; eauto. *)
-(*     erewrite Mem.alloc_stack_blocks; eauto. *)
-(*     erewrite Mem.empty_stack; eauto. *)
-(*   - eapply alloc_globals_perm_ofs; eauto. subst m1. *)
-(*     eapply alloc_segments_perm_ofs; eauto.  *)
-(*     intros b0 ofs k p PERM. erewrite alloc_perm in PERM; eauto. *)
-(*     destruct peq. omega. apply Mem.perm_empty in PERM. contradiction. *)
-(*   - intros id odef b' delta IN FSYM ofs k p OFS. *)
-(*     destruct (vit_dec _ _ odef). *)
-(*     + eapply alloc_globals_pres_perm; eauto. *)
-(*       subst m1. eapply alloc_segments_init_perm; eauto. *)
-(*     + eapply alloc_globals_init_perm; eauto. *)
-(*       subst m1. erewrite alloc_segments_nextblock; eauto. simpl. *)
-(*       rewrite NEXTBLOCK. auto. *)
-(*   - intros (m1' & ALLOC' & MINJ). *)
-(*     exists m1'. split. subst. simpl. *)
-(*     unfold tge in ALLOC'. auto. *)
-(*     auto. *)
-(* Qed. *)
-Admitted.
-*)
-(***** Remove Proofs By Chris End ******)
-
-(** Inversion of initial memory injection on genv_next *)
-(* Lemma acc_symb_maps_inv : forall stbl t id b ofs, *)
-(*     t ! id = None -> *)
-(*     (fold_right acc_symb_map t stbl) ! id = Some (b, ofs) -> *)
-(*     exists e, In e stbl /\  *)
-(*          id = symbentry_id e /\  *)
-(*          (exists i, symbentry_secindex e = secindex_normal i /\ *)
-(*                b = sec_index_to_block i) /\ *)
-(*          ofs = Ptrofs.repr (symbentry_value e). *)
-(* Proof. *)
-(*   induction stbl as [|e stbl]. *)
-(*   - intros. cbn in *. congruence. *)
-(*   - intros t id b ofs NON ACC. cbn in ACC. *)
-(*     unfold acc_symb_map in ACC. *)
-(*     destr_in ACC. *)
-(*     + destruct (peq (symbentry_id e) id). *)
-(*       * subst. rewrite PTree.gss in ACC. inv ACC. *)
-(*         eexists. intuition. eauto. *)
-(*       * rewrite PTree.gso in ACC; auto. *)
-(*         exploit IHstbl; eauto. *)
-(*         intros (e' & IN & ID & (i & SI & BL) & OFS). *)
-(*         subst.  *)
-(*         exists e'. split; eauto. *)
-(*     + exploit IHstbl; eauto. *)
-(*       intros (e' & IN & ID & (i & SI & BL) & OFS). *)
-(*       subst.  *)
-(*       exists e'. split; eauto. *)
-(*     + exploit IHstbl; eauto. *)
-(*       intros (e' & IN & ID & (i & SI & BL) & OFS). *)
-(*       subst.  *)
-(*       exists e'. split; eauto. *)
-(* Qed.         *)
-
-(* Lemma gen_symb_table_index_range: forall rdid did cid p stbl rdz dz cz e i, *)
-(*     gen_symb_table rdid did cid p = (stbl, rdz, dz, cz) -> *)
-(*     In e stbl ->  *)
-(*     symbentry_secindex e = secindex_normal i -> *)
-(*     i = rdid \/ i = did \/ i = cid. *)
-(* Proof. *)
-(*   intros rdid did cid p stbl rdz dz cz e i GEN IN SI. *)
-(*   unfold gen_symb_table in GEN. *)
-(*   destr_in GEN. destruct p0. destruct p0. inv GEN. *)
-(*   exploit acc_symb_index_in_range; eauto. *)
-(*   intros RNG. red in RNG. *)
-(*   rewrite Forall_forall in RNG.  *)
-(*   apply RNG in IN. red in IN.  *)
-(*   rewrite SI in IN. inv IN; auto. inv H; auto. inv H0; auto. inv H. *)
-(* Qed. *)
-
-
-(* Lemma find_symbol_globenv_block_bound : *)
-(*   forall (id : ident) b ofs, Genv.find_symbol (globalenv tprog) id = Some (b, ofs)  *)
-(*                         -> Pos.lt b (Genv.genv_next (globalenv tprog)). *)
-(* Proof. *)
-(*   unfold globalenv. simpl. intros. *)
-(*   exploit add_external_globals_pres_find_symbol_block_bound; eauto.  *)
-(*   red. simpl. intros. *)
-(*   unfold match_prog in TRANSF. unfold transf_program in TRANSF. *)
-(*   repeat destr_in TRANSF. cbn in H0. *)
-(*   clear H.  *)
-(*   unfold Genv.find_symbol in H0. cbn in H0. *)
-(*   exploit acc_symb_maps_inv; eauto. *)
-(*   apply PTree.gempty. *)
-(*   intros (e & IN & ID & (i & SI & BL) & OFS). subst. *)
-(*   exploit gen_symb_table_index_range; eauto. *)
-(*   intros [I | I]; subst; cbn. xomega. *)
-(*   destruct I; subst; cbn; xomega. *)
-(* Qed. *)
-
-(* Lemma init_meminj_genv_next_inv : forall b delta *)
-(*     (MINJ: init_meminj b = Some (Genv.genv_next tge, delta)), *)
-(*     b = Globalenvs.Genv.genv_next ge. *)
-(* Proof. *)
-(*   intros. *)
-(*   unfold init_meminj in MINJ. destruct eq_block; inv MINJ. *)
-(*   - unfold ge. auto. *)
-(*   - destr_match_in H0; inv H0. *)
-(*     destr_match_in H1; inv H1. *)
-(*     destruct p. inv H0. *)
-(*     exploit find_symbol_globenv_block_bound; eauto. *)
-(*     intros. *)
-(*     exfalso. generalize H. *)
-(*     setoid_rewrite <- Pos.compare_nlt_iff. *)
-(*     apply Pos.lt_irrefl. *)
-(* Qed. *)
-
-(** Injection of main pointer *)
-(***** Remove Proofs By Chris Start ******)
-(* Main Function 
-Lemma main_ptr_inject:
-  forall (MATCH_INJ: match_inj init_meminj),
-    Val.inject init_meminj
-               (Globalenvs.Genv.symbol_address
-                  (Globalenvs.Genv.globalenv prog)
-                  (AST.prog_main prog) Ptrofs.zero)
-               (Genv.symbol_address
-                  (globalenv tprog)
-                  (prog_main tprog) Ptrofs.zero).
 Proof.
   intros.
-  unfold match_prog in TRANSF. unfold transf_program in TRANSF.
-  repeat destr_in TRANSF. destruct p. inv Heqp0. monadInv TRANSF.
-  cbn [prog_main].
-  rewrite H0. clear H0.
-  inv w. auto.
-  red in wf_prog_main_exists. rewrite Exists_exists in wf_prog_main_exists.
-  destruct wf_prog_main_exists as (def & IN & P).
-  destruct def. (* destruct o; destruct P as [IDEQ P]; *) inv P.
-  cbn [prog_main].
-  eapply symbol_address_inject; eauto.
+  exploit init_mem_exists;eauto.
+  intros (tm & INIT1). exists tm.
+  exploit (init_mem_inj_2);eauto.
 Qed.
-*)
-(***** Remove Proofs By Chris End ******)
+
 
 Lemma val_inject_set:
   forall j rs1 rs2
