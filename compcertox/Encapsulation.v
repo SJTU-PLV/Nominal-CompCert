@@ -13,10 +13,6 @@ From coqrel Require Import RelClasses.
 (** * State Encapsulation of CompCert LTS *)
 
 (** ** Preliminaries *)
-(* TODO: move this to TensorComp.v and add instance priority *)
-Instance li_func_comp {liA liB liC} (F: LiFunc liA liB) (G: LiFunc liB liC): LiFunc liA liC.
-Proof. split; intros; apply F; apply G; easy. Qed.
-
 Record PSet : Type :=
   mk_pset {
       pset_type :> Type;
@@ -28,6 +24,11 @@ Definition pset_prod (A: PSet) (B: PSet) :=
     pset_init := (pset_init A, pset_init B);
   |}.
 Infix "*" := pset_prod.
+Definition pset_unit :=
+  {|
+    pset_type := unit;
+    pset_init := tt
+  |}.
 
 Record ReflTranRel (X: Type) :=
   {
@@ -98,6 +99,28 @@ Definition comp_esem {liA liB liC} (L1: liB +-> liC) (L2: liA +-> liB) : option 
   | None => None
   end.
 
+(** *** Construction *)
+
+(* TODO: move this to TensorComp.v and add instance priority *)
+Instance li_func_comp {liA liB liC} (F: LiFunc liA liB) (G: LiFunc liB liC): LiFunc liA liC.
+Proof. split; intros; apply F; apply G; easy. Defined.
+
+Definition encap_store {K: PSet} {liA liB} (L: liA +-> liB@K) : liA +-> liB :=
+  {|
+    pstate := pstate L * K;
+    esem := $L
+  |}.
+
+Instance li_func_unit {liA}: LiFunc liA (liA@unit).
+Proof. split; intros; apply X. Defined.
+
+Definition encap_fbk {liA liB} (L: semantics liA liB) : liA +-> liB :=
+  {|
+    pstate := pset_unit;
+    esem := $L;
+  |}.
+
+(** ** Simulations *)
 Set Implicit Arguments.
 
 Module ST.
@@ -196,20 +219,7 @@ Module E.
 
 End E.
 
-(** *** Construction *)
-(* Definition encap_fbk {liA liB} (L: semantics liA liB) : liA +-> liB := *)
-(*   {| *)
-(*     pstate := unit; *)
-(*     esem := L @ unit; *)
-(*   |}. *)
-
-Definition encap_store {K: PSet} {liA liB} (L: liA +-> liB@K) : liA +-> liB :=
-  {|
-    pstate := pstate L * K;
-    esem := $L
-  |}.
-
-(** *** Properties *)
+(** ** Properties *)
 
 (** *** Composition *)
 Generalizable All Variables.
@@ -383,21 +393,84 @@ Section COMP.
 End COMP.
 
 (** Lifting Simulations with Additional States *)
+
 Section LIFT.
 
   Context `(ccA: ST.callconv liA1 liA2)
           `(ccB: ST.callconv liB1 liB2)
-          `(HL: ST.forward_simulation ccA ccB L1 L2).
+          `(X: ST.fsim_components ccA ccB L1 L2).
   Context (K1 K2: PSet).
 
-  Lemma st_fsim_lift: ST.forward_simulation
+  Lemma st_fsim_lift': ST.forward_simulation
                         (ST.callconv_lift ccA K1 K2)
                         (ST.callconv_lift ccB K1 K2)
                         (L1@K1) (L2@K2).
   Proof.
-  Admitted.
+    constructor.
+    eapply ST.Forward_simulation with
+      (ST.fsim_order X)
+      (fun se1 se2 '(wa, k1a, k2a) '(wb, k1b, k2b) i '(s1, k1) '(s2, k2) =>
+         ST.fsim_match_states X se1 se2 wa wb i s1 s2 /\
+           k1a = k1 /\ k1b = k1 /\ k2a = k2 /\ k2b = k2)
+      (fun '(wa, k1a, k2a) '(wb, k1b, k2b) => ST.fsim_invariant X wa wb /\ k1a = k1b /\ k2a = k2b).
+    - intros [[wa k1a] k2a] [[wb k1b] k2b] (INV & -> & ->) [[wb' k1b'] k2b'] W.
+      destruct W as [[W U] V]. inv U. inv V. repeat split; eauto.
+      eapply ST.fsim_invariant_env_step; eauto.
+    - apply X.
+    - cbn. repeat split; eauto. apply X.
+    - intros i. cbn. apply X.
+    - intros [[wa k1a] k2a] [[wb k1b] k2b] se1 se2 (I & -> & ->). split; cbn.
+      + intros. prod_crush. subst.
+        pose proof (ST.fsim_lts X _ _ se1 se2 I).
+        edestruct @ST.fsim_match_initial_states as (idx & s' & Hs' & Hs); eauto.
+        destruct Hs as (wa' & wb'' & W1 & W2 & HS).
+        eexists idx, (s', _). repeat split; eauto.
+        eexists (wa', _, _), (wb'', _, _). repeat split; eauto.
+      + intros. prod_crush. subst.
+        pose proof (ST.fsim_lts X _ _ se1 se2 I).
+        edestruct @ST.fsim_match_final_states as (r' & H' & Hr'); eauto.
+        destruct Hr' as (wb' & W & Hr' & INV).
+        eexists (r', _). repeat split; eauto.
+        eexists (wb', _, _). repeat split; eauto.
+      + intros. prod_crush. subst.
+        pose proof (ST.fsim_lts X _ _ se1 se2 I).
+        edestruct @ST.fsim_match_external as (q' & H' & wa' & WA & Hq' & HH); eauto.
+        eexists (q', _). repeat split; eauto.
+        eexists (wa', _, _). repeat split; eauto.
+        intros. prod_crush. subst.
+        edestruct HH as (i' & s2' & Haft & Hs); eauto.
+        destruct Hs as (wa'' & wb' & WA' & WB & HS).
+        eexists i', (s2', _). repeat split; eauto.
+        eexists (wa'', _, _), (wb', _, _). repeat split; eauto.
+      + intros. prod_crush. subst.
+        pose proof (ST.fsim_lts X _ _ se1 se2 I).
+        edestruct @ST.fsim_simulation as (idx' & s2' & Hs2' & Hs'); eauto.
+        destruct Hs' as (wa' & wb' & WA & WB & HS).
+        destruct Hs2'.
+        * eexists idx', (s2', _). split.
+          -- left. apply lifting_step_plus; eauto.
+          -- eexists (wa', _, _), (wb', _, _).
+             repeat split; eauto.
+        * eexists idx', (s2', _). split.
+          -- right. split. apply lifting_step_star; eauto. all: apply H2.
+          -- eexists (wa', _, _), (wb', _, _).
+             repeat split; eauto.
+    - apply X.
+  Qed.
 
 End LIFT.
+
+
+Lemma st_fsim_lift `(ccA: ST.callconv liA1 liA2) `(ccB: ST.callconv liB1 liB2)
+      L1 L2 (K1 K2: PSet):
+  ST.forward_simulation ccA ccB L1 L2 ->
+  ST.forward_simulation
+                        (ST.callconv_lift ccA K1 K2)
+                        (ST.callconv_lift ccB K1 K2)
+                        (L1@K1) (L2@K2).
+Proof.
+  intros [H]. apply st_fsim_lift'. apply H.
+Qed.
 
 (** Composition of Components with Encapsulated States *)
 Section COMP.
