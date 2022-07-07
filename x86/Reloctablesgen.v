@@ -184,7 +184,7 @@ Definition unsupported i :=
   end.
 
 
-Definition transl_instr (sofs:Z) (i: instruction) : res (list relocentry) :=
+Definition transl_instr (sofs:Z) (i: instruction) : res (option relocentry) :=
   if unsupported i
   then Error [MSG "unsupported instruction: "; MSG (instr_to_string i); MSG " in relocation table generation"]
   else 
@@ -198,106 +198,106 @@ Definition transl_instr (sofs:Z) (i: instruction) : res (list relocentry) :=
   | Pjmptbl _ _ => Error (msg "Source program contains jumps to labels")
   | Pjmp_s id sg => 
     do e <- compute_instr_rel_relocentry sofs i id;
-    OK [e]
+    OK (Some e)
   | Pjmp_m (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pcall_s id sg =>
     do e <- compute_instr_rel_relocentry sofs i id;
-    OK [e]
+    OK (Some e)
   | Pmov_rs rd id => 
     do e <- compute_instr_abs_relocentry sofs i 0 id;
-    OK [e]
+    OK (Some e)
   | Pmovl_rm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   (* | Pmovq_rm rd a => *)
   (*   Error [MSG "Relocation failed: "; MSG (instr_to_string i); MSG " not supported yet"]    *)
   | Pmovl_mr (Addrmode rb ss (inr disp)) rs =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   (* | Pmovq_mr a rs => *)
   (*   Error [MSG "Relocation failed: "; MSG (instr_to_string i); MSG " not supported yet"] *)
   | Pmovsd_fm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovsd_mf (Addrmode rb ss (inr disp)) r1 =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovss_fm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovss_mf (Addrmode rb ss (inr disp)) r1 =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pfldl_m (Addrmode rb ss (inr disp)) => (**r [fld] double precision *)
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pfstpl_m (Addrmode rb ss (inr disp)) => (**r [fstp] double precision *)
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pflds_m (Addrmode rb ss (inr disp)) => (**r [fld] simple precision *)
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pfstps_m (Addrmode rb ss (inr disp)) => (**r [fstp] simple precision *)
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pxorpd_fm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pxorps_fm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pandpd_fm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pandps_fm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
     (** Moves with conversion *)
   | Pmovb_mr (Addrmode rb ss (inr disp)) rs =>    (**r [mov] (8-bit int) *)
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovb_rm rd (Addrmode rb ss (inr disp)) =>    (**r [mov] (8-bit int) *)
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]       
+    OK (Some e)       
   | Pmovw_mr (Addrmode rb ss (inr disp)) rs =>    (**r [mov] (16-bit int) *)
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovw_rm rd (Addrmode rb ss (inr disp)) =>    (**r [mov] (16-bit int) *)
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovzb_rm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovsb_rm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovzw_rm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovsw_rm rd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovsq_rm frd (Addrmode rb ss (inr disp)) =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmovsq_mr (Addrmode rb ss (inr disp)) frs =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   (** Integer arithmetic *)
   | Pleal rd (Addrmode rb ss (inr disp))  =>
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   (* | Pleaq rd a => *)
   (*   Error (msg "Relocation failed: instruction not supported yet") *)
   (** saving and restoring registers *)
   | Pmov_rm_a rd (Addrmode rb ss (inr disp)) =>  (**r like [Pmov_rm], using [Many64] chunk *)
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   | Pmov_mr_a (Addrmode rb ss (inr disp)) rs =>   (**r like [Pmov_mr], using [Many64] chunk *)
     do e <- compute_instr_disp_relocentry sofs i disp;
-    OK [e]
+    OK (Some e)
   (* | Pmovsd_fm_a rd a => (**r like [Pmovsd_fm], using [Many64] chunk *) *)
   (*   Error [MSG "Relocation failed:"; MSG (instr_to_string i); MSG "not supported yet"] *)
   (* | Pmovsd_mf_a a r1 =>  (**r like [Pmovsd_mf], using [Many64] chunk *) *)
@@ -315,16 +315,21 @@ Definition transl_instr (sofs:Z) (i: instruction) : res (list relocentry) :=
   | Pmovq_mr (Addrmode rb ss (inr disp)) _
   | Pleaq _ (Addrmode rb ss (inr disp)) =>
      do e <- compute_instr_disp_relocentry sofs i disp;
-     OK [e]
+     OK (Some e)
   | _ =>
-    OK []
+    OK None
   end.
 
 
 Definition acc_instrs r i :=
   do (sofs, rtbl) <- r;
   do ri <- transl_instr sofs i;
-  OK (sofs + instr_size i, ri ++ rtbl).
+  match ri with
+  | Some r =>
+    OK (sofs + instr_size i, rtbl ++ [r])
+  | None =>
+    OK (sofs + instr_size i, rtbl)
+  end.
 
 Definition transl_code (c:code) : res reloctable :=
   do (_, rtbl) <- fold_left acc_instrs c (OK (0, []));
@@ -332,7 +337,7 @@ Definition transl_code (c:code) : res reloctable :=
 
 (** ** Translation of global variables *)
 
-Definition transl_init_data (dofs:Z) (d:init_data) : res reloctable :=
+Definition transl_init_data (dofs:Z) (d:init_data) : res (option relocentry) :=
   match d with
   | Init_addrof id ofs =>
     match symbtbl!id with
@@ -344,20 +349,25 @@ Definition transl_init_data (dofs:Z) (d:init_data) : res reloctable :=
                   reloc_symb := id;
                   reloc_addend := Ptrofs.unsigned ofs;
                |} in
-      OK [e]
+      OK (Some e)
     end
   | _ =>
-    OK []
+    OK None
   end.
 
 (** Tranlsation of a list of initialization data and generate
     relocation entries *)
 
 Definition acc_init_data r d :=
-  do r' <- r;
-  let '(dofs, rtbl) := r' in
+  do (dofs, rtbl) <- r;
+  (* let '(dofs, rtbl) := r' in *)
   do ri <- transl_init_data dofs d;
-  OK (dofs + init_data_size d, ri ++ rtbl).
+  match ri with
+  | Some r =>
+    OK (dofs + init_data_size d, rtbl ++ [r])
+  | None =>
+    OK (dofs + init_data_size d, rtbl)
+  end.
 
 Definition transl_init_data_list (l:list init_data) : res reloctable :=
   do rs <-
@@ -529,12 +539,147 @@ Definition id_eliminate (i:instruction): instruction:=
      i
     end.
 
+Definition rev_id_eliminate (reloc_map: ZTree.t ident) (ofs: Z) (i:instruction) :=
+  i.
+
+
 Definition acc_id_eliminate r i :=
   id_eliminate i :: r.
 
 Definition transl_code' (c:code): code :=
-  rev (fold_left acc_id_eliminate c []).
+  map id_eliminate c.
+  (* rev (fold_left acc_id_eliminate c []). *)
+
+(* reloc_map: the begining of instr to id *)
+Definition rev_acc_code (reloc_map: ZTree.t ident) (r:code*Z) i :=
+  let (c,ofs) := r in
+  (c++[rev_id_eliminate reloc_map ofs i], ofs + instr_size i).
+
+(* Definition rev_transl_code (c':code) (reloc_map: ZTree.t ident) (c:code) := *)
+(*   fst (fold_left (rev_acc_code reloc_map) c (c',code_size instr_size c')). *)
+
+Definition rev_transl_code (reloc_map: ZTree.t ident) (c:code) :=
+  fst (fold_left (rev_acc_code reloc_map) c ([],0)).
+
+(* Inductive match_reloc_map_code (sz: Z) (reloc_map: ZTree.t ident): code -> Z -> Prop := *)
+(* | Reloc_nil: *)
+(*     match_reloc_map_code sz reloc_map [] sz *)
+(* | Reloc_cons: forall c i ofs symbtbl e, *)
+(*     transl_instr symbtbl ofs i = OK (Some e) -> *)
+(*     ZTree.get e.(reloc_offset) reloc_map = Some e.(reloc_symb) -> *)
+(*     match_reloc_map_code sz reloc_map c (ofs + instr_size i) -> *)
+(*     match_reloc_map_code sz reloc_map (i::c) ofs. *)
+
+
+Inductive match_reloc_map_code: ZTree.t ident -> code -> Prop :=
+| Reloc_nil:
+    match_reloc_map_code (ZTree.empty ident) []
+| Reloc_app1: forall c i symbtbl e reloc_map,
+    transl_instr symbtbl (code_size instr_size c) i = OK (Some e) ->
+    match_reloc_map_code reloc_map c ->
+    ZTree.get e.(reloc_offset) reloc_map = Some e.(reloc_symb) ->
+    match_reloc_map_code reloc_map (c++[i])
+| Reloc_app2: forall c i symbtbl reloc_map,
+    transl_instr symbtbl (code_size instr_size c) i = OK None ->
+    match_reloc_map_code reloc_map c ->
+    match_reloc_map_code reloc_map (c++[i]).
+
+
+Lemma transl_code_app: forall c1 c2,
+    transl_code' (c1++c2) = transl_code' c1 ++ transl_code' c2.
+Proof.
+  unfold transl_code'.
+  eapply map_app.
+Qed.
+
+Lemma app_unit_eq:forall T (l1:list T) l2 a1 a2,
+    l1 ++ [a1] = l2 ++ [a2] <->
+    l1 = l2 /\ a1 = a2.
+Proof.
   
+  intros.
+  split;intros.
+  assert (rev (l1++[a1]) = rev (l2++[a2])).
+  f_equal. auto.
+  rewrite rev_unit in H0. rewrite rev_unit in H0.
+  inv H0.
+  assert (rev (rev l1) = rev (rev l2)).
+  f_equal. auto.
+  rewrite rev_involutive in H0.
+  rewrite rev_involutive in H0.
+  auto.
+  destruct H. subst;auto.
+Qed.
+
+Lemma transl_code_consistency: forall n c reloc_map,
+    length c = n -> 
+    match_reloc_map_code reloc_map c ->
+    rev_transl_code reloc_map (transl_code' c) = c.
+Proof.
+  unfold rev_transl_code.
+  induction  n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl. auto.
+
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a & A & B). subst. clear H.
+  
+  rewrite transl_code_app.
+  rewrite fold_left_app.  
+  inv H0.
+  - destruct l';simpl in H2;congruence.
+  - (* unfold transl_code'. *) simpl.
+    eapply app_unit_eq in H. destruct H;subst.
+    destruct fold_left eqn:FOLD.
+    simpl. eapply app_unit_eq.
+    assert (fst (fold_left (rev_acc_code reloc_map) (transl_code' l') ([], 0)) = c). rewrite FOLD. simpl. auto.
+    rewrite IHn in H;auto. subst.
+    admit.
+  - simpl.
+    eapply app_unit_eq in H. destruct H;subst.
+    destruct fold_left eqn:FOLD.
+    simpl. eapply app_unit_eq.
+    assert (fst (fold_left (rev_acc_code reloc_map) (transl_code' l') ([], 0)) = c). rewrite FOLD. simpl. auto.
+    rewrite IHn in H;auto. subst.
+    admit.    
+Admitted.
+
+Definition reloc_map_gen (reloctbl:reloctable) :=
+  fold_left (fun acc e => ZTree.set e.(reloc_offset) e.(reloc_symb) acc) reloctbl (ZTree.empty ident).
+
+Lemma match_reloc_map_code_gen: forall n c symbtbl reloctbl,
+    length c = n ->
+    transl_code symbtbl c = OK reloctbl ->
+    match_reloc_map_code (reloc_map_gen reloctbl) c.
+Proof.
+  induction n;intros.
+  - rewrite length_zero_iff_nil in H. subst.
+    unfold transl_code in H0. simpl in H0. inv H0.
+    unfold reloc_map_gen. simpl. constructor.
+  - exploit LocalLib.length_S_inv;eauto.
+    intros (l' & a & A & B). subst. clear H.
+    unfold transl_code in H0. monadInv H0.
+    rewrite fold_left_app in EQ.
+    simpl in EQ.
+    (* unfold acc_instrs in EQ. monadInv EQ. *)
+    destruct fold_left eqn:FOLD in EQ. destruct p.
+    unfold acc_instrs in EQ. monadInv EQ. inv EQ0.
+    assert (ACCLen: code_size instr_size l' = x0) by admit.    
+    destruct x2;inv EQ2.
+    + unfold reloc_map_gen in *. rewrite fold_left_app.
+      simpl.
+      econstructor;eauto.
+      * simpl.
+        (* generalize reloc_map in reloc_map_gen*)
+        admit.
+      * rewrite ZTree.gss. auto.
+    + unfold reloc_map_gen in *.
+      eapply Reloc_app2;eauto.
+      eapply IHn;auto.
+      unfold transl_code. erewrite FOLD.
+      simpl. auto.
+    + simpl in EQ. inv EQ.
+Admitted.
 
 Definition transl_section' (sec: section) : section :=
   match sec with

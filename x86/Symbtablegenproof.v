@@ -989,9 +989,11 @@ Lemma storev_pres_match_inj:
     match_inj (Mem.flat_inj (Mem.support m)) ->
     match_inj (Mem.flat_inj (Mem.support m')).
 Proof.
-  intros. constructor.
   intros.
-Admitted.
+  exploit Mem.support_storev;eauto. intros.
+  rewrite <- H1.
+  auto.
+Qed.
 
 Lemma storev_pres_inject:
   forall chunk j m1 m1' m2 a a' v v',
@@ -1001,31 +1003,35 @@ Lemma storev_pres_inject:
     Val.inject j a a' ->
     j = (Mem.flat_inj (Mem.support m1)) ->
     exists m2',  Mem.storev chunk m1' a' v' = Some m2' /\ Mem.inject (Mem.flat_inj (Mem.support m2)) m2 m2'.
-Admitted.
+Proof.
+  intros.
+  exploit Mem.support_storev;eauto. intros.
+  exploit Mem.storev_mapped_inject;eauto.
+  intros (n2 & A & B).
+  exists n2. rewrite <- H4. subst. split;auto.
+Qed.
 
-
+(** auxilary lemma for init_mem_exists *)
 Lemma alloc_globals_alloc_sections_exists: forall defs ge1 ge2 m1 m1' m2,
     Genv.alloc_globals ge1 m1 defs = Some m1' ->
     exists m2', fold_left 
        (fun (a : option mem) (p : positive * section) =>
             alloc_section instr_size ge2 (gen_symb_table instr_size defs) a (fst p) (snd p))
        (PTree.elements (create_sec_table defs)) (Some m2) = Some m2'.
+Proof.
+  induction defs;simpl;intros.
+  - exists m2. auto.
+  - destr_in H.
+    (* generalize the section table and symbol table
+induction on the PTree.elements xxx
+also require the list_norepet    *)
 Admitted.
 
-(* Proof. *)
-(*   rewrite PTree.fold_spec in *. *)
-(*   induction defs;simpl;intros. *)
-(*   - exists m2. unfold gen_symb_table,create_sec_table. simpl. *)
-(*   unfold PTree.fold. simpl. auto. *)
-(*   - rewrite PTree.fold_spec in *. *)
+Lemma alloc_globals_alloc_external_exists: forall defs ge m1 m1' m2,
+    Genv.alloc_globals ge m1 defs = Some m1' ->
+    exists m2', alloc_external_symbols m2 (gen_symb_table instr_size defs) = Some m2'.
+Admitted.
 
-  Lemma alloc_globals_alloc_external_exists: forall defs ge m1 m1' m2,
-      Genv.alloc_globals ge m1 defs = Some m1' ->
-      exists m2', alloc_external_symbols m2 (gen_symb_table instr_size defs) = Some m2'.
-  Admitted.
-
-
-  
 
 Lemma init_mem_exists:
   forall m, Genv.init_mem prog = Some m ->
@@ -1220,96 +1226,6 @@ Qed.
 (*   unfold init_meminj. fold ge. rewrite <- H3. rewrite pred_dec_true. eauto. auto. *)
 (*   intros (m2' & MDROP' & DMINJ). simpl in MDROP'. rewrite Z.add_0_r in MDROP'. *)
 (*   erewrite (drop_perm_pres_def_frame_inj m1) in DMINJ; eauto. *)
-  
-(*   assert (exists m3', Mem.record_stack_blocks m2' (make_singleton_frame_adt' bstack' RawAsm.frame_info_mono 0) = Some m3' *)
-(*                  /\ Mem.inject (init_meminj) (def_frame_inj m3) m3 m3') as RCD. *)
-(*   { *)
-(*     unfold def_frame_inj. unfold def_frame_inj in DMINJ. *)
-(*     eapply (record_stack_block_inject_flat m2 m3 m2' (init_meminj) *)
-(*            (make_singleton_frame_adt' bstack RawAsm.frame_info_mono 0)); eauto. *)
-(*     (* frame inject *) *)
-(*     red. unfold make_singleton_frame_adt'. simpl. constructor. *)
-(*     simpl. intros b2 delta FINJ. *)
-(*     unfold init_meminj in FINJ. fold ge in FINJ. rewrite <- H3 in FINJ. *)
-(*     rewrite pred_dec_true in FINJ; auto. inv FINJ. *)
-(*     exists RawAsm.frame_info_mono. split. auto. apply inject_frame_info_id. *)
-(*     constructor. *)
-(*     (* in frame *) *)
-(*     unfold make_singleton_frame_adt'. simpl. unfold in_frame. simpl. *)
-(*     repeat rewrite_stack_blocks. *)
-(*     erewrite init_mem_stack; eauto. *)
-(*     (* valid frame *) *)
-(*     unfold make_singleton_frame_adt'. simpl. red. unfold in_frame. *)
-(*     simpl. intuition. subst. *)
-(*     eapply Mem.drop_perm_valid_block_1; eauto. *)
-(*     eapply Mem.valid_new_block; eauto. *)
-(*     (* frame_agree_perms *) *)
-(*     red. unfold make_singleton_frame_adt'. simpl. *)
-(*     intros b fi o k p BEQ PERM. inv BEQ; try contradiction. *)
-(*     inv H6. unfold RawAsm.frame_info_mono. simpl. *)
-(*     erewrite Mem.drop_perm_perm in PERM; eauto. destruct PERM. *)
-(*     eapply Mem.perm_alloc_3; eauto. *)
-(*     (* in frame iff *) *)
-(*     unfold make_singleton_frame_adt'. unfold in_frame. simpl. *)
-(*     intros b1 b2 delta INJB. split. *)
-(*     intros BEQ. destruct BEQ; try contradiction. subst b1. *)
-(*     unfold init_meminj in INJB. fold ge in INJB. rewrite <- H3 in INJB. *)
-(*     rewrite pred_dec_true in INJB; auto. inv INJB. left; auto. *)
-(*     intros BEQ. destruct BEQ; try contradiction. subst b2. *)
-(*     assert (bstack' = Mem.nextblock (Mem.push_new_stage m')) as BEQ. *)
-(*     eapply Mem.alloc_result; eauto using MALLOC'. *)
-(*     rewrite Mem.push_new_stage_nextblock in BEQ. *)
-(*     erewrite <- init_mem_genv_next in BEQ; eauto using INITM'. *)
-(*     subst bstack'. *)
-(*     destruct (eq_block bstack b1); auto. *)
-(*     assert (b1 <> bstack) by congruence. *)
-(*     apply NOTBSTK in H4. rewrite H5 in H4. rewrite INJB in H4. *)
-(*     left. symmetry. subst bstack. eapply init_meminj_genv_next_inv; eauto. *)
-
-(*     (* top frame *) *)
-(*     red. repeat rewrite_stack_blocks. constructor. auto. *)
-(*     (* size stack *) *)
-(*     repeat rewrite_stack_blocks. *)
-(*     erewrite init_mem_stack; eauto. simpl. omega. *)
-(*   } *)
-
-(*   destruct RCD as (m3' & RCDSB & RMINJ). *)
-(*   set (rs0' := rs # PC <- (Genv.symbol_address tge tprog.(prog_main) Ptrofs.zero) *)
-(*                   # RA <- Vnullptr *)
-(*                   # RSP <- (Vptr bstack' (Ptrofs.sub (Ptrofs.repr (Mem.stack_limit + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr))))) in *. *)
-(*   edestruct storev_mapped_inject' as (m4' & ST & SMINJ). apply RMINJ. eauto. econstructor. *)
-(*   rewrite <- H5, FBSTACK; eauto. reflexivity. constructor. *)
-(*   exists (State rs0' m4'). split. *)
-(*   - eapply initial_state_intro; eauto. *)
-(*     eapply initial_state_gen_intro; eauto. *)
-(*     subst. fold tge in MDROP'. eauto. *)
-(*     subst. fold tge in MDROP'. rewrite Ptrofs.add_zero in ST. eauto. *)
-(*   - eapply match_states_intro; eauto. *)
-(*     (* + eapply valid_instr_offset_is_internal_init; eauto. inv w; auto. *) *)
-(*     (* + eapply extfun_entry_is_external_init; eauto. inv w; auto. *) *)
-(*     (* + red. *) *)
-(*     (*   intros. eapply extfun_transf; eauto. inv w; auto. *) *)
-(*     + red. unfold rs0, rs0'. *)
-(*       apply AsmFacts.val_inject_set. *)
-(*       apply AsmFacts.val_inject_set. *)
-(*       apply AsmFacts.val_inject_set. *)
-(*       auto. *)
-(*       admit. *)
-(* (***** Remove Proofs By Chris Start ******) *)
-(* (* MAIN Function Insertion *)
-(*       exploit (main_ptr_inject); eauto. unfold Globalenvs.Genv.symbol_address. *)
-(*       unfold ge, ge0 in *. rewrite H1. fold tge. auto. *)
-(* *)       *)
-(* (***** Remove Proofs By Chris End ******) *)
-(*       unfold Vnullptr. destr; auto. *)
-(*       econstructor. unfold init_meminj. subst bstack. fold ge. rewrite peq_true. subst bstack'.  fold tge. eauto. *)
-(*       rewrite Ptrofs.add_zero. *)
-(*       apply Ptrofs.sub_add_opp. *)
-(*     + red. intros b g FD. *)
-(*       unfold Genv.find_def in FD. eapply Genv.genv_defs_range in FD. *)
-(*       revert FD. red. rewnb. *)
-(*       fold ge. intros. xomega. *)
-(* Admitted. *)
 
 (** ** Simulation of Single Step Execution *)
 

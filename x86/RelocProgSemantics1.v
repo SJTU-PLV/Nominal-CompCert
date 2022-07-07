@@ -54,27 +54,6 @@ Definition symbol_address (ge: t) (sec_index: ident) (idofs: Z) (ofs: ptrofs) : 
 Definition find_ext_funct (ge: t) (v:val) : option external_function :=
   RelocProgSemantics.Genv.find_ext_funct (genv_genv ge) v.
 
-(* Lemma symbol_address_offset : forall ge ofs1 b s ofs, *)
-(*     symbol_address ge s Ptrofs.zero = Vptr b ofs -> *)
-(*     symbol_address ge s ofs1 = Vptr b (Ptrofs.add ofs ofs1). *)
-(* Proof. *)
-(*   unfold symbol_address. intros.  *)
-(*   destruct (find_symbol ge s) eqn:FSM. *)
-(*   -  *)
-(*     destruct p. *)
-(*     inv H. *)
-(*     rewrite Ptrofs.add_zero_l. rewrite Ptrofs.add_commut. auto. *)
-(*   -  *)
-(*     inv H. *)
-(* Qed. *)
-
-(* Lemma find_sym_to_addr : forall (ge:t) id b ofs, *)
-(*     find_symbol ge id = Some (b, ofs) -> *)
-(*     symbol_address ge id Ptrofs.zero = Vptr b ofs. *)
-(* Proof. *)
-(*   intros. unfold symbol_address. rewrite H. *)
-(*   rewrite Ptrofs.add_zero_l. auto. *)
-(* Qed. *)
 
 Definition find_instr (ge: t) (v:val) : option instruction :=
   RelocProgSemantics.Genv.find_instr (genv_genv ge) v.
@@ -168,16 +147,6 @@ Definition exec_store (sz:ptrofs) (ge: Genv.t) (chunk: memory_chunk) (m: mem)
   end.
 
 Open Scope asm.
-
-(* Definition eval_ros (ge : Genv.t) (idofs: option Z) (ros : ireg + ident) (rs : regset) := *)
-(*   match ros with *)
-(*   | inl r => rs r *)
-(*   | inr _ =>  *)
-(*     match idofs with *)
-(*     | None => Vundef *)
-(*     | Some idofs => Genv.symbol_address ge RELOC_CODE idofs Ptrofs.zero *)
-(*     end *)
-(*   end. *)
 
 (** Execution of instructions *)
 
@@ -630,60 +599,67 @@ Definition exec_instr (ge: Genv.t) (i: instruction) (rs: regset) (m: mem) : outc
 End WITH_SEC_ID.
 (** * Evaluation of builtin arguments *)
 
-(* Section EVAL_BUILTIN_ARG. *)
+Section EVAL_BUILTIN_ARG.
 
-(* Variable A: Type. *)
+Variable A: Type.
 
-(* Variable ge: Genv.t. *)
-(* Variable idofs: option Z. *)
-(* Variable e: A -> val. *)
-(* Variable sp: val. *)
-(* Variable m:mem.  *)
+Variable ge: Genv.t.
+Variable sec_id : ident.
+Variable idofs: option Z.
+Variable e: A -> val.
+Variable sp: val.
+Variable m:mem.
 
-(* Inductive eval_builtin_arg: builtin_arg A -> val -> Prop := *)
-(*   | eval_BA: forall x, *)
-(*       eval_builtin_arg (BA x) (e x) *)
-(*   | eval_BA_int: forall n, *)
-(*       eval_builtin_arg (BA_int n) (Vint n) *)
-(*   | eval_BA_long: forall n, *)
-(*       eval_builtin_arg (BA_long n) (Vlong n) *)
-(*   | eval_BA_float: forall n, *)
-(*       eval_builtin_arg (BA_float n) (Vfloat n) *)
-(*   | eval_BA_single: forall n, *)
-(*       eval_builtin_arg (BA_single n) (Vsingle n) *)
-(*   | eval_BA_loadstack: forall chunk ofs v, *)
-(*       Mem.loadv chunk m (Val.offset_ptr sp ofs) = Some v -> *)
-(*       eval_builtin_arg (BA_loadstack chunk ofs) v *)
-(*   | eval_BA_addrstack: forall ofs, *)
-(*       eval_builtin_arg (BA_addrstack ofs) (Val.offset_ptr sp ofs) *)
-(*   | eval_BA_loadglobal: forall chunk id idofs' ofs v, *)
-(*       idofs = Some idofs' -> *)
-(*       Mem.loadv chunk m  (Genv.symbol_address ge RELOC_CODE idofs' ofs) = Some v -> *)
-(*       eval_builtin_arg (BA_loadglobal chunk id ofs) v *)
-(*   | eval_BA_addrglobal: forall id ofs idofs', *)
-(*       idofs = Some idofs' -> *)
-(*       eval_builtin_arg (BA_addrglobal id ofs) (Genv.symbol_address ge RELOC_CODE idofs' ofs) *)
-(*   | eval_BA_splitlong: forall hi lo vhi vlo, *)
-(*       eval_builtin_arg hi vhi -> eval_builtin_arg lo vlo -> *)
-(*       eval_builtin_arg (BA_splitlong hi lo) (Val.longofwords vhi vlo). *)
+Inductive eval_builtin_arg: builtin_arg A -> val -> Prop :=
+  | eval_BA: forall x,
+      eval_builtin_arg (BA x) (e x)
+  | eval_BA_int: forall n,
+      eval_builtin_arg (BA_int n) (Vint n)
+  | eval_BA_long: forall n,
+      eval_builtin_arg (BA_long n) (Vlong n)
+  | eval_BA_float: forall n,
+      eval_builtin_arg (BA_float n) (Vfloat n)
+  | eval_BA_single: forall n,
+      eval_builtin_arg (BA_single n) (Vsingle n)
+  | eval_BA_loadstack: forall chunk ofs v,
+      Mem.loadv chunk m (Val.offset_ptr sp ofs) = Some v ->
+      eval_builtin_arg (BA_loadstack chunk ofs) v
+  | eval_BA_addrstack: forall ofs,
+      eval_builtin_arg (BA_addrstack ofs) (Val.offset_ptr sp ofs)
+  | eval_BA_loadglobal: forall chunk id idofs' ofs v,
+      idofs = Some idofs' ->
+      Mem.loadv chunk m  (Genv.symbol_address ge sec_id idofs' ofs) = Some v ->
+      eval_builtin_arg (BA_loadglobal chunk id ofs) v
+  | eval_BA_addrglobal: forall id ofs idofs',
+      idofs = Some idofs' ->
+      eval_builtin_arg (BA_addrglobal id ofs) (Genv.symbol_address ge sec_id idofs' ofs)
+  | eval_BA_splitlong: forall hi lo vhi vlo,
+      eval_builtin_arg hi vhi -> eval_builtin_arg lo vlo ->
+      eval_builtin_arg (BA_splitlong hi lo) (Val.longofwords vhi vlo)
+  | eval_BA_addptr: forall a1 a2 v1 v2,
+      eval_builtin_arg a1 v1 ->
+      eval_builtin_arg a2 v2 ->
+      eval_builtin_arg (BA_addptr a1 a2) (if Archi.ptr64 then Val.addl v1 v2 else Val.add v1 v2).
 
-(* Definition eval_builtin_args (al: list (builtin_arg A)) (vl: list val) : Prop := *)
-(*   list_forall2 eval_builtin_arg al vl. *)
 
-(* Lemma eval_builtin_arg_determ: *)
-(*   forall a v, eval_builtin_arg a v -> forall v', eval_builtin_arg a v' -> v' = v. *)
-(* Proof. *)
-(*   induction 1; intros v' EV; inv EV; try congruence. *)
-(*   f_equal; eauto. *)
-(* Qed. *)
+Definition eval_builtin_args (al: list (builtin_arg A)) (vl: list val) : Prop :=
+  list_forall2 eval_builtin_arg al vl.
 
-(* Lemma eval_builtin_args_determ: *)
-(*   forall al vl, eval_builtin_args al vl -> forall vl', eval_builtin_args al vl' -> vl' = vl. *)
-(* Proof. *)
-(*   induction 1; intros v' EV; inv EV; f_equal; eauto using eval_builtin_arg_determ. *)
-(* Qed. *)
+Lemma eval_builtin_arg_determ:
+  forall a v, eval_builtin_arg a v -> forall v', eval_builtin_arg a v' -> v' = v.
+Proof.
+  induction 1; intros v' EV; inv EV; try congruence.
+  f_equal; eauto.
+  destruct Archi.ptr64;f_equal;auto.
+Qed.
 
-(* End EVAL_BUILTIN_ARG. *)
+Lemma eval_builtin_args_determ:
+  forall al vl, eval_builtin_args al vl -> forall vl', eval_builtin_args al vl' -> vl' = vl.
+Proof.
+  induction 1; intros v' EV; inv EV; f_equal; eauto using eval_builtin_arg_determ.
+Qed.
+
+End EVAL_BUILTIN_ARG.
 
 
 (** Small step semantics *)
@@ -697,19 +673,20 @@ Inductive step (ge: Genv.t) : state -> trace -> state -> Prop :=
       Genv.find_instr ge (Vptr b ofs) = Some i ->
       exec_instr sec_id ge i rs m = Next rs' m' ->
       step ge (State rs m) E0 (State rs' m')
-(* | exec_step_builtin: *)
-(*     forall b ofs ef args res rs m vargs t vres rs' m' idofs, *)
-(*       rs PC = Vptr b ofs -> *)
-(*       Genv.find_ext_funct ge (Vptr b ofs) = None -> *)
-(*       Genv.find_instr ge (Vptr b ofs) = Some (Pbuiltin ef args res)  -> *)
-(*       id_reloc_offset (Ptrofs.unsigned ofs) (Pbuiltin ef args res) = idofs -> *)
-(*       eval_builtin_args preg ge idofs rs (rs RSP) m args vargs -> *)
-(*       external_call ef (RelocProgSemantics.Genv.genv_senv (Genv.genv_genv ge)) vargs m t vres m' -> *)
-(*         rs' = nextinstr_nf *)
-(*                 (set_res res vres *)
-(*                          (undef_regs (map preg_of (destroyed_by_builtin ef)) rs))  *)
-(*                 (Ptrofs.repr (instr_size (Pbuiltin ef args res))) -> *)
-(*         step ge (State rs m) t (State rs' m') *)
+| exec_step_builtin:
+    forall b ofs ef args res rs m vargs t vres rs' m' idofs sec_id,
+      rs PC = Vptr b ofs ->
+      b = Global sec_id ->
+      Genv.find_ext_funct ge (Vptr b ofs) = None ->
+      Genv.find_instr ge (Vptr b ofs) = Some (Pbuiltin ef args res)  ->
+      id_reloc_offset (Ptrofs.unsigned ofs) (Pbuiltin ef args res) = idofs ->
+      eval_builtin_args preg ge sec_id idofs rs (rs RSP) m args vargs ->
+      external_call ef (RelocProgSemantics.Genv.genv_senv (Genv.genv_genv ge)) vargs m t vres m' ->
+      rs' = nextinstr_nf
+              (Ptrofs.repr (instr_size (Pbuiltin ef args res)))
+              (set_res res vres
+                       (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
+        step ge (State rs m) t (State rs' m')
 | exec_step_external:
     forall b ofs ef args res rs m t rs' m',
       rs PC = Vptr b ofs ->
@@ -730,27 +707,13 @@ Inductive step (ge: Genv.t) : state -> trace -> state -> Prop :=
 
 (* Given relocentry [e] and symtable [stbl], updates the mapping [m] that
 associates relocation offsets with their identifiers. *)
-Definition acc_reloc_ofs_symb (e:relocentry) (m:ZTree.t ident) : ZTree.t ident :=
+Definition acc_reloc_ofs_symb (m:ZTree.t ident) (e:relocentry) : ZTree.t ident :=
   ZTree.set (reloc_offset e) (reloc_symb e) m.
 
 
 Definition gen_reloc_ofs_symb (rtbl: reloctable) : ZTree.t ident :=
-  fold_right (acc_reloc_ofs_symb) (ZTree.empty ident) rtbl.
+  fold_left (acc_reloc_ofs_symb) rtbl (ZTree.empty ident).
 
-(* Definition add_reloc_ofs_symb (stbl: symbtable) (i:reloctable_id)  (rmap: reloctable_map) *)
-(*            (ofsmap: reloctable_id -> ZTree.t ident) := *)
-(*   let rtbl := get_reloctable i rmap in *)
-(*   let m := gen_reloc_ofs_symb stbl rtbl in *)
-(*   fun i' => if reloctable_id_eq i i' then m else ofsmap i'. *)
-
-(* Definition gen_reloc_ofs_symbs (p:program) := *)
-(*   let stbl := p.(prog_symbtable) in *)
-(*   let rmap := p.(prog_reloctables) in *)
-(*   let ofsmap := fun i => ZTree.empty ident in *)
-(*   let ofsmap1 := add_reloc_ofs_symb stbl RELOC_RODATA rmap ofsmap in *)
-(*   let ofsmap2 := add_reloc_ofs_symb stbl RELOC_DATA rmap ofsmap1 in *)
-(*   let ofsmap3 := add_reloc_ofs_symb stbl RELOC_CODE rmap ofsmap2 in *)
-(*   ofsmap3. *)
 
 Definition gen_reloc_ofs_symbs (p:program) :=
   PTree.map1 gen_reloc_ofs_symb p.(prog_reloctables).
