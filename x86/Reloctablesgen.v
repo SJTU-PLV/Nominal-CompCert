@@ -570,20 +570,25 @@ Definition rev_transl_code (reloc_map: ZTree.t ident) (c:code) :=
 (*     match_reloc_map_code sz reloc_map c (ofs + instr_size i) -> *)
 (*     match_reloc_map_code sz reloc_map (i::c) ofs. *)
 
+Definition reloc_map_gen (reloctbl:reloctable) :=
+  fold_left (fun acc e => ZTree.set e.(reloc_offset) e.(reloc_symb) acc) reloctbl (ZTree.empty ident).
+
 
 Inductive match_reloc_map_code: ZTree.t ident -> code -> Prop :=
 | Reloc_nil:
     match_reloc_map_code (ZTree.empty ident) []
-| Reloc_app1: forall c i symbtbl e reloc_map,
+| Reloc_app1: forall c i symbtbl e reloc_map reloctbl,
     transl_instr symbtbl (code_size instr_size c) i = OK (Some e) ->
     match_reloc_map_code reloc_map c ->
-    ZTree.get e.(reloc_offset) reloc_map = Some e.(reloc_symb) ->
-    match_reloc_map_code reloc_map (c++[i])
-| Reloc_app2: forall c i symbtbl reloc_map,
+    transl_code symbtbl c = OK reloctbl ->
+    reloc_map = reloc_map_gen reloctbl ->
+    match_reloc_map_code  (ZTree.set e.(reloc_offset) e.(reloc_symb) reloc_map) (c++[i])
+| Reloc_app2: forall c i symbtbl reloc_map reloctbl,
     transl_instr symbtbl (code_size instr_size c) i = OK None ->
     match_reloc_map_code reloc_map c ->
+    transl_code symbtbl c = OK reloctbl ->
+    reloc_map = reloc_map_gen reloctbl ->
     match_reloc_map_code reloc_map (c++[i]).
-
 
 Lemma transl_code_app: forall c1 c2,
     transl_code' (c1++c2) = transl_code' c1 ++ transl_code' c2.
@@ -611,6 +616,43 @@ Proof.
   destruct H. subst;auto.
 Qed.
 
+
+Lemma fst_rev_transl_code_app: forall c1 c2 ofs1 reloc_map,
+    fst (fold_left (rev_acc_code reloc_map) c1 (c2, ofs1)) = c2 ++ fst (fold_left (rev_acc_code reloc_map) c1 ([],ofs1)) .
+Admitted.
+
+Lemma transl_code_consistency: forall c reloc_map,
+    match_reloc_map_code reloc_map c ->
+    rev_transl_code reloc_map (transl_code' c) = c.
+Proof.
+  intros c reloc_map MAT.
+  induction MAT.
+  - simpl. auto.
+  - rewrite transl_code_app.
+    unfold rev_transl_code in *.
+    rewrite fold_left_app.
+    destruct ((fold_left
+          (rev_acc_code
+             (ZTree.set (reloc_offset e) (reloc_symb e) reloc_map))
+          (transl_code' c) ([], 0))) eqn:FOLD.
+    erewrite fst_rev_transl_code_app.
+    simpl.
+      
+    apply app_unit_eq.
+    split.
+    + admit.
+    + admit.
+  - rewrite transl_code_app.
+    unfold rev_transl_code in *.
+    rewrite fold_left_app.
+    destruct (fold_left (rev_acc_code reloc_map) (transl_code' c) ([], 0)) eqn:FOLD.
+    erewrite fst_rev_transl_code_app.
+    simpl.      
+    apply app_unit_eq.
+    split;auto.
+    admit.
+Admitted.
+
 Lemma transl_code_consistency: forall n c reloc_map,
     length c = n -> 
     match_reloc_map_code reloc_map c ->
@@ -632,9 +674,11 @@ Proof.
     eapply app_unit_eq in H. destruct H;subst.
     destruct fold_left eqn:FOLD.
     simpl. eapply app_unit_eq.
-    assert (fst (fold_left (rev_acc_code reloc_map) (transl_code' l') ([], 0)) = c). rewrite FOLD. simpl. auto.
+    set (reloc_map1 := ZTree.set (reloc_offset e) (reloc_symb e) (reloc_map_gen reloctbl)) in *.
+    assert (fst (fold_left (rev_acc_code reloc_map1) (transl_code' l') ([], 0)) = c). rewrite FOLD. simpl. auto.
     rewrite IHn in H;auto. subst.
     admit.
+    unfold reloc_map1.
   - simpl.
     eapply app_unit_eq in H. destruct H;subst.
     destruct fold_left eqn:FOLD.
@@ -644,8 +688,6 @@ Proof.
     admit.    
 Admitted.
 
-Definition reloc_map_gen (reloctbl:reloctable) :=
-  fold_left (fun acc e => ZTree.set e.(reloc_offset) e.(reloc_symb) acc) reloctbl (ZTree.empty ident).
 
 Lemma match_reloc_map_code_gen: forall n c symbtbl reloctbl,
     length c = n ->
@@ -670,6 +712,7 @@ Proof.
       simpl.
       econstructor;eauto.
       * simpl.
+        
         (* generalize reloc_map in reloc_map_gen*)
         admit.
       * rewrite ZTree.gss. auto.
