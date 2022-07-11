@@ -118,7 +118,8 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
 
 Section INSTR_SIZE.
   Variable instr_size: instruction -> Z.
-
+  Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned. (* remove it *)
+  
 (** Calculate the addendum of an instruction *)
 Definition instr_addendum  (i:instruction) : res Z :=
   do ofs <- instr_reloc_offset i;
@@ -539,8 +540,10 @@ Definition id_eliminate (i:instruction): instruction:=
      i
     end.
 
-Definition rev_id_eliminate (reloc_map: ZTree.t ident) (ofs: Z) (i:instruction) :=
+
+Definition rev_id_eliminate (id: ident) (i:instruction) :=
   i.
+
 
 
 Definition acc_id_eliminate r i :=
@@ -550,25 +553,24 @@ Definition transl_code' (c:code): code :=
   map id_eliminate c.
   (* rev (fold_left acc_id_eliminate c []). *)
 
-(* reloc_map: the begining of instr to id *)
-Definition rev_acc_code (reloc_map: ZTree.t ident) (r:code*Z) i :=
-  let (c,ofs) := r in
-  (c++[rev_id_eliminate reloc_map ofs i], ofs + instr_size i).
+Definition rev_acc_code (r:code*Z*reloctable) i :=
+  let '(c,ofs,reloctbl) := r in
+  match reloctbl with
+  | [] =>
+    (c++[i], ofs + instr_size i, [])
+  | e :: reloctbl' =>
+    let ofs' := ofs + instr_size i in
+    if Z.ltb ofs e.(reloc_offset) && Z.ltb e.(reloc_offset) ofs' then
+      (c++[rev_id_eliminate e.(reloc_symb) i], ofs', reloctbl')
+    else
+      (c++[i], ofs', reloctbl)
+  end.
+      
 
-(* Definition rev_transl_code (c':code) (reloc_map: ZTree.t ident) (c:code) := *)
-(*   fst (fold_left (rev_acc_code reloc_map) c (c',code_size instr_size c')). *)
 
-Definition rev_transl_code (reloc_map: ZTree.t ident) (c:code) :=
-  fst (fold_left (rev_acc_code reloc_map) c ([],0)).
+Definition rev_transl_code (reloctbl: reloctable) (c:code) :=
+  fst (fst (fold_left rev_acc_code c ([],0,reloctbl))).
 
-(* Inductive match_reloc_map_code (sz: Z) (reloc_map: ZTree.t ident): code -> Z -> Prop := *)
-(* | Reloc_nil: *)
-(*     match_reloc_map_code sz reloc_map [] sz *)
-(* | Reloc_cons: forall c i ofs symbtbl e, *)
-(*     transl_instr symbtbl ofs i = OK (Some e) -> *)
-(*     ZTree.get e.(reloc_offset) reloc_map = Some e.(reloc_symb) -> *)
-(*     match_reloc_map_code sz reloc_map c (ofs + instr_size i) -> *)
-(*     match_reloc_map_code sz reloc_map (i::c) ofs. *)
 
 Definition reloc_map_gen (reloctbl:reloctable) :=
   fold_left (fun acc e => ZTree.set e.(reloc_offset) e.(reloc_symb) acc) reloctbl (ZTree.empty ident).
@@ -590,7 +592,7 @@ Inductive match_reloc_map_code: ZTree.t ident -> code -> Prop :=
     reloc_map = reloc_map_gen reloctbl ->
     match_reloc_map_code reloc_map (c++[i]).
 
-Lemma transl_code_app: forall c1 c2,
+Lemma code_eliminate_app: forall c1 c2,
     transl_code' (c1++c2) = transl_code' c1 ++ transl_code' c2.
 Proof.
   unfold transl_code'.
@@ -616,113 +618,194 @@ Proof.
   destruct H. subst;auto.
 Qed.
 
-
-Lemma fst_rev_transl_code_app: forall c1 c2 ofs1 reloc_map,
-    fst (fold_left (rev_acc_code reloc_map) c1 (c2, ofs1)) = c2 ++ fst (fold_left (rev_acc_code reloc_map) c1 ([],ofs1)) .
-Admitted.
-
-Lemma transl_code_consistency: forall c reloc_map,
-    match_reloc_map_code reloc_map c ->
-    rev_transl_code reloc_map (transl_code' c) = c.
+Lemma rev_transl_code_snd_size:forall n c c1 c2 r1 r2 sz,
+    length c = n ->
+    fold_left rev_acc_code c (c1,0,r1) = (c2,sz,r2) ->
+    sz = code_size instr_size c.
 Proof.
-  intros c reloc_map MAT.
-  induction MAT.
-  - simpl. auto.
-  - rewrite transl_code_app.
-    unfold rev_transl_code in *.
-    rewrite fold_left_app.
-    destruct ((fold_left
-          (rev_acc_code
-             (ZTree.set (reloc_offset e) (reloc_symb e) reloc_map))
-          (transl_code' c) ([], 0))) eqn:FOLD.
-    erewrite fst_rev_transl_code_app.
-    simpl.
-      
-    apply app_unit_eq.
-    split.
-    + admit.
-    + admit.
-  - rewrite transl_code_app.
-    unfold rev_transl_code in *.
-    rewrite fold_left_app.
-    destruct (fold_left (rev_acc_code reloc_map) (transl_code' c) ([], 0)) eqn:FOLD.
-    erewrite fst_rev_transl_code_app.
-    simpl.      
-    apply app_unit_eq.
-    split;auto.
-    admit.
-Admitted.
-
-Lemma transl_code_consistency: forall n c reloc_map,
-    length c = n -> 
-    match_reloc_map_code reloc_map c ->
-    rev_transl_code reloc_map (transl_code' c) = c.
-Proof.
-  unfold rev_transl_code.
-  induction  n;intros.
+  induction n;intros.
   rewrite length_zero_iff_nil in H. subst.
-  simpl. auto.
+  simpl in *.  inv H0. auto.
+  exploit LocalLib.length_S_inv;eauto. intros (l' & a & A & B).
+  subst. clear H.
+  rewrite fold_left_app in H0. simpl in H0.
+  destruct (fold_left rev_acc_code l' (c1, 0, r1)) eqn:FOLD.
+  destruct p.
+  Require Import Asmgenproof.   (* place in right place *)
+  rewrite code_size_app.
+  exploit IHn. apply eq_refl. apply FOLD. intros.
+  simpl in H0. destruct r.
+  - inv H0. simpl. auto.
+  - destr_in H0.
+    + inv H0. simpl. auto.
+    + inv H0. simpl. auto.
+Qed.
+
+
+Lemma rev_transl_code_fst_inv:forall n c r e c1 c2 sz1 sz2 r1 r2
+    (BOUND: e.(reloc_offset) >= code_size instr_size c),
+    length c = n ->
+    fold_left rev_acc_code c ([],0,r++[e]) = (c1, sz1, r1) ->
+    fold_left rev_acc_code c ([],0,r) = (c2, sz2, r2) ->
+    c1 = c2 /\ ((r1=[]/\r2=[]) \/ r1 = r2++[e]).
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl in *. inv H1. inv H0. auto.
+  exploit LocalLib.length_S_inv;eauto. intros (l' & a & A & B).
+  subst. clear H.
+  rewrite fold_left_app in H1,H0. simpl in H1,H0.
+  destruct (fold_left rev_acc_code l' ([], 0, r)) eqn:FOLD1. destruct p.
+  destruct (fold_left rev_acc_code l' ([], 0, r++[e])) eqn:FOLD2. destruct p.
+  rewrite code_size_app in BOUND. simpl in BOUND.
+  generalize (instr_size_bound a). intros SZA.
+  assert (reloc_offset e >= code_size instr_size l') by lia.
+  exploit IHn. apply H. apply eq_refl. apply FOLD2. apply FOLD1.
+  clear H.
+  intros (A & B). subst.
+  
+  exploit (rev_transl_code_snd_size). apply eq_refl. eapply FOLD1.
+  exploit (rev_transl_code_snd_size). apply eq_refl. eapply FOLD2.
+  intros C D. subst.
+  destruct B.
+  - destruct H;subst. 
+    simpl in H1,H0.
+    inv H1. inv H0. auto.
+  - subst. clear FOLD1 FOLD2.
+    destruct r0;simpl in *.
+    + assert (DESTR: (reloc_offset e <? code_size instr_size l' + instr_size a)= false).
+      { apply Z.ltb_ge. lia. }
+      rewrite DESTR in H0. rewrite andb_false_r in H0.
+      inv H1. inv H0. simpl. auto.
+    + destr_in H1. inv H1. inv H0.
+      simpl. auto.
+Qed.
+
+Lemma transl_code_size: forall c c1 c2 sz symbtbl,
+    fold_left (acc_instrs symbtbl) c (OK (0,c1)) = OK (sz,c2) ->
+    code_size instr_size c = sz.
+Admitted.
+
+Lemma id_eliminate_size_unchanged:forall i,
+    instr_size i = instr_size (id_eliminate i).
+Admitted.
+
+Lemma code_id_eliminate_size_unchanged:forall c,
+    code_size instr_size (transl_code' c) = code_size instr_size c.
+Proof.
+  intros. unfold transl_code'.
+  induction c;simpl;auto.
+  
+Admitted.
+
+Lemma transl_instr_range: forall symbtbl ofs i e,
+    transl_instr symbtbl ofs i = OK (Some e) ->
+    ofs < e.(reloc_offset) < ofs + instr_size i.
+Admitted.
+
+Lemma transl_instr_consistency: forall i symbtbl ofs e,
+    transl_instr symbtbl ofs i = OK (Some e) ->
+    rev_id_eliminate (reloc_symb e) (id_eliminate i) = i.
+Admitted.
+
+Lemma id_eliminate_unchanged:forall i symbtbl ofs,
+    transl_instr symbtbl ofs i = OK None ->
+    id_eliminate i = i.
+Admitted.
+
+
+
+
+Lemma transl_code_consistency_aux:forall n c r1 r2 symbtbl,
+    length c = n ->
+    Forall (fun e => e.(reloc_offset) > code_size instr_size c) r2 ->
+    transl_code symbtbl c = OK r1 ->
+    fold_left rev_acc_code (transl_code' c) ([], 0, r1++r2) = (c, code_size instr_size c, r2).
+Proof.
+  induction n;intros c r1 r2 symbtbl H FORALL H0.
+  rewrite length_zero_iff_nil in H. subst.
+  unfold transl_code in H0. simpl in *. inv H0.
+  simpl. eauto.
 
   exploit LocalLib.length_S_inv;eauto.
   intros (l' & a & A & B). subst. clear H.
+  rewrite code_eliminate_app.
+  rewrite fold_left_app.
+  destruct ((fold_left rev_acc_code (transl_code' l') ([], 0, r1++r2))) eqn:FOLD. destruct p.
   
-  rewrite transl_code_app.
-  rewrite fold_left_app.  
-  inv H0.
-  - destruct l';simpl in H2;congruence.
-  - (* unfold transl_code'. *) simpl.
-    eapply app_unit_eq in H. destruct H;subst.
-    destruct fold_left eqn:FOLD.
-    simpl. eapply app_unit_eq.
-    set (reloc_map1 := ZTree.set (reloc_offset e) (reloc_symb e) (reloc_map_gen reloctbl)) in *.
-    assert (fst (fold_left (rev_acc_code reloc_map1) (transl_code' l') ([], 0)) = c). rewrite FOLD. simpl. auto.
-    rewrite IHn in H;auto. subst.
-    admit.
-    unfold reloc_map1.
-  - simpl.
-    eapply app_unit_eq in H. destruct H;subst.
-    destruct fold_left eqn:FOLD.
-    simpl. eapply app_unit_eq.
-    assert (fst (fold_left (rev_acc_code reloc_map) (transl_code' l') ([], 0)) = c). rewrite FOLD. simpl. auto.
-    rewrite IHn in H;auto. subst.
-    admit.    
-Admitted.
+  unfold transl_code in H0.
+  monadInv H0. rewrite fold_left_app in EQ. simpl in EQ.
+  unfold acc_instrs in EQ at 1. monadInv EQ.
+  destruct x2.
 
+  - inv EQ2.
+    (* prove r = [r0] ++ r2 *)
+    rewrite <- app_assoc in FOLD.
+    (* x0 = code_size l' *)
+    exploit transl_code_size;eauto. intros CODESZ. subst.
+    (* relocation entry size property *)
+    exploit transl_instr_range;eauto. intros RANGE.
+    assert (REQ: fold_left rev_acc_code (transl_code' l') ([],0, x1++[r0]++r2) = (l',code_size instr_size l', [r0]++r2)).
+    { eapply IHn;eauto.
+      (* Forall offset *)
+      simpl. constructor. lia.
+      eapply Forall_impl with (P:= (fun e : relocentry =>
+              reloc_offset e > code_size instr_size (l' ++ [a]))).
+      rewrite code_size_app. simpl. intros. lia. auto.
+      unfold transl_code.
+      rewrite EQ0. simpl. auto. }
+    rewrite FOLD in REQ. inv REQ.
+    simpl.
+    (* id_eliminate size unchanged *)
+    repeat rewrite <- id_eliminate_size_unchanged.
+    assert ((code_size instr_size l' <? reloc_offset r0) &&
+            (reloc_offset r0 <? code_size instr_size l' + instr_size a) = true).
+    apply andb_true_iff. repeat rewrite Z.ltb_lt.
+    auto.
+    rewrite H.
+    rewrite code_size_app. simpl. f_equal;f_equal;auto.
+    exploit transl_instr_consistency;eauto.
+    intros. rewrite H0. auto.
+  - assert (REQ: fold_left rev_acc_code (transl_code' l') ([],0, r1++r2) = (l',code_size instr_size l', r2)).
+    { eapply IHn;auto.
+      (* Forall offset *)
+      eapply Forall_impl with (P:= (fun e : relocentry =>
+              reloc_offset e > code_size instr_size (l' ++ [a]))).
+      rewrite code_size_app. simpl. intros.
+      generalize (instr_size_bound a). intros.
+      lia. auto.
+      unfold transl_code.
+      rewrite EQ0. inv EQ2. simpl. auto. }
+    rewrite FOLD in REQ. inv REQ. inv EQ2.
+    simpl.
+    rewrite code_size_app.
+    destruct r2.
+    + rewrite <- id_eliminate_size_unchanged. f_equal;f_equal;auto.
+      erewrite id_eliminate_unchanged;eauto.
+    + inv FORALL.
+      assert ((reloc_offset r <?
+               code_size instr_size l' + instr_size (id_eliminate a)) = false).
+      apply Z.ltb_ge. rewrite code_size_app in H1. simpl in H1.
+      rewrite <- id_eliminate_size_unchanged.  lia.
+      rewrite H. rewrite andb_false_r.
+      rewrite <- id_eliminate_size_unchanged. simpl.
+      f_equal;f_equal;auto.
+      erewrite id_eliminate_unchanged;eauto.
+Qed.
 
-Lemma match_reloc_map_code_gen: forall n c symbtbl reloctbl,
+        
+Lemma transl_code_consistency: forall n c symbtbl reloctbl,
     length c = n ->
     transl_code symbtbl c = OK reloctbl ->
-    match_reloc_map_code (reloc_map_gen reloctbl) c.
+    rev_transl_code reloctbl (transl_code' c) = c.
 Proof.
-  induction n;intros.
-  - rewrite length_zero_iff_nil in H. subst.
-    unfold transl_code in H0. simpl in H0. inv H0.
-    unfold reloc_map_gen. simpl. constructor.
-  - exploit LocalLib.length_S_inv;eauto.
-    intros (l' & a & A & B). subst. clear H.
-    unfold transl_code in H0. monadInv H0.
-    rewrite fold_left_app in EQ.
-    simpl in EQ.
-    (* unfold acc_instrs in EQ. monadInv EQ. *)
-    destruct fold_left eqn:FOLD in EQ. destruct p.
-    unfold acc_instrs in EQ. monadInv EQ. inv EQ0.
-    assert (ACCLen: code_size instr_size l' = x0) by admit.    
-    destruct x2;inv EQ2.
-    + unfold reloc_map_gen in *. rewrite fold_left_app.
-      simpl.
-      econstructor;eauto.
-      * simpl.
-        
-        (* generalize reloc_map in reloc_map_gen*)
-        admit.
-      * rewrite ZTree.gss. auto.
-    + unfold reloc_map_gen in *.
-      eapply Reloc_app2;eauto.
-      eapply IHn;auto.
-      unfold transl_code. erewrite FOLD.
-      simpl. auto.
-    + simpl in EQ. inv EQ.
-Admitted.
+  unfold rev_transl_code. intros.
+  exploit transl_code_consistency_aux;eauto.
+  rewrite app_nil_r.
+  destruct fold_left. destruct p.
+  simpl. intros. inv H1. auto.
+Qed.
+
 
 Definition transl_section' (sec: section) : section :=
   match sec with
