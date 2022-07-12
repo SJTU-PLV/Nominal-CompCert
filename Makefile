@@ -123,7 +123,7 @@ BACKEND=\
   LocalLib.v Jumptablegen.v CheckDef.v\
   RelocProgram.v \
   Symbtablegen.v Symbtablegenproof.v\
-  Reloctablesgen.v \
+  Reloctablesgen.v Reloctablesgenproof.v\
   RelocBingen.v \
   TranslateInstr1.v\
   AsmLongInt.v\

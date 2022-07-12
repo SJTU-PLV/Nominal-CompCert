@@ -6,10 +6,9 @@
 
 Require Import Coqlib Errors Maps.
 Require Import Integers Floats AST Linking.
-Require Import Values Memory Events Globalenvs Smallstep.
 Require Import Op Locations Mach Conventions Asm RealAsm.
 Require Import Reloctablesgen.
-Require Import RelocProg RelocProgram RelocProgSemantics.
+Require Import RelocProg RelocProgram RelocProgSemantics RelocProgSemantics1.
 Require Import LocalLib AsmInject.
 Import ListNotations.
 Require AsmFacts.
@@ -295,3 +294,75 @@ Proof.
   simpl. intros. inv H1. auto.
 Qed.
 
+Lemma PTree_map_map_aux: forall A B C m n (f:positive -> A -> B) (g:positive -> B -> C),
+    PTree.xmap g (PTree.xmap f m n) n = PTree.xmap (fun p ele => g p (f p ele)) m n.
+Proof.
+  intros A B C.
+  induction m;intros.
+  - simpl. auto.
+  - simpl. destruct o.
+    + rewrite <- IHm1.
+      rewrite <- IHm2.
+      f_equal.
+    + rewrite <- IHm1.
+      rewrite <- IHm2.
+      f_equal.
+Qed.
+
+Theorem PTree_map_map:forall A B C m (f:positive -> A -> B) (g:positive -> B -> C),
+    PTree.map g (PTree.map f m) = PTree.map (fun p ele => g p (f p ele)) m.
+Proof.
+  unfold PTree.map. intros.
+  eapply PTree_map_map_aux.
+Qed.
+
+Lemma PTree_map_id_aux:forall A m n (f:positive -> A -> A),
+    (forall id ele, m ! id = Some ele -> f (PTree.prev_append n id) ele = ele) ->
+    PTree.xmap f m n = m.
+Proof.
+  intros A.
+  induction m;intros.
+  simpl;auto.
+  
+
+  destruct o. 
+  + generalize (H 1%positive a). simpl.
+    unfold PTree.prev. intros B.
+    generalize (B  eq_refl). intros C.
+    rewrite C.
+
+    rewrite IHm1;auto. rewrite IHm2;auto.
+    * intros. generalize (H (id~1)%positive ele).
+      simpl. intros. apply H1. auto.
+    * intros. generalize (H (id~0)%positive ele).
+      simpl. intros. apply H1. auto.
+    
+  + simpl. rewrite IHm1;auto. rewrite IHm2;auto.
+    * intros. generalize (H (id~1)%positive ele).
+      simpl. intros. apply H1. auto.
+    * intros. generalize (H (id~0)%positive ele).
+      simpl. intros. apply H1. auto.
+Qed.
+
+Lemma PTree_map_id:forall A m (f:positive -> A -> A),
+    (forall id ele, m ! id = Some ele -> f id ele = ele) ->
+    PTree.map f m = m.
+Proof.
+  intros. unfold PTree.map.
+  apply PTree_map_id_aux.
+  simpl. auto.
+Qed.
+
+Lemma transl_sections_consistency:forall sectbl symbtbl reloc_map,
+    transl_sectable instr_size symbtbl sectbl = OK reloc_map ->
+    PTree.map (rev_section instr_size reloc_map) (transl_sectable' sectbl) = sectbl.
+Proof.
+  unfold transl_sectable,transl_sectable'.
+  intros.
+  rewrite PTree_map_map.
+  rewrite PTree_map_id;auto.
+  intros. unfold rev_section.
+  destruct ele;simpl;auto.
+Admitted.
+
+  

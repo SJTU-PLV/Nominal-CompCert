@@ -20,12 +20,6 @@ Require Import LocalLib.
 Import ListNotations.
 (** Global environments *)
 
-Definition gdef := globdef Asm.fundef unit.
-
-Module Genv.
-
-Section GENV.
-
 
 Section WITH_INSTR_SIZE.
   Variable instr_size : instruction -> Z.
@@ -214,5 +208,35 @@ Definition semantics (p:program) (rs:regset) :=
                 (RelocProgSemantics.globalenv instr_size p)
                 (RelocProgSemantics.Genv.genv_senv (RelocProgSemantics.globalenv instr_size p)).
 
-  
+Lemma semantics_determinate: forall p rs, determinate (semantics p rs).
+Proof.
+  intros.
+  destruct (RelocProgSemantics.semantics_determinate instr_size p rs).
+  constructor;eauto.
+  -                             (* initial state *)
+    intros. inv H;inv H0.
+    inv H1. inv H2.
+    assert (m = m0) by congruence. subst.
+    inv H0. inv H3.
+    assert (m1 = m3 /\ stk = stk0) by  intuition congruence. destruct H0. subst.
+    assert (m2 = m4) by congruence. subst.
+    f_equal.
+Qed.
+
+Theorem reloc_prog_single_events p rs:
+  single_events (semantics p rs).
+Proof.
+  red. intros.
+  inv H; simpl. lia.
+  eapply external_call_trace_length; eauto.
+  eapply external_call_trace_length; eauto.
+Qed.
+
+Theorem reloc_prog_receptive p rs:
+  receptive (semantics p rs).
+Proof.
+  destruct (RelocProgSemantics.reloc_prog_receptive instr_size p rs).
+  split; auto.
+Qed.
+
 End WITH_INSTR_SIZE.

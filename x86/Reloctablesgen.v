@@ -546,7 +546,7 @@ Definition transl_code' (c:code): code :=
   map id_eliminate c.
   (* rev (fold_left acc_id_eliminate c []). *)    
 
-Definition transl_section' (sec: section) : section :=
+Definition transl_section' (id:ident) (sec: section) : section :=
   match sec with
   | sec_text code =>
     let c := (transl_code' code) in
@@ -571,7 +571,7 @@ Definition print_sectable (stbl: sectable) :=
   PTree.fold1 acc_print_section stbl "".
 
 Definition transl_sectable' (stbl: sectable): sectable :=
-  PTree.map1 transl_section' stbl.
+  PTree.map transl_section' stbl.
 
 
 Definition transf_program (p:RelocProgram.program) : res program :=
