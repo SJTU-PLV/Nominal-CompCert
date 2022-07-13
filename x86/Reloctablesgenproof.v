@@ -46,6 +46,46 @@ Proof.
 Qed.
 
 
+Remark in_norepet_unique:
+  forall T n (gl: list (ident * T)) id g,
+    length gl = n ->
+  In (id, g) gl -> list_norepet (map fst gl) ->
+  exists gl1 gl2, gl = gl1 ++ (id, g) :: gl2 /\ ~In id (map fst gl2) /\ ~In id (map fst gl1).
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  unfold transl_code in H0. simpl in *. inv H0.
+
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l1 & a1 & A1 & B1).
+  assert (exists l2 a2, gl = a2::l2 /\ length l2 = n).
+  { destruct gl. simpl in H. congruence.
+    exists gl,p. auto. }
+  destruct H2 as (l2 & a2 & A2 & B2).
+  subst.
+  destruct l1.
+  - simpl in *. inv A2.
+    destruct H0;subst.
+    exists [],[]. simpl. auto.
+    apply False_rect;auto.      (* can not use congruence, why? *)
+  - simpl in *. inv A2.
+    destruct H0;subst.
+    + exists [],(l1++[a1]).
+      inv H1. simpl. auto.
+    + inv H1.
+      exploit IHn;eauto. intros (gl1 & gl2 & X & Y & Z).
+      rewrite X in *. exists (a2::gl1),gl2.
+      simpl. split;auto.
+      split;auto. clear IHn.
+      rewrite map_app in H4. simpl in H4.
+      apply not_in_app in H4. destruct H4.
+      unfold not.
+      apply Decidable.not_or_iff. split. 
+      * intros. subst. apply not_in_cons in H2. destruct H2.
+        congruence.
+      * auto.
+Qed.
+
 (** The preservation theorem of relocation table generation is established by decoding the program  *)
 
 (** * Main Preservaiton Proofs *)
@@ -190,6 +230,29 @@ Proof.
   unfold transl_instr;simpl;intros;repeat (monadInv H);repeat (destr_in H);repeat monadInv H1.
 Qed.
 
+Lemma code_eliminate_unchanged:forall n c symbtbl,
+    length c = n ->
+    transl_code instr_size symbtbl c = OK [] ->
+    transl_code' c = c.
+Proof.  
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl. auto.
+  
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a & A & B). subst.
+  unfold transl_code' in *.
+  rewrite map_app.
+  unfold transl_code in H0. monadInv H0.
+  rewrite fold_left_app in EQ.
+  simpl in EQ. unfold acc_instrs in EQ at 1.
+  monadInv EQ. destruct x2. inv EQ2.
+  destruct x1;simpl in H2;inv H2. 
+  inv EQ2.
+  exploit IHn;eauto. unfold transl_code. erewrite EQ0.
+  simpl. auto. intro. rewrite H0. simpl.
+  erewrite id_eliminate_unchanged;eauto.
+Qed.
 
 
 Lemma transl_code_consistency_aux:forall n c r1 r2 symbtbl,
@@ -341,18 +404,6 @@ Proof.
   simpl. auto.
 Qed.
 
-Remark in_norepet_unique_r:
-  forall T (gl: list (ident * T)) id g,
-  In (id, g) gl -> list_norepet (map fst gl) ->
-  exists gl1 gl2, gl = gl1 ++ (id, g) :: gl2 /\ ~In id (map fst gl2).
-Proof.
-  induction gl as [|[id1 g1] gl]; simpl; intros.
-  contradiction.
-  inv H0. destruct H.
-  inv H. exists nil, gl. auto.
-  exploit IHgl; eauto. intros (gl1 & gl2 & X & Y).
-  exists ((id1, g1) :: gl1), gl2; split;auto. rewrite X; auto.
-Qed.
 
 Lemma transl_sections_consistency:forall sectbl symbtbl reloc_map,
     transl_sectable instr_size symbtbl sectbl = OK reloc_map ->
@@ -367,8 +418,8 @@ Proof.
   apply PTree.elements_correct in H0.
   generalize (PTree.elements_keys_norepet sectbl).
   intros NOREP.
-  exploit (in_norepet_unique_r);eauto.
-  intros (gl1 & gl2 & A & B).
+  exploit (in_norepet_unique);eauto.
+  intros (gl1 & gl2 & A & B & C).
   rewrite PTree.fold_spec in H.
   (* unable to rewrite, use set printing all to find the problem *)
   unfold section in *.
@@ -376,20 +427,50 @@ Proof.
   rewrite fold_left_app in H. simpl in H.
   set (f:= (fun (a : res reloctable_map)
            (p : positive * RelocProg.section) =>
-         acc_section instr_size symbtbl a (fst p) (snd p))) in *.
+              acc_section instr_size symbtbl a (fst p) (snd p))) in *.
+  (* preservaiton for Error *)
+  assert (ERRPRS: forall l msg, fold_left f l (Error msg) = Error msg).
+  { induction l. simpl. auto.
+    simpl. auto. }
+  (* prove preservaiton for geting None*)
+  assert (PRS: forall l reloc_map1 reloc_map2,
+               ~ In id fst ## l ->
+               fold_left f l (OK reloc_map1) = OK reloc_map2 ->
+               reloc_map2 ! id = reloc_map1 ! id).
+  { induction l;simpl;intros.
+    inv H2. auto.
+    destruct transl_section in H2. simpl in H2. destruct r.
+    eapply IHl;eauto.
+    assert ((PTree.set (fst a) (r :: r0) reloc_map1) ! id = reloc_map1 ! id).
+    rewrite PTree.gsspec. apply Decidable.not_or in H1.
+    destruct H1. destruct peq;try congruence;auto.
+    rewrite <- H3.
+    unfold reloctable in *.
+    eapply IHl;eauto.
+    simpl in H2. rewrite ERRPRS in H2. inv H2. }
+    
   destruct (acc_section instr_size symbtbl
            (fold_left f gl1 (OK (PTree.empty reloctable))) id
            (sec_text code)) eqn:ACC in H;
-    unfold section,ident in *;rewrite ACC in H.
+    unfold section,ident in *;rewrite ACC in H.  
   - unfold acc_section in ACC.
     monadInv ACC. destruct x0.
     + inv EQ2.
-      (* also need gl1 is no repeat *)
-      admit.
+      simpl in EQ1. monadInv EQ1.
+      exploit PRS.
+      apply C. eauto. intros.
+      exploit PRS. apply B. eauto.
+      intros. rewrite PTree.gempty in H1. rewrite H2. rewrite H1.
+      f_equal.
+      erewrite code_eliminate_unchanged;eauto.              
     + inv EQ2.
-      admit.
-  - admit.
-Admitted.
+      simpl in EQ1. monadInv EQ1.
+      exploit PRS.
+      apply B. eauto. intros.
+      rewrite PTree.gss in H1. rewrite H1.
+      f_equal. erewrite transl_code_consistency;eauto.
+  - rewrite ERRPRS in H. inv H.
+Qed.
 
 
 (** Transformation *)
