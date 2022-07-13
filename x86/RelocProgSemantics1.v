@@ -195,6 +195,8 @@ Definition decode_program (p:program) :=
      prog_senv := prog_senv p;
   |}.
 
+Definition globalenv p := RelocProgSemantics.globalenv instr_size (decode_program p).
+
 Inductive initial_state (p:program) (rs:regset) (st:state) : Prop :=
 | initial_state_intro: forall p',
     p' = decode_program p ->
@@ -205,22 +207,47 @@ Definition semantics (p:program) (rs:regset) :=
   Semantics_gen (RelocProgSemantics.step instr_size)
                 (initial_state p rs)
                 (RelocProgSemantics.final_state)
-                (RelocProgSemantics.globalenv instr_size p)
+                (globalenv p)
                 (RelocProgSemantics.Genv.genv_senv (RelocProgSemantics.globalenv instr_size p)).
 
 Lemma semantics_determinate: forall p rs, determinate (semantics p rs).
 Proof.
+  Ltac Equalities :=
+  match goal with
+  | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] =>
+      rewrite H1 in H2; inv H2; Equalities
+  | _ => idtac
+  end.
   intros.
-  destruct (RelocProgSemantics.semantics_determinate instr_size p rs).
-  constructor;eauto.
+  (* destruct (RelocProgSemantics.semantics_determinate instr_size p rs). *)
+  constructor;simpl;intros.
   -                             (* initial state *)
-    intros. inv H;inv H0.
-    inv H1. inv H2.
-    assert (m = m0) by congruence. subst.
-    inv H0. inv H3.
-    assert (m1 = m3 /\ stk = stk0) by  intuition congruence. destruct H0. subst.
-    assert (m2 = m4) by congruence. subst.
-    f_equal.
+    inv H;inv H0;Equalities.
+    + split. constructor. auto.
+    + discriminate.
+    + discriminate.
+    + assert (vargs0 = vargs) by (eapply RelocProgSemantics.eval_builtin_args_determ; eauto).     
+      subst vargs0.      
+      exploit external_call_determ. eexact H5. eexact H11. intros [A B].      
+      split. auto. intros. destruct B; auto. subst. auto.
+    + assert (args0 = args) by (eapply Asm.extcall_arguments_determ; eauto). subst args0.
+      exploit external_call_determ. eexact H3. eexact H7. intros [A B].
+      split. auto. intros. destruct B; auto. subst. auto.
+  - red; intros; inv H; simpl.
+    lia.
+    eapply external_call_trace_length; eauto.
+    eapply external_call_trace_length; eauto.
+  - (* initial states *)
+    inv H; inv H0. inv H1;inv H2. assert (m = m0) by congruence. subst. inv H0; inv H3.
+  assert (m1 = m3 /\ stk = stk0) by intuition congruence. destruct H0; subst.
+  assert (m2 = m4) by congruence. subst.
+  f_equal. (* congruence. *)
+- (* final no step *)
+  assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
+  { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
+  inv H. red; intros; red; intros. inv H; rewrite H0 in *; eelim NOTNULL; eauto.
+- (* final states *)
+  inv H; inv H0. congruence.    
 Qed.
 
 Theorem reloc_prog_single_events p rs:
@@ -235,8 +262,15 @@ Qed.
 Theorem reloc_prog_receptive p rs:
   receptive (semantics p rs).
 Proof.
-  destruct (RelocProgSemantics.reloc_prog_receptive instr_size p rs).
-  split; auto.
+  split.
+  - simpl. intros s t1 s1 t2 STEP MT.
+    inv STEP.
+    inv MT. eexists. eapply RelocProgSemantics.exec_step_internal; eauto.
+    edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
+    eexists. eapply RelocProgSemantics.exec_step_builtin; eauto.
+    edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
+    eexists. eapply RelocProgSemantics.exec_step_external; eauto.
+  - eapply reloc_prog_single_events; eauto.  
 Qed.
 
 End WITH_INSTR_SIZE.

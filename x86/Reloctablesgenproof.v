@@ -55,19 +55,7 @@ Variable instr_size : instruction -> Z.
 Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
 Hypothesis id_eliminate_size_unchanged:forall i, instr_size i = instr_size (id_eliminate i).
 
-(** Transformation *)
-Variable prog: program.
-Variable tprog: program.
-
-Let ge := globalenv instr_size prog.
-Let tge := globalenv instr_size tprog.
-
-Definition match_prog (p: program) (tp: program) :=
-  transf_program instr_size p = OK tp.
-
-Hypothesis TRANSF: match_prog prog tprog.
-
-
+(** *Consistency Theorem *)
 
 Lemma rev_transl_code_snd_size:forall n c c1 c2 r1 r2 sz,
     length c = n ->
@@ -353,6 +341,19 @@ Proof.
   simpl. auto.
 Qed.
 
+Remark in_norepet_unique_r:
+  forall T (gl: list (ident * T)) id g,
+  In (id, g) gl -> list_norepet (map fst gl) ->
+  exists gl1 gl2, gl = gl1 ++ (id, g) :: gl2 /\ ~In id (map fst gl2).
+Proof.
+  induction gl as [|[id1 g1] gl]; simpl; intros.
+  contradiction.
+  inv H0. destruct H.
+  inv H. exists nil, gl. auto.
+  exploit IHgl; eauto. intros (gl1 & gl2 & X & Y).
+  exists ((id1, g1) :: gl1), gl2; split;auto. rewrite X; auto.
+Qed.
+
 Lemma transl_sections_consistency:forall sectbl symbtbl reloc_map,
     transl_sectable instr_size symbtbl sectbl = OK reloc_map ->
     PTree.map (rev_section instr_size reloc_map) (transl_sectable' sectbl) = sectbl.
@@ -363,6 +364,84 @@ Proof.
   rewrite PTree_map_id;auto.
   intros. unfold rev_section.
   destruct ele;simpl;auto.
+  apply PTree.elements_correct in H0.
+  generalize (PTree.elements_keys_norepet sectbl).
+  intros NOREP.
+  exploit (in_norepet_unique_r);eauto.
+  intros (gl1 & gl2 & A & B).
+  rewrite PTree.fold_spec in H.
+  (* unable to rewrite, use set printing all to find the problem *)
+  unfold section in *.
+  rewrite A in H.
+  rewrite fold_left_app in H. simpl in H.
+  set (f:= (fun (a : res reloctable_map)
+           (p : positive * RelocProg.section) =>
+         acc_section instr_size symbtbl a (fst p) (snd p))) in *.
+  destruct (acc_section instr_size symbtbl
+           (fold_left f gl1 (OK (PTree.empty reloctable))) id
+           (sec_text code)) eqn:ACC in H;
+    unfold section,ident in *;rewrite ACC in H.
+  - unfold acc_section in ACC.
+    monadInv ACC. destruct x0.
+    + inv EQ2.
+      (* also need gl1 is no repeat *)
+      admit.
+    + inv EQ2.
+      admit.
+  - admit.
 Admitted.
 
+
+(** Transformation *)
+Variable prog: program.
+Variable tprog: program.
+
+Let ge := RelocProgSemantics.globalenv instr_size prog.
+Let tge := globalenv instr_size tprog.
+
+Definition match_prog (p: program) (tp: program) :=
+  transf_program instr_size p = OK tp.
+
+Hypothesis TRANSF: match_prog prog tprog.  
+
+Lemma globalenv_eq: globalenv instr_size tprog = RelocProgSemantics.globalenv instr_size prog.
+  unfold match_prog in  TRANSF. unfold transf_program in TRANSF.
+  monadInv TRANSF.
+  unfold globalenv,RelocProgSemantics.globalenv.
+  simpl. f_equal.
+  erewrite transl_sections_consistency;eauto.
+Qed.
+
+Lemma transf_initial_state:forall st1 rs1,
+    RelocProgSemantics.initial_state instr_size prog rs1 st1 ->
+    initial_state instr_size tprog rs1 st1.
+Proof.
+  intros st1 rs1 INIT. inv INIT.
+  unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+  monadInv TRANSF. clear ge tge.
   
+  econstructor;eauto. unfold decode_program. simpl.
+  apply RelocProgSemantics.initial_state_intro with (m:=m).
+  unfold init_mem in *. simpl in *.
+  unfold globalenv in *. simpl.
+  erewrite transl_sections_consistency;eauto.
+
+  inv H0. econstructor;eauto.
+Qed.
+
+Lemma transf_program_correct:
+  forall rs, Smallstep.forward_simulation (RelocProgSemantics.semantics instr_size prog rs) (semantics instr_size tprog rs).
+Proof.
+  intros rs.  
+  eapply Smallstep.forward_simulation_step with (match_states:= fun (x y:Asm.state) => x = y).
+  - unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+    monadInv TRANSF. simpl;auto.    
+  - intros. exists s1. split;auto. apply transf_initial_state. auto.
+  - intros;subst. simpl in *. auto.
+  - intros. exists s1'. split;auto.
+    rewrite <- H0. auto.
+    unfold semantics. simpl in *.
+    rewrite globalenv_eq. auto.
+Qed.
+
+End PRESERVATION.

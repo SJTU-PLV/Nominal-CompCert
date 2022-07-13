@@ -572,29 +572,22 @@ Definition print_sectable (stbl: sectable) :=
 
 Definition transl_sectable' (stbl: sectable): sectable :=
   PTree.map transl_section' stbl.
-
-
+  
+  
 Definition transf_program (p:RelocProgram.program) : res program :=
   let map := p.(prog_symbtable) in
-  do reloc_map <- transl_sectable map (prog_sectable p);
-  let sec' := transl_sectable' (prog_sectable p) in
-  (* if list_norepet_dec ident_eq  *)
-  (*                     (List.map fst (prog_defs p)) *)
-  (* then *)
-  (*   if list_norepet_dec ident_eq (List.map symbentry_id (prog_symbtable p)) *)
-  (*   then *)
-  OK {| prog_defs := prog_defs p;
-        prog_public := prog_public p;
-        prog_main := prog_main p;
-        prog_sectable := sec';
-        prog_symbtable := prog_symbtable p;
-        prog_reloctables := reloc_map;
-        prog_senv := prog_senv p;
-     |}
-  (*   else *)
-  (*     Error (msg "Symbol entry identifiers repeat in symbol table") *)
-  (* else *)
-  (*   Error (msg "Identifiers repeat in program definitions") *)
+  (* if  p.(prog_reloctables) (PTree.empty reloctable) then *)
+    do reloc_map <- transl_sectable map (prog_sectable p);
+    let sec' := transl_sectable' (prog_sectable p) in
+    OK {| prog_defs := prog_defs p;
+          prog_public := prog_public p;
+          prog_main := prog_main p;
+          prog_sectable := sec';
+          prog_symbtable := prog_symbtable p;
+          prog_reloctables := reloc_map;
+          prog_senv := prog_senv p;
+       |}
+  (* else Error (msg "Relocation table map is not empty before relocation table generation.") *)
 .
 
 End INSTR_SIZE.
