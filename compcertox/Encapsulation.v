@@ -29,6 +29,12 @@ Definition pset_unit :=
     pset_type := unit;
     pset_init := tt
   |}.
+(* embed a regular type into a pointed set *)
+Definition pset_embed (T: Type) :=
+  {|
+    pset_type := option T;
+    pset_init := None;
+  |}.
 
 Record ReflTranRel (X: Type) :=
   {
@@ -55,10 +61,12 @@ Infix ":->" := w_ext_step (at level 60, no associativity).
 Program Definition pset_world (p: PSet) :=
   {|
     w_type := p;
+    (* internal steps are free to modify the state *)
     w_int_step := {| rel s t := True; |};
-    w_ext_step := {| rel s t := s = t |};
+    (* external steps maintain the state *)
+    w_ext_step := {| rel := eq |};
   |}.
-Next Obligation. intros x y z. intros; subst; easy. Qed.
+
 Program Definition world_prod (u: world) (v: world) :=
   {|
     w_type := u * v;
@@ -78,6 +86,23 @@ Qed.
 Infix "*" := world_prod: world_scope.
 Delimit Scope world_scope with world.
 Bind Scope world_scope with world.
+
+(* Generate a world that corresponds to the world in vanilla simulation
+   conventions, where the replies are matched at the same world as in the
+   queries and the environment is free to choose a new world to match queries *)
+Program Definition world_embed (T: Type) :=
+  {|
+    w_type := pset_embed T;
+    w_int_step := {| rel := eq |};
+    w_ext_step := {| rel s t := True |};
+  |}.
+
+Program Definition world_symtbl :=
+  {|
+    w_type := pset_embed Genv.symtbl;
+    w_int_step := {| rel := eq |};
+    w_ext_step := {| rel := eq |};
+  |}.
 
 (** ** Semantics with Encapsulation *)
 Record esemantics {liA liB} := {
@@ -105,7 +130,7 @@ Definition comp_esem {liA liB liC} (L1: liB +-> liC) (L2: liA +-> liB) : option 
 Instance li_func_comp {liA liB liC} (F: LiFunc liA liB) (G: LiFunc liB liC): LiFunc liA liC.
 Proof. split; intros; apply F; apply G; easy. Defined.
 
-Definition encap_store {K: PSet} {liA liB} (L: liA +-> liB@K) : liA +-> liB :=
+Definition semantics_fbk {K: PSet} {liA liB} (L: liA +-> liB@K) : liA +-> liB :=
   {|
     pstate := pstate L * K;
     esem := $L
@@ -114,7 +139,7 @@ Definition encap_store {K: PSet} {liA liB} (L: liA +-> liB@K) : liA +-> liB :=
 Instance li_func_unit {liA}: LiFunc liA (liA@unit).
 Proof. split; intros; apply X. Defined.
 
-Definition encap_fbk {liA liB} (L: semantics liA liB) : liA +-> liB :=
+Definition semantics_embed {liA liB} (L: semantics liA liB) : liA +-> liB :=
   {|
     pstate := pset_unit;
     esem := $L;
@@ -125,9 +150,10 @@ Set Implicit Arguments.
 
 Module ST.
 
-  Record callconv {li1 li2} :=
+  Record callconv  {li1 li2} :=
     mk_callconv {
       ccworld : world;
+      match_senv : ccworld -> Genv.symtbl -> Genv.symtbl -> Type;
       match_query : ccworld -> query li1 -> query li2 -> Prop;
       match_reply : ccworld -> reply li1 -> reply li2 -> Prop;
     }.
@@ -137,12 +163,30 @@ Module ST.
           (cc: callconv li1 li2) (U V: PSet) : callconv (li1@U) (li2@V) :=
     {|
       ccworld := (ccworld cc * (pset_world U) * (pset_world V))%world;
+      match_senv '(w, u, v) se1 se2 := match_senv cc w se1 se2;
       match_query '(w, u, v) '(q1, uq) '(q2, vq) :=
         match_query cc w q1 q2 /\ u = uq /\ v = vq;
       match_reply '(w, u, v) '(q1, uq) '(q2, vq) :=
         match_reply cc w q1 q2 /\ u = uq /\ v = vq;
     |}.
 
+  Program Definition cc_compose {li1 li2 li3}
+          (cc12: callconv li1 li2) (cc23: callconv li2 li3) :=
+    {|
+      ccworld := ccworld cc12 * ccworld cc23;
+      match_senv '(w12, w23) se1 se3 :=
+        { se2 & (match_senv cc12 w12 se1 se2 * match_senv cc23 w23 se2 se3)%type };
+      match_query '(w12, w23) q1 q3 :=
+      exists q2,
+        match_query cc12 w12 q1 q2 /\
+        match_query cc23 w23 q2 q3;
+      match_reply '(w12, w23) r1 r3 :=
+      exists r2,
+        match_reply cc12 w12 r1 r2 /\
+        match_reply cc23 w23 r2 r3;
+    |}.
+
+  (** Stateful Simulation *)
   Section FSIM.
 
     Context {liA1 liA2} (ccA: callconv liA1 liA2).
@@ -195,10 +239,10 @@ Module ST.
         fsim_skel: skel L1 = skel L2;
         fsim_initial_world: fsim_invariant (pset_init (ccworld ccA)) (pset_init (ccworld ccB));
         fsim_footprint: forall i, footprint L1 i <-> footprint L2 i;
-        fsim_lts wA wB se1 se2:
+        fsim_lts wA wB se1 se2 (Hse: match_senv ccB wB se1 se2):
           fsim_invariant wA wB ->
           fsim_properties ccA ccB wA wB fsim_invariant (activate L1 se1) (activate L2 se2)
-                        fsim_index fsim_order (fsim_match_states se1 se2);
+                        fsim_index fsim_order (fsim_match_states se1 se2 wB Hse);
         fsim_order_wf:
           well_founded fsim_order;
       }.
@@ -209,6 +253,7 @@ Module ST.
 
 End ST.
 
+(** Simulations between components with encapsulated states *)
 Module E.
 
   Definition forward_simulation {liA1 liA2} (ccA: ST.callconv liA1 liA2)
@@ -221,8 +266,31 @@ End E.
 
 (** ** Properties *)
 
-(** *** Composition *)
+Definition callconv_embed {liA liB} (cc: callconv liA liB): ST.callconv liA liB :=
+  {|
+    ST.ccworld := world_embed (ccworld cc);
+    ST.match_query ow q1 q2 :=
+      match ow with
+      | Some w => match_query cc w q1 q2
+      | None => False
+      end;
+    ST.match_reply ow r1 r2 :=
+      match ow with
+      | Some w => match_reply cc w r1 r2
+      | None => False
+      end;
+  |}.
+
 Generalizable All Variables.
+
+Lemma fsim_embed `(ccA: callconv liA1 liA2) `(ccB: callconv liB1 liB2) L1 L2:
+  forward_simulation ccA ccB L1 L2 ->
+  E.forward_simulation (callconv_embed ccA) (callconv_embed ccB)
+                       (semantics_embed L1) (semantics_embed L2).
+Proof.
+Admitted.
+
+(** *** Composition *)
 
 (** Composition of Stateful Simulations *)
 
@@ -261,7 +329,7 @@ Section FSIM.
         exists (i' : ST.fsim_index HL1) (t1' : state L1t),
           after_external (L1t se2) t1 r2 t1' /\
             exists wb'' wc', wb' :-> wb'' /\ wc *-> wc' /\
-                          ST.fsim_match_states HL1 se1 se2 wb'' wc' i' s1' t1') ->
+            ST.fsim_match_states HL1 se1 se2 wb'' wc' i' s1' t1') ->
     match_states wa wc (index2 i1 i2) (st2 L1s L2s s1 s2) (st2 L1t L2t t1 t2).
 
   Definition inv : ST.ccworld ccA -> ST.ccworld ccC -> Prop :=
@@ -464,8 +532,7 @@ End LIFT.
 Lemma st_fsim_lift `(ccA: ST.callconv liA1 liA2) `(ccB: ST.callconv liB1 liB2)
       L1 L2 (K1 K2: PSet):
   ST.forward_simulation ccA ccB L1 L2 ->
-  ST.forward_simulation
-                        (ST.callconv_lift ccA K1 K2)
+  ST.forward_simulation (ST.callconv_lift ccA K1 K2)
                         (ST.callconv_lift ccB K1 K2)
                         (L1@K1) (L2@K2).
 Proof.
@@ -488,9 +555,101 @@ Section COMP.
   Proof.
     unfold E.forward_simulation in *.
     unfold comp_esem in *.
+    apply st_fsim_lift with (K1:=pstate L2s) (K2:=pstate L2t) in HL1.
+    exploit @st_fsim_comp. exact HL1. exact HL2.
   Admitted.
 
 End COMP.
+
+(** Compositing Stateful Simulation Conventions *)
+
+Section COMP_FSIM.
+
+  Context `(ccA1: ST.callconv liAs liAn) `(ccA2: ST.callconv liAn liAf)
+          `(ccB1: ST.callconv liBs liBn) `(ccB2: ST.callconv liBn liBf)
+          (Ls: semantics liAs liBs) (Ln: semantics liAn liBn) (Lf: semantics liAf liBf).
+  Context (H1: ST.fsim_components ccA1 ccB1 Ls Ln)
+          (H2: ST.fsim_components ccA2 ccB2 Ln Lf).
+
+  Inductive compose_fsim_match_states:
+    Genv.symtbl -> Genv.symtbl ->
+    ST.ccworld (ST.cc_compose ccA1 ccA2) ->
+    ST.ccworld (ST.cc_compose ccB1 ccB2) ->
+    (ST.fsim_index H2 * ST.fsim_index H1) ->
+    state Ls -> state Lf -> Prop :=
+  | compose_match_states_intro se1 se2 se3 s1 s2 s3 i1 i2 x wa1 wa2 wb1 wb2:
+    ST.fsim_match_states H1 se1 se2 wa1 wb1 i1 s1 s2 ->
+    ST.fsim_match_states H2 se2 se3 wa2 wb2 i2 s2 s3 ->
+    compose_fsim_match_states se1 se3 (x, wa1, wa2) (Some se2, wb1, wb2)
+                         (i2, i1) s1 s3.
+
+  Inductive compose_fsim_inv:
+    ST.ccworld (ST.cc_compose ccA1 ccA2) ->
+    ST.ccworld (ST.cc_compose ccB1 ccB2) -> Prop :=
+  | compose_fsim_inv_intro ase bse wa1 wa2 wb1 wb2 se2:
+    ST.fsim_invariant H1 wa1 wb1 ->
+    ST.fsim_invariant H2 wa2 wb2 ->
+    bse = Some se2 ->
+    compose_fsim_inv (ase, wa1, wa2) (bse, wb1, wb2).
+
+  Lemma st_compose_fsim_components:
+    ST.fsim_components (ST.cc_compose ccA1 ccA2)
+                       (ST.cc_compose ccB1 ccB2)
+                       Ls Lf.
+  Proof.
+    (* destruct H1 as [ index1 order1 match_states1 inv1 A1 B1 C1 D1 E1 F1 ]. *)
+    (* destruct H2 as [ index2 order2 match_states2 inv2 A2 B2 C2 D2 E2 F2 ]. *)
+    (* set (ff_index := (index2 * index1)%type). *)
+    set (ff_order := lex_ord (Relation_Operators.clos_trans
+                                _ (ST.fsim_order H2)) (ST.fsim_order H1)).
+    (* set (ff_match_states := *)
+    (*        fun se1 se3 '(ose, wa1, wa2) '(o, wb1, wb2) '(i2, i1) s1 s3 => *)
+    (*          match ose with *)
+    (*          | Some se2 => *)
+    (*              exists s2, match_states1 se1 se2 wa1 wb1 i1 s1 s2 /\ *)
+    (*                      match_states2 se2 se3 wa2 wb2 i2 s2 s3 *)
+    (*          | None => False *)
+    (*          end). *)
+
+    (* set (ff_inv := fun '(x, wa1, wa2) '(y, wb1, wb2) => inv1 wa1 wb1 /\ inv2 wa2 wb2). *)
+
+    (* replace (ST.fsim_index H2 * ST.fsim_index H1)%type *)
+    (*   with ff_index in ff_match_states. *)
+    (* 2: { subst ff_index. rewrite X1. rewrite X2. reflexivity. } *)
+    (* clear X1 X2. *)
+    apply ST.Forward_simulation with ff_order compose_fsim_match_states compose_fsim_inv.
+    - intros [[a wa1] wa2] [[b wb1] wb2] I [[b' wb1'] wb2'] [[X1 X2] X3].
+      inv I. econstructor.
+      eapply (ST.fsim_invariant_env_step H1); eauto.
+      eapply (ST.fsim_invariant_env_step H2); eauto.
+      inv X1. reflexivity.
+    - rewrite (ST.fsim_skel H1); apply (ST.fsim_skel H2).
+    - econstructor. apply (ST.fsim_initial_world H1).
+      apply (ST.fsim_initial_world). admit.
+    - intros i. rewrite (ST.fsim_footprint H1).
+      apply (ST.fsim_footprint H2).
+    - intros [[x wa1] wa2] [[y wb1] wb2] se1 se3 I. inv I.
+      pose proof (ST.fsim_lts H1 wa1 wb1 se1 se2 H5) as X1.
+      pose proof (ST.fsim_lts H2 wa2 wb2 se2 se3 H8) as X2.
+      constructor.
+      + intros q1 q3 s1 ((ose & wb1') & wb2') ((WSE & WB1) & WB2) (q2 & Hq12 & Hq23) Hi.
+        inv WSE.
+        edestruct (@ST.fsim_match_initial_states liAs) as (i & s2 & A & B); eauto.
+        edestruct (@ST.fsim_match_initial_states liAn) as (i' & s3 & C & D); eauto.
+        destruct B as (wa1' & wb1'' & WA1 & WB1' & B).
+        destruct D as (wa2' & wb2'' & WA2 & WB2' & D).
+        eexists (i', i), s3. split; eauto.
+        eexists (x, wa1', wa2'), (Some se2, wb1'', wb2''). repeat split; eauto.
+        econstructor; eauto.
+      + intros ((a & wa1') & wa2') ((b & wb1') & wb2') (i2, i1) s1 s3 r1 Hs H.
+        inv Hs.
+        edestruct (@ST.fsim_match_final_states liAs) as (r2 & Hr2 & Hr12); eauto.
+        edestruct (@fsim_match_final_states liA2) as (r3 & Hr3 & Hr23); eauto.
+
+
+
+
+End COMP_FSIM.
 
 Require Import Ctypes Cop Clight.
 
