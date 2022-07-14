@@ -93,6 +93,8 @@ Section PRESERVATION.
 
 Variable instr_size : instruction -> Z.
 Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
+Hypothesis instr_reloc_bound : forall i ofs, instr_reloc_offset i = OK ofs -> 0 < ofs < instr_size i.
+
 Hypothesis id_eliminate_size_unchanged:forall i, instr_size i = instr_size (id_eliminate i).
 
 (** *Consistency Theorem *)
@@ -179,6 +181,11 @@ Proof.
     + simpl. auto.
 Qed.
 
+Lemma lt_add_range:forall a b c,
+    0 < b < c -> a < a + b < a + c.
+Proof. 
+  intros. lia.
+Qed.
 
 Lemma code_id_eliminate_size_unchanged:forall c,
     code_size instr_size (transl_code' c) = code_size instr_size c.
@@ -192,7 +199,33 @@ Qed.
 Lemma transl_instr_range: forall symbtbl ofs i e,
     transl_instr instr_size symbtbl ofs i = OK (Some e) ->
     ofs < e.(reloc_offset) < ofs + instr_size i.
-Admitted.
+  intros symbtbl ofs i e.
+  generalize (instr_size_bound i). intros A.  
+  unfold transl_instr.
+  destruct i;simpl;intros;inv H.
+  1-43: repeat (monadInv H1);
+    unfold compute_instr_abs_relocentry in *;
+    unfold compute_instr_disp_relocentry in *;
+    unfold compute_instr_rel_relocentry in *;
+    repeat (monadInv EQ).
+  (* only solve Pmov_rs *)
+  destr_match_in EQ1;inv EQ1;simpl;eapply lt_add_range; auto.
+  1-42: try (destruct a;destruct const;try destruct p;inv H1).
+  1-42: try (monadInv H0;
+        unfold compute_instr_abs_relocentry in *;
+       unfold compute_instr_disp_relocentry in *;
+       unfold compute_instr_rel_relocentry in *;
+       repeat (monadInv EQ));
+    try (destr_match_in EQ1;inv EQ1;simpl).
+  1-42: try (eapply lt_add_range; auto).
+  (* some special *)
+  1-2 : destr_match_in EQ2;inv EQ2;simpl;eapply lt_add_range; auto.
+  destr_in H1.
+  destr_match_in H1;destr_match_in H1;try destruct p. monadInv H1.
+  monadInv H1. unfold compute_instr_abs_relocentry in *. repeat (monadInv EQ1).
+  destr_match_in EQ0;inv EQ0. simpl.
+  eapply lt_add_range; auto.
+Qed.
 
 Lemma transl_instr_consistency: forall i symbtbl ofs e,
     transl_instr instr_size symbtbl ofs i = OK (Some e) ->
