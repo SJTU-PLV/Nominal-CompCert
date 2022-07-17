@@ -31,6 +31,7 @@ Definition transf_instr (sg:signature) (i: instruction): list instruction :=
     if Archi.ptr64 then
       let (sz, save_regs) := sp_adjustment_elf64 sg sz in
       match (sg.(sig_cc)).(cc_vararg) with
+      (* variant function: ignore it in proof *)
       | Some _ =>
         let addr := linear_addr RSP (Ptrofs.unsigned ofs_link) in
         let savereg_sg := mksignature [] Tvoid cc_default in

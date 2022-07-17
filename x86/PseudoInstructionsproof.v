@@ -447,10 +447,10 @@ Qed.
     - exploit functions_transl. eauto. intros FFP.
       exploit find_instr_transl; eauto. intro CA.
       destruct (id_instr i) eqn:ID; [| destruct i; simpl in ID; try congruence].
-      +  admit. (* pose proof (id_instr_transf _ ID) as NORMAL. *)
-        (* rewrite NORMAL in CA. inv CA.  inv H8. eapply plus_one. *)
-        (* econstructor. eauto. eapply FFP. eauto. *)
-        (* erewrite <- exec_instr_senv_equiv; eauto. *)
+      + pose proof (id_instr_transf _  f.(fn_sig) ID) as NORMAL.
+        rewrite NORMAL in CA. inv CA.  inv H8. eapply plus_one.
+        econstructor. eauto. eapply FFP. eauto.
+        erewrite <- exec_instr_senv_equiv; eauto.
       + admit. (* Pallocframe -> Padd;Psub;Pstoreptr*)
      (*   generalize (transf_instr_size (Pallocframe sz ofs_ra ofs_link)). intro PSIZE.
         simpl in PSIZE.
