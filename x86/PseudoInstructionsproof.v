@@ -436,6 +436,17 @@ Admitted.
     - destr. destr.  eapply goto_ofs_eq.
 Qed.
 
+  (* ignore variant argument function *)
+  Axiom cc_vararg_none_default: forall f,
+      cc_vararg (sig_cc (fn_sig f)) = None.
+
+  Lemma sp_adjustment_elf64_default: forall f sz,
+      sp_adjustment_elf64 f.(fn_sig) sz = ((align sz 16) - 8,0).
+    intros.
+    unfold sp_adjustment_elf64.
+    rewrite (cc_vararg_none_default f). auto.
+  Qed.
+  
   Lemma pseudo_instructions_step:
     forall s1 t s2
            (STEP :step instr_size (Genv.globalenv prog) s1 t s2)
@@ -451,11 +462,18 @@ Qed.
         rewrite NORMAL in CA. inv CA.  inv H8. eapply plus_one.
         econstructor. eauto. eapply FFP. eauto.
         erewrite <- exec_instr_senv_equiv; eauto.
-      + admit. (* Pallocframe -> Padd;Psub;Pstoreptr*)
-     (*   generalize (transf_instr_size (Pallocframe sz ofs_ra ofs_link)). intro PSIZE.
+      + (* Pallocframe -> Padd;Psub;Pstoreptr*)
+        generalize (transf_instr_size (Pallocframe sz ofs_ra ofs_link) f.(fn_sig)). intro PSIZE.
         simpl in PSIZE.
         generalize (instr_size_bound (Pallocframe sz ofs_ra ofs_link)). intro PSIZEB.
-        subst; simpl in *. inv H2. inv CA. inv H8. inv H10.
+        subst; simpl in *. inv H2. inv CA.
+        rewrite (cc_vararg_none_default f) in *. destr_in H6. destr_in H6.
+        rewrite (cc_vararg_none_default f) in *.
+        rewrite (sp_adjustment_elf64_default f) in *.
+        admit.
+(*
+        (* destr_in H6. *)
+        (* inv H6. inv H8. inv H10. *)
         eapply plus_three.
         (*Padd*)
         econstructor. eauto. eapply FFP. eauto.
