@@ -1921,11 +1921,132 @@ Definition decode_instr (instr_ofs: Z) (li:list Instruction) :=
   | _ => Error (msg "impossible")
   end.
 
+Hint Resolve encode_ireg_u4_consistency: encdec.
+
+(* cannot be used in monadInv *)
+Ltac destr_pair :=
+  match goal with
+  | [H: prod ?a ?b |- _ ] =>
+    destruct H;try destr_pair
+  end.
+
+Ltac destr_prod x :=
+  match type of x with
+  | prod ?a ?b =>
+    let a:= fresh "ProdL" in
+    let b:= fresh "ProdR" in
+    destruct x as (a & b);try destr_prod a
+  end.
+
+  
+(* my monadinv *)
+Ltac monadInv1 H :=
+  match type of H with
+  | (OK _ = OK _) =>
+      inversion H; clear H; try subst
+  | (Error _ = OK _) =>
+      discriminate
+  | (bind ?F ?G = OK ?X) =>
+      let x := fresh "x" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind_inversion F G H) as [x [EQ1 EQ2]];
+      clear H;
+      try (destr_prod x);
+      try (monadInv1 EQ2))))
+  | (bind2 ?F ?G = OK ?X) =>
+      let x1 := fresh "x" in (
+      let x2 := fresh "x" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind2_inversion F G H) as [x1 [x2 [EQ1 EQ2]]];
+      clear H;
+      try (destr_prod x1);
+      try (destr_prod x2);
+      try (monadInv1 EQ2)))))
+  | (match ?X with left _ => _ | right _ => assertion_failed end = OK _) =>
+      destruct X; [try (monadInv1 H) | discriminate]
+  | (match (negb ?X) with true => _ | false => assertion_failed end = OK _) =>
+      destruct X as [] eqn:?; simpl negb in H; [discriminate | try (monadInv1 H)]
+  | (match ?X with true => _ | false => assertion_failed end = OK _) =>
+      destruct X as [] eqn:?; [try (monadInv1 H) | discriminate]
+  | (mmap ?F ?L = OK ?M) =>
+      generalize (mmap_inversion F L H); intro
+  end.
+
+Ltac monadInv H :=
+  monadInv1 H ||
+  match type of H with
+  | (?F _ _ _ _ _ _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  end.
+
+
+
+Lemma encode_rex_prefix_rr_result: forall r b l rs bs,
+    encode_rex_prefix_rr r b = OK (l, rs, bs) ->
+    (l = [] /\ decode_ireg_u4 false rs = r /\ decode_ireg_u4 false bs = b) \/
+    (exists rexr rexb, l = [REX_WRXB zero1 rexr zero1 rexb] /\ decode_ireg_u4 rexr rs = r /\ decode_ireg_u4 rexb bs = b).
+Proof.
+  unfold encode_rex_prefix_rr.
+  intros r b l rs bs.
+  destr;destr.
+  admit.
+  destr. intro H.
+  monadInv H.  right.
+  exists zero1,ProdL. assert (decode_ireg_u4 false rs = r) by admit.
+  admit.
+Admitted.
+
+Lemma encode_rex_prefix_r_result: forall b l bs,
+    encode_rex_prefix_r b = OK (l, bs) ->
+    (l = [] /\  decode_ireg_u4 false bs = b) \/
+    (exists rexb, l = [REX_WRXB zero1 zero1 zero1 rexb] /\ decode_ireg_u4 rexb bs = b).
+Admitted.
+
+Lemma encode_rex_prefix_ra_result: forall instr_ofs res_iofs r addr l rs a,
+    encode_rex_prefix_ra instr_ofs res_iofs r addr = OK (l,rs,a) ->
+    (l = [] /\  decode_ireg_u4 false rs = r /\ translate_AddrE_Addrmode instr_ofs res_iofs false false a = OK addr) \/
+    (exists rexr rexx rexb , l = [REX_WRXB zero1 rexr rexx rexb] /\  decode_ireg_u4 false rs = r /\ translate_AddrE_Addrmode instr_ofs res_iofs rexx rexb a = OK addr).
+Admitted.
+
+
+  
 Theorem translate_instr_consistency: forall instr_ofs i li l,
     translate_instr instr_ofs i = OK li ->
     decode_instr instr_ofs (li++l) = OK i.
-Admitted.
+Proof.
+  unfold translate_instr;
+  destruct i;try congruence;intros li l H.
+  destr_in H.
+  monadInv H. 
+  simpl.
+  f_equal;f_equal;auto with encdec.
 
+  
+  monadInv H.
+  apply encode_rex_prefix_rr_result in EQ.
+  destruct EQ.
+  destruct H. destruct H10. inv EQ0.
+  simpl app. unfold decode_instr. unfold decode_instr_rex.
+  auto.
+
+  destruct H as (rexr & rexb & A & B & C). 
+  inv EQ0. simpl. auto.
 
   
 End CSLED_RELOC.
