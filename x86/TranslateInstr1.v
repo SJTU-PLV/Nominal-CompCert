@@ -384,7 +384,7 @@ Definition decode_testcond_u4 (bs:u4) : res testcond :=
   else if Z.eqb n 11 then OK(Cond_np)     (**r B b["1011"] *)
   else Error(msg "reg not found")
 .
-
+(** *Consistency Lemma for offset,testcond *)
 Lemma testcond_encode_consistency : forall c bs,
   encode_testcond_u4 c = bs ->
   decode_testcond_u4 bs = OK(c).
@@ -421,7 +421,23 @@ Proof.
   try apply proof_irr.                        (**r to solve e = eq_refl *)
 Qed.
 
+Lemma encode_ofs_u32_consistency:forall ofs l,
+    encode_ofs_u32 (Int.intval ofs) = OK l ->
+    decode_ofs_u32 l = ofs.
+Proof.
+  unfold encode_ofs_u32.
+  intros ofs l H.
+  set (val:= (bytes_to_bits_opt (bytes_of_int 4 (Int.intval ofs)))) in *.
+  destr_in H. inv H. unfold decode_ofs_u32.
+  simpl. destruct ofs. Transparent Int.repr.
+  unfold Int.repr. cbn [Int.intval] in val.
+  eapply Int.mkint_eq.
+  clear e.
+  unfold val.
+Admitted.
 
+  
+  
 Section WITH_RELOC_OFS_MAP.
 
 Variable rtbl_ofs_map: reloc_ofs_map_type.
@@ -612,6 +628,7 @@ Definition encode_rex_prefix_r (r: ireg) : res (list Instruction * u3) :=
     else
       Error (msg "encode extend register in 32bit mode! ").
 
+(* unused *)
 Definition encode_rex_prefix_f (fr: freg) : res (list Instruction * u3) :=
   if check_extend_freg fr then
     do rbits <- encode_freg_u3 fr;
@@ -1921,7 +1938,7 @@ Definition decode_instr (instr_ofs: Z) (li:list Instruction) :=
   | _ => Error (msg "impossible")
   end.
 
-Hint Resolve encode_ireg_u4_consistency: encdec.
+Hint Resolve encode_ireg_u4_consistency encode_ofs_u32_consistency: encdec.
 
 (* cannot be used in monadInv *)
 Ltac destr_pair :=
@@ -2018,20 +2035,56 @@ Lemma encode_rex_prefix_r_result: forall b l bs,
     (exists rexb, l = [REX_WRXB zero1 zero1 zero1 rexb] /\ decode_ireg_u4 rexb bs = b).
 Admitted.
 
-Lemma encode_rex_prefix_ra_result: forall instr_ofs res_iofs r addr l rs a,
-    encode_rex_prefix_ra instr_ofs res_iofs r addr = OK (l,rs,a) ->
-    (l = [] /\  decode_ireg_u4 false rs = r /\ translate_AddrE_Addrmode instr_ofs res_iofs false false a = OK addr) \/
-    (exists rexr rexx rexb , l = [REX_WRXB zero1 rexr rexx rexb] /\  decode_ireg_u4 false rs = r /\ translate_AddrE_Addrmode instr_ofs res_iofs rexx rexb a = OK addr).
+
+Lemma encode_rex_prefix_ff_result: forall r b l rs bs,
+    encode_rex_prefix_ff r b = OK (l, rs, bs) ->
+    (l = [] /\ decode_freg_u4 false rs = r /\ decode_freg_u4 false bs = b) \/
+    (exists rexr rexb, l = [REX_WRXB zero1 rexr zero1 rexb] /\ decode_freg_u4 rexr rs = r /\ decode_freg_u4 rexb bs = b).
 Admitted.
 
+(* Lemma encode_rex_prefix_f_result: forall b l bs, *)
+(*     encode_rex_prefix_f b = OK (l, bs) -> *)
+(*     (l = [] /\  decode_freg_u4 false bs = b) \/ *)
+(*     (exists rexb, l = [REX_WRXB zero1 zero1 zero1 rexb] /\ decode_freg_u4 rexb bs = b). *)
+(* Admitted. *)
+
+
+Definition not_AddrE0 a:bool:=
+  match a with
+  | AddrE0 _ => false
+  | _ => true
+  end.
+
+
+Lemma encode_rex_prefix_ra_result: forall instr_ofs res_iofs r addr l rs a,
+    encode_rex_prefix_ra instr_ofs res_iofs r addr = OK (l,rs,a) ->
+    (not_AddrE0 a = true) /\
+    ((l = [] /\  decode_ireg_u4 false rs = r /\ translate_AddrE_Addrmode instr_ofs res_iofs false false a = OK addr) \/
+    (exists rexr rexx rexb , l = [REX_WRXB zero1 rexr rexx rexb] /\  decode_ireg_u4 rexr rs = r /\ translate_AddrE_Addrmode instr_ofs res_iofs rexx rexb a = OK addr)).
+Admitted.
+
+Lemma encode_rex_prefix_fa_result: forall instr_ofs res_iofs r addr l rs a,
+    encode_rex_prefix_fa instr_ofs res_iofs r addr = OK (l,rs,a) ->
+    (not_AddrE0 a = true) /\
+    ((l = [] /\  decode_freg_u4 false rs = r /\ translate_AddrE_Addrmode instr_ofs res_iofs false false a = OK addr) \/
+    (exists rexr rexx rexb , l = [REX_WRXB zero1 rexr rexx rexb] /\  decode_freg_u4 rexr rs = r /\ translate_AddrE_Addrmode instr_ofs res_iofs rexx rexb a = OK addr)).
+Admitted.
+
+
+Hint Unfold decode_instr_rex decode_instr_rep decode_instr_repnz decode_instr decode_instr_override: decunfold.
 
   
 Theorem translate_instr_consistency: forall instr_ofs i li l,
     translate_instr instr_ofs i = OK li ->
     decode_instr instr_ofs (li++l) = OK i.
 Proof.
-  unfold translate_instr;
-  destruct i;try congruence;intros li l H.
+  intros instr_ofs i li l H.
+  exploit (encode_reloc_offset_conform i instr_ofs li l);eauto.
+  intros RELOC.  
+  unfold translate_instr in H;
+    destruct i;try congruence.
+
+  
   destr_in H.
   monadInv H. 
   simpl.
@@ -2039,15 +2092,70 @@ Proof.
 
   
   monadInv H.
-  apply encode_rex_prefix_rr_result in EQ.
-  destruct EQ.
-  destruct H. destruct H10. inv EQ0.
-  simpl app. unfold decode_instr. unfold decode_instr_rex.
-  auto.
+  exploit encode_rex_prefix_rr_result;eauto.
+  intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
 
-  destruct H as (rexr & rexb & A & B & C). 
-  inv EQ0. simpl. auto.
+  monadInv H.
+  exploit encode_rex_prefix_r_result;eauto.
+  exploit encode_ofs_u32_consistency;eauto.
+  intros ?.
+  intros [(? & ?) | (? & ? & ?)];subst;simpl;auto.
 
+  monadInv H.
+  exploit encode_rex_prefix_ra_result;eauto.
+  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;unfold decode_instr;unfold decode_instr_rex;
+  rewrite RELOC;rewrite A;
+  cbn [bind];
+  destruct ProdR;simpl;auto;
+  simpl in NOTADDRE0;try congruence.
+
+  monadInv H.
+  exploit encode_rex_prefix_ra_result;eauto.
+  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;unfold decode_instr;unfold decode_instr_rex;
+  rewrite RELOC;rewrite A;
+  cbn [bind];
+  destruct ProdR;simpl;auto;
+  simpl in NOTADDRE0;try congruence.
+  
+  monadInv H.
+  exploit encode_rex_prefix_ff_result;eauto.
+  intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
+  
+  monadInv H.
+  exploit encode_rex_prefix_fa_result;eauto.
+  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;autounfold with decunfold;
+  rewrite RELOC;rewrite A;
+  destruct ProdR;simpl;auto;
+  simpl in NOTADDRE0;try congruence.
+
+  monadInv H.
+  exploit encode_rex_prefix_fa_result;eauto.
+  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;autounfold with decunfold;
+  rewrite RELOC;rewrite A;
+  destruct ProdR;simpl;auto;
+  simpl in NOTADDRE0;try congruence.
+  
+  monadInv H.
+  exploit encode_rex_prefix_fa_result;eauto.
+  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;autounfold with decunfold;
+  rewrite RELOC;rewrite A;
+  destruct ProdR;simpl;auto;
+  simpl in NOTADDRE0;try congruence.
+
+  monadInv H.
+  exploit encode_rex_prefix_fa_result;eauto.
+  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;autounfold with decunfold;
+  rewrite RELOC;rewrite A;
+  destruct ProdR;simpl;auto;
+  simpl in NOTADDRE0;try congruence.
+
+  monadInv H.
+  exploit encode_rex_prefix_ra_result;eauto.
+  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;autounfold with decunfold;
+  rewrite RELOC;rewrite A;
+  destruct ProdR;simpl;auto;
+  simpl in NOTADDRE0;try congruence.
+Qed.
   
 End CSLED_RELOC.
 
