@@ -555,6 +555,7 @@ Proof.
   intros. rewrite H0 in H1. congruence.
 Qed.
 
+
 Section special_construct.
 
 Definition meminj_add (f:meminj) b1 r:=
@@ -761,20 +762,78 @@ Admitted.
 
 End special_construct.
 
-Lemma inject_incr_inv: forall j1 j2 j',
+
+
+(** ** Yuting's Development *)
+Definition inject_dom_in (f:meminj) (s:sup) :=
+  forall b b' o, f b = Some (b', o) -> Mem.sup_In b s.
+  
+Definition inject_image_in (f:meminj) (s:sup) :=
+  forall b b' o, f b = Some (b', o) -> Mem.sup_In b' s.
+
+Definition inject_image_eq (f:meminj) (s:sup) :=
+  forall b b' o, f b = Some (b', o) <-> Mem.sup_In b' s.
+
+(** Injection implies image is in the support *)
+Lemma inject_implies_image_in: forall f m1 m2,
+  Mem.inject f m1 m2 -> inject_image_in f (Mem.support m2).
+Proof.
+  intros f m1 m2 INJ.
+  red.
+  intros b b' o F.
+  generalize (Mem.valid_block_inject_2 _ _ _ _ _ _ F INJ).
+  intros VLD.
+  red in VLD.
+  auto.
+Qed.
+
+(** Injection implies domain is in the support *)
+Lemma inject_implies_dom_in: forall f m1 m2,
+  Mem.inject f m1 m2 -> inject_dom_in f (Mem.support m1).
+Proof.
+  intros f m1 m2 INJ.
+  red.
+  intros b b' o F.
+  generalize (Mem.valid_block_inject_1 _ _ _ _ _ _ F INJ).
+  intros VLD.
+  red in VLD.
+  auto.
+Qed.
+
+(** Increased injection only maps invalid blocks from source to target *)
+Definition inject_incr_disjoint (j j':meminj) (sd si:sup) :=
+  forall b b' delta,
+    j b = None ->
+    j' b = Some (b', delta) ->
+    ~sup_In b sd /\ ~sup_In b' si.
+
+(** Inversion of inject increment *)
+Lemma inject_incr_inv: forall j1 j2 j' sd1 si1 si2,
+    inject_dom_in j1 sd1 ->
+    inject_image_in j1 si1 ->
+    inject_image_in j2 si2 ->
     inject_incr (compose_meminj j1 j2) j' ->
-    exists j1' j2', j' = compose_meminj j1' j2' /\
+    exists j1' j2' si1', j' = compose_meminj j1' j2' /\
                inject_incr j1 j1' /\
-               inject_incr j2 j2'.
+               Mem.sup_include si1 si1' /\
+               inject_image_eq j1' si1' /\
+               inject_incr_disjoint j1 j1' sd1 si1 /\
+               inject_incr j2 j2' /\
+               inject_incr_disjoint j2 j2' si1 si2.
 Admitted.
 
+(** Inversion of injection composition *)
 Lemma inject_compose_inv:
-  forall (f f' : meminj) (m1 m3 : mem),
+  forall (f f' : meminj) (m1 m3 : mem) s,
   Mem.inject (compose_meminj f f') m1 m3 ->
-  exists m2, Mem.inject f m1 m2 /\
-         Mem.inject f' m2 m3.
+  inject_image_eq f s ->
+  exists m2 , Mem.inject f m1 m2 /\
+         Mem.inject f' m2 m3 /\
+         Mem.sup_include s (Mem.support m2).
 Admitted.
 
+
+(** inj@inj is refined by inj *)
 Lemma inj_inj2:
   subcklr (inj @ inj) inj.
 Proof.
@@ -797,34 +856,37 @@ Proof.
     apply inject_incr_refl.
   - intros w13' m1' m3' MMEM13' INCR13.
     unfold rel_compose.
-    edestruct (inject_incr_inv w12 w23 w13') 
-      as (j12' & j23' & JEQ & INCR12 & INCR23).
-    inv INCR13; auto.
-    inv MMEM13'; cbn in *; subst.
-    apply inject_compose_inv in H.
-    destruct H as (m2' & INJ12' & INJ23').
+    clear MSTBL13.
+    inv MMEM12. rename f into j12. rename H into INJ12.
+    inv MMEM23. rename f into j23. rename H into INJ23.
+    cbn in INCR13.
+    inv MMEM13'. rename f into j13'. rename H into INJ13'.
+    cbn.
+    inv INCR13.
+    rename H4 into INCR13.
+    rename H6 into DISJ13.
+    rename H7 into SUPINCL1.
+    rename H8 into SUPINCL3.
+    generalize (inject_implies_image_in _ _ _ INJ12).
+    intros IMGIN12.
+    generalize (inject_implies_image_in _ _ _ INJ23).
+    intros IMGIN23.
+    generalize (inject_implies_dom_in _ _ _ INJ12).
+    intros DOMIN12.
+    generalize (inject_incr_inv _ _ _ _ _ _ DOMIN12 IMGIN12 IMGIN23 INCR13).
+    intros (j12' & j23' & m2'_sup & JEQ & INCR12 & SUPINCL2 & IMGEQ12' & INCRDISJ12 & INCR23 & INCRDISJ23).
+    subst.
+    generalize (inject_compose_inv _ _ _ _ _ INJ13' IMGEQ12').
+    intros (m2' & INJ12' & INJ23' & SUPINCL2').
     exists ((injw j12' (Mem.support m1') (Mem.support m2')),
        (injw j23' (Mem.support m2') (Mem.support m3'))).
     cbn.
     repeat apply conj; cbn.
     + exists m2'.
       repeat apply conj; constructor; auto.
-    + inv MMEM12; cbn in *.
-      rename f into j12.
-      inv INCR13.
-      constructor; auto.
-      admit.
-      admit.
-    + inv MMEM23; cbn in *.
-      rename f into j23.
-      inv INCR13.
-      constructor; auto.
-      admit.
-      admit.
-    + apply inject_incr_refl.
-Abort.
-
-
-
-
-
+    + constructor; auto.
+      eapply Sup.sup_include_trans; eauto.
+    + constructor; auto.
+      ++ eapply Sup.sup_include_trans; eauto.
+    + apply inject_incr_refl. 
+Qed.
