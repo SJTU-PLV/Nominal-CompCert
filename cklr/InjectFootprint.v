@@ -371,6 +371,49 @@ Next Obligation.
   split; eauto using Mem.unchanged_on_support.
 Qed.
 
+Lemma injp_injp:
+  subcklr injp (injp @ injp).
+Proof.
+  intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [f m1 m2 Hm].
+  exists (injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m2 Hm),
+          injpw f m1 m2 Hm); simpl.
+  repeat apply conj.
+  - exists se1. split; eauto.
+    inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
+  - exists m1; split; repeat rstep; eauto using inj_mem_intro, mem_inject_dom.
+  - rewrite meminj_dom_compose.
+    apply inject_incr_refl.
+  - intros [w12' w23'] m1' m3' (m2' & H12' & H23') [Hw12' Hw23']. cbn in *.
+    destruct H12' as [f12' m1' m2' Hm12'].
+    inversion H23' as [f23' xm2' xm3' Hm23']. clear H23'; subst.
+    inversion Hw12' as [? ? ? ? ? ? ? ? ? ? UNMAP1 ? Hf12' SEP12']. clear Hw12'; subst.
+    inversion Hw23' as [? ? ? ? ? ? ? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
+    eexists (injpw (compose_meminj f12' f23') m1' m3'
+               (Mem.inject_compose f12' f23' _ _ _ Hm12' Hm23')
+            ).
+    repeat apply conj.
+    + constructor; auto.
+    + constructor; auto.
+      *
+        generalize (loc_unmapped_dom f). intros.
+        inv UNMAP1. constructor; eauto.
+        intros. apply unchanged_on_perm. apply H6. eauto.
+        eauto.
+        intros. apply unchanged_on_contents. apply H6. eauto.
+        eauto.
+      * rewrite <- (meminj_dom_compose f). rauto.
+      * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
+        destruct (f12' b1) as [[bi delta12] | ] eqn:Hb1; try discriminate.
+        destruct (f23' bi) as [[xb2 delta23] | ] eqn:Hb2; try discriminate.
+        inv Hb'.
+        edestruct SEP12'; eauto. unfold meminj_dom. rewrite Hb. auto.
+        destruct (f bi) as [[? ?] | ] eqn:Hfbi.
+        {
+          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
+        }
+        edestruct SEP23'; eauto.
+    + cbn. rstep; auto.
+Qed.
 
 (** * Properties *)
 

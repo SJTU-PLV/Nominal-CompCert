@@ -536,3 +536,61 @@ Proof.
         edestruct SEP23'; eauto.
     + cbn. rstep; auto.
 Qed.
+
+(*Lemma decompose_meminj:
+  forall f1 f2 f',
+    inject_incr (compose_meminj f1 f2) f' ->
+    exists f1' f2',
+      compose_meminj f1' f2' =  *)
+
+
+Definition meminj_incr_sep (f1 f2 f3 : meminj) : Prop :=
+  forall b, f2 b =
+    match f1 b with
+      | Some _ => f1 b
+      | None => f3 b
+    end
+ /\ forall b r1 r2, f1 b = Some r1 -> f3 b = Some r2 -> False.
+
+Theorem inject_incr_sep : forall f1 f2,
+    inject_incr f1 f2 -> exists f3, meminj_incr_sep f1 f2 f3.
+Proof.
+  intros. exists (fun b => if f1 b then None else f2 b).
+  split. destruct (f1 b) eqn:?. destruct p.
+  apply H in Heqo. eauto. congruence.
+  intros. rewrite H0 in H1. congruence.
+Qed.
+
+Lemma inj_inj2:
+  subcklr (inj @ inj) inj.
+Proof.
+  intros w se1 se2 m1 m2 Hse Hm. destruct w as [w1 w2].
+  destruct Hm as [m0 [Hm10 Hm02]]. simpl in *.
+  destruct Hm10 as [f10 m1 m0 Hm10].
+  destruct Hm02 as [f02 m0 m2 Hm02]. simpl in *.
+  exists (injw (compose_meminj f10 f02) (Mem.support m1)(Mem.support m2)).
+  repeat apply conj.
+  - inv Hse. inv H. inv H0. inv H1.
+    econstructor; auto.
+    eapply Genv.match_stbls_compose; eauto.
+  - constructor.
+    eapply Mem.inject_compose; eauto.
+  - simpl.
+    apply inject_incr_refl.
+  - intros w' m1' m2' H12 Hw12.
+    destruct H12 as [f' m1' m2' Hm12].
+    inversion Hw12 as [? ? ? ? ? ? Hf12' SEP12']. clear Hw12; subst.
+    assert (exists f10' f02' m0', inject_incr f10 f10' /\ inject_incr f02 f02'
+                             /\ Mem.inject f10' m1' m0'
+                             /\ Mem.inject f02' m0' m2').
+    admit.
+    destruct H1 as (f10' & f02' & m0' & INCR1 & INCR2 & INJ1 & INJ2).
+    exists ((injw f10' (Mem.support m1') (Mem.support m0')),(injw f02' (Mem.support m0') (Mem.support m2'))).
+    repeat apply conj.
+    + exists m0'. split; constructor; auto.
+    + constructor. eauto. admit. eauto. admit.
+    + constructor. eauto. admit. admit. eauto.
+    + simpl. admit.
+Abort.
+
+
