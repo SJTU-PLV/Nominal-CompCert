@@ -555,13 +555,7 @@ Proof.
   intros. rewrite H0 in H1. congruence.
 Qed.
 
-(*Lemma inject_compose_inv:
-  forall (f f': meminj) (m1 m2 m3: mem),
-    Mem.inject (compose_meminj f f') m1 m3 ->
-    exists m2, Mem.inject f m1 m2 /\
-          Mem.inject f' m2 m3.
-Proof. Abort.
-*)
+Section special_construct.
 
 Definition meminj_add (f:meminj) b1 r:=
   fun b => if (eq_block b b1) then Some r else f b.
@@ -570,6 +564,18 @@ Lemma meminj_add_new: forall f a b,
     meminj_add f a b a = Some b.
 Proof.
   intros. unfold meminj_add. rewrite pred_dec_true; auto. Qed.
+
+
+(*construction of f10' and f02': iterate the support of m1',
+  if b in (support m1') /\
+  b is not in (support m1) /\
+  f' b = Some (b',ofs).
+  then we add (b -> Some (fresh_block m0,0)) to f10,
+          add (fresh_block m0 -> (b',ofs)) to f02.
+
+ The support should be concrete type list block. Maybe it can also work for other
+ sup types which can be iterated as list.
+ *)
 
 Fixpoint update_meminj12 (s1 s1' : list block) (f10 f02 f': meminj) (smid: sup) :=
   match s1' with
@@ -591,12 +597,6 @@ Lemma update_properties: forall s1' s1 f10 f02 s s' f10' f02' f',
     update_meminj12 s1 s1' f10 f02 f' s = (f10',f02',s') ->
     (forall b, ~sup_In b s -> f02 b = None) ->
     (forall b, ~sup_In b s1 -> f10 b = None) ->
-    (*Mem.inject f10 m1 m0 ->
-    Mem.inject f02 m0 m2 ->
-    Mem.inject f' m1' m2' ->
-    inject_incr (compose_meminj f10 f02) f' ->
-    Mem.sup_include (Mem.support m1) (Mem.support m1') ->
-    Mem.sup_include (Mem.support m2) (Mem.support m2') -> *)
     inject_incr f10 f10' /\ inject_incr f02 f02' /\ Mem.sup_include s s'
     /\ (forall (b1 b0 : block) (delta : Z),
         f10 b1 = None -> f10' b1 = Some (b0, delta) -> (exists b2 ofs2, f' b1 = Some (b2,ofs2)) /\ ~ sup_In b0 s)
@@ -664,6 +664,10 @@ Proof.
     eauto.
 Qed.
 
+(*It seems we do not need f' = compose_meminj j12' j13',
+  inject_incr f' compose j12' j23' in some conditions is good enough.
+  Maybe the proof can be structured better to prove that. *)
+
 Lemma update_properties2: forall s1' s1 f10 f02 s s' f10' f02' f' b b' ofs,
     update_meminj12 s1 s1' f10 f02 f' s = (f10',f02',s') ->
    (forall b, ~sup_In b s -> f02 b = None) ->
@@ -700,9 +704,10 @@ Proof.
     eapply IHs1'; eauto. destruct H4; congruence.
 Qed.
 
-Lemma inj_inj2:
+Lemma inj_inj2':
   subcklr (inj @ inj) inj.
 Proof.
+  red.
   intros w se1 se2 m1 m2 Hse Hm. destruct w as [w1 w2].
   destruct Hm as [m0 [Hm10 Hm02]]. simpl in *.
   destruct Hm10 as [f10 m1 m0 Hm10].
@@ -753,5 +758,73 @@ Proof.
       inv Hm10. eauto. inv Hm12. destruct (Mem.sup_dec b (Mem.support m1')).
       auto. apply mi_freeblocks in n. congruence.
 Admitted.
+
+End special_construct.
+
+Lemma inject_incr_inv: forall j1 j2 j',
+    inject_incr (compose_meminj j1 j2) j' ->
+    exists j1' j2', j' = compose_meminj j1' j2' /\
+               inject_incr j1 j1' /\
+               inject_incr j2 j2'.
+Admitted.
+
+Lemma inject_compose_inv:
+  forall (f f' : meminj) (m1 m3 : mem),
+  Mem.inject (compose_meminj f f') m1 m3 ->
+  exists m2, Mem.inject f m1 m2 /\
+         Mem.inject f' m2 m3.
+Admitted.
+
+Lemma inj_inj2:
+  subcklr (inj @ inj) inj.
+Proof.
+  red.
+  intros w se1 se3 m1 m3 MSTBL13 MMEM13. destruct w as [w12 w23].
+  destruct MMEM13 as [m2 [MMEM12 MMEM23]]. 
+  simpl in *.
+  exists (injw (compose_meminj (injw_meminj w12) (injw_meminj w23))
+          (Mem.support m1)(Mem.support m3)).
+  simpl.
+  repeat apply conj.
+  - inv MSTBL13. inv H. inv H0. inv H1.
+    econstructor; simpl; auto.
+    eapply Genv.match_stbls_compose; eauto.
+    + destruct MMEM12. auto.
+    + destruct MMEM23. auto.
+  - constructor.
+    eapply Mem.inject_compose; eauto.
+  - simpl.
+    apply inject_incr_refl.
+  - intros w13' m1' m3' MMEM13' INCR13.
+    unfold rel_compose.
+    edestruct (inject_incr_inv w12 w23 w13') 
+      as (j12' & j23' & JEQ & INCR12 & INCR23).
+    inv INCR13; auto.
+    inv MMEM13'; cbn in *; subst.
+    apply inject_compose_inv in H.
+    destruct H as (m2' & INJ12' & INJ23').
+    exists ((injw j12' (Mem.support m1') (Mem.support m2')),
+       (injw j23' (Mem.support m2') (Mem.support m3'))).
+    cbn.
+    repeat apply conj; cbn.
+    + exists m2'.
+      repeat apply conj; constructor; auto.
+    + inv MMEM12; cbn in *.
+      rename f into j12.
+      inv INCR13.
+      constructor; auto.
+      admit.
+      admit.
+    + inv MMEM23; cbn in *.
+      rename f into j23.
+      inv INCR13.
+      constructor; auto.
+      admit.
+      admit.
+    + apply inject_incr_refl.
+Abort.
+
+
+
 
 
