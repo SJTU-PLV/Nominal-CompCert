@@ -2073,88 +2073,78 @@ Admitted.
 
 Hint Unfold decode_instr_rex decode_instr_rep decode_instr_repnz decode_instr decode_instr_override: decunfold.
 
-  
+
+(* false if the encoded instruction unable to decode to itself *)
+Definition well_defined_instr i :=
+  match i with
+  | Asm.Pmovzl_rr _ _
+  | Asm.Pcall_s _ _ => false
+  | _ => true
+  end.
+
+Ltac solve_rr H :=
+  monadInv H;
+  exploit encode_rex_prefix_rr_result;eauto;
+  intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
+
+Ltac solve_ri H :=
+  monadInv H;
+  exploit encode_rex_prefix_r_result;eauto;
+  exploit encode_ofs_u32_consistency;eauto;
+  intros ?;intros [(? & ?) | (? & ? & ?)];subst;simpl;auto.
+
+
+Ltac solve_ra H RELOC:=
+  let A := fresh "A" in
+  monadInv H;
+  exploit encode_rex_prefix_ra_result;eauto;
+  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);
+  subst;cbn [app] in *;autounfold with decunfold;
+  rewrite RELOC;rewrite A;
+  cbn [bind];auto;
+  try destr;simpl in NOTADDRE0;try congruence.
+
+Ltac solve_ff H :=
+  monadInv H;
+  exploit encode_rex_prefix_ff_result;eauto;
+  intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
+
+Ltac solve_fa H RELOC:=
+  let A := fresh "A" in
+  monadInv H;
+  exploit encode_rex_prefix_fa_result;eauto;
+  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);
+  subst;cbn [app] in *;autounfold with decunfold;
+  rewrite RELOC;rewrite A;
+  cbn [bind];auto;
+  try destr;simpl in NOTADDRE0;try congruence.
+
+
+
 Theorem translate_instr_consistency: forall instr_ofs i li l,
+    well_defined_instr i = true ->
     translate_instr instr_ofs i = OK li ->
     decode_instr instr_ofs (li++l) = OK i.
 Proof.
-  intros instr_ofs i li l H.
+  intros instr_ofs i li l WD H.
   exploit (encode_reloc_offset_conform i instr_ofs li l);eauto.
   intros RELOC.  
   unfold translate_instr in H;
-    destruct i;try congruence.
+    destruct i;simpl in WD;try congruence;clear WD;
+  try solve_rr H;
+  try solve_ri H;  
+  try solve_ra H RELOC;  
+  try solve_ff H;
+  try solve_fa H RELOC.
 
-  
+  (* special *)
   destr_in H.
   monadInv H. 
   simpl.
-  f_equal;f_equal;auto with encdec.
+  f_equal;f_equal;auto with encdec.  
+  solve_rr H.
 
-  
-  monadInv H.
-  exploit encode_rex_prefix_rr_result;eauto.
-  intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
 
-  monadInv H.
-  exploit encode_rex_prefix_r_result;eauto.
-  exploit encode_ofs_u32_consistency;eauto.
-  intros ?.
-  intros [(? & ?) | (? & ? & ?)];subst;simpl;auto.
-
-  monadInv H.
-  exploit encode_rex_prefix_ra_result;eauto.
-  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;unfold decode_instr;unfold decode_instr_rex;
-  rewrite RELOC;rewrite A;
-  cbn [bind];
-  destruct ProdR;simpl;auto;
-  simpl in NOTADDRE0;try congruence.
-
-  monadInv H.
-  exploit encode_rex_prefix_ra_result;eauto.
-  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;unfold decode_instr;unfold decode_instr_rex;
-  rewrite RELOC;rewrite A;
-  cbn [bind];
-  destruct ProdR;simpl;auto;
-  simpl in NOTADDRE0;try congruence.
-  
-  monadInv H.
-  exploit encode_rex_prefix_ff_result;eauto.
-  intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
-  
-  monadInv H.
-  exploit encode_rex_prefix_fa_result;eauto.
-  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;autounfold with decunfold;
-  rewrite RELOC;rewrite A;
-  destruct ProdR;simpl;auto;
-  simpl in NOTADDRE0;try congruence.
-
-  monadInv H.
-  exploit encode_rex_prefix_fa_result;eauto.
-  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;autounfold with decunfold;
-  rewrite RELOC;rewrite A;
-  destruct ProdR;simpl;auto;
-  simpl in NOTADDRE0;try congruence.
-  
-  monadInv H.
-  exploit encode_rex_prefix_fa_result;eauto.
-  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;autounfold with decunfold;
-  rewrite RELOC;rewrite A;
-  destruct ProdR;simpl;auto;
-  simpl in NOTADDRE0;try congruence.
-
-  monadInv H.
-  exploit encode_rex_prefix_fa_result;eauto.
-  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;autounfold with decunfold;
-  rewrite RELOC;rewrite A;
-  destruct ProdR;simpl;auto;
-  simpl in NOTADDRE0;try congruence.
-
-  monadInv H.
-  exploit encode_rex_prefix_ra_result;eauto.
-  intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);subst;cbn [app] in *;autounfold with decunfold;
-  rewrite RELOC;rewrite A;
-  destruct ProdR;simpl;auto;
-  simpl in NOTADDRE0;try congruence.
 Qed.
   
 End CSLED_RELOC.
