@@ -367,6 +367,7 @@ Program Definition encode_testcond_u4 (c:testcond) : u4 :=
   | Cond_np  => b["1011"]   (**r B *)
   end.
 
+(*change it to total function*)
 Definition decode_testcond_u4 (bs:u4) : res testcond :=
   let bs' := proj1_sig bs in
   let n := bits_to_Z bs' in
@@ -846,898 +847,6 @@ Definition encode_rex_prefix_fa (instr_ofs: Z) (res_iofs: res Z) (r: freg) (addr
 
 
 
-(* (** return (option rex prefix, instruction *) *)
-(* (** REX_WRXB: B R W X  *) *)
-(* Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instruction) := *)
-(*   let res_iofs := instr_reloc_offset i in *)
-(*   let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs res_iofs in *)
-(*   let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs res_iofs in *)
-(*   let encode_rex_prefix_ra := encode_rex_prefix_ra instr_ofs res_iofs in *)
-(*   let encode_rex_prefix_fa := encode_rex_prefix_fa instr_ofs res_iofs in *)
-(*   let encode_rex_prefix_addr := encode_rex_prefix_addr instr_ofs res_iofs in *)
-(*   match i with *)
-(*   | Pmov_rr rd r1 => *)
-(*     if Archi.ptr64 then *)
-(*       do Rrdbits <- encode_ireg_u4 rd; *)
-(*       do Brsbits <- encode_ireg_u4 r1; *)
-(*       let (B, rsbits) := Brsbits in *)
-(*       let (R, rdbits) := Rrdbits in *)
-(*       OK ([REX_WRXB one1 R zero1 B; Pmovl_rm (AddrE0 rsbits) rdbits]) *)
-(*     else *)
-(*       do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*       let (oREX_rdbits, r1bits) := rex_rr in *)
-(*       let (orex, rdbits) := oREX_rdbits in *)
-(*       OK (orex ++ [Pmovl_rm (AddrE0 r1bits) rdbits]) *)
-(*   | Asm.Pmovl_rm rd addr => *)
-(*     do rex_ra <- encode_rex_prefix_ra rd addr; *)
-(*     let (oREX_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK (orex ++ [Pmovl_rm a rdbits]) *)
-(*   | Asm.Pmovl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
-(*     OK (orex ++ [Pmovl_ri rdbits imm32]) *)
-(*   | Asm.Pmovl_mr addr r => *)
-(*     do rex_ra <- encode_rex_prefix_ra r addr; *)
-(*     let (oREX_rbits, a) := rex_ra in *)
-(*     let (orex, rbits) := oREX_rbits in *)
-(*     OK (orex ++ [Pmovl_mr a rbits]) *)
-(*   | Asm.Pmovsd_ff rd rs => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd rs; *)
-(*     let (oREX_rdbits, rsbits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pmovss_d_fm (AddrE0 rsbits) rdbits]) *)
-(*   | Asm.Pmovsd_fm rd addr => *)
-(*     do rex_ra <- encode_rex_prefix_fa rd addr; *)
-(*     let (oREX_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pmovss_d_fm a rdbits]) *)
-(*   | Asm.Pmovsd_mf addr rs => *)
-(*     do rex_ra <- encode_rex_prefix_fa rs addr; *)
-(*     let (oREX_rsbits, a) := rex_ra in *)
-(*     let (orex, rsbits) := oREX_rsbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pmovss_d_mf a rsbits]) *)
-(*   | Asm.Pmovss_fm rd addr => *)
-(*     do rex_ra <- encode_rex_prefix_fa rd addr; *)
-(*     let (oREX_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REP] ++ orex ++ [Pmovss_d_fm a rdbits]) *)
-(*   | Asm.Pmovss_mf addr rs => *)
-(*     do rex_ra <- encode_rex_prefix_fa rs addr; *)
-(*     let (oREX_rsbits, a) := rex_ra in *)
-(*     let (orex, rsbits) := oREX_rsbits in *)
-(*     OK ([REP] ++ orex ++ [Pmovss_d_mf a rsbits]) *)
-(*   | Asm.Pfldl_m addr => *)
-(*     do orex_a <- encode_rex_prefix_addr addr; *)
-(*     let (orex, a) := orex_a in *)
-(*     OK (orex ++ [Pfldl_m a]) *)
-(*   | Asm.Pfstpl_m addr => *)
-(*     do orex_a <- encode_rex_prefix_addr addr; *)
-(*     let (orex, a) := orex_a in *)
-(*     OK (orex ++ [Pfstpl_m a]) *)
-(*   | Asm.Pflds_m addr => *)
-(*     do orex_a <- encode_rex_prefix_addr addr; *)
-(*     let (orex, a) := orex_a in *)
-(*     OK (orex ++ [Pflds_m a]) *)
-(*   | Asm.Pfstps_m addr => *)
-(*     do orex_a <- encode_rex_prefix_addr addr; *)
-(*     let (orex, a) := orex_a in *)
-(*     OK (orex ++ [Pfstps_m a]) *)
-(*   | Asm.Pmovb_mr addr rs => *)
-(*     if Archi.ptr64 then *)
-(*       do Rrsbits <- encode_ireg_u4 rs; *)
-(*       let (R, rsbits):= Rrsbits in *)
-(*       do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*       let (a_X, B) := addr_X_B in *)
-(*       let (a,X) := a_X in *)
-(*       (* 64bit mode rex prefix for byte register encoding *) *)
-(*       OK ([REX_WRXB zero1 R X B;Pmovb_mr a rsbits]) *)
-(*     else *)
-(*       do rex_ra <- encode_rex_prefix_ra rs addr; *)
-(*       let (orex_rbits, a) := rex_ra in *)
-(*       let (orex, rbits) := orex_rbits in *)
-(*       OK (orex ++ [Pmovb_mr a rbits]) *)
-(*   | Asm.Pmovw_mr addr r => *)
-(*     do rex_ra <- encode_rex_prefix_ra r addr; *)
-(*     let (orex_rbits, a) := rex_ra in *)
-(*     let (orex, rbits) := orex_rbits in *)
-(*     OK ([Override] ++ orex ++ [Pmovl_mr a rbits]) *)
-(*   | Asm.Pmovzb_rr rd r1 => *)
-(*     if Archi.ptr64 then *)
-(*       do Rrdbits <- encode_ireg_u4 rd; *)
-(*       do Brsbits <- encode_ireg_u4 r1; *)
-(*       let (B, r1bits) := Brsbits in *)
-(*       let (R, rdbits) := Rrdbits in *)
-(*       OK ([REX_WRXB zero1 R zero1 B; Pmovzb_rm (AddrE0 r1bits) rdbits]) *)
-(*     else *)
-(*       do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*       let (orex_rdbits, r1bits) := rex_rr in *)
-(*       let (orex, rdbits) := orex_rdbits in *)
-(*       OK (orex ++ [Pmovzb_rm (AddrE0 r1bits) rdbits]) *)
-(*   | Asm.Pmovzb_rm rd addr => *)
-(*     (* 1byte memory to 32bit register *) *)
-(*     (* if Archi.ptr64 then *) *)
-(* (*       do Rrdbits <- encode_ireg_u4 rd; *) *)
-(* (*       let (R, rdbits):= Rrdbits in *) *)
-(* (*       do addr_X_B <- translate_Addrmode_AddrE64 addr; *) *)
-(* (*       let (a_X, B) := addr_X_B in *) *)
-(* (*       let (a,X) := a_X in *) *)
-(* (*       OK ([REX_WRXB zero1 R X B; Pmovzb_rm a rdbits]) *) *)
-(* (*     else *) *)
-(*       do rex_ra <- encode_rex_prefix_ra rd addr; *)
-(*       let (orex_rdbits, a) := rex_ra in *)
-(*       let (orex, rdbits) := orex_rdbits in *)
-(*       OK (orex ++ [Pmovzb_rm a rdbits]) *)
-(*   | Asm.Pmovzw_rm rd addr => *)
-(*     do rex_ra <- encode_rex_prefix_ra rd addr; *)
-(*     let (orex_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Pmovzw_GvEv a rdbits]) *)
-(*   | Asm.Pmovzw_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*     let (orex_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*      OK (orex ++ [Pmovzw_GvEv (AddrE0 r1bits) rdbits]) *)
-(*   | Asm.Pmovsb_rm rd addr => *)
-(*     (* if Archi.ptr64 then *) *)
-(* (*       do Rrdbits <- encode_ireg_u4 rd; *) *)
-(* (*       let (R, rdbits):= Rrdbits in *) *)
-(* (*       do addr_X_B <- translate_Addrmode_AddrE64 addr; *) *)
-(* (*       let (a_X, B) := addr_X_B in *) *)
-(* (*       let (a,X) := a_X in *) *)
-(* (*       OK ([REX_WRXB zero1 R X B; Pmovsb_GvEv a rdbits]) *) *)
-(* (*     else *) *)
-(*       do rex_ra <- encode_rex_prefix_ra rd addr; *)
-(*       let (orex_rdbits, a) := rex_ra in *)
-(*       let (orex, rdbits) := orex_rdbits in *)
-(*       OK (orex ++ [Pmovsb_GvEv a rdbits]) *)
-(*   | Asm.Pmovsb_rr rd rs => *)
-(*     if Archi.ptr64 then *)
-(*       do Rrdbits <- encode_ireg_u4 rd; *)
-(*       do Brsbits <- encode_ireg_u4 rs; *)
-(*       let (B, r1bits) := Brsbits in *)
-(*       let (R, rdbits) := Rrdbits in *)
-(*       OK ([REX_WRXB zero1 R zero1 B; Pmovsb_GvEv (AddrE0 r1bits) rdbits]) *)
-(*     else *)
-(*       do rex_rr <- encode_rex_prefix_rr rd rs; *)
-(*       let (orex_rdbits, r1bits) := rex_rr in *)
-(*       let (orex, rdbits) := orex_rdbits in *)
-(*       OK (orex ++ [Pmovsb_GvEv (AddrE0 r1bits) rdbits]) *)
-(*   | Asm.Pmovw_rm rd addr => *)
-(*     do rex_ra <- encode_rex_prefix_ra rd addr; *)
-(*     let (orex_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK ([Override] ++ orex ++ [Pmovl_rm a rdbits]) *)
-(*   | Asm.Pmovb_rm rd addr => *)
-(*     if Archi.ptr64 then *)
-(*       do Rrdbits <- encode_ireg_u4 rd; *)
-(*       let (R, rdbits):= Rrdbits in *)
-(*       do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*       let (a_X, B) := addr_X_B in *)
-(*       let (a,X) := a_X in *)
-(*       OK ([REX_WRXB zero1 R X B; Pmovb_rm a rdbits]) *)
-(*     else *)
-(*       do rex_ra <- encode_rex_prefix_ra rd addr; *)
-(*       let (orex_rdbits, a) := rex_ra in *)
-(*       let (orex, rdbits) := orex_rdbits in *)
-(*       OK (orex ++ [Pmovb_rm a rdbits]) *)
-(*   | Asm.Pmovsw_rm rd addr => *)
-(*     do rex_ra <- encode_rex_prefix_ra rd addr; *)
-(*     let (orex_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Pmovsw_GvEv a rdbits]) *)
-(*   | Asm.Pmovsw_rr rd rs => *)
-(*     do rex_rr <- encode_rex_prefix_rr rd rs; *)
-(*     let (orex_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Pmovsw_GvEv (AddrE0 r1bits) rdbits]) *)
-(*   | Asm.Pnegl rd => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     OK (orex ++ [Pnegl rdbits]) *)
-(*   | Asm.Pleal rd addr => *)
-(*     do rex_ra <- encode_rex_prefix_ra rd addr; *)
-(*     let (orex_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Pleal a rdbits]) *)
-
-(*   | Asm.Pcvttss2si_rf rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rf rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REP] ++ orex ++ [Pcvttss_d_2si_rf rdbits r1bits]) *)
-(*   | Asm.Pcvttss2sl_rf rd rs => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_freg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     OK ([REP; REX_WRXB one1 R zero1 B; Pcvttss_d_2si_rf rdbits rsbits]) *)
-(*   | Asm.Pcvtsi2sd_fr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_fr rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pcvtsi2ss_d_fr rdbits r1bits]) *)
-(*   | Asm.Pcvtsl2sd_fr rd rs => *)
-(*     (* rd require u3, but u4 here *) *)
-(*     do Rrdbits <- encode_freg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     OK ([REPNZ; REX_WRXB one1 R zero1 B; Pcvtsi2ss_d_fr rdbits rsbits]) *)
-(*   | Asm.Pcvtsi2ss_fr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_fr rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REP] ++ orex ++ [Pcvtsi2ss_d_fr rdbits r1bits]) *)
-(*   | Asm.Pcvtsl2ss_fr rd rs => *)
-(*     (* rd require u3, but u4 here *) *)
-(*     do Rrdbits <- encode_freg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     OK ([REP; REX_WRXB one1 R zero1 B; Pcvtsi2ss_d_fr rdbits rsbits]) *)
-(*   | Asm.Pcvttsd2si_rf rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rf rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pcvttss_d_2si_rf rdbits r1bits]) *)
-(*   | Asm.Pcvttsd2sl_rf rd rs => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_freg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     OK ([REPNZ; REX_WRXB one1 R zero1 B; Pcvttss_d_2si_rf rdbits rsbits]) *)
-(*   | Asm.Pcvtss2sd_ff rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*      OK ([REP] ++ orex ++ [Pcvtsd2ss_d_ff rdbits r1bits]) *)
-(*   | Asm.Pcvtsd2ss_ff rd r1=> *)
-(*     do rex_rr <- encode_rex_prefix_ff rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pcvtsd2ss_d_ff rdbits r1bits]) *)
-(*   | Asm.Paddl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
-(*     OK (orex ++ [Paddl_ri rdbits imm32]) *)
-(*   | Asm.Psubl_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*     let (orex_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Psubl_GvEv (AddrE0 r1bits) rdbits]) *)
-(*   | Asm.Pimull_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*     let (orex_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Pimull_GvEv (AddrE0 r1bits) rdbits]) *)
-(*   | Asm.Pimull_r r => *)
-(*     do rex_r <- encode_rex_prefix_r r; *)
-(*     let (orex, rbits) := rex_r in *)
-(*     OK (orex ++ [Pimull_r rbits]) *)
-(*   | Asm.Pimull_ri rd imm => *)
-(*     do rex_rr <- encode_rex_prefix_rr rd rd; *)
-(*     let (orex_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
-(*     OK (orex ++ [Pimull_ri rdbits r1bits imm32]) *)
-(*   | Asm.Pmull_r r => *)
-(*     do rex_r <- encode_rex_prefix_r r; *)
-(*     let (orex, rbits) := rex_r in *)
-(*     OK (orex ++ [Pmull_r rbits]) *)
-(*   | Asm.Pcltd => OK [Pcltd] *)
-(*   | Asm.Pcqto => OK [REX_WRXB one1 zero1 zero1 zero1; Pcltd] *)
-(*   | Asm.Pdivl r1 => *)
-(*     do rex_r <- encode_rex_prefix_r r1; *)
-(*     let (orex, rbits) := rex_r in *)
-(*      OK (orex ++ [Pdivl_r rbits]) *)
-(*   | Asm.Pidivl r1 => *)
-(*     do rex_r <- encode_rex_prefix_r r1; *)
-(*     let (orex, rbits) := rex_r in *)
-(*     OK (orex ++ [Pidivl_r rbits]) *)
-(*   | Asm.Pandl_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr r1 rd; *)
-(*     let (orex_r1bits, rdbits) := rex_rr in *)
-(*     let (orex, r1bits) := orex_r1bits in *)
-(*     OK (orex ++ [Pandl_EvGv (AddrE0 rdbits) r1bits]) *)
-(*   | Asm.Pandl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
-(*     OK (orex ++ [Pandl_ri rdbits imm32]) *)
-(*   | Asm.Porl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
-(*      OK (orex ++ [Porl_ri rdbits imm32]) *)
-(*   | Asm.Porl_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr r1 rd; *)
-(*     let (orex_r1bits, rdbits) := rex_rr in *)
-(*     let (orex, r1bits) := orex_r1bits in *)
-(*     OK (orex ++ [Porl_EvGv (AddrE0 rdbits) r1bits]) *)
-(*   | Asm.Pxorl_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr r1 rd; *)
-(*     let (orex_r1bits, rdbits) := rex_rr in *)
-(*     let (orex, r1bits) := orex_r1bits in *)
-(*     OK (orex ++ [Pxorl_EvGv (AddrE0 rdbits) r1bits]) *)
-(*   | Asm.Pxorl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
-(*     OK (orex ++ [Pxorl_ri rdbits imm32]) *)
-(*   | Asm.Pnotl rd => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     OK (orex ++ [Pnotl rdbits]) *)
-(*   | Asm.Psall_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*     OK (orex ++ [Psall_ri rdbits imm8]) *)
-(*   | Asm.Psall_rcl rd => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     OK (orex ++ [Psall_rcl rdbits]) *)
-(*   | Asm.Pshrl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*     OK (orex ++ [Pshrl_ri rdbits imm8]) *)
-(*   | Asm.Psarl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*     OK (orex ++ [Psarl_ri rdbits imm8]) *)
-(*   | Asm.Psarl_rcl rd => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     OK (orex ++ [Psarl_rcl rdbits]) *)
-(*   | Asm.Pshld_ri rd r1 imm => *)
-(*     do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*     let (orex_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*     (* rd is rm, rd is reg_op *) *)
-(*      OK (orex ++ [Pshld_ri r1bits rdbits imm8]) *)
-(*   | Asm.Prolw_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*     OK ([Override] ++ orex ++ [Prolw_ri rdbits imm8]) *)
-(*   | Asm.Prorl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*     OK (orex ++ [Prorl_ri rdbits imm8]) *)
-(*   | Asm.Pcmpl_rr r1 r2 => *)
-(*     (* swap rd and r1 for some bug found in qsort.c *) *)
-(*     do rex_rr <- encode_rex_prefix_rr r2 r1; *)
-(*     let (orex_r2bits, r1bits) := rex_rr in *)
-(*     let (orex, r2bits) := orex_r2bits in *)
-(*     (* bug here: fixed *) *)
-(*     OK (orex ++ [Pcmpl_EvGv (AddrE0 r1bits) r2bits]) *)
-(*   | Asm.Pcmpl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
-(*     OK (orex ++ [Pcmpl_ri rdbits imm32]) *)
-(*   | Asm.Ptestl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
-(*      OK (orex ++ [Ptestl_ri rdbits imm32]) *)
-(*   | Asm.Ptestl_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr r1 rd; *)
-(*     let (orex_r1bits, rdbits) := rex_rr in *)
-(*     let (orex, r1bits) := orex_r1bits in *)
-(*     OK (orex ++ [Ptestl_EvGv (AddrE0 rdbits) r1bits]) *)
-(*   | Asm.Pcmov c rd r1 => *)
-(*     let cond := encode_testcond_u4 c in *)
-(*     if Archi.ptr64 then *)
-(*       do Rrdbits <- encode_ireg_u4 rd; *)
-(*       do Brsbits <- encode_ireg_u4 r1; *)
-(*       let (B, rsbits) := Brsbits in *)
-(*       let (R, rdbits) := Rrdbits in *)
-(*       OK [REX_WRXB one1 R zero1 B; Pcmov cond rdbits rsbits] *)
-(*     else *)
-(*       do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*       let (orex_rdbits, r1bits) := rex_rr in *)
-(*       let (orex, rdbits) := orex_rdbits in *)
-(*       OK (orex ++ [Pcmov cond rdbits r1bits]) *)
-(*   | Asm.Psetcc c rd => *)
-(*     if Archi.ptr64 then *)
-(*       do Brdbits <- encode_ireg_u4 rd; *)
-(*       let (B, rdbits) := Brdbits in *)
-(*       let cond := encode_testcond_u4 c in *)
-(*       OK ([REX_WRXB zero1 zero1 zero1 B; Psetcc cond rdbits]) *)
-(*     else *)
-(*       do rex_r <- encode_rex_prefix_r rd; *)
-(*       let (orex, rdbits) := rex_r in *)
-(*       let cond := encode_testcond_u4 c in *)
-(*       OK (orex ++ [Psetcc cond rdbits]) *)
-(*   | Asm.Paddd_ff rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Padds_d_ff rdbits r1bits]) *)
-(*   | Asm.Padds_ff rd rs => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd rs; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REP] ++ orex ++ [Padds_d_ff rdbits r1bits]) *)
-(*   | Asm.Psubd_ff rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Psubs_d_ff rdbits r1bits]) *)
-(*   | Asm.Psubs_ff rd rs => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd rs; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REP] ++ orex ++ [Psubs_d_ff rdbits r1bits]) *)
-
-(*   | Asm.Pmuld_ff rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pmuls_d_ff rdbits r1bits]) *)
-(*   | Asm.Pmuls_ff rd rs => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd rs; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REP] ++ orex ++ [Pmuls_d_ff rdbits r1bits]) *)
-
-(*   | Asm.Pcomisd_ff rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([Override] ++ orex ++ [Pcomiss_d_ff rdbits r1bits]) *)
-(*   | Asm.Pcomiss_ff rd rs => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd rs; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     (* bug fix: no mandatory prefix *) *)
-(*     OK (orex ++ [Pcomiss_d_ff rdbits r1bits]) *)
-
-(*   | Asm.Pxorps_f r => *)
-(*     do rex_rr <- encode_rex_prefix_ff r r; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK (orex ++ [Pxorps_d_GvEv (AddrE0 r1bits) rdbits]) *)
-(*   | Asm.Pxorps_fm frd addr => *)
-(*     do rex_ra <- encode_rex_prefix_fa frd addr; *)
-(*     let (orex_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Pxorps_d_GvEv a rdbits]) *)
-(*   | Asm.Pxorpd_f r => *)
-(*     do rex_rr <- encode_rex_prefix_ff r r; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([Override] ++ orex ++ [Pxorps_d_GvEv (AddrE0 r1bits) rdbits]) *)
-(*   | Asm.Pxorpd_fm frd addr => *)
-(*     do rex_ra <- encode_rex_prefix_fa frd addr; *)
-(*     let (orex_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK ([Override] ++ orex ++ [Pxorps_d_GvEv a rdbits]) *)
-(*   | Asm.Pandps_fm frd addr => *)
-(*     do rex_ra <- encode_rex_prefix_fa frd addr; *)
-(*     let (orex_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Pandps_d_fm a rdbits]) *)
-(*   | Asm.Pandpd_fm frd addr => *)
-(*     do rex_ra <- encode_rex_prefix_fa frd addr; *)
-(*     let (orex_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK ([Override] ++ orex ++ [Pandps_d_fm a rdbits]) *)
-
-(*   | Asm.Pjmp_l_rel ofs => *)
-(*     (* no relocation *) *)
-(*     match ZTree.get instr_ofs rtbl_ofs_map with *)
-(*     | None => *)
-(*       do imm <- encode_ofs_u32 ofs; *)
-(*       OK [Pjmp_l_rel imm] *)
-(*     | _ => Error[MSG"Relocation entry in Pjmp_l_rel not expected"; MSG(Z_to_hex_string 4 ofs)] *)
-(*     end *)
-(*   | Asm.Pjmp_s id _ => *)
-(*     if Pos.eqb id xH then *)
-(*       do iofs <- res_iofs; *)
-(*       do addend <- get_instr_reloc_addend' (iofs + instr_ofs); *)
-(*       do imm32 <- encode_ofs_u32 addend; *)
-(*       OK [Pjmp_l_rel imm32] *)
-(*     else Error (msg "Id not equal to xH in Pjmp_s") *)
-(*   | Asm.Pjmp_r r sg => *)
-(*     do rex_r <- encode_rex_prefix_r r; *)
-(*     let (orex, rbits) := rex_r in *)
-(*     OK (orex ++ [Pjmp_Ev (AddrE0 rbits)]) *)
-(*   | Asm.Pjmp_m addr => *)
-(*     (* same in the 64bit and 32bit mode *) *)
-(*     do orex_a <- encode_rex_prefix_addr addr; *)
-(*     let (orex, a) := orex_a in *)
-(*     OK (orex ++ [Pjmp_Ev a]) *)
-(*   | Asm.Pnop | Asm.Plabel _ | Asm.Pmovls_rr _ => *)
-(*      OK [Pnop] *)
-(*   | Asm.Pcall_r r sg => *)
-(*     do rex_r <- encode_rex_prefix_r r; *)
-(*     let (orex, rbits) := rex_r in *)
-(*     OK (orex ++ [Pcall_r rbits]) *)
-(*   | Asm.Pcall_s id sg => *)
-(*     match id with *)
-(*     | xH => *)
-(*       do iofs <- res_iofs; *)
-(*       do addend <- get_instr_reloc_addend' (iofs + instr_ofs); *)
-(*       do imm32 <- encode_ofs_u32 addend; *)
-(*       OK [Pcall_ofs imm32] *)
-(*     | _ => *)
-(*       Error [MSG "id must be 1: Pcall_s"] *)
-(*     end *)
-(*   | Asm.Pret => OK [Pret] *)
-(*   | Asm.Pret_iw imm => (*define encode_ofs_u16*) *)
-(*      do imm16 <- encode_ofs_u16 (Int.intval imm); *)
-(*      OK [Pret_iw imm16] *)
-(*   | Asm.Pjcc_rel c ofs => *)
-(*      let cond := encode_testcond_u4 c in *)
-(*      do imm <- encode_ofs_u32 ofs; *)
-(*      OK [Pjcc_rel cond imm] *)
-(*   | Asm.Padcl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*      do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*      OK (orex ++ [Padcl_ri rdbits imm8]) *)
-(*   | Asm.Padcl_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr r1 rd; *)
-(*     let (orex_r1bits, rdbits) := rex_rr in *)
-(*     let (orex, r1bits) := orex_r1bits in *)
-(*     (* check document, add reg with CF to rm *) *)
-(*     OK ([Padcl_rr r1bits rdbits]) *)
-(*   | Asm.Paddl_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr r1 rd; *)
-(*     let (orex_r1bits, rdbits) := rex_rr in *)
-(*     let (orex, r1bits) := orex_r1bits in *)
-(*     OK ([Paddl_EvGv (AddrE0 rdbits) r1bits]) *)
-(*   | Asm.Paddl_mi addr imm => *)
-(*     do orex_a <- encode_rex_prefix_addr addr; *)
-(*     let (orex, a) := orex_a in *)
-(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
-(*     OK (orex ++ [Paddl_mi a imm32]) *)
-(*   | Asm.Pbsfl rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*     let (orex_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Pbsfl rdbits r1bits]) *)
-(*   | Asm.Pbsrl rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*     let (orex_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Pbsrl rdbits r1bits]) *)
-(*   | Asm.Pbswap32 rd => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     OK (orex ++ [Pbswap32 rdbits]) *)
-(*   | Asm.Pbswap64 rd => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R,rdbits) := Rrdbits in *)
-(*     OK ([REX_WRXB one1 R zero1 zero1; Pbswap32 rdbits]) *)
-(*   | Asm.Pmaxsd rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pmaxsd rdbits r1bits]) *)
-(*   | Asm.Pminsd rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pminsd rdbits r1bits]) *)
-
-(*   | Asm.Pmovsq_mr addr rs => *)
-(*     do rex_ra <- encode_rex_prefix_fa rs addr; *)
-(*     let (orex_rbits, a) := rex_ra in *)
-(*     let (orex, rbits) := orex_rbits in *)
-(*     OK ([Override] ++ orex ++ [Pmovsq_mr a rbits]) *)
-(*   | Asm.Pmovsq_rm rd addr => *)
-(*     do rex_ra <- encode_rex_prefix_fa rd addr; *)
-(*     let (orex_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK ([REP] ++ orex ++ [Pmovsq_rm a rdbits]) *)
-(*   | Asm.Prep_movsl => OK ([REP; Prep_movsl]) *)
-(*   | Asm.Psbbl_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*     let (orex_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Psbbl_rr r1bits rdbits]) *)
-
-(*   | Asm.Psqrtsd rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd r1; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pbsqrtsd rdbits r1bits]) *)
-(*   | Asm.Psubl_ri rd imm => *)
-(*     do rex_r <- encode_rex_prefix_r rd; *)
-(*     let (orex, rdbits) := rex_r in *)
-(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
-(*     OK (orex ++ [Psubl_ri rdbits imm32]) *)
-(*   | Asm.Pmov_mr_a addr rs => *)
-(*     if Archi.ptr64 then *)
-(*       do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*       let (a_X, B) := addr_X_B in *)
-(*       let (a,X) := a_X in *)
-(*       do Rrsbits <- encode_ireg_u4 rs; *)
-(*       let (R,rsbits) := Rrsbits in *)
-(*       OK ([REX_WRXB one1 R X B; Pmovl_mr a rsbits]) *)
-(*     else *)
-(*       do a <- translate_Addrmode_AddrE addr; *)
-(*       do rbits <- encode_ireg_u3 rs; *)
-(*     OK [Pmovl_mr a rbits] *)
-(*   | Asm.Pmov_rm_a rd addr => *)
-(*     if Archi.ptr64 then *)
-(*       do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*       let (a_X, B) := addr_X_B in *)
-(*       let (a,X) := a_X in *)
-(*       do Rrdbits <- encode_ireg_u4 rd; *)
-(*       let (R,rdbits) := Rrdbits in *)
-(*       OK ([REX_WRXB one1 R X B; Pmovl_rm a rdbits]) *)
-(*     else *)
-(*       do a <- translate_Addrmode_AddrE addr; *)
-(*       do rbits <- encode_ireg_u3 rd; *)
-(*       OK ([Pmovl_rm a rbits]) *)
-
-(*   | Asm.Pmovsd_mf_a addr rs => *)
-(*     do rex_ra <- encode_rex_prefix_fa rs addr; *)
-(*     let (orex_rbits, a) := rex_ra in *)
-(*     let (orex, rbits) := orex_rbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pmovss_d_mf a rbits]) *)
-(*   | Asm.Pmovsd_fm_a rd addr => *)
-(*     do rex_ra <- encode_rex_prefix_fa rd addr; *)
-(*     let (orex_rdbits, a) := rex_ra in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK ([REP] ++ orex ++ [Pmovss_d_fm a rdbits]) *)
-(*   | Asm.Pxorl_r r => *)
-(*     do rex_rr <- encode_rex_prefix_rr r r; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK (orex ++ [Pxorl_EvGv (AddrE0 rdbits) r1bits]) *)
-
-(*   | Asm.Pdivd_ff rd rs => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd rs; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REPNZ] ++ orex ++ [Pdivss_d_ff rdbits r1bits]) *)
-(*   | Asm.Pdivs_ff rd rs => *)
-(*     do rex_rr <- encode_rex_prefix_ff rd rs; *)
-(*     let (oREX_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := oREX_rdbits in *)
-(*     OK ([REP] ++ orex ++ [Pdivss_d_ff rdbits r1bits]) *)
-
-(*   | Asm.Pshrl_rcl r => *)
-(*     do rex_r <- encode_rex_prefix_r r; *)
-(*     let (orex, rbits) := rex_r in *)
-(*     OK (orex ++ [Pshrl_rcl rbits]) *)
-(*   | Asm.Pmovzl_rr rd r1 => *)
-(*     do rex_rr <- encode_rex_prefix_rr rd r1; *)
-(*     let (orex_rdbits, r1bits) := rex_rr in *)
-(*     let (orex, rdbits) := orex_rdbits in *)
-(*     OK (orex ++ [Pmovl_rm (AddrE0 r1bits) rdbits]) *)
-
-(*   (* 64bit *) *)
-(*   (* transfer to mov  memory *) *)
-(* (*     | Asm.Pmovq_ri rd imm => *) *)
-(* (*     do Rrdbits <- encode_ireg_u4 rd; *) *)
-(* (*     let (R,rdbits) := Rrdbits in *) *)
-(* (*     do imm64 <- encode_ofs_u64 (Int64.intval imm); *) *)
-(* (*     OK (Pmovq_ri R rdbits imm64) *) *)
-(*   | Asm.Pmovsl_rr rd r1 => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 r1; *)
-(*     let (B, r1bits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     OK ([REX_WRXB one1 R zero1 B; Pmovsxd_GvEv (AddrE0 r1bits) rdbits]) *)
-(*   | Asm.Pmovq_rm rd addr => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R, rdbits):= Rrdbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     (* cannot use '(addr,X,B) because X also a product type *) *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     (* alphabetical: B R X *) *)
-(*     OK ([REX_WRXB one1 R X B; Pmovl_rm a rdbits]) *)
-(*   | Asm.Pmovq_mr addr rs => *)
-(*     do Rrsbits <- encode_ireg_u4 rs; *)
-(*     let (R, rsbits):= Rrsbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     OK ([REX_WRXB one1 R X B; Pmovl_mr a rsbits]) *)
-(*   | Asm.Pleaq rd addr => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R, rdbits):= Rrdbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     OK ([REX_WRXB one1 R X B; Pleal a rdbits]) *)
-(*   | Asm.Pnegq r => *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits):= Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Pnegl rbits]) *)
-(*   | Asm.Paddq_rm rd addr => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R, rdbits):= Rrdbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     OK ([REX_WRXB one1 R X B; Paddl_GvEv a rdbits]) *)
-(*   | Asm.Psubq_rm rd addr => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R, rdbits):= Rrdbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     OK ([REX_WRXB one1 R X B; Psubl_GvEv a rdbits]) *)
-(*   | Asm.Psubq_rr rd rs => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     (* B for rs, R for rd *) *)
-(*     OK ([REX_WRXB one1 R zero1 B; Psubl_GvEv (AddrE0 rsbits) rdbits]) *)
-(*   | Asm.Pimulq_rm rd addr => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R, rdbits):= Rrdbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     OK ([REX_WRXB one1 R X B; Pimull_GvEv a rdbits]) *)
-(*   | Asm.Pimulq_r r => *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Pimull_r rbits]) *)
-(*   | Asm.Pimulq_rr rd rs => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     (* B for rs, R for rd *) *)
-(*     OK ([REX_WRXB one1 R zero1 B; Pimull_GvEv (AddrE0 rsbits) rdbits]) *)
-(*   | Asm.Pmulq_r r => *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Pmull_r rbits]) *)
-(*   | Asm.Pidivq r => *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Pidivl_r rbits]) *)
-(*   | Asm.Pdivq r => *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Pdivl_r rbits]) *)
-(*   | Asm.Pandq_rm rd addr => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R, rdbits):= Rrdbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     OK ([REX_WRXB one1 R X B; Pandl_GvEv a rdbits]) *)
-(*   | Asm.Pandq_rr rd rs => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     (* B for rs, R for rd *) *)
-(*     OK ([REX_WRXB one1 R zero1 B; Pandl_GvEv (AddrE0 rsbits) rdbits]) *)
-(*   | Asm.Porq_rm rd addr => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R, rdbits):= Rrdbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     OK ([REX_WRXB one1 R X B; Porl_GvEv a rdbits]) *)
-(*   | Asm.Porq_rr rd rs => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     (* B for rs, R for rd *) *)
-(*     OK ([REX_WRXB one1 R zero1 B; Porl_GvEv (AddrE0 rsbits) rdbits]) *)
-(*   | Asm.Pxorq_rm rd addr => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R, rdbits):= Rrdbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     OK ([REX_WRXB one1 R X B; Pxorl_GvEv a rdbits]) *)
-(*   | Asm.Pxorq_rr rd rs => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     (* B for rs, R for rd *) *)
-(*     OK ([REX_WRXB one1 R zero1 B; Pxorl_GvEv (AddrE0 rsbits) rdbits]) *)
-(*   | Asm.Pxorq_r r => *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 B zero1 B; Pxorl_GvEv (AddrE0 rbits) rbits]) *)
-(*   | Asm.Pnotq r => *)
-(*   (* test in asm *) *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Pnotl rbits]) *)
-(*   | Asm.Psalq_ri r imm => *)
-(*   (* find some confusion in Asm.v semantic, must check whether imm is 8 bit *) *)
-(*     do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Psall_ri rbits imm8]) *)
-(*   | Asm.Psalq_rcl r => *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Psall_rcl rbits]) *)
-(*   | Asm.Psarq_ri r imm => *)
-(*     do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Psarl_ri rbits imm8]) *)
-(*   | Asm.Psarq_rcl r => *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Psarl_rcl rbits]) *)
-(*   | Asm.Pshrq_ri r imm => *)
-(*     do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Pshrl_ri rbits imm8]) *)
-(*   | Asm.Pshrq_rcl r => *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Pshrl_rcl rbits]) *)
-(*   | Asm.Prorq_ri r imm => *)
-(*     do imm8 <- encode_ofs_u8 (Int.intval imm); *)
-(*     do Brbits <- encode_ireg_u4 r; *)
-(*     let (B, rbits) := Brbits in *)
-(*     OK ([REX_WRXB one1 zero1 zero1 B; Prorl_ri rbits imm8]) *)
-(*   | Asm.Pcmpq_rm rd addr => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R, rdbits):= Rrdbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     OK ([REX_WRXB one1 R X B; Pcmpl_GvEv a rdbits]) *)
-(*   | Asm.Pcmpq_rr r1 r2 => *)
-(*     do Br1bits <- encode_ireg_u4 r1; *)
-(*     do Rr2bits <- encode_ireg_u4 r2; *)
-(*     let (B, r1bits) := Br1bits in *)
-(*     let (R, r2bits) := Rr2bits in *)
-(*     (* B for rs, R for rd *) *)
-(*     OK ([REX_WRXB one1 R zero1 B; Pcmpl_EvGv (AddrE0 r1bits) r2bits]) *)
-(*   | Asm.Ptestq_rm rd addr => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R, rdbits):= Rrdbits in *)
-(*     do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
-(*     let (a_X, B) := addr_X_B in *)
-(*     let (a,X) := a_X in *)
-(*     OK ([REX_WRXB one1 R X B; Ptestl_EvGv a rdbits]) *)
-(*   | Asm.Ptestq_rr rd rs => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     (* B for rs, R for rd  *) *)
-(*     OK ([REX_WRXB one1 R zero1 B; Ptestl_EvGv (AddrE0 rdbits) rsbits]) *)
-(*   (* add Pbsrq Pbsfq for builtin pass*) *)
-(*   | Asm.Pbsfq rd rs => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     OK ([REX_WRXB one1 R zero1 B; Pbsfl rdbits rsbits]) *)
-(*   | Asm.Pbsrq rd rs => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     do Brsbits <- encode_ireg_u4 rs; *)
-(*     let (B, rsbits) := Brsbits in *)
-(*     let (R, rdbits) := Rrdbits in *)
-(*     OK ([REX_WRXB one1 R zero1 B; Pbsrl rdbits rsbits]) *)
-(*   | _ => Error [MSG "Not exists or unsupported: "; MSG (instr_to_string i)] *)
-(*   end. *)
-
 (** return (option rex prefix, instruction *)
 (** REX_WRXB: B R W X  *)
 Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instruction) :=
@@ -1800,11 +909,6 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (oREX_rsbits, a) := rex_ra in
     let (orex, rsbits) := oREX_rsbits in
     OK ([REP] ++ orex ++ [Pmovss_d_mf a rsbits])
-  | Asm.Pmovw_rm rd addr =>
-    do rex_ra <- encode_rex_prefix_ra rd addr;
-    let (orex_rdbits, a) := rex_ra in
-    let (orex, rdbits) := orex_rdbits in
-    OK ([Override] ++ orex ++ [Pmovl_rm a rdbits])
   | Asm.Pfldl_m addr =>
     do orex_a <- encode_rex_prefix_addr addr;
     let (orex, a) := orex_a in
@@ -1901,6 +1005,11 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
       let (orex_rdbits, r1bits) := rex_rr in
       let (orex, rdbits) := orex_rdbits in
       OK (orex ++ [Pmovsb_GvEv (AddrE0 r1bits) rdbits])
+  | Asm.Pmovw_rm rd addr =>
+    do rex_ra <- encode_rex_prefix_ra rd addr;
+    let (orex_rdbits, a) := rex_ra in
+    let (orex, rdbits) := orex_rdbits in
+    OK ([Override] ++ orex ++ [Pmovl_rm a rdbits])
   | Asm.Pmovb_rm rd addr =>
     if Archi.ptr64 then
       do Rrdbits <- encode_ireg_u4 rd;
@@ -1914,9 +1023,902 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
       let (orex_rdbits, a) := rex_ra in
       let (orex, rdbits) := orex_rdbits in
       OK (orex ++ [Pmovb_rm a rdbits])
+  | Asm.Pmovsw_rm rd addr =>
+    do rex_ra <- encode_rex_prefix_ra rd addr;
+    let (orex_rdbits, a) := rex_ra in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Pmovsw_GvEv a rdbits])
+  | Asm.Pmovsw_rr rd rs =>
+    do rex_rr <- encode_rex_prefix_rr rd rs;
+    let (orex_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Pmovsw_GvEv (AddrE0 r1bits) rdbits])
+  | Asm.Pnegl rd =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    OK (orex ++ [Pnegl rdbits])
+  | Asm.Pleal rd addr =>
+    do rex_ra <- encode_rex_prefix_ra rd addr;
+    let (orex_rdbits, a) := rex_ra in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Pleal a rdbits])
 
-  | _ => Error (msg "unsupported")
+  | Asm.Pcvttss2si_rf rd r1 =>
+    do rex_rr <- encode_rex_prefix_rf rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REP] ++ orex ++ [Pcvttss_d_2si_rf rdbits r1bits])
+  | Asm.Pcvttss2sl_rf rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_freg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    OK ([REP; REX_WRXB one1 R zero1 B; Pcvttss_d_2si_rf rdbits rsbits])
+  | Asm.Pcvtsi2sd_fr rd r1 =>
+    do rex_rr <- encode_rex_prefix_fr rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REPNZ] ++ orex ++ [Pcvtsi2ss_d_fr rdbits r1bits])
+  | Asm.Pcvtsl2sd_fr rd rs =>
+    (* rd require u3, but u4 here *)
+    do Rrdbits <- encode_freg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    OK ([REPNZ; REX_WRXB one1 R zero1 B; Pcvtsi2ss_d_fr rdbits rsbits])
+  | Asm.Pcvtsi2ss_fr rd r1 =>
+    do rex_rr <- encode_rex_prefix_fr rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REP] ++ orex ++ [Pcvtsi2ss_d_fr rdbits r1bits])
+  | Asm.Pcvtsl2ss_fr rd rs =>
+    (* rd require u3, but u4 here *)
+    do Rrdbits <- encode_freg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    OK ([REP; REX_WRXB one1 R zero1 B; Pcvtsi2ss_d_fr rdbits rsbits])
+  | Asm.Pcvttsd2si_rf rd r1 =>
+    do rex_rr <- encode_rex_prefix_rf rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REPNZ] ++ orex ++ [Pcvttss_d_2si_rf rdbits r1bits])
+  | Asm.Pcvttsd2sl_rf rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_freg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    OK ([REPNZ; REX_WRXB one1 R zero1 B; Pcvttss_d_2si_rf rdbits rsbits])
+  | Asm.Pcvtss2sd_ff rd r1 =>
+    do rex_rr <- encode_rex_prefix_ff rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+     OK ([REP] ++ orex ++ [Pcvtsd2ss_d_ff rdbits r1bits])
+  | Asm.Pcvtsd2ss_ff rd r1=>
+    do rex_rr <- encode_rex_prefix_ff rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REPNZ] ++ orex ++ [Pcvtsd2ss_d_ff rdbits r1bits])
+  | Asm.Paddl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm32 <- encode_ofs_u32 (Int.intval imm);
+    OK (orex ++ [Paddl_ri rdbits imm32])
+  | Asm.Psubl_rr rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr rd r1;
+    let (orex_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Psubl_GvEv (AddrE0 r1bits) rdbits])
+  | Asm.Pimull_rr rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr rd r1;
+    let (orex_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Pimull_GvEv (AddrE0 r1bits) rdbits])
+  | Asm.Pimull_r r =>
+    do rex_r <- encode_rex_prefix_r r;
+    let (orex, rbits) := rex_r in
+    OK (orex ++ [Pimull_r rbits])
+  | Asm.Pimull_ri rd imm =>
+    do rex_rr <- encode_rex_prefix_rr rd rd;
+    let (orex_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := orex_rdbits in
+    do imm32 <- encode_ofs_u32 (Int.intval imm);
+    OK (orex ++ [Pimull_ri rdbits r1bits imm32])
+  | Asm.Pmull_r r =>
+    do rex_r <- encode_rex_prefix_r r;
+    let (orex, rbits) := rex_r in
+    OK (orex ++ [Pmull_r rbits])
+  | Asm.Pcltd => OK [Pcltd]
+  | Asm.Pcqto => OK [REX_WRXB one1 zero1 zero1 zero1; Pcltd]
+  | Asm.Pdivl r1 =>
+    do rex_r <- encode_rex_prefix_r r1;
+    let (orex, rbits) := rex_r in
+     OK (orex ++ [Pdivl_r rbits])
+  | Asm.Pidivl r1 =>
+    do rex_r <- encode_rex_prefix_r r1;
+    let (orex, rbits) := rex_r in
+    OK (orex ++ [Pidivl_r rbits])
+  | Asm.Pandl_rr rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr r1 rd;
+    let (orex_r1bits, rdbits) := rex_rr in
+    let (orex, r1bits) := orex_r1bits in
+    OK (orex ++ [Pandl_EvGv (AddrE0 rdbits) r1bits])
+  | Asm.Pandl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm32 <- encode_ofs_u32 (Int.intval imm);
+    OK (orex ++ [Pandl_ri rdbits imm32])
+  | Asm.Porl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm32 <- encode_ofs_u32 (Int.intval imm);
+     OK (orex ++ [Porl_ri rdbits imm32])
+  | Asm.Porl_rr rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr r1 rd;
+    let (orex_r1bits, rdbits) := rex_rr in
+    let (orex, r1bits) := orex_r1bits in
+    OK (orex ++ [Porl_EvGv (AddrE0 rdbits) r1bits])
+  | Asm.Pxorl_rr rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr r1 rd;
+    let (orex_r1bits, rdbits) := rex_rr in
+    let (orex, r1bits) := orex_r1bits in
+    OK (orex ++ [Pxorl_EvGv (AddrE0 rdbits) r1bits])
+  | Asm.Pxorl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm32 <- encode_ofs_u32 (Int.intval imm);
+    OK (orex ++ [Pxorl_ri rdbits imm32])
+  | Asm.Pnotl rd =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    OK (orex ++ [Pnotl rdbits])
+  | Asm.Psall_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    OK (orex ++ [Psall_ri rdbits imm8])
+  | Asm.Psall_rcl rd =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    OK (orex ++ [Psall_rcl rdbits])
+  | Asm.Pshrl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    OK (orex ++ [Pshrl_ri rdbits imm8])
+  | Asm.Psarl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    OK (orex ++ [Psarl_ri rdbits imm8])
+  | Asm.Psarl_rcl rd =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    OK (orex ++ [Psarl_rcl rdbits])
+  | Asm.Pshld_ri rd r1 imm =>
+    do rex_rr <- encode_rex_prefix_rr rd r1;
+    let (orex_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := orex_rdbits in
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    (* rd is rm, rd is reg_op *)
+     OK (orex ++ [Pshld_ri r1bits rdbits imm8])
+  | Asm.Prolw_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    OK ([Override] ++ orex ++ [Prolw_ri rdbits imm8])
+  | Asm.Prorl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    OK (orex ++ [Prorl_ri rdbits imm8])
+  | Asm.Pcmpl_rr r1 r2 =>
+    (* swap rd and r1 for some bug found in qsort.c *)
+    do rex_rr <- encode_rex_prefix_rr r2 r1;
+    let (orex_r2bits, r1bits) := rex_rr in
+    let (orex, r2bits) := orex_r2bits in
+    (* bug here: fixed *)
+    OK (orex ++ [Pcmpl_EvGv (AddrE0 r1bits) r2bits])
+  | Asm.Pcmpl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm32 <- encode_ofs_u32 (Int.intval imm);
+    OK (orex ++ [Pcmpl_ri rdbits imm32])
+  | Asm.Ptestl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm32 <- encode_ofs_u32 (Int.intval imm);
+    OK (orex ++ [Ptestl_ri rdbits imm32])
+  | Asm.Ptestl_rr rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr r1 rd;
+    let (orex_r1bits, rdbits) := rex_rr in
+    let (orex, r1bits) := orex_r1bits in
+    OK (orex ++ [Ptestl_EvGv (AddrE0 rdbits) r1bits])
+  | Asm.Pcmov c rd r1 =>
+    let cond := encode_testcond_u4 c in
+    if Archi.ptr64 then
+      do Rrdbits <- encode_ireg_u4 rd;
+      do Brsbits <- encode_ireg_u4 r1;
+      let (B, rsbits) := Brsbits in
+      let (R, rdbits) := Rrdbits in
+      OK [REX_WRXB one1 R zero1 B; Pcmov cond rdbits rsbits]
+    else
+      do rex_rr <- encode_rex_prefix_rr rd r1;
+      let (orex_rdbits, r1bits) := rex_rr in
+      let (orex, rdbits) := orex_rdbits in
+      OK (orex ++ [Pcmov cond rdbits r1bits])
+  | Asm.Psetcc c rd =>
+    if Archi.ptr64 then
+      do Brdbits <- encode_ireg_u4 rd;
+      let (B, rdbits) := Brdbits in
+      let cond := encode_testcond_u4 c in
+      OK ([REX_WRXB zero1 zero1 zero1 B; Psetcc cond rdbits])
+    else
+      do rex_r <- encode_rex_prefix_r rd;
+      let (orex, rdbits) := rex_r in
+      let cond := encode_testcond_u4 c in
+      OK (orex ++ [Psetcc cond rdbits])
+  | Asm.Paddd_ff rd r1 =>
+    do rex_rr <- encode_rex_prefix_ff rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REPNZ] ++ orex ++ [Padds_d_ff rdbits r1bits])
+  | Asm.Padds_ff rd rs =>
+    do rex_rr <- encode_rex_prefix_ff rd rs;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REP] ++ orex ++ [Padds_d_ff rdbits r1bits])
+  | Asm.Psubd_ff rd r1 =>
+    do rex_rr <- encode_rex_prefix_ff rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REPNZ] ++ orex ++ [Psubs_d_ff rdbits r1bits])
+  | Asm.Psubs_ff rd rs =>
+    do rex_rr <- encode_rex_prefix_ff rd rs;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REP] ++ orex ++ [Psubs_d_ff rdbits r1bits])
+
+  | Asm.Pmuld_ff rd r1 =>
+    do rex_rr <- encode_rex_prefix_ff rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REPNZ] ++ orex ++ [Pmuls_d_ff rdbits r1bits])
+  | Asm.Pmuls_ff rd rs =>
+    do rex_rr <- encode_rex_prefix_ff rd rs;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REP] ++ orex ++ [Pmuls_d_ff rdbits r1bits])
+
+  | Asm.Pcomisd_ff rd r1 =>
+    do rex_rr <- encode_rex_prefix_ff rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([Override] ++ orex ++ [Pcomiss_d_ff rdbits r1bits])
+  | Asm.Pcomiss_ff rd rs =>
+    do rex_rr <- encode_rex_prefix_ff rd rs;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    (* bug fix: no mandatory prefix *)
+    OK (orex ++ [Pcomiss_d_ff rdbits r1bits])
+
+  | Asm.Pxorps_f r =>
+    do rex_rr <- encode_rex_prefix_ff r r;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK (orex ++ [Pxorps_d_GvEv (AddrE0 r1bits) rdbits])
+  | Asm.Pxorps_fm frd addr =>
+    do rex_ra <- encode_rex_prefix_fa frd addr;
+    let (orex_rdbits, a) := rex_ra in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Pxorps_d_GvEv a rdbits])
+  | Asm.Pxorpd_f r =>
+    do rex_rr <- encode_rex_prefix_ff r r;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([Override] ++ orex ++ [Pxorps_d_GvEv (AddrE0 r1bits) rdbits])
+  | Asm.Pxorpd_fm frd addr =>
+    do rex_ra <- encode_rex_prefix_fa frd addr;
+    let (orex_rdbits, a) := rex_ra in
+    let (orex, rdbits) := orex_rdbits in
+    OK ([Override] ++ orex ++ [Pxorps_d_GvEv a rdbits])
+  | Asm.Pandps_fm frd addr =>
+    do rex_ra <- encode_rex_prefix_fa frd addr;
+    let (orex_rdbits, a) := rex_ra in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Pandps_d_fm a rdbits])
+  | Asm.Pandpd_fm frd addr =>
+    do rex_ra <- encode_rex_prefix_fa frd addr;
+    let (orex_rdbits, a) := rex_ra in
+    let (orex, rdbits) := orex_rdbits in
+    OK ([Override] ++ orex ++ [Pandps_d_fm a rdbits])
+
+  | Asm.Pjmp_l_rel ofs =>
+    (* no relocation *)
+    do iofs <- res_iofs;
+    match ZTree.get (iofs + instr_ofs) rtbl_ofs_map with
+    | None =>
+      do imm <- encode_ofs_u32 ofs;
+      OK [Pjmp_l_rel imm]
+    | _ => Error[MSG"Relocation entry in Pjmp_l_rel not expected"; MSG(Z_to_hex_string 4 ofs)]
+    end
+  | Asm.Pjmp_s id _ =>
+    if Pos.eqb id xH then
+      do iofs <- res_iofs;
+      do addend <- get_instr_reloc_addend' (iofs + instr_ofs);
+      do imm32 <- encode_ofs_u32 addend;
+      OK [Pjmp_l_rel imm32]
+    else Error (msg "Id not equal to xH in Pjmp_s")
+  | Asm.Pjmp_r r sg =>
+    do rex_r <- encode_rex_prefix_r r;
+    let (orex, rbits) := rex_r in
+    OK (orex ++ [Pjmp_Ev (AddrE0 rbits)])
+  | Asm.Pjmp_m addr =>
+    (* same in the 64bit and 32bit mode *)
+    do orex_a <- encode_rex_prefix_addr addr;
+    let (orex, a) := orex_a in
+    OK (orex ++ [Pjmp_Ev a])
+  | Asm.Pnop | Asm.Plabel _ | Asm.Pmovls_rr _ =>
+     OK [Pnop]
+  | Asm.Pcall_r r sg =>
+    do rex_r <- encode_rex_prefix_r r;
+    let (orex, rbits) := rex_r in
+    OK (orex ++ [Pcall_r rbits])
+  | Asm.Pcall_s id sg =>
+    match id with
+    | xH =>
+      do iofs <- res_iofs;
+      do addend <- get_instr_reloc_addend' (iofs + instr_ofs);
+      do imm32 <- encode_ofs_u32 addend;
+      OK [Pcall_ofs imm32]
+    | _ =>
+      Error [MSG "id must be 1: Pcall_s"]
+    end
+  | Asm.Pret => OK [Pret]
+  | Asm.Pret_iw imm => (*define encode_ofs_u16*)
+     do imm16 <- encode_ofs_u16 (Int.intval imm);
+     OK [Pret_iw imm16]
+  | Asm.Pjcc_rel c ofs =>
+     let cond := encode_testcond_u4 c in
+     do imm <- encode_ofs_u32 ofs;
+     OK [Pjcc_rel cond imm]
+  | Asm.Padcl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+     do imm8 <- encode_ofs_u8 (Int.intval imm);
+     OK (orex ++ [Padcl_ri rdbits imm8])
+  | Asm.Padcl_rr rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr r1 rd;
+    let (orex_r1bits, rdbits) := rex_rr in
+    let (orex, r1bits) := orex_r1bits in
+    (* check document, add reg with CF to rm *)
+    OK ([Padcl_rr r1bits rdbits])
+  | Asm.Paddl_rr rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr r1 rd;
+    let (orex_r1bits, rdbits) := rex_rr in
+    let (orex, r1bits) := orex_r1bits in
+    OK ([Paddl_EvGv (AddrE0 rdbits) r1bits])
+  | Asm.Paddl_mi addr imm =>
+    do orex_a <- encode_rex_prefix_addr addr;
+    let (orex, a) := orex_a in
+    do imm32 <- encode_ofs_u32 (Int.intval imm);
+    OK (orex ++ [Paddl_mi a imm32])
+  | Asm.Pbsfl rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr rd r1;
+    let (orex_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Pbsfl rdbits r1bits])
+  | Asm.Pbsrl rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr rd r1;
+    let (orex_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Pbsrl rdbits r1bits])
+  | Asm.Pbswap32 rd =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    OK (orex ++ [Pbswap32 rdbits])
+  | Asm.Pbswap64 rd =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R,rdbits) := Rrdbits in
+    OK ([REX_WRXB one1 R zero1 zero1; Pbswap32 rdbits])
+  | Asm.Pmaxsd rd r1 =>
+    do rex_rr <- encode_rex_prefix_ff rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REPNZ] ++ orex ++ [Pmaxsd rdbits r1bits])
+  | Asm.Pminsd rd r1 =>
+    do rex_rr <- encode_rex_prefix_ff rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REPNZ] ++ orex ++ [Pminsd rdbits r1bits])
+
+  | Asm.Pmovsq_mr addr rs =>
+    do rex_ra <- encode_rex_prefix_fa rs addr;
+    let (orex_rbits, a) := rex_ra in
+    let (orex, rbits) := orex_rbits in
+    OK ([Override] ++ orex ++ [Pmovsq_mr a rbits])
+  | Asm.Pmovsq_rm rd addr =>
+    do rex_ra <- encode_rex_prefix_fa rd addr;
+    let (orex_rdbits, a) := rex_ra in
+    let (orex, rdbits) := orex_rdbits in
+    OK ([REP] ++ orex ++ [Pmovsq_rm a rdbits])
+  | Asm.Prep_movsl => OK ([REP; Prep_movsl])
+  | Asm.Psbbl_rr rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr rd r1;
+    let (orex_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Psbbl_rr r1bits rdbits])
+
+  | Asm.Psqrtsd rd r1 =>
+    do rex_rr <- encode_rex_prefix_ff rd r1;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REPNZ] ++ orex ++ [Pbsqrtsd rdbits r1bits])
+  | Asm.Psubl_ri rd imm =>
+    do rex_r <- encode_rex_prefix_r rd;
+    let (orex, rdbits) := rex_r in
+    do imm32 <- encode_ofs_u32 (Int.intval imm);
+    OK (orex ++ [Psubl_ri rdbits imm32])
+  | Asm.Pmov_mr_a addr rs =>
+    if Archi.ptr64 then
+      do addr_X_B <- translate_Addrmode_AddrE64 addr;
+      let (a_X, B) := addr_X_B in
+      let (a,X) := a_X in
+      do Rrsbits <- encode_ireg_u4 rs;
+      let (R,rsbits) := Rrsbits in
+      OK ([REX_WRXB one1 R X B; Pmovl_mr a rsbits])
+    else
+      do a <- translate_Addrmode_AddrE addr;
+      do rbits <- encode_ireg_u3 rs;
+    OK [Pmovl_mr a rbits]
+  | Asm.Pmov_rm_a rd addr =>
+    if Archi.ptr64 then
+      do addr_X_B <- translate_Addrmode_AddrE64 addr;
+      let (a_X, B) := addr_X_B in
+      let (a,X) := a_X in
+      do Rrdbits <- encode_ireg_u4 rd;
+      let (R,rdbits) := Rrdbits in
+      OK ([REX_WRXB one1 R X B; Pmovl_rm a rdbits])
+    else
+      do a <- translate_Addrmode_AddrE addr;
+      do rbits <- encode_ireg_u3 rd;
+      OK ([Pmovl_rm a rbits])
+
+  | Asm.Pmovsd_mf_a addr rs =>
+    do rex_ra <- encode_rex_prefix_fa rs addr;
+    let (orex_rbits, a) := rex_ra in
+    let (orex, rbits) := orex_rbits in
+    OK ([REPNZ] ++ orex ++ [Pmovss_d_mf a rbits])
+  | Asm.Pmovsd_fm_a rd addr =>
+    do rex_ra <- encode_rex_prefix_fa rd addr;
+    let (orex_rdbits, a) := rex_ra in
+    let (orex, rdbits) := orex_rdbits in
+    OK ([REP] ++ orex ++ [Pmovss_d_fm a rdbits])
+  | Asm.Pxorl_r r =>
+    do rex_rr <- encode_rex_prefix_rr r r;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK (orex ++ [Pxorl_EvGv (AddrE0 rdbits) r1bits])
+
+  | Asm.Pdivd_ff rd rs =>
+    do rex_rr <- encode_rex_prefix_ff rd rs;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REPNZ] ++ orex ++ [Pdivss_d_ff rdbits r1bits])
+  | Asm.Pdivs_ff rd rs =>
+    do rex_rr <- encode_rex_prefix_ff rd rs;
+    let (oREX_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := oREX_rdbits in
+    OK ([REP] ++ orex ++ [Pdivss_d_ff rdbits r1bits])
+
+  | Asm.Pshrl_rcl r =>
+    do rex_r <- encode_rex_prefix_r r;
+    let (orex, rbits) := rex_r in
+    OK (orex ++ [Pshrl_rcl rbits])
+  | Asm.Pmovzl_rr rd r1 =>
+    do rex_rr <- encode_rex_prefix_rr rd r1;
+    let (orex_rdbits, r1bits) := rex_rr in
+    let (orex, rdbits) := orex_rdbits in
+    OK (orex ++ [Pmovl_rm (AddrE0 r1bits) rdbits])
+
+  (* 64bit *)
+  (* transfer to mov  memory *)
+(*     | Asm.Pmovq_ri rd imm => *)
+(*     do Rrdbits <- encode_ireg_u4 rd; *)
+(*     let (R,rdbits) := Rrdbits in *)
+(*     do imm64 <- encode_ofs_u64 (Int64.intval imm); *)
+(*     OK (Pmovq_ri R rdbits imm64) *)
+  | Asm.Pmovsl_rr rd r1 =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 r1;
+    let (B, r1bits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    OK ([REX_WRXB one1 R zero1 B; Pmovsxd_GvEv (AddrE0 r1bits) rdbits])
+  | Asm.Pmovq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    (* cannot use '(addr,X,B) because X also a product type *)
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    (* alphabetical: B R X *)
+    OK ([REX_WRXB one1 R X B; Pmovl_rm a rdbits])
+  | Asm.Pmovq_mr addr rs =>
+    do Rrsbits <- encode_ireg_u4 rs;
+    let (R, rsbits):= Rrsbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK ([REX_WRXB one1 R X B; Pmovl_mr a rsbits])
+  | Asm.Pleaq rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK ([REX_WRXB one1 R X B; Pleal a rdbits])
+  | Asm.Pnegq r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits):= Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pnegl rbits])
+  | Asm.Paddq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK ([REX_WRXB one1 R X B; Paddl_GvEv a rdbits])
+  | Asm.Psubq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK ([REX_WRXB one1 R X B; Psubl_GvEv a rdbits])
+  | Asm.Psubq_rr rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK ([REX_WRXB one1 R zero1 B; Psubl_GvEv (AddrE0 rsbits) rdbits])
+  | Asm.Pimulq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK ([REX_WRXB one1 R X B; Pimull_GvEv a rdbits])
+  | Asm.Pimulq_r r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pimull_r rbits])
+  | Asm.Pimulq_rr rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK ([REX_WRXB one1 R zero1 B; Pimull_GvEv (AddrE0 rsbits) rdbits])
+  | Asm.Pmulq_r r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pmull_r rbits])
+  | Asm.Pidivq r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pidivl_r rbits])
+  | Asm.Pdivq r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pdivl_r rbits])
+  | Asm.Pandq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK ([REX_WRXB one1 R X B; Pandl_GvEv a rdbits])
+  | Asm.Pandq_rr rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK ([REX_WRXB one1 R zero1 B; Pandl_GvEv (AddrE0 rsbits) rdbits])
+  | Asm.Porq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK ([REX_WRXB one1 R X B; Porl_GvEv a rdbits])
+  | Asm.Porq_rr rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK ([REX_WRXB one1 R zero1 B; Porl_GvEv (AddrE0 rsbits) rdbits])
+  | Asm.Pxorq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK ([REX_WRXB one1 R X B; Pxorl_GvEv a rdbits])
+  | Asm.Pxorq_rr rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd *)
+    OK ([REX_WRXB one1 R zero1 B; Pxorl_GvEv (AddrE0 rsbits) rdbits])
+  | Asm.Pxorq_r r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 B zero1 B; Pxorl_GvEv (AddrE0 rbits) rbits])
+  | Asm.Pnotq r =>
+  (* test in asm *)
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pnotl rbits])
+  | Asm.Psalq_ri r imm =>
+  (* find some confusion in Asm.v semantic, must check whether imm is 8 bit *)
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Psall_ri rbits imm8])
+  | Asm.Psalq_rcl r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Psall_rcl rbits])
+  | Asm.Psarq_ri r imm =>
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Psarl_ri rbits imm8])
+  | Asm.Psarq_rcl r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Psarl_rcl rbits])
+  | Asm.Pshrq_ri r imm =>
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pshrl_ri rbits imm8])
+  | Asm.Pshrq_rcl r =>
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pshrl_rcl rbits])
+  | Asm.Prorq_ri r imm =>
+    do imm8 <- encode_ofs_u8 (Int.intval imm);
+    do Brbits <- encode_ireg_u4 r;
+    let (B, rbits) := Brbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Prorl_ri rbits imm8])
+  | Asm.Pcmpq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK ([REX_WRXB one1 R X B; Pcmpl_GvEv a rdbits])
+  | Asm.Pcmpq_rr r1 r2 =>
+    do Br1bits <- encode_ireg_u4 r1;
+    do Rr2bits <- encode_ireg_u4 r2;
+    let (B, r1bits) := Br1bits in
+    let (R, r2bits) := Rr2bits in
+    (* B for rs, R for rd *)
+    OK ([REX_WRXB one1 R zero1 B; Pcmpl_EvGv (AddrE0 r1bits) r2bits])
+  | Asm.Ptestq_rm rd addr =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R, rdbits):= Rrdbits in
+    do addr_X_B <- translate_Addrmode_AddrE64 addr;
+    let (a_X, B) := addr_X_B in
+    let (a,X) := a_X in
+    OK ([REX_WRXB one1 R X B; Ptestl_EvGv a rdbits])
+  | Asm.Ptestq_rr rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    (* B for rs, R for rd  *)
+    OK ([REX_WRXB one1 R zero1 B; Ptestl_EvGv (AddrE0 rdbits) rsbits])
+  (* add Pbsrq Pbsfq for builtin pass*)
+  | Asm.Pbsfq rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    OK ([REX_WRXB one1 R zero1 B; Pbsfl rdbits rsbits])
+  | Asm.Pbsrq rd rs =>
+    do Rrdbits <- encode_ireg_u4 rd;
+    do Brsbits <- encode_ireg_u4 rs;
+    let (B, rsbits) := Brsbits in
+    let (R, rdbits) := Rrdbits in
+    OK ([REX_WRXB one1 R zero1 B; Pbsrl rdbits rsbits])
+  | _ => Error [MSG "Not exists or unsupported: "; MSG (instr_to_string i)]
   end.
+
+(* (** return (option rex prefix, instruction *) *)
+(* (** REX_WRXB: B R W X  *) *)
+(* Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instruction) := *)
+(*   let res_iofs := instr_reloc_offset i in *)
+(*   let translate_Addrmode_AddrE := translate_Addrmode_AddrE instr_ofs res_iofs in *)
+(*   let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 instr_ofs res_iofs in *)
+(*   let encode_rex_prefix_ra := encode_rex_prefix_ra instr_ofs res_iofs in *)
+(*   let encode_rex_prefix_fa := encode_rex_prefix_fa instr_ofs res_iofs in *)
+(*   let encode_rex_prefix_addr := encode_rex_prefix_addr instr_ofs res_iofs in *)
+(*   match i with *)
+(*   | Pmov_rr rd r1 => *)
+(*     if Archi.ptr64 then *)
+(*       do Rrdbits <- encode_ireg_u4 rd; *)
+(*       do Brsbits <- encode_ireg_u4 r1; *)
+(*       let (B, rsbits) := Brsbits in *)
+(*       let (R, rdbits) := Rrdbits in *)
+(*       OK ([REX_WRXB one1 R zero1 B; Pmovl_rm (AddrE0 rsbits) rdbits]) *)
+(*     else *)
+(*       do rex_rr <- encode_rex_prefix_rr rd r1; *)
+(*       let (oREX_rdbits, r1bits) := rex_rr in *)
+(*       let (orex, rdbits) := oREX_rdbits in *)
+(*       OK (orex ++ [Pmovl_rm (AddrE0 r1bits) rdbits]) *)
+(*   | Asm.Pmovl_rm rd addr => *)
+(*     do rex_ra <- encode_rex_prefix_ra rd addr; *)
+(*     let (oREX_rdbits, a) := rex_ra in *)
+(*     let (orex, rdbits) := oREX_rdbits in *)
+(*     OK (orex ++ [Pmovl_rm a rdbits]) *)
+(*   | Asm.Pmovl_ri rd imm => *)
+(*     do rex_r <- encode_rex_prefix_r rd; *)
+(*     let (orex, rdbits) := rex_r in *)
+(*     do imm32 <- encode_ofs_u32 (Int.intval imm); *)
+(*     OK (orex ++ [Pmovl_ri rdbits imm32]) *)
+(*   | Asm.Pmovl_mr addr r => *)
+(*     do rex_ra <- encode_rex_prefix_ra r addr; *)
+(*     let (oREX_rbits, a) := rex_ra in *)
+(*     let (orex, rbits) := oREX_rbits in *)
+(*     OK (orex ++ [Pmovl_mr a rbits]) *)
+(*   | Asm.Pmovsd_ff rd rs => *)
+(*     do rex_rr <- encode_rex_prefix_ff rd rs; *)
+(*     let (oREX_rdbits, rsbits) := rex_rr in *)
+(*     let (orex, rdbits) := oREX_rdbits in *)
+(*     OK ([REPNZ] ++ orex ++ [Pmovss_d_fm (AddrE0 rsbits) rdbits]) *)
+(*   | Asm.Pmovsd_fm rd addr => *)
+(*     do rex_ra <- encode_rex_prefix_fa rd addr; *)
+(*     let (oREX_rdbits, a) := rex_ra in *)
+(*     let (orex, rdbits) := oREX_rdbits in *)
+(*     OK ([REPNZ] ++ orex ++ [Pmovss_d_fm a rdbits]) *)
+(*   | Asm.Pmovsd_mf addr rs => *)
+(*     do rex_ra <- encode_rex_prefix_fa rs addr; *)
+(*     let (oREX_rsbits, a) := rex_ra in *)
+(*     let (orex, rsbits) := oREX_rsbits in *)
+(*     OK ([REPNZ] ++ orex ++ [Pmovss_d_mf a rsbits]) *)
+(*   | Asm.Pmovss_fm rd addr => *)
+(*     do rex_ra <- encode_rex_prefix_fa rd addr; *)
+(*     let (oREX_rdbits, a) := rex_ra in *)
+(*     let (orex, rdbits) := oREX_rdbits in *)
+(*     OK ([REP] ++ orex ++ [Pmovss_d_fm a rdbits]) *)
+(*   | Asm.Pmovss_mf addr rs => *)
+(*     do rex_ra <- encode_rex_prefix_fa rs addr; *)
+(*     let (oREX_rsbits, a) := rex_ra in *)
+(*     let (orex, rsbits) := oREX_rsbits in *)
+(*     OK ([REP] ++ orex ++ [Pmovss_d_mf a rsbits]) *)
+(*   | Asm.Pmovw_rm rd addr => *)
+(*     do rex_ra <- encode_rex_prefix_ra rd addr; *)
+(*     let (orex_rdbits, a) := rex_ra in *)
+(*     let (orex, rdbits) := orex_rdbits in *)
+(*     OK ([Override] ++ orex ++ [Pmovl_rm a rdbits]) *)
+(*   | Asm.Pfldl_m addr => *)
+(*     do orex_a <- encode_rex_prefix_addr addr; *)
+(*     let (orex, a) := orex_a in *)
+(*     OK (orex ++ [Pfldl_m a]) *)
+(*   | Asm.Pfstpl_m addr => *)
+(*     do orex_a <- encode_rex_prefix_addr addr; *)
+(*     let (orex, a) := orex_a in *)
+(*     OK (orex ++ [Pfstpl_m a]) *)
+(*   | Asm.Pflds_m addr => *)
+(*     do orex_a <- encode_rex_prefix_addr addr; *)
+(*     let (orex, a) := orex_a in *)
+(*     OK (orex ++ [Pflds_m a]) *)
+(*   | Asm.Pfstps_m addr => *)
+(*     do orex_a <- encode_rex_prefix_addr addr; *)
+(*     let (orex, a) := orex_a in *)
+(*     OK (orex ++ [Pfstps_m a]) *)
+(*   | Asm.Pmovb_mr addr rs => *)
+(*     if Archi.ptr64 then *)
+(*       do Rrsbits <- encode_ireg_u4 rs; *)
+(*       let (R, rsbits):= Rrsbits in *)
+(*       do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
+(*       let (a_X, B) := addr_X_B in *)
+(*       let (a,X) := a_X in *)
+(*       (* 64bit mode rex prefix for byte register encoding *) *)
+(*       OK ([REX_WRXB zero1 R X B;Pmovb_mr a rsbits]) *)
+(*     else *)
+(*       do rex_ra <- encode_rex_prefix_ra rs addr; *)
+(*       let (orex_rbits, a) := rex_ra in *)
+(*       let (orex, rbits) := orex_rbits in *)
+(*       OK (orex ++ [Pmovb_mr a rbits]) *)
+(*   | Asm.Pmovw_mr addr r => *)
+(*     do rex_ra <- encode_rex_prefix_ra r addr; *)
+(*     let (orex_rbits, a) := rex_ra in *)
+(*     let (orex, rbits) := orex_rbits in *)
+(*     OK ([Override] ++ orex ++ [Pmovl_mr a rbits]) *)
+(*   | Asm.Pmovzb_rr rd r1 => *)
+(*     if Archi.ptr64 then *)
+(*       do Rrdbits <- encode_ireg_u4 rd; *)
+(*       do Brsbits <- encode_ireg_u4 r1; *)
+(*       let (B, r1bits) := Brsbits in *)
+(*       let (R, rdbits) := Rrdbits in *)
+(*       OK ([REX_WRXB zero1 R zero1 B; Pmovzb_rm (AddrE0 r1bits) rdbits]) *)
+(*     else *)
+(*       do rex_rr <- encode_rex_prefix_rr rd r1; *)
+(*       let (orex_rdbits, r1bits) := rex_rr in *)
+(*       let (orex, rdbits) := orex_rdbits in *)
+(*       OK (orex ++ [Pmovzb_rm (AddrE0 r1bits) rdbits]) *)
+(*   | Asm.Pmovzb_rm rd addr => *)
+(*     (* 1byte memory to 32bit register *) *)
+(*     (* if Archi.ptr64 then *) *)
+(* (*       do Rrdbits <- encode_ireg_u4 rd; *) *)
+(* (*       let (R, rdbits):= Rrdbits in *) *)
+(* (*       do addr_X_B <- translate_Addrmode_AddrE64 addr; *) *)
+(* (*       let (a_X, B) := addr_X_B in *) *)
+(* (*       let (a,X) := a_X in *) *)
+(* (*       OK ([REX_WRXB zero1 R X B; Pmovzb_rm a rdbits]) *) *)
+(* (*     else *) *)
+(*       do rex_ra <- encode_rex_prefix_ra rd addr; *)
+(*       let (orex_rdbits, a) := rex_ra in *)
+(*       let (orex, rdbits) := orex_rdbits in *)
+(*       OK (orex ++ [Pmovzb_rm a rdbits]) *)
+(*   | Asm.Pmovzw_rm rd addr => *)
+(*     do rex_ra <- encode_rex_prefix_ra rd addr; *)
+(*     let (orex_rdbits, a) := rex_ra in *)
+(*     let (orex, rdbits) := orex_rdbits in *)
+(*     OK (orex ++ [Pmovzw_GvEv a rdbits]) *)
+(*   | Asm.Pmovzw_rr rd r1 => *)
+(*     do rex_rr <- encode_rex_prefix_rr rd r1; *)
+(*     let (orex_rdbits, r1bits) := rex_rr in *)
+(*     let (orex, rdbits) := orex_rdbits in *)
+(*      OK (orex ++ [Pmovzw_GvEv (AddrE0 r1bits) rdbits]) *)
+(*   | Asm.Pmovsb_rm rd addr => *)
+(*     (* if Archi.ptr64 then *) *)
+(* (*       do Rrdbits <- encode_ireg_u4 rd; *) *)
+(* (*       let (R, rdbits):= Rrdbits in *) *)
+(* (*       do addr_X_B <- translate_Addrmode_AddrE64 addr; *) *)
+(* (*       let (a_X, B) := addr_X_B in *) *)
+(* (*       let (a,X) := a_X in *) *)
+(* (*       OK ([REX_WRXB zero1 R X B; Pmovsb_GvEv a rdbits]) *) *)
+(* (*     else *) *)
+(*       do rex_ra <- encode_rex_prefix_ra rd addr; *)
+(*       let (orex_rdbits, a) := rex_ra in *)
+(*       let (orex, rdbits) := orex_rdbits in *)
+(*       OK (orex ++ [Pmovsb_GvEv a rdbits]) *)
+(*   | Asm.Pmovsb_rr rd rs => *)
+(*     if Archi.ptr64 then *)
+(*       do Rrdbits <- encode_ireg_u4 rd; *)
+(*       do Brsbits <- encode_ireg_u4 rs; *)
+(*       let (B, r1bits) := Brsbits in *)
+(*       let (R, rdbits) := Rrdbits in *)
+(*       OK ([REX_WRXB zero1 R zero1 B; Pmovsb_GvEv (AddrE0 r1bits) rdbits]) *)
+(*     else *)
+(*       do rex_rr <- encode_rex_prefix_rr rd rs; *)
+(*       let (orex_rdbits, r1bits) := rex_rr in *)
+(*       let (orex, rdbits) := orex_rdbits in *)
+(*       OK (orex ++ [Pmovsb_GvEv (AddrE0 r1bits) rdbits]) *)
+(*   | Asm.Pmovb_rm rd addr => *)
+(*     if Archi.ptr64 then *)
+(*       do Rrdbits <- encode_ireg_u4 rd; *)
+(*       let (R, rdbits):= Rrdbits in *)
+(*       do addr_X_B <- translate_Addrmode_AddrE64 addr; *)
+(*       let (a_X, B) := addr_X_B in *)
+(*       let (a,X) := a_X in *)
+(*       OK ([REX_WRXB zero1 R X B; Pmovb_rm a rdbits]) *)
+(*     else *)
+(*       do rex_ra <- encode_rex_prefix_ra rd addr; *)
+(*       let (orex_rdbits, a) := rex_ra in *)
+(*       let (orex, rdbits) := orex_rdbits in *)
+(*       OK (orex ++ [Pmovb_rm a rdbits]) *)
+
+(*   | _ => Error (msg "unsupported") *)
+(*   end. *)
 
 
        
@@ -1928,7 +1930,8 @@ Hypothesis encode_reloc_offset_conform: forall i iofs li l,
   translate_instr iofs i = OK li ->
   Instr_reloc_offset (li++l) = instr_reloc_offset i.
 
-    
+
+(* unfinished: we should add conditional checking for W bit, which can ensure the deocde_consistency *)
 Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i: Instruction) : res instruction :=
   let translate_AddrE_Addrmode := translate_AddrE_Addrmode instr_ofs res_iofs X B in
   match i with
@@ -1938,11 +1941,10 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     OK (Asm.Pmov_rr rd rs)
   | Pmovl_rm a rdbits =>
     let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
     if W then
-      do addr <- translate_AddrE_Addrmode a;
       OK (Asm.Pmovq_rm rd addr)
     else
-      do addr <- translate_AddrE_Addrmode a;
       OK (Asm.Pmovl_rm rd addr)
   | Pmovl_ri rdbits imm32 =>
     let imm := decode_ofs_u32 imm32 in
@@ -1950,11 +1952,10 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     OK (Asm.Pmovl_ri rd imm)
   | Pmovl_mr a rsbits =>
     let rs := decode_ireg_u4 R rsbits in
+    do addr <- translate_AddrE_Addrmode a;
     if W then
-      do addr <- translate_AddrE_Addrmode a;
       OK (Asm.Pmovq_mr addr rs)
     else
-      do addr <- translate_AddrE_Addrmode a;
       OK (Asm.Pmovl_mr addr rs)
   | Pfldl_m a =>
     do addr <- translate_AddrE_Addrmode a;
@@ -2004,6 +2005,274 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     let rd := decode_ireg_u4 R rdbits in
     do addr <- translate_AddrE_Addrmode a;
     OK (Asm.Pmovb_rm rd addr)
+  | Pmovsw_GvEv a rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    OK (Asm.Pmovsw_rm rd addr)
+  | Pmovsw_GvEv (AddrE0 rsbits) rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    OK (Asm.Pmovsw_rr rd rs)
+  | Pnegl rbits =>
+    let rd := decode_ireg_u4 B rbits in
+    if W then OK (Asm.Pnegq rd)
+    else OK (Asm.Pnegl rd)
+  | Pleal a rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Pleaq rd addr)
+    else OK (Asm.Pleal rd addr)
+  | Paddl_ri rdbits imm32 =>
+    let imm := decode_ofs_u32 imm32 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Paddl_ri rd imm)
+  | Psubl_GvEv (AddrE0 rsbits) rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then OK (Asm.Psubq_rr rd rs)
+    else OK (Asm.Psubl_rr rd rs)
+  | Psubl_GvEv a rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Psubq_rm rd addr)
+    else Error (msg "unsupported")
+  | Pimull_GvEv (AddrE0 rsbits) rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then OK (Asm.Pimulq_rr rd rs)
+    else OK (Asm.Pimull_rr rd rs)
+  | Pimull_GvEv a rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Pimulq_rm rd addr)
+    else Error (msg "unsupported")
+  | Pimull_r rbits =>
+    let rd := decode_ireg_u4 B rbits in
+    if W then OK (Asm.Pimulq_r rd)
+    else OK (Asm.Pimull_r rd)
+  | Pimull_ri rdbits imm32 =>
+    let imm := decode_ofs_u32 imm32 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pimull_ri rd imm)
+  | Pmull_r rbits =>
+    let rd := decode_ireg_u4 B rbits in
+    if W then OK (Asm.Pmulq_r rd)
+    else OK (Asm.Pmull_r rd)
+  | Pcltd => 
+    if W then Asm.Pcqto
+    else Asm.Pcltd
+  | Pdivl_r rbits =>
+    let rd := decode_ireg_u4 B rbits in
+    if W then OK (Asm.Pdivq rd)
+    else OK (Asm.Pdivl rd)
+  | Pidivl_r rbits =>
+    let rd := decode_ireg_u4 B rbits in
+    if W then OK (Asm.Pidivq rd)
+    else OK (Asm.Pidivl rd)
+  | Pandl_EvGv (AddrE0 rdbits) rsbits =>
+    let rd := decode_ireg_u4 R rsbits in
+    let rs := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pandl_rr rd rs)
+  | Pandl_ri rdbits imm32 =>
+    let imm := decode_ofs_u32 imm32 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pandl_ri rd imm)
+  | Porl_ri rdbits imm32 =>
+    let imm := decode_ofs_u32 imm32 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Porl_ri rd imm)
+  | Porl_EvGv (AddrE0 rdbits) rsbits =>
+    let rd := decode_ireg_u4 R rsbits in
+    let rs := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Porl_rr rd rs)
+  | Pxorl_EvGv (AddrE0 rdbits) rsbits =>
+    let rd := decode_ireg_u4 R rsbits in
+    let rs := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pxorl_rr rd rs)
+  | Pxorl_ri rdbits imm32 =>
+    let imm := decode_ofs_u32 imm32 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pxorl_ri rd imm)
+  | Pnotl rbits =>
+    let rd := decode_ireg_u4 B rbits in
+    if W then OK (Asm.Pnotq rd)
+    else OK (Asm.Pnotl rd)
+  | Psall_ri rdbits imm8 =>
+    let imm := decode_ofs_u8 imm8 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then OK (Asm.Psalq_ri rd imm)
+    else OK (Asm.Psall_ri rd imm)
+  | Psall_rcl rbits =>
+    let rd := decode_ireg_u4 B rbits in
+    if W then OK (Asm.Psalq_rcl rd)
+    else OK (Asm.Psall_rcl rd)
+  | Pshrl_ri rdbits imm8 =>
+    let imm := decode_ofs_u8 imm8 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then OK (Asm.Pshrq_ri rd imm)
+    else OK (Asm.Pshrl_ri rd imm)
+  | Psarl_ri rdbits imm8 =>
+    let imm := decode_ofs_u8 imm8 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then OK (Asm.Psarq_ri rd imm)
+    else OK (Asm.Psarl_ri rd imm)
+  | Psarl_rcl rbits =>
+    let rd := decode_ireg_u4 B rbits in
+    if W then OK (Asm.Psarq_rcl rd)
+    else OK (Asm.Psarl_rcl rd)
+  (* special: Asm.Pshld_ri rd r1 imm*)
+  | Pshld_ri r1bits rdbits imm8 =>
+    let imm := decode_ofs_u8 imm8 in
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    OK (Asm.Pshld_ri rd r1 imm)
+  | Prorl_ri rdbits imm8 =>
+    let imm := decode_ofs_u8 imm8 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then OK (Asm.Prorq_ri rd imm)
+    else OK (Asm.Prorl_ri rd imm)
+  | Pcmpl_EvGv (AddrE0 rdbits) rsbits =>
+    let rd := decode_ireg_u4 R rsbits in
+    let rs := decode_ireg_u4 B rdbits in
+    if W then OK (Asm.Pcmpq_rr rd rs)
+    else OK (Asm.Pcmpl_rr rd rs)
+  | Pcmpl_ri rdbits imm32 =>
+    let imm := decode_ofs_u32 imm32 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pcmpl_ri rd imm)
+  | Ptestl_ri rdbits imm32 =>
+    let imm := decode_ofs_u32 imm32 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Ptestl_ri rd imm)
+  | Ptestl_EvGv (AddrE0 rdbits) rsbits =>
+    let rd := decode_ireg_u4 R rsbits in
+    let rs := decode_ireg_u4 B rdbits in
+    if W then OK (Asm.Ptestq_rm rd rs)
+    else OK (Asm.Ptestl_rr rd rs)
+  (* special : Pcmov *)
+  | Pcmov cond rdbits rsbits =>
+    let c := decode_testcond_u4 cond in
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    OK (Asm.Pcmov c rd rs)
+  (* special : Psetcc *)
+  | Psetcc cond rdbits =>
+    let rd := decode_ireg_u4 B rdbits in
+    let c := decode_testcond_u4 cond in
+    OK (Asm.Psetcc c rd)
+  (* rd = rs *)
+  | Pxorps_d_GvEv (AddrE0 rsbits) rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pxorps_f rd)
+  | Pxorps_d_GvEv a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pxorps_fm rd addr)
+  | Pandps_d_fm a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pandps_fm rd addr)
+  (* so special : Pjmp_l_rel *)
+  | Pjmp_l_rel imm32 =>
+    do iofs <- res_iofs;
+    match ZTree.get (iofs + instr_ofs) rtbl_ofs_map with
+    | Some _ =>
+      OK (Asm.Pjmp_s xH signature_main)
+    | None =>
+      let imm := decode_ofs_u32 imm32 in
+      OK (Asm.Pjmp_l_rel imm)
+    end
+  (* not well defined *)
+  | Pjmp_Ev (AddrE0 rsbits)=>
+    let rs := decode_ireg_u4 B rsbits in
+    if W then Error (msg "impossible")
+    else OK (Asm.Pjmp_r rs signature_main)
+  | Pjmp_Ev a =>
+    do addr <- translate_AddrE_Addrmode a;
+    if W then Error (msg "impossible")
+    else OK (Asm.Pjmp_m addr)
+  | Pnop => Asm.Pnop
+  | Pcall_r rbits =>
+    let r := decode_ireg_u4 B rbits in
+    OK (Asm.Pcall_r r signature_main)
+  | Pcall_ofs imm32 =>
+    do iofs <- res_iofs;
+    match ZTree.get (iofs + instr_ofs) rtbl_ofs_map with
+    | Some _ =>
+      (OK Asm.Pcall_s xH signature_main)
+    | None =>
+      Error (msg "impossible")
+    end
+  | Pret => Asm.Pret
+  | Pret_iw imm16 =>
+    let imm := decode_ofs_u16 imm16 in
+    OK (Asm.Pret_iw imm)
+  | Pjcc_rel cond imm32 =>
+    let c := decode_testcond_u4 cond in
+    let imm := decode_ofs_u32 imm32 in
+    OK (Asm.Pjcc_rel c imm)
+  | Padcl_ri rdbits imm8 =>
+    let imm := decode_ofs_u8 imm8 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Padcl_ri rd imm)
+  | Padcl_rr rsbits rdbits =>
+    let rd := decode_ireg_u4 R rsbits in
+    let rs := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Padcl_rr rd rs)
+  | Paddl_EvGv (AddrE0 rdbits) rsbits =>
+    let rd := decode_ireg_u4 R rsbits in
+    let rs := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Paddl_rr rd rs)
+  | Paddl_mi a imm32 =>
+    let imm := decode_ofs_u32 imm32 in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then Error (msg "unsupported")
+    else OK (Asm.Paddl_mi addr imm)
+  | Pbsfl rdbits rsbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then OK (Asm.Pbsfq rd rs)
+    else OK (Asm.Pbsfl rd rs)
+  | Pbsfl rdbits rsbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then OK (Asm.Pbsrq rd rs)
+    else OK (Asm.Pbsrl rd rs)
+  | Pbswap32 rdbits =>
+    let rs := decode_ireg_u4 B rdbits in
+    if W then OK (Asm.Pbswap64 rd)
+    else OK (Asm.Pbswap32 rd)
+  | Psbbl_rr rsbits rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Psbbl_rr rd rs)
+  | Psubl_ri rdbits imm32 =>
+    let imm := decode_ofs_u32 imm32 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Psubl_ri rd imm)
+  | Pshrl_rcl rdbits =>
+    let rs := decode_ireg_u4 B rdbits in
+    if W then OK (Asm.Pshrq_rcl rd)
+    else OK (Asm.Pshrl_rcl rd)
   | _ => Error (msg "unsupported")
   end.
 
@@ -2018,6 +2287,36 @@ Definition decode_instr_override (instr_ofs: Z) (res_iofs: res Z)  (W R X B: boo
     let rs := decode_ireg_u4 R rsbits in
     do addr <- translate_AddrE_Addrmode a;
     OK (Asm.Pmovw_mr addr rs)
+  | Prolw_ri rdbits imm8 =>
+    let imm := decode_ofs_u8 imm8 in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Prolw_ri rd imm)
+  | Pcomiss_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    OK (Asm.Pcomisd_ff rd rs)
+  (* rd = rs *)
+  | Pxorps_d_GvEv (AddrE0 rsbits) rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pxorpd_f rd)
+  | Pxorps_d_GvEv a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pxorpd_fm rd addr)
+  | Pandps_d_fm a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pandpd_fm rd addr)
+  | Pmovsq_mr a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pmovsq_mr rd addr)
   | _ => Error (msg "unsupported")
   end.
 
@@ -2030,20 +2329,62 @@ Definition decode_instr_repnz (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (
     OK (Asm.Pmovsd_ff rd rs)
   | Pmovss_d_fm a rdbits =>
     let rd := decode_freg_u4 R rdbits in
-    if W then
-      do addr <- translate_AddrE_Addrmode a;
-      OK (Asm.Pmovsd_fm rd addr)
-    else
-      do addr <- translate_AddrE_Addrmode a;
-      OK (Asm.Pmovsd_fm rd addr)
+    do addr <- translate_AddrE_Addrmode a;
+    OK (Asm.Pmovsd_fm rd addr)
   | Pmovss_d_mf a rsbits =>
     let rs := decode_freg_u4 R rsbits in
+    do addr <- translate_AddrE_Addrmode a;
+    OK (Asm.Pmovsd_mf addr rs)
+  | Pcvttss_d_2si_rf rdbits rsbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
     if W then
-      do addr <- translate_AddrE_Addrmode a;
-      OK (Asm.Pmovsd_mf addr rs)
+      OK (Asm.Pcvttsd2sl_rf rd rs)
     else
-      do addr <- translate_AddrE_Addrmode a;
-      OK (Asm.Pmovsd_mf addr rs)
+      OK (Asm.Pcvttsd2si_rf rd rs)
+  | Pcvtsi2ss_d_fr rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then
+      OK (Asm.Pcvtsl2sd_fr rd rs)
+    else
+      OK (Asm.Pcvtsi2sd_fr rd rs)
+  | Pcvtsd2ss_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    OK (Asm.Pcvtsd2ss_ff rd rs)
+  | Padds_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    OK (Asm.Paddd_ff rd rs)
+  | Psubs_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    OK (Asm.Psubd_ff rd rs)
+  | Pmuls_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    OK (Asm.Pmuld_ff rd rs)
+  | Pmaxsd rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pmaxsd rd rs)
+  | Pminsd rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pminsd rd rs)
+  | Pbsqrtsd rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pbsqrtsd rd rs)
+  | Pdivss_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pdivd_ff rd rs)
   | _ => Error (msg "unsupported")
   end.
 
@@ -2052,20 +2393,112 @@ Definition decode_instr_rep (instr_ofs: Z) (res_iofs: res Z)  (W R X B: bool) (i
   match i with
   | Pmovss_d_fm a rdbits =>
     let rd := decode_freg_u4 R rdbits in
-    if W then
-      do addr <- translate_AddrE_Addrmode a;
-      OK (Asm.Pmovss_fm rd addr)
-    else
-      do addr <- translate_AddrE_Addrmode a;
-      OK (Asm.Pmovss_fm rd addr)
+    do addr <- translate_AddrE_Addrmode a;
+    OK (Asm.Pmovss_fm rd addr)
   | Pmovss_d_mf a rsbits =>
     let rs := decode_freg_u4 R rsbits in
+    do addr <- translate_AddrE_Addrmode a;
+    OK (Asm.Pmovss_mf addr rs)
+  | Pcvttss_d_2si_rf rdbits rsbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
     if W then
-      do addr <- translate_AddrE_Addrmode a;
-      OK (Asm.Pmovss_mf addr rs)
+      OK (Asm.Pcvttss2sl_rf rd rs)
     else
-      do addr <- translate_AddrE_Addrmode a;
-      OK (Asm.Pmovss_mf addr rs)
+      OK (Asm.Pcvttss2si_rf rd rs)
+  | Pcvtsi2ss_d_fr rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then
+      OK (Asm.Pcvtsl2ss_fr rd rs)
+    else
+      OK (Asm.Pcvtsi2ss_fr rd rs)
+  | Pcvtsd2ss_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    OK (Asm.Pcvtss2sd_ff rd rs)
+  | Padds_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    OK (Asm.Padds_ff rd rs)
+  | Psubs_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    OK (Asm.Psubs_ff rd rs)
+  | Pmuls_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    OK (Asm.Pmuls_ff rd rs)
+  | Pcomiss_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    OK (Asm.Pcomiss_ff rd rs)
+  | Pmovsq_rm a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pmovsq_rm rd addr)
+  | Prep_movsl => Asm.Prep_movsl
+  | Pdivss_d_ff rdbits rsbits =>
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    if W then Error (msg "unsupported")
+    else OK (Asm.Pdivs_ff rd rs)
+  | Pmovsxd_GvEv (AddrE0 rsbits) rdbits]
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    if W then OK (Asm.Pmovsl_rr rd rs)
+    else Error (msg "unsupported")
+  | Paddl_GvEv a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Paddq_rm rd addr)
+    else Error (msg "unsupported")
+  | Pandl_GvEv (AddrE0 rsbits) rdbits]
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    if W then OK (Asm.Pandq_rr rd rs)
+    else Error (msg "unsupported")
+  | Pandl_GvEv a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Pandq_rm rd addr)
+    else Error (msg "unsupported")
+  | Porl_GvEv (AddrE0 rsbits) rdbits]
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    if W then OK (Asm.Porq_rr rd rs)
+    else Error (msg "unsupported")
+  | Porl_GvEv a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Porq_rm rd addr)
+    else Error (msg "unsupported")
+  | Pxorl_GvEv (AddrE0 rsbits) rdbits]
+    let rd := decode_freg_u4 R rdbits in
+    let rs := decode_freg_u4 B rsbits in
+    if W then OK (Asm.Pxorq_rr rd rs)
+    else Error (msg "unsupported")
+  | Pxorl_GvEv a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Pxorq_rm rd addr)
+    else Error (msg "unsupported")
+  | Pcmpl_EvGv (AddrE0 r1bits) r2bits]
+    let r2 := decode_freg_u4 R r2bits in
+    let r1 := decode_freg_u4 B r1bits in
+    if W then OK (Asm.Pcmpq_rr r1 r2)
+    else Error (msg "unsupported")
+  | Pcmpl_GvEv a rdbits =>
+    let rd := decode_freg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Pcmpq_rm rd addr)
+    else Error (msg "unsupported")
+  | Ptestl_EvGv (AddrE0 rdbits) rsbits]
+    let rs := decode_freg_u4 R rsbits in
+    let rd := decode_freg_u4 B rdbits in
+    if W then OK (Asm.Ptestq_rr rd rs)
+    else Error (msg "unsupported")
   | _ => Error (msg "unsupported")
   end.
 
@@ -2237,9 +2670,16 @@ Hint Unfold decode_instr_rex decode_instr_rep decode_instr_repnz decode_instr de
 (* false if the encoded instruction unable to decode to itself *)
 Definition well_defined_instr i :=
   match i with
+  | Pxorq_r _
+  | Pmov_mr_a _ _ | Pmov_rm_a _ _
+  | Pcall_r _ _
+  | Asm.Plabel _ | Asm.Pmovls_rr _
+  | Asm.Pjmp_r _ _
+  | Asm.Pjmp_s _ _
   | Asm.Pmovzl_rr _ _
   | Asm.Pmov_rm_a _ _
-  | Asm.Pcall_s _ _ => false
+  | Asm.Pcall_s _ _
+  | Asm.Pxorl_r _ => false
   | _ => true
   end.
 
