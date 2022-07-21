@@ -767,7 +767,7 @@ End special_construct.
 (** ** Yuting's Development *)
 Definition inject_dom_in (f:meminj) (s:sup) :=
   forall b b' o, f b = Some (b', o) -> Mem.sup_In b s.
-  
+
 Definition inject_image_in (f:meminj) (s:sup) :=
   forall b b' o, f b = Some (b', o) -> Mem.sup_In b' s.
 
@@ -808,18 +808,43 @@ Definition inject_incr_disjoint (j j':meminj) (sd si:sup) :=
     ~sup_In b sd /\ ~sup_In b' si.
 
 (** Inversion of inject increment *)
-Lemma inject_incr_inv: forall j1 j2 j' sd1 si1 si2,
+Lemma inject_incr_inv: forall j1 j2 j' sd1 si1 si2 sd1',
     inject_dom_in j1 sd1 ->
     inject_image_in j1 si1 ->
+    inject_dom_in j2 si1 ->
     inject_image_in j2 si2 ->
+    inject_dom_in j' sd1' ->
     inject_incr (compose_meminj j1 j2) j' ->
+    inject_incr_disjoint (compose_meminj j1 j2) j' sd1 si2 ->
     exists j1' j2' si1', j' = compose_meminj j1' j2' /\
                inject_incr j1 j1' /\
                Mem.sup_include si1 si1' /\
-               inject_image_eq j1' si1' /\
+               inject_image_eq j1' si1' /\ (*??*)
                inject_incr_disjoint j1 j1' sd1 si1 /\
                inject_incr j2 j2' /\
                inject_incr_disjoint j2 j2' si1 si2.
+Proof.
+  intros.
+  destruct (update_meminj12 sd1 sd1' j1 j2 j' si1) as [[j1' j2'] si1'] eqn: UPDATE.
+  exists j1' ,j2' ,si1'.
+  exploit update_properties; eauto.
+  intros. destruct (j2 b) eqn:Hj. destruct p. apply H1 in Hj. congruence. auto.
+  intros. destruct (j1 b) eqn:Hj. destruct p. apply H in Hj. congruence. auto.
+  intros (INCR1 & INCR2 & A & B & C).
+  repeat apply conj.
+  + admit.
+  + auto.
+  + auto.
+  + (*?*) admit.
+  + red. intros. exploit B; eauto. intros [Hf Hs].
+    destruct Hf as (b2 & ofs2 & Hf). split.
+    exploit H5. unfold compose_meminj. rewrite H6. auto. eauto.
+    intros [D E]. auto. auto.
+  + auto.
+  + red. intros. exploit C; eauto. intros [Hs Hf].
+    destruct Hf as (b1 & Hf1 & Hf2). split. auto.
+    exploit  H5. unfold compose_meminj. rewrite Hf1. auto. eauto.
+    intros [D E]. auto.
 Admitted.
 
 (** Inversion of injection composition *)
@@ -873,7 +898,11 @@ Proof.
     intros IMGIN23.
     generalize (inject_implies_dom_in _ _ _ INJ12).
     intros DOMIN12.
-    generalize (inject_incr_inv _ _ _ _ _ _ DOMIN12 IMGIN12 IMGIN23 INCR13).
+    generalize (inject_implies_dom_in _ _ _ INJ23).
+    intros DOMIN23.
+    generalize (inject_implies_dom_in _ _ _ INJ13').
+    intros DOMIN13'.
+    generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 IMGIN23 DOMIN13' INCR13 DISJ13).
     intros (j12' & j23' & m2'_sup & JEQ & INCR12 & SUPINCL2 & IMGEQ12' & INCRDISJ12 & INCR23 & INCRDISJ23).
     subst.
     generalize (inject_compose_inv _ _ _ _ _ INJ13' IMGEQ12').
@@ -888,5 +917,5 @@ Proof.
       eapply Sup.sup_include_trans; eauto.
     + constructor; auto.
       ++ eapply Sup.sup_include_trans; eauto.
-    + apply inject_incr_refl. 
+    + apply inject_incr_refl.
 Qed.
