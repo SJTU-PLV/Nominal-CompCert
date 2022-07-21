@@ -624,6 +624,18 @@ Proof.
   destruct eq_block. subst. congruence. eauto.
 Qed.
 
+Lemma meminj_add_compose : forall f1 f2 a b c o,
+    (forall b0 z, ~ f1 b0 = Some (b,z)) ->
+    compose_meminj (meminj_add f1 a (b,0)) (meminj_add f2 b (c,o)) =
+    meminj_add (compose_meminj f1 f2) a (c,o).
+Proof.
+  intros. apply Axioms.extensionality. intro x.
+  unfold compose_meminj, meminj_add.
+  destruct (eq_block x a). rewrite pred_dec_true; eauto.
+  destruct (f1 x) eqn: Hf1; eauto. destruct p.
+  destruct (eq_block b0 b); eauto. subst. apply H in Hf1. inv Hf1.
+Qed.
+
 Fixpoint update_meminj12 (sd1': list block) (j1 j2 j': meminj) (si1: sup) :=
   match sd1' with
     |nil => (j1,j2,si1)
@@ -638,6 +650,8 @@ Fixpoint update_meminj12 (sd1': list block) (j1 j2 j': meminj) (si1: sup) :=
        end
   end.
 
+Definition empty_meminj (j: meminj) := forall b, j b = None.
+
 Lemma update_properties: forall sd1' sd1 j1 j2 si1 si1' j1' j2' j' si2,
     update_meminj12 sd1' j1 j2 j' si1 = (j1',j2',si1') ->
     inject_dom_in j1 sd1 ->
@@ -647,36 +661,40 @@ Lemma update_properties: forall sd1' sd1 j1 j2 si1 si1' j1' j2' j' si2,
     inject_incr_disjoint (compose_meminj j1 j2) j' sd1 si2 ->
     inject_incr j1 j1'
     /\ inject_incr j2 j2'
+(*    /\ j' = compose_meminj j1' j2' *)
     /\ Mem.sup_include si1 si1'
+    /\ inject_image_in j1' si1'
     /\ inject_incr_disjoint j1 j1' sd1 si1
     /\ inject_incr_disjoint j2 j2' si1 si2.
-(*    /\ (forall (b1 b0 : block) (delta : Z),
-        f10 b1 = None -> f10' b1 = Some (b0, delta) -> (exists b2 ofs2, f' b1 = Some (b2,ofs2)) /\ ~ sup_In b0 s)
-    /\ (forall (b0 b2 : block) (delta : Z),
-        f02 b0 = None -> f02' b0 = Some (b2, delta) -> ~ sup_In b0 s /\ (exists b1, f10 b1 = None /\ f' b1 = Some (b2,delta))). *)
 Proof.
   induction sd1'.
   - (*base*)
     intros; inv H.
     split. eauto. split. eauto. split. congruence.
-    split; congruence.
+    split. eauto. split; congruence.
   - intros sd1 j1 j2 si1 si1' j1' j2' j' si2 UPDATE DOMIN12 IMGIN12
            DOMIN23  INCR13 INCRDISJ13. inv UPDATE.
     destruct (compose_meminj j1 j2 a) eqn: Hja; eauto.
     destruct (j' a) eqn:Hj'a; eauto. destruct p.
     exploit INCRDISJ13; eauto. intros [a_notin_sd1 b_notin_si2].
-    (*update case*)
-    assert (inject_incr j1 (meminj_add j1 a (fresh_block si1,0))).
+    (* facts *)
+    assert (MIDINCR1: inject_incr j1 (meminj_add j1 a (fresh_block si1,0))).
     {
       unfold meminj_add. red. intros. destruct eq_block; eauto.
       apply DOMIN12 in H. congruence.
     }
-    assert (inject_incr j2 (meminj_add j2 (fresh_block si1) (b,z))).
+    assert (MIDINCR2: inject_incr j2 (meminj_add j2 (fresh_block si1) (b,z))).
     {
       unfold meminj_add. red. intros. destruct eq_block; eauto.
-      apply DOMIN23 in H1. subst. apply freshness in H1. inv H1.
+      apply DOMIN23 in H. subst. apply freshness in H. inv H.
+    }
+    assert (MIDINCR3: inject_incr (meminj_add (compose_meminj j1 j2) a (b,z)) j').
+    {
+      red. intros b0 b' o INJ. unfold meminj_add in INJ.
+      destruct (eq_block b0 a). congruence. eauto.
     }
     exploit IHsd1'. eauto.
+    (* rebuild preconditions for induction step *)
     + instantiate (1:= (a :: sd1)).
       red. intros b0 b' o. unfold meminj_add. destruct eq_block.
       left. auto. right. eauto.
@@ -684,28 +702,26 @@ Proof.
       subst. intro INJ. inv INJ. eapply Mem.sup_incr_in1. intro. apply Mem.sup_incr_in2. eauto.
     + red. intros b0 b' o. unfold meminj_add. destruct eq_block.
       subst. intro INJ. inv INJ. eapply Mem.sup_incr_in1. intro. apply Mem.sup_incr_in2. eauto.
-    + red. intros b0 b' o INJ.
-      destruct (eq_block b0 a).
-      -- subst. unfold compose_meminj, meminj_add in INJ.
-         repeat (rewrite pred_dec_true in INJ; eauto). inv INJ. congruence.
-      -- subst. unfold compose_meminj, meminj_add in INJ.
-         apply INCR13. unfold compose_meminj.
-         rewrite pred_dec_false in INJ; eauto. destruct (j1 b0) eqn : INJj1.
-         destruct p. rewrite pred_dec_false in INJ; eauto.
-         apply IMGIN12 in INJj1. intro. subst. apply freshness in INJj1. auto. auto.
-    + instantiate (1:= (b :: si2)).
-      red. intros b0 b' o INJ1 INJ2. destruct (eq_block b0 a).
-      -- subst. unfold compose_meminj, meminj_add in INJ1.
-         repeat (rewrite pred_dec_true in INJ1; eauto). inv INJ1.
-      -- admit.
+    + rewrite meminj_add_compose; eauto.
+      intros. intro. apply IMGIN12 in H. eapply freshness; eauto.
+    + instantiate (1:= (si2)). rewrite meminj_add_compose.
+      red. intros b0 b' o INJ1 INJ2. unfold meminj_add in INJ1. destruct (eq_block b0 a).
+      congruence. exploit INCRDISJ13; eauto. intros [A B]. split.
+      intros [H|H]; congruence.
+      auto.
+      intros. intro. apply IMGIN12 in H. eapply freshness; eauto.
     +
-    intros (incr1& incr2 & sinc  & disjoint1 & disjoint2).
+    intros (incr1& incr2 & sinc & imagein & disjoint1 & disjoint2).
     (*incr1*)
     split. eapply inject_incr_trans; eauto.
     (*incr2*)
     split. eapply inject_incr_trans; eauto.
+(*    (*compose*)
+    split. eauto. *)
     (*sinc*)
     split. eapply Mem.sup_include_trans; eauto.
+    (*imagein*)
+    split. eauto.
     (*disjoint1*)
     split.
     {
@@ -723,9 +739,9 @@ Proof.
     + subst. generalize (meminj_add_new j2 nb (b,z)). intro INJadd. apply incr2 in INJadd.
       rewrite INJ2 in INJadd. inv INJadd. split. apply freshness. auto.
     + exploit disjoint2. unfold meminj_add. rewrite pred_dec_false; eauto. eauto.
-      intros [A B]. split. intro. apply A. apply Mem.sup_incr_in2. auto. intro. apply B. right. auto.
+      intros [A B]. split. intro. apply A. apply Mem.sup_incr_in2. auto. intro. apply B. auto.
     }
-Admitted.
+Qed.
 
 (** Inversion of inject increment *)
 Lemma inject_incr_inv: forall j1 j2 j' sd1 si1 si2 sd1',
@@ -748,15 +764,8 @@ Proof.
   destruct (update_meminj12 sd1' j1 j2 j' si1) as [[j1' j2'] si1'] eqn: UPDATE.
   exists j1' ,j2' ,si1'.
   exploit update_properties; eauto.
-  intros (INCR1 & INCR2 & A & B & C).
-  repeat apply conj.
-  + admit.
-  + auto.
-  + auto.
-  + admit.
-  + auto.
-  + auto.
-  + auto.
+  intros (INCR1 & INCR2 & A & B & C & D).
+  repeat apply conj; eauto.
 Admitted.
 
 (** Inversion of injection composition *)
