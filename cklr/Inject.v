@@ -260,12 +260,12 @@ Next Obligation. (* Mem.valid_block *)
 Qed.
 
 Next Obligation. (* Mem.meminj_no_overlap *)
-  destruct H as [f m1 m2 s1 s2 Hm Hs1 Hs2].
+  destruct H as [f m1 m2 s1].
   eapply Mem.mi_no_overlap; eauto.
 Qed.
 
 Next Obligation. (* representable *)
-  destruct H as [f m1 m2 s1 s2 Hm Hs1 Hs2].
+  destruct H as [f m1 m2 s1].
   rewrite <- (Ptrofs.unsigned_repr ofs1) by extlia.
   eapply Mem.mi_representable; eauto.
   rewrite Ptrofs.unsigned_repr by extlia.
@@ -537,7 +537,7 @@ Proof.
     + cbn. rstep; auto.
 Qed.
 
-(*test *)
+(*test
 Definition meminj_incr_sep (f1 f2 f3 : meminj) : Prop :=
   forall b, f2 b =
     match f1 b with
@@ -554,217 +554,9 @@ Proof.
   apply H in Heqo. eauto. congruence.
   intros. rewrite H0 in H1. congruence.
 Qed.
+*)
 
 
-Section special_construct.
-
-Definition meminj_add (f:meminj) b1 r:=
-  fun b => if (eq_block b b1) then Some r else f b.
-
-Lemma meminj_add_new: forall f a b,
-    meminj_add f a b a = Some b.
-Proof.
-  intros. unfold meminj_add. rewrite pred_dec_true; auto. Qed.
-
-
-(*construction of f10' and f02': iterate the support of m1',
-  if b in (support m1') /\
-  b is not in (support m1) /\
-  f' b = Some (b',ofs).
-  then we add (b -> Some (fresh_block m0,0)) to f10,
-          add (fresh_block m0 -> (b',ofs)) to f02.
-
- The support should be concrete type list block. Maybe it can also work for other
- sup types which can be iterated as list.
- *)
-
-Fixpoint update_meminj12 (s1 s1' : list block) (f10 f02 f': meminj) (smid: sup) :=
-  match s1' with
-    |nil => (f10,f02,smid)
-    |hd::tl => if (Mem.sup_dec hd s1) then update_meminj12 s1 tl f10 f02 f' smid else
-                (
-              let b0 := fresh_block smid in
-              match f' hd with
-                |Some r =>
-                update_meminj12 (hd::s1) tl (meminj_add f10 hd (b0,0) )
-                                   (meminj_add f02 (fresh_block smid) r)
-                                f' (sup_incr smid)
-                |_ =>
-                update_meminj12 s1 tl f10 f02 f' smid
-              end)
-  end.
-
-Lemma update_properties: forall s1' s1 f10 f02 s s' f10' f02' f',
-    update_meminj12 s1 s1' f10 f02 f' s = (f10',f02',s') ->
-    (forall b, ~sup_In b s -> f02 b = None) ->
-    (forall b, ~sup_In b s1 -> f10 b = None) ->
-    inject_incr f10 f10' /\ inject_incr f02 f02' /\ Mem.sup_include s s'
-    /\ (forall (b1 b0 : block) (delta : Z),
-        f10 b1 = None -> f10' b1 = Some (b0, delta) -> (exists b2 ofs2, f' b1 = Some (b2,ofs2)) /\ ~ sup_In b0 s)
-    /\ (forall (b0 b2 : block) (delta : Z),
-        f02 b0 = None -> f02' b0 = Some (b2, delta) -> ~ sup_In b0 s /\ (exists b1, f10 b1 = None /\ f' b1 = Some (b2,delta))).
-Proof.
-  induction s1'; intros; inv H.
-  - split. eauto. split. eauto. split. congruence.
-    split; congruence.
-  - destruct Mem.sup_dec in H3. eauto.
-    destruct (f' a) eqn:?.
-    (*update case*)
-    apply IHs1' in H3.
-    assert (inject_incr f10 (meminj_add f10 a (fresh_block s,0))).
-    unfold meminj_add.
-    intro. intros.  destruct (eq_block b a). apply H1 in n. congruence. auto.
-    assert (inject_incr f02 (meminj_add f02 (fresh_block s) p)).
-    intro. unfold meminj_add. intros.
-    destruct eq_block. exploit H0. apply freshness. intro. congruence.
-    eauto. destruct H3 as (incr1& incr2 & sinc  & sep1 & sep2).
-    (*incr1*)
-    split. eapply inject_incr_trans; eauto.
-    (*incr2*)
-    split. eapply inject_incr_trans; eauto.
-    (*sinc*)
-    split. eapply Mem.sup_include_trans; eauto.
-    (*sep1*)
-    split.
-    intros. destruct (meminj_add f10 a (fresh_block s,0) b1) eqn: Hab.
-    unfold meminj_add in Hab. destruct eq_block in Hab. subst. inv Hab.
-    assert (meminj_add f10 a (fresh_block s,0) a = Some (fresh_block s,0)).
-    unfold meminj_add. rewrite pred_dec_true. auto. auto.
-    apply incr1 in H5.
-    rewrite H4 in H5. inv H5.
-    assert (meminj_add f02 (fresh_block s) p (fresh_block s) = Some p).
-    unfold meminj_add. rewrite pred_dec_true; eauto. destruct p.
-    apply incr2 in H5. split.
-    exists b,z.  congruence.
-    apply freshness.
-    congruence.
-    exploit sep1; eauto. intros. inv H5. split. auto.
-    intro. apply H7. apply Mem.sup_incr_in2. eauto.
-    (*sep2*)
-    intros. destruct p. destruct (meminj_add f02 (fresh_block s) (b,z) b0) eqn: Hab.
-    unfold meminj_add in Hab. destruct eq_block in Hab. subst. inv Hab.
-    assert (meminj_add f02 (fresh_block s) (b,z) (fresh_block s) = Some (b,z)).
-    unfold meminj_add. rewrite pred_dec_true. auto. auto.
-    apply incr2 in H5.
-    rewrite H4 in H5. inv H5.
-    split. apply freshness.
-    exists a. split. apply H1. auto.  congruence.
-    congruence.
-    exploit sep2; eauto. intros. inv H5. split.
-    intro. apply H6. apply Mem.sup_incr_in2. eauto.
-    destruct H7 as (b1 & A & B).
-    exists b1. split.  unfold meminj_add in A. destruct eq_block in A. congruence. auto.
-    auto.
-    (*condition1*)
-    intros. unfold meminj_add. destruct eq_block. subst.
-    elim H. apply Mem.sup_incr_in1. apply H0. intro. apply H.
-    apply Mem.sup_incr_in2. eauto.
-    (*condition2*)
-    intros. unfold meminj_add. destruct eq_block. subst.
-    elim H. left. auto. apply H1. intro. apply H. right. auto.
-    eauto.
-Qed.
-
-(*It seems we do not need f' = compose_meminj j12' j13',
-  inject_incr f' compose j12' j23' in some conditions is good enough.
-  Maybe the proof can be structured better to prove that. *)
-
-Lemma update_properties2: forall s1' s1 f10 f02 s s' f10' f02' f' b b' ofs,
-    update_meminj12 s1 s1' f10 f02 f' s = (f10',f02',s') ->
-   (forall b, ~sup_In b s -> f02 b = None) ->
-    (forall b, ~sup_In b s1 -> f10 b = None) ->
-    f' b = Some (b', ofs) ->
-    ~sup_In b s1 -> sup_In b s1' ->
-    compose_meminj f10' f02' b = Some (b', ofs).
-Proof.
-  induction s1'; intros; inv H.
-  - inv H4.
-  - destruct Mem.sup_dec in H6. eapply IHs1'; eauto.
-    destruct H4. congruence. auto.
-    destruct (eq_block a b). subst.
-    rewrite H2 in H6.
-
-    exploit update_properties. eauto.
-    intros. unfold meminj_add. destruct eq_block. subst. elim H. apply Mem.sup_incr_in1.
-    eapply H0. intro. apply H. apply Mem.sup_incr_in2. auto.
-    intros. unfold meminj_add. destruct eq_block. subst. elim H. left. auto.
-    eapply H1. intro. apply H. right. auto.
-    intros (INCR1 & INCR2 & ? & ?).
-    generalize (meminj_add_new f10 b (fresh_block s,0)). intro A.
-    generalize (meminj_add_new f02 (fresh_block s) (b',ofs)). intro B.
-    eapply compose_meminj_incr. eauto. eauto.
-    unfold compose_meminj. rewrite A, B. f_equal.
-
-    destruct (f' a) in H6.
-    eapply IHs1'; eauto.
-    intros. unfold meminj_add. destruct eq_block. subst. elim H. apply Mem.sup_incr_in1.
-    eapply H0. intro. apply H. apply Mem.sup_incr_in2. auto.
-    intros. unfold meminj_add. destruct eq_block. subst. elim H. left. auto.
-    apply H1. intro. apply H. right. auto. intro. destruct H; congruence.
-    destruct H4; congruence.
-    eapply IHs1'; eauto. destruct H4; congruence.
-Qed.
-
-Lemma inj_inj2':
-  subcklr (inj @ inj) inj.
-Proof.
-  red.
-  intros w se1 se2 m1 m2 Hse Hm. destruct w as [w1 w2].
-  destruct Hm as [m0 [Hm10 Hm02]]. simpl in *.
-  destruct Hm10 as [f10 m1 m0 Hm10].
-  destruct Hm02 as [f02 m0 m2 Hm02]. simpl in *.
-  exists (injw (compose_meminj f10 f02) (Mem.support m1)(Mem.support m2)).
-  repeat apply conj.
-  - inv Hse. inv H. inv H0. inv H1.
-    econstructor; auto.
-    eapply Genv.match_stbls_compose; eauto.
-  - constructor.
-    eapply Mem.inject_compose; eauto.
-  - simpl.
-    apply inject_incr_refl.
-  - intros w' m1' m2' H12 Hw12.
-    destruct H12 as [f' m1' m2' Hm12].
-    inversion Hw12 as [? ? ? ? ? ? Hf12' SEP12']. clear Hw12; subst.
-    destruct (update_meminj12 (Mem.support m1) (Mem.support m1') f10 f02 f' (Mem.support m0)) as
-        [[f10' f02'] s'] eqn: UPDATE.
-    exploit update_properties; eauto.
-    inv Hm02. eauto. inv Hm10. eauto.
-    intros (INCR1 & INCR2 & SINC & SEP1 & SEP2).
-    assert (exists m0',Mem.inject f10' m1' m0'
-                  /\ Mem.inject f02' m0' m2'
-                  /\ Mem.support m0' = s').
-    admit.
-    destruct H1 as (m0' & INJ1 & INJ2 & SUP).
-    exists ((injw f10' (Mem.support m1') (Mem.support m0')),(injw f02' (Mem.support m0') (Mem.support m2'))).
-    repeat apply conj.
-    + exists m0'. split; constructor; auto.
-    + constructor. eauto.
-      intros. exploit SEP1; eauto. intros [A B]. destruct A as (b3 & ofs3 & A).
-      exploit SEP12'. unfold compose_meminj. rewrite H1. auto. rewrite A. reflexivity.
-      intros [D E].
-      split. auto. auto.
-      eauto. rewrite SUP. eauto.
-    + constructor. eauto.
-      intros. exploit SEP2; eauto. intros [A B]. destruct B as (b0 & B & C).
-      split. auto.
-      exploit SEP12'. unfold compose_meminj. rewrite B. auto. rewrite C. reflexivity.
-      intros [D E]. auto. rewrite SUP. eauto. eauto.
-    + simpl. intro. intros.
-      destruct ((compose_meminj f10 f02) b) eqn: Hold. destruct p.
-      apply Hf12' in Hold as H00. rewrite H1 in H00. inv H00.
-      exploit compose_meminj_incr. apply INCR1. apply INCR2.
-      eauto. eauto.
-      exploit SEP12'; eauto. intros [A B].
-      eapply update_properties2; eauto. inv Hm02. eauto.
-      inv Hm10. eauto. inv Hm12. destruct (Mem.sup_dec b (Mem.support m1')).
-      auto. apply mi_freeblocks in n. congruence.
-Admitted.
-
-End special_construct.
-
-
-
-(** ** Yuting's Development *)
 Definition inject_dom_in (f:meminj) (s:sup) :=
   forall b b' o, f b = Some (b', o) -> Mem.sup_In b s.
 
@@ -800,12 +592,140 @@ Proof.
   auto.
 Qed.
 
+Lemma inject_dom_in_inv: forall f s b,
+    inject_dom_in f s -> ~sup_In b s -> f b = None.
+Proof.
+  intros. destruct (f b) eqn:?. destruct p.
+  apply H in Heqo. congruence. auto.
+Qed.
+
 (** Increased injection only maps invalid blocks from source to target *)
 Definition inject_incr_disjoint (j j':meminj) (sd si:sup) :=
   forall b b' delta,
     j b = None ->
     j' b = Some (b', delta) ->
     ~sup_In b sd /\ ~sup_In b' si.
+
+(** Construction of meminj j1' j2' *)
+
+Definition meminj_add (f:meminj) b1 r:=
+  fun b => if (eq_block b b1) then Some r else f b.
+
+Lemma meminj_add_new: forall f a b,
+    meminj_add f a b a = Some b.
+Proof.
+  intros. unfold meminj_add. rewrite pred_dec_true; auto.
+Qed.
+
+Lemma meminj_add_incr: forall f a b,
+    f a = None -> inject_incr f (meminj_add f a b).
+Proof.
+  intros. intro. unfold meminj_add. intros.
+  destruct eq_block. subst. congruence. eauto.
+Qed.
+
+Fixpoint update_meminj12 (sd1': list block) (j1 j2 j': meminj) (si1: sup) :=
+  match sd1' with
+    |nil => (j1,j2,si1)
+    |hd::tl =>
+       match compose_meminj j1 j2 hd, (j' hd) with
+       | None , Some (b2,ofs) =>
+         let b0 := fresh_block si1 in
+         update_meminj12 tl (meminj_add j1 hd (b0,0) )
+                         (meminj_add j2 (fresh_block si1) (b2,ofs))
+                         j' (sup_incr si1)
+       | _,_ => update_meminj12 tl j1 j2 j' si1
+       end
+  end.
+
+Lemma update_properties: forall sd1' sd1 j1 j2 si1 si1' j1' j2' j' si2,
+    update_meminj12 sd1' j1 j2 j' si1 = (j1',j2',si1') ->
+    inject_dom_in j1 sd1 ->
+    inject_image_in j1 si1 ->
+    inject_dom_in j2 si1 ->
+    inject_incr (compose_meminj j1 j2) j' ->
+    inject_incr_disjoint (compose_meminj j1 j2) j' sd1 si2 ->
+    inject_incr j1 j1'
+    /\ inject_incr j2 j2'
+    /\ Mem.sup_include si1 si1'
+    /\ inject_incr_disjoint j1 j1' sd1 si1
+    /\ inject_incr_disjoint j2 j2' si1 si2.
+(*    /\ (forall (b1 b0 : block) (delta : Z),
+        f10 b1 = None -> f10' b1 = Some (b0, delta) -> (exists b2 ofs2, f' b1 = Some (b2,ofs2)) /\ ~ sup_In b0 s)
+    /\ (forall (b0 b2 : block) (delta : Z),
+        f02 b0 = None -> f02' b0 = Some (b2, delta) -> ~ sup_In b0 s /\ (exists b1, f10 b1 = None /\ f' b1 = Some (b2,delta))). *)
+Proof.
+  induction sd1'.
+  - (*base*)
+    intros; inv H.
+    split. eauto. split. eauto. split. congruence.
+    split; congruence.
+  - intros sd1 j1 j2 si1 si1' j1' j2' j' si2 UPDATE DOMIN12 IMGIN12
+           DOMIN23  INCR13 INCRDISJ13. inv UPDATE.
+    destruct (compose_meminj j1 j2 a) eqn: Hja; eauto.
+    destruct (j' a) eqn:Hj'a; eauto. destruct p.
+    exploit INCRDISJ13; eauto. intros [a_notin_sd1 b_notin_si2].
+    (*update case*)
+    assert (inject_incr j1 (meminj_add j1 a (fresh_block si1,0))).
+    {
+      unfold meminj_add. red. intros. destruct eq_block; eauto.
+      apply DOMIN12 in H. congruence.
+    }
+    assert (inject_incr j2 (meminj_add j2 (fresh_block si1) (b,z))).
+    {
+      unfold meminj_add. red. intros. destruct eq_block; eauto.
+      apply DOMIN23 in H1. subst. apply freshness in H1. inv H1.
+    }
+    exploit IHsd1'. eauto.
+    + instantiate (1:= (a :: sd1)).
+      red. intros b0 b' o. unfold meminj_add. destruct eq_block.
+      left. auto. right. eauto.
+    + red. intros b0 b' o. unfold meminj_add. destruct eq_block.
+      subst. intro INJ. inv INJ. eapply Mem.sup_incr_in1. intro. apply Mem.sup_incr_in2. eauto.
+    + red. intros b0 b' o. unfold meminj_add. destruct eq_block.
+      subst. intro INJ. inv INJ. eapply Mem.sup_incr_in1. intro. apply Mem.sup_incr_in2. eauto.
+    + red. intros b0 b' o INJ.
+      destruct (eq_block b0 a).
+      -- subst. unfold compose_meminj, meminj_add in INJ.
+         repeat (rewrite pred_dec_true in INJ; eauto). inv INJ. congruence.
+      -- subst. unfold compose_meminj, meminj_add in INJ.
+         apply INCR13. unfold compose_meminj.
+         rewrite pred_dec_false in INJ; eauto. destruct (j1 b0) eqn : INJj1.
+         destruct p. rewrite pred_dec_false in INJ; eauto.
+         apply IMGIN12 in INJj1. intro. subst. apply freshness in INJj1. auto. auto.
+    + instantiate (1:= (b :: si2)).
+      red. intros b0 b' o INJ1 INJ2. destruct (eq_block b0 a).
+      -- subst. unfold compose_meminj, meminj_add in INJ1.
+         repeat (rewrite pred_dec_true in INJ1; eauto). inv INJ1.
+      -- admit.
+    +
+    intros (incr1& incr2 & sinc  & disjoint1 & disjoint2).
+    (*incr1*)
+    split. eapply inject_incr_trans; eauto.
+    (*incr2*)
+    split. eapply inject_incr_trans; eauto.
+    (*sinc*)
+    split. eapply Mem.sup_include_trans; eauto.
+    (*disjoint1*)
+    split.
+    {
+    red. red in disjoint1. intros b0 b' delta INJ1 INJ2.
+    destruct (eq_block b0 a).
+    + subst. generalize (meminj_add_new j1 a (fresh_block si1,0)). intro INJadd.
+      apply incr1 in INJadd. rewrite INJ2 in INJadd. inv INJadd. split. auto. apply freshness.
+    + exploit disjoint1. unfold meminj_add. rewrite pred_dec_false; eauto. eauto.
+      intros [A B]. split. intro. apply A. right. auto. intro. apply B. apply Mem.sup_incr_in2. auto.
+    }
+    (*disjoint2*)
+    {
+    red. red in disjoint2. intros b0 b' delta INJ1 INJ2. set (nb := fresh_block si1).
+    destruct (eq_block b0 nb).
+    + subst. generalize (meminj_add_new j2 nb (b,z)). intro INJadd. apply incr2 in INJadd.
+      rewrite INJ2 in INJadd. inv INJadd. split. apply freshness. auto.
+    + exploit disjoint2. unfold meminj_add. rewrite pred_dec_false; eauto. eauto.
+      intros [A B]. split. intro. apply A. apply Mem.sup_incr_in2. auto. intro. apply B. right. auto.
+    }
+Admitted.
 
 (** Inversion of inject increment *)
 Lemma inject_incr_inv: forall j1 j2 j' sd1 si1 si2 sd1',
@@ -819,39 +739,31 @@ Lemma inject_incr_inv: forall j1 j2 j' sd1 si1 si2 sd1',
     exists j1' j2' si1', j' = compose_meminj j1' j2' /\
                inject_incr j1 j1' /\
                Mem.sup_include si1 si1' /\
-               inject_image_eq j1' si1' /\ (*??*)
+               inject_image_in j1' si1' /\ (*??*)
                inject_incr_disjoint j1 j1' sd1 si1 /\
                inject_incr j2 j2' /\
                inject_incr_disjoint j2 j2' si1 si2.
 Proof.
   intros.
-  destruct (update_meminj12 sd1 sd1' j1 j2 j' si1) as [[j1' j2'] si1'] eqn: UPDATE.
+  destruct (update_meminj12 sd1' j1 j2 j' si1) as [[j1' j2'] si1'] eqn: UPDATE.
   exists j1' ,j2' ,si1'.
   exploit update_properties; eauto.
-  intros. destruct (j2 b) eqn:Hj. destruct p. apply H1 in Hj. congruence. auto.
-  intros. destruct (j1 b) eqn:Hj. destruct p. apply H in Hj. congruence. auto.
   intros (INCR1 & INCR2 & A & B & C).
   repeat apply conj.
   + admit.
   + auto.
   + auto.
-  + (*?*) admit.
-  + red. intros. exploit B; eauto. intros [Hf Hs].
-    destruct Hf as (b2 & ofs2 & Hf). split.
-    exploit H5. unfold compose_meminj. rewrite H6. auto. eauto.
-    intros [D E]. auto. auto.
+  + admit.
   + auto.
-  + red. intros. exploit C; eauto. intros [Hs Hf].
-    destruct Hf as (b1 & Hf1 & Hf2). split. auto.
-    exploit  H5. unfold compose_meminj. rewrite Hf1. auto. eauto.
-    intros [D E]. auto.
+  + auto.
+  + auto.
 Admitted.
 
 (** Inversion of injection composition *)
 Lemma inject_compose_inv:
   forall (f f' : meminj) (m1 m3 : mem) s,
   Mem.inject (compose_meminj f f') m1 m3 ->
-  inject_image_eq f s ->
+  inject_image_in f s ->
   exists m2 , Mem.inject f m1 m2 /\
          Mem.inject f' m2 m3 /\
          Mem.sup_include s (Mem.support m2).
@@ -864,7 +776,7 @@ Lemma inj_inj2:
 Proof.
   red.
   intros w se1 se3 m1 m3 MSTBL13 MMEM13. destruct w as [w12 w23].
-  destruct MMEM13 as [m2 [MMEM12 MMEM23]]. 
+  destruct MMEM13 as [m2 [MMEM12 MMEM23]].
   simpl in *.
   exists (injw (compose_meminj (injw_meminj w12) (injw_meminj w23))
           (Mem.support m1)(Mem.support m3)).
