@@ -31,7 +31,7 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   match i with
   | Pmov_rs r _ => OK (2 + rex_prefix_check_r r)
   | Pcall_s _ _ => OK 1
-  | Pjmp_s _ _ => OK 1
+  | Pjmp_s _ _ | Pjmp_l_rel _ => OK 1
   | Pleal r a
   | Pmovl_rm r a
   | Pmovl_mr a r =>

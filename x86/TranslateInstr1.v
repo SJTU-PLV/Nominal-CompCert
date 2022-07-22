@@ -387,9 +387,8 @@ Definition decode_testcond_u4 (bs:u4) : res testcond :=
   end.
 
 (** *Consistency Lemma for offset,testcond *)
-Lemma encode_testcond_consistency : forall c bs,
-  encode_testcond_u4 c = bs ->
-  decode_testcond_u4 bs = OK(c).
+Lemma encode_testcond_consistency : forall c,
+  decode_testcond_u4 (encode_testcond_u4 c) = OK(c).
 Proof.
   (**r enumerate all possibility of c *)
   destruct c;
@@ -410,6 +409,12 @@ Lemma encode_ofs_u8_consistency:forall ofs l,
     encode_ofs_u8 (Int.intval ofs) = OK l ->
     decode_ofs_u8 l = ofs.
 Proof.
+Admitted.
+
+Lemma encode_ofs_u32_consistency_aux:forall ofs l,
+    0 <= ofs < Int.modulus ->
+    encode_ofs_u32 ofs = OK l ->
+    Int.intval (decode_ofs_u32 l) = ofs.
 Admitted.
 
 
@@ -1334,10 +1339,13 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
   | Asm.Pjmp_l_rel ofs =>
     (* no relocation *)
     do iofs <- res_iofs;
-    match ZTree.get (iofs + instr_ofs) rtbl_ofs_map with
+    match ZTree.get (iofs+instr_ofs) rtbl_ofs_map with
     | None =>
-      do imm <- encode_ofs_u32 ofs;
-      OK [Pjmp_l_rel imm]
+      if (0 <=? ofs) && (ofs <? Int.modulus) then
+        do imm <- encode_ofs_u32 ofs;
+        OK [Pjmp_l_rel imm]
+      else
+        Error (msg "overflow of offset in Pjmp_l_rel")
     | _ => Error[MSG"Relocation entry in Pjmp_l_rel not expected"; MSG(Z_to_hex_string 4 ofs)]
     end
   | Asm.Pjmp_s id _ =>
@@ -1377,9 +1385,11 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
      do imm16 <- encode_ofs_u16 (Int.intval imm);
      OK [Pret_iw imm16]
   | Asm.Pjcc_rel c ofs =>
-     let cond := encode_testcond_u4 c in
-     do imm <- encode_ofs_u32 ofs;
-     OK [Pjcc_rel cond imm]
+    let cond := encode_testcond_u4 c in
+    if (0 <=? ofs) && (ofs <? Int.modulus) then
+      do imm <- encode_ofs_u32 ofs;
+      OK [Pjcc_rel cond imm]
+    else Error (msg "offset overflow in Pjcc_rel")
   | Asm.Padcl_ri rd imm =>
     do rex_r <- encode_rex_prefix_r rd;
     let (orex, rdbits) := rex_r in
@@ -1390,12 +1400,12 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (orex_r1bits, rdbits) := rex_rr in
     let (orex, r1bits) := orex_r1bits in
     (* check document, add reg with CF to rm *)
-    OK ([Padcl_rr r1bits rdbits])
+    OK (orex ++ [Padcl_rr r1bits rdbits])
   | Asm.Paddl_rr rd r1 =>
     do rex_rr <- encode_rex_prefix_rr r1 rd;
     let (orex_r1bits, rdbits) := rex_rr in
     let (orex, r1bits) := orex_r1bits in
-    OK ([Paddl_EvGv (AddrE0 rdbits) r1bits])
+    OK (orex ++ [Paddl_EvGv (AddrE0 rdbits) r1bits])
   | Asm.Paddl_mi addr imm =>
     do orex_a <- encode_rex_prefix_addr addr;
     let (orex, a) := orex_a in
@@ -1412,9 +1422,13 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (orex, rdbits) := orex_rdbits in
     OK (orex ++ [Pbsrl rdbits r1bits])
   | Asm.Pbswap32 rd =>
-    do rex_r <- encode_rex_prefix_r rd;
-    let (orex, rdbits) := rex_r in
-    OK (orex ++ [Pbswap32 rdbits])
+    do Rrdbits <- encode_ireg_u4 rd;
+    let (R,rdbits) := Rrdbits in
+    (* use R to extend register instead of B *)
+    OK ([REX_WRXB zero1 R zero1 zero1; Pbswap32 rdbits])
+    (* do rex_r <- encode_rex_prefix_r rd; *)
+    (* let (orex, rdbits) := rex_r in *)
+    (* OK (orex ++ [Pbswap32 rdbits]) *)
   | Asm.Pbswap64 rd =>
     do Rrdbits <- encode_ireg_u4 rd;
     let (R,rdbits) := Rrdbits in
@@ -2257,7 +2271,7 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     if W then OK (Asm.Pbsrq rd rs)
     else OK (Asm.Pbsrl rd rs)
   | Pbswap32 rdbits =>
-    let rd := decode_ireg_u4 B rdbits in
+    let rd := decode_ireg_u4 R rdbits in
     if W then OK (Asm.Pbswap64 rd)
     else OK (Asm.Pbswap32 rd)
   | Psbbl_rr rsbits rdbits =>
@@ -2320,6 +2334,11 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     let rd := decode_ireg_u4 R rdbits in
     do addr <- translate_AddrE_Addrmode a;
     if W then OK (Asm.Pcmpq_rm rd addr)
+    else Error (msg "unsupported")
+  | Ptestl_EvGv a rsbits =>
+    let rs := decode_ireg_u4 R rsbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Ptestq_rm rs addr)
     else Error (msg "unsupported")
   | _ => Error (msg "unsupported")
   end.
@@ -2664,6 +2683,8 @@ Hint Unfold decode_instr_rex decode_instr_rep decode_instr_repnz decode_instr de
 (* false if the encoded instruction unable to decode to itself *)
 Definition well_defined_instr i :=
   match i with
+  | Pmovsd_mf_a _ _
+  | Pmovsd_fm_a _ _
   | Pxorq_r _
   | Pmov_mr_a _ _ | Pmov_rm_a _ _
   | Asm.Pcall_r _ _
@@ -2838,42 +2859,48 @@ Proof.
       try destr_ptr64_in_H H;
       try solve_decode_instr H RELOC;
       try (do 2 f_equal;auto with encdec).
-  
-  admit.
-  
-  
-  monadInv H. cbn [app] in *.
-  autounfold with decunfold. simpl.
-  do 2 f_equal. auto with encdec.
-  
-  solve_ri32
-  
-  try solve_rr H;
-  try solve_ff H;
-  try solve_rf H;
-  try solve_fr H;
-  try solve_ri32 H ;
-  try solve_ri16 H;
-  try solve_ri8 H;
-  try solve_ra H RELOC;  
-  try solve_fa H RELOC;
-  try solve_only_addr H RELOC;
-  try solve_only_r H;
-  try solve_ra64_normal H RELOC;
-  try solve_rf_normal H;
-  try solve_ff_normal H;
-  try solve_rr_normal H.        (* not stable, place it to the end *)
 
-  admit.                        (* cond *)
-  f_equal. f_equal. auto with encdec.
-  rewrite <- H11. admit.         (* Pimull *)
+  (* Pimull_ri *)
+  admit. 
+
+  (* testcond *)
+  1-10 : try (rewrite encode_testcond_consistency;simpl;
+  do 2 f_equal;auto with encdec).
+
+  monadInv H. simpl. do 2 f_equal;auto with encdec.
   
-  solve_rr_normal H. 
-  simpl.
-  try do 2 f_equal; auto with encdec.
-  solve_ri32 H.
-  
-Qed.
+  (* Paddmi *)
+  generalize Heqb.
+  unfold zero1. simpl. unfold char_to_bool.
+  simpl. unfold decode_u1. simpl. congruence.
+
+  monadInv H. destr_in EQ0. destr_in EQ0.
+  monadInv EQ0. cbn [app] in *. autounfold with decunfold.
+  simpl in RELOC.
+  rewrite RELOC. cbn [bind]. inv EQ.
+  rewrite Heqo. do 2 f_equal.
+  apply andb_true_iff  in Heqb. destruct Heqb.
+  assert (0 <= ofs < Int.modulus).
+  split. 
+  apply Z.leb_le;eauto. apply Z.ltb_lt;eauto.  
+  apply encode_ofs_u32_consistency_aux;eauto.
+  (* intros. *)
+  (* rewrite H12. unfold Int.repr. simpl. *)
+  (* rewrite Int.Z_mod_modulus_eq. *)
+  (* rewrite Z.mod_eq. erewrite Z.div_small;eauto. *)
+  (* rewrite Z.mul_0_r. rewrite Z.sub_0_r. auto. *)
+  (* generalize  Int.modulus_pos. lia. *)
+
+  destr_in H.
+  monadInv H. cbn [app] in *. autounfold with decunfold.
+  rewrite encode_testcond_consistency. cbn [bind].
+  do 2 f_equal.
+  apply andb_true_iff  in Heqb. destruct Heqb.
+  assert (0 <= ofs < Int.modulus).
+  split. 
+  apply Z.leb_le;eauto. apply Z.ltb_lt;eauto.  
+  apply encode_ofs_u32_consistency_aux;eauto.
+Admitted.
   
 End CSLED_RELOC.
 
