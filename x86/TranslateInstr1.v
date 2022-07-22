@@ -370,23 +370,24 @@ Program Definition encode_testcond_u4 (c:testcond) : u4 :=
 (*change it to total function*)
 Definition decode_testcond_u4 (bs:u4) : res testcond :=
   let bs' := proj1_sig bs in
-  let n := bits_to_Z bs' in
-  if Z.eqb n 4 then OK(Cond_e)            (**r 4 b["0100"] *)
-  else if Z.eqb n 5  then OK(Cond_ne)     (**r 5 b["0101"] *)
-  else if Z.eqb n 2  then OK(Cond_b)      (**r 2 b["0010"] *)
-  else if Z.eqb n 6  then OK(Cond_be)     (**r 6 b["0110"] *)
-  else if Z.eqb n 3  then OK(Cond_ae)     (**r 3 b["0011"] *)
-  else if Z.eqb n 7  then OK(Cond_a)      (**r 7 b["0111"] *)
-  else if Z.eqb n 12 then OK(Cond_l)      (**r C b["1100"] *)
-  else if Z.eqb n 14 then OK(Cond_le)     (**r E b["1110"] *)
-  else if Z.eqb n 13 then OK(Cond_ge)     (**r D b["1101"] *)
-  else if Z.eqb n 15 then OK(Cond_g)      (**r F b["1111"] *)
-  else if Z.eqb n 10 then OK(Cond_p)      (**r A b["1010"] *)
-  else if Z.eqb n 11 then OK(Cond_np)     (**r B b["1011"] *)
-  else Error(msg "reg not found")
-.
+  match bs' with
+  | [false;true;false;false] => OK Cond_e
+  | [false;true;false;true] => OK Cond_ne
+  | [false;false;true;false] => OK Cond_b
+  | [false;true;true;false] => OK Cond_be
+  | [false;false;true;true] => OK Cond_ae
+  | [false;true;true;true] => OK Cond_a
+  | [true;true;false;false] => OK Cond_l
+  | [true;true;true;false] => OK Cond_le
+  | [true;true;false;true] => OK Cond_ge
+  | [true;true;true;true] => OK Cond_g
+  | [true;false;true;false] => OK Cond_p
+  | [true;false;true;true] => OK Cond_np
+  | _ => Error (msg "decode testcond error")
+  end.
+
 (** *Consistency Lemma for offset,testcond *)
-Lemma testcond_encode_consistency : forall c bs,
+Lemma encode_testcond_consistency : forall c bs,
   encode_testcond_u4 c = bs ->
   decode_testcond_u4 bs = OK(c).
 Proof.
@@ -398,29 +399,19 @@ Proof.
   auto.
 Qed.
 
-Lemma testcond_decode_consistency : forall c bs,
-  decode_testcond_u4 bs = OK(c) ->
-  encode_testcond_u4 c = bs.
+Lemma encode_ofs_u16_consistency:forall ofs l,
+    encode_ofs_u16 (Int.intval ofs) = OK l ->
+    decode_ofs_u16 l = ofs.
 Proof.
-  intros.
-  destruct bs as [b Hlen].
-  (** extract three bits from b *)
-  destruct b as [| b0 b]; try discriminate; inversion Hlen. (**r the 1st one *)
-  destruct b as [| b1 b]; try discriminate; inversion Hlen. (**r the 2nd one *)
-  destruct b as [| b2 b]; try discriminate; inversion Hlen. (**r the 3rd one *)
-  destruct b as [| b3 b]; try discriminate; inversion Hlen. (**r the 4th one *)
-  destruct b; try discriminate.                             (**r b is a empty list now, eliminate other possibility *)
-  (** case analysis on [b0, b1, b2] *)
-  destruct b0, b1, b2, b3 eqn:Eb;
-  unfold decode_testcond_u4 in H; simpl in H; (**r extract decoded result r from H *)
-  inversion H; subst;                         (**r subst r *)
-  unfold encode_testcond_u4; simpl;           (**r calculate encode_testcond_u4 *)
-  cbv delta in *;
-  unfold char_to_bool; simpl;
-  replace eq_refl with Hlen;
-  try reflexivity;                            (**r to solve OK(exsit _ _ Hlen) = OK(exsit _ _ Hlen) *)
-  try apply proof_irr.                        (**r to solve e = eq_refl *)
-Qed.
+Admitted.
+
+
+Lemma encode_ofs_u8_consistency:forall ofs l,
+    encode_ofs_u8 (Int.intval ofs) = OK l ->
+    decode_ofs_u8 l = ofs.
+Proof.
+Admitted.
+
 
 Lemma encode_ofs_u32_consistency:forall ofs l,
     encode_ofs_u32 (Int.intval ofs) = OK l ->
@@ -604,15 +595,22 @@ Definition translate_AddrE_Addrmode (sofs: Z) (res_iofs: res Z) (X B: bool) (add
   (*   | *)
 
 
+
 (** *Consistency theorem for AddrE and Addrmode  *)
+Definition not_AddrE0 a:bool:=
+  match a with
+  | AddrE0 _ => false
+  | _ => true
+  end.
+
 Lemma transl_addr_consistency32: forall addr a sofs res_iofs,
     translate_Addrmode_AddrE sofs res_iofs addr = OK a ->
-    translate_AddrE_Addrmode sofs res_iofs false false a = OK addr.
+    not_AddrE0 a = true /\ translate_AddrE_Addrmode sofs res_iofs false false a = OK addr.
 Admitted.
 
 Lemma transl_addr_consistency64: forall addr a sofs res_iofs x b,
     translate_Addrmode_AddrE64 sofs res_iofs addr = OK (a, x, b) ->
-    translate_AddrE_Addrmode sofs res_iofs x b a = OK addr.
+    not_AddrE0 a = true /\ translate_AddrE_Addrmode sofs res_iofs x b a = OK addr.
  Admitted.
 
 (** *REX: Extended register and addrmode encoding *)
@@ -1926,9 +1924,6 @@ Section CSLED_RELOC.
 
 Variable Instr_reloc_offset: list Instruction -> res Z.
 
-Hypothesis encode_reloc_offset_conform: forall i iofs li l,
-  translate_instr iofs i = OK li ->
-  Instr_reloc_offset (li++l) = instr_reloc_offset i.
 
 
 (* unfinished: we should add conditional checking for W bit, which can ensure the deocde_consistency *)
@@ -2005,14 +2000,14 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     let rd := decode_ireg_u4 R rdbits in
     do addr <- translate_AddrE_Addrmode a;
     OK (Asm.Pmovb_rm rd addr)
-  | Pmovsw_GvEv a rdbits =>
-    let rd := decode_ireg_u4 R rdbits in
-    do addr <- translate_AddrE_Addrmode a;
-    OK (Asm.Pmovsw_rm rd addr)
   | Pmovsw_GvEv (AddrE0 rsbits) rdbits =>
     let rd := decode_ireg_u4 R rdbits in
     let rs := decode_ireg_u4 B rsbits in
     OK (Asm.Pmovsw_rr rd rs)
+  | Pmovsw_GvEv a rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    OK (Asm.Pmovsw_rm rd addr)
   | Pnegl rbits =>
     let rd := decode_ireg_u4 B rbits in
     if W then OK (Asm.Pnegq rd)
@@ -2051,7 +2046,8 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     let rd := decode_ireg_u4 B rbits in
     if W then OK (Asm.Pimulq_r rd)
     else OK (Asm.Pimull_r rd)
-  | Pimull_ri rdbits imm32 =>
+  | Pimull_ri rdbits _ imm32 =>
+    (* do not check rdbits = rsbits *)
     let imm := decode_ofs_u32 imm32 in
     let rd := decode_ireg_u4 B rdbits in
     if W then Error (msg "unsupported")
@@ -2061,8 +2057,8 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     if W then OK (Asm.Pmulq_r rd)
     else OK (Asm.Pmull_r rd)
   | Pcltd => 
-    if W then Asm.Pcqto
-    else Asm.Pcltd
+    if W then OK Asm.Pcqto
+    else OK Asm.Pcltd
   | Pdivl_r rbits =>
     let rd := decode_ireg_u4 B rbits in
     if W then OK (Asm.Pdivq rd)
@@ -2072,8 +2068,8 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     if W then OK (Asm.Pidivq rd)
     else OK (Asm.Pidivl rd)
   | Pandl_EvGv (AddrE0 rdbits) rsbits =>
-    let rd := decode_ireg_u4 R rsbits in
-    let rs := decode_ireg_u4 B rdbits in
+    let rs := decode_ireg_u4 R rsbits in
+    let rd := decode_ireg_u4 B rdbits in
     if W then Error (msg "unsupported")
     else OK (Asm.Pandl_rr rd rs)
   | Pandl_ri rdbits imm32 =>
@@ -2087,13 +2083,13 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     if W then Error (msg "unsupported")
     else OK (Asm.Porl_ri rd imm)
   | Porl_EvGv (AddrE0 rdbits) rsbits =>
-    let rd := decode_ireg_u4 R rsbits in
-    let rs := decode_ireg_u4 B rdbits in
+    let rs := decode_ireg_u4 R rsbits in
+    let rd := decode_ireg_u4 B rdbits in
     if W then Error (msg "unsupported")
     else OK (Asm.Porl_rr rd rs)
   | Pxorl_EvGv (AddrE0 rdbits) rsbits =>
-    let rd := decode_ireg_u4 R rsbits in
-    let rs := decode_ireg_u4 B rdbits in
+    let rs := decode_ireg_u4 R rsbits in
+    let rd := decode_ireg_u4 B rdbits in
     if W then Error (msg "unsupported")
     else OK (Asm.Pxorl_rr rd rs)
   | Pxorl_ri rdbits imm32 =>
@@ -2129,19 +2125,19 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     if W then OK (Asm.Psarq_rcl rd)
     else OK (Asm.Psarl_rcl rd)
   (* special: Asm.Pshld_ri rd r1 imm*)
-  | Pshld_ri r1bits rdbits imm8 =>
+  | Pshld_ri rsbits rdbits imm8 =>
     let imm := decode_ofs_u8 imm8 in
     let rd := decode_ireg_u4 R rdbits in
     let rs := decode_ireg_u4 B rsbits in
-    OK (Asm.Pshld_ri rd r1 imm)
+    OK (Asm.Pshld_ri rd rs imm)
   | Prorl_ri rdbits imm8 =>
     let imm := decode_ofs_u8 imm8 in
     let rd := decode_ireg_u4 B rdbits in
     if W then OK (Asm.Prorq_ri rd imm)
     else OK (Asm.Prorl_ri rd imm)
   | Pcmpl_EvGv (AddrE0 rdbits) rsbits =>
-    let rd := decode_ireg_u4 R rsbits in
-    let rs := decode_ireg_u4 B rdbits in
+    let rs := decode_ireg_u4 R rsbits in
+    let rd := decode_ireg_u4 B rdbits in
     if W then OK (Asm.Pcmpq_rr rd rs)
     else OK (Asm.Pcmpl_rr rd rs)
   | Pcmpl_ri rdbits imm32 =>
@@ -2155,25 +2151,26 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     if W then Error (msg "unsupported")
     else OK (Asm.Ptestl_ri rd imm)
   | Ptestl_EvGv (AddrE0 rdbits) rsbits =>
-    let rd := decode_ireg_u4 R rsbits in
-    let rs := decode_ireg_u4 B rdbits in
-    if W then OK (Asm.Ptestq_rm rd rs)
+    let rs := decode_ireg_u4 R rsbits in
+    let rd := decode_ireg_u4 B rdbits in
+    if W then OK (Asm.Ptestq_rr rd rs)
     else OK (Asm.Ptestl_rr rd rs)
   (* special : Pcmov *)
   | Pcmov cond rdbits rsbits =>
-    let c := decode_testcond_u4 cond in
+    do c <- decode_testcond_u4 cond;
     let rd := decode_ireg_u4 R rdbits in
     let rs := decode_ireg_u4 B rsbits in
     OK (Asm.Pcmov c rd rs)
   (* special : Psetcc *)
   | Psetcc cond rdbits =>
     let rd := decode_ireg_u4 B rdbits in
-    let c := decode_testcond_u4 cond in
+    do c <- decode_testcond_u4 cond;
     OK (Asm.Psetcc c rd)
   (* rd = rs *)
   | Pxorps_d_GvEv (AddrE0 rsbits) rdbits =>
-    let rd := decode_ireg_u4 R rdbits in
-    let rs := decode_ireg_u4 B rsbits in
+    (* not check rsbits = rdbits *)
+    let rd := decode_freg_u4 R rdbits in
+    (* let rs := decode_ireg_u4 B rsbits in *)
     if W then Error (msg "unsupported")
     else OK (Asm.Pxorps_f rd)
   | Pxorps_d_GvEv a rdbits =>
@@ -2194,7 +2191,7 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
       OK (Asm.Pjmp_s xH signature_main)
     | None =>
       let imm := decode_ofs_u32 imm32 in
-      OK (Asm.Pjmp_l_rel imm)
+      OK (Asm.Pjmp_l_rel (Int.intval imm))
     end
   (* not well defined *)
   | Pjmp_Ev (AddrE0 rsbits)=>
@@ -2205,7 +2202,7 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     do addr <- translate_AddrE_Addrmode a;
     if W then Error (msg "impossible")
     else OK (Asm.Pjmp_m addr)
-  | Pnop => Asm.Pnop
+  | Pnop => OK Asm.Pnop
   | Pcall_r rbits =>
     let r := decode_ireg_u4 B rbits in
     OK (Asm.Pcall_r r signature_main)
@@ -2213,31 +2210,31 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     do iofs <- res_iofs;
     match ZTree.get (iofs + instr_ofs) rtbl_ofs_map with
     | Some _ =>
-      (OK Asm.Pcall_s xH signature_main)
+      OK (Asm.Pcall_s xH signature_main)
     | None =>
       Error (msg "impossible")
     end
-  | Pret => Asm.Pret
+  | Pret => OK Asm.Pret
   | Pret_iw imm16 =>
     let imm := decode_ofs_u16 imm16 in
     OK (Asm.Pret_iw imm)
   | Pjcc_rel cond imm32 =>
-    let c := decode_testcond_u4 cond in
+    do c <- decode_testcond_u4 cond;
     let imm := decode_ofs_u32 imm32 in
-    OK (Asm.Pjcc_rel c imm)
+    OK (Asm.Pjcc_rel c (Int.intval imm))
   | Padcl_ri rdbits imm8 =>
     let imm := decode_ofs_u8 imm8 in
     let rd := decode_ireg_u4 B rdbits in
     if W then Error (msg "unsupported")
     else OK (Asm.Padcl_ri rd imm)
   | Padcl_rr rsbits rdbits =>
-    let rd := decode_ireg_u4 R rsbits in
-    let rs := decode_ireg_u4 B rdbits in
+    let rs := decode_ireg_u4 R rsbits in
+    let rd := decode_ireg_u4 B rdbits in
     if W then Error (msg "unsupported")
     else OK (Asm.Padcl_rr rd rs)
   | Paddl_EvGv (AddrE0 rdbits) rsbits =>
-    let rd := decode_ireg_u4 R rsbits in
-    let rs := decode_ireg_u4 B rdbits in
+    let rs := decode_ireg_u4 R rsbits in
+    let rd := decode_ireg_u4 B rdbits in
     if W then Error (msg "unsupported")
     else OK (Asm.Paddl_rr rd rs)
   | Paddl_mi a imm32 =>
@@ -2250,13 +2247,13 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     let rs := decode_ireg_u4 B rsbits in
     if W then OK (Asm.Pbsfq rd rs)
     else OK (Asm.Pbsfl rd rs)
-  | Pbsfl rdbits rsbits =>
+  | Pbsrl rdbits rsbits =>
     let rd := decode_ireg_u4 R rdbits in
     let rs := decode_ireg_u4 B rsbits in
     if W then OK (Asm.Pbsrq rd rs)
     else OK (Asm.Pbsrl rd rs)
   | Pbswap32 rdbits =>
-    let rs := decode_ireg_u4 B rdbits in
+    let rd := decode_ireg_u4 B rdbits in
     if W then OK (Asm.Pbswap64 rd)
     else OK (Asm.Pbswap32 rd)
   | Psbbl_rr rsbits rdbits =>
@@ -2270,9 +2267,56 @@ Definition decode_instr_rex (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (i:
     if W then Error (msg "unsupported")
     else OK (Asm.Psubl_ri rd imm)
   | Pshrl_rcl rdbits =>
-    let rs := decode_ireg_u4 B rdbits in
+    let rd := decode_ireg_u4 B rdbits in
     if W then OK (Asm.Pshrq_rcl rd)
     else OK (Asm.Pshrl_rcl rd)
+              | Paddl_GvEv a rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Paddq_rm rd addr)
+    else Error (msg "unsupported")
+              (* 64bit *)
+               
+  | Pmovsxd_GvEv (AddrE0 rsbits) rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then OK (Asm.Pmovsl_rr rd rs)
+    else Error (msg "unsupported")               
+  | Pandl_GvEv (AddrE0 rsbits) rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then OK (Asm.Pandq_rr rd rs)
+    else Error (msg "unsupported")
+  | Pandl_GvEv a rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Pandq_rm rd addr)
+    else Error (msg "unsupported")
+  | Porl_GvEv (AddrE0 rsbits) rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then OK (Asm.Porq_rr rd rs)
+    else Error (msg "unsupported")
+  | Porl_GvEv a rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Porq_rm rd addr)
+    else Error (msg "unsupported")
+  | Pxorl_GvEv (AddrE0 rsbits) rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    let rs := decode_ireg_u4 B rsbits in
+    if W then OK (Asm.Pxorq_rr rd rs)
+    else Error (msg "unsupported")
+  | Pxorl_GvEv a rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Pxorq_rm rd addr)
+    else Error (msg "unsupported")
+  | Pcmpl_GvEv a rdbits =>
+    let rd := decode_ireg_u4 R rdbits in
+    do addr <- translate_AddrE_Addrmode a;
+    if W then OK (Asm.Pcmpq_rm rd addr)
+    else Error (msg "unsupported")
   | _ => Error (msg "unsupported")
   end.
 
@@ -2298,8 +2342,8 @@ Definition decode_instr_override (instr_ofs: Z) (res_iofs: res Z)  (W R X B: boo
     OK (Asm.Pcomisd_ff rd rs)
   (* rd = rs *)
   | Pxorps_d_GvEv (AddrE0 rsbits) rdbits =>
-    let rd := decode_ireg_u4 R rdbits in
-    let rs := decode_ireg_u4 B rsbits in
+    let rd := decode_freg_u4 R rdbits in
+    (* let rs := decode_ireg_u4 B rsbits in *)
     if W then Error (msg "unsupported")
     else OK (Asm.Pxorpd_f rd)
   | Pxorps_d_GvEv a rdbits =>
@@ -2316,7 +2360,7 @@ Definition decode_instr_override (instr_ofs: Z) (res_iofs: res Z)  (W R X B: boo
     let rd := decode_freg_u4 R rdbits in
     do addr <- translate_AddrE_Addrmode a;
     if W then Error (msg "unsupported")
-    else OK (Asm.Pmovsq_mr rd addr)
+    else OK (Asm.Pmovsq_mr addr rd)
   | _ => Error (msg "unsupported")
   end.
 
@@ -2379,7 +2423,7 @@ Definition decode_instr_repnz (instr_ofs: Z) (res_iofs: res Z) (W R X B: bool) (
     let rd := decode_freg_u4 R rdbits in
     let rs := decode_freg_u4 B rsbits in
     if W then Error (msg "unsupported")
-    else OK (Asm.Pbsqrtsd rd rs)
+    else OK (Asm.Psqrtsd rd rs)
   | Pdivss_d_ff rdbits rsbits =>
     let rd := decode_freg_u4 R rdbits in
     let rs := decode_freg_u4 B rsbits in
@@ -2438,67 +2482,12 @@ Definition decode_instr_rep (instr_ofs: Z) (res_iofs: res Z)  (W R X B: bool) (i
     do addr <- translate_AddrE_Addrmode a;
     if W then Error (msg "unsupported")
     else OK (Asm.Pmovsq_rm rd addr)
-  | Prep_movsl => Asm.Prep_movsl
+  | Prep_movsl => OK Asm.Prep_movsl
   | Pdivss_d_ff rdbits rsbits =>
     let rd := decode_freg_u4 R rdbits in
     let rs := decode_freg_u4 B rsbits in
     if W then Error (msg "unsupported")
     else OK (Asm.Pdivs_ff rd rs)
-  | Pmovsxd_GvEv (AddrE0 rsbits) rdbits]
-    let rd := decode_freg_u4 R rdbits in
-    let rs := decode_freg_u4 B rsbits in
-    if W then OK (Asm.Pmovsl_rr rd rs)
-    else Error (msg "unsupported")
-  | Paddl_GvEv a rdbits =>
-    let rd := decode_freg_u4 R rdbits in
-    do addr <- translate_AddrE_Addrmode a;
-    if W then OK (Asm.Paddq_rm rd addr)
-    else Error (msg "unsupported")
-  | Pandl_GvEv (AddrE0 rsbits) rdbits]
-    let rd := decode_freg_u4 R rdbits in
-    let rs := decode_freg_u4 B rsbits in
-    if W then OK (Asm.Pandq_rr rd rs)
-    else Error (msg "unsupported")
-  | Pandl_GvEv a rdbits =>
-    let rd := decode_freg_u4 R rdbits in
-    do addr <- translate_AddrE_Addrmode a;
-    if W then OK (Asm.Pandq_rm rd addr)
-    else Error (msg "unsupported")
-  | Porl_GvEv (AddrE0 rsbits) rdbits]
-    let rd := decode_freg_u4 R rdbits in
-    let rs := decode_freg_u4 B rsbits in
-    if W then OK (Asm.Porq_rr rd rs)
-    else Error (msg "unsupported")
-  | Porl_GvEv a rdbits =>
-    let rd := decode_freg_u4 R rdbits in
-    do addr <- translate_AddrE_Addrmode a;
-    if W then OK (Asm.Porq_rm rd addr)
-    else Error (msg "unsupported")
-  | Pxorl_GvEv (AddrE0 rsbits) rdbits]
-    let rd := decode_freg_u4 R rdbits in
-    let rs := decode_freg_u4 B rsbits in
-    if W then OK (Asm.Pxorq_rr rd rs)
-    else Error (msg "unsupported")
-  | Pxorl_GvEv a rdbits =>
-    let rd := decode_freg_u4 R rdbits in
-    do addr <- translate_AddrE_Addrmode a;
-    if W then OK (Asm.Pxorq_rm rd addr)
-    else Error (msg "unsupported")
-  | Pcmpl_EvGv (AddrE0 r1bits) r2bits]
-    let r2 := decode_freg_u4 R r2bits in
-    let r1 := decode_freg_u4 B r1bits in
-    if W then OK (Asm.Pcmpq_rr r1 r2)
-    else Error (msg "unsupported")
-  | Pcmpl_GvEv a rdbits =>
-    let rd := decode_freg_u4 R rdbits in
-    do addr <- translate_AddrE_Addrmode a;
-    if W then OK (Asm.Pcmpq_rm rd addr)
-    else Error (msg "unsupported")
-  | Ptestl_EvGv (AddrE0 rdbits) rsbits]
-    let rs := decode_freg_u4 R rsbits in
-    let rd := decode_freg_u4 B rdbits in
-    if W then OK (Asm.Ptestq_rr rd rs)
-    else Error (msg "unsupported")
   | _ => Error (msg "unsupported")
   end.
 
@@ -2529,7 +2518,7 @@ Definition decode_instr (instr_ofs: Z) (li:list Instruction) :=
   | _ => Error (msg "impossible")
   end.
 
-Hint Resolve encode_ireg_u4_consistency encode_ofs_u32_consistency: encdec.
+Hint Resolve encode_ireg_u4_consistency encode_freg_u4_consistency encode_ofs_u32_consistency encode_ofs_u8_consistency encode_ofs_u16_consistency encode_testcond_consistency: encdec.
 
 (* cannot be used in monadInv *)
 Ltac destr_pair :=
@@ -2633,13 +2622,18 @@ Lemma encode_rex_prefix_ff_result: forall r b l rs bs,
     (exists rexr rexb, l = [REX_WRXB zero1 rexr zero1 rexb] /\ decode_freg_u4 rexr rs = r /\ decode_freg_u4 rexb bs = b).
 Admitted.
 
+Lemma encode_rex_prefix_fr_result: forall r b l rs bs,
+    encode_rex_prefix_fr r b = OK (l, rs, bs) ->
+    (l = [] /\ decode_freg_u4 false rs = r /\ decode_ireg_u4 false bs = b) \/
+    (exists rexr rexb, l = [REX_WRXB zero1 rexr zero1 rexb] /\ decode_freg_u4 rexr rs = r /\ decode_ireg_u4 rexb bs = b).
+Admitted.
 
+Lemma encode_rex_prefix_rf_result: forall r b l rs bs,
+    encode_rex_prefix_rf r b = OK (l, rs, bs) ->
+    (l = [] /\ decode_ireg_u4 false rs = r /\ decode_freg_u4 false bs = b) \/
+    (exists rexr rexb, l = [REX_WRXB zero1 rexr zero1 rexb] /\ decode_ireg_u4 rexr rs = r /\ decode_freg_u4 rexb bs = b).
+Admitted.
 
-Definition not_AddrE0 a:bool:=
-  match a with
-  | AddrE0 _ => false
-  | _ => true
-  end.
 
 
 Lemma encode_rex_prefix_ra_result: forall instr_ofs res_iofs r addr l rs a,
@@ -2672,32 +2666,54 @@ Definition well_defined_instr i :=
   match i with
   | Pxorq_r _
   | Pmov_mr_a _ _ | Pmov_rm_a _ _
-  | Pcall_r _ _
+  | Asm.Pcall_r _ _
   | Asm.Plabel _ | Asm.Pmovls_rr _
   | Asm.Pjmp_r _ _
   | Asm.Pjmp_s _ _
   | Asm.Pmovzl_rr _ _
-  | Asm.Pmov_rm_a _ _
   | Asm.Pcall_s _ _
   | Asm.Pxorl_r _ => false
   | _ => true
   end.
 
-Ltac solve_rr H :=
-  monadInv H;
-  exploit encode_rex_prefix_rr_result;eauto;
+Ltac solve_rr :=
+    exploit encode_rex_prefix_rr_result;eauto;
+    intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
+
+Ltac solve_ff :=
+    exploit encode_rex_prefix_ff_result;eauto;
+    intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
+
+Ltac solve_rf :=
+  exploit encode_rex_prefix_rf_result;eauto;
   intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
 
-Ltac solve_ri H :=
-  monadInv H;
+
+Ltac solve_fr :=
+    exploit encode_rex_prefix_fr_result;eauto;
+    intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
+
+Ltac solve_only_r :=
+    exploit encode_rex_prefix_r_result;eauto;
+    intros [(? & ?) | (? & ? & ?)];subst;simpl;auto.
+
+Ltac solve_ri32 :=
   exploit encode_rex_prefix_r_result;eauto;
   exploit encode_ofs_u32_consistency;eauto;
   intros ?;intros [(? & ?) | (? & ? & ?)];subst;simpl;auto.
 
+Ltac solve_ri8 :=
+  exploit encode_rex_prefix_r_result;eauto;
+  exploit encode_ofs_u8_consistency;eauto;
+  intros ?;intros [(? & ?) | (? & ? & ?)];subst;simpl;auto.
 
-Ltac solve_ra H RELOC:=
-  let A := fresh "A" in
-  monadInv H;
+Ltac solve_ri16 :=
+  exploit encode_rex_prefix_r_result;eauto;
+  exploit encode_ofs_u16_consistency;eauto;
+  intros ?;intros [(? & ?) | (? & ? & ?)];subst;simpl;auto.
+
+
+Ltac solve_ra RELOC:=
   exploit encode_rex_prefix_ra_result;eauto;
   intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);
   subst;cbn [app] in *;autounfold with decunfold;
@@ -2705,14 +2721,7 @@ Ltac solve_ra H RELOC:=
   cbn [bind];auto;
   try destr;simpl in NOTADDRE0;try congruence.
 
-Ltac solve_ff H :=
-  monadInv H;
-  exploit encode_rex_prefix_ff_result;eauto;
-  intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
-
-Ltac solve_fa H RELOC:=
-  let A := fresh "A" in
-  monadInv H;
+Ltac solve_fa RELOC:=
   exploit encode_rex_prefix_fa_result;eauto;
   intros (NOTADDRE0 & [(? & ? & A) | (? & ? & ? & ? & ? & A)]);
   subst;cbn [app] in *;autounfold with decunfold;
@@ -2721,28 +2730,22 @@ Ltac solve_fa H RELOC:=
   try destr;simpl in NOTADDRE0;try congruence.
 
 (* rex_prefix unused case *)
-Ltac solve_rr_normal H:=
-  monadInv H;
+Ltac solve_normal:=
   (* so adhoc: prevent so much time-consuming in other case *)
-  match goal with
-  | H1: encode_ireg_u4 ?r1 = OK ?res1,
-        H2: encode_ireg_u4 ?r2 = OK ?res2
-    |- context [REX_WRXB ?a ?b ?c ?d :: ?l] =>    
-    cbn [app] in *;autounfold with decunfold
-  end;
+  cbn [app] in *;autounfold with decunfold;
+  simpl;                      (* eliminate decode_u1 *)
   try (do 2 f_equal);auto with encdec.
 
-Ltac solve_ra_normal H RELOC :=
-  let A := fresh "A" in
-  monadInv  H;
+
+Ltac solve_ra64_normal RELOC :=  
   exploit encode_ireg_u4_consistency;eauto;intros;subst;
-  exploit transl_addr_consistency64;eauto;intros A;
+  exploit transl_addr_consistency64;eauto;intros (NOTADDRE0 & A);
   cbn [app] in *;autounfold with decunfold;
   rewrite RELOC;rewrite A;
-  auto.
+  cbn [bind];auto;
+  try destr;simpl in NOTADDRE0;try congruence.
 
-Ltac solve_only_addr H RELOC:=
-  monadInv H;
+Ltac solve_only_addr RELOC:=
   exploit encode_rex_prefix_addr_result; eauto;
   intros (NOTADDRE0 & [(? & A) | (? & ? & ? & A)]);
   subst;cbn [app] in *;autounfold with decunfold;
@@ -2750,7 +2753,77 @@ Ltac solve_only_addr H RELOC:=
   cbn [bind];auto;
   try destr;simpl in NOTADDRE0;try congruence.
 
+Ltac destr_ptr64_in_H H :=
+  match type of H with
+  | context [Archi.ptr64] =>
+    destruct Archi.ptr64
+  end.
+
+Ltac solve_decode_instr H RELOC :=
+  monadInv H;auto;
+  match goal with
+  | H1: encode_rex_prefix_addr _ _ _ = OK _ |- _ =>
+    solve_only_addr RELOC
+  | H1: encode_ireg_u4 _ = OK _,
+        H2: translate_Addrmode_AddrE64 _ _ _ = OK _ |- _ =>
+    solve_ra64_normal RELOC
+  | H1: encode_freg_u4 ?r1 = OK ?res1,
+        H2: encode_freg_u4 ?r2 = OK ?res2
+    |- context [REX_WRXB ?a ?b ?c ?d :: ?l] =>
+    solve_normal
+  | H1: encode_ireg_u4 ?r1 = OK ?res1,
+        H2: encode_freg_u4 ?r2 = OK ?res2
+    |- context [REX_WRXB ?a ?b ?c ?d :: ?l] =>
+    solve_normal
+  | H1: encode_ireg_u4 ?r1 = OK ?res1,
+        H2: encode_ireg_u4 ?r2 = OK ?res2
+    |- context [REX_WRXB ?a ?b ?c ?d :: ?l] =>
+    solve_normal
+  | H1: encode_ireg_u4 ?r1 = OK ?res1,
+        H2: encode_ofs_u32 ?r2 = OK ?res2
+    |- context [REX_WRXB ?a ?b ?c ?d :: ?l] =>
+    solve_normal
+  | H1: encode_ireg_u4 ?r1 = OK ?res1,
+        H2: encode_ofs_u16 ?r2 = OK ?res2
+    |- context [REX_WRXB ?a ?b ?c ?d :: ?l] =>
+    solve_normal
+  | H1: encode_ireg_u4 ?r1 = OK ?res1,
+        H2: encode_ofs_u8 ?r2 = OK ?res2
+    |- context [REX_WRXB ?a ?b ?c ?d :: ?l] =>
+    solve_normal
+  | H1: encode_rex_prefix_fa _ _ _ _ = OK _ |- _ =>
+    solve_fa RELOC
+  | H1: encode_rex_prefix_ra _ _ _ _ = OK _ |- _ =>
+    solve_ra RELOC
+  | H1: encode_rex_prefix_r _ = OK _,
+        H2:encode_ofs_u16 _ = OK _ |- _ =>
+    solve_ri16
+  | H1: encode_rex_prefix_r _ = OK _,
+        H2:encode_ofs_u8 _ = OK _ |- _ =>
+    solve_ri8
+  | H1: encode_rex_prefix_r _ = OK _,
+        H2:encode_ofs_u32 _ = OK _ |- _ =>
+    solve_ri32
+  | H1: encode_rex_prefix_r _ = OK _ |- _ =>
+    solve_only_r
+  | H1: encode_rex_prefix_rf _ _ = OK _ |- _ =>
+    solve_rf
+  | H1: encode_rex_prefix_fr _ _ = OK _ |- _ =>
+    solve_fr
+  | H1: encode_rex_prefix_ff _ _ = OK _ |- _ =>
+    solve_ff
+  | H1: encode_rex_prefix_rr _ _ = OK _ |- _ =>
+    solve_rr
+  (* only encode ireg, place to the end *)
+  | H1: encode_ireg_u4 ?r1 = OK ?res1
+    |- context [REX_WRXB ?a ?b ?c ?d :: ?l] =>
+    solve_normal
+  | _ => fail
+  end.
   
+Hypothesis encode_reloc_offset_conform: forall i iofs li l,
+  translate_instr iofs i = OK li ->
+  Instr_reloc_offset (li++l) = instr_reloc_offset i.
 
 Theorem translate_instr_consistency: forall instr_ofs i li l,
     well_defined_instr i = true ->
@@ -2762,17 +2835,44 @@ Proof.
   intros RELOC.
   unfold translate_instr in H;
     destruct i;simpl in WD;try congruence;clear WD;
-      try destruct Archi.ptr64;
+      try destr_ptr64_in_H H;
+      try solve_decode_instr H RELOC;
+      try (do 2 f_equal;auto with encdec).
+  
+  admit.
+  
+  
+  monadInv H. cbn [app] in *.
+  autounfold with decunfold. simpl.
+  do 2 f_equal. auto with encdec.
+  
+  solve_ri32
+  
   try solve_rr H;
-  try solve_ri H;  
-  try solve_ra H RELOC;  
   try solve_ff H;
+  try solve_rf H;
+  try solve_fr H;
+  try solve_ri32 H ;
+  try solve_ri16 H;
+  try solve_ri8 H;
+  try solve_ra H RELOC;  
   try solve_fa H RELOC;
   try solve_only_addr H RELOC;
-  try solve_ra_normal H RELOC;
+  try solve_only_r H;
+  try solve_ra64_normal H RELOC;
+  try solve_rf_normal H;
+  try solve_ff_normal H;
   try solve_rr_normal H.        (* not stable, place it to the end *)
-  
 
+  admit.                        (* cond *)
+  f_equal. f_equal. auto with encdec.
+  rewrite <- H11. admit.         (* Pimull *)
+  
+  solve_rr_normal H. 
+  simpl.
+  try do 2 f_equal; auto with encdec.
+  solve_ri32 H.
+  
 Qed.
   
 End CSLED_RELOC.
