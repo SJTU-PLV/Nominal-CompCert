@@ -756,50 +756,6 @@ Proof.
   intros. unfold meminj_add. destruct eq_block; congruence.
 Qed.
 
-Lemma update_compose_meminj : forall sd1' j1 j2 j' si1 si1' j1' j2',
-    update_meminj12 sd1' j1 j2 j' si1 = (j1',j2',si1') ->
-    inject_image_in j1 si1 ->
-    update_meminj sd1' (compose_meminj j1 j2) j' = (compose_meminj j1' j2').
-Proof.
-  induction sd1'; intros.
-  - inv H. simpl. auto.
-  - inv H. simpl. destruct (compose_meminj) eqn : Hja.
-    + eauto.
-    + destruct (j' a) eqn: Hj'a.
-      -- destruct p.
-         apply IHsd1' in H2.
-         rewrite <- H2. f_equal. apply Axioms.extensionality.
-         intro x.
-         destruct (compose_meminj j1 j2 x) eqn: Hjx.
-         ++ destruct (eq_block a x).
-            * congruence.
-            * rewrite meminj_add_diff; auto. rewrite Hjx.
-              unfold compose_meminj.
-              rewrite meminj_add_diff; auto.
-              unfold compose_meminj in Hjx.
-              destruct (j1 x) as [[x' ofs]|] eqn:Hj1x.
-              ** rewrite meminj_add_diff. eauto.
-                 intro. apply H0 in Hj1x. subst. eapply freshness; eauto.
-              ** auto.
-         ++ destruct (eq_block a x).
-            * subst. rewrite meminj_add_new.
-              unfold compose_meminj.
-              rewrite meminj_add_new. rewrite meminj_add_new. eauto.
-            * rewrite meminj_add_diff; auto. rewrite Hjx.
-              unfold compose_meminj.
-              rewrite meminj_add_diff; auto.
-              unfold compose_meminj in Hjx.
-              destruct (j1 x) as [[x' ofs]|] eqn:Hj1x.
-              ** rewrite meminj_add_diff. eauto.
-                 intro. apply H0 in Hj1x. subst. eapply freshness; eauto.
-              ** auto.
-         ++ red. intros. red in H0. destruct (eq_block a b0).
-            * subst. rewrite meminj_add_new in H. inv H. apply Mem.sup_incr_in1.
-            * rewrite meminj_add_diff in H. exploit H0; eauto.
-              intro. right. auto. auto.
-      -- eauto.
-Qed.
-
 Definition meminj_sub (j:meminj) (b:block) :=
   fun b0 => if (eq_block b b0) then None else j b0.
 
@@ -935,6 +891,50 @@ Proof.
     erewrite update_meminj_none; eauto.
 Qed.
 
+Lemma update_compose_meminj : forall sd1' j1 j2 j' si1 si1' j1' j2',
+    update_meminj12 sd1' j1 j2 j' si1 = (j1',j2',si1') ->
+    inject_image_in j1 si1 ->
+    update_meminj sd1' (compose_meminj j1 j2) j' = (compose_meminj j1' j2').
+Proof.
+  induction sd1'; intros.
+  - inv H. simpl. auto.
+  - inv H. simpl. destruct (compose_meminj) eqn : Hja.
+    + eauto.
+    + destruct (j' a) eqn: Hj'a.
+      -- destruct p.
+         apply IHsd1' in H2.
+         rewrite <- H2. f_equal. apply Axioms.extensionality.
+         intro x.
+         destruct (compose_meminj j1 j2 x) eqn: Hjx.
+         ++ destruct (eq_block a x).
+            * congruence.
+            * rewrite meminj_add_diff; auto. rewrite Hjx.
+              unfold compose_meminj.
+              rewrite meminj_add_diff; auto.
+              unfold compose_meminj in Hjx.
+              destruct (j1 x) as [[x' ofs]|] eqn:Hj1x.
+              ** rewrite meminj_add_diff. eauto.
+                 intro. apply H0 in Hj1x. subst. eapply freshness; eauto.
+              ** auto.
+         ++ destruct (eq_block a x).
+            * subst. rewrite meminj_add_new.
+              unfold compose_meminj.
+              rewrite meminj_add_new. rewrite meminj_add_new. eauto.
+            * rewrite meminj_add_diff; auto. rewrite Hjx.
+              unfold compose_meminj.
+              rewrite meminj_add_diff; auto.
+              unfold compose_meminj in Hjx.
+              destruct (j1 x) as [[x' ofs]|] eqn:Hj1x.
+              ** rewrite meminj_add_diff. eauto.
+                 intro. apply H0 in Hj1x. subst. eapply freshness; eauto.
+              ** auto.
+         ++ red. intros. red in H0. destruct (eq_block a b0).
+            * subst. rewrite meminj_add_new in H. inv H. apply Mem.sup_incr_in1.
+            * rewrite meminj_add_diff in H. exploit H0; eauto.
+              intro. right. auto. auto.
+      -- eauto.
+Qed.
+
 Lemma update_compose: forall j1 j2 j' sd1' si1 si1' j1' j2' sd1 si2,
     update_meminj12 sd1' j1 j2 j' si1 = (j1',j2',si1') ->
     inject_dom_in j' sd1' ->
@@ -962,22 +962,21 @@ Lemma inject_incr_inv: forall j1 j2 j' sd1 si1 si2 sd1',
     inject_incr_disjoint (compose_meminj j1 j2) j' sd1 si2 ->
     exists j1' j2' si1', j' = compose_meminj j1' j2' /\
                inject_incr j1 j1' /\
+               inject_incr j2 j2' /\
                Mem.sup_include si1 si1' /\
                inject_image_in j1' si1' /\
                inject_incr_disjoint j1 j1' sd1 si1 /\
-               inject_incr j2 j2' /\
                inject_incr_disjoint j2 j2' si1 si2.
 Proof.
   intros.
   destruct (update_meminj12 sd1' j1 j2 j' si1) as [[j1' j2'] si1'] eqn: UPDATE.
   exists j1' ,j2' ,si1'.
-  exploit update_properties; eauto.
-  intros (INCR1 & INCR2 & A & B & C & D).
-  repeat apply conj; eauto.
-  eapply update_compose; eauto.
+  split. eapply update_compose; eauto.
+  eapply update_properties; eauto.
 Qed.
 
 (** Inversion of injection composition *)
+
 Lemma inject_compose_inv:
   forall (f f' : meminj) (m1 m3 : mem) s,
   Mem.inject (compose_meminj f f') m1 m3 ->
@@ -985,6 +984,15 @@ Lemma inject_compose_inv:
   exists m2 , Mem.inject f m1 m2 /\
          Mem.inject f' m2 m3 /\
          Mem.sup_include s (Mem.support m2).
+(*
+  we may need from construction:
+  1) inject_dom_in f s'
+  2) meminj_no_overlap f m1
+  3) meminj_no_overlap f' ??
+  step1 : construct memory m2 with correct support (repeat Mem.alloc empty 0 0)
+  step2 : iterate b \in m1, if f b = Some (b',ofs), then expand the size of b' (Mem.expend, all value Vundef) and copy the content (deal with Vptr) and permission.
+  step3 :
+ *)
 Admitted.
 
 (** inj@inj is refined by inj *)
