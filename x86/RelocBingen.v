@@ -11,7 +11,7 @@ Require Import Asm RelocProg RelocProgram.
 Require Import encode.Hex encode.Bits Memdata encode.Encode.
 Require Import Reloctablesgen.
 Require Import SymbolString.
-Require Import TranslateInstr1.
+Require Import TranslateInstr.
 Import Hex Bits.
 Import ListNotations.
 

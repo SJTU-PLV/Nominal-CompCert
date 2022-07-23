@@ -125,7 +125,7 @@ BACKEND=\
   Symbtablegen.v Symbtablegenproof.v\
   Reloctablesgen.v Reloctablesgenproof.v\
   RelocBingen.v \
-  TranslateInstr1.v\
+  TranslateInstr.v\
   AsmLongInt.v\
   RelocProgSemantics.v RelocProgSemantics1.v\
   AsmInject.v

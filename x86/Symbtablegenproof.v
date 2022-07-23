@@ -862,7 +862,7 @@ Proof.
         destruct INIT1 as (RPERM1 & OFSRANGE1  & LOADSTORE1 & BYTES1).
         apply OFSRANGE1 in H0. destruct H0.
         assert (NO: gvar_volatile v = false).
-        { unfold Genv.perm_globvar in H0. destruct (gvar_volatile v); auto. inv H0.}
+        { unfold Genv.perm_globvar in H0. destruct (gvar_volatile v); auto. inv H0. }
         generalize (BYTES1 NO). unfold Mem.loadbytes. destruct Mem.range_perm_dec; intros E1; inv E1.
         inv BYTES.
         (* H5 and H6 *)
