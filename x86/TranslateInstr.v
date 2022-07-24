@@ -311,7 +311,7 @@ Definition decode_scale (bs: u2) : Z :=
 
 
 Program Definition encode_ofs_u8 (ofs:Z) :res u8 :=
-  if ( -128 <=? ofs) && (ofs <=? 255) then
+  if ( -1 <? ofs) && (ofs <? (two_power_nat 8)) then
     let ofs8 := bytes_to_bits_opt (bytes_of_int 1 ofs) in
     if assertLength ofs8 8 then
       OK (exist _ ofs8 _)
@@ -325,7 +325,8 @@ Definition decode_ofs_u8 (bs:u8) : int :=
   Int.repr z.
 
 Program Definition encode_ofs_u16 (ofs:Z) :res u16 :=
-  if ( - (Int.modulus / 4) <=? ofs) && (ofs <=? (Int.modulus / 2) -1 ) then
+  (* We input Int.intval to this function, so range checking is nessary *)
+  if ( -1 <? ofs) && (ofs <? (two_power_nat 16)) then
     let ofs16 := bytes_to_bits_opt (bytes_of_int 2 ofs) in
     if assertLength ofs16 16 then
     OK (exist _ ofs16 _)
@@ -338,19 +339,27 @@ Definition decode_ofs_u16 (bs:u16) : int :=
   Int.repr z.
 
 Program Definition encode_ofs_u32 (ofs:Z) :res u32 :=
-  (* -2^16 to 2^32 -1: signed and unsigned *)
-  if (Int.min_signed <=? ofs) && (ofs <=? Int.modulus) then
-    let ofs32 := bytes_to_bits_opt (bytes_of_int 4 ofs) in
-    if assertLength ofs32 32 then
-      OK (exist _ ofs32 _)
-    else Error (msg "impossible")
-  else Error (msg "Offset overflow in encode_ofs_u32").
+  let ofs32 := bytes_to_bits_opt (bytes_of_int 4 ofs) in
+  if assertLength ofs32 32 then
+    OK (exist _ ofs32 _)
+  else Error (msg "impossible").
 
 Definition decode_ofs_u32 (bs:u32) : int :=
   let bs' := proj1_sig bs in
   let z := bits_to_Z bs' in
   Int.repr z.
 
+Definition encode_ofs_signed32 (ofs:Z) :=
+  if (Int.min_signed <=? ofs) && (ofs <=? Int.max_signed) then
+    encode_ofs_u32 (Int.intval (Int.repr ofs))
+  else
+    Error (msg "Offset overflow in encode_ofs_signed32").
+
+Definition decode_ofs_signed32 (bs:u32) : Z :=
+  let i := decode_ofs_u32 bs in
+  Int.signed i.
+
+  
 Program Definition encode_testcond_u4 (c:testcond) : u4 :=
   match c with
   | Cond_e   => b["0100"]   (**r 4 *)
@@ -465,7 +474,7 @@ Definition translate_Addrmode_AddrE (sofs: Z) (res_iofs: res Z) (addr:addrmode):
       do iofs <- res_iofs;
       match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with
       | None =>
-          do ofs32 <- encode_ofs_u32 ofs;
+          do ofs32 <- encode_ofs_signed32 ofs;
           translate_Addrmode_AddrE_aux32 obase oindex ofs32            
       | _ => Error (msg "impossible relocation entry in addrmode")
       end
@@ -536,7 +545,7 @@ Definition translate_Addrmode_AddrE64 (sofs: Z) (res_iofs: res Z) (addr:addrmode
       do iofs <- res_iofs;
       match ZTree.get (iofs + sofs)%Z rtbl_ofs_map with
       | None =>         
-          do ofs32 <- encode_ofs_u32 ofs;
+          do ofs32 <- encode_ofs_signed32 ofs;
           translate_Addrmode_AddrE_aux64 obase oindex ofs32
       | _ => Error (msg "64bit: impossible relocation entry in addrmode")
       end
@@ -1268,7 +1277,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     do iofs <- res_iofs;
     match ZTree.get (iofs+instr_ofs) rtbl_ofs_map with
     | None =>
-        do imm <- encode_ofs_u32 ofs;
+        do imm <- encode_ofs_signed32 ofs;
         OK [Pjmp_l_rel imm]
     | _ => Error[MSG"Relocation entry in Pjmp_l_rel not expected"; MSG(Z_to_hex_string 4 ofs)]
     end
@@ -1310,7 +1319,7 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
      OK [Pret_iw imm16]
   | Asm.Pjcc_rel c ofs =>
     let cond := encode_testcond_u4 c in
-    do imm <- encode_ofs_u32 ofs;
+    do imm <- encode_ofs_signed32 ofs;
     OK [Pjcc_rel cond imm]
   | Asm.Padcl_ri rd imm =>
     do rex_r <- encode_rex_prefix_r rd;
@@ -1352,9 +1361,9 @@ Definition translate_instr (instr_ofs: Z) (i:instruction) : res (list Instructio
     let (orex, rdbits) := rex_r in
     OK (orex ++ [Pbswap32 rdbits])
   | Asm.Pbswap64 rd =>
-    do Rrdbits <- encode_ireg_u4 rd;
-    let (R,rdbits) := Rrdbits in
-    OK ([REX_WRXB one1 R zero1 zero1; Pbswap32 rdbits])
+    do Brdbits <- encode_ireg_u4 rd;
+    let (B,rdbits) := Brdbits in
+    OK ([REX_WRXB one1 zero1 zero1 B; Pbswap32 rdbits])
   | Asm.Pmaxsd rd r1 =>
     do rex_rr <- encode_rex_prefix_ff rd r1;
     let (oREX_rdbits, r1bits) := rex_rr in
