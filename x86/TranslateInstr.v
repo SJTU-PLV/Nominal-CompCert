@@ -470,11 +470,13 @@ Definition translate_Addrmode_AddrE (e: option relocentry) (addr:addrmode): res 
       match id with
       | xH =>
         do addend <- get_reloc_addend e;
-        if Z.eqb (Ptrofs.unsigned ofs) addend then
-          (*32bit mode the addend placed in instruction *)
-          do imm32 <- encode_ofs_u32 addend;
-          translate_Addrmode_AddrE_aux32 obase oindex imm32
-        else Error (msg "addend is not equal to ofs")
+        if (Ptrofs.unsigned ofs <? Int.modulus) then
+          if Z.eqb (Ptrofs.unsigned ofs) addend then
+            (*32bit mode the addend placed in instruction *)
+            do imm32 <- encode_ofs_u32 addend;
+            translate_Addrmode_AddrE_aux32 obase oindex imm32
+          else Error (msg "addend is not equal to ofs")
+        else Error (msg "Addrmode32: Out range of unsigned 32bit displacement")
       | _ => Error(msg "id must be 1")
       end
     | inl ofs =>
@@ -539,11 +541,13 @@ Definition translate_Addrmode_AddrE64 (e: option relocentry) (addr:addrmode): re
       match id with
       | xH =>
         do addend <- get_reloc_addend e;
-        (* addend is the offset of id and access point *)
-        if Z.eqb (Ptrofs.unsigned ofs) addend then
-          do imm32 <- encode_ofs_u32 addend;
-          translate_Addrmode_AddrE_aux64 obase oindex imm32
-        else Error (msg "64bit: addend is not equal to ofs")
+        if (Ptrofs.unsigned ofs <? Int.modulus) then
+          (* addend is the offset of id and access point *)
+          if Z.eqb (Ptrofs.unsigned ofs) addend then
+            do imm32 <- encode_ofs_u32 addend;
+            translate_Addrmode_AddrE_aux64 obase oindex imm32
+          else Error (msg "64bit: addend is not equal to ofs")
+        else Error (msg "Addrmode64: Out range of unsigned 32bit displacement")                                        
       | _ => Error(msg "64bit: id must be 1")
       end
     | inl ofs =>
