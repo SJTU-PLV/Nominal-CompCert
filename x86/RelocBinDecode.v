@@ -29,6 +29,19 @@ Definition decode_u1 (a:u1) : bool :=
   | _ => true
   end.
 
+Lemma decode_u1_inject: forall a b,
+    decode_u1 a = decode_u1 b ->
+    a = b.
+Proof.
+  destruct a. destruct b.
+  unfold decode_u1. simpl.
+  destruct x;destruct x0;simpl in *;try congruence.
+  destruct x;destruct x0;simpl in *;try congruence.
+  intros. subst. f_equal. apply proof_irr.
+Qed.
+
+
+  
 Coercion decode_u1 : u1 >-> bool.
 
 Remark decode_ireg_u4_inject1: forall reg1 reg2 e1 e2,
@@ -993,22 +1006,30 @@ Definition decode_instr (instr_ofs: Z) (li:list Instruction) :=
   let decode_instr_rep := decode_instr_rep instr_ofs res_iofs in
   let decode_instr_repnz := decode_instr_repnz instr_ofs res_iofs in
   match li with
-  | Override :: REX_WRXB w r x b :: i :: _ =>
-    decode_instr_override w r x b i
-  | REP :: REX_WRXB w r x b :: i :: _ =>
-    decode_instr_rep w r x b i
-  | REPNZ :: REX_WRXB w r x b :: i :: _ =>
-    decode_instr_repnz w r x b i
-  | REX_WRXB w r x b :: i :: _ =>
-    decode_instr_rex w r x b i
-  | Override :: i :: _ =>
-    decode_instr_override false false false false i
-  | REP :: i :: _ =>
-    decode_instr_rep false false false false i
-  | REPNZ :: i :: _ =>
-    decode_instr_repnz false false false false i
-  | i :: _ =>
-    decode_instr_rex false false false false i
+  | Override :: REX_WRXB w r x b :: i :: tl =>
+    do i' <- decode_instr_override w r x b i;
+    OK (i',tl)
+  | REP :: REX_WRXB w r x b :: i :: tl =>
+    do i' <- decode_instr_rep w r x b i;
+    OK (i',tl)
+  | REPNZ :: REX_WRXB w r x b :: i :: tl =>
+    do i' <- decode_instr_repnz w r x b i;
+    OK (i',tl)
+  | REX_WRXB w r x b :: i :: tl =>
+    do i' <- decode_instr_rex w r x b i;
+    OK (i',tl)
+  | Override :: i :: tl =>
+    do i' <- decode_instr_override false false false false i;
+    OK (i',tl)
+  | REP :: i :: tl =>
+    do i' <- decode_instr_rep false false false false i;
+    OK (i',tl)
+  | REPNZ :: i :: tl =>
+    do i' <- decode_instr_repnz false false false false i;
+    OK (i',tl)
+  | i :: tl =>
+    do i' <- decode_instr_rex false false false false i;
+    OK (i',tl)
   | _ => Error (msg "impossible")
   end.
 
@@ -1177,7 +1198,7 @@ Ltac solve_normal:=
   (* so adhoc: prevent so much time-consuming in other case *)
   cbn [app] in *;autounfold with decunfold;
   simpl;                      (* eliminate decode_u1 *)
-  try (do 2 f_equal);auto with encdec.
+  try (repeat f_equal);auto with encdec.
 
 
 Ltac solve_ra64_normal RELOC :=  
@@ -1271,7 +1292,7 @@ Hypothesis encode_reloc_offset_conform: forall i iofs li l,
 Theorem translate_instr_consistency: forall instr_ofs i li l,
     well_defined_instr i = true ->
     translate_instr rtbl_ofs_map instr_ofs i = OK li ->
-    decode_instr instr_ofs (li++l) = OK i.
+    decode_instr instr_ofs (li++l) = OK (i,l).
 Proof.
   intros instr_ofs i li l WD H.
   exploit (encode_reloc_offset_conform i instr_ofs li l);eauto.
@@ -1280,36 +1301,32 @@ Proof.
     destruct i;simpl in WD;try congruence;clear WD;
       try destr_ptr64_in_H H;
       try solve_decode_instr H RELOC;
-      try (do 2 f_equal;auto with encdec).
+      try (repeat f_equal;auto with encdec).
 
   (* Pimull_ri *)
-  exploit encode_rex_prefix_rr_result;eauto.
-  intros [(?, (?, ?))| (?, (?, (?, (?, ?))))]; subst.
-  exploit decode_ireg_u4_inject1;eauto;intros.
-  rewrite <- H13 in *.
-  exploit decode_ireg_u4_inject2;eauto;intros;subst.
-  exploit decode_ireg_u4_inject1. apply H11. intro.
-  rewrite H14 in *. auto.
-  inv H. exploit decode_ireg_u4_inject1. apply H11.
-  intros. rewrite H. auto.
-  
+  apply decode_ireg_u4_inject1 in H11.
+  apply decode_u1_inject. auto.
 
   (* testcond *)
   1-10 : try (rewrite encode_testcond_consistency;simpl;
-  do 2 f_equal;auto with encdec).
+  repeat f_equal;auto with encdec).
 
-  monadInv H. simpl. do 2 f_equal;auto with encdec.
+  (* Pret_iw *)
+  monadInv H. simpl. do 3 f_equal;auto with encdec.
   
   (* Paddmi *)
   generalize Heqb.
   unfold zero1. simpl. unfold char_to_bool.
   simpl. unfold decode_u1. simpl. congruence.
+  simpl. repeat f_equal. auto with encdec.
+  
 
   monadInv H. destr_in EQ0.
   monadInv EQ0. cbn [app] in *. autounfold with decunfold.
   simpl in RELOC.
-  rewrite RELOC. cbn [bind]. inv EQ.
-  rewrite Heqo. do 2 f_equal.
+  rewrite RELOC. cbn [bind]. simpl in EQ. inv EQ.
+  rewrite Heqo.
+  simpl. repeat f_equal.
   auto with encdec.
   (* intros. *)
   (* rewrite H12. unfold Int.repr. simpl. *)
@@ -1320,7 +1337,7 @@ Proof.
 
   monadInv H. cbn [app] in *. autounfold with decunfold.
   rewrite encode_testcond_consistency. cbn [bind].
-  do 2 f_equal. auto with encdec.
+  repeat f_equal. auto with encdec.
 Qed.
 
 End CSLED_RELOC.
