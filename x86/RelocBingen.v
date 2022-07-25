@@ -18,9 +18,6 @@ Import ListNotations.
 Local Open Scope error_monad_scope.
 Local Open Scope hex_scope.
 Local Open Scope bits_scope.
-
-Section WITH_RELOC_OFS_MAP.
-  Variable rtbl_ofs_map : ZTree.t relocentry.
   
 Section INSTR_SIZE.
   Variable instr_size : instruction -> Z.
@@ -30,34 +27,55 @@ Definition concat_byte (acc: res (list byte)) i :=
   do c <- EncDecRet.encode_Instruction i;
   OK (code ++ c).
 
-Definition encode_instruction (ofs: Z) (i: instruction) :res (list byte) :=
-  do c1 <- translate_instr rtbl_ofs_map ofs i;
-  do c <- fold_left concat_byte c1 (OK []);
-  OK c.
+(* Definition encode_instruction (e: option relocentry) (ofs: Z) (i: instruction) :res (list byte) := *)
+(*   do c1 <- translate_instr e ofs i; *)
+(*   do c <- fold_left concat_byte c1 (OK []); *)
+(*   OK c. *)
 
 (* use generated encoder*)
 Definition acc_instrs r i := 
   do r' <- r;
-  let '(ofs, code) := r' in
-  do c <- encode_instruction ofs i;
-  (** check instr_size eqaul to encoded instuction size *)
-  if Z.eqb (Z.of_nat (length c)) (instr_size i) then
-    OK (ofs + instr_size i, code ++ c)
-  else
-    Error [MSG "Inconsistent instruction size for: ";
-          MSG (instr_to_string i)].
+  let '(code,ofs,reloctbl) := r' in
+  match reloctbl with
+  | [] =>
+    do c1 <- translate_instr None i;
+    do c2 <- fold_left concat_byte c1 (OK []);
+    if Z.eqb (Z.of_nat (length c2)) (instr_size i) then
+      OK (code ++ c2,ofs + instr_size i,[])
+    else
+      Error [MSG "Inconsistent instruction size for: ";
+            MSG (instr_to_string i)]
+  | e :: tl =>
+    let ofs' := ofs + instr_size i in
+    if Z.ltb ofs e.(reloc_offset) && Z.ltb e.(reloc_offset) ofs' then
+      do c1 <- translate_instr (Some e) i;
+      do c2 <- fold_left concat_byte c1 (OK []);
+      if Z.eqb (Z.of_nat (length c2)) (instr_size i) then
+        OK (code ++ c2,ofs + instr_size i,tl)
+      else
+        Error [MSG "Inconsistent instruction size for: ";
+              MSG (instr_to_string i)]
+    else
+      do c1 <- translate_instr None i;
+      do c2 <- fold_left concat_byte c1 (OK []);
+      if Z.eqb (Z.of_nat (length c2)) (instr_size i) then
+        OK (code ++ c2,ofs + instr_size i,reloctbl)
+      else
+        Error [MSG "Inconsistent instruction size for: ";
+              MSG (instr_to_string i)]
+  end.
+
 
 (** Translation of a sequence of instructions in a function *)
-Definition transl_code (c:code) : res (list byte) :=
-  do r <- fold_left acc_instrs c (OK (0, []));
-  let '(_, c') := r in
-  OK c'.                                                           
-
+Definition transl_code (reloctbl: reloctable) (c:code) : res (list byte) :=
+  do r <- fold_left acc_instrs c (OK ([],0,reloctbl));
+  OK (fst (fst r)).
+  
 End INSTR_SIZE.
 
 (** ** Encoding of data *)
 
-Definition transl_init_data (dofs:Z) (d:init_data) : res (list byte) :=
+Definition transl_init_data (e: option relocentry) (d:init_data) : res (list byte) :=
   match d with
   | Init_int8 i => OK [Byte.repr (Int.unsigned i)]
   | Init_int16 i => OK (encode_int 2 (Int.unsigned i))
@@ -68,7 +86,7 @@ Definition transl_init_data (dofs:Z) (d:init_data) : res (list byte) :=
   | Init_space n => OK (zero_bytes (Z.to_nat n))
   | Init_addrof id ofs => 
     (* do addend <- get_reloc_addend rtbl_ofs_map dofs; *)
-    match ZTree.get dofs rtbl_ofs_map with
+    match e with
     | Some e =>
       if (Pos.eqb (reloc_symb e) id) && (Z.eqb (reloc_addend e) (Ptrofs.unsigned ofs)) then
         if Archi.ptr64 then     
@@ -82,16 +100,34 @@ Definition transl_init_data (dofs:Z) (d:init_data) : res (list byte) :=
 
 Definition acc_init_data r d := 
   do r' <- r;
-  let '(ofs, rbytes) := r' in
-  do dbytes <- transl_init_data ofs d;
-  OK (ofs + init_data_size d, rev dbytes ++ rbytes).
+  let '(rbytes,ofs,reloctbl) := r' in
+  match reloctbl with
+  | [] =>
+    let ofs' := ofs + init_data_size d in
+    do dbytes <- transl_init_data None d;
+    if (Z.of_nat (Datatypes.length dbytes)) =? init_data_size d then
+      OK (rbytes ++ dbytes, ofs', [])
+    else Error (msg "Inconsistent data size in data encoding")
+  | e :: tl =>
+    let ofs' := ofs + init_data_size d in
+    if (ofs <=? e.(reloc_offset)) && (e.(reloc_offset) <? ofs') then
+      do dbytes <- transl_init_data (Some e) d;
+      if (Z.of_nat (Datatypes.length dbytes)) =? init_data_size d then
+        OK (rbytes ++ dbytes, ofs', tl)
+      else Error (msg "Inconsistent data size in data encoding")
+    else
+      do dbytes <- transl_init_data None d;
+      if (Z.of_nat (Datatypes.length dbytes)) =? init_data_size d then
+        OK (rbytes ++ dbytes, ofs', reloctbl)
+      else Error (msg "Inconsistent data size in data encoding")
+  end.
 
-Definition transl_init_data_list (l: list init_data) : res (list byte) :=
-  do r <- fold_left acc_init_data l (OK (0, []));
-  let '(_,bytes) := r in
-  OK (rev bytes).
+Definition transl_init_data_list (reloctbl: reloctable) (l: list init_data) : res (list byte) :=
+  do r <- fold_left acc_init_data l (OK ([],0,reloctbl));
+  OK (fst (fst r)).
+  (* let '(_,bytes) := r in *)
+  (* OK (rev bytes). *)
 
-End WITH_RELOC_OFS_MAP.
 
 
 Section INSTR_SIZE.
@@ -101,10 +137,10 @@ Section INSTR_SIZE.
 Definition transl_section (sec : section) (reloctbl: reloctable) : res section :=
   match sec with
   | sec_text code =>
-    do codebytes <- transl_code (gen_reloc_ofs_map reloctbl) instr_size code;
+    do codebytes <- transl_code instr_size reloctbl code;
     OK (sec_bytes codebytes)
   | sec_data dl =>
-    do databytes <- transl_init_data_list (gen_reloc_ofs_map reloctbl) dl;
+    do databytes <- transl_init_data_list reloctbl dl;
     OK (sec_bytes databytes)
   (* | sec_rodata rdl => *)
   (*   do rodatabytes <- transl_init_data_list (gen_reloc_ofs_map reloctbl) rdl; *)
