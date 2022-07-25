@@ -5090,6 +5090,104 @@ Proof.
       eapply mi_perm_inv; eauto.
 Qed.
 
+(** Memory skeleton *)
+
+Program Definition skeleton (s:sup) : mem :=
+    {|
+      mem_contents := NMap.init (memval * PTree.t memval) (ZMap.init Undef);
+      mem_access := NMap.init (Z -> perm_kind -> option permission) (fun (_ : Z) (_ : perm_kind) => None);
+      support := s;
+    |}.
+
+Definition memval_map (f:meminj) (mv:memval) : memval :=
+  match mv with
+  |Fragment (Vptr b ofs) q n =>
+       match (f b) with
+       |Some (b', delta) =>
+          let v' := Vptr b' (Ptrofs.add ofs (Ptrofs.repr delta)) in
+          Fragment v' q n
+       |None => Undef
+       end
+  |_ => mv
+  end.
+(*
+Fixpoint mapN (vl: list memval) (f:meminj) : list memval :=
+  match vl with
+  | nil => nil
+  | v :: vl' => (memval_map f v) :: mapN vl' f
+  end.
+
+  Definition map (A B : Type ) (f: positive -> A -> B) (m : t A) : t B :=
+    (f xH (fst m), PTree.map f (snd m)).
+
+  Theorem gmap:
+    forall (A B: Type) (f: positive -> A -> B) (i : positive) (m: t A),
+      get i (map f m) = f i (get i m).
+  Proof.
+    intros. unfold map. unfold get. simpl. rewrite PTree.gmap.
+    unfold option_map. destruct (PTree.get i (snd m)); auto.
+*)
+
+
+Definition update_mem_access (map : Z -> perm_kind -> option permission) ofs :=
+  fun o p => map (o - ofs) p.
+
+Definition content_map (m : ZMap.t memval) (f:meminj) (ofs i: Z) (mv : memval) :=
+  if Z.leb i ofs then Undef else memval_map f (ZMap.get (i-ofs) m).
+
+Definition positive_to_Z (p:positive): Z :=
+  match p with
+    | 1%positive => 0
+    | (p~0)%positive => Z.pos p
+    | (p~1)%positive => Z.neg p
+  end.
+
+Definition map_trans {A B : Type} (zmap: Z -> A -> B) (p:positive) (a : A) :=
+   zmap (positive_to_Z p) a.
+
+Definition update_mem_content (m : ZMap.t memval) (f:meminj) (ofs : Z) :=
+  (Undef , PTree.map (map_trans (content_map m f ofs)) (snd m)).
+
+Program Definition map (f:meminj) (b:block) (m1 m2:mem) :=
+  match f b with
+  |Some (b',ofs) =>
+     if Mem.sup_dec b' (Mem.support m2) then
+     {|
+       mem_contents :=
+           NMap.set _ b' (update_mem_content ((mem_contents m1)#b) f ofs) (mem_contents m2);
+       mem_access :=
+           NMap.set _ b' (update_mem_access ((mem_access m1)#b) ofs) (mem_access m2);
+       support := (Mem.support m2);
+     |}
+       else m1
+  |None => m1
+  end.
+Next Obligation.
+  destruct (eq_block b0 b') eqn:Hb; subst.
+  - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
+    apply Mem.access_max; eauto.
+  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
+    apply Mem.access_max; auto.
+Qed.
+Next Obligation.
+    destruct (eq_block b0 b') eqn:Hb; subst.
+  - congruence.
+  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
+    apply Mem.nextblock_noaccess. auto.
+Qed.
+Next Obligation.
+    destruct (eq_block b0 b') eqn:Hb; subst.
+  - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
+  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
+    apply Mem.contents_default.
+Qed.
+
+Fixpoint inject_map (s1 s2:list block) (f: meminj) (m1:mem) : mem :=
+  match s1 with
+    |nil => skeleton s2
+    |hd :: tl => map f hd m1 (inject_map tl s2 f m1)
+  end.
+
 End Mem.
 Notation mem := Mem.mem.
 Notation sup := Mem.sup.

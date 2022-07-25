@@ -984,6 +984,11 @@ Lemma inject_compose_inv:
   exists m2 , Mem.inject f m1 m2 /\
          Mem.inject f' m2 m3 /\
          Mem.sup_include s (Mem.support m2).
+Proof.
+  intros.
+  exists (Mem.inject_map (Mem.support m1) s f m1).
+  Admitted.
+
 (*
   we may need from construction:
   1) inject_dom_in f s'
@@ -991,9 +996,9 @@ Lemma inject_compose_inv:
   3) meminj_no_overlap f' ??
   step1 : construct memory m2 with correct support (repeat Mem.alloc empty 0 0)
   step2 : iterate b \in m1, if f b = Some (b',ofs), then expand the size of b' (Mem.expend, all value Vundef) and copy the content (deal with Vptr) and permission.
-  step3 :
+
  *)
-Admitted.
+
 
 (** inj@inj is refined by inj *)
 Lemma inj_inj2:
@@ -1040,9 +1045,9 @@ Proof.
     generalize (inject_implies_dom_in _ _ _ INJ13').
     intros DOMIN13'.
     generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' INCR13 DISJ13).
-    intros (j12' & j23' & m2'_sup & JEQ & INCR12 & SUPINCL2 & IMGEQ12' & INCRDISJ12 & INCR23 & INCRDISJ23).
+    intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & IMGIN12' & INCRDISJ12 & INCRDISJ23).
     subst.
-    generalize (inject_compose_inv _ _ _ _ _ INJ13' IMGEQ12').
+    generalize (inject_compose_inv _ _ _ _ _ INJ13' IMGIN12').
     intros (m2' & INJ12' & INJ23' & SUPINCL2').
     exists ((injw j12' (Mem.support m1') (Mem.support m2')),
        (injw j23' (Mem.support m2') (Mem.support m3'))).
