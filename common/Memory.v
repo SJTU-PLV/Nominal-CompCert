@@ -5159,8 +5159,8 @@ Program Definition map (f:meminj) (b:block) (m1 m2:mem) :=
            NMap.set _ b' (update_mem_access ((mem_access m1)#b) ofs) (mem_access m2);
        support := (Mem.support m2);
      |}
-       else m1
-  |None => m1
+       else m2
+  |None => m2
   end.
 Next Obligation.
   destruct (eq_block b0 b') eqn:Hb; subst.
@@ -5187,6 +5187,44 @@ Fixpoint inject_map (s1 s2:list block) (f: meminj) (m1:mem) : mem :=
     |nil => skeleton s2
     |hd :: tl => map f hd m1 (inject_map tl s2 f m1)
   end.
+
+Lemma support_map : forall f b m1 m2,
+    support (map f b m1 m2) = support m2.
+Proof.
+  intros. unfold map. destruct (f b) eqn: Hf; auto.
+  destruct p. destruct sup_dec; auto.
+Qed.
+
+Lemma inject_map_support : forall s1 s2 f m1,
+    support (inject_map s1 s2 f m1) = s2.
+Proof.
+  induction s1; intros; auto.
+  simpl. rewrite support_map. eauto.
+Qed.
+
+Theorem inject_map_inject : forall m1 s2 f m2,
+    inject_map (Mem.support m1) s2 f m1 = m2 ->
+    Mem.inject f m1 m2.
+Proof.
+  intros.
+  induction (Mem.support m1).
+  - inv H. simpl. assert ( forall b, f b = None ).
+    admit.
+    constructor; intros; try congruence; eauto.
+    + constructor; intros; congruence.
+  - Abort.
+
+Theorem inject_map_inject : forall m1 s2 f m2,
+    inject_map (Mem.support m1) s2 f m1 = m2 ->
+    Mem.inject f m1 m2.
+Proof.
+  intros.
+  constructor.
+  - constructor.
+    + intros. admit. (*trivial *)
+    + intros. admit. (*should be precondition of f*)
+    + intros.
+      Abort.
 
 End Mem.
 Notation mem := Mem.mem.

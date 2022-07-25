@@ -987,6 +987,7 @@ Lemma inject_compose_inv:
 Proof.
   intros.
   exists (Mem.inject_map (Mem.support m1) s f m1).
+  
   Admitted.
 
 (*
