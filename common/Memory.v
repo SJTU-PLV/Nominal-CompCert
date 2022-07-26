@@ -5099,6 +5099,16 @@ Program Definition skeleton (s:sup) : mem :=
       support := s;
     |}.
 
+(** update permission *)
+
+Definition perm_map := Z -> perm_kind -> option permission.
+
+Definition update_mem_access (ofs: Z) (map1 map2 : perm_map) : perm_map :=
+  fun o p =>
+    if Z.ltb o ofs then map1 o p else map2 (o - ofs) p.
+
+(** update content *)
+
 Definition memval_map (f:meminj) (mv:memval) : memval :=
   match mv with
   |Fragment (Vptr b ofs) q n =>
@@ -5110,30 +5120,12 @@ Definition memval_map (f:meminj) (mv:memval) : memval :=
        end
   |_ => mv
   end.
-(*
-Fixpoint mapN (vl: list memval) (f:meminj) : list memval :=
-  match vl with
-  | nil => nil
-  | v :: vl' => (memval_map f v) :: mapN vl' f
+
+Definition perm_check (pmap : Z -> perm_kind -> option permission ) ofs : bool :=
+  match pmap ofs Max with
+    |None => false
+    |Some _ => true
   end.
-
-  Definition map (A B : Type ) (f: positive -> A -> B) (m : t A) : t B :=
-    (f xH (fst m), PTree.map f (snd m)).
-
-  Theorem gmap:
-    forall (A B: Type) (f: positive -> A -> B) (i : positive) (m: t A),
-      get i (map f m) = f i (get i m).
-  Proof.
-    intros. unfold map. unfold get. simpl. rewrite PTree.gmap.
-    unfold option_map. destruct (PTree.get i (snd m)); auto.
-*)
-
-
-Definition update_mem_access (map : Z -> perm_kind -> option permission) ofs :=
-  fun o p => map (o - ofs) p.
-
-Definition content_map (m : ZMap.t memval) (f:meminj) (ofs i: Z) (mv : memval) :=
-  if Z.leb i ofs then Undef else memval_map f (ZMap.get (i-ofs) m).
 
 Definition positive_to_Z (p:positive): Z :=
   match p with
@@ -5142,11 +5134,20 @@ Definition positive_to_Z (p:positive): Z :=
     | (p~1)%positive => Z.neg p
   end.
 
-Definition map_trans {A B : Type} (zmap: Z -> A -> B) (p:positive) (a : A) :=
-   zmap (positive_to_Z p) a.
+Definition content_map (val1 : ZMap.t memval) (pmap1 : perm_map) (f:meminj) (ofs : Z)
+           : positive -> memval -> memval :=
+  fun i mv =>
+    let o := positive_to_Z i in             (* find the o : Z from the positive index in PTree *)
+    if Z.ltb o ofs then mv                  (* check whether offset o is in the image of f *)
+      else let ofs1 := o - ofs in           (* compute the index in domian clock*)
+        if perm_check pmap1 ofs1 then       (* check the source permission*)
+          memval_map f (ZMap.get ofs1 val1) (* copy the valid value from source*)
+        else
+          mv.                               (* not copy the invalid value *)
 
-Definition update_mem_content (m : ZMap.t memval) (f:meminj) (ofs : Z) :=
-  (Undef , PTree.map (map_trans (content_map m f ofs)) (snd m)).
+Definition update_mem_content (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (ofs : Z)
+    : ZMap.t memval -> ZMap.t memval :=
+  fun val2 => (Undef, PTree.map (content_map val1 pmap1 f ofs) (snd val2)).
 
 Program Definition map (f:meminj) (b:block) (m1 m2:mem) :=
   match f b with
@@ -5154,29 +5155,31 @@ Program Definition map (f:meminj) (b:block) (m1 m2:mem) :=
      if Mem.sup_dec b' (Mem.support m2) then
      {|
        mem_contents :=
-           NMap.set _ b' (update_mem_content ((mem_contents m1)#b) f ofs) (mem_contents m2);
+           pmap_update b' (update_mem_content ((mem_contents m1)#b) ((mem_access m1)#b) f ofs)
+                       (mem_contents m2);
        mem_access :=
-           NMap.set _ b' (update_mem_access ((mem_access m1)#b) ofs) (mem_access m2);
+           pmap_update b' (update_mem_access ofs (mem_access m1)#b) (mem_access m2);
        support := (Mem.support m2);
      |}
        else m2
   |None => m2
   end.
 Next Obligation.
-  destruct (eq_block b0 b') eqn:Hb; subst.
+    unfold pmap_update. destruct (eq_block b0 b') eqn:Hb; subst.
   - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
+    unfold update_mem_access. destruct (ofs0 <? ofs);
     apply Mem.access_max; eauto.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
     apply Mem.access_max; auto.
 Qed.
 Next Obligation.
-    destruct (eq_block b0 b') eqn:Hb; subst.
+    unfold pmap_update. destruct (eq_block b0 b') eqn:Hb; subst.
   - congruence.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
     apply Mem.nextblock_noaccess. auto.
 Qed.
 Next Obligation.
-    destruct (eq_block b0 b') eqn:Hb; subst.
+    unfold pmap_update. destruct (eq_block b0 b') eqn:Hb; subst.
   - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
     apply Mem.contents_default.
