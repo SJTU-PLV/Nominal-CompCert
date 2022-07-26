@@ -5109,13 +5109,13 @@ Definition perm_check (pmap : Z -> perm_kind -> option permission ) ofs : bool :
     |Some _ => true
   end.
 
-Definition update_mem_access (ofs: Z) (map1 map2 : perm_map) : perm_map :=
-  fun o p =>
-    if Z.ltb o ofs then map2 o p
-      else let ofs1 := o - ofs in
+Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
+  fun ofs2 p =>
+    if Z.ltb ofs2 delta then map2 ofs2 p
+      else let ofs1 := ofs2 - delta in
            if perm_check map1 ofs1 then
              map1 ofs1 p
-           else map2 o p.
+           else map2 ofs2 p.
 
 (** update content *)
 
@@ -5140,31 +5140,31 @@ Definition positive_to_Z (p:positive): Z :=
     | (p~1)%positive => Z.neg p
   end.
 
-Definition content_map (val1 : ZMap.t memval) (pmap1 : perm_map) (f:meminj) (ofs : Z)
+Definition content_map (val1 : ZMap.t memval) (pmap1 : perm_map) (f:meminj) (delta : Z)
            : positive -> memval -> memval :=
   fun i mv =>
-    let o := positive_to_Z i in             (* find the o : Z from the positive index in PTree *)
-    if Z.ltb o ofs then mv                  (* check whether offset o is in the image of f *)
-      else let ofs1 := o - ofs in           (* compute the index in domian clock*)
+    let ofs2 := positive_to_Z i in             (* find the o : Z from the positive index in PTree *)
+    if Z.ltb ofs2 delta then mv                  (* check whether offset o is in the image of f *)
+      else let ofs1 := ofs2 - delta in           (* compute the index in domian clock*)
         if perm_check pmap1 ofs1 then       (* check the source permission*)
           memval_map f (ZMap.get ofs1 val1) (* copy the valid value from source*)
         else
           mv.                               (* not copy the invalid value *)
 
-Definition update_mem_content (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (ofs : Z)
+Definition update_mem_content (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (delta : Z)
     : ZMap.t memval -> ZMap.t memval :=
-  fun val2 => (Undef, PTree.map (content_map val1 pmap1 f ofs) (snd val2)).
+  fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
 
 Program Definition map (f:meminj) (b:block) (m1 m2:mem) :=
   match f b with
-  |Some (b',ofs) =>
+  |Some (b',delta) =>
      if Mem.sup_dec b' (Mem.support m2) then
      {|
        mem_contents :=
-           pmap_update b' (update_mem_content ((mem_contents m1)#b) ((mem_access m1)#b) f ofs)
+           pmap_update b' (update_mem_content ((mem_contents m1)#b) ((mem_access m1)#b) f delta)
                        (mem_contents m2);
        mem_access :=
-           pmap_update b' (update_mem_access ofs (mem_access m1)#b) (mem_access m2);
+           pmap_update b' (update_mem_access delta (mem_access m1)#b) (mem_access m2);
        support := (Mem.support m2);
      |}
        else m2
@@ -5174,7 +5174,7 @@ Next Obligation.
     unfold pmap_update. destruct (eq_block b0 b') eqn:Hb; subst.
   - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
     unfold update_mem_access.
-    destruct (ofs0 <? ofs).
+    destruct (ofs <? delta).
     apply Mem.access_max; eauto.
     destruct perm_check;
     apply Mem.access_max; eauto.
@@ -5200,6 +5200,9 @@ Fixpoint inject_map (s1 s2:list block) (f: meminj) (m1:mem) : mem :=
     |hd :: tl => map f hd m1 (inject_map tl s2 f m1)
   end.
 
+Definition inject_mem s2 f m1 : mem :=
+  inject_map (Mem.support m1) s2 f m1.
+
 Lemma support_map : forall f b m1 m2,
     support (map f b m1 m2) = support m2.
 Proof.
@@ -5214,6 +5217,13 @@ Proof.
   simpl. rewrite support_map. eauto.
 Qed.
 
+Lemma inject_mem_support : forall s2 f m1,
+    support (inject_mem s2 f m1) = s2.
+Proof.
+  intros. apply inject_map_support.
+Qed.
+
+(* too ambitious for the first step
 Theorem inject_map_inject : forall m1 s2 f m2,
     inject_map (Mem.support m1) s2 f m1 = m2 ->
     Mem.inject f m1 m2.
@@ -5225,20 +5235,89 @@ Proof.
     constructor; intros; try congruence; eauto.
     + constructor; intros; congruence.
   - Abort.
+*)
 
-Theorem inject_map_inject : forall m1 s2 f m2,
-    inject_map (Mem.support m1) s2 f m1 = m2 ->
+Lemma inject_mem_perm_inv: forall m1 s2 f m2 ofs2 k p b2,
+    inject_mem s2 f m1 = m2 ->
+    perm m2 b2 ofs2 k p ->
+    exists b1 delta ofs1,
+      f b1 = Some (b2, delta)
+   /\ perm m1 b1 ofs1 k p
+   /\ ofs2 = ofs1 + delta.
+Proof.
+  (*TODO*)
+Admitted.
+
+
+Theorem inject_mem_inj1 : forall m1 s2 f m2,
+    inject_mem  s2 f m1 = m2 ->
+    Mem.mem_inj f m1 m2.
+Proof.
+  intros. constructor.
+  - intros. admit. (* ok, from the no_overlaping of m1 *)
+  - admit. (*ok, assumption from old f + new added identity mappings *)
+  - admit. (*ok, from the non_overlaping *)
+Admitted.
+
+Theorem inject_mem_inject1 : forall m1 s2 f m2,
+    inject_mem s2 f m1 = m2 ->
     Mem.inject f m1 m2.
 Proof.
   intros.
   constructor.
-  - constructor.
-    + intros. admit. (*trivial *)
-    + intros. admit. (*should be precondition of f*)
-    + intros.
-      Abort.
+  - eapply inject_mem_inj1; eauto.
+  - admit. (* existing assumption*)
+  - admit. (* existing assumption*)
+  - admit. (* assumption comes from kriple acc about max_perm_decrease *)
+  - admit. (* assumption comes from old f + max_perm_decrease + newly added identites *)
+  - admit. (* TO PROVE HERE FROM THE CONSTRUCTION *)
+Admitted.
+
+Theorem inject_mem_inj2 : forall m1 s2 f f' m2 m3,
+    Mem.inject (compose_meminj f f') m1 m3 ->
+    inject_mem s2 f m1 = m2 ->
+    Mem.mem_inj f' m2 m3.
+Proof.
+  intros. constructor.
+  - intros. admit. (*ok, H2 means the position is copied from m1, so
+                     the corresponding possition in m3 is in the image of compose_meminj f f'*)
+  - intros. admit. (*should be ok, 1) new mappings, f' = compose f f' ok 2) old mappings not clear *)
+  - intros. admit. (*ok, same as first *)
+Admitted.
+
+Theorem inject_mem_inject2: forall m1 s2 f f' m2 m3,
+    Mem.inject (compose_meminj f f') m1 m3 ->
+    inject_mem s2 f m1 = m2 ->
+    Mem.inject f' m2 m3.
+Proof.
+  intros.
+  exploit inject_mem_inject1; eauto.
+  intro INJ1.
+  constructor.
+  - eapply inject_mem_inj2; eauto.
+  - admit. (* existing assumption *)
+  - admit. (* existing assumption *)
+  - red. admit. (* PERM m2 -> exists b0, f b0 = Some (b1, delta0) -> compose f f' b0 = Some (b1', delta1 + delta0) *)
+  -  admit. (* SAME AS ABOVE *)
+  -  admit. (* SAME AS ABOVE, id perm m2 b1 ofs is not None, then it is copied from m1 *)
+    (* *)
+Admitted.
+
+Theorem inject_map_inject: forall m1 s2 f f' m2 m3,
+    Mem.inject (compose_meminj f f') m1 m3 ->
+    inject_map (Mem.support m1) s2 f m1 = m2 ->
+    Mem.inject f m1 m2 /\
+    Mem.inject f' m2 m3 /\
+    Mem.sup_include s2 (Mem.support m2).
+Proof.
+  intros.
+  split. eapply inject_mem_inject1; eauto.
+  split. eapply inject_mem_inject2; eauto.
+  rewrite <- H0. erewrite inject_map_support. apply Mem.sup_include_refl.
+Qed.
 
 End Mem.
+
 Notation mem := Mem.mem.
 Notation sup := Mem.sup.
 Notation sup_In := Mem.sup_In.
