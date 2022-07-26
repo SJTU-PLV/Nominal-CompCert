@@ -151,17 +151,7 @@ Definition decode_instrs' (reloctbl: reloctable) (bytes: list byte) :=
   do instrs2 <- decode_instrs (length instrs1) reloctbl 0 instrs1 [];
   OK instrs2.
   
-Definition decode_code_section (e: symbentry) (reloctbl: reloctable) (id: ident) (s:section) : res section :=
-    match s, (symbentry_type e) with
-    | sec_bytes bs, symb_func =>
-      do instrs <- decode_instrs' reloctbl bs;
-      OK (sec_text instrs)
-    | _,_ =>
-      Error (msg "Code section is not encoded into bytes")
-    end.
-
-
-Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) acc id sec:=
+Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) acc id (sec:section) :=
   do acc' <- acc;
   let reloctbl := match reloctbl_map ! id with
                   | None => []
@@ -169,8 +159,12 @@ Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctabl
                   end in
   match symbtbl ! id with
   | Some e =>
-    do s <- decode_code_section e reloctbl id sec;
-    OK (PTree.set id s acc')
+    match sec, (symbentry_type e) with
+    | sec_bytes bs, symb_func =>
+      do instrs <- decode_instrs' reloctbl bs;
+      OK (PTree.set id (sec_text instrs) acc')
+    | _,_ => OK acc'
+    end
   | _ => Error (msg "Decode code section: no corresponding symbol entry")
   end.
 
@@ -185,42 +179,87 @@ Definition decode_prog_code_section (p:program) : res program :=
         prog_reloctables := prog_reloctables p;
         prog_senv        := prog_senv p;
      |}.
- 
+
+Definition globalenv (prog: program) :=
+  match decode_prog_code_section prog with
+  | OK prog' =>
+    RelocProgSemantics.globalenv instr_size prog'
+  (* prove this impossible *)
+  | _ => RelocProgSemantics.globalenv instr_size prog
+  end.
+
+Lemma globalenv_senv: forall prog,
+    Genv.genv_senv (globalenv prog) = prog_senv prog.
+  intros. unfold globalenv.
+  unfold decode_prog_code_section;destruct prog;simpl;auto.
+  destruct PTree.fold. simpl. auto.
+  simpl. auto.
+Qed.
+
 Inductive initial_state (prog: program) (rs: regset) (s: state): Prop :=
 | initial_state_intro: forall m prog',
     decode_prog_code_section prog = OK prog' ->
     init_mem prog' = Some m ->
-    RelocProgSemantics1.initial_state_gen prog' rs m s ->
+    RelocProgSemantics.initial_state_gen instr_size prog' rs m s ->
     initial_state prog rs s.
 
 Definition semantics (p: program) (rs: regset) :=
-  Semantics_gen RelocProgSemantics1.step 
-                (initial_state p rs) RelocProgSemantics1.final_state 
-                (RelocProgSemantics1.globalenv p) 
-                (RelocProgSemantics1.genv_senv (RelocProgSemantics1.globalenv p)).
-
+  Semantics_gen (RelocProgSemantics.step instr_size)
+                (initial_state p rs) RelocProgSemantics.final_state 
+                (globalenv p)
+                (RelocProgSemantics.Genv.genv_senv (RelocProgSemantics.globalenv instr_size p)).
 
 (** Determinacy of the semantics. *)
 
 Lemma semantics_determinate: forall p rs, determinate (semantics p rs).
 Proof.
+  Ltac Equalities :=
+    match goal with
+    | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] =>
+      rewrite H1 in H2; inv H2; Equalities
+    | _ => idtac
+    end.
   intros.
-  destruct (RelocProgSemantics1.semantics_determinate p rs).
-  constructor; simpl; auto.
-- (* initial states *)
-  intros. inv H; inv H0. 
-  assert (prog' = prog'0) by congruence. subst.
-  assert (m = m0) by congruence. subst. inv H3; inv H5.
-  assert (m1 = m5 /\ bstack = bstack0) by intuition congruence. destruct H0; subst.
-  assert (m2 = m6) by congruence. subst.
-  f_equal. congruence.
+  constructor;simpl;intros.
+  -                             (* initial state *)
+    inv H;inv H0;Equalities.
+    + split. constructor. auto.
+    + discriminate.
+    + discriminate.
+    + assert (vargs0 = vargs) by (eapply RelocProgSemantics.eval_builtin_args_determ; eauto).   
+      subst vargs0.      
+      exploit external_call_determ. eexact H5. eexact H11. intros [A B].
+      rewrite globalenv_senv in A.
+      split. auto. intros. destruct B; auto. subst. auto.
+    + assert (args0 = args) by (eapply Asm.extcall_arguments_determ; eauto). subst args0.
+      exploit external_call_determ. eexact H3. eexact H7. intros [A B].
+      rewrite globalenv_senv in A.
+      split. auto. intros. destruct B; auto. subst. auto.
+  - red; intros; inv H; simpl.
+    lia.
+    eapply external_call_trace_length; eauto.
+    eapply external_call_trace_length; eauto.
+  - (* initial states *)
+    inv H; inv H0. inv H1;inv H2. assert (m = m0) by congruence.
+    assert (prog' = prog'0) by congruence.
+    subst. inv H5; inv H3.
+  assert (m1 = m3 /\ stk = stk0) by intuition congruence. destruct H0; subst.
+  assert (m2 = m4) by congruence. subst.
+  f_equal.
+- (* final no step *)
+  assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
+  { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
+  inv H. red; intros; red; intros. inv H; rewrite H0 in *; eelim NOTNULL; eauto.
+- (* final states *)
+  inv H; inv H0. congruence.    
 Qed.
+
 
 Theorem reloc_prog_single_events p rs:
   single_events (semantics p rs).
 Proof.
-  red. simpl. intros s t s' STEP.
-  inv STEP; simpl. omega.
+  red. intros.
+  inv H; simpl. lia.
   eapply external_call_trace_length; eauto.
   eapply external_call_trace_length; eauto.
 Qed.
@@ -228,7 +267,18 @@ Qed.
 Theorem reloc_prog_receptive p rs:
   receptive (semantics p rs).
 Proof.
-  destruct (RelocProgSemantics1.reloc_prog_receptive p rs).
-  split; auto.
+  split.
+  - simpl. intros s t1 s1 t2 STEP MT.
+    inv STEP.
+    inv MT. eexists.
+    + eapply RelocProgSemantics.exec_step_internal; eauto.
+    + rewrite globalenv_senv in *.
+      edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
+      eexists. eapply RelocProgSemantics.exec_step_builtin; eauto.
+      rewrite globalenv_senv in *. eauto.
+    + edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
+      rewrite globalenv_senv in *. eauto.
+      eexists. eapply RelocProgSemantics.exec_step_external; eauto.
+  - eapply reloc_prog_single_events; eauto.  
 Qed.
 
