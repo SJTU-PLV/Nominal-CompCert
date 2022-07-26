@@ -5103,9 +5103,19 @@ Program Definition skeleton (s:sup) : mem :=
 
 Definition perm_map := Z -> perm_kind -> option permission.
 
+Definition perm_check (pmap : Z -> perm_kind -> option permission ) ofs : bool :=
+  match pmap ofs Max with
+    |None => false
+    |Some _ => true
+  end.
+
 Definition update_mem_access (ofs: Z) (map1 map2 : perm_map) : perm_map :=
   fun o p =>
-    if Z.ltb o ofs then map1 o p else map2 (o - ofs) p.
+    if Z.ltb o ofs then map2 o p
+      else let ofs1 := o - ofs in
+           if perm_check map1 ofs1 then
+             map1 ofs1 p
+           else map2 o p.
 
 (** update content *)
 
@@ -5121,11 +5131,7 @@ Definition memval_map (f:meminj) (mv:memval) : memval :=
   |_ => mv
   end.
 
-Definition perm_check (pmap : Z -> perm_kind -> option permission ) ofs : bool :=
-  match pmap ofs Max with
-    |None => false
-    |Some _ => true
-  end.
+
 
 Definition positive_to_Z (p:positive): Z :=
   match p with
@@ -5167,7 +5173,10 @@ Program Definition map (f:meminj) (b:block) (m1 m2:mem) :=
 Next Obligation.
     unfold pmap_update. destruct (eq_block b0 b') eqn:Hb; subst.
   - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
-    unfold update_mem_access. destruct (ofs0 <? ofs);
+    unfold update_mem_access.
+    destruct (ofs0 <? ofs).
+    apply Mem.access_max; eauto.
+    destruct perm_check;
     apply Mem.access_max; eauto.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
     apply Mem.access_max; auto.
