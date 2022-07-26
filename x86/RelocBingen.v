@@ -134,37 +134,44 @@ Section INSTR_SIZE.
   Variable instr_size : instruction -> Z.
 
 (** ** Translation of a program *)
-Definition transl_section (sec : section) (reloctbl: reloctable) : res section :=
-  match sec with
-  | sec_text code =>
+Definition transl_section (sec : section) (reloctbl: reloctable) (symbe:symbentry) : res section :=
+  match sec,(symbentry_type symbe) with
+  | sec_text code, symb_func =>
     do codebytes <- transl_code instr_size reloctbl code;
     OK (sec_bytes codebytes)
-  | sec_data dl =>
+  | sec_data dl, symb_rodata =>
+    do databytes <- transl_init_data_list reloctbl dl;
+    OK (sec_bytes databytes)
+  | sec_data dl, symb_rwdata =>
     do databytes <- transl_init_data_list reloctbl dl;
     OK (sec_bytes databytes)
   (* | sec_rodata rdl => *)
   (*   do rodatabytes <- transl_init_data_list (gen_reloc_ofs_map reloctbl) rdl; *)
   (*   OK (sec_bytes rodatabytes) *)
-  | _ => Error (msg "There are bytes before binary generation")
+  | _,_ => Error (msg "There are bytes before binary generation")
   end.
 
 
-Definition acc_fold_section (reloc_map : reloctable_map) (res_sectbl: res sectable) (id: ident) (sec: section) :=
+Definition acc_fold_section (symbtbl: symbtable) (reloc_map : reloctable_map) (res_sectbl: res sectable) (id: ident) (sec: section) :=
   do sectbl <- res_sectbl;
   let reloc_tbl := 
       match reloc_map ! id with
       | Some t => t
       | None => []
       end in
-  do sec' <- transl_section sec reloc_tbl;
-  OK (PTree.set id sec' sectbl).
+  match symbtbl ! id with
+  | Some e =>
+    do sec' <- transl_section sec reloc_tbl e;
+    OK (PTree.set id sec' sectbl)
+  | _ => Error (msg "no symbol entry for this section")
+  end.
         
-Definition transl_sectable (stbl: sectable) (relocmap: reloctable_map) :=
-  PTree.fold (acc_fold_section relocmap) stbl (OK (PTree.empty section)).
+Definition transl_sectable (stbl: sectable) (relocmap: reloctable_map) (symbtbl: symbtable) :=
+  PTree.fold (acc_fold_section symbtbl relocmap) stbl (OK (PTree.empty section)).
 
 
 Definition transf_program (p:program) : res program := 
-  do stbl <- transl_sectable (prog_sectable p) (prog_reloctables p);
+  do stbl <- transl_sectable (prog_sectable p) (prog_reloctables p) (prog_symbtable p);
   do szstrings <- fold_right
                     (fun (id : ident) (acc : res Z) =>
                        match acc with

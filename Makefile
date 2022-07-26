@@ -127,7 +127,7 @@ BACKEND=\
   RelocBingen.v RelocBinDecode.v\
   TranslateInstr.v\
   AsmLongInt.v\
-  RelocProgSemantics.v RelocProgSemantics1.v\
+  RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
   AsmInject.v
 
 # Encoding of data into bytes
