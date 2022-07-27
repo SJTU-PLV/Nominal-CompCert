@@ -1729,6 +1729,15 @@ Hint Resolve match_cont_globalenv: compat.
 
 (** Relating execution states *)
 
+(* Can be added to match_state and proof internal max_perm_decrease
+   Can we get the result from Clightrel.v? The self simulation plainly says that
+   every semantics will preserve this invariant.
+
+Definition mem_max_perm_decrease m1 m2 : Prop :=
+  max_perm_decrease (injw_mem_l w) m1 /\
+  max_perm_decrease (injw_mem_r w) m2.
+*)
+
 Inductive match_states: state -> state -> Prop :=
   | match_regular_states:
       forall f s k e le m tf ts tk te tle tm j lo hi tlo thi
