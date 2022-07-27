@@ -357,23 +357,6 @@ Lemma ros_address_agree:
   agree_regs F ctx rs rs' ->
   Genv.match_stbls F se tse ->
   Val.inject F (ros_address ge ros rs) (ros_address tge (sros ctx ros) rs').
-(*=======
-Inductive match_globalenvs (F: meminj) (support: sup): Prop :=
-  | mk_match_globalenvs
-      (DOMAIN: forall b, sup_In b support-> F b = Some(b, 0))
-      (IMAGE: forall b1 b2 delta, F b1 = Some(b2, delta) -> sup_In b2 support -> b1 = b2)
-      (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> sup_In b support)
-      (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> sup_In b support)
-      (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> sup_In b support).
-
-Lemma find_function_agree:
-  forall ros rs fd F ctx rs' support,
-  find_function ge ros rs = Some fd ->
-  agree_regs F ctx rs rs' ->
-  match_globalenvs F support ->
-  exists cu fd',
-  find_function tge (sros ctx ros) rs' = Some fd' /\ transf_fundef (funenv_program cu) fd = OK fd' /\ linkorder cu prog.
->>>>>>> 830b2cc *)
 Proof.
   intros. destruct ros as [r | id]; simpl in *.
 - (* register *)
@@ -406,10 +389,6 @@ Qed.
 Lemma tr_builtin_arg:
   forall F ctx rs rs' sp sp' m m',
   Genv.match_stbls F se tse ->
-(*=======
-  forall F support ctx rs rs' sp sp' m m',
-  match_globalenvs F support ->
->>>>>>> 830b2cc *)
   agree_regs F ctx rs rs' ->
   F sp = Some(sp', ctx.(dstk)) ->
   Mem.inject F m m' ->
@@ -453,10 +432,6 @@ Qed.
 Lemma tr_builtin_args:
   forall F ctx rs rs' sp sp' m m',
   Genv.match_stbls F se tse ->
-(*=======
-  forall F support ctx rs rs' sp sp' m m',
-  match_globalenvs F support ->
->>>>>>> 830b2cc *)
   agree_regs F ctx rs rs' ->
   F sp = Some(sp', ctx.(dstk)) ->
   Mem.inject F m m' ->
@@ -477,8 +452,8 @@ Qed.
 Inductive match_stacks (F: meminj) (m m': mem):
              list stackframe -> list stackframe -> sup -> Prop :=
   | match_stacks_nil: forall support
-        (MG: inj_incr w (injw F (Mem.support m) (Mem.support m')))
-        (BELOW: Mem.sup_include (injw_sup_r w) support),
+        (MG: inj_incr w (injw F m m'))
+        (BELOW: Mem.sup_include (Mem.support (injw_mem_r w)) support),
       match_stacks F m m' nil nil support
   | match_stacks_cons: forall res f sp pc rs stk f' sp' sps' rs' stk' support fenv ctx
         (SPS': sp' = fresh_block sps')
@@ -565,24 +540,26 @@ Variable F1: meminj.
 Variables m1 m1': mem.
 Hypothesis INCR: inject_incr F F1.
 
-Lemma mit_incr_invariant bound s1 s2 s1' s2':
-  (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> sup_In b1 (injw_sup_l w) \/ sup_In b2 bound ->
+Lemma mit_incr_invariant bound m0 m2 m0' m2':
+  (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> sup_In b1 (Mem.support (injw_mem_l w)) \/ sup_In b2 bound ->
                        F b1 = Some(b2, delta)) ->
-  Mem.sup_include (injw_sup_r w) bound ->
-  inj_incr w (injw F s1 s2) ->
-  Mem.sup_include s1 s1' ->
-  Mem.sup_include s2 s2' ->
-  inj_incr w (injw F1 s1' s2').
+  Mem.sup_include (Mem.support (injw_mem_r w)) bound ->
+  inj_incr w (injw F m0 m2) ->
+  Mem.sup_include (Mem.support m0) (Mem.support m0') ->
+  Mem.sup_include (Mem.support m2) (Mem.support m2') ->
+  inj_incr w (injw F1 m0' m2').
 Proof.
   intros INJ BELOW H Hs1' Hs2'. inv H. split; cbn in *; eauto; try extlia.
   eapply inject_incr_trans; eauto.
   intros b1 b2 delta Hb1 Hb1'.
   destruct (F b1) as [[xb1' xdelta]|] eqn:Hb1''.
   - rewrite (INCR _ _ _ Hb1'') in Hb1'. inv Hb1'. eauto.
-  - destruct (Mem.sup_dec b1 s0); try (erewrite INJ in Hb1''; eauto; discriminate).
+  - destruct (Mem.sup_dec b1 (Mem.support m3)); try (erewrite INJ in Hb1''; eauto; discriminate).
     destruct (Mem.sup_dec b2 bound); try (erewrite INJ in Hb1''; eauto; discriminate).
-    eauto.
-Qed.
+    split; eauto.
+  - admit.
+  - admit.
+Admitted.
 
 Lemma match_stacks_invariant:
   forall stk stk' support, match_stacks F m m' stk stk' support ->
@@ -590,12 +567,6 @@ Lemma match_stacks_invariant:
                sup_In b1 (injw_sup_l w) \/ sup_In b2 support -> F b1 = Some(b2, delta))
          (NB: Mem.sup_include (Mem.support m) (Mem.support m1))
          (TNB: Mem.sup_include (Mem.support m') (Mem.support m1'))
-(*=======
-Lemma match_stacks_invariant:
-  forall stk stk' support, match_stacks F m m' stk stk' support ->
-  forall (INJ: forall b1 b2 delta,
-               F1 b1 = Some(b2, delta) -> sup_In b2 support -> F b1 = Some(b2, delta))
->>>>>>> 830b2cc *)
          (PERM1: forall b1 b2 delta ofs,
                F1 b1 = Some(b2, delta) -> sup_In b2 support ->
                Mem.perm m1 b1 ofs Max Nonempty -> Mem.perm m b1 ofs Max Nonempty)
@@ -613,10 +584,6 @@ with match_stacks_inside_invariant:
          (RS: forall r, Plt r ctx.(dreg) -> rs2#r = rs1#r)
          (NB: Mem.sup_include (Mem.support m) (Mem.support m1))
          (TNB: Mem.sup_include (Mem.support m') (Mem.support m1'))
-(*
-         (INJ: forall b1 b2 delta, F1 b1 = Some(b2, delta) ->
-               Plt b1 (injw_next_l w) \/ Ple b2 sp' -> F b1 = Some(b2, delta))
-*)
          (INJ: forall b1 b2 delta,
                F1 b1 = Some(b2, delta) ->
                sup_In b1 (injw_sup_l w) \/ sup_In b2 (sup_incr sps') -> F b1 = Some(b2, delta))

@@ -1347,29 +1347,6 @@ Proof.
   intros [P Q]. subst delta. eapply free_blocks_of_env_perm_1 with (m := m); eauto.
   rewrite <- comp_env_preserved. cbn in *. lia.
 Qed.
-(*=======
-  rewrite <- comp_env_preserved. lia.
-Qed.
-
-(** Matching global environments *)
-
-Inductive match_globalenvs (f: meminj) (bound: sup): Prop :=
-  | mk_match_globalenvs
-      (DOMAIN: forall b, sup_In b bound -> f b = Some(b, 0))
-      (IMAGE: forall b1 b2 delta, f b1 = Some(b2, delta) -> sup_In b2 bound -> b1 = b2)
-      (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> sup_In b bound)
-      (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> sup_In b bound)
-      (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> sup_In b bound).
-
-Lemma match_globalenvs_preserves_globals:
-  forall f,
-  (exists bound, match_globalenvs f bound) ->
-  meminj_preserves_globals ge f.
-Proof.
-  intros. destruct H as [bound MG]. inv MG.
-  split; intros. eauto. split; intros. eauto. symmetry. eapply IMAGE; eauto.
->>>>>>> 830b2cc
-*)
 
 (** Evaluation of expressions *)
 
@@ -1540,14 +1517,10 @@ End EVAL_EXPR.
 (** Matching continuations *)
 
 Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> sup -> sup -> Prop :=
-  | match_Kstop: forall cenv m bound tbound,
-      inj_incr w (injw f bound tbound) ->
-(*=======
-Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> sup -> sup -> Prop :=
-  | match_Kstop: forall cenv m bound tbound hi,
-      match_globalenvs f hi -> Mem.sup_include hi bound -> Mem.sup_include hi tbound ->
->>>>>>> 830b2cc
-*)
+  | match_Kstop: forall cenv m m1 m2 bound tbound,
+      inj_incr w (injw f m1 m2) ->
+      Mem.sup_include (Mem.support m1) bound ->
+      Mem.sup_include (Mem.support m2) tbound ->
       match_cont f cenv Kstop Kstop m bound tbound
   | match_Kseq: forall cenv s k ts tk m bound tbound,
       simpl_stmt cenv s = OK ts ->
@@ -1592,16 +1565,11 @@ Lemma match_cont_invariant:
 Proof.
   induction 1; intros LOAD INCR INJ1 INJ2; econstructor; eauto.
 (* globalenvs *)
-  etransitivity; eauto. constructor; eauto. intros.
-  destruct (Mem.sup_dec b1 bound). erewrite INJ1 in H1; eauto. congruence.
-  destruct (Mem.sup_dec b2 tbound). erewrite INJ2 in H1; eauto. congruence.
-  eauto.
-(*=======
-  inv H. constructor; intros; eauto.
-  assert (f b1 = Some (b2, delta)). rewrite <- H; symmetry; eapply INJ2; eauto.
-  auto.
-  eapply IMAGE; eauto.
->>>>>>> 830b2cc*)
+  etransitivity; eauto. constructor; eauto. red. intros.
+  destruct (Mem.sup_dec b bound). erewrite INJ1 in H3; eauto. congruence.
+  destruct (Mem.sup_dec b' tbound). erewrite INJ2 in H3; eauto. congruence.
+  split; eauto.
+  apply max_perm_decrease_refl. apply max_perm_decrease_refl.
 (* call *)
   eapply match_envs_invariant; eauto.
   intros. apply LOAD; auto. destruct H6. auto.
@@ -1664,7 +1632,6 @@ Lemma match_cont_incr_bounds:
   match_cont f cenv k tk m bound' tbound'.
 Proof.
   induction 1; intros; econstructor; eauto; try extlia.
-  etransitivity; eauto. constructor; eauto. congruence.
 Qed.
 
 (** [match_cont] and call continuations. *)
@@ -1780,11 +1747,6 @@ Inductive match_states: state -> state -> Prop :=
       forall vf vargs k m tvf tvargs tk tm j fd targs tres cconv
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (VINJ: Val.inject j vf tvf)
-(*=======
-      forall fd vargs k m tfd tvargs tk tm j targs tres cconv
-        (TRFD: transf_fundef fd = OK tfd)
-        (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
->>>>>>> 830b2cc *)
         (MINJ: Mem.inject j m tm)
         (AINJ: Val.inject_list j vargs tvargs)
         (VFIND: Genv.find_funct ge vf = Some fd)
@@ -2291,7 +2253,7 @@ Proof.
   eapply (match_stbls_support inj); eauto.
   inv Hm; cbn in *.
   econstructor; eauto. econstructor.
-  rewrite <- H0. reflexivity.
+  rewrite <- H0. reflexivity. apply Mem.sup_include_refl. apply Mem.sup_include_refl.
 Qed.
 
 Lemma final_states_simulation:
@@ -2300,9 +2262,14 @@ Lemma final_states_simulation:
 Proof.
   intros. inv H0. inv H.
   specialize (MCONT VSet.empty). inv MCONT.
-  eexists. split; econstructor; split; eauto.
-  constructor; eauto. constructor; eauto.
-Qed.
+  eexists. split. econstructor; split; eauto.
+  exists (injw j m tm).
+  constructor; eauto. etransitivity; eauto.
+  constructor; eauto. red. intros. congruence.
+  (*We shall proof it as rely conditions *)
+  admit. admit.
+  constructor; eauto. constructor; auto.
+Admitted.
 
 Lemma external_states_simulation:
   forall S R q1, match_states S R -> at_external ge S q1 ->
@@ -2346,7 +2313,7 @@ Proof.
     eapply (Genv.is_internal_match (proj1 MATCH)); eauto 1.
     intros _ [|] [|] Hf; monadInv Hf; auto. }
   apply initial_states_simulation; eauto.
-  apply final_states_simulation; eauto.
+  eapply final_states_simulation; eauto.
   intros. cbn. eapply external_states_simulation; eauto.
   apply step_simulation; eauto.
 Qed.

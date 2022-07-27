@@ -1288,6 +1288,20 @@ Module PMap <: MAP.
      rewrite gso; auto.
   Qed.
 
+  (* We shall assume for the init value (fst m), forall i, f i (fst m) = init
+  Definition map1 (A B : Type ) (f: positive -> A -> B) (m : t A) (init : B): t B :=
+    (init, PTree.map f (snd m)).
+
+  Theorem gmap1:
+    forall (A B: Type) (f: positive -> A -> B) (i : positive) (m: t A) (init : B),
+      (forall i, f i (fst m) = init) ->
+      get i (map1 f m init) = f i (get i m).
+  Proof.
+    intros. unfold map. unfold get. simpl. rewrite PTree.gmap.
+    unfold option_map. destruct (PTree.get i (snd m)); auto.
+  Qed.
+  *)
+
   Definition map (A B : Type) (f : A -> B) (m : t A) : t B :=
     (f (fst m), PTree.map1 f (snd m)).
 
@@ -1326,6 +1340,13 @@ Module IMap(X: INDEXED_TYPE).
   Definition get (A: Type) (i: X.t) (m: t A) := PMap.get (X.index i) m.
   Definition set (A: Type) (i: X.t) (v: A) (m: t A) := PMap.set (X.index i) v m.
   Definition map (A B: Type) (f: A -> B) (m: t A) : t B := PMap.map f m.
+
+(*  we need the reverse function of X.index. i.e. it should be a bijection to
+    define this map function in IMap.
+
+    Definition map1 (A B: Type) (f: X.t -> A -> B) (m: t A) (init : B): t B :=
+    PMap.map1 (fun x a => X.index_rev x a) m init.
+*)
 
   Lemma gi:
     forall (A: Type) (x: A) (i: X.t), get i (init x) = x.
@@ -1390,6 +1411,15 @@ Module ZIndexed.
     congruence.
     congruence.
   Qed.
+
+  Lemma index_suj : forall (p:positive), exists x:Z, index x = p.
+  Proof.
+    intros. destruct p; unfold index.
+    exists (Zneg p). auto.
+    exists (Zpos p). auto.
+    exists (Z0). auto.
+  Qed.
+
   Definition eq := zeq.
 End ZIndexed.
 

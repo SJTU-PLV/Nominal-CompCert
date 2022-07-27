@@ -364,9 +364,9 @@ Proof.
       constructor; cbn; auto.
       constructor; cbn; auto.
       * eauto.
-      * clear - H11 H18 H17 H6. inv H6. cbn in *.
+      * clear - H11 H20 H19 H6. inv H6. cbn in *.
         intros cu Hcu. eapply romatch_exten; eauto. intros b id.
-        destruct H17 as [Hglob Hdef]. rewrite <- Hglob. cbn. clear.
+        destruct H19 as [Hglob Hdef]. rewrite <- Hglob. cbn. clear.
         split.
         ++ intros H. destruct Genv.invert_symbol eqn:Hb; inv H.
            apply Genv.invert_find_symbol; auto.
@@ -385,8 +385,8 @@ Proof.
   intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [xse1 w m1 m2 Hnb Hro Hm].
   destruct Hse as [? Hse]. subst.
   destruct Hm as [f m1 m2 Hm].
-  exists ((se1, injw (meminj_dom f) (Mem.support m1) (Mem.support m1)),
-          (se1, injw f (Mem.support m1) (Mem.support m2))); simpl.
+  exists ((se1, injw (meminj_dom f) m1 m1),
+          (se1, injw f m1 m2)); simpl.
   repeat apply conj.
   - exists se1. repeat apply conj; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
@@ -424,8 +424,8 @@ Proof.
   intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [xse1 w m1 m2 Hnb Hro Hm].
   destruct Hse as [? Hse]. subst.
   destruct Hm as [f m1 m2 Hm].
-  exists ((se1, injw (meminj_dom f) (Mem.support m1) (Mem.support m1)),
-          (injw f (Mem.support m1) (Mem.support m2))); simpl.
+  exists ((se1, injw (meminj_dom f) m1 m1),
+          (injw f m1 m2)); simpl.
   repeat apply conj.
   - exists se1. repeat apply conj; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.

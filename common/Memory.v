@@ -5223,20 +5223,6 @@ Proof.
   intros. apply inject_map_support.
 Qed.
 
-(* too ambitious for the first step
-Theorem inject_map_inject : forall m1 s2 f m2,
-    inject_map (Mem.support m1) s2 f m1 = m2 ->
-    Mem.inject f m1 m2.
-Proof.
-  intros.
-  induction (Mem.support m1).
-  - inv H. simpl. assert ( forall b, f b = None ).
-    admit.
-    constructor; intros; try congruence; eauto.
-    + constructor; intros; congruence.
-  - Abort.
-*)
-
 Lemma inject_mem_perm_inv: forall m1 s2 f m2 ofs2 k p b2,
     inject_mem s2 f m1 = m2 ->
     perm m2 b2 ofs2 k p ->
@@ -5305,7 +5291,7 @@ Admitted.
 
 Theorem inject_map_inject: forall m1 s2 f f' m2 m3,
     Mem.inject (compose_meminj f f') m1 m3 ->
-    inject_map (Mem.support m1) s2 f m1 = m2 ->
+    inject_mem s2 f m1 = m2 ->
     Mem.inject f m1 m2 /\
     Mem.inject f' m2 m3 /\
     Mem.sup_include s2 (Mem.support m2).
@@ -5313,7 +5299,7 @@ Proof.
   intros.
   split. eapply inject_mem_inject1; eauto.
   split. eapply inject_mem_inject2; eauto.
-  rewrite <- H0. erewrite inject_map_support. apply Mem.sup_include_refl.
+  rewrite <- H0. erewrite inject_mem_support. apply Mem.sup_include_refl.
 Qed.
 
 End Mem.
