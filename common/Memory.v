@@ -5094,9 +5094,9 @@ Qed.
 
 Program Definition skeleton (s:sup) : mem :=
     {|
-      mem_contents := NMap.init (memval * PTree.t memval) (ZMap.init Undef);
-      mem_access := NMap.init (Z -> perm_kind -> option permission) (fun (_ : Z) (_ : perm_kind) => None);
-      support := s;
+      Mem.mem_contents := NMap.init (memval * PTree.t memval) (ZMap.init Undef);
+      Mem.mem_access := NMap.init (Z -> perm_kind -> option permission) (fun (_ : Z) (_ : perm_kind) => None);
+      Mem.support := s;
     |}.
 
 (** update permission *)
@@ -5130,8 +5130,6 @@ Definition memval_map (f:meminj) (mv:memval) : memval :=
        end
   |_ => mv
   end.
-
-
 
 Definition positive_to_Z (p:positive): Z :=
   match p with
@@ -5221,85 +5219,6 @@ Lemma inject_mem_support : forall s2 f m1,
     support (inject_mem s2 f m1) = s2.
 Proof.
   intros. apply inject_map_support.
-Qed.
-
-Lemma inject_mem_perm_inv: forall m1 s2 f m2 ofs2 k p b2,
-    inject_mem s2 f m1 = m2 ->
-    perm m2 b2 ofs2 k p ->
-    exists b1 delta ofs1,
-      f b1 = Some (b2, delta)
-   /\ perm m1 b1 ofs1 k p
-   /\ ofs2 = ofs1 + delta.
-Proof.
-  (*TODO*)
-Admitted.
-
-
-Theorem inject_mem_inj1 : forall m1 s2 f m2,
-    inject_mem  s2 f m1 = m2 ->
-    Mem.mem_inj f m1 m2.
-Proof.
-  intros. constructor.
-  - intros. admit. (* ok, from the no_overlaping of m1 *)
-  - admit. (*ok, assumption from old f + new added identity mappings *)
-  - admit. (*ok, from the non_overlaping *)
-Admitted.
-
-Theorem inject_mem_inject1 : forall m1 s2 f m2,
-    inject_mem s2 f m1 = m2 ->
-    Mem.inject f m1 m2.
-Proof.
-  intros.
-  constructor.
-  - eapply inject_mem_inj1; eauto.
-  - admit. (* existing assumption*)
-  - admit. (* existing assumption*)
-  - admit. (* assumption comes from kriple acc about max_perm_decrease *)
-  - admit. (* assumption comes from old f + max_perm_decrease + newly added identites *)
-  - admit. (* TO PROVE HERE FROM THE CONSTRUCTION *)
-Admitted.
-
-Theorem inject_mem_inj2 : forall m1 s2 f f' m2 m3,
-    Mem.inject (compose_meminj f f') m1 m3 ->
-    inject_mem s2 f m1 = m2 ->
-    Mem.mem_inj f' m2 m3.
-Proof.
-  intros. constructor.
-  - intros. admit. (*ok, H2 means the position is copied from m1, so
-                     the corresponding possition in m3 is in the image of compose_meminj f f'*)
-  - intros. admit. (*should be ok, 1) new mappings, f' = compose f f' ok 2) old mappings not clear *)
-  - intros. admit. (*ok, same as first *)
-Admitted.
-
-Theorem inject_mem_inject2: forall m1 s2 f f' m2 m3,
-    Mem.inject (compose_meminj f f') m1 m3 ->
-    inject_mem s2 f m1 = m2 ->
-    Mem.inject f' m2 m3.
-Proof.
-  intros.
-  exploit inject_mem_inject1; eauto.
-  intro INJ1.
-  constructor.
-  - eapply inject_mem_inj2; eauto.
-  - admit. (* existing assumption *)
-  - admit. (* existing assumption *)
-  - red. admit. (* PERM m2 -> exists b0, f b0 = Some (b1, delta0) -> compose f f' b0 = Some (b1', delta1 + delta0) *)
-  -  admit. (* SAME AS ABOVE *)
-  -  admit. (* SAME AS ABOVE, id perm m2 b1 ofs is not None, then it is copied from m1 *)
-    (* *)
-Admitted.
-
-Theorem inject_map_inject: forall m1 s2 f f' m2 m3,
-    Mem.inject (compose_meminj f f') m1 m3 ->
-    inject_mem s2 f m1 = m2 ->
-    Mem.inject f m1 m2 /\
-    Mem.inject f' m2 m3 /\
-    Mem.sup_include s2 (Mem.support m2).
-Proof.
-  intros.
-  split. eapply inject_mem_inject1; eauto.
-  split. eapply inject_mem_inject2; eauto.
-  rewrite <- H0. erewrite inject_mem_support. apply Mem.sup_include_refl.
 Qed.
 
 End Mem.

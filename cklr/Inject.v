@@ -1008,11 +1008,111 @@ Qed.
 
 (** Inversion of injection composition *)
 
+Lemma inject_mem_perm_inv: forall m1 s2 f m2 ofs2 k p b2,
+    Mem.inject_mem s2 f m1 = m2 ->
+    Mem.perm m2 b2 ofs2 k p ->
+    exists b1 delta ofs1,
+      f b1 = Some (b2, delta)
+   /\ Mem.perm m1 b1 ofs1 k p
+   /\ ofs2 = ofs1 + delta.
+Proof.
+  (*TODO*)
+Admitted.
+
+
+Theorem inject_mem_inj1 : forall m1 s2 f m2,
+    Mem.inject_mem  s2 f m1 = m2 ->
+    Mem.mem_inj f m1 m2.
+Proof.
+  intros. constructor.
+  - intros. admit. (* ok, from the no_overlaping of m1 *)
+  - admit. (*ok, assumption from old f + new added identity mappings *)
+  - admit. (*ok, from the non_overlaping *)
+Admitted.
+
+Theorem inject_mem_inject1 : forall m1 s2 f m2,
+    Mem.inject_mem s2 f m1 = m2 ->
+    inject_image_in f s2 ->
+    Mem.inject f m1 m2.
+Proof.
+  intros.
+  constructor.
+  - eapply inject_mem_inj1; eauto.
+  - admit. (* existing assumption*)
+  - admit. (* existing assumption*)
+  - admit. (* assumption comes from kriple acc about max_perm_decrease *)
+  - admit. (* assumption comes from old f + max_perm_decrease + newly added identites *)
+  - admit. (* TO PROVE HERE FROM THE CONSTRUCTION *)
+Admitted.
+
+Theorem inject_mem_max_perm : forall m1 m1' m2 m2' s2 f f',
+    inject_image_in f' s2 ->
+    Mem.inject_mem s2 f' m1' = m2' ->
+    Mem.inject f m1 m2 ->
+    Mem.inject f' m1' m2' ->
+    max_perm_decrease m1 m1' ->
+    max_perm_decrease m2 m2'.
+Proof.
+  Admitted.
+
+Theorem inject_mem_inj2 : forall m1 s2 f f' m2 m3,
+    Mem.inject (compose_meminj f f') m1 m3 ->
+    inject_image_in f s2 ->
+    Mem.inject_mem s2 f m1 = m2 ->
+    Mem.mem_inj f' m2 m3.
+Proof.
+  intros. constructor.
+  - intros. admit. (*ok, H2 means the position is copied from m1, so
+                     the corresponding possition in m3 is in the image of compose_meminj f f'*)
+  - intros. admit. (*should be ok, 1) new mappings, f' = compose f f' ok 2) old mappings not clear *)
+  - intros. admit. (*ok, same as first *)
+Admitted.
+
+Theorem inject_mem_inject2: forall m1 s2 f f' m2 m3,
+    Mem.inject (compose_meminj f f') m1 m3 ->
+    inject_image_in f s2 ->
+    Mem.inject_mem s2 f m1 = m2 ->
+    Mem.inject f' m2 m3.
+Proof.
+  intros.
+  exploit inject_mem_inject1; eauto.
+  intro INJ1.
+  constructor.
+  - eapply inject_mem_inj2; eauto.
+  - admit. (* existing assumption *)
+  - admit. (* existing assumption *)
+  - red. admit. (* PERM m2 -> exists b0, f b0 = Some (b1, delta0) -> compose f f' b0 = Some (b1', delta1 + delta0) *)
+  -  admit. (* SAME AS ABOVE *)
+  -  admit. (* SAME AS ABOVE, id perm m2 b1 ofs is not None, then it is copied from m1 *)
+    (* *)
+Admitted.
+
+Theorem inject_map_inject: forall m1 m2 m3 m1' m2' m3' s2 f1 f2 f1' f2',
+    Mem.inject f1 m1 m2 -> Mem.inject f2 m2 m3 ->
+    Mem.inject (compose_meminj f1' f2') m1' m3' ->
+    inject_image_in f1' s2 ->
+    Mem.inject_mem s2 f1' m1' = m2' ->
+    max_perm_decrease m1 m1' ->
+    Mem.inject f1' m1' m2'
+    /\ Mem.inject f2' m2' m3'
+    /\ max_perm_decrease m2 m2'
+    /\ Mem.sup_include s2 (Mem.support m2').
+Proof.
+  intros.
+  exploit inject_mem_inject1; eauto. intros INJ1.
+  exploit inject_mem_inject2; eauto. intros INJ2.
+  repeat apply conj; auto.
+  eapply inject_mem_max_perm; eauto.
+  rewrite <- H3. erewrite Mem.inject_mem_support; eauto.
+Qed.
+
+
 Lemma inject_compose_inv:
   forall (f1 f1' f2 f2' : meminj) (m1 m2 m3 m1' m3': mem) s2',
   Mem.inject f1 m1 m2 ->
   Mem.inject f2 m2 m3 ->
   (*more*)
+  max_perm_decrease m1 m1' ->
   Mem.inject (compose_meminj f1' f2') m1' m3' ->
   inject_image_in f1' s2' ->
   exists m2' , Mem.inject f1' m1' m2' /\
@@ -1021,10 +1121,9 @@ Lemma inject_compose_inv:
          Mem.sup_include s2' (Mem.support m2').
 Proof.
   intros.
-  exists (Mem.inject_mem s2' f1' m1).
-
-  Admitted.
-
+  exists (Mem.inject_mem s2' f1' m1').
+  eapply inject_map_inject; eauto.
+Qed.
 (*
   we may need from construction:
   1) inject_dom_in f s'
@@ -1079,7 +1178,7 @@ Proof.
     generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' INCR13 DISJ13).
     intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & IMGIN12' & INCRDISJ12 & INCRDISJ23).
     subst.
-    generalize (inject_compose_inv _ _ _ _ _ _ _ _ _ _ INJ12 INJ23 INJ13' IMGIN12').
+    generalize (inject_compose_inv _ _ _ _ _ _ _ _ _ _ INJ12 INJ23 MAXPERM1 INJ13' IMGIN12').
     intros (m2' & INJ12' & INJ23' & MAXPERM2 & SUPINCL2').
     exists ((injw j12' m1' m2'), (injw j23' m2' m3')).
     cbn.
