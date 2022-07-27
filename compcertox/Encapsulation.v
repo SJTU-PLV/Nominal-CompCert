@@ -145,7 +145,7 @@ Definition semantics_embed {liA liB} (L: semantics liA liB) : liA +-> liB :=
     esem := $L;
   |}.
 
-(** ** Simulations *)
+(** ** Simulation Convention and Simulation *)
 Set Implicit Arguments.
 Require Import Relation_Operators.
 
@@ -369,10 +369,10 @@ Generalizable All Variables.
 
 (* TODO: we cannot prove this property until we figure out the problem about
    symbol tables *)
+(** Lemma 3.8 *)
 Lemma fsim_embed `(ccA: callconv liA1 liA2) `(ccB: callconv liB1 liB2) L1 L2:
-  forward_simulation ccA ccB L1 L2 ->
-  E.forward_simulation (callconv_embed ccA) (callconv_embed ccB)
-                       (semantics_embed L1) (semantics_embed L2).
+  forward_simulation ccA ccB L1 L2 <->
+  ST.forward_simulation (callconv_embed ccA) (callconv_embed ccB) L1 L2.
 Proof.
 Admitted.
 
@@ -594,6 +594,7 @@ Section COMP.
   Context `(HLs: comp_semantics L1s L2s = Some Ls)
           Lt (HLt: comp_semantics L1t L2t = Some Lt).
 
+  (** Lemma 3.9 *)
   Lemma st_fsim_comp : ST.forward_simulation ccA ccC Ls Lt.
   Proof.
     destruct HL1 as [Ha]. destruct HL2 as [Hb].
@@ -634,6 +635,7 @@ Section COMP.
   Context `(HLs: comp_esem L1s L2s = Some Ls)
           Lt (HLt: comp_esem L1t L2t = Some Lt).
 
+  (** Lemma 3.14 *)
   Lemma encap_fsim_comp : E.forward_simulation ccA ccC Ls Lt.
   Proof.
     unfold E.forward_simulation in *. unfold comp_esem in *.
@@ -763,4 +765,106 @@ Section COMP_FSIM.
       eapply (ST.fsim_order_wf H2). eapply (ST.fsim_order_wf H1).
   Qed.
 
+  (** Lemma 3.11 *)
+  Lemma st_compose_forward_simulations:
+    ST.forward_simulation ccA1 ccB1 Ls Ln ->
+    ST.forward_simulation ccA2 ccB2 Ln Lf ->
+    ST.forward_simulation (ST.cc_compose ccA1 ccA2) (ST.cc_compose ccB1 ccB2) Ls Lf.
+  Proof.
+    intros [X] [Y]. constructor.
+    apply st_compose_fsim_components; auto.
+  Qed.
+
 End COMP_FSIM.
+
+Section COMP_FSIM.
+
+  Context `(ccA1: ST.callconv liAs liAn) `(ccA2: ST.callconv liAn liAf)
+          `(ccB1: ST.callconv liBs liBn) `(ccB2: ST.callconv liBn liBf)
+          (Ls: liAs +-> liBs) (Ln: liAn +-> liBn) (Lf: liAf +-> liBf).
+  Context (H1: E.forward_simulation ccA1 ccB1 Ls Ln)
+          (H2: E.forward_simulation ccA2 ccB2 Ln Lf).
+
+  Lemma encap_compose_forward_simulation:
+    E.forward_simulation (ST.cc_compose ccA1 ccA2)
+                         (ST.cc_compose ccB1 ccB2) Ls Lf.
+  Admitted.
+
+End COMP_FSIM.
+
+(** *** Refinement between Stateful Simulation Conventions *)
+Definition st_ccref {li1 li2} (cc cc': ST.callconv li1 li2) : Prop.
+Admitted.
+
+Require Import LogicalRelations.
+
+Global Instance st_open_fsim_ccref:
+  Monotonic
+    (@ST.forward_simulation)
+    (forallr - @ liA1, forallr - @ liA2, st_ccref ++>
+     forallr - @ liB1, forallr - @ liB2, st_ccref -->
+     subrel).
+Admitted.
+
+(** *** Encapsulation Primitives *)
+
+(** Lemma 3.15 *)
+Lemma encap_fsim_embed `(ccA: callconv liA1 liA2) `(ccB: callconv liB1 liB2) L1 L2:
+  forward_simulation ccA ccB L1 L2 ->
+  E.forward_simulation (callconv_embed ccA) (callconv_embed ccB)
+                       (semantics_embed L1) (semantics_embed L2).
+Admitted.
+
+(** *** Simulation Convention FBK *)
+Definition callconv_fbk {li1 li2 K1 K2} (cc: ST.callconv (li1@K1) (li2@K2)): ST.callconv li1 li2.
+Admitted.
+
+(** Lemma 3.17 *)
+Lemma fsim_fbk {K1 K2: PSet}
+      `(ccA: ST.callconv liA1 liA2) `(ccB: ST.callconv (liB1@K1) (liB2@K2)) L1 L2:
+  E.forward_simulation ccA ccB L1 L2 ->
+  E.forward_simulation ccA (callconv_fbk ccB) (semantics_fbk L1) (semantics_fbk L2).
+Admitted.
+
+(** *** REVEAL Simulation Convention *)
+Definition cc_reveal {K: PSet} {li} : ST.callconv li (li@K).
+Admitted.
+
+(** Lemma 3.18 *)
+Lemma fsim_reveal {K: PSet} {liA liB} (L: liA +-> liB@K):
+  E.forward_simulation (callconv_embed cc_id) cc_reveal (semantics_fbk L) L.
+Admitted.
+
+(** *** FBK vs LIFT *)
+Definition st_cceqv {li1 li2} (cc cc': ST.callconv li1 li2) :=
+  st_ccref cc cc' /\ st_ccref cc' cc.
+
+Lemma callconv_fbk_lift {K1 K2: PSet} `(cc: ST.callconv li1 li2):
+  st_ccref (callconv_fbk (ST.callconv_lift cc K1 K2)) cc.
+Admitted.
+
+(** *** Basics *)
+
+Definition st_cc_id {li} : ST.callconv li li := callconv_embed cc_id.
+
+(** Lemma 3.4 *)
+Definition encap_equiv_simulation {liA liB} (L1 L2: liA +-> liB) :=
+  E.forward_simulation st_cc_id st_cc_id L1 L2 /\ E.forward_simulation st_cc_id st_cc_id L2 L1.
+
+Lemma comp_embed `(L1: semantics liB liC) `(L2: semantics liA liB) L eL:
+  comp_esem (semantics_embed L1) (semantics_embed L2) = Some eL ->
+  comp_semantics L1 L2 = Some L ->
+  encap_equiv_simulation (semantics_embed L) eL.
+Admitted.
+
+Definition esem_lift {K: PSet} `(L: liA +-> liB) : liA@K +-> liB@K.
+Admitted.
+
+Definition esem_assoc `(L: liA +-> (liB @ K1) @ K2) : liA +-> (liB @ (K1 * K2)).
+Admitted.
+
+Lemma comp_fbk {K1 K2: PSet} `(L1: liB +-> liC@K1) `(L2: liA +-> liB@K2) La Lb:
+  comp_esem (semantics_fbk L1) (semantics_fbk L2) = Some La ->
+  comp_esem (esem_lift L1) L2 = Some Lb ->
+  encap_equiv_simulation La (semantics_fbk (K:=K1*K2) (esem_assoc Lb)).
+Admitted.
