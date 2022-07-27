@@ -447,13 +447,16 @@ Proof.
   exists (v1' :: vl'); split; constructor; auto.
 Qed.
 
+
 (** ** Relating stacks *)
+Definition injw_sup_l w := Mem.support (injw_mem_l w).
+Definition injw_sup_r w := Mem.support (injw_mem_r w).
 
 Inductive match_stacks (F: meminj) (m m': mem):
              list stackframe -> list stackframe -> sup -> Prop :=
   | match_stacks_nil: forall support
         (MG: inj_incr w (injw F m m'))
-        (BELOW: Mem.sup_include (Mem.support (injw_mem_r w)) support),
+        (BELOW: Mem.sup_include (injw_sup_r w) support),
       match_stacks F m m' nil nil support
   | match_stacks_cons: forall res f sp pc rs stk f' sp' sps' rs' stk' support fenv ctx
         (SPS': sp' = fresh_block sps')
@@ -541,12 +544,14 @@ Variables m1 m1': mem.
 Hypothesis INCR: inject_incr F F1.
 
 Lemma mit_incr_invariant bound m0 m2 m0' m2':
-  (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> sup_In b1 (Mem.support (injw_mem_l w)) \/ sup_In b2 bound ->
+  (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> sup_In b1 (injw_sup_l w) \/ sup_In b2 bound ->
                        F b1 = Some(b2, delta)) ->
   Mem.sup_include (Mem.support (injw_mem_r w)) bound ->
   inj_incr w (injw F m0 m2) ->
   Mem.sup_include (Mem.support m0) (Mem.support m0') ->
   Mem.sup_include (Mem.support m2) (Mem.support m2') ->
+  max_perm_decrease m0 m0' ->
+  max_perm_decrease m2 m2' ->
   inj_incr w (injw F1 m0' m2').
 Proof.
   intros INJ BELOW H Hs1' Hs2'. inv H. split; cbn in *; eauto; try extlia.
@@ -557,16 +562,16 @@ Proof.
   - destruct (Mem.sup_dec b1 (Mem.support m3)); try (erewrite INJ in Hb1''; eauto; discriminate).
     destruct (Mem.sup_dec b2 bound); try (erewrite INJ in Hb1''; eauto; discriminate).
     split; eauto.
-  - admit.
-  - admit.
-Admitted.
+Qed.
 
 Lemma match_stacks_invariant:
   forall stk stk' support, match_stacks F m m' stk stk' support ->
   forall (INJ: forall b1 b2 delta, F1 b1 = Some(b2, delta) ->
-               sup_In b1 (injw_sup_l w) \/ sup_In b2 support -> F b1 = Some(b2, delta))
+               sup_In b1 (Mem.support (injw_mem_l w)) \/ sup_In b2 support -> F b1 = Some(b2, delta))
          (NB: Mem.sup_include (Mem.support m) (Mem.support m1))
          (TNB: Mem.sup_include (Mem.support m') (Mem.support m1'))
+         (PERMD1 : max_perm_decrease m m1)
+         (PERMD2 : max_perm_decrease m' m1')
          (PERM1: forall b1 b2 delta ofs,
                F1 b1 = Some(b2, delta) -> sup_In b2 support ->
                Mem.perm m1 b1 ofs Max Nonempty -> Mem.perm m b1 ofs Max Nonempty)
@@ -586,7 +591,9 @@ with match_stacks_inside_invariant:
          (TNB: Mem.sup_include (Mem.support m') (Mem.support m1'))
          (INJ: forall b1 b2 delta,
                F1 b1 = Some(b2, delta) ->
-               sup_In b1 (injw_sup_l w) \/ sup_In b2 (sup_incr sps') -> F b1 = Some(b2, delta))
+               sup_In b1 (Mem.support (injw_mem_l w)) \/ sup_In b2 (sup_incr sps') -> F b1 = Some(b2, delta))
+         (PERMD1 : max_perm_decrease m m1)
+         (PERMD2 : max_perm_decrease m' m1')
          (PERM1: forall b1 b2 delta ofs,
                F1 b1 = Some(b2, delta) -> sup_In b2 (sup_incr sps') ->
                Mem.perm m1 b1 ofs Max Nonempty -> Mem.perm m b1 ofs Max Nonempty)
@@ -595,7 +602,6 @@ with match_stacks_inside_invariant:
          (PERM3: forall b ofs k p, sup_In b (sup_incr sps') ->
                Mem.perm m1' b ofs k p -> Mem.perm m' b ofs k p),
   match_stacks_inside F1 m1 m1' stk stk' f' ctx sps' rs2.
-
 Proof.
   induction 1; intros; subst.
   (* nil *)
@@ -710,6 +716,8 @@ Proof.
   eapply match_stacks_inside_invariant; eauto with mem.
   rewrite (Mem.support_store _ _ _ _ _ _ H0). eauto.
   rewrite (Mem.support_store _ _ _ _ _ _ H1). eauto.
+  red. intros. eapply Mem.perm_store_2; eauto.
+  red. intros. eapply Mem.perm_store_2; eauto.
 Qed.
 
 (** Preservation by an allocation *)
@@ -730,6 +738,7 @@ Proof.
   (* base *)
   eapply match_stacks_inside_base; eauto.
   eapply match_stacks_invariant; eauto.
+
   intros. destruct (eq_block b1 b).
   subst b1. rewrite H2 in H5; inv H5.
     exfalso.
@@ -762,6 +771,7 @@ Lemma match_stacks_free_left:
 Proof.
   intros. eapply match_stacks_invariant; eauto.
   rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
+  red. intros. eapply Mem.perm_free_3; eauto.
   intros. eapply Mem.perm_free_3; eauto.
 Qed.
 
@@ -774,6 +784,7 @@ Lemma match_stacks_free_right:
 Proof.
   intros. eapply match_stacks_invariant; eauto.
   rewrite (Mem.support_free _ _ _ _ _ H1). eauto.
+  red. intros. eapply Mem.perm_free_3; eauto.
   intros. eapply Mem.perm_free_1; eauto with ordered_type.
   left.  subst sp. intro. subst b. eapply freshness; eauto.
   intros. eapply Mem.perm_free_3; eauto.
@@ -914,12 +925,6 @@ Inductive match_states: RTL.state -> RTL.state -> Prop :=
         (FINJ: Val.inject F vf vf')
         (VINJ: Val.inject_list F args args')
         (MINJ: Mem.inject F m m'),
-(*<<<<<<< HEAD
-      match_states (Callstate stk vf args m)
-                   (Callstate stk' vf' args' m')
-  | match_call_regular_states: forall stk f vf vargs m stk' f' sp' rs' m' F fenv ctx ctx' pc' pc1' rargs
-        (MS: match_stacks_inside F m m' stk stk' f' ctx sp' rs')
-======= *)
       match_states (Callstate stk vf args m)
                    (Callstate stk' vf' args' m')
   | match_call_regular_states: forall stk f vf vargs m stk' f' sps' sp' rs' m' F fenv ctx ctx' pc' pc1' rargs
@@ -1088,14 +1093,12 @@ Proof.
   eapply match_stacks_invariant; eauto.
     rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
     rewrite (Mem.support_free _ _ _ _ _ FREE). eauto.
+    red. intros. eapply Mem.perm_free_3; eauto.
+    red. intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_1; eauto with ordered_type.
     intros. left. intro. subst b. eapply freshness; eauto.
     intros. eapply Mem.perm_free_3; eauto.
-(*<<<<<<< HEAD
-  erewrite Mem.support_free; eauto. red in VB; extlia.
-  eapply ros_address_agree; eauto.
-=======*)
   erewrite Mem.support_free; eauto.
   eapply ros_address_agree; eauto.
   eapply agree_val_regs; eauto.
@@ -1112,6 +1115,7 @@ Proof.
   eapply match_stacks_untailcall; eauto.
   eapply match_stacks_inside_invariant; eauto.
     rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
+    red. intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_3; eauto.
   eapply ros_address_agree; eauto.
   eapply agree_val_regs; eauto.
@@ -1124,6 +1128,7 @@ Proof.
   eapply match_stacks_inside_inlined_tailcall; eauto.
   eapply match_stacks_inside_invariant; eauto.
     rewrite (Mem.support_free _ _ _ _ _ H2). eauto.
+    red. intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_3; eauto.
   apply agree_val_regs_gen; auto.
   eapply Mem.free_left_inject; eauto.
@@ -1190,6 +1195,8 @@ Proof.
   eapply match_stacks_invariant; eauto.
     rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
     rewrite (Mem.support_free _ _ _ _ _ FREE). eauto.
+    red. intros. eapply Mem.perm_free_3; eauto.
+    red. intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_1; eauto with ordered_type.
     intros. left. intro. subst b. eapply freshness; eauto.
@@ -1210,6 +1217,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_inside_invariant; eauto.
     rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
+    red. intros. eapply Mem.perm_free_3; eauto.
     intros. eapply Mem.perm_free_3; eauto.
   destruct or; simpl. apply agree_val_reg; auto. auto.
   eapply Mem.free_left_inject; eauto.

@@ -56,6 +56,8 @@ Proof.
   apply H. auto. apply H0. apply H1. eauto. auto.
 Qed.
 
+Hint Resolve max_perm_decrease_refl max_perm_decrease_trans.
+
 Variant inj_incr: relation inj_world :=
   inj_incr_intro f f' m1 m2 m1' m2':
     inject_incr f f' ->
@@ -96,15 +98,13 @@ Proof.
   split.
   - intros [f s1 s2].
     constructor; auto using inject_incr_refl, Pos.le_refl.
-    congruence. red. eauto. red. eauto.
+    congruence.
   - intros w w' w'' H H'. destruct H. inv H'.
     constructor; eauto using inject_incr_trans, Pos.le_trans.
     intros b1 b2 delta Hb Hb''.
     destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
     + rewrite (H8 _ _ _ Hb') in Hb''. inv Hb''. eauto.
     + edestruct H9; eauto. split; eauto.
-    + eapply max_perm_decrease_trans; eauto.
-    + eapply max_perm_decrease_trans; eauto.
 Qed.
 
 Global Instance inj_stbls_subrel:
@@ -131,21 +131,7 @@ Lemma inj_mem_inject w m1 m2:
 Proof.
   destruct 1; auto.
 Qed.
-(*
-Lemma inj_mem_sup_l w m1 m2:
-  inj_mem w m1 m2 ->
-  injw_sup_l w = Mem.support m1.
-Proof.
-  destruct 1; auto.
-Qed.
 
-Lemma inj_mem_sup_r w m1 m2:
-  inj_mem w m1 m2 ->
-  injw_sup_r w = Mem.support m2.
-Proof.
-  destruct 1; auto.
-Qed.
-*)
 Hint Constructors inj_mem inj_incr.
 Hint Resolve inj_mem_inject.
 
@@ -187,6 +173,17 @@ Next Obligation.
   destruct H. inv H0; cbn in *. eauto.
 Qed.
 
+Lemma alloc_max_perm_decrease: forall m lo hi m' b,
+    Mem.alloc m lo hi = (m', b) ->
+    max_perm_decrease m m'.
+Proof.
+  intros. red. intros.
+  eapply Mem.perm_alloc_4; eauto. intro. subst.
+  eapply Mem.fresh_block_alloc; eauto.
+Qed.
+
+Hint Resolve alloc_max_perm_decrease.
+
 Lemma inj_cklr_alloc:
     Monotonic Mem.alloc (|= inj_mem ++> - ==> - ==> (<> inj_mem * block_inject_sameofs @@ [injw_meminj])).
 Proof.
@@ -207,10 +204,6 @@ Proof.
     + specialize (Hf'2 _ n). congruence.
     + erewrite (Mem.support_alloc m1 _ _ m1'); eauto.
     + erewrite (Mem.support_alloc m2 _ _ m2'); eauto.
-    + red. intros. eapply Mem.perm_alloc_4; eauto. intro. subst.
-      eapply Mem.fresh_block_alloc. apply Hm1'. eauto.
-    + red. intros. eapply Mem.perm_alloc_4; eauto. intro. subst.
-      eapply Mem.fresh_block_alloc. apply Hm2'. eauto.
   - econstructor; eauto; erewrite Mem.support_alloc by eauto; extlia.
   - cbn. red. auto.
 Qed.
@@ -1029,6 +1022,7 @@ Lemma inject_compose_inv:
 Proof.
   intros.
   exists (Mem.inject_mem s2' f1' m1).
+
   Admitted.
 
 (*

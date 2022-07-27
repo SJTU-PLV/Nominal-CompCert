@@ -1569,7 +1569,6 @@ Proof.
   destruct (Mem.sup_dec b bound). erewrite INJ1 in H3; eauto. congruence.
   destruct (Mem.sup_dec b' tbound). erewrite INJ2 in H3; eauto. congruence.
   split; eauto.
-  apply max_perm_decrease_refl. apply max_perm_decrease_refl.
 (* call *)
   eapply match_envs_invariant; eauto.
   intros. apply LOAD; auto. destruct H6. auto.
