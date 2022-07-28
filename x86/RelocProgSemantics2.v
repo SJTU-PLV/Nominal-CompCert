@@ -151,8 +151,8 @@ Definition decode_instrs' (reloctbl: reloctable) (bytes: list byte) :=
   do instrs2 <- decode_instrs (length instrs1) reloctbl 0 instrs1 [];
   OK instrs2.
   
-Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) acc id (sec:section) :=
-  do acc' <- acc;
+Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) id (sec:section) :=
+  (* do acc' <- acc; *)
   let reloctbl := match reloctbl_map ! id with
                   | None => []
                   | Some r => r
@@ -162,15 +162,17 @@ Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctabl
     match sec, (symbentry_type e) with
     | sec_bytes bs, symb_func =>
       do instrs <- decode_instrs' reloctbl bs;
-      OK (PTree.set id (sec_text instrs) acc')
-    | _,_ => OK acc'
+      OK (sec_text instrs)
+      (* OK (PTree.set id (sec_text instrs) acc') *)
+    | _,_ => (* OK (PTree.set id sec acc') *)
+      OK sec
     end
   | _ => Error (msg "Decode code section: no corresponding symbol entry")
   end.
 
 
 Definition decode_prog_code_section (p:program) : res program :=
-  do t <- PTree.fold (acc_decode_code_section p.(prog_symbtable) p.(prog_reloctables)) (prog_sectable p) (OK (PTree.empty section));
+  do t <- PTree.fold (acc_PTree_fold (acc_decode_code_section p.(prog_symbtable) p.(prog_reloctables))) (prog_sectable p) (OK (PTree.empty section));
   OK {| prog_defs      := prog_defs p;
         prog_public    := prog_public p;
         prog_main      := prog_main p;
@@ -282,3 +284,4 @@ Proof.
   - eapply reloc_prog_single_events; eauto.  
 Qed.
 
+End WITH_INSTR_SIZE.

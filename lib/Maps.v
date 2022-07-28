@@ -811,6 +811,36 @@ Module PTree <: TREE.
     apply IHm2. intros. apply (H (xI i)).
   Qed.
 
+    Theorem elements_canonical_order1':
+    forall (A B: Type) (R: positive -> A -> B -> Prop) (m: t A) (n: t B),
+    (forall i, option_rel (R i) (get i m) (get i n)) ->
+    list_forall2
+      (fun i_x i_y => fst i_x = fst i_y /\ (R (fst i_x)) (snd i_x) (snd i_y))
+      (elements m) (elements n).
+  Proof.
+    intros until n. unfold elements.
+    assert (forall p, (forall i : positive, option_rel (R (prev_append p i)) (get i m) (get i n)) ->
+            list_forall2
+              (fun (i_x : positive * A) (i_y : positive * B) =>
+                 fst i_x = fst i_y /\ R (fst i_x) (snd i_x) (snd i_y))
+              (xelements m p nil) (xelements n p nil)).
+    revert m n R.
+    induction m; intros.
+  - simpl. rewrite xelements_empty. constructor.
+    intros. specialize (H i). rewrite gempty in H. inv H; auto.
+  - destruct n as [ | n1 o' n2 ].
+  + rewrite (xelements_empty (Node m1 o m2)). simpl; constructor.
+    intros. specialize (H i). rewrite gempty in H. inv H; auto.
+  + rewrite ! xelements_node. repeat apply list_forall2_app.
+    apply IHm1. intros. apply (H (xO i)).
+    generalize (H xH); simpl; intros OR; inv OR.
+    constructor.
+    constructor. auto. constructor.
+    apply IHm2. intros. apply (H (xI i)).
+  - apply (H xH).
+  Qed.
+
+  
   Theorem elements_canonical_order:
     forall (A B: Type) (R: A -> B -> Prop) (m: t A) (n: t B),
     (forall i x, get i m = Some x -> exists y, get i n = Some y /\ R x y) ->
@@ -827,6 +857,23 @@ Module PTree <: TREE.
     constructor.
   Qed.
 
+  Theorem elements_canonical_order1:
+    forall (A B: Type) (R: positive -> A -> B -> Prop) (m: t A) (n: t B),
+      (forall i x, get i m = Some x -> exists y, get i n = Some y /\ R i x y) ->
+      (forall i y, get i n = Some y -> exists x, get i m = Some x /\ R i x y) ->
+      list_forall2
+        (fun i_x i_y => fst i_x = fst i_y /\ R (fst i_x) (snd i_x) (snd i_y))
+        (elements m) (elements n).
+  Proof.
+    intros. apply elements_canonical_order1'.
+    intros. destruct (get i m) as [x|] eqn:GM.
+    exploit H; eauto. intros (y & P & Q). rewrite P; constructor; auto.
+    destruct (get i n) as [y|] eqn:GN.
+    exploit H0; eauto. intros (x & P & Q). congruence.
+    constructor.
+  Qed.
+
+  
   Theorem elements_extensional:
     forall (A: Type) (m n: t A),
     (forall i, get i m = get i n) ->

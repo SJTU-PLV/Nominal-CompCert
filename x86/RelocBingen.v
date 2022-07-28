@@ -152,8 +152,9 @@ Definition transl_section (sec : section) (reloctbl: reloctable) (symbe:symbentr
   end.
 
 
-Definition acc_fold_section (symbtbl: symbtable) (reloc_map : reloctable_map) (res_sectbl: res sectable) (id: ident) (sec: section) :=
-  do sectbl <- res_sectbl;
+
+Definition acc_fold_section (symbtbl: symbtable) (reloc_map : reloctable_map) (id: ident) (sec: section) :=
+  (* do sectbl <- res_sectbl; *)
   let reloc_tbl := 
       match reloc_map ! id with
       | Some t => t
@@ -162,28 +163,29 @@ Definition acc_fold_section (symbtbl: symbtable) (reloc_map : reloctable_map) (r
   match symbtbl ! id with
   | Some e =>
     do sec' <- transl_section sec reloc_tbl e;
-    OK (PTree.set id sec' sectbl)
+    OK sec'
+    (* OK (PTree.set id sec' sectbl) *)
   | _ => Error (msg "no symbol entry for this section")
   end.
         
 Definition transl_sectable (stbl: sectable) (relocmap: reloctable_map) (symbtbl: symbtable) :=
-  PTree.fold (acc_fold_section symbtbl relocmap) stbl (OK (PTree.empty section)).
+  PTree.fold (acc_PTree_fold (acc_fold_section symbtbl relocmap)) stbl (OK (PTree.empty section)).
 
 
 Definition transf_program (p:program) : res program := 
   do stbl <- transl_sectable (prog_sectable p) (prog_reloctables p) (prog_symbtable p);
-  do szstrings <- fold_right
-                    (fun (id : ident) (acc : res Z) =>
-                       match acc with
-                       | OK z =>
-                         match SymbolString.find_symbol_pos id with
-                         | Some pos => OK (z + 2 + Z.of_nat (length pos))
-                         | None => Error (msg "cannot find string")
-                         end
-                       | Error _ => acc
-                       end) (OK 0) (map fst (PTree.elements (prog_symbtable p)));
-  if zlt szstrings Int.max_unsigned
-  then 
+  (* do szstrings <- fold_right *)
+  (*                   (fun (id : ident) (acc : res Z) => *)
+  (*                      match acc with *)
+  (*                      | OK z => *)
+  (*                        match SymbolString.find_symbol_pos id with *)
+  (*                        | Some pos => OK (z + 2 + Z.of_nat (length pos)) *)
+  (*                        | None => Error (msg "cannot find string") *)
+  (*                        end *)
+  (*                      | Error _ => acc *)
+  (*                      end) (OK 0) (map fst (PTree.elements (prog_symbtable p))); *)
+  (* if zlt szstrings Int.max_unsigned *)
+  (* then  *)
   OK {| prog_defs := prog_defs p;
         prog_public := prog_public p;
         prog_main := prog_main p;
@@ -191,7 +193,7 @@ Definition transf_program (p:program) : res program :=
         prog_symbtable := prog_symbtable p;
         prog_reloctables := prog_reloctables p;
         prog_senv := prog_senv p;
-     |}
-  else Error (msg "Too many strings in symbtable").
+     |}.
+  (* else Error (msg "Too many strings in symbtable"). *)
 
 End INSTR_SIZE.
