@@ -1104,6 +1104,48 @@ Proof.
     left. eauto.
 Qed.
 
+Lemma map_perm_1 : forall f b1 m1 m2 m2' b2 ofs2 k p,
+        Mem.map f b1 m1 m2 = m2' ->
+        (~ exists delta, f b1 = Some (b2, delta)) ->
+        Mem.perm m2' b2 ofs2 k p ->
+        Mem.perm m2 b2 ofs2 k p.
+Proof. Admitted.
+
+Lemma map_perm_2 : forall f b1 m1 m2 m2' b2 delta ofs2 k p,
+    Mem.map f b1 m1 m2 = m2' ->
+    f b1 = Some (b2, delta) ->
+    Mem.perm m2' b2 ofs2 k p <->
+    if ((Mem.sup_dec b2 (Mem.support m2)) && (Z.leb 0 (ofs2 - delta)) && (Mem.perm_dec m1 b1 (ofs2 - delta) k p)) then
+      Mem.perm m1 b1 (ofs2 - delta) k p else
+      Mem.perm m2 b2 ofs2 k p.
+Proof. Admitted.
+  
+Lemma inject_map_perm_inv: forall s1' s2' f1' m1' m2' b2 ofs2 k p,
+    Mem.inject_map s1' s2' f1' m1' = m2' ->
+    Mem.perm m2' b2 ofs2 k p ->
+    exists b1 delta ofs1,
+      f1' b1 = Some (b2, delta)
+   /\ Mem.perm m1' b1 ofs1 k p
+   /\ ofs2 = ofs1 + delta.
+Proof.
+  induction s1'; intros; simpl in *.
+  - subst. inv H0.
+  - set (m2mid := Mem.inject_map s1' s2' f1' m1').
+    destruct (f1' a) as [[b delta]|] eqn: Hf1'.
+    + destruct (eq_block b b2).
+      * subst b2. exploit map_perm_2. eauto. eauto. intro PERM.
+        destruct ( Mem.sup_dec b (Mem.support (Mem.inject_map s1' s2' f1' m1')) && (0 <=? (ofs2 - delta)) &&
+                   Mem.perm_dec m1' a (ofs2 - delta) k p) eqn : Hb.
+        -- rewrite Hb in PERM. exists a , delta, (ofs2 - delta). split. auto. split. apply PERM. auto.
+           lia.
+        -- rewrite Hb in PERM. eapply IHs1'; eauto. apply PERM. auto.
+      * eapply IHs1'; eauto.
+        eapply map_perm_1; eauto. intros [ofs0 Hf1''].
+        congruence.
+    + eapply IHs1'; eauto. eapply map_perm_1; eauto.
+      intros [ofs0 Hf1'']. congruence.
+Qed.
+
 Lemma inject_mem_perm_inv: forall m1' s2' f1' m2' ofs2 k p b2,
     Mem.inject_mem s2' f1' m1' = m2' ->
     Mem.perm m2' b2 ofs2 k p ->
@@ -1112,8 +1154,8 @@ Lemma inject_mem_perm_inv: forall m1' s2' f1' m2' ofs2 k p b2,
    /\ Mem.perm m1' b1 ofs1 k p
    /\ ofs2 = ofs1 + delta.
 Proof.
-  (*TODO*)
-Admitted.
+  intros. eapply inject_map_perm_inv; eauto.
+Qed.
 
 Theorem inject_mem_inj1 : forall m1' s2' j1' m2',
     Mem.inject_mem s2' j1' m1' = m2' ->
