@@ -73,8 +73,107 @@ Lemma decode_prog_code_section_total: forall p tp,
 Proof.
 Admitted.
 
+(* should be Hypothesis *)
+Lemma translate_code_size: forall c1 c2 c3 r,
+          transl_code instr_size r c1 = OK c2 ->
+          decode_instrs' instr_size Instr_size r c2 = OK c3 ->
+          code_size instr_size c1 = code_size instr_size c3.
+Admitted.
+
+Lemma rev_transl_code_size:forall r c,
+    code_size instr_size c = code_size instr_size (RelocProgSemantics1.rev_transl_code instr_size r c).
+Admitted.
 
 
+Lemma transl_init_data_list_size: forall data l r,
+    transl_init_data_list r data = OK l ->
+    init_data_list_size data = Z.of_nat (length l).
+Admitted.
+
+
+Lemma transl_init_data_pres_mem: forall data r l b m1 m2 ge1 ge2
+                                   (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),          
+    transl_init_data_list r data = OK l ->
+    RelocProgSemantics.store_init_data_list ge1 m1 b 0 data = Some m2 ->
+    store_init_data_bytes ge2 r m1 b 0 l = Some m2.
+Admitted.
+
+
+
+Lemma alloc_section_pres_mem: forall ge1 ge2 id sec sec1 sec2 m m0 reloctbl symbtbl
+    (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+    acc_fold_section instr_size symbtbl reloctbl id sec = OK sec1 ->
+    acc_decode_code_section instr_size Instr_size symbtbl reloctbl id sec1 = OK sec2 ->
+    RelocProgSemantics.alloc_section instr_size ge1 symbtbl (Some m) id (RelocProgSemantics1.rev_section instr_size reloctbl id sec) = Some m0 ->
+    alloc_section instr_size ge2 symbtbl reloctbl (Some m) id sec2 = Some m0.
+Proof.
+  intros.
+  destruct sec.
+
+  (* code section *)
+  - unfold acc_fold_section in H.
+    destr_in H. monadInv H.
+    simpl in EQ. destr_in EQ.
+    monadInv EQ.
+    unfold acc_decode_code_section in H0.
+    rewrite Heqo in H0. rewrite Heqs0 in H0.
+    monadInv H0.
+    unfold alloc_section.
+    unfold RelocProgSemantics.alloc_section in H1.
+    unfold  RelocProgSemantics.get_symbol_type in *.
+    rewrite Heqo in *. rewrite Heqs0 in *.
+    destr_in H1. simpl in H1.
+    exploit translate_code_size;eauto.
+    intros. simpl in Heqs1.
+    destr_in Heqs1.
+    + inv Heqs1.
+      rewrite <- rev_transl_code_size in H1.
+      rewrite H in *. auto.
+    + inv Heqs1.
+      rewrite H in *. auto.
+
+  (* data section *)
+  - unfold acc_fold_section in H.
+    destr_in H. monadInv H.
+    simpl in EQ. destr_in EQ.
+    (* rwdata *)
+    + monadInv EQ.
+      unfold acc_decode_code_section in H0.
+      rewrite Heqo in H0. rewrite Heqs0 in H0.
+      monadInv H0.
+      unfold alloc_section.
+      unfold RelocProgSemantics.alloc_section in H1.
+      unfold  RelocProgSemantics.get_symbol_type in *.
+      rewrite Heqo in *. rewrite Heqs0 in *.
+      destr_in H1. simpl in Heqs1.
+      inv Heqs1. simpl in H1.
+      exploit transl_init_data_list_size;eauto.
+      intros. rewrite H in H1.
+      destruct (Mem.alloc_glob id m 0 (Z.of_nat (Datatypes.length x))).
+      destr_in H1.
+      destr_in H1. exploit transl_init_data_pres_mem;eauto.
+      intros. rewrite H0. auto.
+    (* rodata *)
+    + monadInv EQ.
+      unfold acc_decode_code_section in H0.
+      rewrite Heqo in H0. rewrite Heqs0 in H0.
+      monadInv H0.
+      unfold alloc_section.
+      unfold RelocProgSemantics.alloc_section in H1.
+      unfold  RelocProgSemantics.get_symbol_type in *.
+      rewrite Heqo in *. rewrite Heqs0 in *.
+      destr_in H1. simpl in Heqs1.
+      inv Heqs1. simpl in H1.
+      exploit transl_init_data_list_size;eauto.
+      intros. rewrite H in H1.
+      destruct (Mem.alloc_glob id m 0 (Z.of_nat (Datatypes.length x))).
+      destr_in H1.
+      destr_in H1. exploit transl_init_data_pres_mem;eauto.
+      intros. rewrite H0. auto.
+  - unfold acc_fold_section in H.
+    simpl in H. destr_in H.
+Qed.
+               
 Section PRESERVATION. 
 (** Transformation *)
 Variable prog: program.
@@ -137,26 +236,26 @@ Lemma transf_initial_state:forall st1 rs,
   unfold match_prog in TRANSF.
   exploit decode_prog_code_section_total;eauto.
   intros (tp' & A).
-  
+  (* to prove init_mem equal *)
   assert (TOPROVE: init_mem instr_size tp' = Some m).
   { unfold RelocProgSemantics.init_mem in H.
     unfold init_mem.
     simpl in H. destr_in H.
 
-    assert (alloc_sections (RelocProgSemantics.globalenv instr_size tp')
-      (prog_symbtable tp') (prog_reloctables tp') 
-      (prog_sectable tp') Mem.empty = Some m0).
-    set (ge1:= (RelocProgSemantics.globalenv instr_size
-                                             (RelocProgSemantics1.decode_program instr_size prog))) in *.
+    (* alloc sections preserve memory *)
+  assert (ALLOCSECS: alloc_sections instr_size (RelocProgSemantics.globalenv instr_size tp')
+                         (prog_symbtable tp') (prog_reloctables tp') 
+                         (prog_sectable tp') Mem.empty = Some m0).
+  { 
+    set (ge1:= (RelocProgSemantics.globalenv instr_size (RelocProgSemantics1.decode_program instr_size prog))) in *.
     set (ge2:= (RelocProgSemantics.globalenv instr_size tp')).
     (* globalenv property *)
-    assert (GEProp: forall id ofs,RelocProgSemantics.Genv.symbol_address ge1 id ofs =
-                     RelocProgSemantics.Genv.symbol_address ge2 id ofs).
+    assert (GEProp: forall id ofs,RelocProgSemantics.Genv.symbol_address ge1 id ofs = RelocProgSemantics.Genv.symbol_address ge2 id ofs).
     { intros.
       exploit (symbol_address_pres).
       unfold ge,tge,ge1,ge2.
       unfold globalenv. rewrite A.
-      unfold RelocProgSemantics1.globalenv. eauto. }
+      unfold RelocProgSemantics1.globalenv. eauto. } (* end of GEProp *)
       
     unfold decode_prog_code_section in A.
     monadInv A. simpl.
@@ -230,6 +329,42 @@ Lemma transf_initial_state:forall st1 rs,
       rewrite <- H3 in *. rewrite <- H in *.
       unfold section in *.
       rewrite H1 in *. clear H H1 H3.
-      
-Admitted.
+      rewrite <- H2 in *. clear H2.
+      exploit alloc_section_pres_mem;eauto. } (* end of assert ALLOCSECS *)
+
+  rewrite ALLOCSECS.
+  unfold decode_prog_code_section in A.
+  monadInv A. simpl.
+  unfold transf_program in TRANSF. monadInv TRANSF.
+  simpl in *. auto. }           (* end of assert TOPROVE *)
+  
+  inv H0.
+  
+  set (ge2:= (RelocProgSemantics.globalenv instr_size tp')).
+  set (rs0' := rs # PC <- (RelocProgSemantics.Genv.symbol_address ge2 tp'.(prog_main) Ptrofs.zero)
+           # RA <- Vnullptr
+           # RSP <- (Vptr stk (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr))))) in *.
+  
+  exists (State rs0' m2).
+  constructor;eauto. econstructor;eauto.
+  econstructor;eauto.
+  f_equal.
+  
+  
+  (* globalenv property *)
+  assert (GEProp: forall id ofs,RelocProgSemantics.Genv.symbol_address ge0 id ofs = RelocProgSemantics.Genv.symbol_address ge2 id ofs).
+  { intros.
+    exploit (symbol_address_pres).
+    unfold ge,tge,ge0,ge2.
+    unfold globalenv. rewrite A.
+    unfold RelocProgSemantics1.globalenv. eauto. } (* end of GEProp *)
+  intros.
+  unfold rs0,rs0'.
+  erewrite GEProp.
+  unfold decode_prog_code_section in A.
+  monadInv A. cbn [prog_main].
+  unfold transf_program in TRANSF. monadInv TRANSF.
+  cbn [prog_main]. auto.
+Qed.
+
 

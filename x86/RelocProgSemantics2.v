@@ -83,8 +83,8 @@ Definition alloc_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) (r:
           | Some m3 => Mem.drop_perm m3 b 0 sz Readable
           end
         end
-      | sec_bytes bytes , symb_func =>
-        let sz := Z.of_nat (Datatypes.length bytes) in
+      | sec_text code , symb_func =>
+        let sz := code_size instr_size code in
         let (m1, b) := Mem.alloc_glob id m 0 sz in
         Mem.drop_perm m1 b 0 sz Nonempty
       | _, _ => None
