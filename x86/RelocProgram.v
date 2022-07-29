@@ -16,6 +16,7 @@ Definition section := @RelocProg.section instruction.
 
 Definition sectable := @RelocProg.sectable instruction.
 
+
 Definition sec_size (instr_size: instruction -> Z) (s: section) : Z :=
   match s with
   | sec_text c => code_size instr_size c
