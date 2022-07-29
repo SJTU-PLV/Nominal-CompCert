@@ -1134,7 +1134,7 @@ Lemma map_perm_2 : forall f b1 m1 m2 m2' b2 delta ofs2 k p,
     Mem.map f b1 m1 m2 = m2' ->
     f b1 = Some (b2, delta) ->
     Mem.perm m2' b2 ofs2 k p <->
-    if ((Mem.sup_dec b2 (Mem.support m2)) && (Z.leb 0 (ofs2 - delta)) && (Mem.perm_dec m1 b1 (ofs2 - delta) Max Nonempty)) then
+    if ((Mem.sup_dec b2 (Mem.support m2))&& (Mem.perm_dec m1 b1 (ofs2 - delta) Max Nonempty)) then
       Mem.perm m1 b1 (ofs2 - delta) k p else
       Mem.perm m2 b2 ofs2 k p.
 Proof.
@@ -1143,27 +1143,15 @@ Proof.
   destruct (Mem.sup_dec b2 (Mem.support m2)) eqn: Hb1; try (simpl; subst; reflexivity).
   inv H. unfold Mem.perm. simpl. unfold Mem.pmap_update. rewrite NMap.gsspec.
   rewrite pred_dec_true; eauto.
-  destruct (0 <=? ofs2 - delta) eqn : Hdelta.
-  - destruct (Mem.perm_dec m1 b1 (ofs2 - delta) Max Nonempty); simpl.
+  destruct (Mem.perm_dec m1 b1 (ofs2 - delta) Max Nonempty); simpl.
     + unfold Mem.update_mem_access. unfold Mem.perm in p0.
       destruct (NMap.get (Z -> perm_kind -> option permission) b1 (Mem.mem_access m1) (ofs2 - delta) Max) eqn: Hperm.
-      unfold Mem.perm_check. rewrite Hperm. destruct Z.ltb eqn: Hdelta'.
-      (* real copy here *)
-      * apply Z.leb_le in Hdelta.
-        apply Z.ltb_lt in Hdelta'.
-        extlia.
-      * reflexivity.
-      * exfalso. apply p0.
+      unfold Mem.perm_check. rewrite Hperm. reflexivity. exfalso. apply p0.
     + unfold Mem.update_mem_access.
       unfold Mem.perm in n.
       destruct (NMap.get (Z -> perm_kind -> option permission) b1 (Mem.mem_access m1) (ofs2 - delta) Max) eqn: Hperm.
       exfalso. apply n. simpl. constructor.
-      unfold Mem.perm_check. rewrite Hperm. destruct Z.ltb; reflexivity.
-  - unfold Mem.update_mem_access. destruct (ofs2 <? delta) eqn: Hdelta'.
-    + reflexivity.
-    + apply Z.leb_gt in Hdelta.
-      apply Z.ltb_ge in Hdelta'.
-      extlia.
+      unfold Mem.perm_check. rewrite Hperm. reflexivity.
 Qed.
 
 Lemma inject_map_perm_inv: forall s1' s2' f1' m1' m2' b2 ofs2 k p,
@@ -1180,7 +1168,7 @@ Proof.
     destruct (f1' a) as [[b delta]|] eqn: Hf1'.
     + destruct (eq_block b b2).
       * subst b2. exploit map_perm_2. eauto. eauto. intro PERM.
-        destruct ( Mem.sup_dec b (Mem.support (Mem.inject_map s1' s2' f1' m1')) && (0 <=? (ofs2 - delta)) &&
+        destruct ( Mem.sup_dec b (Mem.support (Mem.inject_map s1' s2' f1' m1'))  &&
                    Mem.perm_dec m1' a (ofs2 - delta) Max Nonempty) eqn : Hb.
         -- rewrite Hb in PERM. exists a , delta, (ofs2 - delta). split. auto. split. apply PERM. auto.
            lia.
@@ -1228,7 +1216,6 @@ Proof.
       rewrite Mem.inject_map_support. replace (ofs1 + delta - delta) with ofs1 by lia.
       apply IMGIN in MAP as SUPIN2.
       destruct (Mem.sup_dec b2 s2') eqn : Hsup; try congruence; simpl.
-      destruct (0 <=? ofs1 ) eqn : Hdelta. 2: admit. (* no need of this check ?*) simpl.
       destruct (Mem.perm_dec m1' b1 ofs1 Max Nonempty). simpl. eauto.
       exfalso. apply n. eauto with mem.
     + (* induction *)

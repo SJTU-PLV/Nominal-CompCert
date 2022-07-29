@@ -5111,11 +5111,10 @@ Definition perm_check (pmap : Z -> perm_kind -> option permission ) ofs : bool :
 
 Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
   fun ofs2 p =>
-    if Z.ltb ofs2 delta then map2 ofs2 p
-      else let ofs1 := ofs2 - delta in
-           if perm_check map1 ofs1 then
-             map1 ofs1 p
-           else map2 ofs2 p.
+    let ofs1 := ofs2 - delta in
+    if perm_check map1 ofs1 then
+      map1 ofs1 p
+    else map2 ofs2 p.
 
 (** update content *)
 
@@ -5142,10 +5141,9 @@ Definition content_map (val1 : ZMap.t memval) (pmap1 : perm_map) (f:meminj) (del
            : positive -> memval -> memval :=
   fun i mv =>
     let ofs2 := positive_to_Z i in             (* find the o : Z from the positive index in PTree *)
-    if Z.ltb ofs2 delta then mv                  (* check whether offset o is in the image of f *)
-      else let ofs1 := ofs2 - delta in           (* compute the index in domian clock*)
-        if perm_check pmap1 ofs1 then       (* check the source permission*)
-          memval_map f (ZMap.get ofs1 val1) (* copy the valid value from source*)
+    let ofs1 := ofs2 - delta in           (* compute the index in domian clock*)
+    if perm_check pmap1 ofs1 then       (* check the source permission*)
+      memval_map f (ZMap.get ofs1 val1) (* copy the valid value from source*)
         else
           mv.                               (* not copy the invalid value *)
 
@@ -5172,8 +5170,6 @@ Next Obligation.
     unfold pmap_update. destruct (eq_block b0 b') eqn:Hb; subst.
   - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
     unfold update_mem_access.
-    destruct (ofs <? delta).
-    apply Mem.access_max; eauto.
     destruct perm_check;
     apply Mem.access_max; eauto.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
