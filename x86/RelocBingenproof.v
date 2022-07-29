@@ -9,6 +9,7 @@ Require Import Asm RelocProg RelocProgram Globalenvs.
 Require Import Stacklayout Conventions.
 Require Import Linking Errors.
 Require Import EncDecRet RelocBingen RelocBinDecode.
+Require Import RelocProgSemantics RelocProgSemantics1.
 Require Import TranslateInstr RelocProgSemantics2.
 
 Import ListNotations.
@@ -192,8 +193,8 @@ Definition match_instr (i1 i2: instruction):=
 
 (* instruction map is mostly identical *)
 Lemma find_instr_refl: forall b ofs i,
-    RelocProgSemantics.Genv.genv_instrs ge b ofs = Some i ->
-    exists i1, RelocProgSemantics.Genv.genv_instrs tge b ofs = Some i
+    Genv.genv_instrs ge b ofs = Some i ->
+    exists i1, Genv.genv_instrs tge b ofs = Some i1
           /\ match_instr i i1.
 Proof.
   unfold ge,tge. unfold globalenv.
@@ -208,6 +209,10 @@ Proof.
   clear ge tge.
 Admitted.
 
+Lemma find_ext_funct_refl: forall v,
+    Genv.find_ext_funct ge v = Genv.find_ext_funct tge v.
+Admitted.
+  
 
 Lemma symbol_address_pres: forall id ofs,
     RelocProgSemantics.Genv.symbol_address ge id ofs =
@@ -292,7 +297,8 @@ Lemma transf_initial_state:forall st1 rs,
     generalize x1,l. clear x1 l.
     clear m m0.
     
-    (* core proof: induction on the length of l *)
+    (* core proof *)
+    
     induction x1;intros.
     - rewrite length_zero_iff_nil in H. subst.
       inv F3. inv F2. inv F1.
@@ -367,4 +373,22 @@ Lemma transf_initial_state:forall st1 rs,
   cbn [prog_main]. auto.
 Qed.
 
-
+Lemma step_simulation: forall st1 st2 t,
+    step instr_size ge st1 t st2 ->
+    exists st2', step instr_size tge st1 t st2'.
+Proof.
+  intros st1 st2 t STEP.
+  exists st2.
+  inv STEP.
+  - unfold Genv.find_instr in H1.
+    exploit find_instr_refl;eauto.
+    intros (i1 & FIND & MATCHINSTR).
+    eapply exec_step_internal;eauto.
+    erewrite <- find_ext_funct_refl;eauto.
+    unfold match_instr in MATCHINSTR.
+    
+    
+  - unfold Genv.find_instr in H1.
+  (* builtin instr impossible *)
+    admit.
+  - 

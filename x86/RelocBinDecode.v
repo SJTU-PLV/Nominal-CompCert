@@ -1200,6 +1200,32 @@ Definition well_defined_instr i :=
   | _ => true
   end.
 
+Definition instr_eq (i1 i2: instruction) : Prop :=
+  i1 = i2 \/
+  match i1,i2 with
+  | Pmovsd_mf_a a1 f1, Pmovsd_mf a2 f2 => a1 = a2 /\ f1 = f2
+  (* why translate Pmovsd_fm_a is rep *)
+  | Pmovsd_fm_a a1 f1, Pmovss_fm a2 f2 => a1 = a2 /\ f1 = f2
+  | Pmov_mr_a a1 r1, Pmovq_mr a2 r2 =>
+    if Archi.ptr64 then a1 = a2 /\ r1 = r2 else False
+  | Pmov_mr_a a1 r1, Asm.Pmovl_mr a2 r2 =>
+    if Archi.ptr64 then False else a1 = a2 /\ r1 = r2
+  | Pmov_rm_a r1 a1, Pmovq_rm r2 a2 =>
+    if Archi.ptr64 then a1 = a2 /\ r1 = r2 else False
+  | Pmov_rm_a r1 a1, Asm.Pmovl_rm r2 a2 =>
+    if Archi.ptr64 then False else a1 = a2 /\ r1 = r2
+  | Asm.Pcall_s id1 _, Asm.Pcall_s id2 _
+  | Asm.Pjmp_s id1 _, Asm.Pjmp_s id2 _ => id1 = id2
+  | Asm.Pcall_r r1 _, Asm.Pcall_r r2 _
+  | Asm.Pjmp_r r1 _, Asm.Pjmp_r r2 _ => r1 = r2
+  | Pxorq_r r, Pxorq_rr r1 r2
+  | Pxorl_r r, Pxorl_rr r1 r2 => r = r1 /\ r = r2
+  | Asm.Plabel _, Asm.Pnop | Asm.Pmovls_rr _, Asm.Pnop => True
+  | Pmovzl_rr r1 r2, Pmov_rr r1' r2' => r1 = r1' /\ r2 = r2'
+  | _,_ => False
+  end.
+
+                                                 
 Ltac solve_rr :=
     exploit encode_rex_prefix_rr_result;eauto;
     intros [(? & ? & ?) | (? & ? & ? & ? & ?)];subst;simpl;auto.
@@ -1345,7 +1371,7 @@ Ltac solve_decode_instr H :=
   | _ => fail
   end.
   
-Theorem translate_instr_consistency: forall e i li l,
+Theorem translate_instr_consistency_partial: forall e i li l,
     well_defined_instr i = true ->
     translate_instr e i = OK li ->
     decode_instr e (li++l) = OK (i,l).
@@ -1393,3 +1419,112 @@ Proof.
   repeat f_equal. auto with encdec.
 Qed.
 
+Theorem translate_instr_consistency: forall e i li l,
+    translate_instr e i = OK li ->
+    exists i1, decode_instr e (li++l) = OK (i1,l) /\ instr_eq i i1.
+Proof.
+  intros.
+  destruct (well_defined_instr i) eqn:WF.
+  - exploit translate_instr_consistency_partial;eauto.
+    exists i. split;eauto.
+    unfold instr_eq.
+    left. auto.
+  - destruct i;simpl in WF;try congruence;try monadInv H.
+    + exploit encode_rex_prefix_rr_result; eauto;
+        intros [(?, (?, ?))| (?, (?, (?, (?, ?))))]; subst.
+      cbn [app] in *.
+      autounfold with decunfold.
+      eexists. cbn [bind]. split;eauto. 
+      unfold instr_eq. right. auto.
+      cbn [app] in *.
+      autounfold with decunfold.
+      eexists. cbn [bind]. split;eauto. 
+      unfold instr_eq. right. auto.
+    + simpl. eexists;split;eauto.
+      unfold instr_eq;auto.
+    + exploit encode_rex_prefix_rr_result; eauto;
+        intros [(?, (?, ?))| (?, (?, (?, (?, ?))))]; subst.
+      cbn [app] in *.
+      autounfold with decunfold.
+      eexists. cbn [bind]. split;eauto. 
+      unfold instr_eq. right. auto.
+      cbn [app] in *.
+      autounfold with decunfold.
+      eexists. split. simpl. eauto.
+      unfold instr_eq. right.
+      exploit decode_ireg_u4_inject1;eauto.
+      exploit decode_ireg_u4_inject2;eauto. intros;subst.
+      split;f_equal.
+      auto.
+    + cbn [app] in *.
+      autounfold with decunfold.
+      eexists. split. simpl. eauto.
+      unfold instr_eq. right. split;symmetry;auto with encdec.
+    + unfold translate_instr in H.
+      destr_in H. monadInv H.
+      cbn [app] in *.
+      autounfold with decunfold.      
+      unfold get_reloc_addend in EQ. destr_in EQ.
+      simpl. eexists. split;eauto.
+      unfold instr_eq;right.
+      apply Pos.eqb_eq;auto.
+    + exploit encode_rex_prefix_r_result; eauto;
+        intros [(?, ?)| (?, (?, ?))]; subst;cbn [app] in *;
+          autounfold with decunfold;cbn [bind];eexists;split;auto.
+      unfold instr_eq. right. auto.
+      simpl. eauto.
+      unfold instr_eq. right. auto.
+    + unfold translate_instr in H.
+      destr_in H. monadInv H.
+      cbn [app] in *.
+      autounfold with decunfold.
+      unfold get_reloc_addend in EQ. destr_in EQ.
+      simpl. eexists. split;eauto.
+      unfold instr_eq;right.
+      apply Pos.eqb_eq;auto.
+    + exploit encode_rex_prefix_r_result; eauto;
+        intros [(?, ?)| (?, (?, ?))]; subst;cbn [app] in *;
+          autounfold with decunfold;cbn [bind];eexists;split;auto.
+      unfold instr_eq. right. auto.
+      simpl. eauto.
+      unfold instr_eq. right. auto.
+    + unfold translate_instr in H.
+      destr_in H;monadInv H;cbn [app] in *.
+      exploit transl_addr_consistency64;eauto.
+      intros (? & ?).
+      autounfold with decunfold.
+      destruct ProdL0;simpl in H;try congruence;
+      rewrite H10;simpl;eexists;split;eauto;
+        unfold instr_eq;rewrite Heqb;right;split;symmetry;auto with encdec.
+      exploit transl_addr_consistency32;eauto.
+      intros (? & ?).
+      autounfold with decunfold.
+      destruct x;simpl in H;try congruence;
+      rewrite H10;cbn [bind];eexists;split;eauto;
+        unfold instr_eq;rewrite Heqb;right;split;symmetry;auto with encdec.
+    + unfold translate_instr in H.
+      destr_in H;monadInv H;cbn [app] in *.
+      exploit transl_addr_consistency64;eauto.
+      intros (? & ?).
+      autounfold with decunfold.
+      destruct ProdL0;simpl in H;try congruence;
+      rewrite H10;simpl;eexists;split;eauto;
+        unfold instr_eq;rewrite Heqb;right;split;symmetry;auto with encdec.
+      exploit transl_addr_consistency32;eauto.
+      intros (? & ?).
+      autounfold with decunfold.
+      destruct x;simpl in H;try congruence;
+      rewrite H10;cbn [bind];eexists;split;eauto;
+        unfold instr_eq;rewrite Heqb;right;split;symmetry;auto with encdec.
+    + exploit encode_rex_prefix_fa_result; eauto;
+        intros (NOTADDRE0, [(?, (?, A))| (?, (?, (?, (?, (?, A)))))]);
+        subst; cbn[app] in *; autounfold with decunfold;
+          rewrite A; cbn[bind];
+            eexists;split;eauto;unfold instr_eq;right;split;symmetry;auto with encdec.
+    +  exploit encode_rex_prefix_fa_result; eauto;
+        intros (NOTADDRE0, [(?, (?, A))| (?, (?, (?, (?, (?, A)))))]);
+        subst; cbn[app] in *; autounfold with decunfold;
+          rewrite A; cbn[bind];
+            eexists;split;eauto;unfold instr_eq;right;split;symmetry;auto with encdec.
+    + simpl. eexists;split;eauto;unfold instr_eq;right. auto.
+Qed.      
