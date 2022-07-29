@@ -1203,20 +1203,65 @@ Proof.
   intros. eapply inject_map_perm_inv; eauto.
 Qed.
 
-Theorem inject_mem_inj1 : forall m1' s2' j1' m2',
+(*Lemma perm_least_max_nonempty : forall m b ofs k p,
+    Mem.perm m b ofs k p -> Mem.perm m b ofs Max Nonempty.
+Proof.
+  intros. apply Mem.perm_max with k.
+  unfold Mem.perm in *.
+  destruct (NMap.get (Z -> perm_kind -> option permission) b (Mem.mem_access m) ofs k); inv H; constructor.
+Qed. *)
+
+Lemma inject_map_perm : forall s1' s2' j1' m1' m2' b1 ofs1 delta b2 k p,
+   Mem.inject_map s1' s2' j1' m1' = m2' ->
+   Mem.meminj_no_overlap j1' m1' ->
+   inject_dom_in j1' s1' ->
+   inject_image_in j1' s2' ->
+   j1' b1 = Some (b2,delta) ->
+   Mem.perm m1' b1 ofs1 k p ->
+   Mem.perm m2' b2 (ofs1 + delta) k p.
+Proof.
+  induction s1'; intros until p; intros INJMAP INJNOLAP DOMIN IMGIN MAP PERM1.
+  - inv INJMAP. apply DOMIN in MAP. inv MAP.
+  - simpl in INJMAP. destruct (eq_block a b1).
+    + (*local*)
+      subst. rewrite map_perm_2; eauto.
+      rewrite Mem.inject_map_support. replace (ofs1 + delta - delta) with ofs1 by lia.
+      apply IMGIN in MAP as SUPIN2.
+      destruct (Mem.sup_dec b2 s2') eqn : Hsup; try congruence; simpl.
+      destruct (0 <=? ofs1 ) eqn : Hdelta. 2: admit. (* no need of this check ?*) simpl.
+      destruct (Mem.perm_dec m1' b1 ofs1 Max Nonempty). simpl. eauto.
+      exfalso. apply n. eauto with mem.
+    + (* induction *)
+(*      simpl. unfold Mem.perm in PERM1. unfold Mem.perm_order' in PERM1.
+      unfold Mem.perm_dec.
+      destruct (NMap.get (Z -> perm_kind -> option permission) b1 (Mem.mem_access m1') ofs1 k).
+      set (jmid := meminj_sub j1' a).
+      set (mmid := Mem.inject_map s1' s2' j1' m1').
+      assert (Mem.meminj_no_overlap jmid mmid). admit.
+      exploit IHs1'. eauto. eauto. admit. *)
+      Admitted.
+
+
+Theorem inject_mem_inj1 : forall m1 m1' s2' j1 j1' m2 m2',
+    Mem.inject j1 m1 m2 ->
+    inject_incr j1 j1' ->
+    max_perm_decrease m1 m1' ->
     Mem.inject_mem s2' j1' m1' = m2' ->
    (* inject_dom_in j1' (Mem.support m1') -> *)
     Mem.meminj_no_overlap j1' m1' ->
+    update_add_zero j1 j1' ->
     Mem.mem_inj j1' m1' m2'.
 Proof.
-  intros. constructor.
+  intros until m2'. intros INJ1 INCR1 MAXPERM1 INJMEM INCRNOLAP1 ADDZERO1.
+  constructor.
   - intros.
-    unfold Mem.inject_mem in H.
-    (* induction (Mem.support m1').
-    + inv H. simpl. apply H0 in H2. inv H2.
-    + *)
     admit. (* ok, from the no_overlaping of m1 *)
-  - admit. (*ok, assumption from old f + new added identity mappings *)
+  - intros. destruct (j1 b1) as [[b2' delta']|] eqn : Hj1b1.
+    + erewrite INCR1 in H; eauto. inv H. inversion INJ1. inversion mi_inj.
+      eapply mi_align; eauto. apply inject_implies_dom_in in INJ1 as DOMIN.
+      red. intros.
+      red in H0. eapply MAXPERM1. eapply DOMIN; eauto. eapply H0; eauto.
+    + exploit ADDZERO1; eauto. intro. subst. destruct chunk; simpl; eapply Z.divide_0_r.
   - admit. (*ok, from the non_overlaping *)
 Admitted.
 
@@ -1226,14 +1271,6 @@ Lemma inject_mem_support : forall s2 j m1 m2,
 Proof.
   intros. rewrite <- H.
   erewrite Mem.inject_mem_support; eauto.
-Qed.
-
-Lemma perm_least_max_nonempty : forall m b ofs k p,
-    Mem.perm m b ofs k p -> Mem.perm m b ofs Max Nonempty.
-Proof.
-  intros. apply Mem.perm_max with k.
-  unfold Mem.perm in *.
-  destruct (NMap.get (Z -> perm_kind -> option permission) b (Mem.mem_access m) ofs k); inv H; constructor.
 Qed.
 
 Theorem inject_mem_inject1 : forall m1 m1' m2 m2' j1 j1' s2',
@@ -1268,8 +1305,7 @@ Proof.
     intros (b1' & delta' & ofs1 & INJ & PERM & OFS).
     destruct (eq_block b1 b1').
     + subst. rewrite H in INJ. inv INJ. assert (ofs = ofs1). lia. subst. eauto.
-    + right. red in NOLAP. intro. exploit NOLAP. apply n. eauto. eauto. eauto.
-      eapply perm_least_max_nonempty; eauto.
+    + right. red in NOLAP. intro. exploit NOLAP; eauto with mem.
       intros [A | A]; congruence.
 Qed.
 
