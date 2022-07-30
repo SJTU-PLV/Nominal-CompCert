@@ -906,6 +906,12 @@ Proof.
   intros. unfold meminj_sub. destruct eq_block; congruence.
 Qed.
 
+Lemma meminj_sub_none : forall j a,
+    meminj_sub j a a = None.
+Proof.
+  intros. unfold meminj_sub. destruct eq_block; congruence.
+Qed.
+
 Lemma update_meminj_new: forall s j j' b b' ofs,
   j b = None ->
   j' b = Some (b',ofs) ->
@@ -1116,7 +1122,7 @@ Qed.
 Lemma map_perm_1 : forall f b1 m1 m2 m2' b2 ofs2 k p,
         Mem.map f b1 m1 m2 = m2' ->
         (~ exists delta, f b1 = Some (b2, delta)) ->
-        Mem.perm m2' b2 ofs2 k p ->
+        Mem.perm m2' b2 ofs2 k p <->
         Mem.perm m2 b2 ofs2 k p.
 Proof.
   intros. unfold Mem.map in H.
@@ -1125,9 +1131,10 @@ Proof.
     + subst. exfalso. apply H0. eauto.
     + destruct (Mem.sup_dec b1' (Mem.support m2)).
       inv H. unfold Mem.perm in *. simpl in *.
-      erewrite <- pmap_update_diff in H1; eauto.
-      subst. auto.
-  - subst. auto.
+      erewrite <- pmap_update_diff; eauto;
+      reflexivity.
+      subst. reflexivity.
+  - subst. reflexivity.
 Qed.
 
 Lemma map_perm_2 : forall f b1 m1 m2 m2' b2 delta ofs2 k p,
@@ -1154,6 +1161,17 @@ Proof.
       unfold Mem.perm_check. rewrite Hperm. reflexivity.
 Qed.
 
+Lemma map_perm_3 :  forall f b1 m1 m2 m2' b2 b2' delta ofs2 k p,
+        Mem.map f b1 m1 m2 = m2' ->
+        f b1 = Some (b2,delta) ->
+        b2 <> b2' ->
+        Mem.perm m2' b2' ofs2 k p <->
+        Mem.perm m2 b2' ofs2 k p.
+Proof.
+  intros. eapply map_perm_1; eauto.
+  intros [d A]. congruence.
+Qed.
+
 Lemma inject_map_perm_inv: forall s1' s2' f1' m1' m2' b2 ofs2 k p,
     Mem.inject_map s1' s2' f1' m1' = m2' ->
     Mem.perm m2' b2 ofs2 k p ->
@@ -1173,10 +1191,9 @@ Proof.
         -- rewrite Hb in PERM. exists a , delta, (ofs2 - delta). split. auto. split. apply PERM. auto.
            lia.
         -- rewrite Hb in PERM. eapply IHs1'; eauto. apply PERM. auto.
-      * eapply IHs1'; eauto.
-        eapply map_perm_1; eauto. intros [ofs0 Hf1''].
-        congruence.
-    + eapply IHs1'; eauto. eapply map_perm_1; eauto.
+      * eapply IHs1'; eauto. erewrite <- map_perm_1; eauto.
+        intros [ofs0 Hf1'']. congruence.
+    + eapply IHs1'; eauto. erewrite <- map_perm_1; eauto.
       intros [ofs0 Hf1'']. congruence.
 Qed.
 
@@ -1191,13 +1208,95 @@ Proof.
   intros. eapply inject_map_perm_inv; eauto.
 Qed.
 
-(*Lemma perm_least_max_nonempty : forall m b ofs k p,
-    Mem.perm m b ofs k p -> Mem.perm m b ofs Max Nonempty.
+Lemma inject_map_meminj_sub : forall s1' s2' j1' b1 m1' m2' m2'1 b2 delta b2' ofs k p,
+    Mem.inject_map s1' s2' j1' m1' = m2' ->
+    Mem.inject_map s1' s2' (meminj_sub j1' b1) m1' = m2'1 ->
+    j1' b1 = Some (b2, delta) ->
+    b2' <> b2 ->
+    Mem.perm m2' b2' ofs k p <-> Mem.perm m2'1 b2' ofs k p.
 Proof.
-  intros. apply Mem.perm_max with k.
-  unfold Mem.perm in *.
-  destruct (NMap.get (Z -> perm_kind -> option permission) b (Mem.mem_access m) ofs k); inv H; constructor.
-Qed. *)
+  induction s1'; intros.
+  - inv H. simpl. reflexivity.
+  - exploit IHs1'; eauto. intro IH.
+    destruct (eq_block b1 a).
+    + subst. simpl.
+      split.
+      * intro. erewrite map_perm_1. 2: eauto.
+        apply IH. erewrite <- map_perm_3; eauto. rewrite meminj_sub_none.
+        intros [delta0 A]. congruence.
+      * intro. 
+        erewrite map_perm_3. 2: eauto. all: eauto. apply IH.
+        erewrite <- map_perm_1; eauto. rewrite meminj_sub_none.
+        intros [delta0 A]. congruence.
+    + destruct (j1' a) as [[b2'' delta']|] eqn: Ha.
+      * simpl in H, H0. destruct (eq_block b2'' b2').
+        -- subst.
+           split; intro.
+           ++ rewrite map_perm_2; eauto. 2: rewrite meminj_sub_diff; eauto.
+              rewrite map_perm_2 in H. 2: eauto. 2: eauto.
+              rewrite Mem.inject_map_support. rewrite Mem.inject_map_support in H.
+              destruct (Mem.sup_dec b2' s2' && Mem.perm_dec m1' a (ofs - delta') Max Nonempty); eauto.
+              apply IH. auto.
+           ++ rewrite map_perm_2; eauto.
+              rewrite map_perm_2 in H. 2: eauto. 2: rewrite meminj_sub_diff; eauto.
+              rewrite Mem.inject_map_support. rewrite Mem.inject_map_support in H.
+              destruct (Mem.sup_dec b2' s2' && Mem.perm_dec m1' a (ofs - delta') Max Nonempty); eauto.
+              apply IH. auto.
+        -- split; intro.
+           ++ erewrite map_perm_3. 2: eauto. 2: rewrite meminj_sub_diff; eauto. all: eauto.
+              apply IH. erewrite <- map_perm_3; eauto.
+           ++ erewrite map_perm_3. 2: eauto. all: eauto. apply IH.
+              erewrite <- map_perm_3; eauto. rewrite meminj_sub_diff; eauto.
+      * simpl in H, H0. unfold Mem.map in H,H0. rewrite Ha in H.
+        rewrite meminj_sub_diff in H0. rewrite Ha in H0. congruence. eauto.
+Qed.
+
+Lemma inject_map_meminj_sub_1 : forall s1' s2' j1' b1 m1' m2' m2'1 b2 delta ofs k p,
+    Mem.inject_map s1' s2' j1' m1' = m2' ->
+    Mem.inject_map s1' s2' (meminj_sub j1' b1) m1' = m2'1 ->
+    j1' b1 = Some (b2, delta) ->
+    (forall ofs1 k p, Mem.perm m1' b1 ofs1 k p -> ofs1 + delta <> ofs) ->
+    Mem.perm m2' b2 ofs k p <-> Mem.perm m2'1 b2 ofs k p.
+Proof.
+    induction s1'; intros.
+  - inv H. simpl. reflexivity.
+  - exploit IHs1'; eauto. intro IH.
+    destruct (eq_block b1 a).
+    + subst. simpl.
+      split; intro.
+      * erewrite map_perm_1. 2: eauto.
+        apply IH. erewrite map_perm_2 in H. 2: eauto. all: eauto.
+        destruct (Mem.perm_dec) in H. apply H2 in p0 as p1. extlia.
+        simpl in H. rewrite andb_false_r in H. eauto. rewrite meminj_sub_none; eauto.
+        intros [delta0 A]. congruence.
+      *
+        erewrite map_perm_2. 2: eauto. all: eauto.
+        destruct (Mem.perm_dec). apply H2 in p0 as p1. extlia.
+        simpl. rewrite andb_false_r. apply IH. erewrite map_perm_1 in H. 2: eauto.
+        eauto. rewrite meminj_sub_none; eauto.
+        intros [delta0 A]. congruence.
+    + destruct (j1' a) as [[b2'' delta']|] eqn: Ha.
+      * simpl in H, H0. destruct (eq_block b2'' b2).
+        -- subst.
+           split; intro.
+           ++ rewrite map_perm_2; eauto. 2: rewrite meminj_sub_diff; eauto.
+              rewrite map_perm_2 in H. 2: eauto. 2: eauto.
+              rewrite Mem.inject_map_support. rewrite Mem.inject_map_support in H.
+              destruct (Mem.sup_dec b2 s2' && Mem.perm_dec m1' a (ofs - delta') Max Nonempty); eauto.
+              apply IH. auto.
+           ++ rewrite map_perm_2; eauto.
+              rewrite map_perm_2 in H. 2: eauto. 2: rewrite meminj_sub_diff; eauto.
+              rewrite Mem.inject_map_support. rewrite Mem.inject_map_support in H.
+              destruct (Mem.sup_dec b2 s2' && Mem.perm_dec m1' a (ofs - delta') Max Nonempty); eauto.
+              apply IH. auto.
+        -- split; intro.
+           ++ erewrite map_perm_3. 2: eauto. 2: rewrite meminj_sub_diff; eauto. all: eauto.
+              apply IH. erewrite <- map_perm_3; eauto.
+           ++ erewrite map_perm_3. 2: eauto. all: eauto. apply IH.
+              erewrite <- map_perm_3; eauto. rewrite meminj_sub_diff; eauto.
+      * simpl in H, H0. unfold Mem.map in H,H0. rewrite Ha in H.
+        rewrite meminj_sub_diff in H0. rewrite Ha in H0. congruence. eauto.
+Qed.
 
 Lemma inject_map_perm : forall s1' s2' j1' m1' m2' b1 ofs1 delta b2 k p,
    Mem.inject_map s1' s2' j1' m1' = m2' ->
@@ -1219,14 +1318,49 @@ Proof.
       destruct (Mem.perm_dec m1' b1 ofs1 Max Nonempty). simpl. eauto.
       exfalso. apply n. eauto with mem.
     + (* induction *)
-(*      simpl. unfold Mem.perm in PERM1. unfold Mem.perm_order' in PERM1.
-      unfold Mem.perm_dec.
-      destruct (NMap.get (Z -> perm_kind -> option permission) b1 (Mem.mem_access m1') ofs1 k).
-      set (jmid := meminj_sub j1' a).
-      set (mmid := Mem.inject_map s1' s2' j1' m1').
-      assert (Mem.meminj_no_overlap jmid mmid). admit.
-      exploit IHs1'. eauto. eauto. admit. *)
-      Admitted.
+      generalize (IHs1' s2' (meminj_sub j1' a) m1').
+      intros. exploit H; eauto.
+      {
+        red. red in INJNOLAP. intros.
+        destruct (eq_block a b0); destruct (eq_block a b3).
+        * subst. congruence.
+        * subst. unfold meminj_sub in H1. rewrite pred_dec_true in H1; auto. inv H1.
+        * subst. unfold meminj_sub in H2. rewrite pred_dec_true in H2; auto. inv H2.
+        * eapply INJNOLAP. apply H0. rewrite meminj_sub_diff in H1; eauto.
+          rewrite meminj_sub_diff in H2; eauto. eauto. eauto.
+      }
+      {
+        red. intros. destruct (eq_block a b).
+        * subst. unfold meminj_sub in H0. rewrite pred_dec_true in H0; auto. inv H0.
+        * rewrite meminj_sub_diff in H0. exploit DOMIN; eauto. intros [A | B].
+          congruence. eauto. eauto.
+      }
+      { red. intros. destruct (eq_block a b).
+        * subst. unfold meminj_sub in H0. rewrite pred_dec_true in H0; auto. inv H0.
+        * rewrite meminj_sub_diff in H0. exploit IMGIN; eauto. eauto.
+      }
+      erewrite meminj_sub_diff; eauto.
+      intro PERMmid.
+      destruct (j1' a) as [[b2' delta']|] eqn : Hj1'a.
+      * destruct (eq_block b2 b2').
+        -- subst.
+           assert (forall ofs1' k p, Mem.perm m1' a ofs1' k p -> ofs1' + delta' <> ofs1 + delta).
+           { intros. exploit INJNOLAP; eauto with mem.
+             intros [A|A]; congruence.
+           }
+           erewrite map_perm_2; eauto.
+           destruct (Mem.perm_dec).
+           apply H0 in p0 as p1. extlia. simpl. rewrite andb_false_r.
+           eapply inject_map_meminj_sub_1; eauto.
+        -- erewrite map_perm_1. 2: eauto.
+           eapply inject_map_meminj_sub; eauto.
+           intros [delta''  A]. congruence.
+      * unfold Mem.map in INJMAP. rewrite Hj1'a in INJMAP.
+        rewrite <- INJMAP. replace (meminj_sub j1' a) with j1' in PERMmid.
+        auto. apply Axioms.extensionality. intro x. destruct (eq_block a x).
+        subst. unfold meminj_sub. rewrite pred_dec_true; eauto.
+        rewrite meminj_sub_diff; eauto.
+Qed.
 
 
 Theorem inject_mem_inj1 : forall m1 m1' s2' j1 j1' m2 m2',
@@ -1234,15 +1368,15 @@ Theorem inject_mem_inj1 : forall m1 m1' s2' j1 j1' m2 m2',
     inject_incr j1 j1' ->
     max_perm_decrease m1 m1' ->
     Mem.inject_mem s2' j1' m1' = m2' ->
-   (* inject_dom_in j1' (Mem.support m1') -> *)
+    inject_dom_in j1' (Mem.support m1') ->
+    inject_image_in j1' s2' ->
     Mem.meminj_no_overlap j1' m1' ->
     update_add_zero j1 j1' ->
     Mem.mem_inj j1' m1' m2'.
 Proof.
-  intros until m2'. intros INJ1 INCR1 MAXPERM1 INJMEM INCRNOLAP1 ADDZERO1.
+  intros until m2'. intros INJ1 INCR1 MAXPERM1 INJMEM DOMIN' IMGIN' INCRNOLAP1 ADDZERO1.
   constructor.
-  - intros.
-    admit. (* ok, from the no_overlaping of m1 *)
+  - intros. eapply inject_map_perm; eauto.
   - intros. destruct (j1 b1) as [[b2' delta']|] eqn : Hj1b1.
     + erewrite INCR1 in H; eauto. inv H. inversion INJ1. inversion mi_inj.
       eapply mi_align; eauto. apply inject_implies_dom_in in INJ1 as DOMIN.
