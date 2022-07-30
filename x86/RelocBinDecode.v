@@ -658,7 +658,11 @@ Definition decode_instr_rex (e: option relocentry) (W R X B: bool) (i: Instructi
     let rs := decode_ireg_u4 R rsbits in
     let rd := decode_ireg_u4 B rdbits in
     if W then Error (msg "unsupported")
-    else OK (Asm.Pxorl_rr rd rs)
+    else
+      if ireg_eq rs rd then
+        OK (Asm.Pxorl_r rs)
+      else
+        OK (Asm.Pxorl_rr rd rs)
   | Pxorl_ri rdbits imm32 =>
     let imm := decode_ofs_u32 imm32 in
     let rd := decode_ireg_u4 B rdbits in
@@ -874,7 +878,11 @@ Definition decode_instr_rex (e: option relocentry) (W R X B: bool) (i: Instructi
   | Pxorl_GvEv (AddrE0 rsbits) rdbits =>
     let rd := decode_ireg_u4 R rdbits in
     let rs := decode_ireg_u4 B rsbits in
-    if W then OK (Asm.Pxorq_rr rd rs)
+    if W then
+      if ireg_eq rd rs then
+        OK (Asm.Pxorq_r rd)
+      else
+        OK (Asm.Pxorq_rr rd rs)
     else Error (msg "unsupported")
   | Pxorl_GvEv a rdbits =>
     let rd := decode_ireg_u4 R rdbits in
@@ -1188,15 +1196,14 @@ Definition well_defined_instr i :=
   match i with
   | Pmovsd_mf_a _ _
   | Pmovsd_fm_a _ _
-  | Pxorq_r _
+  | Pxorq_rr _ _ | Pxorl_rr _ _
   | Pmov_mr_a _ _ | Pmov_rm_a _ _
   | Asm.Pcall_r _ _
   | Asm.Plabel _ | Asm.Pmovls_rr _
   | Asm.Pjmp_r _ _
   | Asm.Pjmp_s _ _
   | Asm.Pmovzl_rr _ _
-  | Asm.Pcall_s _ _
-  | Asm.Pxorl_r _ => false
+  | Asm.Pcall_s _ _ => false
   | _ => true
   end.
 
@@ -1218,8 +1225,12 @@ Definition instr_eq (i1 i2: instruction) : Prop :=
   | Asm.Pjmp_s id1 _, Asm.Pjmp_s id2 _ => id1 = id2
   | Asm.Pcall_r r1 _, Asm.Pcall_r r2 _
   | Asm.Pjmp_r r1 _, Asm.Pjmp_r r2 _ => r1 = r2
-  | Pxorq_r r, Pxorq_rr r1 r2
-  | Pxorl_r r, Pxorl_rr r1 r2 => r = r1 /\ r = r2
+  (* | Pxorq_r r, Pxorq_rr r1 r2 *)
+  (* | Pxorl_r r, Pxorl_rr r1 r2 => r = r1 /\ r = r2 *)
+  | Pxorq_rr r1 r2, Pxorq_r r => r1 = r /\ r2 = r
+  | Pxorq_rr r1 r2, Pxorq_rr r1' r2' => r1 = r1' /\ r2 = r2' /\ r1 <> r2
+  | Pxorl_rr r1 r2, Pxorl_r r => r1 = r /\ r2 = r
+  | Pxorl_rr r1 r2, Pxorl_rr r1' r2' => r1 = r1' /\ r2 = r2' /\ r1 <> r2 
   | Asm.Plabel _, Asm.Pnop | Asm.Pmovls_rr _, Asm.Pnop => True
   | Pmovzl_rr r1 r2, Pmov_rr r1' r2' => r1 = r1' /\ r2 = r2'
   | _,_ => False
@@ -1387,6 +1398,18 @@ Proof.
   apply decode_ireg_u4_inject1 in H11.
   apply decode_u1_inject. auto.
 
+  (* Pxorl_r *)
+  exploit decode_ireg_u4_inject2;eauto. intros;subst.
+  destr.
+  exploit decode_ireg_u4_inject1;eauto. intros;subst.
+  destr. simpl.
+  exploit decode_ireg_u4_inject2;eauto. intros;subst.
+  auto.
+
+  (* Pxorq_r *)
+  destr. simpl. repeat f_equal.
+  auto with encdec.
+  
   (* testcond *)
   1-10 : try (rewrite encode_testcond_consistency;simpl;
   repeat f_equal;auto with encdec).
@@ -1444,22 +1467,38 @@ Proof.
       unfold instr_eq;auto.
     + exploit encode_rex_prefix_rr_result; eauto;
         intros [(?, (?, ?))| (?, (?, (?, (?, ?))))]; subst.
-      cbn [app] in *.
-      autounfold with decunfold.
-      eexists. cbn [bind]. split;eauto. 
-      unfold instr_eq. right. auto.
-      cbn [app] in *.
-      autounfold with decunfold.
-      eexists. split. simpl. eauto.
-      unfold instr_eq. right.
-      exploit decode_ireg_u4_inject1;eauto.
-      exploit decode_ireg_u4_inject2;eauto. intros;subst.
-      split;f_equal.
-      auto.
+      ++ cbn [app] in *.
+         autounfold with decunfold.
+         destr.
+      * cbn [bind]. eexists. split;eauto. 
+        unfold instr_eq. right. auto.
+      * cbn [bind]. eexists. split;eauto. 
+        unfold instr_eq. right. auto.
+      ++ cbn [app] in *.
+         autounfold with decunfold.
+         simpl. destr.
+      * cbn [bind]. eexists. split;eauto. 
+        unfold instr_eq. right. auto.
+      * cbn [bind]. eexists. split;eauto. 
+        unfold instr_eq. right. auto.
     + cbn [app] in *.
       autounfold with decunfold.
-      eexists. split. simpl. eauto.
-      unfold instr_eq. right. split;symmetry;auto with encdec.
+      simpl. destr.
+      * cbn [bind]. 
+        unfold instr_eq. eexists. split;eauto.
+        right. split;symmetry;auto with encdec.
+        exploit decode_ireg_u4_inject1;eauto.
+        exploit decode_ireg_u4_inject2;eauto.
+        intros. exploit decode_u1_inject;eauto.
+        intros. subst.
+        auto with encdec.
+      * cbn [bind]. 
+        unfold instr_eq. eexists. split;eauto.
+        right. split. symmetry. auto with encdec.
+        split. symmetry. auto with encdec.
+        unfold not. intros. subst. rewrite EQ in EQ1.
+        inv EQ1. congruence.
+        
     + unfold translate_instr in H.
       destr_in H. monadInv H.
       cbn [app] in *.

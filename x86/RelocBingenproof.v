@@ -180,22 +180,21 @@ Section PRESERVATION.
 Variable prog: program.
 Variable tprog: program.
 Hypothesis TRANSF: match_prog prog tprog.
+Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.
 
 Let ge := RelocProgSemantics1.globalenv instr_size prog.
 Let tge := globalenv instr_size Instr_size tprog.
 
-
-
-Definition match_instr (i1 i2: instruction):=
-  forall e l l', translate_instr e i1 = OK l ->
-         decode_instr e (l ++ l') = OK (i2,l').
+Lemma senv_refl:
+  (Genv.genv_senv ge) = (Genv.genv_senv tge).
+Admitted.
 
 
 (* instruction map is mostly identical *)
 Lemma find_instr_refl: forall b ofs i,
     Genv.genv_instrs ge b ofs = Some i ->
     exists i1, Genv.genv_instrs tge b ofs = Some i1
-          /\ match_instr i i1.
+          /\ instr_eq i i1.
 Proof.
   unfold ge,tge. unfold globalenv.
   unfold match_prog in TRANSF.
@@ -373,22 +372,141 @@ Lemma transf_initial_state:forall st1 rs,
   cbn [prog_main]. auto.
 Qed.
 
+Lemma exec_instr_refl: forall i rs m,
+    exec_instr instr_size ge i rs m = exec_instr instr_size tge i rs m.
+Admitted.
+
+Lemma eval_addrmode_refl: forall a rs,
+    eval_addrmode ge a rs = eval_addrmode tge a rs.
+Admitted.
+
+  
 Lemma step_simulation: forall st1 st2 t,
     step instr_size ge st1 t st2 ->
-    exists st2', step instr_size tge st1 t st2'.
+    step instr_size tge st1 t st2.
 Proof.
   intros st1 st2 t STEP.
-  exists st2.
   inv STEP.
   - unfold Genv.find_instr in H1.
     exploit find_instr_refl;eauto.
     intros (i1 & FIND & MATCHINSTR).
     eapply exec_step_internal;eauto.
     erewrite <- find_ext_funct_refl;eauto.
-    unfold match_instr in MATCHINSTR.
-    
-    
+    exploit instr_eq_size;eauto. intros SIZE.
+    unfold instr_eq in MATCHINSTR. destruct MATCHINSTR.
+    (* i = i1 *)
+    subst. rewrite <- exec_instr_refl. auto.
+
+  (* i is not well defined *)
+    destruct i;try inv H3;simpl in H2;destr_in H3.
+    (* Pmovzl_rr *)
+    + inv H3. simpl.
+      admit.
+    (* Pmovls_rr *)
+    + subst. simpl.
+      admit.
+    (* Pxorl_rr *)
+    + destruct H3;subst.
+      simpl.
+      admit.
+    (* Pxorq_rr r1 <> r2 *)
+    + destruct H3;subst.
+      destruct H4;subst.
+      simpl. auto.
+    (* Pxorq_rr *)
+    + destruct H3;subst.
+      simpl.
+      admit.
+    (* Pxorq_rr r1 <> r2 *)
+    + destruct H3;subst.
+      destruct H4;subst.
+      simpl. auto.
+
+    (* Pjmp_s *)
+    + subst. simpl.
+      rewrite <- symbol_address_pres.
+      auto.
+    (* Pjmp_r *)
+    + subst. simpl. auto.
+    (* Pcall_s *)
+    + subst. simpl.
+      rewrite SIZE in *.
+      destr_in H2.
+      rewrite <- symbol_address_pres.
+      auto.
+    (* Pcall_r *)
+    + subst. simpl.
+      rewrite SIZE in *.
+      destr_in H2.
+      
+    (* Pmov_rm_a 32 *)
+    + destr_in H3.
+      destruct H3;subst.
+      simpl.
+      unfold exec_load in *.
+      unfold Mem.loadv in *.
+      rewrite <- eval_addrmode_refl.
+      destr_in H2.
+      destr_in Heqo.
+      Transparent Mem.load. 
+      assert (Mem.load  Many32 m b0
+                        (Ptrofs.unsigned i) = Mem.load Mint32 m b0 (Ptrofs.unsigned i)).
+      { unfold Mem.load.
+        unfold Mem.valid_access_dec.
+        cbn [size_chunk]. cbn [align_chunk].
+        destruct (Mem.range_perm_dec m b0 (Ptrofs.unsigned i)
+                                     (Ptrofs.unsigned i + 4) Cur Readable).
+        destruct (Zdivide_dec 4 (Ptrofs.unsigned i)).
+        unfold size_chunk_nat. cbn [size_chunk].
+        f_equal. unfold decode_val.
+        rewrite Heqb0.
+        admit. auto. auto. }
+      rewrite <- H3. rewrite Heqo.
+      admit.
+
+    (* Pmov_rm_a 64 *)
+    + admit.
+    (* Pmov_mr_a 32 *)
+    + admit.
+    (* Pmov_mr_a 64 *)
+    + admit.
+    (* Pmovsd_fm_a *)
+    + admit.
+    (* Pmovsd_mf_a *)
+    + admit.
+    + simpl. rewrite SIZE in *.
+      auto.
+
   - unfold Genv.find_instr in H1.
   (* builtin instr impossible *)
     admit.
   - 
+    rewrite find_ext_funct_refl in H0.
+    eapply exec_step_external;eauto.
+    rewrite <- senv_refl. auto.
+Admitted.
+
+
+Lemma transf_program_correct: forall rs,
+    forward_simulation (RelocProgSemantics1.semantics instr_size prog rs) (semantics instr_size Instr_size tprog rs).
+Proof.
+  intros.
+  eapply forward_simulation_step with (match_states:= fun (st1 st2:Asm.state) => st1 = st2).
+  - simpl. unfold match_prog in TRANSF.
+    unfold transf_program in TRANSF.
+    monadInv TRANSF.
+    simpl. auto.
+  - intros. simpl.
+    eapply transf_initial_state.
+    auto.
+  - simpl. intros. subst.
+    auto.
+  - simpl. intros.
+    subst. fold tge. fold ge in H.
+    exists s1'. split;auto.
+    apply step_simulation. auto.
+Qed.
+
+End PRESERVATION.
+
+End WITH_INSTR_SIZE.
