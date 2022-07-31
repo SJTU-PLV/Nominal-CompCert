@@ -122,9 +122,11 @@ Fixpoint decode_instrs_bytes (fuel:nat) (bytes: list byte) (acc: list Instructio
     end
   end.
 
-Fixpoint decode_instrs (fuel: nat) (reloctbl: reloctable) (ofs: Z) (instrs: list Instruction) (acc: list instruction) :=
+(* For simplicity, we calculate code size every iteration*)
+Fixpoint decode_instrs (fuel: nat) (instrs: list Instruction) (acc: list instruction * reloctable) :=
+  let (l, reloctbl) := acc in
   match instrs with
-  | [] => OK acc
+  | [] => OK (l,reloctbl)
   | _ =>
     match fuel with
     | O => Error (msg "instruction decoding failed: run out of fuel")
@@ -132,24 +134,25 @@ Fixpoint decode_instrs (fuel: nat) (reloctbl: reloctable) (ofs: Z) (instrs: list
       match reloctbl with
       | [] => 
         do (i, instrs') <- decode_instr None instrs;
-        decode_instrs fuel' [] (ofs + instr_size i) instrs' (acc ++ [i])
+        decode_instrs fuel' instrs' ((l ++ [i]),[])
       | e :: tl =>
         let sz := Instr_size instrs in
+        let ofs := code_size instr_size l in
         let ofs' := ofs + sz in
         if (ofs <? e.(reloc_offset)) && (e.(reloc_offset) <? ofs') then
           do (i, instrs') <- decode_instr (Some e) instrs;
-          decode_instrs fuel' tl ofs' instrs' (acc++[i])
+          decode_instrs fuel' instrs' ((l++[i]),tl)
         else
           do (i, instrs') <- decode_instr None instrs;
-          decode_instrs fuel' reloctbl ofs' instrs' (acc++[i])
+          decode_instrs fuel' instrs' ((l++[i]),reloctbl)
       end
     end
   end.
       
 Definition decode_instrs' (reloctbl: reloctable) (bytes: list byte) :=
   do instrs1 <- decode_instrs_bytes (length bytes) bytes [];
-  do instrs2 <- decode_instrs (length instrs1) reloctbl 0 instrs1 [];
-  OK instrs2.
+  do instrs2_reloctbl <- decode_instrs (length instrs1) instrs1 ([],reloctbl);
+  OK (instrs2_reloctbl).
   
 Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) id (sec:section) :=
   (* do acc' <- acc; *)
@@ -161,7 +164,7 @@ Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctabl
   | Some e =>
     match sec, (symbentry_type e) with
     | sec_bytes bs, symb_func =>
-      do instrs <- decode_instrs' reloctbl bs;
+      do (instrs,_) <- decode_instrs' reloctbl bs;
       OK (sec_text instrs)
       (* OK (PTree.set id (sec_text instrs) acc') *)
     | _,_ => (* OK (PTree.set id sec acc') *)

@@ -65,15 +65,218 @@ Hypothesis translate_instr_size: forall i e l l',
       translate_instr e i = OK l ->
       Instr_size (l ++ l') = instr_size i.
 
+Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.
+
 Definition match_prog (p: program) (tp: program) :=
   transf_program instr_size p = OK tp.
+
+Lemma decoed_instrs_bytes_total: forall n l bl len,
+    length l = n ->
+    le (length l) len ->
+    fold_left concat_byte l (OK []) = OK bl ->
+    decode_instrs_bytes len bl [] = OK l.
+Proof.
+Admitted.
+
+Lemma decode_instrs_bytes_len: forall n l len1 len2,
+    length l = n ->
+    le (length l) len1 ->
+    le (length l) len2 ->
+    decode_instrs_bytes len1 l [] = decode_instrs_bytes len2 l [].
+Admitted.
+
+Lemma decode_instrs_bytes_app': forall l l' l1 len,
+    decode_instrs_bytes len l [] = OK l' ->
+    decode_instrs_bytes len l l1 = OK (l1 ++ l').
+Admitted.
+  
+Lemma decode_instrs_bytes_app: forall l1 l2 l3 len1 len2,
+    decode_instrs_bytes len1 l1 [] = OK l3 ->
+    decode_instrs_bytes (len1 + len2) (l1 ++ l2) [] = 
+    decode_instrs_bytes len2 l2 l3.
+Admitted.
+
+  
+Lemma encode_into_byte_consistency: forall l bl,
+    fold_left concat_byte l (OK []) = OK bl ->
+    decode_instrs_bytes (length bl) bl [] = OK l.
+Admitted.
+
+(* Lemma decode_instrs_app: forall n l1 l2 l1' reloctbl1 reloctbl2 fuel1 fuel2, *)
+(*     length l1 = n -> *)
+(*     Forall (fun e => e.(reloc_offset) > code_size instr_size l1') reloctbl2 -> *)
+(*     decode_instrs instr_size Instr_size fuel1 reloctbl1 l1 [] = OK l1' -> *)
+(*     decode_instrs instr_size Instr_size (fuel1 + fuel2) (reloctbl1 ++ reloctbl2) (l1 ++ l2) [] = decode_instrs instr_size Instr_size fuel2 reloctbl2  l2 l1'. *)
+(* Admitted. *)
+
+(* Lemma decode_instrs_app': forall n l1 l1' l2 reloctbl fuel, *)
+(*     length l1 = n -> *)
+(*     decode_instrs instr_size Instr_size fuel reloctbl l1 [] = OK l1' -> *)
+(*     decode_instrs instr_size Instr_size fuel reloctbl l1 l2 = OK (l2 ++ l1'). *)
+(* Admitted. *)
+
+Lemma transl_code_rev: forall n l l' ofs reloctbl reloctbl',
+    length l = n ->
+    fold_left (acc_instrs instr_size) l (OK ([],0,reloctbl)) = OK (l',ofs,reloctbl') ->
+    ofs = code_size instr_size l.
+Admitted.
+
+
+
+Lemma decode_instrs_total: forall c c' reloctbl reloctbl' ofs,
+    fold_left (acc_instrs instr_size) c (OK ([], 0, reloctbl)) = OK (c', ofs, reloctbl') ->
+    (* transl_code instr_size reloctbl c = OK c' -> *)
+    exists c1 , decode_instrs' instr_size Instr_size reloctbl c' = OK (c1,reloctbl') /\ Forall2 instr_eq c c1.
+Proof.
+  intros c.
+  assert (LEN: exists n, length c = n).
+  { induction c. exists O. auto.
+    destruct IHc.
+    exists (S x). simpl. auto. }
+  destruct LEN. generalize H. generalize x c.
+  clear c x H. 
+  induction x;intros.
+  - rewrite length_zero_iff_nil in H. subst.
+    simpl in *. inv H0.
+    unfold decode_instrs'. simpl. exists [].
+    split;auto.
+  - exploit LocalLib.length_S_inv;eauto.
+    intros (l' & a1 & A1 & B1). subst.
+    clear H.
+    rewrite fold_left_app in *.
+    simpl in H0.
+    unfold acc_instrs in H0 at 1.
+    monadInv H0.
+    (* transl_code property *)
+    
+    exploit transl_code_rev;eauto. intros SIZE. subst.
+    exploit IHx;eauto.
+    clear EQ IHx.
+    intros (c1 & P1 & P2).
+    destruct ProdR.
+
+    (* no reloctbl *)
+    + monadInv EQ0.
+      destr_in EQ2. inv EQ2.
+      unfold decode_instrs' in *.
+      monadInv P1.
+      rewrite app_length.
+      (* decode_instrs_bytes *)
+      exploit decode_instrs_bytes_app;eauto. intros Q.
+      rewrite Q. clear Q.
+      exploit encode_into_byte_consistency;eauto. intros Q2.
+      erewrite decode_instrs_bytes_app';eauto. simpl.
+      (* decode_instrs *)
+      clear EQ0 Q2 EQ1.
+      rewrite app_length.
+admit.
+      (* erewrite decode_instrs_app;eauto. *)
+      (* exploit translate_instr_consistency;eauto. *)
+      (* erewrite app_nil_r. intros (i1 & M1 & M2). *)
+      (* destruct x. simpl in M1. inv M1. *)
+      (* cbn [length]. erewrite decode_instrs_app';eauto. *)
+      (* simpl. exists (c1++[i1]). split;eauto. *)
+      (* apply Forall2_app;eauto. *)
+      
+      (* unfold decode_instrs at 1. *)
+      (* rewrite M1. cbn [bind2]. *)
+      (* destruct x;simpl;auto. *)
+
+    + destr_in EQ0.
+      * monadInv EQ0.
+        destr_in EQ2. inv EQ2.
+        unfold decode_instrs' in *.
+        monadInv P1.
+        (* decode_instrs_bytes *)
+        rewrite app_length.
+        exploit decode_instrs_bytes_app;eauto. intros Q.
+        rewrite Q. clear Q.
+        exploit encode_into_byte_consistency;eauto. intros Q2.
+        erewrite decode_instrs_bytes_app';eauto. simpl.
+        (* decode_instrs *)
+        clear EQ0 Q2 EQ1.
+        rewrite app_length.
+
+        erewrite decode_instrs_app;eauto.
+        exploit translate_instr_consistency;eauto.
+        erewrite app_nil_r. intros (i1 & M1 & M2).
+        destruct x. simpl in M1. inv M1.
+        cbn [length]. erewrite decode_instrs_app';eauto.
+        simpl. exists (c1++[i1]). split;eauto.
+        apply Forall2_app;eauto.
+         unfold decode_instrs at 1.
+         rewrite M1. cbn [bind2].
+         destruct x;simpl;auto.
+
+        
+Lemma decode_prog_code_section_total_aux: forall id sec sec' symbtbl reloctbl,
+    acc_fold_section instr_size symbtbl reloctbl id sec = OK sec' ->
+    exists sec1, acc_decode_code_section instr_size Instr_size symbtbl reloctbl id sec' = OK sec1.
+Proof.
+  unfold acc_fold_section.
+  intros. destr_in H.
+  monadInv H.
+  unfold transl_section in EQ.
+  unfold acc_decode_code_section. rewrite Heqo.
+  destr_in EQ.
+  - destr_in EQ. monadInv EQ.
+    exploit decode_instrs_total;eauto. intros (c1 & ? & ?).
+    rewrite H. simpl. eexists;eauto.
+  - destr_in EQ. monadInv EQ.
+    eexists;eauto.
+    destr_in EQ. monadInv EQ.
+    eexists;eauto.
+    monadInv EQ.
+    eexists;eauto.
+Qed.
 
 Lemma decode_prog_code_section_total: forall p tp,
     transf_program instr_size p = OK tp ->
     exists tp', decode_prog_code_section instr_size Instr_size tp = OK tp'.
 Proof.
+  unfold transf_program.
+  intros. monadInv H.
+  unfold transl_sectable in EQ.
+  exploit PTree_fold_elements;eauto. intros A.
+  clear EQ.
+  unfold decode_prog_code_section. simpl.
+  assert (exists t, PTree.fold
+       (acc_PTree_fold
+          (acc_decode_code_section instr_size Instr_size
+             (prog_symbtable p) (prog_reloctables p))) x
+       (OK (PTree.empty section)) = OK t).
+  { rewrite PTree.fold_spec.
+    unfold section in *.
+    revert A.
+    generalize (PTree.elements x) as resl.
+    generalize ((PTree.elements (prog_sectable p))).
+    
+    intros l.
+    assert (LEN: exists n, length l = n).
+    { induction l. exists O. auto.
+      destruct IHl.
+      exists (S x0). simpl. auto. }
+    destruct LEN. generalize H. generalize l.
+    clear l x H.
+    induction x0;intros.
+    - rewrite length_zero_iff_nil in H. subst.
+      inv A. simpl in *. eexists. eauto.
+    - exploit LocalLib.length_S_inv;eauto.
+      intros (l' & a1 & A1 & B1). subst.
+      clear H.
+      apply list_forall2_app_inv_l in A.
+      destruct A as (l4 & l5 & A1 & A2 & A3).
+      inv A3. inv H3. destruct H1.
+      rewrite H in *.
+      exploit IHx0;eauto.
+      intros (t & ?).
+      rewrite fold_left_app. rewrite H1.
+      simpl.
+              
+      
 Admitted.
 
+  
 (* should be Hypothesis *)
 Lemma translate_code_size: forall c1 c2 c3 r,
           transl_code instr_size r c1 = OK c2 ->
@@ -180,7 +383,7 @@ Section PRESERVATION.
 Variable prog: program.
 Variable tprog: program.
 Hypothesis TRANSF: match_prog prog tprog.
-Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.
+
 
 Let ge := RelocProgSemantics1.globalenv instr_size prog.
 Let tge := globalenv instr_size Instr_size tprog.
