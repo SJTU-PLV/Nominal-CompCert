@@ -765,7 +765,6 @@ Section COMP_FSIM.
       eapply (ST.fsim_order_wf H2). eapply (ST.fsim_order_wf H1).
   Qed.
 
-  (** Lemma 3.11 *)
   Lemma st_compose_forward_simulations:
     ST.forward_simulation ccA1 ccB1 Ls Ln ->
     ST.forward_simulation ccA2 ccB2 Ln Lf ->
@@ -777,7 +776,7 @@ Section COMP_FSIM.
 
 End COMP_FSIM.
 
-Section COMP_FSIM.
+Section ENCAP_COMP_FSIM.
 
   Context `(ccA1: ST.callconv liAs liAn) `(ccA2: ST.callconv liAn liAf)
           `(ccB1: ST.callconv liBs liBn) `(ccB2: ST.callconv liBn liBf)
@@ -785,16 +784,336 @@ Section COMP_FSIM.
   Context (H1: E.forward_simulation ccA1 ccB1 Ls Ln)
           (H2: E.forward_simulation ccA2 ccB2 Ln Lf).
 
+  (** Lemma 3.11 *)
   Lemma encap_compose_forward_simulation:
     E.forward_simulation (ST.cc_compose ccA1 ccA2)
                          (ST.cc_compose ccB1 ccB2) Ls Lf.
   Admitted.
 
-End COMP_FSIM.
+End ENCAP_COMP_FSIM.
+
+Section ID_SEM.
+
+  Context {liA liB} (L: semantics liA liB).
+
+  Definition id_skel: AST.program unit unit :=
+    {|
+      prog_defs := nil;
+      prog_public := nil;
+      prog_main := prog_main (skel L);
+    |}.
+  Lemma id_skel_order: Linking.linkorder id_skel (skel L).
+  Proof.
+    constructor. reflexivity.
+    repeat split. easy.
+    intros. inv H.
+  Qed.
+
+  Definition left_comp_id :=
+    comp_semantics' (id_semantics id_skel) L (skel L).
+  Definition right_comp_id :=
+    comp_semantics' L (id_semantics id_skel) (skel L).
+
+End ID_SEM.
+
+Notation "L 'o' 1" := (right_comp_id L) (at level 15).
+Notation "1 'o' L" := (left_comp_id L) (at level 20).
+Notation "1 [ L ]" := (id_semantics (id_skel L)).
+Definition normalize_sem {liA liB} (L: semantics liA liB) := 1 o L o 1.
+
+(* TODO: maybe we need to use CAT.fsim to define E.fsim *)
+Module CAT.
+
+  Definition forward_simulation
+             {liA1 liA2} (ccA: callconv liA1 liA2)
+             {liB1 liB2} (ccB: callconv liB1 liB2) L1 L2 :=
+    forward_simulation ccA ccB (normalize_sem L1) (normalize_sem L2).
+
+  Section ID_PROPS.
+
+    Ltac inv_comp :=
+      match goal with
+      | [ H : at_external ((_ (comp_semantics' _ _ _)) _) _ _ |- _ ] => inv H
+      | [ H : after_external ((_ (comp_semantics' _ _ _)) _) _ _ _ |- _ ] => inv H
+      | [ H : initial_state ((_ (comp_semantics' _ _ _)) _) _ _ |- _ ] => inv H
+      | [ H : final_state ((_ (comp_semantics' _ _ _)) _) _ _ |- _ ] => inv H
+      | [ H : step ((_ (comp_semantics' _ _ _)) _) _ _ _ _ |- _ ] => inv H
+      end.
+    Ltac inv_id :=
+      match goal with
+      | [ H : at_external ((_ (id_semantics _)) _) _ _ |- _ ] => inv H
+      | [ H : after_external ((_ (id_semantics _)) _) _ _ _ |- _ ] => inv H
+      | [ H : initial_state ((_ (id_semantics _)) _) _ _ |- _ ] => inv H
+      | [ H : final_state ((_ (id_semantics _)) _) _ _ |- _ ] => inv H
+      | [ H : step ((_ (id_semantics _)) _) _ _ _ _ |- _ ] => inv H
+      end.
+    Ltac ese := eexists; repeat split; eauto.
+
+    Context {liA liB} (L: semantics liA liB).
+
+    (* TODO: notations like (st4 _ _ _ _ s1 s2 s3 s4) *)
+    Inductive lu_ms: state (1 o L o 1) -> state (1 o (1 o L o 1)) -> Prop :=
+    | lu_ms1 q:
+      lu_ms (st1 1[L] _ (st_q q)) (st1 1[L] _ (st_q q))
+    | lu_ms2 q s:
+      lu_ms (st2 1[L] (L o 1) (st_q q) (st1 L _ s))
+            (st2 1[L] (1 o L o 1) (st_q q) (st2 1[L] (L o 1) (st_q q) (st1 L _ s)))
+    | lu_ms3 qi s qo:
+      lu_ms (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_q qo)))
+            (st2 1[L] (1 o L o 1) (st_q qi) (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_q qo))))
+    | lu_ms4 qi s ro:
+      lu_ms (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_r ro)))
+            (st2 1[L] (1 o L o 1) (st_q qi) (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_r ro))))
+    | lu_ms5 r:
+      lu_ms (st1 1[L] _ (st_r r)) (st1 1[L] _ (st_r r)).
+
+    Hint Constructors lu_ms.
+
+    Lemma left_unit_1: forward_simulation 1 1 L (left_comp_id L).
+    Proof.
+      unfold forward_simulation, normalize_sem.
+      etransitivity. instantiate (1 := 1 o (1 o L o 1)).
+      2: {
+        eapply categorical_compose_simulation'.
+        reflexivity. apply assoc1.
+        eapply Linking.linkorder_trans. apply id_skel_order.
+        1-2: apply Linking.linkorder_refl.
+      }
+      constructor.
+      eapply Forward_simulation
+        with (fsim_order := (ltof _ (fun _ => O)))
+             (fsim_match_states := fun _ _ _ x s1 s2 => x = s1 /\ lu_ms s1 s2).
+      reflexivity. firstorder. 2: apply well_founded_ltof.
+      intros se ? [] [] Hse. clear Hse.
+      apply forward_simulation_plus;
+        unfold left_comp_id, right_comp_id in *.
+      - intros. inv H. repeat (inv_comp || inv_id). ese.
+      - intros. repeat (inv_comp || inv_id). inv H. ese.
+      - intros. repeat (inv_comp || inv_id). exists tt.
+        inv H. ese.
+        intros. repeat (inv_comp || inv_id). inv H. ese.
+      - intros * HSTEP s2 HS. inv HS.
+        + inv HSTEP; repeat (inv_comp || inv_id). ese.
+          eapply plus_two. eapply step_push; repeat constructor.
+          eapply step2. eapply step_push; repeat constructor; eauto.
+          reflexivity.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          * ese. apply plus_one.
+            apply step2. apply step2. apply step1; eassumption.
+          * ese. apply plus_one. apply step2. apply step2.
+            eapply step_push; try constructor; eauto.
+          * ese. eapply plus_two.
+            apply step2. eapply step_pop; constructor; eauto.
+            eapply step_pop; repeat constructor; eauto.
+            reflexivity.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          ese. apply plus_one. apply step2. apply step2.
+          eapply step_pop; repeat constructor; eauto.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+    Qed.
+
+    Definition ul_measure (s: state (1 o (1 o L o 1))) :=
+      match s with
+      | st1 _ _ (st_q _) => 1%nat
+      | st2 _ _ (st_q _) (st1 _ _ (st_q _)) => 0%nat
+      | st2 _ _ (st_q _) (st1 _ _ (st_r _)) => 1%nat
+      | st1 _ _ (st_r _) => 0%nat
+      | _ => 0%nat
+      end.
+    Inductive ul_ms: state (1 o (1 o L o 1)) -> state (1 o L o 1) -> Prop :=
+    | ul_ms1 q:
+      ul_ms (st1 1[L] _ (st_q q)) (st1 1[L] _ (st_q q))
+    | ul_ms1' q:
+      ul_ms (st2 1[L] (1 o L o 1) (st_q q) (st1 1[L] _ (st_q q))) (st1 1[L] _ (st_q q))
+    | ul_ms2 q s:
+      ul_ms (st2 1[L] (1 o L o 1) (st_q q) (st2 1[L] (L o 1) (st_q q) (st1 L _ s)))
+            (st2 1[L] (L o 1) (st_q q) (st1 L _ s))
+    | ul_ms3 qi s qo:
+      ul_ms (st2 1[L] (1 o L o 1) (st_q qi) (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_q qo))))
+             (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_q qo)))
+    | ul_ms4 qi s ro:
+      ul_ms (st2 1[L] (1 o L o 1) (st_q qi) (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_r ro))))
+            (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_r ro)))
+    | ul_ms5 r:
+      ul_ms (st1 1[L] _ (st_r r)) (st1 1[L] _ (st_r r))
+    | ul_ms5' q r:
+      ul_ms (st2 1[L] (1 o L o 1) (st_q q) (st1 1[L] _ (st_r r))) (st1 1[L] _ (st_r r)).
+    Hint Constructors ul_ms.
+
+    Lemma left_unit_2: forward_simulation 1 1 (left_comp_id L) L.
+    Proof.
+      unfold forward_simulation, normalize_sem.
+      etransitivity. instantiate (1 := 1 o (1 o L o 1)).
+      {
+        eapply categorical_compose_simulation'.
+        reflexivity. apply assoc2.
+        eapply Linking.linkorder_trans. apply id_skel_order.
+        1-2: apply Linking.linkorder_refl.
+      }
+      constructor.
+      eapply Forward_simulation
+        with (fsim_order := (ltof _ ul_measure))
+             (fsim_match_states := fun _ _ _ i s1 s2 => i = s1 /\ ul_ms s1 s2).
+      reflexivity. firstorder. 2: apply well_founded_ltof.
+      intros se ? [] [] Hse.
+      eapply forward_simulation_opt;
+        unfold left_comp_id, right_comp_id in *.
+      - intros. inv H. repeat (inv_comp || inv_id). ese.
+      - intros. repeat (inv_comp || inv_id). inv H. ese.
+      - intros. repeat (inv_comp || inv_id). inv H. exists tt. ese.
+        intros. repeat (inv_comp || inv_id). inv H. ese.
+      - intros * HSTEP s HS. inv HS.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          right. repeat split; eauto.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          left. ese. eapply step_push; constructor; eauto.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          * left. ese. apply step2. apply step1. assumption.
+          * left. ese. apply step2.
+            eapply step_push; repeat constructor; eauto.
+          * left. ese.
+            eapply step_pop; repeat constructor; eauto.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          left. ese.
+          apply step2. eapply step_pop; repeat constructor; eauto.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          right. cbn. repeat split; eauto.
+    Qed.
+
+    Inductive ru_ms: state (1 o L o 1) -> state (1 o (L o 1) o 1) -> Prop :=
+    | ru_ms1 q:
+      ru_ms (st1 1[L] _ (st_q q)) (st1 1[L] _ (st_q q))
+    | ru_ms2 q s:
+      ru_ms (st2 1[L] (L o 1) (st_q q) (st1 L _ s))
+            (st2 1[L] ((L o 1) o 1) (st_q q) (st1 (L o 1) _ (st1 L _ s)))
+    | ru_ms3 qi s qo:
+      ru_ms (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_q qo)))
+            (st2 1[L] ((L o 1) o 1) (st_q qi) (st2 (L o 1) 1[L] (st2 L 1[L] s (st_q qo)) (st_q qo)))
+    | ru_ms4 qi s qo ro:
+      ru_ms (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_r ro)))
+            (st2 1[L] ((L o 1) o 1) (st_q qi) (st2 (L o 1) 1[L] (st2 L 1[L] s (st_q qo)) (st_r ro)))
+    | ru_ms5 r:
+      ru_ms (st1 1[L] _ (st_r r)) (st1 1[L] _ (st_r r)).
+    Hint Constructors ru_ms.
+
+    Lemma right_unit_1: forward_simulation 1 1 L (right_comp_id L).
+    Proof.
+      unfold forward_simulation, normalize_sem.
+      constructor.
+      eapply Forward_simulation with (ltof _ (fun _ => O))
+                                     (fun _ _ _ x s1 s2 => x = s1 /\ ru_ms s1 s2).
+      reflexivity. firstorder. 2: apply well_founded_ltof.
+      intros se ? [] [] Hse. clear Hse.
+      apply forward_simulation_plus;
+        unfold left_comp_id, right_comp_id in *.
+      - intros. inv H. repeat (inv_comp || inv_id). ese.
+      - intros. repeat (inv_comp || inv_id). inv H. ese.
+      - intros. repeat (inv_comp || inv_id). inv H. exists tt. ese.
+        intros. repeat (inv_comp || inv_id). inv H. ese.
+      - intros * HSTEP s HS. inv HS.
+        + inv HSTEP; repeat (inv_comp || inv_id). ese.
+          apply plus_one. eapply step_push; repeat constructor; eauto.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          * ese. apply plus_one.
+            apply step2. apply step1. apply step1. assumption.
+          * ese. eapply plus_two.
+            apply step2. apply step1. eapply step_push; eauto. constructor.
+            apply step2. eapply step_push; repeat constructor.
+            reflexivity.
+          * ese. apply plus_one.
+            eapply step_pop; repeat constructor. assumption.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          ese. eapply plus_two.
+          apply step2. eapply step_pop; repeat constructor.
+          apply step2. apply step1. eapply step_pop; try constructor; eauto.
+          reflexivity.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+    Qed.
+
+    Definition ur_measure (s: state (1 o (L o 1) o 1)) :=
+      match s with
+      | st2 _ _ (st_q qi) (st1 _ _ (st2 _ _ s (st_q qo))) => 1%nat
+      | st2 _ _ (st_q qi) (st2 _ _ (st2 _ _ s (st_q qo)) (st_r ro)) => 1%nat
+      | _ => 0%nat
+      end.
+    Inductive ur_ms: state (1 o (L o 1) o 1) -> state (1 o L o 1) -> Prop :=
+    | ur_ms1 q:
+      ur_ms (st1 1[L] _ (st_q q)) (st1 1[L] _ (st_q q))
+    | ur_ms2 q s:
+      ur_ms (st2 1[L] ((L o 1) o 1) (st_q q) (st1 (L o 1) _ (st1 L _ s)))
+            (st2 1[L] (L o 1) (st_q q) (st1 L _ s))
+    | ur_ms3 qi s qo:
+      ur_ms (st2 1[L] ((L o 1) o 1) (st_q qi) (st2 (L o 1) 1[L] (st2 L 1[L] s (st_q qo)) (st_q qo)))
+            (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_q qo)))
+    | ur_ms3' qi s qo:
+      ur_ms (st2 1[L] ((L o 1) o 1) (st_q qi) (st1 (L o 1) _ (st2 L 1[L] s (st_q qo))))
+            (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_q qo)))
+    | ur_ms4 qi s qo ro:
+      ur_ms (st2 1[L] ((L o 1) o 1) (st_q qi) (st2 (L o 1) 1[L] (st2 L 1[L] s (st_q qo)) (st_r ro)))
+            (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_r ro)))
+    | ur_ms4' qi s ro:
+      ur_ms (st2 1[L] ((L o 1) o 1) (st_q qi) (st1 (L o 1) _ (st2 L 1[L] s (st_r ro))))
+            (st2 1[L] (L o 1) (st_q qi) (st2 L 1[L] s (st_r ro)))
+    | ur_ms5 r:
+      ur_ms (st1 1[L] _ (st_r r)) (st1 1[L] _ (st_r r)).
+    Hint Constructors ur_ms.
+
+    Lemma right_unit_2: forward_simulation 1 1 (right_comp_id L) L.
+    Proof.
+      constructor.
+      eapply Forward_simulation
+        with (fsim_order := (ltof _ ur_measure))
+             (fsim_match_states := fun _ _ _ i s1 s2 => i = s1 /\ ur_ms s1 s2).
+      reflexivity. firstorder. 2: apply well_founded_ltof.
+      intros se ? [] [] Hse. clear Hse.
+      eapply forward_simulation_opt;
+        unfold left_comp_id, right_comp_id in *.
+      - intros. inv H. repeat (inv_comp || inv_id). ese.
+      - intros. repeat (inv_comp || inv_id). inv H. ese.
+      - intros. repeat (inv_comp || inv_id). inv H. exists tt. ese.
+        intros. repeat (inv_comp || inv_id). inv H. ese.
+      - intros * HSTEP s HS. inv HS.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          left. ese. eapply step_push; constructor; eauto.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          * left. ese. apply step2. apply step1. assumption.
+          * left. ese. apply step2. eapply step_push; eauto. constructor.
+          * left. ese. eapply step_pop; constructor. assumption.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          right. repeat split; eauto.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          right. repeat split; eauto.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+          left. ese. apply step2. eapply step_pop; try constructor; eauto.
+        + inv HSTEP; repeat (inv_comp || inv_id).
+    Qed.
+
+  End ID_PROPS.
+  (* These properties are then lifted to ST.fsim *)
+
+End CAT.
 
 (** *** Refinement between Stateful Simulation Conventions *)
-Definition st_ccref {li1 li2} (cc cc': ST.callconv li1 li2) : Prop.
-Admitted.
+
+Record st_ccref {li1 li2} (cc cc': ST.callconv li1 li2) :=
+  mk_st_ccref {
+      ccref_rel : ST.ccworld cc -> ST.ccworld cc' -> Prop;
+      ccref_closed :
+        forall w1 w1', ccref_rel w1 w1' ->
+        forall w2 w2', w1 :-> w2 -> w1' :-> w2' -> ccref_rel w2 w2';
+      ccref_init : ccref_rel (pset_init (ST.ccworld cc)) (pset_init (ST.ccworld cc'));
+      ccref_step :
+        forall w1 w1', ccref_rel w1 w1' ->
+        forall w2 q1 q2, w1 :-> w2 -> ST.match_query cc w2 q1 q2 ->
+        exists w2', w1' :-> w2' /\ ST.match_query cc' w2' q1 q2 /\
+        forall w3' r1 r2, w2' *-> w3' -> ST.match_reply cc' w3' r1 r2 ->
+        exists w3, w2 *-> w3 /\ ST.match_reply cc w3 r1 r2 /\ ccref_rel w3 w3';
+    }.
 
 Require Import LogicalRelations.
 

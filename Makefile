@@ -206,7 +206,7 @@ endif
 
 # CompCertOX
 COMPCERTOX=Lifting.v AbRel.v CModule.v TensorComp.v \
-  SkelLinking.v Composition.v
+  SkelLinking.v Composition.v Encapsulation.v
 
 # All source files
 
