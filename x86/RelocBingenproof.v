@@ -466,9 +466,9 @@ Qed.
 
   
 (* should be Hypothesis *)
-Lemma translate_code_size: forall c1 c2 c3 r,
+Lemma translate_code_size: forall c1 c2 c3 r r',
           transl_code instr_size r c1 = OK c2 ->
-          decode_instrs' instr_size Instr_size r c2 = OK c3 ->
+          decode_instrs' instr_size Instr_size r c2 = OK (c3,r') ->
           code_size instr_size c1 = code_size instr_size c3.
 Admitted.
 
@@ -483,11 +483,215 @@ Lemma transl_init_data_list_size: forall data l r,
 Admitted.
 
 
-Lemma transl_init_data_pres_mem: forall data r l b m1 m2 ge1 ge2
-                                   (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),          
-    transl_init_data_list r data = OK l ->
+Lemma store_init_data_list_app: forall ge m1 m2 b start d1 d2 ,
+    store_init_data_list ge m1 b start (d1++d2) = Some m2 ->
+    exists m1',  store_init_data_list ge m1 b start d1 = Some m1' /\
+            store_init_data_list ge m1' b (start + init_data_list_size d1) d2 = Some m2.
+Admitted.
+
+Lemma transl_init_data_pres_mem: forall d ge1 ge2 m1 m1' b ofs opte lm0 sz0 lb (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+    store_init_data ge1 m1 b ofs d = Some m1' ->
+    transl_init_data opte d = OK lb ->
+    let e := match opte with
+             | Some e' => [e']
+             | None => []
+             end in
+    exists lm, fold_left (acc_data ge2) lb (lm0,sz0,e ) = (lm0 ++ lm, sz0 + init_data_size d, []) /\ Mem.storebytes m1 b ofs lm = Some m1'.
+Proof.
+  intros.
+  destruct d;destruct opte;simpl in H0;try congruence;unfold e.
+  - simpl in *. inv H0.
+    generalize  (encode_int_length 1 (Int.unsigned i)).
+    intros VALLEN.
+    set (v:= (encode_int 1 (Int.unsigned i))) in *.
+    destruct v eqn:ENC;simpl in VALLEN;try congruence.
+    destruct l eqn:ENC';simpl in VALLEN;try congruence.
+    simpl. eexists.  split;eauto.
+    assert ([Byte i0] = encode_val Mint8unsigned (Vint i)).
+    simpl. fold v. rewrite ENC. simpl. auto.
+    rewrite H0. apply Mem.store_storebytes. auto.
+  - simpl in *. inv H0.
+    generalize  (encode_int_length 2 (Int.unsigned i)).
+    intros VALLEN.
+    set (v:= (encode_int 2 (Int.unsigned i))) in *.
+    destruct v as [| b0 ?] eqn:ENC;simpl in VALLEN;try congruence.
+    destruct l as [| b1 ?] eqn:ENC';simpl in VALLEN;try congruence.
+    destruct l0 as [| b2 ?] eqn:ENC'';simpl in VALLEN;try congruence.
+    simpl. eexists.
+    rewrite <- app_assoc. simpl. rewrite <- Z.add_assoc.
+    simpl. split;eauto.
+    assert ([Byte b0;Byte b1] = encode_val Mint16unsigned (Vint i)).
+    simpl. fold v. rewrite ENC. simpl. auto.
+    rewrite H0. apply Mem.store_storebytes. auto.
+  - simpl in *. inv H0.
+    generalize  (encode_int_length 4 (Int.unsigned i)).
+    intros VALLEN.
+    set (v:= (encode_int 4 (Int.unsigned i))) in *.
+    destruct v as [| b0 ?] eqn:ENC0;simpl in VALLEN;try congruence.
+    do 4 (destruct l as [| ?b ?] ;simpl in VALLEN;try congruence).
+    simpl. eexists.
+    repeat rewrite <- app_assoc. repeat rewrite <- Z.add_assoc.
+    simpl. split;eauto.
+    assert ([Byte b0; Byte b1; Byte b2; Byte b3] = encode_val Mint32 (Vint i)).
+    simpl. fold v. rewrite ENC0. simpl. auto.
+    rewrite H0. apply Mem.store_storebytes. auto.
+  - simpl in *. inv H0.
+    generalize  (encode_int_length 8(Int64.unsigned i)).
+    intros VALLEN.
+    set (v:= (encode_int 8 (Int64.unsigned i))) in *.
+    destruct v as [| b0 ?] eqn:ENC0;simpl in VALLEN;try congruence.
+    do 8 (destruct l as [| ?b ?] ;simpl in VALLEN;try congruence).
+    simpl. eexists.
+    repeat rewrite <- app_assoc. repeat rewrite <- Z.add_assoc.
+    simpl. split;eauto.
+    assert ([Byte b0; Byte b1; Byte b2; Byte b3; Byte b4; 
+    Byte b5; Byte b6; Byte b7] = encode_val Mint64 (Vlong i)).
+    simpl. fold v. rewrite ENC0. simpl. auto.
+    rewrite H0. apply Mem.store_storebytes. auto.
+  - simpl in *. inv H0.
+    generalize  (encode_int_length 4 (Int.unsigned (Float32.to_bits f))).
+    intros VALLEN.
+    set (v:= (encode_int 4 (Int.unsigned (Float32.to_bits f)))) in *.
+    destruct v as [| b0 ?] eqn:ENC0;simpl in VALLEN;try congruence.
+    do 4 (destruct l as [| ?b ?] ;simpl in VALLEN;try congruence).
+    simpl. eexists.
+    repeat rewrite <- app_assoc. repeat rewrite <- Z.add_assoc.
+    simpl. split;eauto.
+    assert ([Byte b0; Byte b1; Byte b2; Byte b3] = encode_val Mfloat32 (Vsingle f)).
+    simpl. fold v. rewrite ENC0. simpl. auto.
+    rewrite H0. apply Mem.store_storebytes. auto.
+  - simpl in *. inv H0.
+    generalize  (encode_int_length 8 (Int64.unsigned (Float.to_bits f))).
+    intros VALLEN.
+    set (v:= (encode_int 8 (Int64.unsigned (Float.to_bits f)))) in *.
+    destruct v as [| b0 ?] eqn:ENC0;simpl in VALLEN;try congruence.
+    do 8 (destruct l as [| ?b ?] ;simpl in VALLEN;try congruence).
+    simpl. eexists.
+    repeat rewrite <- app_assoc. repeat rewrite <- Z.add_assoc.
+    simpl. split;eauto.
+    assert ([Byte b0; Byte b1; Byte b2; Byte b3; Byte b4; 
+    Byte b5; Byte b6; Byte b7] = encode_val Mfloat64 (Vfloat f)).
+    simpl. fold v. rewrite ENC0. simpl. auto.
+    rewrite H0. apply Mem.store_storebytes. auto.
+  - simpl in *. inv H0.
+    destr_in H2. apply Z.leb_gt in Heqb0.
+    destruct z;try lia.
+
+    erewrite Z.max_l in *;try lia. inv H2.
+    (* unfold Pos.to_nat.  *)
+    (* Pos.iter_op_succ *)
+      
+    
+    (* encode_val encode_int Int.zero *)
+    (* Z.iter *)
+    (* Pos.iter *)
+    (* store_zeros_equation *)
+    (* Require Import Recdef. *)
+    (* generalize (Z.max_spec 0 z). intros [(? & ?) | (? & ?)]. *)
+    (* rewrite Z.max_comm in H1. *)
+    (* rewrite H1 in *. clear e H1. *)
+    
+    (* functional induction (store_zeros m1 b ofs z). *)
+    (* lia.  *)
+    (* apply zle_true in _x. *)
+    (* store_zeros_ind *)
+    (*               Vzero *)
+    (* Mem.store_ *)
+    (* inv H0. *)
+    admit.
+  - destr_in H0. simpl in *.
+    destr_in H0.
+    + inv H0.      
+      generalize  (encode_int_length 8 (Ptrofs.unsigned i0)).
+      intros VALLEN.
+      set (v:= (encode_int 8 (Ptrofs.unsigned i0))) in *.
+      destruct v as [| b0 ?] eqn:ENC0;simpl in VALLEN;try congruence.
+      do 8 (destruct l as [| ?b ?] ;simpl in VALLEN;try congruence).
+      admit.
+      (* repeat rewrite <- app_assoc. repeat rewrite <- Z.add_assoc. *)
+      (* simpl. split;eauto. *)
+Admitted.
+
+      
+Lemma storebytes_append: forall m1 m2 m3 b start l1 l2,
+    Mem.storebytes m1 b start l1 = Some m2 ->
+    Mem.storebytes m2 b (start +  Z.of_nat (length l1)) l2 = Some m3 ->
+    Mem.storebytes m1 b start (l1 ++ l2) = Some m3.
+Admitted.
+
+
+
+Lemma transl_init_data_list_pres_mem: forall n data reloctbl sz l b m1 m2 ge1 ge2
+                                   (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+    length data = n ->
+    fold_left acc_init_data data (OK ([], 0, reloctbl)) = OK (l, sz, []) ->
+    (* transl_init_data_list r data = OK l -> *)
     RelocProgSemantics.store_init_data_list ge1 m1 b 0 data = Some m2 ->
-    store_init_data_bytes ge2 r m1 b 0 l = Some m2.
+    exists bl, fold_left (acc_data ge2) l ([], 0, reloctbl) = (bl, sz, []) /\ init_data_list_size data = Z.of_nat (length bl) /\  Mem.storebytes m1 b 0 bl = Some m2.
+          (* store_init_data_bytes ge2 r m1 b 0 l = Some m2. *)
+Proof.
+  induction n;intros.
+  admit.
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a1 & A1 & B1). subst.
+  clear H.
+  rewrite fold_left_app in H0.
+  simpl in H0. unfold acc_init_data in H0 at 1.
+  monadInv H0.
+  exploit store_init_data_list_app;eauto.
+  intros (m1' & P1 & P2).
+  destruct ProdR.
+  - monadInv EQ0.
+    
+    exploit IHn;eauto.
+    intros (bl & Q1 & Q2 & Q3).
+    rewrite fold_left_app. 
+    rewrite Q1. simpl in P2.
+    destr_in P2. inv P2.
+    exploit transl_init_data_pres_mem;eauto. simpl.
+    intros (lm & ? & ?). erewrite H.
+    eexists. split;eauto.
+    split. erewrite LocalLib.init_data_list_size_app.
+    rewrite app_length. admit.  (* add size to transl_init_data_pres_mem *)
+    eapply storebytes_append;eauto.
+    rewrite Z.add_0_l.
+    rewrite <- Q2. auto.
+  - destr_in EQ0.
+    + monadInv EQ0.
+      
+    destruct a1.
+    + simpl in *. inv EQ1.
+      generalize  (encode_int_length 1 (Int.unsigned i)).
+      intros VALLEN.
+      set (v:= (encode_int 1 (Int.unsigned i))) in *.
+      destruct v eqn:ENC;simpl in VALLEN;try congruence.
+      destruct l eqn:ENC';simpl in VALLEN;try congruence.
+      
+      simpl. eexists.  split;eauto.
+      split. rewrite LocalLib.init_data_list_size_app.
+      rewrite app_length. 
+      assert (init_data_list_size [Init_int8 i] = 1).
+      simpl. auto.
+      simpl. lia.
+      
+      eapply storebytes_append;eauto.
+      rewrite Z.add_0_l.
+      assert ([Byte i0] = encode_val Mint8unsigned (Vint i)).
+      simpl. fold v. rewrite ENC. simpl. auto.
+      rewrite H. rewrite <- Q2.
+      
+      eapply Mem.store_storebytes. auto.
+    + 
+
+      
+  unfold transl_init_data_list.
+  unfold store_init_data_bytes.
+  Mem.setN_concat
+  Mem.storebytes
+  store_init_data
+  Mem.store
+    Globalenvs.Genv.store_init_data
+  Mem.storebytes_store
 Admitted.
 
 

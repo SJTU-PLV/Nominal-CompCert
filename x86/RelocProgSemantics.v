@@ -780,7 +780,8 @@ Definition store_init_data (m: mem) (b: block) (p: Z) (id: init_data) : option m
   | Init_float32 n => Mem.store Mfloat32 m b p (Vsingle n)
   | Init_float64 n => Mem.store Mfloat64 m b p (Vfloat n)
   | Init_addrof gloc ofs => Mem.store Mptr m b p (Genv.symbol_address ge gloc ofs)
-  | Init_space n => Some m
+  (* store zero to common data, which simplify the relocbingenproof, but make symbtablegenproof harder *)
+  | Init_space n => store_zeros m b p (Z.max n 0)
   end.
 
 Fixpoint store_init_data_list (m: mem) (b: block) (p: Z) (idl: list init_data)
@@ -1024,7 +1025,8 @@ Lemma store_init_data_nextblock : forall v ge m b ofs m',
   Mem.nextblock m' = Mem.nextblock m.
 Proof.
   intros. destruct v; simpl in *; try now (eapply Mem.nextblock_store; eauto).
-  inv H. auto.
+  eapply Genv.store_zeros_nextblock.
+  eauto.
 Qed.
     
 Lemma store_init_data_list_nextblock : forall l ge m b ofs m',
@@ -1042,7 +1044,8 @@ Lemma store_init_data_stack : forall v ge (m m' : mem) (b : block) (ofs : Z),
        store_init_data ge m b ofs v = Some  m' -> Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
 Proof.
   intros v ge0 m m' b ofs H. destruct v; simpl in *;try (f_equal;now eapply Mem.support_store; eauto).
-  inv H. auto.
+  eapply Genv.store_zeros_stack.
+  eauto.
 Qed.
 
 Lemma store_init_data_list_stack : forall l ge (m m' : mem) (b : block) (ofs : Z),
@@ -1190,8 +1193,9 @@ Proof.
           Mem.store chunk m b p v = Some m' ->
           (Mem.perm m b' q k prm <-> Mem.perm m' b' q k prm)).
     intros; split; eauto with mem.
-  destruct i; simpl in H; eauto. 
-  inv H; tauto.
+    destruct i; simpl in H; eauto.
+  eapply Genv.store_zeros_perm.
+  eauto.
 Qed.
 
 Remark store_init_data_list_perm:
@@ -1225,7 +1229,8 @@ Proof.
     rewrite  <- H2. auto.
     exists m'; auto. }
   destruct i; eauto.
-  simpl. exists m; auto.
+  simpl. eapply Genv.store_zeros_exists.
+  simpl in H. auto.
 Qed.
 
 (* SACC

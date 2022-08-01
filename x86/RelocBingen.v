@@ -75,27 +75,30 @@ End INSTR_SIZE.
 
 (** ** Encoding of data *)
 
+(* Retain the information for decoding: only provide relocentry for Init_addrof  *)
 Definition transl_init_data (e: option relocentry) (d:init_data) : res (list byte) :=
-  match d with
-  | Init_int8 i => OK [Byte.repr (Int.unsigned i)]
-  | Init_int16 i => OK (encode_int 2 (Int.unsigned i))
-  | Init_int32 i => OK (encode_int 4 (Int.unsigned i))
-  | Init_int64 i => OK (encode_int 8 (Int64.unsigned i))
-  | Init_float32 f => OK (encode_int 4 (Int.unsigned (Float32.to_bits f)))
-  | Init_float64 f => OK (encode_int 8 (Int64.unsigned (Float.to_bits f)))
-  | Init_space n => OK (zero_bytes (Z.to_nat n))
-  | Init_addrof id ofs => 
+  match d,e with
+  | Init_int8 i, None => OK (encode_int 1 (Int.unsigned i))
+  | Init_int16 i, None => OK (encode_int 2 (Int.unsigned i))
+  | Init_int32 i, None => OK (encode_int 4 (Int.unsigned i))
+  | Init_int64 i, None => OK (encode_int 8 (Int64.unsigned i))
+  | Init_float32 f, None => OK (encode_int 4 (Int.unsigned (Float32.to_bits f)))
+  | Init_float64 f, None => OK (encode_int 8 (Int64.unsigned (Float.to_bits f)))
+  | Init_space n, None =>
+    if n <=? 0 then
+      Error (msg "Init_space size is less than equal zero")
+    else
+      OK (concat (list_repeat (Z.to_nat n) (encode_int 1 (Int.unsigned Int.zero))))
+  | Init_addrof id ofs, Some e => 
     (* do addend <- get_reloc_addend rtbl_ofs_map dofs; *)
-    match e with
-    | Some e =>
-      if (Pos.eqb (reloc_symb e) id) && (Z.eqb (reloc_addend e) (Ptrofs.unsigned ofs)) then
-        if Archi.ptr64 then     
-          OK (encode_int64 (Ptrofs.unsigned ofs)) 
-        else
-          OK (encode_int32 (Ptrofs.unsigned ofs))
-      else Error (msg "Init_addrof is inconsistent with relocentry")
-    | None => Error (msg "No relocentry in Init_addrof")
-    end
+
+    if (Pos.eqb (reloc_symb e) id) && (Z.eqb (reloc_addend e) (Ptrofs.unsigned ofs)) then
+      if Archi.ptr64 then     
+        OK (encode_int 8 (Ptrofs.unsigned ofs)) 
+      else
+        OK (encode_int 4 (Ptrofs.unsigned ofs))
+    else Error (msg "Init_addrof is inconsistent with relocentry")
+  | _,_ => Error (msg "mismatching for init_data and relocentry")
   end.
 
 Definition acc_init_data r d := 
@@ -105,21 +108,15 @@ Definition acc_init_data r d :=
   | [] =>
     let ofs' := ofs + init_data_size d in
     do dbytes <- transl_init_data None d;
-    if (Z.of_nat (Datatypes.length dbytes)) =? init_data_size d then
-      OK (rbytes ++ dbytes, ofs', [])
-    else Error (msg "Inconsistent data size in data encoding")
+    OK (rbytes ++ dbytes, ofs', [])
   | e :: tl =>
     let ofs' := ofs + init_data_size d in
     if (ofs <=? e.(reloc_offset)) && (e.(reloc_offset) <? ofs') then
       do dbytes <- transl_init_data (Some e) d;
-      if (Z.of_nat (Datatypes.length dbytes)) =? init_data_size d then
-        OK (rbytes ++ dbytes, ofs', tl)
-      else Error (msg "Inconsistent data size in data encoding")
+      OK (rbytes ++ dbytes, ofs', tl)
     else
       do dbytes <- transl_init_data None d;
-      if (Z.of_nat (Datatypes.length dbytes)) =? init_data_size d then
-        OK (rbytes ++ dbytes, ofs', reloctbl)
-      else Error (msg "Inconsistent data size in data encoding")
+      OK (rbytes ++ dbytes, ofs', reloctbl)
   end.
 
 Definition transl_init_data_list (reloctbl: reloctable) (l: list init_data) : res (list byte) :=
