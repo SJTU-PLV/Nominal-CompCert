@@ -111,7 +111,7 @@ Definition acc_init_data r d :=
     OK (rbytes ++ dbytes, ofs', [])
   | e :: tl =>
     let ofs' := ofs + init_data_size d in
-    if (ofs <=? e.(reloc_offset)) && (e.(reloc_offset) <? ofs') then
+    if ofs =? e.(reloc_offset) then
       do dbytes <- transl_init_data (Some e) d;
       OK (rbytes ++ dbytes, ofs', tl)
     else

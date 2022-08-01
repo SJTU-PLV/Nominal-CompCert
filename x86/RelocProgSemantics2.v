@@ -38,7 +38,14 @@ Definition acc_data r b : list memval * Z * reloctable :=
     if ((reloc_offset e) <=? ofs) && (ofs <? (reloc_offset e) + n) then
       let v := Genv.symbol_address ge (reloc_symb e) (Ptrofs.repr (reloc_addend e)) in
       let m := n - 1 - (ofs - (reloc_offset e)) in
-      (lmv ++ [Fragment v q (Z.to_nat m)], ofs + 1, tl)
+      let mv := match v with
+                | Vptr _ _ => [Fragment v q (Z.to_nat m)]
+                | _ => [Undef]
+                end in
+      if m =? 0 then
+        (lmv ++ mv, ofs + 1, tl)
+      else
+        (lmv ++ mv, ofs + 1, reloctbl)
     else
       (lmv ++ [Byte b], ofs + 1, reloctbl)
   end.

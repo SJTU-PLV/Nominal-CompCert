@@ -612,7 +612,7 @@ Proof.
       (* simpl. split;eauto. *)
 Admitted.
 
-      
+(* can be proved ?  *)
 Lemma storebytes_append: forall m1 m2 m3 b start l1 l2,
     Mem.storebytes m1 b start l1 = Some m2 ->
     Mem.storebytes m2 b (start +  Z.of_nat (length l1)) l2 = Some m3 ->
@@ -621,13 +621,13 @@ Admitted.
 
 
 
-Lemma transl_init_data_list_pres_mem: forall n data reloctbl sz l b m1 m2 ge1 ge2
+Lemma transl_init_data_list_pres_mem: forall n data reloctbl reloctbl' sz l b m1 m2 ge1 ge2
                                    (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
     length data = n ->
-    fold_left acc_init_data data (OK ([], 0, reloctbl)) = OK (l, sz, []) ->
+    fold_left acc_init_data data (OK ([], 0, reloctbl)) = OK (l, sz, reloctbl') ->
     (* transl_init_data_list r data = OK l -> *)
     RelocProgSemantics.store_init_data_list ge1 m1 b 0 data = Some m2 ->
-    exists bl, fold_left (acc_data ge2) l ([], 0, reloctbl) = (bl, sz, []) /\ init_data_list_size data = Z.of_nat (length bl) /\  Mem.storebytes m1 b 0 bl = Some m2.
+    exists bl, fold_left (acc_data ge2) l ([], 0, reloctbl) = (bl, sz, reloctbl') /\ init_data_list_size data = Z.of_nat (length bl) /\  Mem.storebytes m1 b 0 bl = Some m2.
           (* store_init_data_bytes ge2 r m1 b 0 l = Some m2. *)
 Proof.
   induction n;intros.
@@ -658,41 +658,116 @@ Proof.
     rewrite <- Q2. auto.
   - destr_in EQ0.
     + monadInv EQ0.
-      
-    destruct a1.
-    + simpl in *. inv EQ1.
-      generalize  (encode_int_length 1 (Int.unsigned i)).
-      intros VALLEN.
-      set (v:= (encode_int 1 (Int.unsigned i))) in *.
-      destruct v eqn:ENC;simpl in VALLEN;try congruence.
-      destruct l eqn:ENC';simpl in VALLEN;try congruence.
-      
-      simpl. eexists.  split;eauto.
-      split. rewrite LocalLib.init_data_list_size_app.
-      rewrite app_length. 
-      assert (init_data_list_size [Init_int8 i] = 1).
-      simpl. auto.
-      simpl. lia.
-      
-      eapply storebytes_append;eauto.
-      rewrite Z.add_0_l.
-      assert ([Byte i0] = encode_val Mint8unsigned (Vint i)).
-      simpl. fold v. rewrite ENC. simpl. auto.
-      rewrite H. rewrite <- Q2.
-      
-      eapply Mem.store_storebytes. auto.
-    + 
+      exploit IHn;eauto.
+      intros (bl & Q1 & Q2 & Q3).
+      rewrite fold_left_app. rewrite Q1.
+      destruct a1;simpl in EQ1;try congruence.
+      destr_in EQ1. 
+      apply Z.eqb_eq in Heqb0. subst.
+      cbn [init_data_size] in *.
+      apply andb_true_iff in Heqb1.
+      destruct Heqb1 as (SYMB & ADDEND).
+      rewrite Z.add_0_l in P2.
+      simpl in P2. destr_in P2. inv P2.
+      apply Pos.eqb_eq in SYMB.
+      apply Z.eqb_eq in ADDEND.
+      rewrite <- (Ptrofs.repr_unsigned i0)in Heqo. subst.
+      rewrite <- ADDEND in Heqo.
+      erewrite MATCHGE in Heqo.
+      eapply Mem.store_storebytes in Heqo. unfold Mptr in *.
 
-      
-  unfold transl_init_data_list.
-  unfold store_init_data_bytes.
-  Mem.setN_concat
-  Mem.storebytes
-  store_init_data
-  Mem.store
-    Globalenvs.Genv.store_init_data
-  Mem.storebytes_store
-Admitted.
+      destr_in EQ1.
+      * monadInv EQ1.
+       
+        generalize  (encode_int_length 8 (Ptrofs.unsigned i0)).
+        intros VALLEN.
+        set (v:= (encode_int 8 (Ptrofs.unsigned i0))) in *.
+        destruct v as [| b0 ?] eqn:ENC0;simpl in VALLEN;try congruence.
+        do 8 (destruct l as [| ?b ?] ;simpl in VALLEN;try congruence).
+        simpl. rewrite Heqb0.
+
+        (* 7 *)
+        assert ((reloc_offset r <=? reloc_offset r) &&
+                (reloc_offset r <? reloc_offset r + 8) = true) by admit.
+        rewrite H. clear H.
+        rewrite Z.sub_diag. simpl.
+        (* 6 *)
+        rewrite Heqb0. 
+        assert ((reloc_offset r <=? reloc_offset r + 1) &&
+                (reloc_offset r + 1 <? reloc_offset r + 8) = true) by admit.
+        rewrite H. clear H.
+        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
+        (* 5 *)
+        rewrite Heqb0.
+        assert ((reloc_offset r <=? reloc_offset r + 1 + 1) &&
+                (reloc_offset r + 1 + 1 <? reloc_offset r + 8) = true) by admit.
+        rewrite H. clear H.
+        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
+        (* 4 *)
+        rewrite Heqb0.
+        assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1) &&
+                (reloc_offset r + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit.
+        rewrite H. clear H.
+        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
+        (* 3 *)
+        rewrite Heqb0.
+        assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1) &&
+                (reloc_offset r + 1 + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit.
+        rewrite H. clear H.
+        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
+        (* 2 *)
+        rewrite Heqb0.
+        assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1) &&
+                (reloc_offset r + 1 + 1 + 1 + 1 + 1 <? reloc_offset r + 8)= true) by admit.
+        rewrite H. clear H.
+        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
+        (* 1 *)
+        rewrite Heqb0.
+        assert ( (reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1) &&
+                 (reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit.
+        rewrite H. clear H.
+        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
+        (* 0 *)
+        rewrite Heqb0.
+        assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 + 1) &&
+      (reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 + 1 <?
+       reloc_offset r + 8) = true) by admit.
+        rewrite H. clear H.
+        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
+        eexists. split. do 2 f_equal.
+        lia.
+
+        unfold Genv.symbol_address in *.
+        destr_in Heqo.
+
+        ++ destruct p.
+           split. repeat rewrite app_length. cbn [length].
+           rewrite LocalLib.init_data_list_size_app. simpl.
+           rewrite Heqb0. lia.
+           simpl. 
+                      
+           repeat rewrite <- app_assoc.
+           eapply storebytes_append;eauto.
+           rewrite Z.add_0_l. rewrite <- Q2.
+
+           rewrite <- Heqo. f_equal.
+        ++ split. repeat rewrite app_length. cbn [length].
+           rewrite LocalLib.init_data_list_size_app. simpl.
+           rewrite Heqb0. lia.
+           simpl. 
+                      
+           repeat rewrite <- app_assoc.
+           eapply storebytes_append;eauto.
+           rewrite Z.add_0_l. rewrite <- Q2.
+
+           rewrite <- Heqo. f_equal.
+
+      (* 32bit *)
+      *       admit.
+
+    (* without relocentry *)
+    + admit.
+      Admitted.
 
 
 
