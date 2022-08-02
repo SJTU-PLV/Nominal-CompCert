@@ -79,6 +79,9 @@ Require Asmgenproof.
 Require SSAsmproof.
 Require RealAsmproof.
 Require PseudoInstructionsproof.
+Require Symbtablegenproof.
+Require Reloctablesgenproof.
+Require RelocBingenproof.
 (** Command-line flags. *)
 Require Import Compopts.
 (** RealAsm passed. *)
@@ -672,22 +675,31 @@ Proof.
   apply forward_to_backward_simulation.
   eapply PseudoInstructionsproof.pseudo_instructions_correct; eauto.
   eapply instr_size_bound.
-  admit.
-  (* intros. destruct i; simpl; auto. *)
-  (* intros. red. intros. exploit (Globalenvs.Genv.find_funct_ptr_transf_partial MP3); eauto. *)
-(*   intros (tf & FFP & TF). *)
-(*   simpl in TF; monadInv  TF. unfold RealAsmgen.transf_function in EQ. destr_in EQ. *)
-(*   eapply RealAsm.wf_asm_function_check_correct; eauto. eapply instr_size_bound. *)
-(*   exploit match_prog_wf; eauto. *)
-(*   intros (A&B&C). red in A. red. intros. *)
-(*   red. intros. exploit AsmFacts.in_find_instr; eauto. *)
-(*   instantiate (1 := instr_size). *)
-(*   eapply instr_size_bound. *)
-(*   intros [ofs H2]. eapply A; eauto. *)
-(*   apply RealAsm.real_asm_receptive. *)
-(*   apply RealAsm.real_asm_determinate. *)
+
+  intros. destruct i;unfold PseudoInstructions.transf_instr;auto.
+  destr. destruct (PseudoInstructions.sp_adjustment_elf64 sg sz).
+  (* unable to resolve *)
+  assert (cc_vararg (sig_cc sg) = None) by admit. rewrite H.
+  auto.
+
+  destr. destruct PseudoInstructions.sp_adjustment_elf64. auto.
+  
+  intros. red. intros. exploit (Globalenvs.Genv.find_funct_ptr_transf_partial MP3); eauto.
+  intros (tf & FFP & TF).
+  simpl in TF; monadInv  TF. unfold RealAsmgen.transf_function in EQ. destr_in EQ.
+  eapply RealAsm.wf_asm_function_check_correct; eauto. eapply instr_size_bound.
+  exploit match_prog_wf; eauto.
+  intros (A&B&C). red in A. red. intros.
+  red. intros. exploit AsmFacts.in_find_instr; eauto.
+  instantiate (1 := instr_size).
+  eapply instr_size_bound.
+  intros [ofs H2]. eapply A; eauto.
+  apply RealAsm.real_asm_receptive.
+  apply RealAsm.real_asm_determinate.
 (* Qed. *)
 Admitted.
+
+
 (** * Correctness of the CompCert compiler *)
 
 (** Combining the results above, we obtain semantic preservation for two

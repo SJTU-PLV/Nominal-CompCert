@@ -495,7 +495,7 @@ Lemma transl_init_data_pres_mem: forall reloctbl d ge1 ge2 m1 m1' b ofs lm0 sz0 
     store_init_data ge1 m1 b ofs d = Some m1' ->
     transl_init_data None d = OK lb ->
     match reloctbl with
-    | h::_ => sz0 + (init_data_size d) < h.(reloc_offset)
+    | h::_ => sz0 + (init_data_size d) <= h.(reloc_offset)
     | _ => True
     end ->
     exists lm, fold_left (acc_data ge2) lb (lm0,sz0,reloctbl) = (lm0 ++ lm, sz0 + init_data_size d, reloctbl) /\ init_data_size d =  Z.of_nat (length lm) /\ Mem.storebytes m1 b ofs lm = Some m1'.
@@ -847,7 +847,7 @@ Proof.
       rewrite Q1.
       
       exploit (transl_init_data_pres_mem (r::ProdR));eauto.
-      eapply Z.ltb_lt. eauto.
+      eapply Z.leb_le. eauto.
       intros (lm & ? & INITLEN & ?). erewrite H.
       eexists. split;eauto.
       rewrite LocalLib.init_data_list_size_app. simpl.

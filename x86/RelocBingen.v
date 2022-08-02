@@ -114,7 +114,7 @@ Definition acc_init_data r d :=
     if ofs =? e.(reloc_offset) then
       do dbytes <- transl_init_data (Some e) d;
       OK (rbytes ++ dbytes, ofs', tl)
-    else if ofs + (init_data_size d) <? e.(reloc_offset) then
+    else if ofs + (init_data_size d) <=? e.(reloc_offset) then
       do dbytes <- transl_init_data None d;
       OK (rbytes ++ dbytes, ofs', reloctbl)
     else Error (msg "ofs greater than reloc_offset: skipping someone? ")
