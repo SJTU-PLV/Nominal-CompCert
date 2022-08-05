@@ -16,21 +16,25 @@ Import List.ListNotations.
 
 (** ** Sections *)
 
-Inductive section {I:Type} : Type :=
+Inductive section (I D:Type): Type :=
 | sec_text (code: list I)
-| sec_data (init: list init_data)
-(* | sec_rodata (init: list init_data) *)
-| sec_bytes (bs: list byte).
+| sec_rwdata (init: list D)
+| sec_rodata (init: list D).
+(* (* | sec_rodata (init: list init_data) *) *)
+(* | sec_bytes (bs: list byte). *)
 
+Arguments sec_text [I D].
+Arguments sec_rwdata [I D].
+Arguments sec_rodata [I D].
 
 (** Gnerate one section for each definition *)
 (** The section table is the map from ident to section *)
-Definition sectable {I: Type} := PTree.t (@section I).
+Definition sectable (I D: Type) := PTree.t (section I D).
 
 (** ** Symbol table *)
 
 (* Different from the elf file format, we use read-write and read-only two type to represent data . Because encoding elminates the section type infomation. *)
-Inductive symbtype : Type := symb_func | symb_rwdata | symb_rodata | symb_notype.
+Inductive symbtype : Type := symb_func | symb_data | symb_notype.
 
 Definition symbtype_eq_dec : forall (t1 t2: symbtype), {t1 = t2} + {t1 <> t2}.
 Proof.
@@ -87,15 +91,23 @@ Definition reloctable_map := PTree.t reloctable.
 
 (* Definition gdef := AST.globdef fundef unit. *)
 
-Record program {F V I: Type}: Type := {
+Record program (F V I D: Type): Type := {
   prog_defs : list (ident * AST.globdef F V); (** Only used in external function reasoning *)
   prog_public: list ident;
   prog_main: ident;
-  prog_sectable: @sectable I;
+  prog_sectable: sectable I D;
   prog_symbtable: symbtable;
   prog_reloctables: reloctable_map;
-  prog_senv : Globalenvs.Senv.t;
-}.
+  prog_senv : Globalenvs.Senv.t }.
+
+
+Arguments prog_defs [F V I D].
+Arguments prog_public [F V I D].
+Arguments prog_main [F V I D].
+Arguments prog_sectable [F V I D].
+Arguments prog_symbtable [F V I D].
+Arguments prog_reloctables [F V I D].
+Arguments prog_senv [F V I D].
 
 (** Generate the mapping from symbol ids to indexes *)
 Definition symb_index_map_type := PTree.t N.

@@ -427,16 +427,21 @@ Proof.
   simpl. intros.
   eapply IHdefs;eauto. intros.
   destruct a.
-  unfold acc_gen_section. unfold Genv.add_global in H1. simpl in H1.
+  unfold acc_gen_section. simpl in H1.
   generalize (NMap.gsspec). unfold NMap.get. intro.
   erewrite H2 in H1. destr_in H1.
   inv e. inv H1. eapply PTree.gss.
   apply MATCH in H1. destruct g;auto.
   destruct f1;auto. erewrite PTree.gso;auto.
   unfold not. intros;subst. congruence.
-  assert (id<>i0). unfold not. intros;subst. congruence.
-  destruct (gvar_init v);auto. destruct i1;try erewrite PTree.gso;auto.
-  destruct l;auto. destruct i0;try erewrite PTree.gso;auto.
+  assert (id<>i0). unfold not. intros;subst. congruence.    
+  destruct gvar_readonly.
+  - destr.    
+    destruct i1;try erewrite PTree.gso;auto.    
+    destruct l;auto. destruct i0;try erewrite PTree.gso;auto.
+  - destr.    
+    destruct i1;try erewrite PTree.gso;auto.    
+    destruct l;auto. destruct i0;try erewrite PTree.gso;auto.
 Qed.
 
 Lemma genv_pres_instr_aux1:  forall defs (b : block) (f : function) (ofs : Z) (i : instruction)
@@ -726,9 +731,6 @@ Proof.
   unfold P. simpl. auto.
 Qed.
 
-Definition gvar_readonly_symbtype {V: Type} (v: globvar V) :=
-  if v.(gvar_readonly) then symb_rodata else symb_rwdata.
-
 
 Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): Prop :=
 | match_text_int: forall f code,
@@ -736,11 +738,16 @@ Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): P
     (prog_sectable prog) ! id = Some (sec_text code) ->
     (fn_code f) = code ->
     match_sec_def id prog gd
-| match_data_var: forall v data e,
+| match_rodata_var: forall v data,
     gd = Gvar v ->
-    (prog_sectable prog) ! id = Some (sec_data data) ->
-    (prog_symbtable prog) ! id = Some e ->
-    e.(symbentry_type) = gvar_readonly_symbtype v ->
+    (prog_sectable prog) ! id = Some (sec_rodata data) ->
+    v.(gvar_readonly) = true  ->
+    v.(gvar_init) = data ->
+    match_sec_def id prog gd
+| match_rwdata_var: forall v data,
+    gd = Gvar v ->
+    (prog_sectable prog) ! id = Some (sec_rwdata data) ->
+    v.(gvar_readonly) = false  ->
     v.(gvar_init) = data ->
     match_sec_def id prog gd
 | match_ext_fun: forall f e,
@@ -754,7 +761,7 @@ Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): P
     gd = Gvar v ->
     (prog_symbtable prog) ! id = Some e ->
     (prog_sectable prog) ! id = None ->
-    e.(symbentry_type) = gvar_readonly_symbtype v ->
+    e.(symbentry_type) = symb_data ->
     e.(symbentry_secindex) = secindex_undef ->
     match_sec_def id prog gd
 | match_comm: forall v e sz,
@@ -762,7 +769,7 @@ Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): P
     (prog_symbtable prog) ! id = Some e ->
     (prog_sectable prog) ! id = None ->
     v.(gvar_init) = [Init_space sz] ->
-    e.(symbentry_type) = gvar_readonly_symbtype v ->
+    e.(symbentry_type) = symb_data ->
     e.(symbentry_secindex) = secindex_comm ->
     match_sec_def id prog gd.
 
@@ -829,12 +836,13 @@ Proof.
       simpl in OFSRANGE.
       apply OFSRANGE1 in H0. destruct H0. subst.
       eapply Mem.perm_cur. auto.
-    + rewrite H2 in *. rewrite H3 in *. simpl in INIT2.
-      unfold gvar_readonly_symbtype in H4.
-      destruct (gvar_readonly v).
-      * rewrite H4 in INIT2.
-        admit.
-      * admit.
+    + rewrite H2 in *.  simpl in INIT2.
+      destruct INIT2 as (PERM & OFSRANGE).
+      destruct INIT1 as (PERM1 & OFSRANGE1).
+      apply OFSRANGE1 in H0. destruct H0.
+       eapply Mem.perm_cur. auto.
+       admit.
+    + admit.
     + admit.
     + admit.
     + admit.
@@ -852,23 +860,25 @@ Proof.
     + rewrite H1 in *.
       destruct INIT1. apply H2 in H0.
       destruct H0. discriminate.
-    + rewrite H1 in *. rewrite H2 in *.
-      unfold gvar_readonly_symbtype in H3. destr_in H3;rewrite H3 in *.
-      * simpl in INIT2.
-        destruct INIT2 as (RPERM & OFSRANGE & LOADSTORE & BYTES).
-        Local Transparent Mem.loadbytes.
-        unfold Mem.loadbytes in BYTES.
-        destr_in BYTES.
-        destruct INIT1 as (RPERM1 & OFSRANGE1  & LOADSTORE1 & BYTES1).
-        apply OFSRANGE1 in H0. destruct H0.
-        assert (NO: gvar_volatile v = false).
-        { unfold Genv.perm_globvar in H0. destruct (gvar_volatile v); auto. inv H0. }
-        generalize (BYTES1 NO). unfold Mem.loadbytes. destruct Mem.range_perm_dec; intros E1; inv E1.
-        inv BYTES.
-        (* H5 and H6 *)
-        eapply Mem_getN_forall2 with (p := 0) (n := Z.to_nat (init_data_list_size (gvar_init v))).
-        rewrite H5,H6. apply bytes_of_init_inject. lia. lia.
-      * admit.
+    + rewrite H1 in *.
+      admit. (* rewrite H2 in *. *)
+      (* unfold gvar_readonly_symbtype in H3. destr_in H3;rewrite H3 in *. *)
+      (* * simpl in INIT2. *)
+      (*   destruct INIT2 as (RPERM & OFSRANGE & LOADSTORE & BYTES). *)
+      (*   Local Transparent Mem.loadbytes. *)
+      (*   unfold Mem.loadbytes in BYTES. *)
+      (*   destr_in BYTES. *)
+      (*   destruct INIT1 as (RPERM1 & OFSRANGE1  & LOADSTORE1 & BYTES1). *)
+      (*   apply OFSRANGE1 in H0. destruct H0. *)
+      (*   assert (NO: gvar_volatile v = false). *)
+      (*   { unfold Genv.perm_globvar in H0. destruct (gvar_volatile v); auto. inv H0. } *)
+      (*   generalize (BYTES1 NO). unfold Mem.loadbytes. destruct Mem.range_perm_dec; intros E1; inv E1. *)
+      (*   inv BYTES. *)
+      (*   (* H5 and H6 *) *)
+      (*   eapply Mem_getN_forall2 with (p := 0) (n := Z.to_nat (init_data_list_size (gvar_init v))). *)
+      (*   rewrite H5,H6. apply bytes_of_init_inject. lia. lia. *)
+    (* * admit. *)
+    + admit.
     + admit.
     + admit.
     + admit.
@@ -905,6 +915,7 @@ Proof.
       rewrite Z.le_lteq in H0. destruct H0.
       right. unfold not. intros. apply Q1 in H0. destruct H0. lia.
       left. subst. apply Mem.perm_cur. auto.
+    + admit.
     + admit.
     + admit.
     + admit.

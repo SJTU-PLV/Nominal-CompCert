@@ -458,8 +458,9 @@ Proof.
   unfold section in *.
   rewrite A in H.
   rewrite fold_left_app in H. simpl in H.
+  fold section in *.
   set (f:= (fun (a : res reloctable_map)
-           (p : positive * RelocProg.section) =>
+           (p : positive * section) =>
               acc_section instr_size symbtbl a (fst p) (snd p))) in *.
   (* preservaiton for Error *)
   assert (ERRPRS: forall l msg, fold_left f l (Error msg) = Error msg).

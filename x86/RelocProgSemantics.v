@@ -720,14 +720,14 @@ Definition gen_instr_map (c:code) :=
   let '(_, map) := fold_left acc_instr_map c (Ptrofs.zero, fun o => None) in
   map.
 
-Definition acc_code_map r (id:ident) (sec:section) :=
+Definition acc_code_map {D: Type} r (id:ident) (sec:RelocProg.section instruction D) :=
   match sec with
   | sec_text c =>
     NMap.set _ (Global id) (gen_instr_map c) r
   | _ => r
   end.
 
-Definition gen_code_map (sectbl: sectable) :=
+Definition gen_code_map {D: Type} (sectbl: RelocProg.sectable instruction D) :=
   PTree.fold acc_code_map sectbl (NMap.init _ (fun o => None)).
 
 Definition acc_extfuns (idg: ident * gdef) extfuns :=
@@ -758,7 +758,7 @@ Proof.
       unfold not. intros. inv H;congruence.
 Qed.
 
-Definition globalenv (p: program) : Genv.t :=
+Definition globalenv {D: Type} (p: RelocProg.program fundef unit instruction D) : Genv.t :=
   let symbmap := gen_symb_map (prog_symbtable p) in
   let imap := gen_code_map (prog_sectable p) in
   let extfuns := gen_extfuns p.(prog_defs) in
@@ -811,42 +811,29 @@ Definition alloc_external_comm_symbol (r: option mem) (id: ident) (e:symbentry):
     match symbentry_secindex e with
     | secindex_undef =>
       let (m1, b) := Mem.alloc_glob id m 0 1 in
-      Mem.drop_perm m1 b 0 1 Nonempty        
-    | secindex_comm => 
+      Mem.drop_perm m1 b 0 1 Nonempty
+    | secindex_comm =>
       None (**r Impossible *)
     | secindex_normal _ => Some m
     end
   | symb_data =>
     match symbentry_secindex e with
     | secindex_undef
-    | secindex_comm => 
+    | secindex_comm =>
       let sz := symbentry_size e in
       let (m1, b) := Mem.alloc_glob id m 0 sz in
       match store_zeros m1 b 0 sz with
       | None => None
       | Some m2 =>
-        match e.(symbentry_type) with
-            | symb_rodata =>
-              Mem.drop_perm m2 b 0 sz Readable
-            | symb_rwdata =>
-              Mem.drop_perm m2 b 0 sz Writable
-            | _ => None
-      end
+        Mem.drop_perm m2 b 0 sz Nonempty
       end        
     | secindex_normal _ => Some m
     end
   end
-  end.
+end.
 
 Definition alloc_external_symbols (m: mem) (t: symbtable) : option mem :=
   PTree.fold alloc_external_comm_symbol t (Some m).
-
-Definition get_symbol_type (symbtbl: symbtable) (id: ident) :=
-  match symbtbl!id with
-  | Some e =>
-    Some (e.(symbentry_type))
-  | _ => None
-  end.
 
 
 Definition alloc_section (symbtbl: symbtable) (r: option mem) (id: ident) (sec: section) : option mem :=
@@ -854,11 +841,8 @@ Definition alloc_section (symbtbl: symbtable) (r: option mem) (id: ident) (sec: 
   | None => None
   | Some m =>
     let sz := sec_size instr_size sec in
-    (**r Assume section ident corresponds to a symbol entry *)
-    match get_symbol_type symbtbl id with
-    | Some ty =>
-      match sec, ty with
-      | sec_data init, symb_rwdata =>
+    match sec with
+      | sec_rwdata init =>
         let '(m1, b) := Mem.alloc_glob id m 0 sz in
         match store_zeros m1 b 0 sz with
         | None => None
@@ -868,7 +852,7 @@ Definition alloc_section (symbtbl: symbtable) (r: option mem) (id: ident) (sec: 
           | Some m3 => Mem.drop_perm m3 b 0 sz Writable
           end       
         end
-      | sec_data init, symb_rodata =>
+      | sec_rodata init =>
         let '(m1, b) := Mem.alloc_glob id m 0 sz in
         match store_zeros m1 b 0 sz with
         | None => None
@@ -878,12 +862,9 @@ Definition alloc_section (symbtbl: symbtable) (r: option mem) (id: ident) (sec: 
           | Some m3 => Mem.drop_perm m3 b 0 sz Readable
           end
         end
-      | sec_text code, symb_func =>        
+      | sec_text code =>        
         let (m1, b) := Mem.alloc_glob id m 0 sz in
         Mem.drop_perm m1 b 0 sz Nonempty
-      | _, _ => None                 
-      end
-    | None => None
     end
   end.
 
@@ -958,24 +939,16 @@ Definition globals_initialized (ge: Genv.t) (prog: program) (m:mem):=
         Mem.perm m b 0 Cur Nonempty /\
         let sz := code_size instr_size code in
         (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ p = Nonempty)
-      | sec_data data =>
-        match prog.(prog_symbtable) ! id with
-        | Some e =>
-          let sz := (init_data_list_size data) in
-          match e.(symbentry_type) with
-          | symb_rodata =>
-            Mem.range_perm m b 0 sz Cur Readable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Readable p)
-            /\ load_store_init_data ge m b 0 data
-            /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
-          | symb_rwdata =>
-            Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
-            /\ load_store_init_data ge m b 0 data
-            /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
-          | _ => False
-           end
-        | _ => False
-        end
-      | _ => False
+      | sec_rodata data =>        
+        let sz := (init_data_list_size data) in
+        Mem.range_perm m b 0 sz Cur Readable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Readable p)
+        /\ load_store_init_data ge m b 0 data
+        /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+      | sec_rwdata data =>
+        let sz := (init_data_list_size data) in
+        Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
+        /\ load_store_init_data ge m b 0 data
+        /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
       end
     | None =>
       (* common symbol or external function *)
@@ -985,16 +958,10 @@ Definition globals_initialized (ge: Genv.t) (prog: program) (m:mem):=
         | symb_func,secindex_undef =>
           Mem.perm m b 0 Cur Nonempty /\
           (forall ofs k p, Mem.perm m b ofs k p -> ofs = 0 /\ p = Nonempty)
-        | symb_rodata,secindex_comm =>
+        | symb_data,secindex_comm =>
           let sz := e.(symbentry_size) in
           let data := Init_space sz :: nil in
-          Mem.range_perm m b 0 sz Cur Readable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Readable p)
-          /\ load_store_init_data ge m b 0 data
-          /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
-        | symb_rwdata,secindex_comm =>
-          let sz := e.(symbentry_size) in
-          let data := Init_space sz :: nil in
-          Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
+          Mem.range_perm m b 0 sz Cur Nonempty /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Nonempty p)
           /\ load_store_init_data ge m b 0 data
           /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
         | _,_ => False
@@ -1129,14 +1096,14 @@ Proof.
   exploit Mem.support_alloc_glob;eauto. intros.
   exploit Genv.store_zeros_stack;eauto. intros (?&?).
   rewrite H0. rewrite H2. rewrite H. auto.
-  exploit Mem.support_drop;eauto.
-  exploit Mem.support_alloc_glob;eauto. intros.
-  exploit Genv.store_zeros_stack;eauto. intros (?&?).
-  rewrite H0. rewrite H2. rewrite H. auto.
-  exploit Mem.support_drop;eauto.
-  exploit Mem.support_alloc_glob;eauto. intros.
-  exploit Genv.store_zeros_stack;eauto. intros (?&?).
-  rewrite H0. rewrite H2. rewrite H. auto.
+  (* exploit Mem.support_drop;eauto. *)
+  (* exploit Mem.support_alloc_glob;eauto. intros. *)
+  (* exploit Genv.store_zeros_stack;eauto. intros (?&?). *)
+  (* rewrite H0. rewrite H2. rewrite H. auto. *)
+  (* exploit Mem.support_drop;eauto. *)
+  (* exploit Mem.support_alloc_glob;eauto. intros. *)
+  (* exploit Genv.store_zeros_stack;eauto. intros (?&?). *)
+  (* rewrite H0. rewrite H2. rewrite H. auto. *)
 Qed.
 
 
@@ -1267,7 +1234,7 @@ Qed.
 
 End INITDATA.
 
-Inductive initial_state_gen (p: program) (rs: regset) m: state -> Prop :=
+Inductive initial_state_gen {D: Type} (p: RelocProg.program fundef unit instruction D) (rs: regset) m: state -> Prop :=
 | initial_state_gen_intro:
     forall m1 m2 stk
       (MALLOC: Mem.alloc m 0 (max_stacksize + align (size_chunk Mptr) 8) = (m1,stk))

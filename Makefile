@@ -121,7 +121,7 @@ BACKEND=\
   AsmPseudoInstr.v AsmPseudoInstrproof.v\
   Asmlabelgen.v Asmlabelgenproof.v\
   LocalLib.v Jumptablegen.v CheckDef.v Jumptablegenproof.v\
-  RelocProgram.v \
+  RelocProgram.v RelocProgramBytes.v\
   Symbtablegen.v Symbtablegenproof.v\
   Reloctablesgen.v Reloctablesgenproof.v\
   RelocBingen.v RelocBinDecode.v RelocBingenproof.v\

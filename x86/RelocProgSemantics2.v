@@ -10,7 +10,7 @@
     in the initialization of the data section *)
 Require Import Coqlib Maps AST lib.Integers Values.
 Require Import Events lib.Floats Memory Smallstep.
-Require Import Asm RelocProg RelocProgram Globalenvs.
+Require Import Asm RelocProg RelocProgramBytes Globalenvs.
 Require Import Stacklayout Conventions.
 Require Import Linking Errors.
 Require Import EncDecRet RelocBingen RelocBinDecode.
@@ -18,6 +18,11 @@ Require Import RelocProgSemantics RelocProgSemantics1.
 
 Import ListNotations.
 Local Open Scope error_monad_scope.
+
+(* intermediate program representation *)
+Definition program1:= RelocProg.program fundef unit instruction byte.
+Definition section1 := RelocProg.section instruction byte.
+Definition sectable1 := RelocProg.sectable instruction byte.
 
 Section WITH_INSTR_SIZE.
   Variable instr_size : instruction -> Z.
@@ -55,7 +60,7 @@ Definition store_init_data_bytes (reloctbl: reloctable) (m: mem) (b: block) (p: 
   let memvals := fst (fst (fold_left acc_data bytes ([],0,reloctbl))) in
   Mem.storebytes m b p memvals.
 
-Definition alloc_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) (r: option mem) (id: ident) (sec: section) : option mem :=
+Definition alloc_section (reloctbl_map: reloctable_map) (r: option mem) (id: ident) (sec: RelocProg.section instruction byte) : option mem :=
   let reloctbl := match reloctbl_map ! id with
                   | None => []
                   | Some r => r
@@ -64,50 +69,44 @@ Definition alloc_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) (r:
   match r with
   | None => None
   | Some m =>
-    (**r Assume section ident corresponds to a symbol entry *)
-    match get_symbol_type symbtbl id with
-    | Some ty =>
-      match sec, ty with
-      | sec_bytes bytes, symb_rwdata =>
-        let sz := Z.of_nat (Datatypes.length bytes) in
-        let '(m1, b) := Mem.alloc_glob id m 0 sz in
-        match store_zeros m1 b 0 sz with
+    match sec with
+    | sec_rwdata bytes =>
+      let sz := Z.of_nat (Datatypes.length bytes) in
+      let '(m1, b) := Mem.alloc_glob id m 0 sz in
+      match store_zeros m1 b 0 sz with
+      | None => None
+      | Some m2 =>
+        match store_init_data_bytes m2 b 0 bytes with
         | None => None
-        | Some m2 =>
-          match store_init_data_bytes m2 b 0 bytes with
-          | None => None
-          | Some m3 => Mem.drop_perm m3 b 0 sz Writable
-          end
+        | Some m3 => Mem.drop_perm m3 b 0 sz Writable
         end
-      | sec_bytes bytes, symb_rodata =>
-        let sz := Z.of_nat (Datatypes.length bytes) in
-        let '(m1, b) := Mem.alloc_glob id m 0 sz in
-        match store_zeros m1 b 0 sz with
-        | None => None
-        | Some m2 =>
-          match store_init_data_bytes m2 b 0 bytes with
-          | None => None
-          | Some m3 => Mem.drop_perm m3 b 0 sz Readable
-          end
-        end
-      | sec_text code , symb_func =>
-        let sz := code_size instr_size code in
-        let (m1, b) := Mem.alloc_glob id m 0 sz in
-        Mem.drop_perm m1 b 0 sz Nonempty
-      | _, _ => None
       end
-    | None => None
-    end
+    | sec_rodata bytes =>
+      let sz := Z.of_nat (Datatypes.length bytes) in
+      let '(m1, b) := Mem.alloc_glob id m 0 sz in
+      match store_zeros m1 b 0 sz with
+      | None => None
+      | Some m2 =>
+        match store_init_data_bytes m2 b 0 bytes with
+        | None => None
+        | Some m3 => Mem.drop_perm m3 b 0 sz Readable
+        end
+      end
+    | sec_text code =>
+      let sz := code_size instr_size code in
+      let (m1, b) := Mem.alloc_glob id m 0 sz in
+      Mem.drop_perm m1 b 0 sz Nonempty
+    end                  
   end.
 
 
-Definition alloc_sections (symbtbl: symbtable) (reloctbl_map: reloctable_map) (sectbl: sectable) (m:mem) :option mem :=
-  PTree.fold (alloc_section symbtbl reloctbl_map) sectbl (Some m).
+Definition alloc_sections (symbtbl: symbtable) (reloctbl_map: reloctable_map) (sectbl: RelocProg.sectable instruction byte) (m:mem) :option mem :=
+  PTree.fold (alloc_section reloctbl_map) sectbl (Some m).
 
 End WITHGE.
 
 
-Definition init_mem (p: program) :=
+Definition init_mem (p: RelocProg.program fundef unit instruction byte) :=
   let ge := RelocProgSemantics.globalenv instr_size p in
   match alloc_sections ge p.(prog_symbtable) p.(prog_reloctables) p.(prog_sectable) Mem.empty with
   | Some m1 =>
@@ -161,28 +160,27 @@ Definition decode_instrs' (reloctbl: reloctable) (bytes: list byte) :=
   do instrs2_reloctbl <- decode_instrs (length instrs1) instrs1 ([],reloctbl);
   OK (instrs2_reloctbl).
   
-Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) id (sec:section) :=
+Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) id (sec:section) : res (RelocProg.section instruction byte) :=
   (* do acc' <- acc; *)
   let reloctbl := match reloctbl_map ! id with
                   | None => []
                   | Some r => r
                   end in
-  match symbtbl ! id with
-  | Some e =>
-    match sec, (symbentry_type e) with
-    | sec_bytes bs, symb_func =>
-      do (instrs,_) <- decode_instrs' reloctbl bs;
-      OK (sec_text instrs)
-      (* OK (PTree.set id (sec_text instrs) acc') *)
-    | _,_ => (* OK (PTree.set id sec acc') *)
-      OK sec
-    end
-  | _ => Error (msg "Decode code section: no corresponding symbol entry")
+  match sec with
+  | sec_text bs =>
+    do (instrs,_) <- decode_instrs' reloctbl bs;
+    OK (sec_text instrs)
+  (* OK (PTree.set id (sec_text instrs) acc') *)
+  | sec_rodata bs =>
+    OK (sec_rodata bs)
+  | sec_rwdata bs =>
+    OK (sec_rwdata bs)       
   end.
 
 
-Definition decode_prog_code_section (p:program) : res program :=
-  do t <- PTree.fold (acc_PTree_fold (acc_decode_code_section p.(prog_symbtable) p.(prog_reloctables))) (prog_sectable p) (OK (PTree.empty section));
+
+Definition decode_prog_code_section (p:program) : res program1 :=
+  do t <- PTree.fold (acc_PTree_fold (acc_decode_code_section p.(prog_symbtable) p.(prog_reloctables))) (prog_sectable p) (OK (PTree.empty section1));
   OK {| prog_defs      := prog_defs p;
         prog_public    := prog_public p;
         prog_main      := prog_main p;
@@ -192,21 +190,23 @@ Definition decode_prog_code_section (p:program) : res program :=
         prog_senv        := prog_senv p;
      |}.
 
+Definition empty_program1 (prog: program): program1 :=
+  {| prog_defs := [];
+     prog_public := [];
+     prog_main := 1%positive;
+     prog_sectable := PTree.empty section1;
+     prog_symbtable := PTree.empty symbentry;
+     prog_reloctables := PTree.empty reloctable;
+     prog_senv := prog.(prog_senv) |}.
+                                     
+ 
 Definition globalenv (prog: program) :=
   match decode_prog_code_section prog with
   | OK prog' =>
     RelocProgSemantics.globalenv instr_size prog'
   (* prove this impossible *)
-  | _ => RelocProgSemantics.globalenv instr_size prog
+  | _ => RelocProgSemantics.globalenv instr_size (empty_program1 prog)
   end.
-
-Lemma globalenv_senv: forall prog,
-    Genv.genv_senv (globalenv prog) = prog_senv prog.
-  intros. unfold globalenv.
-  unfold decode_prog_code_section;destruct prog;simpl;auto.
-  destruct PTree.fold. simpl. auto.
-  simpl. auto.
-Qed.
 
 Inductive initial_state (prog: program) (rs: regset) (s: state): Prop :=
 | initial_state_intro: forall m prog',
@@ -219,7 +219,7 @@ Definition semantics (p: program) (rs: regset) :=
   Semantics_gen (RelocProgSemantics.step instr_size)
                 (initial_state p rs) RelocProgSemantics.final_state 
                 (globalenv p)
-                (RelocProgSemantics.Genv.genv_senv (RelocProgSemantics.globalenv instr_size p)).
+                (RelocProgSemantics.Genv.genv_senv (globalenv p)).
 
 (** Determinacy of the semantics. *)
 
@@ -241,11 +241,9 @@ Proof.
     + assert (vargs0 = vargs) by (eapply RelocProgSemantics.eval_builtin_args_determ; eauto).   
       subst vargs0.      
       exploit external_call_determ. eexact H5. eexact H11. intros [A B].
-      rewrite globalenv_senv in A.
       split. auto. intros. destruct B; auto. subst. auto.
     + assert (args0 = args) by (eapply Asm.extcall_arguments_determ; eauto). subst args0.
       exploit external_call_determ. eexact H3. eexact H7. intros [A B].
-      rewrite globalenv_senv in A.
       split. auto. intros. destruct B; auto. subst. auto.
   - red; intros; inv H; simpl.
     lia.
@@ -284,12 +282,10 @@ Proof.
     inv STEP.
     inv MT. eexists.
     + eapply RelocProgSemantics.exec_step_internal; eauto.
-    + rewrite globalenv_senv in *.
+    + 
       edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
       eexists. eapply RelocProgSemantics.exec_step_builtin; eauto.
-      rewrite globalenv_senv in *. eauto.
     + edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
-      rewrite globalenv_senv in *. eauto.
       eexists. eapply RelocProgSemantics.exec_step_external; eauto.
   - eapply reloc_prog_single_events; eauto.  
 Qed.

@@ -382,13 +382,12 @@ Definition transl_section (id:ident) (sec:section) :=
   | sec_text code =>
     do reltbl <- transl_code code;
     OK reltbl
-  | sec_data d =>
+  | sec_rwdata d =>
     do reltbl <- transl_init_data_list d;
     OK reltbl
-  (* | sec_rodata d => *)
-  (*   do reltbl <- transl_init_data_list d; *)
-  (*   OK reltbl *)
-  | _ => Error (msg "Section impossible to be bytes")
+  | sec_rodata d =>
+    do reltbl <- transl_init_data_list d;
+    OK reltbl
   end.
 
 Definition acc_section (reloc_map : res reloctable_map) (id:ident) (sec:section) :=
@@ -559,9 +558,8 @@ Local Open Scope string_scope.
 Definition print_section (s: section) :=
   match s with
   | sec_text _ => "text"
-  | sec_data _ => "data"
-  (* | sec_rodata _ => "rodata" *)
-  | sec_bytes _ => "bytes"
+  | sec_rwdata _ => "rwdata"
+  | sec_rodata _ => "rodata"
   end.
 
 Definition acc_print_section (acc: string) (sec : section) :=

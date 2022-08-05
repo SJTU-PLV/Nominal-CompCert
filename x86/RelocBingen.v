@@ -7,7 +7,7 @@
 
 Require Import Coqlib Maps Integers Floats Values AST Errors.
 Require Import Globalenvs.
-Require Import Asm RelocProg RelocProgram.
+Require Import Asm RelocProg RelocProgramBytes.
 Require Import encode.Hex encode.Bits Memdata encode.Encode.
 Require Import Reloctablesgen.
 Require Import SymbolString.
@@ -132,45 +132,36 @@ Section INSTR_SIZE.
   Variable instr_size : instruction -> Z.
 
 (** ** Translation of a program *)
-Definition transl_section (sec : section) (reloctbl: reloctable) (symbe:symbentry) : res section :=
-  match sec,(symbentry_type symbe) with
-  | sec_text code, symb_func =>
+Definition transl_section (sec : RelocProgram.section) (reloctbl: reloctable) : res section :=
+  match sec with
+  | sec_text code =>
     do codebytes <- transl_code instr_size reloctbl code;
-    OK (sec_bytes codebytes)
-  | sec_data dl, symb_rodata =>
+    OK (sec_text codebytes)
+  | sec_rwdata dl =>
     do databytes <- transl_init_data_list reloctbl dl;
-    OK (sec_bytes databytes)
-  | sec_data dl, symb_rwdata =>
+    OK (sec_rwdata databytes)
+  | sec_rodata dl =>
     do databytes <- transl_init_data_list reloctbl dl;
-    OK (sec_bytes databytes)
-  (* | sec_rodata rdl => *)
-  (*   do rodatabytes <- transl_init_data_list (gen_reloc_ofs_map reloctbl) rdl; *)
-  (*   OK (sec_bytes rodatabytes) *)
-  | _,_ => Error (msg "There are bytes before binary generation")
+    OK (sec_rodata databytes)
   end.
 
 
 
-Definition acc_fold_section (symbtbl: symbtable) (reloc_map : reloctable_map) (id: ident) (sec: section) :=
+Definition acc_fold_section (reloc_map : reloctable_map) (id: ident) (sec: RelocProgram.section) :=
   (* do sectbl <- res_sectbl; *)
   let reloc_tbl := 
       match reloc_map ! id with
       | Some t => t
       | None => []
       end in
-  match symbtbl ! id with
-  | Some e =>
-    do sec' <- transl_section sec reloc_tbl e;
-    OK sec'
-    (* OK (PTree.set id sec' sectbl) *)
-  | _ => Error (msg "no symbol entry for this section")
-  end.
+    do sec' <- transl_section sec reloc_tbl;
+    OK sec'.
         
-Definition transl_sectable (stbl: sectable) (relocmap: reloctable_map) (symbtbl: symbtable) :=
-  PTree.fold (acc_PTree_fold (acc_fold_section symbtbl relocmap)) stbl (OK (PTree.empty section)).
+Definition transl_sectable (stbl: RelocProgram.sectable) (relocmap: reloctable_map) (symbtbl: symbtable) :=
+  PTree.fold (acc_PTree_fold (acc_fold_section relocmap)) stbl (OK (PTree.empty section)).
 
 
-Definition transf_program (p:program) : res program := 
+Definition transf_program (p:RelocProgram.program) : res program := 
   do stbl <- transl_sectable (prog_sectable p) (prog_reloctables p) (prog_symbtable p);
   (* do szstrings <- fold_right *)
   (*                   (fun (id : ident) (acc : res Z) => *)

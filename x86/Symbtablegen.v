@@ -77,8 +77,7 @@ Definition get_symbentry (id:ident) (def: (AST.globdef Asm.fundef unit)) : symbe
       (** This is an external data symbol *)
       {|
         symbentry_bind := bindty;
-        symbentry_type := if gvar.(gvar_readonly) then symb_rodata
-                          else symb_rwdata;
+        symbentry_type := symb_data;
         symbentry_value := 0;
         symbentry_secindex := secindex_undef;
         symbentry_size := 0;
@@ -88,8 +87,7 @@ Definition get_symbentry (id:ident) (def: (AST.globdef Asm.fundef unit)) : symbe
       (** TODO: static uninitializd data is also put into this section*)
       {|
         symbentry_bind := bind_global;
-        symbentry_type := if gvar.(gvar_readonly) then symb_rodata
-                          else symb_rwdata;
+        symbentry_type := symb_data;
         symbentry_value := 8 ; (* 8 is a safe alignment for any data *)
         symbentry_secindex := secindex_comm;
         symbentry_size := Z.max sz 0;
@@ -100,7 +98,7 @@ Definition get_symbentry (id:ident) (def: (AST.globdef Asm.fundef unit)) : symbe
            (** This is an internal read-only data symbol *)           
            {|
              symbentry_bind := bindty;
-             symbentry_type := symb_rodata;
+             symbentry_type := symb_data;
              symbentry_value := 0; (* section for each def, so offset is zero *)
              symbentry_secindex := secindex_normal id;
              symbentry_size := AST.init_data_list_size (AST.gvar_init gvar);
@@ -109,7 +107,7 @@ Definition get_symbentry (id:ident) (def: (AST.globdef Asm.fundef unit)) : symbe
            (** This is an internal data symbol *)
            {|
              symbentry_bind := bindty;
-             symbentry_type := symb_rwdata;
+             symbentry_type := symb_data;
              symbentry_value := 0;
              symbentry_secindex := secindex_normal id;
              symbentry_size := AST.init_data_list_size (AST.gvar_init gvar);
@@ -277,10 +275,10 @@ Definition acc_gen_section (acc: sectable) (iddef: ident * (globdef fundef unit)
     | [] => acc
     | [Init_space _] => acc
     | _ =>
-      (* if gvar_readonly v then *)
-      (*   PTree.set id (sec_rodata (gvar_init v)) acc *)
-      (* else *)
-        PTree.set id (sec_data (gvar_init v)) acc
+      if gvar_readonly v then
+        PTree.set id (sec_rodata (gvar_init v)) acc
+      else
+        PTree.set id (sec_rwdata (gvar_init v)) acc
     end
   | _ => acc
   end.

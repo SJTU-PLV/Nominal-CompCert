@@ -5,7 +5,7 @@
 
 Require Import Coqlib Maps AST lib.Integers Values.
 Require Import Events lib.Floats Memory Smallstep.
-Require Import Asm RelocProg RelocProgram Globalenvs.
+Require Import Asm RelocProg RelocProgramBytes Globalenvs.
 Require Import Stacklayout Conventions.
 Require Import Linking Errors.
 Require Import EncDecRet RelocBingen RelocBinDecode.
@@ -67,7 +67,7 @@ Hypothesis translate_instr_size: forall i e l l',
 
 Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.
 
-Definition match_prog (p: program) (tp: program) :=
+Definition match_prog (p: RelocProgram.program) (tp: program) :=
   transf_program instr_size p = OK tp.
 
 
@@ -396,23 +396,21 @@ Proof.
 Qed.
 
 Lemma decode_prog_code_section_total_aux: forall id sec sec' symbtbl reloctbl,
-    acc_fold_section instr_size symbtbl reloctbl id sec = OK sec' ->
+    acc_fold_section instr_size reloctbl id sec = OK sec' ->
     exists sec1, acc_decode_code_section instr_size Instr_size symbtbl reloctbl id sec' = OK sec1.
 Proof.
   unfold acc_fold_section.
-  intros. destr_in H.
+  intros.
   monadInv H.
   unfold transl_section in EQ.
-  unfold acc_decode_code_section. rewrite Heqo.
+  unfold acc_decode_code_section.
   destr_in EQ.
-  - destr_in EQ. monadInv EQ.
+  - monadInv EQ.
     exploit decode_instrs_total;eauto. intros (c1 & reloctbl' & ? & ?).
     rewrite H. simpl. eexists;eauto.
-  - destr_in EQ. monadInv EQ.
+  - monadInv EQ.
     eexists;eauto.
-    destr_in EQ. monadInv EQ.
-    eexists;eauto.
-    monadInv EQ.
+  - monadInv EQ.
     eexists;eauto.
 Qed.
 
@@ -430,11 +428,12 @@ Proof.
        (acc_PTree_fold
           (acc_decode_code_section instr_size Instr_size
              (prog_symbtable p) (prog_reloctables p))) x
-       (OK (PTree.empty section)) = OK t).
+       (OK (PTree.empty section1)) = OK t).
   { rewrite PTree.fold_spec.
     unfold section in *.
     revert A.
     generalize (PTree.elements x) as resl.
+    unfold RelocProgram.section.
     generalize ((PTree.elements (prog_sectable p))).
     
     intros l.
@@ -446,7 +445,8 @@ Proof.
     clear l x H.
     induction x0;intros.
     - rewrite length_zero_iff_nil in H. subst.
-      inv A. simpl in *. eexists. eauto.
+      inv A.
+      simpl in *. eexists. eauto.
     - exploit LocalLib.length_S_inv;eauto.
       intros (l' & a1 & A1 & B1). subst.
       clear H.
@@ -861,40 +861,37 @@ Admitted.
 
 Lemma alloc_section_pres_mem: forall ge1 ge2 id sec sec1 sec2 m m0 reloctbl symbtbl
     (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
-    acc_fold_section instr_size symbtbl reloctbl id sec = OK sec1 ->
+    acc_fold_section instr_size reloctbl id sec = OK sec1 ->
     acc_decode_code_section instr_size Instr_size symbtbl reloctbl id sec1 = OK sec2 ->
     RelocProgSemantics.alloc_section instr_size ge1 symbtbl (Some m) id (RelocProgSemantics1.rev_section instr_size reloctbl id sec) = Some m0 ->
-    alloc_section instr_size ge2 symbtbl reloctbl (Some m) id sec2 = Some m0.
+    alloc_section instr_size ge2 reloctbl (Some m) id sec2 = Some m0.
 Proof.
   intros.
   destruct sec.
 
   (* code section *)
   - unfold acc_fold_section in H.
-    destr_in H. monadInv H.
-    simpl in EQ. destr_in EQ.
+    monadInv H.
+    simpl in EQ.
     monadInv EQ.
     unfold acc_decode_code_section in H0.
-    rewrite Heqo in H0. rewrite Heqs0 in H0.
     monadInv H0.
     unfold alloc_section.
-    unfold RelocProgSemantics.alloc_section in H1.
-    unfold  RelocProgSemantics.get_symbol_type in *.
-    rewrite Heqo in *. rewrite Heqs0 in *.
-    destr_in H1. simpl in H1.
+    simpl in H1.
     exploit translate_code_size;eauto.
-    intros. simpl in Heqs1.
-    destr_in Heqs1.
-    + inv Heqs1.
-      rewrite <- rev_transl_code_size in H1.
-      rewrite H in *. auto.
-    + inv Heqs1.
-      rewrite H in *. auto.
+    intros.
+    destruct (reloctbl ! id).
+    + simpl in *.
+      rewrite <-  rev_transl_code_size in *.
+      rewrite H in *.
+        auto.
+    + simpl in *. rewrite H in *. auto.
 
   (* data section *)
   - unfold acc_fold_section in H.
-    destr_in H. monadInv H.
-    simpl in EQ. destr_in EQ.
+    monadInv H.
+    simpl in EQ. monadInv EQ.
+    simpl in *.
     (* rwdata *)
     + monadInv EQ.
       unfold acc_decode_code_section in H0.
