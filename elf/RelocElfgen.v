@@ -311,8 +311,11 @@ Definition acc_strtbl (res_acc: res (list byte * PTree.t Z * Z)) (id: ident) : r
   | None => Error [MSG "Cannot find the string of the symbol "; CTX id]
   | Some n =>
     let bytes := map (fun p => Byte.repr (Zpos p)) n in
-    let strmap' := PTree.set id ofs strmap in
-    OK (acc' ++ bytes ++  [HB["00"]], strmap', ofs + Z.of_nat (length bytes) + 1)
+    (* check whether there is HB["00"] in bytes *)
+    if in_dec Byte.eq_dec HB["00"] bytes then            
+      let strmap' := PTree.set id ofs strmap in
+      OK (acc' ++ bytes ++  [HB["00"]], strmap', ofs + Z.of_nat (length bytes) + 1)
+    else Error (msg "Symbol string contains '\0'")
   end.
 
 (* content of strtbl, map from ident to index in the strtbl, the accumulate ofs *)
@@ -350,8 +353,9 @@ Definition ident_to_index (idl : list ident) (start: Z): PTree.t Z :=
 
 (* generate section header from text and data section, not include strtbl, symbtbl, reltbl*)
 (* also return the section accumulated size *)
-Definition acc_headers (symbtbl: symbtable) (shstrmap: PTree.t Z) (res_acc: res (list section_header * Z)) (id_sec: ident * RelocProgram.section) : res (list section_header * Z) :=
-  do (acc, ofs) <- res_acc;
+Definition acc_sections_headers (symbtbl: symbtable) (shstrmap: PTree.t Z) (res_acc: res (list section * list section_header * Z)) (id_sec: ident * RelocProgram.section) : res (list section * list section_header * Z) :=
+  do secs_hs_ofs <- res_acc;
+  let '(secs,hs,ofs) := secs_hs_ofs in
   let (id, sec0) := id_sec in
   match sec0 with
   | sec_bytes sec =>
@@ -366,16 +370,16 @@ Definition acc_headers (symbtbl: symbtable) (shstrmap: PTree.t Z) (res_acc: res 
           let h := gen_text_sec_header sec idx ofs in
           (* consistency checking *)
           if Z.eqb (Z.of_nat (length sec)) e.(symbentry_size) then
-            OK (acc++[h],ofs + e.(symbentry_size))
+            OK (secs ++ [sec], hs++[h],ofs + e.(symbentry_size))
           else
             Error [MSG "Inconsistency, section length not equal to symbentry field "; CTX id]
         | symb_rwdata =>
           let h := gen_data_sec_header sec idx ofs in
-          OK (acc++[h],ofs + e.(symbentry_size))
+          OK (secs++[sec], hs++[h],ofs + e.(symbentry_size))
         (* read-only infomation in symb table *)
         | symb_rodata =>
           let h := gen_rodata_sec_header sec idx ofs in
-          OK (acc++[h],ofs + e.(symbentry_size))
+          OK (secs++[sec],hs++[h],ofs + e.(symbentry_size))
         |  _ => Error [MSG "Impossible: no type for section "; CTX id]
         end
       end
@@ -384,23 +388,23 @@ Definition acc_headers (symbtbl: symbtable) (shstrmap: PTree.t Z) (res_acc: res 
   end.
 
 (* return section headers and the size of sections *)
-Definition gen_section_header (idl_sectbl: list (ident * RelocProgram.section)) (symbtbl: symbtable) (shstrmap: PTree.t Z) : res (list section_header * Z) :=
-  fold_left  (acc_headers symbtbl shstrmap) idl_sectbl (OK ([],0)).
+Definition gen_section_header (idl_sectbl: list (ident * RelocProgram.section)) (symbtbl: symbtable) (shstrmap: PTree.t Z) : res (list section* list section_header * Z) :=
+  fold_left  (acc_sections_headers symbtbl shstrmap) idl_sectbl (OK ([],[],0)).
 
 
-Definition transl_section (sec: RelocProgram.section) : res section :=
-  match sec with
-  | sec_bytes bs => OK bs
-  | _ => Error (msg "Section has not been encoded into bytes")
-  end.
+(* Definition transl_section (sec: RelocProgram.section) : res section := *)
+(*   match sec with *)
+(*   | sec_bytes bs => OK bs *)
+(*   | _ => Error (msg "Section has not been encoded into bytes") *)
+(*   end. *)
 
-Definition acc_sections sec r :=
-  do r' <- r;
-  do sec' <- transl_section sec;
-  OK (sec' :: r').
+(* Definition acc_sections sec r := *)
+(*   do r' <- r; *)
+(*   do sec' <- transl_section sec; *)
+(*   OK (sec' :: r'). *)
 
-Definition gen_sections (t:list (RelocProgram.section)) : res (list section) :=
-  fold_right acc_sections (OK []) t.
+(* Definition gen_sections (t:list (RelocProgram.section)) : res (list section) := *)
+(*   fold_right acc_sections (OK []) t. *)
 
 Definition shstrtab_str := SB[".shstrtab"] ++ [HB["00"]].
 Definition strtab_str := SB[".strtab"] ++ [HB["00"]].
@@ -418,10 +422,8 @@ Definition gen_text_data_sections_and_shstrtbl (p: RelocProgram.program) (st:elf
   do shstrtbl_res <- gen_strtbl secidl;
   let '(shstrtbl0, shstrmap, shstrtbl_size0) := shstrtbl_res in
   (* generate section header *)
-  do res_headers_ofs <- gen_section_header idl_sectbl p.(prog_symbtable) shstrmap;
-  let (headers0, ofs0) := res_headers_ofs in
-  (* generate section bytes which only contains func and data *)
-  do sectbl0 <- gen_sections sectbl;
+  do res_sections_headers_ofs <- gen_section_header idl_sectbl p.(prog_symbtable) shstrmap;
+  let '(sectbl0, headers0, ofs0) := res_sections_headers_ofs in
   let secs_size_check := get_sections_size (prog_sectable p) in
   if Z.eqb ofs0 secs_size_check then
     let elf_state1 := update_elf_state st sectbl0 headers0 shstrtbl0 ofs0 (Z.of_nat (length headers0)) shstrtbl_size0 in
@@ -530,16 +532,18 @@ Definition gen_reloc_elf (p:program) :=
   (** *Generate ELF header *)
   let elf_h := gen_elf_header st4 in
   (* file too big ? *)
-  if zlt elf_h.(e_shoff) (two_p 32) then
-    OK {| prog_defs := RelocProg.prog_defs p;
-          prog_public   := RelocProg.prog_public p;
-          prog_main     := RelocProg.prog_main p;
-          prog_senv     := RelocProg.prog_senv p;
-
-          elf_head := elf_h;
-          elf_sections := st4.(e_sections);
-          elf_section_headers := st4.(e_headers) |}
-  else Error (msg "Sections too big (e_shoff above bounds)")
+  if Nat.eqb (length st4.(e_sections)) (length st4.(e_shstrtbl)) then
+    if zlt elf_h.(e_shoff) (two_p 32) then
+      OK {| prog_defs := RelocProg.prog_defs p;
+            prog_public   := RelocProg.prog_public p;
+            prog_main     := RelocProg.prog_main p;
+            prog_senv     := RelocProg.prog_senv p;
+            
+            elf_head := elf_h;
+            elf_sections := st4.(e_sections);
+            elf_section_headers := st4.(e_headers) |}
+    else Error (msg "Sections too big (e_shoff above bounds)")
+  else Error (msg "unequal length of sections and section headers")
   else Error (msg "Generate ELF header fail: shofs inconsistent").
 End INSTR_SIZE.
 

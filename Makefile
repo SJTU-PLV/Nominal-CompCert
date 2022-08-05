@@ -115,17 +115,17 @@ BACKEND=\
   AsmRegs.v AsmFacts.v Asmgenproof.v \
   SSAsm.v SSAsmproof.v \
   RealAsm.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v PseudoInstructionsproof.v \
-  AsmLabelNew.v AsmBuiltinInline.v \
-  AsmStructRet.v \
-  AsmFloatLiteral.v SymbolString.v\
-  AsmPseudoInstr.v \
-  Asmlabelgen.v \
-  LocalLib.v Jumptablegen.v CheckDef.v\
+  AsmLabelNew.v AsmBuiltinInline.v AsmBuiltinInlineproof.v\
+  AsmStructRet.v AsmStructRetproof.v\
+  AsmFloatLiteral.v SymbolString.v AsmFloatLiteralproof.v\
+  AsmPseudoInstr.v AsmPseudoInstrproof.v\
+  Asmlabelgen.v Asmlabelgenproof.v\
+  LocalLib.v Jumptablegen.v CheckDef.v Jumptablegenproof.v\
   RelocProgram.v \
   Symbtablegen.v Symbtablegenproof.v\
   Reloctablesgen.v Reloctablesgenproof.v\
-  RelocBingen.v RelocBinDecode.v\
-  TranslateInstr.v\
+  RelocBingen.v RelocBinDecode.v RelocBingenproof.v\
+  TranslateInstr.v TranslateInstrSize.v\
   AsmLongInt.v\
   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
   AsmInject.v
