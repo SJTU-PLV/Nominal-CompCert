@@ -32,7 +32,7 @@ Definition inject_incr_disjoint (j j':meminj) (sd si:sup) :=
     j b = None ->
     j' b = Some (b', delta) ->
     ~sup_In b sd /\ ~sup_In b' si.
-
+Search Mem.store.
 Definition max_perm_decrease (m m': mem) :=
   forall b ofs p,
     Mem.valid_block m b ->
@@ -1463,6 +1463,97 @@ Proof.
       destruct (Mem.sup_dec b2 s2') eqn : Hsup; try congruence; simpl.
       destruct (Mem.perm_dec m1' b1 ofs1 Max Nonempty). simpl.
       eapply memval_map_inject; eauto.
+      Search Mem.inject.
+(*
+             Mem.inject (compose_meminj j1' j2') m1' m3'
+              j1' b1 = Some (b2,delta)
+             (mem_contents m1') b1 ofs1 = Vptr b ofs
+        -------------------------------------------------
+                exists b', j1' b = Some (b', delta')
+                           /\ (mem_contents m2') b2 (ofs1 + delta) = Vptr b' (ofs + delta')
+Proof.
+
+                                                      j1 b2 = Some(_)
+                                                      sup_In b2 (Mem.support m1') /\ ~ sup_In b2 (Mem.support m1)
+
+support m1' = {b0,b1,b2}                            m1'    b0 [..........(Vptr b2)..........]
+j1' b0 = Some (_)
+block b0 ofs1 -> Vptr b2 0
+ -------------------------------------                 j1' b0 = Some (b0',0)
+                                                       j2' b0' = None
+
+                                                       j1' b2 = None
+
+j1' b2 = Some (_)                                   m2'    b0'  [...........(????)...................]
+
+
+                                                      compose_meminj j1' j2' b0 = None
+                                                      compose_meminj j1' j2' b2 = Some b2''
+
+                                                    m3'   b0'' [........(Vptr b2'').....................]
+
+                                                   sup_In b2 (Mem.support m1)
+
+                                                   inject_incr j1 j1'
+                                                   j1 b0 = Some   j1' b0 = None
+
+j1' b0 = Some (b0',0)
+j2' b0' = None
+case 1)     sup_In b0 (Mem.support m1)
+            j1 b0 = Some (b0')
+            j2 b0' = None
+            Mem.inject j1 m1 m2
+            
+            + protect : forall ofs, (mem_content m1) b0 ofs = (mem_content m1') b0 ofs
+
+
+case 2)     ~sup_In b0 (Mem.support m1)
+
+            j1 b0 = None (IMGIN)
+            j1' b0 = Some (_)
+            construction of j1' -> compose j1' j2' b0 = Some ()
+            Mem.inject (compose_meminj j1' j2') m1' m3'
+            Vptr b2 --inj--> Vptr b2''
+
+            sup_In b (Mem.support m1')
+            j' b = Some (b3,_)/\ j b = None
+            j1' + {b -> fresh_block s2}
+            j2' + {frsh_block s2 -> b3}
+
+
+
+Mem.unchanged_on
+Mem.newinject j m1 m2
+
+
+ mi_unmap: forall b1, j b1 = None ->
+                      valid_block b1 m1 ->
+                      protect m1 b1
+
+Mem.inject (compose j1 j2) m1 m3
+m1      Vptr b2                    m1'                                   m1''   Vptr b2         m1'''
+
+j1      j1 b2= Some(b2')                                                                   j1' b2 = Some (b2')
+
+m2      b2'             -->   compose_meminj j1 j2 b2 = None  ==>  j' b2 = Some b2'  -->      m2'''
+
+j2      j2 b2'= None
+
+m3                                 m3'                                   m3''                   m3'''
+
+j1 b1 = Some ()
+
+1. Add protection permission in memory states
+2. Make injections respect protections
+   a) unprotected -> unprotected
+   b) protected -> protected or none
+3. execution in an open module should not modify the protected memory regions (guarantee) Mem.store
+4. wr ~> wr' (rely) Mem.unchanged_on (protected m1) m1 m2
+
+
+First: Proof refinement here using Axioms
+
+*)
       admit. (* wrong, we need more assumption of memory evolve*)
       exfalso. apply n. eauto with mem.
     + (* induction *)
