@@ -261,43 +261,28 @@ Lemma ext_inj :
   eqcklr (ext @ inj) inj.
 Proof.
   split.
-  - intros [[ ] [f ? ?]] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23').
-    inversion Hm23' as [? ? ?  Hm23]. subst.
-    exists (injw f m1 m3). cbn in *. repeat apply conj; eauto.
-    + destruct Hse23. simpl in *.
-      constructor; simpl.
-      * congruence.
-      * rewrite (Mem.mext_sup _ _ Hm12). rewrite Hse12. auto.
-      * auto.
-    + constructor.
+  - intros [[ ] f] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23).
+    exists f. cbn in *. repeat apply conj; eauto.
+    + congruence.
+    + destruct Hm23. erewrite <- Mem.mext_sup; eauto.
+      constructor; eauto.
       eapply Mem.extends_inject_compose; eauto.
     + rewrite compose_meminj_id_left. apply inject_incr_refl.
     + intros f' m1' m3' Hm' Hincr.
       exists (tt, f'). intuition auto; cbn.
       * exists m1'. eauto using Mem.extends_refl.
-      * repeat rstep. inv Hm'.
-        inversion Hincr. subst. inversion Hm12.
-        constructor; eauto.
-        -- rewrite <- mext_sup. auto.
-        -- rewrite <- mext_sup. auto.
-        -- red. intros. red in H10.
-           exploit H10. unfold Mem.valid_block. rewrite mext_sup. eauto. eauto.
-           eapply Mem.perm_extends; eauto.
+      * rauto.
       * rewrite compose_meminj_id_left. apply inject_incr_refl.
   - intros w se1 se2 m1 m2 Hse Hm.
     exists (tt, w). cbn. repeat apply conj.
     + ercompose; eauto.
     + exists m1. split; auto. apply Mem.extends_refl.
     + rewrite compose_meminj_id_left. apply inject_incr_refl.
-    + intros [[ ] [f' ? ?] ] m1' m2' (mi & Hm1i & Hmi2') [_ Hf']. cbn in *.
-      inversion Hmi2' as [? ? ? Hmi2]. subst.
-      exists (injw f' m1' m2'). intuition auto.
-      * constructor; auto.
+    + intros [[ ] f'] m1' m2' (mi & Hm1i & Hmi2) [_ Hf']. cbn in *.
+      exists f'. intuition auto.
+      * destruct Hmi2. erewrite <- Mem.mext_sup; eauto.
+        constructor; auto.
         eapply Mem.extends_inject_compose; eauto.
-      * destruct w. inv Hm. simpl in *. inv Hmi2'. inv Hf'. subst. inversion Hm1i.
-        constructor; auto. rewrite mext_sup. auto.
-        red. red in H13. intros. eapply H13; eauto.
-        eapply Mem.perm_extends; eauto.
       * rewrite compose_meminj_id_left. apply inject_incr_refl.
 Qed.
 
@@ -305,37 +290,30 @@ Lemma inj_ext :
   eqcklr (inj @ ext) inj.
 Proof.
   split.
-  - intros [[f ? ?] [ ]] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12' & Hm23).
-    simpl in *. inversion Hm12' as [? ? ? Hm12]. subst.
-    exists (injw f m1 m3). cbn in *. repeat apply conj; eauto.
-    + destruct Hse12. constructor; simpl in *; eauto.
-      * inv Hm23. rewrite <- mext_sup. auto.
-    + inversion Hm12.
+  - intros [f [ ]] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23).
+    exists f. cbn in *. repeat apply conj; eauto.
+    + congruence.
+    + destruct Hm12.
+      erewrite (Mem.mext_sup m2 m3); eauto.
       constructor; eauto.
       eapply Mem.inject_extends_compose; eauto.
     + rewrite compose_meminj_id_right. apply inject_incr_refl.
     + intros f' m1' m3' Hm' Hincr.
       exists (f', tt). intuition auto; cbn.
       * exists m3'. eauto using Mem.extends_refl.
-      * repeat rstep. inversion Hm'. subst.
-        inversion Hincr. subst. inversion Hm23.  constructor; simpl; eauto.
-        rewrite mext_sup. auto.
-        rewrite mext_sup. auto.
-        red. red in H11. admit. (* ok ???? *)
+      * rauto.
       * rewrite compose_meminj_id_right. apply inject_incr_refl.
   - intros w se1 se2 m1 m2 Hse Hm.
     exists (w, tt). cbn. repeat apply conj.
     + ercompose; eauto.
     + exists m2. split; auto. apply Mem.extends_refl.
     + rewrite compose_meminj_id_right. apply inject_incr_refl.
-    + intros [[f' ? ?] [ ]] m1' m2' (mi & Hm1i' & Hmi2) [Hf' _]. cbn in *.
-      inversion Hm1i' as [? ? ? Hm1i]. subst.
-      exists (injw f' m1' m2'). intuition auto.
-      * inversion Hm1i.
+    + intros [f' [ ]] m1' m2' (mi & Hm1i & Hmi2) [Hf' _]. cbn in *.
+      exists f'. intuition auto.
+      * destruct Hm1i.
+        erewrite (Mem.mext_sup m3 m2'); eauto.
         constructor; auto.
         eapply Mem.inject_extends_compose; eauto.
-      * inversion Hf'. subst. inv Hm. constructor; auto.
-        rewrite <- (Mem.mext_sup _ _ Hmi2). auto.
-        admit.
       * rewrite compose_meminj_id_right. apply inject_incr_refl.
-Admitted.
+Qed.
+

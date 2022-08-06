@@ -13,72 +13,45 @@ Require Import LanguageInterface.
 Record inj_world :=
   injw {
     injw_meminj :> meminj;
-    injw_mem_l: mem;
-    injw_mem_r: mem;
+    injw_sup_l: sup;
+    injw_sup_r: sup;
   }.
+(*
 
-Definition inject_dom_in (f:meminj) (s:sup) :=
-  forall b b' o, f b = Some (b', o) -> Mem.sup_In b s.
-
-Definition inject_image_in (f:meminj) (s:sup) :=
-  forall b b' o, f b = Some (b', o) -> Mem.sup_In b' s.
-
-Definition inject_image_eq (f:meminj) (s:sup) :=
-  forall b b' o, f b = Some (b', o) <-> Mem.sup_In b' s.
-
-(** Increased injection only maps invalid blocks from source to target *)
-Definition inject_incr_disjoint (j j':meminj) (sd si:sup) :=
-  forall b b' delta,
-    j b = None ->
-    j' b = Some (b', delta) ->
-    ~sup_In b sd /\ ~sup_In b' si.
-Search Mem.store.
 Definition max_perm_decrease (m m': mem) :=
   forall b ofs p,
     Mem.valid_block m b ->
     Mem.perm m' b ofs Max p ->
     Mem.perm m b ofs Max p.
 
-Lemma max_perm_decrease_refl :
-  forall m, max_perm_decrease m m.
-Proof.
-  intros. red. eauto.
-Qed.
 
-Lemma max_perm_decrease_trans :
-  forall m1 m2 m3,
-    max_perm_decrease m1 m2 ->
-    max_perm_decrease m2 m3 ->
-    Mem.sup_include (Mem.support m1) (Mem.support m2) ->
-    max_perm_decrease m1 m3.
-Proof.
-  intros. red in *. intros.
-  apply H. auto. apply H0. apply H1. eauto. auto.
-Qed.
-
-Hint Resolve max_perm_decrease_refl max_perm_decrease_trans.
+*)
+(** Increased injection only maps invalid blocks from source to target *)
+Definition inject_incr_disjoint (j j':meminj) (sd si:sup) :=
+  forall b b' delta,
+    j b = None ->
+    j' b = Some (b', delta) ->
+    ~sup_In b sd /\ ~sup_In b' si.
 
 Variant inj_incr: relation inj_world :=
-  inj_incr_intro f f' m1 m2 m1' m2':
+  inj_incr_intro f f' s1 s2 s1' s2':
     inject_incr f f' ->
-    inject_incr_disjoint f f' (Mem.support m1) (Mem.support m2) ->
-    Mem.sup_include (Mem.support m1) (Mem.support m1') ->
-    Mem.sup_include (Mem.support m2) (Mem.support m2') ->
-    max_perm_decrease m1 m1' ->
-    max_perm_decrease m2 m2' ->
-    inj_incr (injw f m1 m2) (injw f' m1' m2').
+    inject_incr_disjoint f f' s1 s2 ->
+    Mem.sup_include s1 s1' ->
+    Mem.sup_include s2 s2' ->
+    inj_incr (injw f s1 s2) (injw f' s1' s2').
 
 Record inj_stbls (w: inj_world) (se1 se2: Genv.symtbl): Prop :=
   {
     inj_stbls_match: Genv.match_stbls (injw_meminj w) se1 se2;
-    inj_stbls_next_l: Mem.sup_include (Genv.genv_sup se1) (Mem.support (injw_mem_l w));
-    inj_stbls_next_r: Mem.sup_include (Genv.genv_sup se2) (Mem.support (injw_mem_r w));
+    inj_stbls_next_l: Mem.sup_include (Genv.genv_sup se1) (injw_sup_l w);
+    inj_stbls_next_r: Mem.sup_include (Genv.genv_sup se2) (injw_sup_r w);
   }.
 
 Variant inj_mem: klr inj_world mem mem :=
   inj_mem_intro f m1 m2:
     Mem.inject f m1 m2 ->
-    inj_mem (injw f m1 m2) m1 m2.
+    inj_mem (injw f (Mem.support m1) (Mem.support m2)) m1 m2.
 
 (** ** Properties *)
 
@@ -103,8 +76,8 @@ Proof.
     constructor; eauto using inject_incr_trans, Pos.le_trans.
     intros b1 b2 delta Hb Hb''.
     destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
-    + rewrite (H8 _ _ _ Hb') in Hb''. inv Hb''. eauto.
-    + edestruct H9; eauto. split; eauto.
+    + rewrite (H6 _ _ _ Hb') in Hb''. inv Hb''. eauto.
+    + edestruct H7; eauto. split; eauto.
 Qed.
 
 Global Instance inj_stbls_subrel:
@@ -172,7 +145,7 @@ Qed.
 Next Obligation.
   destruct H. inv H0; cbn in *. eauto.
 Qed.
-
+(*
 Lemma alloc_max_perm_decrease: forall m lo hi m' b,
     Mem.alloc m lo hi = (m', b) ->
     max_perm_decrease m m'.
@@ -183,7 +156,7 @@ Proof.
 Qed.
 
 Hint Resolve alloc_max_perm_decrease.
-
+*)
 Lemma inj_cklr_alloc:
     Monotonic Mem.alloc (|= inj_mem ++> - ==> - ==> (<> inj_mem * block_inject_sameofs @@ [injw_meminj])).
 Proof.
@@ -193,7 +166,7 @@ Proof.
     as (f' & m2' & b2 & Hm2' & Hm' & Hf'1 & Hb2 & Hf'2);
     eauto using Z.le_refl.
   rewrite Hm2'.
-  exists (injw f' m1' m2'); split; repeat rstep.
+  exists (injw f' (Mem.support m1') (Mem.support m2')); split; repeat rstep.
   - constructor; eauto.
     intros b1' b2' delta' Hb Hb'.
     destruct (eq_block b1' b1); subst.
@@ -223,8 +196,6 @@ Next Obligation. (* Mem.free *)
   repeat (econstructor; eauto); try congruence.
   erewrite <- Mem.support_free; eauto.
   erewrite <- Mem.support_free; eauto.
-  red. intros. eapply Mem.perm_free_3; eauto.
-  red. intros. eapply Mem.perm_free_3; eauto.
 Qed.
 
 Next Obligation. (* Mem.load *)
@@ -244,8 +215,6 @@ Next Obligation. (* Mem.store *)
   repeat (econstructor; eauto); try congruence.
   erewrite <- Mem.support_store; eauto.
   erewrite <- Mem.support_store; eauto.
-  red. intros. eapply Mem.perm_store_2; eauto.
-  red. intros. eapply Mem.perm_store_2; eauto.
 Qed.
 
 Next Obligation. (* Mem.loadbytes *)
@@ -269,12 +238,10 @@ Next Obligation. (* Mem.storebytes *)
     }
     rewrite Hm2'.
     constructor.
-    exists (injw f m1' m2'); split; repeat rstep.
+    exists (injw f (Mem.support m1') (Mem.support m2')); split; repeat rstep.
     constructor; eauto. red. congruence.
     erewrite <- (Mem.support_storebytes m1); eauto.
     erewrite <- (Mem.support_storebytes m2); eauto.
-    red. intros. eapply Mem.perm_storebytes_2; eauto.
-    red. intros. eapply Mem.perm_storebytes_2; eauto.
     constructor. eapply Mem.storebytes_empty_inject; eauto.
   - assert (ptr_inject f (b1, ofs1) (b2, ofs2)) as Hptr'.
     {
@@ -554,7 +521,7 @@ Lemma inj_inj:
   subcklr inj (inj @ inj).
 Proof.
   intros w se1 se2 m1 m2 Hse Hm. destruct Hm as [f m1 m2 Hm].
-  exists (injw (meminj_dom f) m1 m1, injw f m1 m2); simpl.
+  exists (injw (meminj_dom f) (Mem.support m1)(Mem.support m1), injw f (Mem.support m1)(Mem.support m2)); simpl.
   repeat apply conj.
   - exists se1. split; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
@@ -584,27 +551,8 @@ Proof.
     + cbn. rstep; auto.
 Qed.
 
-(*test
-Definition meminj_incr_sep (f1 f2 f3 : meminj) : Prop :=
-  forall b, f2 b =
-    match f1 b with
-      | Some _ => f1 b
-      | None => f3 b
-    end
- /\ forall b r1 r2, f1 b = Some r1 -> f3 b = Some r2 -> False.
-
-Theorem inject_incr_sep : forall f1 f2,
-    inject_incr f1 f2 -> exists f3, meminj_incr_sep f1 f2 f3.
-Proof.
-  intros. exists (fun b => if f1 b then None else f2 b).
-  split. destruct (f1 b) eqn:?. destruct p.
-  apply H in Heqo. eauto. congruence.
-  intros. rewrite H0 in H1. congruence.
-Qed.
-*)
-
-
 (** Injection implies image is in the support *)
+(*
 Lemma inject_implies_image_in: forall f m1 m2,
   Mem.inject f m1 m2 -> inject_image_in f (Mem.support m2).
 Proof.
@@ -1905,3 +1853,4 @@ Proof.
       ++ eapply Sup.sup_include_trans; eauto.
     + apply inject_incr_refl.
 Qed.
+*)
