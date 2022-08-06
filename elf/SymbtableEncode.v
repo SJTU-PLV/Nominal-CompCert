@@ -71,24 +71,38 @@ Definition encode_secindex (i:secindex) (idxmap: PTree.t Z): res (list byte) :=
   | secindex_normal id =>
     match idxmap ! id with
     | None => Error [MSG "Cannot find the index of the symbol "; CTX id]
-    | Some idx => OK (encode_int 2 idx)
+    | Some idx =>
+      if (0 <? idx) && (idx  <? HZ["FFF2"]) then
+        OK (encode_int 2 idx)
+      else
+        Error (msg "Section index not in the range (1,FFF2)")
     end
   end.
+
+Definition check_range32 (z: Z) :=
+  (0 <=? z) &&  (z <? two_p 32).
+
+Definition check_range64 (z: Z) :=
+  (0 <=? z) &&  (z <? two_p 64).
+
 
 (** Encode Symbol entry with related strtable index which is the index of symbol entry *)
 (** eliminate the strtable checking: add name_index parameter which denote the index in strtb, arbitrary doesn't matter ? *)
 Definition encode_symbentry32 (e:symbentry) (name_index: Z) (idxmap: PTree.t Z) : res (list byte) :=
-  let st_name_bytes := encode_int32 name_index in 
-  let st_value_bytes := encode_int32 (symbentry_value e) in
-  let st_size_bytes := encode_int32 (symbentry_size e) in
-  let st_info_bytes := 
-      bytes_of_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
-  let st_other_bytes := [Byte.repr 0] in
-  do st_shndx_bytes <- encode_secindex (symbentry_secindex e) idxmap;
-  OK (st_name_bytes ++ st_value_bytes ++ st_size_bytes ++
-                    st_info_bytes ++ st_other_bytes ++ st_shndx_bytes).
+  if check_range32 name_index && check_range32 (symbentry_value e) && check_range32 (symbentry_size e) then
+    let st_name_bytes := encode_int32 name_index in 
+    let st_value_bytes := encode_int32 (symbentry_value e) in
+    let st_size_bytes := encode_int32 (symbentry_size e) in
+    let st_info_bytes := 
+        bytes_of_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
+    let st_other_bytes := [Byte.repr 0] in
+    do st_shndx_bytes <- encode_secindex (symbentry_secindex e) idxmap;
+    OK (st_name_bytes ++ st_value_bytes ++ st_size_bytes ++
+                      st_info_bytes ++ st_other_bytes ++ st_shndx_bytes)
+  else Error (msg "encode_symbentry32 out of range").
 
 Definition encode_symbentry64 (e:symbentry) (name_index: Z) (idxmap: PTree.t Z) : res (list byte) :=
+  if check_range32 name_index && check_range64 (symbentry_value e) && check_range64 (symbentry_size e) then
   let st_name_bytes := encode_int32 name_index in 
   let st_value_bytes := encode_int64 (symbentry_value e) in
   let st_size_bytes := encode_int64 (symbentry_size e) in
@@ -96,7 +110,8 @@ Definition encode_symbentry64 (e:symbentry) (name_index: Z) (idxmap: PTree.t Z) 
       bytes_of_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
   let st_other_bytes := [Byte.repr 0] in
   do st_shndx_bytes <- encode_secindex (symbentry_secindex e) idxmap;
-  OK (st_name_bytes ++ st_info_bytes ++ st_other_bytes ++ st_shndx_bytes ++ st_value_bytes ++ st_size_bytes).
+  OK (st_name_bytes ++ st_info_bytes ++ st_other_bytes ++ st_shndx_bytes ++ st_value_bytes ++ st_size_bytes)
+  else Error (msg "encode_symbentry64 out of range").
 
 
 
@@ -136,29 +151,7 @@ Definition encode_dummy_symbentry64 : (list byte) :=
   (st_name_bytes ++ st_info_bytes ++ st_other_bytes ++ st_shndx_bytes ++ st_value_bytes ++ st_size_bytes).
 
 
-(* Compute (length encode_dummy_symbentry). *)
 
-Definition acc_bytes (strmap : PTree.t Z) (idxmap: PTree.t Z) acc (id_e: ident * symbentry) :=
-  let (id, e) := id_e in
-  do bytes <- acc;
-  match strmap ! id with
-  | None => Error [MSG "Cannot find the string of the symbol "; CTX id]
-  | Some ofs =>
-    do ebytes <-
-       (if Archi.ptr64 then
-         (encode_symbentry64 e ofs idxmap)
-       else (encode_symbentry32 e ofs idxmap));
-    OK (bytes ++ ebytes)
-  end.
-
-Definition encode_symbtable (t:list (ident * symbentry)) (strmap : PTree.t Z) (idxmap: PTree.t Z) : res (list byte) :=
-  fold_left (acc_bytes strmap idxmap) t (OK []).
-
-
-Definition create_symbtable_section (t:list (ident * symbentry)) (strmap : PTree.t Z) (idxmap: PTree.t Z) : res (list byte) :=
-  do bytes <- encode_symbtable t strmap idxmap;
-  let dummy_entry := (if Archi.ptr64 then encode_dummy_symbentry64 else encode_dummy_symbentry32) in
-  OK (dummy_entry ++ bytes).
 
 
 (** Transform the program *)

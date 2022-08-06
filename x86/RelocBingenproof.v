@@ -71,28 +71,21 @@ Definition match_prog (p: RelocProgram.program) (tp: program) :=
   transf_program instr_size p = OK tp.
 
 
-Lemma decode_instrs_bytes_len: forall n l len1 len2,
-    length l = n ->
-    le (length l) len1 ->
-    le (length l) len2 ->
-    decode_instrs_bytes len1 l [] = decode_instrs_bytes len2 l [].
-Admitted.
-
-Lemma decode_instrs_bytes_app': forall l l' l1 len,
-    decode_instrs_bytes len l [] = OK l' ->
-    decode_instrs_bytes len l l1 = OK (l1 ++ l').
+Lemma decode_instrs_bytes_app': forall l l' l1,
+    decode_instrs_bytes l [] = OK l' ->
+    decode_instrs_bytes l l1 = OK (l1 ++ l').
 Admitted.
   
-Lemma decode_instrs_bytes_app: forall l1 l2 l3 len1 len2,
-    decode_instrs_bytes len1 l1 [] = OK l3 ->
-    decode_instrs_bytes (len1 + len2) (l1 ++ l2) [] = 
-    decode_instrs_bytes len2 l2 l3.
+Lemma decode_instrs_bytes_app: forall l1 l2 l3,
+    decode_instrs_bytes l1 [] = OK l3 ->
+    decode_instrs_bytes (l1 ++ l2) [] = 
+    decode_instrs_bytes l2 l3.
 Admitted.
 
   
 Lemma encode_into_byte_consistency: forall l bl,
     fold_left concat_byte l (OK []) = OK bl ->
-    decode_instrs_bytes (length bl) bl [] = OK l.
+    decode_instrs_bytes  bl [] = OK l.
 Admitted.
 
 Lemma transl_code_rev: forall n l l' ofs reloctbl reloctbl',
@@ -106,78 +99,107 @@ Lemma decode_instr_len: forall l l' e i,
     exists a l1, l = a :: l1 ++ l' /\ forall l2, decode_instr e (a::l1 ++ l2) = OK (i,l2).
 Admitted.       
 
-                                             
-Lemma decode_instrs_fuel: forall fuel1 l1 l2 fuel2 reloctbl,
-    le (length l1) fuel1 ->
-    le (length l1) fuel2 ->
-    decode_instrs instr_size Instr_size fuel1 l1 (l2,reloctbl) = decode_instrs instr_size Instr_size fuel2 l1 (l2,reloctbl).
-Proof.
-  induction fuel1;intros.
-  - cbn [decode_instrs].
-    destruct l1;destruct fuel2.
-    + cbn [decode_instrs]. auto.
-    + cbn [decode_instrs]. auto.
-    + simpl in H0. lia.
-    + simpl in H. lia.
-  - destruct l1;destruct fuel2.
-    + cbn [decode_instrs]. auto.
-    + cbn [decode_instrs]. auto.
-    + simpl in H0. lia.
-    + cbn [decode_instrs].
-      destr.
-      * destruct decode_instr eqn: DES.
-        destruct p. apply decode_instr_len in DES.
-        destruct DES as (a & l2' & ? & UNUSE).
-        inv H1. cbn [bind2].
-        apply IHfuel1. simpl in H. inv H.
-        rewrite app_length. lia.
-        rewrite app_length in *. lia.
-        simpl in H0. inv H0.
-        rewrite app_length in *. lia.
-        inv H2.
-        rewrite app_length in *. lia.
-        rewrite app_length in *. lia.
-        cbn [bind];auto.
-      * destr.
-        ++ destruct decode_instr eqn: DES.
-           destruct p. apply decode_instr_len in DES.
-           destruct DES as (a & l2' & ? & UNUSE).
-           inv H1. cbn [bind2].
-           apply IHfuel1. simpl in H. inv H.
-           rewrite app_length. lia.
-           rewrite app_length in *. lia.
-           simpl in H0. inv H0.
-           rewrite app_length in *. lia.
-           inv H2.
-           rewrite app_length in *. lia.
-           rewrite app_length in *. lia.
-           cbn [bind];auto.
-        ++ destruct decode_instr eqn: DES.
-           destruct p. apply decode_instr_len in DES.
-           destruct DES as (a & l2' & ? & UNUSE).
-           inv H1. cbn [bind2].
-           apply IHfuel1. simpl in H. inv H.
-           rewrite app_length. lia.
-           rewrite app_length in *. lia.
-           simpl in H0. inv H0.
-           rewrite app_length in *. lia.
-           inv H2.
-           rewrite app_length in *. lia.
-           rewrite app_length in *. lia.
-           cbn [bind];auto.
-Qed.
 
-
-
+Definition decode_instrs_app_prop n :=
+  forall l1 l1' l2 genl reloctbl1 reloctbl2,
+    n = length l1 ->
+    decode_instrs instr_size Instr_size l1 (genl,reloctbl1++reloctbl2) = OK (l1', reloctbl2) ->
+    decode_instrs instr_size Instr_size (l1 ++ l2) (genl,reloctbl1++reloctbl2) = decode_instrs instr_size Instr_size l2 (l1',reloctbl2).
 
 (* TODO: we should return the remaining Instruction list in decode_instrs function, i.e. decode_instrs xxx = OK (decode_result, remaining_reloctbl, remaining_Instruction_list). And we should ensure that decode_code always return empty remaining_Instruction_list*)
-Lemma decode_instrs_app: forall fuel1 fuel2 l1 l2 l1' genl reloctbl1 reloctbl2,
-    le (length l2) fuel2 ->
-    le (length l1) fuel1 ->
-    decode_instrs instr_size Instr_size fuel1 l1 (genl,reloctbl1++reloctbl2) = OK (l1', reloctbl2) ->
-    decode_instrs instr_size Instr_size (fuel1 + fuel2) (l1 ++ l2) (genl,reloctbl1++reloctbl2) = decode_instrs instr_size Instr_size fuel2 l2 (l1',reloctbl2).
+Lemma decode_instrs_app: forall n,
+    decode_instrs_app_prop n.
+  intros n.
+  eapply Nat.strong_right_induction with (z:=O);eauto;try lia.
+  unfold Morphisms.Proper.
+  unfold Morphisms.respectful.
+  intros. subst. split;auto.
+  intros.
+  unfold decode_instrs_app_prop.
+  intros l1 l1' l2 genl reloctbl1 reloctbl2 LEN DEC.
+  rewrite decode_instrs_eq in DEC.
+  simpl in DEC.
+  destruct l1.
+  - inv DEC. repeat rewrite H3. simpl. auto.
+  - destr_in DEC.
+    + monadInv DEC. destr_in EQ0.
+      exploit decode_instr_len;eauto.
+      intros (a & l3 & P1 & P2). inv P1.
+      exploit (H0 (length x0)).
+      lia.
+      simpl. rewrite app_length. lia.
+      eauto.
+      change ((genl ++ [x], [])) with ((genl ++ [x], @app relocentry [] [])) in EQ0.
+      erewrite EQ0. f_equal. f_equal.
+      destruct reloctbl1;destruct reloctbl2;simpl in Heql;try congruence.
+      intros IH.
+      cbn [app].
+      rewrite decode_instrs_eq. rewrite <- app_assoc.
+      rewrite P2. cbn [bind2].
+      destr. rewrite IH. destruct reloctbl1;destruct reloctbl2;simpl in Heql;try congruence.
+      simpl in n0. repeat rewrite app_length in n0.
+      lia.
+      
+    +
+      destr_in DEC.
+      * 
+      monadInv DEC.
+      destr_in EQ0.
+      exploit decode_instr_len;eauto.
+      intros (a & l3 & P1 & P2). inv P1.
+      cbn [app].
+      erewrite decode_instrs_eq. rewrite <- app_assoc.
+      rewrite P2.  cbn [bind2].
+      destr. destr.
+            
+      exploit (H0 (length x0)).
+      lia.
+      simpl. rewrite app_length. lia.
+      eauto.
+
+      (*** 2022.8.7  *)
+      
+      change ((genl ++ [x], [])) with ((genl ++ [x], @app relocentry [] [])) in EQ0.
+      erewrite EQ0. f_equal. f_equal.
+      destruct reloctbl1;destruct reloctbl2;simpl in Heql;try congruence.
+      intros IH.
+      cbn [app].
+      rewrite decode_instrs_eq. rewrite <- app_assoc.
+      rewrite P2. cbn [bind2].
+      destr. rewrite IH. destruct reloctbl1;destruct reloctbl2;simpl in Heql;try congruence.
+      simpl in n0. repeat rewrite app_length in n0.
+      lia.
+
+      
+    decode_instrs instr_size Instr_size l1 (genl,reloctbl1++reloctbl2) = OK (l1', reloctbl2) ->
+    decode_instrs instr_size Instr_size (l1 ++ l2) (genl,reloctbl1++reloctbl2) = decode_instrs instr_size Instr_size l2 (l1',reloctbl2).
 Proof.
   
+  induction l1';intros.
+  - rewrite decode_instrs_eq in H.
+    destr_in H.
+    + subst. inv H. simpl. repeat rewrite H2.
+      auto.
+    + subst. destr_in H.
+      *
+        Nat.strong_right_induction
+        monadInv H. destr_in EQ0.
+        rewrite decode_instrs_eq.
+        cbn [app].
+        exploit decode_instr_len;eauto.
+        intros (a & l1 & P1 & P2). inv P1.
+        rewrite <- app_assoc.
+        erewrite P2. cbn [bind2].
+        destr.
+        --
+    simpl in *. inv H.
+    destruct l2.
+    + rewrite H2. rewrite H2. auto.
+    + rewrite H2. rewrite H2. auto.
+  - repeat rewrite decode_instrs_eq in *.
+    cbn [app] in *.
+    unfold decode_instrs in H. unfold decode_instrs_func in H.
+    
   induction fuel1;intros.
   - simpl in H1. destruct l1.
     + destruct fuel2;destruct l2.
