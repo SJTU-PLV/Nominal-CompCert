@@ -308,9 +308,10 @@ Definition acc_strtbl acc ofs (id: ident) : res (list byte * Z) :=
   | Some n =>
     let bytes := map (fun p => Byte.repr (Zpos p)) n in
     (* check whether there is HB["00"] in bytes *)
-    if in_dec Byte.eq_dec HB["00"] bytes then            
-      OK (acc ++ bytes ++  [HB["00"]], ofs + Z.of_nat (length bytes) + 1)
-    else Error (msg "Symbol string contains '\0'")
+    if in_dec Byte.eq_dec HB["00"] bytes then
+      Error [MSG "Symbol string contains '\0'"; CTX id]    
+    else
+      OK (acc ++ bytes ++  [HB["00"]], ofs + Z.of_nat (length bytes) + 1)  
   end.
 
 (* (* content of strtbl, map from ident to index in the strtbl, the accumulate ofs *) *)
@@ -318,20 +319,21 @@ Definition acc_strtbl acc ofs (id: ident) : res (list byte * Z) :=
 (*   fold_left acc_strtbl symbols (OK ([HB["00"]], PTree.empty Z, 1)). *)
 
 (* generate relocation table string .relname from relocation map*)
-Definition acc_relstrtbl (res_acc: res (list byte * PTree.t Z * Z)) (id: ident) : res (list byte * PTree.t Z * Z) :=
-  do acc <- res_acc;
-  let '(acc', strmap, ofs) := acc in
+Definition acc_relstrtbl acc ofs (id: ident) : res (list byte * Z) :=
   match find_symbol_pos id with
   | None => Error [MSG "Cannot find the string of the symbol "; CTX id]
   | Some n =>
     let bytes := map (fun p => Byte.repr (Zpos p)) n in
-    let strmap' := PTree.set id ofs strmap in
-    OK (acc' ++ SB[".rel"] ++ bytes ++  [HB["00"]], strmap', ofs + Z.of_nat (length bytes) + 5 (*1 + 4*))
+    (* check whether there is HB["00"] in bytes *)
+    if in_dec Byte.eq_dec HB["00"] bytes then
+      Error [MSG "Symbol string contains '\0'"; CTX id]
+    else
+      OK (acc ++ SB[".rel"] ++ bytes ++  [HB["00"]], ofs + Z.of_nat (length bytes) + 5)               
   end.
 
 (* ofs is the previous section header string table offset *)
-Definition gen_relstrtbl (symbols : list ident) (ofs: Z) : res (list byte * PTree.t Z * Z) :=
-  fold_left acc_relstrtbl symbols (OK ([], PTree.empty Z, ofs)).
+(* Definition gen_relstrtbl (symbols : list ident) (ofs: Z) : res (list byte * PTree.t Z * Z) := *)
+(*   fold_left acc_relstrtbl symbols (OK ([], PTree.empty Z, ofs)). *)
 
 (* ident to section index mapping *)
 Fixpoint ident_to_index_aux (idl: list ident) (idx: Z) (acc:PTree.t Z) : PTree.t Z:=
@@ -349,7 +351,7 @@ Definition ident_to_index (idl : list ident) (start: Z): PTree.t Z :=
 (* generate section header and shstrtbl from text and data section, not include strtbl, symbtbl, reltbl*)
 (* also return the section accumulated size *)
 (* acc: section table, section header, section table offset, shstrtbl, strtbl offset *)
-Definition acc_sections_headers (symbtbl: symbtable) (res_acc: res (list section * list section_header * Z * list byte * Z)) (id_sec: ident * section) : res (list section * list section_header * Z * list byte * Z) :=
+Definition acc_sections_headers (symbtbl: symbtable) (res_acc: res (list section * list section_header * Z * list byte * Z)) (id_sec: ident * RelocProgramBytes.section) : res (list section * list section_header * Z * list byte * Z) :=
   do secs_hs_ofs <- res_acc;
   let '(secs,hs,ofs,shstrtbl,shstrofs) := secs_hs_ofs in
   let (id, sec0) := id_sec in
@@ -376,13 +378,11 @@ Definition acc_sections_headers (symbtbl: symbtable) (res_acc: res (list section
       let h := gen_rodata_sec_header sec shstrofs ofs in
       OK (secs++[sec],hs++[h],ofs + e.(symbentry_size), shstrtbl', shstrofs')
     end
-
-  | _ => Error [MSG "Section haven't been encoded"; CTX id]
   end.
 
 (* return section headers and the size of sections *)
-Definition gen_section_header (idl_sectbl: list (ident * RelocProgram.section)) (symbtbl: symbtable) (shstrmap: PTree.t Z) : res (list section* list section_header * Z) :=
-  fold_left  (acc_sections_headers symbtbl shstrmap) idl_sectbl (OK ([],[],0)).
+Definition gen_section_header (idl_sectbl: list (ident * RelocProgramBytes.section)) (symbtbl: symbtable): res (list section* list section_header * Z * list byte * Z) :=
+  fold_left  (acc_sections_headers symbtbl) idl_sectbl (OK ([],[],0,[],0)).
 
 
 (* Definition transl_section (sec: RelocProgram.section) : res section := *)
@@ -404,49 +404,68 @@ Definition strtab_str := SB[".strtab"] ++ [HB["00"]].
 Definition symtab_str := SB[".symtab"] ++ [HB["00"]].
 
 (* return elf_state, section id to index mapping, id to string idx in shstring table mapping *)
-Definition gen_text_data_sections_and_shstrtbl (p: RelocProgram.program) (st:elf_state) : res (elf_state * PTree.t Z * PTree.t Z) :=
+Definition gen_text_data_sections_and_shstrtbl (p: RelocProgramBytes.program) (st:elf_state) : res (elf_state * PTree.t Z) :=
   (* generate ident to section index mapping *)
   let idl_sectbl := PTree.elements (prog_sectable p) in
   let secidl := map fst idl_sectbl in
   let sectbl := map snd idl_sectbl in
   (* generate section header string table from section id*)
   let secidxmap := ident_to_index secidl 1 in
-  (* generate section header string table and mapping *)
-  do shstrtbl_res <- gen_strtbl secidl;
-  let '(shstrtbl0, shstrmap, shstrtbl_size0) := shstrtbl_res in
-  (* generate section header *)
-  do res_sections_headers_ofs <- gen_section_header idl_sectbl p.(prog_symbtable) shstrmap;
-  let '(sectbl0, headers0, ofs0) := res_sections_headers_ofs in
+  (* (* generate section header string table and mapping *) *)
+  (* do shstrtbl_res <- gen_strtbl secidl; *)
+  (* let '(shstrtbl0, shstrmap, shstrtbl_size0) := shstrtbl_res in *)
+  (* generate section header and shstrtbl*)
+  do res_sections_headers_ofs <- gen_section_header idl_sectbl p.(prog_symbtable);
+  let '(sectbl0, headers0, ofs0, shstrtbl0, shstrtbl_size0) := res_sections_headers_ofs in
   let secs_size_check := get_sections_size (prog_sectable p) in
   if Z.eqb ofs0 secs_size_check then
     let elf_state1 := update_elf_state st sectbl0 headers0 shstrtbl0 ofs0 (Z.of_nat (length headers0)) shstrtbl_size0 in
-    OK (elf_state1, secidxmap, shstrmap)
+    OK (elf_state1, secidxmap)
   else Error [MSG "Section size inconsistent between symbol table and section table"].
+
+
+(* Compute (length encode_dummy_symbentry). *)
+(* return: symbtable, strtbl, strtbl_ofs *)
+Definition acc_symbtable_bytes  (idxmap: PTree.t Z) acc (id_e: ident * symbentry) : res (list byte * list byte * Z) :=
+  let (id, e) := id_e in
+  do acc' <- acc;
+  let '(symbtbl, strtbl, strtbl_ofs) := acc' in
+  do ebytes <-
+     (if Archi.ptr64 then
+        (encode_symbentry64 e strtbl_ofs idxmap)
+      else (encode_symbentry32 e strtbl_ofs idxmap));
+  do (strtbl', strtbl_ofs') <- acc_strtbl strtbl strtbl_ofs id;
+  OK (symbtbl ++ ebytes, strtbl', strtbl_ofs').
+
+(* generate symbtable table section *)
+
+Definition create_symbtable_section (t:list (ident * symbentry)) (idxmap: PTree.t Z) : res (list byte * list byte * Z) :=
+  let dummy_entry := (if Archi.ptr64 then encode_dummy_symbentry64 else encode_dummy_symbentry32) in
+  fold_left (acc_symbtable_bytes idxmap) t (OK (dummy_entry,[],0)).
 
 (* input: program, ident to section header index, state *)
 (* output: state, indet to symbol entry index mapping, ident to string index in strtbl mapping (unused and remove it)*)
-Definition gen_symtbl_section_strtbl_and_shstr (p: RelocProgram.program) (secidxmap : PTree.t Z) (st: elf_state) :res (elf_state * PTree.t Z) :=
+Definition gen_symtbl_section_strtbl_and_shstr (p: RelocProgramBytes.program) (secidxmap : PTree.t Z) (st: elf_state) :res (elf_state * PTree.t Z) :=
   let idl_symbtbl := PTree.elements (prog_symbtable p) in
   let idl_symbtbl' := sort_symbtable idl_symbtbl in
   let symbidl := map fst idl_symbtbl' in
   let symbtbl := map snd idl_symbtbl' in
   let symtbl_idx_map := ident_to_index symbidl 1 in
-  do str_res  <-  gen_strtbl symbidl;
-  let '(strtbl, strmap, strtbl_size) := str_res in
+  (* do str_res  <-  gen_strtbl symbidl; *)
+  (* let '(strtbl, strmap, strtbl_size) := str_res in *)
+  (* symbtable and strtbl *)
+  do symbsec_strtbl_strtbl_size <- create_symbtable_section idl_symbtbl' secidxmap;
+  let '(symbsec, strtbl, strtbl_size) := symbsec_strtbl_strtbl_size in
   let strtbl_h := gen_strtab_sec_header strtbl st.(e_shstrtbl_ofs) st.(e_sections_ofs) in
-  (* add string table to elf state *)
-  (* Add checking for debug *)
-  if Z.eqb (Z.of_nat (length strtbl)) strtbl_size then
-    let st1 := update_elf_state st [strtbl] [strtbl_h] strtab_str strtbl_size 1 (Z.of_nat (length strtab_str)) in    
-    (* encode symbol table into section *)
-    do symbsec <- create_symbtable_section idl_symbtbl' strmap secidxmap;
-    let symb_h := gen_symtab_sec_header symbtbl st1.(e_shstrtbl_ofs) st1.(e_sections_ofs) st.(e_headers_idx) in (* we need strtable section header index *)
-    if Z.eqb (Z.of_nat (length symbsec)) symb_h.(sh_size) then
-      let st2 := update_elf_state st1 [symbsec] [symb_h] symtab_str symb_h.(sh_size) 1 (Z.of_nat (length symtab_str)) in
-      OK (st2, symtbl_idx_map)
-    else
-      Error [MSG "Symbol table size inconsistent"]
-  else Error [MSG "String table size generated from symbtable inconsistent"].
+  (* add string table to elf state *)  
+  let st1 := update_elf_state st [strtbl] [strtbl_h] strtab_str strtbl_size 1 (Z.of_nat (length strtab_str)) in
+  (* encode symbol table into section *)    
+  let symb_h := gen_symtab_sec_header symbtbl st1.(e_shstrtbl_ofs) st1.(e_sections_ofs) st.(e_headers_idx) in (* we need strtable section header index *)
+  if Z.eqb (Z.of_nat (length symbsec)) symb_h.(sh_size) then
+    let st2 := update_elf_state st1 [symbsec] [symb_h] symtab_str symb_h.(sh_size) 1 (Z.of_nat (length symtab_str)) in
+    OK (st2, symtbl_idx_map)
+  else
+    Error [MSG "Symbol table size inconsistent"].
 
 Section GEN_RELOC_SECS.
 
@@ -454,28 +473,24 @@ Section GEN_RELOC_SECS.
   Variable (symb_idxmap sec_idxmap :PTree.t Z).
   (* symbol table index in headers table *)
   Variable (symbtbl_idx: Z).
-  (* use the section name instead of new name *)
-  Variable (strmap: PTree.t Z).
-  
-Definition acc_reloc_sections_headers acc (id_reloctbl:ident * list relocentry) :=
+
+(* return: sections, section headers, section offset, shstrtbl, shstrtbl_ofs *)
+Definition acc_reloc_sections_headers (acc: res (list section * list section_header * Z * list byte * Z)) (id_reloctbl:ident * list relocentry) :=
   do acc' <- acc;
-  let '(secs, hs, ofs) := acc' in
+  let '(secs, hs, ofs, shstrtbl, shstrtbl_ofs) := acc' in
   let (id, reloctbl) := id_reloctbl in
   match sec_idxmap ! id with
   | None => Error [MSG "Reloction table generation: no related section header index! "; CTX id]
   | Some sec_h_idx  =>
-    match strmap ! id with
-    | None => Error [MSG "Reloction table generation: no related string for "; CTX id]
-    | Some strtbl_ofs =>
-    let h := gen_rel_sec_header reloctbl strtbl_ofs ofs symbtbl_idx sec_h_idx (* attention to the null header ! no need to +1 because the idxmap generated from symbol table has the consideration of null header*) in  
+    let h := gen_rel_sec_header reloctbl shstrtbl_ofs ofs symbtbl_idx sec_h_idx (* attention to the null header ! no need to +1 because the idxmap generated from symbol table has the consideration of null header*) in  
     do sec <- encode_reloctable symb_idxmap reloctbl;
-    OK (secs++[sec], hs++[h], ofs + Z.of_nat (length sec))
-    end
-  end.
+    do (shstrtbl', shstrtbl_ofs') <- acc_relstrtbl shstrtbl shstrtbl_ofs id;
+    OK (secs++[sec], hs++[h], ofs + Z.of_nat (length sec), shstrtbl', shstrtbl_ofs')
+    end.
 
-(* reloc sections, reloc headers, starting ofs of relocation table section in elf file*)
-Definition gen_reloc_sections_headers (idl_reloctbl: list (ident * list relocentry)) (start_ofs: Z) : res (list section * list section_header * Z ) :=
-  fold_left acc_reloc_sections_headers idl_reloctbl (OK ([],[],start_ofs)).
+(* reloc sections, reloc headers, starting ofs of relocation table section in elf file, shstrtbl ,shstrtbl_ofs*)
+Definition gen_reloc_sections_headers (idl_reloctbl: list (ident * list relocentry)) (sec_start_ofs shstrtbl_start_ofs: Z) : res (list section * list section_header * Z * list byte * Z) :=
+  fold_left acc_reloc_sections_headers idl_reloctbl (OK ([],[],sec_start_ofs, [], shstrtbl_start_ofs)).
 
 End GEN_RELOC_SECS.
 
@@ -487,14 +502,12 @@ Definition gen_reloc_sections_and_shstrtbl (p: program) (symb_idxmap sec_idxmap 
   let idl_reloctbl := PTree.elements p.(prog_reloctables) in
   let rel_idlist := map fst idl_reloctbl in
   (* generate relocation string table , append to shstrtbl *)
-  do r <- gen_relstrtbl rel_idlist st.(e_shstrtbl_ofs);
-  (* ofs is useless !! *)
-  let '(rel_strtbl, rel_strmap, _ ) := r in
   let sec_ofs := st.(e_sections_ofs) in
+  let shstrtbl_ofs := st.(e_shstrtbl_ofs) in
   let symbtbl_idx := st.(e_headers_idx) - 1 in
-  do r <- gen_reloc_sections_headers symb_idxmap sec_idxmap symbtbl_idx rel_strmap idl_reloctbl sec_ofs;
-  let '(secs, hs, sec_ofs') := r in
-  let st1 := update_elf_state st secs hs rel_strtbl (sec_ofs'-sec_ofs) (Z.of_nat (length idl_reloctbl)) (Z.of_nat (length rel_strtbl)) in
+  do r <- gen_reloc_sections_headers symb_idxmap sec_idxmap symbtbl_idx  idl_reloctbl sec_ofs shstrtbl_ofs;
+  let '(secs, hs, sec_ofs', shstrtbl', shstrtbl_ofs') := r in
+  let st1 := update_elf_state st secs hs shstrtbl' (sec_ofs' - sec_ofs) (Z.of_nat (length idl_reloctbl)) (shstrtbl_ofs' - shstrtbl_ofs) in
   OK st1.
 
 (* shstrtable generation *)
@@ -511,13 +524,13 @@ Definition gen_shstrtbl (st: elf_state) :=
     
 Definition gen_reloc_elf (p:program) :=
   (** *Generate text and data section , related headers and shstrtbl *)
-  do st1_secidxmap_shstrmap <- gen_text_data_sections_and_shstrtbl p initial_elf_state;
-  let '(st1, secidxmap, shstrmap) := st1_secidxmap_shstrmap in
+  do st1_secidxmap <- gen_text_data_sections_and_shstrtbl p initial_elf_state;
+  let '(st1, secidxmap) := st1_secidxmap in
   (** *Generate string table and symbtbl from symbol table *)
   do st2_symbmap <- gen_symtbl_section_strtbl_and_shstr p secidxmap st1;
   let '(st2, symtbl_idx_map) := st2_symbmap in
   (** *Generate reloction table section and headers *)
-  do st3 <- gen_reloc_sections_and_shstrtbl p symtbl_idx_map secidxmap (* shstrmap *) st2;
+  do st3 <- gen_reloc_sections_and_shstrtbl p symtbl_idx_map secidxmap st2;
   (** *Generate section header string table and header *)
   do st4 <- gen_shstrtbl st3;
   (* debug: check section size *)
@@ -525,7 +538,7 @@ Definition gen_reloc_elf (p:program) :=
   (** *Generate ELF header *)
   let elf_h := gen_elf_header st4 in
   (* file too big ? *)
-  if Nat.eqb (length st4.(e_sections)) (length st4.(e_shstrtbl)) then
+  if Nat.eqb (length st4.(e_sections)) (length st4.(e_headers) - 1) then
     if zlt elf_h.(e_shoff) (two_p 32) then
       OK {| prog_defs := RelocProg.prog_defs p;
             prog_public   := RelocProg.prog_public p;
@@ -538,7 +551,7 @@ Definition gen_reloc_elf (p:program) :=
     else Error (msg "Sections too big (e_shoff above bounds)")
   else Error (msg "unequal length of sections and section headers")
   else Error (msg "Generate ELF header fail: shofs inconsistent").
-End INSTR_SIZE.
+
 
 (* Definition gen_reloc_elf (p:program) : res elf_file := *)
 (*   do secs <- gen_sections (prog_sectable p); *)

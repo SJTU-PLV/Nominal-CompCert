@@ -5,7 +5,7 @@
 
 Require Import Coqlib Integers AST Maps.
 Require Import Errors.
-Require Import RelocProg RelocProgram Encode.
+Require Import RelocProg RelocProgramBytes Encode.
 Require Import SymbolString.
 Require Import encode.Hex encode.Bits.
 Import Hex Bits.
