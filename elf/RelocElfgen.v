@@ -9,7 +9,7 @@
 
 Require Import Coqlib Integers AST Maps.
 Require Import Errors.
-Require Import Asm RelocProg RelocProgram Encode.
+Require Import Asm RelocProg RelocProgramBytes Encode.
 Require Import Memdata.
 Require Import RelocElf.
 Require Import SymbolString.
@@ -53,8 +53,6 @@ Local Open Scope string_byte_scope.
       -- header for .shstrtab
  *)
 
-Section INSTR_SIZE.
-Variable (instr_size : instruction -> Z).
 
 (** *Transition state *)
 Record elf_state :=
@@ -86,9 +84,9 @@ Definition initial_elf_state :=
 (** ** Generation of ELF header *)
 
 Definition get_sections_size (t: sectable) :=
-  PTree.fold1 (fun acc sec => sec_size instr_size sec + acc) t 0.
+  PTree.fold1 (fun acc sec => sec_size sec + acc) t 0.
 
-Definition get_elf_shoff (p:RelocProgram.program) :=
+Definition get_elf_shoff (p:program) :=
   elf_header_size +
   get_sections_size p.(prog_sectable).
 
@@ -304,23 +302,20 @@ Definition sort_symbtable (id_symbt: list (ident * symbentry))
 
 (* Extract string table from symbol table  *)
 (* every ident should map to one string *)
-Definition acc_strtbl (res_acc: res (list byte * PTree.t Z * Z)) (id: ident) : res (list byte * PTree.t Z * Z) :=
-  do acc <- res_acc;
-  let '(acc', strmap, ofs) := acc in
+Definition acc_strtbl acc ofs (id: ident) : res (list byte * Z) :=
   match find_symbol_pos id with
   | None => Error [MSG "Cannot find the string of the symbol "; CTX id]
   | Some n =>
     let bytes := map (fun p => Byte.repr (Zpos p)) n in
     (* check whether there is HB["00"] in bytes *)
     if in_dec Byte.eq_dec HB["00"] bytes then            
-      let strmap' := PTree.set id ofs strmap in
-      OK (acc' ++ bytes ++  [HB["00"]], strmap', ofs + Z.of_nat (length bytes) + 1)
+      OK (acc ++ bytes ++  [HB["00"]], ofs + Z.of_nat (length bytes) + 1)
     else Error (msg "Symbol string contains '\0'")
   end.
 
-(* content of strtbl, map from ident to index in the strtbl, the accumulate ofs *)
-Definition gen_strtbl (symbols : list ident) : res (list byte * PTree.t Z * Z) :=
-  fold_left acc_strtbl symbols (OK ([HB["00"]], PTree.empty Z, 1)).
+(* (* content of strtbl, map from ident to index in the strtbl, the accumulate ofs *) *)
+(* Definition gen_strtbl (symbols : list ident) : res (list byte * PTree.t Z * Z) := *)
+(*   fold_left acc_strtbl symbols (OK ([HB["00"]], PTree.empty Z, 1)). *)
 
 (* generate relocation table string .relname from relocation map*)
 Definition acc_relstrtbl (res_acc: res (list byte * PTree.t Z * Z)) (id: ident) : res (list byte * PTree.t Z * Z) :=
@@ -351,39 +346,37 @@ Fixpoint ident_to_index_aux (idl: list ident) (idx: Z) (acc:PTree.t Z) : PTree.t
 Definition ident_to_index (idl : list ident) (start: Z): PTree.t Z :=
   ident_to_index_aux idl start (PTree.empty Z).
 
-(* generate section header from text and data section, not include strtbl, symbtbl, reltbl*)
+(* generate section header and shstrtbl from text and data section, not include strtbl, symbtbl, reltbl*)
 (* also return the section accumulated size *)
-Definition acc_sections_headers (symbtbl: symbtable) (shstrmap: PTree.t Z) (res_acc: res (list section * list section_header * Z)) (id_sec: ident * RelocProgram.section) : res (list section * list section_header * Z) :=
+(* acc: section table, section header, section table offset, shstrtbl, strtbl offset *)
+Definition acc_sections_headers (symbtbl: symbtable) (res_acc: res (list section * list section_header * Z * list byte * Z)) (id_sec: ident * section) : res (list section * list section_header * Z * list byte * Z) :=
   do secs_hs_ofs <- res_acc;
-  let '(secs,hs,ofs) := secs_hs_ofs in
+  let '(secs,hs,ofs,shstrtbl,shstrofs) := secs_hs_ofs in
   let (id, sec0) := id_sec in
-  match sec0 with
-  | sec_bytes sec =>
-    match PTree.get id shstrmap with
-    | None => Error [MSG "Cannot find the section header string table index  of the symbol "; CTX id]
-    | Some idx =>
-      match PTree.get id symbtbl with
-      | None => Error [MSG "Cannot find the symbol entry of the symbol "; CTX id]
-      | Some e =>
-        match e.(symbentry_type) with
-        | symb_func =>
-          let h := gen_text_sec_header sec idx ofs in
-          (* consistency checking *)
-          if Z.eqb (Z.of_nat (length sec)) e.(symbentry_size) then
-            OK (secs ++ [sec], hs++[h],ofs + e.(symbentry_size))
-          else
-            Error [MSG "Inconsistency, section length not equal to symbentry field "; CTX id]
-        | symb_rwdata =>
-          let h := gen_data_sec_header sec idx ofs in
-          OK (secs++[sec], hs++[h],ofs + e.(symbentry_size))
-        (* read-only infomation in symb table *)
-        | symb_rodata =>
-          let h := gen_rodata_sec_header sec idx ofs in
-          OK (secs++[sec],hs++[h],ofs + e.(symbentry_size))
-        |  _ => Error [MSG "Impossible: no type for section "; CTX id]
-        end
-      end
+  do (shstrtbl', shstrofs') <- acc_strtbl shstrtbl shstrofs id;
+  match PTree.get id symbtbl with
+  | None => Error [MSG "Cannot find the symbol entry of the symbol "; CTX id]
+  | Some e =>
+    match sec0 with
+    | sec_text sec =>
+    (* match PTree.get id shstrmap with *)
+    (* | None => Error [MSG "Cannot find the section header string table index  of the symbol "; CTX id] *)
+    (* | Some idx => *)
+      let h := gen_text_sec_header sec shstrofs ofs in
+      (* consistency checking *)
+      if Z.eqb (Z.of_nat (length sec)) e.(symbentry_size) then
+        OK (secs ++ [sec], hs++[h],ofs + e.(symbentry_size), shstrtbl', shstrofs')
+      else
+        Error [MSG "Inconsistency, section length not equal to symbentry field "; CTX id]
+    | sec_rwdata sec =>
+      let h := gen_data_sec_header sec shstrofs ofs in
+      OK (secs++[sec], hs++[h],ofs + e.(symbentry_size), shstrtbl', shstrofs')
+    (* read-only infomation in symb table *)
+    | sec_rodata sec =>
+      let h := gen_rodata_sec_header sec shstrofs ofs in
+      OK (secs++[sec],hs++[h],ofs + e.(symbentry_size), shstrtbl', shstrofs')
     end
+
   | _ => Error [MSG "Section haven't been encoded"; CTX id]
   end.
 

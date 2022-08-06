@@ -887,71 +887,45 @@ Proof.
         auto.
     + simpl in *. rewrite H in *. auto.
 
-  (* data section *)
+  (* rwdata section *)
   - unfold acc_fold_section in H.
     monadInv H.
     simpl in EQ. monadInv EQ.
-    simpl in *.
-    (* rwdata *)
-    + monadInv EQ.
-      unfold acc_decode_code_section in H0.
-      rewrite Heqo in H0. rewrite Heqs0 in H0.
-      monadInv H0.
-      unfold alloc_section.
-      unfold RelocProgSemantics.alloc_section in H1.
-      unfold  RelocProgSemantics.get_symbol_type in *.
-      rewrite Heqo in *. rewrite Heqs0 in *.
-      destr_in H1. simpl in Heqs1.
-      inv Heqs1. simpl in H1.
-      exploit transl_init_data_list_size;eauto.
-      intros. rewrite H in H1.
-      destruct (Mem.alloc_glob id m 0 (Z.of_nat (Datatypes.length x))).
-      destr_in H1.
-      unfold transl_init_data_list in EQ0.
-      monadInv EQ0.
-      destr_in H1. exploit transl_init_data_list_pres_mem;eauto.
-      intros (bl & ? & ? & ?).
-      unfold store_init_data_bytes.
-      destruct (reloctbl ! id).
-      unfold reloctable.
-      rewrite H0. simpl. rewrite H3. auto.
-      unfold reloctable.
-      rewrite H0. simpl. rewrite H3. auto.
-           
-    (* rodata *)
-    + monadInv EQ.
-      unfold acc_decode_code_section in H0.
-      rewrite Heqo in H0. rewrite Heqs0 in H0.
-      monadInv H0.
-      unfold alloc_section.
-      unfold RelocProgSemantics.alloc_section in H1.
-      unfold  RelocProgSemantics.get_symbol_type in *.
-      rewrite Heqo in *. rewrite Heqs0 in *.
-      destr_in H1. simpl in Heqs1.
-      inv Heqs1. simpl in H1.
-      exploit transl_init_data_list_size;eauto.
-      intros. rewrite H in H1.
-      destruct (Mem.alloc_glob id m 0 (Z.of_nat (Datatypes.length x))).
-      destr_in H1.
-      destr_in H1.
-      unfold transl_init_data_list in EQ0.
-      monadInv EQ0.
-      exploit transl_init_data_list_pres_mem;eauto.
-      intros (bl & ? & ? & ?).
-      unfold store_init_data_bytes.
-      destruct (reloctbl ! id).
-      unfold reloctable.
-      rewrite H0. simpl. rewrite H3. auto.
-      unfold reloctable.
-      rewrite H0. simpl. rewrite H3. auto.
-      
+    simpl in *. inv H0.
+    exploit transl_init_data_list_size;eauto.
+    intros. rewrite H in H1.
+    destruct (Mem.alloc_glob id m 0 (Z.of_nat (Datatypes.length x))).
+    destr. destr_in H1.    
+    unfold transl_init_data_list in EQ0. monadInv EQ0.
+    exploit transl_init_data_list_pres_mem;eauto.
+    intros (bl & ? & ? & ?).
+    unfold store_init_data_bytes.
+    unfold reloctable in *.
+    rewrite H0. simpl.
+    rewrite H3. auto.
+
+    (* rwdata section *)
   - unfold acc_fold_section in H.
-    simpl in H. destr_in H.
+    monadInv H.
+    simpl in EQ. monadInv EQ.
+    simpl in *. inv H0.
+    exploit transl_init_data_list_size;eauto.
+    intros. rewrite H in H1.
+    destruct (Mem.alloc_glob id m 0 (Z.of_nat (Datatypes.length x))).
+    destr. destr_in H1.    
+    unfold transl_init_data_list in EQ0. monadInv EQ0.
+    exploit transl_init_data_list_pres_mem;eauto.
+    intros (bl & ? & ? & ?).
+    unfold store_init_data_bytes.
+    unfold reloctable in *.
+    rewrite H0. simpl.
+    rewrite H3. auto.
+
 Qed.
                
 Section PRESERVATION. 
 (** Transformation *)
-Variable prog: program.
+Variable prog: RelocProgram.program.
 Variable tprog: program.
 Hypothesis TRANSF: match_prog prog tprog.
 
@@ -1045,15 +1019,16 @@ Lemma transf_initial_state:forall st1 rs,
     unfold alloc_sections. rewrite PTree.fold_spec.
     rewrite PTree.fold_spec in Heqo.
     unfold RelocProg.sectable in *.
-    generalize (PTree_map_elements _ section (RelocProgSemantics1.rev_section instr_size (prog_reloctables prog)) (prog_sectable prog)).
+    generalize (PTree_map_elements _ _ (RelocProgSemantics1.rev_section instr_size (prog_reloctables prog)) (prog_sectable prog)).
     simpl. intros F3.
     (* induction on (prog_reloctables prog) *)
-    set (l:= @PTree.elements section (prog_sectable prog)) in *.
+    set (l:= @PTree.elements RelocProgram.section (prog_sectable prog)) in *.
     set (l1:= @PTree.elements section x0) in *.
-    set (l2 := @PTree.elements section x) in *.
-    unfold section in F3,Heqo.
-    set (l3:= (@PTree.elements (@RelocProg.section instruction)
-            (@PTree.map (@RelocProg.section instruction) (@RelocProg.section instruction)
+    set (l2 := @PTree.elements _ x) in *.
+    unfold RelocProgram.section in F3,Heqo.
+    (* Set Printing All. *)
+    set (l3:= (@PTree.elements _
+            (@PTree.map (RelocProg.section instruction init_data) _
                (RelocProgSemantics1.rev_section instr_size
                                                 (prog_reloctables prog)) (prog_sectable prog)))) in *.
     
@@ -1091,11 +1066,13 @@ Lemma transf_initial_state:forall st1 rs,
       inv H4. inv H9.
       clear F1 F2 F3.
       rewrite fold_left_app in Heqo. simpl in Heqo.
-      destruct (fold_left
-    (fun (a : option mem) (p : positive * RelocProg.section) =>
-     RelocProgSemantics.alloc_section instr_size ge1
-       (prog_symbtable prog) a (fst p) (snd p)) x2 
-    (Some Mem.empty)) eqn: FOLD.
+      destruct ((fold_left
+              (fun (a : option mem)
+                 (p : positive *
+                      RelocProg.section instruction init_data) =>
+               RelocProgSemantics.alloc_section instr_size ge1
+                 (prog_symbtable prog) a (fst p) 
+                 (snd p)) x2 (Some Mem.empty))) eqn:FOLD.
       2:{ simpl in Heqo. inv Heqo. }
       exploit IHx1. eapply eq_refl.
       eapply H2. auto. eauto.
@@ -1106,7 +1083,7 @@ Lemma transf_initial_state:forall st1 rs,
       clear FOLD1 FOLD.
       destruct H3. destruct H5. destruct H7.
       rewrite <- H3 in *. rewrite <- H in *.
-      unfold section in *.
+      unfold RelocProgram.section in *.
       rewrite H1 in *. clear H H1 H3.
       rewrite <- H2 in *. clear H2.
       exploit alloc_section_pres_mem;eauto. } (* end of assert ALLOCSECS *)
@@ -1267,9 +1244,13 @@ Proof.
   intros.
   eapply forward_simulation_step with (match_states:= fun (st1 st2:Asm.state) => st1 = st2).
   - simpl. unfold match_prog in TRANSF.
+    exploit decode_prog_code_section_total;eauto.
+    intros (tp' & ?).
+    unfold globalenv. rewrite H. simpl.
     unfold transf_program in TRANSF.
-    monadInv TRANSF.
-    simpl. auto.
+    monadInv TRANSF. unfold decode_prog_code_section in H.
+    simpl in *. monadInv H. simpl.
+    auto.
   - intros. simpl.
     eapply transf_initial_state.
     auto.

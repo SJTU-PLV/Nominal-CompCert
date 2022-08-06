@@ -49,7 +49,7 @@ Local Open Scope bits_scope.
 Definition encode_symbtype (t:symbtype) :=
   match t with
   | symb_func => 2
-  | symb_rwdata | symb_rodata => 1
+  | symb_data => 1
   | symb_notype => 0
   end.
 
