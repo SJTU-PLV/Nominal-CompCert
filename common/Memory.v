@@ -5099,6 +5099,25 @@ Program Definition skeleton (s:sup) : mem :=
       Mem.support := s;
     |}.
 
+(** Memory support extension *)
+
+Program Definition supext (s:sup) (m:mem) : mem :=
+  if (sup_include_dec (Mem.support m) s) then
+    {|
+      mem_contents := (mem_contents m);
+      mem_access := (mem_access m);
+      support := s
+    |} else
+    m.
+Next Obligation.
+   apply access_max; eauto.
+Qed.
+Next Obligation.
+   apply nextblock_noaccess; eauto.
+Qed.
+Next Obligation.
+   apply contents_default; eauto.
+Qed.
 (** update permission *)
 
 Definition perm_map := Z -> perm_kind -> option permission.
@@ -5188,14 +5207,14 @@ Next Obligation.
     apply Mem.contents_default.
 Qed.
 
-Fixpoint inject_map (s1 s2:list block) (f: meminj) (m1:mem) : mem :=
+Fixpoint inject_map (s1 s2:list block) (f: meminj) (m1':mem) (m2:mem) : mem :=
   match s1 with
-    |nil => skeleton s2
-    |hd :: tl => map f hd m1 (inject_map tl s2 f m1)
+    |nil => supext s2 m2
+    |hd :: tl => map f hd m1' (inject_map tl s2 f m1' m2)
   end.
 
-Definition inject_mem s2 f m1 : mem :=
-  inject_map (Mem.support m1) s2 f m1.
+Definition inject_mem s2 f m1' m2 : mem :=
+  inject_map (Mem.support m1') s2 f m1' m2.
 
 Lemma support_map : forall f b m1 m2,
     support (map f b m1 m2) = support m2.
@@ -5204,17 +5223,20 @@ Proof.
   destruct p. destruct sup_dec; auto.
 Qed.
 
-Lemma inject_map_support : forall s1 s2 f m1,
-    support (inject_map s1 s2 f m1) = s2.
+Lemma inject_map_support : forall s1 s2 f m1' m2,
+    sup_include (support m2) s2 ->
+    support (inject_map s1 s2 f m1' m2) = s2.
 Proof.
-  induction s1; intros; auto.
-  simpl. rewrite support_map. eauto.
+  induction s1; intros; simpl; auto.
+  - unfold supext. destruct sup_include_dec. reflexivity. congruence.
+  - rewrite support_map. eauto.
 Qed.
 
-Lemma inject_mem_support : forall s2 f m1,
-    support (inject_mem s2 f m1) = s2.
+Lemma inject_mem_support : forall s2 f m1' m2,
+    sup_include (support m2) s2 ->
+    support (inject_mem s2 f m1' m2) = s2.
 Proof.
-  intros. apply inject_map_support.
+  intros. apply inject_map_support; auto.
 Qed.
 
 End Mem.
