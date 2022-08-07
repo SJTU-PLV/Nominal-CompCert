@@ -335,18 +335,12 @@ Definition acc_relstrtbl acc ofs (id: ident) : res (list byte * Z) :=
 (* Definition gen_relstrtbl (symbols : list ident) (ofs: Z) : res (list byte * PTree.t Z * Z) := *)
 (*   fold_left acc_relstrtbl symbols (OK ([], PTree.empty Z, ofs)). *)
 
-(* ident to section index mapping *)
-Fixpoint ident_to_index_aux (idl: list ident) (idx: Z) (acc:PTree.t Z) : PTree.t Z:=
-  match idl with
-  | [] => acc
-  | h::t =>
-    let acc' := PTree.set h idx acc in
-    ident_to_index_aux t (idx+1) acc'
-  end.
-
+Definition acc_ident_to_index (acc: PTree.t Z * Z) (id: ident) :=
+  let (t, idx) := acc in
+  (PTree.set id idx t, idx + 1).
 
 Definition ident_to_index (idl : list ident) (start: Z): PTree.t Z :=
-  ident_to_index_aux idl start (PTree.empty Z).
+  fst (fold_left acc_ident_to_index idl (PTree.empty Z, start)).
 
 (* generate section header and shstrtbl from text and data section, not include strtbl, symbtbl, reltbl*)
 (* also return the section accumulated size *)

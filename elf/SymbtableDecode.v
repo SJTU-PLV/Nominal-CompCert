@@ -150,3 +150,9 @@ Lemma decode_encode_symbentry32 : forall e bs nidx m1 m2 (M: match_idxmap m1 m2)
     encode_symbentry32 e nidx m1 = OK bs ->
     decode_symbentry32 bs m2 = OK e.
 Admitted.
+
+Lemma decode_encode_symbentry64 : forall e bs nidx m1 m2 (M: match_idxmap m1 m2),
+    encode_symbentry64 e nidx m1 = OK bs ->
+    decode_symbentry64 bs m2 = OK e.
+Admitted.
+
