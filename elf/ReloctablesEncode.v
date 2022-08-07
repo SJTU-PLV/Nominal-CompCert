@@ -52,16 +52,24 @@ Definition encode_reloc_info (t:reloctype) (symb:ident)  : res (list byte) :=
   | None => Error [MSG "Relocation target symbol doesn't exist!"; CTX symb]
   | Some idx =>
     if Archi.ptr64 then
-      OK (encode_int64 (idx * (Z.pow 2 32) + te))
+      if (0 <? idx) && (idx <? Z.pow 2 32) then
+        OK (encode_int64 (idx * (Z.pow 2 32) + te))
+      else Error (msg "Overflow in encode_reloc_info")
     else
-      OK (encode_int32 (idx * (Z.pow 2 8) + te))
+      if (0 <? idx) && (idx <? Z.pow 2 24) then
+        OK (encode_int32 (idx * (Z.pow 2 8) + te))
+      else Error (msg "Overflow in encode_reloc_info")
   end.
 
 Definition encode_relocentry (e:relocentry) : res (list byte) :=
+  let len := if Archi.ptr64 then 64 else 32 in
   if Z.eqb (reloc_addend e) 0 then
-    let r_offset_bytes := if Archi.ptr64 then encode_int64 (reloc_offset e)  else  encode_int32 (reloc_offset e) in
-    do r_info_bytes <- encode_reloc_info (reloc_type e) (reloc_symb e);
-    OK (r_offset_bytes ++ r_info_bytes)
+    if (0 <=? e.(reloc_offset)) && (e.(reloc_offset) <? Z.pow 2 len) then
+      let r_offset_bytes := if Archi.ptr64 then encode_int64 (reloc_offset e)  else  encode_int32 (reloc_offset e) in
+      
+      do r_info_bytes <- encode_reloc_info (reloc_type e) (reloc_symb e);
+      OK (r_offset_bytes ++ r_info_bytes)
+    else Error [MSG "Reloc offset overflow";CTX (reloc_symb e)]
   else Error [MSG "Relocation addend is not zero!";CTX (reloc_symb e)].
 
 Definition acc_reloctable  acc e :=
