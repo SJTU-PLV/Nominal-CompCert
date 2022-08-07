@@ -94,12 +94,51 @@ Lemma transl_code_rev: forall n l l' ofs reloctbl reloctbl',
     ofs = code_size instr_size l /\ exists reloctbl1, reloctbl = reloctbl1 ++ reloctbl'.
 Admitted.
 
+
+(* important lemma: may be so difficult *)
 Lemma decode_instr_len: forall l l' e i,
     decode_instr e l = OK (i,l') ->
-    exists a l1, l = a :: l1 ++ l' /\ forall l2, decode_instr e (a::l1 ++ l2) = OK (i,l2).
+    exists a l1, l = a :: l1 ++ l' /\ forall l2, decode_instr e (a::l1 ++ l2) = OK (i,l2) /\ Instr_size (a :: l1 ++ l2) = Instr_size l.
 Admitted.       
 
+Definition decode_instrs_reloc_len_prop n:=
+  forall l1 l2 l1' reloctbl1 reloctbl2,
+    n = length l1 ->
+    decode_instrs instr_size Instr_size l1 (l2, reloctbl1) = OK (l1', reloctbl2) ->
+    (length reloctbl2 <= length reloctbl1)%nat.
 
+Definition decode_instrs_reloc_len : forall n,
+    decode_instrs_reloc_len_prop n.
+Proof.
+  
+  intros n.
+  eapply Nat.strong_right_induction with (z:=O);eauto;try lia.
+  unfold Morphisms.Proper.
+  unfold Morphisms.respectful.
+  intros. subst. split;auto.
+
+  intros.
+  
+  unfold decode_instrs_reloc_len_prop.
+  intros.
+  rewrite decode_instrs_eq in H2. simpl in H2. destr_in H2.
+  - subst. inv H2. auto.
+  - destr_in H2.
+    + monadInv H2.
+      destr_in EQ0. subst.
+      exploit (H0 (length x0));eauto.
+      lia.
+    + destr_in H2.
+      * monadInv H2. destr_in EQ0.
+        subst.
+        exploit (H0 (length x0));eauto.
+        lia. intros. simpl. lia.
+      * monadInv H2. destr_in EQ0.
+        subst.
+        exploit (H0 (length x0));eauto.
+        lia.
+Qed.
+        
 Definition decode_instrs_app_prop n :=
   forall l1 l1' l2 genl reloctbl1 reloctbl2,
     n = length l1 ->
@@ -124,7 +163,7 @@ Lemma decode_instrs_app: forall n,
   - destr_in DEC.
     + monadInv DEC. destr_in EQ0.
       exploit decode_instr_len;eauto.
-      intros (a & l3 & P1 & P2). inv P1.
+      intros (a & l3 & P1 & (P2 & P3)). inv P1.
       exploit (H0 (length x0)).
       lia.
       simpl. rewrite app_length. lia.
@@ -145,132 +184,61 @@ Lemma decode_instrs_app: forall n,
       * 
       monadInv DEC.
       destr_in EQ0.
-      exploit decode_instr_len;eauto.
-      intros (a & l3 & P1 & P2). inv P1.
+      exploit decode_instr_len ;eauto.
+      intros (a & l3 & P1 & P2).
+      generalize (P2 (x0 ++ l2)). clear P2.
+      intros (P2 & P3).
+      inv P1.
+      
+      (* reloctbl len decrease *)
+      exploit decode_instrs_reloc_len. eapply eq_refl.
+      apply EQ0. intros. 
+      destruct reloctbl1. simpl in Heql. subst. simpl in H1. lia.
+      simpl in Heql. inv Heql.
+      
       cbn [app].
-      erewrite decode_instrs_eq. rewrite <- app_assoc.
-      rewrite P2.  cbn [bind2].
-      destr. destr.
+      erewrite decode_instrs_eq.
+      cbn [andb].
+      rewrite <- app_assoc. rewrite P3.
+      rewrite Heqb. rewrite P2. simpl.
             
-      exploit (H0 (length x0)).
-      lia.
-      simpl. rewrite app_length. lia.
-      eauto.
+      destr.
 
-      (*** 2022.8.7  *)
-      
-      change ((genl ++ [x], [])) with ((genl ++ [x], @app relocentry [] [])) in EQ0.
-      erewrite EQ0. f_equal. f_equal.
-      destruct reloctbl1;destruct reloctbl2;simpl in Heql;try congruence.
-      intros IH.
-      cbn [app].
-      rewrite decode_instrs_eq. rewrite <- app_assoc.
-      rewrite P2. cbn [bind2].
-      destr. rewrite IH. destruct reloctbl1;destruct reloctbl2;simpl in Heql;try congruence.
-      simpl in n0. repeat rewrite app_length in n0.
-      lia.
+      -- exploit (H0 (length x0)). lia.
+         simpl. rewrite app_length. lia.
+         eauto. apply EQ0.
+         intros. rewrite H2. auto.
+      -- repeat rewrite app_length in n0. lia.
 
-      
-    decode_instrs instr_size Instr_size l1 (genl,reloctbl1++reloctbl2) = OK (l1', reloctbl2) ->
-    decode_instrs instr_size Instr_size (l1 ++ l2) (genl,reloctbl1++reloctbl2) = decode_instrs instr_size Instr_size l2 (l1',reloctbl2).
-Proof.
-  
-  induction l1';intros.
-  - rewrite decode_instrs_eq in H.
-    destr_in H.
-    + subst. inv H. simpl. repeat rewrite H2.
-      auto.
-    + subst. destr_in H.
-      *
-        Nat.strong_right_induction
-        monadInv H. destr_in EQ0.
-        rewrite decode_instrs_eq.
-        cbn [app].
-        exploit decode_instr_len;eauto.
-        intros (a & l1 & P1 & P2). inv P1.
-        rewrite <- app_assoc.
-        erewrite P2. cbn [bind2].
-        destr.
-        --
-    simpl in *. inv H.
-    destruct l2.
-    + rewrite H2. rewrite H2. auto.
-    + rewrite H2. rewrite H2. auto.
-  - repeat rewrite decode_instrs_eq in *.
-    cbn [app] in *.
-    unfold decode_instrs in H. unfold decode_instrs_func in H.
-    
-  induction fuel1;intros.
-  - simpl in H1. destruct l1.
-    + destruct fuel2;destruct l2.
-      * simpl. auto.
-      * simpl. auto.
-      * inv H1. simpl. rewrite H4. rewrite H4. auto.
-      * inv H1. rewrite H4. rewrite H4.
-        auto.
-    + inv H1.
+   * monadInv DEC.
+     destr_in EQ0.
+     rewrite <- Heql in *.
+     
+     exploit decode_instr_len ;eauto.
+     intros (a & l3 & P1 & P2).
+     generalize (P2 (x0 ++ l2)). clear P2.
+     intros (P2 & P3).
+     inv P1.
+     
+     cbn [app].
+     erewrite decode_instrs_eq.
+     cbn [andb].
+     rewrite <- app_assoc. rewrite P3.
 
-  - simpl.
-    cbn [decode_instrs] in H1.
-    destruct l1.
-    + inv H1. simpl. rewrite H4. rewrite H4.
-      destruct l2;auto.
-      * destruct fuel2;simpl;auto.
-      * destruct reloctbl2.
-        ++ destruct fuel2.
-           -- simpl in H. lia.
-           -- cbn [decode_instrs].
-              destruct decode_instr eqn:DES;auto.
-              destruct p. apply decode_instr_len in DES.
-              destruct DES as (a & l2' & ? & UNUSE).
-              simpl. eapply decode_instrs_fuel;auto.
-              rewrite H1 in H. simpl in H. rewrite app_length in H.
-              lia.
-              rewrite H1 in H. simpl in H. rewrite app_length in H.
-              lia.
-        ++ destr.
-           -- destruct fuel2.
-              ** simpl in H;lia.
-              ** cbn [decode_instrs]. simpl code_size.
-                 rewrite Heqb.
-                 destruct decode_instr eqn:DES;auto.
-                 destruct p. apply decode_instr_len in DES.
-                 destruct DES as (a & l2' & ? & UNUSE).
-                 simpl. eapply decode_instrs_fuel;auto.
-                 rewrite H1 in H. simpl in H. rewrite app_length in H.
-                 lia.
-                 rewrite H1 in H. simpl in H. rewrite app_length in H.
-                 lia.
-           -- destruct fuel2.
-              ** simpl in H;lia.
-              ** cbn [decode_instrs]. simpl code_size.
-                 rewrite Heqb.
-                 destruct decode_instr eqn:DES;auto.
-                 destruct p. apply decode_instr_len in DES.
-                 destruct DES as (a & l2' & ? & UNUSE).
-                 simpl. eapply decode_instrs_fuel;auto.
-                 rewrite H1 in H. simpl in H. rewrite app_length in H.
-                 lia.
-                 rewrite H1 in H. simpl in H. rewrite app_length in H.
-                 lia.
-    + cbn [app].
-      destruct reloctbl1.
-      * destruct reloctbl2;cbn [app] in *.
-        -- monadInv H1. apply decode_instr_len in EQ.
-           destruct EQ as (a & l2' & ? & DESGEN).
-           inv H1. rewrite <- app_assoc.
-           rewrite DESGEN. cbn [bind2].
-           assert (decode_instrs instr_size Instr_size (fuel1 + fuel2)
-    (x0 ++ l2) (genl ++ [x], []) = decode_instrs instr_size Instr_size (fuel1 + fuel2)
-                                                 (x0 ++ l2) (genl ++ [x], []++[])) by auto.
-           rewrite H1.
-           erewrite  IHfuel1;eauto.
-           simpl in H0. rewrite app_length in H0. lia.
-        -- destr.
-           **
-Admitted.
+     destr.
 
-  
+     inv Heql. rewrite Heqb. rewrite P2. simpl.
+     destr.
+     exploit (H0 (length x0)). lia.
+     simpl. rewrite app_length. lia.
+     eauto. rewrite <- Heql1 in *.  apply EQ0.
+     intros. rewrite <- Heql1 in *. rewrite H1. auto.
+
+     repeat rewrite app_length in n0. lia.
+
+Qed.
+
+
 Lemma instr_eq_list_len: forall l1 l2,
     Forall2 instr_eq l1 l2 ->
     code_size instr_size l1 = code_size instr_size l2.
@@ -313,7 +281,7 @@ Proof.
       destr_in EQ2. inv EQ2.
       unfold decode_instrs' in *.
       monadInv P1.
-      rewrite app_length.
+      (* rewrite app_length. *)
       (* decode_instrs_bytes *)
       exploit decode_instrs_bytes_app;eauto. intros Q.
       rewrite Q. clear Q.
@@ -321,18 +289,16 @@ Proof.
       erewrite decode_instrs_bytes_app';eauto. simpl.
       (* decode_instrs *)
       clear EQ0 Q2 EQ1.
-      rewrite app_length.
+      (* rewrite app_length. *)
 
       erewrite decode_instrs_app;eauto.
       exploit translate_instr_consistency;eauto.
       erewrite app_nil_r. intros (i1 & M1 & M2).
       destruct x. simpl in M1. inv M1.
-      cbn [length].
-      unfold decode_instrs. rewrite M1.
-      destruct x;simpl.
+      rewrite decode_instrs_eq.
+      rewrite M1. simpl.
+      
 
-      exists (c1++[i1]). split;eauto.
-      apply Forall2_app;eauto.
       exists (c1++[i1]). split;eauto.
       apply Forall2_app;eauto.
 
@@ -342,14 +308,14 @@ Proof.
         unfold decode_instrs' in *.
         monadInv P1.
         (* decode_instrs_bytes *)
-        rewrite app_length.
+       
         exploit decode_instrs_bytes_app;eauto. intros Q.
         rewrite Q. clear Q.
         exploit encode_into_byte_consistency;eauto. intros Q2.
         erewrite decode_instrs_bytes_app';eauto. simpl.
         (* decode_instrs *)
         clear EQ0 Q2 EQ1.
-        rewrite app_length.
+        
 
         erewrite decode_instrs_app;eauto.
         exploit translate_instr_consistency;eauto.
@@ -358,16 +324,14 @@ Proof.
         exploit translate_instr_size;eauto. rewrite app_nil_r.
         intros INSTRSIZE.
         destruct x. simpl in M1. inv M1.
-        cbn [length].
-        unfold decode_instrs.
+        rewrite decode_instrs_eq.
         exploit instr_eq_list_len;eauto. intros LEN.
         rewrite <- LEN. rewrite INSTRSIZE.
+        cbn [andb].
         rewrite Heqb.
         rewrite M1.
-        destruct x;simpl.
+        simpl.
 
-        exists (c1++[i1]). split;eauto.
-        apply Forall2_app;eauto.
         exists (c1++[i1]). split;eauto.
         apply Forall2_app;eauto.
         
@@ -376,14 +340,12 @@ Proof.
         unfold decode_instrs' in *.
         monadInv P1.
         (* decode_instrs_bytes *)
-        rewrite app_length.
         exploit decode_instrs_bytes_app;eauto. intros Q.
         rewrite Q. clear Q.
         exploit encode_into_byte_consistency;eauto. intros Q2.
         erewrite decode_instrs_bytes_app';eauto. simpl.
         (* decode_instrs *)
         clear EQ0 Q2 EQ1.
-        rewrite app_length.
 
         erewrite decode_instrs_app;eauto.
         exploit translate_instr_consistency;eauto.
@@ -392,10 +354,11 @@ Proof.
         exploit translate_instr_size;eauto. rewrite app_nil_r.
         intros INSTRSIZE.
         destruct x. simpl in M1. inv M1.
-        cbn [length].
-        unfold decode_instrs.
+
+        rewrite decode_instrs_eq.
         exploit instr_eq_list_len;eauto. intros LEN.
         rewrite <- LEN. rewrite INSTRSIZE.
+        cbn [andb].
         rewrite Heqb.
         rewrite M1.
         destruct x;simpl.
