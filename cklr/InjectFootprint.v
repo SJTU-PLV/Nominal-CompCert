@@ -1592,18 +1592,41 @@ Proof. eapply OUTOFREACH1; eauto. Qed.
 Theorem inject_mem_inj2 :
     Mem.mem_inj j2' m2' m3'.
 Proof.
-  Admitted.
-(*  constructor.
+  generalize INJ12'. intro INJ12'.
+  generalize MAXPERM2. intro MEXPERM2.
+ constructor.
   - intros b2 b3 delta3 ofs2 k p MAP2 PERM2.
     destruct (j2 b2) as [[b3' delta3']|] eqn: Hj2b2.
-    + apply inject_implies_dom_in in INJ12 as DOMIN1.
+    + apply INCR2 in Hj2b2 as MAP2'. rewrite MAP2 in MAP2'. inversion MAP2'.
+      subst b3' delta3'. clear MAP2'.
       destruct (Mem.loc_in_reach_dec (Mem.support m1) m1 j1 b2 ofs2 Max Nonempty DOMIN1).
-      * (* b2 is in the reach of j1,*)
-      admit.
-      * assert (Mem.perm m2 b2 ofs2 k p). admit. (* update_add_out_of_reach *)
-        erewrite INCR2 in MAP2; eauto. inversion MAP2. subst b3' delta3'. clear MAP2.
-        inversion OUTOFREACH3. eapply unchanged_on_perm.
+      * (* b2 is in the reach of j1 *)
+        destruct (Mem.loc_in_reach_dec (Mem.support m1') m1' j1' b2 ofs2 Max Nonempty DOMIN1').
+        -- (* b2 is in the reach of j1' -- ok*)
+          destruct l0 as (b1 & delta2 & MAP1 & PERM1).
+          replace (ofs2 + delta3) with ((ofs2 - delta2) + (delta2 + delta3)) by lia.
+          eapply Mem.perm_inject. 2: eauto. unfold compose_meminj.
+          rewrite MAP1, MAP2. reflexivity.
+          inversion INJ12'.
+          exploit mi_perm_inv. apply MAP1.
+          replace ofs2 with (ofs2 - delta2 + delta2) in PERM2 by lia.
+          eauto.
+          intros [A | A].
+          auto. congruence.
+        -- (* b1 is out of the reach of j1' -- Mem.perm m2' b2 ofs2 k p should not hold*) admit.
+      * (* b2 is out of the reach of j1 *)
         apply Mem.out_of_reach_reverse in n.
+        assert (Mem.perm m2 b2 ofs2 k p).
+        {
+          generalize OUTOFREACH1'. intro OUTOFREACH1.
+          inversion OUTOFREACH1.
+          exploit unchanged_on_perm; eauto.
+          apply inject_implies_dom_in in INJ23. unfold Mem.valid_block.
+          red in  INJ23; eauto.
+          intro. apply H. auto.
+        }
+        (* update_add_out_of_reach *)
+        inversion UNCHANGE3. eapply unchanged_on_perm.
         eapply loc_out_of_reach_trans; eauto.
         inversion INJ23. eauto.
         eapply Mem.perm_inject; eauto.
@@ -1611,8 +1634,23 @@ Proof.
       intros (b1 & A & B).
       inversion INJ13'. inversion mi_inj. eapply mi_perm.
       unfold compose_meminj. rewrite A,MAP2. reflexivity.
-      admit. (* update_add_perm_inv *)
-*)
+      admit. (* update_add_new_perm_inv *)
+  - intros. destruct (j2 b1) as [[b2' d]|] eqn: Hj2b1.
+    apply INCR2 in Hj2b1 as H'. rewrite H in H'. inversion H'.
+    subst b2' d. clear H'.
+    + inversion INJ23. inversion mi_inj.
+      eapply mi_align; eauto.
+      red. intros. apply H0 in H1. eapply MAXPERM2; eauto.
+      apply inject_implies_dom_in in INJ23. unfold Mem.valid_block.
+      red in  INJ23; eauto.
+    + exploit ADDSAME; eauto. intros (b3 & A & B).
+      inversion INJ13'. inversion mi_inj.
+      eapply mi_align. unfold compose_meminj.
+      rewrite A,H. reflexivity.
+      admit. (*update_add_new_perm_inv*)
+  - admit. (*??? similar to perm*)
+Admitted.
+
 Theorem inject_mem_inject2:
     Mem.inject j2' m2' m3'.
 Proof.
@@ -1628,13 +1666,31 @@ Proof.
     + exploit ADDSAME; eauto. intros (b1 & MAP1 & INJECTIVE).
       inv INJ13'. eapply mi_mappedblocks. unfold compose_meminj. rewrite MAP1. rewrite H.
       reflexivity.
-  - admit.
-  - admit.
-  - admit.
+  - red. intros b2 b3 delta3 b2' b3' delta3' ofs2 ofs2' NEQ MAP2 MAP2' PERM2 PERM2'.
+    admit. (*?????*)
+  - intros. destruct (j2 b) as [[b'' delta']|] eqn : Hj2.
+    + apply inject_implies_dom_in in INJ23 as DOMIN23.
+      erewrite INCR2 in H; eauto. inversion H. subst b'' delta'. clear H.
+      inversion INJ23. eapply mi_representable; eauto.
+      destruct H0 as [A|A].
+      left. eapply MAXPERM2 in A; eauto. unfold Mem.valid_block. red in DOMIN23; eauto.
+      right. eapply MAXPERM2 in A; eauto. unfold Mem.valid_block. red in DOMIN23; eauto.
+    + exploit ADDSAME; eauto. intros (b1 & MAP1 & INJECTIVE).
+      inversion INJ13'. eapply mi_representable. unfold compose_meminj. rewrite MAP1. rewrite H.
+      reflexivity.
+      destruct H0 as [A|A].
+      left. admit. (*quite subtle, we shall show that b is a new block,
+                     so its perm is uniquely copyed from m1'. Then the INJECTIVE and INJNPLAP1 will do it.*)
+      right. admit. (*same as above *)
+  - intros.
+    admit. (*????????*)
 Admitted.
 
 Theorem UNMAP2: Mem.unchanged_on (loc_unmapped j2) m2 m2'.
-Proof. Admitted.
+Proof.
+  constructor.
+  -
+Admitted.
 
 End inject2.
 Lemma inject_compose_inv:
