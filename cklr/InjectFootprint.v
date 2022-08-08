@@ -1588,6 +1588,14 @@ Proof. eapply MAXPERM2; eauto. Qed.
 Lemma OUTOFREACH1' : Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'.
 Proof. eapply OUTOFREACH1; eauto. Qed.
 
+Lemma update_new_perm_inv: forall b1 b2 ofs2 b3 delta3 k p,
+    j2 b2 = None ->
+    j2' b2 = Some (b3, delta3) ->
+    Mem.perm m2' b2 ofs2 k p ->
+    j1' b1 = Some (b2, 0) ->
+    Mem.perm m1' b1 ofs2 k p.
+Proof.
+Admitted.
 
 Theorem inject_mem_inj2 :
     Mem.mem_inj j2' m2' m3'.
@@ -1613,7 +1621,8 @@ Proof.
           eauto.
           intros [A | A].
           auto. congruence.
-        -- (* b1 is out of the reach of j1' -- Mem.perm m2' b2 ofs2 k p should not hold*) admit.
+        -- (* b1 is out of the reach of j1' -- Mem.perm m2' b2 ofs2 k p should not hold*) 
+          admit.
       * (* b2 is out of the reach of j1 *)
         apply Mem.out_of_reach_reverse in n.
         assert (Mem.perm m2 b2 ofs2 k p).
@@ -1634,7 +1643,7 @@ Proof.
       intros (b1 & A & B).
       inversion INJ13'. inversion mi_inj. eapply mi_perm.
       unfold compose_meminj. rewrite A,MAP2. reflexivity.
-      admit. (* update_add_new_perm_inv *)
+      eapply update_new_perm_inv; eauto.
   - intros. destruct (j2 b1) as [[b2' d]|] eqn: Hj2b1.
     apply INCR2 in Hj2b1 as H'. rewrite H in H'. inversion H'.
     subst b2' d. clear H'.
@@ -1647,7 +1656,8 @@ Proof.
       inversion INJ13'. inversion mi_inj.
       eapply mi_align. unfold compose_meminj.
       rewrite A,H. reflexivity.
-      admit. (*update_add_new_perm_inv*)
+      red. intros.
+      eapply update_new_perm_inv; eauto.
   - admit. (*??? similar to perm*)
 Admitted.
 
@@ -1679,17 +1689,96 @@ Proof.
       inversion INJ13'. eapply mi_representable. unfold compose_meminj. rewrite MAP1. rewrite H.
       reflexivity.
       destruct H0 as [A|A].
-      left. admit. (*quite subtle, we shall show that b is a new block,
-                     so its perm is uniquely copyed from m1'. Then the INJECTIVE and INJNPLAP1 will do it.*)
-      right. admit. (*same as above *)
+      left. eapply update_new_perm_inv; eauto.
+      right. eapply update_new_perm_inv; eauto.
   - intros.
     admit. (*????????*)
 Admitted.
 
 Theorem UNMAP2: Mem.unchanged_on (loc_unmapped j2) m2 m2'.
 Proof.
+  generalize OUTOFREACH1'. intro OUTOFREACH1.
+  generalize INJ12'. intro INJ12'.
   constructor.
-  -
+  - erewrite SUP2 with (m2' := m2'); eauto.
+  - intros.
+    destruct (Mem.loc_in_reach_dec (Mem.support m1) m1 j1 b ofs Max Nonempty DOMIN1).
+    + (* b2 is not out_of_reach j1 m1*)
+      destruct l as (b1 & d & MAP1 & PERM1).
+      assert (loc_unmapped (compose_meminj j1 j2) b1 (ofs -d)).
+      {
+        red. unfold compose_meminj.
+        destruct (j1 b1) as [[b2' delta2']|] eqn : Hj1; try congruence.
+        destruct (j2 b2') as [[b3' delta3']|] eqn: Hj2; try congruence.
+      }
+      assert (PERMEQ1: forall k p,Mem.perm m1 b1 (ofs -d) k p <-> Mem.perm m1' b1 (ofs -d) k p).
+      { intros. inversion UNCHANGE1.
+        eapply unchanged_on_perm; eauto.
+        unfold Mem.valid_block. eauto.
+      }
+      split; intro.
+      * inversion INJ12. exploit mi_perm_inv. apply MAP1.
+        replace ofs with (ofs - d + d) in H2 by lia.
+        eauto.
+        intros [A | B]; try congruence.
+        apply PERMEQ1 in A.
+        exploit Mem.perm_inject. 2: apply INJ12'.
+        apply INCR1 in MAP1. eauto. eauto. intro.
+        replace ofs with (ofs - d + d)  by lia. auto.
+      * inversion INJ12'. exploit mi_perm_inv.
+        apply INCR1 in MAP1 as MAP1'.
+        apply MAP1'.
+        replace ofs with (ofs - d + d) in H2 by lia.
+        eauto.
+        intros [A | B]; try congruence.
+        apply PERMEQ1 in A.
+        exploit Mem.perm_inject. 2: apply INJ12.
+        eauto. eauto. intro.
+        replace ofs with (ofs - d + d)  by lia. auto.
+        apply PERMEQ1 in PERM1. congruence.
+    + (* b2 is out_of_reach j1 m1*)
+      apply Mem.out_of_reach_reverse in n.
+      inversion OUTOFREACH1.
+      eapply unchanged_on_perm; eauto.
+  - intros.
+    destruct (Mem.loc_in_reach_dec (Mem.support m1) m1 j1 b ofs Max Nonempty DOMIN1).
+    + (* b2 is not out_of_reach j1 m1*)
+      destruct l as (b1 & d & MAP1 & PERM1).
+      assert (loc_unmapped (compose_meminj j1 j2) b1 (ofs -d)).
+      {
+        red. unfold compose_meminj.
+        destruct (j1 b1) as [[b2' delta2']|] eqn : Hj1; try congruence.
+        destruct (j2 b2') as [[b3' delta3']|] eqn: Hj2; try congruence.
+      }
+      assert (PERMEQ1: forall k p,Mem.perm m1 b1 (ofs -d) k p <-> Mem.perm m1' b1 (ofs -d) k p).
+      { intros. inversion UNCHANGE1.
+        eapply unchanged_on_perm; eauto.
+        unfold Mem.valid_block. eauto.
+      }
+      assert (PERMREAD1: Mem.perm m1 b1 (ofs - d) Cur Readable).
+      {
+        inversion INJ12. exploit mi_perm_inv; eauto.
+        replace ofs with (ofs - d + d) in H0 by lia. eauto.
+        intros [A|B]. auto. congruence.
+      }
+      assert (CONTENTEQ1 :
+                Maps.ZMap.get (ofs -d) (NMap.get (Maps.ZMap.t memval) b1 (Mem.mem_contents m1')) =
+                Maps.ZMap.get (ofs -d) (NMap.get (Maps.ZMap.t memval) b1 (Mem.mem_contents m1)) ).
+      { intros. inversion UNCHANGE1.
+        eapply unchanged_on_contents; eauto.
+      }
+      inversion INJ12. inversion mi_inj.
+      exploit mi_memval; eauto.
+      intro VINJ1.
+      inversion INJ12'. inversion mi_inj0.
+      exploit mi_memval0; eauto.
+      apply PERMEQ1; eauto.
+      intros VINJ2.
+      admit. (* Vundef issue...*)
+    + (* b2 is out_of_reach j1 m1*)
+      apply Mem.out_of_reach_reverse in n.
+      inversion OUTOFREACH1.
+      eapply unchanged_on_contents; eauto.
 Admitted.
 
 End inject2.
