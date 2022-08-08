@@ -1324,6 +1324,49 @@ Proof.
       -- erewrite map_content_1 with (m2' := m2'); eauto. intros [d A]. congruence.
 Qed.
 
+(* Lemma inject_mem_out_of_reach:
+  forall s2' j1' m1' m2'1 m2' b2 ofs2 k p,
+    Mem.inject_mem s2' j1' m1' m2'1 = m2' ->
+    loc_out_of_reach j1' m1' b2 ofs2 ->
+    Mem.perm m2'1 b2 ofs2 k p <-> Mem.perm m2' b2 ofs2 k p.
+Proof. Admitted. *)
+
+ Lemma inject_mem_out_of_reach:
+  forall s2' j1' m1' m2'1 m2',
+    Mem.inject_mem s2' j1' m1' m2'1 = m2' ->
+    Mem.unchanged_on (loc_out_of_reach j1' m1') m2'1 m2'.
+Proof. Admitted.
+
+Lemma initial_out_of_reach:
+  forall m2 m2'1 s2' m1 m1' j1 j1' DOMIN1 DOMIN2,
+    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
+    Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'1.
+Proof. Admitted.
+
+Lemma initial_max_perm_decrease: forall m2 m2'1 s2' m1 m1' j1 j1' DOMIN1 DOMIN2,
+    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
+    injp_max_perm_decrease m2 m2'1.
+Proof. Admitted.
+
+Lemma loc_out_of_reach_incr : forall j1 j1' m1 m2 m1' b ofs,
+    loc_out_of_reach j1 m1 b ofs ->
+    inject_dom_in j1 (Mem.support m1) ->
+    inject_incr j1 j1' ->
+    injp_max_perm_decrease m1 m1' ->
+    sup_In b (Mem.support m2) ->
+    inject_incr_disjoint j1 j1' (Mem.support m1) (Mem.support m2) ->
+    loc_out_of_reach j1' m1' b ofs.
+Proof.
+  intros. red. intros.
+  destruct (j1 b0) as [[b' delta']|] eqn : Hj1b.
+  - erewrite H1 in H5; eauto. inv H5.
+    intro. apply H2 in H5.
+    apply H in Hj1b. congruence.
+    unfold Mem.valid_block. eauto.
+  - exploit H4; eauto. intros [A B].
+    congruence.
+Qed.
+
 Section meminj1.
 
 Variable m1 m1' m2 m2'1 m2' m3': mem.
@@ -1407,11 +1450,79 @@ Proof.
     all : eauto.
 Qed.
 
+
 Theorem MAXPERM2: injp_max_perm_decrease m2 m2'.
-Admitted.
+Proof.
+  red. intros b2 ofs2 p IN2 PERM2'. unfold Mem.valid_block in IN2.
+  generalize inject_mem_inject1.
+  intro INJ12'.
+  destruct (Mem.loc_in_reach_dec (Mem.support m1') m1' j1' b2 ofs2 Max Nonempty); eauto.
+  - (* in reach of j1' m1'*)
+    simpl.
+    destruct l as (b0 & d & MAP1' & PERM1'').
+    assert (MAP1: j1 b0 = Some (b2,d)).
+    {
+      destruct (j1 b0) as [[b' d']|] eqn: Hj1b0.
+      erewrite INCR1 in MAP1'; eauto.
+      exploit INCRDISJ1; eauto. intros [A B].
+      congruence.
+    }
+    assert (PERM1' : Mem.perm m1' b0 (ofs2 - d) Max p).
+    inversion INJ12'.
+    exploit mi_perm_inv; eauto.
+    replace ofs2 with (ofs2 -d + d) in PERM2' by lia.
+    eauto. intros [A | A].
+    auto. congruence.
+    apply MAXPERM1 in PERM1' as PERM1; eauto.
+    inversion INJ12. inversion mi_inj.
+    exploit mi_perm; eauto.
+    intros. replace (ofs2 - d + d) with ofs2 in H by lia.
+    auto. unfold Mem.valid_block. red in DOMIN1. eauto.
+  - (* out of reach *)
+    simpl.
+    apply Mem.out_of_reach_reverse in n.
+    exploit inject_mem_out_of_reach; eauto.
+    intros UNCHANGE.
+    destruct UNCHANGE.
+    exploit unchanged_on_perm; eauto.
+    unfold Mem.valid_block. rewrite SUP2'.
+    eauto.
+    intro PERM. apply PERM in PERM2' as PERM2'1.
+    eapply initial_max_perm_decrease; eauto.
+Qed.
 
 Theorem OUTOFREACH1 : Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'.
-Admitted.
+Proof.
+  constructor.
+  generalize SUP2. intro SUP2.
+  - rewrite SUP2. auto.
+  - intros.
+    exploit initial_out_of_reach; eauto.
+    intro. inversion H1.
+    exploit unchanged_on_perm; eauto. intro PERM1.
+    eapply loc_out_of_reach_incr in H; eauto.
+    exploit inject_mem_out_of_reach; eauto.
+    intro. inversion H2.
+    exploit unchanged_on_perm0; eauto.
+    unfold Mem.valid_block. rewrite SUP2'. eauto.
+    intro PERM2.
+    etransitivity; eauto.
+  - intros.
+    exploit initial_out_of_reach; eauto.
+    intro. inversion H1.
+    exploit unchanged_on_contents; eauto. intro CONTENT1.
+    eapply loc_out_of_reach_incr in H as H'; eauto.
+    exploit inject_mem_out_of_reach; eauto.
+    intro. inversion H2.
+    exploit unchanged_on_contents0; eauto.
+    exploit unchanged_on_perm; eauto.
+    eapply Mem.perm_valid_block; eauto.
+    intro PERM1.
+    apply PERM1. eauto.
+    intro CONTENT2.
+    etransitivity; eauto.
+    eapply Mem.perm_valid_block; eauto.
+Qed.
 
 End meminj1.
 
