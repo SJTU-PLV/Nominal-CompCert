@@ -5213,14 +5213,146 @@ Next Obligation.
     apply Mem.contents_default.
 Qed.
 
+Definition loc_in_reach (f:meminj) m b ofs k p: Prop :=
+  exists b0 delta, f b0 = Some (b,delta) /\ Mem.perm m b0 (ofs - delta) k p.
+
+Definition loc_out_of_reach (f: meminj) (m: mem) (b: block) (ofs: Z): Prop :=
+  forall b0 delta,
+  f b0 = Some(b, delta) -> ~Mem.perm m b0 (ofs - delta) Max Nonempty.
+
+Lemma out_of_reach_reverse: forall f m b ofs,
+    loc_out_of_reach f m b ofs <-> ~ loc_in_reach f m b ofs Max Nonempty.
+Proof.
+  intros. split; intro.
+  - intro. red in H. red in H0. destruct H0 as (b0 & delta & A & B).
+    exploit H; eauto.
+  - red. intros. intro.
+    apply H. red. eauto.
+Qed.
+
+Definition inject_dom_in (f:meminj) s : Prop :=
+  forall b b' o, f b = Some (b',o) -> sup_In b s.
+
+Definition meminj_sub (j:meminj) (b:block) :=
+  fun b0 => if (eq_block b b0) then None else j b0.
+
+
+Lemma meminj_sub_diff: forall j a b,
+    a <> b -> meminj_sub j a b = j b.
+Proof.
+  intros. unfold meminj_sub. destruct eq_block; congruence.
+Qed.
+
+Lemma inject_dom_in_sub: forall j a s,
+    inject_dom_in j (a::s) ->
+    inject_dom_in (meminj_sub j a) s.
+Proof.
+  intros.
+  red. red in H. intros. unfold meminj_sub in H0.
+  destruct eq_block in H0. congruence. exploit H; eauto.
+  intros [A|A]. congruence. auto.
+Qed.
+
+Lemma loc_in_reach_dec: forall s m f b ofs k p,
+    inject_dom_in f s ->
+    {loc_in_reach f m b ofs k p}+{~ loc_in_reach f m b ofs k p}.
+Proof.
+  induction s; intros.
+  - right. intros (b0 & delta & A & B).
+    apply H in A. inv A.
+  - apply inject_dom_in_sub in H as H'.
+    eapply (IHs m (meminj_sub f a) b ofs) in H'.
+    destruct H'.
+    + left. red. red in l. destruct l as (b0 & d & A & B).
+      exists b0,d. split; auto. unfold meminj_sub in A.
+      destruct eq_block; eauto. congruence. eauto.
+    +
+    destruct (f a) as [[a' delta]|] eqn : Hfa.
+    * destruct (eq_block a' b).
+      -- subst.
+         destruct (Mem.perm_dec m a (ofs-delta) k p).
+         left. exists a,delta. eauto.
+         right.
+         intros (b0 & d & A & B).
+         destruct (eq_block b0 a). subst. congruence.
+         apply n. red.
+         exists b0,d. split.
+         rewrite meminj_sub_diff; auto. eauto.
+      -- right. intros (b0 & d & A & B).
+         destruct (eq_block b0 a). subst. congruence.
+         apply n. red.
+         exists b0,d. split.
+         rewrite meminj_sub_diff; auto. eauto.
+    * right.  intros (b0 & d & A & B).
+         destruct (eq_block b0 a). subst. congruence.
+         apply n. red.
+         exists b0,d. split.
+         rewrite meminj_sub_diff; auto. eauto.
+Qed.
+
+Definition update_mem_access_free (m1 m1' : mem) (j1 j1': meminj) (b2: block)
+(H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1')) (map2: perm_map): perm_map :=
+  fun ofs2 p =>
+    if ((loc_in_reach_dec (support m1) m1 j1 b2 ofs2 Max Nonempty H1) &&
+       negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs2 Max Nonempty H2))
+    then None else map2 ofs2 p.
+
+Program Definition out_of_reach_free (m1 m1': mem) (j1 j1' : meminj) (b2 : block)
+(H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1')) (m2' : mem): mem :=
+  {|
+   mem_contents := (mem_contents m2');
+   mem_access := pmap_update b2 (update_mem_access_free m1 m1' j1 j1'  b2 H1 H2) (mem_access m2');
+   support := support m2'
+  |}.
+Next Obligation.
+  unfold pmap_update. rewrite NMap.gsspec.
+  destruct eq_block. unfold update_mem_access_free.
+  destruct (loc_in_reach_dec (support m1) m1 j1 b2 ofs Max Nonempty H1 &&
+      negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs Max Nonempty H2)).
+  constructor.
+  eapply Mem.access_max; eauto.
+  eapply Mem.access_max; eauto.
+Qed.
+Next Obligation.
+  unfold pmap_update. rewrite NMap.gsspec.
+  destruct eq_block. subst. unfold update_mem_access_free.
+    destruct (loc_in_reach_dec (support m1) m1 j1 b2 ofs Max Nonempty H1 &&
+      negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs Max Nonempty H2)).
+    auto.
+    apply Mem.nextblock_noaccess; eauto.
+    apply Mem.nextblock_noaccess; eauto.
+Qed.
+Next Obligation.
+    apply Mem.contents_default; eauto.
+Qed.
+
+Fixpoint initial_free (s2: sup)(m1 m1' :mem) (j1 j1' : meminj)
+(H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1')) (m2':mem): mem :=
+  match s2 with
+    |nil => m2'
+    |hd :: tl => out_of_reach_free m1 m1' j1 j1' hd H1 H2
+                                  (initial_free tl m1 m1' j1 j1' H1 H2 m2')
+  end.
+
+Definition initial_m2' (s2 s2': sup)(m1 m1' :mem) (j1 j1' : meminj)
+(H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1')) (m2:mem): mem :=
+  initial_free s2 m1 m1' j1 j1' H1 H2 (supext s2' m2).
+
 Fixpoint inject_map (s1 s2:list block) (f: meminj) (m1':mem) (m2:mem) : mem :=
   match s1 with
-    |nil => supext s2 m2
+    |nil => m2
     |hd :: tl => map f hd m1' (inject_map tl s2 f m1' m2)
   end.
 
 Definition inject_mem s2 f m1' m2 : mem :=
   inject_map (Mem.support m1') s2 f m1' m2.
+
+Definition construction_m2' (m1 m1' m2 : mem) (j1 j1' : meminj) (s2 s2' : sup)
+           (H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1'))
+           (m2' : mem) : Prop :=
+  exists m2'i,
+  initial_m2' s2 s2' m1 m1' j1 j1' H1 H2 m2 = m2'i /\
+  inject_mem s2' j1' m1' m2'i = m2'.
 
 Lemma support_map : forall f b m1 m2,
     support (map f b m1 m2) = support m2.
@@ -5230,17 +5362,14 @@ Proof.
 Qed.
 
 Lemma inject_map_support : forall s1 s2 f m1' m2,
-    sup_include (support m2) s2 ->
-    support (inject_map s1 s2 f m1' m2) = s2.
+    support (inject_map s1 s2 f m1' m2) = support m2.
 Proof.
   induction s1; intros; simpl; auto.
-  - unfold supext. destruct sup_include_dec. reflexivity. congruence.
   - rewrite support_map. eauto.
 Qed.
 
 Lemma inject_mem_support : forall s2 f m1' m2,
-    sup_include (support m2) s2 ->
-    support (inject_mem s2 f m1' m2) = s2.
+    support (inject_mem s2 f m1' m2) = support m2.
 Proof.
   intros. apply inject_map_support; auto.
 Qed.
