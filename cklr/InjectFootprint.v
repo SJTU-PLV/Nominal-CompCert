@@ -1566,13 +1566,52 @@ Proof.
          exists b0,d. split.
          rewrite meminj_sub_diff; auto. eauto.
 Qed.
+(*
+Lemma loc_out_of_reach_incr: forall j1 j1' m1 m1' b2 ofs2,
+    loc_out_of_reach j1 m1 b2 ofs2 ->
+    inject_incr j1 j1' ->
+    injp_max_perm_decrease m1 m1' -> 
+    loc_out_of_reach j1' m1' b2 ofs2.
+Proof.
+  intros. red. red in H. red in H0. red in H1.
+  intros. intro.
+Admitted.
+*)
+(*
+Lemma loc_in_reach_incr : forall j1 j1' m1 m1' b2 ofs2 Max p,
+    loc_in_reach j1 m1 b2 ofs2 Max p ->
+    loc_in_reach j1' m1' b2 ofs2 Max p.
+Proof.
+  intros until p. intros INREACH1.
+  red. red in INREACH1.
+  destruct INREACH1 as (b0 & d & A & B).
+*)
+Lemma loc_out_of_reach_trans:
+  forall m1 m2 m3 j1 j2 b2 ofs2 b3 delta3 k p,
+    Mem.inject j1 m1 m2 ->
+    Mem.inject j2 m2 m3 ->
+    j2 b2 = Some (b3,delta3) ->
+    Mem.perm m2 b2 ofs2 k p ->
+    loc_out_of_reach j1 m1 b2 ofs2 ->
+    loc_out_of_reach (compose_meminj j1 j2) m1 b3 (ofs2 + delta3).
+Proof.
+  intros until p. intros INJ12 INJ23 MAP2 PERM2 OUTOFREACH1.
+  red.
+  red in OUTOFREACH1.
+  intros. (* assert (INJNOLAP2: Mem.meminj_no_overlap j2' m2'). admit. (*need meminj_no_overlap2*) *)
+  unfold compose_meminj in H.
+  destruct (j1 b0) as [[b2' delta']|] eqn: Hj1b; try congruence.
+  destruct (j2 b2') as [[b3' delta'']|] eqn: Hj2b; try congruence.
+  inv H.
+  destruct (Mem.perm_dec m1 b0 (ofs2 + delta3 - (delta' + delta'')) Max Nonempty); auto.
+  destruct (eq_block b2 b2'). subst. rewrite MAP2 in Hj2b. inv Hj2b. apply OUTOFREACH1 in Hj1b.
+  replace (ofs2 + delta'' - (delta' + delta'')) with (ofs2 - delta') in p0 by lia.
+  congruence.
+  eapply Mem.perm_inject in Hj1b; eauto.
+  inversion INJ23. exploit mi_no_overlap. apply n. eauto. eauto.
+  eauto with mem. eauto. intros [A|A]. congruence. extlia.
+Qed.
 
- Lemma loc_out_of_reach_incr: forall j1 j1' m1 m1' b2 ofs2,
-               loc_out_of_reach j1' m1' b2 ofs2 ->
-               inject_incr j1 j1' ->
-               injp_max_perm_decrease m1 m1' ->
-               loc_out_of_reach j1 m1 b2 ofs2.
-Proof. Admitted.
 Theorem inject_mem_inj2 : forall m1 m1' s2' m2' m3' j1' j2' m2 m3 j1 j2,
     (* injp_max_perm_decrease m2 m2' -> to proof*)
     injp_max_perm_decrease m1 m1' ->
@@ -1595,6 +1634,26 @@ Proof.
                           INJNOLAP1 DOMIN1' IMGIN1' SUPINCL1 INJMEM INJ12' ADDSAME.
   constructor.
   - intros b2 b3 delta3 ofs2 k p MAP2 PERM2.
+    destruct (j2 b2) as [[b3' delta3']|] eqn: Hj2b2.
+    + apply inject_implies_dom_in in INJ12 as DOMIN1.
+      destruct (loc_in_reach_dec (Mem.support m1) m1 j1 b2 ofs2 Max Nonempty DOMIN1).
+      * (* b2 is in the reach of j1,*)
+      admit.
+      * assert (Mem.perm m2 b2 ofs2 k p). admit. (* update_add_out_of_reach *)
+        erewrite INCR2 in MAP2; eauto. inversion MAP2. subst b3' delta3'. clear MAP2.
+        inversion OUTOFREACH3. eapply unchanged_on_perm.
+        apply out_of_reach_reverse in n.
+        eapply loc_out_of_reach_trans; eauto.
+        inversion INJ23. eauto.
+        eapply Mem.perm_inject; eauto.
+    + exploit ADDSAME; eauto.
+      intros (b1 & A & B).
+      inversion INJ13'. inversion mi_inj. eapply mi_perm.
+      unfold compose_meminj. rewrite A,MAP2. reflexivity.
+      admit. (* update_add_perm_inv *)
+(*
+
+
     destruct (loc_in_reach_dec (Mem.support m1') m1' j1' b2 ofs2 Max Nonempty DOMIN1').
     +  destruct l as (b1 & delta2 & MAP1 & PERM1).
        exploit inject_mem_perm_inv ; eauto.
@@ -1631,6 +1690,7 @@ Proof.
         intros (b1 & A & B).
         apply n in A. (*out_of_reach + inject_map + not in m2*)
         (*PERM2 is wrong*) admit.
+*)
   - admit.
   - admit.
 Admitted.
