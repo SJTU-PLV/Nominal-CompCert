@@ -1078,11 +1078,49 @@ Proof.
     congruence.
 Qed.
 
+Definition loc_sup_in_unmapped (j2:meminj) (s2:sup) : block -> Z -> Prop :=
+  fun b _ => Mem.sup_In b s2 /\ j2 b = None.
+
+Lemma map_unmapped: forall j1' j2 b s2 m1' m2'1 m2',
+    Mem.map j1' j2 b s2 m1' m2'1 = m2' ->
+    Mem.unchanged_on ( loc_sup_in_unmapped j2 s2  ) m2'1 m2'.
+Proof.
+  intros. unfold Mem.map in H.
+  destruct (j1' b) as [[b' d']|] eqn: Hj1'b.
+  destruct Mem.valid_position_dec in H.
+  - inv H.
+    constructor.
+    + eauto.
+    + intros.
+      unfold Mem.pmap_update. unfold Mem.perm. simpl.
+      rewrite NMap.gsspec.
+      destruct (NMap.elt_eq b0 b').
+      * subst.
+        exfalso.
+        red in v. red in H. firstorder.
+      * reflexivity.
+    + intros.
+      unfold Mem.pmap_update. unfold Mem.perm. simpl.
+      rewrite NMap.gsspec.
+      destruct (NMap.elt_eq b0 b').
+      * subst.
+        exfalso.
+        red in v. red in H. firstorder.
+      * reflexivity.
+  - inv H. eauto with mem.
+  - inv H. eauto with mem.
+Qed.
+
 Lemma inject_map_unmapped:
-  forall s1' s2' j1' j2 m1' m2'1 m2',
-    Mem.inject_map s1' s2' j1' j2 m1' m2'1 = m2' ->
-    Mem.unchanged_on (loc_unmapped j2) m2'1 m2'.
-Proof. Admitted.
+  forall s1' s2 j1' j2 m1' m2'1 m2',
+    Mem.inject_map s1' s2 j1' j2 m1' m2'1 = m2' ->
+    Mem.unchanged_on (loc_sup_in_unmapped j2 s2 ) m2'1 m2'.
+Proof.
+  induction s1'; intros; inv H; simpl in *.
+  - eapply Mem.unchanged_on_refl.
+  - eapply Mem.unchanged_on_trans; eauto.
+    eapply map_unmapped; eauto.
+Qed.
 
 Lemma inject_mem_out_of_reach:
   forall s2' j1' j2 m1' m2'1 m2',
@@ -1482,13 +1520,27 @@ Qed.
 Lemma INITIAL_UNMAP2 : Mem.unchanged_on (loc_unmapped j2) m2 m2'1.
 Proof. eapply initial_unmapped; eauto. Qed.
 
-Lemma INJMAP_UNMAP2 : Mem.unchanged_on (loc_unmapped j2) m2'1 m2'.
+Lemma INJMAP_UNMAP2 : Mem.unchanged_on (loc_sup_in_unmapped j2 (Mem.support m2)) m2'1 m2'.
 Proof. eapply inject_map_unmapped; eauto. Qed.
+
 Theorem UNMAP2: Mem.unchanged_on (loc_unmapped j2) m2 m2'.
 Proof.
-  eapply Mem.unchanged_on_trans; eauto.
-  eapply INITIAL_UNMAP2.
-  eapply INJMAP_UNMAP2.
+  generalize INITIAL_UNMAP2. intro UN1.
+  generalize INJMAP_UNMAP2. intro UN2.
+  constructor.
+  - rewrite SUP2. auto.
+  - intros.
+    inversion UN1. rewrite unchanged_on_perm; eauto.
+    inversion UN2. rewrite unchanged_on_perm0; eauto.
+    reflexivity.
+    red. split. apply H0. apply H. unfold Mem.valid_block in *.
+    rewrite SUP2'. eauto.
+  - intros.
+    inversion UN2. rewrite unchanged_on_contents; eauto.
+    inversion UN1. rewrite unchanged_on_contents0; eauto.
+    red. split; eauto. eapply Mem.perm_valid_block; eauto.
+    inversion UN1. rewrite <- unchanged_on_perm0; eauto.
+    eapply Mem.perm_valid_block; eauto.
 Qed.
 
 Lemma ADD_MAP2: forall b1 b2 delta,
