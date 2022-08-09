@@ -2174,7 +2174,7 @@ Proof.
     +
       assert (PERM2' : Mem.perm m2' b1 ofs Max p).
       { eapply H0.
-        destruct chunk; simpl; lia.}
+        destruct chunk; simpl; lia. }
       exploit update_new_perm_inv'; eauto.
       intros (b3 & A & B).
       assert (RANGEPERM1 : Mem.range_perm m1' b3 ofs (ofs + size_chunk chunk) Max p).

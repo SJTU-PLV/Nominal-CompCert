@@ -5193,6 +5193,29 @@ Qed.
 Definition update_mem_content (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (delta : Z)
     : ZMap.t memval -> ZMap.t memval :=
   fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
+(*
+(*Fixpoint update_ptree (xe: list (positive * A)) (ptree: PTree.A) (f: positive -> option A) : PTree.A :=
+  match xe with
+    | nil => ptree
+    | (pos,a)::tl => PTree.set pos (f pos) *)
+Fixpoint update_mem_content_ptree (xe: list (positive * memval))
+         (ptree: PTree.t memval) (pmap1 : perm_map) (f:meminj) (delta : Z) (val1 : ZMap.memval)
+Definition update_mem_content1 (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (delta : Z)
+    : ZMap.t memval -> ZMap.t memval :=
+  fun val2 => 
+    let ptreeold = snd val2 in
+    let xelements := PTree.xelements in
+
+    mathc
+  fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
+
+Search PTree.get.
+*)
+Lemma Z_positve_Z:
+  forall z, positive_to_Z (ZIndexed.index z) = z.
+Proof.
+  intros. destruct z; auto.
+Qed.
 
 Lemma update_mem_content_result: forall b1 b2 j1' delta map1 map2 pmap1 (ofs2:Z),
     fst map1 = Undef -> fst map2 = Undef ->
@@ -5202,7 +5225,19 @@ Lemma update_mem_content_result: forall b1 b2 j1' delta map1 map2 pmap1 (ofs2:Z)
       Mem.memval_map j1' (ZMap.get (ofs2 - delta) map1) else
           ZMap.get ofs2 map2.
 Proof.
-  Admitted.
+  intros.
+  unfold update_mem_content. unfold ZMap.get.
+  unfold PMap.get. simpl.
+  rewrite PTree.gmap.
+  unfold option_map.
+  destruct ((snd map2) ! (ZIndexed.index ofs2)) eqn: OLDVALUE.
+  - unfold content_map.
+    rewrite Z_positve_Z. reflexivity.
+  - destruct (perm_check_readable).
+    + admit. (* we cannot update the value of map2 by PTree opearions where it was None *)
+    + eauto.
+Admitted.
+
 
 Program Definition map (f j2:meminj) (b:block) (s2: sup) (m1 m2:mem) :=
   match f b with
