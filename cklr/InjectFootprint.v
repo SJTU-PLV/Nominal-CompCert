@@ -1053,7 +1053,45 @@ Proof.
   intros [d A]. congruence.
 Qed.
 
-(** * meminj1 mi_perm*)
+Definition mem_memval (m:mem) b ofs : memval :=
+  Maps.ZMap.get ofs (NMap.get _ b (Mem.mem_contents m)).
+
+Lemma map_content_1 : forall j1' j2 b1 s2 m1 m2 m2' b2 ofs2,
+    Mem.map j1' j2 b1 s2 m1 m2 = m2' ->
+    (~exists delta, j1' b1 = Some (b2,delta)) ->
+    mem_memval m2' b2 ofs2 = mem_memval m2 b2 ofs2.
+Proof.
+  intros. unfold Mem.map in H.
+  destruct (j1' b1) as [[b1' delta']|] eqn :Hfb.
+  - destruct (eq_block b1' b2).
+    + subst. exfalso. apply H0. eauto.
+    + destruct Mem.valid_position_dec.
+      inv H. unfold mem_memval in *. simpl in *.
+      erewrite <- pmap_update_diff; eauto;
+      reflexivity.
+      subst. reflexivity.
+  - subst. reflexivity.
+Qed.
+
+Lemma map_content_2 : forall j1' j2 b1 m1 s2 m2 m2' b2 delta ofs2 ,
+    Mem.map j1' j2 b1 s2 m1 m2 = m2' ->
+    j1' b1 = Some (b2,delta) ->
+    mem_memval m2' b2 ofs2 =
+    if (Mem.valid_position_dec b2 j2 s2 (Mem.support m2) && Mem.perm_dec m1 b1 (ofs2 - delta) Cur Readable)
+    then Mem.memval_map j1' (mem_memval m1 b1 (ofs2 - delta)) else mem_memval m2 b2 ofs2.
+Proof.
+  intros.
+  unfold Mem.map in H. rewrite H0 in H.
+  destruct Mem.valid_position_dec.
+  -
+  inv H. unfold mem_memval. simpl. unfold Mem.pmap_update. rewrite NMap.gsspec.
+  rewrite pred_dec_true; eauto.
+  destruct (Mem.perm_dec m1 b1 (ofs2 - delta) Cur Readable); simpl.
+    + admit. (* lemmas about PTree update *)
+    + admit. (* lemmas about PTree update *)
+  - simpl. subst. reflexivity.
+Admitted.
+
 Lemma out_of_reach_free_support :forall m1 m1' j1 j2 j1' H1 H2 b m2 m2',
     Mem.out_of_reach_free m1 m1' j1 j2 j1' b H1 H2 m2 = m2' ->
     Mem.support m2' = Mem.support m2.
@@ -1122,12 +1160,62 @@ Proof.
     eapply map_unmapped; eauto.
 Qed.
 
-(* TODO: can be proofed like above*)
+Lemma to_mem_memval : forall m b ofs,
+    Maps.ZMap.get ofs (NMap.get (Maps.ZMap.t memval) b (Mem.mem_contents m)) = mem_memval m b ofs.
+Proof. intros. reflexivity. Qed.
+
+Lemma map_out_of_reach: forall j1' j2 b s2 m1' m2'1 m2',
+    Mem.map j1' j2 b s2 m1' m2'1 = m2' ->
+    Mem.unchanged_on (loc_out_of_reach j1' m1') m2'1 m2'.
+Proof.
+  intros.
+  constructor.
+  - inv H. rewrite Mem.support_map. eauto.
+  - intros.
+    destruct (j1' b) as [[b' d']|] eqn: Hj1'b.
+    destruct (eq_block b0 b').
+    + subst b'.
+      erewrite map_perm_2 with (m2' := m2'); eauto.
+      destruct (Mem.perm_dec m1' b (ofs -d') Max Nonempty).
+      red in H0. apply H0 in Hj1'b. congruence.
+      destruct Mem.valid_position_dec; simpl; reflexivity.
+    + erewrite map_perm_3 with (m2' := m2'); eauto. reflexivity.
+    + erewrite map_perm_1 with (m2' := m2'); eauto. reflexivity.
+      intros [A B]. congruence.
+  - intros.
+    repeat rewrite to_mem_memval.
+    destruct (j1' b) as [[b' d']|] eqn: Hj1'b.
+    destruct (eq_block b0 b').
+    + subst b'.
+      erewrite map_content_2 with (m2' := m2'); eauto.
+      destruct (Mem.perm_dec m1' b (ofs -d') Cur Readable).
+      red in H0. apply H0 in Hj1'b. exfalso. apply Hj1'b. eauto with mem.
+      destruct Mem.valid_position_dec; simpl; reflexivity.
+    + erewrite map_content_1 with (m2' := m2'); eauto.
+      intros [A B]. congruence.
+    + erewrite map_content_1 with (m2' := m2'); eauto.
+      intros [A B]. congruence.
+Qed.
+
+Lemma inject_map_out_of_reach:
+  forall s1' s2' j1' j2 m1' m2'1 m2',
+    Mem.inject_map s1' s2' j1' j2 m1' m2'1 = m2' ->
+    Mem.unchanged_on (loc_out_of_reach j1' m1') m2'1 m2'.
+Proof.
+  induction s1'; intros; inv H; simpl in *.
+  - eapply Mem.unchanged_on_refl.
+  - eapply Mem.unchanged_on_trans; eauto.
+    eapply map_out_of_reach; eauto.
+Qed.
+
 Lemma inject_mem_out_of_reach:
   forall s2' j1' j2 m1' m2'1 m2',
     Mem.inject_mem s2' j1' j2 m1' m2'1 = m2' ->
     Mem.unchanged_on (loc_out_of_reach j1' m1') m2'1 m2'.
-Proof. Admitted.
+Proof.
+  intros.
+  eapply inject_map_out_of_reach; eauto.
+Qed.
 
 Lemma initial_out_of_reach1:
   forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
@@ -1135,11 +1223,6 @@ Lemma initial_out_of_reach1:
     Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'1.
 Proof. Admitted.
 
-Lemma initial_in_of_reach:
-  forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
-    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
-    Mem.unchanged_on (fun b ofs => ~loc_out_of_reach j1' m1' b ofs) m2 m2'1.
-Proof. Admitted.
 
 Lemma initial_unmapped:
     forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
@@ -1321,46 +1404,6 @@ Proof.
      -- erewrite map_perm_1; eauto.
          intros (d & A). congruence.
 Qed.
-
-Definition mem_memval (m:mem) b ofs : memval :=
-  Maps.ZMap.get ofs (NMap.get _ b (Mem.mem_contents m)).
-
-Lemma map_content_1 : forall j1' j2 b1 s2 m1 m2 m2' b2 ofs2,
-    Mem.map j1' j2 b1 s2 m1 m2 = m2' ->
-    (~exists delta, j1' b1 = Some (b2,delta)) ->
-    mem_memval m2' b2 ofs2 = mem_memval m2 b2 ofs2.
-Proof.
-  intros. unfold Mem.map in H.
-  destruct (j1' b1) as [[b1' delta']|] eqn :Hfb.
-  - destruct (eq_block b1' b2).
-    + subst. exfalso. apply H0. eauto.
-    + destruct Mem.valid_position_dec.
-      inv H. unfold mem_memval in *. simpl in *.
-      erewrite <- pmap_update_diff; eauto;
-      reflexivity.
-      subst. reflexivity.
-  - subst. reflexivity.
-Qed.
-
-Lemma map_content_2 : forall j1' j2 b1 m1 s2 m2 m2' b2 delta ofs2 ,
-    Mem.map j1' j2 b1 s2 m1 m2 = m2' ->
-    j1' b1 = Some (b2,delta) ->
-    mem_memval m2' b2 ofs2 =
-    if (Mem.valid_position_dec b2 j2 s2 (Mem.support m2) && Mem.perm_dec m1 b1 (ofs2 - delta) Cur Readable)
-    then Mem.memval_map j1' (mem_memval m1 b1 (ofs2 - delta)) else mem_memval m2 b2 ofs2.
-Proof.
-  intros.
-  unfold Mem.map in H. rewrite H0 in H.
-  destruct Mem.valid_position_dec.
-  -
-  inv H. unfold mem_memval. simpl. unfold Mem.pmap_update. rewrite NMap.gsspec.
-  rewrite pred_dec_true; eauto.
-  destruct (Mem.perm_dec m1 b1 (ofs2 - delta) Cur Readable); simpl.
-    + admit. (* lemmas about PTree update *)
-    + admit. (* lemmas about PTree update *)
-  - simpl. subst. reflexivity.
-Admitted.
-
 
 Lemma memval_map_inject_new : forall j1 j2 mv mv3,
     memval_inject (compose_meminj j1 j2) mv mv3 ->
@@ -1903,7 +1946,13 @@ Lemma initial_new_region_no_perm: forall b2 ofs2 k p,
     ~ sup_In b2 (Mem.support m2) ->
     ~ Mem.perm m2'1 b2 ofs2 k p.
 Proof.
-  Admitted.
+  intros.
+  unfold Mem.initial_m2' in INITIAL.
+  intro.
+  eapply initial_perm_decrease in H0; eauto.
+  apply Mem.perm_valid_block in H0. eauto.
+Qed.
+
 Lemma update_new_perm_inv': forall b2 ofs2 b3 delta3 k p,
     j2 b2 = None ->
     j2' b2 = Some (b3, delta3) ->
@@ -2184,7 +2233,7 @@ Proof.
            erewrite unchanged_on_perm in n0; eauto.
           apply inject_implies_dom_in in INJ23 as DOMIN23.
           apply DOMIN23 in Hj2b2. eauto.
-    + 
+    +
       exploit ADDSAME; eauto.
       intros (b1 & A & B).
       inversion INJ13'. exploit mi_perm_inv; eauto.
