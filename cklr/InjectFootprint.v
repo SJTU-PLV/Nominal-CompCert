@@ -1122,6 +1122,7 @@ Proof.
     eapply map_unmapped; eauto.
 Qed.
 
+(* TODO: can be proofed like above*)
 Lemma inject_mem_out_of_reach:
   forall s2' j1' j2 m1' m2'1 m2',
     Mem.inject_mem s2' j1' j2 m1' m2'1 = m2' ->
@@ -1146,16 +1147,79 @@ Lemma initial_unmapped:
     Mem.unchanged_on (loc_unmapped j2) m2 m2'1.
 Proof. Admitted.
 
-Lemma initial_max_perm_decrease: forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
-    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
-    injp_max_perm_decrease m2 m2'1.
-Proof. Admitted.
+Lemma out_of_reach_free_decrease: forall m1 m1' j1 j2 j1' b H1 H2 m2 m2' b2 ofs k p,
+      Mem.out_of_reach_free m1 m1' j1 j2 j1' b H1 H2 m2 = m2' ->
+      Mem.perm m2' b2 ofs k p -> Mem.perm m2 b2 ofs k p.
+Proof.
+  intros. unfold Mem.out_of_reach_free in H. inv H.
+  unfold Mem.perm in *. simpl in *.
+  unfold Mem.pmap_update in H0. rewrite NMap.gsspec in H0.
+  destruct (NMap.elt_eq b2 b); eauto.
+  subst. unfold Mem.update_mem_access_free in H0.
+  destruct (j2 b); eauto.
+  destruct (Mem.loc_in_reach_dec (Mem.support m1) m1 j1 b ofs Max Nonempty H1 &&
+           negb (Mem.loc_in_reach_dec (Mem.support m1') m1' j1' b ofs Max Nonempty H2)).
+  inv H0. eauto.
+Qed.
+
+Lemma initial_free_decrease: forall s2 m1 m1' j1 j2 j1' H1 H2 m2 m2' b2 ofs k p,
+    Mem.initial_free s2 m1 m1' j1 j2 j1' H1 H2 m2 = m2' ->
+    Mem.perm m2' b2 ofs k p -> Mem.perm m2 b2 ofs k p.
+Proof.
+  induction s2; intros; simpl in H.
+  - subst. eauto.
+  - assert (Mem.perm (Mem.initial_free s2 m1 m1' j1 j2 j1' H1 H2 m2) b2 ofs k p).
+    eapply out_of_reach_free_decrease; eauto.
+    eauto.
+Qed.
 
 Lemma initial_perm_decrease: forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 b2 ofs k p,
     Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
     Mem.perm m2'1 b2 ofs k p -> Mem.perm m2 b2 ofs k p.
-Proof. Admitted.
+Proof.
+  intros.
+  unfold Mem.initial_m2' in H.
+  assert (Mem.perm (Mem.supext s2' m2) b2 ofs k p).
+  eapply initial_free_decrease; eauto.
+  unfold Mem.supext in H1. destruct Mem.sup_include_dec in H1.
+  subst. unfold Mem.perm in *; simpl in *; eauto.
+  auto.
+Qed.
 
+Lemma initial_max_perm_decrease: forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
+    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
+    injp_max_perm_decrease m2 m2'1.
+Proof.
+  intros. red. intros.
+  eapply initial_perm_decrease; eauto.
+Qed.
+
+Lemma initial_free_valid:
+  forall s2 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN1' m2 m2'1 b2 ofs2 b3 delta3,
+    Mem.initial_m2' s2 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN1' m2 = m2'1 ->
+    j2 b2 = Some (b3,delta3) ->
+    Mem.loc_in_reach j1 m1 b2 ofs2 Max Nonempty ->
+    ~ Mem.loc_in_reach j1' m1' b2 ofs2 Max Nonempty ->
+    sup_In b2 s2 ->
+    ~ Mem.perm m2'1 b2 ofs2 Max Nonempty.
+Proof.
+  induction s2; intros.
+  - inv H3.
+  - destruct H3.
+    + subst. unfold Mem.initial_m2'. simpl.
+      unfold Mem.out_of_reach_free. unfold Mem.perm. simpl.
+      unfold Mem.pmap_update. rewrite NMap.gsspec. rewrite pred_dec_true; auto.
+      unfold Mem.update_mem_access_free. rewrite H0.
+      destruct (Mem.loc_in_reach_dec); try congruence.
+      destruct (Mem.loc_in_reach_dec); try congruence.
+      simpl. congruence.
+    + subst. unfold Mem.initial_m2'. simpl.
+      assert (~Mem.perm (Mem.initial_free s2 m1 m1' j1 j2 j1' DOMIN1 DOMIN1' (Mem.supext s2' m2)) b2 ofs2 Max Nonempty).
+      eapply IHs2; eauto.
+      unfold Mem.initial_m2'. reflexivity.
+      intro. apply H.
+      eapply out_of_reach_free_decrease; eauto.
+Qed.
 
 Lemma inject_map_perm_inv: forall s1' s2 s2' j1' j2 m1' m2' m2 b2 b1 delta ofs2 k p,
     Mem.support m2 = s2' ->
@@ -1285,6 +1349,16 @@ Lemma map_content_2 : forall j1' j2 b1 m1 s2 m2 m2' b2 delta ofs2 ,
     if (Mem.valid_position_dec b2 j2 s2 (Mem.support m2) && Mem.perm_dec m1 b1 (ofs2 - delta) Cur Readable)
     then Mem.memval_map j1' (mem_memval m1 b1 (ofs2 - delta)) else mem_memval m2 b2 ofs2.
 Proof.
+  intros.
+  unfold Mem.map in H. rewrite H0 in H.
+  destruct Mem.valid_position_dec.
+  -
+  inv H. unfold mem_memval. simpl. unfold Mem.pmap_update. rewrite NMap.gsspec.
+  rewrite pred_dec_true; eauto.
+  destruct (Mem.perm_dec m1 b1 (ofs2 - delta) Cur Readable); simpl.
+    + admit. (* lemmas about PTree update *)
+    + admit. (* lemmas about PTree update *)
+  - simpl. subst. reflexivity.
 Admitted.
 
 
@@ -1748,6 +1822,24 @@ Proof.
     eapply Mem.perm_valid_block; eauto.
 Qed.
 
+Lemma manual_free_valid:
+  forall b2 ofs2 b3 delta3,
+    j2 b2 = Some (b3,delta3) ->
+    Mem.loc_in_reach j1 m1 b2 ofs2 Max Nonempty ->
+    ~ Mem.loc_in_reach j1' m1' b2 ofs2 Max Nonempty ->
+    ~ Mem.perm m2' b2 ofs2 Max Nonempty.
+Proof.
+  intros.
+  apply inject_implies_dom_in in INJ23.
+  assert (~ Mem.perm m2'1 b2 ofs2 Max Nonempty).
+  eapply initial_free_valid; eauto.
+  exploit inject_mem_out_of_reach; eauto. intro UNCHANGE.
+  apply Mem.out_of_reach_reverse in H1.
+  inversion UNCHANGE. intro. apply H2.
+  erewrite unchanged_on_perm; eauto.
+  unfold Mem.valid_block. rewrite SUP2'. eauto.
+Qed.
+
 Lemma update_new_perm_inv: forall b1 b2 ofs2 b3 delta3 k p,
     j2 b2 = None ->
     j2' b2 = Some (b3, delta3) ->
@@ -1769,13 +1861,6 @@ Proof.
   exists b1. split. auto.
   eapply update_new_perm_inv; eauto.
 Qed.
-
-Lemma manual_free_valid:
-  forall b2 ofs2,
-    Mem.loc_in_reach j1 m1 b2 ofs2 Max Nonempty ->
-    ~ Mem.loc_in_reach j1' m1' b2 ofs2 Max Nonempty ->
-    ~ Mem.perm m2' b2 ofs2 Max Nonempty.
-Admitted.
 
 Lemma update_new_memval:
   forall b1 b2 b3 ofs2 delta3,
@@ -1824,7 +1909,7 @@ Proof.
           intros [A | A].
           auto. congruence.
         -- (* b1 is out of the reach of j1' -- Mem.perm m2' b2 ofs2 k p should not hold*)
-          generalize (manual_free_valid _ _ l n). intro.
+          generalize (manual_free_valid _ _ _ _ Hj2b2 l n). intro.
           exfalso. apply H. eauto with mem.
       * (* b2 is out of the reach of j1 *)
         apply Mem.out_of_reach_reverse in n.
@@ -1880,7 +1965,7 @@ Proof.
            replace (ofs2 - delta2 + (delta2 + delta3)) with (ofs2 + delta3) in H by lia.
            apply memval_compose_2; eauto.
         -- (* b1 is out of the reach of j1' -- Mem.perm m2' b2 ofs2 k p should not hold*)
-          generalize (manual_free_valid _ _ l n). intro.
+          generalize (manual_free_valid _ _ _ _ Hj2b2 l n). intro.
           exfalso. apply H. eauto with mem.
       * (* b2 is out of the reach of j1 *)
         apply Mem.out_of_reach_reverse in n.
@@ -1983,7 +2068,7 @@ Proof.
           congruence.
         -- (* b1 is out of the reach of j1' -- Mem.perm m2' b2 ofs2 k p should not hold*)
           right.
-          generalize (manual_free_valid _ _ l n). intro. eauto.
+          generalize (manual_free_valid _ _ _ _ Hj2b2 l n). intro. eauto.
       * (* b2 is out of the reach of j1 *)
         apply Mem.out_of_reach_reverse in n.
         generalize OUTOFREACH1. intro OUTOFREACH1. inversion OUTOFREACH1.
