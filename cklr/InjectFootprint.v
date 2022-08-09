@@ -1248,16 +1248,7 @@ Lemma map_content_2 : forall j1' j2 b1 m1 s2 m2 m2' b2 delta ofs2 ,
     then Mem.memval_map j1' (mem_memval m1 b1 (ofs2 - delta)) else mem_memval m2 b2 ofs2.
 Proof.
 Admitted.
-(*  intros.
-  unfold Mem.map in H. rewrite H0 in H.
-  destruct (Mem.sup_dec b2 (Mem.support m2)); try (simpl; subst; reflexivity).
-  inv H. unfold mem_memval. simpl. unfold Mem.pmap_update. rewrite NMap.gsspec.
-  rewrite pred_dec_true; eauto.
-  destruct (Mem.perm_dec m1 b1 (ofs2 - delta) Max Nonempty); simpl; eauto.
-    + unfold Mem.update_mem_content. simpl. admit.
-    + unfold Mem.update_mem_content. unfold Mem.content_map.
-Admitted. (*ok*)
-*)
+
 
 Lemma memval_map_inject_new : forall j1 j2 mv mv3,
     memval_inject (compose_meminj j1 j2) mv mv3 ->
@@ -1739,8 +1730,20 @@ Lemma update_new_memval:
     j2 b2 = None ->
     j2' b2 = Some (b3,delta3) ->
     j1' b1 = Some (b2,0) ->
+    Mem.perm m1' b1 ofs2 Cur Readable ->
     (Maps.ZMap.get ofs2 (NMap.get (Maps.ZMap.t memval) b2 (Mem.mem_contents m2'))) =
     Mem.memval_map j1' (Maps.ZMap.get ofs2 (NMap.get (Maps.ZMap.t memval) b1 (Mem.mem_contents m1'))).
+Proof.
+Admitted.
+
+Lemma update_old_memval:
+  forall b1 b2 b3 ofs2 delta2 delta3,
+    j2 b2 = Some (b3,delta3) ->
+    j2' b2 = Some (b3,delta3) ->
+    j1' b1 = Some (b2,delta2) ->
+    Mem.perm m1' b1 (ofs2 - delta2) Cur Readable ->
+    (Maps.ZMap.get ofs2 (NMap.get (Maps.ZMap.t memval) b2 (Mem.mem_contents m2'))) =
+    Mem.memval_map j1' (Maps.ZMap.get (ofs2 - delta2) (NMap.get (Maps.ZMap.t memval) b1 (Mem.mem_contents m1'))).
 Proof.
 Admitted.
 
@@ -1813,22 +1816,17 @@ Proof.
       destruct (Mem.loc_in_reach_dec (Mem.support m1) m1 j1 b2 ofs2 Max Nonempty DOMIN1).
       * (* b2 is in the reach of j1 *)
         destruct (Mem.loc_in_reach_dec (Mem.support m1') m1' j1' b2 ofs2 Max Nonempty DOMIN1').
-        -- (* b2 is in the reach of j1' -- ok*)
-          admit.
-          (*
-          destruct l0 as (b1 & delta2 & MAP1 & PERM1).
-          Search memval_inject.
-          eapply Memdata.memval_inject_compose.
-
-          replace (ofs2 + delta3) with ((ofs2 - delta2) + (delta2 + delta3)) by lia.
-          eapply Mem.perm_inject. 2: eauto. unfold compose_meminj.
-          rewrite MAP1, MAP2. reflexivity.
-          inversion INJ12'.
-          exploit mi_perm_inv. apply MAP1.
-          replace ofs2 with (ofs2 - delta2 + delta2) in PERM2 by lia.
-          eauto.
-          intros [A | A].
-          auto. congruence. *)
+        -- destruct l0 as (b1 & delta2 & MAP1 & PERM1).
+           inversion INJ12'. exploit mi_perm_inv; eauto.
+           replace ofs2 with (ofs2 - delta2 + delta2) in PERM2 by lia. eauto.
+           intros [A | A]; try congruence.
+           erewrite update_old_memval; eauto.
+           inversion INJ13'. inversion mi_inj0.
+           exploit mi_memval; eauto.
+           unfold compose_meminj. rewrite MAP1, MAP2. eauto.
+           intro.
+           replace (ofs2 - delta2 + (delta2 + delta3)) with (ofs2 + delta3) in H by lia.
+           apply memval_compose_2; eauto.
         -- (* b1 is out of the reach of j1' -- Mem.perm m2' b2 ofs2 k p should not hold*)
           generalize (manual_free_valid _ _ l n). intro.
           exfalso. apply H. eauto with mem.
@@ -1861,7 +1859,7 @@ Proof.
       unfold compose_meminj. rewrite A,MAP2. reflexivity. eauto.
       intros.
       apply memval_compose_2; eauto.
-Admitted.
+Qed.
 
 Theorem inject_mem_inject2:
     Mem.inject j2' m2' m3'.
