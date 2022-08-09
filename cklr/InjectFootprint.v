@@ -1056,6 +1056,10 @@ Qed.
 Definition mem_memval (m:mem) b ofs : memval :=
   Maps.ZMap.get ofs (NMap.get _ b (Mem.mem_contents m)).
 
+Lemma to_mem_memval : forall m b ofs,
+    Maps.ZMap.get ofs (NMap.get (Maps.ZMap.t memval) b (Mem.mem_contents m)) = mem_memval m b ofs.
+Proof. intros. reflexivity. Qed.
+
 Lemma map_content_1 : forall j1' j2 b1 s2 m1 m2 m2' b2 ofs2,
     Mem.map j1' j2 b1 s2 m1 m2 = m2' ->
     (~exists delta, j1' b1 = Some (b2,delta)) ->
@@ -1073,6 +1077,8 @@ Proof.
   - subst. reflexivity.
 Qed.
 
+
+
 Lemma map_content_2 : forall j1' j2 b1 m1 s2 m2 m2' b2 delta ofs2 ,
     Mem.map j1' j2 b1 s2 m1 m2 = m2' ->
     j1' b1 = Some (b2,delta) ->
@@ -1087,10 +1093,38 @@ Proof.
   inv H. unfold mem_memval. simpl. unfold Mem.pmap_update. rewrite NMap.gsspec.
   rewrite pred_dec_true; eauto.
   destruct (Mem.perm_dec m1 b1 (ofs2 - delta) Cur Readable); simpl.
-    + admit. (* lemmas about PTree update *)
-    + admit. (* lemmas about PTree update *)
+  +
+    set (map2 := (NMap.get (Maps.ZMap.t memval) b2 (Mem.mem_contents m2))) in *.
+    set (map1 := (NMap.get (Maps.ZMap.t memval) b1 (Mem.mem_contents m1))) in *.
+    unfold Mem.perm in p.
+    set (pmap1 := (NMap.get (Z -> perm_kind -> option permission) b1 (Mem.mem_access m1))) in *.
+    assert (CHECK: Mem.perm_check_readable pmap1 (ofs2 - delta) = true).
+    unfold Mem.perm_check_readable.
+    destruct (pmap1 (ofs2 - delta)); inv p; auto.
+    erewrite Mem.update_mem_content_result; eauto.
+    rewrite CHECK. reflexivity.
+    eapply Mem.contents_default; eauto.
+    eapply Mem.contents_default; eauto.
+  +
+    set (map2 := (NMap.get (Maps.ZMap.t memval) b2 (Mem.mem_contents m2))) in *.
+    set (map1 := (NMap.get (Maps.ZMap.t memval) b1 (Mem.mem_contents m1))) in *.
+    unfold Mem.perm in n.
+    set (pmap1 := (NMap.get (Z -> perm_kind -> option permission) b1 (Mem.mem_access m1))) in *.
+    assert (CHECK: Mem.perm_check_readable pmap1 (ofs2 - delta) = false).
+    {unfold Mem.perm_check_readable.
+    destruct (pmap1 (ofs2 - delta) Cur); auto.
+    destruct p.
+    exfalso. apply n. constructor.
+    exfalso. apply n. constructor.
+    exfalso. apply n. constructor.
+    auto.
+    }
+    erewrite Mem.update_mem_content_result; eauto.
+    rewrite CHECK. reflexivity.
+    eapply Mem.contents_default; eauto.
+    eapply Mem.contents_default; eauto.
   - simpl. subst. reflexivity.
-Admitted.
+Qed.
 
 Lemma out_of_reach_free_support :forall m1 m1' j1 j2 j1' H1 H2 b m2 m2',
     Mem.out_of_reach_free m1 m1' j1 j2 j1' b H1 H2 m2 = m2' ->
@@ -1160,10 +1194,6 @@ Proof.
     eapply map_unmapped; eauto.
 Qed.
 
-Lemma to_mem_memval : forall m b ofs,
-    Maps.ZMap.get ofs (NMap.get (Maps.ZMap.t memval) b (Mem.mem_contents m)) = mem_memval m b ofs.
-Proof. intros. reflexivity. Qed.
-
 Lemma map_out_of_reach: forall j1' j2 b s2 m1' m2'1 m2',
     Mem.map j1' j2 b s2 m1' m2'1 = m2' ->
     Mem.unchanged_on (loc_out_of_reach j1' m1') m2'1 m2'.
@@ -1217,18 +1247,96 @@ Proof.
   eapply inject_map_out_of_reach; eauto.
 Qed.
 
+Lemma supext_unchanged_on : forall s m m' P,
+    Mem.supext s m = m' ->
+    Mem.unchanged_on P m m'.
+Proof.
+  intros. unfold Mem.supext in H.
+  destruct Mem.sup_include_dec in H.
+  - constructor; inv H.
+    + eauto.
+    + intros. reflexivity.
+    + intros. reflexivity.
+  - subst. eauto with mem.
+Qed.
+
+Lemma out_of_reach_free_unchanged_on_2: forall m1 m1' j1 j2 j1' b H1 H2 m2 m2',
+    Mem.out_of_reach_free m1 m1' j1 j2 j1' b H1 H2 m2 = m2' ->
+    Mem.unchanged_on (loc_unmapped j2) m2 m2'.
+Proof.
+  intros. unfold Mem.out_of_reach_free in H.
+  constructor.
+  - inv H. eauto.
+  - inv H. intros. unfold Mem.perm. simpl.
+    unfold Mem.pmap_update. rewrite NMap.gsspec.
+    destruct NMap.elt_eq.
+    + subst.
+      unfold Mem.update_mem_access_free. red in H.
+      rewrite H. reflexivity.
+    + reflexivity.
+  - inv H. intros. reflexivity.
+Qed.
+
+Lemma initial_free_unmapped: forall s2 m1 m1' j1 j2 j1' H1 H2 m2 m2',
+    Mem.initial_free s2 m1 m1' j1 j2 j1' H1 H2 m2 = m2' ->
+    Mem.unchanged_on (loc_unmapped j2) m2 m2'.
+Proof.
+  induction s2; intros; inv H; simpl in *.
+  - eapply Mem.unchanged_on_refl.
+  - eapply Mem.unchanged_on_trans; eauto.
+    eapply out_of_reach_free_unchanged_on_2; eauto.
+Qed.
+Lemma initial_unmapped:
+  forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
+    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
+    Mem.unchanged_on (loc_unmapped j2) m2 m2'1.
+Proof.
+  intros. unfold Mem.initial_m2' in H.
+  eapply Mem.unchanged_on_trans.
+  eapply supext_unchanged_on; eauto.
+  eapply initial_free_unmapped; eauto.
+Qed.
+
+Lemma out_of_reach_free_unchanged_on_1: forall m1 m1' j1 j2 j1' b H1 H2 m2 m2',
+    Mem.out_of_reach_free m1 m1' j1 j2 j1' b H1 H2 m2 = m2' ->
+    Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'.
+Proof.
+  intros. unfold Mem.out_of_reach_free in H.
+  constructor.
+  - inv H. eauto.
+  - inv H. intros. unfold Mem.perm. simpl.
+    unfold Mem.pmap_update. rewrite NMap.gsspec.
+    destruct NMap.elt_eq.
+    + subst.
+      unfold Mem.update_mem_access_free.
+      destruct (j2 b); try reflexivity.
+      destruct (Mem.loc_in_reach_dec (Mem.support m1) m1 j1 b ofs Max Nonempty H1);
+      destruct (Mem.loc_in_reach_dec (Mem.support m1') m1' j1' b ofs Max Nonempty H2);
+      simpl; try reflexivity.
+      apply Mem.out_of_reach_reverse in l; eauto. inv l.
+    + reflexivity.
+  - inv H. intros. reflexivity.
+Qed.
+
+Lemma initial_free_out_of_reach1: forall s2 m1 m1' j1 j2 j1' H1 H2 m2 m2',
+    Mem.initial_free s2 m1 m1' j1 j2 j1' H1 H2 m2 = m2' ->
+    Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'.
+Proof.
+  induction s2; intros; inv H; simpl in *.
+  - eapply Mem.unchanged_on_refl.
+  - eapply Mem.unchanged_on_trans; eauto.
+    eapply out_of_reach_free_unchanged_on_1; eauto.
+Qed.
 Lemma initial_out_of_reach1:
   forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
     Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
     Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'1.
-Proof. Admitted.
-
-
-Lemma initial_unmapped:
-    forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
-    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
-    Mem.unchanged_on (loc_unmapped j2) m2 m2'1.
-Proof. Admitted.
+Proof.
+  intros. unfold Mem.initial_m2' in H.
+  eapply Mem.unchanged_on_trans.
+  eapply supext_unchanged_on; eauto.
+  eapply initial_free_out_of_reach1; eauto.
+Qed.
 
 Lemma out_of_reach_free_decrease: forall m1 m1' j1 j2 j1' b H1 H2 m2 m2' b2 ofs k p,
       Mem.out_of_reach_free m1 m1' j1 j2 j1' b H1 H2 m2 = m2' ->

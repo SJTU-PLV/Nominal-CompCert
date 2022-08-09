@@ -5193,7 +5193,17 @@ Qed.
 Definition update_mem_content (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (delta : Z)
     : ZMap.t memval -> ZMap.t memval :=
   fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
-Locate "&&".
+
+Lemma update_mem_content_result: forall b1 b2 j1' delta map1 map2 pmap1 (ofs2:Z),
+    fst map1 = Undef -> fst map2 = Undef ->
+    j1' b1 = Some (b2,delta) ->
+    ZMap.get ofs2 (Mem.update_mem_content map1 pmap1 j1' delta map2) =
+    if (Mem.perm_check_readable pmap1 (ofs2 - delta)) then
+      Mem.memval_map j1' (ZMap.get (ofs2 - delta) map1) else
+          ZMap.get ofs2 map2.
+Proof.
+  Admitted.
+
 Program Definition map (f j2:meminj) (b:block) (s2: sup) (m1 m2:mem) :=
   match f b with
   |Some (b',delta) =>
