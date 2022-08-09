@@ -1111,14 +1111,14 @@ Lemma initial_perm_decrease: forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 b
     Mem.perm m2'1 b2 ofs k p -> Mem.perm m2 b2 ofs k p.
 Proof. Admitted.
 
-(*
-Lemma inject_map_perm_inv: forall s1' s2' j1' j2 m1' m2' m2 b2 b1 delta ofs2 k p b3 delta3,
+
+Lemma inject_map_perm_inv: forall s1' s2 s2' j1' j2 m1' m2' m2 b2 b1 delta ofs2 k p,
     Mem.support m2 = s2' ->
     Mem.meminj_no_overlap j1' m1' ->
-    Mem.inject_map s1' s2' j1' j2 m1' m2 = m2' ->
+    Mem.inject_map s1' s2 j1' j2 m1' m2 = m2' ->
     sup_In b1 s1' -> sup_In b2 s2' ->
     j1' b1 = Some (b2, delta) ->
-    j2 b2 = Some (b3, delta3) ->
+    Mem.valid_position b2 j2 s2 s2' ->
     Mem.perm m2' b2 ofs2 k p ->
     Mem.perm m1' b1 (ofs2 - delta) k p \/
     ~ Mem.perm m1' b1 (ofs2 - delta) Max Nonempty.
@@ -1129,8 +1129,7 @@ Proof.
     + (* local a = b1, if copy left, else right. *)
       subst a. erewrite map_perm_2 in H6; eauto.
       rewrite Mem.inject_map_support in H6; auto. subst.
-      rewrite H5 in H6.
-      destruct (Mem.sup_dec b2 (Mem.support m2)); try congruence. simpl in H6.
+      destruct (Mem.valid_position_dec); try congruence; simpl in H6.
       destruct (Mem.perm_dec m1' b1 (ofs2 - delta) Max Nonempty) eqn : Hb.
       -- left. auto.
       -- right. eauto.
@@ -1139,8 +1138,7 @@ Proof.
          ++ (* the case where we need to use no_overlap to state the image of a and b1 diffs*)
             subst. erewrite map_perm_2 in H6; eauto.
             rewrite Mem.inject_map_support in H6; auto.
-            rewrite H5 in H6.
-            destruct (Mem.sup_dec b2 (Mem.support m2)); try congruence. simpl in H6.
+            destruct (Mem.valid_position_dec); try congruence; simpl in H6.
             destruct (Mem.perm_dec m1' a (ofs2 - delta') Max Nonempty) eqn : Hb. simpl in H6.
             * destruct (eq_block a b1) eqn: Hab1.
               replace delta' with delta in * by congruence.
@@ -1155,13 +1153,13 @@ Proof.
          intros (d & A). congruence.
 Qed.
 
-Lemma inject_mem_perm_inv: forall m1' m2 s2' j1' j2 m2' ofs1 k p b2 b1 delta b3 delta3,
+Lemma inject_mem_perm_inv: forall m1' m2 s2 s2' j1' j2 m2' ofs1 k p b2 b1 delta,
     Mem.support m2 = s2' ->
     Mem.meminj_no_overlap j1' m1' ->
-    Mem.inject_mem s2' j1' j2 m1' m2 = m2' ->
+    Mem.inject_mem s2 j1' j2 m1' m2 = m2' ->
     sup_In b1 (Mem.support m1') -> sup_In b2 s2' ->
     j1' b1 = Some (b2, delta) ->
-    j2 b2 = Some (b3,delta3) ->
+    Mem.valid_position b2 j2 s2 s2' ->
     Mem.perm m2' b2 (ofs1 + delta) k p ->
     Mem.perm m1' b1 ofs1 k p \/
     ~ Mem.perm m1' b1 ofs1 Max Nonempty.
@@ -1171,17 +1169,17 @@ Proof.
   replace (ofs2 - delta + delta) with ofs2 in H6 by lia.
   eapply inject_map_perm_inv; eauto.
 Qed.
-*)
-Lemma inject_map_perm : forall s1' s2' j1' j2 m1' m2 m2' b1 ofs1 delta b2 k p,
+
+Lemma inject_map_perm : forall s1' s2 s2' j1' j2 m1' m2 m2' b1 ofs1 delta b2 k p,
    Mem.support m2 =  s2' ->
-   Mem.inject_map s1' s2' j1' j2 m1' m2 = m2' ->
+   Mem.inject_map s1' s2 j1' j2 m1' m2 = m2' ->
    Mem.meminj_no_overlap j1'  m1' ->
    sup_In b1 s1' -> sup_In b2 s2' ->
    j1' b1 = Some (b2,delta) ->
+   Mem.valid_position b2 j2 s2 (Mem.support m2) ->
    Mem.perm m1' b1 ofs1 k p ->
    Mem.perm m2' b2 (ofs1 + delta) k p.
 Proof.
-Admitted. (*
   induction s1'; intros; simpl in *.
   - subst. inv H2.
   - destruct H2.
@@ -1189,7 +1187,7 @@ Admitted. (*
       subst a.
       erewrite map_perm_2; eauto.
       rewrite Mem.inject_map_support; eauto.
-      destruct (Mem.sup_dec b2 (Mem.support m2)); try congruence. simpl.
+      destruct (Mem.valid_position_dec); try congruence. simpl.
       replace (ofs1 + delta - delta) with ofs1 by lia.
       destruct (Mem.perm_dec m1' b1 ofs1 Max Nonempty) eqn : Hb; simpl.
       -- auto.
@@ -1199,7 +1197,7 @@ Admitted. (*
          ++ (* the case where we need to use no_overlap to state the image of a and b1 diffs*)
             subst. erewrite map_perm_2; eauto.
             rewrite Mem.inject_map_support; eauto.
-            destruct (Mem.sup_dec b2 (Mem.support m2) ); try congruence; simpl.
+            destruct (Mem.valid_position_dec); try congruence. simpl.
             destruct (Mem.perm_dec m1' a (ofs1 + delta - delta') Max Nonempty) eqn : Hb; simpl.
             * destruct (eq_block a b1) eqn: Hab1.
               replace delta' with delta in * by congruence.
@@ -1214,7 +1212,7 @@ Admitted. (*
      -- erewrite map_perm_1; eauto.
          intros (d & A). congruence.
 Qed.
-*)
+
 Definition mem_memval (m:mem) b ofs : memval :=
   Maps.ZMap.get ofs (NMap.get _ b (Mem.mem_contents m)).
 
@@ -1459,9 +1457,34 @@ Theorem inject_mem_inj1:
   Mem.mem_inj j1' m1' m2'.
 Proof.
   constructor.
-  - admit.
-    (*intros. eapply inject_map_perm. apply SUP2'. all: eauto.
-    eapply INJNOLAP1. *)
+  - intros.
+    destruct (Mem.valid_position_dec b2 j2 (Mem.support m2) s2').
+    + eapply inject_map_perm; eauto.
+      eapply INJNOLAP1.
+      rewrite SUP2'. eauto.
+      rewrite SUP2'. eauto.
+    + unfold Mem.valid_position in n.
+      assert (sup_In b2 s2'). eauto.
+      destruct (Mem.sup_dec b2 (Mem.support m2));
+        destruct (j2 b2) eqn: Hj2.
+      * exfalso. apply n. split. auto. intros [A B]. congruence.
+      *
+      destruct (j1 b1) as [[b2' delta']|] eqn: Hj1.
+      **
+      apply INCR1 in Hj1 as H'. rewrite H in H'. inversion H'.
+      subst b2' delta'. clear H'.
+      assert (IN1: Mem.valid_block m1 b1).
+      unfold Mem.valid_block. eauto.
+      assert (UNMAP: loc_unmapped (compose_meminj j1 j2) b1 ofs).
+      red. unfold compose_meminj. rewrite Hj1, Hj2. auto.
+      generalize UNMAP2. intro UNMAP2. inversion UNMAP2.
+      erewrite <- unchanged_on_perm; eauto.
+      eapply Mem.perm_inject; eauto.
+      inversion UNCHANGE1.
+      erewrite unchanged_on_perm0; eauto.
+      ** exploit INCRDISJ1; eauto. intros [A B]. congruence.
+      * exfalso. apply n. split. auto. intros [A B]. congruence.
+      * exfalso. apply n. split. auto. intros [A B]. congruence.
   - intros. destruct (j1 b1) as [[b2' delta']|] eqn : Hj1b1.
     + erewrite INCR1 in H; eauto. inv H. inversion INJ12. inversion mi_inj.
       eapply mi_align; eauto. apply inject_implies_dom_in in INJ12 as DOMIN.
@@ -1500,7 +1523,7 @@ Proof.
       ** exploit INCRDISJ1; eauto. intros [A B]. congruence.
       * exfalso. apply n. split. auto. intros [A B]. congruence.
       * exfalso. apply n. split. auto. intros [A B]. congruence.
-Admitted.
+Qed.
 
 Theorem inject_mem_inject1 :
     Mem.inject j1' m1' m2'.
@@ -1520,9 +1543,35 @@ Proof.
     + exploit ADDZERO; eauto. intro. subst. split. lia.
       generalize (Ptrofs.unsigned_range_2 ofs). lia.
   - intros.
-    eapply inject_mem_perm_inv. apply SUP2'.
-    eapply INJNOLAP1; eauto.
-    all : eauto.
+        destruct (Mem.valid_position_dec b2 j2 (Mem.support m2) s2').
+    + eapply inject_mem_perm_inv; eauto.
+      eapply INJNOLAP1.
+      rewrite SUP2'. eauto.
+      rewrite SUP2'. eauto.
+    + unfold Mem.valid_position in n.
+      assert (sup_In b2 s2'). eauto.
+      destruct (Mem.sup_dec b2 (Mem.support m2));
+        destruct (j2 b2) eqn: Hj2.
+      * exfalso. apply n. split. auto. intros [A B]. congruence.
+      *
+      destruct (j1 b1) as [[b2' delta']|] eqn: Hj1.
+      **
+      apply INCR1 in Hj1 as H'. rewrite H in H'. inversion H'.
+      subst b2' delta'. clear H'.
+      assert (IN1: Mem.valid_block m1 b1).
+      unfold Mem.valid_block. eauto.
+      assert (UNMAP: loc_unmapped (compose_meminj j1 j2) b1 ofs).
+      red. unfold compose_meminj. rewrite Hj1, Hj2. auto.
+      generalize UNMAP2. intro UNMAP2. inversion UNMAP2.
+      erewrite <- unchanged_on_perm in H0; eauto.
+      inversion INJ12. exploit mi_perm_inv; eauto.
+      inversion UNCHANGE1.
+      intros [A | B].
+      left. eapply unchanged_on_perm0; eauto.
+      right. eauto.
+      ** exploit INCRDISJ1; eauto. intros [A B]. congruence.
+      * exfalso. apply n. split. auto. intros [A B]. congruence.
+      * exfalso. apply n. split. auto. intros [A B]. congruence.
 Qed.
 
 
