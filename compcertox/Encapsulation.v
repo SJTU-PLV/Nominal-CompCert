@@ -408,14 +408,14 @@ Program Definition world_embed (T: Type) :=
   {|
     w_type := pset_embed T;
     w_int_step := {| rel s t := True |};
-    w_ext_step := {| rel := eq |};
+    w_ext_step := {| rel := OptionRel.option_le eq |};
   |}.
 
 Program Definition world_symtbl :=
   {|
     w_type := pset_embed Genv.symtbl;
     w_int_step := {| rel := eq |};
-    w_ext_step := {| rel := eq |};
+    w_ext_step := {| rel := OptionRel.option_le eq |};
   |}.
 
 (** ** Semantics with Encapsulation *)
@@ -1345,30 +1345,193 @@ End CAT_SIM.
 
 (** ** Refinement between Stateful Simulation Conventions *)
 
-Record st_ccref {li1 li2} (cc cc': ST.callconv li1 li2) : Prop :=
-  mk_st_ccref {
-      ccref_rel : ST.ccworld cc -> ST.ccworld cc' -> Prop;
-      ccref_closed :
-        forall w1 w1', ccref_rel w1 w1' ->
-        forall w2 w2', w1 :-> w2 -> w1' :-> w2' -> ccref_rel w2 w2';
-      ccref_init : ccref_rel (pset_init (ST.ccworld cc)) (pset_init (ST.ccworld cc'));
-      ccref_step :
-        forall w1 w1', ccref_rel w1 w1' ->
-        forall w2 q1 q2, w1 :-> w2 -> ST.match_query cc w2 q1 q2 ->
-        exists w2', w1' :-> w2' /\ ST.match_query cc' w2' q1 q2 /\
-        forall w3' r1 r2, w2' *-> w3' -> ST.match_reply cc' w3' r1 r2 ->
-        exists w3, w2 *-> w3 /\ ST.match_reply cc w3 r1 r2 /\ ccref_rel w3 w3';
-    }.
+Definition st_ccref {li1 li2} (cc1 cc2: ST.callconv li1 li2) : Prop :=
+  STCAT.forward_simulation cc2 cc1 1 1.
+
+Lemma ccref_left_unit1 `(cc: ST.callconv liA liB):
+  st_ccref cc (ST.cc_compose &1 cc).
+Proof.
+Admitted.
+
+Section CC_COMP.
+
+  Context `(ccA: ST.callconv liA1 liA2)
+          `(ccB: ST.callconv liB1 liB2)
+          (L1: semantics liA1 liB1) (L2: semantics liA2 liB2)
+          (HL: ST.fsim_components (ST.cc_compose ccA &1) (ST.cc_compose ccB &1) L1 L2).
+
+  Inductive cc_comp_inv: ST.ccworld ccA -> ST.ccworld ccB -> Prop :=
+  | cc_comp_inv_intro wa wb x y:
+    ST.fsim_invariant HL (wa, x) (wb, y) ->
+    cc_comp_inv wa wb.
+  Inductive cc_comp_ms: Genv.symtbl -> ST.ccworld ccA -> ST.ccworld ccB ->
+                        ST.fsim_index HL -> state L1 -> state L2 -> Prop :=
+  | cc_comp_ms_intro se wa wb x y i s1 s2:
+    ST.fsim_match_states HL se (wa, x) (wb, y) i s1 s2 ->
+    cc_comp_ms se wa wb i s1 s2.
+
+  Lemma fsim_cc_comp_right_unit': ST.fsim_components ccA ccB L1 L2.
+  Proof.
+    eapply ST.Forward_simulation with (ST.fsim_order HL) cc_comp_ms cc_comp_inv.
+    - intros. inv H.
+      econstructor. eapply (ST.fsim_invariant_env_step HL); eauto.
+      split; eauto. reflexivity.
+    - apply (ST.fsim_skel HL).
+    - econstructor. apply (ST.fsim_initial_world HL).
+    - apply (ST.fsim_footprint HL).
+    - intros. inv H. exploit (ST.fsim_lts HL); eauto. intros X.
+      constructor.
+      + intros.
+        edestruct (@ST.fsim_match_initial_states)
+          as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
+        instantiate (1 := (_, Some tt)). split; eauto.
+        destruct y. constructor. destruct c. reflexivity. constructor.
+        econstructor. split; eauto. reflexivity.
+        cbn in *. prod_crush. eexists _, _. split; eauto.
+        eexists _, _. repeat split; eauto.
+        econstructor. eauto.
+      + intros. inv H.
+        edestruct (@ST.fsim_match_final_states)
+          as (? & ? & ? & ? & ? & ?); eauto.
+        destruct x2. destruct H4. destruct H4. destruct p0; inv H6.
+        destruct H3. eexists. split; eauto.
+        eexists; repeat split; eauto. econstructor; eauto.
+      + intros. inv H.
+        edestruct (@ST.fsim_match_external)
+          as (? & ? & ? & ? & ? & ?); eauto.
+        destruct x2. destruct H3. destruct H4 as (? & ? & ?).
+        destruct p0; inv H7.
+        eexists; split; eauto. eexists; repeat split; eauto.
+        intros.
+        edestruct H5 as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
+        instantiate (1 := (_, _)). split; eauto. constructor.
+        eexists; split; eauto. instantiate (2 := Some tt). reflexivity.
+        eexists _, _. split; eauto.
+        destruct x4, x5. destruct H11. destruct H12.
+        eexists _, _. repeat split; eauto. econstructor; eauto.
+      + intros. inv H1.
+        edestruct (@ST.fsim_simulation) as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
+        destruct x3, x4. destruct H3. destruct H4.
+        eexists _, _. split; eauto.
+        eexists _, _. repeat split; eauto. econstructor. eauto.
+    - apply (ST.fsim_order_wf HL).
+  Qed.
+
+  Context (LH: ST.fsim_components (ST.cc_compose &1 ccA) (ST.cc_compose &1 ccB) L1 L2).
+
+  Inductive cc_pmoc_inv: ST.ccworld ccA -> ST.ccworld ccB -> Prop :=
+  | cc_pmoc_inv_intro wa wb x y:
+    ST.fsim_invariant LH (x, wa) (y, wb) ->
+    cc_pmoc_inv wa wb.
+  Inductive cc_pmoc_ms: Genv.symtbl -> ST.ccworld ccA -> ST.ccworld ccB ->
+                        ST.fsim_index LH -> state L1 -> state L2 -> Prop :=
+  | cc_pmoc_ms_intro se wa wb x y i s1 s2:
+    ST.fsim_match_states LH se (x, wa) (y, wb) i s1 s2 ->
+    cc_pmoc_ms se wa wb i s1 s2.
+
+  Lemma fsim_cc_comp_left_unit': ST.fsim_components ccA ccB L1 L2.
+  Proof.
+    eapply ST.Forward_simulation with (ST.fsim_order LH) cc_pmoc_ms cc_pmoc_inv.
+    - intros. inv H.
+      econstructor. eapply (ST.fsim_invariant_env_step LH); eauto.
+      split; eauto. reflexivity.
+    - apply (ST.fsim_skel LH).
+    - econstructor. apply (ST.fsim_initial_world LH).
+    - apply (ST.fsim_footprint LH).
+    - intros. inv H. exploit (ST.fsim_lts LH); eauto. intros X.
+      constructor.
+      + intros.
+        edestruct (@ST.fsim_match_initial_states)
+          as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
+        instantiate (1 := (Some tt, _)). split; eauto.
+        destruct y. constructor. destruct c. reflexivity. constructor.
+        econstructor. split; eauto. reflexivity.
+        cbn in *. prod_crush. eexists _, _. split; eauto.
+        eexists _, _. repeat split; eauto.
+        econstructor. eauto.
+      + intros. inv H.
+        edestruct (@ST.fsim_match_final_states)
+          as (? & ? & ? & ? & ? & ?); eauto.
+        destruct x2. destruct H4. destruct H4. destruct p; inv H4.
+        destruct H3. eexists. split; eauto.
+        eexists; repeat split; eauto. econstructor; eauto.
+      + intros. inv H.
+        edestruct (@ST.fsim_match_external)
+          as (? & ? & ? & ? & ? & ?); eauto.
+        destruct x2. destruct H3. destruct H4 as (? & ? & ?).
+        destruct p; inv H4.
+        eexists; split; eauto. eexists; repeat split; eauto.
+        intros.
+        edestruct H5 as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
+        instantiate (1 := (_, _)). split; eauto. constructor.
+        eexists; split; eauto. instantiate (1 := Some tt). reflexivity.
+        eexists _, _. split; eauto.
+        destruct x5, x6. destruct H11. destruct H12.
+        eexists _, _. repeat split; eauto. econstructor; eauto.
+      + intros. inv H1.
+        edestruct (@ST.fsim_simulation) as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
+        destruct x3, x4. destruct H3. destruct H4.
+        eexists _, _. split; eauto.
+        eexists _, _. repeat split; eauto. econstructor. eauto.
+    - apply (ST.fsim_order_wf LH).
+  Qed.
+
+End CC_COMP.
+
+Lemma fsim_cc_comp_right_unit `(ccA: ST.callconv liA1 liA2)
+      `(ccB: ST.callconv liB1 liB2) L1 L2:
+  ST.forward_simulation (ST.cc_compose ccA &1) (ST.cc_compose ccB &1) L1 L2 ->
+  ST.forward_simulation ccA ccB L1 L2.
+Proof.
+  intros [X]. constructor.
+  eapply fsim_cc_comp_right_unit'. apply X.
+Qed.
+
+Lemma fsim_cc_comp_left_unit `(ccA: ST.callconv liA1 liA2)
+      `(ccB: ST.callconv liB1 liB2) L1 L2:
+  ST.forward_simulation (ST.cc_compose &1 ccA) (ST.cc_compose &1 ccB) L1 L2 ->
+  ST.forward_simulation ccA ccB L1 L2.
+Proof.
+  intros [X]. constructor.
+  eapply fsim_cc_comp_left_unit'. apply X.
+Qed.
 
 Require Import LogicalRelations.
 
-Global Instance st_open_fsim_ccref:
+Global Instance st_fsim_ccref:
   Monotonic
-    (@ST.forward_simulation)
+    (@STCAT.forward_simulation)
     (forallr - @ liA1, forallr - @ liA2, st_ccref ++>
      forallr - @ liB1, forallr - @ liB2, st_ccref -->
      subrel).
-Admitted.
+Proof.
+  intros liA1 liA2 ccA1 ccA2 HA
+         liB1 liB2 ccB1 ccB2 HB L1 L2 H.
+  assert (Hsk: skel L1 = skel L2).
+  { destruct H. apply X. }
+  unfold flip, st_ccref in *.
+  exploit @st_cat_fsim_lcomp_sk. exact H. exact HA.
+  apply Linking.linkorder_refl. apply id_skel_order.
+  intros HC.
+  exploit @st_cat_fsim_lcomp_sk. exact HB. exact HC.
+  apply id_skel_order. apply Linking.linkorder_refl.
+  cbn. intros X. rewrite Hsk in X at 3 4. clear -X.
+  assert (Y: STCAT.forward_simulation &1 &1 L1 (1 o L1 o 1)).
+  {
+    exploit @st_fsim_vcomp.
+    apply st_fsim_right_unit1. apply st_fsim_left_unit1.
+    apply fsim_cc_comp_left_unit.
+  }
+  assert (Z: STCAT.forward_simulation &1 &1 (1 o L2 o 1) L2).
+  {
+    exploit @st_fsim_vcomp.
+    apply st_fsim_left_unit2. apply st_fsim_right_unit2.
+    apply fsim_cc_comp_left_unit.
+  }
+  exploit @st_fsim_vcomp. exact Y. exact X. clear Y X. intros W.
+  exploit @st_fsim_vcomp. exact W. exact Z. clear W Z. intros X.
+  apply (fsim_cc_comp_left_unit (fsim_cc_comp_right_unit X)).
+Qed.
 
 (** *** Encapsulation Primitives *)
 
@@ -1471,3 +1634,111 @@ Section ENCAP_COMP_FSIM.
   Admitted.
 
 End ENCAP_COMP_FSIM.
+
+(* This is a special property required to bootstrap *)
+Section DENORMALIZE.
+
+  Context `(ccA: ST.callconv liA1 liA2)
+          `(ccB: ST.callconv liB1 liB2)
+          (L1: semantics liA1 liB1)
+          (L2: semantics liA2 liB2)
+          (HL: ST.fsim_components ccA ccB (1 o (1 o L1 o 1) o 1)
+                                 (1 o (1 o L2 o 1) o 1)).
+  Inductive df_ms: Genv.symtbl -> ST.ccworld ccA -> ST.ccworld ccB ->
+                   ST.fsim_index HL ->
+                   state (1 o L1 o 1) -> state (1 o L2 o 1) -> Prop :=
+  | df_ms1 se wa wb i q1 q2:
+    ST.fsim_match_states HL se wa wb i
+                         (st1 1 _ (st_q q1)) (st1 1 _ (st_q q2)) ->
+    df_ms se wa wb i (st1 1 _ (st_q q1)) (st1 1 _ (st_q q2))
+  | df_ms2 se wa wb i q1 q2 s1 s2:
+    ST.fsim_match_states HL se wa wb i
+                         (st2 1 ((1 o L1 o 1) o 1) (st_q q1)
+                              (st1 (1 o L1 o 1) _
+                                   (st2 1 (L1 o 1) (st_q q1) (st1 L1 _ s1))))
+                         (st2 1 ((1 o L2 o 1) o 1) (st_q q2)
+                              (st1 (1 o L2 o 1) _
+                                   (st2 1 (L2 o 1) (st_q q2) (st1 L2 _ s2)))) ->
+    df_ms se wa wb i (st2 1 (L1 o 1) (st_q q1) (st1 L1 _ s1))
+          (st2 1 (L2 o 1) (st_q q2) (st1 L2 _ s2))
+  | df_ms3 se wa wb i q1 q2 s1 s2 q3 q4:
+    ST.fsim_match_states HL se wa wb i
+                         (st2 1 ((1 o L1 o 1) o 1) (st_q q1)
+                              (st2 (1 o L1 o 1) 1
+                                   (st2 1 (L1 o 1) (st_q q1) (st2 L1 1 s1 (st_q q3)))
+                                   (st_q q3)))
+                         (st2 1 ((1 o L2 o 1) o 1) (st_q q2)
+                              (st2 (1 o L2 o 1) 1
+                                   (st2 1 (L2 o 1) (st_q q2) (st2 L2 1 s2 (st_q q4)))
+                                   (st_q q4))) ->
+    df_ms se wa wb i (st2 1 (L1 o 1) (st_q q1) (st2 L1 1 s1 (st_q q3)))
+          (st2 1 (L2 o 1) (st_q q2) (st2 L2 1 s2 (st_q q4)))
+  | df_ms4 se wa wb i q1 q2 s1 s2 q3 q4 r1 r2:
+    ST.fsim_match_states HL se wa wb i
+                         (st2 1 ((1 o L1 o 1) o 1) (st_q q1)
+                              (st2 (1 o L1 o 1) 1
+                                   (st2 1 (L1 o 1) (st_q q1) (st2 L1 1 s1 (st_q q3)))
+                                   (st_r r1)))
+                         (st2 1 ((1 o L2 o 1) o 1) (st_q q2)
+                              (st2 (1 o L2 o 1) 1
+                                   (st2 1 (L2 o 1) (st_q q2) (st2 L2 1 s2 (st_q q4)))
+                                   (st_r r2))) ->
+    df_ms se wa wb i (st2 1 (L1 o 1) (st_q q1) (st2 L1 1 s1 (st_r r1)))
+          (st2 1 (L2 o 1) (st_q q2) (st2 L2 1 s2 (st_r r2)))
+  | df_ms5 se wa wb i r1 r2:
+    ST.fsim_match_states HL se wa wb i
+                         (st1 1 _ (st_r r1)) (st1 1 _ (st_r r2)) ->
+    df_ms se wa wb i (st1 1 _ (st_r r1)) (st1 1 _ (st_r r2)).
+
+  Lemma denormalize_fsim':
+    ST.fsim_components ccA ccB (1 o L1 o 1) (1 o L2 o 1).
+  Proof.
+    apply ST.Forward_simulation with (ST.fsim_order HL) df_ms (ST.fsim_invariant HL).
+    apply ST.fsim_invariant_env_step.
+    apply (ST.fsim_skel HL).
+    apply ST.fsim_initial_world.
+    pose proof (ST.fsim_footprint HL) as X. cbn in X |- *. firstorder.
+    2: apply ST.fsim_order_wf.
+    intros wa wb se INV. pose proof (ST.fsim_lts HL wa wb se INV) as X.
+    constructor.
+    - intros q1 q2 s1 wb' Hb Hq H. inv H. inv H0.
+      edestruct (@ST.fsim_match_initial_states) as (i & s2 & A & B); eauto.
+      constructor. constructor.
+      destruct B as (wa' & wb'' & Ha & Hb' & H').
+      inv A. inv H.
+      exists i, (st1 1 _ (st_q q2)). split.
+      repeat constructor.
+      exists wa', wb''. repeat split; eauto.
+      constructor. eauto.
+    - intros wa' wb' i s1 s2 r1 Hs H. inv H. inv H0. inv Hs.
+      edestruct (@ST.fsim_match_final_states) as (r2x & Hr2 & A); eauto.
+      repeat constructor.
+      destruct A as (wb'' & Hb' & Hr & HI).
+      inv Hr2. inv H0. exists r2x. repeat split.
+      exists wb''. repeat split; eauto.
+    - intros wa1 wb1 i s1 s2 q1 Hs H. inv H. inv H0. inv H. inv Hs.
+      edestruct (@ST.fsim_match_external) as (q2x & Hq2 & wa2 & Ha2 & Hq & Hk); eauto.
+      repeat constructor.
+      inv Hq2. inv H2. inv H3. exists q2x. split. repeat constructor.
+      exists wa2. repeat split; eauto.
+      intros r1 r2 s1' wa3 Ha3 Hr H. inv H. inv H4. inv H3.
+      edestruct Hk as (i' & s2' & Hs2' & wa4 & wb2 & Ha4 & Hb2 & Hm); eauto.
+      repeat constructor. inv Hs2'. inv H3. inv H4.
+      exists i'. eexists. repeat split; eauto.
+      exists wa4, wb2. repeat split; eauto.
+      econstructor. eauto.
+    - intros s1 t s1' HSTEP wa1 wb1 i s2 HS.
+      inv HS.
+      + inv HSTEP. inv H1. inv H1. inv H2.
+
+
+  Admitted.
+
+End DENORMALIZE.
+
+Lemma denormalize_fsim `(ccA: ST.callconv liA1 liA2)
+      `(ccB: ST.callconv liB1 liB2) L1 L2:
+  ST.forward_simulation ccA ccB (1 o (1 o L1 o 1) o 1)
+                        (1 o (1 o L2 o 1) o 1) ->
+  ST.forward_simulation ccA ccB (1 o L1 o 1) (1 o L2 o 1).
+Admitted.
