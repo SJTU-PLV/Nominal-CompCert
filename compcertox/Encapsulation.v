@@ -1348,10 +1348,152 @@ End CAT_SIM.
 Definition st_ccref {li1 li2} (cc1 cc2: ST.callconv li1 li2) : Prop :=
   STCAT.forward_simulation cc2 cc1 1 1.
 
-Lemma ccref_left_unit1 `(cc: ST.callconv liA liB):
-  st_ccref cc (ST.cc_compose &1 cc).
-Proof.
-Admitted.
+Section CC_UNIT.
+
+  Context `(cc: ST.callconv liA liB).
+
+  Inductive lu_inv: ST.ccworld cc -> ST.ccworld cc -> Prop :=
+  | lu_inv_intro wa wb:
+    wa :-> wb -> lu_inv wa wb.
+  Inductive lu_ms: ST.ccworld cc -> ST.ccworld cc -> @state liA liA 1 -> @state liB liB 1 -> Prop :=
+  | lu_ms_q w q1 q2:
+    ST.match_query cc w q1 q2 -> lu_ms w w (st_q q1) (st_q q2)
+  | lu_ms_r w r1 r2:
+    ST.match_reply cc w r1 r2 -> lu_ms w w (st_r r1) (st_r r2).
+
+  Lemma ccref_left_unit1:
+    st_ccref cc (ST.cc_compose &1 cc).
+  Proof.
+    unfold st_ccref. apply st_normalize_fsim. constructor.
+    eapply ST.Forward_simulation with
+      (ltof _ (fun (_: unit) => 0)) (fun _ '(_, w1) w2 _ => lu_ms w1 w2)
+      (fun '(_, w1) w2 => lu_inv w1 w2); try easy.
+    - intros [? wa] wb I wb1 Hb. inv I.
+      constructor. etransitivity; eauto.
+    - intros [? wa] wb se I. constructor.
+      + intros q1 q2 s1 wb1 Hb Hq H. inv H. exists tt, (st_q q2).
+        split. constructor.
+        exists (p, wb1), wb1. repeat split; try easy.
+        inv I. etransitivity; eauto.
+        constructor. eauto.
+      + intros [? wa1] wb1 [] s1 s2 r1 Hs H. inv H. inv Hs.
+        exists r2. split. constructor.
+        exists wb1. repeat split; easy.
+      + intros [? wa1] wb1 [] s1 s2 q1 Hs H. inv H. inv Hs.
+        exists q2. split. constructor.
+        exists (Some tt, wb1). repeat split; try easy.
+        destruct p0; constructor. destruct c. easy.
+        eexists. split; eauto. reflexivity.
+        intros r1 r2 s1' [? wa2] [? Ha] Hr HX.
+        destruct Hr as (x & HR1 & HR2).
+        destruct p1; inv HR1. inv HX.
+        exists tt, (st_r r2). repeat split.
+        exists (Some tt, wa2), wa2.
+        repeat split; eauto. destruct c. reflexivity. reflexivity.
+        constructor. assumption.
+      + intros. easy.
+  Qed.
+
+  Lemma ccref_left_unit2:
+    st_ccref (ST.cc_compose &1 cc) cc.
+  Proof.
+    unfold st_ccref. apply st_normalize_fsim. constructor.
+    eapply ST.Forward_simulation with
+      (ltof _ (fun (_: unit) => 0)) (fun _ w1 '(_, w2) _ => lu_ms w1 w2)
+      (fun w1 '(_, w2) => lu_inv w1 w2); try easy.
+    - intros wa [? wb] I [? wb1] [? Hb]. inv I.
+      constructor. etransitivity; eauto.
+    - intros wa [? wb] se I. constructor.
+      + intros q1 q2 s1 [? wb1] [_ Hb] Hq H. inv H. exists tt, (st_q q2).
+        split. constructor.
+        destruct Hq as (x & HQ1 & HQ2).
+        destruct p0; inv HQ1.
+        eexists wb1, (Some tt, wb1). repeat split; try easy.
+        inv I. etransitivity; eauto.
+        constructor. eauto.
+      + intros wa1 [? wb1] [] s1 s2 r1 Hs H. inv H. inv Hs.
+        exists r2. split. constructor.
+        eexists (_, wb1). repeat split; try easy.
+        instantiate (1 := Some tt). eexists; split; eauto. reflexivity.
+      + intros wa1 [? wb1] [] s1 s2 q1 Hs H. inv H. inv Hs.
+        exists q2. split. constructor.
+        exists wb1. repeat split; try easy.
+        intros r1 r2 s1' wa2 Ha Hr HX. inv HX.
+        exists tt, (st_r r2). repeat split.
+        exists wa2, (Some tt, wa2).
+        repeat split; eauto. reflexivity.
+        constructor. assumption.
+      + intros. easy.
+  Qed.
+
+  Lemma ccref_right_unit1:
+    st_ccref cc (ST.cc_compose cc &1).
+  Proof.
+  Proof.
+    unfold st_ccref. apply st_normalize_fsim. constructor.
+    eapply ST.Forward_simulation with
+      (ltof _ (fun (_: unit) => 0)) (fun _ '(w1, _) w2 _ => lu_ms w1 w2)
+      (fun '(w1, _) w2 => lu_inv w1 w2); try easy.
+    - intros [wa _] wb I wb1 Hb. inv I.
+      constructor. etransitivity; eauto.
+    - intros [wa ?] wb se I. constructor.
+      + intros q1 q2 s1 wb1 Hb Hq H. inv H. exists tt, (st_q q2).
+        split. constructor.
+        exists (wb1, p), wb1. repeat split; try easy.
+        inv I. etransitivity; eauto.
+        constructor. eauto.
+      + intros [wa1 ?] wb1 [] s1 s2 r1 Hs H. inv H. inv Hs.
+        exists r2. split. constructor.
+        exists wb1. repeat split; easy.
+      + intros [wa1 ?] wb1 [] s1 s2 q1 Hs H. inv H. inv Hs.
+        exists q2. split. constructor.
+        exists (wb1, Some tt). repeat split; try easy.
+        destruct p0; constructor. destruct c. easy.
+        eexists. split; eauto. reflexivity.
+        intros r1 r2 s1' [wa2 ?] [Ha ?] Hr HX.
+        destruct Hr as (x & HR1 & HR2).
+        destruct p1; inv HR2. inv HX.
+        exists tt, (st_r r2). repeat split.
+        exists (wa2, Some tt), wa2.
+        repeat split; eauto. reflexivity. destruct c. reflexivity.
+        constructor. assumption.
+      + intros. easy.
+  Qed.
+
+  Lemma ccref_right_unit2:
+    st_ccref (ST.cc_compose cc &1) cc.
+  Proof.
+    unfold st_ccref. apply st_normalize_fsim. constructor.
+    eapply ST.Forward_simulation with
+      (ltof _ (fun (_: unit) => 0)) (fun _ w1 '(w2, _) _ => lu_ms w1 w2)
+      (fun w1 '(w2, _) => lu_inv w1 w2); try easy.
+    - intros wa [wb ?] I [wb1 ?] [Hb ?]. inv I.
+      constructor. etransitivity; eauto.
+    - intros wa [wb ?] se I. constructor.
+      + intros q1 q2 s1 [wb1 ?] [Hb _] Hq H. inv H. exists tt, (st_q q2).
+        split. constructor.
+        destruct Hq as (x & HQ1 & HQ2).
+        destruct p0; inv HQ2.
+        eexists wb1, (wb1, Some tt). repeat split; try easy.
+        inv I. etransitivity; eauto.
+        constructor. eauto.
+      + intros wa1 [wb1 ?] [] s1 s2 r1 Hs H. inv H. inv Hs.
+        exists r2. split. constructor.
+        eexists (wb1, _). repeat split; try easy.
+        instantiate (1 := Some tt). eexists; split; eauto. reflexivity.
+      + intros wa1 [wb1 ?] [] s1 s2 q1 Hs H. inv H. inv Hs.
+        exists q2. split. constructor.
+        exists wb1. repeat split; try easy.
+        intros r1 r2 s1' wa2 Ha Hr HX. inv HX.
+        exists tt, (st_r r2). repeat split.
+        exists wa2, (wa2, Some tt).
+        repeat split; eauto. reflexivity.
+        constructor. assumption.
+      + intros. easy.
+  Qed.
+
+End CC_UNIT.
+
 
 Section CC_COMP.
 
