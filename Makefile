@@ -135,7 +135,9 @@ BACKEND=\
 ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 
 # Elf file format (unused: MergeSection.v)
-ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v ReloctablesEncode.v RemoveAddend.v RelocElfSemantics.v ReloctablesDecode.v SymbtableDecode.v
+ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
+ ReloctablesEncode.v RemoveAddend.v RelocElfSemantics.v ReloctablesDecode.v \
+ SymbtableDecode.v RelocElfgenproof.v
 
 # CAV generation file
 AUTOGEN = VerificationCondition.v EncDecRet.v

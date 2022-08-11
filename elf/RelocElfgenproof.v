@@ -68,9 +68,68 @@ Qed.
 Lemma gen_reloc_elf_correct: forall p elf,
     gen_reloc_elf p = OK elf ->
     exists p', decode_elf elf = OK p' /\ program_equiv p p'.
-Admitted.
+Proof.
+  unfold gen_reloc_elf,decode_elf.
+  intros. monadInv H.
+  do 3 destr_in EQ4.
+  (* ptr64 *)
+  assert ((get_ptr64 elf) = Archi.ptr64).
+  unfold get_ptr64. inv EQ4.
+  simpl. destruct Archi.ptr64;auto.
+  rewrite H. clear H.
+  
+  inv EQ4. simpl in *. clear Heqb l.
 
+  (* shstrtbl *)
+  unfold gen_shstrtbl in EQ2.
+  destr_in EQ2. destruct x.
+  unfold update_elf_state in EQ2.
+  simpl in EQ2. repeat rewrite app_nil_r in EQ2.
+  repeat rewrite Z.add_0_r in EQ2.
+  inv EQ2.
+  simpl in *. do 2 rewrite removelast_last.
+  rewrite last_last.
+  clear Heqb.
+  
+  (* headers len *)
+  repeat rewrite app_length in Heqb0.
+  simpl in Heqb0.
+  eapply Nat.eqb_eq in Heqb0.
+  destruct e_headers. simpl in Heqb0. lia.
+  simpl.
+  
+  (* reloc sections *)
+  destruct ProdL0.
+  unfold gen_reloc_sections_and_shstrtbl in EQ0.
+  simpl in EQ0. monadInv EQ0.
+  destr_in EQ3. unfold update_elf_state in EQ3.
+  simpl in EQ3. inv EQ3.
+  simpl.
 
+  (* symbtable section *)
+  destruct ProdL.
+  unfold gen_symtbl_section_strtbl_and_shstr in EQ1.
+  simpl in EQ1.
+  monadInv EQ1. destr_in EQ3.
+  unfold update_elf_state in EQ3.
+  simpl in EQ3. inv EQ3.
+  clear Heqb.
+
+  (* text data sections *)
+  unfold initial_elf_state in EQ.
+  unfold gen_text_data_sections_and_shstrtbl in EQ.
+  monadInv EQ. do 2 destr_in EQ3.
+  unfold update_elf_state in EQ3.
+  cbn [RelocElfgen.e_headers_idx] in EQ3.
+  rewrite (Z.add_comm 1) in EQ3. simpl in EQ3.
+  inv EQ3.
+
+  (* null headers *)
+  simpl in H1.
+  inv H1.
+
+  
+  
 Lemma decode_prog_code_section_correct: forall p1 p2 p1',
     program_equiv p1 p2 ->
     decode_prog_code_section instr_size Instr_size p1 = OK p1' ->

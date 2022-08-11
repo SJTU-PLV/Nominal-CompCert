@@ -190,7 +190,7 @@ Definition one_greater_last_local_symb_index (symbtbl: list symbentry) :=
                                     | bind_local => true
                                     | _ => false
                                     end) symbtbl in
-  Z.of_nat (1 + length locals).
+  Z.of_nat (length locals + 1).
 
 (* strtbl_idx: strtbl index in section headers table *)
 Definition gen_symtab_sec_header (symbtbl: list symbentry) (shstrtbl_idx: Z) (sec_ofs: Z) (strtbl_idx: Z):=
@@ -361,16 +361,22 @@ Definition acc_sections_headers (symbtbl: symbtable) (res_acc: res (list section
       let h := gen_text_sec_header sec shstrofs ofs in
       (* consistency checking *)
       if Z.eqb (Z.of_nat (length sec)) e.(symbentry_size) then
-        OK (secs ++ [sec], hs++[h],ofs + e.(symbentry_size), shstrtbl', shstrofs')
+        OK (secs ++ [sec], hs++[h],ofs + (Z.of_nat (length sec)), shstrtbl', shstrofs')
       else
         Error [MSG "Inconsistency, section length not equal to symbentry field "; CTX id]
     | sec_rwdata sec =>
       let h := gen_data_sec_header sec shstrofs ofs in
-      OK (secs++[sec], hs++[h],ofs + e.(symbentry_size), shstrtbl', shstrofs')
+      if Z.eqb (Z.of_nat (length sec)) e.(symbentry_size) then
+        OK (secs++[sec], hs++[h],ofs + (Z.of_nat (length sec)), shstrtbl', shstrofs')
+      else
+        Error [MSG "Inconsistency, section length not equal to symbentry field "; CTX id]
     (* read-only infomation in symb table *)
     | sec_rodata sec =>
       let h := gen_rodata_sec_header sec shstrofs ofs in
-      OK (secs++[sec],hs++[h],ofs + e.(symbentry_size), shstrtbl', shstrofs')
+      if Z.eqb (Z.of_nat (length sec)) e.(symbentry_size) then
+        OK (secs++[sec],hs++[h],ofs + (Z.of_nat (length sec)), shstrtbl', shstrofs')
+      else
+        Error [MSG "Inconsistency, section length not equal to symbentry field "; CTX id]
     end
   end.
 
@@ -413,8 +419,10 @@ Definition gen_text_data_sections_and_shstrtbl (p: RelocProgramBytes.program) (s
   let '(sectbl0, headers0, ofs0, shstrtbl0, shstrtbl_size0) := res_sections_headers_ofs in
   let secs_size_check := get_sections_size (prog_sectable p) in
   if Z.eqb ofs0 secs_size_check then
-    let elf_state1 := update_elf_state st sectbl0 headers0 shstrtbl0 ofs0 (Z.of_nat (length headers0)) shstrtbl_size0 in
-    OK (elf_state1, secidxmap)
+    if Nat.eq_dec (length sectbl0) (length headers0) then
+      let elf_state1 := update_elf_state st sectbl0 headers0 shstrtbl0 ofs0 (Z.of_nat (length headers0)) shstrtbl_size0 in
+      OK (elf_state1, secidxmap)
+    else Error (msg "Sections len <> Sectio headers len")
   else Error [MSG "Section size inconsistent between symbol table and section table"].
 
 
@@ -501,8 +509,10 @@ Definition gen_reloc_sections_and_shstrtbl (p: program) (symb_idxmap sec_idxmap 
   let symbtbl_idx := st.(e_headers_idx) - 1 in
   do r <- gen_reloc_sections_headers symb_idxmap sec_idxmap symbtbl_idx  idl_reloctbl sec_ofs shstrtbl_ofs;
   let '(secs, hs, sec_ofs', shstrtbl', shstrtbl_ofs') := r in
-  let st1 := update_elf_state st secs hs shstrtbl' (sec_ofs' - sec_ofs) (Z.of_nat (length idl_reloctbl)) (shstrtbl_ofs' - shstrtbl_ofs) in
-  OK st1.
+  if Nat.eq_dec (length secs) (length hs) then
+    let st1 := update_elf_state st secs hs shstrtbl' (sec_ofs' - sec_ofs) (Z.of_nat (length idl_reloctbl)) (shstrtbl_ofs' - shstrtbl_ofs) in
+    OK st1
+  else Error (msg "reloc section generation: sections len <> section headers len").
 
 (* shstrtable generation *)
 Definition gen_shstrtbl (st: elf_state) :=

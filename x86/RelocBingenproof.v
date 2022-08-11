@@ -380,9 +380,9 @@ Proof.
   eexists x,ProdR. auto.
 Qed.
 
-Lemma decode_prog_code_section_total_aux: forall id sec sec' symbtbl reloctbl,
+Lemma decode_prog_code_section_total_aux: forall id sec sec' reloctbl,
     acc_fold_section instr_size reloctbl id sec = OK sec' ->
-    exists sec1, acc_decode_code_section instr_size Instr_size symbtbl reloctbl id sec' = OK sec1.
+    exists sec1, acc_decode_code_section instr_size Instr_size reloctbl id sec' = OK sec1.
 Proof.
   unfold acc_fold_section.
   intros.
@@ -412,7 +412,7 @@ Proof.
   assert (exists t, PTree.fold
        (acc_PTree_fold
           (acc_decode_code_section instr_size Instr_size
-             (prog_symbtable p) (prog_reloctables p))) x
+                                   (prog_reloctables p))) x
        (OK (PTree.empty section1)) = OK t).
   { rewrite PTree.fold_spec.
     unfold section in *.
@@ -847,7 +847,7 @@ Admitted.
 Lemma alloc_section_pres_mem: forall ge1 ge2 id sec sec1 sec2 m m0 reloctbl symbtbl
     (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
     acc_fold_section instr_size reloctbl id sec = OK sec1 ->
-    acc_decode_code_section instr_size Instr_size symbtbl reloctbl id sec1 = OK sec2 ->
+    acc_decode_code_section instr_size Instr_size reloctbl id sec1 = OK sec2 ->
     RelocProgSemantics.alloc_section instr_size ge1 symbtbl (Some m) id (RelocProgSemantics1.rev_section instr_size reloctbl id sec) = Some m0 ->
     alloc_section instr_size ge2 reloctbl (Some m) id sec2 = Some m0.
 Proof.
@@ -981,7 +981,7 @@ Lemma transf_initial_state:forall st1 rs,
 
     (* alloc sections preserve memory *)
   assert (ALLOCSECS: alloc_sections instr_size (RelocProgSemantics.globalenv instr_size tp')
-                         (prog_symbtable tp') (prog_reloctables tp') 
+                          (prog_reloctables tp') 
                          (prog_sectable tp') Mem.empty = Some m0).
   { 
     set (ge1:= (RelocProgSemantics.globalenv instr_size (RelocProgSemantics1.decode_program instr_size prog))) in *.
