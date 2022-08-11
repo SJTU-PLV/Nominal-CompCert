@@ -100,7 +100,7 @@ Definition alloc_section (reloctbl_map: reloctable_map) (r: option mem) (id: ide
   end.
 
 
-Definition alloc_sections (symbtbl: symbtable) (reloctbl_map: reloctable_map) (sectbl: RelocProg.sectable instruction byte) (m:mem) :option mem :=
+Definition alloc_sections (reloctbl_map: reloctable_map) (sectbl: RelocProg.sectable instruction byte) (m:mem) :option mem :=
   PTree.fold (alloc_section reloctbl_map) sectbl (Some m).
 
 End WITHGE.
@@ -108,7 +108,7 @@ End WITHGE.
 
 Definition init_mem (p: RelocProg.program fundef unit instruction byte) :=
   let ge := RelocProgSemantics.globalenv instr_size p in
-  match alloc_sections ge p.(prog_symbtable) p.(prog_reloctables) p.(prog_sectable) Mem.empty with
+  match alloc_sections ge p.(prog_reloctables) p.(prog_sectable) Mem.empty with
   | Some m1 =>
     RelocProgSemantics.alloc_external_symbols m1 p.(prog_symbtable)
   | None => None
@@ -269,7 +269,7 @@ Definition decode_instrs' (reloctbl: reloctable) (bytes: list byte) :=
   do instrs2_reloctbl <- decode_instrs instrs1 ([],reloctbl);
   OK (instrs2_reloctbl).
   
-Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctable_map) id (sec:section) : res (RelocProg.section instruction byte) :=
+Definition acc_decode_code_section (reloctbl_map: reloctable_map) id (sec:section) : res (RelocProg.section instruction byte) :=
   (* do acc' <- acc; *)
   let reloctbl := match reloctbl_map ! id with
                   | None => []
@@ -289,7 +289,7 @@ Definition acc_decode_code_section (symbtbl: symbtable) (reloctbl_map: reloctabl
 
 
 Definition decode_prog_code_section (p:program) : res program1 :=
-  do t <- PTree.fold (acc_PTree_fold (acc_decode_code_section p.(prog_symbtable) p.(prog_reloctables))) (prog_sectable p) (OK (PTree.empty section1));
+  do t <- PTree.fold (acc_PTree_fold (acc_decode_code_section p.(prog_reloctables))) (prog_sectable p) (OK (PTree.empty section1));
   OK {| prog_defs      := prog_defs p;
         prog_public    := prog_public p;
         prog_main      := prog_main p;
