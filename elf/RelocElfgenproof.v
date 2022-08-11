@@ -44,9 +44,26 @@ Record program_equiv {F V I D: Type} (p1 p2: RelocProg.program F V I D) :=
       (* external function *)
       pe_prog_defs: p1.(RelocProg.prog_defs) = p2.(RelocProg.prog_defs);
       (* main function *)
-      pe_prog_main: p1.(RelocProg.prog_main) = p2.(RelocProg.prog_main)
+      pe_prog_main: p1.(RelocProg.prog_main) = p2.(RelocProg.prog_main);
+      (* senv *)
+      pe_prog_senv: p1.(RelocProg.prog_senv) = p2.(RelocProg.prog_senv)
     }.
 
+Lemma program_equiv_sym: forall F V I D (p1 p2: RelocProg.program F V I D),
+    program_equiv p1 p2 ->
+    program_equiv p2 p1.
+Proof.
+  intros.
+  eapply mk_program_equiv;symmetry.
+  apply pe_symbtable;auto.
+  apply pe_sectable;auto.
+  apply pe_reloctable_map;auto.
+  apply pe_prog_defs;auto.
+  apply pe_prog_main;auto.
+  apply pe_prog_senv;auto.
+Qed.
+
+  
 (* most important *)
 Lemma gen_reloc_elf_correct: forall p elf,
     gen_reloc_elf p = OK elf ->
@@ -87,6 +104,7 @@ Proof.
     eapply pe_reloctable_map;eauto.
     eapply pe_prog_defs;eauto.
     eapply pe_prog_main;eauto.
+    eapply pe_prog_senv;auto.
   - exploit LocalLib.length_S_inv;eauto.
     intros (l' & a1 & A1 & B1). subst.
     clear H0.
@@ -124,14 +142,37 @@ Proof.
     eapply pe_reloctable_map;eauto.
     eapply pe_prog_defs;auto.
     eapply pe_prog_main;eauto.
+    eapply pe_prog_senv;auto.
 Qed.
+
+
 
 Lemma program_equiv_symbol_address: forall D (p1 p2: RelocProg.program fundef unit instruction D),
     program_equiv p1 p2 ->
     forall id ofs, Genv.symbol_address (RelocProgSemantics.globalenv instr_size p1) id ofs = Genv.symbol_address (RelocProgSemantics.globalenv instr_size p2) id ofs.
 Admitted.
 
+Lemma program_equiv_instr_map: forall D (p1 p2: RelocProg.program fundef unit instruction D),
+    program_equiv p1 p2 ->
+    Genv.genv_instrs (RelocProgSemantics.globalenv instr_size p1) = Genv.genv_instrs (RelocProgSemantics.globalenv instr_size p2).
+Proof.
+  unfold RelocProgSemantics.globalenv.
+  simpl. unfold gen_code_map. intros.
+  repeat rewrite PTree.fold_spec in *.
+  f_equal. eapply PTree.elements_extensional.
+  eapply pe_sectable. auto.
+Qed.
 
+Lemma program_equiv_ext_funs: forall D (p1 p2: RelocProg.program fundef unit instruction D),
+    program_equiv p1 p2 ->
+    Genv.genv_ext_funs (RelocProgSemantics.globalenv instr_size p1) = Genv.genv_ext_funs (RelocProgSemantics.globalenv instr_size p2).
+Proof.
+  unfold RelocProgSemantics.globalenv.
+  simpl. unfold gen_extfuns. intros.
+  f_equal.
+  eapply pe_prog_defs. auto.
+Qed.
+  
 Lemma store_init_data_bytes_match_ge: forall n bytes reloctbl m b p ge1 ge2 (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
     length bytes = n ->
     store_init_data_bytes ge1 reloctbl m b p bytes = store_init_data_bytes ge2 reloctbl m b p bytes.
@@ -251,5 +292,166 @@ Lemma transf_initial_state: forall st1 rs,
   econstructor;eauto. auto.
 Qed.
 
+Lemma eval_addrmode_match_ge: forall ge1 ge2 a rs (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+    eval_addrmode ge1 a rs = eval_addrmode ge2 a rs.
+Proof.
+  unfold eval_addrmode. destruct Archi.ptr64;intros.
+  - unfold eval_addrmode64.
+    destruct a. f_equal.
+    f_equal. destr.
+    destruct p. eauto.
+  - unfold eval_addrmode32.
+    destruct a. f_equal.
+    f_equal. destr.
+    destruct p. eauto.
+Qed.
+
+Lemma exec_load_match_ge: forall sz ge1 ge2 chunk m a rs rd (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs) ,
+          exec_load sz ge1 chunk m a rs rd = exec_load sz ge2 chunk m a rs rd.
+Proof.
+  unfold exec_load.
+  intros. erewrite eval_addrmode_match_ge.
+  eauto. auto.
+Qed.
+
+Lemma exec_store_match_ge: forall sz ge1 ge2 chunk m a rs rd l (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs) ,
+          exec_store sz ge1 chunk m a rs rd l = exec_store sz ge2 chunk m a rs rd l.
+Proof.
+  unfold exec_store.
+  intros. erewrite eval_addrmode_match_ge.
+  eauto. auto.
+Qed.
+
+Lemma eval_builtin_arg_match_ge: forall rs sp m arg varg ge1 ge2 (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+        eval_builtin_arg preg ge1 rs sp m arg varg ->
+        eval_builtin_arg preg ge2 rs sp m arg varg.
+Proof.
+  induction 2;try constructor;auto.
+  rewrite MATCHGE in H. auto.
+  rewrite MATCHGE. constructor.
+Qed.
+
+Lemma eval_builtin_args_match_ge: forall rs sp m args vargs ge1 ge2 (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+        eval_builtin_args preg ge1 rs sp m args vargs ->
+        eval_builtin_args preg ge2 rs sp m args vargs.
+Proof.
+  induction 2.
+  - constructor.
+  - econstructor.
+    eapply eval_builtin_arg_match_ge;eauto.
+    eauto.
+Qed.
+
+Lemma step_simulation: forall st1 st2 t,
+    step instr_size ge st1 t st2 ->
+    step instr_size tge st1 t st2.
+Proof.
+  intros.
+  unfold ge,tge in *.
+  exploit gen_reloc_elf_correct;eauto.
+  unfold globalenv.
+  intros (p' & D1 & E1).
+  rewrite D1.
+  unfold RelocProgSemantics2.globalenv in *.
+  destr_in H.
+  exploit decode_prog_code_section_correct;eauto.
+  intros (p2' & D2 & E2). rewrite D2.
+
+  2: {
+    (* trivial cases *)
+  destr.
+  exploit decode_prog_code_section_correct. eapply program_equiv_sym in E1.
+  eauto. eauto.
+  intros (p2' & D2 & E2). congruence.
+
+  assert ((empty_program1 prog) = (empty_program1 p')).
+  unfold empty_program1.
+  f_equal. apply pe_prog_senv;eauto.
+  rewrite <- H0. auto. }
+  
+  inv H.
+  - eapply exec_step_internal;eauto.
+    + unfold Genv.find_ext_funct in *.
+      destr. erewrite program_equiv_ext_funs in H1.
+      eauto. eauto.
+    + unfold Genv.find_instr.
+      erewrite program_equiv_instr_map.
+      eauto. eapply program_equiv_sym. eauto.
+    + apply program_equiv_sym in E2.
+      destruct i;simpl in *;auto.
+      1-27: try (erewrite program_equiv_symbol_address;eauto).
+      1-24: try (erewrite exec_load_match_ge;eauto;eapply program_equiv_symbol_address;eauto).
+      1-12: try (erewrite exec_store_match_ge;eauto;eapply program_equiv_symbol_address;eauto).
+      rewrite <- H3. do 3 f_equal.
+      unfold eval_addrmode32.
+      destruct a. f_equal.
+      f_equal. destr.
+      destruct p0. eapply program_equiv_symbol_address;eauto.
+      rewrite <- H3. do 3 f_equal.
+      unfold eval_addrmode64.
+      destruct a. f_equal.
+      f_equal. destr.
+      destruct p0. eapply program_equiv_symbol_address;eauto.
+
+  - eapply exec_step_builtin with (vargs:= vargs);eauto.
+    + unfold Genv.find_ext_funct in *.
+      destr. erewrite program_equiv_ext_funs in H1.
+      eauto. eauto.
+    + unfold Genv.find_instr.
+      erewrite program_equiv_instr_map.
+      eauto. eapply program_equiv_sym. eauto.
+    + eapply eval_builtin_args_match_ge.
+      eapply program_equiv_symbol_address;eauto.
+      eauto.
+    + eapply external_call_symbols_preserved with (ge1:= (Genv.genv_senv (RelocProgSemantics.globalenv instr_size p))).
+      simpl. erewrite pe_prog_senv.
+      unfold Senv.equiv. split;eauto.
+      auto. auto.
+      
+  - eapply exec_step_external;eauto.
+    + unfold Genv.find_ext_funct in *.
+      destr. erewrite program_equiv_ext_funs in H1.
+      eauto. eauto.
+    + eapply external_call_symbols_preserved with (ge1:= (Genv.genv_senv (RelocProgSemantics.globalenv instr_size p))).
+      simpl. erewrite pe_prog_senv.
+      unfold Senv.equiv. split;eauto.
+      auto. auto.
+Qed.
 
 
+Theorem transf_program_correct: forall rs,
+    forward_simulation (RelocProgSemantics2.semantics instr_size Instr_size prog rs) (semantics instr_size Instr_size tprog rs).
+Proof.
+  intros.
+  unfold match_prog in TRANSF.
+  exploit gen_reloc_elf_correct;eauto.
+  intros (p' & D1 & E1).
+  
+  eapply forward_simulation_step with (match_states:= fun (st1 st2: Asm.state) => st1 = st2).
+  - simpl. unfold globalenv.
+    unfold RelocProgSemantics2.globalenv.
+    rewrite D1.
+    destr.
+    apply program_equiv_sym in E1.
+    eapply decode_prog_code_section_correct in Heqr.
+    destruct Heqr as (p2' & D2 & E2).
+    rewrite D2.
+    simpl. erewrite pe_prog_senv;eauto.
+    auto.
+    destr.
+    eapply decode_prog_code_section_correct in Heqr0.
+    destruct Heqr0 as (p2' & D2 & E2). rewrite Heqr in D2.
+    congruence.
+    auto. simpl. erewrite pe_prog_senv;eauto.
+    apply program_equiv_sym. auto.
+    
+  - intros. 
+    eapply transf_initial_state. auto.
+  - simpl. intros. subst. auto.
+  - intros. subst. exists s1'. split;auto.
+    apply step_simulation. auto.
+Qed.
+
+End PRESERVATION.
+
+End WITH_INSTR_SIZE.
