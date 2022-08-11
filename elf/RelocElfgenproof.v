@@ -150,8 +150,19 @@ Qed.
 Lemma program_equiv_symbol_address: forall D (p1 p2: RelocProg.program fundef unit instruction D),
     program_equiv p1 p2 ->
     forall id ofs, Genv.symbol_address (RelocProgSemantics.globalenv instr_size p1) id ofs = Genv.symbol_address (RelocProgSemantics.globalenv instr_size p2) id ofs.
-Admitted.
-
+Proof.
+  intros.
+  unfold RelocProgSemantics.globalenv. unfold Genv.symbol_address.
+  unfold Genv.find_symbol. simpl.
+  assert ((gen_symb_map (prog_symbtable p1)) ! id = (gen_symb_map (prog_symbtable p2)) ! id).
+  unfold gen_symb_map.
+  repeat rewrite PTree.gmap.
+  erewrite pe_symbtable. eauto.
+  auto.
+  rewrite H0.
+  auto.
+Qed.
+  
 Lemma program_equiv_instr_map: forall D (p1 p2: RelocProg.program fundef unit instruction D),
     program_equiv p1 p2 ->
     Genv.genv_instrs (RelocProgSemantics.globalenv instr_size p1) = Genv.genv_instrs (RelocProgSemantics.globalenv instr_size p2).
@@ -176,9 +187,30 @@ Qed.
 Lemma store_init_data_bytes_match_ge: forall n bytes reloctbl m b p ge1 ge2 (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
     length bytes = n ->
     store_init_data_bytes ge1 reloctbl m b p bytes = store_init_data_bytes ge2 reloctbl m b p bytes.
-Admitted.
+Proof. 
+  unfold store_init_data_bytes. intros. do 3 f_equal.
+  generalize H. clear H. revert bytes.
+  generalize dependent n. 
+  induction n;intros.
+  - rewrite length_zero_iff_nil in H. subst.
+    simpl. auto.
+  - exploit LocalLib.length_S_inv;eauto.
+    intros (l' & a1 & A1 & B1). subst.
+    clear H.
+    repeat rewrite fold_left_app in *.
+    exploit IHn;eauto. intros.    
+    simpl. rewrite H.
+    destruct fold_left. destruct p0.
+    rewrite <- H. simpl.
+    destruct l;auto.
+    destr. destr.
+    + rewrite MATCHGE.
+      auto.
+    + rewrite MATCHGE.
+      auto.
+Qed.
 
-  
+
 Lemma program_equiv_init_mem: forall p1 p2 m,
     program_equiv p1 p2 ->
     init_mem instr_size p1 = Some m ->
