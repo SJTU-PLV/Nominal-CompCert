@@ -22,6 +22,108 @@ Local Open Scope hex_scope.
 Local Open Scope bits_scope.
 Local Open Scope string_byte_scope.
 
+
+Lemma ident_to_index_injective_aux: forall n l s sz m1 (NOREP: list_norepet l),
+    length l = n ->
+    fold_left acc_ident_to_index l (PTree.empty Z, s) = (m1, sz) ->
+    exists m2, fold_left acc_index_to_ident l (ZTree.empty ident, s) = (m2, sz) /\
+          (forall i ofs, ofs >= sz -> m1 ! i <> Some ofs) /\
+          (forall i1 i2 e, m1 ! i1 = Some e -> m1 ! i2 = Some e -> i1 = i2) /\
+          (forall i ofs, m1 ! i = Some ofs -> ZTree.get ofs m2 = Some i).
+Proof.
+   induction n;intros;simpl.
+   rewrite length_zero_iff_nil in H. subst.
+   simpl in H0. inv H0.
+   simpl. exists (ZTree.empty ident).
+   split;auto.
+   split. intros. rewrite PTree.gempty. congruence.
+   
+   split. intros.    rewrite PTree.gempty in H. congruence.
+   (* split. intros. rewrite PTree.gempty in H. congruence. *)
+   intros. rewrite PTree.gempty in H. congruence.
+   exploit LocalLib.length_S_inv;eauto.
+   intros (l' & a1 & A1 & B1). subst.
+   clear H.
+   rewrite fold_left_app in *.
+   simpl in *.
+   destruct fold_left eqn:FOLD in H0.
+   (* rewrite app_length in H0. *)
+   (* simpl in H0. *)
+   (* rewrite Nat.add_comm in H0. *)
+   (* simpl in H0. *)
+   (* assert (s + Z.pos (Pos.of_succ_nat (Datatypes.length l')) = s + 1 + Z.of_nat (Datatypes.length l')). *)
+   (* lia. rewrite H in H0. *)
+   (* clear H. inv H0. *)
+   (* assert (z = s + Z.of_nat (Datatypes.length l')) by lia. *)
+   (* subst. clear H2. *)
+
+   apply list_norepet_app in NOREP.
+   destruct NOREP as (NOREP1 & NOREP2 & DIS).
+   clear NOREP2.
+   simpl in H0.     inv H0.
+   exploit IHn;eauto.
+   intros (m2' & FOLD2 & INCR & INJ  & M).
+   rewrite FOLD2.
+   simpl. eexists. split;eauto.
+
+   split.
+   intros. 
+   rewrite PTree.gsspec. destr.
+   unfold not. intros. inv H0. lia.
+   apply INCR. lia.
+   
+   assert (INJ': forall (i1 i2 : positive) (e : Z),
+  (PTree.set a1 z t) ! i1 = Some e ->
+  (PTree.set a1 z t) ! i2 = Some e ->
+  i1 = i2).
+   { intros.
+     rewrite PTree.gsspec in H.
+     destr_in H. inv H.
+     rewrite PTree.gsspec in H0.
+     destr_in H0.
+     exploit (INCR i2 e). lia.
+     auto. intros. apply False_ind. auto.
+     rewrite PTree.gsspec in H0.
+     destr_in H0. inv H0.
+     exploit (INCR i1 e). lia.
+     auto. intros. apply False_ind. auto.
+     eapply INJ;eauto. }
+     
+   split.
+   
+   auto.
+
+   intros. 
+   generalize H. intros BH.
+   rewrite PTree.gsspec in H.
+   destr_in H.
+   inv H.  rewrite ZTree.gsspec. destr.
+   rewrite ZTree.gsspec. destr. 
+   rewrite <- e in *.
+   assert ((PTree.set a1 ofs t) ! a1 = Some ofs).
+   rewrite PTree.gsspec. destr.
+   exploit INJ'. apply BH. apply H0.
+   intros.  subst. congruence.
+   apply M. auto.
+Qed.
+
+   
+   
+Lemma ident_to_index_injective: forall l s i ofs (NOREP: list_norepet l),
+    (ident_to_index l s) ! i = Some ofs ->
+    ZTree.get ofs (index_to_ident l s) = Some i.
+Proof.
+  unfold ident_to_index.
+  unfold index_to_ident.
+  intros.
+  destruct fold_left eqn:FOLD in H.
+  exploit ident_to_index_injective_aux;eauto.
+  intros (m2 & P1 & P2 & P3 & P4).
+  rewrite P1. simpl. auto.
+Qed.
+
+
+
 Lemma id_from_strtbl_result_aux: forall l1 l2 l3,
     ~ In (Byte.repr 0) l1 ->
     id_from_strtbl_aux (l1 ++ l2) l3 = id_from_strtbl_aux l2 (l3 ++ l1).
@@ -305,8 +407,218 @@ Proof.
              apply False_ind. auto.
              
       (* rwdata section *)
-      + 
+      + destr_in EQ0.
+        inv EQ0.
+        do 2 rewrite app_length in e0. simpl in e0.
+        rewrite combine_app;try lia. rewrite fold_left_app.
+        simpl.
+        (* e_shstrtbl and l *)
+        unfold acc_strtbl in EQ.
+        destr_in EQ. destr_in EQ. simpl in EQ.
+        inv EQ. repeat rewrite <- app_assoc.
+        (* use induction *)
+        exploit IHx;eauto. lia.
+        rewrite map_app in NOREP.
+        rewrite list_norepet_app in NOREP.
+        simpl in NOREP.
+        destruct NOREP as (NOREP1 & NOREP2 & DISJOINT).
+        auto.
+        intros (sectbl' & P1 & P2).
+        erewrite P1. clear P1 IHx.
+        simpl.
+        (* id from strtbl *)
+        simpl in n.
+        erewrite id_from_strtbl_result;eauto.
+        simpl.
+        (* finish *)
+        unfold update_sectable_shstrtbl. simpl.
+        eexists. split;eauto.
+        intros.
+        (* norepeat *)
+        rewrite map_app in NOREP.
+        rewrite list_norepet_app in NOREP.
+        simpl in NOREP.
+        destruct NOREP as (NOREP1 & NOREP2 & DISJOINT).
+        apply list_disjoint_sym in DISJOINT.
+        unfold list_disjoint in DISJOINT.
+        assert (I: In i [i]) by (simpl;auto).
+        generalize (DISJOINT i). intros DIS.
+        split.
+        * intros.
+          apply PTree.elements_complete in H.
+          rewrite PTree.gsspec in H.
+          destr_in H.
+          -- inv H. rewrite in_app.
+             right. simpl. auto.
+          -- rewrite in_app.
+             left. apply P2.
+             apply PTree.elements_correct. auto.
+        * rewrite in_app.
+          intros [? | ?].
+          -- assert (In i0 (map fst l')).
+             apply in_map_iff.
+             exists (i0,e). simpl. split;auto.
+             apply (DIS i0 I) in H0.
+             apply PTree.elements_correct.
+             rewrite PTree.gsspec. destr.
+             apply PTree.elements_complete.
+             apply P2. auto.
+          -- simpl in H. inv H.
+             inv H0. apply PTree.elements_correct.
+             rewrite PTree.gsspec.
+             rewrite peq_true.
+             auto.
+             apply False_ind. auto.
              
+      (* rodata *)
+      + destr_in EQ0.
+        inv EQ0.
+        do 2 rewrite app_length in e0. simpl in e0.
+        rewrite combine_app;try lia. rewrite fold_left_app.
+        simpl.
+        (* e_shstrtbl and l *)
+        unfold acc_strtbl in EQ.
+        destr_in EQ. destr_in EQ. simpl in EQ.
+        inv EQ. repeat rewrite <- app_assoc.
+        (* use induction *)
+        exploit IHx;eauto. lia.
+        rewrite map_app in NOREP.
+        rewrite list_norepet_app in NOREP.
+        simpl in NOREP.
+        destruct NOREP as (NOREP1 & NOREP2 & DISJOINT).
+        auto.
+        intros (sectbl' & P1 & P2).
+        erewrite P1. clear P1 IHx.
+        simpl.
+        (* id from strtbl *)
+        simpl in n.
+        erewrite id_from_strtbl_result;eauto.
+        simpl.
+        (* finish *)
+        unfold update_sectable_shstrtbl. simpl.
+        eexists. split;eauto.
+        intros.
+        (* norepeat *)
+        rewrite map_app in NOREP.
+        rewrite list_norepet_app in NOREP.
+        simpl in NOREP.
+        destruct NOREP as (NOREP1 & NOREP2 & DISJOINT).
+        apply list_disjoint_sym in DISJOINT.
+        unfold list_disjoint in DISJOINT.
+        assert (I: In i [i]) by (simpl;auto).
+        generalize (DISJOINT i). intros DIS.
+        split.
+        * intros.
+          apply PTree.elements_complete in H.
+          rewrite PTree.gsspec in H.
+          destr_in H.
+          -- inv H. rewrite in_app.
+             right. simpl. auto.
+          -- rewrite in_app.
+             left. apply P2.
+             apply PTree.elements_correct. auto.
+        * rewrite in_app.
+          intros [? | ?].
+          -- assert (In i0 (map fst l')).
+             apply in_map_iff.
+             exists (i0,e). simpl. split;auto.
+             apply (DIS i0 I) in H0.
+             apply PTree.elements_correct.
+             rewrite PTree.gsspec. destr.
+             apply PTree.elements_complete.
+             apply P2. auto.
+          -- simpl in H. inv H.
+             inv H0. apply PTree.elements_correct.
+             rewrite PTree.gsspec.
+             rewrite peq_true.
+             auto.
+             apply False_ind. auto.
+             
+      + simpl in EQ1. congruence. }
+
+  (* rewrite C1 *)
+  destruct C1 as (sectbl & C1 & C1').
+  rewrite C1. clear C1.
+
+  (* strtable section *)
+  cbn [combine].
+  cbn [fold_left].
+  set (str:= strtab_str ++ symtab_str ++ ProdR2 ++ shstrtab_str).
+  assert (C2: acc_section_header Archi.ptr64
+             (OK
+                {|
+                dec_sectable := sectbl;
+                dec_symbtable := PTree.empty symbentry;
+                dec_reloctable := PTree.empty reloctable;
+                dec_shstrtbl := str;
+                dec_strtbl := [] |})
+             (ProdR6,
+             gen_strtab_sec_header ProdR6 e_shstrtbl_ofs
+               e_sections_ofs) = (OK
+                {|
+                dec_sectable := sectbl;
+                dec_symbtable := PTree.empty symbentry;
+                dec_reloctable := PTree.empty reloctable;
+                dec_shstrtbl := symtab_str ++ ProdR2 ++ shstrtab_str;
+                dec_strtbl := ProdR6 |})).
+  { unfold acc_section_header.
+    unfold gen_strtab_sec_header. cbn [bind].
+    cbn [sh_type]. cbn [dec_shstrtbl].
+    unfold str.
+    rewrite Encode.take_drop_length_app.
+    auto. auto. }
+
+  fold section in C2.
+  rewrite C2. clear C2.
+  clear str.
+
+  (* sectbl and prog_sectable isomorphic *)
+  assert (C1'' : forall i, sectbl ! i = (prog_sectable p) ! i).
+  { intros.
+    destruct (sectbl ! i) eqn: G.
+    apply PTree.elements_correct in G. apply C1' in G.
+    apply PTree.elements_complete in G.
+    auto.
+    destruct ((prog_sectable p) ! i) eqn: G'.
+    apply PTree.elements_correct in G'. apply C1' in G'.
+    apply PTree.elements_complete in G'.
+    congruence.
+    auto. }
+  apply PTree.elements_extensional in C1''. clear C1'.
+    
+  (* symbol table section *)
+  assert (C3: exists symbtbl, (acc_section_header Archi.ptr64
+          (OK
+             {|
+             dec_sectable := sectbl;
+             dec_symbtable := PTree.empty symbentry;
+             dec_reloctable := PTree.empty reloctable;
+             dec_shstrtbl := symtab_str ++ ProdR2 ++ shstrtab_str;
+             dec_strtbl := ProdR6 |})
+          (ProdL0,
+          gen_symtab_sec_header
+            (map snd
+               (sort_symbtable (PTree.elements (prog_symbtable p))))
+            (e_shstrtbl_ofs + 8) (e_sections_ofs + ProdR5)
+            (Z.of_nat (Datatypes.length ProdR9) + 1))) =
+                         OK {| dec_sectable := sectbl;
+                               dec_symbtable := symbtbl;
+                               dec_reloctable := PTree.empty reloctable;
+                               dec_shstrtbl := ProdR2 ++ shstrtab_str;
+                               dec_strtbl := ProdR6 |} /\
+                         (forall i e, In (i,e) (PTree.elements symbtbl) <->
+                         In (i,e) (PTree.elements (prog_symbtable p)))).
+  { set (str:= symtab_str ++ ProdR2 ++ shstrtab_str).
+    simpl.
+    clear e0 EQ1 Heqb e EQ2.
+    clear ProdR1 ProdR3.
+    clear Heqb0 ProdR9 ProdR4.
+    clear e_sections_ofs e_shstrtbl_ofs e_shstrtbl e_sections.
+    
+    unfold create_symbtable_section in EQ0.
+    rewrite C1'' in *. clear C1''.
+
+    
 Lemma decode_prog_code_section_correct: forall p1 p2 p1',
     program_equiv p1 p2 ->
     decode_prog_code_section instr_size Instr_size p1 = OK p1' ->
