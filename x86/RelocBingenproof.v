@@ -541,7 +541,7 @@ Proof.
     intros VALLEN.
     set (v:= (encode_int 4 (Int.unsigned i))) in *.
     destruct v as [| b0 ?] eqn:ENC0;simpl in VALLEN;try congruence.
-    do 4 (destruct l as [| ?b ?] ;simpl in VALLEN;try congruence).
+    4 (destruct ldo  as [| ?b ?] ;simpl in VALLEN;try congruence).
     assert ([Byte b0; Byte b1; Byte b2; Byte b3] = encode_val Mint32 (Vint i)).
     simpl. fold v. rewrite ENC0. simpl. auto.
     (* destruct reloctbl *)

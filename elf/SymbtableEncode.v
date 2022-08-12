@@ -151,7 +151,47 @@ Definition encode_dummy_symbentry64 : (list byte) :=
   (st_name_bytes ++ st_info_bytes ++ st_other_bytes ++ st_shndx_bytes ++ st_value_bytes ++ st_size_bytes).
 
 
+Lemma encode_secindex_len: forall l i m,
+    encode_secindex i m = OK l ->
+    length l = 2%nat.
+Proof.
+  unfold encode_secindex.
+  intros. destr_in H.
+  destr_in H. destr_in H.
+  inv H. rewrite encode_int_length. auto.
+  inv H. rewrite encode_int_length. auto.
+  inv H. rewrite encode_int_length. auto.
+Qed.
 
+Lemma encode_symbentry32_len: forall l e idx m,
+    encode_symbentry32 e idx m = OK l ->
+    length l = 16%nat.
+Proof.
+  unfold encode_symbentry32.
+  intros. destr_in H.
+  monadInv H.
+  simpl. repeat rewrite app_length.
+  unfold encode_int32. repeat rewrite encode_int_length.
+  simpl. erewrite encode_secindex_len.
+  auto. eauto.
+Qed.
+
+
+Lemma encode_symbentry64_len: forall l e idx m,
+    encode_symbentry64 e idx m = OK l ->
+    length l = 24%nat.
+Proof.
+  unfold encode_symbentry64.
+  intros. destr_in H.
+  monadInv H.
+  simpl.
+  repeat rewrite app_length. simpl.
+  unfold encode_int32, encode_int64.
+  repeat rewrite app_length.
+  repeat rewrite encode_int_length.
+  simpl. erewrite encode_secindex_len.
+  auto. eauto.
+Qed.
 
 
 (** Transform the program *)

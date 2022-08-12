@@ -11,6 +11,7 @@ Require Import Linking Errors.
 Require Import EncDecRet RelocElfgen.
 Require Import RelocProgSemantics RelocProgSemantics1.
 Require Import TranslateInstr RelocProgSemantics2 RelocElfSemantics.
+Require Import SymbtableDecode.
 
 Import Hex Bits.
 Import ListNotations.
@@ -22,7 +23,31 @@ Local Open Scope hex_scope.
 Local Open Scope bits_scope.
 Local Open Scope string_byte_scope.
 
+Lemma acc_decode_symbtable_section_eq: forall l l' m e strtbl id strtbl' t,
+    let symblen:= if Archi.ptr64 then 24%nat else 16%nat in
+    length l = symblen ->
+    (if Archi.ptr64 then decode_symbentry64 l m = OK e
+    else decode_symbentry32 l m = OK e) ->
+    id_from_strtbl strtbl = OK (id, strtbl') ->
+    fold_left (acc_decode_symbtable_section Archi.ptr64 symblen m) (l++l') (OK (t, strtbl, [], 1%nat)) = fold_left (acc_decode_symbtable_section Archi.ptr64 symblen m) l' (OK ((PTree.set id e t), strtbl', [], 1%nat)).
+Proof.
+  simpl. destruct Archi.ptr64.
+  - intros.
+    do 25 (destruct l as [| ?b ?] ;simpl in H;try congruence).
+    clear H.
+    simpl. rewrite H0.
+    simpl. rewrite H1.
+    simpl. auto.
+  - intros.
+    do 17 (destruct l as [| ?b ?] ;simpl in H;try congruence).
+    clear H.
+    simpl. rewrite H0.
+    simpl. rewrite H1.
+    simpl. auto.
+Qed.
 
+
+    
 Lemma ident_to_index_injective_aux: forall n l s sz m1 (NOREP: list_norepet l),
     length l = n ->
     fold_left acc_ident_to_index l (PTree.empty Z, s) = (m1, sz) ->
@@ -645,12 +670,14 @@ Proof.
   rewrite Nat.sub_diag. rewrite skipn_O.
   cbn [app].
 
+  set (symblen:= (if Archi.ptr64 then 24%nat else 16%nat)) in *.
+  rewrite DUMMY.
   
     (* symbol table section *)
   assert (C3: forall tl,
              exists symbtbl,
              fold_left
-               (acc_decode_symbtable_section Archi.ptr64
+               (acc_decode_symbtable_section Archi.ptr64 symblen
               (index_to_ident (map fst (PTree.elements sectbl)) 1))
                ProdL0 (OK (PTree.empty symbentry, ProdR6 ++ tl, [], 1%nat)) =
              OK (symbtbl, tl, [], 1%nat) /\ (forall i e, In (i,e) (PTree.elements symbtbl) <->
@@ -748,9 +775,56 @@ Proof.
       simpl.
       rewrite <- app_assoc.
       rewrite P1. clear P1 IHn.
-      
-        
-      
+      rewrite (app_nil_end x).
+
+      erewrite acc_decode_symbtable_section_eq.
+      3: { destr.
+           eapply decode_encode_symbentry64;eauto.
+           unfold match_idxmap. intros.
+           eapply ident_to_index_injective.
+           eapply PTree.elements_keys_norepet.
+           auto.
+           eapply decode_encode_symbentry32;eauto.
+           unfold match_idxmap. intros.
+           eapply ident_to_index_injective.
+           eapply PTree.elements_keys_norepet.
+           auto. }
+      3: { rewrite <- app_assoc.
+           simpl. eapply id_from_strtbl_result.
+           eauto. eauto. }
+      2: { unfold symblen.
+           destr. eapply SymbtableEncode.encode_symbentry64_len;eauto.
+           eapply SymbtableEncode.encode_symbentry32_len;eauto. }
+           
+      simpl. eexists. split;eauto.
+      intros. split;intros.
+      + apply in_app.
+        apply PTree.elements_complete in H.
+        rewrite PTree.gsspec in H.
+        destr_in H.
+        * inv H. right. constructor. auto.
+        * left. apply P2. apply PTree.elements_correct;auto.
+      + apply PTree.elements_correct.
+        rewrite PTree.gsspec.
+        apply in_app in H.
+        destruct H.
+        * unfold list_disjoint in DIS.
+          assert (i0 <> i).
+          apply DIS. eapply (in_map fst) in H.
+          simpl in H. auto. simpl. auto.
+          destr. apply PTree.elements_complete.
+          apply P2. auto.
+        * inv H. inv H0.
+          destr. inv H0. }
+
+  rewrite (app_nil_end ProdR6).
+  generalize (C3 []). clear C3. intros (symbtbl & C3 & C3').
+  rewrite C3. simpl. clear C3.
+  rewrite app_nil_r.
+
+  (* reloc sections *)
+  
+  
 Lemma decode_prog_code_section_correct: forall p1 p2 p1',
     program_equiv p1 p2 ->
     decode_prog_code_section instr_size Instr_size p1 = OK p1' ->

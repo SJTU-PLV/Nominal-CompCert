@@ -121,10 +121,9 @@ Next Obligation.
 Defined.
 
 
-Definition acc_decode_symbtable_section (m: ZTree.t ident) (acc: res (symbtable * list byte * list byte * nat)) (b: byte) :=
+Definition acc_decode_symbtable_section (symblen: nat) (m: ZTree.t ident) (acc: res (symbtable * list byte * list byte * nat)) (b: byte) :=
   do acc' <- acc;
   let '(symbtbl, strtbl, symbe, len) :=  acc' in
-  let symblen := if elf64 then 24%nat else 16%nat in
   if Nat.eq_dec len symblen then
     do (id, strtbl') <- id_from_strtbl strtbl;
     if elf64 then
@@ -139,9 +138,8 @@ Definition acc_decode_symbtable_section (m: ZTree.t ident) (acc: res (symbtable 
 Definition decode_symbtable_section (l:list byte) (m:ZTree.t ident) (strtbl: list byte) (symbtbl: symbtable) :=
   let symblen := if elf64 then 24%nat else 16%nat in
   let l := skipn symblen l in   (* skip dummy entry *)
-  do r <- fold_left (acc_decode_symbtable_section m) l (OK (PTree.empty symbentry, strtbl, [], 1%nat));
+  do r <- fold_left (acc_decode_symbtable_section symblen m) l (OK (PTree.empty symbentry, strtbl, [], 1%nat));
   OK (fst (fst (fst r))).
-
 
   
 Definition acc_section_header (st: res decode_elf_state) (sec_h: section * section_header) :=
