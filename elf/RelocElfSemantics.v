@@ -20,19 +20,6 @@ Local Open Scope hex_scope.
 Local Open Scope bits_scope.
 Local Open Scope string_byte_scope.
 
-
-Definition get_ptr64 (ef: elf_file) : bool:=
-  match ef.(elf_head).(e_class) with
-  | ELFCLASS32 => false
-  | ELFCLASS64 => true
-  | _ => false                   (* default *)
-  end.
-
-Section WITH_FLAG.
-
-Variable elf64: bool.
-
-
 Fixpoint id_from_strtbl_aux (l: list byte) (str: list byte) :=
   match l with
   | b :: l' =>
@@ -48,6 +35,19 @@ Fixpoint id_from_strtbl_aux (l: list byte) (str: list byte) :=
   
 Definition id_from_strtbl (l: list byte) :=
   id_from_strtbl_aux l [].
+
+
+Definition get_ptr64 (ef: elf_file) : bool:=
+  match ef.(elf_head).(e_class) with
+  | ELFCLASS32 => false
+  | ELFCLASS64 => true
+  | _ => false                   (* default *)
+  end.
+
+Section WITH_FLAG.
+
+Variable elf64: bool.
+
 
 Record decode_elf_state :=
   { dec_sectable : sectable;
@@ -99,39 +99,7 @@ Definition index_to_ident (idl: list ident) (start: Z) :=
   fst (fold_left acc_index_to_ident idl (ZTree.empty ident, start)).
 
 
-Program Fixpoint decode_symbtable_section (l:list byte) (m:ZTree.t ident) (strtbl: list byte) (symbtbl: symbtable) {measure (length l)} : res symbtable :=
-  match l with
-  | [] => OK symbtbl
-  | _ =>
-    let len := if elf64 then 24%nat else 16%nat in
-    do (id, strtbl') <- id_from_strtbl strtbl;
-    if elf64 then
-      match take_drop len l with
-      | OK (e, r) =>      
-        do e <- decode_symbentry64 e m;
-        decode_symbtable_section r m strtbl' (PTree.set id e symbtbl)
-      | Error m => Error m
-      end     
-    else
-      match take_drop len l with
-      | OK (e, r) =>
-        do e <- decode_symbentry32 e m;
-        decode_symbtable_section r m strtbl' (PTree.set id e symbtbl)
-      | Error m => Error m
-      end
-  end.
-Next Obligation.
-  symmetry in Heq_anonymous.
-  apply take_drop_length_2 in Heq_anonymous.
-  auto.
-  destr;lia.
-Defined.
-Next Obligation.
-  symmetry in Heq_anonymous.
-  apply take_drop_length_2 in Heq_anonymous.
-  auto.
-  destr;lia.
-Defined.
+
 
 Program Fixpoint decode_reloctable_section (l:list byte) (m:ZTree.t ident) (reloctbl: reloctable) {measure (length l)} : res reloctable :=
   match l with
@@ -151,6 +119,27 @@ Next Obligation.
   auto.
   destr;lia.
 Defined.
+
+
+Definition acc_decode_symbtable_section (m: ZTree.t ident) (acc: res (symbtable * list byte * list byte * nat)) (b: byte) :=
+  do acc' <- acc;
+  let '(symbtbl, strtbl, symbe, len) :=  acc' in
+  let symblen := if elf64 then 24%nat else 16%nat in
+  if Nat.eq_dec len symblen then
+    do (id, strtbl') <- id_from_strtbl strtbl;
+    if elf64 then
+      do e <- decode_symbentry64 (symbe ++ [b]) m;
+      OK (PTree.set id e symbtbl, strtbl', [], 1%nat)
+    else
+      do e <- decode_symbentry32 (symbe ++ [b]) m;
+      OK (PTree.set id e symbtbl, strtbl', [], 1%nat)
+  else
+    OK (symbtbl, strtbl, symbe ++ [b], S len).
+
+Definition decode_symbtable_section (l:list byte) (m:ZTree.t ident) (strtbl: list byte) (symbtbl: symbtable) :=
+  do r <- fold_left (acc_decode_symbtable_section m) l (OK (PTree.empty symbentry, strtbl, [], 1%nat));
+  OK (fst (fst (fst r))).
+
 
   
 Definition acc_section_header (st: res decode_elf_state) (sec_h: section * section_header) :=

@@ -585,8 +585,55 @@ Proof.
     congruence.
     auto. }
   apply PTree.elements_extensional in C1''. clear C1'.
+
+  (* sort symbol table not change *)
+  assert (SORT: forall i e, In (i,e) (sort_symbtable (PTree.elements (prog_symbtable p))) <-> In (i,e) (PTree.elements (prog_symbtable p))). {
+      unfold sort_symbtable.
+      intros. split.
+      - intros. apply in_app in H.
+        destruct H.
+        + apply filter_In in H. destruct H.
+          auto.
+        + apply filter_In in H. destruct H.
+          auto.
+      - intros.
+        apply in_app.
+        destruct (filter_local_symbe (i,e1)) eqn: F.
+        + left. apply filter_In.
+          split;auto.
+        + right. apply filter_In.
+          split;auto.
+          unfold filter_local_symbe in F.
+          unfold filter_global_symbe.
+          destr_in F. }
+  assert (SORTNOREP: list_norepet (map fst (sort_symbtable (PTree.elements (prog_symbtable p))))).
+  { 
+    unfold sort_symbtable.
+    rewrite map_app.
+    apply list_norepet_app.
+    split.
+    apply LocalLib.list_norepet_filter_fst_pres.
+    apply PTree.elements_keys_norepet.
+    split.
+    apply LocalLib.list_norepet_filter_fst_pres.
+    apply PTree.elements_keys_norepet.
+    unfold list_disjoint. intros.
+    apply in_map_iff in H. destruct H as (x0 & X1 & X2).
+    apply in_map_iff in H0. destruct H0 as (y0 & Y1 & Y2).
+    subst. apply filter_In in X2.
+    apply filter_In in Y2.
+    destruct X2. destruct Y2.
+    unfold filter_local_symbe in H0.
+    unfold filter_global_symbe in H2.
+    destr_in H0. destr_in H2.
+    destruct x0. destruct y0.
+    simpl. apply PTree.elements_complete in H.
+    apply PTree.elements_complete in H1.
+    simpl in *. unfold not.
+    intros. subst. rewrite H in H1. congruence. }
     
-  (* symbol table section *)
+    
+    (* symbol table section *)
   assert (C3: exists symbtbl, (acc_section_header Archi.ptr64
           (OK
              {|
@@ -610,14 +657,40 @@ Proof.
                          In (i,e) (PTree.elements (prog_symbtable p)))).
   { set (str:= symtab_str ++ ProdR2 ++ shstrtab_str).
     simpl.
-    clear e0 EQ1 Heqb e EQ2.
+    clear e0 EQ1 Heqb e EQ2 SORT.
     clear ProdR1 ProdR3.
     clear Heqb0 ProdR9 ProdR4.
     clear e_sections_ofs e_shstrtbl_ofs e_shstrtbl e_sections.
     
     unfold create_symbtable_section in EQ0.
     rewrite C1'' in *. clear C1''.
+    
+    set (l:= (sort_symbtable (PTree.elements (prog_symbtable p)))) in *.
+    
+    assert (LEN: exists n, length l = n).
+    { clear EQ0 SORTNOREP.
+      induction l. exists O. auto.
+      destruct IHl.
+      exists (S x). simpl. auto. }
+    destruct LEN as (n & LEN).
+    
+    unfold str. clear str. set (str:= ProdR2 ++ shstrtab_str).
+    generalize LEN EQ0 SORTNOREP.
+    generalize str ProdR2 ProdR5 ProdL0 ProdR6 ProdL1.
+    generalize n l.
+    clear LEN EQ0 SORTNOREP.    
+    clear str ProdR2 ProdR5 ProdL0 ProdR6 ProdL1.
+    clear n l.
 
+    induction n;intros.
+    - rewrite length_zero_iff_nil in LEN. subst.
+      simpl in EQ0. inv EQ0.
+      
+      
+    - exploit LocalLib.length_S_inv;eauto.
+      intros (l' & a1 & A1 & B1). subst.
+      clear H.
+      rewrite fold_left_app in *.
     
 Lemma decode_prog_code_section_correct: forall p1 p2 p1',
     program_equiv p1 p2 ->
