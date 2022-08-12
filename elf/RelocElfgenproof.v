@@ -22,6 +22,46 @@ Local Open Scope hex_scope.
 Local Open Scope bits_scope.
 Local Open Scope string_byte_scope.
 
+Lemma id_from_strtbl_result_aux: forall l1 l2 l3,
+    ~ In (Byte.repr 0) l1 ->
+    id_from_strtbl_aux (l1 ++ l2) l3 = id_from_strtbl_aux l2 (l3 ++ l1).
+Proof.
+  induction l1;intros;simpl in *.
+  rewrite app_nil_r. auto.
+
+  apply Decidable.not_or in H.
+  destruct H. rewrite Byte.eq_false;auto.
+  rewrite IHl1;auto.
+  rewrite <- app_assoc. auto.
+Qed.
+
+
+Lemma id_from_strtbl_result: forall l l' i,
+    SymbolString.find_symbol_pos i = Some l ->
+    ~ In (Byte.repr 0) (map (fun p : positive => Byte.repr (Z.pos p)) l) ->
+    id_from_strtbl ((map (fun p : positive => Byte.repr (Z.pos p)) l) ++ Byte.repr 0 :: l') = OK (i, l').
+Proof.
+
+  intros.
+  unfold id_from_strtbl.
+  rewrite id_from_strtbl_result_aux;eauto.
+  simpl. rewrite Byte.eq_true.
+  erewrite SymbolString.string_to_ident_symbol_to_pos. eauto.
+  auto.
+Qed.
+   
+Lemma combine_app: forall A B (l1 l1':list A) (l2 l2': list B),
+    length l1 = length l2 ->
+    combine (l1++l1') (l2++l2') = combine l1 l2 ++ combine l1' l2'.
+Proof.
+  induction l1;intros.
+  - destruct l2;simpl in H;try congruence.
+    simpl. auto.
+  - destruct l2;simpl in H;try congruence.
+    simpl. rewrite IHl1;auto.
+Qed.
+
+    
 Section WITH_INSTR_SIZE.
 
 Variable instr_size : instruction -> Z.
@@ -128,8 +168,145 @@ Proof.
   simpl in H1.
   inv H1.
 
+  (* combine append *)
+  erewrite combine_app.
+  2: { repeat rewrite <- app_assoc.
+       repeat rewrite app_length.
+       simpl. lia. }
+  rewrite fold_left_app.
   
+  erewrite combine_app.
+  2: { repeat rewrite <- app_assoc.
+       repeat rewrite app_length.
+       simpl. lia. }
+  rewrite fold_left_app.
+
+   erewrite combine_app.
+  2: { repeat rewrite <- app_assoc.
+       repeat rewrite app_length.
+       simpl. lia. }
+  rewrite fold_left_app.
   
+  (* encode decode sections and section headers consistency *)
+  repeat rewrite <- app_assoc.
+  assert (C1: exists sectbl, fold_left (acc_section_header Archi.ptr64)
+                (combine e_sections ProdR9)
+                (OK (init_dec_state
+                      (e_shstrtbl ++
+                       strtab_str ++
+                       symtab_str ++ ProdR2 ++ shstrtab_str))) =
+                        OK {| dec_sectable := sectbl;
+                              dec_symbtable := PTree.empty symbentry;
+                              dec_reloctable := PTree.empty reloctable;
+                              dec_shstrtbl := strtab_str ++ symtab_str ++ ProdR2 ++ shstrtab_str;
+                              dec_strtbl := [] |} /\ (forall i e, In (i,e) (PTree.elements sectbl) <-> In (i,e) (PTree.elements p.(prog_sectable)))).
+  { clear Heqb EQ0 e EQ2 Heqb0.
+    clear ProdL1 ProdL0 ProdR6 ProdR4 ProdR5 ProdR3 ProdR1.
+    unfold gen_section_header in EQ1.
+
+    generalize (PTree.elements_keys_norepet (prog_sectable p)).
+    intros NOREP.
+    set (str:= strtab_str ++ symtab_str ++ ProdR2 ++ shstrtab_str).
+    set (l:= (PTree.elements (prog_sectable p))) in *.
+    assert (LEN: exists n, length l = n).
+    { clear EQ1 NOREP.
+      induction l. exists O. auto.
+      destruct IHl.
+      exists (S x). simpl. auto. }
+
+    
+    destruct LEN.
+    generalize H EQ1 e0 NOREP.
+    generalize e_sections ProdR9 e_sections_ofs e_shstrtbl e_shstrtbl_ofs str.
+    generalize x l.    
+    clear l x H EQ1 e0 NOREP.
+    clear e_sections ProdR9 e_sections_ofs e_shstrtbl e_shstrtbl_ofs str.
+    induction x;intros.
+    - rewrite length_zero_iff_nil in H. subst.
+      simpl in EQ1. inv EQ1.
+      cbn [combine]. simpl.
+      eexists. unfold init_dec_state.      
+      split;eauto. simpl. intros. split;auto.
+    - exploit LocalLib.length_S_inv;eauto.
+      intros (l' & a1 & A1 & B1). subst.
+      clear H.
+      rewrite fold_left_app in *.
+      fold ident in *.
+      fold RelocProgramBytes.section in *.
+      destruct ((fold_left (acc_sections_headers (prog_symbtable p)) l'
+                           (OK ([], [], 0, [], 0)))) eqn:FOLD.
+      repeat destruct p0.
+      simpl in EQ1. destruct a1.
+      monadInv EQ1. destr_in EQ0.
+      destruct s.
+
+      (* text section *)
+      + destr_in EQ0.
+        inv EQ0.
+        do 2 rewrite app_length in e0. simpl in e0.
+        rewrite combine_app;try lia. rewrite fold_left_app.
+        simpl.
+        (* e_shstrtbl and l *)
+        unfold acc_strtbl in EQ.
+        destr_in EQ. destr_in EQ. simpl in EQ.
+        inv EQ. repeat rewrite <- app_assoc.
+        (* use induction *)
+        exploit IHx;eauto. lia.
+        rewrite map_app in NOREP.
+        rewrite list_norepet_app in NOREP.
+        simpl in NOREP.
+        destruct NOREP as (NOREP1 & NOREP2 & DISJOINT).
+        auto.
+        intros (sectbl' & P1 & P2).
+        erewrite P1. clear P1 IHx.
+        simpl.
+        (* id from strtbl *)
+        simpl in n.
+        erewrite id_from_strtbl_result;eauto.
+        simpl.
+        (* finish *)
+        unfold update_sectable_shstrtbl. simpl.
+        eexists. split;eauto.
+        intros.
+        (* norepeat *)
+        rewrite map_app in NOREP.
+        rewrite list_norepet_app in NOREP.
+        simpl in NOREP.
+        destruct NOREP as (NOREP1 & NOREP2 & DISJOINT).
+        apply list_disjoint_sym in DISJOINT.
+        unfold list_disjoint in DISJOINT.
+        assert (I: In i [i]) by (simpl;auto).
+        generalize (DISJOINT i). intros DIS.
+        split.
+        * intros.
+          apply PTree.elements_complete in H.
+          rewrite PTree.gsspec in H.
+          destr_in H.
+          -- inv H. rewrite in_app.
+             right. simpl. auto.
+          -- rewrite in_app.
+             left. apply P2.
+             apply PTree.elements_correct. auto.
+        * rewrite in_app.
+          intros [? | ?].
+          -- assert (In i0 (map fst l')).
+             apply in_map_iff.
+             exists (i0,e). simpl. split;auto.
+             apply (DIS i0 I) in H0.
+             apply PTree.elements_correct.
+             rewrite PTree.gsspec. destr.
+             apply PTree.elements_complete.
+             apply P2. auto.
+          -- simpl in H. inv H.
+             inv H0. apply PTree.elements_correct.
+             rewrite PTree.gsspec.
+             rewrite peq_true.
+             auto.
+             apply False_ind. auto.
+             
+      (* rwdata section *)
+      + 
+             
 Lemma decode_prog_code_section_correct: forall p1 p2 p1',
     program_equiv p1 p2 ->
     decode_prog_code_section instr_size Instr_size p1 = OK p1' ->

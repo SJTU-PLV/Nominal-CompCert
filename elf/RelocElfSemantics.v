@@ -47,7 +47,7 @@ Fixpoint id_from_strtbl_aux (l: list byte) (str: list byte) :=
   end.
   
 Definition id_from_strtbl (l: list byte) :=
-  id_from_strtbl_aux [] l.
+  id_from_strtbl_aux l [].
 
 Record decode_elf_state :=
   { dec_sectable : sectable;
