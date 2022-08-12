@@ -137,6 +137,8 @@ Definition acc_decode_symbtable_section (m: ZTree.t ident) (acc: res (symbtable 
     OK (symbtbl, strtbl, symbe ++ [b], S len).
 
 Definition decode_symbtable_section (l:list byte) (m:ZTree.t ident) (strtbl: list byte) (symbtbl: symbtable) :=
+  let symblen := if elf64 then 24%nat else 16%nat in
+  let l := skipn symblen l in   (* skip dummy entry *)
   do r <- fold_left (acc_decode_symbtable_section m) l (OK (PTree.empty symbentry, strtbl, [], 1%nat));
   OK (fst (fst (fst r))).
 

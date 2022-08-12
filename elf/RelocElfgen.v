@@ -442,8 +442,7 @@ Definition acc_symbtable_bytes  (idxmap: PTree.t Z) acc (id_e: ident * symbentry
 (* generate symbtable table section *)
 
 Definition create_symbtable_section (t:list (ident * symbentry)) (idxmap: PTree.t Z) : res (list byte * list byte * Z) :=
-  let dummy_entry := (if Archi.ptr64 then encode_dummy_symbentry64 else encode_dummy_symbentry32) in
-  fold_left (acc_symbtable_bytes idxmap) t (OK (dummy_entry,[],0)).
+  fold_left (acc_symbtable_bytes idxmap) t (OK ([],[],0)).
 
 (* input: program, ident to section header index, state *)
 (* output: state, indet to symbol entry index mapping, ident to string index in strtbl mapping (unused and remove it)*)
@@ -456,6 +455,7 @@ Definition gen_symtbl_section_strtbl_and_shstr (p: RelocProgramBytes.program) (s
   (* do str_res  <-  gen_strtbl symbidl; *)
   (* let '(strtbl, strmap, strtbl_size) := str_res in *)
   (* symbtable and strtbl *)
+  let dummy_entry := (if Archi.ptr64 then encode_dummy_symbentry64 else encode_dummy_symbentry32) in
   do symbsec_strtbl_strtbl_size <- create_symbtable_section idl_symbtbl' secidxmap;
   let '(symbsec, strtbl, strtbl_size) := symbsec_strtbl_strtbl_size in
   let strtbl_h := gen_strtab_sec_header strtbl st.(e_shstrtbl_ofs) st.(e_sections_ofs) in
@@ -463,8 +463,8 @@ Definition gen_symtbl_section_strtbl_and_shstr (p: RelocProgramBytes.program) (s
   let st1 := update_elf_state st [strtbl] [strtbl_h] strtab_str strtbl_size 1 (Z.of_nat (length strtab_str)) in
   (* encode symbol table into section *)    
   let symb_h := gen_symtab_sec_header symbtbl st1.(e_shstrtbl_ofs) st1.(e_sections_ofs) st.(e_headers_idx) in (* we need strtable section header index *)
-  if Z.eqb (Z.of_nat (length symbsec)) symb_h.(sh_size) then
-    let st2 := update_elf_state st1 [symbsec] [symb_h] symtab_str symb_h.(sh_size) 1 (Z.of_nat (length symtab_str)) in
+  if Z.eqb (Z.of_nat (length symbsec + length dummy_entry)) symb_h.(sh_size) then
+    let st2 := update_elf_state st1 [dummy_entry ++ symbsec] [symb_h] symtab_str symb_h.(sh_size) 1 (Z.of_nat (length symtab_str)) in
     OK (st2, symtbl_idx_map)
   else
     Error [MSG "Symbol table size inconsistent"].

@@ -632,31 +632,52 @@ Proof.
     simpl in *. unfold not.
     intros. subst. rewrite H in H1. congruence. }
     
-    
+  set (dummy_entry:=(if Archi.ptr64
+                     then SymbtableEncode.encode_dummy_symbentry64
+                     else SymbtableEncode.encode_dummy_symbentry32)) in *.
+
+  set (str:= symtab_str ++ ProdR2 ++ shstrtab_str).
+  simpl.
+  unfold decode_symbtable_section.
+  assert (DUMMY: length dummy_entry = (if Archi.ptr64 then 24%nat else 16%nat)).
+  destr.
+  rewrite skipn_app. rewrite <- DUMMY. rewrite skipn_all.
+  rewrite Nat.sub_diag. rewrite skipn_O.
+  cbn [app].
+
+  
     (* symbol table section *)
-  assert (C3: exists symbtbl, (acc_section_header Archi.ptr64
-          (OK
-             {|
-             dec_sectable := sectbl;
-             dec_symbtable := PTree.empty symbentry;
-             dec_reloctable := PTree.empty reloctable;
-             dec_shstrtbl := symtab_str ++ ProdR2 ++ shstrtab_str;
-             dec_strtbl := ProdR6 |})
-          (ProdL0,
-          gen_symtab_sec_header
-            (map snd
-               (sort_symbtable (PTree.elements (prog_symbtable p))))
-            (e_shstrtbl_ofs + 8) (e_sections_ofs + ProdR5)
-            (Z.of_nat (Datatypes.length ProdR9) + 1))) =
-                         OK {| dec_sectable := sectbl;
-                               dec_symbtable := symbtbl;
-                               dec_reloctable := PTree.empty reloctable;
-                               dec_shstrtbl := ProdR2 ++ shstrtab_str;
-                               dec_strtbl := ProdR6 |} /\
-                         (forall i e, In (i,e) (PTree.elements symbtbl) <->
-                         In (i,e) (PTree.elements (prog_symbtable p)))).
-  { set (str:= symtab_str ++ ProdR2 ++ shstrtab_str).
-    simpl.
+  assert (C3: forall tl,
+             exists symbtbl,
+             fold_left
+               (acc_decode_symbtable_section Archi.ptr64
+              (index_to_ident (map fst (PTree.elements sectbl)) 1))
+               ProdL0 (OK (PTree.empty symbentry, ProdR6 ++ tl, [], 1%nat)) =
+             OK (symbtbl, tl, [], 1%nat) /\ (forall i e, In (i,e) (PTree.elements symbtbl) <->
+                         In (i,e) (sort_symbtable (PTree.elements (prog_symbtable p))))).
+
+          (*    (acc_section_header Archi.ptr64 *)
+          (* (OK *)
+          (*    {| *)
+          (*    dec_sectable := sectbl; *)
+          (*    dec_symbtable := PTree.empty symbentry; *)
+          (*    dec_reloctable := PTree.empty reloctable; *)
+          (*    dec_shstrtbl := symtab_str ++ ProdR2 ++ shstrtab_str; *)
+          (*    dec_strtbl := ProdR6 |}) *)
+          (* (dummy_entry ++ ProdL0, *)
+          (* gen_symtab_sec_header *)
+          (*   (map snd *)
+          (*      (sort_symbtable (PTree.elements (prog_symbtable p)))) *)
+          (*   (e_shstrtbl_ofs + 8) (e_sections_ofs + ProdR5) *)
+          (*   (Z.of_nat (Datatypes.length ProdR9) + 1))) = *)
+          (*                OK {| dec_sectable := sectbl; *)
+          (*                      dec_symbtable := symbtbl; *)
+          (*                      dec_reloctable := PTree.empty reloctable; *)
+          (*                      dec_shstrtbl := ProdR2 ++ shstrtab_str; *)
+          (*                      dec_strtbl := ProdR6 |} /\ *)
+          (*                (forall i e, In (i,e) (PTree.elements symbtbl) <-> *)
+          (*                In (i,e) (sort_symbtable (PTree.elements (prog_symbtable p))))). *)
+  { 
     clear e0 EQ1 Heqb e EQ2 SORT.
     clear ProdR1 ProdR3.
     clear Heqb0 ProdR9 ProdR4.
@@ -664,6 +685,13 @@ Proof.
     
     unfold create_symbtable_section in EQ0.
     rewrite C1'' in *. clear C1''.
+    
+
+    (* generalize strtbl *)
+    (* assert (STRGEN: exists tl, ProdR6 = ProdR6 ++ tl). *)
+    (* exists []. apply app_nil_end. *)
+    (* destruct STRGEN as (tl & ProdR6H). rewrite ProdR6H. clear ProdR6H. *)
+    
     
     set (l:= (sort_symbtable (PTree.elements (prog_symbtable p)))) in *.
     
@@ -676,22 +704,53 @@ Proof.
     
     unfold str. clear str. set (str:= ProdR2 ++ shstrtab_str).
     generalize LEN EQ0 SORTNOREP.
-    generalize str ProdR2 ProdR5 ProdL0 ProdR6 ProdL1.
+    generalize  ProdR5 ProdL0 ProdR6.
     generalize n l.
     clear LEN EQ0 SORTNOREP.    
-    clear str ProdR2 ProdR5 ProdL0 ProdR6 ProdL1.
+    clear ProdR5 ProdL0 ProdR6 ProdL1.
     clear n l.
-
+    
+    
+    
     induction n;intros.
     - rewrite length_zero_iff_nil in LEN. subst.
       simpl in EQ0. inv EQ0.
-      
+      cbn [fold_left]. cbn [bind].
+      simpl.
+      eexists. split;eauto.
+      split. intros. simpl in H. auto. intros.
+      apply False_ind. auto.
       
     - exploit LocalLib.length_S_inv;eauto.
       intros (l' & a1 & A1 & B1). subst.
-      clear H.
+      clear LEN.
       rewrite fold_left_app in *.
-    
+      simpl in EQ0.
+      unfold acc_symbtable_bytes in EQ0 at 1. destruct a1.
+      monadInv EQ0.
+      set (str':= symtab_str ++ str).
+      unfold decode_symbtable_section.
+      rewrite fold_left_app.
+      (* use induction hypothesis *)
+      rewrite map_app in SORTNOREP.
+      apply list_norepet_app in SORTNOREP.
+      destruct SORTNOREP as (NOREP1 & NOREP2 & DIS).
+      (* acc_strtbl: ProdR6 = ProdR0 ++ xxx *)
+      unfold acc_strtbl in EQ1.
+      destr_in EQ1. destr_in EQ1. simpl in EQ1.
+      inv EQ1. (* rewrite <- app_assoc. *)
+      (* use I.H. *)
+      exploit IHn;eauto.
+     
+      intros (symbtbl' & P1 & P2).
+      (* monadInv P1. monadInv EQ1. *)
+      (* rewrite EQ2. *)
+      simpl.
+      rewrite <- app_assoc.
+      rewrite P1. clear P1 IHn.
+      
+        
+      
 Lemma decode_prog_code_section_correct: forall p1 p2 p1',
     program_equiv p1 p2 ->
     decode_prog_code_section instr_size Instr_size p1 = OK p1' ->
