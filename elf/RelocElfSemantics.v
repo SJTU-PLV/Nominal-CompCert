@@ -100,25 +100,19 @@ Definition index_to_ident (idl: list ident) (start: Z) :=
 
 
 
-
-Program Fixpoint decode_reloctable_section (l:list byte) (m:ZTree.t ident) (reloctbl: reloctable) {measure (length l)} : res reloctable :=
-  match l with
-  | [] => OK reloctbl
-  | _ =>
-    let len := if elf64 then 16%nat else 8%nat in
-    match take_drop len l with
-    | OK (e, r) =>
-      do e <- decode_relocentry m e;
-      decode_reloctable_section r m (reloctbl ++ [e])
-    | Error m => Error m
-    end
-  end.
-Next Obligation.
-  symmetry in Heq_anonymous.
-  apply take_drop_length_2 in Heq_anonymous.
-  auto.
-  destr;lia.
-Defined.
+Definition acc_decode_reloctable_section (reloclen: nat) (m: ZTree.t ident) (acc: res (reloctable * list byte * nat)) (b:byte) :=
+  do acc' <- acc;
+  let '(reloctbl, reloce, len) := acc' in
+  if Nat.eq_dec len reloclen then
+    do e <- decode_relocentry elf64 m (reloce ++ [b]);
+    OK (reloctbl ++ [e], [], 1%nat)
+  else
+    OK (reloctbl, reloce ++ [b], S len).
+  
+Definition decode_reloctable_section (l: list byte) (m:ZTree.t ident) :=
+  let reloclen := if elf64 then 16%nat else 8%nat in
+  do r <- fold_left (acc_decode_reloctable_section reloclen m) l (OK ([], [], 1%nat));
+  OK (fst (fst r)).
 
 
 Definition acc_decode_symbtable_section (symblen: nat) (m: ZTree.t ident) (acc: res (symbtable * list byte * list byte * nat)) (b: byte) :=
@@ -179,13 +173,13 @@ Definition acc_section_header (st: res decode_elf_state) (sec_h: section * secti
     OK (update_symbtable st symbtbl shstrtbl')
        
   | SHT_REL =>
-    (* get id to index map from sectable: Z -> ident *)
-    let idl_sectbl := PTree.elements st.(dec_sectable) in
-    let secidl := map fst idl_sectbl in
-    let secidxmap := index_to_ident secidl 1 in
+    (* get id to index map from sorted symbol table: Z -> ident *)
+    let idl_symbtbl := PTree.elements st.(dec_symbtable) in
+    let symbidl := map fst (sort_symbtable idl_symbtbl) in
+    let symbidxmap := index_to_ident symbidl 1 in
     do (_, shstrtbl0) <- take_drop (length SB[".rel"]) st.(dec_shstrtbl);
     do (id, shstrtbl') <- id_from_strtbl shstrtbl0;
-    do reloctbl <- decode_reloctable_section sec secidxmap [];
+    do reloctbl <- decode_reloctable_section sec symbidxmap;
     OK (update_reloctable_shstrtbl st id reloctbl shstrtbl')
            
   | _ => Error (msg "unsupported section header")

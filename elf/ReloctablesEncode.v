@@ -80,29 +80,22 @@ Definition acc_reloctable  acc e :=
 Definition encode_reloctable (t: list relocentry) : res (list byte) :=
     fold_left acc_reloctable t (OK []).
 
-End WITH_IDXMAP.
-(* Definition create_reloctable_section (t:reloctable) : section := *)
-(*   let bytes := encode_reloctable t in *)
-(*   sec_bytes bytes. *)
+Lemma encode_relocentry_len: forall l e,
+    encode_relocentry e = OK l ->
+    length l = if Archi.ptr64 then 16%nat else 8%nat.
+Proof.
+  unfold encode_relocentry.
+  intros. repeat destr_in H.
+  monadInv H11. unfold encode_reloc_info in EQ.
+  repeat destr_in EQ.
+  unfold encode_int64. rewrite app_length.
+  do 2 rewrite encode_int_length. lia.
+   monadInv H11. unfold encode_reloc_info in EQ.
+  repeat destr_in EQ.
+  unfold encode_int32. rewrite app_length.
+  do 2 rewrite encode_int_length. lia.
+Qed.
   
+  
+End WITH_IDXMAP.
 
-(* Definition create_reloctables_sections p : list section := *)
-(*   [create_reloctable_section (reloctable_rodata (prog_reloctables p)); *)
-(*   create_reloctable_section (reloctable_data (prog_reloctables p)); *)
-(*   create_reloctable_section (reloctable_code (prog_reloctables p))]. *)
-
-(* (** Transforma the program *) *)
-(* Definition transf_program p : res program := *)
-(*   let s := create_reloctables_sections p in *)
-(*   let sect := prog_sectable p ++ s in *)
-(*   if beq_nat (length sect) 9 then *)
-(*     OK {| prog_defs := prog_defs p; *)
-(*           prog_public := prog_public p; *)
-(*           prog_main := prog_main p; *)
-(*           prog_sectable := (prog_sectable p) ++ s; *)
-(*           prog_strtable := (prog_strtable p); *)
-(*           prog_symbtable := prog_symbtable p; *)
-(*           prog_reloctables := prog_reloctables p; *)
-(*           prog_senv := prog_senv p; *)
-(*        |} *)
-(*   else Error []. *)

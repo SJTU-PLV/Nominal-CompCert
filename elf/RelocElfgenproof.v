@@ -823,8 +823,104 @@ Proof.
   rewrite app_nil_r.
 
   (* reloc sections *)
+  unfold update_symbtable.
+  simpl.
+  (* elements symbtbl = elements p.prog_symbtable *)
+  exploit (PTree.elements_extensional symbtbl (prog_symbtable p)).
+  intros. destruct (symbtbl ! i) eqn:G.
+  apply PTree.elements_correct in G. apply C3' in G.
+  apply SORT in G. apply PTree.elements_complete in G.
+  rewrite G. auto.
+  destruct ((prog_symbtable p) ! i) eqn:G1;auto.
+  apply PTree.elements_correct in G1. apply SORT in G1.
+  apply C3' in G1. apply PTree.elements_complete in G1.
+  rewrite G in G1. congruence.
+  clear C3' SORT. intros C3'.
+
+  assert (C4: exists reloctbl,
+         fold_left (acc_section_header Archi.ptr64)
+       (combine ProdL1 ProdR4)
+       (OK
+          {|
+          dec_sectable := sectbl;
+          dec_symbtable := symbtbl;
+          dec_reloctable := PTree.empty reloctable;
+          dec_shstrtbl := ProdR2 ++ shstrtab_str;
+          dec_strtbl := ProdR6 |}) =
+         OK
+          {|
+          dec_sectable := sectbl;
+          dec_symbtable := symbtbl;
+          dec_reloctable := reloctbl;
+          dec_shstrtbl := shstrtab_str;
+          dec_strtbl := ProdR6 |} /\
+         (forall i e, In (i,e) (PTree.elements reloctbl) <-> In (i,e) (PTree.elements (prog_reloctables p)))).
+  clear DUMMY symblen str SORTNOREP C1''.
+  clear e0 EQ1 Heqb EQ0.
+  clear Heqb0 dummy_entry.
+  clear ProdL0  e_shstrtbl e_sections.
   
-  
+  unfold gen_reloc_sections_headers in EQ2.
+
+  generalize (PTree.elements_keys_norepet (prog_reloctables p)).
+  intros NOREP.
+
+  set (l:= (PTree.elements (prog_reloctables p))) in *.
+  generalize NOREP EQ2 e.
+  generalize  ProdR1 ProdR2 ProdR3 ProdR4 ProdL1.
+  clear NOREP EQ2 e.
+  clear ProdR1 ProdR2 ProdR3 ProdR4 ProdL1.
+  generalize shstrtab_str.
+  assert (LEN: exists n, length l = n).
+  { induction l. exists O. auto.
+    destruct IHl.
+    exists (S x). simpl. auto. }
+  destruct LEN as (n & LEN).
+  generalize n l LEN. clear n l LEN.
+  induction n;intros.
+  - rewrite length_zero_iff_nil in LEN. subst.
+    simpl in EQ2. inv EQ2.
+    simpl. eexists. split;eauto.
+    simpl. intros. split;auto.
+  - exploit LocalLib.length_S_inv;eauto.
+    intros (l' & a1 & A1 & B1). subst.
+    clear LEN.
+    rewrite fold_left_app in EQ2.
+    simpl in EQ2.
+    unfold acc_reloc_sections_headers in EQ2 at 1.
+    monadInv EQ2. destruct a1.
+    destr_in EQ0. monadInv EQ0.
+
+    (* combine append *)
+    do 2 rewrite app_length in e. simpl in e.    
+    rewrite combine_app;try lia.
+    rewrite fold_left_app.
+    
+    (* norepeat *)
+    rewrite map_app in NOREP.
+    apply list_norepet_app in NOREP.
+    destruct NOREP as (NOREP1 & NOREP2 & DIS).
+
+    (* acc relocstrtbl *)
+    unfold acc_relstrtbl in EQ0.
+    destr_in EQ0.
+    destr_in EQ0.
+    Opaque Encode.string_to_bytes.
+    simpl in EQ0. inv EQ0.
+    repeat rewrite app_assoc_reverse.
+    
+    (* use I.H. *)
+    exploit IHn;eauto. lia.
+    intros (reloctbl' & P1 & P2).
+    rewrite P1.
+    clear IHn P1 EQ.
+    
+    simpl. Transparent Encode.string_to_bytes.
+    simpl. unfold update_reloctable_shstrtbl.
+    simpl in *.    
+    erewrite id_from_strtbl_result;eauto.
+    simpl. 
+    
 Lemma decode_prog_code_section_correct: forall p1 p2 p1',
     program_equiv p1 p2 ->
     decode_prog_code_section instr_size Instr_size p1 = OK p1' ->

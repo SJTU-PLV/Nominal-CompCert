@@ -103,8 +103,8 @@ Proof.
 
 Qed.
 
-Definition decode_relocentry (m: ZTree.t ident) (l: list byte) : res relocentry :=
-  if Archi.ptr64 then
+Definition decode_relocentry (elf64: bool) (m: ZTree.t ident) (l: list byte) : res relocentry :=
+  if elf64 then
     do (ofsbytes, l) <- take_drop 8 l;
     do (infobytes, l) <- take_drop 8 l;
     let ofs := decode_int ofsbytes in
@@ -116,3 +116,9 @@ Definition decode_relocentry (m: ZTree.t ident) (l: list byte) : res relocentry 
     let ofs := decode_int ofsbytes in
     do (rt, sym) <- decode_reloc_info m infobytes;
     OK ({| reloc_offset := ofs; reloc_type := rt; reloc_symb := sym; reloc_addend := 0 |}).
+
+Lemma decode_encode_relocentry: forall e m1 m2 bs (M:match_idxmap m1 m2),
+    encode_relocentry m1 e = OK bs ->
+    decode_relocentry Archi.ptr64 m2 bs = OK e.
+Admitted.
+
