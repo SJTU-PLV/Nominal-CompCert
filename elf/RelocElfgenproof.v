@@ -11,7 +11,7 @@ Require Import Linking Errors.
 Require Import EncDecRet RelocElfgen.
 Require Import RelocProgSemantics RelocProgSemantics1.
 Require Import TranslateInstr RelocProgSemantics2 RelocElfSemantics.
-Require Import SymbtableDecode.
+Require Import SymbtableDecode ReloctablesEncode.
 
 Import Hex Bits.
 Import ListNotations.
@@ -23,6 +23,38 @@ Local Open Scope hex_scope.
 Local Open Scope bits_scope.
 Local Open Scope string_byte_scope.
 
+Lemma decode_encode_reloctable_correct: forall n l bs m1 m2 (M: match_idxmap m1 m2),
+    let reloclen := if Archi.ptr64 then 16%nat else 8%nat in
+    length l = n ->
+    encode_reloctable m1 l = OK bs ->
+    fold_left (acc_decode_reloctable_section Archi.ptr64 reloclen m2) bs (OK ([], [], 1%nat)) = OK (l, [], 1%nat).
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl in H0. inv H0.
+  unfold decode_reloctable_section. simpl. auto.
+
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a1 & A1 & B1). subst.
+  clear H.
+  unfold encode_reloctable in H0. rewrite fold_left_app in H0.
+  simpl in H0. unfold acc_reloctable in H0 at 1.
+  monadInv H0. exploit IHn;eauto.
+  intros. rewrite fold_left_app.
+  unfold reloclen.
+  rewrite H. clear H EQ IHn.
+  exploit encode_relocentry_len;eauto.
+  intros LEN. rename x0 into l.
+  clear x.
+  eapply ReloctablesDecode.decode_encode_relocentry in EQ1;eauto.
+  destr.
+  - do 17 (destruct l as [| ?b ?] ;simpl in LEN;try congruence).
+    simpl in *. rewrite EQ1. simpl. auto.
+  - do 9 (destruct l as [| ?b ?] ;simpl in LEN;try congruence).
+    simpl in *. rewrite EQ1. simpl. auto.
+Qed.
+
+    
 Lemma acc_decode_symbtable_section_eq: forall l l' m e strtbl id strtbl' t,
     let symblen:= if Archi.ptr64 then 24%nat else 16%nat in
     length l = symblen ->
@@ -854,8 +886,8 @@ Proof.
           dec_reloctable := reloctbl;
           dec_shstrtbl := shstrtab_str;
           dec_strtbl := ProdR6 |} /\
-         (forall i e, In (i,e) (PTree.elements reloctbl) <-> In (i,e) (PTree.elements (prog_reloctables p)))).
-  clear DUMMY symblen str SORTNOREP C1''.
+         (forall i e, In (i,e) (PTree.elements reloctbl) <-> In (i,e) (PTree.elements (prog_reloctables p)))). {
+  clear DUMMY symblen str C1''.
   clear e0 EQ1 Heqb EQ0.
   clear Heqb0 dummy_entry.
   clear ProdL0  e_shstrtbl e_sections.
@@ -920,6 +952,69 @@ Proof.
     simpl in *.    
     erewrite id_from_strtbl_result;eauto.
     simpl. 
+
+    (* decoe encode reloctable correct *)
+    unfold decode_reloctable_section.
+    erewrite decode_encode_reloctable_correct;eauto.
+    simpl. eexists. split;eauto.
+    2: { unfold match_idxmap.
+         intros. erewrite ident_to_index_injective;eauto.
+         rewrite C3'. auto. 
+         rewrite C3'. auto. }
+
+    (* In elements *)
+    intros. split;intros.
+    + apply in_app.
+      apply PTree.elements_complete in H.
+        rewrite PTree.gsspec in H.
+        destr_in H.
+        * inv H. right. constructor. auto.
+        * left. apply P2. apply PTree.elements_correct;auto.
+      + apply PTree.elements_correct.
+        rewrite PTree.gsspec.
+        apply in_app in H.
+        destruct H.
+        * unfold list_disjoint in DIS.
+          assert (i <> p0).
+          apply DIS. eapply (in_map fst) in H.
+          simpl in H. auto. simpl. auto.
+          destr. apply PTree.elements_complete.
+          apply P2. auto.
+        * inv H. inv H0.
+          destr. inv H0. }
+
+  (* final *)
+  destruct C4 as (reloctbl & C4 & C4').
+  rewrite C4. simpl. eexists. split;eauto.
+  (* program_equiv *)
+  constructor;simpl;auto;intros.
+  - destruct ((prog_symbtable p) ! id) eqn:G.
+    apply PTree.elements_correct in G.
+    rewrite <- C3' in G. apply PTree.elements_complete in G.
+    auto.
+    destruct (symbtbl ! id) eqn:G'.
+    apply PTree.elements_correct in G'.
+    rewrite ->  C3' in G'. apply PTree.elements_complete in G'.
+    congruence. auto.
+  - destruct ((prog_sectable p) ! id) eqn:G.
+    apply PTree.elements_correct in G.
+    rewrite <- C1'' in G. apply PTree.elements_complete in G.
+    auto.
+    destruct (sectbl ! id) eqn:G'.
+    apply PTree.elements_correct in G'.
+    rewrite ->  C1'' in G'. apply PTree.elements_complete in G'.
+    congruence. auto.
+  - destruct ((prog_reloctables p) ! id) eqn:G.
+    apply PTree.elements_correct in G.
+    apply C4' in G. apply PTree.elements_complete in G.
+    auto.
+    destruct (reloctbl ! id) eqn:G'.
+    apply PTree.elements_correct in G'.
+    apply C4' in G'. apply PTree.elements_complete in G'.
+    congruence. auto.
+Qed.
+
+    
     
 Lemma decode_prog_code_section_correct: forall p1 p2 p1',
     program_equiv p1 p2 ->
