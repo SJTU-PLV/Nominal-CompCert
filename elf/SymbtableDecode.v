@@ -126,11 +126,11 @@ Definition decode_symbentry32 (lb: list byte) (m: ZTree.t ident): res symbentry 
 
 Definition decode_symbentry64 (lb: list byte) (m: ZTree.t ident): res symbentry :=
   do (st_name_bytes, lb) <- take_drop 4 lb;
-  do (st_value_bytes, lb) <- take_drop 8 lb;
-  do (st_size_bytes, lb) <- take_drop 8 lb;
   do (st_info_bytes, lb) <- take_drop 1 lb;
   do (st_other_bytes, lb) <- take_drop 1 lb;
   do (st_shndx_bytes, lb) <- take_drop 2 lb;
+  do (st_value_bytes, lb) <- take_drop 8 lb;
+  do (st_size_bytes, lb) <- take_drop 8 lb;
 
   let svalue := decode_int st_value_bytes in
   let ssize := decode_int st_size_bytes in
@@ -149,10 +149,91 @@ Definition decode_symbentry64 (lb: list byte) (m: ZTree.t ident): res symbentry 
 Lemma decode_encode_symbentry32 : forall e bs nidx m1 m2 (M: match_idxmap m1 m2),
     encode_symbentry32 e nidx m1 = OK bs ->
     decode_symbentry32 bs m2 = OK e.
-Admitted.
+Proof.
+  unfold encode_symbentry32,decode_symbentry32.
+  intros. destr_in H.
+  monadInv H.
+  apply andb_true_iff in Heqb. destruct Heqb.
+  apply andb_true_iff in H. destruct H.
+  unfold check_range32 in *.
+  apply andb_true_iff in H. destruct H.
+  apply andb_true_iff in H11. destruct H11.
+  apply andb_true_iff in H10. destruct H10.
+  apply Z.leb_le in H.
+  apply Z.leb_le in H11.
+  apply Z.leb_le in H10.
+  apply Z.ltb_lt in H12.
+  apply Z.ltb_lt in H13.
+  apply Z.ltb_lt in H14.
 
+  unfold encode_int32.
+  rewrite take_drop_encode_int. cbn [bind2].
+  rewrite take_drop_encode_int. cbn [bind2].
+  rewrite take_drop_encode_int. cbn [bind2].
+  rewrite take_drop_encode_int. cbn [bind2].
+  rewrite take_drop_cons. cbn [bind2].
+  rewrite take_drop_length. cbn [bind2].
+  rewrite decode_encode_int.
+  rewrite Z.mod_small. rewrite decode_encode_glob_symb_info.
+  simpl. erewrite decode_encode_secindex;eauto.
+  simpl. destruct e. simpl in *.
+  unfold decode_int32.
+  repeat rewrite decode_encode_int.
+  repeat rewrite Z.mod_small. auto.
+  
+  simpl in *.  lia.
+  simpl in *.  lia.
+  generalize (encode_glob_symb_info_range (symbentry_bind e) (symbentry_type e)). intros.
+  simpl. rewrite two_power_pos_equiv. lia.
+  eapply encode_secindex_len. eauto.
+Qed.
+
+  
 Lemma decode_encode_symbentry64 : forall e bs nidx m1 m2 (M: match_idxmap m1 m2),
     encode_symbentry64 e nidx m1 = OK bs ->
     decode_symbentry64 bs m2 = OK e.
+Proof.
+  unfold encode_symbentry64,decode_symbentry64.
+  intros. destr_in H.
+  monadInv H.
+  apply andb_true_iff in Heqb. destruct Heqb.
+  apply andb_true_iff in H. destruct H.
+  unfold check_range32 in *.
+  apply andb_true_iff in H. destruct H.
+  apply andb_true_iff in H11. destruct H11.
+  apply andb_true_iff in H10. destruct H10.
+  apply Z.leb_le in H.
+  apply Z.leb_le in H11.
+  apply Z.leb_le in H10.
+  apply Z.ltb_lt in H12.
+  apply Z.ltb_lt in H13.
+  apply Z.ltb_lt in H14.
+
+  unfold encode_int32, encode_int64.
+  rewrite take_drop_encode_int. cbn [bind2].
+  rewrite take_drop_encode_int. cbn [bind2].
+  rewrite take_drop_cons. cbn [bind2].
+  generalize (encode_secindex_len _ _ EQ). intros.
+  rewrite (take_drop_length_app _  _ _ H15). cbn [bind2].
+  rewrite take_drop_encode_int. cbn [bind2].
+  rewrite take_drop_length. cbn [bind2].
+  
+
+  rewrite decode_encode_int.
+  rewrite Z.mod_small. rewrite decode_encode_glob_symb_info.
+  simpl. erewrite decode_encode_secindex;eauto.
+  simpl. destruct e. simpl in *.
+  repeat rewrite decode_encode_int.
+  repeat rewrite Z.mod_small. auto.
+  
+  simpl in *.  lia.
+  simpl in *.  lia.
+  generalize (encode_glob_symb_info_range (symbentry_bind e) (symbentry_type e)). intros.
+  simpl. rewrite two_power_pos_equiv. lia.
+  apply encode_int_length.
+Qed.
+
+
+  
 Admitted.
 

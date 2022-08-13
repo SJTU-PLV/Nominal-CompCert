@@ -1165,7 +1165,7 @@ Proof.
   intros. destr_in H0.
   assert (alloc_sections instr_size
       (RelocProgSemantics.globalenv instr_size p2)
-      (prog_symbtable p2) (prog_reloctables p2) 
+      (prog_reloctables p2) 
       (prog_sectable p2) Mem.empty = Some m0).
   { unfold alloc_sections in *.
     rewrite PTree.fold_spec in *.

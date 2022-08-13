@@ -120,5 +120,34 @@ Definition decode_relocentry (elf64: bool) (m: ZTree.t ident) (l: list byte) : r
 Lemma decode_encode_relocentry: forall e m1 m2 bs (M:match_idxmap m1 m2),
     encode_relocentry m1 e = OK bs ->
     decode_relocentry Archi.ptr64 m2 bs = OK e.
-Admitted.
+Proof.
+  unfold encode_relocentry,decode_relocentry.
+  intros. repeat destr_in H.
+  monadInv H11.
+  unfold encode_int64.
+  rewrite take_drop_encode_int. cbn [bind2].
+  rewrite take_drop_length. simpl. erewrite decode_encode_reloc_info;eauto.
+  simpl. destruct e. simpl in *. 
+  rewrite Z.eqb_eq in Heqb. rewrite Heqb.
+  rewrite decode_encode_int. simpl.
+  apply andb_true_iff in Heqb0. destruct Heqb0.
+  rewrite Z.ltb_lt in H10.
+  rewrite Z.leb_le in H.
+  rewrite Z.mod_small;auto.
+  unfold encode_reloc_info in EQ. repeat destr_in EQ. 
+  unfold encode_int64. rewrite encode_int_length. auto.
 
+  monadInv H11.
+  unfold encode_int32.
+  rewrite take_drop_encode_int. cbn [bind2].
+  rewrite take_drop_length. simpl. erewrite decode_encode_reloc_info;eauto.
+  simpl. destruct e. simpl in *. 
+  rewrite Z.eqb_eq in Heqb. rewrite Heqb.
+  rewrite decode_encode_int. simpl.
+  apply andb_true_iff in Heqb0. destruct Heqb0.
+  rewrite Z.ltb_lt in H10.
+  rewrite Z.leb_le in H.
+  rewrite Z.mod_small;auto.
+  unfold encode_reloc_info in EQ. repeat destr_in EQ. 
+  unfold encode_int32. rewrite encode_int_length. auto.
+Qed.

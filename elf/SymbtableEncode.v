@@ -62,6 +62,16 @@ Definition encode_symbbind (b:bindtype) :=
 Definition encode_glob_symb_info (b:bindtype) (t:symbtype) := 
   (encode_symbbind b) * (Z.pow 2 4) + encode_symbtype t.
 
+Lemma encode_glob_symb_info_range : forall b t,
+    0 <=  encode_glob_symb_info b t < 256.
+Proof.
+  intros.
+  unfold encode_glob_symb_info.
+  unfold encode_symbbind, encode_symbtype .
+  destruct b;destruct t; lia.
+Qed.
+
+
 Definition encode_secindex (i:secindex) (idxmap: PTree.t Z): res (list byte) :=
   let shn_comm := HZ["FFF2"] in
   let shn_undef := 0 in 
@@ -94,7 +104,7 @@ Definition encode_symbentry32 (e:symbentry) (name_index: Z) (idxmap: PTree.t Z) 
     let st_value_bytes := encode_int32 (symbentry_value e) in
     let st_size_bytes := encode_int32 (symbentry_size e) in
     let st_info_bytes := 
-        bytes_of_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
+        encode_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
     let st_other_bytes := [Byte.repr 0] in
     do st_shndx_bytes <- encode_secindex (symbentry_secindex e) idxmap;
     OK (st_name_bytes ++ st_value_bytes ++ st_size_bytes ++
@@ -107,7 +117,7 @@ Definition encode_symbentry64 (e:symbentry) (name_index: Z) (idxmap: PTree.t Z) 
   let st_value_bytes := encode_int64 (symbentry_value e) in
   let st_size_bytes := encode_int64 (symbentry_size e) in
   let st_info_bytes :=
-      bytes_of_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
+      encode_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
   let st_other_bytes := [Byte.repr 0] in
   do st_shndx_bytes <- encode_secindex (symbentry_secindex e) idxmap;
   OK (st_name_bytes ++ st_info_bytes ++ st_other_bytes ++ st_shndx_bytes ++ st_value_bytes ++ st_size_bytes)
@@ -127,7 +137,7 @@ Definition encode_dummy_symbentry32 : (list byte) :=
   let st_value_bytes := encode_int32 (symbentry_value e) in
   let st_size_bytes := encode_int32 (symbentry_size e) in
   let st_info_bytes := 
-      bytes_of_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
+      encode_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
   let st_other_bytes := [Byte.repr 0] in
   let st_shndx_bytes := encode_int 2 0 in
   (st_name_bytes ++ st_value_bytes ++ st_size_bytes ++
@@ -145,7 +155,7 @@ Definition encode_dummy_symbentry64 : (list byte) :=
   let st_value_bytes := encode_int64 (symbentry_value e) in
   let st_size_bytes := encode_int64 (symbentry_size e) in
   let st_info_bytes := 
-      bytes_of_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
+      encode_int 1 (encode_glob_symb_info (symbentry_bind e) (symbentry_type e)) in
   let st_other_bytes := [Byte.repr 0] in
   let st_shndx_bytes := encode_int 2 0 in
   (st_name_bytes ++ st_info_bytes ++ st_other_bytes ++ st_shndx_bytes ++ st_value_bytes ++ st_size_bytes).
