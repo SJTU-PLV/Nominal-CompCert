@@ -793,54 +793,71 @@ Proof.
         do 8 (destruct l as [| ?b ?] ;simpl in VALLEN;try congruence).
         simpl. rewrite Heqb0.
 
-        (* 7 *)
-        assert ((reloc_offset r <=? reloc_offset r) &&
-                (reloc_offset r <? reloc_offset r + 8) = true) by admit.
-        rewrite H. clear H.
-        rewrite Z.sub_diag. simpl.
-        (* 6 *)
-        rewrite Heqb0. 
-        assert ((reloc_offset r <=? reloc_offset r + 1) &&
-                (reloc_offset r + 1 <? reloc_offset r + 8) = true) by admit.
-        rewrite H. clear H.
-        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
-        (* 5 *)
-        rewrite Heqb0.
-        assert ((reloc_offset r <=? reloc_offset r + 1 + 1) &&
-                (reloc_offset r + 1 + 1 <? reloc_offset r + 8) = true) by admit.
-        rewrite H. clear H.
-        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
-        (* 4 *)
-        rewrite Heqb0.
-        assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1) &&
-                (reloc_offset r + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit.
-        rewrite H. clear H.
-        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
-        (* 3 *)
-        rewrite Heqb0.
-        assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1) &&
-                (reloc_offset r + 1 + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit.
-        rewrite H. clear H.
-        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
-        (* 2 *)
-        rewrite Heqb0.
-        assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1) &&
-                (reloc_offset r + 1 + 1 + 1 + 1 + 1 <? reloc_offset r + 8)= true) by admit.
-        rewrite H. clear H.
-        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
-        (* 1 *)
-        rewrite Heqb0.
-        assert ( (reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1) &&
-                 (reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit.
-        rewrite H. clear H.
-        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
-        (* 0 *)
-        rewrite Heqb0.
-        assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 + 1) &&
-      (reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 + 1 <?
-       reloc_offset r + 8) = true) by admit.
-        rewrite H. clear H.
-        repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl.
+         Ltac solve_reloc_if:=
+        match goal with
+        | |- context [?a && ?b] =>
+          assert (TMP: (a && b) = true) by (apply andb_true_iff;split;try apply Z.leb_le;try lia;try apply Z.ltb_lt;try lia);
+          rewrite TMP;clear TMP
+        end.
+
+         Ltac solve_eq_if:=
+           match goal with
+           | |- context [?a =? ?b] =>
+             assert (TMP:(a =? b) = false) by (apply Z.eqb_neq;lia);
+             rewrite TMP;clear TMP
+           end.
+
+         Ltac simplfy_zarth:=
+           repeat rewrite Z.add_sub_swap;rewrite Z.sub_diag;simpl.
+         
+         do 8 (solve_reloc_if;try rewrite Heqb0;simplfy_zarth;try rewrite Heqb0).
+         
+                    
+      (*   (* 6 *) *)
+      (*   rewrite Heqb0.  *)
+      (*   assert ((reloc_offset r <=? reloc_offset r + 1) && *)
+      (*           (reloc_offset r + 1 <? reloc_offset r + 8) = true) by admit. *)
+      (*   rewrite H. clear H. *)
+      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
+      (*   (* 5 *) *)
+      (*   rewrite Heqb0. *)
+      (*   assert ((reloc_offset r <=? reloc_offset r + 1 + 1) && *)
+      (*           (reloc_offset r + 1 + 1 <? reloc_offset r + 8) = true) by admit. *)
+      (*   rewrite H. clear H. *)
+      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
+      (*   (* 4 *) *)
+      (*   rewrite Heqb0. *)
+      (*   assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1) && *)
+      (*           (reloc_offset r + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit. *)
+      (*   rewrite H. clear H. *)
+      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
+      (*   (* 3 *) *)
+      (*   rewrite Heqb0. *)
+      (*   assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1) && *)
+      (*           (reloc_offset r + 1 + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit. *)
+      (*   rewrite H. clear H. *)
+      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
+      (*   (* 2 *) *)
+      (*   rewrite Heqb0. *)
+      (*   assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1) && *)
+      (*           (reloc_offset r + 1 + 1 + 1 + 1 + 1 <? reloc_offset r + 8)= true) by admit. *)
+      (*   rewrite H. clear H. *)
+      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
+      (*   (* 1 *) *)
+      (*   rewrite Heqb0. *)
+      (*   assert ( (reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1) && *)
+      (*            (reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit. *)
+      (*   rewrite H. clear H. *)
+      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
+      (*   (* 0 *) *)
+      (*   rewrite Heqb0. *)
+      (*   assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 + 1) && *)
+      (* (reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 + 1 <? *)
+      (*  reloc_offset r + 8) = true) by admit. *)
+      (*   rewrite H. clear H. *)
+      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
+
+
         eexists. split. do 2 f_equal.
         lia.
 
@@ -870,8 +887,48 @@ Proof.
            rewrite <- Heqo. f_equal.
 
       (* 32bit *)
-      *       admit.
+      * monadInv EQ1.
+       
+        generalize  (encode_int_length 4 (Ptrofs.unsigned i0)).
+        intros VALLEN.
+        set (v:= (encode_int 4 (Ptrofs.unsigned i0))) in *.
+        destruct v as [| b0 ?] eqn:ENC0;simpl in VALLEN;try congruence.
+        do 4 (destruct l as [| ?b ?] ;simpl in VALLEN;try congruence).
+        simpl. rewrite Heqb0.
 
+        do 4 (solve_reloc_if;try rewrite Heqb0;simplfy_zarth;try rewrite Heqb0).
+
+        eexists. split. do 2 f_equal.
+        lia.
+
+        unfold Genv.symbol_address in *.
+        destr_in Heqo.
+
+        ++ destruct p.
+           split. repeat rewrite app_length. cbn [length].
+           rewrite LocalLib.init_data_list_size_app. simpl.
+           rewrite Heqb0. lia.
+           simpl. 
+                      
+           repeat rewrite <- app_assoc.
+           eapply storebytes_append;eauto.
+           rewrite Z.add_0_l. rewrite <- Q2.
+
+           rewrite <- Heqo. f_equal.
+           unfold encode_val. rewrite Heqb0.
+           auto.
+           
+        ++ split. repeat rewrite app_length. cbn [length].
+           rewrite LocalLib.init_data_list_size_app. simpl.
+           rewrite Heqb0. lia.
+           simpl. 
+                      
+           repeat rewrite <- app_assoc.
+           eapply storebytes_append;eauto.
+           rewrite Z.add_0_l. rewrite <- Q2.
+
+           rewrite <- Heqo. f_equal.
+        
     (* without relocentry *)
     + destr_in EQ0.
       monadInv EQ0.
@@ -892,7 +949,7 @@ Proof.
       eapply storebytes_append;eauto.
       rewrite Z.add_0_l.
       rewrite <- Q2. inv P2.  auto.
-Admitted.
+Qed.
 
 
 Lemma alloc_section_pres_mem: forall ge1 ge2 id sec sec1 sec2 m m0 reloctbl symbtbl
