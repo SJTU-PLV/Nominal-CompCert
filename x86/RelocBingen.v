@@ -88,7 +88,7 @@ Definition transl_init_data (e: option relocentry) (d:init_data) : res (list byt
     if n <=? 0 then
       Error (msg "Init_space size is less than equal zero")
     else
-      OK (concat (list_repeat (Z.to_nat n) (encode_int 1 (Int.unsigned Int.zero))))
+      OK (repeat (Byte.repr 0) (Z.to_nat n))
   | Init_addrof id ofs, Some e => 
     (* do addend <- get_reloc_addend rtbl_ofs_map dofs; *)
 

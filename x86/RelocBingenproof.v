@@ -541,7 +541,7 @@ Proof.
     intros VALLEN.
     set (v:= (encode_int 4 (Int.unsigned i))) in *.
     destruct v as [| b0 ?] eqn:ENC0;simpl in VALLEN;try congruence.
-    4 (destruct ldo  as [| ?b ?] ;simpl in VALLEN;try congruence).
+    do 4 (destruct l  as [| ?b ?] ;simpl in VALLEN;try congruence).
     assert ([Byte b0; Byte b1; Byte b2; Byte b3] = encode_val Mint32 (Vint i)).
     simpl. fold v. rewrite ENC0. simpl. auto.
     (* destruct reloctbl *)
@@ -632,40 +632,82 @@ Proof.
       apply Mem.store_storebytes. auto.
 
   (* so difficult *)
-  - simpl in *. inv H0.
-    destr_in H3. apply Z.leb_gt in Heqb0.
-    destruct z;try lia.
+  - simpl in *. destr_in H0. inv H0. apply Z.leb_gt in Heqb0.
 
-    erewrite Z.max_l in *;try lia. inv H3.
-    (* unfold Pos.to_nat.  *)
-    (* Pos.iter_op_succ *)
+    rewrite <- Z_to_nat_max in *.
+    set (n := (Z.to_nat z)) in *.
+    
+    unfold Int.zero.  unfold encode_int.
+    simpl.
+
+    clear MATCHGE Heqb0.
+
+    generalize n lm0 sz0 m1 m1' ofs H H1. clear n lm0 sz0 m1 m1' ofs H H1. induction n;intros.
+    + simpl in *.
+      eexists. split.
+      rewrite Z.add_0_r. rewrite app_nil_r. auto.
+      simpl. split. auto.
+      rewrite store_zeros_equation in H.
+      rewrite zle_true in H;try lia.
+      inv H.
+      Transparent Mem.storebytes. unfold Mem.storebytes.
+      destr. simpl. destruct m1'. f_equal.
+      apply Mem.mkmem_ext;auto.
+      simpl. unfold NMap.set.
+      unfold NMap.get.
+      apply Axioms.extensionality. intros.
+      destr. 
       
-    
-    (* encode_val encode_int Int.zero *)
-    (* Z.iter *)
-    (* Pos.iter *)
-    (* store_zeros_equation *)
-    (* Require Import Recdef. *)
-    (* generalize (Z.max_spec 0 z). intros [(? & ?) | (? & ?)]. *)
-    (* rewrite Z.max_comm in H1. *)
-    (* rewrite H1 in *. clear e H1. *)
-    
-    (* functional induction (store_zeros m1 b ofs z). *)
-    (* lia.  *)
-    (* apply zle_true in _x. *)
-    (* store_zeros_ind *)
-    (*               Vzero *)
-    (* Mem.store_ *)
-    (* inv H0. *)
-    admit.
-Admitted.
+      unfold Mem.range_perm in n.
+      unfold not in n. apply False_ind. apply n.
+      simpl. intros. lia.
+      
+    + rewrite store_zeros_equation in H.
+      rewrite zle_false in H;try lia.
+      destr_in H.
+      assert ((Z.of_nat (S n) - 1) = Z.of_nat n) by lia.
+      rewrite H0 in H. clear H0.
 
-(* can be proved ?  *)
+      simpl. destr.
+      * exploit IHn;eauto.
+        intros (lm & P1 & P2 & P3).
+        erewrite P1. eexists. split;f_equal;auto.
+        f_equal. rewrite app_assoc_reverse. auto.
+        lia.
+        split. rewrite app_length. simpl. lia.
+        eapply Mem.storebytes_concat.
+        assert ([Byte (Byte.repr 0)] = encode_val Mint8unsigned Vzero).
+        simpl. unfold encode_int. simpl. unfold rev_if_be. destr.
+        rewrite H0.
+        apply Mem.store_storebytes. eauto.
+        simpl. auto.
+      * assert (reloc_offset r <=? sz0 = false).
+        apply Z.leb_gt. lia.
+        rewrite H0. rewrite andb_false_l. clear H0.
+        assert (sz0 + 1 + Z.of_nat n <= reloc_offset r) by lia.
+        exploit IHn;eauto. clear H0.
+        intros (lm & P1 & P2 & P3).
+        erewrite P1. eexists. split;f_equal;auto.
+        f_equal. rewrite app_assoc_reverse. auto.
+        lia.
+        split. rewrite app_length. simpl. lia.
+        eapply Mem.storebytes_concat.
+        assert ([Byte (Byte.repr 0)] = encode_val Mint8unsigned Vzero).
+        simpl. unfold encode_int. simpl. unfold rev_if_be. destr.
+        rewrite H0.
+        apply Mem.store_storebytes. eauto.
+        simpl. auto.
+Qed.
+
+
 Lemma storebytes_append: forall m1 m2 m3 b start l1 l2,
     Mem.storebytes m1 b start l1 = Some m2 ->
     Mem.storebytes m2 b (start +  Z.of_nat (length l1)) l2 = Some m3 ->
     Mem.storebytes m1 b start (l1 ++ l2) = Some m3.
-Admitted.
+Proof.
+  intros.
+  eapply Mem.storebytes_concat;eauto.
+Qed.
 
 
 
@@ -679,13 +721,22 @@ Lemma transl_init_data_list_pres_mem: forall n data reloctbl reloctbl' sz l b m1
           (* store_init_data_bytes ge2 r m1 b 0 l = Some m2. *)
 Proof.
   induction n;intros.
-  (* nil: unable to solve, storebytes impossiblely produce same memory *)
-  (* apply length_zero_iff_nil in H. *)
-  (* subst. simpl in *. inv H0. inv H1. *)
-  (* simpl. eexists. split;eauto. split;eauto. *)
-  (* Transparent Mem.storebytes. unfold Mem.storebytes. *)
-  (* simpl. Mem.getN_ destr.  *)
-  admit.
+  (* finished: --unable to solve, storebytes impossiblely produce same memory--*)
+  apply length_zero_iff_nil in H.
+  subst. simpl in *. inv H0. inv H1.
+  simpl. eexists. split;eauto. split;eauto.
+  Transparent Mem.storebytes. unfold Mem.storebytes.
+  destr. simpl. destruct m2. f_equal.
+  apply Mem.mkmem_ext;auto.
+  simpl. unfold NMap.set.
+  unfold NMap.get.
+  apply Axioms.extensionality. intros.
+  destr. 
+  
+  unfold Mem.range_perm in n.
+  unfold not in n. apply False_ind. apply n.
+  simpl. intros. lia.
+
   
   exploit LocalLib.length_S_inv;eauto.
   intros (l' & a1 & A1 & B1). subst.
