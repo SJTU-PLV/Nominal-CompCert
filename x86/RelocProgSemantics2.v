@@ -300,9 +300,9 @@ Definition decode_prog_code_section (p:program) : res program1 :=
      |}.
 
 Definition empty_program1 (prog: program): program1 :=
-  {| prog_defs := [];
-     prog_public := [];
-     prog_main := 1%positive;
+  {| prog_defs := prog.(prog_defs);
+     prog_public := prog.(prog_public);
+     prog_main := prog.(prog_main);
      prog_sectable := PTree.empty section1;
      prog_symbtable := PTree.empty symbentry;
      prog_reloctables := PTree.empty reloctable;

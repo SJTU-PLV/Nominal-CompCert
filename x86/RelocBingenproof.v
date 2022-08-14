@@ -67,6 +67,8 @@ Hypothesis translate_instr_size: forall i e l l',
 
 Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.
 
+Hypothesis rev_id_eliminate_size: forall i id, instr_size i = instr_size (rev_id_eliminate id i). 
+
 Definition match_prog (p: RelocProgram.program) (tp: program) :=
   transf_program instr_size p = OK tp.
 
@@ -242,8 +244,16 @@ Qed.
 Lemma instr_eq_list_len: forall l1 l2,
     Forall2 instr_eq l1 l2 ->
     code_size instr_size l1 = code_size instr_size l2.
-Admitted.
-  
+Proof.
+  induction l1;intros.
+  inv H. auto.
+  destruct l2. inv H.
+  inv H. simpl.
+  apply IHl1 in H5.
+  rewrite H5.
+  erewrite instr_eq_size;eauto.
+Qed.
+
 Lemma decode_instrs_total_aux: forall c c' reloctbl reloctbl' ofs,
     fold_left (acc_instrs instr_size) c (OK ([], 0, reloctbl)) = OK (c', ofs, reloctbl') ->
     (* transl_code instr_size reloctbl c = OK c' -> *)
@@ -455,24 +465,153 @@ Lemma translate_code_size: forall c1 c2 c3 r r',
           transl_code instr_size r c1 = OK c2 ->
           decode_instrs' instr_size Instr_size r c2 = OK (c3,r') ->
           code_size instr_size c1 = code_size instr_size c3.
-Admitted.
+Proof.
+  intros. apply decode_instrs_total in H.
+  destruct H as (c3' & reloctbl' & P1 & P2).
+  rewrite P1 in H0. inv H0.
+  apply instr_eq_list_len. auto.
+Qed.
 
+  
+Lemma code_size_app: forall c1 c2,
+    code_size instr_size (c1++c2) = code_size instr_size c1 + code_size instr_size c2.
+Proof.
+  induction c1;simpl;auto.
+  intros. rewrite IHc1. lia.
+Qed.
+
+Lemma rev_transl_code_size_aux: forall c c1 r sz c' sz' r',
+    fold_left (rev_acc_code instr_size) c (c',sz',r') = (c1,sz,r) ->
+    code_size instr_size c = code_size instr_size c1 - code_size instr_size c'.
+Proof.
+  induction c;simpl;intros.
+  inv H. lia.
+  destr_in H.
+  apply IHc in H.
+  rewrite H.
+  rewrite code_size_app. simpl. lia.
+  destr_in H.
+  apply IHc in H.
+  rewrite H.
+  rewrite code_size_app. simpl.
+  rewrite <-rev_id_eliminate_size. simpl. lia.
+  apply IHc in H.
+  rewrite H.
+  rewrite code_size_app. simpl.
+  lia.
+Qed.
+
+  
 Lemma rev_transl_code_size:forall r c,
     code_size instr_size c = code_size instr_size (RelocProgSemantics1.rev_transl_code instr_size r c).
-Admitted.
+Proof.
+  unfold rev_transl_code.
+  intros.
+  destruct (fold_left (rev_acc_code instr_size) c ([], 0, r)) eqn:FOLD.
+  destruct p.
+  apply rev_transl_code_size_aux in FOLD.
+  rewrite FOLD. simpl.
+  lia.
+Qed.
+
+
+Lemma transl_init_data_size: forall d r l,
+    transl_init_data r d = OK l ->
+    init_data_size d = Z.of_nat (length l).
+Proof.
+  destruct d;simpl;intros.
+  destr_in H. inv H. rewrite encode_int_length. lia.
+  destr_in H. inv H. rewrite encode_int_length. lia.
+  destr_in H. inv H. rewrite encode_int_length. lia.
+  destr_in H. inv H. rewrite encode_int_length. lia.
+  destr_in H. inv H. rewrite encode_int_length. lia.
+  destr_in H. inv H. rewrite encode_int_length. lia. 
+  destr_in H. destr_in H. inv H.
+  rewrite repeat_length. lia.
+  repeat destr_in H.  rewrite encode_int_length. lia.
+  rewrite encode_int_length. lia.
+Qed.
+
+
+
+Lemma transl_init_data_list_size_aux: forall data l r sz r0 l0 sz0,
+    fold_left acc_init_data data (OK (l0, sz0, r0)) = OK (l, sz, r) ->
+    init_data_list_size data = Z.of_nat (length l) - Z.of_nat (length l0). 
+Proof.
+  induction data.
+  simpl. intros. inv H.
+  lia.
+  simpl. intros.
+  destr_in H.
+  - destruct (transl_init_data None a) eqn:T.
+    + simpl in H.
+      apply IHdata in H.
+      apply transl_init_data_size in T. rewrite T.
+      rewrite H. rewrite app_length.  lia.
+    + simpl in H.
+      clear IHdata.
+      assert (fold_left acc_init_data data (Error e) = Error e).
+      induction data. simpl in H. inv H. 
+      simpl in *. auto.
+      rewrite H in H0. inv H0.
+  - destr_in H.
+    * destruct (transl_init_data (Some r1) a) eqn:T.
+    + simpl in H.
+      apply IHdata in H.
+      apply transl_init_data_size in T. rewrite T.
+      rewrite H. rewrite app_length.  lia.
+    + simpl in H.
+      clear IHdata.
+      assert (fold_left acc_init_data data (Error e) = Error e).
+      induction data. simpl in H. inv H. 
+      simpl in *. auto.
+      rewrite H in H0. inv H0.
+    * destr_in H.
+      + destruct (transl_init_data None a) eqn:T.
+        -- simpl in H.
+           apply IHdata in H.
+           apply transl_init_data_size in T. rewrite T.
+           rewrite H. rewrite app_length.  lia.
+        -- simpl in H.
+           clear IHdata.
+           assert (fold_left acc_init_data data (Error e) = Error e).
+           induction data. simpl in H. inv H. 
+           simpl in *. auto.
+           rewrite H in H0. inv H0.
+      + set (msg:= (msg "ofs greater than reloc_offset: skipping someone? ") ) in *.
+        simpl in H.
+        clear IHdata.
+        assert (fold_left acc_init_data data (Error msg) = Error msg).
+        induction data. simpl in H. inv H. 
+        simpl in *. auto.
+        rewrite H in H0. inv H0.
+Qed.
 
 
 Lemma transl_init_data_list_size: forall data l r,
     transl_init_data_list r data = OK l ->
     init_data_list_size data = Z.of_nat (length l).
-Admitted.
+Proof.
+  unfold transl_init_data_list;intros.
+  monadInv H. apply transl_init_data_list_size_aux in EQ.
+  simpl in EQ. lia.
+Qed.
 
 
-Lemma store_init_data_list_app: forall ge m1 m2 b start d1 d2 ,
+Lemma store_init_data_list_split: forall d1 d2 ge m1 m2 b start ,
     store_init_data_list ge m1 b start (d1++d2) = Some m2 ->
     exists m1',  store_init_data_list ge m1 b start d1 = Some m1' /\
             store_init_data_list ge m1' b (start + init_data_list_size d1) d2 = Some m2.
-Admitted.
+Proof.
+  induction d1;intros.
+  simpl in *. eexists. split;eauto.
+  rewrite Z.add_0_r. auto.
+  simpl in H. destr_in H.
+  simpl. rewrite Heqo. exploit IHd1;eauto.
+  intros (m1' & P1 & P2).
+  rewrite P1. eexists. split;eauto.
+  rewrite Z.add_assoc. auto.
+Qed.
 
 
 (* exclude Vptr , Init_space is so difficult*)
@@ -744,7 +883,7 @@ Proof.
   rewrite fold_left_app in H0.
   simpl in H0. unfold acc_init_data in H0 at 1.
   monadInv H0.
-  exploit store_init_data_list_app;eauto.
+  exploit store_init_data_list_split;eauto.
   intros (m1' & P1 & P2).
   destruct ProdR.
   - monadInv EQ0.
@@ -1028,9 +1167,16 @@ Let tge := globalenv instr_size Instr_size tprog.
 
 Lemma senv_refl:
   (Genv.genv_senv ge) = (Genv.genv_senv tge).
-Admitted.
+Proof.
+  unfold ge,tge.
+  unfold match_prog in TRANSF.
+  unfold transf_program in TRANSF.
+  monadInv TRANSF. unfold globalenv.
+  destr. simpl. unfold decode_prog_code_section in Heqr.
+  simpl in *. monadInv Heqr. simpl. auto.
+Qed.
 
-
+  
 (* instruction map is mostly identical *)
 Lemma find_instr_refl: forall b ofs i,
     Genv.genv_instrs ge b ofs = Some i ->
@@ -1051,9 +1197,23 @@ Admitted.
 
 Lemma find_ext_funct_refl: forall v,
     Genv.find_ext_funct ge v = Genv.find_ext_funct tge v.
-Admitted.
+Proof.
+  unfold ge,tge. unfold globalenv.
+  unfold match_prog in TRANSF.
+  unfold RelocProgSemantics1.globalenv.
+  destr. unfold RelocProgSemantics.globalenv.
+  simpl. unfold Genv.find_ext_funct.
+  simpl. intros. destr.
+  destr. unfold decode_prog_code_section in Heqr.
+  monadInv Heqr. simpl. unfold transf_program in TRANSF.
+  monadInv TRANSF. simpl. auto.
+  unfold transf_program in TRANSF.
+  monadInv TRANSF. unfold empty_program1. simpl.
+  unfold RelocProgSemantics.globalenv.
+  simpl. unfold Genv.find_ext_funct.
+  simpl. intros. destr.
+Qed.  
   
-
 Lemma symbol_address_pres: forall id ofs,
     RelocProgSemantics.Genv.symbol_address ge id ofs =
     RelocProgSemantics.Genv.symbol_address tge id ofs.
@@ -1216,13 +1376,83 @@ Lemma transf_initial_state:forall st1 rs,
   cbn [prog_main]. auto.
 Qed.
 
+Lemma eval_addrmode_match_ge: forall ge1 ge2 a rs (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+    eval_addrmode ge1 a rs = eval_addrmode ge2 a rs.
+Proof.
+  unfold eval_addrmode. destruct Archi.ptr64;intros.
+  - unfold eval_addrmode64.
+    destruct a. f_equal.
+    f_equal. destr.
+    destruct p. eauto.
+  - unfold eval_addrmode32.
+    destruct a. f_equal.
+    f_equal. destr.
+    destruct p. eauto.
+Qed.
+
+Lemma exec_load_match_ge: forall sz ge1 ge2 chunk m a rs rd (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs) ,
+          exec_load sz ge1 chunk m a rs rd = exec_load sz ge2 chunk m a rs rd.
+Proof.
+  unfold exec_load.
+  intros. erewrite eval_addrmode_match_ge.
+  eauto. auto.
+Qed.
+
+Lemma exec_store_match_ge: forall sz ge1 ge2 chunk m a rs rd l (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs) ,
+          exec_store sz ge1 chunk m a rs rd l = exec_store sz ge2 chunk m a rs rd l.
+Proof.
+  unfold exec_store.
+  intros. erewrite eval_addrmode_match_ge.
+  eauto. auto.
+Qed.
+
+Lemma eval_builtin_arg_match_ge: forall rs sp m arg varg ge1 ge2 (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+        eval_builtin_arg preg ge1 rs sp m arg varg ->
+        eval_builtin_arg preg ge2 rs sp m arg varg.
+Proof.
+  induction 2;try constructor;auto.
+  rewrite MATCHGE in H. auto.
+  rewrite MATCHGE. constructor.
+Qed.
+
+Lemma eval_builtin_args_match_ge: forall rs sp m args vargs ge1 ge2 (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+        eval_builtin_args preg ge1 rs sp m args vargs ->
+        eval_builtin_args preg ge2 rs sp m args vargs.
+Proof.
+  induction 2.
+  - constructor.
+  - econstructor.
+    eapply eval_builtin_arg_match_ge;eauto.
+    eauto.
+Qed.
+
 Lemma exec_instr_refl: forall i rs m,
     exec_instr instr_size ge i rs m = exec_instr instr_size tge i rs m.
-Admitted.
+Proof.
+  destruct i;simpl;auto;intros.
+  1-27: try (erewrite symbol_address_pres;eauto).
+  1-24: try (erewrite exec_load_match_ge;eauto;eapply symbol_address_pres;eauto).
+  1-12: try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
+  do 3 f_equal.
+  unfold eval_addrmode32.
+  destruct a. f_equal.
+  f_equal. destr.
+  destruct p. eapply symbol_address_pres;eauto.
+  do 3 f_equal.
+  unfold eval_addrmode64.
+  destruct a. f_equal.
+  f_equal. destr.
+  destruct p. eapply symbol_address_pres;eauto.
+Qed.
+
 
 Lemma eval_addrmode_refl: forall a rs,
     eval_addrmode ge a rs = eval_addrmode tge a rs.
-Admitted.
+Proof.
+  intros.
+  erewrite eval_addrmode_match_ge. eauto.
+  apply symbol_address_pres.
+Qed. 
 
   
 Lemma step_simulation: forall st1 st2 t,
@@ -1324,6 +1554,7 @@ Proof.
   - unfold Genv.find_instr in H1.
   (* builtin instr impossible *)
     admit.
+
   - 
     rewrite find_ext_funct_refl in H0.
     eapply exec_step_external;eauto.
