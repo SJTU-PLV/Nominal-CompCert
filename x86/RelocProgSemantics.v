@@ -765,6 +765,12 @@ Definition globalenv {D: Type} (p: RelocProg.program fundef unit instruction D) 
   Genv.mkgenv symbmap extfuns imap p.(prog_senv).
 
 
+(* code map = code *)
+Lemma gen_code_map_inv: forall D (sectbl : RelocProg.sectable instruction D) id ofs i c,
+    (gen_code_map sectbl) (Global id) ofs = Some i ->
+    (sectbl ! id = Some (sec_text c) /\ In i c).
+Admitted.
+
 
 (** Initialization of memory *)
 Section WITHGE1.
