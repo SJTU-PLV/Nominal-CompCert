@@ -177,21 +177,134 @@ Qed.
 Lemma rev_id_eliminate_instr_eq: forall i1 i2 id,
     instr_eq i1 i2 ->
     instr_eq (rev_id_eliminate id i1) (rev_id_eliminate id i2).
-Admitted.
+Proof.
+  intros.
+  clear instr_eq_size.
+  unfold instr_eq in H. destruct H.
+    (* i = i1 *)
+  subst. left. auto.
+
+  (* i is not well defined *)
+  destruct i1;try inv H;destr_in H;subst.
+  1-10: try (try destruct H;subst;simpl;unfold instr_eq;auto).
+
+  1-6 :
+    try (try destr_in H;destruct H;subst;
+         simpl;do 2 destr;
+         unfold instr_eq; try rewrite Heqb; auto;
+         
+         destruct p; unfold instr_eq; try rewrite Heqb; auto).
+ 
+  destruct H. subst. simpl. do 2 destr. unfold instr_eq. auto.
+  destruct p; unfold instr_eq; auto.
+  destruct H. subst. simpl. do 2 destr. unfold instr_eq. auto.
+  destruct p; unfold instr_eq; auto.
+
+  simpl. unfold instr_eq. right. auto.
+  
+Qed.
+
+Lemma rev_transl_code_instr_eq_aux: forall n c1 c2 r c z r0 c0 z0 r1,
+    length c1 = n ->
+    Forall2 instr_eq c1 c2 ->
+    fold_left (rev_acc_code instr_size) c1 ([], 0, r) = (c, z, r0) ->
+    fold_left (rev_acc_code instr_size) c2 ([], 0, r) = (c0, z0, r1) ->
+    Forall2 instr_eq c c0 /\ z = z0 /\ r0 = r1.
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl in H0. inv H1. inv H0. simpl in H2.
+  inv H2. auto.
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a1 & A1 & B1). subst.
+  clear H.
+  apply Forall2_app_inv_l in H0.
+  destruct H0 as (l1' & l2' & P1 & P2 & P3).
+  inv P2. inv H5.
+  rewrite fold_left_app in *.
+  simpl in *. unfold rev_acc_code in H1 at 1.
+  unfold rev_acc_code in H2 at 1.
+  destr_in H1. destr_in H2. destruct p. destruct p0.
+  exploit IHn;eauto. intros (F1 & ? & ?).
+  subst. destr_in H2.
+  + inv H2. inv H1.
+    split. apply Forall2_app;auto.
+    split. erewrite instr_eq_size;eauto.
+    auto.
+  + exploit instr_eq_size;eauto.
+    intros. rewrite H in*.
+    destr_in H2.
+    * inv H1. inv H2.
+      split. apply Forall2_app;auto.
+      constructor. apply rev_id_eliminate_instr_eq;auto.
+      auto. split;auto.
+    * inv H1. inv H2.
+      split. apply Forall2_app;auto.
+      constructor. 
+      auto. split;auto.
+Qed.
 
 (* used in gen_instr_map_refl *)
 Lemma rev_transl_code_instr_eq: forall c1 c2 r,
     Forall2 instr_eq c1 c2 ->
     Forall2 instr_eq (rev_transl_code instr_size r c1) (rev_transl_code instr_size r c2).
-Admitted.
+Proof.
+  unfold rev_transl_code. intros.
+  destruct ( (fold_left (rev_acc_code instr_size) c1 ([], 0, r))) eqn:FOLD1.
+  destruct ( (fold_left (rev_acc_code instr_size) c2 ([], 0, r))) eqn:FOLD2.
+  destruct p. destruct p0.
+  simpl.
+  exploit rev_transl_code_instr_eq_aux;eauto.
+  intros (P1 & P2 & P3). subst.
+  auto.
+Qed.
 
-Lemma gen_instr_map_canonical: forall c1 c2 ofs i (R: instruction -> instruction -> Prop),
+Lemma gen_instr_map_canonical_aux: forall n (c1 c2:code) sz m (R: instruction -> instruction -> Prop) (Rsize: forall i1 i2 , R i1 i2 -> instr_size i1 = instr_size i2 ),
+    length c1 = n ->
+    fold_left (acc_instr_map instr_size) c1 (Ptrofs.zero, fun _ : ptrofs => None) = (sz, m) ->
+    Forall2 R c1 c2 ->
+    exists m', fold_left (acc_instr_map instr_size) c2 (Ptrofs.zero, fun _ : ptrofs => None) = (sz, m') /\ (forall ofs, option_rel R (m ofs) (m' ofs)).
+Proof.
+
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl in H0. inv H1. inv H0. simpl. eexists.
+  split;eauto. constructor.
+
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a1 & A1 & B1). subst.
+  clear H. apply Forall2_app_inv_l in H1.
+  destruct H1 as (l1' & l2' & P1 & P2 & P3). subst.
+  inv P2. inv H4.
+  rewrite fold_left_app in *.
+  simpl in *. unfold acc_instr_map in H0 at 1.
+  destruct fold_left eqn: FOLD in H0.
+  inv H0.
+  exploit IHn;eauto.
+
+  intros (m' & A1 & A2).
+  rewrite A1.
+  simpl. eexists. split;eauto.
+  f_equal. erewrite <- Rsize;eauto.
+  eapply eq_refl.
+  intros. simpl. destr. constructor;auto.
+  auto.
+Qed.
+
+Lemma gen_instr_map_canonical: forall c1 c2 ofs i (R: instruction -> instruction -> Prop) (Rsize: forall i1 i2 , R i1 i2 -> instr_size i1 = instr_size i2 ),
     gen_instr_map instr_size c1 ofs = Some i ->
     Forall2 R c1 c2 ->
     exists i', gen_instr_map instr_size c2 ofs = Some i' /\ R i i'.
-Admitted.
-
-                                                        
+Proof.
+  unfold gen_instr_map;intros.
+  destruct (fold_left (acc_instr_map instr_size) c1
+          (Ptrofs.zero, fun _ : ptrofs => None)) eqn:FOLD.
+  exploit gen_instr_map_canonical_aux;eauto.
+  intros (m' & P1 & P2).
+  generalize (P2  ofs). intros.
+  rewrite H in H1. inv H1.
+  exists y. rewrite P1. split;auto.
+Qed.
 
 Lemma decode_instrs_bytes_app': forall l l' l1,
     decode_instrs_bytes l [] = OK l' ->

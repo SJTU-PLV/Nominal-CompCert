@@ -455,7 +455,7 @@ module Target(System: SYSTEM):TARGET =
                      label lbl rip_rel
                      freg rd comment (camlfloat_of_coqfloat n)
       | Pmovsd_fm(rd, a) | Pmovsd_fm_a(rd, a) ->
-          fprintf oc "	movsd	%a, %a\n" addressing a freg rd
+          fprintf oc "	decorations	%a, %a\n" addressing a freg rd
       | Pmovsd_mf(a, r1) | Pmovsd_mf_a(a, r1) ->
           fprintf oc "	movsd	%a, %a\n" freg r1 addressing a
       | Pmovss_fi(rd, n) ->

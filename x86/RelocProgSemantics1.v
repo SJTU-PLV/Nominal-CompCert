@@ -59,7 +59,13 @@ Definition rev_id_eliminate (symb: ident) (i:instruction) :=
      (Pmovsd_fm rd (Addrmode rb ss (inr (symb, ptrofs))))
   | Pmovsd_mf (Addrmode rb ss (inr disp)) rs =>
     let '(id, ptrofs) := disp in
-     (Pmovsd_mf (Addrmode rb ss (inr (symb, ptrofs))) rs)
+    (Pmovsd_mf (Addrmode rb ss (inr (symb, ptrofs))) rs)
+  | Pmovsd_fm_a rd (Addrmode rb ss (inr disp)) =>
+    let '(id, ptrofs) := disp in
+    (Pmovsd_fm rd (Addrmode rb ss (inr (symb, ptrofs))))
+  | Pmovsd_mf_a (Addrmode rb ss (inr disp)) rs =>
+    let '(id, ptrofs) := disp in
+     (Pmovsd_mf (Addrmode rb ss (inr (symb, ptrofs))) rs)  
   | Pmovss_fm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
      (Pmovss_fm rd (Addrmode rb ss (inr (symb, ptrofs))))

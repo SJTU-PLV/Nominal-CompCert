@@ -1211,8 +1211,7 @@ Definition instr_eq (i1 i2: instruction) : Prop :=
   i1 = i2 \/
   match i1,i2 with
   | Pmovsd_mf_a a1 f1, Pmovsd_mf a2 f2 => a1 = a2 /\ f1 = f2
-  (* why translate Pmovsd_fm_a is rep *)
-  | Pmovsd_fm_a a1 f1, Pmovss_fm a2 f2 => a1 = a2 /\ f1 = f2
+  | Pmovsd_fm_a a1 f1, Pmovsd_fm a2 f2 => a1 = a2 /\ f1 = f2
   | Pmov_mr_a a1 r1, Pmovq_mr a2 r2 =>
     if Archi.ptr64 then a1 = a2 /\ r1 = r2 else False
   | Pmov_mr_a a1 r1, Asm.Pmovl_mr a2 r2 =>
@@ -1559,11 +1558,15 @@ Proof.
         intros (NOTADDRE0, [(?, (?, A))| (?, (?, (?, (?, (?, A)))))]);
         subst; cbn[app] in *; autounfold with decunfold;
           rewrite A; cbn[bind];
-            eexists;split;eauto;unfold instr_eq;right;split;symmetry;auto with encdec.
+            eexists;split;eauto;unfold instr_eq;
+              destruct ProdR;simpl in NOTADDRE0;try congruence;
+      simpl;eauto.
+
     +  exploit encode_rex_prefix_fa_result; eauto;
         intros (NOTADDRE0, [(?, (?, A))| (?, (?, (?, (?, (?, A)))))]);
         subst; cbn[app] in *; autounfold with decunfold;
           rewrite A; cbn[bind];
-            eexists;split;eauto;unfold instr_eq;right;split;symmetry;auto with encdec.
+            eexists;split;eauto;unfold instr_eq;destruct ProdR;simpl in NOTADDRE0;try congruence;
+      simpl;eauto.
     + simpl. eexists;split;eauto;unfold instr_eq;right. auto.
 Qed.      

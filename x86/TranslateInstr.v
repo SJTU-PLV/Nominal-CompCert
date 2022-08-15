@@ -1437,7 +1437,7 @@ Definition translate_instr (e: option relocentry) (i:instruction) : res (list In
     do rex_ra <- encode_rex_prefix_fa rd addr;
     let (orex_rdbits, a) := rex_ra in
     let (orex, rdbits) := orex_rdbits in
-    OK ([REP] ++ orex ++ [Pmovss_d_fm a rdbits])
+    OK ([REPNZ] ++ orex ++ [Pmovss_d_fm a rdbits])
   | Asm.Pxorl_r r =>
     do rex_rr <- encode_rex_prefix_rr r r;
     let (oREX_rdbits, r1bits) := rex_rr in
