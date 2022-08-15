@@ -72,6 +72,25 @@ Hypothesis rev_id_eliminate_size: forall i id, instr_size i = instr_size (rev_id
 Definition match_prog (p: RelocProgram.program) (tp: program) :=
   transf_program instr_size p = OK tp.
 
+(* used in gen_instr_map_refl *)
+Lemma rev_id_eliminate_instr_eq: forall i1 i2 id,
+    instr_eq i1 i2 ->
+    instr_eq (rev_id_eliminate id i1) (rev_id_eliminate id i2).
+Admitted.
+
+(* used in gen_instr_map_refl *)
+Lemma rev_transl_code_instr_eq: forall c1 c2 r,
+    Forall2 instr_eq c1 c2 ->
+    Forall2 instr_eq (rev_transl_code instr_size r c1) (rev_transl_code instr_size r c2).
+Admitted.
+
+Lemma gen_instr_map_canonical: forall c1 c2 ofs i (R: instruction -> instruction -> Prop),
+    gen_instr_map instr_size c1 ofs = Some i ->
+    Forall2 R c1 c2 ->
+    exists i', gen_instr_map instr_size c2 ofs = Some i' /\ R i i'.
+Admitted.
+
+                                                        
 
 Lemma decode_instrs_bytes_app': forall l l' l1,
     decode_instrs_bytes l [] = OK l' ->
@@ -1201,18 +1220,21 @@ Proof.
   monadInv A. simpl in *.
   clear ge tge.
 
-  intros.
-  unfold gen_code_map in *. rewrite PTree.fold_spec.
+  intros. unfold gen_code_map in *.
+  rewrite PTree.fold_spec.
   rewrite PTree.fold_spec in H.
   
-
   exploit PTree_fold_elements. apply EQ. intros F1. clear EQ.
   exploit PTree_fold_elements. apply EQ0. intros F2. clear EQ0.
   unfold RelocProg.sectable in *.
   generalize (PTree_map_elements _ _ (RelocProgSemantics1.rev_section instr_size (prog_reloctables prog)) (prog_sectable prog)).
   simpl. intros F3.
-    (* induction on (prog_reloctables prog) *)
-  set (l:= @PTree.elements RelocProgram.section (prog_sectable prog)) in *.
+  generalize (PTree_map_elements _ _ (RelocProgSemantics1.rev_section instr_size (prog_reloctables prog)) x0).
+  simpl. intros F4.
+  
+  (* induction on (prog_reloctables prog) *)
+  unfold RelocProgram.section in *.
+  set (l:= @PTree.elements _ (prog_sectable prog)) in *.
   set (l1:= @PTree.elements _ x0) in *.
   set (l2 := @PTree.elements _ x) in *.
   unfold RelocProgram.section in F3,H.
@@ -1221,53 +1243,103 @@ Proof.
             (@PTree.map (RelocProg.section instruction init_data) _
                (rev_section instr_size
                                                 (prog_reloctables prog)) (prog_sectable prog)))) in *.
-
-  revert F1 F2 F3 H.
-  generalize l l1 l2 l3 b ofs i.
-Admitted.
-(* clear l l1 l2 l3 b ofs i. *)
-(*   clear x x0. *)
-(*   intros l. *)
-(*   assert (LEN: exists n, length l = n). *)
-(*   { induction l. exists O. auto. *)
-(*     destruct IHl. *)
-(*     exists (S x). simpl. auto. } *)
-(*   destruct LEN. revert H. *)
-(*   generalize x,l. clear x l. *)
+  set (l4:= (@PTree.elements _
+            (@PTree.map (RelocProg.section instruction byte) _
+               (rev_section instr_size
+                                                (prog_reloctables prog)) x0))) in *.
   
-(*   induction x;intros. *)
-(*   - rewrite length_zero_iff_nil in H. subst. *)
-(*     inv F3. inv F1. inv F2. inv H0. *)
-(*   - apply LocalLib.length_S_inv in H. *)
-(*     destruct H as (l' & a & A1 & A2). subst. *)
+  revert F1 F2 F3 F4 H.
+  generalize l l1 l2 l3 l4 b ofs i x0.
+  clear l l1 l2 l3 l4 b ofs i.
+  clear x x0.
+  intros l.
+  assert (LEN: exists n, length l = n).
+  { induction l. exists O. auto.
+    destruct IHl.
+    exists (S x). simpl. auto. }
+  destruct LEN. revert H.
+  generalize x,l. clear x l.
+  
+  induction x;intros.
+  - rewrite length_zero_iff_nil in H. subst.
+    inv F3. inv F1. inv F2. inv H0.
+  - apply LocalLib.length_S_inv in H.
+    destruct H as (l' & a & A1 & A2). subst.
 
    
-(*     apply list_forall2_app_inv_l in F3. *)
-(*     destruct F3 as (F3l1 & F3l2 & L3 &  F3' & F3''). subst. *)
-(*     inv F3''. destruct H2 as (FST3 & REV1). *)
-(*     inv H4. *)
-(*     apply list_forall2_app_inv_l in F1. *)
-(*     destruct F1 as (F1l1 & F1l2 & L1 &  F1' & F1''). subst. *)
-(*     inv F1''. destruct H2 as (FST1 & REV2). *)
-(*     inv H4. *)
-(*     apply list_forall2_app_inv_l in F2. *)
-(*     destruct F2 as (F2l1 & F2l2 & L2 &  F2' & F2''). subst. *)
-(*     inv F2''. destruct H2 as (FST2 & REV3). *)
-(*     inv H4. *)
+    apply list_forall2_app_inv_l in F3.
+    destruct F3 as (F3l1 & F3l2 & L3 &  F3' & F3''). subst.
+    inv F3''. destruct H2 as (FST3 & REV1).
+    inv H4.
+    apply list_forall2_app_inv_l in F1.
+    destruct F1 as (F1l1 & F1l2 & L1 &  F1' & F1''). subst.
+    inv F1''. destruct H2 as (FST1 & REV2).
+    inv H4.
+    apply list_forall2_app_inv_l in F2.
+    destruct F2 as (F2l1 & F2l2 & L2 &  F2' & F2''). subst.
+    inv F2''. destruct H2 as (FST2 & REV3).
+    inv H4.
+    apply list_forall2_app_inv_l in F4.
+    destruct F4 as (F4l1 & F4l2 & L4 &  F4' & F4''). subst.
+    inv F4''. destruct H2 as (FST4 & REV4).
+    inv H4.
 
-(*     rewrite fold_left_app in *. *)
-(*     simpl in *. destruct a. destruct b1. destruct b0. *)
-(*     simpl in *. subst. *)
+    rewrite fold_left_app in *.
+    simpl in *. destruct a. destruct b1. destruct b0.
+    destruct b2. destruct b3.
+    simpl in *. subst.
 
-(*     destruct b2. simpl in *. *)
-(*     destruct (Block.eq_block (Global p) b). *)
-(*     + unfold acc_code_map in *. *)
-(*       destr. *)
-      
-(*     exploit IHx;eauto. *)
-    
-    
-(* Admitted. *)
+    unfold acc_fold_section in REV2.
+    monadInv REV2. 
+
+    destruct (Block.eq_block (Global p3) b).
+    + subst.
+      destruct s.
+      * simpl in EQ. monadInv EQ.
+        simpl in REV3. monadInv REV3.
+        simpl in H0.
+        simpl. destr.
+        -- unfold acc_code_map in *.
+           rewrite NMap.gss in *.
+           exploit decode_instrs_total;eauto.
+           intros (c1 & reloctbl' & DEC & INSTREQ).
+           rewrite EQ in DEC. inv DEC.
+           exploit (rev_transl_code_instr_eq code c1 r);eauto.
+           intros.
+           eapply gen_instr_map_canonical;eauto.
+        -- unfold acc_code_map in *.
+           rewrite NMap.gss in *.
+           exploit decode_instrs_total;eauto.
+           intros (c1 & reloctbl' & DEC & INSTREQ).
+           rewrite EQ in DEC. inv DEC.
+           exploit (rev_transl_code_instr_eq code c1 []);eauto.
+           intros.
+           eapply gen_instr_map_canonical;eauto.
+      * simpl in EQ. monadInv EQ.
+        simpl in REV3. monadInv REV3.
+        simpl in H0.
+        simpl. eapply IHx;eauto.
+      * simpl in EQ. monadInv EQ.
+        simpl in REV3. monadInv REV3.
+        simpl in H0.
+        simpl. eapply IHx;eauto.
+
+    + destruct s.
+      * simpl in EQ. monadInv EQ.
+        simpl in REV3. monadInv REV3.
+        simpl in H0.
+        simpl. destr.
+        -- simpl. simpl in H0.
+           rewrite NMap.gso in *;eauto.
+        -- simpl. simpl in H0.
+           rewrite NMap.gso in *;eauto.
+      * simpl in EQ. monadInv EQ.
+        simpl in REV3. monadInv REV3.
+        simpl in *. eauto.
+      * simpl in EQ. monadInv EQ.
+        simpl in REV3. monadInv REV3.
+        simpl in *. eauto.    
+Qed.
 
 Lemma find_ext_funct_refl: forall v,
     Genv.find_ext_funct ge v = Genv.find_ext_funct tge v.
