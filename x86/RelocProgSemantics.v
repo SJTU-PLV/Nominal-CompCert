@@ -764,14 +764,114 @@ Definition globalenv {D: Type} (p: RelocProg.program fundef unit instruction D) 
   let extfuns := gen_extfuns p.(prog_defs) in
   Genv.mkgenv symbmap extfuns imap p.(prog_senv).
 
+Lemma gen_instr_map_inv_aux: forall n c ofs i ofs1 m1,
+    length c = n ->
+    fold_left acc_instr_map c
+              (Ptrofs.zero, fun _ : ptrofs => None) = (ofs1,m1) ->
+    m1 ofs = Some i ->
+    In i c.
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl in H0. inv H0.  inv H1.
+  
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a1 & A1 & B1). subst.
+  clear H.
+  rewrite fold_left_app in H0. simpl in H0.
+  destruct ((fold_left acc_instr_map l'
+            (Ptrofs.zero, fun _ : ptrofs => None))) eqn: FOLD.
+  unfold acc_instr_map in H0 at 1. inv H0.
+  destr_in H1.
+  + inv H1. apply in_app.
+    right. constructor. auto.
+  +  apply in_app. left. eapply IHn;eauto.
+Qed.
+
+Lemma gen_instr_map_inv: forall c ofs i,
+    gen_instr_map c ofs = Some i ->
+    In i c.
+Proof.
+  unfold gen_instr_map. intros.
+  destruct (fold_left acc_instr_map c (Ptrofs.zero, fun _ : ptrofs => None)) eqn: FOLD.
+  eapply gen_instr_map_inv_aux;eauto.
+Qed.
+
 
 (* code map = code *)
-Lemma gen_code_map_inv: forall D (sectbl : RelocProg.sectable instruction D) id ofs i c,
-    (gen_code_map sectbl) (Global id) ofs = Some i ->
-    (sectbl ! id = Some (sec_text c) /\ In i c).
-Admitted.
+Lemma gen_code_map_inv: forall D (sectbl : RelocProg.sectable instruction D) b ofs i,
+    (gen_code_map sectbl) b ofs = Some i ->
+    (exists id c, b = Global id /\ sectbl ! id = Some (sec_text c) /\ In i c).
+Proof.
+  unfold gen_code_map. intros.
+  rewrite PTree.fold_spec in H.
+  assert (exists id c, b = Global id /\ In (id, sec_text c) (PTree.elements sectbl) /\ In i c).
+  { set (l:= (PTree.elements sectbl)) in *.
+    generalize H.
+    generalize l i ofs b.
+    clear H l i ofs b. clear sectbl.
+    intro l.
+    assert (LEN: exists n, length l = n).
+    { induction l. exists O. auto.
+      destruct IHl.
+      eexists. simpl. auto. }
 
+    destruct LEN. generalize x l H.
+    clear H x l.
+    induction x;intros.
+    rewrite length_zero_iff_nil in H. subst.
+    simpl in H0. rewrite NMap.gi in H0. inv H0.
 
+    exploit LocalLib.length_S_inv;eauto.
+    intros (l' & a1 & A1 & B1). subst.
+    clear H.
+    rewrite fold_left_app in H0.
+    simpl in H0. destruct a1. simpl in *.
+    destruct (eq_block (Global p) b);subst.
+    - destruct s;simpl in H0.
+      + rewrite NMap.gss in H0.
+        exists p, code. split;eauto.
+        rewrite in_app_iff. split. right. constructor.
+        auto. eapply gen_instr_map_inv. eauto.
+      + eapply IHx in H0;eauto.
+        destruct H0 as (id & c & P1 & P2 & P3).
+        inv P1. exists id,c.
+        split;auto. split;auto.
+        apply in_app.
+        left. auto.
+      + eapply IHx in H0;eauto.
+        destruct H0 as (id & c & P1 & P2 & P3).
+        inv P1. exists id,c.
+        split;auto. split;auto.
+        apply in_app.
+        left. auto.
+    - destruct s;simpl in H0.
+      + rewrite NMap.gso in H0;auto.
+        eapply IHx in H0;eauto.
+        destruct H0 as (id & c & P1 & P2 & P3).
+        inv P1. exists id,c.
+        split;auto. split;auto.
+        apply in_app.
+        left. auto.
+      + eapply IHx in H0;eauto.
+        destruct H0 as (id & c & P1 & P2 & P3).
+        inv P1. exists id,c.
+        split;auto. split;auto.
+        apply in_app.
+        left. auto.
+      + eapply IHx in H0;eauto.
+        destruct H0 as (id & c & P1 & P2 & P3).
+        inv P1. exists id,c.
+        split;auto. split;auto.
+        apply in_app.
+        left. auto.   }
+  destruct H0 as (id & c & P1 & P2 & P3).
+  exists id,c. split;auto. split;auto.
+  apply PTree.elements_complete.
+  auto.
+Qed.
+
+        
 (** Initialization of memory *)
 Section WITHGE1.
 

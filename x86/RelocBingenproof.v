@@ -72,6 +72,107 @@ Hypothesis rev_id_eliminate_size: forall i id, instr_size i = instr_size (rev_id
 Definition match_prog (p: RelocProgram.program) (tp: program) :=
   transf_program instr_size p = OK tp.
 
+Lemma transl_code_inv_aux: forall n c i r c1 z1 r1,
+    length c = n ->
+    fold_left (acc_instrs instr_size) c (OK ([],0,r)) = OK (c1,z1,r1) ->
+    In i c ->
+    exists (i' : list Instruction) (e : option relocentry),
+      translate_instr e i = OK i'.
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl in H0. inv H1.
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a1 & A1 & B1). subst.
+  clear H.
+  rewrite fold_left_app in H0.
+  simpl in H0. unfold acc_instrs in H0 at 1.
+  monadInv H0. apply in_app in H1.
+  destruct H1.
+  - eapply IHn in EQ;eauto.
+  - inv H. destr_in EQ0.
+    monadInv EQ0.
+    eauto.
+    destr_in EQ0.
+    monadInv EQ0. eauto.
+    monadInv EQ0. eauto.
+    inv H0.
+Qed.
+
+Lemma transl_code_inv: forall c c1 i r,
+    In i c ->
+    transl_code instr_size r c = OK c1 ->
+    exists i' e, translate_instr e i = OK i'.
+Proof.
+  unfold transl_code. intros.
+  monadInv H0.
+  eapply transl_code_inv_aux;eauto.
+Qed.
+
+Lemma rev_transl_code_in_aux: forall n i c r c1 z1 r1,
+    length c = n ->
+    fold_left (rev_acc_code instr_size) c ([],0,r) = (c1,z1,r1) ->
+    In i c1 ->
+    exists i' : instruction,
+      In i' c /\
+      ((exists id : ident, rev_id_eliminate id i' = i) \/ i = i').
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl in H0. inv H0. inv H1.
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a1 & A1 & B1). subst.
+  clear H.
+  rewrite fold_left_app in H0.
+  simpl in H0.
+  unfold rev_acc_code in H0 at 1. 
+  destr_in H0. destruct p.
+  destr_in H0. subst.
+  - inv H0. apply in_app in H1.
+    destruct H1.
+    + eapply IHn in Heqp;eauto.
+      destruct Heqp as (i' & In' & P1).
+      exists i'. split. apply in_app.
+      left. auto.
+      auto.
+    + exists a1. split. apply in_app.
+      right. constructor. auto.
+      inv H. right. auto.
+      inv H0.
+  - destr_in H0.
+    + inv H0. apply in_app in H1.
+      destruct H1.
+      * eapply IHn in Heqp;eauto.
+        destruct Heqp as (i' & In' & P1).
+        exists i'. split. apply in_app.
+        left. auto.
+        auto.
+      * exists a1. split. apply in_app.
+        right. constructor. auto.
+        inv H. left. eauto.
+        inv H0.
+    + inv H0. apply in_app in H1.
+      destruct H1.
+      * eapply IHn in Heqp;eauto.
+        destruct Heqp as (i' & In' & P1).
+        exists i'. split. apply in_app.
+        left. auto.
+        auto.
+      * exists a1. split. apply in_app.
+        right. constructor. auto.
+        inv H. right. eauto.
+        inv H0.
+Qed.
+
+Lemma rev_transl_code_in: forall i c r,
+    In i (rev_transl_code instr_size r c) ->
+    exists i', In i' c /\ ((exists id, rev_id_eliminate id i' = i) \/ i = i').
+Proof.
+  unfold rev_transl_code. intros.
+  destruct ((fold_left (rev_acc_code instr_size) c ([], 0, r))) eqn:FOLD. destruct p. simpl in H.
+  eapply rev_transl_code_in_aux;eauto.
+Qed.
+
 (* used in gen_instr_map_refl *)
 Lemma rev_id_eliminate_instr_eq: forall i1 i2 id,
     instr_eq i1 i2 ->
@@ -1199,10 +1300,23 @@ Lemma transl_instr_in_code: forall c i id,
     prog.(prog_sectable) ! id = Some (sec_text c) ->
     In i c ->
     exists i' e, translate_instr e i = OK i'.
-Admitted.
+Proof.
+  unfold match_prog in TRANSF.
+  unfold transf_program in TRANSF.
+  monadInv TRANSF.
+  unfold transl_sectable in EQ.
+  intros. apply PTree.elements_correct in H.
+  exploit PTree_fold_elements;eauto.
+  intros F.
+  exploit list_forall2_in_left;eauto.
+  simpl.
+  intros (x2 & In2 & ? & F2). subst.
+  unfold acc_fold_section in F2. monadInv F2.
+  simpl in EQ0. monadInv EQ0.
+  eapply transl_code_inv;eauto.
+Qed.
 
-  
-  
+
 (* instruction map is mostly identical *)
 Lemma find_instr_refl: forall b ofs i,
     Genv.genv_instrs ge b ofs = Some i ->
@@ -1698,10 +1812,38 @@ Proof.
     + simpl. rewrite SIZE in *.
       auto.
 
+  (* Pbuiltin instr impossible *)
   - unfold Genv.find_instr in H1.
-  (* builtin instr impossible *)
-    admit.
-
+    simpl in H1. apply gen_code_map_inv in H1.
+    destruct H1 as (id & c & P1 & P2 & P3).
+    generalize (PTree_map_elements _ (RelocProg.section instruction init_data) (rev_section instr_size (prog_reloctables prog)) (prog_sectable prog)). simpl.
+    intros F.
+    apply PTree.elements_correct in P2.
+    exploit list_forall2_in_right;eauto.
+    simpl.
+    intros (x1 & In1 & ? &REV1).
+    subst. destruct x1. apply PTree.elements_complete in In1.
+    simpl in REV1.
+    destruct s.  2-3:  simpl in REV1; congruence.
+    simpl in REV1. destr_in REV1.
+    + inv REV1. apply rev_transl_code_in in P3.
+      destruct P3 as (i' & In' & P3').
+      assert (i' = Pbuiltin ef args res).
+      { destruct P3'.
+        destruct H1 as (id & P3').
+        destruct i';simpl in P3';repeat destr_in P3';try congruence.
+        subst. auto. }
+      subst.
+      
+      eapply transl_instr_in_code in In1;eauto.
+      simpl in In1. destruct In1 as (? & ? & ?).
+      inv H1.
+      
+    + inv REV1.
+      eapply transl_instr_in_code in In1;eauto.
+      destruct In1 as (? & ? & ?).
+      inv H1.
+      
   - 
     rewrite find_ext_funct_refl in H0.
     eapply exec_step_external;eauto.
