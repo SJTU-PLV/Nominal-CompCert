@@ -1193,3 +1193,9 @@ Proof.
 Qed.
 
 Notation "L1 ≡ L2" :=  (equiv_simulation L1 L2)(at level 90): lts_scope.
+
+Global Instance fsim_refl {li1 li2}:
+  Reflexive (forward_simulation (@cc_id li1) (@cc_id li2)).
+Proof.
+  intros x. apply identity_forward_simulation.
+Qed.
