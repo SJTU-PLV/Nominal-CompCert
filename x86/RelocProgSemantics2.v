@@ -301,7 +301,7 @@ Definition decode_prog_code_section (p:program) : res program1 :=
 
 Definition empty_program1 (prog: program): program1 :=
   {| prog_defs := prog.(prog_defs);
-     prog_public := prog.(prog_public);
+     prog_public := []; (* no use *)
      prog_main := prog.(prog_main);
      prog_sectable := PTree.empty section1;
      prog_symbtable := PTree.empty symbentry;
@@ -312,7 +312,7 @@ Definition empty_program1 (prog: program): program1 :=
 Definition globalenv (prog: program) :=
   match decode_prog_code_section prog with
   | OK prog' =>
-    RelocProgSemantics.globalenv instr_size prog'
+    RelocProgSemantics1.globalenv instr_size prog'
   (* prove this impossible *)
   | _ => RelocProgSemantics.globalenv instr_size (empty_program1 prog)
   end.

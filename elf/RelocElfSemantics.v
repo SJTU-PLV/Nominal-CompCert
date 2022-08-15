@@ -212,13 +212,13 @@ Variable Instr_size : list Instruction -> Z.
 (* global env *)
 
 Definition empty_elf_file1 (p: elf_file) : program1 :=
-  Build_program _ _ _ _ [] [] 1%positive (PTree.empty section1) (PTree.empty symbentry) (PTree.empty reloctable) (p.(prog_senv)).
+  Build_program _ _ _ _ (prog_defs p) [] (prog_main p) (PTree.empty section1) (PTree.empty symbentry) (PTree.empty reloctable) (p.(prog_senv)).
     
 
 Definition globalenv (p: elf_file) :=
   match decode_elf p with
   | OK p'=>                  
-    globalenv instr_size Instr_size p'
+    RelocProgSemantics2.globalenv instr_size Instr_size p'
   | _ => RelocProgSemantics.globalenv instr_size (empty_elf_file1 p)
   end.
 

@@ -1107,16 +1107,39 @@ Proof.
   rewrite H0.
   auto.
 Qed.
-  
+
+Lemma program_equiv_symbol_address1: forall D (p1 p2: RelocProg.program fundef unit instruction D),
+    program_equiv p1 p2 ->
+    forall id ofs, Genv.symbol_address (RelocProgSemantics1.globalenv instr_size p1) id ofs = Genv.symbol_address (RelocProgSemantics1.globalenv instr_size p2) id ofs.
+Proof.
+  intros.
+  unfold RelocProgSemantics1.globalenv. unfold Genv.symbol_address.
+  unfold Genv.find_symbol. simpl.
+  assert ((gen_symb_map (prog_symbtable p1)) ! id = (gen_symb_map (prog_symbtable p2)) ! id).
+  unfold gen_symb_map.
+  repeat rewrite PTree.gmap.
+  erewrite pe_symbtable. eauto.
+  auto.
+  rewrite H0.
+  auto.
+Qed.
+
+
 Lemma program_equiv_instr_map: forall D (p1 p2: RelocProg.program fundef unit instruction D),
     program_equiv p1 p2 ->
-    Genv.genv_instrs (RelocProgSemantics.globalenv instr_size p1) = Genv.genv_instrs (RelocProgSemantics.globalenv instr_size p2).
+    Genv.genv_instrs (RelocProgSemantics1.globalenv instr_size p1) = Genv.genv_instrs (RelocProgSemantics1.globalenv instr_size p2).
 Proof.
-  unfold RelocProgSemantics.globalenv.
+  unfold RelocProgSemantics1.globalenv.
   simpl. unfold gen_code_map. intros.
   repeat rewrite PTree.fold_spec in *.
   f_equal. eapply PTree.elements_extensional.
-  eapply pe_sectable. auto.
+  intros.
+  do 2 erewrite PTree.gmap.  
+  erewrite pe_sectable;eauto.
+  destruct ((prog_sectable p2) ! i );auto.
+  simpl. f_equal.
+  unfold rev_section.
+  destr. erewrite  pe_reloctable_map;eauto.
 Qed.
 
 Lemma program_equiv_ext_funs: forall D (p1 p2: RelocProg.program fundef unit instruction D),
@@ -1128,7 +1151,18 @@ Proof.
   f_equal.
   eapply pe_prog_defs. auto.
 Qed.
-  
+
+Lemma program_equiv_ext_funs1: forall D (p1 p2: RelocProg.program fundef unit instruction D),
+    program_equiv p1 p2 ->
+    Genv.genv_ext_funs (RelocProgSemantics1.globalenv instr_size p1) = Genv.genv_ext_funs (RelocProgSemantics1.globalenv instr_size p2).
+Proof.
+  unfold RelocProgSemantics1.globalenv.
+  simpl. unfold gen_extfuns. intros.
+  f_equal.
+  eapply pe_prog_defs. auto.
+Qed.
+
+
 Lemma store_init_data_bytes_match_ge: forall n bytes reloctbl m b p ge1 ge2 (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
     length bytes = n ->
     store_init_data_bytes ge1 reloctbl m b p bytes = store_init_data_bytes ge2 reloctbl m b p bytes.
@@ -1343,42 +1377,45 @@ Proof.
 
   assert ((empty_program1 prog) = (empty_program1 p')).
   unfold empty_program1.
-  f_equal. apply pe_prog_senv;eauto.
+  f_equal.
+  apply pe_prog_defs;eauto.
+  apply pe_prog_main;eauto.
+  apply pe_prog_senv;eauto.
   rewrite <- H0. auto. }
   
   inv H.
   - eapply exec_step_internal;eauto.
     + unfold Genv.find_ext_funct in *.
-      destr. erewrite program_equiv_ext_funs in H1.
+      destr. erewrite program_equiv_ext_funs1 in H1.
       eauto. eauto.
     + unfold Genv.find_instr.
       erewrite program_equiv_instr_map.
       eauto. eapply program_equiv_sym. eauto.
     + apply program_equiv_sym in E2.
       destruct i;simpl in *;auto.
-      1-27: try (erewrite program_equiv_symbol_address;eauto).
-      1-24: try (erewrite exec_load_match_ge;eauto;eapply program_equiv_symbol_address;eauto).
-      1-12: try (erewrite exec_store_match_ge;eauto;eapply program_equiv_symbol_address;eauto).
+      1-27: try (erewrite program_equiv_symbol_address1;eauto).
+      1-24: try (erewrite exec_load_match_ge;eauto;eapply program_equiv_symbol_address1;eauto).
+      1-12: try (erewrite exec_store_match_ge;eauto;eapply program_equiv_symbol_address1;eauto).
       rewrite <- H3. do 3 f_equal.
       unfold eval_addrmode32.
       destruct a. f_equal.
       f_equal. destr.
-      destruct p0. eapply program_equiv_symbol_address;eauto.
+      destruct p0. eapply program_equiv_symbol_address1;eauto.
       rewrite <- H3. do 3 f_equal.
       unfold eval_addrmode64.
       destruct a. f_equal.
       f_equal. destr.
-      destruct p0. eapply program_equiv_symbol_address;eauto.
+      destruct p0. eapply program_equiv_symbol_address1;eauto.
 
   - eapply exec_step_builtin with (vargs:= vargs);eauto.
     + unfold Genv.find_ext_funct in *.
-      destr. erewrite program_equiv_ext_funs in H1.
+      destr. erewrite program_equiv_ext_funs1 in H1.
       eauto. eauto.
     + unfold Genv.find_instr.
       erewrite program_equiv_instr_map.
       eauto. eapply program_equiv_sym. eauto.
     + eapply eval_builtin_args_match_ge.
-      eapply program_equiv_symbol_address;eauto.
+      eapply program_equiv_symbol_address1;eauto.
       eauto.
     + eapply external_call_symbols_preserved with (ge1:= (Genv.genv_senv (RelocProgSemantics.globalenv instr_size p))).
       simpl. erewrite pe_prog_senv.
@@ -1387,7 +1424,7 @@ Proof.
       
   - eapply exec_step_external;eauto.
     + unfold Genv.find_ext_funct in *.
-      destr. erewrite program_equiv_ext_funs in H1.
+      destr. erewrite program_equiv_ext_funs1 in H1.
       eauto. eauto.
     + eapply external_call_symbols_preserved with (ge1:= (Genv.genv_senv (RelocProgSemantics.globalenv instr_size p))).
       simpl. erewrite pe_prog_senv.

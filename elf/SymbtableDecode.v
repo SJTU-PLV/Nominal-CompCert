@@ -233,7 +233,3 @@ Proof.
   apply encode_int_length.
 Qed.
 
-
-  
-Admitted.
-

@@ -174,7 +174,7 @@ Definition rev_acc_code (r:code*Z*reloctable) i :=
 Definition rev_transl_code (reloctbl: reloctable) (c:code) :=
   fst (fst (fold_left rev_acc_code c ([],0,reloctbl))).
 
-Definition rev_section (reloctbl_map: reloctable_map) (id:ident) (sec:section) :=
+Definition rev_section {D:Type} (reloctbl_map: reloctable_map) (id:ident) (sec:RelocProg.section instruction D) :=
   match sec with
   | sec_text c =>
     match reloctbl_map ! id with
@@ -185,7 +185,7 @@ Definition rev_section (reloctbl_map: reloctable_map) (id:ident) (sec:section) :
   | _ => sec
   end.
 
-Definition decode_program (p:program) :=
+Definition decode_program {D: Type} (p: RelocProg.program fundef unit instruction D) :=
   {| prog_defs := prog_defs p;
      prog_public := prog_public p;
      prog_main := prog_main p;
@@ -195,7 +195,7 @@ Definition decode_program (p:program) :=
      prog_senv := prog_senv p;
   |}.
 
-Definition globalenv p := RelocProgSemantics.globalenv instr_size (decode_program p).
+Definition globalenv {D: Type} (p: RelocProg.program fundef unit instruction D) := RelocProgSemantics.globalenv instr_size (decode_program p).
 
 Inductive initial_state (p:program) (rs:regset) (st:state) : Prop :=
 | initial_state_intro: forall p',
