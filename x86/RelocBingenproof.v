@@ -72,6 +72,19 @@ Hypothesis rev_id_eliminate_size: forall i id, instr_size i = instr_size (rev_id
 Definition match_prog (p: RelocProgram.program) (tp: program) :=
   transf_program instr_size p = OK tp.
 
+
+      
+(* important lemma: may be so difficult *)
+Lemma decode_instr_len: forall l l' e i,
+    decode_instr e l = OK (i,l') ->
+    exists a l1, l = a :: l1 ++ l' /\ forall l2, decode_instr e (a::l1 ++ l2) = OK (i,l2) /\ Instr_size (a :: l1 ++ l2) = Instr_size l.
+Admitted.
+
+Lemma decode_Instruction_len: forall l len i,
+    decode_Instruction l = OK (i,len) ->
+    exists a l1 l', l = a :: l1 ++ l' /\ (forall l2, decode_Instruction (a::l1 ++ l2) = OK (i,len)) /\ length (a::l1) = len.
+Admitted.
+
 Lemma transl_code_inv_aux: forall n c i r c1 z1 r1,
     length c = n ->
     fold_left (acc_instrs instr_size) c (OK ([],0,r)) = OK (c1,z1,r1) ->
@@ -306,35 +319,150 @@ Proof.
   exists y. rewrite P1. split;auto.
 Qed.
 
+
+
+
+Definition decode_instrs_bytes_app_prop n:= forall l1 l1' l2 l3 l4,
+    length l1 = n ->
+    decode_instrs_bytes l1 l1' = OK l3 ->
+    exists l3', l3 = l1' ++ l3' /\
+           decode_instrs_bytes (l1 ++ l2) l4 = decode_instrs_bytes l2 (l4 ++ l3').
+
+  
+  
+Lemma decode_instrs_bytes_app_general: forall n,
+    decode_instrs_bytes_app_prop n.
+Proof.
+  intros n.
+  eapply Nat.strong_right_induction with (z:=O);eauto;try lia.
+  unfold Morphisms.Proper.
+  unfold Morphisms.respectful.
+  intros. subst. split;auto.
+
+  intros. unfold decode_instrs_bytes_app_prop in *.
+  intros. rewrite decode_instrs_bytes_eq in H2;eauto.
+  destr_in H2.
+  inv H2.
+  exists []. do 2 rewrite app_nil_r.
+  simpl.  split;auto.
+  monadInv H2. destr_in EQ0.
+  simpl in EQ0.
+  rewrite decode_instrs_bytes_eq;eauto.
+  simpl.
+  apply decode_Instruction_len in EQ.
+  destruct EQ as (a & l5 & l' & P1 & P2 & P3).
+  inv P1. rewrite app_assoc_reverse.
+  rewrite P2. simpl. simpl in P3.
+  inv P3. rewrite skipn_app in *.
+  rewrite skipn_all in *. simpl. rewrite Nat.sub_diag in *.
+  simpl in *. 
+  exploit H0.
+  4: eapply EQ0.
+  lia. 2: eauto.
+  rewrite app_length.  lia.
+  intros (l3' & A1 & A2).
+  rewrite A1. rewrite <- app_assoc.
+  eexists. split;eauto.
+  rewrite app_assoc.
+  eapply A2.
+Qed.
+
 Lemma decode_instrs_bytes_app': forall l l' l1,
     decode_instrs_bytes l [] = OK l' ->
     decode_instrs_bytes l l1 = OK (l1 ++ l').
-Admitted.
-  
+Proof.
+  intros.
+  exploit decode_instrs_bytes_app_general;eauto.
+  intros (l3' & A1 & A2).
+  simpl in A1.
+  rewrite (app_nil_end l).
+  erewrite A2. subst.
+  auto.
+Qed.
+
 Lemma decode_instrs_bytes_app: forall l1 l2 l3,
     decode_instrs_bytes l1 [] = OK l3 ->
     decode_instrs_bytes (l1 ++ l2) [] = 
     decode_instrs_bytes l2 l3.
-Admitted.
+Proof.
+  intros.
+  exploit decode_instrs_bytes_app_general;eauto.
+  intros (l3' & A1 & A2).
+  erewrite A2. simpl. subst. auto.
+Qed.
 
-  
-Lemma encode_into_byte_consistency: forall l bl,
+Lemma encode_into_byte_consistency: forall n l bl,
+    length l = n ->
     fold_left concat_byte l (OK []) = OK bl ->
     decode_instrs_bytes  bl [] = OK l.
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl in H0. inv H0. auto.
+
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l1 & a1 & A1 & B1). subst.
+  clear H.
+  rewrite fold_left_app in H0. simpl in H0.
+  unfold concat_byte in H0 at 1 . monadInv H0.
+  apply IHn in EQ;eauto.
+  erewrite decode_instrs_bytes_app;eauto.
+  rewrite decode_instrs_bytes_eq.
+  (* not provided by CSLED: encode length greater than one. We destruct Instruction here *)
+  destruct x0. destruct a1;simpl in EQ1;try monadInv EQ1.
+  (* encode decode consistency: we do not import the consistency theorem for faster compile *)
+  assert (decode_Instruction (i::x0) = OK (a1,length (i::x0))) by admit.
+  rewrite H.
+  simpl.  rewrite skipn_all.
+  auto. auto.
 Admitted.
+
+Lemma code_size_app: forall c1 c2,
+    code_size instr_size (c1++c2) = code_size instr_size c1 + code_size instr_size c2.
+Proof.
+  induction c1;simpl;auto.
+  intros. rewrite IHc1. lia.
+Qed.
+
 
 Lemma transl_code_rev: forall n l l' ofs reloctbl reloctbl',
     length l = n ->
     fold_left (acc_instrs instr_size) l (OK ([],0,reloctbl)) = OK (l',ofs,reloctbl') ->
     ofs = code_size instr_size l /\ exists reloctbl1, reloctbl = reloctbl1 ++ reloctbl'.
-Admitted.
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl in H0. inv H0. simpl.
+  split;eauto. exists []. auto.
+
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l1 & a1 & A1 & B1). subst.
+  clear H.
+  rewrite fold_left_app in H0. simpl in H0.
+  unfold acc_instrs in H0 at 1.
+  monadInv H0.
+  rewrite code_size_app. simpl.
+  exploit IHn;eauto.
+  intros (P1 & (reloctbl1 & P2)).
+  destr_in EQ0.
+  - monadInv EQ0.
+    destr_in EQ3.
+    inv EQ3. split;auto.
+    eexists. eauto.
+  - destr_in EQ0.
+    + monadInv EQ0.
+      destr_in EQ3.
+      inv EQ3.
+      split;auto. rewrite LocalLib.app_cons_comm.
+      eexists. eauto.
+    + monadInv EQ0.
+      destr_in EQ3.
+      inv EQ3.
+      split;auto.
+      eexists. eauto.
+Qed.
 
 
-(* important lemma: may be so difficult *)
-Lemma decode_instr_len: forall l l' e i,
-    decode_instr e l = OK (i,l') ->
-    exists a l1, l = a :: l1 ++ l' /\ forall l2, decode_instr e (a::l1 ++ l2) = OK (i,l2) /\ Instr_size (a :: l1 ++ l2) = Instr_size l.
-Admitted.       
 
 Definition decode_instrs_reloc_len_prop n:=
   forall l1 l2 l1' reloctbl1 reloctbl2,
@@ -706,12 +834,6 @@ Proof.
 Qed.
 
   
-Lemma code_size_app: forall c1 c2,
-    code_size instr_size (c1++c2) = code_size instr_size c1 + code_size instr_size c2.
-Proof.
-  induction c1;simpl;auto.
-  intros. rewrite IHc1. lia.
-Qed.
 
 Lemma rev_transl_code_size_aux: forall c c1 r sz c' sz' r',
     fold_left (rev_acc_code instr_size) c (c',sz',r') = (c1,sz,r) ->
@@ -1185,49 +1307,6 @@ Proof.
          do 8 (solve_reloc_if;try rewrite Heqb0;simplfy_zarth;try rewrite Heqb0).
          
                     
-      (*   (* 6 *) *)
-      (*   rewrite Heqb0.  *)
-      (*   assert ((reloc_offset r <=? reloc_offset r + 1) && *)
-      (*           (reloc_offset r + 1 <? reloc_offset r + 8) = true) by admit. *)
-      (*   rewrite H. clear H. *)
-      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
-      (*   (* 5 *) *)
-      (*   rewrite Heqb0. *)
-      (*   assert ((reloc_offset r <=? reloc_offset r + 1 + 1) && *)
-      (*           (reloc_offset r + 1 + 1 <? reloc_offset r + 8) = true) by admit. *)
-      (*   rewrite H. clear H. *)
-      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
-      (*   (* 4 *) *)
-      (*   rewrite Heqb0. *)
-      (*   assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1) && *)
-      (*           (reloc_offset r + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit. *)
-      (*   rewrite H. clear H. *)
-      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
-      (*   (* 3 *) *)
-      (*   rewrite Heqb0. *)
-      (*   assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1) && *)
-      (*           (reloc_offset r + 1 + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit. *)
-      (*   rewrite H. clear H. *)
-      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
-      (*   (* 2 *) *)
-      (*   rewrite Heqb0. *)
-      (*   assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1) && *)
-      (*           (reloc_offset r + 1 + 1 + 1 + 1 + 1 <? reloc_offset r + 8)= true) by admit. *)
-      (*   rewrite H. clear H. *)
-      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
-      (*   (* 1 *) *)
-      (*   rewrite Heqb0. *)
-      (*   assert ( (reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1) && *)
-      (*            (reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 <? reloc_offset r + 8) = true) by admit. *)
-      (*   rewrite H. clear H. *)
-      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
-      (*   (* 0 *) *)
-      (*   rewrite Heqb0. *)
-      (*   assert ((reloc_offset r <=? reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 + 1) && *)
-      (* (reloc_offset r + 1 + 1 + 1 + 1 + 1 + 1 + 1 <? *)
-      (*  reloc_offset r + 8) = true) by admit. *)
-      (*   rewrite H. clear H. *)
-      (*   repeat rewrite Z.add_sub_swap. rewrite Z.sub_diag. simpl. *)
 
 
         eexists. split. do 2 f_equal.
