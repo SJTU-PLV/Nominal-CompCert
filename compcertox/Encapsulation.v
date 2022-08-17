@@ -93,7 +93,7 @@ Bind Scope world_scope with world.
 Program Definition world_embed (T: Type) :=
   {|
     w_type := pset_embed T;
-    w_int_step := {| rel s t := True |};
+    w_int_step := {| rel := OptionRel.option_le (fun _ _ => True) |};
     w_ext_step := {| rel := OptionRel.option_le eq |};
   |}.
 
@@ -139,7 +139,7 @@ Proof. split; intros; apply F; apply G; easy. Defined.
 
 Definition semantics_fbk {K: PSet} {liA liB} (L: liA +-> liB@K) : liA +-> liB :=
   {|
-    pstate := pstate L * K;
+    pstate := K * pstate L;
     esem := $L
   |}.
 
@@ -1032,11 +1032,12 @@ Section CC_UNIT.
         destruct p0; inv HQ1.
         eexists wb1, (Some tt, wb1). repeat split; try easy.
         inv I. etransitivity; eauto.
-        constructor. eauto.
+        1-2: constructor; eauto.
       + intros wa1 [? wb1] [] s1 s2 r1 Hs H. inv H. inv Hs.
         exists r2. split. constructor.
-        eexists (_, wb1). repeat split; try easy.
-        instantiate (1 := Some tt). eexists; split; eauto. reflexivity.
+        eexists (Some tt, wb1). repeat split; try easy.
+        destruct p0; constructor; easy.
+        eexists; split; eauto. reflexivity.
       + intros wa1 [? wb1] [] s1 s2 q1 Hs H. inv H. inv Hs.
         exists q2. split. constructor.
         exists wb1. repeat split; try easy.
@@ -1044,6 +1045,7 @@ Section CC_UNIT.
         exists tt, (st_r r2). repeat split.
         exists wa2, (Some tt, wa2).
         repeat split; eauto. reflexivity.
+        destruct p0; now constructor.
         constructor. assumption.
       + intros. easy.
   Qed.
@@ -1098,11 +1100,12 @@ Section CC_UNIT.
         destruct p0; inv HQ2.
         eexists wb1, (wb1, Some tt). repeat split; try easy.
         inv I. etransitivity; eauto.
-        constructor. eauto.
+        all: constructor; eauto.
       + intros wa1 [wb1 ?] [] s1 s2 r1 Hs H. inv H. inv Hs.
         exists r2. split. constructor.
-        eexists (wb1, _). repeat split; try easy.
-        instantiate (1 := Some tt). eexists; split; eauto. reflexivity.
+        eexists (wb1, Some tt). repeat split; try easy.
+        destruct p0; now constructor.
+        eexists; split; eauto. reflexivity.
       + intros wa1 [wb1 ?] [] s1 s2 q1 Hs H. inv H. inv Hs.
         exists q2. split. constructor.
         exists wb1. repeat split; try easy.
@@ -1110,6 +1113,7 @@ Section CC_UNIT.
         exists tt, (st_r r2). repeat split.
         exists wa2, (wa2, Some tt).
         repeat split; eauto. reflexivity.
+        destruct p0; now constructor.
         constructor. assumption.
       + intros. easy.
   Qed.
@@ -1169,8 +1173,8 @@ Section CC_COMP.
         eexists; split; eauto. eexists; repeat split; eauto.
         intros.
         edestruct H5 as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
-        instantiate (1 := (_, _)). split; eauto. constructor.
-        eexists; split; eauto. instantiate (2 := Some tt). reflexivity.
+        instantiate (1 := (_, Some tt)). split; eauto. constructor; easy.
+        eexists; split; eauto. reflexivity.
         eexists _, _. split; eauto.
         destruct x4, x5. destruct H11. destruct H12.
         eexists _, _. repeat split; eauto. econstructor; eauto.
@@ -1228,8 +1232,8 @@ Section CC_COMP.
         eexists; split; eauto. eexists; repeat split; eauto.
         intros.
         edestruct H5 as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
-        instantiate (1 := (_, _)). split; eauto. constructor.
-        eexists; split; eauto. instantiate (1 := Some tt). reflexivity.
+        instantiate (1 := (Some tt, _)). split; eauto. now constructor.
+        eexists; split; eauto. reflexivity.
         eexists _, _. split; eauto.
         destruct x5, x6. destruct H11. destruct H12.
         eexists _, _. repeat split; eauto. econstructor; eauto.
@@ -1707,8 +1711,9 @@ Section COMP.
 
 End COMP.
 
-(** A simplified condition for sim. conv. refinement given the world of ccA is a
-    substructure of ccB *)
+(** A simplified condition for ccB ⊑ ccA, where the wB is a substructure of
+    wA. Additional invariant is required on wA to constrain the redundant
+    information *)
 Section CCREF.
 
   Context {li1 li2} (ccA ccB: ST.callconv li1 li2).
@@ -1862,40 +1867,301 @@ Proof.
 Qed.
 
 (** ** Simulation Convention FBK *)
-Definition callconv_fbk {li1 li2 K1 K2} (cc: ST.callconv (li1@K1) (li2@K2)): ST.callconv li1 li2.
-Admitted.
+Definition callconv_fbk {K1 K2: PSet}
+        `(cc: ST.callconv (li1@K1) (li2@K2)): ST.callconv li1 li2 :=
+  {|
+    ST.ccworld := (ST.ccworld cc * pset_world K1 * pset_world K2)%world;
+    ST.match_query '(w, k1, k2) q1 q2 := ST.match_query cc w (q1, k1) (q2, k2);
+    ST.match_reply '(w, k1, k2) r1 r2 := ST.match_reply cc w (r1, k1) (r2, k2);
+  |}.
+
+Lemma ccref_lift {K1 K2} {li1 li2} (ccA ccB: ST.callconv li1 li2):
+  st_ccref ccA ccB -> st_ccref (ST.callconv_lift ccA K1 K2) (ST.callconv_lift ccB K1 K2).
+Proof.
+  unfold st_ccref. intros H. unfold STCAT.forward_simulation.
+  assert (X: forward_simulation 1 1 (@normalize_sem (li1@K1) _ 1) (normalize_sem 1 @ K1)).
+  {
+    etransitivity. 2: apply lift_categorical_comp2.
+    eapply categorical_compose_simulation'. apply lift_unit1.
+    etransitivity. 2: apply lift_categorical_comp2.
+    eapply categorical_compose_simulation'. 1-2: apply lift_unit1.
+    all: apply Linking.linkorder_refl.
+  }
+  assert (Y: forward_simulation 1 1 (@normalize_sem li2 _ 1 @ K2) (normalize_sem 1)).
+  {
+    etransitivity. apply lift_categorical_comp1.
+    eapply categorical_compose_simulation'. apply lift_unit2.
+    etransitivity. apply lift_categorical_comp1.
+    eapply categorical_compose_simulation'. 1-2: apply lift_unit2.
+    all: apply Linking.linkorder_refl.
+  }
+  rewrite (fsim_embed X). rewrite <- (fsim_embed Y).
+  apply st_fsim_lift. apply H.
+Qed.
+
+(** ** FBK vs LIFT *)
+
+(** A simplified condition for ccB ⊑ ccA, where wA is a substructure of wB *)
+Section CCREF.
+
+  Context {li1 li2} (ccA ccB: ST.callconv li1 li2).
+
+  Variable F: ST.ccworld ccB -> ST.ccworld ccA.
+  Variable I: ST.ccworld ccB -> Prop.
+  Hypothesis F_init: F (pset_init (ST.ccworld ccB)) = pset_init (ST.ccworld ccA).
+  Hypothesis F_ext_step: forall x y, x :-> y -> F x :-> F y.
+  Hypothesis F_int_step:
+    forall wb1 wa2, F wb1 *-> wa2 -> exists wb2, wa2 = F wb2 /\ wb1 *-> wb2 /\ (I wb1 -> I wb2).
+  Hypothesis F_mq:
+    forall wb q1 q2, ST.match_query ccB wb q1 q2 -> ST.match_query ccA (F wb) q1 q2 /\ I wb.
+  Hypothesis F_mr:
+    forall wb r1 r2, I wb -> ST.match_reply ccA (F wb) r1 r2 -> ST.match_reply ccB wb r1 r2.
+
+  Inductive super_inv: ST.ccworld ccA -> ST.ccworld ccB -> Prop :=
+  | super_inv_intro wa wb: wa :-> F wb -> super_inv wa wb.
+  Inductive super_ms: ST.ccworld ccA -> ST.ccworld ccB -> @state li1 li1 1 -> @state li2 li2 1 -> Prop :=
+  | super_ms_q q1 q2 wa wb:
+    I wb -> wa = F wb -> ST.match_query ccB wb q1 q2 ->
+    super_ms wa wb (st_q q1) (st_q q2)
+  | super_ms_r r1 r2 wa wb:
+    I wb -> wa = F wb -> ST.match_reply ccB wb r1 r2 ->
+    super_ms wa wb (st_r r1) (st_r r2).
+
+  Lemma st_ccref_super: st_ccref ccB ccA.
+  Proof.
+    apply st_normalize_fsim. constructor.
+    eapply ST.Forward_simulation with
+      (ltof _ (fun (_: unit) => 0)) (fun _ wa wb _ => super_ms wa wb)
+      (fun wa wb => super_inv wa wb); try easy.
+    - intros. inv H. constructor. etransitivity; eauto.
+    - constructor. rewrite F_init. reflexivity.
+    - intros wa wb se Hi. inv Hi.
+      constructor.
+      + intros q1 q2 s1 wb1 Hb Hq Hx. exists tt. inv Hx. exists (st_q q2).
+        split. constructor.
+        exists (F wb1), wb1. repeat split; try easy.
+        * etransitivity; eauto.
+        * constructor; eauto. apply F_mq in Hq. apply Hq.
+      + intros wa1 wb1 [] s1 s2 r1 Hs Hx. inv Hx.
+        inv Hs. exists r2. split. constructor.
+        exists wb1. repeat split; easy.
+      + intros wa1 wb1 [] s1 s2 q1 Hs Hx. inv Hx. inv Hs.
+        exists q2. split. constructor.
+        exists (F wb1). split. reflexivity. split. apply F_mq; auto.
+        intros r1 r2 s1' wa2 Ha2 Hr Hy.
+        inv Hy. eexists tt, _. split. constructor.
+        destruct (F_int_step _ _ Ha2) as (wb2 & Hb1 & Hb2 & Hb3).
+        eexists wa2, wb2. repeat split; try easy.
+        constructor; eauto.
+        apply F_mr; subst; eauto.
+      + intros. easy.
+  Qed.
+
+End CCREF.
+
+Lemma cc_fbk_lift1 {K1 K2: PSet} `(cc: ST.callconv li1 li2):
+  st_ccref (callconv_fbk (ST.callconv_lift cc K1 K2)) cc.
+Proof.
+  match goal with
+  | |- st_ccref ?x ?y => set (w1 := ST.ccworld x); set (w2 := ST.ccworld y)
+  end.
+  cbn in *.
+  set (F := fun '((w, _, _, _, _):w1) => w).
+  set (I := fun '((_, k1, k2, k1', k2'):w1) => k1 = k1' /\ k2 = k2').
+  eapply st_ccref_super with F I;
+    intros; cbn in *; prod_crush; subst; try easy.
+  eexists (_, _, _, _, _). repeat split. eauto.
+  Unshelve. all: eauto.
+Qed.
+
+Lemma cc_fbk_lift2 {K1 K2: PSet} `(cc: ST.callconv li1 li2):
+  st_ccref cc (callconv_fbk (ST.callconv_lift cc K1 K2)).
+Proof.
+  match goal with
+  | |- st_ccref ?x ?y => set (w1 := ST.ccworld x); set (w2 := ST.ccworld y)
+  end.
+  cbn in *.
+  set (F := fun '((w, _, _, _, _):w2) => w).
+  set (I := fun '((_, k1, k2, k1', k2'):w2) => k1 = k1' /\ k2 = k2').
+  eapply st_ccref_sub with F I;
+    intros; cbn in *; prod_crush; subst; try easy.
+  eexists (_, _, _, _, _). repeat split. easy.
+Qed.
+
+(** A simplified condition for ccB ⊑ ccA, where wA is a substructure of wB *)
+Section CCREF.
+
+  Context {li1 li2} (ccA ccB: ST.callconv li1 li2).
+
+  Variable F: ST.ccworld ccB -> ST.ccworld ccA.
+  Variable I: ST.ccworld ccB -> Prop.
+  Hypothesis F_init: pset_init (ST.ccworld ccA) :-> F (pset_init (ST.ccworld ccB)).
+  (* F (pset_init (ST.ccworld ccB)) = pset_init (ST.ccworld ccA). *)
+  Hypothesis I_init: I (pset_init (ST.ccworld ccB)).
+  Hypothesis I_ext_step: forall wb wb1, I wb -> wb :-> wb1 -> I wb1.
+  Hypothesis F_ext_step: forall x y, x :-> y -> F x :-> F y.
+  Hypothesis F_int_step:
+    forall wb1 wa2, F wb1 *-> wa2 ->
+               forall r1 r2, exists wb2, wa2 = F wb2 /\ wb1 *-> wb2
+                               /\ (I wb1 -> I wb2)
+                               /\ (ST.match_reply ccA wa2 r1 r2 ->
+                                  ST.match_reply ccB wb2 r1 r2).
+  Hypothesis F_mq:
+    forall wb q1 q2, I wb -> ST.match_query ccB wb q1 q2 -> ST.match_query ccA (F wb) q1 q2.
+
+  Inductive fbk1_inv: ST.ccworld ccA -> ST.ccworld ccB -> Prop :=
+  | fbk1_inv_intro wa wb: I wb -> wa :-> F wb -> fbk1_inv wa wb.
+  Inductive fbk1_ms: ST.ccworld ccA -> ST.ccworld ccB -> @state li1 li1 1 -> @state li2 li2 1 -> Prop :=
+  | fbk1_ms_q q1 q2 wa wb:
+    I wb -> wa = F wb -> ST.match_query ccB wb q1 q2 ->
+    fbk1_ms wa wb (st_q q1) (st_q q2)
+  | fbk1_ms_r r1 r2 wa wb:
+    I wb -> wa = F wb -> ST.match_reply ccB wb r1 r2 ->
+    fbk1_ms wa wb (st_r r1) (st_r r2).
+
+  Lemma st_ccref_fbk1: st_ccref ccB ccA.
+  Proof.
+    apply st_normalize_fsim. constructor.
+    eapply ST.Forward_simulation with
+      (ltof _ (fun (_: unit) => 0)) (fun _ wa wb _ => fbk1_ms wa wb)
+      (fun wa wb => fbk1_inv wa wb); try easy.
+    - intros. inv H. constructor; eauto. etransitivity; eauto.
+    - intros wa wb se Hi. inv Hi.
+      constructor.
+      + intros q1 q2 s1 wb1 Hb Hq Hx. exists tt. inv Hx. exists (st_q q2).
+        split. constructor.
+        exists (F wb1), wb1. repeat split; try easy.
+        * etransitivity; eauto.
+        * constructor; eauto.
+      + intros wa1 wb1 [] s1 s2 r1 Hs Hx. inv Hx.
+        inv Hs. exists r2. split. constructor.
+        exists wb1. repeat split; easy.
+      + intros wa1 wb1 [] s1 s2 q1 Hs Hx. inv Hx. inv Hs.
+        exists q2. split. constructor.
+        exists (F wb1). split. reflexivity. split. apply F_mq; auto.
+        intros r1 r2 s1' wa2 Ha2 Hr Hy.
+        inv Hy. eexists tt, _. split. constructor.
+        destruct (F_int_step _ _ Ha2 r1 r2) as (wb2 & Hb1 & Hb2 & Hb3 & HR).
+        eexists wa2, wb2. repeat split; try easy.
+        constructor; eauto.
+      + intros. easy.
+  Qed.
+
+End CCREF.
+
+Lemma cc_lift_fbk1 {K1 K2: PSet} `(cc: ST.callconv (li1@K1) (li2@K2)):
+  st_ccref (ST.callconv_lift (callconv_fbk cc) K1 K2) cc.
+Proof.
+  match goal with
+  | |- st_ccref ?x ?y => set (w1 := ST.ccworld x); set (w2 := ST.ccworld y)
+  end.
+  cbn in *.
+  set (F := fun '((w, _, _, _, _):w1) => w).
+  set (I := fun '((_, k1, k2, k1', k2'):w1) => k1 = k1' /\ k2 = k2').
+  eapply st_ccref_fbk1 with F I;
+    intros; cbn in *; prod_crush; subst; try easy.
+  eexists (_, _, _, _, _). repeat split. eauto.
+  intros; cbn in *. prod_crush. repeat split; eauto.
+  cbn in *. prod_crush. subst; eauto.
+Qed.
+
+Lemma cc_lift_fbk2 {K1 K2: PSet} `(cc: ST.callconv (li1@K1) (li2@K2)):
+  st_ccref cc (ST.callconv_lift (callconv_fbk cc) K1 K2).
+Proof.
+  match goal with
+  | |- st_ccref ?x ?y => set (w1 := ST.ccworld x); set (w2 := ST.ccworld y)
+  end.
+  cbn in *.
+  set (F := fun '((w, _, _, _, _):w2) => w).
+  set (I := fun '((_, k1, k2, k1', k2'):w2) => k1 = k1' /\ k2 = k2').
+  eapply st_ccref_sub with F I;
+    intros; cbn in *; prod_crush; subst; try easy.
+  eexists (_, _, _, _, _). repeat split. easy.
+  cbn in *. admit.
+  cbn in *.
+Abort.
 
 (** Lemma 3.17 *)
-Lemma fsim_fbk {K1 K2: PSet}
+Lemma encap_fsim_fbk {K1 K2: PSet}
       `(ccA: ST.callconv liA1 liA2) `(ccB: ST.callconv (liB1@K1) (liB2@K2)) L1 L2:
   E.forward_simulation ccA ccB L1 L2 ->
   E.forward_simulation ccA (callconv_fbk ccB) (semantics_fbk L1) (semantics_fbk L2).
-Admitted.
+Proof.
+  unfold E.forward_simulation. cbn. intros HL.
+  rewrite cc_lift_twice.
+  unfold STCAT.forward_simulation.
+  rewrite (fsim_embed (map_normalize1 _ _ _)).
+  rewrite <- st_map_normalize2. 2-5: typeclasses eauto.
+  rewrite <- (cc_map_id ccA).
+  eapply map_monotonicity_cc.
+  1-2: typeclasses eauto.
+  pose proof (@ccref_lift (pstate L1) (pstate L2)  _ _ _ _ (cc_lift_fbk1 ccB)) as Hcc.
+  assert (X: STCAT.forward_simulation ccA (ST.callconv_lift (ST.callconv_lift (callconv_fbk ccB) K1 K2) (pstate L1) (pstate L2)) L1 L2).
+  {
+    rewrite Hcc. apply HL.
+  }
+  apply X.
+Qed.
 
 (** ** REVEAL Simulation Convention *)
-Definition cc_reveal {K: PSet} {li} : ST.callconv li (li@K).
-Admitted.
 
-(** Lemma 3.18 *)
-Lemma fsim_reveal {K: PSet} {liA liB} (L: liA +-> liB@K):
-  E.forward_simulation (callconv_embed cc_id) cc_reveal (semantics_fbk L) L.
-Admitted.
+Program Definition cc_reveal {K: PSet} {li} : ST.callconv li (li@K) :=
+  {|
+    ST.ccworld := pset_world K;
+    ST.match_query k q1 '(q2, kq) := q1 = q2 /\ k = kq;
+    ST.match_reply k r1 '(r2, kr) := r1 = r2 /\ k = kr;
+  |}.
 
-(** ** FBK vs LIFT *)
-Definition st_cceqv {li1 li2} (cc cc': ST.callconv li1 li2) :=
-  st_ccref cc cc' /\ st_ccref cc' cc.
+Lemma cc_lift_reveal {li} {K1 K2: PSet}:
+  st_ccref
+    (ST.callconv_lift (cc_reveal (li:=li)) (K2 * K1) K1) (callconv_map li_func_k lf &1).
+Proof.
+  match goal with
+  | |- st_ccref ?x ?y => set (w1 := ST.ccworld x); set (w2 := ST.ccworld y)
+  end.
+  cbn in *.
+  set (F := fun _:w1 => Some tt).
+  set (I := fun '((k2, (kk2, k1), kk1):w1) => k1 = kk1 /\ k2 = kk2).
+  eapply st_ccref_fbk1 with F I.
+  all: intros; cbn in *; prod_crush; subst; try easy.
+  - constructor.
+  - inv H. destruct y.
+    eexists (_, (_, _), _). cbn in *. repeat split; inv H; easy.
+  - inv H. reflexivity.
+Qed.
 
-Lemma callconv_fbk_lift {K1 K2: PSet} `(cc: ST.callconv li1 li2):
-  st_ccref (callconv_fbk (ST.callconv_lift cc K1 K2)) cc.
-Admitted.
+Section REVEAL.
+
+  Lemma sem_map_id `(L: semantics liA liB):
+    L = semantics_map L lf lf.
+  Proof.
+    unfold semantics_map. destruct L. cbn. f_equal.
+    apply Axioms.functional_extensionality. intros se.
+    unfold lts_map. destruct (activate se).
+    cbn. f_equal.
+  Qed.
+
+  (** Lemma 3.18 *)
+  Lemma fsim_reveal {K: PSet} {liA liB} (L: liA +-> liB@K):
+    E.forward_simulation &1 cc_reveal (semantics_fbk L) L.
+  Proof.
+    unfold E.forward_simulation. cbn. rewrite cc_lift_reveal.
+    unfold STCAT.forward_simulation.
+    rewrite (fsim_embed (map_normalize1 _ _ _)).
+    rewrite <- (cc_map_id &1).
+    rewrite (sem_map_id (normalize_sem L)) at 2.
+    eapply map_monotonicity_cc.
+    1-2: typeclasses eauto.
+    reflexivity.
+  Qed.
+
+End REVEAL.
 
 (** ** Basics *)
 
-Definition st_cc_id {li} : ST.callconv li li := callconv_embed cc_id.
-
 (** Lemma 3.4 *)
 Definition encap_equiv_simulation {liA liB} (L1 L2: liA +-> liB) :=
-  E.forward_simulation st_cc_id st_cc_id L1 L2 /\ E.forward_simulation st_cc_id st_cc_id L2 L1.
+  E.forward_simulation &1 &1 L1 L2 /\ E.forward_simulation &1 &1 L2 L1.
 
 Lemma comp_embed `(L1: semantics liB liC) `(L2: semantics liA liB) L eL:
   comp_esem (semantics_embed L1) (semantics_embed L2) = Some eL ->
