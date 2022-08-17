@@ -30,16 +30,10 @@ Record t: Type := mkgenv {
   genv_symb: PTree.t (block * ptrofs);        (**r mapping symbol -> block * ptrofs *)
   genv_ext_funs: NMap.t (option external_function);             (**r mapping blocks -> external function defintions *)
   genv_instrs: NMap.t (ptrofs -> option instruction);    (**r mapping block  -> instructions mapping *)
-  (* genv_sup: sup;               (**r symbol support *) *)
-  genv_senv : Globalenvs.Senv.t; (** how to use it *)
 
-  (** some properties about support*)
-  (* genv_sup_glob : forall b, sup_In b genv_sup -> exists id, b = Global id; *)
-  (* genv_symb_range: forall id b ofs,PTree.get id genv_symb = Some (b,ofs) -> sup_In b genv_sup; *)
-  (* genv_defs_range: forall b g, NMap.get _ b genv_defs = Some g -> sup_In b genv_sup; *)
-  (* genv_vars_eq: forall id b, PTree.get id genv_symb = Some b -> b = Global id; *)
-  (* genv_vars_inj: forall id1 id2 b, *)
-  (*   PTree.get id1 genv_symb = Some b -> PTree.get id2 genv_symb = Some b -> id1 = id2 *)
+  (* which may be needed in structured memory injection *)
+  (* genv_sup: sup;               (**r symbol support *) *)
+  genv_senv : Globalenvs.Senv.t; (**r symbol env *)
 }.
 
 (** ** Lookup functions *)

@@ -15,7 +15,6 @@ Require AsmFacts.
 
 Open Scope Z_scope.
 
-Hint Resolve in_eq in_cons.
 
 Ltac monadInvX1 H :=
   let monadInvX H :=  
@@ -179,6 +178,7 @@ Proof.
   inv w. auto.
 Qed.
 
+(* TODEL *)
 Lemma int_funct_instr_valid: forall prog tprog f b,
     transf_program instr_size prog = OK tprog ->
     Globalenvs.Genv.find_funct_ptr (Genv.globalenv prog) b = Some (Internal f) ->
@@ -196,6 +196,7 @@ Proof.
   red in IN'. auto.
 Qed.
 
+(* TODEL *)
 Lemma instr_is_valid: forall prog tprog f b i ofs,
     transf_program instr_size prog = OK tprog ->
     Globalenvs.Genv.find_funct_ptr (Genv.globalenv prog) b = Some (Internal f) ->
@@ -210,8 +211,50 @@ Proof.
   apply NJ. 
   eapply Asmgenproof0.find_instr_in; eauto.
 Qed.
-  
 
+(* auxilary lemma for match_def_sec *)
+Lemma create_sec_table_correct: forall n id def defs,
+    length defs = n ->
+    list_norepet fst ## defs ->
+    In (id,def) defs ->
+    (fold_left acc_gen_section defs (PTree.empty section)) ! id =
+    (match def with
+     | Gfun (Internal f) => Some (sec_text (fn_code f))
+     | Gvar v =>
+       if v.(gvar_readonly) then Some (sec_rodata v.(gvar_init))
+       else Some (sec_rwdata v.(gvar_init))
+     | _ => None
+     end).
+Proof.
+  induction n.
+Admitted.
+
+Lemma advance_next_exists: forall F V n b (defs: list (ident * globdef F V)),
+    length defs = n ->
+    Mem.sup_In b (Genv.advance_next defs Mem.sup_empty) ->
+    exists id gd, b = Global id /\ In (id,gd) defs.
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl in H0. exploit Mem.empty_in;eauto.
+  intros. exfalso. auto.
+  exploit length_S_inv;eauto.
+  intros (l'& a & A1 & A2). destruct a.
+  subst. clear H.  unfold Genv.advance_next in H0.
+  rewrite fold_left_app in H0.
+  simpl in H0. apply Mem.sup_incr_glob_in in H0.
+  destruct H0.
+  subst. exists i,g.
+  split;auto. rewrite in_app.
+  right. constructor;auto.
+  exploit IHn;eauto.
+  intros (id & gd & P1 & P2).
+  subst.
+  exists id,gd. split;auto.
+  rewrite in_app.
+  left. auto.
+Qed.
+  
 (** Transformation *)
 Variable prog: Asm.program.
 Variable tprog: program.
@@ -354,7 +397,11 @@ Proof.
   generalize (find_instr_bound instr_size instr_size_bound _ _ _ H1).
   intros. constructor. lia.
   generalize (instr_size_bound i). intros. lia.
-  admit.                        (* code size bound *)
+  rewrite H2 in H. rewrite code_size_app in H. simpl in H.
+  generalize (instr_size_bound a). intros.
+  split. apply code_size_non_neg. apply instr_size_bound.
+  lia.
+
   intros.
   rewrite H6 in H1. rewrite H2 in H1.
   rewrite find_instr_app' in H1.
@@ -369,6 +416,7 @@ Proof.
   subst. erewrite IHn;auto.
   rewrite code_size_app in H. simpl in H.
   generalize (instr_size_bound a). intros. lia.
+  
   (* i0 = Ptrofs.repr code_size c' *)
   (* code_size c' < ofs or ofs < code_size c' *)
   admit.
@@ -506,7 +554,8 @@ Proof.
   intros (gl1 & gl2 & SPLIT & NOTIN).
   generalize l.
   rewrite SPLIT. unfold create_sec_table.
-  rewrite fold_left_app. 
+  rewrite fold_left_app.
+  unfold sections_size.
 Admitted.
 
 Lemma genv_defs_match: forall l id (ge1 ge2:Globalenvs.Genv.t fundef unit),
@@ -773,12 +822,27 @@ Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): P
     e.(symbentry_secindex) = secindex_comm ->
     match_sec_def id prog gd.
 
+
+
 Lemma transf_program_match_def: forall id gd,
     In (id, gd) (prog.(AST.prog_defs)) ->
     match_sec_def id tprog gd.
+Proof.
+  unfold match_prog in TRANSF.
+  unfold transf_program in TRANSF.
+  repeat destr_in TRANSF.
+  intros id gd HIn.
+  destruct gd.
+  - destruct f.
+    + econstructor;eauto.
+      simpl. unfold create_sec_table.
+      inv w.
+      exploit create_sec_table_correct;eauto.
+    + eapply match_ext_fun;eauto.
 Admitted.
 
-
+              
+          
 Lemma init_meminj_invert_strong :forall m b b' delta ,
     Genv.init_mem prog = Some m ->
     Mem.flat_inj (Mem.support m) b = Some (b',delta) ->
@@ -789,6 +853,65 @@ Lemma init_meminj_invert_strong :forall m b b' delta ,
       /\ Genv.find_symbol tge id = Some (b, Ptrofs.zero)
       /\ Genv.find_def ge b = Some gd
       /\ match_sec_def id tprog gd.
+Proof.
+  unfold Genv.init_mem.
+  intros m b b' del ALLOC INJ.  
+  eapply Genv.alloc_globals_support in ALLOC.
+  rewrite ALLOC in INJ. clear ALLOC.
+  unfold Mem.flat_inj in INJ.
+  destr_in INJ. inv INJ.
+  split;auto.  
+  unfold ge,tge.
+  unfold match_prog in TRANSF.
+  unfold transf_program in TRANSF.
+  repeat destr_in TRANSF.
+  unfold globalenv. simpl. unfold Genv.find_symbol.
+  simpl.
+
+  rewrite Mem.support_empty in s.
+  exploit advance_next_exists;eauto.
+  intros (id & gd & P1 & P2). subst.
+
+  exists id,gd. split;auto.
+  split.
+
+  (* ge find_symbol *)
+  apply Genv.find_symbol_exists in P2.
+  destruct P2. rewrite H.  eapply Genv.genv_vars_eq in H.
+  subst. auto.
+
+  split.
+  (* tge find_symbol *)
+  unfold gen_symb_map.
+  unfold gen_symb_table.
+  rewrite PTree.gmap. unfold option_map.
+
+  
+  
+  admit.
+
+  split.
+  (* find_def *)
+  exploit prog_defmap_norepet;eauto.
+  unfold prog_defs_names. inv w.
+  auto. intros P3.
+  eapply Genv.find_def_symbol in P3.
+  destruct P3 as (b & B1 & B2).
+  eapply Genv.genv_vars_eq in B1.
+  subst. auto.
+
+  (* transf_program_match_def : proved here*)
+  clear s l.
+  
+  destruct gd.
+  - destruct f.
+    + econstructor;eauto.
+      simpl. unfold create_sec_table.
+      inv w.
+      exploit create_sec_table_correct;eauto.
+    + eapply match_ext_fun;eauto.
+      
+  
 Admitted.
 
 
@@ -1030,9 +1153,14 @@ Lemma alloc_globals_alloc_sections_exists: forall defs ge1 ge2 m1 m1' m2,
             alloc_section instr_size ge2 (gen_symb_table instr_size defs) a (fst p) (snd p))
        (PTree.elements (create_sec_table defs)) (Some m2) = Some m2'.
 Proof.
+  Mem.alloc_glob
+  Mem.perm_alloc_glob_2
+  Genv.store_zeros_exists
+  Genv.alloc_globals_match
   induction defs;simpl;intros.
   - exists m2. auto.
   - destr_in H.
+    (* relation between defs and (create_sec_table defs) *)
     (* generalize the section table and symbol table
 induction on the PTree.elements xxx
 also require the list_norepet    *)
@@ -1188,55 +1316,6 @@ Proof.
      exploit Mem.sup_include_incr. apply H4. auto.
 Qed.
 
-(* Lemma transf_initial_states : forall rs (SELF: forall j, forall r : PregEq.t, Val.inject j (rs r) (rs r)) st1, *)
-(*     RealAsm.initial_state prog rs st1  -> *)
-(*     exists st2, initial_state tprog rs st2 /\ match_states st1 st2. *)
-(* Proof. *)
-(*   intros rs SELFINJECT st1 INIT. *)
-(*   generalize TRANSF. intros TRANSF'. *)
-(*   unfold match_prog in TRANSF'. unfold transf_program in TRANSF'. *)
-(*   destruct (check_wellformedness prog) eqn:WF. 2: congruence. repeat destr_in TRANSF'. *)
-(*   rename z0 into dsize. rename z into csize.  *)
-(*   inv INIT. *)
-(*   generalize init_meminj_match_sminj. *)
-(*   intros MATCH_SMINJ. *)
-(*   exploit (init_mem_pres_inject m); eauto. *)
-(*   intros (m' & INITM' & MINJ). *)
-(*   inversion H0. *)
-(*   (* push_new stage *) *)
-(*   exploit Mem.push_new_stage_inject; eauto. intros NSTGINJ. *)
-(*   exploit (Mem.alloc_parallel_inject globs_meminj (1%nat :: def_frame_inj m) *)
-(*           (Mem.push_new_stage m) (Mem.push_new_stage m') *)
-(*           0 (Mem.stack_limit + align (size_chunk Mptr) 8) m1 bstack *)
-(*           0 (Mem.stack_limit + align (size_chunk Mptr) 8)); eauto. omega. omega. *)
-(*   intros (j' & m1' & bstack' & MALLOC' & AINJ & INCR & FBSTACK & NOTBSTK). *)
-(*   rewrite <- push_new_stage_def_frame_inj in AINJ. *)
-(*   erewrite alloc_pres_def_frame_inj in AINJ; eauto. *)
-(*   assert (bstack = Globalenvs.Genv.genv_next ge). *)
-(*   { *)
-(*     exploit (Genv.init_mem_genv_next prog m); eauto. intros BEQ. unfold ge. rewrite BEQ. *)
-(*     apply Mem.alloc_result in MALLOC; eauto. *)
-(*   } *)
-(*   assert (bstack' = Genv.genv_next tge). *)
-(*   { *)
-(*     exploit init_mem_genv_next; eauto. intros BEQ. *)
-(*     unfold tge. rewrite BEQ. *)
-(*     exploit Mem.alloc_result; eauto. *)
-(*   } *)
-(*   assert (forall x, j' x = init_meminj x). *)
-(*   { *)
-(*     intros. destruct (eq_block x bstack). *)
-(*     subst x. rewrite FBSTACK. unfold init_meminj. subst. *)
-(*     rewrite dec_eq_true; auto. *)
-(*     erewrite NOTBSTK; eauto. *)
-(*     unfold init_meminj. subst. *)
-(*     rewrite dec_eq_false; auto. *)
-(*   } *)
-(*   exploit Mem.inject_ext; eauto. intros MINJ'. *)
-(*   exploit drop_parallel_inject; eauto.  *)
-(*   unfold init_meminj. fold ge. rewrite <- H3. rewrite pred_dec_true. eauto. auto. *)
-(*   intros (m2' & MDROP' & DMINJ). simpl in MDROP'. rewrite Z.add_0_r in MDROP'. *)
-(*   erewrite (drop_perm_pres_def_frame_inj m1) in DMINJ; eauto. *)
 
 (** ** Simulation of Single Step Execution *)
 
