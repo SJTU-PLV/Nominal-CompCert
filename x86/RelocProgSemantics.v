@@ -918,14 +918,22 @@ Definition alloc_external_comm_symbol (r: option mem) (id: ident) (e:symbentry):
     end
   | symb_data =>
     match symbentry_secindex e with
-    | secindex_undef
-    | secindex_comm =>
+    | secindex_undef =>
       let sz := symbentry_size e in
       let (m1, b) := Mem.alloc_glob id m 0 sz in
       match store_zeros m1 b 0 sz with
       | None => None
       | Some m2 =>
         Mem.drop_perm m2 b 0 sz Nonempty
+      end        
+    | secindex_comm =>
+      let sz := symbentry_size e in
+      let (m1, b) := Mem.alloc_glob id m 0 sz in
+      match store_zeros m1 b 0 sz with
+      | None => None
+      | Some m2 =>
+       (* writable for common symbol *)
+        Mem.drop_perm m2 b 0 sz Writable
       end        
     | secindex_normal _ => Some m
     end
@@ -1061,9 +1069,12 @@ Definition globals_initialized (ge: Genv.t) (prog: program) (m:mem):=
         | symb_data,secindex_comm =>
           let sz := e.(symbentry_size) in
           let data := Init_space sz :: nil in
-          Mem.range_perm m b 0 sz Cur Nonempty /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Nonempty p)
+          Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
           /\ load_store_init_data ge m b 0 data
           /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+        | symb_data,secindex_undef =>
+          Mem.perm m b 0 Cur Nonempty /\
+          (forall ofs k p, Mem.perm m b ofs k p -> ofs = 0 /\ p = Nonempty)
         | _,_ => False
         end
       | _ => False

@@ -221,8 +221,13 @@ Lemma create_sec_table_correct: forall n id def defs,
     (match def with
      | Gfun (Internal f) => Some (sec_text (fn_code f))
      | Gvar v =>
-       if v.(gvar_readonly) then Some (sec_rodata v.(gvar_init))
-       else Some (sec_rwdata v.(gvar_init))
+       match gvar_init v with
+       | [] => None
+       | [Init_space _ ] => None
+       | _ =>
+         if v.(gvar_readonly) then Some (sec_rodata v.(gvar_init))
+         else Some (sec_rwdata v.(gvar_init))
+       end
      | _ => None
      end).
 Proof.
@@ -254,7 +259,36 @@ Proof.
   rewrite in_app.
   left. auto.
 Qed.
-  
+
+
+Lemma gen_symb_table_in_defs: forall n id gd defs,
+    length defs = n ->
+    list_norepet fst##defs ->
+    In (id,gd) defs ->
+    (fold_left (acc_symb instr_size) defs (PTree.empty symbentry)) ! id = Some (get_symbentry instr_size id gd).
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  inv H1.
+  exploit length_S_inv;eauto.
+  intros (l'& a & A1 & A2). destruct a.
+  subst. clear H.
+  rewrite fold_left_app. simpl.
+  rewrite map_app in H0.
+  apply list_norepet_app in H0.
+  destruct H0 as (A1 & A2 & A3).
+  apply in_app in H1. destruct H1.
+  - simpl in *.
+    unfold list_disjoint in A3.
+    exploit IHn;eauto.
+    intros. rewrite PTree.gso. auto.
+    apply A3. eapply in_map with (f:=fst) in H.
+    simpl in H. auto. constructor;auto.
+  - inv H;inv H0.
+    rewrite PTree.gss. auto.
+Qed.
+
+    
 (** Transformation *)
 Variable prog: Asm.program.
 Variable tprog: program.
@@ -808,6 +842,7 @@ Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): P
     match_sec_def id prog gd
 | match_ext_var: forall v e,
     gd = Gvar v ->
+    v.(gvar_init) = [] ->
     (prog_symbtable prog) ! id = Some e ->
     (prog_sectable prog) ! id = None ->
     e.(symbentry_type) = symb_data ->
@@ -820,27 +855,8 @@ Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): P
     v.(gvar_init) = [Init_space sz] ->
     e.(symbentry_type) = symb_data ->
     e.(symbentry_secindex) = secindex_comm ->
+    e.(symbentry_size) = Z.max sz 0 ->
     match_sec_def id prog gd.
-
-
-
-Lemma transf_program_match_def: forall id gd,
-    In (id, gd) (prog.(AST.prog_defs)) ->
-    match_sec_def id tprog gd.
-Proof.
-  unfold match_prog in TRANSF.
-  unfold transf_program in TRANSF.
-  repeat destr_in TRANSF.
-  intros id gd HIn.
-  destruct gd.
-  - destruct f.
-    + econstructor;eauto.
-      simpl. unfold create_sec_table.
-      inv w.
-      exploit create_sec_table_correct;eauto.
-    + eapply match_ext_fun;eauto.
-Admitted.
-
               
           
 Lemma init_meminj_invert_strong :forall m b b' delta ,
@@ -886,9 +902,14 @@ Proof.
   unfold gen_symb_table.
   rewrite PTree.gmap. unfold option_map.
 
-  
-  
-  admit.
+  inv w.
+  erewrite gen_symb_table_in_defs;eauto.
+  f_equal. unfold gen_global. destruct gd;simpl.
+  destruct f;simpl;auto.
+  destruct (gvar_init v);simpl;auto.
+  destruct i;auto;destruct (gvar_readonly v);auto;
+  destruct l0;auto.
+
 
   split.
   (* find_def *)
@@ -909,10 +930,71 @@ Proof.
       simpl. unfold create_sec_table.
       inv w.
       exploit create_sec_table_correct;eauto.
-    + eapply match_ext_fun;eauto.
-      
-  
-Admitted.
+    + eapply match_ext_fun;eauto;simpl.
+      inv w.
+      unfold gen_symb_table.
+      erewrite gen_symb_table_in_defs;eauto.
+      unfold create_sec_table.
+      erewrite create_sec_table_correct;eauto. simpl.
+      auto. inv w. auto.
+      simpl. auto.
+      simpl. auto.
+  - destruct v.
+    destruct gvar_init.
+    + eapply match_ext_var;eauto.
+      simpl. unfold gen_symb_table.
+      erewrite gen_symb_table_in_defs;eauto.
+      inv w;auto.
+      simpl. unfold create_sec_table.
+      erewrite create_sec_table_correct;eauto. simpl.
+      auto. inv w. auto.
+      simpl. auto.
+      simpl. auto.
+    + destruct (gvar_init).
+      * assert ({exists sz, i=Init_space sz} + {not (exists sz, i=Init_space sz)}).
+        { destruct i.
+          1-6: (right;unfold not;intros;destruct H;inv H).
+          left. exists z. auto.
+          right;unfold not;intros;destruct H;inv H. }
+        destruct H.
+        -- destruct e. subst.
+           eapply match_comm;eauto.
+           simpl. unfold gen_symb_table.
+           erewrite gen_symb_table_in_defs;eauto.
+           inv w;auto.
+           simpl. unfold create_sec_table.
+           erewrite create_sec_table_correct;eauto. simpl.
+           auto. inv w. auto.
+           simpl. eauto.
+           simpl. auto.
+           simpl. auto.
+           simpl. auto.
+        -- destruct gvar_readonly.
+           ++ eapply match_rodata_var;eauto.
+              simpl. unfold create_sec_table.
+              erewrite create_sec_table_correct;eauto. simpl.
+              destruct i;auto.
+              exfalso. apply n. eauto.
+              inv w. auto.
+           ++ eapply match_rwdata_var;eauto.
+              simpl. unfold create_sec_table.
+              erewrite create_sec_table_correct;eauto. simpl.
+              destruct i;auto.
+              exfalso. apply n. eauto.
+              inv w. auto.
+      * destruct gvar_readonly.
+        -- eapply match_rodata_var;eauto.
+           simpl. unfold create_sec_table.
+           erewrite create_sec_table_correct;eauto. simpl.
+           destruct i;auto.         
+           inv w. auto.
+        -- eapply match_rwdata_var;eauto.
+           simpl. unfold create_sec_table.
+           erewrite create_sec_table_correct;eauto. simpl.
+           destruct i;auto.         
+           inv w. auto.           
+Qed.
+
 
 
 Section INIT_MEM.
@@ -960,15 +1042,72 @@ Proof.
       apply OFSRANGE1 in H0. destruct H0. subst.
       eapply Mem.perm_cur. auto.
     + rewrite H2 in *.  simpl in INIT2.
+      unfold Mem.flat_inj in H. destr_in H. inv H.
       destruct INIT2 as (PERM & OFSRANGE).
       destruct INIT1 as (PERM1 & OFSRANGE1).
       apply OFSRANGE1 in H0. destruct H0.
-       eapply Mem.perm_cur. auto.
-       admit.
-    + admit.
-    + admit.
-    + admit.
-    + admit.
+      apply PERM in H.
+      unfold Genv.perm_globvar in H0.
+      rewrite H3 in H0.
+            eapply Mem.perm_cur.
+      destr_in H0. inv H0.
+      eapply Mem.perm_implies. eauto.
+      constructor.
+      eapply Mem.perm_implies. eauto.
+      constructor.
+      eapply Mem.perm_implies. eauto.
+      auto.
+    + rewrite H2 in *.  simpl in INIT2.
+      unfold Mem.flat_inj in H. destr_in H. inv H.
+      destruct INIT2 as (PERM & OFSRANGE).
+      destruct INIT1 as (PERM1 & OFSRANGE1).
+      apply OFSRANGE1 in H0. destruct H0.
+      apply PERM in H.
+      unfold Genv.perm_globvar in H0.
+      rewrite H3 in H0.
+            eapply Mem.perm_cur.
+      destr_in H0. inv H0.
+      eapply Mem.perm_implies. eauto.
+      constructor.
+      eapply Mem.perm_implies. eauto.
+      constructor.
+      eapply Mem.perm_implies. eauto.
+      auto.
+    + rewrite H3 in *. rewrite H2 in *.
+      rewrite H4 in *. rewrite H5 in *.
+      simpl in INIT2.
+      unfold Mem.flat_inj in H. destr_in H. inv H.
+      destruct INIT2 as (PERM & OFSRANGE).
+      destruct INIT1 as (PERM1 & OFSRANGE1).
+      simpl in OFSRANGE.
+      apply OFSRANGE1 in H0. destruct H0. subst.
+      eapply Mem.perm_cur. auto.
+    + rewrite H4 in *. rewrite H3 in *.
+      rewrite H5 in *. rewrite H6 in *.
+      simpl in INIT2.
+      unfold Mem.flat_inj in H. destr_in H. inv H.
+      destruct INIT2 as (PERM & OFSRANGE).
+      destruct INIT1 as (PERM1 & OFSRANGE1).
+      simpl in OFSRANGE.
+      apply OFSRANGE1 in H0. destruct H0.
+      rewrite H2 in H. simpl in H. lia.
+    + rewrite H3 in *. rewrite H2 in *.
+      rewrite H5 in *. rewrite H6 in *.
+      simpl in INIT2.
+      unfold Mem.flat_inj in H. destr_in H. inv H.
+      destruct INIT2 as (PERM & OFSRANGE).
+      destruct INIT1 as (PERM1 & OFSRANGE1).
+      rewrite H7 in *. rewrite H4 in *.
+      apply OFSRANGE1 in H0. destruct H0.
+      simpl in H. rewrite Z.add_0_r in H.
+      apply PERM in H.
+      apply Mem.perm_cur.
+      eapply Mem.perm_implies. eauto.
+      unfold Genv.perm_globvar in H0.
+      destr_in H0. inv H0;constructor.
+      destr_in H0. inv H0;constructor.
+      
+      
   - exploit init_meminj_invert_strong;eauto.
     intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
     apply Z.divide_0_r.
