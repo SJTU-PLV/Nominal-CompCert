@@ -124,13 +124,12 @@ BACKEND=\
   RelocProgram.v RelocProgramBytes.v\
   Symbtablegen.v Symbtablegenproof.v\
   Reloctablesgen.v\
-  RelocBingen.v\
+  RelocBingen.v RelocBinDecode.v RelocBingenproof.v\
   TranslateInstr.v\
   AsmLongInt.v\
-  RelocProgSemantics.v RelocProgSemantics1.v \
+  RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
   AsmInject.v
 
-# RelocBinDecode.v # RelocBingenproof.v
 # Reloctablesgenproof.v TranslateInstrSize.v RelocProgSemantics2.v
 
 # Encoding of data into bytes

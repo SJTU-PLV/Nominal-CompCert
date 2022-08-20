@@ -33,31 +33,51 @@ Section WITHGE.
   
 (** Initialization of memory *)
 
-Definition acc_data r b : list memval * Z * reloctable :=
-  let '(lmv, ofs, reloctbl) := r in
+Fixpoint aux_generate_fragment_ptr n v q :=
+  match n with
+  | O =>
+    []
+  | S n' =>
+    Fragment v q n' :: aux_generate_fragment_ptr n' v q
+  end.
+
+
+Fixpoint aux_generate_fragment_undef n :=
+  match n with
+  | O =>
+    []
+  | S n' =>
+    Undef :: aux_generate_fragment_undef n'
+  end.
+
+    
+  
+Definition acc_data r b : list memval * Z * reloctable * list byte :=
+  let '(lmv, ofs, reloctbl, ofsbytes) := r in
   match reloctbl with
-  | [] => (lmv ++ [Byte b], ofs + 1, []) 
+  | [] => (lmv ++ [Byte b], ofs + 1, [], ofsbytes)
   | e :: tl =>
     let n := if Archi.ptr64 then 8 else 4 in
     let q := if Archi.ptr64 then Q64 else Q32 in
     if ((reloc_offset e) <=? ofs) && (ofs <? (reloc_offset e) + n) then
-      let v := Genv.symbol_address ge (reloc_symb e) (Ptrofs.repr (reloc_addend e)) in
       let m := n - 1 - (ofs - (reloc_offset e)) in
-      let mv := match v with
-                | Vptr _ _ => [Fragment v q (Z.to_nat m)]
-                | _ => [Undef]
-                end in
       if m =? 0 then
-        (lmv ++ mv, ofs + 1, tl)
+        let addrofs := decode_int (ofsbytes ++ [b]) in
+        let v := Genv.symbol_address ge (reloc_symb e) (Ptrofs.repr addrofs) in
+        let mv := match v with
+                  | Vptr _ _ => aux_generate_fragment_ptr (Z.to_nat n) v q
+                  | _ => aux_generate_fragment_undef (Z.to_nat n)
+                  end in
+        (lmv ++ mv, ofs + 1, tl, [])
       else
-        (lmv ++ mv, ofs + 1, reloctbl)
+        (lmv, ofs + 1, reloctbl, ofsbytes ++ [b])
     else
-      (lmv ++ [Byte b], ofs + 1, reloctbl)
+      (lmv ++ [Byte b], ofs + 1, reloctbl, [])
   end.
 
 
 Definition store_init_data_bytes (reloctbl: reloctable) (m: mem) (b: block) (p: Z) (bytes: list byte) : option mem :=
-  let memvals := fst (fst (fold_left acc_data bytes ([],0,reloctbl))) in
+  let memvals := fst (fst (fst (fold_left acc_data bytes ([],0,reloctbl,[])))) in
   Mem.storebytes m b p memvals.
 
 Definition alloc_section (reloctbl_map: reloctable_map) (r: option mem) (id: ident) (sec: RelocProg.section instruction byte) : option mem :=

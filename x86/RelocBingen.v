@@ -93,8 +93,8 @@ Definition transl_init_data (e: option relocentry) (d:init_data) : res (list byt
     (* do addend <- get_reloc_addend rtbl_ofs_map dofs; *)
 
     if (Pos.eqb (reloc_symb e) id) then
-      if Archi.ptr64 then     
-        OK (encode_int 8 (Ptrofs.unsigned ofs)) 
+      if Archi.ptr64 then
+        OK (encode_int 8 (Ptrofs.unsigned ofs))
       else
         OK (encode_int 4 (Ptrofs.unsigned ofs))
     else Error (msg "Init_addrof is inconsistent with relocentry")

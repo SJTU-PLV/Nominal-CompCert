@@ -977,7 +977,7 @@ Lemma transl_init_data_pres_mem: forall reloctbl d ge1 ge2 m1 m1' b ofs lm0 sz0 
     | h::_ => sz0 + (init_data_size d) <= h.(reloc_offset)
     | _ => True
     end ->
-    exists lm, fold_left (acc_data ge2) lb (lm0,sz0,reloctbl) = (lm0 ++ lm, sz0 + init_data_size d, reloctbl) /\ init_data_size d =  Z.of_nat (length lm) /\ Mem.storebytes m1 b ofs lm = Some m1'.
+    exists lm, fold_left (acc_data ge2) lb (lm0,sz0,reloctbl,[]) = (lm0 ++ lm, sz0 + init_data_size d, reloctbl,[]) /\ init_data_size d =  Z.of_nat (length lm) /\ Mem.storebytes m1 b ofs lm = Some m1'.
 Proof.
   intros.
   destruct d;simpl in H0;try congruence.
@@ -1166,7 +1166,7 @@ Proof.
       * exploit IHn;eauto.
         intros (lm & P1 & P2 & P3).
         erewrite P1. eexists. split;f_equal;auto.
-        f_equal. rewrite app_assoc_reverse. auto.
+        do 2 f_equal. rewrite app_assoc_reverse. auto.
         lia.
         split. rewrite app_length. simpl. lia.
         eapply Mem.storebytes_concat.
@@ -1182,7 +1182,7 @@ Proof.
         exploit IHn;eauto. clear H0.
         intros (lm & P1 & P2 & P3).
         erewrite P1. eexists. split;f_equal;auto.
-        f_equal. rewrite app_assoc_reverse. auto.
+        do 2 f_equal. rewrite app_assoc_reverse. auto.
         lia.
         split. rewrite app_length. simpl. lia.
         eapply Mem.storebytes_concat.
@@ -1211,7 +1211,7 @@ Lemma transl_init_data_list_pres_mem: forall n data reloctbl reloctbl' sz l b m1
     fold_left acc_init_data data (OK ([], 0, reloctbl)) = OK (l, sz, reloctbl') ->
     (* transl_init_data_list r data = OK l -> *)
     RelocProgSemantics.store_init_data_list ge1 m1 b 0 data = Some m2 ->
-    exists bl, fold_left (acc_data ge2) l ([], 0, reloctbl) = (bl, sz, reloctbl') /\ init_data_list_size data = Z.of_nat (length bl) /\  Mem.storebytes m1 b 0 bl = Some m2.
+    exists bl, fold_left (acc_data ge2) l ([], 0, reloctbl,[]) = (bl, sz, reloctbl',[]) /\ init_data_list_size data = Z.of_nat (length bl) /\  Mem.storebytes m1 b 0 bl = Some m2.
           (* store_init_data_bytes ge2 r m1 b 0 l = Some m2. *)
 Proof.
   induction n;intros.
@@ -1266,14 +1266,13 @@ Proof.
       destr_in EQ1. 
       apply Z.eqb_eq in Heqb0. subst.
       cbn [init_data_size] in *.
-      apply andb_true_iff in Heqb1.
-      destruct Heqb1 as (SYMB & ADDEND).
+      rename Heqb1 into SYMB.
       rewrite Z.add_0_l in P2.
       simpl in P2. destr_in P2. inv P2.
       apply Pos.eqb_eq in SYMB.
-      apply Z.eqb_eq in ADDEND.
+      (* apply Z.eqb_eq in ADDEND. *)
       rewrite <- (Ptrofs.repr_unsigned i0)in Heqo. subst.
-      rewrite <- ADDEND in Heqo.
+      (* rewrite <- ADDEND in Heqo. *)
       erewrite MATCHGE in Heqo.
       eapply Mem.store_storebytes in Heqo. unfold Mptr in *.
 
@@ -1307,25 +1306,37 @@ Proof.
          do 8 (solve_reloc_if;try rewrite Heqb0;simplfy_zarth;try rewrite Heqb0).
          
                     
-
-
-        eexists. split. do 2 f_equal.
+        rewrite <- ENC0.
+        assert (DEC:(decode_int v) = Ptrofs.unsigned i0).
+        unfold v. rewrite decode_encode_int.
+        simpl. rewrite Z.mod_small. auto.
+        generalize (Ptrofs.unsigned_range i0).
+        unfold Ptrofs.modulus. unfold Ptrofs.wordsize.
+        unfold Wordsize_Ptrofs.wordsize. rewrite Heqb0.
+        auto.
+        rewrite DEC.
+        
+        eexists. split. do 3 f_equal.
         lia.
 
         unfold Genv.symbol_address in *.
         destr_in Heqo.
 
         ++ destruct p.
-           split. repeat rewrite app_length. cbn [length].
-           rewrite LocalLib.init_data_list_size_app. simpl.
-           rewrite Heqb0. lia.
-           simpl. 
-                      
-           repeat rewrite <- app_assoc.
-           eapply storebytes_append;eauto.
-           rewrite Z.add_0_l. rewrite <- Q2.
+           split.
 
-           rewrite <- Heqo. f_equal.
+           ** repeat rewrite app_length. cbn [length].
+              rewrite LocalLib.init_data_list_size_app. simpl.
+              rewrite Heqb0. lia.
+           **
+             
+             repeat rewrite <- app_assoc.
+             eapply storebytes_append;eauto.
+             rewrite Z.add_0_l. rewrite <- Q2.
+             rewrite <- Heqo. simpl.
+             rewrite Heqb0. f_equal.
+             
+           
         ++ split. repeat rewrite app_length. cbn [length].
            rewrite LocalLib.init_data_list_size_app. simpl.
            rewrite Heqb0. lia.
@@ -1349,7 +1360,17 @@ Proof.
 
         do 4 (solve_reloc_if;try rewrite Heqb0;simplfy_zarth;try rewrite Heqb0).
 
-        eexists. split. do 2 f_equal.
+        rewrite <- ENC0.
+        assert (DEC:(decode_int v) = Ptrofs.unsigned i0).
+        unfold v. rewrite decode_encode_int.
+        simpl. rewrite Z.mod_small. auto.
+        generalize (Ptrofs.unsigned_range i0).
+        unfold Ptrofs.modulus. unfold Ptrofs.wordsize.
+        unfold Wordsize_Ptrofs.wordsize. rewrite Heqb0.
+        auto.
+        rewrite DEC.
+        
+        eexists. split. do 3 f_equal.
         lia.
 
         unfold Genv.symbol_address in *.

@@ -429,13 +429,14 @@ Definition get_reloc_addend (e: option relocentry) :=
 Definition translate_Addrmode_AddrE_aux32 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) : res AddrE :=
   match obase,oindex with
   | None,None =>
-    if Archi.ptr64 then
+    OK (AddrE11 ofs32)
+    (* if Archi.ptr64 then
       do rsp <- encode_ireg_u3 RSP;
     (* do not use rip-relative addressing *)
     OK (AddrE11 ofs32)
     (* OK (AddrE9 zero2 rsp ofs32) *)
     else
-      OK (AddrE11 ofs32)
+      OK (AddrE11 ofs32) *)
   | Some base,None =>
     do r <- encode_ireg_u3 base;
     do rsp <- encode_ireg_u3 RSP;
@@ -468,8 +469,8 @@ Definition translate_Addrmode_AddrE (e: option relocentry) (addr:addrmode): res 
   | Addrmode obase oindex disp  =>
     match disp with
     | inr (id, ofs) =>
-      match id with
-      | xH =>
+      match id,e with
+      | xH, Some _ =>
         (* do addend <- get_reloc_addend e; *)
         if (Ptrofs.unsigned ofs <? Int.modulus) then
           (* if Z.eqb (Ptrofs.unsigned ofs) addend then *)
@@ -478,7 +479,7 @@ Definition translate_Addrmode_AddrE (e: option relocentry) (addr:addrmode): res 
             translate_Addrmode_AddrE_aux32 obase oindex imm32
           (* else Error (msg "addend is not equal to ofs") *)
         else Error (msg "Addrmode32: Out range of unsigned 32bit displacement")
-      | _ => Error(msg "id must be 1")
+      | _,_ => Error(msg "id is not 1 or no relocation entry")
       end
     | inl ofs =>
       match e with
@@ -496,7 +497,7 @@ Definition translate_Addrmode_AddrE_aux64 (obase: option ireg) (oindex: option (
   match obase,oindex with
   | None,None =>
     if Archi.ptr64 then
-      do rsp <- encode_ireg_u3 RSP;
+      (* do rsp <- encode_ireg_u3 RSP; *)
       (* use rip-relative addressing *)
       OK (AddrE11 ofs32,zero1,zero1)
       (* OK ((AddrE9 zero2 rsp ofs32),zero1,zero1) *)
@@ -540,8 +541,8 @@ Definition translate_Addrmode_AddrE64 (e: option relocentry) (addr:addrmode): re
   | Addrmode obase oindex disp  =>
     match disp with
     | inr (id, ofs) =>
-      match id with
-      | xH =>
+      match id,e with
+      | xH,Some _ =>
         (* do addend <- get_reloc_addend e; *)
         if (Ptrofs.unsigned ofs <? Int.modulus) then
           (* addend is the offset of id and access point *)
@@ -550,7 +551,7 @@ Definition translate_Addrmode_AddrE64 (e: option relocentry) (addr:addrmode): re
             translate_Addrmode_AddrE_aux64 obase oindex imm32
           (* else Error (msg "64bit: addend is not equal to ofs") *)
         else Error (msg "Addrmode64: Out range of unsigned 32bit displacement")                                        
-      | _ => Error(msg "64bit: id must be 1")
+      | _,_ => Error(msg "64bit: id is not 1 or no relocation entry")
       end
     | inl ofs =>
       match e with
@@ -1290,11 +1291,16 @@ Definition translate_instr (e: option relocentry) (i:instruction) : res (list In
     if Pos.eqb id xH then
       (* do addend <- get_reloc_addend e; *)
       (* do imm32 <- encode_ofs_u32 addend; *)
-      if Archi.ptr64 then 
-        OK [Pjmp_l_rel zero32]
-      else
-        do imm32 <- encode_ofs_u32 (-4);
-        OK [Pjmp_l_rel imm32]
+      match e with
+      |  Some _ =>
+        if Archi.ptr64 then 
+          OK [Pjmp_l_rel zero32]
+        else
+          do imm32 <- encode_ofs_u32 (-4);
+          OK [Pjmp_l_rel imm32]
+      | None =>
+        Error (msg "No relocation entry in Pjmp_s")
+      end
     else Error (msg "Id not equal to xH in Pjmp_s")
   | Asm.Pjmp_r r sg =>
     do rex_r <- encode_rex_prefix_r r;
@@ -1316,11 +1322,16 @@ Definition translate_instr (e: option relocentry) (i:instruction) : res (list In
     | xH =>
       (* do addend <- get_reloc_addend e; *)
       (* do imm32 <- encode_ofs_u32 addend; *)
-      if Archi.ptr64 then 
-        OK [Pcall_ofs zero32]
-      else
-        do imm32 <- encode_ofs_u32 (-4);
-        OK [Pcall_ofs imm32]
+      match e with
+      |  Some _ =>
+        if Archi.ptr64 then 
+          OK [Pcall_ofs zero32]
+        else
+          do imm32 <- encode_ofs_u32 (-4);
+          OK [Pcall_ofs imm32]
+      | _ =>
+        Error [MSG "No relocation entry in Pcall_s"]
+      end
     | _ =>
       Error [MSG "id must be 1: Pcall_s"]
     end

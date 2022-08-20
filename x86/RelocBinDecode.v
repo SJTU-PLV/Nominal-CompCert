@@ -264,19 +264,16 @@ Proof.
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
     + destruct p0. destr_in H.
-      monadInv H. destr_in EQ0. destr_in EQ0. monadInv EQ0.
-      simpl in EQ2. destruct p.  destr_in EQ2. monadInv EQ2.
+      destr_in H. destr_in H. monadInv H.
+      simpl in EQ0. destruct p.  destr_in EQ0. monadInv EQ0.
       split. simpl;auto.
-      unfold get_reloc_addend in EQ.
-      destr_in EQ.
-      unfold translate_AddrE_Addrmode. inv EQ.
+      unfold translate_AddrE_Addrmode.
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-      apply Z.eqb_eq in Heqb0. rewrite <- Heqb0 in *.
       apply Z.ltb_lt in Heqb.
       unfold Ptrofs.of_int.
-      eapply encode_ofs_u32_consistency_aux in EQ1.
-      unfold Int.unsigned. rewrite EQ1.
+      eapply encode_ofs_u32_consistency_aux in EQ.
+      unfold Int.unsigned. rewrite EQ.
       apply Ptrofs.repr_unsigned.
       generalize (Ptrofs.unsigned_range i1).
       lia.
@@ -290,19 +287,17 @@ Proof.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-    + destruct p. destr_in H.
-      monadInv H. destr_in EQ0. destr_in EQ0. monadInv EQ0.
-      unfold translate_Addrmode_AddrE_aux32 in EQ2. monadInv EQ2.
+    + destruct p. do 3 destr_in H.
+      monadInv H.
+      unfold translate_Addrmode_AddrE_aux32 in EQ0. monadInv EQ0.
       split. simpl;auto.
-      unfold get_reloc_addend in EQ. destr_in EQ.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-      apply Z.eqb_eq in Heqb0. rewrite <- Heqb0 in *.
       apply Z.ltb_lt in Heqb.
       unfold Ptrofs.of_int.
-      eapply encode_ofs_u32_consistency_aux in EQ1.
-      unfold Int.unsigned. rewrite EQ1.
+      eapply encode_ofs_u32_consistency_aux in EQ.
+      unfold Int.unsigned. rewrite EQ.
       apply Ptrofs.repr_unsigned.
       generalize (Ptrofs.unsigned_range i1).
       lia.
@@ -316,65 +311,49 @@ Proof.
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
     + destruct p0. destr_in H.
-      monadInv H. destr_in EQ0. destr_in EQ0. monadInv EQ0.
-      simpl in EQ2. destruct p.  destr_in EQ2. monadInv EQ2.
+      destr_in H. destr_in H. monadInv H.
+      simpl in EQ0. destruct p.  destr_in EQ0. monadInv EQ0.
       split. simpl;auto.
-      unfold get_reloc_addend in EQ. destr_in EQ.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-      apply Z.eqb_eq in Heqb0. rewrite <- Heqb0 in *.
       apply Z.ltb_lt in Heqb.
       unfold Ptrofs.of_int.
-      eapply encode_ofs_u32_consistency_aux in EQ1.
-      unfold Int.unsigned. rewrite EQ1.
+      eapply encode_ofs_u32_consistency_aux in EQ.
+      unfold Int.unsigned. rewrite EQ.
       apply Ptrofs.repr_unsigned.
       generalize (Ptrofs.unsigned_range i0).
       lia.
-      
+
   -  destr_in H.
     + destr_in H. monadInv H.
       unfold translate_Addrmode_AddrE_aux32 in EQ0.
-      destr_in EQ0.
-      * monadInv EQ0.
-        split. simpl;auto.
-        unfold translate_AddrE_Addrmode.
-        erewrite encode_ireg_u3_consistency;eauto.
-        destr. rewrite Heqb. repeat f_equal;auto with encdec.
-      * inv EQ0. split. simpl;auto.
-        unfold translate_AddrE_Addrmode.
-        do 4 f_equal.
-        auto with encdec.
-    + destruct p. destr_in H.
-      monadInv H. destr_in EQ0. destr_in EQ0. monadInv EQ0.
-      unfold translate_Addrmode_AddrE_aux32 in EQ2. destr_in EQ2.
-      * monadInv EQ2.
-        split. simpl;auto.
-        unfold get_reloc_addend in EQ. destr_in EQ.
-        unfold translate_AddrE_Addrmode. rewrite Heqb1.
-        erewrite encode_ireg_u3_consistency;eauto.
-        destr. repeat f_equal;auto with encdec.
-        apply Z.eqb_eq in Heqb0. rewrite <- Heqb0 in *.
-        apply Z.ltb_lt in Heqb.
-        unfold Ptrofs.of_int.
-        eapply encode_ofs_u32_consistency_aux in EQ1.
-        unfold Int.unsigned. rewrite EQ1.
-        apply Ptrofs.repr_unsigned.
-        generalize (Ptrofs.unsigned_range i0).
-        lia.
-
-      * inv EQ2. split. simpl;auto.
-        unfold translate_AddrE_Addrmode.
-        unfold get_reloc_addend in EQ. destr_in EQ.
-        do 4 f_equal.
-        apply Z.eqb_eq in Heqb0. rewrite <- Heqb0 in *.
-        apply Z.ltb_lt in Heqb.
-        unfold Ptrofs.of_int.
-        eapply encode_ofs_u32_consistency_aux in EQ1.
-        unfold Int.unsigned. rewrite EQ1.
-        apply Ptrofs.repr_unsigned.
-        generalize (Ptrofs.unsigned_range i0).
-        lia.
+      inv EQ0.
+      split. simpl;auto.
+      unfold translate_AddrE_Addrmode.
+      repeat f_equal;auto with encdec.
+      (* * monadInv EQ0. *)
+      (*   split. simpl;auto. *)
+      (*   unfold translate_AddrE_Addrmode. *)
+      (*   erewrite encode_ireg_u3_consistency;eauto. *)
+      (*   destr. rewrite Heqb. repeat f_equal;auto with encdec. *)
+      (* * inv EQ0. split. simpl;auto. *)
+      (*   unfold translate_AddrE_Addrmode. *)
+      (*   do 4 f_equal. *)
+      (*   auto with encdec. *)
+    + destruct p. do 3 destr_in H.
+      monadInv H.
+      unfold translate_Addrmode_AddrE_aux32 in EQ0. inv EQ0.
+      split. simpl;auto.
+      unfold translate_AddrE_Addrmode.
+      repeat f_equal;auto with encdec.
+      unfold Ptrofs.of_int.
+      eapply encode_ofs_u32_consistency_aux in EQ.
+      unfold Int.unsigned. rewrite EQ.
+      apply Ptrofs.repr_unsigned.
+      apply Z.ltb_lt in Heqb.
+      generalize (Ptrofs.unsigned_range i0).
+      lia.
 Qed.
 
 (* mostly same as 32bit mode *)
@@ -385,7 +364,7 @@ Proof.
   unfold translate_Addrmode_AddrE64.
   destruct addr.
   destruct base;destruct ofs;intros ad e x b H.
-  
+
   - destr_in H.
     + destr_in H. subst.
       monadInv H. simpl in EQ0. destruct p. simpl in EQ0.
@@ -395,19 +374,16 @@ Proof.
       erewrite encode_ireg_u4_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
     + destruct p0. destr_in H.
-      monadInv H. destr_in EQ0. destr_in EQ0. monadInv EQ0.
-      simpl in EQ2. destruct p.  destr_in EQ2. monadInv EQ2.
+      destr_in H. destr_in H. monadInv H.
+      simpl in EQ0. destruct p.  destr_in EQ0. monadInv EQ0.
       split. simpl;auto.
-      unfold get_reloc_addend in EQ.
-      destr_in EQ.
-      unfold translate_AddrE_Addrmode. inv EQ.
+      unfold translate_AddrE_Addrmode.
       erewrite encode_ireg_u4_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-      apply Z.eqb_eq in Heqb1. rewrite <- Heqb1 in *.
       apply Z.ltb_lt in Heqb0.
       unfold Ptrofs.of_int.
-      eapply encode_ofs_u32_consistency_aux in EQ1.
-      unfold Int.unsigned. rewrite EQ1.
+      eapply encode_ofs_u32_consistency_aux in EQ.
+      unfold Int.unsigned. rewrite EQ.
       apply Ptrofs.repr_unsigned.
       generalize (Ptrofs.unsigned_range i1).
       lia.
@@ -421,19 +397,17 @@ Proof.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-    + destruct p. destr_in H.
-      monadInv H. destr_in EQ0. destr_in EQ0. monadInv EQ0.
-      unfold translate_Addrmode_AddrE_aux64 in EQ2. monadInv EQ2.
+    + destruct p. do 3 destr_in H.
+      monadInv H.
+      unfold translate_Addrmode_AddrE_aux64 in EQ0. monadInv EQ0.
       split. simpl;auto.
-      unfold get_reloc_addend in EQ. destr_in EQ.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-      apply Z.eqb_eq in Heqb1. rewrite <- Heqb1 in *.
       apply Z.ltb_lt in Heqb0.
       unfold Ptrofs.of_int.
-      eapply encode_ofs_u32_consistency_aux in EQ1.
-      unfold Int.unsigned. rewrite EQ1.
+      eapply encode_ofs_u32_consistency_aux in EQ.
+      unfold Int.unsigned. rewrite EQ.
       apply Ptrofs.repr_unsigned.
       generalize (Ptrofs.unsigned_range i1).
       lia.
@@ -447,50 +421,53 @@ Proof.
       erewrite encode_ireg_u4_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
     + destruct p0. destr_in H.
-      monadInv H. destr_in EQ0. destr_in EQ0. monadInv EQ0.
-      simpl in EQ2. destruct p.  destr_in EQ2. monadInv EQ2.
+      destr_in H. destr_in H. monadInv H.
+      simpl in EQ0. destruct p.  destr_in EQ0. monadInv EQ0.
       split. simpl;auto.
-      unfold get_reloc_addend in EQ. destr_in EQ.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ireg_u4_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-      apply Z.eqb_eq in Heqb1. rewrite <- Heqb1 in *.
       apply Z.ltb_lt in Heqb0.
       unfold Ptrofs.of_int.
-      eapply encode_ofs_u32_consistency_aux in EQ1.
-      unfold Int.unsigned. rewrite EQ1.
+      eapply encode_ofs_u32_consistency_aux in EQ.
+      unfold Int.unsigned. rewrite EQ.
       apply Ptrofs.repr_unsigned.
       generalize (Ptrofs.unsigned_range i0).
       lia.
-      
+
   -  destr_in H.
     + destr_in H. monadInv H.
       unfold translate_Addrmode_AddrE_aux64 in EQ0.
       destr_in EQ0.
-      monadInv EQ0.
+      inv EQ0.
       split. simpl;auto.
       unfold translate_AddrE_Addrmode.
-      erewrite encode_ireg_u3_consistency;eauto.
-      destr. rewrite Heqb0. repeat f_equal;auto with encdec.
-    + destruct p. destr_in H.
-      monadInv H. destr_in EQ0. destr_in EQ0. monadInv EQ0.
-      unfold translate_Addrmode_AddrE_aux64 in EQ2. destr_in EQ2.
-      * monadInv EQ2.
-        split. simpl;auto.
-        unfold get_reloc_addend in EQ. destr_in EQ.
-        unfold translate_AddrE_Addrmode. rewrite Heqb2.
-        erewrite encode_ireg_u3_consistency;eauto.
-        destr. repeat f_equal;auto with encdec.
-        apply Z.eqb_eq in Heqb1. rewrite <- Heqb1 in *.
-        apply Z.ltb_lt in Heqb0.
-        unfold Ptrofs.of_int.
-        eapply encode_ofs_u32_consistency_aux in EQ1.
-        unfold Int.unsigned. rewrite EQ1.
-        apply Ptrofs.repr_unsigned.
-        generalize (Ptrofs.unsigned_range i0).
-        lia.
-Qed.
-  
+      repeat f_equal;auto with encdec.
+      (* * monadInv EQ0. *)
+      (*   split. simpl;auto. *)
+      (*   unfold translate_AddrE_Addrmode. *)
+      (*   erewrite encode_ireg_u3_consistency;eauto. *)
+      (*   destr. rewrite Heqb. repeat f_equal;auto with encdec. *)
+      (* * inv EQ0. split. simpl;auto. *)
+      (*   unfold translate_AddrE_Addrmode. *)
+      (*   do 4 f_equal. *)
+      (*   auto with encdec. *)
+    + destruct p. do 3 destr_in H.
+      monadInv H.
+      unfold translate_Addrmode_AddrE_aux64 in EQ0.
+      destr_in EQ0.
+      inv EQ0.
+      split. simpl;auto.
+      unfold translate_AddrE_Addrmode.
+      repeat f_equal;auto with encdec.
+      unfold Ptrofs.of_int.
+      eapply encode_ofs_u32_consistency_aux in EQ.
+      unfold Int.unsigned. rewrite EQ.
+      apply Ptrofs.repr_unsigned.
+      apply Z.ltb_lt in Heqb0.
+      generalize (Ptrofs.unsigned_range i0).
+      lia.
+Qed.  
   
 
 (* unfinished: we should add conditional checking for W bit, which can ensure the deocde_consistency *)
@@ -1499,13 +1476,20 @@ Proof.
         inv EQ1. congruence.
         
     + unfold translate_instr in H.
-      destr_in H. monadInv H.
-      cbn [app] in *.
-      autounfold with decunfold.      
-      unfold get_reloc_addend in EQ. destr_in EQ.
-      simpl. eexists. split;eauto.
-      unfold instr_eq;right.
-      apply Pos.eqb_eq;auto.
+      do 3 destr_in H.
+      * monadInv H.
+        cbn [app] in *.
+        autounfold with decunfold.             
+        simpl. eexists. split;eauto.
+        unfold instr_eq;right.
+        apply Pos.eqb_eq;auto.
+      * monadInv H.
+        cbn [app] in *.
+        autounfold with decunfold.             
+        simpl. eexists. split;eauto.
+        unfold instr_eq;right.
+        apply Pos.eqb_eq;auto.
+
     + exploit encode_rex_prefix_r_result; eauto;
         intros [(?, ?)| (?, (?, ?))]; subst;cbn [app] in *;
           autounfold with decunfold;cbn [bind];eexists;split;auto.
@@ -1513,13 +1497,20 @@ Proof.
       simpl. eauto.
       unfold instr_eq. right. auto.
     + unfold translate_instr in H.
-      destr_in H. monadInv H.
-      cbn [app] in *.
-      autounfold with decunfold.
-      unfold get_reloc_addend in EQ. destr_in EQ.
-      simpl. eexists. split;eauto.
-      unfold instr_eq;right.
-      apply Pos.eqb_eq;auto.
+      do 3 destr_in H.
+      * monadInv H.
+        cbn [app] in *.
+        autounfold with decunfold.             
+        simpl. eexists. split;eauto.
+        unfold instr_eq;right.
+        apply Pos.eqb_eq;auto.
+      * monadInv H.
+        cbn [app] in *.
+        autounfold with decunfold.             
+        simpl. eexists. split;eauto.
+        unfold instr_eq;right.
+        apply Pos.eqb_eq;auto.
+
     + exploit encode_rex_prefix_r_result; eauto;
         intros [(?, ?)| (?, (?, ?))]; subst;cbn [app] in *;
           autounfold with decunfold;cbn [bind];eexists;split;auto.
