@@ -23,7 +23,7 @@ Definition prog_header_size := if ptr64 then 56 else 32.
 Definition sec_header_size  := if ptr64 then 64 else 40.
 Definition symb_entry_size := if ptr64 then 24 else 16.
 (** for simplicity , only support SHT_REL*)
-Definition reloc_entry_size := if ptr64 then 16 else 8.
+Definition reloc_entry_size := if ptr64 then 24 else 8.
 
 
 (** ** ELF header *)

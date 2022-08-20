@@ -432,7 +432,8 @@ Definition translate_Addrmode_AddrE_aux32 (obase: option ireg) (oindex: option (
     if Archi.ptr64 then
       do rsp <- encode_ireg_u3 RSP;
     (* do not use rip-relative addressing *)
-      OK (AddrE9 zero2 rsp ofs32)
+    OK (AddrE11 ofs32)
+    (* OK (AddrE9 zero2 rsp ofs32) *)
     else
       OK (AddrE11 ofs32)
   | Some base,None =>
@@ -469,13 +470,13 @@ Definition translate_Addrmode_AddrE (e: option relocentry) (addr:addrmode): res 
     | inr (id, ofs) =>
       match id with
       | xH =>
-        do addend <- get_reloc_addend e;
+        (* do addend <- get_reloc_addend e; *)
         if (Ptrofs.unsigned ofs <? Int.modulus) then
-          if Z.eqb (Ptrofs.unsigned ofs) addend then
+          (* if Z.eqb (Ptrofs.unsigned ofs) addend then *)
             (*32bit mode the addend placed in instruction *)
-            do imm32 <- encode_ofs_u32 addend;
+            do imm32 <- encode_ofs_u32 (Ptrofs.unsigned ofs);
             translate_Addrmode_AddrE_aux32 obase oindex imm32
-          else Error (msg "addend is not equal to ofs")
+          (* else Error (msg "addend is not equal to ofs") *)
         else Error (msg "Addrmode32: Out range of unsigned 32bit displacement")
       | _ => Error(msg "id must be 1")
       end
@@ -496,8 +497,9 @@ Definition translate_Addrmode_AddrE_aux64 (obase: option ireg) (oindex: option (
   | None,None =>
     if Archi.ptr64 then
       do rsp <- encode_ireg_u3 RSP;
-      (* do not use rip-relative addressing *)
-      OK ((AddrE9 zero2 rsp ofs32),zero1,zero1)
+      (* use rip-relative addressing *)
+      OK (AddrE11 ofs32,zero1,zero1)
+      (* OK ((AddrE9 zero2 rsp ofs32),zero1,zero1) *)
     else
       Error (msg "Encode 64bit addrmode in 32bit mode ")
   | Some base,None =>
@@ -540,13 +542,13 @@ Definition translate_Addrmode_AddrE64 (e: option relocentry) (addr:addrmode): re
     | inr (id, ofs) =>
       match id with
       | xH =>
-        do addend <- get_reloc_addend e;
+        (* do addend <- get_reloc_addend e; *)
         if (Ptrofs.unsigned ofs <? Int.modulus) then
           (* addend is the offset of id and access point *)
-          if Z.eqb (Ptrofs.unsigned ofs) addend then
-            do imm32 <- encode_ofs_u32 addend;
+          (* if Z.eqb (Ptrofs.unsigned ofs) addend then *)
+            do imm32 <- encode_ofs_u32 (Ptrofs.unsigned ofs);
             translate_Addrmode_AddrE_aux64 obase oindex imm32
-          else Error (msg "64bit: addend is not equal to ofs")
+          (* else Error (msg "64bit: addend is not equal to ofs") *)
         else Error (msg "Addrmode64: Out range of unsigned 32bit displacement")                                        
       | _ => Error(msg "64bit: id must be 1")
       end
@@ -1286,9 +1288,13 @@ Definition translate_instr (e: option relocentry) (i:instruction) : res (list In
     end
   | Asm.Pjmp_s id _ =>
     if Pos.eqb id xH then
-      do addend <- get_reloc_addend e;
-      do imm32 <- encode_ofs_u32 addend;
-      OK [Pjmp_l_rel imm32]
+      (* do addend <- get_reloc_addend e; *)
+      (* do imm32 <- encode_ofs_u32 addend; *)
+      if Archi.ptr64 then 
+        OK [Pjmp_l_rel zero32]
+      else
+        do imm32 <- encode_ofs_u32 (-4);
+        OK [Pjmp_l_rel imm32]
     else Error (msg "Id not equal to xH in Pjmp_s")
   | Asm.Pjmp_r r sg =>
     do rex_r <- encode_rex_prefix_r r;
@@ -1308,9 +1314,13 @@ Definition translate_instr (e: option relocentry) (i:instruction) : res (list In
   | Asm.Pcall_s id sg =>
     match id with
     | xH =>
-      do addend <- get_reloc_addend e;
-      do imm32 <- encode_ofs_u32 addend;
-      OK [Pcall_ofs imm32]
+      (* do addend <- get_reloc_addend e; *)
+      (* do imm32 <- encode_ofs_u32 addend; *)
+      if Archi.ptr64 then 
+        OK [Pcall_ofs zero32]
+      else
+        do imm32 <- encode_ofs_u32 (-4);
+        OK [Pcall_ofs imm32]
     | _ =>
       Error [MSG "id must be 1: Pcall_s"]
     end

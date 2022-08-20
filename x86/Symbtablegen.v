@@ -67,7 +67,6 @@ Definition get_bind_ty id :=
 (** get_symbol_entry takes the ids and the current sizes of data and text sections and 
     a global definition as input, and outputs the corresponding symbol 
 entry *)
-(** wjh: update value just like before, because offset always is zero *)
 Definition get_symbentry (id:ident) (def: (AST.globdef Asm.fundef unit)) : symbentry :=
   let bindty := get_bind_ty id in
   match def with

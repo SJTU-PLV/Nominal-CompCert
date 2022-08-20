@@ -211,7 +211,7 @@ Definition gen_symtab_sec_header (symbtbl: list symbentry) (shstrtbl_idx: Z) (se
 (* sh_info: reloction related section *)
 Definition gen_rel_sec_header (reloctbl: list relocentry) (shstrtbl_idx: Z) (sec_ofs: Z) (symbtbl_idx: Z) (related_sec: Z):=
   {| sh_name     := shstrtbl_idx;
-     sh_type     := SHT_REL;
+     sh_type     := if Archi.ptr64 then SHT_RELA else SHT_REL;
      sh_flags    := [];
      sh_addr     := 0;
      sh_offset   := elf_header_size + sec_ofs;

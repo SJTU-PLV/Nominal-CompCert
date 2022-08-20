@@ -1292,13 +1292,13 @@ Lemma alloc_globals_alloc_sections_exists: forall defs ge1 ge2 m1 m1' m2,
             alloc_section instr_size ge2 (gen_symb_table instr_size defs) a (fst p) (snd p))
        (PTree.elements (create_sec_table defs)) (Some m2) = Some m2'.
 Proof.
-  Mem.alloc_glob
-  Mem.perm_alloc_glob_2
-  Genv.store_zeros_exists
-  Genv.alloc_globals_match
-  induction defs;simpl;intros.
-  - exists m2. auto.
-  - destr_in H.
+  (* Mem.alloc_glob *)
+  (* Mem.perm_alloc_glob_2 *)
+  (* Genv.store_zeros_exists *)
+  (* Genv.alloc_globals_match *)
+  (* induction defs;simpl;intros. *)
+  (* - exists m2. auto. *)
+  (* - destr_in H. *)
     (* relation between defs and (create_sec_table defs) *)
     (* generalize the section table and symbol table
 induction on the PTree.elements xxx
@@ -1735,41 +1735,68 @@ Proof.
   - repeat apply Val.add_inject; auto.
   - destruct p. apply Val.add_inject; auto. 
     inject_match. apply inject_symbol_address; auto.
+    destruct Archi.ptr64 eqn:PTR.
+    destr_valinj_left H1; inv H1; auto.
+    (* 32bit need the following proof *)
     destr_valinj_left H1; inv H1; auto.
     (* destr_pair_if. auto. *)
-    (* eapply Val.inject_ptr; eauto. *)
-    (* repeat unfold Ptrofs.of_int.  *)
-    (* repeat rewrite Int.unsigned_zero.  *)
-    (* repeat rewrite Ptrofs.add_zero. auto. *)
+    eapply Val.inject_ptr; eauto.
+    repeat unfold Ptrofs.of_int.
+    repeat rewrite Int.unsigned_zero.
+    repeat rewrite Ptrofs.add_zero. auto.
   - destruct p.
     inject_match.
     apply Val.add_inject; auto.
     destr_pair_if; auto.
     apply mul_inject; auto.
+    destruct Archi.ptr64 eqn:PTR.
+    destr_valinj_left H1; inv H1; auto.
+
     destr_valinj_left H1; inv H1; auto.
     (* destr_pair_if. auto. *)
-    (* eapply Val.inject_ptr; eauto. *)
-    (* repeat unfold Ptrofs.of_int.  *)
-    (* repeat rewrite Int.unsigned_zero.  *)
-    (* repeat rewrite Ptrofs.add_zero. auto. *)
+    eapply Val.inject_ptr; eauto.
+    repeat unfold Ptrofs.of_int.
+    repeat rewrite Int.unsigned_zero.
+    repeat rewrite Ptrofs.add_zero. auto.
   - destruct p,p0.
     inject_match.
     apply Val.add_inject; auto.
     destr_pair_if; auto.
     apply mul_inject; auto.
     apply inject_symbol_address; auto.
+    destruct Archi.ptr64 eqn:PTR.
     destr_valinj_left H1; inv H1; auto.
-    (* destr_pair_if. auto. *)
-    (* eapply Val.inject_ptr; eauto. *)
-    (* repeat unfold Ptrofs.of_int.  *)
-    (* repeat rewrite Int.unsigned_zero.  *)
-    (* repeat rewrite Ptrofs.add_zero. auto. *)
+
+    destr_valinj_left H1; inv H1; auto.
+    destr_pair_if. auto.
+    eapply Val.inject_ptr; eauto.
+    repeat unfold Ptrofs.of_int.
+    repeat rewrite Int.unsigned_zero.
+    repeat rewrite Ptrofs.add_zero. auto.
   - repeat apply Val.add_inject; auto.
   - destruct p. 
     inject_match. inject_match.
     apply inject_symbol_address; auto.
+    destruct Archi.ptr64 eqn:PTR.    
     destr_valinj_left H1;inv H1; auto.
-    destr_match;auto. destr_match;try (inv H1);auto.
+
+    destr_valinj_left H1;inv H1; auto.
+    destr_pair_if. auto.
+    eapply Val.inject_ptr; eauto.
+    repeat unfold Ptrofs.of_int.
+    repeat rewrite Int.unsigned_zero.
+    repeat rewrite Ptrofs.add_zero. auto.
+
+    destruct Archi.ptr64 eqn:PTR.    
+    destr_valinj_left H1; inv H1; auto.
+    destr_valinj_left H1; inv H1; auto.
+    destr_pair_if. auto.
+    eapply Val.inject_ptr; eauto.
+    repeat unfold Ptrofs.of_int.
+    repeat rewrite Int.unsigned_zero.
+    repeat rewrite Ptrofs.add_zero. auto.   
+
+        
 Qed.
 
     (* destr_pair_if. auto. *)
@@ -1802,46 +1829,48 @@ Proof.
     apply inject_symbol_address. auto.
   - repeat apply Val.addl_inject; auto.
   - destruct p. apply Val.addl_inject; auto.
-    inject_match. apply inject_symbol_address; auto.
-    destr_valinj_left H1; inv H1; auto.
-    destruct Archi.ptr64;auto.
-    eapply Val.inject_ptr; eauto.
-    repeat rewrite Ptrofs.add_assoc.
-    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
-  - destruct p.
     inject_match.
-    apply Val.addl_inject; auto.
-    destr_pair_if; auto.
-    apply Val.mull_inject; auto.
-    destr_valinj_left H1; inv H1; auto.
-    destruct Archi.ptr64;auto.
-    eapply Val.inject_ptr; eauto.
-    repeat rewrite Ptrofs.add_assoc.
-    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
-  - destruct p,p0.
-    inject_match.
-    apply Val.addl_inject; auto.
-    destr_pair_if; auto.
-    apply Val.mull_inject; auto.
-    apply inject_symbol_address; auto.
-    destr_valinj_left H1; inv H1; auto.
-    destruct Archi.ptr64;auto.
-    eapply Val.inject_ptr; eauto.
-    repeat rewrite Ptrofs.add_assoc.
-    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
-  - repeat apply Val.addl_inject; auto.
-  - destruct p. inject_match. inject_match.
-    apply inject_symbol_address; auto.
-    destr_valinj_left H1; inv H1; auto.
-    destruct Archi.ptr64;auto.
-    eapply Val.inject_ptr; eauto.
-    repeat rewrite Ptrofs.add_assoc.
-    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
-    repeat destr_match;auto;try (inv H1);auto.
-    repeat rewrite Ptrofs.add_assoc.
-    repeat rewrite Ptrofs.add_zero.
-    econstructor. eauto. auto.
-Qed.
+    Admitted.            (* dependent in ptr64 !! try to fix it !!!*)
+    (* apply inject_symbol_address; auto. *)
+(*     destr_valinj_left H1; inv H1; auto. *)
+(*     destruct Archi.ptr64;auto. *)
+(*     eapply Val.inject_ptr; eauto. *)
+(*     repeat rewrite Ptrofs.add_assoc. *)
+(*     rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *)
+(*   - destruct p. *)
+(*     inject_match. *)
+(*     apply Val.addl_inject; auto. *)
+(*     destr_pair_if; auto. *)
+(*     apply Val.mull_inject; auto. *)
+(*     destr_valinj_left H1; inv H1; auto. *)
+(*     destruct Archi.ptr64;auto. *)
+(*     eapply Val.inject_ptr; eauto. *)
+(*     repeat rewrite Ptrofs.add_assoc. *)
+(*     rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *)
+(*   - destruct p,p0. *)
+(*     inject_match. *)
+(*     apply Val.addl_inject; auto. *)
+(*     destr_pair_if; auto. *)
+(*     apply Val.mull_inject; auto. *)
+(*     apply inject_symbol_address; auto. *)
+(*     destr_valinj_left H1; inv H1; auto. *)
+(*     destruct Archi.ptr64;auto. *)
+(*     eapply Val.inject_ptr; eauto. *)
+(*     repeat rewrite Ptrofs.add_assoc. *)
+(*     rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *)
+(*   - repeat apply Val.addl_inject; auto. *)
+(*   - destruct p. inject_match. inject_match. *)
+(*     apply inject_symbol_address; auto. *)
+(*     destr_valinj_left H1; inv H1; auto. *)
+(*     destruct Archi.ptr64;auto. *)
+(*     eapply Val.inject_ptr; eauto. *)
+(*     repeat rewrite Ptrofs.add_assoc. *)
+(*     rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *)
+(*     repeat destr_match;auto;try (inv H1);auto. *)
+(*     repeat rewrite Ptrofs.add_assoc. *)
+(*     repeat rewrite Ptrofs.add_zero. *)
+(*     econstructor. eauto. auto. *)
+(* Qed. *)
 
 Lemma eval_addrmode_inject: forall j a rs1 rs2,
     match_inj j ->

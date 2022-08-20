@@ -467,78 +467,81 @@ Qed.
         simpl in PSIZE.
         generalize (instr_size_bound (Pallocframe sz ofs_ra ofs_link)). intro PSIZEB.
         subst; simpl in *. inv H2. inv CA.
-        rewrite (cc_vararg_none_default f) in *. destr_in H6. destr_in H6.
         rewrite (cc_vararg_none_default f) in *.
-        rewrite (sp_adjustment_elf64_default f) in *.
-        assert ((if ptr64
-        then
-         Padd RAX RSP (size_chunk Mptr)
-         :: Psub RSP RSP (align sz 16 - 8)
-            :: Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link))
-                 RAX :: nil
-        else
-         Padd RAX RSP (size_chunk Mptr)
-         :: Psub RSP RSP (align sz 16 - size_chunk Mptr)
-            :: Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link))
-            RAX :: nil) =
-                Padd RAX RSP (size_chunk Mptr)
-         :: Psub RSP RSP (align sz 16 - size_chunk Mptr)
-         :: Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link))
-         RAX :: nil).
-        { destruct ptr64;simpl;auto. } rewrite H5 in *. clear H5.
-        inv H2. inv H7. inv H10. inv H11.
-        eapply plus_three.
-        (*Padd*)
-        * econstructor. eauto. eapply FFP. eauto.
-        unfold Padd. apply exec_instr_Plea.
-        (*Psub*)
-        * econstructor.
-        rewrite Asmgenproof0.nextinstr_pc. repeat rewrite Pregmap.gso by congruence.
-        rewrite H. simpl. eauto. eauto.
-        erewrite wf_asm_pc_repr'; eauto.
-        rewrite PSIZE.
-        generalize (instr_size_bound (Psub RSP RSP (align sz 16 - size_chunk Mptr))).
-        unfold Padd.
-        generalize (instr_size_bound (Plea RAX (linear_addr RSP (size_chunk Mptr)))).
-        generalize (instr_size_bound (Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link)) RAX)).
-        simpl. intros.
-        lia.
-        unfold Psub, Padd. rewrite exec_instr_Plea. f_equal.
-        (*Pstoreptr*)
-        * generalize (instr_size_bound (Plea RAX (linear_addr RSP (size_chunk Mptr)))). intro SPlea1.
-        generalize (instr_size_bound (Plea RSP (linear_addr RSP (-(align sz 16 - size_chunk Mptr))))).
-        intro SPlea2.
-        generalize (instr_size_bound (Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link))RAX)). intro SPstore.
-        assert (CSIZE: 0 <= code_size instr_size (transf_code (fn_sig f) (fn_code f)) <= Ptrofs.max_unsigned).
-        {
-          apply WF in H0. exploit wf_asm_code_bounded; eauto. intro.
-          rewrite <- transf_code_size. auto.
-        }
-        econstructor. simpl_regs. rewrite H. simpl. eauto. eauto.
-        erewrite code_bounded_repr; eauto.
-        erewrite code_bounded_repr; eauto.
-        unfold Padd. lia.
-        erewrite code_bounded_repr; eauto.
-        unfold Padd. lia.
-        unfold Psub, Padd. lia.
-        unfold Psub, Padd, Pstoreptr in *.
-        destruct ptr64 eqn:PTR64.
-        ** (*64bit storeptr*)
-          simpl. unfold exec_store.  unfold eval_addrmode. rewrite PTR64.
-          unfold eval_addrmode64. simpl.
-          simpl_regs.
-          inv INV. inv RSPPTR. destruct H2. simpl in H2. rewrite H2. rewrite H2 in *.
-          unfold Val.offset_ptr, Mptr in *. simpl in *.
-          repeat (rewrite PTR64 in *; simpl in *).
-         assert (
-              (Ptrofs.unsigned
-              (Ptrofs.add (Ptrofs.add x (Ptrofs.neg (Ptrofs.sub (Ptrofs.repr (align sz 16)) (Ptrofs.repr 16)))) ofs_link))
-                =
-(Ptrofs.unsigned
-         (Ptrofs.add (Ptrofs.add x (Ptrofs.of_int64 (Int64.add Int64.zero (Int64.repr (- (align sz 16 - 16))))))
-            (Ptrofs.of_int64 (Int64.add Int64.zero (Int64.repr (Ptrofs.unsigned ofs_link))))))
-            ).
-         { admit.
+        (*** different in 64 and 32 bit mode ????? *)
+
+        (* destr_in H6. destr_in H6. *)
+        (* rewrite (cc_vararg_none_default f) in *. *)
+        (* rewrite (sp_adjustment_elf64_default f) in *. *)
+        (* assert ((if ptr64 *)
+        (* then *)
+        (*  Padd RAX RSP (size_chunk Mptr) *)
+        (*  :: Psub RSP RSP (align sz 16 - 8) *)
+        (*     :: Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link)) *)
+        (*          RAX :: nil *)
+        (* else *)
+        (*  Padd RAX RSP (size_chunk Mptr) *)
+        (*  :: Psub RSP RSP (align sz 16 - size_chunk Mptr) *)
+        (*     :: Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link)) *)
+        (*     RAX :: nil) = *)
+        (*         Padd RAX RSP (size_chunk Mptr) *)
+        (*  :: Psub RSP RSP (align sz 16 - size_chunk Mptr) *)
+        (*  :: Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link)) *)
+        (*  RAX :: nil). *)
+        (* { destruct ptr64;simpl;auto. } rewrite H5 in *. clear H5. *)
+        (* inv H2. inv H7. inv H10. inv H11. *)
+        (* eapply plus_three. *)
+        (* (*Padd*) *)
+        (* * econstructor. eauto. eapply FFP. eauto. *)
+        (* unfold Padd. apply exec_instr_Plea. *)
+        (* (*Psub*) *)
+        (* * econstructor. *)
+        (* rewrite Asmgenproof0.nextinstr_pc. repeat rewrite Pregmap.gso by congruence. *)
+        (* rewrite H. simpl. eauto. eauto. *)
+        (* erewrite wf_asm_pc_repr'; eauto. *)
+        (* rewrite PSIZE. *)
+        (* generalize (instr_size_bound (Psub RSP RSP (align sz 16 - size_chunk Mptr))). *)
+        (* unfold Padd. *)
+        (* generalize (instr_size_bound (Plea RAX (linear_addr RSP (size_chunk Mptr)))). *)
+        (* generalize (instr_size_bound (Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link)) RAX)). *)
+        (* simpl. intros. *)
+        (* lia. *)
+        (* unfold Psub, Padd. rewrite exec_instr_Plea. f_equal. *)
+        (* (*Pstoreptr*) *)
+        (* * generalize (instr_size_bound (Plea RAX (linear_addr RSP (size_chunk Mptr)))). intro SPlea1. *)
+        (* generalize (instr_size_bound (Plea RSP (linear_addr RSP (-(align sz 16 - size_chunk Mptr))))). *)
+        (* intro SPlea2. *)
+        (* generalize (instr_size_bound (Pstoreptr (linear_addr RSP (Ptrofs.unsigned ofs_link))RAX)). intro SPstore. *)
+        (* assert (CSIZE: 0 <= code_size instr_size (transf_code (fn_sig f) (fn_code f)) <= Ptrofs.max_unsigned). *)
+        (* { *)
+        (*   apply WF in H0. exploit wf_asm_code_bounded; eauto. intro. *)
+        (*   rewrite <- transf_code_size. auto. *)
+        (* } *)
+        (* econstructor. simpl_regs. rewrite H. simpl. eauto. eauto. *)
+        (* erewrite code_bounded_repr; eauto. *)
+        (* erewrite code_bounded_repr; eauto. *)
+        (* unfold Padd. lia. *)
+        (* erewrite code_bounded_repr; eauto. *)
+        (* unfold Padd. lia. *)
+        (* unfold Psub, Padd. lia. *)
+        (* unfold Psub, Padd, Pstoreptr in *. *)
+        (* destruct ptr64 eqn:PTR64. *)
+        (* ** (*64bit storeptr*) *)
+        (*   simpl. unfold exec_store.  unfold eval_addrmode. rewrite PTR64. *)
+        (*   unfold eval_addrmode64. simpl. *)
+        (*   simpl_regs. *)
+        (*   inv INV. inv RSPPTR. destruct H2. simpl in H2. rewrite H2. rewrite H2 in *. *)
+        (*   unfold Val.offset_ptr, Mptr in *. simpl in *. *)
+        (*   repeat (rewrite PTR64 in *; simpl in *. *)
+(*          assert ( *)
+(*               (Ptrofs.unsigned *)
+(*               (Ptrofs.add (Ptrofs.add x (Ptrofs.neg (Ptrofs.sub (Ptrofs.repr (align sz 16)) (Ptrofs.repr 16)))) ofs_link)) *)
+(*                 = *)
+(* (Ptrofs.unsigned *)
+(*          (Ptrofs.add (Ptrofs.add x (Ptrofs.of_int64 (Int64.add Int64.zero (Int64.repr (- (align sz 16 - 16)))))) *)
+(*             (Ptrofs.of_int64 (Int64.add Int64.zero (Int64.repr (Ptrofs.unsigned ofs_link)))))) *)
+(*             ). *)
+(*          { admit. *)
            (* unable to reuse wf_allocframe_repr, because its' stack size is only 8  alignment *)
            (*          exploit wf_allocframe_repr; eauto. *)
            (*          unfold Mptr. rewrite PTR64. simpl. intro. *)
@@ -568,11 +571,11 @@ Qed.
            (*          rewrite Ptrofs.modulus_eq64. auto. auto. *)
            (*          try rewrite H5. (* SANCC *) *)
            (*          apply Ptrofs.unsigned_range_2. *)
-                  }
+                  (* } *)
                   auto.
-         assert ( (Vptr bstack (Ptrofs.add x (Ptrofs.repr 8)))=
-                (Vptr bstack (Ptrofs.add x (Ptrofs.of_int64 (Int64.add Int64.zero (Int64.repr 8)))))
-           ). auto.
+         (* assert ( (Vptr bstack (Ptrofs.add x (Ptrofs.repr 8)))= *)
+         (*        (Vptr bstack (Ptrofs.add x (Ptrofs.of_int64 (Int64.add Int64.zero (Int64.repr 8))))) *)
+         (*   ). auto. *)
                 Admitted.
 
                   

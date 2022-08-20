@@ -80,8 +80,8 @@ Require SSAsmproof.
 Require RealAsmproof.
 Require PseudoInstructionsproof.
 Require Symbtablegenproof.
-Require Reloctablesgenproof.
-Require RelocBingenproof.
+(*Require Reloctablesgenproof.*)
+(*Require RelocBingenproof.*)
 (** Command-line flags. *)
 Require Import Compopts.
 (** RealAsm passed. *)
@@ -94,7 +94,6 @@ Require Jumptablegen.
 Require Symbtablegen.
 Require Reloctablesgen.
 Require RelocBingen.
-Require RemoveAddend.
 Require AsmLongInt.
 (* Require MergeSection. *)
 (* ELF generation *)
@@ -218,7 +217,6 @@ Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
   @@@ time "Generation of symbol table" Symbtablegen.transf_program instr_size
   @@@ time "Generation of relocation table" Reloctablesgen.transf_program instr_size
   @@@ time "Encoding of instructions and data" RelocBingen.transf_program instr_size
-  @@ time "Removing addendums" RemoveAddend.transf_program
   (* @@@ time "Merge Sections" MergeSection.transf_program *)
   @@@ time "Generation of the reloctable Elf" RelocElfgen.gen_reloc_elf
   @@@ time "Encoding of the reloctable Elf" EncodeRelocElf.encode_elf_file.
@@ -676,13 +674,24 @@ Proof.
   eapply PseudoInstructionsproof.pseudo_instructions_correct; eauto.
   eapply instr_size_bound.
 
-  intros. destruct i;unfold PseudoInstructions.transf_instr;auto.
+  intros.
+  destruct Archi.ptr64 eqn:PTR.
+  (* 64bit *)
+  unfold PseudoInstructions.transf_instr.
+  rewrite PTR.
+  destruct i;auto.
   destr. destruct (PseudoInstructions.sp_adjustment_elf64 sg sz).
   (* unable to resolve *)
   assert (cc_vararg (sig_cc sg) = None) by admit. rewrite H.
   auto.
 
-  destr. destruct PseudoInstructions.sp_adjustment_elf64. auto.
+  destruct PseudoInstructions.sp_adjustment_elf64. auto.
+
+  (* 32bit *)
+  unfold PseudoInstructions.transf_instr.
+  rewrite PTR.
+  destruct i;auto.
+  
   
   intros. red. intros. exploit (Globalenvs.Genv.find_funct_ptr_transf_partial MP3); eauto.
   intros (tf & FFP & TF).

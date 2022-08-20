@@ -130,7 +130,7 @@ Section WITH_SYMBTBL.
 Variable (symbtbl: symbtable).
 
 (** Compute the relocation entry of an instruction with a relative reference *)
-Definition compute_instr_rel_relocentry (sofs:Z) (i:instruction) (symb:ident) :=
+Definition compute_instr_rel_relocentry (sofs:Z) (i:instruction) (symb:ident):=
   do iofs <- instr_reloc_offset i;
   do addend <- instr_addendum i;
   match PTree.get symb symbtbl with
@@ -158,7 +158,12 @@ Definition compute_instr_abs_relocentry (sofs:Z) (i:instruction) (addend:Z) (sym
     an addressing mode whose displacement is (id + offset) *)
 Definition compute_instr_disp_relocentry (sofs: Z) (i:instruction) (disp: ident*ptrofs) :=
   let '(symb,addend) := disp in
-  compute_instr_abs_relocentry sofs i (Ptrofs.unsigned addend) symb.
+  if Archi.ptr64 then
+    (* rip relative addressing *)
+    compute_instr_rel_relocentry sofs i symb
+  else
+    (* the addend field is useless in 32bit mode *)
+    compute_instr_abs_relocentry sofs i 0 symb.
 
 (* move unsupported here *)
 Fixpoint ok_builtin_arg {A} (ba: builtin_arg A) : bool :=
@@ -197,14 +202,36 @@ Definition transl_instr (sofs:Z) (i: instruction) : res (option relocentry) :=
   | Pjcc2 _ _ _
   | Pjmptbl _ _ => Error (msg "Source program contains jumps to labels")
   | Pjmp_s id sg => 
-    do e <- compute_instr_rel_relocentry sofs i id;
-    OK (Some e)
+    if Archi.ptr64 then
+      do e <- compute_instr_rel_relocentry sofs i id;
+      OK (Some e)
+    else
+      OK (Some {| reloc_offset := sofs + 1;
+            reloc_type := reloc_rel;
+            reloc_symb := id;
+            reloc_addend := 0 |})
+
   | Pjmp_m (Addrmode rb ss (inr disp)) =>
-    do e <- compute_instr_disp_relocentry sofs i disp;
-    OK (Some e)
+    match rb,ss with
+    | None,None =>
+      do e <- compute_instr_disp_relocentry sofs i disp;
+      OK (Some e)
+    | _,_ =>
+     (* can not use rip-addressing *)
+      let (symb,addend) := disp in
+      do e <- compute_instr_abs_relocentry sofs i 0 symb;
+      OK (Some e)
+      end
   | Pcall_s id sg =>
-    do e <- compute_instr_rel_relocentry sofs i id;
-    OK (Some e)
+    if Archi.ptr64 then
+      do e <- compute_instr_rel_relocentry sofs i id;
+      OK (Some e)
+    else
+     (* 32bit: addend must be 0, because it is useless *)
+      OK (Some {| reloc_offset := sofs + 1;
+            reloc_type := reloc_rel;
+            reloc_symb := id;
+            reloc_addend := 0 |})
   | Pmov_rs rd id => 
     do e <- compute_instr_abs_relocentry sofs i 0 id;
     OK (Some e)
@@ -347,7 +374,7 @@ Definition transl_init_data (dofs:Z) (d:init_data) : res (option relocentry) :=
       let e := {| reloc_offset := dofs;
                   reloc_type := reloc_abs;
                   reloc_symb := id;
-                  reloc_addend := Ptrofs.unsigned ofs;
+                  reloc_addend := 0;
                |} in
       OK (Some e)
     end

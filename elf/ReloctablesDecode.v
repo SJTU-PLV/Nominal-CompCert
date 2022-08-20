@@ -107,9 +107,11 @@ Definition decode_relocentry (elf64: bool) (m: ZTree.t ident) (l: list byte) : r
   if elf64 then
     do (ofsbytes, l) <- take_drop 8 l;
     do (infobytes, l) <- take_drop 8 l;
+    do (addendbytes,_) <- take_drop 8 l;
     let ofs := decode_int ofsbytes in
+    let addend := (decode_int addendbytes) in
     do (rt, sym) <- decode_reloc_info m infobytes;
-    OK ({| reloc_offset := ofs; reloc_type := rt; reloc_symb := sym; reloc_addend := 0 |})
+    OK ({| reloc_offset := ofs; reloc_type := rt; reloc_symb := sym; reloc_addend := (if zlt addend (Z.pow 2 63) then addend else addend - (Z.pow 2 64)) |})
   else
     do (ofsbytes, l) <- take_drop 4 l;
     do (infobytes, l) <- take_drop 4 l;
@@ -126,28 +128,48 @@ Proof.
   monadInv H11.
   unfold encode_int64.
   rewrite take_drop_encode_int. cbn [bind2].
+  rewrite take_drop_length_app. cbn [bind2].
   rewrite take_drop_length. simpl. erewrite decode_encode_reloc_info;eauto.
   simpl. destruct e. simpl in *. 
-  rewrite Z.eqb_eq in Heqb. rewrite Heqb.
   rewrite decode_encode_int. simpl.
-  apply andb_true_iff in Heqb0. destruct Heqb0.
+  apply andb_true_iff in Heqb. destruct Heqb.
   rewrite Z.ltb_lt in H10.
   rewrite Z.leb_le in H.
+  apply andb_true_iff in Heqb1. destruct Heqb1.
+  rewrite Z.ltb_lt in H12.
+  rewrite Z.leb_le in H11.
+  
   rewrite Z.mod_small;auto.
-  unfold encode_reloc_info in EQ. repeat destr_in EQ. 
-  unfold encode_int64. rewrite encode_int_length. auto.
+  rewrite decode_encode_int.
+  rewrite Z.mod_small;auto.
+  unfold encode_reloc_info in EQ. repeat destr_in EQ.
+  f_equal. repeat f_equal.
+  destr.
+  (* destruct  *)
+  (* Z.mod_opp_opp *)
+  admit. admit.
+  admit. admit.
+  (* rewrite Z.mod_small;try lia. *)
+  (* simpl. unfold two_power_pos. simpl. lia. *)
+  (* rewrite encode_int_length. auto. *)
+  unfold encode_reloc_info in EQ. repeat destr_in EQ.
+  unfold encode_int64.   rewrite encode_int_length. auto.
+  
+  monadInv H11.
 
   monadInv H11.
   unfold encode_int32.
   rewrite take_drop_encode_int. cbn [bind2].
   rewrite take_drop_length. simpl. erewrite decode_encode_reloc_info;eauto.
   simpl. destruct e. simpl in *. 
-  rewrite Z.eqb_eq in Heqb. rewrite Heqb.
+  rewrite Z.eqb_eq in Heqb1. rewrite Heqb1.
   rewrite decode_encode_int. simpl.
-  apply andb_true_iff in Heqb0. destruct Heqb0.
+  apply andb_true_iff in Heqb. destruct Heqb.
   rewrite Z.ltb_lt in H10.
   rewrite Z.leb_le in H.
   rewrite Z.mod_small;auto.
   unfold encode_reloc_info in EQ. repeat destr_in EQ. 
   unfold encode_int32. rewrite encode_int_length. auto.
-Qed.
+  monadInv H11.
+Admitted.
+

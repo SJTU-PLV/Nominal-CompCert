@@ -92,7 +92,7 @@ Definition transl_init_data (e: option relocentry) (d:init_data) : res (list byt
   | Init_addrof id ofs, Some e => 
     (* do addend <- get_reloc_addend rtbl_ofs_map dofs; *)
 
-    if (Pos.eqb (reloc_symb e) id) && (Z.eqb (reloc_addend e) (Ptrofs.unsigned ofs)) then
+    if (Pos.eqb (reloc_symb e) id) then
       if Archi.ptr64 then     
         OK (encode_int 8 (Ptrofs.unsigned ofs)) 
       else
