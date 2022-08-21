@@ -110,7 +110,7 @@ Definition acc_decode_reloctable_section (reloclen: nat) (m: ZTree.t ident) (acc
     OK (reloctbl, reloce ++ [b], S len).
   
 Definition decode_reloctable_section (l: list byte) (m:ZTree.t ident) :=
-  let reloclen := if elf64 then 16%nat else 8%nat in
+  let reloclen := if elf64 then 24%nat else 8%nat in
   do r <- fold_left (acc_decode_reloctable_section reloclen m) l (OK ([], [], 1%nat));
   OK (fst (fst r)).
 
@@ -172,7 +172,7 @@ Definition acc_section_header (st: res decode_elf_state) (sec_h: section * secti
     do (_, shstrtbl') <- take_drop (length symtab_str) st.(dec_shstrtbl);
     OK (update_symbtable st symbtbl shstrtbl')
        
-  | SHT_REL =>
+  | SHT_REL | SHT_RELA =>
     (* get id to index map from sorted symbol table: Z -> ident *)
     let idl_symbtbl := PTree.elements st.(dec_symbtable) in
     let symbidl := map fst (sort_symbtable idl_symbtbl) in
@@ -310,6 +310,3 @@ Proof.
 Qed.
 
 End WITH_INSTR_SIZE.
-
-
-    

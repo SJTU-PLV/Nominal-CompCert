@@ -125,12 +125,12 @@ BACKEND=\
   Symbtablegen.v Symbtablegenproof.v\
   Reloctablesgen.v\
   RelocBingen.v RelocBinDecode.v RelocBingenproof.v\
-  TranslateInstr.v\
+  TranslateInstr.v TranslateInstrSize.v\
   AsmLongInt.v\
   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
   AsmInject.v
 
-# Reloctablesgenproof.v TranslateInstrSize.v RelocProgSemantics2.v
+# Reloctablesgenproof.v
 
 # Encoding of data into bytes
 
@@ -139,9 +139,8 @@ ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 # Elf file format (unused: MergeSection.v)
 ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
  ReloctablesEncode.v  ReloctablesDecode.v \
- SymbtableDecode.v 
+ SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof.v\
 
-# RelocElfSemantics.v RelocElfgenproof.v
 
 # CAV generation file
 AUTOGEN = VerificationCondition.v EncDecRet.v

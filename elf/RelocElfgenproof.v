@@ -24,7 +24,7 @@ Local Open Scope bits_scope.
 Local Open Scope string_byte_scope.
 
 Lemma decode_encode_reloctable_correct: forall n l bs m1 m2 (M: match_idxmap m1 m2),
-    let reloclen := if Archi.ptr64 then 16%nat else 8%nat in
+    let reloclen := if Archi.ptr64 then 24%nat else 8%nat in
     length l = n ->
     encode_reloctable m1 l = OK bs ->
     fold_left (acc_decode_reloctable_section Archi.ptr64 reloclen m2) bs (OK ([], [], 1%nat)) = OK (l, [], 1%nat).
@@ -48,7 +48,7 @@ Proof.
   clear x.
   eapply ReloctablesDecode.decode_encode_relocentry in EQ1;eauto.
   destr.
-  - do 17 (destruct l as [| ?b ?] ;simpl in LEN;try congruence).
+  - do 25 (destruct l as [| ?b ?] ;simpl in LEN;try congruence).
     simpl in *. rewrite EQ1. simpl. auto.
   - do 9 (destruct l as [| ?b ?] ;simpl in LEN;try congruence).
     simpl in *. rewrite EQ1. simpl. auto.
@@ -947,7 +947,9 @@ Proof.
     rewrite P1.
     clear IHn P1 EQ.
     
-    simpl. Transparent Encode.string_to_bytes.
+    simpl.
+    Transparent Archi.ptr64. simpl. (* 32bit and 64bit is identical *)
+    Transparent Encode.string_to_bytes.
     simpl. unfold update_reloctable_shstrtbl.
     simpl in *.    
     erewrite id_from_strtbl_result;eauto.
@@ -1167,7 +1169,7 @@ Lemma store_init_data_bytes_match_ge: forall n bytes reloctbl m b p ge1 ge2 (MAT
     length bytes = n ->
     store_init_data_bytes ge1 reloctbl m b p bytes = store_init_data_bytes ge2 reloctbl m b p bytes.
 Proof. 
-  unfold store_init_data_bytes. intros. do 3 f_equal.
+  unfold store_init_data_bytes. intros. do 4 f_equal.
   generalize H. clear H. revert bytes.
   generalize dependent n. 
   induction n;intros.
@@ -1179,14 +1181,14 @@ Proof.
     repeat rewrite fold_left_app in *.
     exploit IHn;eauto. intros.    
     simpl. rewrite H.
-    destruct fold_left. destruct p0.
-    rewrite <- H. simpl.
-    destruct l;auto.
+    destruct fold_left. destruct p0. destruct p0.
+    rewrite <- H.
+    unfold acc_data.
+
+    destruct l0;auto.
     destr. destr.
-    + rewrite MATCHGE.
-      auto.
-    + rewrite MATCHGE.
-      auto.
+    rewrite MATCHGE.
+    destr.
 Qed.
 
 
