@@ -203,6 +203,7 @@ End Sup.
 Module Mem <: MEM.
 Include Sup.
 Local Notation "a # b" := (NMap.get _ b a) (at level 1).
+Local Notation "a ## b" := (ZMap.get b a) (at level 1).
 
 Definition perm_order' (po: option permission) (p: permission) :=
   match po with
@@ -216,21 +217,20 @@ Definition perm_order'' (po1 po2: option permission) :=
   | _, None => True
   | None, Some _ => False
  end.
-(*
-Definition permval : Type := permission * permission.
-*)
+
+Definition memperm : Type := perm_kind -> option permission.
+
 
 Record mem' : Type := mkmem {
   mem_contents: NMap.t (ZMap.t memval);  (**r [block -> offset -> memval] *)
-  (*mem_access : NMap.t (ZMap.t (option (perm_kind -> permission))) *)
-  mem_access: NMap.t (Z -> perm_kind -> option permission);
+  mem_access: NMap.t (ZMap.t memperm);
                                          (**r [block -> offset -> kind -> option permission] *)
   support: sup;
 
   access_max:
-    forall b ofs, perm_order'' (mem_access#b ofs Max) (mem_access#b ofs Cur);
+    forall b ofs, perm_order'' (mem_access#b##ofs Max) (mem_access#b ## ofs Cur);
   nextblock_noaccess:
-    forall b ofs k, ~(sup_In b support) -> mem_access#b ofs k = None;
+    forall b ofs k, ~(sup_In b support) -> mem_access#b##ofs k = None;
   contents_default:
     forall b, fst (mem_contents#b) = Undef
 }.
@@ -265,13 +265,13 @@ Local Hint Resolve valid_not_valid_diff: mem.
 (** Permissions *)
 
 Definition perm (m: mem) (b: block) (ofs: Z) (k: perm_kind) (p: permission) : Prop :=
-   perm_order' (m.(mem_access)#b ofs k) p.
+   perm_order' (m.(mem_access)#b ##ofs k) p.
 
 Theorem perm_implies:
   forall m b ofs k p1 p2, perm m b ofs k p1 -> perm_order p1 p2 -> perm m b ofs k p2.
 Proof.
   unfold perm, perm_order'; intros.
-  destruct (m.(mem_access)#b ofs k); auto.
+  destruct (m.(mem_access)#b## ofs k); auto.
   eapply perm_order_trans; eauto.
 Qed.
 
@@ -310,7 +310,7 @@ Proof.
   unfold perm; intros.
   destruct (sup_dec b m.(support)).
   auto.
-  assert (m.(mem_access)#b ofs k = None).
+  assert (m.(mem_access)#b## ofs k = None).
   eapply nextblock_noaccess; eauto.
   rewrite H0 in H.
   contradiction.
@@ -507,7 +507,7 @@ Qed.
 
 Program Definition empty: mem :=
   mkmem (NMap.init _ (ZMap.init Undef))
-        (NMap.init _ (fun ofs k => None))
+        (NMap.init _ (ZMap.init (fun k => None)))
         sup_empty  _ _ _.
 
 (** Allocation of a fresh block with the given bounds.  Return an updated
@@ -524,19 +524,117 @@ Proof.
   intros. unfold sup_incr. apply sup_incr_in2. auto.
 Qed.
 
+(** Writing N adjacent bytes in a block memperm. *)
+
+Definition interval_length (lo: Z) (hi: Z) : nat :=
+  if (lo <? hi) then Z.to_nat (hi - lo) else 0.
+
+Fixpoint setpermN' (length: nat) (lo: Z) (p: option permission) (c: ZMap.t memperm): ZMap.t memperm :=
+  match length with
+    | O => c
+    | S l => setpermN' l (lo + 1) p (ZMap.set lo (fun k => p) c)
+  end.
+
+Definition setpermN (lo: Z) (hi: Z) (p: option permission) (c: ZMap.t memperm): ZMap.t memperm :=
+  setpermN' (interval_length lo hi) lo p c.
+
+Remark setpermN'_other:
+  forall length lo c p ofs,
+  (forall ofs', lo <= ofs' < lo + (Z.of_nat length) -> ofs' <> ofs) ->
+  ZMap.get ofs (setpermN' length lo p c) = ZMap.get ofs c.
+Proof.
+  induction length; intros; simpl.
+  auto.
+  rewrite Nat2Z.inj_succ in H.
+  transitivity (ZMap.get ofs (ZMap.set lo (fun _ => p) c)).
+  apply IHlength. intros. apply H. lia.
+  apply ZMap.gso. apply not_eq_sym. apply H. lia.
+Qed.
+
+Remark setpermN_other:
+  forall lo hi c p q,
+  (forall r, lo <= r < hi -> r <> q) ->
+  ZMap.get q (setpermN lo hi p c) = ZMap.get q c.
+Proof.
+  intros. eapply setpermN'_other; eauto.
+  intros. unfold interval_length in H0.
+  destruct (lo <? hi) eqn: Hlohi.
+  apply Z.ltb_lt in Hlohi.
+  - rewrite Z_to_nat_max in H0.
+    rewrite Z.max_l in H0.
+    apply H. lia. lia.
+  - extlia.
+Qed.
+
+Remark setpermN_outside:
+  forall lo hi c p q,
+  q < lo \/ q >= hi ->
+  ZMap.get q (setpermN lo hi p c) = ZMap.get q c.
+Proof.
+  intros. apply setpermN_other.
+  intros. lia.
+Qed.
+
+Remark setpermN'_inside :
+  forall length lo p c ofs,
+    lo <= ofs < lo + (Z.of_nat length) ->
+    ZMap.get ofs (setpermN' length lo p c) = (fun k => p).
+Proof.
+  induction length; simpl; intros. extlia.
+  destruct (Z.eq_dec lo ofs).
+  + subst.
+    transitivity (ZMap.get ofs (ZMap.set ofs (fun _ => p) c)).
+    rewrite setpermN'_other. auto.
+    intros. extlia. rewrite ZMap.gss. auto.
+  + rewrite IHlength. auto. lia.
+Qed.
+
+Remark setpermN_inside:
+  forall lo hi c p q,
+    (lo <= q < hi) ->
+    ZMap.get q (setpermN lo hi p c) = (fun k => p).
+Proof.
+  intros. eapply setpermN'_inside; eauto.
+  unfold interval_length. destruct (lo <? hi) eqn: Hlohi.
+  - apply Z.ltb_lt in Hlohi. rewrite Z_to_nat_max.
+    rewrite Z.max_l. lia. lia.
+  - apply Z.ltb_ge in Hlohi. extlia.
+Qed.
+
+Remark setpermN'_default :
+  forall length lo p c,
+    fst (setpermN' length lo p c) = fst c.
+Proof.
+  induction length; simpl; intros. auto. rewrite IHlength. auto.
+Qed.
+
+Remark setpermN_default:
+  forall lo hi q c, fst (setpermN lo hi q c) = fst c.
+Proof.
+  intros.
+  eapply setpermN'_default; eauto.
+Qed.
+
 Program Definition alloc (m: mem) (lo hi: Z) :=
   (mkmem (NMap.set _ (nextblock m)
                    (ZMap.init Undef)
                    m.(mem_contents))
          (NMap.set _ (nextblock m)
-                   (fun ofs k => if zle lo ofs && zlt ofs hi then Some Freeable else None)
+                   (setpermN lo hi (Some Freeable) (ZMap.init (fun k => None)))
                    m.(mem_access))
          (sup_incr (m.(support)))
          _ _ _,
    (nextblock m)).
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)).
-  subst b. destruct (zle lo ofs && zlt ofs hi); red; auto with mem.
+  - subst b.
+    destruct (Z_le_dec lo ofs);
+    destruct (Z_lt_dec ofs hi).
+    rewrite setpermN_inside. constructor. lia.
+    rewrite setpermN_outside. constructor. lia.
+    rewrite setpermN_outside. constructor. lia.
+    rewrite setpermN_outside. constructor. lia.
+  -
   apply access_max.
 Qed.
 Next Obligation.
@@ -557,17 +655,26 @@ Qed.
 Program Definition unchecked_free (m: mem) (b: block) (lo hi: Z): mem :=
   mkmem m.(mem_contents)
         (NMap.set _ b
-                (fun ofs k => if zle lo ofs && zlt ofs hi then None else m.(mem_access)#b ofs k)
+                (setpermN lo hi None (m.(mem_access)#b))
                 m.(mem_access))
         m.(support) _ _ _.
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b).
-  destruct (zle lo ofs && zlt ofs hi). red; auto. apply access_max.
+  subst.
+  destruct (Z_le_dec lo ofs); destruct (Z_lt_dec ofs hi).
+  rewrite setpermN_inside. constructor. lia.
+  rewrite setpermN_outside. apply access_max. lia.
+  rewrite setpermN_outside. apply access_max. lia.
+  rewrite setpermN_outside. apply access_max. lia.
   apply access_max.
 Qed.
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst.
-  destruct (zle lo ofs && zlt ofs hi). auto. apply nextblock_noaccess; auto.
+  destruct (Z_le_dec lo ofs); destruct (Z_lt_dec ofs hi).
+  rewrite setpermN_inside. constructor. lia.
+  rewrite setpermN_outside. apply nextblock_noaccess; auto. lia.
+  rewrite setpermN_outside. apply nextblock_noaccess; auto. lia.
+  rewrite setpermN_outside. apply nextblock_noaccess; auto. lia.
   apply nextblock_noaccess; auto.
 Qed.
 Next Obligation.
@@ -778,22 +885,28 @@ Program Definition drop_perm (m: mem) (b: block) (lo hi: Z) (p: permission): opt
   if range_perm_dec m b lo hi Cur Freeable then
     Some (mkmem m.(mem_contents)
                 (NMap.set _ b
-                        (fun ofs k => if zle lo ofs && zlt ofs hi then Some p else m.(mem_access)#b ofs k)
+                        (setpermN lo hi (Some p) (mem_access m) # b)
                         m.(mem_access))
                 m.(support) _ _ _)
   else None.
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst b0.
-  destruct (zle lo ofs && zlt ofs hi). red; auto with mem. apply access_max.
+  destruct (Z_le_dec lo ofs); destruct (Z_lt_dec ofs hi).
+  rewrite setpermN_inside. constructor. lia.
+  rewrite setpermN_outside. apply access_max. lia.
+  rewrite setpermN_outside. apply access_max. lia.
+  rewrite setpermN_outside. apply access_max. lia.
   apply access_max.
 Qed.
 Next Obligation.
   specialize (nextblock_noaccess m b0 ofs k H0). intros.
   rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst b0.
-  destruct (zle lo ofs). destruct (zlt ofs hi).
+  destruct (Z_le_dec lo ofs); destruct (Z_lt_dec ofs hi).
   assert (perm m b ofs k Freeable). apply perm_cur. apply H; auto.
   unfold perm in H2. rewrite H1 in H2. contradiction.
-  auto. auto. auto.
+  rewrite setpermN_outside; auto.
+  rewrite setpermN_outside; auto. lia.
+  rewrite setpermN_outside; auto. auto.
 Qed.
 Next Obligation.
   apply contents_default.
@@ -1938,8 +2051,8 @@ Theorem perm_alloc_2:
   forall ofs k, lo <= ofs < hi -> perm m2 b ofs k Freeable.
 Proof.
   unfold perm; intros. injection ALLOC; intros. rewrite <- H1; simpl.
-  subst b. unfold NMap.get. rewrite NMap.gss. unfold proj_sumbool. rewrite zle_true.
-  rewrite zlt_true. simpl. auto with mem. lia. lia.
+  subst b. unfold NMap.get. rewrite NMap.gss.
+  rewrite setpermN_inside. simpl. auto with mem. lia.
 Qed.
 
 Theorem perm_alloc_inv:
