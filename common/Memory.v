@@ -601,6 +601,20 @@ Proof.
   - apply Z.ltb_ge in Hlohi. extlia.
 Qed.
 
+Remark setpermN_inv:
+  forall lo hi c p ofs,
+    ZMap.get ofs (setpermN lo hi p c) =
+    if (zle lo ofs && zlt ofs hi) then (fun k => p) else
+      ZMap.get ofs c.
+Proof.
+  intros.
+  destruct (zle lo ofs); destruct (zlt ofs hi); simpl.
+  rewrite setpermN_inside. auto. lia.
+  rewrite setpermN_outside. auto. lia.
+  rewrite setpermN_outside. auto. lia.
+  rewrite setpermN_outside. auto. lia.
+Qed.
+
 Remark setpermN'_default :
   forall length lo p c,
     fst (setpermN' length lo p c) = fst c.
@@ -627,14 +641,9 @@ Program Definition alloc (m: mem) (lo hi: Z) :=
    (nextblock m)).
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)).
-  - subst b.
-    destruct (Z_le_dec lo ofs);
-    destruct (Z_lt_dec ofs hi).
-    rewrite setpermN_inside. constructor. lia.
-    rewrite setpermN_outside. constructor. lia.
-    rewrite setpermN_outside. constructor. lia.
-    rewrite setpermN_outside. constructor. lia.
-  -
+  subst b. rewrite setpermN_inv.
+  destruct (zle lo ofs && zlt ofs hi). constructor.
+  simpl. auto.
   apply access_max.
 Qed.
 Next Obligation.
@@ -661,12 +670,9 @@ Program Definition unchecked_free (m: mem) (b: block) (lo hi: Z): mem :=
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b).
   subst.
-  destruct (Z_le_dec lo ofs); destruct (Z_lt_dec ofs hi).
-  rewrite setpermN_inside. constructor. lia.
-  rewrite setpermN_outside. apply access_max. lia.
-  rewrite setpermN_outside. apply access_max. lia.
-  rewrite setpermN_outside. apply access_max. lia.
-  apply access_max.
+  rewrite setpermN_inv.
+  destruct (zle lo ofs && zlt ofs hi). constructor.
+  apply access_max.  apply access_max.
 Qed.
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst.
@@ -891,22 +897,17 @@ Program Definition drop_perm (m: mem) (b: block) (lo hi: Z) (p: permission): opt
   else None.
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst b0.
-  destruct (Z_le_dec lo ofs); destruct (Z_lt_dec ofs hi).
-  rewrite setpermN_inside. constructor. lia.
-  rewrite setpermN_outside. apply access_max. lia.
-  rewrite setpermN_outside. apply access_max. lia.
-  rewrite setpermN_outside. apply access_max. lia.
-  apply access_max.
+  rewrite setpermN_inv. destruct (zle lo ofs && zlt ofs hi).
+  constructor. apply access_max. apply access_max.
 Qed.
 Next Obligation.
   specialize (nextblock_noaccess m b0 ofs k H0). intros.
   rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst b0.
-  destruct (Z_le_dec lo ofs); destruct (Z_lt_dec ofs hi).
+  rewrite setpermN_inv.
+  destruct (zle lo ofs); destruct (zlt ofs hi); simpl.
   assert (perm m b ofs k Freeable). apply perm_cur. apply H; auto.
   unfold perm in H2. rewrite H1 in H2. contradiction.
-  rewrite setpermN_outside; auto.
-  rewrite setpermN_outside; auto. lia.
-  rewrite setpermN_outside; auto. auto.
+  auto. auto. auto. auto.
 Qed.
 Next Obligation.
   apply contents_default.
@@ -2063,8 +2064,10 @@ Proof.
   intros until p; unfold perm. inv ALLOC. simpl.
   rewrite NMap.gsspec.  destruct (NMap.elt_eq b' (nextblock m1)); intros.
   assert (zle lo ofs && zlt ofs hi = true).
+    rewrite setpermN_inv in H.
     destruct(zle lo ofs && zlt ofs hi). reflexivity. contradiction.
   - destruct(eq_block b' (nextblock m1)).
+    rewrite setpermN_inv in H.
     + split. destruct (zle lo ofs); try auto. try contradiction.
     destruct (zlt ofs hi). try auto. simpl in H.
     destruct (zle lo ofs); simpl in H; contradiction.
@@ -2274,6 +2277,7 @@ Theorem perm_free_1:
 Proof.
   intros. rewrite free_result. unfold perm, unchecked_free; simpl.
   rewrite NMap.gsspec. destruct (NMap.elt_eq b bf). subst b.
+  rewrite setpermN_inv.
   destruct (zle lo ofs); simpl.
   destruct (zlt ofs hi); simpl.
   elimtype False; intuition.
@@ -2285,7 +2289,9 @@ Theorem perm_free_2:
   forall ofs k p, lo <= ofs < hi -> ~ perm m2 bf ofs k p.
 Proof.
   intros. rewrite free_result. unfold perm, unchecked_free; simpl.
-  unfold NMap.get. rewrite NMap.gss. unfold proj_sumbool. rewrite zle_true. rewrite zlt_true.
+  unfold NMap.get. rewrite NMap.gss.
+  rewrite setpermN_inv. unfold proj_sumbool.
+  rewrite zle_true. rewrite zlt_true.
   simpl. tauto. lia. lia.
 Qed.
 
@@ -2295,6 +2301,7 @@ Theorem perm_free_3:
 Proof.
   intros until p. rewrite free_result. unfold perm, unchecked_free; simpl.
   rewrite NMap.gsspec. destruct (NMap.elt_eq b bf). subst b.
+  rewrite setpermN_inv.
   destruct (zle lo ofs); simpl.
   destruct (zlt ofs hi); simpl. tauto.
   auto. auto. auto.
@@ -2307,6 +2314,7 @@ Theorem perm_free_inv:
 Proof.
   intros. rewrite free_result. unfold perm, unchecked_free; simpl.
   rewrite NMap.gsspec. destruct (NMap.elt_eq b bf); auto. subst b.
+  rewrite setpermN_inv.
   destruct (zle lo ofs); simpl; auto.
   destruct (zlt ofs hi); simpl; auto.
 Qed.
@@ -2345,6 +2353,7 @@ Proof.
   red; intros. generalize (H ofs0 H1).
   rewrite free_result. unfold perm, unchecked_free; simpl.
   rewrite NMap.gsspec. destruct (NMap.elt_eq b bf). subst b.
+  rewrite setpermN_inv.
   destruct (zle lo ofs0); simpl.
   destruct (zlt ofs0 hi); simpl.
   tauto. auto. auto. auto.
@@ -2471,7 +2480,8 @@ Theorem perm_drop_1:
 Proof.
   intros.
   unfold drop_perm in DROP. destruct (range_perm_dec m b lo hi Cur Freeable); inv DROP.
-  unfold perm. simpl. unfold NMap.get. rewrite NMap.gss. unfold proj_sumbool.
+  unfold perm. simpl. unfold NMap.get. rewrite NMap.gss.
+  rewrite setpermN_inv. unfold proj_sumbool.
   rewrite zle_true. rewrite zlt_true. simpl. constructor.
   lia. lia.
 Qed.
@@ -2481,7 +2491,8 @@ Theorem perm_drop_2:
 Proof.
   intros.
   unfold drop_perm in DROP. destruct (range_perm_dec m b lo hi Cur Freeable); inv DROP.
-  revert H0. unfold perm; simpl. unfold NMap.get. rewrite NMap.gss. unfold proj_sumbool.
+  revert H0. unfold perm; simpl. unfold NMap.get. rewrite NMap.gss.
+  rewrite setpermN_inv. unfold proj_sumbool.
   rewrite zle_true. rewrite zlt_true. simpl. auto.
   lia. lia.
 Qed.
@@ -2492,6 +2503,7 @@ Proof.
   intros.
   unfold drop_perm in DROP. destruct (range_perm_dec m b lo hi Cur Freeable); inv DROP.
   unfold perm; simpl. rewrite NMap.gsspec. destruct (NMap.elt_eq b' b). subst b'.
+  rewrite setpermN_inv.
   unfold proj_sumbool. destruct (zle lo ofs). destruct (zlt ofs hi).
   byContradiction. intuition lia.
   auto. auto. auto.
@@ -2503,7 +2515,7 @@ Proof.
   intros.
   unfold drop_perm in DROP. destruct (range_perm_dec m b lo hi Cur Freeable); inv DROP.
   revert H. unfold perm; simpl. rewrite NMap.gsspec. destruct (NMap.elt_eq b' b).
-  subst b'. unfold proj_sumbool. destruct (zle lo ofs). destruct (zlt ofs hi).
+  subst b'.  rewrite setpermN_inv. unfold proj_sumbool. destruct (zle lo ofs). destruct (zlt ofs hi).
   simpl. intros. apply perm_implies with p. apply perm_implies with Freeable. apply perm_cur.
   apply r. tauto. auto with mem. auto.
   auto. auto. auto.
