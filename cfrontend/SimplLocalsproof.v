@@ -1517,10 +1517,10 @@ End EVAL_EXPR.
 (** Matching continuations *)
 
 Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> sup -> sup -> Prop :=
-  | match_Kstop: forall cenv m m1 m2 bound tbound,
-      inj_incr w (injw f m1 m2) ->
-      Mem.sup_include (Mem.support m1) bound ->
-      Mem.sup_include (Mem.support m2) tbound ->
+  | match_Kstop: forall cenv m s1 s2 bound tbound,
+      inj_incr w (injw f s1 s2) ->
+      Mem.sup_include s1 bound ->
+      Mem.sup_include s2 tbound ->
       match_cont f cenv Kstop Kstop m bound tbound
   | match_Kseq: forall cenv s k ts tk m bound tbound,
       simpl_stmt cenv s = OK ts ->
@@ -2271,13 +2271,11 @@ Proof.
   intros. inv H0. inv H.
   specialize (MCONT VSet.empty). inv MCONT.
   eexists. split. econstructor; split; eauto.
-  exists (injw j m tm).
+  exists (injw j (Mem.support m) (Mem.support tm)).
   constructor; eauto. etransitivity; eauto.
   constructor; eauto. red. intros. congruence.
-  (*We shall proof it as rely conditions *)
-  admit. admit.
   constructor; eauto. constructor; auto.
-Admitted.
+Qed.
 
 Lemma external_states_simulation:
   forall S R q1, match_states S R -> at_external ge S q1 ->

@@ -483,9 +483,10 @@ Proof.
   induction 1; intros.
   (* base case *)
   econstructor; eauto.
-  etransitivity; eauto. constructor; eauto. intros.
-  destruct (Mem.sup_dec b1 bound). rewrite H3 in H6; eauto. congruence.
-  destruct (Mem.sup_dec b2 tbound). erewrite H4 in H5; eauto. congruence.
+  etransitivity; eauto. constructor; eauto.
+  red. intros.
+  destruct (Mem.sup_dec b bound). rewrite H3 in H6; eauto. congruence.
+  destruct (Mem.sup_dec b' tbound). erewrite H4 in H5; eauto. congruence.
   auto.
   (* inductive case *)
   assert (Mem.sup_include bes es) by (eapply me_sup_include; eauto ).
@@ -610,7 +611,7 @@ Proof.
 (* base case *)
   apply mcs_nil; auto.
   inv H. constructor; eauto. eapply inject_incr_trans; eauto.
-  intros. case_eq (f1 b1).
+  red. intros. case_eq (f1 b).
   intros [b2' delta'] EQ. rewrite (INCR _ _ _ EQ) in H2. inv H2. eauto.
   intro EQ. exploit SEPARATED; eauto. intros [A B].
   unfold Mem.valid_block in *. inv GE; split; eauto.

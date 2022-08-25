@@ -1753,6 +1753,38 @@ Proof.
       * erewrite map_content_1; eauto. intros [d A]. congruence.
 Qed.
 
+
+(*
+SUPEXT : supext s2' m2
+
+
+
+j1 b1 = Some (b2,0) j2 b2 = Some (b3,0)
+j1' b1 = Some (b2,0) j2' b1 = Some (b3,0)
+
+
+m1 m2 m3              m1' m2' m3'
+b1 [p1]      ----->   b1 [None]
+
+b2 [p1]      ----->   b2 [None]
+
+b3 [p1]      ------>  b3 [p1 or None]
+
+INITIAL : 1) extend the suppor to s2'
+          2) pre_free of regions {(b2,ofs2)} in m2 which are
+             a) in_reach of j1 m1 /\ j2 b2 = Some (_) (which means it's in the closure of Mem.inject j m1 m3)
+             b) loc_out_of_reach j1' m1' (out of the closure of Mem.inject j' m1' m3' because of free in m1')
+
+
+MAP : 
+
+m1'  suppoort (m1')
+sup_In b1' support m1'
+
+j1' b1 = Some (b2,_) /\ j2 b2 = Some
+
+*)
+
 Section meminj1.
 
 Variable m1 m1' m2 m2'1 m2' m3 m3': mem.

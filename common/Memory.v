@@ -216,9 +216,13 @@ Definition perm_order'' (po1 po2: option permission) :=
   | _, None => True
   | None, Some _ => False
  end.
+(*
+Definition permval : Type := permission * permission.
+*)
 
 Record mem' : Type := mkmem {
   mem_contents: NMap.t (ZMap.t memval);  (**r [block -> offset -> memval] *)
+  (*mem_access : NMap.t (ZMap.t (option (perm_kind -> permission))) *)
   mem_access: NMap.t (Z -> perm_kind -> option permission);
                                          (**r [block -> offset -> kind -> option permission] *)
   support: sup;
@@ -5134,6 +5138,39 @@ Definition perm_check_readable (pmap : Z -> perm_kind -> option permission) ofs 
     | _ => true
   end.
 
+(*
+
+sup_In b1 m1'                   [--(5-delta)--------------------]
+
+j1' b1 = Some (b2,delta)
+
+sup_In b2 m2'                     [----5------------------]
+
+map1 = (mem_access m1') b1
+map2 = (mem_access m2') b2
+*)
+
+(*
+
+sup_In b1 m1'                   [--(5-delta)--------------------]
+
+j1' b1 = Some (b2,delta)
+
+sup_In b2 m2'                     [----5------------------]
+
+map1 = (mem_content m1') b1
+map2 = (mem_content m2') b2
+
+
+
+
+ptree ofs2 = None
+
+PTree.set ofs2 ptree = (**)
+
+PTree.set
+*)
+
 Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
   fun ofs2 p =>
     let ofs1 := ofs2 - delta in
@@ -5162,15 +5199,6 @@ Definition positive_to_Z (p:positive): Z :=
     | (p~1)%positive => Z.neg p
   end.
 
-Definition content_map (val1 : ZMap.t memval) (pmap1 : perm_map) (f:meminj) (delta : Z)
-           : positive -> memval -> memval :=
-  fun i mv =>
-    let ofs2 := positive_to_Z i in             (* find the o : Z from the positive index in PTree *)
-    let ofs1 := ofs2 - delta in           (* compute the index in domian clock*)
-    if perm_check_readable pmap1 ofs1 then       (* check the source permission*)
-      memval_map f (ZMap.get ofs1 val1) (* copy the valid value from source*)
-        else
-          mv.                               (* not copy the invalid value *)
 
 (* the copyed position should be new regions or old regions which is mapped to m3*)
 Definition valid_position b (j2:meminj) s2 s2' : Prop :=
@@ -5190,14 +5218,24 @@ Proof.
   - right. unfold valid_position. firstorder.
 Qed.
 
+Definition content_map (val1 : ZMap.t memval) (pmap1 : perm_map) (f:meminj) (delta : Z)
+           : positive -> memval -> memval :=
+  fun i mv =>
+    let ofs2 := positive_to_Z i in             (* find the o : Z from the positive index in PTree *)
+    let ofs1 := ofs2 - delta in           (* compute the index in domian clock*)
+    if perm_check_readable pmap1 ofs1 then       (* check the source permission*)
+      memval_map f (ZMap.get ofs1 val1) (* copy the valid value from source*)
+        else
+          mv.                               (* not copy the invalid value *)
+
 Definition update_mem_content (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (delta : Z)
     : ZMap.t memval -> ZMap.t memval :=
   fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
-(*
+
 (*Fixpoint update_ptree (xe: list (positive * A)) (ptree: PTree.A) (f: positive -> option A) : PTree.A :=
   match xe with
     | nil => ptree
-    | (pos,a)::tl => PTree.set pos (f pos) *)
+    | (pos,a)::tl => PTree.set pos (f pos)
 Fixpoint update_mem_content_ptree (xe: list (positive * memval))
          (ptree: PTree.t memval) (pmap1 : perm_map) (f:meminj) (delta : Z) (val1 : ZMap.memval)
 Definition update_mem_content1 (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (delta : Z)

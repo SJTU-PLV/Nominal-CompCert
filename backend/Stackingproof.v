@@ -1364,10 +1364,10 @@ Inductive match_stacks (j: meminj):
         (TY_RA: Val.has_type ra Tptr),
       sg = stk_sg w \/ tailcall_possible sg ->
       inject_incr (stk_w w) j ->
-      injw_mem_r (stk_w w) = (stk_m2 w) ->
+      injw_sup_r (stk_w w) = (Mem.support (stk_m2 w)) ->
       (forall b1 b2 delta, injw_meminj (stk_w w) b1 = None -> j b1 = Some (b2, delta) ->
-         ~ sup_In b1 (Mem.support (injw_mem_l (stk_w w))) /\
-         ~ sup_In b2 (Mem.support (injw_mem_r (stk_w w))))  ->
+         ~ sup_In b1 (injw_sup_l (stk_w w)) /\
+         ~ sup_In b2 (injw_sup_r (stk_w w)))  ->
       match_stacks j
                    (Linear.Stackbase (initial_regs (stk_sg w) (stk_ls1 w)) :: nil)
                    (Stackbase (stk_sp2 w) ra :: nil)
@@ -1424,8 +1424,8 @@ Lemma match_stacks_change_meminj:
   forall j j' m m',
   inject_incr j j' ->
   inject_separated j j' m m' ->
-  Mem.sup_include (Mem.support (injw_mem_l (stk_w w))) (Mem.support m) ->
-  Mem.sup_include (Mem.support (injw_mem_r (stk_w w))) (Mem.support m') ->
+  Mem.sup_include (injw_sup_l (stk_w w)) (Mem.support m) ->
+  Mem.sup_include (injw_sup_r (stk_w w)) (Mem.support m') ->
   forall cs cs' sg,
   match_stacks j cs cs' sg ->
   match_stacks j' cs cs' sg.
@@ -1442,7 +1442,7 @@ Qed.
 Lemma stack_contents_support m j cs cs' sg:
   m |= stack_contents j cs cs' ->
   match_stacks j cs cs' sg ->
-  Mem.sup_include (Mem.support (injw_mem_r (stk_w w))) (Mem.support m).
+  Mem.sup_include (injw_sup_r (stk_w w)) (Mem.support m).
 Proof.
   induction 2.
   - rewrite H2. eapply Mem.unchanged_on_support. apply H.
@@ -1991,7 +1991,7 @@ Qed.
 Inductive match_states: Linear.state -> Mach.state -> Prop :=
   | match_states_intro:
       forall cs f sp c ls m cs' fb sp' rs m' j tf
-        (NB: Mem.sup_include (Mem.support (injw_mem_l (stk_w w))) (Mem.support m)) (* initial w.mem acc m, shoule be extended with max_perm_decrease *)
+        (NB: Mem.sup_include (injw_sup_l (stk_w w)) (Mem.support m))
         (STACKS: match_stacks j cs cs' f.(Linear.fn_sig))
         (TRANSL: transf_function f = OK tf)
         (FIND: Genv.find_funct tge fb = Some (Internal tf))
@@ -2007,7 +2007,7 @@ Inductive match_states: Linear.state -> Mach.state -> Prop :=
                    (Mach.State cs' fb (Vptr sp' Ptrofs.zero) (transl_code (make_env (function_bounds f)) c) rs m')
   | match_states_call:
       forall cs vf f ls m cs' vf' rs m' j
-        (NB: Mem.sup_include (Mem.support (injw_mem_l (stk_w w))) (Mem.support m))
+        (NB: Mem.sup_include (injw_sup_l (stk_w w)) (Mem.support m))
         (STACKS: match_stacks j cs cs' (Linear.funsig f))
         (FIND: Genv.find_funct ge vf = Some f)
         (FINJ: Val.inject j vf vf')
@@ -2019,7 +2019,7 @@ Inductive match_states: Linear.state -> Mach.state -> Prop :=
                    (Mach.Callstate cs' vf' rs m')
   | match_states_return:
       forall cs ls m cs' rs m' j sg
-        (NB: Mem.sup_include (Mem.support (injw_mem_l (stk_w w))) (Mem.support m))
+        (NB: Mem.sup_include (injw_sup_l (stk_w w)) (Mem.support m))
         (STACKS: match_stacks j cs cs' sg)
         (AGREGS: agree_regs j ls rs)
         (SEP: m' |= stack_contents j cs cs'
@@ -2374,7 +2374,7 @@ Lemma transf_initial_states:
   exists st2, Mach.initial_state tge q2 st2 /\ match_states w st1 st2.
 Proof.
   intros w q1 q2 Hse Hq st1 Hst1. inv Hst1. inv Hq. inv Hse. destruct H9.
-  cbn [injw_mem_l injw_mem_r stk_w CKLR.mi inj injw_meminj] in *.
+  cbn [injw_sup_l injw_sup_r stk_w CKLR.mi inj injw_meminj] in *.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   eexists. split.
   (* exists (Callstate (Stackbase (Vptr sb sofs) ra2 :: nil) vf2 rs3 m2). split. *)
@@ -2401,10 +2401,9 @@ Proof.
     eapply cc_stacking_mr_intro with (w' := injw j _ _); cbn; eauto.
     + destruct stk_w as [j0 m1 m2]; cbn in *. constructor; auto.
       rewrite H4. eapply Mem.unchanged_on_support; eauto.
-      admit. admit. (* same as SimplLocalsproof *)
     + intros r Hr. setoid_rewrite <- (AGCS (R r) Hr); eauto.
     + intros sb2 sofs2 H sb1 delta Hsb Hp. eapply DISJ; cbn; eauto.
-Admitted.
+Qed.
 
 Lemma init_args_agree_outgoing_arguments sg j ls1 ls2 m sp:
   agree_outgoing_arguments sg ls1 ls2 ->
