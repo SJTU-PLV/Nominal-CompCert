@@ -1031,14 +1031,16 @@ Proof.
   inv H. unfold Mem.perm. simpl. unfold Mem.pmap_update. rewrite NMap.gsspec.
   rewrite pred_dec_true; eauto.
   destruct (Mem.perm_dec m1 b1 (ofs2 - delta) Max Nonempty); simpl.
-    + unfold Mem.update_mem_access. unfold Mem.perm in p0.
-      destruct (NMap.get (Z -> perm_kind -> option permission) b1 (Mem.mem_access m1) (ofs2 - delta) Max) eqn: Hperm.
-      unfold Mem.perm_check_any. rewrite Hperm. reflexivity. exfalso. apply p0.
-    + unfold Mem.update_mem_access.
-      unfold Mem.perm in n.
-      destruct (NMap.get (Z -> perm_kind -> option permission) b1 (Mem.mem_access m1) (ofs2 - delta) Max) eqn: Hperm.
+    + rewrite Mem.update_mem_access_result.
+      unfold Mem.perm in p0.
+      unfold Mem.perm_check_any.
+      destruct (Maps.ZMap.get) eqn: Hperm.
+      reflexivity. exfalso. apply p0.
+    + rewrite Mem.update_mem_access_result.
+      unfold Mem.perm in n. unfold Mem.perm_check_any.
+      destruct (Maps.ZMap.get) eqn: Hperm.
       exfalso. apply n. simpl. constructor.
-      unfold Mem.perm_check_any. rewrite Hperm. reflexivity.
+      reflexivity.
   - simpl. subst. reflexivity.
 Qed.
 
@@ -1077,8 +1079,6 @@ Proof.
   - subst. reflexivity.
 Qed.
 
-
-
 Lemma map_content_2 : forall j1' j2 b1 m1 s2 m2 m2' b2 delta ofs2 ,
     Mem.map j1' j2 b1 s2 m1 m2 = m2' ->
     j1' b1 = Some (b2,delta) ->
@@ -1097,22 +1097,20 @@ Proof.
     set (map2 := (NMap.get (Maps.ZMap.t memval) b2 (Mem.mem_contents m2))) in *.
     set (map1 := (NMap.get (Maps.ZMap.t memval) b1 (Mem.mem_contents m1))) in *.
     unfold Mem.perm in p.
-    set (pmap1 := (NMap.get (Z -> perm_kind -> option permission) b1 (Mem.mem_access m1))) in *.
+    set (pmap1 := (NMap.get (Maps.ZMap.t Mem.memperm) b1 (Mem.mem_access m1))) in *.
     assert (CHECK: Mem.perm_check_readable pmap1 (ofs2 - delta) = true).
     unfold Mem.perm_check_readable.
-    destruct (pmap1 (ofs2 - delta)); inv p; auto.
+    destruct (Maps.ZMap.get); inv p; auto.
     erewrite Mem.update_mem_content_result; eauto.
     rewrite CHECK. reflexivity.
-    eapply Mem.contents_default; eauto.
-    eapply Mem.contents_default; eauto.
   +
     set (map2 := (NMap.get (Maps.ZMap.t memval) b2 (Mem.mem_contents m2))) in *.
     set (map1 := (NMap.get (Maps.ZMap.t memval) b1 (Mem.mem_contents m1))) in *.
     unfold Mem.perm in n.
-    set (pmap1 := (NMap.get (Z -> perm_kind -> option permission) b1 (Mem.mem_access m1))) in *.
+    set (pmap1 := (NMap.get (Maps.ZMap.t Mem.memperm) b1 (Mem.mem_access m1))) in *.
     assert (CHECK: Mem.perm_check_readable pmap1 (ofs2 - delta) = false).
     {unfold Mem.perm_check_readable.
-    destruct (pmap1 (ofs2 - delta) Cur); auto.
+    destruct (Maps.ZMap.get); auto.
     destruct p.
     exfalso. apply n. constructor.
     exfalso. apply n. constructor.
@@ -1121,8 +1119,6 @@ Proof.
     }
     erewrite Mem.update_mem_content_result; eauto.
     rewrite CHECK. reflexivity.
-    eapply Mem.contents_default; eauto.
-    eapply Mem.contents_default; eauto.
   - simpl. subst. reflexivity.
 Qed.
 
@@ -1134,9 +1130,9 @@ Proof.
   auto.
 Qed.
 
-Lemma initial_m2'_support : forall s2 s2' m1 m1' j1 j2 j1' H1 H2 m2 m2',
+Lemma initial_m2'_support : forall s2 s2' m1 m1' j1 j1' j2 H1 H2 m2 m2',
     Mem.sup_include (Mem.support m2) s2' ->
-    Mem.initial_m2' s2 s2' m1 m1' j1 j2 j1' H1 H2 m2 = m2' ->
+    Mem.initial_m2' m1 m1' j1 j1' j2 H1 H2 s2 s2' m2 = m2' ->
     Mem.support m2' = s2'.
 Proof.
   induction s2; intros.
@@ -1144,7 +1140,7 @@ Proof.
     unfold Mem.supext. destruct Mem.sup_include_dec.
     auto. congruence.
   - unfold Mem.initial_m2' in *. simpl in *.
-    assert (Mem.support (Mem.initial_free s2 m1 m1' j1 j2 j1' H1 H2 (Mem.supext s2' m2)) = s2').
+    assert (Mem.support (Mem.initial_free m1 m1' j1 j1' j2 H1 H2 s2 (Mem.supext s2' m2)) = s2').
     eapply IHs2; eauto.
     apply out_of_reach_free_support in H0.
     congruence.
@@ -1260,8 +1256,8 @@ Proof.
   - subst. eauto with mem.
 Qed.
 
-Lemma out_of_reach_free_unchanged_on_2: forall m1 m1' j1 j2 j1' b H1 H2 m2 m2',
-    Mem.out_of_reach_free m1 m1' j1 j2 j1' b H1 H2 m2 = m2' ->
+Lemma out_of_reach_free_unchanged_on_2: forall m1 m1' j1 j1' j2 b H1 H2 m2 m2',
+    Mem.out_of_reach_free m1 m1' j1 j1' j2 b H1 H2 m2 = m2' ->
     Mem.unchanged_on (loc_unmapped j2) m2 m2'.
 Proof.
   intros. unfold Mem.out_of_reach_free in H.
@@ -1271,14 +1267,14 @@ Proof.
     unfold Mem.pmap_update. rewrite NMap.gsspec.
     destruct NMap.elt_eq.
     + subst.
-      unfold Mem.update_mem_access_free. red in H.
+      rewrite Mem.update_mem_access_free_result. red in H.
       rewrite H. reflexivity.
     + reflexivity.
   - inv H. intros. reflexivity.
 Qed.
 
-Lemma initial_free_unmapped: forall s2 m1 m1' j1 j2 j1' H1 H2 m2 m2',
-    Mem.initial_free s2 m1 m1' j1 j2 j1' H1 H2 m2 = m2' ->
+Lemma initial_free_unmapped: forall s2 m1 m1' j1 j1' j2 H1 H2 m2 m2',
+    Mem.initial_free m1 m1' j1 j1' j2 H1 H2 s2 m2 = m2' ->
     Mem.unchanged_on (loc_unmapped j2) m2 m2'.
 Proof.
   induction s2; intros; inv H; simpl in *.
@@ -1288,7 +1284,7 @@ Proof.
 Qed.
 Lemma initial_unmapped:
   forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
-    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
+    Mem.initial_m2' m1 m1' j1 j1' j2 DOMIN1 DOMIN2 (Mem.support m2) s2' m2 = m2'1  ->
     Mem.unchanged_on (loc_unmapped j2) m2 m2'1.
 Proof.
   intros. unfold Mem.initial_m2' in H.
@@ -1297,8 +1293,8 @@ Proof.
   eapply initial_free_unmapped; eauto.
 Qed.
 
-Lemma out_of_reach_free_unchanged_on_1: forall m1 m1' j1 j2 j1' b H1 H2 m2 m2',
-    Mem.out_of_reach_free m1 m1' j1 j2 j1' b H1 H2 m2 = m2' ->
+Lemma out_of_reach_free_unchanged_on_1: forall m1 m1' j1 j1' j2 b H1 H2 m2 m2',
+    Mem.out_of_reach_free m1 m1' j1 j1' j2 H1 H2 b m2 = m2' ->
     Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'.
 Proof.
   intros. unfold Mem.out_of_reach_free in H.
@@ -1308,7 +1304,7 @@ Proof.
     unfold Mem.pmap_update. rewrite NMap.gsspec.
     destruct NMap.elt_eq.
     + subst.
-      unfold Mem.update_mem_access_free.
+      rewrite Mem.update_mem_access_free_result.
       destruct (j2 b); try reflexivity.
       destruct (Mem.loc_in_reach_dec (Mem.support m1) m1 j1 b ofs Max Nonempty H1);
       destruct (Mem.loc_in_reach_dec (Mem.support m1') m1' j1' b ofs Max Nonempty H2);
@@ -1319,7 +1315,7 @@ Proof.
 Qed.
 
 Lemma initial_free_out_of_reach1: forall s2 m1 m1' j1 j2 j1' H1 H2 m2 m2',
-    Mem.initial_free s2 m1 m1' j1 j2 j1' H1 H2 m2 = m2' ->
+    Mem.initial_free m1 m1' j1 j2 j1' H1 H2 s2 m2 = m2' ->
     Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'.
 Proof.
   induction s2; intros; inv H; simpl in *.
@@ -1329,7 +1325,7 @@ Proof.
 Qed.
 Lemma initial_out_of_reach1:
   forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
-    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
+    Mem.initial_m2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 (Mem.support m2) s2' m2 = m2'1  ->
     Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'1.
 Proof.
   intros. unfold Mem.initial_m2' in H.
@@ -1338,34 +1334,34 @@ Proof.
   eapply initial_free_out_of_reach1; eauto.
 Qed.
 
-Lemma out_of_reach_free_decrease: forall m1 m1' j1 j2 j1' b H1 H2 m2 m2' b2 ofs k p,
-      Mem.out_of_reach_free m1 m1' j1 j2 j1' b H1 H2 m2 = m2' ->
+Lemma out_of_reach_free_decrease: forall m1 m1' j1 j1' j2 b H1 H2 m2 m2' b2 ofs k p,
+      Mem.out_of_reach_free m1 m1' j1 j1' j2 H1 H2 b m2 = m2' ->
       Mem.perm m2' b2 ofs k p -> Mem.perm m2 b2 ofs k p.
 Proof.
   intros. unfold Mem.out_of_reach_free in H. inv H.
   unfold Mem.perm in *. simpl in *.
   unfold Mem.pmap_update in H0. rewrite NMap.gsspec in H0.
   destruct (NMap.elt_eq b2 b); eauto.
-  subst. unfold Mem.update_mem_access_free in H0.
+  subst. rewrite Mem.update_mem_access_free_result in H0.
   destruct (j2 b); eauto.
   destruct (Mem.loc_in_reach_dec (Mem.support m1) m1 j1 b ofs Max Nonempty H1 &&
            negb (Mem.loc_in_reach_dec (Mem.support m1') m1' j1' b ofs Max Nonempty H2)).
   inv H0. eauto.
 Qed.
 
-Lemma initial_free_decrease: forall s2 m1 m1' j1 j2 j1' H1 H2 m2 m2' b2 ofs k p,
-    Mem.initial_free s2 m1 m1' j1 j2 j1' H1 H2 m2 = m2' ->
+Lemma initial_free_decrease: forall s2 m1 m1' j1 j1' j2 H1 H2 m2 m2' b2 ofs k p,
+    Mem.initial_free m1 m1' j1 j1' j2 H1 H2 s2 m2 = m2' ->
     Mem.perm m2' b2 ofs k p -> Mem.perm m2 b2 ofs k p.
 Proof.
   induction s2; intros; simpl in H.
   - subst. eauto.
-  - assert (Mem.perm (Mem.initial_free s2 m1 m1' j1 j2 j1' H1 H2 m2) b2 ofs k p).
+  - assert (Mem.perm (Mem.initial_free m1 m1' j1 j1' j2 H1 H2 s2 m2) b2 ofs k p).
     eapply out_of_reach_free_decrease; eauto.
     eauto.
 Qed.
 
-Lemma initial_perm_decrease: forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 b2 ofs k p,
-    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
+Lemma initial_perm_decrease: forall m2 m2'1 s2' m1 m1' j1 j1' j2 DOMIN1 DOMIN2 b2 ofs k p,
+    Mem.initial_m2' m1 m1' j1 j1' j2 DOMIN1 DOMIN2 (Mem.support m2) s2' m2 = m2'1  ->
     Mem.perm m2'1 b2 ofs k p -> Mem.perm m2 b2 ofs k p.
 Proof.
   intros.
@@ -1377,8 +1373,8 @@ Proof.
   auto.
 Qed.
 
-Lemma initial_max_perm_decrease: forall m2 m2'1 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2,
-    Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN2 m2 = m2'1  ->
+Lemma initial_max_perm_decrease: forall m2 m2'1 s2' m1 m1' j1 j1' j2 DOMIN1 DOMIN2,
+    Mem.initial_m2' m1 m1' j1 j1' j2 DOMIN1 DOMIN2 (Mem.support m2) s2' m2 = m2'1  ->
     injp_max_perm_decrease m2 m2'1.
 Proof.
   intros. red. intros.
@@ -1386,8 +1382,8 @@ Proof.
 Qed.
 
 Lemma initial_free_valid:
-  forall s2 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN1' m2 m2'1 b2 ofs2 b3 delta3,
-    Mem.initial_m2' s2 s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN1' m2 = m2'1 ->
+  forall s2 s2' m1 m1' j1 j1' j2 DOMIN1 DOMIN1' m2 m2'1 b2 ofs2 b3 delta3,
+    Mem.initial_m2' m1 m1' j1 j1' j2 DOMIN1 DOMIN1' s2 s2' m2 = m2'1 ->
     j2 b2 = Some (b3,delta3) ->
     Mem.loc_in_reach j1 m1 b2 ofs2 Max Nonempty ->
     ~ Mem.loc_in_reach j1' m1' b2 ofs2 Max Nonempty ->
@@ -1400,12 +1396,12 @@ Proof.
     + subst. unfold Mem.initial_m2'. simpl.
       unfold Mem.out_of_reach_free. unfold Mem.perm. simpl.
       unfold Mem.pmap_update. rewrite NMap.gsspec. rewrite pred_dec_true; auto.
-      unfold Mem.update_mem_access_free. rewrite H0.
+      rewrite Mem.update_mem_access_free_result. rewrite H0.
       destruct (Mem.loc_in_reach_dec); try congruence.
       destruct (Mem.loc_in_reach_dec); try congruence.
       simpl. congruence.
     + subst. unfold Mem.initial_m2'. simpl.
-      assert (~Mem.perm (Mem.initial_free s2 m1 m1' j1 j2 j1' DOMIN1 DOMIN1' (Mem.supext s2' m2)) b2 ofs2 Max Nonempty).
+      assert (~Mem.perm (Mem.initial_free m1 m1' j1 j1' j2 DOMIN1 DOMIN1' s2 (Mem.supext s2' m2)) b2 ofs2 Max Nonempty).
       eapply IHs2; eauto.
       unfold Mem.initial_m2'. reflexivity.
       intro. apply H.
@@ -1536,7 +1532,7 @@ Proof.
   inv H. inv H4. congruence.
 Qed.
 
-Lemma source_value_closure: forall m1 m2 m1' m3' j1 j2 j1' j2' b1 ofs1 b2 delta,
+Lemma source_value_closure: forall m1 m2 m1' m3' j1 j1' j2 j2' b1 ofs1 b2 delta,
     Mem.inject j1 m1 m2 ->
     Mem.inject (compose_meminj j1' j2') m1' m3' ->
     Mem.unchanged_on (loc_unmapped (compose_meminj j1 j2)) m1 m1' ->
@@ -1792,7 +1788,7 @@ Variable j1 j1' j2 j2': meminj.
 Variable s2': sup.
 Hypothesis DOMIN1: inject_dom_in j1 (Mem.support m1).
 Hypothesis DOMIN1': inject_dom_in j1' (Mem.support m1').
-Hypothesis INITIAL : Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN1' m2= m2'1.
+Hypothesis INITIAL : Mem.initial_m2' m1 m1' j1 j1' j2 DOMIN1 DOMIN1' (Mem.support m2) s2' m2 = m2'1.
 Hypothesis INJMAP: Mem.inject_mem (Mem.support m2) j1' j2 m1' m2'1 = m2'.
 (*Hypothesis CONSTRUCTION : Mem.construction_m2' m1 m1' m2 j1 j1' (Mem.support m2) s2'
                                                DOMIN1 DOMIN2 m2'. *)
@@ -2419,7 +2415,7 @@ Proof.
   intros.
   apply inject_implies_dom_in in H1 as DOMIN1.
   rename H10 into DOMIN1'.
-  exists (Mem.inject_mem (Mem.support m2) j1' j2 m1' (Mem.initial_m2' (Mem.support m2) s2' m1 m1' j1 j2 j1' DOMIN1 DOMIN1' m2)).
+  exists (Mem.inject_mem (Mem.support m2) j1' j2 m1' (Mem.initial_m2' m1 m1' j1 j1' j2 DOMIN1 DOMIN1' (Mem.support m2) s2' m2)).
   repeat apply conj.
   eapply inject_mem_inject1; eauto.
   eapply inject_mem_inject2; eauto.

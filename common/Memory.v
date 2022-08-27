@@ -4856,6 +4856,26 @@ Proof.
   apply H0; auto. eapply perm_valid_block; eauto.
 Qed.
 
+(** * setN' operation on ZMap.t *)
+
+Fixpoint setN' {A:Type} (elements : list (Z*A)) (c: ZMap.t A) {struct elements} :=
+  match elements with
+    | nil => c
+    | (z, a) :: elements' => setN' elements' (ZMap.set z a c)
+  end.
+
+Remark setN'_default:
+  forall (A:Type) vl (c: ZMap.t A), fst (setN' vl c) = fst c.
+Proof.
+  induction vl; simpl; intros. auto. destruct a. rewrite IHvl. auto.
+Qed.
+
+(* how to proof :
+ 1. unrep of elements,
+ 2. perdicate b <-> In b (List.map fst elements)
+ 3. (from 2 and 1) In b (List.map fst elements) -> In (b, some specific value) elements
+ 4. (from 2 and 1) map2' # b = some specific value
+*)
 (** * Memory mixing *)
 
 (** [mix m' b lo hi m] copies the region indicated by [b], [lo], [hi]
@@ -4864,12 +4884,28 @@ Qed.
 Definition pmap_update {A} b (f : A -> A) (t : NMap.t A) : NMap.t A :=
   NMap.set A b (f (NMap.get A b t)) t.
 
-(*
-Definition mix_perms lo hi (pm pm' : Z -> perm_kind -> option permission) ofs k :=
-  if zle lo ofs && zlt ofs hi then pm ofs k else pm' ofs k.
+Fixpoint update_elements' (lo:Z) (l:nat) (pm: ZMap.t (perm_kind -> option permission)) :=
+  match l with
+    |O => nil
+    |S l' => (lo, pm##lo) :: update_elements' (lo+1) l' pm
+  end.
 
-(* why valid block subset? meaningful Vptr in mem?  *)
-(* is the subset relation on nominal set decidable in general? *)
+Definition update_elements lo hi pm :=
+  update_elements' lo (Z.to_nat (hi - lo)) pm.
+
+Definition mix_perms lo hi (pm pm' : ZMap.t (perm_kind -> option permission)) := setN' (update_elements lo hi pm) pm'.
+
+Remark mix_perms_result lo hi (pm pm' : ZMap.t (perm_kind -> option permission)) ofs k :
+  (mix_perms lo hi pm pm')##ofs k =
+  if zle lo ofs && zlt ofs hi then pm##ofs k else pm'##ofs k.
+Proof.
+  intros. unfold mix_perms.
+  destruct (zle lo ofs && zlt ofs hi) eqn: Range.
+  - assert (In ofs (List.map fst (update_elements lo hi pm))).
+    admit. admit.
+  - 
+Admitted.
+
 Definition mixable m' b m :=
   sup_include (support m) (support m') /\
   Mem.valid_block m b.
@@ -4901,8 +4937,9 @@ Program Definition mix m' b lo hi m : option mem :=
     None.
 Next Obligation.
   unfold pmap_update. destruct (eq_block b0 b); subst.
-  - rewrite NMap.gsspec. unfold mix_perms.
+  - rewrite NMap.gsspec.
     rewrite pred_dec_true.
+    repeat rewrite mix_perms_result.
     destruct (_ && _); apply Mem.access_max. auto.
   - rewrite NMap.gsspec. rewrite pred_dec_false.
     apply Mem.access_max. auto.
@@ -4986,8 +5023,9 @@ Proof.
   constructor; cbn.
   - apply sup_include_refl.
   - unfold perm; cbn. intros b1 ofs1 k p H ?.
-    unfold pmap_update, mix_perms.
+    unfold pmap_update.
     destruct (eq_block b1 b); subst; rewrite ?NMap.gss, ?NMap.gso; auto using iff_refl.
+    rewrite mix_perms_result.
     destruct zle, zlt; cbn; auto using iff_refl.
     elim H; auto.
   - intros b1 ofs1 H Hp.
@@ -5000,7 +5038,7 @@ Proof.
     rewrite Zmax_spec. destruct zlt; extlia.
 Qed.
 
-Lemma get_setN_getN_at lo k n x y:
+Lemma get_setN_getN_at A lo k n (x: ZMap.t A) y:
   ZMap.get (lo + Z.of_nat k) (setN (getN (k + S n) lo x) lo y) =
   ZMap.get (lo + Z.of_nat k) x.
 Proof.
@@ -5014,7 +5052,7 @@ Proof.
     rewrite IHk. reflexivity.
 Qed.
 
-Lemma get_setN_getN lo hi ofs x y:
+Lemma get_setN_getN A lo hi ofs (x y: ZMap.t A):
   lo <= ofs < hi ->
   ZMap.get ofs (setN (getN (Z.to_nat (hi - lo)) lo x) lo y) = ZMap.get ofs x.
 Proof.
@@ -5041,7 +5079,8 @@ Proof.
   constructor; cbn.
   - auto.
   - intros _ ofs k p [[ ] Hofs] Hb. unfold perm; cbn.
-    unfold pmap_update, mix_perms. rewrite NMap.gss.
+    unfold pmap_update. rewrite NMap.gss.
+    rewrite mix_perms_result.
     destruct zle, zlt; try extlia; cbn. reflexivity.
   - intros _ ofs [[ ] Hofs] Hp.
     unfold pmap_update. rewrite NMap.gss.
@@ -5219,7 +5258,7 @@ Proof.
       erewrite <- !(unchanged_on_perm _ m1' m1''); eauto using mix_unchanged.
       eapply mi_perm_inv; eauto.
 Qed.
-*)
+
 (** Memory skeleton *)
 
 Program Definition skeleton (s:sup) : mem :=
@@ -5292,12 +5331,6 @@ map2 = (mem_content m2') b2
 
 Definition pair_delta {A: Type} (delta: Z) (pair: Z * A) : Z * A :=
   (fst pair + delta, snd pair).
-
-Fixpoint setN' {A:Type} (elements : list (Z*A)) (c: ZMap.t A) {struct elements} :=
-  match elements with
-    | nil => c
-    | (z, a) :: elements' => setN' elements' (ZMap.set z a c)
-  end.
 
 Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
   let elements := ZMap.elements map1 in
@@ -5393,11 +5426,6 @@ Definition update_mem_content (pmap1 : perm_map) (f:meminj) (delta: Z) (vmap1 vm
   fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
 *)
 
-Remark setN'_default:
-  forall (A:Type) vl (c: ZMap.t A), fst (setN' vl c) = fst c.
-Proof.
-  induction vl; simpl; intros. auto. destruct a. rewrite IHvl. auto.
-Qed.
 
 Lemma update_mem_content_result: forall b1 b2 j1' delta vmap1 vmap2 pmap1 (ofs2:Z),
     j1' b1 = Some (b2,delta) ->
@@ -5525,25 +5553,44 @@ Proof.
          rewrite meminj_sub_diff; auto. eauto.
 Qed.
 
-Definition update_mem_access_free (m1 m1' : mem) (j1 j2 j1': meminj) (b2: block)
-(H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1')) (map2: perm_map): perm_map :=
-  fun ofs2 p =>
+Section out_of_reach_dec.
+Variable m1 m1' : mem.
+Variable j1 j1' j2 : meminj.
+Hypothesis H1: inject_dom_in j1 (support m1).
+Hypothesis H2: inject_dom_in j1' (support m1').
+
+Definition freed_position (b2:block)
+  (pair:Z * (perm_kind -> option permission)) : bool :=
+  if j2 b2 then
+  ((loc_in_reach_dec (support m1) m1 j1 b2 (fst pair) Max Nonempty H1)
+   &&
+   negb (loc_in_reach_dec (support m1') m1' j1' b2 (fst pair) Max Nonempty H2))
+   else false.
+
+Definition update_mem_access_free (b2: block) (map2: perm_map): perm_map :=
+  let elements := filter (freed_position b2) (ZMap.elements map2) in
+  let none_elements := List.map (fun p => (fst p, fun p => None)) elements in
+  setN' none_elements map2.
+
+Remark update_mem_access_free_result (b2: block) (map2: perm_map) ofs2 p:
+    (update_mem_access_free b2 map2)##ofs2 p =
     if j2 b2 then
     if ((loc_in_reach_dec (support m1) m1 j1 b2 ofs2 Max Nonempty H1) &&
        negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs2 Max Nonempty H2))
-    then None else map2 ofs2 p else map2 ofs2 p.
+    then None else map2##ofs2 p else map2##ofs2 p.
+Proof.
+  Admitted.
 
-Program Definition out_of_reach_free (m1 m1': mem) (j1 j2 j1': meminj) (b2 : block)
-(H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1')) (m2' : mem): mem :=
+Program Definition out_of_reach_free (b2 : block) (m2' : mem): mem :=
   {|
    mem_contents := (mem_contents m2');
-   mem_access := pmap_update b2 (update_mem_access_free m1 m1' j1 j2 j1' b2 H1 H2) (mem_access m2');
+   mem_access := pmap_update b2 (update_mem_access_free b2) (mem_access m2');
    support := support m2'
   |}.
-
 Next Obligation.
   unfold pmap_update. rewrite NMap.gsspec.
-  destruct eq_block. unfold update_mem_access_free.
+  destruct eq_block.
+  repeat rewrite update_mem_access_free_result.
   destruct (j2 b2);
   destruct (loc_in_reach_dec (support m1) m1 j1 b2 ofs Max Nonempty H1 &&
       negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs Max Nonempty H2));
@@ -5553,7 +5600,8 @@ Next Obligation.
 Qed.
 Next Obligation.
   unfold pmap_update. rewrite NMap.gsspec.
-  destruct eq_block. subst. unfold update_mem_access_free.
+  destruct eq_block. subst.
+  repeat rewrite update_mem_access_free_result.
   destruct (j2 b2);
   destruct (loc_in_reach_dec (support m1) m1 j1 b2 ofs Max Nonempty H1 &&
             negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs Max Nonempty H2));
@@ -5565,17 +5613,17 @@ Next Obligation.
     apply Mem.contents_default; eauto.
 Qed.
 
-Fixpoint initial_free (s2: sup)(m1 m1' :mem) (j1 j2 j1' : meminj)
-(H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1')) (m2':mem): mem :=
+Fixpoint initial_free (s2: sup) (m2':mem): mem :=
   match s2 with
     |nil => m2'
-    |hd :: tl => out_of_reach_free m1 m1' j1 j2 j1' hd H1 H2
-                                  (initial_free tl m1 m1' j1 j2 j1' H1 H2 m2')
+    |hd :: tl => out_of_reach_free hd
+                                  (initial_free tl m2')
   end.
 
-Definition initial_m2' (s2 s2': sup)(m1 m1' :mem) (j1 j2 j1' : meminj)
-(H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1')) (m2:mem): mem :=
-  initial_free s2 m1 m1' j1 j2 j1' H1 H2 (supext s2' m2).
+Definition initial_m2' (s2 s2': sup) (m2:mem): mem :=
+  initial_free s2 (supext s2' m2).
+
+End out_of_reach_dec.
 
 Fixpoint inject_map (s1' s2:list block) (j1' j2: meminj) (m1':mem) (m2:mem) : mem :=
   match s1' with
@@ -5586,11 +5634,11 @@ Fixpoint inject_map (s1' s2:list block) (j1' j2: meminj) (m1':mem) (m2:mem) : me
 Definition inject_mem s2 j1' j2 m1' m2 : mem :=
   inject_map (Mem.support m1') s2 j1' j2 m1' m2.
 
-Definition construction_m2' (m1 m1' m2 : mem) (j1 j2 j1' : meminj) (s2 s2' : sup)
+Definition construction_m2' (m1 m1' m2 : mem) (j1 j1' j2 : meminj) (s2 s2' : sup)
            (H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1'))
            (m2' : mem) : Prop :=
   exists m2'i,
-  initial_m2' s2 s2' m1 m1' j1 j2 j1' H1 H2 m2 = m2'i /\
+  initial_m2' m1 m1' j1 j1' j2 H1 H2 s2 s2' m2 = m2'i /\
   inject_mem s2' j1' j2 m1' m2'i = m2'.
 
 Lemma support_map : forall j1' j2 b s2 m1 m2,
