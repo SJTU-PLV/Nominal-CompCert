@@ -707,7 +707,7 @@ Fixpoint free_list (m: mem) (l: list (block * Z * Z)) {struct l}: option mem :=
 
 (** Reading N adjacent bytes in a block content. *)
 
-Fixpoint getN (n: nat) (p: Z) (c: ZMap.t memval) {struct n}: list memval :=
+Fixpoint getN {A:Type} (n: nat) (p: Z) (c: ZMap.t A) {struct n}: list A :=
   match n with
   | O => nil
   | S n' => ZMap.get p c :: getN n' (p + 1) c
@@ -745,14 +745,14 @@ Definition loadbytes (m: mem) (b: block) (ofs n: Z): option (list memval) :=
 
 (** Writing N adjacent bytes in a block content. *)
 
-Fixpoint setN (vl: list memval) (p: Z) (c: ZMap.t memval) {struct vl}: ZMap.t memval :=
+Fixpoint setN {A:Type} (vl: list A) (p: Z) (c: ZMap.t A) {struct vl}: ZMap.t A :=
   match vl with
   | nil => c
   | v :: vl' => setN vl' (p + 1) (ZMap.set p v c)
   end.
 
 Remark setN_other:
-  forall vl c p q,
+  forall A vl (c: ZMap.t A) p q,
   (forall r, p <= r < p + Z.of_nat (length vl) -> r <> q) ->
   ZMap.get q (setN vl p c) = ZMap.get q c.
 Proof.
@@ -765,7 +765,7 @@ Proof.
 Qed.
 
 Remark setN_outside:
-  forall vl c p q,
+  forall A vl (c: ZMap.t A) p q,
   q < p \/ q >= p + Z.of_nat (length vl) ->
   ZMap.get q (setN vl p c) = ZMap.get q c.
 Proof.
@@ -774,7 +774,7 @@ Proof.
 Qed.
 
 Remark getN_setN_same:
-  forall vl p c,
+  forall A vl p (c: ZMap.t A),
   getN (length vl) p (setN vl p c) = vl.
 Proof.
   induction vl; intros; simpl.
@@ -785,7 +785,7 @@ Proof.
 Qed.
 
 Remark getN_exten:
-  forall c1 c2 n p,
+  forall A (c1 c2: ZMap.t A) n p,
   (forall i, p <= i < p + Z.of_nat n -> ZMap.get i c1 = ZMap.get i c2) ->
   getN n p c1 = getN n p c2.
 Proof.
@@ -794,7 +794,7 @@ Proof.
 Qed.
 
 Remark getN_setN_disjoint:
-  forall vl q c n p,
+  forall A vl q (c: ZMap.t A) n p,
   Intv.disjoint (p, p + Z.of_nat n) (q, q + Z.of_nat (length vl)) ->
   getN n p (setN vl q c) = getN n p c.
 Proof.
@@ -803,7 +803,7 @@ Proof.
 Qed.
 
 Remark getN_setN_outside:
-  forall vl q c n p,
+  forall A vl q (c: ZMap.t A) n p,
   p + Z.of_nat n <= q \/ q + Z.of_nat (length vl) <= p ->
   getN n p (setN vl q c) = getN n p c.
 Proof.
@@ -811,7 +811,7 @@ Proof.
 Qed.
 
 Remark setN_default:
-  forall vl q c, fst (setN vl q c) = fst c.
+  forall (A:Type) vl q (c: ZMap.t A), fst (setN vl q c) = fst c.
 Proof.
   induction vl; simpl; intros. auto. rewrite IHvl. auto.
 Qed.
@@ -1073,7 +1073,7 @@ Proof.
 Qed.
 
 Lemma getN_length:
-  forall c n p, length (getN n p c) = n.
+  forall A (c: ZMap.t A) n p, length (getN n p c) = n.
 Proof.
   induction n; simpl; intros. auto. decEq; auto.
 Qed.
@@ -1097,7 +1097,7 @@ Proof.
 Qed.
 
 Lemma getN_concat:
-  forall c n1 n2 p,
+  forall A (c: ZMap.t A) n1 n2 p,
   getN (n1 + n2)%nat p c = getN n1 p c ++ getN n2 (p + Z.of_nat n1) c.
 Proof.
   induction n1; intros.
@@ -4855,7 +4855,7 @@ Proof.
 - apply unchanged_on_contents0; auto.
   apply H0; auto. eapply perm_valid_block; eauto.
 Qed.
-
+(*
 (** * Memory mixing *)
 
 (** [mix m' b lo hi m] copies the region indicated by [b], [lo], [hi]
@@ -4863,6 +4863,7 @@ Qed.
 
 Definition pmap_update {A} b (f : A -> A) (t : NMap.t A) : NMap.t A :=
   NMap.set A b (f (NMap.get A b t)) t.
+
 
 Definition mix_perms lo hi (pm pm' : Z -> perm_kind -> option permission) ofs k :=
   if zle lo ofs && zlt ofs hi then pm ofs k else pm' ofs k.
@@ -5218,13 +5219,13 @@ Proof.
       erewrite <- !(unchanged_on_perm _ m1' m1''); eauto using mix_unchanged.
       eapply mi_perm_inv; eauto.
 Qed.
-
+*)
 (** Memory skeleton *)
 
 Program Definition skeleton (s:sup) : mem :=
     {|
-      Mem.mem_contents := NMap.init (memval * PTree.t memval) (ZMap.init Undef);
-      Mem.mem_access := NMap.init (Z -> perm_kind -> option permission) (fun (_ : Z) (_ : perm_kind) => None);
+      mem_contents := NMap.init _ (ZMap.init Undef);
+      Mem.mem_access := NMap.init _ (ZMap.init (fun (_ : perm_kind) => None));
       Mem.support := s;
     |}.
 
@@ -5249,16 +5250,16 @@ Next Obligation.
 Qed.
 (** update permission *)
 
-Definition perm_map := Z -> perm_kind -> option permission.
+Definition perm_map := ZMap.t (perm_kind -> option permission).
 
-Definition perm_check_any (pmap : Z -> perm_kind -> option permission ) ofs : bool :=
-  match pmap ofs Max with
+Definition perm_check_any (pmap : perm_map ) ofs : bool :=
+  match (pmap ## ofs) Max with
     |None => false
     |Some _ => true
   end.
 
-Definition perm_check_readable (pmap : Z -> perm_kind -> option permission) ofs : bool :=
-  match pmap ofs Cur with
+Definition perm_check_readable (pmap : perm_map) ofs : bool :=
+  match (pmap ## ofs) Cur with
     | None | Some Nonempty => false
     | _ => true
   end.
@@ -5279,7 +5280,7 @@ map2 = (mem_access m2') b2
 
 sup_In b1 m1'                   [--(5-delta)--------------------]
 
-j1' b1 = Some (b2,delta)
+j1' b1 = Some (b2,delta)4
 
 sup_In b2 m2'                     [----5------------------]
 
@@ -5294,8 +5295,12 @@ ptree ofs2 = None
 PTree.set ofs2 ptree = (**)
 
 PTree.set
+PTree.get
 *)
-
+getN
+Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
+  let elements := ZMap.elements map1 in
+  
 Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
   fun ofs2 p =>
     let ofs1 := ofs2 - delta in
@@ -5338,7 +5343,7 @@ Proof.
     destruct (j2 b) as [[b' d]|] eqn:Hj2; unfold valid_position.
     left. firstorder. intros [A B]. congruence.
     right. firstorder.
-    left. firstorder.
+     left. firstorder.
     left. firstorder.
   - right. unfold valid_position. firstorder.
 Qed.

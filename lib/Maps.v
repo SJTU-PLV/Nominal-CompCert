@@ -1251,6 +1251,8 @@ Module PMap <: MAP.
   Definition set (A : Type) (i : positive) (x : A) (m : t A) :=
     (fst m, PTree.set i x (snd m)).
 
+  Definition elements (A : Type) (m : t A) := PTree.elements (snd m).
+
   Theorem gi:
     forall (A: Type) (i: positive) (x: A), get i (init x) = x.
   Proof.
@@ -1287,6 +1289,16 @@ Module PMap <: MAP.
      rewrite e. rewrite gss. auto.
      rewrite gso; auto.
   Qed.
+
+  Theorem elements_correct :
+    forall (A: Type) (i: positive) (v: A) (m: t A),
+      get i m = v -> v <> fst m ->
+      In (i,v) (elements m).
+    Proof.
+      intros. unfold get in H. destruct PTree.get eqn: HPTree.
+      subst. apply PTree.elements_correct; auto.
+      congruence.
+    Qed.
 
   (* We shall assume for the init value (fst m), forall i, f i (fst m) = init
   Definition map1 (A B : Type ) (f: positive -> A -> B) (m : t A) (init : B): t B :=
@@ -1340,14 +1352,6 @@ Module IMap(X: INDEXED_TYPE).
   Definition get (A: Type) (i: X.t) (m: t A) := PMap.get (X.index i) m.
   Definition set (A: Type) (i: X.t) (v: A) (m: t A) := PMap.set (X.index i) v m.
   Definition map (A B: Type) (f: A -> B) (m: t A) : t B := PMap.map f m.
-
-(*  we need the reverse function of X.index. i.e. it should be a bijection to
-    define this map function in IMap.
-
-    Definition map1 (A B: Type) (f: X.t -> A -> B) (m: t A) (init : B): t B :=
-    PMap.map1 (fun x a => X.index_rev x a) m init.
-*)
-
   Lemma gi:
     forall (A: Type) (x: A) (i: X.t), get i (init x) = x.
   Proof.
@@ -1396,35 +1400,6 @@ Module IMap(X: INDEXED_TYPE).
 
 End IMap.
 
-Module ZIndexed.
-  Definition t := Z.
-  Definition index (z: Z): positive :=
-    match z with
-    | Z0 => xH
-    | Zpos p => xO p
-    | Zneg p => xI p
-    end.
-  Lemma index_inj: forall (x y: Z), index x = index y -> x = y.
-  Proof.
-    unfold index; destruct x; destruct y; intros;
-    try discriminate; try reflexivity.
-    congruence.
-    congruence.
-  Qed.
-
-  Lemma index_suj : forall (p:positive), exists x:Z, index x = p.
-  Proof.
-    intros. destruct p; unfold index.
-    exists (Zneg p). auto.
-    exists (Zpos p). auto.
-    exists (Z0). auto.
-  Qed.
-
-  Definition eq := zeq.
-End ZIndexed.
-
-Module ZMap := IMap(ZIndexed).
-
 Module NIndexed.
   Definition t := N.
   Definition index (n: N): positive :=
@@ -1445,6 +1420,137 @@ Module NIndexed.
 End NIndexed.
 
 Module NMap := IMap(NIndexed).
+
+(** * An implementation of maps over any type that bijects into type [positive] *)
+
+Module Type INDEXED_REV_TYPE.
+  Parameter t: Type.
+  Parameter index: t -> positive.
+  Parameter index_rev: positive -> t.
+  Axiom t_positive_t: forall (x:t), index_rev (index x) = x.
+  Axiom positive_t_positive : forall (p:positive), index (index_rev p) = p.
+  Axiom index_inj: forall (x y: t), index x = index y -> x = y.
+  Parameter eq: forall (x y: t), {x = y} + {x <> y}.
+End INDEXED_REV_TYPE.
+
+Module IRMap(X: INDEXED_REV_TYPE).
+
+  Definition elt := X.t.
+  Definition elt_eq := X.eq.
+  Definition t : Type -> Type := PMap.t.
+  Definition init (A: Type) (x: A) := PMap.init x.
+  Definition get (A: Type) (i: X.t) (m: t A) := PMap.get (X.index i) m.
+  Definition set (A: Type) (i: X.t) (v: A) (m: t A) := PMap.set (X.index i) v m.
+  Definition map (A B: Type) (f: A -> B) (m: t A) : t B := PMap.map f m.
+
+  Definition pair_rev (A:Type) (pair: positive * A) : X.t * A :=
+    (X.index_rev (fst pair), snd pair).
+
+  Definition elements (A: Type) (m: t A) :=
+    List.map (fun pair => (X.index_rev (fst pair), snd pair)) (PMap.elements m).
+
+  Lemma gi:
+    forall (A: Type) (x: A) (i: X.t), get i (init x) = x.
+  Proof.
+    intros. unfold get, init. apply PMap.gi.
+  Qed.
+
+  Lemma gss:
+    forall (A: Type) (i: X.t) (x: A) (m: t A), get i (set i x m) = x.
+  Proof.
+    intros. unfold get, set. apply PMap.gss.
+  Qed.
+
+  Lemma gso:
+    forall (A: Type) (i j: X.t) (x: A) (m: t A),
+    i <> j -> get i (set j x m) = get i m.
+  Proof.
+    intros. unfold get, set. apply PMap.gso.
+    red. intro. apply H. apply X.index_inj; auto.
+  Qed.
+
+  Lemma gsspec:
+    forall (A: Type) (i j: X.t) (x: A) (m: t A),
+    get i (set j x m) = if X.eq i j then x else get i m.
+  Proof.
+    intros. unfold get, set.
+    rewrite PMap.gsspec.
+    case (X.eq i j); intro.
+    subst j. rewrite peq_true. reflexivity.
+    rewrite peq_false. reflexivity.
+    red; intro. elim n. apply X.index_inj; auto.
+  Qed.
+
+  Lemma gmap:
+    forall (A B: Type) (f: A -> B) (i: X.t) (m: t A),
+    get i (map f m) = f(get i m).
+  Proof.
+    intros. unfold map, get. apply PMap.gmap.
+  Qed.
+
+  Lemma set2:
+    forall (A: Type) (i: elt) (x y: A) (m: t A),
+    set i y (set i x m) = set i y m.
+  Proof.
+    intros. unfold set. apply PMap.set2.
+  Qed.
+
+  Theorem elements_correct :
+    forall (A: Type) (i: elt) (v: A) (m: t A),
+      get i m = v -> v <> fst m ->
+      In (i,v) (elements m).
+    Proof.
+      intros. unfold get in H.
+      exploit PMap.elements_correct; eauto.
+      intros.
+      unfold elements.
+      induction (PMap.elements m).
+      - inv H1.
+      - simpl in *. destruct H1.
+        left. subst. simpl. rewrite X.t_positive_t. auto.
+        right. eapply IHl; eauto.
+Qed.
+
+End IRMap.
+
+Module ZIndexed.
+  Definition t := Z.
+  Definition index (z: Z): positive :=
+    match z with
+    | Z0 => xH
+    | Zpos p => xO p
+    | Zneg p => xI p
+    end.
+
+  Definition index_rev (p:positive) : Z :=
+    match p with
+      |1%positive => 0
+      |(p~0)%positive => Z.pos p
+      |(p~1)%positive => Z.neg p
+    end.
+
+  Lemma t_positive_t : forall (z:Z), index_rev (index z) = z.
+  Proof.
+    intros. destruct z; auto.
+  Qed.
+
+  Lemma positive_t_positive : forall (p:positive), index(index_rev p) = p.
+  Proof.
+    intros. destruct p; auto.
+  Qed.
+
+  Lemma index_inj: forall (x y: Z), index x = index y -> x = y.
+  Proof.
+    unfold index; destruct x; destruct y; intros;
+    try discriminate; try reflexivity.
+    congruence.
+    congruence.
+  Qed.
+
+  Definition eq := zeq.
+End ZIndexed.
+
+Module ZMap := IRMap(ZIndexed).
 
 (** * An implementation of maps over any type with decidable equality *)
 
