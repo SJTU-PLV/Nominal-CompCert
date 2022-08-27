@@ -1447,7 +1447,7 @@ Proof.
 Qed.
 
 Lemma setN_in:
-  forall vl p q c,
+  forall A vl p q (c: ZMap.t A),
   p <= q < p + Z.of_nat (length vl) ->
   In (ZMap.get q (setN vl p c)) vl.
 Proof.
@@ -1460,7 +1460,7 @@ Proof.
 Qed.
 
 Lemma getN_in:
-  forall c q n p,
+  forall A (c: ZMap.t A) q n p,
   p <= q < p + Z.of_nat n ->
   In (ZMap.get q c) (getN n p c).
 Proof.
@@ -1899,7 +1899,7 @@ Qed.
 End STOREBYTES.
 
 Lemma setN_concat:
-  forall bytes1 bytes2 ofs c,
+  forall A bytes1 bytes2 ofs (c:ZMap.t A),
   setN (bytes1 ++ bytes2) ofs c = setN bytes2 (ofs + Z.of_nat (length bytes1)) (setN bytes1 ofs c).
 Proof.
   induction bytes1; intros.
@@ -4855,7 +4855,7 @@ Proof.
 - apply unchanged_on_contents0; auto.
   apply H0; auto. eapply perm_valid_block; eauto.
 Qed.
-(*
+
 (** * Memory mixing *)
 
 (** [mix m' b lo hi m] copies the region indicated by [b], [lo], [hi]
@@ -4864,7 +4864,7 @@ Qed.
 Definition pmap_update {A} b (f : A -> A) (t : NMap.t A) : NMap.t A :=
   NMap.set A b (f (NMap.get A b t)) t.
 
-
+(*
 Definition mix_perms lo hi (pm pm' : Z -> perm_kind -> option permission) ofs k :=
   if zle lo ofs && zlt ofs hi then pm ofs k else pm' ofs k.
 
@@ -5288,26 +5288,35 @@ map1 = (mem_content m1') b1
 map2 = (mem_content m2') b2
 
 
-
-
-ptree ofs2 = None
-
-PTree.set ofs2 ptree = (**)
-
-PTree.set
-PTree.get
 *)
-getN
+
+Definition pair_delta {A: Type} (delta: Z) (pair: Z * A) : Z * A :=
+  (fst pair + delta, snd pair).
+
+Fixpoint setN' {A:Type} (elements : list (Z*A)) (c: ZMap.t A) {struct elements} :=
+  match elements with
+    | nil => c
+    | (z, a) :: elements' => setN' elements' (ZMap.set z a c)
+  end.
+
 Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
   let elements := ZMap.elements map1 in
-  
+  let elements_delta := List.map (pair_delta delta) elements in
+  setN' elements_delta map2.
+
+Lemma update_mem_access_result:
+  forall d map1 map2 ofs2 p,
+    ((update_mem_access d map1 map2)##ofs2) p = if (perm_check_any) map1 (ofs2 - d) then map1##(ofs2 - d) p
+                      else map2##ofs2 p.
+Proof. Admitted.
+(*
 Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
   fun ofs2 p =>
     let ofs1 := ofs2 - delta in
     if perm_check_any map1 ofs1 then
       map1 ofs1 p
     else map2 ofs2 p.
-
+*)
 (** update content *)
 
 Definition memval_map (f:meminj) (mv:memval) : memval :=
@@ -5321,14 +5330,6 @@ Definition memval_map (f:meminj) (mv:memval) : memval :=
        end
   |_ => mv
   end.
-
-Definition positive_to_Z (p:positive): Z :=
-  match p with
-    | 1%positive => 0
-    | (p~0)%positive => Z.pos p
-    | (p~1)%positive => Z.neg p
-  end.
-
 
 (* the copyed position should be new regions or old regions which is mapped to m3*)
 Definition valid_position b (j2:meminj) s2 s2' : Prop :=
@@ -5347,7 +5348,7 @@ Proof.
     left. firstorder.
   - right. unfold valid_position. firstorder.
 Qed.
-
+(*
 Definition content_map (val1 : ZMap.t memval) (pmap1 : perm_map) (f:meminj) (delta : Z)
            : positive -> memval -> memval :=
   fun i mv =>
@@ -5357,55 +5358,55 @@ Definition content_map (val1 : ZMap.t memval) (pmap1 : perm_map) (f:meminj) (del
       memval_map f (ZMap.get ofs1 val1) (* copy the valid value from source*)
         else
           mv.                               (* not copy the invalid value *)
-
-Definition update_mem_content (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (delta : Z)
-    : ZMap.t memval -> ZMap.t memval :=
-  fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
-
-(*Fixpoint update_ptree (xe: list (positive * A)) (ptree: PTree.A) (f: positive -> option A) : PTree.A :=
-  match xe with
-    | nil => ptree
-    | (pos,a)::tl => PTree.set pos (f pos)
-Fixpoint update_mem_content_ptree (xe: list (positive * memval))
-         (ptree: PTree.t memval) (pmap1 : perm_map) (f:meminj) (delta : Z) (val1 : ZMap.memval)
-Definition update_mem_content1 (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (delta : Z)
-    : ZMap.t memval -> ZMap.t memval :=
-  fun val2 => 
-    let ptreeold = snd val2 in
-    let xelements := PTree.xelements in
-
-    mathc
-  fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
-
-Search PTree.get.
 *)
-Lemma Z_positve_Z:
-  forall z, positive_to_Z (ZIndexed.index z) = z.
+
+Definition perm_check_readable' (perm: perm_kind -> option permission) :=
+  match perm Cur with
+    | Some Nonempty | None => false
+    | _ => true
+  end.
+Fixpoint perm_elements_readable (elements : list (Z * (perm_kind -> option permission))) {struct elements} : list Z :=
+  match elements with
+    | nil => nil
+    | (z , perm) :: elements' =>
+      let l :=  perm_elements_readable elements' in
+      if perm_check_readable' perm then z::l else l
+  end.
+
+Fixpoint ofs_elements_val (elements : list Z) (vmap1 : ZMap.t memval) (f: meminj) :=
+  match elements with
+    | nil => nil
+    | z :: elements' =>
+      let mapvalue := memval_map f (vmap1##z) in
+      (z, mapvalue) :: ofs_elements_val elements' vmap1 f
+  end.
+
+Definition update_mem_content (pmap1 : perm_map) (f:meminj) (delta: Z) (vmap1 vmap2: ZMap.t memval):=
+    let elements := ZMap.elements pmap1 in
+    let ofs_elements := perm_elements_readable elements in
+    let val_elements1 := ofs_elements_val ofs_elements vmap1 f in
+    let val_elements2 := List.map (pair_delta delta) val_elements1 in
+    setN' val_elements2 vmap2.
+
+(*Definition update_mem_content (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (delta : Z)
+    : ZMap.t memval -> ZMap.t memval :=
+  fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
+*)
+
+Remark setN'_default:
+  forall (A:Type) vl (c: ZMap.t A), fst (setN' vl c) = fst c.
 Proof.
-  intros. destruct z; auto.
+  induction vl; simpl; intros. auto. destruct a. rewrite IHvl. auto.
 Qed.
 
-Lemma update_mem_content_result: forall b1 b2 j1' delta map1 map2 pmap1 (ofs2:Z),
-    fst map1 = Undef -> fst map2 = Undef ->
+Lemma update_mem_content_result: forall b1 b2 j1' delta vmap1 vmap2 pmap1 (ofs2:Z),
     j1' b1 = Some (b2,delta) ->
-    ZMap.get ofs2 (Mem.update_mem_content map1 pmap1 j1' delta map2) =
+    ZMap.get ofs2 (Mem.update_mem_content pmap1 j1' delta vmap1 vmap2) =
     if (Mem.perm_check_readable pmap1 (ofs2 - delta)) then
-      Mem.memval_map j1' (ZMap.get (ofs2 - delta) map1) else
-          ZMap.get ofs2 map2.
+      Mem.memval_map j1' (ZMap.get (ofs2 - delta) vmap1) else
+          ZMap.get ofs2 vmap2.
 Proof.
-  intros.
-  unfold update_mem_content. unfold ZMap.get.
-  unfold PMap.get. simpl.
-  rewrite PTree.gmap.
-  unfold option_map.
-  destruct ((snd map2) ! (ZIndexed.index ofs2)) eqn: OLDVALUE.
-  - unfold content_map.
-    rewrite Z_positve_Z. reflexivity.
-  - destruct (perm_check_readable).
-    + admit. (* we cannot update the value of map2 by PTree opearions where it was None *)
-    + eauto.
 Admitted.
-
 
 Program Definition map (f j2:meminj) (b:block) (s2: sup) (m1 m2:mem) :=
   match f b with
@@ -5413,7 +5414,7 @@ Program Definition map (f j2:meminj) (b:block) (s2: sup) (m1 m2:mem) :=
    if (valid_position_dec b' j2 s2 (Mem.support m2)) then
      {|
        mem_contents :=
-           pmap_update b' (update_mem_content ((mem_contents m1)#b) ((mem_access m1)#b) f delta)
+           pmap_update b' (update_mem_content ((mem_access m1)#b) f delta (mem_contents m1)#b)
                        (mem_contents m2);
        mem_access :=
            pmap_update b' (update_mem_access delta (mem_access m1)#b) (mem_access m2);
@@ -5423,23 +5424,26 @@ Program Definition map (f j2:meminj) (b:block) (s2: sup) (m1 m2:mem) :=
   |None => m2
   end.
 Next Obligation.
-    unfold pmap_update. destruct (eq_block b0 b') eqn:Hb; subst.
+    unfold pmap_update. destruct (eq_block b0 b'); subst.
   - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
-    unfold update_mem_access.
+    generalize (update_mem_access_result delta ).
+    intros. erewrite H0; eauto.
+    erewrite update_mem_access_result; eauto.
     destruct perm_check_any;
     apply Mem.access_max; eauto.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
     apply Mem.access_max; auto.
 Qed.
 Next Obligation.
-    unfold pmap_update. destruct (eq_block b0 b') eqn:Hb; subst.
+    unfold pmap_update. destruct (eq_block b0 b'); subst.
   - unfold valid_position in H. firstorder.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
     apply Mem.nextblock_noaccess. auto.
 Qed.
 Next Obligation.
-    unfold pmap_update. destruct (eq_block b0 b') eqn:Hb; subst.
-  - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
+    unfold pmap_update. destruct (eq_block b0 b'); subst.
+  - rewrite NMap.gsspec. rewrite pred_dec_true; auto. unfold update_mem_content.
+    rewrite setN'_default. apply Mem.contents_default.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
     apply Mem.contents_default.
 Qed.
@@ -5525,7 +5529,7 @@ Definition update_mem_access_free (m1 m1' : mem) (j1 j2 j1': meminj) (b2: block)
 (H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1')) (map2: perm_map): perm_map :=
   fun ofs2 p =>
     if j2 b2 then
-    if ((loc_in_reach_dec (support m1) m1 j1 b2 ofs2 Max Nonempty H1) && 
+    if ((loc_in_reach_dec (support m1) m1 j1 b2 ofs2 Max Nonempty H1) &&
        negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs2 Max Nonempty H2))
     then None else map2 ofs2 p else map2 ofs2 p.
 
