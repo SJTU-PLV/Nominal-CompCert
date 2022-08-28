@@ -1300,19 +1300,36 @@ Module PMap <: MAP.
       congruence.
     Qed.
 
-  (* We shall assume for the init value (fst m), forall i, f i (fst m) = init
-  Definition map1 (A B : Type ) (f: positive -> A -> B) (m : t A) (init : B): t B :=
-    (init, PTree.map f (snd m)).
-
-  Theorem gmap1:
-    forall (A B: Type) (f: positive -> A -> B) (i : positive) (m: t A) (init : B),
-      (forall i, f i (fst m) = init) ->
-      get i (map1 f m init) = f i (get i m).
+  Lemma in_map_fst_2:
+    forall (A B:Type) (a:A) b (l: list (A*B)),
+      In (a,b) l ->
+      In a (List.map fst l).
   Proof.
-    intros. unfold map. unfold get. simpl. rewrite PTree.gmap.
-    unfold option_map. destruct (PTree.get i (snd m)); auto.
+    induction l; intros.
+    - inv H.
+    - simpl in H. destruct H. destruct a0.
+      inv H. simpl. eauto.
+      simpl. right. eauto.
   Qed.
-  *)
+
+  Theorem elements_complete:
+    forall (A: Type) (i: positive) (m: t A),
+      ~ In i (List.map fst (elements m)) ->
+      get i m = fst m.
+    Proof.
+      intros. unfold get. destruct PTree.get eqn: HPTree.
+      apply PTree.elements_correct in HPTree.
+      exfalso. apply H. unfold elements.
+      eapply in_map_fst_2; eauto.
+      auto.
+    Qed.
+
+  Theorem elements_keys_norepet:
+    forall A (m: t A),
+    list_norepet (List.map (@fst elt A) (elements m)).
+  Proof.
+    intros. apply PTree.elements_keys_norepet.
+  Qed.
 
   Definition map (A B : Type) (f : A -> B) (m : t A) : t B :=
     (f (fst m), PTree.map1 f (snd m)).
@@ -1427,10 +1444,13 @@ Module Type INDEXED_REV_TYPE.
   Parameter t: Type.
   Parameter index: t -> positive.
   Parameter index_rev: positive -> t.
+
+  Axiom index_inj: forall (x y: t), index x = index y -> x = y.
+(*  Axiom index_suj: forall (p: positive), exists x:t, index x = p. *)
+  Parameter eq: forall (x y: t), {x = y} + {x <> y}.
+
   Axiom t_positive_t: forall (x:t), index_rev (index x) = x.
   Axiom positive_t_positive : forall (p:positive), index (index_rev p) = p.
-  Axiom index_inj: forall (x y: t), index x = index y -> x = y.
-  Parameter eq: forall (x y: t), {x = y} + {x <> y}.
 End INDEXED_REV_TYPE.
 
 Module IRMap(X: INDEXED_REV_TYPE).
@@ -1499,17 +1519,74 @@ Module IRMap(X: INDEXED_REV_TYPE).
     forall (A: Type) (i: elt) (v: A) (m: t A),
       get i m = v -> v <> fst m ->
       In (i,v) (elements m).
-    Proof.
-      intros. unfold get in H.
-      exploit PMap.elements_correct; eauto.
-      intros.
-      unfold elements.
-      induction (PMap.elements m).
-      - inv H1.
-      - simpl in *. destruct H1.
-        left. subst. simpl. rewrite X.t_positive_t. auto.
-        right. eapply IHl; eauto.
-Qed.
+  Proof.
+    intros. unfold get in H.
+    exploit PMap.elements_correct; eauto.
+    intros.
+    unfold elements.
+    induction (PMap.elements m).
+    - inv H1.
+    - simpl in *. destruct H1.
+      left. subst. simpl. rewrite X.t_positive_t. auto.
+      right. eapply IHl; eauto.
+  Qed.
+
+  Theorem elements_complete :
+    forall (A: Type) (i: elt) (m: t A),
+      ~ In i (List.map fst (elements m)) ->
+      get i m = fst m.
+  Proof.
+    intros. unfold get.
+    unfold elements in H.
+    eapply PMap.elements_complete; eauto.
+    intro. apply H.
+    induction (PMap.elements m).
+    - inv H0.
+    - simpl. simpl in H0. destruct H0.
+      left. assert (X.index_rev (fst a) = X.index_rev (X.index i)).
+      apply f_equal. auto. rewrite X.t_positive_t in H1.
+      auto.
+      right. apply IHl. intro. apply H.
+      simpl. right. auto. auto.
+  Qed.
+
+  Lemma not_In_index_rev:
+    forall A (vl: list (positive * A)) (p: positive),
+      (~ In p (List.map fst vl)) ->
+      ~ In (X.index_rev p) (List.map fst
+     (List.map (fun pair : positive * A => (X.index_rev (fst pair), snd pair)) vl)).
+  Proof.
+    induction vl; intros; simpl; auto.
+    assert (~In p (List.map fst vl)).
+    intro. apply H. right. apply H0.
+    apply IHvl in H0.
+    clear IHvl.
+    intro.
+    destruct H1.
+    assert (X.index (X.index_rev (fst a)) = X.index (X.index_rev p)).
+    f_equal. auto.
+    repeat rewrite X.positive_t_positive in H2.
+    apply H. left. auto.
+    eauto.
+  Qed.
+
+  Theorem elements_keys_norepet:
+    forall A (m: t A),
+    list_norepet (List.map (@fst elt A) (elements m)).
+  Proof.
+    intros.
+    exploit PMap.elements_keys_norepet. instantiate (1:= m).
+    intro. unfold elements.
+    induction (PMap.elements m).
+    - simpl. constructor.
+    - simpl.
+      constructor.
+      + simpl.
+        inv H.
+        eapply not_In_index_rev; eauto.
+      + inv H.
+      eapply IHl; eauto.
+  Qed.
 
 End IRMap.
 

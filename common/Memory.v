@@ -232,7 +232,9 @@ Record mem' : Type := mkmem {
   nextblock_noaccess:
     forall b ofs k, ~(sup_In b support) -> mem_access#b##ofs k = None;
   contents_default:
-    forall b, fst (mem_contents#b) = Undef
+    forall b, fst (mem_contents#b) = Undef;
+  access_default:
+    forall b, fst (mem_access#b) = fun p => None
 }.
 
 Definition mem := mem'.
@@ -240,9 +242,9 @@ Definition mem := mem'.
 Definition nextblock (m:mem) := fresh_block (support m).
 
 Lemma mkmem_ext:
- forall cont1 cont2 acc1 acc2 sup1 sup2 a1 a2 b1 b2 c1 c2,
+ forall cont1 cont2 acc1 acc2 sup1 sup2 a1 a2 b1 b2 c1 c2 d1 d2,
   cont1=cont2 -> acc1=acc2 -> sup1=sup2 ->
-  mkmem cont1 acc1 sup1 a1 b1 c1= mkmem cont2 acc2 sup2 a2 b2 c2.
+  mkmem cont1 acc1 sup1 a1 b1 c1 d1= mkmem cont2 acc2 sup2 a2 b2 c2 d2.
 Proof.
   intros. subst. f_equal; apply proof_irr.
 Qed.
@@ -508,7 +510,7 @@ Qed.
 Program Definition empty: mem :=
   mkmem (NMap.init _ (ZMap.init Undef))
         (NMap.init _ (ZMap.init (fun k => None)))
-        sup_empty  _ _ _.
+        sup_empty  _ _ _ _.
 
 (** Allocation of a fresh block with the given bounds.  Return an updated
   memory state and the address of the fresh block, which initially contains
@@ -637,7 +639,7 @@ Program Definition alloc (m: mem) (lo hi: Z) :=
                    (setpermN lo hi (Some Freeable) (ZMap.init (fun k => None)))
                    m.(mem_access))
          (sup_incr (m.(support)))
-         _ _ _,
+         _ _ _ _,
    (nextblock m)).
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)).
@@ -655,6 +657,10 @@ Qed.
 Next Obligation.
   rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)). auto. apply contents_default.
 Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)). auto.
+  rewrite setpermN_default. auto. apply access_default.
+Qed.
 
 (** Freeing a block between the given bounds.
   Return the updated memory state where the given range of the given block
@@ -666,7 +672,7 @@ Program Definition unchecked_free (m: mem) (b: block) (lo hi: Z): mem :=
         (NMap.set _ b
                 (setpermN lo hi None (m.(mem_access)#b))
                 m.(mem_access))
-        m.(support) _ _ _.
+        m.(support) _ _ _ _.
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b).
   subst.
@@ -685,6 +691,12 @@ Next Obligation.
 Qed.
 Next Obligation.
   apply contents_default.
+Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst.
+  rewrite setpermN_default.
+  apply access_default.
+  apply access_default.
 Qed.
 
 
@@ -828,7 +840,7 @@ Program Definition store (chunk: memory_chunk) (m: mem) (b: block) (ofs: Z) (v: 
                           m.(mem_contents))
                 m.(mem_access)
                 m.(support)
-                _ _ _)
+                _ _ _ _)
   else
     None.
 Next Obligation. apply access_max. Qed.
@@ -838,6 +850,7 @@ Next Obligation.
   rewrite setN_default. apply contents_default.
   apply contents_default.
 Qed.
+Next Obligation. apply access_default. Qed.
 
 (** [storev chunk m addr v] is similar, but the address and offset are given
   as a single value [addr], which must be a pointer value. *)
@@ -871,7 +884,7 @@ Program Definition storebytes (m: mem) (b: block) (ofs: Z) (bytes: list memval) 
              (NMap.set _ b (setN bytes ofs (m.(mem_contents)#b)) m.(mem_contents))
              m.(mem_access)
              m.(support)
-             _ _ _)
+             _ _ _ _)
   else
     None.
 Next Obligation. apply access_max. Qed.
@@ -881,6 +894,7 @@ Next Obligation.
   rewrite setN_default. apply contents_default.
   apply contents_default.
 Qed.
+Next Obligation. apply access_default. Qed.
 
 (** [drop_perm m b lo hi p] sets the max permissions of the byte range
     [(b, lo) ... (b, hi - 1)] to [p].  These bytes must have current permissions
@@ -893,7 +907,7 @@ Program Definition drop_perm (m: mem) (b: block) (lo hi: Z) (p: permission): opt
                 (NMap.set _ b
                         (setpermN lo hi (Some p) (mem_access m) # b)
                         m.(mem_access))
-                m.(support) _ _ _)
+                m.(support) _ _ _ _)
   else None.
 Next Obligation.
   repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst b0.
@@ -911,6 +925,11 @@ Next Obligation.
 Qed.
 Next Obligation.
   apply contents_default.
+Qed.
+Next Obligation.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst b0.
+  rewrite setpermN_default.
+  apply access_default. apply access_default.
 Qed.
 
 (** * Properties of the memory operations *)
@@ -4870,6 +4889,31 @@ Proof.
   induction vl; simpl; intros. auto. destruct a. rewrite IHvl. auto.
 Qed.
 
+Lemma setN'_outside:
+  forall (A:Type) vl (c:ZMap.t A) (z: Z),
+    ~ In z (List.map fst vl) -> ZMap.get z (setN' vl c) = ZMap.get z c.
+Proof.
+  induction vl; intros; simpl; auto.
+  destruct a. simpl in *.
+  transitivity (ZMap.get z (ZMap.set z0 a c)).
+  apply IHvl. intro. apply H. eauto.
+  apply ZMap.gso. apply not_eq_sym. intro. apply H. eauto.
+Qed.
+
+Lemma setN'_inside:
+    forall (A:Type) vl (c:ZMap.t A) (z: Z) (a : A),
+    list_norepet (List.map fst vl) -> In (z,a) vl
+    -> ZMap.get z (setN' vl c) = a.
+Proof.
+  induction vl; intros; simpl; auto.
+  - inv H0.
+  - destruct a. simpl in *. inv H. destruct H0.
+    + inv H.
+      rewrite setN'_outside; eauto.
+      apply ZMap.gss.
+    + eapply IHvl; eauto.
+Qed.
+
 (* how to proof :
  1. unrep of elements,
  2. perdicate b <-> In b (List.map fst elements)
@@ -4893,6 +4937,22 @@ Fixpoint update_elements' (lo:Z) (l:nat) (pm: ZMap.t (perm_kind -> option permis
 Definition update_elements lo hi pm :=
   update_elements' lo (Z.to_nat (hi - lo)) pm.
 
+Lemma update_elements_inv : forall lo hi pm ofs,
+      if (zle lo ofs && zlt ofs hi) then
+        In (ofs, pm##ofs) (update_elements lo hi pm)
+      else ~ In ofs (List.map fst (update_elements lo hi pm)).
+Proof.
+  Admitted.
+
+Lemma update_elements_norepet: forall n lo pm,
+    list_norepet (map fst (update_elements' lo n pm)).
+Proof.
+  induction n; intros; simpl; auto.
+  constructor.
+  constructor. simpl. admit.
+  eauto.
+Admitted.
+
 Definition mix_perms lo hi (pm pm' : ZMap.t (perm_kind -> option permission)) := setN' (update_elements lo hi pm) pm'.
 
 Remark mix_perms_result lo hi (pm pm' : ZMap.t (perm_kind -> option permission)) ofs k :
@@ -4901,10 +4961,14 @@ Remark mix_perms_result lo hi (pm pm' : ZMap.t (perm_kind -> option permission))
 Proof.
   intros. unfold mix_perms.
   destruct (zle lo ofs && zlt ofs hi) eqn: Range.
-  - assert (In ofs (List.map fst (update_elements lo hi pm))).
-    admit. admit.
-  - 
-Admitted.
+  - generalize (update_elements_inv lo hi pm ofs).
+    rewrite Range. intro.
+    erewrite setN'_inside; eauto.
+    eapply update_elements_norepet.
+  - generalize (update_elements_inv lo hi pm ofs).
+    rewrite Range. intro.
+    erewrite setN'_outside; eauto.
+Qed.
 
 Definition mixable m' b m :=
   sup_include (support m) (support m') /\
@@ -4956,6 +5020,14 @@ Next Obligation.
     rewrite Mem.setN_default. apply Mem.contents_default.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
     apply Mem.contents_default.
+Qed.
+Next Obligation.
+  unfold pmap_update. destruct (eq_block b0 b); subst.
+  - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
+    unfold mix_perms.
+    rewrite Mem.setN'_default. apply Mem.access_default.
+  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
+    apply Mem.access_default.
 Qed.
 
 (** ** Properties *)
@@ -5287,6 +5359,10 @@ Qed.
 Next Obligation.
    apply contents_default; eauto.
 Qed.
+Next Obligation.
+   apply access_default; eauto.
+Qed.
+
 (** update permission *)
 
 Definition perm_map := ZMap.t (perm_kind -> option permission).
@@ -5332,8 +5408,16 @@ map2 = (mem_content m2') b2
 Definition pair_delta {A: Type} (delta: Z) (pair: Z * A) : Z * A :=
   (fst pair + delta, snd pair).
 
+Fixpoint perm_elements_any (elements : list (Z * (perm_kind -> option permission))) {struct elements} :=
+  match elements with
+    | nil => nil
+    | (z , perm) :: elements' =>
+      let l :=  perm_elements_any elements' in
+      if perm Max then (z,perm)::l else l
+  end.
+
 Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
-  let elements := ZMap.elements map1 in
+  let elements := perm_elements_any (ZMap.elements map1) in
   let elements_delta := List.map (pair_delta delta) elements in
   setN' elements_delta map2.
 
@@ -5341,7 +5425,19 @@ Lemma update_mem_access_result:
   forall d map1 map2 ofs2 p,
     ((update_mem_access d map1 map2)##ofs2) p = if (perm_check_any) map1 (ofs2 - d) then map1##(ofs2 - d) p
                       else map2##ofs2 p.
-Proof. Admitted.
+Proof.
+  intros. destruct (perm_check_any) eqn: Hperm.
+  - unfold update_mem_access.
+    erewrite setN'_inside. reflexivity.
+    admit.
+    admit.
+  - unfold update_mem_access.
+    erewrite setN'_outside. reflexivity.
+    unfold perm_check_any in Hperm. destruct (ZMap.get) eqn: Hperm1.
+    congruence.
+    admit.
+Admitted.
+
 (*
 Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
   fun ofs2 p =>
@@ -5434,6 +5530,21 @@ Lemma update_mem_content_result: forall b1 b2 j1' delta vmap1 vmap2 pmap1 (ofs2:
       Mem.memval_map j1' (ZMap.get (ofs2 - delta) vmap1) else
           ZMap.get ofs2 vmap2.
 Proof.
+  intros. destruct (perm_check_readable) eqn: Hperm.
+  - unfold update_mem_content.
+    erewrite setN'_inside. reflexivity.
+    +
+    admit.
+    +
+    admit.
+  - unfold update_mem_content.
+    erewrite setN'_outside. reflexivity.
+    unfold perm_check_readable in Hperm. destruct (pmap1 ## (ofs2 - delta) Cur) eqn: Hperm1. destruct p.
+    congruence.
+    congruence.
+    congruence.
+    admit.
+    admit.
 Admitted.
 
 Program Definition map (f j2:meminj) (b:block) (s2: sup) (m1 m2:mem) :=
@@ -5474,6 +5585,13 @@ Next Obligation.
     rewrite setN'_default. apply Mem.contents_default.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
     apply Mem.contents_default.
+Qed.
+Next Obligation.
+    unfold pmap_update. destruct (eq_block b0 b'); subst.
+  - rewrite NMap.gsspec. rewrite pred_dec_true; auto. unfold update_mem_access.
+    rewrite setN'_default. apply Mem.access_default.
+  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
+    apply Mem.access_default.
 Qed.
 
 Definition loc_in_reach (f:meminj) m b ofs k p: Prop :=
@@ -5568,18 +5686,152 @@ Definition freed_position (b2:block)
    else false.
 
 Definition update_mem_access_free (b2: block) (map2: perm_map): perm_map :=
-  let elements := filter (freed_position b2) (ZMap.elements map2) in
-  let none_elements := List.map (fun p => (fst p, fun p => None)) elements in
-  setN' none_elements map2.
+  let none_elements := List.map (fun p => (fst p, fun p => None)) (ZMap.elements map2) in
+  let felements := filter (freed_position b2) none_elements in
+  setN' felements map2.
+
+Lemma in_map_fst:
+  forall (A B:Type) (a:A) (l: list (A*B)),
+    In a (List.map fst l) ->
+    exists b, In (a,b) l.
+Proof.
+  induction l; intros.
+  - inv H.
+  - simpl in H. destruct H. destruct a0.
+    inv H.
+    exists b. simpl. eauto. exploit IHl; eauto.
+    intros (b & H0).
+    exists b. right. auto.
+Qed.
+
+Lemma in_map_fst_1:
+  forall (A B:Type) (a:A) (b b':B) (l: list (A*B)),
+    In (a,b) (List.map (fun p => (fst p, b')) l) ->
+    In a (List.map fst l).
+Proof.
+  induction l; intros.
+  - inv H.
+  - simpl in H. destruct H. destruct a0.
+    inv H. simpl. eauto.
+    simpl. right. eauto.
+Qed.
+
+Lemma in_map_fst_2:
+    forall (A B:Type) (a:A) b (l: list (A*B)),
+    In (a,b) l ->
+    In a (List.map fst l).
+Proof.
+    induction l; intros.
+  - inv H.
+  - simpl in H. destruct H. destruct a0.
+    inv H. simpl. eauto.
+    simpl. right. eauto.
+Qed.
+
+Lemma in_map_none:
+  forall (A B:Type) (a:A) (b b0:B) (l: list (A*B)),
+    In (a,b0) l ->
+    In (a,b) (List.map (fun p => (fst p, b)) l).
+Proof.
+  induction l; intros.
+  - inv H.
+  - simpl in H. destruct H.
+    + destruct a0. simpl in H.
+    inv H. simpl. eauto.
+    + exploit IHl; eauto.
+      simpl. eauto.
+Qed.
+
+Lemma fst_filter_norepet: forall (A B:Type) (l: list (A*B)) predicate,
+    list_norepet (List.map fst l) ->
+    list_norepet (List.map fst (filter predicate l)).
+Proof.
+  induction l; intros; eauto.
+  inv H. simpl.
+  destruct predicate. simpl.
+  constructor.
+  intro. apply H4.
+  apply in_map_fst in H. destruct H as [b Hb].
+  apply filter_In in Hb. destruct Hb.
+  apply in_map_fst_2 in H. auto.
+  eauto.
+  eauto.
+Qed.
+
+Lemma in_map_none_1:
+  forall (A B:Type) (a:A) (b b0:B) (l: list (A*B)),
+    In (a,b) (List.map (fun p => (fst p, b0)) l) ->
+    In a (List.map fst l).
+Proof.
+  induction l; intros.
+  - inv H.
+  - simpl in H. destruct H.
+    + destruct a0. simpl in H.
+      inv H. simpl. eauto.
+    + exploit IHl; eauto.
+      simpl. eauto.
+Qed.
+
+Lemma fst_none_norepet: forall (A B:Type) (b: B) (l: list (A*B)),
+    list_norepet (List.map fst l) ->
+    list_norepet (List.map fst (List.map (fun p => (fst p, b)) l)).
+Proof.
+  induction l; intros; eauto.
+  inv H. simpl.
+  constructor.
+  intro. apply H4.
+  apply in_map_fst in H. destruct H as [b' Hb].
+  eapply in_map_none_1; eauto.
+  eauto.
+Qed.
 
 Remark update_mem_access_free_result (b2: block) (map2: perm_map) ofs2 p:
+    fst map2 = (fun p => None) ->
     (update_mem_access_free b2 map2)##ofs2 p =
     if j2 b2 then
     if ((loc_in_reach_dec (support m1) m1 j1 b2 ofs2 Max Nonempty H1) &&
        negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs2 Max Nonempty H2))
     then None else map2##ofs2 p else map2##ofs2 p.
 Proof.
-  Admitted.
+  intros. unfold update_mem_access_free.
+  destruct (j2 b2) eqn: Hj2.
+  - destruct (loc_in_reach_dec (support m1) m1 j1 b2 ofs2 Max Nonempty H1 &&
+     negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs2 Max Nonempty H2))
+     eqn: Hreach.
+    + destruct (in_dec zeq ofs2 (List.map fst (ZMap.elements map2))).
+      -- erewrite setN'_inside. reflexivity.
+         apply fst_filter_norepet; eauto.
+         apply fst_none_norepet; eauto.
+         apply ZMap.elements_keys_norepet.
+         apply filter_In. split.
+         apply in_map_fst in i.
+         destruct i as [b A].
+         eapply in_map_none; eauto.
+         unfold freed_position. simpl. rewrite Hj2, Hreach. auto.
+      -- erewrite setN'_outside.
+         apply ZMap.elements_complete in n.
+         rewrite n,H. auto.
+         intro. apply in_map_fst in H0.
+         destruct H0 as [A B].
+         apply filter_In in B.
+         destruct B. apply n.
+         eapply in_map_fst_1; eauto.
+    + erewrite setN'_outside. reflexivity.
+      intro. apply in_map_fst in H0.
+      destruct H0 as [A B].
+      apply filter_In in B.
+      destruct B.
+      unfold freed_position in H3.
+      rewrite Hj2 in H3. simpl in H3. rewrite Hreach in H3.
+      congruence.
+  - erewrite setN'_outside. reflexivity.
+    intro. apply in_map_fst in H0.
+    destruct H0 as [A B].
+    apply filter_In in B.
+    destruct B.
+    unfold freed_position in H3.
+    rewrite Hj2 in H3. congruence.
+  Qed.
 
 Program Definition out_of_reach_free (b2 : block) (m2' : mem): mem :=
   {|
@@ -5587,6 +5839,7 @@ Program Definition out_of_reach_free (b2 : block) (m2' : mem): mem :=
    mem_access := pmap_update b2 (update_mem_access_free b2) (mem_access m2');
    support := support m2'
   |}.
+
 Next Obligation.
   unfold pmap_update. rewrite NMap.gsspec.
   destruct eq_block.
@@ -5596,6 +5849,8 @@ Next Obligation.
       negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs Max Nonempty H2));
       try (eapply Mem.access_max; eauto).
   constructor.
+  apply Mem.access_default.
+  apply Mem.access_default.
   eapply Mem.access_max; eauto.
 Qed.
 Next Obligation.
@@ -5607,10 +5862,18 @@ Next Obligation.
             negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs Max Nonempty H2));
   try (apply Mem.nextblock_noaccess; eauto).
   auto.
+  apply Mem.access_default.
   apply Mem.nextblock_noaccess; eauto.
 Qed.
 Next Obligation.
-    apply Mem.contents_default; eauto.
+  apply Mem.contents_default; eauto.
+Qed.
+Next Obligation.
+  unfold pmap_update. rewrite NMap.gsspec.
+  destruct eq_block. subst.
+  unfold update_mem_access_free. rewrite setN'_default.
+  apply Mem.access_default.
+  apply Mem.access_default.
 Qed.
 
 Fixpoint initial_free (s2: sup) (m2':mem): mem :=

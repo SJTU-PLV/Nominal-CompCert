@@ -1269,6 +1269,7 @@ Proof.
     + subst.
       rewrite Mem.update_mem_access_free_result. red in H.
       rewrite H. reflexivity.
+      apply Mem.access_default.
     + reflexivity.
   - inv H. intros. reflexivity.
 Qed.
@@ -1310,6 +1311,7 @@ Proof.
       destruct (Mem.loc_in_reach_dec (Mem.support m1') m1' j1' b ofs Max Nonempty H2);
       simpl; try reflexivity.
       apply Mem.out_of_reach_reverse in l; eauto. inv l.
+      apply Mem.access_default.
     + reflexivity.
   - inv H. intros. reflexivity.
 Qed.
@@ -1347,6 +1349,7 @@ Proof.
   destruct (Mem.loc_in_reach_dec (Mem.support m1) m1 j1 b ofs Max Nonempty H1 &&
            negb (Mem.loc_in_reach_dec (Mem.support m1') m1' j1' b ofs Max Nonempty H2)).
   inv H0. eauto.
+  apply Mem.access_default.
 Qed.
 
 Lemma initial_free_decrease: forall s2 m1 m1' j1 j1' j2 H1 H2 m2 m2' b2 ofs k p,
@@ -1400,6 +1403,7 @@ Proof.
       destruct (Mem.loc_in_reach_dec); try congruence.
       destruct (Mem.loc_in_reach_dec); try congruence.
       simpl. congruence.
+      apply Mem.access_default.
     + subst. unfold Mem.initial_m2'. simpl.
       assert (~Mem.perm (Mem.initial_free m1 m1' j1 j1' j2 DOMIN1 DOMIN1' s2 (Mem.supext s2' m2)) b2 ofs2 Max Nonempty).
       eapply IHs2; eauto.
