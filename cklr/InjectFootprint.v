@@ -1036,11 +1036,13 @@ Proof.
       unfold Mem.perm_check_any.
       destruct (Maps.ZMap.get) eqn: Hperm.
       reflexivity. exfalso. apply p0.
+      apply Mem.access_default.
     + rewrite Mem.update_mem_access_result.
       unfold Mem.perm in n. unfold Mem.perm_check_any.
       destruct (Maps.ZMap.get) eqn: Hperm.
       exfalso. apply n. simpl. constructor.
       reflexivity.
+      apply Mem.access_default.
   - simpl. subst. reflexivity.
 Qed.
 
@@ -1103,6 +1105,7 @@ Proof.
     destruct (Maps.ZMap.get); inv p; auto.
     erewrite Mem.update_mem_content_result; eauto.
     rewrite CHECK. reflexivity.
+    apply Mem.access_default.
   +
     set (map2 := (NMap.get (Maps.ZMap.t memval) b2 (Mem.mem_contents m2))) in *.
     set (map1 := (NMap.get (Maps.ZMap.t memval) b1 (Mem.mem_contents m1))) in *.
@@ -1119,6 +1122,7 @@ Proof.
     }
     erewrite Mem.update_mem_content_result; eauto.
     rewrite CHECK. reflexivity.
+    apply Mem.access_default.
   - simpl. subst. reflexivity.
 Qed.
 

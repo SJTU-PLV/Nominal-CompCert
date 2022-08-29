@@ -4937,21 +4937,65 @@ Fixpoint update_elements' (lo:Z) (l:nat) (pm: ZMap.t (perm_kind -> option permis
 Definition update_elements lo hi pm :=
   update_elements' lo (Z.to_nat (hi - lo)) pm.
 
+Lemma update_elements'_inv : forall n lo pm ofs,
+    if (zle lo ofs && zlt ofs (lo + Z.of_nat n)) then
+        In (ofs, pm##ofs) (update_elements' lo n pm)
+    else ~ In ofs (List.map fst (update_elements' lo n pm)).
+Proof.
+  induction n; intros; simpl.
+  - replace (lo + 0) with lo by lia.
+    destruct (zle lo ofs); destruct (zlt ofs lo); simpl; eauto.
+    extlia.
+  - generalize (IHn (lo+1) pm ofs). intro.
+    destruct (zeq lo ofs).
+    + destruct (zle lo ofs); simpl; try extlia.
+      destruct (zlt ofs (lo + Z.pos (Pos.of_succ_nat n))); simpl.
+      left. congruence. extlia.
+    + assert (zle (lo + 1) ofs && zlt ofs (lo + 1 + Z.of_nat n) =
+             zle lo ofs && zlt ofs (lo + Z.pos (Pos.of_succ_nat n))).
+      f_equal.
+      destruct (zle lo ofs); destruct (zle (lo + 1) ofs); simpl; auto; extlia.
+      rewrite Zpos_P_of_succ_nat.
+      rewrite <- Z.add_assoc. rewrite Z.add_1_l.
+      auto.
+      destruct (zle lo ofs && zlt ofs (lo + Z.pos (Pos.of_succ_nat n))).
+      rewrite H0 in H. right. auto.
+      rewrite H0 in H. intro. apply H. destruct H1. extlia. auto.
+Qed.
+
 Lemma update_elements_inv : forall lo hi pm ofs,
       if (zle lo ofs && zlt ofs hi) then
         In (ofs, pm##ofs) (update_elements lo hi pm)
       else ~ In ofs (List.map fst (update_elements lo hi pm)).
 Proof.
-  Admitted.
+  intros.
+  destruct (zle lo hi).
+  -
+  unfold update_elements.
+  set (n:= Z.to_nat (hi - lo)).
+  assert (hi = (lo + Z.of_nat n)). unfold n.
+  rewrite Z_to_nat_max.
+  rewrite Z.max_l. lia. lia. rewrite H.
+  eapply update_elements'_inv.
+  - destruct (zle lo ofs); destruct (zlt ofs hi); try extlia; simpl.
+    unfold update_elements.
+    rewrite Z_to_nat_neg. simpl. auto. lia.
+    unfold update_elements.
+    rewrite Z_to_nat_neg. simpl. auto. lia.
+    unfold update_elements.
+    rewrite Z_to_nat_neg. simpl. auto. lia.
+Qed.
 
 Lemma update_elements_norepet: forall n lo pm,
     list_norepet (map fst (update_elements' lo n pm)).
 Proof.
   induction n; intros; simpl; auto.
   constructor.
-  constructor. simpl. admit.
+  constructor. simpl.
+  generalize (update_elements'_inv n (lo+1) pm lo).
+  destruct zle. extlia. simpl. auto.
   eauto.
-Admitted.
+Qed.
 
 Definition mix_perms lo hi (pm pm' : ZMap.t (perm_kind -> option permission)) := setN' (update_elements lo hi pm) pm'.
 
@@ -5421,31 +5465,191 @@ Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
   let elements_delta := List.map (pair_delta delta) elements in
   setN' elements_delta map2.
 
+(* lemmas about elements of ZMap *)
+Lemma fst_pair_delta_norepet: forall (A :Type) (l: list (Z*A)) delta,
+    list_norepet (List.map fst l) ->
+    list_norepet (List.map fst (List.map (pair_delta delta) l)).
+Proof.
+  induction l; intros; simpl.
+  - constructor.
+  - inv H. constructor; eauto. intro. apply H2.
+    simpl. induction l.
+    + simpl. auto.
+    + simpl. simpl in H. destruct H.
+      left. unfold pair_delta in H. inv H. lia.
+      right. eapply IHl0.
+      intros. apply IHl with delta0 in H3. inv H3. auto.
+      intro. apply H2. right. auto.
+      inv H3. eauto.
+    eauto.
+Qed.
+
+Lemma In_fst_perm_any : forall z l,
+    In z (map fst (perm_elements_any l)) -> In z (map fst l).
+Proof.
+  induction l; intros. inv H.
+  simpl in H. destruct a.  destruct (o Max).
+  destruct H. left. auto. right.  eauto.
+  right. eauto.
+Qed.
+
+Lemma fst_perm_any_norepet: forall l,
+    list_norepet (List.map fst l) ->
+    list_norepet (List.map fst (perm_elements_any l)).
+Proof.
+  induction l; intros; simpl.
+  - constructor.
+  - inv H. destruct a. destruct (o Max).
+    + simpl. constructor; eauto.
+      simpl in H2. intro. apply H2.
+      eapply In_fst_perm_any; eauto.
+    + simpl. auto.
+Qed.
+
+Lemma elements_correct' :
+forall (A : Type) (i : ZMap.elt) (m : ZMap.t A),
+  m ## i <> fst m -> In (i, m ## i) (ZMap.elements m).
+Proof.
+  intros. eapply ZMap.elements_correct; eauto.
+Qed.
+
+Lemma in_pair_delta : forall (A: Type) d (a:A) l ofs,
+    In (ofs - d,a) l <->
+    In (ofs, a) (map (pair_delta d) l).
+Proof.
+  induction l; intros.
+  split; intro. inv H. inv H.
+  destruct a0. simpl. split; intros [B | B].
+  inv B. left.  unfold pair_delta. simpl.
+  f_equal. lia.
+  right. eapply IHl; eauto.
+  left. inv B. f_equal. lia.
+  right. eapply IHl; eauto.
+Qed.
+
+Lemma in_map_fst:
+  forall (A B:Type) (a:A) (l: list (A*B)),
+    In a (List.map fst l) ->
+    exists b, In (a,b) l.
+Proof.
+  induction l; intros.
+  - inv H.
+  - simpl in H. destruct H. destruct a0.
+    inv H.
+    exists b. simpl. eauto. exploit IHl; eauto.
+    intros (b & H0).
+    exists b. right. auto.
+Qed.
+
+Lemma in_map_fst_1:
+  forall (A B:Type) (a:A) (b b':B) (l: list (A*B)),
+    In (a,b) (List.map (fun p => (fst p, b')) l) ->
+    In a (List.map fst l).
+Proof.
+  induction l; intros.
+  - inv H.
+  - simpl in H. destruct H. destruct a0.
+    inv H. simpl. eauto.
+    simpl. right. eauto.
+Qed.
+
+Lemma in_map_fst_2:
+    forall (A B:Type) (a:A) b (l: list (A*B)),
+    In (a,b) l ->
+    In a (List.map fst l).
+Proof.
+    induction l; intros.
+  - inv H.
+  - simpl in H. destruct H. destruct a0.
+    inv H. simpl. eauto.
+    simpl. right. eauto.
+Qed.
+
+Lemma in_map_none:
+  forall (A B:Type) (a:A) (b b0:B) (l: list (A*B)),
+    In (a,b0) l ->
+    In (a,b) (List.map (fun p => (fst p, b)) l).
+Proof.
+  induction l; intros.
+  - inv H.
+  - simpl in H. destruct H.
+    + destruct a0. simpl in H.
+    inv H. simpl. eauto.
+    + exploit IHl; eauto.
+      simpl. eauto.
+Qed.
+
+Lemma in_perm_any : forall ofs perm p l,
+    In (ofs, perm) l -> perm Max = Some p ->
+    In (ofs, perm) (perm_elements_any l).
+Proof.
+  induction l; intros.
+  inv H.
+  simpl. destruct a.
+  destruct H.
+  - inv H. rewrite H0. left. auto.
+  - destruct (o Max).
+    right. eauto.
+    eauto.
+Qed.
+
+Lemma in_perm_any_1 : forall ofs perm l,
+    In (ofs,perm) (perm_elements_any l) ->
+    perm Max <> None /\ In (ofs,perm) l.
+Proof.
+  induction l; intros.
+  inv H. simpl in H.
+  destruct a. destruct (o Max) eqn:Hp.
+  - destruct H.
+    + inv H. split. congruence. left. auto.
+    + exploit IHl; eauto. intros [A B]. split; eauto. right. eauto.
+  - exploit IHl; eauto. intros [A B]. split; eauto. right. eauto.
+Qed.
+
+(* result of ZMap update *)
 Lemma update_mem_access_result:
   forall d map1 map2 ofs2 p,
+    (fst map1 = fun k => None) ->
     ((update_mem_access d map1 map2)##ofs2) p = if (perm_check_any) map1 (ofs2 - d) then map1##(ofs2 - d) p
                       else map2##ofs2 p.
 Proof.
   intros. destruct (perm_check_any) eqn: Hperm.
   - unfold update_mem_access.
     erewrite setN'_inside. reflexivity.
-    admit.
-    admit.
+    apply fst_pair_delta_norepet.
+    apply fst_perm_any_norepet.
+    eapply ZMap.elements_keys_norepet.
+    generalize (elements_correct' _ (ofs2 - d) map1).
+    intros. exploit H0. rewrite H. intro.
+    destruct (map1 ## (ofs2 - d) Max) eqn : Hnone. rewrite H1 in Hnone.
+    congruence.
+    unfold perm_check_any in Hperm. rewrite Hnone in Hperm.
+    congruence.
+    intro.
+    apply in_pair_delta.
+    unfold perm_check_any in Hperm.
+    destruct (map1 ## (ofs2 -d) Max) eqn : Hsome.
+    eapply in_perm_any; eauto. congruence.
   - unfold update_mem_access.
     erewrite setN'_outside. reflexivity.
     unfold perm_check_any in Hperm. destruct (ZMap.get) eqn: Hperm1.
     congruence.
-    admit.
-Admitted.
+    intro. apply in_map_fst in H0.
+    destruct H0 as [p0 H0].
+    apply in_pair_delta in H0.
+    apply in_perm_any_1 in H0. destruct H0 as [A B].
+    apply ZMap.elements_complete in B. congruence.
+Qed.
 
-(*
-Definition update_mem_access (delta : Z) (map1 map2 : perm_map) : perm_map :=
+(* old version of update_mem_access
+Definition update_mem_access (delta : Z) (map1 map2 : Z -> perm_kind -> permission) : perm_map :=
   fun ofs2 p =>
     let ofs1 := ofs2 - delta in
     if perm_check_any map1 ofs1 then
       map1 ofs1 p
     else map2 ofs2 p.
 *)
+
 (** update content *)
 
 Definition memval_map (f:meminj) (mv:memval) : memval :=
@@ -5477,6 +5681,7 @@ Proof.
     left. firstorder.
   - right. unfold valid_position. firstorder.
 Qed.
+
 (*
 Definition content_map (val1 : ZMap.t memval) (pmap1 : perm_map) (f:meminj) (delta : Z)
            : positive -> memval -> memval :=
@@ -5522,8 +5727,99 @@ Definition update_mem_content (pmap1 : perm_map) (f:meminj) (delta: Z) (vmap1 vm
   fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
 *)
 
+Lemma fst_ofs_elements_norepet : forall vmap j vl,
+    list_norepet vl ->
+    list_norepet (map fst (ofs_elements_val vl vmap j)).
+Proof.
+  induction vl; intros; simpl.
+  constructor.
+  inv H.
+  constructor; eauto.
+  induction vl; simpl.
+  auto. intro. apply H2.
+  destruct H. left. auto. exfalso.
+  apply IHvl0; eauto.
+  intro. apply IHvl in H3. inv H3. auto.
+  intro. apply H2. right. auto.
+  inv H3. auto.
+Qed.
+
+Lemma perm_readable_norepet: forall vl,
+    list_norepet (map fst vl) ->
+    list_norepet (perm_elements_readable vl).
+Proof.
+  induction vl; intros; simpl.
+  constructor. destruct a. inv H.
+  destruct (perm_check_readable'); eauto.
+  constructor; eauto.
+  intro. apply H2.
+  induction vl; simpl.
+  auto. simpl in H.
+  apply IHvl in H3 as H4.
+  destruct a. destruct perm_check_readable'; eauto.
+  - destruct H. left. simpl. congruence.
+    right. eapply IHvl0; eauto.
+    intro. simpl in H4. destruct perm_check_readable'; eauto.
+    inv H4. eauto.
+    intro. apply H2. right. auto.
+    inv H3. auto.
+  -right. eapply IHvl0; eauto.
+    intro. simpl in H4. destruct perm_check_readable'; eauto.
+    inv H4. eauto.
+    intro. apply H2. right. auto.
+    inv H3. auto.
+Qed.
+
+Lemma in_ofs_elements_val : forall ofs vl j vmap,
+    In ofs vl <->
+    In (ofs,memval_map j vmap##ofs) (ofs_elements_val vl vmap j).
+Proof.
+  induction vl; intros; simpl. reflexivity.
+  split; intros [A | B].
+  left. inv A. reflexivity.
+  right. eapply IHvl; eauto.
+  left. inv A. reflexivity.
+  right. eapply IHvl; eauto.
+Qed.
+
+Lemma in_ofs_elements_val1 : forall vl ofs val j vmap,
+    In (ofs, val) (ofs_elements_val vl vmap j) ->
+    val = memval_map j vmap##ofs.
+Proof.
+  induction vl; intros; simpl. inv H.
+  simpl in H. destruct H. inv H. auto.
+  eauto.
+Qed.
+
+Lemma in_perm_read : forall ofs perm l,
+    In (ofs, perm) l -> perm_check_readable' perm = true ->
+    In ofs (perm_elements_readable l).
+Proof.
+  induction l; intros.
+  inv H.
+  simpl. destruct a.
+  destruct H.
+  - inv H. rewrite H0. left. auto.
+  - destruct (perm_check_readable' o).
+    right. eauto.
+    eauto.
+Qed.
+
+Lemma in_perm_read_1 : forall ofs l,
+    In ofs (perm_elements_readable l) ->
+    exists perm, perm_check_readable' perm =true  /\ In (ofs,perm) l.
+Proof.
+  induction l; intros.
+  inv H. simpl in H.
+  destruct a. destruct (perm_check_readable' o) eqn:Hp.
+  - destruct H.
+    + inv H. exists o. split. congruence. left. auto.
+    + exploit IHl; eauto. intros [p [A B]]. exists p. split; eauto. right. eauto.
+  - exploit IHl; eauto. intros [p [A B]]. exists p. split; eauto. right. eauto.
+Qed.
 
 Lemma update_mem_content_result: forall b1 b2 j1' delta vmap1 vmap2 pmap1 (ofs2:Z),
+    fst pmap1 = (fun k => None) ->
     j1' b1 = Some (b2,delta) ->
     ZMap.get ofs2 (Mem.update_mem_content pmap1 j1' delta vmap1 vmap2) =
     if (Mem.perm_check_readable pmap1 (ofs2 - delta)) then
@@ -5533,19 +5829,51 @@ Proof.
   intros. destruct (perm_check_readable) eqn: Hperm.
   - unfold update_mem_content.
     erewrite setN'_inside. reflexivity.
+    + apply fst_pair_delta_norepet.
+      apply fst_ofs_elements_norepet.
+      apply perm_readable_norepet.
+      apply ZMap.elements_keys_norepet.
     +
-    admit.
-    +
-    admit.
+      generalize (elements_correct' _ (ofs2 -delta) pmap1).
+      intros. exploit H1.
+      { unfold perm_check_readable in Hperm.
+      destruct (pmap1 ## (ofs2 - delta) Cur) eqn:Hsome; try congruence.
+      destruct p; try congruence.
+      intro. rewrite H2,H in Hsome. congruence.
+      intro. rewrite H2,H in Hsome. congruence.
+      intro. rewrite H2,H in Hsome. congruence.
+      }
+      intro IN.
+      apply in_pair_delta.
+      apply in_ofs_elements_val.
+      eapply in_perm_read; eauto.
   - unfold update_mem_content.
     erewrite setN'_outside. reflexivity.
     unfold perm_check_readable in Hperm. destruct (pmap1 ## (ofs2 - delta) Cur) eqn: Hperm1. destruct p.
     congruence.
     congruence.
     congruence.
-    admit.
-    admit.
-Admitted.
+    + intro.
+      apply in_map_fst in H1.
+      destruct H1 as [p0 H1].
+      apply in_pair_delta in H1.
+      apply in_ofs_elements_val1 in H1 as H2. subst p0.
+      apply in_ofs_elements_val in H1.
+      apply in_perm_read_1 in H1. destruct H1 as [p [A B]].
+      apply ZMap.elements_complete in B. subst p.
+      unfold perm_check_readable' in A. rewrite Hperm1 in A.
+      congruence.
+    + intro.
+      apply in_map_fst in H1.
+      destruct H1 as [p0 H1].
+      apply in_pair_delta in H1.
+      apply in_ofs_elements_val1 in H1 as H2. subst p0.
+      apply in_ofs_elements_val in H1.
+      apply in_perm_read_1 in H1. destruct H1 as [p [A B]].
+      apply ZMap.elements_complete in B. subst p.
+      unfold perm_check_readable' in A. rewrite Hperm1 in A.
+      congruence.
+Qed.
 
 Program Definition map (f j2:meminj) (b:block) (s2: sup) (m1 m2:mem) :=
   match f b with
@@ -5570,6 +5898,8 @@ Next Obligation.
     erewrite update_mem_access_result; eauto.
     destruct perm_check_any;
     apply Mem.access_max; eauto.
+    apply Mem.access_default.
+    apply Mem.access_default.
   - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
     apply Mem.access_max; auto.
 Qed.
@@ -5690,57 +6020,6 @@ Definition update_mem_access_free (b2: block) (map2: perm_map): perm_map :=
   let felements := filter (freed_position b2) none_elements in
   setN' felements map2.
 
-Lemma in_map_fst:
-  forall (A B:Type) (a:A) (l: list (A*B)),
-    In a (List.map fst l) ->
-    exists b, In (a,b) l.
-Proof.
-  induction l; intros.
-  - inv H.
-  - simpl in H. destruct H. destruct a0.
-    inv H.
-    exists b. simpl. eauto. exploit IHl; eauto.
-    intros (b & H0).
-    exists b. right. auto.
-Qed.
-
-Lemma in_map_fst_1:
-  forall (A B:Type) (a:A) (b b':B) (l: list (A*B)),
-    In (a,b) (List.map (fun p => (fst p, b')) l) ->
-    In a (List.map fst l).
-Proof.
-  induction l; intros.
-  - inv H.
-  - simpl in H. destruct H. destruct a0.
-    inv H. simpl. eauto.
-    simpl. right. eauto.
-Qed.
-
-Lemma in_map_fst_2:
-    forall (A B:Type) (a:A) b (l: list (A*B)),
-    In (a,b) l ->
-    In a (List.map fst l).
-Proof.
-    induction l; intros.
-  - inv H.
-  - simpl in H. destruct H. destruct a0.
-    inv H. simpl. eauto.
-    simpl. right. eauto.
-Qed.
-
-Lemma in_map_none:
-  forall (A B:Type) (a:A) (b b0:B) (l: list (A*B)),
-    In (a,b0) l ->
-    In (a,b) (List.map (fun p => (fst p, b)) l).
-Proof.
-  induction l; intros.
-  - inv H.
-  - simpl in H. destruct H.
-    + destruct a0. simpl in H.
-    inv H. simpl. eauto.
-    + exploit IHl; eauto.
-      simpl. eauto.
-Qed.
 
 Lemma fst_filter_norepet: forall (A B:Type) (l: list (A*B)) predicate,
     list_norepet (List.map fst l) ->
@@ -5809,7 +6088,7 @@ Proof.
          eapply in_map_none; eauto.
          unfold freed_position. simpl. rewrite Hj2, Hreach. auto.
       -- erewrite setN'_outside.
-         apply ZMap.elements_complete in n.
+         apply ZMap.elements_correct_1 in n.
          rewrite n,H. auto.
          intro. apply in_map_fst in H0.
          destruct H0 as [A B].

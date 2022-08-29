@@ -1312,18 +1312,27 @@ Module PMap <: MAP.
       simpl. right. eauto.
   Qed.
 
-  Theorem elements_complete:
+  Theorem elements_correct_1:
     forall (A: Type) (i: positive) (m: t A),
       ~ In i (List.map fst (elements m)) ->
       get i m = fst m.
-    Proof.
-      intros. unfold get. destruct PTree.get eqn: HPTree.
-      apply PTree.elements_correct in HPTree.
-      exfalso. apply H. unfold elements.
-      eapply in_map_fst_2; eauto.
-      auto.
-    Qed.
+  Proof.
+    intros. unfold get. destruct PTree.get eqn: HPTree.
+    apply PTree.elements_correct in HPTree.
+    exfalso. apply H. unfold elements.
+    eapply in_map_fst_2; eauto.
+    auto.
+  Qed.
 
+  Theorem elements_complete:
+    forall (A: Type) (i:positive) (v : A) (m: t A),
+      In (i,v) (elements m) -> get i m = v.
+  Proof.
+    intros. unfold elements in H.
+    apply PTree.elements_complete in H.
+    unfold get. rewrite H. auto.
+  Qed.
+  
   Theorem elements_keys_norepet:
     forall A (m: t A),
     list_norepet (List.map (@fst elt A) (elements m)).
@@ -1531,14 +1540,14 @@ Module IRMap(X: INDEXED_REV_TYPE).
       right. eapply IHl; eauto.
   Qed.
 
-  Theorem elements_complete :
+  Theorem elements_correct_1 :
     forall (A: Type) (i: elt) (m: t A),
       ~ In i (List.map fst (elements m)) ->
       get i m = fst m.
   Proof.
     intros. unfold get.
     unfold elements in H.
-    eapply PMap.elements_complete; eauto.
+    eapply PMap.elements_correct_1; eauto.
     intro. apply H.
     induction (PMap.elements m).
     - inv H0.
@@ -1548,6 +1557,19 @@ Module IRMap(X: INDEXED_REV_TYPE).
       auto.
       right. apply IHl. intro. apply H.
       simpl. right. auto. auto.
+  Qed.
+
+  Theorem elements_complete:
+    forall (A: Type) (i: elt) (v : A) (m: t A),
+      In (i,v) (elements m) -> get i m = v.
+  Proof.
+    intros. unfold elements in H.
+    eapply PMap.elements_complete.
+    induction (PMap.elements m).
+    - inv H.
+    - simpl. simpl in H. destruct H.
+      left. inv H. rewrite X.positive_t_positive. destruct a. reflexivity.
+      right. apply IHl; eauto.
   Qed.
 
   Lemma not_In_index_rev:
