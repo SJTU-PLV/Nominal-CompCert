@@ -345,55 +345,44 @@ Section TCOMP.
     unfold flip. apply cc_compose_id_right.
     eapply compose_forward_simulations. exact X. clear X.
 
-    unfold tensor_comp_semantics', cmod_layer_comp.
+    unfold tensor_comp_semantics', cmod_layer_comp. cbn.
 
     etransitivity.
-    {
-      apply flat_composition_simulation'. instantiate (1 := fun i => match i with true => _ | false => _ end).
-      intros [|].
-      - instantiate (1 := comp_semantics' (semantics M @ (Kf1 * Kf2)) (lift_layer_k Lf1) (skel Ls1)).
-        etransitivity. apply map_monotonicity. apply lift_categorical_comp1.
-        etransitivity. apply map_ext_comp.
-        etransitivity. apply map_int_comp. typeclasses eauto.
+    2: {
+      eapply categorical_compose_simulation'.
+      - etransitivity.
+        2: eapply lifting_simulation; apply cmodule_flat_comp_simulation; eauto.
+        apply lift_flat_comp2.
+      - reflexivity.
+      - apply tens_skel_link2.
+      - apply tens_skel_link1.
+    }
+    etransitivity. 2: apply categorical_flat_interchangeable.
+    instantiate (1 := fun i:bool => if i then skel Ls1 else skel Ls2).
+    apply flat_composition_simulation'.
+    2: {
+      intros [|]; cbn.
+      1-2: eapply link_linkorder in Hsks; apply Hsks.
+    }
+    intros [|].
+    - etransitivity. apply map_monotonicity. apply lift_categorical_comp1.
+      etransitivity. apply map_ext_comp.
+      eapply categorical_compose_simulation'.
+      + apply lts_lifting_assoc.
+      + apply map_monotonicity. reflexivity.
+      + exact Hmod1.
+      + exact HLsk1.
+    - etransitivity. apply map_monotonicity. apply lift_categorical_comp1.
+      etransitivity.
+      2: {
         eapply categorical_compose_simulation'.
-        + apply lts_lifting_assoc.
-        + reflexivity.
-        + exact Hmod1.
-        + exact HLsk1.
-      - instantiate (1 := comp_semantics' (semantics N @ (Kf1 * Kf2)) (layer_comm (lift_layer_k Lf2)) (skel Ls2)).
-        etransitivity. apply map_monotonicity. apply map_monotonicity. apply lift_categorical_comp1.
-        etransitivity. apply map_monotonicity. apply map_ext_comp.
-        etransitivity. apply map_ext_comp.
-        etransitivity. apply map_int_comp. typeclasses eauto.
-        etransitivity. apply map_int_comp. typeclasses eauto.
-        eapply categorical_compose_simulation'.
+        2: apply map_monotonicity; reflexivity.
         + etransitivity. 2: apply lts_lifting_comm.
-          etransitivity. 2: apply map_monotonicity; apply lts_lifting_assoc.
-          reflexivity.
-        + reflexivity.
+          apply map_monotonicity. apply lts_lifting_assoc.
         + exact Hmod2.
         + exact HLsk2.
-      - intros [|]; cbn.
-        1-2: eapply link_linkorder in Hsks; apply Hsks.
-    }
-
-    set (LX:= fun i:bool => if i then semantics M @ (Kf1 * Kf2) else semantics N @ (Kf1 * Kf2)).
-    set (LY:= fun i:bool => if i then lift_layer_k Lf1 else layer_comm (lift_layer_k Lf2)).
-    set (Lsk:= fun i:bool => if i then skel Ls1 else skel Ls2).
-    replace (flat_comp_semantics' _ sks) with (flat_comp_semantics' (fun i:bool => comp_semantics' (LX i) (LY i) (Lsk i)) sks).
-    2: {
-      subst LX  LY Lsk. cbn. f_equal. apply Axioms.functional_extensionality.
-      intros [|]; reflexivity.
-    }
-
-    etransitivity. apply categorical_flat_interchangeable. cbn.
-    eapply categorical_compose_simulation'.
-    - subst LX. rewrite <- if_rewrite with (f := fun x => x @ (Kf1 * Kf2)).
-      etransitivity. apply lift_flat_comp2. apply lifting_simulation.
-      apply cmodule_flat_comp_simulation; eauto.
-    - reflexivity.
-    - apply tens_skel_link2.
-    - apply tens_skel_link1.
+      }
+      rewrite map_twice. apply map_ext_comp.
   Qed.
 
 End TCOMP.
@@ -433,7 +422,8 @@ Proof.
     intros se1 se2 w Hse Hse1. inv Hse.
     apply forward_simulation_step; cbn.
     + intros. inv H0. destruct i; inv H1;inv H; inv H.
-    + intros. inv H0. destruct i. inv H1. inv H0. inv H1. inv H0.
+    + intros. inv H0. destruct i. inv H1. inv H0. inv H2. inv H0.
+      inv H1. inv H0. inv H2. inv H0.
     + intros. inv H0. destruct i. inv H1. inv H0. inv H1. inv H0.
     + intros. inv H. destruct i.
       * destruct s. destruct s'. inv H1. inv H.

@@ -16,36 +16,70 @@ From compcert.common Require Import
 Generalizable All Variables.
 Close Scope Z_scope.
 
+Typeclasses eauto := 20.
+
+Ltac eprod_crush :=
+  repeat
+    (match goal with
+     | [ H: ?a * ?b |- _ ] => destruct H;cbn [fst snd] in *; subst
+     | [ H: (?a, ?b) = (?c, ?d) |- _ ] => inv H
+     | [ H: (?x * ?y)%rel _ _ |- _] => destruct H; cbn [fst snd] in *; subst
+     | [ H: ?x /\ ?y |- _] => destruct H
+     | [ H: (exists _, _) |- _] => destruct H
+     | [ H: unit |- _] => destruct H
+     end).
+
 (* A li_func convert from one language interface to another. This is useful
    because equivalence on the level of language interfaces can't be defined
    as definitional equality. *)
-Record li_func (liA liB: language_interface) :=
-  mk_li_func {
-      query_func: query liB -> query liA;
-      reply_func: reply liB -> reply liA;
-    }.
-Arguments query_func {liA liB} _ _.
-Arguments reply_func {liA liB} _ _.
+Record li_iso {liA liB: language_interface} :=
+  mk_li_iso {
+      fq: query liB -> query liA;
+      fr: reply liA -> reply liB;
 
-Class LiFunc liA liB := lf : li_func liA liB.
-Class LiSurjective {liA liB} (F: li_func liA liB) :=
-  LiSurj: Surjective (query_func F) /\ Surjective (reply_func F).
-Arguments LiSurjective {_ _} _.
+      query_iso: { gq | (forall qa, fq (gq qa) = qa) /\ (forall qb, gq (fq qb) = qb) };
+      reply_iso: { gr | (forall rb, fr (gr rb) = rb) /\ (forall ra, gr (fr ra) = ra) };
+      entry_same: forall q, entry q = entry (fq q);
+    }.
+Arguments li_iso: clear implicits.
+Class LiIso liA liB := lf : li_iso liA liB.
+
+Section LI_ISO_INJ_SURJ.
+
+  Context `{F: li_iso liA liB}.
+  Lemma fq_surj : Surjective (fq F).
+  Proof. intros x. edestruct (query_iso F) as (g & A & B); eauto. Qed.
+  Lemma fq_inj : Injective (fq F).
+  Proof.
+    intros x y H. edestruct (query_iso F) as (g & A & B); eauto.
+    rewrite <- (B x) in *. rewrite  <- (B y) in *.
+    rewrite A in H. rewrite A in H. rewrite H. reflexivity.
+  Qed.
+  Lemma fr_surj : Surjective (fr F).
+  Proof. intros x. edestruct (reply_iso F) as (g & A & B); eauto. Qed.
+  Lemma fr_inj : Injective (fr F).
+  Proof.
+    intros x y H. edestruct (reply_iso F) as (g & A & B); eauto.
+    rewrite <- (B x) in *. rewrite  <- (B y) in *.
+    rewrite A in H. rewrite A in H. rewrite H. reflexivity.
+  Qed.
+
+End LI_ISO_INJ_SURJ.
 
 Section APPLY.
 
   Context {liA1 liA2 liB1 liB2 S} (L: lts liA1 liB1 S)
-          (FA: li_func liA1 liA2) (FB: li_func liB1 liB2).
+          (FA: li_iso liA1 liA2) (FB: li_iso liB1 liB2).
 
   Definition lts_map: lts liA2 liB2 S :=
     {|
       genvtype := genvtype L;
       globalenv := globalenv L;
       step := step L;
-      initial_state q s := initial_state L (query_func FB q) s;
-      at_external s q := at_external L s (query_func FA q);
-      after_external s r s' := after_external L s (reply_func FA r) s';
-      final_state s r := final_state L s (reply_func FB r);
+      initial_state q s := initial_state L (fq FB q) s;
+      at_external s q := at_external L s (fq FA q);
+      after_external s r s' := exists r', fr FA r' = r /\ after_external L s r' s';
+      final_state s r := exists r', fr FB r' = r /\ final_state L s r';
     |}.
 
 End APPLY.
@@ -57,7 +91,7 @@ Definition semantics_map {liA1 liA2 liB1 liB2} (L: semantics liA1 liB1) F G: sem
     footprint := footprint L;
   |}.
 
-Definition map_monotonicity {liA1 liA2 liB1 liB2} L1 L2 (F: li_func liA1 liA2) (G: li_func liB1 liB2):
+Definition map_monotonicity `(F: li_iso liA1 liA2) `(G: li_iso liB1 liB2) L1 L2:
   L1 ≤ L2 -> semantics_map L1 F G ≤ semantics_map L2 F G.
 Proof.
   intros [[]]. constructor. econstructor; eauto.
@@ -68,25 +102,127 @@ Proof.
     edestruct @fsim_match_initial_states as (idx & s2 & Hs2 & Hs); eauto.
     reflexivity. apply H.
     eexists _, _. split. apply Hs2. apply Hs.
-  - intros idx s1 s2 r Hs H.
+  - intros idx s1 s2 r Hs H. cbn in *. eprod_crush. subst.
     edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
-    apply H. inv Hr. eexists. split.
-    apply Hr2. reflexivity.
+    inv Hr. eexists. split; eauto.
   - intros idx s1 s2 q1 Hs Ht. exists tt.
     edestruct @fsim_match_external as (wx & qx2 & Hqx2 & Hqx & Hsex & H); eauto. apply Ht.
     inv Hqx. inv Hsex. exists q1; repeat apply conj; try constructor. apply Hqx2.
-    intros r1 ? ? [ ] He. edestruct H as (idx' & s2' & Hs2' & Hs'); eauto. reflexivity.
-    apply He. eexists _, _. split. apply Hs2'. apply Hs'.
+    intros r1 ? ? [ ] He. cbn in *. eprod_crush. subst.
+    edestruct H as (idx' & s2' & Hs2' & Hs'); eauto.
+    eexists _, _. split; eauto.
   - intros. edestruct @fsim_simulation as (idx' & s2' & Hs2' & Hs'); eauto.
 Qed.
 
 Notation "$ L" := (semantics_map L lf lf) (at level 1).
-Instance id_li_func {liA} : LiFunc liA liA:= mk_li_func liA liA id id.
+Instance li_iso_id {liA} : LiIso liA liA | 5 :=
+  {| fq := id; fr := id; |}.
+- exists id. split; reflexivity.
+- exists id. split; reflexivity.
+- easy.
+Defined.
 
+Instance li_iso_comp `(F: LiIso liA liB) `(G: LiIso liB liC): LiIso liA liC | 9 :=
+  {|
+    fq := compose (fq F) (fq G);
+    fr := compose (fr G) (fr F);
+  |}.
+- edestruct (query_iso F) as (f & A & B).
+  edestruct (query_iso G) as (g & C & D).
+  exists (compose g f).
+  split; intros; unfold compose; cbn.
+  rewrite C. rewrite A. reflexivity.
+  rewrite B. rewrite D. reflexivity.
+- edestruct (reply_iso F) as (f & A & B).
+  edestruct (reply_iso G) as (g & C & D).
+  exists (compose f g).
+  split; intros; unfold compose; cbn.
+  rewrite A. rewrite C. reflexivity.
+  rewrite D. rewrite B. reflexivity.
+- intros q. erewrite (entry_same G). erewrite (entry_same F). reflexivity.
+Defined.
+
+Instance li_iso_inv `(F: LiIso liA liB) : LiIso liB liA | 10 :=
+  {|
+    fq := proj1_sig (query_iso F);
+    fr := proj1_sig (reply_iso F);
+  |}.
+- exists (fq F).
+  split; intros; edestruct (query_iso F) as (f & A & B); cbn in *; eauto.
+- exists (fr F).
+  split; intros; edestruct (reply_iso F) as (f & A & B); cbn in *; eauto.
+- intros. edestruct (query_iso F) as (f & A & B). cbn.
+  rewrite (entry_same F). rewrite A. reflexivity.
+Defined.
+
+Instance li_iso_unit {liA}: LiIso (liA@unit) liA | 2 :=
+  {|
+    fq q := (q, tt): query (liA@unit); fr '((r, tt): reply (liA@unit)) := r;
+  |}.
+- exists (fun '(q, tt) => q). split; intros; cbn in *; eprod_crush; reflexivity.
+- exists (fun r => (r, tt)). split; intros; cbn in *; eprod_crush; reflexivity.
+- intros; cbn in *; eprod_crush; reflexivity.
+Defined.
+
+Instance li_iso_null {K}: LiIso (li_null @ K) li_null | 2 :=
+  {|
+    fq (q: query li_null) := match q with end;
+    fr (r: reply (li_null@K)) := match r with (a, _) => match a with end end;
+  |}.
+- exists (fun '((x, _):Empty_set * K) => match x with end).
+  split; intros; cbn in *; eprod_crush; easy.
+- exists (fun x: Empty_set => match x with end).
+  split; intros; cbn in *; eprod_crush; easy.
+- cbn in *. easy.
+Defined.
+
+Program Instance li_iso_assoc {li K1 K2}: LiIso ((li@K1)@K2) (li@(K1*K2)) | 3 :=
+  {|
+    fq '(q, (k1, k2)) := (q, k1, k2);
+    fr '(r, k1, k2) := (r, (k1, k2));
+  |}.
+Next Obligation.
+  exists (fun '(a, b, c) => (a, (b, c))). split; intros; eprod_crush; easy.
+Qed.
+Next Obligation.
+  exists (fun '(a, (b, c)) => (a, b, c)). split; intros; eprod_crush; easy.
+Qed.
+
+Program Instance li_iso_comm {li K1 K2}: LiIso (li@(K1*K2)) (li@(K2*K1)) | 3 :=
+  {|
+    fq '(q, (k1, k2)) := (q, (k2, k1));
+    fr '(r, (k1, k2)) := (r, (k2, k1));
+  |}.
+Next Obligation.
+  exists (fun '(a, (b, c)) => (a, (c, b))). split; intros; eprod_crush; easy.
+Qed.
+Next Obligation.
+  exists (fun '(a, (b, c)) => (a, (c, b))). split; intros; eprod_crush; easy.
+Qed.
+
+Program Instance li_iso_lift {K} `(F: LiIso liA liB): LiIso (liA@K) (liB@K) | 4 :=
+  {|
+    fq '(q, k) := (fq F q, k);
+    fr '(r, k) := (fr F r, k);
+  |}.
+Next Obligation.
+  edestruct (query_iso F) as (f & A & B).
+  exists (fun '(q, k) => (f q, k)). split; cbn; intros; eprod_crush.
+  now rewrite A. now rewrite B.
+Qed.
+Next Obligation.
+  edestruct (reply_iso F) as (f & A & B).
+  exists (fun '(r, k) => (f r, k)). split; cbn; intros; eprod_crush.
+  now rewrite A. now rewrite B.
+Qed.
+Next Obligation. apply entry_same. Qed.
+
+(** Properties  *)
 Section MAP_COMP_EXT.
-  Context {liA1 liA2 liB liC1 liC2}
+  Context {liA1 liA2 liB liX liC1 liC2}
           (L1: semantics liB liC1) (L2: semantics liA1 liB)
-          (F: LiFunc liA1 liA2) (G: LiFunc liC1 liC2).
+          (F: LiIso liA1 liA2) (G: LiIso liC1 liC2)
+          (X: LiIso liB liX).
 
   Inductive map_ext_ms : comp_state L1 L2 ->
                          comp_state $L1 $L2 -> Prop :=
@@ -101,24 +237,32 @@ Section MAP_COMP_EXT.
     eapply forward_simulation_step with (match_states := map_ext_ms);
       cbn; intros; subst; unfold id in *.
     - inv H0. eexists; split; constructor. auto.
-    - inv H0; inv H. eexists; split; constructor; auto.
-    - inv H0; inv H. eexists _, _. intuition eauto.
-      constructor; auto. subst. inv H0. eexists; split; constructor. auto.
-    - inv H; inv H0; eexists; split;
-        [ apply step1 | | apply step2 | | eapply step_push | | eapply step_pop |  ]; repeat constructor; eauto.
+    - eprod_crush. eexists; split; eauto. subst.
+      inv H1. inv H. constructor. eexists; split; eauto.
+    - inv H0; inv H. eexists tt,  _. intuition eauto.
+      constructor; auto. eprod_crush. subst. inv H2.
+      eexists; split; constructor. eexists; split; eauto.
+    - inv H; inv H0.
+      + eexists; split. apply step1. all: repeat constructor; eauto.
+      + eexists; split. apply step2. all: repeat constructor; eauto.
+      + edestruct (@fq_surj _ _ X q). subst.
+        eexists; split. eapply step_push. apply H1. apply H2.
+        constructor.
+      + eexists; split. eapply step_pop.
+        eexists; split; eauto.
+        eexists; split; eauto.
+        constructor.
     - apply well_founded_ltof.
-      Unshelve. exact tt.
   Qed.
 End MAP_COMP_EXT.
 
 Section MAP_INT_COMP.
 
-  Context {liA liB1 liB2 liC}
-          (L1: semantics liB1 liC) (L2: semantics liA liB1)
-          (F: LiFunc liB1 liB2).
-  Context `{HS: !LiSurjective F}.
+  Context `(L1: semantics liB1 liC) `(L2: semantics liA liB1)
+          `(F: LiIso liB1 liB2).
 
-  Inductive map_int_ms : comp_state L1 L2 -> comp_state $L1 $L2 -> Prop :=
+  Inductive map_int_ms : comp_state L1 L2 -> comp_state (semantics_map L1 F li_iso_id)
+                                                       (semantics_map L2 li_iso_id F) -> Prop :=
   | map_int_ms1 s: map_int_ms (st1 _ _ s) (st1 $L1 $L2 s)
   | map_int_ms2 s1 s2: map_int_ms (st2 _ _ s1 s2) (st2 $L1 $L2 s1 s2).
 
@@ -131,33 +275,20 @@ Section MAP_INT_COMP.
       cbn; intros; subst; unfold id in *.
     - inv H0. eexists; split; constructor. auto.
     - inv H0; inv H. eexists; split; constructor; auto.
-    - inv H0; inv H. eexists _, _. intuition eauto.
-      constructor; auto. subst. inv H0. eexists; split; constructor. auto.
+      eexists; split; eauto. reflexivity.
+    - inv H0; inv H. eexists tt, _. intuition eauto.
+      constructor; auto. subst. inv H0. eexists; split; constructor.
+      eexists; split; eauto. reflexivity.
     - inv H; inv H0; eexists; (split; [ |constructor]).
       + apply step1. apply H1.
       + apply step2. apply H1.
-      + specialize ((proj1 HS) q) as [q' Hq']. subst.
+      + edestruct (@fq_surj _ _ F q). subst.
         eapply step_push. apply H1. apply H2.
-      + specialize ((proj2 HS) r) as [r' Hr']. subst.
-        eapply step_pop. apply H1. apply H2.
+      + eapply step_pop; eexists; split; eauto.
     - apply well_founded_ltof.
-      Unshelve. exact tt.
   Qed.
 
 End MAP_INT_COMP.
-
-Instance li_func_null {K}: LiFunc (li_null @ K) li_null.
-Proof. split; inversion 1. Defined.
-
-Instance li_func_k {li K1 K2}: LiFunc ((li@K1)@K2) (li@(K1*K2)).
-Proof. split; cbn; intros; repeat split; intuition. Defined.
-Instance li_func_k_surj {li K1 K2}: LiSurjective (@li_func_k li K1 K2).
-Proof. split; intros [[x k1] k2]; exists (x, (k1, k2)); reflexivity. Qed.
-
-Instance li_func_comm {li K1 K2}: LiFunc (li@(K1*K2)) (li@(K2*K1)).
-Proof. split; cbn; intros; repeat split; intuition. Defined.
-Instance li_func_comm_surj {li K1 K2}: LiSurjective (@li_func_comm li K1 K2).
-Proof. split; intros [x [k1 k2]]; exists (x, (k2, k1)); reflexivity. Qed.
 
 Definition lift_layer {li K} (L: semantics li_null li) : semantics li_null (li@K) := $(L@K).
 Definition lift_layer_k {li K1 K2} (L: semantics li_null (li@K1)): semantics li_null (li@(K1*K2)) := $(L@K2).
@@ -200,10 +331,12 @@ Section Properties.
 
 End Properties.
 
-Lemma layer_comm_simulation `(R1: abrel Ks1 Kf1) `(R2: abrel Ks2 Kf2) L1 L2:
+Lemma layer_comm_simulation `(R1: abrel Ks1 Kf1) `(R2: abrel Ks2 Kf2)
+      (L1: semantics li_null _) L2:
   forward_simulation 1 (R1 * R2)%abrel L1 L2 ->
-  forward_simulation 1 (R2 * R1)%abrel (layer_comm L1) (layer_comm L2).
+  forward_simulation 1 (R2 * R1)%abrel $L1 $L2.
 Proof.
+  unfold lf.
   intros [[]]. constructor. econstructor; eauto.
   instantiate (1 := fsim_match_states).
   intros. exploit fsim_lts; eauto. clear. intros HL.
@@ -212,23 +345,15 @@ Proof.
     edestruct @fsim_match_initial_states as (idx & s2 & Hs2 & Hs); eauto.
     apply match_query_comm; eauto. apply H.
     eexists _, _. split. apply Hs2. apply Hs.
-  - intros idx s1 s2 [r [k3 k1]] Hs H.
+  - intros idx s1 s2 [r [k3 k1]] Hs H. cbn in *. eprod_crush.
     edestruct @fsim_match_final_states as (r2 & Hr2 & Hr); eauto.
-    apply H. destruct r2 as [r2 [k2 k4]].
-    eexists (_, (_, _)). split. apply Hr2.
+    cbn in *. eprod_crush.
+    eexists (_, (_, _)). split.
+    eexists (_, (_, _)). split; eauto.
     apply match_reply_comm. apply Hr.
   - intros ? ? ? [ ].
   - intros. edestruct @fsim_simulation as (idx' & s2' & Hs2' & Hs'); eauto.
 Qed.
-
-Ltac prod_crush :=
-  repeat
-    (match goal with
-     | [ H: ?a * ?b |- _ ] => destruct H;cbn [fst snd] in *; subst
-     | [ H: (?a, ?b) = (?c, ?d) |- _ ] => inv H
-     | [ H: (?x * ?y)%rel _ _ |- _] => destruct H; cbn [fst snd] in *; subst
-     | [ H: ?x /\ ?y |- _] => destruct H
-  end).
 
 Section LIFT_ASSOC.
   Context (K1 K2: Type) {li} (L: semantics li li).
@@ -240,11 +365,11 @@ Section LIFT_ASSOC.
     constructor. econstructor; eauto. intros i. reflexivity.
     intros se _ [ ] [ ] _. instantiate (1 := fun _ _ _ => _). cbn beta.
     eapply forward_simulation_step with (match_states := assoc_match);
-      cbn; intros; prod_crush.
+      cbn; intros; eprod_crush.
     - eexists; split; [ | constructor ]. split; auto.
     - inv H. eexists; split; [ | constructor ]. split; auto.
     - inv H. eexists tt, _. intuition eauto. split; auto.
-      prod_crush. eexists; split; [ | constructor ]. split; auto.
+      eprod_crush. eexists; split; [ | constructor ]. split; auto.
     - inv H0. eexists (_, (_, _)). split; [ | constructor ]. split; auto.
     - apply well_founded_ltof.
   Qed.
@@ -262,11 +387,11 @@ Section LIFT_COMM.
     constructor. econstructor; eauto. intros i. reflexivity.
     intros se _ [ ] [ ] _. instantiate (1 := fun _ _ _ => _). cbn beta.
     eapply forward_simulation_step with (match_states := comm_match);
-      cbn; intros; prod_crush.
+      cbn; intros; eprod_crush.
     - eexists; split; [ | constructor ]. split; auto.
     - inv H. eexists; split; [ | constructor ]. split; auto.
     - inv H. eexists tt, _. intuition eauto. split; auto.
-      prod_crush. eexists; split; [ | constructor ]. split; auto.
+      eprod_crush. eexists; split; [ | constructor ]. split; auto.
     - inv H0. eexists (_, (_, _)). split; [ | constructor ]. split; auto.
     - apply well_founded_ltof.
   Qed.
@@ -318,10 +443,11 @@ Section TENSOR.
         * econstructor; eauto. subst. eauto.
           intros * A. apply MPERM. cbn. rewrite locsp_app. now right.
     - intros idx [ss ks2] [sf kf2] [rs [ks1 ks2']] Hs [HX Hks].
-      inv Hs. cbn [fst snd] in *. subst.
+      inv Hs. cbn [fst snd] in *. eprod_crush.  subst.
       edestruct @fsim_match_final_states as (rf & Hrf & Hr); eauto.
       destruct rf as [rf kf1].
-      eexists (_, (_, _)). split. split; cbn; eauto.
+      eexists (_, (_, _)). split.
+      eexists (_, _, _). repeat split; eauto.
       inv H4. destruct Hr as (w & Hw & Hr).
       exists w; split; eauto.
       (* acc *)
@@ -354,9 +480,40 @@ Section TENSOR.
 
 End TENSOR.
 
-Lemma layer_lifting_simulation `(R1: abrel Ks1 Kf1) `(R2: abrel Ks2 Kf2) Ls Lf:
+Require Import PropExtensionality.
+Require Import FunctionalExtensionality.
+
+Lemma map_twice `(F1: LiIso liA1 liA2) `(F2: LiIso liA2 liA3)
+  `(G1: LiIso liB1 liB2) `(G2: LiIso liB2 liB3) L:
+  semantics_map (semantics_map L F1 G1) F2 G2 = $L.
+Proof.
+  unfold lf. destruct L. unfold semantics_map. cbn.
+  f_equal. apply Axioms.extensionality. intros se.
+  unfold lts_map. destruct (activate se). cbn.
+  f_equal.
+  - apply Axioms.extensionality. intros.
+    apply Axioms.extensionality. intros.
+    apply Axioms.extensionality. intros.
+    apply propositional_extensionality.
+    split.
+    + intros. eprod_crush. subst.
+      eexists; split; eauto. reflexivity.
+    + intros. eprod_crush. subst.
+      eexists; split; eauto. reflexivity.
+  - apply Axioms.extensionality. intros.
+    apply Axioms.extensionality. intros.
+    apply propositional_extensionality.
+    split.
+    + intros. eprod_crush. subst.
+      eexists; split; eauto. reflexivity.
+    + intros. eprod_crush. subst.
+      eexists; split; eauto. reflexivity.
+Qed.
+
+Lemma layer_lifting_simulation1 `(R1: abrel Ks1 Kf1) `(R2: abrel Ks2 Kf2)
+      (Ls: layer _) Lf:
   disjoint_abrel R1 R2 -> forward_simulation 1 R1 Ls Lf ->
-  forward_simulation 1 (R1 * R2)%abrel (lift_layer_k Ls) (lift_layer_k Lf).
+  forward_simulation 1 (R1 * R2)%abrel $(Ls@Ks2) $(Lf@Kf2).
 Proof.
   intros HR [HL]. constructor.
   eapply Forward_simulation with (fsim_order HL) (state_match Ls Lf R1 R2 HL).
@@ -366,14 +523,56 @@ Proof.
   - apply (fsim_order_wf HL).
 Qed.
 
+Lemma li_iso_left_unit `(F: LiIso liA liB):
+  li_iso_comp li_iso_id F = F.
+Proof.
+  destruct F. unfold li_iso_comp. cbn. f_equal.
+  - destruct query_iso0. destruct a.
+    f_equal. f_equal.
+    apply Axioms.proof_irr.
+    apply Axioms.proof_irr.
+  - destruct reply_iso0. destruct a.
+    f_equal. f_equal.
+    apply Axioms.proof_irr.
+    apply Axioms.proof_irr.
+  - apply Axioms.proof_irr.
+Qed.
+
+Lemma li_iso_right_unit `(F: LiIso liA liB):
+  li_iso_comp F li_iso_id = F.
+Proof.
+  destruct F. unfold li_iso_comp. cbn. f_equal.
+  - destruct query_iso0. destruct a.
+    f_equal. f_equal.
+    apply Axioms.proof_irr.
+    apply Axioms.proof_irr.
+  - destruct reply_iso0. destruct a.
+    f_equal. f_equal.
+    apply Axioms.proof_irr.
+    apply Axioms.proof_irr.
+  - apply Axioms.proof_irr.
+Qed.
+
+Lemma layer_lifting_simulation2  `(R1: abrel Ks1 Kf1) `(R2: abrel Ks2 Kf2)
+      (Ls: layer _) Lf:
+  disjoint_abrel R1 R2 -> forward_simulation 1 R2 Ls Lf ->
+  forward_simulation 1 (R1 * R2)%abrel $(Ls@Ks1) $(Lf@Kf1).
+Proof.
+  intros HR H.
+  eapply (layer_lifting_simulation1 R2 R1) in H.
+  apply layer_comm_simulation in H.
+  2: { unfold disjoint_abrel in *. intros; eauto. }
+  rewrite !map_twice in H. unfold lf in *.
+  rewrite !li_iso_right_unit in H. apply H.
+Qed.
+
 (* The definition of tensor composition in terms of flat composition *)
 Section TENSOR.
 
-  Context {K1 K2: Type} (L1: layer K1) (L2: layer K2).
-  Let LK1 := lift_layer_k (K2 := K2) L1.
-  Let LK2 := layer_comm (lift_layer_k (K2 := K1) L2).
+  Context `(L1: layer K1) `(L2: layer K2).
+  Let LK1: layer (K1 * K2) := $(L1@K2).
+  Let LK2: layer (K1 * K2) := $(L2@K1).
   Let LK i := match i with true => LK1 | false => LK2 end.
-
   Definition tensor_comp_semantics' sk := flat_comp_semantics' LK sk.
 
 End TENSOR.
@@ -393,10 +592,8 @@ Section MONOTONICITY.
   Proof.
     unfold tensor_comp_semantics'. apply flat_composition_simulation'.
     - intros [|].
-      + apply layer_lifting_simulation; eauto.
-      + apply layer_comm_simulation.
-        apply layer_lifting_simulation; eauto.
-        intros se * A B. eapply HR; eauto.
+      + apply layer_lifting_simulation1; eauto.
+      + apply layer_lifting_simulation2; eauto.
     - intros [|]; auto.
   Qed.
 
