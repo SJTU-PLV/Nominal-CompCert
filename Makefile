@@ -123,14 +123,13 @@ BACKEND=\
   LocalLib.v Jumptablegen.v CheckDef.v Jumptablegenproof.v\
   RelocProgram.v RelocProgramBytes.v\
   Symbtablegen.v Symbtablegenproof.v\
-  Reloctablesgen.v\
+  Reloctablesgen.v Reloctablesgenproof.v\
   RelocBingen.v RelocBinDecode.v RelocBingenproof.v\
   TranslateInstr.v TranslateInstrSize.v\
   AsmLongInt.v\
   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
   AsmInject.v
 
-# Reloctablesgenproof.v
 
 # Encoding of data into bytes
 
