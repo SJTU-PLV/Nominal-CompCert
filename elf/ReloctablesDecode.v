@@ -1,5 +1,4 @@
 Require Import Coqlib Integers AST Maps.
-Require Import Asm.
 Require Import Errors.
 Require Import RelocProg RelocProgramBytes Encode.
 Require Import Memdata.
@@ -102,7 +101,7 @@ Proof.
     destruct rt;simpl;lia.
 
 Qed.
-
+   
 Definition decode_relocentry (elf64: bool) (m: ZTree.t ident) (l: list byte) : res relocentry :=
   if elf64 then
     do (ofsbytes, l) <- take_drop 8 l;
@@ -145,13 +144,31 @@ Proof.
   unfold encode_reloc_info in EQ. repeat destr_in EQ.
   f_equal. repeat f_equal.
   destr.
-  (* destruct  *)
-  (* Z.mod_opp_opp *)
-  admit. admit.
-  admit. admit.
-  (* rewrite Z.mod_small;try lia. *)
-  (* simpl. unfold two_power_pos. simpl. lia. *)
-  (* rewrite encode_int_length. auto. *)
+
+  destruct (zlt reloc_addend 0).
+  (* prove l is contradiction *)
+  apply (Z.sub_lt_mono_l _ _ (Z.pow_pos 2 64)) in l.
+  rewrite <- Z.mod_opp_l_nz in l;try lia.
+  simpl in l.
+  rewrite Z.mod_small in l;try lia.
+  unfold not. intros. apply Z.mod_opp_l_z in H13.
+  rewrite Z.mod_small in H13;try lia. lia.
+
+  rewrite Z.mod_small;try lia.
+
+  destruct (zlt reloc_addend 0).
+  apply Z.opp_inj.
+  rewrite Z.opp_sub_distr.
+  rewrite Z.add_comm. rewrite Z.add_opp_r.
+  rewrite <- Z.mod_opp_l_nz;try lia. rewrite Z.mod_small;try lia.
+
+  rewrite Z.mod_small in g;try lia.
+
+  unfold two_p. simpl. apply Z.mod_pos_bound.
+  unfold two_power_pos. simpl. lia.
+
+  rewrite encode_int_length. lia.
+
   unfold encode_reloc_info in EQ. repeat destr_in EQ.
   unfold encode_int64.   rewrite encode_int_length. auto.
   
@@ -171,5 +188,6 @@ Proof.
   unfold encode_reloc_info in EQ. repeat destr_in EQ. 
   unfold encode_int32. rewrite encode_int_length. auto.
   monadInv H11.
-Admitted.
+Qed.
+
 
