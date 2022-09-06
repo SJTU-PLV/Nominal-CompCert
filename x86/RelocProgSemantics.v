@@ -17,7 +17,19 @@ Require Import Locations Stacklayout Conventions.
 Require Import Linking Errors.
 Require Import LocalLib.
 
-    
+Remark in_norepet_unique_r:
+  forall T (gl: list (ident * T)) id g,
+  In (id, g) gl -> list_norepet (map fst gl) ->
+  exists gl1 gl2, gl = gl1 ++ (id, g) :: gl2 /\ ~In id (map fst gl2).
+Proof.
+  induction gl as [|[id1 g1] gl]; simpl; intros.
+  contradiction.
+  inv H0. destruct H.
+  inv H. exists nil, gl. auto.
+  exploit IHgl; eauto. intros (gl1 & gl2 & X & Y).
+  exists ((id1, g1) :: gl1), gl2; split;auto. rewrite X; auto.
+Qed.
+
 (** Global environments using only the symbol table *)
 
 Definition gdef := globdef Asm.fundef unit.
@@ -944,7 +956,7 @@ Definition alloc_external_symbols (m: mem) (t: symbtable) : option mem :=
   PTree.fold alloc_external_comm_symbol t (Some m).
 
 
-Definition alloc_section (symbtbl: symbtable) (r: option mem) (id: ident) (sec: section) : option mem :=
+Definition alloc_section (r: option mem) (id: ident) (sec: section) : option mem :=
   match r with
   | None => None
   | Some m =>
@@ -976,8 +988,8 @@ Definition alloc_section (symbtbl: symbtable) (r: option mem) (id: ident) (sec: 
     end
   end.
 
-Definition alloc_sections (symbtbl: symbtable) (sectbl: sectable) (m:mem) :option mem :=
-  PTree.fold (alloc_section symbtbl) sectbl (Some m).
+Definition alloc_sections (sectbl: sectable) (m:mem) :option mem :=
+  PTree.fold alloc_section sectbl (Some m).
 
 (** init data to bytes *)
 Definition bytes_of_init_data (i: init_data): list memval :=
@@ -1083,7 +1095,7 @@ Definition globals_initialized (ge: Genv.t) (prog: program) (m:mem):=
 
 Definition init_mem (p: program) :=
   let ge := globalenv p in
-  match alloc_sections ge p.(prog_symbtable) p.(prog_sectable) Mem.empty with
+  match alloc_sections ge p.(prog_sectable) Mem.empty with
   | Some m1 =>
     alloc_external_symbols m1 p.(prog_symbtable)
   | None => None
@@ -1118,6 +1130,18 @@ Proof.
     exploit IHl; eauto. intros. congruence.
 Qed.
 
+Lemma store_init_data_list_support: forall l ge m b ofs m',
+    store_init_data_list ge m b ofs l = Some m' ->
+    Mem.support m' = Mem.support m.
+Proof.
+  induction l;intros.
+  - inv H. auto.
+  - inv H. destr_match_in H1;inv H1.
+    transitivity (Mem.support m0). eapply IHl. eauto.
+    destruct a;simpl in EQ;try (eapply Mem.support_store;eauto;fail).
+    eapply Genv.store_zeros_support. eauto.
+Qed.
+
 Lemma store_init_data_stack : forall v ge (m m' : mem) (b : block) (ofs : Z),
        store_init_data ge m b ofs v = Some  m' -> Mem.stack (Mem.support m') = Mem.stack (Mem.support m).
 Proof.
@@ -1137,8 +1161,8 @@ Proof.
     intros. congruence.
 Qed.
 
-Lemma alloc_section_stack: forall ge symbtbl id sec m m',
-    alloc_section ge symbtbl (Some m) id sec = Some m' ->
+Lemma alloc_section_stack: forall ge id sec m m',
+    alloc_section ge (Some m) id sec = Some m' ->
     Mem.stack (Mem.support m) = Mem.stack (Mem.support m').
 Proof.
   unfold alloc_section. intros.
@@ -1164,11 +1188,11 @@ Definition alloc_property_aux (m: mem) (optm': option mem):=
   forall m', optm' = Some m' ->
         Mem.stack (Mem.support m) = Mem.stack (Mem.support m').
 
-Lemma alloc_sections_stack_aux: forall ge symbtbl defs m,
+Lemma alloc_sections_stack_aux: forall ge defs m,
      alloc_property_aux m
             (fold_left
     (fun (a : option mem) (p : positive * section) =>
-     alloc_section ge symbtbl a (fst p) (snd p))
+     alloc_section ge a (fst p) (snd p))
     defs (Some m)).
 Proof.
   intros. eapply Bounds.fold_left_preserves.
@@ -1180,12 +1204,12 @@ Proof.
   unfold alloc_property_aux. intros. inv H. auto.
 Qed.
   
-Lemma alloc_sections_stack: forall ge symbtbl sectbl m m',
-    alloc_sections ge symbtbl sectbl m = Some m' ->
+Lemma alloc_sections_stack: forall ge sectbl m m',
+    alloc_sections ge sectbl m = Some m' ->
     Mem.stack (Mem.support m) = Mem.stack (Mem.support m').
 Proof.
   
-  unfold alloc_sections. intros ge symbtbl sectbl m m'.
+  unfold alloc_sections. intros ge sectbl m m'.
   rewrite PTree.fold_spec. intros.
   exploit alloc_sections_stack_aux;eauto.
 Qed.
@@ -1345,6 +1369,139 @@ Qed.
 
 End INITDATA.
 
+Definition match_sectbl_symbtbl (sectbl:sectable) symbtbl:=
+  forall id e,
+    symbtbl ! id = Some e ->
+    match symbentry_secindex e with
+    | secindex_normal i =>        
+      exists sec,sectbl ! i = Some sec
+    | secindex_comm =>
+      symbentry_type e = symb_data
+    | secindex_undef =>
+      symbentry_type e <> symb_notype
+    end.
+
+Lemma alloc_sections_valid_aux: forall b l m m' ge,
+    fold_left
+      (fun (a : option mem)
+         (p : positive * RelocProg.section instruction init_data)
+       => alloc_section ge a (fst p) (snd p)) l (Some m) = Some m' ->
+      sup_In b m.(Mem.support) ->
+      sup_In b m'.(Mem.support).
+Admitted.
+
+Lemma alloc_sections_valid: forall id sec sectbl m m' ge,
+      sectbl ! id = Some sec ->
+      alloc_sections ge sectbl m = Some m' ->     
+      sup_In (Global id) m'.(Mem.support).
+Proof.
+  unfold alloc_sections.
+  intros id sec sectbl m m' ge A1 A2 .
+  rewrite PTree.fold_spec in A2.
+  apply PTree.elements_correct in A1.
+  generalize (PTree.elements_keys_norepet sectbl).
+  intros NOREP.
+  exploit in_norepet_unique_r;eauto.
+  intros (gl1 & gl2 & P1 & P2).
+  unfold section in *. rewrite P1 in *.
+  rewrite fold_left_app in A2.
+  simpl in A2.
+   unfold ident in *.
+  destruct ((alloc_section ge
+            (fold_left
+               (fun (a : option mem)
+                  (p : positive *
+                       RelocProg.section instruction init_data) =>
+                alloc_section ge a (fst p) (snd p)) gl1 
+               (Some m)) id sec)) eqn:FOLD.
+  - 
+    exploit alloc_sections_valid_aux;eauto.
+    unfold alloc_section in FOLD at 1. destr_in FOLD.
+    destruct sec.
+    + simpl in *.
+      destruct Mem.alloc_glob eqn:ALLOC in FOLD.
+      apply Mem.support_alloc_glob in ALLOC.
+      generalize (Mem.sup_incr_glob_in1 id (Mem.support m1)).
+      rewrite <- ALLOC.
+      intros.
+      exploit Mem.drop_perm_valid_block_1;eauto.
+    + simpl in *.     
+      destruct Mem.alloc_glob eqn:ALLOC in FOLD.
+      repeat destr_in FOLD.
+      apply Mem.support_alloc_glob in ALLOC.      
+      generalize (Mem.sup_incr_glob_in1 id (Mem.support m1)).
+      rewrite <- ALLOC.
+      exploit Genv.store_zeros_support;eauto.
+      exploit store_init_data_list_support;eauto.
+      intros. rewrite <- H1 in *.
+      rewrite <- H in *.
+      exploit Mem.drop_perm_valid_block_1;eauto.
+    + simpl in *.     
+      destruct Mem.alloc_glob eqn:ALLOC in FOLD.
+      repeat destr_in FOLD.
+      apply Mem.support_alloc_glob in ALLOC.      
+      generalize (Mem.sup_incr_glob_in1 id (Mem.support m1)).
+      rewrite <- ALLOC.
+      exploit Genv.store_zeros_support;eauto.
+      exploit store_init_data_list_support;eauto.
+      intros. rewrite <- H1 in *.
+      rewrite <- H in *.
+      exploit Mem.drop_perm_valid_block_1;eauto.
+  - clear A1 NOREP P1 P2.
+    induction gl2.
+    simpl in A2. inv A2.
+    apply IHgl2. auto.
+Qed.
+
+Lemma alloc_external_symbols_valid: forall id e symbtbl m m',
+    symbtbl ! id = Some e ->
+    alloc_external_symbols m symbtbl = Some m' ->
+    match symbentry_secindex e with
+    | secindex_normal i =>
+      sup_In (Global i) m.(Mem.support) ->
+      sup_In (Global i) m'.(Mem.support)
+    | secindex_comm =>
+      symbentry_type e = symb_data ->
+      sup_In (Global id) m'.(Mem.support)
+    | secindex_undef =>
+      symbentry_type e <> symb_notype ->
+      sup_In (Global id) m'.(Mem.support)
+    end.
+Admitted.
+
+   
+    
+
+Lemma find_symbol_not_fresh: forall p id b m ofs,
+    match_sectbl_symbtbl p.(prog_sectable) p.(prog_symbtable) ->
+    init_mem p = Some m ->
+    Genv.find_symbol (globalenv p) id = Some (b,ofs) ->
+    Mem.valid_block m b.
+Proof.
+  unfold init_mem, globalenv, Genv.find_symbol, gen_symb_map.
+  simpl. intros p id b m ofs MATCH INIT GENV.
+  destr_in INIT.
+  rewrite PTree.gmap in GENV. unfold option_map in GENV.
+  destr_in GENV. inv GENV.
+  unfold gen_global in H0.
+
+  unfold match_sectbl_symbtbl in MATCH.
+  generalize (MATCH _ _ Heqo0). intros A.  
+  unfold Mem.valid_block.
+  destr_in A.
+  - destruct A.
+    eapply alloc_sections_valid in Heqo;eauto.
+    eapply alloc_external_symbols_valid in INIT;eauto.
+    rewrite Heqs0 in INIT. inv H0. eauto.
+  - eapply alloc_external_symbols_valid in INIT;eauto.
+    rewrite Heqs0,A in INIT.
+    inv H0. auto.
+  - eapply alloc_external_symbols_valid in INIT;eauto.
+    rewrite Heqs0 in INIT.
+    inv H0. auto.
+Qed.
+    (* Mem.sup_incr_glob_in *)
+  
 Inductive initial_state_gen {D: Type} (p: RelocProg.program fundef unit instruction D) (rs: regset) m: state -> Prop :=
 | initial_state_gen_intro:
     forall m1 m2 stk

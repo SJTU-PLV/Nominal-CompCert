@@ -457,20 +457,6 @@ Proof.
 Admitted.
 
 
-Remark in_norepet_unique_r:
-  forall T (gl: list (ident * T)) id g,
-  In (id, g) gl -> list_norepet (map fst gl) ->
-  exists gl1 gl2, gl = gl1 ++ (id, g) :: gl2 /\ ~In id (map fst gl2).
-Proof.
-  induction gl as [|[id1 g1] gl]; simpl; intros.
-  contradiction.
-  inv H0. destruct H.
-  inv H. exists nil, gl. auto.
-  exploit IHgl; eauto. intros (gl1 & gl2 & X & Y).
-  exists ((id1, g1) :: gl1), gl2; split;auto. rewrite X; auto.
-Qed.
-
-
 Lemma genv_pres_instr_aux2:  forall defs (b : block) (f : function) (ofs : Z) (i : instruction) ge sectbl
     (* (OFS: 0 <= ofs <= Ptrofs.max_unsigned) *)
     (FSIZE: code_size instr_size (fn_code f) <= Ptrofs.max_unsigned)
@@ -1123,28 +1109,76 @@ Proof.
       destruct INIT1. apply H2 in H0.
       destruct H0. discriminate.
     + rewrite H1 in *.
-      admit. (* rewrite H2 in *. *)
-      (* unfold gvar_readonly_symbtype in H3. destr_in H3;rewrite H3 in *. *)
-      (* * simpl in INIT2. *)
-      (*   destruct INIT2 as (RPERM & OFSRANGE & LOADSTORE & BYTES). *)
-      (*   Local Transparent Mem.loadbytes. *)
-      (*   unfold Mem.loadbytes in BYTES. *)
-      (*   destr_in BYTES. *)
-      (*   destruct INIT1 as (RPERM1 & OFSRANGE1  & LOADSTORE1 & BYTES1). *)
-      (*   apply OFSRANGE1 in H0. destruct H0. *)
-      (*   assert (NO: gvar_volatile v = false). *)
-      (*   { unfold Genv.perm_globvar in H0. destruct (gvar_volatile v); auto. inv H0. } *)
-      (*   generalize (BYTES1 NO). unfold Mem.loadbytes. destruct Mem.range_perm_dec; intros E1; inv E1. *)
-      (*   inv BYTES. *)
-      (*   (* H5 and H6 *) *)
-      (*   eapply Mem_getN_forall2 with (p := 0) (n := Z.to_nat (init_data_list_size (gvar_init v))). *)
-      (*   rewrite H5,H6. apply bytes_of_init_inject. lia. lia. *)
-    (* * admit. *)
-    + admit.
-    + admit.
-    + admit.
-    + admit.
-Admitted.
+      simpl in INIT2.
+      destruct INIT1 as (RPERM1 & OFSRANGE1  & LOADSTORE1 & BYTES1).
+      apply OFSRANGE1 in H0. destruct H0.      
+      unfold Genv.perm_globvar in *.
+      rewrite H2 in *. destruct (gvar_volatile v).
+      inv H0.
+      destruct INIT2 as (RPERM & OFSRANGE & LOADSTORE & BYTES).
+      Local Transparent Mem.loadbytes.
+      unfold Mem.loadbytes in BYTES.
+      destr_in BYTES.
+      generalize (BYTES1 (eq_refl false)).
+      unfold Mem.loadbytes. destruct Mem.range_perm_dec; intros E1; inv E1.
+      inv BYTES.
+      (* H4 and H5 *)
+      eapply Mem_getN_forall2 with (p := 0) (n := Z.to_nat (init_data_list_size (gvar_init v))).
+      rewrite H4,H5. apply bytes_of_init_inject. lia. lia.
+    + rewrite H1 in *.
+      simpl in INIT2.
+      destruct INIT1 as (RPERM1 & OFSRANGE1  & LOADSTORE1 & BYTES1).
+      apply OFSRANGE1 in H0. destruct H0.      
+      unfold Genv.perm_globvar in *.
+      rewrite H2 in *. destruct (gvar_volatile v).
+      inv H0.
+      destruct INIT2 as (RPERM & OFSRANGE & LOADSTORE & BYTES).
+      Local Transparent Mem.loadbytes.
+      unfold Mem.loadbytes in BYTES.
+      destr_in BYTES.
+      generalize (BYTES1 (eq_refl false)).
+      unfold Mem.loadbytes. destruct Mem.range_perm_dec; intros E1; inv E1.
+      inv BYTES.
+      (* H4 and H5 *)
+      eapply Mem_getN_forall2 with (p := 0) (n := Z.to_nat (init_data_list_size (gvar_init v))).
+      rewrite H4,H5. apply bytes_of_init_inject. lia. lia.
+      
+    + rewrite H2,H1,H3,H4 in *.
+      destruct INIT1. apply H5 in H0.
+      destruct H0. discriminate.
+      
+    + rewrite H2,H1,H3,H4,H5 in *.
+      simpl in INIT1.
+      destruct INIT1. apply H6 in H0.
+      destruct H0. lia.
+    + rewrite H2,H1,H3,H4,H5,H6 in *.
+      simpl in *.
+      destruct INIT1 as (RPERM1 & OFSRANGE1  & LOADSTORE1 & BYTES1).
+      apply OFSRANGE1 in H0. destruct H0.      
+      unfold Genv.perm_globvar in *.
+      destruct (gvar_volatile v).
+      inv H0.
+      destruct INIT2 as (RPERM & OFSRANGE & LOADSTORE & BYTES).
+
+      eapply Mem_getN_forall2 with (p := 0) (n := Z.to_nat (Z.max sz 0)).
+      Local Transparent Mem.loadbytes.
+      unfold Mem.loadbytes in *.
+      destr_in BYTES. inv BYTES.
+      generalize (BYTES1 (eq_refl false)).
+      intros. destr_in H7. rewrite Z.add_0_r in H7.
+      rewrite app_nil_r in H7.
+      inv H7. rewrite H8,H10.
+      rewrite app_nil_r.
+      assert ((Z.to_nat sz) = (Z.to_nat (Z.max sz 0))).
+      destruct sz;simpl;lia.
+      rewrite <- H7.
+      set (n:= Z.to_nat sz).
+      clear H7. induction n.
+      simpl. constructor.
+      simpl. constructor. apply memval_inject_byte.
+      auto.
+      lia. lia.
+Qed.
 
 
 Lemma init_mem_inj_2:
@@ -1156,7 +1190,11 @@ Proof.
   - exploit init_meminj_invert_strong;eauto.
     intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
     unfold Mem.flat_inj in H. destr_in H. inv H.
+    unfold Mem.valid_block. simpl.
+    unfold init_mem in TIM. destr_in TIM.
     (* need Genv.find_symbol_not_fresh for tge*)
+    Mem.support
+    Genv.find_symbol_not_fresh
     admit.
   - red;intros.
     unfold Mem.flat_inj in *.
