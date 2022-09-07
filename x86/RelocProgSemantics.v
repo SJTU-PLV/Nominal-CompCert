@@ -1369,7 +1369,7 @@ Qed.
 
 End INITDATA.
 
-Definition match_sectbl_symbtbl (sectbl:sectable) symbtbl:=
+Definition well_formed_symbtbl (sectbl:sectable) symbtbl:=
   forall id e,
     symbtbl ! id = Some e ->
     match symbentry_secindex e with
@@ -1381,14 +1381,79 @@ Definition match_sectbl_symbtbl (sectbl:sectable) symbtbl:=
       symbentry_type e <> symb_notype
     end.
 
-Lemma alloc_sections_valid_aux: forall b l m m' ge,
+Lemma alloc_sections_valid_aux: forall l b m m' ge,
     fold_left
       (fun (a : option mem)
          (p : positive * RelocProg.section instruction init_data)
        => alloc_section ge a (fst p) (snd p)) l (Some m) = Some m' ->
       sup_In b m.(Mem.support) ->
       sup_In b m'.(Mem.support).
-Admitted.
+Proof.
+  induction l;intros.
+  simpl in H. inv H. auto.
+  simpl in H. destruct a.
+  destruct s.
+  - simpl in *.
+    destruct Mem.alloc_glob eqn:ALLOC in H.
+    apply Mem.support_alloc_glob in ALLOC.
+    destruct (Mem.drop_perm) eqn:FOLD in H.
+    eapply IHl;eauto.
+    eapply Mem.drop_perm_valid_block_1;eauto.
+    unfold Mem.valid_block.
+    rewrite ALLOC.
+    apply Mem.sup_incr_glob_in. right. auto.
+    clear IHl.
+    induction l;simpl in H.
+    inv H.  apply IHl. auto.
+  - simpl in *.
+    destruct Mem.alloc_glob eqn:ALLOC in H.
+    destr_in H. destr_in H.
+    apply Mem.support_alloc_glob in ALLOC.
+    destruct (Mem.drop_perm) eqn:FOLD in H.
+    eapply IHl;eauto.
+    eapply Mem.drop_perm_valid_block_1;eauto.
+    unfold Mem.valid_block.
+    
+    eapply store_init_data_list_support in Heqo0.
+    rewrite Heqo0.
+    eapply Genv.store_zeros_support in Heqo. rewrite Heqo.
+    rewrite ALLOC.
+    apply Mem.sup_incr_glob_in. right. auto.
+    clear IHl.
+    induction l;simpl in H.
+    inv H.  apply IHl. auto.
+    clear IHl.
+    induction l;simpl in H.
+    inv H.  apply IHl. auto.
+        clear IHl.
+    induction l;simpl in H.
+    inv H.  apply IHl. auto.
+
+  - simpl in *.
+    destruct Mem.alloc_glob eqn:ALLOC in H.
+    destr_in H. destr_in H.
+    apply Mem.support_alloc_glob in ALLOC.
+    destruct (Mem.drop_perm) eqn:FOLD in H.
+    eapply IHl;eauto.
+    eapply Mem.drop_perm_valid_block_1;eauto.
+    unfold Mem.valid_block.
+    
+    eapply store_init_data_list_support in Heqo0.
+    rewrite Heqo0.
+    eapply Genv.store_zeros_support in Heqo. rewrite Heqo.
+    rewrite ALLOC.
+    apply Mem.sup_incr_glob_in. right. auto.
+    clear IHl.
+    induction l;simpl in H.
+    inv H.  apply IHl. auto.
+    clear IHl.
+    induction l;simpl in H.
+    inv H.  apply IHl. auto.
+        clear IHl.
+    induction l;simpl in H.
+    inv H.  apply IHl. auto.
+Qed.
+
 
 Lemma alloc_sections_valid: forall id sec sectbl m m' ge,
       sectbl ! id = Some sec ->
@@ -1453,6 +1518,67 @@ Proof.
     apply IHgl2. auto.
 Qed.
 
+Lemma alloc_external_symbols_valid_aux2: forall l,
+        fold_left
+          (fun (a : option mem) (p : positive * symbentry) =>
+             alloc_external_comm_symbol a (fst p) (snd p)) l None =
+        None.
+Proof.
+  induction l;simpl;auto.
+Qed.
+
+Lemma alloc_external_symbols_valid_aux: forall l m m' b,
+    fold_left
+      (fun (a : option mem) (p : positive * symbentry) =>
+         alloc_external_comm_symbol a (fst p) (snd p)) l (Some m) =
+    Some m' ->
+    sup_In b (Mem.support m) ->
+    sup_In b (Mem.support m').
+Proof.
+  induction l;intros.
+  simpl in H. inv H. auto.
+  simpl in H.
+  destruct (symbentry_type (snd a)).
+  - destruct (symbentry_secindex (snd a)).
+    + eapply IHl;eauto.
+    + rewrite alloc_external_symbols_valid_aux2 in H. inv H.
+    + destruct Mem.alloc_glob eqn:ALLOC in H.
+      destruct Mem.drop_perm eqn:DROP in H.
+      eapply IHl;eauto.
+      eapply Mem.drop_perm_valid_block_1;eauto.
+      unfold Mem.valid_block. apply Mem.support_alloc_glob in ALLOC.
+      rewrite ALLOC. eapply Mem.sup_incr_glob_in.
+      right. auto.
+      rewrite alloc_external_symbols_valid_aux2 in H. inv H.
+  - destruct (symbentry_secindex (snd a)).
+    + eapply IHl;eauto.
+    + destruct Mem.alloc_glob eqn:ALLOC in H.
+      destruct store_zeros eqn:STORE in H.
+      destruct Mem.drop_perm eqn:DROP in H.
+      eapply IHl;eauto.
+      eapply Mem.drop_perm_valid_block_1;eauto.
+      unfold Mem.valid_block.
+      erewrite Genv.store_zeros_support.
+      apply Mem.support_alloc_glob in ALLOC.
+      rewrite ALLOC. eapply Mem.sup_incr_glob_in.
+      right. auto.  eauto.
+      rewrite alloc_external_symbols_valid_aux2 in H. inv H.
+      rewrite alloc_external_symbols_valid_aux2 in H. inv H.
+    + destruct Mem.alloc_glob eqn:ALLOC in H.
+      destruct store_zeros eqn:STORE in H.
+      destruct Mem.drop_perm eqn:DROP in H.
+      eapply IHl;eauto.
+      eapply Mem.drop_perm_valid_block_1;eauto.
+      unfold Mem.valid_block.
+      erewrite Genv.store_zeros_support.
+      apply Mem.support_alloc_glob in ALLOC.
+      rewrite ALLOC. eapply Mem.sup_incr_glob_in.
+      right. auto.  eauto.
+      rewrite alloc_external_symbols_valid_aux2 in H. inv H.
+      rewrite alloc_external_symbols_valid_aux2 in H. inv H.
+  - rewrite alloc_external_symbols_valid_aux2 in H. inv H.
+Qed.            
+    
 Lemma alloc_external_symbols_valid: forall id e symbtbl m m',
     symbtbl ! id = Some e ->
     alloc_external_symbols m symbtbl = Some m' ->
@@ -1467,13 +1593,104 @@ Lemma alloc_external_symbols_valid: forall id e symbtbl m m',
       symbentry_type e <> symb_notype ->
       sup_In (Global id) m'.(Mem.support)
     end.
-Admitted.
-
-   
-    
+Proof.
+  unfold alloc_external_symbols.
+  intros id e symbtbl m m' A1 A2.
+  rewrite PTree.fold_spec in A2.
+  apply PTree.elements_correct in A1.
+  generalize (PTree.elements_keys_norepet symbtbl).
+  intros NOREP.
+  exploit in_norepet_unique_r;eauto.
+  intros (gl1 & gl2 & P1 & P2).
+  rewrite P1 in *.
+  rewrite fold_left_app in A2.
+  simpl in A2.
+  unfold ident in *.
+  destruct (fold_left
+               (fun (a : option mem) (p : positive * symbentry) =>
+                alloc_external_comm_symbol a (fst p) (snd p)) gl1
+               (Some m)) eqn:FOLD.
+  simpl in A2.
+  - destruct (symbentry_secindex e).
+    + destruct (symbentry_type e).
+      * intros.
+        exploit alloc_external_symbols_valid_aux.
+        eapply FOLD. eauto. intros.
+        exploit alloc_external_symbols_valid_aux.
+        eapply A2. eauto. auto.
+      * intros.
+        exploit alloc_external_symbols_valid_aux.
+        eapply FOLD. eauto. intros.
+        exploit alloc_external_symbols_valid_aux.
+        eapply A2. eauto. auto.
+      * clear A1 P1 P2 NOREP.
+        induction gl2.
+        simpl in A2. inv A2.
+        simpl in A2. apply IHgl2. auto.
+    + intros.
+      destruct (symbentry_type e);try congruence.
+      destruct Mem.alloc_glob eqn:ALLOC in A2.
+      destruct store_zeros eqn:STORE in A2.
+      * destruct Mem.drop_perm eqn:DROP in A2.
+        -- exploit alloc_external_symbols_valid_aux.
+           apply A2. eapply Mem.drop_perm_valid_block_1;eauto.
+           unfold Mem.valid_block.
+           erewrite  Genv.store_zeros_support;eauto.
+           apply Mem.support_alloc_glob in ALLOC.
+           rewrite ALLOC.
+           erewrite Mem.sup_incr_glob_in. left.
+           eauto. auto.
+        -- clear A1 P1 P2 NOREP.
+           induction gl2.
+           simpl in A2. inv A2.
+           simpl in A2. apply IHgl2. auto.
+      * clear A1 P1 P2 NOREP.
+        induction gl2.
+        simpl in A2. inv A2.
+        simpl in A2. apply IHgl2. auto.
+    + intros.
+      destruct (symbentry_type e);try congruence.
+      * destruct Mem.alloc_glob eqn:ALLOC in A2.
+        destruct Mem.drop_perm eqn:DROP in A2.
+        -- exploit alloc_external_symbols_valid_aux.
+           apply A2. eapply Mem.drop_perm_valid_block_1;eauto.
+           unfold Mem.valid_block.
+           apply Mem.support_alloc_glob in ALLOC.
+           rewrite ALLOC.
+           erewrite Mem.sup_incr_glob_in. left.
+           eauto. auto.
+        -- clear A1 P1 P2 NOREP.
+           induction gl2.
+           simpl in A2. inv A2.
+           simpl in A2. apply IHgl2. auto.
+      * destruct Mem.alloc_glob eqn:ALLOC in A2.
+        destruct store_zeros eqn:STORE in A2.
+        -- destruct Mem.drop_perm eqn:DROP in A2.
+           ++ exploit alloc_external_symbols_valid_aux.
+              apply A2. eapply Mem.drop_perm_valid_block_1;eauto.
+              unfold Mem.valid_block.
+              erewrite  Genv.store_zeros_support;eauto.
+              apply Mem.support_alloc_glob in ALLOC.
+              rewrite ALLOC.
+              erewrite Mem.sup_incr_glob_in. left.
+              eauto. auto.
+           ++ clear A1 P1 P2 NOREP.
+              induction gl2.
+              simpl in A2. inv A2.
+              simpl in A2. apply IHgl2. auto.
+        --
+          clear A1 P1 P2 NOREP.
+          induction gl2.
+          simpl in A2. inv A2.
+          simpl in A2. apply IHgl2. auto.
+  - clear A1 P1 P2 NOREP.
+    induction gl2.
+    simpl in A2. inv A2.
+    simpl in A2. apply IHgl2. auto.
+Qed.
 
 Lemma find_symbol_not_fresh: forall p id b m ofs,
-    match_sectbl_symbtbl p.(prog_sectable) p.(prog_symbtable) ->
+    well_formed_symbtbl p.(prog_sectable) p.(prog_symbtable) ->
     init_mem p = Some m ->
     Genv.find_symbol (globalenv p) id = Some (b,ofs) ->
     Mem.valid_block m b.
@@ -1485,7 +1702,7 @@ Proof.
   destr_in GENV. inv GENV.
   unfold gen_global in H0.
 
-  unfold match_sectbl_symbtbl in MATCH.
+  unfold well_formed_symbtbl in MATCH.
   generalize (MATCH _ _ Heqo0). intros A.  
   unfold Mem.valid_block.
   destr_in A.
@@ -1500,7 +1717,7 @@ Proof.
     rewrite Heqs0 in INIT.
     inv H0. auto.
 Qed.
-    (* Mem.sup_incr_glob_in *)
+
   
 Inductive initial_state_gen {D: Type} (p: RelocProg.program fundef unit instruction D) (rs: regset) m: state -> Prop :=
 | initial_state_gen_intro:

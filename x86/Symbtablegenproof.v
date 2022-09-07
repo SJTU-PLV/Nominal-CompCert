@@ -301,6 +301,81 @@ Definition match_prog (p: Asm.program) (tp: program) :=
 
 Hypothesis TRANSF: match_prog prog tprog.
 
+(* some properties *)
+Lemma match_prog_well_formed_symbtbl:
+  well_formed_symbtbl (prog_sectable tprog) (prog_symbtable tprog).
+Proof.
+  unfold match_prog in TRANSF.
+  unfold transf_program in TRANSF.
+  repeat destr_in TRANSF.
+  simpl. unfold well_formed_symbtbl.
+  unfold gen_symb_table,create_sec_table.
+  intros.
+  inv w. clear wf_prog_no_local_jmps.
+  rename wf_prog_norepet_defs into NOREP.
+  clear l.
+  set (l := (AST.prog_defs prog)) in *.
+  clear tge.
+  assert (LEN: exists n, length l = n).
+  { clear H NOREP.
+    induction l. exists O. auto.
+    destruct IHl.
+    eexists. simpl. auto. }
+  destruct LEN. revert H H0.
+  generalize x,l. clear NOREP x l.
+  induction x;intros.
+  rewrite length_zero_iff_nil in H0. subst.
+  simpl in H. rewrite PTree.gempty in H. inv H.
+  apply LocalLib.length_S_inv in H0.
+  destruct H0 as (l' & a & A1 & A2). subst.
+  rewrite fold_left_app in H. simpl in H.
+  unfold acc_symb in H at 1.
+  destruct a.
+  destruct (Pos.eq_dec i id).
+  - subst.
+    rewrite fold_left_app. simpl.
+    rewrite PTree.gss in H. inv H.
+    destruct g.    
+    + destruct f;simpl.     
+      rewrite PTree.gss.
+      eexists. eauto.
+      congruence.
+    + simpl;destruct (gvar_init v);simpl.
+      congruence.
+      destruct i;
+        try (destruct gvar_readonly;
+      simpl;rewrite PTree.gss;
+      eexists;eauto;
+      simpl;rewrite PTree.gss;
+      eexists;eauto).
+      destruct l;simpl;auto.
+      try (destruct gvar_readonly;
+      simpl;rewrite PTree.gss;
+      eexists;eauto;
+      simpl;rewrite PTree.gss;
+      eexists;eauto).
+  - rewrite fold_left_app.
+    rewrite PTree.gsspec in *.
+    destr_in H.    
+    destruct (symbentry_secindex e).
+    + simpl.
+      destruct g.
+      destruct f.
+      rewrite PTree.gsspec. destr.
+      eauto. eapply IHx;eauto.
+      eapply IHx;eauto.
+      destruct (gvar_init v).
+      eapply IHx;eauto.
+      destruct i0;
+      try (destruct gvar_readonly;rewrite PTree.gsspec;destr;
+           eauto;eapply IHx;eauto).
+      destruct l.
+      eapply IHx;eauto.
+      try (destruct gvar_readonly;rewrite PTree.gsspec;destr;
+           eauto;eapply IHx;eauto).
+    + eapply IHx;eauto.
+    + eapply IHx;eauto.
+Qed.
 
 (** ** Definitions of Matching States *)
 
@@ -1190,12 +1265,11 @@ Proof.
   - exploit init_meminj_invert_strong;eauto.
     intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
     unfold Mem.flat_inj in H. destr_in H. inv H.
-    unfold Mem.valid_block. simpl.
-    unfold init_mem in TIM. destr_in TIM.
+    unfold Mem.valid_block. 
     (* need Genv.find_symbol_not_fresh for tge*)
-    Mem.support
-    Genv.find_symbol_not_fresh
-    admit.
+    eapply find_symbol_not_fresh;eauto.
+    eapply match_prog_well_formed_symbtbl.
+      
   - red;intros.
     unfold Mem.flat_inj in *.
     destr_in H0. destr_in H1.
@@ -1215,7 +1289,21 @@ Proof.
       rewrite Z.le_lteq in H0. destruct H0.
       right. unfold not. intros. apply Q1 in H0. destruct H0. lia.
       left. subst. apply Mem.perm_cur. auto.
-    + admit.
+    + rewrite H2. simpl. intros (P2 & Q2) (P1 & Q1).
+      rewrite Z.add_0_r in H0. unfold Mem.flat_inj in H.
+      destr_in H. inv H.
+      (* volatile information loss *)
+      apply Q2 in H0. destruct H0. subst. clear Q2.
+      unfold Genv.perm_globvar in *.
+      inv H0.
+      * apply P1 in H. destruct (gvar_volatile v).
+        -- right. unfold not. intros. 
+          left. apply Mem.perm_cur. eapply Mem.perm_implies.
+          eauto. 
+        right. unfold not. intros. apply Q1 in H0. destruct H0. lia.
+        left. subst. apply Mem.perm_cur. auto.
+    + rewrite H2. simpl. intros (P2 & Q2) (P1 & Q1).
+      admit.
     + admit.
     + admit.
     + admit.
