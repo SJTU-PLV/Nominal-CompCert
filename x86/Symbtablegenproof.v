@@ -148,24 +148,6 @@ Section PRESERVATION.
 
 Variable instr_size : instruction -> Z.
 Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
-(** Assumption about external calls.
-    These should be merged into common properties about external calls later. *)
-Axiom external_call_inject : forall ge j vargs1 vargs2 m1 m2 m1' vres1 t ef,
-    j = Mem.flat_inj (Mem.support m1) ->
-    Val.inject_list j vargs1 vargs2 ->
-    Mem.inject j m1 m2 ->
-    external_call ef ge vargs1 m1 t vres1 m1' ->
-    exists j' vres2 m2',
-      external_call ef ge vargs2 m2 t vres2 m2' /\
-      Val.inject j' vres1 vres2 /\ Mem.inject j' m1' m2' /\
-      inject_incr j j' /\
-      inject_separated j j' m1 m2 /\
-      j' = Mem.flat_inj (Mem.support m1').
-
-
-
-Axiom  external_call_valid_block: forall ef ge vargs m1 t vres m2 b,
-    external_call ef ge vargs m1 t vres m2 -> Mem.valid_block m1 b -> Mem.valid_block m2 b.
 
 
 Lemma prog_instr_valid: forall prog tprog,
@@ -414,12 +396,552 @@ Definition glob_block_valid (m:mem) :=
         Genv.find_ext_funct tge (Vptr b' ofs') = None;
   }.
 
+(** *A new injection: remove the perm_inv *)
+Record magree (f: meminj) (m1 m2: mem) : Prop :=
+  mk_magree {
+    ma_inj:
+      Mem.mem_inj f m1 m2;
+    ma_freeblocks:
+      forall b, ~(Mem.valid_block m1 b) -> f b = None;
+    ma_mappedblocks:
+      forall b b' delta, f b = Some(b', delta) -> Mem.valid_block m2 b';
+    ma_no_overlap:
+      Mem.meminj_no_overlap f m1;
+    ma_representable:
+      forall b b' delta ofs,
+      f b = Some(b', delta) ->
+      Mem.perm m1 b (Ptrofs.unsigned ofs) Max Nonempty \/ Mem.perm m1 b (Ptrofs.unsigned ofs - 1) Max Nonempty ->
+      delta >= 0 /\ 0 <= Ptrofs.unsigned ofs + delta <= Ptrofs.max_unsigned
+  }.
+
+(** Assumption about external calls.
+    These should be merged into common properties about external calls later. *)
+Axiom external_call_inject : forall ge j vargs1 vargs2 m1 m2 m1' vres1 t ef,
+    j = Mem.flat_inj (Mem.support m1) ->
+    Val.inject_list j vargs1 vargs2 ->
+    magree j m1 m2 ->
+    external_call ef ge vargs1 m1 t vres1 m1' ->
+    exists j' vres2 m2',
+      external_call ef ge vargs2 m2 t vres2 m2' /\
+      Val.inject j' vres1 vres2 /\ magree j' m1' m2' /\
+      inject_incr j j' /\
+      inject_separated j j' m1 m2 /\
+      j' = Mem.flat_inj (Mem.support m1').
+
+
+Axiom  external_call_valid_block: forall ef ge vargs m1 t vres m2 b,
+    external_call ef ge vargs m1 t vres m2 -> Mem.valid_block m1 b -> Mem.valid_block m2 b.
+
+(* copy from Memory *)
+
+(** The following lemmas establish the absence of machine integer overflow
+  during address computations. *)
+
+Lemma address_inject:
+  forall f m1 m2 b1 ofs1 b2 delta p,
+  magree f m1 m2 ->
+  Mem.perm m1 b1 (Ptrofs.unsigned ofs1) Cur p ->
+  f b1 = Some (b2, delta) ->
+  Ptrofs.unsigned (Ptrofs.add ofs1 (Ptrofs.repr delta)) = Ptrofs.unsigned ofs1 + delta.
+Proof.
+  intros.
+  assert (Mem.perm m1 b1 (Ptrofs.unsigned ofs1) Max Nonempty) by eauto with mem.
+  exploit ma_representable; eauto. intros [A B].
+  assert (0 <= delta <= Ptrofs.max_unsigned).
+    generalize (Ptrofs.unsigned_range ofs1). lia.
+  unfold Ptrofs.add. repeat rewrite Ptrofs.unsigned_repr; lia.
+Qed.
+
+Lemma address_inject':
+  forall f m1 m2 chunk b1 ofs1 b2 delta,
+  magree f m1 m2 ->
+  Mem.valid_access m1 chunk b1 (Ptrofs.unsigned ofs1) Nonempty ->
+  f b1 = Some (b2, delta) ->
+  Ptrofs.unsigned (Ptrofs.add ofs1 (Ptrofs.repr delta)) = Ptrofs.unsigned ofs1 + delta.
+Proof.
+  intros. destruct H0. eapply address_inject; eauto.
+  apply H0. generalize (size_chunk_pos chunk). lia.
+Qed.
+
+Theorem weak_valid_pointer_inject_no_overflow:
+  forall f m1 m2 b ofs b' delta,
+  magree f m1 m2 ->
+  Mem.weak_valid_pointer m1 b (Ptrofs.unsigned ofs) = true ->
+  f b = Some(b', delta) ->
+  0 <= Ptrofs.unsigned ofs + Ptrofs.unsigned (Ptrofs.repr delta) <= Ptrofs.max_unsigned.
+Proof.
+  intros. rewrite Mem.weak_valid_pointer_spec in H0.
+  rewrite ! Mem.valid_pointer_nonempty_perm in H0.
+  exploit ma_representable; eauto. destruct H0; eauto with mem.
+  intros [A B].
+  pose proof (Ptrofs.unsigned_range ofs).
+  rewrite Ptrofs.unsigned_repr; lia.
+Qed.
+
+Theorem valid_access_inject:
+  forall f m1 m2 chunk b1 ofs b2 delta p,
+  f b1 = Some(b2, delta) ->
+  magree f m1 m2 ->
+  Mem.valid_access m1 chunk b1 ofs p ->
+  Mem.valid_access m2 chunk b2 (ofs + delta) p.
+Proof.
+  intros. eapply Mem.valid_access_inj; eauto. apply ma_inj; auto.
+Qed.
+
+Theorem valid_pointer_inject:
+  forall f m1 m2 b1 ofs b2 delta,
+  f b1 = Some(b2, delta) ->
+  magree f m1 m2 ->
+  Mem.valid_pointer m1 b1 ofs = true ->
+  Mem.valid_pointer m2 b2 (ofs + delta) = true.
+Proof.
+  intros.
+  rewrite Mem.valid_pointer_valid_access in H1.
+  rewrite Mem.valid_pointer_valid_access.
+  eapply valid_access_inject; eauto.
+Qed.
+
+Theorem weak_valid_pointer_inject:
+  forall f m1 m2 b1 ofs b2 delta,
+  f b1 = Some(b2, delta) ->
+  magree f m1 m2 ->
+  Mem.weak_valid_pointer m1 b1 ofs = true ->
+  Mem.weak_valid_pointer m2 b2 (ofs + delta) = true.
+Proof.
+  intros until 2. unfold Mem.weak_valid_pointer. rewrite !orb_true_iff.
+  replace (ofs + delta - 1) with ((ofs - 1) + delta) by lia.
+  intros []; eauto using valid_pointer_inject.
+Qed.
+
+Theorem valid_pointer_inject_val:
+  forall f m1 m2 b ofs b' ofs',
+  magree f m1 m2 ->
+  Mem.valid_pointer m1 b (Ptrofs.unsigned ofs) = true ->
+  Val.inject f (Vptr b ofs) (Vptr b' ofs') ->
+  Mem.valid_pointer m2 b' (Ptrofs.unsigned ofs') = true.
+Proof.
+  intros. inv H1.
+  erewrite address_inject'; eauto.
+  eapply valid_pointer_inject; eauto.
+  rewrite Mem.valid_pointer_valid_access in H0. eauto.
+Qed.
+
+Theorem weak_valid_pointer_inject_val:
+  forall f m1 m2 b ofs b' ofs',
+  magree f m1 m2 ->
+  Mem.weak_valid_pointer m1 b (Ptrofs.unsigned ofs) = true ->
+  Val.inject f (Vptr b ofs) (Vptr b' ofs') ->
+  Mem.weak_valid_pointer m2 b' (Ptrofs.unsigned ofs') = true.
+Proof.
+  intros. inv H1.
+  exploit weak_valid_pointer_inject; eauto. intros W.
+  rewrite Mem.weak_valid_pointer_spec in H0.
+  rewrite ! Mem.valid_pointer_nonempty_perm in H0.
+  exploit ma_representable; eauto. destruct H0; eauto with mem.
+  intros [A B].
+  pose proof (Ptrofs.unsigned_range ofs).
+  unfold Ptrofs.add. repeat rewrite Ptrofs.unsigned_repr; auto; lia.
+Qed.
+
+(* copy from Asminject *)
+(** Injection for cmpu_bool and cmplu_bool *)
+Lemma valid_ptr_inj : forall j m m',
+    magree j m m' ->
+    forall b i b' delta,                                  
+      j b = Some (b', delta) ->
+      Mem.valid_pointer m b (Ptrofs.unsigned i) = true ->
+      Mem.valid_pointer m' b' (Ptrofs.unsigned (Ptrofs.add i (Ptrofs.repr delta))) = true.
+Proof.
+  intros. eapply valid_pointer_inject_val; eauto.
+Qed.
+
+
+Lemma weak_valid_ptr_inj: forall j m m',
+  magree j m m' ->
+  forall b1 ofs b2 delta,
+  j b1 = Some(b2, delta) ->
+  Mem.weak_valid_pointer m b1 (Ptrofs.unsigned ofs) = true ->
+  Mem.weak_valid_pointer m' b2 (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr delta))) = true.
+Proof.
+  intros. eapply weak_valid_pointer_inject_val; eauto.
+Qed.
+
+Lemma weak_valid_ptr_no_overflow: forall j m m',
+  magree j m m' ->
+  forall b1 ofs b2 delta,
+  j b1 = Some(b2, delta) ->
+  Mem.weak_valid_pointer m b1 (Ptrofs.unsigned ofs) = true ->
+  0 <= Ptrofs.unsigned ofs + Ptrofs.unsigned (Ptrofs.repr delta) <= Ptrofs.max_unsigned.
+Proof.
+  intros. eapply weak_valid_pointer_inject_no_overflow; eauto.
+Qed.
+
+Theorem different_pointers_inject:
+  forall f m m' b1 ofs1 b2 ofs2 b1' delta1 b2' delta2,
+  magree f m m' ->
+  b1 <> b2 ->
+  Mem.valid_pointer m b1 (Ptrofs.unsigned ofs1) = true ->
+  Mem.valid_pointer m b2 (Ptrofs.unsigned ofs2) = true ->
+  f b1 = Some (b1', delta1) ->
+  f b2 = Some (b2', delta2) ->
+  b1' <> b2' \/
+  Ptrofs.unsigned (Ptrofs.add ofs1 (Ptrofs.repr delta1)) <>
+  Ptrofs.unsigned (Ptrofs.add ofs2 (Ptrofs.repr delta2)).
+Proof.
+  intros.
+  rewrite Mem.valid_pointer_valid_access in H1.
+  rewrite Mem.valid_pointer_valid_access in H2.
+  rewrite (address_inject' _ _ _ _ _ _ _ _ H H1 H3).
+  rewrite (address_inject' _ _ _ _ _ _ _ _ H H2 H4).
+  inv H1. simpl in H5. inv H2. simpl in H1.
+  eapply ma_no_overlap; eauto.
+  apply Mem.perm_cur_max. apply (H5 (Ptrofs.unsigned ofs1)). lia.
+  apply Mem.perm_cur_max. apply (H1 (Ptrofs.unsigned ofs2)). lia.
+Qed.
+
+Lemma valid_different_ptrs_inj: forall j m m',
+  magree j m m' ->
+  forall b1 ofs1 b2 ofs2 b1' delta1 b2' delta2,
+  b1 <> b2 ->
+  Mem.valid_pointer m b1 (Ptrofs.unsigned ofs1) = true ->
+  Mem.valid_pointer m b2 (Ptrofs.unsigned ofs2) = true ->
+  j b1 = Some (b1', delta1) ->
+  j b2 = Some (b2', delta2) ->
+  b1' <> b2' \/
+  Ptrofs.unsigned (Ptrofs.add ofs1 (Ptrofs.repr delta1)) <> Ptrofs.unsigned (Ptrofs.add ofs2 (Ptrofs.repr delta2)).
+Proof.
+  intros. eapply different_pointers_inject; eauto.
+Qed.
+
+Definition cmpu_bool_inject := fun j m m' (MINJ: magree j m m') =>
+                     Val.cmpu_bool_inject j (Mem.valid_pointer m) (Mem.valid_pointer m')
+                                          (valid_ptr_inj j m m' MINJ)
+                                          (weak_valid_ptr_inj j m m' MINJ)
+                                          (weak_valid_ptr_no_overflow j m m' MINJ)
+                                          (valid_different_ptrs_inj j m m' MINJ).
+
+Lemma cmpu_bool_lessdef : forall j v1 v2 v1' v2' m m' c,
+    Val.inject j v1 v1' -> Val.inject j v2 v2' ->
+    magree j m m' ->
+    Val.opt_lessdef (Val.cmpu_bool (Mem.valid_pointer m) c v1 v2)
+                (Val.cmpu_bool (Mem.valid_pointer m') c v1' v2').
+Proof.
+  intros. destruct (Val.cmpu_bool (Mem.valid_pointer m) c v1 v2) eqn:EQ.
+  - exploit (cmpu_bool_inject j m m' H1 c v1 v2); eauto.
+    intros. rewrite H2. constructor.
+  - constructor.
+Qed.
+
+Definition cmplu_bool_inject := fun j m m' (MINJ: magree j m m') =>
+                     Val.cmplu_bool_inject j (Mem.valid_pointer m) (Mem.valid_pointer m')
+                                           (valid_ptr_inj j m m' MINJ)
+                                           (weak_valid_ptr_inj j m m' MINJ)
+                                           (weak_valid_ptr_no_overflow j m m' MINJ)
+                                           (valid_different_ptrs_inj j m m' MINJ).
+
+
+Lemma cmplu_bool_lessdef : forall j v1 v2 v1' v2' m m' c,
+    Val.inject j v1 v1' -> Val.inject j v2 v2' ->
+    magree j m m' ->
+    Val.opt_lessdef (Val.cmplu_bool (Mem.valid_pointer m) c v1 v2)
+                (Val.cmplu_bool (Mem.valid_pointer m') c v1' v2').
+Proof.
+  intros. destruct (Val.cmplu_bool (Mem.valid_pointer m) c v1 v2) eqn:EQ.
+  - exploit (cmplu_bool_inject j m m' H1 c v1 v2); eauto.
+    intros. rewrite H2. constructor.
+  - constructor.
+Qed.
+
+Lemma cmpu_inject : forall j v1 v2 v1' v2' m m' c,
+    Val.inject j v1 v1' -> Val.inject j v2 v2' ->
+    magree j m m' ->
+    Val.inject j (Val.cmpu (Mem.valid_pointer m) c v1 v2)
+               (Val.cmpu (Mem.valid_pointer m') c v1' v2').
+Proof.
+  intros. unfold Val.cmpu.
+  exploit (cmpu_bool_lessdef j v1 v2); eauto. intros. 
+  exploit val_of_optbool_lessdef; eauto.
+Qed.
+
+
+Lemma cmplu_lessdef : forall j v1 v2 v1' v2' m m' c,
+    Val.inject j v1 v1' -> Val.inject j v2 v2' ->
+    magree j  m m' ->
+    Val.opt_val_inject j (Val.cmplu (Mem.valid_pointer m) c v1 v2)
+                     (Val.cmplu (Mem.valid_pointer m') c v1' v2').
+Proof.
+  intros. unfold Val.cmplu.
+  exploit (cmplu_bool_lessdef j v1 v2 v1' v2' m m' c); eauto. intros.
+  inversion H2; subst; simpl; constructor.
+  apply Val.vofbool_inject.
+Qed.
+(* end of copy *)
+
+Lemma compare_ints_inject: forall j v1 v2 v1' v2' rs rs' m m',
+    Val.inject j v1 v1' -> Val.inject j v2 v2' ->
+    magree j m m' ->
+    regset_inject j rs rs' -> 
+    regset_inject j (compare_ints v1 v2 rs m) (compare_ints v1' v2' rs' m').
+Proof.
+  intros. unfold compare_ints, Asm.compare_ints.
+  repeat apply regset_inject_expand; auto.
+  - apply cmpu_inject; auto.
+  - apply cmpu_inject; auto.
+  - apply val_negative_inject. apply Val.sub_inject; auto.
+  - apply sub_overflow_inject; auto.
+Qed.
+
+Lemma compare_longs_inject: forall j v1 v2 v1' v2' rs rs' m m',
+    Val.inject j v1 v1' -> Val.inject j v2 v2' ->
+    magree j m m' ->
+    regset_inject j rs rs' -> 
+    regset_inject j (compare_longs v1 v2 rs m) (compare_longs v1' v2' rs' m').
+Proof.
+  intros. unfold compare_longs, Asm.compare_longs.
+  repeat apply regset_inject_expand; auto.
+  - unfold Val.cmplu.
+    exploit (cmplu_bool_lessdef j v1 v2 v1' v2' m m' Ceq); eauto. intros.
+    inversion H3; subst.
+    + simpl. auto. 
+    + simpl. apply Val.vofbool_inject.
+  - unfold Val.cmplu.
+    exploit (cmplu_bool_lessdef j v1 v2 v1' v2' m m' Clt); eauto. intros.
+    inversion H3; subst.
+    + simpl. auto. 
+    + simpl. apply Val.vofbool_inject.
+  - apply val_negativel_inject. apply Val.subl_inject; auto.
+  - apply subl_overflow_inject; auto.
+Qed.
+
+
+(** Preservation of loads *)
+
+Theorem load_inject:
+  forall f m1 m2 chunk b1 ofs b2 delta v1,
+  magree f m1 m2 ->
+  Mem.load chunk m1 b1 ofs = Some v1 ->
+  f b1 = Some (b2, delta) ->
+  exists v2, Mem.load chunk m2 b2 (ofs + delta) = Some v2 /\ Val.inject f v1 v2.
+Proof.
+  intros. inv H. eapply Mem.load_inj; eauto.
+Qed.
+
+Theorem loadv_inject:
+  forall f m1 m2 chunk a1 a2 v1,
+  magree f m1 m2 ->
+  Mem.loadv chunk m1 a1 = Some v1 ->
+  Val.inject f a1 a2 ->
+  exists v2, Mem.loadv chunk m2 a2 = Some v2 /\ Val.inject f v1 v2.
+Proof.
+  intros. inv H1; simpl in H0; try discriminate.
+  exploit load_inject; eauto. intros [v2 [LOAD INJ]].
+  exists v2; split; auto. unfold Mem.loadv.
+  replace (Ptrofs.unsigned (Ptrofs.add ofs1 (Ptrofs.repr delta)))
+     with (Ptrofs.unsigned ofs1 + delta).
+  auto. symmetry. eapply address_inject'; eauto with mem.
+Qed.
+
+Theorem loadbytes_inject:
+  forall f m1 m2 b1 ofs len b2 delta bytes1,
+  magree f m1 m2 ->
+  Mem.loadbytes m1 b1 ofs len = Some bytes1 ->
+  f b1 = Some (b2, delta) ->
+  exists bytes2, Mem.loadbytes m2 b2 (ofs + delta) len = Some bytes2
+              /\ list_forall2 (memval_inject f) bytes1 bytes2.
+Proof.
+  intros. inv H. eapply Mem.loadbytes_inj; eauto.
+Qed.
+
+(** Preservation of stores *)
+
+Theorem store_mapped_inject:
+  forall f chunk m1 b1 ofs v1 n1 m2 b2 delta v2,
+  magree f m1 m2 ->
+  Mem.store chunk m1 b1 ofs v1 = Some n1 ->
+  f b1 = Some (b2, delta) ->
+  Val.inject f v1 v2 ->
+  exists n2,
+    Mem.store chunk m2 b2 (ofs + delta) v2 = Some n2
+    /\ magree f n1 n2.
+Proof.
+  intros. inversion H.
+  exploit Mem.store_mapped_inj; eauto. intros [n2 [STORE MI]].
+  exists n2; split. eauto. constructor.
+(* inj *)
+  auto.
+(* freeblocks *)
+  eauto with mem.
+(* mappedblocks *)
+  eauto with mem.
+(* no overlap *)
+  red; intros. eauto with mem.
+(* representable *)
+  intros. eapply ma_representable; try eassumption.
+  destruct H4; eauto with mem.
+Qed.
+
+
+Theorem storev_mapped_inject:
+  forall f chunk m1 a1 v1 n1 m2 a2 v2,
+  magree f m1 m2 ->
+  Mem.storev chunk m1 a1 v1 = Some n1 ->
+  Val.inject f a1 a2 ->
+  Val.inject f v1 v2 ->
+  exists n2,
+    Mem.storev chunk m2 a2 v2 = Some n2 /\ magree f n1 n2.
+Proof.
+  intros. inv H1; simpl in H0; try discriminate.
+  unfold Mem.storev.
+  replace (Ptrofs.unsigned (Ptrofs.add ofs1 (Ptrofs.repr delta)))
+    with (Ptrofs.unsigned ofs1 + delta).
+  eapply store_mapped_inject; eauto.
+  symmetry. eapply address_inject'; eauto with mem.
+Qed.
+
+
+(* Preservaiton of allocation *)
+Theorem alloc_left_mapped_inject:
+  forall f m1 m2 lo hi m1' b1 b2 delta,
+  magree f m1 m2 ->
+  Mem.alloc m1 lo hi = (m1', b1) ->
+  Mem.valid_block m2 b2 ->
+  0 <= delta <= Ptrofs.max_unsigned ->
+  (forall ofs k p, Mem.perm m2 b2 ofs k p -> delta = 0 \/ 0 <= ofs < Ptrofs.max_unsigned) ->
+  (forall ofs k p, lo <= ofs < hi -> Mem.perm m2 b2 (ofs + delta) k p) ->
+  Mem.inj_offset_aligned delta (hi-lo) ->
+  (forall b delta' ofs k p,
+   f b = Some (b2, delta') ->
+   Mem.perm m1 b ofs k p ->
+   lo + delta <= ofs + delta' < hi + delta -> False) ->
+  exists f',
+     magree f' m1' m2
+  /\ inject_incr f f'
+  /\ f' b1 = Some(b2, delta)
+  /\ (forall b, b <> b1 -> f' b = f b).
+Proof.
+  intros. inversion H.
+  set (f' := fun b => if eq_block b b1 then Some(b2, delta) else f b).
+  assert (inject_incr f f').
+    red; unfold f'; intros. destruct (eq_block b b1). subst b.
+    assert (f b1 = None). eauto with mem. congruence.
+    auto.
+  assert (Mem.mem_inj f' m1 m2).
+    inversion ma_inj0; constructor; eauto with mem.
+    unfold f'; intros. destruct (eq_block b0 b1).
+      inversion H8. subst b0 b3 delta0.
+      elim (Mem.fresh_block_alloc _ _ _ _ _ H0). eauto with mem.
+      eauto.
+    unfold f'; intros. destruct (eq_block b0 b1).
+      inversion H8. subst b0 b3 delta0.
+      elim (Mem.fresh_block_alloc _ _ _ _ _ H0).
+      eapply Mem.perm_valid_block with (ofs := ofs). apply H9. generalize (size_chunk_pos chunk); lia.
+      eauto.
+    unfold f'; intros. destruct (eq_block b0 b1).
+      inversion H8. subst b0 b3 delta0.
+      elim (Mem.fresh_block_alloc _ _ _ _ _ H0). eauto with mem.
+      apply memval_inject_incr with f; auto.
+  exists f'. split. constructor.
+(* inj *)
+  eapply Mem.alloc_left_mapped_inj; eauto. unfold f'; apply dec_eq_true.
+(* freeblocks *)
+  unfold f'; intros. destruct (eq_block b b1). subst b.
+  elim H9. eauto with mem.
+  eauto with mem.
+(* mappedblocks *)
+  unfold f'; intros. destruct (eq_block b b1). congruence. eauto.
+(* overlap *)
+  unfold f'; red; intros.
+  exploit Mem.perm_alloc_inv. eauto. eexact H12. intros P1.
+  exploit Mem.perm_alloc_inv. eauto. eexact H13. intros P2.
+  destruct (eq_block b0 b1); destruct (eq_block b3 b1).
+  congruence.
+  inversion H10; subst b0 b1' delta1.
+    destruct (eq_block b2 b2'); auto. subst b2'. right; red; intros.
+    eapply H6; eauto. lia.
+  inversion H11; subst b3 b2' delta2.
+    destruct (eq_block b1' b2); auto. subst b1'. right; red; intros.
+    eapply H6; eauto. lia.
+  eauto.
+(* representable *)
+  unfold f'; intros.
+  destruct (eq_block b b1).
+   subst. injection H9; intros; subst b' delta0. destruct H10.
+    exploit Mem.perm_alloc_inv; eauto; rewrite dec_eq_true; intro.
+    exploit H3. apply H4 with (k := Max) (p := Nonempty); eauto.
+    generalize (Ptrofs.unsigned_range_2 ofs). lia.
+   exploit Mem.perm_alloc_inv; eauto; rewrite dec_eq_true; intro.
+   exploit H3. apply H4 with (k := Max) (p := Nonempty); eauto.
+   generalize (Ptrofs.unsigned_range_2 ofs). lia.
+  eapply ma_representable0; try eassumption.
+  destruct H10; eauto using Mem.perm_alloc_4.
+(* incr *)
+  split. auto.
+(* image of b1 *)
+  split. unfold f'; apply dec_eq_true.
+(* image of others *)
+  intros. unfold f'; apply dec_eq_false; auto.
+Qed.
+
+Theorem alloc_right_inject:
+  forall f m1 m2 lo hi b2 m2',
+  magree f m1 m2 ->
+  Mem.alloc m2 lo hi = (m2', b2) ->
+  magree f m1 m2'.
+Proof.
+  intros. injection H0. intros NEXT MEM.
+  inversion H. constructor.
+(* inj *)
+  eapply Mem.alloc_right_inj; eauto.
+(* freeblocks *)
+  auto.
+(* mappedblocks *)
+  eauto with mem.
+(* no overlap *)
+  auto.
+(* representable *)
+  auto.
+Qed.
+
+Theorem alloc_parallel_inject:
+  forall f m1 m2 lo1 hi1 m1' b1 lo2 hi2,
+  magree f m1 m2 ->
+  Mem.alloc m1 lo1 hi1 = (m1', b1) ->
+  lo2 <= lo1 -> hi1 <= hi2 ->
+  exists f', exists m2', exists b2,
+  Mem.alloc m2 lo2 hi2 = (m2', b2)
+  /\ magree f' m1' m2'
+  /\ inject_incr f f'
+  /\ f' b1 = Some(b2, 0)
+  /\ (forall b, b <> b1 -> f' b = f b).
+Proof.
+  intros.
+  case_eq (Mem.alloc m2 lo2 hi2). intros m2' b2 ALLOC.
+  exploit alloc_left_mapped_inject.
+  eapply alloc_right_inject; eauto.
+  eauto.
+  instantiate (1 := b2). eauto with mem.
+  instantiate (1 := 0). unfold Ptrofs.max_unsigned. generalize Ptrofs.modulus_pos; lia.
+  auto.
+  intros. apply Mem.perm_implies with Freeable; auto with mem.
+  eapply Mem.perm_alloc_2; eauto. lia.
+  red; intros. apply Z.divide_0_r.
+  intros. apply (Mem.valid_not_valid_diff m2 b2 b2).
+  (* cannot solve by mem *)
+  eapply ma_mappedblocks;eauto.
+  eapply  Mem.fresh_block_alloc;eauto.
+  auto.
+ 
+  intros [f' [A [B [C D]]]].
+  exists f'; exists m2'; exists b2; auto.
+Qed.
+
+(** *End of A new injection *)
 
 Inductive match_states: state -> state -> Prop :=
 | match_states_intro: forall (rs: regset) (m: mem) (rs': regset) (m':mem) (j:meminj)
                         (STRUCTJ: j = Mem.flat_inj (Mem.support m))
                         (MATCHINJ: match_inj j)
-                        (MINJ: Mem.inject j  m m')
+                        (MINJ: magree j  m m')
                         (RSINJ: regset_inject j rs rs')
                         (GBVALID: glob_block_valid m),
     match_states (State rs m) (State rs' m').
@@ -1257,7 +1779,7 @@ Qed.
 
 
 Lemma init_mem_inj_2:
-  Mem.inject (Mem.flat_inj (Mem.support m)) m tm.
+  magree (Mem.flat_inj (Mem.support m)) m tm.
 Proof.
   constructor;intros.
   - apply init_mem_inj_1.
@@ -1276,47 +1798,41 @@ Proof.
   - unfold Mem.flat_inj in *.
     destr_in H. inv H.
     split. lia. rewrite Z.add_0_r. apply Ptrofs.unsigned_range_2.
-  - exploit init_meminj_invert_strong;eauto.
-    intros (A & id & gd & B & C & D & E & F).
-    exploit (Genv.init_mem_characterization_gen);eauto.
-    exploit (init_mem_characterization_gen);eauto.
-    inv F.
-    + rewrite H2. simpl. intros (P2 & Q2) (P1 & Q1).
-      rewrite Z.add_0_r in H0. unfold Mem.flat_inj in H.
-      destr_in H. inv H.
-      apply Q2 in H0. destruct H0. subst.
-      inv H.
-      rewrite Z.le_lteq in H0. destruct H0.
-      right. unfold not. intros. apply Q1 in H0. destruct H0. lia.
-      left. subst. apply Mem.perm_cur. auto.
-    + rewrite H2. simpl. intros (P2 & Q2) (P1 & Q1).
-      rewrite Z.add_0_r in H0. unfold Mem.flat_inj in H.
-      destr_in H. inv H.
-      Mem.inject_extends_compose
-      (* volatile information loss *)
-      apply Q2 in H0. destruct H0. subst. clear Q2.
-      unfold Genv.perm_globvar in *.
-      inv H0.
-      * apply P1 in H. destruct (gvar_volatile v).
-        -- right. unfold not. intros. 
-          left. apply Mem.perm_cur. eapply Mem.perm_implies.
-          eauto. 
-        right. unfold not. intros. apply Q1 in H0. destruct H0. lia.
-        left. subst. apply Mem.perm_cur. auto.
-    + rewrite H2. simpl. intros (P2 & Q2) (P1 & Q1).
-      admit.
-    + admit.
-    + admit.
-    + admit.
-    + admit.
-Admitted.
+(*   - exploit init_meminj_invert_strong;eauto. *)
+(*     intros (A & id & gd & B & C & D & E & F). *)
+(*     exploit (Genv.init_mem_characterization_gen);eauto. *)
+(*     exploit (init_mem_characterization_gen);eauto. *)
+(*     inv F. *)
+(*     + rewrite H2. simpl. intros (P2 & Q2) (P1 & Q1). *)
+(*       rewrite Z.add_0_r in H0. unfold Mem.flat_inj in H. *)
+(*       destr_in H. inv H. *)
+(*       apply Q2 in H0. destruct H0. subst. *)
+(*       inv H. *)
+(*       rewrite Z.le_lteq in H0. destruct H0. *)
+(*       right. unfold not. intros. apply Q1 in H0. destruct H0. lia. *)
+(*       left. subst. apply Mem.perm_cur. auto. *)
+(*     + rewrite H2. simpl. intros (P2 & Q2) (P1 & Q1). *)
+(*       rewrite Z.add_0_r in H0. unfold Mem.flat_inj in H. *)
+(*     (*   destr_in H. inv H. *) *)
+(*     (*   (* volatile information loss *) *) *)
+(*     (*   apply Q2 in H0. destruct H0. subst. clear Q2. *) *)
+(*     (*   unfold Genv.perm_globvar in *. *) *)
+(*     (*   inv H0. *) *)
+(*     (*   * apply P1 in H. destruct (gvar_volatile v). *) *)
+(*     (*     -- right. unfold not. intros.  *) *)
+(*     (*       left. apply Mem.perm_cur. eapply Mem.perm_implies. *) *)
+(*     (*       eauto.  *) *)
+(*     (*     right. unfold not. intros. apply Q1 in H0. destruct H0. lia. *) *)
+(*     (*     left. subst. apply Mem.perm_cur. auto. *) *)
+(*     (* + rewrite H2. simpl. intros (P2 & Q2) (P1 & Q1). *) *)
+Qed.
 
 Lemma alloc_stack_pres_inject:
   forall lo hi stk stk' j m' tm',
     Mem.alloc m lo hi = (m', stk) ->
     Mem.alloc tm lo hi = (tm', stk') ->
     j = (Mem.flat_inj (Mem.support m')) ->
-    Mem.inject j m' tm' /\ stk = stk' /\ match_inj j.
+    magree j m' tm' /\ stk = stk' /\ match_inj j.
 Proof.
   intros.
   exploit (Genv.init_mem_stack);eauto.
@@ -1326,7 +1842,7 @@ Proof.
   intros. subst. unfold Mem.nextblock. unfold Mem.fresh_block.
   rewrite H4. rewrite H5. simpl.
   generalize  init_mem_inj_2. intro INJ.
-  exploit (Mem.alloc_parallel_inject);eauto.
+  exploit (alloc_parallel_inject);eauto.
   apply Z.le_refl. apply Z.le_refl.
   (* unfold Mem.nextblock. unfold Mem.fresh_block. repeat rewrite H5. *)
   (* simpl. *)
@@ -1350,7 +1866,7 @@ Proof.
     exploit Mem.support_alloc. apply H. intro.
     rewrite H1 in *. apply Mem.sup_incr_in in s.
     destruct s. unfold Mem.nextblock in n. congruence.
-    congruence. } 
+    congruence. }
   rewrite <- H1. split;auto.
   split;auto.
   exploit init_meminj_match_sminj;eauto. intro MATCHINJ.
@@ -1398,25 +1914,26 @@ Qed.
 Lemma storev_pres_inject:
   forall chunk j m1 m1' m2 a a' v v',
     Mem.storev chunk m1 a v = Some m2 ->
-    Mem.inject j m1 m1' ->
+    magree j m1 m1' ->
     Val.inject j v v' ->
     Val.inject j a a' ->
     j = (Mem.flat_inj (Mem.support m1)) ->
-    exists m2',  Mem.storev chunk m1' a' v' = Some m2' /\ Mem.inject (Mem.flat_inj (Mem.support m2)) m2 m2'.
+    exists m2',  Mem.storev chunk m1' a' v' = Some m2' /\ magree (Mem.flat_inj (Mem.support m2)) m2 m2'.
 Proof.
   intros.
   exploit Mem.support_storev;eauto. intros.
-  exploit Mem.storev_mapped_inject;eauto.
+  exploit storev_mapped_inject;eauto.
   intros (n2 & A & B).
   exists n2. rewrite <- H4. subst. split;auto.
 Qed.
+
 
 (** auxilary lemma for init_mem_exists *)
 Lemma alloc_globals_alloc_sections_exists: forall defs ge1 ge2 m1 m1' m2,
     Genv.alloc_globals ge1 m1 defs = Some m1' ->
     exists m2', fold_left 
        (fun (a : option mem) (p : positive * section) =>
-            alloc_section instr_size ge2 (gen_symb_table instr_size defs) a (fst p) (snd p))
+            alloc_section instr_size ge2 a (fst p) (snd p))
        (PTree.elements (create_sec_table defs)) (Some m2) = Some m2'.
 Proof.
   (* Mem.alloc_glob *)
@@ -1453,8 +1970,7 @@ Proof.
   { unfold match_prog in TRANSF. unfold transf_program in TRANSF.
     repeat destr_in TRANSF. simpl. auto. }
   rewrite <- H. auto.
-  assert (exists m', alloc_sections instr_size (globalenv instr_size tprog)
-                               (prog_symbtable tprog) (prog_sectable tprog) Mem.empty = Some m').
+  assert (exists m', alloc_sections instr_size (globalenv instr_size tprog) (prog_sectable tprog) Mem.empty = Some m').
   {
     generalize TRANSF. intros TRANSF'.
     unfold match_prog in TRANSF'. unfold transf_program in TRANSF'.
@@ -1470,7 +1986,7 @@ Qed.
 Lemma init_mem_pres_inject :
   forall m
     (INITMEM: Genv.init_mem prog = Some m),
-  exists m', init_mem instr_size tprog = Some m' /\ Mem.inject (Mem.flat_inj (Mem.support m)) m m'.
+  exists m', init_mem instr_size tprog = Some m' /\ magree (Mem.flat_inj (Mem.support m)) m m'.
 Proof.
   intros.
   exploit init_mem_exists;eauto.
@@ -1494,7 +2010,7 @@ Qed.
 Lemma transf_initial_states : forall rs st1,
     RealAsm.initial_state prog st1 ->
     exists st2, initial_state instr_size tprog rs st2 /\ match_states st1 st2.
-Proof.  
+Proof.
   intros rs st1 INIT.
   generalize TRANSF. intros TRANSF'.
   unfold match_prog in TRANSF'. unfold transf_program in TRANSF'.
@@ -1587,7 +2103,7 @@ Qed.
 
 Lemma eval_builtin_arg_inject : forall j m m' rs rs' sp sp' arg varg
     (MATCHINJ: match_inj j)                              
-    (MINJ: Mem.inject j m m')
+    (MINJ: magree j m m')
     (RSINJ: regset_inject j rs rs')
     (VINJ: Val.inject j sp sp')
     (EVALBI: Events.eval_builtin_arg ge rs sp m arg varg),
@@ -1601,13 +2117,13 @@ Proof.
   - eexists; split; auto. constructor.
   - eexists; split; auto. constructor.
   - eexists; split; auto. constructor.
-  - exploit Mem.loadv_inject; eauto.
+  - exploit loadv_inject; eauto.
     apply Val.offset_ptr_inject; eauto.
     intros (v2 & ML & VJ); auto.
     eexists; split. constructor. apply ML. auto.
   - eexists; split. constructor.
     apply Val.offset_ptr_inject; eauto.
-  - exploit Mem.loadv_inject; eauto.
+  - exploit loadv_inject; eauto.
     apply symbol_address_inject; eauto.
     intros (v2 & ML & VJ); auto.
     eexists; split. constructor. apply ML. auto.
@@ -1630,9 +2146,10 @@ Proof.
     rewrite PTR. eapply Val.add_inject;auto.
 Qed.
 
+
 Lemma eval_builtin_args_inject : forall j m m' rs rs' sp sp' args vargs
     (MATCHINJ: match_inj j)
-    (MINJ: Mem.inject j m m')
+    (MINJ: magree j m m')
     (RSINJ: regset_inject j rs rs')
     (VINJ: Val.inject j sp sp')
     (EVALBI: Events.eval_builtin_args ge rs sp m args vargs),
@@ -1652,7 +2169,7 @@ Qed.
 
 Lemma extcall_arg_inject : forall rs1 rs2 m1 m2 l arg1 j,
     extcall_arg rs1 m1 l arg1 ->
-    Mem.inject j m1 m2 ->
+    magree j m1 m2 ->
     regset_inject j rs1 rs2 ->
     exists arg2,
       Val.inject j arg1 arg2 /\
@@ -1662,16 +2179,17 @@ Proof.
   - unfold regset_inject in *.
     specialize (H1 (Asm.preg_of r)). eexists; split; eauto.
     constructor.
-  - exploit Mem.loadv_inject; eauto.
+  - exploit loadv_inject; eauto.
     apply Val.offset_ptr_inject. apply H1.
     intros (arg2 & MLOADV & ARGINJ).
     exists arg2. split; auto.
     eapply extcall_arg_stack; eauto.
 Qed.
 
+    
 Lemma extcall_arg_pair_inject : forall rs1 rs2 m1 m2 lp arg1 j,
     extcall_arg_pair rs1 m1 lp arg1 ->
-    Mem.inject j m1 m2 ->
+    magree j m1 m2 ->
     regset_inject j rs1 rs2 ->
     exists arg2,
       Val.inject j arg1 arg2 /\
@@ -1692,7 +2210,7 @@ Qed.
 
 Lemma extcall_arguments_inject_aux : forall rs1 rs2 m1 m2 locs args1 j,
    list_forall2 (extcall_arg_pair rs1 m1) locs args1 ->
-    Mem.inject j m1 m2 ->
+    magree j m1 m2 ->
     regset_inject j rs1 rs2 ->
     exists args2,
       Val.inject_list j args1 args2 /\
@@ -1712,7 +2230,7 @@ Qed.
 
 Lemma extcall_arguments_inject : forall rs1 rs2 m1 m2 ef args1 j,
     Asm.extcall_arguments rs1 m1 (ef_sig ef) args1 ->
-    Mem.inject j m1 m2 ->
+    magree j m1 m2 ->
     regset_inject j rs1 rs2 ->
     exists args2,
       Val.inject_list j args1 args2 /\
@@ -1957,47 +2475,47 @@ Proof.
   - repeat apply Val.addl_inject; auto.
   - destruct p. apply Val.addl_inject; auto.
     inject_match.
-    Admitted.            (* dependent in ptr64 !! try to fix it !!!*)
-    (* apply inject_symbol_address; auto. *)
-(*     destr_valinj_left H1; inv H1; auto. *)
-(*     destruct Archi.ptr64;auto. *)
-(*     eapply Val.inject_ptr; eauto. *)
-(*     repeat rewrite Ptrofs.add_assoc. *)
-(*     rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *)
-(*   - destruct p. *)
-(*     inject_match. *)
-(*     apply Val.addl_inject; auto. *)
-(*     destr_pair_if; auto. *)
-(*     apply Val.mull_inject; auto. *)
-(*     destr_valinj_left H1; inv H1; auto. *)
-(*     destruct Archi.ptr64;auto. *)
-(*     eapply Val.inject_ptr; eauto. *)
-(*     repeat rewrite Ptrofs.add_assoc. *)
-(*     rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *)
-(*   - destruct p,p0. *)
-(*     inject_match. *)
-(*     apply Val.addl_inject; auto. *)
-(*     destr_pair_if; auto. *)
-(*     apply Val.mull_inject; auto. *)
-(*     apply inject_symbol_address; auto. *)
-(*     destr_valinj_left H1; inv H1; auto. *)
-(*     destruct Archi.ptr64;auto. *)
-(*     eapply Val.inject_ptr; eauto. *)
-(*     repeat rewrite Ptrofs.add_assoc. *)
-(*     rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *)
-(*   - repeat apply Val.addl_inject; auto. *)
-(*   - destruct p. inject_match. inject_match. *)
-(*     apply inject_symbol_address; auto. *)
-(*     destr_valinj_left H1; inv H1; auto. *)
-(*     destruct Archi.ptr64;auto. *)
-(*     eapply Val.inject_ptr; eauto. *)
-(*     repeat rewrite Ptrofs.add_assoc. *)
-(*     rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto. *)
-(*     repeat destr_match;auto;try (inv H1);auto. *)
-(*     repeat rewrite Ptrofs.add_assoc. *)
-(*     repeat rewrite Ptrofs.add_zero. *)
-(*     econstructor. eauto. auto. *)
-(* Qed. *)
+    (* dependent in ptr64 !! try to fix it !!!*)
+    apply inject_symbol_address; auto.
+    destr_valinj_left H1; inv H1; auto.
+    destruct Archi.ptr64;auto.
+    eapply Val.inject_ptr; eauto.
+    repeat rewrite Ptrofs.add_assoc.
+    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+  - destruct p.
+    inject_match.
+    apply Val.addl_inject; auto.
+    destr_pair_if; auto.
+    apply Val.mull_inject; auto.
+    destr_valinj_left H1; inv H1; auto.
+    destruct Archi.ptr64;auto.
+    eapply Val.inject_ptr; eauto.
+    repeat rewrite Ptrofs.add_assoc.
+    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+  - destruct p,p0.
+    inject_match.
+    apply Val.addl_inject; auto.
+    destr_pair_if; auto.
+    apply Val.mull_inject; auto.
+    apply inject_symbol_address; auto.
+    destr_valinj_left H1; inv H1; auto.
+    destruct Archi.ptr64;auto.
+    eapply Val.inject_ptr; eauto.
+    repeat rewrite Ptrofs.add_assoc.
+    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+  - repeat apply Val.addl_inject; auto.
+  - destruct p. inject_match. inject_match.
+    apply inject_symbol_address; auto.
+    destr_valinj_left H1; inv H1; auto.
+    destruct Archi.ptr64;auto.
+    eapply Val.inject_ptr; eauto.
+    repeat rewrite Ptrofs.add_assoc.
+    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+    repeat destr_match;auto;try (inv H1);auto.
+    repeat rewrite Ptrofs.add_assoc.
+    repeat rewrite Ptrofs.add_zero.
+    econstructor. eauto. auto.
+Qed.
 
 Lemma eval_addrmode_inject: forall j a rs1 rs2,
     match_inj j ->
@@ -2012,7 +2530,7 @@ Qed.
 
 Lemma exec_load_step: forall j rs1 rs2 m1 m2 rs1' m1' sz chunk rd a
                           (INJ: j = Mem.flat_inj (Mem.support m1))
-                          (MINJ: Mem.inject j  m1 m2)
+                          (MINJ: magree j  m1 m2)
                           (MATCHINJ: match_inj j)
                           (RSINJ: regset_inject j rs1 rs2)
                           (GBVALID: glob_block_valid m1), 
@@ -2024,7 +2542,7 @@ Proof.
   intros. unfold Asm.exec_load in *.
   exploit eval_addrmode_inject; eauto. intro EMODINJ.
   destruct (Mem.loadv chunk m1 (Asm.eval_addrmode ge a rs1)) eqn:MLOAD; try congruence.
-  exploit Mem.loadv_inject; eauto. intros (v2 & MLOADV & VINJ).
+  exploit loadv_inject; eauto. intros (v2 & MLOADV & VINJ).
   eexists. eexists. split.
   - unfold exec_load. rewrite MLOADV. auto.
   - inv H. eapply match_states_intro; eauto.
@@ -2032,6 +2550,7 @@ Proof.
     apply undef_regs_pres_inject.
     apply regset_inject_expand; eauto.
 Qed.
+
 
 Lemma store_pres_glob_block_valid : forall m1 chunk b v ofs m2,
   Mem.store chunk m1 b ofs v = Some m2 -> glob_block_valid m1 -> glob_block_valid m2.
@@ -2049,7 +2568,7 @@ Qed.
 
 Lemma exec_store_step: forall j rs1 rs2 m1 m2 rs1' m1' sz chunk r a dregs
                          (INJ: j = Mem.flat_inj (Mem.support m1))
-                         (MINJ: Mem.inject j m1 m2)
+                         (MINJ: magree j m1 m2)
                          (MATCHINJ: match_inj j)
                          (RSINJ: regset_inject j rs1 rs2)
                          (GBVALID: glob_block_valid m1),
@@ -2061,9 +2580,9 @@ Proof.
   intros. unfold Asm.exec_store in *.
   exploit eval_addrmode_inject; eauto. intro EMODINJ.
   destruct (Mem.storev chunk m1 (Asm.eval_addrmode ge a rs1) (rs1 r)) eqn:MSTORE; try congruence.
-  exploit Mem.storev_mapped_inject; eauto. intros (m2' & MSTOREV & MINJ').
+  exploit storev_mapped_inject; eauto. intros (m2' & MSTOREV & MINJ').
   exploit (Mem.support_storev). apply MSTORE. intros SUP.
-  eexists. eexists. split.  
+  eexists. eexists. split.
   - unfold exec_store. rewrite MSTOREV. auto.
   - inv H. eapply match_states_intro; eauto.
     rewrite <- SUP. auto.
@@ -2073,7 +2592,6 @@ Proof.
     rewrite <- SUP. auto.
     eapply storev_pres_glob_block_valid; eauto.
 Qed.
-
 
 Ltac solve_store_load :=
   match goal with
@@ -2091,6 +2609,7 @@ Lemma eval_testcond_inject: forall j c rs1 rs2,
 Proof.
   intros. destruct c; simpl; try solve_opt_lessdef.
 Qed.
+
 
 
 Hint Resolve nextinstr_nf_pres_inject nextinstr_pres_inject regset_inject_expand
@@ -2223,7 +2742,7 @@ Qed.
 (** The internal step preserves the invariant *)
 Lemma exec_instr_step : forall j rs1 rs2 m1 m2 rs1' m1' i ofs f b
                         (INJ : j = Mem.flat_inj (Mem.support m1))
-                        (MINJ: Mem.inject j m1 m2)
+                        (MINJ: magree j m1 m2)
                         (MATCHSMINJ: match_inj j)
                         (RSINJ: regset_inject j rs1 rs2)
                         (GBVALID: glob_block_valid m1),
@@ -2334,7 +2853,7 @@ Proof.
     (* support after storev *)
     exploit (Mem.support_storev). eapply Heqo. intros SUPEQ.
     rewrite SUPEQ in *.
-    edestruct Mem.storev_mapped_inject as (m2' & ST & MINJ'). apply MINJ. eauto.
+    edestruct storev_mapped_inject as (m2' & ST & MINJ'). apply MINJ. eauto.
     apply Val.offset_ptr_inject. eauto.
     apply Val.offset_ptr_inject. eauto.
     do 2 eexists; split; eauto. simpl.
@@ -2353,7 +2872,7 @@ Proof.
     (* support after storev *)
     exploit (Mem.support_storev). eapply Heqo. intros SUPEQ.
     rewrite SUPEQ in *.
-    edestruct Mem.storev_mapped_inject as (m2' & ST & MINJ'). apply MINJ. eauto.
+    edestruct storev_mapped_inject as (m2' & ST & MINJ'). apply MINJ. eauto.
     apply Val.offset_ptr_inject. eauto.
     apply Val.offset_ptr_inject. eauto.
     do 2 eexists; split; eauto. simpl.
@@ -2367,7 +2886,7 @@ Proof.
   - (* Pret *)
     repeat destr_in H4. simpl.
     unfold loadvv in *. destr_in Heqo. 
-    exploit Mem.loadv_inject;eauto. intros (v2 & LD & VI). rewrite LD.
+    exploit loadv_inject;eauto. intros (v2 & LD & VI). rewrite LD.
     destr_in Heqo;inv Heqo;inv VI;
     eexists _, _; split; eauto;
     econstructor; eauto;
@@ -2525,7 +3044,7 @@ Proof.
   - (* External call *)
     unfold regset_inject in RSINJ. generalize (RSINJ Asm.PC). rewrite H. 
     inversion 1; subst. rewrite Ptrofs.add_zero_l in H6.
-    exploit Mem.loadv_inject. apply MINJ. apply LOADRA. eauto. intros (v2 & LRA & VI).
+    exploit loadv_inject. apply MINJ. apply LOADRA. eauto. intros (v2 & LRA & VI).
     edestruct (extcall_arguments_inject) as (args2 & ARGSINJ & EXTCALLARGS); eauto.
     apply regset_inject_expand. eauto.
     apply Val.offset_ptr_inject. eauto.
