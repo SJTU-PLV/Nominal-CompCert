@@ -1292,6 +1292,7 @@ Proof.
     + rewrite H2. simpl. intros (P2 & Q2) (P1 & Q1).
       rewrite Z.add_0_r in H0. unfold Mem.flat_inj in H.
       destr_in H. inv H.
+      Mem.inject_extends_compose
       (* volatile information loss *)
       apply Q2 in H0. destruct H0. subst. clear Q2.
       unfold Genv.perm_globvar in *.
