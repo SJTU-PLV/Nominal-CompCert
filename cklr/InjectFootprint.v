@@ -2530,68 +2530,109 @@ Proof.
     + apply inject_incr_refl.
 Qed.
 
-
-
-
-(** * Properties *)
-
-(** Needs memory interpolation
-
-Lemma injp_injp:
-  subcklr injp (injp @ inj @ injp).
+Lemma injp_injp_eq :
+  eqcklr (injp @ injp) injp.
 Proof.
-  intros _ _ _ [f m1 m4 Hm14].
-  eexists (injpw (meminj_dom f) m1 m1,
-           (injw (meminj_dom f) (Mem.nextblock m1) (Mem.nextblock m1) _,
-            injpw f m1 m4)).
+  split.
+  apply injp_injp2.
+  apply injp_injp.
+Qed.
+
+(* injp -------------- inj *)
+Lemma sub_inj_injp :
+  subcklr inj injp.
+Proof.
+  red. intros [j sup1 sup2] se1 se2 m1 m2 MSTBL MMEM0.
+  inversion MMEM0 as [? ? ? MMEM]. subst.
+  exists (injpw j m1 m2 MMEM).
   simpl.
   repeat apply conj.
-  - exists m1; split.
-    { constructor. eapply mem_inject_dom; eauto. }
-    exists m1; split.
-    { constructor; repeat rstep; eauto using mem_inject_dom. }
-    constructor; eauto.
-  - rewrite !meminj_dom_compose.
-    apply inject_incr_refl.
-  - intros (w12' & w23' & w34') m1' m4'.
-    intros (m2' & Hm12' & m3' & Hm23' & Hm34').
-    intros (H12 & H23 & H34). simpl in *.
-    destruct Hm12' as [f12 m1' m2' Hm12'].
-    inversion Hm23' as [f23 xm2' xm3' Hm23'']; clear Hm23'; subst.
-    destruct Hm34' as [f34 m3' m4' Hm34'].
-    inv H12.
-    inv H23.
-    inv H34.
-    exists (injpw (compose_meminj f12 (compose_meminj f23 f34)) m1' m4').
-    repeat apply conj.
+  - inv MSTBL. constructor; eauto.
+  - constructor.
+  - eauto.
+  - intros [j' ? ? MMEM'] m1' m2' A B. inv A. inv B.
+    exists (injw j' (Mem.support m1') (Mem.support m2')).
+    simpl. repeat apply conj; eauto.
     + constructor; eauto.
-      eauto using Mem.inject_compose.
-    + constructor; eauto.
-      * apply injp_max_perm_decrease_dom; eauto.
-      * eapply Mem.unchanged_on_implies; eauto.
-        intros. apply loc_unmapped_dom; eauto.
-      * rewrite <- (meminj_dom_compose f).
-        rewrite <- (meminj_dom_compose f) at 2.
-        rauto.
-      * (* XXX we can't actually prove this because the intermediate
-          injection may map a new block into an old one, and falsify
-          the composite separation property. *)
-        (* XXX now we can, if we need to. *)
-Abort.
-*)
+      inv H7; eauto. inv H8; eauto.
+Qed.
+
+(* injp   ------------     injp
+                ------     injp ---------- inj *)
+Lemma injp_inj :
+  subcklr (injp @ inj) injp.
+Proof.
+  etransitivity.
+  apply cklr_compose_subcklr. reflexivity.
+  apply sub_inj_injp. apply injp_injp2.
+Qed.
+
+(* injp   ------------     injp ---------- inj
+                ------     injp ---------- inj *)
+Lemma inj_injp :
+  subcklr (inj @ injp) injp.
+Proof.
+  etransitivity.
+  apply cklr_compose_subcklr. apply sub_inj_injp.
+  reflexivity. apply injp_injp2.
+Qed.
 
 (*
-Lemma injp_inj_injp:
+
+injp   injp @ injp
+
+
+injp  ---- inj @ injp
+
+simplicity
+complex thing: 1. not clear about underlying rules
+               2. not usable for externals
+
+Semantics A           D
+
+          B
+
+          C           E
+
+injp -> injp
+
+CCO:     A            D (depend on language )
+
+         B            D
+
+         C            E
+
+injp @ injp -> injp @ injp
+
+with injp refinement
+
+injp -> injp
+
+*)
+(*
+  with self simulation using injp -> injp
+  injp ----
+  inj  --------- injp
+  injp ----
+*)
+Lemma injp__injp_inj_injp:
   subcklr injp (injp @ inj @ injp).
 Proof.
-  intros _ _ _ [f m1 m4 Hm14].
-  eexists (injpw (meminj_dom f) m1 m1,
-           (injw (meminj_dom f) (Mem.nextblock m1) (Mem.nextblock m1) _,
-            injpw f m1 m4)).
+  intros [f m1 m4 Hm14] se1 se4 ? ? STBL MEM. inv MEM.
+  inv STBL. clear Hm0 Hm1 Hm2 Hm3 Hm4 Hm5. rename m2 into m4. rename m0 into m1.
+  generalize (mem_inject_dom f m1 m4 Hm14). intro Hm12.
+  exists (injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m4 Hm14),
+           (injw (meminj_dom f) (Mem.support m1) (Mem.support m1),
+            injpw f m1 m4 Hm14)).
   simpl.
   repeat apply conj.
+  - exists se1. split. constructor; eauto.
+    eapply match_stbls_dom; eauto.
+    exists se1. split. constructor; eauto.
+    eapply match_stbls_dom; eauto.
+    eauto.
   - exists m1; split.
-    { constructor. eapply mem_inject_dom; eauto. }
+    constructor.
     exists m1; split.
     { constructor; repeat rstep; eauto using mem_inject_dom. }
     constructor; eauto.
@@ -2606,20 +2647,31 @@ Proof.
     inv H12.
     inv H23.
     inv H34.
-    exists (injpw (compose_meminj f12 (compose_meminj f23 f34)) m1' m4').
+    assert (Hm14' :  Mem.inject (compose_meminj f12 (compose_meminj f23 f34)) m1' m4').
+    eapply Mem.inject_compose; eauto.
+    eapply Mem.inject_compose; eauto.
+    eexists (injpw (compose_meminj f12 (compose_meminj f23 f34)) m1' m4' Hm14').
     repeat apply conj.
     + constructor; eauto.
-      eauto using Mem.inject_compose.
     + constructor; eauto.
-      * apply injp_max_perm_decrease_dom; eauto.
       * eapply Mem.unchanged_on_implies; eauto.
         intros. apply loc_unmapped_dom; eauto.
       * rewrite <- (meminj_dom_compose f).
         rewrite <- (meminj_dom_compose f) at 2.
         rauto.
-      * (* XXX we can't actually prove this because the intermediate
+      * red. intros b1 b4 d f14 INJ. unfold compose_meminj in INJ.
+        destruct (f12 b1) as [[b2 d1]|] eqn: INJ1; try congruence.
+        destruct (f23 b2) as [[b3 d2]|] eqn: INJ2; try congruence.
+        destruct (f34 b3) as [[b4' d3]|] eqn: INJ3; try congruence. inv INJ.
+        exploit H14; eauto. unfold meminj_dom. rewrite f14. auto.
+        intros [A B].
+        exploit H15; eauto. inversion Hm12. apply mi_freeblocks; eauto.
+        intros [C D]. eauto.
+        exploit H23. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
+        intros [E F]. split; eauto.
+    + repeat rstep; eauto.
+Qed.
+     (* * (* XXX we can't actually prove this because the intermediate
           injection may map a new block into an old one, and falsify
           the composite separation property. *)
-        (* XXX now we can, if we need to. *)
-Abort.
-*)
+        (* XXX now we can, if we need to. *) *)

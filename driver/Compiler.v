@@ -407,6 +407,19 @@ Require Import VAExtends.
 Definition cc_cklrs : callconv li_c li_c :=
   injp + inj + ext + vainj + vaext.
 
+(*
+
+   cc_c vainjp @ ?
+
+   wt_c @ cc_c_asm @ cc_asm vainjp
+
+   welltypeness
+   overall calling convention
+   public/private control
+
+   va: ?
+*)
+
 Definition cc_compcert : callconv li_c li_asm :=
   cc_cklrs^{*} @
   wt_c @ lessdef_c @ cc_c_locset @ cc_locset_mach @ cc_mach_asm @
