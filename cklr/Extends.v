@@ -4,6 +4,7 @@ Require Import LanguageInterface.
 Require Import CallconvAlgebra.
 Require Import CKLR.
 Require Import Inject.
+Require Import InjectFootprint.
 
 
 (** * [Mem.extends] as a CKLR *)
@@ -317,3 +318,94 @@ Proof.
       * rewrite compose_meminj_id_right. apply inject_incr_refl.
 Qed.
 
+Lemma ext_injp :
+  eqcklr (ext @ injp) injp.
+Proof.
+  split.
+  - intros [[ ] f] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23).
+    destruct f. inversion Hm23. subst. simpl in *.
+    exploit Mem.extends_inject_compose; eauto. intro Hm13.
+    exists (injpw f m1 m3 Hm13). cbn in *. repeat apply conj; eauto.
+    + inv Hse23. constructor; eauto. inversion Hm12. rewrite mext_sup. auto.
+    + rewrite compose_meminj_id_left. apply inject_incr_refl.
+    + intros f' m1' m3' Hm' Hincr.
+      exists (tt, f'). intuition auto; cbn.
+      * exists m1'. eauto using Mem.extends_refl.
+      * repeat rstep. inv Hincr.
+        constructor; eauto; inversion Hm12.
+        ++ red. red in H2. intros.
+           eapply Mem.perm_extends; eauto.
+           eapply H2; eauto.
+           eapply Mem.valid_block_extends; eauto.
+        ++  (* we shall manually free the coresponding regions in m2?*)
+           inversion H4. constructor.
+           rewrite <- mext_sup. auto.
+           admit. admit.
+        ++ eapply Mem.unchanged_on_implies; eauto.
+           intros. red. red in H.
+           intros. intro. eapply H; eauto.
+           eapply Mem.perm_extends; eauto.
+        ++ red. intros.
+           exploit H8; eauto. intros [A B].
+           split. rewrite <- Mem.valid_block_extends; eauto. auto.
+      * rewrite compose_meminj_id_left. apply inject_incr_refl.
+  - intros w se1 se2 m1 m2 Hse Hm.
+    exists (tt, w). cbn. repeat apply conj.
+    + ercompose; eauto.
+    + exists m1. split; auto. apply Mem.extends_refl.
+    + rewrite compose_meminj_id_left. apply inject_incr_refl.
+    + intros [[ ] f'] m1' m2' (mi & Hm1i & Hmi2) [_ Hf']. cbn in *.
+      destruct f'. inversion Hmi2. subst.
+      exploit Mem.extends_inject_compose; eauto. intro Hm12'.
+      exists (injpw f m1' m2' Hm12'). intuition auto.
+      * (* inv Hf'. inversion Hm. subst. constructor; eauto.
+        ++
+        red in H2. red. intros. eapply H2; eauto.
+        eapply Mem.perm_extends; eauto.
+        ++ inversion H4. constructor.
+           inversion Hm1i. rewrite mext_sup. auto.
+           intros. exploit unchanged_on_perm; eauto. intro.
+           rewrite H1. admit.
+           intros. exploit unchanged_on_contents; eauto. intro.
+           rewrite <- H1. inversion Hm1i. inversion mext_inj.
+           assert (Mem.perm m1' b ofs Cur Readable). admit.
+           admit.
+           *)
+        admit.
+      * rewrite compose_meminj_id_left. apply inject_incr_refl.
+Admitted.
+
+Lemma injp_ext :
+  eqcklr (injp @ ext) injp.
+Proof.
+  split.
+  - intros [f [ ]] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23).
+    destruct f. inversion Hm12. subst. cbn in *.
+    exploit Mem.inject_extends_compose; eauto. intros Hm13.
+    exists (injpw f m1 m3 Hm13). repeat apply conj; eauto.
+    + inv Hse12. constructor; eauto. inversion Hm23. rewrite <- mext_sup. eauto.
+    + rewrite compose_meminj_id_right. apply inject_incr_refl.
+    + intros f' m1' m3' Hm' Hincr.
+      exists (f', tt). intuition auto; cbn.
+      * exists m3'. eauto using Mem.extends_refl.
+      * repeat rstep. inv Hincr. inversion Hm'. subst. constructor; eauto.
+        ++ red. red in H3. intros. admit.
+        ++ admit.
+        ++ red. intros. exploit H8; eauto. intros [A B].
+           split. auto. rewrite Mem.valid_block_extends; eauto.
+      * rewrite compose_meminj_id_right. apply inject_incr_refl.
+  - intros w se1 se2 m1 m2 Hse Hm.
+    exists (w, tt). cbn. repeat apply conj.
+    + ercompose; eauto.
+    + exists m2. split; auto. apply Mem.extends_refl.
+    + rewrite compose_meminj_id_right. apply inject_incr_refl.
+    + intros [f' [ ]] m1' m2' (mi & Hm1i & Hmi2) [Hf' _]. cbn in *.
+      destruct f'. inversion Hm1i. subst .
+      exploit Mem.inject_extends_compose; eauto. intros Hm12'.
+      exists (injpw f m1' m2' Hm12'). intuition auto.
+      * inv Hf'. inversion Hm. subst.
+        constructor; eauto.
+        ++ admit.
+        ++ admit.
+      * rewrite compose_meminj_id_right. apply inject_incr_refl.
+Admitted.

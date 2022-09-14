@@ -2611,10 +2611,13 @@ injp -> injp
 *)
 (*
   with self simulation using injp -> injp
-  injp ----
-  inj  --------- injp
-  injp ----
+       ------    injp ->  injp ----
+injp --------    injp ->  inj  --------- injp
+       ------    injp ->  injp ----
+
 *)
+
+
 Lemma injp__injp_inj_injp:
   subcklr injp (injp @ inj @ injp).
 Proof.
@@ -2671,7 +2674,12 @@ Proof.
         intros [E F]. split; eauto.
     + repeat rstep; eauto.
 Qed.
-     (* * (* XXX we can't actually prove this because the intermediate
-          injection may map a new block into an old one, and falsify
-          the composite separation property. *)
-        (* XXX now we can, if we need to. *) *)
+
+(*
+injp ---- injp            injp ----------- injp
+       -- ext             ext  ------
+
+va 
+*)
+(*Lemma injp__injp_ext : 
+  subcklr injp (injp @ ext). *)
