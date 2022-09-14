@@ -2675,11 +2675,3 @@ Proof.
     + repeat rstep; eauto.
 Qed.
 
-(*
-injp ---- injp            injp ----------- injp
-       -- ext             ext  ------
-
-va 
-*)
-(*Lemma injp__injp_ext : 
-  subcklr injp (injp @ ext). *)

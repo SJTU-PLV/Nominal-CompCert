@@ -317,12 +317,17 @@ Proof.
         eapply Mem.inject_extends_compose; eauto.
       * rewrite compose_meminj_id_right. apply inject_incr_refl.
 Qed.
-
+(*
 Lemma ext_injp :
   eqcklr (ext @ injp) injp.
 Proof.
   split.
-  - intros [[ ] f] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23).
+  - (*
+       injp ====------        ext
+                ------        injp
+     *)
+
+    intros [[ ] f] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23).
     destruct f. inversion Hm23. subst. simpl in *.
     exploit Mem.extends_inject_compose; eauto. intro Hm13.
     exists (injpw f m1 m3 Hm13). cbn in *. repeat apply conj; eauto.
@@ -409,3 +414,86 @@ Proof.
         ++ admit.
       * rewrite compose_meminj_id_right. apply inject_incr_refl.
 Admitted.
+*)
+
+Lemma injp__injp_ext_injp:
+  subcklr injp (injp @ ext @ injp).
+Proof.
+  intros [f m1 m4 Hm14] se1 se4 ? ? STBL MEM. inv MEM.
+  inv STBL. clear Hm0 Hm1 Hm2 Hm3 Hm4 Hm5. rename m2 into m4. rename m0 into m1.
+  generalize (mem_inject_dom f m1 m4 Hm14). intro Hm12.
+  exists (injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m4 Hm14),(tt,
+            injpw f m1 m4 Hm14)).
+  simpl.
+  repeat apply conj.
+  - exists se1. split. constructor; eauto.
+    eapply match_stbls_dom; eauto.
+    exists se1. split. auto. constructor; eauto.
+  - exists m1; split.
+    constructor.
+    exists m1; split. apply Mem.extends_refl.
+    constructor; eauto.
+  - rewrite compose_meminj_id_left.
+    rewrite !meminj_dom_compose.
+    apply inject_incr_refl.
+  - intros (w12' & w23' & w34') m1' m4'.
+    intros (m2' & Hm12' & m3' & Hm23' & Hm34').
+    intros (H12 & H23 & H34). simpl in *.
+    destruct Hm12' as [f12 m1' m2' Hm12'].
+    destruct Hm34' as [f34 m3' m4' Hm34'].
+    inv H12.
+    inv H23.
+    inv H34.
+    assert (Hm14' :  Mem.inject (compose_meminj f12 f34) m1' m4').
+    eapply Mem.inject_compose; eauto.
+    eapply Mem.extends_inject_compose; eauto.
+    eexists (injpw (compose_meminj f12 f34) m1' m4' Hm14').
+    repeat apply conj.
+    + constructor; eauto.
+    + constructor; eauto.
+      * eapply Mem.unchanged_on_implies; eauto.
+        intros. apply loc_unmapped_dom; eauto.
+      * rewrite <- (meminj_dom_compose f).
+        rauto.
+      * red. intros b1 b4 d f14 INJ. unfold compose_meminj in INJ.
+        destruct (f12 b1) as [[b2 d1]|] eqn: INJ1; try congruence.
+        destruct (f34 b2) as [[b3 d3]|] eqn: INJ3; try congruence. inv INJ.
+        exploit H14; eauto. unfold meminj_dom. rewrite f14. auto.
+        intros [A B].
+        exploit H19. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
+        intros [E F]. split; eauto.
+    + rewrite compose_meminj_id_left.
+      repeat rstep; eauto.
+Qed.
+(*
+Lemma test1 : subcklr (ext @ injp) injp.
+    intros [[ ] f] se1 se3 m1 m3 (se2 & Hse12 & Hse23) (m2 & Hm12 & Hm23).
+    destruct f. inversion Hm23. subst. simpl in *.
+    exploit Mem.extends_inject_compose; eauto. intro Hm13.
+    exists (injpw f m1 m3 Hm13). cbn in *. repeat apply conj; eauto.
+    + inv Hse23. constructor; eauto. inversion Hm12. rewrite mext_sup. auto.
+    + rewrite compose_meminj_id_left. apply inject_incr_refl.
+    + intros f' m1' m3' Hm' Hincr.
+      exists (tt, f'). intuition auto; cbn.
+      * exists m1'. eauto using Mem.extends_refl.
+      * repeat rstep. inv Hincr.
+        constructor; eauto; inversion Hm12.
+        ++ red. red in H2. intros.
+           eapply Mem.perm_extends; eauto.
+           eapply H2; eauto.
+           eapply Mem.valid_block_extends; eauto.
+        ++  (* we shall manually free the coresponding regions in m2?*)
+           inversion H4. constructor.
+           rewrite <- mext_sup. auto.
+           admit. admit.
+        ++ eapply Mem.unchanged_on_implies; eauto.
+           intros. red. red in H.
+           intros. intro. eapply H; eauto.
+           eapply Mem.perm_extends; eauto.
+        ++ red. intros.
+           exploit H8; eauto. intros [A B].
+           split. rewrite <- Mem.valid_block_extends; eauto. auto.
+      * rewrite compose_meminj_id_left. apply inject_incr_refl.
+Admitted.
+*)
+

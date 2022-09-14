@@ -677,6 +677,53 @@ Qed.
 
 End COMPOSE_C_PASSES.
 
+(*
+ injp_injp_eq : eqcklr (injp @ injp) injp
+ inj_injp : subcklr (inj @ injp) injp
+ injp_inj : subcklr (injp @ inj) injp
+ 
+injp__injp_inj_injp: subcklr injp (injp @ inj @ injp)   
+ *)
+(** Test place about injp in RTL semantics using self simulation *)
+
+Lemma injp_pass: forall p tp,
+    let sem := RTL.semantics p in
+    let tsem := RTL.semantics tp in
+  forward_simulation (cc_c injp) (cc_c inj) sem tsem ->
+  forward_simulation (cc_c injp) (cc_c injp) sem tsem.
+Proof.
+  intros.
+  rewrite injp__injp_inj_injp at 2.
+  rewrite <- injp_injp2,  !cc_c_compose at 1.
+  rewrite <- injp_injp2,  !cc_c_compose at 1.
+  rewrite cc_compose_assoc.
+  eapply compose_forward_simulations.
+  eapply RTLrel.semantics_rel.
+  eapply compose_forward_simulations. eauto.
+  eapply RTLrel.semantics_rel.
+Qed.
+
+Lemma injp_pass_trans: forall p tp,
+    let sem := RTL.semantics p in
+    let tsem := RTL.semantics tp in
+  forward_simulation (cc_c ext) (cc_c ext) sem tsem ->
+  forward_simulation (cc_c injp) (cc_c injp) sem tsem.
+Proof.
+  intros.
+  eapply injp_pass; eauto. fold sem tsem.
+  rewrite <- inj_ext.   rewrite cc_c_compose.
+  rewrite <- sub_inj_injp at 1.
+  assert (HH :subcklr (inj @ ext) inj).
+  rewrite inj_ext. rauto.
+  rewrite <- HH at 1. rewrite cc_c_compose.
+  eapply compose_forward_simulations.
+  eapply RTLrel.semantics_rel.
+  eauto.
+Qed.
+
+
+
+(** This is the simulation convention for the whole compiler. *)
 Lemma compose_identity_pass {liA1 liA2 liB1 liB2} ccA ccB sem bsem tsem:
   forward_simulation 1 1 sem bsem ->
   forward_simulation ccA ccB bsem tsem ->
