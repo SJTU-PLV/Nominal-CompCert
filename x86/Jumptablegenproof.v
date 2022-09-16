@@ -40,4 +40,8 @@ Admitted.
 
 End PRESERVATION.
 
+Instance jumptablegen_transflink: TransfLink match_prog.
+Admitted.
+
+
 End WITH_INSTR_SIZE.

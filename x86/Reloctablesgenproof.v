@@ -5,7 +5,7 @@
 (* *******************  *)
 
 Require Import Coqlib Errors Maps.
-Require Import Integers Floats AST Linking.
+Require Import Integers Floats AST RelocProgLinking Linking.
 Require Import Op Locations Mach Conventions Asm RealAsm.
 Require Import Reloctablesgen.
 Require Import RelocProg RelocProgram RelocProgSemantics RelocProgSemantics1.
@@ -620,3 +620,7 @@ Proof.
 Qed.
 
 End PRESERVATION.
+
+Instance reloctablesgen_transflink (instr_size: instruction -> Z): TransfLink (match_prog instr_size).
+Admitted.
+

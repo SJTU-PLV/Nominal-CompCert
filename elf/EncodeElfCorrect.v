@@ -3,7 +3,7 @@ Require Import Smallstep.
 Require Import EncodeRelocElf DecodeRelocElf.
 Require Import Asm EncDecRet RelocElf.
 Require Import Coqlib Errors.
-
+Require Import Linking RelocElfLinking.
 Require Import RelocElfgenproof.
 Require Import LocalLib.
 
@@ -38,3 +38,27 @@ Qed.
 End PRES.
 
 End WITH_INSTR_SIZE.
+
+Definition link (p1 p2: list Integers.Byte.int * Asm.program * Globalenvs.Senv.t) :=
+  let '(b1, p1, s1) := p1 in let '(b2, p2, s2) := p2 in
+  match decode_elf_file b1 p1 s1, decode_elf_file b2 p2 s2 with
+  | OK e1, OK e2 =>
+    match link_elf_file e1 e2 with
+    | Some e =>
+      match encode_elf_file e with
+        OK r => Some r
+      | _ => None
+      end
+    | None => None
+    end
+  | _, _ => None
+  end.
+
+Instance linker : Linker (list Integers.Byte.int * Asm.program * Globalenvs.Senv.t).
+Proof.
+  eapply Build_Linker with (link := link) (linkorder := fun _ _ => True).
+  auto. auto. auto.
+Defined.
+
+Instance encodeelf_transflink : Linking.TransfLink match_prog.
+Admitted.

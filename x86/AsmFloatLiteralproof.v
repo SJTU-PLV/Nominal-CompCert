@@ -43,3 +43,6 @@ Admitted.
 End PRESERVATION.
 
 End WITH_INSTR_SIZE.
+
+Instance floatliteral_transflink: TransfLink match_prog.
+Admitted.

@@ -93,6 +93,7 @@ Require Reloctablesgenproof.
 Require RelocBingenproof.
 Require RelocElfgenproof.
 Require EncodeElfCorrect.
+Require RelocProgLinking.
 (** Command-line flags. *)
 Require Import Compopts.
 (** RealAsm passed. *)
@@ -213,18 +214,18 @@ Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
   transf_c_program p
   @@ time "SSAsm" SSAsmproof.transf_program
   @@@ time "Translation from SSAsm to RealAsm" RealAsmgen.transf_program instr_size
-  @@ time "Elimination of pseudo instruction" PseudoInstructions.transf_program.
-
- (** Transfer to ELF *)
- Definition transf_c_program_bytes (p: Csyntax.program) :=
-  transf_c_program_real p
+  @@ time "Elimination of pseudo instruction" PseudoInstructions.transf_program
   @@@ time "Expand builtin inline assembly" AsmBuiltinInline.transf_program
   @@@ time "Pad Instructions with struct return" AsmStructRet.transf_program
   @@ time "Generation of the float literal" AsmFloatLiteral.transf_program
   @@ time "Generation of int64 literal" AsmLongInt.transf_program (* enable only in 64bit mode?  *)
   @@@ time "Elimination of other pseudo instructions" AsmPseudoInstr.transf_program
   @@@ time "Make local jumps use offsets instead of labels" Asmlabelgen.transf_program instr_size
-  @@ time "Generation of the jump table" Jumptablegen.transf_program instr_size
+  @@ time "Generation of the jump table" Jumptablegen.transf_program instr_size.
+
+ (** Assembler *)
+ Definition transf_c_program_assembler (p: Csyntax.program) :=
+  transf_c_program_real p
   @@@ time "Generation of symbol table" Symbtablegen.transf_program instr_size
   @@@ time "Generation of relocation table" Reloctablesgen.transf_program instr_size
   @@@ time "Encoding of instructions and data" RelocBingen.transf_program instr_size
@@ -323,9 +324,24 @@ Definition CompCert's_passes :=
       mkpass SSAsmproof.match_prog
   ::: mkpass (RealAsmproof.match_prog instr_size)
   ::: mkpass (PseudoInstructionsproof.match_prog)
-  ::: mkpass AsmBuiltinInline
+  ::: mkpass AsmBuiltinInlineproof.match_prog
+  ::: mkpass AsmStructRetproof.match_prog
+  ::: mkpass AsmFloatLiteralproof.match_prog
+  ::: mkpass AsmLongIntproof.match_prog
+  ::: mkpass AsmPseudoInstrproof.match_prog
+  ::: mkpass (Asmlabelgenproof.match_prog instr_size)
+  ::: @mkpass  _ _ (Jumptablegenproof.match_prog instr_size) (Jumptablegenproof.jumptablegen_transflink instr_size)
   ::: pass_nil _.
-(** Composing the [match_prog] relations above, we obtain the relation
+ 
+ Definition assembler_passes :=
+      mkpass (Symbtablegenproof.match_prog instr_size)
+  ::: mkpass (Reloctablesgenproof.match_prog instr_size)
+  ::: mkpass (RelocBingenproof.match_prog instr_size)
+  ::: mkpass RelocElfgenproof.match_prog
+  ::: mkpass EncodeElfCorrect.match_prog
+  ::: pass_nil _.
+ 
+ (** Composing the [match_prog] relations above, we obtain the relation
   between CompCert C sources and Asm code that characterize CompCert's
   compilation. *)
 
@@ -338,9 +354,14 @@ Fixpoint passes_app {A B C} (l1: Passes A B) (l2: Passes B C) : Passes A C :=
   | pass_cons _ _ _ P1 l1 => fun l2 => P1 ::: passes_app l1 l2
   end l2.
 
- Definition match_prog_real :=
+Definition match_prog_real :=
   pass_match (compose_passes (passes_app CompCert's_passes real_asm_passes)).
 
+Definition match_prog_bytes :=
+  pass_match (compose_passes (passes_app CompCert's_passes (passes_app real_asm_passes assembler_passes))).
+
+ 
+ 
 (** The [transf_c_program] function, when successful, produces
   assembly code that is in the [match_prog] relation with the source C program. *)
 
@@ -403,6 +424,8 @@ Proof.
   reflexivity.
 Qed.
 
+
+
 Lemma compose_passes_app:
   forall {l1 l2} (A: Passes l1 l2) {l3} (B: Passes l2 l3) p tp,
     compose_passes (passes_app A B) p tp <->
@@ -420,19 +443,48 @@ Theorem transf_c_program_real_match:
 Proof.
   intros p tp T. unfold transf_c_program_real in T.
   destruct (transf_c_program p) as [p1|e] eqn:TP; simpl in T; try discriminate.
-  unfold time in T. unfold SSAsmproof.transf_program in T.
+  unfold time in T.
+  unfold SSAsmproof.transf_program in T.
   destruct (RealAsmgen.transf_program instr_size p1) eqn:RTP; simpl in T; try discriminate; inv T.
-(*  destruct (PseudoInstructions.check_program p0) eqn:CHK; simpl in T; try discriminate. inv T. *)
-  unfold match_prog_real. unfold real_asm_passes.
-  rewrite compose_passes_app.
-  fold match_prog. exists p1; split.
-  eapply transf_c_program_match; eauto.
-  simpl. eexists; split; eauto. reflexivity.
-  eexists; split; eauto.
-  eapply RealAsmproof.transf_program_match; eauto.
-  eexists; split; eauto.
-  eapply PseudoInstructionsproof.transf_program_match; eauto.
-Qed.
+  destruct (PseudoInstructions.transf_program p0) eqn:PIE; simpl in H0; try discriminate; inv H0.
+  destruct (AsmBuiltinInline.transf_program _) eqn:BII; simpl in H1; try discriminate; inv H1.
+  destruct (AsmStructRet.transf_program p2) eqn:ASR; simpl in H0; try discriminate; inv H0.
+    destruct (AsmFloatLiteral.transf_program p3) eqn:AFL; simpl in H1; try discriminate; inv H1.    
+    destruct (AsmLongInt.transf_program _) eqn:ALI; simpl in H0; try discriminate; inv H0.
+  destruct (AsmPseudoInstr.transf_program _) eqn:API; simpl in H1; try discriminate; inv H1.
+   
+  Admitted.
+
+  
+(*   unfold match_prog_real. unfold real_asm_passes. *)
+(*   rewrite compose_passes_app. *)
+(*   fold match_prog. exists p1; split. *)
+(*   eapply transf_c_program_match; eauto. *)
+(*   simpl. eexists; split; eauto. reflexivity. *)
+(*   eexists; split; eauto. *)
+(*   eapply RealAsmproof.transf_program_match; eauto. *)
+(*   eexists; split; eauto. *)
+(*   eapply PseudoInstructionsproof.transf_program_match; eauto. *)
+(* Qed. *)
+
+
+Theorem transf_c_program_bytes_match :
+  forall p tp,
+    transf_c_program_assembler p = OK tp ->
+    match_prog_bytes p tp.
+Proof.
+  intros p tp T. unfold transf_c_program_assembler in T.
+  destruct (transf_c_program_real p) as [p1|e] eqn:TP; simpl in T; try discriminate. 
+  unfold time in T.
+  destruct (Symbtablegen.transf_program instr_size p1) eqn:STG; simpl in T; try discriminate.
+  destruct (Reloctablesgen.transf_program instr_size p0) eqn: RTG; simpl in T; try discriminate.
+  destruct (RelocBingen.transf_program instr_size p2) eqn: RBG; simpl in T; try discriminate.
+  destruct (RelocElfgen.gen_reloc_elf p3) eqn: REG; simpl in T; try discriminate.
+  red.
+  repeat rewrite compose_passes_app.
+Admitted.  
+   
+
 
 (** * Semantic preservation *)
 

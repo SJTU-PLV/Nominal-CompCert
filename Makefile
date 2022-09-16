@@ -27,7 +27,7 @@ else
 ARCHDIRS=$(ARCH)_$(BITSIZE) $(ARCH)
 endif
 
-DIRS := lib common $(ARCHDIRS) backend cfrontend driver exportclight cparser encode elf autogen
+DIRS := lib common $(ARCHDIRS) backend cfrontend driver exportclight cparser encode elf autogen assembler
 
 COQINCLUDES := $(foreach d, $(DIRS), -R $(d) compcert.$(d))
 
@@ -140,7 +140,10 @@ ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
  ReloctablesEncode.v  ReloctablesDecode.v \
  SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof.v\
  DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
+ RelocElfLinking.v\
 
+# assembler
+ASSEMBLER = RelocProgLinking.v\
 
 # CAV generation file
 AUTOGEN = VerificationCondition.v EncDecRet.v
@@ -175,7 +178,7 @@ DRIVER=Compopts.v Compiler.v Complements.v
 # All source files
 
 FILES=$(VLIB) $(COMMON) $(BACKEND) $(CFRONTEND) $(DRIVER) $(FLOCQ) \
-  $(MENHIRLIB) $(PARSER) $(ENCODE) $(ELF) $(AUTOGEN)
+  $(MENHIRLIB) $(PARSER) $(ENCODE) $(ELF) $(AUTOGEN) $(ASSEMBLER)
 
 # Generated source files
 

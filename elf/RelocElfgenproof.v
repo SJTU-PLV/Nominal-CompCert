@@ -7,7 +7,7 @@ Require Import Coqlib Maps AST lib.Integers Values.
 Require Import Events lib.Floats Memory Smallstep.
 Require Import Asm RelocProg RelocProgramBytes RelocElf Globalenvs.
 Require Import Stacklayout Conventions.
-Require Import Linking Errors.
+Require Import Linking RelocProgLinking RelocElfLinking Errors.
 Require Import EncDecRet RelocElfgen.
 Require Import RelocProgSemantics RelocProgSemantics1.
 Require Import TranslateInstr RelocProgSemantics2 RelocElfSemantics.
@@ -220,15 +220,14 @@ Proof.
     simpl. rewrite IHl1;auto.
 Qed.
 
-    
+Definition match_prog (p: program) (tp: elf_file) :=
+  gen_reloc_elf p = OK tp.
+
+
 Section WITH_INSTR_SIZE.
 
 Variable instr_size : instruction -> Z.
 Variable Instr_size : list Instruction -> Z.
-
-
-Definition match_prog (p: program) (tp: elf_file) :=
-  gen_reloc_elf p = OK tp.
 
 (* encode decode consistency *)
 
@@ -1471,3 +1470,7 @@ Qed.
 End PRESERVATION.
 
 End WITH_INSTR_SIZE.
+
+Instance relocelfgen_transflink:
+  TransfLink match_prog.
+Admitted.
