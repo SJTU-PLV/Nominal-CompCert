@@ -213,7 +213,23 @@ Lemma create_sec_table_correct: forall n id def defs,
      | _ => None
      end).
 Proof.
-  induction n.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  inv H1.
+  exploit length_S_inv;eauto.
+  intros (l'& a & A1 & A2). destruct a.
+  subst. clear H.
+  apply in_app in H1.
+  rewrite map_app in H0.
+  apply list_norepet_app in H0. destruct H0 as (A1 & A2 & A3).
+  rewrite fold_left_app. simpl.
+  unfold list_disjoint in A3.  
+  destruct g.
+  - destruct f.
+    + destruct H1.
+      -- rewrite PTree.gso.
+         eapply IHn;eauto. eapply A3;simpl;auto.
+
 Admitted.
 
 Lemma advance_next_exists: forall F V n b (defs: list (ident * globdef F V)),

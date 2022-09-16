@@ -1424,11 +1424,11 @@ Proof.
 Qed.
 
 
-Lemma alloc_section_pres_mem: forall ge1 ge2 id sec sec1 sec2 m m0 reloctbl symbtbl
+Lemma alloc_section_pres_mem: forall ge1 ge2 id sec sec1 sec2 m m0 reloctbl
     (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
     acc_fold_section instr_size reloctbl id sec = OK sec1 ->
     acc_decode_code_section instr_size Instr_size reloctbl id sec1 = OK sec2 ->
-    RelocProgSemantics.alloc_section instr_size ge1 symbtbl (Some m) id (RelocProgSemantics1.rev_section instr_size reloctbl id sec) = Some m0 ->
+    RelocProgSemantics.alloc_section instr_size ge1 (Some m) id (RelocProgSemantics1.rev_section instr_size reloctbl id sec) = Some m0 ->
     alloc_section instr_size ge2 reloctbl (Some m) id sec2 = Some m0.
 Proof.
   intros.
@@ -1798,7 +1798,7 @@ Lemma transf_initial_state:forall st1 rs,
                  (p : positive *
                       RelocProg.section instruction init_data) =>
                RelocProgSemantics.alloc_section instr_size ge1
-                 (prog_symbtable prog) a (fst p) 
+                  a (fst p) 
                  (snd p)) x2 (Some Mem.empty))) eqn:FOLD.
       2:{ simpl in Heqo. inv Heqo. }
       exploit IHx1. eapply eq_refl.

@@ -126,7 +126,7 @@ BACKEND=\
   Reloctablesgen.v Reloctablesgenproof.v\
   RelocBingen.v RelocBinDecode.v RelocBingenproof.v\
   TranslateInstr.v TranslateInstrSize.v\
-  AsmLongInt.v\
+  AsmLongInt.v AsmLongIntproof.v\
   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
   AsmInject.v
 
@@ -139,6 +139,7 @@ ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
  ReloctablesEncode.v  ReloctablesDecode.v \
  SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof.v\
+ DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
 
 
 # CAV generation file

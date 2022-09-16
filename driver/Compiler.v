@@ -79,9 +79,20 @@ Require Asmgenproof.
 Require SSAsmproof.
 Require RealAsmproof.
 Require PseudoInstructionsproof.
+(* target printer *)
+Require AsmBuiltinInlineproof.
+Require AsmStructRetproof.
+Require AsmFloatLiteralproof.
+Require AsmLongIntproof.
+Require AsmPseudoInstrproof.
+Require Asmlabelgenproof.
+Require Jumptablegenproof.
+(* Assembler *)
 Require Symbtablegenproof.
-(*Require Reloctablesgenproof.*)
-(*Require RelocBingenproof.*)
+Require Reloctablesgenproof.
+Require RelocBingenproof.
+Require RelocElfgenproof.
+Require EncodeElfCorrect.
 (** Command-line flags. *)
 Require Import Compopts.
 (** RealAsm passed. *)
@@ -311,7 +322,8 @@ Definition CompCert's_passes :=
  Definition real_asm_passes :=
       mkpass SSAsmproof.match_prog
   ::: mkpass (RealAsmproof.match_prog instr_size)
-  ::: mkpass (PseudoInstructionsproof.match_prog )
+  ::: mkpass (PseudoInstructionsproof.match_prog)
+  ::: mkpass AsmBuiltinInline
   ::: pass_nil _.
 (** Composing the [match_prog] relations above, we obtain the relation
   between CompCert C sources and Asm code that characterize CompCert's
