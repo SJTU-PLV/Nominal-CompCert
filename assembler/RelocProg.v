@@ -1,10 +1,3 @@
-(* *******************  *)
-(* Author: Yuting Wang  *)
-(*         Jinhua Wu    *)
-(* Date:   Sep 13, 2019 *)
-(* Last updated:  Feb 27, 2022 by Jinhua Wu*)
-(* *******************  *)
-
 (** * Template of languages with information about symbols and relocation *)
 
 Require Import Coqlib Maps Integers Values AST.
@@ -120,19 +113,6 @@ Definition acc_reloc_ofs_map (e:relocentry) (rs: reloc_ofs_map_type): reloc_ofs_
 
 Definition gen_reloc_ofs_map (rtbl: reloctable) :  reloc_ofs_map_type :=
   fold_right acc_reloc_ofs_map (ZTree.empty relocentry) rtbl.
-
-(* Coercion prog_to_prog : program >-> AST.program. *)
-
-(** Section table ids *)
-(* Definition sec_rodata_id   := 1%N. *)
-(* Definition sec_data_id     := 2%N. *)
-(* Definition sec_code_id     := 3%N. *)
-Definition sec_strtbl_id   := 4%N.
-Definition sec_symbtbl_id  := 5%N.
-(* Definition sec_rel_rodata_id := 6%N. *)
-(* Definition sec_rel_data_id := 7%N. *)
-(* Definition sec_rel_code_id := 8%N. *)
-Definition sec_shstrtbl_id := 9%N.
 
 (** Ultility function s*)
 (* Definition add_symb_to_list (t: list (ident * symbentry)) (s:symbentry) := *)

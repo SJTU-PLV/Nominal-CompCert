@@ -79,14 +79,6 @@ Require Asmgenproof.
 Require SSAsmproof.
 Require RealAsmproof.
 Require PseudoInstructionsproof.
-(* target printer *)
-(* Require AsmBuiltinInlineproof. *)
-(* Require AsmStructRetproof. *)
-(* Require AsmFloatLiteralproof. *)
-(* Require AsmLongIntproof. *)
-(* Require AsmPseudoInstrproof. *)
-(* Require Asmlabelgenproof. *)
-(* Require Jumptablegenproof. *)
 (* Assembler *)
 Require Symbtablegenproof.
 Require Reloctablesgenproof.
@@ -343,14 +335,6 @@ Definition CompCert's_passes :=
  Definition real_asm_passes :=
       mkpass SSAsmproof.match_prog
   ::: mkpass (RealAsmproof.match_prog instr_size)
-  (* ::: mkpass (PseudoInstructionsproof.match_prog) *)
-  (* ::: mkpass AsmBuiltinInlineproof.match_prog *)
-  (* ::: mkpass AsmStructRetproof.match_prog *)
-  (* ::: mkpass AsmFloatLiteralproof.match_prog *)
-  (* ::: mkpass AsmLongIntproof.match_prog *)
-  (* ::: mkpass AsmPseudoInstrproof.match_prog *)
-  (* ::: mkpass (Asmlabelgenproof.match_prog instr_size) *)
-  (* ::: @mkpass  _ _ (Jumptablegenproof.match_prog instr_size) (Jumptablegenproof.jumptablegen_transflink instr_size) *)
   ::: pass_nil _.
  
  Definition assembler_passes :=
