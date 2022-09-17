@@ -220,9 +220,15 @@ Proof.
     simpl. rewrite IHl1;auto.
 Qed.
 
+
 Definition match_prog (p: program) (tp: elf_file) :=
   gen_reloc_elf p = OK tp.
 
+Lemma transf_program_match:
+  forall p tp, gen_reloc_elf p = OK tp -> match_prog p tp.
+Proof.
+  auto.
+Qed.
 
 Section WITH_INSTR_SIZE.
 

@@ -149,6 +149,15 @@ Section PRESERVATION.
 Variable instr_size : instruction -> Z.
 Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
 
+Definition match_prog (p: Asm.program) (tp: program) :=
+  transf_program instr_size p = OK tp.
+
+Lemma transf_program_match:
+  forall p tp, transf_program instr_size p = OK tp -> match_prog p tp.
+Proof.
+  auto.
+Qed.
+
 
 Lemma prog_instr_valid: forall prog tprog,
     transf_program instr_size prog = OK tprog ->
@@ -293,9 +302,6 @@ Variable tprog: program.
 
 Let ge := Genv.globalenv prog.
 Let tge := globalenv instr_size tprog.
-
-Definition match_prog (p: Asm.program) (tp: program) :=
-  transf_program instr_size p = OK tp.
 
 Hypothesis TRANSF: match_prog prog tprog.
 

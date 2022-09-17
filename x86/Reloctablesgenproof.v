@@ -97,6 +97,15 @@ Hypothesis instr_reloc_bound : forall i ofs, instr_reloc_offset i = OK ofs -> 0 
 
 Hypothesis id_eliminate_size_unchanged:forall i, instr_size i = instr_size (id_eliminate i).
 
+Definition match_prog (p: program) (tp: program) :=
+  transf_program instr_size p = OK tp.
+
+Lemma transf_program_match:
+  forall p tp, transf_program instr_size p = OK tp -> match_prog p tp.
+Proof.
+  auto.
+Qed.
+
 (** *Consistency Theorem *)
 
 Lemma rev_transl_code_snd_size:forall n c c1 c2 r1 r2 sz,
@@ -573,9 +582,6 @@ Variable tprog: program.
 
 Let ge := RelocProgSemantics.globalenv instr_size prog.
 Let tge := globalenv instr_size tprog.
-
-Definition match_prog (p: program) (tp: program) :=
-  transf_program instr_size p = OK tp.
 
 Hypothesis TRANSF: match_prog prog tprog.  
 

@@ -72,6 +72,11 @@ Hypothesis rev_id_eliminate_size: forall i id, instr_size i = instr_size (rev_id
 Definition match_prog (p: RelocProgram.program) (tp: program) :=
   transf_program instr_size p = OK tp.
 
+Lemma transf_program_match:
+  forall p tp, transf_program instr_size p = OK tp -> match_prog p tp.
+Proof.
+  auto.
+Qed.
 
       
 (* important lemma: may be so difficult *)

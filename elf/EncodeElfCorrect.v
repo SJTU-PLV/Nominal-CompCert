@@ -4,12 +4,18 @@ Require Import EncodeRelocElf DecodeRelocElf.
 Require Import Asm EncDecRet RelocElf.
 Require Import Coqlib Errors.
 Require Import Linking RelocElfLinking.
-Require Import RelocElfgenproof.
 Require Import LocalLib.
 
 
 Definition match_prog : elf_file -> (list Integers.Byte.int * Asm.program * Globalenvs.Senv.t) -> Prop :=
   fun p p' => encode_elf_file p = OK p'.
+
+Definition transf_program_match :
+  forall p tp, encode_elf_file p = OK tp -> match_prog p tp.
+Proof.
+  auto.
+Qed.
+
 
 Section WITH_INSTR_SIZE.
 
