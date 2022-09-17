@@ -57,7 +57,7 @@ let compile_c_file sourcename ifile ofile =
   (* Convert to ELF *)
   if !option_reloc_elf then
   begin
-    match Compiler.transf_c_program_bytes csyntax with
+    match Compiler.transf_c_program_assembler csyntax with
      | Errors.OK ((bs, p), _) ->
         ElfFileOutput.write_elf ofile bs
      | Errors.Error msg ->

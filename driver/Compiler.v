@@ -94,6 +94,7 @@ Require RelocBingenproof.
 Require RelocElfgenproof.
 Require EncodeElfCorrect.
 Require RelocProgLinking.
+Require TranslateInstrSize.
 (** Command-line flags. *)
 Require Import Compopts.
 (** RealAsm passed. *)
@@ -158,6 +159,7 @@ Definition partial_if {A: Type}
 
 
 Definition instr_size := Asm.instr_size_real.
+Definition Instr_size := TranslateInstrSize.Instr_size.
 Definition instr_size_bound := Asm.instr_size_bound_real.
 
 Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
@@ -525,6 +527,33 @@ Definition fn_stack_requirements (tp: Asm.program) (id: ident) : Z :=
     | _ => 0
     end.
 
+(* CCELF Start *)
+Definition reloc_fn_stack_requirements {I D: Type} (tp: RelocProg.program Asm.fundef unit I D) (id:ident) : Z :=
+  match List.find (fun '(id',_) => ident_eq id id') (RelocProg.prog_defs tp) with
+  | None => 0
+  | Some (_, def) =>
+    match def with
+    | (Gfun (Internal f)) => Asm.fn_stacksize f
+    | _ => 0
+    end
+  end.
+
+Definition elf_fn_stack_requirements (tp: RelocElf.elf_file) (id:ident) : Z :=
+  match (RelocElfSemantics.decode_elf tp) with
+  | OK p =>
+    reloc_fn_stack_requirements p id
+  | _ => 0
+  end.
+  
+Definition elf_bytes_stack_requirements (tp: list Integers.Byte.int * Asm.program * Globalenvs.Senv.t)
+           (id:ident) : Z :=
+  let '(b, p, s) := tp in
+  match DecodeRelocElf.decode_elf_file b p s with
+  | OK ef => elf_fn_stack_requirements ef id
+  | _ => 0
+  end.
+(* CCELF End *)
+
 Lemma match_program_no_more_functions:
   forall {F1 V1 F2 V2}
          `{Linker F1} `{Linker V1}
@@ -690,6 +719,7 @@ Proof.
   apply SSAsm.semantics_determinate.
 Qed.
 
+(* start: stack requirements *)
 Lemma Pseudo_fn_stack_requirements_match: forall  mp ap,
     PseudoInstructionsproof.match_prog mp ap->
     fn_stack_requirements mp = fn_stack_requirements ap.
@@ -706,6 +736,55 @@ Proof.
   setoid_rewrite FF. auto.
 Qed.
 
+Lemma AsmBuiltinInline_fn_stack_requirements_match : forall p tp,
+    AsmBuiltinInlineproof.match_prog p tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Proof.
+  Admitted.
+
+Lemma AsmStructRet_fn_stack_requirements_match : forall p tp,
+    AsmStructRetproof.match_prog p tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Proof.
+Admitted.
+
+Lemma AsmFloatLiteral_fn_stack_requirements_match : forall p tp,
+    AsmFloatLiteralproof.match_prog p tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Proof.
+Admitted.
+
+Lemma AsmLongInt_fn_stack_requirements_match: forall p tp,
+    AsmLongIntproof.match_prog p tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Proof.
+Admitted.
+
+    
+Lemma AsmPseudoInstr_fn_stack_requirements_match : forall p tp,
+    AsmPseudoInstrproof.match_prog p tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Proof.
+Admitted.
+
+Lemma Jumptablegen_fn_stack_requirements_match: forall p tp,
+    Jumptablegenproof.match_prog instr_size p tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Proof.
+Admitted.
+
+Lemma Asmlabelgen_fn_stack_requirements_match : forall p tp,
+    Asmlabelgenproof.match_prog instr_size p tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Proof.
+  intros p tp MATCH.
+  unfold fn_stack_requirements.
+  apply Axioms.extensionality. intro i.
+Admitted.
+(* End: fn_stack_requirements *)
+
+
+(* TODO: Correctness of Target Printer *)
 Theorem c_semantic_preservation_real:
   forall p tp,
   match_prog_real p tp ->
@@ -715,19 +794,29 @@ Proof.
   unfold match_prog_real in H.
   rewrite compose_passes_app in H.
   fold match_prog in H.
-  destruct H as (p1 & MP1 & P).
-  simpl in P. destruct P as (p2 & MP2 & P'). inv MP2.
-  simpl in P'. destruct P' as (p3 & MP3 & p4 & MP4 & EQ).
+  repeat (destruct H as (?p & ?MP & ?);simpl in H).
+  unfold SSAsmproof.match_prog in MP0. inv MP0.  
   exploit RealAsmproof.match_prog_inv; eauto. intro EQ'. inv EQ'.
-  apply compose_backward_simulation with (SSAsm.semantics instr_size p3).
+  apply compose_backward_simulation with (SSAsm.semantics instr_size p2).
   apply RealAsm.real_asm_single_events.
-  replace (fn_stack_requirements tp) with (fn_stack_requirements p3).
+  replace (fn_stack_requirements tp) with (fn_stack_requirements p2).
   eapply c_semantic_preservation_SS; eauto.
-  apply Pseudo_fn_stack_requirements_match; eauto.
+
+  erewrite (Pseudo_fn_stack_requirements_match _ _ MP2).
+  erewrite (AsmBuiltinInline_fn_stack_requirements_match _ _ MP3).
+  erewrite (AsmStructRet_fn_stack_requirements_match _ _ MP4).
+  erewrite (AsmFloatLiteral_fn_stack_requirements_match _ _ MP5).
+  erewrite (AsmLongInt_fn_stack_requirements_match _ _ MP6).
+  erewrite (AsmPseudoInstr_fn_stack_requirements_match _ _ MP7).
+  erewrite (Asmlabelgen_fn_stack_requirements_match _ _ MP8).
+  erewrite (Jumptablegen_fn_stack_requirements_match _ _ MP9).
+  auto.
+
   eapply compose_backward_simulation; eauto.
   apply RealAsm.real_asm_single_events.
   apply RealAsmproof.real_asm_correct'; eauto.
   eapply instr_size_bound.
+  
   exploit match_prog_wf; eauto.
   intros (A&B&C). red in A. red. intros.
   red. intros. exploit AsmFacts.in_find_instr; eauto.
@@ -756,23 +845,122 @@ Proof.
   rewrite PTR.
   destruct i;auto.
   
-  
-  intros. red. intros. exploit (Globalenvs.Genv.find_funct_ptr_transf_partial MP3); eauto.
-  intros (tf & FFP & TF).
-  simpl in TF; monadInv  TF. unfold RealAsmgen.transf_function in EQ. destr_in EQ.
-  eapply RealAsm.wf_asm_function_check_correct; eauto. eapply instr_size_bound.
-  exploit match_prog_wf; eauto.
-  intros (A&B&C). red in A. red. intros.
-  red. intros. exploit AsmFacts.in_find_instr; eauto.
-  instantiate (1 := instr_size).
-  eapply instr_size_bound.
-  intros [ofs H2]. eapply A; eauto.
-  apply RealAsm.real_asm_receptive.
-  apply RealAsm.real_asm_determinate.
-(* Qed. *)
+  Admitted.
+(*   intros. red. intros. exploit (Globalenvs.Genv.find_funct_ptr_transf_partial MP3); eauto. *)
+(*   intros (tf & FFP & TF). *)
+(*   simpl in TF; monadInv  TF. unfold RealAsmgen.transf_function in EQ. destr_in EQ. *)
+(*   eapply RealAsm.wf_asm_function_check_correct; eauto. eapply instr_size_bound. *)
+(*   exploit match_prog_wf; eauto. *)
+(*   intros (A&B&C). red in A. red. intros. *)
+(*   red. intros. exploit AsmFacts.in_find_instr; eauto. *)
+(*   instantiate (1 := instr_size). *)
+(*   eapply instr_size_bound. *)
+(*   intros [ofs H2]. eapply A; eauto. *)
+(*   apply RealAsm.real_asm_receptive. *)
+(*   apply RealAsm.real_asm_determinate. *)
+(* (* Qed. *) *)
+(* Admitted. *)
+
+(* start: assembler *)
+Lemma Symbtablegen_fn_stack_requirements_match: 
+  forall p tp
+    (FM: Symbtablegenproof.match_prog instr_size p tp),
+    fn_stack_requirements p = reloc_fn_stack_requirements tp.
+Proof.
 Admitted.
 
+Lemma Reloctablesgen_fn_stack_requirements_match: 
+  forall p tp
+    (FM: Reloctablesgenproof.match_prog instr_size p tp),
+    reloc_fn_stack_requirements p = reloc_fn_stack_requirements tp.
+Proof.
+Admitted.
 
+Lemma RelocBingen_fn_stack_requirements_match: 
+  forall p tp
+    (FM: RelocBingenproof.match_prog instr_size p tp),
+    reloc_fn_stack_requirements p = reloc_fn_stack_requirements tp.
+Proof.
+Admitted.
+
+Lemma RelocElfGen_fn_stack_requirements_match: 
+  forall p tp
+    (FM: RelocElfgenproof.match_prog p tp),
+    reloc_fn_stack_requirements p = elf_fn_stack_requirements tp.
+Proof.
+Admitted.
+
+Lemma ElfEncode_fn_stack_requirements_match: 
+  forall p tp
+    (FM: EncodeElfCorrect.match_prog p tp),
+    elf_fn_stack_requirements p = elf_bytes_stack_requirements tp.
+Proof.
+  unfold elf_bytes_stack_requirements.
+  unfold EncodeElfCorrect.match_prog.
+  intros.
+  destr. destr.
+  erewrite DecodeRelocElf.decode_encode_elf_file; eauto.
+Qed.
+
+Theorem c_semantic_preservation_bytes:
+  forall p tp,
+    match_prog_bytes p tp ->
+    let '(b, tp0, s) := tp in
+    backward_simulation (Csem.semantics (elf_bytes_stack_requirements tp) p) (ElfBytesSemantics.semantics instr_size Instr_size b tp0 s (Asm.Pregmap.init Values.Vundef)).
+Proof.
+  intros.
+  unfold match_prog_bytes in H.
+  rewrite compose_passes_app in H.
+  destruct H as (pi & MP & H).
+  rewrite compose_passes_app in H.
+  destruct H as (pi' & MP1 & H).
+  repeat (destruct H as (?p & ?MP & ?);simpl in H). subst.
+  simpl in MP0.
+
+  destruct tp. destruct p4.
+  eapply compose_backward_simulation.
+  apply ElfBytesSemantics.reloc_prog_single_events.
+  replace (elf_bytes_stack_requirements (l, p4, t)) with (fn_stack_requirements pi').
+  assert (match_prog_real p pi'). {
+    red.
+    apply compose_passes_app. eexists; split; eauto.
+  }
+  eapply c_semantic_preservation_real;eauto.
+
+  eapply eq_trans.
+  eapply Symbtablegen_fn_stack_requirements_match;eauto.
+  eapply eq_trans.
+  eapply Reloctablesgen_fn_stack_requirements_match;eauto.
+  eapply eq_trans.
+  eapply RelocBingen_fn_stack_requirements_match;eauto.
+  eapply eq_trans.
+  eapply RelocElfGen_fn_stack_requirements_match;eauto.
+  eapply eq_trans.
+  eapply ElfEncode_fn_stack_requirements_match;eauto.
+  auto.
+
+  eapply forward_to_backward_simulation.
+  eapply compose_forward_simulations.
+  eapply Symbtablegenproof.transf_program_correct;eauto.
+  eapply instr_size_bound.
+  eapply compose_forward_simulations.
+  eapply Reloctablesgenproof.transf_program_correct;eauto.
+  eapply instr_size_bound.
+  (* instr_reloc_offset *) admit.
+  (* id_eliminate does not change the size  *) admit.
+  eapply compose_forward_simulations.
+  eapply RelocBingenproof.transf_program_correct;eauto.
+  (* translate_instr size preserve *) admit.
+  (* instr_eq preserve size *) admit.
+  (* rev_id_eliminate preserve size *) admit.
+  eapply compose_forward_simulations.
+  eapply RelocElfgenproof.transf_program_correct;eauto.
+  eapply EncodeElfCorrect.encode_elf_correct;eauto.
+
+  apply RealAsm.real_asm_receptive.
+  eapply ElfBytesSemantics.semantics_determinate.
+Admitted.
+  
 (** * Correctness of the CompCert compiler *)
 
 (** Combining the results above, we obtain semantic preservation for two
@@ -799,6 +987,15 @@ Theorem transf_c_program_correct_real:
   backward_simulation (Csem.semantics (fn_stack_requirements tp) p) (RealAsm.semantics instr_size tp).
 Proof.
   intros. apply c_semantic_preservation_real. apply transf_c_program_real_match; auto.
+Qed.
+
+Theorem transf_c_program_correct_assembler:
+  forall p b tp s,
+    transf_c_program_assembler p = OK (b, tp, s) ->
+    backward_simulation (Csem.semantics (elf_bytes_stack_requirements (b,tp,s)) p) (ElfBytesSemantics.semantics instr_size Instr_size b tp s (Asm.Pregmap.init Values.Vundef)).
+Proof.
+  intros. exploit c_semantic_preservation_bytes. apply transf_c_program_bytes_match; eauto.
+  simpl. auto.
 Qed.
 
 (** Here is the separate compilation case.  Consider a nonempty list [c_units]
