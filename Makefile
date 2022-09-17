@@ -80,7 +80,7 @@ VLIB=Axioms.v Coqlib.v Intv.v Maps.v Heaps.v Lattice.v Ordered.v \
 COMMON=Errors.v AST.v Linking.v \
   Events.v Globalenvs.v Memdata.v Memtype.v Memory.v \
   Values.v Smallstep.v Behaviors.v Switch.v Determinism.v Unityping.v \
-  Separation.v Builtins0.v Builtins1.v Builtins.v RelocProg.v
+  Separation.v Builtins0.v Builtins1.v Builtins.v
 
 # Back-end modules (in backend/, $(ARCH)/)
 
@@ -114,19 +114,19 @@ BACKEND=\
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v \
   AsmRegs.v AsmFacts.v Asmgenproof.v \
   SSAsm.v SSAsmproof.v \
-  RealAsm.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v PseudoInstructionsproof.v \
-  AsmLabelNew.v AsmBuiltinInline.v AsmBuiltinInlineproof.v\
-  AsmStructRet.v AsmStructRetproof.v\
-  AsmFloatLiteral.v SymbolString.v AsmFloatLiteralproof.v\
-  AsmPseudoInstr.v AsmPseudoInstrproof.v\
-  Asmlabelgen.v Asmlabelgenproof.v\
-  LocalLib.v Jumptablegen.v CheckDef.v Jumptablegenproof.v\
+  RealAsm.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v \
+  AsmLabelNew.v AsmBuiltinInline.v\
+  AsmStructRet.v\
+  AsmFloatLiteral.v SymbolString.v\
+  AsmPseudoInstr.v\
+  Asmlabelgen.v\
+  LocalLib.v Jumptablegen.v CheckDef.v\
   RelocProgram.v RelocProgramBytes.v\
   Symbtablegen.v Symbtablegenproof.v\
   Reloctablesgen.v Reloctablesgenproof.v\
   RelocBingen.v RelocBinDecode.v RelocBingenproof.v\
   TranslateInstr.v TranslateInstrSize.v\
-  AsmLongInt.v AsmLongIntproof.v\
+  AsmLongInt.v\
   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
   AsmInject.v
 
@@ -143,7 +143,7 @@ ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
  RelocElfLinking.v\
 
 # assembler
-ASSEMBLER = RelocProgLinking.v\
+ASSEMBLER = RelocProg.v RelocProgLinking.v\
 
 # CAV generation file
 AUTOGEN = VerificationCondition.v EncDecRet.v
