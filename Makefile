@@ -121,13 +121,13 @@ BACKEND=\
   AsmPseudoInstr.v\
   Asmlabelgen.v\
   LocalLib.v Jumptablegen.v CheckDef.v\
-  RelocProgram.v RelocProgramBytes.v\
-  Symbtablegen.v Symbtablegenproof.v\
+  RelocProgramBytes.v\
+  SymbtablegenArchi.v SymbtablegenproofArchi.v\
   Reloctablesgen.v Reloctablesgenproof.v\
   RelocBingen.v RelocBinDecode.v RelocBingenproof.v\
   TranslateInstr.v TranslateInstrSize.v\
   AsmLongInt.v\
-  RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
+  RelocProgGlobalenvs.v RelocProgSemanticsArchi.v RelocProgSemantics1.v RelocProgSemantics2.v\
   AsmInject.v
 
 
@@ -143,7 +143,9 @@ ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
  RelocElfLinking.v\
 
 # assembler
-ASSEMBLER = RelocProg.v RelocProgLinking.v\
+ASSEMBLER = RelocProg.v RelocProgram.v RelocProgLinking.v MemoryAgree.v\
+  RelocProgSemantics.v\
+  Symbtablegen.v Symbtablegenproof.v
 
 # CAV generation file
 AUTOGEN = VerificationCondition.v EncDecRet.v

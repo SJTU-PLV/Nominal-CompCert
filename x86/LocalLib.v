@@ -1,7 +1,3 @@
-(* ********************* *)
-(* Author: Yuting Wang   *)
-(* Date:   Feb 31, 2020   *)
-(* ********************* *)
 Require Import Coqlib Integers AST Maps.
 Require Import Permutation.
 Require Import Values Events Memtype Memory.
