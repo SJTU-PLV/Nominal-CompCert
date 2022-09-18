@@ -156,6 +156,33 @@ Proof.
 Qed.
 
 
+Lemma create_sec_table_correct_aux: forall n l id,
+    length l = n ->
+    ~In id fst##l ->
+    (fold_left acc_gen_section l (PTree.empty section)) ! id = None.
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  simpl. eapply PTree.gempty.
+  exploit length_S_inv;eauto.
+  intros (l'& a & A1 & A2). destruct a. subst. clear H.
+  rewrite fold_left_app. simpl.
+  rewrite map_app in H0.
+  rewrite in_app in H0.
+  eapply Decidable.not_or in H0.
+  destruct H0. simpl in H0. eapply Decidable.not_or in H0.
+  destruct H0. clear H1.
+  destruct g.
+  - destruct f.
+    + rewrite PTree.gso;eauto.
+    + eauto.
+  - destr;eauto.
+    destruct l.
+    + destr;eauto;
+      destr;rewrite PTree.gso;eauto.
+    + destr;eauto;
+        destr;rewrite PTree.gso;eauto.
+Qed.
 
 (* auxilary lemma for match_def_sec *)
 Lemma create_sec_table_correct: forall n id def defs,
@@ -192,8 +219,55 @@ Proof.
     + destruct H1.
       -- rewrite PTree.gso.
          eapply IHn;eauto. eapply A3;simpl;auto.
+         eapply in_map in H.
+         replace id with (fst (id,def)) by auto.
+         eauto.
+      -- inv H. inv H0.
+         rewrite PTree.gss. auto.
+         inv H0.
+    + destruct H1.
+      -- eapply IHn;eauto. 
+      -- inv H. inv H0.
+         clear - A3.
+         assert (~In id fst##l').
+         unfold not. intros. eapply A3.
+         eauto. simpl. left. eauto. eauto.
+         eapply create_sec_table_correct_aux;eauto.
+         inv H0.
+  - destruct H1.
+    + assert (id <> p).
+      eapply A3. replace id with (fst (id,def)). 
+      eapply in_map. auto. auto.
+      simpl. auto.
+      destruct (gvar_init v).
+      -- eapply IHn;eauto.
+      --        
+        destruct l.
+        destruct i;eauto;destruct gvar_readonly;
+          rewrite PTree.gso;auto.                
+        destruct i;
+          destruct gvar_readonly;
+          rewrite PTree.gso;auto. 
+    + inv H. inv H0.
+      destruct (gvar_init v).
+      -- assert (~In id fst##l').
+         unfold not. intros. eapply A3.
+         eauto. simpl. left. eauto. eauto.
+         eapply create_sec_table_correct_aux;eauto.         
+      -- destruct l.
+         destruct i;
+           try (destruct gvar_readonly;
+                rewrite PTree.gss;auto).
+         assert (~In id fst##l').
+         unfold not. intros. eapply A3.
+         eauto. simpl. left. eauto. eauto.
+         eapply create_sec_table_correct_aux;eauto.
 
-Admitted.
+         destruct i;
+           try (destruct gvar_readonly;
+                rewrite PTree.gss;auto).
+      -- inv H0.    
+Qed.
 
 Lemma advance_next_exists: forall F V n b (defs: list (ident * globdef F V)),
     length defs = n ->
@@ -438,6 +512,37 @@ Proof.
   intros. congruence.
 Qed.
 
+Lemma acc_instr_map_fst_code_size: forall n imap c,
+    length c = n ->
+    code_size instr_size c <= Ptrofs.max_unsigned ->
+    fst (fold_left (acc_instr_map instr_size) c (Ptrofs.zero, imap)) = Ptrofs.repr (code_size instr_size c). 
+    induction n.
+    intros. apply length_zero_iff_nil in H. subst. simpl. auto.
+    intros. exploit length_S_inv;eauto.  intros (c' & a & ? & ?).
+    subst. rewrite fold_left_app.
+    simpl. unfold acc_instr_map at 1.
+    destruct (fold_left (acc_instr_map instr_size) c' (Ptrofs.zero, imap)) eqn:FOLD.
+    simpl. replace i with (Ptrofs.repr (code_size instr_size c')).
+    rewrite code_size_app. simpl. rewrite Ptrofs.add_unsigned.
+    rewrite Ptrofs.unsigned_repr;auto. rewrite Ptrofs.unsigned_repr.
+    auto.
+    generalize (instr_size_bound a). lia.
+    rewrite code_size_app in H0. simpl in H0.
+    generalize (instr_size_bound a). intros.
+    split.
+    clear -instr_size_bound.
+    induction c'. simpl. lia. simpl.
+    generalize (instr_size_bound a). intros. lia.
+    lia.
+
+    erewrite <- IHn. rewrite FOLD. auto. auto.
+    rewrite code_size_app in H0. simpl in H0.
+    generalize (instr_size_bound a). intros.
+    lia.
+Qed.
+
+
+
 (** instruction map is equiv to find_instr *)
 Lemma gen_instr_map_pres: forall n c ofs i,
     (code_size instr_size c) <= Ptrofs.max_unsigned ->
@@ -457,9 +562,14 @@ Proof.
                        (Ptrofs.zero, fun _ : ptrofs => None))) eqn:FOLD.
   simpl.
   destruct (Ptrofs.eq_dec i0 (Ptrofs.repr ofs)).
-  assert (forall imap c, fst (fold_left (acc_instr_map instr_size) c (Ptrofs.zero, imap)) = Ptrofs.repr (code_size instr_size c)). admit. (* make sure codesize of c is less than max_unsigned *)
-  generalize (H4 (fun _ : ptrofs => None) c'). unfold fst.
-  rewrite FOLD. intros. rewrite e in H5.
+  assert (C':code_size instr_size c' <= Ptrofs.max_unsigned).
+  rewrite H2 in H. rewrite code_size_app in H. simpl in H.
+  generalize  (instr_size_bound a). intros.
+  lia.
+  
+    
+  generalize (acc_instr_map_fst_code_size (length c') (fun _ : ptrofs => None) c'). unfold fst.
+  rewrite FOLD. intros. rewrite e in H4.
   exploit (ptrofs_repr_eq ofs (code_size instr_size c'));auto.
   generalize (find_instr_ofs_pos instr_size instr_size_bound _ _ _ H1).
   generalize (find_instr_bound instr_size instr_size_bound _ _ _ H1).
@@ -471,7 +581,7 @@ Proof.
   lia.
 
   intros.
-  rewrite H6 in H1. rewrite H2 in H1.
+  rewrite H5 in H1. rewrite H2 in H1.
   rewrite find_instr_app' in H1.
   rewrite Z.sub_diag in H1. simpl in H1. auto.
   eapply instr_size_bound. lia.
@@ -487,9 +597,23 @@ Proof.
   
   (* i0 = Ptrofs.repr code_size c' *)
   (* code_size c' < ofs or ofs < code_size c' *)
-  admit.
-Admitted.
+  generalize (acc_instr_map_fst_code_size (length c') (fun _ : ptrofs => None) c').
+  rewrite FOLD. simpl. intros.
+  rewrite H2 in n0.
+  assert (code_size instr_size c' <> ofs).
+  unfold not. intros. apply n0. rewrite H3. auto.
+  clear - H1 H3.
+  generalize ofs H3 H1. clear ofs H1 H3.
+  induction c'. intros. simpl in H1. destr_in H1. subst. simpl in H3.
+  congruence.
+  intros.
+  simpl in *. destr. eapply IHc'.
+  lia. auto.
+  auto.
 
+  rewrite code_size_app in H. simpl in H.
+  generalize (instr_size_bound a). intros. lia.
+Qed.
 
 Lemma genv_pres_instr_aux2:  forall defs (b : block) (f : function) (ofs : Z) (i : instruction) ge sectbl
     (* (OFS: 0 <= ofs <= Ptrofs.max_unsigned) *)
@@ -604,12 +728,21 @@ Lemma def_size_range: forall id def,
 Proof.
   unfold match_prog in TRANSF. unfold transf_program in TRANSF.
   destr_in TRANSF. destr_in TRANSF.
-  intros. inv w.
-  exploit in_norepet_unique_r;eauto.
-  intros (gl1 & gl2 & SPLIT & NOTIN).
-  generalize l.
-  rewrite SPLIT. unfold create_sec_table.
-Admitted.
+  intros.
+  clear - l H instr_size_bound.
+  unfold defs_size in l.
+  set (defs:=(AST.prog_defs prog)) in *.
+  generalize def H l. generalize defs.
+  clear - instr_size_bound.
+  induction defs. simpl. intros. exfalso. auto.
+  simpl. intros. destruct a. destruct H.
+  - inv H. simpl in l.    
+    generalize (defs_size_pos _ instr_size_bound snd##defs).
+    intros. unfold defs_size in H. lia.
+  - eapply IHdefs;eauto.
+    simpl in l. generalize (def_size_pos _ instr_size_bound g).
+    intros. lia.
+Qed.
 
 Lemma genv_defs_match: forall l id (ge1 ge2:Globalenvs.Genv.t fundef unit),
     Genv.genv_defs ge1 (Global id) = Genv.genv_defs ge2 (Global id) -> 
@@ -1022,11 +1155,82 @@ Variables m tm: mem.
 Hypothesis IM: Genv.init_mem prog = Some m.
 Hypothesis TIM: init_mem instr_size tprog = Some tm.
 
+  
 Lemma bytes_of_init_inject:
   forall il,
   list_forall2 (memval_inject (Mem.flat_inj (Mem.support m))) (Genv.bytes_of_init_data_list ge il) (bytes_of_init_data_list tge il).
-Admitted.
-  
+Proof.
+  induction il.
+  - simpl. constructor.
+  - simpl. eapply list_forall2_app;eauto.
+    destruct a;simpl.
+    generalize (Int.unsigned i). intros.
+    generalize (encode_int_length 1 z). 
+    generalize  (encode_int 1 z). intros.
+    do 2 (destruct l as [|? l];simpl in H;try congruence).
+    constructor. constructor. constructor.
+    generalize (Int.unsigned i). intros.
+    generalize (encode_int_length 2 z). 
+    generalize  (encode_int 2 z). intros.
+    do 3 (destruct l as [|? l];simpl in H;try congruence).
+    repeat constructor.
+    generalize (Int.unsigned i). intros.
+    generalize (encode_int_length 4 z). 
+    generalize  (encode_int 4 z). intros.
+    do 5 (destruct l as [|? l];simpl in H;try congruence).
+    repeat constructor. 
+    generalize (Int64.unsigned i). intros.
+    generalize (encode_int_length 8 z). 
+    generalize  (encode_int 8 z). intros.
+    do 9 (destruct l as [|? l];simpl in H;try congruence).
+    repeat constructor. 
+    generalize (Int.unsigned (Float32.to_bits f)). intros.
+    generalize (encode_int_length 4 z). 
+    generalize  (encode_int 4 z). intros.
+    do 5 (destruct l as [|? l];simpl in H;try congruence).
+    repeat constructor.
+    generalize (Int64.unsigned (Float.to_bits f)). intros.
+    generalize (encode_int_length 8 z). 
+    generalize  (encode_int 8 z). intros.
+    do 9 (destruct l as [|? l];simpl in H;try congruence).
+    repeat constructor. 
+
+    generalize (Z.to_nat z). clear.
+    induction n. simpl. constructor.
+    simpl. constructor. constructor.
+    eauto.
+    
+    destruct Archi.ptr64.
+    destr. exploit init_meminj_match_sminj;eauto.
+    intros. exploit agree_inj_globs;eauto.
+    intros (b' & ofs' & A & B).
+    unfold Mem.flat_inj in B. destr_in B. inv B. rewrite A.
+    eapply inj_value_inject.
+    econstructor. unfold Mem.flat_inj. destr.
+    rewrite H2.
+    rewrite Ptrofs.repr_unsigned. auto.
+    destr. destruct p.
+    simpl.
+    unfold inj_value. simpl.
+    repeat constructor.
+    simpl. repeat constructor.
+
+    destr. exploit init_meminj_match_sminj;eauto.
+    intros. exploit agree_inj_globs;eauto.
+    intros (b' & ofs' & A & B).
+    unfold Mem.flat_inj in B. destr_in B. inv B. rewrite A.
+    eapply inj_value_inject.
+    econstructor. unfold Mem.flat_inj. destr.
+    rewrite H2.
+    rewrite Ptrofs.repr_unsigned. auto.
+    destr. destruct p.
+    simpl.
+    unfold inj_value. simpl.
+    repeat constructor.
+    simpl. repeat constructor.
+Qed.
+
+    
 (** copy from Unusedglobproof *)
 Lemma Mem_getN_forall2:
   forall (P: memval -> memval -> Prop) c1 c2 i n p,
@@ -1337,7 +1541,7 @@ Proof.
 Qed.
 
 
-(** auxilary lemma for init_mem_exists *)
+(** hard: auxilary lemma for init_mem_exists *)
 Lemma alloc_globals_alloc_sections_exists: forall defs ge1 ge2 m1 m1' m2,
     Genv.alloc_globals ge1 m1 defs = Some m1' ->
     exists m2', fold_left 
@@ -1345,13 +1549,11 @@ Lemma alloc_globals_alloc_sections_exists: forall defs ge1 ge2 m1 m1' m2,
             alloc_section instr_size ge2 a (fst p) (snd p))
        (PTree.elements (create_sec_table defs)) (Some m2) = Some m2'.
 Proof.
-  (* Mem.alloc_glob *)
-  (* Mem.perm_alloc_glob_2 *)
-  (* Genv.store_zeros_exists *)
-  (* Genv.alloc_globals_match *)
-  (* induction defs;simpl;intros. *)
+  induction defs;simpl;intros. eauto.
+  
+ 
   (* - exists m2. auto. *)
-  (* - destr_in H. *)
+  destr_in H.
     (* relation between defs and (create_sec_table defs) *)
     (* generalize the section table and symbol table
 induction on the PTree.elements xxx
