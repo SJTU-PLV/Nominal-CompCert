@@ -1,10 +1,3 @@
-(* *******************  *)
-(* Author: Yuting Wang  *)
-(*         Jinhua Wu    *)
-(* Date:   Sep 18, 2019 *)
-(* Last updated: Feb 5, 2022 by Jinhua Wu*)
-(* **********   *********  *)
-
 Require Import Coqlib Maps Integers Floats Values AST Errors.
 Require Import Globalenvs.
 Require Import Asm RelocProg RelocProgramBytes.
@@ -27,10 +20,6 @@ Definition concat_byte (acc: res (list byte)) i :=
   do c <- EncDecRet.encode_Instruction i;
   OK (code ++ c).
 
-(* Definition encode_instruction (e: option relocentry) (ofs: Z) (i: instruction) :res (list byte) := *)
-(*   do c1 <- translate_instr e ofs i; *)
-(*   do c <- fold_left concat_byte c1 (OK []); *)
-(*   OK c. *)
 
 (* use generated encoder*)
 Definition acc_instrs r i := 

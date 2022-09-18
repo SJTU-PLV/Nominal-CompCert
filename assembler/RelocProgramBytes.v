@@ -1,8 +1,3 @@
-(* *******************  *)
-(* Author: Jinhua Wu    *)
-(* Date:   Aug 5th, 2022 *)
-(* *******************  *)
-
 (** * Template of languages with information about symbols and relocation *)
 
 Require Import Coqlib Maps Integers Values AST.

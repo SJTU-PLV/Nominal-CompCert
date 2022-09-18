@@ -1,8 +1,3 @@
-(* *******************  *)
-(* Author: Jinhua Wu    *)
-(* Date:   Jul 26th     *)
-(* *******************  *)
-
 (** * The semantics of relocatable program after instruction and data encoding *)
 
 (** The key feature of this semantics: it first decode the instructions and
@@ -14,7 +9,8 @@ Require Import Asm RelocProg RelocProgramBytes Globalenvs.
 Require Import Stacklayout Conventions.
 Require Import Linking Errors.
 Require Import EncDecRet RelocBingen RelocBinDecode.
-Require Import RelocProgSemantics RelocProgSemantics1.
+Require Import RelocProgSemantics RelocProgSemantics1 RelocProgSemanticsArchi1.
+Require Import RelocProgGlobalenvs RelocProgSemanticsArchi.
 
 Import ListNotations.
 Local Open Scope error_monad_scope.
@@ -29,7 +25,7 @@ Section WITH_INSTR_SIZE.
   Variable Instr_size : list Instruction -> Z.
 Section WITHGE.
 
-  Variable ge:RelocProgSemantics.Genv.t.
+  Variable ge:RelocProgGlobalenvs.Genv.t.
   
 (** Initialization of memory *)
 
@@ -348,7 +344,7 @@ Definition semantics (p: program) (rs: regset) :=
   Semantics_gen (RelocProgSemantics.step instr_size)
                 (initial_state p rs) RelocProgSemantics.final_state 
                 (globalenv p)
-                (RelocProgSemantics.Genv.genv_senv (globalenv p)).
+                (RelocProgGlobalenvs.Genv.genv_senv (globalenv p)).
 
 (** Determinacy of the semantics. *)
 
@@ -367,7 +363,7 @@ Proof.
     + split. constructor. auto.
     + discriminate.
     + discriminate.
-    + assert (vargs0 = vargs) by (eapply RelocProgSemantics.eval_builtin_args_determ; eauto).   
+    + assert (vargs0 = vargs) by (eapply RelocProgSemanticsArchi.eval_builtin_args_determ; eauto).   
       subst vargs0.      
       exploit external_call_determ. eexact H5. eexact H11. intros [A B].
       split. auto. intros. destruct B; auto. subst. auto.

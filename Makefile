@@ -121,10 +121,9 @@ BACKEND=\
   AsmPseudoInstr.v\
   Asmlabelgen.v\
   LocalLib.v Jumptablegen.v CheckDef.v\
-  RelocProgramBytes.v\
   SymbtablegenArchi.v SymbtablegenproofArchi.v\
-  Reloctablesgen.v ReloctablesgenArchi.v Reloctablesgenproof.v\
-  RelocBingen.v RelocBinDecode.v RelocBingenproof.v\
+  Reloctablesgen.v ReloctablesgenArchi.v ReloctablesgenproofArchi.v Reloctablesgenproof.v\
+  RelocBingen.v RelocBinDecode.v RelocBingenproofArchi.v RelocBingenproof.v\
   TranslateInstr.v TranslateInstrSize.v\
   AsmLongInt.v\
   RelocProgGlobalenvs.v RelocProgSemanticsArchi.v RelocProgSemanticsArchi1.v\
@@ -144,7 +143,8 @@ ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
  RelocElfLinking.v\
 
 # assembler
-ASSEMBLER = RelocProg.v RelocProgram.v RelocProgLinking.v MemoryAgree.v\
+ASSEMBLER = RelocProg.v RelocProgram.v  RelocProgramBytes.v\
+  RelocProgLinking.v MemoryAgree.v\
   RelocProgSemantics.v\
   Symbtablegen.v Symbtablegenproof.v
 
