@@ -178,16 +178,16 @@ Definition Paddl_mi_bp code : bool :=
 	true && blen && bmatch0.
 
 Definition Paddl_GvEv_bp code : bool :=
-	let blen := 16 <=? (length code) in
-	let bmask0 := b["1111111111000000"] in
-	let bresult0 := b["0000001111000000"] in
+	let blen := 8 <=? (length code) in
+	let bmask0 := b["11111111"] in
+	let bresult0 := b["00000011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition Paddl_EvGv_bp code : bool :=
-	let blen := 16 <=? (length code) in
-	let bmask0 := b["1111111111000000"] in
-	let bresult0 := b["0000000111000000"] in
+	let blen := 8 <=? (length code) in
+	let bmask0 := b["11111111"] in
+	let bresult0 := b["00000001"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 

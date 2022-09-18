@@ -1402,18 +1402,16 @@ OK (result0 ++ result1 ++ result2)
 | Paddl_GvEv AddrE uvar3_0 => let byte01 := HB["03"] in
 let result0 := [byte01] in
 let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 (proj1_sig uvar3_0) in
-do byte13 <- encode_AddrE AddrE byte12;
-let result1 := byte13 in
+let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
+do byte12 <- encode_AddrE AddrE byte11;
+let result1 := byte12 in
 OK (result0 ++ result1)
 | Paddl_EvGv AddrE uvar3_0 => let byte01 := HB["01"] in
 let result0 := [byte01] in
 let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 (proj1_sig uvar3_0) in
-do byte13 <- encode_AddrE AddrE byte12;
-let result1 := byte13 in
+let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
+do byte12 <- encode_AddrE AddrE byte11;
+let result1 := byte12 in
 OK (result0 ++ result1)
 | Padcl_rr uvar3_0 uvar3_1 => let byte01 := HB["11"] in
 let result0 := [byte01] in
