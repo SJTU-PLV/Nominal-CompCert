@@ -235,7 +235,7 @@ Definition semantics (p: elf_file) (rs: regset) :=
   Semantics_gen (RelocProgSemantics.step instr_size)
                 (initial_state p rs) RelocProgSemantics.final_state 
                 (globalenv p)
-                (RelocProgSemantics.Genv.genv_senv (globalenv p)).
+                (RelocProgGlobalenvs.Genv.genv_senv (globalenv p)).
 
 (** Determinacy of the semantics. *)
 
@@ -254,7 +254,7 @@ Proof.
     + split. constructor. auto.
     + discriminate.
     + discriminate.
-    + assert (vargs0 = vargs) by (eapply RelocProgSemantics.eval_builtin_args_determ; eauto).   
+    + assert (vargs0 = vargs) by (eapply RelocProgSemanticsArchi.eval_builtin_args_determ; eauto).   
       subst vargs0.      
       exploit external_call_determ. eexact H15. eexact H21. intros [A B].
       split. auto. intros. destruct B; auto. subst. auto.

@@ -1,8 +1,3 @@
-(* *******************  *)
-(* Author: Jinhua Wu    *)
-(* Date:   Aug 11th     *)
-(* *******************  *)
-
 Require Import Coqlib Maps AST lib.Integers Values.
 Require Import Events lib.Floats Memory Smallstep.
 Require Import Asm RelocProg RelocProgramBytes RelocElf Globalenvs.
@@ -12,7 +7,7 @@ Require Import EncDecRet RelocElfgen.
 Require Import RelocProgSemantics RelocProgSemantics1.
 Require Import TranslateInstr RelocProgSemantics2 RelocElfSemantics.
 Require Import SymbtableDecode ReloctablesEncode.
-
+Require Import RelocProgGlobalenvs RelocProgSemanticsArchi.
 Import Hex Bits.
 Import ListNotations.
 
@@ -1101,11 +1096,11 @@ Qed.
 
 Lemma program_equiv_symbol_address: forall D (p1 p2: RelocProg.program fundef unit instruction D),
     program_equiv p1 p2 ->
-    forall id ofs, Genv.symbol_address (RelocProgSemantics.globalenv instr_size p1) id ofs = Genv.symbol_address (RelocProgSemantics.globalenv instr_size p2) id ofs.
+    forall id ofs, RelocProgGlobalenvs.Genv.symbol_address (RelocProgSemantics.globalenv instr_size p1) id ofs = RelocProgGlobalenvs.Genv.symbol_address (RelocProgSemantics.globalenv instr_size p2) id ofs.
 Proof.
   intros.
-  unfold RelocProgSemantics.globalenv. unfold Genv.symbol_address.
-  unfold Genv.find_symbol. simpl.
+  unfold RelocProgSemantics.globalenv. unfold RelocProgGlobalenvs.Genv.symbol_address.
+  unfold RelocProgGlobalenvs.Genv.find_symbol. simpl.
   assert ((gen_symb_map (prog_symbtable p1)) ! id = (gen_symb_map (prog_symbtable p2)) ! id).
   unfold gen_symb_map.
   repeat rewrite PTree.gmap.
@@ -1117,11 +1112,11 @@ Qed.
 
 Lemma program_equiv_symbol_address1: forall D (p1 p2: RelocProg.program fundef unit instruction D),
     program_equiv p1 p2 ->
-    forall id ofs, Genv.symbol_address (RelocProgSemantics1.globalenv instr_size p1) id ofs = Genv.symbol_address (RelocProgSemantics1.globalenv instr_size p2) id ofs.
+    forall id ofs, RelocProgGlobalenvs.Genv.symbol_address (RelocProgSemantics1.globalenv instr_size p1) id ofs = RelocProgGlobalenvs.Genv.symbol_address (RelocProgSemantics1.globalenv instr_size p2) id ofs.
 Proof.
   intros.
-  unfold RelocProgSemantics1.globalenv. unfold Genv.symbol_address.
-  unfold Genv.find_symbol. simpl.
+  unfold RelocProgSemantics1.globalenv. unfold RelocProgGlobalenvs.Genv.symbol_address.
+  unfold RelocProgGlobalenvs.Genv.find_symbol. simpl.
   assert ((gen_symb_map (prog_symbtable p1)) ! id = (gen_symb_map (prog_symbtable p2)) ! id).
   unfold gen_symb_map.
   repeat rewrite PTree.gmap.
@@ -1134,7 +1129,7 @@ Qed.
 
 Lemma program_equiv_instr_map: forall D (p1 p2: RelocProg.program fundef unit instruction D),
     program_equiv p1 p2 ->
-    Genv.genv_instrs (RelocProgSemantics1.globalenv instr_size p1) = Genv.genv_instrs (RelocProgSemantics1.globalenv instr_size p2).
+    RelocProgGlobalenvs.Genv.genv_instrs (RelocProgSemantics1.globalenv instr_size p1) = RelocProgGlobalenvs.Genv.genv_instrs (RelocProgSemantics1.globalenv instr_size p2).
 Proof.
   unfold RelocProgSemantics1.globalenv.
   simpl. unfold gen_code_map. intros.
@@ -1161,7 +1156,7 @@ Qed.
 
 Lemma program_equiv_ext_funs1: forall D (p1 p2: RelocProg.program fundef unit instruction D),
     program_equiv p1 p2 ->
-    Genv.genv_ext_funs (RelocProgSemantics1.globalenv instr_size p1) = Genv.genv_ext_funs (RelocProgSemantics1.globalenv instr_size p2).
+    RelocProgGlobalenvs.Genv.genv_ext_funs (RelocProgSemantics1.globalenv instr_size p1) = RelocProgGlobalenvs.Genv.genv_ext_funs (RelocProgSemantics1.globalenv instr_size p2).
 Proof.
   unfold RelocProgSemantics1.globalenv.
   simpl. unfold gen_extfuns. intros.
@@ -1170,7 +1165,7 @@ Proof.
 Qed.
 
 
-Lemma store_init_data_bytes_match_ge: forall n bytes reloctbl m b p ge1 ge2 (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+Lemma store_init_data_bytes_match_ge: forall n bytes reloctbl m b p ge1 ge2 (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs),
     length bytes = n ->
     store_init_data_bytes ge1 reloctbl m b p bytes = store_init_data_bytes ge2 reloctbl m b p bytes.
 Proof. 
@@ -1206,7 +1201,7 @@ Proof.
   intros. destr_in H0.
   assert (alloc_sections instr_size
       (RelocProgSemantics.globalenv instr_size p2)
-      (prog_reloctables p2) 
+      (prog_reloctables p2)
       (prog_sectable p2) Mem.empty = Some m0).
   { unfold alloc_sections in *.
     rewrite PTree.fold_spec in *.
@@ -1214,7 +1209,7 @@ Proof.
     { exploit PTree.elements_extensional.
       intros. exploit (@pe_sectable fundef unit);eauto.
       auto. }
-    unfold RelocProgramBytes.section in *.
+    unfold RelocProgram.section in *.
     rewrite H1 in *. clear H1.
     set (l := (PTree.elements (prog_sectable p2))) in *.
     assert (LEN: exists n, length l = n).
@@ -1310,7 +1305,7 @@ Lemma transf_initial_state: forall st1 rs,
   econstructor;eauto. auto.
 Qed.
 
-Lemma eval_addrmode_match_ge: forall ge1 ge2 a rs (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
+Lemma eval_addrmode_match_ge: forall ge1 ge2 a rs (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs),
     eval_addrmode ge1 a rs = eval_addrmode ge2 a rs.
 Proof.
   unfold eval_addrmode. destruct Archi.ptr64;intros.
@@ -1324,7 +1319,7 @@ Proof.
     destruct p. eauto.
 Qed.
 
-Lemma exec_load_match_ge: forall sz ge1 ge2 chunk m a rs rd (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs) ,
+Lemma exec_load_match_ge: forall sz ge1 ge2 chunk m a rs rd (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
           exec_load sz ge1 chunk m a rs rd = exec_load sz ge2 chunk m a rs rd.
 Proof.
   unfold exec_load.
@@ -1332,7 +1327,7 @@ Proof.
   eauto. auto.
 Qed.
 
-Lemma exec_store_match_ge: forall sz ge1 ge2 chunk m a rs rd l (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs) ,
+Lemma exec_store_match_ge: forall sz ge1 ge2 chunk m a rs rd l (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
           exec_store sz ge1 chunk m a rs rd l = exec_store sz ge2 chunk m a rs rd l.
 Proof.
   unfold exec_store.
@@ -1340,18 +1335,18 @@ Proof.
   eauto. auto.
 Qed.
 
-Lemma eval_builtin_arg_match_ge: forall rs sp m arg varg ge1 ge2 (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
-        eval_builtin_arg preg ge1 rs sp m arg varg ->
-        eval_builtin_arg preg ge2 rs sp m arg varg.
+Lemma eval_builtin_arg_match_ge: forall rs sp m arg varg ge1 ge2 (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs),
+        RelocProgSemanticsArchi.eval_builtin_arg preg ge1 rs sp m arg varg ->
+        RelocProgSemanticsArchi.eval_builtin_arg preg ge2 rs sp m arg varg.
 Proof.
   induction 2;try constructor;auto.
   rewrite MATCHGE in H. auto.
   rewrite MATCHGE. constructor.
 Qed.
 
-Lemma eval_builtin_args_match_ge: forall rs sp m args vargs ge1 ge2 (MATCHGE: forall i ofs, RelocProgSemantics.Genv.symbol_address ge1 i ofs = RelocProgSemantics.Genv.symbol_address ge2 i ofs),
-        eval_builtin_args preg ge1 rs sp m args vargs ->
-        eval_builtin_args preg ge2 rs sp m args vargs.
+Lemma eval_builtin_args_match_ge: forall rs sp m args vargs ge1 ge2 (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs),
+        RelocProgSemanticsArchi.eval_builtin_args preg ge1 rs sp m args vargs ->
+        RelocProgSemanticsArchi.eval_builtin_args preg ge2 rs sp m args vargs.
 Proof.
   induction 2.
   - constructor.
@@ -1392,10 +1387,10 @@ Proof.
   
   inv H.
   - eapply exec_step_internal;eauto.
-    + unfold Genv.find_ext_funct in *.
+    + unfold RelocProgGlobalenvs.Genv.find_ext_funct in *.
       destr. erewrite program_equiv_ext_funs1 in H1.
       eauto. eauto.
-    + unfold Genv.find_instr.
+    + unfold RelocProgGlobalenvs.Genv.find_instr.
       erewrite program_equiv_instr_map.
       eauto. eapply program_equiv_sym. eauto.
     + apply program_equiv_sym in E2.
@@ -1415,10 +1410,10 @@ Proof.
       destruct p0. eapply program_equiv_symbol_address1;eauto.
 
   - eapply exec_step_builtin with (vargs:= vargs);eauto.
-    + unfold Genv.find_ext_funct in *.
+    + unfold RelocProgGlobalenvs.Genv.find_ext_funct in *.
       destr. erewrite program_equiv_ext_funs1 in H1.
       eauto. eauto.
-    + unfold Genv.find_instr.
+    + unfold RelocProgGlobalenvs.Genv.find_instr.
       erewrite program_equiv_instr_map.
       eauto. eapply program_equiv_sym. eauto.
     + eapply eval_builtin_args_match_ge.
@@ -1430,7 +1425,7 @@ Proof.
       auto. auto.
       
   - eapply exec_step_external;eauto.
-    + unfold Genv.find_ext_funct in *.
+    + unfold RelocProgGlobalenvs.Genv.find_ext_funct in *.
       destr. erewrite program_equiv_ext_funs1 in H1.
       eauto. eauto.
     + eapply external_call_symbols_preserved with (ge1:= (Genv.genv_senv (RelocProgSemantics.globalenv instr_size p))).
