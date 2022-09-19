@@ -372,6 +372,7 @@ Lemma decode_encode_section_header sh (V: valid_section_header sh) :
     decode_section_header32 (encode_section_header32 sh) = OK sh.
 Proof.
   destruct Archi.ptr64 eqn:PTR.
+  -
   unfold decode_section_header64, encode_section_header64.
   do 2 (rewrite take_drop_length_app by reflexivity; cbn [bind2]).
   rewrite take_drop_length_app. cbn [bind2].
@@ -385,9 +386,9 @@ Proof.
   rewrite decode_encode_section_flags by auto.
   destruct sh; reflexivity.
   unfold encode_section_flags. rewrite PTR. auto.
-
+  -
   unfold decode_section_header32, encode_section_header32.  
-  repeat (rewrite take_drop_length_app by auto; cbn [bind2]).
+  do 2 (rewrite take_drop_length_app by auto; cbn [bind2]).
   rewrite take_drop_length_app. cbn [bind2].
   repeat (rewrite take_drop_length_app by auto; cbn [bind2]).  
   rewrite take_drop_length by reflexivity. cbn [bind2].
@@ -400,6 +401,7 @@ Proof.
   destruct sh; reflexivity.
   unfold encode_section_flags. rewrite PTR. auto.
 Qed.
+
 
 Fixpoint decode_section_headers' (n: nat) (l: list byte) : res (list section_header) :=
   match n with

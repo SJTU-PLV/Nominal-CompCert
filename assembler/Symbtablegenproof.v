@@ -2072,7 +2072,7 @@ Lemma eval_addrmode64_inject: forall j a rs1 rs2,
     regset_inject j rs1 rs2 ->
     Val.inject j (Asm.eval_addrmode64 ge a rs1) (eval_addrmode64 tge a rs2).
 Proof.
-  intros. unfold Asm.eval_addrmode32, eval_addrmode32.
+  intros. 
   destruct a. 
   destruct base, ofs, const; simpl in *.
   - destruct p. repeat apply Val.addl_inject; auto.
@@ -2088,44 +2088,55 @@ Proof.
     inject_match.
     (* dependent in ptr64 !! try to fix it !!!*)
     apply inject_symbol_address; auto.
-    destr_valinj_left H1; inv H1; auto.
-    destruct Archi.ptr64;auto.
-    eapply Val.inject_ptr; eauto.
-    repeat rewrite Ptrofs.add_assoc.
-    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+    destruct Archi.ptr64 eqn:PTR.
+    (* 64 *)
+    + destr_valinj_left H1; inv H1;eauto.
+      eapply Val.inject_ptr; eauto.
+      repeat rewrite Ptrofs.add_assoc.
+      rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+    + destr_valinj_left H1; inv H1;eauto.
   - destruct p.
     inject_match.
     apply Val.addl_inject; auto.
     destr_pair_if; auto.
     apply Val.mull_inject; auto.
-    destr_valinj_left H1; inv H1; auto.
-    destruct Archi.ptr64;auto.
-    eapply Val.inject_ptr; eauto.
-    repeat rewrite Ptrofs.add_assoc.
-    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+    destruct Archi.ptr64 eqn:PTR.
+    (* 64 *)
+    + destr_valinj_left H1; inv H1;eauto.
+      eapply Val.inject_ptr; eauto.
+      repeat rewrite Ptrofs.add_assoc.
+      rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+    + destr_valinj_left H1; inv H1;eauto.
   - destruct p,p0.
     inject_match.
     apply Val.addl_inject; auto.
     destr_pair_if; auto.
     apply Val.mull_inject; auto.
     apply inject_symbol_address; auto.
-    destr_valinj_left H1; inv H1; auto.
-    destruct Archi.ptr64;auto.
-    eapply Val.inject_ptr; eauto.
-    repeat rewrite Ptrofs.add_assoc.
-    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+    destruct Archi.ptr64 eqn:PTR.
+    (* 64 *)
+    + destr_valinj_left H1; inv H1;eauto.
+      eapply Val.inject_ptr; eauto.
+      repeat rewrite Ptrofs.add_assoc.
+      rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+    + destr_valinj_left H1; inv H1;eauto.
   - repeat apply Val.addl_inject; auto.
   - destruct p. inject_match. inject_match.
     apply inject_symbol_address; auto.
-    destr_valinj_left H1; inv H1; auto.
-    destruct Archi.ptr64;auto.
-    eapply Val.inject_ptr; eauto.
-    repeat rewrite Ptrofs.add_assoc.
-    rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
-    repeat destr_match;auto;try (inv H1);auto.
-    repeat rewrite Ptrofs.add_assoc.
-    repeat rewrite Ptrofs.add_zero.
-    econstructor. eauto. auto.
+    * destruct Archi.ptr64 eqn:PTR.
+    (* 64 *)
+    + destr_valinj_left H1; inv H1;eauto.
+      eapply Val.inject_ptr; eauto.
+      repeat rewrite Ptrofs.add_assoc.
+      rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+    + destr_valinj_left H1; inv H1;eauto.
+    *  destruct Archi.ptr64 eqn:PTR.
+    (* 64 *)
+    + destr_valinj_left H1; inv H1;eauto.
+      eapply Val.inject_ptr; eauto.
+      repeat rewrite Ptrofs.add_assoc.
+      rewrite (Ptrofs.add_commut (Ptrofs.repr delta) (Ptrofs.of_int64 Int64.zero)). auto.
+    + destr_valinj_left H1; inv H1;eauto.
 Qed.
 
 Lemma eval_addrmode_inject: forall j a rs1 rs2,
