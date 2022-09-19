@@ -587,6 +587,7 @@ Proof.
   erewrite instr_eq_size;eauto.
 Qed.
 
+
 Lemma decode_instrs_total_aux: forall c c' reloctbl reloctbl' ofs,
     fold_left (acc_instrs instr_size) c (OK ([], 0, reloctbl)) = OK (c', ofs, reloctbl') ->
     (* transl_code instr_size reloctbl c = OK c' -> *)
@@ -615,7 +616,7 @@ Proof.
     
     exploit transl_code_rev;eauto. intros (SIZE & (reloctbl1 & RELOCP)). subst.
     exploit IHx;eauto.
-    clear EQ IHx.
+    clear IHx. rename EQ into TEST.
     intros (c1 & P1 & P2).
     destruct ProdR.
 

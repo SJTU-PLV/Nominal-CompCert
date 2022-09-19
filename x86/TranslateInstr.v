@@ -309,6 +309,50 @@ Definition decode_scale (bs: u2) : Z :=
   | _ => 1
   end.
 
+(* we cannot use Z to directly translate to bits, because the memory is treats byte as an unit, especially in little endian*)
+(* Fixpoint Pos_to_bits (n:nat) (p:positive):= *)
+(*   match n,p with *)
+(*   | S n', xI p' => *)
+(*     do r <- Pos_to_bits n' p'; *)
+(*     OK (true :: r) *)
+(*   | S n', xO p' => *)
+(*     do r <- Pos_to_bits n' p'; *)
+(*     OK (false :: r) *)
+(*   | S n', xH => *)
+(*     OK (true :: list_repeat n' false) *)
+(*   | O, _ => Error (msg "Overflow in pos_to_bits") *)
+(*   end. *)
+
+(* (* Definition Z_to_bits_pos (n:nat) (z:Z) := *) *)
+(* (*   match z with *) *)
+(* (*   | Z0 => list_repeat n false *) *)
+(* (*   | Z.pos p => Pos_to_bits p *) *)
+(* (*   | Z.neg _ => *) *)
+(* (*     match n with *) *)
+(* (*     | S n' =>  *) *)
+
+(* Definition encode_ofs_u8 (ofs:Z) :res u8 := *)
+(*   match ofs with *)
+(*   | Z0 => *)
+(*     let ofs8:= list_repeat 8 false in *)
+(*     match assertLength ofs8 8 with *)
+(*     | left e => *)
+(*       OK (exist _ ofs8 e)          *)
+(*     | _ => *)
+(*       Error (msg "impossible") *)
+(*     end *)
+(*   | Z.pos p =>  *)
+(*     do ofs8 <- Pos_to_bits 8 p; *)
+(*     match assertLength ofs8 8 with *)
+(*     | left e => *)
+(*       OK (exist _ ofs8 e)          *)
+(*     | _ => *)
+(*       Error (msg "impossible") *)
+(*     end *)
+(*   | Z.neg _ => *)
+(*     Error (msg "encode unsigned encounter a negative number") *)
+(*   end. *)
+      
 
 Program Definition encode_ofs_u8 (ofs:Z) :res u8 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 8)) then
@@ -318,11 +362,11 @@ Program Definition encode_ofs_u8 (ofs:Z) :res u8 :=
     else Error (msg "impossible")
   else Error (msg "Offset overflow in encode_ofs_u8").
 
-
-Definition decode_ofs_u8 (bs:u8) : int :=
+(* FIXME: problem: must use bits_to_byes !*)
+Definition decode_ofs_u8 (bs:u8) : res int :=
   let bs' := proj1_sig bs in
-  let z := bits_to_Z bs' in
-  Int.repr z.
+  do z <- bits_to_bytes bs';
+  OK (Int.repr (int_of_bytes z)).
 
 Program Definition encode_ofs_u16 (ofs:Z) :res u16 :=
   (* We input Int.intval to this function, so range checking is nessary *)

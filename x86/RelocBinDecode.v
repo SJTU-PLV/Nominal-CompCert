@@ -127,10 +127,42 @@ Proof.
   auto.
 Qed.
 
+    
 Lemma encode_ofs_u16_consistency:forall ofs l,
     encode_ofs_u16 (Int.intval ofs) = OK l ->
     decode_ofs_u16 l = ofs.
-Proof.
+Proof.        
+  unfold encode_ofs_u16.
+  intros. destr_in H. destr_in H.
+  destruct l. unfold decode_ofs_u16.
+  cbn [proj1_sig].
+  assert ((bytes_to_bits_opt (bytes_of_int 2 (Int.intval ofs))) = x).
+  inv H. auto.
+  clear H. rewrite <- H10.
+  clear -Heqb.
+  cbn [bytes_of_int].
+  cbn [bytes_to_bits_opt].
+  destruct ofs. cbn [Int.intval] in *.
+  Transparent Int.repr.
+  unfold Int.repr.
+  eapply Int.mkint_eq.
+  repeat rewrite Byte.unsigned_repr_eq.
+  apply andb_true_iff in Heqb.
+  destruct Heqb. 
+  apply Z.ltb_lt in H.
+  apply Z.ltb_lt in H10. unfold two_power_nat in H10. simpl in H10.
+  replace (intval mod Byte.modulus) with intval.
+  replace ((intval / 256) mod Byte.modulus) with (intval / 256).
+  unfold nat_to_bits8_opt.
+  cbn [app].
+  rewrite Int.Z_mod_modulus_eq.
+  rewrite Z.mod_small.
+  
+  destruct intval.
+  simpl. auto.
+  
+  unfold bits_to_Z. cbn [bits_to_Z_acc].
+  
 Admitted.
 
 
