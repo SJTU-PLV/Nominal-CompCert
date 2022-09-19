@@ -505,6 +505,39 @@ Proof.
 Qed.
 
 
+(** * vamatch *)
+(*
+Instance vamatch_reply_prop:
+  PropagatesReplyInvariant (cc_c injp) vamatch.
+Proof.
+  split.
+  - intros [se1 bc1 m1] w [se2 bc2 m2] xse1 xse2 q1 q2 r1 r2. simpl.
+    destruct w as [f m0 m3 Hm].
+    intros Hse S1 S2 Hq Hq1 Hq2 Hw Hr. subst.
+    inv Hse.
+    destruct Hw as (w' & Hw' & Hw''). simpl in *. inv Hq1. inv Hq2.
+    inv Hq. inv H24.
+    inv Hr. inv Hw''.
+    econstructor; eauto.
+    + simpl. inv H15.
+      econstructor.
+    econstructor; eauto.
+    + admit.
+    + inv H1. constructor; eauto.
+      intros. simpl in Hse.
+    
+    econstructor.
+    constructor.
+    destruct Hq; cbn in *. destruct Hr; cbn in *.
+    intro. inv H17.
+    econstructor; eauto.
+    clear -H.
+    destruct H3; auto. constructor.
+Qed.
+*)
+
+
+
 (** * Stacking *)
 
 (** The simulation conventions for most passes are simple enough that

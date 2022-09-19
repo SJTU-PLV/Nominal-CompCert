@@ -677,13 +677,6 @@ Qed.
 
 End COMPOSE_C_PASSES.
 
-(*
- injp_injp_eq : eqcklr (injp @ injp) injp
- inj_injp : subcklr (inj @ injp) injp
- injp_inj : subcklr (injp @ inj) injp
- 
-injp__injp_inj_injp: subcklr injp (injp @ inj @ injp)   
- *)
 (** Test place about injp in RTL semantics using self simulation *)
 
 Lemma injp_pass: forall p tp,
@@ -703,7 +696,7 @@ Proof.
   eapply RTLrel.semantics_rel.
 Qed.
 
-Lemma injp_pass_trans: forall p tp,
+Lemma ext_pass: forall p tp,
     let sem := RTL.semantics p in
     let tsem := RTL.semantics tp in
   forward_simulation (cc_c ext) (cc_c ext) sem tsem ->

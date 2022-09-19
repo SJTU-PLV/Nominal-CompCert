@@ -392,6 +392,15 @@ Proof.
   destruct H as (_ & [Hr] & [_]).
   eauto 20 using rel_inv_intro.
 Qed.
+(*
+Lemma inv_dup' {li} (I: invariant li):
+  cceqv I (I @ I).
+Proof.
+  split; eauto using inv_dup.
+  intros w se1 se2 q1 q2 Hse Hq. destruct w. destruct p. inv Hse. inv Hq. destruct H1.
+  inv H1. in H2.
+  exists (se.
+*)
 
 (** *** Query invariant propagation *)
 
