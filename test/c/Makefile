@@ -3,11 +3,13 @@ include ../../Makefile.config
 CCOMP=../../ccomp
 # CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime -dc -dclight -dasm
 CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime -relf
+VANILLA_COMP_FLAGS=$(CCOMPOPTS) -stdlib ../../runtime
 CFLAGS=-O1 -Wall
 
 LIBS=$(LIBMATH)
 
-TIME=ocaml unix.cma ../../tools/xtime.ml -o /dev/null -mintime 2.0 -minruns 4
+# TIME=ocaml unix.cma ../../tools/xtime.ml -o /dev/null -mintime 2.0 -minruns 4
+TIME=ocaml unix.cma ../../tools/xtime.ml -o /dev/null -repeat 30
 
 PROGS=fib integr qsort fft fftsp fftw sha1 sha3 aes almabench \
   lists binarytrees fannkuch knucleotide mandelbrot nbody \
@@ -22,8 +24,14 @@ all_gcc: $(PROGS:%=%.gcc)
 
 all_myelf: $(PROGS:%=%.myelf)
 
+all_vanilla: $(PROGS:%=%.compcert.vanilla)
+
 %.compcert: %.c
 	$(CCOMP) $(CCOMPFLAGS) -o $*.compcert $*.c $(LIBS)
+
+%.compcert.vanilla: %.c
+	$(CCOMP) $(VANILLA_COMP_FLAGS) -o $*.compcert.vanilla $*.c $(LIBS)
+
 
 %.myelf: %.c
 	$(CCOMP) $(CCOMPFLAGS) -c $*.c -o $*.myelf $(LIBS)
@@ -38,6 +46,14 @@ all_myelf: $(PROGS:%=%.myelf)
 test:
 	@for i in $(PROGS); do \
 	   if $(SIMU) ./$$i.compcert | cmp -s - Results/$$i; \
+           then echo "$$i: passed"; \
+           else echo "$$i: FAILED"; exit 2; \
+	   fi; \
+         done
+
+test_vanilla:
+	@for i in $(PROGS); do \
+	   if $(SIMU) ./$$i.compcert.vanilla | cmp -s - Results/$$i; \
            then echo "$$i: passed"; \
            else echo "$$i: FAILED"; exit 2; \
 	   fi; \
@@ -61,6 +77,11 @@ bench:
 	   $(TIME) -name $$i -- ./$$i.compcert; \
          done
 
+bench_vanilla:
+	@for i in $(PROGS); do \
+	   $(TIME) -name $$i -- ./$$i.compcert.vanilla; \
+         done
+
 clean:
 	rm -f *.compcert *.gcc
-	rm -f *.compcert.c *.light.c *.parsed.c *.s *.o *.sdump *~ 
+	rm -f *.compcert.c *.light.c *.parsed.c *.s *.o *.sdump *~ *.vanilla
