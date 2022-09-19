@@ -211,6 +211,10 @@ Lemma transl_instr_range: forall symbtbl ofs i e,
   intros symbtbl ofs i e.
   generalize (instr_size_bound i). intros A.  
   unfold transl_instr.
+
+  destruct Archi.ptr64 eqn:PTR.
+  -
+  (* 64bit *)
   destruct i;simpl;intros;inv H.
 
   (* only solve Pmov_rs *)  
@@ -220,24 +224,24 @@ Lemma transl_instr_range: forall symbtbl ofs i e,
             
   1-42: try (destruct a;destruct const;try destruct p;inv H1).
   1-42: try (monadInv H0;
-             destruct Archi.ptr64;
+             rewrite PTR in *;
         unfold compute_instr_abs_relocentry in *;
        unfold compute_instr_disp_relocentry in *;
        unfold compute_instr_rel_relocentry in *;
        repeat (monadInv EQ));
     try (destr_match_in EQ1;inv EQ1;simpl).
 
-  1-79: try (eapply lt_add_range; auto).
+  (* 1-79: try (eapply lt_add_range; auto). *)
 
   1-42 : try(destr_match_in EQ2;inv EQ2;simpl;
              eapply lt_add_range; auto).
   
   (* Pjmp_s *)
-  destruct Archi.ptr64. monadInv H1.
+  monadInv H1.
   unfold compute_instr_rel_relocentry in *.
   monadInv EQ.
   destr_match_in EQ2;inv EQ2;simpl;eapply lt_add_range; auto.
-  inv H1. simpl. eapply lt_add_range; auto.
+  (* inv H1. simpl. eapply lt_add_range; auto. *)
   (* Pjmp_m *)
   destruct base. monadInv H0.
   unfold compute_instr_abs_relocentry in *.
@@ -257,25 +261,74 @@ Lemma transl_instr_range: forall symbtbl ofs i e,
   destr_match_in EQ2;inv EQ2;simpl;eapply lt_add_range; auto.
   eapply lt_add_range; auto.
   (* call_s *)
-  destruct Archi.ptr64.
   monadInv H1. unfold compute_instr_rel_relocentry in *. repeat (monadInv EQ). destr_match_in EQ2. inv EQ2.
   simpl. 
   eapply lt_add_range; auto. inv EQ2.
-  inv H1.   simpl. 
+  (* inv H1.   simpl.  *)
+  (* eapply lt_add_range; auto. *)
+  (* Pbuiltin *)
+  destr_match_in H1.
+  inv H1. inv H1.
+  (* Pmovw_rm *)
+  destruct ad;destruct const;try destruct p;inv H1.
+  monadInv H0. rewrite PTR in *.
+  unfold compute_instr_rel_relocentry in *.
+  monadInv EQ. destr_match_in EQ2. inv EQ2. simpl.
+  eapply lt_add_range; auto.
+  inv EQ2.
+  (* unfold compute_instr_abs_relocentry in *. *)
+  (* monadInv EQ. destr_match_in EQ1. inv EQ1. simpl. *)
+  (* eapply lt_add_range; auto. inv EQ1. *)
+  
+  (* 32 bit *)
+  -
+   destruct i;simpl;intros;inv H.
+
+  (* only solve Pmov_rs *)  
+  monadInv H1.
+  unfold compute_instr_abs_relocentry in *. monadInv EQ.
+  destr_match_in EQ1;inv EQ1;simpl;eapply lt_add_range; auto.
+            
+  1-42: try (destruct a;destruct const;try destruct p;inv H1).
+  1-42: try (monadInv H0;
+             rewrite PTR in *;
+        unfold compute_instr_abs_relocentry in *;
+       unfold compute_instr_disp_relocentry in *;
+       unfold compute_instr_rel_relocentry in *;
+       repeat (monadInv EQ));
+    try (destr_match_in EQ1;inv EQ1;simpl).
+
+  1-42: try (eapply lt_add_range; auto).
+
+ 
+  (* Pjmp_m *)
+  destruct base. monadInv H0.
+  unfold compute_instr_abs_relocentry in *.
+  monadInv EQ. 
+  destr_match_in EQ1;inv EQ1;simpl;eapply lt_add_range; auto.
+  destruct ofs0. monadInv H0.
+  unfold compute_instr_abs_relocentry in *.
+  monadInv EQ.
+  destr_match_in EQ1;inv EQ1;simpl;eapply lt_add_range; auto.
+  try (monadInv H0;
+             destruct Archi.ptr64;
+        unfold compute_instr_abs_relocentry in *;
+       unfold compute_instr_disp_relocentry in *;
+       unfold compute_instr_rel_relocentry in *;
+       repeat (monadInv EQ));
+    try (destr_match_in EQ1;inv EQ1;simpl).
+  destr_match_in EQ2;inv EQ2;simpl;eapply lt_add_range; auto.
   eapply lt_add_range; auto.
   (* Pbuiltin *)
   destr_match_in H1.
   inv H1. inv H1.
   (* Pmovw_rm *)
   destruct ad;destruct const;try destruct p;inv H1.
-  monadInv H0. destruct Archi.ptr64.
+  monadInv H0. rewrite PTR in *.
   unfold compute_instr_rel_relocentry in *.
-  monadInv EQ. destr_match_in EQ2. inv EQ2. simpl.
-  eapply lt_add_range; auto.
-  inv EQ2.
-  unfold compute_instr_abs_relocentry in *.
   monadInv EQ. destr_match_in EQ1. inv EQ1. simpl.
-  eapply lt_add_range; auto. inv EQ1.
+  eapply lt_add_range; auto.
+  inv EQ1.
 Qed.
 
 Lemma transl_instr_consistency: forall i symbtbl ofs e,

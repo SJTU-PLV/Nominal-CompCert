@@ -36,18 +36,18 @@ Proof.
   Transparent instr_size_asm.
   intros. unfold instr_eq in H.
   destruct H. subst. auto.
+  destruct Archi.ptr64 eqn:PTR.
+  -
   destruct i1;try inv H;destruct i2;try inv H;cbn [instr_size_asm];auto.
   (* Pmovzl and Pmov_rr: Pmov_rr depend on Ptr64 *)
   admit.
 
   unfold rex_prefix_check_rr,rex_prefix_check_r.
-  destr.
-  destr.
-  apply andb_true_iff in Heqb0. destruct Heqb0.
-  rewrite H. auto.
-  apply andb_false_iff in Heqb0. destruct Heqb0;rewrite H;auto.
-  
-  destruct H11. subst. auto.
+  rewrite PTR. auto.
+
+  -
+    destruct i1;try inv H;destruct i2;try inv H;cbn [instr_size_asm];auto.
+    
 Admitted.
 
 Lemma translate_instr_size: forall i e l l',

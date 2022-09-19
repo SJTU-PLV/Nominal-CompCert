@@ -1391,7 +1391,8 @@ Proof.
            eapply storebytes_append;eauto.
            rewrite Z.add_0_l. rewrite <- Q2.
 
-           rewrite <- Heqo. f_equal.
+           (* 64bit mode stuck? *)
+           rewrite <- Heqo. 
            unfold encode_val. rewrite Heqb0.
            auto.
            
