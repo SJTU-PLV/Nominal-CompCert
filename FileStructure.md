@@ -19,7 +19,7 @@
 **Generation of Relocation Tables (Sec.5)**
 * `x86/ReloctablesgenArchi.v`: provides the functions of generating a relocation entry from an instruction and eliminating the symbol in an instruction.
 * `assembler/Reloctablesgen.v`: generation of relocation tables and elimination of symbols with the functions provided by `x86/ReloctablesgenArchi.v`.
-* `assembler/Reloctablesgenproof.v`, `x86/ReloctablesgenproofArchi.v`: verification of this pass.
+* `x86/Reloctablesgenproof.v`, `x86/ReloctablesgenproofArchi.v`: verification of this pass.
 
 **Instruction and Data Encoding (Sec.6)**
 * `autogen/EncDecRet.v`: the generated encoders and decoders from CSLED.

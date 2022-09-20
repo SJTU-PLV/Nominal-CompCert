@@ -309,51 +309,6 @@ Definition decode_scale (bs: u2) : Z :=
   | _ => 1
   end.
 
-(* we cannot use Z to directly translate to bits, because the memory is treats byte as an unit, especially in little endian*)
-(* Fixpoint Pos_to_bits (n:nat) (p:positive):= *)
-(*   match n,p with *)
-(*   | S n', xI p' => *)
-(*     do r <- Pos_to_bits n' p'; *)
-(*     OK (true :: r) *)
-(*   | S n', xO p' => *)
-(*     do r <- Pos_to_bits n' p'; *)
-(*     OK (false :: r) *)
-(*   | S n', xH => *)
-(*     OK (true :: list_repeat n' false) *)
-(*   | O, _ => Error (msg "Overflow in pos_to_bits") *)
-(*   end. *)
-
-(* (* Definition Z_to_bits_pos (n:nat) (z:Z) := *) *)
-(* (*   match z with *) *)
-(* (*   | Z0 => list_repeat n false *) *)
-(* (*   | Z.pos p => Pos_to_bits p *) *)
-(* (*   | Z.neg _ => *) *)
-(* (*     match n with *) *)
-(* (*     | S n' =>  *) *)
-
-(* Definition encode_ofs_u8 (ofs:Z) :res u8 := *)
-(*   match ofs with *)
-(*   | Z0 => *)
-(*     let ofs8:= list_repeat 8 false in *)
-(*     match assertLength ofs8 8 with *)
-(*     | left e => *)
-(*       OK (exist _ ofs8 e)          *)
-(*     | _ => *)
-(*       Error (msg "impossible") *)
-(*     end *)
-(*   | Z.pos p =>  *)
-(*     do ofs8 <- Pos_to_bits 8 p; *)
-(*     match assertLength ofs8 8 with *)
-(*     | left e => *)
-(*       OK (exist _ ofs8 e)          *)
-(*     | _ => *)
-(*       Error (msg "impossible") *)
-(*     end *)
-(*   | Z.neg _ => *)
-(*     Error (msg "encode unsigned encounter a negative number") *)
-(*   end. *)
-      
-
 Program Definition encode_ofs_u8 (ofs:Z) :res u8 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 8)) then
     let ofs8 := bytes_to_bits_opt (bytes_of_int 1 ofs) in
@@ -448,36 +403,6 @@ Definition decode_testcond_u4 (bs:u4) : res testcond :=
   end.
 
 
-
-  
-(* Section WITH_RELOC_OFS_MAP. *)
-
-(* Variable rtbl_ofs_map: reloc_ofs_map_type. *)
-
-
-(* Definition get_reloc_addend (ofs:Z) : res Z := *)
-(*   match ZTree.get ofs rtbl_ofs_map with *)
-(*   | None => Error [MSG "Cannot find the relocation entry at the offset "; POS (Z.to_pos ofs)] *)
-(*   | Some e => OK (reloc_addend e) *)
-(*   end. *)
-
-(* Definition get_instr_reloc_addend (ofs:Z) (i:instruction) : res Z := *)
-(*   do iofs <- instr_reloc_offset i; *)
-(*   get_reloc_addend (ofs + iofs). *)
-
-
-(* Definition get_instr_reloc_addend' (ofs:Z): res Z := *)
-(*   get_reloc_addend ofs. *)
-
-Definition get_reloc_addend (e: option relocentry) :=
-  match e with
-  | Some e' =>
-    OK (reloc_addend e')
-  | _ => Error (msg "get reloc addend error")
-  end.
-
-
-
 Definition translate_Addrmode_AddrE_aux32 (obase: option ireg) (oindex: option (ireg*Z)) (ofs32:u32) : res AddrE :=
   match obase,oindex with
   | None,None =>
@@ -516,30 +441,15 @@ Definition translate_Addrmode_AddrE_aux32 (obase: option ireg) (oindex: option (
 (* Translate ccelf addressing mode to cav21 addr mode *)
 (* sofs: instruction ofs, res_iofs: relocated location in the instruction*)
 (* TODO: 64bit mode, the addend is placed in the relocation entry *)
-Definition translate_Addrmode_AddrE (e: option relocentry) (addr:addrmode): res AddrE :=
+Definition translate_Addrmode_AddrE  (addr:addrmode): res AddrE :=
   match addr with
   | Addrmode obase oindex disp  =>
     match disp with
-    | inr (id, ofs) =>
-      match id,e with
-      | xH, Some _ =>
-        (* do addend <- get_reloc_addend e; *)
-        if (Ptrofs.unsigned ofs <? Int.modulus) then
-          (* if Z.eqb (Ptrofs.unsigned ofs) addend then *)
-            (*32bit mode the addend placed in instruction *)
-            do imm32 <- encode_ofs_u32 (Ptrofs.unsigned ofs);
-            translate_Addrmode_AddrE_aux32 obase oindex imm32
-          (* else Error (msg "addend is not equal to ofs") *)
-        else Error (msg "Addrmode32: Out range of unsigned 32bit displacement")
-      | _,_ => Error(msg "id is not 1 or no relocation entry")
-      end
+    | inr _ =>
+      Error (msg "We should have transformed inr (id,ofs) to inl ofs")
     | inl ofs =>
-      match e with
-      | None =>
-          do ofs32 <- encode_ofs_signed32 ofs;
-          translate_Addrmode_AddrE_aux32 obase oindex ofs32            
-      | _ => Error (msg "impossible relocation entry in addrmode")
-      end
+        do ofs32 <- encode_ofs_signed32 ofs;
+        translate_Addrmode_AddrE_aux32 obase oindex ofs32
     end
   end.
 
@@ -588,30 +498,15 @@ Definition translate_Addrmode_AddrE_aux64 (obase: option ireg) (oindex: option (
 
 
 (* 64bit addrmode translation, u1: X, u1:B *)
-Definition translate_Addrmode_AddrE64 (e: option relocentry) (addr:addrmode): res (AddrE*u1*u1) :=
+Definition translate_Addrmode_AddrE64  (addr:addrmode): res (AddrE*u1*u1) :=
   match addr with
   | Addrmode obase oindex disp  =>
     match disp with
-    | inr (id, ofs) =>
-      match id,e with
-      | xH,Some _ =>
-        (* do addend <- get_reloc_addend e; *)
-        if (Ptrofs.unsigned ofs <? Int.modulus) then
-          (* addend is the offset of id and access point *)
-          (* if Z.eqb (Ptrofs.unsigned ofs) addend then *)
-            do imm32 <- encode_ofs_u32 (Ptrofs.unsigned ofs);
-            translate_Addrmode_AddrE_aux64 obase oindex imm32
-          (* else Error (msg "64bit: addend is not equal to ofs") *)
-        else Error (msg "Addrmode64: Out range of unsigned 32bit displacement")                                        
-      | _,_ => Error(msg "64bit: id is not 1 or no relocation entry")
-      end
+    | inr _ =>
+      Error (msg "We should have transformed inr (id,ofs) to inl ofs")
     | inl ofs =>
-      match e with
-      | None =>         
-          do ofs32 <- encode_ofs_signed32 ofs;
-          translate_Addrmode_AddrE_aux64 obase oindex ofs32
-      | _ => Error (msg "64bit: impossible relocation entry in addrmode")
-      end
+        do ofs32 <- encode_ofs_signed32 ofs;
+        translate_Addrmode_AddrE_aux64 obase oindex ofs32
     end
   end.
 
@@ -645,9 +540,7 @@ Definition encode_rex_prefix_f (fr: freg) : res (list Instruction * u3) :=
       Error (msg "encode extend register in 32bit mode! ").
 
 
-Definition encode_rex_prefix_addr (e: option relocentry) (addr: addrmode) : res (list Instruction * AddrE) :=
-  let translate_Addrmode_AddrE := translate_Addrmode_AddrE e in
-  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 e in
+Definition encode_rex_prefix_addr (addr: addrmode) : res (list Instruction * AddrE) :=
   if check_extend_addrmode addr then
     do a <- translate_Addrmode_AddrE addr;
     OK ([], a)
@@ -690,9 +583,7 @@ Definition encode_rex_prefix_rr  (r b: ireg) : res (list Instruction * u3 * u3) 
       else
         Error (msg "encode extend two register in 32bit mode! ").
 
-Definition encode_rex_prefix_ra (e: option relocentry) (r: ireg) (addr: addrmode) : res (list Instruction * u3 * AddrE) :=
-  let translate_Addrmode_AddrE := translate_Addrmode_AddrE e in
-  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 e in
+Definition encode_rex_prefix_ra (r: ireg) (addr: addrmode) : res (list Instruction * u3 * AddrE) :=
   if check_extend_reg r then
     if check_extend_addrmode addr then
       do rbits <- encode_ireg_u3 r;
@@ -810,9 +701,7 @@ Definition encode_rex_prefix_fr  (r: freg) (b: ireg): res (list Instruction * u3
         Error (msg "encode extend two register in 32bit mode! ").
 
 
-Definition encode_rex_prefix_fa (e:option relocentry) (r: freg) (addr: addrmode) : res (list Instruction * u3 * AddrE) :=
-  let translate_Addrmode_AddrE := translate_Addrmode_AddrE e in
-  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 e in
+Definition encode_rex_prefix_fa (r: freg) (addr: addrmode) : res (list Instruction * u3 * AddrE) :=
   if check_extend_freg r then
     if check_extend_addrmode addr then
       do rbits <- encode_freg_u3 r;
@@ -848,12 +737,7 @@ Definition encode_rex_prefix_fa (e:option relocentry) (r: freg) (addr: addrmode)
 
 (** return (option rex prefix, instruction *)
 (** REX_WRXB: B R W X  *)
-Definition translate_instr (e: option relocentry) (i:instruction) : res (list Instruction) :=
-  let translate_Addrmode_AddrE := translate_Addrmode_AddrE e in
-  let translate_Addrmode_AddrE64 := translate_Addrmode_AddrE64 e in
-  let encode_rex_prefix_ra := encode_rex_prefix_ra e in
-  let encode_rex_prefix_fa := encode_rex_prefix_fa e in
-  let encode_rex_prefix_addr := encode_rex_prefix_addr e in
+Definition translate_instr (i:instruction) : res (list Instruction) :=
   match i with
   | Pmov_rr rd r1 =>
     if Archi.ptr64 then
@@ -1332,17 +1216,10 @@ Definition translate_instr (e: option relocentry) (i:instruction) : res (list In
     OK ([Override] ++ orex ++ [Pandps_d_fm a rdbits])
 
   | Asm.Pjmp_l_rel ofs =>
-    (* no relocation *)
-    match e with
-    | None =>
-        do imm <- encode_ofs_signed32 ofs;
-        OK [Pjmp_l_rel imm]
-    | _ => Error[MSG"Relocation entry in Pjmp_l_rel not expected"; MSG(Z_to_hex_string 4 ofs)]
-    end
+      do imm <- encode_ofs_signed32 ofs;
+      OK [Pjmp_l_rel imm]
   | Asm.Pjmp_s id _ =>
-    if Pos.eqb id xH then
-      (* do addend <- get_reloc_addend e; *)
-      (* do imm32 <- encode_ofs_u32 addend; *)
+    (* if Pos.eqb id xH then
       match e with
       |  Some _ =>
         if Archi.ptr64 then 
@@ -1353,7 +1230,8 @@ Definition translate_instr (e: option relocentry) (i:instruction) : res (list In
       | None =>
         Error (msg "No relocation entry in Pjmp_s")
       end
-    else Error (msg "Id not equal to xH in Pjmp_s")
+    else Error (msg "Id not equal to xH in Pjmp_s") *)
+    Error (msg "Pjmp_s should be transformed in id elimination")
   | Asm.Pjmp_r r sg =>
     do rex_r <- encode_rex_prefix_r r;
     let (orex, rbits) := rex_r in
@@ -1372,8 +1250,6 @@ Definition translate_instr (e: option relocentry) (i:instruction) : res (list In
   | Asm.Pcall_s id sg =>
     match id with
     | xH =>
-      (* do addend <- get_reloc_addend e; *)
-      (* do imm32 <- encode_ofs_u32 addend; *)
       match e with
       |  Some _ =>
         if Archi.ptr64 then 

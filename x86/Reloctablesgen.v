@@ -15,11 +15,7 @@ Local Open Scope error_monad_scope.
 Section INSTR_SIZE.
   Variable instr_size: instruction -> Z.
 
-Section WITH_SYMBTBL.
-
-Variable (symbtbl: symbtable).
-
-Let transl_instr:= transl_instr instr_size symbtbl.
+Let transl_instr:= transl_instr instr_size.
       
 Definition acc_instrs r i :=
   do (sofs, rtbl) <- r;
@@ -40,17 +36,12 @@ Definition transl_code (c:code) : res reloctable :=
 Definition transl_init_data (dofs:Z) (d:init_data) : res (option relocentry) :=
   match d with
   | Init_addrof id ofs =>
-    match symbtbl!id with
-    | None =>
-      Error [MSG "Cannot find the index for symbol: "; POS id]
-    | Some _ =>
       let e := {| reloc_offset := dofs;
                   reloc_type := reloc_abs;
                   reloc_symb := id;
                   reloc_addend := 0;
                |} in
       OK (Some e)
-    end
   | _ =>
     OK None
   end.
@@ -103,7 +94,6 @@ Definition acc_section (reloc_map : res reloctable_map) (id:ident) (sec:section)
 Definition transl_sectable (stbl: sectable) :=
   PTree.fold acc_section stbl (OK (PTree.empty reloctable)).
 
-End WITH_SYMBTBL.
 
 
 Definition acc_id_eliminate r i :=
@@ -141,10 +131,8 @@ Definition transl_sectable' (stbl: sectable): sectable :=
   
   
 Definition transf_program (p:RelocProgram.program) : res program :=
-  let map := p.(prog_symbtable) in
-  (* if  p.(prog_reloctables) (PTree.empty reloctable) then *)
-    do reloc_map <- transl_sectable map (prog_sectable p);
-    let sec' := transl_sectable' (prog_sectable p) in
+    do reloc_map <- transl_sectable (prog_sectable p);
+    let sec' := transl_sectable' (prog_sectable p) in     
     OK {| prog_defs := prog_defs p;
           prog_public := prog_public p;
           prog_main := prog_main p;
@@ -152,8 +140,6 @@ Definition transf_program (p:RelocProgram.program) : res program :=
           prog_symbtable := prog_symbtable p;
           prog_reloctables := reloc_map;
           prog_senv := prog_senv p;
-       |}
-  (* else Error (msg "Relocation table map is not empty before relocation table generation.") *)
-.
+       |}.
 
 End INSTR_SIZE.

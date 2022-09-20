@@ -8,6 +8,8 @@ Require Import LocalLib AsmInject.
 Import ListNotations.
 Require AsmFacts.
 
+Local Open Scope error_monad_scope.
+
 Section WITH_INSTR_SIZE.
 
 Variable instr_size : instruction -> Z.
@@ -30,182 +32,161 @@ Proof.
   auto.
 Qed.
 
-Lemma transl_instr_range: forall symbtbl ofs i e,
-    transl_instr instr_size symbtbl ofs i = OK (Some e) ->
+Lemma transl_instr_range: forall ofs i e,
+    transl_instr instr_size ofs i = OK (Some e) ->
     ofs < e.(reloc_offset) < ofs + instr_size i.
-  intros symbtbl ofs i e.
+  intros ofs i e.
   generalize (instr_size_bound i). intros A.  
   unfold transl_instr.
 
   destruct Archi.ptr64 eqn:PTR.
   -
   (* 64bit *)
-  destruct i;simpl;intros;inv H.
-
-  (* only solve Pmov_rs *)  
-  monadInv H1.
-  unfold compute_instr_abs_relocentry in *. monadInv EQ.
-  destr_match_in EQ1;inv EQ1;simpl;eapply lt_add_range; auto.
-            
-  1-42: try (destruct a;destruct const;try destruct p;inv H1).
-  1-42: try (monadInv H0;
-             rewrite PTR in *;
-        unfold compute_instr_abs_relocentry in *;
-       unfold compute_instr_disp_relocentry in *;
-       unfold compute_instr_rel_relocentry in *;
-       repeat (monadInv EQ));
-    try (destr_match_in EQ1;inv EQ1;simpl).
-
-  (* 1-79: try (eapply lt_add_range; auto). *)
-
-  1-42 : try(destr_match_in EQ2;inv EQ2;simpl;
-             eapply lt_add_range; auto).
+  destruct i;intros H;destr_match_in H;try monadInv H. 
   
-  (* Pjmp_s *)
-  monadInv H1.
-  unfold compute_instr_rel_relocentry in *.
-  monadInv EQ.
-  destr_match_in EQ2;inv EQ2;simpl;eapply lt_add_range; auto.
+  (* only solve Pmov_rs *)  
+  unfold compute_instr_abs_relocentry in *. monadInv EQ0.
+  simpl;eapply lt_add_range; auto.
+
+  1-41: try (destruct a;destruct const;try destruct p;try monadInv H).
+  1-41: try (
+             unfold compute_instr_disp_relocentry in *;
+             try rewrite PTR in *;
+             unfold compute_instr_abs_relocentry in *;             
+             unfold compute_instr_rel_relocentry in *;
+             repeat (monadInv EQ0));
+  simpl;try eapply lt_add_range; auto.
+  
+  (* (* Pjmp_s *) *)
+  (* monadInv H1. *)
+  (* unfold compute_instr_rel_relocentry in *. *)
+  (* monadInv EQ. *)
+  (* destr_match_in EQ2;inv EQ2;simpl;eapply lt_add_range; auto. *)
   (* inv H1. simpl. eapply lt_add_range; auto. *)
   (* Pjmp_m *)
-  destruct base. monadInv H0.
-  unfold compute_instr_abs_relocentry in *.
-  monadInv EQ. 
-  destr_match_in EQ1;inv EQ1;simpl;eapply lt_add_range; auto.
-  destruct ofs0. monadInv H0.
-  unfold compute_instr_abs_relocentry in *.
-  monadInv EQ.
-  destr_match_in EQ1;inv EQ1;simpl;eapply lt_add_range; auto.
-  try (monadInv H0;
-             destruct Archi.ptr64;
-        unfold compute_instr_abs_relocentry in *;
-       unfold compute_instr_disp_relocentry in *;
-       unfold compute_instr_rel_relocentry in *;
-       repeat (monadInv EQ));
-    try (destr_match_in EQ1;inv EQ1;simpl).
-  destr_match_in EQ2;inv EQ2;simpl;eapply lt_add_range; auto.
-  eapply lt_add_range; auto.
+  destruct base. monadInv H.
+  monadInv EQ0. 
+  simpl;eapply lt_add_range; auto.
+  destruct ofs0. monadInv H.
+  monadInv EQ0.
+  simpl;eapply lt_add_range; auto.
+  monadInv H. monadInv EQ0.
+  simpl. eapply lt_add_range; auto.
   (* call_s *)
-  monadInv H1. unfold compute_instr_rel_relocentry in *. repeat (monadInv EQ). destr_match_in EQ2. inv EQ2.
-  simpl. 
-  eapply lt_add_range; auto. inv EQ2.
-  (* inv H1.   simpl.  *)
-  (* eapply lt_add_range; auto. *)
-  (* Pbuiltin *)
-  destr_match_in H1.
-  inv H1. inv H1.
+  (* monadInv H1. unfold compute_instr_rel_relocentry in *. repeat (monadInv EQ). destr_match_in EQ2. inv EQ2. *)
+  (* simpl.  *)
+  (* eapply lt_add_range; auto. inv EQ2. *)
+  (* (* inv H1.   simpl.  *) *)
+  (* (* eapply lt_add_range; auto. *) *)
+  (* (* Pbuiltin *) *)
+  (* destr_match_in H1. *)
+  (* inv H1. inv H1. *)
   (* Pmovw_rm *)
-  destruct ad;destruct const;try destruct p;inv H1.
-  monadInv H0. rewrite PTR in *.
-  unfold compute_instr_rel_relocentry in *.
-  monadInv EQ. destr_match_in EQ2. inv EQ2. simpl.
+  destruct ad;destruct const;try destruct p;monadInv H.
+  monadInv EQ0. simpl.
   eapply lt_add_range; auto.
-  inv EQ2.
-  (* unfold compute_instr_abs_relocentry in *. *)
-  (* monadInv EQ. destr_match_in EQ1. inv EQ1. simpl. *)
-  (* eapply lt_add_range; auto. inv EQ1. *)
   
   (* 32 bit *)
   -
-   destruct i;simpl;intros;inv H.
+    destruct i;intros H;destr_match_in H;try monadInv H. 
 
   (* only solve Pmov_rs *)  
-  monadInv H1.
-  unfold compute_instr_abs_relocentry in *. monadInv EQ.
-  destr_match_in EQ1;inv EQ1;simpl;eapply lt_add_range; auto.
+  unfold compute_instr_abs_relocentry in *. monadInv EQ0.
+  simpl;eapply lt_add_range; auto.
             
-  1-42: try (destruct a;destruct const;try destruct p;inv H1).
-  1-42: try (monadInv H0;
-             rewrite PTR in *;
-        unfold compute_instr_abs_relocentry in *;
-       unfold compute_instr_disp_relocentry in *;
-       unfold compute_instr_rel_relocentry in *;
-       repeat (monadInv EQ));
-    try (destr_match_in EQ1;inv EQ1;simpl).
-
-  1-42: try (eapply lt_add_range; auto).
-
+  1-41: try (destruct a;destruct const;try destruct p;try monadInv H).
+  1-41:try (
+             unfold compute_instr_disp_relocentry in *;
+             try rewrite PTR in *;
+             unfold compute_instr_abs_relocentry in *;             
+             unfold compute_instr_rel_relocentry in *;
+             repeat (monadInv EQ0));
+    simpl;try eapply lt_add_range; auto.
+  
  
   (* Pjmp_m *)
-  destruct base. monadInv H0.
-  unfold compute_instr_abs_relocentry in *.
-  monadInv EQ. 
-  destr_match_in EQ1;inv EQ1;simpl;eapply lt_add_range; auto.
-  destruct ofs0. monadInv H0.
-  unfold compute_instr_abs_relocentry in *.
-  monadInv EQ.
-  destr_match_in EQ1;inv EQ1;simpl;eapply lt_add_range; auto.
-  try (monadInv H0;
-             destruct Archi.ptr64;
-        unfold compute_instr_abs_relocentry in *;
-       unfold compute_instr_disp_relocentry in *;
-       unfold compute_instr_rel_relocentry in *;
-       repeat (monadInv EQ));
-    try (destr_match_in EQ1;inv EQ1;simpl).
-  destr_match_in EQ2;inv EQ2;simpl;eapply lt_add_range; auto.
-  eapply lt_add_range; auto.
-  (* Pbuiltin *)
-  destr_match_in H1.
-  inv H1. inv H1.
+  destruct base. monadInv H.
+  monadInv EQ0. 
+  simpl;eapply lt_add_range; auto.
+  destruct ofs0. monadInv H.
+  monadInv EQ0.
+  simpl;eapply lt_add_range; auto.
+  monadInv H. monadInv EQ0.
+  simpl;eapply lt_add_range; auto.
+
   (* Pmovw_rm *)
-  destruct ad;destruct const;try destruct p;inv H1.
-  monadInv H0. rewrite PTR in *.
-  unfold compute_instr_rel_relocentry in *.
-  monadInv EQ. destr_match_in EQ1. inv EQ1. simpl.
+  destruct ad;destruct const;try destruct p;try monadInv H.
+  monadInv EQ0. simpl.
   eapply lt_add_range; auto.
-  inv EQ1.
 Qed.
 
-Lemma transl_instr_consistency: forall i symbtbl ofs e,
-    transl_instr instr_size symbtbl ofs i = OK (Some e) ->
-    rev_id_eliminate (reloc_symb e) (id_eliminate i) = i.
+(* id_eliminate just transforms Pjmp_s to Pjmp_l_rel and leave another instruction forms unchanged *)
+Definition instr_eq i1 i2 :=
+  match i1,i2 with
+  | Pjmp_s symb1 _, Pjmp_s symb2 _ => symb1 = symb2
+  | _,_ => i1 = i2
+  end.
+
+
+Lemma transl_instr_consistency: forall i ofs e,
+    transl_instr instr_size ofs i = OK (Some e) ->
+    instr_eq (rev_id_eliminate (reloc_symb e) (id_eliminate i)) i.
 Proof.
-  intros i symbtbl ofs e.
+  intros i ofs e.
   destruct i;simpl;auto;
-    unfold transl_instr;simpl;intros H;repeat (monadInv H);
-      unfold compute_instr_disp_relocentry in *;
+    unfold transl_instr;intros H;destr_match_in H;try monadInv H.
+
+  (* Pmov_rs *)
+  unfold compute_instr_abs_relocentry in EQ0.
+  monadInv EQ0. simpl. auto.
+
+  1-41: try (destruct a;destruct const;try destruct p;try monadInv H).
+
+  
+  
+  1-41: unfold compute_instr_disp_relocentry in *;
       destruct Archi.ptr64;
-      unfold compute_instr_abs_relocentry in *;      
+      unfold compute_instr_abs_relocentry in *;
     unfold compute_instr_rel_relocentry in *;
-    repeat (monadInv EQ);
-    try (destruct (symbtbl ! id);inv EQ1;simpl;auto); (* no addrmode finish *)
+    repeat (monadInv EQ0);
+  simpl;unfold instr_eq;auto;
     try (destruct a;destruct const;try destruct p;try congruence);
   try (monadInv H;
        unfold compute_instr_abs_relocentry in *;
        unfold compute_instr_disp_relocentry in *;
        unfold compute_instr_rel_relocentry in *;
-       repeat (monadInv EQ);
-       try (destr_in EQ1;inv EQ1;simpl;auto)).
+       repeat (monadInv EQ));
+       try (try monadInv EQ0;simpl;auto).
 
-  1-45: try (destruct PTree.get;inv EQ2;simpl;auto).
-  1-4 : simpl;auto.
   (* Pjmp_m *)
   destruct base. monadInv H.
-  monadInv EQ. destruct PTree.get;inv EQ1;simpl;auto.
+  monadInv EQ0. simpl;auto.
   destruct ofs0. monadInv H.
-  monadInv EQ. destruct PTree.get;inv EQ1;simpl;auto.
-  monadInv H. monadInv EQ.
-  destruct PTree.get;inv EQ2;simpl;auto.
+  monadInv EQ0. simpl;auto.
+  monadInv H. 
+  simpl;auto.
+
+  monadInv EQ0. simpl;auto.
   destruct base. monadInv H.
-  monadInv EQ. destruct PTree.get;inv EQ1;simpl;auto.
+  monadInv EQ0. simpl;auto.
   destruct ofs0. monadInv H.
-  monadInv EQ. destruct PTree.get;inv EQ1;simpl;auto.
-  monadInv H. monadInv EQ.
-  destruct PTree.get;inv EQ1;simpl;auto.
+  monadInv EQ0. simpl;auto.
+  monadInv H. monadInv EQ0.
+  simpl;auto.
 
   (* Pmovw *)
   destruct ad;destruct const;try destruct p;try congruence.
-  monadInv H. monadInv EQ. destruct PTree.get;inv EQ2;simpl;auto.
+  monadInv H. monadInv EQ0. simpl;auto.
   destruct ad;destruct const;try destruct p;try congruence.
-  monadInv H. monadInv EQ. destruct PTree.get;inv EQ1;simpl;auto.
+  monadInv H. monadInv EQ0. inv EQ1;simpl;auto.
   
 Qed.
 
-Lemma id_eliminate_unchanged:forall i symbtbl ofs,
-    transl_instr instr_size symbtbl ofs i = OK None ->
+Lemma id_eliminate_unchanged:forall i ofs,
+    transl_instr instr_size ofs i = OK None ->
     id_eliminate i = i.
 Proof.
-  intros i symbtl ofs.
+  intros i ofs.
   destruct i;simpl;auto;
   unfold transl_instr;simpl;intros;repeat (monadInv H);repeat (destr_in H);repeat monadInv H1.
 Qed.

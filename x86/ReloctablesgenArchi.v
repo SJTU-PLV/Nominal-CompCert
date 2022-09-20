@@ -115,34 +115,22 @@ Definition instr_addendum  (i:instruction) : res Z :=
   OK (ofs - (instr_size i)).
 
 
-Section WITH_SYMBTBL.
-
-Variable (symbtbl: symbtable).
-
 (** Compute the relocation entry of an instruction with a relative reference *)
 Definition compute_instr_rel_relocentry (sofs:Z) (i:instruction) (symb:ident):=
   do iofs <- instr_reloc_offset i;
   do addend <- instr_addendum i;
-  match PTree.get symb symbtbl with
-  | None => Error [MSG "Cannot find the index for symbol: "; POS symb]
-  | Some _ =>
-    OK {| reloc_offset := sofs + iofs; 
+  OK {| reloc_offset := sofs + iofs; 
           reloc_type := reloc_rel;
           reloc_symb := symb;
-          reloc_addend := addend |}
-  end.
+          reloc_addend := addend |}.
 
 (** Compute the relocation entry of an instruction with an absolute reference *)
 Definition compute_instr_abs_relocentry (sofs:Z) (i:instruction) (addend:Z) (symb:ident)  :=
   do iofs <- instr_reloc_offset i;
-  match PTree.get symb symbtbl with
-  | None => Error [MSG "Cannot find the index for symbol: "; POS symb]
-  | Some _ => 
-    OK {| reloc_offset := sofs + iofs; 
+  OK {| reloc_offset := sofs + iofs; 
           reloc_type := reloc_abs;
           reloc_symb := symb;
-          reloc_addend := addend |}
-  end.
+          reloc_addend := addend |}.
 
 (** Compute the relocation entry of an instruciton with 
     an addressing mode whose displacement is (id + offset) *)
@@ -337,139 +325,138 @@ Definition transl_instr (sofs:Z) (i: instruction) : res (option relocentry) :=
     OK None
   end.
 
-End WITH_SYMBTBL.
 
 End INSTR_SIZE.
 
-(** Eliminate id that need relocation *)
+(** Eliminate id that needs relocation *)
 Definition id_eliminate (i:instruction): instruction:=  
     match i with
   | Pjmp_s id sg =>
-     (Pjmp_s xH sg)
+     (Pjmp_l_rel 0)
   | Pjmp_m (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pjmp_m (Addrmode rb ss (inr (xH,ptrofs))))
+     (Pjmp_m (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pcall_s id sg =>
      (Pcall_s xH sg)
   | Pmov_rs rd id =>
      (Pmov_rs rd xH)
   | Pmovl_rm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pmovl_rm rd (Addrmode rb ss (inr (xH,ptrofs))))
+     (Pmovl_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovl_mr (Addrmode rb ss (inr disp)) rs =>
     let '(id, ptrofs) := disp in
-     (Pmovl_mr (Addrmode rb ss (inr (xH, ptrofs))) rs)
+     (Pmovl_mr (Addrmode rb ss (inl (Ptrofs.signed ptrofs))) rs)
   | Pfldl_m (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pfldl_m (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pfldl_m (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pfstpl_m (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pfstpl_m (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pfstpl_m (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pflds_m (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pflds_m (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pflds_m (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pfstps_m (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pfstps_m (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pfstps_m (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovsd_fm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pmovsd_fm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pmovsd_fm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovsd_mf (Addrmode rb ss (inr disp)) rs =>
     let '(id, ptrofs) := disp in
-     (Pmovsd_mf (Addrmode rb ss (inr (xH, ptrofs))) rs)
+     (Pmovsd_mf (Addrmode rb ss (inl (Ptrofs.signed ptrofs))) rs)
   | Pmovss_fm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pmovss_fm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pmovss_fm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovss_mf (Addrmode rb ss (inr disp)) rs =>
     let '(id, ptrofs) := disp in
-     (Pmovss_mf (Addrmode rb ss (inr (xH, ptrofs))) rs)
+     (Pmovss_mf (Addrmode rb ss (inl (Ptrofs.signed ptrofs))) rs)
   | Pxorpd_fm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pxorpd_fm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pxorpd_fm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pxorps_fm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pxorps_fm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pxorps_fm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pandpd_fm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pandpd_fm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pandpd_fm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pandps_fm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pandps_fm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pandps_fm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   (** Moves with conversion *)
   | Pmovb_mr (Addrmode rb ss (inr disp)) rs =>
     let '(id, ptrofs) := disp in
-     (Pmovb_mr (Addrmode rb ss (inr (xH, ptrofs))) rs)
+     (Pmovb_mr (Addrmode rb ss (inl (Ptrofs.signed ptrofs))) rs)
   | Pmovb_rm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pmovb_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pmovb_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovw_mr (Addrmode rb ss (inr disp)) rs =>
     let '(id, ptrofs) := disp in
-     (Pmovw_mr (Addrmode rb ss (inr (xH, ptrofs))) rs)
+     (Pmovw_mr (Addrmode rb ss (inl (Ptrofs.signed ptrofs))) rs)
   | Pmovw_rm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pmovw_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pmovw_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovzb_rm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pmovzb_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pmovzb_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovsb_rm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pmovsb_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pmovsb_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovzw_rm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pmovzw_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pmovzw_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovsw_rm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pmovsw_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pmovsw_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovsq_rm rd (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
-     (Pmovsq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pmovsq_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovsq_mr (Addrmode rb ss (inr disp)) rs =>
     let '(id, ptrofs) := disp in
-     (Pmovsq_mr (Addrmode rb ss (inr (xH, ptrofs))) rs)
+     (Pmovsq_mr (Addrmode rb ss (inl (Ptrofs.signed ptrofs))) rs)
   (** Integer arithmetic *)
   | Pleal rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-     (Pleal rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pleal rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   (** Saving and restoring registers *)
   | Pmov_rm_a rd (Addrmode rb ss (inr disp)) =>  (**r like [Pmov_rm], using [Many64] chunk *)
     let '(id, ptrofs) := disp in
-     (Pmov_rm_a rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pmov_rm_a rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmov_mr_a (Addrmode rb ss (inr disp)) rs =>   (**r like [Pmov_mr], using [Many64] chunk *)
     let '(id, ptrofs) := disp in
-    (Pmov_mr_a (Addrmode rb ss (inr (xH, ptrofs))) rs)
+    (Pmov_mr_a (Addrmode rb ss (inl (Ptrofs.signed ptrofs))) rs)
   | Paddq_rm rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-    (Paddq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+    (Paddq_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Psubq_rm rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-    (Psubq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+    (Psubq_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pimulq_rm rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-    (Pimulq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+    (Pimulq_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pandq_rm rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-    (Pandq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
-  | Porq_rm rd (Addrmode rb ss (inr disp))  =>
+    (Pandq_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
+  | Porq_rm rd (Addrmode rb ss (inr disp))  =>    
     let '(id, ptrofs) := disp in
-    (Porq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+    (Porq_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pxorq_rm rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-    (Pxorq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+    (Pxorq_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pcmpq_rm rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-    (Pcmpq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+    (Pcmpq_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Ptestq_rm rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-    (Ptestq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+    (Ptestq_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovq_rm rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-    (Pmovq_rm rd (Addrmode rb ss (inr (xH, ptrofs))))
+    (Pmovq_rm rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | Pmovq_mr (Addrmode rb ss (inr disp)) rs =>
     let '(id, ptrofs) := disp in
-    (Pmovq_mr (Addrmode rb ss (inr (xH, ptrofs))) rs)
+    (Pmovq_mr (Addrmode rb ss (inl (Ptrofs.signed ptrofs))) rs)
   | Pleaq rd (Addrmode rb ss (inr disp))  =>
     let '(id, ptrofs) := disp in
-     (Pleaq rd (Addrmode rb ss (inr (xH, ptrofs))))
+     (Pleaq rd (Addrmode rb ss (inl (Ptrofs.signed ptrofs))))
   | _ =>
      i
     end.

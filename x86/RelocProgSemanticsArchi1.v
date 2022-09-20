@@ -10,8 +10,8 @@ Import ListNotations.
 
 Definition rev_id_eliminate (symb: ident) (i:instruction) :=
    match i with
-  | Pjmp_s id sg =>
-     (Pjmp_s symb sg)
+  | Pjmp_l_rel _ =>
+     (Pjmp_s symb signature_main)
   | Pjmp_m (Addrmode rb ss (inr disp)) =>
     let '(id, ptrofs) := disp in
      (Pjmp_m (Addrmode rb ss (inr (symb,ptrofs))))
