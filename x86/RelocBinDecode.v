@@ -407,8 +407,6 @@ Proof.
       unfold Int.max_unsigned. 
       generalize (Ptrofs.unsigned_range i1).
       lia. 
-      generalize (Ptrofs.unsigned_range i1).
-      lia. 
       
   -  destr_in H.
     + destr_in H.
@@ -437,8 +435,6 @@ Proof.
       unfold Int.max_unsigned. 
       generalize (Ptrofs.unsigned_range i1).
       lia. 
-      generalize (Ptrofs.unsigned_range i1).
-      lia.
       
   - destr_in H.
     + destr_in H.
@@ -464,8 +460,6 @@ Proof.
       unfold Int.max_unsigned. 
       generalize (Ptrofs.unsigned_range i0).
       lia. 
-      generalize (Ptrofs.unsigned_range i0).
-      lia.
 
   -  destr_in H.
     + destr_in H. monadInv H.
@@ -490,8 +484,6 @@ Proof.
       unfold Int.max_unsigned. 
       generalize (Ptrofs.unsigned_range i0).
       lia. 
-      generalize (Ptrofs.unsigned_range i0).
-      lia.      
 Qed.
 
 (* mostly same as 32bit mode *)
@@ -527,8 +519,6 @@ Proof.
       unfold Int.max_unsigned. 
       generalize (Ptrofs.unsigned_range i1).
       lia. 
-      generalize (Ptrofs.unsigned_range i1).
-      lia. 
       
   -  destr_in H.
     + destr_in H.
@@ -556,8 +546,6 @@ Proof.
       unfold Int.max_unsigned. 
       generalize (Ptrofs.unsigned_range i1).
       lia. 
-      generalize (Ptrofs.unsigned_range i1).
-      lia.
       
   - destr_in H.
     + destr_in H.
@@ -583,8 +571,6 @@ Proof.
       unfold Int.max_unsigned. 
       generalize (Ptrofs.unsigned_range i0).
       lia. 
-      generalize (Ptrofs.unsigned_range i0).
-      lia.
 
   -  destr_in H.
     + destr_in H. monadInv H.
@@ -609,8 +595,6 @@ Proof.
       rewrite Int.unsigned_repr.
       apply Ptrofs.repr_unsigned.
       unfold Int.max_unsigned. 
-      generalize (Ptrofs.unsigned_range i0).
-      lia. 
       generalize (Ptrofs.unsigned_range i0).
       lia. 
 Qed.
@@ -1234,38 +1218,119 @@ Proof.
   unfold encode_rex_prefix_rr.
   intros r b l rs bs.
   destr;destr.
-  admit.
-  destr. intro H.
-  monadInv H.  right.
-  exists zero1,ProdL. assert (decode_ireg_u4 false rs = r) by admit.
-  admit.
-Admitted.
+  - intros. monadInv H.
+    left. split;auto.
+    split;auto with encdec.
+  - destr. intros.
+    monadInv H.
+    right. repeat eexists;auto with encdec.
+  - intros.
+    monadInv H.
+    right. intros.
+    repeat eexists;auto with encdec.
+  - destr.
+    + intros.
+    monadInv H.
+    right. intros.
+    repeat eexists;auto with encdec.
+    + intros.
+      monadInv H.
+Qed.
 
 Lemma encode_rex_prefix_r_result: forall b l bs,
     encode_rex_prefix_r b = OK (l, bs) ->
     (l = [] /\  decode_ireg_u4 false bs = b) \/
     (exists rexb, l = [REX_WRXB zero1 zero1 zero1 rexb] /\ decode_ireg_u4 rexb bs = b).
-Admitted.
-
+Proof.
+  unfold encode_rex_prefix_r.
+  intros b l  bs.
+  destr.
+  - intros. monadInv H.
+    left. split;auto.
+    auto with encdec.
+  - destr. intros.
+    monadInv H.
+    right. repeat eexists;auto with encdec.
+Qed.
 
 Lemma encode_rex_prefix_ff_result: forall r b l rs bs,
     encode_rex_prefix_ff r b = OK (l, rs, bs) ->
     (l = [] /\ decode_freg_u4 false rs = r /\ decode_freg_u4 false bs = b) \/
     (exists rexr rexb, l = [REX_WRXB zero1 rexr zero1 rexb] /\ decode_freg_u4 rexr rs = r /\ decode_freg_u4 rexb bs = b).
-Admitted.
+unfold encode_rex_prefix_ff.
+  intros r b l rs bs.
+  destr;destr.
+  - intros. monadInv H.
+    left. split;auto.
+    split;auto with encdec.
+  - destr. intros.
+    monadInv H.
+    right. repeat eexists;auto with encdec.
+  - intros.
+    monadInv H.
+    right. intros.
+    repeat eexists;auto with encdec.
+  - destr.
+    + intros.
+    monadInv H.
+    right. intros.
+    repeat eexists;auto with encdec.
+    + intros.
+      monadInv H.
+Qed.
 
 Lemma encode_rex_prefix_fr_result: forall r b l rs bs,
     encode_rex_prefix_fr r b = OK (l, rs, bs) ->
     (l = [] /\ decode_freg_u4 false rs = r /\ decode_ireg_u4 false bs = b) \/
     (exists rexr rexb, l = [REX_WRXB zero1 rexr zero1 rexb] /\ decode_freg_u4 rexr rs = r /\ decode_ireg_u4 rexb bs = b).
-Admitted.
+Proof.
+  unfold encode_rex_prefix_fr.
+  intros r b l rs bs.
+  destr;destr.
+  - intros. monadInv H.
+    left. split;auto.
+    split;auto with encdec.
+  - destr. intros.
+    monadInv H.
+    right. repeat eexists;auto with encdec.
+  - intros.
+    monadInv H.
+    right. intros.
+    repeat eexists;auto with encdec.
+  - destr.
+    + intros.
+    monadInv H.
+    right. intros.
+    repeat eexists;auto with encdec.
+    + intros.
+      monadInv H.
+Qed.
 
 Lemma encode_rex_prefix_rf_result: forall r b l rs bs,
     encode_rex_prefix_rf r b = OK (l, rs, bs) ->
     (l = [] /\ decode_ireg_u4 false rs = r /\ decode_freg_u4 false bs = b) \/
     (exists rexr rexb, l = [REX_WRXB zero1 rexr zero1 rexb] /\ decode_ireg_u4 rexr rs = r /\ decode_freg_u4 rexb bs = b).
-Admitted.
-
+unfold encode_rex_prefix_rf.
+  intros r b l rs bs.
+  destr;destr.
+  - intros. monadInv H.
+    left. split;auto.
+    split;auto with encdec.
+  - destr. intros.
+    monadInv H.
+    right. repeat eexists;auto with encdec.
+  - intros.
+    monadInv H.
+    right. intros.
+    repeat eexists;auto with encdec.
+  - destr.
+    + intros.
+    monadInv H.
+    right. intros.
+    repeat eexists;auto with encdec.
+    + intros.
+      monadInv H.
+Qed.
 
 Lemma encode_rex_prefix_ra_result: forall e r addr l rs a,
     encode_rex_prefix_ra e r addr = OK (l,rs,a) ->
@@ -1301,14 +1366,47 @@ Lemma encode_rex_prefix_fa_result: forall e r addr l rs a,
     (not_AddrE0 a = true) /\
     ((l = [] /\  decode_freg_u4 false rs = r /\ translate_AddrE_Addrmode e false false a = OK addr) \/
     (exists rexr rexx rexb , l = [REX_WRXB zero1 rexr rexx rexb] /\  decode_freg_u4 rexr rs = r /\ translate_AddrE_Addrmode e rexx rexb a = OK addr)).
-Admitted.
+Proof.
+  unfold encode_rex_prefix_fa.
+  intros e r addr l rs a H.
+  repeat destr_in H.
+  - monadInv H11.
+    apply transl_addr_consistency32 in EQ1.
+    destruct EQ1. split;auto. left.
+    split;split;auto with encdec.
+  - monadInv H11.
+    apply transl_addr_consistency64 in EQ1.
+    destruct EQ1. split;auto. right.
+    exists zero1,ProdR0,ProdR. split;split;auto with encdec.
+  - monadInv H11.
+    apply transl_addr_consistency32 in EQ1.
+    destruct EQ1. split;auto. right.
+    exists ProdL,zero1,zero1.
+    split;split;auto with encdec.
+  - monadInv H11.
+    apply transl_addr_consistency64 in EQ1.
+    destruct EQ1. split;auto. right.
+    exists ProdL,ProdR1,ProdR0.
+    split;split;auto with encdec.
+Qed.
 
 Lemma encode_rex_prefix_addr_result: forall e addr l a,
     encode_rex_prefix_addr e addr = OK (l,a) ->
     (not_AddrE0 a = true) /\
     ((l = [] /\  translate_AddrE_Addrmode e false false a = OK addr) \/
     (exists rexx rexb , l = [REX_WRXB zero1 zero1 rexx rexb] /\ translate_AddrE_Addrmode e rexx rexb a = OK addr)).
-Admitted.
+Proof.
+  unfold encode_rex_prefix_addr.
+  intros e addr l  a H.
+  repeat destr_in H.
+  - monadInv H11.
+    apply transl_addr_consistency32 in EQ.
+    destruct EQ. split;auto. 
+  - monadInv H11.
+    apply transl_addr_consistency64 in EQ.
+    destruct EQ. split;auto. right.
+    exists ProdR0,ProdR. split;auto with encdec.
+Qed.
 
 
 Hint Unfold decode_instr_rex decode_instr_rep decode_instr_repnz decode_instr decode_instr_override: decunfold.
