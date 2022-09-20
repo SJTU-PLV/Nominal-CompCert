@@ -377,21 +377,29 @@ Program Definition encode_ofs_u16 (ofs:Z) :res u16 :=
     else Error (msg "impossible in encode_ofs_u16")
   else Error (msg "Offset overflow in encode_ofs_u16").
 
-Definition decode_ofs_u16 (bs:u16) : int :=
+Definition decode_ofs_u16 (bs:u16) : res int :=
   let bs' := proj1_sig bs in
-  let z := bits_to_Z bs' in
-  Int.repr z.
+  do z <- bits_to_bytes bs';
+  OK (Int.repr (int_of_bytes z)).
+  (* let bs' := proj1_sig bs in *)
+  (* let z := bits_to_Z bs' in *)
+  (* Int.repr z. *)
 
 Program Definition encode_ofs_u32 (ofs:Z) :res u32 :=
-  let ofs32 := bytes_to_bits_opt (bytes_of_int 4 ofs) in
-  if assertLength ofs32 32 then
+  if ( -1 <? ofs) && (ofs <? (two_power_nat 32)) then
+    let ofs32 := bytes_to_bits_opt (bytes_of_int 4 ofs) in
+    if assertLength ofs32 32 then
     OK (exist _ ofs32 _)
-  else Error (msg "impossible").
+    else Error (msg "impossible")
+  else Error (msg "Offset overflow in encode_ofs_u32").
 
-Definition decode_ofs_u32 (bs:u32) : int :=
+Definition decode_ofs_u32 (bs:u32) : res int :=
   let bs' := proj1_sig bs in
-  let z := bits_to_Z bs' in
-  Int.repr z.
+  do z <- bits_to_bytes bs';
+  OK (Int.repr (int_of_bytes z)).
+  (* let bs' := proj1_sig bs in *)
+  (* let z := bits_to_Z bs' in *)
+  (* Int.repr z. *)
 
 Definition encode_ofs_signed32 (ofs:Z) :=
   if (Int.min_signed <=? ofs) && (ofs <=? Int.max_signed) then
@@ -399,9 +407,9 @@ Definition encode_ofs_signed32 (ofs:Z) :=
   else
     Error (msg "Offset overflow in encode_ofs_signed32").
 
-Definition decode_ofs_signed32 (bs:u32) : Z :=
-  let i := decode_ofs_u32 bs in
-  Int.signed i.
+Definition decode_ofs_signed32 (bs:u32) : res Z :=
+  do i <- decode_ofs_u32 bs;
+  OK (Int.signed i).
 
   
 Program Definition encode_testcond_u4 (c:testcond) : u4 :=

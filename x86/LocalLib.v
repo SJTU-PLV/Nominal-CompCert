@@ -1048,29 +1048,7 @@ Proof.
   destr; lia.
 Qed.
 
-Lemma init_data_list_aligned_dec: forall l p,
-    {Genv.init_data_list_aligned p l} + 
-    {~Genv.init_data_list_aligned p l}.
-Admitted.
-(*
-Proof.
-  induction l as [|id l]; cbn; auto.
-  intros p.
-  assert ({(Genv.init_data_alignment id | p)} + 
-          {~(Genv.init_data_alignment id | p)}).
-  { 
-    eapply Zdivide_dec; eauto.
-    generalize (init_data_alignment_pos id). lia. 
-  }
-  generalize (IHl (p + init_data_size id)).
-  intros.
-  inv H; inv H0.
-  - left; split; auto.
-  - right; tauto.
-  - right; tauto.
-  - right; tauto.
-Qed.
-*)
+
 
 Lemma init_data_list_aligned_app : forall l1 p l2,
     Genv.init_data_list_aligned p l1 ->
@@ -1151,41 +1129,6 @@ Proof.
 Qed.
 
 
-Definition init_data_list_aligned0 {F V} (def: globdef F V) :=
-  Globalenvs.Genv.init_data_list_aligned 0 (get_def_init_data def).
-
-Lemma init_data_list_aligned0_dec: forall {F V} (def: globdef F V),
-    {init_data_list_aligned0 def} + {~init_data_list_aligned0 def}.
-Proof.
-  unfold init_data_list_aligned0.
-  intros. apply init_data_list_aligned_dec.
-Qed.
-
-Lemma init_mem_data_aligned:
-  forall {F V : Type} (p : AST.program F V) (m : mem),
-    Genv.init_mem p = Some m ->
-    Forall init_data_list_aligned0 (map snd (AST.prog_defs p)).
-Proof.
-  Admitted.
-(***** Remove Proofs By Chris Start ******)
-(*  How to define get_def_init_data?
-  intros F V p m INIT.
-  rewrite Forall_forall.
-  intros def IN.
-  red. destruct def; [| cbn; auto].
-  cbn [get_def_init_data].
-  destruct g; cbn; auto.
-  destr; cbn; auto.
-  erewrite in_map_iff in IN.
-  destruct IN as ((id', def) & EQ & IN). cbn in EQ. subst.
-  exploit Genv.init_mem_inversion; eauto.
-  intros (AL & O).
-  destr;
-  destruct i; try congruence.
-  destruct l; [cbn; eauto | congruence].
-Qed.
-*)
-(***** Remove Proofs By Chris End ******)
 
 (* New Lemmas for Compcert ELF *)
 
@@ -1222,62 +1165,7 @@ exploit Mem.weak_valid_pointer_size_bounds; eauto. intros [A B].
 repeat rewrite Ptrofs.unsigned_repr; auto.
 Qed.
 
-(* Used in RealAsmproof.v *)
-Theorem store_same_ptr:
-  forall m1 b o v m2,
-    v <> Vundef ->
-    Val.has_type v Tptr ->
-    Mem.loadbytes m1 b o (size_chunk Mptr) = Some (encode_val Mptr v) ->
-    Mem.store Mptr m1 b o v = Some m2 -> m1 = m2.
-Proof.
-(***** Remove Proofs By Chris Start ******)
-Admitted.
-(***** Remove Proofs By Chris End ******)
 
-(* Used in Symbtablegenproof.v *)
-Lemma drop_parallel_inject:
-  forall f g m1 m2 b1 b2 delta lo hi p m1',
-  Mem.inject f g m1 m2 ->
-  Mem.drop_perm m1 b1 lo hi p = Some m1' ->
-  f b1 = Some(b2, delta) ->
-  exists m2',
-      Mem.drop_perm m2 b2 (lo + delta) (hi + delta) p = Some m2'
-   /\ Mem.inject f g m1' m2'.
-Proof.
-  Admitted.
-(***** Remove Proofs By Chris Start ******)  
-(*  
-  intros. inversion H. 
-  exploit Mem.drop_mapped_inj; eauto.
-  intros (m2' & DPERM & MEMINJ).
-  exists m2'. split. auto. constructor.
-(* inj *)
-  auto.
-(* freeblocks *)  
-  eauto with mem. 
-(* mappedblocks *)
-  eauto with mem.
-(* no overlap *)
-  red; intros. eauto with mem.
-(* representable *)
-  intros. exploit mi_representable; try eassumption.
-  intros [A B]; split; eauto. intros ofs0 P. eapply B.
-  destruct P; eauto with mem.
-(* perm inv *)
-  intros. exploit mi_perm_inv0; eauto using perm_drop_4. 
-  intuition eauto using perm_drop_4.
-  destruct (eq_block b0 b1). subst b0.
-  destruct (zle lo ofs). destruct (zlt ofs hi). 
-  rewrite H2 in H3. inv H3.
-  assert (perm_order p p0). eapply perm_drop_2; eauto. lia.
-  assert (perm m1' b1 ofs k p). eapply perm_drop_1; eauto.
-  left. eauto with mem.
-  left. eapply perm_drop_3; eauto. right. right. lia.
-  left. eapply perm_drop_3; eauto. right. left. lia.
-  left. eapply perm_drop_3; eauto. 
-Qed. 
-*)
-(***** Remove Proofs By Chris End ******)
 
 (** Memory-Stack Lemmas **)
 Lemma record_stack_blocks_stack_original:
