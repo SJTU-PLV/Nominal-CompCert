@@ -2032,6 +2032,40 @@ Proof.
   apply X.
 Qed.
 
+Program Definition cc_rel `{PSet K1} `{PSet K2}
+  `(cc: ST.callconv li1 li2) (R: K1 -> K2 -> Prop) : ST.callconv (li1@K1) (li2@K2) :=
+  {|
+    ST.ccworld := ST.ccworld cc;
+    ST.match_query w '(q1, k1) '(q2, k2) := ST.match_query cc w q1 q2 /\ R k1 k2;
+    ST.match_reply w '(r1, k1) '(r2, k2) := ST.match_reply cc w r1 r2 /\ R k1 k2;
+  |}.
+
+Lemma ccref_fbk_rel `{PSet K1} `{PSet K2} (R: K1 -> K2 -> Prop) `(cc: ST.callconv li1 li2):
+  st_ccref cc (callconv_fbk (cc_rel cc R)).
+Proof.
+  match goal with
+  | |- st_ccref ?x ?y => set (w1 := ST.ccworld x); set (w2 := ST.ccworld y)
+  end.
+  cbn in *.
+  set (F := fun '((w, _, _):w2) => w).
+  set (I := fun '((_, k1, k2):w2) => R k1 k2).
+  eapply st_ccref_sub with F I;
+    intros; cbn in *; eprod_crush; subst; try easy.
+  admit.
+  eexists (_, _, _). repeat split. easy.
+Admitted.
+
+Lemma encap_fsim_fbk_rel `{PSet K1} `{PSet K2} (R: K1 -> K2 -> Prop)
+  `(ccA: ST.callconv liA1 liA2) `(ccB: ST.callconv liB1 liB2) L1 L2:
+  E.forward_simulation ccA (cc_rel ccB R) L1 L2 ->
+  E.forward_simulation ccA ccB (semantics_fbk L1) (semantics_fbk L2).
+Proof.
+  intros X. apply encap_fsim_fbk in X.
+  unfold E.forward_simulation in *; cbn in *.
+  pose proof (@ccref_lift (K1 * pstate L1) _ (K2 * pstate L2) _ _ _ _ _ (ccref_fbk_rel R ccB)).
+  rewrite H1. apply X.
+Qed.
+
 (** ** REVEAL Simulation Convention *)
 
 Program Definition cc_reveal `{PSet K} {li} : ST.callconv li (li@K) :=
