@@ -86,6 +86,39 @@ Definition goto_ofs (sz:ptrofs) (ofs:Z) (rs: regset) (m: mem) :=
   | _ => Stuck
   end.
 
+(* evaluation with globalenvs which are the same in genv_symb *)
+
+Lemma eval_addrmode_match_ge: forall ge1 ge2 a rs (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs),
+    RelocProgSemanticsArchi.eval_addrmode ge1 a rs = eval_addrmode ge2 a rs.
+Proof.
+  unfold eval_addrmode. destruct Archi.ptr64;intros.
+  - unfold eval_addrmode64.
+    destruct a. f_equal.
+    f_equal. destr.
+    destruct p. eauto.
+  - unfold eval_addrmode32.
+    destruct a. f_equal.
+    f_equal. destr.
+    destruct p. eauto.
+Qed.
+
+Lemma exec_load_match_ge: forall sz ge1 ge2 chunk m a rs rd (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
+          exec_load sz ge1 chunk m a rs rd = exec_load sz ge2 chunk m a rs rd.
+Proof.
+  unfold exec_load.
+  intros. erewrite eval_addrmode_match_ge.
+  eauto. auto.
+Qed.
+
+Lemma exec_store_match_ge: forall sz ge1 ge2 chunk m a rs rd l (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
+          exec_store sz ge1 chunk m a rs rd l = exec_store sz ge2 chunk m a rs rd l.
+Proof.
+  unfold exec_store.
+  intros. erewrite eval_addrmode_match_ge.
+  eauto. auto.
+Qed.
+
+
 Section WITH_INSTR_SIZE.
   Variable instr_size : instruction -> Z.
 
@@ -508,6 +541,32 @@ Definition exec_instr (ge: Genv.t) (i: instruction) (rs: regset) (m: mem) : outc
   | _ => Stuck
   end.
 
+Lemma exec_instr_refl: forall i rs m ge tge
+    (symbol_address_pres: forall id ofs,
+    RelocProgGlobalenvs.Genv.symbol_address ge id ofs =
+    RelocProgGlobalenvs.Genv.symbol_address tge id ofs),
+    exec_instr ge i rs m = exec_instr tge i rs m.
+Proof.
+  destruct i;simpl;auto;intros.
+  1-27: try (erewrite symbol_address_pres;eauto).
+  1-24: try (erewrite exec_load_match_ge;eauto;eapply symbol_address_pres;eauto).
+  1-12: try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
+  do 3 f_equal.
+  unfold eval_addrmode32.
+  destruct a. f_equal.
+  f_equal. destr.
+  destruct p. eapply symbol_address_pres;eauto.
+  do 3 f_equal.
+  unfold eval_addrmode64.
+  destruct a. f_equal.
+  f_equal. destr.
+  destruct p. eapply symbol_address_pres;eauto.
+Qed.
+
+
+End WITH_INSTR_SIZE.
+
+
 (** Note: Builtin instructions are eliminated after AsmBuiltinInline.v . And the size of builtin instructions are unspecific *)
 (** * Evaluation of builtin arguments, *)
 
@@ -567,6 +626,38 @@ Proof.
   induction 1; intros v' EV; inv EV; f_equal; eauto using eval_builtin_arg_determ.
 Qed.
 
+ 
 End EVAL_BUILTIN_ARG.
 
-End WITH_INSTR_SIZE.
+Hint Constructors eval_builtin_arg: barg.
+
+(* same lemmas as the in Events *)
+Section EVAL_BUILTIN_ARG_PRESERVED.
+
+Variables A: Type.
+Variable ge1: Genv.t.
+Variable ge2: Genv.t.
+Variable e: A -> val.
+Variable sp: val.
+Variable m: mem.
+
+Hypothesis symbols_preserved:
+  forall id, Genv.find_symbol ge2 id = Genv.find_symbol ge1 id.
+
+Lemma eval_builtin_arg_preserved:
+  forall a v, eval_builtin_arg A ge1 e sp m a v -> eval_builtin_arg A ge2 e sp m a v.
+Proof.
+   assert (EQ: forall id ofs, Genv.symbol_address ge2 id ofs = Genv.symbol_address ge1 id ofs).
+  { unfold Genv.symbol_address; simpl; intros. rewrite symbols_preserved; auto. }
+  induction 1; eauto with barg. rewrite <- EQ in H; eauto with barg. rewrite <- EQ; eauto with barg.
+Qed.
+
+Lemma eval_builtin_args_preserved:
+  forall al vl, eval_builtin_args A ge1 e sp m al vl -> eval_builtin_args A ge2 e sp m al vl.
+Proof.
+  induction 1; constructor; auto; eapply eval_builtin_arg_preserved; eauto.
+Qed.
+
+End EVAL_BUILTIN_ARG_PRESERVED.
+
+

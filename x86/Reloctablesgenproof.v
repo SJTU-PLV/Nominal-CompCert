@@ -591,6 +591,16 @@ Proof.
 Qed.
 
 
+
+Lemma symbol_address_pres: forall id ofs,
+    RelocProgGlobalenvs.Genv.symbol_address ge id ofs =
+    RelocProgGlobalenvs.Genv.symbol_address tge id ofs.
+Proof.
+  unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+  monadInv TRANSF. simpl;auto.
+Qed.
+
+
 Lemma step_simulation: forall s1 s1' t,
     step instr_size ge s1 t s1' ->
     step instr_size tge s1 t s1'.
@@ -609,7 +619,13 @@ Proof.
     unfold match_prog in TRANSF. unfold transf_program in TRANSF.
     monadInv TRANSF. simpl;auto.
 
-    admit.
+    unfold instr_eq in H6. clear H4 H1 H2 H0.
+    erewrite exec_instr_refl in H3.
+    2: eapply symbol_address_pres.
+    destruct x;subst;auto.
+    destruct i;inv H6.
+    simpl in *. auto.
+    
   - eapply exec_step_builtin;eauto.
     unfold RelocProgGlobalenvs.Genv.find_ext_funct in *.
     destr_in H1.
@@ -617,10 +633,15 @@ Proof.
     monadInv TRANSF. simpl;auto.
      exploit genv_instr_eq. rewrite H2.
      intros. inv H. unfold instr_eq in H7.
+     (* architecture dependent *)
      destr_in H7. subst.
      simpl. inv H7. rewrite <- H5. auto.
-
-     admit.
+     eapply eval_builtin_args_preserved with (ge1:= ge).
+     unfold RelocProgGlobalenvs.Genv.find_symbol. simpl.     
+     
+     simpl in *. unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+     monadInv TRANSF. simpl;eauto.
+     eauto.
      
      simpl in *. unfold match_prog in TRANSF. unfold transf_program in TRANSF.
      monadInv TRANSF. simpl;eauto.
@@ -631,7 +652,7 @@ Proof.
     monadInv TRANSF. simpl;auto.
     simpl in *. unfold match_prog in TRANSF. unfold transf_program in TRANSF.
     monadInv TRANSF. simpl;eauto.
-Admitted.
+Qed.
 
 Lemma transf_program_correct:
   forall rs, Smallstep.forward_simulation (RelocProgSemantics.semantics instr_size prog rs) (semantics instr_size tprog rs).
@@ -646,9 +667,7 @@ Proof.
     split;auto.
     rewrite <- H0. auto.
     unfold semantics. simpl in *.
-
-             
-    
+    eapply step_simulation. eauto.                
 Qed.
 
 End PRESERVATION.

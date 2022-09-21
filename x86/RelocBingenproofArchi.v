@@ -63,35 +63,6 @@ Proof.
   
 Qed.
 
-Lemma eval_addrmode_match_ge: forall ge1 ge2 a rs (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs),
-    RelocProgSemanticsArchi.eval_addrmode ge1 a rs = eval_addrmode ge2 a rs.
-Proof.
-  unfold eval_addrmode. destruct Archi.ptr64;intros.
-  - unfold eval_addrmode64.
-    destruct a. f_equal.
-    f_equal. destr.
-    destruct p. eauto.
-  - unfold eval_addrmode32.
-    destruct a. f_equal.
-    f_equal. destr.
-    destruct p. eauto.
-Qed.
-
-Lemma exec_load_match_ge: forall sz ge1 ge2 chunk m a rs rd (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
-          exec_load sz ge1 chunk m a rs rd = exec_load sz ge2 chunk m a rs rd.
-Proof.
-  unfold exec_load.
-  intros. erewrite eval_addrmode_match_ge.
-  eauto. auto.
-Qed.
-
-Lemma exec_store_match_ge: forall sz ge1 ge2 chunk m a rs rd l (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
-          exec_store sz ge1 chunk m a rs rd l = exec_store sz ge2 chunk m a rs rd l.
-Proof.
-  unfold exec_store.
-  intros. erewrite eval_addrmode_match_ge.
-  eauto. auto.
-Qed.
 
 (* ad-hoc *)
 Section PRESERVATION. 
@@ -123,25 +94,6 @@ Section PRESERVATION.
   Hypothesis senv_refl:
     (Genv.genv_senv ge) = (Genv.genv_senv tge).
 
-  
-Lemma exec_instr_refl: forall i rs m,
-    exec_instr instr_size ge i rs m = exec_instr instr_size tge i rs m.
-Proof.
-  destruct i;simpl;auto;intros.
-  1-27: try (erewrite symbol_address_pres;eauto).
-  1-24: try (erewrite exec_load_match_ge;eauto;eapply symbol_address_pres;eauto).
-  1-12: try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
-  do 3 f_equal.
-  unfold eval_addrmode32.
-  destruct a. f_equal.
-  f_equal. destr.
-  destruct p. eapply symbol_address_pres;eauto.
-  do 3 f_equal.
-  unfold eval_addrmode64.
-  destruct a. f_equal.
-  f_equal. destr.
-  destruct p. eapply symbol_address_pres;eauto.
-Qed.
 
 
 Lemma eval_addrmode_refl: forall a rs,
