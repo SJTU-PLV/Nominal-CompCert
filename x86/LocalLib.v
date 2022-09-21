@@ -1477,3 +1477,25 @@ Proof.
   destruct (zlt x hi). left; lia. right; intro A; lia.
 Defined.
 
+(*list forall properties*)
+Lemma list_forall2_Forall2: forall A B (P: A -> B -> Prop) l1 l2,
+    list_forall2 P l1 l2 <->
+    Forall2 P l1 l2.
+Proof.
+  induction l1;intros.
+  split;intros. inv H. auto.
+  inv H. constructor.
+  split;intros.
+  inv H. constructor. auto. apply IHl1. auto.
+  inv H. constructor. auto. apply IHl1. auto.
+Qed.
+
+Lemma list_forall2_app_inv_l: forall A B (P: A -> B -> Prop) l1 l2 l3,
+    list_forall2 P (l1++l2) l3 ->
+    exists l4 l5, l3 = l4 ++ l5 /\ list_forall2 P l1 l4 /\ list_forall2 P l2 l5.
+  intros.
+  apply list_forall2_Forall2 in H.
+  exploit Forall2_app_inv_l;eauto. intros (l1' & l2' & ? & ? & ?).
+  eexists. eexists. split;eauto.
+  split;apply list_forall2_Forall2;auto.
+Qed.

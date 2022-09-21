@@ -1,4 +1,4 @@
-Require Import Coqlib Errors Maps.
+Require Import Coqlib Errors Maps Memory.
 Require Import Integers Floats AST RelocProgLinking Linking.
 Require Import Op Locations Mach Conventions Asm RealAsm.
 Require Import Reloctablesgen ReloctablesgenArchi.
@@ -82,6 +82,12 @@ Proof.
       * auto.
 Qed.
 
+Lemma gen_instr_map_pres_eq: forall n c c' instr_size i,
+    length c = n ->
+    Forall2 instr_eq c c' ->
+    option_rel instr_eq (gen_instr_map instr_size c i) (gen_instr_map instr_size c' i).
+Admitted.
+
 (** The preservation theorem of relocation table generation is established by decoding the program  *)
 
 (** * Main Preservaiton Proofs *)
@@ -92,6 +98,7 @@ Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
 Hypothesis instr_reloc_bound : forall i ofs, instr_reloc_offset i = OK ofs -> 0 < ofs < instr_size i.
 
 Hypothesis id_eliminate_size_unchanged:forall i, instr_size i = instr_size (id_eliminate i).
+
 
 Definition match_prog (p: program) (tp: program) :=
   transf_program instr_size p = OK tp.
@@ -212,224 +219,262 @@ Proof.
 Qed.
 
 
-(* Lemma transl_code_consistency_aux:forall n c r1 r2, *)
-(*     length c = n -> *)
-(*     Forall (fun e => e.(reloc_offset) > code_size instr_size c) r2 -> *)
-(*     transl_code instr_size c = OK r1 -> *)
-(*     fold_left (rev_acc_code instr_size) (transl_code' c) ([], 0, r1++r2) = (c, code_size instr_size c, r2). *)
-(* Proof. *)
-(*   induction n;intros c r1 r2 H FORALL H0. *)
-(*   rewrite length_zero_iff_nil in H. subst. *)
-(*   unfold transl_code in H0. simpl in *. inv H0. *)
-(*   simpl. eauto. *)
+Lemma transl_code_consistency_aux:forall n c r1 r2,
+    length c = n ->
+    Forall (fun e => e.(reloc_offset) > code_size instr_size c) r2 ->
+    transl_code instr_size c = OK r1 ->
+    exists c', fold_left (rev_acc_code instr_size) (transl_code' c) ([], 0, r1++r2) = (c', code_size instr_size c, r2)
+          /\ Forall2 instr_eq c' c.
+Proof.
+  induction n;intros c r1 r2 H FORALL H0.
+  rewrite length_zero_iff_nil in H. subst.
+  unfold transl_code in H0. simpl in *. inv H0.
+  simpl. eauto.
 
-(*   exploit LocalLib.length_S_inv;eauto. *)
-(*   intros (l' & a & A & B). subst. clear H. *)
-(*   rewrite code_eliminate_app. *)
-(*   rewrite fold_left_app. *)
-(*   destruct ((fold_left (rev_acc_code instr_size) (transl_code' l') ([], 0, r1++r2))) eqn:FOLD. destruct p. *)
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a & A & B). subst. clear H.
+  rewrite code_eliminate_app.
+  rewrite fold_left_app.
+  destruct ((fold_left (rev_acc_code instr_size) (transl_code' l') ([], 0, r1++r2))) eqn:FOLD. destruct p.
   
-(*   unfold transl_code in H0. *)
-(*   monadInv H0. rewrite fold_left_app in EQ. simpl in EQ. *)
-(*   unfold acc_instrs in EQ at 1. monadInv EQ. *)
-(*   destruct x2. *)
+  unfold transl_code in H0.
+  monadInv H0. rewrite fold_left_app in EQ. simpl in EQ.
+  unfold acc_instrs in EQ at 1. monadInv EQ.
+  destruct x2.
 
-(*   - inv EQ2. *)
-(*     (* prove r = [r0] ++ r2 *) *)
-(*     rewrite <- app_assoc in FOLD. *)
-(*     (* x0 = code_size l' *) *)
-(*     exploit transl_code_size_aux;eauto. intros CODESZ. subst. *)
-(*     (* relocation entry size property *) *)
-(*     exploit transl_instr_range;eauto. intros RANGE. *)
-(*     assert (REQ: fold_left (rev_acc_code instr_size) (transl_code' l') ([],0, x1++[r0]++r2) = (l',code_size instr_size l', [r0]++r2)). *)
-(*     { eapply IHn;eauto. *)
-(*       (* Forall offset *) *)
-(*       simpl. constructor. lia. *)
-(*       eapply Forall_impl with (P:= (fun e : relocentry => *)
-(*               reloc_offset e > code_size instr_size (l' ++ [a]))). *)
-(*       rewrite code_size_app. simpl. intros. lia. auto. *)
-(*       unfold transl_code. *)
-(*       rewrite EQ0. simpl. auto. } *)
-(*     rewrite FOLD in REQ. inv REQ. *)
-(*     simpl. *)
-(*     (* id_eliminate size unchanged *) *)
-(*     repeat rewrite <- id_eliminate_size_unchanged. *)
-(*     assert ((code_size instr_size l' <? reloc_offset r0) && *)
-(*             (reloc_offset r0 <? code_size instr_size l' + instr_size a) = true). *)
-(*     apply andb_true_iff. repeat rewrite Z.ltb_lt. *)
-(*     auto. *)
-(*     rewrite H. *)
-(*     rewrite code_size_app. simpl. f_equal;f_equal;auto. *)
-(*     exploit transl_instr_consistency;eauto. *)
-(*     intros. rewrite H0. auto. *)
-(*   - assert (REQ: fold_left (rev_acc_code instr_size) (transl_code' l') ([],0, r1++r2) = (l',code_size instr_size l', r2)). *)
-(*     { eapply IHn;auto. *)
-(*       (* Forall offset *) *)
-(*       eapply Forall_impl with (P:= (fun e : relocentry => *)
-(*               reloc_offset e > code_size instr_size (l' ++ [a]))). *)
-(*       rewrite code_size_app. simpl. intros. *)
-(*       generalize (instr_size_bound a). intros. *)
-(*       lia. auto. *)
-(*       unfold transl_code. *)
-(*       rewrite EQ0. inv EQ2. simpl. auto. } *)
-(*     rewrite FOLD in REQ. inv REQ. inv EQ2. *)
-(*     simpl. *)
-(*     rewrite code_size_app. *)
-(*     destruct r2. *)
-(*     + rewrite <- id_eliminate_size_unchanged. f_equal;f_equal;auto. *)
-(*       erewrite id_eliminate_unchanged;eauto. *)
-(*     + inv FORALL. *)
-(*       assert ((reloc_offset r <? *)
-(*                code_size instr_size l' + instr_size (id_eliminate a)) = false). *)
-(*       apply Z.ltb_ge. rewrite code_size_app in H1. simpl in H1. *)
-(*       rewrite <- id_eliminate_size_unchanged.  lia. *)
-(*       rewrite H. rewrite andb_false_r. *)
-(*       rewrite <- id_eliminate_size_unchanged. simpl. *)
-(*       f_equal;f_equal;auto. *)
-(*       erewrite id_eliminate_unchanged;eauto. *)
-(* Qed. *)
+  - inv EQ2.
+    (* prove r = [r0] ++ r2 *)
+    rewrite <- app_assoc in FOLD.
+    (* x0 = code_size l' *)
+    exploit transl_code_size_aux;eauto. intros CODESZ. subst.
+    (* relocation entry size property *)
+    exploit transl_instr_range;eauto. intros RANGE.
+    assert (REQ: exists l'', fold_left (rev_acc_code instr_size) (transl_code' l') ([],0, x1++[r0]++r2) = (l'',code_size instr_size l', [r0]++r2) /\ Forall2 instr_eq l'' l').
+    { eapply IHn;eauto.
+      (* Forall offset *)
+      simpl. constructor. lia.
+      eapply Forall_impl with (P:= (fun e : relocentry =>
+              reloc_offset e > code_size instr_size (l' ++ [a]))).
+      rewrite code_size_app. simpl. intros. lia. auto.
+      unfold transl_code.
+      rewrite EQ0. simpl. auto. }
+    rewrite FOLD in REQ. destruct REQ as (l'' & A1 & A2). inv A1.
+    simpl.
+    (* id_eliminate size unchanged *)
+    repeat rewrite <- id_eliminate_size_unchanged.
+    assert ((code_size instr_size l' <? reloc_offset r0) &&
+            (reloc_offset r0 <? code_size instr_size l' + instr_size a) = true).
+    apply andb_true_iff. repeat rewrite Z.ltb_lt.
+    auto.
+    rewrite H.
+    rewrite code_size_app. simpl. eexists. split. f_equal;f_equal;auto.
+    eapply Forall2_app. auto.
+    exploit transl_instr_consistency;eauto.
+  - assert (REQ: exists l'', fold_left (rev_acc_code instr_size) (transl_code' l') ([],0, r1++r2) = (l'',code_size instr_size l', r2) /\ Forall2 instr_eq l'' l').
+    { eapply IHn;auto.
+      (* Forall offset *)
+      eapply Forall_impl with (P:= (fun e : relocentry =>
+              reloc_offset e > code_size instr_size (l' ++ [a]))).
+      rewrite code_size_app. simpl. intros.
+      generalize (instr_size_bound a). intros.
+      lia. auto.
+      unfold transl_code.
+      rewrite EQ0. inv EQ2. simpl. auto. }
+    rewrite FOLD in REQ. destruct REQ as (l'' & A1 & A2). inv A1. 
+    simpl.
+    rewrite code_size_app.
+    destruct r2.
+    + rewrite <- id_eliminate_size_unchanged.
+      eexists. split.
+      f_equal;f_equal;auto.
+      erewrite id_eliminate_unchanged;eauto.
+      eapply Forall2_app. auto.
+      constructor;auto.
+      eapply instr_eq_refl.
+    + inv FORALL.
+      assert ((reloc_offset r <?
+               code_size instr_size l' + instr_size (id_eliminate a)) = false).
+      apply Z.ltb_ge. rewrite code_size_app in H1. simpl in H1.
+      rewrite <- id_eliminate_size_unchanged.  lia.
+      rewrite H. rewrite andb_false_r.
+      rewrite <- id_eliminate_size_unchanged. simpl.
+      eexists. split.
+      f_equal;f_equal;auto.
+      erewrite id_eliminate_unchanged;eauto.
+      eapply Forall2_app. auto.
+      constructor;auto.
+      eapply instr_eq_refl.
+Qed.
 
         
-(* Lemma transl_code_consistency: forall n c symbtbl reloctbl, *)
-(*     length c = n -> *)
-(*     transl_code instr_size symbtbl c = OK reloctbl -> *)
-(*     rev_transl_code instr_size reloctbl (transl_code' c) = c. *)
-(* Proof. *)
-(*   unfold rev_transl_code. intros. *)
-(*   exploit transl_code_consistency_aux;eauto. *)
-(*   rewrite app_nil_r. *)
-(*   destruct fold_left. destruct p. *)
-(*   simpl. intros. inv H1. auto. *)
-(* Qed. *)
+Lemma transl_code_consistency: forall n c reloctbl,
+    length c = n ->
+    transl_code instr_size c = OK reloctbl ->
+    exists c', rev_transl_code instr_size reloctbl (transl_code' c) = c' /\ Forall2 instr_eq c' c.
+Proof.
+  unfold rev_transl_code. intros.
+  exploit transl_code_consistency_aux;eauto.
+  rewrite app_nil_r.
+  destruct fold_left. destruct p.
+  simpl. intros. destruct H1 as (c' & A1 & A2). inv A1.
+  eexists. split;eauto.
+Qed.
 
-(* Lemma PTree_map_map_aux: forall A B C m n (f:positive -> A -> B) (g:positive -> B -> C), *)
-(*     PTree.xmap g (PTree.xmap f m n) n = PTree.xmap (fun p ele => g p (f p ele)) m n. *)
-(* Proof. *)
-(*   intros A B C. *)
-(*   induction m;intros. *)
-(*   - simpl. auto. *)
-(*   - simpl. destruct o. *)
-(*     + rewrite <- IHm1. *)
-(*       rewrite <- IHm2. *)
-(*       f_equal. *)
-(*     + rewrite <- IHm1. *)
-(*       rewrite <- IHm2. *)
-(*       f_equal. *)
-(* Qed. *)
+Lemma PTree_map_map_aux: forall A B C m n (f:positive -> A -> B) (g:positive -> B -> C),
+    PTree.xmap g (PTree.xmap f m n) n = PTree.xmap (fun p ele => g p (f p ele)) m n.
+Proof.
+  intros A B C.
+  induction m;intros.
+  - simpl. auto.
+  - simpl. destruct o.
+    + rewrite <- IHm1.
+      rewrite <- IHm2.
+      f_equal.
+    + rewrite <- IHm1.
+      rewrite <- IHm2.
+      f_equal.
+Qed.
 
-(* Theorem PTree_map_map:forall A B C m (f:positive -> A -> B) (g:positive -> B -> C), *)
-(*     PTree.map g (PTree.map f m) = PTree.map (fun p ele => g p (f p ele)) m. *)
-(* Proof. *)
-(*   unfold PTree.map. intros. *)
-(*   eapply PTree_map_map_aux. *)
-(* Qed. *)
+Theorem PTree_map_map:forall A B C m (f:positive -> A -> B) (g:positive -> B -> C),
+    PTree.map g (PTree.map f m) = PTree.map (fun p ele => g p (f p ele)) m.
+Proof.
+  unfold PTree.map. intros.
+  eapply PTree_map_map_aux.
+Qed.
 
-(* Lemma PTree_map_id_aux:forall A m n (f:positive -> A -> A), *)
-(*     (forall id ele, m ! id = Some ele -> f (PTree.prev_append n id) ele = ele) -> *)
-(*     PTree.xmap f m n = m. *)
-(* Proof. *)
-(*   intros A. *)
-(*   induction m;intros. *)
-(*   simpl;auto. *)
+Lemma PTree_map_id_aux:forall A m n (f:positive -> A -> A),
+    (forall id ele, m ! id = Some ele -> f (PTree.prev_append n id) ele = ele) ->
+    PTree.xmap f m n = m.
+Proof.
+  intros A.
+  induction m;intros.
+  simpl;auto.
   
 
-(*   destruct o.  *)
-(*   + generalize (H 1%positive a). simpl. *)
-(*     unfold PTree.prev. intros B. *)
-(*     generalize (B  eq_refl). intros C. *)
-(*     rewrite C. *)
+  destruct o.
+  + generalize (H 1%positive a). simpl.
+    unfold PTree.prev. intros B.
+    generalize (B  eq_refl). intros C.
+    rewrite C.
 
-(*     rewrite IHm1;auto. rewrite IHm2;auto. *)
-(*     * intros. generalize (H (id~1)%positive ele). *)
-(*       simpl. intros. apply H1. auto. *)
-(*     * intros. generalize (H (id~0)%positive ele). *)
-(*       simpl. intros. apply H1. auto. *)
+    rewrite IHm1;auto. rewrite IHm2;auto.
+    * intros. generalize (H (id~1)%positive ele).
+      simpl. intros. apply H1. auto.
+    * intros. generalize (H (id~0)%positive ele).
+      simpl. intros. apply H1. auto.
     
-(*   + simpl. rewrite IHm1;auto. rewrite IHm2;auto. *)
-(*     * intros. generalize (H (id~1)%positive ele). *)
-(*       simpl. intros. apply H1. auto. *)
-(*     * intros. generalize (H (id~0)%positive ele). *)
-(*       simpl. intros. apply H1. auto. *)
-(* Qed. *)
+  + simpl. rewrite IHm1;auto. rewrite IHm2;auto.
+    * intros. generalize (H (id~1)%positive ele).
+      simpl. intros. apply H1. auto.
+    * intros. generalize (H (id~0)%positive ele).
+      simpl. intros. apply H1. auto.
+Qed.
 
-(* Lemma PTree_map_id:forall A m (f:positive -> A -> A), *)
-(*     (forall id ele, m ! id = Some ele -> f id ele = ele) -> *)
-(*     PTree.map f m = m. *)
-(* Proof. *)
-(*   intros. unfold PTree.map. *)
-(*   apply PTree_map_id_aux. *)
-(*   simpl. auto. *)
-(* Qed. *)
+Lemma PTree_map_id:forall A m (f:positive -> A -> A),
+    (forall id ele, m ! id = Some ele -> f id ele = ele) ->
+    PTree.map f m = m.
+Proof.
+  intros. unfold PTree.map.
+  apply PTree_map_id_aux.
+  simpl. auto.
+Qed.
 
 
-(* Lemma transl_sections_consistency:forall sectbl symbtbl reloc_map, *)
-(*     transl_sectable instr_size symbtbl sectbl = OK reloc_map -> *)
-(*     PTree.map (rev_section instr_size reloc_map) (transl_sectable' sectbl) = sectbl. *)
-(* Proof. *)
-(*   unfold transl_sectable,transl_sectable'. *)
-(*   intros. *)
-(*   rewrite PTree_map_map. *)
-(*   rewrite PTree_map_id;auto. *)
-(*   intros. unfold rev_section. *)
-(*   destruct ele;simpl;auto. *)
-(*   apply PTree.elements_correct in H0. *)
-(*   generalize (PTree.elements_keys_norepet sectbl). *)
-(*   intros NOREP. *)
-(*   exploit (in_norepet_unique);eauto. *)
-(*   intros (gl1 & gl2 & A & B & C). *)
-(*   rewrite PTree.fold_spec in H. *)
-(*   (* unable to rewrite, use set printing all to find the problem *) *)
-(*   unfold section in *. *)
-(*   rewrite A in H. *)
-(*   rewrite fold_left_app in H. simpl in H. *)
-(*   fold section in *. *)
-(*   set (f:= (fun (a : res reloctable_map) *)
-(*            (p : positive * section) => *)
-(*               acc_section instr_size symbtbl a (fst p) (snd p))) in *. *)
-(*   (* preservaiton for Error *) *)
-(*   assert (ERRPRS: forall l msg, fold_left f l (Error msg) = Error msg). *)
-(*   { induction l. simpl. auto. *)
-(*     simpl. auto. } *)
-(*   (* prove preservaiton for geting None*) *)
-(*   assert (PRS: forall l reloc_map1 reloc_map2, *)
-(*                ~ In id fst ## l -> *)
-(*                fold_left f l (OK reloc_map1) = OK reloc_map2 -> *)
-(*                reloc_map2 ! id = reloc_map1 ! id). *)
-(*   { induction l;simpl;intros. *)
-(*     inv H2. auto. *)
-(*     destruct transl_section in H2. simpl in H2. destruct r. *)
-(*     eapply IHl;eauto. *)
-(*     assert ((PTree.set (fst a) (r :: r0) reloc_map1) ! id = reloc_map1 ! id). *)
-(*     rewrite PTree.gsspec. apply Decidable.not_or in H1. *)
-(*     destruct H1. destruct peq;try congruence;auto. *)
-(*     rewrite <- H3. *)
-(*     unfold reloctable in *. *)
-(*     eapply IHl;eauto. *)
-(*     simpl in H2. rewrite ERRPRS in H2. inv H2. } *)
+
+Definition section_eq (sec1 sec2:section) :=
+  match sec1, sec2 with
+  | sec_text c1, sec_text c2 =>
+    Forall2 instr_eq c1 c2
+  | sec_rwdata d1, sec_rwdata d2 =>
+    d1 = d2
+  | sec_rodata d1, sec_rodata d2 =>
+    d1 = d2
+  | _,_ => False
+  end.
+
+Lemma transl_sections_consistency:forall sectbl reloc_map,
+    transl_sectable instr_size sectbl = OK reloc_map ->
+     forall id, option_rel section_eq (PTree.map (rev_section instr_size reloc_map) (transl_sectable' sectbl))!id sectbl!id.
+Proof.
+  unfold transl_sectable,transl_sectable'.
+  intros.
+  rewrite PTree_map_map.
+
+  rewrite PTree.gmap. unfold option_map.
+  destr;unfold section in *;
+  rewrite Heqo;constructor.
+
+  unfold section_eq.
+  destruct s.
+  - simpl. 
+    apply PTree.elements_correct in Heqo.
+    generalize (PTree.elements_keys_norepet sectbl).
+    intros NOREP.
+    exploit (in_norepet_unique);eauto.
+    intros (gl1 & gl2 & A & B & C).
+    rewrite PTree.fold_spec in H.
+    unfold section in *.
+    rewrite A in H.
+    rewrite fold_left_app in H. simpl in H.
+    fold section in *.
+    set (f:= (fun (a : res reloctable_map)
+           (p : positive * section) =>
+                acc_section instr_size a (fst p) (snd p))) in *.
+    assert (ERRPRS: forall l msg, fold_left f l (Error msg) = Error msg).
+  { induction l. simpl. auto.
+    simpl. auto. }
+  (* prove preservaiton for geting None*)
+  assert (PRS: forall l reloc_map1 reloc_map2,
+               ~ In id fst ## l ->
+               fold_left f l (OK reloc_map1) = OK reloc_map2 ->
+               reloc_map2 ! id = reloc_map1 ! id).
+  { induction l;simpl;intros.
+    inv H1. auto.
+    destruct transl_section in H1. simpl in H1. destruct r.
+    eapply IHl;eauto.
+    assert ((PTree.set (fst a) (r :: r0) reloc_map1) ! id = reloc_map1 ! id).
+    rewrite PTree.gsspec. apply Decidable.not_or in H0.
+    destruct H0. destruct peq;try congruence;auto.
+    rewrite <- H2.
+    unfold reloctable in *.
+    eapply IHl;eauto.
+    simpl in H1. rewrite ERRPRS in H1. inv H1. }
+  destruct (acc_section instr_size
+                        (fold_left f gl1 (OK (PTree.empty reloctable))) id
+                        (sec_text code)) eqn:ACC in H;
+    unfold section,ident in *;rewrite ACC in H.
+    + unfold acc_section in ACC.
+      monadInv ACC. destruct x0.
+      * inv EQ2.
+        simpl in EQ1. monadInv EQ1.
+        exploit PRS.
+        apply C. eauto. intros.
+        exploit PRS. apply B. eauto.
+        intros. rewrite H1. rewrite H0.
+        rewrite PTree.gempty.
+        erewrite code_eliminate_unchanged;eauto.
+        clear. induction code. constructor.
+        constructor;auto. eapply instr_eq_refl. 
+      * inv EQ2.
+        simpl in EQ1. monadInv EQ1.
+        exploit PRS.
+        apply B. eauto. intros.
+        rewrite PTree.gss in H0. rewrite H0.
+        exploit transl_code_consistency;eauto.
+        intros (c' & A1 & A2). rewrite A1. auto.
+    +  rewrite ERRPRS in H. inv H.
     
-(*   destruct (acc_section instr_size symbtbl *)
-(*            (fold_left f gl1 (OK (PTree.empty reloctable))) id *)
-(*            (sec_text code)) eqn:ACC in H; *)
-(*     unfold section,ident in *;rewrite ACC in H.   *)
-(*   - unfold acc_section in ACC. *)
-(*     monadInv ACC. destruct x0. *)
-(*     + inv EQ2. *)
-(*       simpl in EQ1. monadInv EQ1. *)
-(*       exploit PRS. *)
-(*       apply C. eauto. intros. *)
-(*       exploit PRS. apply B. eauto. *)
-(*       intros. rewrite PTree.gempty in H1. rewrite H2. rewrite H1. *)
-(*       f_equal. *)
-(*       erewrite code_eliminate_unchanged;eauto.               *)
-(*     + inv EQ2. *)
-(*       simpl in EQ1. monadInv EQ1. *)
-(*       exploit PRS. *)
-(*       apply B. eauto. intros. *)
-(*       rewrite PTree.gss in H1. rewrite H1. *)
-(*       f_equal. erewrite transl_code_consistency;eauto. *)
-(*   - rewrite ERRPRS in H. inv H. *)
-(* Qed. *)
+  - simpl. auto.
+  - simpl. auto.
+Qed.
 
+(* init_mem equal *)
+Lemma alloc_sections_eq: forall sectbl sectbl' ge1 ge2 m m',
+    RelocProgGlobalenvs.Genv.genv_symb ge1 = RelocProgGlobalenvs.Genv.genv_symb ge2 ->
+    (forall id, option_rel section_eq sectbl'!id sectbl!id) ->
+    alloc_sections instr_size ge1 sectbl m = Some m' ->
+    alloc_sections instr_size ge2 sectbl' m = Some m'.
+Admitted.
 
 (** Transformation *)
 Variable prog: program.
@@ -440,31 +485,152 @@ Let tge := globalenv instr_size tprog.
 
 Hypothesis TRANSF: match_prog prog tprog.  
 
-Lemma globalenv_eq: globalenv instr_size tprog = RelocProgSemantics.globalenv instr_size prog.
+Lemma genv_symb_eq: RelocProgGlobalenvs.Genv.genv_symb ge =  RelocProgGlobalenvs.Genv.genv_symb tge.
   unfold match_prog in  TRANSF. unfold transf_program in TRANSF.
   monadInv TRANSF.
   unfold globalenv,RelocProgSemantics.globalenv.
-  simpl. f_equal.
-(*   erewrite transl_sections_consistency;eauto. *)
-(* Qed. *)
-Admitted.
+  simpl. auto.
+Qed.
+
+Lemma genv_ext_funs_eq: RelocProgGlobalenvs.Genv.genv_ext_funs ge =  RelocProgGlobalenvs.Genv.genv_ext_funs tge.
+  unfold match_prog in  TRANSF. unfold transf_program in TRANSF.
+  monadInv TRANSF.
+  unfold globalenv,RelocProgSemantics.globalenv.
+  simpl. auto.
+Qed.
+
+
+                     
+Lemma genv_instr_eq: forall v, option_rel instr_eq (RelocProgGlobalenvs.Genv.find_instr tge v) (RelocProgGlobalenvs.Genv.find_instr ge v).
+  unfold match_prog in  TRANSF. unfold transf_program in TRANSF.
+  monadInv TRANSF.
+  unfold globalenv,RelocProgSemantics.globalenv in *.
+  simpl in *. destruct v;simpl;try constructor.
+
+  unfold ge,tge. simpl.
+  
+  unfold gen_code_map.
+  repeat rewrite PTree.fold_spec.  
+  exploit (@PTree.elements_canonical_order' _ _ section_eq (PTree.map (rev_section instr_size x) (transl_sectable' (prog_sectable prog))) (prog_sectable prog)).
+  eapply transl_sections_consistency. auto.
+  intros.
+
+  unfold section in *.
+  set (l1:= (PTree.elements (PTree.map (rev_section instr_size x) (transl_sectable' (prog_sectable prog))))) in *.
+  set (l2:= (PTree.elements (prog_sectable prog))) in *.
+  clear - H.
+  assert (LEN: exists n, length l1 = n).
+  { clear.
+    induction l1. exists O. auto.
+    destruct IHl1.
+    eexists. simpl. auto. }
+  destruct LEN. generalize x0 l1 H0 l2 H.
+  clear.
+  induction x0;intros.
+  rewrite length_zero_iff_nil in H0. subst.
+  inv H. constructor.
+  apply LocalLib.length_S_inv in H0.
+  destruct H0 as (l' & a & A1 & A2). subst.
+  eapply list_forall2_app_inv_l in H.
+  destruct H as (l4 & l5 & P1 & P2 & P3).
+  inv P3. inv H3. destruct H1.
+  exploit IHx0;eauto. intros.
+  repeat rewrite fold_left_app.
+  simpl. inv H1.
+  - unfold acc_code_map at 1. unfold acc_code_map at 4.
+    destr.
+    + simpl in H0. destr_in H0. rewrite H.
+      unfold Memory.NMap.set. destr.
+      * eapply gen_instr_map_pres_eq;eauto.
+      * rewrite <- H3. rewrite <- H4. constructor.
+    + simpl in H0. destr_in H0.
+      rewrite <- H3. rewrite <- H4. constructor.
+    + simpl in H0. destr_in H0.
+      rewrite <- H3. rewrite <- H4. constructor.
+  - unfold acc_code_map at 1. unfold acc_code_map at 4.
+    destr.
+    + simpl in H0. destr_in H0. rewrite H.
+      unfold Memory.NMap.set. destr.
+      * eapply gen_instr_map_pres_eq;eauto.
+      * rewrite <- H3. rewrite <- H2. constructor. auto.
+    + simpl in H0. destr_in H0.
+      rewrite <- H3. rewrite <- H2. constructor. auto.
+    + simpl in H0. destr_in H0.
+      rewrite <- H3. rewrite <- H2. constructor. auto.      
+Qed.
+
+
 
 Lemma transf_initial_state:forall st1 rs1,
     RelocProgSemantics.initial_state instr_size prog rs1 st1 ->
     initial_state instr_size tprog rs1 st1.
 Proof.
-  intros st1 rs1 INIT. inv INIT.
+  intros st1 rs1 INIT. inv INIT. 
   unfold match_prog in TRANSF. unfold transf_program in TRANSF.
-  monadInv TRANSF. clear ge tge.
+  monadInv TRANSF.
   
   econstructor;eauto. unfold decode_program. simpl.
   apply RelocProgSemantics.initial_state_intro with (m:=m).
   unfold init_mem in *. simpl in *.
-  unfold globalenv in *. simpl.
-(*   erewrite transl_sections_consistency;eauto. *)
+  unfold RelocProgSemantics.globalenv in *. simpl.
 
-(*   inv H0. econstructor;eauto. *)
-(* Qed. *)
+  destr_in H. exploit (alloc_sections_eq).
+  assert (RelocProgGlobalenvs.Genv.genv_symb ge =  RelocProgGlobalenvs.Genv.genv_symb tge).
+  unfold ge,tge. simpl. auto.
+  eapply H1.
+  eapply transl_sections_consistency. eauto.
+  eauto.
+  intros A. unfold tge in A. unfold globalenv in A.
+  unfold decode_program in A. simpl in A.
+  unfold RelocProgSemantics.globalenv  in A. simpl in A.
+  rewrite A.
+
+  auto.
+
+  inv H0. econstructor;eauto.
+Qed.
+
+
+Lemma step_simulation: forall s1 s1' t,
+    step instr_size ge s1 t s1' ->
+    step instr_size tge s1 t s1'.
+Proof.
+  intros.
+  inv H.
+  - 
+
+    exploit genv_instr_eq. rewrite H2.
+    intros. inv H.    
+    eapply exec_step_internal with (i:=x);eauto.
+
+    unfold RelocProgGlobalenvs.Genv.find_ext_funct in *.
+    destr_in H1. 
+    
+    unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+    monadInv TRANSF. simpl;auto.
+
+    admit.
+  - eapply exec_step_builtin;eauto.
+    unfold RelocProgGlobalenvs.Genv.find_ext_funct in *.
+    destr_in H1.
+    unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+    monadInv TRANSF. simpl;auto.
+     exploit genv_instr_eq. rewrite H2.
+     intros. inv H. unfold instr_eq in H7.
+     destr_in H7. subst.
+     simpl. inv H7. rewrite <- H5. auto.
+
+     admit.
+     
+     simpl in *. unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+     monadInv TRANSF. simpl;eauto.
+
+  - eapply exec_step_external;eauto.
+    simpl in *. destr_in H1.
+    unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+    monadInv TRANSF. simpl;auto.
+    simpl in *. unfold match_prog in TRANSF. unfold transf_program in TRANSF.
+    monadInv TRANSF. simpl;eauto.
 Admitted.
 
 Lemma transf_program_correct:
@@ -476,10 +642,13 @@ Proof.
     monadInv TRANSF. simpl;auto.    
   - intros. exists s1. split;auto. apply transf_initial_state. auto.
   - intros;subst. simpl in *. auto.
-  - intros. exists s1'. split;auto.
+  - intros. exists s1'.
+    split;auto.
     rewrite <- H0. auto.
     unfold semantics. simpl in *.
-    rewrite globalenv_eq. auto.
+
+             
+    
 Qed.
 
 End PRESERVATION.

@@ -1250,19 +1250,14 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
   | Asm.Pcall_s id sg =>
     match id with
     | xH =>
-      match e with
-      |  Some _ =>
-        if Archi.ptr64 then 
-          OK [Pcall_ofs zero32]
-        else
-          do imm32 <- encode_ofs_u32 (-4);
-          OK [Pcall_ofs imm32]
-      | _ =>
-        Error [MSG "No relocation entry in Pcall_s"]
-      end
+      if Archi.ptr64 then 
+        OK [Pcall_ofs zero32]
+      else
+        do imm32 <- encode_ofs_u32 (-4);
+        OK [Pcall_ofs imm32]
     | _ =>
       Error [MSG "id must be 1: Pcall_s"]
-    end
+    end   
   | Asm.Pret => OK [Pret]
   | Asm.Pret_iw imm => (*define encode_ofs_u16*)
      do imm16 <- encode_ofs_u16 (Int.intval imm);

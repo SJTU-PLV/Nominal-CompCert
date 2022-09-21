@@ -127,6 +127,12 @@ Definition instr_eq i1 i2 :=
   | _,_ => i1 = i2
   end.
 
+Lemma instr_eq_refl: forall i, instr_eq i i.
+Proof.
+  unfold instr_eq.
+  destruct i;auto.
+Qed.
+
 
 Lemma transl_instr_consistency: forall i ofs e,
     transl_instr instr_size ofs i = OK (Some e) ->
@@ -143,7 +149,6 @@ Proof.
   1-41: try (destruct a;destruct const;try destruct p;try monadInv H).
 
   
-  
   1-41: unfold compute_instr_disp_relocentry in *;
       destruct Archi.ptr64;
       unfold compute_instr_abs_relocentry in *;
@@ -151,6 +156,7 @@ Proof.
     repeat (monadInv EQ0);
   simpl;unfold instr_eq;auto;
     try (destruct a;destruct const;try destruct p;try congruence);
+  try rewrite Ptrofs.repr_signed;
   try (monadInv H;
        unfold compute_instr_abs_relocentry in *;
        unfold compute_instr_disp_relocentry in *;
@@ -176,10 +182,9 @@ Proof.
 
   (* Pmovw *)
   destruct ad;destruct const;try destruct p;try congruence.
-  monadInv H. monadInv EQ0. simpl;auto.
+  monadInv H. monadInv EQ0. simpl;rewrite Ptrofs.repr_signed;auto.
   destruct ad;destruct const;try destruct p;try congruence.
-  monadInv H. monadInv EQ0. inv EQ1;simpl;auto.
-  
+  monadInv H. monadInv EQ0. inv EQ1;simpl;rewrite Ptrofs.repr_signed;auto.  
 Qed.
 
 Lemma id_eliminate_unchanged:forall i ofs,
