@@ -559,6 +559,12 @@ Proof.
   reflexivity.
 Qed.
 
+(* is it possible???
+Lemma cc_cod_vamatch_test:
+  ccref cc_cod ( vamatch @ ext @ cc_cod).
+Proof.
+  Abort.
+*)
 Lemma cc_dom_injp:
   ccref (cc_c injp @ cc_dom) cc_dom.
 Proof.
@@ -588,7 +594,14 @@ Proof.
   rewrite <- (cc_compose_assoc vamatch), <- vaext_va_ext. unfold cc_dom.
   rewrite !cc_star_absorb_l; eauto with cc.
 Qed.
-
+(* Admitted
+Lemma cc_dom_vamatch_test:
+  ccref (vamatch @ ext @ cc_dom) cc_dom.
+Proof.
+  rewrite <- (cc_compose_assoc vamatch), <- vaext_va_ext. unfold cc_dom.
+  rewrite !cc_star_absorb_l; eauto with cc.
+Qed.
+*)
 (** The following collection of lemmas can then be used to pre-compose
   a variety of passes. *)
 

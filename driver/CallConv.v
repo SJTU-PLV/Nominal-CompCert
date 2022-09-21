@@ -506,35 +506,139 @@ Qed.
 
 
 (** * vamatch *)
-(*
-Instance vamatch_reply_prop:
-  PropagatesReplyInvariant (cc_c injp) vamatch.
+
+Lemma inject_list_exists :
+  forall vl1 vl2 v1 j,
+    In v1 vl1 ->
+    Val.inject_list j vl1 vl2 ->
+    exists v2, In v2 vl2 /\
+          Val.inject j v1 v2.
 Proof.
-  split.
-  - intros [se1 bc1 m1] w [se2 bc2 m2] xse1 xse2 q1 q2 r1 r2. simpl.
-    destruct w as [f m0 m3 Hm].
-    intros Hse S1 S2 Hq Hq1 Hq2 Hw Hr. subst.
-    inv Hse.
-    destruct Hw as (w' & Hw' & Hw''). simpl in *. inv Hq1. inv Hq2.
-    inv Hq. inv H24.
-    inv Hr. inv Hw''.
-    econstructor; eauto.
-    + simpl. inv H15.
-      econstructor.
-    econstructor; eauto.
-    + admit.
-    + inv H1. constructor; eauto.
-      intros. simpl in Hse.
-    
-    econstructor.
-    constructor.
-    destruct Hq; cbn in *. destruct Hr; cbn in *.
-    intro. inv H17.
-    econstructor; eauto.
-    clear -H.
-    destruct H3; auto. constructor.
+  induction vl1; intros.
+  inv H0.
+  inv H.
+  destruct H. subst. inv H0. exists v'. split; eauto. left. auto.
+  inv H0. exploit IHvl1; eauto.
+  intros (v2 & A & B).
+  exists v2. split. right. auto. auto.
 Qed.
+
+Lemma vamatch_propagate :
+  forall v1 v2 bc ,
+    Val.inject inject_id v1 v2 ->
+    ValueDomain.vmatch bc v2 ValueDomain.Vtop ->
+    ValueDomain.vmatch bc v1 ValueDomain.Vtop.
+Proof.
+  intros. inv H; inv H0; constructor.
+  unfold inject_id in H1. inv H1. eauto.
+  rewrite Ptrofs.add_zero in H2. eauto.
+Qed.
+
+
+Lemma smatch_propagate_extends: forall m1 m2 bc b ab,
+    Mem.extends m1 m2 ->
+    ValueDomain.smatch bc m2 b ab ->
+    ValueDomain.smatch bc m1 b ab.
+Proof.
+  intros. inv H0. constructor.
+  - intros.
+    exploit Mem.load_extends; eauto. intros [v2 [A B]].
+    exploit H1; eauto.
+    intro. inv H3; inv B; constructor; eauto.
+  - intros.
+    exploit Mem.loadbytes_extends; eauto. intros [bytes2 [A B]].
+    inv B. inv H5. inv H9. unfold inject_id in H5. inv H5. rewrite Ptrofs.add_zero in A.
+    inv H7.
+    exploit H2; eauto.
+Qed.
+
+Lemma bmatch_propagate_extends: forall m1 m2 bc b ab,
+    Mem.extends m1 m2 ->
+    ValueDomain.bmatch bc m2 b ab ->
+    ValueDomain.bmatch bc m1 b ab.
+Proof.
+  intros. inv H0. constructor; eauto.
+  - eapply smatch_propagate_extends; eauto.
+  - intros.
+    exploit Mem.load_extends; eauto. intros [v2 [A B]].
+    exploit H2; eauto.
+    intro. inv H3; inv B; try constructor; eauto.
+    Abort. (*seems wrong here*)
+
+Lemma mmatch_propgate_extends :
+      forall m1 m2 bc,
+        Mem.extends m1 m2 ->
+        ValueDomain.mmatch bc m2 ValueDomain.mtop ->
+        ValueDomain.mmatch bc m1 ValueDomain.mtop.
+Proof.
+  intros. inv H0. constructor; eauto.
+  - intros. exploit mmatch_stack; eauto. simpl.
+    admit. (*bmatch*)
+  - intros. exploit mmatch_glob; eauto. simpl.
+    intros. red.
+    admit. (*bmatch*)
+  - intros. exploit mmatch_nonstack; eauto.
+    eapply smatch_propagate_extends; eauto.
+  - intros. exploit mmatch_top; eauto.
+    eapply smatch_propagate_extends; eauto.
+  - inversion H. rewrite mext_sup. eauto.
+Admitted.
+
+Instance vamatch_quert_prop:
+  PropagatesQueryInvariant (cc_c ext) vamatch.
+Proof.
+  constructor.
+  intros tt [se bc m] se1 se2 q1 q2. simpl.
+  intros. subst. inv H1. inv H2. simpl in *.
+  exists (vaw se2 bc m1). split. auto.
+  constructor; eauto.
+  - eapply vamatch_propagate; eauto.
+  - intros. exploit inject_list_exists; eauto.
+    intros [v2 [A B]].
+    eapply vamatch_propagate; eauto.
+  - eapply mmatch_propgate_extends; eauto.
+  - red. intros.
+    red in H13. apply H13 in H1.
+    red. red in H1.
+    intros. exploit H1; eauto.
+    intros [A [B C]].
+    split. eauto. split.
+    +
+    destruct B. split. eapply smatch_propagate_extends; eauto. admit.
+    +
+    intros. intro. eapply C; eauto.
+    eapply Mem.perm_extends; eauto.
+Admitted.
+
+(*
+    exploit Mem.load_extends; eauto.
+    intros [v2 [A B]]. exploit H2; eauto.
+    Search Val.lessdef.
+    intro. eapply vamatch_pro
+    eapply H2; eauto.
 *)
+
+Instance vamatch_reply_prop:
+  PropagatesReplyInvariant (cc_c ext) vamatch.
+Proof.
+  constructor.
+  intros [se1 bc1 m1] w [se2 bc2 m2] xse1 xse2 q1 q2 r1 r2. simpl.
+  intros. subst. inv H6.
+  destruct H5 as [w' [Hw Hr]]. inv Hw.
+  inv Hr. cbn in *. inv H2. inversion H3. subst m0.  subst. inversion H4. subst m3. subst. cbn in *.
+  exists bc'; eauto.
+  - intros. admit. (*??*)
+  - eapply vamatch_propagate; eauto.
+  - admit. (*??*)
+  - admit. (*??*)
+  - (*BCinvalid blocks, i.e. global variables should not be modified in execution? *)
+    intros.
+    admit.
+  - inversion H12. rewrite mext_sup.
+    inversion H14. rewrite mext_sup0.
+    eauto.
+Admitted.
+
 
 
 
