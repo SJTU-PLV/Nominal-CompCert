@@ -228,7 +228,6 @@ Qed.
 Section WITH_INSTR_SIZE.
 
 Variable instr_size : instruction -> Z.
-Variable Instr_size : list Instruction -> Z.
 
 (* encode decode consistency *)
 
@@ -1020,8 +1019,8 @@ Qed.
     
 Lemma decode_prog_code_section_correct: forall p1 p2 p1',
     program_equiv p1 p2 ->
-    decode_prog_code_section instr_size Instr_size p1 = OK p1' ->
-    exists p2', decode_prog_code_section instr_size Instr_size p2 = OK p2' /\ program_equiv p1' p2'.
+    decode_prog_code_section p1 = OK p1' ->
+    exists p2', decode_prog_code_section p2 = OK p2' /\ program_equiv p1' p2'.
 Proof.
   unfold decode_prog_code_section.
   intros.
@@ -1062,23 +1061,12 @@ Proof.
     intros (p2' & P1 & P2).
     monadInv P1. rewrite EQ1. simpl.
     clear EQ1 EQ0 IHx0.
-    assert (acc_decode_code_section instr_size Instr_size
-                                    (prog_reloctables p2) (fst a1) (snd a1) = OK x1).
+    assert (acc_decode_code_section (prog_reloctables p2) (fst a1) (snd a1) = OK x1).
     { unfold acc_decode_code_section in *.
       assert ((PTree.elements (prog_reloctables p1)) = (PTree.elements (prog_reloctables p2))).
       exploit PTree.elements_extensional.
       intros. exploit (@pe_reloctable_map fundef unit);eauto.
-      auto.
-      destruct ((prog_reloctables p1) ! (fst a1)) eqn: G.
-      + apply PTree.elements_correct in G.
-        rewrite H0 in G.
-        apply PTree.elements_complete in G. rewrite G.
-        auto.
-      + destruct ((prog_reloctables p2) ! (fst a1)) eqn: G2;auto.
-        apply PTree.elements_correct in G2.
-        rewrite <- H0 in G2.
-        apply PTree.elements_complete in G2.
-        congruence. }
+      auto. auto. }
     rewrite H0.
     simpl. eexists. split;eauto.
     constructor;simpl;auto.
@@ -1275,12 +1263,12 @@ Variable tprog: elf_file.
 Hypothesis TRANSF: match_prog prog tprog.
 
 
-Let ge := RelocProgSemantics2.globalenv instr_size Instr_size prog.
-Let tge := globalenv instr_size Instr_size tprog.
+Let ge := RelocProgSemantics2.globalenv instr_size  prog.
+Let tge := globalenv instr_size  tprog.
 
 Lemma transf_initial_state: forall st1 rs,
-    RelocProgSemantics2.initial_state instr_size Instr_size prog rs st1 ->
-    exists st2, initial_state instr_size Instr_size tprog rs st2 /\ st1 = st2.
+    RelocProgSemantics2.initial_state instr_size  prog rs st1 ->
+    exists st2, initial_state instr_size  tprog rs st2 /\ st1 = st2.
   intros st1 rs S1.
   exists st1. split;auto.
   unfold match_prog in TRANSF.
@@ -1436,7 +1424,7 @@ Qed.
 
 
 Theorem transf_program_correct: forall rs,
-    forward_simulation (RelocProgSemantics2.semantics instr_size Instr_size prog rs) (semantics instr_size Instr_size tprog rs).
+    forward_simulation (RelocProgSemantics2.semantics instr_size  prog rs) (semantics instr_size  tprog rs).
 Proof.
   intros.
   unfold match_prog in TRANSF.

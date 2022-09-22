@@ -20,7 +20,6 @@ Qed.
 Section WITH_INSTR_SIZE.
 
 Variable instr_size : instruction -> Z.
-Variable Instr_size : list Instruction -> Z.
 
 Section PRES.
 
@@ -32,8 +31,8 @@ Variable tprog_senv: Globalenvs.Senv.t.
 Hypothesis TRANSF: match_prog prog (tprog_bytes, tprog_prog, tprog_senv).
 
 Lemma encode_elf_correct:
-  forall rs, forward_simulation (RelocElfSemantics.semantics instr_size Instr_size prog rs)
-                                (ElfBytesSemantics.semantics instr_size Instr_size tprog_bytes tprog_prog tprog_senv rs).
+  forall rs, forward_simulation (RelocElfSemantics.semantics instr_size prog rs)
+                                (ElfBytesSemantics.semantics instr_size tprog_bytes tprog_prog tprog_senv rs).
 Proof.
   unfold match_prog in TRANSF.
   unfold ElfBytesSemantics.semantics. intros.

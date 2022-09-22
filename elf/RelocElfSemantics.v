@@ -206,8 +206,7 @@ Definition decode_elf (p: elf_file) : res program :=
 Section WITH_INSTR_SIZE.
 
 Variable instr_size : instruction -> Z.
-Variable Instr_size : list Instruction -> Z.
-  
+
 
 (* global env *)
 
@@ -218,7 +217,7 @@ Definition empty_elf_file1 (p: elf_file) : program1 :=
 Definition globalenv (p: elf_file) :=
   match decode_elf p with
   | OK p'=>                  
-    RelocProgSemantics2.globalenv instr_size Instr_size p'
+    RelocProgSemantics2.globalenv instr_size  p'
   | _ => RelocProgSemantics.globalenv instr_size (empty_elf_file1 p)
   end.
 
@@ -227,7 +226,7 @@ Definition globalenv (p: elf_file) :=
 Inductive initial_state (prog: elf_file) (rs: regset) (s: state): Prop :=
 | initial_state_intro: forall prog',
     decode_elf prog = OK prog' ->
-    RelocProgSemantics2.initial_state instr_size Instr_size prog' rs s ->
+    RelocProgSemantics2.initial_state instr_size  prog' rs s ->
     initial_state prog rs s.
 
 (* Semantics *)

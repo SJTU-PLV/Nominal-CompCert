@@ -78,7 +78,7 @@ Require Stackingproof.
 Require Asmgenproof.
 Require SSAsmproof.
 Require RealAsmproof.
-Require PseudoInstructionsproof.
+(* Require PseudoInstructionsproof. *)
 (* Assembler *)
 Require Symbtablegenproof.
 Require Reloctablesgenproof.
@@ -151,7 +151,6 @@ Definition partial_if {A: Type}
 
 
 Definition instr_size := Asm.instr_size_real.
-Definition Instr_size := TranslateInstrSize.Instr_size.
 Definition instr_size_bound := Asm.instr_size_bound_real.
 
 Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
@@ -229,7 +228,7 @@ Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
   transf_c_program_real p
   @@@ time "Generation of symbol table" Symbtablegen.transf_program instr_size
   @@@ time "Generation of relocation table" Reloctablesgen.transf_program instr_size
-  @@@ time "Encoding of instructions and data" RelocBingen.transf_program instr_size
+  @@@ time "Encoding of instructions and data" RelocBingen.transf_program
   (* @@@ time "Merge Sections" MergeSection.transf_program *)
   @@@ time "Generation of the reloctable Elf" RelocElfgen.gen_reloc_elf
   @@@ time "Encoding of the reloctable Elf" EncodeRelocElf.encode_elf_file.
@@ -239,7 +238,7 @@ Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
   transf_c_program_real1 p
   @@@ time "Generation of symbol table" Symbtablegen.transf_program instr_size
   @@@ time "Generation of relocation table" Reloctablesgen.transf_program instr_size
-  @@@ time "Encoding of instructions and data" RelocBingen.transf_program instr_size
+  @@@ time "Encoding of instructions and data" RelocBingen.transf_program
   (* @@@ time "Merge Sections" MergeSection.transf_program *)
   @@@ time "Generation of the reloctable Elf" RelocElfgen.gen_reloc_elf
   @@@ time "Encoding of the reloctable Elf" EncodeRelocElf.encode_elf_file.
@@ -340,7 +339,7 @@ Definition CompCert's_passes :=
  Definition assembler_passes :=
       mkpass (Symbtablegenproof.match_prog instr_size)
   ::: mkpass (Reloctablesgenproof.match_prog instr_size)
-  ::: mkpass (RelocBingenproof.match_prog instr_size)
+  ::: mkpass RelocBingenproof.match_prog
   ::: mkpass RelocElfgenproof.match_prog
   ::: mkpass EncodeElfCorrect.match_prog
   ::: pass_nil _.
@@ -471,7 +470,7 @@ Proof.
   unfold time in T.
   destruct (Symbtablegen.transf_program instr_size p1) eqn:STG; simpl in T; try discriminate.
   destruct (Reloctablesgen.transf_program instr_size p0) eqn: RTG; simpl in T; try discriminate.
-  destruct (RelocBingen.transf_program instr_size p2) eqn: RBG; simpl in T; try discriminate.
+  destruct (RelocBingen.transf_program p2) eqn: RBG; simpl in T; try discriminate.
   destruct (RelocElfgen.gen_reloc_elf p3) eqn: REG; simpl in T; try discriminate.
   red.
   repeat rewrite compose_passes_app.
@@ -727,21 +726,21 @@ Proof.
 Qed.
 
 (* start: stack requirements *)
-Lemma Pseudo_fn_stack_requirements_match: forall  mp ap,
-    PseudoInstructionsproof.match_prog mp ap->
-    fn_stack_requirements mp = fn_stack_requirements ap.
-Proof.
-  intros.
-  unfold fn_stack_requirements.
-  apply Axioms.extensionality. intro i.
-  destruct (Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv mp)) eqn:FF.
-  exploit PseudoInstructionsproof.functions_translated; eauto. intro TF.
-  unfold PseudoInstructions.transf_fundef in TF.
-  unfold transf_fundef in TF.
-  destr_in TF.  inv TF. rewrite H1. auto. rewrite TF. auto.
-  eapply match_program_no_more_functions in FF; eauto.
-  setoid_rewrite FF. auto.
-Qed.
+(* Lemma Pseudo_fn_stack_requirements_match: forall  mp ap, *)
+(*     PseudoInstructionsproof.match_prog mp ap-> *)
+(*     fn_stack_requirements mp = fn_stack_requirements ap. *)
+(* Proof. *)
+(*   intros. *)
+(*   unfold fn_stack_requirements. *)
+(*   apply Axioms.extensionality. intro i. *)
+(*   destruct (Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv mp)) eqn:FF. *)
+(*   exploit PseudoInstructionsproof.functions_translated; eauto. intro TF. *)
+(*   unfold PseudoInstructions.transf_fundef in TF. *)
+(*   unfold transf_fundef in TF. *)
+(*   destr_in TF.  inv TF. rewrite H1. auto. rewrite TF. auto. *)
+(*   eapply match_program_no_more_functions in FF; eauto. *)
+(*   setoid_rewrite FF. auto. *)
+(* Qed. *)
 
 (* End: fn_stack_requirements *)
 
@@ -790,7 +789,7 @@ Axiom Reloctablesgen_fn_stack_requirements_match:
 
 Axiom RelocBingen_fn_stack_requirements_match: 
   forall p tp
-    (FM: RelocBingenproof.match_prog instr_size p tp),
+    (FM: RelocBingenproof.match_prog p tp),
     reloc_fn_stack_requirements p = reloc_fn_stack_requirements tp.
 
 Axiom RelocElfGen_fn_stack_requirements_match: 
@@ -814,7 +813,7 @@ Theorem c_semantic_preservation_bytes:
   forall p tp,
     match_prog_assembler p tp ->
     let '(b, tp0, s) := tp in
-    backward_simulation (Csem.semantics (elf_bytes_stack_requirements tp) p) (ElfBytesSemantics.semantics instr_size Instr_size b tp0 s (Asm.Pregmap.init Values.Vundef)).
+    backward_simulation (Csem.semantics (elf_bytes_stack_requirements tp) p) (ElfBytesSemantics.semantics instr_size b tp0 s (Asm.Pregmap.init Values.Vundef)).
 Proof.
   intros.
   unfold match_prog_assembler in H.
@@ -855,13 +854,16 @@ Proof.
   eapply compose_forward_simulations.
   eapply Reloctablesgenproof.transf_program_correct;eauto.
   eapply instr_size_bound.
-  (* instr_reloc_offset *) admit.
   (* id_eliminate does not change the size  *) admit.
+  (* instr_reloc_offset *) admit.
+  (* reloctablegen: instr_eq preserve size *) admit.
+  
   eapply compose_forward_simulations.
   eapply RelocBingenproof.transf_program_correct;eauto.
-  (* translate_instr size preserve *) admit.
   (* instr_eq preserve size *) admit.
   (* rev_id_eliminate preserve size *) admit.
+  (* encode_Instruction consistency *) admit.
+
   eapply compose_forward_simulations.
   eapply RelocElfgenproof.transf_program_correct;eauto.
   eapply EncodeElfCorrect.encode_elf_correct;eauto.
@@ -901,7 +903,7 @@ Qed.
 Theorem transf_c_program_correct_assembler:
   forall p b tp s,
     transf_c_program_assembler1 p = OK (b, tp, s) ->
-    backward_simulation (Csem.semantics (elf_bytes_stack_requirements (b,tp,s)) p) (ElfBytesSemantics.semantics instr_size Instr_size b tp s (Asm.Pregmap.init Values.Vundef)).
+    backward_simulation (Csem.semantics (elf_bytes_stack_requirements (b,tp,s)) p) (ElfBytesSemantics.semantics instr_size b tp s (Asm.Pregmap.init Values.Vundef)).
 Proof.
   intros. exploit c_semantic_preservation_bytes. apply transf_c_program_assembler1_match; eauto.
   simpl. auto.

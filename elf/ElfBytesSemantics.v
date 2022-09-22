@@ -14,13 +14,12 @@ Local Open Scope error_monad_scope.
 Section WITH_INSTR_SIZE.
 
 Variable instr_size : instruction -> Z.
-Variable Instr_size : list Instruction -> Z.
 
 
 Definition semantics l p senv (rs: regset) :=
   match decode_elf_file l p senv with
   | OK ef =>
-    RelocElfSemantics.semantics instr_size Instr_size ef rs
+    RelocElfSemantics.semantics instr_size ef rs
   | Error _ =>
     Semantics (state:=state)
       (fun ge s1 t s2 => False)
