@@ -12,55 +12,30 @@ Local Open Scope error_monad_scope.
 Local Open Scope hex_scope.
 Local Open Scope bits_scope.
   
-Section INSTR_SIZE.
-  Variable instr_size : instruction -> Z.
 
-Definition concat_byte (acc: res (list byte)) i :=
-  do code <- acc;
-  do c <- EncDecRet.encode_Instruction i;
-  OK (code ++ c).
-
-
-(* use generated encoder*)
-Definition acc_instrs r i := 
-  do r' <- r;
-  let '(code,ofs,reloctbl) := r' in
-  match reloctbl with
-  | [] =>
-    do c1 <- translate_instr None i;
-    do c2 <- fold_left concat_byte c1 (OK []);
-    if Z.eqb (Z.of_nat (length c2)) (instr_size i) then
-      OK (code ++ c2,ofs + instr_size i,[])
-    else
-      Error [MSG "Inconsistent instruction size for: ";
-            MSG (instr_to_string i)]
-  | e :: tl =>
-    let ofs' := ofs + instr_size i in
-    if Z.ltb ofs e.(reloc_offset) && Z.ltb e.(reloc_offset) ofs' then
-      do c1 <- translate_instr (Some e) i;
-      do c2 <- fold_left concat_byte c1 (OK []);
-      if Z.eqb (Z.of_nat (length c2)) (instr_size i) then
-        OK (code ++ c2,ofs + instr_size i,tl)
-      else
-        Error [MSG "Inconsistent instruction size for: ";
-              MSG (instr_to_string i)]
-    else
-      do c1 <- translate_instr None i;
-      do c2 <- fold_left concat_byte c1 (OK []);
-      if Z.eqb (Z.of_nat (length c2)) (instr_size i) then
-        OK (code ++ c2,ofs + instr_size i,reloctbl)
-      else
-        Error [MSG "Inconsistent instruction size for: ";
-              MSG (instr_to_string i)]
+Fixpoint translate_bytes instrs :=
+  match instrs with
+  | [] => OK []
+  | i :: instrs' =>
+    do tl <- translate_bytes instrs';
+    do bs <- EncDecRet.encode_Instruction i;
+    OK (bs ++ tl)
   end.
 
+Fixpoint translate_instrs instrs :=
+  match instrs with
+  | [] => OK []
+  | i :: instrs' =>
+    do tl <- translate_instrs instrs';
+    do bs <- translate_instr i;
+    OK (bs ++ tl)
+  end.
 
 (** Translation of a sequence of instructions in a function *)
-Definition transl_code (reloctbl: reloctable) (c:code) : res (list byte) :=
-  do r <- fold_left acc_instrs c (OK ([],0,reloctbl));
-  OK (fst (fst r)).
+Definition transl_code (c:code) : res (list byte) :=
+  do l1 <- translate_instrs c;
+  translate_bytes l1.
   
-End INSTR_SIZE.
 
 (** ** Encoding of data *)
 
@@ -116,15 +91,11 @@ Definition transl_init_data_list (reloctbl: reloctable) (l: list init_data) : re
   (* OK (rev bytes). *)
 
 
-
-Section INSTR_SIZE.
-  Variable instr_size : instruction -> Z.
-
 (** ** Translation of a program *)
 Definition transl_section (sec : RelocProgram.section) (reloctbl: reloctable) : res section :=
   match sec with
   | sec_text code =>
-    do codebytes <- transl_code instr_size reloctbl code;
+    do codebytes <- transl_code code;
     OK (sec_text codebytes)
   | sec_rwdata dl =>
     do databytes <- transl_init_data_list reloctbl dl;
@@ -174,4 +145,3 @@ Definition transf_program (p:RelocProgram.program) : res program :=
      |}.
   (* else Error (msg "Too many strings in symbtable"). *)
 
-End INSTR_SIZE.

@@ -30,9 +30,40 @@ Proof.
     exists a. inv H. auto.
 Qed.
 
+(* prove encoder does not generates empty list *)
+
+Lemma encode_Instruction_not_empty:forall i,
+    encode_Instruction i = OK [] -> False.
+Proof.
+  destruct i;simpl;intros H;try monadInv H;try congruence.
+Qed.
+
+Lemma translate_instr_not_empty:forall i,
+    translate_instr i = OK [] -> False.
+Proof.
+    Ltac solve_app_nil:=
+    match goal with
+    | H: ?a ++ [?b] = [] |- _ =>
+      apply app_eq_nil in H;destruct H;congruence
+    end.
+
+    Ltac auto_monadInv:=
+    match goal with
+    | H: bind ?a ?f = ?c |- _ =>
+      monadInv H;try auto_monadInv
+    | _ => fail
+    end.
+  destruct i;simpl;intros H;try destr_in H;try monadInv H;try congruence;
+    try auto_monadInv;try solve_app_nil.
+
+    
+  (* Pcall *)
+  destr_in H.
+Qed.
+
 Section WITH_INSTR_SIZE.
   Variable instr_size: instruction -> Z.
-  Variable Instr_size: list Instruction -> Z.
+
 (* used in gen_instr_map_refl *)
 Lemma rev_id_eliminate_instr_eq: forall i1 i2 id,
     instr_eq i1 i2 ->
@@ -72,7 +103,7 @@ Section PRESERVATION.
   
   
   Let ge := RelocProgSemantics1.globalenv instr_size prog.
-  Let tge := RelocProgSemantics2.globalenv instr_size Instr_size tprog.
+  Let tge := RelocProgSemantics2.globalenv instr_size tprog.
   
   Hypothesis symbol_address_pres: forall id ofs,
     RelocProgGlobalenvs.Genv.symbol_address ge id ofs =
@@ -90,7 +121,7 @@ Section PRESERVATION.
   Hypothesis transl_instr_in_code: forall c i id,
     prog.(prog_sectable) ! id = Some (sec_text c) ->
     In i c ->
-    exists i' e, translate_instr e i = OK i'.
+    exists i', translate_instr i = OK i'.
   Hypothesis senv_refl:
     (Genv.genv_senv ge) = (Genv.genv_senv tge).
 
@@ -119,8 +150,8 @@ Proof.
     exploit instr_eq_size;eauto. intros SIZE.
     unfold instr_eq in MATCHINSTR. destruct MATCHINSTR.
     (* i = i1 *)
-    subst. rewrite <- exec_instr_refl. auto.
-
+    subst. erewrite <- exec_instr_refl;eauto.
+    
   (* i is not well defined *)
     destruct i;try inv H3;simpl in H2;destr_in H3.
     (* Pmovzl_rr *)
@@ -225,12 +256,12 @@ Proof.
       subst.
       
       eapply transl_instr_in_code in In1;eauto.
-      simpl in In1. destruct In1 as (? & ? & ?).
+      simpl in In1. destruct In1 as (? & ?).
       inv H1.
       
     + inv REV1.
       eapply transl_instr_in_code in In1;eauto.
-      destruct In1 as (? & ? & ?).
+      destruct In1 as (? & ?).
       inv H1.
       
   - 

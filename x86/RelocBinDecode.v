@@ -307,64 +307,31 @@ Hint Resolve encode_ireg_u4_consistency encode_freg_u4_consistency encode_ofs_u3
 (** *addrmode decoder *)
 
 (* TODO: decode addrE to addrmode in 64bit mode *)
-Definition translate_AddrE_Addrmode (e:option relocentry) (X B: bool) (addr:AddrE) : res addrmode :=
-  match e with
-  | Some e =>
-    match addr with
-    | AddrE0 _ => Error (msg "AddrE0 impossible in addrmode decoding") 
-    | AddrE5 s i b imm =>
-      let base := decode_ireg_u4 B b in
-      let index := decode_ireg_u4 X i in
-      let scale := decode_scale s in
-      do imm <- decode_ofs_u32 imm;
-      let ofs := Ptrofs.of_int imm in      
-      if ireg_eq index RSP then
-        OK (Addrmode (Some base) None (inr (xH,ofs)))
-      else
-        OK (Addrmode (Some base) (Some (index,scale)) (inr (xH,ofs)))
-    | AddrE9 s i imm =>
-      let scale := decode_scale s in
-      do imm <- decode_ofs_u32 imm;
-      let ofs := Ptrofs.of_int imm in
-      let index := decode_ireg_u4 X i in
-      if ireg_eq index RSP then
-        if Archi.ptr64 then
-          OK (Addrmode None None (inr (xH,ofs)))
-        else Error (msg "impossible: translate_AddrE_Addrmode")
-      else
-        OK (Addrmode None (Some (index,scale)) (inr (xH,ofs)))
-    | AddrE11 imm =>
-      do imm <- decode_ofs_u32 imm;
-      let ofs := Ptrofs.of_int imm in
-      OK (Addrmode None None (inr (xH,ofs)))
-    end
-  (* mostly copy above *)
-  | None =>
-    match addr with
-    | AddrE0 _ => Error (msg "AddrE0 impossible in addrmode decoding") 
-    | AddrE5 s i b imm =>
-      let base := decode_ireg_u4 B b in
-      let index := decode_ireg_u4 X i in
-      let scale := decode_scale s in
-      do ofs <- decode_ofs_signed32 imm;
-      if ireg_eq index RSP then
-        OK (Addrmode (Some base) None (inl ofs))
-      else
-        OK (Addrmode (Some base) (Some (index,scale)) (inl ofs))       
-    | AddrE9 s i imm =>
-      let scale := decode_scale s in
-      do ofs <- decode_ofs_signed32 imm;
-      let index := decode_ireg_u4 X i in
-      if ireg_eq index RSP then
-        if Archi.ptr64 then
-          OK (Addrmode None None (inl ofs))
-        else Error (msg "impossible: translate_AddrE_Addrmode")
-      else
-        OK (Addrmode None (Some (index,scale)) (inl ofs))
-    | AddrE11 imm =>
-      do ofs <- decode_ofs_signed32 imm;
-      OK (Addrmode None None (inl ofs))
-    end
+Definition translate_AddrE_Addrmode (X B: bool) (addr:AddrE) : res addrmode :=
+  match addr with
+  | AddrE0 _ => Error (msg "AddrE0 impossible in addrmode decoding") 
+  | AddrE5 s i b imm =>
+    let base := decode_ireg_u4 B b in
+    let index := decode_ireg_u4 X i in
+    let scale := decode_scale s in
+    do ofs <- decode_ofs_signed32 imm;
+    if ireg_eq index RSP then
+      OK (Addrmode (Some base) None (inl ofs))
+    else
+      OK (Addrmode (Some base) (Some (index,scale)) (inl ofs))       
+  | AddrE9 s i imm =>
+    let scale := decode_scale s in
+    do ofs <- decode_ofs_signed32 imm;
+    let index := decode_ireg_u4 X i in
+    if ireg_eq index RSP then
+      if Archi.ptr64 then
+        OK (Addrmode None None (inl ofs))
+      else Error (msg "impossible: translate_AddrE_Addrmode")
+    else
+      OK (Addrmode None (Some (index,scale)) (inl ofs))
+  | AddrE11 imm =>
+    do ofs <- decode_ofs_signed32 imm;
+    OK (Addrmode None None (inl ofs))
   end.
 
 
@@ -375,42 +342,24 @@ Definition not_AddrE0 a:bool:=
   | _ => true
   end.
 
-Lemma transl_addr_consistency32: forall addr a e,
-    translate_Addrmode_AddrE e addr = OK a ->
-    not_AddrE0 a = true /\ translate_AddrE_Addrmode e false false a = OK addr.
+Lemma transl_addr_consistency32: forall addr a,
+    translate_Addrmode_AddrE addr = OK a ->
+    not_AddrE0 a = true /\ translate_AddrE_Addrmode false false a = OK addr.
 Proof.
   unfold translate_Addrmode_AddrE.
   destruct addr.
-  destruct base;destruct ofs;intros ad e H.
+  destruct base;destruct ofs;intros ad H.
   - destr_in H.
-    + destr_in H. subst.
-      monadInv H. simpl in EQ0. destruct p. simpl in EQ0.
+    + monadInv H. simpl in EQ0. destruct p. simpl in EQ0.
       destr_in EQ0. monadInv EQ0.
       split. simpl;auto.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ofs_signed32_consistency;eauto. cbn [bind].
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-    + destruct p0. destr_in H.
-      destr_in H. destr_in H. monadInv H.
-      simpl in EQ0. destruct p.  destr_in EQ0. monadInv EQ0.
-      split. simpl;auto.
-      unfold translate_AddrE_Addrmode.
-      erewrite encode_ireg_u3_consistency;eauto.
-      destr. 
-      apply Z.ltb_lt in Heqb.
-      unfold Ptrofs.of_int.
-      erewrite encode_ofs_u32_consistency_aux;eauto. cbn [bind].
-      repeat f_equal;auto with encdec.
-      rewrite Int.unsigned_repr.
-      apply Ptrofs.repr_unsigned.
-      unfold Int.max_unsigned. 
-      generalize (Ptrofs.unsigned_range i1).
-      lia. 
       
   -  destr_in H.
-    + destr_in H.
-      monadInv H.
+    + monadInv H.
       unfold translate_Addrmode_AddrE_aux32 in EQ0.
       monadInv EQ0.
       split. simpl;auto.
@@ -418,111 +367,45 @@ Proof.
       erewrite encode_ofs_signed32_consistency;eauto. cbn [bind].
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-    + destruct p. do 3 destr_in H.
-      monadInv H.
-      unfold translate_Addrmode_AddrE_aux32 in EQ0. monadInv EQ0.
-      split. simpl;auto.
-      unfold translate_AddrE_Addrmode.
-      erewrite encode_ireg_u3_consistency;eauto.
-      destr. repeat f_equal;auto with encdec.
-      apply Z.ltb_lt in Heqb.
-      unfold Ptrofs.of_int.
-      unfold Ptrofs.of_int.
-      erewrite encode_ofs_u32_consistency_aux;eauto. cbn [bind].
-      repeat f_equal;auto with encdec.
-      rewrite Int.unsigned_repr.
-      apply Ptrofs.repr_unsigned.
-      unfold Int.max_unsigned. 
-      generalize (Ptrofs.unsigned_range i1).
-      lia. 
       
   - destr_in H.
-    + destr_in H.
-      monadInv H. simpl in EQ0. destruct p.
+    + monadInv H. simpl in EQ0. destruct p.
       destr_in EQ0. monadInv EQ0.
       split. simpl;auto.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ofs_signed32_consistency;eauto. cbn [bind].
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-    + destruct p0. destr_in H.
-      destr_in H. destr_in H. monadInv H.
-      simpl in EQ0. destruct p.  destr_in EQ0. monadInv EQ0.
-      split. simpl;auto.
-      unfold translate_AddrE_Addrmode.
-      erewrite encode_ireg_u3_consistency;eauto.
-      apply Z.ltb_lt in Heqb.      
-      erewrite encode_ofs_u32_consistency_aux;eauto. cbn [bind].
-      destr. repeat f_equal;auto with encdec.     
-      unfold Ptrofs.of_int.
-      rewrite Int.unsigned_repr.
-      apply Ptrofs.repr_unsigned.
-      unfold Int.max_unsigned. 
-      generalize (Ptrofs.unsigned_range i0).
-      lia. 
 
   -  destr_in H.
-    + destr_in H. monadInv H.
+    + monadInv H.
       unfold translate_Addrmode_AddrE_aux32 in EQ0.
       inv EQ0.
       split. simpl;auto.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ofs_signed32_consistency;eauto. cbn [bind].
       repeat f_equal;auto with encdec.
-    + destruct p. do 3 destr_in H.
-      monadInv H.
-      unfold translate_Addrmode_AddrE_aux32 in EQ0. inv EQ0.
-      split. simpl;auto.
-      unfold translate_AddrE_Addrmode.
-      repeat f_equal;auto with encdec.
-      unfold Ptrofs.of_int.
-      apply Z.ltb_lt in Heqb.
-      erewrite encode_ofs_u32_consistency_aux;eauto. cbn [bind].
-      repeat f_equal;auto with encdec.
-      rewrite Int.unsigned_repr.
-      apply Ptrofs.repr_unsigned.
-      unfold Int.max_unsigned. 
-      generalize (Ptrofs.unsigned_range i0).
-      lia. 
 Qed.
 
 (* mostly same as 32bit mode *)
-Lemma transl_addr_consistency64: forall addr a e x b,
-    translate_Addrmode_AddrE64 e addr = OK (a, x, b) ->
-    not_AddrE0 a = true /\ translate_AddrE_Addrmode e x b a = OK addr.
+Lemma transl_addr_consistency64: forall addr a x b,
+    translate_Addrmode_AddrE64 addr = OK (a, x, b) ->
+    not_AddrE0 a = true /\ translate_AddrE_Addrmode x b a = OK addr.
 Proof.
   unfold translate_Addrmode_AddrE64.
   destruct addr.
-  destruct base;destruct ofs;intros ad e x b H.
+  destruct base;destruct ofs;intros ad x b H.
   - destr_in H.
-    + destr_in H. subst.
-      monadInv H. simpl in EQ0. destruct p. simpl in EQ0.
+    + monadInv H. simpl in EQ0. destruct p. simpl in EQ0.
       destr_in EQ0. monadInv EQ0.
       split. simpl;auto.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ofs_signed32_consistency;eauto. cbn [bind].
       erewrite encode_ireg_u4_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-    + destruct p0. destr_in H.
-      destr_in H. destr_in H. monadInv H.
-      simpl in EQ0. destruct p.  destr_in EQ0. monadInv EQ0.
-      split. simpl;auto.
-      unfold translate_AddrE_Addrmode.
-      erewrite encode_ireg_u4_consistency;eauto.
-      destr. 
-      apply Z.ltb_lt in Heqb0.
-      unfold Ptrofs.of_int.
-      erewrite encode_ofs_u32_consistency_aux;eauto. cbn [bind].
-      repeat f_equal;auto with encdec.
-      rewrite Int.unsigned_repr.
-      apply Ptrofs.repr_unsigned.
-      unfold Int.max_unsigned. 
-      generalize (Ptrofs.unsigned_range i1).
-      lia. 
       
   -  destr_in H.
-    + destr_in H.
-      monadInv H.
+    + monadInv H.
       unfold translate_Addrmode_AddrE_aux64 in EQ0.
       monadInv EQ0.
       split. simpl;auto.
@@ -530,50 +413,18 @@ Proof.
       erewrite encode_ofs_signed32_consistency;eauto. cbn [bind].
       erewrite encode_ireg_u3_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-    + destruct p. do 3 destr_in H.
-      monadInv H.
-      unfold translate_Addrmode_AddrE_aux64 in EQ0. monadInv EQ0.
-      split. simpl;auto.
-      unfold translate_AddrE_Addrmode.
-      erewrite encode_ireg_u3_consistency;eauto.
-      destr. repeat f_equal;auto with encdec.
-      apply Z.ltb_lt in Heqb0.
-      unfold Ptrofs.of_int.
-      erewrite encode_ofs_u32_consistency_aux;eauto. cbn [bind].
-      repeat f_equal;auto with encdec.
-      rewrite Int.unsigned_repr.
-      apply Ptrofs.repr_unsigned.
-      unfold Int.max_unsigned. 
-      generalize (Ptrofs.unsigned_range i1).
-      lia. 
       
   - destr_in H.
-    + destr_in H.
-      monadInv H. simpl in EQ0. destruct p.
+    + monadInv H. simpl in EQ0. destruct p.
       destr_in EQ0. monadInv EQ0.
       split. simpl;auto.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ofs_signed32_consistency;eauto. cbn [bind].
       erewrite encode_ireg_u4_consistency;eauto.
       destr. repeat f_equal;auto with encdec.
-    + destruct p0. destr_in H.
-      destr_in H. destr_in H. monadInv H.
-      simpl in EQ0. destruct p.  destr_in EQ0. monadInv EQ0.
-      split. simpl;auto.
-      unfold translate_AddrE_Addrmode.
-      erewrite encode_ireg_u4_consistency;eauto.
-      apply Z.ltb_lt in Heqb0.      
-      erewrite encode_ofs_u32_consistency_aux;eauto. cbn [bind].
-      destr. repeat f_equal;auto with encdec.     
-      unfold Ptrofs.of_int.
-      rewrite Int.unsigned_repr.
-      apply Ptrofs.repr_unsigned.
-      unfold Int.max_unsigned. 
-      generalize (Ptrofs.unsigned_range i0).
-      lia. 
 
   -  destr_in H.
-    + destr_in H. monadInv H.
+    + monadInv H.
       unfold translate_Addrmode_AddrE_aux64 in EQ0.
       destr_in EQ0.
       inv EQ0.
@@ -581,28 +432,12 @@ Proof.
       unfold translate_AddrE_Addrmode.
       erewrite encode_ofs_signed32_consistency;eauto. cbn [bind].
       repeat f_equal;auto with encdec.
-    + destruct p. do 3 destr_in H.
-      monadInv H.
-      unfold translate_Addrmode_AddrE_aux64 in EQ0.
-      destr_in EQ0.
-      inv EQ0.
-      split. simpl;auto.
-      unfold translate_AddrE_Addrmode.
-      apply Z.ltb_lt in Heqb0.
-      erewrite encode_ofs_u32_consistency_aux;eauto. cbn [bind].
-      repeat f_equal;auto with encdec.
-      unfold Ptrofs.of_int.
-      rewrite Int.unsigned_repr.
-      apply Ptrofs.repr_unsigned.
-      unfold Int.max_unsigned. 
-      generalize (Ptrofs.unsigned_range i0).
-      lia. 
 Qed.
   
 
 (* unfinished: we should add conditional checking for W bit, which can ensure the deocde_consistency *)
-Definition decode_instr_rex (e: option relocentry) (W R X B: bool) (i: Instruction) : res instruction :=
-  let translate_AddrE_Addrmode := translate_AddrE_Addrmode e X B in
+Definition decode_instr_rex (W R X B: bool) (i: Instruction) : res instruction :=
+  let translate_AddrE_Addrmode := translate_AddrE_Addrmode X B in
   match i with
   | Pmovl_rm (AddrE0 rsbits) rdbits =>
     let rd := decode_ireg_u4 R rdbits in
@@ -867,13 +702,8 @@ Definition decode_instr_rex (e: option relocentry) (W R X B: bool) (i: Instructi
     else OK (Asm.Pandps_fm rd addr)
   (* so special : Pjmp_l_rel *)
   | Pjmp_l_rel imm32 =>
-    match e with
-    | Some _ =>
-      OK (Asm.Pjmp_s xH signature_main)
-    | None =>
       do imm <- decode_ofs_signed32 imm32;
       OK (Asm.Pjmp_l_rel imm)
-    end
   (* not well defined *)
   | Pjmp_Ev (AddrE0 rsbits)=>
     let rs := decode_ireg_u4 B rsbits in
@@ -888,12 +718,7 @@ Definition decode_instr_rex (e: option relocentry) (W R X B: bool) (i: Instructi
     let r := decode_ireg_u4 B rbits in
     OK (Asm.Pcall_r r signature_main)
   | Pcall_ofs imm32 =>
-    match e with
-    | Some _ =>
-      OK (Asm.Pcall_s xH signature_main)
-    | None =>
-      Error (msg "impossible")
-    end
+    OK (Asm.Pcall_s xH signature_main)
   | Pret => OK Asm.Pret
   | Pret_iw imm16 =>
     do imm <- decode_ofs_u16 imm16;
@@ -1009,8 +834,8 @@ Definition decode_instr_rex (e: option relocentry) (W R X B: bool) (i: Instructi
   | _ => Error (msg "unsupported")
   end.
 
-Definition decode_instr_override (e: option relocentry)  (W R X B: bool) (i: Instruction) : res instruction :=
-  let translate_AddrE_Addrmode := translate_AddrE_Addrmode e X B in
+Definition decode_instr_override (W R X B: bool) (i: Instruction) : res instruction :=
+  let translate_AddrE_Addrmode := translate_AddrE_Addrmode X B in
   match i with
   | Pmovl_rm a rdbits =>
     let rd := decode_ireg_u4 R rdbits in
@@ -1053,8 +878,8 @@ Definition decode_instr_override (e: option relocentry)  (W R X B: bool) (i: Ins
   | _ => Error (msg "unsupported")
   end.
 
-Definition decode_instr_repnz (e: option relocentry) (W R X B: bool) (i: Instruction) : res instruction :=
-  let translate_AddrE_Addrmode := translate_AddrE_Addrmode e X B in
+Definition decode_instr_repnz (W R X B: bool) (i: Instruction) : res instruction :=
+  let translate_AddrE_Addrmode := translate_AddrE_Addrmode X B in
   match i with
   | Pmovss_d_fm (AddrE0 rsbits) rdbits =>
     let rd := decode_freg_u4 R rdbits in
@@ -1121,8 +946,8 @@ Definition decode_instr_repnz (e: option relocentry) (W R X B: bool) (i: Instruc
   | _ => Error (msg "unsupported")
   end.
 
-Definition decode_instr_rep (e: option relocentry) (W R X B: bool) (i: Instruction) : res instruction :=
-  let translate_AddrE_Addrmode := translate_AddrE_Addrmode e X B in
+Definition decode_instr_rep (W R X B: bool) (i: Instruction) : res instruction :=
+  let translate_AddrE_Addrmode := translate_AddrE_Addrmode X B in
   match i with
   | Pmovss_d_fm a rdbits =>
     let rd := decode_freg_u4 R rdbits in
@@ -1177,11 +1002,7 @@ Definition decode_instr_rep (e: option relocentry) (W R X B: bool) (i: Instructi
   end.
 
 
-Definition decode_instr (e: option relocentry) (li:list Instruction) :=
-  let decode_instr_rex := decode_instr_rex e in
-  let decode_instr_override := decode_instr_override e in
-  let decode_instr_rep := decode_instr_rep e in
-  let decode_instr_repnz := decode_instr_repnz e in
+Definition decode_instr (li:list Instruction) :=
   match li with
   | Override :: REX_WRXB w r x b :: i :: tl =>
     do i' <- decode_instr_override w r x b i;
@@ -1332,14 +1153,14 @@ unfold encode_rex_prefix_rf.
       monadInv H.
 Qed.
 
-Lemma encode_rex_prefix_ra_result: forall e r addr l rs a,
-    encode_rex_prefix_ra e r addr = OK (l,rs,a) ->
+Lemma encode_rex_prefix_ra_result: forall r addr l rs a,
+    encode_rex_prefix_ra r addr = OK (l,rs,a) ->
     (not_AddrE0 a = true) /\
-    ((l = [] /\  decode_ireg_u4 false rs = r /\ translate_AddrE_Addrmode e false false a = OK addr) \/
-    (exists rexr rexx rexb , l = [REX_WRXB zero1 rexr rexx rexb] /\  decode_ireg_u4 rexr rs = r /\ translate_AddrE_Addrmode e rexx rexb a = OK addr)).
+    ((l = [] /\  decode_ireg_u4 false rs = r /\ translate_AddrE_Addrmode false false a = OK addr) \/
+    (exists rexr rexx rexb , l = [REX_WRXB zero1 rexr rexx rexb] /\  decode_ireg_u4 rexr rs = r /\ translate_AddrE_Addrmode rexx rexb a = OK addr)).
 Proof.
   unfold encode_rex_prefix_ra.
-  intros e r addr l rs a H.
+  intros r addr l rs a H.
   repeat destr_in H.
   - monadInv H11.
     apply transl_addr_consistency32 in EQ1.
@@ -1361,14 +1182,14 @@ Proof.
     split;split;auto with encdec.
 Qed.
 
-Lemma encode_rex_prefix_fa_result: forall e r addr l rs a,
-    encode_rex_prefix_fa e r addr = OK (l,rs,a) ->
+Lemma encode_rex_prefix_fa_result: forall r addr l rs a,
+    encode_rex_prefix_fa r addr = OK (l,rs,a) ->
     (not_AddrE0 a = true) /\
-    ((l = [] /\  decode_freg_u4 false rs = r /\ translate_AddrE_Addrmode e false false a = OK addr) \/
-    (exists rexr rexx rexb , l = [REX_WRXB zero1 rexr rexx rexb] /\  decode_freg_u4 rexr rs = r /\ translate_AddrE_Addrmode e rexx rexb a = OK addr)).
+    ((l = [] /\  decode_freg_u4 false rs = r /\ translate_AddrE_Addrmode false false a = OK addr) \/
+    (exists rexr rexx rexb , l = [REX_WRXB zero1 rexr rexx rexb] /\  decode_freg_u4 rexr rs = r /\ translate_AddrE_Addrmode rexx rexb a = OK addr)).
 Proof.
   unfold encode_rex_prefix_fa.
-  intros e r addr l rs a H.
+  intros r addr l rs a H.
   repeat destr_in H.
   - monadInv H11.
     apply transl_addr_consistency32 in EQ1.
@@ -1390,14 +1211,14 @@ Proof.
     split;split;auto with encdec.
 Qed.
 
-Lemma encode_rex_prefix_addr_result: forall e addr l a,
-    encode_rex_prefix_addr e addr = OK (l,a) ->
+Lemma encode_rex_prefix_addr_result: forall addr l a,
+    encode_rex_prefix_addr addr = OK (l,a) ->
     (not_AddrE0 a = true) /\
-    ((l = [] /\  translate_AddrE_Addrmode e false false a = OK addr) \/
-    (exists rexx rexb , l = [REX_WRXB zero1 zero1 rexx rexb] /\ translate_AddrE_Addrmode e rexx rexb a = OK addr)).
+    ((l = [] /\  translate_AddrE_Addrmode false false a = OK addr) \/
+    (exists rexx rexb , l = [REX_WRXB zero1 zero1 rexx rexb] /\ translate_AddrE_Addrmode rexx rexb a = OK addr)).
 Proof.
   unfold encode_rex_prefix_addr.
-  intros e addr l  a H.
+  intros addr l  a H.
   repeat destr_in H.
   - monadInv H11.
     apply transl_addr_consistency32 in EQ.
@@ -1422,7 +1243,7 @@ Definition well_defined_instr i :=
   | Asm.Pcall_r _ _
   | Asm.Plabel _ | Asm.Pmovls_rr _
   | Asm.Pjmp_r _ _
-  | Asm.Pjmp_s _ _
+  (* | Asm.Pjmp_s _ _ Ouput error *) 
   | Asm.Pmovzl_rr _ _
   | Asm.Pcall_s _ _ => false
   | _ => true
@@ -1569,10 +1390,10 @@ Ltac destr_ptr64_in_H H :=
 Ltac solve_decode_instr H :=
   monadInv H;auto;
   match goal with
-  | H1: encode_rex_prefix_addr _ _ = OK _ |- _ =>
+  | H1: encode_rex_prefix_addr _ = OK _ |- _ =>
     solve_only_addr
   | H1: encode_ireg_u4 _ = OK _,
-        H2: translate_Addrmode_AddrE64 _ _ = OK _ |- _ =>
+        H2: translate_Addrmode_AddrE64 _ = OK _ |- _ =>
     solve_ra64_normal
   | H1: encode_freg_u4 ?r1 = OK ?res1,
         H2: encode_freg_u4 ?r2 = OK ?res2
@@ -1598,9 +1419,9 @@ Ltac solve_decode_instr H :=
         H2: encode_ofs_u8 ?r2 = OK ?res2
     |- context [REX_WRXB ?a ?b ?c ?d :: ?l] =>
     solve_ri8_normal
-  | H1: encode_rex_prefix_fa _ _ _ = OK _ |- _ =>
+  | H1: encode_rex_prefix_fa _ _ = OK _ |- _ =>
     solve_fa
-  | H1: encode_rex_prefix_ra _ _ _ = OK _ |- _ =>
+  | H1: encode_rex_prefix_ra _ _ = OK _ |- _ =>
     solve_ra
   | H1: encode_rex_prefix_r _ = OK _,
         H2:encode_ofs_u16 _ = OK _ |- _ =>
@@ -1628,12 +1449,12 @@ Ltac solve_decode_instr H :=
   | _ => fail
   end.
   
-Theorem translate_instr_consistency_partial: forall e i li l,
+Theorem translate_instr_consistency_partial: forall i li l,
     well_defined_instr i = true ->
-    translate_instr e i = OK li ->
-    decode_instr e (li++l) = OK (i,l).
+    translate_instr i = OK li ->
+    decode_instr (li++l) = OK (i,l).
 Proof.
-  intros e i li l WD H.
+  intros i li l WD H.
   unfold translate_instr in H;
     destruct i;simpl in WD;try congruence;clear WD;
       try destr_ptr64_in_H H;
@@ -1683,7 +1504,6 @@ Proof.
    erewrite encode_ofs_u32_consistency;eauto. simpl. auto.
   
    (* jmp_l_rel *)
-  destr_in H.
   monadInv H.
   cbn [app] in *. autounfold with decunfold.
   erewrite encode_ofs_signed32_consistency;eauto.
@@ -1703,9 +1523,9 @@ Proof.
 
 Qed.
 
-Theorem translate_instr_consistency: forall e i li l,
-    translate_instr e i = OK li ->
-    exists i1, decode_instr e (li++l) = OK (i1,l) /\ instr_eq i i1.
+Theorem translate_instr_consistency: forall i li l,
+    translate_instr i = OK li ->
+    exists i1, decode_instr (li++l) = OK (i1,l) /\ instr_eq i i1.
 Proof.
   intros.
   destruct (well_defined_instr i) eqn:WF.
@@ -1760,8 +1580,30 @@ Proof.
         unfold not. intros. subst. rewrite EQ in EQ1.
         inv EQ1. congruence.
         
-    + unfold translate_instr in H.
-      do 3 destr_in H.
+    (* + unfold translate_instr in H. *)
+    (*   do 3 destr_in H. *)
+    (*   * monadInv H. *)
+    (*     cbn [app] in *. *)
+    (*     autounfold with decunfold.              *)
+    (*     simpl. eexists. split;eauto. *)
+    (*     unfold instr_eq;right. *)
+    (*     apply Pos.eqb_eq;auto. *)
+    (*   * monadInv H. *)
+    (*     cbn [app] in *. *)
+    (*     autounfold with decunfold.              *)
+    (*     simpl. eexists. split;eauto. *)
+    (*     unfold instr_eq;right. *)
+    (*     apply Pos.eqb_eq;auto. *)
+
+    (* Pjmp_r *)
+    + exploit encode_rex_prefix_r_result; eauto;
+        intros [(?, ?)| (?, (?, ?))]; subst;cbn [app] in *;
+          autounfold with decunfold;cbn [bind];eexists;split;auto.
+      unfold instr_eq. right. auto.
+      simpl. eauto.
+      unfold instr_eq. right. auto.
+    + unfold translate_instr in H. (* Pcall_s *)
+      do 2 destr_in H.
       * monadInv H.
         cbn [app] in *.
         autounfold with decunfold.             
@@ -1775,34 +1617,13 @@ Proof.
         unfold instr_eq;right.
         apply Pos.eqb_eq;auto.
 
-    + exploit encode_rex_prefix_r_result; eauto;
+    + exploit encode_rex_prefix_r_result; eauto; (* Pcall_r *)
         intros [(?, ?)| (?, (?, ?))]; subst;cbn [app] in *;
           autounfold with decunfold;cbn [bind];eexists;split;auto.
       unfold instr_eq. right. auto.
       simpl. eauto.
       unfold instr_eq. right. auto.
-    + unfold translate_instr in H.
-      do 3 destr_in H.
-      * monadInv H.
-        cbn [app] in *.
-        autounfold with decunfold.             
-        simpl. eexists. split;eauto.
-        unfold instr_eq;right.
-        apply Pos.eqb_eq;auto.
-      * monadInv H.
-        cbn [app] in *.
-        autounfold with decunfold.             
-        simpl. eexists. split;eauto.
-        unfold instr_eq;right.
-        apply Pos.eqb_eq;auto.
-
-    + exploit encode_rex_prefix_r_result; eauto;
-        intros [(?, ?)| (?, (?, ?))]; subst;cbn [app] in *;
-          autounfold with decunfold;cbn [bind];eexists;split;auto.
-      unfold instr_eq. right. auto.
-      simpl. eauto.
-      unfold instr_eq. right. auto.
-    + unfold translate_instr in H.
+    + unfold translate_instr in H. (* Pmov_rm_a *)
       destr_in H;monadInv H;cbn [app] in *.
       exploit transl_addr_consistency64;eauto.
       intros (? & ?).
@@ -1816,7 +1637,7 @@ Proof.
       destruct x;simpl in H;try congruence;
       rewrite H10;cbn [bind];eexists;split;eauto;
         unfold instr_eq;rewrite Heqb;right;split;symmetry;auto with encdec.
-    + unfold translate_instr in H.
+    + unfold translate_instr in H. (* Pmov_mr_a *)
       destr_in H;monadInv H;cbn [app] in *.
       exploit transl_addr_consistency64;eauto.
       intros (? & ?).

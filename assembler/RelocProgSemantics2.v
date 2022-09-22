@@ -22,7 +22,6 @@ Definition sectable1 := RelocProg.sectable instruction byte.
 
 Section WITH_INSTR_SIZE.
   Variable instr_size : instruction -> Z.
-  Variable Instr_size : list Instruction -> Z.
 Section WITHGE.
 
   Variable ge:RelocProgGlobalenvs.Genv.t.
@@ -130,16 +129,18 @@ Definition init_mem (p: RelocProg.program fundef unit instruction byte) :=
   | None => None
   end.
 
+(* Instructions Decoding *)
 
-Program Fixpoint decode_instrs_bytes (bytes: list byte) (acc: list Instruction) {measure (length bytes)} : res (list Instruction) :=
+Program Fixpoint decode_instrs_bytes (bytes: list byte) {measure (length bytes)} : res (list Instruction) :=
   match bytes with
-  | nil => OK acc
+  | nil => OK []
   | _ =>
     do (i, len) <- EncDecRet.decode_Instruction bytes;
     match len with
     | S _ =>
       let bytes' := skipn len bytes in
-      decode_instrs_bytes  bytes' (acc ++ [i])
+      do tl <- decode_instrs_bytes bytes';
+       OK (i :: tl)
     | _ =>
       Error (msg "decode_Instruction produce len = 0")
     end
@@ -150,23 +151,24 @@ Next Obligation.
  simpl. lia.
 Defined.
 
-Lemma decode_instrs_bytes_eq: forall bytes acc,
-    decode_instrs_bytes bytes acc =
+Lemma decode_instrs_bytes_eq: forall bytes,
+    decode_instrs_bytes bytes =
     match bytes with
-  | nil => OK acc
-  | _ =>
-    do (i, len) <- EncDecRet.decode_Instruction bytes;
-    match len with
-    | S _ =>
-      let bytes' := skipn len bytes in
-      decode_instrs_bytes  bytes' (acc ++ [i])
+    | nil => OK []
     | _ =>
-      Error (msg "decode_Instruction produce len = 0")
-    end
+      do (i, len) <- EncDecRet.decode_Instruction bytes;
+      match len with
+      | S _ =>
+        let bytes' := skipn len bytes in
+        do tl <- decode_instrs_bytes bytes';
+        OK (i :: tl)
+      | _ =>
+        Error (msg "decode_Instruction produce len = 0")
+      end
     end.
 Proof.
-  intros.
-  unfold decode_instrs_bytes. unfold decode_instrs_bytes_func at 1.
+  intros. 
+  unfold decode_instrs_bytes.
   rewrite Wf.WfExtensionality.fix_sub_eq_ext.
   cbn [projT1].  cbn [projT2].
   destr.
@@ -179,111 +181,50 @@ Proof.
 Qed.
 
 (* For simplicity, we calculate code size every iteration*)
-Program Fixpoint decode_instrs (instrs: list Instruction) (acc: list instruction * reloctable) {measure (length instrs)} :=
-  let (l, reloctbl) := acc in
+Program Fixpoint decode_instrs (instrs: list Instruction) {measure (length instrs)} :=
   match instrs with
-  | [] => OK (l,reloctbl)
+  | [] => OK []
   | _ =>
-    match reloctbl with
-    | [] =>
-      do (i, instrs') <- decode_instr None instrs;
-      match lt_dec (length instrs') (length instrs) with
-      | left _ =>
-        decode_instrs instrs' ((l ++ [i]),[])
-      | _ => Error (msg "decode_instrs error")                  
-      end
-    | e :: tl =>
-      let sz := Instr_size instrs in
-      let ofs := code_size instr_size l in
-      let ofs' := ofs + sz in
-      if (ofs <? e.(reloc_offset)) && (e.(reloc_offset) <? ofs') then
-        do (i, instrs') <- decode_instr (Some e) instrs;
-        match lt_dec (length instrs') (length instrs) with
-        | left _ =>
-          decode_instrs instrs' ((l++[i]),tl)
-        | _ =>
-          Error (msg "decode_instrs error")
-        end
-      else
-        do (i, instrs') <- decode_instr None instrs;
-        match lt_dec (length instrs') (length instrs) with
-        | left _ =>
-          decode_instrs instrs' ((l++[i]),reloctbl)
-        | _ =>
-          Error (msg "decode_instrs error")
-        end
-    end      
+    do (i, instrs') <- decode_instr instrs;
+    match lt_dec (length instrs') (length instrs) with
+    | left _ =>
+      do tl <- decode_instrs instrs';
+      OK (i :: tl)
+    | _ => Error (msg "decode_instrs error")                  
+    end
   end.
 
 
-
-Lemma decode_instrs_eq :forall instrs acc,
-    decode_instrs instrs acc =
-    let (l, reloctbl) := acc in
-  match instrs with
-  | [] => OK (l,reloctbl)
-  | _ =>
-    match reloctbl with
-    | [] =>
-      do (i, instrs') <- decode_instr None instrs;
+Lemma decode_instrs_eq :forall instrs,
+    decode_instrs instrs =
+    match instrs with
+    | [] => OK []
+    | _ =>
+      do (i, instrs') <- decode_instr instrs;
       match lt_dec (length instrs') (length instrs) with
       | left _ =>
-        decode_instrs instrs' ((l ++ [i]),[])
+        do tl <- decode_instrs instrs';
+      OK (i :: tl)
       | _ => Error (msg "decode_instrs error")                  
       end
-    | e :: tl =>
-      let sz := Instr_size instrs in
-      let ofs := code_size instr_size l in
-      let ofs' := ofs + sz in
-      if (ofs <? e.(reloc_offset)) && (e.(reloc_offset) <? ofs') then
-        do (i, instrs') <- decode_instr (Some e) instrs;
-        match lt_dec (length instrs') (length instrs) with
-        | left _ =>
-          decode_instrs instrs' ((l++[i]),tl)
-        | _ =>
-          Error (msg "decode_instrs error")
-        end
-      else
-        do (i, instrs') <- decode_instr None instrs;
-        match lt_dec (length instrs') (length instrs) with
-        | left _ =>
-          decode_instrs instrs' ((l++[i]),reloctbl)
-        | _ =>
-          Error (msg "decode_instrs error")
-        end
-    end      
-  end.
+    end.
 Proof.
-  intros. destruct acc.
+  intros. 
   destruct instrs. auto.
-  destruct r.
-  - unfold decode_instrs. unfold decode_instrs_func at 1.
-    rewrite Wf.WfExtensionality.fix_sub_eq_ext.
-    cbn [projT1].  cbn [projT2].
-    destruct (decode_instr None (i::instrs)) eqn: DES.
-    + destruct p. cbn [bind2].
-      destr.
-    + cbn [bind2]. auto.
-  - unfold decode_instrs. unfold decode_instrs_func at 1.
-    rewrite Wf.WfExtensionality.fix_sub_eq_ext.
-    cbn [projT1].  cbn [projT2].
-    cbn [proj1_sig].
+
+  unfold decode_instrs.
+  rewrite Wf.WfExtensionality.fix_sub_eq_ext.
+  cbn [projT1].  cbn [projT2].
+  destruct (decode_instr (i::instrs)) eqn: DES.
+  + destruct p. cbn [bind2].
     destr.
-    + destruct (decode_instr (Some r) (i :: instrs)) eqn:DES.
-      * destruct p.
-        cbn [bind2]. destr.
-      * cbn [bind2]. auto.
-    + destruct (decode_instr None (i :: instrs)) eqn:DES.
-      * destruct p.
-        cbn [bind2]. destr.
-      * cbn [bind2]. auto.
+  + cbn [bind2]. auto.
 Qed.
 
-
-Definition decode_instrs' (reloctbl: reloctable) (bytes: list byte) :=
-  do instrs1 <- decode_instrs_bytes bytes [];
-  do instrs2_reloctbl <- decode_instrs instrs1 ([],reloctbl);
-  OK (instrs2_reloctbl).
+Definition decode_instrs' (bytes: list byte) :=
+  do instrs1 <- decode_instrs_bytes bytes;
+  do instrs2 <- decode_instrs instrs1;
+  OK instrs2.
   
 Definition acc_decode_code_section (reloctbl_map: reloctable_map) id (sec:section) : res (RelocProg.section instruction byte) :=
   (* do acc' <- acc; *)
@@ -293,7 +234,7 @@ Definition acc_decode_code_section (reloctbl_map: reloctable_map) id (sec:sectio
                   end in
   match sec with
   | sec_text bs =>
-    do (instrs,_) <- decode_instrs' reloctbl bs;
+    do instrs <- decode_instrs' bs;
     OK (sec_text instrs)
   (* OK (PTree.set id (sec_text instrs) acc') *)
   | sec_rodata bs =>
