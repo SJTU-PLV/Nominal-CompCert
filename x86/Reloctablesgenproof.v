@@ -82,11 +82,69 @@ Proof.
       * auto.
 Qed.
 
-Lemma gen_instr_map_pres_eq: forall n c c' instr_size i,
+Section INSTR_MAP.
+  Variable instr_size : instruction -> Z.
+  Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.
+  
+(* gen_code_map properties *)
+Lemma gen_instr_map_pres_eq_aux: forall n c c',
+      length c = n ->
+      Forall2 instr_eq c c' ->
+      fst (fold_left (acc_instr_map instr_size) c (Ptrofs.zero, fun _ : ptrofs => None)) =
+      fst (fold_left (acc_instr_map instr_size) c' (Ptrofs.zero, fun _ : ptrofs => None)).
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  inv H0. simpl. auto.
+  
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l1 & a1 & A1 & B1).
+  subst. eapply Forall2_app_inv_l in H0.
+  destruct H0 as (l1' & l2' & P1 & P2 & P3).
+  inv P2. inv H4.
+  repeat rewrite fold_left_app.  simpl.
+  unfold acc_instr_map at 1 3.
+  destruct (fold_left (acc_instr_map instr_size) l1 (Ptrofs.zero, fun _ : ptrofs => None)) eqn:FOLD.
+  destruct (fold_left (acc_instr_map instr_size) l1' (Ptrofs.zero, fun _ : ptrofs => None)) eqn:FOLD1.
+  simpl. erewrite instr_eq_size;eauto.
+  exploit IHn;eauto. rewrite FOLD,FOLD1.
+  simpl. intros. subst. auto.
+Qed.
+
+Lemma gen_instr_map_pres_eq: forall n c c' i,
     length c = n ->
     Forall2 instr_eq c c' ->
     option_rel instr_eq (gen_instr_map instr_size c i) (gen_instr_map instr_size c' i).
-Admitted.
+Proof.
+  induction n;intros.
+  rewrite length_zero_iff_nil in H. subst.
+  inv H0. unfold gen_instr_map. simpl. constructor.
+  
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l1 & a1 & A1 & B1).
+  subst. eapply Forall2_app_inv_l in H0.
+  destruct H0 as (l1' & l2' & P1 & P2 & P3).
+  inv P2. inv H4. unfold gen_instr_map.
+  repeat rewrite fold_left_app. simpl.
+  unfold acc_instr_map at 1 3.
+  destruct (fold_left (acc_instr_map instr_size) l1 (Ptrofs.zero, fun _ : ptrofs => None)) eqn:FOLD.
+  destruct (fold_left (acc_instr_map instr_size) l1' (Ptrofs.zero, fun _ : ptrofs => None)) eqn:FOLD1.
+  destr.
+  - exploit gen_instr_map_pres_eq_aux.
+    2: eapply P1. eauto.
+    rewrite FOLD,FOLD1. simpl. intros. subst.
+    destr. constructor. auto.
+  - exploit gen_instr_map_pres_eq_aux.
+    2: eapply P1. eauto.
+    rewrite FOLD,FOLD1. simpl. intros. subst.
+    destr. exploit IHn;eauto.
+    unfold gen_instr_map. rewrite FOLD,FOLD1.
+    eauto.
+Qed.
+
+End INSTR_MAP.
+
+
 
 (** The preservation theorem of relocation table generation is established by decoding the program  *)
 
@@ -95,10 +153,10 @@ Section PRESERVATION.
 
 Variable instr_size : instruction -> Z.
 Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
-Hypothesis instr_reloc_bound : forall i ofs, instr_reloc_offset i = OK ofs -> 0 < ofs < instr_size i.
 
 Hypothesis id_eliminate_size_unchanged:forall i, instr_size i = instr_size (id_eliminate i).
-
+Hypothesis instr_reloc_bound : forall i ofs, instr_reloc_offset i = OK ofs -> 0 < ofs < instr_size i.
+Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.
 
 Definition match_prog (p: program) (tp: program) :=
   transf_program instr_size p = OK tp.
@@ -108,6 +166,8 @@ Lemma transf_program_match:
 Proof.
   auto.
 Qed.
+
+
 
 (** *Consistency Theorem *)
 
@@ -468,14 +528,76 @@ Proof.
   - simpl. auto.
 Qed.
 
+Lemma list_length_exists: forall A (l:list A),
+    exists n, length l = n.
+Proof.
+  induction l.
+  exists O. auto.
+  destruct IHl. eexists.
+  simpl. rewrite H. eauto.
+Qed.
+
+Lemma code_eq_size: forall c1 c2,
+    Forall2 instr_eq c1 c2 ->
+    code_size instr_size c1 = code_size instr_size c2.
+Proof.
+  induction c1;intros. simpl.
+  inv H. auto.
+  inv H. simpl. erewrite IHc1;eauto.
+  erewrite instr_eq_size;eauto.
+Qed.
+
 (* init_mem equal *)
 Lemma alloc_sections_eq: forall sectbl sectbl' ge1 ge2 m m',
     RelocProgGlobalenvs.Genv.genv_symb ge1 = RelocProgGlobalenvs.Genv.genv_symb ge2 ->
     (forall id, option_rel section_eq sectbl'!id sectbl!id) ->
     alloc_sections instr_size ge1 sectbl m = Some m' ->
     alloc_sections instr_size ge2 sectbl' m = Some m'.
-Admitted.
+Proof.
+  unfold alloc_sections.
+  intros.
+  rewrite PTree.fold_spec in *.
+  eapply PTree.elements_canonical_order' in H0.
+  set (l1:= (PTree.elements sectbl')) in *.
+  set (l2:= (PTree.elements sectbl)) in *.
+  generalize (list_length_exists l1). intros (n & LEN).
+  generalize n l1 LEN l2  m m' H0 H1. clear n l1 LEN l2 m m' H0 H1.
+  induction n;intros.
+  rewrite length_zero_iff_nil in LEN. subst.
+  inv H0. 
+  simpl in *. auto.
+  
+  exploit LocalLib.length_S_inv;eauto.
+  intros (l' & a & A & B). subst.
+  eapply list_forall2_app_inv_l in H0.
+  destruct H0 as (l4 & l5 & P1 & P2 & P3).
+  inv P3. inv H5. destruct H3.
+  rewrite fold_left_app in *.
+  simpl in *. unfold alloc_section at 1.
+  unfold alloc_section in H1 at 1.
+  rewrite H0. clear H0.
+  destr_in H1.
+  exploit IHn;eauto. intros Q. rewrite Q.
+  unfold section_eq in H2. destr_in H2. 
+  - destr_in H2. simpl in *.
+    erewrite code_eq_size;eauto.
+  - destr_in H1. subst.
+    simpl in *.
+    destruct Mem.alloc_glob. destr.
+    erewrite store_init_data_list_pres.
+    eauto. auto. intros.
+    unfold RelocProgGlobalenvs.Genv.find_symbol. rewrite H.
+    auto.
+  - destr_in H1. subst.
+    simpl in *.
+    destruct Mem.alloc_glob. destr.
+    erewrite store_init_data_list_pres.
+    eauto. auto. intros.
+    unfold RelocProgGlobalenvs.Genv.find_symbol. rewrite H.
+    auto.
+Qed.
 
+    
 (** Transformation *)
 Variable prog: program.
 Variable tprog: program.
@@ -518,14 +640,14 @@ Lemma genv_instr_eq: forall v, option_rel instr_eq (RelocProgGlobalenvs.Genv.fin
   unfold section in *.
   set (l1:= (PTree.elements (PTree.map (rev_section instr_size x) (transl_sectable' (prog_sectable prog))))) in *.
   set (l2:= (PTree.elements (prog_sectable prog))) in *.
-  clear - H.
+  clear - H instr_size instr_eq_size.
   assert (LEN: exists n, length l1 = n).
   { clear.
     induction l1. exists O. auto.
     destruct IHl1.
     eexists. simpl. auto. }
   destruct LEN. generalize x0 l1 H0 l2 H.
-  clear.
+  clear- instr_size instr_eq_size.
   induction x0;intros.
   rewrite length_zero_iff_nil in H0. subst.
   inv H. constructor.

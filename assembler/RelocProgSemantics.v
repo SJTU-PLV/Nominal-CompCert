@@ -734,6 +734,37 @@ Qed.
 
 End INITDATA.
 
+
+Section STORE_INIT_DATA_PRESERVED.
+  Variable ge1: Genv.t.
+  Variable ge2: Genv.t.
+
+  Hypothesis symbols_preserved:
+    forall id, Genv.find_symbol ge2 id = Genv.find_symbol ge1 id.
+
+  Lemma store_init_data_pres: forall d m b ofs,
+      store_init_data ge1 m b ofs d = store_init_data ge2 m b ofs d.
+  Proof.
+    destruct d;simpl;auto.
+    intros.
+    assert (EQ: forall id ofs, Genv.symbol_address ge2 id ofs = Genv.symbol_address ge1 id ofs).
+    { unfold Genv.symbol_address; simpl; intros. rewrite symbols_preserved;auto. }
+    rewrite EQ.
+    auto.
+  Qed.
+
+  Lemma store_init_data_list_pres: forall l m b ofs,
+      store_init_data_list ge1 m b ofs l = store_init_data_list ge2 m b ofs l.
+  Proof.
+    induction l;auto.
+    intros. simpl. rewrite store_init_data_pres.
+    destr.
+  Qed.
+  
+End STORE_INIT_DATA_PRESERVED.
+
+
+
 Definition well_formed_symbtbl (sectbl:sectable) symbtbl:=
   forall id e,
     symbtbl ! id = Some e ->
