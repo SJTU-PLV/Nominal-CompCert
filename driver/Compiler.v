@@ -854,14 +854,19 @@ Proof.
   eapply compose_forward_simulations.
   eapply Reloctablesgenproof.transf_program_correct;eauto.
   eapply instr_size_bound.
-  (* id_eliminate does not change the size  *) admit.
-  (* instr_reloc_offset *) admit.
-  (* reloctablegen: instr_eq preserve size *) admit.
+  (* id_eliminate does not change the size  *)
+  unfold instr_size. eapply TranslateInstrSize.id_eliminate_size_unchanged.
+  (* instr_reloc_offset *)
+  unfold instr_size. eapply TranslateInstrSize.instr_reloc_bound.
+  (* reloctablegen: instr_eq preserve size *)
+  unfold instr_size. unfold Asm.instr_size_real.  eapply TranslateInstrSize.instr_eq_size_reloc.
   
   eapply compose_forward_simulations.
   eapply RelocBingenproof.transf_program_correct;eauto.
-  (* instr_eq preserve size *) admit.
-  (* rev_id_eliminate preserve size *) admit.
+  (* instr_eq preserve size *)
+  unfold instr_size. unfold Asm.instr_size_real. eapply TranslateInstrSize.instr_eq_size.
+  (* rev_id_eliminate preserve size *)
+  unfold instr_size. unfold Asm.instr_size_real. eapply TranslateInstrSize.rev_id_eliminate_size.
   (* encode_Instruction consistency *) admit.
 
   eapply compose_forward_simulations.

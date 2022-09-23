@@ -19,7 +19,7 @@ Definition addrmode_reloc_offset (a:addrmode) : Z :=
 (** To support 64bit, consisder the rex prefix  *)
 Definition instr_reloc_offset (i:instruction) : res Z :=
   match i with
-  | Pmov_rs r _ => OK (2 + rex_prefix_check_r r)
+  | Pmov_rs r _ => OK (rex_prefix_check_r r + 2)
   | Pcall_s _ _ => OK 1
   | Pjmp_s _ _ | Pjmp_l_rel _ => OK 1
   | Pleal r a
@@ -27,15 +27,15 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   | Pmovl_mr a r =>
     let aofs := addrmode_reloc_offset a in
     let rex := rex_prefix_check_ra r a in
-    OK (1 + aofs + rex)
+    OK (aofs + rex + 1)
   | Pmovb_mr a r
   | Pmovb_rm r a =>
     let aofs := addrmode_reloc_offset a in
     let rex := rex_prefix_check_ra r a in
     if Archi.ptr64 then
-      OK (2 + aofs)
+      OK (aofs + 2)
     else
-      OK (1 + aofs + rex)
+      OK (aofs + rex + 1)
   (* | Pmov_rm_a _ a *)
   (* | Pmov_mr_a a _ *)
   | Pjmp_m a 
@@ -45,28 +45,28 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   | Pfstps_m a =>
     let aofs := addrmode_reloc_offset a in
     let rex := rex_prefix_check_a a in
-    OK (1 + aofs + rex)
+    OK (aofs + rex + 1)
   | Pmovw_mr a r
   | Pmovw_rm r a
   | Pmovzw_rm r a
   | Pmovsw_rm r a =>
     let aofs := addrmode_reloc_offset a in
     let rex := rex_prefix_check_ra r a in
-    OK (2 + aofs + rex)
+    OK (aofs + rex + 2)
   | Pmovzb_rm r a
   | Pmovsb_rm r a =>
     let aofs := addrmode_reloc_offset a in
     let rex := rex_prefix_check_ra r a in
     (* 1byte memory to 32bit register *)
     (* if Archi.ptr64 then
-      OK (3 + aofs)
+      OK (aofs + 3)
     else *)
-      OK (2 + aofs + rex)
+      OK (aofs + rex + 2)
   | Pxorps_fm r a
   | Pandps_fm r a =>
     let aofs := addrmode_reloc_offset a in
     let rex := rex_prefix_check_fa r a in
-    OK (2 + aofs + rex)
+    OK (aofs + rex + 2)
   | Pmovsd_fm f a
   | Pmovsd_mf a f
   | Pmovss_fm f a
@@ -77,7 +77,7 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   | Pandpd_fm f a =>
     let aofs := addrmode_reloc_offset a in
     let rex := rex_prefix_check_fa f a in
-    OK (3 + aofs + rex)
+    OK (aofs + rex + 3)
   (* 64bit *)
   | Paddq_rm  _ a 
   | Psubq_rm  _ a 
@@ -90,18 +90,18 @@ Definition instr_reloc_offset (i:instruction) : res Z :=
   | Pmovq_rm _ a
   | Pleaq _ a =>
     let aofs := addrmode_reloc_offset a in
-    OK (2 + aofs)
+    OK (aofs + 2)
   | Pimulq_rm _ a =>
     let aofs := addrmode_reloc_offset a in
-    OK (3 + aofs)
+    OK (aofs + 3)
   | Pmov_rm_a r a
   | Pmov_mr_a a r =>
     let aofs := addrmode_reloc_offset a in
     if Archi.ptr64 then
-      OK (2 + aofs)
+      OK (aofs + 2)
     else
       let rex := rex_prefix_check_ra r a in
-      OK (1 + aofs + rex)
+      OK (aofs + rex + 1)
   | _ => Error [MSG "Calculation of relocation offset failed: Either there is no possible relocation location or the instruction ";
               MSG (instr_to_string i); MSG " is not supported yet by relocation"]
   end.

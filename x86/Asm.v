@@ -1858,7 +1858,8 @@ Let instr_size' (i: instruction) : Z :=
   | Pmovsb_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
   | Pmovsw_rr rd rs => 3 + rex_prefix_check_rr rd rs
   | Pmovsw_rm rd a => 2 + addrmode_size a + rex_prefix_check_ra rd a
-  | Pmovzl_rr rd rs => 2 + rex_prefix_check_rr rd rs
+    (* adhoc: we use the instruction size after instruction encoding to represent the size of Pmovzl_rr, but it is not real size *)
+  | Pmovzl_rr rd rs => if Archi.ptr64 then 3 else 2 + rex_prefix_check_rr rd rs
   | Pmovsq_rm frd a => 3 + addrmode_size a + rex_prefix_check_fa frd a
   | Pmovsq_mr a frs => 3 + addrmode_size a + rex_prefix_check_fa frs a
   | Pcvtsd2ss_ff  frd frs 
