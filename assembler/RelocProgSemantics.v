@@ -770,7 +770,7 @@ Definition well_formed_symbtbl (sectbl:sectable) symbtbl:=
     symbtbl ! id = Some e ->
     match symbentry_secindex e with
     | secindex_normal i =>        
-      exists sec,sectbl ! i = Some sec
+      symbentry_type e <> symb_notype /\  exists sec,sectbl ! i = Some sec
     | secindex_comm =>
       symbentry_type e = symb_data
     | secindex_undef =>
@@ -1102,7 +1102,7 @@ Proof.
   generalize (MATCH _ _ Heqo0). intros A.  
   unfold Mem.valid_block.
   destr_in A.
-  - destruct A.
+  - destruct A as (P1 & sec & P2).
     eapply alloc_sections_valid in Heqo;eauto.
     eapply alloc_external_symbols_valid in INIT;eauto.
     rewrite Heqs0 in INIT. inv H0. eauto.

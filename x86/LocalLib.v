@@ -1499,3 +1499,12 @@ Lemma list_forall2_app_inv_l: forall A B (P: A -> B -> Prop) l1 l2 l3,
   eexists. eexists. split;eauto.
   split;apply list_forall2_Forall2;auto.
 Qed.
+
+Lemma list_length_exists: forall A (l:list A),
+    exists n, length l = n.
+Proof.
+  induction l.
+  exists O. auto.
+  destruct IHl. eexists.
+  simpl. rewrite H. eauto.
+Qed.

@@ -367,25 +367,27 @@ Proof.
   - subst.
     rewrite fold_left_app. simpl.
     rewrite PTree.gss in H. inv H.
-    destruct g.    
-    + destruct f;simpl.     
+    destruct g.
+    + destruct f;simpl;try congruence.
       rewrite PTree.gss.
+      split;try congruence.
       eexists. eauto.
-      congruence.
     + simpl;destruct (gvar_init v);simpl.
       congruence.
       destruct i;
-        try (destruct gvar_readonly;
+      try (
+      destruct gvar_readonly;
       simpl;rewrite PTree.gss;
-      eexists;eauto;
+      split;try congruence;eexists;eauto;
       simpl;rewrite PTree.gss;
-      eexists;eauto).
+      split;try congruence;eexists;eauto).
+   
       destruct l;simpl;auto.
       try (destruct gvar_readonly;
       simpl;rewrite PTree.gss;
-      eexists;eauto;
+      split;try congruence;eexists;eauto;
       simpl;rewrite PTree.gss;
-      eexists;eauto).
+      split;try congruence;eexists;eauto).
   - rewrite fold_left_app.
     rewrite PTree.gsspec in *.
     destr_in H.    
@@ -394,17 +396,18 @@ Proof.
       destruct g.
       destruct f.
       rewrite PTree.gsspec. destr.
-      eauto. eapply IHx;eauto.
+      split;try congruence;eauto. eapply IHx;eauto.
+      eapply IHx;eauto.
       eapply IHx;eauto.
       destruct (gvar_init v).
       eapply IHx;eauto.
-      destruct i0;
-      try (destruct gvar_readonly;rewrite PTree.gsspec;destr;
-           eauto;eapply IHx;eauto).
-      destruct l.
+      destruct i0;destruct gvar_readonly;try rewrite PTree.gsspec;destr;
+           split;try eapply IHx;eauto. 
+      try rewrite PTree.gsspec;destr;eauto.
       eapply IHx;eauto.
-      try (destruct gvar_readonly;rewrite PTree.gsspec;destr;
-           eauto;eapply IHx;eauto).
+      try rewrite PTree.gsspec;destr;eauto.
+      eapply IHx;eauto.
+
     + eapply IHx;eauto.
     + eapply IHx;eauto.
 Qed.
@@ -1710,7 +1713,7 @@ Proof.
             eapply PTree.elements_correct;unfold create_sec_table;
             eauto]).
 Qed.
-           
+
 (** hard: auxilary lemma for init_mem_exists *)
 Lemma alloc_globals_alloc_sections_exists: forall defs ge1 ge2 m1 m1' m2,
     Genv.alloc_globals ge1 m1 defs = Some m1' ->
@@ -1729,10 +1732,78 @@ Proof.
   eapply allocs_globals_init_data_list_aligned in H;eauto.
 Qed.
 
-Lemma alloc_globals_alloc_external_exists: forall defs ge m1 m1' m2,
-    Genv.alloc_globals ge m1 defs = Some m1' ->
-    exists m2', alloc_external_symbols m2 (gen_symb_table instr_size defs) = Some m2'.
-Admitted.
+Definition well_formed_symbtbl_elements sectbl symbtbl:=
+    forall (id : positive) (e : symbentry),
+      In (id,e) (PTree.elements symbtbl) ->
+      match symbentry_secindex e with
+      | secindex_normal i => symbentry_type e <> symb_notype /\ exists sec : RelocProg.section instruction init_data, sectbl ! i = Some sec
+      | secindex_comm => symbentry_type e = symb_data
+      | secindex_undef => symbentry_type e <> symb_notype
+      end.
+
+
+Lemma alloc_globals_alloc_external_exists: forall symbtbl m sectbl,
+    well_formed_symbtbl_elements sectbl symbtbl ->
+    exists m', alloc_external_symbols m symbtbl = Some m'.
+Proof.
+  unfold well_formed_symbtbl_elements.
+  unfold alloc_external_symbols;intros.
+  rewrite PTree.fold_spec.
+  set (l:= (PTree.elements symbtbl)) in *.
+  generalize (list_length_exists _ l).
+  intros (n & LEN).
+  generalize n l LEN H m. clear n l LEN H m.
+  induction n;intros.
+  eapply length_zero_iff_nil in LEN. subst.    
+  simpl. eauto.
+  
+  eapply length_S_inv in LEN.
+  destruct LEN as (l' & a & P1 & P2). subst.  
+  rewrite fold_left_app. exploit IHn;eauto.
+  intros. eapply H. eapply in_app. left. eauto.
+
+  clear IHn.
+  intros (m' & P). simpl.
+  rewrite P. unfold alloc_external_comm_symbol.
+  destruct a.
+  assert (In (p,s) (l'++[(p,s)])).
+  apply in_app. right. simpl. auto.
+  
+  generalize (H p s H0). intros.  
+  simpl.
+
+  destruct (symbentry_secindex s) eqn:SECIDX.
+  - destruct H1. destr;eauto.
+  - rewrite H1.
+    destruct (Mem.alloc_glob p m' 0 (symbentry_size s)) eqn:FOLD.
+    exploit Genv.store_zeros_exists.
+    unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2 with (lo:=0);eauto.
+    rewrite <- (Z.add_0_l (symbentry_size s)). eauto.
+    intros (m0' & STORE). rewrite STORE.
+    unfold Mem.drop_perm.
+    destr. eexists. eauto.
+    unfold Mem.range_perm in n. exfalso.
+    eapply n. intros.  eapply Genv.store_zeros_perm in STORE;eauto.
+    eapply STORE. eapply Mem.perm_alloc_glob_2;eauto.
+  - destr.
+    + destruct (Mem.alloc_glob p m' 0 1) eqn:FOLD.
+      unfold Mem.drop_perm.
+      destr. eexists. eauto.
+      unfold Mem.range_perm in n. exfalso.
+      eapply n. intros. eapply Mem.perm_alloc_glob_2 in FOLD.
+      eapply FOLD. lia.
+    + destruct (Mem.alloc_glob p m' 0 (symbentry_size s)) eqn:FOLD.
+      exploit Genv.store_zeros_exists.
+      unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2 with (lo:=0);eauto.
+      rewrite <- (Z.add_0_l (symbentry_size s)). eauto.
+      intros (m0' & STORE). rewrite STORE.
+      unfold Mem.drop_perm.
+      destr. eexists. eauto.     
+      unfold Mem.range_perm in n. exfalso.
+      eapply n. intros.  eapply Genv.store_zeros_perm in STORE;eauto.
+      eapply STORE. eapply Mem.perm_alloc_glob_2;eauto.
+Qed.
+
 
 
 Lemma init_mem_exists:
@@ -1743,13 +1814,9 @@ Proof.
   intros m M1.
   (* exploit (alloc_globals_alloc_sections_exists (AST.prog_defs prog) (Genv.globalenv prog) ((globalenv instr_size tprog)) (Mem.empty) m (Mem.empty));eauto. *)
   (* intros (m2' & A). *)
-  destr.
-  generalize (alloc_globals_alloc_external_exists _ _ _ _ m0 M1).
-  intros (m1 & E). exists m1.
-  assert ((gen_symb_table instr_size (AST.prog_defs prog)) = (prog_symbtable tprog)).
-  { unfold match_prog in TRANSF. unfold transf_program in TRANSF.
-    repeat destr_in TRANSF. simpl. auto. }
-  rewrite <- H. auto.
+  assert (WF:well_formed_symbtbl_elements (prog_sectable tprog) (prog_symbtable tprog)).
+  unfold well_formed_symbtbl_elements. intros. eapply PTree.elements_complete in H.
+  eapply match_prog_well_formed_symbtbl;eauto.
   assert (exists m', alloc_sections instr_size (globalenv instr_size tprog) (prog_sectable tprog) Mem.empty = Some m').
   {
     generalize TRANSF. intros TRANSF'.
@@ -1759,7 +1826,9 @@ Proof.
     unfold alloc_sections. simpl.
     rewrite PTree.fold_spec.
     eapply alloc_globals_alloc_sections_exists;eauto. }
-   destruct H. congruence.
+  destruct H. rewrite H.
+  generalize (alloc_globals_alloc_external_exists (prog_symbtable tprog) x (prog_sectable tprog) WF). 
+  intros (m1 & E). exists m1. auto.
 Qed.
 
 

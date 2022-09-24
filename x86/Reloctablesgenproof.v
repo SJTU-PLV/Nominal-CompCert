@@ -528,15 +528,6 @@ Proof.
   - simpl. auto.
 Qed.
 
-Lemma list_length_exists: forall A (l:list A),
-    exists n, length l = n.
-Proof.
-  induction l.
-  exists O. auto.
-  destruct IHl. eexists.
-  simpl. rewrite H. eauto.
-Qed.
-
 Lemma code_eq_size: forall c1 c2,
     Forall2 instr_eq c1 c2 ->
     code_size instr_size c1 = code_size instr_size c2.
