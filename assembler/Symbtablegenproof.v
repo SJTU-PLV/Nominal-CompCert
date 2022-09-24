@@ -1541,6 +1541,176 @@ Proof.
 Qed.
 
 
+Definition init_data_list_aligned (sec:section) :=
+  match sec with
+  | sec_text _ => True
+  | sec_rodata l | sec_rwdata l => Genv.init_data_list_aligned 0 l
+  end.
+
+Lemma alloc_sections_exists: forall n ge secs m0,
+    length secs = n ->
+    (forall sec, In sec snd ## secs -> init_data_list_aligned sec) ->
+    exists m', fold_left
+            (fun (a : option mem) (p : positive * section) => alloc_section instr_size ge a (fst p) (snd p))
+            secs (Some m0) = Some m'.
+Proof.
+  induction n;intros.
+  - eapply length_zero_iff_nil in H. subst.
+    simpl.
+    eexists. split;eauto.  
+  - eapply length_S_inv in H.
+    destruct H as (l' & a & P1 & P2). subst.
+    exploit IHn;eauto.
+    intros. eapply H0. rewrite map_app. eapply in_app.
+    auto.
+    intros (m' & Q1).
+    rewrite fold_left_app. simpl.
+    rewrite Q1. 
+    assert (exists m'', alloc_section instr_size ge0 (Some m') (fst a) (snd a) = Some m'').
+    { unfold alloc_section.
+      destruct a;simpl.
+      exploit (H0 s). rewrite map_app.
+      apply in_app. right. simpl. auto.
+      intros ALIGN.
+      destruct s.
+    + destruct (Mem.alloc_glob p m' 0 (sec_size instr_size (sec_text code))) eqn:FOLD.
+      simpl. simpl in FOLD.
+      unfold Mem.drop_perm. destr.
+      eexists. eauto.
+      unfold Mem.range_perm in n. exfalso.
+      eapply n. intros. eapply Mem.perm_alloc_glob_2;eauto.
+    + simpl. destruct (Mem.alloc_glob p m' 0 (init_data_list_size init)) eqn:FOLD.
+      exploit Genv.store_zeros_exists.
+      unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2 with (lo:=0);eauto.
+      rewrite <- (Z.add_0_l (init_data_list_size init)). eauto.
+      intros (m0' & STORE). rewrite STORE.
+      exploit store_init_data_list_exists.
+      eapply store_zeros_pres_range_perm with (lo:=0).
+      rewrite Z.add_0_l. eauto.
+      rewrite Z.add_0_l. unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2;eauto.
+      simpl in ALIGN. auto.
+      intros (m'' & A). rewrite A.
+      unfold Mem.drop_perm.
+      destr. eexists. eauto.
+      unfold Mem.range_perm in n. exfalso.
+      eapply n. intros. eapply store_init_data_list_perm in A;eauto.
+      eapply A. eapply Genv.store_zeros_perm in STORE;eauto.
+      eapply STORE. eapply Mem.perm_alloc_glob_2;eauto.
+    + simpl. destruct (Mem.alloc_glob p m' 0 (init_data_list_size init)) eqn:FOLD.
+      exploit Genv.store_zeros_exists.
+      unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2 with (lo:=0);eauto.
+      rewrite <- (Z.add_0_l (init_data_list_size init)). eauto.
+      intros (m0' & STORE). rewrite STORE.
+      exploit store_init_data_list_exists.
+      eapply store_zeros_pres_range_perm with (lo:=0).
+      rewrite Z.add_0_l. eauto.
+      rewrite Z.add_0_l. unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2;eauto.
+      simpl in ALIGN. auto.
+      intros (m'' & A). rewrite A.
+      unfold Mem.drop_perm.
+      destr. eexists. eauto.
+      unfold Mem.range_perm in n. exfalso.
+      eapply n. intros. eapply store_init_data_list_perm in A;eauto.
+      eapply A. eapply Genv.store_zeros_perm in STORE;eauto.
+      eapply STORE. eapply Mem.perm_alloc_glob_2;eauto. }
+
+    destruct H. rewrite H. exists x. split;auto.
+Qed.      
+
+Lemma alloc_globals_app1: forall F V (l1 l2: list (ident*globdef F V)) m0 m ge,
+    Genv.alloc_globals ge m0 (l1++l2) = Some m ->
+    exists m', (Genv.alloc_globals ge m0 l1 = Some m' /\
+          Genv.alloc_globals ge m' l2 = Some m).
+Proof.
+  induction l1;simpl;eauto.
+  intros. destr_in H.
+  eapply IHl1 in H.
+  destruct H as (m' & A & B).
+  rewrite A. eexists m'.
+  split;eauto.
+Qed.
+
+Lemma allocs_globals_init_data_list_aligned: forall n defs id sec m m' ge,
+    length defs = n ->
+    Genv.alloc_globals ge m defs = Some m' ->
+    In (id,sec) (PTree.elements (create_sec_table defs)) ->
+    init_data_list_aligned sec.
+Proof.
+  induction n;intros.
+  eapply length_zero_iff_nil in H. subst.    
+  simpl in H0.  exfalso;auto.
+
+  eapply length_S_inv in H.
+  destruct H as (l' & a & P1 & P2). subst.  
+
+  eapply alloc_globals_app1 in H0.
+  destruct H0 as (m'' & A & B).
+  simpl in B. destr_in B.
+  inv B. eapply PTree.elements_complete in H1.
+  unfold create_sec_table in H1.
+  rewrite fold_left_app in H1. simpl in H1.
+  unfold acc_gen_section at 1 in H1.
+  destruct a. destruct g.
+  - destruct f.  
+    + rewrite PTree.gsspec in H1.
+      destr_in H1.
+      * inv H1. simpl. auto.
+      * eapply IHn;eauto.
+        eapply PTree.elements_correct. unfold create_sec_table.
+        eauto.
+    + eapply IHn;eauto.
+      eapply PTree.elements_correct. unfold create_sec_table.      
+      eauto.
+  - destr_in H1.
+    + eapply IHn;eauto.
+      eapply PTree.elements_correct. unfold create_sec_table.      
+      eauto.
+    + destruct l.
+      * destruct (gvar_readonly v).
+        -- destruct i0;
+           try 
+           (rewrite PTree.gsspec in H1;
+           destr_in H1;
+           [inv H1;simpl; split; [apply Z.divide_0_r| auto]|
+            eapply IHn;eauto;
+            eapply PTree.elements_correct;unfold create_sec_table;
+            eauto]).
+           eapply IHn;eauto;
+           eapply PTree.elements_correct;unfold create_sec_table;
+             eauto.
+        -- destruct i0;
+           try 
+           (rewrite PTree.gsspec in H1;
+           destr_in H1;
+           [inv H1;simpl; split; [apply Z.divide_0_r| auto]|
+            eapply IHn;eauto;
+            eapply PTree.elements_correct;unfold create_sec_table;
+            eauto]).
+           eapply IHn;eauto;
+           eapply PTree.elements_correct;unfold create_sec_table;
+             eauto.
+      * unfold Genv.alloc_global in Heqo.
+        destruct (Mem.alloc_glob i m'' 0 (init_data_list_size (gvar_init v))).
+        destr_in Heqo. destr_in Heqo.
+        eapply Genv.store_init_data_list_aligned in Heqo1.
+        rewrite Heql in *. 
+        destruct (gvar_readonly v).
+        -- destruct i0;
+           try (rewrite PTree.gsspec in H1;
+           destr_in H1;
+           [inv H1;unfold init_data_list_aligned;auto|
+            destruct sec;eauto;eapply IHn;eauto;
+            eapply PTree.elements_correct;unfold create_sec_table;
+            eauto]).
+        -- destruct i0;
+           try (rewrite PTree.gsspec in H1;
+           destr_in H1;
+           [inv H1;unfold init_data_list_aligned;auto|
+            destruct sec;eauto;eapply IHn;eauto;
+            eapply PTree.elements_correct;unfold create_sec_table;
+            eauto]).
+Qed.
+           
 (** hard: auxilary lemma for init_mem_exists *)
 Lemma alloc_globals_alloc_sections_exists: forall defs ge1 ge2 m1 m1' m2,
     Genv.alloc_globals ge1 m1 defs = Some m1' ->
@@ -1549,16 +1719,15 @@ Lemma alloc_globals_alloc_sections_exists: forall defs ge1 ge2 m1 m1' m2,
             alloc_section instr_size ge2 a (fst p) (snd p))
        (PTree.elements (create_sec_table defs)) (Some m2) = Some m2'.
 Proof.
-  induction defs;simpl;intros. eauto.
-  
- 
-  (* - exists m2. auto. *)
-  destr_in H.
-    (* relation between defs and (create_sec_table defs) *)
-    (* generalize the section table and symbol table
-induction on the PTree.elements xxx
-also require the list_norepet    *)
-Admitted.
+  intros.
+  set (l:= (PTree.elements (create_sec_table defs))).
+  eapply alloc_sections_exists;eauto.
+  intros.
+  eapply in_map_iff in H0.
+  destruct H0 as (x & A & B). destruct x.
+  simpl in A. subst.
+  eapply allocs_globals_init_data_list_aligned in H;eauto.
+Qed.
 
 Lemma alloc_globals_alloc_external_exists: forall defs ge m1 m1' m2,
     Genv.alloc_globals ge m1 defs = Some m1' ->
