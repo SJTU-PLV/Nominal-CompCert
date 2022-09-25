@@ -2557,6 +2557,52 @@ Proof.
       inv H7; eauto. inv H8; eauto.
 Qed.
 
+Lemma injp_inj__inj :
+  subcklr inj (injp @ inj).
+Proof.
+  etransitivity. eapply inj_inj.
+  apply cklr_compose_subcklr. apply sub_inj_injp.
+  reflexivity.
+Qed.
+(*
+Lemma injp_inj__inj :
+  subcklr inj (injp @ inj).
+Proof.
+  red. intros [j sup1 sup2] se1 se2 m1 m2 MSTBL MMEM0.
+  inversion MMEM0 as [? ? ? MMEM]. subst.
+  exists ((injpw (meminj_dom j) m1 m1 (mem_inject_dom j m1 m2 MMEM)),(injw j (Mem.support m1) (Mem.support m2))).
+  simpl in *.
+  repeat apply conj.
+  - inv MSTBL. simpl in *.
+    exists se1. split. constructor; eauto.
+    eapply match_stbls_dom; eauto.
+    constructor; eauto.
+  - exists m1. constructor; eauto.
+  - rewrite meminj_dom_compose. eauto.
+  - intros [[j1 m1' m2' Hm1'] [j2 s2 s3]]. intros.
+    inv H. inv H0. simpl in *. inv H1. inv H2. inv H. inversion H3. subst.
+    inversion H0. subst x. subst m1'0. subst.
+    exists (injw (compose_meminj j1 j2) (Mem.support m1') (Mem.support m2'0)).
+    repeat apply conj.
+    + constructor.
+      eapply Mem.inject_compose; eauto.
+    + simpl. constructor. 4: eauto.
+      rewrite <- (meminj_dom_compose j). rauto.
+      red. intros.
+      unfold compose_meminj in H1.
+      destruct (j1 b) as [[b1 d1]|] eqn: Hj1; try congruence.
+      destruct (j2 b1) as [[b2 d2]|] eqn: Hj2; try congruence.
+      inv H1.
+      exploit H17; eauto. unfold meminj_dom. rewrite H. auto.
+      intros [A B].
+      exploit H10. 2: eauto. inversion MMEM. eauto.
+      intros [C D].
+      split; eauto.
+      inversion H14. eauto.
+    + simpl. eauto.
+Qed.
+*)
+
 (* injp   ------------     injp
                 ------     injp ---------- inj *)
 Lemma injp_inj :
