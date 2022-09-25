@@ -57,6 +57,20 @@ Record vaext_incr (w w' : vaext_world) : Prop :=
       Mem.loadbytes (vaext_m1 w') b ofs n = Some bytes ->
       Mem.loadbytes (vaext_m1 w) b ofs n = Some bytes;
   }.
+(*
+
+
+ m1''     m1 <- va          m1'             va @ ext @ va @ ext @ va @ ext   ---  va @ injp
+          injp             injp 
+          m2 <- va          m2' <-
+          injp             injp
+          m3 <- va          m2' <-
+          injp              injp
+ m2''     m4                m2' <- va                injp @ va
+
+
+
+*)
 
 Instance vaext_incr_preo:
   PreOrder vaext_incr.

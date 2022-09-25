@@ -1694,6 +1694,118 @@ Proof.
   - eauto using sound_final.
 Qed.
 
+(** * vamatch *)
+
+Lemma inject_list_exists :
+  forall vl1 vl2 v1 j,
+    In v1 vl1 ->
+    Val.inject_list j vl1 vl2 ->
+    exists v2, In v2 vl2 /\
+          Val.inject j v1 v2.
+Proof.
+  induction vl1; intros.
+  inv H0.
+  inv H.
+  destruct H. subst. inv H0. exists v'. split; eauto. left. auto.
+  inv H0. exploit IHvl1; eauto.
+  intros (v2 & A & B).
+  exists v2. split. right. auto. auto.
+Qed.
+(*
+
+m1   <----- vamatch se bc m1        Vundef
+
+ext inj
+
+m2   <----- vamatch se bc m2        Vint
+
+
+vamatch
+ext       <=     ext         <= vamatch
+vamatch          vamatch        ext
+
+injp wt vamatch CA
+
+*)
+Lemma vamatch_propagate :
+  forall v1 v2 bc ,
+    Val.inject inject_id v1 v2 ->
+    vmatch bc v2 Vtop ->
+    vmatch bc v1 Vtop.
+Proof.
+  intros. inv H; inv H0; constructor.
+  unfold inject_id in H1. inv H1. eauto.
+  rewrite Ptrofs.add_zero in H2. eauto.
+Qed.
+
+Lemma vamatch_propagate' :
+  forall v1 v2 bc ,
+    Val.inject inject_id v1 v2 ->
+    vmatch bc v1 Vtop ->
+    vmatch bc v2 Vtop.
+Proof.
+  intros. inv H; inv H0; try constructor; eauto.
+  unfold inject_id in H1. inv H1.
+  rewrite Ptrofs.add_zero. eauto.
+ Abort.
+
+
+
+Lemma smatch_propagate_extends: forall m1 m2 bc b ab,
+    Mem.extends m1 m2 ->
+    smatch bc m2 b ab ->
+    smatch bc m1 b ab.
+Proof.
+  intros. inv H0. constructor.
+  - intros.
+    exploit Mem.load_extends; eauto. intros [v2 [A B]].
+    exploit H1; eauto.
+    intro. inv H3; inv B; constructor; eauto.
+  - intros.
+    exploit Mem.loadbytes_extends; eauto. intros [bytes2 [A B]].
+    inv B. inv H5. inv H9. unfold inject_id in H5. inv H5. rewrite Ptrofs.add_zero in A.
+    inv H7.
+    exploit H2; eauto.
+Qed.
+
+Lemma bmatch_propagate_extends: forall m1 m2 bc b,
+    Mem.extends m1 m2 ->
+    bmatch bc m2 b (ablock_init Ptop) ->
+    bmatch bc m1 b (ablock_init Ptop).
+Proof.
+  intros. inv H0. constructor; eauto.
+  - eapply smatch_propagate_extends; eauto.
+  - intros.
+    exploit Mem.load_extends; eauto. intros [v2 [A B]].
+    exploit H2; eauto.
+    intro. inv H3; inv B; try constructor; eauto.
+    + unfold ablock_load in H6. unfold ablock_init in H6. simpl in H6.
+    destruct chunk; simpl in H6; inv H6.
+    + unfold ablock_load in H6. unfold ablock_init in H6. simpl in H6.
+    destruct chunk; simpl in H6; inv H6.
+    + unfold ablock_load in H6. unfold ablock_init in H6. simpl in H6.
+    destruct chunk; simpl in H6; inv H6.
+    + unfold ablock_load in H6. unfold ablock_init in H6. simpl in H6.
+    destruct chunk; simpl in H6; inv H6.
+Qed.
+
+Lemma mmatch_propgate_extends :
+      forall m1 m2 bc,
+        Mem.extends m1 m2 ->
+        mmatch bc m2 mtop ->
+        mmatch bc m1 mtop.
+Proof.
+  intros. inv H0. constructor; eauto.
+  - intros. exploit mmatch_stack; eauto. simpl.
+    eapply bmatch_propagate_extends; eauto.
+  - intros. inv H1.
+  - intros. exploit mmatch_nonstack; eauto.
+    eapply smatch_propagate_extends; eauto.
+  - intros. exploit mmatch_top; eauto.
+    eapply smatch_propagate_extends; eauto.
+  - inversion H. rewrite mext_sup. eauto.
+Qed.
+
 (** ** Soundness of the initial memory abstraction *)
 
 Require Import Axioms.
