@@ -335,7 +335,7 @@ Hypothesis TRANSF: match_prog prog tprog.
 
 (* some properties *)
 Lemma match_prog_well_formed_symbtbl:
-  well_formed_symbtbl (prog_sectable tprog) (prog_symbtable tprog).
+  well_formed_symbtbl instr_size (prog_sectable tprog) (prog_symbtable tprog).
 Proof.
   unfold match_prog in TRANSF.
   unfold transf_program in TRANSF.
@@ -354,7 +354,7 @@ Proof.
     destruct IHl.
     eexists. simpl. auto. }
   destruct LEN. revert H H0.
-  generalize x,l. clear.
+  generalize x,l,id,e. clear.
   induction x;intros.
   rewrite length_zero_iff_nil in H0. subst.
   simpl in H. rewrite PTree.gempty in H. inv H.
@@ -370,46 +370,50 @@ Proof.
     destruct g.
     + destruct f;simpl;try congruence.
       rewrite PTree.gss.
-      split;try congruence.
-      eexists. eauto.
+      split;try split;try congruence.
+      eexists. split;eauto.
+      (* split;intros;try congruence. simpl. auto. *)
     + simpl;destruct (gvar_init v);simpl.
       congruence.
       destruct i;
       try (
       destruct gvar_readonly;
       simpl;rewrite PTree.gss;
-      split;try congruence;eexists;eauto;
+      split;try split;try congruence;eexists;split;eauto; split;simpl;try congruence;auto;
       simpl;rewrite PTree.gss;
-      split;try congruence;eexists;eauto).
+      split;try split;try congruence;eexists;split;eauto; split;simpl;try congruence;auto).
    
       destruct l;simpl;auto.
       try (destruct gvar_readonly;
       simpl;rewrite PTree.gss;
-      split;try congruence;eexists;eauto;
+      split;try split;try congruence;eexists;split;eauto; split;simpl;try congruence;auto;
       simpl;rewrite PTree.gss;
-      split;try congruence;eexists;eauto).
+      split;try split;try congruence;eexists;split;eauto; split;simpl;try congruence;auto).
   - rewrite fold_left_app.
     rewrite PTree.gsspec in *.
-    destr_in H.    
+    destr_in H.
+    (* if symbentry_secindex e = secindex_normal i0 then i0 = id can be proved by symbtable generation *)
+    exploit IHx;eauto.
     destruct (symbentry_secindex e).
-    + simpl.
+    + intros (A & sec & B & C & D). simpl.
       destruct g.
       destruct f.
-      rewrite PTree.gsspec. destr.
-      split;try congruence;eauto. eapply IHx;eauto.
-      eapply IHx;eauto.
-      eapply IHx;eauto.
-      destruct (gvar_init v).
-      eapply IHx;eauto.
-      destruct i0;destruct gvar_readonly;try rewrite PTree.gsspec;destr;
-           split;try eapply IHx;eauto. 
-      try rewrite PTree.gsspec;destr;eauto.
-      eapply IHx;eauto.
-      try rewrite PTree.gsspec;destr;eauto.
-      eapply IHx;eauto.
+      subst.
+      rewrite PTree.gsspec. 
+      split;try congruence;eauto.
+      split;eauto. 
+      destr.
+      eauto. eauto.
 
-    + eapply IHx;eauto.
-    + eapply IHx;eauto.
+      destruct (gvar_init v);eauto.
+      destruct i0;destruct gvar_readonly;try rewrite PTree.gsspec;destr;eauto.
+        (* split;try split;eauto;try eapply IHxeauto. *)
+
+      try rewrite PTree.gsspec;destr;eauto.
+      try rewrite PTree.gsspec;destr;eauto.
+
+    + eauto.
+    + eauto.
 Qed.
 
 (** ** Definitions of Matching States *)
@@ -1019,14 +1023,14 @@ Lemma init_meminj_invert_strong :forall m b b' delta ,
     Mem.flat_inj (Mem.support m) b = Some (b',delta) ->
     delta = 0 /\
     exists id gd,
-      b = Global id
-      /\ Globalenvs.Genv.find_symbol ge id = Some b
+      Globalenvs.Genv.find_symbol ge id = Some b
       /\ Genv.find_symbol tge id = Some (b, Ptrofs.zero)
       /\ Genv.find_def ge b = Some gd
       /\ match_sec_def id tprog gd.
 Proof.
   unfold Genv.init_mem.
-  intros m b b' del ALLOC INJ.  
+  intros m b b' del ALLOC INJ.
+  
   eapply Genv.alloc_globals_support in ALLOC.
   rewrite ALLOC in INJ. clear ALLOC.
   unfold Mem.flat_inj in INJ.
@@ -1038,13 +1042,13 @@ Proof.
   repeat destr_in TRANSF.
   unfold globalenv. simpl. unfold Genv.find_symbol.
   simpl.
-
+  
   rewrite Mem.support_empty in s.
   exploit advance_next_exists;eauto.
   intros (id & gd & P1 & P2). subst.
 
   exists id,gd. split;auto.
-  split.
+  (* split. *)
 
   (* ge find_symbol *)
   apply Genv.find_symbol_exists in P2.
@@ -1254,10 +1258,18 @@ Lemma init_mem_inj_1:
 Proof.  
   constructor;intros.
   - exploit init_meminj_invert_strong;eauto.
-    intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
+    intros (DEL & id & gd & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
     rewrite Z.add_0_r.
     exploit (Genv.init_mem_characterization_gen);eauto. intro INIT1.
-    exploit (init_mem_characterization_gen). apply TIM. apply GDEQ.
+    exploit (init_mem_characterization_gen);eauto.
+    (* assert (WF:well_formed_symbtbl_elements instr_size (prog_sectable tprog) (prog_symbtable tprog)). *)
+    (* unfold well_formed_symbtbl_elements. intros. eapply PTree.elements_complete in H1. *)
+    eapply match_prog_well_formed_symbtbl;eauto.
+    (* eauto. (* find_symbol_not_fresh *) *)
+    
+    (* apply TIM. (* apply GDEQ. *) *)
+    (* eapply FINDSYM2. *)
+    rewrite Ptrofs.unsigned_zero. cbn.
     intro INIT2.
     inv MATCH.
     + rewrite H2 in *.
@@ -1335,14 +1347,20 @@ Proof.
       
       
   - exploit init_meminj_invert_strong;eauto.
-    intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
+    intros (DEL & id & gd & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
     apply Z.divide_0_r.
   - exploit init_meminj_invert_strong;eauto.
-    intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
+    intros (DEL & id & gd & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
     rewrite Z.add_0_r.
     unfold Mem.flat_inj in H. destr_in H. inv H.
     exploit (Genv.init_mem_characterization_gen);eauto. intro INIT1.
-    exploit (init_mem_characterization_gen). apply TIM. eapply (eq_refl (Global id)).
+    exploit (init_mem_characterization_gen);eauto.
+    (* assert (WF:well_formed_symbtbl_elements instr_size (prog_sectable tprog) (prog_symbtable tprog)). *)
+    (* unfold well_formed_symbtbl_elements. intros. eapply PTree.elements_complete in H. *)
+    eapply match_prog_well_formed_symbtbl;eauto.
+    (* eauto. (* find_symbol_not_fresh *) *)
+    (* apply TIM. (* eapply (eq_refl (Global id)). *) *)
+    (* eapply FINDSYM2. *) rewrite Ptrofs.unsigned_zero. cbn.
     intro INIT2.
     inv MATCH.
     + rewrite H1 in *.
@@ -1428,7 +1446,7 @@ Proof.
   - apply init_mem_inj_1.
   - unfold Mem.flat_inj. destr.
   - exploit init_meminj_invert_strong;eauto.
-    intros (DEL & id & gd & GDEQ & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
+    intros (DEL & id & gd & FINDSYM1 & FINDSYM2 & FINDEF & MATCH). subst delta.
     unfold Mem.flat_inj in H. destr_in H. inv H.
     unfold Mem.valid_block. 
     (* need Genv.find_symbol_not_fresh for tge*)
@@ -1732,18 +1750,9 @@ Proof.
   eapply allocs_globals_init_data_list_aligned in H;eauto.
 Qed.
 
-Definition well_formed_symbtbl_elements sectbl symbtbl:=
-    forall (id : positive) (e : symbentry),
-      In (id,e) (PTree.elements symbtbl) ->
-      match symbentry_secindex e with
-      | secindex_normal i => symbentry_type e <> symb_notype /\ exists sec : RelocProg.section instruction init_data, sectbl ! i = Some sec
-      | secindex_comm => symbentry_type e = symb_data
-      | secindex_undef => symbentry_type e <> symb_notype
-      end.
-
 
 Lemma alloc_globals_alloc_external_exists: forall symbtbl m sectbl,
-    well_formed_symbtbl_elements sectbl symbtbl ->
+    well_formed_symbtbl_elements instr_size sectbl symbtbl ->
     exists m', alloc_external_symbols m symbtbl = Some m'.
 Proof.
   unfold well_formed_symbtbl_elements.
@@ -1814,7 +1823,7 @@ Proof.
   intros m M1.
   (* exploit (alloc_globals_alloc_sections_exists (AST.prog_defs prog) (Genv.globalenv prog) ((globalenv instr_size tprog)) (Mem.empty) m (Mem.empty));eauto. *)
   (* intros (m2' & A). *)
-  assert (WF:well_formed_symbtbl_elements (prog_sectable tprog) (prog_symbtable tprog)).
+  assert (WF:well_formed_symbtbl_elements instr_size (prog_sectable tprog) (prog_symbtable tprog)).
   unfold well_formed_symbtbl_elements. intros. eapply PTree.elements_complete in H.
   eapply match_prog_well_formed_symbtbl;eauto.
   assert (exists m', alloc_sections instr_size (globalenv instr_size tprog) (prog_sectable tprog) Mem.empty = Some m').

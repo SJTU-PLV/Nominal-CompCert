@@ -415,25 +415,28 @@ End WITHGE1.
 
 (** globals_initialized *)
 Definition globals_initialized (ge: Genv.t) (prog: program) (m:mem):=
-  forall id b,
-    b = Global id ->
+  forall id b ofs0,
+    (* b = Global id -> *)
+    Genv.find_symbol ge id = Some (b,ofs0) ->
+    let ofs0 := Ptrofs.unsigned ofs0 in
     match prog.(prog_sectable) ! id with
     | Some sec =>
+      (* ofs0 = 0 /\ : required if supporting section merging *)
       match sec with
       | sec_text code =>
-        Mem.perm m b 0 Cur Nonempty /\
+        Mem.perm m b ofs0 Cur Nonempty /\
         let sz := code_size instr_size code in
-        (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ p = Nonempty)
+        (forall ofs k p, Mem.perm m b (ofs0+ofs) k p -> 0 <= ofs < sz /\ p = Nonempty)
       | sec_rodata data =>        
         let sz := (init_data_list_size data) in
-        Mem.range_perm m b 0 sz Cur Readable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Readable p)
-        /\ load_store_init_data ge m b 0 data
-        /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+        Mem.range_perm m b ofs0 sz Cur Readable /\ (forall ofs k p, Mem.perm m b (ofs0+ofs) k p -> 0 <= ofs < sz /\ perm_order Readable p)
+        /\ load_store_init_data ge m b ofs0 data
+        /\ Mem.loadbytes m b ofs0 sz = Some (bytes_of_init_data_list ge data)
       | sec_rwdata data =>
         let sz := (init_data_list_size data) in
-        Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
-        /\ load_store_init_data ge m b 0 data
-        /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+        Mem.range_perm m b ofs0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b (ofs0+ofs) k p -> 0 <= ofs < sz /\ perm_order Writable p)
+        /\ load_store_init_data ge m b ofs0 data
+        /\ Mem.loadbytes m b ofs0 sz = Some (bytes_of_init_data_list ge data)
       end
     | None =>
       (* common symbol or external function *)
@@ -447,11 +450,13 @@ Definition globals_initialized (ge: Genv.t) (prog: program) (m:mem):=
           let sz := e.(symbentry_size) in
           let data := Init_space sz :: nil in
           Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
-          /\ load_store_init_data ge m b 0 data
+          /\ load_store_init_data ge m b 0data
           /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
         | symb_data,secindex_undef =>
           Mem.perm m b 0 Cur Nonempty /\
           (forall ofs k p, Mem.perm m b ofs k p -> ofs = 0 /\ p = Nonempty)
+        (* when id resides in a location of a section *)
+        (* if id <> i then in secidx is allowed: the following cases are required *)
         | _,_ => False
         end
       | _ => False
@@ -466,18 +471,316 @@ Definition init_mem (p: program) :=
   | None => None
   end.
 
-(** Properties about init_mem *)
-Lemma init_mem_characterization_gen:
-  forall p m,
-  init_mem p = Some m ->
-  globals_initialized (globalenv p) p m.
+Definition well_formed_symbtbl (sectbl:sectable) symbtbl:=
+  forall id e,
+    symbtbl ! id = Some e ->
+    match symbentry_secindex e with
+    | secindex_normal i =>        
+      symbentry_type e <> symb_notype
+      /\ i = id                  (* does not support sections merging *)
+      /\ (exists sec, sectbl ! i = Some sec
+                /\ sec_size instr_size sec = symbentry_size e
+                /\ symbentry_value e = 0)
+                (* separation: it should be more complicate. If include the restriction list below, the globals_initialized should be enhanced *)
+                (* (i <> id -> (0 <= symbentry_value e + symbentry_size e <= sec_size instr_size sec))) *)
+    | secindex_comm =>
+      symbentry_type e = symb_data /\ sectbl ! id = None
+    | secindex_undef =>
+      symbentry_type e <> symb_notype /\ sectbl ! id = None
+    end.
+
+Definition globals_initialized_sections ge m b sec :=
+  match sec with
+  | sec_text code =>
+    Mem.perm m b 0 Cur Nonempty /\
+    (let sz := code_size instr_size code in
+     forall (ofs : Z) (k : perm_kind) (p : permission), Mem.perm m b ofs k p -> 0 <= ofs < sz /\ p = Nonempty)
+  | sec_rwdata data =>
+    let sz := init_data_list_size data in
+    Mem.range_perm m b 0 sz Cur Writable /\
+    (forall (ofs : Z) (k : perm_kind) (p : permission),
+        Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p) /\
+    load_store_init_data ge m b 0 data /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+  | sec_rodata data =>
+    let sz := init_data_list_size data in
+    Mem.range_perm m b 0 sz Cur Readable /\
+    (forall (ofs : Z) (k : perm_kind) (p : permission),
+        Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Readable p) /\
+    load_store_init_data ge m b 0 data /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+  end.                                                                       
+
+Definition globals_initialized_external ge m b e:=
+  match e.(symbentry_type),e.(symbentry_secindex) with
+  | symb_func,secindex_undef =>
+    Mem.perm m b 0 Cur Nonempty /\
+    (forall ofs k p, Mem.perm m b ofs k p -> ofs = 0 /\ p = Nonempty)
+  | symb_data,secindex_comm =>
+    let sz := e.(symbentry_size) in
+    let data := Init_space sz :: nil in
+    Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
+    /\ load_store_init_data ge m b 0 data
+    /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+  | symb_data,secindex_undef =>
+    Mem.perm m b 0 Cur Nonempty /\
+    (forall ofs k p, Mem.perm m b ofs k p -> ofs = 0 /\ p = Nonempty)
+  | _,_ => False
+  end.
+
+Lemma alloc_sections_none: forall secs ge,
+    fold_left
+      (fun (a : option mem) (p0 : positive * section) => alloc_section ge a (fst p0) (snd p0))
+      secs None = None.
 Proof.
-  Admitted.
+  induction secs;simpl;auto.
+Qed.
+
+Lemma alloc_sections_pres_characterization: forall secs sec ge m0 m id ,
+    ~ In id  (map fst secs) ->
+    globals_initialized_sections ge m0 (Global id) sec ->
+    fold_left
+      (fun (a : option mem) (p0 : positive * section) => alloc_section ge a (fst p0) (snd p0))
+      secs (Some m0) = Some m ->
+    globals_initialized_sections ge m (Global id) sec.
+Proof.
+  induction secs;simpl;intros.
+  inv H1. auto.
+  eapply Decidable.not_or in H.
+  destruct H.
+  destruct a. simpl in *.
+  destruct s;simpl in *.
+  - destruct (Mem.alloc_glob i m0 0 (code_size instr_size code)) eqn:ALLOC.
+    destruct ((Mem.drop_perm m1 b 0 (code_size instr_size code) Nonempty)) eqn:DROP.
+    assert (globals_initialized_sections ge m2 (Global id) sec).
+    { unfold globals_initialized_sections.
+      unfold globals_initialized_sections in H0.
+      destruct sec.
+      - destruct H0. split.
+        + eapply Mem.perm_drop_3;eauto.
+          left. eapply Mem.alloc_glob_result in ALLOC.
+          subst. congruence.
+          eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+          eauto.
+          congruence.
+        + intros.
+          assert (Mem.perm m0 (Global id) ofs k p).
+          eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.                   
+          eapply Mem.perm_drop_4;eauto.
+          congruence. eapply H3 in H5.
+          eauto.
+      - destruct H0 as (P1 & P2 & P3 & P4).
+        split.
+        (* 1 *)
+        unfold Mem.range_perm in *.
+        intros.
+        eapply Mem.perm_drop_3;eauto.
+        left. eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+        eauto.
+        congruence.
+        (* 2 *)
+        split.
+        intros.
+        assert (Mem.perm m0 (Global id) ofs k p).
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.                   
+        eapply Mem.perm_drop_4;eauto.
+        congruence. eapply P2 in H3.
+        eauto.
+        (* 3 *)
+        split.
+        Mem.load_drop
+          (* define it *)
+        Genv.load_store_init_data_invariant
+        
+Lemma alloc_section_characterization: forall sec id m0 m ge,
+    alloc_section ge (Some m0) id sec = Some m ->
+    globals_initialized_sections ge m (Global id) sec.
+Admitted.
+
+
+
+Lemma alloc_external_symbols_none: forall l,
+    fold_left (fun (a : option mem) (p : positive * symbentry) => alloc_external_comm_symbol a (fst p) (snd p))
+              l None = None.
+Proof.
+  induction l;simpl;auto.
+Qed.
+
+Lemma alloc_external_symbols_pres_characterization: forall m0 symbtbl sectbl m ge id sec,
+    sectbl!id = Some sec ->
+    well_formed_symbtbl sectbl symbtbl ->
+    alloc_external_symbols m0 symbtbl = Some m ->
+    globals_initialized_sections ge m0 (Global id) sec ->
+    globals_initialized_sections ge m (Global id) sec.
+Admitted.
+
+
+Lemma alloc_external_symbols_pres_external_characterization: 
+  forall symbs symb ge m0 m id,
+    ~ In id (map fst symbs) ->
+    globals_initialized_external ge m0 (Global id) symb ->
+    fold_left (fun (a : option mem) (p : positive * symbentry) => alloc_external_comm_symbol a (fst p) (snd p))
+              symbs (Some m0) = Some m ->
+    globals_initialized_external ge m (Global id) symb.
+Admitted.
+
+Lemma alloc_external_characterization: forall symb id m0 m ge,
+    alloc_external_comm_symbol (Some m0) id symb = Some m ->
+    globals_initialized_external ge m (Global id) symb.
+Admitted.
+
+(** Properties about init_mem *)
+Lemma init_mem_characterization_gen: forall p m,
+    well_formed_symbtbl (prog_sectable p) (prog_symbtable p) ->
+    init_mem p = Some m ->
+    globals_initialized (globalenv p) p m.
+Proof.
+   unfold init_mem.
+   unfold globals_initialized.
+   intros p m WF H id b ofs0 G. destr_in H.
+
+   (* symbentry exists *)
+   unfold globalenv in G. unfold Genv.find_symbol in G.
+   unfold gen_symb_map in G.
+   simpl in G. rewrite PTree.gmap in G. unfold option_map in G.
+   destr_in G.
+
+   unfold well_formed_symbtbl in WF.
+   generalize (WF id s Heqo0). rename WF into WF0. intros WF.
+   unfold gen_global in G.
+   (* destruct symbentry_secindex s *)
+   
+   generalize (PTree.elements_keys_norepet (prog_sectable p)).
+   generalize (PTree.elements_keys_norepet (prog_symbtable p)).
+   intros NOREP1 NOREP2.
+   
+   destruct (symbentry_secindex s) eqn:SECIDX.
+   - inv G. 
+     destruct WF as (P1 & P2 & sec & P3 & P4 & P5).
+     rewrite P5. rewrite Ptrofs.unsigned_repr. simpl.
+     subst. rewrite P3.
+     2: { unfold Ptrofs.max_unsigned. unfold Ptrofs.modulus.
+          unfold Ptrofs.wordsize. unfold Wordsize_Ptrofs.wordsize.
+          destr;simpl;lia. }
+     
+     unfold alloc_sections in Heqo. rewrite PTree.fold_spec in Heqo.
+     exploit PTree.elements_correct;eauto. 
+     intros INELE.
+     unfold section in *.
+     set (l:= (PTree.elements (prog_sectable p))) in *.
+     eapply in_norepet_unique in INELE;eauto. destruct INELE as (gl1 & gl2 & Q1 & Q2 & Q3).
+     rewrite Q1 in *.
+     rewrite fold_left_app in Heqo.
+     simpl in Heqo.
+     unfold ident in *.
+     set (m0':=(fold_left
+                  (fun (a : option mem) (p0 : positive * RelocProg.section instruction init_data) =>
+                     alloc_section (globalenv p) a (fst p0) (snd p0)) gl1 (Some Mem.empty))) in Heqo.
+     destruct m0'.
+     + destruct ((alloc_section (globalenv p) (Some m1) id sec)) eqn:ALLOC.
+       * eapply alloc_section_characterization in ALLOC.
+         exploit alloc_sections_pres_characterization. eapply Q2.
+         eapply ALLOC. eauto.
+         intros Q.
+         exploit alloc_external_symbols_pres_characterization;eauto.
+       * erewrite alloc_sections_none in Heqo.
+         congruence.
+     + simpl in Heqo.
+       erewrite alloc_sections_none in Heqo.
+       congruence.
+   - destruct WF as (P1 & P2).
+     rewrite P2. rewrite P1.
+     inv G. 
+     unfold alloc_external_symbols in H. rewrite PTree.fold_spec in H.
+     exploit PTree.elements_correct;eauto. 
+     intros INELE.
+     unfold section in *.
+     set (l:= (PTree.elements (prog_symbtable p))) in *.
+     eapply in_norepet_unique in INELE;eauto. destruct INELE as (gl1 & gl2 & Q1 & Q2 & Q3).
+     rewrite Q1 in *.
+     rewrite fold_left_app in H.
+     simpl in H.
+     unfold ident in *.
+     set (m0':=(fold_left
+           (fun (a : option mem) (p : positive * symbentry) => alloc_external_comm_symbol a (fst p) (snd p)) gl1
+           (Some m0))) in *.
+     destruct m0'.
+     + destruct (alloc_external_comm_symbol (Some m1) id s) eqn:ALLOC.
+       * eapply alloc_external_characterization in ALLOC.
+         exploit alloc_external_symbols_pres_external_characterization. eapply Q2.
+         eapply ALLOC. eauto.
+         unfold globals_initialized_external.
+         rewrite P1. rewrite SECIDX.
+         eauto.
+       * erewrite alloc_external_symbols_none in H.
+         congruence.
+     + simpl in H.
+       erewrite alloc_external_symbols_none in H.
+       congruence.
+   - destruct WF as (P1 & P2).
+     rewrite P2. destr.
+     (* 2 same goals *)
+     { inv G. 
+     unfold alloc_external_symbols in H. rewrite PTree.fold_spec in H.
+     exploit PTree.elements_correct;eauto. 
+     intros INELE.
+     unfold section in *.
+     set (l:= (PTree.elements (prog_symbtable p))) in *.
+     eapply in_norepet_unique in INELE;eauto. destruct INELE as (gl1 & gl2 & Q1 & Q2 & Q3).
+     rewrite Q1 in *.
+     rewrite fold_left_app in H.
+     simpl in H.
+     unfold ident in *.
+     set (m0':=(fold_left
+           (fun (a : option mem) (p : positive * symbentry) => alloc_external_comm_symbol a (fst p) (snd p)) gl1
+           (Some m0))) in *.
+     destruct m0'.
+     + destruct (alloc_external_comm_symbol (Some m1) id s) eqn:ALLOC.
+       * eapply alloc_external_characterization in ALLOC.
+         generalize (alloc_external_symbols_pres_external_characterization gl2 s (globalenv p) m2 m id Q2 ALLOC H). 
+         unfold globals_initialized_external.
+         rewrite Heqs0. rewrite SECIDX.
+         eauto.
+       * erewrite alloc_external_symbols_none in H.
+         congruence.
+     + simpl in H.
+       erewrite alloc_external_symbols_none in H.
+       congruence. }
+
+     inv G.
+     unfold alloc_external_symbols in H. rewrite PTree.fold_spec in H.
+     exploit PTree.elements_correct;eauto. 
+     intros INELE.
+     unfold section in *.
+     set (l:= (PTree.elements (prog_symbtable p))) in *.
+     eapply in_norepet_unique in INELE;eauto. destruct INELE as (gl1 & gl2 & Q1 & Q2 & Q3).
+     rewrite Q1 in *.
+     rewrite fold_left_app in H.
+     simpl in H.
+     unfold ident in *.
+     set (m0':=(fold_left
+           (fun (a : option mem) (p : positive * symbentry) => alloc_external_comm_symbol a (fst p) (snd p)) gl1
+           (Some m0))) in *.
+     destruct m0'.
+     + destruct (alloc_external_comm_symbol (Some m1) id s) eqn:ALLOC.
+       * eapply alloc_external_characterization in ALLOC.
+         generalize (alloc_external_symbols_pres_external_characterization gl2 s (globalenv p) m2 m id Q2 ALLOC H). 
+         unfold globals_initialized_external.
+         rewrite Heqs0. rewrite SECIDX.
+         eauto.
+       * erewrite alloc_external_symbols_none in H.
+         congruence.
+     + simpl in H.
+       erewrite alloc_external_symbols_none in H.
+       congruence.
+Qed.       
 
 
 Lemma store_init_data_nextblock : forall v ge m b ofs m',
   store_init_data ge m b ofs v = Some m' ->
   Mem.nextblock m' = Mem.nextblock m.
+
+         
 Proof.
   intros. destruct v; simpl in *; try now (eapply Mem.nextblock_store; eauto).
   eapply Genv.store_zeros_nextblock.
@@ -487,7 +790,7 @@ Qed.
 Lemma store_init_data_list_nextblock : forall l ge m b ofs m',
   store_init_data_list ge m b ofs l = Some m' ->
   Mem.nextblock m' = Mem.nextblock m.
-Proof.
+ Proof.
   induction l; intros.
   - inv H. auto.
   - inv H. destr_match_in H1; inv H1.
@@ -763,19 +1066,6 @@ Section STORE_INIT_DATA_PRESERVED.
   
 End STORE_INIT_DATA_PRESERVED.
 
-
-
-Definition well_formed_symbtbl (sectbl:sectable) symbtbl:=
-  forall id e,
-    symbtbl ! id = Some e ->
-    match symbentry_secindex e with
-    | secindex_normal i =>        
-      symbentry_type e <> symb_notype /\  exists sec,sectbl ! i = Some sec
-    | secindex_comm =>
-      symbentry_type e = symb_data
-    | secindex_undef =>
-      symbentry_type e <> symb_notype
-    end.
 
 Lemma alloc_sections_valid_aux: forall l b m m' ge,
     fold_left
@@ -1102,7 +1392,7 @@ Proof.
   generalize (MATCH _ _ Heqo0). intros A.  
   unfold Mem.valid_block.
   destr_in A.
-  - destruct A as (P1 & sec & P2).
+  - destruct A as (P1 & sec & P2 & P3 & p4).
     eapply alloc_sections_valid in Heqo;eauto.
     eapply alloc_external_symbols_valid in INIT;eauto.
     rewrite Heqs0 in INIT. inv H0. eauto.

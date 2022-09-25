@@ -42,45 +42,6 @@ Proof.
 Qed.
 
 
-Remark in_norepet_unique:
-  forall T n (gl: list (ident * T)) id g,
-    length gl = n ->
-  In (id, g) gl -> list_norepet (map fst gl) ->
-  exists gl1 gl2, gl = gl1 ++ (id, g) :: gl2 /\ ~In id (map fst gl2) /\ ~In id (map fst gl1).
-Proof.
-  induction n;intros.
-  rewrite length_zero_iff_nil in H. subst.
-  unfold transl_code in H0. simpl in *. inv H0.
-
-  exploit LocalLib.length_S_inv;eauto.
-  intros (l1 & a1 & A1 & B1).
-  assert (exists l2 a2, gl = a2::l2 /\ length l2 = n).
-  { destruct gl. simpl in H. congruence.
-    exists gl,p. auto. }
-  destruct H2 as (l2 & a2 & A2 & B2).
-  subst.
-  destruct l1.
-  - simpl in *. inv A2.
-    destruct H0;subst.
-    exists [],[]. simpl. auto.
-    apply False_rect;auto.      (* can not use congruence, why? *)
-  - simpl in *. inv A2.
-    destruct H0;subst.
-    + exists [],(l1++[a1]).
-      inv H1. simpl. auto.
-    + inv H1.
-      exploit IHn;eauto. intros (gl1 & gl2 & X & Y & Z).
-      rewrite X in *. exists (a2::gl1),gl2.
-      simpl. split;auto.
-      split;auto. clear IHn.
-      rewrite map_app in H4. simpl in H4.
-      apply not_in_app in H4. destruct H4.
-      unfold not.
-      apply Decidable.not_or_iff. split. 
-      * intros. subst. apply not_in_cons in H2. destruct H2.
-        congruence.
-      * auto.
-Qed.
 
 Section INSTR_MAP.
   Variable instr_size : instruction -> Z.
