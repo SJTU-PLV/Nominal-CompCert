@@ -323,7 +323,147 @@ Proof.
     rewrite PTree.gss. auto.
 Qed.
 
-    
+
+(* match_sec_def *)
+
+
+Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): Prop :=
+| match_text_int: forall f code,
+    gd = Gfun (Internal f) ->
+    (prog_sectable prog) ! id = Some (sec_text code) ->
+    (fn_code f) = code ->
+    match_sec_def id prog gd
+| match_rodata_var: forall v data (NM: data <> []) (NCOM: forall sz, data <> [Init_space sz]),
+    gd = Gvar v ->
+    (prog_sectable prog) ! id = Some (sec_rodata data) ->
+    v.(gvar_readonly) = true  ->
+    v.(gvar_init) = data ->
+    match_sec_def id prog gd
+| match_rwdata_var: forall v data (NM: data <> []) (NCOM: forall sz, data <> [Init_space sz]),
+    gd = Gvar v ->
+    (prog_sectable prog) ! id = Some (sec_rwdata data) ->
+    v.(gvar_readonly) = false  ->
+    v.(gvar_init) = data ->
+    match_sec_def id prog gd
+| match_ext_fun: forall f e,
+    gd = Gfun (External f) ->
+    (prog_symbtable prog) ! id = Some e ->
+    (prog_sectable prog) ! id = None ->
+    e.(symbentry_type) = symb_func ->
+    e.(symbentry_secindex) = secindex_undef ->
+    match_sec_def id prog gd
+| match_ext_var: forall v e,
+    gd = Gvar v ->
+    v.(gvar_init) = [] ->
+    (prog_symbtable prog) ! id = Some e ->
+    (prog_sectable prog) ! id = None ->
+    e.(symbentry_type) = symb_data ->
+    e.(symbentry_secindex) = secindex_undef ->
+    match_sec_def id prog gd
+| match_comm: forall v e sz,
+    gd = Gvar v ->
+    (prog_symbtable prog) ! id = Some e ->
+    (prog_sectable prog) ! id = None ->
+    v.(gvar_init) = [Init_space sz] ->
+    e.(symbentry_type) = symb_data ->
+    e.(symbentry_secindex) = secindex_comm ->
+    e.(symbentry_size) = Z.max sz 0 ->
+    match_sec_def id prog gd.
+
+Lemma transf_match_sec_def: forall prog tprog (TRANSF: match_prog prog tprog) id gd ,
+    In (id,gd) (AST.prog_defs prog) ->
+    match_sec_def id tprog gd.
+Proof.
+  intros prog tprog TRANSF id gd P.
+  unfold match_prog in TRANSF.
+  unfold transf_program in TRANSF.
+  repeat destr_in TRANSF.
+  destruct gd.
+  - destruct f.
+    + econstructor;eauto.
+      simpl. unfold create_sec_table.
+      inv w.
+      exploit create_sec_table_correct;eauto.
+    + eapply match_ext_fun;eauto;simpl.
+      inv w.
+      unfold gen_symb_table.
+      erewrite gen_symb_table_in_defs;eauto.
+      unfold create_sec_table.
+      erewrite create_sec_table_correct;eauto. simpl.
+      auto. inv w. auto.
+      simpl. auto.
+      simpl. auto.
+  - destruct v.
+    destruct gvar_init.
+    + eapply match_ext_var;eauto.
+      simpl. unfold gen_symb_table.
+      erewrite gen_symb_table_in_defs;eauto.
+      inv w;auto.
+      simpl. unfold create_sec_table.
+      erewrite create_sec_table_correct;eauto. simpl.
+      auto. inv w. auto.
+      simpl. auto.
+      simpl. auto.
+    + destruct (gvar_init).
+      * assert ({exists sz, i=Init_space sz} + {not (exists sz, i=Init_space sz)}).
+        { destruct i.
+          1-6: (right;unfold not;intros;destruct H;inv H).
+          left. exists z. auto.
+          right;unfold not;intros;destruct H;inv H. }
+        destruct H.
+        -- destruct e. subst.
+           eapply match_comm;eauto.
+           simpl. unfold gen_symb_table.
+           erewrite gen_symb_table_in_defs;eauto.
+           inv w;auto.
+           simpl. unfold create_sec_table.
+           erewrite create_sec_table_correct;eauto. simpl.
+           auto. inv w. auto.
+           simpl. eauto.
+           simpl. auto.
+           simpl. auto.
+           simpl. auto.
+        -- destruct gvar_readonly.
+           ++ eapply match_rodata_var;eauto.
+              (* NM *)
+              simpl. congruence.
+              (* NCOM *)
+              simpl. unfold not. intros. exfalso. eapply n. inv H. eauto.
+              simpl.
+              unfold create_sec_table.
+              erewrite create_sec_table_correct;eauto. simpl.
+              destruct i;auto.
+              exfalso. apply n. eauto.
+              inv w. auto.
+           ++ eapply match_rwdata_var;eauto.
+              simpl. congruence.
+              (* NCOM *)
+              simpl. unfold not. intros. exfalso. eapply n. inv H. eauto.
+              simpl. unfold create_sec_table.
+              erewrite create_sec_table_correct;eauto. simpl.
+              destruct i;auto.
+              exfalso. apply n. eauto.
+              inv w. auto.
+      * destruct gvar_readonly.
+        -- eapply match_rodata_var;eauto.
+           simpl. congruence.
+           (* NCOM *)
+           simpl. congruence.
+           simpl. unfold create_sec_table.
+           erewrite create_sec_table_correct;eauto. simpl.
+           destruct i;auto.
+           inv w. auto.
+        -- eapply match_rwdata_var;eauto.
+           simpl. congruence.
+           simpl. congruence.
+           simpl. unfold create_sec_table.
+           erewrite create_sec_table_correct;eauto. simpl.
+           destruct i;auto.
+           inv w. auto.
+Qed.
+
+
+
 (** Transformation *)
 Variable prog: Asm.program.
 Variable tprog: program.
@@ -332,18 +472,21 @@ Let ge := Genv.globalenv prog.
 Let tge := globalenv instr_size tprog.
 
 Hypothesis TRANSF: match_prog prog tprog.
+        
 
 (* some properties *)
 Lemma match_prog_well_formed_symbtbl:
   well_formed_symbtbl instr_size (prog_sectable tprog) (prog_symbtable tprog).
 Proof.
+  generalize (transf_match_sec_def prog tprog TRANSF).
+  intros MATCHSEC.
   unfold match_prog in TRANSF.
   unfold transf_program in TRANSF.
   repeat destr_in TRANSF.
   simpl. unfold well_formed_symbtbl.
   unfold gen_symb_table,create_sec_table.
   intros.
-  inv w. 
+  inv w.
   rename wf_prog_norepet_defs into NOREP.
   clear l.
   set (l := (AST.prog_defs prog)) in *.
@@ -354,7 +497,7 @@ Proof.
     destruct IHl.
     eexists. simpl. auto. }
   destruct LEN. revert H H0.
-  generalize x,l,id,e. clear.
+  generalize x,l,id,e,MATCHSEC. clear.
   induction x;intros.
   rewrite length_zero_iff_nil in H0. subst.
   simpl in H. rewrite PTree.gempty in H. inv H.
@@ -363,8 +506,15 @@ Proof.
   rewrite fold_left_app in H. simpl in H.
   unfold acc_symb in H at 1.
   destruct a.
+  (* MATCHSEC *)
+  assert (TMPIN: In (i,g) (l'++[(i,g)])).
+  eapply in_app. right. simpl. auto.
+  generalize (MATCHSEC i g TMPIN). 
+  intros MATCHSEC1.
+  
   destruct (Pos.eq_dec i id).
-  - subst.
+  - clear MATCHSEC.
+    subst.
     rewrite fold_left_app. simpl.
     rewrite PTree.gss in H. inv H.
     destruct g.
@@ -372,9 +522,22 @@ Proof.
       rewrite PTree.gss.
       split;try split;try congruence.
       eexists. split;eauto.
-      (* split;intros;try congruence. simpl. auto. *)
-    + simpl;destruct (gvar_init v);simpl.
-      congruence.
+      split;intros;try congruence.
+
+      inv MATCHSEC1;try congruence. simpl in H1.
+      unfold create_sec_table in H1. rewrite fold_left_app in H1.
+      simpl in H1.
+      auto.
+    + simpl;destruct (gvar_init v) eqn:INIT;simpl.
+      split. congruence.
+            
+      (* MATCHSEC1 *)
+      inv MATCHSEC1;try congruence. simpl in H2.
+      unfold create_sec_table in H2. rewrite fold_left_app in H2.
+      simpl in H2. rewrite INIT in *.
+      auto.
+      
+      
       destruct i;
       try (
       destruct gvar_readonly;
@@ -384,6 +547,15 @@ Proof.
       split;try split;try congruence;eexists;split;eauto; split;simpl;try congruence;auto).
    
       destruct l;simpl;auto.
+
+      (* MATCHSEC1 *)
+      split. congruence.
+      inv MATCHSEC1;try congruence. simpl in H1.
+      unfold create_sec_table in H1. rewrite fold_left_app in H1.
+      simpl in H1. rewrite INIT in *.
+      auto.
+      
+      
       try (destruct gvar_readonly;
       simpl;rewrite PTree.gss;
       split;try split;try congruence;eexists;split;eauto; split;simpl;try congruence;auto;
@@ -393,15 +565,21 @@ Proof.
     rewrite PTree.gsspec in *.
     destr_in H.
     (* if symbentry_secindex e = secindex_normal i0 then i0 = id can be proved by symbtable generation *)
-    exploit IHx;eauto.
+    exploit IHx. 2: eapply H.
+
+    (* match_sec_def *)
+    admit.
+
+    auto.
+    
     destruct (symbentry_secindex e).
     + intros (A & sec & B & C & D). simpl.
       destruct g.
       destruct f.
       subst.
-      rewrite PTree.gsspec. 
+      rewrite PTree.gsspec.
       split;try congruence;eauto.
-      split;eauto. 
+      split;eauto.
       destr.
       eauto. eauto.
 
@@ -412,9 +590,12 @@ Proof.
       try rewrite PTree.gsspec;destr;eauto.
       try rewrite PTree.gsspec;destr;eauto.
 
-    + eauto.
-    + eauto.
-Qed.
+    + intros (Q1 &  Q2). split;eauto.
+      simpl. repeat destr;try  erewrite PTree.gso;eauto.
+    + intros (Q1 &  Q2). split;eauto.
+      simpl. repeat destr;try  erewrite PTree.gso;eauto.
+(* Qed. *)
+Admitted.
 
 (** ** Definitions of Matching States *)
 
@@ -973,51 +1154,7 @@ Proof.
   unfold P. simpl. auto.
 Qed.
 
-
-Inductive match_sec_def (id: ident) (prog: program) (gd: globdef fundef unit): Prop :=
-| match_text_int: forall f code,
-    gd = Gfun (Internal f) ->
-    (prog_sectable prog) ! id = Some (sec_text code) ->
-    (fn_code f) = code ->
-    match_sec_def id prog gd
-| match_rodata_var: forall v data,
-    gd = Gvar v ->
-    (prog_sectable prog) ! id = Some (sec_rodata data) ->
-    v.(gvar_readonly) = true  ->
-    v.(gvar_init) = data ->
-    match_sec_def id prog gd
-| match_rwdata_var: forall v data,
-    gd = Gvar v ->
-    (prog_sectable prog) ! id = Some (sec_rwdata data) ->
-    v.(gvar_readonly) = false  ->
-    v.(gvar_init) = data ->
-    match_sec_def id prog gd
-| match_ext_fun: forall f e,
-    gd = Gfun (External f) ->
-    (prog_symbtable prog) ! id = Some e ->
-    (prog_sectable prog) ! id = None ->
-    e.(symbentry_type) = symb_func ->
-    e.(symbentry_secindex) = secindex_undef ->
-    match_sec_def id prog gd
-| match_ext_var: forall v e,
-    gd = Gvar v ->
-    v.(gvar_init) = [] ->
-    (prog_symbtable prog) ! id = Some e ->
-    (prog_sectable prog) ! id = None ->
-    e.(symbentry_type) = symb_data ->
-    e.(symbentry_secindex) = secindex_undef ->
-    match_sec_def id prog gd
-| match_comm: forall v e sz,
-    gd = Gvar v ->
-    (prog_symbtable prog) ! id = Some e ->
-    (prog_sectable prog) ! id = None ->
-    v.(gvar_init) = [Init_space sz] ->
-    e.(symbentry_type) = symb_data ->
-    e.(symbentry_secindex) = secindex_comm ->
-    e.(symbentry_size) = Z.max sz 0 ->
-    match_sec_def id prog gd.
-              
-          
+  
 Lemma init_meminj_invert_strong :forall m b b' delta ,
     Genv.init_mem prog = Some m ->
     Mem.flat_inj (Mem.support m) b = Some (b',delta) ->
@@ -1079,79 +1216,11 @@ Proof.
   destruct P3 as (b & B1 & B2).
   eapply Genv.genv_vars_eq in B1.
   subst. auto.
-
+ 
   (* transf_program_match_def : proved here*)
-  clear s l.
-  
-  destruct gd.
-  - destruct f.
-    + econstructor;eauto.
-      simpl. unfold create_sec_table.
-      inv w.
-      exploit create_sec_table_correct;eauto.
-    + eapply match_ext_fun;eauto;simpl.
-      inv w.
-      unfold gen_symb_table.
-      erewrite gen_symb_table_in_defs;eauto.
-      unfold create_sec_table.
-      erewrite create_sec_table_correct;eauto. simpl.
-      auto. inv w. auto.
-      simpl. auto.
-      simpl. auto.
-  - destruct v.
-    destruct gvar_init.
-    + eapply match_ext_var;eauto.
-      simpl. unfold gen_symb_table.
-      erewrite gen_symb_table_in_defs;eauto.
-      inv w;auto.
-      simpl. unfold create_sec_table.
-      erewrite create_sec_table_correct;eauto. simpl.
-      auto. inv w. auto.
-      simpl. auto.
-      simpl. auto.
-    + destruct (gvar_init).
-      * assert ({exists sz, i=Init_space sz} + {not (exists sz, i=Init_space sz)}).
-        { destruct i.
-          1-6: (right;unfold not;intros;destruct H;inv H).
-          left. exists z. auto.
-          right;unfold not;intros;destruct H;inv H. }
-        destruct H.
-        -- destruct e. subst.
-           eapply match_comm;eauto.
-           simpl. unfold gen_symb_table.
-           erewrite gen_symb_table_in_defs;eauto.
-           inv w;auto.
-           simpl. unfold create_sec_table.
-           erewrite create_sec_table_correct;eauto. simpl.
-           auto. inv w. auto.
-           simpl. eauto.
-           simpl. auto.
-           simpl. auto.
-           simpl. auto.
-        -- destruct gvar_readonly.
-           ++ eapply match_rodata_var;eauto.
-              simpl. unfold create_sec_table.
-              erewrite create_sec_table_correct;eauto. simpl.
-              destruct i;auto.
-              exfalso. apply n. eauto.
-              inv w. auto.
-           ++ eapply match_rwdata_var;eauto.
-              simpl. unfold create_sec_table.
-              erewrite create_sec_table_correct;eauto. simpl.
-              destruct i;auto.
-              exfalso. apply n. eauto.
-              inv w. auto.
-      * destruct gvar_readonly.
-        -- eapply match_rodata_var;eauto.
-           simpl. unfold create_sec_table.
-           erewrite create_sec_table_correct;eauto. simpl.
-           destruct i;auto.         
-           inv w. auto.
-        -- eapply match_rwdata_var;eauto.
-           simpl. unfold create_sec_table.
-           erewrite create_sec_table_correct;eauto. simpl.
-           destruct i;auto.         
-           inv w. auto.           
+  eapply transf_match_sec_def;eauto.
+  unfold match_prog. unfold transf_program.
+  destr. destr.
 Qed.
 
 
@@ -1594,7 +1663,7 @@ Proof.
       apply in_app. right. simpl. auto.
       intros ALIGN.
       destruct s.
-    + destruct (Mem.alloc_glob p m' 0 (sec_size instr_size (sec_text code))) eqn:FOLD.
+    + destruct (Mem.alloc_glob p m' 0 (Z.max (sec_size instr_size (sec_text code)) 1)) eqn:FOLD.
       simpl. simpl in FOLD.
       unfold Mem.drop_perm. destr.
       eexists. eauto.
@@ -1610,6 +1679,8 @@ Proof.
       rewrite Z.add_0_l. eauto.
       rewrite Z.add_0_l. unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2;eauto.
       simpl in ALIGN. auto.
+      (* find_symbol success *)
+      Genv.init_mem_inversion
       intros (m'' & A). rewrite A.
       unfold Mem.drop_perm.
       destr. eexists. eauto.
