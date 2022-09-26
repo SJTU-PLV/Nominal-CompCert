@@ -405,7 +405,7 @@ Fixpoint load_store_init_data (m: mem) (b: block) (p: Z) (il: list init_data) {s
       (exists b' ofs', Genv.find_symbol ge symb = Some (b',ofs') /\ Mem.load Mptr m b p = Some(Vptr b' (Ptrofs.add ofs ofs')))
       /\ load_store_init_data m b (p + size_chunk Mptr) il'
   | Init_space n :: il' =>
-      Globalenvs.Genv.read_as_zero m b p n
+      Globalenvs.Genv.read_as_zero m b p (Z.max n 0)
       /\ load_store_init_data m b (p + Z.max n 0) il'
   end.
 
@@ -439,7 +439,7 @@ Qed.
 Lemma store_init_data_list_charact:
   forall b il m p m',
   store_init_data_list m b p il = Some m' ->
-  Genv.read_as_zero m b p (init_data_list_size il) ->
+  (* Genv.read_as_zero m b p (init_data_list_size il) -> *)
   load_store_init_data m' b p il.
 Proof.
   assert (A: forall chunk v m b p m1 il m',
@@ -456,13 +456,14 @@ Proof.
 - auto.
 - intros. destruct (store_init_data m b p a) as [m1|] eqn:?; try congruence.
   exploit IHil; eauto.
-  set (P := fun (b': block) ofs' => p + init_data_size a <= ofs').
-  apply Genv.read_as_zero_unchanged with (m := m) (P := P).
-  red; intros; apply H0; auto. generalize (init_data_size_pos a); lia. lia.
-  eapply store_init_data_unchanged with (P := P); eauto.
-  intros; unfold P. lia.
-  intros; unfold P. lia.
-  intro D.
+  (* set (P := fun (b': block) ofs' => p + init_data_size a <= ofs'). *)
+  (* apply Genv.read_as_zero_unchanged with (m := m) (P := P). *)
+  (* (* red; *) intros; (* apply H0; *) auto. (* generalize (init_data_size_pos a); lia. lia. *) *)
+  (* eapply store_init_data_unchanged with (P := P); eauto. *)
+  (* intros; unfold P. lia. *)
+  (* intros; unfold P. lia. *)
+  (* intro D. *)
+  intros.
   destruct a; simpl in Heqo.
 + split; auto. eapply (A Mint8unsigned (Vint i)); eauto.
 + split; auto. eapply (A Mint16unsigned (Vint i)); eauto.
@@ -472,15 +473,19 @@ Proof.
 + split; auto. eapply (A Mfloat64 (Vfloat f)); eauto.
 + split; auto.
   set (P := fun (b': block) ofs' => ofs' < p + init_data_size (Init_space z)).
-  inv Heqo. apply Genv.read_as_zero_unchanged with (m := m1) (P := P).
-  red; intros. apply H0; auto. simpl. generalize (init_data_list_size_pos il); extlia.
+  (* inv Heqo. *) apply Genv.read_as_zero_unchanged with (m := m1) (P := P).
+  eapply Genv.store_zeros_read_as_zero;eauto.
+  
+  (* red; intros. apply H0; auto. simpl. generalize (init_data_list_size_pos il); extlia. *)
   eapply store_init_data_list_unchanged; eauto.
   intros; unfold P. lia.
   intros; unfold P. simpl; extlia.
-+ rewrite init_data_size_addrof in *.
++ rewrite Genv.init_data_size_addrof in *.
   split; auto.
-  destruct (find_symbol ge i); try congruence.
-  exists b0; split; auto.
+  Genv.store_init_data_list
+  destruct (Genv.find_symbol ge i); try congruence.
+  destruct p0.
+  exists b0,i1; split; auto.
   transitivity (Some (Val.load_result Mptr (Vptr b0 i0))).
   eapply (A Mptr (Vptr b0 i0)); eauto.
   unfold Val.load_result, Mptr; destruct Archi.ptr64; auto.
