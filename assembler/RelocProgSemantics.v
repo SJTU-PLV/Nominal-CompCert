@@ -348,8 +348,8 @@ Definition alloc_section (r: option mem) (id: ident) (sec: section) : option mem
           end
         end
       | sec_text code =>        
-        let (m1, b) := Mem.alloc_glob id m 0 sz in
-        Mem.drop_perm m1 b 0 sz Nonempty
+        let (m1, b) := Mem.alloc_glob id m 0 (Z.max sz 1) in
+        Mem.drop_perm m1 b 0 (Z.max sz 1 )Nonempty
     end
   end.
 
@@ -409,8 +409,246 @@ Fixpoint load_store_init_data (m: mem) (b: block) (p: Z) (il: list init_data) {s
       /\ load_store_init_data m b (p + Z.max n 0) il'
   end.
 
+(* unchanged properties *)
+Remark store_init_data_unchanged:
+  forall (P: block -> Z -> Prop) b i m p m',
+  store_init_data m b p i = Some m' ->
+  (forall ofs, p <= ofs < p + init_data_size i -> ~ P b ofs) ->
+  Mem.unchanged_on P m m'.
+Proof.
+  intros. destruct i; simpl in *;
+            try (eapply Mem.store_unchanged_on; eauto; fail).
+  eapply Genv.store_zeros_unchanged;eauto.
+Qed.
+
+Remark store_init_data_list_unchanged:
+  forall (P: block -> Z -> Prop) b il m p m',
+  store_init_data_list m b p il = Some m' ->
+  (forall ofs, p <= ofs -> ~ P b ofs) ->
+  Mem.unchanged_on P m m'.
+Proof.
+  induction il; simpl; intros.
+- inv H. apply Mem.unchanged_on_refl.
+- destruct (store_init_data m b p a) as [m1|] eqn:?; try congruence.
+  apply Mem.unchanged_on_trans with m1.
+  eapply store_init_data_unchanged; eauto. intros; apply H0; tauto.
+  eapply IHil; eauto. intros; apply H0. generalize (init_data_size_pos a); lia.
+Qed.
+
+
+Lemma store_init_data_list_charact:
+  forall b il m p m',
+  store_init_data_list m b p il = Some m' ->
+  Genv.read_as_zero m b p (init_data_list_size il) ->
+  load_store_init_data m' b p il.
+Proof.
+  assert (A: forall chunk v m b p m1 il m',
+    Mem.store chunk m b p v = Some m1 ->
+    store_init_data_list m1 b (p + size_chunk chunk) il = Some m' ->
+    Mem.load chunk m' b p = Some(Val.load_result chunk v)).
+  {
+    intros.
+    eapply Mem.load_unchanged_on with (P := fun b' ofs' => ofs' < p + size_chunk chunk).
+    eapply store_init_data_list_unchanged; eauto. intros; lia.
+    intros; tauto.
+    eapply Mem.load_store_same; eauto.
+  }  induction il; simpl.
+- auto.
+- intros. destruct (store_init_data m b p a) as [m1|] eqn:?; try congruence.
+  exploit IHil; eauto.
+  set (P := fun (b': block) ofs' => p + init_data_size a <= ofs').
+  apply Genv.read_as_zero_unchanged with (m := m) (P := P).
+  red; intros; apply H0; auto. generalize (init_data_size_pos a); lia. lia.
+  eapply store_init_data_unchanged with (P := P); eauto.
+  intros; unfold P. lia.
+  intros; unfold P. lia.
+  intro D.
+  destruct a; simpl in Heqo.
++ split; auto. eapply (A Mint8unsigned (Vint i)); eauto.
++ split; auto. eapply (A Mint16unsigned (Vint i)); eauto.
++ split; auto. eapply (A Mint32 (Vint i)); eauto.
++ split; auto. eapply (A Mint64 (Vlong i)); eauto.
++ split; auto. eapply (A Mfloat32 (Vsingle f)); eauto.
++ split; auto. eapply (A Mfloat64 (Vfloat f)); eauto.
++ split; auto.
+  set (P := fun (b': block) ofs' => ofs' < p + init_data_size (Init_space z)).
+  inv Heqo. apply Genv.read_as_zero_unchanged with (m := m1) (P := P).
+  red; intros. apply H0; auto. simpl. generalize (init_data_list_size_pos il); extlia.
+  eapply store_init_data_list_unchanged; eauto.
+  intros; unfold P. lia.
+  intros; unfold P. simpl; extlia.
++ rewrite init_data_size_addrof in *.
+  split; auto.
+  destruct (find_symbol ge i); try congruence.
+  exists b0; split; auto.
+  transitivity (Some (Val.load_result Mptr (Vptr b0 i0))).
+  eapply (A Mptr (Vptr b0 i0)); eauto.
+  unfold Val.load_result, Mptr; destruct Archi.ptr64; auto.
+Qed.
+
+
+Remark load_store_init_data_invariant:
+  forall m m' b,
+  (forall chunk ofs, Mem.load chunk m' b ofs = Mem.load chunk m b ofs) ->
+  forall il p,
+  load_store_init_data m b p il -> load_store_init_data m' b p il.
+Proof.
+  induction il; intro p; simpl.
+  auto.
+  rewrite ! H. destruct a; intuition. red; intros; rewrite H; auto.
+Qed.
+
 
 End WITHGE1.
+Section INITDATA.
+
+Variable ge: Genv.t.
+
+Remark store_init_data_perm:
+  forall k prm b' q i b m p m',
+  store_init_data ge m b p i = Some m' ->
+  (Mem.perm m b' q k prm <-> Mem.perm m' b' q k prm).
+Proof.
+  intros. 
+  assert (forall chunk v,
+          Mem.store chunk m b p v = Some m' ->
+          (Mem.perm m b' q k prm <-> Mem.perm m' b' q k prm)).
+    intros; split; eauto with mem.
+    destruct i; simpl in H; eauto.
+  eapply Genv.store_zeros_perm.
+  eauto.
+Qed.
+
+Remark store_init_data_list_perm:
+  forall k prm b' q idl b m p m',
+  store_init_data_list ge m b p idl = Some m' ->
+  (Mem.perm m b' q k prm <-> Mem.perm m' b' q k prm).
+Proof.
+  induction idl as [ | i1 idl]; simpl; intros.
+- inv H; tauto.
+- destruct (store_init_data ge m b p i1) as [m1|] eqn:S1; try discriminate.
+  transitivity (Mem.perm m1 b' q k prm). 
+  eapply store_init_data_perm; eauto.
+  eapply IHidl; eauto.
+Qed.
+
+Lemma store_init_data_exists:
+  forall m b p i,
+    Mem.range_perm m b p (p + init_data_size i) Cur Writable ->
+    (* Mem.stack_access (Mem.stack m) b p (p + init_data_size i)  -> *)
+    (Genv.init_data_alignment i | p) ->
+    (* (forall id ofs, i = Init_addrof id ofs -> exists b, find_symbol ge id = Some b) -> *)
+    exists m', store_init_data ge m b p i = Some m'.
+Proof.
+  intros. 
+  assert (DFL: forall chunk v,
+          init_data_size i = size_chunk chunk ->
+          Genv.init_data_alignment i = align_chunk chunk ->
+          exists m', Mem.store chunk m b p v = Some m').
+  { intros. destruct (Mem.valid_access_store m chunk b p v) as (m' & STORE).
+    split. rewrite <- H1; auto.
+    rewrite  <- H2. auto.
+    exists m'; auto. }
+  destruct i; eauto.
+  simpl. eapply Genv.store_zeros_exists.
+  simpl in H. auto.
+Qed.
+
+(* SACC
+Lemma store_init_data_stack_access:
+  forall m b p i1 m1,
+    store_init_data ge m b p i1 = Some m1 ->
+    forall b' lo hi,
+      stack_access (Mem.stack m1) b' lo hi <-> stack_access (Mem.stack m) b' lo hi.
+Proof.
+  unfold store_init_data.
+  destruct i1; intros; try now (eapply Mem.store_stack_access ; eauto).
+  inv H; tauto.
+Qed.
+*)
+
+Lemma store_init_data_list_exists:
+  forall b il m p,
+  Mem.range_perm m b p (p + init_data_list_size il) Cur Writable ->
+  (* stack_access (Mem.stack m) b p (p + init_data_list_size il) -> *)
+  Genv.init_data_list_aligned p il ->
+  (* (forall id ofs, In (Init_addrof id ofs) il -> exists b, find_symbol ge id = Some b) -> *)
+  exists m', store_init_data_list ge m b p il = Some m'.
+Proof.
+  induction il as [ | i1 il ]; simpl; intros.
+- exists m; auto.
+- destruct H0. 
+  destruct (@store_init_data_exists m b p i1) as (m1 & S1); eauto.
+  red; intros. apply H. generalize (init_data_list_size_pos il); lia.
+  (* generalize (init_data_list_size_pos il); omega. *)
+  rewrite S1.
+  apply IHil; eauto.
+  red; intros. erewrite <- store_init_data_perm by eauto. apply H. generalize (init_data_size_pos i1); lia.
+Qed.
+
+Remark store_init_data_load_other:
+  forall b' i b m p m' chunk ofs,
+  store_init_data ge m b p i = Some m' -> b <> b' ->
+  (Mem.load chunk m b' ofs = Mem.load chunk m' b' ofs).
+Proof.
+  intros.
+  assert (forall chunk' v,
+          Mem.store chunk' m b p v = Some m' -> b <> b' ->
+          (Mem.load chunk m b' ofs = Mem.load chunk m' b' ofs)).
+   { intros. eapply Mem.load_store_other in H1; eauto. }
+   destruct i. 1-7:  simpl in H; eauto.
+   2: simpl in H; eauto.
+
+   eapply Genv.store_zeros_load_other;eauto.
+   
+  (*  store_zeros_equation *)
+  (* inv H; tauto. *)
+  (* destruct (find_symbol ge i); try discriminate. eauto. *)
+Qed.
+
+Remark store_init_data_list_load_other:
+  forall b' idl b m p m' chunk ofs,
+  store_init_data_list ge m b p idl = Some m' -> b <> b' ->
+  (Mem.load chunk m b' ofs = Mem.load chunk m' b' ofs).
+Proof.
+  induction idl as [ | i1 idl]; simpl; intros.
+- inv H; tauto.
+- destruct (store_init_data ge m b p i1) as [m1|] eqn:S1; try discriminate.
+  transitivity (Mem.load chunk m1 b' ofs).
+  eapply store_init_data_load_other; eauto.
+  eapply IHidl; eauto.
+Qed.
+
+Remark store_init_data_loadbytes_other:
+  forall b' i b m p m' lo hi,
+  store_init_data ge m b p i = Some m' -> b <> b' ->
+  (Mem.loadbytes m b' lo hi = Mem.loadbytes m' b' lo hi).
+Proof.
+  intros.
+  assert (forall chunk' v,
+          Mem.store chunk' m b p v = Some m' -> b <> b' ->
+          (Mem.loadbytes m b' lo hi = Mem.loadbytes m' b' lo hi)).
+  { intros. eapply Mem.loadbytes_store_other in H1; eauto. }
+  destruct i. 1-7:  simpl in H; eauto.
+   2: simpl in H; eauto.
+
+   eapply Genv.store_zeros_loadbytes_other;eauto.
+Qed.
+
+Remark store_init_data_list_loadbytes_other:
+  forall b' idl b m p m' lo hi,
+  store_init_data_list ge m b p idl = Some m' -> b <> b' ->
+  (Mem.loadbytes m b' lo hi= Mem.loadbytes m' b' lo hi).
+Proof.
+  induction idl as [ | i1 idl]; simpl; intros.
+- inv H; tauto.
+- destruct (store_init_data ge m b p i1) as [m1|] eqn:S1; try discriminate.
+  transitivity (Mem.loadbytes m1 b' lo hi).
+  eapply store_init_data_loadbytes_other; eauto.
+  eapply IHidl; eauto.
+Qed.
+
+End INITDATA.
 
 
 (** globals_initialized *)
@@ -425,7 +663,7 @@ Definition globals_initialized (ge: Genv.t) (prog: program) (m:mem):=
       match sec with
       | sec_text code =>
         Mem.perm m b ofs0 Cur Nonempty /\
-        let sz := code_size instr_size code in
+        let sz := Z.max (code_size instr_size code) 1 in
         (forall ofs k p, Mem.perm m b (ofs0+ofs) k p -> 0 <= ofs < sz /\ p = Nonempty)
       | sec_rodata data =>        
         let sz := (init_data_list_size data) in
@@ -493,7 +731,7 @@ Definition globals_initialized_sections ge m b sec :=
   match sec with
   | sec_text code =>
     Mem.perm m b 0 Cur Nonempty /\
-    (let sz := code_size instr_size code in
+    (let sz := Z.max (code_size instr_size code) 1 in
      forall (ofs : Z) (k : perm_kind) (p : permission), Mem.perm m b ofs k p -> 0 <= ofs < sz /\ p = Nonempty)
   | sec_rwdata data =>
     let sz := init_data_list_size data in
@@ -548,8 +786,8 @@ Proof.
   destruct H.
   destruct a. simpl in *.
   destruct s;simpl in *.
-  - destruct (Mem.alloc_glob i m0 0 (code_size instr_size code)) eqn:ALLOC.
-    destruct ((Mem.drop_perm m1 b 0 (code_size instr_size code) Nonempty)) eqn:DROP.
+  - destruct (Mem.alloc_glob i m0 0 (Z.max (code_size instr_size code) 1)) eqn:ALLOC.
+    destruct ((Mem.drop_perm m1 b 0 (Z.max (code_size instr_size code) 1) Nonempty)) eqn:DROP.
     assert (globals_initialized_sections ge m2 (Global id) sec).
     { unfold globals_initialized_sections.
       unfold globals_initialized_sections in H0.
@@ -588,17 +826,393 @@ Proof.
         eauto.
         (* 3 *)
         split.
-        Mem.load_drop
-          (* define it *)
-        Genv.load_store_init_data_invariant
-        
+        eapply load_store_init_data_invariant.
+        2: eapply P3. intros.
+        erewrite (Mem.load_drop m1);eauto.
+        erewrite Mem.load_alloc_glob_unchanged;eauto.
+        congruence. left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        (* 4 *)
+        erewrite Mem.loadbytes_drop. 2: eapply DROP.        
+        erewrite Mem.loadbytes_alloc_glob_unchanged;eauto.
+        congruence. left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+      - destruct H0 as (P1 & P2 & P3 & P4).
+        split.
+        (* 1 *)
+        unfold Mem.range_perm in *.
+        intros.
+        eapply Mem.perm_drop_3;eauto.
+        left. eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+        eauto.
+        congruence.
+        (* 2 *)
+        split.
+        intros.
+        assert (Mem.perm m0 (Global id) ofs k p).
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.                   
+        eapply Mem.perm_drop_4;eauto.
+        congruence. eapply P2 in H3.
+        eauto.
+        (* 3 *)
+        split.
+        eapply load_store_init_data_invariant.
+        2: eapply P3. intros.
+        erewrite (Mem.load_drop m1);eauto.
+        erewrite Mem.load_alloc_glob_unchanged;eauto.
+        congruence. left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        (* 4 *)
+        erewrite Mem.loadbytes_drop. 2: eapply DROP.        
+        erewrite Mem.loadbytes_alloc_glob_unchanged;eauto.
+        congruence. left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence. }
+    eapply IHsecs;eauto.
+    rewrite alloc_sections_none in H1. congruence.
+
+  - destruct (Mem.alloc_glob i m0 0 (init_data_list_size init)) eqn:ALLOC.
+    destr_in H1.
+    2: { rewrite alloc_sections_none in H1. congruence. }
+    destr_in H1.
+    2: { rewrite alloc_sections_none in H1. congruence. }
+    destruct (Mem.drop_perm m3 b 0 (init_data_list_size init) Writable) eqn:DROP.
+    2: { rewrite alloc_sections_none in H1. congruence. }    
+    assert (globals_initialized_sections ge m4 (Global id) sec).
+    { unfold globals_initialized_sections.
+      unfold globals_initialized_sections in H0.
+      destruct sec.
+      - destruct H0. split.
+        + eapply Mem.perm_drop_3;eauto.
+          left. eapply Mem.alloc_glob_result in ALLOC.
+          subst. congruence.
+          erewrite <- store_init_data_list_perm. 2: eapply Heqo0.
+          erewrite <- Genv.store_zeros_perm. 2: eapply Heqo.          
+          eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+          eauto.
+          congruence.
+        + intros.
+          assert (Mem.perm m0 (Global id) ofs k p).
+          eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+          eapply Genv.store_zeros_perm;eauto.
+          eapply store_init_data_list_perm;eauto.
+          eapply Mem.perm_drop_4;eauto.
+          congruence. eapply H3 in H5.
+          eauto.
+      - destruct H0 as (P1 & P2 & P3 & P4).
+        split.
+        (* 1 *)
+        unfold Mem.range_perm in *.
+        intros.
+        eapply Mem.perm_drop_3;eauto.
+        left. eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        erewrite <- store_init_data_list_perm. 2: eapply Heqo0.
+        erewrite <- Genv.store_zeros_perm. 2: eapply Heqo.          
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+        eauto.
+        congruence.
+        (* 2 *)
+        split.
+        intros.
+        assert (Mem.perm m0 (Global id) ofs k p).
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+        eapply Genv.store_zeros_perm;eauto.
+        eapply store_init_data_list_perm;eauto.
+        eapply Mem.perm_drop_4;eauto.
+        congruence. eapply P2 in H3.
+        eauto.
+        (* 3 *)
+        split.
+        eapply load_store_init_data_invariant.
+        2: eapply P3. intros.
+        erewrite (Mem.load_drop m3);eauto.
+        erewrite <- store_init_data_list_load_other.
+        2: eapply Heqo0.
+        erewrite <- (Genv.store_zeros_load_other m1);eauto.
+        erewrite Mem.load_alloc_glob_unchanged;eauto.
+        congruence.
+        eapply Mem.alloc_glob_result in ALLOC. subst.
+        congruence.
+        eapply Mem.alloc_glob_result in ALLOC. subst.
+        congruence. 
+        left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        (* 4 *)
+        erewrite Mem.loadbytes_drop. 2: eapply DROP.
+        erewrite <- store_init_data_list_loadbytes_other.
+        2: eapply Heqo0.
+        erewrite <- Genv.store_zeros_loadbytes_other.
+        2: eapply Heqo.        
+        erewrite Mem.loadbytes_alloc_glob_unchanged.
+        2: eapply ALLOC.
+        congruence. congruence. 
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+      - destruct H0 as (P1 & P2 & P3 & P4).
+        split.
+        (* 1 *)
+        unfold Mem.range_perm in *.
+        intros.
+        eapply Mem.perm_drop_3;eauto.
+        left. eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        erewrite <- store_init_data_list_perm. 2: eapply Heqo0.
+        erewrite <- Genv.store_zeros_perm. 2: eapply Heqo.          
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+        eauto.
+        congruence.
+        (* 2 *)
+        split.
+        intros.
+        assert (Mem.perm m0 (Global id) ofs k p).
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+        eapply Genv.store_zeros_perm;eauto.
+        eapply store_init_data_list_perm;eauto.
+        eapply Mem.perm_drop_4;eauto.
+        congruence. eapply P2 in H3.
+        eauto.
+        (* 3 *)
+        split.
+        eapply load_store_init_data_invariant.
+        2: eapply P3. intros.
+        erewrite (Mem.load_drop m3);eauto.
+        erewrite <- store_init_data_list_load_other.
+        2: eapply Heqo0.
+        erewrite <- (Genv.store_zeros_load_other m1);eauto.
+        erewrite Mem.load_alloc_glob_unchanged;eauto.
+        congruence.
+        eapply Mem.alloc_glob_result in ALLOC. subst.
+        congruence.
+        eapply Mem.alloc_glob_result in ALLOC. subst.
+        congruence. 
+        left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        (* 4 *)
+        erewrite Mem.loadbytes_drop. 2: eapply DROP.
+        erewrite <- store_init_data_list_loadbytes_other.
+        2: eapply Heqo0.
+        erewrite <- Genv.store_zeros_loadbytes_other.
+        2: eapply Heqo.        
+        erewrite Mem.loadbytes_alloc_glob_unchanged.
+        2: eapply ALLOC.
+        congruence. congruence. 
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence. }
+    eapply IHsecs;eauto.
+
+  - destruct (Mem.alloc_glob i m0 0 (init_data_list_size init)) eqn:ALLOC.
+    destr_in H1.
+    2: { rewrite alloc_sections_none in H1. congruence. }
+    destr_in H1.
+    2: { rewrite alloc_sections_none in H1. congruence. }
+    destruct (Mem.drop_perm m3 b 0 (init_data_list_size init) Readable) eqn:DROP.
+    2: { rewrite alloc_sections_none in H1. congruence. }    
+    assert (globals_initialized_sections ge m4 (Global id) sec).
+    { unfold globals_initialized_sections.
+      unfold globals_initialized_sections in H0.
+      destruct sec.
+      - destruct H0. split.
+        + eapply Mem.perm_drop_3;eauto.
+          left. eapply Mem.alloc_glob_result in ALLOC.
+          subst. congruence.
+          erewrite <- store_init_data_list_perm. 2: eapply Heqo0.
+          erewrite <- Genv.store_zeros_perm. 2: eapply Heqo.          
+          eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+          eauto.
+          congruence.
+        + intros.
+          assert (Mem.perm m0 (Global id) ofs k p).
+          eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+          eapply Genv.store_zeros_perm;eauto.
+          eapply store_init_data_list_perm;eauto.
+          eapply Mem.perm_drop_4;eauto.
+          congruence. eapply H3 in H5.
+          eauto.
+      - destruct H0 as (P1 & P2 & P3 & P4).
+        split.
+        (* 1 *)
+        unfold Mem.range_perm in *.
+        intros.
+        eapply Mem.perm_drop_3;eauto.
+        left. eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        erewrite <- store_init_data_list_perm. 2: eapply Heqo0.
+        erewrite <- Genv.store_zeros_perm. 2: eapply Heqo.          
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+        eauto.
+        congruence.
+        (* 2 *)
+        split.
+        intros.
+        assert (Mem.perm m0 (Global id) ofs k p).
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+        eapply Genv.store_zeros_perm;eauto.
+        eapply store_init_data_list_perm;eauto.
+        eapply Mem.perm_drop_4;eauto.
+        congruence. eapply P2 in H3.
+        eauto.
+        (* 3 *)
+        split.
+        eapply load_store_init_data_invariant.
+        2: eapply P3. intros.
+        erewrite (Mem.load_drop m3);eauto.
+        erewrite <- store_init_data_list_load_other.
+        2: eapply Heqo0.
+        erewrite <- (Genv.store_zeros_load_other m1);eauto.
+        erewrite Mem.load_alloc_glob_unchanged;eauto.
+        congruence.
+        eapply Mem.alloc_glob_result in ALLOC. subst.
+        congruence.
+        eapply Mem.alloc_glob_result in ALLOC. subst.
+        congruence. 
+        left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        (* 4 *)
+        erewrite Mem.loadbytes_drop. 2: eapply DROP.
+        erewrite <- store_init_data_list_loadbytes_other.
+        2: eapply Heqo0.
+        erewrite <- Genv.store_zeros_loadbytes_other.
+        2: eapply Heqo.        
+        erewrite Mem.loadbytes_alloc_glob_unchanged.
+        2: eapply ALLOC.
+        congruence. congruence. 
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+      - destruct H0 as (P1 & P2 & P3 & P4).
+        split.
+        (* 1 *)
+        unfold Mem.range_perm in *.
+        intros.
+        eapply Mem.perm_drop_3;eauto.
+        left. eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        erewrite <- store_init_data_list_perm. 2: eapply Heqo0.
+        erewrite <- Genv.store_zeros_perm. 2: eapply Heqo.          
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+        eauto.
+        congruence.
+        (* 2 *)
+        split.
+        intros.
+        assert (Mem.perm m0 (Global id) ofs k p).
+        eapply Mem.perm_alloc_glob_1 in ALLOC. eapply ALLOC.
+        eapply Genv.store_zeros_perm;eauto.
+        eapply store_init_data_list_perm;eauto.
+        eapply Mem.perm_drop_4;eauto.
+        congruence. eapply P2 in H3.
+        eauto.
+        (* 3 *)
+        split.
+        eapply load_store_init_data_invariant.
+        2: eapply P3. intros.
+        erewrite (Mem.load_drop m3);eauto.
+        erewrite <- store_init_data_list_load_other.
+        2: eapply Heqo0.
+        erewrite <- (Genv.store_zeros_load_other m1);eauto.
+        erewrite Mem.load_alloc_glob_unchanged;eauto.
+        congruence.
+        eapply Mem.alloc_glob_result in ALLOC. subst.
+        congruence.
+        eapply Mem.alloc_glob_result in ALLOC. subst.
+        congruence. 
+        left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        (* 4 *)
+        erewrite Mem.loadbytes_drop. 2: eapply DROP.
+        erewrite <- store_init_data_list_loadbytes_other.
+        2: eapply Heqo0.
+        erewrite <- Genv.store_zeros_loadbytes_other.
+        2: eapply Heqo.        
+        erewrite Mem.loadbytes_alloc_glob_unchanged.
+        2: eapply ALLOC.
+        congruence. congruence. 
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence.
+        left.
+        eapply Mem.alloc_glob_result in ALLOC.
+        subst. congruence. }
+    eapply IHsecs;eauto.
+Qed.        
+    
+
+    
 Lemma alloc_section_characterization: forall sec id m0 m ge,
     alloc_section ge (Some m0) id sec = Some m ->
     globals_initialized_sections ge m (Global id) sec.
-Admitted.
+Proof.
+  unfold alloc_section.
+  intros.
+  unfold globals_initialized_sections.
+  destr;simpl in *.
+  - destruct (Mem.alloc_glob id m0 0 (Z.max (code_size instr_size code) 1)) eqn:ALLOC.
+    split.
+    eapply Mem.alloc_glob_result in ALLOC.
+    subst.
+    eapply Mem.perm_drop_1;eauto.
+    lia.
+    intros.
+    exploit Mem.alloc_glob_result;eauto. intro. subst.
+    exploit Mem.perm_drop_4; eauto.
+    intro. exploit Mem.perm_alloc_glob_2; eauto.
+    intros. eapply H2 in H1. split.
+    eauto. eapply Mem.perm_drop_2 in H0;eauto.
+    inv H0;auto.
+  - destruct ( Mem.alloc_glob id m0 0 (init_data_list_size init)) eqn:FOLD.
+    destr_in H.
+    destr_in H.
+    exploit Mem.alloc_glob_result;eauto. intros. subst.
+    split.
+    (* 1 *)
+    unfold Mem.range_perm. intros.
+    eapply Mem.perm_drop_1;eauto.
+    (* 2 *)
+    split. intros.
+    assert (0 <= ofs < init_data_list_size init).
+    exploit Mem.perm_drop_4; eauto.
+    intro. exploit Mem.perm_alloc_glob_2; eauto.
+    intros. exploit Genv.store_zeros_perm;eauto.
+    exploit store_init_data_list_perm;eauto. intros.
+    eapply H3 in H1. eapply H4 in H1.
+    eapply H2. eauto.
+    eapply Mem.perm_drop_2 in H;eauto.
 
-
-
+    (* 3 *)
+    split.
+    
+    exploit Mem.load_drop;eauto. repeat right. constructor.
+    Genv.store_init_data_list_charact
+    Genv.store_init_data_list_loadbytes
+    load_store_init_data_invariant
+    
+    Genv.load_store_init_data_invariant
+    
 Lemma alloc_external_symbols_none: forall l,
     fold_left (fun (a : option mem) (p : positive * symbentry) => alloc_external_comm_symbol a (fst p) (snd p))
               l None = None.
@@ -949,93 +1563,6 @@ Qed.
 
 
 
-Section INITDATA.
-
-Variable ge: Genv.t.
-
-Remark store_init_data_perm:
-  forall k prm b' q i b m p m',
-  store_init_data ge m b p i = Some m' ->
-  (Mem.perm m b' q k prm <-> Mem.perm m' b' q k prm).
-Proof.
-  intros. 
-  assert (forall chunk v,
-          Mem.store chunk m b p v = Some m' ->
-          (Mem.perm m b' q k prm <-> Mem.perm m' b' q k prm)).
-    intros; split; eauto with mem.
-    destruct i; simpl in H; eauto.
-  eapply Genv.store_zeros_perm.
-  eauto.
-Qed.
-
-Remark store_init_data_list_perm:
-  forall k prm b' q idl b m p m',
-  store_init_data_list ge m b p idl = Some m' ->
-  (Mem.perm m b' q k prm <-> Mem.perm m' b' q k prm).
-Proof.
-  induction idl as [ | i1 idl]; simpl; intros.
-- inv H; tauto.
-- destruct (store_init_data ge m b p i1) as [m1|] eqn:S1; try discriminate.
-  transitivity (Mem.perm m1 b' q k prm). 
-  eapply store_init_data_perm; eauto.
-  eapply IHidl; eauto.
-Qed.
-
-Lemma store_init_data_exists:
-  forall m b p i,
-    Mem.range_perm m b p (p + init_data_size i) Cur Writable ->
-    (* Mem.stack_access (Mem.stack m) b p (p + init_data_size i)  -> *)
-    (Genv.init_data_alignment i | p) ->
-    (* (forall id ofs, i = Init_addrof id ofs -> exists b, find_symbol ge id = Some b) -> *)
-    exists m', store_init_data ge m b p i = Some m'.
-Proof.
-  intros. 
-  assert (DFL: forall chunk v,
-          init_data_size i = size_chunk chunk ->
-          Genv.init_data_alignment i = align_chunk chunk ->
-          exists m', Mem.store chunk m b p v = Some m').
-  { intros. destruct (Mem.valid_access_store m chunk b p v) as (m' & STORE).
-    split. rewrite <- H1; auto.
-    rewrite  <- H2. auto.
-    exists m'; auto. }
-  destruct i; eauto.
-  simpl. eapply Genv.store_zeros_exists.
-  simpl in H. auto.
-Qed.
-
-(* SACC
-Lemma store_init_data_stack_access:
-  forall m b p i1 m1,
-    store_init_data ge m b p i1 = Some m1 ->
-    forall b' lo hi,
-      stack_access (Mem.stack m1) b' lo hi <-> stack_access (Mem.stack m) b' lo hi.
-Proof.
-  unfold store_init_data.
-  destruct i1; intros; try now (eapply Mem.store_stack_access ; eauto).
-  inv H; tauto.
-Qed.
-*)
-
-Lemma store_init_data_list_exists:
-  forall b il m p,
-  Mem.range_perm m b p (p + init_data_list_size il) Cur Writable ->
-  (* stack_access (Mem.stack m) b p (p + init_data_list_size il) -> *)
-  Genv.init_data_list_aligned p il ->
-  (* (forall id ofs, In (Init_addrof id ofs) il -> exists b, find_symbol ge id = Some b) -> *)
-  exists m', store_init_data_list ge m b p il = Some m'.
-Proof.
-  induction il as [ | i1 il ]; simpl; intros.
-- exists m; auto.
-- destruct H0. 
-  destruct (@store_init_data_exists m b p i1) as (m1 & S1); eauto.
-  red; intros. apply H. generalize (init_data_list_size_pos il); lia.
-  (* generalize (init_data_list_size_pos il); omega. *)
-  rewrite S1.
-  apply IHil; eauto.
-  red; intros. erewrite <- store_init_data_perm by eauto. apply H. generalize (init_data_size_pos i1); lia.
-Qed.
-
-End INITDATA.
 
 
 Section STORE_INIT_DATA_PRESERVED.
