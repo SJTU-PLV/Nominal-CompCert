@@ -462,8 +462,26 @@ Proof.
            inv w. auto.
 Qed.
 
+(* acc_gen_section get not equal *)
+Lemma acc_gen_section_gso: forall id id' g sectbl,
+    id <> id' ->
+    (acc_gen_section sectbl (id,g)) ! id' = sectbl ! id'.
+Proof.
+  simpl. intros. destruct g.
+  destruct f. rewrite PTree.gso;eauto.
+  eauto.
+  repeat destr;try rewrite PTree.gso;eauto.
+Qed.
 
-
+Lemma acc_symb_gso: forall id id' g symbtbl,
+    id <> id' ->
+    (acc_symb instr_size symbtbl (id,g)) ! id' = symbtbl ! id'.
+Proof.
+  simpl. intros. destruct g;simpl.
+  destruct f;simpl;try rewrite PTree.gso;eauto.
+  repeat destr;try rewrite PTree.gso;eauto.
+Qed.
+  
 (** Transformation *)
 Variable prog: Asm.program.
 Variable tprog: program.
@@ -497,7 +515,7 @@ Proof.
     destruct IHl.
     eexists. simpl. auto. }
   destruct LEN. revert H H0.
-  generalize x,l,id,e,MATCHSEC. clear.
+  generalize x,l,id,e,MATCHSEC,NOREP. clear.
   induction x;intros.
   rewrite length_zero_iff_nil in H0. subst.
   simpl in H. rewrite PTree.gempty in H. inv H.
@@ -564,12 +582,59 @@ Proof.
   - rewrite fold_left_app.
     rewrite PTree.gsspec in *.
     destr_in H.
+    (* no repeat *)
+    rewrite map_app in NOREP.
+    eapply list_norepet_app in NOREP.
+    destruct NOREP as (NOREP1 & NOREP2 & DISJOINT).
+    unfold list_disjoint in DISJOINT.
     (* if symbentry_secindex e = secindex_normal i0 then i0 = id can be proved by symbtable generation *)
-    exploit IHx. 2: eapply H.
-
+    exploit IHx. 3: eapply H.
+    2: eauto.
+    
     (* match_sec_def *)
-    admit.
-
+    {intros id' gd' P.
+    assert (P': In (id', gd') (l' ++ [(i, g)])).
+    eapply in_app. auto.
+    assert (Q': id' <> i).
+    eapply DISJOINT. eapply in_map in P.
+    replace id' with (fst (id',gd')) by auto.
+    eauto. simpl. auto.
+    exploit MATCHSEC;eauto. intros MATCHSEC'.
+    inv MATCHSEC';simpl in *.
+    + econstructor;eauto;simpl.
+      unfold create_sec_table in *. rewrite fold_left_app in H1.
+      cbn [fold_left] in H1.
+      rewrite acc_gen_section_gso in H1;eauto.
+    + eapply match_rodata_var;eauto;simpl.
+      unfold create_sec_table in *. rewrite fold_left_app in H1.
+      cbn [fold_left] in H1.
+      rewrite acc_gen_section_gso in H1;eauto.
+    + eapply match_rwdata_var;eauto;simpl.
+      unfold create_sec_table in *. rewrite fold_left_app in H1.
+      cbn [fold_left] in H1.
+      rewrite acc_gen_section_gso in H1;eauto.
+    + eapply match_ext_fun;eauto;simpl.
+      unfold gen_symb_table in *. rewrite fold_left_app in H1.
+      cbn [fold_left] in H1.
+      rewrite acc_symb_gso in H1;eauto.
+      unfold create_sec_table in *. rewrite fold_left_app in H2.
+      cbn [fold_left] in H2.
+      rewrite acc_gen_section_gso in H2;eauto.
+    + eapply match_ext_var;eauto;simpl.
+      unfold gen_symb_table in *. rewrite fold_left_app in H2.
+      cbn [fold_left] in H2.
+      rewrite acc_symb_gso in H2;eauto.
+      unfold create_sec_table in *. rewrite fold_left_app in H3.
+      cbn [fold_left] in H3.
+      rewrite acc_gen_section_gso in H3;eauto.
+    + eapply match_comm;eauto;simpl.
+      unfold gen_symb_table in *. rewrite fold_left_app in H1.
+      cbn [fold_left] in H1.
+      rewrite acc_symb_gso in H1;eauto.
+      unfold create_sec_table in *. rewrite fold_left_app in H2.
+      cbn [fold_left] in H2.
+      rewrite acc_gen_section_gso in H2;eauto. }
+    
     auto.
     
     destruct (symbentry_secindex e).
@@ -594,8 +659,8 @@ Proof.
       simpl. repeat destr;try  erewrite PTree.gso;eauto.
     + intros (Q1 &  Q2). split;eauto.
       simpl. repeat destr;try  erewrite PTree.gso;eauto.
-(* Qed. *)
-Admitted.
+Qed.
+
 
 (** ** Definitions of Matching States *)
 
@@ -1680,7 +1745,6 @@ Proof.
       rewrite Z.add_0_l. unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2;eauto.
       simpl in ALIGN. auto.
       (* find_symbol success *)
-      Genv.init_mem_inversion
       intros (m'' & A). rewrite A.
       unfold Mem.drop_perm.
       destr. eexists. eauto.
@@ -1823,11 +1887,26 @@ Qed.
 
 
 Lemma alloc_globals_alloc_external_exists: forall symbtbl m sectbl,
-    well_formed_symbtbl_elements instr_size sectbl symbtbl ->
+    well_formed_symbtbl instr_size sectbl symbtbl ->
     exists m', alloc_external_symbols m symbtbl = Some m'.
 Proof.
-  unfold well_formed_symbtbl_elements.
+  unfold well_formed_symbtbl.
   unfold alloc_external_symbols;intros.
+
+  assert (forall (id : positive) (e : symbentry),
+      In (id,e) (PTree.elements symbtbl) ->
+      match symbentry_secindex e with
+      | secindex_normal i =>
+          symbentry_type e <> symb_notype /\
+          i = id /\
+          (exists sec : RelocProg.section instruction init_data,
+             sectbl ! i = Some sec /\ sec_size instr_size sec = symbentry_size e /\ symbentry_value e = 0)
+      | secindex_comm => symbentry_type e = symb_data /\ sectbl ! id = None
+      | secindex_undef => symbentry_type e <> symb_notype /\ sectbl ! id = None
+      end).
+  intros. eapply H. eapply PTree.elements_complete. auto.
+  clear H. rename H0 into H.
+  
   rewrite PTree.fold_spec.
   set (l:= (PTree.elements symbtbl)) in *.
   generalize (list_length_exists _ l).
@@ -1854,7 +1933,8 @@ Proof.
 
   destruct (symbentry_secindex s) eqn:SECIDX.
   - destruct H1. destr;eauto.
-  - rewrite H1.
+  - destruct H1.
+    rewrite H1.
     destruct (Mem.alloc_glob p m' 0 (symbentry_size s)) eqn:FOLD.
     exploit Genv.store_zeros_exists.
     unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2 with (lo:=0);eauto.
@@ -1894,9 +1974,9 @@ Proof.
   intros m M1.
   (* exploit (alloc_globals_alloc_sections_exists (AST.prog_defs prog) (Genv.globalenv prog) ((globalenv instr_size tprog)) (Mem.empty) m (Mem.empty));eauto. *)
   (* intros (m2' & A). *)
-  assert (WF:well_formed_symbtbl_elements instr_size (prog_sectable tprog) (prog_symbtable tprog)).
-  unfold well_formed_symbtbl_elements. intros. eapply PTree.elements_complete in H.
-  eapply match_prog_well_formed_symbtbl;eauto.
+  (* assert (WF:well_formed_symbtbl_elements instr_size (prog_sectable tprog) (prog_symbtable tprog)). *)
+  (* unfold well_formed_symbtbl_elements. intros. eapply PTree.elements_complete in H. *)
+  (* eapply match_prog_well_formed_symbtbl;eauto. *)
   assert (exists m', alloc_sections instr_size (globalenv instr_size tprog) (prog_sectable tprog) Mem.empty = Some m').
   {
     generalize TRANSF. intros TRANSF'.
@@ -1907,7 +1987,7 @@ Proof.
     rewrite PTree.fold_spec.
     eapply alloc_globals_alloc_sections_exists;eauto. }
   destruct H. rewrite H.
-  generalize (alloc_globals_alloc_external_exists (prog_symbtable tprog) x (prog_sectable tprog) WF). 
+  generalize (alloc_globals_alloc_external_exists (prog_symbtable tprog) x (prog_sectable tprog) match_prog_well_formed_symbtbl). 
   intros (m1 & E). exists m1. auto.
 Qed.
 
