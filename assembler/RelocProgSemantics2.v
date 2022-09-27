@@ -108,7 +108,7 @@ Definition alloc_section (reloctbl_map: reloctable_map) (r: option mem) (id: ide
         end
       end
     | sec_text code =>
-      let sz := code_size instr_size code in
+      let sz := Z.max (code_size instr_size code) 1 in
       let (m1, b) := Mem.alloc_glob id m 0 sz in
       Mem.drop_perm m1 b 0 sz Nonempty
     end                  

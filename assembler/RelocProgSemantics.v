@@ -301,15 +301,15 @@ Definition alloc_external_comm_symbol (r: option mem) (id: ident) (e:symbentry):
   | symb_data =>
     match symbentry_secindex e with
     | secindex_undef =>
-      let sz := symbentry_size e in
-      let (m1, b) := Mem.alloc_glob id m 0 sz in
-      match store_zeros m1 b 0 sz with
+      (* let sz := symbentry_size e in *)
+      let (m1, b) := Mem.alloc_glob id m 0 1 in
+      match store_zeros m1 b 0 1 with
       | None => None
       | Some m2 =>
-        Mem.drop_perm m2 b 0 sz Nonempty
-      end        
+        Mem.drop_perm m2 b 0 1 Nonempty
+      end
     | secindex_comm =>
-      let sz := symbentry_size e in
+      let sz := Z.max (symbentry_size e) 0 in
       let (m1, b) := Mem.alloc_glob id m 0 sz in
       match store_zeros m1 b 0 sz with
       | None => None
@@ -772,9 +772,10 @@ Definition globals_initialized (ge: Genv.t) (prog: program) (m:mem):=
         | symb_data,secindex_comm =>
           let sz := e.(symbentry_size) in
           let data := Init_space sz :: nil in
-          Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
+          let sz' := Z.max sz 0 in
+          Mem.range_perm m b 0 sz' Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz' /\ perm_order Writable p)
           /\ load_store_init_data ge m b 0 data
-          /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+          /\ Mem.loadbytes m b 0 sz' = Some (bytes_of_init_data_list ge data)
         | symb_data,secindex_undef =>
           Mem.perm m b 0 Cur Nonempty /\
           (forall ofs k p, Mem.perm m b ofs k p -> ofs = 0 /\ p = Nonempty)
@@ -840,15 +841,363 @@ Definition globals_initialized_external ge m b e:=
   | symb_data,secindex_comm =>
     let sz := e.(symbentry_size) in
     let data := Init_space sz :: nil in
-    Mem.range_perm m b 0 sz Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz /\ perm_order Writable p)
+    let sz' := Z.max sz 0 in
+    Mem.range_perm m b 0 sz' Cur Writable /\ (forall ofs k p, Mem.perm m b ofs k p -> 0 <= ofs < sz' /\ perm_order Writable p)
     /\ load_store_init_data ge m b 0 data
-    /\ Mem.loadbytes m b 0 sz = Some (bytes_of_init_data_list ge data)
+    /\ Mem.loadbytes m b 0 sz' = Some (bytes_of_init_data_list ge data)
   | symb_data,secindex_undef =>
     Mem.perm m b 0 Cur Nonempty /\
     (forall ofs k p, Mem.perm m b ofs k p -> ofs = 0 /\ p = Nonempty)
   | _,_ => False
   end.
 
+(* alloc_glob dose not change the globals_initialized_sections *)
+Lemma alloc_glob_pres_globals_initialized_sections: forall b b' id lo hi sec m1 m2 ge,
+    globals_initialized_sections ge m1 b sec ->
+    Mem.alloc_glob id m1 lo hi = (m2,b') ->
+    b <> b' ->
+    globals_initialized_sections ge m2 b sec.
+Proof.
+  unfold globals_initialized_sections.
+  intros.
+  exploit Mem.alloc_glob_result;eauto;intros. subst.  
+  destruct sec.
+  - destruct H. split. 
+    + eapply Mem.perm_alloc_glob_1 in H0. eapply H0.
+      eauto.
+      congruence.
+    + intros.
+      assert (Mem.perm m1 b ofs k p).
+      eapply Mem.perm_alloc_glob_1 in H0. eapply H0.
+      auto.
+      congruence. eapply H2 in H4.
+      eauto.
+  - destruct H as (P1 & P2 & P3 & P4).
+    split.
+    (* 1 *)
+    unfold Mem.range_perm. intros.
+    eapply Mem.perm_alloc_glob_1 in H0. eapply H0.
+    eauto.
+    congruence.
+    (* 2 *)
+    split.
+    intros.
+    assert (Mem.perm m1 b ofs k p).
+    eapply Mem.perm_alloc_glob_1 in H0. eapply H0.                   
+    auto.
+    congruence. eapply P2 in H2.
+    eauto.
+    (* 3 *)
+    split.
+    eapply load_store_init_data_invariant.
+    2: eapply P3. intros.
+    eapply Mem.load_alloc_glob_unchanged;eauto.
+    (* 4 *)   
+    erewrite Mem.loadbytes_alloc_glob_unchanged;eauto.
+    
+  - destruct H as (P1 & P2 & P3 & P4).
+    split.
+    (* 1 *)
+    unfold Mem.range_perm. intros.
+    eapply Mem.perm_alloc_glob_1 in H0. eapply H0.
+    eauto.
+    congruence.
+    (* 2 *)
+    split.
+    intros.
+    assert (Mem.perm m1 b ofs k p).
+    eapply Mem.perm_alloc_glob_1 in H0. eapply H0.                   
+    auto.
+    congruence. eapply P2 in H2.
+    eauto.
+    (* 3 *)
+    split.
+    eapply load_store_init_data_invariant.
+    2: eapply P3. intros.
+    eapply Mem.load_alloc_glob_unchanged;eauto.
+    (* 4 *)   
+    erewrite Mem.loadbytes_alloc_glob_unchanged;eauto.
+Qed.
+
+
+Lemma alloc_glob_pres_globals_initialized_external: forall b b' id lo hi e m1 m2 ge,
+    globals_initialized_external ge m1 b e ->
+    Mem.alloc_glob id m1 lo hi = (m2,b') ->
+    b <> b' ->
+    globals_initialized_external ge m2 b e.
+Proof.
+  unfold globals_initialized_external.
+  intros.
+  exploit Mem.alloc_glob_result;eauto;intros. subst.  
+  destr.
+  - destr.
+    destruct H. split.
+    + eapply Mem.perm_alloc_glob_1 in H0. eapply H0.
+      eauto.
+      congruence.
+    + intros.
+      assert (Mem.perm m1 b ofs k p).
+      eapply Mem.perm_alloc_glob_1 in H0. eapply H0.
+      auto.
+      congruence. eapply H2 in H4.
+      eauto.
+  - destr.
+    + destruct H as (P1 & P2 & P3 & P4).
+      split.
+      (* 1 *)
+      unfold Mem.range_perm. intros.
+      eapply Mem.perm_alloc_glob_1 in H0. eapply H0.
+      eauto.
+      congruence.
+      (* 2 *)
+      split.
+      intros.
+      assert (Mem.perm m1 b ofs k p).
+      eapply Mem.perm_alloc_glob_1 in H0. eapply H0.                   
+      auto.
+      congruence. eapply P2 in H2.
+      eauto.
+      (* 3 *)
+      split.
+      eapply load_store_init_data_invariant.
+      2: eapply P3. intros.
+      eapply Mem.load_alloc_glob_unchanged;eauto.
+      (* 4 *)   
+      erewrite Mem.loadbytes_alloc_glob_unchanged;eauto.
+    + destruct H. split.
+      * eapply Mem.perm_alloc_glob_1 in H0. eapply H0.
+        eauto.
+        congruence.
+      * intros.
+        assert (Mem.perm m1 b ofs k p).
+        eapply Mem.perm_alloc_glob_1 in H0. eapply H0.
+        auto.
+        congruence. eapply H2 in H4.
+        eauto.
+Qed.
+
+
+Lemma store_zeros_pres_globals_initialized_sections: forall b b' sz ofs sec m1 m2 ge,
+    globals_initialized_sections ge m1 b sec ->
+    store_zeros m1 b' ofs sz = Some m2 ->
+    b <> b' ->
+    globals_initialized_sections ge m2 b sec.
+Proof.
+  unfold globals_initialized_sections.
+  intros.
+  destruct sec.
+  - destruct H.
+    split.
+    + erewrite <- Genv.store_zeros_perm;eauto.
+    + intros.
+      assert (Mem.perm m1 b ofs0 k p).
+      eapply Genv.store_zeros_perm;eauto.
+      eapply H2 in H4.
+      eauto.
+  - destruct H as (P1 & P2 & P3 & P4).
+    split.
+    (* 1 *)
+    unfold Mem.range_perm in *.
+    intros.
+    erewrite <- Genv.store_zeros_perm;eauto. 
+    (* 2 *)
+    split.
+    intros.
+    assert (Mem.perm m1 b ofs0 k p).
+    eapply Genv.store_zeros_perm;eauto.
+    eapply P2 in H2.
+    eauto.
+    (* 3 *)
+    split.
+    eapply load_store_init_data_invariant.
+    2: eapply P3.
+    intros.
+    erewrite <- (Genv.store_zeros_load_other m1);eauto.
+    (* 4 *)        
+    erewrite <- Genv.store_zeros_loadbytes_other;eauto.
+
+  - destruct H as (P1 & P2 & P3 & P4).
+    split.
+    (* 1 *)
+    unfold Mem.range_perm in *.
+    intros.
+    erewrite <- Genv.store_zeros_perm;eauto. 
+    (* 2 *)
+    split.
+    intros.
+    assert (Mem.perm m1 b ofs0 k p).
+    eapply Genv.store_zeros_perm;eauto.
+    eapply P2 in H2.
+    eauto.
+    (* 3 *)
+    split.
+    eapply load_store_init_data_invariant.
+    2: eapply P3.
+    intros.
+    erewrite <- (Genv.store_zeros_load_other m1);eauto.
+    (* 4 *)        
+    erewrite <- Genv.store_zeros_loadbytes_other;eauto.
+Qed.
+
+
+Lemma store_zeros_pres_globals_initialized_external: forall b b' sz ofs e m1 m2 ge,
+    globals_initialized_external ge m1 b e ->
+    store_zeros m1 b' ofs sz = Some m2 ->
+    b <> b' ->
+    globals_initialized_external ge m2 b e.
+Proof.
+  unfold globals_initialized_external.
+  intros.
+  destr.
+  - destr. destruct H. split.
+    + erewrite <- Genv.store_zeros_perm;eauto.
+    + intros.
+      assert (Mem.perm m1 b ofs0 k p).
+      eapply Genv.store_zeros_perm;eauto.
+      eapply H2 in H4.
+      eauto.
+  - destr. destruct H as (P1 & P2 & P3 & P4).
+    split.
+    (* 1 *)
+    unfold Mem.range_perm in *.
+    intros.
+    erewrite <- Genv.store_zeros_perm;eauto. 
+    (* 2 *)
+    split.
+    intros.
+    assert (Mem.perm m1 b ofs0 k p).
+    eapply Genv.store_zeros_perm;eauto.
+    eapply P2 in H2.
+    eauto.
+    (* 3 *)
+    split.
+    eapply load_store_init_data_invariant.
+    2: eapply P3.
+    intros.
+    erewrite <- (Genv.store_zeros_load_other m1);eauto.
+    (* 4 *)        
+    erewrite <- Genv.store_zeros_loadbytes_other;eauto.
+
+     destruct H. split.
+    + erewrite <- Genv.store_zeros_perm;eauto.
+    + intros.
+      assert (Mem.perm m1 b ofs0 k p).
+      eapply Genv.store_zeros_perm;eauto.
+      eapply H2 in H4.
+      eauto.
+Qed.
+
+
+Lemma drop_pres_globals_initialized_sections: forall b b' lo hi p sec m1 m2 ge,
+    globals_initialized_sections ge m1 b sec ->
+    Mem.drop_perm m1 b' lo hi p = Some m2 ->
+    b <> b' ->
+    globals_initialized_sections ge m2 b sec.
+Proof.
+  unfold globals_initialized_sections.
+  intros.
+  destruct sec.
+  - destruct H. split.
+    + eapply Mem.perm_drop_3;eauto.
+    + intros.
+      assert (Mem.perm m1 b ofs k p0).
+      eapply Mem.perm_drop_4;eauto.
+      eapply H2 in H4.
+      eauto.
+  - destruct H as (P1 & P2 & P3 & P4).
+    split.
+    (* 1 *)
+    unfold Mem.range_perm in *.
+    intros.
+    eapply Mem.perm_drop_3;eauto.
+    (* 2 *)
+    split.
+    intros.
+    assert (Mem.perm m1 b ofs k p0).
+    eapply Mem.perm_drop_4;eauto.
+    eapply P2 in H2.
+    eauto.
+    (* 3 *)
+    split.
+    eapply load_store_init_data_invariant.
+    2: eapply P3. intros.
+    erewrite (Mem.load_drop m1);eauto.
+    (* 4 *)
+    erewrite Mem.loadbytes_drop;eauto.
+
+- destruct H as (P1 & P2 & P3 & P4).
+    split.
+    (* 1 *)
+    unfold Mem.range_perm in *.
+    intros.
+    eapply Mem.perm_drop_3;eauto.
+    (* 2 *)
+    split.
+    intros.
+    assert (Mem.perm m1 b ofs k p0).
+    eapply Mem.perm_drop_4;eauto.
+    eapply P2 in H2.
+    eauto.
+    (* 3 *)
+    split.
+    eapply load_store_init_data_invariant.
+    2: eapply P3. intros.
+    erewrite (Mem.load_drop m1);eauto.
+    (* 4 *)
+    erewrite Mem.loadbytes_drop;eauto.
+Qed.
+
+
+Lemma drop_pres_globals_initialized_external: forall b b' lo hi p e m1 m2 ge,
+    globals_initialized_external ge m1 b e ->
+    Mem.drop_perm m1 b' lo hi p = Some m2 ->
+    b <> b' ->
+    globals_initialized_external ge m2 b e.
+Proof.
+  unfold globals_initialized_external.
+  intros.
+  destr.
+  - destr. destruct H. split.
+    + eapply Mem.perm_drop_3;eauto.
+    + intros.
+      assert (Mem.perm m1 b ofs k p0).
+      eapply Mem.perm_drop_4;eauto.
+      eapply H2 in H4.
+      eauto.
+  - destr.
+    destruct H as (P1 & P2 & P3 & P4).
+    split.
+    (* 1 *)
+    unfold Mem.range_perm in *.
+    intros.
+    eapply Mem.perm_drop_3;eauto.
+    (* 2 *)
+    split.
+    intros.
+    assert (Mem.perm m1 b ofs k p0).
+    eapply Mem.perm_drop_4;eauto.
+    eapply P2 in H2.
+    eauto.
+    (* 3 *)
+    split.
+    eapply load_store_init_data_invariant.
+    2: eapply P3. intros.
+    erewrite (Mem.load_drop m1);eauto.
+    (* 4 *)
+    erewrite Mem.loadbytes_drop;eauto.
+    
+    destruct H. split.
+    + eapply Mem.perm_drop_3;eauto.
+    + intros.
+      assert (Mem.perm m1 b ofs k p0).
+      eapply Mem.perm_drop_4;eauto.
+      eapply H2 in H4.
+      eauto.
+Qed.      
+
+     
+    
+(* FIXME: so verbose and we should use the above lemma to simplify it *)
 Lemma alloc_sections_none: forall secs ge,
     fold_left
       (fun (a : option mem) (p0 : positive * section) => alloc_section ge a (fst p0) (snd p0))
@@ -1350,7 +1699,95 @@ Lemma alloc_external_symbols_pres_characterization: forall m0 symbtbl sectbl m g
     alloc_external_symbols m0 symbtbl = Some m ->
     globals_initialized_sections ge m0 (Global id) sec ->
     globals_initialized_sections ge m (Global id) sec.
-Admitted.
+Proof.
+  unfold well_formed_symbtbl,alloc_external_symbols.
+  intros m0 symbtbl sectbl m ge id sec G W ALLOC P.
+  assert (WF: forall (id : positive) (e : symbentry),
+       In (id,e) (PTree.elements symbtbl) ->
+       match symbentry_secindex e with
+       | secindex_normal i =>
+           symbentry_type e <> symb_notype /\
+           i = id /\
+           (exists sec : RelocProg.section instruction init_data,
+              sectbl ! i = Some sec /\ sec_size instr_size sec = symbentry_size e /\ symbentry_value e = 0)
+       | secindex_comm => symbentry_type e = symb_data /\ sectbl ! id = None
+       | secindex_undef => symbentry_type e <> symb_notype /\ sectbl ! id = None
+       end).
+  intros. eapply W. eapply PTree.elements_complete. auto.
+  clear W.
+
+  rewrite PTree.fold_spec in ALLOC.
+  set (l:= (PTree.elements symbtbl)) in *.
+  generalize l m m0 WF ALLOC P. clear l m m0 WF ALLOC P.
+  induction l;simpl. intros.
+  inv ALLOC. auto.
+  
+  intros.
+
+  (* we should ensure ALLOC return some *)
+  destruct a;simpl in *.
+
+  exploit WF. left. eauto.
+  intros WF'.
+  
+  destr_in WF'.
+  
+  - destr_in ALLOC. 
+    eapply IHl. 2: eapply ALLOC.
+    intros. eapply WF. auto. auto.
+    eapply IHl. 2: eapply ALLOC.
+    intros. eapply WF. auto. auto.
+  - destruct WF'.
+    rewrite H in *.
+    destruct (Mem.alloc_glob p m0 0 ((Z.max (symbentry_size s) 0))) eqn:GLOB.
+    destr_in ALLOC.
+    destruct ((Mem.drop_perm m2 b 0 (Z.max (symbentry_size s) 0) Writable)) eqn:DROP.
+    eapply IHl. 2: eapply ALLOC.
+    intros. eapply WF. auto.
+    assert (p <> id).
+    unfold not. intros. subst. congruence.
+    exploit Mem.alloc_glob_result;eauto. intros. subst.
+    eapply drop_pres_globals_initialized_sections.
+    eapply store_zeros_pres_globals_initialized_sections.
+    eapply alloc_glob_pres_globals_initialized_sections;eauto.
+    congruence. eauto.
+    congruence. eauto.
+    congruence.
+
+    erewrite alloc_external_symbols_none in ALLOC. congruence.
+    erewrite alloc_external_symbols_none in ALLOC. congruence.
+  - destruct WF'.
+    destr_in ALLOC;try congruence.
+    + destruct (Mem.alloc_glob p m0 0 1) eqn:GLOB.
+      destruct ((Mem.drop_perm m1 b 0 1 Nonempty)) eqn:DROP.
+      eapply IHl. 2: eapply ALLOC.
+      intros. eapply WF. auto.
+      assert (p <> id).
+      unfold not. intros. subst. congruence.
+      exploit Mem.alloc_glob_result;eauto. intros. subst.
+      eapply drop_pres_globals_initialized_sections.
+      eapply alloc_glob_pres_globals_initialized_sections;eauto.
+      congruence. eauto.
+      congruence.
+      
+      erewrite alloc_external_symbols_none in ALLOC. congruence.
+    + destruct (Mem.alloc_glob p m0 0 1) eqn:GLOB.
+      destr_in ALLOC.
+      destruct ((Mem.drop_perm m2 b 0 1 Nonempty)) eqn:DROP.
+      eapply IHl. 2: eapply ALLOC.
+      intros. eapply WF. auto.
+      assert (p <> id).
+      unfold not. intros. subst. congruence.
+      exploit Mem.alloc_glob_result;eauto. intros. subst.
+      eapply drop_pres_globals_initialized_sections.
+      eapply store_zeros_pres_globals_initialized_sections.
+      eapply alloc_glob_pres_globals_initialized_sections;eauto.
+      congruence. eauto.
+      congruence. eauto.
+      congruence.
+      erewrite alloc_external_symbols_none in ALLOC. congruence.
+      erewrite alloc_external_symbols_none in ALLOC. congruence.
+Qed.
 
 
 Lemma alloc_external_symbols_pres_external_characterization: 
@@ -1360,12 +1797,140 @@ Lemma alloc_external_symbols_pres_external_characterization:
     fold_left (fun (a : option mem) (p : positive * symbentry) => alloc_external_comm_symbol a (fst p) (snd p))
               symbs (Some m0) = Some m ->
     globals_initialized_external ge m (Global id) symb.
-Admitted.
+Proof.
+  induction symbs;simpl;intros.
+  inv H1. auto.
+  destruct a;simpl in *.
+  eapply Decidable.not_or in H.
+  destruct H.
 
-Lemma alloc_external_characterization: forall symb id m0 m ge,
+  rename H1 into ALLOC.
+  destr_in ALLOC.
+  - destr_in ALLOC.
+    + eapply IHsymbs;eauto.
+    + erewrite alloc_external_symbols_none in ALLOC. congruence.
+    + destruct (Mem.alloc_glob i m0 0 1) eqn:GLOB.      
+      destruct ((Mem.drop_perm m1 b 0 1 Nonempty)) eqn:DROP.
+      eapply IHsymbs. 3: eapply ALLOC. auto.
+      exploit Mem.alloc_glob_result;eauto. intros. subst.
+      eapply drop_pres_globals_initialized_external.
+      eapply alloc_glob_pres_globals_initialized_external;eauto.
+      congruence. eauto.
+      congruence. eauto.
+      
+      erewrite alloc_external_symbols_none in ALLOC. congruence.
+  - destr_in ALLOC.
+    + eapply IHsymbs;eauto.
+    + destruct (Mem.alloc_glob i m0 0 (Z.max (symbentry_size s) 0)) eqn:GLOB.
+      destr_in ALLOC.
+      destruct ((Mem.drop_perm m2 b 0 (Z.max (symbentry_size s) 0) Writable)) eqn:DROP.
+      eapply IHsymbs. 3: eapply ALLOC. auto.
+      exploit Mem.alloc_glob_result;eauto. intros. subst.
+      eapply drop_pres_globals_initialized_external.
+      eapply store_zeros_pres_globals_initialized_external.
+      eapply alloc_glob_pres_globals_initialized_external;eauto.
+      congruence. eauto.
+      congruence. eauto.
+      congruence.
+      erewrite alloc_external_symbols_none in ALLOC. congruence.
+      erewrite alloc_external_symbols_none in ALLOC. congruence.
+    + destruct (Mem.alloc_glob i m0 0 1) eqn:GLOB.
+      destr_in ALLOC.
+      destruct ((Mem.drop_perm m2 b 0 1 Nonempty)) eqn:DROP.
+      eapply IHsymbs. 3: eapply ALLOC. auto.
+      exploit Mem.alloc_glob_result;eauto. intros. subst.
+      eapply drop_pres_globals_initialized_external.
+      eapply store_zeros_pres_globals_initialized_external.
+      eapply alloc_glob_pres_globals_initialized_external;eauto.
+      congruence. eauto.
+      congruence. eauto.
+      congruence.
+      erewrite alloc_external_symbols_none in ALLOC. congruence.
+      erewrite alloc_external_symbols_none in ALLOC. congruence.
+
+  - erewrite alloc_external_symbols_none in ALLOC. congruence.
+Qed.
+
+Lemma alloc_external_characterization: forall symb id m0 m ge ,
+    symbentry_secindex symb = secindex_comm \/ symbentry_secindex symb = secindex_undef ->
     alloc_external_comm_symbol (Some m0) id symb = Some m ->
     globals_initialized_external ge m (Global id) symb.
-Admitted.
+Proof.
+  unfold alloc_external_comm_symbol, globals_initialized_external.
+  intros.
+  rename H0 into ALLOC.
+  destruct H;rewrite H in *.
+  - destr.
+    + destruct (Mem.alloc_glob id m0 0 (Z.max (symbentry_size symb) 0)) eqn:GLOB.
+      destr_in ALLOC.
+      exploit Mem.alloc_glob_result;eauto. intros. subst.
+      split.
+      (* 1 *)
+      unfold Mem.range_perm. intros.
+      eapply Mem.perm_drop_1;eauto.
+      (* 2 *)
+      split. intros.
+      assert (0 <= ofs < Z.max (symbentry_size symb) 0).
+      exploit Mem.perm_drop_4; eauto.
+      intro. exploit Mem.perm_alloc_glob_2; eauto.
+      intros. exploit Genv.store_zeros_perm;eauto.
+      intros.
+      eapply H3 in H1. eapply H2 in H1.
+      auto.
+      split. auto.
+      eapply Mem.perm_drop_2 in ALLOC;eauto.
+      
+      (* 3 *)
+      split.          
+      eapply load_store_init_data_invariant. intros.
+      eapply Mem.load_drop;eauto. repeat right. constructor.
+      simpl. split;auto.
+
+      eapply Genv.store_zeros_read_as_zero;eauto.
+      (* rewrite store_zeros_equation in *. destr_in Heqo. *)
+
+      (* assert ((Z.max (symbentry_size symb) 0) = 0). lia. *)
+      (* rewrite H0. rewrite zle_true. eapply Heqo. lia. *)
+      (* assert (Z.max (symbentry_size symb) 0 = (symbentry_size symb)) by lia. *)
+      (* destr. rewrite H0. auto. *)
+
+      (* 4 *)
+      erewrite Mem.loadbytes_drop;eauto.
+      simpl.
+
+      
+      generalize (Genv.store_zeros_loadbytes _ _ _ Heqo).
+      unfold Genv.readbytes_as_zero. intros. rewrite app_nil_r.
+      rewrite <- Z_to_nat_max.
+      
+      eapply H0.
+      lia. lia.
+
+      repeat right. constructor.
+      
+  - destr.  
+    + destruct (Mem.alloc_glob id m0 0 1) eqn:GLOB.
+      exploit Mem.alloc_glob_result;eauto;intros;subst.
+      split.
+      * eapply Mem.perm_drop_1;eauto. lia.
+      * intros. exploit Mem.perm_drop_4; eauto.
+        intro. exploit Mem.perm_alloc_glob_2; eauto.
+        intros. eapply H2 in H1. split.
+        lia. eapply Mem.perm_drop_2 in H0;eauto.
+        inv H0;auto.
+    + destruct (Mem.alloc_glob id m0 0 1) eqn:GLOB.
+      destr_in ALLOC.
+      exploit Mem.alloc_glob_result;eauto;intros;subst.
+      split.
+      * eapply Mem.perm_drop_1;eauto. lia.
+      * intros. exploit Mem.perm_drop_4; eauto.
+        intro. exploit Mem.perm_alloc_glob_2; eauto.
+        intros.
+        exploit Genv.store_zeros_perm;eauto. intros.
+        eapply H3 in H1. eapply H2 in H1. split.
+        lia. eapply Mem.perm_drop_2 in H0;eauto.
+        inv H0;auto.
+Qed.    
 
 (** Properties about init_mem *)
 Lemma init_mem_characterization_gen: forall p m,
@@ -1449,7 +2014,7 @@ Proof.
          eapply ALLOC. eauto.
          unfold globals_initialized_external.
          rewrite P1. rewrite SECIDX.
-         eauto.
+         eauto. auto.
        * erewrite alloc_external_symbols_none in H.
          congruence.
      + simpl in H.
@@ -1478,7 +2043,7 @@ Proof.
          generalize (alloc_external_symbols_pres_external_characterization gl2 s (globalenv p) m2 m id Q2 ALLOC H). 
          unfold globals_initialized_external.
          rewrite Heqs0. rewrite SECIDX.
-         eauto.
+         eauto. auto.
        * erewrite alloc_external_symbols_none in H.
          congruence.
      + simpl in H.
@@ -1505,7 +2070,7 @@ Proof.
          generalize (alloc_external_symbols_pres_external_characterization gl2 s (globalenv p) m2 m id Q2 ALLOC H). 
          unfold globals_initialized_external.
          rewrite Heqs0. rewrite SECIDX.
-         eauto.
+         eauto. auto.
        * erewrite alloc_external_symbols_none in H.
          congruence.
      + simpl in H.

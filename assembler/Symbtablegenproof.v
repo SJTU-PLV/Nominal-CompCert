@@ -1472,6 +1472,8 @@ Proof.
       rewrite H7 in *. rewrite H4 in *.
       apply OFSRANGE1 in H0. destruct H0.
       simpl in H. rewrite Z.add_0_r in H.
+      (* we ensure sz in init_space sz is greater than 0 in allocation and geneeration of symbol entry *)
+      erewrite (Z.max_l (Z.max sz 0)) in * by lia.
       apply PERM in H.
       apply Mem.perm_cur.
       eapply Mem.perm_implies. eauto.
@@ -1559,7 +1561,10 @@ Proof.
       generalize (BYTES1 (eq_refl false)).
       intros. destr_in H7. rewrite Z.add_0_r in H7.
       rewrite app_nil_r in H7.
-      inv H7. rewrite H8,H10.
+      inv H7.
+      
+      erewrite (Z.max_l (Z.max sz 0)) in * by lia.
+      rewrite H8,H10.
       rewrite app_nil_r.
       assert ((Z.to_nat sz) = (Z.to_nat (Z.max sz 0))).
       destruct sz;simpl;lia.
@@ -1935,10 +1940,10 @@ Proof.
   - destruct H1. destr;eauto.
   - destruct H1.
     rewrite H1.
-    destruct (Mem.alloc_glob p m' 0 (symbentry_size s)) eqn:FOLD.
+    destruct (Mem.alloc_glob p m' 0 (Z.max (symbentry_size s) 0))  eqn:FOLD.
     exploit Genv.store_zeros_exists.
     unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2 with (lo:=0);eauto.
-    rewrite <- (Z.add_0_l (symbentry_size s)). eauto.
+    rewrite <- (Z.add_0_l (Z.max (symbentry_size s) 0)). eauto.
     intros (m0' & STORE). rewrite STORE.
     unfold Mem.drop_perm.
     destr. eexists. eauto.
@@ -1952,10 +1957,10 @@ Proof.
       unfold Mem.range_perm in n. exfalso.
       eapply n. intros. eapply Mem.perm_alloc_glob_2 in FOLD.
       eapply FOLD. lia.
-    + destruct (Mem.alloc_glob p m' 0 (symbentry_size s)) eqn:FOLD.
+    + destruct (Mem.alloc_glob p m' 0 1) eqn:FOLD.
       exploit Genv.store_zeros_exists.
       unfold Mem.range_perm. intros. eapply Mem.perm_alloc_glob_2 with (lo:=0);eauto.
-      rewrite <- (Z.add_0_l (symbentry_size s)). eauto.
+      rewrite <- (Z.add_0_l 1). eauto.
       intros (m0' & STORE). rewrite STORE.
       unfold Mem.drop_perm.
       destr. eexists. eauto.     

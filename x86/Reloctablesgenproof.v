@@ -512,7 +512,7 @@ Proof.
   eapply PTree.elements_canonical_order' in H0.
   set (l1:= (PTree.elements sectbl')) in *.
   set (l2:= (PTree.elements sectbl)) in *.
-  generalize (list_length_exists l1). intros (n & LEN).
+  generalize (list_length_exists _ l1). intros (n & LEN).
   generalize n l1 LEN l2  m m' H0 H1. clear n l1 LEN l2 m m' H0 H1.
   induction n;intros.
   rewrite length_zero_iff_nil in LEN. subst.
