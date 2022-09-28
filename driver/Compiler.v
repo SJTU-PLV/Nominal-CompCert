@@ -569,15 +569,7 @@ Proof.
   rewrite <- cc_compose_assoc, <- cc_c_compose at 1.
   rewrite injp_injp2. reflexivity.
 Qed.
-(*
-Lemma cc_dom_ext:
-  ccref (cc_c ext @ cc_c_dom) cc_c_dom.
-Proof.
-  unfold cc_c_dom. Search injp.
-  rewrite injp_inj.
-  rewrite cc_star_absorb_l; eauto with cc.
-Qed.
-*)
+
 Lemma cc_dom_wt:
   ccref (wt_c @ cc_c_dom) cc_c_dom.
 Proof.
@@ -604,18 +596,7 @@ Proof.
   eapply compose_forward_simulations; eauto.
 Qed.
 
-Lemma compose_selection_pass' sem bsem tsem:
-  forward_simulation (wt_c @ cc_c injp) (wt_c @ cc_c inj) sem bsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) bsem tsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) sem tsem.
-Proof.
-  intros.
-  rewrite <- cc_dom_wt, cc_cod_wt, !cc_compose_assoc.
-  rewrite <- cc_dom_injp, cc_cod_inj, !cc_compose_assoc.
-  rewrite <- !(cc_compose_assoc wt_c).
-  eapply compose_forward_simulations; eauto.
-Qed.
-
+(* We can turn ext into injection using the self-simulation of target semantics *)
 Lemma ext_pass: forall sem tp,
     let tsem := RTL.semantics tp in
   forward_simulation (cc_c ext) (cc_c ext) sem tsem ->
@@ -631,8 +612,22 @@ Proof.
   eapply RTLrel.semantics_rel.
 Qed.
 
-Lemma selection_pass: forall p tp,
-    let sem := RTL.semantics p in
+(* Since Selection pass is Cminor -> CminorSel without target self simulation, we need to compose it with 
+   following RTLgen pass, then turn the whole simulation into wt_c @ injp --> wt_c @ inj *)
+
+Lemma compose_wt_injection_pass sem bsem tsem:
+  forward_simulation (wt_c @ cc_c injp) (wt_c @ cc_c inj) sem bsem ->
+  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) bsem tsem ->
+  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) sem tsem.
+Proof.
+  intros.
+  rewrite <- cc_dom_wt, cc_cod_wt, !cc_compose_assoc.
+  rewrite <- cc_dom_injp, cc_cod_inj, !cc_compose_assoc.
+  rewrite <- !(cc_compose_assoc wt_c).
+  eapply compose_forward_simulations; eauto.
+Qed.
+
+Lemma wt_ext_pass: forall sem tp,
     let tsem := RTL.semantics tp in
   forward_simulation (wt_c @ cc_c ext) (wt_c @ cc_c ext) sem tsem ->
   forward_simulation (wt_c @ cc_c injp) (wt_c @ cc_c inj) sem tsem.
@@ -661,21 +656,6 @@ Proof.
   eapply ext_pass; eauto.
 Qed.
 
-Lemma compose_selection_pass p tp tsem:
-  let sem := RTL.semantics p in
-  let bsem := RTL.semantics tp in
-  forward_simulation (wt_c @ cc_c ext) (wt_c @ cc_c ext) sem bsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) bsem tsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) sem tsem.
-Proof.
-  intros.
-  rewrite <- cc_dom_wt, cc_cod_wt, !cc_compose_assoc.
-  rewrite <- cc_dom_injp, cc_cod_inj, ! cc_compose_assoc.
-  rewrite <- !(cc_compose_assoc wt_c).
-  eapply compose_forward_simulations; eauto.
-  eapply selection_pass; eauto.
-Qed.
-
 Lemma compose_backend_passes p tsem:
   let sem := RTL.semantics p in
   RTLtyping.wt_program p ->
@@ -688,7 +668,7 @@ Proof.
   rewrite inj_inj at 2. rewrite cc_c_compose.
   rewrite <- sub_inj_injp at 1.
   rewrite <- (lessdef_c_cklr inj) at 2.
-  rewrite <- (cc_compose_assoc wt_c) at 1. 
+  rewrite <- (cc_compose_assoc wt_c) at 1.
   rewrite <- (commute_around (_ @ _)), cc_compose_assoc.
   rewrite <- (cc_compose_assoc lessdef_c).
   rewrite lessdef_c_cklr.
@@ -697,14 +677,6 @@ Proof.
   - eapply RTLrel.semantics_rel.
   - eapply RTLrel.semantics_rel.
 Qed.
-
-Lemma compose_selection_pass'' sem bsem tsem:
-  forward_simulation (wt_c @ cc_c ext) (wt_c @ cc_c ext) sem bsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) bsem tsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) sem tsem.
-Proof.
-  Admitted.
-
 
 End COMPOSE_C_PASSES.
 
@@ -758,7 +730,6 @@ Qed.
 
 (** ** Composition of passes *)
 
-
 Theorem clight_semantic_preservation:
   forall p tp,
   match_prog p tp ->
@@ -784,10 +755,19 @@ Ltac DestructM :=
     eapply Cshmgenproof.transl_program_correct; eassumption.
   eapply compose_injection_pass.
     eapply Cminorgenproof.transl_program_correct; eassumption.
-  eapply compose_selection_pass''.
+  eapply compose_wt_injection_pass.
+  { (* Selection & RTLgen *)
+    eapply wt_ext_pass.
+    rewrite <- ext_ext at 2. rewrite cc_c_compose.
+    assert (H : subcklr (ext @ ext) ext).
+    rewrite ext_ext. reflexivity.
+    rewrite <- H at 1. rewrite cc_c_compose.
+    rewrite <- (cc_compose_assoc wt_c) at 1.
+    rewrite <- (cc_compose_assoc wt_c).
+    eapply compose_forward_simulations.
     eapply Selectionproof.transf_program_correct; eassumption.
-  eapply compose_extension_pass.
     eapply RTLgenproof.transf_program_correct; eassumption.
+  }
   eapply compose_optional_pass; eauto using compose_extension_pass.
     exact Tailcallproof.transf_program_correct.
   eapply compose_injection_pass.
