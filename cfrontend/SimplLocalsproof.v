@@ -76,6 +76,11 @@ Definition wm1 :=
     injpw j m1 m2 Hm => m1
   end.
 
+Definition wm2 :=
+  match w with
+    injpw j m1 m2 Hm => m2
+  end.
+
 Inductive match_var (f: meminj) (cenv: compilenv) (e: env) (m: mem) (te: env) (tle: temp_env) (id: ident) : Prop :=
   | match_var_lifted: forall b ty chunk v tv
       (ENV: e!id = Some(b, ty))
@@ -2053,19 +2058,30 @@ Proof.
   eapply match_cont_assign_loc; eauto. exploit me_range; eauto. intros [E F]. auto.
   instantiate (1:= HH).
  {
-   destruct w. inv MINJ. constructor.
+   destruct w eqn: Hw.
+   inversion MINJ. subst f1 m0 m3 f' m1' m2'. constructor.
    -
-     eapply max_perm_decrease_trans; eauto.
-     admit.
+     apply max_perm_decrease_trans with m. eauto.
+     red. intros. inversion H2. subst v0 m'0. unfold Mem.storev in H5.
+     eapply Mem.perm_store_2; eauto.
+     eapply Mem.perm_storebytes_2; eauto.
      eapply Mem.unchanged_on_support; eauto.
    -
-     eapply max_perm_decrease_trans; eauto.
+     eapply max_perm_decrease_trans. eauto. eauto.
      eapply Mem.unchanged_on_support; eauto.
-   - inv H11. constructor.
-     admit.
+   -
+     inversion H11. constructor.
+     erewrite (assign_loc_support _ _ _ _ _ _ _ _ H2); eauto.
      intros.
-     inv MV; try congruence. unfold wm1 in *.
-     admit.
+     inversion MV; try congruence. rewrite ENV in H8. inversion H8. subst b0 ty0.
+     destruct (eq_block b loc).
+     subst b. unfold wm1 in INVALID. rewrite Hw in INVALID. congruence.
+     etransitivity; eauto. admit.
+     intros.
+     inversion MV; try congruence. rewrite ENV in H8. inversion H8. subst b0 ty0.
+     destruct (eq_block b loc).
+     subst b. unfold wm1 in INVALID. rewrite Hw in INVALID.
+     exfalso. apply INVALID. eapply Mem.perm_valid_block; eauto.
      admit.
    - eauto.
    - eauto.
@@ -2087,12 +2103,32 @@ Proof.
   econstructor. eauto. eauto.
   eapply match_envs_invariant; eauto.
   eapply match_cont_invariant; eauto.
-
   instantiate (1:= Y).
-  etransitivity; eauto. constructor; eauto.
-  admit. admit. admit. admit. admit.
-
-
+ {
+   (* corresponding b and tb, they *)
+   etransitivity; eauto.
+   constructor; eauto.
+   - admit. (*ok*)
+   - admit. (*ok*)
+   - constructor. admit. 
+     intros. red in H3.
+     destruct (eq_block b loc).
+     subst. inv F. congruence.
+     admit.
+     intros. red in H3.
+     destruct (eq_block b loc).
+     subst. inv F. congruence.
+     admit.
+   - constructor. admit.
+     
+     intros. red in H3.
+     destruct (eq_block b loc).
+     subst. (* to prove tb is inreach...*)
+     admit.
+     admit.
+     intros. admit.
+   - red. intros. congruence.
+ }
   eauto.  eauto with compat.
   erewrite assign_loc_support; eauto.
   erewrite assign_loc_support; eauto.
@@ -2183,13 +2219,13 @@ Proof.
   econstructor; eauto.
   intros. eapply match_cont_call_cont. eapply match_cont_free_env; eauto.
   instantiate (1:= Q).
-(*  etransitivity; eauto.
+  etransitivity; eauto.
   constructor; eauto.
   red. intros. eapply Mem.perm_free_list; eauto.
   red. intros. eapply Mem.perm_free_list; eauto.
   constructor.
   erewrite <- free_list_support; eauto.
-  intros.
+  intros. red in H0. inversion Hm.
   Search Mem.free_list.
   eapply support_free_list; eauto.
   red.
@@ -2301,7 +2337,16 @@ Proof.
   red; intros; subst b'. destruct H7. congruence.
   eapply alloc_variables_load; eauto.
   instantiate (1:= R).
-  admit. (*injp_acc internal *)
+  {
+  etransitivity; eauto.
+  constructor; eauto.
+  admit.
+  admit.
+  admit.
+  admit.
+  admit.
+  }
+   (*injp_acc internal *)
   apply compat_cenv_for.
   rewrite (bind_parameters_support _ _ _ _ _ _ H2). eauto.
   rewrite T; eauto.
