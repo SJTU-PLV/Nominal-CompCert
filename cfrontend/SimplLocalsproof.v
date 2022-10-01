@@ -2043,7 +2043,6 @@ Proof.
   inv H.
   (* local variable *)
    assert (HH : Mem.inject j m' tm).
-   
   inv MV; try congruence. inv H2; try congruence. unfold Mem.storev in H3.
   exploit Mem.store_unmapped_inject; eauto. congruence.
 
@@ -2065,23 +2064,12 @@ Proof.
    - inv H11. constructor.
      admit.
      intros.
-     eapply unchanged_on_perm; eauto.
-     etransitivity.
-   etransitivity; eauto.
-   inv H2.
-   Search inject_separated.
-   econstructor; eauto.
-   + red. intros. unfold Mem.storev in H3.
-     eapply Mem.perm_store_2; eauto.
-   + constructor. erewrite Mem.support_storev; eauto.
-     intros. admit.
-     intros. inv MV. red in H2. rewrite H8 in ENV. inv ENV.
-     unfold Mem.storebytes in H7.
-   eapplyy Mem.
-   admit.
-   admit.
-   admit.
-   admit.
+     inv MV; try congruence. unfold wm1 in *.
+     admit.
+     admit.
+   - eauto.
+   - eauto.
+   - eauto.
   }
   eauto with compat.
   erewrite assign_loc_support; eauto. eauto.
@@ -2140,7 +2128,12 @@ Proof.
   eapply match_cont_extcall; eauto.
   inv MENV. eapply Mem.sup_include_trans. eauto. eauto.
   inv MENV; eapply Mem.sup_include_trans. eauto. eauto.
-  eauto.  eauto with compat.
+  instantiate (1:= R).
+  etransitivity; eauto.
+  constructor; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
+  eauto with compat.
   eapply Mem.sup_include_trans; eauto. eapply external_call_support; eauto.
   eapply Mem.sup_include_trans; eauto. eapply external_call_support; eauto.
 
@@ -2189,6 +2182,19 @@ Proof.
   econstructor; split. apply plus_one. econstructor; eauto.
   econstructor; eauto.
   intros. eapply match_cont_call_cont. eapply match_cont_free_env; eauto.
+  instantiate (1:= Q).
+(*  etransitivity; eauto.
+  constructor; eauto.
+  red. intros. eapply Mem.perm_free_list; eauto.
+  red. intros. eapply Mem.perm_free_list; eauto.
+  constructor.
+  erewrite <- free_list_support; eauto.
+  intros.
+  Search Mem.free_list.
+  eapply support_free_list; eauto.
+  red.
+*)
+  admit. (*acc_return)*)
 
 (* return some *)
   exploit eval_simpl_expr; eauto with compat. intros [tv [A B]].
@@ -2198,6 +2204,8 @@ Proof.
   rewrite typeof_simpl_expr. monadInv TRF; simpl. eauto.
   econstructor; eauto.
   intros. eapply match_cont_call_cont. eapply match_cont_free_env; eauto.
+  instantiate (1:= Q).
+  admit. (*acc_return*)
 
 (* skip call *)
   exploit match_envs_free_blocks; eauto. intros [tm' [P Q]].
@@ -2206,6 +2214,8 @@ Proof.
   monadInv TRF; auto.
   econstructor; eauto.
   intros. apply match_cont_change_cenv with (cenv_for f); auto. eapply match_cont_free_env; eauto.
+  instantiate (1:= Q).
+  admit. (*acc_return*)
 
 (* switch *)
   exploit eval_simpl_expr; eauto with compat. intros [tv [A B]].
@@ -2253,6 +2263,7 @@ Proof.
   assert (list_norepet (var_names (fn_params f ++ fn_vars f))).
     unfold var_names. rewrite map_app. auto.
   exploit match_envs_alloc_variables; eauto.
+    inversion MINJ. unfold wm1. subst. inversion H8. eauto.
     instantiate (1 := cenv_for_gen (addr_taken_stmt f.(fn_body)) (fn_params f ++ fn_vars f)).
     intros. eapply cenv_for_gen_by_value; eauto. rewrite VSF.mem_iff. eexact H4.
     intros. eapply cenv_for_gen_domain. rewrite VSF.mem_iff. eexact H3.
@@ -2289,6 +2300,8 @@ Proof.
   unfold empty_env. rewrite PTree.gempty. intros [?|?]. congruence.
   red; intros; subst b'. destruct H7. congruence.
   eapply alloc_variables_load; eauto.
+  instantiate (1:= R).
+  admit. (*injp_acc internal *)
   apply compat_cenv_for.
   rewrite (bind_parameters_support _ _ _ _ _ _ H2). eauto.
   rewrite T; eauto.
@@ -2307,6 +2320,13 @@ Proof.
   eapply match_cont_extcall; eauto.
   eapply external_call_support; eauto.
   eapply external_call_support; eauto.
+  instantiate (1:= R).
+  etransitivity; eauto.
+  constructor; eauto.
+  red. intros.
+  eapply external_call_max_perm; eauto.
+  red. intros.
+  eapply external_call_max_perm; eauto.
 
 (* return *)
   specialize (MCONT (cenv_for f)). inv MCONT.
@@ -2314,39 +2334,40 @@ Proof.
   apply plus_one. econstructor.
   econstructor; eauto with compat.
   eapply match_envs_set_opttemp; eauto.
-Qed.
+Admitted.
 
 Lemma initial_states_simulation:
-  forall q1 q2 S, match_query (cc_c inj) w q1 q2 -> initial_state ge q1 S ->
+  forall q1 q2 S, match_query (cc_c injp) w q1 q2 -> initial_state ge q1 S ->
   exists R, initial_state tge q2 R /\ match_states S R.
 Proof.
   intros ? ? ? Hq HS.
   inversion Hq as [vf1 vf2 sg vargs1 vargs2 m1 m2 Hvf Hvargs Hm Hvf1]. clear Hq. subst.
   inversion HS. clear HS. subst vf sg vargs m.
-  exploit functions_translated; eauto. apply GE.
+  exploit functions_translated; eauto. inv GE. eauto.
   intros [tf [A B]].
   pose proof (type_of_fundef_preserved _ _ B) as Hsg. monadInv B. simpl in *.
   econstructor; split.
   econstructor; eauto. congruence.
   { revert vargs2 Hvargs. clear - H6.
     induction H6; inversion 1; econstructor; eauto using val_casted_inject. }
-  eapply (match_stbls_support inj); eauto.
+  eapply (match_stbls_support injp); eauto.
   inv Hm; cbn in *.
-  econstructor; eauto. econstructor.
-  rewrite <- H0. reflexivity. apply Mem.sup_include_refl. apply Mem.sup_include_refl.
+  econstructor; eauto. econstructor. unfold injp_inj_world.
+  destruct w. inv H. reflexivity.
+  rewrite <- H. reflexivity.
 Qed.
 
 Lemma final_states_simulation:
   forall S R r1, match_states S R -> final_state S r1 ->
-  exists r2, final_state R r2 /\ match_reply (cc_c inj) w r1 r2.
+  exists r2, final_state R r2 /\ match_reply (cc_c injp) w r1 r2.
 Proof.
   intros. inv H0. inv H.
   specialize (MCONT VSet.empty). inv MCONT.
   eexists. split. econstructor; split; eauto.
-  exists (injw j (Mem.support m) (Mem.support tm)).
-  constructor; eauto. etransitivity; eauto.
-  constructor; eauto. red. intros. congruence.
-  constructor; eauto. constructor; auto.
+  exists (injpw j m tm Hm).
+  constructor; eauto.
+  constructor; eauto.
+  constructor; eauto.
 Qed.
 
 Lemma external_states_simulation:
@@ -2362,15 +2383,15 @@ Proof.
   assert (Hvf: vf <> Vundef) by (destruct vf; try discriminate).
   eapply functions_translated in H as (tfd & TFIND & TRFD); eauto.
   monadInv TRFD.
-  eexists (injpw j m tm MINJ), _. intuition idtac.
+  eexists (injpw j m tm Hm), _. intuition idtac.
   - econstructor; eauto.
   - econstructor; eauto. constructor.
   - specialize (MCONT VSet.empty). constructor.
     + eapply match_cont_globalenv; eauto.
     + inv GE. eapply Mem.sup_include_trans; eauto.
-      clear - MCONT. induction MCONT; cbn in *; eauto. inv H; cbn; eauto. destruct H0. eauto.
+      inversion MINJ. inversion H11. auto.
     + inv GE. eapply Mem.sup_include_trans; eauto.
-      clear - MCONT. induction MCONT; cbn in *; eauto. inv H; cbn; eauto. destruct H0. eauto.
+      inversion MINJ. inversion H12. auto.
   - inv H0. destruct H as (wx' & Hwx' & H). inv Hwx'. inv H. inv H10. eexists. split.
     + econstructor; eauto.
     + econstructor; eauto.
@@ -2378,6 +2399,9 @@ Proof.
       eapply match_cont_extcall; eauto.
       eapply Mem.unchanged_on_support; eauto.
       eapply Mem.unchanged_on_support; eauto.
+      simpl. etransitivity; eauto.
+      instantiate (1:= Hm4).
+      constructor; eauto.
 Qed.
 
 End PRESERVATION.
@@ -2390,7 +2414,6 @@ Proof.
   { intros. destruct Hse, H. cbn in *.
     eapply (Genv.is_internal_match (proj1 MATCH)); eauto 1.
     intros _ [|] [|] Hf; monadInv Hf; auto. }
-  
   apply initial_states_simulation; eauto.
   eapply final_states_simulation; eauto.
   intros. cbn. eapply external_states_simulation; eauto.
