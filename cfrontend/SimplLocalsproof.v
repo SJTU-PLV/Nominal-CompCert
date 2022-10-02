@@ -2159,7 +2159,6 @@ Lemma step_simulation:
   forall S1' (MS: match_states S1 S1'), exists S2', plus step2 tge S1' t S2' /\ match_states S2 S2'.
 Proof.
   induction 1; simpl; intros; inv MS; simpl in *; try (monadInv TRS).
-
 (* assign *)
   generalize (is_liftable_var_charact (cenv_for f) a1); destruct (is_liftable_var (cenv_for f) a1) as [id|]; monadInv TRS.
   (* liftable *)
@@ -2258,7 +2257,48 @@ Proof.
          ++  exploit H14; eauto. intros [Z3 Z4].
              congruence.
       -- intros [Z1 Z2]. congruence.
-    + subst bf v tv m'0 m'1. admit.
+    + rewrite <- Hw in *. subst.
+      assert (GE1 : prog_comp_env prog = genv_cenv ge). auto.
+      assert (SIZE: sizeof tge (typeof a1) = sizeof (prog_comp_env prog) (typeof a1)).
+      rewrite comp_env_preserved. auto.
+      destruct (sizeof tge (typeof a1)) eqn: SIZE'. apply Mem.loadbytes_length in H7.
+      eapply Mem.unchanged_on_implies.
+      eapply storebytes_unchanged_on_1; eauto.
+      intros. intros [A' B']. rewrite H7 in B'. simpl in B'. extlia.
+      assert (POSSIZE : sizeof tge (typeof a1) > 0). rewrite  SIZE'. lia.
+      eapply Mem.unchanged_on_implies.
+      eapply storebytes_unchanged_on_1; eauto.
+      intros. destruct H15. apply Mem.out_of_reach_reverse in H17.
+      destruct (eq_block b tb).
+      -- subst b.
+         intros [Z1 Z2]. inversion F. subst b1 ofs1 b2 ofs2.
+         destruct (f0 loc) as [[tb' delta']|] eqn: Hf0loc.
+         ++
+           apply H13 in Hf0loc as Hj.
+           rewrite H28 in Hj. inversion Hj. subst tb' delta'. clear Hj.
+           apply H17. red.
+           exists loc, delta. split. auto.
+           apply H9. eapply Mem.valid_block_inject_1; eauto.
+           apply Mem.storebytes_range_perm in H23 as RANGE.
+           red in RANGE.
+           inversion Y. exploit mi_representable; eauto.
+           left. instantiate (1:= ofs).
+           exploit RANGE; eauto with mem.
+           apply Mem.loadbytes_length in H22. rewrite H22. rewrite <- SIZE.
+           simpl. lia.
+           intros RANGE1.
+           exploit RANGE. 2: eauto with mem.
+           subst tofs.
+           assert (SIZE1 : (Datatypes.length bytes0) = (Datatypes.length bytes) ).
+           apply Mem.loadbytes_length in H22.
+           apply Mem.loadbytes_length in H7.
+           rewrite H22,H7. congruence.
+           clear - RANGE1 Z2 SIZE1. destruct RANGE1.
+           rewrite <- representable_ofs_range_offset in Z2; lia.
+           ++ exploit H14; eauto. intros [ ]. congruence.
+      -- intros [ ]. congruence.
+      -- generalize (sizeof_pos (prog_comp_env prog) (typeof a1)). intro.
+         rewrite <- SIZE in H15. extlia.
     + subst v0 v1 m'0 m'1. inversion H3; inversion H7; try congruence.
       rewrite <- Hw in *. subst. rewrite <- Hw in *. inv H8.
       unfold Mem.storev in *.
