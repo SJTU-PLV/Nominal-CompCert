@@ -597,7 +597,34 @@ Lemma alloc_variables_support:
 Proof.
   induction 1.
   apply Mem.sup_include_refl.
-  eapply Mem.sup_include_trans; eauto. exploit Mem.support_alloc; eauto. intros EQ. unfold sup_incr in EQ. apply Mem.sup_include_trans with (Mem.support m1). rewrite EQ. apply Mem.sup_include_refl. apply IHalloc_variables.
+  eapply Mem.sup_include_trans; eauto. exploit Mem.support_alloc; eauto.
+  intros EQ. unfold sup_incr in EQ.
+  apply Mem.sup_include_trans with (Mem.support m1). rewrite EQ.
+  apply Mem.sup_include_refl. apply IHalloc_variables.
+Qed.
+
+Lemma alloc_variables_max_perm :
+    forall ge e m vars e' m',
+  alloc_variables ge e m vars e' m' -> injp_max_perm_decrease m m'.
+  induction 1.
+  apply max_perm_decrease_refl.
+  eapply max_perm_decrease_trans. 2: eauto.
+  red. intros.
+  eapply Mem.perm_alloc_4; eauto.
+  apply Mem.fresh_block_alloc in H as fresh.
+  congruence.
+  apply Mem.support_alloc in H. rewrite H.
+  eauto with mem.
+Qed.
+
+Lemma alloc_variables_unchanged_on :
+  forall ge e m vars e' m' P,
+    alloc_variables ge e m vars e' m' -> Mem.unchanged_on P m m'.
+Proof.
+  induction 1; eauto with mem.
+  eapply Mem.unchanged_on_trans.
+  eapply Mem.alloc_unchanged_on; eauto.
+  eauto.
 Qed.
 
 Lemma alloc_variables_range:
@@ -1172,12 +1199,15 @@ Theorem store_params_correct:
   /\ bind_parameter_temps params targs tle2 = Some tle
   /\ Mem.inject j m' tm'
   /\ match_envs j cenv e le m' lo hi te tle tlo thi
-  /\ Mem.support tm' = Mem.support tm.
+  /\ Mem.support tm' = Mem.support tm
+  /\ injp_max_perm_decrease tm tm'
+  /\ Mem.unchanged_on (fun b _  => Mem.valid_block wm2 b) tm tm'.
 Proof.
   induction 1; simpl; intros until targs; intros NOREPET CASTED VINJ MENV MINJ TLE LE.
   (* base case *)
   inv VINJ. exists tle2; exists tm; split. apply star_refl. split. auto. split. auto.
-  split. apply match_envs_temps_exten with tle1; auto. auto.
+  split. apply match_envs_temps_exten with tle1; auto. split. auto. split. auto.
+  eauto with mem.
   (* inductive case *)
   inv NOREPET. inv CASTED. inv VINJ.
   exploit me_vars; eauto. instantiate (1 := id); intros MV.
@@ -1205,7 +1235,7 @@ Proof.
   apply TLE. intuition.
   intros. apply LE. auto.
   instantiate (1 := s).
-  intros [tle [tm' [U [V [X [Y Z]]]]]].
+  intros [tle [tm' [U [V [X [Y [Z1 Z2]]]]]]].
   exists tle; exists tm'; split.
   eapply star_trans.
   eapply star_left. econstructor.
@@ -1220,7 +1250,13 @@ Proof.
   reflexivity. reflexivity.
   eexact U.
   traceEq.
-  rewrite (assign_loc_support _ _ _ _ _ _ _ _ A) in Z. auto.
+  rewrite (assign_loc_support _ _ _ _ _ _ _ _ A) in Z1. intuition auto.
+  eapply max_perm_decrease_trans. eapply assign_loc_max_perm; eauto. eauto.
+  erewrite <- assign_loc_support; eauto.
+  eapply Mem.unchanged_on_trans. 2: eauto.
+  eapply Mem.unchanged_on_implies.
+  eapply assign_loc_unchanged_on; eauto.
+  intros. inv Y. apply me_tinitial0 in TENV. congruence.
 Qed.
 
 Lemma bind_parameters_support:
@@ -1231,6 +1267,32 @@ Proof.
   auto.
   rewrite IHbind_parameters. eapply assign_loc_support; eauto.
 Qed.
+
+Lemma bind_parameters_max_perm:
+  forall ge e m params args m',
+  bind_parameters ge e m params args m' -> injp_max_perm_decrease m m'.
+Proof.
+  induction 1.
+  auto.
+  apply assign_loc_max_perm in H0 as Hp.
+  eapply max_perm_decrease_trans; eauto.
+  erewrite <- assign_loc_support; eauto.
+Qed.
+
+Lemma bind_parameters_unchanged_on :
+  forall ge e m params args m' j ce te e' te' s1 s2 s3 s4 m'',
+    bind_parameters ge e m params args m' ->
+    match_envs j ce e te m'' s1 s2 e' te' s3 s4 ->
+    Mem.unchanged_on (fun b _ => Mem.valid_block wm1 b) m m'.
+Proof.
+  induction 1; intros.
+  apply Mem.unchanged_on_refl.
+  eapply Mem.unchanged_on_trans. 2: eauto.
+  eapply Mem.unchanged_on_implies.
+  eapply assign_loc_unchanged_on; eauto.
+  intros. inv H2. apply me_initial0 in H. congruence.
+Qed.
+
 
 Lemma bind_parameters_load:
   forall ge e chunk b ofs,
@@ -1753,6 +1815,48 @@ Proof.
   transitivity (Mem.support m1). eauto. eapply Mem.support_free; eauto.
 Qed.
 
+Remark free_list_max_perm:
+  forall l m m',
+  Mem.free_list m l = Some m' -> injp_max_perm_decrease m m'.
+Proof.
+  induction l; simpl; intros.
+  congruence.
+  destruct a. destruct p. destruct (Mem.free m b z0 z) as [m1|] eqn:?; try discriminate.
+  eapply max_perm_decrease_trans.
+  2: eapply IHl; eauto.
+  red. intros. 
+  eapply Mem.perm_free_3; eauto.
+  erewrite <- Mem.support_free; eauto.
+Qed.
+(*
+Lemma free_list_unchanged_on_1' :
+  forall l m m' j f e le lo hi te tle tlo thi,
+  Mem.free_list m l = Some m' ->
+  (forall b z1 z2, In (b,z1,z2) l -> exists id ty, e ! id = Some (b ,ty)) ->
+  match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
+  Mem.unchanged_on (fun b _ => Mem.valid_block wm1 b) m m'.
+Proof.
+  induction l; simpl; intros.
+  - inv H.
+  Admitted.
+*)
+
+Lemma free_list_unchanged_on_1 :
+  forall m m' j f e le lo hi te tle tlo thi,
+  Mem.free_list m (blocks_of_env ge e) = Some m' ->
+  match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
+  Mem.unchanged_on (fun b _ => Mem.valid_block wm1 b) m m'.
+Proof.
+Admitted.
+
+Lemma free_list_unchanged_on_2 :
+  forall m tm tm' j f e le lo hi te tle tlo thi,
+  Mem.free_list tm (blocks_of_env tge te) = Some tm' ->
+  match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
+  Mem.unchanged_on (fun b _ => Mem.valid_block wm2 b) tm tm'.
+Proof.
+Admitted.
+
 Remark free_list_load:
   forall chunk b' l m m',
   Mem.free_list m l = Some m' ->
@@ -2154,6 +2258,36 @@ Proof.
   erewrite Ptrofs.unsigned_repr. eauto. lia.
 Qed.
 
+Lemma injp_acc_return:
+  forall m m' tm tm' j f k tk e le lo hi te tle tlo thi Hm Hm',
+    match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
+    match_cont j (cenv_for f) k tk m lo tlo ->
+    Mem.free_list m (blocks_of_env ge e) = Some m' ->
+    Mem.free_list tm (blocks_of_env tge te) = Some tm' ->
+    injp_acc w (injpw j m tm Hm) ->
+    injp_acc w (injpw j m' tm' Hm').
+Proof.
+  intros. destruct w eqn: Hw.
+  eapply injp_acc_local; eauto.
+  - eapply free_list_max_perm; eauto.
+  - eapply free_list_max_perm; eauto.
+  - rewrite <- Hw in GE.
+    apply match_cont_inject_separated in H0 as INJSEP.
+    unfold wf, wm1, wm2 in INJSEP. rewrite Hw in INJSEP. eauto.
+  - assert (Mem.unchanged_on (fun b _ => Mem.valid_block m1 b) m m').
+    replace m1 with wm1. rewrite <- Hw in GE.
+    eapply free_list_unchanged_on_1; eauto.
+    unfold wm1. rewrite Hw. reflexivity.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H5. auto.
+  - assert (Mem.unchanged_on (fun b _ => Mem.valid_block m2 b) tm tm').
+    replace m2 with wm2. rewrite <- Hw in GE.
+    eapply free_list_unchanged_on_2; eauto.
+    unfold wm2. rewrite Hw. reflexivity.
+    eapply Mem.unchanged_on_implies; eauto.
+    intros. destruct H5. auto.
+Qed.
+
 Lemma step_simulation:
   forall S1 t S2, step1 ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'), exists S2', plus step2 tge S1' t S2' /\ match_states S2 S2'.
@@ -2422,25 +2556,7 @@ Proof.
   econstructor; eauto.
   intros. eapply match_cont_call_cont. eapply match_cont_free_env; eauto.
   instantiate (1:= Q).
-  { destruct w eqn: Hw.
-    eapply injp_acc_local; eauto.
-    (*should be ok here*)
-    - (* Lemma free_list_max_perm:
-        forall m list m',
-          Mem.free_list m list = Some m' =>
-          injp_max_perm_decrease m m'.
-          *)
-      admit.
-    - admit.
-    - rewrite <- Hw in GE. apply match_cont_inject_separated in MCONT.
-      unfold wf, wm1, wm2 in MCONT. rewrite Hw in MCONT. eauto.
-    - inversion MENV.
-      assert (forall b, In b (blocks_of_env ge e) -> exists id (ty0: type), e ! id = Some (fst (fst  b), ty0 ) ).
-      admit.
-      admit.
-    -
-      admit.
-  }
+  eapply injp_acc_return; eauto.
 
 (* return some *)
   exploit eval_simpl_expr; eauto with compat. intros [tv [A B]].
@@ -2451,7 +2567,7 @@ Proof.
   econstructor; eauto.
   intros. eapply match_cont_call_cont. eapply match_cont_free_env; eauto.
   instantiate (1:= Q).
-  admit. (*acc_return*)
+  eapply injp_acc_return; eauto.
 
 (* skip call *)
   exploit match_envs_free_blocks; eauto. intros [tm' [P Q]].
@@ -2461,7 +2577,7 @@ Proof.
   econstructor; eauto.
   intros. apply match_cont_change_cenv with (cenv_for f); auto. eapply match_cont_free_env; eauto.
   instantiate (1:= Q).
-  admit. (*acc_return*)
+  eapply injp_acc_return; eauto.
 
 (* switch *)
   exploit eval_simpl_expr; eauto with compat. intros [tv [A B]].
@@ -2526,7 +2642,7 @@ Proof.
     intros. apply (create_undef_temps_lifted id f). auto.
     intros. destruct (create_undef_temps (fn_temps f))!id as [v|] eqn:?; auto.
     exploit create_undef_temps_inv; eauto. intros [P Q]. elim (l id id); auto.
-  intros [tel [tm1 [P [Q [R [S T]]]]]].
+  intros [tel [tm1 [P [Q [R [S [T [U V]]]]]]]].
   change (cenv_for_gen (addr_taken_stmt (fn_body f)) (fn_params f ++ fn_vars f))
     with (cenv_for f) in *.
   generalize (vars_and_temps_properties (cenv_for f) (fn_params f) (fn_vars f) (fn_temps f)).
@@ -2539,7 +2655,7 @@ Proof.
   unfold remove_lifted; intros. rewrite List.filter_In in H3. destruct H3.
   apply negb_true_iff in H4. eauto.
   reflexivity. reflexivity. traceEq.
-  econstructor; eauto.
+  assert (MCONT' :  match_cont j' (cenv_for f) k tk m1 (Mem.support m) (Mem.support tm)).
   eapply match_cont_invariant; eauto.
   intros. transitivity (Mem.load chunk m0 b 0).
   eapply bind_parameters_load; eauto. intros.
@@ -2547,17 +2663,39 @@ Proof.
   unfold empty_env. rewrite PTree.gempty. intros [?|?]. congruence.
   red; intros; subst b'. destruct H7. congruence.
   eapply alloc_variables_load; eauto.
+  econstructor; eauto.
   instantiate (1:= R).
   {
     destruct w eqn : Hw.
     eapply injp_acc_local; eauto.
-    - admit.
-    - admit.
-    - admit. (* eapply match_cont_inject_separated. *)
-    - admit.
-    - admit.
+    - eapply max_perm_decrease_trans.
+      eapply alloc_variables_max_perm; eauto.
+      eapply bind_parameters_max_perm; eauto.
+      eapply alloc_variables_support; eauto.
+    - eapply max_perm_decrease_trans.
+      eapply alloc_variables_max_perm; eauto.
+      eauto.
+      eapply alloc_variables_support; eauto.
+    - rewrite <- Hw in *.
+      apply match_cont_inject_separated in MCONT'.
+      unfold wf, wm1, wm2 in MCONT'. rewrite Hw in MCONT'. eauto.
+    - assert (Mem.unchanged_on (fun b _ => Mem.valid_block m2 b) m m1).
+      eapply Mem.unchanged_on_trans.
+      eapply alloc_variables_unchanged_on; eauto.
+      replace m2 with wm1.
+      eapply bind_parameters_unchanged_on; eauto.
+      unfold wm1. rewrite Hw. reflexivity.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. destruct H4. auto.
+    - assert (Mem.unchanged_on (fun b _ => Mem.valid_block m3 b) tm tm1).
+      eapply Mem.unchanged_on_trans.
+      eapply alloc_variables_unchanged_on; eauto.
+      replace m3 with wm2.
+      eauto.
+      unfold wm2. rewrite Hw. reflexivity.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. destruct H4. auto.
   }
-   (*injp_acc internal *)
   apply compat_cenv_for.
   rewrite (bind_parameters_support _ _ _ _ _ _ H2). eauto.
   rewrite T; eauto.
@@ -2590,7 +2728,7 @@ Proof.
   apply plus_one. econstructor.
   econstructor; eauto with compat.
   eapply match_envs_set_opttemp; eauto.
-Admitted.
+Qed.
 
 Lemma initial_states_simulation:
   forall q1 q2 S, match_query (cc_c injp) w q1 q2 -> initial_state ge q1 S ->
@@ -2662,7 +2800,7 @@ Qed.
 
 End PRESERVATION.
 
-Theorem transf_program_correct prog tprog:
+Theorem transf_program_correct' prog tprog:
   match_prog prog tprog ->
   forward_simulation (cc_c injp) (cc_c injp) (semantics1 prog) (semantics2 tprog).
 Proof.
@@ -2674,6 +2812,15 @@ Proof.
   eapply final_states_simulation; eauto.
   intros. cbn. eapply external_states_simulation; eauto.
   apply step_simulation; eauto.
+Qed.
+
+Theorem transf_program_correct prog tprog:
+  match_prog prog tprog ->
+  forward_simulation (cc_c injp) (cc_c inj) (semantics1 prog) (semantics2 tprog).
+Proof.
+  intros. 
+  rewrite sub_inj_injp.
+  eapply transf_program_correct'; eauto.
 Qed.
 
 (** ** Commutation with linking *)
