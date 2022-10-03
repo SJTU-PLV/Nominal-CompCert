@@ -1828,18 +1828,35 @@ Proof.
   eapply Mem.perm_free_3; eauto.
   erewrite <- Mem.support_free; eauto.
 Qed.
-(*
-Lemma free_list_unchanged_on_1' :
-  forall l m m' j f e le lo hi te tle tlo thi,
+
+Lemma free_list_unchanged_on :
+  forall l m m' P,
   Mem.free_list m l = Some m' ->
-  (forall b z1 z2, In (b,z1,z2) l -> exists id ty, e ! id = Some (b ,ty)) ->
-  match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
-  Mem.unchanged_on (fun b _ => Mem.valid_block wm1 b) m m'.
+  (forall b z1 z2, In (b,z1,z2) l -> ~ P b) ->
+  Mem.unchanged_on (fun b _ => P b) m m'.
 Proof.
   induction l; simpl; intros.
-  - inv H.
-  Admitted.
-*)
+  - inv H. eapply Mem.unchanged_on_refl.
+  - destruct a. destruct p. destruct (Mem.free m b z0 z) eqn: FREE; try congruence.
+    eapply Mem.unchanged_on_trans. 2: eapply IHl; eauto.
+    eapply Mem.free_unchanged_on; eauto.
+Qed.
+
+Lemma blocks_of_env_unvalid_1 :
+  forall j f e le m lo hi te tle tlo thi,
+    match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
+    ( forall b z1 z2,
+    In (b, z1, z2) (blocks_of_env ge e) ->
+    ~ Mem.valid_block wm1 b ).
+Proof.
+  intros. unfold blocks_of_env in H0.
+  apply list_in_map_inv in H0.
+  destruct H0 as [[id [b' ty]] [A B]].
+  simpl in A. inv A.
+  apply PTree.elements_complete in B.
+  inv H.
+  eauto.
+Qed.
 
 Lemma free_list_unchanged_on_1 :
   forall m m' j f e le lo hi te tle tlo thi,
@@ -1847,7 +1864,26 @@ Lemma free_list_unchanged_on_1 :
   match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
   Mem.unchanged_on (fun b _ => Mem.valid_block wm1 b) m m'.
 Proof.
-Admitted.
+  intros.
+  eapply free_list_unchanged_on; eauto.
+  eapply blocks_of_env_unvalid_1; eauto.
+Qed.
+
+Lemma blocks_of_env_unvalid_2 :
+  forall j f e le m lo hi te tle tlo thi,
+    match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
+    ( forall b z1 z2,
+    In (b, z1, z2) (blocks_of_env tge te) ->
+    ~ Mem.valid_block wm2 b ).
+Proof.
+  intros. unfold blocks_of_env in H0.
+  apply list_in_map_inv in H0.
+  destruct H0 as [[id [b' ty]] [A B]].
+  simpl in A. inv A.
+  apply PTree.elements_complete in B.
+  inv H.
+  eauto.
+Qed.
 
 Lemma free_list_unchanged_on_2 :
   forall m tm tm' j f e le lo hi te tle tlo thi,
@@ -1855,7 +1891,10 @@ Lemma free_list_unchanged_on_2 :
   match_envs j (cenv_for f) e le m lo hi te tle tlo thi ->
   Mem.unchanged_on (fun b _ => Mem.valid_block wm2 b) tm tm'.
 Proof.
-Admitted.
+  intros.
+  eapply free_list_unchanged_on; eauto.
+  eapply blocks_of_env_unvalid_2; eauto.
+Qed.
 
 Remark free_list_load:
   forall chunk b' l m m',
@@ -2818,7 +2857,7 @@ Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (cc_c injp) (cc_c inj) (semantics1 prog) (semantics2 tprog).
 Proof.
-  intros. 
+  intros.
   rewrite sub_inj_injp.
   eapply transf_program_correct'; eauto.
 Qed.
