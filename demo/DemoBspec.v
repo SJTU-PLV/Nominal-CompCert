@@ -40,6 +40,7 @@ Inductive initial_state : query li_c -> state -> Prop :=
     v args m b i
     (SYMB: Genv.find_symbol se g_id = Some b)
     (FPTR: v = Vptr b Ptrofs.zero)
+    (RANGE: 0 <= i.(Int.intval) < MAX)
     (VS: args = (Vint i:: nil)):
     initial_state (cq v int_int_sg ((Vint i) :: nil) m) (Callstate i m).
 
@@ -60,8 +61,8 @@ Inductive step : state -> trace -> state -> Prop :=
     i m :
     step (Callstate i m) E0 (Returnstate (sum i) m)
 | step_call
-    i m :
-(*    (NZERO: i.(Int.intval) <> 0%Z) :*)
+    i m
+    (NZERO: i.(Int.intval) <> 0%Z) :
     step (Callstate i m) E0 (Interstate i m).
 
 Inductive final_state: state -> reply li_c  -> Prop :=
