@@ -70,15 +70,17 @@ Inductive final_state: state -> reply li_c  -> Prop :=
       s m :
       final_state (Returnstate s m) (cr (Vint s) m).
 
-Definition valid_query (q : query li_c): bool :=
-  match Genv.find_symbol se g_id with
+(* no actual program context, donot need to check available internal function implementation*)
+Definition valid_query (q : query li_c): bool := true.
+
+(*  match Genv.find_symbol se g_id with
     |Some b =>
        match (cq_vf q) with
          |Vptr b' Ptrofs => eq_block b b'
          |_ => false
        end
     |None => false
-  end.
+  end.*)
 
 Program Definition lts_Bspec :=
   {|
