@@ -1796,6 +1796,8 @@ Definition rex_prefix_check_fa (r: freg) (a: addrmode) :=
     if check_extend_freg r && check_extend_addrmode a then 0 else 1
   else 0.
 
+Hint Unfold rex_prefix_check_rr rex_prefix_check_r rex_prefix_check_frr rex_prefix_check_frir rex_prefix_check_fr rex_prefix_check_a rex_prefix_check_ra rex_prefix_check_fa : check_rex.
+
 Let instr_size' (i: instruction) : Z :=
   match i with
   | Pjmp_l _ => 5
@@ -1991,14 +1993,11 @@ Definition instr_size_asm (i: instruction) : Z :=
 
 Lemma instr_size'_positive : forall i, 0 < instr_size' i.
 Proof.
-  (* intros. unfold instr_size'. *)
-  (* destruct i; try (destruct Archi.ptr64); try lia; *)
-  (*   try (generalize (addrmode_size_pos a); lia); *)
-  (*   try (destr; lia). *)
-  (* generalize (addrmode_size_pos ad). lia. *)
-  (* (* 64bit *) *)
-  (* generalize (addrmode_size_pos ad). lia. *)
-Admitted.
+  intros. unfold instr_size'.
+  destruct i; autounfold with check_rex; repeat destr; try lia;
+    try (generalize (addrmode_size_pos a); lia);
+  try (generalize (addrmode_size_pos ad); lia).
+Qed.
 
 
 Lemma instr_size_positive : forall i, 0 < instr_size_asm i.
@@ -2017,10 +2016,9 @@ Proof.
   lia.
 Qed.
 
-Local Transparent Archi.ptr64.
 
-(* Lemma z_le_ptrofs_max32: forall n,  *)
-(*     n < two_power_nat 32 ->  *)
+(* Lemma z_le_ptrofs_max32: forall n, *)
+(*     n < two_power_nat 32 -> *)
 (*     n <= Ptrofs.max_unsigned. *)
 (* Proof. *)
 (*   intros. apply z_le_ptrofs_max. unfold Archi.ptr64. assumption. *)
@@ -2039,28 +2037,34 @@ Local Transparent Archi.ptr64.
 (*     [ generalize (addrmode_size_upper_bound a); lia | solve_n_le_ptrofs_max ] *)
 (*   end. *)
 
-(* Lemma instr_size'_repr: forall i, 0 < instr_size' i <= Ptrofs.max_unsigned. *)
-(* Proof. *)
-(*   intros. unfold instr_size'.  *)
-(*   destruct i; split; try lia;  *)
-(*   try solve_n_le_ptrofs_max; *)
-(*   try (generalize (addrmode_size_pos a); lia); *)
-(*   try solve_amod_le_ptrofs_max. *)
-(*   generalize (addrmode_size_pos ad). lia. *)
-(*   (* destr; omega. *) *)
-(*   (* destr; try solve_n_le_ptrofs_max. *) *)
-(*   (* destr; omega. *) *)
-(*   (* destr; try solve_n_le_ptrofs_max. *) *)
-(* Qed. *)
+Lemma instr_size'_bound: forall i,  instr_size' i <= Ptrofs.max_unsigned.
+Proof.
+  unfold Ptrofs.max_unsigned. unfold Ptrofs.modulus.
+  unfold Ptrofs.wordsize. unfold Wordsize_Ptrofs.wordsize.
+  rewrite two_power_nat_equiv.
+  intros. unfold instr_size'.
+  destruct i; autounfold with check_rex; repeat destr; try lia;
+    try generalize (addrmode_size_upper_bound a);
+    unfold amod_size_ub; try lia;
+      try generalize (addrmode_size_upper_bound ad);
+    unfold amod_size_ub; try lia.
+Qed.
+
+Lemma instr_size_bound: forall i,  instr_size_asm i <= Ptrofs.max_unsigned.
+Proof.
+  intros. unfold instr_size_asm.
+  generalize (instr_size'_bound i).
+  destruct i; auto.
+Qed.
 
 Lemma instr_size_repr: forall i, 0 < instr_size_asm i <= Ptrofs.max_unsigned.
 Proof.
-Admitted.
-(*   intros. *)
-(*   generalize (instr_size'_repr i). *)
-(*   unfold instr_size_asm. *)
-(*   destruct i; auto. *)
-(* Qed. *)
+  intros. split.
+  eapply instr_size_positive.
+  unfold instr_size_asm.
+  eapply instr_size_bound.
+Qed.
+
 
 Global Opaque instr_size_asm.
 
