@@ -20,8 +20,9 @@ Proof.
   destruct H. subst. auto.
   destruct Archi.ptr64 eqn:PTR.
   -
-  destruct i1;try inv H;destruct i2;try inv H;cbn [instr_size_asm];auto.
+  destruct i1 eqn: I1;try inv H;destruct i2 eqn:I2;try inv H;cbn [instr_size_asm];auto.
 
+  (* Pmovzl_rr: we can not prove the instr_size consistency *)
   unfold rex_prefix_check_rr,rex_prefix_check_r.
   rewrite PTR. destr.
   apply andb_true_iff in Heqb. destruct Heqb.

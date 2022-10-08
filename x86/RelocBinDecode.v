@@ -1273,7 +1273,7 @@ Definition instr_eq (i1 i2: instruction) : Prop :=
   | Pxorl_rr r1 r2, Pxorl_r r => r1 = r /\ r2 = r
   | Pxorl_rr r1 r2, Pxorl_rr r1' r2' => r1 = r1' /\ r2 = r2' /\ r1 <> r2 
   | Asm.Plabel _, Asm.Pnop | Asm.Pmovls_rr _, Asm.Pnop => True
-  | Pmovzl_rr r1 r2, Pmov_rr r1' r2' => r1 = r1' /\ r2 = r2'
+  | Pmovzl_rr r1 r2, Pmov_rr r1' r2' => if Archi.ptr64 then r1 = r1' /\ r2 = r2' else False
   | _,_ => False
   end.
 
@@ -1534,16 +1534,20 @@ Proof.
     unfold instr_eq.
     left. auto.
   - destruct i;simpl in WF;try congruence;try monadInv H.
-    + exploit encode_rex_prefix_rr_result; eauto;
-        intros [(?, (?, ?))| (?, (?, (?, (?, ?))))]; subst.
+    + simpl in H.
+      destr_in H. monadInv H.
+      (* exploit encode_rex_prefix_rr_result; eauto; *)
+      (*   intros [(?, (?, ?))| (?, (?, (?, (?, ?))))]; subst. *)
       cbn [app] in *.
       autounfold with decunfold.
       eexists. cbn [bind]. split;eauto. 
-      unfold instr_eq. right. auto.
-      cbn [app] in *.
-      autounfold with decunfold.
-      eexists. cbn [bind]. split;eauto. 
-      unfold instr_eq. right. auto.
+      unfold instr_eq. right.
+      split;symmetry;
+      eapply encode_ireg_u4_consistency;eauto.
+      (* eapply encode_ireg_u4_consistency;eauto. *)
+      (* autounfold with decunfold. *)
+      (* eexists. cbn [bind]. split;eauto.  *)
+      (* unfold instr_eq. right. auto. *)
     + simpl. eexists;split;eauto.
       unfold instr_eq;auto.
     + exploit encode_rex_prefix_rr_result; eauto;

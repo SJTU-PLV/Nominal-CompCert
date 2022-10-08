@@ -76,8 +76,15 @@ Proof.
 
   (* i is not well defined *)
   destruct i1;try inv H;destr_in H;subst.
+
+  (* movzl_rr *)
+  destr_in H. 
+  
   1-10: try (try destruct H;subst;simpl;unfold instr_eq;auto).
 
+  (* movzl_rr *)
+  rewrite Heqb. right. auto.
+  
   1-6 :
     try (try destr_in H;destruct H;subst;
          simpl;do 2 destr;

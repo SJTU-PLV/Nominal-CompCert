@@ -1403,11 +1403,7 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
     do rex_r <- encode_rex_prefix_r r;
     let (orex, rbits) := rex_r in
     OK (orex ++ [Pshrl_rcl rbits])
-  | Asm.Pmovzl_rr rd r1 =>
-    do rex_rr <- encode_rex_prefix_rr rd r1;
-    let (orex_rdbits, r1bits) := rex_rr in
-    let (orex, rdbits) := orex_rdbits in
-    OK (orex ++ [Pmovl_rm (AddrE0 r1bits) rdbits])
+  
 
   (* 64bit *)
   (* transfer to mov  memory *)
@@ -1415,7 +1411,21 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
 (*     do Rrdbits <- encode_ireg_u4 rd; *)
 (*     let (R,rdbits) := Rrdbits in *)
 (*     do imm64 <- encode_ofs_u64 (Int64.intval imm); *)
-(*     OK (Pmovq_ri R rdbits imm64) *)
+  (*     OK (Pmovq_ri R rdbits imm64) *)
+  (* movzl is a 64-bit instructions, we generate a rex prefix for it to ensure the instruction size consistency *)
+  | Asm.Pmovzl_rr rd r1 =>
+    if Archi.ptr64 then
+      do Rrdbits <- encode_ireg_u4 rd;
+      do Brsbits <- encode_ireg_u4 r1;
+      let (B, r1bits) := Brsbits in
+      let (R, rdbits) := Rrdbits in
+      OK ([REX_WRXB zero1 R zero1 B; Pmovl_rm (AddrE0 r1bits) rdbits])
+    else
+      Error (msg "Pmovzl_rr in 32 bit mode")
+    (* do rex_rr <- encode_rex_prefix_rr rd r1; *)
+    (* let (orex_rdbits, r1bits) := rex_rr in *)
+    (* let (orex, rdbits) := orex_rdbits in *)
+    (* OK (orex ++ [Pmovl_rm (AddrE0 r1bits) rdbits]) *)
   | Asm.Pmovsl_rr rd r1 =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 r1;
