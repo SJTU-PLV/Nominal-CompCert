@@ -121,16 +121,145 @@ Qed.
 
 End WT_C.
 
-
-Variable BspecL : Smallstep.semantics li_locset li_locset.
 Variable BspecM : Smallstep.semantics li_mach li_mach.
 Variable BspecA : Smallstep.semantics li_asm li_asm.
 
 Section CL.
+Require Import Locations.
+
+Definition int_loc_arguments := loc_arguments int_int_sg.
+
+Definition int_loc_argument := if Archi.ptr64 then (if Archi.win64 then (R CX) else (R DI))
+                                          else S Outgoing 0 Tint.
+(* result & *)
+
+Definition int_loc_result' : rpair mreg := loc_result int_int_sg.
+(* Compute int_loc_result. One AX *)
+
+Definition int_loc_result : loc := R AX.
+
+(*if Archi.ptr64
+      then if Archi.win64 then One (R CX) :: nil else One (R DI) :: nil
+      else One (S Outgoing 0 Tint) :: nil) *)
+
+Definition loc_int_loc (i: int) (l : loc): Locmap.t :=
+  fun loc => if Loc.eq loc l  then (Vint i) else Vundef.
+
+(* Definition valid_loc (ls : Locmap.t) (i: int) : Prop :=
+  ls (loc_int) = Vint i.
+*)
+
+Section WITH_SE.
+  Context (se: Genv.symtbl).
+
+Inductive initial_state : query li_locset -> state -> Prop :=
+| initial_state_intro
+    v m b i (ls: Locmap.t)
+    (SYMB: Genv.find_symbol se g_id = Some b)
+    (FPTR: v = Vptr b Ptrofs.zero)
+    (RANGE: 0 <= i.(Int.intval) < MAX)
+    (LS: (Vint i :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg)):
+    initial_state (lq v int_int_sg ls m) (Callstate i m).
+
+Inductive at_external: state -> query li_locset -> Prop :=
+| at_external_intro
+    g_fptr i m ls
+    (FINDG: Genv.find_symbol se f_id = Some g_fptr)
+    (LS: (Vint (Int.sub i (Int.repr 1)) :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg)):
+    at_external (Interstate i m)
+                (lq (Vptr g_fptr Ptrofs.zero) int_int_sg ls m).
+
+Inductive after_external: state -> reply li_locset -> state -> Prop :=
+| after_external_intro
+    i ti m tm ls
+    (SUM: ti = sum (Int.sub i Int.one))
+    (LS : Vint ti = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls):
+    after_external (Interstate i m) (lr ls tm) (Returnstate (sum i) tm).
+
+Inductive step : state -> trace -> state -> Prop :=
+| step_sum
+    i m :
+    step (Callstate i m) E0 (Returnstate (sum i) m)
+| step_call
+    i m
+    (NZERO: i.(Int.intval) <> 0%Z) :
+    step (Callstate i m) E0 (Interstate i m).
+
+Inductive final_state: state -> reply li_locset  -> Prop :=
+  | final_state_intro
+      s m ls
+      (LS : Vint s = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls):
+      final_state (Returnstate s m) (lr ls m).
+
+(* no actual program context, donot need to check available internal function implementation*)
+Definition valid_query (q : query li_locset): bool := true.
+
+(*  match Genv.find_symbol se g_id with
+    |Some b =>
+       match (cq_vf q) with
+         |Vptr b' Ptrofs => eq_block b b'
+         |_ => false
+       end
+    |None => false
+  end.*)
+
+Program Definition lts_BspecL : lts li_locset li_locset state :=
+  {|
+  Smallstep.step ge := step;
+  Smallstep.valid_query := valid_query;
+  Smallstep.initial_state := initial_state;
+  Smallstep.at_external := at_external;
+  Smallstep.after_external := after_external;
+  Smallstep.final_state := final_state;
+  globalenv := tt;
+  |}.
+
+End WITH_SE.
+
+Program Definition BspecL : Smallstep.semantics li_locset li_locset :=
+  {|
+   Smallstep.skel := skel0;
+   Smallstep.state := state;
+   Smallstep.activate := lts_BspecL
+   |}.
 
 Theorem c_locset :
   forward_simulation (cc_c_locset) (cc_c_locset) Bspec BspecL.
-Admitted.
+Proof.
+  constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
+  intros se1 se2 w Hse Hse1. cbn in *.
+  pose (ms := fun (s1 s2: state) => (s1 = s2 /\ w = int_int_sg)).
+  eapply forward_simulation_step with (match_states := ms); cbn; eauto.
+  - intros. exists s1. split. inv H0. inv H.
+    econstructor; eauto.
+    econstructor; eauto.
+    inv H0. inv H. auto.
+  - intros. inv H. inv H0.
+    exists (lr (loc_int_loc s int_loc_result) m). split.
+    constructor. reflexivity.
+    constructor. reflexivity.
+  - intros. inversion H0. inv H.
+    exists int_int_sg, (lq (Vptr g_fptr Ptrofs.zero) int_int_sg (loc_int_loc (Int.sub i (Int.repr 1)) int_loc_argument) m).
+    repeat apply conj; eauto.
+    + econstructor; eauto.
+      unfold loc_int_loc, int_int_sg, loc_arguments. simpl.
+      unfold int_loc_argument. destruct Archi.ptr64.
+      -- destruct Archi.win64; reflexivity.
+      -- reflexivity.
+    + econstructor; eauto.
+      unfold loc_int_loc, int_int_sg, loc_arguments. simpl.
+      unfold int_loc_argument. destruct Archi.ptr64.
+      -- destruct Archi.win64; reflexivity.
+      -- reflexivity.
+    + intros. exists s1'. split.
+      inv H1. inv H.  econstructor; eauto.
+      constructor; auto.
+  - intros. inv H.
+    + inv H0. exists (Returnstate (sum i) m). split; constructor; auto.
+    + inv H0. exists (Interstate i m). split; constructor; auto.
+  - constructor. intros. inv H.
+Qed.
+
 End CL.
 
 Section LM.
