@@ -27,7 +27,8 @@ else
 ARCHDIRS=$(ARCH)_$(BITSIZE) $(ARCH)
 endif
 
-DIRS := lib common $(ARCHDIRS) backend cfrontend driver exportclight cparser encode elf autogen assembler
+DIRS := lib common $(ARCHDIRS) backend cfrontend driver exportclight cparser encode \
+# elf autogen assembler
 
 COQINCLUDES := $(foreach d, $(DIRS), -R $(d) compcert.$(d))
 
@@ -112,6 +113,10 @@ BACKEND=\
   Mach.v \
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v \
+  
+# architecture dependent files (x86 and riscv)
+
+X86 = \
   AsmRegs.v AsmFacts.v Asmgenproof.v \
   SSAsm.v SSAsmproof.v \
   RealAsm.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v \
@@ -135,22 +140,22 @@ BACKEND=\
 ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 
 # Elf file format (unused: MergeSection.v)
-ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
- ReloctablesEncode.v  ReloctablesDecode.v \
- SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof.v\
- DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
- RelocElfLinking.v\
+# ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
+#  ReloctablesEncode.v  ReloctablesDecode.v \
+#  SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof.v\
+#  DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
+#  RelocElfLinking.v\
 
 # assembler
-ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
-  RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
-  RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
-  Symbtablegen.v Symbtablegenproof.v\
-  Reloctablesgen.v Reloctablesgenproof.v\
-  RelocBingen.v RelocBingenproof.v\
+# ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
+#   RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
+#   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
+#   Symbtablegen.v Symbtablegenproof.v\
+#   Reloctablesgen.v Reloctablesgenproof.v\
+#   RelocBingen.v RelocBingenproof.v\
 
-# CAV generation file
-AUTOGEN = VerificationCondition.v EncDecRet.v
+# CSLED generation file
+# AUTOGEN = VerificationCondition.v EncDecRet.v
 
 # C front-end modules (in cfrontend/)
 
