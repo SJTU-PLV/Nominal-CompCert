@@ -319,7 +319,7 @@ Inductive state :=
 Section WITH_SE.
   Context (se: Genv.symtbl).
 
-Compute CL.int_loc_argument.
+(* Compute CL.int_loc_argument. *)
 Definition int_argument_mreg := if Archi.win64 then CX else DI.
 
 Inductive initial_state_mach : query li_mach -> state -> Prop :=
@@ -410,26 +410,25 @@ Variable sp: val.
 Variable m0: mem.
 (* cc_locset_mach_mr *)
 Inductive match_states_locset_mach :  CL.state -> state -> Prop :=
-  |LM_callstate ls ra m_
+  |LM_callstate ls ra
     (LS_RS : ls = make_locset rs0 m0 sp)
-    (MEM: args_removed int_int_sg sp m0 m_)
     (SP: Val.has_type sp Tptr)
     (RA: Val.has_type ra Tptr):
-     match_states_locset_mach (CL.Callstate ls m_) (Callstate sp ra rs0 m0)
-  |LM_interstate ls ra m_
+     match_states_locset_mach (CL.Callstate ls m0) (Callstate sp ra rs0 m0)
+  |LM_interstate ls ra
     (LS_RS : ls = make_locset rs0 m0 sp)
-    (MEM: args_removed int_int_sg sp m0 m_)
     (SP: Val.has_type sp Tptr)
     (RA: Val.has_type ra Tptr):
-      match_states_locset_mach (CL.Interstate ls m_) (Interstate sp ra rs0 m0)
+      match_states_locset_mach (CL.Interstate ls m0) (Interstate sp ra rs0 m0)
   |LM_returnstate ls rs m_ m
      (LS_RS : rs AX  = ls (R AX))
      (RS: forall r : mreg, is_callee_save r = true -> rs r = rs0 r)
-     (TMEM: Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m0 m) (*for mr*)
      (MEM: Mem.unchanged_on (not_init_args (size_arguments int_int_sg) sp) m_ m)
      (SUP: Mem.support m_ = Mem.support m)
-     (PERM: forall (b : block) (ofs : Z) (k : perm_kind) (p : permission),
-                               loc_init_args (size_arguments int_int_sg) sp b ofs -> ~ Mem.perm m_ b ofs k p):
+(*     (PERM: forall (b : block) (ofs : Z) (k : perm_kind) (p : permission),
+                               loc_init_args (size_arguments int_int_sg) sp b ofs -> ~ Mem.perm m_ b ofs k p)
+ *)
+     (TMEM: Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m0 m): (*for mr*)
      match_states_locset_mach (CL.Returnstate ls m_) (Returnstate rs m).
 
 End MS.
@@ -447,6 +446,13 @@ Proof.
   congruence. simpl in *. congruence. reflexivity.
 Qed.
 
+Lemma size_int_int_sg_0:
+  size_arguments int_int_sg = 0.
+Proof.
+  unfold size_arguments, int_int_sg, loc_arguments. replace Archi.ptr64 with true by reflexivity.
+  destruct Archi.win64; simpl;  reflexivity.
+Qed.
+
 Theorem locset_mach:
   forward_simulation (cc_locset_mach) (cc_locset_mach) CL.BspecL BspecM.
 Proof.
@@ -454,9 +460,11 @@ Proof.
   intros se1 se2 w Hse Hse1. cbn in *. subst. 
   pose (ms := fun s1 s2 => match_states_locset_mach (lmw_rs w) (lmw_sp w) (lmw_m w) s1 s2 /\ (lmw_sg w) = int_int_sg).
   eapply forward_simulation_step with (match_states := ms); cbn; eauto.
-  - intros. inv H. inv H0. exists (Callstate sp ra rs m). split.
+  - intros. inv H. inv H0. inv H1.
+    exists (Callstate sp ra rs m_). split.
     econstructor; eauto. eapply argument_int_value; eauto.
     red. simpl. split. econstructor; eauto. auto.
+    rewrite size_int_int_sg_0 in H4. extlia.
   - intros. inv H. inv H0. inv H1.
     exists (mr rs m0). split.
     econstructor; eauto. rewrite CL.ls_result_int in LS.
@@ -464,6 +472,7 @@ Proof.
     destruct w. cbn in *. subst lmw_sg.
     econstructor; eauto.
     rewrite CL.loc_result_int. simpl. intros. inv H. auto. inv H0.
+    intros. inv H. rewrite size_int_int_sg_0 in H0. extlia.
   - intros. inv H0. inv H. inv H0. destruct w. cbn in *. subst lmw_sg.
     set (rs' := Regmap.set int_argument_mreg (Vint (Int.sub i (Int.repr 1))) lmw_rs).
     exists (lmw int_int_sg rs' lmw_m lmw_sp), (mq (Vptr g_fptr Ptrofs.zero) lmw_sp ra rs' lmw_m).
@@ -491,6 +500,7 @@ Proof.
       }
       rewrite H. simpl.
       econstructor; eauto.
+      constructor. red. apply size_int_int_sg_0.
     + intros. inv H0. inv H. cbn in *.
       set (rs'' := Regmap.set AX (Vint (sum i0)) rs'0).
       exists (Returnstate rs'' m' ). split.
@@ -503,7 +513,8 @@ Proof.
          unfold int_argument_mreg. unfold is_callee_save in H.
          replace Archi.ptr64 with true in H by reflexivity. cbn in *.
          destruct Archi.win64; destruct r; try congruence.
-      -- constructor; eauto. constructor; eauto.
+      -- constructor; eauto.
+         econstructor; eauto.
          intros. unfold rs''. rewrite Regmap.gso.
          rewrite H7; eauto. unfold rs'. rewrite Regmap.gso. eauto.
          {
@@ -519,42 +530,21 @@ Proof.
       econstructor; eauto.
       eapply argument_int_value; eauto. eauto.
       econstructor; eauto.
-      econstructor; eauto.
+      econstructor; eauto with mem.
       -- intros. rewrite Regmap.gso. eauto.
          destruct r; unfold is_callee_save in H; try congruence.
-      -- eapply Mem.unchanged_on_refl.
-      -- unfold int_int_sg in *. cbn in *. inv MEM.
-         eauto with mem.
-         constructor.
-         ++ erewrite Mem.support_free; eauto.
-         ++ intros.
-            split.
-            eapply Mem.perm_free_3; eauto.
-            eapply Mem.perm_free_1; eauto.
-            admit.
-         ++ 
-            admit.
-      -- inv MEM. eauto. erewrite Mem.support_free; eauto.
-      -- intros. inv MEM.
-         clear -H0. inv H0. unfold int_int_sg, size_arguments in H1.
-         unfold loc_arguments in H1. replace Archi.ptr64 with true in H1 by reflexivity.
-         destruct Archi.win64. simpl in H1. admit.
-         simpl in H1.
-         admit. (*int_int_sg is not tailcall_possible*)
-         Search Mem.free. inv H. rewrite <- H0 in H6. inv H6.
-         eapply Mem.perm_free_2; eauto.
     + inv H1. exists (Interstate (lmw_sp w) ra (lmw_rs w) (lmw_m w)). split; econstructor; eauto.
       eapply argument_int_value; eauto.
       econstructor; eauto.
   - constructor. intros. inv H.
-Admitted.
+Qed.
 
 End LM.
 
 Section MA.
 
 Theorem mach_asm :
-  forward_simulation (cc_mach_asm) (cc_mach_asm) BspecM BspecA.
+  forward_simulation (cc_mach_asm) (cc_mach_asm) LM.BspecM BspecA.
 Admitted.
 End MA.
 
@@ -578,7 +568,7 @@ Proof.
   eapply compose_forward_simulations.
   eapply self_simulation_wt.
   repeat eapply compose_forward_simulations.
-  eapply c_locset. eapply locset_mach. eapply mach_asm.
+  eapply CL.c_locset. eapply LM.locset_mach. eapply mach_asm.
   eapply asm_simulation_inj.
 Qed.
 
