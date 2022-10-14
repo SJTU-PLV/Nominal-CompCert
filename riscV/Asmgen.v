@@ -923,9 +923,12 @@ Definition transl_function (f: Mach.function) :=
         (Pallocframe f.(fn_stacksize) f.(fn_link_ofs) ::
          storeind_ptr RA SP f.(fn_retaddr_ofs) c)).
 
+Section INSTRSIZE.
+  Variable instr_size : instruction -> Z.
+  
 Definition transf_function (f: Mach.function) : res Asm.function :=
   do tf <- transl_function f;
-  if zlt Ptrofs.max_unsigned (list_length_z tf.(fn_code))
+  if zlt Ptrofs.max_unsigned (code_size instr_size tf.(fn_code))
   then Error (msg "code size exceeded")
   else OK tf.
 
@@ -934,3 +937,5 @@ Definition transf_fundef (f: Mach.fundef) : res Asm.fundef :=
 
 Definition transf_program (p: Mach.program) : res Asm.program :=
   transform_partial_program transf_fundef p.
+
+End INSTRSIZE.

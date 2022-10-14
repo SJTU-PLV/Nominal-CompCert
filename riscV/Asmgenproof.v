@@ -18,11 +18,15 @@ Require Import Values Memory Events Globalenvs Smallstep.
 Require Import Op Locations Mach Conventions Asm.
 Require Import Asmgen Asmgenproof0 Asmgenproof1.
 
+Section INSTRSIZE.
+Variable instr_size : instruction -> Z.
+Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
+
 Definition match_prog (p: Mach.program) (tp: Asm.program) :=
-  match_program (fun _ f tf => transf_fundef f = OK tf) eq p tp.
+  match_program (fun _ f tf => transf_fundef instr_size f = OK tf) eq p tp.
 
 Lemma transf_program_match:
-  forall p tp, transf_program p = OK tp -> match_prog p tp.
+  forall p tp, transf_program instr_size p = OK tp -> match_prog p tp.
 Proof.
   intros. eapply match_transform_partial_program; eauto.
 Qed.
@@ -47,13 +51,13 @@ Lemma functions_translated:
   forall b f,
   Genv.find_funct_ptr ge b = Some f ->
   exists tf,
-  Genv.find_funct_ptr tge b = Some tf /\ transf_fundef f = OK tf.
+  Genv.find_funct_ptr tge b = Some tf /\ transf_fundef instr_size f = OK tf.
 Proof (Genv.find_funct_ptr_transf_partial TRANSF).
 
 Lemma functions_transl:
   forall fb f tf,
   Genv.find_funct_ptr ge fb = Some (Internal f) ->
-  transf_function f = OK tf ->
+  transf_function instr_size f = OK tf ->
   Genv.find_funct_ptr tge fb = Some (Internal tf).
 Proof.
   intros. exploit functions_translated; eauto. intros [tf' [A B]].
@@ -64,17 +68,17 @@ Qed.
 
 Lemma transf_function_no_overflow:
   forall f tf,
-  transf_function f = OK tf -> list_length_z tf.(fn_code) <= Ptrofs.max_unsigned.
+  transf_function instr_size f = OK tf -> code_size instr_size tf.(fn_code) <= Ptrofs.max_unsigned.
 Proof.
-  intros. monadInv H. destruct (zlt Ptrofs.max_unsigned (list_length_z x.(fn_code))); inv EQ0.
+  intros. monadInv H. destruct (zlt Ptrofs.max_unsigned (code_size instr_size x.(fn_code))); inv EQ0.
   lia.
 Qed.
 
 Lemma exec_straight_exec:
   forall fb f c ep tf tc c' rs m rs' m',
-  transl_code_at_pc ge (rs PC) fb f c ep tf tc ->
-  exec_straight tge tf tc rs m c' rs' m' ->
-  plus step tge (State rs m) E0 (State rs' m').
+  transl_code_at_pc instr_size ge (rs PC) fb f c ep tf tc ->
+  exec_straight instr_size tge tf tc rs m c' rs' m' ->
+  plus (step instr_size) tge (State rs m) E0 (State rs' m').
 Proof.
   intros. inv H.
   eapply exec_straight_steps_1; eauto.
@@ -84,10 +88,10 @@ Qed.
 
 Lemma exec_straight_at:
   forall fb f c ep tf tc c' ep' tc' rs m rs' m',
-  transl_code_at_pc ge (rs PC) fb f c ep tf tc ->
+  transl_code_at_pc instr_size ge (rs PC) fb f c ep tf tc ->
   transl_code f c' ep' = OK tc' ->
-  exec_straight tge tf tc rs m tc' rs' m' ->
-  transl_code_at_pc ge (rs' PC) fb f c' ep' tf tc'.
+  exec_straight instr_size tge tf tc rs m tc' rs' m' ->
+  transl_code_at_pc instr_size ge (rs' PC) fb f c' ep' tf tc'.
 Proof.
   intros. inv H.
   exploit exec_straight_steps_2; eauto.
@@ -115,6 +119,21 @@ Qed.
 
 Section TRANSL_LABEL.
 
+Hint Resolve tail_nolabel_refl: labels.
+
+Ltac TailNoLabel :=
+  eauto with labels;
+  match goal with
+  | [ |- tail_nolabel _ (_ :: _) ] => apply tail_nolabel_cons; [auto; exact I | TailNoLabel]
+  | [ H: Error _ = OK _ |- _ ] => discriminate
+  | [ H: assertion_failed = OK _ |- _ ] => discriminate
+  | [ H: OK _ = OK _ |- _ ] => inv H; TailNoLabel
+  | [ H: bind _ _ = OK _ |- _ ] => monadInv H;  TailNoLabel
+  | [ H: (if ?x then _ else _) = OK _ |- _ ] => destruct x; TailNoLabel
+  | [ H: match ?x with nil => _ | _ :: _ => _ end = OK _ |- _ ] => destruct x; TailNoLabel
+  | _ => idtac
+  end.
+  
 Remark loadimm32_label:
   forall r n k, tail_nolabel k (loadimm32 r n k).
 Proof.
@@ -157,7 +176,7 @@ Remark addptrofs_label:
   forall r1 r2 n k, tail_nolabel k (addptrofs r1 r2 n k).
 Proof.
   unfold addptrofs; intros. destruct (Ptrofs.eq_dec n Ptrofs.zero). TailNoLabel.
-  destruct Archi.ptr64. apply opimm64_label; TailNoLabel. apply opimm32_label; TailNoLabel.
+  destruct Archi.ptr64. apply opimm64_label; TailNoLabel;constructor. apply opimm32_label; TailNoLabel; constructor.
 Qed.
 Hint Resolve addptrofs_label: labels.
 
@@ -396,13 +415,13 @@ Qed.
 
 Lemma transl_find_label:
   forall lbl f tf,
-  transf_function f = OK tf ->
+  transf_function instr_size f = OK tf ->
   match Mach.find_label lbl f.(Mach.fn_code) with
   | None => find_label lbl tf.(fn_code) = None
   | Some c => exists tc, find_label lbl tf.(fn_code) = Some tc /\ transl_code f c false = OK tc
   end.
 Proof.
-  intros. monadInv H. destruct (zlt Ptrofs.max_unsigned (list_length_z x.(fn_code))); inv EQ0.
+  intros. monadInv H. destruct (zlt Ptrofs.max_unsigned (code_size instr_size x.(fn_code))); inv EQ0.
   monadInv EQ. rewrite transl_code'_transl_code in EQ0. unfold fn_code. 
   simpl. destruct (storeind_ptr_label X1 X2 (fn_retaddr_ofs f) x) as [A B]; rewrite B. 
   eapply transl_code_label; eauto.
@@ -416,12 +435,12 @@ End TRANSL_LABEL.
 Lemma find_label_goto_label:
   forall f tf lbl rs m c' b ofs,
   Genv.find_funct_ptr ge b = Some (Internal f) ->
-  transf_function f = OK tf ->
+  transf_function instr_size f = OK tf ->
   rs PC = Vptr b ofs ->
   Mach.find_label lbl f.(Mach.fn_code) = Some c' ->
   exists tc', exists rs',
-    goto_label tf lbl rs m = Next rs' m
-  /\ transl_code_at_pc ge (rs' PC) b f c' false tf tc'
+    goto_label instr_size tf lbl rs m = Next rs' m
+  /\ transl_code_at_pc instr_size ge (rs' PC) b f c' false tf tc'
   /\ forall r, r <> PC -> rs'#r = rs#r.
 Proof.
   intros. exploit (transl_find_label lbl f tf); eauto. rewrite H2.
@@ -441,13 +460,13 @@ Qed.
 
 Lemma return_address_exists:
   forall f sg ros c, is_tail (Mcall sg ros :: c) f.(Mach.fn_code) ->
-  exists ra, return_address_offset f c ra.
+  exists ra, return_address_offset instr_size f c ra.
 Proof.
   intros. eapply Asmgenproof0.return_address_exists; eauto.
 - intros. exploit transl_instr_label; eauto.
   destruct i; try (intros [A B]; apply A). intros. subst c0. repeat constructor.
 - intros. monadInv H0.
-  destruct (zlt Ptrofs.max_unsigned (list_length_z x.(fn_code))); inv EQ0. monadInv EQ.
+  destruct (zlt Ptrofs.max_unsigned (code_size instr_size x.(fn_code))); inv EQ0. monadInv EQ.
   rewrite transl_code'_transl_code in EQ0.
   exists x; exists true; split; auto. unfold fn_code.
   constructor. apply (storeind_ptr_label X1 X2 (fn_retaddr_ofs f0) x).
@@ -475,26 +494,27 @@ Qed.
 Inductive match_states: Mach.state -> Asm.state -> Prop :=
   | match_states_intro:
       forall s fb sp c ep ms m m' rs f tf tc
-        (STACKS: match_stack ge s)
+        (STACKS: match_stack instr_size ge s)
         (FIND: Genv.find_funct_ptr ge fb = Some (Internal f))
         (MEXT: Mem.extends m m')
-        (AT: transl_code_at_pc ge (rs PC) fb f c ep tf tc)
+        (AT: transl_code_at_pc instr_size ge (rs PC) fb f c ep tf tc)
         (AG: agree ms sp rs)
         (DXP: ep = true -> rs#X30 = parent_sp s),
       match_states (Mach.State s fb sp c ms m)
                    (Asm.State rs m')
   | match_states_call:
-      forall s fb ms m m' rs
-        (STACKS: match_stack ge s)
+      forall s fb ms m m' rs id
+        (STACKS: match_stack instr_size ge s)
         (MEXT: Mem.extends m m')
         (AG: agree ms (parent_sp s) rs)
         (ATPC: rs PC = Vptr fb Ptrofs.zero)
-        (ATLR: rs RA = parent_ra s),
-      match_states (Mach.Callstate s fb ms m)
+        (ATLR: rs RA = parent_ra s)
+        (FB: fb = Global id),
+      match_states (Mach.Callstate s fb ms m id)
                    (Asm.State rs m')
   | match_states_return:
       forall s ms m m' rs
-        (STACKS: match_stack ge s)
+        (STACKS: match_stack instr_size ge s)
         (MEXT: Mem.extends m m')
         (AG: agree ms (parent_sp s) rs)
         (ATPC: rs PC = parent_ra s),
@@ -503,17 +523,17 @@ Inductive match_states: Mach.state -> Asm.state -> Prop :=
 
 Lemma exec_straight_steps:
   forall s fb f rs1 i c ep tf tc m1' m2 m2' sp ms2,
-  match_stack ge s ->
+  match_stack instr_size ge s ->
   Mem.extends m2 m2' ->
   Genv.find_funct_ptr ge fb = Some (Internal f) ->
-  transl_code_at_pc ge (rs1 PC) fb f (i :: c) ep tf tc ->
+  transl_code_at_pc instr_size ge (rs1 PC) fb f (i :: c) ep tf tc ->
   (forall k c (TR: transl_instr f i ep k = OK c),
    exists rs2,
-       exec_straight tge tf c rs1 m1' k rs2 m2'
+       exec_straight instr_size tge tf c rs1 m1' k rs2 m2'
     /\ agree ms2 sp rs2
     /\ (it1_is_parent ep i = true -> rs2#X30 = parent_sp s)) ->
   exists st',
-  plus step tge (State rs1 m1') E0 st' /\
+  plus (step instr_size) tge (State rs1 m1') E0 st' /\
   match_states (Mach.State s fb sp c ms2 m2) st'.
 Proof.
   intros. inversion H2. subst. monadInv H7.
@@ -525,19 +545,19 @@ Qed.
 
 Lemma exec_straight_steps_goto:
   forall s fb f rs1 i c ep tf tc m1' m2 m2' sp ms2 lbl c',
-  match_stack ge s ->
+  match_stack instr_size ge s ->
   Mem.extends m2 m2' ->
   Genv.find_funct_ptr ge fb = Some (Internal f) ->
   Mach.find_label lbl f.(Mach.fn_code) = Some c' ->
-  transl_code_at_pc ge (rs1 PC) fb f (i :: c) ep tf tc ->
+  transl_code_at_pc instr_size ge (rs1 PC) fb f (i :: c) ep tf tc ->
   it1_is_parent ep i = false ->
   (forall k c (TR: transl_instr f i ep k = OK c),
    exists jmp, exists k', exists rs2,
-       exec_straight tge tf c rs1 m1' (jmp :: k') rs2 m2'
+       exec_straight instr_size tge tf c rs1 m1' (jmp :: k') rs2 m2'
     /\ agree ms2 sp rs2
-    /\ exec_instr tge tf jmp rs2 m2' = goto_label tf lbl rs2 m2') ->
+    /\ exec_instr instr_size tge tf jmp rs2 m2' = goto_label instr_size tf lbl rs2 m2') ->
   exists st',
-  plus step tge (State rs1 m1') E0 st' /\
+  plus (step instr_size) tge (State rs1 m1') E0 st' /\
   match_states (Mach.State s fb sp c' ms2 m2) st'.
 Proof.
   intros. inversion H3. subst. monadInv H9.
@@ -552,7 +572,7 @@ Proof.
   eapply plus_right'.
   eapply exec_straight_steps_1; eauto.
   econstructor; eauto.
-  eapply find_instr_tail. eauto.
+  eapply find_instr_tail. eauto. eauto.
   rewrite C. eexact GOTO.
   traceEq.
   econstructor; eauto.
@@ -562,19 +582,19 @@ Qed.
 
 Lemma exec_straight_opt_steps_goto:
   forall s fb f rs1 i c ep tf tc m1' m2 m2' sp ms2 lbl c',
-  match_stack ge s ->
+  match_stack instr_size ge s ->
   Mem.extends m2 m2' ->
   Genv.find_funct_ptr ge fb = Some (Internal f) ->
   Mach.find_label lbl f.(Mach.fn_code) = Some c' ->
-  transl_code_at_pc ge (rs1 PC) fb f (i :: c) ep tf tc ->
+  transl_code_at_pc instr_size ge (rs1 PC) fb f (i :: c) ep tf tc ->
   it1_is_parent ep i = false ->
   (forall k c (TR: transl_instr f i ep k = OK c),
    exists jmp, exists k', exists rs2,
-       exec_straight_opt tge tf c rs1 m1' (jmp :: k') rs2 m2'
+       exec_straight_opt instr_size tge tf c rs1 m1' (jmp :: k') rs2 m2'
     /\ agree ms2 sp rs2
-    /\ exec_instr tge tf jmp rs2 m2' = goto_label tf lbl rs2 m2') ->
+    /\ exec_instr instr_size tge tf jmp rs2 m2' = goto_label instr_size tf lbl rs2 m2') ->
   exists st',
-  plus step tge (State rs1 m1') E0 st' /\
+  plus (step instr_size) tge (State rs1 m1') E0 st' /\
   match_states (Mach.State s fb sp c' ms2 m2) st'.
 Proof.
   intros. inversion H3. subst. monadInv H9.
@@ -586,7 +606,7 @@ Proof.
   intros [tc' [rs3 [GOTO [AT' OTH]]]].
   exists (State rs3 m2'); split.
   apply plus_one. econstructor; eauto.
-  eapply find_instr_tail. eauto.
+  eapply find_instr_tail. eauto. eauto.
   rewrite C. eexact GOTO.
   econstructor; eauto.
   apply agree_exten with rs2; auto with asmgen.
@@ -599,7 +619,7 @@ Proof.
   eapply plus_right'.
   eapply exec_straight_steps_1; eauto.
   econstructor; eauto.
-  eapply find_instr_tail. eauto.
+  eapply find_instr_tail. eauto. eauto.
   rewrite C. eexact GOTO.
   traceEq.
   econstructor; eauto.
@@ -618,7 +638,7 @@ Qed.
 Definition measure (s: Mach.state) : nat :=
   match s with
   | Mach.State _ _ _ _ _ _ => 0%nat
-  | Mach.Callstate _ _ _ _ => 0%nat
+  | Mach.Callstate _ _ _ _ _ => 0%nat
   | Mach.Returnstate _ _ _ => 1%nat
   end.
 
@@ -631,9 +651,9 @@ Qed.
 (** This is the simulation diagram.  We prove it by case analysis on the Mach transition. *)
 
 Theorem step_simulation:
-  forall S1 t S2, Mach.step return_address_offset ge S1 t S2 ->
+  forall S1 t S2, Mach.step (return_address_offset instr_size) ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'),
-  (exists S2', plus step tge S1' t S2' /\ match_states S2 S2')
+  (exists S2', plus (step instr_size) tge S1' t S2' /\ match_states S2 S2')
   \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 S1')%nat.
 Proof.
   induction 1; intros; inv MS.
@@ -741,66 +761,73 @@ Local Transparent destroyed_by_op.
 - (* Mcall *)
   assert (f0 = f) by congruence.  subst f0.
   inv AT.
-  assert (NOOV: list_length_z tf.(fn_code) <= Ptrofs.max_unsigned).
+  assert (NOOV: code_size instr_size tf.(fn_code) <= Ptrofs.max_unsigned).
     eapply transf_function_no_overflow; eauto.
-  destruct ros as [rf|fid]; simpl in H; monadInv H5.
+  destruct ros as [rf|fid]; simpl in H0; monadInv H6.
 + (* Indirect call *)
-  assert (rs rf = Vptr f' Ptrofs.zero).
-    destruct (rs rf); try discriminate.
-    revert H; predSpec Ptrofs.eq Ptrofs.eq_spec i Ptrofs.zero; intros; congruence.
-  assert (rs0 x0 = Vptr f' Ptrofs.zero).
-    exploit ireg_val; eauto. rewrite H5; intros LD; inv LD; auto.
-  generalize (code_tail_next_int _ _ _ _ NOOV H6). intro CT1.
-  assert (TCA: transl_code_at_pc ge (Vptr fb (Ptrofs.add ofs Ptrofs.one)) fb f c false tf x).
+  assert (rs rf = Vptr (Global id) Ptrofs.zero).
+  (* SANCC *)
+  simpl in H0. repeat destr_in H0.
+  f_equal. generalize (Ptrofs.eq_spec i Ptrofs.zero). rewrite Heqb0. auto.
+    (* destruct (rs rf); try discriminate. *)
+  (* revert H; predSpec Ptrofs.eq Ptrofs.eq_spec i Ptrofs.zero; intros; congruence. *)
+  assert (rs0 x0 = Vptr (Global id) Ptrofs.zero).
+    exploit ireg_val; eauto. rewrite H6; intros LD; inv LD; auto.
+  generalize (code_tail_next_int instr_size instr_size_bound _ _ _ _ NOOV H7). intro CT1.
+  assert (TCA: transl_code_at_pc instr_size ge (Vptr fb (Ptrofs.add ofs (Ptrofs.repr (instr_size (Pjal_r x0 sig))))) fb f c false tf x).
     econstructor; eauto.
   exploit return_address_offset_correct; eauto. intros; subst ra.
   left; econstructor; split.
-  apply plus_one. eapply exec_step_internal. Simpl. rewrite <- H2; simpl; eauto.
+  apply plus_one. eapply exec_step_internal. rewrite H. auto. auto.  (* Simpl. rewrite <- H2; simpl; eauto. *)
   eapply functions_transl; eauto. eapply find_instr_tail; eauto.
   simpl. eauto.
   econstructor; eauto.
   econstructor; eauto.
   eapply agree_sp_def; eauto.
   simpl. eapply agree_exten; eauto. intros. Simpl.
-  Simpl. rewrite <- H2. auto.
+  Simpl. rewrite <- H. auto.
 + (* Direct call *)
-  generalize (code_tail_next_int _ _ _ _ NOOV H6). intro CT1.
-  assert (TCA: transl_code_at_pc ge (Vptr fb (Ptrofs.add ofs Ptrofs.one)) fb f c false tf x).
+  generalize (code_tail_next_int instr_size instr_size_bound _ _ _ _ NOOV H7). intro CT1.
+  assert (TCA: transl_code_at_pc instr_size ge (Vptr fb (Ptrofs.add ofs (Ptrofs.repr (instr_size (Pjal_s fid sig))))) fb f c false tf x).
     econstructor; eauto.
   exploit return_address_offset_correct; eauto. intros; subst ra.
   left; econstructor; split.
   apply plus_one. eapply exec_step_internal. eauto.
   eapply functions_transl; eauto. eapply find_instr_tail; eauto.
-  simpl. unfold Genv.symbol_address. rewrite symbols_preserved. rewrite H. eauto.
+  simpl. unfold Genv.symbol_address. rewrite symbols_preserved. rewrite H0. eauto.
   econstructor; eauto.
   econstructor; eauto.
   eapply agree_sp_def; eauto.
   simpl. eapply agree_exten; eauto. intros. Simpl.
-  Simpl. rewrite <- H2. auto.
+  Simpl. rewrite <- H. auto.
 
 - (* Mtailcall *)
   assert (f0 = f) by congruence.  subst f0.
   inversion AT; subst.
-  assert (NOOV: list_length_z tf.(fn_code) <= Ptrofs.max_unsigned).
-    eapply transf_function_no_overflow; eauto.  exploit Mem.loadv_extends. eauto. eexact H1. auto. simpl. intros [parent' [A B]].
-  destruct ros as [rf|fid]; simpl in H; monadInv H7.
+  assert (NOOV: code_size instr_size tf.(fn_code) <= Ptrofs.max_unsigned).
+    eapply transf_function_no_overflow; eauto.  exploit Mem.loadv_extends. eauto. eexact H3. auto. simpl. intros [parent' [A B]].
+  destruct ros as [rf|fid]; simpl in H0; monadInv H10.
 + (* Indirect call *)
-  assert (rs rf = Vptr f' Ptrofs.zero).
-    destruct (rs rf); try discriminate.
-    revert H; predSpec Ptrofs.eq Ptrofs.eq_spec i Ptrofs.zero; intros; congruence.
-  assert (rs0 x0 = Vptr f' Ptrofs.zero).
-    exploit ireg_val; eauto. rewrite H7; intros LD; inv LD; auto.
+  assert (rs rf = Vptr (Global id) Ptrofs.zero).
+  simpl in H0. repeat destr_in H0.
+  f_equal. generalize (Ptrofs.eq_spec i Ptrofs.zero). rewrite Heqb0. auto.
+    (* destruct (rs rf); try discriminate. *)
+    (* revert H; predSpec Ptrofs.eq Ptrofs.eq_spec i Ptrofs.zero; intros; congruence. *)
+  assert (rs0 x0 = Vptr (Global id) Ptrofs.zero).
+  exploit ireg_val; eauto. rewrite H10; intros LD; inv LD; auto.
+  (*** TODO: FIX Asmgenproof1 *)
   exploit make_epilogue_correct; eauto. intros (rs1 & m1 & U & V & W & X & Y & Z). 
   exploit exec_straight_steps_2; eauto using functions_transl.                      
   intros (ofs' & P & Q).
   left; econstructor; split.
   (* execution *)
   eapply plus_right'. eapply exec_straight_exec; eauto.
-  econstructor. eexact P. eapply functions_transl; eauto. eapply find_instr_tail. eexact Q.
+  econstructor. eexact P. eapply functions_transl; eauto. eapply find_instr_tail. auto. eexact Q.
   simpl. reflexivity.
   traceEq.
   (* match states *)
   econstructor; eauto.
+  Mem.pop_stage_
   apply agree_set_other; auto with asmgen.
   Simpl. rewrite Z by (rewrite <- (ireg_of_eq _ _ EQ1); eauto with asmgen). assumption. 
 + (* Direct call *)

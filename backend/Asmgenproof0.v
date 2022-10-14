@@ -997,11 +997,6 @@ Proof.
   inv H0. congruence.
 Qed.
 
-Lemma parent_ra_type: forall s, match_stack s -> Val.has_type (parent_ra s) Tptr.
-Proof.
-  induction 1; simpl.
-  unfold Vnullptr; unfold Tptr; destruct Archi.ptr64; simpl; auto. inv H0. constructor.
-Qed.
 
 Lemma lessdef_parent_sp:
   forall s v,

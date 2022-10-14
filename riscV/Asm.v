@@ -493,6 +493,13 @@ Fixpoint set_res (res: builtin_res preg) (v: val) (rs: regset) : regset :=
   | BR_splitlong hi lo => set_res lo (Val.loword v) (set_res hi (Val.hiword v) rs)
   end.
 
+Section INSTRSIZE.
+(** Since we need to eliminate the pseudo instructions to get real assembly programs, it is
+necessary to define specific size for each instruction instead of the constant 1.
+*)
+Variable instr_size : instruction -> Z.
+Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
+
 Section RELSEM.
 
 (** Looking up instructions in a code sequence by position. *)
@@ -500,8 +507,19 @@ Section RELSEM.
 Fixpoint find_instr (pos: Z) (c: code) {struct c} : option instruction :=
   match c with
   | nil => None
-  | i :: il => if zeq pos 0 then Some i else find_instr (pos - 1) il
+  | i :: il => if zeq pos 0 then Some i else find_instr (pos - (instr_size i)) il
   end.
+
+Fixpoint code_size (c:code) : Z :=
+  match c with
+  |nil => 0
+  |i::c' => code_size c' + instr_size i
+  end.
+
+Lemma code_size_non_neg: forall c, 0 <= code_size c.
+Proof.
+  intros. induction c; simpl. lia. generalize (instr_size_bound a); lia.
+Qed.
 
 (** Position corresponding to a label *)
 
@@ -523,7 +541,7 @@ Fixpoint label_pos (lbl: label) (pos: Z) (c: code) {struct c} : option Z :=
   match c with
   | nil => None
   | instr :: c' =>
-      if is_label lbl instr then Some (pos + 1) else label_pos lbl (pos + 1) c'
+      if is_label lbl instr then Some (pos + instr_size instr) else label_pos lbl (pos + instr_size instr) c'
   end.
 
 Variable ge: genv.
@@ -557,8 +575,8 @@ Inductive outcome: Type :=
 (** Manipulations over the [PC] register: continuing with the next
   instruction ([nextinstr]) or branching to a label ([goto_label]). *)
 
-Definition nextinstr (rs: regset) :=
-  rs#PC <- (Val.offset_ptr rs#PC Ptrofs.one).
+Definition nextinstr (sz: ptrofs) (rs: regset) :=
+  rs#PC <- (Val.offset_ptr rs#PC sz).
 
 Definition goto_label (f: function) (lbl: label) (rs: regset) (m: mem) :=
   match label_pos lbl 0 (fn_code f) with
@@ -578,26 +596,26 @@ Definition eval_offset (ofs: offset) : ptrofs :=
   | Ofslow id delta => low_half ge id delta
   end.
 
-Definition exec_load (chunk: memory_chunk) (rs: regset) (m: mem)
+Definition exec_load (sz:ptrofs) (chunk: memory_chunk) (rs: regset) (m: mem)
                      (d: preg) (a: ireg) (ofs: offset) :=
   match Mem.loadv chunk m (Val.offset_ptr (rs a) (eval_offset ofs)) with
   | None => Stuck
-  | Some v => Next (nextinstr (rs#d <- v)) m
+  | Some v => Next (nextinstr sz (rs#d <- v)) m
   end.
 
-Definition exec_store (chunk: memory_chunk) (rs: regset) (m: mem)
+Definition exec_store (sz:ptrofs) (chunk: memory_chunk) (rs: regset) (m: mem)
                       (s: preg) (a: ireg) (ofs: offset) :=
   match Mem.storev chunk m (Val.offset_ptr (rs a) (eval_offset ofs)) (rs s) with
   | None => Stuck
-  | Some m' => Next (nextinstr rs) m'
+  | Some m' => Next (nextinstr sz rs) m'
   end.
 
 (** Evaluating a branch *)
 
-Definition eval_branch (f: function) (l: label) (rs: regset) (m: mem) (res: option bool) : outcome :=
+Definition eval_branch (sz:ptrofs) (f: function) (l: label) (rs: regset) (m: mem) (res: option bool) : outcome :=
   match res with
     | Some true  => goto_label f l rs m
-    | Some false => Next (nextinstr rs) m
+    | Some false => Next (nextinstr sz rs) m
     | None => Stuck
   end.
 
@@ -614,6 +632,11 @@ Definition eval_branch (f: function) (l: label) (rs: regset) (m: mem) (res: opti
     survive the execution of the pseudo-instruction. *)
 
 Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : outcome :=
+  let sz := Ptrofs.repr (instr_size i) in
+  let nextinstr := nextinstr sz in
+  let eval_branch := eval_branch sz in
+  let exec_load := exec_load sz in
+  let exec_store := exec_store sz in
   match i with
   | Pmv d s =>
       Next (nextinstr (rs#d <- (rs#s))) m
@@ -756,11 +779,11 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
       Next (rs#PC <- (rs#r)) m
   | Pjal_s s sg =>
       Next (rs#PC <- (Genv.symbol_address ge s Ptrofs.zero)
-              #RA <- (Val.offset_ptr rs#PC Ptrofs.one)
+              #RA <- (Val.offset_ptr rs#PC (Ptrofs.repr (instr_size i)))
            ) m
   | Pjal_r r sg =>
       Next (rs#PC <- (rs#r)
-              #RA <- (Val.offset_ptr rs#PC Ptrofs.one)
+              #RA <- (Val.offset_ptr rs#PC (Ptrofs.repr (instr_size i)))
            ) m
 (** Conditional branches, 32-bit comparisons *)
   | Pbeqw s1 s2 l =>
@@ -923,12 +946,30 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
 
 (** Pseudo-instructions *)
   | Pallocframe sz pos =>
-      let (m1, stk) := Mem.alloc m 0 sz in
-      let sp := (Vptr stk Ptrofs.zero) in
-      match Mem.storev Mptr m1 (Val.offset_ptr sp pos) rs#SP with
-      | None => Stuck
-      | Some m2 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m2
+    if zle 0 sz then
+      match rs # PC with
+      |Vptr (Global id) _
+       =>
+       let (m0,path) := Mem.alloc_frame m id in
+       let (m1, stk) := Mem.alloc m0 0 sz in
+       match Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame sz) with
+       |None => Stuck
+       |Some m2 =>
+        let sp := Vptr stk Ptrofs.zero in
+        match Mem.storev Mptr m2 (Val.offset_ptr sp pos) rs#SP with
+        | None => Stuck
+        | Some m3 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m3
+        end
+       end
+     |_ => Stuck
       end
+    else Stuck
+      (* let (m1, stk) := Mem.alloc m 0 sz in *)
+      (* let sp := (Vptr stk Ptrofs.zero) in *)
+      (* match Mem.storev Mptr m1 (Val.offset_ptr sp pos) rs#SP with *)
+      (* | None => Stuck *)
+      (* | Some m2 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m2 *)
+      (* end *)
   | Pfreeframe sz pos =>
       match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with
       | None => Stuck
@@ -1077,7 +1118,7 @@ Inductive step: state -> trace -> state -> Prop :=
       find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some (Pbuiltin ef args res) ->
       eval_builtin_args ge rs (rs SP) m args vargs ->
       external_call ef ge vargs m t vres m' ->
-      rs' = nextinstr
+      rs' = nextinstr (Ptrofs.repr (instr_size (Pbuiltin ef args res)))
               (set_res res vres
                 (undef_regs (map preg_of (destroyed_by_builtin ef))
                    (rs#X31 <- Vundef))) ->
@@ -1185,3 +1226,7 @@ Definition data_preg (r: preg) : bool :=
   | FR _   => true
   | PC     => false
   end.
+
+End INSTRSIZE.
+
+(** instrsize instantiation *)
