@@ -123,9 +123,6 @@ Qed.
 
 End WT_C.
 
-Variable BspecA : Smallstep.semantics li_asm li_asm.
-
-
 Module CL.
 
 Definition int_loc_arguments := loc_arguments int_int_sg.
@@ -257,8 +254,7 @@ Proof.
     econstructor; eauto.
     constructor. eauto.
   - intros. inversion H0. inv H. inv H0. inv H3.
-    exists int_int_sg, (lq (Vptr g_fptr Ptrofs.zero)
-                      int_int_sg 
+    exists int_int_sg, (lq (Vptr g_fptr Ptrofs.zero) int_int_sg
                       (Locmap.set int_loc_argument (Vint (Int.sub i Int.one)) ls) m).
     repeat apply conj; eauto.
     + econstructor; eauto.
@@ -327,11 +323,10 @@ Inductive after_external_mach : state -> reply li_mach -> state -> Prop :=
 
 Inductive step_mach : state -> trace -> state -> Prop :=
 | step_sum_mach
-    i m rs rs'' sp ra
+    i m rs rs' sp ra
     (RS: rs int_argument_mreg = Vint i)
-    (RS'' : rs'' AX = Vint (sum i)):
-    (* maybe need to identify rs'' here for asm level *)
-    step_mach (Callstate sp ra rs m) E0 (Returnstate rs'' m)
+    (RS' : rs' = Regmap.set AX (Vint (sum i)) rs):
+    step_mach (Callstate sp ra rs m) E0 (Returnstate rs' m)
 | step_call_mach
     i m rs sp ra
     (NZERO: i.(Int.intval) <> 0%Z)
@@ -523,7 +518,7 @@ Section WITH_SE.
 Definition int_argument_preg := if Archi.win64 then IR RCX else IR RDI.
 
 (* cc_mach_asm_mr *)
-Notation "a # b <- c" := (Pregmap.set b c a).
+
 Inductive initial_state : query li_asm -> state -> Prop :=
 | initial_state_intro
     v m b i rs
@@ -551,17 +546,14 @@ Inductive after_external : state -> reply li_asm -> state -> Prop :=
     (RS' : rs' (IR RAX) = Vint (sum (Int.sub i Int.one)))
     (RS'' : rs'' = Pregmap.set (IR RAX) (Vint (sum i)) rs')
     (SUP : Mem.sup_include (Mem.support m) (Mem.support m')):
-   (* (forall r, is_callee_save r = true -> rs' r = rs r) -> *)
-   (* Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m m' -> *)
     after_external (Interstate rs m) (rs',m') (Returnstate rs'' m').
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_sum
-    i m rs rs''
+    i m rs rs'
     (RS: rs int_argument_preg = Vint i)
-    (RS'' : rs'' (IR RAX) = Vint (sum i)):
-    (* maybe need to identify rs'' here for asm level *)
-    step (Callstate rs m) E0 (Returnstate rs'' m)
+    (RS': rs' = (rs # (IR RAX) <- (Vint (sum i))) # PC <- (rs RA)):
+    step (Callstate rs m) E0 (Returnstate rs' m)
 | step_call
     i m rs
     (NZERO: i.(Int.intval) <> 0%Z)
@@ -709,35 +701,32 @@ Proof.
          rewrite Pregmap.gso. eauto.
          unfold int_argument_preg. destruct Archi.win64; congruence.
   - intros. inv H; inv H0; inv H; destruct H1 as (A & B & C). cbn in *.
-    + 
-      set (r'' := fun r => match r with
-                      | PC => (r RA)
-                      | (IR RAX) 
-                      r # (IR RAX) <- (Vint (sum i))).
-      exists (Returnstate r'' m). split.
+    + eexists. split.
       econstructor; eauto.
       rewrite int_argument_preg_of. rewrite <- MRS_RS. eauto.
-      unfold r''. rewrite Pregmap.gss. reflexivity.
       econstructor; eauto.
       econstructor; eauto.
-
-      admit.
-      admit.
-      subst s. eauto with mem.
+      intros r0. destruct (mreg_eq r0 AX).
+      -- subst. rewrite Regmap.gss. simpl. rewrite Pregmap.gso; try congruence.
+         rewrite Pregmap.gss. reflexivity.
+      -- rewrite Regmap.gso; try congruence.
+         rewrite !Pregmap.gso; try congruence.
+         destruct r0; simpl; congruence.
+         destruct r0; simpl; congruence.
+      -- subst s. eauto with mem.
     + cbn in *. exists (Interstate r m). split.
       econstructor; eauto. rewrite int_argument_preg_of. rewrite <- MRS_RS. eauto.
       econstructor; eauto.
       econstructor; eauto.
   - constructor. intros. inv H.
-Admitted.
+Qed.
 
 End MA.
-
 
 Section Ainj.
 
 Theorem asm_simulation_inj:
-  forward_simulation (cc_asm inj) (cc_asm inj) BspecA (Asm.semantics DemoB.prog).
+  forward_simulation (cc_asm inj) (cc_asm inj) MA.BspecA (Asm.semantics DemoB.prog).
 Admitted.
 
 End Ainj.
@@ -753,7 +742,7 @@ Proof.
   eapply compose_forward_simulations.
   eapply self_simulation_wt.
   repeat eapply compose_forward_simulations.
-  eapply CL.c_locset. eapply LM.locset_mach. eapply mach_asm.
+  eapply CL.c_locset. eapply LM.locset_mach. eapply MA.mach_asm.
   eapply asm_simulation_inj.
 Qed.
 
