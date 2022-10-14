@@ -132,8 +132,6 @@ Definition int_loc_arguments := loc_arguments int_int_sg.
 
 Definition int_loc_argument := if Archi.ptr64 then (if Archi.win64 then (R CX) else (R DI))
                                           else S Outgoing 0 Tint.
-(* result & *)
-
 Lemma loc_result_int:
  loc_result int_int_sg = One AX.
 Proof.
@@ -154,16 +152,8 @@ Definition int_loc_result' : rpair mreg := loc_result int_int_sg.
 
 Definition int_loc_result : loc := R AX.
 
-(*if Archi.ptr64
-      then if Archi.win64 then One (R CX) :: nil else One (R DI) :: nil
-      else One (S Outgoing 0 Tint) :: nil) *)
-
 Definition loc_int_loc (i: int) (l : loc): Locmap.t :=
   fun loc => if Loc.eq loc l  then (Vint i) else Vundef.
-
-(* Definition valid_loc (ls : Locmap.t) (i: int) : Prop :=
-  ls (loc_int) = Vint i.
-*)
 
 Inductive state :=
   | Callstate (ls: Locmap.t) (m:mem)
@@ -173,13 +163,6 @@ Inductive state :=
 Section WITH_SE.
   Context (se: Genv.symtbl).
 
-(*
-LTL_q1       m_ ---------------> m_  r1
-
-args_remove  ms                  ms  unchanged_on
-mach_q2      m  ---------------> m   r2
-
-*)
 Inductive initial_state : query li_locset -> state -> Prop :=
 | initial_state_intro
     v i m b (ls: Locmap.t)
@@ -224,17 +207,7 @@ Inductive final_state: state -> reply li_locset  -> Prop :=
       (LS : Vint s = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls):
       final_state (Returnstate ls m) (lr ls m).
 
-(* no actual program context, donot need to check available internal function implementation*)
 Definition valid_query (q : query li_locset): bool := true.
-
-(*  match Genv.find_symbol se g_id with
-    |Some b =>
-       match (cq_vf q) with
-         |Vptr b' Ptrofs => eq_block b b'
-         |_ => false
-       end
-    |None => false
-  end.*)
 
 Program Definition lts_BspecL : lts li_locset li_locset state :=
   {|
@@ -339,9 +312,6 @@ Inductive at_external_mach: state -> query li_mach -> Prop :=
     (FINDG: Genv.find_symbol se f_id = Some g_fptr)
     (RS: rs int_argument_mreg = Vint i)
     (RS': rs' = Regmap.set int_argument_mreg (Vint (Int.sub i (Int.repr 1))) rs):
-(*    (RS': rs' int_argument_mreg = Vint (Int.sub i (Int.repr 1)))*)
-(*    (SP: Val.has_type sp Tptr)
-    (RA: Val.has_type ra Tptr): *)
     at_external_mach (Interstate sp ra rs m)
                 (mq (Vptr g_fptr Ptrofs.zero) sp ra rs' m).
 
@@ -351,11 +321,7 @@ Inductive after_external_mach : state -> reply li_mach -> state -> Prop :=
     (RS: rs int_argument_mreg = Vint i)
     (RS' : rs' AX = Vint (sum (Int.sub i Int.one)))
     (RS'' : rs'' = Regmap.set AX (Vint (sum i)) rs'):
-    (* here other values in rs' and rs'' are the same or not ??
-       if we need they are the same to preserve match_states and further mr, shoule we 
-       algo change the semantics of locset to let Locmap.t only change in R AX also? *)
     (forall r, is_callee_save r = true -> rs' r = rs r) ->
-     (* similar, should it be rs'' r = rs'r = rs r?*)
     Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m m' ->
     after_external_mach (Interstate sp ra rs m) (mr rs' m') (Returnstate rs'' m').
 
@@ -364,7 +330,7 @@ Inductive step_mach : state -> trace -> state -> Prop :=
     i m rs rs'' sp ra
     (RS: rs int_argument_mreg = Vint i)
     (RS'' : rs'' AX = Vint (sum i)):
-    (* maybe need to identify rs'' here *)
+    (* maybe need to identify rs'' here for asm level *)
     step_mach (Callstate sp ra rs m) E0 (Returnstate rs'' m)
 | step_call_mach
     i m rs sp ra
@@ -408,7 +374,7 @@ Section MS.
 Variable rs0: Mach.regset.
 Variable sp: val.
 Variable m0: mem.
-(* cc_locset_mach_mr *)
+
 Inductive match_states_locset_mach :  CL.state -> state -> Prop :=
   |LM_callstate ls ra
     (LS_RS : ls = make_locset rs0 m0 sp)
@@ -425,8 +391,10 @@ Inductive match_states_locset_mach :  CL.state -> state -> Prop :=
      (RS: forall r : mreg, is_callee_save r = true -> rs r = rs0 r)
      (MEM: Mem.unchanged_on (not_init_args (size_arguments int_int_sg) sp) m_ m)
      (SUP: Mem.support m_ = Mem.support m)
-(*     (PERM: forall (b : block) (ofs : Z) (k : perm_kind) (p : permission),
+(*
+     (PERM: forall (b : block) (ofs : Z) (k : perm_kind) (p : permission),
                                loc_init_args (size_arguments int_int_sg) sp b ofs -> ~ Mem.perm m_ b ofs k p)
+
  *)
      (TMEM: Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m0 m): (*for mr*)
      match_states_locset_mach (CL.Returnstate ls m_) (Returnstate rs m).
@@ -541,11 +509,228 @@ Qed.
 
 End LM.
 
-Section MA.
+Module MA.
 
-Theorem mach_asm :
+Inductive state :=
+  |Callstate (rs: regset) (m:mem)
+  |Interstate (rs: regset) (m: mem)
+  |Returnstate (rs: regset) (m:mem).
+
+Section WITH_SE.
+  Context (se: Genv.symtbl).
+
+(* Compute CL.int_loc_argument. *)
+Definition int_argument_preg := if Archi.win64 then IR RCX else IR RDI.
+
+(* cc_mach_asm_mr *)
+Notation "a # b <- c" := (Pregmap.set b c a).
+Inductive initial_state : query li_asm -> state -> Prop :=
+| initial_state_intro
+    v m b i rs
+    (SYMB: Genv.find_symbol se g_id = Some b)
+    (FPTR: v = Vptr b Ptrofs.zero)
+    (RANGE: 0 <= i.(Int.intval) < MAX)
+    (RS : rs int_argument_preg = Vint i)
+    (PC: rs PC <> Vundef)
+    (RA: rs RA <> Vundef):
+    initial_state (rs,m) (Callstate rs m).
+
+Inductive at_external: state -> query li_asm -> Prop :=
+| at_external_intro
+    g_fptr i m rs rs'
+    (FINDG: Genv.find_symbol se f_id = Some g_fptr)
+    (RS: rs int_argument_preg = Vint i)
+    (RS': rs' = (rs # int_argument_preg <- (Vint (Int.sub i (Int.repr 1)))) # PC <- (Vptr g_fptr Ptrofs.zero)):
+    at_external (Interstate rs m)
+                (rs',m).
+
+Inductive after_external : state -> reply li_asm -> state -> Prop :=
+| after_external_intro
+    i m rs rs' rs'' m'
+    (RS: rs int_argument_preg = Vint i)
+    (RS' : rs' (IR RAX) = Vint (sum (Int.sub i Int.one)))
+    (RS'' : rs'' = Pregmap.set (IR RAX) (Vint (sum i)) rs')
+    (SUP : Mem.sup_include (Mem.support m) (Mem.support m')):
+   (* (forall r, is_callee_save r = true -> rs' r = rs r) -> *)
+   (* Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m m' -> *)
+    after_external (Interstate rs m) (rs',m') (Returnstate rs'' m').
+
+Inductive step : state -> trace -> state -> Prop :=
+| step_sum
+    i m rs rs''
+    (RS: rs int_argument_preg = Vint i)
+    (RS'' : rs'' (IR RAX) = Vint (sum i)):
+    (* maybe need to identify rs'' here for asm level *)
+    step (Callstate rs m) E0 (Returnstate rs'' m)
+| step_call
+    i m rs
+    (NZERO: i.(Int.intval) <> 0%Z)
+    (RS: rs int_argument_preg = Vint i):
+    step (Callstate rs m) E0 (Interstate rs m).
+
+Inductive final_state: state -> reply li_asm  -> Prop :=
+  | final_state_intro
+      s m rs
+      (RS: rs (IR RAX) = Vint s):
+      final_state (Returnstate rs m) (rs, m).
+
+(* no actual program context, donot need to check available internal function implementation*)
+Definition valid_query (q : query li_asm): bool := true.
+
+Program Definition lts_BspecA : lts li_asm li_asm state :=
+  {|
+  Smallstep.step ge := step;
+  Smallstep.valid_query := valid_query;
+  Smallstep.initial_state := initial_state;
+  Smallstep.at_external := at_external;
+  Smallstep.after_external := after_external;
+  Smallstep.final_state := final_state;
+  globalenv := tt;
+  |}.
+
+End WITH_SE.
+
+Program Definition BspecA : Smallstep.semantics li_asm li_asm :=
+  {|
+   Smallstep.skel := skel0;
+   Smallstep.state := state;
+   Smallstep.activate := lts_BspecA
+   |}.
+
+Definition make_regset_result (ls: Locmap.t) (sg: signature) (r: mreg) : val :=
+  if in_dec mreg_eq r (regs_of_rpair (loc_result sg)) then ls (R r) else Vundef.
+
+Section MS.
+Variable rs0: regset.
+Variable s0: sup.
+
+Inductive match_states_mach_asm :  LM.state -> state -> Prop :=
+  |LM_callstate mrs m
+    (MRS_RS : forall r, mrs r = rs0 (preg_of r))
+    (SUP: s0 = Mem.support m):
+     match_states_mach_asm (LM.Callstate (rs0 RSP) (rs0 RA) mrs m) (Callstate rs0 m)
+  |LM_interstate mrs m
+    (MRS_RS : forall r, mrs r = rs0 (preg_of r))
+    (SUP: s0 = Mem.support m):
+(*    (TSP: Val.has_type (rs RSP) Tptr)
+    (TRA: Val.has_type (rs RA) Tptr): *)
+      match_states_mach_asm (LM.Interstate (rs0 RSP) (rs0 RA) mrs m) (Interstate rs0 m)
+  |LM_returnstate mrs rs m
+     (MRS_RS : forall r, mrs r = rs (preg_of r))
+     (RSP' : rs RSP = rs0 RSP)
+     (PC': rs PC = rs0 RA)
+     (SUP: Mem.sup_include s0 (Mem.support m)):
+     match_states_mach_asm (LM.Returnstate mrs m) (Returnstate rs m).
+
+End MS.
+
+Lemma int_argument_preg_of:
+  int_argument_preg = preg_of LM.int_argument_mreg.
+Proof.
+  unfold LM.int_argument_mreg, int_argument_preg, preg_of.
+  destruct Archi.win64; reflexivity.
+Qed.
+
+Lemma int_result_preg_of:
+  IR RAX = preg_of AX.
+Proof.
+  reflexivity.
+Qed.
+
+Theorem mach_asm:
   forward_simulation (cc_mach_asm) (cc_mach_asm) LM.BspecM BspecA.
+Proof.
+  constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
+  intros se1 se2 w Hse Hse1. cbn in *. subst.
+  pose (ms := fun s1 s2 => match_states_mach_asm (fst w) (snd w) s1 s2
+                         /\ (fst w) PC <> Vundef /\ (fst w RA <> Vundef)
+                         /\ valid_blockv (snd w) (fst w RSP)).
+  eapply forward_simulation_step with (match_states := ms); cbn; destruct w; eauto.
+  - intros. inv H. inv H0.
+    exists (Callstate r m). split.
+    econstructor; eauto. rewrite int_argument_preg_of.
+    rewrite <- H4; eauto.
+    red. econstructor; eauto.
+    econstructor; eauto.
+  - intros. inv H0. inv H. inv H0. cbn in *.
+    exists (rs0 , m). split.
+    econstructor; eauto.
+    rewrite MRS_RS in RS. eauto.
+    econstructor; eauto.
+  - intros. inv H0. inv H. cbn in *. inv H0. destruct H1 as (A & B & C).
+    set (s:= Mem.support m).
+    set (r' := r # int_argument_preg <- (Vint (Int.sub i (Int.repr 1))) # PC <- (Vptr g_fptr Ptrofs.zero) ).
+    exists (r',s), (r',m). repeat apply conj; eauto.
+    + econstructor; eauto.
+      rewrite int_argument_preg_of. rewrite <- MRS_RS. eauto.
+      unfold r'. reflexivity.
+    + assert (VF': Vptr g_fptr Ptrofs.zero = r' PC).
+      unfold r'. rewrite Pregmap.gss. eauto.
+      assert (SP': r RSP = r' RSP).
+      unfold r'. rewrite !Pregmap.gso. eauto.
+      unfold int_argument_preg. destruct Archi.win64; congruence. congruence.
+      assert (RA': r RA = r' RA).
+      unfold r'. rewrite !Pregmap.gso. eauto.
+      unfold int_argument_preg. destruct Archi.win64; congruence. congruence.
+      rewrite VF',SP',RA'. unfold s.
+      econstructor; eauto.
+      unfold r'. rewrite Pregmap.gss. congruence.
+      rewrite <- SP'. eauto.
+      congruence.
+      intros r0. destruct (mreg_eq r0 (LM.int_argument_mreg)).
+      -- subst. rewrite Regmap.gss. unfold r'. rewrite int_argument_preg_of. rewrite Pregmap.gso.
+         rewrite Pregmap.gss. eauto. unfold LM.int_argument_mreg. destruct Archi.win64; simpl; congruence.
+      -- rewrite Regmap.gso; eauto. unfold r'.
+         rewrite !Pregmap.gso. eauto. unfold LM.int_argument_mreg, int_argument_preg in *.
+         destruct Archi.win64; destruct r0; simpl; congruence.
+         destruct r0; simpl; congruence.
+    + intros. inv H0. rewrite RS in RS0.  inv RS0. inv H. (* why 2 RS? *)
+      set (rs'2 := rs'0 # RAX <- (Vint (sum i0))).
+      exists (Returnstate rs'2 m').
+      split. econstructor; eauto.
+      rewrite int_argument_preg_of. rewrite <- MRS_RS. eauto.
+      rewrite H6 in RS'. eauto.
+      unfold rs'2. reflexivity.
+      constructor; eauto.
+      constructor; eauto.
+      -- unfold rs'2. intro mreg.
+         destruct (mreg_eq mreg AX).
+         subst. rewrite Regmap.gss. simpl.
+         rewrite Pregmap.gss. eauto.
+         rewrite Regmap.gso; eauto.
+         rewrite Pregmap.gso; eauto.
+         destruct mreg; simpl; try congruence.
+      -- unfold rs'2. rewrite Pregmap.gso; try congruence.
+         rewrite H2. unfold r'. rewrite Pregmap.gso; try congruence.
+         rewrite Pregmap.gso. eauto.
+         unfold int_argument_preg. destruct Archi.win64; congruence.
+      -- unfold rs'2. rewrite Pregmap.gso; try congruence.
+         rewrite H3. unfold r'. rewrite Pregmap.gso; try congruence.
+         rewrite Pregmap.gso. eauto.
+         unfold int_argument_preg. destruct Archi.win64; congruence.
+  - intros. inv H; inv H0; inv H; destruct H1 as (A & B & C). cbn in *.
+    + 
+      set (r'' := fun r => match r with
+                      | PC => (r RA)
+                      | (IR RAX) 
+                      r # (IR RAX) <- (Vint (sum i))).
+      exists (Returnstate r'' m). split.
+      econstructor; eauto.
+      rewrite int_argument_preg_of. rewrite <- MRS_RS. eauto.
+      unfold r''. rewrite Pregmap.gss. reflexivity.
+      econstructor; eauto.
+      econstructor; eauto.
+
+      admit.
+      admit.
+      subst s. eauto with mem.
+    + cbn in *. exists (Interstate r m). split.
+      econstructor; eauto. rewrite int_argument_preg_of. rewrite <- MRS_RS. eauto.
+      econstructor; eauto.
+      econstructor; eauto.
+  - constructor. intros. inv H.
 Admitted.
+
 End MA.
 
 
