@@ -52,12 +52,12 @@ Inductive at_external: state -> query li_c -> Prop :=
 
 Inductive after_external: state -> reply li_c -> state -> Prop :=
 | after_external_intro
-    i ti m tm tm' tm'' b_mem
+    i ti m m' m'' m''' b_mem
 (*    (SUM: ti = sum (Int.sub i Int.one)) : *)
     (FINDM: Genv.find_symbol se _memoized = Some b_mem)
-    (STORE0: Mem.storev Mint32 tm (Vptr b_mem Ptrofs.zero) (Vint i) = Some tm')
-    (STORE0: Mem.storev Mint32 tm' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some tm''):
-    after_external (Interstate i m) (cr (Vint ti) tm) (Returnstate (Int.add ti i) tm'').
+    (STORE0: Mem.storev Mint32 m' (Vptr b_mem Ptrofs.zero) (Vint i) = Some m'')
+    (STORE0: Mem.storev Mint32 m'' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some m'''):
+    after_external (Interstate i m) (cr (Vint ti) m') (Returnstate (Int.add ti i) m''').
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_zero

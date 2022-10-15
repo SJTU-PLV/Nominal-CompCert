@@ -4860,6 +4860,63 @@ Proof.
   destruct (range_perm_dec m b lo hi Cur Freeable); inv H; simpl. auto.
 Qed.
 
+Lemma setN_remain_same: forall A vl ofs ofs0 (c1 c2: ZMap.t A),
+      c1 ## ofs0 = c2 ## ofs0 ->
+      (setN vl ofs c1) ## ofs0 = (setN vl ofs c2) ## ofs0.
+Proof.
+  induction vl; intros; simpl; eauto.
+  eapply IHvl; eauto.
+  destruct (ZMap.elt_eq ofs ofs0).
+  subst. rewrite !ZMap.gss; eauto.
+  rewrite !ZMap.gso; eauto.
+Qed.
+
+Lemma store_mapped_unchanged_on:
+  forall (chunk : memory_chunk) (m1 : mem) (b : block) (ofs : Z) (v : val)
+    (n1 m2 : mem),
+    unchanged_on m1 m2 ->
+    (forall ofs', P b ofs') ->
+    store chunk m1 b ofs v = Some n1 ->
+    exists n2 : mem, store chunk m2 b ofs v = Some n2 /\
+                unchanged_on n1 n2.
+Proof.
+  intros chunk m1 b ofs v n1 m2 UNC1 HP STORE1.
+  assert ({n2| store chunk m2 b ofs v = Some n2}).
+  { apply valid_access_store.
+    apply store_valid_access_3 in STORE1 as ACC1.
+    destruct ACC1 as [RANGE1 ALIGN].
+    split; eauto.
+    red. red in RANGE1.
+    intros.
+    inversion UNC1.
+    eapply unchanged_on_perm0; eauto.
+    eapply perm_valid_block. eapply RANGE1. instantiate (1:= ofs). lia.
+  }
+  destruct X as [n2 STORE2].
+  apply support_store in STORE1 as SUP1. apply support_store in STORE2 as SUP2.
+  exists n2. split. auto. inversion UNC1.
+  constructor.
+  - rewrite SUP1, SUP2. eauto.
+  - intros. split; intros.
+    eapply perm_store_1; eauto. eapply unchanged_on_perm0; eauto.
+    unfold valid_block in *. congruence. eapply perm_store_2; eauto.
+    eapply perm_store_1; eauto. eapply unchanged_on_perm0; eauto.
+    unfold valid_block in *. congruence. eapply perm_store_2; eauto.
+  - intros.
+    exploit unchanged_on_contents0; eauto.
+    eapply Mem.perm_store_2; eauto.
+    intros.
+    unfold store in STORE1, STORE2.
+    destruct valid_access_dec in STORE1; try congruence.
+    destruct valid_access_dec in STORE2; try congruence.
+    inv STORE1. inv STORE2. cbn in *.
+    unfold perm in H0. simpl in H0.
+    destruct (eq_block b b0). subst.
+    rewrite !NMap.gss.
+    eapply setN_remain_same; eauto.
+    rewrite !NMap.gso; eauto.
+Qed.
+
 End UNCHANGED_ON.
 
 Lemma unchanged_on_implies:
