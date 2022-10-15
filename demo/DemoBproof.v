@@ -725,9 +725,38 @@ End MA.
 
 Section Ainj.
 
+Section WITH_SE.
+Variable w: inj_world.
+
+(*Inductive match_states : MA.state -> State -> Prop :=
+  | match_states_callstate rs mem
+      match_states (MA.Callstate) (State rs mem )
+
+
+
+*)
+End WITH_SE.
+
+Require Import Extends.
+
+Theorem asm_simulation_ext:
+  forward_simulation (cc_asm ext) (cc_asm ext) MA.BspecA (Asm.semantics DemoB.prog).
+Proof.
+Admitted.
+
+
 Theorem asm_simulation_inj:
   forward_simulation (cc_asm inj) (cc_asm inj) MA.BspecA (Asm.semantics DemoB.prog).
-Admitted.
+Proof.
+  intros.
+  assert (H : ccref (cc_asm ext @ cc_asm inj) (cc_asm inj)).
+  rewrite <- cc_asm_compose. rewrite ext_inj. reflexivity.
+  rewrite <- H at 1.
+  rewrite <- ext_inj at 2. rewrite cc_asm_compose.
+  eapply compose_forward_simulations.
+  eapply asm_simulation_ext.
+  eapply semantics_asm_rel.
+Qed.
 
 End Ainj.
 
