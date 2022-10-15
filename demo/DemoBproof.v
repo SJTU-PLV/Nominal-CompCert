@@ -12,7 +12,7 @@ Require Import SymbolTable DemoB DemoBspec.
 
 Require Import CallConv Compiler.
 
-Require Import CKLRAlgebra Inject InjectFootprint.
+Require Import CKLRAlgebra Extends Inject InjectFootprint.
 
 (** * Step1 : self_simulation of Bspec *)
 
@@ -385,23 +385,23 @@ Inductive at_external: state -> query li_mach -> Prop :=
 
 Inductive after_external : state -> reply li_mach -> state -> Prop :=
 | after_external_intro
-    i m  sp ra rs rs' rs'' b_mem tm tm' tm'' ti
+    i m  sp ra rs rs' rs'' b_mem m' m'' m''' ti
     (RS: rs int_argument_mreg = Vint i)
     (RS' : rs' AX = Vint ti)
     (RS'' : rs'' = Regmap.set AX (Vint (Int.add ti i)) rs')
     (FINDM: Genv.find_symbol se _memoized = Some b_mem)
-    (STORE0: Mem.storev Mint32 tm (Vptr b_mem Ptrofs.zero) (Vint i) = Some tm')
-    (STORE0: Mem.storev Mint32 tm' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some tm''):
+    (STORE0: Mem.storev Mint32 m' (Vptr b_mem Ptrofs.zero) (Vint i) = Some m'')
+    (STORE0: Mem.storev Mint32 m'' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some m'''):
     (forall r, is_callee_save r = true -> rs' r = rs r) ->
-    Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m tm ->
-    after_external (Interstate sp ra rs m) (mr rs' tm) (Returnstate rs'' tm'').
+    Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m m' ->
+    after_external (Interstate sp ra rs m) (mr rs' m') (Returnstate rs'' m''').
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_zero
     i m rs rs' sp ra
     (ZERO: i.(Int.intval) = 0%Z)
     (RS: rs int_argument_mreg = Vint i)
-    (RS' : rs' AX = (Vint (Int.zero))):
+    (RS' : rs' = Regmap.set AX (Vint (Int.zero)) rs ):
      step (Callstate sp ra rs m) E0 (Returnstate rs' m)
 | step_read
     i ti m rs rs' sp ra b_mem 
@@ -410,7 +410,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i))
     (LOAD1: Mem.loadv Mint32 m (Vptr b_mem (Ptrofs.repr 4)) = Some (Vint ti))
     (RS: rs int_argument_mreg = Vint i)
-    (RS' : rs' AX = (Vint ti)):
+    (RS' : rs' = Regmap.set AX (Vint ti) rs):
     step (Callstate sp ra rs m) E0 (Returnstate rs' m)
 | step_call
     i i' m rs sp ra b_mem
@@ -629,7 +629,7 @@ Inductive initial_state : query li_asm -> state -> Prop :=
     v m b i rs
     (SYMB: Genv.find_symbol se g_id = Some b)
     (FPTR: v = Vptr b Ptrofs.zero)
-    (RANGE: 0 <= i.(Int.intval) < MAX)
+(*    (RANGE: 0 <= i.(Int.intval) < MAX) *)
     (RS : rs int_argument_preg = Vint i)
     (PC: rs PC <> Vundef)
     (RA: rs RA <> Vundef):
@@ -646,23 +646,39 @@ Inductive at_external: state -> query li_asm -> Prop :=
 
 Inductive after_external : state -> reply li_asm -> state -> Prop :=
 | after_external_intro
-    i m rs rs' rs'' m'
+    i m rs rs' rs'' m' b_mem m'' m''' ti
     (RS: rs int_argument_preg = Vint i)
-    (RS' : rs' (IR RAX) = Vint (sum (Int.sub i Int.one)))
-    (RS'' : rs'' = Pregmap.set (IR RAX) (Vint (sum i)) rs')
-    (SUP : Mem.sup_include (Mem.support m) (Mem.support m')):
-    after_external (Interstate rs m) (rs',m') (Returnstate rs'' m').
+    (RS' : rs' (IR RAX) = Vint ti)
+    (RS'' : rs'' = Pregmap.set (IR RAX) (Vint (Int.add ti i)) rs') (*more here?*)
+    (SUP : Mem.sup_include (Mem.support m) (Mem.support m'))
+    (FINDM: Genv.find_symbol se _memoized = Some b_mem)
+    (STORE0: Mem.storev Mint32 m' (Vptr b_mem Ptrofs.zero) (Vint i) = Some m'')
+    (STORE0: Mem.storev Mint32 m'' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some m'''):
+    after_external (Interstate rs m) (rs',m') (Returnstate rs'' m''').
 
 Inductive step : state -> trace -> state -> Prop :=
-| step_sum
+| step_zero
     i m rs rs'
+    (ZERO: i.(Int.intval) = 0%Z)
     (RS: rs int_argument_preg = Vint i)
-    (RS': rs' = (rs # (IR RAX) <- (Vint (sum i))) # PC <- (rs RA)):
+    (RS': rs' = (rs # (IR RAX) <- (Vint (Int.zero))) # PC <- (rs RA)):
+    step (Callstate rs m) E0 (Returnstate rs' m)
+| step_read
+    i m rs rs' ti b_mem
+    (RS: rs int_argument_preg = Vint i)
+    (RS': rs' = (rs # (IR RAX) <- (Vint ti)) # PC <- (rs RA))
+    (NZERO: i.(Int.intval) <> 0%Z)
+    (FINDM: Genv.find_symbol se _memoized = Some b_mem)
+    (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i))
+    (LOAD1: Mem.loadv Mint32 m (Vptr b_mem (Ptrofs.repr 4)) = Some (Vint ti)):
     step (Callstate rs m) E0 (Returnstate rs' m)
 | step_call
-    i m rs
+    i m rs b_mem i'
     (NZERO: i.(Int.intval) <> 0%Z)
-    (RS: rs int_argument_preg = Vint i):
+    (RS: rs int_argument_preg = Vint i)
+    (FINDM: Genv.find_symbol se _memoized = Some b_mem)
+    (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
+    (NEQ: i <> i'):
     step (Callstate rs m) E0 (Interstate rs m).
 
 Inductive final_state: state -> reply li_asm  -> Prop :=
@@ -782,8 +798,8 @@ Proof.
          destruct Archi.win64; destruct r0; simpl; congruence.
          destruct r0; simpl; congruence.
     + intros. inv H0. rewrite RS in RS0.  inv RS0. inv H. (* why 2 RS? *)
-      set (rs'2 := rs'0 # RAX <- (Vint (sum i0))).
-      exists (Returnstate rs'2 m').
+      set (rs'2 := rs'0 # RAX <- (Vint (Int.add ti i0))).
+      exists (Returnstate rs'2 m''').
       split. econstructor; eauto.
       rewrite int_argument_preg_of. rewrite <- MRS_RS. eauto.
       rewrite H6 in RS'. eauto.
@@ -805,6 +821,8 @@ Proof.
          rewrite H3. unfold r'. rewrite Pregmap.gso; try congruence.
          rewrite Pregmap.gso. eauto.
          unfold int_argument_preg. destruct Archi.win64; congruence.
+      -- rewrite <- (Mem.support_storev _ _ _ _ _ STORE1).
+         rewrite <- (Mem.support_storev _ _ _ _ _ STORE0). eauto.
   - intros. inv H; inv H0; inv H; destruct H1 as (A & B & C). cbn in *.
     + eexists. split.
       econstructor; eauto.
@@ -812,13 +830,30 @@ Proof.
       econstructor; eauto.
       econstructor; eauto.
       intros r0. destruct (mreg_eq r0 AX).
-      -- subst. rewrite Regmap.gss. simpl. rewrite Pregmap.gso; try congruence.
+      -- subst. simpl.
+         rewrite Regmap.gss.
+         rewrite Pregmap.gso; try congruence.
          rewrite Pregmap.gss. reflexivity.
-      -- rewrite Regmap.gso; try congruence.
-         rewrite !Pregmap.gso; try congruence.
+      -- rewrite !Pregmap.gso; try congruence.
+         rewrite Regmap.gso; try congruence.
          destruct r0; simpl; congruence.
          destruct r0; simpl; congruence.
       -- subst s. eauto with mem.
+    + eexists. split.
+      eapply step_read; eauto.
+      rewrite int_argument_preg_of. rewrite <- MRS_RS. eauto.
+      econstructor; eauto.
+      econstructor; eauto.
+      intros r0. destruct (mreg_eq r0 AX).
+      -- subst. simpl.
+         rewrite Regmap.gss.
+         rewrite Pregmap.gso; try congruence.
+         rewrite Pregmap.gss. reflexivity.
+      -- rewrite !Pregmap.gso; try congruence.
+         rewrite Regmap.gso; try congruence.
+         destruct r0; simpl; congruence.
+         destruct r0; simpl; congruence.
+      -- cbn in *. subst s. eauto with mem.
     + cbn in *. exists (Interstate r m). split.
       econstructor; eauto. rewrite int_argument_preg_of. rewrite <- MRS_RS. eauto.
       econstructor; eauto.
@@ -841,8 +876,6 @@ Variable w: inj_world.
 
 *)
 End WITH_SE.
-
-Require Import Extends.
 
 Theorem asm_simulation_ext:
   forward_simulation (cc_asm ext) (cc_asm ext) MA.BspecA (Asm.semantics DemoB.prog).
