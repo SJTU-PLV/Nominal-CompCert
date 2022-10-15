@@ -971,6 +971,33 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
       (* | Some m2 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m2 *)
       (* end *)
   | Pfreeframe sz pos =>
+    (* if zle 0 sz then *)
+    (*   match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with *)
+    (*   | None => Stuck *)
+    (*   | Some sp => *)
+    (*     match rs#SP with *)
+    (*     | Vptr stk ofs => *)
+    (*       if check_topframe sz (Mem.astack (Mem.support m)) then *)
+    (*         if Val.eq sp (parent_sp_stree (Mem.stack (Mem.support m))) then *)
+    (*           if Val.eq (Vptr stk ofs) (top_sp_stree (Mem.stack (Mem.support m))) then *)
+    (*               match Mem.free m stk 0 fsz with *)
+    (*               | None => Stuck *)
+    (*               | Some m' => *)
+    (*                 match Mem.return_frame m' with *)
+    (*                 | None => Stuck *)
+    (*                 | Some m'' => *)
+    (*                   match Mem.pop_stage m'' with *)
+    (*                     | None => Stuck *)
+    (*                     | Some m''' => *)
+    (*                     Next (nextinstr (rs#RSP <- sp #RA <- ra)) m''' *)
+    (*                   end *)
+    (*                 end *)
+    (*               end else Stuck else Stuck else Stuck *)
+    (*           | _ => Stuck *)
+    (*           end *)
+    (*       end *)
+    (*   end else Stuck *)
+    
       match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with
       | None => Stuck
       | Some v =>

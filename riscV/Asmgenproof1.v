@@ -1366,30 +1366,32 @@ Lemma make_epilogue_correct:
   /\ (forall r, r <> PC -> r <> RA -> r <> SP -> r <> X31 -> rs'#r = rs#r).
 Proof.
   (*** TODO  *)
-  intros until tm; intros LP LRA FREE RETF POP AG MEXT MCS.
-  exploit Mem.loadv_extends. eauto. eexact LP. auto. simpl. intros (parent' & LP' & LDP').
-  exploit Mem.loadv_extends. eauto. eexact LRA. auto. simpl. intros (ra' & LRA' & LDRA').
-  exploit lessdef_parent_sp; eauto. intros EQ; subst parent'; clear LDP'.
-  exploit lessdef_parent_ra; eauto. intros EQ; subst ra'; clear LDRA'.
-  exploit Mem.free_parallel_extends; eauto. intros (tm' & FREE' & MEXT').
-  unfold make_epilogue. 
-  rewrite chunk_of_Tptr in *. 
-  exploit (loadind_ptr_correct SP (fn_retaddr_ofs f) RA (Pfreeframe (fn_stacksize f) (fn_link_ofs f) :: k) rs tm).
-    rewrite <- (sp_val _ _ _ AG). simpl. eexact LRA'. congruence.
-  intros (rs1 & A1 & B1 & C1).
-  econstructor; econstructor; split.
-  eapply exec_straight_trans. eexact A1. apply exec_straight_one. simpl. 
-    rewrite (C1 X2) by auto with asmgen. rewrite <- (sp_val _ _ _ AG). simpl; rewrite LP'. 
-    rewrite FREE'. eauto. auto. 
-  split. apply agree_nextinstr. apply agree_set_other; auto with asmgen. 
-    apply agree_change_sp with (Vptr stk soff).
-    apply agree_exten with rs; auto. intros; apply C1; auto with asmgen.
-    eapply parent_sp_def; eauto.
-  split. auto.
-  split. Simpl. 
-  split. Simpl. 
-  intros. Simpl. 
-Qed.
+  (* we add return frame and pop stage to match the exec_function_internal *)
+  Admitted.
+(*   intros until tm; intros LP LRA FREE RETF POP AG MEXT MCS. *)
+(*   exploit Mem.loadv_extends. eauto. eexact LP. auto. simpl. intros (parent' & LP' & LDP'). *)
+(*   exploit Mem.loadv_extends. eauto. eexact LRA. auto. simpl. intros (ra' & LRA' & LDRA'). *)
+(*   exploit lessdef_parent_sp; eauto. intros EQ; subst parent'; clear LDP'. *)
+(*   exploit lessdef_parent_ra; eauto. intros EQ; subst ra'; clear LDRA'. *)
+(*   exploit Mem.free_parallel_extends; eauto. intros (tm' & FREE' & MEXT'). *)
+(*   unfold make_epilogue.  *)
+(*   rewrite chunk_of_Tptr in *.  *)
+(*   exploit (loadind_ptr_correct SP (fn_retaddr_ofs f) RA (Pfreeframe (fn_stacksize f) (fn_link_ofs f) :: k) rs tm). *)
+(*     rewrite <- (sp_val _ _ _ AG). simpl. eexact LRA'. congruence. *)
+(*   intros (rs1 & A1 & B1 & C1). *)
+(*   econstructor; econstructor; split. *)
+(*   eapply exec_straight_trans. eexact A1. apply exec_straight_one. simpl.  *)
+(*     rewrite (C1 X2) by auto with asmgen. rewrite <- (sp_val _ _ _ AG). simpl; rewrite LP'.  *)
+(*     rewrite FREE'. eauto. auto.  *)
+(*   split. apply agree_nextinstr. apply agree_set_other; auto with asmgen.  *)
+(*     apply agree_change_sp with (Vptr stk soff). *)
+(*     apply agree_exten with rs; auto. intros; apply C1; auto with asmgen. *)
+(*     eapply parent_sp_def; eauto. *)
+(*   split. auto. *)
+(*   split. Simpl.  *)
+(*   split. Simpl.  *)
+(*   intros. Simpl.  *)
+(* Qed. *)
 
 End CONSTRUCTORS.
 
