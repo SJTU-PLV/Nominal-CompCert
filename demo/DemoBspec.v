@@ -72,11 +72,11 @@ Inductive step : state -> trace -> state -> Prop :=
     (LOAD1: Mem.loadv Mint32 m (Vptr b_mem (Ptrofs.repr 4)) = Some (Vint ti)):
       step (Callstate i m) E0 (Returnstate ti m)
 | step_call
-    i m v b_mem
+    i m i' b_mem
     (NZERO: i.(Int.intval) <> 0%Z)
     (FINDM: Genv.find_symbol se _memoized = Some b_mem)
-    (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some v)
-    (NEQ: v <> Vint i):
+    (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
+    (NEQ: i <> i'):
     step (Callstate i m) E0 (Interstate i m).
 
 Inductive final_state: state -> reply li_c  -> Prop :=

@@ -22,11 +22,11 @@ Section ms.
 Variable w : world injp.
 
 Inductive match_states' : state -> state -> Prop :=
-  |match_callstate_intro f m1 m2 Hm i:
-     injp_acc w (injpw f m1 m2 Hm) ->
+|match_callstate_intro f m1 m2 Hm i:
+     w = injpw f m1 m2 Hm ->
      match_states' (Callstate i m1) (Callstate i m2)
   |match_Interstate_intro f m1 m2 Hm i:
-     injp_acc w (injpw f m1 m2 Hm) ->
+     w = injpw f m1 m2 Hm ->
      match_states' (Interstate i m1) (Interstate i m2)
   |match_Returnstate_intro f m1 m2 Hm i:
      injp_acc w (injpw f m1 m2 Hm) ->
@@ -46,46 +46,98 @@ Proof.
     exists (Callstate i m2). split.
     econstructor; eauto. simpl in H1. rewrite H1 in A. inv A.
     rewrite Ptrofs.add_zero. reflexivity.
-    econstructor; eauto. reflexivity.
+    econstructor; eauto.
   - intros. inv H; inv H0.
     exists (cr (Vint i) m2). split; econstructor; eauto.
     split. eauto. constructor. simpl. eauto.
     constructor.
-  - intros. inv H; inv H0. inversion Hse. subst. eapply Genv.find_symbol_match in H as H'; eauto.
-    destruct H' as [tb [A B]]. inv H1.
-    exists (injpw f m1 m2 Hm),(cq (Vptr tb Ptrofs.zero) int_int_sg (Vint (Int.sub i (Int.repr 1)) :: nil) m2).
-    apply Mem.unchanged_on_support in H11 as SUP1.
-    apply Mem.unchanged_on_support in H12 as SUP2.
+  - intros. inv H; inv H0. inversion Hse. subst.
+    eapply Genv.find_symbol_match in H2 as H'; eauto.
+    destruct H' as [tb [A B]].
+    exists (injpw f m1 m2 Hm) , (cq (Vptr tb Ptrofs.zero) int_int_sg (Vint (Int.sub i (Int.repr 1)) :: nil) m2).
     repeat apply conj; eauto.
     + constructor. eauto.
     + constructor. simpl.
     replace (Vptr tb Ptrofs.zero) with (Vptr tb (Ptrofs.add Ptrofs.zero (Ptrofs.repr 0))).
     econstructor; eauto. rewrite Ptrofs.add_zero. reflexivity.
     simpl. constructor. constructor. constructor. constructor. congruence.
-    + constructor.
-      eapply Genv.match_stbls_incr; eauto.
-      intros. exploit H14; eauto. intros [C D].
-      unfold Mem.valid_block in *. split; eauto.
-      eauto. eauto.
     + intros r1 r2 s1' [w'[ Hw Hr]] F.
-      destruct w'. inv F. inv Hr. cbn in *. inv H4.
-      inv H6.
-      exists (Returnstate (sum i) m2'). split.
-      constructor. auto.
+      destruct w' as [f' m1' m2' INJ0].
+      destruct r1 as [t1 m1''].
+      destruct r2 as [t2 m2''].
+      inv Hr. cbn in *.
+      inv F. inv H3. rename tm' into tm1'. rename tm'' into tm1''.
+      cbn in *. inv Hw. inv H7.
+      eapply Genv.match_stbls_incr in H2; eauto.
+      2:{ intros. exploit H14; eauto. intros [E F].
+      unfold Mem.valid_block in *. split; eauto. }
+      eapply Genv.find_symbol_match in H2. 2: eapply FINDM.
+      destruct H2 as [b' [C D]].
+      edestruct Mem.store_mapped_inject as [tm2' [STORE0' INJ1]]; eauto.
+      edestruct Mem.store_mapped_inject as [tm2'' [STORE1' INJ2]]; eauto.
+      exists (Returnstate (Int.add ti i) tm2''). split.
       econstructor; eauto.
-      etransitivity; eauto. constructor; eauto.
+      econstructor; eauto.
+      transitivity (injpw f' m1'' m2'' Hm9).
+      constructor; eauto.
+      instantiate (1:= INJ2).
+      constructor; eauto.
+      -- red. intros. eapply Mem.perm_store_2; eauto.
+         eapply Mem.perm_store_2; eauto.
+      -- red. intros. eapply Mem.perm_store_2; eauto.
+         eapply Mem.perm_store_2; eauto.
+      -- eapply Mem.unchanged_on_trans.
+         eapply Mem.store_unchanged_on; eauto.
+         intros. intro. red in H0. congruence.
+         eapply Mem.store_unchanged_on; eauto.
+         intros. intro. red in H0. congruence.
+      -- eapply Mem.unchanged_on_trans. 
+         eapply Mem.store_unchanged_on; eauto.
+         intros. intro. red in H0. apply H0 in C.
+         apply Mem.store_valid_access_3 in STORE0.
+         destruct STORE0 as [RANGE ALIGN].
+         red in RANGE. exploit RANGE; eauto.
+         intro. eapply C. replace (i0 - 0) with i0 by lia.
+         eauto with mem.
+         eapply Mem.store_unchanged_on; eauto.
+         intros. intro. red in H0. apply H0 in C.
+         apply Mem.store_valid_access_3 in STORE1.
+         destruct STORE1 as [RANGE ALIGN].
+         red in RANGE. exploit RANGE; eauto.
+         intro. eapply C. replace (i0 - 0) with i0 by lia.
+         eauto with mem.
+      -- red. intros. congruence.
   - intros. inv H0; inv H.
-    + exists (Returnstate (sum i) m2). split.
-      constructor. econstructor; eauto.
-    + exists (Interstate i m2). split.
-      constructor; auto. econstructor; eauto.
+    + (* zero *)
+      exists (Returnstate (Int.zero) m2). split. constructor; eauto.
+      econstructor; eauto. reflexivity.
+    + (* read *)
+      exists (Returnstate ti m2).
+      inv Hse. eapply Genv.find_symbol_match in H2; eauto.
+      destruct H2 as [b' [VINJ FINDM']].
+      exploit Mem.loadv_inject. 2: eapply LOAD0. all: eauto.
+      intros [v0 [LOAD0' VINJ0]]. inv VINJ0.
+      exploit Mem.loadv_inject; eauto.
+      intros [v1 [LOAD1' VINJ1]]. inv VINJ1.
+      split.
+      econstructor; eauto.
+      econstructor; eauto. reflexivity.
+    + (* call *)
+      exists (Interstate i m2).
+      inv Hse. eapply Genv.find_symbol_match in H2; eauto.
+      destruct H2 as [b' [VINJ FINDM']].
+      exploit Mem.loadv_inject. 2: eapply LOAD0. all: eauto.
+      intros [v0 [LOAD0' VINJ0]]. inv VINJ0.
+      split.
+      econstructor; eauto.
+      econstructor; eauto.
   - constructor. intros. inv H.
 Qed.
 
 End SELF_INJP.
 
 Section WT_C.
-  
+
 Theorem self_simulation_wt :
   forward_simulation (wt_c @ lessdef_c) (wt_c @ lessdef_c) Bspec Bspec.
 Proof.
@@ -114,7 +166,7 @@ Proof.
     + constructor; eauto. simpl. constructor. eauto.
     + intros. exists s1'. exists s1'. split; eauto.
       destruct H as [r3 [A B]].
-      inv A. inv B. inv H1. inv H2. constructor. auto.
+      inv A. inv B. inv H1. inv H2. econstructor; eauto.
   - intros. inv H0. exists s1', s1'. split. left. econstructor; eauto.
     econstructor. traceEq.
     eauto.
