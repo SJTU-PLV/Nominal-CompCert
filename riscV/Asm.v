@@ -426,7 +426,7 @@ table:  .long   table[0], table[1], ...
 *)
 
 Definition code := list instruction.
-Record function : Type := mkfunction { fn_sig: signature; fn_code: code }.
+Record function : Type := mkfunction { fn_sig: signature; fn_code: code; fn_stacksize : Z}.
 Definition fundef := AST.fundef function.
 Definition program := AST.program fundef unit.
 
@@ -1257,3 +1257,5 @@ Definition data_preg (r: preg) : bool :=
 End INSTRSIZE.
 
 (** instrsize instantiation *)
+
+(*** TODO  *)

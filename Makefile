@@ -112,12 +112,13 @@ BACKEND=\
   Debugvar.v Debugvarproof.v \
   Mach.v \
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
-  Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v \
+  Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
+  TargetPrinterAux.v \
   
 # architecture dependent files (x86 and riscv)
 
 X86 = \
-  AsmRegs.v AsmFacts.v Asmgenproof.v \
+  AsmRegs.v AsmFacts.v \
   SSAsm.v SSAsmproof.v \
   RealAsm.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v \
   AsmLabelNew.v AsmBuiltinInline.v\

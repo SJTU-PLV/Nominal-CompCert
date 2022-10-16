@@ -1351,7 +1351,7 @@ Lemma make_epilogue_correct:
   forall ge0 f m stk soff cs m' m'' m''' ms rs k tm,
   load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp cs) ->
   load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra cs) ->
-  Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+  Mem.free m stk 0 f.(Mach.fn_stacksize) = Some m' ->
   Mem.return_frame m' = Some m'' ->
   Mem.pop_stage m'' = Some m''' ->
   agree ms (Vptr stk soff) rs ->
@@ -1394,6 +1394,3 @@ Proof.
 (* Qed. *)
 
 End CONSTRUCTORS.
-
-
- 
