@@ -664,12 +664,11 @@ Definition int_argument_preg := if Archi.win64 then IR RCX else IR RDI.
 
 Inductive initial_state : query li_asm -> state -> Prop :=
 | initial_state_intro
-    v m b i rs
+    m b i rs
     (SYMB: Genv.find_symbol se g_id = Some b)
-    (FPTR: v = Vptr b Ptrofs.zero)
 (*    (RANGE: 0 <= i.(Int.intval) < MAX) *)
     (RS : rs int_argument_preg = Vint i)
-    (PC: rs PC <> Vundef)
+    (PC: rs PC = Vptr b Ptrofs.zero)
     (RA: rs RA <> Vundef)
     (RSP: rs RSP <> Vundef):
     initial_state (rs,m) (Callstate rs m).
@@ -900,14 +899,6 @@ Qed.
 
 End MA.
 
-Section Ainj.
-
-Variable se : Genv.symtbl.
-Variable w : ccworld (cc_asm ext).
-
-Let ge := Genv.globalenv se prog.
-
-Hypothesis  VALID : Genv.valid_for (skel MA.BspecA) se.
 
 Inductive match_states : MA.state -> (sup * Asm.state) -> Prop :=
   | match_states_callstate rs trs m tm
@@ -925,20 +916,16 @@ Inductive match_states : MA.state -> (sup * Asm.state) -> Prop :=
 
 Definition measure (s: MA.state) : nat :=
   match s with
-  | MA.Callstate _ _ => 0%nat
-  | MA.Interstate  _ _ => 0%nat
-  | MA.Returnstate  _ _ => 1%nat
+  | MA.Callstate _ _ => 2%nat
+  | MA.Interstate  _ _ => 1%nat
+  | MA.Returnstate  _ _ => 0%nat
   end.
 
-(*mma transf_initial_states:
-  forall q1 q2, match_query (cc_asm ext) tt q1 q2 ->
-  forall S, MA.initial_state ge q1 S ->
-  exists R, Asm.initial_state ge q2 R /\ match_states S R.
-Proof.
-  intros. inv H0. destruct q2. inv H.
-  Admitted.
-*)
-End Ainj.
+(* the example asm program is not under win64 architecture *)
+Axiom not_win64 : Archi.win64 = false.
+
+Lemma int_DI: MA.int_argument_preg = IR RDI.
+Proof. unfold MA.int_argument_preg. rewrite not_win64. reflexivity. Qed.
 
 Theorem asm_simulation_ext:
   forward_simulation (cc_asm ext) (cc_asm ext) MA.BspecA (Asm.semantics DemoB.prog).
@@ -955,22 +942,60 @@ Proof.
     generalize (H0 PC). intro Hpc.
     apply val_inject_lessdef_eqrel in Hpc.
     inv Hpc; try congruence.
-  - intros. 
+  - intros.
     intros. destruct q1, q2. inv H. destruct H2 as [rPC MEM]. cbn in *.
     inv H0.
     exists ((Mem.support m),(State r0 m0 true)). repeat apply conj; eauto.
     + econstructor; eauto.
-      admit. (*to add in all initial_state?? *)
+      generalize (H1 Asm.PC). intro Hpc. apply val_inject_lessdef_eqrel in Hpc.
+      inv Hpc; try congruence. rewrite PC.
+      {
+        instantiate (1:= func_g). admit. (*ok, need some effort *)
+      }
       generalize (H1 SP). intro Hsp. apply val_inject_lessdef_eqrel in Hsp.
       inv Hsp; congruence.
       generalize (H1 Asm.RA). intro Hra. apply val_inject_lessdef_eqrel in Hra.
       inv Hra; congruence.
     + inversion MEM. congruence.
     + econstructor; eauto. intros. apply val_inject_lessdef_eqrel; eauto.
-  -
-
+  - intros.
+    inv H0. inv H. exists (trs,tm).
+    split.
+    econstructor; eauto. exists tt. split. reflexivity.
+    econstructor; eauto. intros. eapply val_inject_lessdef_eqrel; eauto.
+  - intros. inv H0. inv H.
+    exists tt, (trs,tm). repeat apply conj; eauto.
+    + inv Hse. econstructor. admit.
+    + admit.
+      (*
+      intros. simpl. eapply val_inject_lessdef_eqrel; eauto.
+      destruct (preg_eq r PC). subst.
+      rewrite !Pregmap.gss. constructor; eauto.
+      rewrite int_DI in *.
+      destruct (preg_eq r RDI). subst.
+      rewrite Pregmap.gso; try congruence. rewrite Pregmap.gss.
+      rewrite Pregmap.gso; try congruence. rewrite Pregmap.gss.
+      constructor; eauto.
+      rewrite !Pregmap.gso; try congruence. eauto.
+      *)
+    + rewrite Pregmap.gss. congruence.
+    + intros. inv H. inv H1. inv H0. destruct r2. inv H2.
+      simpl. exists (Mem.support m, State r m0 false).
+      admit. (*wrong now*)
+  - intros. inv H; inv H0.
+    + (*zero_big_step *)
+      left. eexists. admit. (*split.
+      econstructor. simpl. instantiate (2 := ((Mem.support m) , (Asm.State trs tm true))).
+      simpl. split; eauto.
+      econstructor;  admit.
+      admit.*)
+    + (*read_big_step*)
+      left. eexists. admit.
+    + right. split; eauto. split; eauto.
+      constructor; eauto.
+  - auto using well_founded_ltof.
 Admitted.
-
+      (*call*)
 
 Theorem asm_simulation_inj:
   forward_simulation (cc_asm inj) (cc_asm inj) MA.BspecA (Asm.semantics DemoB.prog).
@@ -984,8 +1009,6 @@ Proof.
   eapply asm_simulation_ext.
   eapply semantics_asm_rel.
 Qed.
-
-End Ainj.
 
 Theorem Bproof :
   forward_simulation cc_compcert cc_compcert Bspec (Asm.semantics DemoB.prog).
