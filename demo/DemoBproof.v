@@ -33,6 +33,36 @@ Inductive match_states' : state -> state -> Prop :=
      match_states' (Returnstate i m1) (Returnstate i m2).
 End ms.
 
+Lemma symbol_address_ptrofs :
+  forall ge id o1 b o2,
+    Genv.symbol_address ge id o1 = Vptr b o2 ->
+    o1 = o2.
+Proof.
+  intros. unfold Genv.symbol_address in H.
+  destruct Genv.find_symbol. inv H. reflexivity. inv H.
+Qed.
+(*
+Lemma symbol_address_match:
+  forall f se1 se2 fb id,
+    Genv.match_stbls f se1 se2 ->
+    Genv.symbol_address se1 id Ptrofs.zero = Vptr fb Ptrofs.zero ->
+    exists fb',
+      Genv.symbol_address se2 id Ptrofs.zero = Vptr fb' Ptrofs.zero /\
+      f fb = Some (fb', 0).
+Proof.
+  intros.
+  eapply Op.symbol_address_inject in H; eauto.
+  erewrite H0 in H. inv H.
+  symmetry in H3.
+  apply symbol_address_ptrofs in H3 as H5.
+  rewrite Ptrofs.add_zero_l in H5. unfold Ptrofs.zero in H5.
+  destruct delta.
+  + exists b2. split; eauto.
+  + Search Ptrofs.repr.
+  inv H5. simpl in H1. destruct delta;
+  Search Ptrofs.repr.
+*)
+
 Theorem self_simulation_C :
   forward_simulation (cc_c injp) (cc_c injp) Bspec Bspec.
 Proof.
@@ -40,6 +70,19 @@ Proof.
   intros se1 se2 w Hse Hse1. cbn in *.
   pose (ms := fun s1 s2 => match_states' w s1 s2).
   eapply forward_simulation_step with (match_states := ms); cbn; eauto.
+  -  intros. inv Hse. inv H. cbn in H3.
+    eapply Genv.is_internal_transf; eauto.
+    + red. red. repeat apply conj; eauto.
+      instantiate (1:= id).
+      constructor.
+      -- constructor; eauto. econstructor; eauto. apply linkorder_refl.
+      -- constructor; eauto.
+         econstructor; eauto. simpl.
+         econstructor; eauto. econstructor; eauto.
+         econstructor; eauto. simpl.
+         econstructor; eauto. econstructor; eauto. apply linkorder_refl.
+         econstructor; eauto.
+    + reflexivity.
   - intros. inv H0. inv H. inv H4. inv H6. inv H2. inv H4. cbn in *.
     inv Hse. inv H7.
     eapply Genv.find_symbol_match in H; eauto. destruct H as [tb [A B]].
@@ -149,6 +192,7 @@ Proof.
   instantiate (1 := state).
   instantiate (1 := fun s1 s2 => False).
   constructor; eauto.
+  - intros. simpl. inv H. inv H0. inv H. inv H1. reflexivity.
   - intros. inv H. inv H1. cbn in *. inv H. inv H1. exists s1. exists s1.
     split. inv H2. inv H0. simpl. simpl in *.
     inv H. inv H2. inv H5.
@@ -194,7 +238,6 @@ Lemma ls_result_int:
 Proof.
   intros. rewrite loc_result_int. reflexivity.
 Qed.
-
 
 Definition int_loc_result' : rpair mreg := loc_result int_int_sg.
 (* Compute int_loc_result. One AX *)
@@ -272,26 +315,23 @@ Inductive final_state: state -> reply li_locset  -> Prop :=
       (LS : Vint s = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls):
       final_state (Returnstate ls m) (lr ls m).
 
-Definition valid_query (q : query li_locset): bool := true.
-
-Program Definition lts_BspecL : lts li_locset li_locset state :=
-  {|
-  Smallstep.step ge := step;
-  Smallstep.valid_query := valid_query;
-  Smallstep.initial_state := initial_state;
-  Smallstep.at_external := at_external;
-  Smallstep.after_external := after_external;
-  Smallstep.final_state := final_state;
-  globalenv := tt;
-  |}.
-
 End WITH_SE.
 
 Program Definition BspecL : Smallstep.semantics li_locset li_locset :=
   {|
-   Smallstep.skel := skel0;
+   Smallstep.skel := erase_program prog;
    Smallstep.state := state;
-   Smallstep.activate := lts_BspecL
+   Smallstep.activate se :=
+     let ge := Genv.globalenv se prog in
+     {|
+       Smallstep.step ge := step ge;
+       Smallstep.valid_query q := Genv.is_internal ge (entry q);
+       Smallstep.initial_state := initial_state ge;
+       Smallstep.at_external := at_external ge;
+       Smallstep.after_external := after_external ge;
+       Smallstep.final_state := final_state;
+       globalenv := ge;
+     |}
    |}.
 
 Inductive match_states_c_locset : DemoBspec.state -> state -> Prop :=
@@ -312,6 +352,7 @@ Proof.
   intros se1 se2 w Hse Hse1. cbn in *.
   pose (ms := fun s1 s2 => (match_states_c_locset s1 s2 /\ w = int_int_sg)).
   eapply forward_simulation_step with (match_states := ms); cbn; eauto.
+  - intros. inv H. simpl. reflexivity.
   - intros. inv H0. inv H. exists (Callstate rs m).
     split.
     econstructor; eauto.
@@ -427,27 +468,23 @@ Inductive final_state: state -> reply li_mach  -> Prop :=
       (RS: rs AX = Vint s):
       final_state (Returnstate rs m) (mr rs m).
 
-(* no actual program context, donot need to check available internal function implementation*)
-Definition valid_query (q : query li_mach): bool := true.
-
-Program Definition lts_BspecM : lts li_mach li_mach state :=
-  {|
-  Smallstep.step ge := step;
-  Smallstep.valid_query := valid_query;
-  Smallstep.initial_state := initial_state;
-  Smallstep.at_external := at_external;
-  Smallstep.after_external := after_external;
-  Smallstep.final_state := final_state;
-  globalenv := tt;
-  |}.
-
 End WITH_SE.
 
 Program Definition BspecM : Smallstep.semantics li_mach li_mach :=
   {|
-   Smallstep.skel := skel0;
+   Smallstep.skel := erase_program prog;
    Smallstep.state := state;
-   Smallstep.activate := lts_BspecM
+   Smallstep.activate se :=
+     let ge := Genv.globalenv se DemoB.prog in
+     {|
+       Smallstep.step ge := step ge;
+       Smallstep.valid_query q := Genv.is_internal ge (mq_vf q);
+       Smallstep.initial_state := initial_state ge;
+       Smallstep.at_external := at_external ge;
+       Smallstep.after_external := after_external ge;
+       Smallstep.final_state := final_state;
+       globalenv := ge;
+     |}
    |}.
 
 Definition make_regset_result (ls: Locmap.t) (sg: signature) (r: mreg) : val :=
@@ -511,6 +548,7 @@ Proof.
   intros se1 se2 w Hse Hse1. cbn in *. subst. 
   pose (ms := fun s1 s2 => match_states_locset_mach (lmw_rs w) (lmw_sp w) (lmw_m w) s1 s2 /\ (lmw_sg w) = int_int_sg).
   eapply forward_simulation_step with (match_states := ms); cbn; eauto.
+  - intros. inv H. reflexivity.
   - intros. inv H. inv H0. inv H1.
     exists (Callstate sp ra rs m_). split.
     econstructor; eauto. eapply argument_int_value; eauto.
@@ -632,7 +670,8 @@ Inductive initial_state : query li_asm -> state -> Prop :=
 (*    (RANGE: 0 <= i.(Int.intval) < MAX) *)
     (RS : rs int_argument_preg = Vint i)
     (PC: rs PC <> Vundef)
-    (RA: rs RA <> Vundef):
+    (RA: rs RA <> Vundef)
+    (RSP: rs RSP <> Vundef):
     initial_state (rs,m) (Callstate rs m).
 
 Inductive at_external: state -> query li_asm -> Prop :=
@@ -687,27 +726,23 @@ Inductive final_state: state -> reply li_asm  -> Prop :=
       (RS: rs (IR RAX) = Vint s):
       final_state (Returnstate rs m) (rs, m).
 
-(* no actual program context, donot need to check available internal function implementation*)
-Definition valid_query (q : query li_asm): bool := true.
-
-Program Definition lts_BspecA : lts li_asm li_asm state :=
-  {|
-  Smallstep.step ge := step;
-  Smallstep.valid_query := valid_query;
-  Smallstep.initial_state := initial_state;
-  Smallstep.at_external := at_external;
-  Smallstep.after_external := after_external;
-  Smallstep.final_state := final_state;
-  globalenv := tt;
-  |}.
-
 End WITH_SE.
 
 Program Definition BspecA : Smallstep.semantics li_asm li_asm :=
   {|
-   Smallstep.skel := skel0;
+   Smallstep.skel := erase_program prog;
    Smallstep.state := state;
-   Smallstep.activate := lts_BspecA
+   Smallstep.activate se :=
+     let ge := Genv.globalenv se DemoB.prog in
+     {|
+       Smallstep.step ge := step ge;
+       Smallstep.valid_query q := Genv.is_internal ge (asm_entry q);
+       Smallstep.initial_state := initial_state ge;
+       Smallstep.at_external := at_external ge;
+       Smallstep.after_external := after_external ge;
+       Smallstep.final_state := final_state;
+       globalenv := ge;
+     |}
    |}.
 
 Definition make_regset_result (ls: Locmap.t) (sg: signature) (r: mreg) : val :=
@@ -759,10 +794,12 @@ Proof.
                          /\ (fst w) PC <> Vundef /\ (fst w RA <> Vundef)
                          /\ valid_blockv (snd w) (fst w RSP)).
   eapply forward_simulation_step with (match_states := ms); cbn; destruct w; eauto.
+  - intros. inv H. simpl. reflexivity.
   - intros. inv H. inv H0.
     exists (Callstate r m). split.
     econstructor; eauto. rewrite int_argument_preg_of.
     rewrite <- H4; eauto.
+    intro. rewrite H in H2. inv H2.
     red. econstructor; eauto.
     econstructor; eauto.
   - intros. inv H0. inv H. inv H0. cbn in *.
@@ -865,21 +902,73 @@ End MA.
 
 Section Ainj.
 
-Section WITH_SE.
-Variable w: inj_world.
+Variable se : Genv.symtbl.
+Variable w : ccworld (cc_asm ext).
 
-(*Inductive match_states : MA.state -> State -> Prop :=
-  | match_states_callstate rs mem
-      match_states (MA.Callstate) (State rs mem )
+Let ge := Genv.globalenv se prog.
 
+Hypothesis  VALID : Genv.valid_for (skel MA.BspecA) se.
 
+Inductive match_states : MA.state -> (sup * Asm.state) -> Prop :=
+  | match_states_callstate rs trs m tm
+      (MRS : forall r, Val.lessdef (rs r) (trs r))
+      (MMEM : Mem.extends m tm):
+      match_states (MA.Callstate rs m) ((Mem.support m),(State trs tm true))
+  | match_states_interstate rs trs m tm
+      (MRS : forall r, Val.lessdef (rs r) (trs r))
+      (MMEM : Mem.extends m tm):
+      match_states (MA.Interstate rs m) ((Mem.support m),(State trs tm true))
+  | match_states_returnstate rs trs m tm
+      (MRS : forall r, Val.lessdef (rs r) (trs r))
+      (MMEM : Mem.extends m tm):
+      match_states (MA.Returnstate rs m) ((Mem.support m),(State trs tm false)).
 
+Definition measure (s: MA.state) : nat :=
+  match s with
+  | MA.Callstate _ _ => 0%nat
+  | MA.Interstate  _ _ => 0%nat
+  | MA.Returnstate  _ _ => 1%nat
+  end.
+
+(*mma transf_initial_states:
+  forall q1 q2, match_query (cc_asm ext) tt q1 q2 ->
+  forall S, MA.initial_state ge q1 S ->
+  exists R, Asm.initial_state ge q2 R /\ match_states S R.
+Proof.
+  intros. inv H0. destruct q2. inv H.
+  Admitted.
 *)
-End WITH_SE.
+End Ainj.
 
 Theorem asm_simulation_ext:
   forward_simulation (cc_asm ext) (cc_asm ext) MA.BspecA (Asm.semantics DemoB.prog).
 Proof.
+  constructor.
+  econstructor.
+  reflexivity.
+  intros se1 se2 w Hse Hse1.
+  instantiate (3 := MA.state).
+  instantiate (2 := ltof MA.state measure).
+  set (ms := fun s1 s2 => match_states s1 s2).
+  apply forward_simulation_star with (match_states := ms).
+  - intros. destruct q1, q2. inv H. simpl. destruct H1 as [rPC MEM]. cbn in *.
+    generalize (H0 PC). intro Hpc.
+    apply val_inject_lessdef_eqrel in Hpc.
+    inv Hpc; try congruence.
+  - intros. 
+    intros. destruct q1, q2. inv H. destruct H2 as [rPC MEM]. cbn in *.
+    inv H0.
+    exists ((Mem.support m),(State r0 m0 true)). repeat apply conj; eauto.
+    + econstructor; eauto.
+      admit. (*to add in all initial_state?? *)
+      generalize (H1 SP). intro Hsp. apply val_inject_lessdef_eqrel in Hsp.
+      inv Hsp; congruence.
+      generalize (H1 Asm.RA). intro Hra. apply val_inject_lessdef_eqrel in Hra.
+      inv Hra; congruence.
+    + inversion MEM. congruence.
+    + econstructor; eauto. intros. apply val_inject_lessdef_eqrel; eauto.
+  -
+
 Admitted.
 
 
