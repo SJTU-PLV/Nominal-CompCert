@@ -22,46 +22,19 @@ Section ms.
 Variable w : world injp.
 
 Inductive match_states' : state -> state -> Prop :=
-|match_callstate_intro f m1 m2 Hm i:
+  |match_Callstateg_intro f m1 m2 Hm i:
      w = injpw f m1 m2 Hm ->
-     match_states' (Callstate i m1) (Callstate i m2)
-  |match_Interstate_intro f m1 m2 Hm i:
+     match_states' (Callstateg i m1) (Callstateg i m2)
+  |match_Callstatef_intro f m1 m2 Hm i:
      w = injpw f m1 m2 Hm ->
-     match_states' (Interstate i m1) (Interstate i m2)
-  |match_Returnstate_intro f m1 m2 Hm i:
+     match_states' (Callstatef i m1) (Callstatef i m2)
+  |match_Returnstatef_intro f m1 m2 Hm i ti:
      injp_acc w (injpw f m1 m2 Hm) ->
-     match_states' (Returnstate i m1) (Returnstate i m2).
+     match_states' (Returnstatef i ti m1) (Returnstatef i ti m2)
+  |match_Returnstateg_intro f m1 m2 Hm i:
+     injp_acc w (injpw f m1 m2 Hm) ->
+     match_states' (Returnstateg i m1) (Returnstateg i m2).
 End ms.
-
-Lemma symbol_address_ptrofs :
-  forall ge id o1 b o2,
-    Genv.symbol_address ge id o1 = Vptr b o2 ->
-    o1 = o2.
-Proof.
-  intros. unfold Genv.symbol_address in H.
-  destruct Genv.find_symbol. inv H. reflexivity. inv H.
-Qed.
-(*
-Lemma symbol_address_match:
-  forall f se1 se2 fb id,
-    Genv.match_stbls f se1 se2 ->
-    Genv.symbol_address se1 id Ptrofs.zero = Vptr fb Ptrofs.zero ->
-    exists fb',
-      Genv.symbol_address se2 id Ptrofs.zero = Vptr fb' Ptrofs.zero /\
-      f fb = Some (fb', 0).
-Proof.
-  intros.
-  eapply Op.symbol_address_inject in H; eauto.
-  erewrite H0 in H. inv H.
-  symmetry in H3.
-  apply symbol_address_ptrofs in H3 as H5.
-  rewrite Ptrofs.add_zero_l in H5. unfold Ptrofs.zero in H5.
-  destruct delta.
-  + exists b2. split; eauto.
-  + Search Ptrofs.repr.
-  inv H5. simpl in H1. destruct delta;
-  Search Ptrofs.repr.
-*)
 
 Theorem self_simulation_C :
   forward_simulation (cc_c injp) (cc_c injp) Bspec Bspec.
@@ -86,7 +59,7 @@ Proof.
   - intros. inv H0. inv H. inv H4. inv H6. inv H2. inv H4. cbn in *.
     inv Hse. inv H7.
     eapply Genv.find_symbol_match in H; eauto. destruct H as [tb [A B]].
-    exists (Callstate i m2). split.
+    exists (Callstateg i m2). split.
     econstructor; eauto. simpl in H1. rewrite H1 in A. inv A.
     rewrite Ptrofs.add_zero. reflexivity.
     econstructor; eauto.
@@ -97,7 +70,7 @@ Proof.
   - intros. inv H; inv H0. inversion Hse. subst.
     eapply Genv.find_symbol_match in H2 as H'; eauto.
     destruct H' as [tb [A B]].
-    exists (injpw f m1 m2 Hm) , (cq (Vptr tb Ptrofs.zero) int_int_sg (Vint (Int.sub i (Int.repr 1)) :: nil) m2).
+    exists (injpw f m1 m2 Hm) , (cq (Vptr tb Ptrofs.zero) int_int_sg ((Vint (Int.sub i Int.one)) :: nil) m2).
     repeat apply conj; eauto.
     + constructor. eauto.
     + constructor. simpl.
@@ -109,21 +82,51 @@ Proof.
       destruct r1 as [t1 m1'1].
       destruct r2 as [t2 m2'1].
       inv Hr. cbn in *.
-      inv F. inv H3. rename m'' into m1'2. rename m''' into m1'3.
-      cbn in *. inv Hw. inv H7.
-      eapply Genv.match_stbls_incr in H2; eauto.
+      inv F. inv H3. inv H7.
+      exists (Returnstatef i ti m2'1). split.
+      econstructor; eauto.
+      econstructor; eauto.
+  - intros. inv H0; inv H.
+    + (* zero *)
+      exists (Returnstateg (Int.zero) m2). split. constructor; eauto.
+      econstructor; eauto. reflexivity.
+    + (* read *)
+      exists (Returnstateg ti m2).
+      inv Hse. eapply Genv.find_symbol_match in H2; eauto.
+      destruct H2 as [b' [VINJ FINDM']].
+      exploit Mem.loadv_inject. 2: eapply LOAD0. all: eauto.
+      intros [v0 [LOAD0' VINJ0]]. inv VINJ0.
+      exploit Mem.loadv_inject; eauto.
+      intros [v1 [LOAD1' VINJ1]]. inv VINJ1.
+      split.
+      econstructor; eauto.
+      econstructor; eauto. reflexivity.
+    + (* call *)
+      exists (Callstatef i m2).
+      inv Hse. eapply Genv.find_symbol_match in H2; eauto.
+      destruct H2 as [b' [VINJ FINDM']].
+      exploit Mem.loadv_inject. 2: eapply LOAD0. all: eauto.
+      intros [v0 [LOAD0' VINJ0]]. inv VINJ0.
+      split.
+      econstructor; eauto.
+      econstructor; eauto.
+    + (* return *)
+      destruct w as [f0 m1'0 m2'0 Hm0].
+      inv Hse. inv H1. rename m' into m1'1. rename m'' into m1'2.
+      eapply Genv.match_stbls_incr in H3; eauto.
       2:{ intros. exploit H14; eauto. intros [E F].
       unfold Mem.valid_block in *. split; eauto. }
-      eapply Genv.find_symbol_match in H2. 2: eapply FINDM.
-      destruct H2 as [b' [C D]].
-      edestruct Mem.store_mapped_inject as [m2'2 [STORE0' INJ1]]; eauto.
-      edestruct Mem.store_mapped_inject as [m2'3 [STORE1' INJ2]]; eauto.
-      exists (Returnstate (Int.add ti i) m2'3). split.
+      eapply Genv.find_symbol_match in H3. 2: eapply FINDM.
+      destruct H3 as [b' [C D]].
+      edestruct Mem.store_mapped_inject as [m2'1 [STORE0' INJ1]]; eauto.
+      edestruct Mem.store_mapped_inject as [m2'2 [STORE1' INJ2]]; eauto.
+      exists (Returnstateg (Int.add ti i) m2'2).
       econstructor; eauto.
       econstructor; eauto.
-      transitivity (injpw f' m1'1 m2'1 Hm9).
-      constructor; eauto.
+      econstructor; eauto.
       instantiate (1:= INJ2).
+      transitivity (injpw f m1 m2 Hm'2).
+      constructor; eauto.
       constructor; eauto.
       -- red. intros. eapply Mem.perm_store_2; eauto.
          eapply Mem.perm_store_2; eauto.
@@ -150,30 +153,6 @@ Proof.
          intro. eapply C. replace (i0 - 0) with i0 by lia.
          eauto with mem.
       -- red. intros. congruence.
-  - intros. inv H0; inv H.
-    + (* zero *)
-      exists (Returnstate (Int.zero) m2). split. constructor; eauto.
-      econstructor; eauto. reflexivity.
-    + (* read *)
-      exists (Returnstate ti m2).
-      inv Hse. eapply Genv.find_symbol_match in H2; eauto.
-      destruct H2 as [b' [VINJ FINDM']].
-      exploit Mem.loadv_inject. 2: eapply LOAD0. all: eauto.
-      intros [v0 [LOAD0' VINJ0]]. inv VINJ0.
-      exploit Mem.loadv_inject; eauto.
-      intros [v1 [LOAD1' VINJ1]]. inv VINJ1.
-      split.
-      econstructor; eauto.
-      econstructor; eauto. reflexivity.
-    + (* call *)
-      exists (Interstate i m2).
-      inv Hse. eapply Genv.find_symbol_match in H2; eauto.
-      destruct H2 as [b' [VINJ FINDM']].
-      exploit Mem.loadv_inject. 2: eapply LOAD0. all: eauto.
-      intros [v0 [LOAD0' VINJ0]]. inv VINJ0.
-      split.
-      econstructor; eauto.
-      econstructor; eauto.
   - constructor. intros. inv H.
 Qed.
 
@@ -248,9 +227,10 @@ Definition loc_int_loc (i: int) (l : loc): Locmap.t :=
   fun loc => if Loc.eq loc l  then (Vint i) else Vundef.
 
 Inductive state :=
-  | Callstate (ls: Locmap.t) (m:mem)
-  | Interstate (ls: Locmap.t) (m:mem)
-  | Returnstate (ls: Locmap.t) (m:mem).
+  | Callstateg (ls: Locmap.t) (m:mem)
+  | Callstatef (ls: Locmap.t) (m:mem)
+  | Returnstatef (aif: int) (ls: Locmap.t) (m:mem)
+  | Returnstateg (ls: Locmap.t) (m:mem).
 
 Section WITH_SE.
   Context (se: Genv.symtbl).
@@ -262,27 +242,26 @@ Inductive initial_state : query li_locset -> state -> Prop :=
     (FPTR: v = Vptr b Ptrofs.zero)
     (* (RANGE: 0 <= i.(Int.intval) < MAX) *)
     (LS: (Vint i :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg)):
-    initial_state (lq v int_int_sg ls m) (Callstate ls m).
+    initial_state (lq v int_int_sg ls m) (Callstateg ls m).
 
 Inductive at_external: state -> query li_locset -> Prop :=
 | at_external_intro
-    g_fptr i m ls ls'
-    (FINDG: Genv.find_symbol se f_id = Some g_fptr)
-    (LS: (Vint i :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg))
-    (LS': ls' = Locmap.set int_loc_argument (Vint (Int.sub i Int.one)) ls):
-    at_external (Interstate ls m)
-                (lq (Vptr g_fptr Ptrofs.zero) int_int_sg ls' m).
+    g_fptr m ls
+    (FINDG: Genv.find_symbol se f_id = Some g_fptr):
+    at_external (Callstatef ls m)
+                (lq (Vptr g_fptr Ptrofs.zero) int_int_sg ls m).
 
 Inductive after_external: state -> reply li_locset -> state -> Prop :=
 | after_external_intro
-    i ti m ls ls' ls'' b_mem m1 m2 m3
-    (LS: (Vint i :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg))
-    (LS' : Vint ti = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls')
-    (LS'' : ls'' = Locmap.set (R AX) (Vint (Int.add ti i)) ls')
+    m ls ls' m1 i ti
+    (LS: (Vint (Int.sub i Int.one) :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg))
+    (LS' : Vint ti = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls'):
+(*    (LS'' : ls'' = Locmap.set (R AX) (Vint (Int.add ti i)) ls')
     (FINDM: Genv.find_symbol se _memoized = Some b_mem)
     (STORE0: Mem.storev Mint32 m1 (Vptr b_mem Ptrofs.zero) (Vint i) = Some m2)
     (STORE0: Mem.storev Mint32 m2 (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some m3):
-    after_external (Interstate ls m) (lr ls' m1) (Returnstate ls'' m3).
+*)
+    after_external (Callstatef ls m) (lr ls' m1) (Returnstatef i ls' m1).
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_zero
@@ -290,7 +269,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (ZERO: i.(Int.intval) = 0%Z)
     (LS: (Vint i :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg))
     (LS' : Vint (Int.zero) = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls'):
-    step (Callstate ls m) E0 (Returnstate ls' m)
+    step (Callstateg ls m) E0 (Returnstateg ls' m)
 | step_read
     i ti b_mem m ls ls'
     (LS: (Vint i :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg))
@@ -299,21 +278,33 @@ Inductive step : state -> trace -> state -> Prop :=
     (FINDM: Genv.find_symbol se _memoized = Some b_mem)
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i))
     (LOAD1: Mem.loadv Mint32 m (Vptr b_mem (Ptrofs.repr 4)) = Some (Vint ti)):
-    step (Callstate ls m) E0 (Returnstate ls' m)
+    step (Callstateg ls m) E0 (Returnstateg ls' m)
 | step_call
-    i m ls b_mem i'
+    i m ls b_mem i' ls'
     (NZERO: i.(Int.intval) <> 0%Z)
     (FINDM: Genv.find_symbol se _memoized = Some b_mem)
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
     (NEQ: i <> i')
-    (LS: (Vint i :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg)):
-    step (Callstate ls m) E0 (Interstate ls m).
+    (LS: (Vint i :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg))
+    (LS' : ls' = Locmap.set (R BX) (Vint i) (Locmap.set int_loc_argument (Vint (Int.sub i Int.one)) ls)):
+    step (Callstateg ls m) E0 (Callstatef ls' m)
+| step_return
+    b_mem m m' m'' ti ls ls' i
+    (FINDM: Genv.find_symbol se _memoized = Some b_mem)
+    (STORE0: Mem.storev Mint32 m (Vptr b_mem Ptrofs.zero) (Vint i) = Some m')
+    (STORE0: Mem.storev Mint32 m' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some m'')
+    (LS: Vint ti =  Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls)
+    (LS': ls' = Locmap.set (R AX) (Vint (Int.add ti i)) ls):
+    step (Returnstatef i ls m) E0 (Returnstateg ls' m'').
+
+(*maybe we should remember the origin value ls # (R BX) in f states.
+  Because the arugment i of function g occupies the position of this callee-save position
+*)
 
 Inductive final_state: state -> reply li_locset  -> Prop :=
   | final_state_intro
-      s m ls
-      (LS : Vint s = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls):
-      final_state (Returnstate ls m) (lr ls m).
+      m ls:
+      final_state (Returnstateg ls m) (lr ls m).
 
 End WITH_SE.
 
@@ -328,32 +319,36 @@ Program Definition BspecL : Smallstep.semantics li_locset li_locset :=
        Smallstep.valid_query q := Genv.is_internal ge (entry q);
        Smallstep.initial_state := initial_state ge;
        Smallstep.at_external := at_external ge;
-       Smallstep.after_external := after_external ge;
+       Smallstep.after_external := after_external;
        Smallstep.final_state := final_state;
        globalenv := ge;
      |}
    |}.
 
-Inductive match_states_c_locset : DemoBspec.state -> state -> Prop :=
-  |cl_callstate i ls m
+Inductive match_states : DemoBspec.state -> state -> Prop :=
+  |cl_callstateg i ls m
      (LS: (Vint i :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg)):
-     match_states_c_locset (DemoBspec.Callstate i m) (Callstate ls m)
-  |cl_interstate i ls m
-     (LS: (Vint i :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg)):
-     match_states_c_locset (DemoBspec.Interstate i m) (Interstate ls m)
-  |cl_returnstate i ls m
-    (LS' : Vint i = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls):
-     match_states_c_locset (DemoBspec.Returnstate i m) (Returnstate ls m).
+     match_states (DemoBspec.Callstateg i m) (Callstateg ls m)
+  |cl_callstatef i ls m
+     (LS1: (Vint (Int.sub i Int.one) :: nil) =  (fun p : rpair loc => Locmap.getpair p ls) ## (loc_arguments int_int_sg))
+     (LS2: Vint i = ls (R BX)):
+     match_states (DemoBspec.Callstatef i m) (Callstatef ls m)
+  |cl_returnstatef i ti ls m
+     (LS' : Vint ti = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls):
+     match_states (DemoBspec.Returnstatef i ti m) (Returnstatef i ls m)
+  |cl_returnstateg i ls m
+     (LS: Vint i = Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls):
+     match_states (DemoBspec.Returnstateg i m) (Returnstateg ls m).
 
 Theorem c_locset :
   forward_simulation (cc_c_locset) (cc_c_locset) Bspec BspecL.
 Proof.
   constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
   intros se1 se2 w Hse Hse1. cbn in *.
-  pose (ms := fun s1 s2 => (match_states_c_locset s1 s2 /\ w = int_int_sg)).
+  pose (ms := fun s1 s2 => (match_states s1 s2 /\ w = int_int_sg)).
   eapply forward_simulation_step with (match_states := ms); cbn; eauto.
   - intros. inv H. simpl. reflexivity.
-  - intros. inv H0. inv H. exists (Callstate rs m).
+  - intros. inv H0. inv H. exists (Callstateg rs m).
     split.
     econstructor; eauto.
     econstructor; eauto.
@@ -363,29 +358,31 @@ Proof.
     econstructor; eauto.
     constructor. eauto.
   - intros. inversion H0. inv H. inv H0. inv H3.
-    exists int_int_sg, (lq (Vptr g_fptr Ptrofs.zero) int_int_sg
-                      (Locmap.set int_loc_argument (Vint (Int.sub i Int.one)) ls) m).
+    exists int_int_sg, (lq (Vptr g_fptr Ptrofs.zero) int_int_sg ls m).
     repeat apply conj; eauto.
     + econstructor; eauto.
     + econstructor; eauto.
-      unfold loc_int_loc, int_int_sg, loc_arguments. simpl.
-      unfold int_loc_argument. destruct Archi.ptr64.
-      -- destruct Archi.win64; reflexivity.
-      -- reflexivity.
     + intros. inv H0. inv H.
-      exists (Returnstate (Locmap.set (R AX) (Vint (Int.add ti i)) rs') m'''). split.
-      econstructor; eauto. red. split.
+      exists (Returnstatef aif rs' m'). split.
+      econstructor; eauto.
+      red. split.
       econstructor; eauto. auto.
   - intros. inv H; inv H0; inv H.
-    + exists (Returnstate (loc_int_loc (Int.zero) int_loc_result) m).
+    + exists (Returnstateg (loc_int_loc (Int.zero) int_loc_result) m).
       split;econstructor; eauto.
       constructor; eauto.
-    + exists (Returnstate (loc_int_loc (ti) int_loc_result) m). split.
+    + exists (Returnstateg (loc_int_loc (ti) int_loc_result) m). split.
       eapply step_read; eauto. reflexivity.
       econstructor; eauto.
       econstructor; eauto.
-    + exists (Interstate ls m). split; econstructor; eauto.
+    + exists (Callstatef (Locmap.set (R BX) (Vint i) (Locmap.set int_loc_argument (Vint (Int.sub i Int.one)) ls)) m). split; econstructor; eauto.
       constructor; eauto.
+      unfold int_loc_arguments, int_int_sg. unfold loc_arguments.
+      unfold int_loc_argument. replace Archi.ptr64 with true by reflexivity.
+      simpl. destruct Archi.win64; simpl; f_equal.
+    + eexists. split. econstructor; eauto.
+      econstructor; eauto.
+      econstructor; eauto.
   - constructor. intros. inv H.
 Qed.
 
@@ -394,9 +391,10 @@ End CL.
 Module LM.
 
 Inductive state :=
-  |Callstate (sp ra: val) (rs: Mach.regset) (m:mem)
-  |Interstate (sp ra: val) (rs: Mach.regset) (m: mem)
-  |Returnstate (rs: Mach.regset) (m:mem).
+  |Callstateg (sp ra: val) (rs: Mach.regset) (m:mem)
+  |Callstatef (sp ra: val) (rs: Mach.regset) (m: mem)
+  |Returnstatef (rs: Mach.regset) (m:mem)
+  |Returnstateg (rs: Mach.regset) (m:mem).
 
 Section WITH_SE.
   Context (se: Genv.symtbl).
@@ -413,29 +411,29 @@ Inductive initial_state : query li_mach -> state -> Prop :=
     (RS : rs int_argument_mreg = Vint i)
     (SP: Val.has_type sp Tptr)
     (RA: Val.has_type ra Tptr):
-    initial_state (mq v sp ra rs m) (Callstate sp ra rs m).
+    initial_state (mq v sp ra rs m) (Callstateg sp ra rs m).
 
 Inductive at_external: state -> query li_mach -> Prop :=
 | at_external_intro
-    g_fptr i m sp ra rs rs'
-    (FINDG: Genv.find_symbol se f_id = Some g_fptr)
-    (RS: rs int_argument_mreg = Vint i)
-    (RS': rs' = Regmap.set int_argument_mreg (Vint (Int.sub i (Int.repr 1))) rs):
-    at_external (Interstate sp ra rs m)
-                (mq (Vptr g_fptr Ptrofs.zero) sp ra rs' m).
+    g_fptr m sp ra rs
+    (FINDG: Genv.find_symbol se f_id = Some g_fptr):
+    at_external (Callstatef sp ra rs m)
+                (mq (Vptr g_fptr Ptrofs.zero) sp ra rs m).
 
 Inductive after_external : state -> reply li_mach -> state -> Prop :=
 | after_external_intro
-    i m  sp ra rs rs' rs'' b_mem m' m'' m''' ti
-    (RS: rs int_argument_mreg = Vint i)
-    (RS' : rs' AX = Vint ti)
-    (RS'' : rs'' = Regmap.set AX (Vint (Int.add ti i)) rs')
-    (FINDM: Genv.find_symbol se _memoized = Some b_mem)
+    i m  sp ra rs rs'  m' ti
+    (RS1 : rs int_argument_mreg = Vint (Int.sub i Int.one))
+(*    (RS2 : rs BX = Vint i) *)
+    (RS' : rs' AX = Vint ti):
+(*    (RS'' : rs'' = Regmap.set AX (Vint (Int.add ti i)) rs') *)
+(*    (FINDM: Genv.find_symbol se _memoized = Some b_mem)
     (STORE0: Mem.storev Mint32 m' (Vptr b_mem Ptrofs.zero) (Vint i) = Some m'')
     (STORE0: Mem.storev Mint32 m'' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some m'''):
+*)
     (forall r, is_callee_save r = true -> rs' r = rs r) ->
     Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m m' ->
-    after_external (Interstate sp ra rs m) (mr rs' m') (Returnstate rs'' m''').
+    after_external (Callstatef sp ra rs m) (mr rs' m') (Returnstatef rs' m').
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_zero
@@ -443,30 +441,39 @@ Inductive step : state -> trace -> state -> Prop :=
     (ZERO: i.(Int.intval) = 0%Z)
     (RS: rs int_argument_mreg = Vint i)
     (RS' : rs' = Regmap.set AX (Vint (Int.zero)) rs ):
-     step (Callstate sp ra rs m) E0 (Returnstate rs' m)
+     step (Callstateg sp ra rs m) E0 (Returnstateg rs' m)
 | step_read
-    i ti m rs rs' sp ra b_mem 
+    i ti m rs rs' sp ra b_mem
     (NZERO: i.(Int.intval) <> 0%Z)
     (FINDM: Genv.find_symbol se _memoized = Some b_mem)
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i))
     (LOAD1: Mem.loadv Mint32 m (Vptr b_mem (Ptrofs.repr 4)) = Some (Vint ti))
     (RS: rs int_argument_mreg = Vint i)
     (RS' : rs' = Regmap.set AX (Vint ti) rs):
-    step (Callstate sp ra rs m) E0 (Returnstate rs' m)
+    step (Callstateg sp ra rs m) E0 (Returnstateg rs' m)
 | step_call
-    i i' m rs sp ra b_mem
+    i i' m rs rs' sp ra b_mem
     (NZERO: i.(Int.intval) <> 0%Z)
     (FINDM: Genv.find_symbol se _memoized = Some b_mem)
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
     (NEQ: i <> i')
-    (RS: rs int_argument_mreg = Vint i):
-    step (Callstate sp ra rs m) E0 (Interstate sp ra rs m).
+    (RS: rs int_argument_mreg = Vint i)
+    (RS': rs' = Regmap.set BX (Vint i) (Regmap.set int_argument_mreg (Vint (Int.sub i (Int.repr 1))) rs)):
+    step (Callstateg sp ra rs m) E0 (Callstatef sp ra rs' m)
+|step_return
+    b_mem m m' m'' ti rs rs' i
+    (FINDM: Genv.find_symbol se _memoized = Some b_mem)
+    (STORE0: Mem.storev Mint32 m (Vptr b_mem Ptrofs.zero) (Vint i) = Some m')
+    (STORE0: Mem.storev Mint32 m' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some m'')
+    (RS1: Vint i = rs BX)
+    (RS2: Vint ti =  rs AX)
+    (LS': rs' = Regmap.set AX (Vint (Int.add ti i)) rs):
+    step (Returnstatef rs m) E0 (Returnstateg rs' m'').
 
 Inductive final_state: state -> reply li_mach  -> Prop :=
   | final_state_mach_intro
-      s m rs
-      (RS: rs AX = Vint s):
-      final_state (Returnstate rs m) (mr rs m).
+      m rs:
+      final_state (Returnstateg rs m) (mr rs m).
 
 End WITH_SE.
 
@@ -481,7 +488,7 @@ Program Definition BspecM : Smallstep.semantics li_mach li_mach :=
        Smallstep.valid_query q := Genv.is_internal ge (mq_vf q);
        Smallstep.initial_state := initial_state ge;
        Smallstep.at_external := at_external ge;
-       Smallstep.after_external := after_external ge;
+       Smallstep.after_external := after_external;
        Smallstep.final_state := final_state;
        globalenv := ge;
      |}
@@ -496,28 +503,30 @@ Variable sp: val.
 Variable m0: mem.
 
 Inductive match_states_locset_mach :  CL.state -> state -> Prop :=
-  |LM_callstate ls ra
+  |LM_Callstateg ls ra
     (LS_RS : ls = make_locset rs0 m0 sp)
     (SP: Val.has_type sp Tptr)
     (RA: Val.has_type ra Tptr):
-     match_states_locset_mach (CL.Callstate ls m0) (Callstate sp ra rs0 m0)
-  |LM_interstate ls ra
-    (LS_RS : ls = make_locset rs0 m0 sp)
+     match_states_locset_mach (CL.Callstateg ls m0) (Callstateg sp ra rs0 m0)
+  |LM_Callstatef ls ra rs
+    (LS_RS : ls = make_locset rs m0 sp)
     (SP: Val.has_type sp Tptr)
     (RA: Val.has_type ra Tptr):
-      match_states_locset_mach (CL.Interstate ls m0) (Interstate sp ra rs0 m0)
-  |LM_returnstate ls rs m_ m
+      match_states_locset_mach (CL.Callstatef ls m0) (Callstatef sp ra rs m0)
+  |LM_returnstatef ls rs m_ m i
+     (LS_RS : rs AX  = ls (R AX))
+(*     (RS: forall r : mreg, is_callee_save r = true -> rs r = rs0 r) *)
+     (MEM: Mem.unchanged_on (not_init_args (size_arguments int_int_sg) sp) m_ m)
+     (SUP: Mem.support m_ = Mem.support m)
+     (TMEM: Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m0 m):
+     match_states_locset_mach (CL.Returnstatef i ls m_) (Returnstatef rs m)
+  |LM_returnstateg ls rs m_ m
      (LS_RS : rs AX  = ls (R AX))
      (RS: forall r : mreg, is_callee_save r = true -> rs r = rs0 r)
      (MEM: Mem.unchanged_on (not_init_args (size_arguments int_int_sg) sp) m_ m)
      (SUP: Mem.support m_ = Mem.support m)
-(*
-     (PERM: forall (b : block) (ofs : Z) (k : perm_kind) (p : permission),
-                               loc_init_args (size_arguments int_int_sg) sp b ofs -> ~ Mem.perm m_ b ofs k p)
-
- *)
-     (TMEM: Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m0 m): (*for mr*)
-     match_states_locset_mach (CL.Returnstate ls m_) (Returnstate rs m).
+     (TMEM: Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m0 m):
+     match_states_locset_mach (CL.Returnstateg ls m_) (Returnstateg rs m).
 
 End MS.
 
@@ -550,103 +559,196 @@ Proof.
   eapply forward_simulation_step with (match_states := ms); cbn; eauto.
   - intros. inv H. reflexivity.
   - intros. inv H. inv H0. inv H1.
-    exists (Callstate sp ra rs m_). split.
+    exists (Callstateg sp ra rs m_). split.
     econstructor; eauto. eapply argument_int_value; eauto.
     red. simpl. split. econstructor; eauto. auto.
     rewrite size_int_int_sg_0 in H4. extlia.
   - intros. inv H. inv H0. inv H1.
     exists (mr rs m0). split.
-    econstructor; eauto. rewrite CL.ls_result_int in LS.
-    rewrite LS_RS. eauto.
+    econstructor; eauto.
+    (* rewrite CL.ls_result_int in LS.
+    rewrite LS_RS. eauto. *)
     destruct w. cbn in *. subst lmw_sg.
     econstructor; eauto.
     rewrite CL.loc_result_int. simpl. intros. inv H. auto. inv H0.
     intros. inv H. rewrite size_int_int_sg_0 in H0. extlia.
   - intros. inv H0. inv H. inv H0. destruct w. cbn in *. subst lmw_sg.
-    set (rs' := Regmap.set int_argument_mreg (Vint (Int.sub i (Int.repr 1))) lmw_rs).
-    exists (lmw int_int_sg rs' lmw_m lmw_sp), (mq (Vptr g_fptr Ptrofs.zero) lmw_sp ra rs' lmw_m).
+    (* set (rs' := Regmap.set int_argument_mreg (Vint (Int.sub i (Int.repr 1))) lmw_rs). *)
+    exists (lmw int_int_sg rs lmw_m lmw_sp), (mq (Vptr g_fptr Ptrofs.zero) lmw_sp ra rs lmw_m).
     repeat apply conj; eauto.
     + econstructor; eauto.
-      eapply argument_int_value; eauto.
-      eauto.
-    + assert (Locmap.set CL.int_loc_argument (Vint (Int.sub i Int.one)) (make_locset lmw_rs lmw_m lmw_sp) = make_locset rs' lmw_m lmw_sp).
-      {
-        unfold rs'.
-        unfold CL.int_loc_argument. unfold int_argument_mreg.
-        replace Archi.ptr64 with true by reflexivity.
-        apply Axioms.extensionality. intro l.
-        destruct (Loc.eq l (if Archi.win64 then R CX else R DI)).
-        - subst l. rewrite Locmap.gss.
-          unfold make_locset. destruct Archi.win64.
-          rewrite Regmap.gss. reflexivity.
-          rewrite Regmap.gss. reflexivity.
-        - rewrite Locmap.gso. unfold make_locset.
-          destruct l. rewrite Regmap.gso. eauto.
-          destruct Archi.win64; destruct r; try congruence.
-          reflexivity.
-          destruct l. destruct Archi.win64; destruct r; try congruence.
-          destruct Archi.win64; simpl; eauto.
-      }
-      rewrite H. simpl.
-      econstructor; eauto.
+    + econstructor; eauto.
       constructor. red. apply size_int_int_sg_0.
     + intros. inv H0. inv H. cbn in *.
-      set (rs'' := Regmap.set AX (Vint (Int.add ti i0)) rs'0).
-      edestruct Mem.store_mapped_unchanged_on as [m'2 [STORE0' UNC1]]. apply H9. all: eauto.
-      intros. red. intro. inv H. rewrite size_int_int_sg_0 in H0. extlia.
-      edestruct Mem.store_mapped_unchanged_on as [m'3 [STORE1' UNC2]]. apply UNC1. all: eauto.
-      intros. red. intro. inv H. rewrite size_int_int_sg_0 in H0. extlia.
-      exists (Returnstate rs'' m'3). split.
+      exists (Returnstatef rs' m'). split.
       econstructor; eauto.
       -- eapply argument_int_value; eauto.
-      -- rewrite CL.loc_result_int in H6.
-         cbn in *. rewrite H6. eauto. eauto.
-      -- unfold rs''. reflexivity.
-      -- intros. rewrite H7; eauto. unfold rs'. rewrite Regmap.gso. reflexivity.
-         unfold int_argument_mreg. unfold is_callee_save in H.
-         replace Archi.ptr64 with true in H by reflexivity. cbn in *.
-         destruct Archi.win64; destruct r; try congruence.
-      -- constructor; eauto.
+      -- admit.
+      -- econstructor; eauto.
          econstructor; eauto.
-         intros. unfold rs''. rewrite Regmap.gso.
-         rewrite H7; eauto. unfold rs'. rewrite Regmap.gso. eauto.
-         {
-           unfold int_argument_mreg. unfold is_callee_save in H.
-         replace Archi.ptr64 with true in H by reflexivity. cbn in *.
-         destruct Archi.win64; destruct r; try congruence.
-         }
-         {
-          unfold is_callee_save in H. destruct r; try congruence. 
-         }
-         apply Mem.support_store in STORE0. apply Mem.support_store in STORE1.
-         apply Mem.support_store in STORE0'. apply Mem.support_store in STORE1'.
-         congruence.
-         constructor. inversion H10.
-         apply Mem.support_store in STORE0'. apply Mem.support_store in STORE1'.
-         rewrite STORE1', STORE0'. eauto.
-         intros. inv H. rewrite size_int_int_sg_0 in H1. extlia.
-         intros. inv H. rewrite size_int_int_sg_0 in H1. extlia.
+         eapply H6. unfold int_int_sg. unfold loc_result.
+         replace Archi.ptr64 with true by reflexivity. simpl.
+         eauto.
   - intros. inv H0. inv H; inv H1.
-    + exists (Returnstate (Regmap.set AX (Vint Int.zero) (lmw_rs w)) (lmw_m w)). split.
+    + exists (Returnstateg (Regmap.set AX (Vint Int.zero) (lmw_rs w)) (lmw_m w)). split.
       econstructor; eauto. eapply argument_int_value; eauto.
       econstructor; eauto. econstructor; eauto with mem.
       intros. rewrite Regmap.gso. eauto.
       destruct r; unfold is_callee_save in H; try congruence.
-    + exists (Returnstate (Regmap.set AX (Vint ti) (lmw_rs w)) (lmw_m w)). split.
+    + exists (Returnstateg (Regmap.set AX (Vint ti) (lmw_rs w)) (lmw_m w)). split.
       eapply step_read; eauto.
       eapply argument_int_value; eauto. eauto.
       econstructor; eauto.
       econstructor; eauto with mem.
       intros. rewrite Regmap.gso. eauto.
       destruct r; unfold is_callee_save in H; try congruence.
-    + exists (Interstate (lmw_sp w) ra (lmw_rs w) (lmw_m w)). split; econstructor; eauto.
+    + eexists. split. eapply step_call; eauto.
       eapply argument_int_value; eauto.
       econstructor; eauto.
+      econstructor; eauto.
+      { 
+        unfold CL.int_loc_argument. unfold int_argument_mreg.
+      replace Archi.ptr64 with true by reflexivity.
+      apply Axioms.extensionality. intro l.
+      destruct (Loc.eq l (R BX)).
+        - subst l. rewrite Locmap.gss. unfold make_locset.
+          rewrite Regmap.gss. reflexivity.
+        - rewrite Locmap.gso.
+          2: { destruct l; try congruence; simpl; eauto. }
+          destruct (Loc.eq l (if Archi.win64 then R CX else R DI)).
+          + subst l. rewrite Locmap.gss.
+          unfold make_locset. destruct Archi.win64.
+          rewrite Regmap.gso; try congruence.
+          rewrite Regmap.gss. reflexivity.
+          rewrite Regmap.gso; try congruence.
+          rewrite Regmap.gss. reflexivity.
+          + rewrite Locmap.gso.
+            unfold make_locset.
+          destruct l. rewrite Regmap.gso; try congruence. rewrite Regmap.gso. eauto.
+          destruct Archi.win64; destruct r; try congruence.
+          reflexivity.
+          destruct l. destruct Archi.win64; destruct r; try congruence.
+          destruct Archi.win64; simpl; eauto.
+      }
+    + set (rs' := Regmap.set AX (Vint (Int.add ti i)) rs).
+      edestruct Mem.store_mapped_unchanged_on as [m'2 [STORE0' UNC1]]. apply MEM. all: eauto.
+      intros. red. intro. inv H. rewrite size_int_int_sg_0 in H1. extlia.
+      edestruct Mem.store_mapped_unchanged_on as [m'3 [STORE1' UNC2]]. apply UNC1. all: eauto.
+      intros. red. intro. inv H. rewrite size_int_int_sg_0 in H1. extlia.
+      eexists; split.
+      eapply step_return; eauto.
+      admit.
+      rewrite CL.loc_result_int in LS. cbn in *. rewrite LS_RS. eauto.
+      econstructor; eauto.
+      econstructor; eauto.
+      -- intros. admit.
+      -- apply Mem.support_store in STORE0. apply Mem.support_store in STORE1.
+         apply Mem.support_store in STORE0'. apply Mem.support_store in STORE1'.
+         congruence.
+      -- constructor. inversion TMEM.
+         apply Mem.support_store in STORE0'. apply Mem.support_store in STORE1'.
+         rewrite STORE1', STORE0'. eauto.
+         intros. inv H. rewrite size_int_int_sg_0 in H3. extlia.
+         intros. inv H. rewrite size_int_int_sg_0 in H3. extlia.
   - constructor. intros. inv H.
-Qed.
-
+Admitted.
 End LM.
 
+Module MA.
+Axiom not_win64 : Archi.win64 = false.
+
+Definition int_argument_preg := IR RDI.
+
+Section MS.
+Variable rs0: regset.
+Variable s0: sup.
+
+Inductive match_states' :  LM.state -> Asm.state -> Prop :=
+  |LM_callstateg mrs m
+    (MRS_RS : forall r, mrs r = rs0 (preg_of r))
+    (SUP: s0 = Mem.support m):
+     match_states' (LM.Callstateg (rs0 RSP) (rs0 RA) mrs m) (State rs0 m true)
+  |LM_callstatef mrs rs m
+    (MRS_RS : forall r, mrs r = rs0 (preg_of r))
+    (SUP: s0 = Mem.support m):
+      match_states' (LM.Callstatef (rs0 RSP) (rs0 RA) mrs m) (State rs m true)
+  |LM_returnstatef mrs rs m
+     (MRS_RS : forall r, mrs r = rs (preg_of r))
+     (RSP' : rs RSP = rs0 RSP)
+     (PC': rs PC = rs0 RA)
+     (SUP: Mem.sup_include s0 (Mem.support m)):
+     match_states' (LM.Returnstatef mrs m) (State rs m true)
+  |LM_returnstateg mrs rs m
+     (MRS_RS : forall r, mrs r = rs (preg_of r))
+     (RSP' : rs RSP = rs0 RSP)
+     (PC': rs PC = rs0 RA)
+     (SUP: Mem.sup_include s0 (Mem.support m)):
+     match_states' (LM.Returnstateg mrs m) (State rs m false).
+
+Definition match_states (s1: LM.state) (s2: sup * Asm.state) :=
+  match_states' s1 (snd s2) /\ s0 = fst s2.
+End MS.
+
+Lemma int_argument_preg_of:
+  int_argument_preg = preg_of LM.int_argument_mreg.
+Proof.
+  unfold LM.int_argument_mreg, int_argument_preg, preg_of.
+  rewrite not_win64. reflexivity.
+Qed.
+
+Lemma int_result_preg_of:
+  IR RAX = preg_of AX.
+Proof.
+  reflexivity.
+Qed.
+
+Theorem mach_asm:
+  forward_simulation (cc_mach_asm) (cc_mach_asm) LM.BspecM (Asm.semantics DemoB.prog).
+Proof.
+  constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
+  intros se1 se2 w Hse Hse1. cbn in *. subst.
+  pose (ms := fun s1 s2 => match_states (fst w) (snd w) s1 s2
+                         /\ (fst w) PC <> Vundef /\ (fst w RA <> Vundef)
+                         /\ valid_blockv (snd w) (fst w RSP)).
+  eapply forward_simulation_star with (match_states := ms); cbn in *; eauto.
+  - intros. simpl. cbn in *. destruct w. inv H. reflexivity.
+  - intros. inv H0. destruct w. inv H. exists (Mem.support m, (State r m true)).
+    split. simpl. split; eauto.
+    econstructor; eauto.
+    admit.
+    inv H8. congruence.
+    constructor; eauto.
+    constructor; eauto.
+    constructor; eauto.
+  - intros. destruct w. inv H. inv H1. inv H0. destruct s2. inv H.
+    cbn in *. subst. destruct H2 as [A [B C]].
+    exists (rs0,m). split. econstructor; eauto.
+    econstructor; eauto.
+  - intros. inv H. inv H1. inv H. destruct s2. destruct w. cbn in *. subst.
+    exists (rs.),()
+Admitted.
+      (*call*)
+
+Theorem Bproof :
+  forward_simulation cc_compcert cc_compcert Bspec (Asm.semantics DemoB.prog).
+Proof.
+  unfold cc_compcert.
+  rewrite <- (cc_compose_assoc wt_c lessdef_c) at 1.
+  rewrite <- (cc_compose_assoc wt_c lessdef_c).
+  eapply compose_forward_simulations.
+  eapply self_simulation_C.
+  eapply compose_forward_simulations.
+  eapply self_simulation_wt.
+  repeat eapply compose_forward_simulations.
+  eapply CL.c_locset. eapply LM.locset_mach. eapply mach_asm.
+  eapply semantics_asm_rel; eauto.
+Qed.
+
+
+
+
+
+(*
 Module MA.
 
 Inductive state :=
@@ -747,42 +849,6 @@ Program Definition BspecA : Smallstep.semantics li_asm li_asm :=
 Definition make_regset_result (ls: Locmap.t) (sg: signature) (r: mreg) : val :=
   if in_dec mreg_eq r (regs_of_rpair (loc_result sg)) then ls (R r) else Vundef.
 
-Section MS.
-Variable rs0: regset.
-Variable s0: sup.
-
-Inductive match_states_mach_asm :  LM.state -> state -> Prop :=
-  |LM_callstate mrs m
-    (MRS_RS : forall r, mrs r = rs0 (preg_of r))
-    (SUP: s0 = Mem.support m):
-     match_states_mach_asm (LM.Callstate (rs0 RSP) (rs0 RA) mrs m) (Callstate rs0 m)
-  |LM_interstate mrs m
-    (MRS_RS : forall r, mrs r = rs0 (preg_of r))
-    (SUP: s0 = Mem.support m):
-(*    (TSP: Val.has_type (rs RSP) Tptr)
-    (TRA: Val.has_type (rs RA) Tptr): *)
-      match_states_mach_asm (LM.Interstate (rs0 RSP) (rs0 RA) mrs m) (Interstate rs0 m)
-  |LM_returnstate mrs rs m
-     (MRS_RS : forall r, mrs r = rs (preg_of r))
-     (RSP' : rs RSP = rs0 RSP)
-     (PC': rs PC = rs0 RA)
-     (SUP: Mem.sup_include s0 (Mem.support m)):
-     match_states_mach_asm (LM.Returnstate mrs m) (Returnstate rs m).
-
-End MS.
-
-Lemma int_argument_preg_of:
-  int_argument_preg = preg_of LM.int_argument_mreg.
-Proof.
-  unfold LM.int_argument_mreg, int_argument_preg, preg_of.
-  destruct Archi.win64; reflexivity.
-Qed.
-
-Lemma int_result_preg_of:
-  IR RAX = preg_of AX.
-Proof.
-  reflexivity.
-Qed.
 
 Theorem mach_asm:
   forward_simulation (cc_mach_asm) (cc_mach_asm) LM.BspecM BspecA.
@@ -898,8 +964,8 @@ Proof.
 Qed.
 
 End MA.
-
-
+*)
+(*
 Inductive match_states : MA.state -> (sup * Asm.state) -> Prop :=
   | match_states_callstate rs trs m tm
       (MRS : forall r, Val.lessdef (rs r) (trs r))
@@ -920,7 +986,7 @@ Definition measure (s: MA.state) : nat :=
   | MA.Interstate  _ _ => 1%nat
   | MA.Returnstate  _ _ => 0%nat
   end.
-
+*)
 (* the example asm program is not under win64 architecture *)
 Axiom not_win64 : Archi.win64 = false.
 

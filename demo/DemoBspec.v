@@ -18,7 +18,6 @@ Inductive state: Type :=
     (m: mem)
 | Callstatef
     (aif: int)
-    (aig: int)
     (m: mem)
 | Returnstatef
     (aif: int)
@@ -44,18 +43,14 @@ Inductive initial_state : query li_c -> state -> Prop :=
 
 Inductive at_external: state -> query li_c -> Prop :=
 | at_external_intro
-    g_fptr aif aig m
+    g_fptr aif m
     (FINDG: Genv.find_symbol se f_id = Some g_fptr):
-    at_external (Callstatef aif aig m) (cq (Vptr g_fptr Ptrofs.zero) int_int_sg ((Vint aig) :: nil) m).
+    at_external (Callstatef aif m) (cq (Vptr g_fptr Ptrofs.zero) int_int_sg ((Vint (Int.sub aif Int.one)) :: nil) m).
 
 Inductive after_external: state -> reply li_c -> state -> Prop :=
 | after_external_intro
-    aif aig ti m m':
-(*    (SUM: ti = sum (Int.sub i Int.one)) : *)
-(*    (FINDM: Genv.find_symbol se _memoized = Some b_mem)
-    (STORE0: Mem.storev Mint32 m' (Vptr b_mem Ptrofs.zero) (Vint i) = Some m'')
-    (STORE0: Mem.storev Mint32 m'' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some m'''): *)
-    after_external (Callstatef aif aig m) (cr (Vint ti) m') (Returnstatef aif ti m').
+    aif ti m m':
+    after_external (Callstatef aif m) (cr (Vint ti) m') (Returnstatef aif ti m').
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_zero
@@ -75,7 +70,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (FINDM: Genv.find_symbol se _memoized = Some b_mem)
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
     (NEQ: i <> i'):
-    step (Callstateg i m) E0 (Callstatef i (Int.sub i Int.one) m)
+    step (Callstateg i m) E0 (Callstatef i m)
 | step_return
     b_mem m m' m'' ti i
     (FINDM: Genv.find_symbol se _memoized = Some b_mem)
