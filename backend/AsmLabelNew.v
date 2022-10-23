@@ -1,8 +1,3 @@
-(* ******************** *)
-(* Author: Zhenguo Yin  *)
-(* Date:   Aug 30, 2020 *)
-(* ******************** *)
-
 Require Import Coqlib Integers AST Maps.
 Require Import Asm.
 Require Import Errors.

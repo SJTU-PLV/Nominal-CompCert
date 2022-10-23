@@ -113,7 +113,7 @@ BACKEND=\
   Mach.v \
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
-  TargetPrinterAux.v \
+  TargetPrinterAux.v AsmLabelNew.v\
   
 # architecture dependent files (x86 and riscv)
 
@@ -121,7 +121,7 @@ X86 = \
   AsmRegs.v AsmFacts.v \
   SSAsm.v SSAsmproof.v \
   RealAsm.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v \
-  AsmLabelNew.v AsmBuiltinInline.v\
+  AsmBuiltinInline.v\
   AsmStructRet.v\
   AsmFloatLiteral.v SymbolString.v\
   AsmPseudoInstr.v\

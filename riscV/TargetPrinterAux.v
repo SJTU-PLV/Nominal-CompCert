@@ -10,6 +10,9 @@ Definition expand_addptrofs dst src n :=
 Definition expand_storeind_ptr src base ofs :=
   storeind_ptr src base ofs [].
 
+Definition expand_loadimm32 dst n :=
+  loadimm32 dst n [].
+
 (* argument size *)
 Definition arg_int_size (ri rf ofs: Z) k : Z*Z*Z :=
   if ri <? 8 then k (ri + 1) rf ofs
