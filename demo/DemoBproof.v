@@ -430,8 +430,9 @@ Inductive after_external : state -> reply li_mach -> state -> Prop :=
     (RS' : rs' AX = Vint ti):
     (forall r, is_callee_save r = true -> rs' r = rs r) ->
     Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m m' ->
-    after_external (Callstatef vbx sp ra gsp gra rs m) (mr rs' m') (Returnstatef sp ra gsp gra vbx rs' m').
-(* The values sp and ra are keeped in the Stack block of g 
+    after_external (Callstatef vbx sp ra gsp gra rs m) (mr rs' m') (Returnstatef vbx sp ra gsp gra rs' m').
+
+(* The values sp and ra are keeped in the Stack block of g
    The values gsp and gra are keeped in register by stored in f's Stack block are loaded back.
  *)
 
@@ -505,57 +506,56 @@ Program Definition BspecM : Smallstep.semantics li_mach li_mach :=
 Definition make_regset_result (ls: Locmap.t) (sg: signature) (r: mreg) : val :=
   if in_dec mreg_eq r (regs_of_rpair (loc_result sg)) then ls (R r) else Vundef.
 
+
+(** * Using cc_stacking instead *)
+
 Section MS.
+(* cc_stacking *)
+Variable w : cc_stacking_world inj.
 
+Definition f0 := injw_meminj (stk_w w).
+Definition ls0 := stk_ls1 w.
+Definition sp0 := stk_sp2 w.
+Definition m0 := stk_m2 w.
 
-Variable rs0: Mach.regset.
-Variable sp: val.
-Variable m0: mem.
-
-Variable w0: inj_world.
+(* NEED TO RECHECK AGAIN *)
 Inductive match_states_locset_mach :  CL.state -> state -> Prop :=
-  |LM_Callstateg ls ra vf j tm trs tsp tra
-    (LS_RS : ls = make_locset rs0 m0 sp)
-    (INCR: inj_incr w0 (injw j (Mem.support m0) (Mem.support tm)))
-    (MEMINJ: Mem.inject j m0 tm)
-    (RSINJ: forall r, Val.inject j (rs0 r) (trs r))
-    (TSP: Val.inject j sp tsp)
-    (TRA: Val.inject j ra tra)
-    (SP: Val.has_type sp Tptr)
+  |LM_Callstateg ls (ra:val)  vf m rs ra
+    (LS_RS : forall r, Val.inject f0 (ls (R r)) (rs r))
+    (MEMINJ: Mem.inject f0 m m0)
     (RA: Val.has_type ra Tptr):
-     match_states_locset_mach (CL.Callstateg ls m0) (Callstateg vf tsp tra trs tm)
-  |LM_Callstatef ls ra rs vbx gsp gra j tm trs
-    (LS_RS : ls = make_locset rs m0 sp)
-    (RS: forall r : mreg, (is_callee_save r = true /\ r <> BX) -> rs r = rs0 r)
-    (VBX: vbx = rs0 BX)
-    (INCR: inj_incr w0 (injw j (Mem.support m0) (Mem.support tm)))
-    (MEMINJ: Mem.inject j m0 tm)
-    (RSINJ: forall r, Val.inject j (rs0 r) (trs r))
-    (SP: Val.has_type sp Tptr)
-    (RA: Val.has_type ra Tptr):
-      match_states_locset_mach (CL.Callstatef ls m0) (Callstatef vbx sp ra gsp gra trs tm)
-  |LM_returnstatef ls rs m_ m i vbx sp ra gsp gra j tm trs
-     (LS_RS : rs AX  = ls (R AX))
+     match_states_locset_mach (CL.Callstateg ls m) (Callstateg vf sp0 ra rs m0)
+  |LM_Callstatef ls rs vbx gsp gra f m tm ra
+    (LS_RS : forall r, Val.inject f (ls (R r)) (rs r))
+    (CALLEE_SAVE: forall r : mreg, (is_callee_save r = true /\ r <> BX) ->
+                     Val.inject f (ls0 (R r)) (rs r))
+    (VBX: vbx = ls0 (R BX))
+    (INCR: inj_incr (stk_w w) (injw f (Mem.support m) (Mem.support tm)))
+    (MEMINJ: Mem.inject f m tm)
+    (SP: Val.has_type gsp Tptr)
+    (RA: Val.has_type gra Tptr):
+      match_states_locset_mach (CL.Callstatef ls m0)
+                               (Callstatef vbx sp0 ra gsp gra rs tm)
+  |LM_returnstatef ls (rs: Mach.regset) m tm i vbx sp ra gsp gra f
+    (* (LS_RS : rs AX  = ls (R AX))
      (i_RS: rs BX = Vint i)
-     (RS: forall r : mreg, (is_callee_save r = true /\ r <> BX) -> rs r = rs0 r)
-     (VBX: vbx = rs0 BX)
-     (INCR: inj_incr w0 (injw j (Mem.support m) (Mem.support tm)))
-     (MEMINJ: Mem.inject j m tm)
-     (RSINJ: forall r, Val.inject j (rs0 r) (trs r))
-     (MEM: Mem.unchanged_on (not_init_args (size_arguments int_int_sg) sp) m_ m)
-     (SUP: Mem.support m_ = Mem.support m)
-     (TMEM: Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m0 m):
-     match_states_locset_mach (CL.Returnstatef i ls m_) (Returnstatef vbx sp ra gsp gra trs tm)
-  |LM_returnstateg ls rs m_ m ra j trs tm
-     (LS_RS : rs AX  = ls (R AX))
-     (RS: forall r : mreg, is_callee_save r = true -> rs r = rs0 r)
-    (INCR: inj_incr w0 (injw j (Mem.support m) (Mem.support tm)))
-     (MEMINJ: Mem.inject j m tm)
-     (RSINJ: forall r, Val.inject j (rs r) (trs r))
-     (MEM: Mem.unchanged_on (not_init_args (size_arguments int_int_sg) sp) m_ m)
-     (SUP: Mem.support m_ = Mem.support m)
-     (TMEM: Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m0 m):
-     match_states_locset_mach (CL.Returnstateg ls m_) (Returnstateg sp ra trs tm).
+     cc_stacking_mr *)
+     (CALLEE_SAVE: forall r : mreg, (is_callee_save r = true /\ r <> BX) ->
+                      Val.inject f (ls0 (R r)) (rs r))
+     (LS_RS: Val.inject f (ls (R AX)) (rs AX))
+     (VBX: vbx = ls0 (R BX))
+     (INCR: inj_incr (stk_w w) (injw f (Mem.support m) (Mem.support tm)))
+     (MEMINJ: Mem.inject f m tm)
+     (SUP: Mem.sup_include (Mem.support m0) (Mem.support tm)):
+     match_states_locset_mach (CL.Returnstatef i ls m) (Returnstatef vbx sp ra gsp gra rs tm)
+  |LM_returnstateg ls rs m tm ra f
+     (LS_RS : Val.inject f (ls (R AX)) (rs AX))
+     (CALLEE_SAVE: forall r : mreg, is_callee_save r = true ->
+                      Val.inject f (ls0 (R r)) (rs r))
+     (INCR: inj_incr (stk_w w) (injw f (Mem.support m) (Mem.support tm)))
+     (MEMINJ: Mem.inject f m tm)
+     (SUP: Mem.sup_include (Mem.support m0) (Mem.support tm)):
+     match_states_locset_mach (CL.Returnstateg ls m) (Returnstateg sp0 ra rs tm).
 
 End MS.
 
@@ -572,6 +572,7 @@ Proof.
   congruence. simpl in *. congruence. reflexivity.
 Qed.
 
+
 Lemma size_int_int_sg_0:
   size_arguments int_int_sg = 0.
 Proof.
@@ -579,6 +580,196 @@ Proof.
   destruct Archi.win64; simpl;  reflexivity.
 Qed.
 
+(*inj_L @ LM simpler? cc_locset *)
+Theorem locset_mach:
+  forward_simulation (cc_stacking injp)
+                     (cc_stacking inj) CL.BspecL BspecM.
+Proof.
+  constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
+  intros se1 se2 w Hse Hse1.
+  cbn in w.
+  pose (ms :=
+          fun s1 s2 => match_states_locset_mach w s1 s2 /\
+                     stk_sg w= int_int_sg).
+  eapply forward_simulation_step with (match_states := ms);
+  destruct w as [[f0 s1 s2] sg ls0 sp0 m0]; inv Hse; cbn in *.
+  - intros. inv H. cbn in *.
+    eapply Genv.is_internal_transf; eauto.
+    instantiate (1:= id). cbn. 2: eauto.
+    red. red. constructor; eauto.
+    constructor. constructor. eauto. simpl. econstructor; eauto.
+    apply linkorder_refl.
+    constructor. constructor; eauto. constructor; eauto.
+    constructor; eauto.
+    constructor; eauto. constructor; eauto. simpl. econstructor; eauto.
+    apply linkorder_refl.
+    constructor.
+  - (*initial*)
+    intros. inv H0. inv H. cbn in *.
+    eapply Genv.find_symbol_match in inj_stbls_match as SYMB'; eauto.
+    destruct SYMB' as [tb [A B]].
+    inv H11. rewrite A in H1. inv H1. inv H14.
+    eexists. split. econstructor; eauto.
+    admit. (*ok new lemma*)
+    constructor; eauto. constructor; eauto.
+  - (*final*)
+    intros. inv H0. inv H. inv H0. cbn in *.
+    eexists. split. econstructor; eauto.
+    econstructor; eauto.
+    intros. rewrite CL.loc_result_int in H. simpl.
+    inv H. eauto. inv H0.
+    constructor; eauto.
+    constructor; eauto.
+    intros. inv H. rewrite size_int_int_sg_0 in H1. extlia.
+    intros. inv H. rewrite size_int_int_sg_0 in H1. extlia.
+    intros. inv H. rewrite size_int_int_sg_0 in H0. extlia.
+  - (*external*)
+    intros. inv H0. inv H. inv H0. cbn in *.
+    eapply Genv.find_symbol_match in inj_stbls_match as SYMB'; eauto.
+    destruct SYMB' as [tb [A B]].
+    exists (stkw injp (injpw f m1 tm MEMINJ) int_int_sg ls
+            (Vptr g_fptr Ptrofs.zero) tm).
+    eexists. cbn in *.
+    repeat apply conj; eauto.
+    + (* at_external *)
+      constructor; eauto.
+    + (* match_query *)
+      econstructor; eauto. constructor.
+      red. rewrite size_int_int_sg_0. lia.
+      inv INCR.
+      constructor; cbn; eauto. congruence.
+      admit. admit. 
+    (*TODO: to be add in match_callstatef,
+      after making sure step_call can provide these conditions *)
+    + (*match_stbls*)
+      inv INCR. constructor; eauto. simpl.
+      eapply Genv.match_stbls_incr; eauto.
+      intros. exploit H7; eauto. intros [C D].
+      split; eauto.
+    + (* external *)
+      intros. inv H0.
+      destruct H as [midr [Hr1 Hr2]].
+      inv Hr1. destruct Hr2 as [w [Hw Hr2]]. inv Hw.
+      inv Hr2. cbn in *.
+      eexists. split.
+      (* after_external *)
+      econstructor; eauto.
+      apply argument_int_value in LS. generalize (RSINJ int_argument_mreg).
+      intro VINJ. rewrite LS in VINJ. inv VINJ. reflexivity.
+      admit. (*ok*)
+      {
+        clear -H6 H1 RSINJ.
+        intros. apply H6 in H.
+        (*seems wrong here, the callee_save_reg values in middle
+          can be Vundef, *)
+        admit.
+      }
+      {
+        inv H13.
+        constructor.
+        eauto.
+        intros. inv H. rewrite size_int_int_sg_0 in H4. extlia.
+        intros. inv H. rewrite size_int_int_sg_0 in H4. extlia.
+      }
+      constructor; eauto.
+      econstructor; eauto.
+      rewrite CL.loc_result_int in LS'. simpl in LS'.
+      rewrite <- LS'. admit.
+      simpl. constructor; eauto.
+      
+  - (*step*)
+    admit.
+  - constructor. intros. inv H.
+Admitted.
+
+
+
+
+
+(*
+Section MS.
+
+Variable rs0: Mach.regset.
+Variable sp: val.
+Variable m0: mem.
+
+Variable w0: inj_world.
+
+(* NEED TO RECHECK AGAIN *)
+Inductive match_states_locset_mach :  CL.state -> state -> Prop :=
+  |LM_Callstateg ls ra vf j tm trs tsp tra
+    (LS_RS : ls = make_locset rs0 m0 sp)
+    (INCR: inj_incr w0 (injw j (Mem.support m0) (Mem.support tm)))
+    (MEMINJ: Mem.inject j m0 tm)
+    (RSINJ: forall r, Val.inject j (rs0 r) (trs r))
+    (TSP: Val.inject j sp tsp)
+    (TRA: Val.inject j ra tra)
+    (SP: Val.has_type sp Tptr)
+    (RA: Val.has_type ra Tptr):
+     match_states_locset_mach (CL.Callstateg ls m0) (Callstateg vf tsp tra trs tm)
+  |LM_Callstatef ls ra rs vbx gsp gra j tm trs tgsp tgra
+    (LS_RS : ls = make_locset rs m0 gsp)
+    (RS: forall r : mreg, (is_callee_save r = true /\ r <> BX) -> rs r = rs0 r)
+    (VBX: vbx = rs0 BX)
+    (INCR: inj_incr w0 (injw j (Mem.support m0) (Mem.support tm)))
+    (MEMINJ: Mem.inject j m0 tm)
+    (RSINJ: forall r, Val.inject j (rs r) (trs r))
+    (TGSP: Val.inject j gsp tgsp)
+    (TGRA: Val.inject j gra tgra)
+    (SP: Val.has_type gsp Tptr)
+    (RA: Val.has_type gra Tptr):
+      match_states_locset_mach (CL.Callstatef ls m0)
+                               (Callstatef vbx sp ra tgsp tgra trs tm)
+  |LM_returnstatef ls rs m_ m i vbx sp ra gsp gra j tm trs
+     (LS_RS : rs AX  = ls (R AX))
+     (i_RS: rs BX = Vint i)
+     (RS: forall r : mreg, (is_callee_save r = true /\ r <> BX) -> rs r = rs0 r)
+     (VBX: vbx = rs0 BX)
+     (INCR: inj_incr w0 (injw j (Mem.support m) (Mem.support tm)))
+     (MEMINJ: Mem.inject j m tm)
+     (RSINJ: forall r, Val.inject j (rs r) (trs r))
+     (MEM: Mem.unchanged_on (not_init_args (size_arguments int_int_sg) sp) m_ m)
+     (SUP: Mem.support m_ = Mem.support m)
+     (TMEM: Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m0 m):
+     match_states_locset_mach (CL.Returnstatef i ls m_) (Returnstatef vbx sp ra gsp gra trs tm)
+  |LM_returnstateg ls rs m_ m ra j trs tm tsp tra
+     (LS_RS : rs AX  = ls (R AX))
+     (RS: forall r : mreg, is_callee_save r = true -> rs r = rs0 r)
+    (INCR: inj_incr w0 (injw j (Mem.support m) (Mem.support tm)))
+     (MEMINJ: Mem.inject j m tm)
+     (RSINJ: forall r, Val.inject j (rs r) (trs r))
+     (TSP: Val.inject j sp tsp)
+     (TRA: Val.inject j ra tra)
+     (MEM: Mem.unchanged_on (not_init_args (size_arguments int_int_sg) sp) m_ m)
+     (SUP: Mem.support m_ = Mem.support m)
+     (TMEM: Mem.unchanged_on (loc_init_args (size_arguments int_int_sg) sp) m0 m):
+     match_states_locset_mach (CL.Returnstateg ls m_) (Returnstateg tsp tra trs tm).
+
+End MS.
+
+
+Lemma argument_int_value:
+  forall rs m sp i,
+    Vint i :: nil =
+    (fun p : rpair loc => Locmap.getpair p (make_locset rs m sp)) ## (loc_arguments int_int_sg) ->
+    rs int_argument_mreg = Vint i.
+Proof.
+  intros.
+  unfold make_locset in *.
+  unfold int_int_sg, loc_arguments, int_argument_mreg in *.
+  replace Archi.ptr64 with true in *. simpl in *. destruct Archi.win64. simpl in *.
+  congruence. simpl in *. congruence. reflexivity.
+Qed.
+
+
+Lemma size_int_int_sg_0:
+  size_arguments int_int_sg = 0.
+Proof.
+  unfold size_arguments, int_int_sg, loc_arguments. replace Archi.ptr64 with true by reflexivity.
+  destruct Archi.win64; simpl;  reflexivity.
+Qed.
+
+(*inj_L @ LM simpler? cc_locset *)
 Theorem locset_mach:
   forward_simulation (cc_locset_mach @ (cc_mach inj))
                      (cc_locset_mach @ (cc_mach inj)) CL.BspecL BspecM.
@@ -629,11 +820,68 @@ Proof.
     econstructor. split. eauto.
     constructor; eauto. constructor. eauto.
   - (*external*)
-    
-    admit.
+    subst. intros. inv H. inv H0. inv H1. cbn in *. simpl.
+    eapply Genv.find_symbol_match in inj_stbls_match as SYMB'; eauto.
+    destruct SYMB' as [tb [A B]].
+    destruct w. cbn in *.
+    exists ((se,(lmw int_int_sg rs lmw_m gsp)),  (injw j0 (Mem.support lmw_m) (Mem.support tm))).
+    eexists.
+    repeat apply conj; eauto.
+    + (* at_external *)
+      constructor; eauto.
+    + (* match_query *)
+      exists (mq (Vptr g_fptr Ptrofs.zero) gsp gra rs lmw_m).
+      split.
+      econstructor; eauto. constructor.
+      red. rewrite size_int_int_sg_0. lia.
+      inv INCR.
+      constructor; cbn; eauto. congruence.
+      admit. admit. 
+    (*TODO: to be add in match_callstatef,
+      after making sure step_call can provide these conditions *)
+    + (*match_stbls*)
+      inv INCR. constructor; eauto. simpl.
+      eapply Genv.match_stbls_incr; eauto.
+      intros. exploit H7; eauto. intros [C D].
+      split; eauto.
+    + (* external *)
+      intros. inv H0.
+      destruct H as [midr [Hr1 Hr2]].
+      inv Hr1. destruct Hr2 as [w [Hw Hr2]]. inv Hw.
+      inv Hr2. cbn in *.
+      eexists. split.
+      (* after_external *)
+      econstructor; eauto.
+      apply argument_int_value in LS. generalize (RSINJ int_argument_mreg).
+      intro VINJ. rewrite LS in VINJ. inv VINJ. reflexivity.
+      admit. (*ok*)
+      {
+        clear -H6 H1 RSINJ.
+        intros. apply H6 in H.
+        (*seems wrong here, the callee_save_reg values in middle
+          can be Vundef, *)
+        admit.
+      }
+      {
+        inv H13.
+        constructor.
+        eauto.
+        intros. inv H. rewrite size_int_int_sg_0 in H4. extlia.
+        intros. inv H. rewrite size_int_int_sg_0 in H4. extlia.
+      }
+      constructor; eauto.
+      econstructor; eauto.
+      rewrite CL.loc_result_int in LS'. simpl in LS'.
+      rewrite <- LS'. admit.
+      simpl. constructor; eauto.
+      
   - (*step*)
     admit.
   - constructor. intros. inv H.
+Admitted.
+
+
+
 (*    
     
 
@@ -748,6 +996,8 @@ Proof.
 Qed.
 *)
 End LM.
+*)
+
 
 Module MA.
 Axiom not_win64 : Archi.win64 = false.
