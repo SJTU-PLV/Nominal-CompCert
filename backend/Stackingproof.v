@@ -1345,6 +1345,7 @@ Fixpoint stack_contents (j: meminj) (cs: list Linear.stackframe) (cs': list Mach
   match cs, cs' with
   | Linear.Stackbase ls :: nil, Mach.Stackbase _ ra :: nil =>
       contains_init_args (stk_sg w) j ls (stk_m2 w) (stk_sp2 w)
+(*      **  contains_init_sp_ra (stk_sg w) (stk_fsz2 w) (stk_m2 w) (stk_sp2 w) *)
   | Linear.Stackframe f _ ls c :: cs, Mach.Stackframe fb (Vptr sp' _) ra c' :: cs' =>
       frame_contents f j sp' ls (parent_locset cs) (parent_sp cs') (parent_ra cs')
       ** stack_contents j cs cs'

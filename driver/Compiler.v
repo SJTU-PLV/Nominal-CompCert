@@ -409,6 +409,16 @@ Require Import VAExtends.
 (*
 Definition cc_cklrs : callconv li_c li_c :=
   injp + inj + ext + vainj + vaext.
+
+CompCertO:
+
+locset m (stk_data)                locset (stk_data)                  locset (stk_data)
+
+cc_stacking (inj/injp)    --->    cc_locset_mach           -->        cc_locset_inj
+                                                                      locset (all_date)
+                                  cc_mach_inj              --->       cc_locset_mach
+
+Mach   m (all_data)                Mach (all_data)                  Mach(all_data)
 *)
 
 Definition cc_compcert : callconv li_c li_asm :=
@@ -427,7 +437,7 @@ Definition cc_compcert_cod : callconv li_c li_asm :=
 Definition cc_compcert_dom : callconv li_c li_asm :=
   cc_c injp @ wt_c @ lessdef_c @
        cc_c_locset @ cc_locset_mach @ cc_mach_asm.
-
+Search injp.
 Theorem cc_compcert_merge:
   forall p tp,
   forward_simulation cc_compcert_dom cc_compcert_cod (Clight.semantics1 p) (Asm.semantics tp) ->

@@ -1,25 +1,33 @@
 Require Import Coqlib Errors.
-Require Import AST Linking Values Events Globalenvs Memory Smallstep.
+Require Import AST Linking Smallstep Invariant CallconvAlgebra.
+Require Import Conventions Mach.
+
+Require Import Locations.
 
 Require Import LanguageInterface.
 Require Import Asm Asmrel.
 
 Require Import Integers.
+Require Import SymbolTable DemoB DemoBspec.
 
-Require Import SymbolTable DemoB.
+Require Import CallConv Compiler CA.
 
-(*
-  The specification of DemoB.prog in lts li_C -> li_C
- *)
+Require Import CKLRAlgebra Extends Inject InjectFootprint.
+
+Search wt_c.
+
+Module C_injp.
 
 Inductive state: Type :=
 | Callstateg
     (ai: int)
     (m: mem)
 | Callstatef
+    (sp: val)
     (aif: int)
     (m: mem)
 | Returnstatef
+    (sp: val)
     (aif: int)
     (rig: int)
     (m: mem)
@@ -27,8 +35,6 @@ Inductive state: Type :=
     (ri: int)
     (m: mem).
 
-Definition genv := Genv.t fundef unit.
-args_removed
 Section WITH_SE.
   Context (se: Genv.symtbl).
 
@@ -43,14 +49,17 @@ Inductive initial_state : query li_c -> state -> Prop :=
 
 Inductive at_external: state -> query li_c -> Prop :=
 | at_external_intro
-    g_fptr aif m
-    (FINDG: Genv.symbol_address se f_id Ptrofs.zero = Vptr g_fptr Ptrofs.zero ):
-    at_external (Callstatef aif m) (cq (Vptr g_fptr Ptrofs.zero) int_int_sg ((Vint (Int.sub aif Int.one)) :: nil) m).
+    g_fptr aif m sp
+    (VALID: valid_blockv (Mem.support m) sp)
+    (FINDG: Genv.symbol_address se f_id Ptrofs.zero = Vptr g_fptr Ptrofs.zero):
+    at_external (Callstatef sp aif m)
+                (cq (Vptr g_fptr Ptrofs.zero) int_int_sg ((Vint (Int.sub aif Int.one)) :: nil) m).
 
 Inductive after_external: state -> reply li_c -> state -> Prop :=
 | after_external_intro
-    aif ti m m':
-    after_external (Callstatef aif m) (cr (Vint ti) m') (Returnstatef aif ti m').
+    aif ti m m' sp
+    (UNCHANGE: Mem.unchanged_on (fun b _  => sp = Vptr b Ptrofs.zero) m m'):
+    after_external (Callstatef sp aif m) (cr (Vint ti) m') (Returnstatef sp aif ti m').
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_zero
@@ -64,12 +73,13 @@ Inductive step : state -> trace -> state -> Prop :=
     (LOAD1: Mem.loadv Mint32 m (Vptr b_mem (Ptrofs.repr 4)) = Some (Vint ti)):
       step (Callstateg i m) E0 (Returnstateg ti m)
 | step_call
-    i m i' b_mem
+    i m i' b_mem m' sb
     (NZERO: i.(Int.intval) <> 0%Z)
     (FINDM: Genv.symbol_address se _memoized Ptrofs.zero= Vptr b_mem Ptrofs.zero)
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
-    (NEQ: i <> i'):
-    step (Callstateg i m) E0 (Callstatef i m)
+    (NEQ: i <> i')
+    (ALLOC: Mem.alloc m 0 24 = (m',sb)):
+    step (Callstateg i m) E0 (Callstatef (Vptr sb Ptrofs.zero) i m')
 | step_return
     b_mem m m' m'' ti i
     (FINDM: Genv.symbol_address se _memoized Ptrofs.zero  = Vptr b_mem Ptrofs.zero)
@@ -101,4 +111,33 @@ Program Definition Bspec : Smallstep.semantics li_c li_c :=
      |}
    |}.
 
+End C_injp.
+Variable Bspec' : Smallstep.semantics li_c li_c.
 
+Axiom injp_protection : forward_simulation
+                          (cc_c injp) (cc_c injp) Bspec Bspec'.
+
+Variable self_wt : forward_simulation (wt_c @ lessdef_c) (wt_c @ lessdef_c) Bspec' Bspec'.
+
+Axiom CA : forward_simulation (cc_c_asm) (cc_c_asm) Bspec' (Asm.semantics DemoB.prog).
+
+
+Theorem Bproof :
+  forward_simulation cc_compcert cc_compcert Bspec (Asm.semantics DemoB.prog).
+Proof.
+  unfold cc_compcert.
+  rewrite <- (cc_compose_assoc wt_c lessdef_c) at 1.
+  rewrite <- (cc_compose_assoc wt_c lessdef_c).
+  eapply compose_forward_simulations.
+  eapply injp_protection.
+  eapply compose_forward_simulations.
+  eapply self_wt.
+  rewrite <- !(cc_compose_assoc) at 1.
+  eapply compose_forward_simulations.
+  rewrite cc_compose_assoc at 1.
+  rewrite cc_compose_assoc at 1.
+  rewrite <- cc_ca_cllmma at 1.
+  rewrite cc_cllmma_ca.
+  eapply CA.
+  eapply semantics_asm_rel; eauto.
+Qed.

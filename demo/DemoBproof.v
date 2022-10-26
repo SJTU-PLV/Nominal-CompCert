@@ -26,7 +26,7 @@ Inductive match_states' : state -> state -> Prop :=
      w = injpw f m1 m2 Hm ->
      match_states' (Callstateg i m1) (Callstateg i m2)
   |match_Callstatef_intro f m1 m2 Hm i:
-     w = injpw f m1 m2 Hm ->
+     w = injpw f m1 m2 Hm ->D
      match_states' (Callstatef i m1) (Callstatef i m2)
   |match_Returnstatef_intro f m1 m2 Hm i ti:
      injp_acc w (injpw f m1 m2 Hm) ->
