@@ -28,7 +28,7 @@ Inductive state: Type :=
     (m: mem).
 
 Definition genv := Genv.t fundef unit.
-args_removed
+
 Section WITH_SE.
   Context (se: Genv.symtbl).
 
