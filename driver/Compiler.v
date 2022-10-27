@@ -437,7 +437,7 @@ Definition cc_compcert_cod : callconv li_c li_asm :=
 Definition cc_compcert_dom : callconv li_c li_asm :=
   cc_c injp @ wt_c @ lessdef_c @
        cc_c_locset @ cc_locset_mach @ cc_mach_asm.
-Search injp.
+
 Theorem cc_compcert_merge:
   forall p tp,
   forward_simulation cc_compcert_dom cc_compcert_cod (Clight.semantics1 p) (Asm.semantics tp) ->
@@ -500,7 +500,7 @@ Lemma cc_compcert_collapse:
      cc_locset ext @                              (* Tunneling *)
      (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
      (cc_mach ext @ cc_mach_asm) @
-    cc_asm inj)                (* Asmgen *)
+    cc_asm inj)                                   (* Asmgen *)
     cc_compcert_dom.
 Proof.
   (* commute the cklrs towards source C level *)
@@ -537,7 +537,6 @@ Proof.
   rewrite injp_inj.
   reflexivity.
 Qed.
-
 
 (** To compose the early passes in a flexible and incremental way,
   we maintain a simulation convention of the form [cc_dom -->> cc_cod],

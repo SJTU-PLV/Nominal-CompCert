@@ -35,18 +35,18 @@ Section WITH_SE.
   
 Inductive initial_state (ge:genv) : query li_c -> state -> Prop :=
 | initial_state_intro
-    v args m i f
+    v args m i
 (*    (SYMB: Genv.symbol_address se g_id Ptrofs.zero = v)
     (FPTR: v = Vptr b Ptrofs.zero)
 *)
-    (FIND: Genv.find_funct ge v = Some (Internal f))
+    (FIND: Genv.find_funct ge v = Some (Internal func_g))
     (VS: args = (Vint i:: nil)):
     initial_state ge (cq v int_int_sg ((Vint i) :: nil) m) (Callstateg i m).
 
 Inductive at_external (ge:genv): state -> query li_c -> Prop :=
 | at_external_intro
-    aif m vf id sg
-    (FIND: Genv.find_funct ge vf = Some (External (EF_external id sg))):
+    aif m vf id
+    (FIND: Genv.find_funct ge vf = Some (External (EF_external id int_int_sg))):
     at_external ge (Callstatef vf aif m) (cq vf int_int_sg ((Vint (Int.sub aif Int.one)) :: nil) m).
 
 Inductive after_external: state -> reply li_c -> state -> Prop :=
@@ -71,6 +71,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (FINDM: Genv.symbol_address se _memoized Ptrofs.zero= Vptr b_mem Ptrofs.zero)
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
     (FINDF: Genv.symbol_address se f_id Ptrofs.zero = vf)
+    (VF: vf <> Vundef)
     (NEQ: i <> i'):
     step (Callstateg i m) E0 (Callstatef vf i m)
 | step_return

@@ -11,12 +11,9 @@ Require Import Integers.
 Require Import SymbolTable DemoB DemoBspec.
 
 Require Import CallConv Compiler CA.
-
 Require Import CKLRAlgebra Extends Inject InjectFootprint.
 
-(* forget it for now
-Search wt_c.
-*)
+Require Import Asmgenproof0.
 
 Section injp_CA.
 
@@ -39,14 +36,20 @@ Definition bx0 := rs0 RBX. (*only used callee_save register in this sample*)
 Inductive new_blockv (s:sup) : val -> Prop :=
   new_blockv_intro : forall b ofs, ~ sup_In b s -> new_blockv s (Vptr b ofs).
 
+Definition ge := Genv.globalenv se DemoB.prog.
+
 Inductive match_state_c_asm : state -> (sup * Asm.state) -> Prop :=
-  |match_ca_callg i m m2':
+  |match_ca_callg i m m2' b:
+     rs0 PC = Vptr b Ptrofs.zero ->
+     Genv.find_funct_ptr ge b = Some (Internal func_g) ->
      injp_match_mem injw m m2' ->
      args_removed sg sp0 m2 m2 ->
      rs0 RDI = Vint i ->
      match_state_c_asm (Callstateg i m) ((Mem.support m2),State rs0 m2 true)
   |match_ca_callf w' i m m2' tm (rs: regset) vfc sb:
      let sp := rs RSP in let ra := rs RA in let vf := rs PC in
+(*     rs RA = Vptr b Ptrofs.zero (*position after Pcall_s*) ->
+     Genv.find_funct_ptr ge b = Some (Internal func_g) -> *)
      injp_acc injw w' ->
      injp_match_mem w' m m2' ->
      rs RBX = Vint i ->
@@ -66,6 +69,8 @@ Inductive match_state_c_asm : state -> (sup * Asm.state) -> Prop :=
      match_state_c_asm (Callstatef vfc i m) ((Mem.support m2),State rs tm true)
   |match_ca_returnf w' m2' i rig m tm (rs: regset):
      let sp := rs RSP in
+(*     rs PC = Vptr b Ptrofs.zero (*position after Pcall_s*) ->
+     Genv.find_funct_ptr ge b = Some (Internal func_g) -> *)
      injp_acc injw w' ->
      injp_match_mem w' m m2' ->
      rs RBX = Vint i -> rs RAX = Vint rig ->
@@ -78,6 +83,8 @@ Inductive match_state_c_asm : state -> (sup * Asm.state) -> Prop :=
      Mem.sup_include (Mem.support m2) (Mem.support tm) -> (*unchanged_on of Outgoing*)
      match_state_c_asm (Returnstatef i rig m) ((Mem.support m2), State rs tm true)
   |match_ca_returng w' m2' m tm (rs: regset) ri:
+(*     rs PC = Vptr b Ptrofs.??? (*position after Pfreeframe*) ->
+     Genv.find_funct_ptr ge b = Some (Internal func_g) -> *)
      injp_acc injw w' ->
      injp_match_mem w' m m2' ->
      rs RAX = Vint ri ->
@@ -157,13 +164,18 @@ Proof.
   - (* initial *)
     intros q1 q3 s1 [q2 [Hq1 Hq2]] Hi1. inv Hi1.
     inv Hq1. inv Hq2. cbn in *. inv H7.
-    exists (Mem.support m2'0, State rs0 m2'0 true). repeat apply conj.
+    exists (Mem.support m2'0, State rs0 m2'0 true).
+    generalize  match_program_id. intro TRAN.
+    eapply Genv.find_funct_transf in TRAN; eauto.
+    2: inv H; eauto.
+    repeat apply conj.
     + econstructor; eauto.
-      generalize  match_program_id. intro TRAN.
-      eapply Genv.find_funct_transf in TRAN; eauto. inv H; eauto.
       inv H17. subst sp. congruence.
     + eauto.
-    + econstructor; cbn; eauto.
+    + subst vf. unfold Genv.find_funct in TRAN.
+      destruct (rs0 PC) eqn:HPC; try congruence. destruct Ptrofs.eq_dec; try congruence.
+      subst.
+      econstructor; cbn; eauto.
       constructor. red. rewrite size_int_int_sg_0. reflexivity.
       rewrite loc_arguments_int in H6. simpl in H6. inv H6. inv H3. reflexivity.
     + eauto.
@@ -248,12 +260,31 @@ Proof.
          ++ inversion H36. eauto with mem.
       -- reflexivity.
   - (*internal_steps*)
-    intros. inv H0; inv H1.
+    intros. inv H0; inv H1; inv H0;cbn in *.
     ++ (*step_zero*)
+      inv H3. inv H. cbn in *. cbn in H4. unfold ge in H4.
+      cbn in *.
+      (* eexists.
+      split. econstructor. *)
       
-      
+      set (c:= fn_code func_g).
+      assert (find_instr (Ptrofs.unsigned Ptrofs.zero) c = Some (Pallocframe 24 (Ptrofs.repr 16) Ptrofs.zero)).
+      reflexivity.
+      exploit exec_step_internal; eauto. instantiate (5:= Mem.support m2'0).
+      instantiate (4:= m2'0).
+      simpl. admit.
+      admit.
+    ++ (*step_read*)
+      admit.
+    ++ (*step_call*)
+      admit.
+    ++ (*step_return*)
+      admit.
+  - constructor. intros. inv H.
+Admitted.
 
 End injp_CA.
+(*
 Theorem Bproof :
   forward_simulation cc_compcert cc_compcert Bspec (Asm.semantics DemoB.prog).
 Proof.
