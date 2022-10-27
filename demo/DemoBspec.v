@@ -17,6 +17,7 @@ Inductive state: Type :=
     (ai: int)
     (m: mem)
 | Callstatef
+    (vf: val)
     (aif: int)
     (m: mem)
 | Returnstatef
@@ -31,26 +32,27 @@ Definition genv := Genv.t fundef unit.
 
 Section WITH_SE.
   Context (se: Genv.symtbl).
-
-Inductive initial_state : query li_c -> state -> Prop :=
+  
+Inductive initial_state (ge:genv) : query li_c -> state -> Prop :=
 | initial_state_intro
-    v args m b i
-    (SYMB: Genv.symbol_address se g_id Ptrofs.zero = v)
+    v args m i f
+(*    (SYMB: Genv.symbol_address se g_id Ptrofs.zero = v)
     (FPTR: v = Vptr b Ptrofs.zero)
-(*    (RANGE: 0 <= i.(Int.intval) < MAX) *)
+*)
+    (FIND: Genv.find_funct ge v = Some (Internal f))
     (VS: args = (Vint i:: nil)):
-    initial_state (cq v int_int_sg ((Vint i) :: nil) m) (Callstateg i m).
+    initial_state ge (cq v int_int_sg ((Vint i) :: nil) m) (Callstateg i m).
 
-Inductive at_external: state -> query li_c -> Prop :=
+Inductive at_external (ge:genv): state -> query li_c -> Prop :=
 | at_external_intro
-    g_fptr aif m
-    (FINDG: Genv.symbol_address se f_id Ptrofs.zero = Vptr g_fptr Ptrofs.zero ):
-    at_external (Callstatef aif m) (cq (Vptr g_fptr Ptrofs.zero) int_int_sg ((Vint (Int.sub aif Int.one)) :: nil) m).
+    aif m vf id sg
+    (FIND: Genv.find_funct ge vf = Some (External (EF_external id sg))):
+    at_external ge (Callstatef vf aif m) (cq vf int_int_sg ((Vint (Int.sub aif Int.one)) :: nil) m).
 
 Inductive after_external: state -> reply li_c -> state -> Prop :=
 | after_external_intro
-    aif ti m m':
-    after_external (Callstatef aif m) (cr (Vint ti) m') (Returnstatef aif ti m').
+    aif ti m m' vf:
+    after_external (Callstatef vf aif m) (cr (Vint ti) m') (Returnstatef aif ti m').
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_zero
@@ -64,12 +66,13 @@ Inductive step : state -> trace -> state -> Prop :=
     (LOAD1: Mem.loadv Mint32 m (Vptr b_mem (Ptrofs.repr 4)) = Some (Vint ti)):
       step (Callstateg i m) E0 (Returnstateg ti m)
 | step_call
-    i m i' b_mem
+    i m i' b_mem vf
     (NZERO: i.(Int.intval) <> 0%Z)
     (FINDM: Genv.symbol_address se _memoized Ptrofs.zero= Vptr b_mem Ptrofs.zero)
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
+    (FINDF: Genv.symbol_address se f_id Ptrofs.zero = vf)
     (NEQ: i <> i'):
-    step (Callstateg i m) E0 (Callstatef i m)
+    step (Callstateg i m) E0 (Callstatef vf i m)
 | step_return
     b_mem m m' m'' ti i
     (FINDM: Genv.symbol_address se _memoized Ptrofs.zero  = Vptr b_mem Ptrofs.zero)
