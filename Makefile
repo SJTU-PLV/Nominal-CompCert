@@ -113,9 +113,14 @@ BACKEND=\
   Mach.v \
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
-  TargetPrinterAux.v AsmLabelNew.v\
+  AsmLabelNew.v SymbolString.v CheckDef.v\
+  TargetPrinterAux.v\
+  PseudoInstructions.v\
+  AsmBuiltinInline.v\
+  AsmLiteral.v\
   
 # architecture dependent files (x86 and riscv)
+# TODO: AsmInject.v LocalLib.v
 
 X86 = \
   AsmRegs.v AsmFacts.v \
@@ -123,10 +128,10 @@ X86 = \
   RealAsm.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v \
   AsmBuiltinInline.v\
   AsmStructRet.v\
-  AsmFloatLiteral.v SymbolString.v\
+  AsmFloatLiteral.v \
   AsmPseudoInstr.v\
   Asmlabelgen.v\
-  LocalLib.v Jumptablegen.v CheckDef.v\
+  LocalLib.v Jumptablegen.v \
   SymbtablegenArchi.v SymbtablegenproofArchi.v\
   ReloctablesgenArchi.v ReloctablesgenproofArchi.v\
   RelocBinDecode.v RelocBingenproofArchi.v\
