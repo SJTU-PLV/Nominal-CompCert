@@ -283,8 +283,55 @@ Proof.
   inv H. congruence. inv H0. congruence.
 Qed.
 
+Lemma undef_regs_rax :
+  forall (rs:regset),
+    undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs RAX = rs RAX.
+Proof.
+  intros. rewrite undef_regs_other. reflexivity.
+  intros. destruct (preg_eq RAX r'). subst.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+Qed.
+
+Lemma undef_regs_rbx :
+  forall (rs:regset),
+    undef_regs (CR ZF :: CR CF :: CR PF :: CR SF :: CR OF :: nil) rs RBX = rs RBX.
+Proof.
+  intros. rewrite undef_regs_other. reflexivity.
+  intros. destruct (preg_eq RBX r'). subst.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+  inv H. congruence. inv H0. congruence.
+Qed.
+
+Lemma undef_regs_nil :
+  forall rs,
+    undef_regs nil rs = rs.
+Proof.
+  intros. reflexivity. Qed.
+
 Ltac Pgso := rewrite Pregmap.gso; try congruence.
 Ltac Pgss := rewrite Pregmap.gss.
+
+(*we can proof d = 0 by the representable property of f in a Mem.inject,
+ but this is strong enough here *)
+Lemma symbol_address_inject : forall ge tge f b ofs id,
+    Genv.match_stbls f ge tge ->
+    Genv.symbol_address ge id  ofs = Vptr b ofs ->
+    exists b' d, f b = Some (b',d) /\
+            Ptrofs.add ofs (Ptrofs.repr d) = ofs /\
+          Genv.symbol_address tge id ofs = Vptr b' ofs.
+Proof.
+  intros.
+  eapply Op.symbol_address_inject in H as H1. rewrite H0 in H1.
+  inv H1. unfold Genv.symbol_address in H4.
+  destruct Genv.find_symbol; try congruence.
+  inv H4.
+  exists b0, delta. intuition eauto.
+  rewrite !H3. eauto.
+  rewrite !H3. eauto.
+Qed.
 
 Lemma injp_CA_simulation: forward_simulation
                  (cc_c injp @ cc_c_asm)
@@ -297,6 +344,11 @@ Proof.
                          caw_sg (snd w) = int_int_sg).
   eapply forward_simulation_plus with (match_states := ms);
   destruct w as [[se [f ? ? Hm]] [sg rs0 m2'0]]; destruct Hse; subst; cbn in *; eauto.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+    (*
   -  (*valid_query*)
     intros. destruct H0 as [qm [Hq1 Hq2]]. inv Hq1. inv Hq2.
     simpl. cbn in *. subst vf.
@@ -399,85 +451,86 @@ Proof.
          ++ intros. rewrite H34. rewrite H23. eauto. eauto. apply H.
          ++ inversion H36. eauto with mem.
       -- reflexivity.
+  *)
   - (*internal_steps*)
-    intros. inv H0; inv H1; inv H0;cbn in *.
-    ++ inv H10. (*step_zero*)
+    Local Opaque undef_regs.
+    Ltac compute_pc := rewrite Ptrofs.add_unsigned;
+                       rewrite Ptrofs.unsigned_one; rewrite Ptrofs.unsigned_repr; try rlia; cbn.
+    Ltac find_instr := cbn; try rewrite Ptrofs.unsigned_repr; try rlia; cbn; reflexivity.
+    intros. inv H0; inv H1; inv H0; inv H10; cbn in *.
+    ++ (*step_zero*)
+
       subst sp ra.
       destruct (enter_fung_exec m2'0 rs0) as (m2'1 & m2'2 & m2'3 & m2'4 & m2'5 & sp &
                                               ALLOC & STORE1 & STORE2 & STORE3
                                              & LOAD1 & LOAD2 & LOAD3 & FREE & UNC); eauto.
-      inv H7.
+      inv H7. inv H11. 2: { rewrite size_int_int_sg_0 in H12. extlia. }
+      apply Mem.fresh_block_alloc in ALLOC as FRESH.
+      exploit Mem.alloc_right_inject; eauto. intro INJ1.
+      exploit Mem.store_outside_inject; eauto.
+      intros. inversion Hm1. eauto. intro INJ2.
+      exploit Mem.store_outside_inject; eauto.
+      intros. inversion Hm1. eauto. intro INJ3.
+      exploit Mem.store_outside_inject; eauto.
+      intros. inversion Hm1. eauto. intro INJ4.
+      exploit Mem.free_right_inject; eauto.
+      intros. inversion Hm1. eauto. intro INJ5.
       assert (exists s2': Asm.state,
-             plus (Asm.step (Mem.support m2'0)) (Genv.globalenv se2 prog) (State rs0 m2'0 true) E0 s2'
-             /\ ms (Returnstateg Int.zero m) (Mem.support m2'0, s2')).
+             plus (Asm.step (Mem.support m2')) (Genv.globalenv se2 prog) (State rs0 m2' true) E0 s2'
+             /\ ms (Returnstateg Int.zero m) (Mem.support m2', s2')).
       { 
         (*execution of Asm code*)
         eexists. split.
         - (*plus steps*)
           econstructor.
       (*Pallocframe*)
-      econstructor; eauto. unfold fn_code. cbn. rewrite Ptrofs.unsigned_zero. simpl.
-      reflexivity. simpl. rewrite ALLOC. rewrite Ptrofs.add_zero. rewrite STORE1.
+      econstructor; eauto.
+      find_instr. simpl.
+      rewrite ALLOC. rewrite Ptrofs.add_zero. rewrite STORE1.
       rewrite Ptrofs.add_zero_l. rewrite STORE2. unfold nextinstr.
-      rewrite !Pregmap.gso; try congruence. rewrite H8. simpl. rewrite Ptrofs.add_zero_l.
-      reflexivity.
+      repeat try Pgso. rewrite H8. cbn.
+      rewrite Ptrofs.add_zero_l. reflexivity.
       (*save RBX*)
       eapply star_step; eauto.
       econstructor; eauto. Simplif.
-      cbn. rewrite Ptrofs.unsigned_one. cbn. reflexivity.
-      simpl. replace Archi.ptr64 with true by reflexivity.
-      simpl. unfold exec_store. cbn. unfold eval_addrmode. replace Archi.ptr64 with true by reflexivity.
-      cbn. replace Archi.ptr64 with true by reflexivity.
+      find_instr.
+      simpl. Ap64.
+      simpl. unfold exec_store. cbn. rewrite undef_regs_nil.
+      unfold eval_addrmode. Ap64. cbn. Ap64.
       rewrite Ptrofs.add_zero_l. rewrite Int64.add_zero_l.
       unfold Ptrofs.of_int64.
       rewrite Int64.unsigned_repr.
       rewrite STORE3. unfold nextinstr_nf. unfold nextinstr.
-      rewrite undef_regs_pc.
-      rewrite Pregmap.gss.
-      Local Opaque undef_regs. simpl.
+      rewrite undef_regs_pc. Pgss. cbn.
       rewrite Ptrofs.add_unsigned. rewrite Ptrofs.unsigned_one. simpl.
       reflexivity. unfold Int64.max_unsigned. simpl. lia.
       (* move i from DI to BX*)
       eapply star_step; eauto.
-      econstructor; eauto. Simplifs.
-      cbn.
-      rewrite Ptrofs.unsigned_repr; try rlia. cbn. reflexivity.
-      simpl. rewrite !Pregmap.gso; try congruence.
-      rewrite undef_regs_rdi. rewrite !Pregmap.gso; try congruence.
-      unfold nextinstr. rewrite Pregmap.gso; try congruence. rewrite Pregmap.gss.
-      simpl. rewrite Ptrofs.add_unsigned. rewrite Ptrofs.unsigned_one.
-      rewrite Ptrofs.unsigned_repr. simpl. reflexivity. rlia.
+      econstructor; eauto. Simplifs. find_instr. simpl. repeat try Pgso.
+      rewrite undef_regs_rdi. repeat try Pgso.
+      unfold nextinstr. Pgso.  Pgss. cbn.
+      compute_pc. reflexivity.
       (* compare i = 0 ?*)
-      eapply star_step; eauto. econstructor; eauto. Simplifs.
-      cbn. rewrite Ptrofs.unsigned_repr; try rlia. cbn. reflexivity.
+      eapply star_step; eauto. econstructor; eauto. Simplifs. find_instr.
       simpl. Pgso. Pgss. rewrite H13. simpl.
       rewrite Int.and_idem. unfold Vzero.
-      unfold compare_ints. unfold nextinstr.
-      Pgso. Pgso. Pgso. Pgso. Pgso. Pgss. cbn. rewrite Ptrofs.add_unsigned.
-      rewrite Ptrofs.unsigned_one. rewrite Ptrofs.unsigned_repr; try rlia.
-      cbn.
-      reflexivity.
+      unfold compare_ints. unfold nextinstr. do 5 Pgso. Pgss.
+      cbn. compute_pc. reflexivity.
       (* test *)
-      eapply star_step; eauto. econstructor; eauto. Simplif.
-      cbn. rewrite Ptrofs.unsigned_repr; try rlia. cbn. reflexivity.
-      simpl. Pgso. Pgso. Pgso. Pgso. Pgso. Pgss.
+      eapply star_step; eauto. econstructor; eauto. Simplif. find_instr.
+      simpl. do 5 Pgso. Pgss.
       assert (Int.eq i Int.zero = true).
       unfold Int.eq. unfold zeq. rewrite Int.unsigned_zero.
       unfold Int.unsigned. rewrite ZERO. cbn. reflexivity.
-      rewrite H2. simpl.
+      rewrite H7. simpl.
       assert (FF: Int.eq Int.one Int.zero = false).
       unfold Int.eq. rewrite Int.unsigned_one. rewrite Int.unsigned_zero.
       cbn. reflexivity.
       rewrite FF.
       unfold nextinstr. Pgss. cbn.
-      Ltac compute_pc := rewrite Ptrofs.add_unsigned;
-      rewrite Ptrofs.unsigned_one; rewrite Ptrofs.unsigned_repr; try rlia; cbn.
       compute_pc. reflexivity.
       (* set RAX *)
-      eapply star_step; eauto. econstructor; eauto. Simplif.
-      Ltac find_instr := cbn; rewrite Ptrofs.unsigned_repr; try rlia; cbn; reflexivity.
-      find_instr.
-      simpl.
+      eapply star_step; eauto. econstructor; eauto. Simplif. find_instr. simpl.
       unfold nextinstr_nf, nextinstr. rewrite undef_regs_pc.
       Pgso. cbn. compute_pc. reflexivity.
       (* jmp *)
@@ -489,7 +542,7 @@ Proof.
       reflexivity.
       (* restore BX *)
       eapply star_step; eauto. econstructor; eauto. Simplif.
-      find_instr. simpl. replace Archi.ptr64 with true by reflexivity.
+      find_instr. simpl. Ap64.
       unfold exec_load. unfold eval_addrmode.
       Ap64. cbn. rewrite undef_regs_rsp. do 11 Pgso.
       rewrite undef_regs_rsp. Pgso. Pgss. rewrite Int64.add_zero_l.
@@ -512,17 +565,6 @@ Proof.
       rewrite pred_dec_true; eauto.
       apply star_refl. traceEq. traceEq.
       - constructor; eauto. cbn in *.
-        inv H11. 2:{ rewrite size_int_int_sg_0 in H12. extlia. }
-        apply Mem.fresh_block_alloc in ALLOC as FRESH.
-        exploit Mem.alloc_right_inject; eauto. intro INJ1.
-        exploit Mem.store_outside_inject; eauto.
-        intros. inversion Hm1. eauto. intro INJ2.
-        exploit Mem.store_outside_inject; eauto.
-        intros. inversion Hm1. eauto. intro INJ3.
-        exploit Mem.store_outside_inject; eauto.
-        intros. inversion Hm1. eauto. intro INJ4.
-        exploit Mem.free_right_inject; eauto.
-        intros. inversion Hm1. eauto. intro INJ5.
         econstructor. instantiate (1:= injpw f m m2'5 INJ5). all: eauto.
         + constructor; eauto. 
           -- red. intros. inversion UNC. eapply unchanged_on_perm; eauto.
@@ -535,19 +577,178 @@ Proof.
           cbn. repeat try Pgso; destruct r; cbn in *; try congruence; eauto.
         + cbn. inversion UNC. eauto.
       }
-      destruct H2 as [s2' [STEP MS]].
-      exists (Mem.support m2'0, s2'). intuition eauto.
-      revert STEP. generalize (Mem.support m2'0), (Genv.globalenv se1 prog); clear; intros.
-      pattern (State rs0 m2'0 true),E0,s2'. eapply plus_ind2; eauto; intros.
+      destruct H7 as [s2' [STEP MS]].
+      exists (Mem.support m2', s2'). intuition eauto.
+      revert STEP. generalize (Mem.support m2'), (Genv.globalenv se1 prog); clear; intros.
+      pattern (State rs0 m2' true),E0,s2'. eapply plus_ind2; eauto; intros.
       * apply plus_one; eauto.
       * eapply plus_trans; eauto.
         apply plus_one. auto.
-    ++
-      (*step_read*)
+    ++ (*step_read*)
+      subst sp ra.
+      destruct (enter_fung_exec m2'0 rs0) as (m2'1 & m2'2 & m2'3 & m2'4 & m2'5 & sp &
+                                              ALLOC & STORE1 & STORE2 & STORE3
+                                             & LOAD2 & LOAD3 & LOAD4 & FREE & UNC); eauto.
+      inv H7. inv H11. 2: { rewrite size_int_int_sg_0 in H12. extlia. }
+      apply Mem.fresh_block_alloc in ALLOC as FRESH.
+      exploit Mem.alloc_right_inject; eauto. intro INJ1.
+      exploit Mem.store_outside_inject; eauto.
+      intros. inversion Hm1. eauto. intro INJ2.
+      exploit Mem.store_outside_inject; eauto.
+      intros. inversion Hm1. eauto. intro INJ3.
+      exploit Mem.store_outside_inject; eauto.
+      intros. inversion Hm1. eauto. intro INJ4.
+      exploit Mem.free_right_inject; eauto.
+      intros. inversion Hm1. eauto. intro INJ5.
+      inv H.
+      eapply Genv.find_symbol_match in H12 as FINDM'; eauto.
+      destruct FINDM' as [b_mem' [VINJM FINDM']].
+      assert (exists s2': Asm.state,
+             plus (Asm.step (Mem.support m2')) (Genv.globalenv se2 prog) (State rs0 m2' true) E0 s2'
+             /\ ms (Returnstateg ti m) (Mem.support m2', s2')).
+      { 
+        (*execution of Asm code*)
+        eexists. split.
+        - (*plus steps*)
+          econstructor.
+      (*Pallocframe*)
+      econstructor; eauto.
+      find_instr. simpl.
+      rewrite ALLOC. rewrite Ptrofs.add_zero. rewrite STORE1.
+      rewrite Ptrofs.add_zero_l. rewrite STORE2. unfold nextinstr.
+      repeat try Pgso. rewrite H8. cbn.
+      rewrite Ptrofs.add_zero_l. reflexivity.
+      (*save RBX*)
+      eapply star_step; eauto.
+      econstructor; eauto. Simplif.
+      find_instr.
+      simpl. Ap64.
+      simpl. unfold exec_store. cbn. rewrite undef_regs_nil.
+      unfold eval_addrmode. Ap64. cbn. Ap64.
+      rewrite Ptrofs.add_zero_l. rewrite Int64.add_zero_l.
+      unfold Ptrofs.of_int64.
+      rewrite Int64.unsigned_repr.
+      rewrite STORE3. unfold nextinstr_nf. unfold nextinstr.
+      rewrite undef_regs_pc. Pgss. cbn.
+      rewrite Ptrofs.add_unsigned. rewrite Ptrofs.unsigned_one. simpl.
+      reflexivity. unfold Int64.max_unsigned. simpl. lia.
+      (* move i from DI to BX*)
+      eapply star_step; eauto.
+      econstructor; eauto. Simplifs. find_instr. simpl. repeat try Pgso.
+      rewrite undef_regs_rdi. repeat try Pgso.
+      unfold nextinstr. Pgso.  Pgss. cbn.
+      compute_pc. reflexivity.
+      (* compare i = 0 ?*)
+      eapply star_step; eauto. econstructor; eauto. Simplifs. find_instr.
+      simpl. Pgso. Pgss. rewrite H13. simpl.
+      rewrite Int.and_idem. unfold Vzero.
+      unfold compare_ints. unfold nextinstr. do 5 Pgso. Pgss.
+      cbn. compute_pc. reflexivity.
+      (* test *)
+      eapply star_step; eauto. econstructor; eauto. Simplif. find_instr.
+      simpl. do 5 Pgso. Pgss.
+      assert (FF: Int.eq i Int.zero = false).
+      unfold Int.eq. unfold zeq. rewrite Int.unsigned_zero.
+      unfold Int.unsigned. rewrite pred_dec_false. reflexivity. eauto.
+      rewrite FF. simpl.
+      assert (TT: Int.eq Int.zero Int.zero = true).
+      unfold Int.eq. rewrite !Int.unsigned_zero.
+      cbn. reflexivity.
+      rewrite TT.
+      unfold goto_label. cbn. unfold lb0,lb1, lb2.
+      rewrite pred_dec_true; try congruence.
+      reflexivity.
+      (* read mem[0] value *)
+      eapply star_step; eauto. econstructor; eauto. Simplif. find_instr. simpl.
+      unfold exec_load. unfold Mem.loadv. unfold eval_addrmode. Ap64. cbn.
+      unfold Genv.symbol_address in *. rewrite FINDM'. Ap64.
+      rewrite Ptrofs.add_zero_l.
+      unfold Ptrofs.of_int64. rewrite Int64.unsigned_zero.
+      exploit Mem.load_inject. apply INJ4. apply LOAD0. eauto. eauto.
+      intros [v2' [LOAD0' INJV2]]. inv INJV2. rewrite Z.add_0_r in LOAD0'.
+      fold Ptrofs.zero. rewrite LOAD0'.
+      unfold nextinstr_nf, nextinstr. rewrite undef_regs_pc. Pgso. Pgss.
+      cbn. compute_pc. reflexivity.
+      (* compare i and mem[0] *)
+      eapply star_step; eauto. econstructor; eauto. Simplif. find_instr. simpl.
+      repeat try Pgso. rewrite undef_regs_rbx. do 9 Pgso. Pgss.
+      rewrite undef_regs_rax. Pgss.
+      unfold compare_ints. unfold nextinstr. do 5 Pgso. Pgss.
+      cbn. compute_pc. reflexivity.
+      (* test *)
+      eapply star_step; eauto. econstructor; eauto. Simplif. find_instr.
+      unfold Int.eq. cbn. unfold Int.unsigned. rewrite pred_dec_true; eauto. cbn.
+      unfold Int.eq. rewrite Int.unsigned_one. cbn.
+      unfold goto_label. cbn. unfold lb0,lb1,lb2.
+      rewrite pred_dec_false; try congruence.
+      rewrite pred_dec_true; try congruence.
+      reflexivity.
+      (* read ti *)
+      eapply star_step; eauto. econstructor; eauto. Simplif. find_instr. simpl.
+      unfold exec_load. unfold Mem.loadv. unfold eval_addrmode. Ap64. cbn.
+      unfold Genv.symbol_address in *. rewrite FINDM'. Ap64.
+      unfold Ptrofs.of_int64. rewrite Int64.unsigned_zero.
+      rewrite !Ptrofs.add_zero.
+      exploit Mem.load_inject. apply INJ4. apply LOAD1. eauto. eauto.
+      intros [v2' [LOAD1' INJV2]]. inv INJV2. rewrite Z.add_0_r in LOAD1'.
+      rewrite LOAD1'.
+      unfold nextinstr_nf, nextinstr. rewrite undef_regs_pc. Pgso. Pgss.
+      cbn. compute_pc. reflexivity.
+      (* label *)
+      eapply star_step; eauto. econstructor; eauto. Simplif. find_instr. simpl.
+      unfold nextinstr. cbn. compute_pc. reflexivity.
+      (* restore BX *)
+      eapply star_step; eauto. econstructor; eauto. Simplif.
+      find_instr. simpl. Ap64.
+      unfold exec_load. unfold eval_addrmode.
+      Ap64. cbn. rewrite undef_regs_rsp. repeat try Pgso.
+      rewrite undef_regs_rsp. repeat try Pgso. rewrite undef_regs_rsp.
+      Pgso. Pgss. cbn. Ap64. cbn.
+      rewrite Int64.add_zero_l.
+      cbn. rewrite Ptrofs.add_zero_l. unfold Ptrofs.of_int64.
+      rewrite Int64.unsigned_repr.
+      rewrite LOAD2.
+      unfold nextinstr_nf, nextinstr. rewrite undef_regs_pc. Pgso.
+      Pgss. cbn. compute_pc. reflexivity. cbn. lia.
+      (* Pfreeframe *)
+      eapply star_step; eauto. econstructor; eauto. Simplif.
+      find_instr. simpl. cbn. unfold Mem.loadv. rewrite undef_regs_rsp.
+      do 3 Pgso. rewrite undef_regs_rsp. repeat try Pgso. rewrite undef_regs_rsp.
+      repeat try Pgso. rewrite undef_regs_rsp.
+      Pgso. Pgss. cbn. rewrite Ptrofs.add_zero_l.
+      rewrite LOAD3. rewrite Ptrofs.add_zero_l.
+      rewrite LOAD4. Plia. cbn. rewrite FREE.
+      unfold nextinstr. cbn. compute_pc.
+      reflexivity.
+      (* Pret *)
+      eapply star_step; eauto. econstructor; eauto. Simplif.
+      find_instr. simpl. cbn. unfold inner_sp. rewrite <- H0.
+      rewrite pred_dec_true; eauto.
+      apply star_refl. traceEq.
+      - constructor; eauto. cbn in *.
+        econstructor. instantiate (1:= injpw f m m2'5 INJ5). all: eauto.
+        + constructor; eauto. 
+          -- red. intros. inversion UNC. eapply unchanged_on_perm; eauto.
+          -- eauto with mem.
+          -- eapply Mem.unchanged_on_implies; eauto.
+             intros. cbn. eauto.
+          -- red. intros. congruence.
+        + eauto with mem.
+        + intros.
+          cbn. repeat try Pgso; destruct r; cbn in *; try congruence; eauto.
+        + cbn. inversion UNC. eauto.
+      }
+      destruct H as [s2' [STEP MS]].
+      exists (Mem.support m2', s2'). intuition eauto.
+      revert STEP. generalize (Mem.support m2'), (Genv.globalenv se1 prog); clear; intros.
+      pattern (State rs0 m2' true),E0,s2'. eapply plus_ind2; eauto; intros.
+      * apply plus_one; eauto.
+      * eapply plus_trans; eauto.
+        apply plus_one. auto.
+   ++ (* step_call *)
+ 
       admit.
-    ++ (*step_call*)
-      admit.
-    ++ (*step_return*)
+   ++ (*step_return*)
       admit.
   - constructor. intros. inv H.
 Admitted.

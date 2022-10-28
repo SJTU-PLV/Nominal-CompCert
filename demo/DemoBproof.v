@@ -98,13 +98,12 @@ Proof.
       inv FINDM.
       eapply Genv.find_symbol_match in H2; eauto.
       destruct H2 as [b' [VINJ FINDM']].
-      exploit Mem.loadv_inject. 2: eapply LOAD1. all: eauto.
+      exploit Mem.loadv_inject. 2: eapply LOAD0. all: eauto.
       intros [v0 [LOAD0' VINJ0]]. inv VINJ0.
       exploit Mem.loadv_inject; eauto.
       intros [v1 [LOAD1' VINJ1]]. inv VINJ1.
       split.
-      econstructor; eauto. unfold Genv.symbol_address.
-      rewrite FINDM'. reflexivity.
+      econstructor; eauto.
       econstructor; eauto. reflexivity.
     + (* call *)
       inv Hse.
@@ -114,18 +113,19 @@ Proof.
       unfold Genv.symbol_address in FINDM.
       destruct Genv.find_symbol eqn:FIND; try congruence.
       inv FINDM.
+      unfold Genv.symbol_address in VF.
+      destruct (Genv.find_symbol se1 f_id) eqn:FINDF; try congruence.
       eapply Genv.find_symbol_match in H2 as F; eauto.
       destruct F as [b' [VINJ FINDM']].
+      eapply Genv.find_symbol_match in H2 as F. 2: apply FIND.
+      destruct F as [b_mem' [VINJ' FIND']].
       exploit Mem.loadv_inject. 2: eapply LOAD0. all: eauto.
       intros [v0 [LOAD0' VINJ0]]. inv VINJ0.
       exists (Callstatef (Genv.symbol_address se2 f_id Ptrofs.zero) i m2).
       split.
       econstructor; eauto.
-      unfold Genv.symbol_address. rewrite FINDM'. eauto.
-      unfold Genv.symbol_address in *.
-      destruct (Genv.find_symbol se1 f_id); try congruence.
-      destruct (Genv.find_symbol se2 f_id); try congruence. inv VVF.
-      econstructor; eauto.
+      unfold Genv.symbol_address. rewrite FINDM'. congruence.
+      econstructor; eauto. unfold Genv.symbol_address. rewrite FINDF. congruence.
     + (* return *)
       destruct w as [f0 m1'0 m2'0 Hm0].
       inv Hse. inv H1. rename m' into m1'1. rename m'' into m1'2.

@@ -60,19 +60,21 @@ Inductive step : state -> trace -> state -> Prop :=
     (ZERO: i.(Int.intval) = 0%Z):
     step (Callstateg i m) E0 (Returnstateg (Int.zero) m)
 | step_read
-    i b_mem m ti
+    i b_mem m ti i'
     (NZERO: i.(Int.intval) <> 0%Z)
-    (FINDM: Genv.symbol_address se _memoized (Ptrofs.repr 4) = Vptr b_mem (Ptrofs.repr 4))
+    (EQ: i.(Int.intval) = i'.(Int.intval))
+    (FINDM: Genv.find_symbol se _memoized = (Some b_mem))
+    (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
     (LOAD1: Mem.loadv Mint32 m (Vptr b_mem (Ptrofs.repr 4)) = Some (Vint ti)):
       step (Callstateg i m) E0 (Returnstateg ti m)
 | step_call
     i m i' b_mem vf
     (NZERO: i.(Int.intval) <> 0%Z)
-    (FINDM: Genv.symbol_address se _memoized Ptrofs.zero= Vptr b_mem Ptrofs.zero)
+    (FINDM: Genv.find_symbol se _memoized = (Some b_mem))
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
     (FINDF: Genv.symbol_address se f_id Ptrofs.zero = vf)
     (VF: vf <> Vundef)
-    (NEQ: i <> i'):
+    (NEQ: i.(Int.intval) <> i'.(Int.intval)):
     step (Callstateg i m) E0 (Callstatef vf i m)
 | step_return
     b_mem m m' m'' ti i
