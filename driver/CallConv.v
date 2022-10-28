@@ -414,8 +414,17 @@ Proof.
     * exists wR'. split; auto. constructor; eauto.
       eapply Mem.val_inject_lessdef_compose; eauto.
 Qed.
-
-
+(*
+Theorem commut_wt_c_reverse (R:cklr):
+  ccref (R @ wt_c @ lessdef_c) (R @ (wt_c @ lessdef_c) @ R).
+Proof.
+  rewrite cc_compose_assoc. rewrite lessdef_c_cklr.
+  intros w se1 se2 q1 q4 Hse Hq.
+  destruct w as [[se wR] [[se' [se'' sg]] d]]. inv Hse. cbn in H.
+  inv H0. inv H1. inv H0. destruct d.
+  destruct Hq as [q2 [Hq1 [q3 [Hq2 Hq3]]]]. inv Hq2.
+  exists ()
+*)
 (** ** Locset-level typing constraints *)
 
 Inductive lessdef_loc_mq sg: locset_query -> locset_query -> Prop :=
