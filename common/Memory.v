@@ -4917,6 +4917,45 @@ Proof.
     rewrite !NMap.gso; eauto.
 Qed.
 
+Lemma free_mapped_unchanged_on : forall m1 b lo hi m2 n1,
+           unchanged_on m1 m2 ->
+           (forall ofs, P b ofs) ->
+           free m1 b lo hi = Some n1 ->
+           exists n2, free m2 b lo hi = Some n2
+                 /\ unchanged_on n1 n2.
+Proof.
+  intros m1 b lo hi m2 n1 UNC1 HP FREE1.
+  assert ({n2| free m2 b lo hi  = Some n2}).
+  { apply range_perm_free.
+    apply free_range_perm in FREE1 as RANGE1.
+    red. red in RANGE1.
+    intros.
+    inversion UNC1.
+    eapply unchanged_on_perm0; eauto.
+    eapply perm_valid_block. eapply RANGE1. instantiate (1:= ofs). lia.
+  }
+  destruct X as [n2 FREE2].
+  apply support_free in FREE1 as SUP1. apply support_free in FREE2 as SUP2.
+  exists n2. split. auto. inversion UNC1.
+  constructor.
+  - rewrite SUP1, SUP2. eauto.
+  - intros.
+    apply free_result in FREE1. apply free_result in FREE2.
+    subst. unfold perm. cbn.
+    destruct (eq_block b0 b); auto.
+    + (*same block*) subst.
+       rewrite !NMap.gss.
+      destruct (zle lo ofs); destruct (zle hi ofs); auto.
+      -- rewrite !setpermN_outside; try lia. eauto.
+      -- rewrite !setpermN_inside; try lia. reflexivity.
+      -- rewrite !setpermN_outside; try lia. eauto.
+      -- rewrite !setpermN_outside; try lia. eauto.
+    + rewrite !NMap.gso; eauto.
+  - intros. apply free_result in FREE1 as RES1. apply free_result in FREE2.
+    subst. simpl. eapply unchanged_on_contents0; eauto.
+    eapply Mem.perm_free_3; eauto.
+Qed.
+
 End UNCHANGED_ON.
 
 Lemma unchanged_on_implies:
