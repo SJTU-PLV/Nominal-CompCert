@@ -347,7 +347,24 @@ Inductive instruction : Type :=
   | Pbtbl   (r: ireg)  (tbl: list label)            (**r N-way branch through a jump table *)
   | Pbuiltin: external_function -> list (builtin_arg preg)
               -> builtin_res preg -> instruction    (**r built-in function (pseudo) *)
-  | Pnop : instruction.                             (**r nop instruction *)
+  | Pnop : instruction                             (**r nop instruction *)
+
+  (** Some realistic instruction outputed by target printer *)
+  | Pauipc (imm: ident + Z)                       (**r add upper 20 bit immediate to pc *)
+  | Plui_s (id: ident)                            (**r load the high part of the address of a symbol, which is the same as Ploadsymbol_high *)
+  | Paddi_s (rd:ireg) (rs:ireg0) (id: ident)      (**r add the low 12 bit of ident with rs to rd *)
+
+  (** unconditional jump to immediate instead of symbol *)
+  | Pjal_ofs (rd: ireg0) (ofs: Z)      (**r relative jump to PC + ofs, store PC + 4 to rd *)
+  | Pjal_rr (rd: ireg0) (rs: ireg)
+          
+  (** conditional branches *)
+  | Pbeq_ofs  (rs1 rs2: ireg0) (ofs: Z) 
+  | Pbne_ofs  (rs1 rs2: ireg0) (ofs: Z)
+  | Pblt_ofs  (rs1 rs2: ireg0) (ofs: Z)
+  | Pbltu_ofs (rs1 rs2: ireg0) (ofs: Z)
+  | Pbge_ofs (rs1 rs2: ireg0) (ofs:  Z)
+  | Pbgeu_ofs (rs1 rs2: ireg0) (ofs: Z).   
 
 
 (** The pseudo-instructions are the following:
@@ -1059,6 +1076,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pfnmaddd _ _ _ _
   | Pfnmsubd _ _ _ _
   | Pnop
+  | _
     => Stuck
   end.
 
