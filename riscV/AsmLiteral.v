@@ -18,24 +18,17 @@ Definition transf_instr i : (list instruction) * option (ident * globdef fundef 
       (* follow Asm.v Ploadli >> lui ++ ld *)
       (*  lui x31, %hi(lbl)
         ld rd, %lo(lbl  )(x31)  *)
-      ([Ploadsymbol_high X31 id (Ptrofs.zero); Pld rd X31 (Ofslow id (Ptrofs.zero))], Some (id,def))
+      ([Plui_s X31 id 0; Pld rd X31 (Ofslow id (Ptrofs.zero))], Some (id,def))
   | Ploadfi rd f =>
       let id := create_float_literal_ident tt in
       let var := mkglobvar tt [Init_float64 f] true false in
       let def := Gvar var in
-      ([Ploadsymbol_high X31 id (Ptrofs.zero); Pfld rd X31 (Ofslow id (Ptrofs.zero))], Some (id,def))
+      ([Plui_s X31 id 0; Pfld rd X31 (Ofslow id (Ptrofs.zero))], Some (id,def))
   | Ploadsi rd f =>
       let id := create_float_literal_ident tt in
       let var := mkglobvar tt [Init_float32 f] true false in
       let def := Gvar var in
-      ([Ploadsymbol_high X31 id (Ptrofs.zero); Pfls rd X31 (Ofslow id (Ptrofs.zero))], Some (id,def))
-  | Ploadsymbol rd id ofs =>
-      (* not consider :  Archi.pic_code *)
-      (* I think it is necessary to check the 20-bit bounds for ofs when generating reocation entry for Ploadsymbol_high *)
-      (* HACKING!!!! Since addi use an int value, we can not place a symbol in addi instruction. I use Ploadsymbol to represent the addi here, which is transformed to addi in relocation table generation *)
-      (* We expand Ploadsymbol here because the id_eliminate in assembler is one to one *)
-      (* A more flexible choice is to define a new instruction *)
-      ([Ploadsymbol_high rd id ofs; Ploadsymbol rd id ofs], None)
+      ([Plui_s X31 id 0; Pfls rd X31 (Ofslow id (Ptrofs.zero))], Some (id,def))
   | _ =>
       ([],None)
   end.
