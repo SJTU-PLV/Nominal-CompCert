@@ -350,8 +350,8 @@ Inductive instruction : Type :=
   | Pnop : instruction                             (**r nop instruction *)
 
   (** Some realistic instruction outputed by target printer *)
-  | Pauipc (imm: ident + Z)                       (**r add upper 20 bit immediate to pc *)
-  | Plui_s (id: ident)                            (**r load the high part of the address of a symbol, which is the same as Ploadsymbol_high *)
+  (* | Pauipc (imm: ident + Z)                       (**r add upper 20 bit immediate to pc *) *)
+  | Plui_s (rd: ireg) (id: ident) (ofs: Z)        (**r load the high part of the address of a symbol, which is the same as Ploadsymbol_high *)
   | Paddi_s (rd:ireg) (rs:ireg0) (id: ident)      (**r add the low 12 bit of ident with rs to rd *)
 
   (** unconditional jump to immediate instead of symbol *)
