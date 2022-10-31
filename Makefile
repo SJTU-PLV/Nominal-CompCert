@@ -118,6 +118,7 @@ BACKEND=\
   PseudoInstructions.v\
   AsmBuiltinInline.v\
   AsmLiteral.v\
+  Asmlabelgen.v\
   
 # architecture dependent files (x86 and riscv)
 # TODO: AsmInject.v LocalLib.v

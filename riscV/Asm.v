@@ -364,7 +364,8 @@ Inductive instruction : Type :=
   | Pblt_ofs  (rs1 rs2: ireg0) (ofs: Z)
   | Pbltu_ofs (rs1 rs2: ireg0) (ofs: Z)
   | Pbge_ofs (rs1 rs2: ireg0) (ofs:  Z)
-  | Pbgeu_ofs (rs1 rs2: ireg0) (ofs: Z).   
+  | Pbgeu_ofs (rs1 rs2: ireg0) (ofs: Z)
+  | Pbtbl_ofs (r:ireg) (ofsLst: list Z).
 
 
 (** The pseudo-instructions are the following:
