@@ -121,8 +121,9 @@ Definition transl_instr (i: instruction) (ofs: Z) (code:code) : res instruction 
     end
 
   | Pbtbl rs tbl =>
-    do lst <-  findAllLabel tbl code;
-    let ofsLst := map (Z.add (-( sz + ofs))) lst in
+    (* ofsLst is the relative address of the start of the current function *)
+    do ofsLst <-  findAllLabel tbl code;
+    (* let ofsLst := map (Z.add (-( sz + ofs))) lst in *)
     OK (Pbtbl_ofs rs ofsLst)
 
   | Plabel lbl => OK Pnop

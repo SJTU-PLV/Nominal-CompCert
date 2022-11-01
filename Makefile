@@ -119,6 +119,7 @@ BACKEND=\
   AsmBuiltinInline.v\
   AsmLiteral.v\
   Asmlabelgen.v\
+  Jumptablegen.v\
   
 # architecture dependent files (x86 and riscv)
 # TODO: AsmInject.v LocalLib.v

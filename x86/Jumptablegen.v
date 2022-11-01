@@ -42,6 +42,7 @@ Definition transl_instr (i: instruction) (ofs:Z) :
     let initdataLst := map (labelofstoInitdata fid) addrLst in
     let def := mkglobvar tt initdataLst true false in
     let disp := (id, Ptrofs.repr(0)) in
+    (* unnecessary to distinguish ptr64 *)
     let lblMem := if Archi.ptr64 then  (Addrmode None (Some(r,8)) (inr disp)) else (Addrmode None (Some(r,4)) (inr disp)) in
     let i' := Pjmp_m lblMem in
     (i', Some (id, Gvar def))
