@@ -2326,6 +2326,21 @@ Proof.
   auto. auto. auto.
 Qed.
 
+Theorem perm_free_4:
+  forall b ofs k p,
+    perm m2 b ofs k p -> b <> bf \/ ofs < lo \/ hi <= ofs.
+Proof.
+  intros until p.
+  rewrite free_result. unfold perm, unchecked_free; simpl.
+  rewrite NMap.gsspec. destruct (NMap.elt_eq b bf). subst b.
+  - 
+  rewrite setpermN_inv.
+  destruct (zle lo ofs); simpl.
+  destruct (zlt ofs hi); simpl. tauto.
+  intros. lia. intros. lia.
+  - intros. left.  auto.
+Qed.
+
 Theorem perm_free_inv:
   forall b ofs k p,
   perm m1 b ofs k p ->
@@ -4842,6 +4857,23 @@ Proof.
   simpl. auto.
 Qed.
 
+Lemma free_unchanged_on':
+  forall m b lo hi m',
+  free m b lo hi = Some m' ->
+  (forall i, lo <= i < hi -> ~ P b i) ->
+  unchanged_on m' m.
+Proof.
+  intros; constructor; intros.
+- rewrite (support_free _ _ _ _ _ H). apply sup_include_refl.
+- split; intros.
+  eapply perm_free_3; eauto.
+  eapply perm_free_1; eauto.
+  destruct (eq_block b0 b); auto. destruct (zlt ofs lo); auto. destruct (zle hi ofs); auto.
+  subst b0. elim (H0 ofs). lia. auto.
+- unfold free in H. destruct (range_perm_dec m b lo hi Cur Freeable); inv H.
+  simpl. auto.
+Qed.
+
 Lemma drop_perm_unchanged_on:
   forall m b lo hi p m',
   drop_perm m b lo hi p = Some m' ->
@@ -4919,7 +4951,7 @@ Qed.
 
 Lemma free_mapped_unchanged_on : forall m1 b lo hi m2 n1,
            unchanged_on m1 m2 ->
-           (forall ofs, P b ofs) ->
+           (forall ofs, lo <= ofs < hi -> P b ofs) ->
            free m1 b lo hi = Some n1 ->
            exists n2, free m2 b lo hi = Some n2
                  /\ unchanged_on n1 n2.

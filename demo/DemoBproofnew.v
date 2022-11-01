@@ -1133,8 +1133,16 @@ Proof.
   - constructor. intros. inv H.
 Qed.
 
-
 End injp_CA.
+
+Lemma CAinjp_sim:
+  forward_simulation cc_c_asm_injp cc_c_asm_injp Bspec (Asm.semantics DemoB.prog).
+Proof.
+  rewrite cc_cainjp__injp_ca at 2.
+  rewrite <- cc_injpca_cainjp.
+  eapply injp_CA_simulation.
+Qed.
+
 (*
 Theorem Bproof :
   forward_simulation cc_compcert cc_compcert Bspec (Asm.semantics DemoB.prog).

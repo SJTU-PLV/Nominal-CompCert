@@ -216,51 +216,6 @@ Proof.
 Qed.
 
 End WT_C.
-(*
-Module CL.
-
-Definition int_loc_arguments := loc_arguments int_int_sg.
-
-Definition int_loc_argument := if Archi.ptr64 then (if Archi.win64 then (R CX) else (R DI))
-                                          else S Outgoing 0 Tint.
-Lemma loc_result_int:
- loc_result int_int_sg = One AX.
-Proof.
-  intros. unfold int_int_sg, loc_result.
-  replace Archi.ptr64 with true by reflexivity.
-  reflexivity.
-Qed.
-
-Lemma ls_result_int:
-  forall ls, Locmap.getpair (map_rpair R (loc_result int_int_sg)) ls = ls (R AX).
-Proof.
-  intros. rewrite loc_result_int. reflexivity.
-Qed.
-
-Definition int_loc_result' : rpair mreg := loc_result int_int_sg.
-(* Compute int_loc_result. One AX *)
-
-Definition int_loc_result : loc := R AX.
-
-Definition loc_int_loc (i: int) (l : loc): Locmap.t :=
-  fun loc => if Loc.eq loc l  then (Vint i) else Vundef.
-*)
-(*
-Theorem Bproof :
-  forward_simulation cc_compcert cc_compcert Bspec (Asm.semantics DemoB.prog).
-Proof.
-  unfold cc_compcert.
-  rewrite <- (cc_compose_assoc wt_c lessdef_c) at 1.
-  rewrite <- (cc_compose_assoc wt_c lessdef_c).
-  eapply compose_forward_simulations.
-  eapply self_simulation_C.
-  eapply compose_forward_simulations.
-  eapply self_simulation_wt.
-  repeat eapply compose_forward_simulations.
-  eapply CL.c_locset. eapply LM.locset_mach. eapply mach_asm.
-  eapply semantics_asm_rel; eauto.
-Qed.
-*)
 
 
 

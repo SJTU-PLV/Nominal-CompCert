@@ -35,11 +35,12 @@ Qed.
 
 End Preservation.
 
+(*
 Theorem compile_A_success :
   exists tprog,
   transf_clight_program DemoA.prog = OK tprog.
 Proof.
-  Admitted.
+*)
 (*
 Section Preservation2.
 
