@@ -32,6 +32,7 @@ Require Import Asmrel.
 Require Import ValueAnalysis.
 Require Import Conventions.
 Require Import CallConv.
+Require Import CA.
 
 (** Languages (syntax and semantics). *)
 Require Ctypes Csyntax Csem Cstrategy (*Cexec*).
@@ -406,22 +407,17 @@ Require Import VAExtends.
 
 (** This is the simulation convention for the whole compiler. *)
 
+
 (*
-Definition cc_cklrs : callconv li_c li_c :=
-  injp + inj + ext + vainj + vaext.
+Definition cc_compcert : callconv li_c li_asm :=
 
-CompCertO:
+     wt_c @ lessdef_c @
+     cc_c_asm_injp @
+     cc_asm injp
 
-locset m (stk_data)                locset (stk_data)                  locset (stk_data)
-
-cc_stacking (inj/injp)    --->    cc_locset_mach           -->        cc_locset_inj
-                                                                      locset (all_date)
-                                  cc_mach_inj              --->       cc_locset_mach
-
-Mach   m (all_data)                Mach (all_data)                  Mach(all_data)
 *)
 
-Definition cc_compcert : callconv li_c li_asm :=
+Definition cc_compcert' : callconv li_c li_asm :=
   cc_c injp @ wt_c @ lessdef_c @
        cc_c_locset @ cc_locset_mach @ cc_mach_asm @ cc_asm inj.
 
@@ -438,21 +434,54 @@ Definition cc_compcert_dom : callconv li_c li_asm :=
   cc_c injp @ wt_c @ lessdef_c @
        cc_c_locset @ cc_locset_mach @ cc_mach_asm.
 
+Definition cc_compcert : callconv li_c li_asm :=
+       wt_c @
+       cc_c_asm_injp @
+       cc_asm inj.
+
+Theorem ccc': cceqv cc_compcert cc_compcert'.
+  split.
+  - unfold cc_compcert.
+    rewrite cc_cainjp__injp_ca.
+    rewrite <- cc_compose_assoc.
+    rewrite cc_ca_cllmma.
+    rewrite <- lessdef_c_cklr.
+    rewrite !cc_compose_assoc.
+    rewrite <- cc_compose_assoc.
+    rewrite (commute_around (wt_c @ lessdef_c)), cc_compose_assoc. reflexivity.
+  - unfold cc_compcert'.
+    rewrite <- cc_compose_assoc.
+    rewrite <- cc_compose_assoc.
+    rewrite (cc_compose_assoc injp).
+    rewrite wt_c_injp_refinement.
+    rewrite !cc_compose_assoc.
+    rewrite <- (cc_compose_assoc lessdef_c).
+    rewrite lessdef_c_cklr.
+    rewrite <- (cc_compose_assoc cc_c_locset).
+    rewrite <- (cc_compose_assoc (cc_c_locset @ cc_locset_mach)).
+    rewrite (cc_compose_assoc cc_c_locset).
+    rewrite cc_cllmma_ca.
+    rewrite <- (cc_compose_assoc injp).
+    rewrite cc_injpca_cainjp. reflexivity.
+Qed.
+
 Theorem cc_compcert_merge:
   forall p tp,
   forward_simulation cc_compcert_dom cc_compcert_cod (Clight.semantics1 p) (Asm.semantics tp) ->
   forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
 Proof.
-  intros. unfold cc_compcert, cc_compcert_cod, cc_compcert_dom in *.
+  intros. rewrite ccc' at 1. rewrite ccc'.
+  unfold cc_compcert', cc_compcert_cod, cc_compcert_dom in *.
   rewrite inj_inj at 2. rewrite cc_asm_compose.
   rewrite <- injp_injp2, !cc_c_compose, !cc_compose_assoc at 1.
   eapply compose_forward_simulations.
   eapply Clightrel.semantics1_rel.
   rewrite <- !cc_compose_assoc.
   eapply compose_forward_simulations.
-  rewrite !cc_compose_assoc; eauto.
+  rewrite !cc_compose_assoc. eauto.
   eapply semantics_asm_rel.
 Qed.
+
 
 Lemma cc_compcert_expand:
   ccref
@@ -492,6 +521,7 @@ Proof.
   }
   reflexivity.
 Qed.
+(* injp  <=  inj*)
 
 Lemma cc_compcert_collapse:
   ccref
@@ -583,7 +613,7 @@ Lemma cc_dom_wt:
   ccref (wt_c @ cc_c_dom) cc_c_dom.
 Proof.
   unfold cc_c_dom, cc_c_cod.
-  do 2 rewrite <- cc_compose_assoc at 1. rewrite (cc_compose_assoc wt_c).
+  do 2 rewrite <- cc_compose_assoc at 1. rewrite (cc_compose_assoc wt_c).   
   rewrite (inv_drop _ wt_c), cc_compose_assoc.
   reflexivity.
 Qed.
@@ -615,7 +645,7 @@ Proof.
   rewrite <- ext_inj.   rewrite cc_c_compose.
   rewrite <- sub_inj_injp at 1.
   assert (HH :subcklr (ext @ inj) inj).
-  rewrite ext_inj. rauto.
+  rewrite ext_inj. rauto. 
   rewrite <- HH at 1. rewrite cc_c_compose.
   eapply compose_forward_simulations; eauto.
   eapply RTLrel.semantics_rel.
@@ -755,6 +785,7 @@ Ltac DestructM :=
   repeat DestructM. subst tp.
   assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p15)).
   {
+  
   eapply cc_compcert_merge; eauto.
   rewrite cc_compcert_expand.
   rewrite <- cc_compcert_collapse at 1.

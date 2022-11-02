@@ -3,14 +3,86 @@ Require Import AST Linking Smallstep Invariant CallconvAlgebra.
 Require Import Values Memory.
 Require Import Conventions Mach Asm.
 Require Import CKLR.
-Require Import Locations CallConv Compiler.
+Require Import Locations CallConv.
 Require Import InjectFootprint.
 
+
+
+Lemma lessdef_list_refl : forall l,
+    Val.lessdef_list l l.
+Proof.
+  induction l. constructor.
+  constructor; eauto.
+Qed.
+
+Definition wt_c_injp_refinement:
+  ccref (cc_c injp @ (wt_c @ lessdef_c)) ((wt_c @ lessdef_c) @ cc_c injp).
+Proof.
+  intros [[se [j m tm Hm]][[se' [se'' sg]] ?]].
+  intros se1 se2 q1 q2 [Hse1 [Hse2 Hse3]] [q2' [Hq1 [q2'' [Hq2 Hq3]]]].
+  inv Hse1. inv Hse2. inv Hse3. cbn in H. cbn in Hq1. subst se''.
+  inv Hq1. inv Hq2. inv Hq3. cbn in H4. destruct H4 as [? TYPE]. subst.
+  inv H1.
+  exists (se1,(se1,(se1,sg0),tt),(injpw j m1 m2 Hm)). repeat apply conj.
+  - constructor; cbn; eauto. constructor; eauto.
+    constructor; eauto.
+  - cbn in H0. cbn in H.
+    exists (cq vf1 sg0 vargs1 m1). split.
+    econstructor; eauto. split.
+    econstructor; eauto. cbn. split. eauto.
+    eapply val_has_type_list_inject; eauto.
+    econstructor; eauto.
+    apply lessdef_list_refl.
+    econstructor; eauto. cbn.
+    eapply VAExtends.val_inject_lessdef_list_compose; eauto.
+    constructor.
+  - intros r1 r2 [r1' [Hr1 Hr2]].
+    inv Hr1. cbn in H1. inv H1. inv H4. inv H7.
+    destruct Hr2 as [w [Hw Hr2]].
+    inv Hr2. inv Hw. cbn in *. inv H11. rename m into m1'.
+    set (res' := Val.ensure_type vres2 (proj_sig_res sg0) ).
+    exists (cr res' m2'). split.
+    exists (injpw f' m1' m2' Hm10). split.
+    constructor; eauto.
+    constructor; eauto. cbn. unfold res'.
+    apply has_type_inject; eauto.
+    eapply Mem.val_lessdef_inject_compose; eauto.
+    constructor.
+    exists (cr res' m2'). split.
+    constructor; eauto. cbn. unfold res'. apply Val.ensure_has_type.
+    constructor; eauto. unfold res'.
+    destruct vres2, (proj_sig_res sg0); auto.
+Qed.
 (*
-     injp
- C  -> [sp bx ra] li_c -> li_c   (cq : args m)
-     CA
- Asm -> [sp bx ra]
+Definition wt_c_injp_refinement':
+  ccref (cc_c injp @ wt_c) (wt_c @ cc_c injp).
+Proof.
+  intros [[se [j m tm Hm]] [se'' sg]].
+  intros se1 se2 q1 q2 [Hse1 Hse2] [q2' [Hq1 Hq2]].
+  inv Hse1. inv Hse2. cbn in H. cbn in Hq1. subst se''.
+  inv Hq1. inv Hq2. cbn in H4. destruct H4 as [? TYPE]. subst.
+  inv H1.
+  exists (se1,(se1,sg0),(injpw j m1 m2 Hm)). repeat apply conj.
+  - constructor; cbn; eauto. constructor; eauto.
+  - cbn in H0. cbn in H.
+    exists (cq vf1 sg0 vargs1 m1). split; cbn.
+    econstructor; eauto. split. reflexivity.
+    cbn.
+    eapply val_has_type_list_inject; eauto.
+    econstructor; eauto. constructor.
+  - intros r1 r2 [r1' [Hr1 Hr2]].
+    inv Hr1. cbn in H1.
+    destruct Hr2 as [w [Hw Hr2]].
+    inv Hr2. inv Hw. cbn in *. inv H7.
+    set (res' := Val.ensure_type vres2 (proj_sig_res sg0) ).
+    exists (cr res' m2'). split.
+    exists (injpw f' m1' m2' Hm10). split.
+    constructor; eauto.
+    constructor; eauto. cbn. unfold res'.
+    apply has_type_inject; eauto. constructor.
+    Abort.
+*)
+(*
    cc_c_asm_injp   ==    injp      === injp
                           CA           CL
                                        LM
@@ -36,8 +108,6 @@ Inductive cc_c_asm_mq : cc_ca_world -> c_query -> query li_asm -> Prop:=
     let sp := rs#SP in let ra := rs#RA in let vf := rs#PC in
     args = (map (fun p => Locmap.getpair p ls) (loc_arguments sg)) ->
     ls = make_locset_rs rs tm sp ->
-(*    ls = make_locset mrs tm sp ->
-    (forall r: mreg, mrs r = rs (preg_of r)) -> *)
     args_removed sg sp tm m ->
     Val.has_type sp Tptr ->
     Val.has_type ra Tptr ->
