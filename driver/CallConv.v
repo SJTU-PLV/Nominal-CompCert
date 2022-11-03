@@ -598,6 +598,28 @@ Definition make_locset (rs: Mach.regset) (m: mem) (sp: val) (l: loc) : val :=
 Definition not_init_args (sz: Z) (sp: val) :=
   fun b ofs => ~ loc_init_args sz sp b ofs.
 
+
+Theorem loc_init_args_dec:
+  forall sz sp b ofs,
+    {loc_init_args sz sp b ofs} + {not_init_args sz sp b ofs}.
+Proof.
+  intros. destruct sp.
+  right; intro; inv H. 
+  right; intro; inv H.
+  right; intro; inv H.
+  right; intro; inv H.
+  right; intro; inv H.
+  destruct (eq_block b0 b). subst.
+  destruct (zle (offset_sarg i 0) ofs);
+  destruct (zlt ofs (offset_sarg i sz)).
+  left. constructor; eauto.
+  right. intro. inv H. extlia.
+  right. intro. inv H. extlia.
+  right. intro. inv H. extlia.
+  right. intro. inv H. congruence.
+Qed.
+
+
 (** *** Definition *)
 
 (** We can now define the structural convention
@@ -879,6 +901,123 @@ Proof.
         unfold offset_sarg in H3. extlia.
       * destruct 1; eelim H; eauto. split; eauto.
         unfold offset_sarg in H3. extlia.
+    + apply Mem.unchanged_on_refl.
+    + reflexivity.
+Qed.
+
+Instance injp_mixable:
+  Mixable injp.
+Proof.
+  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB.
+  destruct SZ as [k Hk]; subst.
+  destruct (classic (k > 0 /\ exists sb1 sofs1, sp1 = Vptr sb1 sofs1)).
+  - destruct H as (Hk & sb1 & sofs1 & Hsp1). subst. inv Hsp.
+    assert (Mem.mixable m1'_ sb1 m1). {
+      split.
+      + destruct Hm, Hm'_. inv Hw. inversion H8. auto.
+      + assert (SZ: k * 2 > 0) by extlia.
+        specialize (VB SZ). inv VB. auto.
+    }
+    eapply Mem.mixable_mix in H as [m1' Hm1'].
+    instantiate (1 := offset_sarg sofs1 (k * 2)) in Hm1'.
+    instantiate (1 := offset_sarg sofs1 0) in Hm1'.
+    inv Hm. inv Hm'_. inv Hw. intro H.
+    assert (Hm'' : Mem.inject f0 m1' m2').
+    {
+      eapply Mem.mix_left_inject; eauto.
+      * eapply Mem.inject_extends_compose; eauto.
+      * eapply Mem.unchanged_on_implies; eauto.
+        intros _ ofs [-> Hofs] VLD. constructor.
+        unfold offset_sarg in *.
+        rewrite (Ptrofs.add_commut sofs1), Ptrofs.add_assoc, Ptrofs.add_commut.
+        erewrite (Mem.address_inject f m1 m2); eauto. extlia.
+        eapply H; eauto. extlia. extlia.
+      * intros b1' delta' ofs pk p Hb' Hofs Hp.
+        eapply (OOR b2 ofs); eauto.
+        -- constructor. unfold offset_sarg in *.
+           rewrite (Ptrofs.add_commut sofs1), Ptrofs.add_assoc, Ptrofs.add_commut.
+           erewrite (Mem.address_inject f m1 m2); eauto. extlia.
+           eapply H; eauto. extlia. extlia.
+        -- eapply Mem.perm_max, Mem.perm_implies; eauto. constructor.
+      * eapply Mem.mi_align with (chunk := Mint64); eauto using (Mem.mi_inj f m1 m2).
+        instantiate (2 := offset_sarg sofs1 0). intros ofs Hofs.
+        eapply Mem.perm_max, H; eauto; unfold offset_sarg in *; cbn in Hofs; extlia.
+    }
+    exists (injpw f0 m1' m2' Hm''), m1'. repeat apply conj.
+    + apply Mem.mix_updated in Hm1' as UNCm1tom1'.
+      apply Mem.mix_unchanged in Hm1' as UNCm1'_tom1'.
+      constructor; eauto.
+      * red. intros.
+        destruct (loc_init_args_dec (k*2) (Vptr sb1 sofs1) b ofs).
+        -- inversion UNCm1tom1'. eapply unchanged_on_perm; eauto.
+           inv l. split. auto. lia.
+        -- red in H6. eapply H6; eauto.
+           inversion UNCm1'_tom1'. eapply unchanged_on_perm; eauto.
+           intro. apply n. destruct H3. subst b. constructor; eauto.
+           inversion H8. unfold Mem.valid_block in *. eauto.
+      * red. intros.
+        destruct (loc_init_args_dec (k*2) (Vptr b2 (Ptrofs.add sofs1 (Ptrofs.repr delta))) b ofs).
+        -- inversion UPD. eapply unchanged_on_perm; eauto.
+        -- eapply H7; eauto.
+           inversion UNCH. eapply unchanged_on_perm; eauto.
+           inversion H9. unfold Mem.valid_block in *. eauto.
+      * eapply Mem.unchanged_on_trans; eauto.
+        eapply Mem.unchanged_on_implies; eauto.
+        intros _ ofs NIA _ [<- Hofs]. red in NIA. cbn in H1. congruence.
+      * constructor.
+        -- inversion UPD. eauto.
+        -- intros.
+           destruct (loc_init_args_dec (k*2) (Vptr b2 (Ptrofs.add sofs1 (Ptrofs.repr delta))) b ofs).
+           ++ inversion UPD. eauto.
+           ++ etransitivity. inversion H9. eauto.
+              inversion UNCH. eapply unchanged_on_perm; eauto.
+              inversion H9. unfold Mem.valid_block in *. eauto with mem.
+        -- intros.
+           destruct (loc_init_args_dec (k*2) (Vptr b2 (Ptrofs.add sofs1 (Ptrofs.repr delta))) b ofs).
+           ++ inversion UPD. eauto.
+           ++ etransitivity. inversion UNCH. eapply unchanged_on_contents; eauto.
+              inversion H9. eapply unchanged_on_perm0; eauto.
+              eapply Mem.perm_valid_block; eauto.
+              inversion H9. eapply unchanged_on_contents; eauto.
+    + apply inject_incr_refl.
+    +  cbn -[Z.add Z.mul] in *. constructor.
+    + eapply Mem.unchanged_on_implies; eauto using Mem.mix_updated.
+      inversion 1; auto.
+    + eapply Mem.unchanged_on_implies; eauto using Mem.mix_unchanged.
+      intros _ ofs NIA _ [<- Hofs]. apply NIA. constructor; auto.
+    + eapply Mem.support_mix; eauto.
+  - inv Hm. inv Hm'_. inv Hw. cbn in *.
+    assert (Hm'' : Mem.inject f0 m1'_ m2'). eapply Mem.inject_extends_compose; eauto.
+    eexists (injpw f0 m1'_ m2' Hm''), m1'_. repeat apply conj.
+    + constructor; eauto.
+      * red. intros.
+         destruct (loc_init_args_dec (k*2) sp2 b ofs).
+         -- inversion UPD. eapply unchanged_on_perm; eauto.
+         -- eapply H7; eauto. inversion UNCH. eapply unchanged_on_perm; eauto.
+            eapply Mem.valid_block_extends; eauto. eapply Mem.perm_valid_block; eauto.
+      * constructor. inversion UPD. eauto.
+         -- intros.
+            destruct (loc_init_args_dec (k*2) sp2 b ofs).
+            ++ inversion UPD. eauto.
+            ++ etransitivity. inversion H9. eapply unchanged_on_perm; eauto.
+               inversion UNCH. eapply unchanged_on_perm; eauto.
+               inversion H9. unfold Mem.valid_block in *. eauto.
+         -- intros.
+            destruct (loc_init_args_dec (k*2) sp2 b ofs).
+            ++ inversion UPD. eauto.
+            ++ etransitivity.
+               inversion UNCH. eapply unchanged_on_contents; eauto.
+               inversion H9. eapply unchanged_on_perm0; eauto.
+               eapply Mem.perm_valid_block; eauto.
+               inversion H9. eapply unchanged_on_contents; eauto.
+    + apply inject_incr_refl.
+    + constructor.
+    + split.
+      * inversion H8. eauto.
+      * destruct 1; eelim H; eauto. split; eauto.
+        unfold offset_sarg in H1. extlia.
+      * destruct 1; eelim H; eauto. split; eauto.
+        unfold offset_sarg in H1. extlia.
     + apply Mem.unchanged_on_refl.
     + reflexivity.
 Qed.

@@ -586,25 +586,7 @@ Inductive loc_init_args sz : val -> block -> Z -> Prop :=
   loc_init_args_intro sb sofs ofs:
     offset_sarg sofs 0 <= ofs < offset_sarg sofs sz ->
     loc_init_args sz (Vptr sb sofs) sb ofs.
-(*
-(* sz here is the size of Outgoing part in stack block, same to up, the sp value is stored
-   just above the Outgoing slot *)
-Inductive loc_init_sp sz : val -> block -> Z -> Prop :=
-  loc_init_sp_intro sb sofs ofs:
-    let fe_ofs_link := offset_sarg sofs sz in
-    let w :=  if Archi.ptr64 then 8 else 4 in
-    fe_ofs_link <= ofs < fe_ofs_link + w ->
-    loc_init_sp sz (Vptr sb sofs) sb ofs.
 
-(* fsz here is the size of whole stack block allocated in Mach and Asm level, which is available
-   from an asm program (the instruction which allocates its stack )*)
-Inductive loc_init_ra fsz : val -> block -> Z -> Prop :=
-  loc_init_ra_intro sb sofs ofs :
-    let w :=  if Archi.ptr64 then 8 else 4 in
-    let fe_ofs_retaddr := offset_sarg sofs (fsz - w) in
-    fe_ofs_retaddr <= ofs < fe_ofs_retaddr ->
-    loc_init_ra fsz (Vptr sb sofs) sb ofs.
-*)
 Program Definition contains_init_args sg j ls m0 sp : massert :=
   let sz := size_arguments sg in
   {|
@@ -645,40 +627,13 @@ Next Obligation.
   + unfold offset_sarg in *. extlia.
   + inv Hsp. eapply Mem.perm_valid_block; eauto.
 Qed.
-(*
-Program Definition contains_init_sp_ra sg fsz m0 sp : massert :=
-  let sz := size_arguments sg in
-  {|
-    m_pred m :=
-      Mem.unchanged_on (loc_init_sp sz sp) m0 m /\
-      Mem.unchanged_on (loc_init_ra fsz sp) m0 m /\
-      (exists sb sofs, sp = Vptr sb sofs /\ Mem.valid_block m sb);
-    m_footprint := fun b z => loc_init_sp sz sp b z \/ loc_init_ra fsz sp b z;
-  |}.
-Next Obligation.
-  repeat apply conj.
-  - eapply Mem.unchanged_on_trans; eauto.
-    eapply Mem.unchanged_on_implies; eauto.
-    intros. left. eauto.
-  - eapply Mem.unchanged_on_trans; eauto.
-    eapply Mem.unchanged_on_implies; eauto.
-    intros. right; eauto.
-  - exists H2, H3. split; eauto.
-    inversion H0. unfold Mem.valid_block in *. eauto with mem.
-Qed.
-Next Obligation.
-  destruct H0.
-  + inv H0. eauto.
-  + inv H0. eauto.
-Qed.
-*)
+
 Record cc_stacking_world {R} :=
   stkw {
     stk_w :> world R;
     stk_sg : signature;
     stk_ls1 : Locmap.t;
     stk_sp2 : val;
-(*    stk_fsz2 : Z; *)
     stk_m2 : mem;
   }.
 
@@ -689,14 +644,9 @@ Inductive cc_stacking_mq R: cc_stacking_world R -> _ -> _ -> Prop :=
       vf1 <> Vundef -> Val.inject (mi R w) vf1 vf2 ->
       (forall r, Val.inject (mi R w) (ls1 (Locations.R r)) (rs2 r)) ->
       m2 |= contains_init_args sg (mi R w) ls1 m2 sp2 ->
-(*         ** contains_init_sp_ra sg fsz2 m2 sp2 -> *)
       match_mem R w m1 m2 ->
       (forall b ofs, loc_init_args (size_arguments sg) sp2 b ofs ->
                      loc_out_of_reach (mi R w) m1 b ofs) ->
-(*      (forall b ofs, loc_init_sp (size_arguments sg) sp2 b ofs ->
-                     loc_out_of_reach (mi R w) m1 b ofs) ->
-      (forall b ofs, loc_init_ra fsz2 sp2 b ofs ->
-                     loc_out_of_reach (mi R w) m1 b ofs) -> *)
       Val.has_type sp2 Tptr ->
       Val.has_type ra2 Tptr ->
       cc_stacking_mq R
@@ -715,14 +665,8 @@ Inductive cc_stacking_mr R: cc_stacking_world R -> _ -> _ -> Prop :=
       Val.inject (mi R w') (ls1 (Locations.R r)) (rs2' r)) ->
     match_mem R w' m1' m2' ->
     Mem.unchanged_on (loc_init_args (size_arguments sg) sp2) m2 m2' ->
-(*    Mem.unchanged_on (loc_init_sp (size_arguments sg) sp2) m2 m2' ->
-    Mem.unchanged_on (loc_init_ra fsz2 sp2) m2 m2' -> *)
     (forall b ofs, loc_init_args (size_arguments sg) sp2 b ofs ->
                    loc_out_of_reach (mi R w') m1' b ofs) ->
-(*      (forall b ofs, loc_init_sp (size_arguments sg) sp2 b ofs ->
-                     loc_out_of_reach (mi R w) m1' b ofs) ->
-      (forall b ofs, loc_init_ra fsz2 sp2 b ofs ->
-                     loc_out_of_reach (mi R w) m1' b ofs) -> *)
     cc_stacking_mr R
       (stkw R w sg ls1 sp2 m2)
       (lr ls1' m1')

@@ -378,26 +378,6 @@ Proof.
            eapply Mem.perm_free_2; eauto.
 Qed.
 
-Theorem loc_init_args_dec:
-  forall sz sp b ofs,
-    {loc_init_args sz sp b ofs} + {not_init_args sz sp b ofs}.
-Proof.
-  intros. destruct sp.
-  right; intro; inv H. 
-  right; intro; inv H.
-  right; intro; inv H.
-  right; intro; inv H.
-  right; intro; inv H.
-  destruct (eq_block b0 b). subst.
-  destruct (zle (offset_sarg i 0) ofs);
-  destruct (zlt ofs (offset_sarg i sz)).
-  left. constructor; eauto.
-  right. intro. inv H. extlia.
-  right. intro. inv H. extlia.
-  right. intro. inv H. extlia.
-  right. intro. inv H. congruence.
-Qed.
-
 (*directly used in later proof*)
 Lemma not_init_args_dec:
   forall sz sp b ofs,

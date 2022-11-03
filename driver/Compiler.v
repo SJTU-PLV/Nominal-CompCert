@@ -419,7 +419,7 @@ Definition cc_compcert : callconv li_c li_asm :=
 
 Definition cc_compcert' : callconv li_c li_asm :=
   cc_c injp @ wt_c @ lessdef_c @
-       cc_c_locset @ cc_locset_mach @ cc_mach_asm @ cc_asm inj.
+       cc_c_locset @ cc_locset_mach @ cc_mach_asm @ cc_asm injp.
 
 Definition cc_c_cod : callconv li_c li_c :=
   wt_c @ inj.
@@ -428,7 +428,8 @@ Definition cc_c_dom : callconv li_c li_c :=
   injp @ cc_c_cod.
 
 Definition cc_compcert_cod : callconv li_c li_asm :=
-  wt_c @ lessdef_c @ cc_c_locset @ cc_locset_mach @ cc_mach_asm @ cc_asm inj.
+  wt_c @ lessdef_c @ cc_c_locset @ cc_locset_mach @ cc_mach_asm @
+       @ cc_asm injp @ cc_asm inj.
 
 Definition cc_compcert_dom : callconv li_c li_asm :=
   cc_c injp @ wt_c @ lessdef_c @
@@ -437,7 +438,7 @@ Definition cc_compcert_dom : callconv li_c li_asm :=
 Definition cc_compcert : callconv li_c li_asm :=
        wt_c @
        cc_c_asm_injp @
-       cc_asm inj.
+       cc_asm injp.
 
 Theorem ccc': cceqv cc_compcert cc_compcert'.
   split.
@@ -472,7 +473,7 @@ Theorem cc_compcert_merge:
 Proof.
   intros. rewrite ccc' at 1. rewrite ccc'.
   unfold cc_compcert', cc_compcert_cod, cc_compcert_dom in *.
-  rewrite inj_inj at 2. rewrite cc_asm_compose.
+  rewrite injp__injp_inj_injp at 4. rewrite !cc_asm_compose.
   rewrite <- injp_injp2, !cc_c_compose, !cc_compose_assoc at 1.
   eapply compose_forward_simulations.
   eapply Clightrel.semantics1_rel.
@@ -486,7 +487,7 @@ Qed.
 Lemma cc_compcert_expand:
   ccref
     cc_compcert_cod
-    (cc_c_cod @                                              (* Passes up to Alloc *)
+    (cc_c injp @ cc_c_cod @                                              (* Passes up to Alloc *)
      (wt_c @ cc_c ext @ cc_c_locset) @                     (* Alloc *)
      cc_locset ext @                                       (* Tunneling *)
      (wt_loc @ cc_locset_mach @ cc_mach inj) @             (* Stacking *)
@@ -499,6 +500,7 @@ Proof.
   {
     rewrite inj_inj, !cc_asm_compose.
     rewrite <- (cc_compose_assoc wt_c lessdef_c).
+    do 4 rewrite (commute_around _ (R2 := _ injp)).
     do 3 rewrite (commute_around _ (R2 := _ inj)).
     rewrite (inv_dup wt_c), (cc_compose_assoc wt_c), (cc_compose_assoc wt_c).
     rewrite (commute_around (_@_) (R2:= inj)).
@@ -521,6 +523,7 @@ Proof.
   }
   reflexivity.
 Qed.
+
 (* injp  <=  inj*)
 
 Lemma cc_compcert_collapse:
@@ -624,6 +627,19 @@ Qed.
 Section COMPOSE_C_PASSES.
 
 Context {li} (ccA ccB: callconv li_c li).
+
+Lemma compose_injection_self p tsem:
+  let sem := Clight.semantics1 p in
+  forward_simulation (cc_c injp) (cc_c injp) sem sem ->
+  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) sem tsem ->
+  forward_simulation (cc_c_dom @ ccA) (cc_c injp @ cc_c_cod @ ccB) sem tsem.
+Proof.
+  intros. unfold cc_c_dom, cc_c_cod in *.
+  rewrite <- cc_dom_injp,! cc_compose_assoc.
+  eapply compose_forward_simulations; eauto.
+  unfold cc_c_dom, cc_c_cod. rewrite !cc_compose_assoc.
+  rewrite !cc_compose_assoc in H0. eauto.
+Qed.
 
 Lemma compose_injection_pass sem bsem tsem:
   forward_simulation (cc_c injp) (cc_c inj) sem bsem ->
@@ -789,6 +805,8 @@ Ltac DestructM :=
   eapply cc_compcert_merge; eauto.
   rewrite cc_compcert_expand.
   rewrite <- cc_compcert_collapse at 1.
+  eapply compose_injection_self.
+    eapply Clightrel.semantics1_rel.
   eapply compose_injection_pass.
     eapply SimplLocalsproof.transf_program_correct; eassumption.
   eapply compose_identity_pass.
