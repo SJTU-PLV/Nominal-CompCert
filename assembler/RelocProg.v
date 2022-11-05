@@ -4,6 +4,7 @@ Require Import Coqlib Maps Integers Values AST.
 Require Import Globalenvs.
 Require Import Permutation.
 Require Import LocalLib.
+Require Import RelocationTypes.
 
 Import List.ListNotations.
 
@@ -66,7 +67,6 @@ Definition is_symbentry_internal e :=
 Definition symbtable := PTree.t symbentry.
 
 (** ** Relocation table *)
-Inductive reloctype : Type := reloc_abs | reloc_rel | reloc_null.
 
 Record relocentry : Type :=
 {

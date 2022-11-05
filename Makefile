@@ -121,6 +121,8 @@ BACKEND=\
   Asmlabelgen.v\
   Jumptablegen.v\
   SymbtablegenArchi.v\
+  RelocationTypes.v ReloctablesgenArchi.v\
+
 # architecture dependent files (x86 and riscv)
 # TODO: AsmInject.v
 
@@ -135,7 +137,7 @@ X86 = \
   Asmlabelgen.v\
   LocalLib.v Jumptablegen.v \
   SymbtablegenArchi.v SymbtablegenproofArchi.v\
-  ReloctablesgenArchi.v ReloctablesgenproofArchi.v\
+  RelocationTypes.v ReloctablesgenArchi.v ReloctablesgenproofArchi.v\
   RelocBinDecode.v RelocBingenproofArchi.v\
   TranslateInstr.v TranslateInstrSize.v\
   AsmLongInt.v\
@@ -164,6 +166,7 @@ ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 
 ASSEMBLER = RelocProg.v RelocProgram.v\
   Symbtablegen.v\
+  Reloctablesgen.v\
 
 # CSLED generation file
 # AUTOGEN = VerificationCondition.v EncDecRet.v
