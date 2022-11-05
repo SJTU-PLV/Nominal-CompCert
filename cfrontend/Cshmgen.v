@@ -630,6 +630,8 @@ Definition make_normalization (t: type) (a: expr) :=
 
 Definition make_funcall (x: option ident) (tres: type) (sg: signature)
                       (fn: expr) (args: list expr): stmt :=
+  Scall x sg fn args.
+(*
   match x, return_value_needs_normalization sg.(sig_res) with
   | Some id, true =>
       Sseq (Scall x sg fn args)
@@ -637,7 +639,7 @@ Definition make_funcall (x: option ident) (tres: type) (sg: signature)
   | _, _ =>
       Scall x sg fn args
   end.
-
+*)
 (** * Translation of statements *)
 
 (** [transl_statement nbrk ncnt s] returns a Csharpminor statement

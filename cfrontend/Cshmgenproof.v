@@ -1462,7 +1462,8 @@ Inductive match_cont: composite_env -> type -> nat -> nat -> Clight.cont -> Csha
       match_cont cu.(prog_comp_env) (Clight.fn_return f) nbrk' ncnt' k tk ->
       match_cont ce tyret nbrk ncnt
                  (Clight.Kcall id f e le k)
-                 (Kcall id tf te le tk)
+                 (Kcall id tf te le tk).
+(*
   | match_Kcall_normalize: forall ce tyret nbrk ncnt nbrk' ncnt' f e k id a tf te le tk cu,
       linkorder cu prog ->
       transl_function cu.(prog_comp_env) f = OK tf ->
@@ -1472,6 +1473,7 @@ Inductive match_cont: composite_env -> type -> nat -> nat -> Clight.cont -> Csha
       match_cont ce tyret nbrk ncnt
                  (Clight.Kcall (Some id) f e le k)
                  (Kcall (Some id) tf te le (Kseq (Sset id a) tk)).
+*)
 
 Inductive match_states: Clight.state -> Csharpminor.state -> Prop :=
   | match_state:
@@ -1497,8 +1499,8 @@ Inductive match_states: Clight.state -> Csharpminor.state -> Prop :=
                    (Callstate vf args tk m)
   | match_returnstate:
       forall res tres k m tk ce
-          (MK: match_cont ce tres 0%nat 0%nat k tk)
-          (WT: wt_val res tres),
+          (MK: match_cont ce tres 0%nat 0%nat k tk),
+          (* (WT: wt_val res tres), *)
       match_states (Clight.Returnstate res k m)
                    (Returnstate res tk m).
 
@@ -1627,7 +1629,7 @@ Proof.
   induction 1; simpl; auto.
 - apply match_Kstop.
 - eapply match_Kcall; eauto.
-- eapply match_Kcall_normalize; eauto.
+(* - eapply match_Kcall_normalize; eauto. *)
 Qed.
 
 Lemma match_cont_is_call_cont:
@@ -1639,7 +1641,7 @@ Proof.
   intros. inv H; simpl in H0; try contradiction; simpl.
   split; auto; apply match_Kstop.
   split; auto; eapply match_Kcall; eauto.
-  split; auto; eapply match_Kcall_normalize; eauto.
+  (* split; auto; eapply match_Kcall_normalize; eauto. *)
 Qed.
 
 (** The simulation proof *)
@@ -1686,7 +1688,7 @@ Proof.
   assert (SIG: funsig tfd = sg).
   { unfold sg; erewrite typlist_of_arglist_eq by eauto.
     eapply transl_fundef_sig1; eauto. rewrite H3; auto. }
-  assert (EITHER: tk' = tk /\ ts' = Scall optid sg x x0
+(*  assert (EITHER: tk' = tk /\ ts' = Scall optid sg x x0).
                \/ exists id, optid = Some id /\
                   tk' = tk /\ ts' = Sseq (Scall optid sg x x0)
                                          (Sset id (make_normalization tres (Evar id)))).
@@ -1696,6 +1698,8 @@ Proof.
     inv MTR; auto.
     inv MTR; auto. }
   destruct EITHER as [(EK & ES) | (id & EI & EK & ES)]; rewrite EK, ES.
+  *)
+  unfold make_funcall in MTR. inv MTR.
   + (* without normalization of return value *)
     econstructor; split.
     apply plus_one. eapply step_call; eauto.
@@ -1704,7 +1708,7 @@ Proof.
     econstructor; eauto.
     eapply match_Kcall with (ce := prog_comp_env cu') (cu := cu); eauto.
     exact I.
-  + (* with normalization of return value *)
+(*  + (* with normalization of return value *)
     subst optid.
     econstructor; split.
     eapply plus_two. apply step_seq. eapply step_call; eauto. 
@@ -1712,9 +1716,10 @@ Proof.
     eapply transl_arglist_correct with (cunit := cu); eauto.
     traceEq.
     econstructor; eauto.
-    eapply match_Kcall_normalize  with (ce := prog_comp_env cu') (cu := cu); eauto.
+    eapply match_Kcall  with (ce := prog_comp_env cu') (cu := cu); eauto.
     intros. eapply make_normalization_correct; eauto. constructor; eauto.
     exact I.
+*)
 
 - (* builtin *)
   monadInv TR. inv MTR.
@@ -1810,7 +1815,7 @@ Proof.
   eapply match_env_free_blocks; eauto.
   eapply match_returnstate with (ce := prog_comp_env cu); eauto.
   eapply match_cont_call_cont. eauto.
-  constructor.
+  (* constructor. *)
 
 - (* return some *)
   monadInv TR. inv MTR.
@@ -1820,7 +1825,7 @@ Proof.
   eapply match_env_free_blocks; eauto.
   eapply match_returnstate with (ce := prog_comp_env cu); eauto.
   eapply match_cont_call_cont. eauto.
-  apply wt_val_casted. eapply cast_val_is_casted; eauto.
+  (* apply wt_val_casted. eapply cast_val_is_casted; eauto. *)
 
 - (* skip call *)
   monadInv TR. inv MTR.
@@ -1829,7 +1834,7 @@ Proof.
   apply plus_one. apply step_skip_call. auto.
   eapply match_env_free_blocks; eauto.
   eapply match_returnstate with (ce := prog_comp_env cu); eauto.
-  constructor.
+  (* constructor. *)
 
 - (* switch *)
   monadInv TR.
@@ -1901,10 +1906,10 @@ Proof.
   econstructor; split.
   apply plus_one. econstructor; eauto.
   eapply match_returnstate with (ce := ce); eauto.
-  apply has_rettype_wt_val. 
+  (* apply has_rettype_wt_val. 
   replace (rettype_of_type tres0) with (sig_res (ef_sig ef)).
   eapply external_call_well_typed_gen; eauto.
-  rewrite H5. simpl. simpl in TY. congruence.
+  rewrite H5. simpl. simpl in TY. congruence. *)
 
 - (* returnstate *)
   inv MK.
@@ -1912,12 +1917,13 @@ Proof.
     econstructor; split.
     apply plus_one. constructor.
     econstructor; eauto. simpl; reflexivity. constructor.
-  + (* with normalization *)
+(*  + (* with normalization *)
     econstructor; split.
     eapply plus_three. econstructor. econstructor. constructor.
     simpl. apply H13. eauto. apply PTree.gss.
     traceEq.
     simpl. rewrite PTree.set2. econstructor; eauto. simpl; reflexivity. constructor.
+*)
 Qed.
 
 Lemma transl_initial_states:
@@ -1942,8 +1948,7 @@ Proof.
   split. econstructor; eauto. intros r S' HS'. inv HS'.
   eexists. split. econstructor; eauto.
   econstructor; eauto.
-  admit. (* XXX need typing constraint somewhere *)
-Admitted.
+Qed.
 
 Lemma transl_final_states:
   forall S R r,

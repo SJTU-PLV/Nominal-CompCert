@@ -156,7 +156,7 @@ Proof.
   change loc_result with loc_result_64. unfold loc_result_64.
   destruct proj_sig_res as [ | | | | | ]; eauto.
 Qed.
-
+(*
 Lemma commut_c_locsert' R:
    ccref (cc_c R @ cc_c_locset) (cc_c_locset @ cc_locset R).
 Proof.
@@ -185,8 +185,8 @@ Proof.
     rewrite H''.
     cbn. eapply H6. rewrite H''. cbn. eauto.
     constructor; eauto.
-Admitted. (*I believe it's correct*)
-
+Abort.
+*)
 Instance commut_c_locset R:
   Commutes cc_c_locset (cc_c R) (cc_locset R).
 Proof.
@@ -1092,9 +1092,8 @@ Proof.
   - auto.
 Qed.
 
-Lemma size_arguments_always_64 sg:
+Axiom size_arguments_always_64: forall sg,
   (2 | size_arguments sg).
-Admitted. (* XXX may not hold in current CompCert *)
 (*
 Proof.
   unfold size_arguments.
@@ -1205,20 +1204,6 @@ Proof.
       destruct is_callee_save eqn:Hr; auto.
       rewrite H20 by auto. cbn. generalize (H5 r). rauto.
 Qed.
-
-(*
-Lemma commut_locset_mach' R:
-  ccref (cc_locset R @ cc_locset_mach) (cc_locset_mach @ cc_mach R).
-Proof.
-  intros [[se [sg wR]] [sg' rs2 m sp]] se1 se2 q1 q2 Hse [q1' [Hq1 Hq2]].
-  destruct Hse. cbn in H. inv H0. inv Hq1. inv Hq2. rename m into m3.
-  set (ls2 := make_locset rs2 m3 sp).
-  assert (exists rs1 m1', ls1 = make_locset rs1 m1' sp
-         /\ args_removed sg sp ).
-
-*)
-
-
 
 
 (** ** Matching [cc_stacking] *)
