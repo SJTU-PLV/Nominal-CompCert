@@ -27,7 +27,7 @@ else
 ARCHDIRS=$(ARCH)_$(BITSIZE) $(ARCH)
 endif
 
-DIRS := lib common $(ARCHDIRS) backend cfrontend driver exportclight cparser encode \
+DIRS := lib common $(ARCHDIRS) backend cfrontend driver exportclight cparser encode assembler\
 # elf autogen assembler
 
 COQINCLUDES := $(foreach d, $(DIRS), -R $(d) compcert.$(d))
@@ -113,16 +113,16 @@ BACKEND=\
   Mach.v \
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
-  AsmLabelNew.v SymbolString.v CheckDef.v\
+  AsmLabelNew.v SymbolString.v LocalLib.v CheckDef.v\
   TargetPrinterAux.v\
   PseudoInstructions.v\
   AsmBuiltinInline.v\
   AsmLiteral.v\
   Asmlabelgen.v\
   Jumptablegen.v\
-  
+  SymbtablegenArchi.v\
 # architecture dependent files (x86 and riscv)
-# TODO: AsmInject.v LocalLib.v
+# TODO: AsmInject.v
 
 X86 = \
   AsmRegs.v AsmFacts.v \
@@ -161,6 +161,9 @@ ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 #   Symbtablegen.v Symbtablegenproof.v\
 #   Reloctablesgen.v Reloctablesgenproof.v\
 #   RelocBingen.v RelocBingenproof.v\
+
+ASSEMBLER = RelocProg.v RelocProgram.v\
+  Symbtablegen.v\
 
 # CSLED generation file
 # AUTOGEN = VerificationCondition.v EncDecRet.v
