@@ -402,68 +402,36 @@ Qed.
 (** ** Calling conventions *)
 
 Require Import Conventions Asm Mach Lineartyping.
-Require Import VAInject.
-Require Import VAExtends.
 
 (** This is the simulation convention for the whole compiler. *)
-
-
-(*
-Definition cc_compcert : callconv li_c li_asm :=
-
-     wt_c @ lessdef_c @
-     cc_c_asm_injp @
-     cc_asm injp
-
-*)
-
-Definition cc_compcert' : callconv li_c li_asm :=
-  cc_c injp @ wt_c @ lessdef_c @
-       cc_c_locset @ cc_locset_mach @ cc_mach_asm @ cc_asm injp.
-
-Definition cc_c_cod : callconv li_c li_c :=
-  wt_c @ inj.
-
-Definition cc_c_dom : callconv li_c li_c :=
-  injp @ cc_c_cod.
-
-Definition cc_compcert_cod : callconv li_c li_asm :=
-  wt_c @ lessdef_c @ cc_c_locset @ cc_locset_mach @ cc_mach_asm @
-       @ cc_asm injp @ cc_asm inj.
-
-Definition cc_compcert_dom : callconv li_c li_asm :=
-  cc_c injp @ wt_c @ lessdef_c @
-       cc_c_locset @ cc_locset_mach @ cc_mach_asm.
 
 Definition cc_compcert : callconv li_c li_asm :=
        wt_c @
        cc_c_asm_injp @
        cc_asm injp.
 
-Theorem ccc': cceqv cc_compcert cc_compcert'.
-  split.
-  - unfold cc_compcert.
-    rewrite cc_cainjp__injp_ca.
-    rewrite <- cc_compose_assoc.
-    rewrite cc_ca_cllmma.
-    rewrite <- lessdef_c_cklr.
-    rewrite !cc_compose_assoc.
-    rewrite <- cc_compose_assoc.
-    rewrite (commute_around (wt_c @ lessdef_c)), cc_compose_assoc. reflexivity.
-  - unfold cc_compcert'.
-    rewrite <- cc_compose_assoc.
-    rewrite <- cc_compose_assoc.
-    rewrite (cc_compose_assoc injp).
-    rewrite wt_c_injp_refinement.
-    rewrite !cc_compose_assoc.
-    rewrite <- (cc_compose_assoc lessdef_c).
-    rewrite lessdef_c_cklr.
-    rewrite <- (cc_compose_assoc cc_c_locset).
-    rewrite <- (cc_compose_assoc (cc_c_locset @ cc_locset_mach)).
-    rewrite (cc_compose_assoc cc_c_locset).
-    rewrite cc_cllmma_ca.
-    rewrite <- (cc_compose_assoc injp).
-    rewrite cc_injpca_cainjp. reflexivity.
+Definition cc_c_level : callconv li_c li_c := wt_c @ injp.
+
+Definition cc_compcert_cod : callconv li_c li_asm :=
+  wt_c @ cc_c injp @
+       cc_c_locset @ cc_locset_mach @ cc_mach_asm @
+       @ cc_asm inj.
+
+Definition cc_compcert_dom : callconv li_c li_asm :=
+  wt_c @  cc_c injp @
+       cc_c_locset @ cc_locset_mach @ cc_mach_asm.
+
+Lemma transport_injp_to_asm :
+  ccref (wt_c @ cc_c injp @ cc_c_locset @ cc_locset_mach @ cc_mach_asm @ cc_asm injp @ cc_asm inj)
+        cc_compcert_cod.
+Proof.
+  rewrite (commute_around cc_mach_asm).
+  rewrite (commute_around cc_locset_mach).
+  rewrite (commute_around cc_c_locset).
+  rewrite <- (cc_compose_assoc injp).
+  rewrite <- cc_c_compose.
+  rewrite injp_injp_eq.
+  reflexivity.
 Qed.
 
 Theorem cc_compcert_merge:
@@ -471,49 +439,52 @@ Theorem cc_compcert_merge:
   forward_simulation cc_compcert_dom cc_compcert_cod (Clight.semantics1 p) (Asm.semantics tp) ->
   forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
 Proof.
-  intros. rewrite ccc' at 1. rewrite ccc'.
-  unfold cc_compcert', cc_compcert_cod, cc_compcert_dom in *.
-  rewrite injp__injp_inj_injp at 4. rewrite !cc_asm_compose.
-  rewrite <- injp_injp2, !cc_c_compose, !cc_compose_assoc at 1.
-  eapply compose_forward_simulations.
-  eapply Clightrel.semantics1_rel.
+  intros.
+  unfold cc_compcert, cc_compcert_cod, cc_compcert_dom in *.
+  rewrite injp__injp_inj_injp at 2. rewrite !cc_asm_compose.
+  rewrite <- transport_injp_to_asm in H.
   rewrite <- !cc_compose_assoc.
   eapply compose_forward_simulations.
+  rewrite !cc_compose_assoc.
+  rewrite <- cc_injpca_cainjp at 1.
+  rewrite cc_cainjp__injp_ca.
+  rewrite <- cc_cllmma_ca at 1.
+  rewrite cc_ca_cllmma.
   rewrite !cc_compose_assoc. eauto.
   eapply semantics_asm_rel.
 Qed.
 
-
 Lemma cc_compcert_expand:
   ccref
     cc_compcert_cod
-    (cc_c injp @ cc_c_cod @                                              (* Passes up to Alloc *)
+    (cc_c_level @                                          (* Passes up to Alloc *)
+     cc_c inj @                                            (* to compose the ext downside*)
      (wt_c @ cc_c ext @ cc_c_locset) @                     (* Alloc *)
      cc_locset ext @                                       (* Tunneling *)
      (wt_loc @ cc_locset_mach @ cc_mach inj) @             (* Stacking *)
      (cc_mach ext @ cc_mach_asm) @                         (* Asmgen *)
      cc_asm inj).
 Proof.
-  unfold cc_compcert_cod. unfold cc_c_cod.
+  unfold cc_compcert_cod. unfold cc_c_level.
   rewrite !cc_compose_assoc.
   etransitivity.
   {
     rewrite inj_inj, !cc_asm_compose.
+    rewrite inj_inj at 1. rewrite !cc_asm_compose. rewrite cc_compose_assoc.
+    rewrite <- lessdef_c_cklr, cc_compose_assoc.
     rewrite <- (cc_compose_assoc wt_c lessdef_c).
-    do 4 rewrite (commute_around _ (R2 := _ injp)).
-    do 3 rewrite (commute_around _ (R2 := _ inj)).
     rewrite (inv_dup wt_c), (cc_compose_assoc wt_c), (cc_compose_assoc wt_c).
-    rewrite (commute_around (_@_) (R2:= inj)).
+    rewrite (commute_around (_@_) (R2:= injp)).
+    do 4 rewrite (commute_around _ (R2 := _ inj)).
     reflexivity.
   }
   repeat (rstep; [rauto | ]).
   etransitivity.
   {
     rewrite !cc_compose_assoc.
-    rewrite <- ext_inj, cc_asm_compose.
-    rewrite <- ext_inj, cc_asm_compose.
-    rewrite inj_inj, cc_asm_compose.
-    rewrite <- ext_inj at 2. rewrite cc_asm_compose.
+    rewrite <- ext_inj, !cc_asm_compose.
+    rewrite cc_compose_assoc.
+    rewrite <- ext_ext at 1. rewrite cc_asm_compose, cc_compose_assoc.
     do 4 rewrite (commute_around cc_mach_asm).
     do 2 rewrite (commute_around cc_locset_mach).
     do 1 rewrite (commute_around cc_c_locset).
@@ -528,7 +499,8 @@ Qed.
 
 Lemma cc_compcert_collapse:
   ccref
-    (cc_c_dom @                                     (* Passes up to Alloc *)
+    (cc_c_level @                                     (* Passes up to Alloc *)
+     cc_c inj @                                              (* to compose the ext downside*)
      (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
      cc_locset ext @                              (* Tunneling *)
      (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
@@ -547,14 +519,26 @@ Proof.
   eapply commut_mach_asm.
   rewrite H.
   rewrite !(commute_around cc_locset_mach).
-  unfold cc_c_dom, cc_c_cod. rewrite !cc_compose_assoc.
-  (* compose the wt_c invaraint using its propagatation property and move it down *)
+  rewrite !(commute_around cc_c_locset).
+  unfold cc_c_level. rewrite !cc_compose_assoc.
+
+  (* compose the wt_c invaraint using its propagatation property *)
+  rewrite <- lessdef_c_cklr, cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
+  rewrite (commute_around (wt_c @ lessdef_c)), cc_compose_assoc.
+  rewrite <- (cc_compose_assoc lessdef_c).
+  rewrite lessdef_c_cklr.
   rewrite <- (cc_compose_assoc inj).
   rewrite <- (cc_compose_assoc wt_c).
   rewrite (inv_drop _ wt_c), !cc_compose_assoc.
-  rewrite !(commute_around cc_c_locset).
-  rewrite <- (lessdef_c_cklr ext), cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
-  rewrite !(commute_around (wt_c @ lessdef_c)), cc_compose_assoc.
+  (* move the wt_c to top level *)
+  rewrite <- (lessdef_c_cklr ext) , cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
+  rewrite <- (cc_compose_assoc inj).
+  rewrite !wt_c_R_refinement. rewrite cc_compose_assoc.
+  rewrite <- (cc_compose_assoc injp).
+  rewrite wt_c_R_refinement. rewrite !cc_compose_assoc.
+  rewrite <- (cc_compose_assoc lessdef_c).
+  rewrite lessdef_c_cklr.
+
   (* manully compose the cklrs into a single injp *)
   rewrite <- (cc_compose_assoc inj), <- cc_c_compose.
   rewrite inj_ext.
@@ -575,167 +559,109 @@ Qed.
   we maintain a simulation convention of the form [cc_dom -->> cc_cod],
   which is stable under composition with various kinds of passes. *)
 
-Lemma cc_cod_inj:
-  ccref cc_c_cod (cc_c inj @ cc_c_cod).
+Lemma cc_c_level_expand:
+  ccref cc_c_level
+        (cc_c injp @ 
+              cc_c inj@
+              (wt_c @ cc_c ext) @ cc_c ext @
+              cc_c inj @
+              cc_c ext @ cc_c inj @ cc_c injp).
 Proof.
-  unfold cc_c_cod.
-  rewrite inj_inj, cc_c_compose at 1.
-  rewrite <- (lessdef_c_cklr inj), cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
-  rewrite (commute_around (_ @ _)), cc_compose_assoc.
+  unfold cc_c_level.
+  (*p j e e j e j p*)
+  etransitivity.
+  rewrite injp__injp_inj_injp, !cc_c_compose.
+  rewrite inj_inj, cc_c_compose, cc_compose_assoc.
+  rewrite inj_inj, cc_c_compose, cc_compose_assoc at 1.
+  rewrite <- inj_ext, cc_c_compose, cc_compose_assoc at 1.
+  rewrite <- inj_ext, cc_c_compose, cc_compose_assoc at 1.
+  rewrite <- inj_ext at 2. rewrite cc_c_compose, cc_compose_assoc.
+  rewrite <- (lessdef_c_cklr injp) at 1. rewrite cc_compose_assoc.
+  rewrite <- (cc_compose_assoc wt_c).
+  rewrite <- cc_compose_assoc.
+  assert (HINJP: ccref ((wt_c @ lessdef_c) @ injp) (injp @ wt_c @ lessdef_c)).
+  apply commut_wt_c.
+  rewrite HINJP.
+  rewrite !cc_compose_assoc.
+  rewrite <- (cc_compose_assoc wt_c).
+  rewrite <- (cc_compose_assoc (_@_)).
+  assert (HINJ: ccref ((wt_c @ lessdef_c) @ inj) (inj @ wt_c @ lessdef_c)).
+  apply commut_wt_c.
+  rewrite HINJ.
+  rewrite !cc_compose_assoc. rewrite <- (cc_compose_assoc lessdef_c).
   rewrite lessdef_c_cklr. reflexivity.
+  rewrite !cc_compose_assoc. reflexivity.
 Qed.
 
-Lemma cc_cod_ext:
-  ccref cc_c_cod (cc_c ext @ cc_c_cod).
+Lemma cc_c_level_collapse:
+  ccref (cc_c injp @ cc_c injp @
+              (wt_c @ cc_c ext) @ cc_c ext @
+              cc_c inj @
+              cc_c ext @
+              cc_c injp @
+              cc_c injp
+        )
+        cc_c_level.
 Proof.
-  unfold cc_c_cod.
-  rewrite <- ext_inj, cc_c_compose at 1.
-  rewrite <- (lessdef_c_cklr ext), cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
-  rewrite (commute_around (_ @ _)), cc_compose_assoc.
-  rewrite lessdef_c_cklr.
-  reflexivity.
-Qed.
-
-Lemma cc_cod_wt:
-  ccref cc_c_cod (wt_c @ cc_c_cod).
-Proof.
-  unfold cc_c_cod.
-  rewrite (inv_dup wt_c), !cc_compose_assoc at 1.
-  reflexivity.
-Qed.
-
-Lemma cc_dom_injp:
-  ccref (cc_c injp @ cc_c_dom) cc_c_dom.
-Proof.
-  unfold cc_c_dom.
-  rewrite <- cc_compose_assoc, <- cc_c_compose at 1.
-  rewrite injp_injp2. reflexivity.
-Qed.
-
-Lemma cc_dom_wt:
-  ccref (wt_c @ cc_c_dom) cc_c_dom.
-Proof.
-  unfold cc_c_dom, cc_c_cod.
-  do 2 rewrite <- cc_compose_assoc at 1. rewrite (cc_compose_assoc wt_c).   
-  rewrite (inv_drop _ wt_c), cc_compose_assoc.
-  reflexivity.
-Qed.
-
-(** The following collection of lemmas can then be used to pre-compose
-  a variety of passes. *)
-
-Section COMPOSE_C_PASSES.
-
-Context {li} (ccA ccB: callconv li_c li).
-
-Lemma compose_injection_self p tsem:
-  let sem := Clight.semantics1 p in
-  forward_simulation (cc_c injp) (cc_c injp) sem sem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) sem tsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c injp @ cc_c_cod @ ccB) sem tsem.
-Proof.
-  intros. unfold cc_c_dom, cc_c_cod in *.
-  rewrite <- cc_dom_injp,! cc_compose_assoc.
-  eapply compose_forward_simulations; eauto.
-  unfold cc_c_dom, cc_c_cod. rewrite !cc_compose_assoc.
-  rewrite !cc_compose_assoc in H0. eauto.
-Qed.
-
-Lemma compose_injection_pass sem bsem tsem:
-  forward_simulation (cc_c injp) (cc_c inj) sem bsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) bsem tsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) sem tsem.
-Proof.
-  intros. unfold cc_c_dom,cc_c_cod in *.
-  rewrite <- cc_dom_injp, cc_cod_inj, !cc_compose_assoc.
-  eapply compose_forward_simulations; eauto.
-Qed.
-
-(* We can turn ext into injection using the self-simulation of target semantics *)
-Lemma ext_pass: forall sem tp,
-    let tsem := RTL.semantics tp in
-  forward_simulation (cc_c ext) (cc_c ext) sem tsem ->
-  forward_simulation (cc_c injp) (cc_c inj) sem tsem.
-Proof.
-  intros.
-  rewrite <- ext_inj.   rewrite cc_c_compose.
-  rewrite <- sub_inj_injp at 1.
-  assert (HH :subcklr (ext @ inj) inj).
-  rewrite ext_inj. rauto. 
-  rewrite <- HH at 1. rewrite cc_c_compose.
-  eapply compose_forward_simulations; eauto.
-  eapply RTLrel.semantics_rel.
-Qed.
-
-(* Since Selection pass is Cminor -> CminorSel without target self simulation, we need to compose it with 
-   following RTLgen pass, then turn the whole simulation into wt_c @ injp --> wt_c @ inj *)
-
-Lemma compose_wt_injection_pass sem bsem tsem:
-  forward_simulation (wt_c @ cc_c injp) (wt_c @ cc_c inj) sem bsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) bsem tsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) sem tsem.
-Proof.
-  intros.
-  rewrite <- cc_dom_wt, cc_cod_wt, !cc_compose_assoc.
-  rewrite <- cc_dom_injp, cc_cod_inj, !cc_compose_assoc.
-  rewrite <- !(cc_compose_assoc wt_c).
-  eapply compose_forward_simulations; eauto.
-Qed.
-
-Lemma wt_ext_pass: forall sem tp,
-    let tsem := RTL.semantics tp in
-  forward_simulation (wt_c @ cc_c ext) (wt_c @ cc_c ext) sem tsem ->
-  forward_simulation (wt_c @ cc_c injp) (wt_c @ cc_c inj) sem tsem.
-Proof.
-  intros.
-  rewrite <- ext_inj.   rewrite cc_c_compose.
-  rewrite <- sub_inj_injp at 1.
-  assert (HH :subcklr (ext @ inj) inj).
-  rewrite ext_inj. rauto.
-  rewrite <- HH at 1. rewrite cc_c_compose.
-  assert (HHH : cceqv (wt_c @ ext @ inj) ((wt_c @ ext) @ inj)).
-  rewrite cc_compose_assoc. reflexivity.
-  rewrite HHH at 1. rewrite HHH.
-  eapply compose_forward_simulations; eauto.
-  eapply RTLrel.semantics_rel.
-Qed.
-
-Lemma compose_extension_pass sem tp tsem:
-  let bsem := RTL.semantics tp in
-  forward_simulation (cc_c ext) (cc_c ext) sem bsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) bsem tsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) sem tsem.
-Proof.
-  intros.
-  eapply compose_injection_pass; eauto.
-  eapply ext_pass; eauto.
-Qed.
-
-Lemma compose_backend_passes p tsem:
-  let sem := RTL.semantics p in
-  RTLtyping.wt_program p ->
-  forward_simulation ccA ccB sem tsem ->
-  forward_simulation (cc_c_dom @ ccA) (cc_c_cod @ ccB) sem tsem.
-Proof.
-  intros.
-  eapply compose_forward_simulations; eauto.
-  unfold cc_c_dom, cc_c_cod.
-  rewrite inj_inj at 2. rewrite cc_c_compose.
-  rewrite <- sub_inj_injp at 1.
-  rewrite <- (lessdef_c_cklr inj) at 2.
-  rewrite <- (cc_compose_assoc wt_c) at 1.
-  rewrite <- (commute_around (_ @ _)), cc_compose_assoc.
+  rewrite <- (cc_compose_assoc injp), <- cc_c_compose. rewrite injp_injp_eq.
+  rewrite <- (lessdef_c_cklr ext) at 1. rewrite !cc_compose_assoc.
+  rewrite <- (cc_compose_assoc wt_c).
+  rewrite <- (cc_compose_assoc injp).
+  rewrite wt_c_R_refinement.
+  rewrite !cc_compose_assoc.
   rewrite <- (cc_compose_assoc lessdef_c).
   rewrite lessdef_c_cklr.
-  repeat eapply compose_forward_simulations.
-  - eapply preserves_fsim, RTLtyping.rtl_wt; auto.
-  - eapply RTLrel.semantics_rel.
-  - eapply RTLrel.semantics_rel.
+  unfold cc_c_level. rstep. rauto.
+  rewrite <- (cc_compose_assoc ext), <- cc_c_compose. rewrite ext_ext.
+  rewrite <- (cc_compose_assoc ext), <- cc_c_compose. rewrite ext_inj.
+  rewrite <- (cc_compose_assoc inj), <- cc_c_compose. rewrite inj_ext.
+  rewrite <- cc_c_compose. rewrite inj_injp. rewrite <- cc_c_compose.
+  rewrite injp_injp_eq. reflexivity.
 Qed.
 
-End COMPOSE_C_PASSES.
+Lemma cc_expand :
+  ccref 
+    cc_compcert_cod
+    (
+      cc_c injp @ 
+      cc_c inj @
+      (wt_c @ cc_c ext) @ cc_c ext @
+      cc_c inj @
+      cc_c ext @ cc_c inj @ cc_c injp @
+    cc_c inj @                                              (* to compose the ext downside*)
+    (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
+    cc_locset ext @                              (* Tunneling *)
+    (wt_loc @ cc_locset_mach @ cc_mach inj ) @ (* Stacking *)
+    (cc_mach ext @ cc_mach_asm) @
+    cc_asm inj
+    ).
+Proof.
+  unfold cc_compcert_cod. rewrite cc_compcert_expand.
+  rewrite cc_c_level_expand. rewrite !cc_compose_assoc.
+  reflexivity.
+Qed.
 
-(** Test place about injp in RTL semantics using self simulation *)
+Lemma cc_collapse :
+  ccref
+    ( cc_c injp @ 
+      cc_c injp @
+      (wt_c @ cc_c ext) @ cc_c ext @
+      cc_c inj @
+      cc_c ext @ cc_c injp @ cc_c injp @
+      cc_c inj @                                              (* to compose the ext downside*)
+      (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
+      cc_locset ext @                              (* Tunneling *)
+      (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
+      (cc_mach ext @ cc_mach_asm) @
+      cc_asm inj
+    )
+    cc_compcert_dom.
+Proof.
+  rewrite <- cc_compcert_collapse.
+  rewrite <- cc_c_level_collapse.
+  rewrite ! cc_compose_assoc.
+  reflexivity.
+Qed.
 
 Lemma injp_pass: forall p tp,
     let sem := RTL.semantics p in
@@ -754,9 +680,6 @@ Proof.
   eapply RTLrel.semantics_rel.
 Qed.
 
-
-
-(** This is the simulation convention for the whole compiler. *)
 Lemma compose_identity_pass {liA1 liA2 liB1 liB2} ccA ccB sem bsem tsem:
   forward_simulation 1 1 sem bsem ->
   forward_simulation ccA ccB bsem tsem ->
@@ -801,46 +724,32 @@ Ltac DestructM :=
   repeat DestructM. subst tp.
   assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p15)).
   {
-  
   eapply cc_compcert_merge; eauto.
-  rewrite cc_compcert_expand.
-  rewrite <- cc_compcert_collapse at 1.
-  eapply compose_injection_self.
-    eapply Clightrel.semantics1_rel.
-  eapply compose_injection_pass.
-    eapply SimplLocalsproof.transf_program_correct; eassumption.
+  rewrite cc_expand. rewrite <- cc_collapse at 1.
+  eapply compose_forward_simulations.
+    eapply SimplLocalsproof.transf_program_correct'; eassumption.
   eapply compose_identity_pass.
     eapply Cshmgenproof.transl_program_correct; eassumption.
-  eapply compose_injection_pass.
+  eapply compose_forward_simulations.
     eapply Cminorgenproof.transl_program_correct; eassumption.
-  eapply compose_wt_injection_pass.
-  { (* Selection & RTLgen *)
-    eapply wt_ext_pass.
-    rewrite <- ext_ext at 2. rewrite cc_c_compose.
-    assert (H : subcklr (ext @ ext) ext).
-    rewrite ext_ext. reflexivity.
-    rewrite <- H at 1. rewrite cc_c_compose.
-    rewrite <- (cc_compose_assoc wt_c) at 1.
-    rewrite <- (cc_compose_assoc wt_c).
-    eapply compose_forward_simulations.
+  eapply compose_forward_simulations.
     eapply Selectionproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
     eapply RTLgenproof.transf_program_correct; eassumption.
-  }
-  eapply compose_optional_pass; eauto using compose_extension_pass.
-    exact Tailcallproof.transf_program_correct.
-  eapply compose_injection_pass.
+  eapply compose_forward_simulations.
+    eapply RTLrel.semantics_rel.
+  eapply compose_forward_simulations.
+    unfold match_if in M4. destruct (optim_tailcalls tt).
+    eapply Tailcallproof.transf_program_correct; eauto.
+    subst. eapply RTLrel.semantics_rel.
+  eapply compose_forward_simulations.
     eapply Inliningproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply RTLrel.semantics_rel.
   eapply compose_identity_pass.
     eapply Renumberproof.transf_program_correct; eassumption.
-(*  eapply compose_optional_pass; eauto using compose_va_pass.
-    exact Constpropproof.transf_program_correct.
-  eapply compose_optional_pass; eauto using compose_identity_pass.
-    exact Renumberproof.transf_program_correct.
-  eapply compose_optional_pass; eauto using compose_va_pass.
-    exact CSEproof.transf_program_correct.
-  eapply compose_optional_pass; eauto using compose_va_pass.
-    exact Deadcodeproof.transf_program_correct; eauto. *)
-  eapply compose_backend_passes; eauto using Allocproof.wt_prog.
+  eapply compose_forward_simulations.
+    eapply RTLrel.semantics_rel.
   eapply compose_forward_simulations.
     eapply Allocproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.

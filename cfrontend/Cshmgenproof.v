@@ -1937,10 +1937,11 @@ Lemma transl_external:
   forall r S', Clight.after_external S r S' ->
   exists R', after_external R r R' /\ match_states S' R'.
 Proof.
-  intros S R q HSR Hq. destruct Hq; inv HSR.
+  intros S R q HSR Hq. destruct Hq. inv HSR.
   assert (fd = f) by congruence; subst fd f. inv TR.
   split. econstructor; eauto. intros r S' HS'. inv HS'.
-  eexists. split; econstructor; eauto.
+  eexists. split. econstructor; eauto.
+  econstructor; eauto.
   admit. (* XXX need typing constraint somewhere *)
 Admitted.
 

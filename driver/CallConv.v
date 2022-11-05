@@ -157,6 +157,36 @@ Proof.
   destruct proj_sig_res as [ | | | | | ]; eauto.
 Qed.
 
+Lemma commut_c_locsert' R:
+   ccref (cc_c R @ cc_c_locset) (cc_c_locset @ cc_locset R).
+Proof.
+  intros [[se' wR] sg] se1 se2 q1 q2 Hse Hq.
+  inv Hse. inv H0. cbn in H. 
+  inv Hq. inv H0. inv H1. inv H2.  rename rs into ls2.
+  exists (se1,sg0,(sg0,wR)). repeat apply conj.
+  - cbn; auto.
+  - assert (exists ls1, vargs1 = (fun p : rpair loc => Locmap.getpair p ls1) ## (loc_arguments sg0)).
+    admit.
+    destruct H1 as [ls1 A].
+    exists (lq vf1 sg0 ls1 m1). split.
+    constructor; eauto.
+    constructor; eauto.
+    red. intros. inv H1.
+    + admit.
+    + admit.
+  - intros r1 r2 [r1' [Hr1 Hr2]].
+    destruct Hr2 as [w [Hw Hr2]]. inv Hr1.
+    inv Hr2. rename rs' into ls1'. rename m' into m1'.
+    set (res' := Locmap.getpair (map_rpair Locations.R (loc_result sg0)) ls2').
+    exists (cr res' m2'). split.
+    econstructor; eauto. split. eauto.
+    constructor; eauto. subst res'.
+    destruct (loc_result_always_one sg0) as [r H''].
+    rewrite H''.
+    cbn. eapply H6. rewrite H''. cbn. eauto.
+    constructor; eauto.
+Admitted. (*I believe it's correct*)
+
 Instance commut_c_locset R:
   Commutes cc_c_locset (cc_c R) (cc_locset R).
 Proof.
@@ -1175,6 +1205,21 @@ Proof.
       destruct is_callee_save eqn:Hr; auto.
       rewrite H20 by auto. cbn. generalize (H5 r). rauto.
 Qed.
+
+(*
+Lemma commut_locset_mach' R:
+  ccref (cc_locset R @ cc_locset_mach) (cc_locset_mach @ cc_mach R).
+Proof.
+  intros [[se [sg wR]] [sg' rs2 m sp]] se1 se2 q1 q2 Hse [q1' [Hq1 Hq2]].
+  destruct Hse. cbn in H. inv H0. inv Hq1. inv Hq2. rename m into m3.
+  set (ls2 := make_locset rs2 m3 sp).
+  assert (exists rs1 m1', ls1 = make_locset rs1 m1' sp
+         /\ args_removed sg sp ).
+
+*)
+
+
+
 
 (** ** Matching [cc_stacking] *)
 
