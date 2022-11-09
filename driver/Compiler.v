@@ -499,8 +499,8 @@ Qed.
 
 Lemma cc_compcert_collapse:
   ccref
-    (cc_c_level @                                     (* Passes up to Alloc *)
-     cc_c inj @                                              (* to compose the ext downside*)
+    (cc_c_level @                                 (* Passes up to Alloc *)
+     cc_c inj @                                   (* to compose the ext downside*)
      (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
      cc_locset ext @                              (* Tunneling *)
      (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)

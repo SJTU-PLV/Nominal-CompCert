@@ -107,8 +107,6 @@ Inductive match_state_c_asm : state -> (sup * Asm.state) -> Prop :=
      Mem.sup_include (Mem.support m2) (Mem.support m3'') -> (*unchanged_on of Outgoing*)
      match_state_c_asm (Returnstatef i rig m1'') ((Mem.support m2), State rs m3'' true)
   |match_ca_returng j' m2''' m3''' m1''' (rs: regset) ri Hm''':
-(*   rs PC = Vptr b Ptrofs.??? (*position after Pfreeframe*) ->
-     Genv.find_funct_ptr ge b = Some (Internal func_g) -> *)
      injp_acc injw (injpw j' m1''' m2''' Hm''') ->
      rs RAX = Vint ri ->
      Mem.unchanged_on (fun b ofs => True) m2''' m3''' ->
@@ -1181,24 +1179,3 @@ Proof.
   eapply semantics_asm_rel; eauto.
 Qed.
 
-(*
-Theorem Bproof :
-  forward_simulation cc_compcert cc_compcert Bspec (Asm.semantics DemoB.prog).
-Proof.
-  unfold cc_compcert.
-  rewrite <- (cc_compose_assoc wt_c lessdef_c) at 1.
-  rewrite <- (cc_compose_assoc wt_c lessdef_c).
-  eapply compose_forward_simulations.
-  eapply injp_protection.
-  eapply compose_forward_simulations.
-  eapply self_wt.
-  rewrite <- !(cc_compose_assoc) at 1.
-  eapply compose_forward_simulations.
-  rewrite cc_compose_assoc at 1.
-  rewrite cc_compose_assoc at 1.
-  rewrite <- cc_ca_cllmma at 1.
-  rewrite cc_cllmma_ca.
-  eapply CA.
-  eapply semantics_asm_rel; eauto.
-Qed.
-*)

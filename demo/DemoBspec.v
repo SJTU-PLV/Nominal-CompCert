@@ -35,12 +35,8 @@ Section WITH_SE.
   
 Inductive initial_state (ge:genv) : query li_c -> state -> Prop :=
 | initial_state_intro
-    v args m i
-(*    (SYMB: Genv.symbol_address se g_id Ptrofs.zero = v)
-    (FPTR: v = Vptr b Ptrofs.zero)
-*)
-    (FIND: Genv.find_funct ge v = Some (Internal func_g))
-    (VS: args = (Vint i:: nil)):
+    v m i
+    (FIND: Genv.find_funct ge v = Some (Internal func_g)):
     initial_state ge (cq v int_int_sg ((Vint i) :: nil) m) (Callstateg i m).
 
 Inductive at_external (ge:genv): state -> query li_c -> Prop :=
