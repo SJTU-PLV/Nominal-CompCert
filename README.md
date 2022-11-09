@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # CompCertO
 
 A version of CompCert featuring an open module semantics, designed to
@@ -6,7 +6,7 @@ target the framework of *refinement-based game semantics*.
 
 ## Overview
 
-This is a modified version of CompCert v3.6. The language semantics
+This is a modified version of CompCert v3.10. The language semantics
 and correctness proofs have been updated to describe the behavior of
 individual compilation units. Most passes from Clight to Asm have
 been update, for the x86 architecture.
@@ -20,7 +20,7 @@ compiled in the following way.
 
 ### Requirements
 
-Build requirements are identical to those of CompCert v3.6. We recommend
+Build requirements are identical to those of CompCert v3.10. We recommend
 using the `opam` package manager to set up a build environment. We have
 tested CompCertO on Linux with the following `opam` installation:
 
@@ -100,15 +100,3 @@ with CompCert v3.6.
 
 # CompCert
 The formally-verified C compiler.
-=======
-# Nominal CompCert
->>>>>>> 830b2cc
-
-## Overview
-We replaced the "nextblock" design in CompCert by "support and freshness" which comes from Nominal Technique.
-
-This version uses Module Type to describe the necessary properties (definitions and theorems) of "block" and "sup" Type for the original compilation pass. 
-
-We have repaired the whole proof using "Declare Module sup:SUP (block:BLOCK)". We have also made the compiler available using "positive" and "positive list" to realize "block" and "sup". While the code is the same except the definition of these two Modules. 
-
-We optimistically believe that we can design different "block" and "sup" types which satisfy our signature to carry more information and improve/extend the original CompCert without breaking the proves we do not concern.
