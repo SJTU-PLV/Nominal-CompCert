@@ -6,7 +6,7 @@ Require Import Asm Asmrel.
 
 Require Import Integers.
 
-Require Import SymbolTable DemoB.
+Require Import DemoB.
 
 (*
   The specification of DemoB.prog in lts li_C -> li_C
