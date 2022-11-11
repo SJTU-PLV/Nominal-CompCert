@@ -8,9 +8,6 @@ Require Import Integers.
 
 Require Import DemoB.
 
-(*
-  The specification of DemoB.prog in lts li_C -> li_C
- *)
 
 Inductive state: Type :=
 | Callstateg
@@ -59,14 +56,14 @@ Inductive step : state -> trace -> state -> Prop :=
     i b_mem m ti i'
     (NZERO: i.(Int.intval) <> 0%Z)
     (EQ: i.(Int.intval) = i'.(Int.intval))
-    (FINDM: Genv.find_symbol se _memoized = (Some b_mem))
+    (FINDM: Genv.find_symbol se _s = (Some b_mem))
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
     (LOAD1: Mem.loadv Mint32 m (Vptr b_mem (Ptrofs.repr 4)) = Some (Vint ti)):
       step (Callstateg i m) E0 (Returnstateg ti m)
 | step_call
     i m i' b_mem vf
     (NZERO: i.(Int.intval) <> 0%Z)
-    (FINDM: Genv.find_symbol se _memoized = (Some b_mem))
+    (FINDM: Genv.find_symbol se _s = (Some b_mem))
     (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
     (FINDF: Genv.symbol_address se f_id Ptrofs.zero = vf)
     (VF: vf <> Vundef)
@@ -74,7 +71,7 @@ Inductive step : state -> trace -> state -> Prop :=
     step (Callstateg i m) E0 (Callstatef vf i m)
 | step_return
     b_mem m m' m'' ti i
-    (FINDM: Genv.symbol_address se _memoized Ptrofs.zero  = Vptr b_mem Ptrofs.zero)
+    (FINDM: Genv.symbol_address se _s Ptrofs.zero  = Vptr b_mem Ptrofs.zero)
     (STORE0: Mem.storev Mint32 m (Vptr b_mem Ptrofs.zero) (Vint i) = Some m')
     (STORE0: Mem.storev Mint32 m' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some m''):
     step (Returnstatef i ti m) E0 (Returnstateg (Int.add ti i) m'').
@@ -86,12 +83,12 @@ Inductive final_state: state -> reply li_c  -> Prop :=
 
 End WITH_SE.
 
-Program Definition Bspec : Smallstep.semantics li_c li_c :=
+Program Definition L_A : Smallstep.semantics li_c li_c :=
   {|
-   Smallstep.skel := erase_program DemoB.prog;
+   Smallstep.skel := erase_program M_A;
    Smallstep.state := state;
    Smallstep.activate se :=
-     let ge := Genv.globalenv se DemoB.prog in
+     let ge := Genv.globalenv se M_A in
      {|
        Smallstep.step ge := step ge;
        Smallstep.valid_query q := Genv.is_internal ge (cq_vf q);

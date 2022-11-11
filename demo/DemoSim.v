@@ -11,7 +11,7 @@ Section Preservation.
 
 Lemma compose_transf_Clight_Asm_correct:
   forall Atprog tp spec,
-  compose (Clight.semantics1 DemoA.prog) Bspec = Some spec -> (*can be proofed for the demo*)
+  compose (Clight.semantics1 DemoA.prog) Bspec = Some spec -> (*can be proofed for the demo *)
   transf_clight_program DemoA.prog = OK Atprog ->
   link Atprog DemoB.prog = Some tp ->
   forward_simulation cc_compcert cc_compcert spec (Asm.semantics tp).

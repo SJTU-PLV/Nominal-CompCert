@@ -16,6 +16,7 @@ Require Import CKLRAlgebra Extends Inject InjectFootprint.
 Require Import Asmgenproof0 Asmgenproof1.
 
 Section injp_CA.
+(* The proof here uses cc_c injp @ cc_c_asm which is equivalent to cc_c_asm_injp *)
 
 Section MS.
 Variable w: ccworld (cc_c injp @ cc_c_asm).
@@ -31,26 +32,12 @@ Definition sp0 := rs0 RSP.
 Definition ra0 := rs0 RA.
 Definition vf0 := rs0 PC.
 Definition bx0 := rs0 RBX. (*only used callee_save register in this sample*)
-(*cc_c_asm_mq*)
 
 Inductive new_blockv (s:sup) : val -> Prop :=
   new_blockv_intro : forall b ofs, ~ sup_In b s -> new_blockv s (Vptr b ofs).
 
-Definition ge := Genv.globalenv se DemoB.prog.
+Definition ge := Genv.globalenv se M_A.
 
-
-
-(*
-Callg             Callf             Returnf            Returng
-m1     STORE       m1'                 m1''      STORE     m1'''
-
-j                  j                   j'                   j'
-
-m2                 m2'                m2''                 m2'''
-
-
-m2                 m2'                m3''
-*)
 Inductive match_state_c_asm : state -> (sup * Asm.state) -> Prop :=
   |match_ca_callg i j m1 b Hm:
      let sp := rs0 RSP in let ra := rs0 RA in
@@ -143,7 +130,7 @@ Proof.
 Qed.
 
 Lemma match_program_id :
-  match_program (fun _ f0 tf => tf = id f0) eq prog prog.
+  match_program (fun _ f0 tf => tf = id f0) eq M_A M_A.
 Proof.
   red. red. constructor; eauto.
     constructor. constructor. eauto. simpl. econstructor; eauto.
@@ -372,7 +359,7 @@ Qed.
 Lemma injp_CA_simulation: forward_simulation
                  (cc_c injp @ cc_c_asm)
                  (cc_c injp @ cc_c_asm)
-                 Bspec (Asm.semantics prog).
+                 L_A (Asm.semantics M_A).
 Proof.
   constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
   intros se1 se2 w Hse Hse1. cbn in *. subst.
@@ -525,7 +512,7 @@ Proof.
       intros. inversion Hm0. eauto. intro INJ5.
       rename H9 into Hpc. rename H12 into Hrdi.
       assert (exists s2': Asm.state,
-             plus (Asm.step (Mem.support m3)) (Genv.globalenv se2 prog) (State rs0 m3 true) E0 s2'
+             plus (Asm.step (Mem.support m3)) (Genv.globalenv se2 M_A) (State rs0 m3 true) E0 s2'
              /\ ms (Returnstateg Int.zero m1) (Mem.support m3, s2')).
       { 
         (*execution of Asm code*)
@@ -629,7 +616,7 @@ Proof.
       }
       destruct H3 as [s2' [STEP MS]].
       exists (Mem.support m3, s2'). intuition eauto.
-      revert STEP. generalize (Mem.support m3), (Genv.globalenv se1 prog); clear; intros.
+      revert STEP. generalize (Mem.support m3), (Genv.globalenv se1 M_A); clear; intros.
       pattern (State rs0 m3 true),E0,s2'. eapply plus_ind2; eauto; intros.
       * apply plus_one; eauto.
       * eapply plus_trans; eauto.
@@ -655,7 +642,7 @@ Proof.
       destruct FINDM' as [b_mem' [VINJM FINDM']].
       rename H9 into Hpc. rename H12 into Hrdi.
       assert (exists s2': Asm.state,
-             plus (Asm.step (Mem.support m3)) (Genv.globalenv se2 prog) (State rs0 m3 true) E0 s2'
+             plus (Asm.step (Mem.support m3)) (Genv.globalenv se2 M_A) (State rs0 m3 true) E0 s2'
              /\ ms (Returnstateg ti m1) (Mem.support m3, s2')).
       { 
         (*execution of Asm code*)
@@ -791,7 +778,7 @@ Proof.
       }
       destruct H as [s2' [STEP MS]].
       exists (Mem.support m3, s2'). intuition eauto.
-      revert STEP. generalize (Mem.support m3), (Genv.globalenv se1 prog); clear; intros.
+      revert STEP. generalize (Mem.support m3), (Genv.globalenv se1 M_A); clear; intros.
       pattern (State rs0 m3 true),E0,s2'. eapply plus_ind2; eauto; intros.
       * apply plus_one; eauto.
       * eapply plus_trans; eauto.
@@ -815,7 +802,7 @@ Proof.
       destruct FINDM' as [b_mem' [VINJM FINDM']].
       rename H9 into Hpc. rename H12 into Hrdi.
       assert (exists s2': Asm.state,
-             plus (Asm.step (Mem.support m3)) (Genv.globalenv se2 prog) (State rs0 m3 true) E0 s2'
+             plus (Asm.step (Mem.support m3)) (Genv.globalenv se2 M_A) (State rs0 m3 true) E0 s2'
              /\ ms (Callstatef (Genv.symbol_address se1 f_id Ptrofs.zero) i m1) (Mem.support m3, s2')).
       { 
         (*execution of Asm code*)
@@ -938,7 +925,7 @@ Proof.
       }
       destruct H as [s2' [STEP MS]].
       exists (Mem.support m3, s2'). intuition eauto.
-      revert STEP. generalize (Mem.support m3), (Genv.globalenv se1 prog); clear; intros.
+      revert STEP. generalize (Mem.support m3), (Genv.globalenv se1 M_A); clear; intros.
       pattern (State rs0 m3 true),E0,s2'. eapply plus_ind2; eauto; intros.
       * apply plus_one; eauto.
       * eapply plus_trans; eauto.
@@ -991,7 +978,7 @@ Proof.
      intro LOAD3'.
      rewrite Ptrofs.add_zero_l in *. inv H20.
      assert (exists s2': Asm.state,
-             plus (Asm.step (Mem.support m3)) (Genv.globalenv se2 prog) (State rs m3'' true) E0 s2'
+             plus (Asm.step (Mem.support m3)) (Genv.globalenv se2 M_A) (State rs m3'' true) E0 s2'
              /\ ms (Returnstateg (Int.add ti i) m'') (Mem.support m3, s2')).
       { 
         (*execution of Asm code*)
@@ -1123,7 +1110,7 @@ Proof.
       }
       destruct H1 as [s2' [STEP MS]].
       exists (Mem.support m3, s2'). intuition eauto.
-      revert STEP. generalize (Mem.support m3), (Genv.globalenv se1 prog); clear; intros.
+      revert STEP. generalize (Mem.support m3), (Genv.globalenv se1 M_A); clear; intros.
       pattern (State rs m3'' true) ,E0,s2'. eapply plus_ind2; eauto; intros.
       * apply plus_one; eauto.
       * eapply plus_trans; eauto.
@@ -1133,9 +1120,9 @@ Qed.
 
 End injp_CA.
 
-
+(* L_A <=  wt ->> wt L_A*)
 Theorem self_simulation_wt :
-  forward_simulation wt_c wt_c Bspec Bspec.
+  forward_simulation wt_c wt_c L_A L_A.
 Proof.
   constructor. econstructor; eauto.
   intros se1 se2 w Hse Hse1. cbn in *.
@@ -1166,8 +1153,8 @@ Proof.
   - constructor. intros. inv H.
 Qed.
 
-Lemma DemoB_semantics_preservation:
-  forward_simulation cc_compcert cc_compcert Bspec (Asm.semantics DemoB.prog).
+Lemma M_A_semantics_preservation:
+  forward_simulation cc_compcert cc_compcert L_A (Asm.semantics M_A).
 Proof.
   unfold cc_compcert.
   eapply compose_forward_simulations.
@@ -1177,5 +1164,33 @@ Proof.
   rewrite <- cc_injpca_cainjp.
   eapply injp_CA_simulation.
   eapply semantics_asm_rel; eauto.
+Qed.
+
+
+(* Final theorem *)
+Require Import Linking Smallstep SmallstepLinking.
+
+Lemma compose_transf_Clight_Asm_correct:
+  forall M_C' tp spec,
+  compose (Clight.semantics1 M_C) L_A = Some spec ->
+  transf_clight_program M_C = OK M_C' ->
+  link M_C' M_A = Some tp ->
+  forward_simulation cc_compcert cc_compcert spec (Asm.semantics tp).
+Proof.
+  intros.
+  rewrite <- (cc_compose_id_right cc_compcert) at 1.
+  rewrite <- (cc_compose_id_right cc_compcert) at 2.
+  eapply compose_forward_simulations.
+  2: { unfold compose in H.
+       destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel; try discriminate.
+       cbn in *. inv H.
+       eapply AsmLinking.asm_linking; eauto. }
+  eapply compose_simulation.
+  eapply clight_semantic_preservation; eauto using transf_clight_program_match.
+  eapply M_A_semantics_preservation.
+  eauto.
+  unfold compose. cbn.
+  apply link_erase_program in H1. rewrite H1. cbn. f_equal. f_equal.
+  apply Axioms.functional_extensionality. intros [|]; auto.
 Qed.
 
