@@ -8,7 +8,7 @@ Require Import LanguageInterface.
 Require Import Asm Asmrel.
 
 Require Import Integers.
-Require Import DemoB DemoBspec.
+Require Import Demo Demospec.
 
 Require Import CallConv Compiler CA.
 Require Import CKLRAlgebra Extends Inject InjectFootprint.

@@ -6,7 +6,7 @@ Require Import Asm Asmrel.
 
 Require Import Integers.
 
-Require Import DemoB.
+Require Import Demo.
 
 
 Inductive state: Type :=
