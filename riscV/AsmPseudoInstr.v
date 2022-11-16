@@ -24,6 +24,20 @@ Definition transf_instr i : (list instruction) :=
   | Pj_r rs sg => [Pjal_rr X0 rs 0]
   | Pjal_s id sg => [Pjal_ofs X1 (inl id)]
   | Pjal_r rs sg => [Pjal_rr X1 rs 0]
+                     
+  (* we remove the pseudo instruction that use any type here *)
+  | Plw_a rd ra ofs =>
+    [Plw rd ra ofs]
+  | Pld_a rd ra ofs =>
+    [Pld rd ra ofs]
+  | Psw_a rs ra ofs =>
+    [Psw rs ra ofs]
+  | Psd_a rs ra ofs =>
+    [Psd rs ra ofs]
+  | Pfld_a rd ra ofs =>
+    [Pfld rd ra ofs]
+  | Pfsd_a rs ra ofs =>
+    [Pfsd rs ra ofs]
   | _ => []
   end.
 

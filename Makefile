@@ -119,6 +119,7 @@ BACKEND=\
   AsmBuiltinInline.v\
   AsmLiteral.v\
   Asmlabelgen.v\
+  AsmPseudoInstr.v\
   Jumptablegen.v\
   SymbtablegenArchi.v\
   RelocationTypes.v ReloctablesgenArchi.v\
