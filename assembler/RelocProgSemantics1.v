@@ -26,8 +26,8 @@ Definition rev_acc_code (r:code*Z*reloctable) i :=
     (c++[i], ofs + instr_size i, [])
   | e :: reloctbl' =>
     let ofs' := ofs + instr_size i in
-    if Z.ltb ofs e.(reloc_offset) && Z.ltb e.(reloc_offset) ofs' then
-      (c++[rev_id_eliminate e.(reloc_symb) i], ofs', reloctbl')
+    if Z.leb ofs e.(reloc_offset) && Z.ltb e.(reloc_offset) ofs' then
+      (c++[rev_id_eliminate e.(reloc_symb) e.(reloc_addend) i], ofs', reloctbl')
     else
       (c++[i], ofs', reloctbl)
   end.

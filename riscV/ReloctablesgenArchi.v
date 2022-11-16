@@ -35,7 +35,7 @@ Definition transl_instr (sofs:Z) (i: instruction) : res (option relocentry) :=
   | Plb  _ _ (Ofslow symb ofs)
   | Plbu _ _ (Ofslow symb ofs)
   | Plh  _ _ (Ofslow symb ofs)
-  | Plhu _ _ (Ofslow symb ofs)        
+  | Plhu _ _ (Ofslow symb ofs)
   | Plw  _ _ (Ofslow symb ofs)
   | Pld  _ _ (Ofslow symb ofs)
   | Pfls _ _ (Ofslow symb ofs)
@@ -59,3 +59,43 @@ Definition transl_instr (sofs:Z) (i: instruction) : res (option relocentry) :=
   | _ => OK None
   end.
       
+Definition id_eliminate (i:instruction) : instruction :=
+  match i with
+  | Plui_s rd symb ofs =>
+      Plui_s rd xH 0
+  | Paddi_s rd rs symb ofs =>
+      Paddi_s rd rs xH 0
+  | Pjal_ofs rd (inl symb) =>
+      Pjal_ofs rd (inr 0)
+  | Plb  r1 r2 (Ofslow symb ofs) =>
+      Plb  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Plbu r1 r2 (Ofslow symb ofs) =>
+      Plbu  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Plh  r1 r2 (Ofslow symb ofs) =>
+      Plh  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Plhu r1 r2 (Ofslow symb ofs) =>
+      Plhu  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Plw  r1 r2 (Ofslow symb ofs) =>
+      Plw  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Pld  r1 r2 (Ofslow symb ofs) =>
+      Pld  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Pfls r1 r2 (Ofslow symb ofs) =>
+      Pfls  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Pfld r1 r2 (Ofslow symb ofs) =>
+      Pfld  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Psb  r1 r2 (Ofslow symb ofs) =>
+      Psb  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Psh  r1 r2 (Ofslow symb ofs) =>
+      Psh  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Psw  r1 r2 (Ofslow symb ofs) =>
+      Psw  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Psd  r1 r2 (Ofslow symb ofs) =>
+      Psd  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Pfss r1 r2 (Ofslow symb ofs) =>
+      Pfss  r1 r2 (Ofsimm (Ptrofs.zero))
+  | Pfsd r1 r2 (Ofslow symb ofs) =>
+      Pfsd  r1 r2 (Ofsimm (Ptrofs.zero))
+  | _ => i
+  end.
+
+         
