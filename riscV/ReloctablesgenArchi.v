@@ -12,7 +12,7 @@ Local Open Scope error_monad_scope.
 
 (** ** Generation of relocation entries *)
 
-Definition transl_instr (sofs:Z) (i: instruction) : res (option relocentry) :=
+Definition transl_instr (instr_size: instruction -> Z) (sofs:Z) (i: instruction) : res (option relocentry) :=
   match i with
   (* instructions with raw symbol *)
   | Plui_s _ symb ofs =>
@@ -98,4 +98,16 @@ Definition id_eliminate (i:instruction) : instruction :=
   | _ => i
   end.
 
-         
+(* data relocation *)
+Definition transl_init_data (dofs:Z) (d:init_data) : res (option relocentry) :=
+  match d with
+  | Init_addrof id ofs =>
+      let e := {| reloc_offset := dofs;
+                  reloc_type := if Archi.ptr64 then R_RISCV_64 else R_RISCV_32;
+                  reloc_symb := id;
+                  reloc_addend := 0;
+               |} in
+      OK (Some e)
+  | _ =>
+    OK None
+  end.

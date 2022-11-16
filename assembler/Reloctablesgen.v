@@ -33,6 +33,7 @@ Definition transl_code (c:code) : res reloctable :=
 
 (** ** Translation of global variables *)
 
+(* define it in x86 and riscv respectively 
 Definition transl_init_data (dofs:Z) (d:init_data) : res (option relocentry) :=
   match d with
   | Init_addrof id ofs =>
@@ -45,6 +46,7 @@ Definition transl_init_data (dofs:Z) (d:init_data) : res (option relocentry) :=
   | _ =>
     OK None
   end.
+*)
 
 (** Tranlsation of a list of initialization data and generate
     relocation entries *)
