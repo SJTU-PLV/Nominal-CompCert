@@ -347,7 +347,6 @@ Definition expand_ctz (sixtyfour splitlong:bool) : list instruction :=
   else Psrliw X6 (X X6) (Int.repr 31);
   Psubw X7 (X X7) (X X6)].
 
-Compute (if ireg_eq X1 X2 then true else false).
 
 (* Handling of compiler-inlined builtins *)
 Definition expand_builtin_inline (f:function) (name: string) (args: list (builtin_arg preg)) (res: builtin_res preg) : Errors.res (list instruction) :=
