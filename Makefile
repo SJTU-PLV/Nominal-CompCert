@@ -27,8 +27,8 @@ else
 ARCHDIRS=$(ARCH)_$(BITSIZE) $(ARCH)
 endif
 
-DIRS := lib common $(ARCHDIRS) backend cfrontend driver exportclight cparser encode assembler\
-# elf autogen assembler
+DIRS := lib common $(ARCHDIRS) backend cfrontend driver exportclight cparser encode assembler autogen\
+# elf assembler
 
 COQINCLUDES := $(foreach d, $(DIRS), -R $(d) compcert.$(d))
 
@@ -123,6 +123,7 @@ BACKEND=\
   Jumptablegen.v\
   SymbtablegenArchi.v\
   RelocationTypes.v ReloctablesgenArchi.v\
+  TranslateInstr.v\
 
 # architecture dependent files (x86 and riscv)
 # TODO: AsmInject.v
@@ -170,7 +171,7 @@ ASSEMBLER = RelocProg.v RelocProgram.v\
   Reloctablesgen.v\
 
 # CSLED generation file
-# AUTOGEN = VerificationCondition.v EncDecRet.v
+AUTOGEN = VerificationCondition.v EncDecRet.v
 
 # C front-end modules (in cfrontend/)
 

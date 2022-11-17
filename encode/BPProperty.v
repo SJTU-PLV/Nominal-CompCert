@@ -753,17 +753,36 @@ Qed.
 (* Definition u? := { data?: list bool| length data? = ?}. *)
 
 Definition u1 := builtIn 1.
-
 Definition u2 := builtIn 2.
-
 Definition u3 := builtIn 3.
-
 Definition u4 := builtIn 4.
-
+Definition u5 := builtIn 5.
+Definition u6 := builtIn 6.
+Definition u7 := builtIn 7.
 Definition u8 := builtIn 8.
-
+Definition u9 := builtIn 9.
+Definition u10 := builtIn 10.
+Definition u11 := builtIn 11.
+Definition u12 := builtIn 12.
+Definition u13 := builtIn 13.
+Definition u14 := builtIn 14.
+Definition u15 := builtIn 15.
 Definition u16 := builtIn 16.
-
+Definition u17 := builtIn 17.
+Definition u18 := builtIn 18.
+Definition u19 := builtIn 19.
+Definition u20 := builtIn 20.
+Definition u21 := builtIn 21.
+Definition u22 := builtIn 22.
+Definition u23 := builtIn 23.
+Definition u24 := builtIn 24.
+Definition u25 := builtIn 25.
+Definition u26 := builtIn 26.
+Definition u27 := builtIn 27.
+Definition u28 := builtIn 28.
+Definition u29 := builtIn 29.
+Definition u30 := builtIn 30.
+Definition u31 := builtIn 31.
 Definition u32 := builtIn 32.
 
 Definition u64 := builtIn 64.
@@ -851,9 +870,12 @@ Ltac simpl_branch_decode Dec:=
 
 Ltac solve_try_get_n_decode H:=
     match type of H with
-    |try_get_n _ 0 = OK ?x1 =>
+    |try_get_n (?b::?l) 0 = OK ?x1 =>
      unfold try_get_n in H;
      destruct Nat.ltb in H;[congruence|simpl in H;injection H as H;subst x1]
+    | try_get_n ?l 0 = OK ?x1 =>
+     unfold try_get_n in H;
+     destruct Nat.ltb in H;[congruence|destruct l as [|il l];simpl in H;[congruence|destr_byte il;injection H as H;subst x1]]                             
     end.
 
   
