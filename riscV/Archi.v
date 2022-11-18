@@ -17,9 +17,12 @@
 (** Architecture-dependent parameters for RISC-V *)
 
 From Flocq Require Import Binary Bits.
-Require Import ZArith List.
+Require Import ZArith List MachineTypes.
 
 Parameter ptr64 : bool.
+
+(** machine type *)
+Definition machine := EM_RISCV.
 
 Definition big_endian := false.
 

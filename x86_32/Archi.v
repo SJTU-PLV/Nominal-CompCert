@@ -17,9 +17,12 @@
 (** Architecture-dependent parameters for x86 in 32-bit mode *)
 
 From Flocq Require Import Binary Bits.
-Require Import ZArith List.
+Require Import ZArith List MachineTypes.
 
 Definition ptr64 := false.
+
+(** machine type *)
+Definition machine := EM_386.
 
 Definition big_endian := false.
 

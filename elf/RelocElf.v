@@ -1,9 +1,5 @@
-(* Relocatable Elf Files *)
-(* Author        : Yuting Wang *)
-(* Date Created  : Sep-22-2019 *)
-
 Require Import Coqlib Integers Maps.
-Require Import AST Asm Archi.
+Require Import AST Asm Archi MachineTypes.
 Require Import Errors.
 Require Import Encode.
 Require Import Memdata.
@@ -87,21 +83,16 @@ Definition elf_file_type_value typ :=
   | ET_REL => 1
   end.
 
-Definition encode_elf_file_type typ :=
-  encode_int 2 (elf_file_type_value typ).
-
-(** Machine architecture 
-    We only support x86-32 for now *)
-(** Update: support x86-64 now*)
-Inductive elf_machine :Type := 
-| EM_386
-| EM_x86_64.
 
 Definition elf_machine_value m :=
   match m with
   | EM_386 => 3
   | EM_x86_64 => 62
+  | EM_RISCV => 243              (** F3 *)
   end.
+
+Definition encode_elf_file_type typ :=
+  encode_int 2 (elf_file_type_value typ).
 
 Definition encode_elf_machine m :=
   encode_int 2 (elf_machine_value m).

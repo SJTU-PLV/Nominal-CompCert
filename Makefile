@@ -27,8 +27,7 @@ else
 ARCHDIRS=$(ARCH)_$(BITSIZE) $(ARCH)
 endif
 
-DIRS := lib common $(ARCHDIRS) backend cfrontend driver exportclight cparser encode assembler autogen\
-# elf assembler
+DIRS := lib common $(ARCHDIRS) backend cfrontend driver exportclight cparser encode assembler autogen elf\
 
 COQINCLUDES := $(foreach d, $(DIRS), -R $(d) compcert.$(d))
 
@@ -158,7 +157,7 @@ ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 #  DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
 #  RelocElfLinking.v\
 
-ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
+ELF = MachineTypes.v RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
   ReloctablesEncode.v  ReloctablesDecode.v \
 
 # assembler

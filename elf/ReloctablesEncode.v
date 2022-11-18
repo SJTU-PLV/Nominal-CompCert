@@ -1,14 +1,8 @@
-(* *******************  *)
-(* Author: Yuting Wang  *)
-(*         Jinhua Wu    *)
-(* Date:   Sep 21, 2019 *)
-(* *******************  *)
-
 (** * Encoding of the relocation tables into sections *)
 
 Require Import Coqlib lib.Integers AST Maps.
 Require Import Errors.
-Require Import RelocProg Encode.
+Require Import RelocProg Encode RelocationTypes.
 Require Import Memdata.
 Require Import encode.Hex encode.Bits.
 Import Hex Bits.
@@ -36,13 +30,6 @@ Local Open Scope bits_scope.
     
 
 *)
-
-Definition encode_reloctype (t:reloctype) :=
-  match t with
-  | reloc_null => 0     (* R_386_NONE *)
-  | reloc_abs  => 1     (* R_386_32, addend 64bit in 64bit mode*)
-  | reloc_rel  => 2     (* R_386_PC32 in 32bit and R_X86_64_PC32 in 64bit mode*)
-  end.
 
 Section WITH_IDXMAP.
 Variable  (idxmap: PTree.t Z).
