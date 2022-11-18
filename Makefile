@@ -158,6 +158,9 @@ ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 #  DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
 #  RelocElfLinking.v\
 
+ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
+  ReloctablesEncode.v  ReloctablesDecode.v \
+
 # assembler
 # ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
 #   RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
@@ -166,9 +169,10 @@ ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 #   Reloctablesgen.v Reloctablesgenproof.v\
 #   RelocBingen.v RelocBingenproof.v\
 
-ASSEMBLER = RelocProg.v RelocProgram.v\
+ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
   Symbtablegen.v\
   Reloctablesgen.v\
+  RelocBingen.v\
 
 # CSLED generation file
 AUTOGEN = VerificationCondition.v EncDecRet.v

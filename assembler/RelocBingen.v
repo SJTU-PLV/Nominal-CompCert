@@ -4,31 +4,32 @@ Require Import Asm RelocProg RelocProgramBytes.
 Require Import encode.Hex encode.Bits Memdata encode.Encode.
 Require Import Reloctablesgen.
 Require Import SymbolString.
-Require Import TranslateInstr.
+Require Import TranslateInstr BPProperty.
 Import Hex Bits.
 Import ListNotations.
 
 Local Open Scope error_monad_scope.
 Local Open Scope hex_scope.
 Local Open Scope bits_scope.
-  
+
 
 Fixpoint translate_bytes instrs :=
   match instrs with
   | [] => OK []
   | i :: instrs' =>
-    do tl <- translate_bytes instrs';
-    do bs <- EncDecRet.encode_Instruction i;
-    OK (bs ++ tl)
+      do bits <- EncDecRet.encode_Instruction i;
+      do bs <- bits_to_bytes bits;
+      do tl <- translate_bytes instrs';
+      OK (bs ++ tl)
   end.
 
 Fixpoint translate_instrs instrs :=
   match instrs with
   | [] => OK []
   | i :: instrs' =>
-    do tl <- translate_instrs instrs';
-    do bs <- translate_instr i;
-    OK (bs ++ tl)
+      do bs <- translate_instr i;
+      do tl <- translate_instrs instrs';      
+      OK (bs ++ tl)
   end.
 
 (** Translation of a sequence of instructions in a function *)

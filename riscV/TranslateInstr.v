@@ -221,7 +221,7 @@ Definition decode_freg (bs: u5) : res freg :=
   else Error(msg "reg not found")
 .
 
-Program Definition ofs_to_Z (ofs: offset) : res Z :=
+Definition ofs_to_Z (ofs: offset) : res Z :=
   match ofs with
   | Ofsimm ptrofs =>
     let (ptrofs_val, ptrofs_inrange) := ptrofs in
@@ -252,7 +252,7 @@ Definition decode_ireg0_u5 (bs:u5) : res ireg0 :=
     | _ => decode_ireg0 bs
     end.
 
-  Program Definition encode_freg_u5 (r:freg) : res u5 :=
+Program Definition encode_freg_u5 (r:freg) : res u5 :=
   do b <- encode_freg r;
   if assertLength b 5 then
     OK (exist _ b _)
@@ -266,7 +266,7 @@ Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=
     else Error (msg "impossible")
   else Error (msg "Offset overflow in encode_ofs_u12").
 
-Program Definition decode_ofs_u12 (bs:u12) : res int :=
+Definition decode_ofs_u12 (bs:u12) : res int :=
   let bs' := proj1_sig bs in
   OK (Int.repr (int_of_bits bs')).
 
@@ -278,7 +278,7 @@ Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
     else Error (msg "impossible")
   else Error (msg "Offset overflow in encode_ofs_u5").
 
-Program Definition decode_ofs_u5 (bs:u5) : res int :=
+Definition decode_ofs_u5 (bs:u5) : res int :=
   let bs' := proj1_sig bs in
   OK (Int.repr (int_of_bits bs')).
 
@@ -290,7 +290,7 @@ Program Definition encode_ofs_u20 (ofs:Z) :res u20 :=
     else Error (msg "impossible")
   else Error (msg "Offset overflow in encode_ofs_u20").
 
-Program Definition decode_ofs_u20 (bs:u20) : res int :=
+Definition decode_ofs_u20 (bs:u20) : res int :=
   let bs' := proj1_sig bs in
   OK (Int.repr (int_of_bits bs')).
 
@@ -339,7 +339,7 @@ Program Definition encode_B4 (imm: Z) : res u1 :=
   else Error(msg "illegal length").
 
 
-Definition translate_instr (i:instruction) : res (Instruction) :=
+Definition translate_instr' (i:instruction) : res (Instruction) :=
   match i with
   | Pmv rd rs =>
     do rdbits <- encode_ireg0_u5 rd;
@@ -664,3 +664,4 @@ Definition translate_instr (i:instruction) : res (Instruction) :=
   | _ => Error [MSG "Not exists or unsupported: "]
   end.
 
+Definition translate_instr i := do i' <- translate_instr' i; OK [i'].
