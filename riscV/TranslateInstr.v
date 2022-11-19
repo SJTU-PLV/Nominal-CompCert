@@ -247,6 +247,12 @@ Definition decode_ireg0_u5 (bs:u5) : res ireg0 :=
     | _ => decode_ireg0 bs
     end.
 
+Definition decode_ireg_u5 (bs:u5) : res ireg :=
+    match (proj1_sig bs) with
+    | [false;false;false;false;false] => Error (msg "X0 register unsupported")
+    | _ => decode_ireg bs
+    end.
+
 Program Definition encode_freg_u5 (r:freg) : res u5 :=
   do b <- encode_freg r;
   if assertLength b 5 then
@@ -720,3 +726,135 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
   end.
 
 Definition translate_instr i := do i' <- translate_instr' i; OK [i'].
+
+(* Decode;struction *)
+
+  (* NEW *)
+Definition decode_instr_rv32 (i: Instruction) : res instruction :=
+  match i with
+  | addi rdbits rsbits imm12 =>
+    do rd  <- decode_ireg_u5 rdbits;
+    do rs  <- decode_ireg0_u5 rsbits;
+    do imm <- decode_ofs_u12 imm12;
+    OK (Asm.Paddiw rd rs imm)
+  | slti rdbits rsbits imm12 =>
+    do rd  <- decode_ireg_u5 rdbits;
+    do rs  <- decode_ireg0_u5 rsbits;
+    do imm <- decode_ofs_u12 imm12;
+    OK (Asm.Psltiw rd rs imm)
+  | andi rdbits rsbits imm12 =>
+    do rd  <- decode_ireg_u5 rdbits;
+    do rs  <- decode_ireg0_u5 rsbits;
+    do imm <- decode_ofs_u12 imm12;
+    OK (Asm.Pandiw rd rs imm)
+  | ori rdbits rsbits imm12 =>
+    do rd  <- decode_ireg_u5 rdbits;
+    do rs  <- decode_ireg0_u5 rsbits;
+    do imm <- decode_ofs_u12 imm12;
+    OK (Asm.Poriw rd rs imm)
+  | xori rdbits rsbits imm12 =>
+    do rd  <- decode_ireg_u5 rdbits;
+    do rs  <- decode_ireg0_u5 rsbits;
+    do imm <- decode_ofs_u12 imm12;
+    OK (Asm.Pxoriw rd rs imm)
+  | slli rdbits rsbits imm5 =>
+    do rd  <- decode_ireg_u5 rdbits;
+    do rs  <- decode_ireg0_u5 rsbits;
+    do imm <- decode_ofs_u5 imm5;
+    OK (Asm.Pslliw rd rs imm)
+  | srli rdbits rsbits imm5 =>
+    do rd  <- decode_ireg_u5 rdbits;
+    do rs  <- decode_ireg0_u5 rsbits;
+    do imm <- decode_ofs_u5 imm5;
+    OK (Asm.Psrliw rd rs imm)
+  | srai rdbits rsbits imm5 =>
+    do rd  <- decode_ireg_u5 rdbits;
+    do rs  <- decode_ireg0_u5 rsbits;
+    do imm <- decode_ofs_u5 imm5;
+    OK (Asm.Psraiw rd rs imm)
+  | lui rdbits imm20 =>
+    do rd  <- decode_ireg_u5 rdbits;
+    do imm <- decode_ofs_u20 imm20;
+    OK (Asm.Pluiw rd imm)
+  | add rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Paddw rd rs1 rs2)
+  | sub rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Psubw rd rs1 rs2)
+  | mul rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Pmulw rd rs1 rs2)
+  | mulh rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Pmulhw rd rs1 rs2)
+  | mulhu rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Pmulhuw rd rs1 rs2)
+  | div rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Pdivw rd rs1 rs2)
+  | divu rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Pdivuw rd rs1 rs2)
+  | rem rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Premw rd rs1 rs2)
+  | remu rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Premuw rd rs1 rs2)
+  | slt rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Psltw rd rs1 rs2)
+  | sltu rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Psltuw rd rs1 rs2)
+  | and rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Pandw rd rs1 rs2)
+  | xor rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Pxorw rd rs1 rs2)
+  | sll rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Psllw rd rs1 rs2)
+  | srl rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Psrlw rd rs1 rs2)
+  | sra rdbits rs1bits rs2bits =>
+    do rd  <- decode_ireg_u5 rdbits ;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Asm.Psraw rd rs1 rs2)
+  | _ => Error (msg "unsupported")
+  end.
