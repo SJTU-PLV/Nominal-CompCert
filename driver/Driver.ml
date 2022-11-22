@@ -68,7 +68,7 @@ let compile_c_file sourcename ifile ofile =
   else begin
   (* Convert to Asm *)
     let asm =
-      match Compiler.apply_partial
+      match CompilerAux.apply_partial
                 (Compiler.transf_c_program csyntax)
                 Asmexpand.expand_program with
       | Errors.OK asm ->

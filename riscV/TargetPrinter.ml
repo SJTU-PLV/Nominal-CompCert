@@ -590,7 +590,9 @@ module Target : TARGET =
               fprintf oc "%s end inline assembly\n" comment
           | _ ->
               assert false
-         end
+          end
+      (* additional instructions *)
+      | _ -> assert false
 
     let get_section_names name =
       let (text, lit) =

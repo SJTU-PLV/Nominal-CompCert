@@ -31,6 +31,8 @@ Require Ctypes.
 Require Csyntax.
 Require Ctyping.
 Require Clight.
+(** machine dependent *)
+Require CompilerAux.
 Require Compiler.
 Require Parser.
 Require Initializers.
@@ -116,8 +118,6 @@ Extract Constant Compopts.thumb =>
 Extract Constant Compopts.debug =>
   "fun _ -> !Clflags.option_g".
 
-(* Pseudo Instructions Elimination*)
-Extract Constant PseudoInstructions.coq_string_to_ident => "FindSymbolString.coq_string_to_ident".
 
 (* Strtablegen *)
 Extract Constant SymbolString.find_symbol_pos => "FindSymbolString.find_symbol_pos".
@@ -161,8 +161,8 @@ Extract Constant Compiler.print_Cminor => "PrintCminor.print_if".
 Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
 Extract Constant Compiler.print_Mach => "PrintMach.print_if".
-Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
-Extract Constant Compiler.time  => "Timing.time_coq".
+Extract Constant CompilerAux.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
+Extract Constant CompilerAux.time  => "Timing.time_coq".
 
 (*Extraction Inline Compiler.apply_total Compiler.apply_partial.*)
 

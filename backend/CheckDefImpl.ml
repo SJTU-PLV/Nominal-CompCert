@@ -1,8 +1,3 @@
-(* *******************  *)
-(* Author: Yuting Wang  *)
-(* Date:   Oct 16, 2019 *)
-(* *******************  *)
-
 (** * Check if the definition is a local or global one *)
 
 open C2C

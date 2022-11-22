@@ -158,7 +158,7 @@ ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 #  RelocElfLinking.v\
 
 ELF = MachineTypes.v RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
-  ReloctablesEncode.v  ReloctablesDecode.v \
+  ReloctablesEncode.v \
 
 # assembler
 # ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\

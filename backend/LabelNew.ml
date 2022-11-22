@@ -1,15 +1,10 @@
-(* *******************  *)
-(* Author: Zhenguo Yin  *)
-(* Date:   Aug 27, 2020 *)
-(* *******************  *)
-
 open Asm
 open AST
 open Camlcoq
 
 (* Generation of fresh labels *)
 
-let dummy_function = { fn_code = []; fn_sig = signature_main; fn_stacksize = Camlcoq.Z.of_uint 0; fn_ofs_link = Camlcoq.Z.of_uint 0}
+let dummy_function = { fn_code = []; fn_sig = signature_main; fn_stacksize = Camlcoq.Z.of_uint 0}
 let current_function = ref dummy_function
 let next_label = ref (None: label option)
 

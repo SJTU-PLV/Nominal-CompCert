@@ -31,3 +31,6 @@ Extract Constant SelectOp.symbol_is_external =>
     | ""macosx"" -> C2C.atom_is_extern
     | ""cygwin"" when Archi.ptr64 -> C2C.atom_is_extern
     | _ -> (fun _ -> false)".
+
+(* Pseudo Instructions Elimination*)
+Extract Constant PseudoInstructions.coq_string_to_ident => "FindSymbolString.coq_string_to_ident".
