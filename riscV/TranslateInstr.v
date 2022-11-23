@@ -347,7 +347,7 @@ Definition decode_immS (S1: u5) (S2: u7) : res Z :=
   let S2_bits := proj1_sig S2 in
   OK (int_of_bits (S1_bits ++ S2_bits)).
 
-Program Definition encode_B1 (imm: Z) : res u1 :=
+  Program Definition encode_B1 (imm: Z) : res u1 :=
   do immbits <- encode_ofs_u12 imm;
   let B1_withtail := skipn 1 immbits in
   let B1 := firstn 1 B1_withtail in
