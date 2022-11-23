@@ -201,7 +201,7 @@ endif
 
 # Putting everything together (in driver/)
 
-DRIVER=Compopts.v Compiler.v Complements.v
+DRIVER=Compopts.v CompilerAux.v Compiler.v Complements.v
 
 # All source files
 
