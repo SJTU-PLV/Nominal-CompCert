@@ -238,6 +238,11 @@ Definition ofs_to_Z (ofs: offset) : res Z :=
     Error (msg "offset not transferred")
   end.
 
+Program Definition Z_to_ofs (z: Z) : res offset :=
+  if (-1 <? z) && (z <? Int.modulus) then
+    OK (Ofsimm (Ptrofs.repr z))
+  else Error (msg "Out of range").
+
 Definition decode_ireg0_u5 (bs:u5) : res ireg0 :=
     match (proj1_sig bs) with
     | [false;false;false;false;false] => OK X0
@@ -337,9 +342,14 @@ Program Definition encode_J4 (imm: Z) : res u1 :=
     OK (exist _ B1 _)
   else Error(msg "illegal length").
 
+Definition decode_immS (S1: u5) (S2: u7) : res Z :=
+  let S1_bits := proj1_sig S1 in
+  let S2_bits := proj1_sig S2 in
+  OK (int_of_bits (S1_bits ++ S2_bits)).
+
 Program Definition encode_B1 (imm: Z) : res u1 :=
   do immbits <- encode_ofs_u12 imm;
-  let B1_withtail := skipn 10 immbits in
+  let B1_withtail := skipn 1 immbits in
   let B1 := firstn 1 B1_withtail in
   if assertLength B1 1 then
     OK (exist _ B1 _)
@@ -347,14 +357,15 @@ Program Definition encode_B1 (imm: Z) : res u1 :=
 
 Program Definition encode_B2 (imm: Z) : res u4 :=
   do immbits <- encode_ofs_u12 imm;
-  let B2 := firstn 4 immbits in
+  let B2_withtail := skipn 8 immbits in
+  let B2 := firstn 4 B2_withtail in
   if assertLength B2 4 then
     OK (exist _ B2 _)
   else Error(msg "illegal length").
 
 Program Definition encode_B3 (imm: Z) : res u6 :=
   do immbits <- encode_ofs_u12 imm;
-  let B3_withtail := skipn 4 immbits in
+  let B3_withtail := skipn 2 immbits in
   let B3 := firstn 6 B3_withtail in
   if assertLength B3 6 then
     OK (exist _ B3 _)
@@ -362,10 +373,17 @@ Program Definition encode_B3 (imm: Z) : res u6 :=
 
 Program Definition encode_B4 (imm: Z) : res u1 :=
   do immbits <- encode_ofs_u12 imm;
-  let B4 := skipn 11 immbits in
+  let B4 := firstn 1 immbits in
   if assertLength B4 1 then
     OK (exist _ B4 _)
   else Error(msg "illegal length").
+
+Definition decode_immB (B1: u1) (B2: u4) (B3: u6) (B4: u1) : res Z :=
+  let B1_bits := proj1_sig B1 in
+  let B2_bits := proj1_sig B2 in
+  let B3_bits := proj1_sig B3 in
+  let B4_bits := proj1_sig B4 in
+  OK (int_of_bits (B2_bits ++ B3_bits ++ B1_bits ++ B4_bits)).
 
 
 Definition translate_instr' (i:instruction) : res (Instruction) :=
@@ -604,25 +622,25 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rabits <- encode_ireg rd;
     do ofs_Z <- ofs_to_Z ofs;
     do ofsbits <- encode_ofs_u12 ofs_Z;
-    OK (lb rdbits rabits ofsbits)
+    OK (lbu rdbits rabits ofsbits)
   | Plh rd ra ofs =>
     do rdbits <- encode_ireg rd;
     do rabits <- encode_ireg rd;
     do ofs_Z <- ofs_to_Z ofs;
     do ofsbits <- encode_ofs_u12 ofs_Z;
-    OK (lb rdbits rabits ofsbits)
+    OK (lh rdbits rabits ofsbits)
   | Plhu rd ra ofs =>
     do rdbits <- encode_ireg rd;
     do rabits <- encode_ireg rd;
     do ofs_Z <- ofs_to_Z ofs;
     do ofsbits <- encode_ofs_u12 ofs_Z;
-    OK (lb rdbits rabits ofsbits)
+    OK (lhu rdbits rabits ofsbits)
   | Plw rd ra ofs =>
     do rdbits <- encode_ireg rd;
     do rabits <- encode_ireg rd;
     do ofs_Z <- ofs_to_Z ofs;
     do ofsbits <- encode_ofs_u12 ofs_Z;
-    OK (lb rdbits rabits ofsbits)
+    OK (lw rdbits rabits ofsbits)
   | Psb rd ra ofs =>
     do rdbits <- encode_ireg rd;
     do rabits <- encode_ireg rd;
@@ -636,14 +654,14 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
-    OK (sb immS1bits rdbits rabits immS2bits)
+    OK (sh immS1bits rdbits rabits immS2bits)
   | Psw rd ra ofs =>
     do rdbits <- encode_ireg rd;
     do rabits <- encode_ireg rd;
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
-    OK (sb immS1bits rdbits rabits immS2bits)
+    OK (sw immS1bits rdbits rabits immS2bits)
   | Pfmv fd fs =>
     do fdbits <- encode_freg_u5 fd;
     do fsbits <- encode_freg_u5 fs;
@@ -707,7 +725,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rdbits <- encode_ireg rd;
     do fs1bits <- encode_freg_u5 fs1;
     do fs2bits <- encode_freg_u5 fs2;
-    OK (fadds rdbits fs1bits fs2bits)
+    OK (feqs rdbits fs1bits fs2bits)
   | Pflts rd fs1 fs2 =>
     do rdbits <- encode_ireg rd;
     do fs1bits <- encode_freg_u5 fs1;
@@ -896,5 +914,65 @@ Definition decode_instr_rv32 (i: Instruction) : res instruction :=
     do rs1 <- decode_ireg0_u5 rs1bits;
     do rs2 <- decode_ireg0_u5 rs2bits;
     OK (Asm.Psraw rd rs1 rs2)
+  | beq immB1 immB2 rs1bits rs2bits immB3 immB4 =>
+    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Pbeq_ofs rs1 rs2 ofs_Z)
+  | bne immB1 immB2 rs1bits rs2bits immB3 immB4 =>
+    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Pbne_ofs rs1 rs2 ofs_Z)
+  | blt immB1 immB2 rs1bits rs2bits immB3 immB4 =>
+    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Pblt_ofs rs1 rs2 ofs_Z)
+  | bltu immB1 immB2 rs1bits rs2bits immB3 immB4 =>
+    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Pbltu_ofs rs1 rs2 ofs_Z)
+  | bge immB1 immB2 rs1bits rs2bits immB3 immB4 =>
+    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Pbge_ofs rs1 rs2 ofs_Z)
+  | bgeu immB1 immB2 rs1bits rs2bits immB3 immB4 =>
+    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
+    do rs1 <- decode_ireg0_u5 rs1bits;
+    do rs2 <- decode_ireg0_u5 rs2bits;
+    OK (Pbgeu_ofs rs1 rs2 ofs_Z)
+  | lb rdbits rabits ofs_bits =>
+    do rd <- decode_ireg_u5 rdbits;
+    do ra <- decode_ireg_u5 rabits;
+    do ofs_int <- decode_ofs_u12 ofs_bits;
+    do ofs <- Z_to_ofs (Int.intval ofs_int);
+    OK (Asm.Plb rd ra ofs)
+  | lbu rdbits rabits ofs_bits =>
+    do rd <- decode_ireg_u5 rdbits;
+    do ra <- decode_ireg_u5 rabits;
+    do ofs_int <- decode_ofs_u12 ofs_bits;
+    do ofs <- Z_to_ofs (Int.intval ofs_int);
+    OK (Asm.Plbu rd ra ofs)
+  | lh rdbits rabits ofs_bits =>
+    do rd <- decode_ireg_u5 rdbits;
+    do ra <- decode_ireg_u5 rabits;
+    do ofs_int <- decode_ofs_u12 ofs_bits;
+    do ofs <- Z_to_ofs (Int.intval ofs_int);
+    OK (Asm.Plh rd ra ofs)
+  | lhu rdbits rabits ofs_bits =>
+    do rd <- decode_ireg_u5 rdbits;
+    do ra <- decode_ireg_u5 rabits;
+    do ofs_int <- decode_ofs_u12 ofs_bits;
+    do ofs <- Z_to_ofs (Int.intval ofs_int);
+    OK (Asm.Plhu rd ra ofs)
+  | lw rdbits rabits ofs_bits =>
+    do rd <- decode_ireg_u5 rdbits;
+    do ra <- decode_ireg_u5 rabits;
+    do ofs_int <- decode_ofs_u12 ofs_bits;
+    do ofs <- Z_to_ofs (Int.intval ofs_int);
+    OK (Asm.Plw rd ra ofs)
   | _ => Error (msg "unsupported")
   end.
