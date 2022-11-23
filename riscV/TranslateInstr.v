@@ -106,11 +106,8 @@ Theorem encode_ireg_consistency: forall ireg ireg_bits,
   decode_ireg ireg_bits = OK ireg.
 Proof.
   unfold encode_ireg. unfold decode_ireg.
-  intro ireg. destruct ireg. simpl. intros.
-  inv H. simpl. auto.
-Abort. 
-
-
+  intro ireg. destruct ireg; simpl; intros; inv H; simpl; eauto.
+Qed.
 
 Program Definition encode_ireg0 (r: ireg0) : res (u5) :=
   match r with
@@ -231,7 +228,7 @@ Definition decode_freg (bs: u5) : res freg :=
   else if Z.eqb n 31 then OK(F31)      (**r b["11111"] *)
   else Error(msg "reg not found")
 .
-
+ 
 Definition ofs_to_Z (ofs: offset) : res Z :=
   match ofs with
   | Ofsimm ptrofs =>
@@ -309,6 +306,37 @@ Program Definition encode_S2 (imm: Z) : res u7 :=
     OK (exist _ S2 _)
   else Error(msg "illegal length").
 
+Program Definition encode_J1 (imm: Z) : res u8 :=
+  do immbits <- encode_ofs_u20 imm;
+  let B1_withtail := skipn 11 immbits in
+  let B1 := firstn 8 B1_withtail in
+  if assertLength B1 8 then
+    OK (exist _ B1 _)
+  else Error(msg "illegal length").
+
+Program Definition encode_J2 (imm: Z) : res u1 :=
+  do immbits <- encode_ofs_u20 imm;
+  let B1_withtail := skipn 10 immbits in
+  let B1 := firstn 1 B1_withtail in
+  if assertLength B1 1 then
+    OK (exist _ B1 _)
+  else Error(msg "illegal length").
+
+  Program Definition encode_J3 (imm: Z) : res u10 :=
+  do immbits <- encode_ofs_u20 imm;
+  let B2 := firstn 10 immbits in
+  if assertLength B2 10 then
+    OK (exist _ B2 _)
+  else Error(msg "illegal length").
+
+Program Definition encode_J4 (imm: Z) : res u1 :=
+  do immbits <- encode_ofs_u20 imm;
+  let B1_withtail := skipn 19 immbits in
+  let B1 := firstn 1 B1_withtail in
+  if assertLength B1 1 then
+    OK (exist _ B1 _)
+  else Error(msg "illegal length").
+
 Program Definition encode_B1 (imm: Z) : res u1 :=
   do immbits <- encode_ofs_u12 imm;
   let B1_withtail := skipn 10 immbits in
@@ -342,6 +370,18 @@ Program Definition encode_B4 (imm: Z) : res u1 :=
 
 Definition translate_instr' (i:instruction) : res (Instruction) :=
   match i with
+  | Pjal_ofs rd (inr ofs) =>
+    do rdbits <- encode_ireg0 rd;
+    do J1 <- encode_J1 ofs;
+    do J2 <- encode_J2 ofs;
+    do J3 <- encode_J3 ofs;
+    do J4 <- encode_J4 ofs;
+    OK (jal rdbits J1 J2 J3 J4)
+  | Pjal_rr rd rs ofs =>
+    do rdbits <- encode_ireg0 rd;
+    do rsbits <- encode_ireg0 rs;
+    do imm <- encode_ofs_u12 ofs;
+    OK (jalr rdbits rsbits imm)
   | Pmv rd rs =>
     do rdbits <- encode_ireg0 rd;
     do rsbits <- encode_ireg0 rs;
