@@ -740,7 +740,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do fdbits <- encode_freg_u5 fd;
     do rsbits <- encode_ireg0 rs;
     OK (fcvtswu fdbits rsbits)
-  | _ => Error [MSG "Not exists or unsupported: "]
+  | _ => Error [MSG "Not exists or unsupported: "; MSG (instr_to_string i)]
   end.
 
 Definition translate_instr i := do i' <- translate_instr' i; OK [i'].

@@ -30,7 +30,7 @@ Definition transf_instr i : (list instruction) * option (ident * globdef fundef 
       let def := Gvar var in
       ([Plui_s X31 id 0; Pfls rd X31 (Ofslow id (Ptrofs.zero))], Some (id,def))
   | _ =>
-      ([],None)
+      ([i],None)
   end.
 
 Definition acc_instr (acc: code * list (ident * (globdef fundef unit))) (i: instruction) :=
