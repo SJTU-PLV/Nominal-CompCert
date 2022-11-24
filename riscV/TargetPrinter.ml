@@ -644,6 +644,9 @@ module Target : TARGET =
 
     let print_prologue oc =
       fprintf oc "	.option %s\n" (if Archi.pic_code() then "pic" else "nopic");
+      (* DEBUG: no relaxation, no compression*)
+      fprintf oc "	.option %s\n" ("norelax");
+      fprintf oc "	.option %s\n" ("norvc");
       if !Clflags.option_g then begin
         section oc Section_text;
       end
