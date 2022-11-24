@@ -592,7 +592,7 @@ module Target : TARGET =
               assert false
           end
       (* additional instructions *)
-      | _ -> assert false
+      | _ -> fprintf oc "unknown\n"
 
     let get_section_names name =
       let (text, lit) =

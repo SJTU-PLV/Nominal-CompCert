@@ -360,7 +360,7 @@ Definition encode_ofs_signed32 (ofs:Z) :=
   if (Int.min_signed <=? ofs) && (ofs <=? Int.max_signed) then
     encode_ofs_u32 (Int.intval (Int.repr ofs))
   else
-    Error (msg "Offset overflow in encode_ofs_signed32").
+  Error (msg "Offset overflow in encode_ofs_signed32").
 
 Definition decode_ofs_signed32 (bs:u32) : res Z :=
   do i <- decode_ofs_u32 bs;
