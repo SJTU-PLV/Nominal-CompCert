@@ -25,7 +25,7 @@ Fixpoint int_of_bits (l: list bool): Z :=
   end. 
 
 Program Definition zero5  : u5  := b["00000"].
-Program Definition zero12 : u12 := b["000000000000"].  
+Program Definition zero12 : u12 := b["000000000000"].
 
 (** * Encoding of instructions and functions *)
 
@@ -232,14 +232,13 @@ Definition decode_freg (bs: u5) : res freg :=
 Definition ofs_to_Z (ofs: offset) : res Z :=
   match ofs with
   | Ofsimm ptrofs =>
-    let (ptrofs_val, ptrofs_inrange) := ptrofs in
-      OK ptrofs_val
+      OK (Ptrofs.signed ptrofs)
   | Ofslow _ _ => 
     Error (msg "offset not transferred")
   end.
 
 Program Definition Z_to_ofs (z: Z) : res offset :=
-  if (-1 <? z) && (z <? Int.modulus) then
+  if (Ptrofs.min_signed <=? z) && (z <=? Ptrofs.max_signed) then
     OK (Ofsimm (Ptrofs.repr z))
   else Error (msg "Out of range").
 
@@ -262,12 +261,18 @@ Program Definition encode_freg_u5 (r:freg) : res u5 :=
   else Error (msg "impossible").
 
 Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=
-  if ( -1 <? ofs) && (ofs <? (two_power_nat 12)) then
-    let ofs12 := (bits_of_int 12 ofs) in
+  if ( -(two_power_nat 11) <=? ofs) && (ofs <? 0) then    
+    let ofs12 := (bits_of_int 12 (ofs + (two_power_nat 12))) in
     if assertLength ofs12 12 then
-      OK (exist _ ofs12 _)
+      OK (exist _ ofs12 _)         
     else Error (msg "impossible")
-  else Error (msg "Offset overflow in encode_ofs_u12").
+  else
+    if ( 0 <=? ofs) && (ofs <? (two_power_nat 11)) then
+      let ofs12 := (bits_of_int 12 ofs) in
+      if assertLength ofs12 12 then
+        OK (exist _ ofs12 _)         
+      else Error (msg "impossible")
+    else Error (msg "Offset overflow in encode_ofs_u12").
 
 Definition decode_ofs_u12 (bs:u12) : res int :=
   let bs' := proj1_sig bs in
