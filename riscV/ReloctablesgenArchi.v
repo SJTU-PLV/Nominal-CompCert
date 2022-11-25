@@ -62,9 +62,15 @@ Definition transl_instr (instr_size: instruction -> Z) (sofs:Z) (i: instruction)
 Definition id_eliminate (i:instruction) : instruction :=
   match i with
   | Plui_s rd symb ofs =>
-      Plui_s rd xH 0
+      if Archi.ptr64 then
+        Pluil rd Int64.zero
+      else
+        Pluiw rd Int.zero
   | Paddi_s rd rs symb ofs =>
-      Paddi_s rd rs xH 0
+      if Archi.ptr64 then
+        Paddil rd rs Int64.zero
+      else
+        Paddiw rd rs Int.zero
   | Pjal_ofs rd (inl symb) =>
       Pjal_ofs rd (inr 0)
   | Plb  r1 r2 (Ofslow symb ofs) =>

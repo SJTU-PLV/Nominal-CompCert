@@ -1279,7 +1279,7 @@ End INSTRSIZE.
 
 (** instrsize instantiation *)
 
-Definition instr_size_real (i: instruction) := 32. 
+Definition instr_size_real (i: instruction) := 4.
 
 Lemma instr_size_bound_real : forall i, 0 < instr_size_real i <= Ptrofs.max_unsigned.
 Proof.

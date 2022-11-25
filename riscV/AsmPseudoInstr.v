@@ -38,7 +38,7 @@ Definition transf_instr i : (list instruction) :=
     [Pfld rd ra ofs]
   | Pfsd_a rs ra ofs =>
     [Pfsd rs ra ofs]
-  | _ => []
+  | _ => [i]
   end.
 
 

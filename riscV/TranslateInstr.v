@@ -413,6 +413,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
     do imm12  <- encode_ofs_u12 (Int.intval imm);
+    (* do imm12  <- encode_ofs_u12_signed (Int.signed imm); *)
     OK (addi rdbits rsbits imm12)
   | Psltiw rd rs imm =>
     do rdbits <- encode_ireg rd;
