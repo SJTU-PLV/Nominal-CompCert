@@ -38,6 +38,13 @@ Definition transf_instr i : (list instruction) :=
     [Pfld rd ra ofs]
   | Pfsd_a rs ra ofs =>
     [Pfsd rs ra ofs]
+
+  (* Some pseudo instructions in riscv manual *)
+  | Pmv rd rs =>
+    if Archi.ptr64 then
+      [Paddil rd rs (Int64.zero)]
+    else
+      [Paddiw rd rs (Int.zero)]
   | _ => [i]
   end.
 
