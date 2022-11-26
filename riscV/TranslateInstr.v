@@ -399,6 +399,8 @@ Definition decode_immB (B1: u1) (B2: u4) (B3: u6) (B4: u1) : res Z :=
 
 Definition translate_instr' (i:instruction) : res (Instruction) :=
   match i with
+  | Pnop =>
+    OK (addi zero5 zero5 zero12)
   | Pjal_ofs rd (inr ofs) =>
     do rdbits <- encode_ireg0 rd;
     do J1 <- encode_J1 ofs;
@@ -411,10 +413,6 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rsbits <- encode_ireg0 rs;
     do imm <- encode_ofs_u12 ofs;
     OK (jalr rdbits rsbits imm)
-  | Pmv rd rs =>
-    do rdbits <- encode_ireg0 rd;
-    do rsbits <- encode_ireg0 rs;
-    OK (addi rdbits rsbits zero12)
   | Paddiw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
