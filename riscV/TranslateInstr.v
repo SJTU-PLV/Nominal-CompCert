@@ -291,10 +291,16 @@ Definition decode_ofs_u5 (bs:u5) : res int :=
   OK (Int.repr (int_of_bits bs')).
 
 Program Definition encode_ofs_u20 (ofs:Z) :res u20 :=
-  if ( -1 <? ofs) && (ofs <? (two_power_nat 20)) then
+  if ( -(two_power_nat 19) <=? ofs) && (ofs <? 0) then    
+  let ofs20 := (bits_of_int 20 (ofs + (two_power_nat 20))) in
+  if assertLength ofs20 20 then
+    OK (exist _ ofs20 _)         
+  else Error (msg "impossible")
+  else
+  if ( 0 <=? ofs) && (ofs <? (two_power_nat 19)) then
     let ofs20 := (bits_of_int 20 ofs) in
     if assertLength ofs20 20 then
-      OK (exist _ ofs20 _)
+      OK (exist _ ofs20 _)         
     else Error (msg "impossible")
   else Error (msg "Offset overflow in encode_ofs_u20").
 
@@ -412,47 +418,47 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
   | Paddiw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm12  <- encode_ofs_u12 (Int.intval imm);
+    do imm12  <- encode_ofs_u12 (Int.signed imm);
     (* do imm12  <- encode_ofs_u12_signed (Int.signed imm); *)
     OK (addi rdbits rsbits imm12)
   | Psltiw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm12  <- encode_ofs_u12 (Int.intval imm);
+    do imm12  <- encode_ofs_u12 (Int.signed imm);
     OK (slti rdbits rsbits imm12)
   | Pandiw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm12  <- encode_ofs_u12 (Int.intval imm);
+    do imm12  <- encode_ofs_u12 (Int.signed imm);
     OK (andi rdbits rsbits imm12)
   | Poriw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm12  <- encode_ofs_u12 (Int.intval imm);
+    do imm12  <- encode_ofs_u12 (Int.signed imm);
     OK (ori rdbits rsbits imm12)
   | Pxoriw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm12  <- encode_ofs_u12 (Int.intval imm);
+    do imm12  <- encode_ofs_u12 (Int.signed imm);
     OK (xori rdbits rsbits imm12)
   | Pslliw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm5  <- encode_ofs_u5 (Int.intval imm);
+    do imm5  <- encode_ofs_u5 (Int.signed imm);
     OK (slli rdbits rsbits imm5)
   | Psrliw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm5  <- encode_ofs_u5 (Int.intval imm);
+    do imm5  <- encode_ofs_u5 (Int.signed imm);
     OK (srli rdbits rsbits imm5)
   | Psraiw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm5  <- encode_ofs_u5 (Int.intval imm);
+    do imm5  <- encode_ofs_u5 (Int.signed imm);
     OK (srai rdbits rsbits imm5)
   | Pluiw rd imm =>
     do rdbits <- encode_ireg rd;
-    do imm20  <- encode_ofs_u20 (Int.intval imm);
+    do imm20  <- encode_ofs_u20 (Int.signed imm);
     OK (lui rdbits imm20)
   | Paddw rd rs1 rs2 =>
     if Archi.ptr64 then Error (msg "Only in rv32")
