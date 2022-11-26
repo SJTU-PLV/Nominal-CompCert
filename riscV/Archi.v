@@ -21,9 +21,6 @@ Require Import ZArith List MachineTypes.
 
 Parameter ptr64 : bool.
 
-(** machine type *)
-Definition machine := EM_RISCV.
-
 Definition big_endian := false.
 
 Definition align_int64 := 8%Z.

@@ -123,6 +123,8 @@ BACKEND=\
   SymbtablegenArchi.v\
   RelocationTypes.v ReloctablesgenArchi.v\
   TranslateInstr.v\
+  RelocElfArchi.v\
+  ReloctablesEncodeArchi.v\
 
 # architecture dependent files (x86 and riscv)
 # TODO: AsmInject.v

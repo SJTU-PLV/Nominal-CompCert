@@ -10,6 +10,7 @@ Require Import SymbolString.
 Require Import ReloctablesEncode.
 Require Import encode.Hex encode.Bits.
 Require Import SymbtableEncode.
+Require Import RelocElfArchi.
 Import Hex Bits.
 Import ListNotations.
 (* Require Import RelocProgSemantics3. *)
@@ -89,11 +90,11 @@ Definition gen_elf_header (st: elf_state) : elf_header :=
      e_encoding     := if Archi.big_endian then ELFDATA2MSB else ELFDATA2LSB;
      e_version      := EV_CURRENT;
      e_type         := ET_REL;
-     e_machine      := Archi.machine;
+     e_machine      := machine;
      e_entry        := 0;
      e_phoff        := 0;
      e_shoff        := elf_header_size + st.(e_sections_ofs);      
-     e_flags        := 0;
+     e_flags        := elf_flag;
      e_ehsize       := elf_header_size;
      e_phentsize    := prog_header_size;
      e_phnum        := 0;
@@ -204,7 +205,7 @@ Definition gen_symtab_sec_header (symbtbl: list symbentry) (shstrtbl_idx: Z) (se
 (* sh_info: reloction related section *)
 Definition gen_rel_sec_header (reloctbl: list relocentry) (shstrtbl_idx: Z) (sec_ofs: Z) (symbtbl_idx: Z) (related_sec: Z):=
   {| sh_name     := shstrtbl_idx;
-     sh_type     := if Archi.ptr64 then SHT_RELA else SHT_REL;
+     sh_type     := rel_eh_type;
      sh_flags    := [];
      sh_addr     := 0;
      sh_offset   := elf_header_size + sec_ofs;

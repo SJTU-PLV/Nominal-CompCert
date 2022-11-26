@@ -21,9 +21,6 @@ Require Import ZArith List MachineTypes.
 
 Definition ptr64 := false.
 
-(** machine type *)
-Definition machine := EM_386.
-
 Definition big_endian := false.
 
 Definition align_int64 := 4%Z.
