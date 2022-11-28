@@ -1,7 +1,7 @@
 include ../../Makefile.config
 
 CCOMP=../../ccomp
-# CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime -dc -dclight -dasm
+CCOMPFLAGS_GCC=$(CCOMPOPTS) -stdlib ../../runtime -dc -dclight -dasm
 CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime -relf
 CFLAGS=-O1 -Wall
 
@@ -25,9 +25,11 @@ all_myelf: $(PROGS:%=%.myelf)
 %.compcert: %.c
 	$(CCOMP) $(CCOMPFLAGS) -o $*.compcert $*.c $(LIBS)
 
+%.compcert_gcc: %.c
+	$(CCOMP) $(CCOMPFLAGS_GCC) -o $*.compcert_gcc $*.c $(LIBS)
+
 %.myelf: %.c
 	$(CCOMP) $(CCOMPFLAGS) -c $*.c -o $*.myelf $(LIBS)
-
 
 %.s: %.c
 	$(CCOMP) $(CCOMPFLAGS) -S $*.c
