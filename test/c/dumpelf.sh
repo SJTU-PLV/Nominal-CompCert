@@ -12,7 +12,7 @@ TAG_GCC_READELF=$1.readelf_gcc
 TAG_OBJDUMP=$1.objdump
 TAG_GCC_OBJDUMP=$1.objdump_gcc
 
-rm ${SRC} ${SRC_GCC}
+rm -f ${SRC} ${SRC_GCC}
 
 make ${SRC}
 make ${SRC_GCC}
