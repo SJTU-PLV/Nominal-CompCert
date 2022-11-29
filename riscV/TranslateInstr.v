@@ -270,13 +270,72 @@ Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=
     if ( 0 <=? ofs) && (ofs <? (two_power_nat 11)) then
       let ofs12 := (bits_of_int 12 ofs) in
       if assertLength ofs12 12 then
-        OK (exist _ ofs12 _)         
+        OK (exist _ ofs12 _)
       else Error (msg "impossible")
     else Error (msg "Offset overflow in encode_ofs_u12").
 
+(* Unsigned version:
 Definition decode_ofs_u12 (bs:u12) : res int :=
   let bs' := proj1_sig bs in
-  OK (Int.repr (int_of_bits bs')).
+  OK (Int.repr (int_of_bits bs')). *)
+
+(* the nil case is impossible, can it be eliminated? *)
+Definition decode_ofs_u12 (bs:u12) : res int :=
+  let bs' := proj1_sig bs in
+  match bs' with
+  | b0 :: bs1 => 
+      if b0 then OK (Int.repr ((int_of_bits bs') - two_power_nat 12)) 
+        else OK (Int.repr (int_of_bits bs'))
+  | nil => Error(msg "impossible")
+  end.
+
+Lemma encode_ofs_u12_consistency:forall ofs l,
+    encode_ofs_u12 (Int.intval ofs) = OK l ->
+    decode_ofs_u12 l = OK ofs.
+Proof.
+  unfold encode_ofs_u12,decode_ofs_u12.
+  intros. do 2 destr_in H.
+
+  (* Clear -Heqb. *)
+  destruct l.
+  cbn [proj1_sig].
+  destruct ofs. cbn [Int.intval] in *.
+  assert ((bits_of_int 12 (intval + two_power_nat 12)) = x).
+  inv H. auto.
+  (* the length is 0, impossible *)
+  destruct x. inversion e0.
+
+  (* length is not 0 *)
+  destruct b eqn:Hb; f_equal.
+  (* sign is 1 , Heqb: intval<0 ; intrange: intval>-1  Contradiction*)
+  simpl.
+  rewrite<- H0.
+
+  rewrite bytes_to_bits_to_bytes. simpl.
+  Transparent Int.repr.
+  unfold Int.repr. f_equal.
+  eapply Int.mkint_eq. rewrite Int.Z_mod_modulus_eq.
+  eapply andb_true_iff in Heqb.
+  destruct Heqb.
+  apply Z.ltb_lt in H.
+  apply Z.ltb_lt in H10.
+  unfold two_power_nat in H10. simpl in H10.
+  erewrite Byte.unsigned_repr_eq.
+  erewrite Byte.unsigned_repr_eq. rewrite Z.add_0_r.
+  assert (intval mod Byte.modulus + (intval / 256) mod Byte.modulus * 256 = intval).
+  unfold Byte.modulus. unfold two_power_nat. simpl.
+  repeat rewrite Z.mod_eq. rewrite Z.mul_sub_distr_r.
+  rewrite <- (Z.sub_0_r intval) at 5.
+  rewrite <- Z.sub_sub_distr.
+  apply (Z.sub_cancel_l intval _ 0).
+  eapply Z.sub_move_0_r.
+  rewrite <- Z.mul_sub_distr_r.
+  rewrite Z.mul_comm. apply Z.mul_cancel_r.
+  lia. rewrite Z.div_div.
+  erewrite (Z.div_small intval (256*256)).
+  lia. lia. lia. lia. lia. lia.
+  rewrite H11. rewrite Z.mod_small. auto.
+  lia.
 
 Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 5)) then
@@ -304,9 +363,18 @@ Program Definition encode_ofs_u20 (ofs:Z) :res u20 :=
     else Error (msg "impossible")
   else Error (msg "Offset overflow in encode_ofs_u20").
 
+(* Unsigned version:
+  Definition decode_ofs_u12 (bs:u12) : res int :=
+  let bs' := proj1_sig bs in
+  OK (Int.repr (int_of_bits bs')). *)
 Definition decode_ofs_u20 (bs:u20) : res int :=
   let bs' := proj1_sig bs in
-  OK (Int.repr (int_of_bits bs')).
+  match bs' with
+  | b0 :: bs1 => 
+      if b0 then OK (Int.repr ((int_of_bits bs') - two_power_nat 20)) 
+        else OK (Int.repr (int_of_bits bs'))
+  | nil => Error(msg "impossible")
+  end.
 
 Program Definition encode_S1 (imm: Z) : res u5 :=
   do immbits <- encode_ofs_u12 imm;
