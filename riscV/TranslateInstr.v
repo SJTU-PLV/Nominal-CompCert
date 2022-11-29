@@ -292,7 +292,7 @@ Definition decode_ofs_u12 (bs:u12) : res int :=
   | nil => Error(msg "impossible")
   end.
 
-Lemma encode_ofs_u12_consistency:forall ofs l,
+(* Lemma encode_ofs_u12_consistency:forall ofs l,
     encode_ofs_u12 (Int.intval ofs) = OK l ->
     decode_ofs_u12 l = OK ofs.
 Proof.
@@ -311,7 +311,7 @@ Proof.
   (* length is not 0 *)
   destruct b eqn:Hb; f_equal.
   (* sign is 1 , Heqb: intval<0 ; intrange: intval>-1  Contradiction*)
-Abort.
+Abort. *)
 
 Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 5)) then
@@ -667,51 +667,51 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     OK (bgeu B1 B2 rs1bits rs2bits B3 B4)
   | Plb rd ra ofs =>
     do rdbits <- encode_ireg rd;
-    do rabits <- encode_ireg rd;
+    do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do ofsbits <- encode_ofs_u12 ofs_Z;
     OK (lb rdbits rabits ofsbits)
   | Plbu rd ra ofs =>
     do rdbits <- encode_ireg rd;
-    do rabits <- encode_ireg rd;
+    do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do ofsbits <- encode_ofs_u12 ofs_Z;
     OK (lbu rdbits rabits ofsbits)
   | Plh rd ra ofs =>
     do rdbits <- encode_ireg rd;
-    do rabits <- encode_ireg rd;
+    do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do ofsbits <- encode_ofs_u12 ofs_Z;
     OK (lh rdbits rabits ofsbits)
   | Plhu rd ra ofs =>
     do rdbits <- encode_ireg rd;
-    do rabits <- encode_ireg rd;
+    do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do ofsbits <- encode_ofs_u12 ofs_Z;
     OK (lhu rdbits rabits ofsbits)
   | Plw rd ra ofs =>
     do rdbits <- encode_ireg rd;
-    do rabits <- encode_ireg rd;
+    do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do ofsbits <- encode_ofs_u12 ofs_Z;
     OK (lw rdbits rabits ofsbits)
   | Psb rd ra ofs =>
     do rdbits <- encode_ireg rd;
-    do rabits <- encode_ireg rd;
+    do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
     OK (sb immS1bits rdbits rabits immS2bits)
   | Psh rd ra ofs =>
     do rdbits <- encode_ireg rd;
-    do rabits <- encode_ireg rd;
+    do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
     OK (sh immS1bits rdbits rabits immS2bits)
   | Psw rd ra ofs =>
     do rdbits <- encode_ireg rd;
-    do rabits <- encode_ireg rd;
+    do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
