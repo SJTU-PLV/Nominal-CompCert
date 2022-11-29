@@ -11,11 +11,14 @@ Local Open Scope bits_scope.
 
 Local Open Scope error_monad_scope.
 
-Fixpoint bits_of_int (n: nat) (x: Z) {struct n}: list bool :=
+Fixpoint bits_of_int_rec (n: nat) (x: Z) {struct n}: list bool :=
   match n with
   | O => nil
-  | S m => ((x mod 2)=?1) :: bits_of_int m (x / 2)
+  | S m => ((x mod 2)=?1) :: bits_of_int_rec m (x / 2)
   end.
+
+Definition bits_of_int (n: nat) (x: Z) : list bool :=
+  rev (bits_of_int_rec n x).
 
 Fixpoint int_of_bits (l: list bool): Z :=
   match l with
