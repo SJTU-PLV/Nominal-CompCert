@@ -311,34 +311,7 @@ Proof.
   (* length is not 0 *)
   destruct b eqn:Hb; f_equal.
   (* sign is 1 , Heqb: intval<0 ; intrange: intval>-1  Contradiction*)
-  simpl.
-  rewrite<- H0.
-
-  rewrite bytes_to_bits_to_bytes. simpl.
-  Transparent Int.repr.
-  unfold Int.repr. f_equal.
-  eapply Int.mkint_eq. rewrite Int.Z_mod_modulus_eq.
-  eapply andb_true_iff in Heqb.
-  destruct Heqb.
-  apply Z.ltb_lt in H.
-  apply Z.ltb_lt in H10.
-  unfold two_power_nat in H10. simpl in H10.
-  erewrite Byte.unsigned_repr_eq.
-  erewrite Byte.unsigned_repr_eq. rewrite Z.add_0_r.
-  assert (intval mod Byte.modulus + (intval / 256) mod Byte.modulus * 256 = intval).
-  unfold Byte.modulus. unfold two_power_nat. simpl.
-  repeat rewrite Z.mod_eq. rewrite Z.mul_sub_distr_r.
-  rewrite <- (Z.sub_0_r intval) at 5.
-  rewrite <- Z.sub_sub_distr.
-  apply (Z.sub_cancel_l intval _ 0).
-  eapply Z.sub_move_0_r.
-  rewrite <- Z.mul_sub_distr_r.
-  rewrite Z.mul_comm. apply Z.mul_cancel_r.
-  lia. rewrite Z.div_div.
-  erewrite (Z.div_small intval (256*256)).
-  lia. lia. lia. lia. lia. lia.
-  rewrite H11. rewrite Z.mod_small. auto.
-  lia.
+Abort.
 
 Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 5)) then
