@@ -292,7 +292,7 @@ Definition decode_ofs_u12 (bs:u12) : res int :=
   | nil => Error(msg "impossible")
   end.
 
-(* Lemma encode_ofs_u12_consistency:forall ofs l,
+Lemma encode_ofs_u12_consistency:forall ofs l,
     encode_ofs_u12 (Int.intval ofs) = OK l ->
     decode_ofs_u12 l = OK ofs.
 Proof.
@@ -311,7 +311,13 @@ Proof.
   (* length is not 0 *)
   destruct b eqn:Hb; f_equal.
   (* sign is 1 , Heqb: intval<0 ; intrange: intval>-1  Contradiction*)
-Abort. *)
+
+  Transparent Int.repr.
+  unfold Int.repr.
+  eapply Int.mkint_eq.
+  destruct x. simpl in e0. congruence.
+  repeat (destruct x as [|? x];simpl in e0;try congruence).
+Admitted.
 
 Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 5)) then
