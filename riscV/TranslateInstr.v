@@ -795,6 +795,9 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
 
 Definition translate_instr i := do i' <- translate_instr' i; OK [i'].
 
+(* FIXME: for the big endian output for the multi-bytes token in CSLED *)
+Definition bits_to_bytes_archi bs := do bs' <- (bits_to_bytes bs); OK (rev bs').
+
 (* Decode;struction *)
 
   (* NEW *)

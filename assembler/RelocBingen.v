@@ -18,7 +18,7 @@ Fixpoint translate_bytes instrs :=
   | [] => OK []
   | i :: instrs' =>
       do bits <- EncDecRet.encode_Instruction i;
-      do bs <- bits_to_bytes bits;
+      do bs <- bits_to_bytes_archi bits;
       do tl <- translate_bytes instrs';
       OK (bs ++ tl)
   end.

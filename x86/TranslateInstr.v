@@ -1638,3 +1638,4 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
   | _ => Error [MSG "Not exists or unsupported: "; MSG (instr_to_string i)]
   end.
 
+Definition bits_to_bytes_archi bs := bits_to_bytes bs.
