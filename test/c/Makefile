@@ -5,6 +5,9 @@ CCOMPFLAGS_GCC=$(CCOMPOPTS) -stdlib ../../runtime -dc -dclight -dasm
 CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime -relf
 CFLAGS=-O1 -Wall
 
+# set simulator
+SIMU=qemu-riscv32 -L ~/riscv/sysroot
+
 LIBS=$(LIBMATH)
 
 TIME=ocaml unix.cma ../../tools/xtime.ml -o /dev/null -mintime 2.0 -minruns 4

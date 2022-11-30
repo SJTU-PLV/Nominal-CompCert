@@ -1,7 +1,7 @@
 Require Import Coqlib Maps lib.Integers Floats Values AST Errors.
 Require Import Globalenvs.
 Require Import Asm.
-Require Import compcert.encode.Bits Memdata .
+Require Import encode.Bits Memdata.
 Require Import EncDecRet.
 Require Import Coq.Logic.Eqdep_dec.
 Import Bits.
@@ -10,6 +10,8 @@ Require Import BPProperty.
 Local Open Scope bits_scope.
 
 Local Open Scope error_monad_scope.
+
+Global Obligation Tactic := simpl;auto.
 
 Fixpoint bits_of_int_rec (n: nat) (x: Z) {struct n}: list bool :=
   match n with
@@ -67,7 +69,7 @@ Program Definition encode_ireg (r: ireg) : res (u5) :=
   | X31 => OK (b["11111"])
   end.
 
-  Definition decode_ireg (bs: u5) : res ireg :=
+Definition decode_ireg (bs: u5) : res ireg :=
     let bs' := proj1_sig bs in
     let n := bits_to_Z bs' in
     if      Z.eqb n 1  then OK(X1 )      (**r b["00001"] *)
