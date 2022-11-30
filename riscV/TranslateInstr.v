@@ -483,6 +483,8 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rsbits <- encode_ireg0 rs;
     do imm <- encode_ofs_u12 ofs;
     OK (jalr rdbits rsbits imm)
+
+  (** 32-bit integer register-immediate instructions *)
   | Paddiw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
@@ -528,6 +530,8 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rdbits <- encode_ireg rd;
     do imm20  <- encode_ofs_u20 (Int.signed imm);
     OK (lui rdbits imm20)
+
+  (** 32-bit integer register-register instructions *)
   | Paddw rd rs1 rs2 =>
     if Archi.ptr64 then Error (msg "Only in rv32")
     else 
@@ -631,6 +635,178 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rs1bits <- encode_ireg0 rs1;
     do rs2bits <- encode_ireg0 rs2;
     OK (sra rdbits rs1bits rs2bits)
+
+  (** 64-bit integer register-immediate instructions *)
+  | Paddil rd rs imm =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int64.signed imm);
+      OK (addi rdbits rsbits imm12)
+    else Error (msg "Only in rv64")
+  | Psltil rd rs imm =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int64.signed imm);
+      OK (slti rdbits rsbits imm12)
+    else Error (msg "Only in rv64")
+  | Pandil rd rs imm =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int64.signed imm);
+      OK (andi rdbits rsbits imm12)
+    else Error (msg "Only in rv64")
+  | Poril rd rs imm =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int64.signed imm);
+      OK (ori rdbits rsbits imm12)
+    else Error (msg "Only in rv64")
+  | Pxoril rd rs imm =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int64.signed imm);
+      OK (xori rdbits rsbits imm12)
+    else Error (msg "Only in rv64")
+  | Psllil rd rs imm =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int.signed imm);
+      OK (slli rdbits rsbits imm5)
+    else Error (msg "Only in rv64")
+  | Psrlil rd rs imm =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int.signed imm);
+      OK (srli rdbits rsbits imm5)
+    else Error (msg "Only in rv64")
+  | Psrail rd rs imm =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int.signed imm);
+      OK (srai rdbits rsbits imm5)
+    else Error (msg "Only in rv64")
+  | Pluil rd imm =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do imm20  <- encode_ofs_u20 (Int64.signed imm);
+      OK (lui rdbits imm20)
+    else Error (msg "Only in rv64")
+
+  (* 64-bit integer register-register instructions *)
+  | Paddl rd rs1 rs2 =>
+    if Archi.ptr64 then 
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (add rdbits rs1bits rs2bits)
+    else 
+      Error (msg "Only in rv32")
+  | Psubl rd rs1 rs2 =>
+    if Archi.ptr64 then 
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (sub rdbits rs1bits rs2bits)
+    else 
+      Error (msg "Only in rv32")
+  | Pmull rd rs1 rs2 =>
+  if Archi.ptr64 then Error (msg "Only in rv32")
+    else 
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (mul rdbits rs1bits rs2bits)
+  | Pmulhw rd rs1 rs2 =>
+  if Archi.ptr64 then Error (msg "Only in rv32")
+    else 
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (mulh rdbits rs1bits rs2bits)
+  | Pmulhuw rd rs1 rs2 =>
+  if Archi.ptr64 then Error (msg "Only in rv32")
+    else 
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (mulhu rdbits rs1bits rs2bits)
+  | Pdivw rd rs1 rs2 =>
+  if Archi.ptr64 then Error (msg "Only in rv32")
+    else 
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (div rdbits rs1bits rs2bits)
+  | Pdivuw rd rs1 rs2 =>
+  if Archi.ptr64 then Error (msg "Only in rv32")
+    else 
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (divu rdbits rs1bits rs2bits)
+  | Premw rd rs1 rs2 =>
+  if Archi.ptr64 then Error (msg "Only in rv32")
+    else 
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (rem rdbits rs1bits rs2bits)
+  | Premuw rd rs1 rs2 =>
+  if Archi.ptr64 then Error (msg "Only in rv32")
+    else 
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (remu rdbits rs1bits rs2bits)
+  | Psltw rd rs1 rs2 =>
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (slt rdbits rs1bits rs2bits)
+  | Psltuw rd rs1 rs2 =>
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (sltu rdbits rs1bits rs2bits)
+  | Pandw rd rs1 rs2 =>
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (and rdbits rs1bits rs2bits)
+  | Porw rd rs1 rs2 =>
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (or rdbits rs1bits rs2bits)
+  | Pxorw rd rs1 rs2 =>
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (xor rdbits rs1bits rs2bits)
+  | Psllw rd rs1 rs2 =>
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (sll rdbits rs1bits rs2bits)
+  | Psrlw rd rs1 rs2 =>
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (srl rdbits rs1bits rs2bits)
+  | Psraw rd rs1 rs2 =>
+    do rdbits <- encode_ireg rd;
+    do rs1bits <- encode_ireg0 rs1;
+    do rs2bits <- encode_ireg0 rs2;
+    OK (sra rdbits rs1bits rs2bits)
+
   | Pbeq_ofs rs1 rs2 ofs =>
     if Archi.ptr64 then Error (msg "Only in rv32")
     else
