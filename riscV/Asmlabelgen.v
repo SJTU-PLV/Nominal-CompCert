@@ -32,91 +32,91 @@ Definition transl_instr (i: instruction) (ofs: Z) (code:code) : res instruction 
     match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pjal_ofs X0 (inr relOfs))   
     end
 
   | Pbeql  rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pbeq_ofs rs1 rs2 relOfs)
     end
 
   | Pbnel  rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pbne_ofs rs1 rs2 relOfs)
     end
 
   | Pbltl  rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pblt_ofs rs1 rs2 relOfs)
     end
 
   | Pbltul rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pbltu_ofs rs1 rs2 relOfs)
     end
 
   | Pbgel  rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pbge_ofs rs1 rs2 relOfs)
     end
 
   | Pbgeul rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pbgeu_ofs rs1 rs2 relOfs)
     end
 
   | Pbeqw  rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pbeq_ofs rs1 rs2 relOfs)
     end
 
   | Pbnew  rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pbne_ofs rs1 rs2 relOfs)
     end
 
   | Pbltw  rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pblt_ofs rs1 rs2 relOfs)
     end
 
   | Pbltuw rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pbltu_ofs rs1 rs2 relOfs)
     end
 
   | Pbgew  rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pbge_ofs rs1 rs2 relOfs)
     end
 
   | Pbgeuw rs1 rs2 lbl =>    match label_pos instr_size lbl 0 code with
     | None =>   Error (msg"Label not found")
     | Some pos =>
-      let relOfs :=  pos - (ofs+sz)  in
+      let relOfs :=  Z.div2 (pos - (ofs+sz))  in
       OK (Pbgeu_ofs rs1 rs2 relOfs)
     end
 
@@ -124,6 +124,7 @@ Definition transl_instr (i: instruction) (ofs: Z) (code:code) : res instruction 
     (* ofsLst is the relative address of the start of the current function *)
     do ofsLst <-  findAllLabel tbl code;
     (* let ofsLst := map (Z.add (-( sz + ofs))) lst in *)
+    (* Pbtbl_ofs => Pjal_rr which is absolute addressing *)
     OK (Pbtbl_ofs rs ofsLst)
 
   | Plabel lbl => OK Pnop

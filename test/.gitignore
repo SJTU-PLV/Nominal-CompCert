@@ -6,3 +6,4 @@
 *.light.c
 *.compcert
 *.gcc
+*.sh
