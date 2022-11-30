@@ -361,14 +361,14 @@ Program Definition encode_S1 (imm: Z) : res u5 :=
   let S1 := immbits>@[7] in
   if assertLength S1 5 then
     OK (exist _ S1 _)
-  else Error(msg "illegal length").
+  else Error(msg "illegal length in encode_S1").
 
 Program Definition encode_S2 (imm: Z) : res u7 :=
   do immbits <- encode_ofs_u12 imm;
   let S2 := immbits~@[7] in
   if assertLength S2 7 then
     OK (exist _ S2 _)
-  else Error(msg "illegal length").
+  else Error(msg "illegal length in encode_S2").
 
 
 (* subtle: we treat imm as an offset multiple of 2 bytes, so we need to preserve the least bit
@@ -383,7 +383,7 @@ Program Definition encode_J1 (imm: Z) : res u8 :=
   let B1 := immbits>@[1]~@[8] in
   if assertLength B1 8 then
     OK (exist _ B1 _)
-  else Error(msg "illegal length").
+  else Error(msg "illegal length in encode_J1").
 
 Program Definition encode_J2 (imm: Z) : res u1 :=
   do immbits <- encode_ofs_u20 imm;
@@ -392,7 +392,7 @@ Program Definition encode_J2 (imm: Z) : res u1 :=
   let B1 := immbits>@[9]~@[1] in
   if assertLength B1 1 then
     OK (exist _ B1 _)
-  else Error(msg "illegal length").
+  else Error(msg "illegal length in encode_J2").
 
 Program Definition encode_J3 (imm: Z) : res u10 :=
   do immbits <- encode_ofs_u20 imm;
@@ -400,7 +400,7 @@ Program Definition encode_J3 (imm: Z) : res u10 :=
   let B2 := immbits>@[10] in
   if assertLength B2 10 then
     OK (exist _ B2 _)
-  else Error(msg "illegal length").
+  else Error(msg "illegal length in encode_J3").
 
 Program Definition encode_J4 (imm: Z) : res u1 :=
   do immbits <- encode_ofs_u20 imm;
@@ -409,7 +409,7 @@ Program Definition encode_J4 (imm: Z) : res u1 :=
   let B1 := immbits~@[1] in
   if assertLength B1 1 then
     OK (exist _ B1 _)
-  else Error(msg "illegal length").
+  else Error(msg "illegal length in encode_J4").
 
 Definition decode_immS (S1: u5) (S2: u7) : res Z :=
   let S1_bits := proj1_sig S1 in
@@ -426,36 +426,36 @@ Program Definition encode_B1 (imm: Z) : res u1 :=
   do immbits <- encode_ofs_u12 imm;
   (* let B1_withtail := skipn 1 immbits in *)
   (* let B1 := firstn 1 B1_withtail in *)
-  let B1 := immbits~@[1] in
+  let B1 := immbits>@[1]~@[1] in
   if assertLength B1 1 then
     OK (exist _ B1 _)
-  else Error(msg "illegal length").
+  else Error(msg "illegal length in encode_B1").
 
 Program Definition encode_B2 (imm: Z) : res u4 :=
   do immbits <- encode_ofs_u12 imm;
   (* let B2_withtail := skipn 8 immbits in *)
   (* let B2 := firstn 4 B2_withtail in *)
-  let B2 := immbits>@[2]~@[6] in
+  let B2 := immbits>@[8]~@[4] in
   if assertLength B2 4 then
     OK (exist _ B2 _)
-  else Error(msg "illegal length").
+  else Error(msg "illegal length in encode_B2").
 
 Program Definition encode_B3 (imm: Z) : res u6 :=
   do immbits <- encode_ofs_u12 imm;
   (* let B3_withtail := skipn 2 immbits in *)
   (* let B3 := firstn 6 B3_withtail in *)
-  let B3 := immbits>@[8]~@[4] in
+  let B3 := immbits>@[2]~@[6] in
   if assertLength B3 6 then
     OK (exist _ B3 _)
-  else Error(msg "illegal length").
+  else Error(msg "illegal length in encode_B3").
 
 Program Definition encode_B4 (imm: Z) : res u1 :=
   do immbits <- encode_ofs_u12 imm;
   (* let B4 := firstn 1 immbits in *)
-  let B4 := immbits>@[1]~@[1] in
+  let B4 := immbits~@[1] in
   if assertLength B4 1 then
     OK (exist _ B4 _)
-  else Error(msg "illegal length").
+  else Error(msg "illegal length in encode_B4").
 
 Definition decode_immB (B1: u1) (B2: u4) (B3: u6) (B4: u1) : res Z :=
   let B1_bits := proj1_sig B1 in
@@ -725,21 +725,21 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
-    OK (sb immS1bits rdbits rabits immS2bits)
+    OK (sb immS1bits rabits rdbits immS2bits)
   | Psh rd ra ofs =>
     do rdbits <- encode_ireg rd;
     do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
-    OK (sh immS1bits rdbits rabits immS2bits)
+    OK (sh immS1bits rabits rdbits immS2bits)
   | Psw rd ra ofs =>
     do rdbits <- encode_ireg rd;
     do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
-    OK (sw immS1bits rdbits rabits immS2bits)
+    OK (sw immS1bits rabits rdbits immS2bits)
   | Pfmv fd fs =>
     do fdbits <- encode_freg_u5 fd;
     do fsbits <- encode_freg_u5 fs;
