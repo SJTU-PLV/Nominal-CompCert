@@ -32,6 +32,27 @@ Fixpoint int_of_bits_rec (l: list bool): Z :=
 Definition int_of_bits (l: list bool): Z :=
   int_of_bits_rec(rev l).
 
+(* NEW: signed version of conversion between bits and ints *)
+Definition bits_of_int_signed (n:nat) (ofs:Z) : res bits :=
+  if ( -(two_power_nat (n-1)) <=? ofs) && (ofs <? 0) then    
+    OK (bits_of_int n (ofs + (two_power_nat n)))
+  else 
+    if ( 0 <=? ofs) && (ofs <? (two_power_nat (n-1))) then
+    OK (bits_of_int n ofs)
+    else Error (msg "Offset overflow in bits_of_int_signed").
+
+Definition int_of_bits_signed (l: list bool): res Z :=
+  match l with
+  | nil => Error (msg "need at least a sign bit!")
+  | false :: l' => OK (int_of_bits l')
+  | true  :: l' => OK (-(int_of_bits l'))
+  end.
+
+Lemma bits_of_int_signed_consistency: forall n ofs l,
+  bits_of_int_signed n ofs = OK l ->
+  int_of_bits_signed l = OK ofs.
+Proof. Admitted.
+
 Program Definition zero5  : u5  := b["00000"].
 Program Definition zero12 : u12 := b["000000000000"].
 
@@ -268,7 +289,7 @@ Program Definition encode_freg_u5 (r:freg) : res u5 :=
     OK (exist _ b _)
   else Error (msg "impossible").
 
-Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=  
+(* Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=  
   do ofs <- if ( -(two_power_nat 11) <=? ofs) && (ofs <? 0) then
              OK (ofs + (two_power_nat 12))
            else if ( 0 <=? ofs) && (ofs <? (two_power_nat 11)) then
@@ -277,14 +298,25 @@ Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=
   let ofs12 := (bits_of_int 12 ofs) in
   if assertLength ofs12 12 then
     OK (exist _ ofs12 _)
-  else Error (msg "impossible").
+  else Error (msg "impossible"). *)
+
+(* New ddefinition of encode_ofs_u12 *)
+Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=
+  let l0 := bits_of_int_signed 12 ofs in
+  match l0 with
+  | OK _ => 
+      do l <- l0;
+      if assertLength l 12 then
+        OK (exist _ l _)
+      else Error (msg "impossible")
+  | Error _ => Error (msg "Offset overflow in encode_ofs_u12")
+  end.
 
 (* Unsigned version:
 Definition decode_ofs_u12 (bs:u12) : res int :=
   let bs' := proj1_sig bs in
   OK (Int.repr (int_of_bits bs')). *)
 
-(* the nil case is impossible, can it be eliminated? *)
 Definition decode_ofs_u12 (bs:u12) : res int :=
   let bs' := proj1_sig bs in
   match bs' with
@@ -294,31 +326,12 @@ Definition decode_ofs_u12 (bs:u12) : res int :=
   | nil => Error(msg "impossible")
   end.
 
-(* NEW: signed version of conversion between bits and ints *)
-Definition bits_of_int_signed (n:nat) (ofs:Z) : res bits :=
-  if ( -(two_power_nat (n-1)) <=? ofs) && (ofs <? 0) then    
-    OK (bits_of_int n (ofs + (two_power_nat n)))
-  else 
-    if ( 0 <=? ofs) && (ofs <? (two_power_nat (n-1))) then
-    OK (bits_of_int n ofs)
-    else Error (msg "Offset overflow in bits_of_int_signed").
-
-Definition int_of_bits_signed (l: list bool): res Z :=
-  match l with
-  | nil => Error (msg "need at least a sign bit!")
-  | false :: l' => OK (int_of_bits l')
-  | true  :: l' => OK (-(int_of_bits l'))
-  end.
-
-(* New ddefinition of encode_ofs_u12 *)
-Program Definition encode_ofs_u12' (ofs:Z) :res u12 :=
-  let l0 := bits_of_int_signed 12 ofs in
-  match l0 with
-  | OK _ => 
-      do l <- l0;
-      OK (exist _ l _)
-  | Error _ => Error (msg "Offset overflow in encode_ofs_u12")
-  end.
+Lemma encode_ofs_u12_consistency:forall ofs l,
+    encode_ofs_u12 (Int.intval ofs) = OK l ->
+    decode_ofs_u12 l = OK ofs.
+Proof.
+  unfold encode_ofs_u12',decode_ofs_u12.
+  intros. do 2 destr_in H.
 
 (* proof broken due to the modification of encode_ofs_u12 *)
 (* Lemma encode_ofs_u12_consistency:forall ofs l, *)
@@ -346,7 +359,7 @@ Program Definition encode_ofs_u12' (ofs:Z) :res u12 :=
 (*   eapply Int.mkint_eq. *)
 (*   destruct x. simpl in e0. congruence. *)
 (*   repeat (destruct x as [|? x];simpl in e0;try congruence). *)
-(* Admitted. *)
+Admitted.
 
 Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 5)) then
