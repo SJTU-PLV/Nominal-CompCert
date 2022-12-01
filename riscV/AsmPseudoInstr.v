@@ -45,6 +45,53 @@ Definition transf_instr i : (list instruction) :=
       [Paddil rd rs (Int64.zero)]
     else
       [Paddiw rd rs (Int.zero)]
+
+  (* Some instructions redundant in 64bit mode *)
+  | Psltiw rd rs imm =>
+      if Archi.ptr64 then
+        [Psltil rd rs (Int64.repr (Int.signed imm))]
+      else [i]
+  | Psltiuw rd rs imm =>
+      if Archi.ptr64 then
+        [Psltiul rd rs (Int64.repr (Int.signed imm))]
+      else [i]
+  | Pandiw rd rs imm =>
+      if Archi.ptr64 then
+        [Pandil rd rs (Int64.repr (Int.signed imm))]
+      else [i]       
+  | Poriw rd rs imm =>
+      if Archi.ptr64 then
+        [Poril rd rs (Int64.repr (Int.signed imm))]
+      else [i]
+  | Pxoriw rd rs imm =>
+      if Archi.ptr64 then
+        [Pxoril rd rs (Int64.repr (Int.signed imm))]
+      else [i]
+  | Pluiw rd imm =>
+      if Archi.ptr64 then
+        [Pluil rd (Int64.repr (Int.signed imm))]
+      else [i]
+  | Psltw rd rs imm =>
+      if Archi.ptr64 then
+        [Psltl rd rs imm]
+      else [i]
+  | Psltuw rd rs imm =>
+      if Archi.ptr64 then
+        [Psltul rd rs imm]
+      else [i]
+  | Pandw rd rs1 rs2 =>
+      if Archi.ptr64 then
+        [Pandl rd rs1 rs2]
+      else [i]
+  | Porw rd rs1 rs2 =>
+      if Archi.ptr64 then
+        [Porl rd rs1 rs2]
+      else [i]
+  | Pxorw rd rs1 rs2 =>
+      if Archi.ptr64 then
+        [Pxorl rd rs1 rs2]
+      else [i]
+             
   | _ => [i]
   end.
 

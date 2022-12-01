@@ -467,6 +467,23 @@ Definition decode_immB (B1: u1) (B2: u4) (B3: u6) (B4: u1) : res Z :=
   OK (int_of_bits (B2_bits ++ B3_bits ++ B1_bits ++ B4_bits)).
 
 
+Program Definition encode_shamt ofs : res u6 :=
+  if Archi.ptr64 then
+    if ( -1 <? ofs) && (ofs <? (two_power_nat 6)) then
+      let bs := (bits_of_int 6 ofs) in
+      if assertLength bs 6 then
+        OK (exist _ bs _)
+      else Error (msg "impossible")
+    else Error (msg "Offset overflow in encode_shamt")
+  else
+    if ( -1 <? ofs) && (ofs <? (two_power_nat 5)) then
+      let bs := false :: (bits_of_int 5 ofs) in
+      if assertLength bs 6 then
+        OK (exist _ bs _)
+      else Error (msg "impossible")
+    else Error (msg "Offset overflow in encode_shamt").
+
+
 Definition translate_instr' (i:instruction) : res (Instruction) :=
   match i with
   | Pnop =>
@@ -489,153 +506,224 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
     do imm12  <- encode_ofs_u12 (Int.signed imm);
-    (* do imm12  <- encode_ofs_u12_signed (Int.signed imm); *)
-    OK (addi rdbits rsbits imm12)
+    if Archi.ptr64 then
+      OK (addiw rdbits rsbits imm12)
+    else
+      OK (addi rdbits rsbits imm12)
   | Psltiw rd rs imm =>
-    do rdbits <- encode_ireg rd;
-    do rsbits <- encode_ireg0 rs;
-    do imm12  <- encode_ofs_u12 (Int.signed imm);
-    OK (slti rdbits rsbits imm12)
+    if Archi.ptr64 then
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int.signed imm);
+      OK (slti rdbits rsbits imm12)
+  | Psltiuw rd rs imm =>
+    if Archi.ptr64 then
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int.signed imm);
+      OK (sltiu rdbits rsbits imm12)
   | Pandiw rd rs imm =>
-    do rdbits <- encode_ireg rd;
-    do rsbits <- encode_ireg0 rs;
-    do imm12  <- encode_ofs_u12 (Int.signed imm);
-    OK (andi rdbits rsbits imm12)
+    if Archi.ptr64 then
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int.signed imm);
+      OK (andi rdbits rsbits imm12)
   | Poriw rd rs imm =>
-    do rdbits <- encode_ireg rd;
-    do rsbits <- encode_ireg0 rs;
-    do imm12  <- encode_ofs_u12 (Int.signed imm);
-    OK (ori rdbits rsbits imm12)
+    if Archi.ptr64 then
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int.signed imm);
+      OK (ori rdbits rsbits imm12)
   | Pxoriw rd rs imm =>
-    do rdbits <- encode_ireg rd;
-    do rsbits <- encode_ireg0 rs;
-    do imm12  <- encode_ofs_u12 (Int.signed imm);
-    OK (xori rdbits rsbits imm12)
+    if Archi.ptr64 then
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int.signed imm);
+      OK (xori rdbits rsbits imm12)
   | Pslliw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm5  <- encode_ofs_u5 (Int.signed imm);
-    OK (slli rdbits rsbits imm5)
+    if Archi.ptr64 then
+      do imm5  <- encode_ofs_u5 (Int.unsigned imm);
+      OK (slliw rdbits rsbits imm5)
+    else
+      do imm6  <- encode_shamt (Int.unsigned imm);
+      OK (slli rdbits rsbits imm6)
   | Psrliw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm5  <- encode_ofs_u5 (Int.signed imm);
-    OK (srli rdbits rsbits imm5)
+    if Archi.ptr64 then
+      do imm5  <- encode_ofs_u5 (Int.unsigned imm);
+      OK (srliw rdbits rsbits imm5)
+    else
+      do imm6  <- encode_shamt (Int.unsigned imm);
+      OK (srli rdbits rsbits imm6)
   | Psraiw rd rs imm =>
     do rdbits <- encode_ireg rd;
     do rsbits <- encode_ireg0 rs;
-    do imm5  <- encode_ofs_u5 (Int.signed imm);
-    OK (srai rdbits rsbits imm5)
+    if Archi.ptr64 then
+      do imm5  <- encode_ofs_u5 (Int.unsigned imm);
+      OK (sraiw rdbits rsbits imm5)
+    else
+      do imm6  <- encode_shamt (Int.unsigned imm);
+      OK (srai rdbits rsbits imm6)
   | Pluiw rd imm =>
-    do rdbits <- encode_ireg rd;
-    do imm20  <- encode_ofs_u20 (Int.signed imm);
-    OK (lui rdbits imm20)
+    if Archi.ptr64 then
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do imm20  <- encode_ofs_u20 (Int.signed imm);
+      OK (lui rdbits imm20)
 
   (** 32-bit integer register-register instructions *)
   | Paddw rd rs1 rs2 =>
-    if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
     do rdbits <- encode_ireg rd;
     do rs1bits <- encode_ireg0 rs1;
     do rs2bits <- encode_ireg0 rs2;
-    OK (add rdbits rs1bits rs2bits)
+    if Archi.ptr64 then 
+      OK (addw rdbits rs1bits rs2bits)
+    else 
+      OK (add rdbits rs1bits rs2bits)
   | Psubw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
     do rdbits <- encode_ireg rd;
     do rs1bits <- encode_ireg0 rs1;
     do rs2bits <- encode_ireg0 rs2;
-    OK (sub rdbits rs1bits rs2bits)
+    if Archi.ptr64 then 
+      OK (subw rdbits rs1bits rs2bits)
+    else
+      OK (sub rdbits rs1bits rs2bits)
   | Pmulw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
     do rdbits <- encode_ireg rd;
     do rs1bits <- encode_ireg0 rs1;
     do rs2bits <- encode_ireg0 rs2;
-    OK (mul rdbits rs1bits rs2bits)
+    if Archi.ptr64 then 
+      OK (mulw rdbits rs1bits rs2bits)
+    else
+      OK (mul rdbits rs1bits rs2bits)
   | Pmulhw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
+    if Archi.ptr64 then 
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
     else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (mulh rdbits rs1bits rs2bits)
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (mulh rdbits rs1bits rs2bits)
   | Pmulhuw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
+    if Archi.ptr64 then 
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
     else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (mulhu rdbits rs1bits rs2bits)
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (mulhu rdbits rs1bits rs2bits)
   | Pdivw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
     do rdbits <- encode_ireg rd;
     do rs1bits <- encode_ireg0 rs1;
     do rs2bits <- encode_ireg0 rs2;
-    OK (div rdbits rs1bits rs2bits)
+    if Archi.ptr64 then
+      OK (divw rdbits rs1bits rs2bits)
+    else
+      OK (div rdbits rs1bits rs2bits)
   | Pdivuw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
     do rdbits <- encode_ireg rd;
     do rs1bits <- encode_ireg0 rs1;
     do rs2bits <- encode_ireg0 rs2;
-    OK (divu rdbits rs1bits rs2bits)
+    if Archi.ptr64 then
+      OK (divuw rdbits rs1bits rs2bits)
+    else
+      OK (divu rdbits rs1bits rs2bits)
   | Premw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (rem rdbits rs1bits rs2bits)
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      if Archi.ptr64 then
+        OK (remw rdbits rs1bits rs2bits)
+      else 
+        OK (rem rdbits rs1bits rs2bits)
   | Premuw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (remu rdbits rs1bits rs2bits)
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;    
+      if Archi.ptr64 then
+        OK (remuw rdbits rs1bits rs2bits)
+      else 
+        OK (remu rdbits rs1bits rs2bits)
   | Psltw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (slt rdbits rs1bits rs2bits)
+    if Archi.ptr64 then 
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (slt rdbits rs1bits rs2bits)
   | Psltuw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (sltu rdbits rs1bits rs2bits)
+    if Archi.ptr64 then 
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (sltu rdbits rs1bits rs2bits)
   | Pandw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (and rdbits rs1bits rs2bits)
+    if Archi.ptr64 then 
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (and rdbits rs1bits rs2bits)
   | Porw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (or rdbits rs1bits rs2bits)
+    if Archi.ptr64 then 
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (or rdbits rs1bits rs2bits)
   | Pxorw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (xor rdbits rs1bits rs2bits)
+    if Archi.ptr64 then 
+      Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
+    else
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (xor rdbits rs1bits rs2bits)
   | Psllw rd rs1 rs2 =>
     do rdbits <- encode_ireg rd;
     do rs1bits <- encode_ireg0 rs1;
     do rs2bits <- encode_ireg0 rs2;
-    OK (sll rdbits rs1bits rs2bits)
+    if Archi.ptr64 then
+      OK (sllw rdbits rs1bits rs2bits)
+    else
+      OK (sll rdbits rs1bits rs2bits)
   | Psrlw rd rs1 rs2 =>
     do rdbits <- encode_ireg rd;
     do rs1bits <- encode_ireg0 rs1;
     do rs2bits <- encode_ireg0 rs2;
-    OK (srl rdbits rs1bits rs2bits)
+    if Archi.ptr64 then
+      OK (srlw rdbits rs1bits rs2bits)
+    else
+      OK (srl rdbits rs1bits rs2bits)
   | Psraw rd rs1 rs2 =>
     do rdbits <- encode_ireg rd;
     do rs1bits <- encode_ireg0 rs1;
     do rs2bits <- encode_ireg0 rs2;
-    OK (sra rdbits rs1bits rs2bits)
+    if Archi.ptr64 then
+      OK (sraw rdbits rs1bits rs2bits)
+    else
+      OK (sra rdbits rs1bits rs2bits)
 
+         
   (** 64-bit integer register-immediate instructions *)
   | Paddil rd rs imm =>
     if Archi.ptr64 then
@@ -643,62 +731,62 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
       do rsbits <- encode_ireg0 rs;
       do imm12  <- encode_ofs_u12 (Int64.signed imm);
       OK (addi rdbits rsbits imm12)
-    else Error (msg "Only in rv64")
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Psltil rd rs imm =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
       do rsbits <- encode_ireg0 rs;
       do imm12  <- encode_ofs_u12 (Int64.signed imm);
       OK (slti rdbits rsbits imm12)
-    else Error (msg "Only in rv64")
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pandil rd rs imm =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
       do rsbits <- encode_ireg0 rs;
       do imm12  <- encode_ofs_u12 (Int64.signed imm);
       OK (andi rdbits rsbits imm12)
-    else Error (msg "Only in rv64")
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Poril rd rs imm =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
       do rsbits <- encode_ireg0 rs;
       do imm12  <- encode_ofs_u12 (Int64.signed imm);
       OK (ori rdbits rsbits imm12)
-    else Error (msg "Only in rv64")
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pxoril rd rs imm =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
       do rsbits <- encode_ireg0 rs;
       do imm12  <- encode_ofs_u12 (Int64.signed imm);
       OK (xori rdbits rsbits imm12)
-    else Error (msg "Only in rv64")
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Psllil rd rs imm =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
       do rsbits <- encode_ireg0 rs;
-      do imm12  <- encode_ofs_u12 (Int.signed imm);
-      OK (slli rdbits rsbits imm5)
-    else Error (msg "Only in rv64")
+      do imm6  <- encode_shamt (Int.unsigned imm);
+      OK (slli rdbits rsbits imm6)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Psrlil rd rs imm =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
       do rsbits <- encode_ireg0 rs;
-      do imm12  <- encode_ofs_u12 (Int.signed imm);
-      OK (srli rdbits rsbits imm5)
-    else Error (msg "Only in rv64")
+      do imm6  <- encode_shamt (Int.unsigned imm);
+      OK (srli rdbits rsbits imm6)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Psrail rd rs imm =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
       do rsbits <- encode_ireg0 rs;
-      do imm12  <- encode_ofs_u12 (Int.signed imm);
-      OK (srai rdbits rsbits imm5)
-    else Error (msg "Only in rv64")
+      do imm6  <- encode_shamt (Int.unsigned imm);
+      OK (srai rdbits rsbits imm6)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pluil rd imm =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
       do imm20  <- encode_ofs_u20 (Int64.signed imm);
       OK (lui rdbits imm20)
-    else Error (msg "Only in rv64")
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
 
   (* 64-bit integer register-register instructions *)
   | Paddl rd rs1 rs2 =>
@@ -708,7 +796,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
       do rs2bits <- encode_ireg0 rs2;
       OK (add rdbits rs1bits rs2bits)
     else 
-      Error (msg "Only in rv32")
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Psubl rd rs1 rs2 =>
     if Archi.ptr64 then 
       do rdbits <- encode_ireg rd;
@@ -716,100 +804,130 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
       do rs2bits <- encode_ireg0 rs2;
       OK (sub rdbits rs1bits rs2bits)
     else 
-      Error (msg "Only in rv32")
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pmull rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (mul rdbits rs1bits rs2bits)
-  | Pmulhw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (mulh rdbits rs1bits rs2bits)
-  | Pmulhuw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (mulhu rdbits rs1bits rs2bits)
-  | Pdivw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (div rdbits rs1bits rs2bits)
-  | Pdivuw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (divu rdbits rs1bits rs2bits)
-  | Premw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (rem rdbits rs1bits rs2bits)
-  | Premuw rd rs1 rs2 =>
-  if Archi.ptr64 then Error (msg "Only in rv32")
-    else 
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (remu rdbits rs1bits rs2bits)
-  | Psltw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (slt rdbits rs1bits rs2bits)
-  | Psltuw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (sltu rdbits rs1bits rs2bits)
-  | Pandw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (and rdbits rs1bits rs2bits)
-  | Porw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (or rdbits rs1bits rs2bits)
-  | Pxorw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (xor rdbits rs1bits rs2bits)
-  | Psllw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (sll rdbits rs1bits rs2bits)
-  | Psrlw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (srl rdbits rs1bits rs2bits)
-  | Psraw rd rs1 rs2 =>
-    do rdbits <- encode_ireg rd;
-    do rs1bits <- encode_ireg0 rs1;
-    do rs2bits <- encode_ireg0 rs2;
-    OK (sra rdbits rs1bits rs2bits)
-
-  | Pbeq_ofs rs1 rs2 ofs =>
-    if Archi.ptr64 then Error (msg "Only in rv32")
+    if Archi.ptr64 then 
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (mul rdbits rs1bits rs2bits)
     else
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pmulhl rd rs1 rs2 =>
+    if Archi.ptr64 then 
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (mulh rdbits rs1bits rs2bits)
+    else
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pmulhul rd rs1 rs2 =>
+    if Archi.ptr64 then 
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (mulhu rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pdivl rd rs1 rs2 =>
+    if Archi.ptr64 then 
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (div rdbits rs1bits rs2bits)
+    else
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pdivul rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (divu rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Preml rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (rem rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Premul rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (remu rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Psltl rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (slt rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Psltul rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (sltu rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pandl rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (and rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Porl rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (or rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pxorl rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (xor rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pslll rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (sll rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Psrll rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (srl rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Psral rd rs1 rs2 =>
+    if Archi.ptr64 then     
+      do rdbits <- encode_ireg rd;
+      do rs1bits <- encode_ireg0 rs1;
+      do rs2bits <- encode_ireg0 rs2;
+      OK (sra rdbits rs1bits rs2bits)
+    else 
+      Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+
+    (* Conditional branches, 32-bit comparisons *)
+  | Pbeq_ofs rs1 rs2 ofs =>
     do B1 <- encode_B1 ofs;
     do B2 <- encode_B2 ofs;
     do B3 <- encode_B3 ofs;
@@ -818,8 +936,6 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rs2bits <- encode_ireg0 rs2;
     OK (beq B1 B2 rs1bits rs2bits B3 B4)
   | Pbne_ofs rs1 rs2 ofs =>
-    if Archi.ptr64 then Error (msg "Only in rv32")
-    else
     do B1 <- encode_B1 ofs;
     do B2 <- encode_B2 ofs;
     do B3 <- encode_B3 ofs;
@@ -828,8 +944,6 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rs2bits <- encode_ireg0 rs2;
     OK (bne B1 B2 rs1bits rs2bits B3 B4)
   | Pblt_ofs rs1 rs2 ofs =>
-    if Archi.ptr64 then Error (msg "Only in rv32")
-    else
     do B1 <- encode_B1 ofs;
     do B2 <- encode_B2 ofs;
     do B3 <- encode_B3 ofs;
@@ -838,8 +952,6 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rs2bits <- encode_ireg0 rs2;
     OK (blt B1 B2 rs1bits rs2bits B3 B4)
   | Pbltu_ofs rs1 rs2 ofs =>
-    if Archi.ptr64 then Error (msg "Only in rv32")
-    else
     do B1 <- encode_B1 ofs;
     do B2 <- encode_B2 ofs;
     do B3 <- encode_B3 ofs;
@@ -848,8 +960,6 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rs2bits <- encode_ireg0 rs2;
     OK (bltu B1 B2 rs1bits rs2bits B3 B4)
   | Pbge_ofs rs1 rs2 ofs =>
-    if Archi.ptr64 then Error (msg "Only in rv32")
-    else
     do B1 <- encode_B1 ofs;
     do B2 <- encode_B2 ofs;
     do B3 <- encode_B3 ofs;
@@ -858,8 +968,6 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rs2bits <- encode_ireg0 rs2;
     OK (bge B1 B2 rs1bits rs2bits B3 B4)
   | Pbgeu_ofs rs1 rs2 ofs =>
-    if Archi.ptr64 then Error (msg "Only in rv32")
-    else
     do B1 <- encode_B1 ofs;
     do B2 <- encode_B2 ofs;
     do B3 <- encode_B3 ofs;
@@ -867,6 +975,8 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do rs1bits <- encode_ireg0 rs1;
     do rs2bits <- encode_ireg0 rs2;
     OK (bgeu B1 B2 rs1bits rs2bits B3 B4)
+
+  (* Loads and stores *)
   | Plb rd ra ofs =>
     do rdbits <- encode_ireg rd;
     do rabits <- encode_ireg ra;
@@ -897,6 +1007,15 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do ofs_Z <- ofs_to_Z ofs;
     do ofsbits <- encode_ofs_u12 ofs_Z;
     OK (lw rdbits rabits ofsbits)
+  | Pld rd ra ofs =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rabits <- encode_ireg ra;
+      do ofs_Z <- ofs_to_Z ofs;
+      do ofsbits <- encode_ofs_u12 ofs_Z;
+      OK (ld rdbits rabits ofsbits)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+      
   | Psb rd ra ofs =>
     do rdbits <- encode_ireg rd;
     do rabits <- encode_ireg ra;
@@ -918,6 +1037,17 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
     OK (sw immS1bits rabits rdbits immS2bits)
+  | Psd rd ra ofs =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rabits <- encode_ireg ra;
+      do ofs_Z <- ofs_to_Z ofs;
+      do immS1bits <- encode_S1 ofs_Z;
+      do immS2bits <- encode_S2 ofs_Z;
+      OK (sw immS1bits rabits rdbits immS2bits)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+      
+  (* floating point register move *)
   | Pfmv fd fs =>
     do fdbits <- encode_freg_u5 fd;
     do fsbits <- encode_freg_u5 fs;
@@ -930,6 +1060,16 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do fdbits <- encode_freg_u5 fd;
     do rsbits <- encode_ireg rs;
     OK (fmvwx fdbits rsbits)
+  | Pfmvxd rd fs =>
+    do rdbits <- encode_ireg rd;
+    do fsbits <- encode_freg_u5 fs;
+    OK (fmvxd rdbits fsbits)
+  | Pfmvdx fd rs =>
+    do fdbits <- encode_freg_u5 fd;
+    do rsbits <- encode_ireg rs;
+    OK (fmvdx fdbits rsbits)
+  
+  (* 32-bit (single-precision) floating point *)
   | Pfls fd ra ofs =>
     do fdbits <- encode_freg_u5 fd;
     do rabits <- encode_ireg0 ra;
@@ -947,6 +1087,10 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do fdbits <- encode_freg_u5 fd;
     do fsbits <- encode_freg_u5 fs;
     OK (fsgnjns fdbits fsbits fsbits)
+  | Pfabss fd fs =>
+    do fdbits <- encode_freg_u5 fd;
+    do fsbits <- encode_freg_u5 fs;
+    OK (fsgnjxs fdbits fsbits fsbits)
   | Pfadds fd fs1 fs2 =>
     do fdbits <- encode_freg_u5 fd;
     do fs1bits <- encode_freg_u5 fs1;
@@ -1036,6 +1180,178 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do fdbits <- encode_freg_u5 fd;
     do rsbits <- encode_ireg0 rs;
     OK (fcvtswu fdbits rsbits)
+  
+  | Pfcvtls rd fs =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do fsbits <- encode_freg_u5 fs;
+      OK (fcvtls rdbits fsbits)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pfcvtlus rd fs =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do fsbits <- encode_freg_u5 fs;
+      OK (fcvtlus rdbits fsbits)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pfcvtsl fd rs =>
+    if Archi.ptr64 then
+      do fdbits <- encode_freg_u5 fd;
+      do rsbits <- encode_ireg0 rs;
+      OK (fcvtsl fdbits rsbits)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pfcvtslu fd rs =>
+    if Archi.ptr64 then
+      do fdbits <- encode_freg_u5 fd;
+      do rsbits <- encode_ireg0 rs;
+      OK (fcvtslu fdbits rsbits)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  
+  (* 64-bit (double-precision) floating point *)
+  | Pfld fd ra ofs =>
+    do fdbits <- encode_freg_u5 fd;
+    do rabits <- encode_ireg0 ra;
+    do ofs_Z <- ofs_to_Z ofs;
+    do immbits <- encode_ofs_u12 ofs_Z;
+    OK (fload fdbits rabits immbits)
+  | Pfsd fs ra ofs =>
+    do fsbits <- encode_freg_u5 fs;
+    do rabits <- encode_ireg ra;
+    do ofs_Z <- ofs_to_Z ofs;
+    do immS1bits <- encode_S1 ofs_Z;
+    do immS2bits <- encode_S2 ofs_Z;
+    OK (fsd immS1bits fsbits rabits immS2bits)
+  | Pfnegd fd fs =>
+    do fdbits <- encode_freg_u5 fd;
+    do fsbits <- encode_freg_u5 fs;
+    OK (fsgnjnd fdbits fsbits fsbits)
+  | Pfabsd fd fs =>
+    do fdbits <- encode_freg_u5 fd;
+    do fsbits <- encode_freg_u5 fs;
+    OK (fsgnjxd fdbits fsbits fsbits)
+  | Pfaddd fd fs1 fs2 =>
+    do fdbits <- encode_freg_u5 fd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    OK (faddd fdbits fs1bits fs2bits)
+  | Pfsubd fd fs1 fs2 =>
+    do fdbits <- encode_freg_u5 fd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    OK (fsubd fdbits fs1bits fs2bits)
+  | Pfmuld fd fs1 fs2 =>
+    do fdbits <- encode_freg_u5 fd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    OK (fmuld fdbits fs1bits fs2bits)
+  | Pfdivd fd fs1 fs2 =>
+    do fdbits <- encode_freg_u5 fd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    OK (fdivd fdbits fs1bits fs2bits)
+  | Pfmind fd fs1 fs2 =>
+    do fdbits <- encode_freg_u5 fd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    OK (fmind fdbits fs1bits fs2bits)
+  | Pfmaxd fd fs1 fs2 =>
+    do fdbits <- encode_freg_u5 fd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    OK (fmaxd fdbits fs1bits fs2bits)
+  | Pfeqd rd fs1 fs2 =>
+    do rdbits <- encode_ireg rd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    OK (feqd rdbits fs1bits fs2bits)
+  | Pfltd rd fs1 fs2 =>
+    do rdbits <- encode_ireg rd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    OK (fltd rdbits fs1bits fs2bits)
+  | Pfled rd fs1 fs2 =>
+    do rdbits <- encode_ireg rd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    OK (fled rdbits fs1bits fs2bits)
+  | Pfsqrtd fd fs =>
+    do fdbits <- encode_freg_u5 fd;
+    do fsbits <- encode_freg_u5 fs;
+    OK (fsqrtd fdbits fsbits)
+  | Pfmaddd fd fs1 fs2 fs3 =>
+    do fdbits <- encode_freg_u5 fd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    do fs3bits <- encode_freg_u5 fs3;
+    OK (fmaddd fdbits fs1bits fs2bits fs3bits)
+  | Pfmsubd fd fs1 fs2 fs3 =>
+    do fdbits <- encode_freg_u5 fd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    do fs3bits <- encode_freg_u5 fs3;
+    OK (fmsubd fdbits fs1bits fs2bits fs3bits)
+  | Pfnmaddd fd fs1 fs2 fs3 =>
+    do fdbits <- encode_freg_u5 fd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    do fs3bits <- encode_freg_u5 fs3;
+    OK (fnmaddd fdbits fs1bits fs2bits fs3bits)
+  | Pfnmsubd fd fs1 fs2 fs3 =>
+    do fdbits <- encode_freg_u5 fd;
+    do fs1bits <- encode_freg_u5 fs1;
+    do fs2bits <- encode_freg_u5 fs2;
+    do fs3bits <- encode_freg_u5 fs3;
+    OK (fnmsubd fdbits fs1bits fs2bits fs3bits)
+  | Pfcvtwd rd fs =>
+    do rdbits <- encode_ireg rd;
+    do fsbits <- encode_freg_u5 fs;
+    OK (fcvtwd rdbits fsbits)
+  | Pfcvtwud rd fs =>
+    do rdbits <- encode_ireg rd;
+    do fsbits <- encode_freg_u5 fs;
+    OK (fcvtwud rdbits fsbits)
+  | Pfcvtdw fd rs =>
+    do fdbits <- encode_freg_u5 fd;
+    do rsbits <- encode_ireg0 rs;
+    OK (fcvtdw fdbits rsbits)
+  | Pfcvtdwu fd rs =>
+    do fdbits <- encode_freg_u5 fd;
+    do rsbits <- encode_ireg0 rs;
+    OK (fcvtdwu fdbits rsbits)
+
+  | Pfcvtld rd fs =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do fsbits <- encode_freg_u5 fs;
+      OK (fcvtld rdbits fsbits)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pfcvtlud rd fs =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do fsbits <- encode_freg_u5 fs;
+      OK (fcvtlud rdbits fsbits)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pfcvtdl fd rs =>
+    if Archi.ptr64 then
+      do fdbits <- encode_freg_u5 fd;
+      do rsbits <- encode_ireg0 rs;
+      OK (fcvtdl fdbits rsbits)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Pfcvtdlu fd rs =>
+    if Archi.ptr64 then
+      do fdbits <- encode_freg_u5 fd;
+      do rsbits <- encode_ireg0 rs;
+      OK (fcvtdlu fdbits rsbits)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+
+  | Pfcvtds fd rs =>
+    do fdbits <- encode_freg_u5 fd;
+    do rsbits <- encode_freg_u5 rs;
+    OK (fcvtds fdbits rsbits)
+  | Pfcvtsd fd rs =>
+    do fdbits <- encode_freg_u5 fd;
+    do rsbits <- encode_freg_u5 rs;
+    OK (fcvtsd fdbits rsbits)
+
   | _ => Error [MSG "Not exists or unsupported: "; MSG (instr_to_string i)]
   end.
 
@@ -1046,192 +1362,193 @@ Definition bits_to_bytes_archi bs := do bs' <- (bits_to_bytes bs); OK (rev bs').
 
 (* Decode;struction *)
 
+(* Broken due to the shamt *)
   (* NEW *)
-Definition decode_instr_rv32 (i: Instruction) : res instruction :=
-  match i with
-  | addi rdbits rsbits imm12 =>
-    do rd  <- decode_ireg_u5 rdbits;
-    do rs  <- decode_ireg0_u5 rsbits;
-    do imm <- decode_ofs_u12 imm12;
-    OK (Asm.Paddiw rd rs imm)
-  | slti rdbits rsbits imm12 =>
-    do rd  <- decode_ireg_u5 rdbits;
-    do rs  <- decode_ireg0_u5 rsbits;
-    do imm <- decode_ofs_u12 imm12;
-    OK (Asm.Psltiw rd rs imm)
-  | andi rdbits rsbits imm12 =>
-    do rd  <- decode_ireg_u5 rdbits;
-    do rs  <- decode_ireg0_u5 rsbits;
-    do imm <- decode_ofs_u12 imm12;
-    OK (Asm.Pandiw rd rs imm)
-  | ori rdbits rsbits imm12 =>
-    do rd  <- decode_ireg_u5 rdbits;
-    do rs  <- decode_ireg0_u5 rsbits;
-    do imm <- decode_ofs_u12 imm12;
-    OK (Asm.Poriw rd rs imm)
-  | xori rdbits rsbits imm12 =>
-    do rd  <- decode_ireg_u5 rdbits;
-    do rs  <- decode_ireg0_u5 rsbits;
-    do imm <- decode_ofs_u12 imm12;
-    OK (Asm.Pxoriw rd rs imm)
-  | slli rdbits rsbits imm5 =>
-    do rd  <- decode_ireg_u5 rdbits;
-    do rs  <- decode_ireg0_u5 rsbits;
-    do imm <- decode_ofs_u5 imm5;
-    OK (Asm.Pslliw rd rs imm)
-  | srli rdbits rsbits imm5 =>
-    do rd  <- decode_ireg_u5 rdbits;
-    do rs  <- decode_ireg0_u5 rsbits;
-    do imm <- decode_ofs_u5 imm5;
-    OK (Asm.Psrliw rd rs imm)
-  | srai rdbits rsbits imm5 =>
-    do rd  <- decode_ireg_u5 rdbits;
-    do rs  <- decode_ireg0_u5 rsbits;
-    do imm <- decode_ofs_u5 imm5;
-    OK (Asm.Psraiw rd rs imm)
-  | lui rdbits imm20 =>
-    do rd  <- decode_ireg_u5 rdbits;
-    do imm <- decode_ofs_u20 imm20;
-    OK (Asm.Pluiw rd imm)
-  | add rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Paddw rd rs1 rs2)
-  | sub rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Psubw rd rs1 rs2)
-  | mul rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Pmulw rd rs1 rs2)
-  | mulh rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Pmulhw rd rs1 rs2)
-  | mulhu rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Pmulhuw rd rs1 rs2)
-  | div rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Pdivw rd rs1 rs2)
-  | divu rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Pdivuw rd rs1 rs2)
-  | rem rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Premw rd rs1 rs2)
-  | remu rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Premuw rd rs1 rs2)
-  | slt rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Psltw rd rs1 rs2)
-  | sltu rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Psltuw rd rs1 rs2)
-  | and rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Pandw rd rs1 rs2)
-  | xor rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Pxorw rd rs1 rs2)
-  | sll rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Psllw rd rs1 rs2)
-  | srl rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Psrlw rd rs1 rs2)
-  | sra rdbits rs1bits rs2bits =>
-    do rd  <- decode_ireg_u5 rdbits ;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Asm.Psraw rd rs1 rs2)
-  | beq immB1 immB2 rs1bits rs2bits immB3 immB4 =>
-    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Pbeq_ofs rs1 rs2 ofs_Z)
-  | bne immB1 immB2 rs1bits rs2bits immB3 immB4 =>
-    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Pbne_ofs rs1 rs2 ofs_Z)
-  | blt immB1 immB2 rs1bits rs2bits immB3 immB4 =>
-    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Pblt_ofs rs1 rs2 ofs_Z)
-  | bltu immB1 immB2 rs1bits rs2bits immB3 immB4 =>
-    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Pbltu_ofs rs1 rs2 ofs_Z)
-  | bge immB1 immB2 rs1bits rs2bits immB3 immB4 =>
-    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Pbge_ofs rs1 rs2 ofs_Z)
-  | bgeu immB1 immB2 rs1bits rs2bits immB3 immB4 =>
-    do ofs_Z <- decode_immB immB1 immB2 immB3 immB4;
-    do rs1 <- decode_ireg0_u5 rs1bits;
-    do rs2 <- decode_ireg0_u5 rs2bits;
-    OK (Pbgeu_ofs rs1 rs2 ofs_Z)
-  | lb rdbits rabits ofs_bits =>
-    do rd <- decode_ireg_u5 rdbits;
-    do ra <- decode_ireg_u5 rabits;
-    do ofs_int <- decode_ofs_u12 ofs_bits;
-    do ofs <- Z_to_ofs (Int.intval ofs_int);
-    OK (Asm.Plb rd ra ofs)
-  | lbu rdbits rabits ofs_bits =>
-    do rd <- decode_ireg_u5 rdbits;
-    do ra <- decode_ireg_u5 rabits;
-    do ofs_int <- decode_ofs_u12 ofs_bits;
-    do ofs <- Z_to_ofs (Int.intval ofs_int);
-    OK (Asm.Plbu rd ra ofs)
-  | lh rdbits rabits ofs_bits =>
-    do rd <- decode_ireg_u5 rdbits;
-    do ra <- decode_ireg_u5 rabits;
-    do ofs_int <- decode_ofs_u12 ofs_bits;
-    do ofs <- Z_to_ofs (Int.intval ofs_int);
-    OK (Asm.Plh rd ra ofs)
-  | lhu rdbits rabits ofs_bits =>
-    do rd <- decode_ireg_u5 rdbits;
-    do ra <- decode_ireg_u5 rabits;
-    do ofs_int <- decode_ofs_u12 ofs_bits;
-    do ofs <- Z_to_ofs (Int.intval ofs_int);
-    OK (Asm.Plhu rd ra ofs)
-  | lw rdbits rabits ofs_bits =>
-    do rd <- decode_ireg_u5 rdbits;
-    do ra <- decode_ireg_u5 rabits;
-    do ofs_int <- decode_ofs_u12 ofs_bits;
-    do ofs <- Z_to_ofs (Int.intval ofs_int);
-    OK (Asm.Plw rd ra ofs)
-  | _ => Error (msg "unsupported")
-  end.
+(* Definition decode_instr_rv32 (i: Instruction) : res instruction := *)
+(*   match i with *)
+(*   | addi rdbits rsbits imm12 => *)
+(*     do rd  <- decode_ireg_u5 rdbits; *)
+(*     do rs  <- decode_ireg0_u5 rsbits; *)
+(*     do imm <- decode_ofs_u12 imm12; *)
+(*     OK (Asm.Paddiw rd rs imm) *)
+(*   | slti rdbits rsbits imm12 => *)
+(*     do rd  <- decode_ireg_u5 rdbits; *)
+(*     do rs  <- decode_ireg0_u5 rsbits; *)
+(*     do imm <- decode_ofs_u12 imm12; *)
+(*     OK (Asm.Psltiw rd rs imm) *)
+(*   | andi rdbits rsbits imm12 => *)
+(*     do rd  <- decode_ireg_u5 rdbits; *)
+(*     do rs  <- decode_ireg0_u5 rsbits; *)
+(*     do imm <- decode_ofs_u12 imm12; *)
+(*     OK (Asm.Pandiw rd rs imm) *)
+(*   | ori rdbits rsbits imm12 => *)
+(*     do rd  <- decode_ireg_u5 rdbits; *)
+(*     do rs  <- decode_ireg0_u5 rsbits; *)
+(*     do imm <- decode_ofs_u12 imm12; *)
+(*     OK (Asm.Poriw rd rs imm) *)
+(*   | xori rdbits rsbits imm12 => *)
+(*     do rd  <- decode_ireg_u5 rdbits; *)
+(*     do rs  <- decode_ireg0_u5 rsbits; *)
+(*     do imm <- decode_ofs_u12 imm12; *)
+(*     OK (Asm.Pxoriw rd rs imm) *)
+(*   | slli rdbits rsbits imm5 => *)
+(*     do rd  <- decode_ireg_u5 rdbits; *)
+(*     do rs  <- decode_ireg0_u5 rsbits; *)
+(*     do imm <- decode_ofs_u5 imm5; *)
+(*     OK (Asm.Pslliw rd rs imm) *)
+(*   | srli rdbits rsbits imm5 => *)
+(*     do rd  <- decode_ireg_u5 rdbits; *)
+(*     do rs  <- decode_ireg0_u5 rsbits; *)
+(*     do imm <- decode_ofs_u5 imm5; *)
+(*     OK (Asm.Psrliw rd rs imm) *)
+(*   | srai rdbits rsbits imm5 => *)
+(*     do rd  <- decode_ireg_u5 rdbits; *)
+(*     do rs  <- decode_ireg0_u5 rsbits; *)
+(*     do imm <- decode_ofs_u5 imm5; *)
+(*     OK (Asm.Psraiw rd rs imm) *)
+(*   | lui rdbits imm20 => *)
+(*     do rd  <- decode_ireg_u5 rdbits; *)
+(*     do imm <- decode_ofs_u20 imm20; *)
+(*     OK (Asm.Pluiw rd imm) *)
+(*   | add rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Paddw rd rs1 rs2) *)
+(*   | sub rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Psubw rd rs1 rs2) *)
+(*   | mul rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Pmulw rd rs1 rs2) *)
+(*   | mulh rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Pmulhw rd rs1 rs2) *)
+(*   | mulhu rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Pmulhuw rd rs1 rs2) *)
+(*   | div rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Pdivw rd rs1 rs2) *)
+(*   | divu rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Pdivuw rd rs1 rs2) *)
+(*   | rem rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Premw rd rs1 rs2) *)
+(*   | remu rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Premuw rd rs1 rs2) *)
+(*   | slt rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Psltw rd rs1 rs2) *)
+(*   | sltu rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Psltuw rd rs1 rs2) *)
+(*   | and rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Pandw rd rs1 rs2) *)
+(*   | xor rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Pxorw rd rs1 rs2) *)
+(*   | sll rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Psllw rd rs1 rs2) *)
+(*   | srl rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Psrlw rd rs1 rs2) *)
+(*   | sra rdbits rs1bits rs2bits => *)
+(*     do rd  <- decode_ireg_u5 rdbits ; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Asm.Psraw rd rs1 rs2) *)
+(*   | beq immB1 immB2 rs1bits rs2bits immB3 immB4 => *)
+(*     do ofs_Z <- decode_immB immB1 immB2 immB3 immB4; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Pbeq_ofs rs1 rs2 ofs_Z) *)
+(*   | bne immB1 immB2 rs1bits rs2bits immB3 immB4 => *)
+(*     do ofs_Z <- decode_immB immB1 immB2 immB3 immB4; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Pbne_ofs rs1 rs2 ofs_Z) *)
+(*   | blt immB1 immB2 rs1bits rs2bits immB3 immB4 => *)
+(*     do ofs_Z <- decode_immB immB1 immB2 immB3 immB4; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Pblt_ofs rs1 rs2 ofs_Z) *)
+(*   | bltu immB1 immB2 rs1bits rs2bits immB3 immB4 => *)
+(*     do ofs_Z <- decode_immB immB1 immB2 immB3 immB4; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Pbltu_ofs rs1 rs2 ofs_Z) *)
+(*   | bge immB1 immB2 rs1bits rs2bits immB3 immB4 => *)
+(*     do ofs_Z <- decode_immB immB1 immB2 immB3 immB4; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Pbge_ofs rs1 rs2 ofs_Z) *)
+(*   | bgeu immB1 immB2 rs1bits rs2bits immB3 immB4 => *)
+(*     do ofs_Z <- decode_immB immB1 immB2 immB3 immB4; *)
+(*     do rs1 <- decode_ireg0_u5 rs1bits; *)
+(*     do rs2 <- decode_ireg0_u5 rs2bits; *)
+(*     OK (Pbgeu_ofs rs1 rs2 ofs_Z) *)
+(*   | lb rdbits rabits ofs_bits => *)
+(*     do rd <- decode_ireg_u5 rdbits; *)
+(*     do ra <- decode_ireg_u5 rabits; *)
+(*     do ofs_int <- decode_ofs_u12 ofs_bits; *)
+(*     do ofs <- Z_to_ofs (Int.intval ofs_int); *)
+(*     OK (Asm.Plb rd ra ofs) *)
+(*   | lbu rdbits rabits ofs_bits => *)
+(*     do rd <- decode_ireg_u5 rdbits; *)
+(*     do ra <- decode_ireg_u5 rabits; *)
+(*     do ofs_int <- decode_ofs_u12 ofs_bits; *)
+(*     do ofs <- Z_to_ofs (Int.intval ofs_int); *)
+(*     OK (Asm.Plbu rd ra ofs) *)
+(*   | lh rdbits rabits ofs_bits => *)
+(*     do rd <- decode_ireg_u5 rdbits; *)
+(*     do ra <- decode_ireg_u5 rabits; *)
+(*     do ofs_int <- decode_ofs_u12 ofs_bits; *)
+(*     do ofs <- Z_to_ofs (Int.intval ofs_int); *)
+(*     OK (Asm.Plh rd ra ofs) *)
+(*   | lhu rdbits rabits ofs_bits => *)
+(*     do rd <- decode_ireg_u5 rdbits; *)
+(*     do ra <- decode_ireg_u5 rabits; *)
+(*     do ofs_int <- decode_ofs_u12 ofs_bits; *)
+(*     do ofs <- Z_to_ofs (Int.intval ofs_int); *)
+(*     OK (Asm.Plhu rd ra ofs) *)
+(*   | lw rdbits rabits ofs_bits => *)
+(*     do rd <- decode_ireg_u5 rdbits; *)
+(*     do ra <- decode_ireg_u5 rabits; *)
+(*     do ofs_int <- decode_ofs_u12 ofs_bits; *)
+(*     do ofs <- Z_to_ofs (Int.intval ofs_int); *)
+(*     OK (Asm.Plw rd ra ofs) *)
+(*   | _ => Error (msg "unsupported") *)
+(*   end. *)
