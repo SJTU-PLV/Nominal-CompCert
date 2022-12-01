@@ -22,12 +22,15 @@ Fixpoint bits_of_int_rec (n: nat) (x: Z) {struct n}: list bool :=
 Definition bits_of_int (n: nat) (x: Z) : list bool :=
   rev (bits_of_int_rec n x).
 
-Fixpoint int_of_bits (l: list bool): Z :=
+Fixpoint int_of_bits_rec (l: list bool): Z :=
   match l with
   | nil => 0
-  | false :: l' =>  2 * (int_of_bits l')
-  | true  :: l' => 2 * (int_of_bits l')+1
+  | false :: l' =>  2 * (int_of_bits_rec l')
+  | true  :: l' => 2 * (int_of_bits_rec l')+1
   end. 
+
+Definition int_of_bits (l: list bool): Z :=
+  int_of_bits_rec(rev l).
 
 Program Definition zero5  : u5  := b["00000"].
 Program Definition zero12 : u12 := b["000000000000"].

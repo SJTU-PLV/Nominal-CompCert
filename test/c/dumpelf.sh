@@ -1,7 +1,7 @@
 #!/bin/bash
 SRC=$1.compcert
 SRC_GCC=$1.compcert_gcc
-TOOLPREFIX=~/riscv/bin/riscv32-unknown-linux-gnu-
+TOOLPREFIX=~/riscv32/riscv/bin/riscv32-unknown-linux-gnu-
 # TOOLPREFIX=
 READELF=${TOOLPREFIX}readelf
 OBJDUMP=${TOOLPREFIX}objdump 
