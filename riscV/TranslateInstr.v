@@ -294,6 +294,32 @@ Definition decode_ofs_u12 (bs:u12) : res int :=
   | nil => Error(msg "impossible")
   end.
 
+(* NEW: signed version of conversion between bits and ints *)
+Definition bits_of_int_signed (n:nat) (ofs:Z) : res bits :=
+  if ( -(two_power_nat (n-1)) <=? ofs) && (ofs <? 0) then    
+    OK (bits_of_int n (ofs + (two_power_nat n)))
+  else 
+    if ( 0 <=? ofs) && (ofs <? (two_power_nat (n-1))) then
+    OK (bits_of_int n ofs)
+    else Error (msg "Offset overflow in bits_of_int_signed").
+
+Definition int_of_bits_signed (l: list bool): res Z :=
+  match l with
+  | nil => Error (msg "need at least a sign bit!")
+  | false :: l' => OK (int_of_bits l')
+  | true  :: l' => OK (-(int_of_bits l'))
+  end.
+
+(* New ddefinition of encode_ofs_u12 *)
+Program Definition encode_ofs_u12' (ofs:Z) :res u12 :=
+  let l0 := bits_of_int_signed 12 ofs in
+  match l0 with
+  | OK _ => 
+      do l <- l0;
+      OK (exist _ l _)
+  | Error _ => Error (msg "Offset overflow in encode_ofs_u12")
+  end.
+
 (* proof broken due to the modification of encode_ofs_u12 *)
 (* Lemma encode_ofs_u12_consistency:forall ofs l, *)
 (*     encode_ofs_u12 (Int.intval ofs) = OK l -> *)
