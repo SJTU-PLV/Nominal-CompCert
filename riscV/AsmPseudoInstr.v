@@ -68,12 +68,9 @@ Definition transf_instr i : (list instruction) :=
         [Pxoril rd rs (Int64.repr (Int.signed imm))]
       else [i]
   | Pluiw rd imm =>
-      (* lui only store the upper 20 bits *)
-      let imm := Int.shr imm (Int.repr 12) in      
       if Archi.ptr64 then
         [Pluil rd (Int64.repr (Int.signed imm))]
-      else
-        [Pluiw rd imm]
+      else [i]
   | Psltw rd rs imm =>
       if Archi.ptr64 then
         [Psltl rd rs imm]
@@ -94,11 +91,6 @@ Definition transf_instr i : (list instruction) :=
       if Archi.ptr64 then
         [Pxorl rd rs1 rs2]
       else [i]
-
-  (* lui only store the upper 20 bits *)
-  | Pluil rd imm =>
-      let imm := Int64.shr imm (Int64.repr 12) in
-      [Pluil rd imm]
              
   | _ => [i]
   end.
