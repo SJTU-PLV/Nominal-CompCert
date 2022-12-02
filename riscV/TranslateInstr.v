@@ -34,18 +34,18 @@ Definition int_of_bits (l: list bool): Z :=
 
 (* NEW: signed version of conversion between bits and ints *)
 Definition bits_of_int_signed (n:nat) (ofs:Z) : res bits :=
-  if ( -(two_power_nat (n-1)) <=? ofs) && (ofs <? 0) then    
-    OK (bits_of_int n (ofs + (two_power_nat n)))
-  else 
-    if ( 0 <=? ofs) && (ofs <? (two_power_nat (n-1))) then
+  if ( 0 <=? ofs) && (ofs <? (two_power_nat (n-1))) then
     OK (bits_of_int n ofs)
+  else 
+    if ( -(two_power_nat (n-1)) <=? ofs) && (ofs <? 0) then    
+    OK (bits_of_int n (ofs + (two_power_nat n)))
     else Error (msg "Offset overflow in bits_of_int_signed").
 
 Definition int_of_bits_signed (l: list bool): res Z :=
   match l with
   | nil => Error (msg "need at least a sign bit!")
   | false :: l' => OK (int_of_bits l')
-  | true  :: l' => OK (-(int_of_bits l'))
+  | true  :: l' => OK ((int_of_bits l') - two_power_nat (length l))
   end.
 
 Lemma bits_of_int_signed_consistency: forall n ofs l,
@@ -312,54 +312,77 @@ Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=
   | Error _ => Error (msg "Offset overflow in encode_ofs_u12")
   end.
 
-(* Unsigned version:
 Definition decode_ofs_u12 (bs:u12) : res int :=
-  let bs' := proj1_sig bs in
-  OK (Int.repr (int_of_bits bs')). *)
+  let ans := int_of_bits_signed (proj1_sig bs) in
+  match ans with
+  | OK z    => OK (Int.repr z)
+  | Error _ => Error (msg "need at least a sign bit!")
+  end.
 
-Definition decode_ofs_u12 (bs:u12) : res int :=
+(* Definition decode_ofs_u12 (bs:u12) : res int :=
   let bs' := proj1_sig bs in
   match bs' with
   | b0 :: bs1 => 
       if b0 then OK (Int.repr ((int_of_bits bs') - two_power_nat 12)) 
         else OK (Int.repr (int_of_bits bs'))
   | nil => Error(msg "impossible")
-  end.
+  end. *)
 
-Lemma encode_ofs_u12_consistency:forall ofs l,
+(* FIX_ME: when the sign is 1, contradiction *)
+Lemma encode_ofs_u12_consistency:forall ofs l, 
     encode_ofs_u12 (Int.intval ofs) = OK l ->
     decode_ofs_u12 l = OK ofs.
 Proof.
-  unfold encode_ofs_u12',decode_ofs_u12.
+  unfold encode_ofs_u12,decode_ofs_u12.
   intros. do 2 destr_in H.
 
-(* proof broken due to the modification of encode_ofs_u12 *)
-(* Lemma encode_ofs_u12_consistency:forall ofs l, *)
-(*     encode_ofs_u12 (Int.intval ofs) = OK l -> *)
-(*     decode_ofs_u12 l = OK ofs. *)
-(* Proof. *)
-(*   unfold encode_ofs_u12,decode_ofs_u12. *)
-(*   intros. do 2 destr_in H. *)
+  inversion Heqr.
+  unfold bits_of_int_signed in H0.
+  destruct ((0 <=? Int.intval ofs) &&
+  (Int.intval ofs <? two_power_nat (12 - 1))) eqn:Ha.
 
-(*   (* Clear -Heqb. *) *)
-(*   destruct l. *)
-(*   cbn [proj1_sig]. *)
-(*   destruct ofs. cbn [Int.intval] in *. *)
-(*   assert ((bits_of_int 12 (intval + two_power_nat 12)) = x). *)
-(*   inv H. auto. *)
-(*   (* the length is 0, impossible *) *)
-(*   destruct x. inversion e0. *)
+  (* case sign = 0 *)
+  apply bits_of_int_signed_consistency in Heqr.
+  destruct l.
+  cbn [proj1_sig].
+  destruct ofs. cbn [Int.intval] in *.
+  destruct (int_of_bits_signed b) eqn: H2.
+  destruct (assertLength b 12) eqn:H3.
+  inversion H1. subst.
+  rewrite H2. f_equal.
+  inversion Heqr. subst.
+  Transparent Int.repr.
+  unfold Int.repr. apply Int.mkint_eq.
+  rewrite Int.Z_mod_modulus_eq. 
+  eapply andb_true_iff in Ha. destruct Ha as [Ha1 Ha2].
+  apply Z.leb_le in Ha1. apply Z.ltb_lt in Ha2.
+  unfold two_power_nat in Ha1. simpl in Ha1.
+  unfold Int.modulus. unfold two_power_nat. simpl.
+  rewrite Z.mod_small. auto. split. lia. 
+  unfold two_power_nat in Ha2. simpl in Ha2. lia.
+  congruence. congruence. 
 
-(*   (* length is not 0 *) *)
-(*   destruct b eqn:Hb; f_equal. *)
-(*   (* sign is 1 , Heqb: intval<0 ; intrange: intval>-1  Contradiction*) *)
-
-(*   Transparent Int.repr. *)
-(*   unfold Int.repr. *)
-(*   eapply Int.mkint_eq. *)
-(*   destruct x. simpl in e0. congruence. *)
-(*   repeat (destruct x as [|? x];simpl in e0;try congruence). *)
-Admitted.
+  (* case sign = 1 : problematic *)
+  destruct ((- two_power_nat (12 - 1) <=? Int.intval ofs) &&
+  (Int.intval ofs <? 0)) eqn: Hb.
+  apply bits_of_int_signed_consistency in Heqr.
+  destruct l.
+  cbn [proj1_sig].
+  destruct ofs. cbn [Int.intval] in *.
+  destruct (int_of_bits_signed b) eqn: H2.
+  destruct (assertLength b 12) eqn:H3.
+  inversion H1. subst.
+  rewrite H2. f_equal.
+  inversion Heqr. subst.
+  Transparent Int.repr.
+  unfold Int.repr. apply Int.mkint_eq.
+  rewrite Int.Z_mod_modulus_eq. 
+  eapply andb_true_iff in Hb. destruct Hb as [Hb1 Hb2].
+  apply Z.leb_le in Hb1. apply Z.ltb_lt in Hb2.
+  unfold two_power_nat in Hb1. simpl in Hb1.
+  unfold Int.modulus. unfold two_power_nat. simpl.
+  rewrite Z.mod_small. (* contradiction!!! *)
+  Admitted.
 
 Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 5)) then
