@@ -1812,7 +1812,7 @@ let result0 := bits06 in
 OK (result0)
 | fsgnjd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
 let bits01 := write_opcode bits00 b["1010011"] in
-let bits02 := write_funct3 bits01 b["100"] in
+let bits02 := write_funct3 bits01 b["000"] in
 let bits03 := write_funct7 bits02 b["0010001"] in
 let bits04 := write_rd bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1 bits04 (proj1_sig uvar5_1) in

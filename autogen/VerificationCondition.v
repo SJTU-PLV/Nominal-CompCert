@@ -424,7 +424,7 @@ Definition fmvxw_bp code : bool :=
 Definition fsgnjd_bp code : bool :=
 	let blen := 32 <=? (length code) in
 	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00100010000000000100000001010011"] in
+	let bresult0 := b["00100010000000000000000001010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 

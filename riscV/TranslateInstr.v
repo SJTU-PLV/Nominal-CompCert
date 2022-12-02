@@ -1109,7 +1109,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
       do ofs_Z <- ofs_to_Z ofs;
       do immS1bits <- encode_S1 ofs_Z;
       do immS2bits <- encode_S2 ofs_Z;
-      OK (sw immS1bits rabits rdbits immS2bits)
+      OK (sd immS1bits rabits rdbits immS2bits)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
       
   (* floating point register move *)
@@ -1147,7 +1147,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
-    OK (fsw immS1bits fsbits rabits immS2bits)
+    OK (fsw immS1bits rabits fsbits immS2bits)
   | Pfnegs fd fs =>
     do fdbits <- encode_freg_u5 fd;
     do fsbits <- encode_freg_u5 fs;
@@ -1284,7 +1284,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
-    OK (fsd immS1bits fsbits rabits immS2bits)
+    OK (fsd immS1bits rabits fsbits immS2bits)
   | Pfnegd fd fs =>
     do fdbits <- encode_freg_u5 fd;
     do fsbits <- encode_freg_u5 fs;
