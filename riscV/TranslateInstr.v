@@ -372,7 +372,7 @@ Program Definition encode_ofs_u20 (ofs:Z) :res u20 :=
       if assertLength l 20 then
         OK (exist _ l _)
       else Error (msg "impossible")
-  | Error _ => Error (msg "Offset overflow in encode_ofs_u12")
+  | Error _ => Error (msg "Offset overflow in encode_ofs_u20")
   end.
 
 Definition decode_ofs_u20 (bs:u20) : res Z :=
