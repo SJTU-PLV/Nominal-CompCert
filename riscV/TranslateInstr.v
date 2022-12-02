@@ -471,6 +471,7 @@ Program Definition encode_ofs_u20 (ofs:Z) :res u20 :=
 Definition decode_ofs_u20 (bs:u20) : res Z :=
   int_of_bits_signed (proj1_sig bs).
 
+
 Lemma encode_ofs_u20_consistency:forall ofs l, 
     encode_ofs_u20 ofs = OK l ->
     decode_ofs_u20 l = OK ofs.
@@ -500,6 +501,16 @@ Proof.
   (* congruence. *)
   (* congruence. Qed. *)
 Admitted.
+
+(* lui use unsigned offset as the upper 20bits (Asmgen.v)*)
+Program Definition encode_ofs_u20_unsigned (ofs:Z) : res u20 :=
+  if ( -1 <? ofs) && (ofs <? (two_power_nat 20)) then
+  let bs := (bits_of_int 20 ofs) in
+    if assertLength bs 20 then
+      OK (exist _ bs _)
+    else Error (msg "impossible")
+  else Error (msg "Offset overflow in encode_ofs_u20").
+
   
 Program Definition encode_S1 (imm: Z) : res u5 :=
   do immbits <- encode_ofs_u12 imm;
@@ -725,7 +736,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
       Error [MSG "Only in rv32: "; MSG (instr_to_string i)]
     else
       do rdbits <- encode_ireg rd;
-      do imm20  <- encode_ofs_u20 (Int.signed imm);
+      do imm20  <- encode_ofs_u20_unsigned (Int.signed imm);
       OK (lui rdbits imm20)
 
   (** 32-bit integer register-register instructions *)
@@ -927,7 +938,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
   | Pluil rd imm =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
-      do imm20  <- encode_ofs_u20 (Int64.signed imm);
+      do imm20  <- encode_ofs_u20_unsigned (Int64.signed imm);
       OK (lui rdbits imm20)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
 
