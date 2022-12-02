@@ -592,10 +592,10 @@ module Target : TARGET =
               assert false
           end
       (* additional instructions *)
-      | Plui_s (rd,id,ofs) -> fprintf oc "   lui	%a, %%lo(%a)\n" ireg rd symbol_offset (id, ofs)
+      | Plui_s (rd,id,ofs) -> fprintf oc "    lui	%a, %%lo(%a)\n" ireg rd symbol_offset (id, ofs)
       | Paddi_s (rd,rs,id,ofs) -> fprintf oc "    addi  %a, %a, %%lo(%a)\n" ireg rd ireg0 rs symbol_offset (id, ofs)
-      | Pjal_ofs (ra,Datatypes.Coq_inr ofs) -> fprintf oc "   jal   %a, %a\n" ireg0 ra coqint ofs
-      | Pjal_ofs (ra,Datatypes.Coq_inl id) -> fprintf oc "   jal   %a, %a\n" ireg0 ra symbol id
+      | Pjal_ofs (ra,Datatypes.Coq_inr ofs) -> fprintf oc "    jal   %a, %a\n" ireg0 ra coqint ofs
+      | Pjal_ofs (ra,Datatypes.Coq_inl id) -> fprintf oc "    jal   %a, %a\n" ireg0 ra symbol id
       | Pjal_rr (ra,rd,ofs) -> fprintf oc "    jalr   %a, %a, %a\n" ireg0 ra ireg rd coqint ofs
       | Pbeq_ofs  (rs1,rs2,ofs) -> fprintf oc "    beq  %a, %a, %a\n" ireg0 rs1 ireg0 rs2 coqint ofs
       | Pbne_ofs  (rs1,rs2,ofs) -> fprintf oc "    bne  %a, %a, %a\n" ireg0 rs1 ireg0 rs2 coqint ofs

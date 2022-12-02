@@ -70,13 +70,13 @@ Fixpoint fixup_gen (single double: freg -> nat -> list instruction)  (args: list
   | [],[] => []
   | Tsingle :: args', One (Locations.R r) :: locs' =>
     match float_extra_index r with
-    | Some (r, i) => single r i ++ fixup_gen double single args' locs'
+    | Some (r, i) => single r i ++ fixup_gen single double args' locs'
     | None => fixup_gen single double args' locs'
     end
   | Tfloat :: args', One (Locations.R r) :: locs'
   | Tany64 :: args', One (Locations.R r) :: locs' =>
     match float_extra_index r with
-    | Some (r, i) => double r i ++ fixup_gen double single args' locs'
+    | Some (r, i) => double r i ++ fixup_gen single double args' locs'
     | None => fixup_gen single double args' locs'
     end
   | _ :: args', _ :: locs' =>
