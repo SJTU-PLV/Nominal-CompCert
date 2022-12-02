@@ -440,10 +440,9 @@ Proof.
   destruct l.
   cbn [proj1_sig].
   destruct (assertLength b 12) eqn:H3.
-  inversion H1. subst. (* assumption. *)
-  (* congruence. *)
-  (* congruence. Qed. *)
-Admitted.
+  inversion H1. subst. assumption.
+  congruence.
+  congruence. Qed.
 
 Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 5)) then
@@ -495,12 +494,10 @@ Proof.
   destruct l.
   cbn [proj1_sig].
   destruct (assertLength b 20) eqn:H3.
-  inversion H1. subst.
-  lia. lia. lia. lia. (* assumption. *)
-  (* congruence. *)
-  (* congruence. Qed. *)
-Admitted.
-  
+  inversion H1. subst. assumption.
+  congruence.
+  congruence. Qed.
+
 Program Definition encode_S1 (imm: Z) : res u5 :=
   do immbits <- encode_ofs_u12 imm;
   let S1 := immbits>@[7] in
