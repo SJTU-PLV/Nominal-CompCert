@@ -5,6 +5,7 @@ Require Asm.
 (** RealAsm passed. *)
 (* Require RealAsmgen. *)
 Require PseudoInstructions.
+Require AsmFixupcode.
 Require AsmBuiltinInline.
 (* Require AsmStructRet. *)
 (* Require AsmFloatLiteral. *)
@@ -64,6 +65,7 @@ Definition targetprinter p: res Asm.program :=
   (* @@ time "SSAsm" SSAsmproof.transf_program *)
   (* @@@ time "Translation from SSAsm to RealAsm" RealAsmgen.transf_program instr_size *)
   @@ time "Elimination of pseudo instruction" PseudoInstructions.transf_program
+  @@ time "Adjustment of float point arguments passing by fix-up code" AsmFixupcode.transf_program
   @@@ time "Expand builtin inline assembly" AsmBuiltinInline.transf_program
   (* @@@ time "Pad Instructions with struct return" AsmStructRet.transf_program *)
   (* @@ time "Generation of the float literal" AsmFloatLiteral.transf_program *)

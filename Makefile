@@ -115,6 +115,7 @@ BACKEND=\
   AsmLabelNew.v SymbolString.v LocalLib.v CheckDef.v\
   TargetPrinterAux.v\
   PseudoInstructions.v\
+  AsmFixupcode.v\
   AsmBuiltinInline.v\
   AsmLiteral.v\
   Asmlabelgen.v\
