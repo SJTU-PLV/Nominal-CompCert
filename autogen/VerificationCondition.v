@@ -60,14 +60,14 @@ Definition fcvtld_bp code : bool :=
 Definition fcvtdwu_bp code : bool :=
 	let blen := 32 <=? (length code) in
 	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010010000100000111000001010011"] in
+	let bresult0 := b["11010010000100000000000001010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtdw_bp code : bool :=
 	let blen := 32 <=? (length code) in
 	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010010000000000111000001010011"] in
+	let bresult0 := b["11010010000000000000000001010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
@@ -242,14 +242,14 @@ Definition fcvtls_bp code : bool :=
 Definition fcvtswu_bp code : bool :=
 	let blen := 32 <=? (length code) in
 	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010000000100000111000001010011"] in
+	let bresult0 := b["11010000000100000000000001010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtsw_bp code : bool :=
 	let blen := 32 <=? (length code) in
 	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010000000000000111000001010011"] in
+	let bresult0 := b["11010000000000000000000001010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
@@ -424,7 +424,7 @@ Definition fmvxw_bp code : bool :=
 Definition fsgnjd_bp code : bool :=
 	let blen := 32 <=? (length code) in
 	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00100010000000000100000001010011"] in
+	let bresult0 := b["00100010000000000000000001010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
@@ -661,21 +661,21 @@ Definition slliw_bp code : bool :=
 
 Definition srai_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111000000000111000001111111"] in
-	let bresult0 := b["00100000000000000101000000010011"] in
+	let bmask0 := b["11111100000000000111000001111111"] in
+	let bresult0 := b["01000000000000000101000000010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition srli_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111000000000111000001111111"] in
+	let bmask0 := b["11111100000000000111000001111111"] in
 	let bresult0 := b["00000000000000000101000000010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition slli_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111000000000111000001111111"] in
+	let bmask0 := b["11111100000000000111000001111111"] in
 	let bresult0 := b["00000000000000000001000000010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.

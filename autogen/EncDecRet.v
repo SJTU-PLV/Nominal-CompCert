@@ -81,10 +81,10 @@ Definition read_immISp32 (Instr:bits) : bits :=
 	Instr~@[7].
 
 Definition write_immISp64 (Instr:bits)  (immISp64_value:bits) : bits :=
-	immISp64_value++(Instr>@[8]).
+	immISp64_value++(Instr>@[6]).
 
 Definition read_immISp64 (Instr:bits) : bits :=
-	Instr~@[8].
+	Instr~@[6].
 
 Definition write_immJ1 (Instr:bits)  (immJ1_value:bits) : bits :=
 	(Instr~@[12])++immJ1_value++(Instr>@[20]).
@@ -1338,7 +1338,7 @@ let result0 := bits06 in
 OK (result0)
 | fcvtdwu uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
 let bits01 := write_opcode bits00 b["1010011"] in
-let bits02 := write_funct3 bits01 b["111"] in
+let bits02 := write_funct3 bits01 b["000"] in
 let bits03 := write_rs2 bits02 b["00001"] in
 let bits04 := write_funct7 bits03 b["1101001"] in
 let bits05 := write_rd bits04 (proj1_sig uvar5_0) in
@@ -1347,7 +1347,7 @@ let result0 := bits06 in
 OK (result0)
 | fcvtdw uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
 let bits01 := write_opcode bits00 b["1010011"] in
-let bits02 := write_funct3 bits01 b["111"] in
+let bits02 := write_funct3 bits01 b["000"] in
 let bits03 := write_rs2 bits02 b["00000"] in
 let bits04 := write_funct7 bits03 b["1101001"] in
 let bits05 := write_rd bits04 (proj1_sig uvar5_0) in
@@ -1575,7 +1575,7 @@ let result0 := bits06 in
 OK (result0)
 | fcvtswu uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
 let bits01 := write_opcode bits00 b["1010011"] in
-let bits02 := write_funct3 bits01 b["111"] in
+let bits02 := write_funct3 bits01 b["000"] in
 let bits03 := write_rs2 bits02 b["00001"] in
 let bits04 := write_funct7 bits03 b["1101000"] in
 let bits05 := write_rd bits04 (proj1_sig uvar5_0) in
@@ -1584,7 +1584,7 @@ let result0 := bits06 in
 OK (result0)
 | fcvtsw uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
 let bits01 := write_opcode bits00 b["1010011"] in
-let bits02 := write_funct3 bits01 b["111"] in
+let bits02 := write_funct3 bits01 b["000"] in
 let bits03 := write_rs2 bits02 b["00000"] in
 let bits04 := write_funct7 bits03 b["1101000"] in
 let bits05 := write_rd bits04 (proj1_sig uvar5_0) in
@@ -1812,7 +1812,7 @@ let result0 := bits06 in
 OK (result0)
 | fsgnjd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
 let bits01 := write_opcode bits00 b["1010011"] in
-let bits02 := write_funct3 bits01 b["100"] in
+let bits02 := write_funct3 bits01 b["000"] in
 let bits03 := write_funct7 bits02 b["0010001"] in
 let bits04 := write_rd bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1 bits04 (proj1_sig uvar5_1) in
@@ -2122,7 +2122,7 @@ OK (result0)
 | srai uvar5_0 uvar5_1 uvar6_2 => let bits00 := (repeat false 32) in
 let bits01 := write_opcode bits00 b["0010011"] in
 let bits02 := write_funct3 bits01 b["101"] in
-let bits03 := write_immISp64 bits02 b["00100000"] in
+let bits03 := write_immISp64 bits02 b["010000"] in
 let bits04 := write_rd bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1 bits04 (proj1_sig uvar5_1) in
 let bits06 := write_shamt64 bits05 (proj1_sig uvar6_2) in
@@ -2131,7 +2131,7 @@ OK (result0)
 | srli uvar5_0 uvar5_1 uvar6_2 => let bits00 := (repeat false 32) in
 let bits01 := write_opcode bits00 b["0010011"] in
 let bits02 := write_funct3 bits01 b["101"] in
-let bits03 := write_immISp64 bits02 b["00000000"] in
+let bits03 := write_immISp64 bits02 b["000000"] in
 let bits04 := write_rd bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1 bits04 (proj1_sig uvar5_1) in
 let bits06 := write_shamt64 bits05 (proj1_sig uvar6_2) in
@@ -2140,7 +2140,7 @@ OK (result0)
 | slli uvar5_0 uvar5_1 uvar6_2 => let bits00 := (repeat false 32) in
 let bits01 := write_opcode bits00 b["0010011"] in
 let bits02 := write_funct3 bits01 b["001"] in
-let bits03 := write_immISp64 bits02 b["00000000"] in
+let bits03 := write_immISp64 bits02 b["000000"] in
 let bits04 := write_rd bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1 bits04 (proj1_sig uvar5_1) in
 let bits06 := write_shamt64 bits05 (proj1_sig uvar6_2) in
