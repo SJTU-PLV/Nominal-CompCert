@@ -111,7 +111,7 @@ Definition transl_init_data (dofs:Z) (d:init_data) : res (option relocentry) :=
       let e := {| reloc_offset := dofs;
                   reloc_type := if Archi.ptr64 then R_RISCV_64 else R_RISCV_32;
                   reloc_symb := id;
-                  reloc_addend := 0;
+                  reloc_addend := Ptrofs.signed ofs;
                |} in
       OK (Some e)
   | _ =>

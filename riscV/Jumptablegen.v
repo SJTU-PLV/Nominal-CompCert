@@ -11,8 +11,9 @@ Set Implicit Arguments.
 
 Local Open Scope error_monad_scope.
 
+(* 16 is adhoc *)
 Definition labelofstoInitdata (fid: ident) (ofs: Z) : init_data :=
-  Init_addrof fid (Ptrofs.repr ofs).
+  Init_addrof fid (Ptrofs.repr (ofs + 16)).
 
 Section INSTRSIZE.
   Variable instr_size : instruction -> Z.
@@ -21,7 +22,6 @@ Section FID.
   Variable fid: ident.          (* the function processing *)
   
 Definition transf_instr (i: instruction) (ofs:Z) : (list instruction * option (ident * globdef fundef unit)) :=
-  let sz := instr_size i in
   match i with
   | Pbtbl_ofs r ofsLst =>
     let id := create_jump_table_ident tt in
@@ -38,7 +38,7 @@ Definition transf_instr (i: instruction) (ofs:Z) : (list instruction * option (i
     let i1 := if Archi.ptr64 then Psllil X5 r (Int.repr 3) else Pslliw X5 r (Int.repr 2) in
     let loadid := [Plui_s X31 id 0; Paddi_s X31 X31 id 0] in
     let lbladdr := if Archi.ptr64 then Paddl X5 X31 X5 else Paddw X5 X31 X5 in
-    let loadaddr := Pld X5 X5 (Ofsimm Ptrofs.zero) in
+    let loadaddr := if Archi.ptr64 then Pld X5 X5 (Ofsimm Ptrofs.zero) else Plw X5 X5 (Ofsimm Ptrofs.zero) in
     let jump := Pjal_rr X0 X5 0 in
     ([i1]++loadid++[lbladdr;loadaddr;jump], Some (id, Gvar def))
   | _ => ([i], None)
