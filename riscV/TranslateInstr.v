@@ -289,6 +289,7 @@ Program Definition encode_freg_u5 (r:freg) : res u5 :=
     OK (exist _ b _)
   else Error (msg "impossible").
 
+(* Previous version: *)
 (* Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=  
   do ofs <- if ( -(two_power_nat 11) <=? ofs) && (ofs <? 0) then
              OK (ofs + (two_power_nat 12))
@@ -299,6 +300,14 @@ Program Definition encode_freg_u5 (r:freg) : res u5 :=
   if assertLength ofs12 12 then
     OK (exist _ ofs12 _)
   else Error (msg "impossible"). *)
+(* Definition decode_ofs_u12 (bs:u12) : res int :=
+  let bs' := proj1_sig bs in
+  match bs' with
+  | b0 :: bs1 => 
+      if b0 then OK (Int.repr ((int_of_bits bs') - two_power_nat 12)) 
+        else OK (Int.repr (int_of_bits bs'))
+  | nil => Error(msg "impossible")
+  end. *)
 
 (* New ddefinition of encode_ofs_u12 *)
 Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=
@@ -315,27 +324,16 @@ Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=
 Definition decode_ofs_u12 (bs:u12) : res Z :=
   int_of_bits_signed (proj1_sig bs).
 
-(* Definition decode_ofs_u12 (bs:u12) : res int :=
-  let bs' := proj1_sig bs in
-  match bs' with
-  | b0 :: bs1 => 
-      if b0 then OK (Int.repr ((int_of_bits bs') - two_power_nat 12)) 
-        else OK (Int.repr (int_of_bits bs'))
-  | nil => Error(msg "impossible")
-  end. *)
-
 Lemma encode_ofs_u12_consistency:forall ofs l, 
-    encode_ofs_u12 (ofs) = OK l ->
+    encode_ofs_u12 ofs = OK l ->
     decode_ofs_u12 l = OK ofs.
 Proof.
   unfold encode_ofs_u12,decode_ofs_u12.
   intros. do 2 destr_in H.
-
   inversion Heqr.
   unfold bits_of_int_signed in H0.
   destruct ((0 <=? ofs) &&
   (ofs <? two_power_nat (12 - 1))) eqn:Ha.
-
   (* case sign = 0 *)
   apply bits_of_int_signed_consistency in Heqr.
   destruct l.
@@ -343,7 +341,6 @@ Proof.
   destruct (assertLength b 12) eqn:H3.
   inversion H1. subst. assumption.
   congruence.
-
   (* case sign = 1  *)
   destruct ((- two_power_nat (12 - 1) <=? ofs) &&
   (ofs <? 0)) eqn: Hb.
@@ -354,42 +351,6 @@ Proof.
   inversion H1. subst. assumption.
   congruence.
   congruence. Qed.
-
-  rewrite H2. f_equal.
-  repeat(inversion Heqr; auto ).
-  inversion Heqr.
-  Transparent Int.repr.
-  unfold Int.repr. apply Int.mkint_eq.
-  rewrite Int.Z_mod_modulus_eq. 
-  eapply andb_true_iff in Ha. destruct Ha as [Ha1 Ha2].
-  apply Z.leb_le in Ha1. apply Z.ltb_lt in Ha2.
-  unfold two_power_nat in Ha1. simpl in Ha1.
-  unfold Int.modulus. unfold two_power_nat. simpl.
-  rewrite Z.mod_small. auto. split. lia. 
-  unfold two_power_nat in Ha2. simpl in Ha2. lia.
-  congruence. congruence. 
-
-  (* case sign = 1 : problematic *)
-  destruct ((- two_power_nat (12 - 1) <=? Int.intval ofs) &&
-  (Int.intval ofs <? 0)) eqn: Hb.
-  apply bits_of_int_signed_consistency in Heqr.
-  destruct l.
-  cbn [proj1_sig].
-  destruct ofs. cbn [Int.intval] in *.
-  destruct (int_of_bits_signed b) eqn: H2.
-  destruct (assertLength b 12) eqn:H3.
-  inversion H1. subst.
-  rewrite H2. f_equal.
-  inversion Heqr. subst.
-  Transparent Int.repr.
-  unfold Int.repr. apply Int.mkint_eq.
-  rewrite Int.Z_mod_modulus_eq. (* but intval < 0! Why? *) 
-  eapply andb_true_iff in Hb. destruct Hb as [Hb1 Hb2].
-  apply Z.leb_le in Hb1. apply Z.ltb_lt in Hb2.
-  unfold two_power_nat in Hb1. simpl in Hb1.
-  unfold Int.modulus. unfold two_power_nat. simpl.
-  rewrite Z.mod_small. (* contradiction!!! *)
-  Admitted.
 
 Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 5)) then
@@ -404,31 +365,46 @@ Definition decode_ofs_u5 (bs:u5) : res int :=
   OK (Int.repr (int_of_bits bs')).
 
 Program Definition encode_ofs_u20 (ofs:Z) :res u20 :=
-  if ( -(two_power_nat 19) <=? ofs) && (ofs <? 0) then    
-  let ofs20 := (bits_of_int 20 (ofs + (two_power_nat 20))) in
-  if assertLength ofs20 20 then
-    OK (exist _ ofs20 _)         
-  else Error (msg "impossible")
-  else
-  if ( 0 <=? ofs) && (ofs <? (two_power_nat 19)) then
-    let ofs20 := (bits_of_int 20 ofs) in
-    if assertLength ofs20 20 then
-      OK (exist _ ofs20 _)         
-    else Error (msg "impossible")
-  else Error (msg "Offset overflow in encode_ofs_u20").
-
-(* Unsigned version:
-  Definition decode_ofs_u12 (bs:u12) : res int :=
-  let bs' := proj1_sig bs in
-  OK (Int.repr (int_of_bits bs')). *)
-Definition decode_ofs_u20 (bs:u20) : res int :=
-  let bs' := proj1_sig bs in
-  match bs' with
-  | b0 :: bs1 => 
-      if b0 then OK (Int.repr ((int_of_bits bs') - two_power_nat 20)) 
-        else OK (Int.repr (int_of_bits bs'))
-  | nil => Error(msg "impossible")
+  let l0 := bits_of_int_signed 20 ofs in
+  match l0 with
+  | OK _ => 
+      do l <- l0;
+      if assertLength l 20 then
+        OK (exist _ l _)
+      else Error (msg "impossible")
+  | Error _ => Error (msg "Offset overflow in encode_ofs_u12")
   end.
+
+Definition decode_ofs_u20 (bs:u20) : res Z :=
+  int_of_bits_signed (proj1_sig bs).
+
+Lemma encode_ofs_u20_consistency:forall ofs l, 
+    encode_ofs_u20 ofs = OK l ->
+    decode_ofs_u20 l = OK ofs.
+Proof.
+  unfold encode_ofs_u20,decode_ofs_u20.
+  intros. do 2 destr_in H.
+  inversion Heqr.
+  unfold bits_of_int_signed in H0.
+  destruct ((0 <=? ofs) &&
+  (ofs <? two_power_nat (20 - 1))) eqn:Ha.
+  (* case sign = 0 *)
+  apply bits_of_int_signed_consistency in Heqr.
+  destruct l.
+  cbn [proj1_sig].
+  destruct (assertLength b 20) eqn:H3.
+  inversion H1. subst. assumption.
+  congruence.
+  (* case sign = 1  *)
+  destruct ((- two_power_nat (20 - 1) <=? ofs) &&
+  (ofs <? 0)) eqn: Hb.
+  apply bits_of_int_signed_consistency in Heqr.
+  destruct l.
+  cbn [proj1_sig].
+  destruct (assertLength b 20) eqn:H3.
+  inversion H1. subst. assumption.
+  congruence.
+  congruence. Qed.
 
 Program Definition encode_S1 (imm: Z) : res u5 :=
   do immbits <- encode_ofs_u12 imm;
