@@ -661,21 +661,21 @@ Definition slliw_bp code : bool :=
 
 Definition srai_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111000000000111000001111111"] in
-	let bresult0 := b["00100000000000000101000000010011"] in
+	let bmask0 := b["11111100000000000111000001111111"] in
+	let bresult0 := b["01000000000000000101000000010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition srli_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111000000000111000001111111"] in
+	let bmask0 := b["11111100000000000111000001111111"] in
 	let bresult0 := b["00000000000000000101000000010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition slli_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111000000000111000001111111"] in
+	let bmask0 := b["11111100000000000111000001111111"] in
 	let bresult0 := b["00000000000000000001000000010011"] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
