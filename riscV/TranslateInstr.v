@@ -312,12 +312,8 @@ Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=
   | Error _ => Error (msg "Offset overflow in encode_ofs_u12")
   end.
 
-Definition decode_ofs_u12 (bs:u12) : res int :=
-  let ans := int_of_bits_signed (proj1_sig bs) in
-  match ans with
-  | OK z    => OK (Int.repr z)
-  | Error _ => Error (msg "need at least a sign bit!")
-  end.
+Definition decode_ofs_u12 (bs:u12) : res Z :=
+  int_of_bits_signed (proj1_sig bs).
 
 (* Definition decode_ofs_u12 (bs:u12) : res int :=
   let bs' := proj1_sig bs in
@@ -328,9 +324,8 @@ Definition decode_ofs_u12 (bs:u12) : res int :=
   | nil => Error(msg "impossible")
   end. *)
 
-(* FIX_ME: when the sign is 1, contradiction *)
 Lemma encode_ofs_u12_consistency:forall ofs l, 
-    encode_ofs_u12 (Int.intval ofs) = OK l ->
+    encode_ofs_u12 (ofs) = OK l ->
     decode_ofs_u12 l = OK ofs.
 Proof.
   unfold encode_ofs_u12,decode_ofs_u12.
@@ -338,19 +333,31 @@ Proof.
 
   inversion Heqr.
   unfold bits_of_int_signed in H0.
-  destruct ((0 <=? Int.intval ofs) &&
-  (Int.intval ofs <? two_power_nat (12 - 1))) eqn:Ha.
+  destruct ((0 <=? ofs) &&
+  (ofs <? two_power_nat (12 - 1))) eqn:Ha.
 
   (* case sign = 0 *)
   apply bits_of_int_signed_consistency in Heqr.
   destruct l.
   cbn [proj1_sig].
-  destruct ofs. cbn [Int.intval] in *.
-  destruct (int_of_bits_signed b) eqn: H2.
   destruct (assertLength b 12) eqn:H3.
-  inversion H1. subst.
+  inversion H1. subst. assumption.
+  congruence.
+
+  (* case sign = 1  *)
+  destruct ((- two_power_nat (12 - 1) <=? ofs) &&
+  (ofs <? 0)) eqn: Hb.
+  apply bits_of_int_signed_consistency in Heqr.
+  destruct l.
+  cbn [proj1_sig].
+  destruct (assertLength b 12) eqn:H3.
+  inversion H1. subst. assumption.
+  congruence.
+  congruence. Qed.
+
   rewrite H2. f_equal.
-  inversion Heqr. subst.
+  repeat(inversion Heqr; auto ).
+  inversion Heqr.
   Transparent Int.repr.
   unfold Int.repr. apply Int.mkint_eq.
   rewrite Int.Z_mod_modulus_eq. 
@@ -376,7 +383,7 @@ Proof.
   inversion Heqr. subst.
   Transparent Int.repr.
   unfold Int.repr. apply Int.mkint_eq.
-  rewrite Int.Z_mod_modulus_eq. 
+  rewrite Int.Z_mod_modulus_eq. (* but intval < 0! Why? *) 
   eapply andb_true_iff in Hb. destruct Hb as [Hb1 Hb2].
   apply Z.leb_le in Hb1. apply Z.ltb_lt in Hb2.
   unfold two_power_nat in Hb1. simpl in Hb1.
