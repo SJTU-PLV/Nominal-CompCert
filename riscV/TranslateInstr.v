@@ -22,6 +22,20 @@ Fixpoint bits_of_int_rec (n: nat) (x: Z) {struct n}: list bool :=
 Definition bits_of_int (n: nat) (x: Z) : list bool :=
   rev (bits_of_int_rec n x).
 
+Lemma bits_of_int_length': forall n x,
+  length(bits_of_int_rec n x)=n.
+Proof.
+  intro n. induction n.
+  - auto.
+  - simpl. intros. f_equal. apply IHn. Qed.
+
+Lemma bits_of_int_length: forall n x,
+  length(bits_of_int n x)=n.
+Proof. unfold bits_of_int. intros.
+  assert (length (rev (bits_of_int_rec n x))=
+    length (bits_of_int_rec n x)). apply rev_length.
+  rewrite H. apply bits_of_int_length'. Qed.
+
 Fixpoint int_of_bits_rec (l: list bool): Z :=
   match l with
   | nil => 0
@@ -31,12 +45,39 @@ Fixpoint int_of_bits_rec (l: list bool): Z :=
 
 Definition int_of_bits (l: list bool): Z :=
   int_of_bits_rec(rev l).
+(* Fixpoint int_of_bits (l: list bool): Z :=
+  match l with
+  | nil => 0
+  | false :: l' =>  int_of_bits l'
+  | true  :: l' => int_of_bits l'+two_power_nat(length l)
+  end. *)
+Lemma bits_of_int_consistency': forall n x l,
+  -1 < x < two_power_nat n ->
+  bits_of_int_rec n x = l ->
+  int_of_bits_rec l = x.
+Proof. Admitted.
+
+Lemma bits_of_int_consistency: forall n x l,
+  -1 < x < two_power_nat n ->
+  bits_of_int n x = l ->
+  int_of_bits l = x.
+Proof. Admitted.
+
+Lemma int_of_bits_range: forall l,
+  -1 < int_of_bits l < two_power_nat (length l).
+Proof. Admitted.
+
+Lemma int_of_bits_append: forall b l,
+  int_of_bits (b::l)=
+    if b then (two_power_nat (length l)) + int_of_bits l
+    else int_of_bits l.
+Proof. Admitted.
 
 (* NEW: signed version of conversion between bits and ints *)
 Definition bits_of_int_signed (n:nat) (ofs:Z) : res bits :=
   if ( 0 <=? ofs) && (ofs <? (two_power_nat (n-1))) then
     OK (bits_of_int n ofs)
-  else 
+  else
     if ( -(two_power_nat (n-1)) <=? ofs) && (ofs <? 0) then    
     OK (bits_of_int n (ofs + (two_power_nat n)))
     else Error (msg "Offset overflow in bits_of_int_signed").
@@ -45,13 +86,62 @@ Definition int_of_bits_signed (l: list bool): res Z :=
   match l with
   | nil => Error (msg "need at least a sign bit!")
   | false :: l' => OK (int_of_bits l')
-  | true  :: l' => OK ((int_of_bits l') - two_power_nat (length l))
+  | true  :: l' => OK ((int_of_bits l') - two_power_nat (length l'))
   end.
 
+Lemma two_power_nat_double: forall n,
+  two_power_nat (S n) = 2 * two_power_nat (n).
+Proof. Admitted.
+
 Lemma bits_of_int_signed_consistency: forall n ofs l,
+  n <> O ->
   bits_of_int_signed n ofs = OK l ->
   int_of_bits_signed l = OK ofs.
-Proof. Admitted.
+Proof.
+  unfold bits_of_int_signed,int_of_bits_signed.
+  intros. destruct n as [|n']. congruence.
+  do 1 destr_in H0; inversion H0.
+  assert (length l = S n'). rewrite <- H2. apply bits_of_int_length.
+  rewrite H2 in *.
+  assert (ofs = int_of_bits l). {
+    symmetry. apply (bits_of_int_consistency (S n')).
+    eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2].
+    apply Z.leb_le in Heqb1. split. lia.
+    apply Z.ltb_lt in Heqb2. simpl in *. 
+    rewrite Nat.sub_0_r in *.
+  }
+  destruct l;
+  (* l=[] *)simpl in H1; try (congruence);
+  injection H1 as H1.
+  destruct b;simpl;f_equal.
+  (* ofs >= 0; sign=1, impossible *)
+  rewrite int_of_bits_append in H3.
+  rewrite H1 in *.
+  assert (ofs >= two_power_nat n'). { simpl. }
+  eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2].
+  apply Z.ltb_lt in Heqb2. simpl in Heqb2. rewrite Nat.sub_0_r in *.
+  congruence.
+  (* ofs >= 0; sign=0, ok *)
+  rewrite int_of_bits_append in H3. rewrite H3. auto.
+  
+  do 1 destr_in H0. injection H0 as H0. 
+  assert (length l = S n'). rewrite <- H0. apply bits_of_int_length.
+  rewrite H0 in *. rewrite Nat.sub_0_r in *.
+  assert (ofs + two_power_nat (S n')=int_of_bits l). 
+    symmetry. apply (bits_of_int_consistency (S n')).
+    (* FIX_ME *)
+    assert (-1 < ofs + two_power_nat (S n') < two_power_nat (S n')). {simpl. }
+    apply H3. apply H0.
+
+  destruct l as [|? l'];
+  (* l=[] *)simpl in H1; try (congruence);
+  injection H1 as H1.
+  destruct b;simpl;f_equal.
+  (* ofs <  0; sign=1, ok *)
+  rewrite (two_power_nat_double n') in H3.
+  rewrite int_of_bits_append in H3.
+  (* H3 -> goal *)
+  Admitted.
 
 Program Definition zero5  : u5  := b["00000"].
 Program Definition zero12 : u12 := b["000000000000"].
