@@ -63,7 +63,11 @@ Lemma bits_of_int_consistency: forall n x l,
   int_of_bits l = x.
 Proof. Admitted.
 
-Lemma int_of_bits'_append: forall b l,
+Lemma int_of_bits_range: forall l,
+  -1 < int_of_bits l < two_power_nat (length l).
+Proof. Admitted.
+
+  Lemma int_of_bits'_append: forall b l,
   int_of_bits_rec (l++[b])=
     if b then (two_power_nat (length l)) + int_of_bits_rec l
     else int_of_bits_rec l.
@@ -116,10 +120,6 @@ Definition int_of_bits_signed (l: list bool): res Z :=
   | false :: l' => OK (int_of_bits l')
   | true  :: l' => OK ((int_of_bits l') - two_power_nat (length l'))
   end.
-
-Lemma two_power_nat_double: forall n,
-  two_power_nat (S n) = 2 * two_power_nat (n).
-Proof. Admitted.
 
 Lemma bits_of_int_signed_consistency: forall n ofs l,
   n <> O ->
