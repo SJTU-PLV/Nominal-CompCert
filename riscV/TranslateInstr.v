@@ -276,7 +276,7 @@ Definition decode_ireg0 (bs: u5) : res ireg0 :=
 .
 
 (*encode 64bit reg ,return *)
-Definition encode_freg (r:freg) : res (bits):=
+Program Definition encode_freg (r:freg) : res (u5):=
   match r with
   | F0 => OK  (b["00000"])
   | F1 => OK  (b["00001"])
@@ -349,7 +349,15 @@ Definition decode_freg (bs: u5) : res freg :=
   else if Z.eqb n 31 then OK(F31)      (**r b["11111"] *)
   else Error(msg "reg not found")
 .
- 
+
+Theorem encode_freg_consistency: forall freg freg_bits,
+  encode_freg freg = OK (freg_bits) ->
+  decode_freg freg_bits = OK freg.
+Proof.
+  unfold encode_freg. unfold decode_freg.
+  intro freg. destruct freg; simpl; intros; inv H; simpl; eauto.
+Qed.
+
 Definition ofs_to_Z (ofs: offset) : res Z :=
   match ofs with
   | Ofsimm ptrofs =>
@@ -374,12 +382,6 @@ Definition decode_ireg_u5 (bs:u5) : res ireg :=
     | [false;false;false;false;false] => Error (msg "X0 register unsupported")
     | _ => decode_ireg bs
     end.
-
-Program Definition encode_freg_u5 (r:freg) : res u5 :=
-  do b <- encode_freg r;
-  if assertLength b 5 then
-    OK (exist _ b _)
-  else Error (msg "impossible").
 
 (* Previous version: *)
 (* Program Definition encode_ofs_u12 (ofs:Z) :res u12 :=  
@@ -526,7 +528,6 @@ Program Definition encode_S2 (imm: Z) : res u7 :=
     OK (exist _ S2 _)
   else Error(msg "illegal length in encode_S2").
 
-
 (* subtle: we treat imm as an offset multiple of 2 bytes, so we need to preserve the least bit
    20     10:1          11         19:12  
    J4      J3           J2           J1
@@ -571,6 +572,13 @@ Definition decode_immS (S1: u5) (S2: u7) : res Z :=
   let S1_bits := proj1_sig S1 in
   let S2_bits := proj1_sig S2 in
   OK (int_of_bits (S1_bits ++ S2_bits)).
+
+Theorem encode_immS_consistency: forall Z S1 S2,
+  encode_S1 Z = OK S1 -> encode_S2 Z = OK S2 ->
+  decode_immS S1 S2 = OK Z.
+Proof.
+  unfold encode_S1, encode_S2, decode_immS.
+  intros. Admitted.
 
 (* subtle: we treat imm as an offset multiple of 2 bytes, so we need to preserve the least bit
    12     10:5          4:1          11
@@ -620,6 +628,12 @@ Definition decode_immB (B1: u1) (B2: u4) (B3: u6) (B4: u1) : res Z :=
   let B4_bits := proj1_sig B4 in
   OK (int_of_bits (B2_bits ++ B3_bits ++ B1_bits ++ B4_bits)).
 
+Theorem encode_immB_consistency: forall Z B1 B2 B3 B4,
+  encode_B1 Z = OK B1 -> encode_B2 Z = OK B2 ->
+  encode_B3 Z = OK B3 -> encode_B4 Z = OK B4 ->
+  decode_immB B1 B2 B3 B4 = OK Z.
+Proof.
+  Admitted.
 
 Program Definition encode_shamt ofs : res u6 :=
   if Archi.ptr64 then
@@ -1203,307 +1217,307 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
       
   (* floating point register move *)
   | Pfmv fd fs =>
-    do fdbits <- encode_freg_u5 fd;
-    do fsbits <- encode_freg_u5 fs;
+    do fdbits <- encode_freg fd;
+    do fsbits <- encode_freg fs;
     OK (fsgnjd fdbits fsbits fsbits)
   | Pfmvxs rd fs =>
     do rdbits <- encode_ireg rd;
-    do fsbits <- encode_freg_u5 fs;
+    do fsbits <- encode_freg fs;
     OK (fmvxw rdbits fsbits)
   | Pfmvsx fd rs =>
-    do fdbits <- encode_freg_u5 fd;
+    do fdbits <- encode_freg fd;
     do rsbits <- encode_ireg rs;
     OK (fmvwx fdbits rsbits)
   | Pfmvxd rd fs =>
     do rdbits <- encode_ireg rd;
-    do fsbits <- encode_freg_u5 fs;
+    do fsbits <- encode_freg fs;
     OK (fmvxd rdbits fsbits)
   | Pfmvdx fd rs =>
-    do fdbits <- encode_freg_u5 fd;
+    do fdbits <- encode_freg fd;
     do rsbits <- encode_ireg rs;
     OK (fmvdx fdbits rsbits)
   
   (* 32-bit (single-precision) floating point *)
   | Pfls fd ra ofs =>
-    do fdbits <- encode_freg_u5 fd;
+    do fdbits <- encode_freg fd;
     do rabits <- encode_ireg0 ra;
     do ofs_Z <- ofs_to_Z ofs;
     do immbits <- encode_ofs_u12 ofs_Z;
     OK (flw fdbits rabits immbits)
   | Pfss fs ra ofs =>
-    do fsbits <- encode_freg_u5 fs;
+    do fsbits <- encode_freg fs;
     do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
     OK (fsw immS1bits rabits fsbits immS2bits)
   | Pfnegs fd fs =>
-    do fdbits <- encode_freg_u5 fd;
-    do fsbits <- encode_freg_u5 fs;
+    do fdbits <- encode_freg fd;
+    do fsbits <- encode_freg fs;
     OK (fsgnjns fdbits fsbits fsbits)
   | Pfabss fd fs =>
-    do fdbits <- encode_freg_u5 fd;
-    do fsbits <- encode_freg_u5 fs;
+    do fdbits <- encode_freg fd;
+    do fsbits <- encode_freg fs;
     OK (fsgnjxs fdbits fsbits fsbits)
   | Pfadds fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fadds fdbits fs1bits fs2bits)
   | Pfsubs fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fsubs fdbits fs1bits fs2bits)
   | Pfmuls fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fmuls fdbits fs1bits fs2bits)
   | Pfdivs fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fdivs fdbits fs1bits fs2bits)
   | Pfmins fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fmins fdbits fs1bits fs2bits)
   | Pfmaxs fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fmaxs fdbits fs1bits fs2bits)
   | Pfeqs rd fs1 fs2 =>
     do rdbits <- encode_ireg rd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (feqs rdbits fs1bits fs2bits)
   | Pflts rd fs1 fs2 =>
     do rdbits <- encode_ireg rd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (flts rdbits fs1bits fs2bits)
   | Pfles rd fs1 fs2 =>
     do rdbits <- encode_ireg rd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fles rdbits fs1bits fs2bits)
   | Pfsqrts fd fs =>
-    do fdbits <- encode_freg_u5 fd;
-    do fsbits <- encode_freg_u5 fs;
+    do fdbits <- encode_freg fd;
+    do fsbits <- encode_freg fs;
     OK (fsqrts fdbits fsbits)
   | Pfmadds fd fs1 fs2 fs3 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
-    do fs3bits <- encode_freg_u5 fs3;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
+    do fs3bits <- encode_freg fs3;
     OK (fmadds fdbits fs1bits fs2bits fs3bits)
   | Pfmsubs fd fs1 fs2 fs3 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
-    do fs3bits <- encode_freg_u5 fs3;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
+    do fs3bits <- encode_freg fs3;
     OK (fmsubs fdbits fs1bits fs2bits fs3bits)
   | Pfnmadds fd fs1 fs2 fs3 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
-    do fs3bits <- encode_freg_u5 fs3;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
+    do fs3bits <- encode_freg fs3;
     OK (fnmadds fdbits fs1bits fs2bits fs3bits)
   | Pfnmsubs fd fs1 fs2 fs3 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
-    do fs3bits <- encode_freg_u5 fs3;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
+    do fs3bits <- encode_freg fs3;
     OK (fnmsubs fdbits fs1bits fs2bits fs3bits)
   | Pfcvtws rd fs =>
     do rdbits <- encode_ireg rd;
-    do fsbits <- encode_freg_u5 fs;
+    do fsbits <- encode_freg fs;
     OK (fcvtws rdbits fsbits)
   | Pfcvtwus rd fs =>
     do rdbits <- encode_ireg rd;
-    do fsbits <- encode_freg_u5 fs;
+    do fsbits <- encode_freg fs;
     OK (fcvtwus rdbits fsbits)
   | Pfcvtsw fd rs =>
-    do fdbits <- encode_freg_u5 fd;
+    do fdbits <- encode_freg fd;
     do rsbits <- encode_ireg0 rs;
     OK (fcvtsw fdbits rsbits)
   | Pfcvtswu fd rs =>
-    do fdbits <- encode_freg_u5 fd;
+    do fdbits <- encode_freg fd;
     do rsbits <- encode_ireg0 rs;
     OK (fcvtswu fdbits rsbits)
   
   | Pfcvtls rd fs =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
-      do fsbits <- encode_freg_u5 fs;
+      do fsbits <- encode_freg fs;
       OK (fcvtls rdbits fsbits)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pfcvtlus rd fs =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
-      do fsbits <- encode_freg_u5 fs;
+      do fsbits <- encode_freg fs;
       OK (fcvtlus rdbits fsbits)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pfcvtsl fd rs =>
     if Archi.ptr64 then
-      do fdbits <- encode_freg_u5 fd;
+      do fdbits <- encode_freg fd;
       do rsbits <- encode_ireg0 rs;
       OK (fcvtsl fdbits rsbits)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pfcvtslu fd rs =>
     if Archi.ptr64 then
-      do fdbits <- encode_freg_u5 fd;
+      do fdbits <- encode_freg fd;
       do rsbits <- encode_ireg0 rs;
       OK (fcvtslu fdbits rsbits)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   
   (* 64-bit (double-precision) floating point *)
   | Pfld fd ra ofs =>
-    do fdbits <- encode_freg_u5 fd;
+    do fdbits <- encode_freg fd;
     do rabits <- encode_ireg0 ra;
     do ofs_Z <- ofs_to_Z ofs;
     do immbits <- encode_ofs_u12 ofs_Z;
     OK (fload fdbits rabits immbits)
   | Pfsd fs ra ofs =>
-    do fsbits <- encode_freg_u5 fs;
+    do fsbits <- encode_freg fs;
     do rabits <- encode_ireg ra;
     do ofs_Z <- ofs_to_Z ofs;
     do immS1bits <- encode_S1 ofs_Z;
     do immS2bits <- encode_S2 ofs_Z;
     OK (fsd immS1bits rabits fsbits immS2bits)
   | Pfnegd fd fs =>
-    do fdbits <- encode_freg_u5 fd;
-    do fsbits <- encode_freg_u5 fs;
+    do fdbits <- encode_freg fd;
+    do fsbits <- encode_freg fs;
     OK (fsgnjnd fdbits fsbits fsbits)
   | Pfabsd fd fs =>
-    do fdbits <- encode_freg_u5 fd;
-    do fsbits <- encode_freg_u5 fs;
+    do fdbits <- encode_freg fd;
+    do fsbits <- encode_freg fs;
     OK (fsgnjxd fdbits fsbits fsbits)
   | Pfaddd fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (faddd fdbits fs1bits fs2bits)
   | Pfsubd fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fsubd fdbits fs1bits fs2bits)
   | Pfmuld fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fmuld fdbits fs1bits fs2bits)
   | Pfdivd fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fdivd fdbits fs1bits fs2bits)
   | Pfmind fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fmind fdbits fs1bits fs2bits)
   | Pfmaxd fd fs1 fs2 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fmaxd fdbits fs1bits fs2bits)
   | Pfeqd rd fs1 fs2 =>
     do rdbits <- encode_ireg rd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (feqd rdbits fs1bits fs2bits)
   | Pfltd rd fs1 fs2 =>
     do rdbits <- encode_ireg rd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fltd rdbits fs1bits fs2bits)
   | Pfled rd fs1 fs2 =>
     do rdbits <- encode_ireg rd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
     OK (fled rdbits fs1bits fs2bits)
   | Pfsqrtd fd fs =>
-    do fdbits <- encode_freg_u5 fd;
-    do fsbits <- encode_freg_u5 fs;
+    do fdbits <- encode_freg fd;
+    do fsbits <- encode_freg fs;
     OK (fsqrtd fdbits fsbits)
   | Pfmaddd fd fs1 fs2 fs3 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
-    do fs3bits <- encode_freg_u5 fs3;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
+    do fs3bits <- encode_freg fs3;
     OK (fmaddd fdbits fs1bits fs2bits fs3bits)
   | Pfmsubd fd fs1 fs2 fs3 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
-    do fs3bits <- encode_freg_u5 fs3;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
+    do fs3bits <- encode_freg fs3;
     OK (fmsubd fdbits fs1bits fs2bits fs3bits)
   | Pfnmaddd fd fs1 fs2 fs3 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
-    do fs3bits <- encode_freg_u5 fs3;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
+    do fs3bits <- encode_freg fs3;
     OK (fnmaddd fdbits fs1bits fs2bits fs3bits)
   | Pfnmsubd fd fs1 fs2 fs3 =>
-    do fdbits <- encode_freg_u5 fd;
-    do fs1bits <- encode_freg_u5 fs1;
-    do fs2bits <- encode_freg_u5 fs2;
-    do fs3bits <- encode_freg_u5 fs3;
+    do fdbits <- encode_freg fd;
+    do fs1bits <- encode_freg fs1;
+    do fs2bits <- encode_freg fs2;
+    do fs3bits <- encode_freg fs3;
     OK (fnmsubd fdbits fs1bits fs2bits fs3bits)
   | Pfcvtwd rd fs =>
     do rdbits <- encode_ireg rd;
-    do fsbits <- encode_freg_u5 fs;
+    do fsbits <- encode_freg fs;
     OK (fcvtwd rdbits fsbits)
   | Pfcvtwud rd fs =>
     do rdbits <- encode_ireg rd;
-    do fsbits <- encode_freg_u5 fs;
+    do fsbits <- encode_freg fs;
     OK (fcvtwud rdbits fsbits)
   | Pfcvtdw fd rs =>
-    do fdbits <- encode_freg_u5 fd;
+    do fdbits <- encode_freg fd;
     do rsbits <- encode_ireg0 rs;
     OK (fcvtdw fdbits rsbits)
   | Pfcvtdwu fd rs =>
-    do fdbits <- encode_freg_u5 fd;
+    do fdbits <- encode_freg fd;
     do rsbits <- encode_ireg0 rs;
     OK (fcvtdwu fdbits rsbits)
 
   | Pfcvtld rd fs =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
-      do fsbits <- encode_freg_u5 fs;
+      do fsbits <- encode_freg fs;
       OK (fcvtld rdbits fsbits)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pfcvtlud rd fs =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
-      do fsbits <- encode_freg_u5 fs;
+      do fsbits <- encode_freg fs;
       OK (fcvtlud rdbits fsbits)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pfcvtdl fd rs =>
     if Archi.ptr64 then
-      do fdbits <- encode_freg_u5 fd;
+      do fdbits <- encode_freg fd;
       do rsbits <- encode_ireg0 rs;
       OK (fcvtdl fdbits rsbits)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pfcvtdlu fd rs =>
     if Archi.ptr64 then
-      do fdbits <- encode_freg_u5 fd;
+      do fdbits <- encode_freg fd;
       do rsbits <- encode_ireg0 rs;
       OK (fcvtdlu fdbits rsbits)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
 
   | Pfcvtds fd rs =>
-    do fdbits <- encode_freg_u5 fd;
-    do rsbits <- encode_freg_u5 rs;
+    do fdbits <- encode_freg fd;
+    do rsbits <- encode_freg rs;
     OK (fcvtds fdbits rsbits)
   | Pfcvtsd fd rs =>
-    do fdbits <- encode_freg_u5 fd;
-    do rsbits <- encode_freg_u5 rs;
+    do fdbits <- encode_freg fd;
+    do rsbits <- encode_freg rs;
     OK (fcvtsd fdbits rsbits)
 
   | _ => Error [MSG "Not exists or unsupported: "; MSG (instr_to_string i)]
