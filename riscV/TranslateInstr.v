@@ -63,15 +63,43 @@ Lemma bits_of_int_consistency: forall n x l,
   int_of_bits l = x.
 Proof. Admitted.
 
-Lemma int_of_bits_range: forall l,
-  -1 < int_of_bits l < two_power_nat (length l).
-Proof. Admitted.
+Lemma int_of_bits'_append: forall b l,
+  int_of_bits_rec (l++[b])=
+    if b then (two_power_nat (length l)) + int_of_bits_rec l
+    else int_of_bits_rec l.
+Proof.
+  intros. generalize dependent b. induction l.
+  - intros. destruct b; unfold two_power_nat; reflexivity.
+  - intros. remember (length l) as n.
+    replace (length (a :: l)) with (S n).
+    rewrite two_power_nat_S.
+    remember (int_of_bits_rec ((a :: l) ++ [b])) as LHS.
+    simpl in HeqLHS. 
+    replace (match int_of_bits_rec (l ++ [b]) with
+    | 0 => 0
+    | Z.pos y' => Z.pos y'~0
+    | Z.neg y' => Z.neg y'~0
+    end) with (2*(int_of_bits_rec (l ++ [b]))) in HeqLHS.
+    replace (int_of_bits_rec (a :: l)) with 
+    (if a then 2 * (int_of_bits_rec l) + 1
+          else 2 * (int_of_bits_rec l)).
+    rewrite IHl in HeqLHS.
+    remember (two_power_nat n) as two_n.
+    remember (int_of_bits_rec l) as x.
+    destruct a eqn:HA; destruct b eqn:HB; lia.
+    auto. auto. 
+    simpl. rewrite Heqn. reflexivity. Qed.
 
 Lemma int_of_bits_append: forall b l,
   int_of_bits (b::l)=
     if b then (two_power_nat (length l)) + int_of_bits l
-    else int_of_bits l.
-Proof. Admitted.
+    else int_of_bits l. 
+Proof.
+  unfold int_of_bits. intros.
+  simpl.
+  replace (length l) with (length (rev l)).
+  apply (int_of_bits'_append b (rev l)).
+  apply rev_length. Qed.
 
 (* NEW: signed version of conversion between bits and ints *)
 Definition bits_of_int_signed (n:nat) (ofs:Z) : res bits :=
@@ -108,7 +136,7 @@ Proof.
     eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2].
     apply Z.leb_le in Heqb1. split. lia.
     apply Z.ltb_lt in Heqb2. simpl in *. 
-    rewrite Nat.sub_0_r in *.
+    rewrite Nat.sub_0_r in *. Locate shift.
     rewrite two_power_nat_S. lia.
     auto.
   }
@@ -118,7 +146,7 @@ Proof.
   destruct b;simpl;f_equal.
   (* ofs >= 0; sign=1, impossible *)
   rewrite int_of_bits_append in H3.
-  rewrite H1 in *.
+  rewrite H1 in *. Search two_power_nat.
   (* assert (ofs >= two_power_nat n'). { simpl. } *)
   (* eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2]. *)
   (* apply Z.ltb_lt in Heqb2. simpl in Heqb2. rewrite Nat.sub_0_r in *. *)
