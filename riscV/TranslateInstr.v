@@ -45,12 +45,7 @@ Fixpoint int_of_bits_rec (l: list bool): Z :=
 
 Definition int_of_bits (l: list bool): Z :=
   int_of_bits_rec(rev l).
-(* Fixpoint int_of_bits (l: list bool): Z :=
-  match l with
-  | nil => 0
-  | false :: l' =>  int_of_bits l'
-  | true  :: l' => int_of_bits l'+two_power_nat(length l)
-  end. *)
+
 Lemma bits_of_int_consistency': forall n x l,
   -1 < x < two_power_nat n ->
   bits_of_int_rec n x = l ->
@@ -476,7 +471,7 @@ Proof.
   cbn [proj1_sig].
   destruct (assertLength b 12) eqn:H3.
   inversion H1. subst. assumption.
-  congruence.
+  congruence. lia.
   (* case sign = 1  *)
   destruct ((- two_power_nat (12 - 1) <=? ofs) &&
   (ofs <? 0)) eqn: Hb.
@@ -484,10 +479,8 @@ Proof.
   destruct l.
   cbn [proj1_sig].
   destruct (assertLength b 12) eqn:H3.
-  inversion H1. subst. (* assumption. *)
-  (* congruence. *)
-  (* congruence. Qed. *)
-Admitted.
+  inversion H1. subst. assumption.
+  congruence. lia. congruence. Qed.  
 
 Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 5)) then
@@ -532,7 +525,7 @@ Proof.
   cbn [proj1_sig].
   destruct (assertLength b 20) eqn:H3.
   inversion H1. subst. assumption.
-  congruence.
+  congruence. lia.
   (* case sign = 1  *)
   destruct ((- two_power_nat (20 - 1) <=? ofs) &&
   (ofs <? 0)) eqn: Hb.
@@ -540,11 +533,8 @@ Proof.
   destruct l.
   cbn [proj1_sig].
   destruct (assertLength b 20) eqn:H3.
-  inversion H1. subst.
-  lia. lia. lia. lia. (* assumption. *)
-  (* congruence. *)
-  (* congruence. Qed. *)
-Admitted.
+  inversion H1. subst. assumption.
+  congruence. lia. congruence. Qed.  
 
 (* lui use unsigned offset as the upper 20bits (Asmgen.v)*)
 Program Definition encode_ofs_u20_unsigned (ofs:Z) : res u20 :=
