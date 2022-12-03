@@ -63,10 +63,6 @@ Lemma bits_of_int_consistency: forall n x l,
   int_of_bits l = x.
 Proof. Admitted.
 
-Lemma int_of_bits_range: forall l,
-  -1 < int_of_bits l < two_power_nat (length l).
-Proof. Admitted.
-
   Lemma int_of_bits'_append: forall b l,
   int_of_bits_rec (l++[b])=
     if b then (two_power_nat (length l)) + int_of_bits_rec l
@@ -104,6 +100,16 @@ Proof.
   replace (length l) with (length (rev l)).
   apply (int_of_bits'_append b (rev l)).
   apply rev_length. Qed.
+
+Lemma int_of_bits_range: forall l,
+  -1 < int_of_bits l < two_power_nat (length l).
+Proof. 
+  intros. induction l.
+  unfold int_of_bits , two_power_nat. simpl. lia.
+  simpl. rewrite two_power_nat_S.
+  remember (two_power_nat (length l)) as two_n eqn:H1.
+  rewrite int_of_bits_append.
+  destruct a; lia. Qed.
 
 (* NEW: signed version of conversion between bits and ints *)
 Definition bits_of_int_signed (n:nat) (ofs:Z) : res bits :=
