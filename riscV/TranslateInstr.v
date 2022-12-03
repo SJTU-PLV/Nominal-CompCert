@@ -134,6 +134,7 @@ Lemma bits_of_int_signed_consistency: forall n ofs l,
 Proof.
   unfold bits_of_int_signed,int_of_bits_signed.
   intros. destruct n as [|n']. congruence.
+  replace (two_power_nat (S n' - 1)) with (two_power_nat n') in *.
   do 1 destr_in H0; inversion H0.
   assert (length l = S n'). rewrite <- H2. apply bits_of_int_length.
   rewrite H2 in *.
@@ -141,43 +142,50 @@ Proof.
     symmetry. apply (bits_of_int_consistency (S n')).
     eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2].
     apply Z.leb_le in Heqb1. split. lia.
-    apply Z.ltb_lt in Heqb2. simpl in *. 
-    rewrite Nat.sub_0_r in *. Locate shift.
-    rewrite two_power_nat_S. lia.
-    auto.
-  }
+    apply Z.ltb_lt in Heqb2. rewrite two_power_nat_S.
+    lia. auto. }
   destruct l;
   (* l=[] *)simpl in H1; try (congruence);
-  injection H1 as H1.
+  injection H1 as H1. 
   destruct b;simpl;f_equal.
   (* ofs >= 0; sign=1, impossible *)
   rewrite int_of_bits_append in H3.
-  rewrite H1 in *. Search two_power_nat.
-  (* assert (ofs >= two_power_nat n'). { simpl. } *)
-  (* eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2]. *)
-  (* apply Z.ltb_lt in Heqb2. simpl in Heqb2. rewrite Nat.sub_0_r in *. *)
-  (* congruence. *)
-  (* (* ofs >= 0; sign=0, ok *) *)
-  (* rewrite int_of_bits_append in H3. rewrite H3. auto. *)
+  rewrite H1 in *. 
+  assert (-1 < int_of_bits l). apply int_of_bits_range.
+  assert (ofs >= two_power_nat n'). lia. 
+  eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2].
+  apply Z.ltb_lt in Heqb2. simpl in Heqb2. congruence.
+  (* ofs >= 0; sign=0, ok *)
+  rewrite int_of_bits_append in H3. rewrite H3. auto.
   
-  (* do 1 destr_in H0. injection H0 as H0.  *)
-  (* assert (length l = S n'). rewrite <- H0. apply bits_of_int_length. *)
-  (* rewrite H0 in *. rewrite Nat.sub_0_r in *. *)
-  (* assert (ofs + two_power_nat (S n')=int_of_bits l).  *)
-  (*   symmetry. apply (bits_of_int_consistency (S n')). *)
-  (*   (* FIX_ME *) *)
-  (*   assert (-1 < ofs + two_power_nat (S n') < two_power_nat (S n')). {simpl. } *)
-  (*   apply H3. apply H0. *)
+  do 1 destr_in H0. injection H0 as H0. 
+  assert (length l = S n'). rewrite <- H0. apply bits_of_int_length.
+  rewrite H0 in *. 
+  assert (ofs + two_power_nat (S n')=int_of_bits l). 
+    symmetry. apply (bits_of_int_consistency (S n')).
+    assert (-1 < ofs + two_power_nat (S n') < two_power_nat (S n')).
+    { eapply andb_true_iff in Heqb0. destruct Heqb0 as [Heqb1 Heqb2].
+      apply Z.leb_le in Heqb1. apply Z.ltb_lt in Heqb2. 
+      rewrite two_power_nat_S. lia. }
+    apply H3. apply H0.
 
-  (* destruct l as [|? l']; *)
-  (* (* l=[] *)simpl in H1; try (congruence); *)
-  (* injection H1 as H1. *)
-  (* destruct b;simpl;f_equal. *)
-  (* (* ofs <  0; sign=1, ok *) *)
-  (* rewrite (two_power_nat_double n') in H3. *)
-  (* rewrite int_of_bits_append in H3. *)
-  (* H3 -> goal *)
-  Admitted.
+  destruct l as [|? l'];
+  (* l=[] *)simpl in H1; try (congruence);
+  injection H1 as H1.
+  destruct b;simpl;f_equal.
+  (* ofs <  0; sign=1, ok *)
+  rewrite (two_power_nat_S n') in H3.
+  rewrite int_of_bits_append in H3. rewrite H1 in *. lia.
+  (* ofs <  0; sign=0, impossible *)
+  eapply andb_true_iff in Heqb0. destruct Heqb0 as [Heqb1 Heqb2].
+  apply Z.leb_le in Heqb1. apply Z.ltb_lt in Heqb2.
+  rewrite int_of_bits_append in H3. rewrite two_power_nat_S in H3.
+  assert (int_of_bits l' < two_power_nat n'). 
+    rewrite <- H1. apply int_of_bits_range. 
+  assert (ofs < - two_power_nat n'). lia. 
+  assert (ofs >= - two_power_nat n'). lia.
+  congruence.
+  f_equal. lia. Qed.
 
 Program Definition zero5  : u5  := b["00000"].
 Program Definition zero12 : u12 := b["000000000000"].
