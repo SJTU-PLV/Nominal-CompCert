@@ -592,7 +592,7 @@ module Target : TARGET =
               assert false
           end
       (* additional instructions *)
-      | Plui_s (rd,id,ofs) -> fprintf oc "    lui	%a, %%lo(%a)\n" ireg rd symbol_offset (id, ofs)
+      | Plui_s (rd,id,ofs) -> fprintf oc "    lui	%a, %%hi(%a)\n" ireg rd symbol_offset (id, ofs)
       | Paddi_s (rd,rs,id,ofs) -> fprintf oc "    addi  %a, %a, %%lo(%a)\n" ireg rd ireg0 rs symbol_offset (id, ofs)
       | Pjal_ofs (ra,Datatypes.Coq_inr ofs) -> fprintf oc "    jal   %a, %a\n" ireg0 ra coqint ofs
       | Pjal_ofs (ra,Datatypes.Coq_inl id) -> fprintf oc "    jal   %a, %a\n" ireg0 ra symbol id

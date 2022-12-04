@@ -12,6 +12,9 @@ CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime \
 INTERPFLAGS=-stdlib ../../runtime -interp -quiet -fall
 LIBS=$(LIBMATH)
 
+# set simulator
+SIMU=qemu-riscv32
+
 # Can run, both in compiled mode and in interpreter mode,
 # and have reference output in Results
 

@@ -45,8 +45,8 @@ Fixpoint copy (fuel:nat) (rsrc rdst: ireg) (al: Z) (osrc odst: ptrofs) (sz :Z) :
 Definition expand_builtin_memcpy_small (sz al:Z) (src dst:builtin_arg preg) :=
   let (tsrc, tdst) :=
       match dst with
-      | BA (IR X5) => (X5, X6)
-      | _ => (X6, X5) end in
+      | BA (IR X5) => (X6, X5)
+      | _ => (X5, X6) end in
   do (rsrc_osrc, i1) <- memcpy_small_arg sz src tsrc;
   do (rdst_odst, i2) <- memcpy_small_arg sz dst tdst;
   let (rsrc, osrc) := rsrc_osrc in
@@ -69,8 +69,8 @@ Definition expand_builtin_memcpy_big (sz al: Z) (src dst: builtin_arg preg) :=
   else
     let (s,d) :=
         match dst with
-        | BA (IR X5) => (X5, X6)
-        | _ => (X6, X5) end in
+        | BA (IR X5) => (X6, X5)
+        | _ => (X5, X6) end in
     do i1 <- memcpy_big_arg sz src s;
     do i2 <- memcpy_big_arg sz dst d;
     let '(load, store, chunksize) :=
@@ -175,11 +175,11 @@ Definition expand_builtin_vstore_common (chunk: memory_chunk) (base: ireg) (ofs:
     OK [Psd src base (Ofsimm ofs)]
   | Mint64, BA_splitlong (BA (IR src1)) (BA (IR src2)) =>
     let ofs' := Ptrofs.add ofs (Ptrofs.repr 4) in
-      OK [Psw src2 base (Ofsimm ofs); Plw src1 base (Ofsimm ofs')]
+      OK [Psw src2 base (Ofsimm ofs); Psw src1 base (Ofsimm ofs')]
   | Mfloat32, BA (FR src) =>
-    OK [Pfls src base (Ofsimm ofs)]
+    OK [Pfss src base (Ofsimm ofs)]
   | Mfloat64, BA (FR src) =>
-    OK [Pfld src base (Ofsimm ofs)]
+    OK [Pfsd src base (Ofsimm ofs)]
   | _,_ => Error(msg"expand_builtin_vstore_common")
   end.
 
