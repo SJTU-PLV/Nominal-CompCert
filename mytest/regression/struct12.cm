@@ -1,0 +1,123 @@
+var "__stringlit_1" readonly {int8 69,int8 82,int8 82,int8 79,int8 82,int8 32,int8 97,int8 116,int8 32,int8 37,int8 100,int8 58,int8 32,int8 37,int8 100,int8 10,int8 0}
+
+extern "__builtin_ais_annot" = builtin "__builtin_ais_annot" : int -> void
+extern "__builtin_bswap64" = builtin "__builtin_bswap64" : long -> long
+extern "__builtin_bswap" = builtin "__builtin_bswap" : int -> int
+extern "__builtin_bswap32" = builtin "__builtin_bswap32" : int -> int
+extern "__builtin_bswap16" = builtin "__builtin_bswap16" : int -> int16u
+extern "__builtin_clz" = builtin "__builtin_clz" : int -> int
+extern "__builtin_clzl" = builtin "__builtin_clzl" : int -> int
+extern "__builtin_clzll" = builtin "__builtin_clzll" : long -> int
+extern "__builtin_ctz" = builtin "__builtin_ctz" : int -> int
+extern "__builtin_ctzl" = builtin "__builtin_ctzl" : int -> int
+extern "__builtin_ctzll" = builtin "__builtin_ctzll" : long -> int
+extern "__builtin_fabs" = builtin "__builtin_fabs" : float -> float
+extern "__builtin_fabsf" = builtin "__builtin_fabsf" : single -> single
+extern "__builtin_fsqrt" = builtin "__builtin_fsqrt" : float -> float
+extern "__builtin_sqrt" = builtin "__builtin_sqrt" : float -> float
+extern "__builtin_memcpy_aligned" = builtin "__builtin_memcpy_aligned" :
+         int -> int -> int -> int -> void
+extern "__builtin_sel" = builtin "__builtin_sel" : int -> void
+extern "__builtin_annot" = builtin "__builtin_annot" : int -> void
+extern "__builtin_annot_intval" = builtin "__builtin_annot_intval" : int ->
+         int -> int
+extern "__builtin_membar" = builtin "__builtin_membar" : void
+extern "__builtin_va_start" = builtin "__builtin_va_start" : int -> void
+extern "__builtin_va_arg" = builtin "__builtin_va_arg" : int -> int -> void
+extern "__builtin_va_copy" = builtin "__builtin_va_copy" : int -> int -> void
+extern "__builtin_va_end" = builtin "__builtin_va_end" : int -> void
+extern "__compcert_va_int32" = extern "__compcert_va_int32" : int -> int
+extern "__compcert_va_int64" = extern "__compcert_va_int64" : int -> long
+extern "__compcert_va_float64" = extern "__compcert_va_float64" : int ->
+         float
+extern "__compcert_va_composite" = extern "__compcert_va_composite" : int ->
+         int -> int
+extern "__compcert_va_saveregs" = extern "__compcert_va_saveregs" : int ->
+         void
+extern "__compcert_i64_dtos" = runtime "__compcert_i64_dtos" : float -> long
+extern "__compcert_i64_dtou" = runtime "__compcert_i64_dtou" : float -> long
+extern "__compcert_i64_stod" = runtime "__compcert_i64_stod" : long -> float
+extern "__compcert_i64_utod" = runtime "__compcert_i64_utod" : long -> float
+extern "__compcert_i64_stof" = runtime "__compcert_i64_stof" : long -> single
+extern "__compcert_i64_utof" = runtime "__compcert_i64_utof" : long -> single
+extern "__compcert_i64_sdiv" = runtime "__compcert_i64_sdiv" : long ->
+         long -> long
+extern "__compcert_i64_udiv" = runtime "__compcert_i64_udiv" : long ->
+         long -> long
+extern "__compcert_i64_smod" = runtime "__compcert_i64_smod" : long ->
+         long -> long
+extern "__compcert_i64_umod" = runtime "__compcert_i64_umod" : long ->
+         long -> long
+extern "__compcert_i64_shl" = runtime "__compcert_i64_shl" : long -> int ->
+         long
+extern "__compcert_i64_shr" = runtime "__compcert_i64_shr" : long -> int ->
+         long
+extern "__compcert_i64_sar" = runtime "__compcert_i64_sar" : long -> int ->
+         long
+extern "__compcert_i64_smulh" = runtime "__compcert_i64_smulh" : long ->
+         long -> long
+extern "__compcert_i64_umulh" = runtime "__compcert_i64_umulh" : long ->
+         long -> long
+extern "__builtin_fence" = builtin "__builtin_fence" : void
+extern "__builtin_fmadd" = builtin "__builtin_fmadd" : float -> float ->
+         float -> float
+extern "__builtin_fmsub" = builtin "__builtin_fmsub" : float -> float ->
+         float -> float
+extern "__builtin_fnmadd" = builtin "__builtin_fnmadd" : float -> float ->
+         float -> float
+extern "__builtin_fnmsub" = builtin "__builtin_fnmsub" : float -> float ->
+         float -> float
+extern "__builtin_fmax" = builtin "__builtin_fmax" : float -> float -> float
+extern "__builtin_fmin" = builtin "__builtin_fmin" : float -> float -> float
+extern "__builtin_debug" = extern "__builtin_debug" : int -> void
+extern "printf" = extern "printf" : int -> int
+var "v" {[260]}
+var "q" {4("v")}
+var "zp" {0("v")}
+"rp"('_res') : int -> void
+{
+  builtin memcpy size 256 align 1 ('_res', int32["zp"]) : int -> int -> void;
+  return;
+}
+"qp"() : void
+{
+  stack 256;
+  "rp"(&0) : int -> void;
+  builtin memcpy size 256 align 1 (int32["q"], &0) : int -> int -> void;
+}
+"main"() : int
+{
+  var 'i';
+  'i' = 0;
+  {{ loop {
+       {{ if ('i' < 256) {
+            /*skip*/
+          } else {
+            exit 1;
+          }
+          int8u[int32["zp"] + 0 + 1 * 'i'] = int8u 'i';
+       }}
+       'i' = 'i' + 1;
+     }
+  }}
+  "qp"() : void;
+  'i' = 0;
+  {{ loop {
+       {{ if ('i' < 256) {
+            /*skip*/
+          } else {
+            exit 1;
+          }
+          if (int8u[int32["q"] + 0 + 1 * 'i'] != 'i') {
+            "printf"
+              ("__stringlit_1", 'i', int8u[int32["q"] + 0 + 1 * 'i'])
+              : int -> int -> int -> int;
+          }
+       }}
+       'i' = 'i' + 1;
+     }
+  }}
+  return 0;
+  return 0;
+}
+

@@ -1,0 +1,562 @@
+ELF Header:
+  Magic:   7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF32
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              REL (Relocatable file)
+  Machine:                           RISC-V
+  Version:                           0x1
+  Entry point address:               0x0
+  Start of program headers:          0 (bytes into file)
+  Start of section headers:          11226 (bytes into file)
+  Flags:                             0x4, double-float ABI
+  Size of this header:               52 (bytes)
+  Size of program headers:           32 (bytes)
+  Number of program headers:         0
+  Size of section headers:           40 (bytes)
+  Number of section headers:         38
+  Section header string table index: 37
+
+Section Headers:
+  [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al
+  [ 0] __stringlit_10    NULL            00000000 000000 000000 00      0   0  0
+  [ 1] __stringlit_10    PROGBITS        00000000 000034 000006 00   A  0   0 16
+  [ 2] __floatlit_21     PROGBITS        00000000 00003a 000008 00   A  0   0 16
+  [ 3] __stringlit_2     PROGBITS        00000000 000042 000003 00   A  0   0 16
+  [ 4] __floatlit_13     PROGBITS        00000000 000045 000008 00   A  0   0 16
+  [ 5] __stringlit_18    PROGBITS        00000000 00004d 00000d 00   A  0   0 16
+  [ 6] __stringlit_14    PROGBITS        00000000 00005a 000015 00   A  0   0 16
+  [ 7] __stringlit_6     PROGBITS        00000000 00006f 00000e 00   A  0   0 16
+  [ 8] __floatlit_17     PROGBITS        00000000 00007d 000008 00   A  0   0 16
+  [ 9] __stringlit_12    PROGBITS        00000000 000085 00000a 00   A  0   0 16
+  [10] __floatlit_23     PROGBITS        00000000 00008f 000008 00   A  0   0 16
+  [11] __stringlit_4     PROGBITS        00000000 000097 00000a 00   A  0   0 16
+  [12] __floatlit_15     PROGBITS        00000000 0000a1 000008 00   A  0   0 16
+  [13] __stringlit_20    PROGBITS        00000000 0000a9 000011 00   A  0   0 16
+  [14] __stringlit_16    PROGBITS        00000000 0000ba 000016 00   A  0   0 16
+  [15] __stringlit_8     PROGBITS        00000000 0000d0 00000f 00   A  0   0 16
+  [16] __floatlit_19     PROGBITS        00000000 0000df 000008 00   A  0   0 16
+  [17] __stringlit_11    PROGBITS        00000000 0000e7 000007 00   A  0   0 16
+  [18] __floatlit_22     PROGBITS        00000000 0000ee 000004 00   A  0   0 16
+  [19] __stringlit_3     PROGBITS        00000000 0000f2 00000c 00   A  0   0 16
+  [20] __floatlit_14     PROGBITS        00000000 0000fe 000004 00   A  0   0 16
+  [21] __stringlit_19    PROGBITS        00000000 000102 00000e 00   A  0   0 16
+  [22] __stringlit_15    PROGBITS        00000000 000110 000014 00   A  0   0 16
+  [23] __stringlit_7     PROGBITS        00000000 000124 00000d 00   A  0   0 16
+  [24] __floatlit_18     PROGBITS        00000000 000131 000008 00   A  0   0 16
+  [25] __stringlit_13    PROGBITS        00000000 000139 000013 00   A  0   0 16
+  [26] __floatlit_24     PROGBITS        00000000 00014c 000008 00   A  0   0 16
+  [27] __stringlit_5     PROGBITS        00000000 000154 00000a 00   A  0   0 16
+  [28] __floatlit_16     PROGBITS        00000000 00015e 000004 00   A  0   0 16
+  [29] main              PROGBITS        00000000 000162 000ac4 00  AX  0   0  1
+  [30] __stringlit_1     PROGBITS        00000000 000c26 000007 00   A  0   0 16
+  [31] __stringlit_17    PROGBITS        00000000 000c2d 00000b 00   A  0   0 16
+  [32] __stringlit_9     PROGBITS        00000000 000c38 000004 00   A  0   0 16
+  [33] __floatlit_20     PROGBITS        00000000 000c3c 000004 00   A  0   0 16
+  [34] .strtab           STRTAB          00000000 000c40 0005a7 00      0   0  1
+  [35] .symtab           SYMTAB          00000000 0011e7 000600 10     34  33  1
+  [36] .relmain          RELA            00000000 0017e7 001200 0c     35  29  1
+  [37] .shstrtab         STRTAB          00000000 0029e7 0001f3 00      0   0  1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings), I (info),
+  L (link order), O (extra OS processing required), G (group), T (TLS),
+  C (compressed), x (unknown), o (OS specific), E (exclude),
+  D (mbind), p (processor specific)
+
+There are no section groups in this file.
+
+There are no program headers in this file.
+
+There is no dynamic section in this file.
+
+Relocation section '.relmain' at offset 0x17e7 contains 384 entries:
+ Offset     Info    Type            Sym.Value  Sym. Name + Addend
+00000024  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000028  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000034  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000038  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+00000040  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+00000044  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+00000048  0000131a R_RISCV_HI20      00000000   __stringlit_3 + 0
+0000004c  0000131b R_RISCV_LO12_I    00000000   __stringlit_3 + 0
+00000050  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000068  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+0000006c  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000078  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+0000007c  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+00000084  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000088  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+0000008c  0000131a R_RISCV_HI20      00000000   __stringlit_3 + 0
+00000090  0000131b R_RISCV_LO12_I    00000000   __stringlit_3 + 0
+00000094  00004b11 R_RISCV_JAL       00000000   printf + 0
+000000ac  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000000b0  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000000bc  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000000c0  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+000000c8  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+000000cc  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+000000d0  0000071a R_RISCV_HI20      00000000   __stringlit_6 + 0
+000000d4  0000071b R_RISCV_LO12_I    00000000   __stringlit_6 + 0
+000000d8  00004b11 R_RISCV_JAL       00000000   printf + 0
+000000f0  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000000f4  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000100  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000104  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000010c  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000110  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+00000114  0000071a R_RISCV_HI20      00000000   __stringlit_6 + 0
+00000118  0000071b R_RISCV_LO12_I    00000000   __stringlit_6 + 0
+0000011c  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000134  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000138  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000144  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000148  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+00000150  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+00000154  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+00000158  0000171a R_RISCV_HI20      00000000   __stringlit_7 + 0
+0000015c  0000171b R_RISCV_LO12_I    00000000   __stringlit_7 + 0
+00000160  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000180  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000184  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000190  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000194  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000019c  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+000001a0  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+000001a4  0000171a R_RISCV_HI20      00000000   __stringlit_7 + 0
+000001a8  0000171b R_RISCV_LO12_I    00000000   __stringlit_7 + 0
+000001ac  00004b11 R_RISCV_JAL       00000000   printf + 0
+000001c4  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000001c8  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000001d4  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000001d8  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+000001e0  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+000001e4  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+000001e8  00000f1a R_RISCV_HI20      00000000   __stringlit_8 + 0
+000001ec  00000f1b R_RISCV_LO12_I    00000000   __stringlit_8 + 0
+000001f0  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000210  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000214  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000220  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000224  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000022c  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000230  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+00000234  00000f1a R_RISCV_HI20      00000000   __stringlit_8 + 0
+00000238  00000f1b R_RISCV_LO12_I    00000000   __stringlit_8 + 0
+0000023c  00004b11 R_RISCV_JAL       00000000   printf + 0
+0000025c  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000260  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+0000026c  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000270  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+00000278  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+0000027c  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+00000280  00001f1a R_RISCV_HI20      00000000   __stringlit_9 + 0
+00000284  00001f1b R_RISCV_LO12_I    00000000   __stringlit_9 + 0
+00000288  00004b11 R_RISCV_JAL       00000000   printf + 0
+000002a8  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000002ac  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000002b8  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000002bc  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+000002c4  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+000002c8  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+000002cc  00001f1a R_RISCV_HI20      00000000   __stringlit_9 + 0
+000002d0  00001f1b R_RISCV_LO12_I    00000000   __stringlit_9 + 0
+000002d4  00004b11 R_RISCV_JAL       00000000   printf + 0
+000002d8  0000041a R_RISCV_HI20      00000000   __floatlit_13 + 0
+000002dc  0000041b R_RISCV_LO12_I    00000000   __floatlit_13 + 0
+000002e0  0000141a R_RISCV_HI20      00000000   __floatlit_14 + 0
+000002e4  0000141b R_RISCV_LO12_I    00000000   __floatlit_14 + 0
+000002fc  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000300  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+0000030c  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000310  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+00000318  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+0000031c  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+00000320  0000011a R_RISCV_HI20      00000000   <null> + 0
+00000324  0000011b R_RISCV_LO12_I    00000000   <null> + 0
+00000328  00004b11 R_RISCV_JAL       00000000   printf + 0
+0000032c  00000c1a R_RISCV_HI20      00000000   __floatlit_15 + 0
+00000330  00000c1b R_RISCV_LO12_I    00000000   __floatlit_15 + 0
+00000334  00001c1a R_RISCV_HI20      00000000   __floatlit_16 + 0
+00000338  00001c1b R_RISCV_LO12_I    00000000   __floatlit_16 + 0
+00000350  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000354  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000360  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000364  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000036c  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000370  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+00000374  0000011a R_RISCV_HI20      00000000   <null> + 0
+00000378  0000011b R_RISCV_LO12_I    00000000   <null> + 0
+0000037c  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000380  0000081a R_RISCV_HI20      00000000   __floatlit_17 + 0
+00000384  0000081b R_RISCV_LO12_I    00000000   __floatlit_17 + 0
+00000398  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+0000039c  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000003a8  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000003ac  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+000003b4  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+000003b8  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+000003bc  0000111a R_RISCV_HI20      00000000   __stringlit_11 + 0
+000003c0  0000111b R_RISCV_LO12_I    00000000   __stringlit_11 + 0
+000003c4  00004b11 R_RISCV_JAL       00000000   printf + 0
+000003c8  0000181a R_RISCV_HI20      00000000   __floatlit_18 + 0
+000003cc  0000181b R_RISCV_LO12_I    00000000   __floatlit_18 + 0
+000003e0  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000003e4  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000003f0  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000003f4  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+000003fc  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000400  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+00000404  0000111a R_RISCV_HI20      00000000   __stringlit_11 + 0
+00000408  0000111b R_RISCV_LO12_I    00000000   __stringlit_11 + 0
+0000040c  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000450  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000454  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000460  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000464  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000046c  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+00000470  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+00000474  0000091a R_RISCV_HI20      00000000   __stringlit_12 + 0
+00000478  0000091b R_RISCV_LO12_I    00000000   __stringlit_12 + 0
+0000047c  00004b11 R_RISCV_JAL       00000000   printf + 0
+000004c0  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000004c4  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000004d0  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000004d4  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+000004dc  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+000004e0  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+000004e4  0000091a R_RISCV_HI20      00000000   __stringlit_12 + 0
+000004e8  0000091b R_RISCV_LO12_I    00000000   __stringlit_12 + 0
+000004ec  00004b11 R_RISCV_JAL       00000000   printf + 0
+000004f0  00003b1a R_RISCV_HI20      00000008   gsc + 0
+000004f4  00003b1b R_RISCV_LO12_I    00000008   gsc + 0
+00000500  00003b1a R_RISCV_HI20      00000008   gsc + 0
+00000504  00003b1b R_RISCV_LO12_I    00000008   gsc + 0
+00000510  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000514  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000520  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000524  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000052c  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+00000530  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+00000534  0000191a R_RISCV_HI20      00000000   __stringlit_13 + 0
+00000538  0000191b R_RISCV_LO12_I    00000000   __stringlit_13 + 0
+0000053c  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000544  00003b1a R_RISCV_HI20      00000008   gsc + 0
+00000548  00003b1c R_RISCV_LO12_S    00000008   gsc + 0
+0000054c  00003b1a R_RISCV_HI20      00000008   gsc + 0
+00000550  00003b1b R_RISCV_LO12_I    00000008   gsc + 0
+00000560  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000564  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000570  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000574  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000057c  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000580  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+00000584  0000191a R_RISCV_HI20      00000000   __stringlit_13 + 0
+00000588  0000191b R_RISCV_LO12_I    00000000   __stringlit_13 + 0
+0000058c  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000590  00005c1a R_RISCV_HI20      00000008   guc + 0
+00000594  00005c1b R_RISCV_LO12_I    00000008   guc + 0
+000005a0  00005c1a R_RISCV_HI20      00000008   guc + 0
+000005a4  00005c1b R_RISCV_LO12_I    00000008   guc + 0
+000005b0  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000005b4  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000005c0  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000005c4  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+000005cc  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+000005d0  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+000005d4  0000061a R_RISCV_HI20      00000000   __stringlit_14 + 0
+000005d8  0000061b R_RISCV_LO12_I    00000000   __stringlit_14 + 0
+000005dc  00004b11 R_RISCV_JAL       00000000   printf + 0
+000005e4  00005c1a R_RISCV_HI20      00000008   guc + 0
+000005e8  00005c1c R_RISCV_LO12_S    00000008   guc + 0
+000005ec  00005c1a R_RISCV_HI20      00000008   guc + 0
+000005f0  00005c1b R_RISCV_LO12_I    00000008   guc + 0
+00000600  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000604  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000610  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000614  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000061c  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000620  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+00000624  0000061a R_RISCV_HI20      00000000   __stringlit_14 + 0
+00000628  0000061b R_RISCV_LO12_I    00000000   __stringlit_14 + 0
+0000062c  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000630  0000271a R_RISCV_HI20      00000008   gss + 0
+00000634  0000271b R_RISCV_LO12_I    00000008   gss + 0
+00000640  0000271a R_RISCV_HI20      00000008   gss + 0
+00000644  0000271b R_RISCV_LO12_I    00000008   gss + 0
+00000650  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000654  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000660  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000664  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000066c  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+00000670  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+00000674  0000161a R_RISCV_HI20      00000000   __stringlit_15 + 0
+00000678  0000161b R_RISCV_LO12_I    00000000   __stringlit_15 + 0
+0000067c  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000688  0000271a R_RISCV_HI20      00000008   gss + 0
+0000068c  0000271c R_RISCV_LO12_S    00000008   gss + 0
+00000690  0000271a R_RISCV_HI20      00000008   gss + 0
+00000694  0000271b R_RISCV_LO12_I    00000008   gss + 0
+000006a8  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000006ac  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000006b8  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000006bc  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+000006c4  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+000006c8  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+000006cc  0000161a R_RISCV_HI20      00000000   __stringlit_15 + 0
+000006d0  0000161b R_RISCV_LO12_I    00000000   __stringlit_15 + 0
+000006d4  00004b11 R_RISCV_JAL       00000000   printf + 0
+000006d8  0000471a R_RISCV_HI20      00000008   gus + 0
+000006dc  0000471b R_RISCV_LO12_I    00000008   gus + 0
+000006e8  0000471a R_RISCV_HI20      00000008   gus + 0
+000006ec  0000471b R_RISCV_LO12_I    00000008   gus + 0
+000006f8  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000006fc  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000708  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+0000070c  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+00000714  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+00000718  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+0000071c  00000e1a R_RISCV_HI20      00000000   __stringlit_16 + 0
+00000720  00000e1b R_RISCV_LO12_I    00000000   __stringlit_16 + 0
+00000724  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000730  0000471a R_RISCV_HI20      00000008   gus + 0
+00000734  0000471c R_RISCV_LO12_S    00000008   gus + 0
+00000738  0000471a R_RISCV_HI20      00000008   gus + 0
+0000073c  0000471b R_RISCV_LO12_I    00000008   gus + 0
+00000750  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000754  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000760  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000764  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000076c  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000770  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+00000774  00000e1a R_RISCV_HI20      00000000   __stringlit_16 + 0
+00000778  00000e1b R_RISCV_LO12_I    00000000   __stringlit_16 + 0
+0000077c  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000780  0000371a R_RISCV_HI20      00000008   gi + 0
+00000784  0000371b R_RISCV_LO12_I    00000008   gi + 0
+00000794  0000371a R_RISCV_HI20      00000008   gi + 0
+00000798  0000371b R_RISCV_LO12_I    00000008   gi + 0
+000007a8  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000007ac  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000007b8  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000007bc  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+000007c4  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+000007c8  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+000007cc  00001e1a R_RISCV_HI20      00000000   __stringlit_17 + 0
+000007d0  00001e1b R_RISCV_LO12_I    00000000   __stringlit_17 + 0
+000007d4  00004b11 R_RISCV_JAL       00000000   printf + 0
+000007e0  0000371a R_RISCV_HI20      00000008   gi + 0
+000007e4  0000371c R_RISCV_LO12_S    00000008   gi + 0
+000007e8  0000371a R_RISCV_HI20      00000008   gi + 0
+000007ec  0000371b R_RISCV_LO12_I    00000008   gi + 0
+00000800  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000804  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000810  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000814  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000081c  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000820  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+00000824  00001e1a R_RISCV_HI20      00000000   __stringlit_17 + 0
+00000828  00001e1b R_RISCV_LO12_I    00000000   __stringlit_17 + 0
+0000082c  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000830  00002f1a R_RISCV_HI20      00000008   gf + 0
+00000834  00002f1b R_RISCV_LO12_I    00000008   gf + 0
+00000838  0000101a R_RISCV_HI20      00000000   __floatlit_19 + 0
+0000083c  0000101b R_RISCV_LO12_I    00000000   __floatlit_19 + 0
+00000840  0000201a R_RISCV_HI20      00000000   __floatlit_20 + 0
+00000844  0000201b R_RISCV_LO12_I    00000000   __floatlit_20 + 0
+0000084c  00002f1a R_RISCV_HI20      00000008   gf + 0
+00000850  00002f1b R_RISCV_LO12_I    00000008   gf + 0
+00000860  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000864  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000870  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000874  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+0000087c  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+00000880  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+00000884  0000051a R_RISCV_HI20      00000000   __stringlit_18 + 0
+00000888  0000051b R_RISCV_LO12_I    00000000   __stringlit_18 + 0
+0000088c  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000890  0000021a R_RISCV_HI20      00000000   __floatlit_21 + 0
+00000894  0000021b R_RISCV_LO12_I    00000000   __floatlit_21 + 0
+00000898  0000121a R_RISCV_HI20      00000000   __floatlit_22 + 0
+0000089c  0000121b R_RISCV_LO12_I    00000000   __floatlit_22 + 0
+000008a0  00002f1a R_RISCV_HI20      00000008   gf + 0
+000008a4  00002f1c R_RISCV_LO12_S    00000008   gf + 0
+000008a8  00002f1a R_RISCV_HI20      00000008   gf + 0
+000008ac  00002f1b R_RISCV_LO12_I    00000008   gf + 0
+000008c0  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000008c4  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000008d0  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000008d4  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+000008dc  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+000008e0  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+000008e4  0000051a R_RISCV_HI20      00000000   __stringlit_18 + 0
+000008e8  0000051b R_RISCV_LO12_I    00000000   __stringlit_18 + 0
+000008ec  00004b11 R_RISCV_JAL       00000000   printf + 0
+000008f0  00004f1a R_RISCV_HI20      00000008   gd + 0
+000008f4  00004f1b R_RISCV_LO12_I    00000008   gd + 0
+000008f8  00000a1a R_RISCV_HI20      00000000   __floatlit_23 + 0
+000008fc  00000a1b R_RISCV_LO12_I    00000000   __floatlit_23 + 0
+00000904  00004f1a R_RISCV_HI20      00000008   gd + 0
+00000908  00004f1b R_RISCV_LO12_I    00000008   gd + 0
+00000914  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000918  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000924  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000928  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+00000930  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+00000934  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+00000938  0000151a R_RISCV_HI20      00000000   __stringlit_19 + 0
+0000093c  0000151b R_RISCV_LO12_I    00000000   __stringlit_19 + 0
+00000940  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000944  00001a1a R_RISCV_HI20      00000000   __floatlit_24 + 0
+00000948  00001a1b R_RISCV_LO12_I    00000000   __floatlit_24 + 0
+0000094c  00004f1a R_RISCV_HI20      00000008   gd + 0
+00000950  00004f1c R_RISCV_LO12_S    00000008   gd + 0
+00000954  00004f1a R_RISCV_HI20      00000008   gd + 0
+00000958  00004f1b R_RISCV_LO12_I    00000008   gd + 0
+00000968  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+0000096c  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000978  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+0000097c  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+00000984  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000988  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+0000098c  0000151a R_RISCV_HI20      00000000   __stringlit_19 + 0
+00000990  0000151b R_RISCV_LO12_I    00000000   __stringlit_19 + 0
+00000994  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000998  00003f1a R_RISCV_HI20      00000008   gll + 0
+0000099c  00003f1b R_RISCV_LO12_I    00000008   gll + 0
+000009b8  00003f1a R_RISCV_HI20      00000008   gll + 0
+000009bc  00003f1b R_RISCV_LO12_I    00000008   gll + 0
+000009c0  00003f1a R_RISCV_HI20      00000008   gll + 4
+000009c4  00003f1b R_RISCV_LO12_I    00000008   gll + 4
+000009e8  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000009ec  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000009f8  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+000009fc  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+00000a04  00000b1a R_RISCV_HI20      00000000   __stringlit_4 + 0
+00000a08  00000b1b R_RISCV_LO12_I    00000000   __stringlit_4 + 0
+00000a0c  00000d1a R_RISCV_HI20      00000000   __stringlit_20 + 0
+00000a10  00000d1b R_RISCV_LO12_I    00000000   __stringlit_20 + 0
+00000a14  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000a28  00003f1a R_RISCV_HI20      00000008   gll + 0
+00000a2c  00003f1c R_RISCV_LO12_S    00000008   gll + 0
+00000a30  00003f1a R_RISCV_HI20      00000008   gll + 4
+00000a34  00003f1c R_RISCV_LO12_S    00000008   gll + 4
+00000a38  00003f1a R_RISCV_HI20      00000008   gll + 0
+00000a3c  00003f1b R_RISCV_LO12_I    00000008   gll + 0
+00000a68  00001d1a R_RISCV_HI20      00000000   __stringlit_1 + 0
+00000a6c  00001d1b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+00000a78  0000031a R_RISCV_HI20      00000000   __stringlit_2 + 0
+00000a7c  0000031b R_RISCV_LO12_I    00000000   __stringlit_2 + 0
+00000a84  00001b1a R_RISCV_HI20      00000000   __stringlit_5 + 0
+00000a88  00001b1b R_RISCV_LO12_I    00000000   __stringlit_5 + 0
+00000a8c  00000d1a R_RISCV_HI20      00000000   __stringlit_20 + 0
+00000a90  00000d1b R_RISCV_LO12_I    00000000   __stringlit_20 + 0
+00000a94  00004b11 R_RISCV_JAL       00000000   printf + 0
+00000a98  00003f1a R_RISCV_HI20      00000008   gll + 0
+00000a9c  00003f1b R_RISCV_LO12_I    00000008   gll + 0
+00000aa4  0000581a R_RISCV_HI20      00000008   gu + 0
+00000aa8  0000581b R_RISCV_LO12_I    00000008   gu + 0
+
+The decoding of unwind sections for machine type RISC-V is not currently supported.
+
+Symbol table '.symtab' contains 96 entries:
+   Num:    Value  Size Type    Bind   Vis      Ndx Name
+     0: 00000000     0 NOTYPE  LOCAL  DEFAULT  UND __stringlit_10
+     1: 00000000     6 OBJECT  LOCAL  DEFAULT    1 __stringlit_10
+     2: 00000000     8 OBJECT  LOCAL  DEFAULT    2 __floatlit_21
+     3: 00000000     3 OBJECT  LOCAL  DEFAULT    3 __stringlit_2
+     4: 00000000     8 OBJECT  LOCAL  DEFAULT    4 __floatlit_13
+     5: 00000000    13 OBJECT  LOCAL  DEFAULT    5 __stringlit_18
+     6: 00000000    21 OBJECT  LOCAL  DEFAULT    6 __stringlit_14
+     7: 00000000    14 OBJECT  LOCAL  DEFAULT    7 __stringlit_6
+     8: 00000000     8 OBJECT  LOCAL  DEFAULT    8 __floatlit_17
+     9: 00000000    10 OBJECT  LOCAL  DEFAULT    9 __stringlit_12
+    10: 00000000     8 OBJECT  LOCAL  DEFAULT   10 __floatlit_23
+    11: 00000000    10 OBJECT  LOCAL  DEFAULT   11 __stringlit_4
+    12: 00000000     8 OBJECT  LOCAL  DEFAULT   12 __floatlit_15
+    13: 00000000    17 OBJECT  LOCAL  DEFAULT   13 __stringlit_20
+    14: 00000000    22 OBJECT  LOCAL  DEFAULT   14 __stringlit_16
+    15: 00000000    15 OBJECT  LOCAL  DEFAULT   15 __stringlit_8
+    16: 00000000     8 OBJECT  LOCAL  DEFAULT   16 __floatlit_19
+    17: 00000000     7 OBJECT  LOCAL  DEFAULT   17 __stringlit_11
+    18: 00000000     4 OBJECT  LOCAL  DEFAULT   18 __floatlit_22
+    19: 00000000    12 OBJECT  LOCAL  DEFAULT   19 __stringlit_3
+    20: 00000000     4 OBJECT  LOCAL  DEFAULT   20 __floatlit_14
+    21: 00000000    14 OBJECT  LOCAL  DEFAULT   21 __stringlit_19
+    22: 00000000    20 OBJECT  LOCAL  DEFAULT   22 __stringlit_15
+    23: 00000000    13 OBJECT  LOCAL  DEFAULT   23 __stringlit_7
+    24: 00000000     8 OBJECT  LOCAL  DEFAULT   24 __floatlit_18
+    25: 00000000    19 OBJECT  LOCAL  DEFAULT   25 __stringlit_13
+    26: 00000000     8 OBJECT  LOCAL  DEFAULT   26 __floatlit_24
+    27: 00000000    10 OBJECT  LOCAL  DEFAULT   27 __stringlit_5
+    28: 00000000     4 OBJECT  LOCAL  DEFAULT   28 __floatlit_16
+    29: 00000000     7 OBJECT  LOCAL  DEFAULT   30 __stringlit_1
+    30: 00000000    11 OBJECT  LOCAL  DEFAULT   31 __stringlit_17
+    31: 00000000     4 OBJECT  LOCAL  DEFAULT   32 __stringlit_9
+    32: 00000000     4 OBJECT  LOCAL  DEFAULT   33 __floatlit_20
+    33: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_stod
+    34: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_memcpy[...]
+    35: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fnmadd
+    36: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_clzll
+    37: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_shl
+    38: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_va_end
+    39: 00000008     2 OBJECT  GLOBAL DEFAULT  COM gss
+    40: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_bswap32
+    41: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_sdiv
+    42: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_membar
+    43: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_debug
+    44: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fabs
+    45: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_umulh
+    46: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_va_co[...]
+    47: 00000008     4 OBJECT  GLOBAL DEFAULT  COM gf
+    48: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_bswap64
+    49: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_stof
+    50: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_annot
+    51: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fmax
+    52: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_ctzl
+    53: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_sar
+    54: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_va_int64
+    55: 00000008     4 OBJECT  GLOBAL DEFAULT  COM gi
+    56: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_clz
+    57: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_smod
+    58: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_va_arg
+    59: 00000008     1 OBJECT  GLOBAL DEFAULT  COM gsc
+    60: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fsqrt
+    61: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fmadd
+    62: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_dtos
+    63: 00000008     8 OBJECT  GLOBAL DEFAULT  COM gll
+    64: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_ais_annot
+    65: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_utod
+    66: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_sel
+    67: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fnmsub
+    68: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_ctz
+    69: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_shr
+    70: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_va_int32
+    71: 00000008     2 OBJECT  GLOBAL DEFAULT  COM gus
+    72: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_bswap16
+    73: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_udiv
+    74: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_va_start
+    75: 00000000     0 FUNC    GLOBAL DEFAULT  UND printf
+    76: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fabsf
+    77: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fence
+    78: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_va_sa[...]
+    79: 00000008     8 OBJECT  GLOBAL DEFAULT  COM gd
+    80: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_bswap
+    81: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_utof
+    82: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_annot_[...]
+    83: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fmin
+    84: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_ctzll
+    85: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_smulh
+    86: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_va_float64
+    87: 00000000  2756 FUNC    GLOBAL DEFAULT   29 main
+    88: 00000008     4 OBJECT  GLOBAL DEFAULT  COM gu
+    89: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_clzl
+    90: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_umod
+    91: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_va_copy
+    92: 00000008     1 OBJECT  GLOBAL DEFAULT  COM guc
+    93: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_sqrt
+    94: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fmsub
+    95: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_dtou
+
+No version information found in this file.

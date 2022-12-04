@@ -1,0 +1,415 @@
+ELF Header:
+  Magic:   7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF32
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              EXEC (Executable file)
+  Machine:                           RISC-V
+  Version:                           0x1
+  Entry point address:               0x10380
+  Start of program headers:          52 (bytes into file)
+  Start of section headers:          19056 (bytes into file)
+  Flags:                             0x5, RVC, double-float ABI
+  Size of this header:               52 (bytes)
+  Size of program headers:           32 (bytes)
+  Number of program headers:         10
+  Size of section headers:           40 (bytes)
+  Number of section headers:         68
+  Section header string table index: 67
+
+Section Headers:
+  [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al
+  [ 0]                   NULL            00000000 000000 000000 00      0   0  0
+  [ 1] .interp           PROGBITS        00010174 000174 000022 00   A  0   0  1
+  [ 2] .note.ABI-tag     NOTE            00010198 000198 000020 00   A  0   0  4
+  [ 3] .hash             HASH            000101b8 0001b8 00002c 04   A  5   0  4
+  [ 4] .gnu.hash         GNU_HASH        000101e4 0001e4 00002c 04   A  5   0  4
+  [ 5] .dynsym           DYNSYM          00010210 000210 000060 10   A  6   1  4
+  [ 6] .dynstr           STRTAB          00010270 000270 000081 00   A  0   0  1
+  [ 7] .gnu.version      VERSYM          000102f2 0002f2 00000c 02   A  5   0  2
+  [ 8] .gnu.version_r    VERNEED         00010300 000300 000020 00   A  6   1  4
+  [ 9] .rela.plt         RELA            00010320 000320 000018 0c  AI  5  52  4
+  [10] .plt              PROGBITS        00010340 000340 000040 10  AX  0   0 16
+  [11] .text             PROGBITS        00010380 000380 000b32 00  AX  0   0 16
+  [12] main              PROGBITS        00010eb2 000eb2 000ac4 00  AX  0   0  1
+  [13] .rodata           PROGBITS        00011978 001978 000020 00   A  0   0  8
+  [14]                   PROGBITS        000119a0 0019a0 000006 00   A  0   0 16
+  [15] __floatlit_21     PROGBITS        000119b0 0019b0 000008 00   A  0   0 16
+  [16] __stringlit_2     PROGBITS        000119c0 0019c0 000003 00   A  0   0 16
+  [17] __floatlit_13     PROGBITS        000119d0 0019d0 000008 00   A  0   0 16
+  [18] __stringlit_18    PROGBITS        000119e0 0019e0 00000d 00   A  0   0 16
+  [19] __stringlit_14    PROGBITS        000119f0 0019f0 000015 00   A  0   0 16
+  [20] __stringlit_6     PROGBITS        00011a10 001a10 00000e 00   A  0   0 16
+  [21] __floatlit_17     PROGBITS        00011a20 001a20 000008 00   A  0   0 16
+  [22] __stringlit_12    PROGBITS        00011a30 001a30 00000a 00   A  0   0 16
+  [23] __floatlit_23     PROGBITS        00011a40 001a40 000008 00   A  0   0 16
+  [24] __stringlit_4     PROGBITS        00011a50 001a50 00000a 00   A  0   0 16
+  [25] __floatlit_15     PROGBITS        00011a60 001a60 000008 00   A  0   0 16
+  [26] __stringlit_20    PROGBITS        00011a70 001a70 000011 00   A  0   0 16
+  [27] __stringlit_16    PROGBITS        00011a90 001a90 000016 00   A  0   0 16
+  [28] __stringlit_8     PROGBITS        00011ab0 001ab0 00000f 00   A  0   0 16
+  [29] __floatlit_19     PROGBITS        00011ac0 001ac0 000008 00   A  0   0 16
+  [30] __stringlit_11    PROGBITS        00011ad0 001ad0 000007 00   A  0   0 16
+  [31] __floatlit_22     PROGBITS        00011ae0 001ae0 000004 00   A  0   0 16
+  [32] __stringlit_3     PROGBITS        00011af0 001af0 00000c 00   A  0   0 16
+  [33] __floatlit_14     PROGBITS        00011b00 001b00 000004 00   A  0   0 16
+  [34] __stringlit_19    PROGBITS        00011b10 001b10 00000e 00   A  0   0 16
+  [35] __stringlit_15    PROGBITS        00011b20 001b20 000014 00   A  0   0 16
+  [36] __stringlit_7     PROGBITS        00011b40 001b40 00000d 00   A  0   0 16
+  [37] __floatlit_18     PROGBITS        00011b50 001b50 000008 00   A  0   0 16
+  [38] __stringlit_13    PROGBITS        00011b60 001b60 000013 00   A  0   0 16
+  [39] __floatlit_24     PROGBITS        00011b80 001b80 000008 00   A  0   0 16
+  [40] __stringlit_5     PROGBITS        00011b90 001b90 00000a 00   A  0   0 16
+  [41] __floatlit_16     PROGBITS        00011ba0 001ba0 000004 00   A  0   0 16
+  [42] __stringlit_1     PROGBITS        00011bb0 001bb0 000007 00   A  0   0 16
+  [43] __stringlit_17    PROGBITS        00011bc0 001bc0 00000b 00   A  0   0 16
+  [44] __stringlit_9     PROGBITS        00011bd0 001bd0 000004 00   A  0   0 16
+  [45] __floatlit_20     PROGBITS        00011be0 001be0 000004 00   A  0   0 16
+  [46] .eh_frame_hdr     PROGBITS        00011be4 001be4 000014 00   A  0   0  4
+  [47] .eh_frame         PROGBITS        00011bf8 001bf8 00002c 00   A  0   0  4
+  [48] .preinit_array    PREINIT_ARRAY   00012efc 001efc 000004 04  WA  0   0  1
+  [49] .init_array       INIT_ARRAY      00012f00 001f00 000004 04  WA  0   0  4
+  [50] .fini_array       FINI_ARRAY      00012f04 001f04 000004 04  WA  0   0  4
+  [51] .dynamic          DYNAMIC         00012f08 001f08 0000f8 08  WA  6   0  4
+  [52] .got              PROGBITS        00013000 002000 000014 04  WA  0   0  4
+  [53] .sdata            PROGBITS        00013014 002014 000008 00  WA  0   0  4
+  [54] .bss              NOBITS          00013020 00201c 000050 00  WA  0   0  8
+  [55] .comment          PROGBITS        00000000 00201c 00002d 01  MS  0   0  1
+  [56] .riscv.attributes RISCV_ATTRIBUTE 00000000 002049 000035 00      0   0  1
+  [57] .debug_aranges    PROGBITS        00000000 002080 000070 00      0   0  8
+  [58] .debug_info       PROGBITS        00000000 0020f0 000648 00      0   0  1
+  [59] .debug_abbrev     PROGBITS        00000000 002738 00027b 00      0   0  1
+  [60] .debug_line       PROGBITS        00000000 0029b3 00023c 00      0   0  1
+  [61] .debug_frame      PROGBITS        00000000 002bf0 000054 00      0   0  4
+  [62] .debug_str        PROGBITS        00000000 002c44 0004e2 01  MS  0   0  1
+  [63] .debug_line_str   PROGBITS        00000000 003126 000174 01  MS  0   0  1
+  [64] .debug_loclists   PROGBITS        00000000 00329a 0000c6 00      0   0  1
+  [65] .symtab           SYMTAB          00000000 003360 000d20 10     66 161  4
+  [66] .strtab           STRTAB          00000000 004080 0006cf 00      0   0  1
+  [67] .shstrtab         STRTAB          00000000 00474f 000321 00      0   0  1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings), I (info),
+  L (link order), O (extra OS processing required), G (group), T (TLS),
+  C (compressed), x (unknown), o (OS specific), E (exclude),
+  D (mbind), p (processor specific)
+
+There are no section groups in this file.
+
+Program Headers:
+  Type           Offset   VirtAddr   PhysAddr   FileSiz MemSiz  Flg Align
+  PHDR           0x000034 0x00010034 0x00010034 0x00140 0x00140 R   0x4
+  INTERP         0x000174 0x00010174 0x00010174 0x00022 0x00022 R   0x1
+      [Requesting program interpreter: /lib/ld-linux-riscv32-ilp32d.so.1]
+  RISCV_ATTRIBUT 0x002049 0x00000000 0x00000000 0x00035 0x00000 R   0x1
+  LOAD           0x000000 0x00010000 0x00010000 0x01c24 0x01c24 R E 0x1000
+  LOAD           0x001efc 0x00012efc 0x00012efc 0x00120 0x00174 RW  0x1000
+  DYNAMIC        0x001f08 0x00012f08 0x00012f08 0x000f8 0x000f8 RW  0x4
+  NOTE           0x000198 0x00010198 0x00010198 0x00020 0x00020 R   0x4
+  GNU_EH_FRAME   0x001be4 0x00011be4 0x00011be4 0x00014 0x00014 R   0x4
+  GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x00000 RW  0x10
+  GNU_RELRO      0x001efc 0x00012efc 0x00012efc 0x00104 0x00104 R   0x1
+
+ Section to Segment mapping:
+  Segment Sections...
+   00     
+   01     .interp 
+   02     .riscv.attributes 
+   03     .interp .note.ABI-tag .hash .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.plt .plt .text main .rodata  __floatlit_21 __stringlit_2 __floatlit_13 __stringlit_18 __stringlit_14 __stringlit_6 __floatlit_17 __stringlit_12 __floatlit_23 __stringlit_4 __floatlit_15 __stringlit_20 __stringlit_16 __stringlit_8 __floatlit_19 __stringlit_11 __floatlit_22 __stringlit_3 __floatlit_14 __stringlit_19 __stringlit_15 __stringlit_7 __floatlit_18 __stringlit_13 __floatlit_24 __stringlit_5 __floatlit_16 __stringlit_1 __stringlit_17 __stringlit_9 __floatlit_20 .eh_frame_hdr .eh_frame 
+   04     .preinit_array .init_array .fini_array .dynamic .got .sdata .bss 
+   05     .dynamic 
+   06     .note.ABI-tag 
+   07     .eh_frame_hdr 
+   08     
+   09     .preinit_array .init_array .fini_array .dynamic 
+
+Dynamic section at offset 0x1f08 contains 26 entries:
+  Tag        Type                         Name/Value
+ 0x00000001 (NEEDED)                     Shared library: [libm.so.6]
+ 0x00000001 (NEEDED)                     Shared library: [libc.so.6]
+ 0x00000020 (PREINIT_ARRAY)              0x12efc
+ 0x00000021 (PREINIT_ARRAYSZ)            4 (bytes)
+ 0x00000019 (INIT_ARRAY)                 0x12f00
+ 0x0000001b (INIT_ARRAYSZ)               4 (bytes)
+ 0x0000001a (FINI_ARRAY)                 0x12f04
+ 0x0000001c (FINI_ARRAYSZ)               4 (bytes)
+ 0x00000004 (HASH)                       0x101b8
+ 0x6ffffef5 (GNU_HASH)                   0x101e4
+ 0x00000005 (STRTAB)                     0x10270
+ 0x00000006 (SYMTAB)                     0x10210
+ 0x0000000a (STRSZ)                      129 (bytes)
+ 0x0000000b (SYMENT)                     16 (bytes)
+ 0x00000015 (DEBUG)                      0x0
+ 0x00000003 (PLTGOT)                     0x13000
+ 0x00000002 (PLTRELSZ)                   24 (bytes)
+ 0x00000014 (PLTREL)                     RELA
+ 0x00000017 (JMPREL)                     0x10320
+ 0x00000007 (RELA)                       0x10320
+ 0x00000008 (RELASZ)                     24 (bytes)
+ 0x00000009 (RELAENT)                    12 (bytes)
+ 0x6ffffffe (VERNEED)                    0x10300
+ 0x6fffffff (VERNEEDNUM)                 1
+ 0x6ffffff0 (VERSYM)                     0x102f2
+ 0x00000000 (NULL)                       0x0
+
+Relocation section '.rela.plt' at offset 0x320 contains 2 entries:
+ Offset     Info    Type            Sym.Value  Sym. Name + Addend
+00013008  00000305 R_RISCV_JUMP_SLOT 00010360   printf@GLIBC_2.33 + 0
+0001300c  00000505 R_RISCV_JUMP_SLOT 00010370   __libc_start_main@GLIBC_2.33 + 0
+
+The decoding of unwind sections for machine type RISC-V is not currently supported.
+
+Symbol table '.dynsym' contains 6 entries:
+   Num:    Value  Size Type    Bind   Vis      Ndx Name
+     0: 00000000     0 NOTYPE  LOCAL  DEFAULT  UND 
+     1: 00000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_deregisterT[...]
+     2: 00000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_registerTMC[...]
+     3: 00010360     0 FUNC    GLOBAL DEFAULT  UND printf@GLIBC_2.33 (2)
+     4: 00013800     0 NOTYPE  GLOBAL DEFAULT  ABS __global_pointer$
+     5: 00010370     0 FUNC    GLOBAL DEFAULT  UND _[...]@GLIBC_2.33 (2)
+
+Symbol table '.symtab' contains 210 entries:
+   Num:    Value  Size Type    Bind   Vis      Ndx Name
+     0: 00000000     0 NOTYPE  LOCAL  DEFAULT  UND 
+     1: 00010174     0 SECTION LOCAL  DEFAULT    1 .interp
+     2: 00010198     0 SECTION LOCAL  DEFAULT    2 .note.ABI-tag
+     3: 000101b8     0 SECTION LOCAL  DEFAULT    3 .hash
+     4: 000101e4     0 SECTION LOCAL  DEFAULT    4 .gnu.hash
+     5: 00010210     0 SECTION LOCAL  DEFAULT    5 .dynsym
+     6: 00010270     0 SECTION LOCAL  DEFAULT    6 .dynstr
+     7: 000102f2     0 SECTION LOCAL  DEFAULT    7 .gnu.version
+     8: 00010300     0 SECTION LOCAL  DEFAULT    8 .gnu.version_r
+     9: 00010320     0 SECTION LOCAL  DEFAULT    9 .rela.plt
+    10: 00010340     0 SECTION LOCAL  DEFAULT   10 .plt
+    11: 00010380     0 SECTION LOCAL  DEFAULT   11 .text
+    12: 00010eb2     0 SECTION LOCAL  DEFAULT   12 main
+    13: 00011978     0 SECTION LOCAL  DEFAULT   13 .rodata
+    14: 000119a0     0 SECTION LOCAL  DEFAULT   14 
+    15: 000119b0     0 SECTION LOCAL  DEFAULT   15 __floatlit_21
+    16: 000119c0     0 SECTION LOCAL  DEFAULT   16 __stringlit_2
+    17: 000119d0     0 SECTION LOCAL  DEFAULT   17 __floatlit_13
+    18: 000119e0     0 SECTION LOCAL  DEFAULT   18 __stringlit_18
+    19: 000119f0     0 SECTION LOCAL  DEFAULT   19 __stringlit_14
+    20: 00011a10     0 SECTION LOCAL  DEFAULT   20 __stringlit_6
+    21: 00011a20     0 SECTION LOCAL  DEFAULT   21 __floatlit_17
+    22: 00011a30     0 SECTION LOCAL  DEFAULT   22 __stringlit_12
+    23: 00011a40     0 SECTION LOCAL  DEFAULT   23 __floatlit_23
+    24: 00011a50     0 SECTION LOCAL  DEFAULT   24 __stringlit_4
+    25: 00011a60     0 SECTION LOCAL  DEFAULT   25 __floatlit_15
+    26: 00011a70     0 SECTION LOCAL  DEFAULT   26 __stringlit_20
+    27: 00011a90     0 SECTION LOCAL  DEFAULT   27 __stringlit_16
+    28: 00011ab0     0 SECTION LOCAL  DEFAULT   28 __stringlit_8
+    29: 00011ac0     0 SECTION LOCAL  DEFAULT   29 __floatlit_19
+    30: 00011ad0     0 SECTION LOCAL  DEFAULT   30 __stringlit_11
+    31: 00011ae0     0 SECTION LOCAL  DEFAULT   31 __floatlit_22
+    32: 00011af0     0 SECTION LOCAL  DEFAULT   32 __stringlit_3
+    33: 00011b00     0 SECTION LOCAL  DEFAULT   33 __floatlit_14
+    34: 00011b10     0 SECTION LOCAL  DEFAULT   34 __stringlit_19
+    35: 00011b20     0 SECTION LOCAL  DEFAULT   35 __stringlit_15
+    36: 00011b40     0 SECTION LOCAL  DEFAULT   36 __stringlit_7
+    37: 00011b50     0 SECTION LOCAL  DEFAULT   37 __floatlit_18
+    38: 00011b60     0 SECTION LOCAL  DEFAULT   38 __stringlit_13
+    39: 00011b80     0 SECTION LOCAL  DEFAULT   39 __floatlit_24
+    40: 00011b90     0 SECTION LOCAL  DEFAULT   40 __stringlit_5
+    41: 00011ba0     0 SECTION LOCAL  DEFAULT   41 __floatlit_16
+    42: 00011bb0     0 SECTION LOCAL  DEFAULT   42 __stringlit_1
+    43: 00011bc0     0 SECTION LOCAL  DEFAULT   43 __stringlit_17
+    44: 00011bd0     0 SECTION LOCAL  DEFAULT   44 __stringlit_9
+    45: 00011be0     0 SECTION LOCAL  DEFAULT   45 __floatlit_20
+    46: 00011be4     0 SECTION LOCAL  DEFAULT   46 .eh_frame_hdr
+    47: 00011bf8     0 SECTION LOCAL  DEFAULT   47 .eh_frame
+    48: 00012efc     0 SECTION LOCAL  DEFAULT   48 .preinit_array
+    49: 00012f00     0 SECTION LOCAL  DEFAULT   49 .init_array
+    50: 00012f04     0 SECTION LOCAL  DEFAULT   50 .fini_array
+    51: 00012f08     0 SECTION LOCAL  DEFAULT   51 .dynamic
+    52: 00013000     0 SECTION LOCAL  DEFAULT   52 .got
+    53: 00013014     0 SECTION LOCAL  DEFAULT   53 .sdata
+    54: 00013020     0 SECTION LOCAL  DEFAULT   54 .bss
+    55: 00000000     0 SECTION LOCAL  DEFAULT   55 .comment
+    56: 00000000     0 SECTION LOCAL  DEFAULT   56 .riscv.attributes
+    57: 00000000     0 SECTION LOCAL  DEFAULT   57 .debug_aranges
+    58: 00000000     0 SECTION LOCAL  DEFAULT   58 .debug_info
+    59: 00000000     0 SECTION LOCAL  DEFAULT   59 .debug_abbrev
+    60: 00000000     0 SECTION LOCAL  DEFAULT   60 .debug_line
+    61: 00000000     0 SECTION LOCAL  DEFAULT   61 .debug_frame
+    62: 00000000     0 SECTION LOCAL  DEFAULT   62 .debug_str
+    63: 00000000     0 SECTION LOCAL  DEFAULT   63 .debug_line_str
+    64: 00000000     0 SECTION LOCAL  DEFAULT   64 .debug_loclists
+    65: 00000000     0 FILE    LOCAL  DEFAULT  ABS abi-note.c
+    66: 00010198    32 OBJECT  LOCAL  DEFAULT    2 __abi_tag
+    67: 00000000     0 FILE    LOCAL  DEFAULT  ABS start.o
+    68: 00010380     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    69: 000103aa     0 NOTYPE  LOCAL  DEFAULT   11 load_gp
+    70: 00000000     0 FILE    LOCAL  DEFAULT  ABS init.c
+    71: 00000000     0 FILE    LOCAL  DEFAULT  ABS static-reloc.c
+    72: 00000000     0 FILE    LOCAL  DEFAULT  ABS crtstuff.c
+    73: 000103b6     0 FUNC    LOCAL  DEFAULT   11 deregister_tm_clones
+    74: 000103b6     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    75: 000103d4     0 FUNC    LOCAL  DEFAULT   11 register_tm_clones
+    76: 000103fc     0 FUNC    LOCAL  DEFAULT   11 __do_global_dtors_aux
+    77: 00013020     1 OBJECT  LOCAL  DEFAULT   54 completed.0
+    78: 00012f04     0 OBJECT  LOCAL  DEFAULT   50 __do_global_dtor[...]
+    79: 00010418     0 FUNC    LOCAL  DEFAULT   11 frame_dummy
+    80: 00012f00     0 OBJECT  LOCAL  DEFAULT   49 __frame_dummy_in[...]
+    81: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_dtos.o
+    82: 0001041c     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    83: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_dtou.o
+    84: 000104dc     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    85: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_sar.o
+    86: 0001057c     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    87: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_sdiv.o
+    88: 000105d4     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    89: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_shl.o
+    90: 00010654     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    91: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_shr.o
+    92: 000106ac     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    93: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_smod.o
+    94: 0001070c     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    95: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_stod.o
+    96: 00010794     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    97: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_stof.o
+    98: 000107c8     0 NOTYPE  LOCAL  DEFAULT   11 $x
+    99: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_udivmod.o
+   100: 0001084c     0 NOTYPE  LOCAL  DEFAULT   11 $x
+   101: 00010b54   144 FUNC    LOCAL  DEFAULT   11 __compcert_i64_nlz
+   102: 000109f0   356 FUNC    LOCAL  DEFAULT   11 __compcert_i64_u[...]
+   103: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_udiv.o
+   104: 00010be4     0 NOTYPE  LOCAL  DEFAULT   11 $x
+   105: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_umod.o
+   106: 00010c0c     0 NOTYPE  LOCAL  DEFAULT   11 $x
+   107: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_utod.o
+   108: 00010c3c     0 NOTYPE  LOCAL  DEFAULT   11 $x
+   109: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_utof.o
+   110: 00010c70     0 NOTYPE  LOCAL  DEFAULT   11 $x
+   111: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_smulh.o
+   112: 00010ccc     0 NOTYPE  LOCAL  DEFAULT   11 $x
+   113: 00000000     0 FILE    LOCAL  DEFAULT  ABS i64_umulh.o
+   114: 00010d58     0 NOTYPE  LOCAL  DEFAULT   11 $x
+   115: 00000000     0 FILE    LOCAL  DEFAULT  ABS vararg.o
+   116: 00010df0     0 NOTYPE  LOCAL  DEFAULT   11 $x
+   117: 00000000     0 FILE    LOCAL  DEFAULT  ABS elf-init.c
+   118: 00010e58     0 NOTYPE  LOCAL  DEFAULT   11 $x
+   119: 00000000     0 FILE    LOCAL  DEFAULT  ABS crtstuff.c
+   120: 00011c20     0 OBJECT  LOCAL  DEFAULT   47 __FRAME_END__
+   121: 00000000     0 FILE    LOCAL  DEFAULT  ABS compcert81e5a9.o
+   122: 000119a0     6 OBJECT  LOCAL  DEFAULT   14 
+   123: 000119b0     8 OBJECT  LOCAL  DEFAULT   15 __floatlit_21
+   124: 000119c0     3 OBJECT  LOCAL  DEFAULT   16 __stringlit_2
+   125: 000119d0     8 OBJECT  LOCAL  DEFAULT   17 __floatlit_13
+   126: 000119e0    13 OBJECT  LOCAL  DEFAULT   18 __stringlit_18
+   127: 000119f0    21 OBJECT  LOCAL  DEFAULT   19 __stringlit_14
+   128: 00011a10    14 OBJECT  LOCAL  DEFAULT   20 __stringlit_6
+   129: 00011a20     8 OBJECT  LOCAL  DEFAULT   21 __floatlit_17
+   130: 00011a30    10 OBJECT  LOCAL  DEFAULT   22 __stringlit_12
+   131: 00011a40     8 OBJECT  LOCAL  DEFAULT   23 __floatlit_23
+   132: 00011a50    10 OBJECT  LOCAL  DEFAULT   24 __stringlit_4
+   133: 00011a60     8 OBJECT  LOCAL  DEFAULT   25 __floatlit_15
+   134: 00011a70    17 OBJECT  LOCAL  DEFAULT   26 __stringlit_20
+   135: 00011a90    22 OBJECT  LOCAL  DEFAULT   27 __stringlit_16
+   136: 00011ab0    15 OBJECT  LOCAL  DEFAULT   28 __stringlit_8
+   137: 00011ac0     8 OBJECT  LOCAL  DEFAULT   29 __floatlit_19
+   138: 00011ad0     7 OBJECT  LOCAL  DEFAULT   30 __stringlit_11
+   139: 00011ae0     4 OBJECT  LOCAL  DEFAULT   31 __floatlit_22
+   140: 00011af0    12 OBJECT  LOCAL  DEFAULT   32 __stringlit_3
+   141: 00011b00     4 OBJECT  LOCAL  DEFAULT   33 __floatlit_14
+   142: 00011b10    14 OBJECT  LOCAL  DEFAULT   34 __stringlit_19
+   143: 00011b20    20 OBJECT  LOCAL  DEFAULT   35 __stringlit_15
+   144: 00011b40    13 OBJECT  LOCAL  DEFAULT   36 __stringlit_7
+   145: 00011b50     8 OBJECT  LOCAL  DEFAULT   37 __floatlit_18
+   146: 00011b60    19 OBJECT  LOCAL  DEFAULT   38 __stringlit_13
+   147: 00011b80     8 OBJECT  LOCAL  DEFAULT   39 __floatlit_24
+   148: 00011b90    10 OBJECT  LOCAL  DEFAULT   40 __stringlit_5
+   149: 00011ba0     4 OBJECT  LOCAL  DEFAULT   41 __floatlit_16
+   150: 00011bb0     7 OBJECT  LOCAL  DEFAULT   42 __stringlit_1
+   151: 00011bc0    11 OBJECT  LOCAL  DEFAULT   43 __stringlit_17
+   152: 00011bd0     4 OBJECT  LOCAL  DEFAULT   44 __stringlit_9
+   153: 00011be0     4 OBJECT  LOCAL  DEFAULT   45 __floatlit_20
+   154: 00000000     0 FILE    LOCAL  DEFAULT  ABS 
+   155: 00010340     0 OBJECT  LOCAL  DEFAULT   10 _PROCEDURE_LINKA[...]
+   156: 00012f04     0 NOTYPE  LOCAL  DEFAULT   49 __init_array_end
+   157: 00012f08     0 OBJECT  LOCAL  DEFAULT   51 _DYNAMIC
+   158: 00012f00     0 NOTYPE  LOCAL  DEFAULT   49 __init_array_start
+   159: 00011be4     0 NOTYPE  LOCAL  DEFAULT   46 __GNU_EH_FRAME_HDR
+   160: 00013010     0 OBJECT  LOCAL  DEFAULT   52 _GLOBAL_OFFSET_TABLE_
+   161: 00010eb0     2 FUNC    GLOBAL DEFAULT   11 __libc_csu_fini
+   162: 0001084c   420 FUNC    GLOBAL DEFAULT   11 __compcert_i64_u[...]
+   163: 000104dc   160 FUNC    GLOBAL DEFAULT   11 __compcert_i64_dtou
+   164: 00010c3c    52 FUNC    GLOBAL DEFAULT   11 __compcert_i64_utod
+   165: 00010c70    92 FUNC    GLOBAL DEFAULT   11 __compcert_i64_utof
+   166: 000107c8   132 FUNC    GLOBAL DEFAULT   11 __compcert_i64_stof
+   167: 00000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_deregisterT[...]
+   168: 00013000     0 NOTYPE  WEAK   DEFAULT   52 data_start
+   169: 00010794    52 FUNC    GLOBAL DEFAULT   11 __compcert_i64_stod
+   170: 00013028     2 OBJECT  GLOBAL DEFAULT   54 gus
+   171: 00013070     0 NOTYPE  GLOBAL DEFAULT   54 __BSS_END__
+   172: 00010360     0 FUNC    GLOBAL DEFAULT  UND printf@GLIBC_2.33
+   173: 0001041c   192 FUNC    GLOBAL DEFAULT   11 __compcert_i64_dtos
+   174: 00013030     8 OBJECT  GLOBAL DEFAULT   54 gll
+   175: 0001301c     0 NOTYPE  GLOBAL DEFAULT   53 _edata
+   176: 00013014     0 NOTYPE  GLOBAL DEFAULT   53 __SDATA_BEGIN__
+   177: 00013000     0 NOTYPE  GLOBAL DEFAULT   52 __DATA_BEGIN__
+   178: 00010e10    28 FUNC    GLOBAL DEFAULT   11 __compcert_va_int64
+   179: 00013038     4 OBJECT  GLOBAL DEFAULT   54 gi
+   180: 00010c0c    48 FUNC    GLOBAL DEFAULT   11 __compcert_i64_umod
+   181: 00013040     4 OBJECT  GLOBAL DEFAULT   54 gu
+   182: 00010e50     4 FUNC    GLOBAL DEFAULT   11 __compcert_va_co[...]
+   183: 00013048     1 OBJECT  GLOBAL DEFAULT   54 gsc
+   184: 00010d58   148 FUNC    GLOBAL DEFAULT   11 __compcert_i64_umulh
+   185: 00010df0    20 FUNC    GLOBAL DEFAULT   11 __compcert_va_int32
+   186: 00013050     1 OBJECT  GLOBAL DEFAULT   54 guc
+   187: 00013058     2 OBJECT  GLOBAL DEFAULT   54 gss
+   188: 00013000     0 NOTYPE  GLOBAL DEFAULT   52 __data_start
+   189: 0001057c    88 FUNC    GLOBAL DEFAULT   11 __compcert_i64_sar
+   190: 00013018     0 OBJECT  GLOBAL HIDDEN    53 __dso_handle
+   191: 00010e30    24 FUNC    GLOBAL DEFAULT   11 __compcert_va_float64
+   192: 00013014     4 OBJECT  GLOBAL DEFAULT   53 _IO_stdin_used
+   193: 00010ccc   140 FUNC    GLOBAL DEFAULT   11 __compcert_i64_smulh
+   194: 00010654    88 FUNC    GLOBAL DEFAULT   11 __compcert_i64_shl
+   195: 000106ac    96 FUNC    GLOBAL DEFAULT   11 __compcert_i64_shr
+   196: 00010370     0 FUNC    GLOBAL DEFAULT  UND __libc_start_mai[...]
+   197: 00010e58    88 FUNC    GLOBAL DEFAULT   11 __libc_csu_init
+   198: 00013070     0 NOTYPE  GLOBAL DEFAULT   54 _end
+   199: 00010380    42 FUNC    GLOBAL DEFAULT   11 _start
+   200: 00013800     0 NOTYPE  GLOBAL DEFAULT  ABS __global_pointer$
+   201: 0001301c     0 NOTYPE  GLOBAL DEFAULT   54 __bss_start
+   202: 00010eb2  2756 FUNC    GLOBAL DEFAULT   12 main
+   203: 00013060     4 OBJECT  GLOBAL DEFAULT   54 gf
+   204: 00013068     8 OBJECT  GLOBAL DEFAULT   54 gd
+   205: 0001070c   136 FUNC    GLOBAL DEFAULT   11 __compcert_i64_smod
+   206: 00010be4    40 FUNC    GLOBAL DEFAULT   11 __compcert_i64_udiv
+   207: 000105d4   128 FUNC    GLOBAL DEFAULT   11 __compcert_i64_sdiv
+   208: 00013000     0 OBJECT  GLOBAL HIDDEN    52 __TMC_END__
+   209: 00000000     0 NOTYPE  WEAK   DEFAULT  UND _ITM_registerTMC[...]
+
+Histogram for bucket list length (total of 3 buckets):
+ Length  Number     % of total  Coverage
+      0  0          (  0.0%)
+      1  2          ( 66.7%)     40.0%
+      2  0          (  0.0%)     40.0%
+      3  1          ( 33.3%)    100.0%
+
+Histogram for `.gnu.hash' bucket list length (total of 3 buckets):
+ Length  Number     % of total  Coverage
+      0  1          ( 33.3%)
+      1  1          ( 33.3%)     33.3%
+      2  1          ( 33.3%)    100.0%
+
+Version symbols section '.gnu.version' contains 6 entries:
+ Addr: 0x00000000000102f2  Offset: 0x0002f2  Link: 5 (.dynsym)
+  000:   0 (*local*)       1 (*global*)      1 (*global*)      2 (GLIBC_2.33) 
+  004:   1 (*global*)      2 (GLIBC_2.33) 
+
+Version needs section '.gnu.version_r' contains 1 entry:
+ Addr: 0x0000000000010300  Offset: 0x000300  Link: 6 (.dynstr)
+  000000: Version: 1  File: libc.so.6  Cnt: 1
+  0x0010:   Name: GLIBC_2.33  Flags: none  Version: 2
+
+Displaying notes found in: .note.ABI-tag
+  Owner                Data size 	Description
+  GNU                  0x00000010	NT_GNU_ABI_TAG (ABI version tag)
+    OS: Linux, ABI: 5.4.0
+Attribute Section: riscv
+File Attributes
+  Tag_RISCV_stack_align: 16-bytes
+  Tag_RISCV_arch: "rv32i2p0_m2p0_a2p0_f2p0_d2p0_c2p0"

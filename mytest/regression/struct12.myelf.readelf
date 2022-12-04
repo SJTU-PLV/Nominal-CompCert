@@ -1,0 +1,133 @@
+ELF Header:
+  Magic:   7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF32
+  Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              REL (Relocatable file)
+  Machine:                           RISC-V
+  Version:                           0x1
+  Entry point address:               0x0
+  Start of program headers:          0 (bytes into file)
+  Start of section headers:          2458 (bytes into file)
+  Flags:                             0x4, double-float ABI
+  Size of this header:               52 (bytes)
+  Size of program headers:           32 (bytes)
+  Number of program headers:         0
+  Size of section headers:           40 (bytes)
+  Number of section headers:         11
+  Section header string table index: 10
+
+Section Headers:
+  [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al
+  [ 0] q                 NULL            00000000 000000 000000 00      0   0  0
+  [ 1] q                 PROGBITS        00000000 000034 000004 00  WA  0   0  1
+  [ 2] __stringlit_1     PROGBITS        00000000 000038 000011 00   A  0   0 16
+  [ 3] zp                PROGBITS        00000000 000049 000004 00  WA  0   0  1
+  [ 4] main              PROGBITS        00000000 00004d 0000e8 00  AX  0   0  1
+  [ 5] .strtab           STRTAB          00000000 000135 0003d1 00      0   0  1
+  [ 6] .symtab           SYMTAB          00000000 000506 0003b0 10      5   4  1
+  [ 7] .relq             RELA            00000000 0008b6 00000c 0c      6   1  1
+  [ 8] .relzp            RELA            00000000 0008c2 00000c 0c      6   3  1
+  [ 9] .relmain          RELA            00000000 0008ce 000084 0c      6   4  1
+  [10] .shstrtab         STRTAB          00000000 000952 000048 00      0   0  1
+Key to Flags:
+  W (write), A (alloc), X (execute), M (merge), S (strings), I (info),
+  L (link order), O (extra OS processing required), G (group), T (TLS),
+  C (compressed), x (unknown), o (OS specific), E (exclude),
+  D (mbind), p (processor specific)
+
+There are no section groups in this file.
+
+There are no program headers in this file.
+
+There is no dynamic section in this file.
+
+Relocation section '.relq' at offset 0x8b6 contains 1 entry:
+ Offset     Info    Type            Sym.Value  Sym. Name + Addend
+00000000  00003a01 R_RISCV_32        00000008   v + 4
+
+Relocation section '.relzp' at offset 0x8c2 contains 1 entry:
+ Offset     Info    Type            Sym.Value  Sym. Name + Addend
+00000000  00003a01 R_RISCV_32        00000008   v + 0
+
+Relocation section '.relmain' at offset 0x8ce contains 11 entries:
+ Offset     Info    Type            Sym.Value  Sym. Name + Addend
+0000001c  0000031a R_RISCV_HI20      00000000   zp + 0
+00000020  0000031b R_RISCV_LO12_I    00000000   zp + 0
+0000003c  0000031a R_RISCV_HI20      00000000   zp + 0
+00000040  0000031b R_RISCV_LO12_I    00000000   zp + 0
+0000006c  0000011a R_RISCV_HI20      00000000   <null> + 0
+00000070  0000011b R_RISCV_LO12_I    00000000   <null> + 0
+000000a0  0000011a R_RISCV_HI20      00000000   <null> + 0
+000000a4  0000011b R_RISCV_LO12_I    00000000   <null> + 0
+000000b4  0000021a R_RISCV_HI20      00000000   __stringlit_1 + 0
+000000b8  0000021b R_RISCV_LO12_I    00000000   __stringlit_1 + 0
+000000c0  00001e11 R_RISCV_JAL       00000000   printf + 0
+
+The decoding of unwind sections for machine type RISC-V is not currently supported.
+
+Symbol table '.symtab' contains 59 entries:
+   Num:    Value  Size Type    Bind   Vis      Ndx Name
+     0: 00000000     0 NOTYPE  LOCAL  DEFAULT  UND q
+     1: 00000000     4 OBJECT  LOCAL  DEFAULT    1 q
+     2: 00000000    17 OBJECT  LOCAL  DEFAULT    2 __stringlit_1
+     3: 00000000     4 OBJECT  LOCAL  DEFAULT    3 zp
+     4: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_va_copy
+     5: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_clzl
+     6: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_umod
+     7: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_dtou
+     8: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_sqrt
+     9: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fmsub
+    10: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_va_float64
+    11: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_ctzll
+    12: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_smulh
+    13: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_bswap
+    14: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_utof
+    15: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_annot_[...]
+    16: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fmin
+    17: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_va_int32
+    18: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_ctz
+    19: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_shr
+    20: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_ais_annot
+    21: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_utod
+    22: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_sel
+    23: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fnmsub
+    24: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_va_sa[...]
+    25: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fabsf
+    26: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fence
+    27: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_bswap16
+    28: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_udiv
+    29: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_va_start
+    30: 00000000     0 FUNC    GLOBAL DEFAULT  UND printf
+    31: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_va_end
+    32: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_clzll
+    33: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_shl
+    34: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_stod
+    35: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_memcpy[...]
+    36: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fnmadd
+    37: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_va_co[...]
+    38: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fabs
+    39: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_umulh
+    40: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_bswap32
+    41: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_sdiv
+    42: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_membar
+    43: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_debug
+    44: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_va_int64
+    45: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_ctzl
+    46: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_sar
+    47: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_bswap64
+    48: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_stof
+    49: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_annot
+    50: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fmax
+    51: 00000000   232 FUNC    GLOBAL DEFAULT    4 main
+    52: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_dtos
+    53: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fsqrt
+    54: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_fmadd
+    55: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_clz
+    56: 00000000     0 FUNC    GLOBAL DEFAULT  UND __compcert_i64_smod
+    57: 00000000     0 FUNC    GLOBAL DEFAULT  UND __builtin_va_arg
+    58: 00000008   260 OBJECT  GLOBAL DEFAULT  COM v
+
+No version information found in this file.

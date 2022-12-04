@@ -1,0 +1,60 @@
+rp(x1) {
+    3:	x3 = int32["zp" + 0]
+    2:	_ = memcpy size 256 align 1 (x1, x3)
+    1:	return
+}
+
+qp() {
+	goto 5
+    9:	x5 = x3
+    8:	x7 = int32["zp" + 0]
+    7:	_ = memcpy size 256 align 1 (x5, x7)
+    6:	goto 3
+    5:	x3 = stack(0)
+    4:	goto 9
+    3:	x2 = int32["q" + 0]
+    2:	_ = memcpy size 256 align 1 (x2, sp + 0)
+    1:	return
+}
+
+main() {
+	goto 27
+   36:	x19 = x17
+   35:	x21 = int32["zp" + 0]
+   34:	_ = memcpy size 256 align 1 (x19, x21)
+   33:	goto 30
+   32:	x17 = stack(0)
+   31:	goto 36
+   30:	x16 = int32["q" + 0]
+   29:	_ = memcpy size 256 align 1 (x16, sp + 0)
+   28:	goto 17
+   27:	x1 = 0
+   26:	nop
+   25:	if (x1 <s 256) goto 24 else goto 18
+   24:	x14 = int32["zp" + 0]
+   23:	x12 = x14 + x1
+   22:	x13 = x1 & 255
+   21:	int8u[x12 + 0] = x13
+   20:	x1 = x1 + 1
+   19:	goto 25
+   18:	goto 32
+   17:	x1 = 0
+   16:	nop
+   15:	if (x1 <s 256) goto 14 else goto 3
+   14:	x10 = int32["q" + 0]
+   13:	x9 = x10 + x1
+   12:	x8 = int8u[x9 + 0]
+   11:	if (x8 !=s x1) goto 10 else goto 5
+   10:	x3 = "__stringlit_1" + 0
+    9:	x7 = int32["q" + 0]
+    8:	x6 = x7 + x1
+    7:	x4 = int8u[x6 + 0]
+    6:	x5 = "printf"(x3, x1, x4)
+    5:	x1 = x1 + 1
+    4:	goto 15
+    3:	x2 = 0
+	goto 1
+    2:	x2 = 0
+    1:	return x2
+}
+

@@ -1,0 +1,28 @@
+main() {
+	stack(8, any32) = X8
+	X5 = 0
+   29:	X10 = int32["zp" + 0]
+	X7 = X10 + X5
+	int8u[X7 + 0] = X5
+	X5 = X5 + 1
+	if (X5 <s 256) goto 29
+	X11 = stack(16)
+	X14 = int32["zp" + 0]
+	_ = memcpy size 256 align 1 (X11, X14)
+	X6 = int32["q" + 0]
+	_ = memcpy size 256 align 1 (X6, sp + 16)
+	X8 = 0
+   13:	X6 = int32["q" + 0]
+	X13 = X6 + X8
+	X12 = int8u[X13 + 0]
+	if (X12 ==s X8) goto 4
+	X10 = "__stringlit_1" + 0
+	X11 = X8
+	call "printf"
+    4:	X8 = X8 + 1
+	if (X8 <s 256) goto 13
+	X10 = 0
+	X8 = stack(8, any32)
+	return
+}
+
