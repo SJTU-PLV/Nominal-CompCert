@@ -1281,6 +1281,7 @@ End INSTRSIZE.
 
 Definition instr_size_real (i: instruction) := 
   match i with
+  | Pbtbl _ _ => 24
   | Pbtbl_ofs _ _ => 24
   | _ => 4
 end.

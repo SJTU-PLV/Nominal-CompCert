@@ -13,7 +13,7 @@ Local Open Scope error_monad_scope.
 
 (* 16 is adhoc *)
 Definition labelofstoInitdata (fid: ident) (ofs: Z) : init_data :=
-  Init_addrof fid (Ptrofs.repr (ofs + 16)).
+  Init_addrof fid (Ptrofs.repr ofs).
 
 Section INSTRSIZE.
   Variable instr_size : instruction -> Z.
