@@ -6331,6 +6331,98 @@ Proof.
   intros. apply inject_map_support; auto.
 Qed.
 
+(*
+Lemma exist_find: forall (A:Type) (P:A -> Prop),
+    (exists a, P a) -> {x|P x}.
+Proof.
+  intros. exists a. eapply H.
+.*)  
+
+Section STEP2.
+(** The construction step (2) in appendix *)
+ 
+Variable m1 m2 m1' : mem.
+Variable j12 j23 : meminj.
+
+Hypothesis INJ1: inject j12 m1 m2.
+
+(* find (b_1,o_1) from (b_2,o_2) *)
+Section REVERSE.
+  Variable b2: block.
+  Variable o2: Z.
+  Hypothesis PERM2 : perm m2 b2 o2 Max Nonempty.
+
+  Lemma DOMIN: inject_dom_in j12 (Mem.support m1).
+  Proof.
+    red. intros. inv INJ1.
+    destruct (sup_dec b (Mem.support m1)).
+    auto. exploit mi_freeblocks0; eauto.
+    intro. congruence.
+  Qed.
+
+
+  Definition check_position o1 (pos1: Z * memperm) : bool :=
+    if (zeq o1 (fst pos1)) then true
+    else false.
+    
+  Definition block_find b1 b2 o2 : option (block * Z) :=
+    match j12 b1 with
+    |Some (b2',delta) =>
+       if eq_block b2 b2' then
+         let pmap1 := (mem_access m1 b1) in
+         let elements := perm_elements_any (ZMap.elements pmap1) in
+         match find (check_position (o2 - delta)) elements with
+         |Some (o1,_) => Some (b1,o2 - delta)
+         |None => None
+         end
+       else None
+    |_ => None
+    end.
+        
+  Fixpoint loc_in_reach_find' (b2: block) (o2: Z) (s : sup): option (block * Z) :=
+    match s with
+    | nil => None
+    | hd :: tl =>
+        match block_find hd b2 o2 with
+        | Some a => Some a
+        | None => loc_in_reach_find' b2 o2 tl
+        end
+    end.
+
+  Definition loc_in_reach_find (b2: block) (o2: Z) :=
+    loc_in_reach_find' b2 o2 (Mem.support m1).
+
+  Lemma loc_in_reach_find_valid: forall b2 o2 b1 o1,
+      loc_in_reach_find b2 o2 = Some (b1,o1) ->
+      j12 b1 = Some (b2,o2 - o1)
+      /\ perm m1 b1 o1 Max Nonempty.
+  Proof.
+    Admitted.
+
+End REVERSE.
+(*
+ Program Definition copy_block b2 m : mem :=
+   match j23 b2 with
+   |Some _ =>
+      {|
+        mem_contents := pmap_update b2 (xxx) (mem_contents m);
+        mem_access := pmap_update b2 (yyy) (mem_access m);
+        support := (Mem.support m2);
+     |}
+   |None => m2
+   end.
+
+ Fixpoint copy' (s:sup) m : mem :=
+   match s with
+   | nil => m
+   | hd :: tl => copy_block hd (copy' tl m)
+   end.
+
+ Definition copy_m1' :=
+   copy' (Mem.support m2) m2.
+*) 
+End STEP2.
+
 End Mem.
 
 Notation mem := Mem.mem.

@@ -2442,7 +2442,7 @@ Lemma out_of_reach_trans: forall j12 j23 m1 m2 m3 m3',
 Proof.
   intros.
   inv H0. constructor; auto.
-  - intros. eapply unchanged_on_perm.
+  - intros. eapply unchanged_on_perm; auto.
   red in H. red.
   intros b1 delta23 MAP13. unfold compose_meminj in MAP13.
   destruct (j12 b1) as [[b2 delta2]|] eqn: MAP12; try congruence.
@@ -2453,7 +2453,7 @@ Proof.
   destruct (Mem.perm_dec m1 b1 (ofs - (delta2 + delta3)) Max Nonempty).
   exploit mi_perm; eauto.
   replace (ofs - (delta2 + delta3) + delta2) with (ofs - delta3).
-  intro. congruence. lia. auto. auto.
+  intro. congruence. lia. auto.
   - intros. eapply unchanged_on_contents.
   red in H. red.
   intros b1 delta23 MAP13. unfold compose_meminj in MAP13.
