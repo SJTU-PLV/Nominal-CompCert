@@ -352,13 +352,13 @@ Inductive instruction : Type :=
   | Pnop : instruction                             (**r nop instruction *)
 
   (** Some realistic instruction outputed by target printer *)
-  (* | Pauipc (imm: ident + Z)                       (**r add upper 20 bit immediate to pc *) *)
+  | Pauipc (rd: ireg) (imm: ident + Z)                       (**r add upper 20 bit immediate to pc *)
   | Plui_s (rd: ireg) (id: ident) (ofs: Z)        (**r load the high part of the address of a symbol, which is the same as Ploadsymbol_high *)
   | Paddi_s (rd:ireg) (rs:ireg0) (id: ident) (ofs: Z)  (**r add the low 12 bit of ident with rs to rd *)
 
   (** unconditional jump to immediate instead of symbol *)
   | Pjal_ofs (rd: ireg0) (ofs: ident + Z)      (**r relative jump to PC + ofs, store PC + 4 to rd *)
-  | Pjal_rr (rd: ireg0) (rs: ireg) (ofs: Z)
+  | Pjal_rr (rd: ireg0) (rs: ireg) (ofs: ident + Z)
           
   (** conditional branches *)
   | Pbeq_ofs  (rs1 rs2: ireg0) (ofs: Z) 
@@ -1475,4 +1475,5 @@ Definition instr_to_string i :=
   | Pbge_ofs  _ _ _ => "Pbge_ofs "
   | Pbgeu_ofs  _ _ _ => "Pbgeu_ofs" 
   | Pbtbl_ofs   _ _ => "Pbtbl_ofs "
+  | Pauipc      _ _ => "Pauipc"
   end.
