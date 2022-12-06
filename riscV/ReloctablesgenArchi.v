@@ -35,11 +35,6 @@ Definition transl_instr (instr_size: instruction -> Z) (sofs:Z) (i: instruction)
                reloc_type := R_RISCV_CALL;
                reloc_symb := symb;
                reloc_addend := 0 |})
-  (* | Pjal_rr _ _ (inl symb) =>
-      OK (Some {|reloc_offset := sofs; 
-                 reloc_type := R_RISCV_PCREL_LO12_I;
-                 reloc_symb := symb;
-                 reloc_addend := 0 |}) *)
 
   (* load instructions: I type *)
   | Plb  _ _ (Ofslow symb ofs)
@@ -83,8 +78,6 @@ Definition id_eliminate (i:instruction) : instruction :=
         Paddiw rd rs Int.zero
   | Pauipc rd (inl symb) =>
     Pauipc rd (inr 0)
-  | Pjal_rr rd rs (inl symb) =>
-      Pjal_rr rd rs (inr 0)
   | Pjal_ofs rd (inl symb) =>
       Pjal_ofs rd (inr 0)
   | Plb  r1 r2 (Ofslow symb ofs) =>
