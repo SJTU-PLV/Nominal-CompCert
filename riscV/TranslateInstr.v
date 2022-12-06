@@ -695,7 +695,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
     do J3 <- encode_J3 ofs;
     do J4 <- encode_J4 ofs;
     OK (jal rdbits J1 J2 J3 J4)
-  | Pjal_rr rd rs (inr ofs) =>
+  | Pjal_rr rd rs ofs =>
     do rdbits <- encode_ireg0 rd;
     do rsbits <- encode_ireg0 rs;
     do imm <- encode_ofs_u12 ofs;

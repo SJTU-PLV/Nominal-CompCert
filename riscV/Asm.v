@@ -358,7 +358,7 @@ Inductive instruction : Type :=
 
   (** unconditional jump to immediate instead of symbol *)
   | Pjal_ofs (rd: ireg0) (ofs: ident + Z)      (**r relative jump to PC + ofs, store PC + 4 to rd *)
-  | Pjal_rr (rd: ireg0) (rs: ireg) (ofs: ident + Z)
+  | Pjal_rr (rd: ireg0) (rs: ireg) (ofs: Z)
           
   (** conditional branches *)
   | Pbeq_ofs  (rs1 rs2: ireg0) (ofs: Z) 

@@ -39,7 +39,7 @@ Definition transf_instr (i: instruction) (ofs:Z) : (list instruction * option (i
     let loadid := [Plui_s X31 id 0; Paddi_s X31 X31 id 0] in
     let lbladdr := if Archi.ptr64 then Paddl X5 X31 X5 else Paddw X5 X31 X5 in
     let loadaddr := if Archi.ptr64 then Pld X5 X5 (Ofsimm Ptrofs.zero) else Plw X5 X5 (Ofsimm Ptrofs.zero) in
-    let jump := Pjal_rr X0 X5 (inr 0) in
+    let jump := Pjal_rr X0 X5 0 in
     ([i1]++loadid++[lbladdr;loadaddr;jump], Some (id, Gvar def))
   | _ => ([i], None)
   end.

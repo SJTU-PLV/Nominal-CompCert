@@ -20,10 +20,10 @@ Definition transf_instr i : (list instruction) :=
       [Plui_s rd id (Ptrofs.signed ofs); Paddi_s rd rd id (Ptrofs.signed ofs)]
         
   (* transform pseudo jump instruction *)
-  | Pj_s id sg => [Pauipc X31 (inl id); Pjal_rr X0 X31 (inl id)]
-  | Pj_r rs sg => [Pjal_rr X0 rs (inr 0)]
-  | Pjal_s id sg => [Pauipc X1 (inl id); Pjal_rr X1 X1 (inl id)]
-  | Pjal_r rs sg => [Pjal_rr X1 rs (inr 0)]
+  | Pj_s id sg => [Pauipc X31 (inl id); Pjal_rr X0 X31 0]
+  | Pj_r rs sg => [Pjal_rr X0 rs 0]
+  | Pjal_s id sg => [Pauipc X1 (inl id); Pjal_rr X1 X1 0]
+  | Pjal_r rs sg => [Pjal_rr X1 rs 0]
 
   (* we remove the pseudo instruction that use any type here *)
   | Plw_a rd ra ofs =>
