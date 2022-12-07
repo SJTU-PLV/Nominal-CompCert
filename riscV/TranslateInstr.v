@@ -50,7 +50,54 @@ Lemma bits_of_int_consistency': forall n x l,
   -1 < x < two_power_nat n ->
   bits_of_int_rec n x = l ->
   int_of_bits_rec l = x.
-Proof. Admitted.
+Proof.
+  induction n.
+  - intros. rewrite <- H0. simpl. destruct H.
+    unfold two_power_nat in H1. simpl in H1. lia.
+  - intros. destruct (Z.even x) eqn: Heven.
+    + assert (exists p : Z, x = 2 * p + (if Z.even x then 0 else 1)).
+      { apply Zaux.Zeven_ex. }
+      rewrite Heven in H1. destruct H1.
+      rewrite <- Zred_factor6 in H1. rewrite H1 in H.
+      simpl in H0. rewrite Zmod_even in H0. rewrite Heven in H0.
+      simpl in H0. rewrite <- H0.
+      assert (int_of_bits_rec (false :: bits_of_int_rec n (x / 2)) = 2 * int_of_bits_rec (bits_of_int_rec n (x / 2))).
+      { simpl. reflexivity. }
+      rewrite -> H2.
+      destruct H. rewrite two_power_nat_S in H3.
+      assert (-1 < x0 < two_power_nat n).
+      { lia. }
+      remember (bits_of_int_rec n (x / 2)) as l0. symmetry in Heql0.
+      rewrite H1 in Heql0. rewrite Z.mul_comm in Heql0. 
+      rewrite Z_div_mult_full in Heql0.
+      remember (IHn x0 l0 H4 Heql0) as H5. rewrite H5.
+      symmetry. apply H1. lia.
+    + assert (exists p : Z, x = 2 * p + (if Z.even x then 0 else 1)).
+      { apply Zaux.Zeven_ex. }
+      rewrite Heven in H1. destruct H1. rewrite H1 in H.
+      rewrite two_power_nat_S in H.
+      assert (-1 < x0 < two_power_nat n).
+      { lia. }
+      simpl in H0. rewrite Zmod_even in H0. rewrite Heven in H0.
+      simpl in H0. assert (int_of_bits_rec (true :: bits_of_int_rec n (x / 2)) = 2 * int_of_bits_rec (bits_of_int_rec n (x / 2)) + 1).
+      { simpl. reflexivity. }
+      rewrite <- H0. rewrite -> H3.
+      remember (bits_of_int_rec n (x / 2)) as l0. symmetry in Heql0.
+      rewrite H1 in Heql0. rewrite Z.mul_comm in Heql0. 
+      assert ((x0 * 2 + 1) / 2 = x0).
+      (* { remember (Z_div_mod_eq_full (x0 * 2 + 1) 2). *)
+      { assert ((x0 * 2 + 1) mod 2 = 1).
+        { rewrite Zmod_even. rewrite Z.mul_comm.
+          rewrite <- H1. rewrite Heven. reflexivity. }
+        assert (x0 * 2 + 1 = 2 * ((x0 * 2 + 1) / 2) + (x0 * 2 + 1) mod 2).
+        { apply Z_div_mod_eq_full. lia. }
+        rewrite H4 in H5. apply Z.add_cancel_r in H5.
+        rewrite Z.mul_comm in H5.
+        apply Z.mul_cancel_l in H5. symmetry in H5.
+        rewrite Z.mul_comm. apply H5. lia. }
+      rewrite H4 in Heql0. remember (IHn x0 l0 H2 Heql0) as H5.
+      rewrite H5. rewrite H1. reflexivity.
+Qed.
 
 Lemma bits_of_int_consistency: forall n x l,
   -1 < x < two_power_nat n ->
