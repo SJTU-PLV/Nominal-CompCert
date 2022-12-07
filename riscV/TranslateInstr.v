@@ -926,7 +926,7 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
       OK (sraw rdbits rs1bits rs2bits)
     else
       OK (sra rdbits rs1bits rs2bits)
-
+  
          
   (** 64-bit integer register-immediate instructions *)
   | Paddil rd rs imm =>
