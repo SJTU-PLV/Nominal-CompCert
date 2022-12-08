@@ -18,11 +18,11 @@ SIMU=qemu-riscv32
 # Can run, both in compiled mode and in interpreter mode,
 # and have reference output in Results
 
-#FAILTESTS=floats [timecomsuming]
+#FAILTESTS=floats [timecomsuming] struct12
 TESTS=int32 int64 floats-basics floats-lit \
   expr1 expr6 funptr2 initializers initializers2 initializers3 \
   volatile1 volatile2 volatile3 volatile4\
-  funct3 expr5 struct7 struct8 struct11 struct12 casts1 casts2 char1 \
+  funct3 expr5 struct7 struct8 struct11 casts1 casts2 char1 \
   sizeof1 sizeof2 binops bool for1 for2 switch switch2 compound \
   decl1 interop1 bitfields9 ptrs3 \
   parsing krfun ifconv

@@ -6,7 +6,7 @@ CCOMPFLAGS=$(CCOMPOPTS) -stdlib ../../runtime -relf
 CFLAGS=-O1 -Wall
 
 # set simulator
-SIMU=qemu-riscv32 -L ~/riscv/sysroot
+SIMU=qemu-riscv32
 
 LIBS=$(LIBMATH)
 
