@@ -4,6 +4,9 @@ CC=../../ccomp
 # CFLAGS=$(CCOMPOPTS) -U__GNUC__ -stdlib ../../runtime -dclight -dasm
 CFLAGS=$(CCOMPOPTS) -U__GNUC__ -stdlib ../../runtime -relf
 
+# set simulator
+SIMU=qemu-riscv32
+
 LIBS=
 TIME=ocaml unix.cma ../../tools/xtime.ml -mintime 2.0 -minruns 2
 

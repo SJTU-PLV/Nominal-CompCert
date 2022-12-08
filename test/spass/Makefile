@@ -4,6 +4,9 @@ CC=../../ccomp
 # CFLAGS=$(CCOMPOPTS) -stdlib ../../runtime -dparse -dclight -dasm -fstruct-return
 CFLAGS=$(CCOMPOPTS) -stdlib ../../runtime -relf -fstruct-return
 
+# set simulator
+SIMU=qemu-riscv32
+
 SRCS=analyze.c clause.c clock.c closure.c cnf.c component.c                 \
   condensing.c context.c defs.c dfgparser.c dfgscanner.c doc-proof.c        \
   flags.c foldfg.c graph.c hash.c hasharray.c iaparser.c iascanner.c        \
