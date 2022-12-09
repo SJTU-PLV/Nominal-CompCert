@@ -59,21 +59,21 @@ let compile_c_file sourcename ifile ofile =
   begin
     (* Debug: Print RealAsm in text form *)
     (* if !option_drealasm then *)
-    (match Compiler.transf_c_program_real csyntax with
+    match Compiler.transf_c_program_real csyntax with
       | Errors.OK realasm ->
         let oc = open_out (sourcename^".realasm") in
-        PrintAsm.print_program oc realasm
+        PrintAsm.print_program oc realasm;
+        (match CompilerAux.assembler Compiler.instr_size realasm with
+        | Errors.OK ((bs, p), _) ->
+           ElfFileOutput.write_elf ofile bs
+        | Errors.Error msg ->
+           let loc = file_loc sourcename in
+             fatal_error loc "%a"  print_error msg
+           (* exit 2 *))
       |  Errors.Error msg ->
         let loc = file_loc sourcename in
-          fatal_error loc "%a"  print_error msg);
+          fatal_error loc "%a"  print_error msg;
     
-    match Compiler.transf_c_program_assembler csyntax with
-     | Errors.OK ((bs, p), _) ->
-        ElfFileOutput.write_elf ofile bs
-     | Errors.Error msg ->
-        let loc = file_loc sourcename in
-          fatal_error loc "%a"  print_error msg
-        (* exit 2 *)
   end
   else begin
   (* Convert to Asm *)
