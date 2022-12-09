@@ -990,6 +990,13 @@ Definition translate_instr' (i:instruction) : res (Instruction) :=
       do imm12  <- encode_ofs_u12 (Int64.signed imm);
       OK (slti rdbits rsbits imm12)
     else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
+  | Psltiul rd rs imm =>
+    if Archi.ptr64 then
+      do rdbits <- encode_ireg rd;
+      do rsbits <- encode_ireg0 rs;
+      do imm12  <- encode_ofs_u12 (Int64.signed imm);
+      OK (sltiu rdbits rsbits imm12)
+    else Error [MSG "Only in rv64: "; MSG (instr_to_string i)]
   | Pandil rd rs imm =>
     if Archi.ptr64 then
       do rdbits <- encode_ireg rd;
