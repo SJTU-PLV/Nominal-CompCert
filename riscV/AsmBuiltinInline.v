@@ -259,7 +259,7 @@ Definition expand_bswap32 (d s: ireg) :=
 Definition expand_bswap64 d s :=
   let i1 := Psllil X1 (X s) (Int.repr 56) in
   let i2 := fold_left
-              (fun acc p => [Psrlil X31 (X s) (Int.repr (fst p)); Pandil X31 (X X31) (Int64.repr 255); Psllil X31 (X X31) (Int.repr (snd p)); Porl X1 (X X1) (X X31)])
+              (fun acc p => acc ++ [Psrlil X31 (X s) (Int.repr (fst p)); Pandil X31 (X X31) (Int64.repr 255); Psllil X31 (X X31) (Int.repr (snd p)); Porl X1 (X X1) (X X31)])
               [(8,48); (16,40); (24,32); (32,24); (40,16); (48,8)] [] in
   [i1] ++ i2 ++ [Psrlil X31 (X s) (Int.repr 56); Porl d (X X1) (X X31)].
 
