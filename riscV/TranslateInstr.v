@@ -103,7 +103,13 @@ Lemma bits_of_int_consistency: forall n x l,
   -1 < x < two_power_nat n ->
   bits_of_int n x = l ->
   int_of_bits l = x.
-Proof. Admitted.
+Proof. 
+  intros. unfold bits_of_int in H0. unfold int_of_bits.
+  assert (rev (rev (bits_of_int_rec n x)) = rev l).
+  { rewrite H0. reflexivity. }
+  rewrite rev_involutive in H1.
+  apply (bits_of_int_consistency' n x (rev l) H H1).
+Qed.
 
   Lemma int_of_bits'_append: forall b l,
   int_of_bits_rec (l++[b])=
