@@ -5503,15 +5503,6 @@ Proof.
       eapply mi_perm_inv; eauto.
 Qed.
 
-(** Memory skeleton *)
-
-Program Definition skeleton (s:sup) : mem :=
-    {|
-      mem_contents := NMap.init _ (ZMap.init Undef);
-      Mem.mem_access := NMap.init _ (ZMap.init (fun (_ : perm_kind) => None));
-      Mem.support := s;
-    |}.
-
 (** Memory support extension *)
 
 Program Definition supext (s:sup) (m:mem) : mem :=
@@ -5551,31 +5542,6 @@ Definition perm_check_readable (pmap : perm_map) ofs : bool :=
     | _ => true
   end.
 
-(*
-
-sup_In b1 m1'                   [--(5-delta)--------------------]
-
-j1' b1 = Some (b2,delta)
-
-sup_In b2 m2'                     [----5------------------]
-
-map1 = (mem_access m1') b1
-map2 = (mem_access m2') b2
-*)
-
-(*
-
-sup_In b1 m1'                   [--(5-delta)--------------------]
-
-j1' b1 = Some (b2,delta)4
-
-sup_In b2 m2'                     [----5------------------]
-
-map1 = (mem_content m1') b1
-map2 = (mem_content m2') b2
-
-
-*)
 
 Definition pair_delta {A: Type} (delta: Z) (pair: Z * A) : Z * A :=
   (fst pair + delta, snd pair).
@@ -5810,18 +5776,6 @@ Proof.
   - right. unfold valid_position. firstorder.
 Qed.
 
-(*
-Definition content_map (val1 : ZMap.t memval) (pmap1 : perm_map) (f:meminj) (delta : Z)
-           : positive -> memval -> memval :=
-  fun i mv =>
-    let ofs2 := positive_to_Z i in             (* find the o : Z from the positive index in PTree *)
-    let ofs1 := ofs2 - delta in           (* compute the index in domian clock*)
-    if perm_check_readable pmap1 ofs1 then       (* check the source permission*)
-      memval_map f (ZMap.get ofs1 val1) (* copy the valid value from source*)
-        else
-          mv.                               (* not copy the invalid value *)
-*)
-
 Definition perm_check_readable' (perm: perm_kind -> option permission) :=
   match perm Cur with
     | Some Nonempty | None => false
@@ -5849,11 +5803,6 @@ Definition update_mem_content (pmap1 : perm_map) (f:meminj) (delta: Z) (vmap1 vm
     let val_elements1 := ofs_elements_val ofs_elements vmap1 f in
     let val_elements2 := List.map (pair_delta delta) val_elements1 in
     setN' val_elements2 vmap2.
-
-(*Definition update_mem_content (val1 : ZMap.t memval) (pmap1 : perm_map)(f:meminj) (delta : Z)
-    : ZMap.t memval -> ZMap.t memval :=
-  fun val2 => (Undef, PTree.map (content_map val1 pmap1 f delta) (snd val2)).
-*)
 
 Lemma fst_ofs_elements_norepet : forall vmap j vl,
     list_norepet vl ->
@@ -6052,6 +6001,7 @@ Next Obligation.
     apply Mem.access_default.
 Qed.
 
+(** loc_in_reach_dec *)
 Definition loc_in_reach (f:meminj) m b ofs k p: Prop :=
   exists b0 delta, f b0 = Some (b,delta) /\ Mem.perm m b0 (ofs - delta) k p.
 
@@ -6267,7 +6217,7 @@ Next Obligation.
   destruct (j2 b2);
   destruct (loc_in_reach_dec (support m1) m1 j1 b2 ofs Max Nonempty H1 &&
             negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs Max Nonempty H2));
-  try (apply Mem.nextblock_noaccess; eauto).
+  try (apply nextblock_noaccess; eauto).
   auto.
   apply Mem.access_default.
   apply Mem.nextblock_noaccess; eauto.
@@ -6295,6 +6245,7 @@ Definition initial_m2' (s2 s2': sup) (m2:mem): mem :=
 
 End out_of_reach_dec.
 
+
 Fixpoint inject_map (s1' s2:list block) (j1' j2: meminj) (m1':mem) (m2:mem) : mem :=
   match s1' with
     |nil => m2
@@ -6303,14 +6254,14 @@ Fixpoint inject_map (s1' s2:list block) (j1' j2: meminj) (m1':mem) (m2:mem) : me
 
 Definition inject_mem s2 j1' j2 m1' m2 : mem :=
   inject_map (Mem.support m1') s2 j1' j2 m1' m2.
-
+(*
 Definition construction_m2' (m1 m1' m2 : mem) (j1 j1' j2 : meminj) (s2 s2' : sup)
            (H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1'))
            (m2' : mem) : Prop :=
   exists m2'i,
   initial_m2' m1 m1' j1 j1' j2 H1 H2 s2 s2' m2 = m2'i /\
   inject_mem s2' j1' j2 m1' m2'i = m2'.
-
+*)
 Lemma support_map : forall j1' j2 b s2 m1 m2,
     support (map j1' j2 b s2 m1 m2) = support m2.
 Proof.
@@ -6331,20 +6282,76 @@ Proof.
   intros. apply inject_map_support; auto.
 Qed.
 
-(*
-Lemma exist_find: forall (A:Type) (P:A -> Prop),
-    (exists a, P a) -> {x|P x}.
-Proof.
-  intros. exists a. eapply H.
-.*)  
-
-Section STEP2.
-(** The construction step (2) in appendix *)
- 
-Variable m1 m2 m1' : mem.
-Variable j12 j23 : meminj.
+Section STEP23.
+  
+Variable m1 m2 m3 m1' : mem.
+Variable s2' : sup.  
+Variable j12 j23 j12' j23': meminj.
 
 Hypothesis INJ1: inject j12 m1 m2.
+Hypothesis INJ2: inject j23 m2 m3.
+(** The construction step (2) in appendix *)
+
+ Program Definition map_block (b1:block) (m:mem) :=
+  match j12' b1 with
+  |Some (b2,delta) =>
+     if (sup_dec b1 (Mem.support m1)) then m else
+       if (sup_dec b2 (Mem.support m)) then (* well-typeness constrain *)
+     {|
+       mem_contents :=
+           pmap_update b2 (update_mem_content ((mem_access m1)#b1) j12' delta (mem_contents m1)#b1)
+                       (mem_contents m);
+       mem_access :=
+           pmap_update b2 (update_mem_access delta (mem_access m1)#b1) (mem_access m);
+       support := (Mem.support m);
+     |} else m
+  |None => m
+  end.
+Next Obligation.
+    unfold pmap_update. destruct (eq_block b b2); subst.
+  - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
+    generalize (update_mem_access_result delta ).
+    intros. erewrite H1; eauto.
+    erewrite update_mem_access_result; eauto.
+    destruct perm_check_any;
+    apply Mem.access_max; eauto.
+    apply Mem.access_default.
+    apply Mem.access_default.
+  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
+    apply Mem.access_max; auto.
+Qed.
+Next Obligation.
+  unfold pmap_update. destruct (eq_block b b2); subst.
+  - congruence.
+  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
+    apply Mem.nextblock_noaccess. auto.
+Qed.
+Next Obligation.
+    unfold pmap_update. destruct (eq_block b b2); subst.
+  - rewrite NMap.gsspec. rewrite pred_dec_true; auto. unfold update_mem_content.
+    rewrite setN'_default. apply Mem.contents_default.
+  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
+    apply Mem.contents_default.
+Qed.
+Next Obligation.
+    unfold pmap_update. destruct (eq_block b b2); subst.
+  - rewrite NMap.gsspec. rewrite pred_dec_true; auto. unfold update_mem_access.
+    rewrite setN'_default. apply Mem.access_default.
+  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
+    apply Mem.access_default.
+Qed.
+
+Fixpoint map_sup (s:sup) (m:mem) :=
+  match s with
+  |nil => m
+  |hd:: tl => map_block hd (map_sup tl m)
+  end.
+
+(** step2, with the extension of support s2' which is constructed in step (1) *)
+Definition step2 := 
+  map_sup (Mem.support m1') (supext s2' m2).
+
+(** construction step3 *)
 
 (* find (b_1,o_1) from (b_2,o_2) *)
 Section REVERSE.
@@ -6360,11 +6367,12 @@ Section REVERSE.
     intro. congruence.
   Qed.
 
-
+  
   Definition check_position o1 (pos1: Z * memperm) : bool :=
     if (zeq o1 (fst pos1)) then true
     else false.
-    
+
+  (* find (b_1,o_1) in block b_1 *)
   Definition block_find b1 b2 o2 : option (block * Z) :=
     match j12 b1 with
     |Some (b2',delta) =>
@@ -6378,7 +6386,8 @@ Section REVERSE.
        else None
     |_ => None
     end.
-        
+
+  (* find (b_1,o_1) in all blocks in s *)
   Fixpoint loc_in_reach_find' (b2: block) (o2: Z) (s : sup): option (block * Z) :=
     match s with
     | nil => None
@@ -6389,6 +6398,7 @@ Section REVERSE.
         end
     end.
 
+  (*specific find function, find (b_1,o_1) in sup(m_1)*)
   Definition loc_in_reach_find (b2: block) (o2: Z) :=
     loc_in_reach_find' b2 o2 (Mem.support m1).
 
@@ -6400,28 +6410,139 @@ Section REVERSE.
     Admitted.
 
 End REVERSE.
-(*
+(* update_mem_access *)
+
+(* update permission of position (b_2,o_2) using loc_in_reach_find *)
+Definition copy_access_position (b2: block)(pos2: Z * memperm) : Z * memperm :=
+  let o2 := fst pos2 in
+  let perm2 := snd pos2 in
+  match loc_in_reach_find b2 o2 with
+  |Some (b1,o1) => (o2,((mem_access m1')#b1)##o1)
+  |None => (o2,perm2)
+  end.
+
+(* update permission of all positions with nonempty permission of block b_2 *)
+Definition copy_access_block (b2: block) (map2: perm_map) :=
+  let elements2 := perm_elements_any (ZMap.elements map2) in
+  let elements2' := List.map (copy_access_position b2) elements2 in
+  setN' elements2' map2.
+
+(* update content of position (b_2,o_2) using loc_in_reach_find *)
+Definition copy_content_position (b2: block)(pos2: Z * memval) : Z * memval :=
+  let o2 := fst pos2 in
+  let val2 := snd pos2 in
+  match loc_in_reach_find b2 o2 with
+  |Some (b1,o1) =>
+     let perm1 := ((mem_access m1')#b1)##o1 in
+     let mv := ((mem_contents m1')#b1)##o1 in
+     if perm_check_readable' perm1 then
+     (o2,memval_map j12 mv) else (o2,val2)
+  |None => (o2,val2)
+  end.
+
+Definition perm_to_val (vmap: ZMap.t memval) (pair: Z * memperm) : (Z* memval) :=
+  (fst pair, vmap##(fst pair)).
+
+(* update contents of all positions with nonempty permission in block b_2 *)
+Definition copy_content_block (b2: block) (pmap2: perm_map) (vmap2: ZMap.t memval) :=
+  let perm_elements2 := perm_elements_any (ZMap.elements pmap2) in
+  let val_elements2 := List.map (perm_to_val vmap2) perm_elements2 in
+  let val_elements2' := List.map (copy_content_position b2) val_elements2 in
+  setN' val_elements2' vmap2.
+
+(** Lemmas need to fix *)
+(* result of ZMap update *)
+Lemma copy_access_block_result:
+  forall b2 map2 o2 p,
+(*    (fst map2 = fun k => None) -> *)
+    ((copy_access_block b2 map2)##o2) p =
+      match (loc_in_reach_find b2 o2) with
+      | Some (b1,o1) => ((mem_access m1')#b1)##o1 p
+      | None =>  map2##o2 p
+   end.
+Proof.
+  intros. unfold copy_access_block.
+Admitted.
+
+Lemma copy_content_block_default:
+  forall b2 map2 vmap2, fst (copy_content_block b2 map2 vmap2) = fst vmap2.
+Proof.
+  intros. unfold copy_content_block.
+  rewrite setN'_default. reflexivity.
+Qed.
+
+Lemma copy_content_block_result:
+  forall b2 map2 vmap2 o2,
+(*    (fst map2 = fun k => None) -> *)
+    (copy_content_block b2 map2 vmap2)##o2=
+      match (loc_in_reach_find b2 o2) with
+      | Some (b1,o1) =>
+          let mv := ((mem_contents m1')#b1)##o1 in
+          memval_map j12 mv
+      | None =>  vmap2##o2
+   end.
+Proof.
+Admitted.
+
+Lemma loc_in_reach_notin2:
+  forall b o, ~ sup_In b (support m2) -> loc_in_reach_find b o = None.
+Admitted.
+
  Program Definition copy_block b2 m : mem :=
    match j23 b2 with
    |Some _ =>
+      if (sup_dec b2 (Mem.support m)) then
       {|
-        mem_contents := pmap_update b2 (xxx) (mem_contents m);
-        mem_access := pmap_update b2 (yyy) (mem_access m);
-        support := (Mem.support m2);
-     |}
-   |None => m2
+        mem_contents := pmap_update b2
+                          (copy_content_block b2 (mem_access m)#b2)
+                          (mem_contents m);
+        mem_access := pmap_update b2
+                        (copy_access_block b2)
+                        (mem_access m);
+        support := (Mem.support m);
+      |}
+        else m
+   |None => m
    end.
-
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct NMap.elt_eq.
+   - repeat rewrite copy_access_block_result.
+     destruct loc_in_reach_find.
+     + destruct p. apply access_max.
+     + apply access_max.
+   - apply access_max.
+ Qed.
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct NMap.elt_eq.
+   - subst. congruence.
+   - apply nextblock_noaccess; eauto.
+ Qed.
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct NMap.elt_eq.
+   - subst. rewrite copy_content_block_default.
+     apply contents_default.
+   - apply contents_default.
+ Qed.
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct eq_block; try apply access_default.
+   unfold copy_access_block. rewrite setN'_default.
+   apply access_default.
+ Qed.
+            
  Fixpoint copy' (s:sup) m : mem :=
    match s with
    | nil => m
    | hd :: tl => copy_block hd (copy' tl m)
    end.
 
- Definition copy_m1' :=
-   copy' (Mem.support m2) m2.
-*) 
-End STEP2.
+ (*m2'*)
+ Definition m2' :=
+   copy' (Mem.support m2) step2.
+End STEP23.
 
 End Mem.
 
