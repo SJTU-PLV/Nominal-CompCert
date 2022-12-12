@@ -6357,7 +6357,7 @@ Definition step2 :=
 Section REVERSE.
   Variable b2: block.
   Variable o2: Z.
-  Hypothesis PERM2 : perm m2 b2 o2 Max Nonempty.
+  (* Hypothesis PERM2 : perm m2 b2 o2 Max Nonempty. *)
 
   Lemma DOMIN: inject_dom_in j12 (Mem.support m1).
   Proof.
@@ -6489,8 +6489,7 @@ Lemma loc_in_reach_notin2:
 Admitted.
 
  Program Definition copy_block b2 m : mem :=
-   match j23 b2 with
-   |Some _ =>
+   if j23 b2 then
       if (sup_dec b2 (Mem.support m)) then
       {|
         mem_contents := pmap_update b2
@@ -6502,8 +6501,7 @@ Admitted.
         support := (Mem.support m);
       |}
         else m
-   |None => m
-   end.
+   else m.
  Next Obligation.
    unfold pmap_update. rewrite NMap.gsspec.
    destruct NMap.elt_eq.
@@ -6532,7 +6530,8 @@ Admitted.
    unfold copy_access_block. rewrite setN'_default.
    apply access_default.
  Qed.
-            
+
+
  Fixpoint copy' (s:sup) m : mem :=
    match s with
    | nil => m

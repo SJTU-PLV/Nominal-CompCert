@@ -1786,22 +1786,189 @@ Section CONSTR_PROOF.
   Hypothesis ADDEXISTS: update_add_exists j1 j1' (compose_meminj j1' j2').
   Hypothesis ADDSAME : update_add_same j2 j2' j1'.
 
-  Definition m2' := Mem.m2' m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23.
+  (*after step2 *)
+  Definition m2'1 := Mem.step2 m1 m2 m1' s2' j1'.
+  Definition m2' := Mem.copy' m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 (Mem.support m2) m2'1.
+
+  (* Lemma A.8 UNCHANGE properties about m2' *)
+
+  Lemma pmap_update_diff': forall (A:Type) b f (map: NMap.t A) b',
+  b <> b' ->
+  NMap.get _ b' (Mem.pmap_update b f map) = NMap.get _ b' map.
+  Proof.
+    intros. unfold Mem.pmap_update.
+    rewrite NMap.gsspec. rewrite pred_dec_false; auto.
+  Qed.
+  
+  Lemma unchanged_on_map_block : forall m m' b,
+      Mem.map_block m1 j1' b m = m' ->
+      Mem.unchanged_on (fun b _ => Mem.valid_block m2 b) m m'.
+  Proof.
+    intros. subst.
+    unfold Mem.map_block.
+    destruct (j1' b) as [[b2 d]|] eqn:j1'b; try eauto with mem.
+    destruct Mem.sup_dec; try eauto with mem.
+    destruct Mem.sup_dec; try eauto with mem.
+    constructor; simpl. eauto with mem.
+    intros. unfold Mem.perm. simpl.
+    erewrite pmap_update_diff'. reflexivity.
+    intro. subst. exploit INCRDISJ1; eauto.
+    inversion INJ12. eauto. intros [A B]. apply B. eauto.
+    intros. erewrite pmap_update_diff'. reflexivity.
+    intro. subst. exploit INCRDISJ1; eauto.
+    inversion INJ12. eauto. intros [A B]. apply B. eauto.
+  Qed.
+
+  Lemma unchanged_on_map_sup : forall s m m',
+      Mem.map_sup m1 j1' s m = m' ->
+      Mem.unchanged_on (fun b _ => Mem.valid_block m2 b) m m'.
+  Proof.
+    induction s.
+    - intros. inv H. simpl. eauto with mem.
+    - intros. inv H. simpl.
+      eapply Mem.unchanged_on_trans.
+      2: eapply unchanged_on_map_block; eauto.
+      eauto.
+  Qed.
+
+  Lemma unchanged1_step2: Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'1.
+  Proof.
+    intros. unfold m2'1. unfold Mem.step2.
+    eapply Mem.unchanged_on_implies with (P := fun b _ => Mem.valid_block m2 b).
+    eapply Mem.unchanged_on_trans.
+    eapply supext_unchanged_on. instantiate (1:= Mem.supext s2' m2). reflexivity.
+    eapply unchanged_on_map_sup; eauto.
+    intros. eauto.
+  Qed.
+
+  Lemma unchanged2_step2: Mem.unchanged_on (loc_unmapped j2) m2 m2'1.
+  Proof.
+    intros. unfold m2'1. unfold Mem.step2.
+    eapply Mem.unchanged_on_implies with (P := fun b _ => Mem.valid_block m2 b).
+    eapply Mem.unchanged_on_trans.
+    eapply supext_unchanged_on. instantiate (1:= Mem.supext s2' m2). reflexivity.
+    eapply unchanged_on_map_sup; eauto.
+    intros. eauto.
+  Qed.
+
+  Lemma unchanged_on_copy_block2 : forall m m' b,
+      Mem.copy_block m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 b m = m' ->
+      Mem.unchanged_on (loc_unmapped j2) m m'.
+  Proof.
+    intros. subst. unfold Mem.copy_block.
+    destruct (j2 b) as [[b3 d]|] eqn: j2b; eauto with mem.
+    destruct (Mem.sup_dec); eauto with mem.
+    constructor; simpl. eauto with mem.
+    intros. unfold Mem.perm. simpl. erewrite pmap_update_diff'. reflexivity.
+    congruence.
+    intros. rewrite pmap_update_diff'. reflexivity.
+    congruence.
+  Qed.
+
+    Lemma unchanged_on_copy_block1 : forall m m' b,
+      Mem.copy_block m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 b m = m' ->
+      Mem.unchanged_on (loc_out_of_reach j1 m1) m m'.
+  Proof.
+    intros. subst. unfold Mem.copy_block.
+    destruct (j2 b) as [[b3 d]|] eqn: j2b; eauto with mem.
+    destruct (Mem.sup_dec); eauto with mem.
+    constructor; simpl. eauto with mem.
+    - intros. unfold Mem.perm. simpl.
+      unfold Mem.pmap_update.
+      rewrite NMap.gsspec.
+      destruct (eq_block). subst.
+      erewrite Mem.copy_access_block_result; eauto.
+      destruct Mem.loc_in_reach_find as [[b1 o1]|] eqn:LOCIN.
+      eapply Mem.loc_in_reach_find_valid in LOCIN; eauto.
+      destruct LOCIN as [A B].
+      red in H. exploit H; eauto. replace (ofs - (ofs - o1)) with o1 by lia.
+      eauto. intro. inv H1. reflexivity. reflexivity.
+          - intros. unfold Mem.perm. simpl.
+      unfold Mem.pmap_update.
+      rewrite NMap.gsspec.
+      destruct (eq_block). subst.
+      erewrite Mem.copy_content_block_result; eauto.
+      destruct Mem.loc_in_reach_find as [[b1 o1]|] eqn:LOCIN.
+      eapply Mem.loc_in_reach_find_valid in LOCIN; eauto.
+      destruct LOCIN as [A B].
+      red in H. exploit H; eauto. replace (ofs - (ofs - o1)) with o1 by lia.
+      eauto. intro. inv H1. reflexivity. reflexivity.
+  Qed.
+
+  Lemma unchanged_on_copy'1 : forall s m m',
+      Mem.copy' m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 s m = m' ->
+      Mem.unchanged_on (loc_out_of_reach j1 m1) m m'.
+  Proof.
+    induction s; intros; subst; simpl.
+    - eauto with mem.
+    - eapply Mem.unchanged_on_trans.
+      2: eapply unchanged_on_copy_block1; eauto.
+      eauto.
+  Qed.
+  
+  Lemma unchanged_on_copy'2 : forall s m m',
+      Mem.copy' m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 s m = m' ->
+      Mem.unchanged_on (loc_unmapped j2) m m'.
+  Proof.
+    induction s; intros; subst; simpl.
+    - eauto with mem.
+    - eapply Mem.unchanged_on_trans.
+      2: eapply unchanged_on_copy_block2; eauto.
+      eauto.
+  Qed.
+  
+  Lemma unchanged1_step3: Mem.unchanged_on (loc_out_of_reach j1 m1) m2'1 m2'.
+  Proof.
+    unfold m2'.
+    eapply unchanged_on_copy'1; eauto.
+  Qed.
+
+  Lemma unchanged2_step3: Mem.unchanged_on (loc_unmapped j2) m2'1 m2'.
+  Proof.
+    unfold m2'.
+    eapply unchanged_on_copy'2; eauto.
+  Qed.
+
+  Theorem UNCHANGE21 : Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'.
+  Proof.
+    eapply Mem.unchanged_on_trans; eauto.
+    eapply unchanged1_step2.
+    eapply unchanged1_step3.
+  Qed.
+
+  Theorem UNCHANGE22 : Mem.unchanged_on (loc_unmapped j2) m2 m2'.
+  Proof.
+    eapply Mem.unchanged_on_trans; eauto.
+    eapply unchanged2_step2.
+    eapply unchanged2_step3.
+  Qed.
+
+  Theorem MAXPERM2 : injp_max_perm_decrease m2 m2'.
+  Proof. Admitted.
 
   Theorem INJ12' : Mem.inject j1' m1' m2'.
-  Proof. Admitted.
+  Proof.
+    constructor.
+    - constructor.
+      + intros. destruct (j1 b1) as [[b2' delta']|] eqn: j1b.
+        * apply INCR1 in j1b as j1'b. rewrite j1'b in H. inv H.
+          destruct (j2 b2) as [[b3 delta2]|] eqn:j2b2.
+          -- admit.
+          -- generalize UNCHANGE22. intro UNCHANGE22.
+             inversion UNCHANGE22. apply unchanged_on_perm; eauto.
+             inversion INJ12. eauto.
+             eapply Mem.perm_inject. apply j1b. eauto.
+             inversion UNCHANGE1. eapply unchanged_on_perm0; eauto.
+             red. unfold compose_meminj. rewrite j1b, j2b2. reflexivity.
+             unfold Mem.valid_block. eauto.
+        * exploit ADDZERO; eauto. intro. subst.
+          replace (ofs + 0) with ofs by lia.
+          admit.
+  Admitted.
 
   Theorem INJ23' : Mem.inject j2' m2' m3'.
   Proof. Admitted.
 
-  Theorem UNCHANGE21 : Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'.
-  Proof. Admitted.
-
-  Theorem UNCHANGE22 : Mem.unchanged_on (loc_unmapped j2) m2 m2'.
-  Proof. Admitted.
-
-  Theorem MAXPERM2 : injp_max_perm_decrease m2 m2'.
-  Proof. Admitted.
   
 End CONSTR_PROOF.
 
