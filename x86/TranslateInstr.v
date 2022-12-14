@@ -15,6 +15,8 @@ Local Open Scope error_monad_scope.
 Local Open Scope hex_scope.
 Local Open Scope bits_scope.
 
+Global Obligation Tactic := simpl;auto.
+
 (* cannot be used in monadInv *)
 Ltac destr_pair :=
   match goal with

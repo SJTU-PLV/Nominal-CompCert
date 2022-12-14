@@ -8,7 +8,7 @@ Require Import LocalLib.
 Import ListNotations.
 
 
-Definition rev_id_eliminate (symb: ident) (i:instruction) :=
+Definition rev_id_eliminate (symb: ident) (_ : Z) (i:instruction) :=
    match i with
   | Pjmp_l_rel _ =>
      (Pjmp_s symb signature_main)

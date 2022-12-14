@@ -6,6 +6,7 @@ Require Import encode.Hex encode.Bits.
 Import Hex Bits.
 Import ListNotations.
 Require Import SymbtableDecode ReloctablesEncode.
+Require Import RelocationTypes ReloctablesEncodeArchi.
 Set Implicit Arguments.
 
 Local Open Scope error_monad_scope.
@@ -13,17 +14,6 @@ Local Open Scope hex_scope.
 Local Open Scope bits_scope.
 Local Open Scope Z_scope.
 
-Definition decode_reloctype (z: Z) : res reloctype :=
-  match z with
-  | 0 => OK reloc_null
-  | 1 => OK reloc_abs
-  | 2 => OK reloc_rel
-  | _ => Error (msg "decode_reloctype: Unexpected value for symbtype")
-  end.
-
-Lemma decode_encode_reloctype rt:
-  decode_reloctype (encode_reloctype rt) = OK rt.
-Proof. destruct rt; reflexivity. Qed.
 
 Definition decode_reloc_info (m: ZTree.t ident) (lb: list byte) : res (reloctype * ident) :=
   if Archi.ptr64 then

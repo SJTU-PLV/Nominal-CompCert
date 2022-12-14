@@ -3,6 +3,7 @@ Require Import Asm.
 Require Import Errors.
 Require Import Memtype.
 Require Import RelocProg RelocProgram.
+Require Import RelocationTypes.
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -460,3 +461,17 @@ Definition id_eliminate (i:instruction): instruction:=
   | _ =>
      i
     end.
+
+
+Definition transl_init_data (dofs:Z) (d:init_data) : res (option relocentry) :=
+  match d with
+  | Init_addrof id ofs =>
+      let e := {| reloc_offset := dofs;
+                  reloc_type := reloc_abs;
+                  reloc_symb := id;
+                  reloc_addend := 0;
+               |} in
+      OK (Some e)
+  | _ =>
+    OK None
+  end.

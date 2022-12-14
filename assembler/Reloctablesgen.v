@@ -31,22 +31,6 @@ Definition transl_code (c:code) : res reloctable :=
   do (_, rtbl) <- fold_left acc_instrs c (OK (0, []));
   OK rtbl.
 
-(** ** Translation of global variables *)
-
-(* define it in x86 and riscv respectively 
-Definition transl_init_data (dofs:Z) (d:init_data) : res (option relocentry) :=
-  match d with
-  | Init_addrof id ofs =>
-      let e := {| reloc_offset := dofs;
-                  reloc_type := reloc_abs;
-                  reloc_symb := id;
-                  reloc_addend := 0;
-               |} in
-      OK (Some e)
-  | _ =>
-    OK None
-  end.
-*)
 
 (** Tranlsation of a list of initialization data and generate
     relocation entries *)

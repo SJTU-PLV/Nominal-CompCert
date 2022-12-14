@@ -136,7 +136,7 @@ Qed.
 
 Lemma transl_instr_consistency: forall i ofs e,
     transl_instr instr_size ofs i = OK (Some e) ->
-    instr_eq (rev_id_eliminate (reloc_symb e) (id_eliminate i)) i.
+    instr_eq (rev_id_eliminate (reloc_symb e) (reloc_addend e) (id_eliminate i)) i.
 Proof.
   intros i ofs e.
   destruct i;simpl;auto;

@@ -113,24 +113,11 @@ BACKEND=\
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
   AsmLabelNew.v SymbolString.v LocalLib.v CheckDef.v\
-  TargetPrinterAux.v\
-  PseudoInstructions.v\
-  AsmFixupcode.v\
-  AsmBuiltinInline.v\
-  AsmLiteral.v\
-  Asmlabelgen.v\
-  AsmPseudoInstr.v\
-  Jumptablegen.v\
-  SymbtablegenArchi.v\
-  RelocationTypes.v ReloctablesgenArchi.v\
-  TranslateInstr.v\
-  RelocElfArchi.v\
-  ReloctablesEncodeArchi.v\
 
-# architecture dependent files (x86 and riscv)
-# TODO: AsmInject.v
+# Architecture dependent files for assembler (x86 & riscV)
 
-X86 = \
+ifeq ($(ARCH), x86)
+ARCHFILES=\
   AsmRegs.v AsmFacts.v \
   SSAsm.v SSAsmproof.v \
   RealAsm.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v \
@@ -146,35 +133,56 @@ X86 = \
   TranslateInstr.v TranslateInstrSize.v\
   AsmLongInt.v\
   RelocProgSemanticsArchi.v RelocProgSemanticsArchi1.v\
-  AsmInject.v
-
+  AsmInject.v\
+  RelocElfArchi.v ReloctablesEncodeArchi.v
+else
+ifeq ($(ARCH), riscV)
+ARCHFILES=\
+  TargetPrinterAux.v\
+  PseudoInstructions.v\
+  AsmFixupcode.v\
+  AsmBuiltinInline.v\
+  AsmLiteral.v\
+  Asmlabelgen.v\
+  AsmPseudoInstr.v\
+  Jumptablegen.v\
+  SymbtablegenArchi.v\
+  RelocationTypes.v ReloctablesgenArchi.v\
+  TranslateInstr.v\
+  RelocElfArchi.v\
+  ReloctablesEncodeArchi.v
+else
+ARCHFILES=
+endif
+endif
 
 # Encoding of data into bytes
 
 ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 
 # Elf file format (unused: MergeSection.v)
-# ELF = RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
-#  ReloctablesEncode.v  ReloctablesDecode.v \
-#  SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof.v\
-#  DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
-#  RelocElfLinking.v\
+ELF = MachineTypes.v RelocElf.v\
+ EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
+ ReloctablesEncode.v  ReloctablesDecode.v \
+ SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof.v\
+ DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
+ RelocElfLinking.v\
 
-ELF = MachineTypes.v RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
-  ReloctablesEncode.v \
+# ELF = MachineTypes.v RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
+#   ReloctablesEncode.v \
 
 # assembler
-# ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
-#   RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
-#   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
-#   Symbtablegen.v Symbtablegenproof.v\
-#   Reloctablesgen.v Reloctablesgenproof.v\
-#   RelocBingen.v RelocBingenproof.v\
-
 ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
-  Symbtablegen.v\
-  Reloctablesgen.v\
-  RelocBingen.v\
+  RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
+  RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
+  Symbtablegen.v Symbtablegenproof.v\
+  Reloctablesgen.v Reloctablesgenproof.v\
+  RelocBingen.v RelocBingenproof.v\
+
+# ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
+#   Symbtablegen.v\
+#   Reloctablesgen.v\
+#   RelocBingen.v\
 
 # CSLED generation file
 AUTOGEN = VerificationCondition.v EncDecRet.v
@@ -209,7 +217,7 @@ DRIVER=Compopts.v CompilerAux.v Compiler.v Complements.v
 # All source files
 
 FILES=$(VLIB) $(COMMON) $(BACKEND) $(CFRONTEND) $(DRIVER) $(FLOCQ) \
-  $(MENHIRLIB) $(PARSER) $(ENCODE) $(ELF) $(AUTOGEN) $(ASSEMBLER)
+  $(MENHIRLIB) $(PARSER) $(ENCODE) $(ELF) $(AUTOGEN) $(ASSEMBLER) $(ARCHFILES)
 
 # Generated source files
 

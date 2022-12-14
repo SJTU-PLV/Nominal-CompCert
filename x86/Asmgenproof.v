@@ -655,7 +655,7 @@ Proof.
 Qed.
 
 (* copy from Asmgenproof0.v *)
-Lemma parent_ra_type: forall s, match_stack s -> Val.has_type (parent_ra s) Tptr.
+Lemma parent_ra_type: forall s, match_stack instr_size ge s -> Val.has_type (parent_ra s) Tptr.
 Proof.
   induction 1; simpl.
   unfold Vnullptr; unfold Tptr; destruct Archi.ptr64; simpl; auto. inv H0. constructor.

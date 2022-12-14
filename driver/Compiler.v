@@ -88,7 +88,7 @@ Require Asmgenproof.
 (** Command-line flags. *)
 Require Import Compopts.
 
-(** Architecture dependent part: targetprinter and assembler *)
+(** Architecture dependent parts: targetprinter and assembler *)
 Require Import CompilerAux.
 (* (** RealAsm passed. *) *)
 (* (* Require RealAsmgen. *) *)
