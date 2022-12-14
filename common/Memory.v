@@ -6290,6 +6290,8 @@ Variable j12 j23 j12' j23': meminj.
 
 Hypothesis INJ1: inject j12 m1 m2.
 Hypothesis INJ2: inject j23 m2 m3.
+Hypothesis SUPINCR2 : sup_include (support m2) s2'.
+
 (** The construction step (2) in appendix *)
 
  Program Definition map_block (b1:block) (m:mem) :=
@@ -6349,7 +6351,35 @@ Fixpoint map_sup (s:sup) (m:mem) :=
 
 (** step2, with the extension of support s2' which is constructed in step (1) *)
 Definition step2 := 
-  map_sup (Mem.support m1') (supext s2' m2).
+  map_sup (support m1') (supext s2' m2).
+
+(** properties of step2 *)
+
+Lemma map_block_support : forall b m,
+  support (map_block b m) = support m.
+Proof.
+  intros. unfold map_block.
+  destruct (j12' b); auto.
+  destruct p.
+  destruct (sup_dec); auto.
+  destruct (sup_dec); auto.
+Qed.
+
+Lemma map_sup_support : forall s m,
+    support (map_sup s m) = support m.
+Proof.
+  induction s; intros; simpl; eauto.
+  rewrite map_block_support. eauto.
+Qed.
+
+Lemma step2_support :
+  support step2 = s2'.
+Proof.
+  unfold step2. rewrite map_sup_support.
+  unfold supext.
+  destruct sup_include_dec; eauto.
+  congruence.
+Qed.
 
 (** construction step3 *)
 
@@ -6402,12 +6432,90 @@ Section REVERSE.
   Definition loc_in_reach_find (b2: block) (o2: Z) :=
     loc_in_reach_find' b2 o2 (Mem.support m1).
 
+  Lemma block_find_valid: forall b b2 o2 b1 o1,
+      block_find b b2 o2 = Some (b1, o1) ->
+      j12 b1 = Some (b2, o2 - o1) /\ perm m1 b1 o1 Max Nonempty.
+  Proof.
+    intros. unfold block_find in H.
+    destruct (j12 b) as [[b2' d]|] eqn:Hj; try congruence.
+    destruct eq_block; try congruence.
+    destruct find eqn:FIND; try congruence.
+    destruct p. inv H.
+    apply find_some in FIND. unfold check_position in FIND.
+    destruct FIND.
+    destruct zeq; try congruence. inv e. simpl in H1. inv H1.
+    split. replace (o0 - (o0 - d)) with d by lia. eauto.
+    unfold perm. unfold perm_order'.
+    apply in_perm_any_1 in H.
+    destruct H as [PERM IN].
+    apply ZMap.elements_complete in IN.
+    unfold NMap.get.
+    rewrite IN. destruct (m Max); eauto.
+    constructor.
+  Qed.
+  
+  Lemma loc_in_reach_find'_rec: forall s b2 o2 b1 o1,
+      loc_in_reach_find' b2 o2 s = Some (b1, o1) ->
+      j12 b1 = Some (b2, o2 - o1) /\ perm m1 b1 o1 Max Nonempty.
+  Proof.
+    induction s; intros; subst; simpl; eauto.
+    - inv H.
+    - simpl in H. destruct block_find eqn:BLOCK. destruct p.
+      inv H. eapply block_find_valid; eauto.
+      eauto.
+  Qed.
+
   Lemma loc_in_reach_find_valid: forall b2 o2 b1 o1,
       loc_in_reach_find b2 o2 = Some (b1,o1) ->
       j12 b1 = Some (b2,o2 - o1)
       /\ perm m1 b1 o1 Max Nonempty.
   Proof.
-    Admitted.
+    intros. unfold loc_in_reach_find in H.
+    eapply loc_in_reach_find'_rec; eauto.
+  Qed.
+
+  Lemma block_find_none : forall b b2 o2 d,
+      block_find b b2 o2 = None ->
+      j12 b = Some (b2,d) -> ~ perm m1 b (o2 - d) Max Nonempty.
+  Proof.
+    intros. unfold block_find in H.
+    destruct (j12 b) as [[b2' d']|] eqn:Hj; try congruence. inv H0.
+    rewrite pred_dec_true in H; eauto.
+    destruct find eqn:FIND; try congruence.
+    destruct p. inv H.
+
+    assert (forall z, In z (perm_elements_any (ZMap.elements (mem_access m1 b)))
+                 -> check_position (o0 - d) z = false).
+    apply find_none. eauto.
+    unfold perm. unfold perm_order'.
+    destruct (((mem_access m1) # b) ## (o0 - d) Max) eqn:PERM.
+    exploit H0. eapply in_perm_any; eauto.
+    eapply elements_correct'. setoid_rewrite access_default.
+    unfold NMap.get in PERM. intro. rewrite H1 in PERM. congruence.
+    unfold check_position. simpl.
+    rewrite pred_dec_true; eauto. intro. congruence. eauto.
+  Qed.
+  
+  Lemma loc_in_reach_find'_none_rec : forall s b2 o2,
+      loc_in_reach_find' b2 o2 s = None ->
+      forall b1 d1, j12 b1 = Some (b2,d1) -> sup_In b1 s -> ~ perm m1 b1 (o2 - d1) Max Nonempty.
+  Proof.
+    induction s; intros.
+    - inv H1.
+    - simpl in *. destruct block_find eqn:FIND. congruence.
+      destruct H1. subst.
+      eapply block_find_none; eauto. eauto.
+Qed.
+      
+  Lemma loc_in_reach_find_none:
+    forall b o, loc_in_reach_find b o = None -> loc_out_of_reach j12 m1 b o.
+  Proof.
+    intros. unfold loc_in_reach_find in H.
+    red. intros. eapply loc_in_reach_find'_none_rec; eauto.
+    inv INJ1. destruct (sup_dec b0 (support m1)). auto.
+    exploit mi_freeblocks0; eauto.
+    intro. congruence.
+  Qed.
 
 End REVERSE.
 (* update_mem_access *)
@@ -6532,15 +6640,41 @@ Admitted.
  Qed.
 
 
- Fixpoint copy' (s:sup) m : mem :=
+ Fixpoint copy_sup (s:sup) m : mem :=
    match s with
    | nil => m
-   | hd :: tl => copy_block hd (copy' tl m)
+   | hd :: tl => copy_block hd (copy_sup tl m)
    end.
 
  (*m2'*)
  Definition m2' :=
-   copy' (Mem.support m2) step2.
+   copy_sup (Mem.support m2) step2.
+
+ (** lemmas about step3 *)
+ Lemma copy_block_support : forall b m m',
+     copy_block b m = m' ->
+     support m' = support m.
+ Proof.
+   intros. subst. unfold copy_block.
+   destruct (j23 b); auto.
+   destruct (sup_dec); auto.
+ Qed.
+
+ Lemma copy_sup_support : forall s m m',
+     copy_sup s m = m' ->
+     support m' = support m.
+ Proof.
+   induction s; intros; subst; simpl; eauto.
+   erewrite copy_block_support. 2: eauto.
+   eauto.
+ Qed.
+
+ Lemma m2'_support : support m2' = s2'.
+ Proof.
+   unfold m2'. erewrite copy_sup_support; eauto.
+   apply step2_support.
+ Qed.
+   
 End STEP23.
 
 End Mem.

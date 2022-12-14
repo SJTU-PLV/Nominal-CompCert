@@ -1644,7 +1644,7 @@ Proof.
 Qed.
  *)
 
-(*
+
 Lemma loc_out_of_reach_incr : forall j1 j1' m1 m2 m1' b ofs,
     loc_out_of_reach j1 m1 b ofs ->
     inject_dom_in j1 (Mem.support m1) ->
@@ -1663,7 +1663,7 @@ Proof.
   - exploit H4; eauto. intros [A B].
     congruence.
 Qed.
-*)
+
 (** * Lemma A.5 *)
 Lemma loc_out_of_reach_trans:
   forall m1 m2 m3 j1 j2 b2 ofs2 b3 delta3 k p,
@@ -1797,11 +1797,9 @@ Section CONSTR_PROOF.
 
   (*after step2 *)
   Definition m2'1 := Mem.step2 m1 m2 m1' s2' j1'.
-  Definition m2' := Mem.copy' m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 (Mem.support m2) m2'1.
+  Definition m2' := Mem.copy_sup m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 SUPINCL2 (Mem.support m2) m2'1.
 
-  Lemma m2'_support: Mem.support m2' = s2'.
-  Proof.
-    Admitted.
+
   (* Lemma A.8 UNCHANGE properties about m2' *)
 
   Lemma pmap_update_diff': forall (A:Type) b f (map: NMap.t A) b',
@@ -1864,7 +1862,7 @@ Section CONSTR_PROOF.
   Qed.
 
   Lemma unchanged_on_copy_block2 : forall m m' b,
-      Mem.copy_block m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 b m = m' ->
+      Mem.copy_block m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 SUPINCL2 b m = m' ->
       Mem.unchanged_on (loc_unmapped j2) m m'.
   Proof.
     intros. subst. unfold Mem.copy_block.
@@ -1878,7 +1876,7 @@ Section CONSTR_PROOF.
   Qed.
 
     Lemma unchanged_on_copy_block1 : forall m m' b,
-      Mem.copy_block m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 b m = m' ->
+      Mem.copy_block m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 SUPINCL2 b m = m' ->
       Mem.unchanged_on (loc_out_of_reach j1 m1) m m'.
   Proof.
     intros. subst. unfold Mem.copy_block.
@@ -1908,7 +1906,7 @@ Section CONSTR_PROOF.
   Qed.
 
   Lemma unchanged_on_copy'1 : forall s m m',
-      Mem.copy' m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 s m = m' ->
+      Mem.copy_sup m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 SUPINCL2 s m = m' ->
       Mem.unchanged_on (loc_out_of_reach j1 m1) m m'.
   Proof.
     induction s; intros; subst; simpl.
@@ -1919,7 +1917,7 @@ Section CONSTR_PROOF.
   Qed.
   
   Lemma unchanged_on_copy'2 : forall s m m',
-      Mem.copy' m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 s m = m' ->
+      Mem.copy_sup m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 SUPINCL2 s m = m' ->
       Mem.unchanged_on (loc_unmapped j2) m m'.
   Proof.
     induction s; intros; subst; simpl.
@@ -2067,11 +2065,6 @@ Section CONSTR_PROOF.
 
 
   
-  (*to mem*)
-  Lemma loc_in_reach_find_none:
-    forall m j b o, Mem.loc_in_reach_find  m j b o = None -> loc_out_of_reach j m b o.
-  Proof. Admitted.
-  
   Theorem MAXPERM2 : injp_max_perm_decrease m2 m2'.
   Proof.
     red. intros b2 o2 p VALID PERM2.
@@ -2090,7 +2083,7 @@ Section CONSTR_PROOF.
         inversion UNC2. eapply unchanged_on_perm; eauto.
     - generalize (UNCHANGE21). intro UNC1.
       inversion UNC1. eapply unchanged_on_perm; eauto.
-      eapply loc_in_reach_find_none; eauto.
+      eapply Mem.loc_in_reach_find_none; eauto.
   Qed.
 
   Lemma subinj_dec : forall j j' b1 b2 d,
@@ -2105,6 +2098,8 @@ Section CONSTR_PROOF.
   Qed.
 
 
+  Lemma m2'_support : Mem.support m2' = s2'.
+  Proof. unfold m2'. apply Mem.m2'_support. Qed.
   
   Theorem INJ12' : Mem.inject j1' m1' m2'.
   Proof.
@@ -2244,7 +2239,7 @@ Section CONSTR_PROOF.
             reflexivity. intro. replace (o1 + (o2 - o1 + d2)) with (o2 + d2) in H by lia.
             auto.
           --
-            apply loc_in_reach_find_none in LOCIN.
+            eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
             assert (PERM2 : Mem.perm m2 b2 o2 k p).
             generalize UNCHANGE21. intro UNC2. inversion UNC2.
             eapply unchanged_on_perm; eauto.
@@ -2300,7 +2295,7 @@ Section CONSTR_PROOF.
             replace (o1 + (o2 - o1 + d2)) with (o2 + d2) by lia.
             eauto.
           --
-            apply loc_in_reach_find_none in LOCIN.
+            eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
             assert (PERM2 : Mem.perm m2 b2 o2 Cur Readable).
             generalize UNCHANGE21. intro UNC2. inversion UNC2.
             eapply unchanged_on_perm; eauto.
@@ -2390,7 +2385,7 @@ Section CONSTR_PROOF.
           eauto. intros [A | B].
           left. eapply copy_perm; eauto. congruence.
           right. intro. apply B. eapply copy_perm; eauto. congruence.
-        * apply loc_in_reach_find_none in LOCIN.
+        * eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
           destruct (Mem.perm_dec m2' b2 o2 Max Nonempty); auto.
           left. generalize UNCHANGE21. intro UNC2.
           assert (PERM2: Mem.perm m2 b2 o2 Max Nonempty).
@@ -2494,7 +2489,7 @@ Proof.
     generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
     intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
     subst.
-    set (m2' := m2' m1 m2 m3 m1' j12 j23 j12' j23' m2'_sup INJ12 INJ23 ).
+    set (m2' := m2' m1 m2 m3 m1' j12 j23 j12' j23' m2'_sup INJ12 INJ23 SUPINCL2 ).
     assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
     assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
     set (w1' := injpw j12' m1' m2' INJ12').
