@@ -1977,20 +1977,166 @@ Section CONSTR_PROOF.
   Lemma m2'_support : Mem.support m2' = s2'.
   Proof. unfold m2'. erewrite Mem.copy_sup_support; eauto. erewrite m2'1_support; eauto. Qed.
 
-  Lemma copy_perm: forall b1 o1 b2 o2,
+  Lemma copy_block_perm1 : forall m b1 o1 b2 o2 k p,
+      j1 b1 = Some (b2, o2 - o1) ->
+      Mem.perm m1 b1 o1 Max Nonempty ->
+      ~ (j2 b2 = None) ->
+      Mem.support m = s2' ->
+      Mem.perm (Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b2 m) b2 o2 k p <-> Mem.perm m1' b1 o1 k p.
+  Proof.
+    intros.
+    unfold Mem.copy_block. destruct (j2 b2); try congruence.
+    destruct Mem.sup_dec.
+    - unfold Mem.perm. simpl. unfold Mem.pmap_update.
+      setoid_rewrite NMap.gss. rewrite Mem.copy_access_block_result.
+      destruct Mem.loc_in_reach_find as [[b1' o1']|]eqn:FIND.
+      apply Mem.loc_in_reach_find_valid in FIND. destruct FIND as [A B].
+      (* generalize INJNOLAP1'. intro INJNOLAP1'. *)
+      assert (b1 = b1').
+      {
+        destruct (eq_block b1 b1'). auto.
+        inversion INJ12. exploit mi_no_overlap; eauto.
+        intros [C|D]. congruence. extlia.
+      }
+      assert (o1 = o1'). subst b1'. rewrite H in A.
+      inv A. lia. subst b1 o1. reflexivity.
+      eapply Mem.loc_in_reach_find_none in FIND; eauto.
+      red in FIND. exploit FIND; eauto. replace (o2 - (o2 - o1)) with o1 by lia. auto.
+      intro. inv H3. eauto.
+    - exfalso. rewrite H2 in *. apply n. inversion INJ12.
+      exploit mi_mappedblocks; eauto.
+  Qed.
+
+  Lemma copy_block_perm2 : forall m b2 o2 b2' k p,
+      b2 <> b2' ->
+      Mem.perm (Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b2' m) b2 o2 k p <-> Mem.perm m b2 o2 k p.
+  Proof.
+    intros.
+    unfold Mem.copy_block. destruct (j2 b2'); try reflexivity.
+    destruct Mem.sup_dec; try reflexivity.
+    unfold Mem.perm. simpl. rewrite pmap_update_diff'; eauto. reflexivity.
+  Qed.
+  
+  Lemma copy_sup_perm: forall s m b1 o1 b2 o2 k p,
+        j1 b1 = Some (b2, o2 - o1) ->
+        Mem.perm m1 b1 o1 Max Nonempty ->
+        ~ (j2 b2 = None) ->
+        sup_In b2 s ->
+        Mem.support m = s2' ->
+        Mem.perm (Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 s m) b2 o2 k p <-> Mem.perm m1' b1 o1 k p.
+  Proof.
+    induction s; intros.
+    - inv H2.
+    - simpl. destruct H2.
+      + subst a.
+        eapply copy_block_perm1; eauto.
+        erewrite Mem.copy_sup_support; eauto.
+      + destruct (eq_block a b2).
+        * subst a.
+          eapply copy_block_perm1; eauto.
+          erewrite Mem.copy_sup_support; eauto.
+        * 
+          exploit IHs; eauto.
+          intro.
+          etransitivity. 2: eauto.
+          eapply copy_block_perm2; eauto.
+  Qed.
+
+  Lemma copy_perm: forall b1 o1 b2 o2 k p,
           j1 b1 = Some (b2, o2 - o1) ->
           Mem.perm m1 b1 o1 Max Nonempty ->
           ~ (j2 b2 = None) ->
-          (forall k p, Mem.perm m2' b2 o2 k p <-> Mem.perm m1' b1 o1 k p).
-  Proof. Admitted.
+          Mem.perm m2' b2 o2 k p <-> Mem.perm m1' b1 o1 k p.
+  Proof.
+    intros. eapply copy_sup_perm; eauto.
+    inversion INJ12. eapply mi_mappedblocks; eauto.
+    apply m2'1_support.
+  Qed.
 
+  Lemma copy_block_content1 : forall m b1 o1 b2 o2,
+      j1 b1 = Some (b2, o2 - o1) ->
+      Mem.perm m1' b1 o1 Cur Readable ->
+      ~ (j2 b2 = None) ->
+      Mem.support m = s2' ->
+      mem_memval (Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b2 m) b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
+  Proof.
+    intros. assert (PERM1 : Mem.perm m1 b1 o1 Max Nonempty).
+    {
+      eapply MAXPERM1; eauto with mem.
+      eapply DOMIN1; eauto.
+    }
+    unfold Mem.copy_block. destruct (j2 b2); try congruence.
+    destruct Mem.sup_dec.
+    - unfold mem_memval. simpl. unfold Mem.pmap_update.
+      setoid_rewrite NMap.gss. rewrite Mem.copy_content_block_result; eauto.
+      destruct Mem.loc_in_reach_find as [[b1' o1']|] eqn:FIND.
+      + 
+      apply Mem.loc_in_reach_find_valid in FIND. destruct FIND as [A B].
+      (* generalize INJNOLAP1'. intro INJNOLAP1'. *)
+      assert (b1 = b1').
+      {
+        destruct (eq_block b1 b1'). auto.
+        inversion INJ12. exploit mi_no_overlap; eauto with mem.
+        intros [C|D]. congruence. extlia.
+      }
+      assert (o1 = o1'). subst b1'. rewrite H in A.
+      inv A. lia. subst b1 o1.
+      destruct Mem.perm_dec. simpl. reflexivity.
+      exfalso. apply n. eauto.
+      +
+      eapply Mem.loc_in_reach_find_none in FIND; eauto.
+      red in FIND. exploit FIND; eauto. replace (o2 - (o2 - o1)) with o1 by lia.
+      eauto with mem.
+      intro. inv H3.
+    - exfalso. rewrite H2 in *. apply n. inversion INJ12.
+      exploit mi_mappedblocks; eauto.
+  Qed.
 
+  Lemma copy_block_content2 : forall m b2 o2 b2',
+      b2 <> b2' ->
+      mem_memval (Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b2' m) b2 o2 = mem_memval m b2 o2.
+  Proof.
+    intros.
+    unfold Mem.copy_block. destruct (j2 b2'); try reflexivity.
+    destruct Mem.sup_dec; try reflexivity.
+    unfold mem_memval. simpl. rewrite pmap_update_diff'; eauto.
+  Qed.
+  
+  Lemma copy_sup_content: forall s m b1 o1 b2 o2,
+        j1 b1 = Some (b2, o2 - o1) ->
+        Mem.perm m1' b1 o1 Cur Readable ->
+        ~ (j2 b2 = None) ->
+        sup_In b2 s ->
+        Mem.support m = s2' ->
+        mem_memval (Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 s m) b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
+  Proof.
+    induction s; intros.
+    - inv H2.
+    - simpl. destruct H2.
+      + subst a.
+        eapply copy_block_content1; eauto.
+        erewrite Mem.copy_sup_support; eauto.
+      + destruct (eq_block a b2).
+        * subst a.
+          eapply copy_block_content1; eauto.
+          erewrite Mem.copy_sup_support; eauto.
+        * 
+          exploit IHs; eauto.
+          intro.
+          etransitivity. 2: eauto.
+          eapply copy_block_content2; eauto.
+  Qed.
+  
   Lemma copy_content : forall b1 o1 b2 o2,
           j1 b1 = Some (b2, o2 - o1) ->
           Mem.perm m1' b1 o1 Cur Readable ->
           ~ (j2 b2 = None) ->
           mem_memval m2' b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
-  Proof. Admitted.
+  Proof.
+    intros. eapply copy_sup_content; eauto.
+    inversion INJ12. eapply mi_mappedblocks; eauto.
+    apply m2'1_support.
+  Qed.
 
   Lemma copy_content_inject : forall b1 o1 b2 o2,
           j1 b1 = Some (b2, o2 - o1) ->
@@ -2225,40 +2371,6 @@ Section CONSTR_PROOF.
            unfold Mem.perm in n. exfalso. apply n. eauto.
   Qed.
         
-(*  Lemma map_sup_rev : forall s m m' b2 o2 b1 o1 k p,
-      Mem.map_sup m1 m1' j1' s m = m' ->
-      sup_In b1 s ->
-      ~ sup_In b1 (Mem.support m1) ->
-      Mem.support m = s2' ->
-      ~ Mem.perm m b2 o2 Max Nonempty ->
-      j1' b1 = Some (b2, o2 - o1) ->
-      Mem.perm m' b2 o2 k p ->
-      Mem.perm m1' b1 o1 k p.
-  Proof.
-    induction s; intros.
-    - inv H0.
-    - simpl in H.
-      destruct H0.
-      + subst a.
-        exploit map_block_perm_1
-        eapply IHs; eauto.
-        rewrite <- H.
-        eapply map_block_perm_1; eauto.
-        rewrite Mem.map_sup_support. eauto.
-      + destruct (eq_block a b1).
-        * subst a. rewrite <- H.
-          eapply map_block_perm_1; eauto.
-          rewrite Mem.map_sup_support. eauto.
-        * 
-          exploit IHs; eauto.
-          intro.
-          etransitivity. apply H6. rewrite <- H.
-          symmetry.
-          eapply map_block_perm_2; eauto.
-          rewrite Mem.map_sup_support. eauto. 
-  Qed.
-*)
-  
   Lemma map_sup_1 : forall s m m' b2 o2 b1 o1 k p,
       Mem.map_sup m1 m1' j1' s m = m' ->
       sup_In b1 s ->
