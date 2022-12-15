@@ -5952,55 +5952,6 @@ Proof.
       congruence.
 Qed.
 
-Program Definition map (f j2:meminj) (b:block) (s2: sup) (m1 m2:mem) :=
-  match f b with
-  |Some (b',delta) =>
-   if (valid_position_dec b' j2 s2 (Mem.support m2)) then
-     {|
-       mem_contents :=
-           pmap_update b' (update_mem_content ((mem_access m1)#b) f delta (mem_contents m1)#b)
-                       (mem_contents m2);
-       mem_access :=
-           pmap_update b' (update_mem_access delta (mem_access m1)#b) (mem_access m2);
-       support := (Mem.support m2);
-     |}
-   else m2
-  |None => m2
-  end.
-Next Obligation.
-    unfold pmap_update. destruct (eq_block b0 b'); subst.
-  - rewrite NMap.gsspec. rewrite pred_dec_true; auto.
-    generalize (update_mem_access_result delta ).
-    intros. erewrite H0; eauto.
-    erewrite update_mem_access_result; eauto.
-    destruct perm_check_any;
-    apply Mem.access_max; eauto.
-    apply Mem.access_default.
-    apply Mem.access_default.
-  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
-    apply Mem.access_max; auto.
-Qed.
-Next Obligation.
-    unfold pmap_update. destruct (eq_block b0 b'); subst.
-  - unfold valid_position in H. firstorder.
-  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
-    apply Mem.nextblock_noaccess. auto.
-Qed.
-Next Obligation.
-    unfold pmap_update. destruct (eq_block b0 b'); subst.
-  - rewrite NMap.gsspec. rewrite pred_dec_true; auto. unfold update_mem_content.
-    rewrite setN'_default. apply Mem.contents_default.
-  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
-    apply Mem.contents_default.
-Qed.
-Next Obligation.
-    unfold pmap_update. destruct (eq_block b0 b'); subst.
-  - rewrite NMap.gsspec. rewrite pred_dec_true; auto. unfold update_mem_access.
-    rewrite setN'_default. apply Mem.access_default.
-  - rewrite NMap.gsspec. rewrite pred_dec_false; auto.
-    apply Mem.access_default.
-Qed.
-
 (** loc_in_reach_dec *)
 Definition loc_in_reach (f:meminj) m b ofs k p: Prop :=
   exists b0 delta, f b0 = Some (b,delta) /\ Mem.perm m b0 (ofs - delta) k p.
@@ -6022,6 +5973,9 @@ Qed.
 Definition inject_dom_in (f:meminj) s : Prop :=
   forall b b' o, f b = Some (b',o) -> sup_In b s.
 
+(**  proof of loc_in_reach_dec which is contained by 
+     properties about loc_in_reach_find presented later *)
+(*
 Definition meminj_sub (j:meminj) (b:block) :=
   fun b0 => if (eq_block b b0) then None else j b0.
 
@@ -6078,209 +6032,8 @@ Proof.
          exists b0,d. split.
          rewrite meminj_sub_diff; auto. eauto.
 Qed.
+ *)
 
-Section out_of_reach_dec.
-Variable m1 m1' : mem.
-Variable j1 j1' j2 : meminj.
-Hypothesis H1: inject_dom_in j1 (support m1).
-Hypothesis H2: inject_dom_in j1' (support m1').
-
-Definition freed_position (b2:block)
-  (pair:Z * (perm_kind -> option permission)) : bool :=
-  if j2 b2 then
-  ((loc_in_reach_dec (support m1) m1 j1 b2 (fst pair) Max Nonempty H1)
-   &&
-   negb (loc_in_reach_dec (support m1') m1' j1' b2 (fst pair) Max Nonempty H2))
-   else false.
-
-Definition update_mem_access_free (b2: block) (map2: perm_map): perm_map :=
-  let none_elements := List.map (fun p => (fst p, fun p => None)) (ZMap.elements map2) in
-  let felements := filter (freed_position b2) none_elements in
-  setN' felements map2.
-
-
-Lemma fst_filter_norepet: forall (A B:Type) (l: list (A*B)) predicate,
-    list_norepet (List.map fst l) ->
-    list_norepet (List.map fst (filter predicate l)).
-Proof.
-  induction l; intros; eauto.
-  inv H. simpl.
-  destruct predicate. simpl.
-  constructor.
-  intro. apply H4.
-  apply in_map_fst in H. destruct H as [b Hb].
-  apply filter_In in Hb. destruct Hb.
-  apply in_map_fst_2 in H. auto.
-  eauto.
-  eauto.
-Qed.
-
-Lemma in_map_none_1:
-  forall (A B:Type) (a:A) (b b0:B) (l: list (A*B)),
-    In (a,b) (List.map (fun p => (fst p, b0)) l) ->
-    In a (List.map fst l).
-Proof.
-  induction l; intros.
-  - inv H.
-  - simpl in H. destruct H.
-    + destruct a0. simpl in H.
-      inv H. simpl. eauto.
-    + exploit IHl; eauto.
-      simpl. eauto.
-Qed.
-
-Lemma fst_none_norepet: forall (A B:Type) (b: B) (l: list (A*B)),
-    list_norepet (List.map fst l) ->
-    list_norepet (List.map fst (List.map (fun p => (fst p, b)) l)).
-Proof.
-  induction l; intros; eauto.
-  inv H. simpl.
-  constructor.
-  intro. apply H4.
-  apply in_map_fst in H. destruct H as [b' Hb].
-  eapply in_map_none_1; eauto.
-  eauto.
-Qed.
-
-Remark update_mem_access_free_result (b2: block) (map2: perm_map) ofs2 p:
-    fst map2 = (fun p => None) ->
-    (update_mem_access_free b2 map2)##ofs2 p =
-    if j2 b2 then
-    if ((loc_in_reach_dec (support m1) m1 j1 b2 ofs2 Max Nonempty H1) &&
-       negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs2 Max Nonempty H2))
-    then None else map2##ofs2 p else map2##ofs2 p.
-Proof.
-  intros. unfold update_mem_access_free.
-  destruct (j2 b2) eqn: Hj2.
-  - destruct (loc_in_reach_dec (support m1) m1 j1 b2 ofs2 Max Nonempty H1 &&
-     negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs2 Max Nonempty H2))
-     eqn: Hreach.
-    + destruct (in_dec zeq ofs2 (List.map fst (ZMap.elements map2))).
-      -- erewrite setN'_inside. reflexivity.
-         apply fst_filter_norepet; eauto.
-         apply fst_none_norepet; eauto.
-         apply ZMap.elements_keys_norepet.
-         apply filter_In. split.
-         apply in_map_fst in i.
-         destruct i as [b A].
-         eapply in_map_none; eauto.
-         unfold freed_position. simpl. rewrite Hj2, Hreach. auto.
-      -- erewrite setN'_outside.
-         apply ZMap.elements_correct_1 in n.
-         rewrite n,H. auto.
-         intro. apply in_map_fst in H0.
-         destruct H0 as [A B].
-         apply filter_In in B.
-         destruct B. apply n.
-         eapply in_map_fst_1; eauto.
-    + erewrite setN'_outside. reflexivity.
-      intro. apply in_map_fst in H0.
-      destruct H0 as [A B].
-      apply filter_In in B.
-      destruct B.
-      unfold freed_position in H3.
-      rewrite Hj2 in H3. simpl in H3. rewrite Hreach in H3.
-      congruence.
-  - erewrite setN'_outside. reflexivity.
-    intro. apply in_map_fst in H0.
-    destruct H0 as [A B].
-    apply filter_In in B.
-    destruct B.
-    unfold freed_position in H3.
-    rewrite Hj2 in H3. congruence.
-  Qed.
-
-Program Definition out_of_reach_free (b2 : block) (m2' : mem): mem :=
-  {|
-   mem_contents := (mem_contents m2');
-   mem_access := pmap_update b2 (update_mem_access_free b2) (mem_access m2');
-   support := support m2'
-  |}.
-
-Next Obligation.
-  unfold pmap_update. rewrite NMap.gsspec.
-  destruct eq_block.
-  repeat rewrite update_mem_access_free_result.
-  destruct (j2 b2);
-  destruct (loc_in_reach_dec (support m1) m1 j1 b2 ofs Max Nonempty H1 &&
-      negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs Max Nonempty H2));
-      try (eapply Mem.access_max; eauto).
-  constructor.
-  apply Mem.access_default.
-  apply Mem.access_default.
-  eapply Mem.access_max; eauto.
-Qed.
-Next Obligation.
-  unfold pmap_update. rewrite NMap.gsspec.
-  destruct eq_block. subst.
-  repeat rewrite update_mem_access_free_result.
-  destruct (j2 b2);
-  destruct (loc_in_reach_dec (support m1) m1 j1 b2 ofs Max Nonempty H1 &&
-            negb (loc_in_reach_dec (support m1') m1' j1' b2 ofs Max Nonempty H2));
-  try (apply nextblock_noaccess; eauto).
-  auto.
-  apply Mem.access_default.
-  apply Mem.nextblock_noaccess; eauto.
-Qed.
-Next Obligation.
-  apply Mem.contents_default; eauto.
-Qed.
-Next Obligation.
-  unfold pmap_update. rewrite NMap.gsspec.
-  destruct eq_block. subst.
-  unfold update_mem_access_free. rewrite setN'_default.
-  apply Mem.access_default.
-  apply Mem.access_default.
-Qed.
-
-Fixpoint initial_free (s2: sup) (m2':mem): mem :=
-  match s2 with
-    |nil => m2'
-    |hd :: tl => out_of_reach_free hd
-                                  (initial_free tl m2')
-  end.
-
-Definition initial_m2' (s2 s2': sup) (m2:mem): mem :=
-  initial_free s2 (supext s2' m2).
-
-End out_of_reach_dec.
-
-
-Fixpoint inject_map (s1' s2:list block) (j1' j2: meminj) (m1':mem) (m2:mem) : mem :=
-  match s1' with
-    |nil => m2
-    |hd :: tl => map j1' j2 hd s2 m1' (inject_map tl s2 j1' j2 m1' m2)
-  end.
-
-Definition inject_mem s2 j1' j2 m1' m2 : mem :=
-  inject_map (Mem.support m1') s2 j1' j2 m1' m2.
-(*
-Definition construction_m2' (m1 m1' m2 : mem) (j1 j1' j2 : meminj) (s2 s2' : sup)
-           (H1: inject_dom_in j1 (support m1)) (H2: inject_dom_in j1' (support m1'))
-           (m2' : mem) : Prop :=
-  exists m2'i,
-  initial_m2' m1 m1' j1 j1' j2 H1 H2 s2 s2' m2 = m2'i /\
-  inject_mem s2' j1' j2 m1' m2'i = m2'.
-*)
-Lemma support_map : forall j1' j2 b s2 m1 m2,
-    support (map j1' j2 b s2 m1 m2) = support m2.
-Proof.
-  intros. unfold map. destruct (j1' b) eqn: Hf; auto.
-  destruct p. destruct valid_position_dec; auto.
-Qed.
-
-Lemma inject_map_support : forall s1 s2 j1' j2 m1' m2,
-    support (inject_map s1 s2 j1' j2 m1' m2) = support m2.
-Proof.
-  induction s1; intros; simpl; auto.
-  - rewrite support_map. eauto.
-Qed.
-
-Lemma inject_mem_support : forall s2 j1' j2 m1' m2,
-    support (inject_mem s2 j1' j2 m1' m2) = support m2.
-Proof.
-  intros. apply inject_map_support; auto.
-Qed.
 
 Section STEP23.
   
@@ -6549,7 +6302,7 @@ Lemma access_filter'_none: forall map b2 o2,
    ~ In o2 (List.map fst (access_filter' (ZMap.elements map) b2)).
 Proof.
   intros.
-  induction (ZMap.elements map0); intros.
+  induction (ZMap.elements map); intros.
   - simpl. eauto.
   - simpl. destruct a.
     destruct (loc_in_reach_find b2 t) eqn:FIND.
@@ -6656,20 +6409,6 @@ Proof.
 Qed.
 
 
-(*
-Definition copy_content_position (b2: block)(pos2: Z * memval) : Z * memval :=
-  let o2 := fst pos2 in
-  let val2 := snd pos2 in
-  match loc_in_reach_find b2 o2 with
-  |Some (b1,o1) =>
-     let perm1 := ((mem_access m1')#b1)##o1 in
-     let mv := ((mem_contents m1')#b1)##o1 in
-     if perm_check_readable' perm1 then
-     (o2,memval_map j12 mv) else (o2,val2)
-  |None => (o2,val2)
-  end.
-*)
-
 Fixpoint content_filter' (vl2 : list (Z * memperm)) (b2: block): list (Z * memval) :=
   match vl2 with
   | nil => nil
@@ -6692,7 +6431,7 @@ Lemma content_filter'_none: forall map b2 o2,
    ~ In o2 (List.map fst (content_filter' (ZMap.elements map) b2)).
 Proof.
   intros.
-  induction (ZMap.elements map0); intros.
+  induction (ZMap.elements map); intros.
   - simpl. eauto.
   - simpl. destruct a.
     destruct (loc_in_reach_find b2 t) eqn:FIND; eauto.
@@ -6707,7 +6446,7 @@ Lemma content_filter'_none': forall map b2 o2 b1 o1,
    ~ In o2 (List.map fst (content_filter' (ZMap.elements map) b2)).
 Proof.
   intros.
-  induction (ZMap.elements map0); intros.
+  induction (ZMap.elements map); intros.
   - simpl. eauto.
   - simpl. destruct a.
     destruct (loc_in_reach_find b2 t) eqn:FIND; eauto.
