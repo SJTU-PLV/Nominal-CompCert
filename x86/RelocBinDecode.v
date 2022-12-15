@@ -600,11 +600,7 @@ Definition decode_instr_rex (W R X B: bool) (i: Instruction) : res instruction :
     let rs := decode_ireg_u4 R rsbits in
     let rd := decode_ireg_u4 B rdbits in
     if W then Error (msg "unsupported")
-    else
-      if ireg_eq rs rd then
-        OK (Asm.Pxorl_r rs)
-      else
-        OK (Asm.Pxorl_rr rd rs)
+    else OK (Asm.Pxorl_rr rd rs)
   | Pxorl_ri rdbits imm32 =>
     do imm <- decode_ofs_u32 imm32;
     let rd := decode_ireg_u4 B rdbits in
@@ -810,11 +806,7 @@ Definition decode_instr_rex (W R X B: bool) (i: Instruction) : res instruction :
   | Pxorl_GvEv (AddrE0 rsbits) rdbits =>
     let rd := decode_ireg_u4 R rdbits in
     let rs := decode_ireg_u4 B rsbits in
-    if W then
-      if ireg_eq rd rs then
-        OK (Asm.Pxorq_r rd)
-      else
-        OK (Asm.Pxorq_rr rd rs)
+    if W then OK (Asm.Pxorq_rr rd rs)
     else Error (msg "unsupported")
   | Pxorl_GvEv a rdbits =>
     let rd := decode_ireg_u4 R rdbits in
@@ -1232,51 +1224,6 @@ Qed.
 
 Hint Unfold decode_instr_rex decode_instr_rep decode_instr_repnz decode_instr decode_instr_override: decunfold.
 
-
-(* false if the encoded instruction unable to decode to itself *)
-Definition well_defined_instr i :=
-  match i with
-  | Pmovsd_mf_a _ _
-  | Pmovsd_fm_a _ _
-  | Pxorq_rr _ _ | Pxorl_rr _ _
-  | Pmov_mr_a _ _ | Pmov_rm_a _ _
-  | Asm.Pcall_r _ _
-  | Asm.Plabel _ | Asm.Pmovls_rr _
-  | Asm.Pjmp_r _ _
-  (* | Asm.Pjmp_s _ _ Ouput error *) 
-  | Asm.Pmovzl_rr _ _
-  | Asm.Pcall_s _ _ => false
-  | _ => true
-  end.
-
-Definition instr_eq (i1 i2: instruction) : Prop :=
-  i1 = i2 \/
-  match i1,i2 with
-  | Pmovsd_mf_a a1 f1, Pmovsd_mf a2 f2 => a1 = a2 /\ f1 = f2
-  | Pmovsd_fm_a a1 f1, Pmovsd_fm a2 f2 => a1 = a2 /\ f1 = f2
-  | Pmov_mr_a a1 r1, Pmovq_mr a2 r2 =>
-    if Archi.ptr64 then a1 = a2 /\ r1 = r2 else False
-  | Pmov_mr_a a1 r1, Asm.Pmovl_mr a2 r2 =>
-    if Archi.ptr64 then False else a1 = a2 /\ r1 = r2
-  | Pmov_rm_a r1 a1, Pmovq_rm r2 a2 =>
-    if Archi.ptr64 then a1 = a2 /\ r1 = r2 else False
-  | Pmov_rm_a r1 a1, Asm.Pmovl_rm r2 a2 =>
-    if Archi.ptr64 then False else a1 = a2 /\ r1 = r2
-  | Asm.Pcall_s id1 _, Asm.Pcall_s id2 _
-  | Asm.Pjmp_s id1 _, Asm.Pjmp_s id2 _ => id1 = id2
-  | Asm.Pcall_r r1 _, Asm.Pcall_r r2 _
-  | Asm.Pjmp_r r1 _, Asm.Pjmp_r r2 _ => r1 = r2
-  (* | Pxorq_r r, Pxorq_rr r1 r2 *)
-  (* | Pxorl_r r, Pxorl_rr r1 r2 => r = r1 /\ r = r2 *)
-  | Pxorq_rr r1 r2, Pxorq_r r => r1 = r /\ r2 = r
-  | Pxorq_rr r1 r2, Pxorq_rr r1' r2' => r1 = r1' /\ r2 = r2' /\ r1 <> r2
-  | Pxorl_rr r1 r2, Pxorl_r r => r1 = r /\ r2 = r
-  | Pxorl_rr r1 r2, Pxorl_rr r1' r2' => r1 = r1' /\ r2 = r2' /\ r1 <> r2 
-  | Asm.Plabel _, Asm.Pnop | Asm.Pmovls_rr _, Asm.Pnop => True
-  | Pmovzl_rr r1 r2, Pmov_rr r1' r2' => if Archi.ptr64 then r1 = r1' /\ r2 = r2' else False
-  | _,_ => False
-  end.
-
                                                  
 Ltac solve_rr :=
     exploit encode_rex_prefix_rr_result;eauto;
@@ -1449,35 +1396,22 @@ Ltac solve_decode_instr H :=
   | _ => fail
   end.
   
-Theorem translate_instr_consistency_partial: forall i li l,
-    well_defined_instr i = true ->
+Theorem translate_instr_consistency: forall i li l,
     translate_instr i = OK li ->
     decode_instr (li++l) = OK (i,l).
 Proof.
-  intros i li l WD H.
+  intros i li l H.
   unfold translate_instr in H;
-    destruct i;simpl in WD;try congruence;clear WD;
-      try destr_ptr64_in_H H;
-      try solve_decode_instr H;
-      try (repeat f_equal;auto with encdec).
+    destruct i;
+    try destr_ptr64_in_H H;
+    try solve_decode_instr H;
+    try (repeat f_equal;auto with encdec).
 
   (* Pimull_ri *)
   erewrite encode_ofs_u32_consistency;eauto. auto.
   erewrite encode_ofs_u32_consistency;eauto. simpl.
   apply decode_ireg_u4_inject1 in H11. repeat f_equal.
   apply decode_u1_inject. auto.
-
-  (* Pxorl_r *)
-  exploit decode_ireg_u4_inject2;eauto. intros;subst.
-  destr.
-  exploit decode_ireg_u4_inject1;eauto. intros;subst.
-  destr. simpl.
-  exploit decode_ireg_u4_inject2;eauto. intros;subst.
-  auto.
-
-  (* Pxorq_r *)
-  destr. simpl. repeat f_equal.
-  auto with encdec.
 
   (* shld_ri *)
   erewrite encode_ofs_u8_consistency;eauto. simpl.
@@ -1490,6 +1424,15 @@ Proof.
   1-10 : try (rewrite encode_testcond_consistency;simpl;
   repeat f_equal;auto with encdec).
 
+  (* Pjmp_r *)
+  destr_in H;monadInv H. solve_only_r.
+  (* Pcall_s *)
+  repeat destr_in H; auto.
+  repeat destr_in H; auto.
+  (* Pcall_r *)
+  destr_in H;monadInv H. solve_only_r.
+    
+  
   (* Pret_iw *)
   monadInv H. simpl.
   erewrite encode_ofs_u16_consistency;eauto. simpl.
@@ -1523,151 +1466,23 @@ Proof.
 
 Qed.
 
-Theorem translate_instr_consistency: forall i li l,
-    translate_instr i = OK li ->
-    exists i1, decode_instr (li++l) = OK (i1,l) /\ instr_eq i i1.
+(* architecture dependent bytes_to_bits *)
+
+Definition bytes_to_bits_archi := bytes_to_bits_opt.
+
+Lemma bytes_to_bits_archi_app : forall x1 x2,
+    bytes_to_bits_archi (x1++x2) = bytes_to_bits_archi x1 ++ bytes_to_bits_archi x2.
 Proof.
-  intros.
-  destruct (well_defined_instr i) eqn:WF.
-  - exploit translate_instr_consistency_partial;eauto.
-    exists i. split;eauto.
-    unfold instr_eq.
-    left. auto.
-  - destruct i;simpl in WF;try congruence;try monadInv H.
-    + simpl in H.
-      destr_in H. monadInv H.
-      (* exploit encode_rex_prefix_rr_result; eauto; *)
-      (*   intros [(?, (?, ?))| (?, (?, (?, (?, ?))))]; subst. *)
-      cbn [app] in *.
-      autounfold with decunfold.
-      eexists. cbn [bind]. split;eauto. 
-      unfold instr_eq. right.
-      split;symmetry;
-      eapply encode_ireg_u4_consistency;eauto.
-      (* eapply encode_ireg_u4_consistency;eauto. *)
-      (* autounfold with decunfold. *)
-      (* eexists. cbn [bind]. split;eauto.  *)
-      (* unfold instr_eq. right. auto. *)
-    + simpl. eexists;split;eauto.
-      unfold instr_eq;auto.
-    + exploit encode_rex_prefix_rr_result; eauto;
-        intros [(?, (?, ?))| (?, (?, (?, (?, ?))))]; subst.
-      ++ cbn [app] in *.
-         autounfold with decunfold.
-         destr.
-      * cbn [bind]. eexists. split;eauto. 
-        unfold instr_eq. right. auto.
-      * cbn [bind]. eexists. split;eauto. 
-        unfold instr_eq. right. auto.
-      ++ cbn [app] in *.
-         autounfold with decunfold.
-         simpl. destr.
-      * cbn [bind]. eexists. split;eauto. 
-        unfold instr_eq. right. auto.
-      * cbn [bind]. eexists. split;eauto. 
-        unfold instr_eq. right. auto.
-    + cbn [app] in *.
-      autounfold with decunfold.
-      simpl. destr.
-      * cbn [bind]. 
-        unfold instr_eq. eexists. split;eauto.
-        right. split;symmetry;auto with encdec.
-        exploit decode_ireg_u4_inject1;eauto.
-        exploit decode_ireg_u4_inject2;eauto.
-        intros. exploit decode_u1_inject;eauto.
-        intros. subst.
-        auto with encdec.
-      * cbn [bind]. 
-        unfold instr_eq. eexists. split;eauto.
-        right. split. symmetry. auto with encdec.
-        split. symmetry. auto with encdec.
-        unfold not. intros. subst. rewrite EQ in EQ1.
-        inv EQ1. congruence.
-        
-    (* + unfold translate_instr in H. *)
-    (*   do 3 destr_in H. *)
-    (*   * monadInv H. *)
-    (*     cbn [app] in *. *)
-    (*     autounfold with decunfold.              *)
-    (*     simpl. eexists. split;eauto. *)
-    (*     unfold instr_eq;right. *)
-    (*     apply Pos.eqb_eq;auto. *)
-    (*   * monadInv H. *)
-    (*     cbn [app] in *. *)
-    (*     autounfold with decunfold.              *)
-    (*     simpl. eexists. split;eauto. *)
-    (*     unfold instr_eq;right. *)
-    (*     apply Pos.eqb_eq;auto. *)
+  unfold bytes_to_bits_archi.
+  eapply bytes_to_bits_opt_app.
+Qed.
 
-    (* Pjmp_r *)
-    + exploit encode_rex_prefix_r_result; eauto;
-        intros [(?, ?)| (?, (?, ?))]; subst;cbn [app] in *;
-          autounfold with decunfold;cbn [bind];eexists;split;auto.
-      unfold instr_eq. right. auto.
-      simpl. eauto.
-      unfold instr_eq. right. auto.
-    + unfold translate_instr in H. (* Pcall_s *)
-      do 2 destr_in H.
-      * monadInv H.
-        cbn [app] in *.
-        autounfold with decunfold.             
-        simpl. eexists. split;eauto.
-        unfold instr_eq;right.
-        apply Pos.eqb_eq;auto.
-      * monadInv H.
-        cbn [app] in *.
-        autounfold with decunfold.             
-        simpl. eexists. split;eauto.
-        unfold instr_eq;right.
-        apply Pos.eqb_eq;auto.
+Lemma bits_to_bytes_to_bits_archi:
+  forall bs' bs,
+    bits_to_bytes_archi bs = OK bs' ->
+    bytes_to_bits_archi bs' = bs.
+Proof.
+  unfold bits_to_bytes_archi, bytes_to_bits_archi.
+  apply bits_to_bytes_to_bits.
+Qed.
 
-    + exploit encode_rex_prefix_r_result; eauto; (* Pcall_r *)
-        intros [(?, ?)| (?, (?, ?))]; subst;cbn [app] in *;
-          autounfold with decunfold;cbn [bind];eexists;split;auto.
-      unfold instr_eq. right. auto.
-      simpl. eauto.
-      unfold instr_eq. right. auto.
-    + unfold translate_instr in H. (* Pmov_rm_a *)
-      destr_in H;monadInv H;cbn [app] in *.
-      exploit transl_addr_consistency64;eauto.
-      intros (? & ?).
-      autounfold with decunfold.
-      destruct ProdL0;simpl in H;try congruence;
-      rewrite H10;simpl;eexists;split;eauto;
-        unfold instr_eq;rewrite Heqb;right;split;symmetry;auto with encdec.
-      exploit transl_addr_consistency32;eauto.
-      intros (? & ?).
-      autounfold with decunfold.
-      destruct x;simpl in H;try congruence;
-      rewrite H10;cbn [bind];eexists;split;eauto;
-        unfold instr_eq;rewrite Heqb;right;split;symmetry;auto with encdec.
-    + unfold translate_instr in H. (* Pmov_mr_a *)
-      destr_in H;monadInv H;cbn [app] in *.
-      exploit transl_addr_consistency64;eauto.
-      intros (? & ?).
-      autounfold with decunfold.
-      destruct ProdL0;simpl in H;try congruence;
-      rewrite H10;simpl;eexists;split;eauto;
-        unfold instr_eq;rewrite Heqb;right;split;symmetry;auto with encdec.
-      exploit transl_addr_consistency32;eauto.
-      intros (? & ?).
-      autounfold with decunfold.
-      destruct x;simpl in H;try congruence;
-      rewrite H10;cbn [bind];eexists;split;eauto;
-        unfold instr_eq;rewrite Heqb;right;split;symmetry;auto with encdec.
-    + exploit encode_rex_prefix_fa_result; eauto;
-        intros (NOTADDRE0, [(?, (?, A))| (?, (?, (?, (?, (?, A)))))]);
-        subst; cbn[app] in *; autounfold with decunfold;
-          rewrite A; cbn[bind];
-            eexists;split;eauto;unfold instr_eq;
-              destruct ProdR;simpl in NOTADDRE0;try congruence;
-      simpl;eauto.
-
-    +  exploit encode_rex_prefix_fa_result; eauto;
-        intros (NOTADDRE0, [(?, (?, A))| (?, (?, (?, (?, (?, A)))))]);
-        subst; cbn[app] in *; autounfold with decunfold;
-          rewrite A; cbn[bind];
-            eexists;split;eauto;unfold instr_eq;destruct ProdR;simpl in NOTADDRE0;try congruence;
-      simpl;eauto.
-    + simpl. eexists;split;eauto;unfold instr_eq;right. auto.
-Qed.      

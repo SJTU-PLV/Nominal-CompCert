@@ -8,7 +8,7 @@ Import Hex Bits.
 Require Import BPProperty.
 
 (* use a simple tactic to solve obligation *)
-Obligation Tactic := auto.
+Local Obligation Tactic := auto.
 
 Local Open Scope error_monad_scope.
 Local Open Scope hex_scope.

@@ -42,6 +42,39 @@ Definition transf_instr (i: instruction) (code: code) : res (list instruction) :
     OK ([i1]++[i2]++[i3])
   | Pbswap16 rd =>
     OK [Prolw_ri rd (Int.repr 8)]
+
+  (* ambiguous instructions pair *)
+  | Pmovsd_mf_a a1 f1 =>
+    OK [Pmovsd_mf a1 f1]
+  | Pmovsd_fm f1 a1 =>
+    OK [Pmovsd_fm f1 a1]
+  | Pmov_mr_a a1 f1 =>
+    if Archi.ptr64 then
+      OK [Pmovq_mr a1 f1]
+    else
+      OK [Pmovl_mr a1 f1]
+  | Pmov_rm_a rd a =>
+    if Archi.ptr64 then
+      OK [Pmovq_rm rd a]
+    else
+      OK [Pmovl_rm rd a]
+  | Pcall_s id sg =>
+    OK [Pcall_s id signature_main]
+  | Pjmp_s id sg =>
+    OK [Pjmp_s id signature_main]
+  | Pcall_r r sg =>
+    OK [Pcall_r r signature_main]
+  | Pjmp_r r sg =>
+    OK [Pjmp_r r signature_main]
+  | Pxorq_r r =>
+    OK [Pxorq_rr r r]
+  | Pxorl_r r =>
+    OK [Pxorl_rr r r]
+  | Plabel _ => OK [Pnop]
+  | Pmovls_rr r => OK [Pnop]
+  | Pmovzl_rr r1 r2 =>
+    if Archi.ptr64 then OK [Pmov_rr r1 r2]
+    else Error (msg "Pmovzl_rr in x86-32")
   |_ => OK [i] 
   end.
 

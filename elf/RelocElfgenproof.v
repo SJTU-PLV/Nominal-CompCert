@@ -8,6 +8,7 @@ Require Import RelocProgSemantics RelocProgSemantics1.
 Require Import TranslateInstr RelocProgSemantics2 RelocElfSemantics.
 Require Import SymbtableDecode ReloctablesEncode.
 Require Import RelocProgGlobalenvs RelocProgSemanticsArchi.
+Require Import ReloctablesEncodeArchi.
 Import Hex Bits.
 Import ListNotations.
 
@@ -357,7 +358,7 @@ Proof.
                               dec_symbtable := PTree.empty symbentry;
                               dec_reloctable := PTree.empty reloctable;
                               dec_shstrtbl := strtab_str ++ symtab_str ++ ProdR2 ++ shstrtab_str;
-                              dec_strtbl := [] |} /\ (forall i e, In (i,e) (PTree.elements sectbl) <-> In (i,e) (PTree.elements p.(prog_sectable)))).
+                              dec_strtbl := [Byte.repr 0] |} /\ (forall i e, In (i,e) (PTree.elements sectbl) <-> In (i,e) (PTree.elements p.(prog_sectable)))).
   { clear Heqb EQ0 e EQ2 Heqb0.
     clear ProdL1 ProdL0 ProdR6 ProdR4 ProdR5 ProdR3 ProdR1.
     unfold gen_section_header in EQ1.
@@ -384,7 +385,9 @@ Proof.
       simpl in EQ1. inv EQ1.
       cbn [combine]. simpl.
       eexists. unfold init_dec_state.      
-      split;eauto. simpl. intros. split;auto.
+      split;eauto. simpl. intros.
+      (*** TODO  *)
+      split;auto.
     - exploit LocalLib.length_S_inv;eauto.
       intros (l' & a1 & A1 & B1). subst.
       clear H.

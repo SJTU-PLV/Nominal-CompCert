@@ -15,6 +15,7 @@ Require Import RelocProgGlobalenvs RelocProgSemanticsArchi.
 Import ListNotations.
 Local Open Scope error_monad_scope.
 
+
 (* intermediate program representation *)
 Definition program1:= RelocProg.program fundef unit instruction byte.
 Definition section1 := RelocProg.section instruction byte.
@@ -131,36 +132,38 @@ Definition init_mem (p: RelocProg.program fundef unit instruction byte) :=
 
 (* Instructions Decoding *)
 
-Program Fixpoint decode_instrs_bytes (bytes: list byte) {measure (length bytes)} : res (list Instruction) :=
-  match bytes with
+Program Fixpoint decode_instrs_bits (bits: list bool) {measure (length bits)} : res (list Instruction) :=
+  match bits with
   | nil => OK []
   | _ =>
-    do (i, len) <- EncDecRet.decode_Instruction bytes;
+    do (i, len) <- EncDecRet.decode_Instruction bits;
     match len with
     | S _ =>
-      let bytes' := skipn len bytes in
-      do tl <- decode_instrs_bytes bytes';
+      let bits' := skipn len bits in
+      do tl <- decode_instrs_bits bits';
        OK (i :: tl)
     | _ =>
       Error (msg "decode_Instruction produce len = 0")
     end
   end.
 Next Obligation.
- erewrite skipn_length.
- destruct bytes. congruence.
- simpl. lia.
+  erewrite skipn_length.
+  destruct bits. congruence.
+  simpl.
+  lia.
 Defined.
 
-Lemma decode_instrs_bytes_eq: forall bytes,
-    decode_instrs_bytes bytes =
-    match bytes with
+  
+Lemma decode_instrs_bits_eq: forall bits,
+    decode_instrs_bits bits =
+    match bits with
     | nil => OK []
     | _ =>
-      do (i, len) <- EncDecRet.decode_Instruction bytes;
+      do (i, len) <- EncDecRet.decode_Instruction bits;
       match len with
       | S _ =>
-        let bytes' := skipn len bytes in
-        do tl <- decode_instrs_bytes bytes';
+        let bits' := skipn len bits in
+        do tl <- decode_instrs_bits bits';
         OK (i :: tl)
       | _ =>
         Error (msg "decode_Instruction produce len = 0")
@@ -168,11 +171,11 @@ Lemma decode_instrs_bytes_eq: forall bytes,
     end.
 Proof.
   intros. 
-  unfold decode_instrs_bytes.
+  unfold decode_instrs_bits.
   rewrite Wf.WfExtensionality.fix_sub_eq_ext.
   cbn [projT1].  cbn [projT2].
   destr.
-  destruct (decode_Instruction (i :: l)) eqn:DES.
+  destruct (decode_Instruction (b :: l)) eqn:DES.
   - destruct p.
     cbn [bind2].
     destr.
@@ -222,7 +225,8 @@ Proof.
 Qed.
 
 Definition decode_instrs' (bytes: list byte) :=
-  do instrs1 <- decode_instrs_bytes bytes;
+  let bits := bytes_to_bits_archi bytes in
+  do instrs1 <- decode_instrs_bits bits;
   do instrs2 <- decode_instrs instrs1;
   OK instrs2.
   

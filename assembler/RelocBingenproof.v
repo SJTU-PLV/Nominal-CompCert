@@ -48,9 +48,10 @@ Proof.
   induction l1;simpl;intros.
   - exists [],l. split;auto.
   - monadInv H.
-    eapply IHl1 in EQ.
-    destruct EQ as (l1' & l2' & P1 & P2 & P3).
-    subst. rewrite P1. rewrite EQ1. simpl.
+    eapply IHl1 in EQ0.
+    destruct EQ0 as (l1' & l2' & P1 & P2 & P3).
+    subst. rewrite P1. rewrite EQ. simpl.
+    rewrite EQ1. simpl.
     do 2 eexists.  split;eauto.
     split;eauto. apply app_assoc.
 Qed.
@@ -66,22 +67,21 @@ Proof.
   - subst. unfold transl_code in H0.
     monadInv H0.
     simpl in EQ. monadInv EQ.
-    rewrite EQ. eauto.
+    rewrite EQ1. eauto.
   - unfold transl_code in H0.
     monadInv H0.
     simpl in EQ.
     monadInv EQ.
     eapply translate_bytes_app in EQ0.
     destruct EQ0 as (l1' & l2' & P1 & P2 & P3).
-    eapply IHc;eauto. unfold transl_code. rewrite EQ1.
+    eapply IHc;eauto. unfold transl_code. rewrite EQ.
     simpl. eauto.
 Qed.    
 
     
 Section WITH_INSTR_SIZE.
   Variable instr_size : instruction -> Z.
-  Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.
-  Hypothesis rev_id_eliminate_size: forall i id, instr_size i = instr_size (rev_id_eliminate id i).
+  Hypothesis rev_id_eliminate_size: forall i id z, instr_size i = instr_size (rev_id_eliminate id z i).
   
 (* properties about rev_id_eliminate *)
 Lemma rev_transl_code_in_aux: forall n i c r c1 z1 r1,
@@ -90,7 +90,7 @@ Lemma rev_transl_code_in_aux: forall n i c r c1 z1 r1,
     In i c1 ->
     exists i' : instruction,
       In i' c /\
-      ((exists id : ident, rev_id_eliminate id i' = i) \/ i = i').
+      ((exists (id : ident) addend, rev_id_eliminate id addend i' = i) \/ i = i').
 Proof.
   induction n;intros.
   rewrite length_zero_iff_nil in H. subst.
@@ -141,117 +141,11 @@ Qed.
 
 Lemma rev_transl_code_in: forall i c r,
     In i (rev_transl_code instr_size r c) ->
-    exists i', In i' c /\ ((exists id, rev_id_eliminate id i' = i) \/ i = i').
+    exists i', In i' c /\ ((exists id addend, rev_id_eliminate id addend i' = i) \/ i = i').
 Proof.
   unfold rev_transl_code. intros.
   destruct ((fold_left (rev_acc_code instr_size) c ([], 0, r))) eqn:FOLD. destruct p. simpl in H.
   eapply rev_transl_code_in_aux;eauto.
-Qed.
-
-
-Lemma rev_transl_code_instr_eq_aux: forall n c1 c2 r c z r0 c0 z0 r1,
-    length c1 = n ->
-    Forall2 instr_eq c1 c2 ->
-    fold_left (rev_acc_code instr_size) c1 ([], 0, r) = (c, z, r0) ->
-    fold_left (rev_acc_code instr_size) c2 ([], 0, r) = (c0, z0, r1) ->
-    Forall2 instr_eq c c0 /\ z = z0 /\ r0 = r1.
-Proof.
-  induction n;intros.
-  rewrite length_zero_iff_nil in H. subst.
-  simpl in H0. inv H1. inv H0. simpl in H2.
-  inv H2. auto.
-  exploit LocalLib.length_S_inv;eauto.
-  intros (l' & a1 & A1 & B1). subst.
-  clear H.
-  apply Forall2_app_inv_l in H0.
-  destruct H0 as (l1' & l2' & P1 & P2 & P3).
-  inv P2. inv H5.
-  rewrite fold_left_app in *.
-  simpl in *. unfold rev_acc_code in H1 at 1.
-  unfold rev_acc_code in H2 at 1.
-  destr_in H1. destr_in H2. destruct p. destruct p0.
-  exploit IHn;eauto. intros (F1 & ? & ?).
-  subst. destr_in H2.
-  + inv H2. inv H1.
-    split. apply Forall2_app;auto.
-    split. erewrite instr_eq_size;eauto.
-    auto.
-  + exploit instr_eq_size;eauto.
-    intros. rewrite H in*.
-    destr_in H2.
-    * inv H1. inv H2.
-      split. apply Forall2_app;auto.
-      constructor. apply rev_id_eliminate_instr_eq;auto.
-      auto. split;auto.
-    * inv H1. inv H2.
-      split. apply Forall2_app;auto.
-      constructor. 
-      auto. split;auto.
-Qed.
-
-(* used in gen_instr_map_refl *)
-Lemma rev_transl_code_instr_eq: forall c1 c2 r,
-    Forall2 instr_eq c1 c2 ->
-    Forall2 instr_eq (rev_transl_code instr_size r c1) (rev_transl_code instr_size r c2).
-Proof.
-  unfold rev_transl_code. intros.
-  destruct ( (fold_left (rev_acc_code instr_size) c1 ([], 0, r))) eqn:FOLD1.
-  destruct ( (fold_left (rev_acc_code instr_size) c2 ([], 0, r))) eqn:FOLD2.
-  destruct p. destruct p0.
-  simpl.
-  exploit rev_transl_code_instr_eq_aux;eauto.
-  intros (P1 & P2 & P3). subst.
-  auto.
-Qed.
-
-
-
-Lemma gen_instr_map_canonical_aux: forall n (c1 c2:code) sz m (R: instruction -> instruction -> Prop) (Rsize: forall i1 i2 , R i1 i2 -> instr_size i1 = instr_size i2 ),
-    length c1 = n ->
-    fold_left (acc_instr_map instr_size) c1 (Ptrofs.zero, fun _ : ptrofs => None) = (sz, m) ->
-    Forall2 R c1 c2 ->
-    exists m', fold_left (acc_instr_map instr_size) c2 (Ptrofs.zero, fun _ : ptrofs => None) = (sz, m') /\ (forall ofs, option_rel R (m ofs) (m' ofs)).
-Proof.
-
-  induction n;intros.
-  rewrite length_zero_iff_nil in H. subst.
-  simpl in H0. inv H1. inv H0. simpl. eexists.
-  split;eauto. constructor.
-
-  exploit LocalLib.length_S_inv;eauto.
-  intros (l' & a1 & A1 & B1). subst.
-  clear H. apply Forall2_app_inv_l in H1.
-  destruct H1 as (l1' & l2' & P1 & P2 & P3). subst.
-  inv P2. inv H4.
-  rewrite fold_left_app in *.
-  simpl in *. unfold acc_instr_map in H0 at 1.
-  destruct fold_left eqn: FOLD in H0.
-  inv H0.
-  exploit IHn;eauto.
-
-  intros (m' & A1 & A2).
-  rewrite A1.
-  simpl. eexists. split;eauto.
-  f_equal. erewrite <- Rsize;eauto.
-  eapply eq_refl.
-  intros. simpl. destr. constructor;auto.
-  auto.
-Qed.
-
-
-Lemma gen_instr_map_canonical: forall c1 c2 ofs i (R: instruction -> instruction -> Prop) (Rsize: forall i1 i2 , R i1 i2 -> instr_size i1 = instr_size i2 ),
-    gen_instr_map instr_size c1 ofs = Some i ->
-    Forall2 R c1 c2 ->
-    exists i', gen_instr_map instr_size c2 ofs = Some i' /\ R i i'.
-Proof.
-  unfold gen_instr_map;intros.
-  destruct (fold_left (acc_instr_map instr_size) c1
-          (Ptrofs.zero, fun _ : ptrofs => None)) eqn:FOLD.
-  exploit gen_instr_map_canonical_aux;eauto.
-  intros (m' & P1 & P2).
-  generalize (P2  ofs). intros.
-  rewrite H in H1. inv H1.
-  exists y. rewrite P1. split;auto.
 Qed.
 
 
@@ -261,20 +155,23 @@ Hypothesis encode_Instruction_consistency:
     encode_Instruction data = OK bin ->    
     decode_Instruction (bin++l) = OK(data, length(bin)).
 
+
 Lemma encode_into_byte_consistency: forall l bl,
     translate_bytes l = OK bl ->
-    decode_instrs_bytes bl = OK l.
+    decode_instrs_bits (bytes_to_bits_archi bl) = OK l.
 Proof.
   induction l;simpl;intros.
   inv H. auto.
   
-  monadInv H. destruct x0.
+  monadInv H. destruct x.
   exfalso.
   (* we use not empty lemma defined in RelocBingenproofArchi.v *)
   eapply encode_Instruction_not_empty;eauto.
-  simpl. rewrite decode_instrs_bytes_eq.  
-  eapply encode_Instruction_consistency in EQ1.
-  simpl in EQ1. rewrite EQ1. simpl.
+  rewrite bytes_to_bits_archi_app.
+  erewrite bits_to_bytes_to_bits_archi;eauto.
+  simpl. rewrite decode_instrs_bits_eq.  
+  eapply encode_Instruction_consistency in EQ.
+  simpl in EQ. rewrite EQ. simpl.
   rewrite skipn_app. rewrite Nat.sub_diag.
   simpl. rewrite skipn_all. simpl. rewrite IHl;eauto.
 Qed.
@@ -288,55 +185,37 @@ Proof.
 Qed.
 
 
-Lemma instr_eq_list_len: forall l1 l2,
-    Forall2 instr_eq l1 l2 ->
-    code_size instr_size l1 = code_size instr_size l2.
-Proof.
-  induction l1;intros.
-  inv H. auto.
-  destruct l2. inv H.
-  inv H. simpl.
-  apply IHl1 in H5.
-  rewrite H5.
-  erewrite instr_eq_size;eauto.
-Qed.
-
-
 Lemma encode_instrs_consistency: forall c c',
     translate_instrs c = OK c' ->
-    exists c1 , decode_instrs c' = OK c1 /\ Forall2 instr_eq c c1.
+    decode_instrs c' = OK c.
 Proof.
   induction c;simpl;intros.
-  inv H. exists []. split. auto.
-  constructor.
-  monadInv H. eapply IHc in EQ.
-  destruct EQ as (c1 & P1 & P2).
-  destruct x0.
+  inv H. auto.  
+  monadInv H. eapply IHc in EQ1.
+  destruct x.
   exfalso.
   eapply translate_instr_not_empty;eauto.
-  apply translate_instr_consistency with (l:=x) in EQ1.
-  destruct EQ1 as (i1 & Q1 & Q2).
+  apply translate_instr_consistency with (l:=x0) in EQ.
   simpl. rewrite decode_instrs_eq;eauto.
-  cbn [app] in Q1. rewrite Q1.
+  cbn [app] in EQ. rewrite EQ.
   simpl. rewrite app_length.
   destr.
-  rewrite P1. simpl. eexists.
-  split;eauto.
+  rewrite EQ1. simpl. eexists. 
   lia.
 Qed.
 
 Lemma decode_instrs_total: forall c c',
-    transl_code  c = OK c' ->
-    exists c1 , decode_instrs' c' = OK c1 /\ Forall2 instr_eq c c1.
+    transl_code c = OK c' ->
+    decode_instrs' c' = OK c.
 Proof.
   unfold transl_code;intros.
+  unfold decode_instrs'.
   monadInv H.
-  apply encode_instrs_consistency in EQ.
-  destruct EQ.
   apply encode_into_byte_consistency in EQ0.
-  eexists x0. unfold decode_instrs'.
-  rewrite EQ0. simpl. destruct H.
-  rewrite H. simpl. auto.
+  rewrite EQ0. simpl.
+  apply encode_instrs_consistency in EQ.
+  rewrite EQ.
+  simpl. auto.
 Qed.
 
 Lemma decode_prog_code_section_total_aux: forall id sec sec' reloctbl,
@@ -350,7 +229,7 @@ Proof.
   unfold acc_decode_code_section.
   destr_in EQ.
   - monadInv EQ.
-    exploit decode_instrs_total;eauto. intros (c1 & ? & ?).
+    exploit decode_instrs_total;eauto. intros.
     rewrite H. simpl. eexists;eauto.
   - monadInv EQ.
     eexists;eauto.
@@ -414,9 +293,7 @@ Lemma translate_code_size: forall c1 c2 c3,
           code_size instr_size c1 = code_size instr_size c3.
 Proof.
   intros. apply decode_instrs_total in H.
-  destruct H as (c3' & P1 & P2).
-  rewrite P1 in H0. inv H0.
-  apply instr_eq_list_len. auto.
+  congruence.
 Qed.
 
   
@@ -1119,8 +996,7 @@ Qed.
 (* instruction map is mostly identical *)
 Lemma find_instr_refl: forall b ofs i,
     Genv.genv_instrs ge b ofs = Some i ->
-    exists i1, Genv.genv_instrs tge b ofs = Some i1
-          /\ instr_eq i i1.
+    Genv.genv_instrs tge b ofs = Some i.
 Proof.
   unfold ge,tge. unfold globalenv.
   unfold match_prog in TRANSF.
@@ -1215,19 +1091,11 @@ Proof.
         -- unfold acc_code_map in *.
            rewrite NMap.gss in *.
            exploit decode_instrs_total;eauto.
-           intros (c1 & DEC & INSTREQ).
-           rewrite EQ in DEC. inv DEC.
-           exploit (rev_transl_code_instr_eq code c1 r);eauto.
-           intros.
-           eapply gen_instr_map_canonical;eauto.
+           intros DEC. congruence.
         -- unfold acc_code_map in *.
            rewrite NMap.gss in *.
            exploit decode_instrs_total;eauto.
-           intros (c1 & DEC & INSTREQ).
-           rewrite EQ in DEC. inv DEC.
-           exploit (rev_transl_code_instr_eq code c1 []);eauto.
-           intros.
-           eapply gen_instr_map_canonical;eauto.
+           intros DEC. congruence.
       * simpl in EQ. monadInv EQ.
         simpl in REV3. monadInv REV3.
         simpl in H0.
@@ -1462,7 +1330,6 @@ Proof.
     eapply symbol_address_pres.
     eapply find_instr_refl.
     eapply find_ext_funct_refl.
-    eapply instr_eq_size.
     eapply rev_transl_code_in.
     eapply transl_instr_in_code.
     eapply senv_refl.

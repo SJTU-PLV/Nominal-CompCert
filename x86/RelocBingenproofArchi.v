@@ -58,49 +58,11 @@ Proof.
 
     
   (* Pcall *)
-  destr_in H.
+  destr_in H. destr_in H.
 Qed.
 
 Section WITH_INSTR_SIZE.
   Variable instr_size: instruction -> Z.
-
-(* used in gen_instr_map_refl *)
-Lemma rev_id_eliminate_instr_eq: forall i1 i2 id,
-    instr_eq i1 i2 ->
-    instr_eq (rev_id_eliminate id i1) (rev_id_eliminate id i2).
-Proof.
-  intros.
-  unfold instr_eq in H. destruct H.
-    (* i = i1 *)
-  subst. left. auto.
-
-  (* i is not well defined *)
-  destruct i1;try inv H;destr_in H;subst.
-
-  (* movzl_rr *)
-  destr_in H. 
-  
-  1-10: try (try destruct H;subst;simpl;unfold instr_eq;auto).
-
-  (* movzl_rr *)
-  rewrite Heqb. right. auto.
-  
-  1-6 :
-    try (try destr_in H;destruct H;subst;
-         simpl;do 2 destr;
-         unfold instr_eq; try rewrite Heqb; auto;
-         
-         destruct p; unfold instr_eq; try rewrite Heqb; auto).
- 
-  destruct H. subst. simpl. do 2 destr. unfold instr_eq. auto.
-  destruct p; unfold instr_eq; auto.
-  destruct H. subst. simpl. do 2 destr. unfold instr_eq. auto.
-  destruct p; unfold instr_eq; auto.
-
-  simpl. unfold instr_eq. right. auto.
-  
-Qed.
-
 
 (* ad-hoc *)
 Section PRESERVATION. 
@@ -117,14 +79,13 @@ Section PRESERVATION.
     RelocProgGlobalenvs.Genv.symbol_address tge id ofs.
   Hypothesis find_instr_refl: forall b ofs i,
     Genv.genv_instrs ge b ofs = Some i ->
-    exists i1, Genv.genv_instrs tge b ofs = Some i1
-          /\ instr_eq i i1.
+    Genv.genv_instrs tge b ofs = Some i.
   Hypothesis find_ext_funct_refl: forall v,
     Genv.find_ext_funct ge v = Genv.find_ext_funct tge v.
-  Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.
+
   Hypothesis rev_transl_code_in: forall i c r,
     In i (rev_transl_code instr_size r c) ->
-    exists i', In i' c /\ ((exists id, rev_id_eliminate id i' = i) \/ i = i').
+    exists i', In i' c /\ ((exists id addend, rev_id_eliminate id addend i' = i) \/ i = i').
   Hypothesis transl_instr_in_code: forall c i id,
     prog.(prog_sectable) ! id = Some (sec_text c) ->
     In i c ->
@@ -151,93 +112,10 @@ Proof.
   inv STEP.
   - unfold Genv.find_instr in H1.
     exploit find_instr_refl;eauto.
-    intros (i1 & FIND & MATCHINSTR).
+    intros.
     eapply exec_step_internal;eauto.
     erewrite <- find_ext_funct_refl;eauto.
-    exploit instr_eq_size;eauto. intros SIZE.
-    unfold instr_eq in MATCHINSTR. destruct MATCHINSTR.
-    (* i = i1 *)
-    subst. erewrite <- exec_instr_refl;eauto.
-    
-  (* i is not well defined *)
-    destruct i;try inv H3;simpl in H2;destr_in H3.
-    (* Pmovzl_rr *)
-    + inv H3. simpl.
-      admit.
-    (* Pmovls_rr *)
-    + subst. simpl.
-      admit.
-    (* Pxorl_rr *)
-    + destruct H3;subst.
-      simpl.
-      admit.
-    (* Pxorq_rr r1 <> r2 *)
-    + destruct H3;subst.
-      destruct H4;subst.
-      simpl. auto.
-    (* Pxorq_rr *)
-    + destruct H3;subst.
-      simpl.
-      admit.
-    (* Pxorq_rr r1 <> r2 *)
-    + destruct H3;subst.
-      destruct H4;subst.
-      simpl. auto.
-
-    (* Pjmp_s *)
-    + subst. simpl.
-      rewrite <- symbol_address_pres.
-      auto.
-    (* Pjmp_r *)
-    + subst. simpl. auto.
-    (* Pcall_s *)
-    + subst. simpl.
-      rewrite SIZE in *.
-      destr_in H2.
-      (* rewrite <- symbol_address_pres. *)
-      (* auto. *)
-    (* Pcall_r *)
-    + subst. simpl.
-      rewrite SIZE in *.
-      destr_in H2.
-      
-    (* Pmov_rm_a 32 *)
-    + destr_in H3.
-      destruct H3;subst.
-      simpl.
-      unfold exec_load in *.
-      unfold Mem.loadv in *.
-      rewrite <- eval_addrmode_refl.
-      destr_in H2.
-      destr_in Heqo.
-      Transparent Mem.load. 
-      assert (Mem.load  Many32 m b0
-                        (Ptrofs.unsigned i) = Mem.load Mint32 m b0 (Ptrofs.unsigned i)).
-      { unfold Mem.load.
-        unfold Mem.valid_access_dec.
-        cbn [size_chunk]. cbn [align_chunk].
-        destruct (Mem.range_perm_dec m b0 (Ptrofs.unsigned i)
-                                     (Ptrofs.unsigned i + 4) Cur Readable).
-        destruct (Zdivide_dec 4 (Ptrofs.unsigned i)).
-        unfold size_chunk_nat. cbn [size_chunk].
-        f_equal. unfold decode_val.
-        rewrite Heqb0.
-        admit. auto. auto. }
-      rewrite <- H3. rewrite Heqo.
-      admit.
-
-    (* Pmov_rm_a 64 *)
-    + admit.
-    (* Pmov_mr_a 32 *)
-    + admit.
-    (* Pmov_mr_a 64 *)
-    + admit.
-    (* Pmovsd_fm_a *)
-    + admit.
-    (* Pmovsd_mf_a *)
-    + admit.
-    + simpl. rewrite SIZE in *.
-      auto.
+    erewrite <- exec_instr_refl;eauto.
 
   (* Pbuiltin instr impossible *)
   - unfold Genv.find_instr in H1.
@@ -274,8 +152,8 @@ Proof.
   - 
     rewrite find_ext_funct_refl in H0.
     eapply exec_step_external;eauto.
-    rewrite <- senv_refl. auto.
-Admitted.
+    rewrite <- senv_refl. auto.    
+Qed.
 
 End PRESERVATION.
 

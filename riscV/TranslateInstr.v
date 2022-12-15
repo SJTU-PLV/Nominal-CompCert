@@ -11,7 +11,7 @@ Local Open Scope bits_scope.
 
 Local Open Scope error_monad_scope.
 
-Global Obligation Tactic := simpl;auto.
+Local Obligation Tactic := simpl;auto.
 
 Fixpoint bits_of_int_rec (n: nat) (x: Z) {struct n}: list bool :=
   match n with

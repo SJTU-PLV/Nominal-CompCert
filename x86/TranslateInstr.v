@@ -15,7 +15,7 @@ Local Open Scope error_monad_scope.
 Local Open Scope hex_scope.
 Local Open Scope bits_scope.
 
-Global Obligation Tactic := simpl;auto.
+Local Obligation Tactic := simpl;auto.
 
 (* cannot be used in monadInv *)
 Ltac destr_pair :=
@@ -1220,43 +1220,52 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
   | Asm.Pjmp_l_rel ofs =>
       do imm <- encode_ofs_signed32 ofs;
       OK [Pjmp_l_rel imm]
-  | Asm.Pjmp_s id _ =>
+  | Asm.Pjmp_s id sg =>
     (* if Pos.eqb id xH then
       match e with
       |  Some _ =>
-        if Archi.ptr64 then 
-          OK [Pjmp_l_rel zero32]
-        else
-          do imm32 <- encode_ofs_u32 (-4);
-          OK [Pjmp_l_rel imm32]
+        if signature_eq sg signature_main then
+          if Archi.ptr64 then 
+            OK [Pjmp_l_rel zero32]
+          else
+            do imm32 <- encode_ofs_u32 (-4);
+            OK [Pjmp_l_rel imm32]
+        else Error [MSG "sg must be signature_main: Pjmp_s"]
       | None =>
         Error (msg "No relocation entry in Pjmp_s")
       end
     else Error (msg "Id not equal to xH in Pjmp_s") *)
     Error (msg "Pjmp_s should be transformed in id elimination")
   | Asm.Pjmp_r r sg =>
-    do rex_r <- encode_rex_prefix_r r;
-    let (orex, rbits) := rex_r in
-    OK (orex ++ [Pjmp_Ev (AddrE0 rbits)])
+    if signature_eq sg signature_main then
+      do rex_r <- encode_rex_prefix_r r;
+      let (orex, rbits) := rex_r in
+      OK (orex ++ [Pjmp_Ev (AddrE0 rbits)])
+    else Error [MSG "sg must be signature_main: Pjmp_r"]
   | Asm.Pjmp_m addr =>
     (* same in the 64bit and 32bit mode *)
     do orex_a <- encode_rex_prefix_addr addr;
     let (orex, a) := orex_a in
     OK (orex ++ [Pjmp_Ev a])
-  | Asm.Pnop | Asm.Plabel _ | Asm.Pmovls_rr _ =>
+  | Asm.Pnop =>
      OK [Pnop]
   | Asm.Pcall_r r sg =>
-    do rex_r <- encode_rex_prefix_r r;
-    let (orex, rbits) := rex_r in
-    OK (orex ++ [Pcall_r rbits])
+    if signature_eq sg signature_main then
+      do rex_r <- encode_rex_prefix_r r;
+      let (orex, rbits) := rex_r in
+      OK (orex ++ [Pcall_r rbits])
+    else Error [MSG "sg must be signature_main: Pcall_r"]
   | Asm.Pcall_s id sg =>
     match id with
     | xH =>
-      if Archi.ptr64 then 
-        OK [Pcall_ofs zero32]
+      if signature_eq sg signature_main then
+        if Archi.ptr64 then 
+          OK [Pcall_ofs zero32]
+        else
+          do imm32 <- encode_ofs_u32 (-4);
+          OK [Pcall_ofs imm32]
       else
-        do imm32 <- encode_ofs_u32 (-4);
-        OK [Pcall_ofs imm32]
+        Error [MSG "sg must be signature_main: Pcall_s"]
     | _ =>
       Error [MSG "id must be 1: Pcall_s"]
     end   
@@ -1349,46 +1358,6 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
     let (orex, rdbits) := rex_r in
     do imm32 <- encode_ofs_u32 (Int.intval imm);
     OK (orex ++ [Psubl_ri rdbits imm32])
-  | Asm.Pmov_mr_a addr rs =>
-    if Archi.ptr64 then
-      do addr_X_B <- translate_Addrmode_AddrE64 addr;
-      let (a_X, B) := addr_X_B in
-      let (a,X) := a_X in
-      do Rrsbits <- encode_ireg_u4 rs;
-      let (R,rsbits) := Rrsbits in
-      OK ([REX_WRXB one1 R X B; Pmovl_mr a rsbits])
-    else
-      do a <- translate_Addrmode_AddrE addr;
-      do rbits <- encode_ireg_u3 rs;
-    OK [Pmovl_mr a rbits]
-  | Asm.Pmov_rm_a rd addr =>
-    if Archi.ptr64 then
-      do addr_X_B <- translate_Addrmode_AddrE64 addr;
-      let (a_X, B) := addr_X_B in
-      let (a,X) := a_X in
-      do Rrdbits <- encode_ireg_u4 rd;
-      let (R,rdbits) := Rrdbits in
-      OK ([REX_WRXB one1 R X B; Pmovl_rm a rdbits])
-    else
-      do a <- translate_Addrmode_AddrE addr;
-      do rbits <- encode_ireg_u3 rd;
-      OK ([Pmovl_rm a rbits])
-
-  | Asm.Pmovsd_mf_a addr rs =>
-    do rex_ra <- encode_rex_prefix_fa rs addr;
-    let (orex_rbits, a) := rex_ra in
-    let (orex, rbits) := orex_rbits in
-    OK ([REPNZ] ++ orex ++ [Pmovss_d_mf a rbits])
-  | Asm.Pmovsd_fm_a rd addr =>
-    do rex_ra <- encode_rex_prefix_fa rd addr;
-    let (orex_rdbits, a) := rex_ra in
-    let (orex, rdbits) := orex_rdbits in
-    OK ([REPNZ] ++ orex ++ [Pmovss_d_fm a rdbits])
-  | Asm.Pxorl_r r =>
-    do rex_rr <- encode_rex_prefix_rr r r;
-    let (oREX_rdbits, r1bits) := rex_rr in
-    let (orex, rdbits) := oREX_rdbits in
-    OK (orex ++ [Pxorl_EvGv (AddrE0 rdbits) r1bits])
 
   | Asm.Pdivd_ff rd rs =>
     do rex_rr <- encode_rex_prefix_ff rd rs;
@@ -1408,26 +1377,6 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
   
 
   (* 64bit *)
-  (* transfer to mov  memory *)
-(*     | Asm.Pmovq_ri rd imm => *)
-(*     do Rrdbits <- encode_ireg_u4 rd; *)
-(*     let (R,rdbits) := Rrdbits in *)
-(*     do imm64 <- encode_ofs_u64 (Int64.intval imm); *)
-  (*     OK (Pmovq_ri R rdbits imm64) *)
-  (* movzl is a 64-bit instructions, we generate a rex prefix for it to ensure the instruction size consistency *)
-  | Asm.Pmovzl_rr rd r1 =>
-    if Archi.ptr64 then
-      do Rrdbits <- encode_ireg_u4 rd;
-      do Brsbits <- encode_ireg_u4 r1;
-      let (B, r1bits) := Brsbits in
-      let (R, rdbits) := Rrdbits in
-      OK ([REX_WRXB zero1 R zero1 B; Pmovl_rm (AddrE0 r1bits) rdbits])
-    else
-      Error (msg "Pmovzl_rr in 32 bit mode")
-    (* do rex_rr <- encode_rex_prefix_rr rd r1; *)
-    (* let (orex_rdbits, r1bits) := rex_rr in *)
-    (* let (orex, rdbits) := orex_rdbits in *)
-    (* OK (orex ++ [Pmovl_rm (AddrE0 r1bits) rdbits]) *)
   | Asm.Pmovsl_rr rd r1 =>
     do Rrdbits <- encode_ireg_u4 rd;
     do Brsbits <- encode_ireg_u4 r1;
@@ -1554,10 +1503,7 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
     let (R, rdbits) := Rrdbits in
     (* B for rs, R for rd *)
     OK ([REX_WRXB one1 R zero1 B; Pxorl_GvEv (AddrE0 rsbits) rdbits])
-  | Asm.Pxorq_r r =>
-    do Brbits <- encode_ireg_u4 r;
-    let (B, rbits) := Brbits in
-    OK ([REX_WRXB one1 B zero1 B; Pxorl_GvEv (AddrE0 rbits) rbits])
+
   | Asm.Pnotq r =>
   (* test in asm *)
     do Brbits <- encode_ireg_u4 r;
@@ -1640,4 +1586,4 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
   | _ => Error [MSG "Not exists or unsupported: "; MSG (instr_to_string i)]
   end.
 
-Definition bits_to_bytes_archi bs := bits_to_bytes bs.
+Definition bits_to_bytes_archi := bits_to_bytes.
