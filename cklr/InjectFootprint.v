@@ -1797,7 +1797,7 @@ Section CONSTR_PROOF.
 
   (*after step2 *)
   Definition m2'1 := Mem.step2 m1 m2 m1' s2' j1'.
-  Definition m2' := Mem.copy_sup m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 SUPINCL2 (Mem.support m2) m2'1.
+  Definition m2' := Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 s2' m2'1.
 
 
   (* Lemma A.8 UNCHANGE properties about m2' *)
@@ -1862,7 +1862,7 @@ Section CONSTR_PROOF.
   Qed.
 
   Lemma unchanged_on_copy_block2 : forall m m' b,
-      Mem.copy_block m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 SUPINCL2 b m = m' ->
+      Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b m = m' ->
       Mem.unchanged_on (loc_unmapped j2) m m'.
   Proof.
     intros. subst. unfold Mem.copy_block.
@@ -1876,7 +1876,7 @@ Section CONSTR_PROOF.
   Qed.
 
     Lemma unchanged_on_copy_block1 : forall m m' b,
-      Mem.copy_block m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 SUPINCL2 b m = m' ->
+      Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b m = m' ->
       Mem.unchanged_on (loc_out_of_reach j1 m1) m m'.
   Proof.
     intros. subst. unfold Mem.copy_block.
@@ -1906,7 +1906,7 @@ Section CONSTR_PROOF.
   Qed.
 
   Lemma unchanged_on_copy'1 : forall s m m',
-      Mem.copy_sup m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 SUPINCL2 s m = m' ->
+      Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 s m = m' ->
       Mem.unchanged_on (loc_out_of_reach j1 m1) m m'.
   Proof.
     induction s; intros; subst; simpl.
@@ -1917,7 +1917,7 @@ Section CONSTR_PROOF.
   Qed.
   
   Lemma unchanged_on_copy'2 : forall s m m',
-      Mem.copy_sup m1 m2 m3 m1' s2' j1 j2 j1' j2' INJ12 INJ23 SUPINCL2 s m = m' ->
+      Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 s m = m' ->
       Mem.unchanged_on (loc_unmapped j2) m m'.
   Proof.
     induction s; intros; subst; simpl.
@@ -2099,7 +2099,11 @@ Section CONSTR_PROOF.
 
 
   Lemma m2'_support : Mem.support m2' = s2'.
-  Proof. unfold m2'. apply Mem.m2'_support. Qed.
+  Proof. unfold m2'.
+         erewrite Mem.copy_sup_support; eauto.
+         unfold m2'1.
+         erewrite Mem.step2_support; eauto.
+  Qed.
   
   Theorem INJ12' : Mem.inject j1' m1' m2'.
   Proof.
@@ -2489,7 +2493,7 @@ Proof.
     generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
     intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
     subst.
-    set (m2' := m2' m1 m2 m3 m1' j12 j23 j12' j23' m2'_sup INJ12 INJ23 SUPINCL2 ).
+    set (m2' := m2' m1 m2 m1' j12 j23 j12' m2'_sup INJ12 ).
     assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
     assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
     set (w1' := injpw j12' m1' m2' INJ12').

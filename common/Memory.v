@@ -6656,7 +6656,7 @@ Proof.
 Qed.
 
 
-(* update content of position (b_2,o_2) using loc_in_reach_find *)
+(*
 Definition copy_content_position (b2: block)(pos2: Z * memval) : Z * memval :=
   let o2 := fst pos2 in
   let val2 := snd pos2 in
@@ -6668,7 +6668,7 @@ Definition copy_content_position (b2: block)(pos2: Z * memval) : Z * memval :=
      (o2,memval_map j12 mv) else (o2,val2)
   |None => (o2,val2)
   end.
-
+*)
 
 Fixpoint content_filter' (vl2 : list (Z * memperm)) (b2: block): list (Z * memval) :=
   match vl2 with
@@ -6676,7 +6676,7 @@ Fixpoint content_filter' (vl2 : list (Z * memperm)) (b2: block): list (Z * memva
   | (o2,_) :: tl =>
       match (loc_in_reach_find b2 o2) with
       |Some (b1,o1) => if perm_dec m1' b1 o1 Cur Readable then
-                           (o2, memval_map j12 ((mem_contents m1')#b1)##o1)
+                           (o2, memval_map j12' ((mem_contents m1')#b1)##o1)
                              :: (content_filter' tl b2)
                       else (content_filter' tl b2)
       |None => (content_filter' tl b2)
@@ -6737,7 +6737,7 @@ Lemma content_filter'_rec : forall vl b2 o2 b1 o1,
     loc_in_reach_find b2 o2 = Some (b1, o1) ->
     perm m1' b1 o1 Cur Readable ->
     In o2 (List.map fst vl) ->
-    In (o2, memval_map j12 ((mem_contents m1')#b1)##o1) (content_filter' vl b2).
+    In (o2, memval_map j12' ((mem_contents m1')#b1)##o1) (content_filter' vl b2).
 Proof.
   induction vl; intros.
   - inv H1.
@@ -6754,7 +6754,7 @@ Qed.
 Lemma content_filter_some: forall b2 o2 b1 o1,
     loc_in_reach_find b2 o2 = Some (b1, o1) ->
     perm m1' b1 o1 Cur Readable ->
-    In (o2, memval_map j12 ((mem_contents m1')#b1)##o1) (content_filter b2).
+    In (o2, memval_map j12' ((mem_contents m1')#b1)##o1) (content_filter b2).
 Proof.
   intros.
   eapply content_filter'_rec; eauto.
@@ -6824,7 +6824,7 @@ Lemma copy_content_block_result:
       match (loc_in_reach_find b2 o2) with
       | Some (b1,o1) =>
           let mv := ((mem_contents m1')#b1)##o1 in
-          if perm_dec m1' b1 o1 Cur Readable then memval_map j12 mv else vmap2##o2
+          if perm_dec m1' b1 o1 Cur Readable then memval_map j12' mv else vmap2##o2
       | None =>  vmap2##o2
    end.
 Proof.
@@ -6900,10 +6900,6 @@ Qed.
    | hd :: tl => copy_block hd (copy_sup tl m)
    end.
 
- (*m2'*)
- Definition m2' :=
-   copy_sup (Mem.support m2) step2.
-
  (** lemmas about step3 *)
  Lemma copy_block_support : forall b m m',
      copy_block b m = m' ->
@@ -6923,12 +6919,6 @@ Qed.
    eauto.
  Qed.
 
- Lemma m2'_support : support m2' = s2'.
- Proof.
-   unfold m2'. erewrite copy_sup_support; eauto.
-   apply step2_support.
- Qed.
-   
 End STEP23.
 
 End Mem.
