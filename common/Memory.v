@@ -6520,7 +6520,7 @@ Qed.
 End REVERSE.
 (* update_mem_access *)
 
-(* update permission of position (b_2,o_2) using loc_in_reach_find *)
+(* update permission of position (b_2,o_2) using loc_in_reach_find
 Definition copy_access_position (b2: block)(pos2: Z * memperm) : Z * memperm :=
   let o2 := fst pos2 in
   let perm2 := snd pos2 in
@@ -6528,12 +6528,96 @@ Definition copy_access_position (b2: block)(pos2: Z * memperm) : Z * memperm :=
   |Some (b1,o1) => (o2,((mem_access m1')#b1)##o1)
   |None => (o2,perm2)
   end.
+ *)
+
+Fixpoint access_filter (vl2 : list (Z * memperm)) (b2: block): list (Z * memperm) :=
+  match vl2 with
+  | nil => nil
+  | (o2,_) :: tl =>
+      match (loc_in_reach_find b2 o2) with
+      |Some (b1,o1) => (o2,((mem_access m1')#b1)##o1) :: (access_filter tl b2)
+      |None => (access_filter tl b2)
+      end
+  end.
+
+Lemma access_filter_none: forall map b2 o2,
+    loc_in_reach_find b2 o2 = None ->   
+   ~ In o2 (List.map fst (access_filter (ZMap.elements map) b2)).
+Proof.
+  intros.
+  induction (ZMap.elements map0); intros.
+  - simpl. eauto.
+  - simpl. destruct a.
+    destruct (loc_in_reach_find b2 t) eqn:FIND.
+    + destruct p. intro. destruct H0.
+      inv H0. simpl in H. congruence. eapply IHl; eauto.
+    + eauto.
+Qed.
+
+Lemma access_filter_some: forall map b2 o2 b1 o1,
+    loc_in_reach_find b2 o2 = Some (b1, o1) ->
+    map = (mem_access m2) # b2 ->
+    In (o2, ((mem_access m1') # b1) ##o1) (access_filter (ZMap.elements map) b2).
+Proof.
+  intros. apply loc_in_reach_find_valid in H as H'. destruct H' as [MAP PERM1].
+  exploit Mem.perm_inject; eauto. intro PERM2.
+  replace (o1 + (o2 - o1)) with o2 in PERM2 by lia.
+  
+  induction (ZMap.elements map0) eqn:MAP2.
+  - subst. unfold perm in PERM2.
+    rewrite ZMap.elements_correct_1 in PERM2; eauto. rewrite access_default in PERM2.
+    inv PERM2. rewrite MAP2. simpl. eauto.
+  -
+    rewrite MAP2 in PERM2.
+  Admitted.
 
 (* update permission of all positions with nonempty permission of block b_2 *)
 Definition copy_access_block (b2: block) (map2: perm_map) :=
-  let elements2 := perm_elements_any (ZMap.elements map2) in
-  let elements2' := List.map (copy_access_position b2) elements2 in
-  setN' elements2' map2.
+  let elements2 := access_filter (ZMap.elements map2) b2 in
+  setN' elements2 map2.
+
+
+Lemma copy_access_block_result:
+  forall b2 map2 o2 p,
+(*    (fst map2 = fun k => None) -> *)
+    ((copy_access_block b2 map2)##o2) p =
+      match (loc_in_reach_find b2 o2) with
+      | Some (b1,o1) => ((mem_access m1')#b1)##o1 p
+      | None =>  map2##o2 p
+   end.
+Proof.
+  intros. unfold copy_access_block.
+  destruct (loc_in_reach_find) as [[b1 o1]|] eqn:FIND.
+  - erewrite setN'_inside; eauto.
+    admit. (*ok*)
+    simpl.
+
+    admit.
+  - erewrite setN'_outside; eauto.
+    eapply access_filter_none; eauto.
+Admitted.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 (* update content of position (b_2,o_2) using loc_in_reach_find *)
 Definition copy_content_position (b2: block)(pos2: Z * memval) : Z * memval :=
@@ -6560,17 +6644,7 @@ Definition copy_content_block (b2: block) (pmap2: perm_map) (vmap2: ZMap.t memva
 
 (** Lemmas need to fix *)
 (* result of ZMap update *)
-Lemma copy_access_block_result:
-  forall b2 map2 o2 p,
-(*    (fst map2 = fun k => None) -> *)
-    ((copy_access_block b2 map2)##o2) p =
-      match (loc_in_reach_find b2 o2) with
-      | Some (b1,o1) => ((mem_access m1')#b1)##o1 p
-      | None =>  map2##o2 p
-   end.
-Proof.
-  intros. unfold copy_access_block.
-Admitted.
+
 
 Lemma copy_content_block_default:
   forall b2 map2 vmap2, fst (copy_content_block b2 map2 vmap2) = fst vmap2.
