@@ -6301,10 +6301,10 @@ Hypothesis SUPINCR2 : sup_include (support m2) s2'.
        if (sup_dec b2 (Mem.support m)) then (* well-typeness constrain *)
      {|
        mem_contents :=
-           pmap_update b2 (update_mem_content ((mem_access m1)#b1) j12' delta (mem_contents m1)#b1)
+           pmap_update b2 (update_mem_content ((mem_access m1')#b1) j12' delta (mem_contents m1')#b1)
                        (mem_contents m);
        mem_access :=
-           pmap_update b2 (update_mem_access delta (mem_access m1)#b1) (mem_access m);
+           pmap_update b2 (update_mem_access delta (mem_access m1')#b1) (mem_access m);
        support := (Mem.support m);
      |} else m
   |None => m
