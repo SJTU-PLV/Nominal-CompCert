@@ -5600,6 +5600,12 @@ Proof.
     + simpl. auto.
 Qed.
 
+(** 
+ZMap.elements m contains all (i,a) such that a <> fst m. It is also possible for
+some (i,fst m) in it.
+For mem_access, ZMap.elements pmap contains all nonempty positions in pmap.
+For mem_contents, ZMap.elements vmap contains all positions where the value is not Vundef
+*)
 Lemma elements_correct' :
 forall (A : Type) (i : ZMap.elt) (m : ZMap.t A),
   m ## i <> fst m -> In (i, m ## i) (ZMap.elements m).
@@ -5735,15 +5741,6 @@ Proof.
     apply ZMap.elements_complete in B. congruence.
 Qed.
 
-(* old version of update_mem_access
-Definition update_mem_access (delta : Z) (map1 map2 : Z -> perm_kind -> permission) : perm_map :=
-  fun ofs2 p =>
-    let ofs1 := ofs2 - delta in
-    if perm_check_any map1 ofs1 then
-      map1 ofs1 p
-    else map2 ofs2 p.
-*)
-
 (** update content *)
 
 Definition memval_map (f:meminj) (mv:memval) : memval :=
@@ -5757,24 +5754,6 @@ Definition memval_map (f:meminj) (mv:memval) : memval :=
        end
   |_ => mv
   end.
-
-(* the copyed position should be new regions or old regions which is mapped to m3*)
-Definition valid_position b (j2:meminj) s2 s2' : Prop :=
-  sup_In b s2' /\
-  (~(sup_In b s2 /\ j2 b = None)).
-
-Theorem valid_position_dec : forall b j2 s2 s2',
-    {valid_position b j2 s2 s2' } + {~ valid_position b j2 s2 s2'}.
-Proof.
-  intros. destruct (sup_dec b s2').
-  - destruct (sup_dec b s2);
-    destruct (j2 b) as [[b' d]|] eqn:Hj2; unfold valid_position.
-    left. firstorder. intros [A B]. congruence.
-    right. firstorder.
-     left. firstorder.
-    left. firstorder.
-  - right. unfold valid_position. firstorder.
-Qed.
 
 Definition perm_check_readable' (perm: perm_kind -> option permission) :=
   match perm Cur with
@@ -6273,16 +6252,6 @@ Qed.
 End REVERSE.
 (* update_mem_access *)
 
-(* update permission of position (b_2,o_2) using loc_in_reach_find
-Definition copy_access_position (b2: block)(pos2: Z * memperm) : Z * memperm :=
-  let o2 := fst pos2 in
-  let perm2 := snd pos2 in
-  match loc_in_reach_find b2 o2 with
-  |Some (b1,o1) => (o2,((mem_access m1')#b1)##o1)
-  |None => (o2,perm2)
-  end.
- *)
-
 Fixpoint access_filter' (vl2 : list (Z * memperm)) (b2: block): list (Z * memperm) :=
   match vl2 with
   | nil => nil
@@ -6351,11 +6320,10 @@ Proof.
   inv PERM2.
 Qed.
 
-(* update permission of all positions with nonempty permission of block b_2 *)
+(** update permission of all positions with nonempty permission of block b_2 *)
 Definition copy_access_block (b2: block) (map2: perm_map) :=
   let elements2 := access_filter b2 in
   setN' elements2 map2.
-
 
 Lemma In_access_filter'_any : forall vl b z,
     In z (List.map fst (access_filter' vl b)) -> In z (List.map fst vl).

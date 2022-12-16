@@ -516,6 +516,7 @@ Proof.
   destruct (eq_block b0 b); eauto. subst. apply H in Hf1. inv Hf1.
 Qed.
 
+(** * step (1) of Definition A.6 *)
 Fixpoint update_meminj12 (sd1': list block) (j1 j2 j': meminj) (si1: sup) :=
   match sd1' with
     |nil => (j1,j2,si1)
@@ -1004,18 +1005,7 @@ Qed.
 Definition mem_memval (m:mem) b ofs : memval :=
   Maps.ZMap.get ofs (NMap.get _ b (Mem.mem_contents m)).
 
-Lemma memval_map_inject_new : forall j1 j2 mv mv3,
-    memval_inject (compose_meminj j1 j2) mv mv3 ->
-    memval_inject j1 mv (Mem.memval_map j1 mv).
-Proof.
-  intros. destruct mv; simpl; try constructor.
-  destruct v; simpl; try repeat constructor.
-  destruct (j1 b) as [[b1 d]|] eqn : ?.
-  repeat constructor. econstructor; eauto.
-  inv H. inv H4. unfold compose_meminj in H1. rewrite Heqo in H1.
-  congruence.
-Qed.
-
+(*
 Lemma memval_map_inject_old : forall j1 mv mv2,
     memval_inject j1 mv mv2 ->
     memval_inject j1 mv (Mem.memval_map j1 mv).
@@ -1026,7 +1016,7 @@ Proof.
   repeat constructor. econstructor; eauto.
   inv H. inv H4. congruence.
 Qed.
-
+*)
 
 Lemma loc_out_of_reach_incr : forall j1 j1' m1 m2 m1' b ofs,
     loc_out_of_reach j1 m1 b ofs ->
@@ -1074,6 +1064,19 @@ Proof.
   eauto with mem. eauto. intros [A|A]. congruence. extlia.
 Qed.
 
+(** * Part of Lemma A.4 *)
+Lemma memval_compose_1 : forall j1 j2 mv mv3,
+    memval_inject (compose_meminj j1 j2) mv mv3 ->
+    memval_inject j1 mv (Mem.memval_map j1 mv).
+Proof.
+  intros. destruct mv; simpl; try constructor.
+  destruct v; simpl; try repeat constructor.
+  destruct (j1 b) as [[b1 d]|] eqn : ?.
+  repeat constructor. econstructor; eauto.
+  inv H. inv H4. unfold compose_meminj in H1. rewrite Heqo in H1.
+  congruence.
+Qed.
+
 Lemma memval_compose_2:
   forall mv mv3 j1 j2,
     memval_inject (compose_meminj j1 j2) mv mv3 ->
@@ -1119,15 +1122,15 @@ Section CONSTR_PROOF.
   Hypothesis ADDEXISTS: update_add_exists j1 j1' (compose_meminj j1' j2').
   Hypothesis ADDSAME : update_add_same j2 j2' j1'.
 
-  (* step2 *)
+  (** * step2 of Definition A.6, defined in common/Memory.v as memory operation *)
   Definition m2'1 := Mem.step2 m1 m2 m1' s2' j1'.
-  (* step3 *)
+  (** * step3 of Definition A.6, in common/Memory.v *)
   Definition m2' := Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 (Mem.support m2) m2'1.
   
   Lemma INJNOLAP1' : Mem.meminj_no_overlap j1' m1'.
   Proof. eapply update_meminj_no_overlap1; eauto. Qed.
 
-  (* Lemma A.8 UNCHANGE properties about m2' *)
+  (** unchanged_on properties about m2' *)
 
   Lemma pmap_update_diff': forall (A:Type) b f (map: NMap.t A) b',
   b <> b' ->
@@ -1279,7 +1282,7 @@ Qed.
     eapply unchanged_on_copy'2; eauto.
   Qed.
 
-  (* Lemma A.8 *)
+  (** * Lemma A.8 *)
   Theorem UNCHANGE21 : Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'.
   Proof.
     eapply Mem.unchanged_on_trans; eauto.
@@ -1485,7 +1488,7 @@ Qed.
     apply INCR1 in H as MAP1'.
     destruct (j2 b2) as [[b3 d]|] eqn : MAP2; try congruence.
     apply INCR2 in MAP2 as MAP2'.
-    eapply memval_map_inject_new; eauto.
+    eapply memval_compose_1; eauto.
     inversion INJ13'. inversion mi_inj.
     eapply  mi_memval; eauto. unfold compose_meminj.
     rewrite MAP1', MAP2'. reflexivity.
@@ -1891,7 +1894,7 @@ Qed.
   Proof.
     intros. erewrite step2_content; eauto.
     exploit ADDEXISTS; eauto. intros (b3 & o3 & MAP13).
-    eapply memval_map_inject_new; eauto.
+    eapply memval_compose_1; eauto.
     inversion INJ13'. inversion mi_inj.
     eapply  mi_memval; eauto.
   Qed.
@@ -1906,7 +1909,7 @@ Qed.
     intro HH. eapply HH; eauto.
   Qed.
   
-  
+  (** * Lemma A.9 *)
   Theorem MAXPERM2 : injp_max_perm_decrease m2 m2'.
   Proof.
     red. intros b2 o2 p VALID PERM2.
@@ -1928,6 +1931,7 @@ Qed.
       eapply Mem.loc_in_reach_find_none; eauto.
   Qed.
 
+  (** * Lemma A.10 *)
   Theorem INJ12' : Mem.inject j1' m1' m2'.
   Proof.
     constructor.
@@ -2024,9 +2028,6 @@ Qed.
   Qed.
 
 
-  (* INJ2 and lemmas *)
-
-  
   Lemma step2_perm2': forall b1 o1 b2 o2 b3 d k p,
       j1' b1 = Some (b2, o2 - o1) ->
       j2 b2 = None -> j2' b2 = Some (b3, d) ->
@@ -2039,7 +2040,7 @@ Qed.
     inversion INJ12. exploit mi_mappedblocks; eauto.
   Qed.
 
-  
+  (** * Lemma A.11 *)
   Theorem INJ23' : Mem.inject j2' m2' m3'.
   Proof.
      assert (DOMIN2: inject_dom_in j2 (Mem.support m2)).
@@ -2240,7 +2241,7 @@ Qed.
   
 End CONSTR_PROOF.
 
-(* main content of Lemma A.13 *)
+(** * main content of Lemma A.13 *)
 Lemma out_of_reach_trans: forall j12 j23 m1 m2 m3 m3',
     Mem.inject j12 m1 m2 ->
     Mem.unchanged_on (loc_out_of_reach (compose_meminj j12 j23) m1) m3 m3' ->
@@ -2328,7 +2329,7 @@ Proof.
       repeat apply conj; constructor; auto.
     + unfold w1'. constructor; auto.
       -- eapply MAXPERM2; eauto.
-      -- (* main content of Lemma A.12*)
+      -- (** * main content of Lemma A.12 *)
          eapply Mem.unchanged_on_implies; eauto.
          intros. red. red in H. unfold compose_meminj.
          rewrite H. reflexivity.
