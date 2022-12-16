@@ -24,3 +24,4 @@ Definition elf_flag := 0%Z.
 Definition reloc_entry_size := if ptr64 then 24 else 8.
 
 Definition rel_eh_type := if Archi.ptr64 then SHT_RELA else SHT_REL.
+

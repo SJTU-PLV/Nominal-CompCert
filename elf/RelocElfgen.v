@@ -376,7 +376,7 @@ Definition acc_sections_headers (symbtbl: symbtable) (res_acc: res (list section
 
 (* return section headers and the size of sections *)
 Definition gen_section_header (idl_sectbl: list (ident * RelocProgramBytes.section)) (symbtbl: symbtable): res (list section* list section_header * Z * list byte * Z) :=
-  fold_left  (acc_sections_headers symbtbl) idl_sectbl (OK ([],[],0,[HB["00"]],1)).
+  fold_left  (acc_sections_headers symbtbl) idl_sectbl (OK ([],[],0,[Byte.repr 0],1)).
 
 
 (* Definition transl_section (sec: RelocProgram.section) : res section := *)
@@ -436,7 +436,7 @@ Definition acc_symbtable_bytes  (idxmap: PTree.t Z) acc (id_e: ident * symbentry
 (* generate symbtable table section *)
 
 Definition create_symbtable_section (t:list (ident * symbentry)) (idxmap: PTree.t Z) : res (list byte * list byte * Z) :=
-  fold_left (acc_symbtable_bytes idxmap) t (OK ([],[HB["00"]],1)).
+  fold_left (acc_symbtable_bytes idxmap) t (OK ([],[Byte.repr 0],1)).
 
 (* input: program, ident to section header index, state *)
 (* output: state, indet to symbol entry index mapping, ident to string index in strtbl mapping (unused and remove it)*)

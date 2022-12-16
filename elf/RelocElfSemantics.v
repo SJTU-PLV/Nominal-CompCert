@@ -132,6 +132,8 @@ Definition acc_decode_symbtable_section (symblen: nat) (m: ZTree.t ident) (acc: 
 Definition decode_symbtable_section (l:list byte) (m:ZTree.t ident) (strtbl: list byte) (symbtbl: symbtable) :=
   let symblen := if elf64 then 24%nat else 16%nat in
   let l := skipn symblen l in   (* skip dummy entry *)
+  (* skip '0' *)
+  let strtbl := tail strtbl in
   do r <- fold_left (acc_decode_symbtable_section symblen m) l (OK (PTree.empty symbentry, strtbl, [], 1%nat));
   OK (fst (fst (fst r))).
 
@@ -195,7 +197,8 @@ Definition init_dec_state shstrtbl :=
      dec_strtbl := [] |}.
 
 Definition decode_elf (p: elf_file) : res program :=
-  let init := init_dec_state (last p.(elf_sections) []) in
+  (* skip the '0' in section string table *)
+  let init := init_dec_state (tail (last p.(elf_sections) [])) in
   let elf64 := get_ptr64 p in
   let secs := removelast p.(elf_sections) in
   let hs := tail (removelast p.(elf_section_headers)) in

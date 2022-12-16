@@ -218,6 +218,7 @@ Separate Extraction
    Machregs.two_address_op Machregs.is_stack_reg
    Machregs.destroyed_at_indirect_call
    AST.signature_main
+   Asm.dummy_function
    Floats.Float32.from_parsed Floats.Float.from_parsed
    Globalenvs.Senv.invert_symbol
    Parser.translation_unit_file.

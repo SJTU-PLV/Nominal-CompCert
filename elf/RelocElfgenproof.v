@@ -351,14 +351,15 @@ Proof.
   assert (C1: exists sectbl, fold_left (acc_section_header Archi.ptr64)
                 (combine e_sections ProdR9)
                 (OK (init_dec_state
-                      (e_shstrtbl ++
+                       (* skip '0' *)
+                      (tail (e_shstrtbl ++
                        strtab_str ++
-                       symtab_str ++ ProdR2 ++ shstrtab_str))) =
+                       symtab_str ++ ProdR2 ++ shstrtab_str)))) =
                         OK {| dec_sectable := sectbl;
                               dec_symbtable := PTree.empty symbentry;
                               dec_reloctable := PTree.empty reloctable;
                               dec_shstrtbl := strtab_str ++ symtab_str ++ ProdR2 ++ shstrtab_str;
-                              dec_strtbl := [Byte.repr 0] |} /\ (forall i e, In (i,e) (PTree.elements sectbl) <-> In (i,e) (PTree.elements p.(prog_sectable)))).
+                              dec_strtbl := [] |} /\ (forall i e, In (i,e) (PTree.elements sectbl) <-> In (i,e) (PTree.elements p.(prog_sectable)))).
   { clear Heqb EQ0 e EQ2 Heqb0.
     clear ProdL1 ProdL0 ProdR6 ProdR4 ProdR5 ProdR3 ProdR1.
     unfold gen_section_header in EQ1.
@@ -386,7 +387,6 @@ Proof.
       cbn [combine]. simpl.
       eexists. unfold init_dec_state.      
       split;eauto. simpl. intros.
-      (*** TODO  *)
       split;auto.
     - exploit LocalLib.length_S_inv;eauto.
       intros (l' & a1 & A1 & B1). subst.
@@ -395,9 +395,9 @@ Proof.
       fold ident in *.
       fold RelocProgramBytes.section in *.
       destruct ((fold_left (acc_sections_headers (prog_symbtable p)) l'
-                           (OK ([], [], 0, [], 0)))) eqn:FOLD.
+                           (OK ([], [], 0, [Byte.repr 0], 1)))) eqn:FOLD.
       repeat destruct p0.
-      simpl in EQ1. destruct a1.
+      simpl in EQ1. destruct a1. 
       monadInv EQ1. destr_in EQ0.
       destruct s.
 
@@ -713,7 +713,7 @@ Proof.
              fold_left
                (acc_decode_symbtable_section Archi.ptr64 symblen
               (index_to_ident (map fst (PTree.elements sectbl)) 1))
-               ProdL0 (OK (PTree.empty symbentry, ProdR6 ++ tl, [], 1%nat)) =
+               ProdL0 (OK (PTree.empty symbentry, tail (ProdR6 ++ tl), [], 1%nat)) =
              OK (symbtbl, tl, [], 1%nat) /\ (forall i e, In (i,e) (PTree.elements symbtbl) <->
                          In (i,e) (sort_symbtable (PTree.elements (prog_symbtable p))))).
 

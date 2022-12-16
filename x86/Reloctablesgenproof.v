@@ -283,10 +283,10 @@ Proof.
     simpl.
     (* id_eliminate size unchanged *)
     repeat rewrite <- id_eliminate_size_unchanged.
-    assert ((code_size instr_size l' <? reloc_offset r0) &&
+    assert ((code_size instr_size l' <=? reloc_offset r0) &&
             (reloc_offset r0 <? code_size instr_size l' + instr_size a) = true).
-    apply andb_true_iff. repeat rewrite Z.ltb_lt.
-    auto.
+    apply andb_true_iff. rewrite Z.leb_le. rewrite Z.ltb_lt.
+    lia.
     rewrite H.
     rewrite code_size_app. simpl. eexists. split. f_equal;f_equal;auto.
     eapply Forall2_app. auto.
@@ -574,7 +574,6 @@ Lemma genv_ext_funs_eq: RelocProgGlobalenvs.Genv.genv_ext_funs ge =  RelocProgGl
 Qed.
 
 
-                     
 Lemma genv_instr_eq: forall v, option_rel instr_eq (RelocProgGlobalenvs.Genv.find_instr tge v) (RelocProgGlobalenvs.Genv.find_instr ge v).
   unfold match_prog in  TRANSF. unfold transf_program in TRANSF.
   monadInv TRANSF.

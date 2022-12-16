@@ -5,11 +5,11 @@ Require Import Memdata.
 Require Import RelocElf.
 Require Import Asm.
 Require Import encode.Hex.
-Require Import EncodeRelocElf.
+Require Import EncodeRelocElf RelocElfArchi.
 Import Hex.
 Import ListNotations.
 Require Import Encode.
-Require Import RelocElfSemantics.
+Require Import MachineTypes RelocElfSemantics.
 
 Set Implicit Arguments.
 Set Asymmetric Patterns.
@@ -121,7 +121,9 @@ Definition decode_elf_machine (l: list byte) : res elf_machine :=
       OK EM_386
     else if (Z.eqb (decode_int l) 62) then
            OK EM_x86_64
-         else Error [].
+         else if (Z.eqb (decode_int l) 243) then
+                OK EM_RISCV
+              else Error (msg "Unsupported machine types").
 
 Lemma decode_encode_elf_machine em:
   decode_elf_machine (encode_elf_machine em) = OK em.

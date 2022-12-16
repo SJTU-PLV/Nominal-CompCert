@@ -120,7 +120,7 @@ Lemma transl_instr_range: forall ofs i e,
   eapply lt_add_range; auto.
 Qed.
 
-(* id_eliminate just transforms Pjmp_s to Pjmp_l_rel and leave another instruction forms unchanged *)
+(* id_eliminate just transforms Pjmp_s to Pjmp_l_rel and leaves another instruction forms unchanged *)
 Definition instr_eq i1 i2 :=
   match i1,i2 with
   | Pjmp_s symb1 _, Pjmp_s symb2 _ => symb1 = symb2

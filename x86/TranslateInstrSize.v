@@ -12,52 +12,13 @@ Local Open Scope hex_scope.
 Local Open Scope bits_scope.
 
 
-Lemma instr_eq_size: forall i1 i2,
-    RelocBinDecode.instr_eq i1 i2 -> instr_size_asm i1 = instr_size_asm i2.
-Proof.
-  Transparent instr_size_asm.
-  intros. unfold instr_eq in H.
-  destruct H. subst. auto.
-  destruct Archi.ptr64 eqn:PTR.
-  -
-  destruct i1 eqn: I1;try inv H;destruct i2 eqn:I2;try inv H;cbn [instr_size_asm];auto.
-
-  (* Pmovzl_rr: we can not prove the instr_size consistency *)
-  unfold rex_prefix_check_rr,rex_prefix_check_r.
-  rewrite PTR. destr.
-  apply andb_true_iff in Heqb. destruct Heqb.
-  rewrite H. auto.
-  apply andb_false_iff in Heqb. destruct Heqb.
-  rewrite H. auto.
-  rewrite H. auto.
-
-  destruct H11. subst. auto.
-  
-  -
-    destruct i1;try inv H;destruct i2;try inv H;cbn [instr_size_asm];auto.
-    
-    unfold rex_prefix_check_rr,rex_prefix_check_r.
-    rewrite PTR. auto.
-    
-    destruct H11. subst. auto.
-
-    rewrite PTR. auto.
-    rewrite PTR. auto.
-Qed.
-
-Lemma rev_id_eliminate_size: forall i id, instr_size_asm i = instr_size_asm (rev_id_eliminate id i).
+Lemma rev_id_eliminate_size: forall i id addend, instr_size_asm i = instr_size_asm (rev_id_eliminate id addend i).
 Proof.
   destruct i;intros;cbn;auto;
     try (destruct a;destruct const;simpl;auto).
   try (destruct ad;destruct const;simpl;auto).
 Qed.
 
-Lemma instr_eq_size_reloc: forall i1 i2, instr_eq i1 i2 -> instr_size_asm i1 = instr_size_asm i2.
-Proof.
-  unfold instr_eq.
-  intros. destruct i1;subst;auto.
-  destruct i2;try congruence;subst;auto.
-Qed.  
 
 Lemma id_eliminate_size_unchanged:forall i, instr_size_asm i = instr_size_asm (id_eliminate i).
 Proof.

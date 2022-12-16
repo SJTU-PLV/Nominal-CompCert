@@ -1,7 +1,3 @@
-(* Relocatable Elf Files *)
-(* Author        : Yuting Wang *)
-(* Date Created  : Sep-22-2019 *)
-
 Require Import Coqlib Integers Maps Ascii.
 Require Import Errors.
 Require Import Encode.

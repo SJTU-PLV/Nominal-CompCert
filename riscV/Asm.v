@@ -450,6 +450,9 @@ Record function : Type := mkfunction { fn_sig: signature; fn_code: code; fn_stac
 Definition fundef := AST.fundef function.
 Definition program := AST.program fundef unit.
 
+Definition dummy_function := {| fn_sig := signature_main; fn_code := nil; fn_stacksize := 0 |}.
+
+
 (** * Operational semantics *)
 
 (** The semantics operates over a single mapping from registers

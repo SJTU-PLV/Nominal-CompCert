@@ -1,10 +1,8 @@
 open Asm
-open AST
 open Camlcoq
 
 (* Generation of fresh labels *)
 
-let dummy_function = { fn_code = []; fn_sig = signature_main; fn_stacksize = Camlcoq.Z.of_uint 0}
 let current_function = ref dummy_function
 let next_label = ref (None: label option)
 
