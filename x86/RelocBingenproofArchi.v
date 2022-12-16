@@ -59,6 +59,7 @@ Proof.
     
   (* Pcall *)
   destr_in H. destr_in H.
+  monadInv H.
 Qed.
 
 Section WITH_INSTR_SIZE.

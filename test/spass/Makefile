@@ -5,7 +5,7 @@ CC=../../ccomp
 CFLAGS=$(CCOMPOPTS) -stdlib ../../runtime -relf -fstruct-return
 
 # set simulator
-SIMU=qemu-riscv32
+# SIMU=qemu-riscv32
 
 SRCS=analyze.c clause.c clock.c closure.c cnf.c component.c                 \
   condensing.c context.c defs.c dfgparser.c dfgscanner.c doc-proof.c        \

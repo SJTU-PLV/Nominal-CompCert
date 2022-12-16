@@ -66,7 +66,9 @@ Definition transl_instr (i: instruction) (ofs:Z) (code:code) : res instruction :
    do lst <-  findAllLabel tbl code;
    let ofsLst := map (Zplus (-( sz + ofs))) lst in
    OK (Pjmptbl_rel r ofsLst)
-          
+  
+  | Plabel _ => OK Pnop
+  
   |_ =>
    OK i 
   end.

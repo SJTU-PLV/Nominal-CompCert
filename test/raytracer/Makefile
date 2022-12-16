@@ -11,7 +11,7 @@ OBJS=memory.o gmllexer.o gmlparser.o eval.o \
   simplify.o render.o main.o
 
 # set simulator
-SIMU=qemu-riscv32
+# SIMU=qemu-riscv32
 
 all: render
 

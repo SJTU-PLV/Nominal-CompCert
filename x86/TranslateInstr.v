@@ -1228,7 +1228,7 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
           if Archi.ptr64 then 
             OK [Pjmp_l_rel zero32]
           else
-            do imm32 <- encode_ofs_u32 (-4);
+            do imm32 <- encode_ofs_signed32 (-4);
             OK [Pjmp_l_rel imm32]
         else Error [MSG "sg must be signature_main: Pjmp_s"]
       | None =>
@@ -1262,7 +1262,7 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
         if Archi.ptr64 then 
           OK [Pcall_ofs zero32]
         else
-          do imm32 <- encode_ofs_u32 (-4);
+          do imm32 <- encode_ofs_signed32 (-4);
           OK [Pcall_ofs imm32]
       else
         Error [MSG "sg must be signature_main: Pcall_s"]

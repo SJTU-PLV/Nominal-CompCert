@@ -70,7 +70,6 @@ Definition transf_instr (i: instruction) (code: code) : res (list instruction) :
     OK [Pxorq_rr r r]
   | Pxorl_r r =>
     OK [Pxorl_rr r r]
-  | Plabel _ => OK [Pnop]
   | Pmovls_rr r => OK [Pnop]
   | Pmovzl_rr r1 r2 =>
     if Archi.ptr64 then OK [Pmov_rr r1 r2]

@@ -58,11 +58,13 @@ let compile_c_file sourcename ifile ofile =
   if !option_reloc_elf then
   begin
     (* Debug: Print RealAsm in text form *)
-    (* if !option_drealasm then *)
+
     match Compiler.transf_c_program_real csyntax with
       | Errors.OK realasm ->
-        let oc = open_out (sourcename^".realasm") in
-        PrintAsm.print_program oc realasm;
+        (* unsupported in x86 *)
+        (* if !option_drealasm then *)
+        (* let oc = open_out (sourcename^".realasm") in
+        PrintAsm.print_program oc realasm; *)
         (match CompilerAux.assembler Compiler.instr_size realasm with
         | Errors.OK ((bs, p), _) ->
            ElfFileOutput.write_elf ofile bs
