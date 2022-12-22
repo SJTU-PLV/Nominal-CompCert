@@ -415,21 +415,45 @@ Proof.
       eapply Mem.val_inject_lessdef_compose; eauto.
 Qed.
 
+Lemma lessdef_list_refl : forall l,
+    Val.lessdef_list l l.
+Proof.
+  induction l. constructor.
+  constructor; eauto.
+Qed.
 
-
-
-
-(*
-Theorem commut_wt_c_reverse (R:cklr):
-  ccref (R @ wt_c @ lessdef_c) (R @ (wt_c @ lessdef_c) @ R).
+Definition wt_c_R_refinement R:
+  ccref (cc_c R @ (wt_c @ lessdef_c)) ((wt_c @ lessdef_c) @ cc_c R).
 Proof.
   rewrite cc_compose_assoc. rewrite lessdef_c_cklr.
-  intros w se1 se2 q1 q4 Hse Hq.
-  destruct w as [[se wR] [[se' [se'' sg]] d]]. inv Hse. cbn in H.
-  inv H0. inv H1. inv H0. destruct d.
-  destruct Hq as [q2 [Hq1 [q3 [Hq2 Hq3]]]]. inv Hq2.
-  exists ()
-*)
+  intros [[se wR][[se' [se'' sg]] ?]].
+  intros se1 se2 q1 q2 [Hse1 [Hse2 Hse3]] [q2' [Hq1 [q2'' [Hq2 Hq3]]]].
+  inv Hse2. inv Hse3. cbn in H. cbn in Hq1. subst se''.
+  inv Hq1. inv Hq2. inv Hq3. cbn in H3. destruct H3 as [? TYPE]. subst.
+  exists (se1,(se1,sg0),wR). repeat apply conj.
+  - constructor; cbn; eauto. constructor; eauto.
+  - cbn in H0. cbn in H.
+    exists (cq vf1 sg0 vargs1 m1). split.
+    econstructor; eauto. split.
+    econstructor; eauto.
+    eapply val_has_type_list_inject; eauto.
+    econstructor; eauto.
+    eapply val_inject_lessdef_list_compose; eauto.
+  - intros r1 r2 [r1' [Hr1 Hr2]].
+    inv Hr1. cbn in H3.
+    destruct Hr2 as [w [Hw Hr2]].
+    inv Hr2.
+    set (res' := Val.ensure_type vres2 (proj_sig_res sg0) ).
+    exists (cr res' m2'). split. exists w. split. eauto.
+    econstructor; eauto.
+    unfold res'.
+    apply has_type_inject; eauto.
+    exists (cr res' m2'). split.
+    constructor; eauto. cbn. unfold res'. apply Val.ensure_has_type.
+    constructor; eauto. unfold res'.
+    destruct vres2, (proj_sig_res sg0); auto.
+Qed.
+
 (** ** Locset-level typing constraints *)
 
 Inductive lessdef_loc_mq sg: locset_query -> locset_query -> Prop :=
