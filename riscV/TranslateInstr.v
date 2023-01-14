@@ -613,6 +613,20 @@ Program Definition encode_S2 (imm: Z) : res u7 :=
     OK (exist _ S2 _)
   else Error(msg "illegal length in encode_S2").
 
+Program Definition decode_immS (S1: u5) (S2: u7) : res Z :=
+  let S1_bits := proj1_sig S1 in
+  let S2_bits := proj1_sig S2 in
+  let S_bits := S2_bits ++ S1_bits in
+  if assertLength S_bits 12 then
+    decode_ofs_u12 (exist _ S_bits _)
+  else Error(msg "illegal length in decode_immS").
+
+Theorem encode_immS_consistency: forall Z S1 S2,
+  encode_S1 Z = OK S1 -> encode_S2 Z = OK S2 ->
+  decode_immS S1 S2 = OK Z.
+Proof.
+  Admitted.
+
 (* subtle: we treat imm as an offset multiple of 2 bytes, so we need to preserve the least bit
    20     10:1          11         19:12  
    J4      J3           J2           J1
@@ -653,17 +667,22 @@ Program Definition encode_J4 (imm: Z) : res u1 :=
     OK (exist _ B1 _)
   else Error(msg "illegal length in encode_J4").
 
-Definition decode_immS (S1: u5) (S2: u7) : res Z :=
-  let S1_bits := proj1_sig S1 in
-  let S2_bits := proj1_sig S2 in
-  OK (int_of_bits (S1_bits ++ S2_bits)).
+Program Definition decode_immJ (J1: u8) (J2: u1) (J3: u10) (J4: u1) : res Z :=
+  let J1_bits := proj1_sig J1 in
+  let J2_bits := proj1_sig J2 in
+  let J3_bits := proj1_sig J3 in
+  let J4_bits := proj1_sig J4 in
+  let J_bits := J4_bits ++ J1_bits ++ J2_bits ++ J3_bits in
+  if assertLength J_bits 20 then
+    decode_ofs_u20 (exist _ J_bits _)
+  else Error(msg "illegal length in decode_immJ").
 
-Theorem encode_immS_consistency: forall Z S1 S2,
-  encode_S1 Z = OK S1 -> encode_S2 Z = OK S2 ->
-  decode_immS S1 S2 = OK Z.
+Theorem encode_immJ_consistency: forall Z J1 J2 J3 J4,
+  encode_J1 Z = OK J1 -> encode_J2 Z = OK J2 ->
+  encode_J3 Z = OK J3 -> encode_J4 Z = OK J4 ->
+  decode_immJ J1 J2 J3 J4 = OK Z.
 Proof.
-  unfold encode_S1, encode_S2, decode_immS.
-  intros. Admitted.
+  Admitted.
 
 (* subtle: we treat imm as an offset multiple of 2 bytes, so we need to preserve the least bit
    12     10:5          4:1          11
@@ -706,12 +725,15 @@ Program Definition encode_B4 (imm: Z) : res u1 :=
     OK (exist _ B4 _)
   else Error(msg "illegal length in encode_B4").
 
-Definition decode_immB (B1: u1) (B2: u4) (B3: u6) (B4: u1) : res Z :=
+Program Definition decode_immB (B1: u1) (B2: u4) (B3: u6) (B4: u1) : res Z :=
   let B1_bits := proj1_sig B1 in
   let B2_bits := proj1_sig B2 in
   let B3_bits := proj1_sig B3 in
   let B4_bits := proj1_sig B4 in
-  OK (int_of_bits (B2_bits ++ B3_bits ++ B1_bits ++ B4_bits)).
+  let B_bits := B4_bits ++ B1_bits ++ B3_bits ++ B2_bits in
+  if assertLength B_bits 12 then
+    decode_ofs_u12 (exist _ B_bits _)
+  else Error(msg "illegal length in decode_immB").
 
 Theorem encode_immB_consistency: forall Z B1 B2 B3 B4,
   encode_B1 Z = OK B1 -> encode_B2 Z = OK B2 ->
@@ -736,6 +758,23 @@ Program Definition encode_shamt ofs : res u6 :=
       else Error (msg "impossible")
     else Error (msg "Offset overflow in encode_shamt").
 
+Definition decode_shamt (shamt: u6) : res Z :=
+  let shamt_bits := proj1_sig shamt in
+  let shamt_Z := int_of_bits shamt_bits in
+  if Archi.ptr64 then
+    OK shamt_Z
+  else
+    if ( -1 <? shamt_Z) && (shamt_Z <? (two_power_nat 5)) then
+      OK shamt_Z
+    else Error (msg "Shamt overflow in decode_shamt").
+
+Theorem encode_shamt_consistency: forall Z shamt,
+  encode_shamt Z = OK shamt ->
+  decode_shamt shamt = OK Z.
+Proof.
+  unfold encode_shamt. unfold decode_shamt. intros.
+  do 2 destr_in H.
+  Admitted.
 
 Definition translate_instr' (i:instruction) : res (Instruction) :=
   match i with
