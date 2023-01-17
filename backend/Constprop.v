@@ -56,7 +56,7 @@ Definition transf_ros (ae: AE.t) (ros: reg + ident) : reg + ident :=
   match ros with
   | inl r =>
       match areg ae r with
-      | Ptr(Gl symb ofs) => if Ptrofs.eq ofs Ptrofs.zero then inr _ symb else ros
+      | Ptr(Gl symb ofs) => if Ptrofs.eq ofs Ptrofs.zero then inr symb else ros
       | _ => ros
       end
   | inr s => ros

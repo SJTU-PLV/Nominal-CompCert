@@ -543,6 +543,12 @@ Proof.
   - repeat rstep. apply cc_join_ub_l.
 Qed.
 
+
+(** * Value Analysis Interface *)
+
+(** Trying to handle vamatch as wt_c *)
+
+
 (** * Stacking *)
 
 (** The simulation conventions for most passes are simple enough that

@@ -1664,6 +1664,7 @@ Qed.
 
 End SOUNDNESS.
 
+
 (** ** Overall preservation property *)
 
 Record vamatch_world :=
@@ -1694,8 +1695,293 @@ Proof.
   - eauto using sound_final.
 Qed.
 
-(** * vamatch *)
+(** ** Interface without bc *)
 
+
+(*
+  romem_for
+  Genv.valid_for
+  Genv.symtbl
+
+Definition alloc_global (rm: romem) (idg: ident * globdef fundef unit): romem :=
+  match idg with
+  | (id, Gfun f) =>
+      PTree.remove id rm
+  | (id, Gvar v) =>
+      if v.(gvar_readonly) && negb v.(gvar_volatile) && definitive_initializer v.(gvar_init)
+      then PTree.set id (store_init_data_list (ablock_init Pbot) 0 v.(gvar_init)) rm
+      else PTree.remove id rm
+  end.
+ *)
+(** romem derived from symtbl *)
+
+Definition check_add_global (se : Genv.symtbl)
+  (rm : romem)(b : ident) : romem :=
+  match Genv.invert_symbol se b with
+  | Some id =>
+      match NMap.get _ b (Genv.find_info se) with
+      | Some (Gvar v) =>
+          if v.(gvar_readonly) && negb v.(gvar_volatile) && definitive_initializer v.(gvar_init)
+          then PTree.set id (store_init_data_list (ablock_init Pbot) 0 v.(gvar_init)) rm
+          else PTree.remove id rm
+      | _ => PTree.remove id rm
+      end
+  | None => rm
+  end.
+                            
+Definition romem_for_symtbl (se : Genv.symtbl) : romem :=
+  fold_left (check_add_global se) (Genv.genv_sup se) (PTree.empty ablock).
+
+Program Definition bc_of_se_mem (se : Genv.symtbl) (m:mem) :=
+  {|
+    bc_img b :=
+      if Mem.sup_dec b (Mem.support m) then
+        match Genv.invert_symbol se b with
+        | Some id => BCglob id
+        | None => BCother
+        end
+      else BCinvalid
+  |}.
+Next Obligation.
+  destruct Mem.sup_dec; try discriminate.
+  destruct Genv.invert_symbol; try discriminate.
+Qed.
+Next Obligation.
+  destruct Mem.sup_dec; try discriminate.
+  destruct Mem.sup_dec; try discriminate.
+  destruct Genv.invert_symbol eqn:Hb1; try discriminate.
+  destruct (Genv.invert_symbol se b2) eqn:Hb2; try discriminate.
+  inv H. inv H0.
+  apply Genv.invert_find_symbol in Hb1.
+  apply Genv.invert_find_symbol in Hb2. congruence.
+Qed.
+
+Definition romem_consistent (defmap: PTree.t (globdef fundef unit)) (rm: romem) :=
+  forall id ab,
+  rm!id = Some ab ->
+  exists v,
+     defmap!id = Some (Gvar v)
+  /\ v.(gvar_readonly) = true
+  /\ v.(gvar_volatile) = false
+  /\ definitive_initializer v.(gvar_init) = true
+  /\ ab = store_init_data_list (ablock_init Pbot) 0 v.(gvar_init).
+
+Lemma alloc_global_consistent:
+  forall dm rm idg,
+  romem_consistent dm rm ->
+  romem_consistent (PTree.set (fst idg) (snd idg) dm) (alloc_global rm idg).
+Proof.
+  intros; red; intros. destruct idg as [id1 [f1 | v1]]; simpl in *.
+- rewrite PTree.grspec in H0. destruct (PTree.elt_eq id id1); try discriminate.
+  rewrite PTree.gso by auto. apply H; auto.
+- destruct (gvar_readonly v1 && negb (gvar_volatile v1) && definitive_initializer (gvar_init v1)) eqn:RO.
++ InvBooleans. rewrite negb_true_iff in H4.
+  rewrite PTree.gsspec in *. destruct (peq id id1).
+* inv H0. exists v1; auto.
+* apply H; auto.
++ rewrite PTree.grspec in H0. destruct (PTree.elt_eq id id1); try discriminate.
+  rewrite PTree.gso by auto. apply H; auto.
+Qed.
+
+Lemma romem_for_consistent:
+  forall cunit, romem_consistent (prog_defmap cunit) (romem_for cunit).
+Proof.
+  assert (REC: forall l dm rm,
+            romem_consistent dm rm ->
+            romem_consistent (fold_left (fun m idg => PTree.set (fst idg) (snd idg) m) l dm)
+                             (fold_left alloc_global l rm)).
+  { induction l; intros; simpl; auto. apply IHl. apply alloc_global_consistent; auto. }
+  intros. apply REC.
+  red; intros. rewrite PTree.gempty in H; discriminate.
+Qed.
+
+Lemma romem_symtbl_prog : forall se prog id ab,
+    Genv.valid_for (erase_program prog) se ->
+    (romem_for prog) ! id = Some ab ->
+    (romem_for_symtbl se) ! id = Some ab.
+Proof.
+  intros. red in H.
+  generalize (romem_for_consistent prog).
+  intro CONSIS. exploit CONSIS; eauto.
+  intros (v & MAP & RO & VOL & DEF & AB).
+  exploit H.
+  rewrite erase_program_defmap.
+  unfold option_map.
+  erewrite MAP. reflexivity.
+  intros (b & FIND & INFO & LINK).
+  unfold romem_for_symtbl.
+  admit. (* correct, need to be proved by Ind*)
+Admitted.
+  
+Theorem romatch_symtbl_prog : forall se prog m,
+    Genv.valid_for (erase_program prog) se ->
+    romatch (bc_of_se_mem se m) m (romem_for_symtbl se) ->
+    romatch (bc_of_se_mem se m) m (romem_for prog).
+Proof.
+  intros. red in H. red in H0.
+  constructor.
+  - exploit H0; eauto.
+    eapply romem_symtbl_prog; eauto.
+    intros [A B]. eauto.
+  - exploit H0; eauto.
+    eapply romem_symtbl_prog; eauto.
+    intros [A B]. eauto.
+Qed.
+  
+Section BCgen.
+  
+Variable prog: program.
+Variable ge: Genv.symtbl.
+Variable m0: mem.
+(* Variable bc0: block_classification. *)
+
+Hypothesis GEVALID: Genv.valid_for (erase_program prog) ge.
+
+Let rm := romem_for prog.
+  
+Definition valid_val (m:mem) (v:val) : Prop :=
+  match v with
+  |Vptr b ofs => Mem.valid_block m b
+  |_ => True
+  end.
+
+Inductive valid_vals (m:mem) : list val -> Prop :=
+  | valid_vals_nil : valid_vals m nil
+  | valid_vals_cons : forall v vl,
+    valid_val m v -> valid_vals m vl -> valid_vals m (v :: vl).
+
+Lemma valid_vals_in : forall  vl v m,
+  valid_vals m vl -> In v vl -> valid_val m v.
+Proof.
+  induction 1; intros. inv H.
+  destruct H1. subst. eauto.
+  eauto.
+Qed.
+
+Definition valid_readvalue (m:mem) : Prop :=
+  forall b, Mem.valid_block m b ->
+        (forall chunk ofs v, Mem.load chunk m b ofs = Some v -> valid_val m v) /\
+         (forall ofs b' ofs' q i, Mem.loadbytes m b ofs 1 = Some (Fragment (Vptr b' ofs') q i :: nil) -> Mem.valid_block m b').
+
+
+
+(** Lemmas about bc_of_se_mem *)
+
+Lemma valid_pmatch : forall b m,
+    Mem.valid_block m b <->
+    (bc_of_se_mem ge m) b <> BCinvalid.
+Proof.
+  intros. simpl.
+  split; intros. simpl. rewrite pred_dec_true; eauto.
+  destruct Genv.invert_symbol; congruence.
+  destruct Mem.sup_dec; eauto. congruence.
+Qed.
+
+Lemma valid_vmatch : forall v m,
+    valid_val m v ->
+    vmatch (bc_of_se_mem ge m) v Vtop.
+Proof.
+  intros. destruct v; constructor.
+  simpl in H. constructor.
+  eapply valid_pmatch; eauto.
+Qed.
+
+Lemma bc_of_se_mem_nostack : forall m,
+    bc_nostack (bc_of_se_mem ge m).
+Proof.
+  intros. red. intros.
+  simpl. destruct Mem.sup_dec; try congruence.
+  destruct Genv.invert_symbol; try congruence.
+Qed.
+
+(** Requirement of mem in query *)
+Inductive valid_mem (m:mem) : Prop :=
+  valid_mem_intros: forall 
+      (SUP: Mem.sup_include (Genv.genv_sup ge) (Mem.support m))
+      (READ: valid_readvalue m),
+    valid_mem m.
+
+Inductive sound_query' m: c_query -> Prop :=
+  sound_query'_intro : forall vf sg vargs,
+      valid_mem m ->
+      valid_val m vf ->
+      valid_vals m vargs ->
+      sound_query' m (cq vf sg vargs m).
+      
+Lemma sound_query_valid: forall m cq,
+    sound_query' m cq ->
+    sound_query ge (bc_of_se_mem ge m) m cq.
+Proof.
+  intros. inv H.
+  econstructor; eauto. inv H0.
+  - (* genv_match *)
+    constructor.
+    + intros. split; intros.
+      unfold bc_of_se_mem.
+      exploit Genv.genv_symb_range; eauto.
+      intro SUPIN. simpl.
+      rewrite pred_dec_true. 2: eauto with mem.
+      exploit Genv.find_invert_symbol; eauto.
+      intro H0. rewrite H0. reflexivity.
+      unfold bc_of_se_mem in H. simpl in H.
+      destruct Mem.sup_dec; try discriminate.
+      destruct Genv.invert_symbol eqn:INVERT; try discriminate.
+      inv H.
+      apply Genv.invert_find_symbol; eauto.
+    + intros. simpl. split.
+      rewrite pred_dec_true. 2: eauto with mem.
+      destruct Genv.invert_symbol; congruence.
+      rewrite pred_dec_true. 2: eauto with mem.
+      destruct Genv.invert_symbol; congruence.
+  - apply valid_vmatch; eauto.
+  - intros. exploit valid_vals_in; eauto.
+    intro IN. apply valid_vmatch; eauto.
+  - (* mmatch *)
+    constructor.
+    + intros. simpl in H. destruct Mem.sup_dec; destruct Genv.invert_symbol;
+        discriminate.
+    + intros. simpl in H3. inv H3.
+    + intros. simpl.
+      constructor.
+      -- intros. inv H0. exploit READ; eauto.
+         eapply valid_pmatch; eauto.
+         intros [A B].
+         apply valid_vmatch; eauto.
+      -- intros. constructor. eapply valid_pmatch; eauto.
+         inv H0. exploit READ; eauto. eapply valid_pmatch; eauto.
+         intros [A B].
+         eauto.
+    + intros. simpl. constructor.
+      -- intros. inv H0. exploit READ; eauto.
+         eapply valid_pmatch; eauto.
+         intros [A B].
+         apply valid_vmatch; eauto.
+      -- intros. constructor. eapply valid_pmatch; eauto.
+         inv H0. exploit READ; eauto. eapply valid_pmatch; eauto.
+         intros [A B].
+         eauto.
+    + red. intros. apply valid_pmatch in H. eauto.
+  - apply bc_of_se_mem_nostack.
+  - (* romatch_all *)
+    red. intros.
+    red in H. red in GEVALID.
+    constructor.
+    + (*initial values in Glob blocks shall point to only other Glob blocks*)
+      admit.
+    + split.
+      -- (* m v.s. romem_for cu *)
+         constructor.
+         ++ constructor. admit. admit.
+         ++ intros. admit.
+      -- (* perm of m on read_only part *)
+        admit.
+Admitted.
+
+End BCgen.
+
+
+(** * vamatch *)
+(*
 Lemma inject_list_exists :
   forall vl1 vl2 v1 j,
     In v1 vl1 ->
@@ -1747,9 +2033,10 @@ Proof.
   intros. inv H; inv H0; try constructor; eauto.
   unfold inject_id in H1. inv H1.
   rewrite Ptrofs.add_zero. eauto.
+  unfold Vtop.
+  destruct v2; constructor; eauto.
+  constructor. 
  Abort.
-
-
 
 Lemma smatch_propagate_extends: forall m1 m2 bc b ab,
     Mem.extends m1 m2 ->
@@ -1805,7 +2092,8 @@ Proof.
     eapply smatch_propagate_extends; eauto.
   - inversion H. rewrite mext_sup. eauto.
 Qed.
-
+*)
+(*
 (** ** Soundness of the initial memory abstraction *)
 
 Require Import Axioms.
@@ -2170,7 +2458,7 @@ Proof.
 Qed.
 
 End INITIAL.
-
+*)
 Global Hint Resolve areg_sound aregs_sound: va.
 
 (** * Interface with other optimizations *)

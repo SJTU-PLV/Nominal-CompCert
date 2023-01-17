@@ -748,7 +748,9 @@ Definition uns (p: aptr) (n: Z) : aval :=
   else Ifptr p.
 
 Definition sgn (p: aptr) (n: Z) : aval :=
-  if zle n 8 then Sgn p 8 else if zle n 16 then Sgn p 16 else Ifptr p.
+  if zle n 8 then Sgn p 8
+  else if zle n 16 then Sgn p 16
+  else Ifptr p.
 
 Lemma vmatch_uns':
   forall p i n, is_uns (Z.max 0 n) i -> vmatch (Vint i) (uns p n).
