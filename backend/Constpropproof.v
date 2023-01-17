@@ -367,7 +367,8 @@ Proof.
   set (aa := eval_static_addressing addr (aregs ae args)).
   assert (VM1: vmatch bc a aa) by (eapply eval_static_addressing_sound; eauto with va).
   set (av := loadv chunk (romem_for prog) am aa).
-  assert (VM2: vmatch bc v av) by (eapply loadv_sound; eauto).
+  eapply romatch_symtbl_prog in SEVALID as RO'; eauto.
+  assert (VM2: vmatch bc v av) by (eapply loadv_sound;  eauto).
   destruct (const_for_result av) as [cop|] eqn:?; intros.
 + (* constant-propagated *)
   exploit const_for_result_correct; eauto. intros (v' & A & B).
@@ -436,6 +437,7 @@ Proof.
 Opaque builtin_strength_reduction.
   set (dfl := Ibuiltin ef (builtin_strength_reduction ae ef args) res pc') in *.
   set (rm := romem_for prog) in *.
+  eapply romatch_symtbl_prog in SEVALID as RO'; eauto.
   assert (DFL: (fn_code (transf_function rm f))!pc = Some dfl ->
           exists (n2 : nat) (s2' : state),
             step tge

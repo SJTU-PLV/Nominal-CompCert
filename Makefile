@@ -122,12 +122,12 @@ CKLR=\
   CKLR.v CKLRAlgebra.v \
   Extends.v \
   Inject.v InjectFootprint.v \
-  VAInject.v VAExtends.v \
   Mapsrel.v \
   Valuesrel.v Builtinsrel.v Eventsrel.v \
   Coprel.v Clightrel.v \
   Registersrel.v RTLrel.v \
 
+#  VAInject.v VAExtends.v 
 # Back-end modules (in backend/, $(ARCH)/)
 
 BACKEND=\

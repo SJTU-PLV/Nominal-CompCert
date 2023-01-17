@@ -39,7 +39,7 @@
   ValueAnalysis passes. *)
 
 Require Import LanguageInterface CallconvAlgebra Invariant.
-Require Import CKLR Inject InjectFootprint Extends VAInject VAExtends.
+Require Import CKLR Inject InjectFootprint Extends.
 Require Import Mach Locations Conventions Asm.
 Require Import ValueAnalysis.
 Require Import Allocproof Lineartyping Asmgenproof0.
@@ -420,6 +420,16 @@ Lemma lessdef_list_refl : forall l,
 Proof.
   induction l. constructor.
   constructor; eauto.
+Qed.
+
+Lemma val_inject_lessdef_list_compose f v1 v2 v3:
+  Val.inject_list f v1 v2 ->
+  Val.lessdef_list v2 v3 ->
+  Val.inject_list f v1 v3.
+Proof.
+  intros Hv12. revert v3.
+  induction Hv12; inversion 1; subst; constructor; eauto.
+  eapply Mem.val_inject_lessdef_compose; eauto.
 Qed.
 
 Definition wt_c_R_refinement R:
@@ -1051,7 +1061,7 @@ Proof.
     + apply Mem.unchanged_on_refl.
     + reflexivity.
 Qed.
-
+(*
 Instance vainj_mixable:
   Mixable vainj.
 Proof.
@@ -1091,7 +1101,7 @@ Proof.
       unfold Mem.valid_block. rewrite <- H11. eapply Mem.perm_valid_block; eauto.
   - auto.
 Qed.
-
+*)
 Axiom size_arguments_always_64: forall sg,
   (2 | size_arguments sg).
 (*
