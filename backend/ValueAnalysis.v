@@ -1069,23 +1069,6 @@ Qed.
 
 (** romem derived from symtbl *)
 
-Definition check_add_global (se : Genv.symtbl)
-  (rm : romem)(b : ident) : romem :=
-  match Genv.invert_symbol se b with
-  | Some id =>
-      match NMap.get _ b (Genv.find_info se) with
-      | Some (Gvar v) =>
-          if v.(gvar_readonly) && negb v.(gvar_volatile) && definitive_initializer v.(gvar_init)
-          then PTree.set id (store_init_data_list (ablock_init Pbot) 0 v.(gvar_init)) rm
-          else PTree.remove id rm
-      | _ => PTree.remove id rm
-      end
-  | None => rm
-  end.
-                            
-Definition romem_for_symtbl (se : Genv.symtbl) : romem :=
-  fold_left (check_add_global se) (Genv.genv_sup se) (PTree.empty ablock).
-
 Definition romem_consistent (defmap: PTree.t (globdef fundef unit)) (rm: romem) :=
   forall id ab,
   rm!id = Some ab ->
@@ -1125,6 +1108,94 @@ Proof.
   red; intros. rewrite PTree.gempty in H; discriminate.
 Qed.
 
+Definition check_add_global (se : Genv.symtbl)
+  (b:block)(rm : romem) : romem :=
+  match Genv.invert_symbol se b with
+  | Some id =>
+      match NMap.get _ b (Genv.find_info se) with
+      | Some (Gvar v) =>
+          if v.(gvar_readonly) && negb v.(gvar_volatile) && definitive_initializer v.(gvar_init)
+          then PTree.set id (store_init_data_list (ablock_init Pbot) 0 v.(gvar_init)) rm
+          else PTree.remove id rm
+      | _ => PTree.remove id rm
+      end
+  | None => rm
+  end.
+                            
+Definition romem_for_symtbl (se : Genv.symtbl) : romem :=
+  fold_right (check_add_global se)  (PTree.empty ablock) (Genv.genv_sup se).
+
+Lemma check_add_global_diff:
+  forall a b se id map,
+    a <> b ->
+    Genv.find_symbol se id = Some b ->
+    (check_add_global se a map) ! id = map ! id.
+Proof.
+  intros. unfold check_add_global.
+  destruct Genv.invert_symbol eqn:INV; eauto.
+  assert (i <> id).
+  {
+    apply Genv.invert_find_symbol in INV.
+    congruence.
+  }
+  destruct NMap.get eqn:INFO; eauto.
+  destruct g; eauto.
+  rewrite PTree.gro; eauto.
+  destruct ( gvar_readonly v && negb (gvar_volatile v) && definitive_initializer (gvar_init v)).
+  rewrite PTree.gso; eauto.
+  rewrite PTree.gro; eauto.
+  rewrite PTree.gro; eauto.
+Qed.
+
+Lemma romem_for_in : forall l se b (F:Type) (g0: globdef F unit) (v: globvar unit) g id,
+      In b l ->
+      Genv.find_symbol se id = Some b ->
+      Genv.find_info se b = Some g ->
+      g0 = Gvar v ->
+      linkorder (erase_globdef g0) g -> 
+      gvar_readonly v = true ->
+      gvar_volatile v = false ->
+      definitive_initializer (gvar_init v) = true ->
+      (fold_right (check_add_global se) (PTree.empty ablock) l) ! id = Some (store_init_data_list (ablock_init Pbot) 0 (gvar_init v)).
+Proof.
+  induction l; intros. inv H.
+  destruct H.
+  - subst. simpl. unfold check_add_global.
+    simpl.
+    exploit Genv.find_invert_symbol; eauto.
+    intro INV. rewrite INV. unfold Genv.find_info in H1.
+    setoid_rewrite H1.
+    unfold erase_globdef in H3.
+    unfold erase_globvar in H3. inv H3.
+    inv H2. simpl. rewrite H4. rewrite H5.
+    inv H11.
+    + 
+    rewrite H6. simpl.
+    rewrite PTree.gss. reflexivity.
+    + rewrite <- H2 in H6. inv H6.
+    + rewrite <- H in H6. inv H6.
+  - destruct (eq_block a b).
+    + subst.
+      simpl. unfold check_add_global.
+      simpl.
+      exploit Genv.find_invert_symbol; eauto.
+      intro INV. rewrite INV. unfold Genv.find_info in H1.
+      setoid_rewrite H1.
+      unfold erase_globdef in H3.
+      unfold erase_globvar in H3. inv H3.
+      inv H7. simpl. rewrite H4. rewrite H5.
+      inv H12.
+      -- 
+        rewrite H6. simpl.
+        rewrite PTree.gss. reflexivity.
+      -- rewrite <- H3 in H6. inv H6.
+      -- rewrite <- H2 in H6. inv H6.
+    +
+      exploit IHl; eauto.
+      intro. simpl.
+      erewrite check_add_global_diff; eauto.
+Qed.
+
 Lemma romem_symtbl_prog : forall se prog id ab,
     Genv.valid_for (erase_program prog) se ->
     (romem_for prog) ! id = Some ab ->
@@ -1138,10 +1209,10 @@ Proof.
   rewrite erase_program_defmap.
   unfold option_map.
   erewrite MAP. reflexivity.
-  intros (b & FIND & INFO & LINK).
-  unfold romem_for_symtbl.
-  admit. (* correct, need to be proved by Ind*)
-Admitted.
+  intros (b & g & FIND & INFO & LINK).
+  subst ab. eapply romem_for_in; eauto.
+  eapply Genv.genv_info_range; eauto.
+Qed.
   
 Theorem romatch_symtbl_prog : forall bc se prog m,
     Genv.valid_for (erase_program prog) se ->
@@ -1871,8 +1942,6 @@ Definition valid_readvalue (m:mem) : Prop :=
   forall b, Mem.valid_block m b ->
         (forall chunk ofs v, Mem.load chunk m b ofs = Some v -> valid_val m v) /\
          (forall ofs b' ofs' q i, Mem.loadbytes m b ofs 1 = Some (Fragment (Vptr b' ofs') q i :: nil) -> Mem.valid_block m b').
-
-
 
 (** Lemmas about bc_of_se_mem *)
 
