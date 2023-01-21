@@ -126,14 +126,13 @@ ARCHFILES=\
   AsmFloatLiteral.v \
   AsmPseudoInstr.v\
   Asmlabelgen.v\
-  LocalLib.v Jumptablegen.v \
+  Jumptablegen.v \
   SymbtablegenArchi.v SymbtablegenproofArchi.v\
   RelocationTypes.v ReloctablesgenArchi.v ReloctablesgenproofArchi.v\
   RelocBinDecode.v RelocBingenproofArchi.v\
   TranslateInstr.v TranslateInstrSize.v\
   AsmLongInt.v\
   RelocProgSemanticsArchi.v RelocProgSemanticsArchi1.v\
-  AsmInject.v\
   RelocElfArchi.v ReloctablesEncodeArchi.v
 else
 ifeq ($(ARCH), riscV)
@@ -150,6 +149,7 @@ ARCHFILES=\
   RelocationTypes.v ReloctablesgenArchi.v\
   TranslateInstr.v\
   RelocElfArchi.v\
+  RelocProgSemanticsArchi.v\
   ReloctablesEncodeArchi.v
 else
 ARCHFILES=
@@ -173,7 +173,7 @@ ELF = MachineTypes.v RelocElf.v\
 
 # assembler
 ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
-  RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
+  AsmInject.v RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
   Symbtablegen.v Symbtablegenproof.v\
   Reloctablesgen.v Reloctablesgenproof.v\
