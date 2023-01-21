@@ -2630,7 +2630,98 @@ Proof.
     inv H0. auto.
 Qed.
 
-  
+(** New defined eval_builtin_arg for Genv.t *)
+Section EVAL_BUILTIN_ARG.
+
+Variable A: Type.
+
+Variable ge: Genv.t.
+Variable e: A -> val.
+Variable sp: val.
+Variable m:mem. 
+
+Inductive eval_builtin_arg: builtin_arg A -> val -> Prop :=
+  | eval_BA: forall x,
+      eval_builtin_arg (BA x) (e x)
+  | eval_BA_int: forall n,
+      eval_builtin_arg (BA_int n) (Vint n)
+  | eval_BA_long: forall n,
+      eval_builtin_arg (BA_long n) (Vlong n)
+  | eval_BA_float: forall n,
+      eval_builtin_arg (BA_float n) (Vfloat n)
+  | eval_BA_single: forall n,
+      eval_builtin_arg (BA_single n) (Vsingle n)
+  | eval_BA_loadstack: forall chunk ofs v,
+      Mem.loadv chunk m (Val.offset_ptr sp ofs) = Some v ->
+      eval_builtin_arg (BA_loadstack chunk ofs) v
+  | eval_BA_addrstack: forall ofs,
+      eval_builtin_arg (BA_addrstack ofs) (Val.offset_ptr sp ofs)
+  | eval_BA_loadglobal: forall chunk id ofs v,
+      Mem.loadv chunk m  (Genv.symbol_address ge id ofs) = Some v ->
+      eval_builtin_arg (BA_loadglobal chunk id ofs) v
+  | eval_BA_addrglobal: forall id ofs,
+      eval_builtin_arg (BA_addrglobal id ofs) (Genv.symbol_address ge id ofs)
+  | eval_BA_splitlong: forall hi lo vhi vlo,
+      eval_builtin_arg hi vhi -> eval_builtin_arg lo vlo ->
+      eval_builtin_arg (BA_splitlong hi lo) (Val.longofwords vhi vlo)
+  | eval_BA_addptr: forall a1 a2 v1 v2,
+      eval_builtin_arg a1 v1 ->
+      eval_builtin_arg a2 v2 ->
+      eval_builtin_arg (BA_addptr a1 a2) (if Archi.ptr64 then Val.addl v1 v2 else Val.add v1 v2).
+
+                       
+Definition eval_builtin_args (al: list (builtin_arg A)) (vl: list val) : Prop :=
+  list_forall2 eval_builtin_arg al vl.
+
+Lemma eval_builtin_arg_determ:
+  forall a v, eval_builtin_arg a v -> forall v', eval_builtin_arg a v' -> v' = v.
+Proof.
+  induction 1; intros v' EV; inv EV; try congruence.
+  f_equal; eauto.
+  destruct Archi.ptr64;f_equal;auto.
+Qed.
+
+Lemma eval_builtin_args_determ:
+  forall al vl, eval_builtin_args al vl -> forall vl', eval_builtin_args al vl' -> vl' = vl.
+Proof.
+  induction 1; intros v' EV; inv EV; f_equal; eauto using eval_builtin_arg_determ.
+Qed.
+
+ 
+End EVAL_BUILTIN_ARG.
+
+Hint Constructors eval_builtin_arg: barg.
+
+(* same lemmas as the in Events *)
+Section EVAL_BUILTIN_ARG_PRESERVED.
+
+Variables A: Type.
+Variable ge1: Genv.t.
+Variable ge2: Genv.t.
+Variable e: A -> val.
+Variable sp: val.
+Variable m: mem.
+
+Hypothesis symbols_preserved:
+  forall id, Genv.find_symbol ge2 id = Genv.find_symbol ge1 id.
+
+Lemma eval_builtin_arg_preserved:
+  forall a v, eval_builtin_arg A ge1 e sp m a v -> eval_builtin_arg A ge2 e sp m a v.
+Proof.
+   assert (EQ: forall id ofs, Genv.symbol_address ge2 id ofs = Genv.symbol_address ge1 id ofs).
+  { unfold Genv.symbol_address; simpl; intros. rewrite symbols_preserved; auto. }
+  induction 1; eauto with barg. rewrite <- EQ in H; eauto with barg. rewrite <- EQ; eauto with barg.
+Qed.
+
+Lemma eval_builtin_args_preserved:
+  forall al vl, eval_builtin_args A ge1 e sp m al vl -> eval_builtin_args A ge2 e sp m al vl.
+Proof.
+  induction 1; constructor; auto; eapply eval_builtin_arg_preserved; eauto.
+Qed.
+
+End EVAL_BUILTIN_ARG_PRESERVED.
+
+
 Inductive initial_state_gen {D: Type} (p: RelocProg.program fundef unit instruction D) (rs: regset) m: state -> Prop :=
 | initial_state_gen_intro:
     forall m1 m2 stk

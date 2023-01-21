@@ -1,87 +1,33 @@
-Require Import Coqlib Maps AST Integers Values.
-Require Import Events lib.Floats Memory Smallstep.
-Require Import Asm RelocProg RelocProgram Globalenvs.
-Require Import Locations Stacklayout Conventions.
-Require Import Linking Errors.
-Require Import LocalLib.
-Require Import RelocProgGlobalenvs.
+Require Import Smallstep.
+Require Import Machregs.
+Require Import Asm.
+Require Import Integers.
+Require Import Floats.
+Require Import List.
+Require Import ZArith.
+Require Import Memtype.
+Require Import Memory.
+Require Import Archi.
+Require Import Coqlib.
+Require Import AST.
+Require Import Globalenvs.
+Require Import Events.
+Require Import Values.
+Require Import Conventions1.
 
-Parameter low_half: Genv.t -> ident -> ptrofs -> ptrofs.
-Parameter high_half: Genv.t -> ident -> ptrofs -> val.
+Section INSTRSIZE.
+Variable instr_size : instruction -> Z.
 
-Axiom low_half_match_ge: forall ge1 ge2 id ofs (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
-    low_half ge1 id ofs = low_half ge2 id ofs.
+Section WITHGE.
+  Variable ge : Genv.t Asm.fundef unit.
 
-Axiom high_half_match_ge: forall ge1 ge2 id ofs (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
-    high_half ge1 id ofs = high_half ge2 id ofs.
-
-Section WITH_INSTR_SIZE.
-  Variable instr_size : instruction -> Z.
-
-   
-  Definition eval_offset (ge: Genv.t) (ofs: offset) : ptrofs :=
-  match ofs with
-  | Ofsimm n => n
-  | Ofslow id delta => low_half ge id delta
-  end.
-
-Definition exec_load (sz:ptrofs) (ge: Genv.t) (chunk: memory_chunk) (rs: regset) (m: mem)
-                     (d: preg) (a: ireg) (ofs: offset) :=
-  match Mem.loadv chunk m (Val.offset_ptr (rs a) (eval_offset ge ofs)) with
-  | None => Stuck
-  | Some v => Next (nextinstr sz (rs#d <- v)) m
-  end.
-
-
-Definition exec_store (sz:ptrofs) (ge: Genv.t) (chunk: memory_chunk) (rs: regset) (m: mem)
-                      (s: preg) (a: ireg) (ofs: offset) :=
-  match Mem.storev chunk m (Val.offset_ptr (rs a) (eval_offset ge ofs)) (rs s) with
-  | None => Stuck
-  | Some m' => Next (nextinstr sz rs) m'
-  end.
-
-Lemma eval_offset_match_ge: forall ge1 ge2 ofs (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
-    eval_offset ge1 ofs = eval_offset ge2 ofs.
-Proof.
-  intros.
-  unfold eval_offset.
-  destruct ofs;auto.
-  erewrite low_half_match_ge;eauto.
-Qed.
-
-Lemma exec_load_match_ge: forall sz ge1 ge2 chunk rs m s a ofs (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
-          exec_load sz ge1 chunk rs m s a ofs  = exec_load sz ge2 chunk rs m s a ofs.
-Proof.
-  unfold exec_load.
-  intros. erewrite eval_offset_match_ge.
-  eauto. auto.
-Qed.
-
-Lemma exec_store_match_ge: forall sz ge1 ge2 chunk rs m s a ofs (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs) ,
-          exec_store sz ge1 chunk rs m s a ofs = exec_store sz ge2 chunk rs m s a ofs.
-Proof.
-  unfold exec_store.
-  intros. erewrite eval_offset_match_ge.
-  eauto. auto.
-Qed.
-
-(** Branch to a offset *)
-Definition goto_ofs (sz:ptrofs) (ofs:Z) (rs: regset) (m: mem) :=
-  match rs#PC with
-  | Vptr b o =>
-    Next (rs#PC <- (Vptr b (Ptrofs.add o (Ptrofs.add sz (Ptrofs.repr ofs))))) m
-  | _ => Stuck
-  end.
-
-
-(** Execution of instructions *)
-
-(** Almost Copy from RealAsm, so to FIXME  *)
-  Definition exec_instr (ge: Genv.t) (i: instruction) (rs: regset) (m: mem) : outcome :=
+  (* only eliminate the f argument here, not complete *)
+  (** TODO: eliminate pseudo instructions and semantics for additional instructions *)
+  Definition exec_instr (i: instruction) (rs: regset) (m: mem) : outcome :=
   let sz := Ptrofs.repr (instr_size i) in
   let nextinstr := nextinstr sz in
-  let exec_load := exec_load sz ge in
-  let exec_store := exec_store sz ge in
+  let exec_load := exec_load ge sz in
+  let exec_store := exec_store ge sz in
   match i with
   | Pmv d s =>
       Next (nextinstr (rs#d <- (rs#s))) m
@@ -473,19 +419,76 @@ Definition goto_ofs (sz:ptrofs) (ofs:Z) (rs: regset) (m: mem) :=
   end.
 
 
-  Lemma exec_instr_refl: forall i rs m ge tge
-    (symbol_address_pres: forall id ofs,
-    RelocProgGlobalenvs.Genv.symbol_address ge id ofs =
-    RelocProgGlobalenvs.Genv.symbol_address tge id ofs),
-    exec_instr ge i rs m = exec_instr tge i rs m.
-  Proof.
-    destruct i;simpl;auto;intros.
-    all: try (erewrite symbol_address_pres;eauto).
-    all:  try (erewrite exec_load_match_ge;eauto;eapply symbol_address_pres;eauto).
-    all:  try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
-    erewrite high_half_match_ge;eauto.
-  Qed.
-  
-End WITH_INSTR_SIZE.
+Inductive step: state -> trace -> state -> Prop :=
+  | exec_step_internal:
+      forall b ofs f i rs m rs' m',
+      rs PC = Vptr b ofs ->
+      Genv.find_funct_ptr ge b = Some (Internal f) ->
+      find_instr instr_size (Ptrofs.unsigned ofs) (fn_code f) = Some i ->
+      exec_instr i rs m = Next rs' m' ->
+      step (State rs m) E0 (State rs' m')
+  | exec_step_builtin:
+      forall b ofs f ef args res rs m vargs t vres rs' m',
+      rs PC = Vptr b ofs ->
+      Genv.find_funct_ptr ge b = Some (Internal f) ->
+      find_instr instr_size (Ptrofs.unsigned ofs) f.(fn_code) = Some (Pbuiltin ef args res) ->
+      eval_builtin_args ge rs (rs SP) m args vargs ->
+      external_call ef ge vargs m t vres m' ->
+      rs' = nextinstr (Ptrofs.repr (instr_size (Pbuiltin ef args res)))
+              (set_res res vres
+                (undef_regs (map preg_of (destroyed_by_builtin ef))
+                   (rs#X31 <- Vundef))) ->
+      step (State rs m) t (State rs' m')
+  | exec_step_external:
+      forall b ef args res rs m t rs' m',
+      rs PC = Vptr b Ptrofs.zero ->
+      Genv.find_funct_ptr ge b = Some (External ef) ->
+      external_call ef ge args m t res m' ->
+      extcall_arguments rs m (ef_sig ef) args ->
+      rs' = (set_pair (loc_external_result (ef_sig ef) ) res (undef_caller_save_regs rs))#PC <- (rs RA) ->
+      step (State rs m) t (State rs' m').
 
-(***  TODO: step relation *)
+
+End WITHGE.
+
+
+Definition semantics p :=
+  Semantics step (initial_state p) final_state (Genv.globalenv p).
+
+Lemma semantics_determinate: forall p, determinate (semantics p).
+Proof.
+Ltac Equalities :=
+  match goal with
+  | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] =>
+      rewrite H1 in H2; inv H2; Equalities
+  | _ => idtac
+  end.
+  intros; constructor; simpl; intros.
+- (* determ *)
+  inv H; inv H0; Equalities.
+  split. constructor. auto.
+  discriminate.
+  discriminate.
+  assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0.
+  exploit external_call_determ. eexact H5. eexact H11. intros [A B].
+  split. auto. intros. destruct B; auto. subst. auto.
+  assert (args0 = args) by (eapply extcall_arguments_determ; eauto). subst args0.
+  exploit external_call_determ. eexact H3. eexact H8. intros [A B].
+  split. auto. intros. destruct B; auto. subst. auto.
+- (* trace length *)
+  red; intros. inv H; simpl.
+  lia.
+  eapply external_call_trace_length; eauto.
+  eapply external_call_trace_length; eauto.
+- (* initial states *)
+  inv H; inv H0. f_equal. congruence.
+- (* final no step *)
+  assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
+  { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
+  inv H. unfold Vzero in H0. red; intros; red; intros.
+  inv H; rewrite H0 in *; eelim NOTNULL; eauto.
+- (* final states *)
+  inv H; inv H0. congruence.
+Qed.
+
+End INSTRSIZE.
