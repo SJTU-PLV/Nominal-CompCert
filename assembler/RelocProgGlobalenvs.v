@@ -74,5 +74,3 @@ Definition find_instr (ge: t) (v:val) : option instruction :=
 End GENV.
 
 End Genv.
-
-Coercion Genv.genv_senv: Genv.t >-> Senv.t.

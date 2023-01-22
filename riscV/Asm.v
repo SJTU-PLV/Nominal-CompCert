@@ -31,6 +31,8 @@ Require Import Locations.
 Require Stacklayout.
 Require Import Conventions.
 
+Local Open Scope string_scope.      
+
 (** * Abstract syntax *)
 
 (** Integer registers.  X0 is treated specially because it always reads 
@@ -537,52 +539,10 @@ Fixpoint code_size (c:code) : Z :=
   |i::c' => code_size c' + instr_size i
   end.
 
-(* need in Symbtablegenproof *)
 Lemma code_size_non_neg: forall c, 0 <= code_size c.
 Proof.
   intros. induction c; simpl. lia. generalize (instr_size_bound a); lia.
 Qed.
-
-Lemma find_instr_ofs_pos:
-  forall c o i,
-    find_instr o c = Some i ->
-    0 <= o.
-Proof.
-  induction c; simpl; intros; repeat destr_in H.
-  lia. apply IHc in H1.
-  generalize(instr_size_bound a); lia.
-Qed.
-
-Lemma find_instr_bound:
-  forall c o i,
-    find_instr o c = Some i ->
-    o + instr_size i <= code_size c.
-Proof.
-  induction c; simpl; intros; eauto. congruence.
-  destr_in H. inv H. generalize (code_size_non_neg c) (instr_size_bound i). lia.
-  apply IHc in H. lia.
-Qed.
-
-Lemma find_instr_app:
-    forall a o b,
-      0 <= o ->
-      find_instr (o + code_size a) (a ++ b) = find_instr o b.
-  Proof.
-    induction a; simpl; intros; eauto.
-    f_equal. lia.
-    rewrite pred_dec_false.
-    rewrite <- (IHa o b). f_equal. lia. lia.
-    generalize (code_size_non_neg a0). generalize (instr_size_bound a). lia.
-  Qed.
-
-  Lemma find_instr_app':
-    forall a o b,
-      code_size a <= o ->
-      find_instr o (a ++ b) = find_instr (o - code_size a) b.
-  Proof.
-    intros.
-    rewrite <- (find_instr_app a _ b). f_equal. lia. lia.
-  Qed.
 
 (** Position corresponding to a label *)
 
@@ -1339,8 +1299,6 @@ Proof.
   unfold Int.zwordsize. simpl. lia.
 Qed. *)
 Admitted.
-
-Local Open Scope string_scope.
 
 Definition instr_to_string i :=
   match i with
