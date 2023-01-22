@@ -144,8 +144,9 @@ ARCHFILES=\
   AsmLiteral.v\
   Asmlabelgen.v\
   AsmPseudoInstr.v\
+  RealAsm.v\
   Jumptablegen.v\
-  SymbtablegenArchi.v\
+  SymbtablegenArchi.v SymbtablegenproofArchi.v\
   RelocationTypes.v ReloctablesgenArchi.v\
   TranslateInstr.v\
   RelocElfArchi.v\

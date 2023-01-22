@@ -4,7 +4,7 @@ Require Import Asm RelocProg RelocProgram Globalenvs.
 Require Import Locations Stacklayout Conventions.
 Require Import Linking Errors.
 Require Import LocalLib.
-Require Import RelocProgGlobalenvs.
+Require Import RelocProgGlobalenvs RelocProgSemantics0.
 
 (** Evaluating an addressing mode *)
 
@@ -561,6 +561,131 @@ Proof.
   destruct a. f_equal.
   f_equal. destr.
   destruct p. eapply symbol_address_pres;eauto.
+Qed.
+
+Inductive step (ge: Genv.t) : state -> trace -> state -> Prop :=
+| exec_step_internal:
+    forall b ofs i rs m rs' m',
+      rs PC = Vptr b ofs ->
+      Genv.find_ext_funct ge (Vptr b ofs) = None ->
+      Genv.find_instr ge (Vptr b ofs) = Some i ->
+      exec_instr ge i rs m = Next rs' m' ->
+      step ge (State rs m) E0 (State rs' m')
+| exec_step_builtin:
+    forall b ofs ef args res rs m vargs t vres rs' m',
+      rs PC = Vptr b ofs ->
+      Genv.find_ext_funct ge (Vptr b ofs) = None ->
+      Genv.find_instr ge (Vptr b ofs) = Some (Pbuiltin ef args res)  ->
+      eval_builtin_args preg ge rs (rs RSP) m args vargs ->
+      external_call ef (Genv.genv_senv ge) vargs m t vres m' ->
+      rs' = nextinstr_nf (Ptrofs.repr (instr_size (Pbuiltin ef args res)))
+                         (set_res res vres
+                                  (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
+        step ge (State rs m) t (State rs' m')
+| exec_step_external:
+    forall b ofs ef args res rs m t rs' m',
+      rs PC = Vptr b ofs ->
+      Genv.find_ext_funct ge (Vptr b ofs) = Some ef ->
+      forall ra (LOADRA: Mem.loadv Mptr m (rs RSP) = Some ra)
+        (RA_NOT_VUNDEF: ra <> Vundef)
+        (ARGS: extcall_arguments (rs # RSP <- (Val.offset_ptr (rs RSP) (Ptrofs.repr (size_chunk Mptr)))) m (ef_sig ef) args),
+        external_call ef (Genv.genv_senv ge) args m t res m' ->
+          rs' = (set_pair (loc_external_result (ef_sig ef)) res
+                          (undef_caller_save_regs rs))
+                  #PC <- ra
+                  #RA <- Vundef
+                  #RSP <- (Val.offset_ptr (rs RSP) (Ptrofs.repr (size_chunk Mptr))) ->
+        step ge (State rs m) t (State rs' m').
+
+
+Inductive initial_state_gen {D: Type} (p: RelocProg.program fundef unit instruction D) (rs: regset) m: state -> Prop :=
+| initial_state_gen_intro:
+    forall m1 m2 stk
+      (MALLOC: Mem.alloc m 0 (max_stacksize + align (size_chunk Mptr) 8) = (m1,stk))
+      (MST: Mem.storev Mptr m1 (Vptr stk (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8 - size_chunk Mptr))) Vnullptr = Some m2),
+      let ge := (globalenv p) in
+      let rs0 :=
+          rs # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
+           # RA <- Vnullptr
+           # RSP <- (Vptr stk (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr)))) in
+      initial_state_gen p rs m (State rs0 m2).
+
+Inductive initial_state (prog: program) (rs: regset) (s: state): Prop :=
+| initial_state_intro: forall m,
+    init_mem prog = Some m ->
+    initial_state_gen prog rs m s ->
+    initial_state prog rs s.
+
+Inductive final_state: state -> int -> Prop :=
+  | final_state_intro: forall rs m r,
+      rs#PC = Vnullptr ->
+      rs#RAX = Vint r ->
+      final_state (State rs m) r.
+
+Definition semantics (p: program) (rs: regset) :=
+  Semantics_gen (step instr_size) (initial_state p rs) final_state (globalenv p) (Genv.genv_senv (globalenv p)).
+
+(** Determinacy of the [Asm] semantics. *)
+
+Lemma semantics_determinate: forall p rs, determinate (semantics p rs).
+Proof.
+Ltac Equalities :=
+  match goal with
+  | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] =>
+      rewrite H1 in H2; inv H2; Equalities
+  | _ => idtac
+  end.
+  intros; constructor; simpl; intros.
+- (* determ *)
+  inv H; inv H0; Equalities.
++ split. constructor. auto.
++ discriminate.
++ discriminate.
++ assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0.
+  exploit external_call_determ. eexact H5. eexact H11. intros [A B].
+  split. auto. intros. destruct B; auto. subst. auto.
++ assert (args0 = args) by (eapply Asm.extcall_arguments_determ; eauto). subst args0.
+  exploit external_call_determ. eexact H3. eexact H7. intros [A B].
+  split. auto. intros. destruct B; auto. subst. auto.
+- (* trace length *)
+  red; intros; inv H; simpl.
+  lia.
+  eapply external_call_trace_length; eauto.
+  eapply external_call_trace_length; eauto.
+- (* initial states *)
+  inv H; inv H0. assert (m = m0) by congruence. subst. inv H2; inv H3.
+  assert (m1 = m3 /\ stk = stk0) by intuition congruence. destruct H0; subst.
+  assert (m2 = m4) by congruence. subst.
+  f_equal. (* congruence. *)
+- (* final no step *)
+  assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
+  { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
+  inv H. red; intros; red; intros. inv H; rewrite H0 in *; eelim NOTNULL; eauto.
+- (* final states *)
+  inv H; inv H0. congruence.
+Qed.
+
+Theorem reloc_prog_single_events p rs:
+  single_events (semantics p rs).
+Proof.
+  red. simpl. intros s t s' STEP.
+  inv STEP; simpl. lia.
+  eapply external_call_trace_length; eauto.
+  eapply external_call_trace_length; eauto.
+Qed.
+
+Theorem reloc_prog_receptive p rs:
+  receptive (semantics p rs).
+Proof.
+  split.
+  - simpl. intros s t1 s1 t2 STEP MT.
+    inv STEP.
+    inv MT. eexists. eapply exec_step_internal; eauto.
+    edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
+    eexists. eapply exec_step_builtin; eauto.
+    edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
+    eexists. eapply exec_step_external; eauto.
+  - eapply reloc_prog_single_events; eauto.
 Qed.
 
 

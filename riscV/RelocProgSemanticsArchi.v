@@ -4,7 +4,7 @@ Require Import Asm RelocProg RelocProgram Globalenvs.
 Require Import Locations Stacklayout Conventions.
 Require Import Linking Errors.
 Require Import LocalLib.
-Require Import RelocProgGlobalenvs.
+Require Import RelocProgGlobalenvs RelocProgSemantics.
 
 Parameter low_half: Genv.t -> ident -> ptrofs -> ptrofs.
 Parameter high_half: Genv.t -> ident -> ptrofs -> val.
@@ -485,7 +485,121 @@ Definition goto_ofs (sz:ptrofs) (ofs:Z) (rs: regset) (m: mem) :=
     all:  try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
     erewrite high_half_match_ge;eauto.
   Qed.
+    
   
-End WITH_INSTR_SIZE.
+(** Use Genv.t *)
+Inductive step (ge: Genv.t): state -> trace -> state -> Prop :=
+  | exec_step_internal:
+    forall b ofs i rs m rs' m',
+      rs PC = Vptr b ofs ->
+      Genv.find_ext_funct ge (Vptr b ofs) = None ->
+      Genv.find_instr ge (Vptr b ofs) = Some i ->
+      exec_instr ge i rs m = Next rs' m' ->
+      step ge (State rs m) E0 (State rs' m')
+  | exec_step_builtin:
+      forall b ofs ef args res rs m vargs t vres rs' m',
+      rs PC = Vptr b ofs ->
+      Genv.find_ext_funct ge (Vptr b ofs) = None ->
+      Genv.find_instr ge (Vptr b ofs) = Some (Pbuiltin ef args res)  ->      
+      eval_builtin_args preg ge rs (rs SP) m args vargs ->
+      external_call ef ge vargs m t vres m' ->
+      rs' = nextinstr (Ptrofs.repr (instr_size (Pbuiltin ef args res)))
+              (set_res res vres
+                (undef_regs (map preg_of (destroyed_by_builtin ef))
+                   (rs#X31 <- Vundef))) ->
+      step ge (State rs m) t (State rs' m')
+  | exec_step_external:
+      forall b ef args res rs m t rs' m' ofs,
+      rs PC = Vptr b ofs ->
+      Genv.find_ext_funct ge (Vptr b ofs) = Some ef ->
+      external_call ef ge args m t res m' ->
+      extcall_arguments rs m (ef_sig ef) args ->
+      rs' = (set_pair (loc_external_result (ef_sig ef) ) res (undef_caller_save_regs rs))#PC <- (rs RA) ->
+      step ge (State rs m) t (State rs' m').
 
-(***  TODO: step relation *)
+Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall m0,
+      let ge := globalenv instr_size p in
+      let rs0 :=
+        (Pregmap.init Vundef)
+        # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
+        # SP <- Vnullptr
+        # RA <- Vnullptr in
+      init_mem instr_size p = Some m0 ->
+      initial_state p (State rs0 m0).
+
+Inductive final_state: state -> int -> Prop :=
+  | final_state_intro: forall rs m r,
+      rs PC = Vnullptr ->
+      rs X10 = Vint r ->
+      final_state (State rs m) r.
+
+(* Local Existing Instance mem_accessors_default. *)
+
+Definition semantics p :=
+  Semantics_gen step (initial_state p) final_state (globalenv instr_size p) (Genv.genv_senv (globalenv instr_size p)).
+
+
+(** Determinacy of the [Asm] semantics. *)
+
+Lemma semantics_determinate: forall p, determinate (semantics p).
+Proof.
+Ltac Equalities :=
+  match goal with
+  | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] =>
+      rewrite H1 in H2; inv H2; Equalities
+  | _ => idtac
+  end.
+  intros; constructor; simpl; intros.
+- (* determ *)
+  inv H; inv H0; Equalities.
++ split. constructor. auto.
++ discriminate.
++ discriminate.
++ assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0.
+  exploit external_call_determ. eexact H5. eexact H11. intros [A B].
+  split. auto. intros. destruct B; auto. subst. auto.
++ assert (args0 = args) by (eapply Asm.extcall_arguments_determ; eauto). subst args0.
+  exploit external_call_determ. eexact H3. eexact H8. intros [A B].
+  split. auto. intros. destruct B; auto. subst. auto.
+- (* trace length *)
+  red; intros; inv H; simpl.
+  lia.
+  eapply external_call_trace_length; eauto.
+  eapply external_call_trace_length; eauto.
+- (* initial states *)
+  inv H; inv H0. assert (m0 = m1) by congruence. subst.
+  f_equal.
+- (* final no step *)
+  assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
+  { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
+  inv H. red; intros; red; intros. inv H; rewrite H0 in *; eelim NOTNULL; eauto.
+- (* final states *)
+  inv H; inv H0. congruence.
+Qed.
+
+Theorem reloc_prog_single_events p:
+  single_events (semantics p).
+Proof.
+  red. simpl. intros s t s' STEP.
+  inv STEP; simpl. lia.
+  eapply external_call_trace_length; eauto.
+  eapply external_call_trace_length; eauto.
+Qed.
+
+Theorem reloc_prog_receptive p:
+  receptive (semantics p).
+Proof.
+  split.
+  - simpl. intros s t1 s1 t2 STEP MT.
+    inv STEP.
+    inv MT. eexists. eapply exec_step_internal; eauto.
+    edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
+    eexists. eapply exec_step_builtin; eauto.
+    edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
+    eexists. eapply exec_step_external; eauto.
+  - eapply reloc_prog_single_events; eauto.
+Qed.
+
+
+End WITH_INSTR_SIZE.

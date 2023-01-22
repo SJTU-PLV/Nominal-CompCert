@@ -491,4 +491,13 @@ Ltac Equalities :=
   inv H; inv H0. congruence.
 Qed.
 
+(** Some Auxilary lemmas *)
+
+Lemma code_size_app:
+    forall c1 c2,
+      code_size instr_size (c1 ++ c2) = code_size instr_size c1 + code_size instr_size c2.
+  Proof.
+    induction c1; simpl; intros; eauto. rewrite IHc1. lia.
+  Qed.
+  
 End INSTRSIZE.
