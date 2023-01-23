@@ -161,28 +161,28 @@ endif
 ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 
 # Elf file format (unused: MergeSection.v)
-ELF = MachineTypes.v RelocElf.v\
- EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
- ReloctablesEncode.v  ReloctablesDecode.v \
- SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof.v\
- DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
- RelocElfLinking.v\
+# ELF = MachineTypes.v RelocElf.v\
+#  EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
+#  ReloctablesEncode.v  ReloctablesDecode.v \
+#  SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof.v\
+#  DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
+#  RelocElfLinking.v\
 
-# ELF = MachineTypes.v RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
-#   ReloctablesEncode.v \
+ELF = MachineTypes.v RelocElf.v EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
+  ReloctablesEncode.v \
 
 # assembler
-ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
-  RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
-  RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
-  Symbtablegen.v Symbtablegenproof.v\
-  Reloctablesgen.v Reloctablesgenproof.v\
-  RelocBingen.v RelocBingenproof.v\
-
 # ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
-#   Symbtablegen.v\
-#   Reloctablesgen.v\
-#   RelocBingen.v\
+#   RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
+#   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
+#   Symbtablegen.v Symbtablegenproof.v\
+#   Reloctablesgen.v Reloctablesgenproof.v\
+#   RelocBingen.v RelocBingenproof.v\
+
+ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
+  Symbtablegen.v\
+  Reloctablesgen.v\
+  RelocBingen.v\
 
 # CSLED generation file
 AUTOGEN = VerificationCondition.v EncDecRet.v

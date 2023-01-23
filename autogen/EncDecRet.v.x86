@@ -6,6 +6,10 @@ Import List.
 Import ListNotations.
 Import Hex Bits.
 Require Import BPProperty.
+
+(* use a simple tactic to solve obligation *)
+Local Obligation Tactic := auto.
+
 Local Open Scope error_monad_scope.
 Local Open Scope hex_scope.
 Local Open Scope bits_scope.
@@ -16,264 +20,103 @@ Local Open Scope nat_scope.
 
 
 
-Definition write_B (REX:byte)  (B_value:bits) : byte :=
-	let REX_bits := bytes_to_bits_opt[REX] in
-	bB[(REX_bits~@[7])++B_value].
+Definition write_B (REX:bits)  (B_value:bits) : bits :=
+	(REX~@[7])++B_value.
 
-Definition read_B (REX:byte) : bits :=
-	let REX_bits := bytes_to_bits_opt[REX] in
-	(REX_bits>@[7]).
+Definition read_B (REX:bits) : bits :=
+	(REX>@[7]).
 
-Lemma read_write_B: 
-forall token field,
-length field = 1-> 
-read_B (write_B token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_B;unfold write_B;repeat everything.
-Qed.
+Definition write_R (REX:bits)  (R_value:bits) : bits :=
+	(REX~@[5])++R_value++(REX>@[6]).
 
-Definition write_R (REX:byte)  (R_value:bits) : byte :=
-	let REX_bits := bytes_to_bits_opt[REX] in
-	bB[(REX_bits~@[5])++R_value++(REX_bits>@[6])].
+Definition read_R (REX:bits) : bits :=
+	(REX>@[5])~@[1].
 
-Definition read_R (REX:byte) : bits :=
-	let REX_bits := bytes_to_bits_opt[REX] in
-	(REX_bits>@[5])~@[1].
+Definition write_W (REX:bits)  (W_value:bits) : bits :=
+	(REX~@[4])++W_value++(REX>@[5]).
 
-Lemma read_write_R: 
-forall token field,
-length field = 1-> 
-read_R (write_R token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_R;unfold write_R;repeat everything.
-Qed.
+Definition read_W (REX:bits) : bits :=
+	(REX>@[4])~@[1].
 
-Definition write_W (REX:byte)  (W_value:bits) : byte :=
-	let REX_bits := bytes_to_bits_opt[REX] in
-	bB[(REX_bits~@[4])++W_value++(REX_bits>@[5])].
+Definition write_X (REX:bits)  (X_value:bits) : bits :=
+	(REX~@[6])++X_value++(REX>@[7]).
 
-Definition read_W (REX:byte) : bits :=
-	let REX_bits := bytes_to_bits_opt[REX] in
-	(REX_bits>@[4])~@[1].
+Definition read_X (REX:bits) : bits :=
+	(REX>@[6])~@[1].
 
-Lemma read_write_W: 
-forall token field,
-length field = 1-> 
-read_W (write_W token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_W;unfold write_W;repeat everything.
-Qed.
+Definition write_base (SIB:bits)  (base_value:bits) : bits :=
+	(SIB~@[5])++base_value.
 
-Definition write_X (REX:byte)  (X_value:bits) : byte :=
-	let REX_bits := bytes_to_bits_opt[REX] in
-	bB[(REX_bits~@[6])++X_value++(REX_bits>@[7])].
+Definition read_base (SIB:bits) : bits :=
+	(SIB>@[5]).
 
-Definition read_X (REX:byte) : bits :=
-	let REX_bits := bytes_to_bits_opt[REX] in
-	(REX_bits>@[6])~@[1].
+Definition write_cccode (condi:bits)  (cccode_value:bits) : bits :=
+	(condi~@[4])++cccode_value.
 
-Lemma read_write_X: 
-forall token field,
-length field = 1-> 
-read_X (write_X token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_X;unfold write_X;repeat everything.
-Qed.
+Definition read_cccode (condi:bits) : bits :=
+	(condi>@[4]).
 
-Definition write_base (SIB:byte)  (base_value:bits) : byte :=
-	let SIB_bits := bytes_to_bits_opt[SIB] in
-	bB[(SIB_bits~@[5])++base_value].
+Definition write_col (Opcode:bits)  (col_value:bits) : bits :=
+	(Opcode~@[5])++col_value.
 
-Definition read_base (SIB:byte) : bits :=
-	let SIB_bits := bytes_to_bits_opt[SIB] in
-	(SIB_bits>@[5]).
+Definition read_col (Opcode:bits) : bits :=
+	(Opcode>@[5]).
 
-Lemma read_write_base: 
-forall token field,
-length field = 3-> 
-read_base (write_base token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_base;unfold write_base;repeat everything.
-Qed.
+Definition write_cprefix (condi:bits)  (cprefix_value:bits) : bits :=
+	cprefix_value++(condi>@[4]).
 
-Definition write_cccode (condi:byte)  (cccode_value:bits) : byte :=
-	let condi_bits := bytes_to_bits_opt[condi] in
-	bB[(condi_bits~@[4])++cccode_value].
+Definition read_cprefix (condi:bits) : bits :=
+	condi~@[4].
 
-Definition read_cccode (condi:byte) : bits :=
-	let condi_bits := bytes_to_bits_opt[condi] in
-	(condi_bits>@[4]).
+Definition write_index (SIB:bits)  (index_value:bits) : bits :=
+	(SIB~@[2])++index_value++(SIB>@[5]).
 
-Lemma read_write_cccode: 
-forall token field,
-length field = 4-> 
-read_cccode (write_cccode token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_cccode;unfold write_cccode;repeat everything.
-Qed.
+Definition read_index (SIB:bits) : bits :=
+	(SIB>@[2])~@[3].
 
-Definition write_col (Opcode:byte)  (col_value:bits) : byte :=
-	let Opcode_bits := bytes_to_bits_opt[Opcode] in
-	bB[(Opcode_bits~@[5])++col_value].
+Definition write_mod (ModRM:bits)  (mod_value:bits) : bits :=
+	mod_value++(ModRM>@[2]).
 
-Definition read_col (Opcode:byte) : bits :=
-	let Opcode_bits := bytes_to_bits_opt[Opcode] in
-	(Opcode_bits>@[5]).
+Definition read_mod (ModRM:bits) : bits :=
+	ModRM~@[2].
 
-Lemma read_write_col: 
-forall token field,
-length field = 3-> 
-read_col (write_col token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_col;unfold write_col;repeat everything.
-Qed.
+Definition write_page (Opcode:bits)  (page_value:bits) : bits :=
+	(Opcode~@[4])++page_value++(Opcode>@[5]).
 
-Definition write_cprefix (condi:byte)  (cprefix_value:bits) : byte :=
-	let condi_bits := bytes_to_bits_opt[condi] in
-	bB[cprefix_value++(condi_bits>@[4])].
+Definition read_page (Opcode:bits) : bits :=
+	(Opcode>@[4])~@[1].
 
-Definition read_cprefix (condi:byte) : bits :=
-	let condi_bits := bytes_to_bits_opt[condi] in
-	condi_bits~@[4].
+Definition write_reg_op (ModRM:bits)  (reg_op_value:bits) : bits :=
+	(ModRM~@[2])++reg_op_value++(ModRM>@[5]).
 
-Lemma read_write_cprefix: 
-forall token field,
-length field = 4-> 
-read_cprefix (write_cprefix token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_cprefix;unfold write_cprefix;repeat everything.
-Qed.
+Definition read_reg_op (ModRM:bits) : bits :=
+	(ModRM>@[2])~@[3].
 
-Definition write_index (SIB:byte)  (index_value:bits) : byte :=
-	let SIB_bits := bytes_to_bits_opt[SIB] in
-	bB[(SIB_bits~@[2])++index_value++(SIB_bits>@[5])].
+Definition write_rm (ModRM:bits)  (rm_value:bits) : bits :=
+	(ModRM~@[5])++rm_value.
 
-Definition read_index (SIB:byte) : bits :=
-	let SIB_bits := bytes_to_bits_opt[SIB] in
-	(SIB_bits>@[2])~@[3].
+Definition read_rm (ModRM:bits) : bits :=
+	(ModRM>@[5]).
 
-Lemma read_write_index: 
-forall token field,
-length field = 3-> 
-read_index (write_index token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_index;unfold write_index;repeat everything.
-Qed.
+Definition write_rmagic (REX:bits)  (rmagic_value:bits) : bits :=
+	rmagic_value++(REX>@[4]).
 
-Definition write_mod (ModRM:byte)  (mod_value:bits) : byte :=
-	let ModRM_bits := bytes_to_bits_opt[ModRM] in
-	bB[mod_value++(ModRM_bits>@[2])].
+Definition read_rmagic (REX:bits) : bits :=
+	REX~@[4].
 
-Definition read_mod (ModRM:byte) : bits :=
-	let ModRM_bits := bytes_to_bits_opt[ModRM] in
-	ModRM_bits~@[2].
+Definition write_row (Opcode:bits)  (row_value:bits) : bits :=
+	row_value++(Opcode>@[4]).
 
-Lemma read_write_mod: 
-forall token field,
-length field = 2-> 
-read_mod (write_mod token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_mod;unfold write_mod;repeat everything.
-Qed.
+Definition read_row (Opcode:bits) : bits :=
+	Opcode~@[4].
 
-Definition write_page (Opcode:byte)  (page_value:bits) : byte :=
-	let Opcode_bits := bytes_to_bits_opt[Opcode] in
-	bB[(Opcode_bits~@[4])++page_value++(Opcode_bits>@[5])].
+Definition write_scale (SIB:bits)  (scale_value:bits) : bits :=
+	scale_value++(SIB>@[2]).
 
-Definition read_page (Opcode:byte) : bits :=
-	let Opcode_bits := bytes_to_bits_opt[Opcode] in
-	(Opcode_bits>@[4])~@[1].
-
-Lemma read_write_page: 
-forall token field,
-length field = 1-> 
-read_page (write_page token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_page;unfold write_page;repeat everything.
-Qed.
-
-Definition write_reg_op (ModRM:byte)  (reg_op_value:bits) : byte :=
-	let ModRM_bits := bytes_to_bits_opt[ModRM] in
-	bB[(ModRM_bits~@[2])++reg_op_value++(ModRM_bits>@[5])].
-
-Definition read_reg_op (ModRM:byte) : bits :=
-	let ModRM_bits := bytes_to_bits_opt[ModRM] in
-	(ModRM_bits>@[2])~@[3].
-
-Lemma read_write_reg_op: 
-forall token field,
-length field = 3-> 
-read_reg_op (write_reg_op token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_reg_op;unfold write_reg_op;repeat everything.
-Qed.
-
-Definition write_rm (ModRM:byte)  (rm_value:bits) : byte :=
-	let ModRM_bits := bytes_to_bits_opt[ModRM] in
-	bB[(ModRM_bits~@[5])++rm_value].
-
-Definition read_rm (ModRM:byte) : bits :=
-	let ModRM_bits := bytes_to_bits_opt[ModRM] in
-	(ModRM_bits>@[5]).
-
-Lemma read_write_rm: 
-forall token field,
-length field = 3-> 
-read_rm (write_rm token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_rm;unfold write_rm;repeat everything.
-Qed.
-
-Definition write_rmagic (REX:byte)  (rmagic_value:bits) : byte :=
-	let REX_bits := bytes_to_bits_opt[REX] in
-	bB[rmagic_value++(REX_bits>@[4])].
-
-Definition read_rmagic (REX:byte) : bits :=
-	let REX_bits := bytes_to_bits_opt[REX] in
-	REX_bits~@[4].
-
-Lemma read_write_rmagic: 
-forall token field,
-length field = 4-> 
-read_rmagic (write_rmagic token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_rmagic;unfold write_rmagic;repeat everything.
-Qed.
-
-Definition write_row (Opcode:byte)  (row_value:bits) : byte :=
-	let Opcode_bits := bytes_to_bits_opt[Opcode] in
-	bB[row_value++(Opcode_bits>@[4])].
-
-Definition read_row (Opcode:byte) : bits :=
-	let Opcode_bits := bytes_to_bits_opt[Opcode] in
-	Opcode_bits~@[4].
-
-Lemma read_write_row: 
-forall token field,
-length field = 4-> 
-read_row (write_row token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_row;unfold write_row;repeat everything.
-Qed.
-
-Definition write_scale (SIB:byte)  (scale_value:bits) : byte :=
-	let SIB_bits := bytes_to_bits_opt[SIB] in
-	bB[scale_value++(SIB_bits>@[2])].
-
-Definition read_scale (SIB:byte) : bits :=
-	let SIB_bits := bytes_to_bits_opt[SIB] in
-	SIB_bits~@[2].
-
-Lemma read_write_scale: 
-forall token field,
-length field = 2-> 
-read_scale (write_scale token field) = field.
-Proof.
-intros token field HL;destr_byte token; destr_list field;unfold read_scale;unfold write_scale;repeat everything.
-Qed.
+Definition read_scale (SIB:bits) : bits :=
+	SIB~@[2].
 
 
-Hint Resolve read_write_B read_write_R read_write_W read_write_X read_write_base read_write_cccode read_write_col read_write_cprefix read_write_index read_write_mod read_write_page read_write_reg_op read_write_rm read_write_rmagic read_write_row read_write_scale:bitfields.
 Hint Unfold read_B write_B read_R write_R read_W write_W read_X write_X read_base write_base read_cccode write_cccode read_col write_col read_cprefix write_cprefix read_index write_index read_mod write_mod read_page write_page read_reg_op write_reg_op read_rm write_rm read_rmagic write_rmagic read_row write_row read_scale write_scale:bitfields.
 
 Hint Unfold AddrE11_bp AddrE9_bp AddrE5_bp AddrE0_bp :AddrE_bpdb.
@@ -788,72 +631,71 @@ Definition AddrE_op_to_bp element  :=
 | AddrE5_op => AddrE5_bp
 | AddrE0_op => AddrE0_bp
 end.
-Definition encode_AddrE element  inByte  :=
+Definition encode_AddrE element  inBits  :=
 	match element with
-| AddrE11 uvar32_0 => let byte00 := inByte in
-let byte01 := write_mod byte00 b["00"] in
-let byte02 := write_rm byte01 b["101"] in
-let result0 := [byte02] in
-do byte11 <- bits_to_bytes (proj1_sig uvar32_0);
-let result1 := byte11 in
+| AddrE11 uvar32_0 => let bits00 := inBits in
+let bits01 := write_mod bits00 b["00"] in
+let bits02 := write_rm bits01 b["101"] in
+let result0 := bits02 in
+let bits11 := (proj1_sig uvar32_0) in
+let result1 := bits11 in
 OK (result0 ++ result1)
-| AddrE9 uvar2_0 uvar3_1 uvar32_2 => let byte00 := inByte in
-let byte01 := write_mod byte00 b["00"] in
-let byte02 := write_rm byte01 b["100"] in
-let result0 := [byte02] in
-let byte10 := HB["00"] in
-let byte11 := write_base byte10 b["101"] in
-let byte12 := write_scale byte11 (proj1_sig uvar2_0) in
-let byte13 := write_index byte12 (proj1_sig uvar3_1) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_2);
-let result2 := byte21 in
+| AddrE9 uvar2_0 uvar3_1 uvar32_2 => let bits00 := inBits in
+let bits01 := write_mod bits00 b["00"] in
+let bits02 := write_rm bits01 b["100"] in
+let result0 := bits02 in
+let bits10 := (repeat false 8) in
+let bits11 := write_base bits10 b["101"] in
+let bits12 := write_scale bits11 (proj1_sig uvar2_0) in
+let bits13 := write_index bits12 (proj1_sig uvar3_1) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar32_2) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| AddrE5 uvar2_0 uvar3_1 uvar3_2 uvar32_3 => let byte00 := inByte in
-let byte01 := write_mod byte00 b["10"] in
-let byte02 := write_rm byte01 b["100"] in
-let result0 := [byte02] in
-let byte10 := HB["00"] in
-let byte11 := write_scale byte10 (proj1_sig uvar2_0) in
-let byte12 := write_index byte11 (proj1_sig uvar3_1) in
-let byte13 := write_base byte12 (proj1_sig uvar3_2) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_3);
-let result2 := byte21 in
+| AddrE5 uvar2_0 uvar3_1 uvar3_2 uvar32_3 => let bits00 := inBits in
+let bits01 := write_mod bits00 b["10"] in
+let bits02 := write_rm bits01 b["100"] in
+let result0 := bits02 in
+let bits10 := (repeat false 8) in
+let bits11 := write_scale bits10 (proj1_sig uvar2_0) in
+let bits12 := write_index bits11 (proj1_sig uvar3_1) in
+let bits13 := write_base bits12 (proj1_sig uvar3_2) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar32_3) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| AddrE0 uvar3_0 => let byte00 := inByte in
-let byte01 := write_mod byte00 b["11"] in
-let byte02 := write_rm byte01 (proj1_sig uvar3_0) in
-let result0 := [byte02] in
+| AddrE0 uvar3_0 => let bits00 := inBits in
+let bits01 := write_mod bits00 b["11"] in
+let bits02 := write_rm bits01 (proj1_sig uvar3_0) in
+let result0 := bits02 in
 OK (result0)
 end.
 
-Program Definition decode_AddrE code : res (AddrE*nat) :=
-	let bin := bytes_to_bits_opt code in
+Program Definition decode_AddrE bin : res (AddrE*nat) :=
 	if AddrE11_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte_seq0 <- try_first_n bytes1 4;
-let uvar32_0 := bytes_to_bits_opt byte_seq0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 32;
+let uvar32_0 := token0 in
 if assertLength uvar32_0 32 then
-do bytes2 <- try_skip_n bytes1 4;
+do code2 <- try_skip_n code1 32;
 OK ((AddrE11 (uvar32_0)), 5)
 else Error(msg"impossible")
 else
 
 	if AddrE9_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar2_0 := read_scale byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar2_0 := read_scale token0 in
 if assertLength uvar2_0 2 then
-let uvar3_1 := read_index byte0 in
+let uvar3_1 := read_index token0 in
 if assertLength uvar3_1 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_2 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_2 := token1 in
 if assertLength uvar32_2 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((AddrE9 (uvar2_0) (uvar3_1) (uvar32_2)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -861,20 +703,20 @@ else Error(msg"impossible")
 else
 
 	if AddrE5_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar2_0 := read_scale byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar2_0 := read_scale token0 in
 if assertLength uvar2_0 2 then
-let uvar3_1 := read_index byte0 in
+let uvar3_1 := read_index token0 in
 if assertLength uvar3_1 3 then
-let uvar3_2 := read_base byte0 in
+let uvar3_2 := read_base token0 in
 if assertLength uvar3_2 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_3 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_3 := token1 in
 if assertLength uvar32_3 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((AddrE5 (uvar2_0) (uvar3_1) (uvar3_2) (uvar32_3)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -883,11 +725,11 @@ else Error(msg"impossible")
 else
 
 	if AddrE0_bp bin then
-let bytes0 := code in
-do byte0 <- try_get_n bytes0 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do token0 <- try_first_n code0 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes1 <- try_skip_n bytes0 1;
+do code1 <- try_skip_n code0 8;
 OK ((AddrE0 (uvar3_0)), 1)
 else Error(msg"impossible")
 else
@@ -1276,777 +1118,776 @@ Definition Instruction_op_to_bp element  :=
 end.
 Definition encode_Instruction element  :=
 	match element with
-| REX_WRXB uvar1_0 uvar1_1 uvar1_2 uvar1_3 => let byte00 := HB["00"] in
-let byte01 := write_rmagic byte00 b["0100"] in
-let byte02 := write_W byte01 (proj1_sig uvar1_0) in
-let byte03 := write_R byte02 (proj1_sig uvar1_1) in
-let byte04 := write_X byte03 (proj1_sig uvar1_2) in
-let byte05 := write_B byte04 (proj1_sig uvar1_3) in
-let result0 := [byte05] in
+| REX_WRXB uvar1_0 uvar1_1 uvar1_2 uvar1_3 => let bits00 := (repeat false 8) in
+let bits01 := write_rmagic bits00 b["0100"] in
+let bits02 := write_W bits01 (proj1_sig uvar1_0) in
+let bits03 := write_R bits02 (proj1_sig uvar1_1) in
+let bits04 := write_X bits03 (proj1_sig uvar1_2) in
+let bits05 := write_B bits04 (proj1_sig uvar1_3) in
+let result0 := bits05 in
 OK (result0)
-| Override => let byte01 := HB["66"] in
-let result0 := [byte01] in
+| Override => let bits01 := b["01100110"] in
+let result0 := bits01 in
 OK (result0)
-| REP => let byte01 := HB["F3"] in
-let result0 := [byte01] in
+| REP => let bits01 := b["11110011"] in
+let result0 := bits01 in
 OK (result0)
-| REPNZ => let byte01 := HB["F2"] in
-let result0 := [byte01] in
+| REPNZ => let bits01 := b["11110010"] in
+let result0 := bits01 in
 OK (result0)
-| Psubl_ri uvar3_0 uvar32_1 => let byte01 := HB["81"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["101"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
-let result2 := byte21 in
+| Psubl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["101"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar32_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pbsqrtsd uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["51"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pbsqrtsd uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01010001"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Psbbl_rr uvar3_0 uvar3_1 => let byte01 := HB["19"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 (proj1_sig uvar3_0) in
-let byte13 := write_rm byte12 (proj1_sig uvar3_1) in
-let result1 := [byte13] in
+| Psbbl_rr uvar3_0 uvar3_1 => let bits01 := b["00011001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 (proj1_sig uvar3_0) in
+let bits13 := write_rm bits12 (proj1_sig uvar3_1) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Prep_movsl => let byte01 := HB["A5"] in
-let result0 := [byte01] in
+| Prep_movsl => let bits01 := b["10100101"] in
+let result0 := bits01 in
 OK (result0)
-| Pmovsq_rm AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["7E"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pmovsq_rm AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01111110"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Pmovsq_mr AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["D6"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pmovsq_mr AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["11010110"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Pminsd uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["5D"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pminsd uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01011101"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Pmaxsd uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["5F"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pmaxsd uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01011111"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Pbswap32 uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["001"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Pbswap32 uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["001"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Pbsrl uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["BD"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pbsrl uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["10111101"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Pbsfl uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["BC"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pbsfl uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["10111100"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Paddl_mi AddrE uvar32_1 => let byte01 := HB["80"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 b["000"] in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
-let result2 := byte21 in
+| Paddl_mi AddrE uvar32_1 => let bits01 := b["10000000"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 b["000"] in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
+let bits21 := (proj1_sig uvar32_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Paddl_GvEv AddrE uvar3_0 => let byte01 := HB["03"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Paddl_GvEv AddrE uvar3_0 => let bits01 := b["00000011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Paddl_EvGv AddrE uvar3_0 => let byte01 := HB["01"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Paddl_EvGv AddrE uvar3_0 => let bits01 := b["00000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Padcl_rr uvar3_0 uvar3_1 => let byte01 := HB["11"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 (proj1_sig uvar3_0) in
-let byte13 := write_rm byte12 (proj1_sig uvar3_1) in
-let result1 := [byte13] in
+| Padcl_rr uvar3_0 uvar3_1 => let bits01 := b["00010001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 (proj1_sig uvar3_0) in
+let bits13 := write_rm bits12 (proj1_sig uvar3_1) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Padcl_ri uvar3_0 uvar8_1 => let byte01 := HB["83"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["010"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar8_1);
-let result2 := byte21 in
+| Padcl_ri uvar3_0 uvar8_1 => let bits01 := b["10000011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["010"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar8_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pjcc_rel uvar4_0 uvar32_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_cprefix byte10 b["1000"] in
-let byte12 := write_cccode byte11 (proj1_sig uvar4_0) in
-let result1 := [byte12] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
-let result2 := byte21 in
+| Pjcc_rel uvar4_0 uvar32_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_cprefix bits10 b["1000"] in
+let bits12 := write_cccode bits11 (proj1_sig uvar4_0) in
+let result1 := bits12 in
+let bits21 := (proj1_sig uvar32_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pret_iw uvar16_0 => let byte01 := HB["C2"] in
-let result0 := [byte01] in
-do byte11 <- bits_to_bytes (proj1_sig uvar16_0);
-let result1 := byte11 in
+| Pret_iw uvar16_0 => let bits01 := b["11000010"] in
+let result0 := bits01 in
+let bits11 := (proj1_sig uvar16_0) in
+let result1 := bits11 in
 OK (result0 ++ result1)
-| Pret => let byte01 := HB["C3"] in
-let result0 := [byte01] in
+| Pret => let bits01 := b["11000011"] in
+let result0 := bits01 in
 OK (result0)
-| Pcall_r uvar3_0 => let byte01 := HB["FF"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["010"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Pcall_r uvar3_0 => let bits01 := b["11111111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["010"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Pcall_ofs uvar32_0 => let byte01 := HB["E8"] in
-let result0 := [byte01] in
-do byte11 <- bits_to_bytes (proj1_sig uvar32_0);
-let result1 := byte11 in
+| Pcall_ofs uvar32_0 => let bits01 := b["11101000"] in
+let result0 := bits01 in
+let bits11 := (proj1_sig uvar32_0) in
+let result1 := bits11 in
 OK (result0 ++ result1)
-| Pnop => let byte01 := HB["90"] in
-let result0 := [byte01] in
+| Pnop => let bits01 := b["10010000"] in
+let result0 := bits01 in
 OK (result0)
-| Pjmp_Ev AddrE => let byte01 := HB["FF"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 b["100"] in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pjmp_Ev AddrE => let bits01 := b["11111111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 b["100"] in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pjmp_l_rel uvar32_0 => let byte01 := HB["E9"] in
-let result0 := [byte01] in
-do byte11 <- bits_to_bytes (proj1_sig uvar32_0);
-let result1 := byte11 in
+| Pjmp_l_rel uvar32_0 => let bits01 := b["11101001"] in
+let result0 := bits01 in
+let bits11 := (proj1_sig uvar32_0) in
+let result1 := bits11 in
 OK (result0 ++ result1)
-| Pxorps_d_GvEv AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["57"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pxorps_d_GvEv AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01010111"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Pcomiss_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["2F"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pcomiss_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["00101111"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Pdivss_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["5E"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pdivss_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01011110"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Pmuls_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["59"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pmuls_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01011001"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Psubs_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["5C"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Psubs_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01011100"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Pandps_d_fm AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["54"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pandps_d_fm AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01010100"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Padds_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["58"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Padds_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01011000"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Psetcc uvar4_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_cprefix byte10 b["1001"] in
-let byte12 := write_cccode byte11 (proj1_sig uvar4_0) in
-let result1 := [byte12] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 b["000"] in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Psetcc uvar4_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_cprefix bits10 b["1001"] in
+let bits12 := write_cccode bits11 (proj1_sig uvar4_0) in
+let result1 := bits12 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 b["000"] in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Pcmov uvar4_0 uvar3_1 uvar3_2 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_cprefix byte10 b["0100"] in
-let byte12 := write_cccode byte11 (proj1_sig uvar4_0) in
-let result1 := [byte12] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_1) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_2) in
-let result2 := [byte23] in
+| Pcmov uvar4_0 uvar3_1 uvar3_2 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_cprefix bits10 b["0100"] in
+let bits12 := write_cccode bits11 (proj1_sig uvar4_0) in
+let result1 := bits12 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_1) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_2) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Ptestl_EvGv AddrE uvar3_0 => let byte01 := HB["85"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Ptestl_EvGv AddrE uvar3_0 => let bits01 := b["10000101"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Ptestl_ri uvar3_0 uvar32_1 => let byte01 := HB["F7"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["000"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
-let result2 := byte21 in
+| Ptestl_ri uvar3_0 uvar32_1 => let bits01 := b["11110111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["000"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar32_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pcmpl_ri uvar3_0 uvar32_1 => let byte01 := HB["81"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["111"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
-let result2 := byte21 in
+| Pcmpl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["111"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar32_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pcmpl_GvEv AddrE uvar3_0 => let byte01 := HB["3B"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pcmpl_GvEv AddrE uvar3_0 => let bits01 := b["00111011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pcmpl_EvGv AddrE uvar3_0 => let byte01 := HB["39"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pcmpl_EvGv AddrE uvar3_0 => let bits01 := b["00111001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Prorl_ri uvar3_0 uvar8_1 => let byte01 := HB["C1"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 b["001"] in
-let byte12 := write_mod byte11 b["11"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar8_1);
-let result2 := byte21 in
+| Prorl_ri uvar3_0 uvar8_1 => let bits01 := b["11000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 b["001"] in
+let bits12 := write_mod bits11 b["11"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar8_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Prolw_ri uvar3_0 uvar8_1 => let byte01 := HB["C1"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["000"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar8_1);
-let result2 := byte21 in
+| Prolw_ri uvar3_0 uvar8_1 => let bits01 := b["11000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["000"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar8_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pshld_ri uvar3_0 uvar3_1 uvar8_2 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["A4"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
-do byte31 <- bits_to_bytes (proj1_sig uvar8_2);
-let result3 := byte31 in
+| Pshld_ri uvar3_0 uvar3_1 uvar8_2 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["10100100"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
+let bits31 := (proj1_sig uvar8_2) in
+let result3 := bits31 in
 OK (result0 ++ result1 ++ result2 ++ result3)
-| Psarl_rcl uvar3_0 => let byte01 := HB["D3"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["111"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Psarl_rcl uvar3_0 => let bits01 := b["11010011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["111"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Psarl_ri uvar3_0 uvar8_1 => let byte01 := HB["C1"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["111"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar8_1);
-let result2 := byte21 in
+| Psarl_ri uvar3_0 uvar8_1 => let bits01 := b["11000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["111"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar8_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pshrl_rcl uvar3_0 => let byte01 := HB["D3"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["101"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Pshrl_rcl uvar3_0 => let bits01 := b["11010011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["101"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Pshrl_ri uvar3_0 uvar8_1 => let byte01 := HB["C1"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["101"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar8_1);
-let result2 := byte21 in
+| Pshrl_ri uvar3_0 uvar8_1 => let bits01 := b["11000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["101"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar8_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Psall_rcl uvar3_0 => let byte01 := HB["D3"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["100"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Psall_rcl uvar3_0 => let bits01 := b["11010011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["100"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Psall_ri uvar3_0 uvar8_1 => let byte01 := HB["C1"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["100"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar8_1);
-let result2 := byte21 in
+| Psall_ri uvar3_0 uvar8_1 => let bits01 := b["11000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["100"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar8_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pnotl uvar3_0 => let byte01 := HB["F7"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["010"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Pnotl uvar3_0 => let bits01 := b["11110111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["010"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Pxorl_GvEv AddrE uvar3_0 => let byte01 := HB["33"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pxorl_GvEv AddrE uvar3_0 => let bits01 := b["00110011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pxorl_EvGv AddrE uvar3_0 => let byte01 := HB["31"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pxorl_EvGv AddrE uvar3_0 => let bits01 := b["00110001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pxorl_ri uvar3_0 uvar32_1 => let byte01 := HB["81"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["110"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
-let result2 := byte21 in
+| Pxorl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["110"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar32_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Porl_GvEv AddrE uvar3_0 => let byte01 := HB["0B"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Porl_GvEv AddrE uvar3_0 => let bits01 := b["00001011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Porl_EvGv AddrE uvar3_0 => let byte01 := HB["09"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Porl_EvGv AddrE uvar3_0 => let bits01 := b["00001001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Porl_ri uvar3_0 uvar32_1 => let byte01 := HB["81"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["001"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
-let result2 := byte21 in
+| Porl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["001"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar32_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pandl_ri uvar3_0 uvar32_1 => let byte01 := HB["81"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["100"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
-let result2 := byte21 in
+| Pandl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["100"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar32_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pandl_GvEv AddrE uvar3_0 => let byte01 := HB["23"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pandl_GvEv AddrE uvar3_0 => let bits01 := b["00100011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pandl_EvGv AddrE uvar3_0 => let byte01 := HB["21"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pandl_EvGv AddrE uvar3_0 => let bits01 := b["00100001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pidivl_r uvar3_0 => let byte01 := HB["F7"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["111"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Pidivl_r uvar3_0 => let bits01 := b["11110111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["111"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Pdivl_r uvar3_0 => let byte01 := HB["F7"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["110"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Pdivl_r uvar3_0 => let bits01 := b["11110111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["110"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Pcltd => let byte01 := HB["99"] in
-let result0 := [byte01] in
+| Pcltd => let bits01 := b["10011001"] in
+let result0 := bits01 in
 OK (result0)
-| Pmull_r uvar3_0 => let byte01 := HB["F7"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["100"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Pmull_r uvar3_0 => let bits01 := b["11110111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["100"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Pimull_r uvar3_0 => let byte01 := HB["F7"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["101"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Pimull_r uvar3_0 => let bits01 := b["11110111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["101"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Pimull_ri uvar3_0 uvar3_1 uvar32_2 => let byte01 := HB["69"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 (proj1_sig uvar3_0) in
-let byte13 := write_rm byte12 (proj1_sig uvar3_1) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_2);
-let result2 := byte21 in
+| Pimull_ri uvar3_0 uvar3_1 uvar32_2 => let bits01 := b["01101001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 (proj1_sig uvar3_0) in
+let bits13 := write_rm bits12 (proj1_sig uvar3_1) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar32_2) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pimull_GvEv AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["AF"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pimull_GvEv AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["10101111"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Psubl_GvEv AddrE uvar3_0 => let byte01 := HB["2B"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Psubl_GvEv AddrE uvar3_0 => let bits01 := b["00101011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Psubl_EvGv AddrE uvar3_0 => let byte01 := HB["29"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Psubl_EvGv AddrE uvar3_0 => let bits01 := b["00101001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Paddl_ri uvar3_0 uvar32_1 => let byte01 := HB["81"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["000"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
-do byte21 <- bits_to_bytes (proj1_sig uvar32_1);
-let result2 := byte21 in
+| Paddl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["000"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
+let bits21 := (proj1_sig uvar32_1) in
+let result2 := bits21 in
 OK (result0 ++ result1 ++ result2)
-| Pnegl uvar3_0 => let byte01 := HB["F7"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 b["011"] in
-let byte13 := write_rm byte12 (proj1_sig uvar3_0) in
-let result1 := [byte13] in
+| Pnegl uvar3_0 => let bits01 := b["11110111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 b["011"] in
+let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Pleal AddrE uvar3_0 => let byte01 := HB["8D"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pleal AddrE uvar3_0 => let bits01 := b["10001101"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pcvtsi2ss_d_fr uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["2A"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pcvtsi2ss_d_fr uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["00101010"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Pcvttss_d_2si_rf uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["2C"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pcvttss_d_2si_rf uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["00101100"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Pcvtsd2ss_d_ff uvar3_0 uvar3_1 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["5A"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_mod byte20 b["11"] in
-let byte22 := write_reg_op byte21 (proj1_sig uvar3_0) in
-let byte23 := write_rm byte22 (proj1_sig uvar3_1) in
-let result2 := [byte23] in
+| Pcvtsd2ss_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["01011010"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_mod bits20 b["11"] in
+let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
+let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
+let result2 := bits23 in
 OK (result0 ++ result1 ++ result2)
-| Pmovsxd_GvEv AddrE uvar3_0 => let byte01 := HB["63"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pmovsxd_GvEv AddrE uvar3_0 => let bits01 := b["01100011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pmovsw_GvEv AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["BF"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pmovsw_GvEv AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["10111111"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Pmovzw_GvEv AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["B7"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pmovzw_GvEv AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["10110111"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Pmovsb_GvEv AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["BE"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pmovsb_GvEv AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["10111110"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Pmovzb_rm AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["B6"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pmovzb_rm AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["10110110"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Pmovb_rm AddrE uvar3_0 => let byte01 := HB["8A"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pmovb_rm AddrE uvar3_0 => let bits01 := b["10001010"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pmovb_mr AddrE uvar3_0 => let byte01 := HB["88"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pmovb_mr AddrE uvar3_0 => let bits01 := b["10001000"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pxchg_rr uvar3_0 uvar3_1 => let byte01 := HB["87"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_mod byte10 b["11"] in
-let byte12 := write_reg_op byte11 (proj1_sig uvar3_0) in
-let byte13 := write_rm byte12 (proj1_sig uvar3_1) in
-let result1 := [byte13] in
+| Pxchg_rr uvar3_0 uvar3_1 => let bits01 := b["10000111"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_mod bits10 b["11"] in
+let bits12 := write_reg_op bits11 (proj1_sig uvar3_0) in
+let bits13 := write_rm bits12 (proj1_sig uvar3_1) in
+let result1 := bits13 in
 OK (result0 ++ result1)
-| Pflds_m AddrE => let byte01 := HB["D9"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 b["000"] in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pflds_m AddrE => let bits01 := b["11011001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 b["000"] in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pfstps_m AddrE => let byte01 := HB["D9"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 b["011"] in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pfstps_m AddrE => let bits01 := b["11011001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 b["011"] in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pfstpl_m AddrE => let byte01 := HB["DD"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 b["011"] in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pfstpl_m AddrE => let bits01 := b["11011101"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 b["011"] in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pfldl_m AddrE => let byte01 := HB["DD"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 b["000"] in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pfldl_m AddrE => let bits01 := b["11011101"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 b["000"] in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pmovss_d_fm AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["10"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pmovss_d_fm AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["00010000"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Pmovss_d_mf AddrE uvar3_0 => let byte01 := HB["0F"] in
-let result0 := [byte01] in
-let byte11 := HB["11"] in
-let result1 := [byte11] in
-let byte20 := HB["00"] in
-let byte21 := write_reg_op byte20 (proj1_sig uvar3_0) in
-do byte22 <- encode_AddrE AddrE byte21;
-let result2 := byte22 in
+| Pmovss_d_mf AddrE uvar3_0 => let bits01 := b["00001111"] in
+let result0 := bits01 in
+let bits11 := b["00010001"] in
+let result1 := bits11 in
+let bits20 := (repeat false 8) in
+let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
+do bits22 <- encode_AddrE AddrE bits21;
+let result2 := bits22 in
 OK (result0 ++ result1 ++ result2)
-| Pmovl_rm AddrE uvar3_0 => let byte01 := HB["8B"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pmovl_rm AddrE uvar3_0 => let bits01 := b["10001011"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pmovl_mr AddrE uvar3_0 => let byte01 := HB["89"] in
-let result0 := [byte01] in
-let byte10 := HB["00"] in
-let byte11 := write_reg_op byte10 (proj1_sig uvar3_0) in
-do byte12 <- encode_AddrE AddrE byte11;
-let result1 := byte12 in
+| Pmovl_mr AddrE uvar3_0 => let bits01 := b["10001001"] in
+let result0 := bits01 in
+let bits10 := (repeat false 8) in
+let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
+do bits12 <- encode_AddrE AddrE bits11;
+let result1 := bits12 in
 OK (result0 ++ result1)
-| Pmovl_ri uvar3_0 uvar32_1 => let byte00 := HB["00"] in
-let byte01 := write_row byte00 b["1011"] in
-let byte02 := write_page byte01 b["1"] in
-let byte03 := write_col byte02 (proj1_sig uvar3_0) in
-let result0 := [byte03] in
-do byte11 <- bits_to_bytes (proj1_sig uvar32_1);
-let result1 := byte11 in
+| Pmovl_ri uvar3_0 uvar32_1 => let bits00 := (repeat false 8) in
+let bits01 := write_row bits00 b["1011"] in
+let bits02 := write_page bits01 b["1"] in
+let bits03 := write_col bits02 (proj1_sig uvar3_0) in
+let result0 := bits03 in
+let bits11 := (proj1_sig uvar32_1) in
+let result1 := bits11 in
 OK (result0 ++ result1)
 end.
 
-Program Definition decode_Instruction code : res (Instruction*nat) :=
-	let bin := bytes_to_bits_opt code in
+Program Definition decode_Instruction bin : res (Instruction*nat) :=
 	if REX_WRXB_bp bin then
-let bytes0 := code in
-do byte0 <- try_get_n bytes0 0;
-let uvar1_0 := read_W byte0 in
+let code0 := bin in
+do token0 <- try_first_n code0 8;
+let uvar1_0 := read_W token0 in
 if assertLength uvar1_0 1 then
-let uvar1_1 := read_R byte0 in
+let uvar1_1 := read_R token0 in
 if assertLength uvar1_1 1 then
-let uvar1_2 := read_X byte0 in
+let uvar1_2 := read_X token0 in
 if assertLength uvar1_2 1 then
-let uvar1_3 := read_B byte0 in
+let uvar1_3 := read_B token0 in
 if assertLength uvar1_3 1 then
-do bytes1 <- try_skip_n bytes0 1;
+do code1 <- try_skip_n code0 8;
 OK ((REX_WRXB (uvar1_0) (uvar1_1) (uvar1_2) (uvar1_3)), 1)
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2055,448 +1896,448 @@ else Error(msg"impossible")
 else
 
 	if Override_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
 OK ((Override), 1)
 else
 
 	if REP_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
 OK ((REP), 1)
 else
 
 	if REPNZ_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
 OK ((REPNZ), 1)
 else
 
 	if Psubl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_1 := token1 in
 if assertLength uvar32_1 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((Psubl_ri (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pbsqrtsd_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pbsqrtsd (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Psbbl_rr_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Psbbl_rr (uvar3_0) (uvar3_1)), 2)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Prep_movsl_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
 OK ((Prep_movsl), 1)
 else
 
 	if Pmovsq_rm_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pmovsq_rm AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovsq_mr_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pmovsq_mr AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pminsd_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pminsd (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pmaxsd_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pmaxsd (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pbswap32_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Pbswap32 (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Pbsrl_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pbsrl (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pbsfl_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pbsfl (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Paddl_mi_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
-do byte_seq0 <- try_first_n bytes2 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
+do token0 <- try_first_n code2 32;
+let uvar32_1 := token0 in
 if assertLength uvar32_1 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((Paddl_mi AddrE (uvar32_1)), 5 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Paddl_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Paddl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Paddl_EvGv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Paddl_EvGv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Padcl_rr_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Padcl_rr (uvar3_0) (uvar3_1)), 2)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Padcl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 1;
-let uvar8_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 8;
+let uvar8_1 := token1 in
 if assertLength uvar8_1 8 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Padcl_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pjcc_rel_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar4_0 := read_cccode byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar4_0 := read_cccode token0 in
 if assertLength uvar4_0 4 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_1 := token1 in
 if assertLength uvar32_1 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((Pjcc_rel (uvar4_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pret_iw_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte_seq0 <- try_first_n bytes1 2;
-let uvar16_0 := bytes_to_bits_opt byte_seq0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 16;
+let uvar16_0 := token0 in
 if assertLength uvar16_0 16 then
-do bytes2 <- try_skip_n bytes1 2;
+do code2 <- try_skip_n code1 16;
 OK ((Pret_iw (uvar16_0)), 3)
 else Error(msg"impossible")
 else
 
 	if Pret_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
 OK ((Pret), 1)
 else
 
 	if Pcall_r_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Pcall_r (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Pcall_ofs_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte_seq0 <- try_first_n bytes1 4;
-let uvar32_0 := bytes_to_bits_opt byte_seq0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 32;
+let uvar32_0 := token0 in
 if assertLength uvar32_0 32 then
-do bytes2 <- try_skip_n bytes1 4;
+do code2 <- try_skip_n code1 32;
 OK ((Pcall_ofs (uvar32_0)), 5)
 else Error(msg"impossible")
 else
 
 	if Pnop_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
 OK ((Pnop), 1)
 else
 
 	if Pjmp_Ev_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pjmp_Ev AddrE), 1 + localLength0)
 else
 
 	if Pjmp_l_rel_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte_seq0 <- try_first_n bytes1 4;
-let uvar32_0 := bytes_to_bits_opt byte_seq0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 32;
+let uvar32_0 := token0 in
 if assertLength uvar32_0 32 then
-do bytes2 <- try_skip_n bytes1 4;
+do code2 <- try_skip_n code1 32;
 OK ((Pjmp_l_rel (uvar32_0)), 5)
 else Error(msg"impossible")
 else
 
 	if Pxorps_d_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pxorps_d_GvEv AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pcomiss_d_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pcomiss_d_ff (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pdivss_d_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pdivss_d_ff (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pmuls_d_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pmuls_d_ff (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Psubs_d_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Psubs_d_ff (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pandps_d_fm_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pandps_d_fm AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Padds_d_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Padds_d_ff (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Psetcc_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar4_0 := read_cccode byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar4_0 := read_cccode token0 in
 if assertLength uvar4_0 4 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte1 <- try_get_n bytes2 0;
-let uvar3_1 := read_rm byte1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 8;
+let uvar3_1 := read_rm token1 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Psetcc (uvar4_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pcmov_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar4_0 := read_cccode byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar4_0 := read_cccode token0 in
 if assertLength uvar4_0 4 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte1 <- try_get_n bytes2 0;
-let uvar3_1 := read_reg_op byte1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 8;
+let uvar3_1 := read_reg_op token1 in
 if assertLength uvar3_1 3 then
-let uvar3_2 := read_rm byte1 in
+let uvar3_2 := read_rm token1 in
 if assertLength uvar3_2 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pcmov (uvar4_0) (uvar3_1) (uvar3_2)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2504,119 +2345,119 @@ else Error(msg"impossible")
 else
 
 	if Ptestl_EvGv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Ptestl_EvGv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Ptestl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_1 := token1 in
 if assertLength uvar32_1 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((Ptestl_ri (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pcmpl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_1 := token1 in
 if assertLength uvar32_1 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((Pcmpl_ri (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pcmpl_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pcmpl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pcmpl_EvGv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pcmpl_EvGv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Prorl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 1;
-let uvar8_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 8;
+let uvar8_1 := token1 in
 if assertLength uvar8_1 8 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Prorl_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Prolw_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 1;
-let uvar8_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 8;
+let uvar8_1 := token1 in
 if assertLength uvar8_1 8 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Prolw_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pshld_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
-do byte_seq1 <- try_first_n bytes3 1;
-let uvar8_2 := bytes_to_bits_opt byte_seq1 in
+do code3 <- try_skip_n code2 8;
+do token1 <- try_first_n code3 8;
+let uvar8_2 := token1 in
 if assertLength uvar8_2 8 then
-do bytes4 <- try_skip_n bytes3 1;
+do code4 <- try_skip_n code3 8;
 OK ((Pshld_ri (uvar3_0) (uvar3_1) (uvar8_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2624,280 +2465,280 @@ else Error(msg"impossible")
 else
 
 	if Psarl_rcl_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Psarl_rcl (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Psarl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 1;
-let uvar8_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 8;
+let uvar8_1 := token1 in
 if assertLength uvar8_1 8 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Psarl_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pshrl_rcl_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Pshrl_rcl (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Pshrl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 1;
-let uvar8_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 8;
+let uvar8_1 := token1 in
 if assertLength uvar8_1 8 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pshrl_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Psall_rcl_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Psall_rcl (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Psall_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 1;
-let uvar8_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 8;
+let uvar8_1 := token1 in
 if assertLength uvar8_1 8 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Psall_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pnotl_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Pnotl (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Pxorl_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pxorl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pxorl_EvGv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pxorl_EvGv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pxorl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_1 := token1 in
 if assertLength uvar32_1 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((Pxorl_ri (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Porl_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Porl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Porl_EvGv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Porl_EvGv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Porl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_1 := token1 in
 if assertLength uvar32_1 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((Porl_ri (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pandl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_1 := token1 in
 if assertLength uvar32_1 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((Pandl_ri (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pandl_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pandl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pandl_EvGv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pandl_EvGv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pidivl_r_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Pidivl_r (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Pdivl_r_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Pdivl_r (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Pcltd_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
 OK ((Pcltd), 1)
 else
 
 	if Pmull_r_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Pmull_r (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Pimull_r_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Pimull_r (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Pimull_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_2 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_2 := token1 in
 if assertLength uvar32_2 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((Pimull_ri (uvar3_0) (uvar3_1) (uvar32_2)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2905,320 +2746,320 @@ else Error(msg"impossible")
 else
 
 	if Pimull_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pimull_GvEv AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Psubl_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Psubl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Psubl_EvGv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Psubl_EvGv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Paddl_ri_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
-do byte_seq1 <- try_first_n bytes2 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
+do code2 <- try_skip_n code1 8;
+do token1 <- try_first_n code2 32;
+let uvar32_1 := token1 in
 if assertLength uvar32_1 32 then
-do bytes3 <- try_skip_n bytes2 4;
+do code3 <- try_skip_n code2 32;
 OK ((Paddl_ri (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pnegl_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_rm byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_rm token0 in
 if assertLength uvar3_0 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Pnegl (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
 	if Pleal_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pleal AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pcvtsi2ss_d_fr_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pcvtsi2ss_d_fr (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pcvttss_d_2si_rf_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pcvttss_d_2si_rf (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pcvtsd2ss_d_ff_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes3 <- try_skip_n bytes2 1;
+do code3 <- try_skip_n code2 8;
 OK ((Pcvtsd2ss_d_ff (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pmovsxd_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pmovsxd_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovsw_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pmovsw_GvEv AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovzw_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pmovzw_GvEv AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovsb_GvEv_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pmovsb_GvEv AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovzb_rm_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pmovzb_rm AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovb_rm_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pmovb_rm AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovb_mr_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pmovb_mr AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pxchg_rr_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm byte0 in
+let uvar3_1 := read_rm token0 in
 if assertLength uvar3_1 3 then
-do bytes2 <- try_skip_n bytes1 1;
+do code2 <- try_skip_n code1 8;
 OK ((Pxchg_rr (uvar3_0) (uvar3_1)), 2)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
 	if Pflds_m_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pflds_m AddrE), 1 + localLength0)
 else
 
 	if Pfstps_m_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pfstps_m AddrE), 1 + localLength0)
 else
 
 	if Pfstpl_m_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pfstpl_m AddrE), 1 + localLength0)
 else
 
 	if Pfldl_m_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pfldl_m AddrE), 1 + localLength0)
 else
 
 	if Pmovss_d_fm_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pmovss_d_fm AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovss_d_mf_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do bytes2 <- try_skip_n bytes1 1;
-do byte0 <- try_get_n bytes2 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do code2 <- try_skip_n code1 8;
+do token0 <- try_first_n code2 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes2;
-do bytes3 <- try_skip_n bytes2 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code2;
+do code3 <- try_skip_n code2 localLength0;
 OK ((Pmovss_d_mf AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovl_rm_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pmovl_rm AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovl_mr_bp bin then
-let bytes0 := code in
-do bytes1 <- try_skip_n bytes0 1;
-do byte0 <- try_get_n bytes1 0;
-let uvar3_0 := read_reg_op byte0 in
+let code0 := bin in
+do code1 <- try_skip_n code0 8;
+do token0 <- try_first_n code1 8;
+let uvar3_0 := read_reg_op token0 in
 if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE bytes1;
-do bytes2 <- try_skip_n bytes1 localLength0;
+do (AddrE, localLength0) <- decode_AddrE code1;
+do code2 <- try_skip_n code1 localLength0;
 OK ((Pmovl_mr AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
 	if Pmovl_ri_bp bin then
-let bytes0 := code in
-do byte0 <- try_get_n bytes0 0;
-let uvar3_0 := read_col byte0 in
+let code0 := bin in
+do token0 <- try_first_n code0 8;
+let uvar3_0 := read_col token0 in
 if assertLength uvar3_0 3 then
-do bytes1 <- try_skip_n bytes0 1;
-do byte_seq1 <- try_first_n bytes1 4;
-let uvar32_1 := bytes_to_bits_opt byte_seq1 in
+do code1 <- try_skip_n code0 8;
+do token1 <- try_first_n code1 32;
+let uvar32_1 := token1 in
 if assertLength uvar32_1 32 then
-do bytes2 <- try_skip_n bytes1 4;
+do code2 <- try_skip_n code1 32;
 OK ((Pmovl_ri (uvar3_0) (uvar32_1)), 5)
 else Error(msg"impossible")
 else Error(msg"impossible")
