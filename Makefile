@@ -226,6 +226,90 @@ GENERATED=\
   backend/SelectDiv.v backend/SplitLong.v \
   cparser/Parser.v
 
+# Count LoC
+RELOC_PROG=\
+  assembler/RelocProg.v assembler/RelocProgram.v assembler/RelocProgramBytes.v \
+  assembler/RelocProgLinking.v assembler/MemoryAgree.v assembler/RelocProgGlobalenvs.v \
+  assembler/RelocProgSemantics.v assembler/RelocProgSemantics1.v assembler/RelocProgSemantics2.v
+
+RELOC_PROG_X86=\
+  x86/RelocProgSemanticsArchi.v x86/RelocProgSemanticsArchi1.v\
+  x86/RelocationTypes.v
+
+RELOC_PROG_RISCV=\
+  riscV/RelocProgSemanticsArchi.v riscV/RelocProgSemanticsArchi1.v\
+  riscV/RelocationTypes.v
+
+RELOC_ELF=\
+  elf/RelocElf.v elf/RelocElfSemantics.v\
+  elf/ElfBytesSemantics.v elf/RelocElfLinking.v MachineTypes.v
+
+RELOC_ELF_X86=\
+  x86/RelocElfArchi.v
+
+RELOC_ELF_RISCV=\
+  riscV/RelocElfArchi.v
+
+# Symbtablegenproof is not correct
+RELOC_PROG_GEN=\
+  assembler/Symbtablegen.v assembler/Symbtablegenproof.v\
+
+RELOC_PROG_GEN_X86=\
+  x86/SymbtablegenArchi.v x86/SymbtablegenproofArchi.v\
+
+RELOC_PROG_GEN_RISCV=\
+  riscV/SymbtablegenArchi.v riscV/SymbtablegenproofArchi.v\
+
+RELOC_TAB_GEN=\
+  assembler/Reloctablesgen.v assembler/Reloctablesgenproof.v
+
+RELOC_TAB_GEN_X86=\
+  x86/ReloctablesgenArchi.v x86/ReloctablesgenproofArchi.v
+
+RELOC_TAB_GEN_RISCV=\
+  riscV/ReloctablesgenArchi.v riscV/ReloctablesgenproofArchi.v
+
+INSTR_ENCODE=\
+  assembler/RelocBingen.v assembler/RelocBingenproof.v
+
+INSTR_ENCODE_X86=\
+  x86/RelocBinDecode.v x86/RelocBingenproofArchi.v\
+  x86/TranslateInstr.v x86/TranslateInstrSize.v
+
+INSTR_ENCODE_RISCV=\
+  riscV/RelocBinDecode.v riscV/RelocBingenproofArchi.v\
+  riscV/TranslateInstr.v
+
+RELOC_ELF_GEN=\
+  elf/EncodeRelocElf.v elf/SymbtableEncode.v elf/RelocElfgen.v \
+  elf/ReloctablesEncode.v  elf/ReloctablesDecode.v \
+  elf/SymbtableDecode.v elf/RelocElfgenproof.v elf/DecodeRelocElf.v elf/EncodeElfCorrect.v\
+
+RELOC_ELF_GEN_X86=\
+  x86/RelocElfArchi.v x86/ReloctablesEncodeArchi.v
+  
+RELOC_ELF_GEN_RISCV=\
+  riscV/RelocElfArchi.v riscV/ReloctablesEncodeArchi.v
+
+loc:
+	@echo "RELOC_PROG" && coqwc $(RELOC_PROG)
+	@echo "RELOC_PROG_X86" && coqwc $(RELOC_PROG_X86)
+	@echo "RELOC_PROG_RISCV" && coqwc $(RELOC_PROG_RISCV)
+	@echo "RELOC_ELF" && coqwc $(RELOC_ELF)
+	@echo "RELOC_ELF_X86" && coqwc $(RELOC_ELF_X86)
+	@echo "RELOC_ELF_RISCV" && coqwc $(RELOC_ELF_RISCV)
+	@echo "RELOC_PROG_GEN" && coqwc $(RELOC_PROG_GEN)
+	@echo "RELOC_PROG_GEN_X86" && coqwc $(RELOC_PROG_GEN_X86)
+	@echo "RELOC_PROG_GEN_RISCV" && coqwc $(RELOC_PROG_GEN_RISCV)
+	@echo "RELOC_TAB_GEN" && coqwc $(RELOC_TAB_GEN)
+	@echo "RELOC_TAB_GEN_X86" && coqwc $(RELOC_TAB_GEN_X86)
+	@echo "RELOC_TAB_GEN_RISCV" && coqwc $(RELOC_TAB_GEN_RISCV)
+	@echo "INSTR_ENCODE" && coqwc $(INSTR_ENCODE)
+	@echo "INSTR_ENCODE_X86" && coqwc $(INSTR_ENCODE_X86)
+	@echo "INSTR_ENCODE_RISCV" && coqwc $(INSTR_ENCODE_RISCV)
+	@echo "RELOC_ELF_GEN" && coqwc $(RELOC_ELF_GEN)
+	@echo "RELOC_ELF_GEN_X86" && coqwc $(RELOC_ELF_GEN_X86)
+	@echo "RELOC_ELF_GEN_RISCV" && coqwc $(RELOC_ELF_GEN_RISCV)
 all:
 	@test -f .depend || $(MAKE) depend
 	$(MAKE) proof
