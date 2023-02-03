@@ -621,126 +621,235 @@ Program Definition decode_immS (S1: u5) (S2: u7) : res Z :=
     decode_ofs_u12 (exist _ S_bits _)
   else Error(msg "illegal length in decode_immS").
 
-Theorem encode_immS_consistency: forall Z S1 S2,
+  Theorem encode_immS_consistency: forall Z S1 S2,
   encode_S1 Z = OK S1 -> encode_S2 Z = OK S2 ->
   decode_immS S1 S2 = OK Z.
 Proof.
-  Admitted.
+  unfold encode_S1, encode_S2, decode_immS. intros.
+  monadInv H. monadInv H0. rewrite EQ1 in EQ. inversion EQ. subst.
+  destruct (assertLength (proj1_sig x >@[ 7]) 5);
+  destruct (assertLength (proj1_sig x ~@[ 7]) 7); try congruence.
+  assert ((proj1_sig x >@[ 7]) =proj1_sig S1).
+  destruct S1. inversion EQ0. apply H0.
+  assert ((proj1_sig x ~@[ 7]) =proj1_sig S2).
+  destruct S2. inversion EQ2. apply H1.
+  assert (proj1_sig S2 ++ proj1_sig S1 = proj1_sig x).
+  rewrite <- H. rewrite <- H0. apply (firstn_skipn). 
+  destruct (assertLength (proj1_sig S2 ++ proj1_sig S1) 12).
+  apply encode_ofs_u12_consistency in EQ1.
+  rewrite <- EQ1. f_equal. 
+  unfold decode_immS_obligation_1. destruct x. 
+  cbn [proj1_sig] in *.
+  subst. f_equal. apply Axioms.proof_irr.
+  (* impossible case: total length *)
+  assert (Datatypes.length (proj1_sig S2 ++ proj1_sig S1) = 12%nat).
+  rewrite app_length. rewrite <- H. rewrite <- H0. lia. congruence.
+  Qed.  
 
 (* subtle: we treat imm as an offset multiple of 2 bytes, so we need to preserve the least bit
    20     10:1          11         19:12  
    J4      J3           J2           J1
-   ~@[1]  >@[10]    >@[9]~@[1]   >@[1]~@[8]
+   ~@[1]  >@[10]    ~@[10]>@[9]   ~@[9]>@[1]
  *)
-Program Definition encode_J1 (imm: Z) : res u8 :=
-  do immbits <- encode_ofs_u20 imm;
-  (* let B1_withtail := skipn 11 immbits in *)
-  (* let B1 := firstn 8 B1_withtail in *)
-  let B1 := immbits>@[1]~@[8] in
-  if assertLength B1 8 then
-    OK (exist _ B1 _)
-  else Error(msg "illegal length in encode_J1").
+ Program Definition encode_J1 (imm: Z) : res u8 :=
+ do immbits <- encode_ofs_u20 imm;
+ (* let B1_withtail := skipn 11 immbits in *)
+ (* let B1 := firstn 8 B1_withtail in *)
+ let B1 := immbits~@[9]>@[1] in
+ if assertLength B1 8 then
+   OK (exist _ B1 _)
+ else Error(msg "illegal length in encode_J1").
 
 Program Definition encode_J2 (imm: Z) : res u1 :=
-  do immbits <- encode_ofs_u20 imm;
-  (* let B1_withtail := skipn 10 immbits in *)
-  (* let B1 := firstn 1 B1_withtail in *)
-  let B1 := immbits>@[9]~@[1] in
-  if assertLength B1 1 then
-    OK (exist _ B1 _)
-  else Error(msg "illegal length in encode_J2").
+ do immbits <- encode_ofs_u20 imm;
+ (* let B1_withtail := skipn 10 immbits in *)
+ (* let B1 := firstn 1 B1_withtail in *)
+ let B1 := immbits~@[10]>@[9] in
+ if assertLength B1 1 then
+   OK (exist _ B1 _)
+ else Error(msg "illegal length in encode_J2").
 
 Program Definition encode_J3 (imm: Z) : res u10 :=
-  do immbits <- encode_ofs_u20 imm;
-  (* let B2 := firstn 10 immbits in *)
-  let B2 := immbits>@[10] in
-  if assertLength B2 10 then
-    OK (exist _ B2 _)
-  else Error(msg "illegal length in encode_J3").
+ do immbits <- encode_ofs_u20 imm;
+ (* let B2 := firstn 10 immbits in *)
+ let B2 := immbits>@[10] in
+ if assertLength B2 10 then
+   OK (exist _ B2 _)
+ else Error(msg "illegal length in encode_J3").
 
 Program Definition encode_J4 (imm: Z) : res u1 :=
-  do immbits <- encode_ofs_u20 imm;
-  (* let B1_withtail := skipn 19 immbits in *)
-  (* let B1 := firstn 1 B1_withtail in *)
-  let B1 := immbits~@[1] in
-  if assertLength B1 1 then
-    OK (exist _ B1 _)
-  else Error(msg "illegal length in encode_J4").
+ do immbits <- encode_ofs_u20 imm;
+ (* let B1_withtail := skipn 19 immbits in *)
+ (* let B1 := firstn 1 B1_withtail in *)
+ let B1 := immbits~@[1] in
+ if assertLength B1 1 then
+   OK (exist _ B1 _)
+ else Error(msg "illegal length in encode_J4").
 
 Program Definition decode_immJ (J1: u8) (J2: u1) (J3: u10) (J4: u1) : res Z :=
-  let J1_bits := proj1_sig J1 in
-  let J2_bits := proj1_sig J2 in
-  let J3_bits := proj1_sig J3 in
-  let J4_bits := proj1_sig J4 in
-  let J_bits := J4_bits ++ J1_bits ++ J2_bits ++ J3_bits in
-  if assertLength J_bits 20 then
-    decode_ofs_u20 (exist _ J_bits _)
-  else Error(msg "illegal length in decode_immJ").
+ let J1_bits := proj1_sig J1 in
+ let J2_bits := proj1_sig J2 in
+ let J3_bits := proj1_sig J3 in
+ let J4_bits := proj1_sig J4 in
+ let J_bits := J4_bits ++ J1_bits ++ J2_bits ++ J3_bits in
+ if assertLength J_bits 20 then
+   decode_ofs_u20 (exist _ J_bits _)
+ else Error(msg "illegal length in decode_immJ").
 
 Theorem encode_immJ_consistency: forall Z J1 J2 J3 J4,
-  encode_J1 Z = OK J1 -> encode_J2 Z = OK J2 ->
-  encode_J3 Z = OK J3 -> encode_J4 Z = OK J4 ->
-  decode_immJ J1 J2 J3 J4 = OK Z.
+ encode_J1 Z = OK J1 -> encode_J2 Z = OK J2 ->
+ encode_J3 Z = OK J3 -> encode_J4 Z = OK J4 ->
+ decode_immJ J1 J2 J3 J4 = OK Z.
 Proof.
-  Admitted.
+ unfold encode_J1, encode_J2, encode_J3, encode_J4, decode_immJ. intros.
+ monadInv H. monadInv H0. monadInv H1. monadInv H2.
+ rewrite EQ1 in EQ. inversion EQ. subst.
+ rewrite EQ3 in EQ1. inversion EQ1. subst.
+ rewrite EQ5 in EQ3. inversion EQ3. subst. 
+ destruct (assertLength ((proj1_sig x ~@[ 9]) >@[ 1]) 8);
+ destruct (assertLength ((proj1_sig x ~@[ 10]) >@[ 9]) 1);
+ destruct (assertLength (proj1_sig x >@[ 10]) 10);
+ destruct (assertLength (proj1_sig x ~@[ 1]) 1);
+ try congruence.
+ assert ((proj1_sig x ~@[ 9]) >@[ 1] =proj1_sig J1).
+   destruct J1. inversion EQ0. apply H0.
+ assert ((proj1_sig x ~@[ 10]) >@[ 9] =proj1_sig J2).
+   destruct J2. inversion EQ2. apply H1.
+ assert ((proj1_sig x >@[ 10]) =proj1_sig J3).
+   destruct J3. inversion EQ4. apply H2.
+ assert ((proj1_sig x ~@[ 1]) =proj1_sig J4).
+   destruct J4. inversion EQ6. apply H3.
+ assert (proj1_sig x ~@[ 1] ++ (proj1_sig x ~@[ 9]) >@[ 1] = proj1_sig x ~@[ 9]).
+   assert ((proj1_sig x ~@[ 9]) ~@[ 1]=proj1_sig x ~@[ 1]).
+     apply firstn_firstn.
+   rewrite <- H3. apply firstn_skipn.
+ assert (proj1_sig x ~@[ 9] ++ (proj1_sig x ~@[ 10]) >@[ 9] = proj1_sig x ~@[ 10]).
+   assert ((proj1_sig x ~@[ 10]) ~@[ 9]=proj1_sig x ~@[ 9]).
+     apply firstn_firstn.
+   rewrite <- H4. apply firstn_skipn.
+ assert (proj1_sig J4 ++ proj1_sig J1 ++ proj1_sig J2 ++ proj1_sig J3 = proj1_sig x).
+   rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2.
+   rewrite app_assoc. rewrite H3.
+   rewrite app_assoc. rewrite H4.
+   apply firstn_skipn.
+ apply encode_ofs_u20_consistency in EQ5.
+ rewrite <- EQ5. 
+ destruct (assertLength
+ (proj1_sig J4 ++
+  proj1_sig J1 ++ proj1_sig J2 ++ proj1_sig J3) 20). f_equal. 
+ unfold decode_immJ_obligation_1. destruct x. 
+ cbn [proj1_sig] in *.
+ subst. f_equal. apply Axioms.proof_irr.
+ (* impossible case: total length *)
+ assert (Datatypes.length (proj1_sig J4 ++ proj1_sig J1 ++ proj1_sig J2 ++ proj1_sig J3) =
+ 20%nat).
+ rewrite app_length. rewrite app_length. rewrite app_length.
+ rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2.
+ lia. congruence.
+ Qed.
 
 (* subtle: we treat imm as an offset multiple of 2 bytes, so we need to preserve the least bit
-   12     10:5          4:1          11
-   B4      B3           B2           B1
-   ~@[1]  >@[2]~[6]    >@[8]~@[4]   >@[1]~@[1]
+  12     10:5          4:1          11
+  B4      B3           B2           B1
+  ~@[1]  ~@[8]>@[2]    >@[8]      ~@[2]>@[1]
 *)
 
 Program Definition encode_B1 (imm: Z) : res u1 :=
-  do immbits <- encode_ofs_u12 imm;
-  (* let B1_withtail := skipn 1 immbits in *)
-  (* let B1 := firstn 1 B1_withtail in *)
-  let B1 := immbits>@[1]~@[1] in
-  if assertLength B1 1 then
-    OK (exist _ B1 _)
-  else Error(msg "illegal length in encode_B1").
+ do immbits <- encode_ofs_u12 imm;
+ (* let B1_withtail := skipn 1 immbits in *)
+ (* let B1 := firstn 1 B1_withtail in *)
+ let B1 := immbits~@[2]>@[1] in
+ if assertLength B1 1 then
+   OK (exist _ B1 _)
+ else Error(msg "illegal length in encode_B1").
 
 Program Definition encode_B2 (imm: Z) : res u4 :=
-  do immbits <- encode_ofs_u12 imm;
-  (* let B2_withtail := skipn 8 immbits in *)
-  (* let B2 := firstn 4 B2_withtail in *)
-  let B2 := immbits>@[8]~@[4] in
-  if assertLength B2 4 then
-    OK (exist _ B2 _)
-  else Error(msg "illegal length in encode_B2").
+ do immbits <- encode_ofs_u12 imm;
+ (* let B2_withtail := skipn 8 immbits in *)
+ (* let B2 := firstn 4 B2_withtail in *)
+ let B2 := immbits>@[8] in
+ if assertLength B2 4 then
+   OK (exist _ B2 _)
+ else Error(msg "illegal length in encode_B2").
 
 Program Definition encode_B3 (imm: Z) : res u6 :=
-  do immbits <- encode_ofs_u12 imm;
-  (* let B3_withtail := skipn 2 immbits in *)
-  (* let B3 := firstn 6 B3_withtail in *)
-  let B3 := immbits>@[2]~@[6] in
-  if assertLength B3 6 then
-    OK (exist _ B3 _)
-  else Error(msg "illegal length in encode_B3").
+ do immbits <- encode_ofs_u12 imm;
+ (* let B3_withtail := skipn 2 immbits in *)
+ (* let B3 := firstn 6 B3_withtail in *)
+ let B3 := immbits~@[8]>@[2] in
+ if assertLength B3 6 then
+   OK (exist _ B3 _)
+ else Error(msg "illegal length in encode_B3").
 
 Program Definition encode_B4 (imm: Z) : res u1 :=
-  do immbits <- encode_ofs_u12 imm;
-  (* let B4 := firstn 1 immbits in *)
-  let B4 := immbits~@[1] in
-  if assertLength B4 1 then
-    OK (exist _ B4 _)
-  else Error(msg "illegal length in encode_B4").
+ do immbits <- encode_ofs_u12 imm;
+ (* let B4 := firstn 1 immbits in *)
+ let B4 := immbits~@[1] in
+ if assertLength B4 1 then
+   OK (exist _ B4 _)
+ else Error(msg "illegal length in encode_B4").
 
 Program Definition decode_immB (B1: u1) (B2: u4) (B3: u6) (B4: u1) : res Z :=
-  let B1_bits := proj1_sig B1 in
-  let B2_bits := proj1_sig B2 in
-  let B3_bits := proj1_sig B3 in
-  let B4_bits := proj1_sig B4 in
-  let B_bits := B4_bits ++ B1_bits ++ B3_bits ++ B2_bits in
-  if assertLength B_bits 12 then
-    decode_ofs_u12 (exist _ B_bits _)
-  else Error(msg "illegal length in decode_immB").
+ let B1_bits := proj1_sig B1 in
+ let B2_bits := proj1_sig B2 in
+ let B3_bits := proj1_sig B3 in
+ let B4_bits := proj1_sig B4 in
+ let B_bits := B4_bits ++ B1_bits ++ B3_bits ++ B2_bits in
+ if assertLength B_bits 12 then
+   decode_ofs_u12 (exist _ B_bits _)
+ else Error(msg "illegal length in decode_immB").
 
 Theorem encode_immB_consistency: forall Z B1 B2 B3 B4,
-  encode_B1 Z = OK B1 -> encode_B2 Z = OK B2 ->
-  encode_B3 Z = OK B3 -> encode_B4 Z = OK B4 ->
-  decode_immB B1 B2 B3 B4 = OK Z.
+ encode_B1 Z = OK B1 -> encode_B2 Z = OK B2 ->
+ encode_B3 Z = OK B3 -> encode_B4 Z = OK B4 ->
+ decode_immB B1 B2 B3 B4 = OK Z.
 Proof.
-  Admitted.
+ unfold encode_B1, encode_B2, encode_B3, encode_B4, decode_immB. intros.
+ monadInv H. monadInv H0. monadInv H1. monadInv H2.
+ rewrite EQ1 in EQ. inversion EQ. subst.
+ rewrite EQ3 in EQ1. inversion EQ1. subst.
+ rewrite EQ5 in EQ3. inversion EQ3. subst. 
+ destruct (assertLength ((proj1_sig x ~@[ 2]) >@[ 1]) 1);
+ destruct (assertLength (proj1_sig x >@[ 8]) 4);
+ destruct (assertLength ((proj1_sig x ~@[ 8]) >@[ 2]) 6);
+ destruct (assertLength (proj1_sig x ~@[ 1]) 1);
+ try congruence.
+ assert ((proj1_sig x ~@[ 2]) >@[ 1] =proj1_sig B1).
+   destruct B1. inversion EQ0. apply H0.
+ assert (proj1_sig x >@[ 8] =proj1_sig B2).
+   destruct B2. inversion EQ2. apply H1.
+ assert ((proj1_sig x ~@[ 8]) >@[ 2] =proj1_sig B3).
+   destruct B3. inversion EQ4. apply H2.
+ assert ((proj1_sig x ~@[ 1]) =proj1_sig B4).
+   destruct B4. inversion EQ6. apply H3.
+ assert (proj1_sig x ~@[ 1] ++ (proj1_sig x ~@[ 2]) >@[ 1] = proj1_sig x ~@[ 2]).
+   assert ((proj1_sig x ~@[ 2]) ~@[ 1]=proj1_sig x ~@[ 1]).
+     apply firstn_firstn.
+   rewrite <- H3. apply firstn_skipn.
+ assert (proj1_sig x ~@[ 2] ++ (proj1_sig x ~@[ 8]) >@[ 2] = proj1_sig x ~@[ 8]).
+   assert ((proj1_sig x ~@[ 8]) ~@[ 2]=proj1_sig x ~@[ 2]).
+     apply firstn_firstn.
+   rewrite <- H4. apply firstn_skipn.
+ assert (proj1_sig B4 ++ proj1_sig B1 ++ proj1_sig B3 ++ proj1_sig B2 = proj1_sig x).
+   rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2.
+   rewrite app_assoc. rewrite H3.
+   rewrite app_assoc. rewrite H4.
+   apply firstn_skipn.
+ apply encode_ofs_u12_consistency in EQ5.
+ rewrite <- EQ5. 
+ destruct (assertLength
+   (proj1_sig B4 ++
+    proj1_sig B1 ++ proj1_sig B3 ++ proj1_sig B2)
+   12). f_equal. 
+ unfold decode_immJ_obligation_1. destruct x. 
+ cbn [proj1_sig] in *.
+ subst. f_equal. apply Axioms.proof_irr.
+ (* impossible case: total length *)
+ assert (Datatypes.length (proj1_sig B4 ++ proj1_sig B1 ++ proj1_sig B3 ++ proj1_sig B2) = 12%nat).
+ rewrite app_length. rewrite app_length. rewrite app_length.
+ rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2.
+ lia. congruence.
+ Qed.
 
 Program Definition encode_shamt ofs : res u6 :=
   if Archi.ptr64 then
@@ -1663,7 +1772,7 @@ Definition translate_instr i := do i' <- translate_instr' i; OK [i'].
 (* FIXME: for the big endian output for the multi-bytes token in CSLED *)
 Definition bits_to_bytes_archi bs := do bs' <- (bits_to_bytes bs); OK (rev bs').
 
-(* Decode;struction *)
+(* Decode;instruction *)
 
 (* Broken due to the shamt *)
   (* NEW *)
