@@ -877,13 +877,32 @@ Definition decode_shamt (shamt: u6) : res Z :=
       OK shamt_Z
     else Error (msg "Shamt overflow in decode_shamt").
 
-Theorem encode_shamt_consistency: forall Z shamt,
-  encode_shamt Z = OK shamt ->
-  decode_shamt shamt = OK Z.
-Proof.
-  unfold encode_shamt. unfold decode_shamt. intros.
-  do 2 destr_in H.
-  Admitted.
+    Theorem encode_shamt_consistency: forall Z shamt,
+    encode_shamt Z = OK shamt ->
+    decode_shamt shamt = OK Z.
+  Proof.
+    unfold encode_shamt. unfold decode_shamt. intros.
+    do 3 destr_in H. inversion H. f_equal.
+    unfold encode_shamt_obligation_1 in *.
+    cbn [proj1_sig]. remember (bits_of_int 6 Z) as l.
+    apply (bits_of_
+    int_consistency 6).
+    apply andb_true_iff in Heqb0. destruct Heqb0.
+    apply Z.ltb_lt in H0. apply Z.ltb_lt in H2. lia.
+    rewrite Heql. reflexivity.
+  
+    unfold encode_shamt_obligation_2 in *. inversion H.
+    cbn [proj1_sig].
+    assert (int_of_bits (false :: bits_of_int 5 Z) = int_of_bits (bits_of_int 5 Z)).
+    apply int_of_bits_append.
+    rewrite H0. remember (bits_of_int 5 Z) as l. 
+    assert (int_of_bits l = Z).
+    apply (bits_of_int_consistency 5).
+    apply andb_true_iff in Heqb0. destruct Heqb0.
+    apply Z.ltb_lt in H2. apply Z.ltb_lt in H3. lia.
+    rewrite Heql. reflexivity.
+    rewrite H2. rewrite Heqb0. reflexivity.
+    Qed.
 
 Definition translate_instr' (i:instruction) : res (Instruction) :=
   match i with
