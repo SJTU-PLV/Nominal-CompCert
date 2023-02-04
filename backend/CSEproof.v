@@ -952,9 +952,9 @@ Ltac TransfInstr :=
 (** The proof of simulation is a case analysis over the transition
   in the source code. *)
 
-Lemma transf_step_correct m0 bc0:
+Lemma transf_step_correct m0:
   forall s1 t s2, step ge s1 t s2 ->
-  forall s1' (MS: match_states s1 s1') (SOUND: sound_state prog se m0 bc0 s1),
+  forall s1' (MS: match_states s1 s1') (SOUND: sound_state prog se m0 s1),
   exists s2', step tge s1' t s2' /\ match_states s2 s2'.
 Proof.
   induction 1; intros; inv MS; try (TransfInstr; intro C).
@@ -1250,6 +1250,6 @@ Proof.
   edestruct transf_external_states as (q2 & Hq2 & Hq & _ & Hk); eauto.
   exists tt, q2. repeat apply conj; eauto.
   intros r1 r2 s1' Hr (Hs1' & _). eauto.
-- intros s1 t s1' (STEP & [se bc0 m0] & Hse & Hs1 & Hs1') s2 Hs. subst. cbn in *.
+- intros s1 t s1' (STEP & [se m0] & Hse & Hs1 & Hs1') s2 Hs. subst. cbn in *.
   eapply transf_step_correct; eauto.
 Qed.

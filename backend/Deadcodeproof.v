@@ -695,9 +695,9 @@ Qed.
 
 (** * The simulation diagram *)
 
-Theorem step_simulation bc0 m0:
+Theorem step_simulation m0:
   forall S1 t S2, step ge S1 t S2 ->
-  forall S1', match_states S1 S1' -> sound_state prog se bc0 m0 S1 ->
+  forall S1', match_states S1 S1' -> sound_state prog se m0 S1 ->
   exists S2', step tge S1' t S2' /\ match_states S2 S2'.
 Proof.
 
@@ -1139,6 +1139,6 @@ Proof.
   edestruct transf_external_states as (q2 & Hq2 & Hq & _ & Hk); eauto.
   exists tt, q2. repeat apply conj; eauto.
   intros r1 r2 s1' Hr (Hs1' & _). eauto.
-- intros s1 t s1' (STEP & [se bc0 m0] & Hse & Hs1 & Hs1') s2 Hs. subst. cbn in *.
+- intros s1 t s1' (STEP & [se m0] & Hse & Hs1 & Hs1') s2 Hs. subst. cbn in *.
   eapply step_simulation; eauto.
 Qed.
