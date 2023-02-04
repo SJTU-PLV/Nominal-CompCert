@@ -543,9 +543,22 @@ Program Definition encode_ofs_u5 (ofs:Z) :res u5 :=
     else Error (msg "impossible")
   else Error (msg "Offset overflow in encode_ofs_u5").
 
-Definition decode_ofs_u5 (bs:u5) : res int :=
+Definition decode_ofs_u5 (bs:u5) : res Z :=
   let bs' := proj1_sig bs in
-  OK (Int.repr (int_of_bits bs')).
+  OK (int_of_bits bs').
+
+Lemma encode_ofs_u5_consistency:forall ofs l, 
+    encode_ofs_u5 ofs = OK l ->
+    decode_ofs_u5 l = OK ofs.
+Proof.
+  unfold encode_ofs_u5,decode_ofs_u5.
+  intros. do 2 destr_in H.
+  inversion H. unfold encode_ofs_u5_obligation_1 in *.
+  f_equal. cbn [proj1_sig].
+  remember (bits_of_int 5 ofs) as l1.
+  apply (bits_of_int_consistency 5).
+  apply andb_true_iff in Heqb. destruct Heqb. apply Z.ltb_lt in H0.
+  apply Z.ltb_lt in H2. lia. rewrite Heql1. reflexivity. Qed. 
 
 Program Definition encode_ofs_u20 (ofs:Z) :res u20 :=
   let l0 := bits_of_int_signed 20 ofs in
@@ -598,7 +611,23 @@ Program Definition encode_ofs_u20_unsigned (ofs:Z) : res u20 :=
     else Error (msg "impossible")
   else Error (msg "Offset overflow in encode_ofs_u20").
 
-  
+Definition decode_ofs_u20_unsigned (bs:u20) : res Z :=
+  let bs' := proj1_sig bs in
+  OK (int_of_bits bs').
+
+Lemma encode_ofs_u20_unsigned_consistency:forall ofs l, 
+    encode_ofs_u20_unsigned ofs = OK l ->
+    decode_ofs_u20_unsigned l = OK ofs.
+Proof.
+  unfold encode_ofs_u20_unsigned,decode_ofs_u20_unsigned.
+  intros. do 2 destr_in H.
+  inversion H. unfold encode_ofs_u20_unsigned_obligation_1 in *.
+  f_equal. cbn [proj1_sig].
+  remember (bits_of_int 20 ofs) as l1.
+  apply (bits_of_int_consistency 20).
+  apply andb_true_iff in Heqb. destruct Heqb. apply Z.ltb_lt in H0.
+  apply Z.ltb_lt in H2. lia. rewrite Heql1. reflexivity. Qed. 
+
 Program Definition encode_S1 (imm: Z) : res u5 :=
   do immbits <- encode_ofs_u12 imm;
   let S1 := immbits>@[7] in
