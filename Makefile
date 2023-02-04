@@ -229,6 +229,8 @@ GENERATED=\
 # Count LoC
 RELOC_PROG=\
   assembler/RelocProg.v assembler/RelocProgram.v assembler/RelocProgramBytes.v \
+  
+RELOC_PROG_SEM=\
   assembler/RelocProgLinking.v assembler/MemoryAgree.v assembler/RelocProgGlobalenvs.v \
   assembler/RelocProgSemantics.v assembler/RelocProgSemantics1.v assembler/RelocProgSemantics2.v
 
@@ -241,8 +243,11 @@ RELOC_PROG_RISCV=\
   riscV/RelocationTypes.v
 
 RELOC_ELF=\
-  elf/RelocElf.v elf/RelocElfSemantics.v\
-  elf/ElfBytesSemantics.v elf/RelocElfLinking.v MachineTypes.v
+  elf/RelocElf.v elf/MachineTypes.v 
+RELOC_ELF_SEM=\
+  elf/RelocElfSemantics.v\
+  elf/ElfBytesSemantics.v elf/RelocElfLinking.v elf/DecodeRelocElf.v
+
 
 RELOC_ELF_X86=\
   x86/RelocElfArchi.v
@@ -283,7 +288,7 @@ INSTR_ENCODE_RISCV=\
 RELOC_ELF_GEN=\
   elf/EncodeRelocElf.v elf/SymbtableEncode.v elf/RelocElfgen.v \
   elf/ReloctablesEncode.v  elf/ReloctablesDecode.v \
-  elf/SymbtableDecode.v elf/RelocElfgenproof.v elf/DecodeRelocElf.v elf/EncodeElfCorrect.v\
+  elf/SymbtableDecode.v elf/RelocElfgenproof.v elf/EncodeElfCorrect.v\
 
 RELOC_ELF_GEN_X86=\
   x86/RelocElfArchi.v x86/ReloctablesEncodeArchi.v
@@ -291,11 +296,19 @@ RELOC_ELF_GEN_X86=\
 RELOC_ELF_GEN_RISCV=\
   riscV/RelocElfArchi.v riscV/ReloctablesEncodeArchi.v
 
+INSTR_TRANSLATOR_X86=\
+  x86/TranslateInstr.v x86/RelocBinDecode.v
+
+INSTR_TRANSLATOR_RISCV=\
+  riscV/TranslateInstr.v
+
 loc:
 	@echo "RELOC_PROG" && coqwc $(RELOC_PROG)
+	@echo "RELOC_PROG_SEM" && coqwc $(RELOC_PROG_SEM)
 	@echo "RELOC_PROG_X86" && coqwc $(RELOC_PROG_X86)
 	@echo "RELOC_PROG_RISCV" && coqwc $(RELOC_PROG_RISCV)
 	@echo "RELOC_ELF" && coqwc $(RELOC_ELF)
+	@echo "RELOC_ELF_SEM" && coqwc $(RELOC_ELF_SEM)
 	@echo "RELOC_ELF_X86" && coqwc $(RELOC_ELF_X86)
 	@echo "RELOC_ELF_RISCV" && coqwc $(RELOC_ELF_RISCV)
 	@echo "RELOC_PROG_GEN" && coqwc $(RELOC_PROG_GEN)
@@ -310,6 +323,9 @@ loc:
 	@echo "RELOC_ELF_GEN" && coqwc $(RELOC_ELF_GEN)
 	@echo "RELOC_ELF_GEN_X86" && coqwc $(RELOC_ELF_GEN_X86)
 	@echo "RELOC_ELF_GEN_RISCV" && coqwc $(RELOC_ELF_GEN_RISCV)
+	@echo "INSTR_TRANSLATOR_X86" && coqwc $(INSTR_TRANSLATOR_X86)
+	@echo "INSTR_TRANSLATOR_RISCV" && coqwc $(INSTR_TRANSLATOR_RISCV)
+
 all:
 	@test -f .depend || $(MAKE) depend
 	$(MAKE) proof
