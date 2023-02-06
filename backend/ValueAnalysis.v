@@ -17,7 +17,6 @@ Require Import Values Memory Globalenvs Builtins Events.
 Require Import Registers Op RTL.
 Require Import ValueDomain ValueAOp Liveness.
 Require Import LanguageInterface Invariant.
-Require Import InjectFootprint.
 
 (** * The dataflow analysis *)
 
@@ -465,7 +464,7 @@ Theorem allocate_stack:
   Mem.alloc m 0 sz = (m', sp) ->
   genv_match bc ge ->
   mmatch bc m am ->
-  bc_nostack bc -> 
+  bc_nostack bc ->
   exists bc',
      bc_incr bc bc'
   /\ bc' sp = BCstack
@@ -964,7 +963,6 @@ Proof.
   induction vargs0; simpl; intros; constructor.
   eapply vmatch_inj; eauto. auto.
   intros (j' & vres' & m'' & EC' & IRES & IMEM & UNCH1 & UNCH2 & IINCR & ISEP).
-  clear UNCH2.
   assert (JBELOW: forall b, sup_In b (Mem.support m) -> j' b = inj_of_bc bc b).
   {
     intros. destruct (inj_of_bc bc b) as [[b' delta] | ] eqn:EQ.
@@ -1327,7 +1325,7 @@ Inductive sound_stack: block_classification -> list stackframe -> mem -> sup -> 
 
 Inductive sound_state: state -> Prop :=
   | sound_regular_state:
-      forall s f sps sp pc e m ae am bc 
+      forall s f sps sp pc e m ae am bc
         (SPS: sp = fresh_block sps)
         (SINCR: Mem.sup_include (sup_incr sps) (Mem.support m))
         (STK: sound_stack bc s m sps)
@@ -1795,6 +1793,7 @@ Qed.
 
 (** ** Preservation of the invariant at call sites *)
 
+
 Definition valid_val (m:mem) (v:val) : Prop :=
   match v with
   |Vptr b ofs => Mem.valid_block m b
@@ -1848,6 +1847,7 @@ Proof.
   destruct Genv.invert_symbol; try congruence.
 Qed.
 
+
 (** Requirement of mem in query *)
 Inductive valid_mem (m:mem) : Prop :=
   valid_mem_intros: forall 
@@ -1865,18 +1865,17 @@ Inductive sound_query m: c_query -> Prop :=
 
 Inductive sound_reply m: c_reply -> Prop :=
   sound_reply_intro : forall vres m' (bc' : block_classification),
-(*    let bc := bc_of_se_mem ge m in
-    (forall b, sup_In b (Mem.support m) -> bc' b = bc b) -> *)
+    let bc := bc_of_se_mem ge m in
+    (forall b, sup_In b (Mem.support m) -> bc' b = bc b) ->
     vmatch bc' vres Vtop ->
     genv_match bc' ge ->
     romatch bc' m' rmge ->
     mmatch bc' m' mtop ->
     bc_nostack bc' ->
-(*    (forall b ofs n bytes,
+    (forall b ofs n bytes,
         sup_In b (Mem.support m) -> bc b = BCinvalid -> n >= 0 ->
         Mem.loadbytes m' b ofs n = Some bytes ->
         Mem.loadbytes m b ofs n = Some bytes) ->
-*)
     Mem.sup_include (Mem.support m) (Mem.support m') ->
     sound_reply m (cr vres m').
 
@@ -1982,9 +1981,9 @@ Theorem sound_final:
 Proof.
   intros st r Hst Hr. destruct Hr. inv Hst. inv STK.
   eapply sound_reply_intro with bc; eauto.
-(*  intros. simpl in H3. rewrite pred_dec_true in H3; eauto.
+  intros. simpl in H3. rewrite pred_dec_true in H3; eauto.
   destruct (Genv.invert_symbol ge b) eqn: INV;
-  congruence. *)
+  congruence.
 Qed.
 
 Lemma sound_stack_bound : forall bc s m sup,
@@ -2022,7 +2021,8 @@ Theorem sound_external:
 Proof.
   intros st q Hst Hq. destruct Hq. inv Hst.
   exists m; cbn; repeat apply conj; auto.
-  - econstructor; eauto.
+  - 
+    econstructor; eauto.
     + constructor.
       -- inv GE. intros b A.
          exploit H1; eauto. intros [B C].
@@ -2054,24 +2054,12 @@ Proof.
         inv MM. exploit mmatch_below; eauto. congruence.
   - intros r st' Hr Hst'. inv Hr. inv Hst'.
     econstructor; eauto.
-    assert (  forall b : block, sup_In b (Mem.support m) -> bc' b = bc b).
-    admit.
     apply sound_stack_new_bound with (Mem.support m); auto.
     apply sound_stack_exten with bc; auto.
     apply sound_stack_ext with m; auto.
-    + intros. admit.
+    admit.
+    admit.
 Admitted.
-
-
-
-
-
-
-
-
-
-
-
 
 End SOUNDNESS.
 
