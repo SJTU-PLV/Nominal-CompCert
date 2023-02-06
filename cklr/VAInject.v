@@ -48,7 +48,7 @@ Qed.
 Inductive vainj_mem : klr (Genv.symtbl * world inj) mem mem :=
   vainj_mem_intro se w m1 m2:
     Mem.sup_include (Genv.genv_sup se) (Mem.support m1) ->
-    romatch_all se (bc_of_symtbl se) m1 ->
+    romatch (bc_of_symtbl se) m1 (romem_for_symtbl se) ->
     match_mem inj w m1 m2 ->
     vainj_mem (se, w) m1 m2.
 
@@ -352,7 +352,7 @@ Proof.
       * eapply bc_of_inj_args_vmatch; eauto.
       * eapply bc_of_inj_mmatch; eauto.
       * eapply bc_of_inj_nostack; eauto.
-      * intros cu Hcu b id ab Hid Hab.
+      * red. intros b id ab Hid Hab.
         edestruct H4 as (? & ? & ?); eauto using bc_of_symtbl_inj_glob.
         intuition auto.
         eapply bmatch_incr; eauto using bc_of_symtbl_inj.
@@ -364,7 +364,7 @@ Proof.
       constructor; cbn; auto.
       constructor; cbn; auto.
       * eauto.
-      * clear - H11 H18 H17 H6. inv H6. cbn in *.
+      * clear - H18 H17 H6. inv H6. cbn in *.
         intros cu Hcu. eapply romatch_exten; eauto. intros b id.
         destruct H17 as [Hglob Hdef]. rewrite <- Hglob. cbn. clear.
         split.
@@ -373,6 +373,37 @@ Proof.
         ++ intros Hb. apply Genv.find_invert_symbol in Hb. rewrite Hb.
            reflexivity.
 Qed.
+
+Lemma va_inj_vainj:
+  ccref (vamatch @ cc_c inj) (cc_c vainj).
+Proof.
+  intros [[se1' w1] wj] se1 se2 q1' q2 [Hse1 Hse2] [q1 [Hq1 Hq2]].
+  destruct w1. inv Hse1. simpl in H. subst se1'. cbn in * |-.
+  rename vaw_symtbl into se1. inv Hq1. inv Hq2. inv H2. inv H.
+  exists (se1, injw f (Mem.support m1) (Mem.support m2)). cbn.
+  repeat apply conj; eauto 10 using rel_inv_intro.
+  - econstructor; eauto.
+    econstructor; eauto.
+    + inv Hse2. eauto.
+    + intros cu Hcu. eapply romatch_exten; eauto. intros b id.
+      destruct H8 as [Hglob Hdef]. rewrite <- Hglob. cbn. clear.
+        split.
+        ++ intros H. destruct Genv.invert_symbol eqn:Hb; inv H.
+           apply Genv.invert_find_symbol; auto.
+        ++ intros Hb. apply Genv.find_invert_symbol in Hb. rewrite Hb.
+           reflexivity.
+    + constructor; eauto.
+  - intros r1 r2 [[se1' w'] [[eq Hw] Hr]]. cbn in *. subst se1'.
+    inv Hw. inv Hr. inv H2. inv H21.
+    exists (cr vres1 m1'). repeat apply conj; eauto 10 using rel_inv_intro.
+    + econstructor; eauto. admit. (*problem here, need injp*)
+    + exists (injw f' (Mem.support m1') (Mem.support m2')).
+      repeat apply  conj; econstructor; eauto.
+      constructor; eauto.
+Admitted.
+      
+    
+  
 
 
 (** * Other properties *)
