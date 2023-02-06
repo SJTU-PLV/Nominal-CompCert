@@ -355,12 +355,6 @@ Proof.
     + destruct v', t; auto.
 Qed.
 
-(* arg1   <----          arg1
-                          lessdef
-   inj                   arg1' <-- typ
-                           inj
-   arg2   <---- typ      arg2   
-*)
 (** ** C-level typing constraints *)
 
 Inductive lessdef_c_mq: c_query -> c_query -> Prop :=
