@@ -95,6 +95,45 @@ Proof.
   intros. destruct res; simpl; auto. apply set_reg_lessdef; auto.
 Qed.
 
+(** Pointwise "injection" relation between register maps. *)
+
+Definition regset_inject (f: meminj) (rs rs': Regmap.t val): Prop :=
+  forall r, Val.inject f rs#r rs'#r.
+
+Lemma regs_inject:
+  forall f rs rs', regset_inject f rs rs' -> forall l, Val.inject_list f rs##l rs'##l.
+Proof.
+  induction l; simpl. constructor. constructor; auto.
+Qed.
+
+Lemma set_reg_inject:
+  forall f rs rs' r v v',
+  regset_inject f rs rs' -> Val.inject f v v' ->
+  regset_inject f (rs#r <- v) (rs'#r <- v').
+Proof.
+  intros; red; intros. rewrite ! Regmap.gsspec. destruct (peq r0 r); auto.
+Qed.
+
+Lemma set_res_inject:
+  forall f rs rs' res v v',
+  regset_inject f rs rs' -> Val.inject f v v' ->
+  regset_inject f (regmap_setres res v rs) (regmap_setres res v' rs').
+Proof.
+  intros. destruct res; auto. apply set_reg_inject; auto.
+Qed.
+
+Lemma regset_inject_incr:
+  forall f f' rs rs', regset_inject f rs rs' -> inject_incr f f' -> regset_inject f' rs rs'.
+Proof.
+  intros; red; intros. apply val_inject_incr with f; auto.
+Qed.
+
+Lemma regset_undef_inject:
+  forall f, regset_inject f (Regmap.init Vundef) (Regmap.init Vundef).
+Proof.
+  intros; red; intros. rewrite Regmap.gi. auto.
+Qed.
+
 (** Sets of registers *)
 
 Module Regset := FSetAVL.Make(OrderedPositive).
