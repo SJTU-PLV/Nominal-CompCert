@@ -744,7 +744,11 @@ Proof.
     econstructor; simpl; eauto.
     exploit vmatch_inj; eauto. intro.
     eapply val_inject_compose; eauto.
-    admit. (*ok*)
+    eapply CKLRAlgebra.val_inject_list_compose.
+    econstructor; eauto. split; eauto.
+    revert ARGS0. generalize vargs.
+    induction vargs0; simpl; intros; constructor.
+    eapply vmatch_inj; eauto. auto.
     congruence.
   - inv GE. inv INCR. constructor; simpl; eauto.
     eapply Genv.match_stbls_compose.
@@ -882,18 +886,21 @@ Proof.
       {
         red; simpl; intros. apply pred_dec_true. eapply mmatch_below; eauto.
       }
-(*      assert (BC'INV: forall b, bc' b <> BCinvalid -> exists b' delta, j' b = Some(b', delta)).
+      assert (BC'INV: forall b, bc' b <> BCinvalid -> (exists b' delta, j' b = Some(b', delta)) \/
+                                                 (bc b <> BCinvalid /\ j b = None /\ Mem.valid_block m b)).
       {
         simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
-        rewrite JBELOW by auto. unfold jbc. 
-        admit.
-        destruct (j' b) as [[b' delta] | ].
+        rewrite JBELOW by auto. unfold jbc.
+        destruct (j b) as [[b' delta]|] eqn : Hjb.
+        left.
+        exists b', delta. destruct (bc b); try congruence.
+        right. eauto.
+        destruct (j' b) as [[b' delta] | ]. left.
         exists b', delta; auto.
         congruence.
       }
-*)
   (* Part 3: injection wrt j' implies matching with top wrt bc' *)
-      assert (PMTOP: forall b b' delta ofs, j' b = Some (b', delta) -> pmatch bc' b ofs Ptop).
+  assert (PMTOP: forall b b' delta ofs, j' b = Some (b', delta) -> pmatch bc' b ofs Ptop).
   {
     intros. constructor. simpl; unfold f.
     destruct (Mem.sup_dec b (Mem.support m)).
@@ -905,37 +912,74 @@ Proof.
   {
     intros. inv H1; constructor. eapply PMTOP; eauto.
   }
-(*  assert (SMTOP: forall b, bc' b <> BCinvalid -> smatch bc' m' b Ptop).
+  assert (SMTOP: forall b, bc' b <> BCinvalid -> smatch bc' m'0 b Ptop).
   {
     intros; split; intros.
-  - exploit BC'INV; eauto. intros (b' & delta & J').
-    exploit Mem.load_inject. eexact IMEM. eauto. eauto. intros (v' & A & B).
-    eapply VMTOP; eauto.
-  - exploit BC'INV; eauto. intros (b'' & delta & J').
-    exploit Mem.loadbytes_inject. eexact IMEM. eauto. eauto. intros (bytes & A & B).
-    inv B. inv H3. inv H7. eapply PMTOP; eauto.
+    - 
+      exploit BC'INV; eauto. intros [(b' & delta & J') | [A [B C]]].
+      exploit Mem.load_inject. eexact Hm3. eauto. eauto. intros (v' & A & B).
+      eapply VMTOP; eauto.
+      eapply vmatch_incr; eauto.
+      eapply vmatch_top.
+      inv MM. exploit mmatch_top. eauto.
+      intros [D E]. eapply D; eauto.
+      erewrite Mem.load_unchanged_on_1 in H2; eauto.
+      intros. red. unfold compose_meminj, inj_of_bc.
+      destruct (bc b); try congruence. rewrite B. reflexivity.
+      rewrite B. reflexivity. rewrite B. reflexivity.
+    - exploit BC'INV; eauto. intros [(b'' & delta & J') | [A [B C]]].
+      exploit Mem.loadbytes_inject. eexact Hm3. eauto. eauto. intros (bytes & A & B).
+      inv B. inv H6. inv H16. eapply PMTOP; eauto.
+      eapply pmatch_incr; eauto.
+      inv MM. exploit mmatch_top. eauto.
+      intros [D E]. eapply E; eauto.
+      erewrite Mem.loadbytes_unchanged_on_1 in H2; eauto.
+      intros. red. unfold compose_meminj, inj_of_bc.
+      destruct (bc b); try congruence. rewrite B. reflexivity.
+      rewrite B. reflexivity. rewrite B. reflexivity.
   }
-*)
       econstructor; eauto.
       * (*sound_stack*)
         eapply sound_stack_new_bound.
         2: inversion H9; eauto.
         eapply sound_stack_exten.
         instantiate (1:= bc).
-        Search sound_stack.
         eapply sound_stack_inv; eauto. intros.
         eapply Mem.loadbytes_unchanged_on_1; eauto.
         intros. red. rewrite JBC_COMPOSE.
         unfold jbc. rewrite H2. reflexivity.
-        admit. (*ok*)
+        intros.
+        unfold bc'.  simpl. rewrite pred_dec_true; eauto.
       * (*romatch*)
-        admit.
+        red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
+        exploit RO; eauto. intros (R & P & Q).
+        split; auto.
+        split. apply bmatch_incr with bc; auto. apply bmatch_ext with m; auto.
+        intros. admit. (*Leave for readonly *)
+        intros; red; intros; elim (Q ofs).
+        apply H7; eauto.
+        destruct (j' b); congruence.
       * (*mmatch*)
-        admit.
+        constructor; simpl; intros.
+        -- apply ablock_init_sound. apply SMTOP. simpl; congruence.
+        -- rewrite PTree.gempty in H2; discriminate.
+        -- apply SMTOP; auto.
+        -- apply SMTOP; auto.
+        -- red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
+           inv H9. eauto.
+           destruct (j' b) as [[bx deltax] | ] eqn:J'.
+           eapply Mem.valid_block_inject_1; eauto.
+           congruence.
       * (*genv_match*)
-        admit.
+        apply genv_match_exten with bc; auto.
+        simpl; intros; split; intros.
+        rewrite pred_dec_true by (eapply mmatch_below; eauto with va). auto.
+        destruct (Mem.sup_dec b (Mem.support m)). auto. destruct (j' b); congruence.
+        simpl; intros. rewrite pred_dec_true by (eapply mmatch_below; eauto with va). auto.
       * (*bc_nostack*)
-        admit.
+        red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
+        apply NOSTK; auto.
+        destruct (j' b); congruence.
 Admitted.
 
 End PRESERVATION.
@@ -957,19 +1001,13 @@ Proof.
   eapply (Genv.is_internal_match MATCH); eauto.
   unfold transf_fundef, transf_partial_fundef.
   intros ? [|] [|]; cbn -[transf_function]; inversion 1; auto.
-- intros q1 q2 s1 Hq Hs1. exploit transf_initial_states; eauto.
-  intros (i & st2 & A & B).
-  exists i, st2. split; eauto. split; eauto.
-  admit.
+- intros q1 q2 s1 Hq Hs1.
+  eapply transf_initial_states; eauto.
 - intros n s1 s2 r1 (Hs & SOUND) Hr1.
   eapply transf_final_states; eauto.
 - intros n s1 s2 q1 (Hs & SOUND) Hq1.
   edestruct transf_external_states as (w' & q2 & Hq2 & Hq & Hse' & Hk); eauto.
   exists w', q2. repeat apply conj; eauto.
-  intros r1 r2 s1' Hr Hs1'. exploit Hk; eauto.
-  intros (i' & s2' & AFTER & MATCH').
-  exists i', s2'. repeat apply conj; eauto.
-  admit.
 - intros s1 t s1' STEP n s2 (Hs & SOUND). subst. cbn in *.
   exploit transf_step_correct; eauto.
   intros [ [n2 [s2' [A B]]] | [n2 [A [B C]]]].
@@ -979,7 +1017,7 @@ Proof.
   split; eauto. eapply sound_step; eauto.
 - apply lt_wf.
 Qed.
-
+(*
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (vamatch @ cc_c injp) (vamatch @ cc_c inj) (RTL.semantics prog) (RTL.semantics tprog).
@@ -1006,3 +1044,4 @@ Proof.
   exists n2; exists s2; split; auto. right; split; auto. subst t; apply star_refl.
 - apply lt_wf.
 Qed.
+*)
