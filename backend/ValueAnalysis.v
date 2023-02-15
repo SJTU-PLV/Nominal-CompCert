@@ -1235,8 +1235,10 @@ Section SOUNDNESS.
 
 Variable prog: program.
 Variable ge: Genv.symtbl.
+(* 
 Variable m0: mem.
 Variable bc0: block_classification.
+*)
 Hypothesis GEVALID: Genv.valid_for (erase_program prog) ge.
 
 Let rm := romem_for prog.
@@ -1260,12 +1262,13 @@ Let rmge := romem_for_symtbl ge.
 
 Inductive sound_stack: block_classification -> list stackframe -> mem -> sup -> Prop :=
   | sound_stack_nil: forall (bc: block_classification) m bound,
-      (forall b, sup_In b (Mem.support m0) -> bc b = bc0 b) ->
+(*      (forall b, sup_In b (Mem.support m0) -> bc b = bc0 b) ->
       (forall b ofs n bytes,
           sup_In b (Mem.support m0) -> bc b = BCinvalid -> n >= 0 ->
           Mem.loadbytes m b ofs n = Some bytes ->
           Mem.loadbytes m0 b ofs n = Some bytes) ->
       Mem.sup_include (Mem.support m0) bound ->
+*)
       sound_stack bc nil m bound
   | sound_stack_public_call:
       forall (bc: block_classification) res f sps sp pc e stk m bound bc' bound' ae
@@ -1342,7 +1345,7 @@ Lemma sound_stack_ext:
   sound_stack bc stk m' bound.
 Proof.
   induction 1; intros INV.
-- assert (forall b, sup_In b (Mem.support m0) -> sup_In b bound) by (intros; eauto).
+- (* assert (forall b, sup_In b (Mem.support m0) -> sup_In b bound) by (intros; eauto). *)
   constructor; auto.
 - assert (sup_In sp bound') by eauto with va.
   eapply sound_stack_public_call; eauto. apply IHsound_stack; intros.
@@ -1431,8 +1434,9 @@ Lemma sound_stack_exten:
 Proof.
   intros. inv H.
 - constructor; eauto.
-  + intros. rewrite H0 by eauto. auto.
+(*  + intros. rewrite H0 by eauto. auto.
   + intros. eapply H2; auto. rewrite <- H0; auto.
+*)
 - assert (sup_In (fresh_block sps) bound') by eauto with va.
   eapply sound_stack_public_call; eauto.
   rewrite H0; auto.
@@ -1767,6 +1771,8 @@ Qed.
 
 (** ** Preservation of the invariant at call sites *)
 
+
+(*
 Inductive sound_query bc m: c_query -> Prop :=
   sound_query_intro vf sg vargs:
     genv_match bc ge ->
@@ -1795,7 +1801,7 @@ Inductive sound_reply bc m: c_reply -> Prop :=
 
 Theorem sound_initial:
   forall q st,
-    sound_query bc0 m0 q ->
+    sound_query q ->
     initial_state (Genv.globalenv ge prog) q st ->
     sound_state st.
 Proof.
@@ -1830,12 +1836,12 @@ Proof.
     apply sound_stack_exten with bc; auto.
     apply sound_stack_ext with m; auto.
 Qed.
-
+*)
 End SOUNDNESS.
 
 
 (** ** Overall preservation property *)
-
+(*
 Record vamatch_world :=
   vaw {
     vaw_symtbl: Genv.symtbl;
@@ -1863,7 +1869,7 @@ Proof.
   - intros. edestruct sound_external as (? & ? & ?); eauto. eexists (vaw _ _ _); cbn; eauto.
   - eauto using sound_final.
 Qed.
-
+*)
 (** ** Interface without bc *)
 
 
@@ -1907,143 +1913,6 @@ Next Obligation.
 Qed.
 
 
-
-Section BCgen.
-  
-Variable prog: program.
-Variable ge: Genv.symtbl.
-Variable m0: mem.
-(* Variable bc0: block_classification. *)
-
-Hypothesis GEVALID: Genv.valid_for (erase_program prog) ge.
-
-Let rm := romem_for prog.
-  
-Definition valid_val (m:mem) (v:val) : Prop :=
-  match v with
-  |Vptr b ofs => Mem.valid_block m b
-  |_ => True
-  end.
-
-Inductive valid_vals (m:mem) : list val -> Prop :=
-  | valid_vals_nil : valid_vals m nil
-  | valid_vals_cons : forall v vl,
-    valid_val m v -> valid_vals m vl -> valid_vals m (v :: vl).
-
-Lemma valid_vals_in : forall  vl v m,
-  valid_vals m vl -> In v vl -> valid_val m v.
-Proof.
-  induction 1; intros. inv H.
-  destruct H1. subst. eauto.
-  eauto.
-Qed.
-
-Definition valid_readvalue (m:mem) : Prop :=
-  forall b, Mem.valid_block m b ->
-        (forall chunk ofs v, Mem.load chunk m b ofs = Some v -> valid_val m v) /\
-         (forall ofs b' ofs' q i, Mem.loadbytes m b ofs 1 = Some (Fragment (Vptr b' ofs') q i :: nil) -> Mem.valid_block m b').
-
-(** Lemmas about bc_of_se_mem *)
-
-Lemma valid_pmatch : forall b m,
-    Mem.valid_block m b <->
-    (bc_of_se_mem ge m) b <> BCinvalid.
-Proof.
-  intros. simpl.
-  split; intros. simpl. rewrite pred_dec_true; eauto.
-  destruct Genv.invert_symbol; congruence.
-  destruct Mem.sup_dec; eauto. congruence.
-Qed.
-
-Lemma valid_vmatch : forall v m,
-    valid_val m v ->
-    vmatch (bc_of_se_mem ge m) v Vtop.
-Proof.
-  intros. destruct v; constructor.
-  simpl in H. constructor.
-  eapply valid_pmatch; eauto.
-Qed.
-
-Lemma bc_of_se_mem_nostack : forall m,
-    bc_nostack (bc_of_se_mem ge m).
-Proof.
-  intros. red. intros.
-  simpl. destruct Mem.sup_dec; try congruence.
-  destruct Genv.invert_symbol; try congruence.
-Qed.
-
-(** Requirement of mem in query *)
-Inductive valid_mem (m:mem) : Prop :=
-  valid_mem_intros: forall 
-      (SUP: Mem.sup_include (Genv.genv_sup ge) (Mem.support m))
-      (READ: valid_readvalue m),
-    valid_mem m.
-
-Inductive sound_query' m: c_query -> Prop :=
-  sound_query'_intro : forall vf sg vargs,
-      valid_mem m ->
-      valid_val m vf ->
-      valid_vals m vargs ->
-      sound_query' m (cq vf sg vargs m).
-      
-Lemma sound_query_valid: forall m cq,
-    sound_query' m cq ->
-    sound_query ge (bc_of_se_mem ge m) m cq.
-Proof.
-  intros. inv H.
-  econstructor; eauto. inv H0.
-  - (* genv_match *)
-    constructor.
-    + intros. split; intros.
-      unfold bc_of_se_mem.
-      exploit Genv.genv_symb_range; eauto.
-      intro SUPIN. simpl.
-      rewrite pred_dec_true. 2: eauto with mem.
-      exploit Genv.find_invert_symbol; eauto.
-      intro H0. rewrite H0. reflexivity.
-      unfold bc_of_se_mem in H. simpl in H.
-      destruct Mem.sup_dec; try discriminate.
-      destruct Genv.invert_symbol eqn:INVERT; try discriminate.
-      inv H.
-      apply Genv.invert_find_symbol; eauto.
-    + intros. simpl. split.
-      rewrite pred_dec_true. 2: eauto with mem.
-      destruct Genv.invert_symbol; congruence.
-      rewrite pred_dec_true. 2: eauto with mem.
-      destruct Genv.invert_symbol; congruence.
-  - apply valid_vmatch; eauto.
-  - intros. exploit valid_vals_in; eauto.
-    intro IN. apply valid_vmatch; eauto.
-  - (* mmatch *)
-    constructor.
-    + intros. simpl in H. destruct Mem.sup_dec; destruct Genv.invert_symbol;
-        discriminate.
-    + intros. simpl in H3. inv H3.
-    + intros. simpl.
-      constructor.
-      -- intros. inv H0. exploit READ; eauto.
-         eapply valid_pmatch; eauto.
-         intros [A B].
-         apply valid_vmatch; eauto.
-      -- intros. constructor. eapply valid_pmatch; eauto.
-         inv H0. exploit READ; eauto. eapply valid_pmatch; eauto.
-         intros [A B].
-         eauto.
-    + intros. simpl. constructor.
-      -- intros. inv H0. exploit READ; eauto.
-         eapply valid_pmatch; eauto.
-         intros [A B].
-         apply valid_vmatch; eauto.
-      -- intros. constructor. eapply valid_pmatch; eauto.
-         inv H0. exploit READ; eauto. eapply valid_pmatch; eauto.
-         intros [A B].
-         eauto.
-    + red. intros. apply valid_pmatch in H. eauto.
-  - apply bc_of_se_mem_nostack.
-  - admit.
-Abort.
-
-End BCgen.
 
 
 (** * vamatch *)
@@ -2531,7 +2400,7 @@ Global Hint Resolve areg_sound aregs_sound: va.
 
 Ltac InvSoundState :=
   match goal with
-  | H: sound_state ?prog ?ge ?m0 ?bc0 ?st |- _ => inv H
+  | H: sound_state ?prog ?ge ?st |- _ => inv H
   end.
 
 Definition avalue (a: VA.t) (r: reg) : aval :=
@@ -2541,8 +2410,8 @@ Definition avalue (a: VA.t) (r: reg) : aval :=
   end.
 
 Lemma avalue_sound:
-  forall prog ge m0 bc0 s f sp pc e m r,
-  sound_state prog ge m0 bc0 (State s f (Vptr sp Ptrofs.zero) pc e m) ->
+  forall prog ge s f sp pc e m r,
+  sound_state prog ge (State s f (Vptr sp Ptrofs.zero) pc e m) ->
   exists bc,
      vmatch bc e#r (avalue (analyze (romem_for prog) f)!!pc r)
   /\ genv_match bc ge
@@ -2558,8 +2427,8 @@ Definition aaddr (a: VA.t) (r: reg) : aptr :=
   end.
 
 Lemma aaddr_sound:
-  forall prog ge m0 bc0 s f sp pc e m r b ofs,
-  sound_state prog ge m0 bc0 (State s f (Vptr sp Ptrofs.zero) pc e m) ->
+  forall prog ge s f sp pc e m r b ofs,
+  sound_state prog ge (State s f (Vptr sp Ptrofs.zero) pc e m) ->
   e#r = Vptr b ofs ->
   exists bc,
      pmatch bc b ofs (aaddr (analyze (romem_for prog) f)!!pc r)
@@ -2577,8 +2446,8 @@ Definition aaddressing (a: VA.t) (addr: addressing) (args: list reg) : aptr :=
   end.
 
 Lemma aaddressing_sound:
-  forall prog ge m0 bc0 s f sp pc e m addr args b ofs,
-  sound_state prog ge m0 bc0 (State s f (Vptr sp Ptrofs.zero) pc e m) ->
+  forall prog ge s f sp pc e m addr args b ofs,
+  sound_state prog ge (State s f (Vptr sp Ptrofs.zero) pc e m) ->
   eval_addressing ge (Vptr sp Ptrofs.zero) addr e##args = Some (Vptr b ofs) ->
   exists bc,
      pmatch bc b ofs (aaddressing (analyze (romem_for prog) f)!!pc addr args)
@@ -2622,8 +2491,8 @@ Proof.
 Qed.
 
 Lemma aaddr_arg_sound:
-  forall prog ge m0 bc0 s f sp pc e m a b ofs,
-  sound_state prog ge m0 bc0 (State s f (Vptr sp Ptrofs.zero) pc e m) ->
+  forall prog ge s f sp pc e m a b ofs,
+  sound_state prog ge (State s f (Vptr sp Ptrofs.zero) pc e m) ->
   eval_builtin_arg ge (fun r => e#r) (Vptr sp Ptrofs.zero) m a (Vptr b ofs) ->
   Genv.valid_for (erase_program prog) ge ->
   exists bc,

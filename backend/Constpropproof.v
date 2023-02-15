@@ -19,7 +19,7 @@ Require Compopts Machregs.
 Require Import Op Registers RTL.
 Require Import Liveness ValueDomain ValueAOp ValueAnalysis.
 Require Import ConstpropOp ConstpropOpproof Constprop.
-Require Import LanguageInterface cklr.Inject.
+Require Import LanguageInterface cklr.Inject cklr.InjectFootprint cklr.VAInject.
 
 Definition match_prog (prog tprog: program) :=
   match_program (fun _ f tf => tf = transf_fundef (romem_for prog) f) eq prog tprog.
@@ -406,10 +406,10 @@ Ltac TransfInstr :=
 (** The proof of simulation proceeds by case analysis on the transition
   taken in the source code. *)
 
-Lemma transf_step_correct m0 bc0:
+Lemma transf_step_correct:
   forall s1 t s2,
   step ge s1 t s2 ->
-  forall n1 s1' (SS: sound_state prog se m0 bc0 s1) (MS: match_states n1 s1 s1'),
+  forall n1 s1' (SS: sound_state prog se s1) (MS: match_states n1 s1 s1'),
   (exists n2, exists s2', step tge s1' t s2' /\ match_states n2 s2 s2')
   \/ (exists n2, n2 < n1 /\ t = E0 /\ match_states n2 s2 s1')%nat.
 Proof.
@@ -684,16 +684,25 @@ Qed.
 
 Lemma transf_initial_states:
   forall q1 q2 st1, match_query (cc_c inj) w q1 q2 -> initial_state ge q1 st1 ->
-  exists n, exists st2, initial_state tge q2 st2 /\ match_states n st1 st2.
+  exists n, exists st2, initial_state tge q2 st2 /\ match_states n st1 st2 /\ sound_state prog ge st1.
 Proof.
   intros. destruct H.  inv H0. inv GE.
   exploit functions_translated; eauto.
   intros FIND.
-  exists O; exists (Callstate nil vf2 vargs2 m2); split.
+  exists O; exists (Callstate nil vf2 vargs2 m2); repeat apply conj.
   - setoid_rewrite <- (sig_function_translated (romem_for prog) (Internal f)).
     constructor; auto.
   - econstructor; eauto. constructor. inv H2. simpl. reflexivity.
-Qed.
+  - cbn in *. inv H2. cbn in *.
+    set (bc := bc_of_inj f0 ge). econstructor. instantiate (1:= bc).
+    constructor; eauto.
+    + eapply bc_of_inj_vmatch; eauto.
+    + eapply bc_of_inj_args_vmatch; eauto.
+    + admit. (* Leave for readonly invariant *)
+    + eapply bc_of_inj_mmatch; eauto.
+    + eapply bc_of_inj_genv_match; eauto.
+    + eapply bc_of_inj_nostack; eauto.
+Admitted.
 
 Lemma transf_final_states:
   forall n st1 st2 r1,
@@ -707,29 +716,227 @@ Proof.
 Qed.
 
 Lemma transf_external_states:
-  forall n st1 st2 q1, match_states n st1 st2 -> at_external ge st1 q1 ->
-  exists w' q2, at_external tge st2 q2 /\ match_query (cc_c inj) w' q1 q2 /\ match_senv (cc_c inj) w' se tse /\
-  forall r1 r2 st1', match_reply (cc_c inj) w' r1 r2 -> after_external st1 r1 st1' ->
-  exists n' st2', after_external st2 r2 st2' /\ match_states n' st1' st2'.
+  forall n st1 st2 q1, match_states n st1 st2 -> sound_state prog ge st1 -> at_external ge st1 q1 ->
+  exists w' q2, at_external tge st2 q2 /\ match_query (cc_c injp) w' q1 q2 /\ match_senv (cc_c injp) w' se tse /\
+  forall r1 r2 st1', match_reply (cc_c injp) w' r1 r2 -> after_external st1 r1 st1' ->
+  exists n' st2', after_external st2 r2 st2' /\ match_states n' st1' st2' /\ sound_state prog ge st1'.
 Proof.
-  intros n st1 st2 q1 Hst Hq1. destruct Hq1. inv Hst.
+  intros n st1 st2 q1 Hst Hs Hq1. destruct Hq1. inv Hst.
   exploit match_stbls_incr; eauto. intro MSTB.
   exploit functions_translated; eauto. simpl.
   intro FIND'.
-  exists (injw j (Mem.support m) (Mem.support m')). eexists. cbn. intuition idtac.
+  inv Hs. exploit mmatch_inj; eauto. eapply mmatch_below; eauto.
+  intro.
+  exploit Mem.inject_compose. apply H0. apply MEM.
+  intro MEM'.
+  set (jbc := fun b => match bc b with
+                    | BCinvalid => None
+                    | _ => j b end).
+  assert (JBC_COMPOSE: forall b, compose_meminj (inj_of_bc bc) j b = jbc b).
+  {
+    intro b. unfold compose_meminj,inj_of_bc, jbc.
+    destruct (bc b); simpl; eauto;
+    destruct (j b) as [[x y]|]; eauto.
+  }
+  eexists (injpw _ _ _ MEM'). eexists. cbn. intuition idtac.
   - econstructor; eauto.
   - destruct VF; try discriminate.
-    econstructor; simpl; eauto. congruence.
-  - inv GE. inv INCR.
-    constructor; simpl; eauto.
-  - inv H1. destruct H0 as ([j' s1 s2] & INCR' & Hr).
-    inv Hr. inv H4. simpl in *.
+    econstructor; simpl; eauto.
+    exploit vmatch_inj; eauto. intro.
+    eapply val_inject_compose; eauto.
+    admit. (*ok*)
+    congruence.
+  - inv GE. inv INCR. constructor; simpl; eauto.
+    eapply Genv.match_stbls_compose.
+    eapply inj_of_bc_preserves_globals; auto.
+    eauto.
+  - inv H2. destruct H1 as ([j' s1 s2 MEM''] & Hw' & Hr).
+    inv Hw'.
+    inv Hr. cbn in *. inv H5. simpl in *.
     eexists _, (Returnstate s' vres2 m2'); split.
-    econstructor; eauto.
-    econstructor. 2: eauto.
-    eapply match_stackframes_incr; eauto. inv INCR'. eauto.
-    etransitivity; eauto. eauto.
-Qed.
+    econstructor; eauto. split.
+    + (*match_states*)
+      set (j'' := fun b => match bc b with
+                        |BCinvalid =>
+                           if j b then j b else j' b
+                        |_ => j' b
+                        end
+          ).
+      assert (INCR1 : inject_incr j j'').
+      { red. intros. destruct (block_class_eq (bc b) BCinvalid).
+        unfold j''; rewrite e; eauto. rewrite H1.
+        reflexivity.
+        unfold j''. destruct (bc b) eqn:BC; try congruence; apply H11;
+        unfold compose_meminj, inj_of_bc;
+        rewrite BC, H1; reflexivity.
+      }
+      assert (INCR2: inject_incr j' j'').
+      { red. intros.
+        destruct (bc b) eqn:BC;
+          unfold j''; rewrite BC; eauto.
+        destruct (j b) as [[b'' d']|] eqn :Hj.
+        exploit H12; eauto. unfold compose_meminj, inj_of_bc.
+        rewrite BC. reflexivity. intros [A B].
+        inv MEM. exploit mi_freeblocks; eauto. intro. congruence.
+        eauto.
+      }
+      econstructor.
+      instantiate (1:= j'').
+      * eapply match_stackframes_incr; eauto.
+      * eauto.
+      * etransitivity; eauto. econstructor; eauto.
+        red. intros.
+        destruct (bc b) eqn:BC.
+        -- eapply H12; eauto. unfold compose_meminj,inj_of_bc.
+           rewrite BC. reflexivity.
+           unfold j'' in H2. rewrite BC in H2. rewrite H1 in H2.
+           eauto.
+        -- eapply H12; eauto. unfold compose_meminj,inj_of_bc.
+           rewrite BC, H1. reflexivity. unfold j'' in H2.
+           rewrite BC in H2. eauto.
+        -- eapply H12; eauto. unfold compose_meminj,inj_of_bc.
+           rewrite BC, H1. reflexivity. unfold j'' in H2.
+           rewrite BC in H2. eauto.
+        -- eapply H12; eauto. unfold compose_meminj,inj_of_bc.
+           rewrite BC, H1. reflexivity. unfold j'' in H2.
+           rewrite BC in H2. eauto.
+        -- inv H9. eauto.
+        -- inv H10. eauto.
+      * clear - MEM MEM'' INCR2 H9 H10.
+        inv MEM''.
+        constructor; eauto.
+        -- inv mi_inj. constructor; eauto.
+           ++ intros. destruct (bc b1) eqn:BC;
+              unfold j'' in H; rewrite BC in H; eauto.
+              destruct (j b1) as [[b2' d']|] eqn:Hjb1.
+              **
+                inversion H9. apply unchanged_on_perm in H0 as P1; eauto.
+                inv H. inversion H10. eapply unchanged_on_perm0.
+                red. intros b1' delta0 A.
+                unfold compose_meminj, inj_of_bc in A. intro.
+                destruct (bc b1') eqn: BC0; try congruence.
+                --- 
+                  destruct (j b1') as [[b2'' d'']|] eqn: Hjb1'.
+                  inv A. inv MEM.
+                  exploit mi_no_overlap0. 2:apply Hjb1.
+                  2: apply Hjb1'. congruence. eauto with mem.
+                  eauto with mem.
+                  intros [A | B]. congruence. extlia. congruence.
+                --- 
+                  destruct (j b1') as [[b2'' d'']|] eqn: Hjb1'.
+                  inv A. inv MEM.
+                  exploit mi_no_overlap0. 2:apply Hjb1.
+                  2: apply Hjb1'. congruence. eauto with mem.
+                  eauto with mem.
+                  intros [A | B]. congruence. extlia. congruence.
+                --- 
+                  destruct (j b1') as [[b2'' d'']|] eqn: Hjb1'.
+                  inv A. inv MEM.
+                  exploit mi_no_overlap0. 2:apply Hjb1.
+                  2: apply Hjb1'. congruence. eauto with mem.
+                  eauto with mem.
+                  intros [A | B]. congruence. extlia. congruence.
+                --- inv MEM. eauto.
+                --- eapply Mem.perm_inject; eauto.
+                --- red. unfold compose_meminj, inj_of_bc.
+                    rewrite BC. reflexivity.
+                --- inv MEM. destruct (Mem.sup_dec b1 (Mem.support m)).
+                    eauto. exploit mi_freeblocks0; eauto. congruence.
+              ** eapply mi_perm; eauto.
+           ++ admit. (*ok*)
+           ++ admit. (*ok*)
+        -- (* source_range *)
+           intros. admit. (*ok*)
+        -- intros. admit. (*ok*)
+        -- red. intros. admit. (*ok*)
+        -- intros. admit.
+        -- intros. admit.
+    + (* sound_state *)
+      (* Part 2: constructing bc' from j' *)
+      assert (JBELOW: forall b, sup_In b (Mem.support m) -> j' b = jbc b).
+      {
+        intros. destruct (jbc b) as [[b' delta] | ] eqn:EQ.
+        rewrite <- JBC_COMPOSE in EQ.
+        eapply H11; eauto.
+        destruct (j' b) as [[b'' delta'] | ] eqn:EQ'; auto.
+        exploit H12; eauto. rewrite JBC_COMPOSE. eauto.
+        intros [A B]. exfalso. eauto.
+      }
+      set (f := fun b => if Mem.sup_dec b (Mem.support m)
+                      then bc b
+                      else match j' b with None => BCinvalid | Some _ => BCother end).
+      assert (F_stack: forall b1 b2, f b1 = BCstack -> f b2 = BCstack -> b1 = b2).
+      {
+        assert (forall b, f b = BCstack -> bc b = BCstack).
+        { unfold f; intros. destruct (Mem.sup_dec b (Mem.support m)); auto. destruct (j' b); discriminate. }
+        intros. apply (bc_stack bc); auto.
+      }
+      assert (F_glob: forall b1 b2 id, f b1 = BCglob id -> f b2 = BCglob id -> b1 = b2).
+      {
+        assert (forall b id, f b = BCglob id -> bc b = BCglob id).
+        { unfold f; intros. destruct (Mem.sup_dec b (Mem.support m)); auto. destruct (j' b); discriminate. }
+        intros. eapply (bc_glob bc); eauto.
+      }
+      set (bc' := BC f F_stack F_glob). unfold f in bc'.
+      assert (BCINCR: bc_incr bc bc').
+      {
+        red; simpl; intros. apply pred_dec_true. eapply mmatch_below; eauto.
+      }
+(*      assert (BC'INV: forall b, bc' b <> BCinvalid -> exists b' delta, j' b = Some(b', delta)).
+      {
+        simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
+        rewrite JBELOW by auto. unfold jbc. 
+        admit.
+        destruct (j' b) as [[b' delta] | ].
+        exists b', delta; auto.
+        congruence.
+      }
+*)
+  (* Part 3: injection wrt j' implies matching with top wrt bc' *)
+      assert (PMTOP: forall b b' delta ofs, j' b = Some (b', delta) -> pmatch bc' b ofs Ptop).
+  {
+    intros. constructor. simpl; unfold f.
+    destruct (Mem.sup_dec b (Mem.support m)).
+    rewrite JBELOW in H1 by auto.
+    unfold jbc in H1. destruct (bc b); try congruence; eauto.
+    rewrite H1; congruence.
+  }
+  assert (VMTOP: forall v v', Val.inject j' v v' -> vmatch bc' v Vtop).
+  {
+    intros. inv H1; constructor. eapply PMTOP; eauto.
+  }
+(*  assert (SMTOP: forall b, bc' b <> BCinvalid -> smatch bc' m' b Ptop).
+  {
+    intros; split; intros.
+  - exploit BC'INV; eauto. intros (b' & delta & J').
+    exploit Mem.load_inject. eexact IMEM. eauto. eauto. intros (v' & A & B).
+    eapply VMTOP; eauto.
+  - exploit BC'INV; eauto. intros (b'' & delta & J').
+    exploit Mem.loadbytes_inject. eexact IMEM. eauto. eauto. intros (bytes & A & B).
+    inv B. inv H3. inv H7. eapply PMTOP; eauto.
+  }
+*)
+      econstructor; eauto.
+      * (*sound_stack*)
+        eapply sound_stack_new_bound.
+        2: inversion H9; eauto.
+        eapply sound_stack_exten.
+        instantiate (1:= bc).
+        Search sound_stack.
+        eapply sound_stack_inv; eauto. intros.
+        eapply Mem.loadbytes_unchanged_on_1; eauto.
+        intros. red. rewrite JBC_COMPOSE.
+        unfold jbc. rewrite H2. reflexivity.
+        admit. (*ok*)
+      * (*romatch*)
+        admit.
+      * (*mmatch*)
+        admit.
+      * (*genv_match*)
+        admit.
+      * (*bc_nostack*)
+        admit.
+Admitted.
 
 End PRESERVATION.
 
@@ -738,9 +945,44 @@ End PRESERVATION.
 
 Require Import Invariant.
 
+
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (vamatch @ cc_c inj) (vamatch @ cc_c inj) (RTL.semantics prog) (RTL.semantics tprog).
+  forward_simulation (cc_c injp) (cc_c inj) (RTL.semantics prog) (RTL.semantics tprog).
+Proof.
+  fsim (eapply Build_fsim_properties with (order := lt)
+                                          (match_states := fun i s1 s2 => match_states prog w i s1 s2
+                                                                       /\ sound_state prog se1 s1 )).
+- inv Hse. destruct 1. cbn. destruct H; try congruence; eauto.
+  eapply (Genv.is_internal_match MATCH); eauto.
+  unfold transf_fundef, transf_partial_fundef.
+  intros ? [|] [|]; cbn -[transf_function]; inversion 1; auto.
+- intros q1 q2 s1 Hq Hs1. exploit transf_initial_states; eauto.
+  intros (i & st2 & A & B).
+  exists i, st2. split; eauto. split; eauto.
+  admit.
+- intros n s1 s2 r1 (Hs & SOUND) Hr1.
+  eapply transf_final_states; eauto.
+- intros n s1 s2 q1 (Hs & SOUND) Hq1.
+  edestruct transf_external_states as (w' & q2 & Hq2 & Hq & Hse' & Hk); eauto.
+  exists w', q2. repeat apply conj; eauto.
+  intros r1 r2 s1' Hr Hs1'. exploit Hk; eauto.
+  intros (i' & s2' & AFTER & MATCH').
+  exists i', s2'. repeat apply conj; eauto.
+  admit.
+- intros s1 t s1' STEP n s2 (Hs & SOUND). subst. cbn in *.
+  exploit transf_step_correct; eauto.
+  intros [ [n2 [s2' [A B]]] | [n2 [A [B C]]]].
+  exists n2; exists s2'; split; auto. left; apply plus_one; auto. split. eauto.
+  eapply sound_step; eauto.
+  exists n2; exists s2; split; auto. right; split; auto. subst t; apply star_refl.
+  split; eauto. eapply sound_step; eauto.
+- apply lt_wf.
+Qed.
+
+Theorem transf_program_correct prog tprog:
+  match_prog prog tprog ->
+  forward_simulation (vamatch @ cc_c injp) (vamatch @ cc_c inj) (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
   intros MATCH. eapply source_invariant_fsim; eauto using rtl_vamatch. revert MATCH.
   fsim (eapply Build_fsim_properties with (order := lt) (match_states := match_states prog w));

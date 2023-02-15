@@ -11,7 +11,7 @@ Unset Program Cases.
 
 
 (** * Preliminaries *)
-
+ 
 Program Definition bc_of_symtbl (se: Genv.symtbl) :=
   {|
     bc_img b :=
@@ -331,7 +331,7 @@ Proof.
   destruct Genv.invert_symbol; congruence.
 Qed.
 
-(** ** Expanding [vainj] *)
+(** ** Expanding [vainj] 
 
 (** Note: this only works in this direction; in the other there is no
   guarantee that the block classification used by [vamatch] and the
@@ -486,3 +486,4 @@ Proof.
         }
         edestruct SEP23'; eauto.
 Qed.
+*)
