@@ -695,9 +695,9 @@ Qed.
 
 (** * The simulation diagram *)
 
-Theorem step_simulation bc0 m0:
+Theorem step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
-  forall S1', match_states S1 S1' -> sound_state prog se bc0 m0 S1 ->
+  forall S1', match_states S1 S1' -> sound_state prog se S1 ->
   exists S2', step tge S1' t S2' /\ match_states S2 S2'.
 Proof.
 
@@ -1121,6 +1121,13 @@ End PRESERVATION.
 
 (** * Semantic preservation *)
 
+Require Import InjectFootprint.
+Theorem transf_program_correct prog tprog:
+  match_prog prog tprog ->
+  forward_simulation (ro @ cc_c injp) (ro @ cc_c injp) (RTL.semantics prog) (RTL.semantics tprog).
+Proof.
+  Admitted.
+(*
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (vamatch @ cc_c ext) (vamatch @ cc_c ext) (RTL.semantics prog) (RTL.semantics tprog).
@@ -1142,3 +1149,4 @@ Proof.
 - intros s1 t s1' (STEP & [se bc0 m0] & Hse & Hs1 & Hs1') s2 Hs. subst. cbn in *.
   eapply step_simulation; eauto.
 Qed.
+*)

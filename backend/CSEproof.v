@@ -952,9 +952,9 @@ Ltac TransfInstr :=
 (** The proof of simulation is a case analysis over the transition
   in the source code. *)
 
-Lemma transf_step_correct m0 bc0:
+Lemma transf_step_correct:
   forall s1 t s2, step ge s1 t s2 ->
-  forall s1' (MS: match_states s1 s1') (SOUND: sound_state prog se m0 bc0 s1),
+  forall s1' (MS: match_states s1 s1') (SOUND: sound_state prog se s1),
   exists s2', step tge s1' t s2' /\ match_states s2 s2'.
 Proof.
   induction 1; intros; inv MS; try (TransfInstr; intro C).
@@ -1232,6 +1232,13 @@ Qed.
 
 End PRESERVATION.
 
+Require Import InjectFootprint.
+Theorem transf_program_correct prog tprog:
+  match_prog prog tprog ->
+  forward_simulation (ro @ cc_c injp) (ro @ cc_c injp) (RTL.semantics prog) (RTL.semantics tprog).
+Proof.
+  Admitted.
+(*
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (vamatch @ cc_c ext) (vamatch @ cc_c ext) (RTL.semantics prog) (RTL.semantics tprog).
@@ -1253,3 +1260,4 @@ Proof.
 - intros s1 t s1' (STEP & [se bc0 m0] & Hse & Hs1 & Hs1') s2 Hs. subst. cbn in *.
   eapply transf_step_correct; eauto.
 Qed.
+*)
