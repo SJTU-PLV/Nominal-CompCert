@@ -1250,7 +1250,7 @@ Let rmge := romem_for_symtbl ge.
   specific compilation unit, and must be strong enough to establish
   the invariant for *any* compilation unit [cu] compatible with the
   symbol table [ge]. To this effect, we use the following property to
-  ensure global constants have appropriate value in the concrete
+  ensure global constants have appropriatea value in the concrete
   memory state. *)
 
 (* Definition romatch_all bc m :=
@@ -1839,8 +1839,140 @@ Qed.
 *)
 End SOUNDNESS.
 
+(** ** Readonly preservation property *)
 
+Record ro_world :=
+  row {
+      ro_symtbl : Genv.symtbl;
+      ro_mem: mem;
+    }.
+
+Program Definition bc_of_symtbl (se: Genv.symtbl) :=
+  {|
+    bc_img b :=
+      match Genv.invert_symbol se b with
+        | Some id => BCglob id
+        | None => BCinvalid
+      end
+  |}.
+Next Obligation.
+  destruct Genv.invert_symbol; discriminate.
+Qed.
+Next Obligation.
+  destruct (Genv.invert_symbol se b1) eqn:Hb1; inv H.
+  destruct (Genv.invert_symbol se b2) eqn:Hb2; inv H0.
+  apply Genv.invert_find_symbol in Hb1.
+  apply Genv.invert_find_symbol in Hb2.
+  congruence.
+Qed.
+
+Lemma bc_of_symtbl_below se thr:
+  Mem.sup_include (Genv.genv_sup se) thr ->
+  bc_below (bc_of_symtbl se) thr.
+Proof.
+  intros Hthr b. cbn.
+  destruct Genv.invert_symbol eqn:Hb; try congruence. intros _.
+  eapply Mem.sup_include_trans; eauto.
+  apply Genv.invert_find_symbol in Hb.
+  eapply Genv.genv_symb_range; eauto.
+Qed.
+
+(* to be simplified for trans and compose *)
+
+Definition sound_memory_ro ge m : Prop :=
+  romatch (bc_of_symtbl ge) m (romem_for_symtbl ge).
+
+Definition ro_acc m1 m2 : Prop :=
+   forall b ofs n bytes, Mem.valid_block m1 b ->
+                      Mem.loadbytes m2 b ofs n = Some bytes ->
+                      (forall i, ofs <= i < ofs + n -> ~ Mem.perm m1 b i Max Writable) ->
+                      Mem.loadbytes m1 b ofs n = Some bytes.
+
+Inductive sound_query ge m: c_query -> Prop :=
+  sound_query_intro vf sg vargs:
+    sound_memory_ro ge m ->
+    sound_query ge m (cq vf sg vargs m).
+
+Inductive sound_reply m: c_reply -> Prop :=
+  sound_reply_intro res tm:
+    ro_acc m tm ->
+    sound_reply m (cr res tm).
+
+(*
+Inductive sound_state_ro ge m0: state -> Prop :=
+|sound_regular_state_ro : forall s f sp pc e m,
+    sound_memory_ro ge m ->
+    ro_acc m0 m ->
+     sound_state_ro ge m0 (State s f sp pc e m)
+|sound_call_state_ro: forall s fd args m,
+    sound_memory_ro ge m ->
+    ro_acc m0 m ->
+    sound_state_ro ge m0 (Callstate s fd args m)
+|sound_return_state_ro : forall s v m,
+    sound_memory_ro ge m ->
+    ro_acc m0 m ->
+    sound_state_ro ge m0 (Returnstate s v m).
+*)
+Definition ro : invariant li_c :=
+  {|
+    symtbl_inv '(row ge m) := eq ge;
+    query_inv '(row ge m) := sound_query ge m;
+    reply_inv '(row ge m) := sound_reply m;
+  |}.
+
+(*
+Definition ro_inv '(row ge m0) : state -> Prop :=
+  sound_state_ro ge m0.
+
+Lemma ro_acc_trans: forall m1 m2 m3,
+    ro_acc m1 m2 -> ro_acc m2 m3 -> ro_acc m1 m3.
+Proof.
+  intros. red in H. red in H0.
+  red. intros.
+  eapply H; eauto. eapply H0; eauto.
+Lemma rtl_ro prog:
+  preserves (semantics prog) ro ro ro_inv.
+Proof.
+  intros [xse m0] se Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros. inv H0; inv H; try (constructor; eauto).
+    + red. red in H5.
+      unfold Mem.storev in H3. destruct a; try congruence.
+      eapply romatch_store; eauto.
+    + admit.
+    + (*free*) admit.
+    + admit.
+    + (*external*)
+      admit.
+    + admit.
+    + (*free*)
+      admit.
+    + admit.
+    + (*alloc*)
+      admit.
+    + admit.
+    + (*external*)
+      admit.
+    + admit.
+  - intros. inv H. inv H0.
+    constructor; eauto.
+    red. intros. eauto.
+  - intros. inv H0. inv H. exists (row se m).
+    split; cbn in *; eauto.
+    split. constructor; eauto.
+    intros. inv H0. inv H.
+    constructor; eauto.
+    admit. (*acc_preserve_inv*)
+    admit. (*acc_trans*)
+  - intros. inv H0. inv H.
+    constructor; eauto.
+    admit.
+Abort.
+    
+*)    
+  
 (** ** Overall preservation property *)
+
 (*
 Record vamatch_world :=
   vaw {
@@ -1870,50 +2002,6 @@ Proof.
   - eauto using sound_final.
 Qed.
 *)
-(** ** Interface without bc *)
-
-
-(*
-  romem_for
-  Genv.valid_for
-  Genv.symtbl
-
-Definition alloc_global (rm: romem) (idg: ident * globdef fundef unit): romem :=
-  match idg with
-  | (id, Gfun f) =>
-      PTree.remove id rm
-  | (id, Gvar v) =>
-      if v.(gvar_readonly) && negb v.(gvar_volatile) && definitive_initializer v.(gvar_init)
-      then PTree.set id (store_init_data_list (ablock_init Pbot) 0 v.(gvar_init)) rm
-      else PTree.remove id rm
-  end.
- *)
-Program Definition bc_of_se_mem (se : Genv.symtbl) (m:mem) :=
-  {|
-    bc_img b :=
-      if Mem.sup_dec b (Mem.support m) then
-        match Genv.invert_symbol se b with
-        | Some id => BCglob id
-        | None => BCother
-        end
-      else BCinvalid
-  |}.
-Next Obligation.
-  destruct Mem.sup_dec; try discriminate.
-  destruct Genv.invert_symbol; try discriminate.
-Qed.
-Next Obligation.
-  destruct Mem.sup_dec; try discriminate.
-  destruct Mem.sup_dec; try discriminate.
-  destruct Genv.invert_symbol eqn:Hb1; try discriminate.
-  destruct (Genv.invert_symbol se b2) eqn:Hb2; try discriminate.
-  inv H. inv H0.
-  apply Genv.invert_find_symbol in Hb1.
-  apply Genv.invert_find_symbol in Hb2. congruence.
-Qed.
-
-
-
 
 (** * vamatch *)
 (*
@@ -1940,12 +2028,6 @@ ext inj
 
 m2   <----- vamatch se bc m2        Vint
 
-
-vamatch
-ext       <=     ext         <= vamatch
-vamatch          vamatch        ext
-
-injp wt vamatch CA
 
 *)
 Lemma vamatch_propagate :
@@ -2028,7 +2110,7 @@ Proof.
   - inversion H. rewrite mext_sup. eauto.
 Qed.
 *)
-(*
+
 (** ** Soundness of the initial memory abstraction *)
 
 Require Import Axioms.
@@ -2294,44 +2376,7 @@ Proof.
   eapply alloc_global_match; eauto.
 Qed.
 
-Definition romem_consistent (defmap: PTree.t (globdef fundef unit)) (rm: romem) :=
-  forall id ab,
-  rm!id = Some ab ->
-  exists v,
-     defmap!id = Some (Gvar v)
-  /\ v.(gvar_readonly) = true
-  /\ v.(gvar_volatile) = false
-  /\ definitive_initializer v.(gvar_init) = true
-  /\ ab = store_init_data_list (ablock_init Pbot) 0 v.(gvar_init).
 
-Lemma alloc_global_consistent:
-  forall dm rm idg,
-  romem_consistent dm rm ->
-  romem_consistent (PTree.set (fst idg) (snd idg) dm) (alloc_global rm idg).
-Proof.
-  intros; red; intros. destruct idg as [id1 [f1 | v1]]; simpl in *.
-- rewrite PTree.grspec in H0. destruct (PTree.elt_eq id id1); try discriminate.
-  rewrite PTree.gso by auto. apply H; auto.
-- destruct (gvar_readonly v1 && negb (gvar_volatile v1) && definitive_initializer (gvar_init v1)) eqn:RO.
-+ InvBooleans. rewrite negb_true_iff in H4.
-  rewrite PTree.gsspec in *. destruct (peq id id1).
-* inv H0. exists v1; auto.
-* apply H; auto.
-+ rewrite PTree.grspec in H0. destruct (PTree.elt_eq id id1); try discriminate.
-  rewrite PTree.gso by auto. apply H; auto.
-Qed.
-
-Lemma romem_for_consistent:
-  forall cunit, romem_consistent (prog_defmap cunit) (romem_for cunit).
-Proof.
-  assert (REC: forall l dm rm,
-            romem_consistent dm rm ->
-            romem_consistent (fold_left (fun m idg => PTree.set (fst idg) (snd idg) m) l dm)
-                             (fold_left alloc_global l rm)).
-  { induction l; intros; simpl; auto. apply IHl. apply alloc_global_consistent; auto. }
-  intros. apply REC.
-  red; intros. rewrite PTree.gempty in H; discriminate.
-Qed.
 
 Lemma romem_for_consistent_2:
   forall cunit, linkorder cunit prog -> romem_consistent (prog_defmap prog) (romem_for cunit).
@@ -2393,7 +2438,7 @@ Proof.
 Qed.
 
 End INITIAL.
-*)
+
 Global Hint Resolve areg_sound aregs_sound: va.
 
 (** * Interface with other optimizations *)

@@ -196,15 +196,15 @@ Next Obligation.
   destruct H. inv H0. auto.
 Qed.
 
-Next Obligation. (* Mem.alloc *)
-  intros _ _ _ [f m1 m2 Hm] lo hi.
-  destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:Hm1'.
-  edestruct Mem.alloc_parallel_inject
-    as (f' & m2' & b2 & Hm2' & Hm' & Hf' & Hb2 & Hff');
-    eauto using Z.le_refl.
-  rewrite Hm2'.
-  exists (injpw f' m1' m2' Hm'); split; repeat rstep; eauto.
-  constructor.
+Lemma injp_acc_alloc: forall f f' m1 m2 b1 b2 lo hi m1' m2' Hm Hm',
+    Mem.alloc m1 lo hi = (m1',b1) ->
+    Mem.alloc m2 lo hi = (m2',b2) ->
+    inject_incr f f' ->
+    f' b1 = Some (b2, 0) ->
+    (forall b, b<> b1 -> f' b = f b) ->
+    injp_acc (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+Proof.
+  intros. constructor.
   - intros b ofs p Hb Hp.
     eapply Mem.perm_alloc_inv in Hp; eauto.
     destruct (eq_block b b1); eauto; subst.
@@ -220,12 +220,46 @@ Next Obligation. (* Mem.alloc *)
     assert (b = b1).
     {
       destruct (eq_block b b1); eauto.
-      rewrite Hff' in Hb'; eauto.
+      rewrite H3 in Hb'; eauto.
       congruence.
     }
     assert (b' = b2) by congruence.
     subst.
     split; eauto using Mem.fresh_block_alloc.
+Qed.
+
+Next Obligation. (* Mem.alloc *)
+  intros _ _ _ [f m1 m2 Hm] lo hi.
+  destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:Hm1'.
+  edestruct Mem.alloc_parallel_inject
+    as (f' & m2' & b2 & Hm2' & Hm' & Hf' & Hb2 & Hff');
+    eauto using Z.le_refl.
+  rewrite Hm2'.
+  exists (injpw f' m1' m2' Hm'); split; repeat rstep; eauto.
+  eapply injp_acc_alloc; eauto.
+Qed.
+
+Lemma injp_acc_free: forall f m1 m2 b1 b2 delta lo1 sz m1' m2' Hm Hm',
+    Mem.free m1 b1 lo1 (lo1 + sz) = Some m1' ->
+    Mem.free m2 b2 (lo1 + delta) (lo1 + sz + delta) = Some m2' ->
+    f b1 = Some (b2, delta) ->
+    injp_acc (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. constructor.
+  - red. eauto using Mem.perm_free_3.
+  - red. eauto using Mem.perm_free_3.
+  - eapply Mem.free_unchanged_on; eauto.
+    unfold loc_unmapped. congruence.
+  - eapply Mem.free_unchanged_on; eauto.
+    unfold loc_out_of_reach.
+    intros ofs Hofs H'.
+    eelim H'; eauto.
+    eapply Mem.perm_cur_max.
+    eapply Mem.perm_implies; [ | eapply perm_any_N].
+    eapply Mem.free_range_perm; eauto.
+    extlia.
+  - apply inject_incr_refl.
+  - apply inject_separated_refl.
 Qed.
 
 Next Obligation. (* Mem.free *)
@@ -237,21 +271,7 @@ Next Obligation. (* Mem.free *)
   replace (lo1 + delta + sz) with (lo1 + sz + delta) by extlia.
   rewrite Hm2'. repeat rstep.
   exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
-  constructor.
-  - red. eauto using Mem.perm_free_3.
-  - red. eauto using Mem.perm_free_3.
-  - eapply Mem.free_unchanged_on; eauto.
-    unfold loc_unmapped. congruence.
-  - eapply Mem.free_unchanged_on; eauto.
-    unfold loc_out_of_reach.
-    intros ofs Hofs H.
-    eelim H; eauto.
-    eapply Mem.perm_cur_max.
-    eapply Mem.perm_implies; [ | eapply perm_any_N].
-    eapply Mem.free_range_perm; eauto.
-    extlia.
-  - apply inject_incr_refl.
-  - apply inject_separated_refl.
+  eapply injp_acc_free; eauto.
 Qed.
 
 Next Obligation. (* Mem.load *)
@@ -262,6 +282,46 @@ Next Obligation. (* Mem.load *)
   rewrite Hv2. rauto.
 Qed.
 
+Lemma injp_acc_store : forall f chunk v1 v2 b1 b2 ofs1 delta m1 m2 m1' m2' Hm Hm',
+    Mem.store chunk m1 b1 ofs1 v1 = Some m1' ->
+    Mem.store chunk m2 b2 (ofs1 + delta) v2 = Some m2' ->
+    Val.inject f v1 v2 ->
+    f b1 = Some (b2,delta) ->
+    injp_acc (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. constructor.
+  - red. eauto using Mem.perm_store_2.
+  - red. eauto using Mem.perm_store_2.
+  - eapply Mem.store_unchanged_on; eauto.
+    unfold loc_unmapped. congruence.
+  - eapply Mem.store_unchanged_on; eauto.
+    unfold loc_out_of_reach.
+    intros ofs Hofs H'.
+    eelim H'; eauto.
+    edestruct (Mem.store_valid_access_3 chunk m1); eauto.
+    eapply Mem.perm_cur_max.
+    eapply Mem.perm_implies; [ | eapply perm_any_N].
+    eapply H3; eauto.
+    extlia.
+  - apply inject_incr_refl.
+  - apply inject_separated_refl.
+Qed.
+
+Lemma injp_acc_storev : forall f chunk v1 v2 a1 a2 m1 m2 m1' m2' Hm Hm',
+    Mem.storev chunk m1 a1 v1 = Some m1' ->
+    Mem.storev chunk m2 a2 v2 = Some m2' ->
+    Val.inject f a1 a2 -> Val.inject f v1 v2 ->
+    injp_acc (injpw f m1 m2 Hm) (injpw f m1' m2' Hm').
+Proof.
+  intros. unfold Mem.storev in *. destruct a1; try congruence.
+  inv H1.
+  erewrite Mem.address_inject in H0. 2: apply Hm. 3: eauto.
+  eapply injp_acc_store; eauto.
+  apply Mem.store_valid_access_3 in H.
+  destruct H as [A B].
+  apply A. destruct chunk; simpl; lia.
+Qed.
+
 Next Obligation. (* Mem.store *)
   intros _ chunk _ _ [f m1 m2 Hm] _ _ [b1 ofs1 b2 delta Hptr] v1 v2 Hv.
   simpl in *. red.
@@ -269,22 +329,7 @@ Next Obligation. (* Mem.store *)
   edestruct Mem.store_mapped_inject as (m2' & Hm2' & Hm'); eauto.
   rewrite Hm2'. repeat rstep.
   exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
-  constructor.
-  - red. eauto using Mem.perm_store_2.
-  - red. eauto using Mem.perm_store_2.
-  - eapply Mem.store_unchanged_on; eauto.
-    unfold loc_unmapped. congruence.
-  - eapply Mem.store_unchanged_on; eauto.
-    unfold loc_out_of_reach.
-    intros ofs Hofs H.
-    eelim H; eauto.
-    edestruct (Mem.store_valid_access_3 chunk m1); eauto.
-    eapply Mem.perm_cur_max.
-    eapply Mem.perm_implies; [ | eapply perm_any_N].
-    eapply H0; eauto.
-    extlia.
-  - apply inject_incr_refl.
-  - apply inject_separated_refl.
+  eapply injp_acc_store; eauto.
 Qed.
 
 Next Obligation. (* Mem.loadbytes *)

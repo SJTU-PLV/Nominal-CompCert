@@ -125,7 +125,7 @@ CKLR=\
   Mapsrel.v \
   Valuesrel.v Builtinsrel.v Eventsrel.v \
   Coprel.v Clightrel.v \
-  Registersrel.v RTLrel.v \
+  Registersrel.v RTLrel.v VAInject.v \
 
 #  VAInject.v VAExtends.v 
 # Back-end modules (in backend/, $(ARCH)/)

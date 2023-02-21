@@ -14,7 +14,7 @@
 
 Require Import Coqlib Maps Integers Floats Lattice Kildall.
 Require Import AST Linking.
-Require Import Values Builtins Events Memory Globalenvs Smallstep.
+Require Import Values Builtins Events Memory Globalenvs Smallstep Invariant.
 Require Compopts Machregs.
 Require Import Op Registers RTL.
 Require Import Liveness ValueDomain ValueAOp ValueAnalysis.
@@ -36,9 +36,9 @@ Variable prog: program.
 Variable tprog: program.
 Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
-Variable w: CKLR.world inj.
+Variable w: CKLR.world injp.
 Hypothesis TRANSL: match_prog prog tprog.
-Hypothesis GE: CKLR.match_stbls inj w se tse.
+Hypothesis GE: CKLR.match_stbls injp w se tse.
 Hypothesis SEVALID: Genv.valid_for (erase_program prog) se.
 
 Let ge := Genv.globalenv se prog.
@@ -327,40 +327,37 @@ Inductive match_stackframes (j: meminj): stackframe -> stackframe -> Prop :=
 
 Inductive match_states: nat -> state -> state -> Prop :=
   | match_states_intro:
-      forall s sp sp' pc rs m f s' pc' rs' m' n j
+      forall s sp sp' pc rs m f s' pc' rs' m' n j MEM
            (STACKS: list_forall2 (match_stackframes j) s s')
            (PC: match_pc f rs m n pc pc')
            (REGS: regset_inject j rs rs')
            (SP: j sp = Some (sp',0))
-           (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m')))
-           (MEM: Mem.inject j m m'),
+           (INCR: injp_acc w (injpw j m m' MEM)),
       match_states n (State s f (Vptr sp Ptrofs.zero) pc rs m)
                     (State s' (transf_function (romem_for prog) f) (Vptr sp' Ptrofs.zero) pc' rs' m')
   | match_states_call:
-      forall s vf args m s' vf' args' m' j
+      forall s vf args m s' vf' args' m' j MEM
            (STACKS: list_forall2 (match_stackframes j) s s')
            (VF: Val.inject j vf vf')
            (ARGS: Val.inject_list j args args')
-           (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m')))
-           (MEM: Mem.inject j m m'),
+           (INCR: injp_acc w (injpw j m m' MEM)),
       match_states O (Callstate s vf args m)
                      (Callstate s' vf' args' m')
   | match_states_return:
-      forall s v m s' v' m' j
+      forall s v m s' v' m' j MEM
            (STACKS: list_forall2 (match_stackframes j) s s')
            (RES: Val.inject j v v')
-           (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m')))
-           (MEM: Mem.inject j m m'),
+           (INCR: injp_acc w (injpw j m m' MEM)),
       match_states O (Returnstate s v m)
                      (Returnstate s' v' m').
 
 Lemma match_states_succ:
-  forall s f sp pc rs m s' rs' sp' m' j,
+  forall s f sp pc rs m s' rs' sp' m' j MEM,
   list_forall2 (match_stackframes j) s s' ->
   regset_inject j rs rs' ->
   Mem.inject j m m' ->
   j sp = Some (sp',0) ->
-  inj_incr w (injw j (Mem.support m) (Mem.support m')) ->
+  injp_acc w (injpw j m m' MEM) ->
   match_states O (State s f (Vptr sp Ptrofs.zero) pc rs m)
                  (State s' (transf_function (romem_for prog) f) (Vptr sp' Ptrofs.zero) pc rs' m').
 Proof.
@@ -375,14 +372,13 @@ Proof.
   intros. simpl. rewrite PTree.gmap. rewrite H. auto.
 Qed.
 
-Lemma match_stbls_incr : forall j s1 s2,
-    inj_incr w (injw j s1 s2) ->
+Lemma match_stbls_incr : forall j m1 m2 MEM,
+    injp_acc w (injpw j m1 m2 MEM) ->
     Genv.match_stbls j ge tge.
 Proof.
   intros.
   exploit CKLR.match_stbls_acc. 2: apply GE.
-  simpl. eauto. intro. simpl in H0.
-  exploit inj_stbls_match; eauto.
+  simpl. eauto. intro. simpl in H0. inv H0. eauto.
 Qed.
 
 Lemma match_stackframes_incr : forall j j' s s',
@@ -523,9 +519,9 @@ Proof.
   left; econstructor; econstructor; split.
   eapply exec_Istore; eauto.
   eapply match_states_succ; eauto.
-  etransitivity. eauto. constructor; eauto. red. intros. congruence.
-  erewrite Mem.support_storev; eauto.
-  erewrite Mem.support_storev; eauto.
+  etransitivity. eauto. instantiate (1:= Y).
+  eapply injp_acc_storev; eauto.
+  eapply Mem.val_lessdef_inject_compose; eauto.
 
 - (* Icall *)
   rename pc'0 into pc. exploit match_stbls_incr; eauto. intro MSTB.
@@ -548,9 +544,10 @@ Proof.
   left; econstructor; econstructor; split.
   eapply exec_Itailcall; eauto. apply sig_function_translated; auto.
   econstructor; eauto.
-  apply regs_inject; auto.
-  etransitivity; eauto. constructor; eauto. red. intros. congruence.
-  erewrite <- Mem.support_free; eauto. erewrite <- Mem.support_free; eauto.
+  apply regs_inject; auto. instantiate (1:= B).
+  etransitivity; eauto. eapply injp_acc_free with (lo1 := 0); eauto.
+  replace (0+0) with 0 by lia.
+  replace (0 + fn_stacksize f + 0) with (fn_stacksize f) by lia. eauto.
 
 - (* Ibuiltin *)
   rename pc'0 into pc. TransfInstr; intros.
@@ -577,9 +574,10 @@ Opaque builtin_strength_reduction.
     eapply match_stackframes_incr; eauto.
     apply set_res_inject; auto. red. intros. eauto.
     eauto.
-    etransitivity. eauto. constructor; eauto.
-    eapply external_call_support; eauto.
-    eapply external_call_support; eauto.
+    etransitivity. eauto. instantiate (1:= C).
+    constructor; eauto. 
+    red. intros. eapply external_call_max_perm; eauto.
+    red. intros. eapply external_call_max_perm; eauto.
   }
   destruct ef; auto.
   destruct res; auto.
@@ -639,10 +637,10 @@ Opaque builtin_strength_reduction.
   left; exists O; exists (Returnstate s' (regmap_optget or Vundef rs') m2'); split.
   eapply exec_Ireturn; eauto. TransfInstr; auto.
   econstructor; eauto.
-  destruct or; simpl; auto.
-  etransitivity. eauto. constructor; auto. red. intros. congruence.
-  erewrite <- Mem.support_free; eauto. erewrite <- Mem.support_free; eauto.
-  
+  destruct or; simpl; auto. instantiate (1:= B).
+  etransitivity. eauto. eapply injp_acc_free with (lo1 := 0); eauto.
+  replace (0+0) with 0 by lia.
+  replace (0 + fn_stacksize f + 0) with (fn_stacksize f) by lia. eauto.
 
   - (* internal function *)
   exploit match_stbls_incr; eauto. intro MSTB.  
@@ -652,15 +650,11 @@ Opaque builtin_strength_reduction.
   simpl. unfold transf_function.
   left; exists O; econstructor; split.
   eapply exec_function_internal; simpl; eauto.
-  simpl. econstructor. 6: eauto. all: eauto.
+  simpl. econstructor. 4: eauto. all: eauto.
   eapply match_stackframes_incr; eauto.
   constructor.
-  apply init_regs_inject; auto. eauto.
-  etransitivity. eauto. constructor; eauto. red.
-  intros. destruct (eq_block b stk). subst. rewrite D in H1. inv H1.
-  split; eapply Mem.fresh_block_alloc; eauto. rewrite E in H1; congruence.
-  rewrite (Mem.support_alloc _ _ _ _ _ H). eauto with mem.
-  rewrite (Mem.support_alloc _ _ _ _ _ A). eauto with mem.
+  apply init_regs_inject; auto. eauto. instantiate (1:= B).
+  etransitivity. eauto. eapply injp_acc_alloc; eauto.
 
   - (* external function *)
   exploit match_stbls_incr; eauto. intro MSTB.  
@@ -671,9 +665,9 @@ Opaque builtin_strength_reduction.
   eapply exec_function_external; eauto.
   econstructor. 2: eauto. all: eauto.
   eapply match_stackframes_incr; eauto.
-  etransitivity. eauto. constructor; eauto.
-  eapply external_call_support; eauto.
-  eapply external_call_support; eauto.
+  etransitivity. eauto. instantiate (1:= C). constructor; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
 
 - (* return *)
   inv STACKS. inv H1.
@@ -683,31 +677,42 @@ Opaque builtin_strength_reduction.
 Qed.
 
 Lemma transf_initial_states:
-  forall q1 q2 st1, match_query (cc_c inj) w q1 q2 -> initial_state ge q1 st1 ->
+  forall q1 q2 st1, match_query (cc_c injp) w q1 q2 -> initial_state ge q1 st1 ->
   exists n, exists st2, initial_state tge q2 st2 /\ match_states n st1 st2 /\ sound_state prog ge st1.
 Proof.
-  intros. destruct H.  inv H0. inv GE.
-  exploit functions_translated; eauto.
+  intros. destruct H. inv H0. cbn in *. inv H2.
+  exploit functions_translated; eauto. inv GE. eauto.
   intros FIND.
   exists O; exists (Callstate nil vf2 vargs2 m2); repeat apply conj.
   - setoid_rewrite <- (sig_function_translated (romem_for prog) (Internal f)).
     constructor; auto.
-  - econstructor; eauto. constructor. inv H2. simpl. reflexivity.
-  - cbn in *. inv H2. cbn in *.
+  - cbn in *. econstructor; eauto. constructor.  rewrite H0. reflexivity.
+  - cbn in *. cbn in *.
     set (bc := bc_of_inj f0 ge). econstructor. instantiate (1:= bc).
     constructor; eauto.
     + eapply bc_of_inj_vmatch; eauto.
     + eapply bc_of_inj_args_vmatch; eauto.
-    + admit. (* Leave for readonly invariant *)
+    + assert (sound_memory_ro ge m1). admit.
+      red in H2.
+      eapply romatch_exten; eauto.
+      intros. unfold bc, bc_of_inj, ValueAnalysis.bc_of_symtbl.
+      simpl. split; intro.
+      destruct (f0 b) as [[b' d']|] eqn:Hf0; try congruence.
+      destruct (Genv.invert_symbol se b); try congruence.
+      destruct (Genv.invert_symbol se b) eqn:Hinv; try congruence.
+      inv H4. inv GE. inv H6.
+      apply Genv.invert_find_symbol in Hinv. exploit mge_dom; eauto.
+      eapply Genv.genv_symb_range; eauto.
+      intros [b2 Hf0]. rewrite Hf0. reflexivity.
     + eapply bc_of_inj_mmatch; eauto.
-    + eapply bc_of_inj_genv_match; eauto.
+    + eapply bc_of_inj_genv_match; eauto. inv GE. eauto.
     + eapply bc_of_inj_nostack; eauto.
 Admitted.
 
 Lemma transf_final_states:
   forall n st1 st2 r1,
   match_states n st1 st2 -> final_state st1 r1 ->
-  exists r2, final_state st2 r2 /\ match_reply (cc_c inj) w r1 r2.
+  exists r2, final_state st2 r2 /\ match_reply (cc_c injp) w r1 r2.
 Proof.
   intros. inv H0. inv H. inv STACKS.
   eexists; split. constructor; eauto.
@@ -740,7 +745,11 @@ Proof.
   }
   eexists (injpw _ _ _ MEM'). eexists. cbn. intuition idtac.
   - econstructor; eauto.
-  - destruct VF; try discriminate.
+  - assert (sound_memory_ro ge m).
+    {
+      admit.
+    }
+    destruct VF; try discriminate.
     econstructor; simpl; eauto.
     exploit vmatch_inj; eauto. intro.
     eapply val_inject_compose; eauto.
@@ -752,8 +761,8 @@ Proof.
     congruence.
   - inv GE. inv INCR. constructor; simpl; eauto.
     eapply Genv.match_stbls_compose.
-    eapply inj_of_bc_preserves_globals; auto.
-    eauto.
+    eapply inj_of_bc_preserves_globals; eauto.
+    apply MSTB. inversion H12. eauto. inversion H13. eauto.
   - inv H2. destruct H1 as ([j' s1 s2 MEM''] & Hw' & Hr).
     inv Hw'.
     inv Hr. cbn in *. inv H5. simpl in *.
@@ -781,21 +790,12 @@ Proof.
         destruct (j b) as [[b'' d']|] eqn :Hj.
         exploit H12; eauto. unfold compose_meminj, inj_of_bc.
         rewrite BC. reflexivity. intros [A B].
-        inv MEM. exploit mi_freeblocks; eauto. intro. congruence.
+        inversion MEM. exploit mi_freeblocks; eauto. intro. congruence.
         eauto.
       }
-      econstructor.
-      instantiate (1:= j'').
-      * eapply match_stackframes_incr; eauto.
-      * eauto.
-      * etransitivity; eauto. econstructor; eauto.
-        red. intros.
-        eapply H12; eauto. unfold compose_meminj, inj_of_bc.
-        destruct (bc b) eqn:BC; try (rewrite H1; reflexivity). reflexivity.
-        unfold j'' in H2.
-        destruct (bc b) eqn:BC; eauto. rewrite H1 in H2. eauto.
-        inv H9. eauto. inv H10. eauto.
-      * clear - JBC_COMPOSE MEM MEM'' INCR1 INCR2 H7 H8 H9 H10 H11 H12.
+      assert(MEM''' : Mem.inject j'' m'0 m2').
+      {
+       clear - JBC_COMPOSE MEM MEM'' INCR1 INCR2 H7 H8 H9 H10 H11 H12.
         assert (j''_INV: forall b b' d, j'' b = Some (b',d) -> (j' b = Some (b',d)) \/
                                                            (j b = Some (b',d) /\ bc b = BCinvalid)).
         {
@@ -903,7 +903,26 @@ Proof.
            inv H10. eapply unchanged_on_perm; eauto.
            intros [A|B].
            inv H9. eapply unchanged_on_perm; eauto with mem. congruence.
-           eapply Mem.valid_block_inject_1; eauto.
+           eapply Mem.valid_block_inject_1; eauto. 
+      }
+      econstructor.
+      instantiate (1:= j'').
+      * eapply match_stackframes_incr; eauto.
+      * eauto.
+      * etransitivity; eauto. instantiate (1:= MEM'''). econstructor; eauto.
+        eapply Mem.unchanged_on_implies; eauto.
+        intros. red. red in H1. unfold compose_meminj, inj_of_bc.
+        destruct (bc b); simpl; try (rewrite H1); eauto.
+        eapply Mem.unchanged_on_implies; eauto.
+        intros. red. red in H1. intros. eapply H1; eauto.
+        unfold compose_meminj,inj_of_bc in H4.
+        destruct (bc b0); simpl in H4; try congruence;
+        destruct (j b0) as [[b1 d1]|]; eauto.
+        red. intros.
+        eapply H12; eauto. unfold compose_meminj, inj_of_bc.
+        destruct (bc b1) eqn:BC; try (rewrite H1; reflexivity). reflexivity.
+        unfold j'' in H2.
+        destruct (bc b1) eqn:BC; eauto. rewrite H1 in H2. eauto.
     + (* sound_state *)
       (* Part 2: constructing bc' from j' *)
       assert (JBELOW: forall b, sup_In b (Mem.support m) -> j' b = jbc b).
@@ -1000,11 +1019,13 @@ Proof.
         intros.
         unfold bc'.  simpl. rewrite pred_dec_true; eauto.
       * (*romatch*)
+        assert (ro_acc m m'0). admit.
         red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
         exploit RO; eauto. intros (R & P & Q).
         split; auto.
-        split. apply bmatch_incr with bc; auto. apply bmatch_ext with m; auto.
-        intros. admit. (*Leave for readonly *)
+        split.
+        (*bmatch*)
+        apply bmatch_incr with bc; auto. apply bmatch_ext with m; auto.
         intros; red; intros; elim (Q ofs).
         apply H7; eauto.
         destruct (j' b); congruence.
@@ -1041,12 +1062,12 @@ Require Import Invariant.
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
-  forward_simulation (cc_c injp) (cc_c inj) (RTL.semantics prog) (RTL.semantics tprog).
+  forward_simulation (cc_c injp) (cc_c injp) (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
   fsim (eapply Build_fsim_properties with (order := lt)
                                           (match_states := fun i s1 s2 => match_states prog w i s1 s2
                                                                        /\ sound_state prog se1 s1 )).
-- inv Hse. destruct 1. cbn. destruct H; try congruence; eauto.
+- inv Hse. destruct 1. cbn. destruct H2; try congruence; eauto.
   eapply (Genv.is_internal_match MATCH); eauto.
   unfold transf_fundef, transf_partial_fundef.
   intros ? [|] [|]; cbn -[transf_function]; inversion 1; auto.
@@ -1066,6 +1087,7 @@ Proof.
   split; eauto. eapply sound_step; eauto.
 - apply lt_wf.
 Qed.
+
 (*
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
