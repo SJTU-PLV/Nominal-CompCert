@@ -427,18 +427,6 @@ Inductive step: state -> trace -> state -> Prop :=
       find_instr instr_size (Ptrofs.unsigned ofs) (fn_code f) = Some i ->
       exec_instr i rs m = Next rs' m' ->
       step (State rs m) E0 (State rs' m')
-  | exec_step_builtin:
-      forall b ofs f ef args res rs m vargs t vres rs' m',
-      rs PC = Vptr b ofs ->
-      Genv.find_funct_ptr ge b = Some (Internal f) ->
-      find_instr instr_size (Ptrofs.unsigned ofs) f.(fn_code) = Some (Pbuiltin ef args res) ->
-      eval_builtin_args ge rs (rs SP) m args vargs ->
-      external_call ef ge vargs m t vres m' ->
-      rs' = nextinstr (Ptrofs.repr (instr_size (Pbuiltin ef args res)))
-              (set_res res vres
-                (undef_regs (map preg_of (destroyed_by_builtin ef))
-                   (rs#X31 <- Vundef))) ->
-      step (State rs m) t (State rs' m')
   | exec_step_external:
       forall b ef args res rs m t rs' m',
       rs PC = Vptr b Ptrofs.zero ->
@@ -451,53 +439,81 @@ Inductive step: state -> trace -> state -> Prop :=
 
 End WITHGE.
 
+Inductive initial_stack_regset (p: Asm.program) (m0: mem) : mem -> regset -> Prop :=
+| initial_state_archi_archi:
+    let ge := Genv.globalenv p in
+    let rs0 :=
+      (Pregmap.init Vundef)
+        # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
+        # SP <- Vnullptr
+        # RA <- Vnullptr in    
+    initial_stack_regset p m0 m0 rs0.
 
-Definition semantics p :=
-  Semantics step (initial_state p) final_state (Genv.globalenv p).
-
-Lemma semantics_determinate: forall p, determinate (semantics p).
-Proof.
+Lemma semantics_determinate_step : forall p s s1 s2 t1 t2,
+  step (Genv.globalenv p) s t1 s1 ->
+  step (Genv.globalenv p) s t2 s2 -> match_traces (Genv.globalenv p) t1 t2 /\ (t1 = t2 -> s1 = s2).
+Proof. 
 Ltac Equalities :=
   match goal with
   | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] =>
       rewrite H1 in H2; inv H2; Equalities
   | _ => idtac
   end.
-  intros; constructor; simpl; intros.
+  intros.
 - (* determ *)
   inv H; inv H0; Equalities.
-  split. constructor. auto.
-  discriminate.
-  discriminate.
-  assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0.
-  exploit external_call_determ. eexact H5. eexact H11. intros [A B].
-  split. auto. intros. destruct B; auto. subst. auto.
+  split. constructor.  auto.
   assert (args0 = args) by (eapply extcall_arguments_determ; eauto). subst args0.
   exploit external_call_determ. eexact H3. eexact H8. intros [A B].
   split. auto. intros. destruct B; auto. subst. auto.
-- (* trace length *)
-  red; intros. inv H; simpl.
-  lia.
-  eapply external_call_trace_length; eauto.
-  eapply external_call_trace_length; eauto.
-- (* initial states *)
-  inv H; inv H0. f_equal. congruence.
-- (* final no step *)
-  assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
-  { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
-  inv H. unfold Vzero in H0. red; intros; red; intros.
-  inv H; rewrite H0 in *; eelim NOTNULL; eauto.
-- (* final states *)
-  inv H; inv H0. congruence.
 Qed.
 
-(** Some Auxilary lemmas *)
+(* Definition semantics p := *)
+(*   Semantics step (initial_state p) final_state (Genv.globalenv p). *)
 
-Lemma code_size_app:
-    forall c1 c2,
-      code_size instr_size (c1 ++ c2) = code_size instr_size c1 + code_size instr_size c2.
-  Proof.
-    induction c1; simpl; intros; eauto. rewrite IHc1. lia.
-  Qed.
+(* Lemma semantics_determinate: forall p, determinate (semantics p). *)
+(* Proof. *)
+(* Ltac Equalities := *)
+(*   match goal with *)
+(*   | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] => *)
+(*       rewrite H1 in H2; inv H2; Equalities *)
+(*   | _ => idtac *)
+(*   end. *)
+(*   intros; constructor; simpl; intros. *)
+(* - (* determ *) *)
+(*   inv H; inv H0; Equalities. *)
+(*   split. constructor. auto. *)
+(*   discriminate. *)
+(*   discriminate. *)
+(*   assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0. *)
+(*   exploit external_call_determ. eexact H5. eexact H11. intros [A B]. *)
+(*   split. auto. intros. destruct B; auto. subst. auto. *)
+(*   assert (args0 = args) by (eapply extcall_arguments_determ; eauto). subst args0. *)
+(*   exploit external_call_determ. eexact H3. eexact H8. intros [A B]. *)
+(*   split. auto. intros. destruct B; auto. subst. auto. *)
+(* - (* trace length *) *)
+(*   red; intros. inv H; simpl. *)
+(*   lia. *)
+(*   eapply external_call_trace_length; eauto. *)
+(*   eapply external_call_trace_length; eauto. *)
+(* - (* initial states *) *)
+(*   inv H; inv H0. f_equal. congruence. *)
+(* - (* final no step *) *)
+(*   assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs). *)
+(*   { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. } *)
+(*   inv H. unfold Vzero in H0. red; intros; red; intros. *)
+(*   inv H; rewrite H0 in *; eelim NOTNULL; eauto. *)
+(* - (* final states *) *)
+(*   inv H; inv H0. congruence. *)
+(* Qed. *)
+
+(* (** Some Auxilary lemmas *) *)
+
+(* Lemma code_size_app: *)
+(*     forall c1 c2, *)
+(*       code_size instr_size (c1 ++ c2) = code_size instr_size c1 + code_size instr_size c2. *)
+(*   Proof. *)
+(*     induction c1; simpl; intros; eauto. rewrite IHc1. lia. *)
+(*   Qed. *)
   
 End INSTRSIZE.

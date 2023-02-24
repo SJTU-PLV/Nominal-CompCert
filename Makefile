@@ -120,7 +120,7 @@ ifeq ($(ARCH), x86)
 ARCHFILES=\
   AsmRegs.v AsmFacts.v \
   SSAsm.v SSAsmproof.v \
-  RealAsm.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v \
+  RealAsmArchi.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v \
   AsmBuiltinInline.v\
   AsmStructRet.v\
   AsmFloatLiteral.v \
@@ -144,7 +144,7 @@ ARCHFILES=\
   AsmLiteral.v\
   Asmlabelgen.v\
   AsmPseudoInstr.v\
-  RealAsm.v\
+  RealAsmArchi.v\
   Jumptablegen.v\
   SymbtablegenArchi.v SymbtablegenproofArchi.v\
   RelocationTypes.v ReloctablesgenArchi.v\
@@ -173,7 +173,8 @@ ELF = MachineTypes.v RelocElf.v\
 #   ReloctablesEncode.v \
 
 # assembler
-ASSEMBLER = RelocProg.v RelocProgram.v RelocProgramBytes.v\
+ASSEMBLER = RealAsm.v \
+  RelocProg.v RelocProgram.v RelocProgramBytes.v\
   AsmInject.v RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
   Symbtablegen.v Symbtablegenproof.v\
