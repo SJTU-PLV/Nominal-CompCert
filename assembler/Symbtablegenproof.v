@@ -6,7 +6,7 @@ Require Import Symbtablegen SymbtablegenArchi.
 Require Import RelocProg RelocProgram RelocProgSemantics.
 Require Import RelocProgSemanticsArchi.
 Require Import LocalLib AsmInject.
-Require Import SymbtablegenproofArchi RelocProgGlobalenvs MemoryAgree.
+Require Import (* SymbtablegenproofArchi *) RelocProgGlobalenvs MemoryAgree.
 Import ListNotations.
 
 Open Scope Z_scope.
@@ -765,6 +765,14 @@ Proof.
   intros. congruence.
 Qed.
 
+
+Lemma code_size_app:
+  forall c1 c2,
+    code_size instr_size (c1 ++ c2) = code_size instr_size c1 + code_size instr_size c2.
+Proof.
+  induction c1; simpl; intros; rewrite ? IHc1; lia.
+Qed.
+
 Lemma acc_instr_map_fst_code_size: forall n imap c,
     length c = n ->
     code_size instr_size c <= Ptrofs.max_unsigned ->
@@ -1006,6 +1014,7 @@ Proof.
   auto. eapply IHl. destruct a.
   simpl. unfold NMap.set. destr.
 Qed.
+
 
 Theorem init_meminj_match_sminj : forall m,
   Genv.init_mem prog = Some m ->
@@ -2226,6 +2235,7 @@ Proof.
 Qed.
 
 
+
 Ltac simpl_goal :=
   repeat match goal with
          | [ |- context [ Int.add Int.zero _ ] ] =>
@@ -2288,8 +2298,7 @@ Proof.
   unfold Val.mul. destruct v1, v2; auto; inv H; inv H0; auto.
 Qed.
 
-(*** TODO date 1.22:reconstruct to here *)
-
+(*** TODO: move the archi-dependent lemma  *)
 Lemma exec_load_step: forall j rs1 rs2 m1 m2 rs1' m1' sz chunk rd a
                           (INJ: j = Mem.flat_inj (Mem.support m1))
                           (MINJ: magree j  m1 m2)

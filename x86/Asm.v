@@ -592,6 +592,38 @@ Proof.
   generalize (instr_size_bound a). lia.
 Qed.
 
+(* need in Symbtablegenproof *)
+Lemma find_instr_bound:
+  forall c o i,
+    find_instr o c = Some i ->
+    o + instr_size i <= code_size c.
+Proof.
+  induction c; simpl; intros; eauto. congruence.
+  destr_in H. inv H. generalize (code_size_non_neg c) (instr_size_bound i). lia.
+  apply IHc in H. lia.
+Qed.
+
+Lemma find_instr_app:
+    forall a o b,
+      0 <= o ->
+      find_instr (o + code_size a) (a ++ b) = find_instr o b.
+  Proof.
+    induction a; simpl; intros; eauto.
+    f_equal. lia.
+    rewrite pred_dec_false.
+    rewrite <- (IHa o b). f_equal. lia. lia.
+    generalize (code_size_non_neg a0). generalize (instr_size_bound a). lia.
+  Qed.
+
+Lemma find_instr_app':
+  forall a o b,
+    code_size a <= o ->
+    find_instr o (a ++ b) = find_instr (o - code_size a) b.
+Proof.
+  intros.
+  rewrite <- (find_instr_app a _ b). f_equal. lia. lia.
+Qed.
+
 Lemma find_instr_no_overlap:
   forall l o1 o2 i1 i2,
     find_instr o1 l = Some i1 ->

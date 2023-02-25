@@ -9,17 +9,17 @@ Import ListNotations.
 
 (* Injection lemmas dependent to architecture *)
 
-  Lemma val_inject_nextinstr_nf:
-    forall j rs1 rs2 sz
-      (RINJ: forall r, Val.inject j (rs1 r) (rs2 r)) r,
-      Val.inject j (nextinstr_nf sz rs1 r) (nextinstr_nf sz rs2 r).
-  Proof.
-    unfold nextinstr_nf.
-    intros.
-    apply val_inject_nextinstr; auto.
-    intros.
-    apply val_inject_undef_regs; auto.
-  Qed.
+Lemma val_inject_nextinstr_nf:
+  forall j rs1 rs2 sz
+    (RINJ: forall r, Val.inject j (rs1 r) (rs2 r)) r,
+    Val.inject j (nextinstr_nf sz rs1 r) (nextinstr_nf sz rs2 r).
+Proof.
+  unfold nextinstr_nf.
+  intros.
+  apply val_inject_nextinstr; auto.
+  intros.
+  apply val_inject_undef_regs; auto.
+Qed.
 
 Lemma nextinstr_nf_pres_inject : forall j rs1 rs2 sz,
     regset_inject j rs1 rs2 ->
