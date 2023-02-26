@@ -177,7 +177,7 @@ ASSEMBLER = RealAsm.v \
   RelocProg.v RelocProgram.v RelocProgramBytes.v\
   AsmInject.v RelocProgLinking.v MemoryAgree.v RelocProgGlobalenvs.v\
   RelocProgSemantics.v RelocProgSemantics1.v RelocProgSemantics2.v\
-  Symbtablegen.v Symbtablegenproof.v\
+  Symbtablegen.v Symbtablegenproof.v Symbtablegenproof1.v\
   Reloctablesgen.v Reloctablesgenproof.v\
   RelocBingen.v RelocBingenproof.v\
 
