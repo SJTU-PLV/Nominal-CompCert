@@ -16,6 +16,7 @@ Close Scope asm.
 
 Section WITH_INSTR_SIZE.
   Variable instr_size : instruction -> Z.
+  Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
   
 (* injection lemmas dependent to architures *)
 Lemma compare_ints_inject: forall j v1 v2 v1' v2' rs rs' m m',
@@ -751,7 +752,38 @@ Proof.
   eauto.
 Qed.
 
+Let alloc_stack_pres_inject := alloc_stack_pres_inject instr_size instr_size_bound prog tprog TRANSF.
+Let storev_pres_match_inj := storev_pres_match_inj instr_size prog tprog.
 
+Lemma initial_state_gen_pres_inject: forall m0 m0' m1 rs0 rs
+    (INIT: Genv.init_mem prog = Some m0)
+    (INIT': init_mem instr_size tprog = Some m0'),
+    magree (Mem.flat_inj (Mem.support m0)) m0 m0' ->
+    RealAsmArchi.initial_stack_regset prog m0 m1 rs0 ->
+    exists st, initial_state_gen instr_size tprog rs m0' st.
+Proof.
+  intros. inv H0.
+  exploit (Mem.valid_new_block m0);eauto. unfold Mem.valid_block. intros VALIDSTK.
+  caseEq (Mem.alloc m0' 0 (max_stacksize + align (size_chunk Mptr) 8)).
+  intros m1'  stk'  H0'.
+  exploit (alloc_stack_pres_inject  m0 m0');eauto.
+  intros (MINJ1 &  STK &  MATINJ1). subst.  
+  exploit (storev_pres_match_inj Mptr m2 m1);eauto.
+  intros MATINJ2.
+  edestruct storev_pres_inject as (m2' & ST & SMINJ). apply H2. apply MINJ1. econstructor. econstructor.
+  (* stk' is valid *)
+  unfold Mem.flat_inj. destruct (Mem.sup_dec stk' (Mem.support m2)).
+  eauto. congruence.
+  eapply eq_refl. constructor.
+  (* regset *)
+  set (rs0' := rs # PC <- (Genv.symbol_address tge tprog.(prog_main) Ptrofs.zero)
+           # RA <- Vnullptr
+           # RSP <- (Vptr stk' (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr))))) in *.
+
+  (* instantiate the initial state*)
+  exists (State rs0' m2').
+  econstructor;eauto.
+Qed.
 
 End PRESERVATION.
 
