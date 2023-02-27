@@ -15,7 +15,7 @@
 (** More precisely, for a structural component [CC], we make sure that
   the following holds for all CKLRs [R]:
 <<
-                    ccref (CC @ R) (R @ CC)
+                    ccref (CC @ R) (R @ CC)1
 >>
   In the context of external calls, this allows us to propagate CKLRs
   towards the source level, where they can be satisfied by the
@@ -554,9 +554,106 @@ Proof.
 Qed.
 
 
-(** * Value Analysis Interface *)
+(** * Readonly Interface *)
 
-(** Trying to handle vamatch as wt_c *)
+(** Trying to handle ro as wt_c *)
+Require Import ValueDomain ValueAnalysis.
+
+Lemma commut_ro_upside:
+  ccref (ro @ injp) (injp @ ro).
+Proof.
+(*  intros [[se [j m1 m2 Hm]] [se' m1']] se1 se2 q1 q2 [Hse1 Hse2] [q1'[Hq1 Hq2]].
+  inv Hse2. inv H. inv Hq2. inv H. inv Hq1. cbn in Hse1, H5,H6,H7. inv H7.
+  rename m0 into m1. rename m1' into m2. Admitted.
+ *)
+Abort.
+
+(* should be correct, need stronger definition about sound_memory_ro, including
+   non-empty permission and more concrete description of memvals *)
+Lemma sound_memory_ro_downside: forall f se1 se2 m1 m2,
+    Mem.inject f m1 m2 ->
+    Genv.match_stbls f se1 se2 ->
+    sound_memory_ro se1 m1 ->
+    sound_memory_ro se2 m2.
+Proof.
+  intros. red. red in H1.
+  red. red in H1. inversion H0.
+  intros b2 id ab H2 H3. unfold bc_of_symtbl in H2.
+  cbn in H2. destruct (Genv.invert_symbol se2 b2) eqn: Hfind2; inv H2.
+  apply Genv.invert_find_symbol in Hfind2.
+  apply Genv.genv_symb_range in Hfind2 as RANGE2.
+  apply mge_img in RANGE2 as MAP. destruct MAP as [b1 MAP].
+  unfold Genv.find_symbol in Hfind2.
+  exploit mge_symb; eauto. intro SYMB. apply SYMB in Hfind2 as Hfind1.
+  exploit H1. unfold bc_of_symtbl. cbn. apply Genv.find_invert_symbol in Hfind1 as Hrev1.
+  rewrite Hrev1. reflexivity.
+  instantiate (1:= ab). admit. (*should be a lemma about match_stbls*)
+  intros [A [B C]]. split. eauto. split.
+  - destruct B as [B1 B2]. split.
+    + admit.
+    + intros. admit.
+  - intros. intro.
+    inv H. exploit mi_perm_inv; eauto. instantiate (3:= ofs).
+    rewrite Z.add_0_r. eauto. intros [|].
+    eapply C; eauto. admit.
+Admitted.
+
+Lemma ro_acc_upside : forall m1 m1' m2 m2' w w' se1 se2,
+    injp_match_stbls w se1 se2 ->
+    injp_acc w w' ->
+    injp_match_mem w m1 m2 ->
+    injp_match_mem w' m1' m2' ->
+    ro_acc m2 m2' ->
+    ro_acc m1 m1'.
+Proof.
+  intros. inv H1. inv H2. inv H0.
+  rename f0 into f'. cbn in *. inv H.
+  red. red in H3.
+  intros b1 ofs n bytes VM1 LOAD1' NOPERM1.
+  destruct (f b1) as [[b2 delta]|] eqn : MAP.
+  - (*mapped*)
+    apply H12 in MAP as MAP'.
+    exploit Mem.loadbytes_inject. apply Hm3. eauto. eauto.
+    intros [bytes' [LOAD2' LOADINJ]].
+    exploit H3; eauto. inv Hm1. eauto.
+    intros. intro.
+    assert (PERM1: Mem.perm m1 b1 (i-delta) Max Nonempty).
+    apply H8; eauto.
+    apply Mem.loadbytes_range_perm in LOAD1' as PERM1'.
+    red in PERM1'. exploit PERM1'. instantiate (1:= i- delta).
+    lia. eauto with mem.
+    inversion Hm1. exploit mi_perm_inv; eauto.
+    instantiate (3:= i - delta). replace ( i -delta + delta) with i by lia.
+    eauto. intros [|]. eapply NOPERM1; eauto. lia.
+    congruence. intro LOAD2.
+    admit. (*???????*)
+  - erewrite <- Mem.loadbytes_unchanged_on_1; eauto.
+Admitted.  
+
+(* injp @ ro ⊑ ro @ injp *)
+Instance commut_ro_downside:
+  Commutes (ro) injp injp.
+Proof.
+  red.
+  intros [[se1' wr] w] se1 se2 q1 q2 [Hse1 Hse2] (qi & Hq1 & Hq2).
+  inv Hse1. inv Hq1.
+  destruct qi as [vf1 sg1 args1 m1].
+  destruct q2 as [vf2 sg2 args2 m2].
+  destruct wr. inv H0. inv H.
+  exists (se2,w, (row se2 m2)). cbn. repeat apply conj; eauto.
+  - constructor; auto.
+  - exists (cq vf2 sg2 args2 m2). split.
+    + (*injp*) eauto.
+    + (*ro*)
+      constructor. constructor. inv Hq2. cbn in *. inv H10.
+      cbn in *. inv Hse2.
+      eapply sound_memory_ro_downside; eauto.
+  - intros r1 r2 (ri & A & B). inv B. inv H.
+    exists (r1). split. constructor. destruct r1 as [res1 m].
+    constructor. 2: eauto. inv Hq2. destruct A as [w' [Hw Hr]].
+    cbn in *. inv Hr. cbn in *.
+Abort.
+
 
 
 (** * Stacking *)

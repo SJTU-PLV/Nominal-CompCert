@@ -2282,6 +2282,7 @@ Proof.
 - discriminate.
 Qed.
 
+
 Lemma store_zeros_other:
   forall b' ab m b p n m',
   store_zeros m b p n = Some m' ->

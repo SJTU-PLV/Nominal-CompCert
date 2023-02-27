@@ -80,6 +80,7 @@ Global Instance open_fsim_ccref:
      forallr - @ liB1, forallr - @ liB2, ccref -->
      subrel).
 Proof.
+  
   intros liA1 liA2 ccA ccA' HA liB1 liB2 ccB ccB' HB sem1 sem2 [FS].
   destruct FS as [index order match_states SKEL PROP WF].
   constructor.
