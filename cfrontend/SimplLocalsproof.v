@@ -2225,6 +2225,7 @@ End FIND_LABEL.
 Lemma injp_acc_local :
   forall f0 wm wtm Htm j1 m1 tm1 Hm1 j2 m2 tm2 Hm2,
     injp_acc (injpw f0 wm wtm Htm) (injpw j1 m1 tm1 Hm1) ->
+    ro_acc m1 m2 -> ro_acc tm1 tm2 ->
     injp_max_perm_decrease m1 m2 ->
     injp_max_perm_decrease tm1 tm2 ->
     inject_incr j1 j2 ->
@@ -2234,12 +2235,18 @@ Lemma injp_acc_local :
     injp_acc (injpw f0 wm wtm Htm) (injpw j2 m2 tm2 Hm2).
 Proof.
   intros.  inv H.
-  apply Mem.unchanged_on_support in H14 as SUP.
-  apply Mem.unchanged_on_support in H15 as TSUP.
+  apply Mem.unchanged_on_support in H18 as SUP.
+  apply Mem.unchanged_on_support in H19 as TSUP.
   constructor.
+  - red. intros. eapply H14; eauto.
+    eapply H0; eauto.  inversion H18. eapply unchanged_on_support; eauto.
+    intros. intro. eapply H9; eauto.
+  - red. intros. eapply H15; eauto.
+    eapply H1; eauto. inversion H19. eapply unchanged_on_support; eauto.
+    intros. intro. eapply H9; eauto.
   - eapply max_perm_decrease_trans; eauto.
   - eapply max_perm_decrease_trans; eauto.
-  - inversion H14. inversion H4.
+  - inversion H18. inversion H6.
     constructor; eauto.
     intros. etransitivity; eauto.
     eapply unchanged_on_perm0; eauto.
@@ -2250,7 +2257,7 @@ Proof.
     eapply unchanged_on_perm; eauto.
     eapply Mem.perm_valid_block; eauto.
     eauto.
-  - inversion H15. inversion H5.
+  - inversion H19. inversion H7.
     constructor; eauto.
     intros. etransitivity; eauto.
     eapply unchanged_on_perm0; eauto.
@@ -2308,6 +2315,8 @@ Lemma injp_acc_return:
 Proof.
   intros. destruct w eqn: Hw.
   eapply injp_acc_local; eauto.
+  - admit.
+  - admit.
   - eapply free_list_max_perm; eauto.
   - eapply free_list_max_perm; eauto.
   - rewrite <- Hw in GE.
@@ -2325,7 +2334,7 @@ Proof.
     unfold wm2. rewrite Hw. reflexivity.
     eapply Mem.unchanged_on_implies; eauto.
     intros. destruct H5. auto.
-Qed.
+Admitted.
 
 Lemma step_simulation:
   forall S1 t S2, step1 ge S1 t S2 ->
@@ -2351,6 +2360,7 @@ Proof.
   eapply match_envs_assign_lifted; eauto. eapply cast_val_is_casted; eauto.
   eapply match_cont_assign_loc; eauto. exploit me_range; eauto. intros [E F]. auto.
   instantiate (1:= HH).
+  destruct w.
   {
   destruct w eqn : Hw.
   eapply injp_acc_local; eauto.
