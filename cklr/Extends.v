@@ -360,9 +360,9 @@ Proof.
       * red. intros b1 b4 d f14 INJ. unfold compose_meminj in INJ.
         destruct (f12 b1) as [[b2 d1]|] eqn: INJ1; try congruence.
         destruct (f34 b2) as [[b3 d3]|] eqn: INJ3; try congruence. inv INJ.
-        exploit H16; eauto. unfold meminj_dom. rewrite f14. auto.
+        exploit H14; eauto. unfold meminj_dom. rewrite f14. auto.
         intros [A B].
-        exploit H23. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
+        exploit H19. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
         intros [E F]. split; eauto.
     + rewrite compose_meminj_id_left.
       repeat rstep; eauto.
