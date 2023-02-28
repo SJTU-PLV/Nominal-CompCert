@@ -15,6 +15,8 @@ Require Import Events.
 Require Import Values.
 Require Import Conventions1.
 
+Definition stkblock := Stack None nil 1.
+
 Section INSTRSIZE.
 Variable instr_size : instruction -> Z.
 
