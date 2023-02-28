@@ -655,7 +655,8 @@ Proof.
   repeat rstep.
 Qed.
 
-
+(* wrong, this need inv_reply can trans downside through R*)
+(*
 Lemma trans_R_inv_outgoing {li} (R: callconv li li) (I : invariant li):
   ccref (R @ R) R ->
   ccref ((I @ R) @ (I @ R)) (I @ R).
@@ -679,7 +680,8 @@ Proof.
     exists r1'. split. exists r1. split. constructor. eauto.
     eauto. exists r1'. split; eauto. constructor.
     admit.
-Admitted.
+Abort.
+ *)
 
 Lemma cc_c_level_collapse:
   ccref (ro @ cc_c injp @ cc_c injp @
@@ -714,7 +716,7 @@ Proof.
   rewrite <- !(cc_compose_assoc ro).
   assert (ccref (injp @ injp) injp).
   rewrite <- cc_c_compose. rewrite injp_injp_eq. reflexivity.
-  rewrite !(trans_R_inv_outgoing injp ro); eauto. reflexivity.
+  rewrite !(trans_injp_ro_outgoing); eauto. reflexivity.
 Qed.
 
 Lemma cc_expand :

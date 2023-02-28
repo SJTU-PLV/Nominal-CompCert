@@ -2283,7 +2283,32 @@ Qed.
         right. intro. apply P1. eapply step2_perm2; eauto.
         replace (o2 - o2) with 0 by lia. eauto.
   Qed.
-  
+
+  Definition ro_acc_memval m m' : Prop :=
+    forall b ofs,
+      Mem.valid_block m b ->
+      Mem.perm m' b ofs Cur Readable ->
+      ~ Mem.perm m b ofs Max Writable ->
+      Mem.perm m b ofs Cur Readable /\
+        mem_memval m b ofs = mem_memval m' b ofs.
+
+  Lemma ro_acc_m1'_m2': ro_acc_memval m1 m1' -> ro_acc_memval m2 m2'.
+  Proof.
+    intros. red in H. red.
+    intros b2 o2 VALID2 PERM2' NOPERM2.
+    destruct (Mem.loc_in_reach_find m1 j1 b2 o2) as [[b1 o1]|] eqn:LOCIN.
+    - eapply Mem.loc_in_reach_find_valid in LOCIN; eauto.
+      destruct LOCIN as [MAP PERM1].
+      admit. (* need to change mapval, if value in m1' is Undef: memval then we ignore it,
+                leave the memval in m2' the same as m2*)
+    - eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
+      generalize UNCHANGE21. intro UNC2.
+      inversion UNC2. split.
+      eapply unchanged_on_perm; eauto. symmetry.
+      apply unchanged_on_contents; eauto.
+      eapply unchanged_on_perm; eauto.
+Admitted.
+    
 End CONSTR_PROOF.
 
 (** * main content of Lemma A.13 *)
