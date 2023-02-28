@@ -558,7 +558,16 @@ Qed.
 
 (** Trying to handle ro as wt_c *)
 Require Import ValueDomain ValueAnalysis.
+Require Import Clight.
 
+Lemma top_ro_selfsim:
+  forall p: (Clight.program),
+    let sem := semantics1 p in
+    forward_simulation ro ro sem sem.
+Proof.
+Admitted.
+
+(*
 Lemma commut_ro_upside:
   ccref (ro @ injp) (injp @ ro).
 Proof.
@@ -653,7 +662,7 @@ Proof.
     constructor. 2: eauto. inv Hq2. destruct A as [w' [Hw Hr]].
     cbn in *. inv Hr. cbn in *.
 Abort.
-
+*)
 
 
 (** * Stacking *)

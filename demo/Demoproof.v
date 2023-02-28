@@ -1153,10 +1153,19 @@ Proof.
   - constructor. intros. inv H.
 Qed.
 
+Require Import ValueAnalysis.
+
+Theorem self_simulation_ro :
+  forward_simulation ro ro L_A L_A.
+Proof.
+Admitted.
+
 Lemma M_A_semantics_preservation:
   forward_simulation cc_compcert cc_compcert L_A (Asm.semantics M_A).
 Proof.
   unfold cc_compcert.
+  eapply compose_forward_simulations.
+  eapply self_simulation_ro.
   eapply compose_forward_simulations.
   eapply self_simulation_wt.
   eapply compose_forward_simulations.
