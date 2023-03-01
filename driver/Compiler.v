@@ -809,6 +809,15 @@ Proof.
   destruct (flag tt); subst; eauto.
 Qed.
 
+Lemma va_interface_selfsim: forall (prog: RTL.program),
+  forward_simulation (ro @ injp) (ro @ injp) (RTL.semantics prog) (RTL.semantics prog).
+Proof.
+  intros.
+  eapply compose_forward_simulations.
+  eapply preserves_fsim. eapply ValueAnalysis.RTL_ro_preserves.
+  eapply RTLrel.semantics_rel.
+Qed.
+  
 (** ** Composition of passes *)
 
 Theorem clight_semantic_preservation:
@@ -854,15 +863,21 @@ Ltac DestructM :=
   eapply compose_forward_simulations.
     eapply RTLrel.semantics_rel.
   eapply compose_forward_simulations.
-  {instantiate (1:= RTL.semantics p9). admit. }
+  { unfold match_if in M7. destruct (optim_constprop tt).
+    eapply Constpropproof.transf_program_correct; eassumption.
+    subst. apply va_interface_selfsim. }
   eapply compose_identity_pass. 
     unfold match_if in M8. destruct (optim_constprop tt).
     eapply Renumberproof.transf_program_correct; eassumption.
     subst. eapply identity_forward_simulation.
   eapply compose_forward_simulations.
-  {instantiate (1:= RTL.semantics p11). admit. }
+  { unfold match_if in M9. destruct (optim_CSE tt).
+    eapply CSEproof.transf_program_correct; eassumption.
+    subst. apply va_interface_selfsim. }
   eapply compose_forward_simulations.
-  {instantiate (1:= RTL.semantics p12). admit. }
+  { unfold match_if in M10. destruct (optim_redundancy tt).
+    eapply Deadcodeproof.transf_program_correct; eassumption.
+    subst. apply va_interface_selfsim. }
   eapply compose_forward_simulations.
     eapply RTLrel.semantics_rel.
   eapply compose_forward_simulations.
@@ -888,7 +903,7 @@ Ltac DestructM :=
   apply forward_to_backward_simulation. auto.
   apply Clight.semantics_receptive.
   apply Asm.semantics_determinate.
-Admitted.
+Qed.
 
 Theorem c_semantic_preservation:
   forall p tp,

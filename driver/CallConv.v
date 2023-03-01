@@ -560,12 +560,134 @@ Qed.
 Require Import ValueDomain ValueAnalysis.
 Require Import Clight.
 
+Inductive sound_state se0 m0 : state -> Prop :=
+|ro_inv_state f s c e te m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state se0 m0 (State f s c e te m)
+|ro_inv_callstate v args c m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state se0 m0 (Callstate v args c m)
+|ro_inv_returnstate v c m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state se0 m0 (Returnstate v c m).
+
+Definition ro_inv '(row se m) := sound_state se m.
+
+Lemma ro_acc_storebytes : forall m m' b ofs bytes,
+    Mem.storebytes m b ofs bytes = Some m' ->
+    ro_acc m m'.
+Proof.
+  intros. constructor.
+  - red. intros.
+    destruct (Z_le_gt_dec n 0).
+    rewrite Mem.loadbytes_empty in H1; eauto. inv H1.
+    rewrite Mem.loadbytes_empty. eauto. auto.
+    destruct (Z_le_gt_dec (Z.of_nat (Datatypes.length bytes)) 0).
+    destruct bytes. simpl in l. inv H.
+    assert (m = m'). {
+      eapply Mem.storebytes_empty; eauto.
+    }
+    subst. eauto. cbn in l. extlia.
+    erewrite <- Mem.loadbytes_storebytes_other; eauto. lia.
+    apply Mem.storebytes_range_perm in H. red in H.
+    destruct (eq_block b0 b). subst. right.
+    destruct (Z_le_gt_dec (ofs0+n) ofs).
+    left. auto.
+    destruct (Z_le_gt_dec (ofs + Z.of_nat (Datatypes.length bytes)) ofs0).
+    right. auto.
+    exfalso.
+    destruct (Z_le_gt_dec ofs ofs0).
+    exploit H. instantiate (1:= ofs0). lia. intro PERM.
+    exploit H2. instantiate (1:= ofs0). lia.  eauto with mem. auto.
+    exploit H. instantiate (1:= ofs). lia. intro PERM.
+    exploit H2. instantiate (1:= ofs). lia. eauto with mem. auto.
+    left. auto.
+  - erewrite <- Mem.support_storebytes; eauto.
+  - red. eauto using Mem.perm_storebytes_2.
+Qed.
+
+                            
+Lemma ro_acc_assign_loc : forall m m' ce t b ofs bt v,
+    assign_loc ce t m b ofs bt v m' ->
+    ro_acc m m'.
+Proof.
+  intros. inv H.
+  - unfold Mem.storev in H1. eapply ro_acc_store; eauto.
+  - eapply ro_acc_storebytes; eauto.
+  - inv H0. cbn in H5. eapply ro_acc_store; eauto.
+Qed.
+
+Lemma ro_acc_free_list : forall l m m',
+    Mem.free_list m l = Some m' ->
+    ro_acc m m'.
+Proof.
+  induction l; intros.
+  inv H. eapply ro_acc_refl.
+  simpl in H. destruct a. destruct p.
+  destruct (Mem.free) eqn:F; try congruence.
+  eapply ro_acc_trans. eapply ro_acc_free; eauto.
+  eapply IHl. eauto.
+Qed.
+
+Lemma ro_acc_bind : forall m m' ge e params args,
+    bind_parameters ge e m params args m' -> ro_acc m m'.
+Proof.
+  intros. induction H. eapply ro_acc_refl.
+  eapply ro_acc_trans. eapply ro_acc_assign_loc; eauto.
+  eauto.
+Qed.
+
+Lemma ro_acc_allocs : forall m m' ge pa e1 e2,
+    alloc_variables ge e1 m pa e2 m' -> ro_acc m m'.
+Proof.
+  intros. induction H. eapply ro_acc_refl.
+  eapply ro_acc_trans. eapply ro_acc_alloc; eauto. auto.
+Qed.
+
+Lemma ro_acc_fe : forall m m' ge f args e te,
+    function_entry1 ge f args m e te m' ->
+    ro_acc m m'.
+Proof.
+  intros. inv H.
+  eapply ro_acc_trans.
+  eapply ro_acc_allocs; eauto.
+  eapply ro_acc_bind; eauto.
+Qed.
+
+Lemma top_ro_preserves prog:
+  preserves (semantics1 prog) ro ro ro_inv.
+Proof.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros.
+    Ltac Solve :=
+      match goal with
+      | [H: assign_loc _ _ _ _ _ _ _ _  |- _] => apply ro_acc_assign_loc in H
+      | [H: external_call _ _ _ _ _ _ _ |- _] => apply ro_acc_external in H
+      | [H: Mem.free_list _ _ = Some _ |- _] => apply ro_acc_free_list in H
+      | [H: function_entry1 _ _ _ _ _ _ _ |- _ ] => apply ro_acc_fe in H
+      | _ => idtac
+      end.  
+    inv H0; inv H; Solve; constructor; eauto using ro_acc_sound, ro_acc_trans.
+  - intros. inv H0. inv H. constructor; eauto.
+    constructor; eauto. red. eauto.
+  - intros. inv H0. inv H. simpl.
+    exists (row se1 m). split; eauto.
+    constructor; eauto. constructor; eauto.
+    intros r s' Hr AFTER. inv Hr. inv AFTER.
+    constructor.
+    eapply ro_acc_sound; eauto.
+    eapply ro_acc_trans; eauto.
+  - intros. inv H0. inv H. constructor; eauto.
+Qed.
+
 Lemma top_ro_selfsim:
   forall p: (Clight.program),
     let sem := semantics1 p in
     forward_simulation ro ro sem sem.
 Proof.
-Admitted.
+  intros. eapply preserves_fsim. eapply top_ro_preserves.
+Qed.
 
 Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
     Val.inject (compose_meminj j1 j2) v1 v3 ->

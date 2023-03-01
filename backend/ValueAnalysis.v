@@ -1960,6 +1960,40 @@ Proof.
   - red. eauto using Mem.perm_store_2.
 Qed.
 
+Lemma ro_acc_alloc : forall m m' lo hi b,
+    Mem.alloc m lo hi = (m',b) ->
+    ro_acc m m'.
+Proof.
+  intros. constructor.
+  - red. intros.
+    erewrite <- Mem.loadbytes_alloc_unchanged; eauto.
+  - exploit Mem.alloc_unchanged_on; eauto.
+    instantiate (1:= fun _ _ => True). intro.
+    inv H0. eauto.
+  - red. intros. eapply Mem.perm_alloc_4; eauto.
+    apply Mem.fresh_block_alloc in H. intro. congruence.
+Qed.
+
+Lemma ro_acc_free : forall m m' b lo hi,
+    Mem.free m b lo hi = Some m' ->
+    ro_acc m m'.
+Proof.
+  intros. constructor.
+  - red. intros. eapply Mem.loadbytes_free_2; eauto.
+  - erewrite <- Mem.support_free; eauto.
+  - red. eauto using Mem.perm_free_3; eauto.
+Qed.
+
+Lemma ro_acc_external : forall m m' ef ge vargs t vres,
+    external_call ef ge vargs m t vres m' ->  
+    ro_acc m m'.
+Proof.
+  intros. constructor.
+  - red. intros. eapply external_call_readonly; eauto.
+  - eapply external_call_support; eauto.
+  - red. intros. eapply external_call_max_perm; eauto.
+Qed.
+
 Inductive sound_query ge m: c_query -> Prop :=
   sound_query_intro vf sg vargs:
     sound_memory_ro ge m ->
@@ -1970,21 +2004,6 @@ Inductive sound_reply m: c_reply -> Prop :=
     ro_acc m tm ->
     sound_reply m (cr res tm).
 
-(*
-Inductive sound_state_ro ge m0: state -> Prop :=
-|sound_regular_state_ro : forall s f sp pc e m,
-    sound_memory_ro ge m ->
-    ro_acc m0 m ->
-     sound_state_ro ge m0 (State s f sp pc e m)
-|sound_call_state_ro: forall s fd args m,
-    sound_memory_ro ge m ->
-    ro_acc m0 m ->
-    sound_state_ro ge m0 (Callstate s fd args m)
-|sound_return_state_ro : forall s v m,
-    sound_memory_ro ge m ->
-    ro_acc m0 m ->
-    sound_state_ro ge m0 (Returnstate s v m).
-*)
 Definition ro : invariant li_c :=
   {|
     symtbl_inv '(row ge m) := eq ge;
@@ -1992,196 +2011,76 @@ Definition ro : invariant li_c :=
     reply_inv '(row ge m) := sound_reply m;
   |}.
 
-(*
-Definition ro_inv '(row ge m0) : state -> Prop :=
-  sound_state_ro ge m0.
+(* self-sim for RTL programs using ro *)
+Section RO.
+  Variable se: Genv.symtbl.
+  Variable m0 : mem.
 
-Lemma ro_acc_trans: forall m1 m2 m3,
-    ro_acc m1 m2 -> ro_acc m2 m3 -> ro_acc m1 m3.
-Proof.
-  intros. red in H. red in H0.
-  red. intros.
-  eapply H; eauto. eapply H0; eauto.
-Lemma rtl_ro prog:
+Inductive sound_state_ro : state -> Prop :=
+  |sound_regular_state_ro : forall s f sp pc e m,
+      sound_memory_ro se m ->
+      ro_acc m0 m ->
+      sound_state_ro (State s f sp pc e m)
+  |sound_call_state_ro: forall s fd args m,
+      sound_memory_ro se m ->
+      ro_acc m0 m ->
+      sound_state_ro (Callstate s fd args m)
+  |sound_return_state_ro : forall s v m,
+      sound_memory_ro se m ->
+      ro_acc m0 m ->
+      sound_state_ro (Returnstate s v m).
+
+End RO.
+
+Definition ro_inv '(row se0 m0) := sound_state_ro se0 m0.
+
+Lemma RTL_ro_preserves prog:
   preserves (semantics prog) ro ro ro_inv.
 Proof.
-  intros [xse m0] se Hse Hw. cbn in Hw. subst.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
   split; cbn in *.
-  - intros. inv H0; inv H; try (constructor; eauto).
-    + red. red in H5.
-      unfold Mem.storev in H3. destruct a; try congruence.
-      eapply romatch_store; eauto.
-    + admit.
-    + (*free*) admit.
-    + admit.
-    + (*external*)
-      admit.
-    + admit.
-    + (*free*)
-      admit.
-    + admit.
-    + (*alloc*)
-      admit.
-    + admit.
-    + (*external*)
-      admit.
-    + admit.
-  - intros. inv H. inv H0.
-    constructor; eauto.
-    red. intros. eauto.
-  - intros. inv H0. inv H. exists (row se m).
-    split; cbn in *; eauto.
-    split. constructor; eauto.
-    intros. inv H0. inv H.
-    constructor; eauto.
-    admit. (*acc_preserve_inv*)
-    admit. (*acc_trans*)
-  - intros. inv H0. inv H.
-    constructor; eauto.
-    admit.
-Abort.
-    
-*)    
-  
-(** ** Overall preservation property *)
-
-(*
-Record vamatch_world :=
-  vaw {
-    vaw_symtbl: Genv.symtbl;
-    vaw_bc: block_classification;
-    vaw_mem: mem;
-  }.
-
-Definition vamatch : invariant li_c :=
-  {|
-    symtbl_inv '(vaw ge bc m) := eq ge;
-    query_inv '(vaw ge bc m) := sound_query ge bc m;
-    reply_inv '(vaw ge bc m) := sound_reply ge bc m;
-  |}.
-
-Definition vamatch_inv prog '(vaw ge bc0 m0) :=
-  sound_state prog ge m0 bc0.
-
-Lemma rtl_vamatch prog:
-  preserves (semantics prog) vamatch vamatch (vamatch_inv prog).
-Proof.
-  intros [xse bc0 m0] se Hse Hw. cbn in Hw. subst.
-  split; cbn in *.
-  - eauto using sound_step.
-  - eauto using sound_initial.
-  - intros. edestruct sound_external as (? & ? & ?); eauto. eexists (vaw _ _ _); cbn; eauto.
-  - eauto using sound_final.
-Qed.
-*)
-
-(** * vamatch *)
-(*
-Lemma inject_list_exists :
-  forall vl1 vl2 v1 j,
-    In v1 vl1 ->
-    Val.inject_list j vl1 vl2 ->
-    exists v2, In v2 vl2 /\
-          Val.inject j v1 v2.
-Proof.
-  induction vl1; intros.
-  inv H0.
-  inv H.
-  destruct H. subst. inv H0. exists v'. split; eauto. left. auto.
-  inv H0. exploit IHvl1; eauto.
-  intros (v2 & A & B).
-  exists v2. split. right. auto. auto.
-Qed.
-(*
-
-m1   <----- vamatch se bc m1        Vundef
-
-ext inj
-
-m2   <----- vamatch se bc m2        Vint
-
-
-*)
-Lemma vamatch_propagate :
-  forall v1 v2 bc ,
-    Val.inject inject_id v1 v2 ->
-    vmatch bc v2 Vtop ->
-    vmatch bc v1 Vtop.
-Proof.
-  intros. inv H; inv H0; constructor.
-  unfold inject_id in H1. inv H1. eauto.
-  rewrite Ptrofs.add_zero in H2. eauto.
+  - intros. inv H0; inv H.
+    + constructor; eauto.
+    + constructor; eauto.
+    + constructor; eauto.
+    + unfold Mem.storev in H3.
+      destruct a; try congruence.
+      exploit ro_acc_store; eauto. intro H.
+      constructor; eauto.
+      eapply ro_acc_sound; eauto.
+      eapply ro_acc_trans; eauto.
+    + constructor; eauto.
+    + exploit ro_acc_free; eauto. intro H.
+      constructor; eauto. eapply ro_acc_sound; eauto.
+      eapply ro_acc_trans; eauto.
+    + exploit ro_acc_external; eauto. intro H.
+      constructor; eauto.
+      eapply ro_acc_sound; eauto.
+      eapply ro_acc_trans; eauto.
+    + constructor; eauto.
+    + constructor; eauto.
+    + exploit ro_acc_free; eauto. intro H.
+      constructor; eauto. eapply ro_acc_sound; eauto.
+      eapply ro_acc_trans; eauto.
+    + exploit ro_acc_alloc; eauto. intro H.
+      constructor; eauto. eapply ro_acc_sound; eauto.
+      eapply ro_acc_trans; eauto.
+    + exploit ro_acc_external; eauto. intro H.
+      constructor; eauto. eapply ro_acc_sound; eauto.
+      eapply ro_acc_trans; eauto.
+    + constructor; eauto.
+  - intros. inv H0. inv H. constructor; eauto.
+    constructor; eauto. red. eauto.
+  - intros. inv H0. inv H. simpl.
+    exists (row se1 m). split; eauto.
+    constructor; eauto. constructor; eauto.
+    intros r s' Hr AFTER. inv Hr. inv AFTER.
+    constructor.
+    eapply ro_acc_sound; eauto.
+    eapply ro_acc_trans; eauto.
+  - intros. inv H0. inv H. constructor; eauto.
 Qed.
 
-Lemma vamatch_propagate' :
-  forall v1 v2 bc ,
-    Val.inject inject_id v1 v2 ->
-    vmatch bc v1 Vtop ->
-    vmatch bc v2 Vtop.
-Proof.
-  intros. inv H; inv H0; try constructor; eauto.
-  unfold inject_id in H1. inv H1.
-  rewrite Ptrofs.add_zero. eauto.
-  unfold Vtop.
-  destruct v2; constructor; eauto.
-  constructor. 
- Abort.
-
-Lemma smatch_propagate_extends: forall m1 m2 bc b ab,
-    Mem.extends m1 m2 ->
-    smatch bc m2 b ab ->
-    smatch bc m1 b ab.
-Proof.
-  intros. inv H0. constructor.
-  - intros.
-    exploit Mem.load_extends; eauto. intros [v2 [A B]].
-    exploit H1; eauto.
-    intro. inv H3; inv B; constructor; eauto.
-  - intros.
-    exploit Mem.loadbytes_extends; eauto. intros [bytes2 [A B]].
-    inv B. inv H5. inv H9. unfold inject_id in H5. inv H5. rewrite Ptrofs.add_zero in A.
-    inv H7.
-    exploit H2; eauto.
-Qed.
-
-Lemma bmatch_propagate_extends: forall m1 m2 bc b,
-    Mem.extends m1 m2 ->
-    bmatch bc m2 b (ablock_init Ptop) ->
-    bmatch bc m1 b (ablock_init Ptop).
-Proof.
-  intros. inv H0. constructor; eauto.
-  - eapply smatch_propagate_extends; eauto.
-  - intros.
-    exploit Mem.load_extends; eauto. intros [v2 [A B]].
-    exploit H2; eauto.
-    intro. inv H3; inv B; try constructor; eauto.
-    + unfold ablock_load in H6. unfold ablock_init in H6. simpl in H6.
-    destruct chunk; simpl in H6; inv H6.
-    + unfold ablock_load in H6. unfold ablock_init in H6. simpl in H6.
-    destruct chunk; simpl in H6; inv H6.
-    + unfold ablock_load in H6. unfold ablock_init in H6. simpl in H6.
-    destruct chunk; simpl in H6; inv H6.
-    + unfold ablock_load in H6. unfold ablock_init in H6. simpl in H6.
-    destruct chunk; simpl in H6; inv H6.
-Qed.
-
-Lemma mmatch_propgate_extends :
-      forall m1 m2 bc,
-        Mem.extends m1 m2 ->
-        mmatch bc m2 mtop ->
-        mmatch bc m1 mtop.
-Proof.
-  intros. inv H0. constructor; eauto.
-  - intros. exploit mmatch_stack; eauto. simpl.
-    eapply bmatch_propagate_extends; eauto.
-  - intros. inv H1.
-  - intros. exploit mmatch_nonstack; eauto.
-    eapply smatch_propagate_extends; eauto.
-  - intros. exploit mmatch_top; eauto.
-    eapply smatch_propagate_extends; eauto.
-  - inversion H. rewrite mext_sup. eauto.
-Qed.
-*)
 
 (** ** Soundness of the initial memory abstraction *)
 

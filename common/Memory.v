@@ -89,16 +89,25 @@ Qed.
   Lemma gmap:
     forall (A B: Type) (f: A -> B) (i: elt) (m: t A),
      get B i (map A B f m ) = f(get A i m).
-Proof.
+  Proof.
     intros. unfold get, map. reflexivity.
-Qed.
+  Qed.
   Lemma set2:
     forall (A: Type) (i: elt) (x y: A) (m: t A),
-    set A i y (set A i x m) = set A i y m.
-Proof.
-  intros. apply extensionality.
-  intros. unfold set. case (eq_block x0 i); auto.
-Qed.
+      set A i y (set A i x m) = set A i y m.
+  Proof.
+    intros. apply extensionality.
+    intros. unfold set. case (eq_block x0 i); auto.
+  Qed.
+
+  Lemma set3:
+    forall (A:Type) (i:elt) (m: t A),
+      m = set A i (m i) m.
+  Proof.
+    intros. apply extensionality.
+    intros. unfold set. case (eq_block x i); auto.
+    intro. subst. auto.
+  Qed.
 End NMap.
 
 
@@ -1762,6 +1771,14 @@ Variable ofs: Z.
 Variable bytes: list memval.
 Variable m2: mem.
 Hypothesis STORE: storebytes m1 b ofs bytes = Some m2.
+
+Lemma storebytes_empty : bytes = nil -> m1 = m2.
+  intro. subst. inv STORE. unfold storebytes in H0.
+  destruct range_perm_dec; try congruence.
+  inv H0. destruct m1.
+  apply mkmem_ext; eauto. cbn.
+  apply NMap.set3.
+Qed.
 
 Lemma storebytes_access: mem_access m2 = mem_access m1.
 Proof.
