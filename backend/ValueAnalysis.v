@@ -1039,13 +1039,14 @@ Proof.
 - (* romatch m' *)
   intros rm RO.
   red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
+  + 
   exploit RO; eauto. intros (R & P & Q).
   split; auto.
   split. apply bmatch_incr with bc; auto. apply bmatch_ext with m; auto.
   intros. eapply external_call_readonly with (m2 := m'); eauto.
   intros; red; intros; elim (Q ofs).
   eapply external_call_max_perm with (m2 := m'); eauto.
-  destruct (j' b); congruence.
+  + destruct (j' b); congruence.
 - (* mmatch top *)
   constructor; simpl; intros.
   + apply ablock_init_sound. apply SMTOP. simpl; congruence.
@@ -1880,13 +1881,84 @@ Qed.
 (* to be simplified for trans and compose *)
 
 Definition sound_memory_ro ge m : Prop :=
-  romatch (bc_of_symtbl ge) m (romem_for_symtbl ge).
+  romatch (bc_of_symtbl ge) m (romem_for_symtbl ge)
+  /\ Mem.sup_include (Genv.genv_sup ge) (Mem.support m).
 
-Definition ro_acc m1 m2 : Prop :=
+Definition ro_unchange m1 m2 : Prop :=
    forall b ofs n bytes, Mem.valid_block m1 b ->
                       Mem.loadbytes m2 b ofs n = Some bytes ->
                       (forall i, ofs <= i < ofs + n -> ~ Mem.perm m1 b i Max Writable) ->
                       Mem.loadbytes m1 b ofs n = Some bytes.
+
+Require Import InjectFootprint.
+Inductive ro_acc : mem -> mem -> Prop :=
+| ro_acc_intro m1 m2:
+  ro_unchange m1 m2 ->
+  Mem.sup_include (Mem.support m1) (Mem.support m2) ->
+  injp_max_perm_decrease m1 m2 ->
+  ro_acc m1 m2.
+                  
+Lemma ro_acc_refl : forall m, ro_acc m m.
+Proof.
+  intros. constructor; eauto.
+  red. eauto.
+Qed.
+
+Lemma ro_acc_trans : forall m1 m2 m3, ro_acc m1 m2 -> ro_acc m2 m3 -> ro_acc m1 m3.
+Proof.
+  intros. inv H. inv H0. constructor; eauto.
+  - red. intros. red in H1. eapply H1; eauto.
+    eapply H; eauto. apply H2; eauto.
+    intros. intro. eapply H7; eauto.
+Qed.
+
+Lemma ro_acc_sound : forall se m1 m2,
+    sound_memory_ro se m1 ->
+    ro_acc m1 m2 ->
+    sound_memory_ro se m2.
+Proof.
+  intros. inv H0. red. destruct H. red in H.
+  red in H1. split; eauto. red. intros.
+  exploit H; eauto. intros [A [B C]].
+  assert (Mem.valid_block m1 b).
+  { clear - H0 H4.
+    unfold bc_of_symtbl in H4. cbn in H4.
+    destruct Genv.invert_symbol eqn:Hi; inv H4.
+    apply Genv.invert_find_symbol in Hi.
+    apply Genv.genv_symb_range in Hi. apply H0; eauto.
+  }
+  split. auto. split.
+  - eapply bmatch_ext; eauto.
+  - intros. intro. eapply C; eauto.
+Qed.
+
+Lemma ro_acc_store : forall m m' chunk b ofs v,
+    Mem.store chunk m b ofs v = Some m' ->
+    ro_acc m m'.
+Proof.
+  intros. constructor.
+  - red. intros.
+    erewrite <- Mem.loadbytes_store_other; eauto.
+    apply Mem.store_valid_access_3 in H. destruct H.
+    red in H.
+    destruct (eq_block b b0).
+    + subst. right.
+      destruct (Z_le_gt_dec n 0). left. auto.
+      right.
+      destruct (Z_le_gt_dec (ofs0+n) ofs).
+      left. auto.
+      destruct (Z_le_gt_dec (ofs + size_chunk chunk) ofs0).
+      right. auto.
+      exfalso.
+      destruct (Z_le_gt_dec ofs ofs0).
+      exploit H. instantiate (1:= ofs0). lia. intro PERM.
+      exploit H2. instantiate (1:= ofs0). lia.  eauto with mem. auto.
+      exploit H. instantiate (1:= ofs). destruct chunk; simpl; lia. intro PERM.
+      exploit H2. instantiate (1:= ofs). lia. eauto with mem. auto.
+    + left. auto.
+  - erewrite <- Mem.support_store; eauto.
+  - red. eauto using Mem.perm_store_2.
+Qed.
 
 Inductive sound_query ge m: c_query -> Prop :=
   sound_query_intro vf sg vargs:

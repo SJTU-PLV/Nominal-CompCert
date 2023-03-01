@@ -136,18 +136,7 @@ Qed.
 Next Obligation.
   destruct H. inv H0; cbn in *. eauto.
 Qed.
-(*
-Lemma alloc_max_perm_decrease: forall m lo hi m' b,
-    Mem.alloc m lo hi = (m', b) ->
-    max_perm_decrease m m'.
-Proof.
-  intros. red. intros.
-  eapply Mem.perm_alloc_4; eauto. intro. subst.
-  eapply Mem.fresh_block_alloc; eauto.
-Qed.
 
-Hint Resolve alloc_max_perm_decrease.
-*)
 Lemma inj_cklr_alloc:
     Monotonic Mem.alloc (|= inj_mem ++> - ==> - ==> (<> inj_mem * block_inject_sameofs @@ [injw_meminj])).
 Proof.

@@ -585,23 +585,12 @@ Proof.
   exists Vundef. split; constructor.
 Qed.
 
-  Lemma ro_acc_memval_loadbytes:
-    forall m m',
-      ro_acc_memval m m' <-> ro_acc m m'.
-  Proof.
-    intros. split; intro H.
-    - admit.
-    - red. intros b ofs Hv P' NP.
-      red in H.
-      exploit H; eauto.
-      instantiate (2:= 1). instantiate (2:= ofs).
-      instantiate (1:= mem_memval m' b ofs :: nil).
-      admit.
-      intros. destruct (zeq i ofs). subst. eauto. extlia.
-      intro.
-      admit. (*ok*)
-  Admitted.
-  
+Lemma ro_acc_memval_loadbytes:
+  forall m m',
+    ro_acc_memval m m' <-> ro_acc m m'.
+Proof.
+Admitted.
+
 Lemma trans_injp_ro_outgoing:
   ccref ((ro @ injp) @ (ro @ injp)) (ro @ injp).
 Proof.

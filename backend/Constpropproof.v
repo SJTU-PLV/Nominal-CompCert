@@ -522,18 +522,20 @@ Proof.
   eapply regs_inject; eauto. eexact P.
   intros (a'' & U & V). rewrite eval_shift_stack_addressing in U.
   exploit Mem.storev_mapped_inject. eauto. eauto.
-   eapply Mem.val_lessdef_inject_compose; eauto. apply REGS.
+  eapply Mem.val_lessdef_inject_compose; eauto. apply REGS.
   intros (m2' & X & Y).
+  assert (INCR0: injp_acc (injpw j m m'0 MEM) (injpw j m' m2' Y)).
+  eapply injp_acc_storev; eauto.
+  eapply Mem.val_lessdef_inject_compose; eauto.
   left; econstructor; econstructor; split.
   eapply exec_Istore; eauto.
   eapply match_states_succ; eauto.
   etransitivity. eauto. instantiate (1:= Y).
   eapply injp_acc_storev; eauto.
   eapply Mem.val_lessdef_inject_compose; eauto.
-  (*TODO: stat a lemma*)
-  clear - RO H1 INCR .
-  red. red in RO. intros.
-  eapply RO; eauto.
+  eapply ro_acc_trans; eauto. inv INCR0.
+  constructor; eauto.
+  red. intros.
   unfold Mem.storev in H1. destruct a; try congruence.
   erewrite <- Mem.loadbytes_store_other; eauto.
   apply Mem.store_valid_access_3 in H1. destruct H1.
@@ -542,8 +544,7 @@ Proof.
   + subst. right.
   assert (forall i:Z, ofs <= i < ofs + n -> ~ Mem.perm m b0 i Max Writable).
   {
-    intros. intro. eapply H2; eauto. unfold m01 in *. destruct w. inv INCR.
-    apply H12; eauto.
+    intros. intro. eapply H5; eauto.
   }
   destruct (Z_le_gt_dec n 0). left. auto.
   right.
@@ -555,10 +556,11 @@ Proof.
   destruct (Z_le_gt_dec ofs (Ptrofs.unsigned i)).
   exploit H1. instantiate (1:= Ptrofs.unsigned i). destruct chunk; simpl; lia.
   intro PERM.
-  exploit H4. instantiate (1:= Ptrofs.unsigned i). lia. eauto with mem. auto.
+  exploit H7. instantiate (1:= Ptrofs.unsigned i). lia. eauto with mem. auto.
   exploit H1. instantiate (1:= ofs). lia. intro PERM.
-  exploit H4. instantiate (1:= ofs). lia. eauto with mem. auto.
+  exploit H7. instantiate (1:= ofs). lia. eauto with mem. auto.
   + left. auto.
+  + inversion H11. eauto.
     
 - (* Icall *)
   rename pc'0 into pc. exploit match_stbls_incr; eauto. intro MSTB.
@@ -578,16 +580,19 @@ Proof.
   exploit (ros_address_translated j ros); eauto. intros FEXT.
   exploit functions_translated; eauto using ros_address_translated. intro FIND.
   TransfInstr; intro.
+  assert (INCR0 : injp_acc (injpw j m m'0 MEM) (injpw j m' m2' B)).
+  eapply injp_acc_free with (lo1 := 0); eauto.
+  replace (0+0) with 0 by lia.
+  replace (0 + fn_stacksize f + 0) with (fn_stacksize f) by lia. eauto.
   left; econstructor; econstructor; split.
   eapply exec_Itailcall; eauto. apply sig_function_translated; auto.
   econstructor; eauto.
   apply regs_inject; auto. instantiate (1:= B).
-  etransitivity; eauto. eapply injp_acc_free with (lo1 := 0); eauto.
-  replace (0+0) with 0 by lia.
-  replace (0 + fn_stacksize f + 0) with (fn_stacksize f) by lia. eauto.
-  red. intros. red in RO.
-  eapply RO; eauto.
+  etransitivity; eauto. inv INCR0.
+  eapply ro_acc_trans; eauto. constructor; eauto.
+  red. intros. 
   erewrite Mem.loadbytes_free_2; eauto.
+  erewrite <- Mem.support_free; eauto.
 
 - (* Ibuiltin *)
   rename pc'0 into pc. TransfInstr; intros.
@@ -618,11 +623,11 @@ Opaque builtin_strength_reduction.
     constructor; eauto. 
     red. intros. eapply external_call_max_perm; eauto.
     red. intros. eapply external_call_max_perm; eauto.
-    unfold m01 in *. inv INCR.
-    red. intros. eapply RO; eauto.
-    eapply external_call_readonly; eauto.
-    inversion H9. apply unchanged_on_support. eauto.
-    intros. intro. eapply H6; eauto.
+    unfold m01 in *. inv INCR. eapply ro_acc_trans. eauto.
+    constructor; eauto.
+    red. intros. eapply external_call_readonly; eauto.
+    eapply external_call_support; eauto.
+    red. intros. eapply external_call_max_perm; eauto.
   }
   destruct ef; auto.
   destruct res; auto.
@@ -679,14 +684,17 @@ Opaque builtin_strength_reduction.
 
 - (* Ireturn *)
   exploit Mem.free_parallel_inject; eauto. intros [m2' [A B]]. simpl in A. rewrite Z.add_0_r in A.
+  assert (INCR0 : injp_acc (injpw j m m'0 MEM) (injpw j m' m2' B)).
+  eapply injp_acc_free with (lo1 := 0); eauto.
+  replace (0+0) with 0 by lia.
+  replace (0 + fn_stacksize f + 0) with (fn_stacksize f) by lia. eauto.
   left; exists O; exists (Returnstate s' (regmap_optget or Vundef rs') m2'); split.
   eapply exec_Ireturn; eauto. TransfInstr; auto.
   econstructor; eauto.
   destruct or; simpl; auto. instantiate (1:= B).
-  etransitivity. eauto. eapply injp_acc_free with (lo1 := 0); eauto.
-  replace (0+0) with 0 by lia.
-  replace (0 + fn_stacksize f + 0) with (fn_stacksize f) by lia. eauto.
-  red. intros. eapply RO; eauto. eapply Mem.loadbytes_free_2; eauto.
+  etransitivity; eauto. eapply ro_acc_trans; eauto. inv INCR0.
+  constructor; eauto.
+  red. intros. eapply Mem.loadbytes_free_2; eauto. inv H9. eauto.
 
   - (* internal function *)
   exploit match_stbls_incr; eauto. intro MSTB.  
@@ -694,16 +702,19 @@ Opaque builtin_strength_reduction.
   exploit Mem.alloc_parallel_inject. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros (f' & m2' & b2 & A & B & C & D & E).
   simpl. unfold transf_function.
+  assert (INCR0 :injp_acc (injpw j m m'0 MEM) (injpw f' m' m2' B)).
+  eapply injp_acc_alloc; eauto.
   left; exists O; econstructor; split.
   eapply exec_function_internal; simpl; eauto.
   simpl. econstructor. 4: eauto. all: eauto.
   eapply match_stackframes_incr; eauto.
   constructor.
   apply init_regs_inject; auto. eauto. instantiate (1:= B).
-  etransitivity. eauto. eapply injp_acc_alloc; eauto.
-  red. intros. eapply RO; eauto.
+  etransitivity; eauto. eapply ro_acc_trans; eauto. inv INCR0.
+  constructor; eauto.
+  red. intros.
   erewrite <- Mem.loadbytes_alloc_unchanged; eauto.
-  unfold m01 in *. inv INCR. inversion H8. apply unchanged_on_support; eauto.
+  inv H8. eauto.
 
   - (* external function *)
   exploit match_stbls_incr; eauto. intro MSTB.  
@@ -717,11 +728,10 @@ Opaque builtin_strength_reduction.
   etransitivity. eauto. instantiate (1:= C). constructor; eauto.
   red. intros. eapply external_call_max_perm; eauto.
   red. intros. eapply external_call_max_perm; eauto.
-  unfold m01 in *. inv INCR.
-  red. intros. eapply RO; eauto.
-  eapply external_call_readonly; eauto.
-  inversion H5. apply unchanged_on_support. eauto.
-  intros. intro. eapply H2; eauto.
+  eapply ro_acc_trans. eauto. constructor.
+  red. intros. eapply external_call_readonly; eauto.
+  eapply external_call_support; eauto.
+  red. intros. eapply external_call_max_perm; eauto.
 
 - (* return *)
   inv STACKS. inv H1.
@@ -744,20 +754,20 @@ Proof.
   - setoid_rewrite <- (sig_function_translated (romem_for prog) (Internal f)).
     constructor; auto.
   - cbn in *. econstructor; eauto. constructor.  rewrite H0. reflexivity.
-    red. intros. eauto.
+    eapply ro_acc_refl.
   - cbn in *. cbn in *.
     set (bc := bc_of_inj f0 ge). econstructor. instantiate (1:= bc).
     constructor; eauto.
     + eapply bc_of_inj_vmatch; eauto.
     + eapply bc_of_inj_args_vmatch; eauto.
-    + red in H2.
+    + red in H2. destruct H2 as [H2 H3].
       eapply romatch_exten; eauto.
       intros. unfold bc, bc_of_inj, ValueAnalysis.bc_of_symtbl.
       simpl. split; intro.
       destruct (f0 b) as [[b' d']|] eqn:Hf0; try congruence.
       destruct (Genv.invert_symbol se b); try congruence.
       destruct (Genv.invert_symbol se b) eqn:Hinv; try congruence.
-      inversion H1. subst id. inversion GE. inversion H7.
+      inversion H1. subst id. inversion GE. inversion H9.
       apply Genv.invert_find_symbol in Hinv. exploit mge_dom; eauto.
       eapply Genv.genv_symb_range; eauto.
       intros [b2 Hf0]. rewrite Hf0. reflexivity.
@@ -806,7 +816,7 @@ Proof.
   - econstructor; eauto.
   - assert (sound_memory_ro ge m).
     {
-      red. eapply romatch_exten; eauto.
+      red. split. eapply romatch_exten; eauto.
       intros.
       clear -RO GE0. destruct GE0.
       unfold ValueAnalysis.bc_of_symtbl. simpl.
@@ -816,6 +826,7 @@ Proof.
       intro. apply  H in Hinv. congruence.
       split. intro. congruence. intro. apply H in H1.
       apply Genv.find_invert_symbol in H1. cbn in *. congruence.
+      inv GE. inversion INCR. inversion H13. eauto.
     }
     eexists. split. constructor. constructor; eauto.
     econstructor; eauto.
@@ -996,12 +1007,7 @@ Proof.
         destruct (bc b1) eqn:BC; try (rewrite H1; reflexivity). reflexivity.
         unfold j'' in H2.
         destruct (bc b1) eqn:BC; eauto. rewrite H1 in H2. eauto.
-      * red. intros.
-        eapply RO; eauto.
-        eapply ROACC; eauto.
-        unfold m01 in *. inv INCR. inversion H16. eapply unchanged_on_support; eauto.
-        intros. intro. eapply H4; eauto. unfold m01 in *. inv INCR.
-        eapply H16; eauto.
+      * eapply ro_acc_trans; eauto.
     + (* sound_state *)
       (* Part 2: constructing bc' from j' *)
       assert (JBELOW: forall b, sup_In b (Mem.support m) -> j' b = jbc b).
@@ -1099,14 +1105,15 @@ Proof.
         unfold bc'.  simpl. rewrite pred_dec_true; eauto.
       * (*romatch*)
         red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
+        -- 
         exploit RO0; eauto. intros (R & P & Q).
         split; auto.
         split.
         (*bmatch*)
         apply bmatch_incr with bc; auto. apply bmatch_ext with m; auto.
-        intros; red; intros; elim (Q ofs).
-        apply H7; eauto.
-        destruct (j' b); congruence.
+        intros. inv ROACC. eauto.
+        intros. inv ROACC. intro. eapply Q; eauto.
+        -- destruct (j' b); congruence.
       * (*mmatch*)
         constructor; simpl; intros.
         -- apply ablock_init_sound. apply SMTOP. simpl; congruence.

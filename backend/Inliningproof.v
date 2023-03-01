@@ -586,8 +586,6 @@ with match_stacks_inside_invariant:
          (INJ: forall b1 b2 delta,
                F1 b1 = Some(b2, delta) ->
                sup_In b1 (injw_sup_l w) \/ sup_In b2 (sup_incr sps') -> F b1 = Some(b2, delta))
-(*         (PERMD1 : max_perm_decrease m m1)
-         (PERMD2 : max_perm_decrease m' m1') *)
          (PERM1: forall b1 b2 delta ofs,
                F1 b1 = Some(b2, delta) -> sup_In b2 (sup_incr sps') ->
                Mem.perm m1 b1 ofs Max Nonempty -> Mem.perm m b1 ofs Max Nonempty)

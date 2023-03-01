@@ -1153,12 +1153,60 @@ Proof.
   - constructor. intros. inv H.
 Qed.
 
+(* Self-sim using ro *)
 Require Import ValueAnalysis.
+
+Section RO.
+
+Variable se : Genv.symtbl.
+Variable m0 : mem.
+
+Inductive sound_state : state -> Prop :=
+| sound_Callstateg : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callstateg i m)
+| sound_Callstatef : forall v i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callstatef v i m)
+| sound_Returnstatef : forall i1 i2 m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Returnstatef i1 i2 m)
+| sound_Returnstateg : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Returnstateg i m).
+End RO.
+
+Definition ro_inv '(row se0 m0) := sound_state se0 m0.
+
+Lemma L_A_ro : preserves L_A ro ro ro_inv.
+Proof.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros. inv H0; inv H.
+    + constructor; eauto.
+    + constructor; eauto.
+    + constructor; eauto.
+    + unfold Mem.storev in *.
+      assert (ro_acc m m'').
+      eapply ro_acc_trans; eapply ro_acc_store; eauto.
+      constructor. eapply ro_acc_trans; eauto.
+      eapply ro_acc_sound; eauto.
+  - intros. inv H0. inv H. constructor; eauto.
+    constructor; eauto. red. eauto.
+  - intros. inv H0. inv H. simpl.
+    exists (row se1 m). split; eauto.
+    constructor; eauto. constructor; eauto.
+    intros r s' Hr AFTER. inv Hr. inv AFTER.
+    constructor. eapply ro_acc_trans; eauto.
+    eapply ro_acc_sound; eauto.
+  - intros. inv H0. inv H. constructor; eauto.
+Qed.
 
 Theorem self_simulation_ro :
   forward_simulation ro ro L_A L_A.
 Proof.
-Admitted.
+  eapply preserves_fsim. eapply L_A_ro; eauto.
+Qed.
 
 Lemma M_A_semantics_preservation:
   forward_simulation cc_compcert cc_compcert L_A (Asm.semantics M_A).
