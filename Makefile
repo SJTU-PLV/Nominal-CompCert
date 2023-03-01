@@ -127,7 +127,7 @@ ARCHFILES=\
   AsmPseudoInstr.v\
   Asmlabelgen.v\
   Jumptablegen.v \
-  SymbtablegenArchi.v SymbtablegenproofArchi.v\
+  SymbtablegenArchi.v  .v\
   RelocationTypes.v ReloctablesgenArchi.v ReloctablesgenproofArchi.v\
   RelocBinDecode.v RelocBingenproofArchi.v\
   TranslateInstr.v TranslateInstrSize.v\
