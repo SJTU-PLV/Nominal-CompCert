@@ -556,7 +556,6 @@ Qed.
 
 (** * Readonly Interface *)
 
-(** Trying to handle ro as wt_c *)
 Require Import ValueDomain ValueAnalysis.
 Require Import Clight.
 
@@ -712,7 +711,17 @@ Lemma ro_acc_memval_loadbytes:
     ro_acc_memval m m' <-> ro_acc m m'.
 Proof.
 Admitted.
+(*
 
+m1
+
+
+m2
+
+
+m3
+
+*)
 Lemma trans_injp_ro_outgoing:
   ccref ((ro @ injp) @ (ro @ injp)) (ro @ injp).
 Proof.

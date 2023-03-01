@@ -404,6 +404,29 @@ Require Import Conventions Asm Mach Lineartyping.
 
 (** This is the simulation convention for the whole compiler. *)
 
+(**)
+
+
+
+
+
+
+(*
+                  m1 ro <= ro m1
+m1 <- ro     -> ro     m1    
+
+                       m2          
+
+             -> ro     m3
+
+                       ..
+
+mn                     mn
+
+
+*)
+
+
 Definition cc_compcert : callconv li_c li_asm :=
        ro @ wt_c @
        cc_c_asm_injp @
@@ -553,6 +576,46 @@ Proof.
 Qed.
 
 (* To be moved to Callconv.v *)
+
+(*
+
+I
+injp   <=   I
+I           injp
+injp
+
+m1 <-I                 m1  <- I                 m1' <- I'                  m1' <- I'
+
+          exists->     m1  <- I  ---forall-->   m2' <- I'   ---exists-->   m2'
+
+m3                     m3                       m3'                        m3'
+
+*)
+
+
+(*
+
+I         <= I @ injp @ I @ injp
+injp  
+
+m1                                              m1' <- ro'                  m1'
+
+m2       --exists-->                                       ---exists--->    m2' <-- ro'
+
+m3                                                                          m3'
+
+"sound_reply"
+
+ro_unchange m1 m1' ->
+ro_unchange m2 m2.
+
+[x] m1                [x] m1'   p1   ~ Mem.perm m1 p1 Max Writable -> m1'[p1] = m1[p1]
+
+
+[  ] m2                [j(x)] m2'   p2   ~ Mem.perm m2 p2 Max Writable ->  m2'[p2] = m2[p2]
+
+ Mem.perm m1 p1 Max Nonempty  
+*)
 Lemma trans_injp_inv_incoming (I: invariant li_c) :
   ccref (I @ injp) ((I @ injp) @ (I @ injp)).
 Proof.
