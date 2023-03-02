@@ -298,3 +298,253 @@ Proof.
 Qed.
 (* end of copy *)
 
+(* Some properties used in RISC-V*)
+
+
+Lemma cmp_inject : forall v1 v2 v1' v2' c j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.inject j (Val.cmp c v1 v2) (Val.cmp c v1' v2').
+Proof. 
+  intros.
+  unfold Val.cmp.
+  unfold Val.of_optbool. destr.
+  exploit Val.cmp_bool_inject. eapply H. eapply H0. eapply Heqo.
+  intros.
+  rewrite H1.
+  unfold Vtrue, Vfalse.
+  destruct b;eauto. eauto.
+Qed.
+
+Lemma cmpl_inject : forall v1 v2 v1' v2' c j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.opt_val_inject j (Val.cmpl c v1 v2) (Val.cmpl c v1' v2').
+Proof. 
+  intros.
+  unfold Val.cmpl. 
+  unfold Val.cmpl_bool. destr;try econstructor.
+  inv H.
+  destr;try econstructor.
+  inv H0. simpl. econstructor.
+  unfold Val.of_bool,Vtrue,Vfalse. destr;eauto.
+Qed.
+
+Lemma cmpf_inject : forall v1 v2 v1' v2' c j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.inject j (Val.cmpf c v1 v2) (Val.cmpf c v1' v2').
+Proof. 
+  intros.
+  unfold Val.cmpf.
+  unfold Val.cmpf_bool. destr;try econstructor.
+  inv H.
+  destr;try econstructor.
+  inv H0. simpl.
+  unfold Val.of_bool,Vtrue,Vfalse. destr;eauto.
+Qed.
+
+Lemma cmpfs_inject : forall v1 v2 v1' v2' c j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.inject j (Val.cmpfs c v1 v2) (Val.cmpfs c v1' v2').
+Proof. 
+  intros.
+  unfold Val.cmpfs.
+  unfold Val.cmpfs_bool. destr;try econstructor.
+  inv H.
+  destr;try econstructor.
+  inv H0. simpl.
+  unfold Val.of_bool,Vtrue,Vfalse. destr;eauto.
+Qed.
+
+
+Lemma divs_inject : forall v1 v2 v1' v2' j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.opt_val_inject j (Val.divs v1 v2) (Val.divs v1' v2').
+Proof.
+  intros. unfold Val.divs.
+  destr;try econstructor.  
+  inv H. destr;inv H0;try econstructor.  
+  destr;eauto.
+  econstructor.
+  econstructor. econstructor.
+Qed.
+
+Lemma divu_inject : forall v1 v2 v1' v2' j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.opt_val_inject j (Val.divu v1 v2) (Val.divu v1' v2').
+Proof.
+  intros. unfold Val.divu.
+  destr;try econstructor.  
+  inv H. destr;inv H0;try econstructor.  
+  destr;eauto.
+  econstructor.
+  econstructor. econstructor.
+Qed.
+
+
+Lemma divls_inject : forall v1 v2 v1' v2' j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.opt_val_inject j (Val.divls v1 v2) (Val.divls v1' v2').
+Proof.
+  intros. unfold Val.divls.
+  destr;try econstructor.  
+  inv H. destr;inv H0;try econstructor.  
+  destr;eauto.
+  econstructor.
+  econstructor. econstructor.
+Qed.
+
+
+Lemma divlu_inject : forall v1 v2 v1' v2' j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.opt_val_inject j (Val.divlu v1 v2) (Val.divlu v1' v2').
+Proof.
+  intros. unfold Val.divlu.
+  destr;try econstructor.
+  inv H. destr;inv H0;try econstructor.  
+  destr;eauto.
+  econstructor.
+  econstructor. econstructor.
+Qed.
+
+
+Lemma mods_inject: forall v1 v2 v1' v2' j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.opt_val_inject j (Val.mods v1 v2) (Val.mods v1' v2').
+Proof.
+  intros. unfold Val.mods.
+  destr;try econstructor.
+  inv H. destr;inv H0;try econstructor.  
+  destr;eauto.
+  econstructor.
+  econstructor. econstructor.
+Qed.
+
+Lemma modu_inject: forall v1 v2 v1' v2' j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.opt_val_inject j (Val.modu v1 v2) (Val.modu v1' v2').
+Proof.
+  intros. unfold Val.modu.
+  destr;try econstructor.
+  inv H. destr;inv H0;try econstructor.  
+  destr;eauto.
+  econstructor.
+  econstructor. econstructor.
+Qed.
+
+Lemma modls_inject: forall v1 v2 v1' v2' j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.opt_val_inject j (Val.modls v1 v2) (Val.modls v1' v2').
+Proof.
+  intros. unfold Val.modls.
+  destr;try econstructor.
+  inv H. destr;inv H0;try econstructor.  
+  destr;eauto.
+  econstructor.
+  econstructor. econstructor.
+Qed.
+
+Lemma modlu_inject: forall v1 v2 v1' v2' j,
+    Val.inject j v1 v1' ->
+    Val.inject j v2 v2' ->
+    Val.opt_val_inject j (Val.modlu v1 v2) (Val.modlu v1' v2').
+Proof.
+  intros. unfold Val.modlu.
+  destr;try econstructor.
+  inv H. destr;inv H0;try econstructor.  
+  destr;eauto.
+  econstructor.
+  econstructor. econstructor.
+Qed.
+
+Lemma intuofsingle_inject: forall v1 v1' j,
+    Val.inject j v1 v1' ->
+    Val.opt_val_inject j (Val.intuofsingle v1) (Val.intuofsingle v1').
+Proof.
+  intros. unfold Val.intuofsingle.
+  destr;try econstructor.
+  inv H. unfold option_map. destr;econstructor.
+  constructor.
+Qed.
+
+Lemma singleofintu_inject: forall v1 v1' j,
+    Val.inject j v1 v1' ->
+    Val.opt_val_inject j (Val.singleofintu v1) (Val.singleofintu v1').
+Proof.
+  intros. unfold Val.singleofintu.
+  destr;try econstructor.
+  inv H. 
+  constructor. constructor.
+Qed.
+
+
+Lemma longuofsingle_inject: forall v1 v1' j,
+    Val.inject j v1 v1' ->
+    Val.opt_val_inject j (Val.longuofsingle v1) (Val.longuofsingle v1').
+Proof.
+  intros. unfold Val.longuofsingle.
+  destr;try econstructor.
+  inv H. unfold option_map. destr;econstructor.
+  constructor.
+Qed.
+
+
+Lemma singleoflongu_inject: forall v1 v1' j,
+    Val.inject j v1 v1' ->
+    Val.opt_val_inject j (Val.singleoflongu v1) (Val.singleoflongu v1').
+Proof.
+  intros. unfold Val.singleoflongu.
+  destr;try econstructor.
+  inv H. constructor.
+  constructor.
+Qed.
+
+Lemma intuoffloat_inject: forall v1 v1' j,
+    Val.inject j v1 v1' ->
+    Val.opt_val_inject j (Val.intuoffloat v1) (Val.intuoffloat v1').
+Proof.
+  intros. unfold Val.intuoffloat.
+  destr;try econstructor.
+  inv H. unfold option_map. destr;econstructor.
+  constructor.
+Qed.
+
+Lemma floatofintu_inject: forall v1 v1' j,
+    Val.inject j v1 v1' ->
+    Val.opt_val_inject j (Val.floatofintu v1) (Val.floatofintu v1').
+Proof.
+  intros. unfold Val.floatofintu.
+  destr;try econstructor.
+  inv H.
+  constructor. constructor.
+Qed.
+
+Lemma longuoffloat_inject: forall v1 v1' j,
+    Val.inject j v1 v1' ->
+    Val.opt_val_inject j (Val.longuoffloat v1) (Val.longuoffloat v1').
+Proof.
+  intros. unfold Val.longuoffloat.
+  destr;try econstructor.
+  inv H. unfold option_map. destr;econstructor.
+  constructor.
+Qed.
+
+Lemma floatoflongu_inject: forall v1 v1' j,
+    Val.inject j v1 v1' ->
+    Val.opt_val_inject j (Val.floatoflongu v1) (Val.floatoflongu v1').
+Proof.
+  intros. unfold Val.floatoflongu.
+  destr;try econstructor.
+  inv H. 
+  constructor. constructor.
+Qed.
+

@@ -310,72 +310,7 @@ Section WITHGE.
   | Pfcvtsd d s =>
       Next (nextinstr (rs#d <- (Val.singleoffloat rs#s))) m
 
-(** Pseudo-instructions *)
-  | Pallocframe sz pos =>
-    if zle 0 sz then
-      match rs # PC with
-      |Vptr (Global id) _
-       =>
-       let (m0,path) := Mem.alloc_frame m id in
-       let (m1, stk) := Mem.alloc m0 0 sz in
-       match Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame sz) with
-       |None => Stuck
-       |Some m2 =>
-        let sp := Vptr stk Ptrofs.zero in
-        match Mem.storev Mptr m2 (Val.offset_ptr sp pos) rs#SP with
-        | None => Stuck
-        | Some m3 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m3
-        end
-       end
-     |_ => Stuck
-      end
-    else Stuck
-      (* let (m1, stk) := Mem.alloc m 0 sz in *)
-      (* let sp := (Vptr stk Ptrofs.zero) in *)
-      (* match Mem.storev Mptr m1 (Val.offset_ptr sp pos) rs#SP with *)
-      (* | None => Stuck *)
-      (* | Some m2 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m2 *)
-      (* end *)
-  | Pfreeframe sz pos =>
-    (* if zle 0 sz then *)
-    (*   match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with *)
-    (*   | None => Stuck *)
-    (*   | Some sp => *)
-    (*     match rs#SP with *)
-    (*     | Vptr stk ofs => *)
-    (*       if check_topframe sz (Mem.astack (Mem.support m)) then *)
-    (*         if Val.eq sp (parent_sp_stree (Mem.stack (Mem.support m))) then *)
-    (*           if Val.eq (Vptr stk ofs) (top_sp_stree (Mem.stack (Mem.support m))) then *)
-    (*               match Mem.free m stk 0 fsz with *)
-    (*               | None => Stuck *)
-    (*               | Some m' => *)
-    (*                 match Mem.return_frame m' with *)
-    (*                 | None => Stuck *)
-    (*                 | Some m'' => *)
-    (*                   match Mem.pop_stage m'' with *)
-    (*                     | None => Stuck *)
-    (*                     | Some m''' => *)
-    (*                     Next (nextinstr (rs#RSP <- sp #RA <- ra)) m''' *)
-    (*                   end *)
-    (*                 end *)
-    (*               end else Stuck else Stuck else Stuck *)
-    (*           | _ => Stuck *)
-    (*           end *)
-    (*       end *)
-    (*   end else Stuck *)
-    
-      match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with
-      | None => Stuck
-      | Some v =>
-          match rs SP with
-          | Vptr stk ofs =>
-              match Mem.free m stk 0 sz with
-              | None => Stuck
-              | Some m' => Next (nextinstr (rs#SP <- v #X31 <- Vundef)) m'
-              end
-          | _ => Stuck
-          end
-      end
+(*
   | Plabel lbl =>
       Next (nextinstr rs) m
   | Ploadsymbol rd s ofs =>
@@ -390,6 +325,7 @@ Section WITHGE.
       Next (nextinstr (rs#X31 <- Vundef #rd <- (Vsingle f))) m
   | Pbuiltin ef args res =>
       Stuck (**r treated specially below *)
+*)
 
   (** The following instructions and directives are not generated directly by Asmgen,
       so we do not model them. *)

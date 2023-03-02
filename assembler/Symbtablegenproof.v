@@ -2245,6 +2245,43 @@ Proof.
   unfold Val.mul. destruct v1, v2; auto; inv H; inv H0; auto.
 Qed.
 
+(* Used in exec store step*)
+
+Lemma store_pres_glob_block_valid : forall m1 chunk b v ofs m2,
+  Mem.store chunk m1 b ofs v = Some m2 -> glob_block_valid m1 -> glob_block_valid m2.
+Proof.
+  unfold glob_block_valid in *. intros.  
+  eapply Mem.store_valid_block_1; eauto.
+Qed.
+
+Lemma storev_pres_glob_block_valid : forall m1 chunk ptr v m2,
+  Mem.storev chunk m1 ptr v = Some m2 -> glob_block_valid m1 -> glob_block_valid m2.
+Proof.
+  unfold Mem.storev. intros. destruct ptr; try congruence.
+  eapply store_pres_glob_block_valid; eauto.
+Qed.
+
+(* external call *)
+Lemma extcall_pres_glob_block_valid : forall ef ge vargs m1 t vres m2,
+  external_call ef ge vargs m1 t vres m2 -> glob_block_valid m1 -> glob_block_valid m2.
+Proof.
+  unfold glob_block_valid in *. intros.
+  eapply external_call_valid_block; eauto.
+Qed.
+
+(* copy from SSAsmproof.v, which is used in the external call in the step simulation*)
+Lemma val_inject_undef_caller_save_regs:
+  forall j rs1 rs2
+    (RINJ: forall r, Val.inject j (rs1 r) (rs2 r))
+    r,
+    Val.inject j (undef_caller_save_regs rs1 r) (undef_caller_save_regs rs2 r).
+Proof.
+  intros; eauto.
+  unfold undef_caller_save_regs.
+  destruct (preg_eq r SP); destruct (in_dec preg_eq r (map preg_of (filter Conventions1.is_callee_save Machregs.all_mregs))); simpl; try (apply RINJ).
+  eauto.
+Qed.
+
 
 End PRESERVATION.
 

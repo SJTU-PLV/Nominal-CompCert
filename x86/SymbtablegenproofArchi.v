@@ -321,19 +321,6 @@ Proof.
 Qed.
 
 
-Lemma store_pres_glob_block_valid : forall m1 chunk b v ofs m2,
-  Mem.store chunk m1 b ofs v = Some m2 -> glob_block_valid m1 -> glob_block_valid m2.
-Proof.
-  unfold glob_block_valid, Symbtablegenproof.glob_block_valid in *. intros.  
-  eapply Mem.store_valid_block_1; eauto.
-Qed.
-
-Lemma storev_pres_glob_block_valid : forall m1 chunk ptr v m2,
-  Mem.storev chunk m1 ptr v = Some m2 -> glob_block_valid m1 -> glob_block_valid m2.
-Proof.
-  unfold Mem.storev. intros. destruct ptr; try congruence.
-  eapply store_pres_glob_block_valid; eauto.
-Qed.
 
 Lemma exec_store_step: forall j rs1 rs2 m1 m2 rs1' m1' sz chunk r a dregs
                          (INJ: j = Mem.flat_inj (Mem.support m1))
@@ -501,12 +488,6 @@ Proof.
   repeat apply regset_inject_expand; auto.
 Qed.
 
-Lemma extcall_pres_glob_block_valid : forall ef ge vargs m1 t vres m2,
-  external_call ef ge vargs m1 t vres m2 -> glob_block_valid m1 -> glob_block_valid m2.
-Proof.
-  unfold glob_block_valid,Symbtablegenproof.glob_block_valid in *. intros.
-  eapply external_call_valid_block; eauto.
-Qed.
 
 (* TODO: it is architechture specific, we should move it to architechture directory *)
 (** The internal step preserves the invariant *)
@@ -739,18 +720,6 @@ Proof.
 (***** Remove Proofs By Chris End ******)
 Qed.
 
-(* copy from SSAsmproof.v *)
-Lemma val_inject_undef_caller_save_regs:
-  forall j rs1 rs2
-    (RINJ: forall r, Val.inject j (rs1 r) (rs2 r))
-    r,
-    Val.inject j (undef_caller_save_regs rs1 r) (undef_caller_save_regs rs2 r).
-Proof.
-  intros; eauto.
-  unfold undef_caller_save_regs.
-  destruct (preg_eq r SP); destruct (in_dec preg_eq r (map preg_of (filter Conventions1.is_callee_save Machregs.all_mregs))); simpl; try (apply RINJ).
-  eauto.
-Qed.
 
 Lemma prog_main_eq: AST.prog_main prog = prog_main tprog.
 Proof.
@@ -963,6 +932,18 @@ Proof.
 Qed.
 
 
+(** ** Matching of the Final States*)
+Lemma transf_final_states:
+  forall st1 st2 r,
+  match_states st1 st2 -> Asm.final_state st1 r -> final_state st2 r.
+Proof.
+  intros st1 st2 r MATCH FINAL.
+  inv FINAL. inv MATCH. constructor. 
+  - red in RSINJ. generalize (RSINJ PC). rewrite H. 
+    unfold Vnullptr. destruct Archi.ptr64; inversion 1; auto.
+  - red in RSINJ. generalize (RSINJ RAX). rewrite H0.
+    inversion 1. auto.
+Qed.
 
 End PRESERVATION.
 

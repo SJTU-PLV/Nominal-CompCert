@@ -55,20 +55,6 @@ Proof.
 Qed.
 
 
-
-(** ** Matching of the Final States*)
-Lemma transf_final_states:
-  forall st1 st2 r,
-  match_states st1 st2 -> Asm.final_state st1 r -> final_state st2 r.
-Proof.
-  intros st1 st2 r MATCH FINAL.
-  inv FINAL. inv MATCH. constructor. 
-  - red in RSINJ. generalize (RSINJ PC). rewrite H. 
-    unfold Vnullptr. destruct Archi.ptr64; inversion 1; auto.
-  - red in RSINJ. generalize (RSINJ RAX). rewrite H0.
-    inversion 1. auto.
-Qed.
-
 (** ** The Main Correctness Theorem *)
 Lemma transf_program_correct:
   forward_simulation (RealAsm.semantics instr_size prog) 
