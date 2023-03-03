@@ -2,8 +2,9 @@
 
 (** The key feature of this semantics: it uses the relocation tables 
 for each sections to recover the id in the code section. 
-The data sections is unchanged in relocation table generation.
-Then we apply the RelocProgsemantics to the decoded program *)
+The data sections are unchanged in the generation of relocation tables.
+Then we use the RelocProgsemantics of the decoded program as the semantics 
+of the source program *)
 
 Require Import Coqlib Maps AST lib.Integers Values.
 Require Import Events lib.Floats Memory Smallstep.
@@ -57,7 +58,7 @@ Definition decode_program {D: Type} (p: RelocProg.program fundef unit instructio
      prog_senv := prog_senv p;
   |}.
 
-Definition globalenv {D: Type} (p: RelocProg.program fundef unit instruction D) := RelocProgSemantics.globalenv instr_size (decode_program p).
+Definition globalenv {D: Type} (p: RelocProg.program fundef unit instruction D) := globalenv instr_size (decode_program p).
 
 Inductive initial_state (p:program) (rs:regset) (st:state) : Prop :=
 | initial_state_intro: forall p',
@@ -66,59 +67,48 @@ Inductive initial_state (p:program) (rs:regset) (st:state) : Prop :=
     initial_state p rs st.
 
 Definition semantics (p:program) (rs:regset) :=
-  Semantics_gen (RelocProgSemantics.step instr_size)
+  Semantics_gen (RelocProgSemanticsArchi.step instr_size)
                 (initial_state p rs)
-                (RelocProgSemantics.final_state)
+                (final_state)
                 (globalenv p)
-                (Genv.genv_senv (RelocProgSemantics.globalenv instr_size p)).
+                (Genv.genv_senv (globalenv p)).
+
+
+  Ltac rewrite_hyps :=
+  repeat
+    match goal with
+      H1 : ?a = _, H2: ?a = _ |- _ => rewrite H1 in H2; inv H2
+    end.
+  
 
 Lemma semantics_determinate: forall p rs, determinate (semantics p rs).
 Proof.
-  Ltac Equalities :=
-  match goal with
-  | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] =>
-      rewrite H1 in H2; inv H2; Equalities
-  | _ => idtac
-  end.
-  intros.
-  (* destruct (RelocProgSemantics.semantics_determinate instr_size p rs). *)
-  constructor;simpl;intros.
-  -                             (* initial state *)
-    inv H;inv H0;Equalities.
-    + split. constructor. auto.
-    + discriminate.
-    + discriminate.
-    + assert (vargs0 = vargs) by (eapply RelocProgSemanticsArchi.eval_builtin_args_determ; eauto).     
-      subst vargs0.      
-      exploit external_call_determ. eexact H5. eexact H11. intros [A B].      
-      split. auto. intros. destruct B; auto. subst. auto.
-    + assert (args0 = args) by (eapply Asm.extcall_arguments_determ; eauto). subst args0.
-      exploit external_call_determ. eexact H3. eexact H7. intros [A B].
-      split. auto. intros. destruct B; auto. subst. auto.
-  - red; intros; inv H; simpl.
+  intros; constructor; simpl; intros.
+  - unfold globalenv in *. exploit semantics_determinate_step. eapply H. eapply H0.
+    unfold decode_program. simpl. auto.
+  - (* trace length *)
+    red; intros; inv H; simpl.
     lia.
     eapply external_call_trace_length; eauto.
-    eapply external_call_trace_length; eauto.
   - (* initial states *)
-    inv H; inv H0. inv H1;inv H2. assert (m = m0) by congruence. subst. inv H0; inv H3.
-  assert (m1 = m3 /\ stk = stk0) by intuition congruence. destruct H0; subst.
-  assert (m2 = m4) by congruence. subst.
-  f_equal. (* congruence. *)
-- (* final no step *)
-  assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
-  { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
-  inv H. red; intros; red; intros. inv H; rewrite H0 in *; eelim NOTNULL; eauto.
-- (* final states *)
-  inv H; inv H0. congruence.    
+    inv H; inv H0. inv H2; inv H1. rewrite_hyps.
+    eapply initial_state_gen_determinate;eauto.
+  - (* final no step *)
+    assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
+    { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
+    inv H. red; intros; red; intros. inv H; rewrite H0 in *; eelim NOTNULL; eauto.
+  - (* final states *)
+    inv H; inv H0. congruence.
 Qed.
 
+  
 Theorem reloc_prog_single_events p rs:
   single_events (semantics p rs).
 Proof.
   red. intros.
   inv H; simpl. lia.
   eapply external_call_trace_length; eauto.
-  eapply external_call_trace_length; eauto.
+  (* eapply external_call_trace_length; eauto. *)
 Qed.
 
 Theorem reloc_prog_receptive p rs:
@@ -127,11 +117,11 @@ Proof.
   split.
   - simpl. intros s t1 s1 t2 STEP MT.
     inv STEP.
-    inv MT. eexists. eapply RelocProgSemantics.exec_step_internal; eauto.
+    inv MT. eexists. eapply exec_step_internal; eauto.
     edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
-    eexists. eapply RelocProgSemantics.exec_step_builtin; eauto.
-    edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
-    eexists. eapply RelocProgSemantics.exec_step_external; eauto.
+    (* eexists. eapply RelocProgSemantics.exec_step_builtin; eauto. *)
+    (* edestruct external_call_receptive as (vres2 & m2 & EC2); eauto. *)
+    eexists. eapply exec_step_external; eauto.
   - eapply reloc_prog_single_events; eauto.  
 Qed.
 

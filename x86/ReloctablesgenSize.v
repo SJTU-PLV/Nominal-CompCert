@@ -1,9 +1,8 @@
 Require Import Coqlib Maps Integers Floats Values AST Errors.
 Require Import Asm RelocProg RelocProgram.
 Require Import Hex compcert.encode.Bits Memdata Encode.
-Require Import EncDecRet BPProperty.
-Require Import TranslateInstr RelocBinDecode.
-Require Import ReloctablesgenArchi RelocProgSemanticsArchi1 ReloctablesgenproofArchi.
+Require Import LocalLib.
+Require Import ReloctablesgenArchi RelocProgSemanticsArchi1.
 Import Hex Bits.
 Import ListNotations.
 
@@ -12,7 +11,7 @@ Local Open Scope hex_scope.
 Local Open Scope bits_scope.
 
 
-Lemma rev_id_eliminate_size: forall i id addend, instr_size_asm i = instr_size_asm (rev_id_eliminate id addend i).
+Lemma rev_id_eliminate_size: forall i id addend, instr_size_real i = instr_size_real (rev_id_eliminate id addend i).
 Proof.
   destruct i;intros;cbn;auto;
     try (destruct a;destruct const;simpl;auto).
@@ -20,7 +19,7 @@ Proof.
 Qed.
 
 
-Lemma id_eliminate_size_unchanged:forall i, instr_size_asm i = instr_size_asm (id_eliminate i).
+Lemma id_eliminate_size_unchanged:forall i, instr_size_real i = instr_size_real (id_eliminate i).
 Proof.
   Transparent addrmode_size.
   destruct i;simpl;auto;
@@ -143,8 +142,9 @@ Ltac addrmode_reloc_offset_check:=
 
 Lemma instr_reloc_bound :
   forall i ofs,
-    instr_reloc_offset i = OK ofs -> 0 < ofs < instr_size_asm i.
+    instr_reloc_offset i = OK ofs -> 0 < ofs < instr_size_real i.
 Proof.
+  unfold instr_size_real.
   destruct i;cbn [instr_reloc_offset];cbn [instr_size_asm];intros;destr_in H;try monadInv H;    
     try check_r;
     try check_f;
@@ -157,3 +157,110 @@ Proof.
     try lia.
 Qed.
 
+Lemma lt_add_range:forall a b c,
+    0 < b < c -> a < a + b < a + c.
+Proof. 
+  intros. lia.
+Qed.
+
+Section WITH_INSTR_SIZE.
+
+Variable instr_size : instruction -> Z.
+Hypothesis instr_reloc_bound : forall i ofs, instr_reloc_offset i = OK ofs -> 0 < ofs < instr_size i.
+
+Lemma transl_instr_range': forall ofs i e,
+    transl_instr instr_size ofs i = OK (Some e) ->
+    ofs < e.(reloc_offset) < ofs + instr_size i.
+  intros ofs i e.
+  (* generalize (instr_size_bound i). intros A.   *)
+  unfold transl_instr.
+
+  destruct Archi.ptr64 eqn:PTR.
+  -
+  (* 64bit *)
+  destruct i;intros H;destr_match_in H;try monadInv H. 
+  
+  (* only solve Pmov_rs *)  
+  unfold compute_instr_abs_relocentry in *. monadInv EQ0.
+  simpl;eapply lt_add_range; auto.
+
+  1-41: try (destruct a;destruct const;try destruct p;try monadInv H).
+  1-41: try (
+             unfold compute_instr_disp_relocentry in *;
+             try rewrite PTR in *;
+             unfold compute_instr_abs_relocentry in *;             
+             unfold compute_instr_rel_relocentry in *;
+             repeat (monadInv EQ0));
+  simpl;try eapply lt_add_range; auto.
+  
+  (* (* Pjmp_s *) *)
+  (* monadInv H1. *)
+  (* unfold compute_instr_rel_relocentry in *. *)
+  (* monadInv EQ. *)
+  (* destr_match_in EQ2;inv EQ2;simpl;eapply lt_add_range; auto. *)
+  (* inv H1. simpl. eapply lt_add_range; auto. *)
+  (* Pjmp_m *)
+  destruct base. monadInv H.
+  monadInv EQ0. 
+  simpl;eapply lt_add_range; auto.
+  destruct ofs0. monadInv H.
+  monadInv EQ0.
+  simpl;eapply lt_add_range; auto.
+  monadInv H. monadInv EQ0.
+  simpl. eapply lt_add_range; auto.
+  (* call_s *)
+  (* monadInv H1. unfold compute_instr_rel_relocentry in *. repeat (monadInv EQ). destr_match_in EQ2. inv EQ2. *)
+  (* simpl.  *)
+  (* eapply lt_add_range; auto. inv EQ2. *)
+  (* (* inv H1.   simpl.  *) *)
+  (* (* eapply lt_add_range; auto. *) *)
+  (* (* Pbuiltin *) *)
+  (* destr_match_in H1. *)
+  (* inv H1. inv H1. *)
+  (* Pmovw_rm *)
+  destruct ad;destruct const;try destruct p;monadInv H.
+  monadInv EQ0. simpl.
+  eapply lt_add_range; auto.
+  
+  (* 32 bit *)
+  -
+    destruct i;intros H;destr_match_in H;try monadInv H. 
+
+  (* only solve Pmov_rs *)  
+  unfold compute_instr_abs_relocentry in *. monadInv EQ0.
+  simpl;eapply lt_add_range; auto.
+            
+  1-41: try (destruct a;destruct const;try destruct p;try monadInv H).
+  1-41:try (
+             unfold compute_instr_disp_relocentry in *;
+             try rewrite PTR in *;
+             unfold compute_instr_abs_relocentry in *;             
+             unfold compute_instr_rel_relocentry in *;
+             repeat (monadInv EQ0));
+    simpl;try eapply lt_add_range; auto.
+  
+ 
+  (* Pjmp_m *)
+  destruct base. monadInv H.
+  monadInv EQ0. 
+  simpl;eapply lt_add_range; auto.
+  destruct ofs0. monadInv H.
+  monadInv EQ0.
+  simpl;eapply lt_add_range; auto.
+  monadInv H. monadInv EQ0.
+  simpl;eapply lt_add_range; auto.
+
+  (* Pmovw_rm *)
+  destruct ad;destruct const;try destruct p;try monadInv H.
+  monadInv EQ0. simpl.
+  eapply lt_add_range; auto.
+Qed.
+
+End WITH_INSTR_SIZE.
+
+Lemma transl_instr_range: forall ofs i e,
+    transl_instr instr_size_real ofs i = OK (Some e) ->
+    ofs < e.(reloc_offset) < ofs + instr_size_real i.
+Proof.
+  eapply (transl_instr_range' instr_size_real instr_reloc_bound).
+Qed.

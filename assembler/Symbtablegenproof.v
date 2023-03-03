@@ -766,13 +766,6 @@ Proof.
 Qed.
 
 
-Lemma code_size_app:
-  forall c1 c2,
-    code_size instr_size (c1 ++ c2) = code_size instr_size c1 + code_size instr_size c2.
-Proof.
-  induction c1; simpl; intros; rewrite ? IHc1; lia.
-Qed.
-
 Lemma acc_instr_map_fst_code_size: forall n imap c,
     length c = n ->
     code_size instr_size c <= Ptrofs.max_unsigned ->

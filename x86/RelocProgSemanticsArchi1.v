@@ -144,4 +144,4 @@ Definition rev_id_eliminate (symb: ident) (_ : Z) (i:instruction) :=
      (Pleaq rd (Addrmode rb ss (inr (symb, ptrofs))))
   | _ =>
      i
-    end.
+   end.

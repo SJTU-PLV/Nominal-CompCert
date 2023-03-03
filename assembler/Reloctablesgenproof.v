@@ -2,12 +2,11 @@ Require Import Coqlib Errors Maps Memory.
 Require Import Integers Floats AST RelocProgLinking Linking.
 Require Import Op Locations Mach Conventions Asm RealAsm.
 Require Import Reloctablesgen ReloctablesgenArchi.
-Require Import RelocProg RelocProgram RelocProgSemantics RelocProgSemantics1.
+Require Import RelocProg RelocProgram RelocProgGlobalenvs RelocProgSemantics RelocProgSemantics1.
 Require Import RelocProgSemanticsArchi RelocProgSemanticsArchi1.
 Require Import ReloctablesgenproofArchi.
 Require Import LocalLib AsmInject.
 Import ListNotations.
-Require AsmFacts.
 
 
 Set Implicit Arguments.
@@ -115,8 +114,12 @@ Section PRESERVATION.
 Variable instr_size : instruction -> Z.
 Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
 
+(* Proved in ReloctablesgenSize.v *)
+Hypothesis transl_instr_range: forall ofs i e,
+    transl_instr instr_size ofs i = OK (Some e) ->
+    ofs < e.(reloc_offset) < ofs + instr_size i.
+
 Hypothesis id_eliminate_size_unchanged:forall i, instr_size i = instr_size (id_eliminate i).
-Hypothesis instr_reloc_bound : forall i ofs, instr_reloc_offset i = OK ofs -> 0 < ofs < instr_size i.
 Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.
 
 Definition match_prog (p: program) (tp: program) :=
@@ -242,7 +245,7 @@ Qed.
 
 Lemma transl_code_consistency_aux:forall n c r1 r2,
     length c = n ->
-    Forall (fun e => e.(reloc_offset) > code_size instr_size c) r2 ->
+    Forall (fun e => e.(reloc_offset) >= code_size instr_size c) r2 ->
     transl_code instr_size c = OK r1 ->
     exists c', fold_left (rev_acc_code instr_size) (transl_code' c) ([], 0, r1++r2) = (c', code_size instr_size c, r2)
           /\ Forall2 instr_eq c' c.
@@ -275,7 +278,7 @@ Proof.
       (* Forall offset *)
       simpl. constructor. lia.
       eapply Forall_impl with (P:= (fun e : relocentry =>
-              reloc_offset e > code_size instr_size (l' ++ [a]))).
+              reloc_offset e >= code_size instr_size (l' ++ [a]))).
       rewrite code_size_app. simpl. intros. lia. auto.
       unfold transl_code.
       rewrite EQ0. simpl. auto. }
@@ -295,7 +298,7 @@ Proof.
     { eapply IHn;auto.
       (* Forall offset *)
       eapply Forall_impl with (P:= (fun e : relocentry =>
-              reloc_offset e > code_size instr_size (l' ++ [a]))).
+              reloc_offset e >= code_size instr_size (l' ++ [a]))).
       rewrite code_size_app. simpl. intros.
       generalize (instr_size_bound a). intros.
       lia. auto.
@@ -412,6 +415,8 @@ Definition section_eq (sec1 sec2:section) :=
     d1 = d2
   | _,_ => False
   end.
+
+Local Close Scope asm.          (* for the notation of "##" *)
 
 Lemma transl_sections_consistency:forall sectbl reloc_map,
     transl_sectable instr_size sectbl = OK reloc_map ->
@@ -554,7 +559,7 @@ Qed.
 Variable prog: program.
 Variable tprog: program.
 
-Let ge := RelocProgSemantics.globalenv instr_size prog.
+Let ge := RelocProgGlobalenvs.globalenv instr_size prog.
 Let tge := globalenv instr_size tprog.
 
 Hypothesis TRANSF: match_prog prog tprog.  
@@ -562,14 +567,14 @@ Hypothesis TRANSF: match_prog prog tprog.
 Lemma genv_symb_eq: RelocProgGlobalenvs.Genv.genv_symb ge =  RelocProgGlobalenvs.Genv.genv_symb tge.
   unfold match_prog in  TRANSF. unfold transf_program in TRANSF.
   monadInv TRANSF.
-  unfold globalenv,RelocProgSemantics.globalenv.
+  unfold globalenv,RelocProgGlobalenvs.globalenv.
   simpl. auto.
 Qed.
 
 Lemma genv_ext_funs_eq: RelocProgGlobalenvs.Genv.genv_ext_funs ge =  RelocProgGlobalenvs.Genv.genv_ext_funs tge.
   unfold match_prog in  TRANSF. unfold transf_program in TRANSF.
   monadInv TRANSF.
-  unfold globalenv,RelocProgSemantics.globalenv.
+  unfold globalenv,RelocProgGlobalenvs.globalenv.
   simpl. auto.
 Qed.
 
@@ -577,7 +582,7 @@ Qed.
 Lemma genv_instr_eq: forall v, option_rel instr_eq (RelocProgGlobalenvs.Genv.find_instr tge v) (RelocProgGlobalenvs.Genv.find_instr ge v).
   unfold match_prog in  TRANSF. unfold transf_program in TRANSF.
   monadInv TRANSF.
-  unfold globalenv,RelocProgSemantics.globalenv in *.
+  unfold globalenv,RelocProgGlobalenvs.globalenv in *.
   simpl in *. destruct v;simpl;try constructor.
 
   unfold ge,tge. simpl.
@@ -645,7 +650,7 @@ Proof.
   econstructor;eauto. unfold decode_program. simpl.
   apply RelocProgSemantics.initial_state_intro with (m:=m).
   unfold init_mem in *. simpl in *.
-  unfold RelocProgSemantics.globalenv in *. simpl.
+  unfold RelocProgGlobalenvs.globalenv in *. simpl.
 
   destr_in H. exploit (alloc_sections_eq).
   assert (RelocProgGlobalenvs.Genv.genv_symb ge =  RelocProgGlobalenvs.Genv.genv_symb tge).
@@ -655,7 +660,7 @@ Proof.
   eauto.
   intros A. unfold tge in A. unfold globalenv in A.
   unfold decode_program in A. simpl in A.
-  unfold RelocProgSemantics.globalenv  in A. simpl in A.
+  unfold RelocProgGlobalenvs.globalenv  in A. simpl in A.
   rewrite A.
 
   auto.
@@ -683,41 +688,37 @@ Proof.
   - 
 
     exploit genv_instr_eq. rewrite H2.
-    intros. inv H.    
+    intros. inv H.
     eapply exec_step_internal with (i:=x);eauto.
 
     unfold RelocProgGlobalenvs.Genv.find_ext_funct in *.
-    destr_in H1. 
+    destr_in H1.
     
     unfold match_prog in TRANSF. unfold transf_program in TRANSF.
     monadInv TRANSF. simpl;auto.
 
-    unfold instr_eq in H6. clear H4 H1 H2 H0.
-    erewrite exec_instr_refl in H3.
-    2: eapply symbol_address_pres.
-    destruct x;subst;auto.
-    destruct i;inv H6.
-    simpl in *. auto.
+    exploit exec_instr_eq. eapply symbol_address_pres. eauto.   
+    rewrite <- H3. eauto.
     
-  - eapply exec_step_builtin;eauto.
-    unfold RelocProgGlobalenvs.Genv.find_ext_funct in *.
-    destr_in H1.
-    unfold match_prog in TRANSF. unfold transf_program in TRANSF.
-    monadInv TRANSF. simpl;auto.
-     exploit genv_instr_eq. rewrite H2.
-     intros. inv H. unfold instr_eq in H7.
-     (* architecture dependent *)
-     destr_in H7. subst.
-     simpl. inv H7. rewrite <- H5. auto.
-     eapply eval_builtin_args_preserved with (ge1:= ge).
-     unfold RelocProgGlobalenvs.Genv.find_symbol. simpl.     
+  (* - eapply exec_step_builtin;eauto. *)
+  (*   unfold RelocProgGlobalenvs.Genv.find_ext_funct in *. *)
+  (*   destr_in H1. *)
+  (*   unfold match_prog in TRANSF. unfold transf_program in TRANSF. *)
+  (*   monadInv TRANSF. simpl;auto. *)
+  (*    exploit genv_instr_eq. rewrite H2. *)
+  (*    intros. inv H. unfold instr_eq in H7. *)
+  (*    (* architecture dependent *) *)
+  (*    destr_in H7. subst. *)
+  (*    simpl. inv H7. rewrite <- H5. auto. *)
+  (*    eapply eval_builtin_args_preserved with (ge1:= ge). *)
+  (*    unfold RelocProgGlobalenvs.Genv.find_symbol. simpl.      *)
      
-     simpl in *. unfold match_prog in TRANSF. unfold transf_program in TRANSF.
-     monadInv TRANSF. simpl;eauto.
-     eauto.
+  (*    simpl in *. unfold match_prog in TRANSF. unfold transf_program in TRANSF. *)
+  (*    monadInv TRANSF. simpl;eauto. *)
+  (*    eauto. *)
      
-     simpl in *. unfold match_prog in TRANSF. unfold transf_program in TRANSF.
-     monadInv TRANSF. simpl;eauto.
+  (*    simpl in *. unfold match_prog in TRANSF. unfold transf_program in TRANSF. *)
+  (*    monadInv TRANSF. simpl;eauto. *)
 
   - eapply exec_step_external;eauto.
     simpl in *. destr_in H1.

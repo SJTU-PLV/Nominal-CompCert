@@ -18,8 +18,15 @@ Section WITH_INSTR_SIZE.
   Variable instr_size : instruction -> Z.
   Let exec_instr:= exec_instr instr_size.
 
+Lemma code_size_app:
+  forall c1 c2,
+    code_size instr_size (c1 ++ c2) = code_size instr_size c1 + code_size instr_size c2.
+Proof.
+  induction c1; simpl; intros; rewrite ? IHc1; lia.
+Qed.
+
+
 (** Small step semantics *)
-        
 
 
 (** New defined eval_builtin_arg for Genv.t *)

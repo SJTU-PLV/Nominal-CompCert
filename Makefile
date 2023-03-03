@@ -129,9 +129,9 @@ ARCHFILES=\
   Jumptablegen.v \
   AsmInjectArchi.v \
   SymbtablegenArchi.v  SymbtablegenproofArchi.v\
-  RelocationTypes.v ReloctablesgenArchi.v ReloctablesgenproofArchi.v\
+  RelocationTypes.v ReloctablesgenArchi.v ReloctablesgenSize.v ReloctablesgenproofArchi.v\
   RelocBinDecode.v RelocBingenproofArchi.v\
-  TranslateInstr.v TranslateInstrSize.v\
+  TranslateInstr.v\
   AsmLongInt.v\
   RelocProgSemanticsArchi.v RelocProgSemanticsArchi1.v\
   RelocElfArchi.v ReloctablesEncodeArchi.v
@@ -149,10 +149,10 @@ ARCHFILES=\
   Jumptablegen.v\
   AsmInjectArchi.v \
   SymbtablegenArchi.v SymbtablegenproofArchi.v\
-  RelocationTypes.v ReloctablesgenArchi.v\
+  RelocationTypes.v ReloctablesgenArchi.v ReloctablesgenSize.v ReloctablesgenproofArchi.v\
   TranslateInstr.v\
   RelocElfArchi.v\
-  RelocProgSemanticsArchi.v\
+  RelocProgSemanticsArchi.v RelocProgSemanticsArchi1.v\
   ReloctablesEncodeArchi.v
 else
 ARCHFILES=
