@@ -5020,6 +5020,130 @@ Proof.
   apply H0; auto. eapply perm_valid_block; eauto.
 Qed.
 
+(** * memory accessibility relations that remain valid during memory operations *)
+
+(** ro_unchanged *)
+Definition ro_unchanged m1 m2 : Prop :=
+   forall b ofs n bytes, valid_block m1 b ->
+                      loadbytes m2 b ofs n = Some bytes ->
+                      (forall i, ofs <= i < ofs + n -> ~ perm m1 b i Max Writable) ->
+                      loadbytes m1 b ofs n = Some bytes.
+
+Definition ro_unchanged_memval m m' : Prop :=
+    forall b ofs,
+      valid_block m b ->
+      perm m' b ofs Cur Readable ->
+      ~ perm m b ofs Max Writable ->
+      perm m b ofs Cur Readable /\
+        ZMap.get ofs (NMap.get _ b (mem_contents m)) = ZMap.get ofs (NMap.get _ b (mem_contents m')).
+
+Lemma ro_unchanged_memval_bytes: forall m m',
+    ro_unchanged m m' <-> ro_unchanged_memval m m'.
+Proof.
+  intros. split.
+  - intros. red in H. red. intros.
+    exploit H. eauto. instantiate (2:= 1).
+    instantiate (2:= ofs). instantiate (1:= ZMap.get ofs (NMap.get _ b (mem_contents m')) :: nil).
+    unfold loadbytes. destruct range_perm_dec.
+    simpl. reflexivity. exfalso. apply n. red.
+    intros. destruct (zeq ofs0 ofs). subst. eauto. extlia.
+    intros. destruct (zeq i ofs). subst. eauto. extlia.
+    intro LOAD.
+    unfold loadbytes in LOAD. destruct range_perm_dec; try congruence.
+    split. apply r. lia. simpl in LOAD. congruence.
+  - intros. red in H. red. intros. destruct (zlt 0 n).
+    + (* n ≥ 0 *)
+      unfold loadbytes in *; simpl in H1. destruct range_perm_dec; try congruence.
+      rewrite pred_dec_true. inv H1. f_equal.
+      apply getN_exten. intros. rewrite Z2Nat.id in H1; try lia.
+      exploit H; eauto. intros [A B]. eauto.
+      red. intros. exploit H. eauto. eapply r. instantiate (1:= ofs0). lia.
+      eapply H2; eauto. intros [A B]. eauto.
+    + (* n < 0 *)
+      unfold loadbytes in *; simpl in H1. destruct range_perm_dec; try congruence.
+      rewrite Z_to_nat_neg in H1; try lia. simpl in H1. inv H1.
+      rewrite pred_dec_true. rewrite Z_to_nat_neg. simpl. reflexivity. lia.
+      red. intros. extlia.
+Qed.
+
+Lemma ro_unchanged_alloc : forall m m' lo hi b,
+    alloc m lo hi = (m',b) -> ro_unchanged m m'.
+Proof.
+  intros. red. intros. erewrite <- Mem.loadbytes_alloc_unchanged; eauto.
+Qed.
+
+Lemma ro_unchanged_free : forall m m' b lo hi,
+    free m b lo hi = Some m' -> ro_unchanged m m'.
+Proof.
+  intros. red. intros. eapply loadbytes_free_2; eauto.
+Qed.
+
+Lemma ro_unchanged_store : forall m m' chunk ofs b v,
+    store chunk m b ofs v = Some m' -> ro_unchanged m m'.
+Proof.
+  intros. red. intros. erewrite <- loadbytes_store_other; eauto.
+  apply store_valid_access_3 in H. destruct H. red in H.
+  destruct (eq_block b b0).
+    + subst. right.
+      destruct (Z_le_gt_dec n 0). left. auto.
+      right.
+      destruct (Z_le_gt_dec (ofs0+n) ofs).
+      left. auto.
+      destruct (Z_le_gt_dec (ofs + size_chunk chunk) ofs0).
+      right. auto.
+      exfalso.
+      destruct (Z_le_gt_dec ofs ofs0).
+      exploit H. instantiate (1:= ofs0). lia. intro PERM.
+      exploit H2. instantiate (1:= ofs0). lia.  eauto with mem. auto.
+      exploit H. instantiate (1:= ofs). destruct chunk; simpl; lia. intro PERM.
+      exploit H2. instantiate (1:= ofs). lia. eauto with mem. auto.
+    + left. auto.
+Qed.
+
+Lemma ro_unchanged_storebytes :forall m m' b ofs bytes,
+    storebytes m b ofs bytes = Some m' -> ro_unchanged m m'.
+Proof.
+  intros. red. intros.
+  destruct (Z_le_gt_dec n 0).
+    rewrite Mem.loadbytes_empty in H1; eauto. inv H1.
+    rewrite Mem.loadbytes_empty. eauto. auto.
+    destruct (Z_le_gt_dec (Z.of_nat (Datatypes.length bytes)) 0).
+    destruct bytes. simpl in l. inv H.
+    assert (m = m'). {
+      eapply Mem.storebytes_empty; eauto.
+    }
+    subst. eauto. cbn in l. extlia.
+    erewrite <- Mem.loadbytes_storebytes_other; eauto. lia.
+    apply Mem.storebytes_range_perm in H. red in H.
+    destruct (eq_block b0 b). subst. right.
+    destruct (Z_le_gt_dec (ofs0+n) ofs).
+    left. auto.
+    destruct (Z_le_gt_dec (ofs + Z.of_nat (Datatypes.length bytes)) ofs0).
+    right. auto.
+    exfalso.
+    destruct (Z_le_gt_dec ofs ofs0).
+    exploit H. instantiate (1:= ofs0). lia. intro PERM.
+    exploit H2. instantiate (1:= ofs0). lia.  eauto with mem. auto.
+    exploit H. instantiate (1:= ofs). lia. intro PERM.
+    exploit H2. instantiate (1:= ofs). lia. eauto with mem. auto.
+    left. auto.
+Qed.
+
+(** max_perm_decrease *)
+
+(** sup_include *)
+
+(* All these three relations can be combind together to form a PreOrder,
+  which can be further used to state a invariant (self-sim) for all internal
+  semantics. Later we may need this.
+*)
+                           
+
+
+
+
+
+
 (** * setN' operation on ZMap.t *)
 
 Fixpoint setN' {A:Type} (elements : list (Z*A)) (c: ZMap.t A) {struct elements} :=
@@ -6393,6 +6517,12 @@ Proof.
     eapply access_filter_none; eauto.
 Qed.
 
+Definition is_Undef (mv : memval) : bool :=
+  match mv with
+  |Undef => true
+  |_ => false
+  end.
+
 
 Fixpoint content_filter' (vl2 : list (Z * memperm)) (b2: block): list (Z * memval) :=
   match vl2 with
@@ -6400,8 +6530,10 @@ Fixpoint content_filter' (vl2 : list (Z * memperm)) (b2: block): list (Z * memva
   | (o2,_) :: tl =>
       match (loc_in_reach_find b2 o2) with
       |Some (b1,o1) => if perm_dec m1' b1 o1 Cur Readable then
+                          if perm_dec m1 b1 o1 Max Writable then
                            (o2, memval_map j12' ((mem_contents m1')#b1)##o1)
                              :: (content_filter' tl b2)
+                             else (content_filter' tl b2)
                       else (content_filter' tl b2)
       |None => (content_filter' tl b2)
       end
@@ -6421,13 +6553,14 @@ Proof.
   - simpl. destruct a.
     destruct (loc_in_reach_find b2 t) eqn:FIND; eauto.
     destruct p. destruct perm_dec; eauto.
+    destruct perm_dec; eauto.
     intro. destruct H0. inv H0. simpl in H. congruence.
     eapply IHl; eauto.
 Qed.
 
 Lemma content_filter'_none': forall map b2 o2 b1 o1,
     loc_in_reach_find b2 o2 = Some (b1, o1) ->
-    ~ perm m1' b1 o1 Cur Readable ->
+    (~ perm m1' b1 o1 Cur Readable \/ ~perm m1 b1 o1 Max Writable) ->
    ~ In o2 (List.map fst (content_filter' (ZMap.elements map) b2)).
 Proof.
   intros.
@@ -6435,9 +6568,9 @@ Proof.
   - simpl. eauto.
   - simpl. destruct a.
     destruct (loc_in_reach_find b2 t) eqn:FIND; eauto.
-    destruct p. destruct perm_dec; eauto.
-    intro. destruct H1. inv H1. simpl in H. congruence.
-    eapply IHl; eauto.
+    destruct p. destruct perm_dec; eauto. destruct perm_dec; eauto.
+    intro. destruct H1. inv H1. simpl in H. rewrite H in FIND. inv FIND.
+    destruct H0; try congruence. eapply IHl; eauto.
 Qed.
 
 Lemma content_filter_none: forall b2 o2,
@@ -6450,7 +6583,7 @@ Qed.
 
 Lemma content_filter_none': forall b2 o2 b1 o1,
     loc_in_reach_find b2 o2 = Some (b1,o1) ->
-    ~ perm m1' b1 o1 Cur Readable ->
+    (~ perm m1' b1 o1 Cur Readable \/ ~ perm m1 b1 o1 Max Writable) ->
    ~ In o2 (List.map fst (content_filter b2)).
 Proof.
   intros.
@@ -6459,25 +6592,28 @@ Qed.
 
 Lemma content_filter'_rec : forall vl b2 o2 b1 o1,
     loc_in_reach_find b2 o2 = Some (b1, o1) ->
-    perm m1' b1 o1 Cur Readable ->
+    perm m1' b1 o1 Cur Readable -> perm m1 b1 o1 Max Writable ->
     In o2 (List.map fst vl) ->
     In (o2, memval_map j12' ((mem_contents m1')#b1)##o1) (content_filter' vl b2).
 Proof.
   induction vl; intros.
-  - inv H1.
+  - inv H2.
   - simpl in *. destruct a.
-    destruct H1.
-    + simpl in H1. subst.
-      rewrite H. destruct perm_dec; try congruence. left. eauto.
+    destruct H2.
+    + simpl in H2. subst.
+      rewrite H. destruct perm_dec; try congruence.
+      destruct perm_dec; try congruence.
+      left. eauto.
     + destruct (loc_in_reach_find b2 z) eqn:FIND'.
       * destruct p. destruct perm_dec; eauto.
+        destruct perm_dec; eauto.
         right. eauto.
       * eauto.
 Qed.
 
 Lemma content_filter_some: forall b2 o2 b1 o1,
     loc_in_reach_find b2 o2 = Some (b1, o1) ->
-    perm m1' b1 o1 Cur Readable ->
+    perm m1' b1 o1 Cur Readable -> perm m1 b1 o1 Max Writable ->
     In (o2, memval_map j12' ((mem_contents m1')#b1)##o1) (content_filter b2).
 Proof.
   intros.
@@ -6488,7 +6624,7 @@ Proof.
   unfold perm in PERM2.
   eapply in_map_fst_2.
   apply elements_correct'.
-  intro. rewrite H1 in PERM2. rewrite access_default in PERM2.
+  intro. rewrite H2 in PERM2. rewrite access_default in PERM2.
   inv PERM2.
 Qed.
 
@@ -6513,6 +6649,7 @@ Proof.
   - simpl in H. destruct a.
     destruct loc_in_reach_find; eauto. 2: right; eauto.
     destruct p. destruct perm_dec. 2: right; eauto.
+    destruct perm_dec. 2: right; eauto.
     destruct H. simpl in H. subst.
     left. reflexivity. right. eauto.
 Qed.
@@ -6526,6 +6663,7 @@ Proof.
   - constructor.
   - simpl in H. inv H. simpl. destruct a.
     destruct loc_in_reach_find; eauto. destruct p.
+    destruct perm_dec; eauto.
     destruct perm_dec; eauto.
     simpl. constructor.
     intro. apply H2. simpl.
@@ -6548,16 +6686,21 @@ Lemma copy_content_block_result:
       match (loc_in_reach_find b2 o2) with
       | Some (b1,o1) =>
           let mv := ((mem_contents m1')#b1)##o1 in
-          if perm_dec m1' b1 o1 Cur Readable then memval_map j12' mv else vmap2##o2
+          if perm_dec m1' b1 o1 Cur Readable then
+            if perm_dec m1 b1 o1 Max Writable then memval_map j12' mv
+            else vmap2##o2 else vmap2##o2
       | None =>  vmap2##o2
    end.
 Proof.
   intros. unfold copy_content_block.
   destruct (loc_in_reach_find) as [[b1 o1]|] eqn:FIND.
   destruct (perm_dec m1' b1 o1 Cur Readable).
-  - erewrite setN'_inside; eauto.
-    apply content_filter_norepet.
-    apply content_filter_some; eauto.
+  - destruct (perm_dec m1 b1 o1 Max Writable).
+    + erewrite setN'_inside; eauto.
+      apply content_filter_norepet.
+      apply content_filter_some; eauto.
+    + erewrite setN'_outside; eauto.
+      eapply content_filter'_none'; eauto.
   - erewrite setN'_outside; eauto.
     eapply content_filter'_none'; eauto.
   - erewrite setN'_outside; eauto.
