@@ -1407,7 +1407,7 @@ Proof.
     + eapply match_stacks_globalenvs; eauto.
     + eapply match_stacks_support in MS; eauto. destruct MS. inv GE. eauto.
     + eapply match_stacks_support in MS; eauto. destruct MS. inv GE. eauto.
-  - inv H1. destruct H0 as (w' & Hw' & H0). inv Hw'. inv H0. inv H11.
+  - inv H1. destruct H0 as (w' & Hw' & H0). inv Hw'. inv H0. inv H13.
     eexists; split; econstructor; eauto.
     eapply match_stacks_sup_include with (Mem.support m').
     eapply match_stacks_extcall with (F1 := F) (F2 := f') (m1 := m) (m1' := m'); eauto.

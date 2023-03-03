@@ -2440,12 +2440,12 @@ Proof.
     + eapply match_stacks_type_retaddr; eauto.
   - constructor; apply SEP.
   - intros r1 r2 st1' Hr Hst1'. inv Hr. inv H4. inv Hst1'. inv H9.
-    rewrite H17 in FIND. inv FIND.
+    rewrite H19 in FIND. inv FIND.
     eexists. split.
     + econstructor; eauto.
     + eapply match_states_return with (j := f'); eauto.
       * eauto.
-        apply Mem.unchanged_on_support in H6; eauto.
+        apply Mem.unchanged_on_support in H12; eauto.
       * eapply match_stacks_change_meminj; eauto.
         eapply stack_contents_support; eauto. apply SEP.
       * intros r. cbn. destruct in_dec; eauto.

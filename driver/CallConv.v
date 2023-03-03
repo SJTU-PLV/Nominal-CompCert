@@ -706,22 +706,7 @@ Proof.
   exists Vundef. split; constructor.
 Qed.
 
-Lemma ro_acc_memval_loadbytes:
-  forall m m',
-    ro_acc_memval m m' <-> ro_acc m m'.
-Proof.
-Admitted.
-(*
 
-m1
-
-
-m2
-
-
-m3
-
-*)
 Lemma trans_injp_ro_outgoing:
   ccref ((ro @ injp) @ (ro @ injp)) (ro @ injp).
 Proof.
@@ -751,7 +736,7 @@ Proof.
   - intros r1 r3 [r2 [Hi2 [w13' [INCR13' Hr13]]]].
     inv Hr13. inv H1. rename f into j13'. rename Hm3 into INJ13'.
     cbn in INCR13'. rename m2' into m3'.
-    inversion INCR13' as [? ? ? ? ? ? ? ? MAXPERM1 MAXPERM3 UNCHANGE1 UNCHANGE3 INCR13 DISJ13]. subst.
+    inversion INCR13' as [? ? ? ? ? ? ? ? RO1 RO3 MAXPERM1 MAXPERM3 UNCHANGE1 UNCHANGE3 INCR13 DISJ13]. subst.
     generalize (inject_implies_image_in _ _ _ INJ12).
     intros IMGIN12.
     generalize (inject_implies_image_in _ _ _ INJ23).
@@ -777,19 +762,23 @@ Proof.
     rename vres2 into vres3.
     exploit compose_meminj_midvalue; eauto.
     intros [vres2 [RES1 RES2]].
+    assert (UNC21:Mem.unchanged_on (loc_out_of_reach j12 m1) m2 m2').
+    eapply UNCHANGE21; eauto.
     exists (cr vres2 m2'). split.
     + 
       exists (cr vres1 m1'). split. cbn. auto.
-      exists w1'. cbn. split. constructor; eauto. eapply MAXPERM2; eauto.
+      exists w1'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
+      eapply MAXPERM2; eauto.
       eapply Mem.unchanged_on_implies; eauto.
       intros. red. unfold compose_meminj.
       rewrite H1. reflexivity.
-      eapply UNCHANGE21; eauto.
       constructor; eauto. constructor; eauto.
     + exists (cr vres2 m2'). split. cbn. econstructor. constructor.
-      apply ro_acc_memval_loadbytes. eapply ro_acc_m1'_m2'; eauto.
-      apply ro_acc_memval_loadbytes. inv Hi2. inv H1. auto.
-      exists w2'. cbn. split. constructor; eauto. eapply MAXPERM2; eauto.
+      constructor. eapply ROUNC2; eauto.
+      inversion UNC21. eauto.
+      eapply MAXPERM2; eauto.
+      exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
+      eapply MAXPERM2; eauto.
       eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
       econstructor; eauto. constructor; eauto.
 Qed.
@@ -1189,7 +1178,7 @@ Proof.
   - destruct H as (Hk & sb1 & sofs1 & Hsp1). subst. inv Hsp.
     assert (Mem.mixable m1'_ sb1 m1). {
       split.
-      + destruct Hm, Hm'_. inv Hw. inversion H8. auto.
+      + destruct Hm, Hm'_. inv Hw. inversion H10. auto.
       + assert (SZ: k * 2 > 0) by extlia.
         specialize (VB SZ). inv VB. auto.
     }
@@ -1222,20 +1211,44 @@ Proof.
     + apply Mem.mix_updated in Hm1' as UNCm1tom1'.
       apply Mem.mix_unchanged in Hm1' as UNCm1'_tom1'.
       constructor; eauto.
+      * cbn in *. apply Mem.ro_unchanged_memval_bytes.
+        apply Mem.ro_unchanged_memval_bytes in H6. red. intros.
+        destruct (loc_init_args_dec (k*2) (Vptr sb1 sofs1) b ofs).
+        -- inversion UNCm1tom1'. eapply unchanged_on_perm in H2; eauto.
+           split. eauto. symmetry. eapply unchanged_on_contents; eauto.
+           inv l. split; auto.
+           inv l. split. auto. lia.
+        -- inversion UNCm1'_tom1'.
+           eapply unchanged_on_perm in H2; eauto.
+           exploit H6; eauto. intros [A B].
+           rewrite unchanged_on_contents; eauto.
+           intro. apply n. destruct H4. subst b. constructor; eauto.
+           intro. apply n. destruct H5. subst b. constructor; eauto.
+           inversion H10. unfold Mem.valid_block in *. eauto.
+      * cbn in *. apply Mem.ro_unchanged_memval_bytes.
+        apply Mem.ro_unchanged_memval_bytes in H7. red. intros.
+        destruct (loc_init_args_dec (k*2) (Vptr b2 (Ptrofs.add sofs1 (Ptrofs.repr delta))) b ofs).
+        -- inversion UPD. eapply unchanged_on_perm in H2; eauto.
+           split. eauto. symmetry. eapply unchanged_on_contents; eauto.
+        -- inversion UNCH.
+           eapply unchanged_on_perm in H2; eauto.
+           exploit H7; eauto. intros [A B].
+           rewrite unchanged_on_contents; eauto.
+           inversion H11. unfold Mem.valid_block in *. eauto.
       * red. intros.
         destruct (loc_init_args_dec (k*2) (Vptr sb1 sofs1) b ofs).
         -- inversion UNCm1tom1'. eapply unchanged_on_perm; eauto.
            inv l. split. auto. lia.
-        -- red in H6. eapply H6; eauto.
+        -- red in H8. eapply H8; eauto.
            inversion UNCm1'_tom1'. eapply unchanged_on_perm; eauto.
            intro. apply n. destruct H3. subst b. constructor; eauto.
-           inversion H8. unfold Mem.valid_block in *. eauto.
+           inversion H10. unfold Mem.valid_block in *. eauto.
       * red. intros.
         destruct (loc_init_args_dec (k*2) (Vptr b2 (Ptrofs.add sofs1 (Ptrofs.repr delta))) b ofs).
         -- inversion UPD. eapply unchanged_on_perm; eauto.
-        -- eapply H7; eauto.
+        -- eapply H9; eauto.
            inversion UNCH. eapply unchanged_on_perm; eauto.
-           inversion H9. unfold Mem.valid_block in *. eauto.
+           inversion H11. unfold Mem.valid_block in *. eauto.
       * eapply Mem.unchanged_on_trans; eauto.
         eapply Mem.unchanged_on_implies; eauto.
         intros _ ofs NIA _ [<- Hofs]. red in NIA. cbn in H1. congruence.
@@ -1244,16 +1257,16 @@ Proof.
         -- intros.
            destruct (loc_init_args_dec (k*2) (Vptr b2 (Ptrofs.add sofs1 (Ptrofs.repr delta))) b ofs).
            ++ inversion UPD. eauto.
-           ++ etransitivity. inversion H9. eauto.
+           ++ etransitivity. inversion H11. eauto.
               inversion UNCH. eapply unchanged_on_perm; eauto.
-              inversion H9. unfold Mem.valid_block in *. eauto with mem.
+              inversion H11. unfold Mem.valid_block in *. eauto with mem.
         -- intros.
            destruct (loc_init_args_dec (k*2) (Vptr b2 (Ptrofs.add sofs1 (Ptrofs.repr delta))) b ofs).
            ++ inversion UPD. eauto.
            ++ etransitivity. inversion UNCH. eapply unchanged_on_contents; eauto.
-              inversion H9. eapply unchanged_on_perm0; eauto.
+              inversion H11. eapply unchanged_on_perm0; eauto.
               eapply Mem.perm_valid_block; eauto.
-              inversion H9. eapply unchanged_on_contents; eauto.
+              inversion H11. eapply unchanged_on_contents; eauto.
     + apply inject_incr_refl.
     +  cbn -[Z.add Z.mul] in *. constructor.
     + eapply Mem.unchanged_on_implies; eauto using Mem.mix_updated.
@@ -1265,78 +1278,47 @@ Proof.
     assert (Hm'' : Mem.inject f0 m1'_ m2'). eapply Mem.inject_extends_compose; eauto.
     eexists (injpw f0 m1'_ m2' Hm''), m1'_. repeat apply conj.
     + constructor; eauto.
+      * apply Mem.ro_unchanged_memval_bytes. apply Mem.ro_unchanged_memval_bytes in H7.
+        red. intros. destruct (loc_init_args_dec (k*2) sp2 b ofs).
+        -- inversion UPD.
+           eapply unchanged_on_perm in H2; eauto. split.
+           eauto. symmetry. eapply unchanged_on_contents; eauto.
+        -- inversion UNCH. eapply unchanged_on_perm in H2; eauto.
+           exploit H7; eauto. intros [A B].
+           rewrite unchanged_on_contents; eauto.
+           inversion H11. unfold Mem.valid_block in *. eauto.
       * red. intros.
          destruct (loc_init_args_dec (k*2) sp2 b ofs).
          -- inversion UPD. eapply unchanged_on_perm; eauto.
-         -- eapply H7; eauto. inversion UNCH. eapply unchanged_on_perm; eauto.
+         -- eapply H9; eauto. inversion UNCH. eapply unchanged_on_perm; eauto.
             eapply Mem.valid_block_extends; eauto. eapply Mem.perm_valid_block; eauto.
       * constructor. inversion UPD. eauto.
          -- intros.
             destruct (loc_init_args_dec (k*2) sp2 b ofs).
             ++ inversion UPD. eauto.
-            ++ etransitivity. inversion H9. eapply unchanged_on_perm; eauto.
+            ++ etransitivity. inversion H11. eapply unchanged_on_perm; eauto.
                inversion UNCH. eapply unchanged_on_perm; eauto.
-               inversion H9. unfold Mem.valid_block in *. eauto.
+               inversion H11. unfold Mem.valid_block in *. eauto.
          -- intros.
             destruct (loc_init_args_dec (k*2) sp2 b ofs).
             ++ inversion UPD. eauto.
             ++ etransitivity.
                inversion UNCH. eapply unchanged_on_contents; eauto.
-               inversion H9. eapply unchanged_on_perm0; eauto.
+               inversion H11. eapply unchanged_on_perm0; eauto.
                eapply Mem.perm_valid_block; eauto.
-               inversion H9. eapply unchanged_on_contents; eauto.
+               inversion H11. eapply unchanged_on_contents; eauto.
     + apply inject_incr_refl.
     + constructor.
     + split.
-      * inversion H8. eauto.
+      * inversion H10. eauto.
       * destruct 1; eelim H; eauto. split; eauto.
         unfold offset_sarg in H1. extlia.
       * destruct 1; eelim H; eauto. split; eauto.
         unfold offset_sarg in H1. extlia.
     + apply Mem.unchanged_on_refl.
     + reflexivity.
-Qed.
-(*
-Instance vainj_mixable:
-  Mixable vainj.
-Proof.
-  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB RANGE.
-  destruct Hm, Hm'_. inv Hw. cbn in *. subst.
-  edestruct (result_mem (R:=inj) sz sp1 sp2 w m1 m2 w0) as (? & ? & ? & ? & ? & ? & ? & ?); eauto.
-  exists (se0, x), x0. repeat apply conj; eauto.
-  constructor.
-  - rewrite H11. eauto.
-  - intros cu Hcu. specialize (H3 cu Hcu).
-    intros b id ab Hab Habcu.
-    edestruct H0 as (? & ? & ?); eauto.
-    edestruct H3 as (? & ? & ?); eauto.
-    assert (forall ofs, not_init_args sz sp1 b ofs).
-    {
-      intros ofs. destruct 1.
-      eapply H14. eapply Mem.perm_max, Mem.perm_implies.
-      eapply RANGE; eauto. unfold offset_sarg in *. extlia.
-      constructor.
-    }
-    split; auto. split; auto.
-    + assert (forall ofs k p, Mem.perm x0 b ofs k p -> Mem.valid_block m0 b).
-      { unfold Mem.valid_block. rewrite <- H11. eapply Mem.perm_valid_block; eauto. }
-      destruct H16. split; auto.
-      * destruct H16. split.
-        -- intros. erewrite Mem.load_unchanged_on_1 in H22; eauto.
-           apply Mem.load_valid_access in H22 as [? ?].
-           eapply H19. eapply H22. pose proof (size_chunk_pos chunk). instantiate (1 := ofs). extlia.
-        -- intros. erewrite Mem.loadbytes_unchanged_on_1 in H22; eauto.
-           apply Mem.loadbytes_range_perm in H22.
-           eapply H19. eapply H22. instantiate (1 := ofs). extlia.
-      * intros. erewrite Mem.load_unchanged_on_1 in H21; eauto.
-        apply Mem.load_valid_access in H21 as [? ?].
-        eapply H19. eapply H21. pose proof (size_chunk_pos chunk). instantiate (1 := ofs). extlia.
-    + intros ofs Hp. eapply H17; eauto.
-      rewrite <- Mem.unchanged_on_perm in Hp; eauto.
-      unfold Mem.valid_block. rewrite <- H11. eapply Mem.perm_valid_block; eauto.
-  - auto.
-Qed.
-*)
+Qed.      
+
 Axiom size_arguments_always_64: forall sg,
   (2 | size_arguments sg).
 (*
@@ -1650,13 +1632,36 @@ Proof.
     }
     exists (injpw f' m1' m2' Hm''); cbn.
     + constructor; eauto.
+      * apply Mem.ro_unchanged_memval_bytes. apply Mem.ro_unchanged_memval_bytes in H10.
+        red. intros. destruct (loc_init_args_dec (size_arguments sg) sp2 b ofs).
+        -- inv H27. eapply unchanged_on_perm in H7; eauto.
+           split; eauto. symmetry. eapply unchanged_on_contents; eauto.
+        -- inv H26.
+           destruct Hm2_.
+           ++ eapply unchanged_on_perm in H7; eauto.
+              exploit H10; eauto. intros [A B].
+              rewrite unchanged_on_contents; eauto.
+              inversion H16. eapply unchanged_on_support0; eauto.
+           ++
+             eapply unchanged_on_perm in H7; eauto.
+             eapply Mem.free_unchanged_on with (P:= not_init_args  (size_arguments sg) (Vptr sb sofs)) in H20.
+             2: { intros. intro. apply H30. constructor; eauto. }
+             inv H20.
+             rewrite unchanged_on_contents; eauto.
+             rewrite unchanged_on_perm0 in H17; eauto.
+             exploit H10; eauto. apply unchanged_on_support0; eauto.
+             intros [A B]. apply unchanged_on_perm0 in A; eauto.
+             rewrite <- unchanged_on_contents0; eauto.
+             inversion H16.
+             eapply unchanged_on_support0.
+             erewrite Mem.support_free; eauto.
       * intros b ofs p Hb Hp.
-        destruct (classic (loc_init_args (size_arguments sg) sp2 b ofs)).
+        destruct (loc_init_args_dec (size_arguments sg) sp2 b ofs).
         -- eapply Mem.perm_unchanged_on_2; eauto.
         -- cut (Mem.valid_block m2_ b -> Mem.perm m2_ b ofs Max p); intros.
            ++ destruct Hm2_; eauto using Mem.perm_free_3, Mem.valid_block_free_1.
-           ++ eapply H10; eauto.
-              eapply Mem.valid_block_unchanged_on in H7; eauto.
+           ++ eapply H14; eauto.
+              eapply Mem.valid_block_unchanged_on in H16; eauto.
               eapply Mem.perm_unchanged_on_2; eauto.
       * eapply unchanged_on_combine; eauto.
         apply Mem.unchanged_on_trans with m2_.
@@ -1670,8 +1675,8 @@ Proof.
           intros b ofs [_ ?] _. red. auto. }
       * red. inv Hm2_; eauto.
         unfold Mem.valid_block. erewrite <- (Mem.support_free m2); eauto.
-    + intros r REG. rewrite H21; eauto.
-    + intros r REG. rewrite H22; eauto.
+    + intros r REG. rewrite H23; eauto.
+    + intros r REG. rewrite H24; eauto.
     + constructor.
     + auto.
     + intros b2 ofs2 Hofs2 b1 delta Hb Hp.
@@ -1680,7 +1685,7 @@ Proof.
         destruct Hofs2. unfold offset_sarg in *. extlia.
       * inv Hofs2.
         eapply inject_incr_separated_inv in Hb; eauto.
-        -- eapply H9 in Hp; eauto using Mem.valid_block_inject_1.
+        -- eapply H13 in Hp; eauto using Mem.valid_block_inject_1.
            eapply Mem.perm_inject in Hp; eauto.
            replace (ofs2 - delta + delta) with ofs2 in Hp by extlia.
            eapply Mem.perm_free_2; eauto.

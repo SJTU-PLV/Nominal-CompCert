@@ -17,6 +17,7 @@ Require Import Values Memory Globalenvs Builtins Events.
 Require Import Registers Op RTL.
 Require Import ValueDomain ValueAOp Liveness.
 Require Import LanguageInterface Invariant.
+Require Import InjectFootprint.
 
 (** * The dataflow analysis *)
 
@@ -1884,16 +1885,10 @@ Definition sound_memory_ro ge m : Prop :=
   romatch (bc_of_symtbl ge) m (romem_for_symtbl ge)
   /\ Mem.sup_include (Genv.genv_sup ge) (Mem.support m).
 
-Definition ro_unchange m1 m2 : Prop :=
-   forall b ofs n bytes, Mem.valid_block m1 b ->
-                      Mem.loadbytes m2 b ofs n = Some bytes ->
-                      (forall i, ofs <= i < ofs + n -> ~ Mem.perm m1 b i Max Writable) ->
-                      Mem.loadbytes m1 b ofs n = Some bytes.
 
-Require Import InjectFootprint.
 Inductive ro_acc : mem -> mem -> Prop :=
 | ro_acc_intro m1 m2:
-  ro_unchange m1 m2 ->
+  Mem.ro_unchanged m1 m2 ->
   Mem.sup_include (Mem.support m1) (Mem.support m2) ->
   injp_max_perm_decrease m1 m2 ->
   ro_acc m1 m2.
@@ -1937,25 +1932,7 @@ Lemma ro_acc_store : forall m m' chunk b ofs v,
     ro_acc m m'.
 Proof.
   intros. constructor.
-  - red. intros.
-    erewrite <- Mem.loadbytes_store_other; eauto.
-    apply Mem.store_valid_access_3 in H. destruct H.
-    red in H.
-    destruct (eq_block b b0).
-    + subst. right.
-      destruct (Z_le_gt_dec n 0). left. auto.
-      right.
-      destruct (Z_le_gt_dec (ofs0+n) ofs).
-      left. auto.
-      destruct (Z_le_gt_dec (ofs + size_chunk chunk) ofs0).
-      right. auto.
-      exfalso.
-      destruct (Z_le_gt_dec ofs ofs0).
-      exploit H. instantiate (1:= ofs0). lia. intro PERM.
-      exploit H2. instantiate (1:= ofs0). lia.  eauto with mem. auto.
-      exploit H. instantiate (1:= ofs). destruct chunk; simpl; lia. intro PERM.
-      exploit H2. instantiate (1:= ofs). lia. eauto with mem. auto.
-    + left. auto.
+  - eapply Mem.ro_unchanged_store; eauto.
   - erewrite <- Mem.support_store; eauto.
   - red. eauto using Mem.perm_store_2.
 Qed.

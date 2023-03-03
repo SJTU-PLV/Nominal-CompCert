@@ -640,7 +640,7 @@ Proof.
     destruct Hr1 as [w12' [Hw12' Hr12']]. destruct Hr2 as [w23' [Hw23' Hr23']].
     destruct w12' as [f12' m1' m2' Hm12']. destruct w23' as [f23' m2'' m3' Hm23'].
     inv Hw12'. inv Hw23'. cbn in *.
-    inv Hr12'. inv Hr23'. cbn in *. inv H0. inv H23.
+    inv Hr12'. inv Hr23'. cbn in *. inv H0. inv H27.
     rename m1'0 into m1'. rename m2'0 into m2'. rename m2'1 into m3'.
     eexists (injpw (compose_meminj f12' f23') m1' m3'
                (Mem.inject_compose f12' f23' _ _ _ Hm12' Hm23')
@@ -650,19 +650,19 @@ Proof.
       * eapply Mem.unchanged_on_implies; eauto.
         intros. red. unfold meminj_dom. rewrite H0. reflexivity.
       * red. intros. unfold compose_meminj.
-        erewrite H15. erewrite H21; eauto.
+        erewrite H17. erewrite H25; eauto.
         2: unfold meminj_dom; rewrite H0; reflexivity.
         rewrite Z.add_0_l. reflexivity.
       * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
         destruct (f12' b1) as [[bi delta12] | ] eqn:Hb1; try discriminate.
         destruct (f23' bi) as [[xb2 delta23] | ] eqn:Hb2; try discriminate.
         inv Hb'.
-        edestruct H16; eauto. unfold meminj_dom. rewrite Hb. auto.
+        edestruct H18; eauto. unfold meminj_dom. rewrite Hb. auto.
         destruct (f bi) as [[? ?] | ] eqn:Hfbi.
         {
           eapply Mem.valid_block_inject_1 in Hfbi; eauto.
         }
-        edestruct H22; eauto.
+        edestruct H26; eauto.
     + constructor; cbn; eauto with mem.
       eapply Values.val_inject_compose; eauto.
 Qed.

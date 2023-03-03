@@ -2227,7 +2227,7 @@ Proof.
       clear - MCS. induction MCS; cbn in *; eauto. inv H; cbn; auto.
   - destruct H as (wx' & Hwx' & H). inv Hwx'. inv H1. inv H. eexists. split.
     + econstructor; eauto.
-    + inv H9. econstructor; eauto.
+    + inv H11. econstructor; eauto.
       apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
       eapply match_callstack_external_call; eauto.
       eapply Mem.unchanged_on_support; eauto.

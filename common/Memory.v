@@ -5078,6 +5078,19 @@ Proof.
   intros. red. intros. eapply loadbytes_free_2; eauto.
 Qed.
 
+Lemma ro_unchanged_free_list : forall l m m',
+    free_list m l = Some m' -> ro_unchanged m m'.
+Proof.
+  induction l; intros; simpl in H.
+  inv H. red. intros. eauto.
+  destruct a. destruct p. destruct free eqn:F; inv H.
+  red. intros. apply ro_unchanged_free in F as FUNC.
+  eapply FUNC; eauto. eapply IHl in H0; eauto.
+  eapply H0; eauto. intros.
+  intro. eapply H2; eauto. eapply perm_free_3; eauto.
+  eapply valid_block_free_1; eauto.
+Qed.
+  
 Lemma ro_unchanged_store : forall m m' chunk ofs b v,
     store chunk m b ofs v = Some m' -> ro_unchanged m m'.
 Proof.
@@ -5127,6 +5140,23 @@ Proof.
     exploit H. instantiate (1:= ofs). lia. intro PERM.
     exploit H2. instantiate (1:= ofs). lia. eauto with mem. auto.
     left. auto.
+Qed.
+
+Definition max_perm_decrease (m m': mem) :=
+  forall b ofs p,
+    Mem.valid_block m b ->
+    Mem.perm m' b ofs Max p ->
+    Mem.perm m b ofs Max p.
+
+Lemma ro_unchanged_trans: forall m1 m2 m3,
+    ro_unchanged m1 m2 -> ro_unchanged m2 m3 ->
+    sup_include (support m1) (support m2) ->
+    max_perm_decrease m1 m2 ->
+    ro_unchanged m1 m3.
+Proof.
+  intros. red. intros. eapply H; eauto.
+  eapply H0; eauto. eapply H1; eauto.
+  intros. intro. eapply H5; eauto.
 Qed.
 
 (** max_perm_decrease *)

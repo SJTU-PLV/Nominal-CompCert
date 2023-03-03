@@ -627,6 +627,16 @@ Proof.
   eauto.
 Qed.
 
+Lemma alloc_variables_ro :
+   forall ge e m vars e' m',
+    alloc_variables ge e m vars e' m' -> Mem.ro_unchanged m m'.
+Proof.
+  intros. apply alloc_variables_unchanged_on with (P:= fun _ _ => True) in H.
+  red. intros.
+  erewrite <- Mem.loadbytes_unchanged_on_1; eauto.
+  intros. simpl. auto.
+Qed.
+
 Lemma alloc_variables_range:
   forall ge id b ty e m vars e' m',
   alloc_variables ge e m vars e' m' ->
@@ -1182,6 +1192,17 @@ Proof.
   inv H0. eauto with mem.
 Qed.
 
+Lemma assign_loc_ro:
+  forall ge ty m b ofs bf v m',
+    assign_loc ge ty m b ofs bf v m' ->
+    Mem.ro_unchanged m m'.
+Proof.
+  intros. inv H.
+  - simpl in H1. eapply Mem.ro_unchanged_store; eauto.
+  - eapply Mem.ro_unchanged_storebytes; eauto.
+  - inv H0. simpl in H5. eapply Mem.ro_unchanged_store; eauto.
+Qed.
+  
 Theorem store_params_correct:
   forall j f k cenv le lo hi te tlo thi e m params args m',
   bind_parameters ge e m params args m' ->
@@ -1200,14 +1221,15 @@ Theorem store_params_correct:
   /\ Mem.inject j m' tm'
   /\ match_envs j cenv e le m' lo hi te tle tlo thi
   /\ Mem.support tm' = Mem.support tm
+  /\ Mem.ro_unchanged tm tm'
   /\ injp_max_perm_decrease tm tm'
   /\ Mem.unchanged_on (fun b _  => Mem.valid_block wm2 b) tm tm'.
 Proof.
   induction 1; simpl; intros until targs; intros NOREPET CASTED VINJ MENV MINJ TLE LE.
   (* base case *)
   inv VINJ. exists tle2; exists tm; split. apply star_refl. split. auto. split. auto.
-  split. apply match_envs_temps_exten with tle1; auto. split. auto. split. auto.
-  eauto with mem.
+  split. apply match_envs_temps_exten with tle1; auto. split. auto. split.
+  red. eauto. split. auto. eauto with mem.
   (* inductive case *)
   inv NOREPET. inv CASTED. inv VINJ.
   exploit me_vars; eauto. instantiate (1 := id); intros MV.
@@ -1250,9 +1272,13 @@ Proof.
   reflexivity. reflexivity.
   eexact U.
   traceEq.
-  rewrite (assign_loc_support _ _ _ _ _ _ _ _ A) in Z1. intuition auto.
-  eapply max_perm_decrease_trans. eapply assign_loc_max_perm; eauto. eauto.
-  erewrite <- assign_loc_support; eauto.
+  apply assign_loc_ro in A as ASSRO. apply assign_loc_support in A as ASSSUP.
+  apply assign_loc_max_perm in A as ASSMAX.
+  rewrite ASSSUP in Z1. intuition auto.
+  red. intros. eapply ASSRO; eauto. eapply H; eauto.
+  unfold Mem.valid_block. rewrite ASSSUP. eauto.
+  intros. intro. eapply H12; eauto.
+  eapply max_perm_decrease_trans; eauto. rewrite ASSSUP. eauto.
   eapply Mem.unchanged_on_trans. 2: eauto.
   eapply Mem.unchanged_on_implies.
   eapply assign_loc_unchanged_on; eauto.
@@ -1293,6 +1319,20 @@ Proof.
   intros. inv H2. apply me_initial0 in H. congruence.
 Qed.
 
+Lemma bind_parameters_ro :
+  forall ge e m params args m',
+    bind_parameters ge e m params args m' ->
+    Mem.ro_unchanged m m'.
+Proof.
+  intros. induction H. red. eauto.
+  apply assign_loc_support in H0 as S.
+  apply assign_loc_ro in H0 as R.
+  apply assign_loc_max_perm in H0 as M.
+  red. intros. eapply R; eauto.
+  eapply IHbind_parameters; eauto.
+  unfold Mem.valid_block. rewrite S. eauto.
+  intros. intro. eapply H4; eauto.
+Qed.
 
 Lemma bind_parameters_load:
   forall ge e chunk b ofs,
@@ -2221,10 +2261,10 @@ Qed.
 
 End FIND_LABEL.
 
-
 Lemma injp_acc_local :
   forall f0 wm wtm Htm j1 m1 tm1 Hm1 j2 m2 tm2 Hm2,
     injp_acc (injpw f0 wm wtm Htm) (injpw j1 m1 tm1 Hm1) ->
+    Mem.ro_unchanged m1 m2 -> Mem.ro_unchanged tm1 tm2 ->
     injp_max_perm_decrease m1 m2 ->
     injp_max_perm_decrease tm1 tm2 ->
     inject_incr j1 j2 ->
@@ -2234,12 +2274,16 @@ Lemma injp_acc_local :
     injp_acc (injpw f0 wm wtm Htm) (injpw j2 m2 tm2 Hm2).
 Proof.
   intros.  inv H.
-  apply Mem.unchanged_on_support in H14 as SUP.
-  apply Mem.unchanged_on_support in H15 as TSUP.
+  apply Mem.unchanged_on_support in H18 as SUP.
+  apply Mem.unchanged_on_support in H19 as TSUP.
   constructor.
+  - red. intros. eapply H14; eauto. eapply H0; eauto.
+    eapply SUP; eauto. intros. intro. eapply H9; eauto.
+  - red. intros. eapply H15; eauto. eapply H1; eauto.
+    eapply TSUP; eauto. intros. intro. eapply H9; eauto.
   - eapply max_perm_decrease_trans; eauto.
   - eapply max_perm_decrease_trans; eauto.
-  - inversion H14. inversion H4.
+  - inversion H18. inversion H6.
     constructor; eauto.
     intros. etransitivity; eauto.
     eapply unchanged_on_perm0; eauto.
@@ -2250,7 +2294,7 @@ Proof.
     eapply unchanged_on_perm; eauto.
     eapply Mem.perm_valid_block; eauto.
     eauto.
-  - inversion H15. inversion H5.
+  - inversion H19. inversion H7.
     constructor; eauto.
     intros. etransitivity; eauto.
     eapply unchanged_on_perm0; eauto.
@@ -2308,6 +2352,8 @@ Lemma injp_acc_return:
 Proof.
   intros. destruct w eqn: Hw.
   eapply injp_acc_local; eauto.
+  - eapply Mem.ro_unchanged_free_list; eauto.
+  - eapply Mem.ro_unchanged_free_list; eauto.
   - eapply free_list_max_perm; eauto.
   - eapply free_list_max_perm; eauto.
   - rewrite <- Hw in GE.
@@ -2354,6 +2400,8 @@ Proof.
   {
   destruct w eqn : Hw.
   eapply injp_acc_local; eauto.
+  - eapply assign_loc_ro; eauto.
+  - red. eauto.
   - eapply assign_loc_max_perm; eauto.
   - rewrite <- Hw in GE.
     apply match_cont_inject_separated in MCONT.
@@ -2388,6 +2436,8 @@ Proof.
   destruct w eqn : Hw.
   inversion MINJ. subst f1 m0 m3 f' m1' m2'.
   eapply injp_acc_local; eauto.
+  - eapply assign_loc_ro; eauto.
+  - eapply assign_loc_ro; eauto.
   - eapply assign_loc_max_perm; eauto.
   - eapply assign_loc_max_perm; eauto.
   - eapply Mem.unchanged_on_implies.
@@ -2395,7 +2445,7 @@ Proof.
     intros. simpl.  destruct (eq_block b loc); auto.
     subst b. exfalso. destruct H3. red in H5.
     inversion F. subst b1 b2 ofs1 ofs2.
-    exploit H14; eauto. intros [Z1 Z2].
+    exploit H16; eauto. intros [Z1 Z2].
     congruence.
   - inversion X; inversion H2; try congruence.
     + subst bf v0 v1 m'0 m'1.
@@ -2410,13 +2460,13 @@ Proof.
          destruct (f0 loc) as [[tb' delta']|] eqn: Hf0loc.
          ++
            (* f0 = Some, proof the perm *)
-           apply H13 in Hf0loc as Hj.
-           rewrite H18 in Hj. inversion Hj. subst tb' delta'. clear Hj.
+           apply H15 in Hf0loc as Hj.
+           rewrite H20 in Hj. inversion Hj. subst tb' delta'. clear Hj.
            apply H7. red.
            exists loc,delta. split. auto.
-           apply H9.
+           apply H11.
            eapply Mem.valid_block_inject_1; eauto.
-           apply Mem.store_valid_access_3 in H15 as VALID.
+           apply Mem.store_valid_access_3 in H17 as VALID.
            destruct VALID as [RANGE ALIGN]. red in RANGE.
            exploit RANGE. instantiate (1:=Ptrofs.unsigned ofs). lia.
            intros PERM0.
@@ -2427,7 +2477,7 @@ Proof.
            subst tofs.
            clear - RANGE1 Z2. destruct RANGE1.
            rewrite <- representable_ofs_range_offset in Z2; lia.
-         ++  exploit H14; eauto. intros [Z3 Z4].
+         ++  exploit H16; eauto. intros [Z3 Z4].
              congruence.
       -- intros [Z1 Z2]. congruence.
     + rewrite <- Hw in *. subst.
@@ -2441,56 +2491,56 @@ Proof.
       assert (POSSIZE : sizeof tge (typeof a1) > 0). rewrite  SIZE'. lia.
       eapply Mem.unchanged_on_implies.
       eapply storebytes_unchanged_on_1; eauto.
-      intros. destruct H15. apply Mem.out_of_reach_reverse in H17.
+      intros. destruct H17. apply Mem.out_of_reach_reverse in H19.
       destruct (eq_block b tb).
       -- subst b.
          intros [Z1 Z2]. inversion F. subst b1 ofs1 b2 ofs2.
          destruct (f0 loc) as [[tb' delta']|] eqn: Hf0loc.
          ++
-           apply H13 in Hf0loc as Hj.
-           rewrite H28 in Hj. inversion Hj. subst tb' delta'. clear Hj.
-           apply H17. red.
+           apply H15 in Hf0loc as Hj.
+           rewrite H30 in Hj. inversion Hj. subst tb' delta'. clear Hj.
+           apply H19. red.
            exists loc, delta. split. auto.
-           apply H9. eapply Mem.valid_block_inject_1; eauto.
-           apply Mem.storebytes_range_perm in H23 as RANGE.
+           apply H11. eapply Mem.valid_block_inject_1; eauto.
+           apply Mem.storebytes_range_perm in H25 as RANGE.
            red in RANGE.
            inversion Y. exploit mi_representable; eauto.
            left. instantiate (1:= ofs).
            exploit RANGE; eauto with mem.
-           apply Mem.loadbytes_length in H22. rewrite H22. rewrite <- SIZE.
+           apply Mem.loadbytes_length in H24. rewrite H24. rewrite <- SIZE.
            simpl. lia.
            intros RANGE1.
            exploit RANGE. 2: eauto with mem.
            subst tofs.
            assert (SIZE1 : (Datatypes.length bytes0) = (Datatypes.length bytes) ).
-           apply Mem.loadbytes_length in H22.
+           apply Mem.loadbytes_length in H24.
            apply Mem.loadbytes_length in H7.
-           rewrite H22,H7. congruence.
+           rewrite H24,H7. congruence.
            clear - RANGE1 Z2 SIZE1. destruct RANGE1.
            rewrite <- representable_ofs_range_offset in Z2; lia.
-           ++ exploit H14; eauto. intros [ ]. congruence.
+           ++ exploit H16; eauto. intros [ ]. congruence.
       -- intros [ ]. congruence.
       -- generalize (sizeof_pos (prog_comp_env prog) (typeof a1)). intro.
-         rewrite <- SIZE in H15. extlia.
+         rewrite <- SIZE in H17. extlia.
     + subst v0 v1 m'0 m'1. inversion H3; inversion H7; try congruence.
       rewrite <- Hw in *. subst. rewrite <- Hw in *. inv H8.
       unfold Mem.storev in *.
       eapply Mem.unchanged_on_implies.
       eapply store_unchanged_on_1; eauto.
-      intros. destruct H4. apply Mem.out_of_reach_reverse in H17.
+      intros. destruct H4. apply Mem.out_of_reach_reverse in H19.
       destruct (eq_block b tb).
       -- subst b.
          intros [Z1 Z2]. inversion F. subst b1 ofs1 b2 ofs2.
          destruct (f0 loc) as [[tb' delta']|] eqn: Hf0loc.
          ++
            (* f0 = Some, proof the perm *)
-           apply H13 in Hf0loc as Hj.
-           rewrite H23 in Hj. inversion Hj. subst tb' delta'. clear Hj.
-           apply H17. red.
+           apply H15 in Hf0loc as Hj.
+           rewrite H25 in Hj. inversion Hj. subst tb' delta'. clear Hj.
+           apply H19. red.
            exists loc,delta. split. auto.
-           apply H9.
+           apply H11.
            eapply Mem.valid_block_inject_1; eauto.
-           apply Mem.store_valid_access_3 in H35 as VALID.
+           apply Mem.store_valid_access_3 in H37 as VALID.
            destruct VALID as [RANGE ALIGN]. red in RANGE.
            exploit RANGE. instantiate (1:=Ptrofs.unsigned ofs). lia.
            intros PERM0.
@@ -2501,7 +2551,7 @@ Proof.
            subst tofs.
            clear - RANGE1 Z2. destruct RANGE1.
            rewrite <- representable_ofs_range_offset in Z2; lia.
-         ++  exploit H14; eauto. intros [Z3 Z4].
+         ++  exploit H16; eauto. intros [Z3 Z4].
              congruence.
       -- intros [Z1 Z2]. congruence.
   }
@@ -2543,6 +2593,8 @@ Proof.
   instantiate (1:= R).
   etransitivity; eauto.
   constructor; eauto.
+  red. eauto using external_call_readonly.
+  red. eauto using external_call_readonly.
   red. intros. eapply external_call_max_perm; eauto.
   red. intros. eapply external_call_max_perm; eauto.
   eauto with compat.
@@ -2664,8 +2716,8 @@ Proof.
   assert (list_norepet (var_names (fn_params f ++ fn_vars f))).
     unfold var_names. rewrite map_app. auto.
   exploit match_envs_alloc_variables. eauto. eauto.
-    inversion MINJ. unfold wm1. subst. inversion H8. eauto. 2: eauto. all: eauto.
-    inversion MINJ. unfold wm2. subst. inversion H10. eauto.
+    inversion MINJ. unfold wm1. subst. inversion H10. eauto. 2: eauto. all: eauto.
+    inversion MINJ. unfold wm2. subst. inversion H12. eauto.
     instantiate (1 := cenv_for_gen (addr_taken_stmt f.(fn_body)) (fn_params f ++ fn_vars f)).
     intros. eapply cenv_for_gen_by_value; eauto. rewrite VSF.mem_iff. eexact H4.
     intros. eapply cenv_for_gen_domain. rewrite VSF.mem_iff. eexact H3.
@@ -2681,7 +2733,7 @@ Proof.
     intros. apply (create_undef_temps_lifted id f). auto.
     intros. destruct (create_undef_temps (fn_temps f))!id as [v|] eqn:?; auto.
     exploit create_undef_temps_inv; eauto. intros [P Q]. elim (l id id); auto.
-  intros [tel [tm1 [P [Q [R [S [T [U V]]]]]]]].
+  intros [tel [tm1 [P [Q [R [S [T [U [V W]]]]]]]]].
   change (cenv_for_gen (addr_taken_stmt (fn_body f)) (fn_params f ++ fn_vars f))
     with (cenv_for f) in *.
   generalize (vars_and_temps_properties (cenv_for f) (fn_params f) (fn_vars f) (fn_temps f)).
@@ -2707,6 +2759,23 @@ Proof.
   {
     destruct w eqn : Hw.
     eapply injp_acc_local; eauto.
+    - clear - H1 H2. apply bind_parameters_support in H2 as S2.
+      apply bind_parameters_ro in H2.
+      eapply alloc_variables_unchanged_on with (P:= fun _ _ => True) in H1 as UNC.
+      red. intros.
+      erewrite <- Mem.loadbytes_unchanged_on_1. 2: eauto. 2: eauto.
+      eapply H2; eauto.
+      eapply alloc_variables_support; eauto.
+      intros. inv UNC. intro. eapply H3; eauto. eapply unchanged_on_perm; eauto.
+      cbn. eauto.
+    - clear - A U T.
+      eapply alloc_variables_unchanged_on with (P:= fun _ _ => True) in A as UNC.
+      red. intros.
+      erewrite <- Mem.loadbytes_unchanged_on_1. 2: eauto. 2: eauto.
+      eapply U; eauto.
+      eapply alloc_variables_support; eauto.
+      intros. inv UNC. intro. eapply H1; eauto. eapply unchanged_on_perm; eauto.
+      cbn. eauto.
     - eapply max_perm_decrease_trans.
       eapply alloc_variables_max_perm; eauto.
       eapply bind_parameters_max_perm; eauto.
@@ -2756,10 +2825,10 @@ Proof.
   instantiate (1:= R).
   etransitivity; eauto.
   constructor; eauto.
-  red. intros.
-  eapply external_call_max_perm; eauto.
-  red. intros.
-  eapply external_call_max_perm; eauto.
+  red. eauto using external_call_readonly.
+  red. eauto using external_call_readonly.
+  red. eauto using external_call_max_perm; eauto.
+  red. eauto using external_call_max_perm; eauto.
 
 (* return *)
   specialize (MCONT (cenv_for f)). inv MCONT.
@@ -2822,10 +2891,10 @@ Proof.
   - specialize (MCONT VSet.empty). constructor.
     + eapply match_cont_globalenv; eauto.
     + inv GE. eapply Mem.sup_include_trans; eauto.
-      inversion MINJ. inversion H11. auto.
+      inversion MINJ. inversion H13. auto.
     + inv GE. eapply Mem.sup_include_trans; eauto.
-      inversion MINJ. inversion H12. auto.
-  - inv H0. destruct H as (wx' & Hwx' & H). inv Hwx'. inv H. inv H10. eexists. split.
+      inversion MINJ. inversion H14. auto.
+  - inv H0. destruct H as (wx' & Hwx' & H). inv Hwx'. inv H. inv H12. eexists. split.
     + econstructor; eauto.
     + econstructor; eauto.
       intros. apply match_cont_incr_bounds with (Mem.support m) (Mem.support tm).
