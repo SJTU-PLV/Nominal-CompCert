@@ -1,6 +1,6 @@
 Require Import Coqlib Maps Integers Floats Values AST Errors.
 Require Import Axioms Globalenvs.
-Require Import Asm RelocProg RelocProgram.
+Require Import Asm RelocProg RelocProgram LocalLib.
 Require Import Hex compcert.encode.Bits Memdata Encode.
 Require Import Reloctablesgen.
 Require Import SymbolString.
@@ -1465,24 +1465,3 @@ Proof.
   erewrite encode_ofs_signed32_consistency;eauto. simpl. auto.
 
 Qed.
-
-(* architecture dependent bytes_to_bits *)
-
-Definition bytes_to_bits_archi := bytes_to_bits_opt.
-
-Lemma bytes_to_bits_archi_app : forall x1 x2,
-    bytes_to_bits_archi (x1++x2) = bytes_to_bits_archi x1 ++ bytes_to_bits_archi x2.
-Proof.
-  unfold bytes_to_bits_archi.
-  eapply bytes_to_bits_opt_app.
-Qed.
-
-Lemma bits_to_bytes_to_bits_archi:
-  forall bs' bs,
-    bits_to_bytes_archi bs = OK bs' ->
-    bytes_to_bits_archi bs' = bs.
-Proof.
-  unfold bits_to_bytes_archi, bytes_to_bits_archi.
-  apply bits_to_bytes_to_bits.
-Qed.
-

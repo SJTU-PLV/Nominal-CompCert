@@ -119,8 +119,7 @@ BACKEND=\
 ifeq ($(ARCH), x86)
 ARCHFILES=\
   AsmRegs.v AsmFacts.v \
-  SSAsm.v SSAsmproof.v \
-  RealAsmArchi.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v \
+  RealAsmArchi.v PseudoInstructions.v \
   AsmBuiltinInline.v\
   AsmStructRet.v\
   AsmFloatLiteral.v \
@@ -150,7 +149,7 @@ ARCHFILES=\
   AsmInjectArchi.v \
   SymbtablegenArchi.v SymbtablegenproofArchi.v\
   RelocationTypes.v ReloctablesgenArchi.v ReloctablesgenSize.v ReloctablesgenproofArchi.v\
-  TranslateInstr.v\
+  TranslateInstr.v RelocBinDecode.v RelocBingenproofArchi.v\
   RelocElfArchi.v\
   RelocProgSemanticsArchi.v RelocProgSemanticsArchi1.v\
   ReloctablesEncodeArchi.v

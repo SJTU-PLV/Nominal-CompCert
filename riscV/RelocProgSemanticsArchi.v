@@ -537,7 +537,7 @@ Ltac Equalities :=
   | _ => idtac
   end.
   
-Lemma semantics_determinate_step : forall (p:program)  s s1 s2 t1 t2,
+Lemma semantics_determinate_step : forall D (p:RelocProg.program fundef unit instruction D) s s1 s2 t1 t2,
   step (globalenv instr_size p) s t1 s1 ->
   step (globalenv instr_size p) s t2 s2 -> match_traces (prog_senv p) t1 t2 /\ (t1 = t2 -> s1 = s2).
 Proof.
@@ -551,7 +551,7 @@ Proof.
 Qed.
 
 
-Lemma  initial_state_gen_determinate : forall (p: program) rs m s1 s2,
+Lemma  initial_state_gen_determinate : forall D (p:RelocProg.program fundef unit instruction D) rs m s1 s2,
     initial_state_gen p rs m s1 ->
     initial_state_gen p rs m s2 ->
     s1 = s2.

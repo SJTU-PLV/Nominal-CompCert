@@ -11,6 +11,79 @@ Import ListNotations.
 (* | opt_lessdef_none v : opt_lessdef None v *)
 (* | opt_lessdef_some v : opt_lessdef (Some v) (Some v). *)
 
+(* cannot be used in monadInv *)
+Ltac destr_pair :=
+  match goal with
+  | [H: prod ?a ?b |- _ ] =>
+    destruct H;try destr_pair
+  end.
+
+Ltac destr_prod x :=
+  match type of x with
+  | prod ?a ?b =>
+    let a:= fresh "ProdL" in
+    let b:= fresh "ProdR" in
+    destruct x as (a & b);try destr_prod a
+  end.
+
+
+(* my monadinv: used in this framework *)
+Ltac monadInv1 H :=
+  match type of H with
+  | (OK _ = OK _) =>
+      inversion H; clear H; try subst
+  | (Error _ = OK _) =>
+      discriminate
+  | (bind ?F ?G = OK ?X) =>
+      let x := fresh "x" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind_inversion F G H) as [x [EQ1 EQ2]];
+      clear H;
+      try (destr_prod x);
+      try (monadInv1 EQ2))))
+  | (bind2 ?F ?G = OK ?X) =>
+      let x1 := fresh "x" in (
+      let x2 := fresh "x" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind2_inversion F G H) as [x1 [x2 [EQ1 EQ2]]];
+      clear H;
+      try (destr_prod x1);
+      try (destr_prod x2);
+      try (monadInv1 EQ2)))))
+  | (match ?X with left _ => _ | right _ => assertion_failed end = OK _) =>
+      destruct X; [try (monadInv1 H) | discriminate]
+  | (match (negb ?X) with true => _ | false => assertion_failed end = OK _) =>
+      destruct X as [] eqn:?; simpl negb in H; [discriminate | try (monadInv1 H)]
+  | (match ?X with true => _ | false => assertion_failed end = OK _) =>
+      destruct X as [] eqn:?; [try (monadInv1 H) | discriminate]
+  | (mmap ?F ?L = OK ?M) =>
+      generalize (mmap_inversion F L H); intro
+  end.
+
+Ltac monadInv H :=
+  monadInv1 H ||
+  match type of H with
+  | (?F _ _ _ _ _ _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ = OK _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  end.
+
+
 
 Definition alignw:Z := 16.
 

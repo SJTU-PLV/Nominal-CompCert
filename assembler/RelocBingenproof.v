@@ -3,10 +3,10 @@ Require Import Events lib.Floats Memory Smallstep.
 Require Import Asm RelocProg RelocProgramBytes Globalenvs.
 Require Import Stacklayout Conventions.
 Require Import Linking RelocProgLinking Errors.
-Require Import EncDecRet RelocBingen RelocBinDecode.
-Require Import RelocProgSemantics RelocProgSemantics1 RelocProgSemanticsArchi1.
+Require Import BPProperty EncDecRet RelocBingen RelocBinDecode.
+Require Import RelocProgGlobalenvs RelocProgSemantics RelocProgSemantics1 RelocProgSemanticsArchi1.
 Require Import TranslateInstr RelocProgSemantics2.
-Require Import RelocBingenproofArchi RelocProgGlobalenvs.
+Require Import RelocBingenproofArchi.
 Require Import LocalLib.
 
 Import ListNotations.
@@ -158,7 +158,7 @@ Hypothesis encode_Instruction_consistency:
 
 Lemma encode_into_byte_consistency: forall l bl,
     translate_bytes l = OK bl ->
-    decode_instrs_bits (bytes_to_bits_archi bl) = OK l.
+    decode_instrs_bits (bytes_to_bits_opt bl) = OK l.
 Proof.
   induction l;simpl;intros.
   inv H. auto.
@@ -167,8 +167,8 @@ Proof.
   exfalso.
   (* we use not empty lemma defined in RelocBingenproofArchi.v *)
   eapply encode_Instruction_not_empty;eauto.
-  rewrite bytes_to_bits_archi_app.
-  erewrite bits_to_bytes_to_bits_archi;eauto.
+  rewrite bytes_to_bits_opt_app.
+  erewrite bits_to_bytes_to_bits;eauto.
   simpl. rewrite decode_instrs_bits_eq.  
   eapply encode_Instruction_consistency in EQ.
   simpl in EQ. rewrite EQ. simpl.
@@ -673,7 +673,7 @@ Lemma transl_init_data_list_pres_mem: forall n data reloctbl reloctbl' sz l b m1
     length data = n ->
     fold_left acc_init_data data (OK ([], 0, reloctbl)) = OK (l, sz, reloctbl') ->
     (* transl_init_data_list r data = OK l -> *)
-    RelocProgSemantics.store_init_data_list ge1 m1 b 0 data = Some m2 ->
+    store_init_data_list ge1 m1 b 0 data = Some m2 ->
     exists bl, fold_left (acc_data ge2) l ([], 0, reloctbl,[]) = (bl, sz, reloctbl',[]) /\ init_data_list_size data = Z.of_nat (length bl) /\  Mem.storebytes m1 b 0 bl = Some m2.
           (* store_init_data_bytes ge2 r m1 b 0 l = Some m2. *)
 Proof.
@@ -891,8 +891,8 @@ Lemma alloc_section_pres_mem: forall ge1 ge2 id sec sec1 sec2 m m0 reloctbl
     (MATCHGE: forall i ofs, RelocProgGlobalenvs.Genv.symbol_address ge1 i ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 i ofs),
     acc_fold_section reloctbl id sec = OK sec1 ->
     acc_decode_code_section reloctbl id sec1 = OK sec2 ->
-    RelocProgSemantics.alloc_section instr_size ge1 (Some m) id (RelocProgSemantics1.rev_section instr_size reloctbl id sec) = Some m0 ->
-    alloc_section instr_size ge2 reloctbl (Some m) id sec2 = Some m0.
+    RelocProgGlobalenvs.alloc_section instr_size ge1 (Some m) id (RelocProgSemantics1.rev_section instr_size reloctbl id sec) = Some m0 ->
+    RelocProgSemantics2.alloc_section instr_size ge2 reloctbl (Some m) id sec2 = Some m0.
 Proof.
   intros.
   destruct sec.
@@ -1128,7 +1128,7 @@ Proof.
   unfold ge,tge. unfold globalenv.
   unfold match_prog in TRANSF.
   unfold RelocProgSemantics1.globalenv.
-  destr. unfold RelocProgSemantics.globalenv.
+  destr. unfold globalenv.
   simpl. unfold Genv.find_ext_funct.
   simpl. intros. destr.
   destr. unfold decode_prog_code_section in Heqr.
@@ -1136,7 +1136,7 @@ Proof.
   monadInv TRANSF. simpl. auto.
   unfold transf_program in TRANSF.
   monadInv TRANSF. unfold empty_program1. simpl.
-  unfold RelocProgSemantics.globalenv.
+  unfold globalenv.
   simpl. unfold Genv.find_ext_funct.
   simpl. intros. destr.
 Qed.  
@@ -1152,12 +1152,17 @@ Proof.
   rewrite A.
   unfold RelocProgGlobalenvs.Genv.symbol_address.
   unfold RelocProgGlobalenvs.Genv.find_symbol.
-  unfold RelocProgSemantics.globalenv. simpl.
+  unfold globalenv. simpl.
   unfold match_prog in TRANSF.
   unfold transf_program in TRANSF. monadInv TRANSF.
   unfold decode_prog_code_section in A. simpl in *.
   monadInv A. simpl.
   auto.
+Qed.
+
+Lemma prog_main_eq: prog_main prog = prog_main tprog.
+  unfold match_prog, transf_program in TRANSF.
+  monadInv TRANSF. auto.
 Qed.
 
 Lemma transf_initial_state:forall st1 rs,
@@ -1170,17 +1175,17 @@ Lemma transf_initial_state:forall st1 rs,
   intros (tp' & A).
   (* to prove init_mem equal *)
   assert (TOPROVE: init_mem instr_size tp' = Some m).
-  { unfold RelocProgSemantics.init_mem in H.
+  { unfold RelocProgGlobalenvs.init_mem in H.
     unfold init_mem.
     simpl in H. destr_in H.
 
     (* alloc sections preserve memory *)
-  assert (ALLOCSECS: alloc_sections instr_size (RelocProgSemantics.globalenv instr_size tp')
+  assert (ALLOCSECS: alloc_sections instr_size (RelocProgGlobalenvs.globalenv instr_size tp')
                           (prog_reloctables tp') 
                          (prog_sectable tp') Mem.empty = Some m0).
   { 
-    set (ge1:= (RelocProgSemantics.globalenv instr_size (RelocProgSemantics1.decode_program instr_size prog))) in *.
-    set (ge2:= (RelocProgSemantics.globalenv instr_size tp')).
+    set (ge1:= (RelocProgGlobalenvs.globalenv instr_size (RelocProgSemantics1.decode_program instr_size prog))) in *.
+    set (ge2:= (RelocProgGlobalenvs.globalenv instr_size tp')).
     (* globalenv property *)
     assert (GEProp: forall id ofs,RelocProgGlobalenvs.Genv.symbol_address ge1 id ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 id ofs).
     { intros.
@@ -1195,7 +1200,7 @@ Lemma transf_initial_state:forall st1 rs,
     unfold transl_sectable in  EQ0. simpl in *.
     exploit PTree_fold_elements. apply EQ. intros F1. clear EQ.
     exploit PTree_fold_elements. apply EQ0. intros F2. clear EQ0.
-    unfold RelocProgSemantics.alloc_sections in Heqo.
+    unfold RelocProgGlobalenvs.alloc_sections in Heqo.
     unfold alloc_sections. rewrite PTree.fold_spec.
     rewrite PTree.fold_spec in Heqo.
     unfold RelocProg.sectable in *.
@@ -1251,7 +1256,7 @@ Lemma transf_initial_state:forall st1 rs,
               (fun (a : option mem)
                  (p : positive *
                       RelocProg.section instruction init_data) =>
-               RelocProgSemantics.alloc_section instr_size ge1
+               RelocProgGlobalenvs.alloc_section instr_size ge1
                   a (fst p) 
                  (snd p)) x2 (Some Mem.empty))) eqn:FOLD.
       2:{ simpl in Heqo. inv Heqo. }
@@ -1274,34 +1279,43 @@ Lemma transf_initial_state:forall st1 rs,
   monadInv A. simpl.
   unfold transf_program in TRANSF. monadInv TRANSF.
   simpl in *. auto. }           (* end of assert TOPROVE *)
+
   
-  inv H0.
-  
-  set (ge2:= (RelocProgSemantics.globalenv instr_size tp')).
-  set (rs0' := rs # PC <- (RelocProgGlobalenvs.Genv.symbol_address ge2 tp'.(prog_main) Ptrofs.zero)
-           # RA <- Vnullptr
-           # RSP <- (Vptr stk (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr))))) in *.
-  
-  exists (State rs0' m2).
-  constructor;eauto. econstructor;eauto.
+  exploit initial_state_gen_match. eapply symbol_address_pres. eapply prog_main_eq.
+  eauto. eauto.
+  intros (st' & INITGEN & ?). subst.
+  exists st'. split;eauto.
   econstructor;eauto.
-  f_equal.
+  
+  (* initial_state_gen *)
+  
+  (* inv H0. *)
+  
+  (* set (ge2:= (RelocProgSemantics.globalenv instr_size tp')). *)
+  (* set (rs0' := rs # PC <- (RelocProgGlobalenvs.Genv.symbol_address ge2 tp'.(prog_main) Ptrofs.zero) *)
+  (*          # RA <- Vnullptr *)
+  (*          # RSP <- (Vptr stk (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr))))) in *. *)
+  
+  (* exists (State rs0' m2). *)
+  (* constructor;eauto. econstructor;eauto. *)
+  (* econstructor;eauto. *)
+  (* f_equal. *)
   
   
-  (* globalenv property *)
-  assert (GEProp: forall id ofs,RelocProgGlobalenvs.Genv.symbol_address ge0 id ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 id ofs).
-  { intros.
-    exploit (symbol_address_pres).
-    unfold ge,tge,ge0,ge2.
-    unfold globalenv. rewrite A.
-    unfold RelocProgSemantics1.globalenv. eauto. } (* end of GEProp *)
-  intros.
-  unfold rs0,rs0'.
-  erewrite GEProp.
-  unfold decode_prog_code_section in A.
-  monadInv A. cbn [prog_main].
-  unfold transf_program in TRANSF. monadInv TRANSF.
-  cbn [prog_main]. auto.
+  (* (* globalenv property *) *)
+  (* assert (GEProp: forall id ofs,RelocProgGlobalenvs.Genv.symbol_address ge0 id ofs = RelocProgGlobalenvs.Genv.symbol_address ge2 id ofs). *)
+  (* { intros. *)
+  (*   exploit (symbol_address_pres). *)
+  (*   unfold ge,tge,ge0,ge2. *)
+  (*   unfold globalenv. rewrite A. *)
+  (*   unfold RelocProgSemantics1.globalenv. eauto. } (* end of GEProp *) *)
+  (* intros. *)
+  (* unfold rs0,rs0'. *)
+  (* erewrite GEProp. *)
+  (* unfold decode_prog_code_section in A. *)
+  (* monadInv A. cbn [prog_main]. *)
+  (* unfold transf_program in TRANSF. monadInv TRANSF. *)
+  (* cbn [prog_main]. auto. *)
 Qed.
 
 Lemma transf_program_correct: forall rs,
@@ -1330,8 +1344,8 @@ Proof.
     eapply symbol_address_pres.
     eapply find_instr_refl.
     eapply find_ext_funct_refl.
-    eapply rev_transl_code_in.
-    eapply transl_instr_in_code.
+    (* eapply rev_transl_code_in. *)
+    (* eapply transl_instr_in_code. *)
     eapply senv_refl.
     auto.
 Qed.

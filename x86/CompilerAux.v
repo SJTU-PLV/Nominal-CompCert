@@ -3,7 +3,7 @@ Require Import Coqlib Errors.
 Require Import AST Linking Smallstep.
 Require Asm RealAsm.
 (** RealAsm passes  *)
-Require RealAsmgen.
+(* Require RealAsmgen. *)
 Require PseudoInstructions.
 Require AsmBuiltinInline.
 Require AsmStructRet.
@@ -21,8 +21,8 @@ Require RelocElfgen.
 Require EncodeRelocElf.
 
 (** RealAsm Proof *)
-Require SSAsmproof.
-Require RealAsmproof.
+(* Require SSAsmproof.
+Require RealAsmproof. *)
 (* Require PseudoInstructionsproof. *)
 (** Assembler Proof *)
 Require Symbtablegenproof.
@@ -31,7 +31,7 @@ Require RelocBingenproof.
 Require RelocElfgenproof.
 Require EncodeElfCorrect.
 Require RelocProgLinking.
-Require TranslateInstrSize.
+Require ReloctablesgenSize.
 
 (** * Composing the translation passes *)
 
@@ -71,8 +71,8 @@ Section INSTR_SIZE.
   (** TargetPrinter *)
 Definition targetprinter p: res Asm.program :=
   OK p
-  @@ time "SSAsm" SSAsmproof.transf_program
-  @@@ time "Translation from SSAsm to RealAsm" RealAsmgen.transf_program instr_size
+(*  @@ time "SSAsm" SSAsmproof.transf_program
+  @@@ time "Translation from SSAsm to RealAsm" RealAsmgen.transf_program instr_size *)
   @@ time "Elimination of pseudo instruction" PseudoInstructions.transf_program
   @@@ time "Expand builtin inline assembly" AsmBuiltinInline.transf_program
   @@@ time "Pad Instructions with struct return" AsmStructRet.transf_program
@@ -83,10 +83,10 @@ Definition targetprinter p: res Asm.program :=
   @@ time "Generation of the jump table" Jumptablegen.transf_program instr_size.
 
  (** Verified part from SACompcert *)
-  Definition targetprinter1 p: res Asm.program :=
+(*  Definition targetprinter1 p: res Asm.program :=
   OK p
   @@ time "SSAsm" SSAsmproof.transf_program
-  @@@ time "Translation from SSAsm to RealAsm" RealAsmgen.transf_program instr_size.
+  @@@ time "Translation from SSAsm to RealAsm" RealAsmgen.transf_program instr_size. *)
 
  
  (** Assembler *)

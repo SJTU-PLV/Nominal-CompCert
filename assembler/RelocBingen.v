@@ -18,8 +18,8 @@ Fixpoint translate_bytes instrs :=
   | [] => OK []
   | i :: instrs' =>
       do bits <- EncDecRet.encode_Instruction i;
-      (* bits_to_bytes, in addition with a revertion in riscV *)
-      do bs <- bits_to_bytes_archi bits;
+      (* We assume that CSLED would generate little endian bits *)
+      do bs <- bits_to_bytes bits;
       do tl <- translate_bytes instrs';
       OK (bs ++ tl)
   end.

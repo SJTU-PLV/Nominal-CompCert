@@ -123,10 +123,10 @@ End WITHGE.
 
 
 Definition init_mem (p: RelocProg.program fundef unit instruction byte) :=
-  let ge := RelocProgSemantics.globalenv instr_size p in
+  let ge := globalenv instr_size p in
   match alloc_sections ge p.(prog_reloctables) p.(prog_sectable) Mem.empty with
   | Some m1 =>
-    RelocProgSemantics.alloc_external_symbols m1 p.(prog_symbtable)
+    alloc_external_symbols m1 p.(prog_symbtable)
   | None => None
   end.
 
@@ -225,7 +225,7 @@ Proof.
 Qed.
 
 Definition decode_instrs' (bytes: list byte) :=
-  let bits := bytes_to_bits_archi bytes in
+  let bits := BPProperty.bytes_to_bits_opt bytes in
   do instrs1 <- decode_instrs_bits bits;
   do instrs2 <- decode_instrs instrs1;
   OK instrs2.
@@ -275,64 +275,54 @@ Definition globalenv (prog: program) :=
   | OK prog' =>
     RelocProgSemantics1.globalenv instr_size prog'
   (* prove this impossible *)
-  | _ => RelocProgSemantics.globalenv instr_size (empty_program1 prog)
+  | _ => globalenv instr_size (empty_program1 prog)
   end.
 
 Inductive initial_state (prog: program) (rs: regset) (s: state): Prop :=
 | initial_state_intro: forall m prog',
     decode_prog_code_section prog = OK prog' ->
     init_mem prog' = Some m ->
-    RelocProgSemantics.initial_state_gen instr_size prog' rs m s ->
+    RelocProgSemanticsArchi.initial_state_gen instr_size (decode_program instr_size prog') rs m s ->
     initial_state prog rs s.
 
 Definition semantics (p: program) (rs: regset) :=
-  Semantics_gen (RelocProgSemantics.step instr_size)
-                (initial_state p rs) RelocProgSemantics.final_state 
+  Semantics_gen (RelocProgSemanticsArchi.step instr_size)
+                (initial_state p rs) final_state 
                 (globalenv p)
                 (RelocProgGlobalenvs.Genv.genv_senv (globalenv p)).
 
 (** Determinacy of the semantics. *)
 
+
+  Ltac rewrite_hyps :=
+  repeat
+    match goal with
+      H1 : ?a = _, H2: ?a = _ |- _ => rewrite H1 in H2; inv H2
+    end.
+  
+
 Lemma semantics_determinate: forall p rs, determinate (semantics p rs).
 Proof.
-  Ltac Equalities :=
-    match goal with
-    | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] =>
-      rewrite H1 in H2; inv H2; Equalities
-    | _ => idtac
-    end.
-  intros.
-  constructor;simpl;intros.
-  -                             (* initial state *)
-    inv H;inv H0;Equalities.
-    + split. constructor. auto.
-    + discriminate.
-    + discriminate.
-    + assert (vargs0 = vargs) by (eapply RelocProgSemanticsArchi.eval_builtin_args_determ; eauto).   
-      subst vargs0.      
-      exploit external_call_determ. eexact H5. eexact H11. intros [A B].
-      split. auto. intros. destruct B; auto. subst. auto.
-    + assert (args0 = args) by (eapply Asm.extcall_arguments_determ; eauto). subst args0.
-      exploit external_call_determ. eexact H3. eexact H7. intros [A B].
-      split. auto. intros. destruct B; auto. subst. auto.
-  - red; intros; inv H; simpl.
+  intros; constructor; simpl; intros.
+  - unfold globalenv in *. unfold RelocProgSemantics1.globalenv in *. destr_in H.    
+    eapply semantics_determinate_step.
+    eapply H. eapply H0.
+    eapply semantics_determinate_step.
+    eapply H. eapply H0.
+  - (* trace length *)
+    red; intros; inv H; simpl.
     lia.
     eapply external_call_trace_length; eauto.
-    eapply external_call_trace_length; eauto.
   - (* initial states *)
-    inv H; inv H0. inv H1;inv H2. assert (m = m0) by congruence.
-    assert (prog' = prog'0) by congruence.
-    subst. inv H5; inv H3.
-  assert (m1 = m3 /\ stk = stk0) by intuition congruence. destruct H0; subst.
-  assert (m2 = m4) by congruence. subst.
-  f_equal.
-- (* final no step *)
-  assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
-  { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
-  inv H. red; intros; red; intros. inv H; rewrite H0 in *; eelim NOTNULL; eauto.
-- (* final states *)
-  inv H; inv H0. congruence.    
-Qed.
+    inv H; inv H0. inv H2; inv H1. rewrite_hyps.
+    eapply initial_state_gen_determinate;eauto.
+  - (* final no step *)
+    assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
+    { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
+    inv H. red; intros; red; intros. inv H; rewrite H0 in *; eelim NOTNULL; eauto.
+  - (* final states *)
+    inv H; inv H0. congruence.
+Qed.    
 
 
 Theorem reloc_prog_single_events p rs:
@@ -341,7 +331,7 @@ Proof.
   red. intros.
   inv H; simpl. lia.
   eapply external_call_trace_length; eauto.
-  eapply external_call_trace_length; eauto.
+  (* eapply external_call_trace_length; eauto. *)
 Qed.
 
 Theorem reloc_prog_receptive p rs:
@@ -351,12 +341,12 @@ Proof.
   - simpl. intros s t1 s1 t2 STEP MT.
     inv STEP.
     inv MT. eexists.
-    + eapply RelocProgSemantics.exec_step_internal; eauto.
-    + 
-      edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
-      eexists. eapply RelocProgSemantics.exec_step_builtin; eauto.
+    + eapply RelocProgSemanticsArchi.exec_step_internal; eauto.
+    (* +  *)
+    (*   edestruct external_call_receptive as (vres2 & m2 & EC2); eauto. *)
+    (*   eexists. eapply RelocProgSemantics.exec_step_builtin; eauto. *)
     + edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
-      eexists. eapply RelocProgSemantics.exec_step_external; eauto.
+      eexists. eapply RelocProgSemanticsArchi.exec_step_external; eauto.
   - eapply reloc_prog_single_events; eauto.  
 Qed.
 

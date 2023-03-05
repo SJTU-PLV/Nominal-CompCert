@@ -2,7 +2,7 @@ Require Import Coqlib Maps AST lib.Integers Values.
 Require Import Events lib.Floats Memory Smallstep.
 Require Import Asm RelocProg RelocProgramBytes.
 Require Import Stacklayout Conventions.
-Require Import Linking RelocProgLinking Errors.   
+Require Import Linking RelocProgLinking Errors LocalLib.   
 Require Import EncDecRet RelocBingen RelocBinDecode.
 Require Import RelocProgSemantics RelocProgSemantics1.
 Require Import TranslateInstr RelocProgSemantics2.
@@ -84,13 +84,13 @@ Section PRESERVATION.
   Hypothesis find_ext_funct_refl: forall v,
     Genv.find_ext_funct ge v = Genv.find_ext_funct tge v.
 
-  Hypothesis rev_transl_code_in: forall i c r,
-    In i (rev_transl_code instr_size r c) ->
-    exists i', In i' c /\ ((exists id addend, rev_id_eliminate id addend i' = i) \/ i = i').
-  Hypothesis transl_instr_in_code: forall c i id,
-    prog.(prog_sectable) ! id = Some (sec_text c) ->
-    In i c ->
-    exists i', translate_instr i = OK i'.
+  (* Hypothesis rev_transl_code_in: forall i c r, *)
+  (*   In i (rev_transl_code instr_size r c) -> *)
+  (*   exists i', In i' c /\ ((exists id addend, rev_id_eliminate id addend i' = i) \/ i = i'). *)
+  (* Hypothesis transl_instr_in_code: forall c i id, *)
+  (*   prog.(prog_sectable) ! id = Some (sec_text c) -> *)
+  (*   In i c -> *)
+  (*   exists i', translate_instr i = OK i'. *)
   Hypothesis senv_refl:
     (Genv.genv_senv ge) = (Genv.genv_senv tge).
 
@@ -118,42 +118,72 @@ Proof.
     erewrite <- find_ext_funct_refl;eauto.
     erewrite <- exec_instr_refl;eauto.
 
-  (* Pbuiltin instr impossible *)
-  - unfold Genv.find_instr in H1.
-    simpl in H1. apply gen_code_map_inv in H1.
-    destruct H1 as (id & c & P1 & P2 & P3).
-    generalize (PTree_map_elements _ (RelocProg.section instruction init_data) (rev_section instr_size (prog_reloctables prog)) (prog_sectable prog)). simpl.
-    intros F.
-    apply PTree.elements_correct in P2.
-    exploit list_forall2_in_right;eauto.
-    simpl.
-    intros (x1 & In1 & ? &REV1).
-    subst. destruct x1. apply PTree.elements_complete in In1.
-    simpl in REV1.
-    destruct s.  2-3:  simpl in REV1; congruence.
-    simpl in REV1. destr_in REV1.
-    + inv REV1. apply rev_transl_code_in in P3.
-      destruct P3 as (i' & In' & P3').
-      assert (i' = Pbuiltin ef args res).
-      { destruct P3'.
-        destruct H1 as (id & P3').
-        destruct i';simpl in P3';repeat destr_in P3';try congruence.
-        subst. auto. }
-      subst.
+  (* (* Pbuiltin instr impossible *) *)
+  (* - unfold Genv.find_instr in H1. *)
+  (*   simpl in H1. apply gen_code_map_inv in H1. *)
+  (*   destruct H1 as (id & c & P1 & P2 & P3). *)
+  (*   generalize (PTree_map_elements _ (RelocProg.section instruction init_data) (rev_section instr_size (prog_reloctables prog)) (prog_sectable prog)). simpl. *)
+  (*   intros F. *)
+  (*   apply PTree.elements_correct in P2. *)
+  (*   exploit list_forall2_in_right;eauto. *)
+  (*   simpl. *)
+  (*   intros (x1 & In1 & ? &REV1). *)
+  (*   subst. destruct x1. apply PTree.elements_complete in In1. *)
+  (*   simpl in REV1. *)
+  (*   destruct s.  2-3:  simpl in REV1; congruence. *)
+  (*   simpl in REV1. destr_in REV1. *)
+  (*   + inv REV1. apply rev_transl_code_in in P3. *)
+  (*     destruct P3 as (i' & In' & P3'). *)
+  (*     assert (i' = Pbuiltin ef args res). *)
+  (*     { destruct P3'. *)
+  (*       destruct H1 as (id & P3'). *)
+  (*       destruct i';simpl in P3';repeat destr_in P3';try congruence. *)
+  (*       subst. auto. } *)
+  (*     subst. *)
       
-      eapply transl_instr_in_code in In1;eauto.
-      simpl in In1. destruct In1 as (? & ?).
-      inv H1.
+  (*     eapply transl_instr_in_code in In1;eauto. *)
+  (*     simpl in In1. destruct In1 as (? & ?). *)
+  (*     inv H1. *)
       
-    + inv REV1.
-      eapply transl_instr_in_code in In1;eauto.
-      destruct In1 as (? & ?).
-      inv H1.
+  (*   + inv REV1. *)
+  (*     eapply transl_instr_in_code in In1;eauto. *)
+  (*     destruct In1 as (? & ?). *)
+  (*     inv H1. *)
       
   - 
     rewrite find_ext_funct_refl in H0.
     eapply exec_step_external;eauto.
     rewrite <- senv_refl. auto.    
+Qed.
+
+
+Lemma initial_state_gen_match: forall rs m st tprog' (MAIN: prog_main prog = prog_main tprog),
+    decode_prog_code_section tprog = OK tprog' ->
+  initial_state_gen instr_size (decode_program instr_size prog) rs m st ->
+  exists st', initial_state_gen instr_size (decode_program instr_size tprog') rs m st' /\ st = st'.
+Proof.
+  intros.
+  inv H0.
+  
+  set (ge2:= (globalenv instr_size (decode_program instr_size tprog'))).
+  set (rs0' := rs # PC <- (RelocProgGlobalenvs.Genv.symbol_address ge2 (decode_program instr_size tprog').(prog_main) Ptrofs.zero)
+           # RA <- Vnullptr
+           # RSP <- (Vptr stk (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr))))) in *.
+  
+  exists (State rs0' m2).
+  split.
+  econstructor;eauto.
+  f_equal. unfold rs0,rs0'.
+  generalize  symbol_address_pres.
+  unfold ge,tge. unfold RelocProgSemantics1.globalenv,RelocProgSemantics2.globalenv.
+  rewrite H. intros SYMB.
+  unfold ge0,ge2.
+  assert ((prog_main (decode_program instr_size prog)) = (prog_main (decode_program instr_size tprog'))).
+  unfold decode_program. unfold decode_prog_code_section in H.
+  monadInv H. simpl.  auto.
+
+  rewrite H0.
+  erewrite SYMB. auto.
 Qed.
 
 End PRESERVATION.
