@@ -2,13 +2,13 @@ Require Import Coqlib Integers AST Maps.
 Require Import Events Errors Smallstep Values.
 Require Import Asm RelocProg RelocProgramBytes Encode.
 Require Import Memdata.
-Require Import RelocElf RelocElfgen.
+Require Import RelocElf RelocElfArchi RelocElfgen.
 Require Import SymbolString.
 Require Import ReloctablesEncode.
 Require Import encode.Hex encode.Bits.
 Require Import SymbtableEncode SymbtableDecode.
-Require Import ReloctablesDecode.
-Require Import EncDecRet RelocProgSemantics2.
+Require Import ReloctablesDecodeArchi ReloctablesDecode.
+Require Import EncDecRet RelocProgSemantics2 RelocProgSemanticsArchi.
 
 Import Hex Bits.
 Import ListNotations.
@@ -100,21 +100,6 @@ Definition index_to_ident (idl: list ident) (start: Z) :=
 
 
 
-Definition acc_decode_reloctable_section (reloclen: nat) (m: ZTree.t ident) (acc: res (reloctable * list byte * nat)) (b:byte) :=
-  do acc' <- acc;
-  let '(reloctbl, reloce, len) := acc' in
-  if Nat.eq_dec len reloclen then
-    do e <- decode_relocentry elf64 m (reloce ++ [b]);
-    OK (reloctbl ++ [e], [], 1%nat)
-  else
-    OK (reloctbl, reloce ++ [b], S len).
-  
-Definition decode_reloctable_section (l: list byte) (m:ZTree.t ident) :=
-  let reloclen := if elf64 then 24%nat else 8%nat in
-  do r <- fold_left (acc_decode_reloctable_section reloclen m) l (OK ([], [], 1%nat));
-  OK (fst (fst r)).
-
-
 Definition acc_decode_symbtable_section (symblen: nat) (m: ZTree.t ident) (acc: res (symbtable * list byte * list byte * nat)) (b: byte) :=
   do acc' <- acc;
   let '(symbtbl, strtbl, symbe, len) :=  acc' in
@@ -181,7 +166,7 @@ Definition acc_section_header (st: res decode_elf_state) (sec_h: section * secti
     let symbidxmap := index_to_ident symbidl 1 in
     do (_, shstrtbl0) <- take_drop (length SB[".rel"]) st.(dec_shstrtbl);
     do (id, shstrtbl') <- id_from_strtbl shstrtbl0;
-    do reloctbl <- decode_reloctable_section sec symbidxmap;
+    do reloctbl <- decode_reloctable_section reloc_entry_size  sec symbidxmap;
     OK (update_reloctable_shstrtbl st id reloctbl shstrtbl')
            
   | _ => Error (msg "unsupported section header")
@@ -221,7 +206,7 @@ Definition globalenv (p: elf_file) :=
   match decode_elf p with
   | OK p'=>                  
     RelocProgSemantics2.globalenv instr_size  p'
-  | _ => RelocProgSemantics.globalenv instr_size (empty_elf_file1 p)
+  | _ => RelocProgGlobalenvs.globalenv instr_size (empty_elf_file1 p)
   end.
 
 (* initial state *)
@@ -234,55 +219,41 @@ Inductive initial_state (prog: elf_file) (rs: regset) (s: state): Prop :=
 
 (* Semantics *)
 Definition semantics (p: elf_file) (rs: regset) :=
-  Semantics_gen (RelocProgSemantics.step instr_size)
-                (initial_state p rs) RelocProgSemantics.final_state 
+  Semantics_gen (RelocProgSemanticsArchi.step instr_size)
+                (initial_state p rs) final_state 
                 (globalenv p)
                 (RelocProgGlobalenvs.Genv.genv_senv (globalenv p)).
 
 (** Determinacy of the semantics. *)
 
+  Ltac rewrite_hyps :=
+  repeat
+    match goal with
+      H1 : ?a = _, H2: ?a = _ |- _ => rewrite H1 in H2; inv H2
+    end.
+
+
 Lemma semantics_determinate: forall p rs, determinate (semantics p rs).
 Proof.
-  Ltac Equalities :=
-    match goal with
-    | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] =>
-      rewrite H1 in H2; inv H2; Equalities
-    | _ => idtac
-    end.
   intros.
   constructor;simpl;intros.
-  -                             (* initial state *)
-    inv H;inv H10;Equalities.
-    + split. constructor. auto.
-    + discriminate.
-    + discriminate.
-    + assert (vargs0 = vargs) by (eapply RelocProgSemanticsArchi.eval_builtin_args_determ; eauto).   
-      subst vargs0.      
-      exploit external_call_determ. eexact H15. eexact H21. intros [A B].
-      split. auto. intros. destruct B; auto. subst. auto.
-    + assert (args0 = args) by (eapply Asm.extcall_arguments_determ; eauto). subst args0.
-      exploit external_call_determ. eexact H13. eexact H17. intros [A B].
-      split. auto. intros. destruct B; auto. subst. auto.
+  - unfold globalenv in *.
+    destr;try eapply RelocProgSemanticsArchi.semantics_determinate_step;eauto.
+    unfold RelocProgSemantics2.globalenv in *.
+    destr;try eapply RelocProgSemanticsArchi.semantics_determinate_step;eauto.
   - red; intros; inv H; simpl.
     lia.
     eapply external_call_trace_length; eauto.
-    eapply external_call_trace_length; eauto.
+    (* eapply external_call_trace_length; eauto. *)
   - (* initial states *)
-    inv H; inv H10. inv H13;inv H12. assert (m = m0) by congruence.
-    assert (prog' = prog'0) by congruence.
-    subst.
-    assert (prog'1 = prog'2) by congruence.
-    subst.
-    inv H15; inv H17.
-  assert (m1 = m3 /\ stk = stk0) by intuition congruence. destruct H12; subst.
-  assert (m2 = m4) by congruence. subst.
-  f_equal.
-- (* final no step *)
-  assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
-  { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
-  inv H. red; intros; red; intros. inv H; rewrite H10 in *; eelim NOTNULL; eauto.
-- (* final states *)
-  inv H; inv H10. congruence.    
+    inv H; inv H10. inv H12; inv H13. rewrite_hyps.
+    eapply initial_state_gen_determinate;eauto.
+  - (* final no step *)
+    assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs).
+    { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. }
+    inv H. red; intros; red; intros. inv H;rewrite H10 in *; eelim NOTNULL; eauto.
+  - (* final states *)
+    inv H; inv H10. congruence.
 Qed.
 
 
@@ -292,7 +263,7 @@ Proof.
   red. intros.
   inv H; simpl. lia.
   eapply external_call_trace_length; eauto.
-  eapply external_call_trace_length; eauto.
+  (* eapply external_call_trace_length; eauto. *)
 Qed.
 
 Theorem reloc_prog_receptive p rs:
@@ -302,12 +273,12 @@ Proof.
   - simpl. intros s t1 s1 t2 STEP MT.
     inv STEP.
     inv MT. eexists.
-    + eapply RelocProgSemantics.exec_step_internal; eauto.
-    + 
-      edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
-      eexists. eapply RelocProgSemantics.exec_step_builtin; eauto.
+    + eapply exec_step_internal; eauto.
+    (* +  *)
+    (*   edestruct external_call_receptive as (vres2 & m2 & EC2); eauto. *)
+    (*   eexists. eapply RelocProgSemantics.exec_step_builtin; eauto. *)
     + edestruct external_call_receptive as (vres2 & m2 & EC2); eauto.
-      eexists. eapply RelocProgSemantics.exec_step_external; eauto.
+      eexists. eapply exec_step_external; eauto.
   - eapply reloc_prog_single_events; eauto.  
 Qed.
 

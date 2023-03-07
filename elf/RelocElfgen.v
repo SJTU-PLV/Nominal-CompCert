@@ -209,11 +209,11 @@ Definition gen_rel_sec_header (reloctbl: list relocentry) (shstrtbl_idx: Z) (sec
      sh_flags    := [];
      sh_addr     := 0;
      sh_offset   := elf_header_size + sec_ofs;
-     sh_size     := Z.mul reloc_entry_size (Z.of_nat (length reloctbl));
+     sh_size     := Z.mul (Z.of_nat reloc_entry_size) (Z.of_nat (length reloctbl));
      sh_link     := symbtbl_idx;
      sh_info     := related_sec;
      sh_addralign := 1;
-     sh_entsize  := reloc_entry_size;
+     sh_entsize  := (Z.of_nat reloc_entry_size);
   |}.
 
 (* Definition gen_reldata_sec_header p := *)

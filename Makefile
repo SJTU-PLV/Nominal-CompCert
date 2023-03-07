@@ -133,7 +133,7 @@ ARCHFILES=\
   TranslateInstr.v\
   AsmLongInt.v\
   RelocProgSemanticsArchi.v RelocProgSemanticsArchi1.v\
-  RelocElfArchi.v ReloctablesEncodeArchi.v
+  RelocElfArchi.v RelocElfgenproofArchi.v ReloctablesEncodeArchi.v ReloctablesDecodeArchi.v
 else
 ifeq ($(ARCH), riscV)
 ARCHFILES=\
@@ -150,9 +150,9 @@ ARCHFILES=\
   SymbtablegenArchi.v SymbtablegenproofArchi.v\
   RelocationTypes.v ReloctablesgenArchi.v ReloctablesgenSize.v ReloctablesgenproofArchi.v\
   TranslateInstr.v RelocBinDecode.v RelocBingenproofArchi.v\
-  RelocElfArchi.v\
+  RelocElfArchi.v RelocElfgenproofArchi.v\
   RelocProgSemanticsArchi.v RelocProgSemanticsArchi1.v\
-  ReloctablesEncodeArchi.v
+  ReloctablesEncodeArchi.v ReloctablesDecodeArchi.v
 else
 ARCHFILES=
 endif
@@ -166,7 +166,7 @@ ENCODE=Encode.v Bits.v Hex.v BPProperty.v
 ELF = MachineTypes.v RelocElf.v\
  EncodeRelocElf.v SymbtableEncode.v RelocElfgen.v \
  ReloctablesEncode.v  ReloctablesDecode.v \
- SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof.v\
+ SymbtableDecode.v RelocElfSemantics.v RelocElfgenproof0.v RelocElfgenproof.v\
  DecodeRelocElf.v ElfBytesSemantics.v EncodeElfCorrect.v\
  RelocElfLinking.v\
 

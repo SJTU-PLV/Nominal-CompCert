@@ -20,6 +20,6 @@ Definition machine := EM_RISCV.
 Definition elf_flag := 4%Z.
 
 (* relocentry size *)
-Definition reloc_entry_size := if ptr64 then 24%Z else 12%Z.
+Definition reloc_entry_size := if ptr64 then 24%nat else 12%nat.
 
 Definition rel_eh_type := SHT_RELA.

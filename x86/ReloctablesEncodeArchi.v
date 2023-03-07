@@ -68,16 +68,3 @@ Proof.
 Qed.
 
 End WITH_IDXMAP.
-
-(* Decoding of relocation typem. I do not know where to place *)
-Definition decode_reloctype (z: Z) : res reloctype :=
-  match z with
-  | 0 => OK reloc_null
-  | 1 => OK reloc_abs
-  | 2 => OK reloc_rel
-  | _ => Error (msg "decode_reloctype: Unexpected value for symbtype")
-  end.
-
-Lemma decode_encode_reloctype rt:
-  decode_reloctype (encode_reloctype rt) = OK rt.
-Proof. destruct rt; reflexivity. Qed.
