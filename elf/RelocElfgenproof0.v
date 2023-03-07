@@ -5,7 +5,7 @@ Require Import Linking RelocProgLinking RelocElfLinking Errors.
 Require Import EncDecRet RelocElfgen LocalLib RelocProgGlobalenvs.
 Require Import RelocProgSemantics RelocProgSemantics1.
 Require Import TranslateInstr RelocProgSemantics2 RelocElfSemantics.
-Require Import SymbtableDecode ReloctablesEncode.
+Require Import SymbtableDecode ReloctablesEncode ReloctablesDecode.
 Require Import RelocProgSemanticsArchi.
 Require Import ReloctablesEncodeArchi.
 Import Hex Bits.
@@ -28,37 +28,6 @@ Proof.
 Qed.
 
 (** Properties of program equivalent *)
-
-Lemma decode_encode_reloctable_correct: forall n l bs m1 m2 (M: match_idxmap m1 m2),
-    let reloclen := if Archi.ptr64 then 24%nat else 8%nat in
-    length l = n ->
-    encode_reloctable m1 l = OK bs ->
-    fold_left (acc_decode_reloctable_section Archi.ptr64 reloclen m2) bs (OK ([], [], 1%nat)) = OK (l, [], 1%nat).
-Proof.
-  induction n;intros.
-  rewrite length_zero_iff_nil in H. subst.
-  simpl in H0. inv H0.
-  unfold decode_reloctable_section. simpl. auto.
-
-  exploit LocalLib.length_S_inv;eauto.
-  intros (l' & a1 & A1 & B1). subst.
-  clear H.
-  unfold encode_reloctable in H0. rewrite fold_left_app in H0.
-  simpl in H0. unfold acc_reloctable in H0 at 1.
-  monadInv H0. exploit IHn;eauto.
-  intros. rewrite fold_left_app.
-  unfold reloclen.
-  rewrite H. clear H EQ IHn.
-  exploit encode_relocentry_len;eauto.
-  intros LEN. rename x0 into l.
-  clear x.
-  eapply ReloctablesDecode.decode_encode_relocentry in EQ1;eauto.
-  destr.
-  - do 25 (destruct l as [| ?b ?] ;simpl in LEN;try congruence).
-    simpl in *. rewrite EQ1. simpl. auto.
-  - do 9 (destruct l as [| ?b ?] ;simpl in LEN;try congruence).
-    simpl in *. rewrite EQ1. simpl. auto.
-Qed.
 
     
 Lemma acc_decode_symbtable_section_eq: forall l l' m e strtbl id strtbl' t,
@@ -280,6 +249,10 @@ Proof.
   apply pe_prog_senv;auto.
 Qed.
 
+Hypothesis decode_encode_reloctable_correct: forall n l bs m1 m2 (M: match_idxmap m1 m2),
+    length l = n ->
+    encode_reloctable m1 l = OK bs ->
+    fold_left (acc_decode_reloctable_section RelocElfArchi.reloc_entry_size m2) bs (OK ([], [], 1%nat)) = OK (l, [], 1%nat).
 
 (* most important *)
 Lemma gen_reloc_elf_correct: forall p elf,

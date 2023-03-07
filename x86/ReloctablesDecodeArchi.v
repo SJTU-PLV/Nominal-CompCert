@@ -58,7 +58,7 @@ Definition decode_relocentry (elf64: bool) (m: ZTree.t ident) (l: list byte) : r
     OK ({| reloc_offset := ofs; reloc_type := rt; reloc_symb := sym; reloc_addend := 0 |}).
 
 Lemma decode_encode_relocentry: forall e m1 m2 bs (M:match_idxmap m1 m2),
-    encode_relocentry m1 e = OK bs ->
+    encode_relocentry m1 encode_reloc_info e = OK bs ->
     decode_relocentry Archi.ptr64 m2 bs = OK e.
 Proof.
   unfold encode_relocentry,decode_relocentry.
@@ -80,8 +80,8 @@ Proof.
   rewrite Z.mod_small;auto.
   rewrite decode_encode_int.
   rewrite Z.mod_small;auto.
-  unfold encode_reloc_info in EQ. repeat destr_in EQ.
-  f_equal. repeat f_equal.
+  repeat f_equal.
+
   destr.
 
   destruct (zlt reloc_addend 0).
@@ -108,8 +108,7 @@ Proof.
 
   rewrite encode_int_length. lia.
 
-  unfold encode_reloc_info in EQ. repeat destr_in EQ.
-  unfold encode_int64.   rewrite encode_int_length. auto.
+  eapply encode_reloc_info_len;eauto.
   
   monadInv H11.
 
@@ -124,8 +123,7 @@ Proof.
   rewrite Z.ltb_lt in H10.
   rewrite Z.leb_le in H.
   rewrite Z.mod_small;auto.
-  unfold encode_reloc_info in EQ. repeat destr_in EQ. 
-  unfold encode_int32. rewrite encode_int_length. auto.
+  eapply encode_reloc_info_len;eauto.
   monadInv H11.
 Qed.
 

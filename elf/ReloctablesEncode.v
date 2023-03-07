@@ -1,4 +1,4 @@
-(** * Encoding of the relocation tables into sections *)
+ (** * Encoding of the relocation tables into sections *)
 
 Require Import Coqlib lib.Integers AST Maps.
 Require Import Errors.

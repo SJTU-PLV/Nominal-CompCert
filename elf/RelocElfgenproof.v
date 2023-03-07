@@ -145,7 +145,9 @@ Lemma transf_initial_state: forall st1 rs,
   intros st1 rs S1.
   exists st1. split;auto.
   unfold match_prog in TRANSF.
-  exploit gen_reloc_elf_correct;eauto. intros (prog' & D1 & E1).  
+  exploit gen_reloc_elf_correct;eauto.
+  eapply decode_encode_reloctable_correct.
+  intros (prog' & D1 & E1).  
   econstructor. eapply D1.
   inv S1.
 
@@ -169,6 +171,7 @@ Proof.
   intros.
   unfold match_prog in TRANSF.
   exploit gen_reloc_elf_correct;eauto.
+  eapply decode_encode_reloctable_correct.
   intros (p' & D1 & E1).
   
   eapply forward_simulation_step with (match_states:= fun (st1 st2: Asm.state) => st1 = st2).
