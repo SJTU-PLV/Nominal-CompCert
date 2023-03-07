@@ -19,7 +19,7 @@ Require Compopts Machregs.
 Require Import Op Registers RTL.
 Require Import Liveness ValueDomain ValueAOp ValueAnalysis.
 Require Import ConstpropOp ConstpropOpproof Constprop.
-Require Import LanguageInterface cklr.Inject cklr.InjectFootprint cklr.VAInject.
+Require Import LanguageInterface Inject InjectFootprint.
 
 Definition match_prog (prog tprog: program) :=
   match_program (fun _ f tf => tf = transf_fundef (romem_for prog) f) eq prog tprog.
@@ -724,25 +724,8 @@ Proof.
     constructor; auto.
   - cbn in *. econstructor; eauto. constructor.  rewrite H0. reflexivity.
     eapply ro_acc_refl.
-  - cbn in *. cbn in *.
-    set (bc := bc_of_inj f0 ge). econstructor. instantiate (1:= bc).
-    constructor; eauto.
-    + eapply bc_of_inj_vmatch; eauto.
-    + eapply bc_of_inj_args_vmatch; eauto.
-    + red in H2. destruct H2 as [H2 H3].
-      eapply romatch_exten; eauto.
-      intros. unfold bc, bc_of_inj, ValueAnalysis.bc_of_symtbl.
-      simpl. split; intro.
-      destruct (f0 b) as [[b' d']|] eqn:Hf0; try congruence.
-      destruct (Genv.invert_symbol se b); try congruence.
-      destruct (Genv.invert_symbol se b) eqn:Hinv; try congruence.
-      inversion H1. subst id. inversion GE. inversion H9.
-      apply Genv.invert_find_symbol in Hinv. exploit mge_dom; eauto.
-      eapply Genv.genv_symb_range; eauto.
-      intros [b2 Hf0]. rewrite Hf0. reflexivity.
-    + eapply bc_of_inj_mmatch; eauto.
-    + eapply bc_of_inj_genv_match; eauto. inversion GE. eauto.
-    + eapply bc_of_inj_nostack; eauto.
+  - eapply sound_memory_ro_sound_state; eauto.
+    inversion GE. eauto.
 Qed.
 
 Lemma transf_final_states:
@@ -811,7 +794,7 @@ Proof.
     + constructor; eauto.
     + unfold Genv.find_funct in H. destruct vf; try congruence; eauto.
   - constructor; eauto.
-  - inv GE. inversion INCR. constructor; simpl; eauto.
+  - inv GE. inversion INCR. constructor.
     eapply Genv.match_stbls_compose.
     eapply inj_of_bc_preserves_globals; eauto.
     apply MSTB. inversion H15. eauto. inversion H16. eauto.
@@ -1110,8 +1093,6 @@ End PRESERVATION.
 (** The preservation of the observable behavior of the program then
   follows. *)
 
-Require Import Invariant.
-
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
@@ -1166,32 +1147,3 @@ Proof.
   split; eauto. split. eapply sound_step; eauto. auto.
 - apply lt_wf.
 Qed.
-
-(*
-Theorem transf_program_correct prog tprog:
-  match_prog prog tprog ->
-  forward_simulation (vamatch @ cc_c injp) (vamatch @ cc_c inj) (RTL.semantics prog) (RTL.semantics tprog).
-Proof.
-  intros MATCH. eapply source_invariant_fsim; eauto using rtl_vamatch. revert MATCH.
-  fsim (eapply Build_fsim_properties with (order := lt) (match_states := match_states prog w));
-     cbn.
-- inv Hse. destruct 1. cbn. destruct H; try congruence; eauto.
-  eapply (Genv.is_internal_match MATCH); eauto.
-  unfold transf_fundef, transf_partial_fundef.
-  intros ? [|] [|]; cbn -[transf_function]; inversion 1; auto.
-- intros q1 q2 s1 Hq (Hs1 & _).
-  eapply transf_initial_states; eauto.
-- intros n s1 s2 r1 Hs (Hr1 & _).
-  eapply transf_final_states; eauto.
-- intros n s1 s2 q1 Hs (Hq1 & _).
-  edestruct transf_external_states as (w' & q2 & Hq2 & Hq & Hse' & Hk); eauto.
-  exists w', q2. repeat apply conj; eauto.
-  intros r1 r2 s1' Hr (Hs1' & _). eauto.
-- intros s1 t s1' (STEP & [se bc0 m0] & Hse' & Hs1 & Hs1') n s2 Hs. subst. cbn in *.
-  exploit transf_step_correct; eauto.
-  intros [ [n2 [s2' [A B]]] | [n2 [A [B C]]]].
-  exists n2; exists s2'; split; auto. left; apply plus_one; auto.
-  exists n2; exists s2; split; auto. right; split; auto. subst t; apply star_refl.
-- apply lt_wf.
-Qed.
-*)
