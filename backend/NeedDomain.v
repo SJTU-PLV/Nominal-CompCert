@@ -47,7 +47,7 @@ Definition iagree (p q mask: int) : Prop :=
   forall i, 0 <= i < Int.zwordsize -> Int.testbit mask i = true ->
             Int.testbit p i = Int.testbit q i.
 
-Definition vagree (v w: val) (x: nval) : Prop :=
+Definition vagree (j:meminj) (v w: val) (x: nval) : Prop :=
   match x with
   | Nothing => True
   | I m =>
@@ -56,51 +56,54 @@ Definition vagree (v w: val) (x: nval) : Prop :=
       | Vint p, _ => False
       | _, _ => True
       end
-  | All => Val.lessdef v w
+  | All => Val.inject j v w
   end.
 
-Lemma vagree_same: forall v x, vagree v v x.
+(*
+Lemma vagree_same: forall j v x, vagree j v v x.
 Proof.
   intros. destruct x; simpl; auto; destruct v; auto. red; auto.
 Qed.
-
-Lemma vagree_lessdef: forall v w x, Val.lessdef v w -> vagree v w x.
+*)
+Lemma vagree_inject: forall j v w x, Val.inject j v w -> vagree j v w x.
 Proof.
-  intros. inv H. apply vagree_same. destruct x; simpl; auto.
+  intros. inv H; destruct x; simpl; auto.
+  red. intros. eauto.
+  econstructor; eauto.
 Qed.
 
-Lemma lessdef_vagree: forall v w, vagree v w All -> Val.lessdef v w.
+Lemma inject_vagree: forall j v w, vagree j v w All -> Val.inject j v w.
 Proof.
   intros. simpl in H. auto.
 Qed.
 
-Global Hint Resolve vagree_same vagree_lessdef lessdef_vagree: na.
+Global Hint Resolve vagree_inject inject_vagree: na.
 
-Inductive vagree_list: list val -> list val -> list nval -> Prop :=
+Inductive vagree_list (j:meminj): list val -> list val -> list nval -> Prop :=
   | vagree_list_nil: forall nvl,
-      vagree_list nil nil nvl
+      vagree_list j nil nil nvl
   | vagree_list_default: forall v1 vl1 v2 vl2,
-      vagree v1 v2 All -> vagree_list vl1 vl2 nil ->
-      vagree_list (v1 :: vl1) (v2 :: vl2) nil
+      vagree j v1 v2 All -> vagree_list j vl1 vl2 nil ->
+      vagree_list j (v1 :: vl1) (v2 :: vl2) nil
   | vagree_list_cons: forall v1 vl1 v2 vl2 nv1 nvl,
-      vagree v1 v2 nv1 -> vagree_list vl1 vl2 nvl ->
-      vagree_list (v1 :: vl1) (v2 :: vl2) (nv1 :: nvl).
+      vagree j v1 v2 nv1 -> vagree_list j vl1 vl2 nvl ->
+      vagree_list j (v1 :: vl1) (v2 :: vl2) (nv1 :: nvl).
 
-Lemma lessdef_vagree_list:
-  forall vl1 vl2, vagree_list vl1 vl2 nil -> Val.lessdef_list vl1 vl2.
+Lemma inject_vagree_list:
+  forall j vl1 vl2, vagree_list j vl1 vl2 nil -> Val.inject_list j vl1 vl2.
 Proof.
   induction vl1; intros; inv H; constructor; auto with na.
 Qed.
 
-Lemma vagree_lessdef_list:
-  forall vl1 vl2, Val.lessdef_list vl1 vl2 -> forall nvl, vagree_list vl1 vl2 nvl.
+Lemma vagree_inject_list:
+  forall j vl1 vl2, Val.inject_list j vl1 vl2 -> forall nvl, vagree_list j vl1 vl2 nvl.
 Proof.
   induction 1; intros.
   constructor.
   destruct nvl; constructor; auto with na.
 Qed.
 
-Global Hint Resolve lessdef_vagree_list vagree_lessdef_list: na.
+Global Hint Resolve inject_vagree_list vagree_inject_list: na.
 
 (** ** Ordering and least upper bound between value needs *)
 
@@ -125,7 +128,7 @@ Proof.
 Qed.
 
 Lemma nge_agree:
-  forall v w x y, nge x y -> vagree v w x -> vagree v w y.
+  forall v w x y j, nge x y -> vagree j v w x -> vagree j v w y.
 Proof.
   induction 1; simpl; auto.
 - destruct v; auto with na.
@@ -393,9 +396,9 @@ Definition andimm (x: nval) (n: int) :=
   end.
 
 Lemma andimm_sound:
-  forall v w x n,
-  vagree v w (andimm x n) ->
-  vagree (Val.and v (Vint n)) (Val.and w (Vint n)) x.
+  forall j v w x n,
+  vagree j v w (andimm x n) ->
+  vagree j (Val.and v (Vint n)) (Val.and w (Vint n)) x.
 Proof.
   unfold andimm; intros; destruct x; simpl in *; unfold Val.and.
 - auto.
@@ -411,15 +414,16 @@ Definition orimm (x: nval) (n: int) :=
   end.
 
 Lemma orimm_sound:
-  forall v w x n,
-  vagree v w (orimm x n) ->
-  vagree (Val.or v (Vint n)) (Val.or w (Vint n)) x.
+  forall j v w x n,
+  vagree j v w (orimm x n) ->
+  vagree j (Val.or v (Vint n)) (Val.or w (Vint n)) x.
 Proof.
   unfold orimm; intros; destruct x; simpl in *.
 - auto.
 - unfold Val.or; InvAgree. apply iagree_or; auto.
-- InvAgree. simpl. apply Val.lessdef_same. f_equal. apply iagree_mone.
+- InvAgree. simpl. assert (Vint (Int.or i n) = Vint (Int.or i0 n)). f_equal. apply iagree_mone.
   apply iagree_or. rewrite Int.and_commut. rewrite Int.and_mone. auto.
+  rewrite H0. constructor.
 Qed.
 
 (** Bitwise operations: and, or, xor, not *)
@@ -433,39 +437,39 @@ Lemma vagree_bitwise_binop:
   forall f,
   (forall p1 p2 q1 q2 m,
      iagree p1 q1 m -> iagree p2 q2 m -> iagree (f p1 p2) (f q1 q2) m) ->
-  forall v1 w1 v2 w2 x,
-  vagree v1 w1 (bitwise x) -> vagree v2 w2 (bitwise x) ->
-  vagree (match v1, v2 with Vint i1, Vint i2 => Vint(f i1 i2) | _, _ => Vundef end)
+  forall j v1 w1 v2 w2 x,
+  vagree j v1 w1 (bitwise x) -> vagree j v2 w2 (bitwise x) ->
+  vagree j (match v1, v2 with Vint i1, Vint i2 => Vint(f i1 i2) | _, _ => Vundef end)
          (match w1, w2 with Vint i1, Vint i2 => Vint(f i1 i2) | _, _ => Vundef end)
          x.
 Proof.
   unfold bitwise; intros. destruct x; simpl in *.
 - auto.
 - InvAgree.
-- inv H0; auto. inv H1; auto. destruct w1; auto.
+- inv H0; auto. inv H1; auto.
 Qed.
 
 Lemma and_sound:
-  forall v1 w1 v2 w2 x,
-  vagree v1 w1 (bitwise x) -> vagree v2 w2 (bitwise x) ->
-  vagree (Val.and v1 v2) (Val.and w1 w2) x.
+  forall j v1 w1 v2 w2 x,
+  vagree j  v1 w1 (bitwise x) -> vagree j v2 w2 (bitwise x) ->
+  vagree j (Val.and v1 v2) (Val.and w1 w2) x.
 Proof (vagree_bitwise_binop Int.and (iagree_bitwise_binop andb Int.and Int.bits_and)).
 
 Lemma or_sound:
-  forall v1 w1 v2 w2 x,
-  vagree v1 w1 (bitwise x) -> vagree v2 w2 (bitwise x) ->
-  vagree (Val.or v1 v2) (Val.or w1 w2) x.
+  forall j v1 w1 v2 w2 x,
+  vagree j v1 w1 (bitwise x) -> vagree j v2 w2 (bitwise x) ->
+  vagree j (Val.or v1 v2) (Val.or w1 w2) x.
 Proof (vagree_bitwise_binop Int.or (iagree_bitwise_binop orb Int.or Int.bits_or)).
 
 Lemma xor_sound:
-  forall v1 w1 v2 w2 x,
-  vagree v1 w1 (bitwise x) -> vagree v2 w2 (bitwise x) ->
-  vagree (Val.xor v1 v2) (Val.xor w1 w2) x.
+  forall j v1 w1 v2 w2 x,
+  vagree j v1 w1 (bitwise x) -> vagree j v2 w2 (bitwise x) ->
+  vagree j (Val.xor v1 v2) (Val.xor w1 w2) x.
 Proof (vagree_bitwise_binop Int.xor (iagree_bitwise_binop xorb Int.xor Int.bits_xor)).
 
 Lemma notint_sound:
-  forall v w x,
-  vagree v w (bitwise x) -> vagree (Val.notint v) (Val.notint w) x.
+  forall j v w x,
+  vagree j v w (bitwise x) -> vagree j (Val.notint v) (Val.notint w) x.
 Proof.
   intros. rewrite ! Val.not_xor. apply xor_sound; auto with na.
 Qed.
@@ -480,16 +484,17 @@ Definition shlimm (x: nval) (n: int) :=
   end.
 
 Lemma shlimm_sound:
-  forall v w x n,
-  vagree v w (shlimm x n) ->
-  vagree (Val.shl v (Vint n)) (Val.shl w (Vint n)) x.
+  forall j v w x n,
+  vagree j v w (shlimm x n) ->
+  vagree j (Val.shl v (Vint n)) (Val.shl w (Vint n)) x.
 Proof.
   unfold shlimm; intros. unfold Val.shl.
   destruct (Int.ltu n Int.iwordsize).
   destruct x; simpl in *.
 - auto.
 - InvAgree. apply iagree_shl; auto.
-- InvAgree. apply Val.lessdef_same. f_equal. apply iagree_mone. apply iagree_shl; auto.
+- InvAgree. assert (Int.shl i n = Int.shl i0 n). apply iagree_mone. apply iagree_shl; auto.
+  rewrite H0. constructor.
 - destruct v; auto with na.
 Qed.
 
@@ -501,16 +506,17 @@ Definition shruimm (x: nval) (n: int) :=
   end.
 
 Lemma shruimm_sound:
-  forall v w x n,
-  vagree v w (shruimm x n) ->
-  vagree (Val.shru v (Vint n)) (Val.shru w (Vint n)) x.
+  forall j v w x n,
+  vagree j v w (shruimm x n) ->
+  vagree j (Val.shru v (Vint n)) (Val.shru w (Vint n)) x.
 Proof.
   unfold shruimm; intros. unfold Val.shru.
   destruct (Int.ltu n Int.iwordsize).
   destruct x; simpl in *.
 - auto.
 - InvAgree. apply iagree_shru; auto.
-- InvAgree. apply Val.lessdef_same. f_equal. apply iagree_mone. apply iagree_shru; auto.
+- InvAgree. assert (Int.shru i n = Int.shru i0 n). apply iagree_mone. apply iagree_shru; auto.
+  rewrite H0. constructor.
 - destruct v; auto with na.
 Qed.
 
@@ -525,9 +531,9 @@ Definition shrimm (x: nval) (n: int) :=
   end.
 
 Lemma shrimm_sound:
-  forall v w x n,
-  vagree v w (shrimm x n) ->
-  vagree (Val.shr v (Vint n)) (Val.shr w (Vint n)) x.
+  forall j v w x n,
+  vagree j v w (shrimm x n) ->
+  vagree j (Val.shr v (Vint n)) (Val.shr w (Vint n)) x.
 Proof.
   unfold shrimm; intros. unfold Val.shr.
   destruct (Int.ltu n Int.iwordsize).
@@ -537,7 +543,8 @@ Proof.
   destruct (Int.eq_dec (Int.shru (Int.shl m n) n) m).
   apply iagree_shr_1; auto.
   apply iagree_shr; auto.
-- InvAgree. apply Val.lessdef_same. f_equal. apply iagree_mone. apply iagree_shr. auto.
+- InvAgree. assert (Int.shr i n = Int.shr i0 n).  apply iagree_mone. apply iagree_shr. auto.
+  rewrite H0. constructor.
 - destruct v; auto with na.
 Qed.
 
@@ -549,9 +556,9 @@ Definition rol (x: nval) (amount: int) :=
   end.
 
 Lemma rol_sound:
-  forall v w x n,
-  vagree v w (rol x n) ->
-  vagree (Val.rol v (Vint n)) (Val.rol w (Vint n)) x.
+  forall j v w x n,
+  vagree j v w (rol x n) ->
+  vagree j (Val.rol v (Vint n)) (Val.rol w (Vint n)) x.
 Proof.
   unfold rol, Val.rol; intros.
   destruct x; simpl in *.
@@ -568,9 +575,9 @@ Definition ror (x: nval) (amount: int) :=
   end.
 
 Lemma ror_sound:
-  forall v w x n,
-  vagree v w (ror x n) ->
-  vagree (Val.ror v (Vint n)) (Val.ror w (Vint n)) x.
+  forall j v w x n,
+  vagree j v w (ror x n) ->
+  vagree j (Val.ror v (Vint n)) (Val.ror w (Vint n)) x.
 Proof.
   unfold ror, Val.ror; intros.
   destruct x; simpl in *.
@@ -582,9 +589,9 @@ Qed.
 Definition rolm (x: nval) (amount mask: int) := rol (andimm x mask) amount.
 
 Lemma rolm_sound:
-  forall v w x amount mask,
-  vagree v w (rolm x amount mask) ->
-  vagree (Val.rolm v amount mask) (Val.rolm w amount mask) x.
+  forall j v w x amount mask,
+  vagree j v w (rolm x amount mask) ->
+  vagree j (Val.rolm v amount mask) (Val.rolm w amount mask) x.
 Proof.
   unfold rolm; intros.
   assert (X: forall u, Val.rolm u amount mask = Val.and (Val.rol u (Vint amount)) (Vint mask)).
@@ -605,28 +612,29 @@ Definition modarith (x: nval) :=
   end.
 
 Lemma add_sound:
-  forall v1 w1 v2 w2 x,
-  vagree v1 w1 (modarith x) -> vagree v2 w2 (modarith x) ->
-  vagree (Val.add v1 v2) (Val.add w1 w2) x.
+  forall j v1 w1 v2 w2 x,
+  vagree j v1 w1 (modarith x) -> vagree j v2 w2 (modarith x) ->
+  vagree j (Val.add v1 v2) (Val.add w1 w2) x.
 Proof.
   unfold modarith; intros. destruct x; simpl in *.
 - auto.
 - unfold Val.add; InvAgree.
   apply eqmod_iagree. apply eqmod_add; apply iagree_eqmod; auto.
-- inv H; auto. inv H0; auto. destruct w1; auto.
+- inv H; auto. inv H0; auto. constructor.
+  inv H0; auto.
 Qed.
 
 Lemma sub_sound:
-  forall v1 w1 v2 w2 x,
-  vagree v1 w1 (modarith x) -> vagree v2 w2 (modarith x) ->
+  forall j v1 w1 v2 w2 x,
+  vagree j v1 w1 (modarith x) -> vagree j v2 w2 (modarith x) ->
   Archi.ptr64 = true ->
-  vagree (Val.sub v1 v2) (Val.sub w1 w2) x.
+  vagree j (Val.sub v1 v2) (Val.sub w1 w2) x.
 Proof.
   unfold modarith; intros. destruct x; simpl in *.
 - auto.
 - unfold Val.sub; rewrite H1; InvAgree.
   apply eqmod_iagree. apply eqmod_sub; apply iagree_eqmod; auto.
-- inv H; auto. inv H0; auto. destruct w1; auto.
+- inv H; auto. inv H0; auto. constructor. inv H0; auto.
 Qed.
 
 Remark modarith_idem: forall nv, modarith (modarith nv) = modarith nv.
@@ -635,20 +643,20 @@ Proof.
 Qed.
 
 Lemma mul_sound:
-  forall v1 w1 v2 w2 x,
-  vagree v1 w1 (modarith x) -> vagree v2 w2 (modarith x) ->
-  vagree (Val.mul v1 v2) (Val.mul w1 w2) x.
+  forall j v1 w1 v2 w2 x,
+  vagree j v1 w1 (modarith x) -> vagree j v2 w2 (modarith x) ->
+  vagree j (Val.mul v1 v2) (Val.mul w1 w2) x.
 Proof.
   unfold mul, add; intros. destruct x; simpl in *.
 - auto.
 - unfold Val.mul; InvAgree. apply eqmod_iagree. apply eqmod_mult; apply iagree_eqmod; auto.
-- inv H; auto. inv H0; auto. destruct w1; auto.
+- inv H; auto. inv H0; auto. constructor.
 Qed.
 
 Lemma neg_sound:
-  forall v w x,
-  vagree v w (modarith x) ->
-  vagree (Val.neg v) (Val.neg w) x.
+  forall j v w x,
+  vagree j v w (modarith x) ->
+  vagree j (Val.neg v) (Val.neg w) x.
 Proof.
   intros; destruct x; simpl in *.
 - auto.
@@ -667,10 +675,10 @@ Definition zero_ext (n: Z) (x: nval) :=
   end.
 
 Lemma zero_ext_sound:
-  forall v w x n,
-  vagree v w (zero_ext n x) ->
+  forall j v w x n,
+  vagree j v w (zero_ext n x) ->
   0 <= n ->
-  vagree (Val.zero_ext n v) (Val.zero_ext n w) x.
+  vagree j (Val.zero_ext n v) (Val.zero_ext n w) x.
 Proof.
   unfold zero_ext; intros.
   destruct x; simpl in *.
@@ -679,9 +687,9 @@ Proof.
   red; intros. autorewrite with ints; try lia.
   destruct (zlt i1 n); auto. apply H; auto.
   autorewrite with ints; try lia. rewrite zlt_true; auto.
-- unfold Val.zero_ext; InvAgree; auto. apply Val.lessdef_same. f_equal.
+- unfold Val.zero_ext; InvAgree; auto. assert (Int.zero_ext n i = Int.zero_ext n i0).
   Int.bit_solve; try lia. destruct (zlt i1 n); auto. apply H; auto.
-  autorewrite with ints; try lia. apply zlt_true; auto.
+  autorewrite with ints; try lia. apply zlt_true; auto. rewrite H1. constructor.
 Qed.
 
 Definition sign_ext (n: Z) (x: nval) :=
@@ -692,33 +700,33 @@ Definition sign_ext (n: Z) (x: nval) :=
   end.
 
 Lemma sign_ext_sound:
-  forall v w x n,
-  vagree v w (sign_ext n x) ->
+  forall j v w x n,
+  vagree j v w (sign_ext n x) ->
   0 < n ->
-  vagree (Val.sign_ext n v) (Val.sign_ext n w) x.
+  vagree j (Val.sign_ext n v) (Val.sign_ext n w) x.
 Proof.
   unfold sign_ext; intros. destruct x; simpl in *.
 - auto.
 - unfold Val.sign_ext; InvAgree.
   red; intros. autorewrite with ints; try lia.
-  set (j := if zlt i1 n then i1 else n - 1).
-  assert (0 <= j < Int.zwordsize).
-  { unfold j; destruct (zlt i1 n); lia. }
+  set (j' := if zlt i1 n then i1 else n - 1).
+  assert (0 <= j' < Int.zwordsize).
+  { unfold j'; destruct (zlt i1 n); lia. }
   apply H; auto.
   autorewrite with ints; try lia. apply orb_true_intro.
-  unfold j; destruct (zlt i1 n).
+  unfold j'; destruct (zlt i1 n).
   left. rewrite zlt_true; auto.
   right. rewrite Int.unsigned_repr. rewrite zlt_false by lia.
   replace (n - 1 - (n - 1)) with 0 by lia. reflexivity.
   generalize Int.wordsize_max_unsigned; lia.
-- unfold Val.sign_ext; InvAgree; auto. apply Val.lessdef_same. f_equal.
+- unfold Val.sign_ext; InvAgree; auto. assert (Int.sign_ext n i = Int.sign_ext n i0).
   Int.bit_solve; try lia.
-  set (j := if zlt i1 n then i1 else n - 1).
-  assert (0 <= j < Int.zwordsize).
-  { unfold j; destruct (zlt i1 n); lia. }
+  set (j' := if zlt i1 n then i1 else n - 1).
+  assert (0 <= j' < Int.zwordsize).
+  { unfold j'; destruct (zlt i1 n); lia. }
   apply H; auto. rewrite Int.bits_zero_ext; try lia.
   rewrite zlt_true. apply Int.bits_mone; auto.
-  unfold j. destruct (zlt i1 n); lia.
+  unfold j'. destruct (zlt i1 n); lia. rewrite H1. constructor.
 Qed.
 
 (** The needs of a memory store concerning the value being stored. *)
@@ -730,51 +738,61 @@ Definition store_argument (chunk: memory_chunk) :=
   | _ => All
   end.
 
+Definition no_fragment (mv:memval) : Prop :=
+  match mv with
+  |Fragment _ _ _ => False
+  |_ => True
+  end.
+
 Lemma store_argument_sound:
-  forall chunk v w,
-  vagree v w (store_argument chunk) ->
-  list_forall2 memval_lessdef (encode_val chunk v) (encode_val chunk w).
+  forall j chunk v w,
+  vagree j v w (store_argument chunk) ->
+  list_forall2 (memval_inject j) (encode_val chunk v) (encode_val chunk w).
 Proof.
   intros.
-  assert (UNDEF: list_forall2 memval_lessdef
+  assert (UNDEF: list_forall2 (memval_inject j)
                      (List.repeat Undef (size_chunk_nat chunk))
                      (encode_val chunk w)).
   {
      rewrite <- (encode_val_length chunk w).
      apply repeat_Undef_inject_any.
   }
-  assert (SAME: forall vl1 vl2,
-                vl1 = vl2 ->
-                list_forall2 memval_lessdef vl1 vl2).
+  assert (SAME: forall vl1 vl2 j,
+                vl1 = vl2 -> Forall no_fragment vl1 -> 
+                list_forall2 (memval_inject j) vl1 vl2).
   {
-     intros. subst vl2. revert vl1. induction vl1; constructor; auto.
-     apply memval_lessdef_refl.
+    induction vl1; intros. inv H1. constructor; auto.
+    inv H1. constructor. destruct a; constructor. inv H4.
+    eauto.
   }
-
   intros. unfold store_argument in H; destruct chunk.
 - InvAgree. apply SAME. simpl; f_equal. apply encode_int_8_mod.
   change 8 with (Int.size (Int.repr 255)). apply iagree_eqmod; auto.
+  simpl. constructor; simpl; eauto.
 - InvAgree. apply SAME. simpl; f_equal. apply encode_int_8_mod.
   change 8 with (Int.size (Int.repr 255)). apply iagree_eqmod; auto.
+  simpl. constructor; simpl; eauto.
 - InvAgree. apply SAME. simpl; f_equal. apply encode_int_16_mod.
   change 16 with (Int.size (Int.repr 65535)). apply iagree_eqmod; auto.
+  simpl. constructor; simpl; eauto. constructor; simpl; eauto.
 - InvAgree. apply SAME. simpl; f_equal. apply encode_int_16_mod.
   change 16 with (Int.size (Int.repr 65535)). apply iagree_eqmod; auto.
-- apply encode_val_inject. rewrite val_inject_id; auto.
-- apply encode_val_inject. rewrite val_inject_id; auto.
-- apply encode_val_inject. rewrite val_inject_id; auto.
-- apply encode_val_inject. rewrite val_inject_id; auto.
-- apply encode_val_inject. rewrite val_inject_id; auto.
-- apply encode_val_inject. rewrite val_inject_id; auto.
+  simpl. constructor; simpl; eauto. constructor; simpl; eauto.
+- apply encode_val_inject. eauto.
+- apply encode_val_inject. eauto.
+- apply encode_val_inject. eauto.
+- apply encode_val_inject. eauto.
+- apply encode_val_inject. eauto.
+- apply encode_val_inject. eauto.
 Qed.
 
 Lemma store_argument_load_result:
-  forall chunk v w,
-  vagree v w (store_argument chunk) ->
-  Val.lessdef (Val.load_result chunk v) (Val.load_result chunk w).
+  forall j chunk v w,
+  vagree j v w (store_argument chunk) ->
+  Val.inject j (Val.load_result chunk v) (Val.load_result chunk w).
 Proof.
   unfold store_argument; intros; destruct chunk;
-  auto using Val.load_result_lessdef; InvAgree; simpl.
+  auto using Val.load_result_inject; InvAgree; simpl.
 - apply sign_ext_sound with (v := Vint i) (w := Vint i0) (x := All) (n := 8).
   auto. compute; auto.
 - apply zero_ext_sound with (v := Vint i) (w := Vint i0) (x := All) (n := 8).
@@ -790,8 +808,8 @@ Qed.
 Definition maskzero (n: int) := I n.
 
 Lemma maskzero_sound:
-  forall v w n b,
-  vagree v w (maskzero n) ->
+  forall j v w n b,
+  vagree j v w (maskzero n) ->
   Val.maskzero_bool v n = Some b ->
   Val.maskzero_bool w n = Some b.
 Proof.
@@ -803,9 +821,9 @@ Qed.
 (** The needs of a select *)
 
 Lemma normalize_sound:
-  forall v w x ty,
-  vagree v w x ->
-  vagree (Val.normalize v ty) (Val.normalize w ty) x.
+  forall j v w x ty,
+  vagree j v w x ->
+  vagree j (Val.normalize v ty) (Val.normalize w ty) x.
 Proof.
   intros. destruct x; simpl in *. 
 - auto.
@@ -816,13 +834,13 @@ Proof.
   destruct ty; auto.
   destruct ty; auto.
   destruct ty; destruct Archi.ptr64; auto.
-- apply Val.normalize_lessdef; auto.
+- apply Val.normalize_inject; auto.
 Qed.
 
 Lemma select_sound:
-  forall ob v1 v2 w1 w2 ty x,
-  vagree v1 w1 x -> vagree v2 w2 x ->
-  vagree (Val.select ob v1 v2 ty) (Val.select ob w1 w2 ty) x.
+  forall j ob v1 v2 w1 w2 ty x,
+  vagree j v1 w1 x -> vagree j v2 w2 x ->
+  vagree j (Val.select ob v1 v2 ty) (Val.select ob w1 w2 ty) x.
 Proof.
   unfold Val.select; intros. destruct ob as [b|]; auto with na.
   apply normalize_sound. destruct b; auto.
@@ -839,40 +857,44 @@ Definition default (x: nval) :=
 
 Section DEFAULT.
 
-Variable ge: Genv.symtbl.
-Variable sp: block.
+Variables ge tge: Genv.symtbl.
+Variables sp sp': block.
 Variables m1 m2: mem.
-Hypothesis PERM: forall b ofs k p, Mem.perm m1 b ofs k p -> Mem.perm m2 b ofs k p.
+Variable j: meminj.
+
+Hypothesis INJSP: j sp = Some (sp',0).
+Hypothesis INJGE: forall id ofs,
+  Val.inject j (Genv.symbol_address ge id ofs) (Genv.symbol_address tge id ofs).
+Hypothesis INJ: Mem.inject j m1 m2.
+(* Hypothesis PERM: forall b ofs k p, Mem.perm m1 b ofs k p -> Mem.perm m2 b ofs k p. *)
 
 Let valid_pointer_inj:
   forall b1 ofs b2 delta,
-  inject_id b1 = Some(b2, delta) ->
+  j b1 = Some(b2, delta) ->
   Mem.valid_pointer m1 b1 (Ptrofs.unsigned ofs) = true ->
   Mem.valid_pointer m2 b2 (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr delta))) = true.
 Proof.
-  unfold inject_id; intros. inv H. rewrite Ptrofs.add_zero.
-  rewrite Mem.valid_pointer_nonempty_perm in *. eauto.
+  intros.
+  eapply Mem.valid_pointer_inject_val; eauto.
 Qed.
 
 Let weak_valid_pointer_inj:
   forall b1 ofs b2 delta,
-  inject_id b1 = Some(b2, delta) ->
+  j b1 = Some(b2, delta) ->
   Mem.weak_valid_pointer m1 b1 (Ptrofs.unsigned ofs) = true ->
   Mem.weak_valid_pointer m2 b2 (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr delta))) = true.
 Proof.
-  unfold inject_id; intros. inv H. rewrite Ptrofs.add_zero.
-  rewrite Mem.weak_valid_pointer_spec in *.
-  rewrite ! Mem.valid_pointer_nonempty_perm in *.
-  destruct H0; [left|right]; eauto.
+  intros. eapply Mem.weak_valid_pointer_inject_val; eauto.
 Qed.
 
 Let weak_valid_pointer_no_overflow:
   forall b1 ofs b2 delta,
-  inject_id b1 = Some(b2, delta) ->
+  j b1 = Some(b2, delta) ->
   Mem.weak_valid_pointer m1 b1 (Ptrofs.unsigned ofs) = true ->
   0 <= Ptrofs.unsigned ofs + Ptrofs.unsigned (Ptrofs.repr delta) <= Ptrofs.max_unsigned.
 Proof.
-  unfold inject_id; intros. inv H. rewrite Z.add_0_r. apply Ptrofs.unsigned_range_2.
+  intros.
+  eapply Mem.weak_valid_pointer_inject_no_overflow; eauto.
 Qed.
 
 Let valid_different_pointers_inj:
@@ -880,53 +902,57 @@ Let valid_different_pointers_inj:
   b1 <> b2 ->
   Mem.valid_pointer m1 b1 (Ptrofs.unsigned ofs1) = true ->
   Mem.valid_pointer m1 b2 (Ptrofs.unsigned ofs2) = true ->
-  inject_id b1 = Some (b1', delta1) ->
-  inject_id b2 = Some (b2', delta2) ->
+  j b1 = Some (b1', delta1) ->
+  j b2 = Some (b2', delta2) ->
   b1' <> b2' \/
   Ptrofs.unsigned (Ptrofs.add ofs1 (Ptrofs.repr delta1)) <> Ptrofs.unsigned (Ptrofs.add ofs2 (Ptrofs.repr delta2)).
 Proof.
-  unfold inject_id; intros. left; congruence.
+  intros.
+  apply Mem.valid_pointer_nonempty_perm in H0.
+  apply Mem.valid_pointer_nonempty_perm in H1.
+  erewrite Mem.address_inject; eauto.
+  erewrite Mem.address_inject; eauto.
+  inv INJ. exploit mi_no_overlap; eauto. eauto with mem. eauto with mem.
 Qed.
 
 Lemma default_needs_of_condition_sound:
   forall cond args1 b args2,
   eval_condition cond args1 m1 = Some b ->
-  vagree_list args1 args2 nil ->
+  vagree_list j args1 args2 nil ->
   eval_condition cond args2 m2 = Some b.
 Proof.
-  intros. apply eval_condition_inj with (f := inject_id) (m1 := m1) (vl1 := args1); auto.
-  apply val_inject_list_lessdef. apply lessdef_vagree_list. auto.
+  intros. apply eval_condition_inj with (f := j) (m1 := m1) (vl1 := args1); auto.
+  apply inject_vagree_list. auto.
 Qed.
 
 Lemma default_needs_of_operation_sound:
   forall op args1 v1 args2 nv,
   eval_operation ge (Vptr sp Ptrofs.zero) op args1 m1 = Some v1 ->
-  vagree_list args1 args2 nil
-  \/ vagree_list args1 args2 (default nv :: nil)
-  \/ vagree_list args1 args2 (default nv :: default nv :: nil)
-  \/ vagree_list args1 args2 (default nv :: default nv :: default nv :: nil) ->
+  vagree_list j args1 args2 nil
+  \/ vagree_list j args1 args2 (default nv :: nil)
+  \/ vagree_list j args1 args2 (default nv :: default nv :: nil)
+  \/ vagree_list j args1 args2 (default nv :: default nv :: default nv :: nil) ->
   nv <> Nothing ->
   exists v2,
-     eval_operation ge (Vptr sp Ptrofs.zero) op args2 m2 = Some v2
-  /\ vagree v1 v2 nv.
+     eval_operation tge (Vptr sp' Ptrofs.zero) op args2 m2 = Some v2
+  /\ vagree j v1 v2 nv.
 Proof.
   intros. assert (default nv = All) by (destruct nv; simpl; congruence).
   rewrite H2 in H0.
-  assert (Val.lessdef_list args1 args2).
+  assert (Val.inject_list j args1 args2).
   {
     destruct H0. auto with na.
     destruct H0. inv H0; constructor; auto with na.
     destruct H0. inv H0. constructor. inv H8; constructor; auto with na. 
     inv H0; constructor; auto with na. inv H8; constructor; auto with na. inv H9; constructor; auto with na.
   }
-  exploit (@eval_operation_inj ge ge inject_id).
+  exploit (@eval_operation_inj ge tge j).
   eassumption. auto. auto. auto.
-  instantiate (1 := op). intros. apply val_inject_lessdef; auto.
-  apply val_inject_lessdef. instantiate (1 := Vptr sp Ptrofs.zero). instantiate (1 := Vptr sp Ptrofs.zero). auto.
-  apply val_inject_list_lessdef; eauto.
-  eauto.
+  instantiate (1 := op). intros. eauto.
+  instantiate (1 := Vptr sp' Ptrofs.zero). instantiate (1 := Vptr sp Ptrofs.zero).
+  econstructor; eauto. eauto. eauto.
   intros (v2 & A & B). exists v2; split; auto.
-  apply vagree_lessdef. apply val_inject_lessdef. auto.
+  apply vagree_inject. auto.
 Qed.
 
 End DEFAULT.
@@ -941,10 +967,10 @@ Definition andimm_redundant (x: nval) (n: int) :=
   end.
 
 Lemma andimm_redundant_sound:
-  forall v w x n,
+  forall j v w x n,
   andimm_redundant x n = true ->
-  vagree v w (andimm x n) ->
-  vagree (Val.and v (Vint n)) w x.
+  vagree j v w (andimm x n) ->
+  vagree j (Val.and v (Vint n)) w x.
 Proof.
   unfold andimm_redundant; intros. destruct x; try discriminate.
 - simpl; auto.
@@ -964,16 +990,16 @@ Definition orimm_redundant (x: nval) (n: int) :=
   end.
 
 Lemma orimm_redundant_sound:
-  forall v w x n,
+  forall j v w x n,
   orimm_redundant x n = true ->
-  vagree v w (orimm x n) ->
-  vagree (Val.or v (Vint n)) w x.
+  vagree j v w (orimm x n) ->
+  vagree j (Val.or v (Vint n)) w x.
 Proof.
   unfold orimm_redundant; intros. destruct x; try discriminate.
 - auto.
 - InvBooleans. simpl in *; unfold Val.or; InvAgree.
   apply iagree_not'. rewrite Int.not_or_and_not.
-  apply (andimm_redundant_sound (Vint (Int.not i)) (Vint (Int.not i0)) (I m) (Int.not n)).
+  apply (andimm_redundant_sound j (Vint (Int.not i)) (Vint (Int.not i0)) (I m) (Int.not n)).
   simpl. rewrite Int.not_involutive. apply proj_sumbool_is_true. auto.
   simpl. apply iagree_not; auto.
 Qed.
@@ -982,10 +1008,10 @@ Definition rolm_redundant (x: nval) (amount mask: int) :=
   Int.eq_dec amount Int.zero && andimm_redundant x mask.
 
 Lemma rolm_redundant_sound:
-  forall v w x amount mask,
+  forall j v w x amount mask,
   rolm_redundant x amount mask = true ->
-  vagree v w (rolm x amount mask) ->
-  vagree (Val.rolm v amount mask) w x.
+  vagree j v w (rolm x amount mask) ->
+  vagree j (Val.rolm v amount mask) w x.
 Proof.
   unfold rolm_redundant; intros; InvBooleans. subst amount. rewrite Val.rolm_zero.
   apply andimm_redundant_sound; auto.
@@ -1005,11 +1031,11 @@ Definition zero_ext_redundant (n: Z) (x: nval) :=
   end.
 
 Lemma zero_ext_redundant_sound:
-  forall v w x n,
+  forall j v w x n,
   zero_ext_redundant n x = true ->
-  vagree v w (zero_ext n x) ->
+  vagree j v w (zero_ext n x) ->
   0 <= n ->
-  vagree (Val.zero_ext n v) w x.
+  vagree j (Val.zero_ext n v) w x.
 Proof.
   unfold zero_ext_redundant; intros. destruct x; try discriminate.
 - auto.
@@ -1027,11 +1053,11 @@ Definition sign_ext_redundant (n: Z) (x: nval) :=
   end.
 
 Lemma sign_ext_redundant_sound:
-  forall v w x n,
+  forall j v w x n,
   sign_ext_redundant n x = true ->
-  vagree v w (sign_ext n x) ->
+  vagree j v w (sign_ext n x) ->
   0 < n ->
-  vagree (Val.sign_ext n v) w x.
+  vagree j (Val.sign_ext n v) w x.
 Proof.
   unfold sign_ext_redundant; intros. destruct x; try discriminate.
 - auto.
@@ -1075,11 +1101,11 @@ Definition nenv := NE.t.
 
 Definition nreg (ne: nenv) (r: reg) := NE.get r ne.
 
-Definition eagree (e1 e2: regset) (ne: nenv) : Prop :=
-  forall r, vagree e1#r e2#r (NE.get r ne).
+Definition eagree (j: meminj) (e1 e2: regset) (ne: nenv) : Prop :=
+  forall r, vagree j e1#r e2#r (NE.get r ne).
 
 Lemma nreg_agree:
-  forall rs1 rs2 ne r, eagree rs1 rs2 ne -> vagree rs1#r rs2#r (nreg ne r).
+  forall j rs1 rs2 ne r, eagree j rs1 rs2 ne -> vagree j rs1#r rs2#r (nreg ne r).
 Proof.
   intros. apply H.
 Qed.
@@ -1087,37 +1113,38 @@ Qed.
 Global Hint Resolve nreg_agree: na.
 
 Lemma eagree_ge:
-  forall e1 e2 ne ne',
-  eagree e1 e2 ne -> NE.ge ne ne' -> eagree e1 e2 ne'.
+  forall j e1 e2 ne ne',
+  eagree j e1 e2 ne -> NE.ge ne ne' -> eagree j e1 e2 ne'.
 Proof.
   intros; red; intros. apply nge_agree with (NE.get r ne); auto. apply H0.
 Qed.
 
 Lemma eagree_bot:
-  forall e1 e2, eagree e1 e2 NE.bot.
+  forall j e1 e2, eagree j e1 e2 NE.bot.
 Proof.
   intros; red; intros. rewrite NE.get_bot. exact Logic.I.
 Qed.
 
-Lemma eagree_same:
-  forall e ne, eagree e e ne.
+(*Lemma eagree_same:
+  forall j e ne, eagree j e e ne.
 Proof.
-  intros; red; intros. apply vagree_same.
+  intros; red; intros. apply vagree_inject.
 Qed.
+ *)
 
 Lemma eagree_update_1:
-  forall e1 e2 ne v1 v2 nv r,
-  eagree e1 e2 ne -> vagree v1 v2 nv -> eagree (e1#r <- v1) (e2#r <- v2) (NE.set r nv ne).
+  forall j e1 e2 ne v1 v2 nv r,
+  eagree j e1 e2 ne -> vagree j v1 v2 nv -> eagree j (e1#r <- v1) (e2#r <- v2) (NE.set r nv ne).
 Proof.
   intros; red; intros. rewrite NE.gsspec. rewrite ! PMap.gsspec.
   destruct (peq r0 r); auto.
 Qed.
 
 Lemma eagree_update:
-  forall e1 e2 ne v1 v2 r,
-  vagree v1 v2 (nreg ne r) ->
-  eagree e1 e2 (NE.set r Nothing ne) ->
-  eagree (e1#r <- v1) (e2#r <- v2) ne.
+  forall j e1 e2 ne v1 v2 r,
+  vagree j v1 v2 (nreg ne r) ->
+  eagree j e1 e2 (NE.set r Nothing ne) ->
+  eagree j (e1#r <- v1) (e2#r <- v2) ne.
 Proof.
   intros; red; intros. specialize (H0 r0). rewrite NE.gsspec in H0.
   rewrite ! PMap.gsspec. destruct (peq r0 r).
@@ -1126,9 +1153,9 @@ Proof.
 Qed.
 
 Lemma eagree_update_dead:
-  forall e1 e2 ne v1 r,
+  forall j e1 e2 ne v1 r,
   nreg ne r = Nothing ->
-  eagree e1 e2 ne -> eagree (e1#r <- v1) e2 ne.
+  eagree j e1 e2 ne -> eagree j (e1#r <- v1) e2 ne.
 Proof.
   intros; red; intros. rewrite PMap.gsspec.
   destruct (peq r0 r); auto. subst. unfold nreg in H. rewrite H. red; auto.

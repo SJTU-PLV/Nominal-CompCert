@@ -16,7 +16,7 @@ Require Import FunInd.
 Require Import Coqlib Maps Errors Integers Floats Lattice Kildall.
 Require Import AST Linking.
 Require Import Values Memory Globalenvs Events Smallstep.
-Require Import LanguageInterface Invariant cklr.Extends.
+Require Import LanguageInterface Invariant InjectFootprint.
 Require Import Registers Op RTL.
 Require Import ValueDomain ValueAnalysis NeedDomain NeedOp Deadcode.
 
@@ -31,201 +31,236 @@ Qed.
 
 (** * Relating the memory states *)
 
-(** The [magree] predicate is a variant of [Mem.extends] where we
+(** The [magree] predicate is a variant of [Mem.inject] where we
   allow the contents of the two memory states to differ arbitrarily
   on some locations.  The predicate [P] is true on the locations whose
-  contents must be in the [lessdef] relation. *)
+  contents must be in the [inject] relation. *)
 
 Definition locset := block -> Z -> Prop.
 
-Record magree (m1 m2: mem) (P: locset) : Prop := mk_magree {
+Record magree (f:meminj) (m1 m2: mem) (P: locset) : Prop := mk_magree {
   ma_perm:
-    forall b ofs k p,
-    Mem.perm m1 b ofs k p -> Mem.perm m2 b ofs k p;
+    forall b1 b2 ofs delta k p,
+      f b1 = Some (b2,delta) -> Mem.perm m1 b1 ofs k p -> Mem.perm m2 b2 (ofs + delta) k p;
+  ma_align:
+    forall b1 b2 delta ofs chunk p,                                                  
+      f b1 = Some (b2, delta) ->
+     Mem.range_perm m1 b1 ofs (ofs + size_chunk chunk) Max p -> (align_chunk chunk | delta);
   ma_perm_inv:
-    forall b ofs k p,
-    Mem.perm m2 b ofs k p -> Mem.perm m1 b ofs k p \/ ~Mem.perm m1 b ofs Max Nonempty;
+    forall b1 b2 delta ofs k p, f b1 = Some (b2, delta) ->
+    Mem.perm m2 b2 (ofs + delta) k p -> Mem.perm m1 b1 ofs k p \/ ~Mem.perm m1 b1 ofs Max Nonempty;
   ma_memval:
-    forall b ofs,
-    Mem.perm m1 b ofs Cur Readable ->
-    P b ofs ->
-    memval_lessdef (ZMap.get ofs (NMap.get _ b (Mem.mem_contents m1)))
-                   (ZMap.get ofs (NMap.get _ b (Mem.mem_contents m2)));
-  ma_support:
-    Mem.support m2 = Mem.support m1
-}.
+    forall b1 b2 delta ofs, f b1 = Some (b2, delta) ->
+    Mem.perm m1 b1 ofs Cur Readable ->
+    P b1 ofs ->
+    memval_inject f (ZMap.get ofs (NMap.get _ b1 (Mem.mem_contents m1)))
+      (ZMap.get (ofs + delta) (NMap.get _ b2 (Mem.mem_contents m2)));
+  ma_freeblocks:
+    forall b, ~ Mem.valid_block m1 b -> f b = None;
+  ma_mappedblocks:                                                           
+    forall b b' delta, f b = Some (b', delta) -> Mem.valid_block m2 b';
+  ma_no_overlap : Mem.meminj_no_overlap f m1;
+ ma_representable : forall b b' delta ofs, f b = Some (b', delta) ->
+                                      Mem.perm m1 b (Ptrofs.unsigned ofs) Max Nonempty \/
+                                        Mem.perm m1 b (Ptrofs.unsigned ofs - 1) Max Nonempty ->
+                                      delta >= 0 /\ 0 <= Ptrofs.unsigned ofs + delta <= Ptrofs.max_unsigned;
+                                                           }.
 
 Lemma magree_monotone:
-  forall m1 m2 (P Q: locset),
-  magree m1 m2 P ->
+  forall m1 m2 j (P Q: locset),
+  magree j m1 m2 P ->
   (forall b ofs, Q b ofs -> P b ofs) ->
-  magree m1 m2 Q.
+  magree j m1 m2 Q.
 Proof.
-  intros. destruct H. constructor; auto.
+  intros. destruct H. constructor; eauto.
 Qed.
 
 Lemma mextends_agree:
-  forall m1 m2 P, Mem.extends m1 m2 -> magree m1 m2 P.
+  forall j m1 m2 P, Mem.inject j m1 m2 -> magree j m1 m2 P.
 Proof.
-  intros. destruct H. destruct mext_inj. constructor; intros.
-- replace ofs with (ofs + 0) by lia. eapply mi_perm; eauto. auto.
-- eauto.
-- exploit mi_memval; eauto. unfold inject_id; eauto.
-  rewrite Z.add_0_r. auto.
-- auto.
+  intros. destruct H. destruct mi_inj. constructor; intros; eauto.
 Qed.
 
 Lemma magree_extends:
-  forall m1 m2 (P: locset),
+  forall j m1 m2 (P: locset),
   (forall b ofs, P b ofs) ->
-  magree m1 m2 P -> Mem.extends m1 m2.
+  magree j m1 m2 P -> Mem.inject j m1 m2.
 Proof.
-  intros. destruct H0. constructor; auto. constructor; unfold inject_id; intros.
-- inv H0. rewrite Z.add_0_r. eauto.
-- inv H0. apply Z.divide_0_r.
-- inv H0. rewrite Z.add_0_r. eapply ma_memval0; eauto.
+  intros. destruct H0. constructor; eauto. constructor; eauto.
 Qed.
 
 Lemma magree_loadbytes:
-  forall m1 m2 P b ofs n bytes,
-  magree m1 m2 P ->
-  Mem.loadbytes m1 b ofs n = Some bytes ->
-  (forall i, ofs <= i < ofs + n -> P b i) ->
-  exists bytes', Mem.loadbytes m2 b ofs n = Some bytes' /\ list_forall2 memval_lessdef bytes bytes'.
+  forall j m1 m2 P b1 b2 delta ofs n bytes,
+  magree j m1 m2 P ->
+  Mem.loadbytes m1 b1 ofs n = Some bytes ->
+  j b1 = Some (b2,delta) ->
+  (forall i, ofs <= i < ofs + n -> P b1 i) ->
+  exists bytes', Mem.loadbytes m2 b2 (ofs + delta) n = Some bytes' /\ list_forall2 (memval_inject j) bytes bytes'.
 Proof.
-  assert (GETN: forall c1 c2 n ofs,
-    (forall i, ofs <= i < ofs + Z.of_nat n -> memval_lessdef (ZMap.get i c1) (ZMap.get i c2)) ->
-    list_forall2 memval_lessdef (Mem.getN n ofs c1) (Mem.getN n ofs c2)).
+  assert (GETN: forall c1 c2 n ofs j delta,
+    (forall i, ofs <= i < ofs + Z.of_nat n -> memval_inject j (ZMap.get i c1) (ZMap.get (i + delta) c2)) ->
+    list_forall2 (memval_inject j) (Mem.getN n ofs c1) (Mem.getN n (ofs + delta) c2)).
   {
     induction n; intros; simpl.
     constructor.
     rewrite Nat2Z.inj_succ in H. constructor.
     apply H. lia.
+    replace (ofs + delta + 1) with (ofs + 1 + delta) by lia.
     apply IHn. intros; apply H; lia.
   }
 Local Transparent Mem.loadbytes.
   unfold Mem.loadbytes; intros. destruct H.
-  destruct (Mem.range_perm_dec m1 b ofs (ofs + n) Cur Readable); inv H0.
+  destruct (Mem.range_perm_dec m1 b1 ofs (ofs + n) Cur Readable); inv H0.
   rewrite pred_dec_true. econstructor; split; eauto.
   apply GETN. intros. rewrite Z_to_nat_max in H.
   assert (ofs <= i < ofs + n) by extlia.
   apply ma_memval0; auto.
   red; intros; eauto.
+  red in r. replace (ofs0) with ((ofs0 - delta) + delta) by lia.
+  eapply ma_perm0; eauto. eapply r. lia.
 Qed.
 
 Lemma magree_load:
-  forall m1 m2 P chunk b ofs v,
-  magree m1 m2 P ->
-  Mem.load chunk m1 b ofs = Some v ->
-  (forall i, ofs <= i < ofs + size_chunk chunk -> P b i) ->
-  exists v', Mem.load chunk m2 b ofs = Some v' /\ Val.lessdef v v'.
+  forall j m1 m2 P chunk b1 b2 delta ofs v,
+  magree j m1 m2 P ->
+  Mem.load chunk m1 b1 ofs = Some v ->
+  j b1 = Some (b2, delta) ->
+  (forall i, ofs <= i < ofs + size_chunk chunk -> P b1 i) ->
+  exists v', Mem.load chunk m2 b2 (ofs + delta) = Some v' /\ Val.inject j v v'.
 Proof.
   intros. exploit Mem.load_valid_access; eauto. intros [A B].
   exploit Mem.load_loadbytes; eauto. intros [bytes [C D]].
   exploit magree_loadbytes; eauto. intros [bytes' [E F]].
   exists (decode_val chunk bytes'); split.
   apply Mem.loadbytes_load; auto.
-  apply val_inject_id. subst v. apply decode_val_inject; auto.
+  apply Z.divide_add_r; eauto.
+  inv H. eapply ma_align0; eauto with mem.
+  subst v. apply decode_val_inject; auto.
 Qed.
 
 Lemma magree_storebytes_parallel:
-  forall m1 m2 (P Q: locset) b ofs bytes1 m1' bytes2,
-  magree m1 m2 P ->
-  Mem.storebytes m1 b ofs bytes1 = Some m1' ->
+  forall j m1 m2 (P Q: locset) b1 b2 delta ofs bytes1 m1' bytes2,
+  magree j m1 m2 P ->
+  Mem.storebytes m1 b1 ofs bytes1 = Some m1' ->
+  j b1 = Some (b2,delta) ->
   (forall b' i, Q b' i ->
-                b' <> b \/ i < ofs \/ ofs + Z.of_nat (length bytes1) <= i ->
+                b' <> b1 \/ i < ofs \/ ofs + Z.of_nat (length bytes1) <= i ->
                 P b' i) ->
-  list_forall2 memval_lessdef bytes1 bytes2 ->
-  exists m2', Mem.storebytes m2 b ofs bytes2 = Some m2' /\ magree m1' m2' Q.
+  list_forall2 (memval_inject j) bytes1 bytes2 ->
+  exists m2', Mem.storebytes m2 b2 (ofs + delta) bytes2 = Some m2' /\ magree j m1' m2' Q.
 Proof.
-  assert (SETN: forall (access: Z -> Prop) bytes1 bytes2,
-    list_forall2 memval_lessdef bytes1 bytes2 ->
+  assert (SETN: forall (access: Z -> Prop) j bytes1 bytes2 delta,
+    list_forall2 (memval_inject j) bytes1 bytes2 ->
     forall p c1 c2,
-    (forall i, access i -> i < p \/ p + Z.of_nat (length bytes1) <= i -> memval_lessdef (ZMap.get i c1) (ZMap.get i c2)) ->
+    (forall i, access i -> i < p \/ p + Z.of_nat (length bytes1) <= i -> memval_inject j (ZMap.get i c1) (ZMap.get (i + delta) c2)) ->
     forall q, access q ->
-    memval_lessdef (ZMap.get q (Mem.setN bytes1 p c1))
-                   (ZMap.get q (Mem.setN bytes2 p c2))).
+    memval_inject j (ZMap.get q (Mem.setN bytes1 p c1))
+                   (ZMap.get (q + delta) (Mem.setN bytes2 (p + delta) c2))).
   {
     induction 1; intros; simpl.
   - apply H; auto. simpl. lia.
   - simpl length in H1; rewrite Nat2Z.inj_succ in H1.
+    replace (p + delta + 1) with (p + 1 + delta) by lia.
     apply IHlist_forall2; auto.
-    intros. rewrite ! ZMap.gsspec. destruct (ZIndexed.eq i p). auto.
-    apply H1; auto. unfold ZIndexed.t in *; lia.
+    intros. rewrite ! ZMap.gsspec. destruct (ZIndexed.eq i p).
+    rewrite pred_dec_true. auto. lia. rewrite pred_dec_false.
+    eapply H1; auto. unfold ZIndexed.t in *; lia. lia.
   }
   intros.
-  destruct (Mem.range_perm_storebytes m2 b ofs bytes2) as [m2' ST2].
+  destruct (Mem.range_perm_storebytes m2 b2 (ofs + delta) bytes2) as [m2' ST2].
   { erewrite <- list_forall2_length by eauto. red; intros.
+    replace (ofs0) with ((ofs0 - delta) + delta) by lia.
     eapply ma_perm; eauto.
-    eapply Mem.storebytes_range_perm; eauto. }
+    eapply Mem.storebytes_range_perm; eauto. lia. }
   exists m2'; split; auto.
   constructor; intros.
 - eapply Mem.perm_storebytes_1; eauto. eapply ma_perm; eauto.
   eapply Mem.perm_storebytes_2; eauto.
+- exploit ma_align; eauto. red. eauto using Mem.perm_storebytes_2.
 - exploit ma_perm_inv; eauto using Mem.perm_storebytes_2.
   intuition eauto using Mem.perm_storebytes_1, Mem.perm_storebytes_2.
 - rewrite (Mem.storebytes_mem_contents _ _ _ _ _ H0).
   rewrite (Mem.storebytes_mem_contents _ _ _ _ _ ST2).
-  rewrite ! NMap.gsspec. destruct (NMap.elt_eq b0 b).
-+ subst b0. apply SETN with (access := fun ofs => Mem.perm m1' b ofs Cur Readable /\ Q b ofs); auto.
-  intros. destruct H5. eapply ma_memval; eauto.
+  rewrite ! NMap.gsspec. destruct (NMap.elt_eq b0 b1).
++ subst b0. rewrite H1 in H4. inv H4. rewrite pred_dec_true; auto.
+  apply SETN with (access := fun ofs => Mem.perm m1' b1 ofs Cur Readable /\ Q b1 ofs); auto.
+  intros. destruct H4. eapply ma_memval; eauto.
   eapply Mem.perm_storebytes_2; eauto.
-+ eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
-- rewrite (Mem.support_storebytes _ _ _ _ _ H0).
-  rewrite (Mem.support_storebytes _ _ _ _ _ ST2).
-  eapply ma_support; eauto.
++ destruct (NMap.elt_eq b3 b2).
+  * subst. rewrite Mem.setN_other. eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
+    intros.  assert (b2 <> b2 \/ ofs0 + delta0 <> (r - delta) + delta).
+    eapply ma_no_overlap; eauto 6 with mem.
+    exploit Mem.storebytes_range_perm. eexact H0. instantiate (1:= r - delta).
+    rewrite (list_forall2_length H3). lia.
+    eauto with mem. destruct H8. congruence. lia.
+  * eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
+- eapply ma_freeblocks; eauto with mem.
+- eapply Mem.storebytes_valid_block_1; eauto with mem. eapply ma_mappedblocks; eauto.
+- red. intros. eapply ma_no_overlap; eauto with mem.
+- eapply ma_representable; eauto with mem.
+  destruct H5. left. eapply Mem.perm_storebytes_2; eauto.
+  right. eapply Mem.perm_storebytes_2; eauto.
 Qed.
 
 Lemma magree_store_parallel:
-  forall m1 m2 (P Q: locset) chunk b ofs v1 m1' v2,
-  magree m1 m2 P ->
-  Mem.store chunk m1 b ofs v1 = Some m1' ->
-  vagree v1 v2 (store_argument chunk) ->
+  forall j m1 m2 (P Q: locset) chunk b1 b2 delta ofs v1 m1' v2,
+  magree j m1 m2 P ->
+  Mem.store chunk m1 b1 ofs v1 = Some m1' ->
+  vagree j v1 v2 (store_argument chunk) ->
+  j b1 = Some (b2, delta) ->
   (forall b' i, Q b' i ->
-                b' <> b \/ i < ofs \/ ofs + size_chunk chunk <= i ->
+                b' <> b1 \/ i < ofs \/ ofs + size_chunk chunk <= i ->
                 P b' i) ->
-  exists m2', Mem.store chunk m2 b ofs v2 = Some m2' /\ magree m1' m2' Q.
+  exists m2', Mem.store chunk m2 b2 (ofs + delta) v2 = Some m2' /\ magree j m1' m2' Q.
 Proof.
   intros.
   exploit Mem.store_valid_access_3; eauto. intros [A B].
   exploit Mem.store_storebytes; eauto. intros SB1.
-  exploit magree_storebytes_parallel. eauto. eauto.
-  instantiate (1 := Q). intros. rewrite encode_val_length in H4.
-  rewrite <- size_chunk_conv in H4. apply H2; auto.
+  exploit magree_storebytes_parallel. eauto. eauto. eauto.
+  instantiate (1 := Q). intros. rewrite encode_val_length in H5.
+  rewrite <- size_chunk_conv in H5. apply H3; auto.
   eapply store_argument_sound; eauto.
   intros [m2' [SB2 AG]].
   exists m2'; split; auto.
   apply Mem.storebytes_store; auto.
+  eapply Z.divide_add_r; eauto. eapply ma_align; eauto.
+  red. intros.
+  eapply Mem.perm_store_1; eauto.
+  exploit A; eauto with mem.
 Qed.
 
 Lemma magree_storebytes_left:
-  forall m1 m2 P b ofs bytes1 m1',
-  magree m1 m2 P ->
-  Mem.storebytes m1 b ofs bytes1 = Some m1' ->
-  (forall i, ofs <= i < ofs + Z.of_nat (length bytes1) -> ~(P b i)) ->
-  magree m1' m2 P.
+  forall j m1 m2 P b1 ofs bytes1 m1',
+  magree j m1 m2 P ->
+  Mem.storebytes m1 b1 ofs bytes1 = Some m1' ->
+  (forall i, ofs <= i < ofs + Z.of_nat (length bytes1) -> ~(P b1 i)) ->
+  magree j m1' m2 P.
 Proof.
   intros. constructor; intros.
-- eapply ma_perm; eauto. eapply Mem.perm_storebytes_2; eauto.
-- exploit ma_perm_inv; eauto.
-  intuition eauto using Mem.perm_storebytes_1, Mem.perm_storebytes_2.
-- rewrite (Mem.storebytes_mem_contents _ _ _ _ _ H0).
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b).
-+ subst b0. rewrite Mem.setN_outside. eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
-  destruct (zlt ofs0 ofs); auto. destruct (zle (ofs + Z.of_nat (length bytes1)) ofs0); try lia.
-  assert(ofs <= ofs0 < ofs + Z.of_nat(Datatypes.length bytes1)) by lia.
-  apply H1 in H4. congruence.
-+ eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
-- rewrite (Mem.support_storebytes _ _ _ _ _ H0).
-  eapply ma_support; eauto.
+  - eapply ma_perm; eauto. eapply Mem.perm_storebytes_2; eauto.
+  - eapply ma_align; eauto. red. intros. eauto using Mem.perm_storebytes_2.
+  - exploit ma_perm_inv; eauto.
+    intuition eauto using Mem.perm_storebytes_1, Mem.perm_storebytes_2.
+  - rewrite (Mem.storebytes_mem_contents _ _ _ _ _ H0).
+    rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b1).
+    + subst b0. rewrite Mem.setN_outside. eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
+      destruct (zlt ofs0 ofs); auto. destruct (zle (ofs + Z.of_nat (length bytes1)) ofs0); try lia.
+      assert(ofs <= ofs0 < ofs + Z.of_nat(Datatypes.length bytes1)) by lia.
+      apply H1 in H5. congruence.
+    + eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
+  - eapply ma_freeblocks; eauto with mem.
+  - eapply ma_mappedblocks; eauto with mem.
+  - red. intros. eapply ma_no_overlap; eauto with mem.
+  - eapply ma_representable; eauto with mem.
+    destruct H3. left. eauto with mem. right. eauto with mem.
 Qed.
 
 Lemma magree_store_left:
-  forall m1 m2 P chunk b ofs v1 m1',
-  magree m1 m2 P ->
-  Mem.store chunk m1 b ofs v1 = Some m1' ->
-  (forall i, ofs <= i < ofs + size_chunk chunk -> ~(P b i)) ->
-  magree m1' m2 P.
+  forall j m1 m2 P chunk b1 ofs v1 m1',
+  magree j m1 m2 P ->
+  Mem.store chunk m1 b1 ofs v1 = Some m1' ->
+  (forall i, ofs <= i < ofs + size_chunk chunk -> ~(P b1 i)) ->
+  magree j m1' m2 P.
 Proof.
   intros. eapply magree_storebytes_left; eauto.
   eapply Mem.store_storebytes; eauto.
@@ -234,23 +269,32 @@ Proof.
 Qed.
 
 Lemma magree_free:
-  forall m1 m2 (P Q: locset) b lo hi m1',
-  magree m1 m2 P ->
-  Mem.free m1 b lo hi = Some m1' ->
+  forall j m1 m2 (P Q: locset) b1 b2 delta lo hi m1',
+  magree j m1 m2 P ->
+  Mem.free m1 b1 lo hi = Some m1' ->
+  j b1 = Some (b2, delta) ->
   (forall b' i, Q b' i ->
-                b' <> b \/ ~(lo <= i < hi) ->
+                b' <> b1 \/ ~(lo <= i < hi) ->
                 P b' i) ->
-  exists m2', Mem.free m2 b lo hi = Some m2' /\ magree m1' m2' Q.
+  exists m2', Mem.free m2 b2 (lo + delta) (hi + delta) = Some m2' /\ magree j m1' m2' Q.
 Proof.
   intros.
-  destruct (Mem.range_perm_free m2 b lo hi) as [m2' FREE].
-  red; intros. eapply ma_perm; eauto. eapply Mem.free_range_perm; eauto.
+  destruct (Mem.range_perm_free m2 b2 (lo + delta) (hi + delta)) as [m2' FREE].
+  red; intros. replace (ofs) with ((ofs - delta) + delta) by lia.
+  eapply ma_perm; eauto. eapply Mem.free_range_perm; eauto. lia.
   exists m2'; split; auto.
   constructor; intros.
 - (* permissions *)
-  assert (Mem.perm m2 b0 ofs k p). { eapply ma_perm; eauto. eapply Mem.perm_free_3; eauto. }
+  assert (Mem.perm m2 b3 (ofs + delta0) k p). { eapply ma_perm; eauto. eapply Mem.perm_free_3; eauto. }
   exploit Mem.perm_free_inv; eauto. intros [[A B] | A]; auto.
-  subst b0. eelim Mem.perm_free_2. eexact H0. eauto. eauto.
+  subst b3. exfalso. destruct (eq_block b0 b1). subst.
+  rewrite H1 in H3. inv H3.
+  eelim Mem.perm_free_2. eexact H0. 2: eauto. lia.
+  exploit ma_no_overlap; eauto. eapply Mem.perm_free_3; eauto with mem.
+  instantiate (1:= ofs + delta0 - delta).
+  apply Mem.free_range_perm in H0. red in H0. exploit H0; eauto with mem. lia.
+  intros [|]. eauto. extlia.
+- eapply ma_align; eauto. red. eauto using Mem.perm_free_3; eauto.
 - (* inverse permissions *)
   exploit ma_perm_inv; eauto using Mem.perm_free_3. intros [A|A].
   eapply Mem.perm_free_inv in A; eauto. destruct A as [[A B] | A]; auto.
@@ -260,45 +304,50 @@ Proof.
   rewrite (Mem.free_result _ _ _ _ _ H0).
   rewrite (Mem.free_result _ _ _ _ _ FREE).
   simpl. eapply ma_memval; eauto. eapply Mem.perm_free_3; eauto.
-  apply H1; auto. destruct (eq_block b0 b); auto.
+  apply H2; auto. destruct (eq_block b0 b1); auto.
   subst b0. right. red; intros. eelim Mem.perm_free_2. eexact H0. eauto. eauto.
-- (* support *)
-  rewrite (Mem.free_result _ _ _ _ _ H0).
-  rewrite (Mem.free_result _ _ _ _ _ FREE).
-  simpl. eapply ma_support; eauto.
+- eapply ma_freeblocks; eauto with mem.
+- eapply Mem.valid_block_free_1; eauto with mem. eapply ma_mappedblocks; eauto.
+- red. intros. eapply ma_no_overlap; eauto with mem.
+- eapply ma_representable; eauto with mem.
+  destruct H4; eauto with mem.
 Qed.
 
 Lemma magree_valid_access:
-  forall m1 m2 (P: locset) chunk b ofs p,
-  magree m1 m2 P ->
-  Mem.valid_access m1 chunk b ofs p ->
-  Mem.valid_access m2 chunk b ofs p.
+  forall j m1 m2 (P: locset) chunk b1 b2 delta ofs p,
+  magree j m1 m2 P ->
+  j b1 = Some (b2, delta) ->
+  Mem.valid_access m1 chunk b1 ofs p ->
+  Mem.valid_access m2 chunk b2 (ofs + delta) p.
 Proof.
-  intros. destruct H0; split; auto.
-  red; intros. eapply ma_perm; eauto.
+  intros. destruct H1; split; auto.
+  red; intros. replace ofs0 with ((ofs0 - delta) + delta) by lia.
+  eapply ma_perm; eauto. eapply H1; eauto. lia.
+  apply Z.divide_add_r; eauto.
+  eapply ma_align; eauto. red. intros. eauto with mem.
 Qed.
 
 (** * Properties of the need environment *)
 
 Lemma add_need_all_eagree:
-  forall e e' r ne,
-  eagree e e' (add_need_all r ne) -> eagree e e' ne.
+  forall j e e' r ne,
+  eagree j e e' (add_need_all r ne) -> eagree j e e' ne.
 Proof.
   intros; red; intros. generalize (H r0). unfold add_need_all.
   rewrite NE.gsspec. destruct (peq r0 r); auto with na.
 Qed.
 
-Lemma add_need_all_lessdef:
-  forall e e' r ne,
-  eagree e e' (add_need_all r ne) -> Val.lessdef e#r e'#r.
+Lemma add_need_all_inject:
+  forall j e e' r ne,
+  eagree j e e' (add_need_all r ne) -> Val.inject j e#r e'#r.
 Proof.
   intros. generalize (H r); unfold add_need_all.
   rewrite NE.gsspec, peq_true. auto with na.
 Qed.
 
 Lemma add_need_eagree:
-  forall e e' r nv ne,
-  eagree e e' (add_need r nv ne) -> eagree e e' ne.
+  forall j e e' r nv ne,
+  eagree j e e' (add_need r nv ne) -> eagree j e e' ne.
 Proof.
   intros; red; intros. generalize (H r0); unfold add_need.
   rewrite NE.gsspec. destruct (peq r0 r); auto.
@@ -306,35 +355,35 @@ Proof.
 Qed.
 
 Lemma add_need_vagree:
-  forall e e' r nv ne,
-  eagree e e' (add_need r nv ne) -> vagree e#r e'#r nv.
+  forall j e e' r nv ne,
+  eagree j e e' (add_need r nv ne) -> vagree j e#r e'#r nv.
 Proof.
   intros. generalize (H r); unfold add_need.
   rewrite NE.gsspec, peq_true. intros. eapply nge_agree; eauto. apply nge_lub_l.
 Qed.
 
 Lemma add_needs_all_eagree:
-  forall rl e e' ne,
-  eagree e e' (add_needs_all rl ne) -> eagree e e' ne.
+  forall j rl e e' ne,
+  eagree j e e' (add_needs_all rl ne) -> eagree j e e' ne.
 Proof.
   induction rl; simpl; intros.
   auto.
   apply IHrl. eapply add_need_all_eagree; eauto.
 Qed.
 
-Lemma add_needs_all_lessdef:
-  forall rl e e' ne,
-  eagree e e' (add_needs_all rl ne) -> Val.lessdef_list e##rl e'##rl.
+Lemma add_needs_all_inject:
+  forall j rl e e' ne,
+  eagree j e e' (add_needs_all rl ne) -> Val.inject_list j e##rl e'##rl.
 Proof.
   induction rl; simpl; intros.
   constructor.
-  constructor. eapply add_need_all_lessdef; eauto.
+  constructor. eapply add_need_all_inject; eauto.
   eapply IHrl. eapply add_need_all_eagree; eauto.
 Qed.
 
 Lemma add_needs_eagree:
-  forall rl nvl e e' ne,
-  eagree e e' (add_needs rl nvl ne) -> eagree e e' ne.
+  forall j rl nvl e e' ne,
+  eagree j e e' (add_needs rl nvl ne) -> eagree j e e' ne.
 Proof.
   induction rl; simpl; intros.
   auto.
@@ -343,33 +392,33 @@ Proof.
 Qed.
 
 Lemma add_needs_vagree:
-  forall rl nvl e e' ne,
-  eagree e e' (add_needs rl nvl ne) -> vagree_list e##rl e'##rl nvl.
+  forall j rl nvl e e' ne,
+  eagree j e e' (add_needs rl nvl ne) -> vagree_list j e##rl e'##rl nvl.
 Proof.
   induction rl; simpl; intros.
   constructor.
   destruct nvl.
-  apply vagree_lessdef_list. eapply add_needs_all_lessdef with (rl := a :: rl); eauto.
+  apply vagree_inject_list. eapply add_needs_all_inject with (rl := a :: rl); eauto.
   constructor. eapply add_need_vagree; eauto.
   eapply IHrl. eapply add_need_eagree; eauto.
 Qed.
 
 Lemma add_ros_need_eagree:
-  forall e e' ros ne, eagree e e' (add_ros_need_all ros ne) -> eagree e e' ne.
+  forall j e e' ros ne, eagree j e e' (add_ros_need_all ros ne) -> eagree j e e' ne.
 Proof.
   intros. destruct ros; simpl in *. eapply add_need_all_eagree; eauto. auto.
 Qed.
 
-Global Hint Resolve add_need_all_eagree add_need_all_lessdef
+Global Hint Resolve add_need_all_eagree add_need_all_inject
              add_need_eagree add_need_vagree
-             add_needs_all_eagree add_needs_all_lessdef
+             add_needs_all_eagree add_needs_all_inject
              add_needs_eagree add_needs_vagree
              add_ros_need_eagree: na.
 
 Lemma eagree_init_regs:
-  forall rl vl1 vl2 ne,
-  Val.lessdef_list vl1 vl2 ->
-  eagree (init_regs vl1 rl) (init_regs vl2 rl) ne.
+  forall j rl vl1 vl2 ne,
+  Val.inject_list j vl1 vl2 ->
+  eagree j (init_regs vl1 rl) (init_regs vl2 rl) ne.
 Proof.
   induction rl; intros until ne; intros LD; simpl.
 - red; auto with na.
@@ -384,21 +433,22 @@ Section PRESERVATION.
 
 Variable prog: program.
 Variable tprog: program.
-Variable se: Genv.symtbl.
+Variables se tse: Genv.symtbl.
+Variable w : injp_world.
 Hypothesis SEVALID: Genv.valid_for (erase_program prog) se.
 Hypothesis TRANSF: match_prog prog tprog.
 Let ge := Genv.globalenv se prog.
-Let tge := Genv.globalenv se tprog.
+Let tge := Genv.globalenv tse tprog.
 
 Lemma functions_translated:
-  forall (v tv: val) (f: RTL.fundef),
+  forall (j: meminj) (v tv: val) (f: RTL.fundef),
+  Genv.match_stbls j se tse ->
   Genv.find_funct ge v = Some f ->
-  Val.lessdef v tv ->
+  Val.inject j v tv ->
   exists tf,
   Genv.find_funct tge tv = Some tf /\ transf_fundef (romem_for prog) f = OK tf.
 Proof.
-  intros v tv f Hf Hv. apply (Genv.find_funct_transf_partial_id TRANSF).
-  destruct Hv; try discriminate; auto.
+  intros. eapply Genv.find_funct_transf_partial; eauto.
 Qed.
 
 Lemma sig_function_translated:
@@ -455,51 +505,54 @@ Proof.
 Qed.
 
 Lemma ros_address_translated:
-  forall ros rs trs ne,
-  eagree rs trs (add_ros_need_all ros ne) ->
-  Val.lessdef (ros_address ge ros rs) (ros_address tge ros trs).
+  forall j ros rs trs ne,
+    Genv.match_stbls j se tse ->
+  eagree j rs trs (add_ros_need_all ros ne) ->
+  Val.inject j (ros_address ge ros rs) (ros_address tge ros trs).
 Proof.
   intros. unfold ros_address, Genv.find_funct. destruct ros; auto.
-  specialize (H r). unfold NE.get in H. cbn in H. rewrite PTree.gss in H. auto.
+  specialize (H0 r). unfold NE.get in H0. cbn in H0. rewrite PTree.gss in H0. auto.
+  eapply symbol_address_inject; eauto.
 Qed.
 
 (** * Semantic invariant *)
 
-Inductive match_stackframes: stackframe -> stackframe -> Prop :=
+Inductive match_stackframes (j:meminj): stackframe -> stackframe -> Prop :=
   | match_stackframes_intro:
-      forall res f sp pc e tf te an
+      forall res f sp sp' pc e tf te an
         (FUN: transf_function (romem_for prog) f = OK tf)
         (ANL: analyze (vanalyze prog f) f = Some an)
         (RES: forall v tv,
-              Val.lessdef v tv ->
-              eagree (e#res <- v) (te#res<- tv)
-                     (fst (transfer f (vanalyze prog f) pc an!!pc))),
-      match_stackframes (Stackframe res f (Vptr sp Ptrofs.zero) pc e)
-                        (Stackframe res tf (Vptr sp Ptrofs.zero) pc te).
+              Val.inject j v tv ->
+              eagree j (e#res <- v) (te#res<- tv)
+                (fst (transfer f (vanalyze prog f) pc an!!pc)))
+        (PC: j sp = Some (sp',0)),
+      match_stackframes j (Stackframe res f (Vptr sp Ptrofs.zero) pc e)
+                          (Stackframe res tf (Vptr sp' Ptrofs.zero) pc te).
 
 Inductive match_states: state -> state -> Prop :=
   | match_regular_states:
-      forall s f sp pc e m ts tf te tm an
-        (STACKS: list_forall2 match_stackframes s ts)
+      forall s f sp pc e m ts tf te tm an j
+        (STACKS: list_forall2 (match_stackframes j) s ts)
         (FUN: transf_function (romem_for prog) f = OK tf)
         (ANL: analyze (vanalyze prog f) f = Some an)
-        (ENV: eagree e te (fst (transfer f (vanalyze prog f) pc an!!pc)))
-        (MEM: magree m tm (nlive ge sp (snd (transfer f (vanalyze prog f) pc an!!pc)))),
+        (ENV: eagree j e te (fst (transfer f (vanalyze prog f) pc an!!pc)))
+        (MEM: magree j m tm (nlive ge sp (snd (transfer f (vanalyze prog f) pc an!!pc)))),
       match_states (State s f (Vptr sp Ptrofs.zero) pc e m)
                    (State ts tf (Vptr sp Ptrofs.zero) pc te tm)
   | match_call_states:
-      forall s vf args m ts tvf targs tm
-        (STACKS: list_forall2 match_stackframes s ts)
-        (VF: Val.lessdef vf tvf)
-        (ARGS: Val.lessdef_list args targs)
-        (MEM: Mem.extends m tm),
+      forall s vf args m ts tvf targs tm j MEM
+        (STACKS: list_forall2 (match_stackframes j) s ts)
+        (VF: Val.inject j vf tvf)
+        (ARGS: Val.inject_list j args targs)
+        (INCR: injp_acc w (injpw j m tm MEM)),
       match_states (Callstate s vf args m)
                    (Callstate ts tvf targs tm)
   | match_return_states:
-      forall s v m ts tv tm
-        (STACKS: list_forall2 match_stackframes s ts)
-        (RES: Val.lessdef v tv)
-        (MEM: Mem.extends m tm),
+      forall s v m ts tv tm j MEM
+        (STACKS: list_forall2 (match_stackframes j) s ts)
+        (RES: Val.inject j v tv)
+        (INCR: injp_acc w (injpw j m tm MEM)),
       match_states (Returnstate s v m)
                    (Returnstate ts tv tm).
 
@@ -524,7 +577,7 @@ Lemma match_succ_states:
     (INSTR: f.(fn_code)!pc = Some instr)
     (SUCC: In pc' (successors_instr instr))
     (ANPC: an!!pc = (ne, nm))
-    (ENV: eagree e te ne)
+    (ENV: eagree j e te ne)
     (MEM: magree m tm (nlive ge sp nm)),
   match_states (State s f (Vptr sp Ptrofs.zero) pc' e m)
                (State ts tf (Vptr sp Ptrofs.zero) pc' te tm).
@@ -540,8 +593,8 @@ Qed.
 Lemma eagree_set_res:
   forall e1 e2 v1 v2 res ne,
   Val.lessdef v1 v2 ->
-  eagree e1 e2 (kill_builtin_res res ne) ->
-  eagree (regmap_setres res v1 e1) (regmap_setres res v2 e2) ne.
+  eagree j e1 e2 (kill_builtin_res res ne) ->
+  eagree j (regmap_setres res v1 e1) (regmap_setres res v2 e2) ne.
 Proof.
   intros. destruct res; simpl in *; auto.
   apply eagree_update; eauto. apply vagree_lessdef; auto.
@@ -552,14 +605,14 @@ Lemma transfer_builtin_arg_sound:
   eval_builtin_arg ge (fun r => e#r) (Vptr sp Ptrofs.zero) m a v ->
   forall nv ne1 nm1 ne2 nm2,
   transfer_builtin_arg nv (ne1, nm1) a = (ne2, nm2) ->
-  eagree e e' ne2 ->
+  eagree j e e' ne2 ->
   magree m m' (nlive ge sp nm2) ->
   genv_match bc ge ->
   bc sp = BCstack ->
   exists v',
      eval_builtin_arg ge (fun r => e'#r) (Vptr sp Ptrofs.zero) m' a  v'
   /\ vagree v v' nv
-  /\ eagree e e' ne1
+  /\ eagree j e e' ne1
   /\ magree m m' (nlive ge sp nm1).
 Proof.
   induction 1; simpl; intros until nm2; intros TR EA MA GM SPM; inv TR.
@@ -604,14 +657,14 @@ Lemma transfer_builtin_args_sound:
   eval_builtin_args ge (fun r => e#r) (Vptr sp Ptrofs.zero) m al vl ->
   forall ne1 nm1 ne2 nm2,
   transfer_builtin_args (ne1, nm1) al = (ne2, nm2) ->
-  eagree e e' ne2 ->
+  eagree j e e' ne2 ->
   magree m m' (nlive ge sp nm2) ->
   genv_match bc ge ->
   bc sp = BCstack ->
   exists vl',
      eval_builtin_args ge (fun r => e'#r) (Vptr sp Ptrofs.zero) m' al vl'
   /\ Val.lessdef_list vl vl'
-  /\ eagree e e' ne1
+  /\ eagree j e e' ne1
   /\ magree m m' (nlive ge sp nm1).
 Proof.
 Local Opaque transfer_builtin_arg.
@@ -688,7 +741,7 @@ Proof.
 Qed.
 
 Lemma eagree_set_undef:
-  forall e1 e2 ne r, eagree e1 e2 ne -> eagree (e1#r <- Vundef) e2 ne.
+  forall e1 e2 ne r, eagree j e1 e2 ne -> eagree j (e1#r <- Vundef) e2 ne.
 Proof.
   intros; red; intros. rewrite PMap.gsspec. destruct (peq r0 r); auto with na.
 Qed.

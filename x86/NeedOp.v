@@ -136,8 +136,8 @@ Definition operation_is_redundant (op: operation) (nv: nval): bool :=
 
 Ltac InvAgree :=
   match goal with
-  | [H: vagree_list nil _ _ |- _ ] => inv H; InvAgree
-  | [H: vagree_list (_::_) _ _ |- _ ] => inv H; InvAgree
+  | [H: vagree_list _ nil _ _ |- _ ] => inv H; InvAgree
+  | [H: vagree_list _ (_::_) _ _ |- _ ] => inv H; InvAgree
   | _ => idtac
   end.
 
@@ -149,15 +149,20 @@ Ltac TrivialExists :=
 
 Section SOUNDNESS.
 
-Variable ge: Genv.symtbl.
-Variable sp: block.
+Variables ge tge: Genv.symtbl.
+Variables sp sp': block.
 Variables m m': mem.
-Hypothesis PERM: forall b ofs k p, Mem.perm m b ofs k p -> Mem.perm m' b ofs k p.
+Variable j: meminj.
+
+Hypothesis INJSP: j sp = Some (sp',0).
+Hypothesis INJGE: forall id ofs,
+  Val.inject j (Genv.symbol_address ge id ofs) (Genv.symbol_address tge id ofs).
+Hypothesis INJ: Mem.inject j m m'.
 
 Lemma needs_of_condition_sound:
   forall cond args b args',
   eval_condition cond args m = Some b ->
-  vagree_list args args' (needs_of_condition cond) ->
+  vagree_list j args args' (needs_of_condition cond) ->
   eval_condition cond args' m' = Some b.
 Proof.
   intros. destruct cond; simpl in H;
@@ -169,12 +174,12 @@ Proof.
 Qed.
 
 Lemma needs_of_addressing_32_sound:
-  forall sp addr args v nv args',
+  forall addr args v nv args',
   eval_addressing32 ge (Vptr sp Ptrofs.zero) addr args = Some v ->
-  vagree_list args args' (needs_of_addressing_32 addr nv) ->
+  vagree_list j args args' (needs_of_addressing_32 addr nv) ->
   exists v',
-     eval_addressing32 ge (Vptr sp Ptrofs.zero) addr args' = Some v'
-  /\ vagree v v' nv.
+     eval_addressing32 tge (Vptr sp' Ptrofs.zero) addr args' = Some v'
+  /\ vagree j v v' nv.
 Proof.
   unfold needs_of_addressing_32; intros.
   destruct addr; simpl in *; FuncInv; InvAgree; TrivialExists;
@@ -182,6 +187,8 @@ Proof.
   apply add_sound; auto with na. apply add_sound; rewrite modarith_idem; auto.
   apply add_sound; auto. apply add_sound; rewrite modarith_idem; auto with na.
   apply mul_sound; rewrite modarith_idem; auto with na.
+  eapply vagree_inject. econstructor; eauto.
+  rewrite Ptrofs.add_zero. reflexivity.
 Qed.
 
 (*
@@ -197,14 +204,14 @@ Lemma needs_of_addressing_64_sound:
 Lemma needs_of_operation_sound:
   forall op args v nv args',
   eval_operation ge (Vptr sp Ptrofs.zero) op args m = Some v ->
-  vagree_list args args' (needs_of_operation op nv) ->
+  vagree_list j args args' (needs_of_operation op nv) ->
   nv <> Nothing ->
   exists v',
-     eval_operation ge (Vptr sp Ptrofs.zero) op args' m' = Some v'
-  /\ vagree v v' nv.
+     eval_operation tge (Vptr sp' Ptrofs.zero) op args' m' = Some v'
+  /\ vagree j v v' nv.
 Proof.
   unfold needs_of_operation; intros; destruct op; try (eapply default_needs_of_operation_sound; eauto; fail);
-  simpl in *; FuncInv; InvAgree; TrivialExists.
+    simpl in *; FuncInv; InvAgree; TrivialExists.
 - apply sign_ext_sound; auto. compute; auto.
 - apply zero_ext_sound; auto. lia.
 - apply sign_ext_sound; auto. compute; auto.
@@ -224,13 +231,15 @@ Proof.
 - apply shruimm_sound; auto.
 - apply ror_sound; auto.
 - eapply needs_of_addressing_32_sound; eauto.
-- change (eval_addressing64 ge (Vptr sp Ptrofs.zero) a args')
-    with (eval_operation ge (Vptr sp Ptrofs.zero) (Oleal a) args' m').
+- change (eval_addressing64 tge (Vptr sp' Ptrofs.zero) a args')
+    with (eval_operation tge (Vptr sp' Ptrofs.zero) (Oleal a) args' m').
   eapply default_needs_of_operation_sound; eauto.
   destruct a; simpl in H0; auto.
 - destruct (eval_condition cond args m) as [b|] eqn:EC; simpl in H2.
   erewrite needs_of_condition_sound by eauto.
-  subst v; simpl. auto with na.
+  subst v; simpl. destruct b; auto with na.
+  eapply vagree_inject. constructor.
+  eapply vagree_inject. constructor.
   subst v; auto with na.
 - destruct (eval_condition c args m) as [b|] eqn:EC.
   erewrite needs_of_condition_sound by eauto.
@@ -242,8 +251,8 @@ Lemma operation_is_redundant_sound:
   forall op nv arg1 args v arg1' args',
   operation_is_redundant op nv = true ->
   eval_operation ge (Vptr sp Ptrofs.zero) op (arg1 :: args) m = Some v ->
-  vagree_list (arg1 :: args) (arg1' :: args') (needs_of_operation op nv) ->
-  vagree v arg1' nv.
+  vagree_list j (arg1 :: args) (arg1' :: args') (needs_of_operation op nv) ->
+  vagree j v arg1' nv.
 Proof.
   intros. destruct op; simpl in *; try discriminate; inv H1; FuncInv; subst.
 - apply sign_ext_redundant_sound; auto. lia.
