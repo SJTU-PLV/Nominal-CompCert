@@ -865,8 +865,28 @@ Variable j: meminj.
 Hypothesis INJSP: j sp = Some (sp',0).
 Hypothesis INJGE: forall id ofs,
   Val.inject j (Genv.symbol_address ge id ofs) (Genv.symbol_address tge id ofs).
-Hypothesis INJ: Mem.inject j m1 m2.
+Hypothesis INJPERM: forall b1 b2 delta ofs k p, j b1 = Some (b2, delta) -> Mem.perm m1 b1 ofs k p ->
+                                           Mem.perm m2 b2 (ofs + delta) k p.
+Hypothesis INJREPRE: forall b b' delta ofs,
+      j b = Some(b', delta) ->
+      Mem.perm m1 b (Ptrofs.unsigned ofs) Max Nonempty \/ Mem.perm m1 b (Ptrofs.unsigned ofs - 1) Max Nonempty ->
+      delta >= 0 /\ 0 <= Ptrofs.unsigned ofs + delta <= Ptrofs.max_unsigned.
+Hypothesis INJNOLAP : Mem.meminj_no_overlap j m1.
+
 (* Hypothesis PERM: forall b ofs k p, Mem.perm m1 b ofs k p -> Mem.perm m2 b ofs k p. *)
+
+Lemma address_inject: forall b1 ofs1 b2 delta p,
+  (Mem.perm m1 b1 (Ptrofs.unsigned ofs1) Cur p \/ Mem.perm m1 b1 (Ptrofs.unsigned ofs1 - 1) Cur p) ->
+  j b1 = Some (b2, delta) ->
+  Ptrofs.unsigned (Ptrofs.add ofs1 (Ptrofs.repr delta)) = Ptrofs.unsigned ofs1 + delta.
+Proof.
+  intros.
+  exploit INJREPRE; eauto. destruct H; [left|right]; eauto with mem.
+  intros [A B].
+  assert (0 <= delta <= Ptrofs.max_unsigned).
+    generalize (Ptrofs.unsigned_range ofs1). lia.
+  unfold Ptrofs.add. repeat rewrite Ptrofs.unsigned_repr; lia.
+Qed.
 
 Let valid_pointer_inj:
   forall b1 ofs b2 delta,
@@ -874,8 +894,11 @@ Let valid_pointer_inj:
   Mem.valid_pointer m1 b1 (Ptrofs.unsigned ofs) = true ->
   Mem.valid_pointer m2 b2 (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr delta))) = true.
 Proof.
-  intros.
-  eapply Mem.valid_pointer_inject_val; eauto.
+  intros. 
+  apply Mem.valid_pointer_nonempty_perm in H0.
+  erewrite address_inject; eauto.
+  apply Mem.valid_pointer_nonempty_perm.
+  eauto.
 Qed.
 
 Let weak_valid_pointer_inj:
@@ -884,7 +907,13 @@ Let weak_valid_pointer_inj:
   Mem.weak_valid_pointer m1 b1 (Ptrofs.unsigned ofs) = true ->
   Mem.weak_valid_pointer m2 b2 (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr delta))) = true.
 Proof.
-  intros. eapply Mem.weak_valid_pointer_inject_val; eauto.
+  intros. 
+  rewrite Mem.weak_valid_pointer_spec in H0.
+  rewrite !Mem.valid_pointer_nonempty_perm in H0.
+  erewrite address_inject; eauto.
+  unfold Mem.weak_valid_pointer. rewrite !orb_true_iff.
+  replace (Ptrofs.unsigned ofs + delta - 1) with ((Ptrofs.unsigned ofs - 1) + delta) by lia.
+  rewrite !Mem.valid_pointer_nonempty_perm. destruct H0; [left| right]; eauto.
 Qed.
 
 Let weak_valid_pointer_no_overflow:
@@ -893,8 +922,13 @@ Let weak_valid_pointer_no_overflow:
   Mem.weak_valid_pointer m1 b1 (Ptrofs.unsigned ofs) = true ->
   0 <= Ptrofs.unsigned ofs + Ptrofs.unsigned (Ptrofs.repr delta) <= Ptrofs.max_unsigned.
 Proof.
-  intros.
-  eapply Mem.weak_valid_pointer_inject_no_overflow; eauto.
+  intros. rewrite Mem.weak_valid_pointer_spec in H0.
+  rewrite !Mem.valid_pointer_nonempty_perm in H0.
+  exploit INJREPRE; eauto. destruct H0; [left | right]; eauto with mem.
+  intros [A B].
+  assert (0 <= delta <= Ptrofs.max_unsigned).
+    generalize (Ptrofs.unsigned_range ofs). lia.
+  unfold Ptrofs.add. repeat rewrite Ptrofs.unsigned_repr; lia.
 Qed.
 
 Let valid_different_pointers_inj:
@@ -910,9 +944,9 @@ Proof.
   intros.
   apply Mem.valid_pointer_nonempty_perm in H0.
   apply Mem.valid_pointer_nonempty_perm in H1.
-  erewrite Mem.address_inject; eauto.
-  erewrite Mem.address_inject; eauto.
-  inv INJ. exploit mi_no_overlap; eauto. eauto with mem. eauto with mem.
+  erewrite address_inject; eauto.
+  erewrite address_inject; eauto.
+  exploit INJNOLAP; eauto with mem.
 Qed.
 
 Lemma default_needs_of_condition_sound:

@@ -157,7 +157,13 @@ Variable j: meminj.
 Hypothesis INJSP: j sp = Some (sp',0).
 Hypothesis INJGE: forall id ofs,
   Val.inject j (Genv.symbol_address ge id ofs) (Genv.symbol_address tge id ofs).
-Hypothesis INJ: Mem.inject j m m'.
+Hypothesis INJPERM: forall b1 b2 delta ofs k p, j b1 = Some (b2, delta) -> Mem.perm m b1 ofs k p ->
+                                           Mem.perm m' b2 (ofs + delta) k p.
+Hypothesis INJREPRE: forall b b' delta ofs,
+      j b = Some(b', delta) ->
+      Mem.perm m b (Ptrofs.unsigned ofs) Max Nonempty \/ Mem.perm m b (Ptrofs.unsigned ofs - 1) Max Nonempty ->
+      delta >= 0 /\ 0 <= Ptrofs.unsigned ofs + delta <= Ptrofs.max_unsigned.
+Hypothesis INJNOLAP : Mem.meminj_no_overlap j m.
 
 Lemma needs_of_condition_sound:
   forall cond args b args',
