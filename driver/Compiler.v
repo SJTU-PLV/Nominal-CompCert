@@ -575,99 +575,6 @@ Proof.
   reflexivity.
 Qed.
 
-(* To be moved to Callconv.v *)
-
-(*
-
-I
-injp   <=   I
-I           injp
-injp
-
-m1 <-I                 m1  <- I                 m1' <- I'                  m1' <- I'
-
-          exists->     m1  <- I  ---forall-->   m2' <- I'   ---exists-->   m2'
-
-m3                     m3                       m3'                        m3'
-
-*)
-
-
-(*
-
-I         <= I @ injp @ I @ injp
-injp  
-
-m1                                              m1' <- ro'                  m1'
-
-m2       --exists-->                                       ---exists--->    m2' <-- ro'
-
-m3                                                                          m3'
-
-"sound_reply"
-
-ro_unchange m1 m1' ->
-ro_unchange m2 m2.
-
-[x] m1                [x] m1'   p1   ~ Mem.perm m1 p1 Max Writable -> m1'[p1] = m1[p1]
-
-
-[  ] m2                [j(x)] m2'   p2   ~ Mem.perm m2 p2 Max Writable ->  m2'[p2] = m2[p2]
-
- Mem.perm m1 p1 Max Nonempty  
-*)
-Lemma trans_injp_inv_incoming (I: invariant li_c) :
-  ccref (I @ injp) ((I @ injp) @ (I @ injp)).
-Proof.
-  red. intros [[se wi] w] se1 se2 q1' q2 [Hse1 Hse2] [q1 [Hq1 Hq2]].
-  inv Hse1. inv Hq1. inv Hse2. inv Hq2. inv H6. rename m0 into m1.
-  rename m3 into m2. cbn in H4, H5.
-  exists (se, (se,wi, (injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m2 Hm))),
-      (se,wi, (injpw f m1 m2 Hm))). repeat apply conj.
-  - constructor. constructor. red. cbn. constructor. auto.
-    constructor; eauto. eapply match_stbls_dom; eauto.
-    constructor. constructor. auto.
-    constructor; eauto.
-  - eexists (cq vf1 sg vargs1 m1). split. eexists. split. constructor. eauto.
-    econstructor; cbn; eauto.
-    eapply val_inject_dom; eauto.
-    eapply val_inject_list_dom; eauto.
-    eexists. split. constructor. eauto. constructor; eauto. constructor.
-  - intros r1' r3 [r2' [[r1 [Hi1 Hr1]] [r2 [Hi2 Hr2]]]].
-    inv Hi1. inv Hi2.
-    exists r1. split. red. cbn. constructor. auto.
-    clear H6 H8 H0 H.
-    destruct Hr1 as [w12' [Hw12' Hr12']]. destruct Hr2 as [w23' [Hw23' Hr23']].
-    destruct w12' as [f12' m1' m2' Hm12']. destruct w23' as [f23' m2'' m3' Hm23'].
-    inv Hw12'. inv Hw23'. cbn in *.
-    inv Hr12'. inv Hr23'. cbn in *. inv H0. inv H27.
-    rename m1'0 into m1'. rename m2'0 into m2'. rename m2'1 into m3'.
-    eexists (injpw (compose_meminj f12' f23') m1' m3'
-               (Mem.inject_compose f12' f23' _ _ _ Hm12' Hm23')
-            ).
-    repeat apply conj.
-    + constructor; eauto.
-      * eapply Mem.unchanged_on_implies; eauto.
-        intros. red. unfold meminj_dom. rewrite H0. reflexivity.
-      * red. intros. unfold compose_meminj.
-        erewrite H17. erewrite H25; eauto.
-        2: unfold meminj_dom; rewrite H0; reflexivity.
-        rewrite Z.add_0_l. reflexivity.
-      * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
-        destruct (f12' b1) as [[bi delta12] | ] eqn:Hb1; try discriminate.
-        destruct (f23' bi) as [[xb2 delta23] | ] eqn:Hb2; try discriminate.
-        inv Hb'.
-        edestruct H18; eauto. unfold meminj_dom. rewrite Hb. auto.
-        destruct (f bi) as [[? ?] | ] eqn:Hfbi.
-        {
-          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
-        }
-        edestruct H26; eauto.
-    + constructor; cbn; eauto with mem.
-      eapply Values.val_inject_compose; eauto.
-Qed.
-
-
 Lemma cc_c_level_expand:
   ccref cc_c_level
         ( ro @ cc_c injp @ 
@@ -880,6 +787,20 @@ Proof.
   eapply preserves_fsim. eapply ValueAnalysis.RTL_ro_preserves.
   eapply RTLrel.semantics_rel.
 Qed.
+
+Lemma deadcode_va_correct : forall (p tp:  RTL.program),
+    let sem1 := RTL.semantics p in
+    let sem2 := RTL.semantics tp in
+    forward_simulation (ro @ injp) (ro @ inj) sem1 sem2 ->
+    forward_simulation (ro @ injp) (ro @ injp) sem1 sem2.
+Proof.
+  intros. rewrite (ro_injp_inj_I_incoming ro) at 2.
+  rewrite <- Deadcode_ext_out at 1.
+  eapply compose_forward_simulations.
+  eapply va_interface_selfsim; eauto.
+  eapply compose_forward_simulations. eauto.
+  apply RTLrel.semantics_rel.
+Qed.
   
 (** ** Composition of passes *)
 
@@ -939,7 +860,8 @@ Ltac DestructM :=
     subst. apply va_interface_selfsim. }
   eapply compose_forward_simulations.
   { unfold match_if in M10. destruct (optim_redundancy tt).
-    eapply Deadcodeproof.transf_program_correct; eassumption.
+    eapply deadcode_va_correct.
+    eapply Deadcodeproof.transf_program_correct'; eassumption.
     subst. apply va_interface_selfsim. }
   eapply compose_forward_simulations.
     eapply RTLrel.semantics_rel.
