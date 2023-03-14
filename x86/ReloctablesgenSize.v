@@ -258,9 +258,12 @@ Qed.
 
 End WITH_INSTR_SIZE.
 
+(* less than or equal here for the compatability with other archi *)
 Lemma transl_instr_range: forall ofs i e,
     transl_instr instr_size_real ofs i = OK (Some e) ->
-    ofs < e.(reloc_offset) < ofs + instr_size_real i.
+    ofs <= e.(reloc_offset) < ofs + instr_size_real i.
 Proof.
-  eapply (transl_instr_range' instr_size_real instr_reloc_bound).
+  intros.
+  generalize (transl_instr_range' instr_size_real instr_reloc_bound ofs i e H).
+  lia.
 Qed.

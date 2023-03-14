@@ -117,7 +117,7 @@ Hypothesis instr_size_bound : forall i, 0 < instr_size i <= Ptrofs.max_unsigned.
 (* Proved in ReloctablesgenSize.v *)
 Hypothesis transl_instr_range: forall ofs i e,
     transl_instr instr_size ofs i = OK (Some e) ->
-    ofs < e.(reloc_offset) < ofs + instr_size i.
+    ofs <= e.(reloc_offset) < ofs + instr_size i.
 
 Hypothesis id_eliminate_size_unchanged:forall i, instr_size i = instr_size (id_eliminate i).
 Hypothesis instr_eq_size: forall i1 i2, instr_eq i1 i2 -> instr_size i1 = instr_size i2.

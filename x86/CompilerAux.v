@@ -32,42 +32,18 @@ Require RelocElfgenproof.
 Require EncodeElfCorrect.
 Require RelocProgLinking.
 Require ReloctablesgenSize.
-
-(** * Composing the translation passes *)
-
-(** We first define useful monadic composition operators,
-    along with funny (but convenient) notations. *)
-
-Definition apply_total (A B: Type) (x: res A) (f: A -> B) : res B :=
-  match x with Error msg => Error msg | OK x1 => OK (f x1) end.
-
-Definition apply_partial (A B: Type)
-                         (x: res A) (f: A -> res B) : res B :=
-  match x with Error msg => Error msg | OK x1 => f x1 end.
-
-Notation "a @@@ b" :=
-   (apply_partial _ _ a b) (at level 50, left associativity).
-Notation "a @@ b" :=
-   (apply_total _ _ a b) (at level 50, left associativity).
-
-Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
-  let unused := printer prog in prog.
-
-Definition time {A B: Type} (name: string) (f: A -> B) : A -> B := f.
-
-Definition total_if {A: Type}
-          (flag: unit -> bool) (f: A -> A) (prog: A) : A :=
-  if flag tt then f prog else prog.
-
-Definition partial_if {A: Type}
-          (flag: unit -> bool) (f: A -> res A) (prog: A) : res A :=
-  if flag tt then f prog else OK prog.
+Require Import Compiler0.
 
 
-Section INSTR_SIZE.
 
-  Variable instr_size : Asm.instruction -> Z.
-  
+Definition instr_size := Asm.instr_size_real.
+Definition instr_size_bound := Asm.instr_size_bound_real.
+
+Lemma instr_eq_size: forall i1 i2,
+    ReloctablesgenproofArchi.instr_eq i1 i2 -> instr_size i1 = instr_size i2.
+Admitted.
+
+
   (** TargetPrinter *)
 Definition targetprinter p: res Asm.program :=
   OK p
@@ -88,14 +64,71 @@ Definition targetprinter p: res Asm.program :=
   @@ time "SSAsm" SSAsmproof.transf_program
   @@@ time "Translation from SSAsm to RealAsm" RealAsmgen.transf_program instr_size. *)
 
- 
- (** Assembler *)
- Definition assembler (p: Asm.program) :=
-  OK p
-  @@@ time "Generation of symbol table" Symbtablegen.transf_program instr_size
-  @@@ time "Generation of relocation table" Reloctablesgen.transf_program instr_size
-  @@@ time "Encoding of instructions and data" RelocBingen.transf_program
-  @@@ time "Generation of the reloctable Elf" RelocElfgen.gen_reloc_elf
-  @@@ time "Encoding of the reloctable Elf" EncodeRelocElf.encode_elf_file.
+Definition match_prog_targetprinter p tp :=
+  targetprinter p = OK tp.
 
-End INSTR_SIZE.
+
+Lemma Pseudo_fn_stack_requirements_match: forall p,
+    fn_stack_requirements p = fn_stack_requirements (PseudoInstructions.transf_program p).
+Admitted.
+
+Lemma BuiltInline_fn_stack_requirements_match: forall p tp,
+    AsmBuiltinInline.transf_program p = OK tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Admitted.
+
+Lemma AsmStructret_fn_stack_requirements_match: forall p tp,
+    AsmStructRet.transf_program p = OK tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Admitted.
+
+
+Lemma Float_fn_stack_requirements_match: forall p,
+    fn_stack_requirements p = fn_stack_requirements (AsmFloatLiteral.transf_program p).
+Admitted.
+
+Lemma LongInt_fn_stack_requirements_match: forall p,
+    fn_stack_requirements p = fn_stack_requirements (AsmLongInt.transf_program p).
+Admitted.
+
+
+Lemma AsmPseudo_fn_stack_requirements_match: forall p tp,
+    AsmPseudoInstr.transf_program p = OK tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Admitted.
+
+Lemma Asmlabel_fn_stack_requirements_match: forall p tp,
+    Asmlabelgen.transf_program instr_size p = OK tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Admitted.
+
+Lemma Jumptable_fn_stack_requirements_match: forall p,
+    fn_stack_requirements p = fn_stack_requirements (Jumptablegen.transf_program instr_size p).
+Admitted.
+
+
+Lemma targetprinter_fn_stack_requirements_match: forall p tp,
+    match_prog_targetprinter p tp ->
+    fn_stack_requirements p = fn_stack_requirements tp.
+Proof.
+  intros.
+  unfold match_prog_targetprinter in H. unfold targetprinter in H.
+  unfold time in H.
+  simpl in H. 
+  destruct  AsmBuiltinInline.transf_program eqn: T1; simpl in H; try discriminate.
+  destruct  AsmStructRet.transf_program eqn: T2; simpl in H; try discriminate.
+  destruct  AsmPseudoInstr.transf_program eqn: T3; simpl in H; try discriminate.
+  destruct  Asmlabelgen.transf_program eqn: T4; simpl in H; try discriminate.
+  inv H.
+
+  
+  rewrite Pseudo_fn_stack_requirements_match.
+  erewrite (BuiltInline_fn_stack_requirements_match _ _ T1).
+  erewrite (AsmStructret_fn_stack_requirements_match _ _ T2).
+  rewrite Float_fn_stack_requirements_match.
+  rewrite LongInt_fn_stack_requirements_match.
+  erewrite (AsmPseudo_fn_stack_requirements_match _ _ T3).
+  erewrite (Asmlabel_fn_stack_requirements_match _ _ T4).
+  erewrite Jumptable_fn_stack_requirements_match.
+  auto.
+Qed.

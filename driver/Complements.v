@@ -16,7 +16,7 @@ Require Import Classical.
 Require Import Coqlib Errors.
 Require Import AST Linking Events Smallstep Behaviors.
 Require Import Csyntax Csem Cstrategy Asm.
-Require Import Compiler.
+Require Import Compiler0 CompilerAux Compiler.
 
 (** * Preservation of whole-program behaviors *)
 

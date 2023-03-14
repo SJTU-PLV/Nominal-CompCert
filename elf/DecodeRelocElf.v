@@ -311,7 +311,8 @@ Definition decode_section_flags (l: list byte) : list section_flag :=
 Lemma decode_encode_section_flags sf (V: valid_section_flags sf):
   decode_section_flags (encode_section_flags sf) = sf.
 Proof.
-  inv V; reflexivity.
+  destruct Archi.ptr64 eqn:PTR;
+  inv V;unfold encode_section_flags;try rewrite PTR;simpl;reflexivity.  
 Qed.
 
 Definition decode_section_header32 (l: list byte) : res section_header :=
