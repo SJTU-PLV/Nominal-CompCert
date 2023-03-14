@@ -365,6 +365,15 @@ Definition decode_ireg0 (bs: u5) : res ireg0 :=
   else Error(msg "reg not found")
 .
 
+Theorem encode_ireg0_consistency: forall ireg ireg_bits,
+  encode_ireg0 ireg = OK (ireg_bits) ->
+  decode_ireg0 ireg_bits = OK ireg.
+Proof.
+  intros. destruct ireg.
+  - unfold encode_ireg0. unfold decode_ireg0. monadInv H. eauto.
+  - destruct i; simpl; intros; inv H; simpl; eauto.
+Qed.
+
 (*encode 64bit reg ,return *)
 Program Definition encode_freg (r:freg) : res (u5):=
   match r with
@@ -460,6 +469,22 @@ Program Definition Z_to_ofs (z: Z) : res offset :=
   if (Ptrofs.min_signed <=? z) && (z <=? Ptrofs.max_signed) then
     OK (Ofsimm (Ptrofs.repr z))
   else Error (msg "Out of range").
+
+Theorem encode_ofs_consistency: forall ofs z,
+  ofs_to_Z ofs = OK z ->
+  Z_to_ofs z = OK ofs.
+Proof.
+  intros. unfold ofs_to_Z in H. unfold Z_to_ofs.
+  destruct ofs.
+  - monadInv H. 
+    assert (Ptrofs.min_signed <= Ptrofs.signed ofs <= Ptrofs.max_signed).
+    { apply (Ptrofs.signed_range ofs). }
+    destruct H. apply Zle_imp_le_bool in H.
+    apply Zle_imp_le_bool in H0.
+    rewrite H. rewrite H0. simpl.
+    rewrite Ptrofs.repr_signed. reflexivity.
+  - inv H.
+Qed.
 
 Definition decode_ireg0_u5 (bs:u5) : res ireg0 :=
     match (proj1_sig bs) with
@@ -906,9 +931,9 @@ Definition decode_shamt (shamt: u6) : res Z :=
       OK shamt_Z
     else Error (msg "Shamt overflow in decode_shamt").
 
-    Theorem encode_shamt_consistency: forall Z shamt,
-    encode_shamt Z = OK shamt ->
-    decode_shamt shamt = OK Z.
+Theorem encode_shamt_consistency: forall Z shamt,
+  encode_shamt Z = OK shamt ->
+  decode_shamt shamt = OK Z.
   Proof.
     unfold encode_shamt. unfold decode_shamt. intros.
     do 3 destr_in H. inversion H. f_equal.
@@ -934,8 +959,8 @@ Definition decode_shamt (shamt: u6) : res Z :=
 
 Definition translate_instr' (i:instruction) : res (Instruction) :=
   match i with
-  | Pnop =>
-    OK (addi zero5 zero5 zero12)
+  (* | Pnop =>
+    OK (addi zero5 zero5 zero12) *)
   | Pjal_ofs rd (inr ofs) =>
     do rdbits <- encode_ireg0 rd;
     do J1 <- encode_J1 ofs;
@@ -1834,7 +1859,7 @@ Definition decode_instr' (I: Instruction) : res instruction :=
     OK (Pjal_rr rd rs ofs)
   | auipc rdbits imm20 =>
     do rd <- decode_ireg rdbits;
-    do ofs <- decode_ofs_u20 imm20;
+    do ofs <- decode_ofs_u20_unsigned imm20;
     OK (Pauipc rd (inr ofs))
   
   | addiw rdbits rsbits imm12 =>
@@ -2268,7 +2293,6 @@ Definition decode_instr' (I: Instruction) : res instruction :=
     OK (Psd rd ra ofs)
 
   | fsgnjd fdbits fs1bits _ =>
-    (* Need Discussion for fs1bits == fs2bits *)
     do fd <- decode_freg fdbits;
     do fs <- decode_freg fs1bits;
     OK (Pfmv fd fs)
@@ -2302,12 +2326,10 @@ Definition decode_instr' (I: Instruction) : res instruction :=
     do ofs <- Z_to_ofs imm;
     OK (Pfss fs ra ofs)
   | fsgnjns fdbits fsbits _ =>
-    (* Need Discussion *)
     do fd <- decode_freg fdbits;
     do fs <- decode_freg fsbits;
     OK (Pfnegs fd fs)
   | fsgnjxs fdbits fsbits _ =>
-    (* Need Discussion *)
     do fd <- decode_freg fdbits;
     do fs <- decode_freg fsbits;
     OK (Pfabss fd fs)
@@ -2394,11 +2416,11 @@ Definition decode_instr' (I: Instruction) : res instruction :=
     OK (Pfcvtwus rd fs)
   | fcvtsw fdbits rsbits =>
     do fd <- decode_freg fdbits;
-    do rs <- decode_ireg rsbits;
+    do rs <- decode_ireg0 rsbits;
     OK (Pfcvtsw fd rs)
   | fcvtswu fdbits rsbits =>
     do fd <- decode_freg fdbits;
-    do rs <- decode_ireg rsbits;
+    do rs <- decode_ireg0 rsbits;
     OK (Pfcvtswu fd rs)
 
   | fcvtls rdbits fsbits =>
@@ -2416,14 +2438,14 @@ Definition decode_instr' (I: Instruction) : res instruction :=
   | fcvtsl fdbits rsbits =>
     if Archi.ptr64 then
       do fd <- decode_freg fdbits;
-      do rs <- decode_ireg rsbits;
+      do rs <- decode_ireg0 rsbits;
       OK (Pfcvtsl fd rs)
     else Error [MSG "Only in rv64"]
   | fcvtslu fdbits rsbits =>
     if Archi.ptr64 then
       do fd <- decode_freg fdbits;
-      do rs <- decode_ireg rsbits;
-      OK (Pfcvtsl fd rs)
+      do rs <- decode_ireg0 rsbits;
+      OK (Pfcvtslu fd rs)
     else Error [MSG "Only in rv64"]
 
   | fload fdbits rabits immbits =>
@@ -2439,12 +2461,10 @@ Definition decode_instr' (I: Instruction) : res instruction :=
     do ofs <- Z_to_ofs imm;
     OK (Pfsd fs ra ofs)
   | fsgnjnd fdbits fsbits _ =>
-    (* Need Discussion *)
     do fd <- decode_freg fdbits;
     do fs <- decode_freg fsbits;
     OK (Pfnegd fd fs)
   | fsgnjxd fdbits fsbits _ =>
-    (* Need Discussion *)
     do fd <- decode_freg fdbits;
     do fs <- decode_freg fsbits;
     OK (Pfabsd fd fs)
@@ -2531,7 +2551,11 @@ Definition decode_instr' (I: Instruction) : res instruction :=
     OK (Pfcvtwud rd fs)
   | fcvtdw fdbits rsbits =>
     do fd <- decode_freg fdbits;
-    do rs <- decode_ireg rsbits;
+    do rs <- decode_ireg0 rsbits;
+    OK (Pfcvtdw fd rs)
+  | fcvtdwu fdbits rsbits =>
+    do fd <- decode_freg fdbits;
+    do rs <- decode_ireg0 rsbits;
     OK (Pfcvtdwu fd rs)
 
   | fcvtld rdbits fsbits =>
@@ -2549,13 +2573,13 @@ Definition decode_instr' (I: Instruction) : res instruction :=
   | fcvtdl fdbits rsbits =>
     if Archi.ptr64 then
       do fd <- decode_freg fdbits;
-      do rs <- decode_ireg rsbits;
+      do rs <- decode_ireg0 rsbits;
       OK (Pfcvtdl fd rs)
     else Error [MSG "Only in rv64"]
   | fcvtdlu fdbits rsbits =>
     if Archi.ptr64 then
       do fd <- decode_freg fdbits;
-      do rs <- decode_ireg rsbits;
+      do rs <- decode_ireg0 rsbits;
       OK (Pfcvtdlu fd rs)
     else Error [MSG "Only in rv64"]
   
@@ -2570,3 +2594,91 @@ Definition decode_instr' (I: Instruction) : res instruction :=
 
   | _ => Error [MSG "Not exists or unsupported"]
   end.
+
+Ltac solve_preparation H :=
+  try (destruct Archi.ptr64 eqn:E;
+  monadInv H; unfold decode_instr'; try (rewrite E));
+  try (monadInv H; unfold decode_instr').
+
+Ltac solve_Itype_instr H :=
+  solve_preparation H;
+  try (repeat (erewrite encode_ireg_consistency; eauto));
+  try (erewrite encode_ireg0_consistency; eauto);
+  try (repeat (erewrite encode_freg_consistency; eauto));
+  erewrite encode_ofs_u12_consistency; eauto; simpl;
+  try (erewrite encode_ofs_consistency; eauto); simpl;
+  try (rewrite Int.repr_signed);
+  try (rewrite Int64.repr_signed);
+  reflexivity.
+
+Ltac solve_Itype_instr_shamt H :=
+  solve_preparation H;
+  erewrite encode_ireg_consistency; eauto;
+  erewrite encode_ireg0_consistency; eauto;
+  try (erewrite encode_ofs_u5_consistency; eauto);
+  try (erewrite encode_shamt_consistency; eauto);
+  simpl; rewrite Int.repr_unsigned; reflexivity.
+
+Ltac solve_Utype_instr H :=
+  solve_preparation H;
+  erewrite encode_ireg_consistency; eauto;
+  erewrite encode_ofs_u20_unsigned_consistency; eauto;
+  simpl; try (rewrite Int.repr_signed);
+  try (rewrite Int64.repr_signed);
+  reflexivity.
+
+Ltac solve_Rtype_instr H :=
+  solve_preparation H;
+  try (erewrite encode_ireg_consistency; eauto;
+  repeat (erewrite encode_ireg0_consistency; eauto));
+  try (repeat (erewrite encode_freg_consistency; eauto));
+  simpl; reflexivity.
+
+Ltac solve_Stype_instr H :=
+  solve_preparation H;
+  try (repeat (erewrite encode_ireg_consistency; eauto));
+  try (repeat (erewrite encode_freg_consistency; eauto));
+  erewrite encode_immS_consistency; eauto; simpl;
+  erewrite encode_ofs_consistency; eauto; simpl; reflexivity.
+
+Ltac solve_Btype_instr H :=
+  solve_preparation H;
+  erewrite encode_immB_consistency; eauto;
+  repeat (erewrite encode_ireg0_consistency; eauto); simpl;
+  reflexivity.
+
+Ltac solve_fcvt H :=
+  solve_preparation H;
+  try (repeat (erewrite encode_freg_consistency; eauto));
+  try (repeat (erewrite encode_ireg0_consistency; eauto));
+  try (repeat (erewrite encode_ireg_consistency; eauto)); simpl;
+  reflexivity.
+
+Theorem translate_instruction_consistency :
+  forall i I,
+  translate_instr' i = OK I ->
+  decode_instr' I = OK i.
+Proof.
+  intros i I H.
+  unfold translate_instr' in H.
+  destruct i;
+  try solve_Itype_instr H;
+  try solve_Itype_instr_shamt H;
+  try solve_Utype_instr H;
+  try solve_Rtype_instr H;
+  try solve_Stype_instr H;
+  try solve_fcvt H;
+  try solve_Btype_instr H.
+  
+  (* auipc *)
+  - destruct imm; solve_preparation H;
+  erewrite encode_ireg_consistency; eauto;
+  erewrite encode_ofs_u20_unsigned_consistency; eauto; simpl;
+  reflexivity.
+
+  (* jal *)
+  - destruct ofs; solve_preparation H;
+    erewrite encode_ireg0_consistency; eauto;
+    erewrite encode_immJ_consistency; eauto; simpl;
+    reflexivity.
+Qed.
