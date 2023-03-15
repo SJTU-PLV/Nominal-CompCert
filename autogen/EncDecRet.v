@@ -20,3047 +20,4327 @@ Local Open Scope nat_scope.
 
 
 
-Definition write_B (REX:bits)  (B_value:bits) : bits :=
-	(REX~@[7])++B_value.
+Definition write_funct2_R (InstrR:bits)  (funct2_R_value:bits) : bits :=
+	(InstrR~@[5])++funct2_R_value++(InstrR>@[7]).
 
-Definition read_B (REX:bits) : bits :=
-	(REX>@[7]).
+Definition read_funct2_R (InstrR:bits) : bits :=
+	(InstrR>@[5])~@[2].
 
-Definition write_R (REX:bits)  (R_value:bits) : bits :=
-	(REX~@[5])++R_value++(REX>@[6]).
+Definition write_funct3_B (InstrB:bits)  (funct3_B_value:bits) : bits :=
+	(InstrB~@[17])++funct3_B_value++(InstrB>@[20]).
 
-Definition read_R (REX:bits) : bits :=
-	(REX>@[5])~@[1].
+Definition read_funct3_B (InstrB:bits) : bits :=
+	(InstrB>@[17])~@[3].
 
-Definition write_W (REX:bits)  (W_value:bits) : bits :=
-	(REX~@[4])++W_value++(REX>@[5]).
+Definition write_funct3_I (InstrI:bits)  (funct3_I_value:bits) : bits :=
+	(InstrI~@[17])++funct3_I_value++(InstrI>@[20]).
 
-Definition read_W (REX:bits) : bits :=
-	(REX>@[4])~@[1].
+Definition read_funct3_I (InstrI:bits) : bits :=
+	(InstrI>@[17])~@[3].
 
-Definition write_X (REX:bits)  (X_value:bits) : bits :=
-	(REX~@[6])++X_value++(REX>@[7]).
+Definition write_funct3_R (InstrR:bits)  (funct3_R_value:bits) : bits :=
+	(InstrR~@[17])++funct3_R_value++(InstrR>@[20]).
 
-Definition read_X (REX:bits) : bits :=
-	(REX>@[6])~@[1].
+Definition read_funct3_R (InstrR:bits) : bits :=
+	(InstrR>@[17])~@[3].
 
-Definition write_base (SIB:bits)  (base_value:bits) : bits :=
-	(SIB~@[5])++base_value.
+Definition write_funct3_S (InstrS:bits)  (funct3_S_value:bits) : bits :=
+	(InstrS~@[17])++funct3_S_value++(InstrS>@[20]).
 
-Definition read_base (SIB:bits) : bits :=
-	(SIB>@[5]).
+Definition read_funct3_S (InstrS:bits) : bits :=
+	(InstrS>@[17])~@[3].
 
-Definition write_cccode (condi:bits)  (cccode_value:bits) : bits :=
-	(condi~@[4])++cccode_value.
+Definition write_funct7_R (InstrR:bits)  (funct7_R_value:bits) : bits :=
+	funct7_R_value++(InstrR>@[7]).
 
-Definition read_cccode (condi:bits) : bits :=
-	(condi>@[4]).
+Definition read_funct7_R (InstrR:bits) : bits :=
+	InstrR~@[7].
 
-Definition write_col (Opcode:bits)  (col_value:bits) : bits :=
-	(Opcode~@[5])++col_value.
+Definition write_immB1_B (InstrB:bits)  (immB1_B_value:bits) : bits :=
+	(InstrB~@[24])++immB1_B_value++(InstrB>@[25]).
 
-Definition read_col (Opcode:bits) : bits :=
-	(Opcode>@[5]).
+Definition read_immB1_B (InstrB:bits) : bits :=
+	(InstrB>@[24])~@[1].
 
-Definition write_cprefix (condi:bits)  (cprefix_value:bits) : bits :=
-	cprefix_value++(condi>@[4]).
+Definition write_immB2_B (InstrB:bits)  (immB2_B_value:bits) : bits :=
+	(InstrB~@[20])++immB2_B_value++(InstrB>@[24]).
 
-Definition read_cprefix (condi:bits) : bits :=
-	condi~@[4].
+Definition read_immB2_B (InstrB:bits) : bits :=
+	(InstrB>@[20])~@[4].
 
-Definition write_index (SIB:bits)  (index_value:bits) : bits :=
-	(SIB~@[2])++index_value++(SIB>@[5]).
+Definition write_immB3_B (InstrB:bits)  (immB3_B_value:bits) : bits :=
+	(InstrB~@[1])++immB3_B_value++(InstrB>@[7]).
 
-Definition read_index (SIB:bits) : bits :=
-	(SIB>@[2])~@[3].
+Definition read_immB3_B (InstrB:bits) : bits :=
+	(InstrB>@[1])~@[6].
 
-Definition write_mod (ModRM:bits)  (mod_value:bits) : bits :=
-	mod_value++(ModRM>@[2]).
+Definition write_immB4_B (InstrB:bits)  (immB4_B_value:bits) : bits :=
+	immB4_B_value++(InstrB>@[1]).
 
-Definition read_mod (ModRM:bits) : bits :=
-	ModRM~@[2].
+Definition read_immB4_B (InstrB:bits) : bits :=
+	InstrB~@[1].
 
-Definition write_page (Opcode:bits)  (page_value:bits) : bits :=
-	(Opcode~@[4])++page_value++(Opcode>@[5]).
+Definition write_immISp32_I (InstrI:bits)  (immISp32_I_value:bits) : bits :=
+	immISp32_I_value++(InstrI>@[7]).
 
-Definition read_page (Opcode:bits) : bits :=
-	(Opcode>@[4])~@[1].
+Definition read_immISp32_I (InstrI:bits) : bits :=
+	InstrI~@[7].
 
-Definition write_reg_op (ModRM:bits)  (reg_op_value:bits) : bits :=
-	(ModRM~@[2])++reg_op_value++(ModRM>@[5]).
+Definition write_immISp64_I (InstrI:bits)  (immISp64_I_value:bits) : bits :=
+	immISp64_I_value++(InstrI>@[6]).
 
-Definition read_reg_op (ModRM:bits) : bits :=
-	(ModRM>@[2])~@[3].
+Definition read_immISp64_I (InstrI:bits) : bits :=
+	InstrI~@[6].
 
-Definition write_rm (ModRM:bits)  (rm_value:bits) : bits :=
-	(ModRM~@[5])++rm_value.
+Definition write_immI_I (InstrI:bits)  (immI_I_value:bits) : bits :=
+	immI_I_value++(InstrI>@[12]).
 
-Definition read_rm (ModRM:bits) : bits :=
-	(ModRM>@[5]).
+Definition read_immI_I (InstrI:bits) : bits :=
+	InstrI~@[12].
 
-Definition write_rmagic (REX:bits)  (rmagic_value:bits) : bits :=
-	rmagic_value++(REX>@[4]).
+Definition write_immJ1_J (InstrJ:bits)  (immJ1_J_value:bits) : bits :=
+	(InstrJ~@[12])++immJ1_J_value++(InstrJ>@[20]).
 
-Definition read_rmagic (REX:bits) : bits :=
-	REX~@[4].
+Definition read_immJ1_J (InstrJ:bits) : bits :=
+	(InstrJ>@[12])~@[8].
 
-Definition write_row (Opcode:bits)  (row_value:bits) : bits :=
-	row_value++(Opcode>@[4]).
+Definition write_immJ2_J (InstrJ:bits)  (immJ2_J_value:bits) : bits :=
+	(InstrJ~@[11])++immJ2_J_value++(InstrJ>@[12]).
 
-Definition read_row (Opcode:bits) : bits :=
-	Opcode~@[4].
+Definition read_immJ2_J (InstrJ:bits) : bits :=
+	(InstrJ>@[11])~@[1].
 
-Definition write_scale (SIB:bits)  (scale_value:bits) : bits :=
-	scale_value++(SIB>@[2]).
+Definition write_immJ3_J (InstrJ:bits)  (immJ3_J_value:bits) : bits :=
+	(InstrJ~@[1])++immJ3_J_value++(InstrJ>@[11]).
 
-Definition read_scale (SIB:bits) : bits :=
-	SIB~@[2].
+Definition read_immJ3_J (InstrJ:bits) : bits :=
+	(InstrJ>@[1])~@[10].
+
+Definition write_immJ4_J (InstrJ:bits)  (immJ4_J_value:bits) : bits :=
+	immJ4_J_value++(InstrJ>@[1]).
+
+Definition read_immJ4_J (InstrJ:bits) : bits :=
+	InstrJ~@[1].
+
+Definition write_immS1_S (InstrS:bits)  (immS1_S_value:bits) : bits :=
+	(InstrS~@[20])++immS1_S_value++(InstrS>@[25]).
+
+Definition read_immS1_S (InstrS:bits) : bits :=
+	(InstrS>@[20])~@[5].
+
+Definition write_immS2_S (InstrS:bits)  (immS2_S_value:bits) : bits :=
+	immS2_S_value++(InstrS>@[7]).
+
+Definition read_immS2_S (InstrS:bits) : bits :=
+	InstrS~@[7].
+
+Definition write_immU_U (InstrU:bits)  (immU_U_value:bits) : bits :=
+	immU_U_value++(InstrU>@[20]).
+
+Definition read_immU_U (InstrU:bits) : bits :=
+	InstrU~@[20].
+
+Definition write_opcode_B (InstrB:bits)  (opcode_B_value:bits) : bits :=
+	(InstrB~@[25])++opcode_B_value.
+
+Definition read_opcode_B (InstrB:bits) : bits :=
+	(InstrB>@[25]).
+
+Definition write_opcode_I (InstrI:bits)  (opcode_I_value:bits) : bits :=
+	(InstrI~@[25])++opcode_I_value.
+
+Definition read_opcode_I (InstrI:bits) : bits :=
+	(InstrI>@[25]).
+
+Definition write_opcode_J (InstrJ:bits)  (opcode_J_value:bits) : bits :=
+	(InstrJ~@[25])++opcode_J_value.
+
+Definition read_opcode_J (InstrJ:bits) : bits :=
+	(InstrJ>@[25]).
+
+Definition write_opcode_R (InstrR:bits)  (opcode_R_value:bits) : bits :=
+	(InstrR~@[25])++opcode_R_value.
+
+Definition read_opcode_R (InstrR:bits) : bits :=
+	(InstrR>@[25]).
+
+Definition write_opcode_S (InstrS:bits)  (opcode_S_value:bits) : bits :=
+	(InstrS~@[25])++opcode_S_value.
+
+Definition read_opcode_S (InstrS:bits) : bits :=
+	(InstrS>@[25]).
+
+Definition write_opcode_U (InstrU:bits)  (opcode_U_value:bits) : bits :=
+	(InstrU~@[25])++opcode_U_value.
+
+Definition read_opcode_U (InstrU:bits) : bits :=
+	(InstrU>@[25]).
+
+Definition write_rd_I (InstrI:bits)  (rd_I_value:bits) : bits :=
+	(InstrI~@[20])++rd_I_value++(InstrI>@[25]).
+
+Definition read_rd_I (InstrI:bits) : bits :=
+	(InstrI>@[20])~@[5].
+
+Definition write_rd_J (InstrJ:bits)  (rd_J_value:bits) : bits :=
+	(InstrJ~@[20])++rd_J_value++(InstrJ>@[25]).
+
+Definition read_rd_J (InstrJ:bits) : bits :=
+	(InstrJ>@[20])~@[5].
+
+Definition write_rd_R (InstrR:bits)  (rd_R_value:bits) : bits :=
+	(InstrR~@[20])++rd_R_value++(InstrR>@[25]).
+
+Definition read_rd_R (InstrR:bits) : bits :=
+	(InstrR>@[20])~@[5].
+
+Definition write_rd_U (InstrU:bits)  (rd_U_value:bits) : bits :=
+	(InstrU~@[20])++rd_U_value++(InstrU>@[25]).
+
+Definition read_rd_U (InstrU:bits) : bits :=
+	(InstrU>@[20])~@[5].
+
+Definition write_rs1_B (InstrB:bits)  (rs1_B_value:bits) : bits :=
+	(InstrB~@[12])++rs1_B_value++(InstrB>@[17]).
+
+Definition read_rs1_B (InstrB:bits) : bits :=
+	(InstrB>@[12])~@[5].
+
+Definition write_rs1_I (InstrI:bits)  (rs1_I_value:bits) : bits :=
+	(InstrI~@[12])++rs1_I_value++(InstrI>@[17]).
+
+Definition read_rs1_I (InstrI:bits) : bits :=
+	(InstrI>@[12])~@[5].
+
+Definition write_rs1_R (InstrR:bits)  (rs1_R_value:bits) : bits :=
+	(InstrR~@[12])++rs1_R_value++(InstrR>@[17]).
+
+Definition read_rs1_R (InstrR:bits) : bits :=
+	(InstrR>@[12])~@[5].
+
+Definition write_rs1_S (InstrS:bits)  (rs1_S_value:bits) : bits :=
+	(InstrS~@[12])++rs1_S_value++(InstrS>@[17]).
+
+Definition read_rs1_S (InstrS:bits) : bits :=
+	(InstrS>@[12])~@[5].
+
+Definition write_rs2_B (InstrB:bits)  (rs2_B_value:bits) : bits :=
+	(InstrB~@[7])++rs2_B_value++(InstrB>@[12]).
+
+Definition read_rs2_B (InstrB:bits) : bits :=
+	(InstrB>@[7])~@[5].
+
+Definition write_rs2_R (InstrR:bits)  (rs2_R_value:bits) : bits :=
+	(InstrR~@[7])++rs2_R_value++(InstrR>@[12]).
+
+Definition read_rs2_R (InstrR:bits) : bits :=
+	(InstrR>@[7])~@[5].
+
+Definition write_rs2_S (InstrS:bits)  (rs2_S_value:bits) : bits :=
+	(InstrS~@[7])++rs2_S_value++(InstrS>@[12]).
+
+Definition read_rs2_S (InstrS:bits) : bits :=
+	(InstrS>@[7])~@[5].
+
+Definition write_rs3_R (InstrR:bits)  (rs3_R_value:bits) : bits :=
+	rs3_R_value++(InstrR>@[5]).
+
+Definition read_rs3_R (InstrR:bits) : bits :=
+	InstrR~@[5].
+
+Definition write_shamt32_I (InstrI:bits)  (shamt32_I_value:bits) : bits :=
+	(InstrI~@[7])++shamt32_I_value++(InstrI>@[12]).
+
+Definition read_shamt32_I (InstrI:bits) : bits :=
+	(InstrI>@[7])~@[5].
+
+Definition write_shamt64_I (InstrI:bits)  (shamt64_I_value:bits) : bits :=
+	(InstrI~@[6])++shamt64_I_value++(InstrI>@[12]).
+
+Definition read_shamt64_I (InstrI:bits) : bits :=
+	(InstrI>@[6])~@[6].
 
 
-Hint Unfold read_B write_B read_R write_R read_W write_W read_X write_X read_base write_base read_cccode write_cccode read_col write_col read_cprefix write_cprefix read_index write_index read_mod write_mod read_page write_page read_reg_op write_reg_op read_rm write_rm read_rmagic write_rmagic read_row write_row read_scale write_scale:bitfields.
+Hint Unfold read_funct2_R write_funct2_R read_funct3_B write_funct3_B read_funct3_I write_funct3_I read_funct3_R write_funct3_R read_funct3_S write_funct3_S read_funct7_R write_funct7_R read_immB1_B write_immB1_B read_immB2_B write_immB2_B read_immB3_B write_immB3_B read_immB4_B write_immB4_B read_immISp32_I write_immISp32_I read_immISp64_I write_immISp64_I read_immI_I write_immI_I read_immJ1_J write_immJ1_J read_immJ2_J write_immJ2_J read_immJ3_J write_immJ3_J read_immJ4_J write_immJ4_J read_immS1_S write_immS1_S read_immS2_S write_immS2_S read_immU_U write_immU_U read_opcode_B write_opcode_B read_opcode_I write_opcode_I read_opcode_J write_opcode_J read_opcode_R write_opcode_R read_opcode_S write_opcode_S read_opcode_U write_opcode_U read_rd_I write_rd_I read_rd_J write_rd_J read_rd_R write_rd_R read_rd_U write_rd_U read_rs1_B write_rs1_B read_rs1_I write_rs1_I read_rs1_R write_rs1_R read_rs1_S write_rs1_S read_rs2_B write_rs2_B read_rs2_R write_rs2_R read_rs2_S write_rs2_S read_rs3_R write_rs3_R read_shamt32_I write_shamt32_I read_shamt64_I write_shamt64_I:bitfields.
 
-Hint Unfold AddrE11_bp AddrE9_bp AddrE5_bp AddrE0_bp :AddrE_bpdb.
-
-Hint Unfold REX_WRXB_bp Override_bp REP_bp REPNZ_bp Psubl_ri_bp Pbsqrtsd_bp Psbbl_rr_bp Prep_movsl_bp Pmovsq_rm_bp Pmovsq_mr_bp Pminsd_bp Pmaxsd_bp Pbswap32_bp Pbsrl_bp Pbsfl_bp Paddl_mi_bp Paddl_GvEv_bp Paddl_EvGv_bp Padcl_rr_bp Padcl_ri_bp Pjcc_rel_bp Pret_iw_bp Pret_bp Pcall_r_bp Pcall_ofs_bp Pnop_bp Pjmp_Ev_bp Pjmp_l_rel_bp Pxorps_d_GvEv_bp Pcomiss_d_ff_bp Pdivss_d_ff_bp Pmuls_d_ff_bp Psubs_d_ff_bp Pandps_d_fm_bp Padds_d_ff_bp Psetcc_bp Pcmov_bp Ptestl_EvGv_bp Ptestl_ri_bp Pcmpl_ri_bp Pcmpl_GvEv_bp Pcmpl_EvGv_bp Prorl_ri_bp Prolw_ri_bp Pshld_ri_bp Psarl_rcl_bp Psarl_ri_bp Pshrl_rcl_bp Pshrl_ri_bp Psall_rcl_bp Psall_ri_bp Pnotl_bp Pxorl_GvEv_bp Pxorl_EvGv_bp Pxorl_ri_bp Porl_GvEv_bp Porl_EvGv_bp Porl_ri_bp Pandl_ri_bp Pandl_GvEv_bp Pandl_EvGv_bp Pidivl_r_bp Pdivl_r_bp Pcltd_bp Pmull_r_bp Pimull_r_bp Pimull_ri_bp Pimull_GvEv_bp Psubl_GvEv_bp Psubl_EvGv_bp Paddl_ri_bp Pnegl_bp Pleal_bp Pcvtsi2ss_d_fr_bp Pcvttss_d_2si_rf_bp Pcvtsd2ss_d_ff_bp Pmovsxd_GvEv_bp Pmovsw_GvEv_bp Pmovzw_GvEv_bp Pmovsb_GvEv_bp Pmovzb_rm_bp Pmovb_rm_bp Pmovb_mr_bp Pxchg_rr_bp Pflds_m_bp Pfstps_m_bp Pfstpl_m_bp Pfldl_m_bp Pmovss_d_fm_bp Pmovss_d_mf_bp Pmovl_rm_bp Pmovl_mr_bp Pmovl_ri_bp :Instruction_bpdb.
-Lemma AddrE_bp_in_list0: 
-In AddrE11_bp AddrE_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma AddrE_bp_in_list1: 
-In AddrE9_bp AddrE_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma AddrE_bp_in_list2: 
-In AddrE5_bp AddrE_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
-Lemma AddrE_bp_in_list3: 
-In AddrE0_bp AddrE_bp_list.
-Proof.
-simpl; goOver; auto. Qed.
-
+Hint Unfold fcvtsd_bp fcvtds_bp fcvtdlu_bp fcvtdl_bp fcvtlud_bp fcvtld_bp fcvtdwu_bp fcvtdw_bp fcvtwud_bp fcvtwd_bp fnmsubd_bp fnmaddd_bp fmsubd_bp fmaddd_bp fsqrtd_bp fled_bp fltd_bp feqd_bp fmaxd_bp fmind_bp fdivd_bp fmuld_bp fsubd_bp faddd_bp fsgnjxd_bp fsgnjnd_bp fsd_bp fload_bp fcvtslu_bp fcvtsl_bp fcvtlus_bp fcvtls_bp fcvtswu_bp fcvtsw_bp fcvtwus_bp fcvtws_bp fnmsubs_bp fnmadds_bp fmsubs_bp fmadds_bp fsqrts_bp fles_bp flts_bp feqs_bp fmaxs_bp fmins_bp fdivs_bp fmuls_bp fsubs_bp fadds_bp fsgnjxs_bp fsgnjns_bp fsw_bp flw_bp fmvdx_bp fmvxd_bp fmvwx_bp fmvxw_bp fsgnjd_bp sd_bp sw_bp sh_bp sb_bp ld_bp lw_bp lhu_bp lh_bp lbu_bp lb_bp bgeu_bp bge_bp bltu_bp blt_bp bne_bp beq_bp auipc_bp jalr_bp jal_bp sraw_bp srlw_bp sllw_bp remuw_bp remw_bp divuw_bp divw_bp mulw_bp subw_bp addw_bp sraiw_bp srliw_bp slliw_bp srai_bp srli_bp slli_bp addiw_bp sra_bp srl_bp sll_bp xor_bp or_bp and_bp sltu_bp slt_bp remu_bp rem_bp divu_bp div_bp mulhu_bp mulh_bp mul_bp sub_bp add_bp lui_bp xori_bp ori_bp andi_bp sltiu_bp slti_bp addi_bp :Instruction_bpdb.
 Lemma Instruction_bp_in_list0: 
-In REX_WRXB_bp Instruction_bp_list.
+In fcvtsd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list1: 
-In Override_bp Instruction_bp_list.
+In fcvtds_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list2: 
-In REP_bp Instruction_bp_list.
+In fcvtdlu_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list3: 
-In REPNZ_bp Instruction_bp_list.
+In fcvtdl_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list4: 
-In Psubl_ri_bp Instruction_bp_list.
+In fcvtlud_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list5: 
-In Pbsqrtsd_bp Instruction_bp_list.
+In fcvtld_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list6: 
-In Psbbl_rr_bp Instruction_bp_list.
+In fcvtdwu_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list7: 
-In Prep_movsl_bp Instruction_bp_list.
+In fcvtdw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list8: 
-In Pmovsq_rm_bp Instruction_bp_list.
+In fcvtwud_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list9: 
-In Pmovsq_mr_bp Instruction_bp_list.
+In fcvtwd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list10: 
-In Pminsd_bp Instruction_bp_list.
+In fnmsubd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list11: 
-In Pmaxsd_bp Instruction_bp_list.
+In fnmaddd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list12: 
-In Pbswap32_bp Instruction_bp_list.
+In fmsubd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list13: 
-In Pbsrl_bp Instruction_bp_list.
+In fmaddd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list14: 
-In Pbsfl_bp Instruction_bp_list.
+In fsqrtd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list15: 
-In Paddl_mi_bp Instruction_bp_list.
+In fled_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list16: 
-In Paddl_GvEv_bp Instruction_bp_list.
+In fltd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list17: 
-In Paddl_EvGv_bp Instruction_bp_list.
+In feqd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list18: 
-In Padcl_rr_bp Instruction_bp_list.
+In fmaxd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list19: 
-In Padcl_ri_bp Instruction_bp_list.
+In fmind_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list20: 
-In Pjcc_rel_bp Instruction_bp_list.
+In fdivd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list21: 
-In Pret_iw_bp Instruction_bp_list.
+In fmuld_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list22: 
-In Pret_bp Instruction_bp_list.
+In fsubd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list23: 
-In Pcall_r_bp Instruction_bp_list.
+In faddd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list24: 
-In Pcall_ofs_bp Instruction_bp_list.
+In fsgnjxd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list25: 
-In Pnop_bp Instruction_bp_list.
+In fsgnjnd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list26: 
-In Pjmp_Ev_bp Instruction_bp_list.
+In fsd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list27: 
-In Pjmp_l_rel_bp Instruction_bp_list.
+In fload_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list28: 
-In Pxorps_d_GvEv_bp Instruction_bp_list.
+In fcvtslu_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list29: 
-In Pcomiss_d_ff_bp Instruction_bp_list.
+In fcvtsl_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list30: 
-In Pdivss_d_ff_bp Instruction_bp_list.
+In fcvtlus_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list31: 
-In Pmuls_d_ff_bp Instruction_bp_list.
+In fcvtls_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list32: 
-In Psubs_d_ff_bp Instruction_bp_list.
+In fcvtswu_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list33: 
-In Pandps_d_fm_bp Instruction_bp_list.
+In fcvtsw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list34: 
-In Padds_d_ff_bp Instruction_bp_list.
+In fcvtwus_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list35: 
-In Psetcc_bp Instruction_bp_list.
+In fcvtws_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list36: 
-In Pcmov_bp Instruction_bp_list.
+In fnmsubs_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list37: 
-In Ptestl_EvGv_bp Instruction_bp_list.
+In fnmadds_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list38: 
-In Ptestl_ri_bp Instruction_bp_list.
+In fmsubs_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list39: 
-In Pcmpl_ri_bp Instruction_bp_list.
+In fmadds_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list40: 
-In Pcmpl_GvEv_bp Instruction_bp_list.
+In fsqrts_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list41: 
-In Pcmpl_EvGv_bp Instruction_bp_list.
+In fles_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list42: 
-In Prorl_ri_bp Instruction_bp_list.
+In flts_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list43: 
-In Prolw_ri_bp Instruction_bp_list.
+In feqs_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list44: 
-In Pshld_ri_bp Instruction_bp_list.
+In fmaxs_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list45: 
-In Psarl_rcl_bp Instruction_bp_list.
+In fmins_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list46: 
-In Psarl_ri_bp Instruction_bp_list.
+In fdivs_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list47: 
-In Pshrl_rcl_bp Instruction_bp_list.
+In fmuls_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list48: 
-In Pshrl_ri_bp Instruction_bp_list.
+In fsubs_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list49: 
-In Psall_rcl_bp Instruction_bp_list.
+In fadds_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list50: 
-In Psall_ri_bp Instruction_bp_list.
+In fsgnjxs_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list51: 
-In Pnotl_bp Instruction_bp_list.
+In fsgnjns_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list52: 
-In Pxorl_GvEv_bp Instruction_bp_list.
+In fsw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list53: 
-In Pxorl_EvGv_bp Instruction_bp_list.
+In flw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list54: 
-In Pxorl_ri_bp Instruction_bp_list.
+In fmvdx_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list55: 
-In Porl_GvEv_bp Instruction_bp_list.
+In fmvxd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list56: 
-In Porl_EvGv_bp Instruction_bp_list.
+In fmvwx_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list57: 
-In Porl_ri_bp Instruction_bp_list.
+In fmvxw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list58: 
-In Pandl_ri_bp Instruction_bp_list.
+In fsgnjd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list59: 
-In Pandl_GvEv_bp Instruction_bp_list.
+In sd_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list60: 
-In Pandl_EvGv_bp Instruction_bp_list.
+In sw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list61: 
-In Pidivl_r_bp Instruction_bp_list.
+In sh_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list62: 
-In Pdivl_r_bp Instruction_bp_list.
+In sb_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list63: 
-In Pcltd_bp Instruction_bp_list.
+In ld_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list64: 
-In Pmull_r_bp Instruction_bp_list.
+In lw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list65: 
-In Pimull_r_bp Instruction_bp_list.
+In lhu_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list66: 
-In Pimull_ri_bp Instruction_bp_list.
+In lh_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list67: 
-In Pimull_GvEv_bp Instruction_bp_list.
+In lbu_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list68: 
-In Psubl_GvEv_bp Instruction_bp_list.
+In lb_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list69: 
-In Psubl_EvGv_bp Instruction_bp_list.
+In bgeu_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list70: 
-In Paddl_ri_bp Instruction_bp_list.
+In bge_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list71: 
-In Pnegl_bp Instruction_bp_list.
+In bltu_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list72: 
-In Pleal_bp Instruction_bp_list.
+In blt_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list73: 
-In Pcvtsi2ss_d_fr_bp Instruction_bp_list.
+In bne_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list74: 
-In Pcvttss_d_2si_rf_bp Instruction_bp_list.
+In beq_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list75: 
-In Pcvtsd2ss_d_ff_bp Instruction_bp_list.
+In auipc_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list76: 
-In Pmovsxd_GvEv_bp Instruction_bp_list.
+In jalr_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list77: 
-In Pmovsw_GvEv_bp Instruction_bp_list.
+In jal_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list78: 
-In Pmovzw_GvEv_bp Instruction_bp_list.
+In sraw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list79: 
-In Pmovsb_GvEv_bp Instruction_bp_list.
+In srlw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list80: 
-In Pmovzb_rm_bp Instruction_bp_list.
+In sllw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list81: 
-In Pmovb_rm_bp Instruction_bp_list.
+In remuw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list82: 
-In Pmovb_mr_bp Instruction_bp_list.
+In remw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list83: 
-In Pxchg_rr_bp Instruction_bp_list.
+In divuw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list84: 
-In Pflds_m_bp Instruction_bp_list.
+In divw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list85: 
-In Pfstps_m_bp Instruction_bp_list.
+In mulw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list86: 
-In Pfstpl_m_bp Instruction_bp_list.
+In subw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list87: 
-In Pfldl_m_bp Instruction_bp_list.
+In addw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list88: 
-In Pmovss_d_fm_bp Instruction_bp_list.
+In sraiw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list89: 
-In Pmovss_d_mf_bp Instruction_bp_list.
+In srliw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list90: 
-In Pmovl_rm_bp Instruction_bp_list.
+In slliw_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list91: 
-In Pmovl_mr_bp Instruction_bp_list.
+In srai_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
 Lemma Instruction_bp_in_list92: 
-In Pmovl_ri_bp Instruction_bp_list.
+In srli_bp Instruction_bp_list.
 Proof.
 simpl; goOver; auto. Qed.
 
-Inductive AddrE: Type :=
-| AddrE11(uvar32_0:u32)
-| AddrE9(uvar2_0:u2)(uvar3_1:u3)(uvar32_2:u32)
-| AddrE5(uvar2_0:u2)(uvar3_1:u3)(uvar3_2:u3)(uvar32_3:u32)
-| AddrE0(uvar3_0:u3).
-Inductive AddrE_op: Type :=
-| AddrE11_op
-| AddrE9_op
-| AddrE5_op
-| AddrE0_op.
-Definition AddrE_to_op element  :=
-	match element with
-| AddrE11 _ => AddrE11_op
-| AddrE9 _ _ _ => AddrE9_op
-| AddrE5 _ _ _ _ => AddrE5_op
-| AddrE0 _ => AddrE0_op
-end.
-Definition AddrE_op_to_bp element  :=
-	match element with
-| AddrE11_op => AddrE11_bp
-| AddrE9_op => AddrE9_bp
-| AddrE5_op => AddrE5_bp
-| AddrE0_op => AddrE0_bp
-end.
-Definition encode_AddrE element  inBits  :=
-	match element with
-| AddrE11 uvar32_0 => let bits00 := inBits in
-let bits01 := write_mod bits00 b["00"] in
-let bits02 := write_rm bits01 b["101"] in
-let result0 := bits02 in
-let bits11 := (proj1_sig uvar32_0) in
-let result1 := bits11 in
-OK (result0 ++ result1)
-| AddrE9 uvar2_0 uvar3_1 uvar32_2 => let bits00 := inBits in
-let bits01 := write_mod bits00 b["00"] in
-let bits02 := write_rm bits01 b["100"] in
-let result0 := bits02 in
-let bits10 := (repeat false 8) in
-let bits11 := write_base bits10 b["101"] in
-let bits12 := write_scale bits11 (proj1_sig uvar2_0) in
-let bits13 := write_index bits12 (proj1_sig uvar3_1) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar32_2) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| AddrE5 uvar2_0 uvar3_1 uvar3_2 uvar32_3 => let bits00 := inBits in
-let bits01 := write_mod bits00 b["10"] in
-let bits02 := write_rm bits01 b["100"] in
-let result0 := bits02 in
-let bits10 := (repeat false 8) in
-let bits11 := write_scale bits10 (proj1_sig uvar2_0) in
-let bits12 := write_index bits11 (proj1_sig uvar3_1) in
-let bits13 := write_base bits12 (proj1_sig uvar3_2) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar32_3) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| AddrE0 uvar3_0 => let bits00 := inBits in
-let bits01 := write_mod bits00 b["11"] in
-let bits02 := write_rm bits01 (proj1_sig uvar3_0) in
-let result0 := bits02 in
-OK (result0)
-end.
+Lemma Instruction_bp_in_list93: 
+In slli_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
 
-Program Definition decode_AddrE bin : res (AddrE*nat) :=
-	if AddrE11_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 32;
-let uvar32_0 := token0 in
-if assertLength uvar32_0 32 then
-do code2 <- try_skip_n code1 32;
-OK ((AddrE11 (uvar32_0)), 5)
-else Error(msg"impossible")
-else
+Lemma Instruction_bp_in_list94: 
+In addiw_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
 
-	if AddrE9_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar2_0 := read_scale token0 in
-if assertLength uvar2_0 2 then
-let uvar3_1 := read_index token0 in
-if assertLength uvar3_1 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_2 := token1 in
-if assertLength uvar32_2 32 then
-do code3 <- try_skip_n code2 32;
-OK ((AddrE9 (uvar2_0) (uvar3_1) (uvar32_2)), 6)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
+Lemma Instruction_bp_in_list95: 
+In sra_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
 
-	if AddrE5_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar2_0 := read_scale token0 in
-if assertLength uvar2_0 2 then
-let uvar3_1 := read_index token0 in
-if assertLength uvar3_1 3 then
-let uvar3_2 := read_base token0 in
-if assertLength uvar3_2 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_3 := token1 in
-if assertLength uvar32_3 32 then
-do code3 <- try_skip_n code2 32;
-OK ((AddrE5 (uvar2_0) (uvar3_1) (uvar3_2) (uvar32_3)), 6)
-else Error(msg"impossible")
-else Error(msg"impossible")
-else Error(msg"impossible")
-else Error(msg"impossible")
-else
+Lemma Instruction_bp_in_list96: 
+In srl_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
 
-	if AddrE0_bp bin then
-let code0 := bin in
-do token0 <- try_first_n code0 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code1 <- try_skip_n code0 8;
-OK ((AddrE0 (uvar3_0)), 1)
-else Error(msg"impossible")
-else
+Lemma Instruction_bp_in_list97: 
+In sll_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
 
-	Error(msg"Unsupported AddrE").
+Lemma Instruction_bp_in_list98: 
+In xor_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list99: 
+In or_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list100: 
+In and_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list101: 
+In sltu_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list102: 
+In slt_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list103: 
+In remu_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list104: 
+In rem_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list105: 
+In divu_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list106: 
+In div_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list107: 
+In mulhu_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list108: 
+In mulh_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list109: 
+In mul_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list110: 
+In sub_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list111: 
+In add_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list112: 
+In lui_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list113: 
+In xori_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list114: 
+In ori_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list115: 
+In andi_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list116: 
+In sltiu_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list117: 
+In slti_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
+
+Lemma Instruction_bp_in_list118: 
+In addi_bp Instruction_bp_list.
+Proof.
+simpl; goOver; auto. Qed.
 
 Inductive Instruction: Type :=
-| REX_WRXB(uvar1_0:u1)(uvar1_1:u1)(uvar1_2:u1)(uvar1_3:u1)
-| Override
-| REP
-| REPNZ
-| Psubl_ri(uvar3_0:u3)(uvar32_1:u32)
-| Pbsqrtsd(uvar3_0:u3)(uvar3_1:u3)
-| Psbbl_rr(uvar3_0:u3)(uvar3_1:u3)
-| Prep_movsl
-| Pmovsq_rm(AddrE:AddrE)(uvar3_0:u3)
-| Pmovsq_mr(AddrE:AddrE)(uvar3_0:u3)
-| Pminsd(uvar3_0:u3)(uvar3_1:u3)
-| Pmaxsd(uvar3_0:u3)(uvar3_1:u3)
-| Pbswap32(uvar3_0:u3)
-| Pbsrl(uvar3_0:u3)(uvar3_1:u3)
-| Pbsfl(uvar3_0:u3)(uvar3_1:u3)
-| Paddl_mi(AddrE:AddrE)(uvar32_1:u32)
-| Paddl_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Paddl_EvGv(AddrE:AddrE)(uvar3_0:u3)
-| Padcl_rr(uvar3_0:u3)(uvar3_1:u3)
-| Padcl_ri(uvar3_0:u3)(uvar8_1:u8)
-| Pjcc_rel(uvar4_0:u4)(uvar32_1:u32)
-| Pret_iw(uvar16_0:u16)
-| Pret
-| Pcall_r(uvar3_0:u3)
-| Pcall_ofs(uvar32_0:u32)
-| Pnop
-| Pjmp_Ev(AddrE:AddrE)
-| Pjmp_l_rel(uvar32_0:u32)
-| Pxorps_d_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Pcomiss_d_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pdivss_d_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pmuls_d_ff(uvar3_0:u3)(uvar3_1:u3)
-| Psubs_d_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pandps_d_fm(AddrE:AddrE)(uvar3_0:u3)
-| Padds_d_ff(uvar3_0:u3)(uvar3_1:u3)
-| Psetcc(uvar4_0:u4)(uvar3_1:u3)
-| Pcmov(uvar4_0:u4)(uvar3_1:u3)(uvar3_2:u3)
-| Ptestl_EvGv(AddrE:AddrE)(uvar3_0:u3)
-| Ptestl_ri(uvar3_0:u3)(uvar32_1:u32)
-| Pcmpl_ri(uvar3_0:u3)(uvar32_1:u32)
-| Pcmpl_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Pcmpl_EvGv(AddrE:AddrE)(uvar3_0:u3)
-| Prorl_ri(uvar3_0:u3)(uvar8_1:u8)
-| Prolw_ri(uvar3_0:u3)(uvar8_1:u8)
-| Pshld_ri(uvar3_0:u3)(uvar3_1:u3)(uvar8_2:u8)
-| Psarl_rcl(uvar3_0:u3)
-| Psarl_ri(uvar3_0:u3)(uvar8_1:u8)
-| Pshrl_rcl(uvar3_0:u3)
-| Pshrl_ri(uvar3_0:u3)(uvar8_1:u8)
-| Psall_rcl(uvar3_0:u3)
-| Psall_ri(uvar3_0:u3)(uvar8_1:u8)
-| Pnotl(uvar3_0:u3)
-| Pxorl_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Pxorl_EvGv(AddrE:AddrE)(uvar3_0:u3)
-| Pxorl_ri(uvar3_0:u3)(uvar32_1:u32)
-| Porl_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Porl_EvGv(AddrE:AddrE)(uvar3_0:u3)
-| Porl_ri(uvar3_0:u3)(uvar32_1:u32)
-| Pandl_ri(uvar3_0:u3)(uvar32_1:u32)
-| Pandl_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Pandl_EvGv(AddrE:AddrE)(uvar3_0:u3)
-| Pidivl_r(uvar3_0:u3)
-| Pdivl_r(uvar3_0:u3)
-| Pcltd
-| Pmull_r(uvar3_0:u3)
-| Pimull_r(uvar3_0:u3)
-| Pimull_ri(uvar3_0:u3)(uvar3_1:u3)(uvar32_2:u32)
-| Pimull_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Psubl_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Psubl_EvGv(AddrE:AddrE)(uvar3_0:u3)
-| Paddl_ri(uvar3_0:u3)(uvar32_1:u32)
-| Pnegl(uvar3_0:u3)
-| Pleal(AddrE:AddrE)(uvar3_0:u3)
-| Pcvtsi2ss_d_fr(uvar3_0:u3)(uvar3_1:u3)
-| Pcvttss_d_2si_rf(uvar3_0:u3)(uvar3_1:u3)
-| Pcvtsd2ss_d_ff(uvar3_0:u3)(uvar3_1:u3)
-| Pmovsxd_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Pmovsw_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Pmovzw_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Pmovsb_GvEv(AddrE:AddrE)(uvar3_0:u3)
-| Pmovzb_rm(AddrE:AddrE)(uvar3_0:u3)
-| Pmovb_rm(AddrE:AddrE)(uvar3_0:u3)
-| Pmovb_mr(AddrE:AddrE)(uvar3_0:u3)
-| Pxchg_rr(uvar3_0:u3)(uvar3_1:u3)
-| Pflds_m(AddrE:AddrE)
-| Pfstps_m(AddrE:AddrE)
-| Pfstpl_m(AddrE:AddrE)
-| Pfldl_m(AddrE:AddrE)
-| Pmovss_d_fm(AddrE:AddrE)(uvar3_0:u3)
-| Pmovss_d_mf(AddrE:AddrE)(uvar3_0:u3)
-| Pmovl_rm(AddrE:AddrE)(uvar3_0:u3)
-| Pmovl_mr(AddrE:AddrE)(uvar3_0:u3)
-| Pmovl_ri(uvar3_0:u3)(uvar32_1:u32).
+| fcvtsd(uvar5_0:u5)(uvar5_1:u5)
+| fcvtds(uvar5_0:u5)(uvar5_1:u5)
+| fcvtdlu(uvar5_0:u5)(uvar5_1:u5)
+| fcvtdl(uvar5_0:u5)(uvar5_1:u5)
+| fcvtlud(uvar5_0:u5)(uvar5_1:u5)
+| fcvtld(uvar5_0:u5)(uvar5_1:u5)
+| fcvtdwu(uvar5_0:u5)(uvar5_1:u5)
+| fcvtdw(uvar5_0:u5)(uvar5_1:u5)
+| fcvtwud(uvar5_0:u5)(uvar5_1:u5)
+| fcvtwd(uvar5_0:u5)(uvar5_1:u5)
+| fnmsubd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar5_3:u5)
+| fnmaddd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar5_3:u5)
+| fmsubd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar5_3:u5)
+| fmaddd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar5_3:u5)
+| fsqrtd(uvar5_0:u5)(uvar5_1:u5)
+| fled(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fltd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| feqd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fmaxd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fmind(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fdivd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fmuld(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fsubd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| faddd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fsgnjxd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fsgnjnd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fsd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar7_3:u7)
+| fload(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| fcvtslu(uvar5_0:u5)(uvar5_1:u5)
+| fcvtsl(uvar5_0:u5)(uvar5_1:u5)
+| fcvtlus(uvar5_0:u5)(uvar5_1:u5)
+| fcvtls(uvar5_0:u5)(uvar5_1:u5)
+| fcvtswu(uvar5_0:u5)(uvar5_1:u5)
+| fcvtsw(uvar5_0:u5)(uvar5_1:u5)
+| fcvtwus(uvar5_0:u5)(uvar5_1:u5)
+| fcvtws(uvar5_0:u5)(uvar5_1:u5)
+| fnmsubs(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar5_3:u5)
+| fnmadds(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar5_3:u5)
+| fmsubs(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar5_3:u5)
+| fmadds(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar5_3:u5)
+| fsqrts(uvar5_0:u5)(uvar5_1:u5)
+| fles(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| flts(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| feqs(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fmaxs(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fmins(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fdivs(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fmuls(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fsubs(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fadds(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fsgnjxs(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fsgnjns(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| fsw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar7_3:u7)
+| flw(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| fmvdx(uvar5_0:u5)(uvar5_1:u5)
+| fmvxd(uvar5_0:u5)(uvar5_1:u5)
+| fmvwx(uvar5_0:u5)(uvar5_1:u5)
+| fmvxw(uvar5_0:u5)(uvar5_1:u5)
+| fsgnjd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| sd(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar7_3:u7)
+| sw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar7_3:u7)
+| sh(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar7_3:u7)
+| sb(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)(uvar7_3:u7)
+| ld(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| lw(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| lhu(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| lh(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| lbu(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| lb(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| bgeu(uvar1_0:u1)(uvar4_1:u4)(uvar5_2:u5)(uvar5_3:u5)(uvar6_4:u6)(uvar1_5:u1)
+| bge(uvar1_0:u1)(uvar4_1:u4)(uvar5_2:u5)(uvar5_3:u5)(uvar6_4:u6)(uvar1_5:u1)
+| bltu(uvar1_0:u1)(uvar4_1:u4)(uvar5_2:u5)(uvar5_3:u5)(uvar6_4:u6)(uvar1_5:u1)
+| blt(uvar1_0:u1)(uvar4_1:u4)(uvar5_2:u5)(uvar5_3:u5)(uvar6_4:u6)(uvar1_5:u1)
+| bne(uvar1_0:u1)(uvar4_1:u4)(uvar5_2:u5)(uvar5_3:u5)(uvar6_4:u6)(uvar1_5:u1)
+| beq(uvar1_0:u1)(uvar4_1:u4)(uvar5_2:u5)(uvar5_3:u5)(uvar6_4:u6)(uvar1_5:u1)
+| auipc(uvar5_0:u5)(uvar20_1:u20)
+| jalr(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| jal(uvar5_0:u5)(uvar8_1:u8)(uvar1_2:u1)(uvar10_3:u10)(uvar1_4:u1)
+| sraw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| srlw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| sllw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| remuw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| remw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| divuw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| divw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| mulw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| subw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| addw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| sraiw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| srliw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| slliw(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| srai(uvar5_0:u5)(uvar5_1:u5)(uvar6_2:u6)
+| srli(uvar5_0:u5)(uvar5_1:u5)(uvar6_2:u6)
+| slli(uvar5_0:u5)(uvar5_1:u5)(uvar6_2:u6)
+| addiw(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| sra(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| srl(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| sll(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| xor(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| or(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| and(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| sltu(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| slt(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| remu(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| rem(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| divu(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| div(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| mulhu(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| mulh(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| mul(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| sub(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| add(uvar5_0:u5)(uvar5_1:u5)(uvar5_2:u5)
+| lui(uvar5_0:u5)(uvar20_1:u20)
+| xori(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| ori(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| andi(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| sltiu(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| slti(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12)
+| addi(uvar5_0:u5)(uvar5_1:u5)(uvar12_2:u12).
 Inductive Instruction_op: Type :=
-| REX_WRXB_op
-| Override_op
-| REP_op
-| REPNZ_op
-| Psubl_ri_op
-| Pbsqrtsd_op
-| Psbbl_rr_op
-| Prep_movsl_op
-| Pmovsq_rm_op
-| Pmovsq_mr_op
-| Pminsd_op
-| Pmaxsd_op
-| Pbswap32_op
-| Pbsrl_op
-| Pbsfl_op
-| Paddl_mi_op
-| Paddl_GvEv_op
-| Paddl_EvGv_op
-| Padcl_rr_op
-| Padcl_ri_op
-| Pjcc_rel_op
-| Pret_iw_op
-| Pret_op
-| Pcall_r_op
-| Pcall_ofs_op
-| Pnop_op
-| Pjmp_Ev_op
-| Pjmp_l_rel_op
-| Pxorps_d_GvEv_op
-| Pcomiss_d_ff_op
-| Pdivss_d_ff_op
-| Pmuls_d_ff_op
-| Psubs_d_ff_op
-| Pandps_d_fm_op
-| Padds_d_ff_op
-| Psetcc_op
-| Pcmov_op
-| Ptestl_EvGv_op
-| Ptestl_ri_op
-| Pcmpl_ri_op
-| Pcmpl_GvEv_op
-| Pcmpl_EvGv_op
-| Prorl_ri_op
-| Prolw_ri_op
-| Pshld_ri_op
-| Psarl_rcl_op
-| Psarl_ri_op
-| Pshrl_rcl_op
-| Pshrl_ri_op
-| Psall_rcl_op
-| Psall_ri_op
-| Pnotl_op
-| Pxorl_GvEv_op
-| Pxorl_EvGv_op
-| Pxorl_ri_op
-| Porl_GvEv_op
-| Porl_EvGv_op
-| Porl_ri_op
-| Pandl_ri_op
-| Pandl_GvEv_op
-| Pandl_EvGv_op
-| Pidivl_r_op
-| Pdivl_r_op
-| Pcltd_op
-| Pmull_r_op
-| Pimull_r_op
-| Pimull_ri_op
-| Pimull_GvEv_op
-| Psubl_GvEv_op
-| Psubl_EvGv_op
-| Paddl_ri_op
-| Pnegl_op
-| Pleal_op
-| Pcvtsi2ss_d_fr_op
-| Pcvttss_d_2si_rf_op
-| Pcvtsd2ss_d_ff_op
-| Pmovsxd_GvEv_op
-| Pmovsw_GvEv_op
-| Pmovzw_GvEv_op
-| Pmovsb_GvEv_op
-| Pmovzb_rm_op
-| Pmovb_rm_op
-| Pmovb_mr_op
-| Pxchg_rr_op
-| Pflds_m_op
-| Pfstps_m_op
-| Pfstpl_m_op
-| Pfldl_m_op
-| Pmovss_d_fm_op
-| Pmovss_d_mf_op
-| Pmovl_rm_op
-| Pmovl_mr_op
-| Pmovl_ri_op.
+| fcvtsd_op
+| fcvtds_op
+| fcvtdlu_op
+| fcvtdl_op
+| fcvtlud_op
+| fcvtld_op
+| fcvtdwu_op
+| fcvtdw_op
+| fcvtwud_op
+| fcvtwd_op
+| fnmsubd_op
+| fnmaddd_op
+| fmsubd_op
+| fmaddd_op
+| fsqrtd_op
+| fled_op
+| fltd_op
+| feqd_op
+| fmaxd_op
+| fmind_op
+| fdivd_op
+| fmuld_op
+| fsubd_op
+| faddd_op
+| fsgnjxd_op
+| fsgnjnd_op
+| fsd_op
+| fload_op
+| fcvtslu_op
+| fcvtsl_op
+| fcvtlus_op
+| fcvtls_op
+| fcvtswu_op
+| fcvtsw_op
+| fcvtwus_op
+| fcvtws_op
+| fnmsubs_op
+| fnmadds_op
+| fmsubs_op
+| fmadds_op
+| fsqrts_op
+| fles_op
+| flts_op
+| feqs_op
+| fmaxs_op
+| fmins_op
+| fdivs_op
+| fmuls_op
+| fsubs_op
+| fadds_op
+| fsgnjxs_op
+| fsgnjns_op
+| fsw_op
+| flw_op
+| fmvdx_op
+| fmvxd_op
+| fmvwx_op
+| fmvxw_op
+| fsgnjd_op
+| sd_op
+| sw_op
+| sh_op
+| sb_op
+| ld_op
+| lw_op
+| lhu_op
+| lh_op
+| lbu_op
+| lb_op
+| bgeu_op
+| bge_op
+| bltu_op
+| blt_op
+| bne_op
+| beq_op
+| auipc_op
+| jalr_op
+| jal_op
+| sraw_op
+| srlw_op
+| sllw_op
+| remuw_op
+| remw_op
+| divuw_op
+| divw_op
+| mulw_op
+| subw_op
+| addw_op
+| sraiw_op
+| srliw_op
+| slliw_op
+| srai_op
+| srli_op
+| slli_op
+| addiw_op
+| sra_op
+| srl_op
+| sll_op
+| xor_op
+| or_op
+| and_op
+| sltu_op
+| slt_op
+| remu_op
+| rem_op
+| divu_op
+| div_op
+| mulhu_op
+| mulh_op
+| mul_op
+| sub_op
+| add_op
+| lui_op
+| xori_op
+| ori_op
+| andi_op
+| sltiu_op
+| slti_op
+| addi_op.
 Definition Instruction_to_op element  :=
 	match element with
-| REX_WRXB _ _ _ _ => REX_WRXB_op
-| Override => Override_op
-| REP => REP_op
-| REPNZ => REPNZ_op
-| Psubl_ri _ _ => Psubl_ri_op
-| Pbsqrtsd _ _ => Pbsqrtsd_op
-| Psbbl_rr _ _ => Psbbl_rr_op
-| Prep_movsl => Prep_movsl_op
-| Pmovsq_rm _ _ => Pmovsq_rm_op
-| Pmovsq_mr _ _ => Pmovsq_mr_op
-| Pminsd _ _ => Pminsd_op
-| Pmaxsd _ _ => Pmaxsd_op
-| Pbswap32 _ => Pbswap32_op
-| Pbsrl _ _ => Pbsrl_op
-| Pbsfl _ _ => Pbsfl_op
-| Paddl_mi _ _ => Paddl_mi_op
-| Paddl_GvEv _ _ => Paddl_GvEv_op
-| Paddl_EvGv _ _ => Paddl_EvGv_op
-| Padcl_rr _ _ => Padcl_rr_op
-| Padcl_ri _ _ => Padcl_ri_op
-| Pjcc_rel _ _ => Pjcc_rel_op
-| Pret_iw _ => Pret_iw_op
-| Pret => Pret_op
-| Pcall_r _ => Pcall_r_op
-| Pcall_ofs _ => Pcall_ofs_op
-| Pnop => Pnop_op
-| Pjmp_Ev _ => Pjmp_Ev_op
-| Pjmp_l_rel _ => Pjmp_l_rel_op
-| Pxorps_d_GvEv _ _ => Pxorps_d_GvEv_op
-| Pcomiss_d_ff _ _ => Pcomiss_d_ff_op
-| Pdivss_d_ff _ _ => Pdivss_d_ff_op
-| Pmuls_d_ff _ _ => Pmuls_d_ff_op
-| Psubs_d_ff _ _ => Psubs_d_ff_op
-| Pandps_d_fm _ _ => Pandps_d_fm_op
-| Padds_d_ff _ _ => Padds_d_ff_op
-| Psetcc _ _ => Psetcc_op
-| Pcmov _ _ _ => Pcmov_op
-| Ptestl_EvGv _ _ => Ptestl_EvGv_op
-| Ptestl_ri _ _ => Ptestl_ri_op
-| Pcmpl_ri _ _ => Pcmpl_ri_op
-| Pcmpl_GvEv _ _ => Pcmpl_GvEv_op
-| Pcmpl_EvGv _ _ => Pcmpl_EvGv_op
-| Prorl_ri _ _ => Prorl_ri_op
-| Prolw_ri _ _ => Prolw_ri_op
-| Pshld_ri _ _ _ => Pshld_ri_op
-| Psarl_rcl _ => Psarl_rcl_op
-| Psarl_ri _ _ => Psarl_ri_op
-| Pshrl_rcl _ => Pshrl_rcl_op
-| Pshrl_ri _ _ => Pshrl_ri_op
-| Psall_rcl _ => Psall_rcl_op
-| Psall_ri _ _ => Psall_ri_op
-| Pnotl _ => Pnotl_op
-| Pxorl_GvEv _ _ => Pxorl_GvEv_op
-| Pxorl_EvGv _ _ => Pxorl_EvGv_op
-| Pxorl_ri _ _ => Pxorl_ri_op
-| Porl_GvEv _ _ => Porl_GvEv_op
-| Porl_EvGv _ _ => Porl_EvGv_op
-| Porl_ri _ _ => Porl_ri_op
-| Pandl_ri _ _ => Pandl_ri_op
-| Pandl_GvEv _ _ => Pandl_GvEv_op
-| Pandl_EvGv _ _ => Pandl_EvGv_op
-| Pidivl_r _ => Pidivl_r_op
-| Pdivl_r _ => Pdivl_r_op
-| Pcltd => Pcltd_op
-| Pmull_r _ => Pmull_r_op
-| Pimull_r _ => Pimull_r_op
-| Pimull_ri _ _ _ => Pimull_ri_op
-| Pimull_GvEv _ _ => Pimull_GvEv_op
-| Psubl_GvEv _ _ => Psubl_GvEv_op
-| Psubl_EvGv _ _ => Psubl_EvGv_op
-| Paddl_ri _ _ => Paddl_ri_op
-| Pnegl _ => Pnegl_op
-| Pleal _ _ => Pleal_op
-| Pcvtsi2ss_d_fr _ _ => Pcvtsi2ss_d_fr_op
-| Pcvttss_d_2si_rf _ _ => Pcvttss_d_2si_rf_op
-| Pcvtsd2ss_d_ff _ _ => Pcvtsd2ss_d_ff_op
-| Pmovsxd_GvEv _ _ => Pmovsxd_GvEv_op
-| Pmovsw_GvEv _ _ => Pmovsw_GvEv_op
-| Pmovzw_GvEv _ _ => Pmovzw_GvEv_op
-| Pmovsb_GvEv _ _ => Pmovsb_GvEv_op
-| Pmovzb_rm _ _ => Pmovzb_rm_op
-| Pmovb_rm _ _ => Pmovb_rm_op
-| Pmovb_mr _ _ => Pmovb_mr_op
-| Pxchg_rr _ _ => Pxchg_rr_op
-| Pflds_m _ => Pflds_m_op
-| Pfstps_m _ => Pfstps_m_op
-| Pfstpl_m _ => Pfstpl_m_op
-| Pfldl_m _ => Pfldl_m_op
-| Pmovss_d_fm _ _ => Pmovss_d_fm_op
-| Pmovss_d_mf _ _ => Pmovss_d_mf_op
-| Pmovl_rm _ _ => Pmovl_rm_op
-| Pmovl_mr _ _ => Pmovl_mr_op
-| Pmovl_ri _ _ => Pmovl_ri_op
+| fcvtsd _ _ => fcvtsd_op
+| fcvtds _ _ => fcvtds_op
+| fcvtdlu _ _ => fcvtdlu_op
+| fcvtdl _ _ => fcvtdl_op
+| fcvtlud _ _ => fcvtlud_op
+| fcvtld _ _ => fcvtld_op
+| fcvtdwu _ _ => fcvtdwu_op
+| fcvtdw _ _ => fcvtdw_op
+| fcvtwud _ _ => fcvtwud_op
+| fcvtwd _ _ => fcvtwd_op
+| fnmsubd _ _ _ _ => fnmsubd_op
+| fnmaddd _ _ _ _ => fnmaddd_op
+| fmsubd _ _ _ _ => fmsubd_op
+| fmaddd _ _ _ _ => fmaddd_op
+| fsqrtd _ _ => fsqrtd_op
+| fled _ _ _ => fled_op
+| fltd _ _ _ => fltd_op
+| feqd _ _ _ => feqd_op
+| fmaxd _ _ _ => fmaxd_op
+| fmind _ _ _ => fmind_op
+| fdivd _ _ _ => fdivd_op
+| fmuld _ _ _ => fmuld_op
+| fsubd _ _ _ => fsubd_op
+| faddd _ _ _ => faddd_op
+| fsgnjxd _ _ _ => fsgnjxd_op
+| fsgnjnd _ _ _ => fsgnjnd_op
+| fsd _ _ _ _ => fsd_op
+| fload _ _ _ => fload_op
+| fcvtslu _ _ => fcvtslu_op
+| fcvtsl _ _ => fcvtsl_op
+| fcvtlus _ _ => fcvtlus_op
+| fcvtls _ _ => fcvtls_op
+| fcvtswu _ _ => fcvtswu_op
+| fcvtsw _ _ => fcvtsw_op
+| fcvtwus _ _ => fcvtwus_op
+| fcvtws _ _ => fcvtws_op
+| fnmsubs _ _ _ _ => fnmsubs_op
+| fnmadds _ _ _ _ => fnmadds_op
+| fmsubs _ _ _ _ => fmsubs_op
+| fmadds _ _ _ _ => fmadds_op
+| fsqrts _ _ => fsqrts_op
+| fles _ _ _ => fles_op
+| flts _ _ _ => flts_op
+| feqs _ _ _ => feqs_op
+| fmaxs _ _ _ => fmaxs_op
+| fmins _ _ _ => fmins_op
+| fdivs _ _ _ => fdivs_op
+| fmuls _ _ _ => fmuls_op
+| fsubs _ _ _ => fsubs_op
+| fadds _ _ _ => fadds_op
+| fsgnjxs _ _ _ => fsgnjxs_op
+| fsgnjns _ _ _ => fsgnjns_op
+| fsw _ _ _ _ => fsw_op
+| flw _ _ _ => flw_op
+| fmvdx _ _ => fmvdx_op
+| fmvxd _ _ => fmvxd_op
+| fmvwx _ _ => fmvwx_op
+| fmvxw _ _ => fmvxw_op
+| fsgnjd _ _ _ => fsgnjd_op
+| sd _ _ _ _ => sd_op
+| sw _ _ _ _ => sw_op
+| sh _ _ _ _ => sh_op
+| sb _ _ _ _ => sb_op
+| ld _ _ _ => ld_op
+| lw _ _ _ => lw_op
+| lhu _ _ _ => lhu_op
+| lh _ _ _ => lh_op
+| lbu _ _ _ => lbu_op
+| lb _ _ _ => lb_op
+| bgeu _ _ _ _ _ _ => bgeu_op
+| bge _ _ _ _ _ _ => bge_op
+| bltu _ _ _ _ _ _ => bltu_op
+| blt _ _ _ _ _ _ => blt_op
+| bne _ _ _ _ _ _ => bne_op
+| beq _ _ _ _ _ _ => beq_op
+| auipc _ _ => auipc_op
+| jalr _ _ _ => jalr_op
+| jal _ _ _ _ _ => jal_op
+| sraw _ _ _ => sraw_op
+| srlw _ _ _ => srlw_op
+| sllw _ _ _ => sllw_op
+| remuw _ _ _ => remuw_op
+| remw _ _ _ => remw_op
+| divuw _ _ _ => divuw_op
+| divw _ _ _ => divw_op
+| mulw _ _ _ => mulw_op
+| subw _ _ _ => subw_op
+| addw _ _ _ => addw_op
+| sraiw _ _ _ => sraiw_op
+| srliw _ _ _ => srliw_op
+| slliw _ _ _ => slliw_op
+| srai _ _ _ => srai_op
+| srli _ _ _ => srli_op
+| slli _ _ _ => slli_op
+| addiw _ _ _ => addiw_op
+| sra _ _ _ => sra_op
+| srl _ _ _ => srl_op
+| sll _ _ _ => sll_op
+| xor _ _ _ => xor_op
+| or _ _ _ => or_op
+| and _ _ _ => and_op
+| sltu _ _ _ => sltu_op
+| slt _ _ _ => slt_op
+| remu _ _ _ => remu_op
+| rem _ _ _ => rem_op
+| divu _ _ _ => divu_op
+| div _ _ _ => div_op
+| mulhu _ _ _ => mulhu_op
+| mulh _ _ _ => mulh_op
+| mul _ _ _ => mul_op
+| sub _ _ _ => sub_op
+| add _ _ _ => add_op
+| lui _ _ => lui_op
+| xori _ _ _ => xori_op
+| ori _ _ _ => ori_op
+| andi _ _ _ => andi_op
+| sltiu _ _ _ => sltiu_op
+| slti _ _ _ => slti_op
+| addi _ _ _ => addi_op
 end.
 Definition Instruction_op_to_bp element  :=
 	match element with
-| REX_WRXB_op => REX_WRXB_bp
-| Override_op => Override_bp
-| REP_op => REP_bp
-| REPNZ_op => REPNZ_bp
-| Psubl_ri_op => Psubl_ri_bp
-| Pbsqrtsd_op => Pbsqrtsd_bp
-| Psbbl_rr_op => Psbbl_rr_bp
-| Prep_movsl_op => Prep_movsl_bp
-| Pmovsq_rm_op => Pmovsq_rm_bp
-| Pmovsq_mr_op => Pmovsq_mr_bp
-| Pminsd_op => Pminsd_bp
-| Pmaxsd_op => Pmaxsd_bp
-| Pbswap32_op => Pbswap32_bp
-| Pbsrl_op => Pbsrl_bp
-| Pbsfl_op => Pbsfl_bp
-| Paddl_mi_op => Paddl_mi_bp
-| Paddl_GvEv_op => Paddl_GvEv_bp
-| Paddl_EvGv_op => Paddl_EvGv_bp
-| Padcl_rr_op => Padcl_rr_bp
-| Padcl_ri_op => Padcl_ri_bp
-| Pjcc_rel_op => Pjcc_rel_bp
-| Pret_iw_op => Pret_iw_bp
-| Pret_op => Pret_bp
-| Pcall_r_op => Pcall_r_bp
-| Pcall_ofs_op => Pcall_ofs_bp
-| Pnop_op => Pnop_bp
-| Pjmp_Ev_op => Pjmp_Ev_bp
-| Pjmp_l_rel_op => Pjmp_l_rel_bp
-| Pxorps_d_GvEv_op => Pxorps_d_GvEv_bp
-| Pcomiss_d_ff_op => Pcomiss_d_ff_bp
-| Pdivss_d_ff_op => Pdivss_d_ff_bp
-| Pmuls_d_ff_op => Pmuls_d_ff_bp
-| Psubs_d_ff_op => Psubs_d_ff_bp
-| Pandps_d_fm_op => Pandps_d_fm_bp
-| Padds_d_ff_op => Padds_d_ff_bp
-| Psetcc_op => Psetcc_bp
-| Pcmov_op => Pcmov_bp
-| Ptestl_EvGv_op => Ptestl_EvGv_bp
-| Ptestl_ri_op => Ptestl_ri_bp
-| Pcmpl_ri_op => Pcmpl_ri_bp
-| Pcmpl_GvEv_op => Pcmpl_GvEv_bp
-| Pcmpl_EvGv_op => Pcmpl_EvGv_bp
-| Prorl_ri_op => Prorl_ri_bp
-| Prolw_ri_op => Prolw_ri_bp
-| Pshld_ri_op => Pshld_ri_bp
-| Psarl_rcl_op => Psarl_rcl_bp
-| Psarl_ri_op => Psarl_ri_bp
-| Pshrl_rcl_op => Pshrl_rcl_bp
-| Pshrl_ri_op => Pshrl_ri_bp
-| Psall_rcl_op => Psall_rcl_bp
-| Psall_ri_op => Psall_ri_bp
-| Pnotl_op => Pnotl_bp
-| Pxorl_GvEv_op => Pxorl_GvEv_bp
-| Pxorl_EvGv_op => Pxorl_EvGv_bp
-| Pxorl_ri_op => Pxorl_ri_bp
-| Porl_GvEv_op => Porl_GvEv_bp
-| Porl_EvGv_op => Porl_EvGv_bp
-| Porl_ri_op => Porl_ri_bp
-| Pandl_ri_op => Pandl_ri_bp
-| Pandl_GvEv_op => Pandl_GvEv_bp
-| Pandl_EvGv_op => Pandl_EvGv_bp
-| Pidivl_r_op => Pidivl_r_bp
-| Pdivl_r_op => Pdivl_r_bp
-| Pcltd_op => Pcltd_bp
-| Pmull_r_op => Pmull_r_bp
-| Pimull_r_op => Pimull_r_bp
-| Pimull_ri_op => Pimull_ri_bp
-| Pimull_GvEv_op => Pimull_GvEv_bp
-| Psubl_GvEv_op => Psubl_GvEv_bp
-| Psubl_EvGv_op => Psubl_EvGv_bp
-| Paddl_ri_op => Paddl_ri_bp
-| Pnegl_op => Pnegl_bp
-| Pleal_op => Pleal_bp
-| Pcvtsi2ss_d_fr_op => Pcvtsi2ss_d_fr_bp
-| Pcvttss_d_2si_rf_op => Pcvttss_d_2si_rf_bp
-| Pcvtsd2ss_d_ff_op => Pcvtsd2ss_d_ff_bp
-| Pmovsxd_GvEv_op => Pmovsxd_GvEv_bp
-| Pmovsw_GvEv_op => Pmovsw_GvEv_bp
-| Pmovzw_GvEv_op => Pmovzw_GvEv_bp
-| Pmovsb_GvEv_op => Pmovsb_GvEv_bp
-| Pmovzb_rm_op => Pmovzb_rm_bp
-| Pmovb_rm_op => Pmovb_rm_bp
-| Pmovb_mr_op => Pmovb_mr_bp
-| Pxchg_rr_op => Pxchg_rr_bp
-| Pflds_m_op => Pflds_m_bp
-| Pfstps_m_op => Pfstps_m_bp
-| Pfstpl_m_op => Pfstpl_m_bp
-| Pfldl_m_op => Pfldl_m_bp
-| Pmovss_d_fm_op => Pmovss_d_fm_bp
-| Pmovss_d_mf_op => Pmovss_d_mf_bp
-| Pmovl_rm_op => Pmovl_rm_bp
-| Pmovl_mr_op => Pmovl_mr_bp
-| Pmovl_ri_op => Pmovl_ri_bp
+| fcvtsd_op => fcvtsd_bp
+| fcvtds_op => fcvtds_bp
+| fcvtdlu_op => fcvtdlu_bp
+| fcvtdl_op => fcvtdl_bp
+| fcvtlud_op => fcvtlud_bp
+| fcvtld_op => fcvtld_bp
+| fcvtdwu_op => fcvtdwu_bp
+| fcvtdw_op => fcvtdw_bp
+| fcvtwud_op => fcvtwud_bp
+| fcvtwd_op => fcvtwd_bp
+| fnmsubd_op => fnmsubd_bp
+| fnmaddd_op => fnmaddd_bp
+| fmsubd_op => fmsubd_bp
+| fmaddd_op => fmaddd_bp
+| fsqrtd_op => fsqrtd_bp
+| fled_op => fled_bp
+| fltd_op => fltd_bp
+| feqd_op => feqd_bp
+| fmaxd_op => fmaxd_bp
+| fmind_op => fmind_bp
+| fdivd_op => fdivd_bp
+| fmuld_op => fmuld_bp
+| fsubd_op => fsubd_bp
+| faddd_op => faddd_bp
+| fsgnjxd_op => fsgnjxd_bp
+| fsgnjnd_op => fsgnjnd_bp
+| fsd_op => fsd_bp
+| fload_op => fload_bp
+| fcvtslu_op => fcvtslu_bp
+| fcvtsl_op => fcvtsl_bp
+| fcvtlus_op => fcvtlus_bp
+| fcvtls_op => fcvtls_bp
+| fcvtswu_op => fcvtswu_bp
+| fcvtsw_op => fcvtsw_bp
+| fcvtwus_op => fcvtwus_bp
+| fcvtws_op => fcvtws_bp
+| fnmsubs_op => fnmsubs_bp
+| fnmadds_op => fnmadds_bp
+| fmsubs_op => fmsubs_bp
+| fmadds_op => fmadds_bp
+| fsqrts_op => fsqrts_bp
+| fles_op => fles_bp
+| flts_op => flts_bp
+| feqs_op => feqs_bp
+| fmaxs_op => fmaxs_bp
+| fmins_op => fmins_bp
+| fdivs_op => fdivs_bp
+| fmuls_op => fmuls_bp
+| fsubs_op => fsubs_bp
+| fadds_op => fadds_bp
+| fsgnjxs_op => fsgnjxs_bp
+| fsgnjns_op => fsgnjns_bp
+| fsw_op => fsw_bp
+| flw_op => flw_bp
+| fmvdx_op => fmvdx_bp
+| fmvxd_op => fmvxd_bp
+| fmvwx_op => fmvwx_bp
+| fmvxw_op => fmvxw_bp
+| fsgnjd_op => fsgnjd_bp
+| sd_op => sd_bp
+| sw_op => sw_bp
+| sh_op => sh_bp
+| sb_op => sb_bp
+| ld_op => ld_bp
+| lw_op => lw_bp
+| lhu_op => lhu_bp
+| lh_op => lh_bp
+| lbu_op => lbu_bp
+| lb_op => lb_bp
+| bgeu_op => bgeu_bp
+| bge_op => bge_bp
+| bltu_op => bltu_bp
+| blt_op => blt_bp
+| bne_op => bne_bp
+| beq_op => beq_bp
+| auipc_op => auipc_bp
+| jalr_op => jalr_bp
+| jal_op => jal_bp
+| sraw_op => sraw_bp
+| srlw_op => srlw_bp
+| sllw_op => sllw_bp
+| remuw_op => remuw_bp
+| remw_op => remw_bp
+| divuw_op => divuw_bp
+| divw_op => divw_bp
+| mulw_op => mulw_bp
+| subw_op => subw_bp
+| addw_op => addw_bp
+| sraiw_op => sraiw_bp
+| srliw_op => srliw_bp
+| slliw_op => slliw_bp
+| srai_op => srai_bp
+| srli_op => srli_bp
+| slli_op => slli_bp
+| addiw_op => addiw_bp
+| sra_op => sra_bp
+| srl_op => srl_bp
+| sll_op => sll_bp
+| xor_op => xor_bp
+| or_op => or_bp
+| and_op => and_bp
+| sltu_op => sltu_bp
+| slt_op => slt_bp
+| remu_op => remu_bp
+| rem_op => rem_bp
+| divu_op => divu_bp
+| div_op => div_bp
+| mulhu_op => mulhu_bp
+| mulh_op => mulh_bp
+| mul_op => mul_bp
+| sub_op => sub_bp
+| add_op => add_bp
+| lui_op => lui_bp
+| xori_op => xori_bp
+| ori_op => ori_bp
+| andi_op => andi_bp
+| sltiu_op => sltiu_bp
+| slti_op => slti_bp
+| addi_op => addi_bp
 end.
 Definition encode_Instruction element  :=
 	match element with
-| REX_WRXB uvar1_0 uvar1_1 uvar1_2 uvar1_3 => let bits00 := (repeat false 8) in
-let bits01 := write_rmagic bits00 b["0100"] in
-let bits02 := write_W bits01 (proj1_sig uvar1_0) in
-let bits03 := write_R bits02 (proj1_sig uvar1_1) in
-let bits04 := write_X bits03 (proj1_sig uvar1_2) in
-let bits05 := write_B bits04 (proj1_sig uvar1_3) in
+| fcvtsd uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00001"] in
+let bits04 := write_funct7_R bits03 b["0100000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fcvtds uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["0100001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fcvtdlu uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00011"] in
+let bits04 := write_funct7_R bits03 b["1101001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fcvtdl uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00010"] in
+let bits04 := write_funct7_R bits03 b["1101001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fcvtlud uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_rs2_R bits02 b["00011"] in
+let bits04 := write_funct7_R bits03 b["1100001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fcvtld uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_rs2_R bits02 b["00010"] in
+let bits04 := write_funct7_R bits03 b["1100001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fcvtdwu uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00001"] in
+let bits04 := write_funct7_R bits03 b["1101001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fcvtdw uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["1101001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fcvtwud uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_rs2_R bits02 b["00001"] in
+let bits04 := write_funct7_R bits03 b["1100001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fcvtwd uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["1100001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fnmsubd uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1001011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct2_R bits02 b["01"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
+let result0 := bits07 in
+OK (result0)
+| fnmaddd uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1001111"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct2_R bits02 b["01"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
+let result0 := bits07 in
+OK (result0)
+| fmsubd uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1000111"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct2_R bits02 b["01"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
+let result0 := bits07 in
+OK (result0)
+| fmaddd uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1000011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct2_R bits02 b["01"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
+let result0 := bits07 in
+OK (result0)
+| fsqrtd uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["0101101"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fled uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["1010001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fltd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_funct7_R bits02 b["1010001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| feqd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["010"] in
+let bits03 := write_funct7_R bits02 b["1010001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fmaxd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_funct7_R bits02 b["0010101"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fmind uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["0010101"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fdivd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0001101"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fmuld uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0001001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fsubd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0000101"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| faddd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fsgnjxd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["010"] in
+let bits03 := write_funct7_R bits02 b["0010001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fsgnjnd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_funct7_R bits02 b["0010001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fsd uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_S bits00 b["0100111"] in
+let bits02 := write_funct3_S bits01 b["011"] in
+let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
+let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
+let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
+let result0 := bits06 in
+OK (result0)
+| fload uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0000111"] in
+let bits02 := write_funct3_R bits01 b["011"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
-| Override => let bits01 := b["01100110"] in
-let result0 := bits01 in
+| fcvtslu uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00011"] in
+let bits04 := write_funct7_R bits03 b["1101000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
 OK (result0)
-| REP => let bits01 := b["11110011"] in
-let result0 := bits01 in
+| fcvtsl uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00010"] in
+let bits04 := write_funct7_R bits03 b["1101000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
 OK (result0)
-| REPNZ => let bits01 := b["11110010"] in
-let result0 := bits01 in
+| fcvtlus uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_rs2_R bits02 b["00011"] in
+let bits04 := write_funct7_R bits03 b["1100000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
 OK (result0)
-| Psubl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["101"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar32_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pbsqrtsd uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01010001"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Psbbl_rr uvar3_0 uvar3_1 => let bits01 := b["00011001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 (proj1_sig uvar3_0) in
-let bits13 := write_rm bits12 (proj1_sig uvar3_1) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Prep_movsl => let bits01 := b["10100101"] in
-let result0 := bits01 in
+| fcvtls uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_rs2_R bits02 b["00010"] in
+let bits04 := write_funct7_R bits03 b["1100000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
 OK (result0)
-| Pmovsq_rm AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01111110"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Pmovsq_mr AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["11010110"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Pminsd uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01011101"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Pmaxsd uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01011111"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Pbswap32 uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["001"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Pbsrl uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["10111101"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Pbsfl uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["10111100"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Paddl_mi AddrE uvar32_1 => let bits01 := b["10000000"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 b["000"] in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-let bits21 := (proj1_sig uvar32_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Paddl_GvEv AddrE uvar3_0 => let bits01 := b["00000011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Paddl_EvGv AddrE uvar3_0 => let bits01 := b["00000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Padcl_rr uvar3_0 uvar3_1 => let bits01 := b["00010001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 (proj1_sig uvar3_0) in
-let bits13 := write_rm bits12 (proj1_sig uvar3_1) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Padcl_ri uvar3_0 uvar8_1 => let bits01 := b["10000011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["010"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar8_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pjcc_rel uvar4_0 uvar32_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_cprefix bits10 b["1000"] in
-let bits12 := write_cccode bits11 (proj1_sig uvar4_0) in
-let result1 := bits12 in
-let bits21 := (proj1_sig uvar32_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pret_iw uvar16_0 => let bits01 := b["11000010"] in
-let result0 := bits01 in
-let bits11 := (proj1_sig uvar16_0) in
-let result1 := bits11 in
-OK (result0 ++ result1)
-| Pret => let bits01 := b["11000011"] in
-let result0 := bits01 in
+| fcvtswu uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00001"] in
+let bits04 := write_funct7_R bits03 b["1101000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
 OK (result0)
-| Pcall_r uvar3_0 => let bits01 := b["11111111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["010"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Pcall_ofs uvar32_0 => let bits01 := b["11101000"] in
-let result0 := bits01 in
-let bits11 := (proj1_sig uvar32_0) in
-let result1 := bits11 in
-OK (result0 ++ result1)
-| Pnop => let bits01 := b["10010000"] in
-let result0 := bits01 in
+| fcvtsw uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["1101000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
 OK (result0)
-| Pjmp_Ev AddrE => let bits01 := b["11111111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 b["100"] in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pjmp_l_rel uvar32_0 => let bits01 := b["11101001"] in
-let result0 := bits01 in
-let bits11 := (proj1_sig uvar32_0) in
-let result1 := bits11 in
-OK (result0 ++ result1)
-| Pxorps_d_GvEv AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01010111"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Pcomiss_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["00101111"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Pdivss_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01011110"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Pmuls_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01011001"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Psubs_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01011100"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Pandps_d_fm AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01010100"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Padds_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01011000"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Psetcc uvar4_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_cprefix bits10 b["1001"] in
-let bits12 := write_cccode bits11 (proj1_sig uvar4_0) in
-let result1 := bits12 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 b["000"] in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Pcmov uvar4_0 uvar3_1 uvar3_2 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_cprefix bits10 b["0100"] in
-let bits12 := write_cccode bits11 (proj1_sig uvar4_0) in
-let result1 := bits12 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_1) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_2) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Ptestl_EvGv AddrE uvar3_0 => let bits01 := b["10000101"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Ptestl_ri uvar3_0 uvar32_1 => let bits01 := b["11110111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["000"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar32_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pcmpl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["111"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar32_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pcmpl_GvEv AddrE uvar3_0 => let bits01 := b["00111011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pcmpl_EvGv AddrE uvar3_0 => let bits01 := b["00111001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Prorl_ri uvar3_0 uvar8_1 => let bits01 := b["11000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 b["001"] in
-let bits12 := write_mod bits11 b["11"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar8_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Prolw_ri uvar3_0 uvar8_1 => let bits01 := b["11000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["000"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar8_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pshld_ri uvar3_0 uvar3_1 uvar8_2 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["10100100"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-let bits31 := (proj1_sig uvar8_2) in
-let result3 := bits31 in
-OK (result0 ++ result1 ++ result2 ++ result3)
-| Psarl_rcl uvar3_0 => let bits01 := b["11010011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["111"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Psarl_ri uvar3_0 uvar8_1 => let bits01 := b["11000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["111"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar8_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pshrl_rcl uvar3_0 => let bits01 := b["11010011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["101"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Pshrl_ri uvar3_0 uvar8_1 => let bits01 := b["11000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["101"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar8_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Psall_rcl uvar3_0 => let bits01 := b["11010011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["100"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Psall_ri uvar3_0 uvar8_1 => let bits01 := b["11000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["100"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar8_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pnotl uvar3_0 => let bits01 := b["11110111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["010"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Pxorl_GvEv AddrE uvar3_0 => let bits01 := b["00110011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pxorl_EvGv AddrE uvar3_0 => let bits01 := b["00110001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pxorl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["110"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar32_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Porl_GvEv AddrE uvar3_0 => let bits01 := b["00001011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Porl_EvGv AddrE uvar3_0 => let bits01 := b["00001001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Porl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["001"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar32_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pandl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["100"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar32_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pandl_GvEv AddrE uvar3_0 => let bits01 := b["00100011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pandl_EvGv AddrE uvar3_0 => let bits01 := b["00100001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pidivl_r uvar3_0 => let bits01 := b["11110111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["111"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Pdivl_r uvar3_0 => let bits01 := b["11110111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["110"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Pcltd => let bits01 := b["10011001"] in
-let result0 := bits01 in
+| fcvtwus uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_rs2_R bits02 b["00001"] in
+let bits04 := write_funct7_R bits03 b["1100000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
 OK (result0)
-| Pmull_r uvar3_0 => let bits01 := b["11110111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["100"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Pimull_r uvar3_0 => let bits01 := b["11110111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["101"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Pimull_ri uvar3_0 uvar3_1 uvar32_2 => let bits01 := b["01101001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 (proj1_sig uvar3_0) in
-let bits13 := write_rm bits12 (proj1_sig uvar3_1) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar32_2) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pimull_GvEv AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["10101111"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Psubl_GvEv AddrE uvar3_0 => let bits01 := b["00101011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Psubl_EvGv AddrE uvar3_0 => let bits01 := b["00101001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Paddl_ri uvar3_0 uvar32_1 => let bits01 := b["10000001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["000"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-let bits21 := (proj1_sig uvar32_1) in
-let result2 := bits21 in
-OK (result0 ++ result1 ++ result2)
-| Pnegl uvar3_0 => let bits01 := b["11110111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 b["011"] in
-let bits13 := write_rm bits12 (proj1_sig uvar3_0) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Pleal AddrE uvar3_0 => let bits01 := b["10001101"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pcvtsi2ss_d_fr uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["00101010"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Pcvttss_d_2si_rf uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["00101100"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Pcvtsd2ss_d_ff uvar3_0 uvar3_1 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["01011010"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_mod bits20 b["11"] in
-let bits22 := write_reg_op bits21 (proj1_sig uvar3_0) in
-let bits23 := write_rm bits22 (proj1_sig uvar3_1) in
-let result2 := bits23 in
-OK (result0 ++ result1 ++ result2)
-| Pmovsxd_GvEv AddrE uvar3_0 => let bits01 := b["01100011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pmovsw_GvEv AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["10111111"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Pmovzw_GvEv AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["10110111"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Pmovsb_GvEv AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["10111110"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Pmovzb_rm AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["10110110"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Pmovb_rm AddrE uvar3_0 => let bits01 := b["10001010"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pmovb_mr AddrE uvar3_0 => let bits01 := b["10001000"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pxchg_rr uvar3_0 uvar3_1 => let bits01 := b["10000111"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_mod bits10 b["11"] in
-let bits12 := write_reg_op bits11 (proj1_sig uvar3_0) in
-let bits13 := write_rm bits12 (proj1_sig uvar3_1) in
-let result1 := bits13 in
-OK (result0 ++ result1)
-| Pflds_m AddrE => let bits01 := b["11011001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 b["000"] in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pfstps_m AddrE => let bits01 := b["11011001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 b["011"] in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pfstpl_m AddrE => let bits01 := b["11011101"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 b["011"] in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pfldl_m AddrE => let bits01 := b["11011101"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 b["000"] in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pmovss_d_fm AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["00010000"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Pmovss_d_mf AddrE uvar3_0 => let bits01 := b["00001111"] in
-let result0 := bits01 in
-let bits11 := b["00010001"] in
-let result1 := bits11 in
-let bits20 := (repeat false 8) in
-let bits21 := write_reg_op bits20 (proj1_sig uvar3_0) in
-do bits22 <- encode_AddrE AddrE bits21;
-let result2 := bits22 in
-OK (result0 ++ result1 ++ result2)
-| Pmovl_rm AddrE uvar3_0 => let bits01 := b["10001011"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pmovl_mr AddrE uvar3_0 => let bits01 := b["10001001"] in
-let result0 := bits01 in
-let bits10 := (repeat false 8) in
-let bits11 := write_reg_op bits10 (proj1_sig uvar3_0) in
-do bits12 <- encode_AddrE AddrE bits11;
-let result1 := bits12 in
-OK (result0 ++ result1)
-| Pmovl_ri uvar3_0 uvar32_1 => let bits00 := (repeat false 8) in
-let bits01 := write_row bits00 b["1011"] in
-let bits02 := write_page bits01 b["1"] in
-let bits03 := write_col bits02 (proj1_sig uvar3_0) in
+| fcvtws uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["1100000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fnmsubs uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1001011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct2_R bits02 b["00"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
+let result0 := bits07 in
+OK (result0)
+| fnmadds uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1001111"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct2_R bits02 b["00"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
+let result0 := bits07 in
+OK (result0)
+| fmsubs uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1000111"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct2_R bits02 b["00"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
+let result0 := bits07 in
+OK (result0)
+| fmadds uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1000011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct2_R bits02 b["00"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
+let result0 := bits07 in
+OK (result0)
+| fsqrts uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["0101100"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fles uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["1010000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| flts uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_funct7_R bits02 b["1010000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| feqs uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["010"] in
+let bits03 := write_funct7_R bits02 b["1010000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fmaxs uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_funct7_R bits02 b["0010100"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fmins uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["0010100"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fdivs uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0001100"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fmuls uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0001000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fsubs uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0000100"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fadds uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fsgnjxs uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["010"] in
+let bits03 := write_funct7_R bits02 b["0010000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fsgnjns uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_funct7_R bits02 b["0010000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| fsw uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_S bits00 b["0100111"] in
+let bits02 := write_funct3_S bits01 b["010"] in
+let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
+let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
+let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
+let result0 := bits06 in
+OK (result0)
+| flw uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0000111"] in
+let bits02 := write_funct3_I bits01 b["010"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| fmvdx uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["1111001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fmvxd uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["1110001"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fmvwx uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["1111000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fmvxw uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_rs2_R bits02 b["00000"] in
+let bits04 := write_funct7_R bits03 b["1110000"] in
+let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
+let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
+let result0 := bits06 in
+OK (result0)
+| fsgnjd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["1010011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["0010001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| sd uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_S bits00 b["0100011"] in
+let bits02 := write_funct3_S bits01 b["011"] in
+let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
+let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
+let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
+let result0 := bits06 in
+OK (result0)
+| sw uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_S bits00 b["0100011"] in
+let bits02 := write_funct3_S bits01 b["010"] in
+let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
+let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
+let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
+let result0 := bits06 in
+OK (result0)
+| sh uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_S bits00 b["0100011"] in
+let bits02 := write_funct3_S bits01 b["001"] in
+let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
+let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
+let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
+let result0 := bits06 in
+OK (result0)
+| sb uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_S bits00 b["0100011"] in
+let bits02 := write_funct3_S bits01 b["000"] in
+let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
+let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
+let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
+let result0 := bits06 in
+OK (result0)
+| ld uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0000011"] in
+let bits02 := write_funct3_I bits01 b["011"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| lw uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0000011"] in
+let bits02 := write_funct3_I bits01 b["010"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| lhu uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0000011"] in
+let bits02 := write_funct3_I bits01 b["101"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| lh uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0000011"] in
+let bits02 := write_funct3_I bits01 b["001"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| lbu uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0000011"] in
+let bits02 := write_funct3_I bits01 b["100"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| lb uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0000011"] in
+let bits02 := write_funct3_I bits01 b["000"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| bgeu uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_B bits00 b["1100011"] in
+let bits02 := write_funct3_B bits01 b["111"] in
+let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
+let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
+let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
+let bits06 := write_rs2_B bits05 (proj1_sig uvar5_3) in
+let bits07 := write_immB3_B bits06 (proj1_sig uvar6_4) in
+let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
+let result0 := bits08 in
+OK (result0)
+| bge uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_B bits00 b["1100011"] in
+let bits02 := write_funct3_B bits01 b["101"] in
+let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
+let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
+let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
+let bits06 := write_rs2_B bits05 (proj1_sig uvar5_3) in
+let bits07 := write_immB3_B bits06 (proj1_sig uvar6_4) in
+let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
+let result0 := bits08 in
+OK (result0)
+| bltu uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_B bits00 b["1100011"] in
+let bits02 := write_funct3_B bits01 b["110"] in
+let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
+let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
+let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
+let bits06 := write_rs2_B bits05 (proj1_sig uvar5_3) in
+let bits07 := write_immB3_B bits06 (proj1_sig uvar6_4) in
+let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
+let result0 := bits08 in
+OK (result0)
+| blt uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_B bits00 b["1100011"] in
+let bits02 := write_funct3_B bits01 b["100"] in
+let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
+let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
+let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
+let bits06 := write_rs2_B bits05 (proj1_sig uvar5_3) in
+let bits07 := write_immB3_B bits06 (proj1_sig uvar6_4) in
+let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
+let result0 := bits08 in
+OK (result0)
+| bne uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_B bits00 b["1100011"] in
+let bits02 := write_funct3_B bits01 b["001"] in
+let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
+let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
+let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
+let bits06 := write_rs2_B bits05 (proj1_sig uvar5_3) in
+let bits07 := write_immB3_B bits06 (proj1_sig uvar6_4) in
+let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
+let result0 := bits08 in
+OK (result0)
+| beq uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_B bits00 b["1100011"] in
+let bits02 := write_funct3_B bits01 b["000"] in
+let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
+let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
+let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
+let bits06 := write_rs2_B bits05 (proj1_sig uvar5_3) in
+let bits07 := write_immB3_B bits06 (proj1_sig uvar6_4) in
+let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
+let result0 := bits08 in
+OK (result0)
+| auipc uvar5_0 uvar20_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_U bits00 b["0010111"] in
+let bits02 := write_rd_U bits01 (proj1_sig uvar5_0) in
+let bits03 := write_immU_U bits02 (proj1_sig uvar20_1) in
 let result0 := bits03 in
-let bits11 := (proj1_sig uvar32_1) in
-let result1 := bits11 in
-OK (result0 ++ result1)
+OK (result0)
+| jalr uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["1100111"] in
+let bits02 := write_funct3_I bits01 b["000"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| jal uvar5_0 uvar8_1 uvar1_2 uvar10_3 uvar1_4 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_J bits00 b["1101111"] in
+let bits02 := write_rd_J bits01 (proj1_sig uvar5_0) in
+let bits03 := write_immJ1_J bits02 (proj1_sig uvar8_1) in
+let bits04 := write_immJ2_J bits03 (proj1_sig uvar1_2) in
+let bits05 := write_immJ3_J bits04 (proj1_sig uvar10_3) in
+let bits06 := write_immJ4_J bits05 (proj1_sig uvar1_4) in
+let result0 := bits06 in
+OK (result0)
+| sraw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0111011"] in
+let bits02 := write_funct3_R bits01 b["101"] in
+let bits03 := write_funct7_R bits02 b["0100000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| srlw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0111011"] in
+let bits02 := write_funct3_R bits01 b["101"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| sllw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0111011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| remuw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0111011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| remw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0111011"] in
+let bits02 := write_funct3_R bits01 b["110"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| divuw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0111011"] in
+let bits02 := write_funct3_R bits01 b["101"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| divw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0111011"] in
+let bits02 := write_funct3_R bits01 b["100"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| mulw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0111011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| subw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0111011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["0100000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| addw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0111011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| sraiw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0011011"] in
+let bits02 := write_funct3_I bits01 b["101"] in
+let bits03 := write_immISp32_I bits02 b["0100000"] in
+let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
+let bits06 := write_shamt32_I bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| srliw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0011011"] in
+let bits02 := write_funct3_I bits01 b["101"] in
+let bits03 := write_immISp32_I bits02 b["0000000"] in
+let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
+let bits06 := write_shamt32_I bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| slliw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0011011"] in
+let bits02 := write_funct3_I bits01 b["001"] in
+let bits03 := write_immISp32_I bits02 b["0000000"] in
+let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
+let bits06 := write_shamt32_I bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| srai uvar5_0 uvar5_1 uvar6_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0010011"] in
+let bits02 := write_funct3_I bits01 b["101"] in
+let bits03 := write_immISp64_I bits02 b["010000"] in
+let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
+let bits06 := write_shamt64_I bits05 (proj1_sig uvar6_2) in
+let result0 := bits06 in
+OK (result0)
+| srli uvar5_0 uvar5_1 uvar6_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0010011"] in
+let bits02 := write_funct3_I bits01 b["101"] in
+let bits03 := write_immISp64_I bits02 b["000000"] in
+let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
+let bits06 := write_shamt64_I bits05 (proj1_sig uvar6_2) in
+let result0 := bits06 in
+OK (result0)
+| slli uvar5_0 uvar5_1 uvar6_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0010011"] in
+let bits02 := write_funct3_I bits01 b["001"] in
+let bits03 := write_immISp64_I bits02 b["000000"] in
+let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
+let bits06 := write_shamt64_I bits05 (proj1_sig uvar6_2) in
+let result0 := bits06 in
+OK (result0)
+| addiw uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0011011"] in
+let bits02 := write_funct3_I bits01 b["000"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| sra uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["101"] in
+let bits03 := write_funct7_R bits02 b["0100000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| srl uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["101"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| sll uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| xor uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["100"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| or uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["110"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| and uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| sltu uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["011"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| slt uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["010"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| remu uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["111"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| rem uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["110"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| divu uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["101"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| div uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["100"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| mulhu uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["011"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| mulh uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["001"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| mul uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| sub uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["0100000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| add uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_R bits00 b["0110011"] in
+let bits02 := write_funct3_R bits01 b["000"] in
+let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
+let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
+let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
+let result0 := bits06 in
+OK (result0)
+| lui uvar5_0 uvar20_1 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_U bits00 b["0110111"] in
+let bits02 := write_rd_U bits01 (proj1_sig uvar5_0) in
+let bits03 := write_immU_U bits02 (proj1_sig uvar20_1) in
+let result0 := bits03 in
+OK (result0)
+| xori uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0010011"] in
+let bits02 := write_funct3_I bits01 b["100"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| ori uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0010011"] in
+let bits02 := write_funct3_I bits01 b["110"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| andi uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0010011"] in
+let bits02 := write_funct3_I bits01 b["111"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| sltiu uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0010011"] in
+let bits02 := write_funct3_I bits01 b["011"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| slti uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0010011"] in
+let bits02 := write_funct3_I bits01 b["010"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
+| addi uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
+let bits01 := write_opcode_I bits00 b["0010011"] in
+let bits02 := write_funct3_I bits01 b["000"] in
+let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
+let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
+let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
+let result0 := bits05 in
+OK (result0)
 end.
 
 Program Definition decode_Instruction bin : res (Instruction*nat) :=
-	if REX_WRXB_bp bin then
+	if fcvtsd_bp bin then
 let code0 := bin in
-do token0 <- try_first_n code0 8;
-let uvar1_0 := read_W token0 in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtsd (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtds_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtds (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtdlu_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtdlu (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtdl_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtdl (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtlud_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtlud (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtld_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtld (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtdwu_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtdwu (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtdw_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtdw (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtwud_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtwud (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtwd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtwd (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fnmsubd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs3_R token0 in
+if assertLength uvar5_3 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fnmsubd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fnmaddd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs3_R token0 in
+if assertLength uvar5_3 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fnmaddd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmsubd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs3_R token0 in
+if assertLength uvar5_3 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmsubd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmaddd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs3_R token0 in
+if assertLength uvar5_3 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmaddd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsqrtd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fsqrtd (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fled_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fled (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fltd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fltd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if feqd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((feqd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmaxd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmaxd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmind_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmind (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fdivd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fdivd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmuld_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmuld (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsubd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fsubd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if faddd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((faddd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsgnjxd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fsgnjxd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsgnjnd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fsgnjnd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_immS1_S token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_S token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_S token0 in
+if assertLength uvar5_2 5 then
+let uvar7_3 := read_immS2_S token0 in
+if assertLength uvar7_3 7 then
+do code1 <- try_skip_n code0 32;
+OK ((fsd (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fload_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((fload (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtslu_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtslu (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtsl_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtsl (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtlus_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtlus (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtls_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtls (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtswu_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtswu (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtsw_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtsw (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtwus_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtwus (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fcvtws_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fcvtws (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fnmsubs_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs3_R token0 in
+if assertLength uvar5_3 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fnmsubs (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fnmadds_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs3_R token0 in
+if assertLength uvar5_3 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fnmadds (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmsubs_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs3_R token0 in
+if assertLength uvar5_3 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmsubs (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmadds_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs3_R token0 in
+if assertLength uvar5_3 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmadds (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsqrts_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fsqrts (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fles_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fles (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if flts_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((flts (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if feqs_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((feqs (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmaxs_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmaxs (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmins_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmins (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fdivs_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fdivs (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmuls_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmuls (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsubs_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fsubs (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fadds_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fadds (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsgnjxs_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fsgnjxs (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsgnjns_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fsgnjns (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsw_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_immS1_S token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_S token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_S token0 in
+if assertLength uvar5_2 5 then
+let uvar7_3 := read_immS2_S token0 in
+if assertLength uvar7_3 7 then
+do code1 <- try_skip_n code0 32;
+OK ((fsw (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if flw_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((flw (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmvdx_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmvdx (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmvxd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmvxd (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmvwx_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmvwx (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fmvxw_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fmvxw (uvar5_0) (uvar5_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if fsgnjd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((fsgnjd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if sd_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_immS1_S token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_S token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_S token0 in
+if assertLength uvar5_2 5 then
+let uvar7_3 := read_immS2_S token0 in
+if assertLength uvar7_3 7 then
+do code1 <- try_skip_n code0 32;
+OK ((sd (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if sw_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_immS1_S token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_S token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_S token0 in
+if assertLength uvar5_2 5 then
+let uvar7_3 := read_immS2_S token0 in
+if assertLength uvar7_3 7 then
+do code1 <- try_skip_n code0 32;
+OK ((sw (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if sh_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_immS1_S token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_S token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_S token0 in
+if assertLength uvar5_2 5 then
+let uvar7_3 := read_immS2_S token0 in
+if assertLength uvar7_3 7 then
+do code1 <- try_skip_n code0 32;
+OK ((sh (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if sb_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_immS1_S token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_S token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_S token0 in
+if assertLength uvar5_2 5 then
+let uvar7_3 := read_immS2_S token0 in
+if assertLength uvar7_3 7 then
+do code1 <- try_skip_n code0 32;
+OK ((sb (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if ld_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((ld (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if lw_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((lw (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if lhu_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((lhu (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if lh_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((lh (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if lbu_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((lbu (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if lb_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((lb (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if bgeu_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar1_0 := read_immB1_B token0 in
 if assertLength uvar1_0 1 then
-let uvar1_1 := read_R token0 in
-if assertLength uvar1_1 1 then
-let uvar1_2 := read_X token0 in
+let uvar4_1 := read_immB2_B token0 in
+if assertLength uvar4_1 4 then
+let uvar5_2 := read_rs1_B token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs2_B token0 in
+if assertLength uvar5_3 5 then
+let uvar6_4 := read_immB3_B token0 in
+if assertLength uvar6_4 6 then
+let uvar1_5 := read_immB4_B token0 in
+if assertLength uvar1_5 1 then
+do code1 <- try_skip_n code0 32;
+OK ((bgeu (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if bge_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar1_0 := read_immB1_B token0 in
+if assertLength uvar1_0 1 then
+let uvar4_1 := read_immB2_B token0 in
+if assertLength uvar4_1 4 then
+let uvar5_2 := read_rs1_B token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs2_B token0 in
+if assertLength uvar5_3 5 then
+let uvar6_4 := read_immB3_B token0 in
+if assertLength uvar6_4 6 then
+let uvar1_5 := read_immB4_B token0 in
+if assertLength uvar1_5 1 then
+do code1 <- try_skip_n code0 32;
+OK ((bge (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if bltu_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar1_0 := read_immB1_B token0 in
+if assertLength uvar1_0 1 then
+let uvar4_1 := read_immB2_B token0 in
+if assertLength uvar4_1 4 then
+let uvar5_2 := read_rs1_B token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs2_B token0 in
+if assertLength uvar5_3 5 then
+let uvar6_4 := read_immB3_B token0 in
+if assertLength uvar6_4 6 then
+let uvar1_5 := read_immB4_B token0 in
+if assertLength uvar1_5 1 then
+do code1 <- try_skip_n code0 32;
+OK ((bltu (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if blt_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar1_0 := read_immB1_B token0 in
+if assertLength uvar1_0 1 then
+let uvar4_1 := read_immB2_B token0 in
+if assertLength uvar4_1 4 then
+let uvar5_2 := read_rs1_B token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs2_B token0 in
+if assertLength uvar5_3 5 then
+let uvar6_4 := read_immB3_B token0 in
+if assertLength uvar6_4 6 then
+let uvar1_5 := read_immB4_B token0 in
+if assertLength uvar1_5 1 then
+do code1 <- try_skip_n code0 32;
+OK ((blt (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if bne_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar1_0 := read_immB1_B token0 in
+if assertLength uvar1_0 1 then
+let uvar4_1 := read_immB2_B token0 in
+if assertLength uvar4_1 4 then
+let uvar5_2 := read_rs1_B token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs2_B token0 in
+if assertLength uvar5_3 5 then
+let uvar6_4 := read_immB3_B token0 in
+if assertLength uvar6_4 6 then
+let uvar1_5 := read_immB4_B token0 in
+if assertLength uvar1_5 1 then
+do code1 <- try_skip_n code0 32;
+OK ((bne (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if beq_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar1_0 := read_immB1_B token0 in
+if assertLength uvar1_0 1 then
+let uvar4_1 := read_immB2_B token0 in
+if assertLength uvar4_1 4 then
+let uvar5_2 := read_rs1_B token0 in
+if assertLength uvar5_2 5 then
+let uvar5_3 := read_rs2_B token0 in
+if assertLength uvar5_3 5 then
+let uvar6_4 := read_immB3_B token0 in
+if assertLength uvar6_4 6 then
+let uvar1_5 := read_immB4_B token0 in
+if assertLength uvar1_5 1 then
+do code1 <- try_skip_n code0 32;
+OK ((beq (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if auipc_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_U token0 in
+if assertLength uvar5_0 5 then
+let uvar20_1 := read_immU_U token0 in
+if assertLength uvar20_1 20 then
+do code1 <- try_skip_n code0 32;
+OK ((auipc (uvar5_0) (uvar20_1)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if jalr_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((jalr (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+else Error(msg"impossible")
+else Error(msg"impossible")
+else Error(msg"impossible")
+else
+
+	if jal_bp bin then
+let code0 := bin in
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_J token0 in
+if assertLength uvar5_0 5 then
+let uvar8_1 := read_immJ1_J token0 in
+if assertLength uvar8_1 8 then
+let uvar1_2 := read_immJ2_J token0 in
 if assertLength uvar1_2 1 then
-let uvar1_3 := read_B token0 in
-if assertLength uvar1_3 1 then
-do code1 <- try_skip_n code0 8;
-OK ((REX_WRXB (uvar1_0) (uvar1_1) (uvar1_2) (uvar1_3)), 1)
+let uvar10_3 := read_immJ3_J token0 in
+if assertLength uvar10_3 10 then
+let uvar1_4 := read_immJ4_J token0 in
+if assertLength uvar1_4 1 then
+do code1 <- try_skip_n code0 32;
+OK ((jal (uvar5_0) (uvar8_1) (uvar1_2) (uvar10_3) (uvar1_4)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Override_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-OK ((Override), 1)
-else
-
-	if REP_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-OK ((REP), 1)
-else
-
-	if REPNZ_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-OK ((REPNZ), 1)
-else
-
-	if Psubl_ri_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_1 := token1 in
-if assertLength uvar32_1 32 then
-do code3 <- try_skip_n code2 32;
-OK ((Psubl_ri (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
-else Error(msg"impossible")
 else
 
-	if Pbsqrtsd_bp bin then
+	if sraw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pbsqrtsd (uvar3_0) (uvar3_1)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((sraw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
+else Error(msg"impossible")
 else
 
-	if Psbbl_rr_bp bin then
+	if srlw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Psbbl_rr (uvar3_0) (uvar3_1)), 2)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((srlw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Prep_movsl_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-OK ((Prep_movsl), 1)
-else
-
-	if Pmovsq_rm_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pmovsq_rm AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pmovsq_mr_bp bin then
+	if sllw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pmovsq_mr AddrE (uvar3_0)), 2 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((sllw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pminsd_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pminsd (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pmaxsd_bp bin then
+	if remuw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pmaxsd (uvar3_0) (uvar3_1)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((remuw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Pbswap32_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Pbswap32 (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
-	if Pbsrl_bp bin then
+	if remw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pbsrl (uvar3_0) (uvar3_1)), 3)
-else Error(msg"impossible")
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((remw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pbsfl_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pbsfl (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Paddl_mi_bp bin then
+	if divuw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-do token0 <- try_first_n code2 32;
-let uvar32_1 := token0 in
-if assertLength uvar32_1 32 then
-do code3 <- try_skip_n code2 32;
-OK ((Paddl_mi AddrE (uvar32_1)), 5 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((divuw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Paddl_GvEv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Paddl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
-else
-
-	if Paddl_EvGv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Paddl_EvGv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Padcl_rr_bp bin then
+	if divw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Padcl_rr (uvar3_0) (uvar3_1)), 2)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((divw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else Error(msg"impossible")
-else
-
-	if Padcl_ri_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 8;
-let uvar8_1 := token1 in
-if assertLength uvar8_1 8 then
-do code3 <- try_skip_n code2 8;
-OK ((Padcl_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pjcc_rel_bp bin then
+	if mulw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar4_0 := read_cccode token0 in
-if assertLength uvar4_0 4 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_1 := token1 in
-if assertLength uvar32_1 32 then
-do code3 <- try_skip_n code2 32;
-OK ((Pjcc_rel (uvar4_0) (uvar32_1)), 6)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((mulw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Pret_iw_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 16;
-let uvar16_0 := token0 in
-if assertLength uvar16_0 16 then
-do code2 <- try_skip_n code1 16;
-OK ((Pret_iw (uvar16_0)), 3)
 else Error(msg"impossible")
-else
-
-	if Pret_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-OK ((Pret), 1)
 else
 
-	if Pcall_r_bp bin then
+	if subw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Pcall_r (uvar3_0)), 2)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((subw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pcall_ofs_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 32;
-let uvar32_0 := token0 in
-if assertLength uvar32_0 32 then
-do code2 <- try_skip_n code1 32;
-OK ((Pcall_ofs (uvar32_0)), 5)
 else Error(msg"impossible")
-else
-
-	if Pnop_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-OK ((Pnop), 1)
-else
-
-	if Pjmp_Ev_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pjmp_Ev AddrE), 1 + localLength0)
-else
-
-	if Pjmp_l_rel_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 32;
-let uvar32_0 := token0 in
-if assertLength uvar32_0 32 then
-do code2 <- try_skip_n code1 32;
-OK ((Pjmp_l_rel (uvar32_0)), 5)
 else Error(msg"impossible")
 else
 
-	if Pxorps_d_GvEv_bp bin then
+	if addw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pxorps_d_GvEv AddrE (uvar3_0)), 2 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((addw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pcomiss_d_ff_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pcomiss_d_ff (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pdivss_d_ff_bp bin then
+	if sraiw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pdivss_d_ff (uvar3_0) (uvar3_1)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_shamt32_I token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((sraiw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
+else Error(msg"impossible")
 else
 
-	if Pmuls_d_ff_bp bin then
+	if srliw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pmuls_d_ff (uvar3_0) (uvar3_1)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_shamt32_I token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((srliw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Psubs_d_ff_bp bin then
+	if slliw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Psubs_d_ff (uvar3_0) (uvar3_1)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_shamt32_I token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((slliw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Pandps_d_fm_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pandps_d_fm AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Padds_d_ff_bp bin then
+	if srai_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Padds_d_ff (uvar3_0) (uvar3_1)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar6_2 := read_shamt64_I token0 in
+if assertLength uvar6_2 6 then
+do code1 <- try_skip_n code0 32;
+OK ((srai (uvar5_0) (uvar5_1) (uvar6_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
+else Error(msg"impossible")
 else
 
-	if Psetcc_bp bin then
+	if srli_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar4_0 := read_cccode token0 in
-if assertLength uvar4_0 4 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 8;
-let uvar3_1 := read_rm token1 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Psetcc (uvar4_0) (uvar3_1)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar6_2 := read_shamt64_I token0 in
+if assertLength uvar6_2 6 then
+do code1 <- try_skip_n code0 32;
+OK ((srli (uvar5_0) (uvar5_1) (uvar6_2)), 4)
+else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pcmov_bp bin then
+	if slli_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar4_0 := read_cccode token0 in
-if assertLength uvar4_0 4 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 8;
-let uvar3_1 := read_reg_op token1 in
-if assertLength uvar3_1 3 then
-let uvar3_2 := read_rm token1 in
-if assertLength uvar3_2 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pcmov (uvar4_0) (uvar3_1) (uvar3_2)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar6_2 := read_shamt64_I token0 in
+if assertLength uvar6_2 6 then
+do code1 <- try_skip_n code0 32;
+OK ((slli (uvar5_0) (uvar5_1) (uvar6_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Ptestl_EvGv_bp bin then
+	if addiw_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Ptestl_EvGv AddrE (uvar3_0)), 1 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((addiw (uvar5_0) (uvar5_1) (uvar12_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Ptestl_ri_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_1 := token1 in
-if assertLength uvar32_1 32 then
-do code3 <- try_skip_n code2 32;
-OK ((Ptestl_ri (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pcmpl_ri_bp bin then
+	if sra_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_1 := token1 in
-if assertLength uvar32_1 32 then
-do code3 <- try_skip_n code2 32;
-OK ((Pcmpl_ri (uvar3_0) (uvar32_1)), 6)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((sra (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Pcmpl_GvEv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pcmpl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pcmpl_EvGv_bp bin then
+	if srl_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pcmpl_EvGv AddrE (uvar3_0)), 1 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((srl (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Prorl_ri_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 8;
-let uvar8_1 := token1 in
-if assertLength uvar8_1 8 then
-do code3 <- try_skip_n code2 8;
-OK ((Prorl_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Prolw_ri_bp bin then
+	if sll_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 8;
-let uvar8_1 := token1 in
-if assertLength uvar8_1 8 then
-do code3 <- try_skip_n code2 8;
-OK ((Prolw_ri (uvar3_0) (uvar8_1)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((sll (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
+else Error(msg"impossible")
 else
 
-	if Pshld_ri_bp bin then
+	if xor_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-do token1 <- try_first_n code3 8;
-let uvar8_2 := token1 in
-if assertLength uvar8_2 8 then
-do code4 <- try_skip_n code3 8;
-OK ((Pshld_ri (uvar3_0) (uvar3_1) (uvar8_2)), 4)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((xor (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Psarl_rcl_bp bin then
+	if or_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Psarl_rcl (uvar3_0)), 2)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((or (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Psarl_ri_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 8;
-let uvar8_1 := token1 in
-if assertLength uvar8_1 8 then
-do code3 <- try_skip_n code2 8;
-OK ((Psarl_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pshrl_rcl_bp bin then
+	if and_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Pshrl_rcl (uvar3_0)), 2)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((and (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pshrl_ri_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 8;
-let uvar8_1 := token1 in
-if assertLength uvar8_1 8 then
-do code3 <- try_skip_n code2 8;
-OK ((Pshrl_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Psall_rcl_bp bin then
+	if sltu_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Psall_rcl (uvar3_0)), 2)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((sltu (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Psall_ri_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 8;
-let uvar8_1 := token1 in
-if assertLength uvar8_1 8 then
-do code3 <- try_skip_n code2 8;
-OK ((Psall_ri (uvar3_0) (uvar8_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pnotl_bp bin then
+	if slt_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Pnotl (uvar3_0)), 2)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((slt (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pxorl_GvEv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pxorl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
-else
-
-	if Pxorl_EvGv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pxorl_EvGv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pxorl_ri_bp bin then
+	if remu_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_1 := token1 in
-if assertLength uvar32_1 32 then
-do code3 <- try_skip_n code2 32;
-OK ((Pxorl_ri (uvar3_0) (uvar32_1)), 6)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((remu (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Porl_GvEv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Porl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Porl_EvGv_bp bin then
+	if rem_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Porl_EvGv AddrE (uvar3_0)), 1 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((rem (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Porl_ri_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_1 := token1 in
-if assertLength uvar32_1 32 then
-do code3 <- try_skip_n code2 32;
-OK ((Porl_ri (uvar3_0) (uvar32_1)), 6)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pandl_ri_bp bin then
+	if divu_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_1 := token1 in
-if assertLength uvar32_1 32 then
-do code3 <- try_skip_n code2 32;
-OK ((Pandl_ri (uvar3_0) (uvar32_1)), 6)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((divu (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Pandl_GvEv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pandl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pandl_EvGv_bp bin then
+	if div_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pandl_EvGv AddrE (uvar3_0)), 1 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((div (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pidivl_r_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Pidivl_r (uvar3_0)), 2)
 else Error(msg"impossible")
-else
-
-	if Pdivl_r_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Pdivl_r (uvar3_0)), 2)
 else Error(msg"impossible")
-else
-
-	if Pcltd_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-OK ((Pcltd), 1)
 else
 
-	if Pmull_r_bp bin then
+	if mulhu_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Pmull_r (uvar3_0)), 2)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((mulhu (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pimull_r_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Pimull_r (uvar3_0)), 2)
 else Error(msg"impossible")
+else Error(msg"impossible")
 else
 
-	if Pimull_ri_bp bin then
+	if mulh_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_2 := token1 in
-if assertLength uvar32_2 32 then
-do code3 <- try_skip_n code2 32;
-OK ((Pimull_ri (uvar3_0) (uvar3_1) (uvar32_2)), 6)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((mulh (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pimull_GvEv_bp bin then
+	if mul_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pimull_GvEv AddrE (uvar3_0)), 2 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((mul (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Psubl_GvEv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Psubl_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
-else
-
-	if Psubl_EvGv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Psubl_EvGv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Paddl_ri_bp bin then
+	if sub_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-do token1 <- try_first_n code2 32;
-let uvar32_1 := token1 in
-if assertLength uvar32_1 32 then
-do code3 <- try_skip_n code2 32;
-OK ((Paddl_ri (uvar3_0) (uvar32_1)), 6)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((sub (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Pnegl_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_rm token0 in
-if assertLength uvar3_0 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Pnegl (uvar3_0)), 2)
 else Error(msg"impossible")
 else
 
-	if Pleal_bp bin then
+	if add_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pleal AddrE (uvar3_0)), 1 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_R token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_R token0 in
+if assertLength uvar5_1 5 then
+let uvar5_2 := read_rs2_R token0 in
+if assertLength uvar5_2 5 then
+do code1 <- try_skip_n code0 32;
+OK ((add (uvar5_0) (uvar5_1) (uvar5_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pcvtsi2ss_d_fr_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pcvtsi2ss_d_fr (uvar3_0) (uvar3_1)), 3)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pcvttss_d_2si_rf_bp bin then
+	if lui_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pcvttss_d_2si_rf (uvar3_0) (uvar3_1)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_U token0 in
+if assertLength uvar5_0 5 then
+let uvar20_1 := read_immU_U token0 in
+if assertLength uvar20_1 20 then
+do code1 <- try_skip_n code0 32;
+OK ((lui (uvar5_0) (uvar20_1)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
 
-	if Pcvtsd2ss_d_ff_bp bin then
+	if xori_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code3 <- try_skip_n code2 8;
-OK ((Pcvtsd2ss_d_ff (uvar3_0) (uvar3_1)), 3)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((xori (uvar5_0) (uvar5_1) (uvar12_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Pmovsxd_GvEv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pmovsxd_GvEv AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pmovsw_GvEv_bp bin then
+	if ori_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pmovsw_GvEv AddrE (uvar3_0)), 2 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((ori (uvar5_0) (uvar5_1) (uvar12_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pmovzw_GvEv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pmovzw_GvEv AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
-else
-
-	if Pmovsb_GvEv_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pmovsb_GvEv AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pmovzb_rm_bp bin then
+	if andi_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pmovzb_rm AddrE (uvar3_0)), 2 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((andi (uvar5_0) (uvar5_1) (uvar12_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pmovb_rm_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pmovb_rm AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
-else
-
-	if Pmovb_mr_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pmovb_mr AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pxchg_rr_bp bin then
+	if sltiu_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-let uvar3_1 := read_rm token0 in
-if assertLength uvar3_1 3 then
-do code2 <- try_skip_n code1 8;
-OK ((Pxchg_rr (uvar3_0) (uvar3_1)), 2)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((sltiu (uvar5_0) (uvar5_1) (uvar12_2)), 4)
 else Error(msg"impossible")
 else Error(msg"impossible")
-else
-
-	if Pflds_m_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pflds_m AddrE), 1 + localLength0)
-else
-
-	if Pfstps_m_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pfstps_m AddrE), 1 + localLength0)
-else
-
-	if Pfstpl_m_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pfstpl_m AddrE), 1 + localLength0)
-else
-
-	if Pfldl_m_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pfldl_m AddrE), 1 + localLength0)
-else
-
-	if Pmovss_d_fm_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pmovss_d_fm AddrE (uvar3_0)), 2 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pmovss_d_mf_bp bin then
+	if slti_bp bin then
 let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do code2 <- try_skip_n code1 8;
-do token0 <- try_first_n code2 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code2;
-do code3 <- try_skip_n code2 localLength0;
-OK ((Pmovss_d_mf AddrE (uvar3_0)), 2 + localLength0)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((slti (uvar5_0) (uvar5_1) (uvar12_2)), 4)
 else Error(msg"impossible")
-else
-
-	if Pmovl_rm_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pmovl_rm AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
-else
-
-	if Pmovl_mr_bp bin then
-let code0 := bin in
-do code1 <- try_skip_n code0 8;
-do token0 <- try_first_n code1 8;
-let uvar3_0 := read_reg_op token0 in
-if assertLength uvar3_0 3 then
-do (AddrE, localLength0) <- decode_AddrE code1;
-do code2 <- try_skip_n code1 localLength0;
-OK ((Pmovl_mr AddrE (uvar3_0)), 1 + localLength0)
 else Error(msg"impossible")
 else
 
-	if Pmovl_ri_bp bin then
+	if addi_bp bin then
 let code0 := bin in
-do token0 <- try_first_n code0 8;
-let uvar3_0 := read_col token0 in
-if assertLength uvar3_0 3 then
-do code1 <- try_skip_n code0 8;
-do token1 <- try_first_n code1 32;
-let uvar32_1 := token1 in
-if assertLength uvar32_1 32 then
-do code2 <- try_skip_n code1 32;
-OK ((Pmovl_ri (uvar3_0) (uvar32_1)), 5)
+do token0 <- try_first_n code0 32;
+let uvar5_0 := read_rd_I token0 in
+if assertLength uvar5_0 5 then
+let uvar5_1 := read_rs1_I token0 in
+if assertLength uvar5_1 5 then
+let uvar12_2 := read_immI_I token0 in
+if assertLength uvar12_2 12 then
+do code1 <- try_skip_n code0 32;
+OK ((addi (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
