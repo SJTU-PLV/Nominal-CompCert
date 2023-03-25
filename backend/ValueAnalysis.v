@@ -1879,7 +1879,25 @@ Proof.
   eapply Genv.genv_symb_range; eauto.
 Qed.
 
-(* to be simplified for trans and compose *)
+Inductive match_init_data_block :list init_data -> mem -> block ->Prop :=
+|init_data_block_intro: forall (il : list init_data) m b
+   (NOWRIT: forall ofs, ~ Mem.perm m b ofs Max Writable),
+  match_init_data_block il m b.
+  (*
+    1. pge Glob (ab_summary ab) : need requirement here?
+    2. bmatch
+       2.1 smatch (ab_summary ab)
+           2.1.1 load -> vmatch v (Ifptr ab_summay ab)
+           2.1.2 loadbytes 1 = Vptr b' ofs' -> pmatch b' ofs' (ab_summary ab)
+       2.2 load -> vmatch (ofs---one-to-one)
+
+   *)
+Definition readonly_mem se m : Prop :=
+  forall b id v,
+    Genv.find_symbol se id = Some b ->
+    Genv.find_info se b = Some (Gvar v) ->
+    gvar_readonly v && negb (gvar_volatile v) && definitive_initializer (gvar_init v) = true ->
+    match_init_data_block (gvar_init v) m b.
 
 Definition sound_memory_ro ge m : Prop :=
   romatch (bc_of_symtbl ge) m (romem_for_symtbl ge)

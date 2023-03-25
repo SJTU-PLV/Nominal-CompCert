@@ -840,6 +840,9 @@ Qed.
     self-sim using ro and injp at RTL level and following refinement.
 
     ro @ injp ⊑ ro @ injp @ ro @ injp @ injp   --> ro @ injp @ ro @ inj @ injp ⊑ ro @ injp
+
+    Explanation : Useability of "invariant transportation" and "self simulation" for
+    single pass compilation.
  *)
 
 Lemma ro_injp_inj_I_incoming (I: invariant li_c) :
