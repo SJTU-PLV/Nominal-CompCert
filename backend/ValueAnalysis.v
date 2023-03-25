@@ -1771,74 +1771,6 @@ Proof.
    eapply ematch_ge; eauto. apply ematch_update. auto. auto.
 Qed.
 
-(** ** Preservation of the invariant at call sites *)
-
-
-(*
-Inductive sound_query bc m: c_query -> Prop :=
-  sound_query_intro vf sg vargs:
-    genv_match bc ge ->
-    vmatch bc vf Vtop ->
-    (forall v, In v vargs -> vmatch bc v Vtop) ->
-    mmatch bc m mtop ->
-    bc_nostack bc ->
-    romatch bc m rmge ->
-    sound_query bc m (cq vf sg vargs m).
-
-Inductive sound_reply bc m: c_reply -> Prop :=
-  c_reply_match_intro (bc': block_classification) vres m':
-    (*bc_incr bc bc' ->*)
-    (forall b, sup_In b (Mem.support m) -> bc' b = bc b) ->
-    vmatch bc' vres Vtop ->
-    genv_match bc' ge ->
-    romatch bc' m' rmge ->
-    mmatch bc' m' mtop ->
-    bc_nostack bc' ->
-    (forall b ofs n bytes,
-        sup_In b (Mem.support m) -> bc b = BCinvalid -> n >= 0 ->
-        Mem.loadbytes m' b ofs n = Some bytes ->
-        Mem.loadbytes m b ofs n = Some bytes) ->
-    Mem.sup_include (Mem.support m) (Mem.support m') ->
-    sound_reply bc m (cr vres m').
-
-Theorem sound_initial:
-  forall q st,
-    sound_query q ->
-    initial_state (Genv.globalenv ge prog) q st ->
-    sound_state st.
-Proof.
-  intros q st Hq Hst.
-  inv Hq. cbn in *; subst. inv Hst.
-  eapply sound_call_state; eauto.
-  - constructor; auto.
-Qed.
-
-Theorem sound_final:
-  forall st r,
-    sound_state st ->
-    final_state st r ->
-    sound_reply bc0 m0 r.
-Proof.
-  intros st r Hst Hr. destruct Hr. inv Hst. inv STK.
-  apply c_reply_match_intro with bc; eauto.
-  intros. eapply H0; eauto. rewrite H; auto.
-Qed.
-
-Theorem sound_external:
-  forall st q, sound_state st -> at_external (Genv.globalenv ge prog) st q ->
-  exists bc m, sound_query bc m q /\
-  forall r st', sound_reply bc m r -> after_external st r st' -> sound_state st'.
-Proof.
-  intros st q Hst Hq. destruct Hq. inv Hst.
-  exists bc, m; cbn; repeat apply conj; auto.
-  - econstructor; eauto.
-  - intros r st' Hr Hst'. inv Hr. inv Hst'.
-    econstructor; eauto.
-    apply sound_stack_new_bound with (Mem.support m); auto.
-    apply sound_stack_exten with bc; auto.
-    apply sound_stack_ext with m; auto.
-Qed.
-*)
 End SOUNDNESS.
 
 (** ** Readonly preservation property *)
@@ -1879,6 +1811,10 @@ Proof.
   eapply Genv.genv_symb_range; eauto.
 Qed.
 
+(** Simplifed version of sound_memory_ro, we need
+    1) ro_mem m1 -> sound_memory_ro m1
+    2) ro_mem m1 -> ro_acc m1 m2 -> ro_mem m2 *)
+(*
 Inductive match_init_data_block :list init_data -> mem -> block ->Prop :=
 |init_data_block_intro: forall (il : list init_data) m b
    (NOWRIT: forall ofs, ~ Mem.perm m b ofs Max Writable),
@@ -1898,6 +1834,7 @@ Definition readonly_mem se m : Prop :=
     Genv.find_info se b = Some (Gvar v) ->
     gvar_readonly v && negb (gvar_volatile v) && definitive_initializer (gvar_init v) = true ->
     match_init_data_block (gvar_init v) m b.
+ *)
 
 Definition sound_memory_ro ge m : Prop :=
   romatch (bc_of_symtbl ge) m (romem_for_symtbl ge)
