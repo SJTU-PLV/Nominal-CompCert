@@ -23,20 +23,15 @@ void encrypt (void ( *complete) (int), int input){
 
 *)
 Inductive state: Type :=
-| Callstateg
+| Call1
     (fptr: val)
     (input: int)
     (m: mem)
-| Callstatef
-    (vf: val)
-    (aif: int)
+| Call2
+    (fptr: val)
+    (output: int)
     (m: mem)
-| Returnstatef
-    (aif: int)
-    (rig: int)
-    (m: mem)
-| Returnstateg
-    (ri: int)
+| Return
     (m: mem).
 
 Definition genv := Genv.t fundef unit.
@@ -44,74 +39,82 @@ Definition genv := Genv.t fundef unit.
 Section WITH_SE.
   Context (se: Genv.symtbl).
   
-Inductive initial_state (ge:genv) : query li_c -> state -> Prop :=
-| initial_state_intro
-    v m i
-    (FIND: Genv.find_funct ge v = Some (Internal func_g)):
-    initial_state ge (cq v int_int_sg ((Vint i) :: nil) m) (Callstateg i m).
+Inductive initial_state1 (ge:genv) : query li_c -> state -> Prop :=
+| initial_state_intro1
+    v m i b ofs
+    (FIND: Genv.find_funct ge v = Some (Internal func_encrypt_b1)):
+  initial_state1 ge (cq v int_fptr__void_sg ((Vptr b ofs) :: (Vint i) :: nil) m) (Call1 (Vptr b ofs) i m).
+
+Inductive initial_state2 (ge:genv) : query li_c -> state -> Prop :=
+| initial_state_intro2
+    v m i b ofs
+    (FIND: Genv.find_funct ge v = Some (Internal func_encrypt_b2)):
+    initial_state2 ge (cq v int_fptr__void_sg ((Vptr b ofs) :: (Vint i) :: nil) m) (Call1 (Vptr b ofs) i m).
 
 Inductive at_external (ge:genv): state -> query li_c -> Prop :=
 | at_external_intro
-    aif m vf id
-    (FIND: Genv.find_funct ge vf = Some (External (EF_external id int_int_sg))):
-    at_external ge (Callstatef vf aif m) (cq vf int_int_sg ((Vint (Int.sub aif Int.one)) :: nil) m).
+    m output b ofs:
+    at_external ge (Call2 (Vptr b ofs) output m) (cq (Vptr b ofs) int__void_sg (Vint output :: nil) m).
 
 Inductive after_external: state -> reply li_c -> state -> Prop :=
 | after_external_intro
-    aif ti m m' vf:
-    after_external (Callstatef vf aif m) (cr (Vint ti) m') (Returnstatef aif ti m').
-
-Inductive step : state -> trace -> state -> Prop :=
-| step_zero
-    i m
-    (ZERO: i.(Int.intval) = 0%Z):
-    step (Callstateg i m) E0 (Returnstateg (Int.zero) m)
-| step_read
-    i b_mem m ti i'
-    (NZERO: i.(Int.intval) <> 0%Z)
-    (EQ: i.(Int.intval) = i'.(Int.intval))
-    (FINDM: Genv.find_symbol se _s = (Some b_mem))
-    (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
-    (LOAD1: Mem.loadv Mint32 m (Vptr b_mem (Ptrofs.repr 4)) = Some (Vint ti)):
-      step (Callstateg i m) E0 (Returnstateg ti m)
-| step_call
-    i m i' b_mem vf
-    (NZERO: i.(Int.intval) <> 0%Z)
-    (FINDM: Genv.find_symbol se _s = (Some b_mem))
-    (LOAD0: Mem.loadv Mint32 m (Vptr b_mem Ptrofs.zero) = Some (Vint i'))
-    (FINDF: Genv.symbol_address se f_id Ptrofs.zero = vf)
-    (VF: vf <> Vundef)
-    (NEQ: i.(Int.intval) <> i'.(Int.intval)):
-    step (Callstateg i m) E0 (Callstatef vf i m)
-| step_return
-    b_mem m m' m'' ti i
-    (FINDM: Genv.symbol_address se _s Ptrofs.zero  = Vptr b_mem Ptrofs.zero)
-    (STORE0: Mem.storev Mint32 m (Vptr b_mem Ptrofs.zero) (Vint i) = Some m')
-    (STORE0: Mem.storev Mint32 m' (Vptr b_mem (Ptrofs.repr 4)) (Vint (Int.add ti i)) = Some m''):
-    step (Returnstatef i ti m) E0 (Returnstateg (Int.add ti i) m'').
+    vf m m' output res:
+    after_external (Call2 vf output m) (cr res m') (Return m').
 
 Inductive final_state: state -> reply li_c  -> Prop :=
   | final_state_intro
-      s m:
-      final_state (Returnstateg s m) (cr (Vint s) m).
+      m:
+      final_state (Return m) (cr Vundef m).
 
+Inductive step1 : state -> trace -> state -> Prop := 
+| step_xor1
+    input output m b ofs key keyb
+    (FINDKEY: Genv.find_symbol se key_id = Some keyb)
+    (LOADKEY: Mem.loadv Mint32 m (Vptr keyb Ptrofs.zero) = Some (Vint key))
+    (XOR: output = Int.xor input key):
+    step1 (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) output m).
+
+Inductive step2 : state -> trace -> state -> Prop :=
+| step_xor2
+    input m b ofs:
+    step2 (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) (Int.xor input (Int.repr 42)) m).
+                                    
 End WITH_SE.
 
-Program Definition L_A : Smallstep.semantics li_c li_c :=
+Program Definition L1 : Smallstep.semantics li_c li_c :=
   {|
-   Smallstep.skel := erase_program M_A;
+   Smallstep.skel := erase_program b1;
    Smallstep.state := state;
    Smallstep.activate se :=
-     let ge := Genv.globalenv se M_A in
+     let ge := Genv.globalenv se b1 in
      {|
-       Smallstep.step ge := step ge;
+       Smallstep.step ge := step1 ge;
        Smallstep.valid_query q := Genv.is_internal ge (cq_vf q);
-       Smallstep.initial_state := initial_state ge;
+       Smallstep.initial_state := initial_state1 ge;
        Smallstep.at_external := at_external ge;
        Smallstep.after_external := after_external;
        Smallstep.final_state := final_state;
        globalenv := ge;
      |}
-   |}.
+  |}.
+
+Program Definition L2 : Smallstep.semantics li_c li_c :=
+  {|
+   Smallstep.skel := erase_program b2;
+   Smallstep.state := state;
+   Smallstep.activate se :=
+     let ge := Genv.globalenv se b2 in
+     {|
+       Smallstep.step ge := step2;
+       Smallstep.valid_query q := Genv.is_internal ge (cq_vf q);
+       Smallstep.initial_state := initial_state2 ge;
+       Smallstep.at_external := at_external ge;
+       Smallstep.after_external := after_external;
+       Smallstep.final_state := final_state;
+       globalenv := ge;
+     |}
+  |}.
+
+
 
 
