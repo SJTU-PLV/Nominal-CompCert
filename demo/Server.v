@@ -11,14 +11,14 @@ Require Import Integers Intv.
 (* C-level spec : in C code:
 L1:
 int key;
-void encrypt (void ( *complete)(int)), int input){
+void encrypt (int input, void ( *complete)(int))){
   int output = input ^ key;
   complete(output);
 }
 
 L2:
 const int key = 42;
-void encrypt (void ( *complete)(int), int input){
+void encrypt (int input, void ( *complete)(int)){
   int output = input ^ key;
   complete(output)
 }
@@ -28,7 +28,7 @@ Definition encrypt_id := (1%positive).
 Definition key_id := (2%positive).
 
 Definition int__void_sg : signature := mksignature (AST.Tint :: nil) Tvoid cc_default.
-Definition int_fptr__void_sg : signature := mksignature (AST.Tany64 :: AST.Tint :: nil) Tvoid cc_default.
+Definition int_fptr__void_sg : signature := mksignature (AST.Tint :: AST.Tany64 :: nil) Tvoid cc_default.
 
 (** registers responding to above signatures*)
 
@@ -39,8 +39,9 @@ Compute (loc_arguments int_fptr__void_sg).
 (*= if Archi.win64
        then One (Locations.R Machregs.CX) :: One (Locations.R Machregs.DX) :: nil
        else One (Locations.R Machregs.DI) :: One (Locations.R Machregs.SI) :: nil
-*)
-
+ *)
+Compute is_callee_save (Machregs.AX).
+(* = false *)
 (** * Implementation of b1.asm, corresponding to L1 *)
 
 Definition key_def := {|
@@ -54,34 +55,21 @@ Definition key_def := {|
 L1: 
 Pallocframe 16 8 0
 
-Pmov RDI RBX //save the function pointer
-Pmov key RDI //read key from memory to RDI as argument
-Pxor RSI RDI //xor op
-Pcall_r RBX
+Pmov key RAX //read key from memory to RAX as argument
+Pxor RAX RDI //xor op
+Pcall_r RSI //call function pointer
 
 Pfreeframe 16 8 0
 Pret
 
 *)
 Definition code_b1: list instruction :=
-   (* .cfi_startproc *)
    Pallocframe 16 (Ptrofs.repr 8) Ptrofs.zero ::
-     (* subq    $8, %rsp *)
-     (* .cfi_adjust_cfa_offset    8 *)
-     (* leaq    16(%rsp), %rax *)
-     (* movq    %rax, 0(%rsp) *)
-     Pmov_rr RBX RDI ::
-     (* movq    %rdi, %rbx *)
-     Pmovl_rm RDI (Addrmode None None (inr (key_id, Ptrofs.zero))) ::
-     (* movl	memoized(%rip), %rdi *)
-     Pxorl_rr RDI RSI ::
-     (* xorl  %rsi %rdi *)
-     Pcall_r RBX (int__void_sg) ::
-     (* callr  RBX *)
+     Pmovl_rm RAX (Addrmode None None (inr (key_id, Ptrofs.zero))) ::
+     Pxorl_rr RDI RAX ::
+     Pcall_r RSI (int__void_sg) ::
      Pfreeframe 16 (Ptrofs.repr 8) Ptrofs.zero ::
-     (* addq    $8, %rsp *)
      Pret ::
-       (* ret *)
      nil.
 
 Definition func_encrypt_b1: Asm.function :=
@@ -107,35 +95,22 @@ Definition key_def_const := {|
 |}.
 
 (*
-L1: 
+L2: 
 Pallocframe 16 8 0
 
-Pmov RDI RBX //save the function pointer
-Pmov key RDI //read key from memory to RDI as argument
-Pxor RSI RDI //xor op
-Pcall_r RBX
+Pxori 42 RDI //read key from memory to RDI as argument
+Pcall_r RSI
 
 Pfreeframe 16 8 0
 Pret
 
 *)
 Definition code_b2: list instruction :=
-   (* .cfi_startproc *)
    Pallocframe 16 (Ptrofs.repr 8) Ptrofs.zero ::
-     (* subq    $8, %rsp *)
-     (* .cfi_adjust_cfa_offset    8 *)
-     (* leaq    16(%rsp), %rax *)
-     (* movq    %rax, 0(%rsp) *)
-     Pmov_rr RBX RDI ::
-     (* movq    %rdi, %rbx *)
      Pxorl_ri RDI (Int.repr 42) ::
-     (* xorli  42 %rdi *)
-     Pcall_r RBX (int__void_sg) ::
-     (* callr  RBX *)
+     Pcall_r RSI (int__void_sg) ::
      Pfreeframe 16 (Ptrofs.repr 8) Ptrofs.zero ::
-     (* addq    $8, %rsp *)
      Pret ::
-       (* ret *)
      nil.
 
 Definition func_encrypt_b2: Asm.function :=
