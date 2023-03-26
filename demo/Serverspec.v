@@ -45,13 +45,13 @@ Inductive initial_state1 (ge:genv) : query li_c -> state -> Prop :=
 | initial_state_intro1
     v m i b ofs
     (FIND: Genv.find_funct ge v = Some (Internal func_encrypt_b1)):
-  initial_state1 ge (cq v int_fptr__void_sg ((Vptr b ofs) :: (Vint i) :: nil) m) (Call1 (Vptr b ofs) i m).
+  initial_state1 ge (cq v int_fptr__void_sg ((Vint i) :: (Vptr b ofs) ::nil) m) (Call1 (Vptr b ofs) i m).
 
 Inductive initial_state2 (ge:genv) : query li_c -> state -> Prop :=
 | initial_state_intro2
     v m i b ofs
     (FIND: Genv.find_funct ge v = Some (Internal func_encrypt_b2)):
-    initial_state2 ge (cq v int_fptr__void_sg ((Vptr b ofs) :: (Vint i) :: nil) m) (Call1 (Vptr b ofs) i m).
+    initial_state2 ge (cq v int_fptr__void_sg ((Vint i) :: (Vptr b ofs) :: nil) m) (Call1 (Vptr b ofs) i m).
 
 Inductive at_external (ge:genv): state -> query li_c -> Prop :=
 | at_external_intro
