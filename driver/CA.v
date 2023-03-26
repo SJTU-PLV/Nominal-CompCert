@@ -136,7 +136,6 @@ Record cc_cainjp_world :=
       cajw_injp: world injp;
       cajw_sg : signature;
       cajw_rs : regset;
-      cajw_m : mem
     }.
 
 Inductive cc_c_asm_injp_mq : cc_cainjp_world -> c_query -> query li_asm -> Prop:=
@@ -155,7 +154,7 @@ Inductive cc_c_asm_injp_mq : cc_cainjp_world -> c_query -> query li_asm -> Prop:
     args_removed sg tsp tm tm0 -> (* The Outgoing arguments are readable and freeable in tm *)
     vf <> Vundef -> tra <> Vundef ->
     cc_c_asm_injp_mq
-      (cajw (injpw j m tm Hm) sg rs tm)
+      (cajw (injpw j m tm Hm) sg rs)
       (cq vf sg args m)
       (rs,tm).
 
@@ -170,7 +169,7 @@ Inductive cc_c_asm_injp_mr : cc_cainjp_world -> c_reply -> reply li_asm -> Prop 
               loc_out_of_reach j m b ofs) ->
      rs'#SP = rs#SP -> rs'#PC = rs#RA ->
      cc_c_asm_injp_mr
-       (cajw (injpw j m tm Hm) sg rs tm)
+       (cajw (injpw j m tm Hm) sg rs)
        (cr res m')
        (rs', tm').
 
@@ -201,22 +200,22 @@ Proof.
   inv H14.
   - (*easy: no Outgoing part*)
     rename tm0 into tm.
-    exists (cajw (injpw j m tm Hm3) sg rs tm).
+    exists (cajw (injpw j m tm Hm3) sg rs).
     repeat apply conj; eauto.
     + constructor; eauto.
     + econstructor; eauto.
       intros. inv H3. red in H1. rewrite H1 in H6. extlia.
       constructor; eauto.
-    + intros r1 r2 Hr. inversion Hr. subst. clear H11.
+    + intros r1 r2 Hr. inversion Hr. subst.
       exists (cr tres tm'). split.
       * econstructor; eauto. split.
         instantiate (1:= injpw j' m' tm' Hm'0).
-        inv H15.
+        inv H12.
         constructor; eauto.
         constructor; eauto.
         constructor; eauto.
       * constructor; eauto with mem.
-        inv H15.
+        inv H12.
         eapply Mem.unchanged_on_implies; eauto.
         intros. inv H3. red in H1. rewrite H1 in H6. extlia.
   - (*with Outgoing part*)
@@ -240,7 +239,7 @@ Proof.
           eapply Mem.perm_free_2 in H3 as NOPERMtm0; eauto.
         + eapply mi_perm_inv; eauto.
     }
-    exists (cajw (injpw j m tm Htm) sg rs tm).
+    exists (cajw (injpw j m tm Htm) sg rs).
     repeat apply conj; eauto.
     + constructor; eauto.
       erewrite <- Mem.support_free; eauto.
@@ -253,14 +252,14 @@ Proof.
         apply NOPERM. eauto with mem.
       * subst sp. rewrite <- H1.
         eapply args_removed_free; eauto.
-    + intros r1 r2 Hr. inv Hr. clear H15. subst sp tsp. inv H24.
+    + intros r1 r2 Hr. inv Hr. subst sp tsp. inv H21.
       assert {tm'0| Mem.free tm' sb (offset_sarg sofs 0) (offset_sarg sofs (size_arguments sg)) = Some tm'0}.
       {
         apply Mem.range_perm_free.
         red. intros.
         apply Mem.free_range_perm in H3 as RANGEtm. red in RANGEtm.
         inversion H32.
-        eapply unchanged_on_perm; eauto. apply H26. rewrite <- H1.
+        eapply unchanged_on_perm; eauto. apply H25. rewrite <- H1.
         constructor; eauto. rewrite <- H1 in H18. inv H18. eauto.
       }
       destruct X as [tm'0 FREE'].
@@ -269,7 +268,7 @@ Proof.
         eapply Mem.free_right_inject; eauto. intros.
         assert (loc_out_of_reach j' m' sb (ofs+ delta)).
         eapply loc_out_of_reach_incr; eauto.
-        eapply H26; eauto. rewrite <- H1. econstructor; eauto.
+        eapply H25; eauto. rewrite <- H1. econstructor; eauto.
         eapply inject_implies_dom_in; eauto.
         inv H18. rewrite <- H1 in H13. inv H13. eauto.
         red in H13. exploit H13; eauto. replace (ofs + delta - delta) with ofs by lia.
@@ -279,7 +278,7 @@ Proof.
       * econstructor. split.
         instantiate (1:= injpw j' m' tm'0 INJ').
         -- constructor; eauto.
-           ++ apply Mem.ro_unchanged_memval_bytes. apply Mem.ro_unchanged_memval_bytes in H23.
+           ++ apply Mem.ro_unchanged_memval_bytes. apply Mem.ro_unchanged_memval_bytes in H28.
               red. intros. destruct (loc_init_args_dec (size_arguments sg) (rs RSP) b ofs).
               rewrite <- H1 in l. inv l.
               exfalso.
@@ -292,7 +291,7 @@ Proof.
               eapply Mem.valid_block_free_2 in H10; eauto.
               inv UNC2. rewrite <- unchanged_on_perm in H12; eauto.
               inv UNC1. rewrite <- unchanged_on_perm0 in H11; eauto.
-              exploit H23; eauto. intros [A B].
+              exploit H28; eauto. intros [A B].
               rewrite <- unchanged_on_perm; eauto.
               rewrite unchanged_on_contents; eauto.
               rewrite unchanged_on_contents0; eauto.
@@ -305,12 +304,12 @@ Proof.
               eapply Mem.perm_free_1; eauto.
               eapply Mem.perm_free_4; eauto.
            ++ exploit Mem.free_mapped_unchanged_on; eauto.
-              intros. eapply H26; eauto. rewrite <- H1. constructor; eauto.
+              intros. eapply H25; eauto. rewrite <- H1. constructor; eauto.
               intros [tm''0 [FREE'' UNC]].
               rewrite FREE' in FREE''. inv FREE''. eauto.
           ++ red. intros. exploit H34; eauto. intros [A B].
              split; eauto with mem.
-        -- constructor; eauto. constructor.
+        -- constructor; cbn; eauto.
       * constructor; eauto.
         -- eapply Mem.free_unchanged_on'; eauto.
            intros. intro. red in H11. apply H11.
@@ -385,16 +384,16 @@ Qed.
 Lemma cc_cainjp__injp_ca :
   ccref (cc_c_asm_injp) (cc_c injp @ cc_c_asm).
 Proof.
-  intros [w sg rs tm] se1 se2 q1 q2 Hse Hq.
+  intros [w sg rs] se1 se2 q1 q2 Hse Hq.
   destruct w as [j m tm1 Hm]. inv Hse. inv Hq.
-  rename tm2 into tm0. inv H16.
+  inv H15.
   - (* no Outgoing part*) rename tm0 into tm.
     exists (se2, (injpw j m tm Hm), caw sg rs tm). repeat apply conj; eauto.
     + constructor; eauto. constructor; eauto. constructor; eauto.
     + econstructor; eauto. split.
       econstructor; eauto. constructor.
       econstructor; eauto. subst tsp0. eauto. constructor; eauto.
-      subst tvf. inv H9; try congruence.
+      subst tvf. inv H8; try congruence.
     + intros r1 r3 [r2 [Hr1 Hr2]]. destruct Hr1 as [w' [Hw Hr1]]. inv Hr1. inv Hr2.
       cbn in *. destruct w' as [j' m' tm'' Hm']. inv Hw. cbn in *.
       rename m2' into tm'0. inv H1. rename m1' into m'.
@@ -449,21 +448,21 @@ Proof.
     assert (Htm0: Mem.inject j m tm0).
     {
       eapply Mem.free_right_inject; eauto. intros.
-      red in H10. exploit H10; eauto. subst tsp0. rewrite <- H.
+      red in H9. exploit H9; eauto. subst tsp0. rewrite <- H.
       econstructor; eauto.
       replace (ofs + delta - delta) with ofs by lia.
       eauto with mem.
-    }
-    exists (se2, (injpw j m tm0 Htm0), caw sg rs tm). repeat apply conj; eauto.
+    } 
+    exists (se2, (injpw j m tm0 Htm0), caw sg rs tm1). repeat apply conj; eauto.
     + constructor; eauto. constructor; eauto. erewrite Mem.support_free; eauto.
       constructor; eauto.
     + econstructor; eauto. split.
       econstructor; eauto. constructor.
       econstructor; eauto. constructor. subst tsp0.
-      rewrite <- H. econstructor; eauto. subst tvf. inv H9; try congruence.
+      rewrite <- H. econstructor; eauto. subst tvf. inv H8; try congruence.
     + intros r1 r3 [r2 [Hr1 Hr2]]. destruct Hr1 as [w' [Hw Hr1]]. inv Hr1. inv Hr2.
       destruct w' as [j' m' tm'' Hm']. inv Hw.
-      rename m2' into tm'0. inv H12. rename m1' into m'. cbn in H7.
+      rename m2' into tm'0. inv H13. rename m1' into m'. cbn in H12.
       assert (Htm': Mem.inject j' m' tm').
       {
         eapply inject_unchanged_on_inject; eauto.
@@ -476,7 +475,7 @@ Proof.
       * constructor; eauto.
         -- apply Mem.ro_unchanged_memval_bytes. red. intros.
            destruct (loc_init_args_dec (size_arguments sg) sp b ofs).
-           ++ inversion H25. eapply unchanged_on_perm in H13; eauto. split. eauto.
+           ++ inversion H25. eapply unchanged_on_perm in H15; eauto. split. eauto.
               inversion H25. symmetry. eapply unchanged_on_contents; eauto.
            ++ apply Mem.ro_unchanged_memval_bytes in H31.
               assert (PERMtm'0: Mem.perm tm'0 b ofs Cur Readable).
@@ -488,7 +487,7 @@ Proof.
                 in H0 as UNCF.
               2: {intros. intros. intro. apply H20. unfold tsp0 in *. rewrite <- H. constructor. eauto. }
               assert (NOWRITtm0 : ~ Mem.perm tm0 b ofs Max Writable).
-              intro. apply H16. eapply Mem.perm_free_3; eauto.
+              intro. apply H18. eapply Mem.perm_free_3; eauto.
               exploit H31; eauto. eapply Mem.valid_block_free_1; eauto.
               intros [PERMtm0 MVAL].
               split. eapply Mem.perm_free_3; eauto.
@@ -519,14 +518,14 @@ Proof.
                  etransitivity. inversion H35. eapply unchanged_on_perm; eauto.
                  unfold Mem.valid_block in *. erewrite Mem.support_free; eauto.
                  inversion H24. eapply unchanged_on_perm; eauto.
-                 unfold Mem.valid_block in *. erewrite <- Mem.support_free in H13. 2: eauto.
+                 unfold Mem.valid_block in *. erewrite <- Mem.support_free in H15. 2: eauto.
                  inversion H35; eauto.
            ++ intros.
               destruct (loc_init_args_dec (size_arguments sg) sp b ofs).
               ** inversion H25. eauto.
               ** etransitivity. inversion H24. eapply unchanged_on_contents; eauto.
                  inversion H35. eapply unchanged_on_perm0; eauto.
-                 apply Mem.perm_valid_block in H13.
+                 apply Mem.perm_valid_block in H15.
                  eapply Mem.valid_block_free_1; eauto.
                  eapply Mem.perm_free_1; eauto.
                  subst sp tsp0. rewrite <- H in n.
