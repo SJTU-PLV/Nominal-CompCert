@@ -27,7 +27,7 @@ Let tge := Genv.globalenv tse b1.
 Definition wp := cajw_injp w.
 Definition sg := cajw_sg w.
 Definition rs0 := cajw_rs w.
-Definition m2 := cajw_m w.
+Definition m2 := match wp with injpw _ _ m2 _ => m2 end.
 Definition s2 := Mem.support m2.
 Hypothesis GE: match_stbls injp wp se tse.
 Definition sp0 := rs0 RSP.
@@ -332,9 +332,6 @@ Proof.
   rewrite !H3. eauto.
 Qed.
 
-Definition well_w (w: cc_cainjp_world) : Prop :=
-  match cajw_injp w with
-    |injpw _ _ m2 _ => m2 = cajw_m2
 Lemma injp_CA_simulation: forward_simulation
                  (cc_c_asm_injp)
                  (cc_c_asm_injp)
@@ -344,8 +341,8 @@ Proof.
   intros se1 se2 w Hse Hse1. cbn in *. subst.
   pose (ms := fun s1 s2 => match_state_c_asm w se2 s1 s2 /\
                           cajw_sg w = int_fptr__void_sg).
-  eapply forward_simulation_plus with (match_states := ms).
-  destruct w as [[f ? ? Hm] sg rs0 m2'0]. cbn in Hse. inv Hse. subst; cbn in *; eauto.
+  eapply forward_simulation_plus with (match_states := ms);
+  destruct w as [[f ? ? Hm] sg rs0]; cbn in Hse; inv Hse; subst; cbn in *; eauto.
   -  (*valid_query*)
     intros. inv H.
     simpl. cbn in *.
@@ -354,48 +351,37 @@ Proof.
   - (* initial *)
     intros q1 q2 s1 Hq Hi1. inv Hi1.
     inv Hq.
-    inv H11. 2:{ rewrite size_int_fptr__void_sg_0 in H2. extlia. }
-    clear Hm0. rename tm0 into m2. rename m into m1. rename rs into rs0.
+    inv H18. 2:{ rewrite size_int_fptr__void_sg_0 in H3. extlia. }
+    rename tm0 into m2. rename m into m1.
     exists (Mem.support m2, State rs0 m2 true).
     generalize  match_program_id. intro TRAN.
     eapply Genv.find_funct_transf in TRAN; eauto.
-    2: inv H; eauto.
     repeat apply conj.
-    + econstructor; eauto. inv H9.
-      subst tsp. congruence.
+    + econstructor; eauto. inv H17.
+      subst tsp0. congruence.
     + eauto.
     + subst tvf. unfold Genv.find_funct in TRAN.
       destruct (rs0 PC) eqn:HPC; try congruence. destruct Ptrofs.eq_dec; try congruence.
-      subst targs. rewrite loc_arguments_int in H3. simpl in H3. inv H3. inv H11.
-      inv H8. inv H3.
+      subst targs. rewrite loc_arguments_int in H11. simpl in H11. inv H11. inv H8.
+      inv H4. inv H7.
       econstructor; cbn; eauto.
-      inv H9. subst tsp. congruence.
+      inv H17. subst tsp0. congruence.
     + eauto.
-    + cbn in Hse. inv Hse. eauto.
   - (* final_state *)
     intros s1 s2 r1 Hms Hf1. inv Hf1. inv Hms. inv H. cbn in *.
-    exists (rs, m2''). split. constructor. destruct w. cbn in *. unfold s2 in H6.
-    simpl in H6. destruct cajw_injp.
-    econstructor.
-    exists (cr (Vint s) m2'''). split.
-    exists (injpw j' m m2''' Hm'''). split. eauto. constructor; eauto.
-    constructor; eauto.
-    constructor; eauto. eapply Mem.unchanged_on_implies; eauto.
-    intros. simpl. auto.
-    constructor. eauto with mem.
-    intros. inv H0. rewrite size_int_int_sg_0 in H10. extlia.
-    intros. inv H0. rewrite size_int_int_sg_0 in H10. extlia.
-    intros. inv H0. rewrite size_int_int_sg_0 in H2. extlia.
+    exists (rs, m2''). split. constructor.
+    econstructor; eauto.
+    intros. inv H. rewrite size_int_fptr__void_sg_0 in H9. extlia.
   - (* at_external*)
-    intros s1 s2 q1 MS EXT1. inv EXT1. inv MS.
-    inv H0. cbn in *. inv H8. cbn in *.
-    symmetry in H5. inv H5.
-    inv H. eapply Genv.match_stbls_incr in H3; eauto.
+    intros s1 s2 q1 MS EXT1. cbn. inv EXT1. inv MS.
+    inv H. cbn in *. inv H11. cbn in *.
+    symmetry in H8. inv H8.
+    eapply Genv.match_stbls_incr in H2; eauto.
     2:{
-      intros. exploit H35; eauto. intros [A B].
+      intros. exploit H32; eauto. intros [A B].
       unfold Mem.valid_block in *. split; eauto with mem.
     }
-    exists ((se2, (injpw f m m2' Hm'1)),(caw int_int_sg rs m2')).
+    exists (cajw (injpw f m m2' Hm'1) int_fptr__void_sg rs).
     exists (rs,m2'). repeat apply conj.
     + econstructor; eauto.
       generalize  match_program_id. intro TRAN.
