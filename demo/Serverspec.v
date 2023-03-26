@@ -31,7 +31,9 @@ Inductive state: Type :=
     (fptr: val)
     (output: int)
     (m: mem)
-| Return
+| Return1
+    (m: mem)
+| Return2
     (m: mem).
 
 Definition genv := Genv.t fundef unit.
@@ -59,12 +61,12 @@ Inductive at_external (ge:genv): state -> query li_c -> Prop :=
 Inductive after_external: state -> reply li_c -> state -> Prop :=
 | after_external_intro
     vf m m' output res:
-    after_external (Call2 vf output m) (cr res m') (Return m').
+    after_external (Call2 vf output m) (cr res m') (Return1 m').
 
 Inductive final_state: state -> reply li_c  -> Prop :=
   | final_state_intro
       m:
-      final_state (Return m) (cr Vundef m).
+      final_state (Return2 m) (cr Vundef m).
 
 Inductive step1 : state -> trace -> state -> Prop := 
 | step_xor1
@@ -72,12 +74,16 @@ Inductive step1 : state -> trace -> state -> Prop :=
     (FINDKEY: Genv.find_symbol se key_id = Some keyb)
     (LOADKEY: Mem.loadv Mint32 m (Vptr keyb Ptrofs.zero) = Some (Vint key))
     (XOR: output = Int.xor input key):
-    step1 (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) output m).
+  step1 (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) output m)
+| step_asmret m:
+    step1 (Return1 m) E0 (Return2 m).
 
 Inductive step2 : state -> trace -> state -> Prop :=
 | step_xor2
     input m b ofs:
-    step2 (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) (Int.xor input (Int.repr 42)) m).
+  step2 (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) (Int.xor input (Int.repr 42)) m)
+| step_asmfree m:
+  step2 (Return1 m) E0 (Return2 m).
                                     
 End WITH_SE.
 

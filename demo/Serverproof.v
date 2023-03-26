@@ -45,20 +45,22 @@ Inductive match_state_c_asm : state -> (sup * Asm.state) -> Prop :=
   Val.has_type sp0 Tptr -> Val.has_type ra0 Tptr ->
   valid_blockv (Mem.support m2) sp0 ->
   vf0 = Vptr eb Ptrofs.zero ->
-  Genv.find_funct_ptr ge b = Some (Internal func_encrypt_b1) ->
+  Genv.find_funct_ptr ge eb = Some (Internal func_encrypt_b1) ->
   j b = Some (b', delta) ->
   rs0 RDI = Vint input ->
   rs0 RSI = Vptr b' (Ptrofs.add ofs (Ptrofs.repr delta)) ->
   match_state_c_asm (Call1 (Vptr b ofs) input m1) (s2, State rs0 m2 true)
-|match_call2 m1 b ofs j Hm (rs:regset) m1' m2' Hm' output sb:
+|match_call2 m1 b ofs j Hm (rs:regset) m1' m2' Hm' output sb b' delta eb:
     let sp := rs RSP in let ra := rs RA in let vf := rs PC in
     sp = Vptr sb Ptrofs.zero ->
     wp = injpw j m1 m2 Hm ->
     (forall ofs, loc_out_of_reach j m1 sb ofs) ->
     Mem.range_perm m2' sb 0 16 Cur Freeable ->
     injp_acc wp (injpw j m1' m2' Hm') ->
-    rs RBX = Vptr b ofs -> rs RDI = Vint output ->
-    ra = Vptr b (Ptrofs.repr 5) ->
+    rs RSI = Vptr b' (Ptrofs.add ofs (Ptrofs.repr delta)) ->
+    j b = Some (b', delta) -> rs RDI = Vint output ->
+    ra = Vptr eb (Ptrofs.repr 4) ->
+    Genv.find_funct_ptr ge eb = Some (Internal func_encrypt_b1) ->
     sb = Mem.fresh_block s2 ->
     (forall b d, j b = Some (sb,d) -> False) ->
     vf <> Vundef ->
@@ -67,9 +69,31 @@ Inductive match_state_c_asm : state -> (sup * Asm.state) -> Prop :=
     valid_blockv s2 sp0 ->
      (forall r, is_callee_save r = true -> rs (preg_of r) = rs0 (preg_of r)) ->
      Mem.sup_include s2 (Mem.support m2')  ->
-     match_state_c_asm (Call2 (Vptr b ofs) output m1') (s2, State rs m2' true).
-|match_return1: j m1 m1'' m2''
-|match_return2:
+     match_state_c_asm (Call2 (Vptr b ofs) output m1') (s2, State rs m2' true)
+|match_return1 j m1 m1'' m2'' Hm Hm'' (rs:regset) eb:
+    let sp := rs RSP in
+    sp = Vptr sb Ptrofs.zero ->
+     injw = injpw j m1 m2 Hm ->
+     (forall ofs, loc_out_of_reach j m1 sb ofs) ->
+     Mem.range_perm m2'' sb 0 24 Cur Freeable ->
+     injp_acc injw (injpw j' m1'' m2'' Hm'') ->
+     rs PC = Vptr eb (Ptrofs.repr 4) ->
+     Genv.find_funct_ptr ge b = Some (Internal encrypt_b1) ->
+     (forall b d, j' b = Some (sb,d) -> False) ->
+     Mem.loadv Mptr m2'' (Val.offset_ptr sp (Ptrofs.repr 8)) = Some ra0 ->
+     Mem.loadv Mptr m2'' (Val.offset_ptr sp Ptrofs.zero) = Some sp0 ->
+     valid_blockv (Mem.support m2) sp0 ->
+     (forall r, is_callee_save r = true  -> rs (preg_of r) = rs0 (preg_of r)) ->
+     Mem.sup_include (Mem.support m2) (Mem.support m2'') ->
+     match_state_c_asm (Return1 m1'') (s2, State rs m2'' true).
+|match_return2 j' m2'' m1'' (rs:regset) Hm'':
+  (injp_acc injw (injpw j' m1'' m2'' Hm'') ->
+   rs RSP = rs0 RSP -> rs PC = rs0 RA ->
+   (forall r, is_callee_save r = true -> rs (preg_of r) = rs0 (preg_of r)) ->
+   Mem.sup_include s2 (Mem.support m2'') ->
+   match_state_c_asm (Return2 m1'') (s2, State rs m2'' false),
+    
+     
   |match_ca_returnf j m1 i rig (rs: regset) b sb j' m1'' m2'' m3'' Hm Hm'':
      let sp := rs RSP in
      sp = Vptr sb Ptrofs.zero ->
