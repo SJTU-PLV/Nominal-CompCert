@@ -119,7 +119,7 @@ Definition func_encrypt_b2: Asm.function :=
   Asm.mkfunction (int_fptr__void_sg) code_b2.
 
 Definition global_definitions_b2 : list (ident * globdef fundef unit) :=
-  (key_id, Gvar key_def) ::
+  (key_id, Gvar key_def_const) ::
   (encrypt_id, Gfun(Internal func_encrypt_b2)) ::
   (complete_id, Gfun(External (EF_external "complete" int__void_sg))) ::
   nil.

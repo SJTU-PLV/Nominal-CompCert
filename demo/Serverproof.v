@@ -662,6 +662,7 @@ Proof.
 Qed.
 
 (* Self-sim using ro *)
+Require Import ValueDomain.
 Require Import ValueAnalysis.
 
 Section RO.
@@ -837,6 +838,15 @@ Ltac Pgss := rewrite Pregmap.gss.
 
 Definition source_mem (w: injp_world) := match w with injpw _ m1 _ _ => m1 end.
 
+(*need non-trivial induction*)
+Lemma romem_for_ablock : forall se id b vdef,
+    Genv.find_symbol se id = Some b  ->   
+    Genv.find_info se b = Some (Gvar vdef) ->
+    gvar_readonly vdef && negb (gvar_volatile vdef) && definitive_initializer (gvar_init vdef) = true ->
+    Maps.PTree.get id (romem_for_symtbl se) = Some (store_init_data_list (ablock_init Pbot) 0 (gvar_init vdef)).
+Proof.
+Admitted.
+
 Lemma CAinjp_simulation_L2: forward_simulation
                  (ro @ cc_c_asm_injp)
                  (ro @ cc_c_asm_injp)
@@ -977,7 +987,30 @@ Proof.
       exploit Mem.free_right_inject; eauto.
       intros. inversion Hm0. eauto. intro INJ4.
       rename H14 into Hpc. rename H18 into Hrdi. rename H19 into Hrsi.
-      set (key := Int.repr 42).
+      assert (ROREAD : key = Int.repr 42).
+      { clear - H20 FINDKEY LOADKEY Hse1.
+        inv H20. red in H. red in Hse1.
+        assert (Maps.PTree.get key_id (prog_defmap (erase_program b2)) = Some (Gvar key_def_const)).
+        cbn.
+        rewrite Maps.PTree.gso; try congruence.
+        rewrite Maps.PTree.gso; try congruence.
+        rewrite Maps.PTree.gss. reflexivity.
+        unfold key_id. unfold encrypt_id. congruence.
+        unfold key_id. unfold complete_id. congruence.
+        exploit Hse1; eauto.
+        intros (key_b' &  vardef & FIND' & INFO & L).
+        inv L. inv H3. inv H9. inv H8.
+        rewrite FINDKEY in FIND'. inv FIND'.
+        exploit H; eauto.
+        simpl.
+        apply Genv.find_invert_symbol in FINDKEY as INVERT.
+        rewrite INVERT. reflexivity.
+        eapply romem_for_ablock; eauto. cbn.
+        intros [_ [[_ B] _]].
+        exploit B. eauto. intro. cbn in H2. rewrite Ptrofs.unsigned_zero in H2.
+        unfold ablock_store,ablock_load in H2. cbn in H2. rewrite Maps.ZTree.gss in H2.
+        inv H2. reflexivity.
+      }
       set (output := Int.xor input key).
       assert (exists s2': Asm.state,
              plus (Asm.step (Mem.support m2)) (Genv.globalenv se2 b2) (State rs0 m2 true) E0 s2'
@@ -1034,7 +1067,7 @@ Proof.
              intros. cbn. eauto.
           -- red. intros. congruence.
           + repeat Pgso. rewrite undef_regs_rdi. Pgss.
-            unfold output. rewrite Hrdi. reflexivity.
+            unfold output. rewrite Hrdi. subst. reflexivity.
           + Pgso. Pgss. reflexivity.
           + apply Mem.valid_new_block in ALLOC as VALID. unfold Mem.valid_block in *.
           erewrite Mem.support_store. 2: eauto.
@@ -1061,18 +1094,18 @@ Proof.
      }
      destruct X as [m2'1 FREE'].
      exploit Mem.free_right_inject. apply Hm''. eauto.
-     intros. exploit H11; eauto. intro INJ'.
-     symmetry in H3. inv H3. rename m3 into m2. inv H15.
+     intros. exploit H12; eauto. intro INJ'.
+     symmetry in H3. inv H3. inv H16.
      assert (exists s2': Asm.state,
-             plus (Asm.step (Mem.support m2)) (Genv.globalenv se2 b1) (State rs m2'' true) E0 s2'
+             plus (Asm.step (Mem.support m2)) (Genv.globalenv se2 b2) (State rs m2'' true) E0 s2'
              /\ ms (Return2 m) (Mem.support m2, s2')).
      {
        eexists. split.
        econstructor. econstructor; eauto. find_instr.
       (* Pfreeframe *)
-       simpl. cbn. unfold Mem.loadv. subst sp. rewrite H1 in *.
-       cbn in H12. cbn in H13. cbn. rewrite H12. rewrite H13.
-       Plia. cbn. rewrite FREE'. unfold nextinstr. cbn. rewrite H9.
+       simpl. cbn. unfold Mem.loadv. subst sp. inv H1. rewrite <- H0 in *.
+       cbn in H13. cbn in H14. cbn. rewrite H13. rewrite H14.
+       Plia. cbn. rewrite FREE'. unfold nextinstr. cbn. rewrite H10.
        cbn. compute_pc. reflexivity.
        (*Pret*)
        eapply star_step; eauto. econstructor; eauto. Simplif.
@@ -1081,7 +1114,7 @@ Proof.
        eapply star_refl. traceEq.
       - constructor; eauto.
         econstructor. instantiate (1:= INJ'). all: eauto.
-        + cbn. inv H8.
+        + cbn. inv H9.
           constructor; eauto.
           -- eapply Mem.ro_unchanged_trans; eauto.
              eapply Mem.ro_unchanged_free; eauto.
@@ -1091,25 +1124,26 @@ Proof.
              eapply Mem.free_unchanged_on; eauto.
              intros. intros [A B]. congruence.
              intros. simpl. intuition auto. subst.
-             unfold Mem.valid_block in H8. unfold s2 in H14. cbn in H14. congruence.
+             unfold Mem.valid_block in H16. cbn in H15. congruence.
         + intros. cbn.
           cbn. repeat try Pgso; eauto; destruct r; cbn in *; try congruence; eauto.
-        + cbn. unfold s2. cbn. inv H8.
-          erewrite (Mem.support_free _ _ _ _ _ FREE'). inv H26. eauto.
+        + cbn. inv H9.
+          erewrite (Mem.support_free _ _ _ _ _ FREE'). inv H30. eauto.
       }
-      destruct H3 as [s2' [STEP MS]]. unfold s2. cbn.
+      destruct H16 as [s2' [STEP MS]].  cbn.
       exists (Mem.support m2, s2'). intuition eauto.
-      revert STEP. generalize (Mem.support m2), (Genv.globalenv se1 b1); clear; intros.
+      revert STEP. generalize (Mem.support m2), (Genv.globalenv se2 b2); clear; intros.
       pattern (State rs m2'' true),E0,s2'. eapply plus_ind2; eauto; intros.
       * apply plus_one; eauto.
       * eapply plus_trans; eauto.
         apply plus_one. auto.
   - constructor. intros. inv H.
 Qed.
-End CAinjp_b1.
 
-Theorem self_simulation_wt :
-  forward_simulation wt_c wt_c L1 L1.
+End CAinjp_b2.
+
+Theorem self_simulation_wt' :
+  forward_simulation wt_c wt_c L2 L2.
 Proof.
   constructor. econstructor; eauto.
   intros se1 se2 w Hse Hse1. cbn in *.
@@ -1140,65 +1174,30 @@ Proof.
   - constructor. intros. inv H.
 Qed.
 
-(* Self-sim using ro *)
-Require Import ValueAnalysis.
 
-Section RO.
-
-Variable se : Genv.symtbl.
-Variable m0 : mem.
-
-Inductive sound_state : state -> Prop :=
-| sound_Callstateg : forall vf i m,
-    ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Call1 vf i m)
-| sound_Callstatef : forall vf o m,
-    ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Call2 vf o m)
-| sound_Returnstatef : forall m,
-    ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Return1 m)
-| sound_Returnstateg : forall m,
-    ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Return2 m).
-End RO.
-
-Definition ro_inv '(row se0 m0) := sound_state se0 m0.
-
-Lemma L1_ro : preserves L1 ro ro ro_inv.
+Lemma cc_compcert_wt_ro:
+  cceqv cc_compcert (wt_c @ (ro @ cc_c_asm_injp) @ cc_asm injp).
 Proof.
-  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
-  split; cbn in *.
-  - intros. inv H0; inv H.
-    + constructor; eauto.
-    + constructor; eauto.
-  - intros. inv H0. inv H. constructor; eauto.
-    constructor; eauto. red. eauto.
-  - intros. inv H0. inv H. simpl.
-    exists (row se1 m). split; eauto.
-    constructor; eauto. constructor; eauto.
-    intros r s' Hr AFTER. inv Hr. inv AFTER.
-    constructor. eapply ro_acc_trans; eauto.
-    eapply ro_acc_sound; eauto.
-  - intros. inv H0. inv H. constructor; eauto.
+  split; unfold cc_compcert.
+  etransitivity. rewrite <- (cc_compose_assoc ro).
+  rewrite inv_commute_ref. rewrite cc_compose_assoc.
+  rewrite <- (cc_compose_assoc ro).
+  reflexivity. reflexivity.
+  etransitivity. rewrite cc_compose_assoc.
+  rewrite <- (cc_compose_assoc wt_c).
+  rewrite inv_commute_ref. rewrite cc_compose_assoc.
+  reflexivity. reflexivity.
 Qed.
-
-Theorem self_simulation_ro :
-  forward_simulation ro ro L1 L1.
+  
+Lemma semantics_preservation_L2:
+  forward_simulation cc_compcert cc_compcert L2 (Asm.semantics b2).
 Proof.
-  eapply preserves_fsim. eapply L1_ro; eauto.
-Qed.
-
-Lemma semantics_preservation_L1:
-  forward_simulation cc_compcert cc_compcert L1 (Asm.semantics b1).
-Proof.
-  unfold cc_compcert.
+  rewrite cc_compcert_wt_ro at 1.
+  rewrite cc_compcert_wt_ro.
   eapply compose_forward_simulations.
-  eapply self_simulation_ro.
+  eapply self_simulation_wt'.
   eapply compose_forward_simulations.
-  eapply self_simulation_wt.
-  eapply compose_forward_simulations.
-  eapply CAinjp_simulation_L1.
+  eapply CAinjp_simulation_L2.
   eapply semantics_asm_rel; eauto.
 Qed.
 
