@@ -84,7 +84,9 @@ Definition composites : list composite_definition := nil.
 Definition global_definitions_client : list (ident * globdef fundef type) :=
 (encrypt_id,
    Gfun(External (EF_external "encrypt" int_fptr__void_sg)
-          (Tcons tint (Tcons (Tpointer (Tfunction (Tcons tint Tnil) Tvoid cc_default) noattr)  Tnil)) tint cc_default)) ::
+          (Tcons tint (Tcons (Tpointer (Tfunction (Tcons tint Tnil) Tvoid cc_default) noattr)  Tnil))
+          tint
+          cc_default)) ::
  (request_id, Gfun(Internal func_request)) ::
  (process_id, Gfun(Internal func_process)) ::
  (result_id, Gvar result_def) ::
