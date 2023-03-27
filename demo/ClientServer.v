@@ -17,9 +17,15 @@ client ⊕ L1 ≤ client_asm ⊕ b1
 client ⊕ L2 ≤ client_asm ⊕ b2
  *)
 
-(* Compute compose (Clight.semantics1 client) L1. *)
+(* Compute compose (Clight.semantics1 client) L1. 
+Can terminate ~10min in at laptop
+*)
 
-(*Compute transf_clight_program client.
+Compute transf_clight_program client.
+Require Import Ctypes Ctypesdefs Cshmgen.
+
+Compute signature_of_type (Tcons tint (Tcons (Tpointer (Tfunction (Tcons tint Tnil) Tvoid cc_default) noattr)  Tnil)) tint cc_default.
+           
 Lemma transf_client :
   transf_clight_program client = Error
          (MSG "In function "

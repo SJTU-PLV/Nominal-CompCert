@@ -29,7 +29,7 @@ Definition key_id := (2%positive).
 Definition complete_id := (3%positive).
 
 Definition int__void_sg : signature := mksignature (AST.Tint :: nil) Tvoid cc_default.
-Definition int_fptr__void_sg : signature := mksignature (AST.Tint :: AST.Tany64 :: nil) Tvoid cc_default.
+Definition int_fptr__void_sg : signature := mksignature (AST.Tint :: AST.Tlong :: nil) Tint cc_default.
 
 (** registers responding to above signatures*)
 
