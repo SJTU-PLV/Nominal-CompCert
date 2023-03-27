@@ -55,7 +55,8 @@ Inductive initial_state2 (ge:genv) : query li_c -> state -> Prop :=
 
 Inductive at_external (ge:genv): state -> query li_c -> Prop :=
 | at_external_intro
-    m output b ofs:
+    m output b ofs id
+    (FIND: Genv.find_funct ge (Vptr b ofs) = Some (External (EF_external id int__void_sg))):
     at_external ge (Call2 (Vptr b ofs) output m) (cq (Vptr b ofs) int__void_sg (Vint output :: nil) m).
 
 Inductive after_external: state -> reply li_c -> state -> Prop :=

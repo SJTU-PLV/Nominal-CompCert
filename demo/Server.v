@@ -26,6 +26,7 @@ void encrypt (int input, void ( *complete)(int)){
 Definition main_id := (42%positive).
 Definition encrypt_id := (1%positive).
 Definition key_id := (2%positive).
+Definition complete_id := (3%positive).
 
 Definition int__void_sg : signature := mksignature (AST.Tint :: nil) Tvoid cc_default.
 Definition int_fptr__void_sg : signature := mksignature (AST.Tint :: AST.Tany64 :: nil) Tvoid cc_default.
@@ -77,11 +78,12 @@ Definition func_encrypt_b1: Asm.function :=
 
 Definition global_definitions_b1 : list (ident * globdef fundef unit) :=
   (key_id, Gvar key_def) ::
-  (encrypt_id, Gfun(Internal func_encrypt_b1)) ::
+    (encrypt_id, Gfun(Internal func_encrypt_b1)) ::
+    (complete_id, Gfun(External (EF_external "complete" int__void_sg))) ::
   nil.
 
 Definition public_idents : list ident :=
-(key_id :: encrypt_id :: nil).
+(key_id :: encrypt_id :: complete_id :: nil).
 
 Definition b1: program := mkprogram global_definitions_b1 public_idents main_id.
 
@@ -119,6 +121,7 @@ Definition func_encrypt_b2: Asm.function :=
 Definition global_definitions_b2 : list (ident * globdef fundef unit) :=
   (key_id, Gvar key_def) ::
   (encrypt_id, Gfun(Internal func_encrypt_b2)) ::
+  (complete_id, Gfun(External (EF_external "complete" int__void_sg))) ::
   nil.
 
 Definition b2: program := mkprogram global_definitions_b2 public_idents main_id.
