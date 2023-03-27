@@ -69,23 +69,23 @@ Inductive final_state: state -> reply li_c  -> Prop :=
       m:
       final_state (Return2 m) (cr Vundef m).
 
-Inductive step1 : state -> trace -> state -> Prop := 
+Inductive step : state -> trace -> state -> Prop := 
 | step_xor1
     input output m b ofs key keyb
     (FINDKEY: Genv.find_symbol se key_id = Some keyb)
     (LOADKEY: Mem.loadv Mint32 m (Vptr keyb Ptrofs.zero) = Some (Vint key))
     (XOR: output = Int.xor input key):
-  step1 (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) output m)
+  step (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) output m)
 | step_asmret m:
-    step1 (Return1 m) E0 (Return2 m).
-
+    step (Return1 m) E0 (Return2 m).
+(*
 Inductive step2 : state -> trace -> state -> Prop :=
 | step_xor2
     input m b ofs:
   step2 (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) (Int.xor input (Int.repr 42)) m)
 | step_asmfree m:
   step2 (Return1 m) E0 (Return2 m).
-                                    
+ *)                                  
 End WITH_SE.
 
 Program Definition L1 : Smallstep.semantics li_c li_c :=
@@ -95,7 +95,7 @@ Program Definition L1 : Smallstep.semantics li_c li_c :=
    Smallstep.activate se :=
      let ge := Genv.globalenv se b1 in
      {|
-       Smallstep.step ge := step1 ge;
+       Smallstep.step ge := step ge;
        Smallstep.valid_query q := Genv.is_internal ge (cq_vf q);
        Smallstep.initial_state := initial_state1 ge;
        Smallstep.at_external := at_external ge;
@@ -112,7 +112,7 @@ Program Definition L2 : Smallstep.semantics li_c li_c :=
    Smallstep.activate se :=
      let ge := Genv.globalenv se b2 in
      {|
-       Smallstep.step ge := step2;
+       Smallstep.step ge := step ge;
        Smallstep.valid_query q := Genv.is_internal ge (cq_vf q);
        Smallstep.initial_state := initial_state2 ge;
        Smallstep.at_external := at_external ge;
