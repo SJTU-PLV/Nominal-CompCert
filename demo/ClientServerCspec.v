@@ -1,5 +1,5 @@
 Require Import Integers Values Memory.
-Require Import Clight.
+Require Import Ctypes Clight.
 Require Import InjectFootprint Invariant ValueAnalysis.
 Require Import CA Asm CallConv CKLRAlgebra.
 Require Import Client Server Serverspec.
@@ -102,7 +102,7 @@ Inductive step : state -> trace -> state -> Prop :=
 
 End WITH_SE.
 
-Program Definition top_spec : Smallstep.semantics li_c li_c :=
+Program Definition top_spec1 : Smallstep.semantics li_c li_c :=
     {|
       Smallstep.skel := linked_skel1;
       Smallstep.state := state;
@@ -127,14 +127,127 @@ Variable se tse : Genv.symtbl.
 
 Hypothesis MSTB : match_stbls injp w se tse.
 
-Inductive match_state : state -> Clight.state -> Prop :=
-|match_process (j:meminj) m tm input pb j pb'
+Inductive match_client_state : state -> Clight.state -> Prop :=
+|match_process (j:meminj) m tm output pb pb'
   (Hm: Mem.inject j m tm)
   (FINDP : Genv.find_symbol se process_id = Some pb)
   (FINJ: j pb = Some (pb',0))
   (INJP : injp_acc w (injpw j m tm Hm)):
-  match_state (Callprocess input m) (Callstate (Vptr pb Ptrofs.zero) (Vint input :: nil) Kstop tm).
+  match_client_state (Callprocess output m) (Callstate (Vptr pb' Ptrofs.zero) (Vint output :: nil) Kstop tm)
+|match_request (j:meminj) m tm input rb rb'
+   (Hm: Mem.inject j m tm)
+  (FINDP : Genv.find_symbol se process_id = Some rb)
+  (FINJ: j rb = Some (rb',0))
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_client_state (Callrequest input m) (Callstate (Vptr rb' Ptrofs.zero) (Vint input :: nil) Kstop tm)
+|match_return (j:meminj) m tm
+  (Hm: Mem.inject j m tm)
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_client_state (Return m) (Returnstate Vundef Kstop tm).
+
+Inductive match_server_state : state -> Serverspec.state -> Prop :=
+|match_encrypt (j:meminj) m tm pb pb' input
+   (Hm: Mem.inject j m tm)
+  (FINDP : Genv.find_symbol se process_id = Some pb)
+  (FINJ: j pb = Some (pb',0))
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_server_state (Callencrypt input (Vptr pb Ptrofs.zero) m) (Call1 (Vptr pb' Ptrofs.zero) input tm).
+
+Inductive match_state : state -> list (frame L) -> Prop :=
+|match_client_intro s1 s2 k:
+   match_client_state s1 s2 ->
+   match_state s1 (st L true s2 :: k)
+|match_server_intro s1 s2 k:
+  match_server_state s1 s2 ->
+  match_state s1 (st L false s2 :: k).
 
 End MS.
   
-
+Lemma top_simulation_L1:
+  forward_simulation (cc_c injp) (cc_c injp) top_spec1 composed_spec1.
+Proof.
+  constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
+  intros se1 se2 w Hse Hse1. cbn in *. subst.
+  pose (ms := fun s1 s2 => match_state w se1 s1 s2).
+  eapply forward_simulation_plus with (match_states := ms).
+  destruct w as [f0 m0 tm0 Hm0]; cbn in Hse; inv Hse; subst; cbn in *; eauto.
+  - intros. inv H. cbn in *. inv H3.
+    unfold valid_query.
+    unfold L. simpl.
+    unfold SmallstepLinking.valid_query, Smallstep.valid_query.
+    cbn.
+    inv H0; try congruence; cbn; eauto.
+    destruct (Genv.invert_symbol se1 b1) eqn:INV.
+    2: {
+      unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr.
+      rewrite !Genv.find_def_spec.
+      assert (Genv.invert_symbol se2 b2 = None).
+      destruct (Genv.invert_symbol se2 b2) as [i|] eqn:FIND2; eauto.
+      apply Genv.invert_find_symbol in FIND2.
+      inv H2.
+      eapply mge_symb in FIND2 as FIND1; eauto.
+      apply Genv.find_invert_symbol in FIND1. congruence.
+      rewrite H0.
+      destruct Ptrofs.eq_dec; destruct Ptrofs.eq_dec; eauto.
+    }
+    apply Genv.invert_find_symbol in INV as FIND.
+    assert (delta = 0).
+    { inv H2. exploit mge_dom. eapply Genv.genv_symb_range; eauto.
+      intros [a b]. rewrite H in b. inv b. reflexivity.
+    }
+    subst delta.
+    destruct (Ptrofs.eq_dec ofs1 Ptrofs.zero).
+    2: {
+      unfold Genv.is_internal. unfold Genv.find_funct.
+      rewrite !pred_dec_false. reflexivity.
+      rewrite Ptrofs.add_zero. auto.
+      rewrite Ptrofs.add_zero. auto.
+    }
+    (* unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr.
+    cbn. rewrite !Ptrofs.add_zero.
+    rewrite pred_dec_true; eauto.
+    rewrite pred_dec_true; eauto.
+    destruct (peq i 3). subst. cbn.
+     *)
+    (*true, need lemma about Genv.globalenv construction of genv from symtbl and static definition*)
+    admit.
+  - intros q1 q2 s1 Hq Hi1. inv Hq. inv H1. inv Hi1; cbn in *.
+    + (*process*)
+      inv Hse.
+      eapply Genv.find_symbol_match in H5 as FIND'; eauto.
+      destruct FIND' as [fb' [FINJ FIND']]. inv H.
+      rewrite FINJ in H4. inv H4. rename b2 into fb'. rewrite Ptrofs.add_zero.
+      exists ((st L true (Callstate (Vptr fb' Ptrofs.zero) (Vint output :: nil) Kstop m2)) :: nil).
+      split. split.
+      -- cbn. admit. (*same lemma as above*)
+      -- cbn.
+         set (gec := (Clight.globalenv se2
+       {|
+       Ctypes.prog_defs := global_definitions_client;
+       Ctypes.prog_public := public_idents_client;
+       Ctypes.prog_main := main_id;
+       Ctypes.prog_types := composites;
+       Ctypes.prog_comp_env := Maps.PTree.empty Ctypes.composite;
+       Ctypes.prog_comp_env_eq := eq_refl |})).
+       assert (FINDP: Genv.find_funct gec (Vptr fb' Ptrofs.zero) = Some (Ctypes.Internal func_process)).
+       admit.
+       Compute type_of_function func_process.
+       set (targs := (Ctypes.Tcons
+            (Ctypes.Tint Ctypes.I32 Ctypes.Signed
+                         {| Ctypes.attr_volatile := false; Ctypes.attr_alignas := None |}) Ctypes.Tnil)).
+       assert (Ctypes.signature_of_type targs Tvoid Ctypes.noattr = int__void_sg).
+       econstructor.
+       unfold Clight.initial_state.
+      constructor.
+    inv H18. 2:{ rewrite size_int_fptr__void_sg_0 in H3. extlia. }
+    rename tm0 into m2. rename m into m1.
+    exists (Mem.support m2, State rs0 m2 true).
+    generalize  match_program_id. intro TRAN.
+    eapply Genv.find_funct_transf in TRAN; eauto.
+    repeat apply conj.  
+    Search Genv.globalenv.
+              cbn; eauto. admit.
+    simpl. cbn in *.
+    simpl.
+    generalize  match_program_id. intro TRAN.
+    eapply Genv.is_internal_transf in TRAN; eauto.
