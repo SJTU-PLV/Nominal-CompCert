@@ -71,13 +71,12 @@ Qed.
 
 (* Top level theorem *)
 
-Section SPEC.
+Section SPEC1.
 
 (*items need to define and prove *)
 
-Axiom top_sim: forward_simulation (cc_c injp) (cc_c injp) top_spec composed_spec1.
-Axiom top_ro : forward_simulation ro ro top_spec top_spec.
-Axiom top_wt : forward_simulation wt_c wt_c top_spec top_spec.
+Axiom top_ro : forward_simulation ro ro top_spec1 top_spec1.
+Axiom top_wt : forward_simulation wt_c wt_c top_spec1 top_spec1.
 
 Variable client_asm tp : Asm.program.
 Axiom compile: transf_clight_program client = OK client_asm.
@@ -136,7 +135,7 @@ Proof.
   rewrite cc_injpca_cainjp. reflexivity.
 Qed.
   
-Theorem spec_sim_1 : forward_simulation cc_compcert cc_compcert top_spec (Asm.semantics tp).
+Theorem spec_sim_1 : forward_simulation cc_compcert cc_compcert top_spec1 (Asm.semantics tp).
 Proof.
   rewrite ro_injp_cc_compcert at 1.
   rewrite ro_injp_cc_compcert at 2.
@@ -145,10 +144,10 @@ Proof.
   eapply compose_forward_simulations.
   eapply top_ro.
   eapply compose_forward_simulations.
-  eapply top_sim.
+  eapply top_simulation_L1.
   eapply compose_Client_Server_correct1; eauto.
   eapply compile.
   eapply link.
 Qed.
 
-End SPEC.
+End SPEC1.

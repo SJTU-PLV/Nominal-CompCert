@@ -139,11 +139,11 @@ Inductive match_client_state : state -> Clight.state -> Prop :=
   (FINDP : Genv.find_symbol se process_id = Some rb)
   (FINJ: j rb = Some (rb',0))
   (INJP : injp_acc w (injpw j m tm Hm)):
-  match_client_state (Callrequest input m) (Callstate (Vptr rb' Ptrofs.zero) (Vint input :: nil) Kstop tm)
-|match_return (j:meminj) m tm
+  match_client_state (Callrequest input m) (Callstate (Vptr rb' Ptrofs.zero) (Vint input :: nil) Kstop tm).
+(*|match_return (j:meminj) m tm
   (Hm: Mem.inject j m tm)
   (INJP : injp_acc w (injpw j m tm Hm)):
-  match_client_state (Return m) (Returnstate Vundef Kstop tm).
+  match_client_state (Return m) (Returnstate Vundef Kstop tm). *)
 
 Inductive match_server_state : state -> Serverspec.state -> Prop :=
 |match_encrypt (j:meminj) m tm pb pb' input
@@ -159,7 +159,15 @@ Inductive match_state : state -> list (frame L) -> Prop :=
    match_state s1 (st L true s2 :: k)
 |match_server_intro s1 s2 k:
   match_server_state s1 s2 ->
-  match_state s1 (st L false s2 :: k).
+  match_state s1 (st L false s2 :: k)
+|match_return_introc (j:meminj) m tm
+  (Hm: Mem.inject j m tm)
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_state (Return m) (st L true (Returnstate Vundef Kstop tm) :: nil) 
+|match_return_intros (j:meminj) m tm
+  (Hm: Mem.inject j m tm)
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_state (Return m) (st L false (Return2 tm) :: nil) .
 
 End MS.
   
@@ -216,6 +224,7 @@ Proof.
       inv Hse.
       eapply Genv.find_symbol_match in H5 as FIND'; eauto.
       destruct FIND' as [fb' [FINJ FIND']]. inv H.
+      inv H0. inv H7. inv H3.
       rewrite FINJ in H4. inv H4. rename b2 into fb'. rewrite Ptrofs.add_zero.
       exists ((st L true (Callstate (Vptr fb' Ptrofs.zero) (Vint output :: nil) Kstop m2)) :: nil).
       split. split.
@@ -231,23 +240,40 @@ Proof.
        Ctypes.prog_comp_env_eq := eq_refl |})).
        assert (FINDP: Genv.find_funct gec (Vptr fb' Ptrofs.zero) = Some (Ctypes.Internal func_process)).
        admit.
-       Compute type_of_function func_process.
+       (* Compute type_of_function func_process. *)
        set (targs := (Ctypes.Tcons
             (Ctypes.Tint Ctypes.I32 Ctypes.Signed
                          {| Ctypes.attr_volatile := false; Ctypes.attr_alignas := None |}) Ctypes.Tnil)).
-       assert (Ctypes.signature_of_type targs Tvoid Ctypes.noattr = int__void_sg).
-       econstructor.
-       unfold Clight.initial_state.
-      constructor.
-    inv H18. 2:{ rewrite size_int_fptr__void_sg_0 in H3. extlia. }
-    rename tm0 into m2. rename m into m1.
-    exists (Mem.support m2, State rs0 m2 true).
-    generalize  match_program_id. intro TRAN.
-    eapply Genv.find_funct_transf in TRAN; eauto.
-    repeat apply conj.  
-    Search Genv.globalenv.
-              cbn; eauto. admit.
-    simpl. cbn in *.
-    simpl.
-    generalize  match_program_id. intro TRAN.
-    eapply Genv.is_internal_transf in TRAN; eauto.
+       assert (Ctypes.signature_of_type targs Ctypes.Tvoid cc_default = int__void_sg).
+       reflexivity.
+       rewrite <- H.
+       econstructor; eauto.
+       constructor; cbn; eauto. constructor; eauto. constructor.
+      -- constructor. econstructor; eauto.
+         reflexivity.
+    + (*encrypt*)
+      admit.
+    + (*requese*)
+      admit.
+  - intros s1 s2 r1 Hms Hf1. inv Hf1. inv Hms;
+      try inv H; cbn in *.
+    + (*final of server*)
+    exists (cr Vundef tm). split. cbn.
+    constructor. constructor.
+    eexists. split. eauto. constructor; eauto. constructor.
+    +  exists (cr Vundef tm). split. cbn.
+    constructor. constructor.
+    eexists. split. eauto. constructor; eauto. constructor.
+  - intros. cbn in *. inv H0.
+  - (*step*)
+    intros. inv H; inv H0; inv H; cbn.
+    + (*process*)
+      admit.
+    + (*encrypt*)
+      admit.
+    + (*request*)
+      admit.
+  - constructor. intros. inv H.
+Admitted.
+
+
