@@ -81,12 +81,16 @@ Definition func_request :=
 
 Definition composites : list composite_definition := nil.
 
+
+Definition func_encrypt_external : fundef :=
+  (External (EF_external "encrypt" int_fptr__void_sg)
+          (Tcons tint (Tcons (Tpointer (Tfunction (Tcons tint Tnil) Tvoid cc_default) noattr)  Tnil))
+          Tvoid
+          cc_default).
+
 Definition global_definitions_client : list (ident * globdef fundef type) :=
 (encrypt_id,
-   Gfun(External (EF_external "encrypt" int_fptr__void_sg)
-          (Tcons tint (Tcons (Tpointer (Tfunction (Tcons tint Tnil) Tvoid cc_default) noattr)  Tnil))
-          tint
-          cc_default)) ::
+  Gfun func_encrypt_external) ::
  (request_id, Gfun(Internal func_request)) ::
  (process_id, Gfun(Internal func_process)) ::
  (result_id, Gvar result_def) ::

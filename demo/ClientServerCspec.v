@@ -1,10 +1,9 @@
 Require Import Integers Values Memory.
-Require Import Ctypes Clight.
+Require Import Clight.
 Require Import InjectFootprint Invariant ValueAnalysis.
 Require Import CA Asm CallConv CKLRAlgebra.
 Require Import Client Server Serverspec.
 Require Import Smallstep Linking SmallstepLinking.
-
 Require Import LanguageInterface.
 (** * C-level composed specification *)
 
@@ -37,6 +36,7 @@ Theorem link_result :
 Proof.
   unfold compose. rewrite link_ok. simpl. reflexivity.
 Qed.
+
 
 
 (** * C-level top specification *)
@@ -77,9 +77,10 @@ Definition valid_query (q: query li_c) : bool :=
   match (cq_vf q) with
   |Vptr b ofs =>  if Ptrofs.eq_dec ofs Ptrofs.zero then
                   match Genv.invert_symbol se b with
-                  | Some id => (id =? process_id)%positive || (id =? encrypt_id)%positive ||
-                                (id =? request_id)%positive
-                  | None => false
+                  | Some 3%positive | Some  1%positive | Some 6%positive => true
+                  (* => (id =? process_id)%positive || (id =? encrypt_id)%positive ||
+                                (id =? request_id)%positive *)
+                  | _ => false
                   end
                   else false
   |_  => false
@@ -96,8 +97,9 @@ Inductive step : state -> trace -> state -> Prop :=
    (READ: Mem.loadv Mint32 m (Vptr kb Ptrofs.zero) = Some (Vint key))
    (XOR: output = Int.xor input key):
   step (Callencrypt input (Vptr pb Ptrofs.zero) m) E0 (Callprocess output m)
-|step_request input pb m
-  (FINDP: Genv.find_symbol se process_id = Some pb):
+|step_request input pb m eb
+   (FINDP: Genv.find_symbol se process_id = Some pb)
+   (FINDE: Genv.find_symbol se encrypt_id = Some eb):
   step (Callrequest input m) E0 (Callencrypt input (Vptr pb Ptrofs.zero) m).
 
 End WITH_SE.
@@ -125,6 +127,9 @@ Section MS.
 Variable w: injp_world.
 Variable se tse : Genv.symtbl.
 
+Let tge1 := Clight.globalenv tse client.
+Let tge2 := Genv.globalenv tse b1.
+
 Hypothesis MSTB : match_stbls injp w se tse.
 
 Inductive match_client_state : state -> Clight.state -> Prop :=
@@ -136,7 +141,7 @@ Inductive match_client_state : state -> Clight.state -> Prop :=
   match_client_state (Callprocess output m) (Callstate (Vptr pb' Ptrofs.zero) (Vint output :: nil) Kstop tm)
 |match_request (j:meminj) m tm input rb rb'
    (Hm: Mem.inject j m tm)
-  (FINDP : Genv.find_symbol se process_id = Some rb)
+  (FINDP : Genv.find_symbol se request_id = Some rb)
   (FINJ: j rb = Some (rb',0))
   (INJP : injp_acc w (injpw j m tm Hm)):
   match_client_state (Callrequest input m) (Callstate (Vptr rb' Ptrofs.zero) (Vint input :: nil) Kstop tm).
@@ -154,12 +159,6 @@ Inductive match_server_state : state -> Serverspec.state -> Prop :=
   match_server_state (Callencrypt input (Vptr pb Ptrofs.zero) m) (Call1 (Vptr pb' Ptrofs.zero) input tm).
 
 Inductive match_state : state -> list (frame L) -> Prop :=
-|match_client_intro s1 s2 k:
-   match_client_state s1 s2 ->
-   match_state s1 (st L true s2 :: k)
-|match_server_intro s1 s2 k:
-  match_server_state s1 s2 ->
-  match_state s1 (st L false s2 :: k)
 |match_return_introc (j:meminj) m tm
   (Hm: Mem.inject j m tm)
   (INJP : injp_acc w (injpw j m tm Hm)):
@@ -167,7 +166,162 @@ Inductive match_state : state -> list (frame L) -> Prop :=
 |match_return_intros (j:meminj) m tm
   (Hm: Mem.inject j m tm)
   (INJP : injp_acc w (injpw j m tm Hm)):
-  match_state (Return m) (st L false (Return2 tm) :: nil) .
+  match_state (Return m) ((st L false (Return2 tm)) :: nil)
+|match_request_intro
+   (j:meminj) m tm input rb rb'
+  (Hm: Mem.inject j m tm)
+  (FINDP : Genv.find_symbol se request_id = Some rb)
+  (FINJ: j rb = Some (rb',0))
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_state (Callrequest input m)
+    ((st L true (Callstate (Vptr rb' Ptrofs.zero) (Vint input :: nil) Kstop tm))  :: nil)
+|match_encrypt_intro1 (j:meminj) m tm v tv input
+  (Hm: Mem.inject j m tm)
+  (* (FINDP : Genv.find_symbol se process_id = Some pb) *)
+  (VINJ: Val.inject j v tv)
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_state  (Callencrypt input v m)
+    ((st L false (Call1 tv input tm)) ::nil)
+|match_encrypt_intro2 (j:meminj) m tm tm' input vf args cont v tv
+   (Hm: Mem.inject j m tm)
+  (*(FINDP : Genv.find_symbol se process_id = Some pb)
+  (FINJ: j pb = Some (pb',0)) *)
+  (VINJ: Val.inject j v tv)
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_state  (Callencrypt input v m)
+    ((st L false (Call1 tv input tm)) ::
+       (st L true (Callstate vf args cont tm')) ::nil)
+|match_process_intro1 (j:meminj) m tm output pb pb'
+  (Hm: Mem.inject j m tm)
+  (FINDP : Genv.find_symbol se process_id = Some pb)
+  (FINJ: j pb = Some (pb',0))
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_state (Callprocess output m)
+    ((st L true(Callstate (Vptr pb' Ptrofs.zero) (Vint output :: nil) Kstop tm)):: nil)
+|match_process_intro2 (j:meminj) m tm  pb pb' vf output output' tm'
+  (Hm: Mem.inject j m tm)
+  (FINDP : Genv.find_symbol se process_id = Some pb)
+  (FINJ: j pb = Some (pb',0))
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_state (Callprocess output m)
+    ((st L true(Callstate (Vptr pb' Ptrofs.zero) (Vint output :: nil) Kstop tm)) ::
+       (st L false (Call2 vf output' tm')) :: nil)
+|match_process_intro3 (j:meminj) m tm  pb pb' vf output output' tm' vf' args cont tm''
+  (Hm: Mem.inject j m tm)
+  (FINDP : Genv.find_symbol se process_id = Some pb)
+  (FINJ: j pb = Some (pb',0))
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_state (Callprocess output m)
+    ((st L true(Callstate (Vptr pb' Ptrofs.zero) (Vint output :: nil) Kstop tm)) ::
+       (st L false (Call2 vf output' tm')) ::
+        (st L true (Callstate vf' args cont tm'')) :: nil).
+
+Lemma find_request:
+  forall rb rb' j,
+    Genv.match_stbls j se tse ->
+    Genv.find_symbol se request_id = Some rb ->
+    j rb = Some (rb',0) ->
+    Genv.find_funct tge1 (Vptr rb' Ptrofs.zero) = Some (Ctypes.Internal func_request).
+Proof.
+  intros. cbn. rewrite pred_dec_true; eauto.
+  unfold global_definitions_client. unfold Genv.find_funct_ptr.
+  rewrite Genv.find_def_spec.
+  eapply Genv.find_symbol_match in H; eauto.
+  destruct H as [tb' [A B]]. rewrite A in H1. inv H1.
+  apply Genv.find_invert_symbol in B. cbn.
+  rewrite B. rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gss. reflexivity.
+  unfold request_id, process_id. congruence.
+  unfold request_id, result_id. congruence.
+Qed.
+
+Lemma find_process:
+  forall rb rb' j,
+    Genv.match_stbls j se tse ->
+    Genv.find_symbol se process_id = Some rb ->
+    j rb = Some (rb',0) ->
+    Genv.find_funct tge1 (Vptr rb' Ptrofs.zero) = Some (Ctypes.Internal func_process).
+Proof.
+  intros. cbn. rewrite pred_dec_true; eauto.
+  unfold global_definitions_client. unfold Genv.find_funct_ptr.
+  rewrite Genv.find_def_spec.
+  eapply Genv.find_symbol_match in H; eauto.
+  destruct H as [tb' [A B]]. rewrite A in H1. inv H1.
+  apply Genv.find_invert_symbol in B. cbn.
+  rewrite B. rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gss. reflexivity.
+  unfold result_id, process_id. congruence.
+Qed.
+
+Lemma find_encrypt:
+  forall rb rb' j,
+    Genv.match_stbls j se tse ->
+    Genv.find_symbol se encrypt_id = Some rb ->
+    j rb = Some (rb',0) ->
+    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b1).
+Proof.
+  intros. cbn. rewrite pred_dec_true; eauto.
+  unfold global_definitions_client. unfold Genv.find_funct_ptr.
+  unfold tge2.
+  rewrite Genv.find_def_spec.
+  eapply Genv.find_symbol_match in H; eauto.
+  destruct H as [tb' [A B]]. rewrite A in H1. inv H1.
+  apply Genv.find_invert_symbol in B. cbn.
+  rewrite B. rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gss. reflexivity.
+  unfold encrypt_id, complete_id. congruence.
+Qed.
+
+Lemma find_encrypt_1:
+  forall rb rb' j,
+    Genv.match_stbls j se tse ->
+    Genv.find_symbol se encrypt_id = Some rb ->
+    j rb = Some (rb',0) ->
+    Genv.find_funct tge1 (Vptr rb' Ptrofs.zero) = Some (func_encrypt_external).
+Proof.
+  intros. cbn. rewrite pred_dec_true; eauto.
+  unfold global_definitions_client. unfold Genv.find_funct_ptr.
+  unfold tge2.
+  rewrite Genv.find_def_spec.
+  eapply Genv.find_symbol_match in H; eauto.
+  destruct H as [tb' [A B]]. rewrite A in H1. inv H1.
+  apply Genv.find_invert_symbol in B. cbn.
+  rewrite B.
+  rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gss. reflexivity.
+  unfold encrypt_id, request_id. congruence.
+  unfold encrypt_id, process_id. congruence.
+  unfold encrypt_id, result_id. congruence.
+Qed.
+
+Lemma find_encrypt':
+  forall rb j,
+    Genv.match_stbls j se tse ->
+    Genv.find_symbol se encrypt_id = Some rb ->
+    exists rb', j rb = Some (rb',0) /\ Genv.find_symbol tge2 encrypt_id = Some rb' /\
+    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b1).
+Proof.
+  intros. eapply Genv.find_symbol_match in H as F; eauto.
+  destruct F as [rb' [A B]].
+  exists rb'. split. eauto. split. eauto.
+  eapply find_encrypt; eauto.
+Qed.
+
+Lemma find_process':
+  forall rb j,
+    Genv.match_stbls j se tse ->
+    Genv.find_symbol se process_id = Some rb ->
+    exists rb', j rb = Some (rb',0) /\ Genv.find_symbol tge2 process_id = Some rb' /\
+    Genv.find_funct tge1 (Vptr rb' Ptrofs.zero) = Some (Ctypes.Internal func_process).
+Proof.
+  intros. eapply Genv.find_symbol_match in H as F; eauto.
+  destruct F as [rb' [A B]].
+  exists rb'. split. eauto. split. eauto.
+  eapply find_process; eauto.
+Qed.
 
 End MS.
   
@@ -182,9 +336,9 @@ Proof.
   - intros. inv H. cbn in *. inv H3.
     unfold valid_query.
     unfold L. simpl.
-    unfold SmallstepLinking.valid_query, Smallstep.valid_query.
-    cbn.
-    inv H0; try congruence; cbn; eauto.
+    unfold SmallstepLinking.valid_query.
+    unfold Smallstep.valid_query. simpl.
+    inv H0; try congruence; simpl; eauto.
     destruct (Genv.invert_symbol se1 b1) eqn:INV.
     2: {
       unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr.
@@ -211,14 +365,17 @@ Proof.
       rewrite Ptrofs.add_zero. auto.
       rewrite Ptrofs.add_zero. auto.
     }
-    (* unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr.
-    cbn. rewrite !Ptrofs.add_zero.
-    rewrite pred_dec_true; eauto.
-    rewrite pred_dec_true; eauto.
-    destruct (peq i 3). subst. cbn.
-     *)
-    (*true, need lemma about Genv.globalenv construction of genv from symtbl and static definition*)
-    admit.
+    unfold Genv.is_internal.
+    rewrite !Ptrofs.add_zero. subst ofs1.
+    destruct (peq i 3).
+    + subst. setoid_rewrite find_process; eauto.
+    + destruct (peq i 1).
+      ++ subst i. setoid_rewrite find_encrypt; eauto.
+         destruct (Genv.find_funct); cbn; eauto.
+         destruct fundef_is_internal; reflexivity.
+      ++ destruct (peq i 6).
+         subst i. setoid_rewrite find_request; eauto.
+         admit. (* straightforward & tedious*)
   - intros q1 q2 s1 Hq Hi1. inv Hq. inv H1. inv Hi1; cbn in *.
     + (*process*)
       inv Hse.
@@ -226,21 +383,12 @@ Proof.
       destruct FIND' as [fb' [FINJ FIND']]. inv H.
       inv H0. inv H7. inv H3.
       rewrite FINJ in H4. inv H4. rename b2 into fb'. rewrite Ptrofs.add_zero.
+      exploit find_process; eauto. intro FINDP.
       exists ((st L true (Callstate (Vptr fb' Ptrofs.zero) (Vint output :: nil) Kstop m2)) :: nil).
       split. split.
-      -- cbn. admit. (*same lemma as above*)
-      -- cbn.
-         set (gec := (Clight.globalenv se2
-       {|
-       Ctypes.prog_defs := global_definitions_client;
-       Ctypes.prog_public := public_idents_client;
-       Ctypes.prog_main := main_id;
-       Ctypes.prog_types := composites;
-       Ctypes.prog_comp_env := Maps.PTree.empty Ctypes.composite;
-       Ctypes.prog_comp_env_eq := eq_refl |})).
-       assert (FINDP: Genv.find_funct gec (Vptr fb' Ptrofs.zero) = Some (Ctypes.Internal func_process)).
-       admit.
-       (* Compute type_of_function func_process. *)
+      -- simpl. unfold Genv.is_internal.
+         setoid_rewrite find_process; eauto.
+      -- simpl.
        set (targs := (Ctypes.Tcons
             (Ctypes.Tint Ctypes.I32 Ctypes.Signed
                          {| Ctypes.attr_volatile := false; Ctypes.attr_alignas := None |}) Ctypes.Tnil)).
@@ -249,12 +397,41 @@ Proof.
        rewrite <- H.
        econstructor; eauto.
        constructor; cbn; eauto. constructor; eauto. constructor.
-      -- constructor. econstructor; eauto.
-         reflexivity.
+      -- econstructor; eauto. reflexivity.
     + (*encrypt*)
-      admit.
+      inv Hse.
+      eapply Genv.find_symbol_match in H5 as FIND'; eauto.
+      destruct FIND' as [fb' [FINJ FIND']]. inv H.
+      inv H0. inv H7. inv H3. inv H10.
+      rewrite FINJ in H4. inv H4. rename b2 into fb'. rewrite Ptrofs.add_zero.
+      exploit find_encrypt; eauto. intro FINDE.
+      exists ((st L false (Call1 v'0 i m2)) :: nil).
+      split. split.
+      -- simpl. unfold Genv.is_internal.
+         setoid_rewrite find_encrypt; eauto.
+      -- simpl. inv H1. econstructor; eauto.
+      -- inv H1.
+         econstructor; eauto. reflexivity.
     + (*requese*)
-      admit.
+      inv Hse.
+      eapply Genv.find_symbol_match in H5 as FIND'; eauto.
+      destruct FIND' as [fb' [FINJ FIND']]. inv H.
+      inv H0. inv H7. inv H3.
+      rewrite FINJ in H4. inv H4. rename b2 into fb'. rewrite Ptrofs.add_zero.
+      exploit find_request; eauto. intro FINDR.
+      exists ((st L true (Callstate (Vptr fb' Ptrofs.zero) (Vint i :: nil) Kstop m2)) :: nil).
+      split. split.
+      -- simpl. unfold Genv.is_internal. setoid_rewrite FINDR. reflexivity.
+      -- simpl.
+       set (targs := (Ctypes.Tcons
+            (Ctypes.Tint Ctypes.I32 Ctypes.Signed
+                         {| Ctypes.attr_volatile := false; Ctypes.attr_alignas := None |}) Ctypes.Tnil)).
+       assert (Ctypes.signature_of_type targs Ctypes.Tvoid cc_default = int__void_sg).
+       reflexivity.
+       rewrite <- H.
+       econstructor; eauto.
+       constructor; cbn; eauto. constructor; eauto. constructor.
+      -- econstructor; eauto. reflexivity.
   - intros s1 s2 r1 Hms Hf1. inv Hf1. inv Hms;
       try inv H; cbn in *.
     + (*final of server*)
@@ -266,13 +443,109 @@ Proof.
     eexists. split. eauto. constructor; eauto. constructor.
   - intros. cbn in *. inv H0.
   - (*step*)
-    intros. inv H; inv H0; inv H; cbn.
-    + (*process*)
+    intros. inv H; inv H0.
+    + (*process1*)
       admit.
-    + (*encrypt*)
+    + (*process2*)
+      admit.
+    + (*process3*)
+      admit.
+    + (*encrypt1*)
+      admit.
+    + (*encrypt2*)
       admit.
     + (*request*)
-      admit.
+      destruct (Mem.alloc tm 0 4) as [tm' sp] eqn: ALLOC.
+      generalize (Mem.perm_alloc_2 _ _ _ _ _ ALLOC). intro PERMSP.
+      apply Mem.fresh_block_alloc in ALLOC as FRESH.
+      assert (STORE: {tm''| Mem.store Mint32 tm' sp (Ptrofs.unsigned Ptrofs.zero) (Vint input) = Some tm''}).
+      apply Mem.valid_access_store.
+      red. split. red. intros. rewrite Ptrofs.unsigned_zero in H. simpl in H.
+      unfold Mptr in H. replace Archi.ptr64 with true in H by reflexivity. cbn in H.
+      exploit PERMSP. instantiate (1:= ofs). lia. eauto with mem.
+      unfold Mptr. replace Archi.ptr64 with true by reflexivity. simpl. rewrite Ptrofs.unsigned_zero.
+      red. exists  0. lia. destruct STORE as [m2 STORE1].
+      exploit Mem.alloc_right_inject; eauto. intro INJ1.
+      exploit Mem.store_outside_inject; eauto. intros.
+      inv INJP. inv Hm'0.  exploit mi_mappedblocks; eauto.
+      intro INJ2.
+      apply Mem.load_store_same in STORE1 as LOAD1. cbn in LOAD1.
+      assert (UNC1 : Mem.unchanged_on (fun _ _ => True) tm tm').
+      eapply Mem.alloc_unchanged_on; eauto.
+      assert (UNC2: Mem.unchanged_on (fun b ofs => b <> sp) tm' m2).
+      eapply Mem.store_unchanged_on; eauto.
+      exploit (match_stbls_acc injp); eauto.
+      intro MSTB. cbn in MSTB. inv MSTB.
+      exploit find_encrypt'; eauto. intros [eb' [EBINJ [FINDE1 FINDE2]]].
+      exploit find_process'; eauto. intros [pb' [PBINJ [FINDP1 FINDP2]]].
+      exploit find_encrypt_1; eauto.
+      cbn. eexists. split.
+      econstructor.
+      (*step1 function entry *)
+      econstructor; eauto.
+      simpl. constructor.
+      instantiate (1:= func_request).
+      eapply find_request; eauto.
+      (*function_entry*)
+      econstructor; simpl.
+      constructor; eauto. constructor.
+      econstructor; eauto.
+      constructor.
+      econstructor; eauto. rewrite Maps.PTree.gss. reflexivity.
+      econstructor; cbn; eauto.
+      econstructor; eauto. reflexivity.
+      eapply star_step; eauto.
+      (*step2 call*)
+      econstructor; eauto.
+      simpl. constructor.
+      eapply star_step; eauto.
+      eapply step_internal.
+      econstructor. simpl. reflexivity.
+      (*eval_expr*)
+      instantiate (1:= Vptr eb' Ptrofs.zero).
+      eapply eval_Elvalue.
+      eapply eval_Evar_global. rewrite Maps.PTree.gso. reflexivity.
+      unfold encrypt_id. unfold i_id. congruence.  eauto.
+      eapply deref_loc_reference. eauto.
+      (*eval_exprlist*)
+      {
+        econstructor. econstructor.
+        eapply eval_Evar_local; eauto.
+        rewrite Maps.PTree.gss. reflexivity.
+        econstructor. cbn. reflexivity. eauto.
+        cbn. reflexivity.
+        econstructor; eauto.
+        econstructor. eapply eval_Evar_global.
+        rewrite Maps.PTree.gso. reflexivity.
+        unfold process_id. unfold i_id. congruence.  eauto.
+        eapply deref_loc_reference. eauto. reflexivity.
+        econstructor.
+      }
+      eauto. cbn. reflexivity.
+      (*step3 : at_external *)
+      eapply star_one. eapply step_push; eauto.
+      econstructor; eauto. instantiate (1:= false).
+      cbn. unfold Genv.is_internal. rewrite FINDE2. reflexivity.
+      constructor; eauto. traceEq.
+      (*ms*)
+      econstructor; eauto.
+      etransitivity. eauto.
+      instantiate (1:= INJ2).
+      assert (ro_acc tm m2).
+      eapply ro_acc_trans. eapply ro_acc_alloc; eauto.
+      eapply ro_acc_store; eauto.
+      inv H0.
+      constructor; eauto.
+      -- red. intros. eauto.
+      -- eapply Mem.unchanged_on_refl.
+      -- inv UNC1. inv UNC2. constructor.
+      eauto with mem.
+      intros. etransitivity. eauto. apply unchanged_on_perm0.
+      intro. subst. congruence. eauto with mem.
+      intros. etransitivity. apply unchanged_on_contents0.
+      intro. subst. apply Mem.perm_valid_block in H7. congruence. eauto with mem.
+      eauto.
+      -- red. intros. congruence.
   - constructor. intros. inv H.
 Admitted.
 
