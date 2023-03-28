@@ -15,8 +15,6 @@ Require Import CKLRAlgebra Extends Inject InjectFootprint.
 
 Require Import Asmgenproof0 Asmgenproof1.
 
-Section CAinjp_b1.
-
 Section MS.
 
 Variable w: ccworld (cc_c_asm_injp).
@@ -627,7 +625,6 @@ Proof.
   - constructor. intros. inv H.
 Qed.
 
-End CAinjp_b1.
 
 Theorem self_simulation_wt :
   forward_simulation wt_c wt_c L1 L1.
@@ -724,7 +721,7 @@ Proof.
   eapply semantics_asm_rel; eauto.
 Qed.
 
-Section CAinjp_b2.
+(** L2 --> b2*)
 
 Section MS.
 
@@ -813,11 +810,6 @@ Inductive match_state_ro_c_asm : state -> (sup * Asm.state) -> Prop :=
 
 End MS.
 
-Ltac rlia := rewrite maxv; lia.
-Ltac Plia := try rewrite !Ptrofs.unsigned_zero; try rewrite!Ptrofs.unsigned_repr; try rlia.
-Ltac Ap64 := replace Archi.ptr64 with true by reflexivity.
-Ltac Ap64_in H0 := replace Archi.ptr64 with true in H0 by reflexivity.
-
 Lemma match_program_id' :
   match_program (fun _ f0 tf => tf = id f0) eq b2 b2.
 Proof.
@@ -832,9 +824,6 @@ Proof.
   apply linkorder_refl. eauto.
   constructor; eauto.
 Qed.
-
-Ltac Pgso := rewrite Pregmap.gso; try congruence.
-Ltac Pgss := rewrite Pregmap.gss.
 
 Definition source_mem (w: injp_world) := match w with injpw _ m1 _ _ => m1 end.
 
@@ -969,9 +958,6 @@ Proof.
      -- reflexivity.            
   - (*internal_steps*)
     Local Opaque undef_regs.
-    Ltac compute_pc := rewrite Ptrofs.add_unsigned;
-                       rewrite Ptrofs.unsigned_one; rewrite Ptrofs.unsigned_repr; try rlia; cbn.
-    Ltac find_instr := cbn; try rewrite Ptrofs.unsigned_repr; try rlia; cbn; reflexivity.
     intros. inv H; inv H0; inv H; cbn in *. inv H1.
     ++ (*step_xor*)
       inv H13. symmetry in H8. inv H8.
@@ -1139,8 +1125,6 @@ Proof.
         apply plus_one. auto.
   - constructor. intros. inv H.
 Qed.
-
-End CAinjp_b2.
 
 Theorem self_simulation_wt' :
   forward_simulation wt_c wt_c L2 L2.
