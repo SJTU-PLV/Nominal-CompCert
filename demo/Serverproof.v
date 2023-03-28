@@ -1201,31 +1201,3 @@ Proof.
   eapply semantics_asm_rel; eauto.
 Qed.
 
-(*
-(* Final theorem *)
-Require Import Linking Smallstep SmallstepLinking.
-
-Lemma compose_transf_Clight_Asm_correct:
-  forall M_C' tp spec,
-  compose (Clight.semantics1 M_C) L_A = Some spec ->
-  transf_clight_program M_C = OK M_C' ->
-  link M_C' M_A = Some tp ->
-  forward_simulation cc_compcert cc_compcert spec (Asm.semantics tp).
-Proof.
-  intros.
-  rewrite <- (cc_compose_id_right cc_compcert) at 1.
-  rewrite <- (cc_compose_id_right cc_compcert) at 2.
-  eapply compose_forward_simulations.
-  2: { unfold compose in H.
-       destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel; try discriminate.
-       cbn in *. inv H.
-       eapply AsmLinking.asm_linking; eauto. }
-  eapply compose_simulation.
-  eapply clight_semantic_preservation; eauto using transf_clight_program_match.
-  eapply M_A_semantics_preservation.
-  eauto.
-  unfold compose. cbn.
-  apply link_erase_program in H1. rewrite H1. cbn. f_equal. f_equal.
-  apply Axioms.functional_extensionality. intros [|]; auto.
-Qed.
-*)
