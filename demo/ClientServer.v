@@ -72,8 +72,97 @@ Proof.
   apply Axioms.functional_extensionality. intros [|]; auto.
 Qed.
 
+(** * C-level composed specification *)
+
+Require Import Integers Values Memory.
+
+Inductive state : Type :=
+| Callrequest (input : int) (m:mem)
+| Callencrypt (input : int) (fptr : val) (m:mem)
+| Callprocess (output : int) (m:mem)
+| Return (m:mem).
+
+Definition genv := Genv.t unit unit.
+
+Section WITH_SE.
+Context (se:Genv.symtbl).
+
+Inductive initial_state : query li_c ->  state -> Prop :=
+|initial_process output m fb
+   (FIND: Genv.find_symbol se process_id = Some fb):
+  initial_state (cq (Vptr fb Ptrofs.zero) int__void_sg ((Vint output) :: nil) m)
+    (Callprocess output m)
+|initial_encrypt i fb b ofs m
+   (FIND: Genv.find_symbol se encrypt_id = Some fb):
+  initial_state (cq (Vptr fb Ptrofs.zero) int_fptr__void_sg ((Vint i) :: (Vptr b ofs) :: nil) m)
+    (Callencrypt i (Vptr b ofs) m) 
+|initial_request i m fb
+   (FIND: Genv.find_symbol se request_id = Some fb):
+  initial_state (cq (Vptr fb Ptrofs.zero) int__void_sg ((Vint i) :: nil) m) (Callrequest i m).
+    
+Inductive at_external : state -> query li_c -> Prop :=.
+Inductive after_external : state -> c_reply -> state -> Prop := .
+
+Inductive final_state : state -> reply li_c -> Prop :=
+|final_process m:
+  final_state (Return m) (cr Vundef m).
+
+Definition valid_query (q: query li_c) : bool :=
+  match (cq_vf q) with
+  |Vptr b ofs =>  if Ptrofs.eq_dec ofs Ptrofs.zero then
+                  match Genv.invert_symbol se b with
+                  | Some id => (id =? process_id)%positive || (id =? encrypt_id)%positive ||
+                                (id =? request_id)%positive
+                  | None => false
+                  end
+                  else false
+  |_  => false
+  end.
+
+Inductive step : state -> trace -> state -> Prop :=
+|step_process output m m' b
+  (FIND: Genv.find_symbol se result_id = Some b)
+  (SET: Mem.storev Mint32 m (Vptr b Ptrofs.zero) (Vint output) = Some m'):
+  step (Callprocess output m) E0 (Return m')
+|step_encrypt kb pb key input m output
+   (FINDK: Genv.find_symbol se key_id = Some kb)
+   (FINDP: Genv.find_symbol se process_id = Some pb)
+   (READ: Mem.loadv Mint32 m (Vptr kb Ptrofs.zero) = Some (Vint key))
+   (XOR: output = Int.xor input key):
+  step (Callencrypt input (Vptr pb Ptrofs.zero) m) E0 (Callprocess output m)
+|step_request input pb m
+  (FINDP: Genv.find_symbol se process_id = Some pb):
+  step (Callrequest input m) E0 (Callencrypt input (Vptr pb Ptrofs.zero) m).
+
+End WITH_SE.
+
+Compute link (skel (Clight.semantics1 client)) (skel L1).
+
+Definition linked_skel1 : program unit unit:=
+  {|
+    prog_defs := (result_id, result_def) :: (key_id, key_def) ::
+                   (request_id, Gfun tt) :: (encrypt_id, Gfun tt) ::
+                   (process_id, )(complete_id, Gfun tt) :: nil;
+    prog_public := encrypt_id :: 
+  |}
+Program Definition top_spec : Smallstep.semantics li_c li_c :=
+    {|
+      Smallstep.skel := link (skel (Clight.semantics1 client)) (skel L1);
+      Smallstep.state := state;
+      Smallstep.activate se :=
+        {|
+          Smallstep.step _ := step se;
+          Smallstep.valid_query q := valid_query se;
+          Smallstep.initial_state := initial_state ge;
+          Smallstep.at_external := at_external ge;
+          Smallstep.after_external := after_external;
+          Smallstep.final_state := final_state;
+          globalenv := tt;
+        |}
+    |}.
 
 
+(* Top level theorem *)
 Require Import InjectFootprint Invariant ValueAnalysis.
 Require Import CA Asm CallConv CKLRAlgebra.
 Section SPEC.
