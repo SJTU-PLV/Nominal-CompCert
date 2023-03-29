@@ -40,7 +40,9 @@ Definition genv := Genv.t fundef unit.
 
 Section WITH_SE.
   Context (se: Genv.symtbl).
-  
+
+(* we can unify initial_state by define FIND: Genv.find_symbol encrypt_id = Some eb,
+  v = Vptr eb Ptrofs.zero*)
 Inductive initial_state1 (ge:genv) : query li_c -> state -> Prop :=
 | initial_state_intro1
     v m i b ofs
