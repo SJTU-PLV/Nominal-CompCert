@@ -375,7 +375,66 @@ Proof.
          destruct fundef_is_internal; reflexivity.
       ++ destruct (peq i 6).
          subst i. setoid_rewrite find_request; eauto.
-         admit. (* straightforward & tedious*)
+         (* Tedious work below : find function fails for b2 *)
+         simpl. rewrite !pred_dec_true.
+         
+         unfold Genv.find_funct_ptr.
+         assert (FIND_DEF_CLIENT: forall f, Genv.find_def (Genv.globalenv se2 (Ctypes.program_of_program client)) b2 <> Some (Gfun f)).
+         { unfold Genv.globalenv. simpl.
+           intros.
+           unfold Genv.add_globdef.
+           (* se2 b2 = i *)
+           assert (A: Maps.PTree.get i (Genv.genv_symb se2) = Some b2).
+           erewrite <- Genv.mge_symb. 2: eapply H2.
+           eauto. eauto.
+           (* destruct all the get *)
+           repeat destruct Maps.PTree.get eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *.
+           1-15 :try assert (NEQ1: b2 <> b) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence);
+           try assert (NEQ2: b2 <> b0) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence);
+           try assert (NEQ3: b2 <> b3) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence).
+           
+           1-8: erewrite NMap.gso;eauto.
+           1-4, 9-12: try erewrite NMap.gso;eauto.
+           1-2,5-6,9-10,13-14: try erewrite NMap.gso;eauto.
+           1-16: try erewrite NMap.gi;try congruence.
+           1-16: try setoid_rewrite NMap.gsspec.
+           1-16: destruct NMap.elt_eq;try congruence.
+           1-8: unfold NMap.get;rewrite NMap.gi;congruence. }
+
+         assert (FIND_DEF_SERVER: forall f, Genv.find_def (Genv.globalenv se2 Server.b1) b2 <> Some (Gfun f)).
+         { unfold Genv.globalenv. simpl.
+           intros.
+           unfold Genv.add_globdef.
+           (* se2 b2 = i *)
+           assert (A: Maps.PTree.get i (Genv.genv_symb se2) = Some b2).
+           erewrite <- Genv.mge_symb. 2: eapply H2.
+           eauto. eauto.
+           (* destruct all the get *)
+           repeat destruct Maps.PTree.get eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *.
+           1-8 :try assert (NEQ1: b2 <> b) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence);
+           try assert (NEQ2: b2 <> b0) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence).
+           1-4: erewrite NMap.gso;eauto.
+           1-2,5-6: erewrite NMap.gso;eauto.
+           2,4,6,8: erewrite NMap.gi;try congruence.
+           1-4: try setoid_rewrite NMap.gsspec;destruct NMap.elt_eq;try congruence;
+           unfold NMap.get;rewrite NMap.gi;congruence. }
+
+
+         assert (RHS: match i with
+           | 3%positive | 6%positive | 1%positive => true
+           | _ => false
+                      end = false).
+         { destruct i;try congruence;destruct i;try congruence;auto;destruct i;try congruence;auto. }
+         rewrite RHS.
+         
+         destruct Genv.find_def eqn:?. destruct g. specialize (FIND_DEF_CLIENT f). contradiction.
+         destruct Genv.find_def eqn:? at 1. destruct g. rewrite Heqo0 in FIND_DEF_SERVER. specialize (FIND_DEF_SERVER f). contradiction.
+         auto. auto.
+         destruct Genv.find_def eqn:? at 1. destruct g. rewrite Heqo0 in FIND_DEF_SERVER. specialize (FIND_DEF_SERVER f). contradiction.
+         auto. auto.
+
+         auto. auto.
+         
   - intros q1 q2 s1 Hq Hi1. inv Hq. inv H1. inv Hi1; cbn in *.
     + (*process*)
       inv Hse.
