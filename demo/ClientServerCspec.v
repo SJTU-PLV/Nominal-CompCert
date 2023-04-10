@@ -504,7 +504,43 @@ Proof.
   - (*step*)
     intros. inv H; inv H0.
     + (*process1*)
-      admit.
+      destruct (Mem.alloc tm 0 4) as [tm' sp] eqn: ALLOC.
+      generalize (Mem.perm_alloc_2 _ _ _ _ _ ALLOC). intro PERMSP.
+      apply Mem.fresh_block_alloc in ALLOC as FRESH.
+      assert (STORE: {tm''| Mem.store Mint32 tm' sp (Ptrofs.unsigned Ptrofs.zero) (Vint output) = Some tm''}).
+      apply Mem.valid_access_store.
+      red. split. red. intros. rewrite Ptrofs.unsigned_zero in H. simpl in H.
+      unfold Mptr in H. replace Archi.ptr64 with true in H by reflexivity. cbn in H.
+      exploit PERMSP. instantiate (1:= ofs). lia. eauto with mem.
+      unfold Mptr. replace Archi.ptr64 with true by reflexivity. simpl. rewrite Ptrofs.unsigned_zero.
+      red. exists  0. lia. destruct STORE as [m2 STORE1].
+      
+      inv Hse. inv INJP.
+      cbn.
+      eexists. split. econstructor.
+      (* step *)
+      econstructor;eauto.
+      simpl.
+      (* step_internal_function *)
+      econstructor.
+      exploit find_process';eauto. intros (rb' & INJP1 & FINDP1 & FINDP2).
+      replace pb' with rb'. eauto.
+      unfold inject_incr in H14. eapply H14 in INJP1. rewrite FINJ in INJP1.
+      inv INJP1. auto.
+      (* function entry *)
+      econstructor. simpl. constructor.
+      auto. constructor.
+      simpl. econstructor.
+      instantiate (1 := sp). instantiate (1:= tm').
+      simpl. eauto.
+      econstructor.
+      econstructor. erewrite Maps.PTree.gss.
+      eauto.
+      econstructor. simpl. eauto.
+    (* storev tm' success *)
+      eauto.
+      econstructor. eauto.
+      
     + (*process2*)
       admit.
     + (*process3*)
