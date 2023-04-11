@@ -296,6 +296,7 @@ Proof.
   unfold encrypt_id, process_id. congruence.
   unfold encrypt_id, result_id. congruence.
 Qed.
+  
 
 Lemma find_encrypt':
   forall rb j,
@@ -322,6 +323,17 @@ Proof.
   exists rb'. split. eauto. split. eauto.
   eapply find_process; eauto.
 Qed.
+
+
+Lemma find_result':
+  forall rb j,
+    Genv.match_stbls j se tse ->
+    Genv.find_symbol se result_id = Some rb ->
+    exists rb', j rb = Some (rb', 0) /\ Genv.find_symbol tge2 result_id = Some rb'.
+Proof.
+  intros. eapply Genv.find_symbol_match in H as F;eauto. 
+Qed.
+
 
 End MS.
   
@@ -514,8 +526,60 @@ Proof.
       exploit PERMSP. instantiate (1:= ofs). lia. eauto with mem.
       unfold Mptr. replace Archi.ptr64 with true by reflexivity. simpl. rewrite Ptrofs.unsigned_zero.
       red. exists  0. lia. destruct STORE as [m2 STORE1].
-      
+
       inv Hse. inv INJP.
+      
+      exploit (Genv.find_symbol_match H). eapply FIND.
+      intros (tb & FINDP3 & FINDSYMB).
+      
+      
+      (* storev *)
+      assert (exists n3 n4 : mem,
+                 Mem.store Mint32 m2 tb (Ptrofs.unsigned (Ptrofs.repr 0)) (Vint output) = Some n4 /\
+       Mem.unchanged_on (fun (b0 : block) (_ : Z) => b0 <> sp) n3 n4).
+                                                                  
+      exploit Mem.storev_mapped_inject.
+      eapply Hm'1. eauto. econstructor.
+      eapply H14. eauto.
+      eauto. econstructor.
+      intros (n2 & STORE2 & INJ2).
+      erewrite Ptrofs.add_zero_l in STORE2.
+      unfold Ptrofs.zero.
+      (* allocate and store some irrelevant value *)
+      assert (UNC1 : Mem.unchanged_on (fun _ _ => True) tm tm').
+      eapply Mem.alloc_unchanged_on; eauto.
+      assert (UNC2: Mem.unchanged_on (fun b ofs => b <> sp) tm' m2).
+      eapply Mem.store_unchanged_on; eauto.      
+      exploit Mem.store_mapped_unchanged_on. eapply UNC1. simpl. auto. eapply STORE2.
+      intros (n3 & STORE3 & UNC3).
+      exploit Mem.store_mapped_unchanged_on. eapply UNC2. simpl. instantiate (1:=tb).
+      (* prove two blocks not equal: utilize permission *)
+      unfold not. intros.
+      subst.
+      eapply Mem.alloc_result in ALLOC as ALLOCRES.
+      exploit Mem.nextblock_noaccess. eauto. intros NOACCESS.
+      simpl in STORE2. Transparent Mem.store. unfold Mem.store in STORE2.
+      destruct Mem.valid_access_dec eqn:VALIDACC in STORE2;try congruence.
+      unfold Mem.valid_access in v. unfold Mem.range_perm in v. destruct v.
+      unfold Mem.perm in p. exploit p.
+      instantiate (1 := 0). simpl. rewrite Ptrofs.unsigned_repr. lia.
+      replace 0 with (Ptrofs.unsigned Ptrofs.zero) at 2.
+      eapply Ptrofs.unsigned_range_2. rewrite Ptrofs.unsigned_zero. auto.
+      erewrite NOACCESS. simpl. auto.
+      eauto.
+
+      intros (n4 & STORE4 & UNC4).
+      exists n3,n4. eauto.
+      destruct H2 as (n3 & n4 & STORE4 & UNC4).
+
+      assert (FREE:{n4' | Mem.free n4 sp 0 4 = Some n4'}).
+      eapply Mem.range_perm_free.
+      unfold Mem.range_perm. intros.
+      eapply Mem.perm_store_1. eauto.
+      eapply Mem.perm_store_1. eauto.
+      eapply Mem.perm_alloc_2. eauto. auto.
+      destruct FREE as [n4'  FREE].
+     
       cbn.
       eexists. split. econstructor.
       (* step *)
@@ -540,6 +604,71 @@ Proof.
     (* storev tm' success *)
       eauto.
       econstructor. eauto.
+    (* the function body execution *)
+      simpl.
+      eapply star_step.
+      econstructor.
+      eapply step_seq.
+      eapply star_step. econstructor.
+      eapply step_assign.
+      (* assign *)
+      eapply eval_Evar_global.
+      auto.
+      instantiate (1 := tb).
+      simpl. eauto.
+      econstructor. econstructor.
+      erewrite Maps.PTree.gss. eauto.
+      econstructor.
+      econstructor.
+      eapply Mem.load_store_same;eauto.
+      simpl. unfold Cop.sem_cast;simpl;destruct Archi.ptr64;eauto.
+      simpl. econstructor. simpl. eauto.
+
+      eauto.
+      
+      (* step skip *)
+      eapply star_step.
+      econstructor. econstructor.
+      (* step return *)
+      eapply star_step.
+      econstructor. econstructor.
+      simpl.
+      (* prove free sp success *)
+      rewrite FREE. eauto.
+
+      (* star refl *)
+      eapply star_refl.
+      1-5: eauto.
+
+      (* ms *)
+      econstructor.
+      (* injp_acc *)
+      assert (ro_acc m0 n4').
+      eapply ro_acc_trans. econstructor. eapply H9. eapply Mem.unchanged_on_support. eauto.
+      eauto.
+      eapply ro_acc_trans. eapply ro_acc_alloc. eauto.
+      eapply ro_acc_trans. eapply ro_acc_store. eauto.
+      eapply ro_acc_trans. eapply ro_acc_store. eauto.
+      eapply ro_acc_free. eauto.
+
+      assert (ro_acc m1 m').
+      eapply ro_acc_trans. econstructor. eauto. eapply Mem.unchanged_on_support. eauto.
+      eauto.
+      eapply ro_acc_store. eauto.
+      
+      inv H2. inv H3.
+     
+      econstructor;eauto.
+      (* unchanged on *)
+      eapply Mem.unchanged_on_trans. eauto.
+      eapply Mem.store_unchanged_on. eauto. simpl. intros.
+      unfold loc_unmapped. congruence.
+
+      
+      
+      admit.
+    (* match state *)
+      
       
     + (*process2*)
       admit.
