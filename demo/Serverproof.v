@@ -798,14 +798,12 @@ Inductive match_state_ro_c_asm : state -> (sup * Asm.state) -> Prop :=
      valid_blockv (Mem.support m2) sp0 ->
      (forall r, is_callee_save r = true  -> rs (preg_of r) = rs0 (preg_of r)) ->
      Mem.sup_include (Mem.support m2) (Mem.support m2'') ->
-     sound_memory_ro se m1'' ->
      match_state_ro_c_asm (Return1 m1'') (s2, State rs m2'' true)
 |match_return2_ro j' m2'' m1'' (rs:regset) Hm'':
   (injp_acc wp (injpw j' m1'' m2'' Hm'')) ->
    rs RSP = rs0 RSP -> rs PC = rs0 RA ->
    (forall r, is_callee_save r = true -> rs (preg_of r) = rs0 (preg_of r)) ->
    Mem.sup_include s2 (Mem.support m2'') ->
-   sound_memory_ro se m1'' ->
    match_state_ro_c_asm (Return2 m1'') (s2, State rs m2'' false).
 
 End MS.
@@ -879,7 +877,7 @@ Proof.
     intros s1 s2 r1 Hms Hf1. inv Hf1. inv Hms. inv H. cbn in *. inv H0.
     exists (rs, m2''). split. constructor.
     exists (cr Vundef m). split. constructor. constructor.
-    inv H3. constructor; eauto. inversion H18. eauto.
+    inv H3. constructor; eauto. inversion H17. eauto.
     econstructor; eauto.
     intros. inv H. rewrite size_int_fptr__void_sg_0 in H1. extlia.
   - (* at_external*)
@@ -953,7 +951,6 @@ Proof.
             intros. red. intros. exploit H20; eauto.
          ++ intros. rewrite H40; eauto.
          ++ inversion H46. eauto with mem.
-         ++ eapply ro_acc_sound; eauto.
      -- reflexivity.
      -- reflexivity.            
   - (*internal_steps*)
@@ -1114,7 +1111,7 @@ Proof.
         + intros. cbn.
           cbn. repeat try Pgso; eauto; destruct r; cbn in *; try congruence; eauto.
         + cbn. inv H9.
-          erewrite (Mem.support_free _ _ _ _ _ FREE'). inv H30. eauto.
+          erewrite (Mem.support_free _ _ _ _ _ FREE'). inv H29. eauto.
       }
       destruct H16 as [s2' [STEP MS]].  cbn.
       exists (Mem.support m2, s2'). intuition eauto.
