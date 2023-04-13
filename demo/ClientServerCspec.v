@@ -336,7 +336,17 @@ Qed.
 
 
 End MS.
-  
+
+
+Lemma maxv:
+  Ptrofs.max_unsigned = 18446744073709551615.
+Proof.
+  unfold Ptrofs.max_unsigned. unfold Ptrofs.modulus. unfold Ptrofs.wordsize.
+  unfold two_power_nat. unfold Wordsize_Ptrofs.wordsize.
+  replace Archi.ptr64 with true by reflexivity. reflexivity.
+Qed.
+
+
 Lemma top_simulation_L1:
   forward_simulation (cc_c injp) (cc_c injp) top_spec1 composed_spec1.
 Proof.
@@ -532,54 +542,51 @@ Proof.
       exploit (Genv.find_symbol_match H). eapply FIND.
       intros (tb & FINDP3 & FINDSYMB).
       
-      
-      (* storev *)
-      assert (exists n3 n4 : mem,
-                 Mem.store Mint32 m2 tb (Ptrofs.unsigned (Ptrofs.repr 0)) (Vint output) = Some n4 /\
-       Mem.unchanged_on (fun (b0 : block) (_ : Z) => b0 <> sp) n3 n4).
-                                                                  
-      exploit Mem.storev_mapped_inject.
-      eapply Hm'1. eauto. econstructor.
-      eapply H14. eauto.
-      eauto. econstructor.
-      intros (n2 & STORE2 & INJ2).
-      erewrite Ptrofs.add_zero_l in STORE2.
-      unfold Ptrofs.zero.
-      (* allocate and store some irrelevant value *)
+      (* unchanged_on alloc and store *)
       assert (UNC1 : Mem.unchanged_on (fun _ _ => True) tm tm').
       eapply Mem.alloc_unchanged_on; eauto.
       assert (UNC2: Mem.unchanged_on (fun b ofs => b <> sp) tm' m2).
       eapply Mem.store_unchanged_on; eauto.      
-      exploit Mem.store_mapped_unchanged_on. eapply UNC1. simpl. auto. eapply STORE2.
-      intros (n3 & STORE3 & UNC3).
-      exploit Mem.store_mapped_unchanged_on. eapply UNC2. simpl. instantiate (1:=tb).
-      (* prove two blocks not equal: utilize permission *)
-      unfold not. intros.
-      subst.
-      eapply Mem.alloc_result in ALLOC as ALLOCRES.
-      exploit Mem.nextblock_noaccess. eauto. intros NOACCESS.
-      simpl in STORE2. Transparent Mem.store. unfold Mem.store in STORE2.
-      destruct Mem.valid_access_dec eqn:VALIDACC in STORE2;try congruence.
-      unfold Mem.valid_access in v. unfold Mem.range_perm in v. destruct v.
-      unfold Mem.perm in p. exploit p.
-      instantiate (1 := 0). simpl. rewrite Ptrofs.unsigned_repr. lia.
-      replace 0 with (Ptrofs.unsigned Ptrofs.zero) at 2.
-      eapply Ptrofs.unsigned_range_2. rewrite Ptrofs.unsigned_zero. auto.
-      erewrite NOACCESS. simpl. auto.
-      eauto.
 
-      intros (n4 & STORE4 & UNC4).
-      exists n3,n4. eauto.
-      destruct H2 as (n3 & n4 & STORE4 & UNC4).
+      
+      (* storev to result id *)
+      assert (STORE: {m3 | Mem.store Mint32 m2 tb (Ptrofs.unsigned (Ptrofs.repr 0)) (Vint output) = Some m3}).
+      apply Mem.valid_access_store.
+      red. split. red. intros. erewrite <- Mem.unchanged_on_perm;eauto.
+      erewrite <- Mem.unchanged_on_perm;eauto.
+      replace ofs with (ofs + 0);try lia.
+      eapply Mem.perm_inj. eapply Hm.
+      eapply Mem.store_valid_access_3;eauto.
+      eauto. simpl. auto.
+      eapply Mem.valid_block_inject_2. eapply H14. eauto. eauto.
+      simpl. intro. subst. exploit inject_implies_image_in. eapply Hm'1.
+      eapply H14. eauto. intros.
+      eapply Mem.fresh_block_alloc  in ALLOC as NOTFRESH. unfold Mem.valid_block in NOTFRESH. congruence.
+      eapply Mem.valid_block_alloc. eauto.
+      eapply Mem.valid_block_inject_2. eapply H14. eauto. eauto.
+      simpl. erewrite Ptrofs.unsigned_repr. eapply Z.divide_0_r.
+      rewrite maxv. lia.
+      destruct STORE as (m3 & STORE2).
 
-      assert (FREE:{n4' | Mem.free n4 sp 0 4 = Some n4'}).
+      (* free *)
+      assert (FREE:{m4 | Mem.free m3 sp 0 4 = Some m4}).
       eapply Mem.range_perm_free.
       unfold Mem.range_perm. intros.
       eapply Mem.perm_store_1. eauto.
       eapply Mem.perm_store_1. eauto.
       eapply Mem.perm_alloc_2. eauto. auto.
-      destruct FREE as [n4'  FREE].
-     
+      destruct FREE as [m4  FREE].
+
+      (* unchanged_on alloc and store *)
+      assert (UNC3 : Mem.unchanged_on (fun b ofs =>(b = tb -> ~ 0<= ofs < 4) ) m2 m3).
+      eapply Mem.store_unchanged_on; eauto.(*  intros. *)
+      (* rewrite Ptrofs.unsigned_repr in H2. simpl in H2. *)
+      (* intro. generalize (H3 eq_refl). lia. *)
+      (* rewrite maxv. lia. *)
+      assert (UNC4: Mem.unchanged_on (fun b ofs => b <> sp) m3 m4).
+      eapply Mem.free_unchanged_on; eauto.      
+      
+      
       cbn.
       eexists. split. econstructor.
       (* step *)
@@ -643,7 +650,7 @@ Proof.
       (* ms *)
       econstructor.
       (* injp_acc *)
-      assert (ro_acc m0 n4').
+      assert (ro_acc m0 m4).
       eapply ro_acc_trans. econstructor. eapply H9. eapply Mem.unchanged_on_support. eauto.
       eauto.
       eapply ro_acc_trans. eapply ro_acc_alloc. eauto.
@@ -664,9 +671,42 @@ Proof.
       eapply Mem.store_unchanged_on. eauto. simpl. intros.
       unfold loc_unmapped. congruence.
 
+      (* target memory unchanged on *)
+      eapply Mem.unchanged_on_trans. eapply H13.     
+      inv UNC1. inv UNC2. inv UNC3. inv UNC4. 
+      econstructor. eauto.
+      intros. etransitivity. eauto.
+      etransitivity. eapply unchanged_on_perm0. 
+      intro. subst. congruence. eapply Mem.valid_block_alloc;eauto.
+      (* store perm m2 -> m3 *)
+      etransitivity. split. eapply Mem.perm_store_1. eauto. eapply Mem.perm_store_2. eauto.
+      split. eapply Mem.perm_free_1. eauto. left. intro. subst. congruence.
+      eapply Mem.perm_free_3. eauto.
+      (* contents unchanged *)
+      intros.
+      etransitivity. eapply unchanged_on_contents2.
+      intro. subst. eapply Mem.fresh_block_alloc.
+      eauto. eapply Mem.perm_valid_block. eauto.
+      eapply Mem.perm_store_1. eauto. eapply Mem.perm_store_1. eauto.
+      eapply Mem.perm_alloc_1. eauto. auto.
+      etransitivity. eapply unchanged_on_contents1. intro. intro. subst.
+      eapply H3. eauto.
+      eapply H10. eapply H0. eapply Genv.genv_symb_range. eauto.
+      rewrite Z.sub_0_r. exploit Mem.store_valid_access_3. eapply SET.
+      intros. eapply Mem.perm_implies with (p1 := Writable). unfold Mem.valid_access in H18.
+      destruct H18.  simpl in H18. rewrite Ptrofs.unsigned_zero in H18. simpl in H18.
+      eapply Mem.perm_cur_max. eapply H18. auto.
+      constructor.
+      eapply Mem.perm_store_1;eauto.
+      eapply Mem.perm_alloc_1;eauto.
+      (* m2 tm *)
+      etransitivity. eapply unchanged_on_contents0. intro. subst.
+      eapply Mem.fresh_block_alloc. eauto. eapply Mem.perm_valid_block. eauto.
+      eapply Mem.perm_alloc_1. eauto. eauto.
+      (* tm' tm *)
+      eauto.
       
-      
-      admit.
+     
     (* match state *)
       
       
