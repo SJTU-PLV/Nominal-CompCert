@@ -579,10 +579,7 @@ Proof.
 
       (* unchanged_on alloc and store *)
       assert (UNC3 : Mem.unchanged_on (fun b ofs =>(b = tb -> ~ 0<= ofs < 4) ) m2 m3).
-      eapply Mem.store_unchanged_on; eauto.(*  intros. *)
-      (* rewrite Ptrofs.unsigned_repr in H2. simpl in H2. *)
-      (* intro. generalize (H3 eq_refl). lia. *)
-      (* rewrite maxv. lia. *)
+      eapply Mem.store_unchanged_on; eauto.
       assert (UNC4: Mem.unchanged_on (fun b ofs => b <> sp) m3 m4).
       eapply Mem.free_unchanged_on; eauto.      
       
@@ -598,7 +595,7 @@ Proof.
       replace pb' with rb'. eauto.
       unfold inject_incr in H14. eapply H14 in INJP1. rewrite FINJ in INJP1.
       inv INJP1. auto.
-      (* function entry *)
+      (* function entry *)           
       econstructor. simpl. constructor.
       auto. constructor.
       simpl. econstructor.
@@ -664,7 +661,7 @@ Proof.
       eapply ro_acc_store. eauto.
       
       inv H2. inv H3.
-     
+      
       econstructor;eauto.
       (* unchanged on *)
       eapply Mem.unchanged_on_trans. eauto.
@@ -704,14 +701,12 @@ Proof.
       eapply Mem.fresh_block_alloc. eauto. eapply Mem.perm_valid_block. eauto.
       eapply Mem.perm_alloc_1. eauto. eauto.
       (* tm' tm *)
-      eauto.
-      
-     
-    (* match state *)
-      
+      eauto.                 
       
     + (*process2*)
-      admit.
+      
+      
+      
     + (*process3*)
       admit.
     + (*encrypt1*)
