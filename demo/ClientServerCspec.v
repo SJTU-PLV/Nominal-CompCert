@@ -28,6 +28,7 @@ Theorem link_ok :
   link (skel (Clight.semantics1 client)) (skel L1) = Some linked_skel1.
 Proof. reflexivity. Qed.
 
+
 Definition L := fun i : bool => if i then (Clight.semantics1 client) else L1.
 Definition composed_spec1 := semantics L linked_skel1.
 
@@ -347,6 +348,186 @@ Proof.
 Qed.
 
 
+
+Lemma exec_process_mem:
+  forall stb tb sm sm1 m argv val j,
+    Mem.storev Mint32 sm (Vptr stb Ptrofs.zero) val = Some sm1 ->
+    Mem.inject j sm m ->
+    j stb = Some (tb,0) ->
+    exists m1 m2 m3 m4 sp,
+      Mem.alloc m 0 4 = (m1, sp) /\
+        Mem.storev Mint32 m1 (Vptr sp Ptrofs.zero) argv = Some m2 /\
+        Mem.storev Mint32 m2 (Vptr tb Ptrofs.zero) val = Some m3 /\
+        Mem.free m3 sp 0 4 = Some m4 /\
+        Mem.unchanged_on (fun b ofs => b = tb -> ~ 0 <= ofs < 4) m m4.
+Proof.
+  intros.
+  destruct (Mem.alloc m 0 4) as [tm' sp] eqn: ALLOC.
+  generalize (Mem.perm_alloc_2 _ _ _ _ _ ALLOC). intro PERMSP.
+  apply Mem.fresh_block_alloc in ALLOC as FRESH.
+  (* store varibale *)
+  assert (STORE: {tm''| Mem.store Mint32 tm' sp (Ptrofs.unsigned Ptrofs.zero) argv = Some tm''}).
+  apply Mem.valid_access_store.
+  red. split. red. intros. rewrite Ptrofs.unsigned_zero in H2. simpl in H2.
+  exploit PERMSP. instantiate (1:= ofs). lia. eauto with mem.
+  red. exists  0. rewrite Ptrofs.unsigned_zero. lia. destruct STORE as [m2 STORE1].
+  (* store val *)
+  
+  assert (STORE: {m3 | Mem.store Mint32 m2 tb (Ptrofs.unsigned (Ptrofs.repr 0)) val  = Some m3}).
+  apply Mem.valid_access_store.
+  red. split. red. intros. rewrite Ptrofs.unsigned_repr in H2. simpl in H2.  
+  eapply Mem.store_valid_access_1. eauto.
+  eapply Mem.valid_access_alloc_other. eauto.
+  eapply Mem.valid_access_inject;eauto.
+  eapply Mem.store_valid_access_3;eauto.
+  rewrite Ptrofs.unsigned_zero. simpl. auto.
+  rewrite maxv. lia.
+  rewrite Ptrofs.unsigned_repr. simpl. eapply Z.divide_0_r.
+  rewrite maxv. lia.
+  destruct STORE as ( m3 & STORE2).
+
+  (* free *) 
+  assert (FREE:{m4 | Mem.free m3 sp 0 4 = Some m4}).
+  eapply Mem.range_perm_free.
+  unfold Mem.range_perm. intros.
+  eapply Mem.perm_store_1. eauto.
+  eapply Mem.perm_store_1. eauto.
+  eapply Mem.perm_alloc_2. eauto. auto.
+  destruct FREE as [m4  FREE].
+  
+  exists tm',m2,m3,m4,sp.
+  split;auto. split;auto.
+  split;auto. split;auto.
+
+  (* unchanged_on alloc and store *)
+  assert (UNC1 : Mem.unchanged_on (fun _ _ => True) m tm').
+  eapply Mem.alloc_unchanged_on; eauto.
+  assert (UNC2: Mem.unchanged_on (fun b ofs => b <> sp) tm' m2).
+  eapply Mem.store_unchanged_on; eauto.      
+
+  assert (UNC3 : Mem.unchanged_on (fun b ofs =>(b = tb -> ~ 0<= ofs < 4) ) m2 m3).
+  eapply Mem.store_unchanged_on; eauto.
+  assert (UNC4: Mem.unchanged_on (fun b ofs => b <> sp) m3 m4).
+  eapply Mem.free_unchanged_on; eauto.      
+
+  inv UNC1. inv UNC2. inv UNC3. inv UNC4.
+  
+  (* unchanged on *)
+  econstructor.
+  (* support include *)
+  eauto with mem.
+  (* perm *)
+  intros.
+  assert (b<>sp).
+  intro. subst.
+  exploit Mem.fresh_block_alloc. eapply ALLOC. eauto. auto.
+  assert (Mem.valid_block tm' b).
+  eapply Mem.valid_block_alloc. eapply ALLOC. auto.  
+  assert (Mem.valid_block m2 b).
+  eapply Mem.store_valid_block_1;eauto.
+  assert (Mem.valid_block m3 b).
+  eapply Mem.store_valid_block_1;eauto.  
+  
+  etransitivity. eauto.
+  etransitivity. eauto.
+  etransitivity. eauto.
+  etransitivity. eauto.
+  split;auto.
+  
+  (* contents *)
+  intros.
+  assert (b<>sp).
+  intro. subst. exploit Mem.fresh_block_alloc. eapply ALLOC. eapply Mem.perm_valid_block. eauto.
+  auto.
+  
+  assert (Mem.perm tm' b ofs Cur Readable).
+  eapply Mem.perm_alloc_1. eauto. auto.
+  assert (Mem.perm m2 b ofs Cur Readable).
+  eapply Mem.perm_store_1. eauto. auto.
+  assert (Mem.perm m3 b ofs Cur Readable).
+  eapply Mem.perm_store_1. eauto. auto.
+  assert (Mem.perm m4 b ofs Cur Readable).
+  eapply Mem.perm_free_1. eauto. auto.
+  auto.
+
+  etransitivity. eapply unchanged_on_contents2;eauto.
+  etransitivity. eapply unchanged_on_contents1;eauto.
+  etransitivity. eapply unchanged_on_contents0;eauto.
+  etransitivity. eapply unchanged_on_contents;eauto.
+  auto.
+Qed.        
+
+
+Lemma exec_process_plus:
+  forall se2 fb lf m m1 m2 m3 m4 output sp tb,
+    Genv.find_symbol se2 result_id = Some tb ->
+    Genv.find_funct (Clight.globalenv se2 client) (Vptr fb Ptrofs.zero) = Some (Ctypes.Internal func_process) ->
+    Mem.alloc m 0 4 = (m1, sp) ->
+    Mem.storev Mint32 m1 (Vptr sp Ptrofs.zero) (Vint output) = Some m2 ->
+    Mem.storev Mint32 m2 (Vptr tb Ptrofs.zero) (Vint output) = Some m3 ->
+    Mem.free m3 sp 0 4 = Some m4 ->          
+    plus (fun _ : unit => SmallstepLinking.step L se2) tt
+      (st L true (Callstate (Vptr fb Ptrofs.zero) (Vint output :: nil) Kstop m) :: lf) E0
+      (st L true (Returnstate Vundef Kstop m4) :: lf).
+
+Proof.
+  intros.
+  cbn.
+  eexists. econstructor.
+  (* one step : enter the process function*)
+  econstructor;eauto.
+  simpl.                              
+  (* step_internal_function *)
+  econstructor.
+  (* function entry *)           
+  simpl. constructor.
+  auto. constructor.
+  (* alloc variable *)
+  simpl. econstructor;eauto.
+  econstructor.
+  (* bind parameters *)
+  econstructor. erewrite Maps.PTree.gss.
+  eauto.
+  (* assign loc *)
+  econstructor. simpl. eauto.
+  eauto.
+  econstructor. eauto.
+  (* the execution of function body *)
+  simpl.
+  eapply star_step.
+  econstructor.
+  eapply step_seq.
+  eapply star_step. econstructor.
+  eapply step_assign.
+  (* assign *)
+  eapply eval_Evar_global.
+  auto.
+  instantiate (1 := tb).
+  simpl. eauto.
+  econstructor. econstructor.
+  erewrite Maps.PTree.gss. eauto.
+  econstructor.
+  econstructor.
+  eapply Mem.load_store_same;eauto.
+  simpl. unfold Cop.sem_cast;simpl;destruct Archi.ptr64;eauto.
+  simpl. econstructor. simpl. eauto.
+  eauto.
+  (* step skip *)
+  eapply star_step.
+  econstructor. econstructor.
+  (* step return *)
+  eapply star_step.
+  econstructor. econstructor.
+  simpl.
+  (* prove free sp success *)
+  rewrite H4. eauto.
+  
+  (* star refl *)
+  eapply star_refl.
+  1-5: eauto.
+Qed.
+       
+
 Lemma top_simulation_L1:
   forward_simulation (cc_c injp) (cc_c injp) top_spec1 composed_spec1.
 Proof.
@@ -525,129 +706,26 @@ Proof.
   - intros. cbn in *. inv H0.
   - (*step*)
     intros. inv H; inv H0.
+    
     + (*process1*)
-      destruct (Mem.alloc tm 0 4) as [tm' sp] eqn: ALLOC.
-      generalize (Mem.perm_alloc_2 _ _ _ _ _ ALLOC). intro PERMSP.
-      apply Mem.fresh_block_alloc in ALLOC as FRESH.
-      assert (STORE: {tm''| Mem.store Mint32 tm' sp (Ptrofs.unsigned Ptrofs.zero) (Vint output) = Some tm''}).
-      apply Mem.valid_access_store.
-      red. split. red. intros. rewrite Ptrofs.unsigned_zero in H. simpl in H.
-      unfold Mptr in H. replace Archi.ptr64 with true in H by reflexivity. cbn in H.
-      exploit PERMSP. instantiate (1:= ofs). lia. eauto with mem.
-      unfold Mptr. replace Archi.ptr64 with true by reflexivity. simpl. rewrite Ptrofs.unsigned_zero.
-      red. exists  0. lia. destruct STORE as [m2 STORE1].
-
       inv Hse. inv INJP.
-      
+            
       exploit (Genv.find_symbol_match H). eapply FIND.
       intros (tb & FINDP3 & FINDSYMB).
-      
-      (* unchanged_on alloc and store *)
-      assert (UNC1 : Mem.unchanged_on (fun _ _ => True) tm tm').
-      eapply Mem.alloc_unchanged_on; eauto.
-      assert (UNC2: Mem.unchanged_on (fun b ofs => b <> sp) tm' m2).
-      eapply Mem.store_unchanged_on; eauto.      
 
-      
-      (* storev to result id *)
-      assert (STORE: {m3 | Mem.store Mint32 m2 tb (Ptrofs.unsigned (Ptrofs.repr 0)) (Vint output) = Some m3}).
-      apply Mem.valid_access_store.
-      red. split. red. intros. erewrite <- Mem.unchanged_on_perm;eauto.
-      erewrite <- Mem.unchanged_on_perm;eauto.
-      replace ofs with (ofs + 0);try lia.
-      eapply Mem.perm_inj. eapply Hm.
-      eapply Mem.store_valid_access_3;eauto.
-      eauto. simpl. auto.
-      eapply Mem.valid_block_inject_2. eapply H14. eauto. eauto.
-      simpl. intro. subst. exploit inject_implies_image_in. eapply Hm'1.
-      eapply H14. eauto. intros.
-      eapply Mem.fresh_block_alloc  in ALLOC as NOTFRESH. unfold Mem.valid_block in NOTFRESH. congruence.
-      eapply Mem.valid_block_alloc. eauto.
-      eapply Mem.valid_block_inject_2. eapply H14. eauto. eauto.
-      simpl. erewrite Ptrofs.unsigned_repr. eapply Z.divide_0_r.
-      rewrite maxv. lia.
-      destruct STORE as (m3 & STORE2).
+      exploit exec_process_mem;eauto. intros (m3 & m4 & m5 & m6 & sp & ALLOC & STORE1 & STORE2 & FREE1 & UNC).
 
-      (* free *)
-      assert (FREE:{m4 | Mem.free m3 sp 0 4 = Some m4}).
-      eapply Mem.range_perm_free.
-      unfold Mem.range_perm. intros.
-      eapply Mem.perm_store_1. eauto.
-      eapply Mem.perm_store_1. eauto.
-      eapply Mem.perm_alloc_2. eauto. auto.
-      destruct FREE as [m4  FREE].
+      (* muliple step in the function of  process *)
+      simpl. exists (st L true (Returnstate Vundef Kstop m6) :: nil).      
+      split.
+      exploit find_process';eauto. intros (rb' & INJP1 & FINDP1 & FINDP2).     
+      eapply exec_process_plus;eauto.      
+      eapply H14 in INJP1. rewrite FINJ in INJP1. inv INJP1. auto.
 
-      (* unchanged_on alloc and store *)
-      assert (UNC3 : Mem.unchanged_on (fun b ofs =>(b = tb -> ~ 0<= ofs < 4) ) m2 m3).
-      eapply Mem.store_unchanged_on; eauto.
-      assert (UNC4: Mem.unchanged_on (fun b ofs => b <> sp) m3 m4).
-      eapply Mem.free_unchanged_on; eauto.      
-      
-      
-      cbn.
-      eexists. split. econstructor.
-      (* step *)
-      econstructor;eauto.
-      simpl.
-      (* step_internal_function *)
-      econstructor.
-      exploit find_process';eauto. intros (rb' & INJP1 & FINDP1 & FINDP2).
-      replace pb' with rb'. eauto.
-      unfold inject_incr in H14. eapply H14 in INJP1. rewrite FINJ in INJP1.
-      inv INJP1. auto.
-      (* function entry *)           
-      econstructor. simpl. constructor.
-      auto. constructor.
-      simpl. econstructor.
-      instantiate (1 := sp). instantiate (1:= tm').
-      simpl. eauto.
-      econstructor.
-      econstructor. erewrite Maps.PTree.gss.
-      eauto.
-      econstructor. simpl. eauto.
-    (* storev tm' success *)
-      eauto.
-      econstructor. eauto.
-    (* the function body execution *)
-      simpl.
-      eapply star_step.
-      econstructor.
-      eapply step_seq.
-      eapply star_step. econstructor.
-      eapply step_assign.
-      (* assign *)
-      eapply eval_Evar_global.
-      auto.
-      instantiate (1 := tb).
-      simpl. eauto.
-      econstructor. econstructor.
-      erewrite Maps.PTree.gss. eauto.
-      econstructor.
-      econstructor.
-      eapply Mem.load_store_same;eauto.
-      simpl. unfold Cop.sem_cast;simpl;destruct Archi.ptr64;eauto.
-      simpl. econstructor. simpl. eauto.
-
-      eauto.
-      
-      (* step skip *)
-      eapply star_step.
-      econstructor. econstructor.
-      (* step return *)
-      eapply star_step.
-      econstructor. econstructor.
-      simpl.
-      (* prove free sp success *)
-      rewrite FREE. eauto.
-
-      (* star refl *)
-      eapply star_refl.
-      1-5: eauto.
-
-      (* ms *)
+      (* match state: may be redundant *)
       econstructor.
       (* injp_acc *)
-      assert (ro_acc m0 m4).
+      assert (ro_acc m2 m6).
       eapply ro_acc_trans. econstructor. eapply H9. eapply Mem.unchanged_on_support. eauto.
       eauto.
       eapply ro_acc_trans. eapply ro_acc_alloc. eauto.
@@ -659,7 +737,7 @@ Proof.
       eapply ro_acc_trans. econstructor. eauto. eapply Mem.unchanged_on_support. eauto.
       eauto.
       eapply ro_acc_store. eauto.
-      
+            
       inv H2. inv H3.
       
       econstructor;eauto.
@@ -669,46 +747,213 @@ Proof.
       unfold loc_unmapped. congruence.
 
       (* target memory unchanged on *)
-      eapply Mem.unchanged_on_trans. eapply H13.     
-      inv UNC1. inv UNC2. inv UNC3. inv UNC4. 
-      econstructor. eauto.
-      intros. etransitivity. eauto.
-      etransitivity. eapply unchanged_on_perm0. 
-      intro. subst. congruence. eapply Mem.valid_block_alloc;eauto.
-      (* store perm m2 -> m3 *)
-      etransitivity. split. eapply Mem.perm_store_1. eauto. eapply Mem.perm_store_2. eauto.
-      split. eapply Mem.perm_free_1. eauto. left. intro. subst. congruence.
-      eapply Mem.perm_free_3. eauto.
-      (* contents unchanged *)
-      intros.
-      etransitivity. eapply unchanged_on_contents2.
-      intro. subst. eapply Mem.fresh_block_alloc.
-      eauto. eapply Mem.perm_valid_block. eauto.
-      eapply Mem.perm_store_1. eauto. eapply Mem.perm_store_1. eauto.
-      eapply Mem.perm_alloc_1. eauto. auto.
-      etransitivity. eapply unchanged_on_contents1. intro. intro. subst.
-      eapply H3. eauto.
-      eapply H10. eapply H0. eapply Genv.genv_symb_range. eauto.
-      rewrite Z.sub_0_r. exploit Mem.store_valid_access_3. eapply SET.
-      intros. eapply Mem.perm_implies with (p1 := Writable). unfold Mem.valid_access in H18.
-      destruct H18.  simpl in H18. rewrite Ptrofs.unsigned_zero in H18. simpl in H18.
-      eapply Mem.perm_cur_max. eapply H18. auto.
-      constructor.
-      eapply Mem.perm_store_1;eauto.
-      eapply Mem.perm_alloc_1;eauto.
-      (* m2 tm *)
-      etransitivity. eapply unchanged_on_contents0. intro. subst.
-      eapply Mem.fresh_block_alloc. eauto. eapply Mem.perm_valid_block. eauto.
-      eapply Mem.perm_alloc_1. eauto. eauto.
-      (* tm' tm *)
-      eauto.                 
-      
+      inv UNC.
+      eapply Mem.unchanged_on_trans. eauto.
+      econstructor;eauto.
+      (* perm *)
+      intros. eapply unchanged_on_perm. intros.
+      intro. subst.
+      unfold loc_out_of_reach in H3. eapply H3.
+      eauto. 
+      (* perm not decrease *)
+      erewrite Z.sub_0_r. eapply H10. eapply H0.
+      eapply Genv.genv_symb_range. eauto.
+      exploit Mem.store_valid_access_3. eapply SET.
+      unfold Mem.valid_access. rewrite Ptrofs.unsigned_zero. simpl.
+      intros (RNGPERM & DIV). eapply Mem.perm_cur.
+      eapply Mem.perm_implies with Writable.
+      eapply RNGPERM. auto.
+      econstructor.
+      auto.
+      (* unchanged on contents *)
+      intros. eapply unchanged_on_contents.
+      intros. subst. intro.
+      unfold loc_out_of_reach in H3. eapply H3.
+      (* the same reasoning as the perm *)
+      eauto.      
+      erewrite Z.sub_0_r. eapply H10. eapply H0.
+      eapply Genv.genv_symb_range. eauto.
+      exploit Mem.store_valid_access_3. eapply SET.
+      unfold Mem.valid_access. rewrite Ptrofs.unsigned_zero. simpl.
+      intros (RNGPERM & DIV). eapply Mem.perm_cur.
+      eapply Mem.perm_implies with Writable.
+      eapply RNGPERM. auto.
+      econstructor.
+      auto.
+           
     + (*process2*)
+      inv Hse. inv INJP.
+            
+      exploit (Genv.find_symbol_match H). eapply FIND.
+      intros (tb & FINDP3 & FINDSYMB).
+
+      exploit exec_process_mem;eauto. intros (m3 & m4 & m5 & m6 & sp & ALLOC & STORE1 & STORE2 & FREE1 & UNC).
+      instantiate (1 := Vint output) in STORE1.
+      (* muliple step in the function of  process *)
+      simpl. eexists.
+      split.
+      eapply plus_trans.
+      instantiate (1:= (st L true (Returnstate Vundef Kstop m6) :: st L false (Call2 vf output' tm') :: nil)).
+      instantiate (1:= E0).
+      exploit find_process';eauto. intros (rb' & INJP1 & FINDP1 & FINDP2).     
+      eapply exec_process_plus;eauto.
+      eapply H14 in INJP1. rewrite FINJ in INJP1. inv INJP1. auto.
+      (* final state in client *)
+      econstructor. eapply step_pop.
+      econstructor. econstructor.
+      (* return 1 -> return 2 *)
+      eapply star_step. econstructor. simpl. eapply step_asmret.
+      eapply star_refl.
+      1-3:eauto.
+
+      (* match state *)
+      econstructor.
+      (* injp_acc *)
+      assert (ro_acc m2 m6).
+      eapply ro_acc_trans. econstructor. eapply H9. eapply Mem.unchanged_on_support. eauto.
+      eauto.
+      eapply ro_acc_trans. eapply ro_acc_alloc. eauto.
+      eapply ro_acc_trans. eapply ro_acc_store. eauto.
+      eapply ro_acc_trans. eapply ro_acc_store. eauto.
+      eapply ro_acc_free. eauto.
+
+      assert (ro_acc m1 m').
+      eapply ro_acc_trans. econstructor. eauto. eapply Mem.unchanged_on_support. eauto.
+      eauto.
+      eapply ro_acc_store. eauto.
+            
+      inv H2. inv H3.
       
-      
-      
+      econstructor;eauto.
+      (* unchanged on *)
+      eapply Mem.unchanged_on_trans. eauto.
+      eapply Mem.store_unchanged_on. eauto. simpl. intros.
+      unfold loc_unmapped. congruence.
+
+      (* target memory unchanged on *)
+      inv UNC.
+      eapply Mem.unchanged_on_trans. eauto.
+      econstructor;eauto.
+      (* perm *)
+      intros. eapply unchanged_on_perm. intros.
+      intro. subst.
+      unfold loc_out_of_reach in H3. eapply H3.
+      eauto. 
+      (* perm not decrease *)
+      erewrite Z.sub_0_r. eapply H10. eapply H0.
+      eapply Genv.genv_symb_range. eauto.
+      exploit Mem.store_valid_access_3. eapply SET.
+      unfold Mem.valid_access. rewrite Ptrofs.unsigned_zero. simpl.
+      intros (RNGPERM & DIV). eapply Mem.perm_cur.
+      eapply Mem.perm_implies with Writable.
+      eapply RNGPERM. auto.
+      econstructor.
+      auto.
+      (* unchanged on contents *)
+      intros. eapply unchanged_on_contents.
+      intros. subst. intro.
+      unfold loc_out_of_reach in H3. eapply H3.
+      (* the same reasoning as the perm *)
+      eauto.      
+      erewrite Z.sub_0_r. eapply H10. eapply H0.
+      eapply Genv.genv_symb_range. eauto.
+      exploit Mem.store_valid_access_3. eapply SET.
+      unfold Mem.valid_access. rewrite Ptrofs.unsigned_zero. simpl.
+      intros (RNGPERM & DIV). eapply Mem.perm_cur.
+      eapply Mem.perm_implies with Writable.
+      eapply RNGPERM. auto.
+      econstructor.
+      auto.
+           
     + (*process3*)
-      admit.
+      inv Hse. inv INJP.            
+      exploit (Genv.find_symbol_match H). eapply FIND.
+      intros (tb & FINDP3 & FINDSYMB).
+
+      exploit exec_process_mem;eauto. intros (m3 & m4 & m5 & m6 & sp & ALLOC & STORE1 & STORE2 & FREE1 & UNC).
+      instantiate (1 := Vint output) in STORE1.
+      (* muliple step in the function of  process *)
+      simpl. eexists.
+      split.
+      eapply plus_trans.
+      instantiate (1:= (st L true (Returnstate Vundef Kstop m6) :: st L false (Call2 vf output' tm') :: st L true (Callstate vf' args cont tm'') :: nil) ).
+      instantiate (1:= E0).
+      exploit find_process';eauto. intros (rb' & INJP1 & FINDP1 & FINDP2).     
+      eapply exec_process_plus;eauto.
+      eapply H14 in INJP1. rewrite FINJ in INJP1. inv INJP1. auto.
+      (* final state in client *)
+      econstructor. eapply step_pop.
+      econstructor. econstructor.
+      (* return 1 -> return 2 *)
+      eapply star_step. econstructor. simpl. eapply step_asmret.
+      (* final state in server *)
+      eapply star_step. eapply step_pop. simpl.  econstructor. simpl. econstructor.
+      eapply star_step.
+      eapply star_refl.
+      1-4:eauto.
+      
+      (* match state *)
+      unfold ms. eapply match_return_introc.
+      econstructor.
+      (* injp_acc *)
+      assert (ro_acc m2 m6).
+      eapply ro_acc_trans. econstructor. eapply H9. eapply Mem.unchanged_on_support. eauto.
+      eauto.
+      eapply ro_acc_trans. eapply ro_acc_alloc. eauto.
+      eapply ro_acc_trans. eapply ro_acc_store. eauto.
+      eapply ro_acc_trans. eapply ro_acc_store. eauto.
+      eapply ro_acc_free. eauto.
+
+      assert (ro_acc m1 m').
+      eapply ro_acc_trans. econstructor. eauto. eapply Mem.unchanged_on_support. eauto.
+      eauto.
+      eapply ro_acc_store. eauto.
+            
+      inv H2. inv H3.
+      
+      econstructor;eauto.
+      (* unchanged on *)
+      eapply Mem.unchanged_on_trans. eauto.
+      eapply Mem.store_unchanged_on. eauto. simpl. intros.
+      unfold loc_unmapped. congruence.
+
+      (* target memory unchanged on *)
+      inv UNC.
+      eapply Mem.unchanged_on_trans. eauto.
+      econstructor;eauto.
+      (* perm *)
+      intros. eapply unchanged_on_perm. intros.
+      intro. subst.
+      unfold loc_out_of_reach in H3. eapply H3.
+      eauto. 
+      (* perm not decrease *)
+      erewrite Z.sub_0_r. eapply H10. eapply H0.
+      eapply Genv.genv_symb_range. eauto.
+      exploit Mem.store_valid_access_3. eapply SET.
+      unfold Mem.valid_access. rewrite Ptrofs.unsigned_zero. simpl.
+      intros (RNGPERM & DIV). eapply Mem.perm_cur.
+      eapply Mem.perm_implies with Writable.
+      eapply RNGPERM. auto.
+      econstructor.
+      auto.
+      (* unchanged on contents *)
+      intros. eapply unchanged_on_contents.
+      intros. subst. intro.
+      unfold loc_out_of_reach in H3. eapply H3.
+      (* the same reasoning as the perm *)
+      eauto.      
+      erewrite Z.sub_0_r. eapply H10. eapply H0.
+      eapply Genv.genv_symb_range. eauto.
+      exploit Mem.store_valid_access_3. eapply SET.
+      unfold Mem.valid_access. rewrite Ptrofs.unsigned_zero. simpl.
+      intros (RNGPERM & DIV). eapply Mem.perm_cur.
+      eapply Mem.perm_implies with Writable.
+      eapply RNGPERM. auto.
+      econstructor.
+      auto.
+
+      
+      
     + (*encrypt1*)
       admit.
     + (*encrypt2*)
