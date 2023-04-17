@@ -163,7 +163,7 @@ Inductive match_state : state -> list (frame L) -> Prop :=
 |match_return_introc (j:meminj) m tm
   (Hm: Mem.inject j m tm)
   (INJP : injp_acc w (injpw j m tm Hm)):
-  match_state (Return m) (st L true (Returnstate Vundef Kstop tm) :: nil) 
+  match_state (Return m) (st L true (Returnstate Vundef Kstop tm) :: nil)
 |match_return_intros (j:meminj) m tm
   (Hm: Mem.inject j m tm)
   (INJP : injp_acc w (injpw j m tm Hm)):
@@ -207,13 +207,14 @@ Inductive match_state : state -> list (frame L) -> Prop :=
   match_state (Callprocess output m)
     ((st L true(Callstate (Vptr pb' Ptrofs.zero) (Vint output :: nil) Kstop tm)) ::
        (st L false (Call2 vf output' tm')) :: nil)
-|match_process_intro3 (j:meminj) m tm  pb pb' vf output output' tm' vf' args tm'' sp le
+|match_process_intro3 (j:meminj) m tm  pb pb' vf output output' tm' vf' args tm'' sp le i tm0 tm1 tm2 m0 f Hm0 Hm1
   (Hm: Mem.inject j m tm)
   (FINDP : Genv.find_symbol se process_id = Some pb)
   (FINJ: j pb = Some (pb',0))
-  (INJP : injp_acc w (injpw j m tm Hm))
-  (PERM: Mem.range_perm tm sp 0 4 Cur Freeable)
-  (SPUNREACH: forall ofs, 0<= ofs < 4 -> loc_out_of_reach j m sp ofs):
+  (WORLD: w = injpw f m0 tm0 Hm0)
+  (ALLOC: Mem.alloc tm0 0 4 = (tm1, sp))
+  (STORE: Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint i) = Some tm2)
+  (INJP : injp_acc (injpw f m0 tm2 Hm1) (injpw j m tm Hm)):
   match_state (Callprocess output m)
     ((st L true(Callstate (Vptr pb' Ptrofs.zero) (Vint output :: nil) Kstop tm)) ::
        (st L false (Call2 vf output' tm')) ::
@@ -866,21 +867,63 @@ Proof.
 
     + (*process3*)
       inv Hse. inv INJP.            
-      exploit (Genv.find_symbol_match H). eapply FIND.
+      exploit (Genv.find_symbol_match H2). eapply FIND.
       intros (tb & FINDP3 & FINDSYMB).
 
-      exploit exec_process_mem;eauto. intros (m3 & m4 & m5 & m6 & sp0 & ALLOC & STORE1 & STORE2 & FREE1 & UNC & INJ).
+      assert (NEQB: tb <> sp).
+      { intro. subst. eapply Mem.fresh_block_alloc. eapply ALLOC.
+        eapply Mem.valid_block_inject_2;eauto.
+      }
+
+      assert (VALIDSP: Mem.valid_block tm2 sp).
+      { eapply Mem.store_valid_block_1. eapply STORE.
+        unfold Mem.valid_block.
+        erewrite Mem.support_alloc;eauto.
+        exploit Mem.alloc_result. eapply ALLOC. intros. subst. unfold Mem.nextblock.
+        eapply Mem.sup_incr_in1.                
+      }
+            
+      exploit exec_process_mem. eapply SET. eauto. eauto. intros (m3 & m4 & m5 & m6 & sp0 & ALLOC1 & STORE1 & STORE2 & FREE1 & UNC & INJ).
+                   
+      assert (UNC1: Mem.unchanged_on (fun b _ => b <> sp) tm0 tm2).  
+      { eapply Mem.unchanged_on_trans. eapply Mem.alloc_unchanged_on;eauto.
+        econstructor.
+        erewrite (Mem.support_store _ _ _ _ _ tm2);eauto.
+        intros. split;intros. eapply Mem.perm_store_1. eauto. auto.
+        eapply Mem.perm_store_2. eauto. auto.
+        intros. exploit Mem.store_mem_contents.
+        eapply STORE. intros. rewrite H1. simpl.
+        unfold NMap.get.
+        erewrite NMap.gso;eauto.        
+      }
+      
       (* final free in request *)
+      assert (TM2FREE: Mem.range_perm tm2 sp 0 4 Cur Freeable).
+      { unfold Mem.range_perm. intros.
+        eapply Mem.perm_store_1. eauto.
+        exploit Mem.perm_alloc_2. eapply ALLOC. eapply H.
+        eauto.
+      } 
+      assert (TMFREE: Mem.range_perm tm sp 0 4 Cur Freeable).
+      { unfold Mem.range_perm. intros.
+        erewrite  <- Mem.unchanged_on_perm.
+        eapply TM2FREE. auto. eauto. unfold loc_out_of_reach. intros.
+        intro. eapply Mem.fresh_block_alloc. eapply ALLOC.
+        eapply Mem.mi_mappedblocks. eapply Hm4. eauto.
+        auto.
+        }
+      
       assert ({m7 | Mem.free m6 sp 0 4 = Some m7}).
       { eapply Mem.range_perm_free. unfold Mem.range_perm. intros.
-        erewrite  <- Mem.unchanged_on_perm;eauto.
+        erewrite  <- Mem.unchanged_on_perm. eapply TMFREE. eauto. eauto.
         simpl. intros. intro. subst.
-        eapply SPUNREACH. eauto. eapply H14. eauto. rewrite Z.sub_0_r.
-        exploit Mem.store_valid_access_3. eapply SET. intros.
-        eapply Mem.perm_implies. eapply Mem.perm_cur. eapply H3. simpl. rewrite Ptrofs.unsigned_zero.
-        lia. econstructor.
-        eapply Mem.perm_valid_block. eauto. }
+        eapply NEQB. auto.
+        eapply Mem.unchanged_on_support;eauto. }
       destruct X as (m7 & FREE2).
+
+      assert (UNC2: Mem.unchanged_on (fun b _ => b<>sp) m6 m7).
+      { eapply Mem.free_unchanged_on;eauto. }
+
       
       (* muliple step in the function of  process *)
       simpl. eexists.
@@ -910,20 +953,68 @@ Proof.
       
       1-7:eauto.      
 
-      (* match state *)
-      econstructor.
+
+      (* match state: first prove m1~tm2 ~-> m'~m6  *)
+      assert (INJP1: injp_acc (injpw f m1 tm2 Hm7) (injpw j m' m6 INJ)).
       etransitivity. econstructor;eauto.
-      etransitivity. instantiate (1:= (injpw j m' m6 INJ)).
       instantiate (1:=Hm'0).
       eapply injp_acc_process. eapply H14. eapply FINDP3. 1-6: eauto.
+      inv INJP1.
+      (* the reset match_state*)      
       (* m'~m' -> m6~m7*)      
-      assert (ro_acc m' m'). eapply ro_acc_refl.
+      (* assert (ro_acc m' m'). eapply ro_acc_refl. *)
+      (* assert (ro_acc m1 m1). eapply ro_acc_refl. *)
       assert (ro_acc m6 m7). eapply ro_acc_free;eauto.
-      inv H2. inv H3.
+      assert (ro_acc tm0 m7).
+      eapply ro_acc_trans. eapply ro_acc_alloc;eauto.
+      eapply ro_acc_trans. eapply ro_acc_store;eauto.
+      eapply ro_acc_trans. instantiate (1:=m6). econstructor. auto. eapply Mem.unchanged_on_support.
+      eauto. auto. auto.
+      
+      assert (INJ2: Mem.inject j m' m7).
+      eapply Mem.free_right_inject;eauto. intros.
+      (* contradicte by j b1 = Some (sp,delta) , using the inject_separated*)
+      (* f b1 = None *)
+      destruct (f b1) eqn: FB.      
+      destruct p0. eapply H14 in FB as FB1. rewrite FB1 in H1. inv H1.
+      exploit Mem.mi_mappedblocks. eapply Hm4. eapply FB. intros.
+      eapply Mem.fresh_block_alloc. eapply ALLOC. auto.
+      eapply H23;eauto.
+            
+      inv H. inv H0.
+      econstructor.
+      instantiate (1:= INJ2).
       econstructor;eauto.
-      eapply Mem.unchanged_on_refl.
-      eapply Mem.free_unchanged_on';eauto.
-      intros. unfold loc_out_of_reach. intro. eapply H17.
+      (* unchanged_on tm0 m7 *)
+      inv H21. inv UNC1. inv UNC2.
+      econstructor;eauto.
+      (* perm *)
+      intros.
+      assert (b0 <> sp). { intro. subst. eapply Mem.fresh_block_alloc. eapply ALLOC. auto. }      
+      etransitivity.
+      eapply unchanged_on_perm0;eauto.
+      etransitivity. instantiate (1:= Mem.perm m6 b0 ofs k p).
+      eapply unchanged_on_perm. auto. eapply Mem.store_valid_block_1;eauto.
+      eapply Mem.valid_block_alloc;eauto.
+      (* perm m6 m7 *)
+      intros.  eapply unchanged_on_perm1;eauto. eapply unchanged_on_support.
+      eapply Mem.store_valid_block_1;eauto.
+      eapply Mem.valid_block_alloc;eauto.
+      (* contents *)      
+      intros.
+      assert (b0 <> sp). { intro. subst. eapply Mem.fresh_block_alloc. eapply ALLOC. eapply Mem.perm_valid_block. eauto. }      
+      erewrite unchanged_on_contents1;eauto. erewrite unchanged_on_contents;eauto.
+      eapply unchanged_on_perm0;eauto. eapply Mem.perm_valid_block. eauto.
+      eapply unchanged_on_perm;eauto.
+      eapply Mem.store_valid_block_1;eauto.
+      eapply Mem.valid_block_alloc;eauto. eapply Mem.perm_valid_block;eauto.
+      eapply unchanged_on_perm0;eauto. eapply Mem.perm_valid_block. eauto.
+
+      (* inject_separated *)
+      econstructor;eauto. eapply H23;eauto.
+      intro. eapply Mem.valid_block_alloc in H26;eauto.
+      eapply Mem.store_valid_block_1 in H26;eauto. eapply H23 in H25. destruct H25.
+      congruence. auto.
       
       
     + (*encrypt1*)
