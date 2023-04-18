@@ -826,13 +826,52 @@ Qed.
 Definition source_mem (w: injp_world) := match w with injpw _ m1 _ _ => m1 end.
 
 (*need non-trivial induction*)
+
+Require Import Maps.
+
+Lemma fold_right_get : forall bl se id b vdef,
+    sup_In b bl ->
+    Genv.find_symbol se id = Some b ->
+    Genv.find_info se b = Some (Gvar vdef) ->
+    gvar_readonly vdef && negb (gvar_volatile vdef) && definitive_initializer (gvar_init vdef) = true ->
+    Maps.PTree.get id (fold_right (check_add_global se) (PTree.empty ablock) bl) =
+      Some (store_init_data_list (ablock_init Pbot) 0 (gvar_init vdef)).
+Proof.
+  induction bl; intros.
+  - inv H.
+  - destruct (eq_block a b).
+    + subst. simpl. unfold check_add_global. simpl.
+      apply Genv.find_invert_symbol in H0. rewrite H0.
+      simpl. setoid_rewrite H1. rewrite H2.
+      rewrite PTree.gss. reflexivity.
+    + exploit IHbl; eauto. destruct H. congruence. eauto.
+      intro IH.
+      simpl. unfold check_add_global.
+      destruct Genv.invert_symbol eqn:SYMB; eauto.
+      assert (id <> i).
+      {
+        intro. subst. erewrite Genv.invert_find_symbol in H0; eauto.
+        inv H0. congruence.
+      }
+      destruct Memory.NMap.get; eauto.
+      -- destruct g.
+         rewrite PTree.gro; eauto.
+         destruct ( gvar_readonly v && negb (gvar_volatile v) && definitive_initializer (gvar_init v)).
+         rewrite PTree.gso; eauto.
+         rewrite PTree.gro; eauto.
+      -- rewrite PTree.gro; eauto.
+Qed.
+
 Lemma romem_for_ablock : forall se id b vdef,
     Genv.find_symbol se id = Some b  ->   
     Genv.find_info se b = Some (Gvar vdef) ->
     gvar_readonly vdef && negb (gvar_volatile vdef) && definitive_initializer (gvar_init vdef) = true ->
     Maps.PTree.get id (romem_for_symtbl se) = Some (store_init_data_list (ablock_init Pbot) 0 (gvar_init vdef)).
 Proof.
-Admitted.
+  intros. unfold romem_for_symtbl.
+  eapply fold_right_get; eauto.
+  eapply Genv.genv_symb_range; eauto.
+Qed.
 
 Lemma CAinjp_simulation_L2: forward_simulation
                  (ro @ cc_c_asm_injp)
@@ -972,14 +1011,16 @@ Proof.
       rename H14 into Hpc. rename H18 into Hrdi. rename H19 into Hrsi.
       assert (ROREAD : key = Int.repr 42).
       { clear - H20 FINDKEY LOADKEY Hse1.
-        inv H20. red in H. red in Hse1.
+        inv H20.
+        red in H. red in Hse1.
         assert (Maps.PTree.get key_id (prog_defmap (erase_program b2)) = Some (Gvar key_def_const)).
-        cbn.
+        { cbn.
         rewrite Maps.PTree.gso; try congruence.
         rewrite Maps.PTree.gso; try congruence.
         rewrite Maps.PTree.gss. reflexivity.
         unfold key_id. unfold encrypt_id. congruence.
         unfold key_id. unfold complete_id. congruence.
+        }
         exploit Hse1; eauto.
         intros (key_b' &  vardef & FIND' & INFO & L).
         inv L. inv H3. inv H9. inv H8.
