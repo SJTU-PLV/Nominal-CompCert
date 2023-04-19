@@ -14,9 +14,9 @@ Definition result_def_unit :=
     gvar_readonly := false;
     gvar_volatile := false |}.
 
-Definition linked_skel1 : program unit unit:=
+Definition linked_skel2 : program unit unit:=
   {|
-    prog_defs := (result_id, Gvar result_def_unit) :: (key_id, Gvar key_def) ::
+    prog_defs := (result_id, Gvar result_def_unit) :: (key_id, Gvar key_def_const) ::
                    (request_id, Gfun tt) :: (encrypt_id, Gfun tt) ::
                    (process_id, Gfun tt) :: nil;
     prog_public := encrypt_id :: request_id :: process_id :: result_id ::
@@ -24,18 +24,18 @@ Definition linked_skel1 : program unit unit:=
     prog_main := 42%positive
   |}.
 
-Theorem link_ok :
-  link (skel (Clight.semantics1 client)) (skel L1) = Some linked_skel1.
+Theorem link_ok2 :
+  link (skel (Clight.semantics1 client)) (skel L2) = Some linked_skel2.
 Proof. reflexivity. Qed.
 
 
-Definition L := fun i : bool => if i then (Clight.semantics1 client) else L1.
-Definition composed_spec1 := semantics L linked_skel1.
+Definition L := fun i : bool => if i then (Clight.semantics1 client) else L2.
+Definition composed_spec2 := semantics L linked_skel2.
 
 Theorem link_result :
-  compose (Clight.semantics1 client) L1 = Some composed_spec1.
+  compose (Clight.semantics1 client) L2 = Some composed_spec2.
 Proof.
-  unfold compose. rewrite link_ok. simpl. reflexivity.
+  unfold compose. rewrite link_ok2. simpl. reflexivity.
 Qed.
 
 
@@ -105,9 +105,9 @@ Inductive step : state -> trace -> state -> Prop :=
 
 End WITH_SE.
 
-Program Definition top_spec1 : Smallstep.semantics li_c li_c :=
+Program Definition top_spec2 : Smallstep.semantics li_c li_c :=
     {|
-      Smallstep.skel := linked_skel1;
+      Smallstep.skel := linked_skel2;
       Smallstep.state := state;
       Smallstep.activate se :=
         {|
@@ -121,65 +121,6 @@ Program Definition top_spec1 : Smallstep.semantics li_c li_c :=
         |}
     |}.
 
-(** Top invariant of top_spec1*)
-
-Section RO.
-
-Variable se : Genv.symtbl.
-Variable m0 : mem.
-
-Inductive sound_state : state -> Prop :=
-| sound_Callrequest : forall i m,
-    ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Callrequest i m)
-| sound_Callencrypt : forall vf i m,
-    ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Callencrypt i vf m)
-| sound_Callprocess : forall i m,
-    ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Callprocess i m)
-| sound_Return : forall m,
-    ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Return m).
-End RO.
-
-Definition ro_inv '(row se0 m0) := sound_state se0 m0.
-
-Lemma spec1_ro : preserves top_spec1 ro ro ro_inv.
-Proof.
-  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
-  split; cbn in *.
-  - intros. inv H0; inv H.
-    + simpl in SET. apply ro_acc_store in SET.
-      constructor; eauto.
-      eapply ro_acc_trans; eauto.
-      eapply ro_acc_sound; eauto.
-    + constructor; eauto.
-    + constructor; eauto.
-  - intros. inv H. inv H0. constructor; eauto.
-    eapply ro_acc_refl.
-    constructor; eauto. eapply ro_acc_refl.
-    constructor; eauto. eapply ro_acc_refl.
-  - intros. inv H0.
-  - intros. inv H0. inv H. constructor; eauto.
-Qed.
-
-Theorem top1_ro :
-  forward_simulation ro ro top_spec1 top_spec1.
-Proof.
-  eapply preserves_fsim. eapply spec1_ro; eauto.
-Qed.
-
-(* 
-  need a match_state or sound_state relation
-  different function entry pointers need different signatures.
-*)
-Theorem top1_wt : forward_simulation wt_c wt_c top_spec1 top_spec1.
-Proof.
-Admitted.
-
-
-
 (** Proof of top_spec -> composed_spec1 *)
 
 Section MS.
@@ -188,7 +129,7 @@ Variable w: injp_world.
 Variable se tse : Genv.symtbl.
 
 Let tge1 := Clight.globalenv tse client.
-Let tge2 := Genv.globalenv tse b1.
+Let tge2 := Genv.globalenv tse b2.
 
 Hypothesis MSTB : match_stbls injp w se tse.
 
@@ -325,7 +266,7 @@ Lemma find_encrypt:
     Genv.match_stbls j se tse ->
     Genv.find_symbol se encrypt_id = Some rb ->
     j rb = Some (rb',0) ->
-    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b1).
+    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b2).
 Proof.
   intros. cbn. rewrite pred_dec_true; eauto.
   unfold global_definitions_client. unfold Genv.find_funct_ptr.
@@ -369,7 +310,7 @@ Lemma find_encrypt':
     Genv.match_stbls j se tse ->
     Genv.find_symbol se encrypt_id = Some rb ->
     exists rb', j rb = Some (rb',0) /\ Genv.find_symbol tge2 encrypt_id = Some rb' /\
-    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b1).
+    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b2).
 Proof.
   intros. eapply Genv.find_symbol_match in H as F; eauto.
   destruct F as [rb' [A B]].
@@ -699,8 +640,8 @@ Qed.
 
 
   
-Lemma top_simulation_L1:
-  forward_simulation (cc_c injp) (cc_c injp) top_spec1 composed_spec1.
+Lemma top_simulation_L2:
+  forward_simulation (cc_c injp) (cc_c injp) top_spec2 composed_spec2.
 Proof.
   constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
   intros se1 se2 w Hse Hse1. cbn in *. subst.
@@ -775,7 +716,7 @@ Proof.
            1-16: destruct NMap.elt_eq;try congruence.
            1-8: unfold NMap.get;rewrite NMap.gi;congruence. }
 
-         assert (FIND_DEF_SERVER: forall f, Genv.find_def (Genv.globalenv se2 Server.b1) b2 <> Some (Gfun f)).
+         assert (FIND_DEF_SERVER: forall f, Genv.find_def (Genv.globalenv se2 Server.b2) b2 <> Some (Gfun f)).
          { unfold Genv.globalenv. simpl.
            intros.
            unfold Genv.add_globdef.

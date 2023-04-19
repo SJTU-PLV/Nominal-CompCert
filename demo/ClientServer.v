@@ -7,7 +7,7 @@ Require Import CallconvAlgebra InjectFootprint CKLRAlgebra CA CallConv.
 Require Import Invariant ValueAnalysis.
 
 Require Import Client.
-Require Import Server Serverspec Serverproof ClientServerCspec.
+Require Import Server Serverspec Serverproof ClientServerCspec ClientServerCspec2.
 
 Require Import Linking SmallstepLinking.
 
@@ -18,9 +18,6 @@ client ⊕ L1 ≤ client_asm ⊕ b1
 client ⊕ L2 ≤ client_asm ⊕ b2
  *)
 
-(* Compute transf_clight_program client. 
-Coq process killed
-*)
 Lemma compose_Client_Server_correct1:
   forall client_asm tp spec,
   compose (Clight.semantics1 client) L1 = Some spec ->
@@ -71,16 +68,13 @@ Qed.
 
 (* Top level theorem *)
 
-Section SPEC1.
+Section SPEC.
 
-(*items need to define and prove *)
 
-Axiom top_ro : forward_simulation ro ro top_spec1 top_spec1.
-Axiom top_wt : forward_simulation wt_c wt_c top_spec1 top_spec1.
-
-Variable client_asm tp : Asm.program.
+Variable client_asm tp1 tp2 : Asm.program.
 Axiom compile: transf_clight_program client = OK client_asm.
-Axiom link : link client_asm b1 = Some tp.
+Axiom link1 : link client_asm b1 = Some tp1.
+Axiom link2 : link client_asm b2 = Some tp2.
 
 Lemma ro_injp_cc_compcert:
   cceqv cc_compcert (wt_c @ ro @ cc_c injp @ cc_compcert).
@@ -135,19 +129,38 @@ Proof.
   rewrite cc_injpca_cainjp. reflexivity.
 Qed.
   
-Theorem spec_sim_1 : forward_simulation cc_compcert cc_compcert top_spec1 (Asm.semantics tp).
+Theorem spec_sim_1 : forward_simulation cc_compcert cc_compcert top_spec1 (Asm.semantics tp1).
 Proof.
   rewrite ro_injp_cc_compcert at 1.
   rewrite ro_injp_cc_compcert at 2.
   eapply compose_forward_simulations.
-  eapply top_wt.
+  eapply top1_wt.
   eapply compose_forward_simulations.
-  eapply top_ro.
+  eapply top1_ro.
   eapply compose_forward_simulations.
   eapply top_simulation_L1.
   eapply compose_Client_Server_correct1; eauto.
   eapply compile.
-  eapply link.
+  eapply link1.
 Qed.
 
-End SPEC1.
+(*To be moved to ClightServerCspec2.v *)
+Axiom top_ro2 : forward_simulation ro ro top_spec2 top_spec2.
+Axiom top_wt2 : forward_simulation wt_c wt_c top_spec2 top_spec2.
+
+Theorem spec_sim_2 : forward_simulation cc_compcert cc_compcert top_spec2 (Asm.semantics tp2).
+Proof.
+  rewrite ro_injp_cc_compcert at 1.
+  rewrite ro_injp_cc_compcert at 2.
+  eapply compose_forward_simulations.
+  eapply top_wt2.
+  eapply compose_forward_simulations.
+  eapply top_ro2.
+  eapply compose_forward_simulations.
+  eapply top_simulation_L2.
+  eapply compose_Client_Server_correct2; eauto.
+  eapply compile.
+  eapply link2.
+Qed.
+
+End SPEC.
