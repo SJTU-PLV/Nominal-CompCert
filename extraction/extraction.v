@@ -33,7 +33,7 @@ Require Ctyping.
 Require Clight.
 (** machine dependent *)
 Require CompilerAux.
-Require Compiler.
+Require Compiler0 Compiler.
 Require Parser.
 Require Initializers.
 
@@ -161,8 +161,8 @@ Extract Constant Compiler.print_Cminor => "PrintCminor.print_if".
 Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
 Extract Constant Compiler.print_Mach => "PrintMach.print_if".
-Extract Constant CompilerAux.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
-Extract Constant CompilerAux.time  => "Timing.time_coq".
+Extract Constant Compiler0.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
+Extract Constant Compiler0.time  => "Timing.time_coq".
 
 (*Extraction Inline Compiler.apply_total Compiler.apply_partial.*)
 

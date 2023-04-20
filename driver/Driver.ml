@@ -65,7 +65,7 @@ let compile_c_file sourcename ifile ofile =
         (* if !option_drealasm then *)
         (* let oc = open_out (sourcename^".realasm") in
         PrintAsm.print_program oc realasm; *)
-        (match CompilerAux.assembler Compiler.instr_size realasm with
+        (match Compiler.assembler realasm with
         | Errors.OK ((bs, p), _) ->
            ElfFileOutput.write_elf ofile bs
         | Errors.Error msg ->
@@ -80,7 +80,7 @@ let compile_c_file sourcename ifile ofile =
   else begin
   (* Convert to Asm *)
     let asm =
-      match CompilerAux.apply_partial
+      match Compiler0.apply_partial
                 (Compiler.transf_c_program csyntax)
                 Asmexpand.expand_program with
       | Errors.OK asm ->

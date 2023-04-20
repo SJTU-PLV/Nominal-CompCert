@@ -158,7 +158,7 @@ Hypothesis encode_Instruction_consistency:
 
 Lemma encode_into_byte_consistency: forall l bl,
     translate_bytes l = OK bl ->
-    decode_instrs_bits (bytes_to_bits_opt bl) = OK l.
+    decode_instrs_bits (bytes_to_bits bl) = OK l.
 Proof.
   induction l;simpl;intros.
   inv H. auto.
@@ -167,7 +167,7 @@ Proof.
   exfalso.
   (* we use not empty lemma defined in RelocBingenproofArchi.v *)
   eapply encode_Instruction_not_empty;eauto.
-  rewrite bytes_to_bits_opt_app.
+  rewrite bytes_to_bits_app.
   erewrite bits_to_bytes_to_bits;eauto.
   simpl. rewrite decode_instrs_bits_eq.  
   eapply encode_Instruction_consistency in EQ.

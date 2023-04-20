@@ -160,7 +160,7 @@ endif
 
 # Encoding of data into bytes
 
-ENCODE=Encode.v Bits.v Hex.v BPProperty.v
+ENCODE=Encode.v Bits.v Hex.v BPProperty.v ListDestruct.v
 
 # Elf file format (unused: MergeSection.v)
 ELF = MachineTypes.v RelocElf.v\

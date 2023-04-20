@@ -21,82 +21,82 @@ Local Open Scope nat_scope.
 
 
 Definition write_funct2_R (InstrR:bits)  (funct2_R_value:bits) : bits :=
-	(InstrR~@[5])++funct2_R_value++(InstrR>@[7]).
+	(InstrR~@[25])++funct2_R_value++(InstrR>@[27]).
 
 Definition read_funct2_R (InstrR:bits) : bits :=
-	(InstrR>@[5])~@[2].
+	(InstrR>@[25])~@[2].
 
 Definition write_funct3_B (InstrB:bits)  (funct3_B_value:bits) : bits :=
-	(InstrB~@[17])++funct3_B_value++(InstrB>@[20]).
+	(InstrB~@[12])++funct3_B_value++(InstrB>@[15]).
 
 Definition read_funct3_B (InstrB:bits) : bits :=
-	(InstrB>@[17])~@[3].
+	(InstrB>@[12])~@[3].
 
 Definition write_funct3_I (InstrI:bits)  (funct3_I_value:bits) : bits :=
-	(InstrI~@[17])++funct3_I_value++(InstrI>@[20]).
+	(InstrI~@[12])++funct3_I_value++(InstrI>@[15]).
 
 Definition read_funct3_I (InstrI:bits) : bits :=
-	(InstrI>@[17])~@[3].
+	(InstrI>@[12])~@[3].
 
 Definition write_funct3_R (InstrR:bits)  (funct3_R_value:bits) : bits :=
-	(InstrR~@[17])++funct3_R_value++(InstrR>@[20]).
+	(InstrR~@[12])++funct3_R_value++(InstrR>@[15]).
 
 Definition read_funct3_R (InstrR:bits) : bits :=
-	(InstrR>@[17])~@[3].
+	(InstrR>@[12])~@[3].
 
 Definition write_funct3_S (InstrS:bits)  (funct3_S_value:bits) : bits :=
-	(InstrS~@[17])++funct3_S_value++(InstrS>@[20]).
+	(InstrS~@[12])++funct3_S_value++(InstrS>@[15]).
 
 Definition read_funct3_S (InstrS:bits) : bits :=
-	(InstrS>@[17])~@[3].
+	(InstrS>@[12])~@[3].
 
 Definition write_funct7_R (InstrR:bits)  (funct7_R_value:bits) : bits :=
-	funct7_R_value++(InstrR>@[7]).
+	(InstrR~@[25])++funct7_R_value.
 
 Definition read_funct7_R (InstrR:bits) : bits :=
-	InstrR~@[7].
+	(InstrR>@[25]).
 
 Definition write_immB1_B (InstrB:bits)  (immB1_B_value:bits) : bits :=
-	(InstrB~@[24])++immB1_B_value++(InstrB>@[25]).
+	(InstrB~@[7])++immB1_B_value++(InstrB>@[8]).
 
 Definition read_immB1_B (InstrB:bits) : bits :=
-	(InstrB>@[24])~@[1].
+	(InstrB>@[7])~@[1].
 
 Definition write_immB2_B (InstrB:bits)  (immB2_B_value:bits) : bits :=
-	(InstrB~@[20])++immB2_B_value++(InstrB>@[24]).
+	(InstrB~@[8])++immB2_B_value++(InstrB>@[12]).
 
 Definition read_immB2_B (InstrB:bits) : bits :=
-	(InstrB>@[20])~@[4].
+	(InstrB>@[8])~@[4].
 
 Definition write_immB3_B (InstrB:bits)  (immB3_B_value:bits) : bits :=
-	(InstrB~@[1])++immB3_B_value++(InstrB>@[7]).
+	(InstrB~@[25])++immB3_B_value++(InstrB>@[31]).
 
 Definition read_immB3_B (InstrB:bits) : bits :=
-	(InstrB>@[1])~@[6].
+	(InstrB>@[25])~@[6].
 
 Definition write_immB4_B (InstrB:bits)  (immB4_B_value:bits) : bits :=
-	immB4_B_value++(InstrB>@[1]).
+	(InstrB~@[31])++immB4_B_value.
 
 Definition read_immB4_B (InstrB:bits) : bits :=
-	InstrB~@[1].
+	(InstrB>@[31]).
 
 Definition write_immISp32_I (InstrI:bits)  (immISp32_I_value:bits) : bits :=
-	immISp32_I_value++(InstrI>@[7]).
+	(InstrI~@[25])++immISp32_I_value.
 
 Definition read_immISp32_I (InstrI:bits) : bits :=
-	InstrI~@[7].
+	(InstrI>@[25]).
 
 Definition write_immISp64_I (InstrI:bits)  (immISp64_I_value:bits) : bits :=
-	immISp64_I_value++(InstrI>@[6]).
+	(InstrI~@[26])++immISp64_I_value.
 
 Definition read_immISp64_I (InstrI:bits) : bits :=
-	InstrI~@[6].
+	(InstrI>@[26]).
 
 Definition write_immI_I (InstrI:bits)  (immI_I_value:bits) : bits :=
-	immI_I_value++(InstrI>@[12]).
+	(InstrI~@[20])++immI_I_value.
 
 Definition read_immI_I (InstrI:bits) : bits :=
-	InstrI~@[12].
+	(InstrI>@[20]).
 
 Definition write_immJ1_J (InstrJ:bits)  (immJ1_J_value:bits) : bits :=
 	(InstrJ~@[12])++immJ1_J_value++(InstrJ>@[20]).
@@ -105,160 +105,160 @@ Definition read_immJ1_J (InstrJ:bits) : bits :=
 	(InstrJ>@[12])~@[8].
 
 Definition write_immJ2_J (InstrJ:bits)  (immJ2_J_value:bits) : bits :=
-	(InstrJ~@[11])++immJ2_J_value++(InstrJ>@[12]).
+	(InstrJ~@[20])++immJ2_J_value++(InstrJ>@[21]).
 
 Definition read_immJ2_J (InstrJ:bits) : bits :=
-	(InstrJ>@[11])~@[1].
+	(InstrJ>@[20])~@[1].
 
 Definition write_immJ3_J (InstrJ:bits)  (immJ3_J_value:bits) : bits :=
-	(InstrJ~@[1])++immJ3_J_value++(InstrJ>@[11]).
+	(InstrJ~@[21])++immJ3_J_value++(InstrJ>@[31]).
 
 Definition read_immJ3_J (InstrJ:bits) : bits :=
-	(InstrJ>@[1])~@[10].
+	(InstrJ>@[21])~@[10].
 
 Definition write_immJ4_J (InstrJ:bits)  (immJ4_J_value:bits) : bits :=
-	immJ4_J_value++(InstrJ>@[1]).
+	(InstrJ~@[31])++immJ4_J_value.
 
 Definition read_immJ4_J (InstrJ:bits) : bits :=
-	InstrJ~@[1].
+	(InstrJ>@[31]).
 
 Definition write_immS1_S (InstrS:bits)  (immS1_S_value:bits) : bits :=
-	(InstrS~@[20])++immS1_S_value++(InstrS>@[25]).
+	(InstrS~@[7])++immS1_S_value++(InstrS>@[12]).
 
 Definition read_immS1_S (InstrS:bits) : bits :=
-	(InstrS>@[20])~@[5].
-
-Definition write_immS2_S (InstrS:bits)  (immS2_S_value:bits) : bits :=
-	immS2_S_value++(InstrS>@[7]).
-
-Definition read_immS2_S (InstrS:bits) : bits :=
-	InstrS~@[7].
-
-Definition write_immU_U (InstrU:bits)  (immU_U_value:bits) : bits :=
-	immU_U_value++(InstrU>@[20]).
-
-Definition read_immU_U (InstrU:bits) : bits :=
-	InstrU~@[20].
-
-Definition write_opcode_B (InstrB:bits)  (opcode_B_value:bits) : bits :=
-	(InstrB~@[25])++opcode_B_value.
-
-Definition read_opcode_B (InstrB:bits) : bits :=
-	(InstrB>@[25]).
-
-Definition write_opcode_I (InstrI:bits)  (opcode_I_value:bits) : bits :=
-	(InstrI~@[25])++opcode_I_value.
-
-Definition read_opcode_I (InstrI:bits) : bits :=
-	(InstrI>@[25]).
-
-Definition write_opcode_J (InstrJ:bits)  (opcode_J_value:bits) : bits :=
-	(InstrJ~@[25])++opcode_J_value.
-
-Definition read_opcode_J (InstrJ:bits) : bits :=
-	(InstrJ>@[25]).
-
-Definition write_opcode_R (InstrR:bits)  (opcode_R_value:bits) : bits :=
-	(InstrR~@[25])++opcode_R_value.
-
-Definition read_opcode_R (InstrR:bits) : bits :=
-	(InstrR>@[25]).
-
-Definition write_opcode_S (InstrS:bits)  (opcode_S_value:bits) : bits :=
-	(InstrS~@[25])++opcode_S_value.
-
-Definition read_opcode_S (InstrS:bits) : bits :=
-	(InstrS>@[25]).
-
-Definition write_opcode_U (InstrU:bits)  (opcode_U_value:bits) : bits :=
-	(InstrU~@[25])++opcode_U_value.
-
-Definition read_opcode_U (InstrU:bits) : bits :=
-	(InstrU>@[25]).
-
-Definition write_rd_I (InstrI:bits)  (rd_I_value:bits) : bits :=
-	(InstrI~@[20])++rd_I_value++(InstrI>@[25]).
-
-Definition read_rd_I (InstrI:bits) : bits :=
-	(InstrI>@[20])~@[5].
-
-Definition write_rd_J (InstrJ:bits)  (rd_J_value:bits) : bits :=
-	(InstrJ~@[20])++rd_J_value++(InstrJ>@[25]).
-
-Definition read_rd_J (InstrJ:bits) : bits :=
-	(InstrJ>@[20])~@[5].
-
-Definition write_rd_R (InstrR:bits)  (rd_R_value:bits) : bits :=
-	(InstrR~@[20])++rd_R_value++(InstrR>@[25]).
-
-Definition read_rd_R (InstrR:bits) : bits :=
-	(InstrR>@[20])~@[5].
-
-Definition write_rd_U (InstrU:bits)  (rd_U_value:bits) : bits :=
-	(InstrU~@[20])++rd_U_value++(InstrU>@[25]).
-
-Definition read_rd_U (InstrU:bits) : bits :=
-	(InstrU>@[20])~@[5].
-
-Definition write_rs1_B (InstrB:bits)  (rs1_B_value:bits) : bits :=
-	(InstrB~@[12])++rs1_B_value++(InstrB>@[17]).
-
-Definition read_rs1_B (InstrB:bits) : bits :=
-	(InstrB>@[12])~@[5].
-
-Definition write_rs1_I (InstrI:bits)  (rs1_I_value:bits) : bits :=
-	(InstrI~@[12])++rs1_I_value++(InstrI>@[17]).
-
-Definition read_rs1_I (InstrI:bits) : bits :=
-	(InstrI>@[12])~@[5].
-
-Definition write_rs1_R (InstrR:bits)  (rs1_R_value:bits) : bits :=
-	(InstrR~@[12])++rs1_R_value++(InstrR>@[17]).
-
-Definition read_rs1_R (InstrR:bits) : bits :=
-	(InstrR>@[12])~@[5].
-
-Definition write_rs1_S (InstrS:bits)  (rs1_S_value:bits) : bits :=
-	(InstrS~@[12])++rs1_S_value++(InstrS>@[17]).
-
-Definition read_rs1_S (InstrS:bits) : bits :=
-	(InstrS>@[12])~@[5].
-
-Definition write_rs2_B (InstrB:bits)  (rs2_B_value:bits) : bits :=
-	(InstrB~@[7])++rs2_B_value++(InstrB>@[12]).
-
-Definition read_rs2_B (InstrB:bits) : bits :=
-	(InstrB>@[7])~@[5].
-
-Definition write_rs2_R (InstrR:bits)  (rs2_R_value:bits) : bits :=
-	(InstrR~@[7])++rs2_R_value++(InstrR>@[12]).
-
-Definition read_rs2_R (InstrR:bits) : bits :=
-	(InstrR>@[7])~@[5].
-
-Definition write_rs2_S (InstrS:bits)  (rs2_S_value:bits) : bits :=
-	(InstrS~@[7])++rs2_S_value++(InstrS>@[12]).
-
-Definition read_rs2_S (InstrS:bits) : bits :=
 	(InstrS>@[7])~@[5].
 
-Definition write_rs3_R (InstrR:bits)  (rs3_R_value:bits) : bits :=
-	rs3_R_value++(InstrR>@[5]).
+Definition write_immS2_S (InstrS:bits)  (immS2_S_value:bits) : bits :=
+	(InstrS~@[25])++immS2_S_value.
 
-Definition read_rs3_R (InstrR:bits) : bits :=
-	InstrR~@[5].
+Definition read_immS2_S (InstrS:bits) : bits :=
+	(InstrS>@[25]).
 
-Definition write_shamt32_I (InstrI:bits)  (shamt32_I_value:bits) : bits :=
-	(InstrI~@[7])++shamt32_I_value++(InstrI>@[12]).
+Definition write_immU_U (InstrU:bits)  (immU_U_value:bits) : bits :=
+	(InstrU~@[12])++immU_U_value.
 
-Definition read_shamt32_I (InstrI:bits) : bits :=
+Definition read_immU_U (InstrU:bits) : bits :=
+	(InstrU>@[12]).
+
+Definition write_opcode_B (InstrB:bits)  (opcode_B_value:bits) : bits :=
+	opcode_B_value++(InstrB>@[7]).
+
+Definition read_opcode_B (InstrB:bits) : bits :=
+	InstrB~@[7].
+
+Definition write_opcode_I (InstrI:bits)  (opcode_I_value:bits) : bits :=
+	opcode_I_value++(InstrI>@[7]).
+
+Definition read_opcode_I (InstrI:bits) : bits :=
+	InstrI~@[7].
+
+Definition write_opcode_J (InstrJ:bits)  (opcode_J_value:bits) : bits :=
+	opcode_J_value++(InstrJ>@[7]).
+
+Definition read_opcode_J (InstrJ:bits) : bits :=
+	InstrJ~@[7].
+
+Definition write_opcode_R (InstrR:bits)  (opcode_R_value:bits) : bits :=
+	opcode_R_value++(InstrR>@[7]).
+
+Definition read_opcode_R (InstrR:bits) : bits :=
+	InstrR~@[7].
+
+Definition write_opcode_S (InstrS:bits)  (opcode_S_value:bits) : bits :=
+	opcode_S_value++(InstrS>@[7]).
+
+Definition read_opcode_S (InstrS:bits) : bits :=
+	InstrS~@[7].
+
+Definition write_opcode_U (InstrU:bits)  (opcode_U_value:bits) : bits :=
+	opcode_U_value++(InstrU>@[7]).
+
+Definition read_opcode_U (InstrU:bits) : bits :=
+	InstrU~@[7].
+
+Definition write_rd_I (InstrI:bits)  (rd_I_value:bits) : bits :=
+	(InstrI~@[7])++rd_I_value++(InstrI>@[12]).
+
+Definition read_rd_I (InstrI:bits) : bits :=
 	(InstrI>@[7])~@[5].
 
+Definition write_rd_J (InstrJ:bits)  (rd_J_value:bits) : bits :=
+	(InstrJ~@[7])++rd_J_value++(InstrJ>@[12]).
+
+Definition read_rd_J (InstrJ:bits) : bits :=
+	(InstrJ>@[7])~@[5].
+
+Definition write_rd_R (InstrR:bits)  (rd_R_value:bits) : bits :=
+	(InstrR~@[7])++rd_R_value++(InstrR>@[12]).
+
+Definition read_rd_R (InstrR:bits) : bits :=
+	(InstrR>@[7])~@[5].
+
+Definition write_rd_U (InstrU:bits)  (rd_U_value:bits) : bits :=
+	(InstrU~@[7])++rd_U_value++(InstrU>@[12]).
+
+Definition read_rd_U (InstrU:bits) : bits :=
+	(InstrU>@[7])~@[5].
+
+Definition write_rs1_B (InstrB:bits)  (rs1_B_value:bits) : bits :=
+	(InstrB~@[15])++rs1_B_value++(InstrB>@[20]).
+
+Definition read_rs1_B (InstrB:bits) : bits :=
+	(InstrB>@[15])~@[5].
+
+Definition write_rs1_I (InstrI:bits)  (rs1_I_value:bits) : bits :=
+	(InstrI~@[15])++rs1_I_value++(InstrI>@[20]).
+
+Definition read_rs1_I (InstrI:bits) : bits :=
+	(InstrI>@[15])~@[5].
+
+Definition write_rs1_R (InstrR:bits)  (rs1_R_value:bits) : bits :=
+	(InstrR~@[15])++rs1_R_value++(InstrR>@[20]).
+
+Definition read_rs1_R (InstrR:bits) : bits :=
+	(InstrR>@[15])~@[5].
+
+Definition write_rs1_S (InstrS:bits)  (rs1_S_value:bits) : bits :=
+	(InstrS~@[15])++rs1_S_value++(InstrS>@[20]).
+
+Definition read_rs1_S (InstrS:bits) : bits :=
+	(InstrS>@[15])~@[5].
+
+Definition write_rs2_B (InstrB:bits)  (rs2_B_value:bits) : bits :=
+	(InstrB~@[20])++rs2_B_value++(InstrB>@[25]).
+
+Definition read_rs2_B (InstrB:bits) : bits :=
+	(InstrB>@[20])~@[5].
+
+Definition write_rs2_R (InstrR:bits)  (rs2_R_value:bits) : bits :=
+	(InstrR~@[20])++rs2_R_value++(InstrR>@[25]).
+
+Definition read_rs2_R (InstrR:bits) : bits :=
+	(InstrR>@[20])~@[5].
+
+Definition write_rs2_S (InstrS:bits)  (rs2_S_value:bits) : bits :=
+	(InstrS~@[20])++rs2_S_value++(InstrS>@[25]).
+
+Definition read_rs2_S (InstrS:bits) : bits :=
+	(InstrS>@[20])~@[5].
+
+Definition write_rs3_R (InstrR:bits)  (rs3_R_value:bits) : bits :=
+	(InstrR~@[27])++rs3_R_value.
+
+Definition read_rs3_R (InstrR:bits) : bits :=
+	(InstrR>@[27]).
+
+Definition write_shamt32_I (InstrI:bits)  (shamt32_I_value:bits) : bits :=
+	(InstrI~@[20])++shamt32_I_value++(InstrI>@[25]).
+
+Definition read_shamt32_I (InstrI:bits) : bits :=
+	(InstrI>@[20])~@[5].
+
 Definition write_shamt64_I (InstrI:bits)  (shamt64_I_value:bits) : bits :=
-	(InstrI~@[6])++shamt64_I_value++(InstrI>@[12]).
+	(InstrI~@[20])++shamt64_I_value++(InstrI>@[26]).
 
 Definition read_shamt64_I (InstrI:bits) : bits :=
-	(InstrI>@[6])~@[6].
+	(InstrI>@[20])~@[6].
 
 
 Hint Unfold read_funct2_R write_funct2_R read_funct3_B write_funct3_B read_funct3_I write_funct3_I read_funct3_R write_funct3_R read_funct3_S write_funct3_S read_funct7_R write_funct7_R read_immB1_B write_immB1_B read_immB2_B write_immB2_B read_immB3_B write_immB3_B read_immB4_B write_immB4_B read_immISp32_I write_immISp32_I read_immISp64_I write_immISp64_I read_immI_I write_immI_I read_immJ1_J write_immJ1_J read_immJ2_J write_immJ2_J read_immJ3_J write_immJ3_J read_immJ4_J write_immJ4_J read_immS1_S write_immS1_S read_immS2_S write_immS2_S read_immU_U write_immU_U read_opcode_B write_opcode_B read_opcode_I write_opcode_I read_opcode_J write_opcode_J read_opcode_R write_opcode_R read_opcode_S write_opcode_S read_opcode_U write_opcode_U read_rd_I write_rd_I read_rd_J write_rd_J read_rd_R write_rd_R read_rd_U write_rd_U read_rs1_B write_rs1_B read_rs1_I write_rs1_I read_rs1_R write_rs1_R read_rs1_S write_rs1_S read_rs2_B write_rs2_B read_rs2_R write_rs2_R read_rs2_S write_rs2_S read_rs3_R write_rs3_R read_shamt32_I write_shamt32_I read_shamt64_I write_shamt64_I:bitfields.
@@ -1346,99 +1346,99 @@ end.
 Definition encode_Instruction element  :=
 	match element with
 | fcvtsd uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00001"] in
-let bits04 := write_funct7_R bits03 b["0100000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [true;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;false;false;true;false] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtds uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["0100001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;false;false;true;false] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtdlu uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00011"] in
-let bits04 := write_funct7_R bits03 b["1101001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [true;true;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;true;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtdl uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00010"] in
-let bits04 := write_funct7_R bits03 b["1101001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [false;true;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;true;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtlud uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_rs2_R bits02 b["00011"] in
-let bits04 := write_funct7_R bits03 b["1100001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_rs2_R bits02 [true;true;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;false;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtld uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_rs2_R bits02 b["00010"] in
-let bits04 := write_funct7_R bits03 b["1100001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_rs2_R bits02 [false;true;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;false;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtdwu uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00001"] in
-let bits04 := write_funct7_R bits03 b["1101001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [true;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;true;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtdw uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["1101001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;true;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtwud uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_rs2_R bits02 b["00001"] in
-let bits04 := write_funct7_R bits03 b["1100001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_rs2_R bits02 [true;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;false;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtwd uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["1100001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;false;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fnmsubd uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1001011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct2_R bits02 b["01"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;false;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct2_R bits02 [true;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
@@ -1446,9 +1446,9 @@ let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
 let result0 := bits07 in
 OK (result0)
 | fnmaddd uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1001111"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct2_R bits02 b["01"] in
+let bits01 := write_opcode_R bits00 [true;true;true;true;false;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct2_R bits02 [true;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
@@ -1456,9 +1456,9 @@ let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
 let result0 := bits07 in
 OK (result0)
 | fmsubd uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1000111"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct2_R bits02 b["01"] in
+let bits01 := write_opcode_R bits00 [true;true;true;false;false;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct2_R bits02 [true;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
@@ -1466,9 +1466,9 @@ let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
 let result0 := bits07 in
 OK (result0)
 | fmaddd uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1000011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct2_R bits02 b["01"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;false;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct2_R bits02 [true;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
@@ -1476,116 +1476,116 @@ let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
 let result0 := bits07 in
 OK (result0)
 | fsqrtd uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["0101101"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;true;true;false;true;false] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fled uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["1010001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;true;false;true] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fltd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_funct7_R bits02 b["1010001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;true;false;true] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | feqd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["010"] in
-let bits03 := write_funct7_R bits02 b["1010001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;true;false] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;true;false;true] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fmaxd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_funct7_R bits02 b["0010101"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_funct7_R bits02 [true;false;true;false;true;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fmind uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["0010101"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [true;false;true;false;true;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fdivd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0001101"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [true;false;true;true;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fmuld uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0001001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [true;false;false;true;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fsubd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0000101"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [true;false;true;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | faddd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fsgnjxd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["010"] in
-let bits03 := write_funct7_R bits02 b["0010001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;true;false] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;true;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fsgnjnd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_funct7_R bits02 b["0010001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;true;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fsd uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_S bits00 b["0100111"] in
-let bits02 := write_funct3_S bits01 b["011"] in
+let bits01 := write_opcode_S bits00 [true;true;true;false;false;true;false] in
+let bits02 := write_funct3_S bits01 [true;true;false] in
 let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
 let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
@@ -1593,89 +1593,89 @@ let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
 let result0 := bits06 in
 OK (result0)
 | fload uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0000111"] in
-let bits02 := write_funct3_R bits01 b["011"] in
+let bits01 := write_opcode_I bits00 [true;true;true;false;false;false;false] in
+let bits02 := write_funct3_I bits01 [true;true;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | fcvtslu uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00011"] in
-let bits04 := write_funct7_R bits03 b["1101000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [true;true;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;true;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtsl uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00010"] in
-let bits04 := write_funct7_R bits03 b["1101000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [false;true;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;true;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtlus uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_rs2_R bits02 b["00011"] in
-let bits04 := write_funct7_R bits03 b["1100000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_rs2_R bits02 [true;true;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;false;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtls uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_rs2_R bits02 b["00010"] in
-let bits04 := write_funct7_R bits03 b["1100000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_rs2_R bits02 [false;true;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;false;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtswu uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00001"] in
-let bits04 := write_funct7_R bits03 b["1101000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [true;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;true;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtsw uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["1101000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;true;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtwus uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_rs2_R bits02 b["00001"] in
-let bits04 := write_funct7_R bits03 b["1100000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_rs2_R bits02 [true;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;false;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fcvtws uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["1100000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;false;false;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fnmsubs uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1001011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct2_R bits02 b["00"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;false;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct2_R bits02 [false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
@@ -1683,9 +1683,9 @@ let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
 let result0 := bits07 in
 OK (result0)
 | fnmadds uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1001111"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct2_R bits02 b["00"] in
+let bits01 := write_opcode_R bits00 [true;true;true;true;false;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct2_R bits02 [false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
@@ -1693,9 +1693,9 @@ let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
 let result0 := bits07 in
 OK (result0)
 | fmsubs uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1000111"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct2_R bits02 b["00"] in
+let bits01 := write_opcode_R bits00 [true;true;true;false;false;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct2_R bits02 [false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
@@ -1703,9 +1703,9 @@ let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
 let result0 := bits07 in
 OK (result0)
 | fmadds uvar5_0 uvar5_1 uvar5_2 uvar5_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1000011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct2_R bits02 b["00"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;false;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct2_R bits02 [false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
@@ -1713,116 +1713,116 @@ let bits07 := write_rs3_R bits06 (proj1_sig uvar5_3) in
 let result0 := bits07 in
 OK (result0)
 | fsqrts uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["0101100"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;true;true;false;true;false] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fles uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["1010000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;true;false;true] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | flts uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_funct7_R bits02 b["1010000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;true;false;true] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | feqs uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["010"] in
-let bits03 := write_funct7_R bits02 b["1010000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;true;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;true;false;true] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fmaxs uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_funct7_R bits02 b["0010100"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;true;false;true;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fmins uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["0010100"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;true;false;true;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fdivs uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0001100"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [false;false;true;true;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fmuls uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0001000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [false;false;false;true;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fsubs uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0000100"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [false;false;true;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fadds uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fsgnjxs uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["010"] in
-let bits03 := write_funct7_R bits02 b["0010000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;true;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;true;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fsgnjns uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_funct7_R bits02 b["0010000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;true;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | fsw uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_S bits00 b["0100111"] in
-let bits02 := write_funct3_S bits01 b["010"] in
+let bits01 := write_opcode_S bits00 [true;true;true;false;false;true;false] in
+let bits02 := write_funct3_S bits01 [false;true;false] in
 let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
 let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
@@ -1830,61 +1830,61 @@ let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
 let result0 := bits06 in
 OK (result0)
 | flw uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0000111"] in
-let bits02 := write_funct3_I bits01 b["010"] in
+let bits01 := write_opcode_I bits00 [true;true;true;false;false;false;false] in
+let bits02 := write_funct3_I bits01 [false;true;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | fmvdx uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["1111001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;true;true;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fmvxd uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["1110001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [true;false;false;false;true;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fmvwx uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["1111000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;true;true;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fmvxw uvar5_0 uvar5_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_rs2_R bits02 b["00000"] in
-let bits04 := write_funct7_R bits03 b["1110000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_rs2_R bits02 [false;false;false;false;false] in
+let bits04 := write_funct7_R bits03 [false;false;false;false;true;true;true] in
 let bits05 := write_rd_R bits04 (proj1_sig uvar5_0) in
 let bits06 := write_rs1_R bits05 (proj1_sig uvar5_1) in
 let result0 := bits06 in
 OK (result0)
 | fsgnjd uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["1010011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["0010001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;false;true] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;true;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | sd uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_S bits00 b["0100011"] in
-let bits02 := write_funct3_S bits01 b["011"] in
+let bits01 := write_opcode_S bits00 [true;true;false;false;false;true;false] in
+let bits02 := write_funct3_S bits01 [true;true;false] in
 let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
 let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
@@ -1892,8 +1892,8 @@ let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
 let result0 := bits06 in
 OK (result0)
 | sw uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_S bits00 b["0100011"] in
-let bits02 := write_funct3_S bits01 b["010"] in
+let bits01 := write_opcode_S bits00 [true;true;false;false;false;true;false] in
+let bits02 := write_funct3_S bits01 [false;true;false] in
 let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
 let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
@@ -1901,8 +1901,8 @@ let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
 let result0 := bits06 in
 OK (result0)
 | sh uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_S bits00 b["0100011"] in
-let bits02 := write_funct3_S bits01 b["001"] in
+let bits01 := write_opcode_S bits00 [true;true;false;false;false;true;false] in
+let bits02 := write_funct3_S bits01 [true;false;false] in
 let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
 let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
@@ -1910,8 +1910,8 @@ let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
 let result0 := bits06 in
 OK (result0)
 | sb uvar5_0 uvar5_1 uvar5_2 uvar7_3 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_S bits00 b["0100011"] in
-let bits02 := write_funct3_S bits01 b["000"] in
+let bits01 := write_opcode_S bits00 [true;true;false;false;false;true;false] in
+let bits02 := write_funct3_S bits01 [false;false;false] in
 let bits03 := write_immS1_S bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_S bits03 (proj1_sig uvar5_1) in
 let bits05 := write_rs2_S bits04 (proj1_sig uvar5_2) in
@@ -1919,56 +1919,56 @@ let bits06 := write_immS2_S bits05 (proj1_sig uvar7_3) in
 let result0 := bits06 in
 OK (result0)
 | ld uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0000011"] in
-let bits02 := write_funct3_I bits01 b["011"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;false;false;false] in
+let bits02 := write_funct3_I bits01 [true;true;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | lw uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0000011"] in
-let bits02 := write_funct3_I bits01 b["010"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;false;false;false] in
+let bits02 := write_funct3_I bits01 [false;true;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | lhu uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0000011"] in
-let bits02 := write_funct3_I bits01 b["101"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;false;false;false] in
+let bits02 := write_funct3_I bits01 [true;false;true] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | lh uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0000011"] in
-let bits02 := write_funct3_I bits01 b["001"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;false;false;false] in
+let bits02 := write_funct3_I bits01 [true;false;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | lbu uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0000011"] in
-let bits02 := write_funct3_I bits01 b["100"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;false;false;false] in
+let bits02 := write_funct3_I bits01 [false;false;true] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | lb uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0000011"] in
-let bits02 := write_funct3_I bits01 b["000"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;false;false;false] in
+let bits02 := write_funct3_I bits01 [false;false;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | bgeu uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_B bits00 b["1100011"] in
-let bits02 := write_funct3_B bits01 b["111"] in
+let bits01 := write_opcode_B bits00 [true;true;false;false;false;true;true] in
+let bits02 := write_funct3_B bits01 [true;true;true] in
 let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
 let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
 let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
@@ -1978,8 +1978,8 @@ let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
 let result0 := bits08 in
 OK (result0)
 | bge uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_B bits00 b["1100011"] in
-let bits02 := write_funct3_B bits01 b["101"] in
+let bits01 := write_opcode_B bits00 [true;true;false;false;false;true;true] in
+let bits02 := write_funct3_B bits01 [true;false;true] in
 let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
 let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
 let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
@@ -1989,8 +1989,8 @@ let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
 let result0 := bits08 in
 OK (result0)
 | bltu uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_B bits00 b["1100011"] in
-let bits02 := write_funct3_B bits01 b["110"] in
+let bits01 := write_opcode_B bits00 [true;true;false;false;false;true;true] in
+let bits02 := write_funct3_B bits01 [false;true;true] in
 let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
 let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
 let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
@@ -2000,8 +2000,8 @@ let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
 let result0 := bits08 in
 OK (result0)
 | blt uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_B bits00 b["1100011"] in
-let bits02 := write_funct3_B bits01 b["100"] in
+let bits01 := write_opcode_B bits00 [true;true;false;false;false;true;true] in
+let bits02 := write_funct3_B bits01 [false;false;true] in
 let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
 let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
 let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
@@ -2011,8 +2011,8 @@ let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
 let result0 := bits08 in
 OK (result0)
 | bne uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_B bits00 b["1100011"] in
-let bits02 := write_funct3_B bits01 b["001"] in
+let bits01 := write_opcode_B bits00 [true;true;false;false;false;true;true] in
+let bits02 := write_funct3_B bits01 [true;false;false] in
 let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
 let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
 let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
@@ -2022,8 +2022,8 @@ let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
 let result0 := bits08 in
 OK (result0)
 | beq uvar1_0 uvar4_1 uvar5_2 uvar5_3 uvar6_4 uvar1_5 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_B bits00 b["1100011"] in
-let bits02 := write_funct3_B bits01 b["000"] in
+let bits01 := write_opcode_B bits00 [true;true;false;false;false;true;true] in
+let bits02 := write_funct3_B bits01 [false;false;false] in
 let bits03 := write_immB1_B bits02 (proj1_sig uvar1_0) in
 let bits04 := write_immB2_B bits03 (proj1_sig uvar4_1) in
 let bits05 := write_rs1_B bits04 (proj1_sig uvar5_2) in
@@ -2033,21 +2033,21 @@ let bits08 := write_immB4_B bits07 (proj1_sig uvar1_5) in
 let result0 := bits08 in
 OK (result0)
 | auipc uvar5_0 uvar20_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_U bits00 b["0010111"] in
+let bits01 := write_opcode_U bits00 [true;true;true;false;true;false;false] in
 let bits02 := write_rd_U bits01 (proj1_sig uvar5_0) in
 let bits03 := write_immU_U bits02 (proj1_sig uvar20_1) in
 let result0 := bits03 in
 OK (result0)
 | jalr uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["1100111"] in
-let bits02 := write_funct3_I bits01 b["000"] in
+let bits01 := write_opcode_I bits00 [true;true;true;false;false;true;true] in
+let bits02 := write_funct3_I bits01 [false;false;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | jal uvar5_0 uvar8_1 uvar1_2 uvar10_3 uvar1_4 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_J bits00 b["1101111"] in
+let bits01 := write_opcode_J bits00 [true;true;true;true;false;true;true] in
 let bits02 := write_rd_J bits01 (proj1_sig uvar5_0) in
 let bits03 := write_immJ1_J bits02 (proj1_sig uvar8_1) in
 let bits04 := write_immJ2_J bits03 (proj1_sig uvar1_2) in
@@ -2056,359 +2056,359 @@ let bits06 := write_immJ4_J bits05 (proj1_sig uvar1_4) in
 let result0 := bits06 in
 OK (result0)
 | sraw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0111011"] in
-let bits02 := write_funct3_R bits01 b["101"] in
-let bits03 := write_funct7_R bits02 b["0100000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;false;true] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;true;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | srlw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0111011"] in
-let bits02 := write_funct3_R bits01 b["101"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;false;true] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | sllw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0111011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | remuw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0111011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | remw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0111011"] in
-let bits02 := write_funct3_R bits01 b["110"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;true;true] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | divuw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0111011"] in
-let bits02 := write_funct3_R bits01 b["101"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;false;true] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | divw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0111011"] in
-let bits02 := write_funct3_R bits01 b["100"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;false;true] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | mulw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0111011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | subw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0111011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["0100000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;true;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | addw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0111011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;true;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | sraiw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0011011"] in
-let bits02 := write_funct3_I bits01 b["101"] in
-let bits03 := write_immISp32_I bits02 b["0100000"] in
+let bits01 := write_opcode_I bits00 [true;true;false;true;true;false;false] in
+let bits02 := write_funct3_I bits01 [true;false;true] in
+let bits03 := write_immISp32_I bits02 [false;false;false;false;false;true;false] in
 let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
 let bits06 := write_shamt32_I bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | srliw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0011011"] in
-let bits02 := write_funct3_I bits01 b["101"] in
-let bits03 := write_immISp32_I bits02 b["0000000"] in
+let bits01 := write_opcode_I bits00 [true;true;false;true;true;false;false] in
+let bits02 := write_funct3_I bits01 [true;false;true] in
+let bits03 := write_immISp32_I bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
 let bits06 := write_shamt32_I bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | slliw uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0011011"] in
-let bits02 := write_funct3_I bits01 b["001"] in
-let bits03 := write_immISp32_I bits02 b["0000000"] in
+let bits01 := write_opcode_I bits00 [true;true;false;true;true;false;false] in
+let bits02 := write_funct3_I bits01 [true;false;false] in
+let bits03 := write_immISp32_I bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
 let bits06 := write_shamt32_I bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | srai uvar5_0 uvar5_1 uvar6_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0010011"] in
-let bits02 := write_funct3_I bits01 b["101"] in
-let bits03 := write_immISp64_I bits02 b["010000"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;true;false;false] in
+let bits02 := write_funct3_I bits01 [true;false;true] in
+let bits03 := write_immISp64_I bits02 [false;false;false;false;true;false] in
 let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
 let bits06 := write_shamt64_I bits05 (proj1_sig uvar6_2) in
 let result0 := bits06 in
 OK (result0)
 | srli uvar5_0 uvar5_1 uvar6_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0010011"] in
-let bits02 := write_funct3_I bits01 b["101"] in
-let bits03 := write_immISp64_I bits02 b["000000"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;true;false;false] in
+let bits02 := write_funct3_I bits01 [true;false;true] in
+let bits03 := write_immISp64_I bits02 [false;false;false;false;false;false] in
 let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
 let bits06 := write_shamt64_I bits05 (proj1_sig uvar6_2) in
 let result0 := bits06 in
 OK (result0)
 | slli uvar5_0 uvar5_1 uvar6_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0010011"] in
-let bits02 := write_funct3_I bits01 b["001"] in
-let bits03 := write_immISp64_I bits02 b["000000"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;true;false;false] in
+let bits02 := write_funct3_I bits01 [true;false;false] in
+let bits03 := write_immISp64_I bits02 [false;false;false;false;false;false] in
 let bits04 := write_rd_I bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_I bits04 (proj1_sig uvar5_1) in
 let bits06 := write_shamt64_I bits05 (proj1_sig uvar6_2) in
 let result0 := bits06 in
 OK (result0)
 | addiw uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0011011"] in
-let bits02 := write_funct3_I bits01 b["000"] in
+let bits01 := write_opcode_I bits00 [true;true;false;true;true;false;false] in
+let bits02 := write_funct3_I bits01 [false;false;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | sra uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["101"] in
-let bits03 := write_funct7_R bits02 b["0100000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;false;true] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;true;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | srl uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["101"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;false;true] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | sll uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | xor uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["100"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;false;true] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | or uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["110"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;true;true] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | and uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | sltu uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["011"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;true;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | slt uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["010"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;true;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | remu uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["111"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;true;true] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | rem uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["110"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;true;true] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | divu uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["101"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;false;true] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | div uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["100"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;false;true] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | mulhu uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["011"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;true;false] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | mulh uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["001"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [true;false;false] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | mul uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["0000001"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [true;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | sub uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["0100000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;true;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | add uvar5_0 uvar5_1 uvar5_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_R bits00 b["0110011"] in
-let bits02 := write_funct3_R bits01 b["000"] in
-let bits03 := write_funct7_R bits02 b["0000000"] in
+let bits01 := write_opcode_R bits00 [true;true;false;false;true;true;false] in
+let bits02 := write_funct3_R bits01 [false;false;false] in
+let bits03 := write_funct7_R bits02 [false;false;false;false;false;false;false] in
 let bits04 := write_rd_R bits03 (proj1_sig uvar5_0) in
 let bits05 := write_rs1_R bits04 (proj1_sig uvar5_1) in
 let bits06 := write_rs2_R bits05 (proj1_sig uvar5_2) in
 let result0 := bits06 in
 OK (result0)
 | lui uvar5_0 uvar20_1 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_U bits00 b["0110111"] in
+let bits01 := write_opcode_U bits00 [true;true;true;false;true;true;false] in
 let bits02 := write_rd_U bits01 (proj1_sig uvar5_0) in
 let bits03 := write_immU_U bits02 (proj1_sig uvar20_1) in
 let result0 := bits03 in
 OK (result0)
 | xori uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0010011"] in
-let bits02 := write_funct3_I bits01 b["100"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;true;false;false] in
+let bits02 := write_funct3_I bits01 [false;false;true] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | ori uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0010011"] in
-let bits02 := write_funct3_I bits01 b["110"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;true;false;false] in
+let bits02 := write_funct3_I bits01 [false;true;true] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | andi uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0010011"] in
-let bits02 := write_funct3_I bits01 b["111"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;true;false;false] in
+let bits02 := write_funct3_I bits01 [true;true;true] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | sltiu uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0010011"] in
-let bits02 := write_funct3_I bits01 b["011"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;true;false;false] in
+let bits02 := write_funct3_I bits01 [true;true;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | slti uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0010011"] in
-let bits02 := write_funct3_I bits01 b["010"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;true;false;false] in
+let bits02 := write_funct3_I bits01 [false;true;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
 let result0 := bits05 in
 OK (result0)
 | addi uvar5_0 uvar5_1 uvar12_2 => let bits00 := (repeat false 32) in
-let bits01 := write_opcode_I bits00 b["0010011"] in
-let bits02 := write_funct3_I bits01 b["000"] in
+let bits01 := write_opcode_I bits00 [true;true;false;false;true;false;false] in
+let bits02 := write_funct3_I bits01 [false;false;false] in
 let bits03 := write_rd_I bits02 (proj1_sig uvar5_0) in
 let bits04 := write_rs1_I bits03 (proj1_sig uvar5_1) in
 let bits05 := write_immI_I bits04 (proj1_sig uvar12_2) in
@@ -2425,7 +2425,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtsd (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtsd (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2438,7 +2438,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtds (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtds (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2451,7 +2451,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtdlu (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtdlu (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2464,7 +2464,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtdl (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtdl (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2477,7 +2477,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtlud (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtlud (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2490,7 +2490,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtld (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtld (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2503,7 +2503,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtdwu (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtdwu (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2516,7 +2516,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtdw (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtdw (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2529,7 +2529,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtwud (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtwud (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2542,7 +2542,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtwd (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtwd (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2559,7 +2559,7 @@ if assertLength uvar5_2 5 then
 let uvar5_3 := read_rs3_R token0 in
 if assertLength uvar5_3 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fnmsubd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+OK ((fnmsubd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2578,7 +2578,7 @@ if assertLength uvar5_2 5 then
 let uvar5_3 := read_rs3_R token0 in
 if assertLength uvar5_3 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fnmaddd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+OK ((fnmaddd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2597,7 +2597,7 @@ if assertLength uvar5_2 5 then
 let uvar5_3 := read_rs3_R token0 in
 if assertLength uvar5_3 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmsubd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+OK ((fmsubd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2616,7 +2616,7 @@ if assertLength uvar5_2 5 then
 let uvar5_3 := read_rs3_R token0 in
 if assertLength uvar5_3 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmaddd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+OK ((fmaddd (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2631,7 +2631,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fsqrtd (uvar5_0) (uvar5_1)), 4)
+OK ((fsqrtd (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2646,7 +2646,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fled (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fled (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2662,7 +2662,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fltd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fltd (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2678,7 +2678,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((feqd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((feqd (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2694,7 +2694,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmaxd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fmaxd (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2710,7 +2710,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmind (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fmind (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2726,7 +2726,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fdivd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fdivd (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2742,7 +2742,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmuld (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fmuld (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2758,7 +2758,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fsubd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fsubd (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2774,7 +2774,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((faddd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((faddd (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2790,7 +2790,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fsgnjxd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fsgnjxd (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2806,7 +2806,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fsgnjnd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fsgnjnd (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2824,7 +2824,7 @@ if assertLength uvar5_2 5 then
 let uvar7_3 := read_immS2_S token0 in
 if assertLength uvar7_3 7 then
 do code1 <- try_skip_n code0 32;
-OK ((fsd (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+OK ((fsd (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2841,7 +2841,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((fload (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((fload (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2855,7 +2855,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtslu (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtslu (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2868,7 +2868,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtsl (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtsl (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2881,7 +2881,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtlus (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtlus (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2894,7 +2894,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtls (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtls (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2907,7 +2907,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtswu (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtswu (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2920,7 +2920,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtsw (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtsw (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2933,7 +2933,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtwus (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtwus (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2946,7 +2946,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fcvtws (uvar5_0) (uvar5_1)), 4)
+OK ((fcvtws (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -2963,7 +2963,7 @@ if assertLength uvar5_2 5 then
 let uvar5_3 := read_rs3_R token0 in
 if assertLength uvar5_3 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fnmsubs (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+OK ((fnmsubs (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -2982,7 +2982,7 @@ if assertLength uvar5_2 5 then
 let uvar5_3 := read_rs3_R token0 in
 if assertLength uvar5_3 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fnmadds (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+OK ((fnmadds (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3001,7 +3001,7 @@ if assertLength uvar5_2 5 then
 let uvar5_3 := read_rs3_R token0 in
 if assertLength uvar5_3 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmsubs (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+OK ((fmsubs (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3020,7 +3020,7 @@ if assertLength uvar5_2 5 then
 let uvar5_3 := read_rs3_R token0 in
 if assertLength uvar5_3 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmadds (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 4)
+OK ((fmadds (uvar5_0) (uvar5_1) (uvar5_2) (uvar5_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3035,7 +3035,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fsqrts (uvar5_0) (uvar5_1)), 4)
+OK ((fsqrts (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -3050,7 +3050,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fles (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fles (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3066,7 +3066,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((flts (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((flts (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3082,7 +3082,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((feqs (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((feqs (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3098,7 +3098,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmaxs (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fmaxs (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3114,7 +3114,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmins (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fmins (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3130,7 +3130,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fdivs (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fdivs (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3146,7 +3146,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmuls (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fmuls (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3162,7 +3162,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fsubs (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fsubs (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3178,7 +3178,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fadds (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fadds (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3194,7 +3194,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fsgnjxs (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fsgnjxs (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3210,7 +3210,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fsgnjns (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fsgnjns (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3228,7 +3228,7 @@ if assertLength uvar5_2 5 then
 let uvar7_3 := read_immS2_S token0 in
 if assertLength uvar7_3 7 then
 do code1 <- try_skip_n code0 32;
-OK ((fsw (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+OK ((fsw (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3245,7 +3245,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((flw (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((flw (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3259,7 +3259,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmvdx (uvar5_0) (uvar5_1)), 4)
+OK ((fmvdx (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -3272,7 +3272,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmvxd (uvar5_0) (uvar5_1)), 4)
+OK ((fmvxd (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -3285,7 +3285,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmvwx (uvar5_0) (uvar5_1)), 4)
+OK ((fmvwx (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -3298,7 +3298,7 @@ if assertLength uvar5_0 5 then
 let uvar5_1 := read_rs1_R token0 in
 if assertLength uvar5_1 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fmvxw (uvar5_0) (uvar5_1)), 4)
+OK ((fmvxw (uvar5_0) (uvar5_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -3313,7 +3313,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((fsgnjd (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((fsgnjd (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3331,7 +3331,7 @@ if assertLength uvar5_2 5 then
 let uvar7_3 := read_immS2_S token0 in
 if assertLength uvar7_3 7 then
 do code1 <- try_skip_n code0 32;
-OK ((sd (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+OK ((sd (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3350,7 +3350,7 @@ if assertLength uvar5_2 5 then
 let uvar7_3 := read_immS2_S token0 in
 if assertLength uvar7_3 7 then
 do code1 <- try_skip_n code0 32;
-OK ((sw (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+OK ((sw (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3369,7 +3369,7 @@ if assertLength uvar5_2 5 then
 let uvar7_3 := read_immS2_S token0 in
 if assertLength uvar7_3 7 then
 do code1 <- try_skip_n code0 32;
-OK ((sh (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+OK ((sh (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3388,7 +3388,7 @@ if assertLength uvar5_2 5 then
 let uvar7_3 := read_immS2_S token0 in
 if assertLength uvar7_3 7 then
 do code1 <- try_skip_n code0 32;
-OK ((sb (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 4)
+OK ((sb (uvar5_0) (uvar5_1) (uvar5_2) (uvar7_3)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3405,7 +3405,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((ld (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((ld (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3421,7 +3421,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((lw (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((lw (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3437,7 +3437,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((lhu (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((lhu (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3453,7 +3453,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((lh (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((lh (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3469,7 +3469,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((lbu (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((lbu (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3485,7 +3485,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((lb (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((lb (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3507,7 +3507,7 @@ if assertLength uvar6_4 6 then
 let uvar1_5 := read_immB4_B token0 in
 if assertLength uvar1_5 1 then
 do code1 <- try_skip_n code0 32;
-OK ((bgeu (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+OK ((bgeu (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3532,7 +3532,7 @@ if assertLength uvar6_4 6 then
 let uvar1_5 := read_immB4_B token0 in
 if assertLength uvar1_5 1 then
 do code1 <- try_skip_n code0 32;
-OK ((bge (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+OK ((bge (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3557,7 +3557,7 @@ if assertLength uvar6_4 6 then
 let uvar1_5 := read_immB4_B token0 in
 if assertLength uvar1_5 1 then
 do code1 <- try_skip_n code0 32;
-OK ((bltu (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+OK ((bltu (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3582,7 +3582,7 @@ if assertLength uvar6_4 6 then
 let uvar1_5 := read_immB4_B token0 in
 if assertLength uvar1_5 1 then
 do code1 <- try_skip_n code0 32;
-OK ((blt (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+OK ((blt (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3607,7 +3607,7 @@ if assertLength uvar6_4 6 then
 let uvar1_5 := read_immB4_B token0 in
 if assertLength uvar1_5 1 then
 do code1 <- try_skip_n code0 32;
-OK ((bne (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+OK ((bne (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3632,7 +3632,7 @@ if assertLength uvar6_4 6 then
 let uvar1_5 := read_immB4_B token0 in
 if assertLength uvar1_5 1 then
 do code1 <- try_skip_n code0 32;
-OK ((beq (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 4)
+OK ((beq (uvar1_0) (uvar4_1) (uvar5_2) (uvar5_3) (uvar6_4) (uvar1_5)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3649,7 +3649,7 @@ if assertLength uvar5_0 5 then
 let uvar20_1 := read_immU_U token0 in
 if assertLength uvar20_1 20 then
 do code1 <- try_skip_n code0 32;
-OK ((auipc (uvar5_0) (uvar20_1)), 4)
+OK ((auipc (uvar5_0) (uvar20_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -3664,7 +3664,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((jalr (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((jalr (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3684,7 +3684,7 @@ if assertLength uvar10_3 10 then
 let uvar1_4 := read_immJ4_J token0 in
 if assertLength uvar1_4 1 then
 do code1 <- try_skip_n code0 32;
-OK ((jal (uvar5_0) (uvar8_1) (uvar1_2) (uvar10_3) (uvar1_4)), 4)
+OK ((jal (uvar5_0) (uvar8_1) (uvar1_2) (uvar10_3) (uvar1_4)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3702,7 +3702,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((sraw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((sraw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3718,7 +3718,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((srlw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((srlw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3734,7 +3734,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((sllw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((sllw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3750,7 +3750,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((remuw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((remuw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3766,7 +3766,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((remw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((remw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3782,7 +3782,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((divuw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((divuw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3798,7 +3798,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((divw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((divw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3814,7 +3814,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((mulw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((mulw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3830,7 +3830,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((subw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((subw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3846,7 +3846,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((addw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((addw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3862,7 +3862,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_shamt32_I token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((sraiw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((sraiw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3878,7 +3878,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_shamt32_I token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((srliw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((srliw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3894,7 +3894,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_shamt32_I token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((slliw (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((slliw (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3910,7 +3910,7 @@ if assertLength uvar5_1 5 then
 let uvar6_2 := read_shamt64_I token0 in
 if assertLength uvar6_2 6 then
 do code1 <- try_skip_n code0 32;
-OK ((srai (uvar5_0) (uvar5_1) (uvar6_2)), 4)
+OK ((srai (uvar5_0) (uvar5_1) (uvar6_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3926,7 +3926,7 @@ if assertLength uvar5_1 5 then
 let uvar6_2 := read_shamt64_I token0 in
 if assertLength uvar6_2 6 then
 do code1 <- try_skip_n code0 32;
-OK ((srli (uvar5_0) (uvar5_1) (uvar6_2)), 4)
+OK ((srli (uvar5_0) (uvar5_1) (uvar6_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3942,7 +3942,7 @@ if assertLength uvar5_1 5 then
 let uvar6_2 := read_shamt64_I token0 in
 if assertLength uvar6_2 6 then
 do code1 <- try_skip_n code0 32;
-OK ((slli (uvar5_0) (uvar5_1) (uvar6_2)), 4)
+OK ((slli (uvar5_0) (uvar5_1) (uvar6_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3958,7 +3958,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((addiw (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((addiw (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3974,7 +3974,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((sra (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((sra (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -3990,7 +3990,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((srl (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((srl (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4006,7 +4006,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((sll (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((sll (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4022,7 +4022,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((xor (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((xor (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4038,7 +4038,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((or (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((or (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4054,7 +4054,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((and (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((and (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4070,7 +4070,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((sltu (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((sltu (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4086,7 +4086,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((slt (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((slt (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4102,7 +4102,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((remu (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((remu (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4118,7 +4118,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((rem (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((rem (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4134,7 +4134,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((divu (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((divu (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4150,7 +4150,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((div (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((div (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4166,7 +4166,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((mulhu (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((mulhu (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4182,7 +4182,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((mulh (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((mulh (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4198,7 +4198,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((mul (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((mul (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4214,7 +4214,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((sub (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((sub (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4230,7 +4230,7 @@ if assertLength uvar5_1 5 then
 let uvar5_2 := read_rs2_R token0 in
 if assertLength uvar5_2 5 then
 do code1 <- try_skip_n code0 32;
-OK ((add (uvar5_0) (uvar5_1) (uvar5_2)), 4)
+OK ((add (uvar5_0) (uvar5_1) (uvar5_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4244,7 +4244,7 @@ if assertLength uvar5_0 5 then
 let uvar20_1 := read_immU_U token0 in
 if assertLength uvar20_1 20 then
 do code1 <- try_skip_n code0 32;
-OK ((lui (uvar5_0) (uvar20_1)), 4)
+OK ((lui (uvar5_0) (uvar20_1)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else
@@ -4259,7 +4259,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((xori (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((xori (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4275,7 +4275,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((ori (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((ori (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4291,7 +4291,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((andi (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((andi (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4307,7 +4307,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((sltiu (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((sltiu (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4323,7 +4323,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((slti (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((slti (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")
@@ -4339,7 +4339,7 @@ if assertLength uvar5_1 5 then
 let uvar12_2 := read_immI_I token0 in
 if assertLength uvar12_2 12 then
 do code1 <- try_skip_n code0 32;
-OK ((addi (uvar5_0) (uvar5_1) (uvar12_2)), 4)
+OK ((addi (uvar5_0) (uvar5_1) (uvar12_2)), 32)
 else Error(msg"impossible")
 else Error(msg"impossible")
 else Error(msg"impossible")

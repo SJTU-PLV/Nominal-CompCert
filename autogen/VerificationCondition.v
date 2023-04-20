@@ -17,834 +17,834 @@ Local Open Scope nat_scope.
 
 Definition fcvtsd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["01000000000100000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;true;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtds_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["01000010000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;true;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtdlu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010010001100000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;true;false;false;true;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtdl_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010010001000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;true;false;false;true;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtlud_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11000010001100000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;true;true;false;false;false;true;false;false;false;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtld_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11000010001000000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;true;false;false;false;true;false;false;false;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtdwu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010010000100000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;true;false;false;true;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtdw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010010000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;true;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtwud_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11000010000100000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;true;false;false;false;false;true;false;false;false;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtwd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11000010000000000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fnmsubd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000111000001001011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false] in
+	let bresult0 := [true;true;false;true;false;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fnmaddd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000111000001001111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false] in
+	let bresult0 := [true;true;true;true;false;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmsubd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000111000001000111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false] in
+	let bresult0 := [true;true;true;false;false;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmaddd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000111000001000011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsqrtd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["01011010000000000111000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;true;true;false;true;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fled_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["10100010000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;true;false;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fltd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["10100010000000000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;true;false;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition feqd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["10100010000000000010000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;true;false;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmaxd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00101010000000000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;true;false;true;false;true;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmind_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00101010000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;true;false;true;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fdivd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00011010000000000111000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;true;true;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmuld_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00010010000000000111000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;true;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsubd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00001010000000000111000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;true;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition faddd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000111000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsgnjxd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00100010000000000010000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;true;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsgnjnd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00100010000000000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;true;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000011000000100111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;true;false;false;true;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fload_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000011000000000111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;true;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtslu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010000001100000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false;false;true;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtsl_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010000001000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;true;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtlus_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11000000001100000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtls_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11000000001000000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtswu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010000000100000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;true;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtsw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11010000000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtwus_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11000000000100000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fcvtws_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11000000000000000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fnmsubs_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000111000001001011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false] in
+	let bresult0 := [true;true;false;true;false;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fnmadds_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000111000001001111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false] in
+	let bresult0 := [true;true;true;true;false;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmsubs_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000111000001000111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false] in
+	let bresult0 := [true;true;true;false;false;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmadds_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000111000001000011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsqrts_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["01011000000000000111000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;true;true;false;true;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fles_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["10100000000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition flts_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["10100000000000000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition feqs_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["10100000000000000010000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmaxs_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00101000000000000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;true;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmins_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00101000000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;true;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fdivs_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00011000000000000111000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmuls_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00010000000000000111000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsubs_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00001000000000000111000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fadds_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000111000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsgnjxs_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00100000000000000010000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsgnjns_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00100000000000000001000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000010000000100111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;true;false;false;true;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition flw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000010000000000111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmvdx_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11110010000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;true;true;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmvxd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11100010000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;true;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmvwx_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11110000000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;true;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fmvxw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111111111100000111000001111111"] in
-	let bresult0 := b["11100000000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;true;true;true;true;true;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;true;true] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition fsgnjd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00100010000000000000000001010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;true;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sd_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000011000000100011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;true;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000010000000100011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;true;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sh_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000001000000100011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;true;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sb_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000000000000100011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition ld_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000011000000000011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition lw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000010000000000011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition lhu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000101000000000011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;false;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition lh_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000001000000000011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition lbu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000100000000000011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition lb_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000000000000000011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition bgeu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000111000001100011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition bge_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000101000001100011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;true;true;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition bltu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000110000001100011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;true;true;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition blt_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000100000001100011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;true;true;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition bne_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000001000001100011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;true;true;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition beq_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000000000001100011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition auipc_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000000000001111111"] in
-	let bresult0 := b["00000000000000000000000000010111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition jalr_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000000000001100111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;true;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition jal_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000000000001111111"] in
-	let bresult0 := b["00000000000000000000000001101111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;true;true;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sraw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["01000000000000000101000000111011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;true;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition srlw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000101000000111011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;true;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sllw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000001000000111011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;true;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition remuw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000111000000111011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;true;false;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition remw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000110000000111011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;true;false;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition divuw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000101000000111011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;true;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition divw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000100000000111011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;true;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition mulw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000000000000111011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition subw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["01000000000000000000000000111011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition addw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000000000000111011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sraiw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["01000000000000000101000000011011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;false;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition srliw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000101000000011011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;false;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition slliw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000001000000011011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;true;true;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition srai_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111100000000000111000001111111"] in
-	let bresult0 := b["01000000000000000101000000010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition srli_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111100000000000111000001111111"] in
-	let bresult0 := b["00000000000000000101000000010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition slli_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111100000000000111000001111111"] in
-	let bresult0 := b["00000000000000000001000000010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition addiw_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000000000000011011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sra_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["01000000000000000101000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition srl_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000101000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sll_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000001000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition xor_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000100000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition or_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000110000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition and_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000111000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sltu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000011000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition slt_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000010000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition remu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000111000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition rem_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000110000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition divu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000101000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;true;false;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition div_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000100000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition mulhu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000011000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition mulh_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000001000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition mul_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000010000000000000000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sub_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["01000000000000000000000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;true;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition add_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["11111110000000000111000001111111"] in
-	let bresult0 := b["00000000000000000000000000110011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;true;true;true;true;true;true;true] in
+	let bresult0 := [true;true;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition lui_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000000000001111111"] in
-	let bresult0 := b["00000000000000000000000000110111"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;true;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition xori_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000100000000010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;true;false;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition ori_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000110000000010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;true;false;false;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition andi_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000111000000010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;true;false;false;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition sltiu_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000011000000010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;true;false;false;false;false;false;false;false;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition slti_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000010000000010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;true;false;false;false;false;false;false;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 
 Definition addi_bp code : bool :=
 	let blen := 32 <=? (length code) in
-	let bmask0 := b["00000000000000000111000001111111"] in
-	let bresult0 := b["00000000000000000000000000010011"] in
+	let bmask0 := [true;true;true;true;true;true;true;false;false;false;false;false;true;true;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
+	let bresult0 := [true;true;false;false;true;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false;false] in
 	let bmatch0 := bp_eq(bp_and bmask0 code) bresult0 in
 	true && blen && bmatch0.
 Definition Instruction_bp_list := [fcvtsd_bp; fcvtds_bp; fcvtdlu_bp; fcvtdl_bp; fcvtlud_bp; fcvtld_bp; fcvtdwu_bp; fcvtdw_bp; fcvtwud_bp; fcvtwd_bp; fnmsubd_bp; fnmaddd_bp; fmsubd_bp; fmaddd_bp; fsqrtd_bp; fled_bp; fltd_bp; feqd_bp; fmaxd_bp; fmind_bp; fdivd_bp; fmuld_bp; fsubd_bp; faddd_bp; fsgnjxd_bp; fsgnjnd_bp; fsd_bp; fload_bp; fcvtslu_bp; fcvtsl_bp; fcvtlus_bp; fcvtls_bp; fcvtswu_bp; fcvtsw_bp; fcvtwus_bp; fcvtws_bp; fnmsubs_bp; fnmadds_bp; fmsubs_bp; fmadds_bp; fsqrts_bp; fles_bp; flts_bp; feqs_bp; fmaxs_bp; fmins_bp; fdivs_bp; fmuls_bp; fsubs_bp; fadds_bp; fsgnjxs_bp; fsgnjns_bp; fsw_bp; flw_bp; fmvdx_bp; fmvxd_bp; fmvwx_bp; fmvxw_bp; fsgnjd_bp; sd_bp; sw_bp; sh_bp; sb_bp; ld_bp; lw_bp; lhu_bp; lh_bp; lbu_bp; lb_bp; bgeu_bp; bge_bp; bltu_bp; blt_bp; bne_bp; beq_bp; auipc_bp; jalr_bp; jal_bp; sraw_bp; srlw_bp; sllw_bp; remuw_bp; remw_bp; divuw_bp; divw_bp; mulw_bp; subw_bp; addw_bp; sraiw_bp; srliw_bp; slliw_bp; srai_bp; srli_bp; slli_bp; addiw_bp; sra_bp; srl_bp; sll_bp; xor_bp; or_bp; and_bp; sltu_bp; slt_bp; remu_bp; rem_bp; divu_bp; div_bp; mulhu_bp; mulh_bp; mul_bp; sub_bp; add_bp; lui_bp; xori_bp; ori_bp; andi_bp; sltiu_bp; slti_bp; addi_bp].

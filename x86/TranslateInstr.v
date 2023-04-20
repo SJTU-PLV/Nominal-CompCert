@@ -20,52 +20,52 @@ Local Obligation Tactic := simpl;auto.
 
 (** *CAV21: Instruction ,CompCertELF: instruction*)
 
-(** * Encoding of instructions and functions *)
+(** * Encoding of instructions and functions (Little Endian) *)
 
 Definition encode_ireg (r: ireg) : res bits :=
   match r with
   | RAX => OK (b["000"])
-  | RCX => OK (b["001"])
+  | RCX => OK (b["100"])
   | RDX => OK (b["010"])
-  | RBX => OK (b["011"])
-  | RSP => OK (b["100"])
+  | RBX => OK (b["110"])
+  | RSP => OK (b["001"])
   | RBP => OK (b["101"])
-  | RSI => OK (b["110"])
+  | RSI => OK (b["011"])
   | RDI => OK (b["111"])
   | _ => Error (msg "Encoding of register not supported")
   end.
 
-(*encode 64bit reg ,return *)
+(*encode 64bit reg, using little endian *)
 Definition encode_ireg64 (r:ireg) :(bits*bits):=
   match r with
-  | RAX =>  (b["0"],b[ "000"])
-  | RBX =>  (b["0"],b[ "011"])
-  | RCX =>  (b["0"],b[ "001"])
-  | RDX =>  (b["0"],b[ "010"])
-  | RSI =>  (b["0"],b[ "110"])
-  | RDI =>  (b["0"],b[ "111"])
-  | RBP =>  (b["0"],b[ "101"])
-  | RSP =>  (b["0"],b[ "100"])
-  | R8 => (b["1"],b["000"])
-  | R9 => (b["1"],b["001"])
+  | RAX =>  (b["0"],b["000"])
+  | RCX =>  (b["0"],b["100"])
+  | RDX =>  (b["0"],b["010"])
+  | RBX =>  (b["0"],b["110"])
+  | RSP =>  (b["0"],b["001"])
+  | RBP =>  (b["0"],b["101"])
+  | RSI =>  (b["0"],b["011"])
+  | RDI =>  (b["0"],b["111"])
+  | R8 => (b["1"],  b["000"])
+  | R9 => (b["1"],  b["100"])
   | R10 =>  (b["1"],b["010"])
-  | R11 =>  (b["1"],b["011"])
-  | R12 =>  (b["1"],b["100"])
+  | R11 =>  (b["1"],b["110"])
+  | R12 =>  (b["1"],b["001"])
   | R13 =>  (b["1"],b["101"])
-  | R14 => (b["1"],b["110"])
-  | R15 => (b["1"],b["111"])
+  | R14 => (b["1"], b["011"])
+  | R15 => (b["1"], b["111"])
 end.
    
 
 Definition encode_freg (r: freg) : res bits :=
   match r with
   | XMM0 => OK (b["000"])
-  | XMM1 => OK (b["001"])
+  | XMM1 => OK (b["100"])
   | XMM2 => OK (b["010"])
-  | XMM3 => OK (b["011"])
-  | XMM4 => OK (b["100"])
+  | XMM3 => OK (b["110"])
+  | XMM4 => OK (b["001"])
   | XMM5 => OK (b["101"])
-  | XMM6 => OK (b["110"])
+  | XMM6 => OK (b["011"])
   | XMM7 => OK (b["111"])
   | _ => Error (msg "Encoding of freg not supported")
   end.
@@ -73,36 +73,36 @@ Definition encode_freg (r: freg) : res bits :=
 Definition encode_freg64 (r:freg) :(bits*bits):=
   match r with
   | XMM0  =>  (b["0"],b["000"])
-  | XMM1  =>  (b["0"],b["001"])
+  | XMM1  =>  (b["0"],b["100"])
   | XMM2  =>  (b["0"],b["010"])
-  | XMM3  =>  (b["0"],b["011"])
-  | XMM4  =>  (b["0"],b["100"])
+  | XMM3  =>  (b["0"],b["110"])
+  | XMM4  =>  (b["0"],b["001"])
   | XMM5  =>  (b["0"],b["101"])
-  | XMM6  =>  (b["0"],b["110"])
+  | XMM6  =>  (b["0"],b["011"])
   | XMM7  =>  (b["0"],b["111"])
-  | XMM8 => (b["1"],b["000"])
-  | XMM9 => (b["1"],b["001"])
+  | XMM8 => (b["1"],   b["000"])
+  | XMM9 => (b["1"],   b["100"])
   | XMM10  =>  (b["1"],b["010"])
-  | XMM11  =>  (b["1"],b["011"])
-  | XMM12  =>  (b["1"],b["100"])
+  | XMM11  =>  (b["1"],b["110"])
+  | XMM12  =>  (b["1"],b["001"])
   | XMM13  =>  (b["1"],b["101"])
-  | XMM14  => (b["1"],b["110"])
-  | XMM15  => (b["1"],b["111"])
+  | XMM14  => (b["1"], b["011"])
+  | XMM15  => (b["1"], b["111"])
 end.
 
 
 Definition encode_scale (s: Z) : res bits :=
   match s with
   | 1 => OK b["00"]
-  | 2 => OK b["01"]
-  | 4 => OK b["10"]
+  | 2 => OK b["10"]
+  | 4 => OK b["01"]
   | 8 => OK b["11"]
   | _ => Error (msg "Translation of scale failed")
   end.
 
 
 Program Definition zero32 : u32 :=
-  bytes_to_bits_opt (bytes_of_int 4 0).
+  bytes_to_bits (bytes_of_int 4 0).
 
 Program Definition zero1: u1 :=
   b["0"].
@@ -120,15 +120,15 @@ Program Definition encode_ireg_u3 (r:ireg) : res u3 :=
   else Error (msg "impossible").
 
 Definition decode_ireg (bs: u3) : res ireg :=
-  let bs' := proj1_sig bs in
+  let bs' := rev (proj1_sig bs) in
   let n := bits_to_Z bs' in
   if Z.eqb n 0 then OK(RAX)           (**r b["000"] *)
-  else if Z.eqb n 1 then OK(RCX)      (**r b["001"] *)
+  else if Z.eqb n 1 then OK(RCX)      (**r b["100"] *)
   else if Z.eqb n 2 then OK(RDX)      (**r b["010"] *)
-  else if Z.eqb n 3 then OK(RBX)      (**r b["011"] *)
-  else if Z.eqb n 4 then OK(RSP)      (**r b["100"] *)
+  else if Z.eqb n 3 then OK(RBX)      (**r b["110"] *)
+  else if Z.eqb n 4 then OK(RSP)      (**r b["001"] *)
   else if Z.eqb n 5 then OK(RBP)      (**r b["101"] *)
-  else if Z.eqb n 6 then OK(RSI)      (**r b["110"] *)
+  else if Z.eqb n 6 then OK(RSI)      (**r b["011"] *)
   else if Z.eqb n 7 then OK(RDI)      (**r b["111"] *)
   else Error(msg "reg not found")
 .
@@ -137,25 +137,25 @@ Definition decode_ireg_u4 (extend: bool) (bs:u3) : ireg :=
   if extend then
     match (proj1_sig bs) with
     | [false;false;false] => R8
-    | [false;false;true] => R9
-    | [false;true;false] => R10
-    | [false;true;true] => R11
-    | [true;false;false] => R12
-    | [true;false;true] => R13
-    | [true;true;false] => R14
-    | [true;true;true] => R15
+    | [true;false;false]  => R9
+    | [false;true;false]  => R10
+    | [true;true;false]   => R11
+    | [false;false;true]  => R12
+    | [true;false;true]   => R13
+    | [false;true;true]   => R14
+    | [true;true;true]    => R15
     | _ => RAX                   (* impossible *)
     end
   else
     match (proj1_sig bs) with
-    | [false;false;false]=> RAX
-    | [false;false;true]=> RCX
-    | [false;true;false]=> RDX
-    | [false;true;true] => RBX
-    | [true;false;false]=> RSP
-    | [true;false;true] => RBP
-    | [true;true;false] => RSI
-    | [true;true;true] => RDI
+    | [false;false;false] => RAX
+    | [true;false;false]  => RCX
+    | [false;true;false]  => RDX
+    | [true;true;false]   => RBX
+    | [false;false;true]  => RSP
+    | [true;false;true]   => RBP
+    | [false;true;true]   => RSI
+    | [true;true;true]    => RDI
     | _ => RAX                   (* impossible *)
     end.
 
@@ -173,25 +173,25 @@ Program Definition encode_ireg_u4 (r:ireg) : res (u1*u3):=
 Definition decode_freg_u4 (extend: bool) (bs:u3) : freg :=
   if extend then
     match (proj1_sig bs) with
-    | [false;false;false]=> XMM8
-    | [false;false;true] => XMM9
-    | [false;true;false] => XMM10
-    | [false;true;true]  => XMM11
-    | [true;false;false] => XMM12
-    | [true;false;true]  => XMM13
-    | [true;true;false]  => XMM14
-    | [true;true;true]   => XMM15
+    | [false;false;false] => XMM8
+    | [true;false;false]  => XMM9
+    | [false;true;false]  => XMM10
+    | [true;true;false]   => XMM11
+    | [false;false;true]  => XMM12
+    | [true;false;true]   => XMM13
+    | [false;true;true]   => XMM14
+    | [true;true;true]    => XMM15
     | _ => XMM0                  (* impossible *)
     end
   else
     match (proj1_sig bs) with
     | [false;false;false] => XMM0
-    | [false;false;true]  => XMM1 
+    | [true;false;false]  => XMM1 
     | [false;true;false]  => XMM2
-    | [false;true;true]   => XMM3
-    | [true;false;false]  => XMM4
+    | [true;true;false]   => XMM3
+    | [false;false;true]  => XMM4
     | [true;false;true]   => XMM5
-    | [true;true;false]   => XMM6
+    | [false;true;true]   => XMM6
     | [true;true;true]    => XMM7
     | _ => XMM0
     end.
@@ -215,7 +215,7 @@ Program Definition encode_freg_u4 (r:freg) : res (u1*u3):=
 
 (* FIXME *)
 Program Definition encode_ofs_u64 (ofs:Z) : res u64 :=
-  let ofs64 := bytes_to_bits_opt (bytes_of_int 8 ofs) in
+  let ofs64 := bytes_to_bits (bytes_of_int 8 ofs) in
   if assertLength ofs64 64 then
     OK (exist _ ofs64 _)
   else Error (msg "impossible").
@@ -232,15 +232,15 @@ Definition decode_scale (bs: u2) : Z :=
   let bs' := proj1_sig bs in
   match bs' with
   | [false;false] => 1
-  | [false;true] => 2
-  | [true;false] => 4
+  | [true;false] => 2
+  | [false;true] => 4
   | [true;true] => 8
   | _ => 1
   end.
 
 Program Definition encode_ofs_u8 (ofs:Z) :res u8 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 8)) then
-    let ofs8 := bytes_to_bits_opt (bytes_of_int 1 ofs) in
+    let ofs8 := bytes_to_bits (bytes_of_int 1 ofs) in
     if assertLength ofs8 8 then
       OK (exist _ ofs8 _)
     else Error (msg "impossible")
@@ -255,7 +255,7 @@ Definition decode_ofs_u8 (bs:u8) : res int :=
 Program Definition encode_ofs_u16 (ofs:Z) :res u16 :=
   (* We input Int.intval to this function, so range checking is nessary *)
   if ( -1 <? ofs) && (ofs <? (two_power_nat 16)) then
-    let ofs16 := bytes_to_bits_opt (bytes_of_int 2 ofs) in
+    let ofs16 := bytes_to_bits (bytes_of_int 2 ofs) in
     if assertLength ofs16 16 then
     OK (exist _ ofs16 _)
     else Error (msg "impossible in encode_ofs_u16")
@@ -271,7 +271,7 @@ Definition decode_ofs_u16 (bs:u16) : res int :=
 
 Program Definition encode_ofs_u32 (ofs:Z) :res u32 :=
   if ( -1 <? ofs) && (ofs <? (two_power_nat 32)) then
-    let ofs32 := bytes_to_bits_opt (bytes_of_int 4 ofs) in
+    let ofs32 := bytes_to_bits (bytes_of_int 4 ofs) in
     if assertLength ofs32 32 then
     OK (exist _ ofs32 _)
     else Error (msg "impossible")
@@ -298,36 +298,36 @@ Definition decode_ofs_signed32 (bs:u32) : res Z :=
   
 Program Definition encode_testcond_u4 (c:testcond) : u4 :=
   match c with
-  | Cond_e   => b["0100"]   (**r 4 *)
-  | Cond_ne  => b["0101"]   (**r 5 *)
-  | Cond_b   => b["0010"]   (**r 2 *)
+  | Cond_e   => b["0010"]   (**r 4 *)
+  | Cond_ne  => b["1010"]   (**r 5 *)
+  | Cond_b   => b["0100"]   (**r 2 *)
   | Cond_be  => b["0110"]   (**r 6 *)
-  | Cond_ae  => b["0011"]   (**r 3 *)
-  | Cond_a   => b["0111"]   (**r 7 *)
-  | Cond_l   => b["1100"]   (**r C *)
-  | Cond_le  => b["1110"]   (**r E *)
-  | Cond_ge  => b["1101"]   (**r D *)
+  | Cond_ae  => b["1100"]   (**r 3 *)
+  | Cond_a   => b["1110"]   (**r 7 *)
+  | Cond_l   => b["0011"]   (**r C *)
+  | Cond_le  => b["0111"]   (**r E *)
+  | Cond_ge  => b["1011"]   (**r D *)
   | Cond_g   => b["1111"]   (**r F *)
-  | Cond_p   => b["1010"]   (**r A *)
-  | Cond_np  => b["1011"]   (**r B *)
+  | Cond_p   => b["0101"]   (**r A *)
+  | Cond_np  => b["1101"]   (**r B *)
   end.
 
 (*change it to total function*)
 Definition decode_testcond_u4 (bs:u4) : res testcond :=
   let bs' := proj1_sig bs in
   match bs' with
-  | [false;true;false;false] => OK Cond_e
-  | [false;true;false;true] => OK Cond_ne
-  | [false;false;true;false] => OK Cond_b
+  | [false;false;true;false] => OK Cond_e
+  | [true;false;true;false] => OK Cond_ne
+  | [false;true;false;false] => OK Cond_b
   | [false;true;true;false] => OK Cond_be
-  | [false;false;true;true] => OK Cond_ae
-  | [false;true;true;true] => OK Cond_a
-  | [true;true;false;false] => OK Cond_l
-  | [true;true;true;false] => OK Cond_le
-  | [true;true;false;true] => OK Cond_ge
+  | [true;true;false;false] => OK Cond_ae
+  | [true;true;true;false] => OK Cond_a
+  | [false;false;true;true] => OK Cond_l
+  | [false;true;true;true] => OK Cond_le
+  | [true;false;true;true] => OK Cond_ge
   | [true;true;true;true] => OK Cond_g
-  | [true;false;true;false] => OK Cond_p
-  | [true;false;true;true] => OK Cond_np
+  | [false;true;false;true] => OK Cond_p
+  | [true;true;false;true] => OK Cond_np
   | _ => Error (msg "decode testcond error")
   end.
 

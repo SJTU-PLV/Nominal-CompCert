@@ -1,12 +1,12 @@
 Require Import Coqlib Integers Errors.
-Require Import encode.Hex encode.Bits Memdata.
+Require Import Hex encode.Bits Memdata.
 Require Import Encode.
 Import String Ascii.
 Import List.
 Import ListNotations.
 Import Hex Bits.
 (* Require Import Intersection. *)
-Require Import Coq.Logic.Eqdep_dec.
+Require Import Coq.Logic.Eqdep_dec ListDestruct.
 
 Local Open Scope error_monad_scope.
 Local Open Scope hex_scope.
@@ -62,7 +62,7 @@ subst.
 congruence.
 Qed.
 
-Lemma bpt_neq_refl: forall f g,
+Lemma bpt_neq_sym: forall f g,
   bpt_neq f g -> bpt_neq g f.
 Proof.
 intros f g H.
@@ -87,6 +87,7 @@ Fixpoint bp_and (b1 b2:bits): bits :=
   |_::t1, _::t2 => false::(bp_and t1 t2)
   end.
 
+(* Unused *)
 Fixpoint bp_or (b1 b2:bits): bits :=
   match b1, b2 with
   |[], _ => []
@@ -113,39 +114,51 @@ Fixpoint bp_neq (b1 b2:bits): bool :=
   |_::t1, _::t2 => true
   end.
 
-Fixpoint nat_to_bits8 (n:nat) (p:nat) (lb:bits) : bits :=
-  match p with
-  | O => lb
-  | S p' => match (n mod 2)%nat with
-           | O => nat_to_bits8 (n/2)%nat p' (false::lb)
-           | S _ => nat_to_bits8 (n/2)%nat p' (true::lb)
-           end
-  end.
+
+Lemma bp_and_eq: forall l1 l2 b1 b2,
+    bp_and (b1::l1) (b2::l2) = if b1 then b2::bp_and l1 l2 else false::bp_and l1 l2.
+Proof.
+  intros. simpl. destruct b1;auto.
+  destruct b2;auto.
+Qed.
+
+Lemma bp_eq_eq: forall l1 l2 b1 b2,
+    bp_eq (b1::l1) (b2::l2) = (bool_eq b1 b2) && bp_eq l1 l2.
+Proof.
+  intros. destruct b1;destruct b2;auto.
+Qed.
+
+Lemma bp_neq_eq: forall l1 l2 b1 b2,
+    bp_neq (b1::l1) (b2::l2) = (negb (bool_eq b1 b2)) || bp_neq l1 l2.
+Proof.
+  intros. destruct b1;destruct b2;auto.
+Qed.
 
 
-Definition nat_to_bits8_opt n : bits :=
-  [( n/128 mod 2 =? 1);
-  ( n/64 mod 2 =? 1);
-  ( n/32 mod 2 =? 1);
-  ( n/16 mod 2 =? 1);
-  ( n/8 mod 2 =? 1);
-  ( n/4 mod 2 =? 1);
+(* little endian *)
+Definition nat_to_bits8 n : bits :=
+  [(n mod 2 =? 1);
   ( n/2 mod 2 =? 1);
-  ( n mod 2 =? 1)].
+  ( n/4 mod 2 =? 1);
+  ( n/8 mod 2 =? 1);
+  ( n/16 mod 2 =? 1);
+  ( n/32 mod 2 =? 1);
+  ( n/64 mod 2 =? 1);
+  ( n/128 mod 2 =? 1)].
 
-Fixpoint bytes_to_bits_opt (lb:list byte) : bits :=
+Fixpoint bytes_to_bits (lb:list byte) : bits :=
   match lb with
   | [] => []
-  | b::lb' =>(nat_to_bits8_opt (Z.to_nat(Byte.unsigned b))) ++
-                                                           (bytes_to_bits_opt lb')
+  | b::lb' =>(nat_to_bits8 (Z.to_nat(Byte.unsigned b))) ++ (bytes_to_bits lb')
   end.
+
 
 
 (* bits must be a multiple of 8 *)
 Fixpoint bits_to_bytes (bs:bits) : res (list byte) :=
   match bs with
   |[] => OK ([])
-  |b7::b6::b5::b4::b3::b2::b1::b0::tail =>
+  |b0::b1::b2::b3::b4::b5::b6::b7::tail =>
    let head := bB[b7::b6::b5::b4::b3::b2::b1::b0::[]] in
    do tailBytes <- bits_to_bytes tail;
    OK(head::tailBytes)
@@ -170,35 +183,35 @@ Proof.
   simpl in H. congruence.
 Qed.
 
-Lemma bytes_to_bits_opt_correct : forall b,
+Lemma bytes_to_bits_correct : forall b,
     length b = 8%nat -> (*also 8*n*)
-    bytes_to_bits_opt [bB[b]] = b.
+    bytes_to_bits [bB[rev b]] = b.
 Proof.
   intros.
   generalize (destruct_bits8 b H).
   intros (b0 & b1 & b2 & b3 & b4 & b5 & b6 & b7 & HBEq).
-  subst b.
+  subst b. cbn [rev app].
   destruct b7; destruct b6; destruct b5; destruct b4;
   destruct b3; destruct b2; destruct b1; destruct b0; reflexivity.
 Qed.
 
 Lemma bytes_to_bits_cons_correct :forall b l,
   length b = 8%nat ->
-  bytes_to_bits_opt (bB[b]::l) = b ++ bytes_to_bits_opt l.
+  bytes_to_bits (bB[rev b]::l) = b ++ bytes_to_bits l.
 Proof.
   intros.
-  apply bytes_to_bits_opt_correct in H.
-  unfold bytes_to_bits_opt in *.
+  apply bytes_to_bits_correct in H.
+  unfold bytes_to_bits in *.
   rewrite app_nil_r in H. rewrite H. auto.
 Qed.
 
-Lemma byte_to_bits_opt_correct : forall b,
+Lemma byte_to_bits_correct : forall b,
   length b = 8%nat ->
-  nat_to_bits8_opt (Z.to_nat(Byte.unsigned bB[b])) = b.
+  nat_to_bits8 (Z.to_nat(Byte.unsigned bB[rev b])) = b.
 Proof.
   intros.
-  apply bytes_to_bits_opt_correct in H.
-  unfold bytes_to_bits_opt in H.
+  apply bytes_to_bits_correct in H.
+  unfold bytes_to_bits in H.
   rewrite app_nil_r in H. auto.
 Qed.
 
@@ -276,7 +289,7 @@ Ltac destr_byte b:=
   let HBEq := fresh "HBEq" in
   match goal with
   |_ => generalize (byte_destruct b);
-        intros (b7 & b6 & b5 & b4 & b3 & b2 & b1 & b0 & HBEq);
+        intros (b0 & b1 & b2 & b3 & b4 & b5 & b6 & b7 & HBEq);
         subst b
   end.
 
@@ -288,12 +301,12 @@ Ltac destr_const_byte n :=
 
 Ltac hexize_byte_value n:=
   let HHex := fresh "HHex" in
-  assert(HHex: Byte.repr n = bB[ bytes_to_bits_opt [Byte.repr n]]);[ 
-    unfold bytes_to_bits_opt;rewrite Byte.unsigned_repr;
+  assert(HHex: Byte.repr n = bB[ bytes_to_bits [Byte.repr n]]);[ 
+    unfold bytes_to_bits;rewrite Byte.unsigned_repr;
     simpl; auto;
     unfold Byte.max_unsigned;
     simpl; lia|];
-  unfold bytes_to_bits_opt in HHex;
+  unfold bytes_to_bits in HHex;
   rewrite Byte.unsigned_repr in HHex;
   [simpl in HHex|unfold Byte.max_unsigned;simpl;lia].
 
@@ -308,7 +321,7 @@ match goal with
 end.
 
 
-Hint Resolve  bpt_neq_refl: bpneq.
+Hint Resolve  bpt_neq_sym: bpneq.
 
 
 
@@ -441,26 +454,26 @@ Proof.
   intros. eapply bits_to_bytes_len_induc; eauto.
 Qed.
 
-Lemma bytes_to_bits_opt_app: forall l1 l2,
-    bytes_to_bits_opt (l1++l2) = (bytes_to_bits_opt l1) ++ (bytes_to_bits_opt l2).
+Lemma bytes_to_bits_app: forall l1 l2,
+    bytes_to_bits (l1++l2) = (bytes_to_bits l1) ++ (bytes_to_bits l2).
 Proof.
   induction l1.
   - simpl. auto.
   - intros.
-    transitivity ((nat_to_bits8_opt(Z.to_nat(Byte.unsigned a))) ++ bytes_to_bits_opt(l1++l2)). auto.
+    transitivity ((nat_to_bits8(Z.to_nat(Byte.unsigned a))) ++ bytes_to_bits(l1++l2)). auto.
     rewrite IHl1. auto.
 Qed.
 
-Lemma bytes_to_bits_opt_cons :forall b l,
-    bytes_to_bits_opt (b::l) = (bytes_to_bits_opt [b]) ++ (bytes_to_bits_opt l).
+Lemma bytes_to_bits_cons :forall b l,
+    bytes_to_bits (b::l) = (bytes_to_bits [b]) ++ (bytes_to_bits l).
 Proof.
   intros.
   assert (b::l = [b]++l). auto. rewrite H.
-  apply bytes_to_bits_opt_app.
+  apply bytes_to_bits_app.
 Qed.
 
-Lemma bytes_to_bits_opt_len: forall bytes,
-    length(bytes_to_bits_opt bytes) = 8*(length bytes).
+Lemma bytes_to_bits_len: forall bytes,
+    length(bytes_to_bits bytes) = 8*(length bytes).
 Proof.
   intros. induction bytes.
   - auto.
@@ -471,7 +484,7 @@ Qed.
 Lemma bits_to_bytes_to_bits_induc: forall n bs bytes,
     length bs <= n ->
     bits_to_bytes bs = OK bytes ->
-    bytes_to_bits_opt bytes = bs.
+    bytes_to_bits bytes = bs.
 Proof.
   induction n.
   - intros. destruct bs. inv H10. auto. simpl in H. lia.
@@ -489,14 +502,16 @@ Proof.
     inv H2.
     assert (b::b0::b1::b2::b3::b4::b5::b6::bs = [b;b0;b1;b2;b3;b4;b5;b6]++bs).
     auto. rewrite H10.
-    rewrite bytes_to_bits_opt_cons.
-    rewrite bytes_to_bits_opt_correct.
+    rewrite bytes_to_bits_cons.
+    assert ([b6; b5; b4; b3; b2; b1; b0; b] = rev [b; b0; b1; b2; b3; b4; b5; b6]) by reflexivity.
+    rewrite H11.
+    rewrite bytes_to_bits_correct.
     erewrite IHn; eauto. simpl in H. lia. auto.
 Qed.
 
 Lemma bits_to_bytes_to_bits: forall bytes bs,
             bits_to_bytes bs = OK bytes
-            -> bytes_to_bits_opt bytes = bs.
+            -> bytes_to_bits bytes = bs.
 Proof.
   intros. eapply bits_to_bytes_to_bits_induc; eauto.
 Qed.
@@ -581,22 +596,14 @@ Ltac solve_try_first_n :=
 
 Ltac solve_assertion :=
   let EQA := fresh "EQA" in
-  let HLxB := fresh "HLxB" in
   let lef := fresh "lef" in
-  let rig := fresh "rig" in
   match goal with
-  |[H: length ?x = _ |- context G[assertLength (bytes_to_bits_opt ?x) ?n]]
-   => generalize(bytes_to_bits_opt_len x);
-     rewrite H;
-     intros HLxB;
-     simpl in HLxB;
-     destruct assertLength eqn:EQA;
-     [|congruence];
-     clear EQA; clear HLxB
-  | |- context G[assertLength (_ _) _ ] =>
-    destruct assertLength as [lef|rig] eqn:EQA at 1;
-    [|simpl in rig;congruence];clear EQA
-     end.
+  | |- context G[ assertLength (_ _) _ ] =>
+      destruct assertLength as [lef| rig] eqn:EQA in |- * at 1; [  | simpl in rig; congruence ];
+      clear EQA
+  end.
+
+
 
 
 
@@ -633,8 +640,8 @@ Ltac enc_dec_normalize :=
 
 Ltac solve_bytes_to_bits :=
   match goal with
-  |[|- context G[bytes_to_bits_opt [bB[?l]]]]
-   => rewrite bytes_to_bits_opt_correct;enc_dec_normalize;auto
+  |[|- context G[bytes_to_bits [bB[?l]]]]
+   => rewrite bytes_to_bits_correct;enc_dec_normalize;auto
   end.
 
 Ltac everything := try solve_try_skip_n; try solve_try_first_n;
@@ -651,39 +658,86 @@ Proof.
   - exists a,l0. auto.
 Qed.
 
-Ltac destr_list l :=
-  let b:= fresh "b" in
-  let tail := fresh "tail" in
-  let HCons := fresh "HCons" in
-  let HLTail := fresh "HLTail" in
+Ltac destr_token l :=
   match goal with
-  |[H: length l = 0 |- _] =>
-   apply length_zero_iff_nil in H;
-   subst l
-  |[H: length l = ?n |- _]
-   => generalize (len_exists l _ H);
-     intros (b & tail & HCons & HLTail);
-     subst l;
-     destr_list tail
+  | [H: length l = 8, l: list _ |- _ ] =>
+      generalize (list_length8_destruct _ l H);
+      intros (? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length l = 32, l: list _ |- _ ] =>
+     generalize (list_length32_destruct _ l H);
+     intros (? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  | [H: 8 = length l, l: list _ |- _ ] =>
+      symmetry in H;
+      generalize (list_length8_destruct _ l H);
+      intros (? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: 32 = length l, l: list _ |- _ ] =>
+     symmetry in H;
+     generalize (list_length32_destruct _ l H);
+     intros (? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
   end.
 
 
-
-Ltac destr_all_lists:=
+Ltac destr_all_lists :=
   match goal with
-  |[H: length ?x = _ |- context G[?x]]
-   => destr_list x
+  |[H: length ?l = 1, l: list _ |- _ ] =>
+     generalize (list_length1_destruct _ l H);
+    intros (? & ?);subst l;try clear H    
+  |[H: length ?l = 2, l: list _ |- _ ] =>
+     generalize (list_length2_destruct _ l H);
+    intros (? & ? & ?);subst l;try clear H
+  |[H: length ?l = 3, l: list _ |- _ ] =>
+     generalize (list_length3_destruct _ l H);
+    intros (? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 4, l: list _ |- _ ] =>
+     generalize (list_length4_destruct _ l H);
+    intros (? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 5, l: list _ |- _ ] =>
+     generalize (list_length5_destruct _ l H);
+    intros (? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 6, l: list _ |- _ ] =>
+     generalize (list_length6_destruct _ l H);
+    intros (? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 7, l: list _ |- _ ] =>
+     generalize (list_length7_destruct _ l H);
+    intros (? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 8, l: list _ |- _ ] =>
+     generalize (list_length8_destruct _ l H);
+    intros (? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 9, l: list _ |- _ ] =>
+     generalize (list_length9_destruct _ l H);
+    intros (? & ? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 10, l: list _ |- _ ] =>
+     generalize (list_length10_destruct _ l H);
+    intros (? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 11, l: list _ |- _ ] =>
+     generalize (list_length11_destruct _ l H);
+    intros (? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 12, l: list _ |- _ ] =>
+     generalize (list_length12_destruct _ l H);
+    intros (? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 20, l: list _ |- _ ] =>
+     generalize (list_length20_destruct _ l H);
+    intros (? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
+  |[H: length ?l = 32, l: list _ |- _ ] =>
+     generalize (list_length32_destruct _ l H);
+    intros (? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ? & ?);subst l;try clear H
   end.
+
+(* Lemma test: forall (l:list bool), *)
+(*     length l = 32 -> *)
+(*   length l = 32. *)
+(* Proof. *)
+(* intros. repeat destr_all_lists. *)
 
 Ltac solve_length_equal :=
-   repeat destr_all_lists;simpl; repeat rewrite app_length; try lia;
+  simpl; repeat rewrite app_length; try lia;
   auto.
-  Ltac solve_equal:=
-  repeat ((apply builtin_inj; simpl)||f_equal);
-  autounfold with *;
-  try (apply bits_to_bytes_to_bits; auto);
-  repeat try (solve_bytes_to_bits; auto);
+
+Ltac solve_equal:=
+  repeat ((apply builtin_inj; simpl; auto)||f_equal);
+  autounfold with *; auto;
   solve_length_equal.
+
 
   
 (*autoproof add*)
@@ -697,7 +751,7 @@ Ltac destruct_builtIn :=
         rewrite HHex in H;
         destr_list x;
         autounfold with bitfields in H;
-        rewrite bytes_to_bits_opt_correct in H;
+        rewrite bytes_to_bits_correct in H;
         [simpl in H|auto]
       end.
 
@@ -723,14 +777,17 @@ Proof.
 Qed.
 
 Lemma bytes_to_bits_to_bytes:
-  forall b ,bits_to_bytes (bytes_to_bits_opt b) = OK b.
+  forall b ,bits_to_bytes (bytes_to_bits b) = OK b.
 Proof.
   induction b.
   - auto.
-  - rewrite bytes_to_bits_opt_cons.
+  - rewrite bytes_to_bits_cons.
     exploit byte_destruct. instantiate (1:=a).
     intros (b7&b6&b5&b4&b3&b2&b1&b0&H).
-    rewrite H. rewrite bytes_to_bits_opt_correct.
+    rewrite H.
+    assert ([b7; b6; b5; b4; b3; b2; b1; b0]=rev [b0; b1; b2; b3; b4; b5; b6; b7]) by reflexivity.
+    rewrite H10.
+    rewrite bytes_to_bits_correct.
     simpl. rewrite IHb. auto. auto.
 Qed.
 
@@ -806,16 +863,38 @@ Ltac ind_builtIn:=
     |[H: u2|- _] =>
      induction H
     |[H: u3|- _] =>
+      induction H
+    |[H: u4|-_] =>
+     induction H
+    |[H: u5|-_] =>
+     induction H
+    |[H: u6|- _] =>
+     induction H
+    |[H: u7|- _] =>
+     induction H
+    |[H: u8|- _] =>
+      induction H
+    |[H: u9|-_] =>
+     induction H
+    |[H: u10|-_] =>
+     induction H
+    |[H: u11|- _] =>
+     induction H
+    |[H: u12|- _] =>
+     induction H
+    |[H: u13|- _] =>
+      induction H
+    |[H: u14|-_] =>
+     induction H
+    |[H: u15|-_] =>
+     induction H
+    |[H: u16|-_] =>
+     induction H
+    |[H: u20|-_] =>
      induction H
     |[H: u32|-_] =>
      induction H
     |[H: u64|-_] =>
-     induction H
-    |[H: u4|-_] =>
-     induction H
-    |[H: u8|-_] =>
-     induction H
-    |[H: u16|-_] =>
      induction H
     end.
 
@@ -932,12 +1011,12 @@ Ltac solve_try_get_n_decode H:=
 
 Ltac destruct_const_byte_rewrite n:=
     let HHex := fresh "HHex" in
-    assert(HHex: Byte.repr n = bB[ bytes_to_bits_opt [Byte.repr n]]);[ 
-    unfold bytes_to_bits_opt;rewrite Byte.unsigned_repr;
+    assert(HHex: Byte.repr n = bB[ bytes_to_bits [Byte.repr n]]);[ 
+    unfold bytes_to_bits;rewrite Byte.unsigned_repr;
     simpl; auto;
     unfold Byte.max_unsigned;
     simpl; lia|];
-  unfold bytes_to_bits_opt in HHex;
+  unfold bytes_to_bits in HHex;
   rewrite Byte.unsigned_repr in HHex;
   [simpl in HHex|unfold Byte.max_unsigned;simpl;lia];
   rewrite HHex in *;clear HHex.
@@ -950,6 +1029,13 @@ Ltac destruct_conjunction H :=
   | _ => idtac
   end.
 
+
+Ltac rename_firstn_result H :=
+  let name := fresh "firstn_result" in
+  match type of H with
+  | try_first_n _ _ = OK ?x =>
+      rename x into name
+  end.
 
 
 Ltac solve_try_first_n_decode H Decode_Len:=
@@ -1026,7 +1112,7 @@ Ltac solve_builtin_eq_dec_decode:=
     let Bindec := fresh "Bindec" in
     match goal with
     | [|- context G[builtin_eq_dec]] =>
-      repeat rewrite bytes_to_bits_opt_correct by auto;
+      repeat rewrite bytes_to_bits_correct by auto;
       destruct builtin_eq_dec as [Bindec|];
       [unfold char_to_bool in Bindec;
       simpl in Bindec;
@@ -1081,12 +1167,12 @@ Ltac solve_builtin_eq_dec_decode:=
       (* adhoc: destruct Byte 0 , may fail*)
       try destruct_const_byte_rewrite 0%Z;
     (* adhoc: common prefix is one byte *)
-      repeat rewrite bytes_to_bits_opt_correct in * by auto;
+      repeat rewrite bytes_to_bits_correct in * by auto;
       simpl in H;
       (* solve char_to_bool ,simpl may stuck!*)
       (* reg_op may not be const! *)
       cbn [proj1_sig];
-      repeat rewrite bytes_to_bits_opt_correct by auto;
+      repeat rewrite bytes_to_bits_correct by auto;
       unfold char_to_bool in *;
       simpl;
       rewrite H;
@@ -1109,37 +1195,31 @@ Ltac solve_zero_len_list:=
 (*Ltac for enc consistency*)
 Ltac simpl_branch_encode HIN BPfact Enc Orth:=
   match goal with 
-  | [H:?a(bytes_to_bits_opt ?code) = true,
+  | [H:?a ?code = true,
      HInst: Enc _ _ = OK _ |-
-     context G [(if ?b (bytes_to_bits_opt ?code)
-                 then _ else _ ) = _ ]]
-    =>
-    assert(HFalse: b (bytes_to_bits_opt code) = false);[
-      apply(Orth _ _ _ _ _ HIN HInst);
-      simpl; apply bpt_neq_refl;apply BPfact
+     context G [(if ?b ?code then _ else _ ) = _ ]] =>
+      assert(HFalse: b code = false);[
+        eapply Orth;[apply HIN | eapply HInst | apply bpt_neq_sym;apply BPfact]
      |];
     rewrite HFalse;
     clear HFalse
   end.
 
+
 Ltac simpl_branch_encode_last :=
   match goal with
-  | [H:?a (bytes_to_bits_opt ?code)  = true |-
-     context G [(if ?a (bytes_to_bits_opt ?code)
-                 then _ else _ ) = _ ]]
+  | [H:?a ?code  = true |-
+     context G [(if ?a ?code then _ else _ ) = _ ]]
     => rewrite H
-  end.     
+  end.
 
 Ltac simpl_branch_encode_instr HIN BPfact Enc Orth:=
   match goal with 
-  | [H:?a(bytes_to_bits_opt ?code) = true,
+  | [H:?a ?code = true,
      HInst: Enc _ = OK _ |-
-     context G [(if ?b (bytes_to_bits_opt ?code)
-                 then _ else _ ) = _ ]]
-    =>
-    assert(HFalse: b (bytes_to_bits_opt code) = false);[
-      apply(Orth _ _ _ _ HIN HInst);
-      simpl; apply bpt_neq_refl;apply BPfact
+     context G [(if ?b ?code then _ else _ ) = _ ]] =>
+      assert(HFalse: b code = false);[
+        eapply Orth;[apply HIN | eapply HInst | apply bpt_neq_sym;apply BPfact]
      |];
     rewrite HFalse;
     clear HFalse
@@ -1155,18 +1235,17 @@ Ltac destruct_exists H:=
 Ltac solve_preserve_klass Enc Preserve:=
   let HXEq := fresh "HXEq" in 
   match goal with
-  |[H: Enc _ bB[[_;_;_;_;_;_;_;_]] = OK _ |-  _]
+  |[H: Enc _ [_;_;_;_;_;_;_;_] = OK _ |-  _]
    => generalize(Preserve _ _ _ _ _ _ _ _ _ _ H);
      intros HXEq;
      destruct_exists HXEq;
      subst 
   end.
 
-Ltac solve_klass Enc Consistency:=
+
+Ltac solve_klass Enc Consistency :=
   match goal with
-  |[HEv: Enc _ _ = _ |- _]
-   => rewrite (Consistency _ _ _ _ HEv);
-     cbn [bind2]
+  | HEv:Enc _ _ = _ |- _ => autounfold with * in HEv;simpl in HEv; erewrite Consistency; eauto; cbn[bind2]
   end.
 
 

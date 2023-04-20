@@ -36,6 +36,12 @@ Lemma encode_Instruction_not_empty:forall i,
     encode_Instruction i = OK [] -> False.
 Proof.
   destruct i;simpl;intros H;try monadInv H;try congruence.
+  generalize  H1.
+  repeat BPProperty.ind_builtIn. repeat BPProperty.destr_all_lists.
+  autounfold with *. simpl. congruence.
+  generalize  H1.
+  repeat BPProperty.ind_builtIn. ListDestruct.destr_list  x.
+  autounfold with *. simpl. congruence.
 Qed.
 
 Lemma translate_instr_not_empty:forall i,

@@ -139,7 +139,7 @@ Proof.
   destruct l.
   cbn [proj1_sig].
   destruct ofs. cbn [Int.intval] in *.
-  assert ((bytes_to_bits_opt (bytes_of_int 2 intval)) = x).
+  assert ((bytes_to_bits (bytes_of_int 2 intval)) = x).
   inv H. auto.
   rewrite<- H10.
   clear -Heqb.
@@ -181,7 +181,7 @@ Proof.
   destruct l.
   cbn [proj1_sig].
   destruct ofs. cbn [Int.intval] in *.
-  assert ((bytes_to_bits_opt (bytes_of_int 1 intval)) = x).
+  assert ((bytes_to_bits (bytes_of_int 1 intval)) = x).
   inv H. auto.
   rewrite<- H10.
   clear -Heqb.
@@ -215,7 +215,7 @@ Proof.
   destruct l.
   cbn [proj1_sig].
   destruct ofs. cbn [Int.intval] in *.
-  assert ((bytes_to_bits_opt (bytes_of_int 4 intval)) = x).
+  assert ((bytes_to_bits (bytes_of_int 4 intval)) = x).
   inv H. auto.
   rewrite<- H10.
   clear -Heqb.
@@ -253,7 +253,7 @@ Proof.
   (* Clear -Heqb. *)
   destruct l.
   cbn [proj1_sig].
-  assert ((bytes_to_bits_opt (bytes_of_int 4 ofs)) = x).
+  assert ((bytes_to_bits (bytes_of_int 4 ofs)) = x).
   inv H. auto.
   rewrite<- H10.
   clear -Heqb.

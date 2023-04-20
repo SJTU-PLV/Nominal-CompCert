@@ -31,23 +31,29 @@ Definition decode_instr' (I: Instruction) : res instruction :=
     OK (Pauipc rd (inr ofs))
   
   | addiw rdbits rsbits imm12 =>
-    if Archi.ptr64 then
-      do rd <- decode_ireg rdbits;
-      do rs <- decode_ireg0 rsbits;
-      do imm_Z <- decode_ofs_u12 imm12;
-      let imm := Int.repr imm_Z in
-      OK (Paddiw rd rs imm)
-    else Error [MSG "Only in rv64"]
+      if builtin_eq_dec (proj1_sig rdbits) (list_repeat 5 false) then
+        OK Pnop
+      else
+        if Archi.ptr64 then
+          do rd <- decode_ireg rdbits;
+          do rs <- decode_ireg0 rsbits;
+          do imm_Z <- decode_ofs_u12 imm12;
+          let imm := Int.repr imm_Z in
+          OK (Paddiw rd rs imm)
+        else Error [MSG "Only in rv64"]
   | addi rdbits rsbits imm12 =>
-    do rd <- decode_ireg rdbits;
-    do rs <- decode_ireg0 rsbits;
-    do imm_Z <- decode_ofs_u12 imm12;
-    if Archi.ptr64 then
-      let imm := Int64.repr imm_Z in
-      OK (Paddil rd rs imm)
-    else
-      let imm := Int.repr imm_Z in
-      OK (Paddiw rd rs imm)
+      if builtin_eq_dec (proj1_sig rdbits) (list_repeat 5 false) then
+        OK Pnop
+      else
+        do rd <- decode_ireg rdbits;
+        do rs <- decode_ireg0 rsbits;
+        do imm_Z <- decode_ofs_u12 imm12;
+        if Archi.ptr64 then
+          let imm := Int64.repr imm_Z in
+          OK (Paddil rd rs imm)
+        else
+          let imm := Int.repr imm_Z in
+          OK (Paddiw rd rs imm)
   | slti rdbits rsbits imm12 =>
     do rd <- decode_ireg rdbits;
     do rs <- decode_ireg0 rsbits;
@@ -837,6 +843,27 @@ Proof.
   try solve_Stype_instr H;
   try solve_fcvt H;
   try solve_Btype_instr H.
+
+  (* addiw *)
+  monadInv H. destruct Archi.ptr64 eqn:PTR.
+  inv EQ3. simpl. destr.
+  destruct rd;simpl in EQ;inv EQ;unfold char_to_bool in *;simpl in e;try congruence.
+  rewrite PTR.
+  solve_Itype_instr H.
+  inv EQ3. simpl. destr.
+  destruct rd;simpl in EQ;inv EQ;unfold char_to_bool in *;simpl in e;try congruence.
+  rewrite PTR.
+  solve_Itype_instr H.
+
+  (* addil *)
+  destruct Archi.ptr64 eqn:PTR. monadInv H.
+  simpl. destr.
+  destruct rd;simpl in EQ;inv EQ;unfold char_to_bool in *;simpl in e;try congruence.
+  rewrite PTR.
+  solve_Itype_instr H.
+  monadInv H.
+
+  destruct Archi.ptr64 eqn:PTR;monadInv H;simpl;auto.
   
   (* auipc *)
   - destruct imm; solve_preparation H;

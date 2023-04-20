@@ -225,7 +225,7 @@ Proof.
 Qed.
 
 Definition decode_instrs' (bytes: list byte) :=
-  let bits := BPProperty.bytes_to_bits_opt bytes in
+  let bits := BPProperty.bytes_to_bits bytes in
   do instrs1 <- decode_instrs_bits bits;
   do instrs2 <- decode_instrs instrs1;
   OK instrs2.
