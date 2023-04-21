@@ -1,0 +1,90 @@
+
+
+(*for optimization*)
+Ltac save48 :=
+  match goal with
+  |[|- (
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else                                              
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else                                              
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else                     
+                                              
+             ?b0) = _]
+   => set (Hsave0:=b0);
+    try match b0 with
+       | (
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else                                              
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else                                              
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else ?b1) =>  
+          set (Hsave1:=b1) in Hsave0;
+     try match b1 with
+       | (
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else                                              
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else                                              
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else ?b2) =>  
+          set (Hsave2:=b2) in Hsave1;
+     try match b2 with
+       | (
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else                                              
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else                                              
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else
+          if _ then _ else if _ then _ else if _ then _ else ?b3) =>  
+          set (Hsave3:=b3) in Hsave2
+          end
+          end
+          end
+  end.

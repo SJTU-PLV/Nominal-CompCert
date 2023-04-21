@@ -507,6 +507,21 @@ Proof.
   unfold find_def; simpl; intros. simpl in H. discriminate.
 Qed.
 
+Theorem find_def_inversion1:
+  forall p id g,
+  find_def (globalenv p) (Global id) = Some g ->
+  In (id, g) (prog_defs p).
+Proof.
+  intros until g. unfold globalenv. apply add_globals_preserves.
+(* preserves *)
+  unfold find_def; simpl; intros.
+  rewrite NMap.gsspec in H1. destruct (NMap.elt_eq (Global id) (Global id0)).
+  inv H1. inv e. auto.
+  auto.
+(* base *)
+  unfold find_def; simpl; intros. simpl in H. discriminate.
+Qed.
+
 Corollary find_funct_ptr_inversion:
   forall p b f,
   find_funct_ptr (globalenv p) b = Some f ->

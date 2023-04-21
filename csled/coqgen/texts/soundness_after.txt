@@ -1,0 +1,16 @@
+
+Lemma decode_Instruction_sound:
+  forall l l' i, decode_Instruction (l++l') = OK(i, length l)
+                 -> Instruction_spec l i.
+Proof.
+  intros l l' i H.
+  generalize (decode_Instruction_consistency _ _ _ H).
+  intros HEnc.
+  generalize (encode_Instruction_sound _ _ HEnc).
+  auto.
+Qed.
+
+
+
+
+

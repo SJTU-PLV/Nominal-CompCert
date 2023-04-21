@@ -489,28 +489,6 @@ Proof.
 Qed.
 
 
-Lemma match_program_no_more_functions:
-  forall {F1 V1 F2 V2}
-         `{Linker F1} `{Linker V1}
-         Mf Mv
-         (p1: program F1 V1) (p2: program F2 V2),
-    match_program Mf Mv p1 p2 ->
-    forall b,
-    Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p1) b = None ->
-    Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p2) b = None.
-Proof.
-  intros.
-  generalize (Globalenvs.Genv.find_def_match_2 H1 b).
-  inversion 1.
-  - destruct (Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p2) b) eqn:?; auto.
-    apply Globalenvs.Genv.find_funct_ptr_iff in Heqo. congruence.
-  - destruct (Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p2) b) eqn:?; auto.
-    apply Globalenvs.Genv.find_funct_ptr_iff in Heqo. rewrite Heqo in H5. inv H5.
-    inv H6.
-    symmetry in H4.
-    apply Globalenvs.Genv.find_funct_ptr_iff in H4. congruence.
-Qed.
-
 Lemma Asmgen_fn_stack_requirements_match: forall  mp ap isz,
     Asmgenproof.match_prog isz mp ap->
     Stackingproof.fn_stack_requirements mp = fn_stack_requirements ap.
@@ -716,45 +694,99 @@ Qed.
 (* start: assembler *)
 
 (* stack requirements *)
-Axiom Symbtablegen_fn_stack_requirements_match:
+Lemma Symbtablegen_fn_stack_requirements_match:
   forall p tp
     (FM: Symbtablegenproof.match_prog instr_size p tp),
     fn_stack_requirements p = reloc_fn_stack_requirements tp.
-(* Proof. *)
-(*   intros. *)
-(*   unfold Symbtablegenproof.match_prog, Symbtablegen.transf_program in FM. *)
-(*   unfold fn_stack_requirements. unfold reloc_fn_stack_requirements. *)
-(*   eapply Axioms.extensionality. intros. *)
-(*   unfold  Globalenvs.Genv.find_funct_ptr. unfold  Globalenvs.Genv.find_def. *)
-(*   Globalenvs.Genv.find_funct_ptr_iff *)
-(*   destr. *)
-(*   - eapply Globalenvs.Genv.find_funct_ptr_iff in Heqo. *)
-(*     eapply Globalenvs.Genv.find_def_inversion in Heqo. *)
-(*     destruct Heqo. *)
-(*     repeat destr_in FM. simpl. *)
-(*     destruct find eqn:FIND. *)
-(*     + destruct p0. *)
-      
-(*   find *)
-(*   find_ *)
-(*   find_def  *)
-(*   Globalenvs.Genv.find_funct_ptr_ *)
-  
-Axiom Reloctablesgen_fn_stack_requirements_match:
+Proof.
+  intros.
+  unfold Symbtablegenproof.match_prog, Symbtablegen.transf_program in FM.
+  unfold fn_stack_requirements. unfold reloc_fn_stack_requirements.
+  eapply Axioms.extensionality. intros.  
+  unfold  Globalenvs.Genv.find_funct_ptr.
+  destr.
+  - eapply Globalenvs.Genv.find_funct_ptr_iff in Heqo.
+    eapply Globalenvs.Genv.find_def_inversion1 in Heqo.    
+    repeat destr_in FM. simpl.
+    (* unique defs *)
+    inv w. eapply LocalLib.in_norepet_unique in Heqo;eauto. destruct Heqo as (l1 & l2 & A & B & C). rewrite A in *.
+    destruct (find) eqn:FIND. destruct p0.
+    eapply find_some in FIND. destruct FIND. unfold ident_eq in H0. destruct Pos.eq_dec in H0;simpl in H0;try congruence.
+    subst. eapply in_app_iff in H.
+    destruct H.
+    exfalso. eapply C. eapply in_map_iff. exists (p0,g). auto.
+    inv H. inv H1. destruct f;simpl;auto.
+    exfalso. eapply B. eapply in_map_iff. exists (p0,g). auto.
+    
+    eapply find_none in FIND. instantiate (1:= (x,Gfun f)) in FIND. simpl in FIND.
+    unfold ident_eq in FIND. destruct Pos.eq_dec  in FIND;simpl in FIND;congruence.
+    eapply in_app_iff. right. constructor. auto.
+  - repeat destr_in FM. simpl.
+    inv w.
+    destruct find eqn:FIND.
+    eapply find_some in FIND.
+    destruct p0. destruct FIND as (A & B).
+    destruct ident_eq in B;simpl in B;try congruence;subst.
+    destr_in Heqo.
+    + destr_in Heqo.
+      eapply Globalenvs.Genv.find_def_inversion1 in Heqo0.
+      eapply LocalLib.in_norepet_unique in Heqo0;eauto.
+      destruct Heqo0 as (l1 & l2 & D & E & F).  rewrite D in *.
+      eapply in_app_iff in A. destruct A.
+      * exfalso. eapply F. eapply in_map_iff. exists (p0,g). auto.
+      * inv H. inv H0. auto. exfalso. eapply E. eapply in_map_iff. exists (p0,g). auto.
+    + exploit prog_defmap_dom. unfold prog_defs_names.
+      eapply in_map_iff. exists (p0,g). eauto.
+      intros (g0 & H).
+      eapply Globalenvs.Genv.find_def_symbol in H.
+      destruct H as (b' & B1 & C1). simpl in B1.
+      eapply Globalenvs.Genv.genv_vars_eq in B1. subst.
+      congruence.
+    + auto.
+Qed.
+
+Lemma Reloctablesgen_fn_stack_requirements_match:
   forall p tp
     (FM: Reloctablesgenproof.match_prog instr_size p tp),
     reloc_fn_stack_requirements p = reloc_fn_stack_requirements tp.
+Proof.
+  intros.
+  unfold reloc_fn_stack_requirements.
+  unfold Reloctablesgenproof.match_prog, Reloctablesgen.transf_program in FM.
+  monadInv  FM.
+  simpl. auto.
+Qed.
 
-Axiom RelocBingen_fn_stack_requirements_match:
+
+Lemma RelocBingen_fn_stack_requirements_match:
   forall p tp
     (FM: RelocBingenproof.match_prog p tp),
     reloc_fn_stack_requirements p = reloc_fn_stack_requirements tp.
+Proof.
+  intros.
+  unfold reloc_fn_stack_requirements.
+  unfold RelocBingenproof.match_prog,RelocBingen.transf_program in FM.
+  monadInv  FM.
+  simpl. auto.
+Qed.
 
-Axiom RelocElfGen_fn_stack_requirements_match:
+Lemma  RelocElfGen_fn_stack_requirements_match:
   forall p tp
     (FM: RelocElfgenproof0.match_prog p tp),
     reloc_fn_stack_requirements p = elf_fn_stack_requirements tp.
+Proof.
+  intros.
+  unfold reloc_fn_stack_requirements, elf_fn_stack_requirements.
+  unfold RelocElfgenproof0.match_prog in FM.
+  exploit RelocElfgenproof0.gen_reloc_elf_correct;eauto.
+  eapply RelocElfgenproofArchi.decode_encode_reloctable_correct.
+  intros (p' & A & B).
+  rewrite A. unfold reloc_fn_stack_requirements.
+  inv B. rewrite pe_prog_defs.
+  auto.
+Qed.
 
+  
 Lemma ElfEncode_fn_stack_requirements_match:
   forall p tp
     (FM: EncodeElfCorrect.match_prog p tp),

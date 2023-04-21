@@ -230,6 +230,8 @@ GENERATED=\
   cparser/Parser.v
 
 all:
+# make csled
+  $(MAKE) -f csled/Makefile
 	@test -f .depend || $(MAKE) depend
 	$(MAKE) proof
 	$(MAKE) extraction

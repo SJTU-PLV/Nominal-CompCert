@@ -1,0 +1,11 @@
+Require Import Coqlib Integers Errors.
+Require Import encode.Hex encode.Bits Memdata.
+Require Import Encode  VerificationCondition.
+Import String Ascii.
+Import List.
+Import ListNotations.
+Import Hex Bits.
+Require Import BPProperty.
+
+(* use a simple tactic to solve obligation *)
+Local Obligation Tactic := auto.

@@ -1,0 +1,27 @@
+# Object files, in general
+*.vo
+*.vok
+*.vos
+*.glob
+*.o
+*.a
+*.cmi
+*.cmo
+*.cmx
+*.cma
+*.cmxa
+.*.aux
+*.cmti
+*.cmt
+# Emacs saves
+*~
+# Executables and configuration
+/.merlin
+/_CoqProject
+# Generated files
+/.depend
+# Coq caches
+.lia.cache
+.nia.cache
+.nra.cache
+.csdp.cache

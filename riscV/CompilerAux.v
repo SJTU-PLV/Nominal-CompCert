@@ -28,8 +28,10 @@ Definition instr_size_bound := Asm.instr_size_bound_real.
 
 Lemma instr_eq_size: forall i1 i2,
     ReloctablesgenproofArchi.instr_eq i1 i2 -> instr_size i1 = instr_size i2.
-Admitted.
-
+Proof.
+  intros. unfold ReloctablesgenproofArchi.instr_eq in H.
+  subst. auto.
+Qed.
 
   (** TargetPrinter *)
 Definition targetprinter p: res Asm.program :=
@@ -71,35 +73,123 @@ Definition match_prog_targetprinter p tp :=
 
 Lemma Pseudo_fn_stack_requirements_match: forall p,
     fn_stack_requirements p = fn_stack_requirements (PseudoInstructions.transf_program p).
-Admitted.
+Proof.
+  intros. unfold fn_stack_requirements.  
+  eapply Axioms.extensionality. intros.
+  destr.
+  - eapply Globalenvs.Genv.find_funct_ptr_transf in Heqo.
+    erewrite Heqo.
+    2: {
+      instantiate (1:= PseudoInstructions.transf_fundef).
+      unfold PseudoInstructions.transf_program.
+      eapply match_transform_program. }
+    unfold PseudoInstructions.transf_fundef,PseudoInstructions.transf_function,transf_fundef.
+    destruct f. auto. auto.
+  - eapply match_program_no_more_functions in Heqo.
+    erewrite Heqo. auto.
+    eapply match_transform_program.
+Qed.
 
 Lemma Fixup_fn_stack_requirements_match: forall p,
     fn_stack_requirements p = fn_stack_requirements (AsmFixupcode.transf_program p).
-Admitted.
+Proof.
+  intros. unfold fn_stack_requirements.  
+  eapply Axioms.extensionality. intros.
+  destr.
+  - eapply Globalenvs.Genv.find_funct_ptr_transf in Heqo.
+    erewrite Heqo.
+    2: {
+      instantiate (1:= AsmFixupcode.transf_fundef).
+      unfold AsmFixupcode.transf_program.
+      eapply match_transform_program. }
+    unfold AsmFixupcode.transf_fundef,AsmFixupcode.transf_function,transf_fundef.
+    destruct f. auto. auto.
+  - eapply match_program_no_more_functions in Heqo.
+    erewrite Heqo. auto.
+    eapply match_transform_program.
+Qed.
+
 
 Lemma BuiltInline_fn_stack_requirements_match: forall p tp,
     AsmBuiltinInline.transf_program p = OK tp ->
     fn_stack_requirements p = fn_stack_requirements tp.
-Admitted.
-
+Proof.
+  intros. unfold fn_stack_requirements.  
+  eapply Axioms.extensionality. intros.
+  destr.
+  - eapply Globalenvs.Genv.find_funct_ptr_transf_partial in Heqo.
+    destruct Heqo as (tf & A & B).
+    erewrite A.
+    2:{
+      instantiate (1:= AsmBuiltinInline.transf_fundef).
+      eapply match_transform_partial_program.
+      unfold AsmBuiltinInline.transf_program in H. auto.
+    }
+    unfold AsmBuiltinInline.transf_fundef,transf_partial_fundef,AsmBuiltinInline.transf_function,transf_fundef in B.
+    destruct f. monadInv B. monadInv EQ. auto. inv B. auto.
+  - eapply match_program_no_more_functions in Heqo.
+    erewrite Heqo. auto.
+    eapply match_transform_partial_program.
+    unfold AsmBuiltinInline.transf_program in H. eauto.
+Qed.    
+    
 Lemma AsmPseudo_fn_stack_requirements_match: forall p,
     fn_stack_requirements p = fn_stack_requirements (AsmPseudoInstr.transf_program p).
-Admitted.
+Proof.
+  intros. unfold fn_stack_requirements.  
+  eapply Axioms.extensionality. intros.
+  destr.
+  - eapply Globalenvs.Genv.find_funct_ptr_transf in Heqo.
+    erewrite Heqo.
+    2: {
+      instantiate (1:= AsmPseudoInstr.transf_fundef).
+      unfold AsmPseudoInstr.transf_program.
+      eapply match_transform_program. }
+    unfold AsmPseudoInstr.transf_fundef,AsmPseudoInstr.transf_function,transf_fundef.
+    destruct f. auto. auto.
+  - eapply match_program_no_more_functions in Heqo.
+    erewrite Heqo. auto.
+    eapply match_transform_program.
+Qed.
+
 
 Lemma Asmlabel_fn_stack_requirements_match: forall p tp,
     Asmlabelgen.transf_program instr_size p = OK tp ->
     fn_stack_requirements p = fn_stack_requirements tp.
-Admitted.  
+Proof.
+  intros. unfold fn_stack_requirements.  
+  eapply Axioms.extensionality. intros.
+  destr.
+  - eapply Globalenvs.Genv.find_funct_ptr_transf_partial in Heqo.
+    destruct Heqo as (tf & A & B).
+    erewrite A.
+    2:{
+      instantiate (1:= Asmlabelgen.transf_fundef instr_size).
+      eapply match_transform_partial_program.
+      unfold Asmlabelgen.transf_program in H. auto.
+    }
+    unfold Asmlabelgen.transf_fundef,transf_partial_fundef,Asmlabelgen.trans_function,transf_fundef in B.
+    destruct f. monadInv B. monadInv EQ. auto. inv B. auto.
+  - eapply match_program_no_more_functions in Heqo.
+    erewrite Heqo. auto.
+    eapply match_transform_partial_program.
+    unfold Asmlabelgen.transf_program in H. eauto.
+Qed.    
+
 
 Lemma AsmLiteral_fn_stack_requirements_match: forall p,
     fn_stack_requirements p = fn_stack_requirements (AsmLiteral.transf_program p).
+Proof.
+  intros. unfold fn_stack_requirements.  
+  eapply Axioms.extensionality. intros.
+  destr.
 Admitted.
 
-    Lemma Jumptable_fn_stack_requirements_match: forall p,
+Lemma Jumptable_fn_stack_requirements_match: forall p,
     fn_stack_requirements p = fn_stack_requirements (Jumptablegen.transf_program instr_size p).
 Admitted.
 
-
+(* This should be an Axiom *)
 Lemma targetprinter_fn_stack_requirements_match: forall p tp,
     match_prog_targetprinter p tp ->
     fn_stack_requirements p = fn_stack_requirements tp.

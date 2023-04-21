@@ -1,0 +1,230 @@
+
+
+
+// I type
+token InstrI = (32);
+field immI_I = InstrI(31:20);
+field rs1_I = InstrI(19:15);
+field funct3_I = InstrI(14:12);
+field rd_I = InstrI(11:7);
+field opcode_I = InstrI(6:0);
+
+// I-type Special(32-bit mode)
+field immISp32_I = InstrI(31:25);
+field shamt32_I = InstrI(24:20);
+
+// I-type Special(64-bit mode)
+field immISp64_I = InstrI(31:26);
+field shamt64_I = InstrI(25:20);
+
+// R-type
+token InstrR = (32);
+field funct7_R = InstrR(31:25);
+field rs2_R = InstrR(24:20);
+field rs1_R = InstrR(19:15);
+field funct3_R = InstrR(14:12);
+field rd_R = InstrR(11:7);
+field opcode_R = InstrR(6:0);
+
+// R4-type
+field rs3_R = InstrR(31:27);
+field funct2_R = InstrR(26:25);
+
+// S-type
+token InstrS = (32);
+field immS2_S = InstrS(31:25);
+field rs2_S = InstrS(24:20);
+field rs1_S = InstrS(19:15);
+field funct3_S = InstrS(14:12);
+field immS1_S = InstrS(11:7);
+field opcode_S = InstrS(6:0);
+
+// B-type
+token InstrB = (32);
+field immB4_B = InstrB(31:31);
+field immB3_B = InstrB(30:25);
+field rs2_B = InstrB(24:20);
+field rs1_B = InstrB(19:15);
+field funct3_B = InstrB(14:12);
+field immB2_B = InstrB(11:8);
+field immB1_B = InstrB(7:7);
+field opcode_B = InstrB(6:0);
+
+// U-type
+token InstrU = (32);
+field immU_U = InstrU(31:12);
+field rd_U = InstrU(11:7);
+field opcode_U = InstrU(6:0);
+
+// J-type
+token InstrJ = (32);
+field immJ4_J = InstrJ(31:31);
+field immJ3_J = InstrJ(30:21);
+field immJ2_J = InstrJ(20:20);
+field immJ1_J = InstrJ(19:12);
+field rd_J = InstrJ(11:7);
+field opcode_J = InstrJ(6:0);
+
+// R I S B U J
+class Instruction = 
+// 32-bit integer register-immediate instructions
+| constr addi [rd_I, rs1_I, immI_I] (opcode_I = 0x13 & fld%1 & funct3_I = 0x0 & fld%2 & fld%3)
+// slti and sltiu is the same in 32 and 64 bit mode
+| constr slti [rd_I, rs1_I, immI_I] (opcode_I = 0x13 & fld%1 & funct3_I = 0x2 & fld%2 & fld%3)
+| constr sltiu [rd_I, rs1_I, immI_I] (opcode_I = 0x13 & fld%1 & funct3_I = 0x3 & fld%2 & fld%3)
+| constr andi [rd_I, rs1_I, immI_I] (opcode_I = 0x13 & fld%1 & funct3_I = 0x7 & fld%2 & fld%3)
+| constr ori [rd_I, rs1_I, immI_I] (opcode_I = 0x13 & fld%1 & funct3_I = 0x6 & fld%2 & fld%3)
+| constr xori [rd_I, rs1_I, immI_I] (opcode_I = 0x13 & fld%1 & funct3_I = 0x4 & fld%2 & fld%3)
+| constr lui [rd_U, immU_U] (opcode_U = 0x37 & fld%1 & fld%2)
+
+// 32/64-bit integer register-register instructions
+| constr add [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr sub [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x20)
+| constr mul [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr mulh [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x1 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr mulhu [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x3 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr div [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x4 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr divu [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x5 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr rem [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x6 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr remu [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr slt [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x2 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr sltu [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x3 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr and [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr or [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x6 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr xor [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x4 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr sll [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x1 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr srl [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x5 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr sra [rd_R, rs1_R, rs2_R] (opcode_R = 0x33 & fld%1 & funct3_R = 0x5 & fld%2 & fld%3 & funct7_R = 0x20)
+
+// 64-bit mode only: 32-bit integer register-immediate instructions
+| constr addiw [rd_I, rs1_I, immI_I] (opcode_I = 0x1B & fld%1 & funct3_I = 0x0 & fld%2 & fld%3)
+// we treat 32-bit slli srli srai are the special cases of 64-bit mode by setting the instr[25] to 0
+| constr slli [rd_I, rs1_I, shamt64_I] (opcode_I = 0x13 & fld%1 & funct3_I = 0x1 & fld%2 & fld%3 & immISp64_I = 0x0)
+| constr srli [rd_I, rs1_I, shamt64_I] (opcode_I = 0x13 & fld%1 & funct3_I = 0x5 & fld%2 & fld%3 & immISp64_I = 0x0)
+| constr srai [rd_I, rs1_I, shamt64_I] (opcode_I = 0x13 & fld%1 & funct3_I = 0x5 & fld%2 & fld%3 & immISp64_I = 0x10)
+| constr slliw [rd_I, rs1_I, shamt32_I] (opcode_I = 0x1B & fld%1 & funct3_I = 0x1 & fld%2 & fld%3 & immISp32_I = 0x0)
+| constr srliw [rd_I, rs1_I, shamt32_I] (opcode_I = 0x1B & fld%1 & funct3_I = 0x5 & fld%2 & fld%3 & immISp32_I = 0x0)
+| constr sraiw [rd_I, rs1_I, shamt32_I] (opcode_I = 0x1B & fld%1 & funct3_I = 0x5 & fld%2 & fld%3 & immISp32_I = 0x20)
+
+// 64-bit mode only : 32-bit integer register-register instructions
+| constr addw [rd_R, rs1_R, rs2_R] (opcode_R = 0x3B & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr subw [rd_R, rs1_R, rs2_R] (opcode_R = 0x3B & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x20)
+| constr mulw [rd_R, rs1_R, rs2_R] (opcode_R = 0x3B & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr divw [rd_R, rs1_R, rs2_R] (opcode_R = 0x3B & fld%1 & funct3_R = 0x4 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr divuw [rd_R, rs1_R, rs2_R] (opcode_R = 0x3B & fld%1 & funct3_R = 0x5 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr remw [rd_R, rs1_R, rs2_R] (opcode_R = 0x3B & fld%1 & funct3_R = 0x6 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr remuw [rd_R, rs1_R, rs2_R] (opcode_R = 0x3B & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr sllw [rd_R, rs1_R, rs2_R] (opcode_R = 0x3B & fld%1 & funct3_R = 0x1 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr srlw [rd_R, rs1_R, rs2_R] (opcode_R = 0x3B & fld%1 & funct3_R = 0x5 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr sraw [rd_R, rs1_R, rs2_R] (opcode_R = 0x3B & fld%1 & funct3_R = 0x5 & fld%2 & fld%3 & funct7_R = 0x20)
+
+
+// Control Transfer instructions
+| constr jal [rd_J, immJ1_J, immJ2_J, immJ3_J, immJ4_J] (opcode_J = 0x6F & fld%1 & fld%2 & fld%3 & fld%4 & fld%5)
+| constr jalr [rd_I, rs1_I, immI_I] (opcode_I = 0x67 & fld%1 & funct3_I = 0 & fld%2 & fld%3)
+| constr auipc [rd_U, immU_U] (opcode_U = 0x17 & fld%1 & fld%2)
+| constr beq [immB1_B, immB2_B, rs1_B, rs2_B, immB3_B, immB4_B] (opcode_B = 0x63 & fld%1 & fld%2 & funct3_B = 0 & fld%3 & fld%4 & fld%5 & fld%6)
+| constr bne [immB1_B, immB2_B, rs1_B, rs2_B, immB3_B, immB4_B] (opcode_B = 0x63 & fld%1 & fld%2 & funct3_B = 0x1 & fld%3 & fld%4 & fld%5 & fld%6)
+| constr blt [immB1_B, immB2_B, rs1_B, rs2_B, immB3_B, immB4_B] (opcode_B = 0x63 & fld%1 & fld%2 & funct3_B = 0x4 & fld%3 & fld%4 & fld%5 & fld%6)
+| constr bltu [immB1_B, immB2_B, rs1_B, rs2_B, immB3_B, immB4_B] (opcode_B = 0x63 & fld%1 & fld%2 & funct3_B = 0x6 & fld%3 & fld%4 & fld%5 & fld%6)
+| constr bge [immB1_B, immB2_B, rs1_B, rs2_B, immB3_B, immB4_B] (opcode_B = 0x63 & fld%1 & fld%2 & funct3_B = 0x5 & fld%3 & fld%4 & fld%5 & fld%6)
+| constr bgeu [immB1_B, immB2_B, rs1_B, rs2_B, immB3_B, immB4_B] (opcode_B = 0x63 & fld%1 & fld%2 & funct3_B = 0x7 & fld%3 & fld%4 & fld%5 & fld%6)
+
+// Loads and stores
+| constr lb [rd_I, rs1_I, immI_I] (opcode_I = 0x3 & fld%1 & funct3_I = 0x0 & fld%2 & fld%3)
+| constr lbu [rd_I, rs1_I, immI_I] (opcode_I = 0x3 & fld%1 & funct3_I = 0x4 & fld%2 & fld%3)
+| constr lh [rd_I, rs1_I, immI_I] (opcode_I = 0x3 & fld%1 & funct3_I = 0x1 & fld%2 & fld%3)
+| constr lhu [rd_I, rs1_I, immI_I] (opcode_I = 0x3 & fld%1 & funct3_I = 0x5 & fld%2 & fld%3)
+| constr lw [rd_I, rs1_I, immI_I] (opcode_I = 0x3 & fld%1 & funct3_I = 0x2 & fld%2 & fld%3)
+| constr ld [rd_I, rs1_I, immI_I] (opcode_I = 0x3 & fld%1 & funct3_I = 0x3 & fld%2 & fld%3)
+
+| constr sb [immS1_S, rs1_S, rs2_S, immS2_S] (opcode_S = 0x23 & fld%1 & funct3_S = 0x0 & fld%2 & fld%3 & fld%4)
+| constr sh [immS1_S, rs1_S, rs2_S, immS2_S] (opcode_S = 0x23 & fld%1 & funct3_S = 0x1 & fld%2 & fld%3 & fld%4)
+| constr sw [immS1_S, rs1_S, rs2_S, immS2_S] (opcode_S = 0x23 & fld%1 & funct3_S = 0x2 & fld%2 & fld%3 & fld%4)
+| constr sd [immS1_S, rs1_S, rs2_S, immS2_S] (opcode_S = 0x23 & fld%1 & funct3_S = 0x3 & fld%2 & fld%3 & fld%4)
+
+// floating point register move
+| constr fsgnjd [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x11)
+| constr fmvxw [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x0 & funct7_R = 0x70)
+| constr fmvwx [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x0 & funct7_R = 0x78)
+| constr fmvxd [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x0 & funct7_R = 0x71)
+| constr fmvdx [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x0 & funct7_R = 0x79)
+
+// 32-bit (single-precision) floating point
+| constr flw [rd_I, rs1_I, immI_I] (opcode_I = 0x7 & fld%1 & funct3_I = 0x2 & fld%2 & fld%3)
+| constr fsw [immS1_S, rs1_S, rs2_S, immS2_S] (opcode_S = 0x27 & fld%1 & funct3_S = 0x2 & fld%2 & fld%3 & fld%4)
+
+| constr fsgnjns [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & fld%3 & funct7_R = 0x10)
+| constr fsgnjxs [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x2 & fld%2 & fld%3 & funct7_R = 0x10)
+
+| constr fadds [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0x0)
+| constr fsubs [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0x4)
+| constr fmuls [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0x8)
+| constr fdivs [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0xC)
+| constr fmins [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x14)
+| constr fmaxs [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & fld%3 & funct7_R = 0x14)
+
+| constr feqs [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x2 & fld%2 & fld%3 & funct7_R = 0x50)
+| constr flts [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & fld%3 & funct7_R = 0x50)
+| constr fles [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x50)
+
+| constr fsqrts [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x7 & fld%2 & rs2_R = 0x0 & funct7_R = 0x2C)
+
+| constr fmadds [rd_R, rs1_R, rs2_R, rs3_R] (opcode_R = 0x43 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct2_R = 0x0 & fld%4)
+| constr fmsubs [rd_R, rs1_R, rs2_R, rs3_R] (opcode_R = 0x47 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct2_R = 0x0 & fld%4)
+| constr fnmadds [rd_R, rs1_R, rs2_R, rs3_R] (opcode_R = 0x4F & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct2_R = 0x0 & fld%4)
+| constr fnmsubs [rd_R, rs1_R, rs2_R, rs3_R] (opcode_R = 0x4B & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct2_R = 0x0 & fld%4)
+
+// CompCert uses rtz rounding mode, so set funct3 to 1
+| constr fcvtws [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & rs2_R = 0x0 & funct7_R = 0x60)
+| constr fcvtwus [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & rs2_R = 0x1 & funct7_R = 0x60)
+// CompCert dose not specify the rm, so set it (0x0)
+| constr fcvtsw [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x0 & funct7_R = 0x68)
+| constr fcvtswu [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x1 & funct7_R = 0x68)
+
+| constr fcvtls [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & rs2_R = 0x2 & funct7_R = 0x60)
+| constr fcvtlus [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & rs2_R = 0x3 & funct7_R = 0x60)
+| constr fcvtsl [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x2 & funct7_R = 0x68)
+| constr fcvtslu [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x3 & funct7_R = 0x68)
+
+// 64-bit (double-precision) floating point
+// fld => fload since fld is a key word
+| constr fload [rd_I, rs1_I, immI_I] (opcode_I = 0x7 & fld%1 & funct3_I = 0x3 & fld%2 & fld%3)
+| constr fsd [immS1_S, rs1_S, rs2_S, immS2_S] (opcode_S = 0x27 & fld%1 & funct3_S = 0x3 & fld%2 & fld%3 & fld%4)
+
+| constr fsgnjnd [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & fld%3 & funct7_R = 0x11)
+| constr fsgnjxd [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x2 & fld%2 & fld%3 & funct7_R = 0x11)
+
+| constr faddd [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0x1)
+| constr fsubd [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0x5)
+| constr fmuld [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0x9)
+| constr fdivd [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct7_R = 0xD)
+| constr fmind [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x15)
+| constr fmaxd [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & fld%3 & funct7_R = 0x15)
+
+| constr feqd [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x2 & fld%2 & fld%3 & funct7_R = 0x51)
+| constr fltd [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & fld%3 & funct7_R = 0x51)
+| constr fled [rd_R, rs1_R, rs2_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & fld%3 & funct7_R = 0x51)
+
+| constr fsqrtd [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x7 & fld%2 & rs2_R = 0x0 & funct7_R = 0x2D)
+
+| constr fmaddd [rd_R, rs1_R, rs2_R, rs3_R] (opcode_R = 0x43 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct2_R = 0x1 & fld%4)
+| constr fmsubd [rd_R, rs1_R, rs2_R, rs3_R] (opcode_R = 0x47 & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct2_R = 0x1 & fld%4)
+| constr fnmaddd [rd_R, rs1_R, rs2_R, rs3_R] (opcode_R = 0x4F & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct2_R = 0x1 & fld%4)
+| constr fnmsubd [rd_R, rs1_R, rs2_R, rs3_R] (opcode_R = 0x4B & fld%1 & funct3_R = 0x7 & fld%2 & fld%3 & funct2_R = 0x1 & fld%4)
+
+// CompCert uses rtz rounding mode, so set funct3 to 1
+| constr fcvtwd [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & rs2_R = 0x0 & funct7_R = 0x61)
+| constr fcvtwud [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & rs2_R = 0x1 & funct7_R = 0x61)
+// CompCert dose not specify the rm, so set it to (0x0)
+| constr fcvtdw [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x0 & funct7_R = 0x69)
+| constr fcvtdwu [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x1 & funct7_R = 0x69)
+
+| constr fcvtld [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & rs2_R = 0x2 & funct7_R = 0x61)
+| constr fcvtlud [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x1 & fld%2 & rs2_R = 0x3 & funct7_R = 0x61)
+| constr fcvtdl [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x2 & funct7_R = 0x69)
+| constr fcvtdlu [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x3 & funct7_R = 0x69)
+
+| constr fcvtds [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x0 & funct7_R = 0x21)
+| constr fcvtsd [rd_R, rs1_R] (opcode_R = 0x53 & fld%1 & funct3_R = 0x0 & fld%2 & rs2_R = 0x1 & funct7_R = 0x20)
+;

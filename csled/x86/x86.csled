@@ -1,0 +1,150 @@
+token REX = (8);
+field rmagic = REX(7:4);
+field W = REX(3:3);
+field R = REX(2:2);
+field X = REX(1:1);
+field B = REX(0:0);
+
+token Grp1 = (8);
+token Grp3 = (8);
+
+token Opcode = (8);
+field row = Opcode(7:4);
+field page = Opcode(3:3);
+field col = Opcode(2:0);
+
+token ModRM = (8);
+field mod = ModRM(7:6);
+field reg_op = ModRM(5:3);
+field rm = ModRM(2:0);
+
+token SIB = (8);
+field scale = SIB(7:6);
+field index = SIB(5:3);
+field base = SIB(2:0);
+
+token imm64 = (64);
+token imm32 = (32);
+token imm16 = (16);
+token imm8 = (8);
+
+token condi = (8);
+//condi[8]
+field cprefix = condi(7:4);
+field cccode = condi(3:0);
+
+token prefix = (8);
+
+
+class AddrE =
+|constr AddrE0 [rm] (mod = 0x3 & fld %1)
+|constr AddrE5 [scale, index, base, imm32] (mod = 0x2 & rm = 0x4 ; fld %1 & fld %2 & fld %3 ; fld %4)
+|constr AddrE9 [scale, index, imm32] (mod = 0x0 & rm = 0x4 ; base = 0x5 & fld %1 & fld %2 ; fld %3)
+|constr AddrE11 [imm32] (mod = 0x0 & rm = 0x5 ; fld %1)
+;
+
+
+class Instruction =
+// 32bit
+// |constr Pmovl_rr [reg_op, rm] (Opcode = 0x8b ; mod = 0x3 & fld %1 & fld %2)
+|constr Pmovl_ri [col, imm32] (row = 0xb & page = 0x1 & fld %1 ; fld %2)
+|constr Pmovl_mr [reg_op, AddrE] (Opcode = 0x89 ; fld %1 & cls %2)
+|constr Pmovl_rm [reg_op, AddrE] (Opcode = 0x8b ; fld %1 & cls %2)
+// movsd or movss depend on Grp1 prefix
+|constr Pmovss_d_mf [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0x11 ; fld %1 & cls %2)
+|constr Pmovss_d_fm [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0x10 ; fld %1 & cls %2)
+|constr Pfldl_m [AddrE] (Opcode = 0xdd ; reg_op = 0x0 & cls %1)
+|constr Pfstpl_m [AddrE] (Opcode = 0xdd ; reg_op = 0x3 & cls %1)
+|constr Pfstps_m [AddrE] (Opcode = 0xd9 ; reg_op = 0x3 & cls %1)
+|constr Pflds_m [AddrE] (Opcode = 0xd9 ; reg_op = 0x0 & cls %1)
+|constr Pxchg_rr [reg_op, rm] (Opcode = 0x87 ; mod = 0x3 & fld %1 & fld %2)
+|constr Pmovb_mr [reg_op, AddrE] (Opcode = 0x88 ; fld %1 & cls %2)
+|constr Pmovb_rm [reg_op, AddrE] (Opcode = 0x8a ; fld %1 & cls %2)
+// operand size override, add 66 to Pmovl
+// |constr Pmovw_mr [reg_op, AddrE] (Opcode = 0x66 ; Opcode = 0x89 ; fld %1 & cls %2)
+// |constr Pmovw_rm [reg_op, AddrE] (Opcode = 0x66 ; Opcode = 0x8b ; fld %1 & cls %2)
+|constr Pmovzb_rm [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0xb6 ; fld %1 & cls %2)
+|constr Pmovsb_GvEv [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0xbe ; fld %1 & cls %2)
+|constr Pmovzw_GvEv [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0xb7 ; fld %1 & cls %2)
+|constr Pmovsw_GvEv [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0xbf ; fld %1 & cls %2)
+|constr Pmovsxd_GvEv [reg_op, AddrE] (Opcode = 0x63 ; fld %1 & cls %2)
+|constr Pcvtsd2ss_d_ff [reg_op, rm] (Opcode = 0xf ; Opcode = 0x5a ; mod = 0x3 & fld %1 & fld %2)
+|constr Pcvttss_d_2si_rf [reg_op, rm] (Opcode = 0xf ; Opcode = 0x2c ; mod = 0x3 & fld %1 & fld %2)
+|constr Pcvtsi2ss_d_fr [reg_op, rm] (Opcode = 0xf ; Opcode = 0x2a ; mod = 0x3 & fld %1 & fld %2)
+|constr Pleal [reg_op, AddrE] (Opcode = 0x8d ; fld %1 & cls %2)
+|constr Pnegl [rm] (Opcode = 0xf7 ; mod = 0x3 & reg_op = 0x3 & fld %1) 
+|constr Paddl_ri [rm, imm32] (Opcode = 0x81 ; mod = 0x3 & reg_op = 0x0 & fld %1 ; fld %2)
+|constr Psubl_EvGv [reg_op, AddrE] (Opcode = 0x29; fld %1 & cls %2)
+|constr Psubl_GvEv [reg_op, AddrE] (Opcode = 0x2B; fld %1 & cls %2)
+|constr Pimull_GvEv [reg_op, AddrE] (Opcode = 0x0F; Opcode=0xAF; fld %1 & cls %2)
+// actually this should be a imull reg, imm, reg; meaning that reg = reg*imm
+|constr Pimull_ri [reg_op, rm, imm32] (Opcode = 0x69 ; mod = 0x3 & fld %1 & fld %2; fld %3)
+|constr Pimull_r [rm] (Opcode = 0xf7 ; mod = 0x3 & reg_op = 0x5 & fld %1)
+|constr Pmull_r [rm] (Opcode = 0xf7 ; mod = 0x3 & reg_op = 0x4 & fld %1)
+|constr Pcltd [] (Opcode = 0x99)
+|constr Pdivl_r [rm] (Opcode = 0xf7 ; mod = 0x3 & reg_op = 0x6 & fld %1)
+|constr Pidivl_r [rm] (Opcode = 0xf7 ; mod = 0x3 & reg_op = 0x7 & fld %1)
+|constr Pandl_EvGv [reg_op, AddrE] (Opcode = 0x21; fld %1 & cls %2)
+|constr Pandl_GvEv [reg_op, AddrE] (Opcode = 0x23; fld %1 & cls %2)
+|constr Pandl_ri [rm, imm32] (Opcode = 0x81 ; mod = 0x3 & reg_op = 0x4 & fld %1 ; fld %2)
+|constr Porl_ri [rm, imm32] (Opcode = 0x81 ; mod = 0x3 & reg_op = 0x1 & fld %1 ; fld %2)
+|constr Porl_EvGv [reg_op, AddrE] (Opcode = 0x09; fld %1 & cls %2)
+|constr Porl_GvEv [reg_op, AddrE] (Opcode = 0x0B; fld %1 & cls %2)
+|constr Pxorl_ri [rm, imm32] (Opcode = 0x81 ; mod = 0x3 & reg_op = 0x6 & fld %1 ; fld %2)
+|constr Pxorl_EvGv [reg_op, AddrE] (Opcode = 0x31; fld %1 & cls %2)
+|constr Pxorl_GvEv [reg_op, AddrE] (Opcode = 0x33; fld %1 & cls %2)
+|constr Pnotl [rm] (Opcode = 0xf7 ; mod = 0x3 & reg_op = 0x2 & fld %1)
+|constr Psall_ri [rm, imm8] (Opcode = 0xc1 ; mod = 0x3 & reg_op = 0x4 & fld %1 ; fld %2)
+|constr Psall_rcl [rm] (Opcode = 0xd3 ; mod = 0x3 & reg_op = 0x4 & fld %1)
+|constr Pshrl_ri [rm, imm8] (Opcode = 0xc1 ; mod = 0x3 & reg_op = 0x5 & fld %1 ; fld %2)
+|constr Pshrl_rcl [rm] (Opcode = 0xd3 ; mod = 0x3 & reg_op = 0x5 & fld %1)
+|constr Psarl_ri [rm, imm8] (Opcode = 0xc1 ; mod = 0x3 & reg_op = 0x7 & fld %1 ; fld %2)
+|constr Psarl_rcl [rm] (Opcode = 0xd3 ; mod = 0x3 & reg_op = 0x7 & fld %1)
+|constr Pshld_ri [reg_op, rm, imm8] (Opcode = 0xf ; Opcode = 0xa4 ; mod = 0x3 & fld %1 & fld %2 ; fld %3)
+|constr Prolw_ri [rm, imm8] (Opcode = 0xc1 ; mod = 0x3 & reg_op = 0x0 & fld %1 ; fld %2)
+|constr Prorl_ri [rm, imm8] (Opcode = 0xc1 ; reg_op = 0x1 & mod = 0x3 & fld %1 ; fld %2)
+|constr Pcmpl_EvGv [reg_op, AddrE] (Opcode = 0x39; fld %1 & cls %2)
+|constr Pcmpl_GvEv [reg_op, AddrE] (Opcode = 0x3B; fld %1 & cls %2)
+|constr Pcmpl_ri [rm, imm32] (Opcode = 0x81 ; mod = 0x3 & reg_op = 0x7 & fld %1 ; fld %2)
+|constr Ptestl_ri [rm, imm32] (Opcode = 0xf7 ; mod = 0x3 & reg_op = 0x0 & fld %1 ; fld %2)
+|constr Ptestl_EvGv [reg_op, AddrE] (Opcode = 0x85; fld %1 & cls %2)
+|constr Pcmov [cccode, reg_op, rm] (Opcode = 0xf ; cprefix = 0x4 & fld %1 ; mod = 0x3 & fld %2 & fld %3)
+|constr Psetcc [cccode, rm] (Opcode = 0xf ; cprefix = 0x9 & fld %1 ; mod = 0x3 & reg_op = 0x0 & fld %2)
+|constr Padds_d_ff [reg_op, rm] (Opcode = 0xf ; Opcode = 0x58 ; mod = 0x3 & fld %1 & fld %2)
+|constr Pandps_d_fm [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0x54 ; fld %1 & cls %2)
+|constr Psubs_d_ff [reg_op, rm] (Opcode = 0xf ; Opcode = 0x5c ; mod = 0x3 & fld %1 & fld %2)
+|constr Pmuls_d_ff [reg_op, rm] (Opcode = 0xf ; Opcode = 0x59 ; mod = 0x3 & fld %1 & fld %2)
+|constr Pdivss_d_ff [reg_op, rm] (Opcode = 0xf ; Opcode = 0x5e ; mod = 0x3 & fld %1 & fld %2)
+|constr Pcomiss_d_ff [reg_op, rm] (Opcode = 0xf ; Opcode = 0x2f ; mod = 0x3 & fld %1 & fld %2)
+|constr Pxorps_d_GvEv [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0x57 ; fld %1 & cls %2)
+|constr Pjmp_l_rel [imm32] (Opcode = 0xe9 ; fld %1)
+|constr Pjmp_Ev [AddrE] (Opcode = 0xff ; reg_op = 0x4 & cls %1)
+|constr Pnop [] (Opcode = 0x90)
+|constr Pcall_ofs [imm32] (Opcode = 0xe8 ; fld %1)
+|constr Pcall_r [rm] (Opcode = 0xff ; mod = 0x3 & reg_op = 0x2 & fld %1)
+|constr Pret [] (Opcode = 0xc3)
+|constr Pret_iw [imm16] (Opcode = 0xc2 ; fld %1)
+|constr Pjcc_rel [cccode, imm32] (Opcode = 0xf ; cprefix = 0x8 & fld %1 ; fld %2)
+|constr Padcl_ri [rm, imm8] (Opcode = 0x83 ; mod = 0x3 & reg_op = 0x2 & fld %1 ; fld %2)
+|constr Padcl_rr [reg_op, rm] (Opcode = 0x11 ; mod = 0x3 & fld %1 & fld %2)
+|constr Paddl_EvGv [reg_op, AddrE] (Opcode = 0x1 ; fld %1 & cls %2)
+|constr Paddl_GvEv [reg_op, AddrE] (Opcode = 0x3 ; fld %1 & cls %2)
+|constr Paddl_mi [AddrE, imm32] (Opcode = 0x80; reg_op = 0x0 & cls %1; fld %2)
+|constr Pbsfl [reg_op, rm] (Opcode = 0xf ; Opcode = 0xbc ; mod = 0x3 & fld %1 & fld %2)
+|constr Pbsrl [reg_op, rm] (Opcode = 0xf ; Opcode = 0xbd ; mod = 0x3 & fld %1 & fld %2)
+|constr Pbswap32 [rm] (Opcode = 0xf ; mod = 0x3 & reg_op = 0x1 & fld %1)
+|constr Pmaxsd [reg_op, rm] (Opcode = 0xf ; Opcode = 0x5f ; mod = 0x3 & fld %1 & fld %2)    
+|constr Pminsd [reg_op, rm] (Opcode = 0xf ; Opcode = 0x5d ; mod = 0x3 & fld %1 & fld %2)
+|constr Pmovsq_mr [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0xd6 ; fld %1 & cls %2)
+|constr Pmovsq_rm [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0x7e ; fld %1 & cls %2)
+|constr Prep_movsl [] (Opcode = 0xa5)
+|constr Psbbl_rr [reg_op, rm] (Opcode = 0x19 ; mod = 0x3 & fld %1 & fld %2)
+|constr Pbsqrtsd [reg_op, rm] (Opcode = 0xf ; Opcode = 0x51 ; mod = 0x3 & fld %1 & fld %2)
+|constr Psubl_ri [rm, imm32] (Opcode = 0x81 ; mod = 0x3 & reg_op = 0x5 & fld %1 ; fld %2)
+// mandatory prefix
+|constr REPNZ [] (Grp1 = 0xF2)
+|constr REP [] (Grp1 = 0xF3)
+|constr Override [] (Grp3 = 0x66)
+// 64bit
+| constr REX_WRXB [W, R, X, B] (rmagic = 0x4 & fld %1 & fld %2 & fld %3 & fld %4)
+;

@@ -1,0 +1,7 @@
+Lemma list_length1_destruct: forall A (l:list A),
+    length l = 1 ->
+    exists  b1, l=[b1].
+Proof.
+  intros.
+  destr_all_lists. repeat eexists.
+Qed.

@@ -1,6 +1,6 @@
 Require Import String.
 Require Import Coqlib Errors.
-Require Import AST Asm Globalenvs.
+Require Import AST Asm Globalenvs Linking.
 Require Import RelocProg RelocProgram RelocElf RelocElfSemantics DecodeRelocElf.
 
 (** * Composing the translation passes *)
@@ -68,3 +68,26 @@ Definition elf_bytes_stack_requirements (tp: list Integers.Byte.int * Asm.progra
   | _ => 0
   end.
 (* CCELF End *)
+
+
+Lemma match_program_no_more_functions:
+  forall {F1 V1 F2 V2}
+         `{Linker F1} `{Linker V1}
+         Mf Mv
+         (p1: AST.program F1 V1) (p2: AST.program F2 V2),
+    match_program Mf Mv p1 p2 ->
+    forall b,
+    Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p1) b = None ->
+    Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p2) b = None.
+Proof.
+  intros.
+  generalize (Globalenvs.Genv.find_def_match_2 H1 b).
+  inversion 1.
+  - destruct (Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p2) b) eqn:?; auto.
+    apply Globalenvs.Genv.find_funct_ptr_iff in Heqo. congruence.
+  - destruct (Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p2) b) eqn:?; auto.
+    apply Globalenvs.Genv.find_funct_ptr_iff in Heqo. rewrite Heqo in H5. inv H5.
+    inv H6.
+    symmetry in H4.
+    apply Globalenvs.Genv.find_funct_ptr_iff in H4. congruence.
+Qed.

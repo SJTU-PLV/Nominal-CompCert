@@ -1,0 +1,35 @@
+
+Ltac destr_para_name_type var name t Ht:=
+  match goal with
+  |[|-_] => destruct var as [name Ht]
+  end.
+
+Ltac simpl_bytes_to_bits :=
+  repeat (try rewrite bytes_to_bits_opt_cons;
+          rewrite bytes_to_bits_opt_correct;
+          [|simpl; (try rewrite app_length; simpl);(try omega); auto]).
+
+Ltac finalize_soundness:=
+  repeat (split; simpl; try omega; auto).
+
+Ltac try_hexize_value n:=
+  let HHex := fresh "HHex" in
+  match goal with
+  |[|- context G[Byte.repr n]] =>
+   try(hexize_byte_value n; rewrite HHex; clear HHex)
+  end.
+
+Ltac solve_bits_to_bytes_to_bits :=
+  match goal with
+  |[H: bits_to_bytes ?var = OK ?x |-
+    context G[bytes_to_bits_opt ?x]]
+   => rewrite (bits_to_bytes_to_bits _ _ H)
+  end.
+
+Ltac simpl_bytes_to_bits_in H :=
+  try rewrite bytes_to_bits_opt_cons in H;
+  rewrite bytes_to_bits_opt_correct in H;
+  [|simpl; (try rewrite app_length; simpl);
+    try omega;auto].
+
+
