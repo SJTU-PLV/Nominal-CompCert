@@ -145,17 +145,15 @@ Proof.
 Qed.
 
 (*To be moved to ClightServerCspec2.v *)
-Axiom top_ro2 : forward_simulation ro ro top_spec2 top_spec2.
-Axiom top_wt2 : forward_simulation wt_c wt_c top_spec2 top_spec2.
 
 Theorem spec_sim_2 : forward_simulation cc_compcert cc_compcert top_spec2 (Asm.semantics tp2).
 Proof.
   rewrite ro_injp_cc_compcert at 1.
   rewrite ro_injp_cc_compcert at 2.
   eapply compose_forward_simulations.
-  eapply top_wt2.
+  eapply top2_wt.
   eapply compose_forward_simulations.
-  eapply top_ro2.
+  eapply top2_ro.
   eapply compose_forward_simulations.
   eapply top_simulation_L2.
   eapply compose_Client_Server_correct2; eauto.

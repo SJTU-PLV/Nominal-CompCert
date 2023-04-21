@@ -1181,3 +1181,71 @@ Proof.
   - constructor. intros. inv H.
 Qed.
 
+Section RO.
+
+Variable se : Genv.symtbl.
+Variable m0 : mem.
+
+Inductive sound_state : state -> Prop :=
+| sound_Callrequest : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callrequest i m)
+| sound_Callencrypt : forall vf i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callencrypt i vf m)
+| sound_Callprocess : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callprocess i m)
+| sound_Return : forall m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Return m).
+End RO.
+
+Definition ro_inv '(row se0 m0) := sound_state se0 m0.
+
+Lemma spec2_ro : preserves top_spec2 ro ro ro_inv.
+Proof.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros. inv H0; inv H.
+    + simpl in SET. apply ro_acc_store in SET.
+      constructor; eauto.
+      eapply ro_acc_trans; eauto.
+      eapply ro_acc_sound; eauto.
+    + constructor; eauto.
+    + constructor; eauto.
+  - intros. inv H. inv H0. constructor; eauto.
+    eapply ro_acc_refl.
+    constructor; eauto. eapply ro_acc_refl.
+    constructor; eauto. eapply ro_acc_refl.
+  - intros. inv H0.
+  - intros. inv H0. inv H. constructor; eauto.
+Qed.
+
+Theorem top2_ro :
+  forward_simulation ro ro top_spec2 top_spec2.
+Proof.
+  eapply preserves_fsim. eapply spec2_ro; eauto.
+Qed.
+
+
+Definition wt_inv :  (Genv.symtbl * signature) -> state -> Prop := fun _ _ => True.
+
+Lemma spec2_wt : preserves top_spec2 wt_c wt_c wt_inv.
+Proof.
+  intros [se0 sg] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros. inv H0; inv H.
+    + simpl in SET. constructor.
+    + constructor; eauto.
+    + constructor; eauto.
+  - intros. inv H. inv H0. constructor; eauto.
+    constructor. constructor.
+  - intros. inv H0.
+  - intros. inv H0. inv H. constructor; eauto.
+Qed.
+
+Theorem top2_wt : forward_simulation wt_c wt_c top_spec2 top_spec2.
+Proof.
+  eapply preserves_fsim. eapply spec2_wt; eauto.
+Qed.
