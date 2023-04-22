@@ -14,8 +14,8 @@ ifeq ($(ARCH), riscV)
 	./generator riscv/riscv.csled
 endif
 endif
-	mv generated/VerificationCondition.v ../autogen
-	mv generated/EncDecRet.v ../autogen
+	cp generated/VerificationCondition.v ../autogen
+	cp generated/EncDecRet.v ../autogen
 
 generator: parser src
 	g++  -std=c++11 $(O_FILES) syntax.tab.o lex.yy.o  -g -o generator

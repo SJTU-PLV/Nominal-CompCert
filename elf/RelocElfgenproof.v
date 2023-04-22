@@ -203,6 +203,5 @@ End PRESERVATION.
 
 End WITH_INSTR_SIZE.
 
-Instance relocelfgen_transflink:
+Axiom Instance relocelfgen_transflink:
   TransfLink match_prog.
-Admitted.

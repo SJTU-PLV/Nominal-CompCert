@@ -65,5 +65,4 @@ Proof.
   auto. auto. auto.
 Defined.
 
-Instance encodeelf_transflink : Linking.TransfLink match_prog.
-Admitted.
+Axiom Instance encodeelf_transflink : Linking.TransfLink match_prog.

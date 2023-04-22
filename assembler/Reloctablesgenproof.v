@@ -746,5 +746,4 @@ Qed.
 
 End PRESERVATION.
 
-Instance reloctablesgen_transflink (instr_size: instruction -> Z): TransfLink (match_prog instr_size).
-Admitted.
+Axiom Instance reloctablesgen_transflink : forall (instr_size: instruction -> Z), TransfLink (match_prog instr_size).

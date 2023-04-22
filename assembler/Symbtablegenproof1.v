@@ -78,8 +78,7 @@ Qed.
 
 End PRESERVATION.
 
-Instance symbtablegen_transflink:
+Axiom Instance symbtablegen_transflink:
   TransfLink (match_prog instr_size).
-Admitted.
 
 End WITH_INSTR_SIZE.

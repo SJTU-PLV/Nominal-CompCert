@@ -1354,5 +1354,4 @@ End PRESERVATION.
 
 End WITH_INSTR_SIZE.
 
-Instance relocbingen_transflink : TransfLink match_prog.
-Admitted.
+Axiom Instance relocbingen_transflink : TransfLink match_prog.

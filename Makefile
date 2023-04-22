@@ -230,8 +230,6 @@ GENERATED=\
   cparser/Parser.v
 
 all:
-# make csled
-  $(MAKE) -f csled/Makefile
 	@test -f .depend || $(MAKE) depend
 	$(MAKE) proof
 	$(MAKE) extraction
@@ -245,6 +243,9 @@ endif
 ifeq ($(INSTALL_COQDEV),true)
 	$(MAKE) compcert.config
 endif
+
+csled:
+	$(MAKE) -C csled
 
 proof: $(FILES:.v=.vo)
 
@@ -276,7 +277,7 @@ runtime:
 
 FORCE:
 
-.PHONY: proof extraction runtime FORCE
+.PHONY: proof extraction runtime FORCE csled
 
 documentation: $(FILES)
 	mkdir -p doc/html
@@ -398,6 +399,7 @@ clean:
 	$(MAKE) -f Makefile.extr clean
 	$(MAKE) -C runtime clean
 	$(MAKE) -C test clean
+	$(MAKE) -C csled clean
 
 distclean:
 	$(MAKE) clean

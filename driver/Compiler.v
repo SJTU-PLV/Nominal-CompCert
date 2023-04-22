@@ -290,13 +290,13 @@ Axiom Instance targetprinter_transflink:
  Definition real_asm_passes :=
       @mkpass _ _ match_prog_targetprinter targetprinter_transflink
   ::: pass_nil _.
- 
- Definition assembler_passes :=
-      @mkpass _ _(Symbtablegenproof.match_prog instr_size) (Symbtablegenproof1.symbtablegen_transflink instr_size instr_size_bound)
-  ::: mkpass (Reloctablesgenproof.match_prog instr_size)
-  ::: mkpass RelocBingenproof.match_prog
-  ::: mkpass RelocElfgenproof0.match_prog
-  ::: mkpass EncodeElfCorrect.match_prog
+
+Definition assembler_passes :=
+  @mkpass _ _ (Symbtablegenproof.match_prog instr_size) (Symbtablegenproof1.symbtablegen_transflink instr_size)
+  ::: @mkpass _ _ (Reloctablesgenproof.match_prog instr_size) (@Reloctablesgenproof.reloctablesgen_transflink instr_size)
+  ::: @mkpass _ _ RelocBingenproof.match_prog RelocBingenproof.relocbingen_transflink
+  ::: @mkpass _ _ RelocElfgenproof0.match_prog RelocElfgenproof.relocelfgen_transflink
+  ::: @mkpass _ _ EncodeElfCorrect.match_prog EncodeElfCorrect.encodeelf_transflink
   ::: pass_nil _.
  
  (** Composing the [match_prog] relations above, we obtain the relation
