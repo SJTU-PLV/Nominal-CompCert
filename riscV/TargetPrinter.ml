@@ -527,9 +527,9 @@ module Target : TARGET =
          fprintf oc "	fcvt.s.d	%a, %a\n" freg fd freg fs
 
       (* Pseudo-instructions expanded in Asmexpand *)
-      | Pallocframe(sz, ofs) ->
+      | Pallocframe(sz, _, ofs) ->
          assert false
-      | Pfreeframe(sz, ofs) ->
+      | Pfreeframe(sz, _, ofs) ->
          assert false
       | Pseqw _ | Psnew _ | Pseql _ | Psnel _ | Pcvtl2w _ | Pcvtw2l _ ->
          assert false

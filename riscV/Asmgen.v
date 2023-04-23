@@ -830,7 +830,7 @@ Definition transl_store (chunk: memory_chunk) (addr: addressing)
 
 Definition make_epilogue (f: Mach.function) (k: code) :=
   loadind_ptr SP f.(fn_retaddr_ofs) RA
-    (Pfreeframe f.(Mach.fn_stacksize) f.(fn_link_ofs) :: k).
+    (Pfreeframe f.(Mach.fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) :: k).
 
 (** Translation of a Mach instruction. *)
 
@@ -919,9 +919,11 @@ Definition transl_code' (f: Mach.function) (il: list Mach.instruction) (it1p: bo
 
 Definition transl_function (f: Mach.function) :=
   do c <- transl_code' f f.(Mach.fn_code) true;
+  if zle 0 f.(Mach.fn_stacksize) then
   OK (mkfunction f.(Mach.fn_sig)
-        (Pallocframe f.(Mach.fn_stacksize) f.(fn_link_ofs) ::
-         storeind_ptr RA SP f.(fn_retaddr_ofs) c) f.(Mach.fn_stacksize)).
+        (Pallocframe f.(Mach.fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) ::
+                                               (* storeind_ptr RA SP f.(fn_retaddr_ofs) *) c) f.(Mach.fn_stacksize))
+  else Error (msg "negative function stacksize").
 
 Section INSTRSIZE.
   Variable instr_size : instruction -> Z.

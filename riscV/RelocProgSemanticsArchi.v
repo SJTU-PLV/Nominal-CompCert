@@ -363,7 +363,7 @@ Definition goto_ofs (sz:ptrofs) (ofs:Z) (rs: regset) (m: mem) :=
       Next (nextinstr (rs#d <- (Val.singleoffloat rs#s))) m
 
 (** Pseudo-instructions *)
-  | Pallocframe sz pos =>
+  | Pallocframe sz _ pos =>
     if zle 0 sz then
       match rs # PC with
       |Vptr (Global id) _
@@ -388,7 +388,7 @@ Definition goto_ofs (sz:ptrofs) (ofs:Z) (rs: regset) (m: mem) :=
       (* | None => Stuck *)
       (* | Some m2 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m2 *)
       (* end *)
-  | Pfreeframe sz pos =>
+  | Pfreeframe sz _ pos =>
     (* if zle 0 sz then *)
     (*   match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with *)
     (*   | None => Stuck *)
