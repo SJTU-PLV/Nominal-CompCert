@@ -656,7 +656,7 @@ let expand_builtin_inline name args res =
 
 let expand_instruction instr =
   match instr with
-  | Pallocframe (sz, _, ofs) ->
+  | Pallocframe (sz, ofs) ->
       let sg = get_current_function_sig() in
       emit (Pmv (X30, X2));
       if (sg.sig_cc.cc_vararg <> None) then begin
@@ -674,7 +674,7 @@ let expand_instruction instr =
         expand_storeind_ptr X30 X2 ofs;
         vararg_start_ofs := None
       end
-  | Pfreeframe (sz, _, ofs) ->
+  | Pfreeframe (sz, ofs) ->
      let sg = get_current_function_sig() in
      let extra_sz =
       if (sg.sig_cc.cc_vararg <> None) then begin

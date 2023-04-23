@@ -10,7 +10,7 @@ Close Scope nat_scope.
 
 Definition transf_instr (sg:signature) (i: instruction): list instruction :=
   match i with
-  | Pallocframe sz _ ofs =>
+  | Pallocframe sz ofs =>
     match sg.(sig_cc).(cc_vararg) with
     | Some _ =>
       let i1 := [Pmv X30 X2] in
@@ -28,7 +28,7 @@ Definition transf_instr (sg:signature) (i: instruction): list instruction :=
       (* X30 is temporary varaible storing the parent stack pointer *)
       [Pmv X30 X2] ++ expand_addptrofs X2 X2 (Ptrofs.repr (-sz)) ++ expand_storeind_ptr X30 X2 ofs
     end
-  | Pfreeframe sz _ ofs =>
+  | Pfreeframe sz ofs =>
     let extra_sz :=
         match sg.(sig_cc).(cc_vararg) with
         | Some _ =>

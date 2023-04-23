@@ -422,8 +422,8 @@ Lemma transl_find_label:
   end.
 Proof.
   intros. monadInv H. destruct (zlt Ptrofs.max_unsigned (code_size instr_size x.(fn_code))); inv EQ0.
-  monadInv EQ. destr_in  EQ1. monadInv EQ1. rewrite transl_code'_transl_code in EQ0. unfold fn_code. 
-  simpl. (* destruct (storeind_ptr_label X1 X2 (fn_retaddr_ofs f) x) as [A B]; rewrite B.  *)
+  monadInv EQ. rewrite transl_code'_transl_code in EQ0. unfold fn_code. 
+  simpl. destruct (storeind_ptr_label X1 X2 (fn_retaddr_ofs f) x) as [A B]; rewrite B. 
   eapply transl_code_label; eauto.
 Qed.
 
@@ -467,10 +467,9 @@ Proof.
   destruct i; try (intros [A B]; apply A). intros. subst c0. repeat constructor.
 - intros. monadInv H0.
   destruct (zlt Ptrofs.max_unsigned (code_size instr_size x.(fn_code))); inv EQ0. monadInv EQ.
-  destr_in EQ1. monadInv EQ1.
   rewrite transl_code'_transl_code in EQ0.
   exists x; exists true; split; auto. unfold fn_code.
-  constructor. econstructor. (* apply (storeind_ptr_label X1 X2 (fn_retaddr_ofs f0) x). *)
+  constructor. apply (storeind_ptr_label X1 X2 (fn_retaddr_ofs f0) x).
 - exact transf_function_no_overflow.
 Qed.
 
@@ -968,62 +967,61 @@ Local Transparent destroyed_by_op.
   intros [m3' [P Q]].
   (* Execution of function prologue *)
   monadInv EQ0. rewrite transl_code'_transl_code in EQ1.
-  (* set (tfbody := Pallocframe (Mach.fn_stacksize f) (fn_retaddr_ofs f) :: *)
-  (*                storeind_ptr RA SP (fn_retaddr_ofs f) x0) in *. *)
-  (* set (tf := {| fn_sig := Mach.fn_sig f; fn_code := tfbody ;fn_stacksize:= (Mach.fn_stacksize f)|}) in *. *)
-  (* set (rs2 := nextinstr (Ptrofs.repr (instr_size (Pallocframe (Mach.fn_stacksize f) (fn_retaddr_ofs f)))) (rs0#X30 <- (parent_sp s) #SP <- sp #X31 <- Vundef)). *)
-  (* exploit (storeind_ptr_correct tge tf instr_size SP (fn_retaddr_ofs f) RA x0 rs2 m5'). *)
-  (*   rewrite chunk_of_Tptr in F. change (rs2 X1) with (rs0 X1). rewrite ATLR. *)
-  (*   change (rs2 X2) with sp.   eexact F. *)
-  (*   congruence. congruence. *)
-  (*   intros (rs3 & U & V). *)
+  set (tfbody := Pallocframe (Mach.fn_stacksize f) (fn_retaddr_ofs f) ::
+                 storeind_ptr RA SP (fn_retaddr_ofs f) x0) in *.
+  set (tf := {| fn_sig := Mach.fn_sig f; fn_code := tfbody ;fn_stacksize:= (Mach.fn_stacksize f)|}) in *.
+  set (rs2 := nextinstr (Ptrofs.repr (instr_size (Pallocframe (Mach.fn_stacksize f) (fn_retaddr_ofs f)))) (rs0#X30 <- (parent_sp s) #SP <- sp #X31 <- Vundef)).
+  exploit (storeind_ptr_correct tge tf instr_size SP (fn_retaddr_ofs f) RA x0 rs2 m5').
+    rewrite chunk_of_Tptr in F. change (rs2 X1) with (rs0 X1). rewrite ATLR.
+    change (rs2 X2) with sp.   eexact F.
+    congruence. congruence.
+    intros (rs3 & U & V).
     (*** TODO  *)
-(*    destr_in EQ2. monadInv EQ2. *)
-(*   assert (EXEC_PROLOGUE: *)
-(*             exec_straight instr_size tge tf *)
-(*               tf.(fn_code) rs0 m' *)
-(*               x0 rs3 m3'). *)
-(*   { change (fn_code tf) with tfbody; unfold tfbody. *)
-(*     apply exec_straight_step with rs2 m2'. *)
-(*     unfold exec_instr. rewrite C. fold sp. *)
-(*     rewrite <- (sp_val _ _ _ AG). rewrite chunk_of_Tptr in F. rewrite F. reflexivity. *)
-(*     reflexivity. *)
-(*     eexact U. } *)
-(*   exploit exec_straight_steps_2; eauto using functions_transl. lia. constructor. *)
-(*   intros (ofs' & X & Y). *)
-(*   left; exists (State rs3 m3'); split. *)
-(*   eapply exec_straight_steps_1; eauto. lia. constructor. *)
-(*   econstructor; eauto. *)
-(*   rewrite X; econstructor; eauto. *)
-(*   apply agree_exten with rs2; eauto with asmgen. *)
-(*   unfold rs2. *)
-(*   apply agree_nextinstr. apply agree_set_other; auto with asmgen. *)
-(*   apply agree_change_sp with (parent_sp s). *)
-(*   apply agree_undef_regs with rs0. auto. *)
-(* Local Transparent destroyed_at_function_entry. *)
-(*   simpl; intros; Simpl. *)
-(*   unfold sp; congruence. *)
-(*   intros. rewrite V by auto with asmgen. reflexivity. *)
+  assert (EXEC_PROLOGUE:
+            exec_straight instr_size tge tf
+              tf.(fn_code) rs0 m'
+              x0 rs3 m3').
+  { change (fn_code tf) with tfbody; unfold tfbody.
+    apply exec_straight_step with rs2 m2'.
+    unfold exec_instr. rewrite C. fold sp.
+    rewrite <- (sp_val _ _ _ AG). rewrite chunk_of_Tptr in F. rewrite F. reflexivity.
+    reflexivity.
+    eexact U. }
+  exploit exec_straight_steps_2; eauto using functions_transl. lia. constructor.
+  intros (ofs' & X & Y).
+  left; exists (State rs3 m3'); split.
+  eapply exec_straight_steps_1; eauto. lia. constructor.
+  econstructor; eauto.
+  rewrite X; econstructor; eauto.
+  apply agree_exten with rs2; eauto with asmgen.
+  unfold rs2.
+  apply agree_nextinstr. apply agree_set_other; auto with asmgen.
+  apply agree_change_sp with (parent_sp s).
+  apply agree_undef_regs with rs0. auto.
+Local Transparent destroyed_at_function_entry.
+  simpl; intros; Simpl.
+  unfold sp; congruence.
+  intros. rewrite V by auto with asmgen. reflexivity.
 
-(* - (* external function *) *)
-(*   exploit functions_translated; eauto. *)
-(*   intros [tf [A B]]. simpl in B. inv B. *)
-(*   exploit extcall_arguments_match; eauto. *)
-(*   intros [args' [C D]]. *)
-(*   exploit external_call_mem_extends; eauto. *)
-(*   intros [res' [m2' [P [Q [R S]]]]]. *)
-(*   left; econstructor; split. *)
-(*   apply plus_one. eapply exec_step_external; eauto. *)
-(*   eapply external_call_symbols_preserved; eauto. apply senv_preserved. *)
-(*   econstructor; eauto. *)
-(*   unfold loc_external_result. apply agree_set_other; auto. apply agree_set_pair; auto. *)
-(*   apply agree_undef_caller_save_regs; auto.  *)
+- (* external function *)
+  exploit functions_translated; eauto.
+  intros [tf [A B]]. simpl in B. inv B.
+  exploit extcall_arguments_match; eauto.
+  intros [args' [C D]].
+  exploit external_call_mem_extends; eauto.
+  intros [res' [m2' [P [Q [R S]]]]].
+  left; econstructor; split.
+  apply plus_one. eapply exec_step_external; eauto.
+  eapply external_call_symbols_preserved; eauto. apply senv_preserved.
+  econstructor; eauto.
+  unfold loc_external_result. apply agree_set_other; auto. apply agree_set_pair; auto.
+  apply agree_undef_caller_save_regs; auto. 
 
-(* - (* return *) *)
-(*   inv STACKS. simpl in *. *)
-(*   right. split. lia. split. auto. *)
-(*   rewrite <- ATPC in H5. *)
-(*   econstructor; eauto. congruence. *)
+- (* return *)
+  inv STACKS. simpl in *.
+  right. split. lia. split. auto.
+  rewrite <- ATPC in H5.
+  econstructor; eauto. congruence.
 Admitted.
 
 Lemma transf_initial_states:
