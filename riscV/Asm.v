@@ -336,8 +336,8 @@ Inductive instruction : Type :=
   | Pfcvtsd  (rd: freg) (rs: freg)                  (**r float   -> float32 *)
 
   (* Pseudo-instructions *)
-  | Pallocframe (sz: Z) (pos: ptrofs)               (**r allocate new stack frame *)
-  | Pfreeframe  (sz: Z) (pos: ptrofs)               (**r deallocate stack frame and restore previous frame *)
+  | Pallocframe (sz: Z) (ofs_ra ofs_link: ptrofs)               (**r allocate new stack frame *)
+  | Pfreeframe  (sz: Z) (ofs_ra ofs_link: ptrofs)               (**r deallocate stack frame and restore previous frame *)
   | Plabel  (lbl: label)                            (**r define a code label *)
   | Ploadsymbol (rd: ireg) (id: ident) (ofs: ptrofs) (**r load the address of a symbol *)
   | Ploadsymbol_high (rd: ireg) (id: ident) (ofs: ptrofs) (**r load the high part of the address of a symbol *)
@@ -1008,7 +1008,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
       Next (nextinstr (rs#d <- (Val.singleoffloat rs#s))) m
 
 (** Pseudo-instructions *)
-  | Pallocframe sz pos =>
+  | Pallocframe sz ofs_ra ofs_link =>
     if zle 0 sz then
       match rs # PC with
       |Vptr (Global id) _
@@ -1019,7 +1019,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
        |None => Stuck
        |Some m2 =>
         let sp := Vptr stk Ptrofs.zero in
-        match Mem.storev Mptr m2 (Val.offset_ptr sp pos) rs#SP with
+        match Mem.storev Mptr m2 (Val.offset_ptr sp ofs_link) rs#SP with
         | None => Stuck
         | Some m3 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m3
         end
@@ -1033,7 +1033,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
       (* | None => Stuck *)
       (* | Some m2 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m2 *)
       (* end *)
-  | Pfreeframe sz pos =>
+  | Pfreeframe sz ofs_ra ofs_link =>
     (* if zle 0 sz then *)
     (*   match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with *)
     (*   | None => Stuck *)
@@ -1061,7 +1061,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
     (*       end *)
     (*   end else Stuck *)
     
-      match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with
+      match Mem.loadv Mptr m (Val.offset_ptr rs#SP ofs_link) with
       | None => Stuck
       | Some v =>
           match rs SP with
@@ -1498,8 +1498,8 @@ Definition instr_to_string i :=
   | Pfcvtdlu  _ _  => "Pfcvtdlu "
   | Pfcvtds   _ _  => "Pfcvtds  "
   | Pfcvtsd   _ _  => "Pfcvtsd " 
-  | Pallocframe  _ _  => "Pallocframe" 
-  | Pfreeframe  _ _  => "Pfreeframe "
+  | Pallocframe _ _ _  => "Pallocframe" 
+  | Pfreeframe  _ _ _  => "Pfreeframe "
   | Plabel      _   => "Plabel  " 
   | Ploadsymbol  _ _ _ => "Ploadsymbol "
   | Ploadsymbol_high  _ _ _ => "Ploadsymbol_high" 
