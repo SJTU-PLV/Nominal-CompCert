@@ -3,3 +3,5 @@ DecConsistency.v
 EncConsistency.v
 RelSpec.v
 Soundness.v
+EncDecRet.v
+EncConsistency.v
