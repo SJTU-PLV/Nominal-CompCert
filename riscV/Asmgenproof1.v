@@ -1349,6 +1349,7 @@ Qed.
 
 Lemma make_epilogue_correct:
   forall ge0 f m stk soff cs m' m'' m''' ms rs k tm,
+    Z.le 0 f.(Mach.fn_stacksize)  ->
   load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp cs) ->
   load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra cs) ->
   Mem.free m stk 0 f.(Mach.fn_stacksize) = Some m' ->
@@ -1365,32 +1366,30 @@ Lemma make_epilogue_correct:
   /\ rs'#SP = parent_sp cs
   /\ (forall r, r <> PC -> r <> RA -> r <> SP -> r <> X31 -> rs'#r = rs#r).
 Proof.
-  (*** TODO  *)
   (* we add return frame and pop stage to match the exec_function_internal *)
-  Admitted.
-(*   intros until tm; intros LP LRA FREE RETF POP AG MEXT MCS. *)
-(*   exploit Mem.loadv_extends. eauto. eexact LP. auto. simpl. intros (parent' & LP' & LDP'). *)
-(*   exploit Mem.loadv_extends. eauto. eexact LRA. auto. simpl. intros (ra' & LRA' & LDRA'). *)
-(*   exploit lessdef_parent_sp; eauto. intros EQ; subst parent'; clear LDP'. *)
-(*   exploit lessdef_parent_ra; eauto. intros EQ; subst ra'; clear LDRA'. *)
-(*   exploit Mem.free_parallel_extends; eauto. intros (tm' & FREE' & MEXT'). *)
-(*   unfold make_epilogue.  *)
-(*   rewrite chunk_of_Tptr in *.  *)
-(*   exploit (loadind_ptr_correct SP (fn_retaddr_ofs f) RA (Pfreeframe (fn_stacksize f) (fn_link_ofs f) :: k) rs tm). *)
-(*     rewrite <- (sp_val _ _ _ AG). simpl. eexact LRA'. congruence. *)
-(*   intros (rs1 & A1 & B1 & C1). *)
-(*   econstructor; econstructor; split. *)
-(*   eapply exec_straight_trans. eexact A1. apply exec_straight_one. simpl.  *)
-(*     rewrite (C1 X2) by auto with asmgen. rewrite <- (sp_val _ _ _ AG). simpl; rewrite LP'.  *)
-(*     rewrite FREE'. eauto. auto.  *)
-(*   split. apply agree_nextinstr. apply agree_set_other; auto with asmgen.  *)
-(*     apply agree_change_sp with (Vptr stk soff). *)
-(*     apply agree_exten with rs; auto. intros; apply C1; auto with asmgen. *)
-(*     eapply parent_sp_def; eauto. *)
-(*   split. auto. *)
-(*   split. Simpl.  *)
-(*   split. Simpl.  *)
-(*   intros. Simpl.  *)
-(* Qed. *)
+  intros until tm; intros LEZ LP LRA FREE RETF POP AG MEXT MCS.
+  exploit Mem.loadv_extends. eauto. eexact LP. auto. simpl. intros (parent' & LP' & LDP').
+  exploit Mem.loadv_extends. eauto. eexact LRA. auto. simpl. intros (ra' & LRA' & LDRA').
+  exploit lessdef_parent_sp; eauto. intros EQ; subst parent'; clear LDP'.
+  exploit lessdef_parent_ra; eauto. intros EQ; subst ra'; clear LDRA'.
+  exploit Mem.free_parallel_extends; eauto. intros (tm' & FREE' & MEXT').
+  exploit Mem.return_frame_parallel_extends;eauto. intros (tm'' & RETF' & MEXT'').
+  exploit Mem.pop_stage_extends;eauto. intros (tm''' & POP' & MEXT''').
+  unfold make_epilogue.
+  rewrite chunk_of_Tptr in *.
+  eexists. exists tm'''.
+  split. eapply exec_straight_one. simpl.
+  destr. rewrite <- (sp_val _ _ _ AG). simpl.
+  rewrite LRA'. rewrite LP'. rewrite FREE'. rewrite RETF'. rewrite POP'.
+  eauto.
+  auto with asmgen.
+  split. apply agree_nextinstr. apply agree_set_other; auto with asmgen. apply agree_set_other; auto with asmgen.  
+  apply agree_change_sp with (Vptr stk soff). auto.
+  eapply parent_sp_def; eauto.
+  split. auto.
+  split. Simpl.
+  split. Simpl.
+  intros. Simpl.
+Qed.
 
 End CONSTRUCTORS.

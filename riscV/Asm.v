@@ -1233,15 +1233,16 @@ End RELSEM.
 (** Execution of whole programs. *)
 
 Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall m0,
+  | initial_state_intro: forall m0 m1 b0,
       let ge := Genv.globalenv p in
       let rs0 :=
         (Pregmap.init Vundef)
         # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
-        # SP <- Vnullptr
+        # SP <- (Vptr (Stack None nil 1) Ptrofs.zero)
         # RA <- Vnullptr in
       Genv.init_mem p = Some m0 ->
-      initial_state p (State rs0 m0).
+      Mem.alloc m0 0 0 = (m1,b0) ->
+      initial_state p (State rs0 m1).
 
 Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall rs m r,
