@@ -10,7 +10,7 @@ Close Scope nat_scope.
 
 Definition transf_instr (sg:signature) (i: instruction): list instruction :=
   match i with
-  | Pallocframe sz _ ofs =>
+  | Pallocframe sz ra_ofs link_ofs =>
     match sg.(sig_cc).(cc_vararg) with
     | Some _ =>
       let i1 := [Pmv X30 X2] in
@@ -19,16 +19,18 @@ Definition transf_instr (sg:signature) (i: instruction): list instruction :=
       let extra_size := if n >=? 8 then 0 else align ((8-n) * wordsize) 16 in
       let full_sz := Z.add sz extra_size in
       let i2 := expand_addptrofs X2 X2 (Ptrofs.repr (-full_sz)) in
-      let i3 := expand_storeind_ptr X30 X2 ofs in
+      (* store return address of the current function and remove the store ra in the Asmgen.v *)
+      let i_ra := expand_storeind_ptr X1 X2 ra_ofs in
+      let i3 := expand_storeind_ptr X30 X2 link_ofs in
       (* the starting offset of the va_list. It may be greater than full_sz  *)
       let va_ofs := Z.add full_sz ((n - 8) * wordsize) in
       let i4 := save_arguments (Z.to_nat n) va_ofs in
-      i1 ++ i2 ++ i3 ++ i4
+      i1 ++ i2 ++ i_ra ++ i3 ++ i4
     | None =>
       (* X30 is temporary varaible storing the parent stack pointer *)
-      [Pmv X30 X2] ++ expand_addptrofs X2 X2 (Ptrofs.repr (-sz)) ++ expand_storeind_ptr X30 X2 ofs
+      [Pmv X30 X2] ++ expand_addptrofs X2 X2 (Ptrofs.repr (-sz)) ++ expand_storeind_ptr X1 X2 ra_ofs ++ expand_storeind_ptr X30 X2 link_ofs
     end
-  | Pfreeframe sz _ ofs =>
+  | Pfreeframe sz ra_ofs ofs =>
     let extra_sz :=
         match sg.(sig_cc).(cc_vararg) with
         | Some _ =>
@@ -36,7 +38,8 @@ Definition transf_instr (sg:signature) (i: instruction): list instruction :=
           if n >=? 8 then 0 else align ((8-n) * wordsize) 16
         | None => 0
         end in
-    expand_addptrofs X2 X2 (Ptrofs.repr (Z.add sz extra_sz))
+    (* load return address *)
+    loadind_ptr X2 ra_ofs X1 (expand_addptrofs X2 X2 (Ptrofs.repr (Z.add sz extra_sz)))
   | _ => [i]
   end.
 

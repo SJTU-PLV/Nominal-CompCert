@@ -50,7 +50,8 @@ let expand_addptrofs dst src n =
   List.iter emit (Asmgen.addptrofs dst src n [])
 let expand_storeind_ptr src base ofs =
   List.iter emit (Asmgen.storeind_ptr src base ofs [])
-
+let expand_loadind_ptr src base ofs =
+  List.iter emit (Asmgen.loadind_ptr src base ofs [])
 (* Fix-up code around function calls and function entry.
    Some floating-point arguments residing in FP registers need to be
    moved to integer registers or register pairs.
@@ -656,7 +657,7 @@ let expand_builtin_inline name args res =
 
 let expand_instruction instr =
   match instr with
-  | Pallocframe (sz, _, ofs) ->
+  | Pallocframe (sz, ra_ofs, link_ofs) ->
       let sg = get_current_function_sig() in
       emit (Pmv (X30, X2));
       if (sg.sig_cc.cc_vararg <> None) then begin
@@ -664,24 +665,28 @@ let expand_instruction instr =
         let extra_sz = if n >= 8 then 0 else align ((8 - n) * wordsize) 16 in
         let full_sz = Z.add sz (Z.of_uint extra_sz) in
         expand_addptrofs X2 X2 (Ptrofs.repr (Z.neg full_sz));
-        expand_storeind_ptr X30 X2 ofs;
+        (* return address storing *)
+        expand_storeind_ptr X1 X2 ra_ofs;
+        expand_storeind_ptr X30 X2 link_ofs;
         let va_ofs =
           Z.add full_sz (Z.of_sint ((n - 8) * wordsize)) in
         vararg_start_ofs := Some va_ofs;
         save_arguments n va_ofs
       end else begin
         expand_addptrofs X2 X2 (Ptrofs.repr (Z.neg sz));
-        expand_storeind_ptr X30 X2 ofs;
+        expand_storeind_ptr X1 X2 ra_ofs;
+        expand_storeind_ptr X30 X2 link_ofs;
         vararg_start_ofs := None
       end
-  | Pfreeframe (sz, _, ofs) ->
+  | Pfreeframe (sz, ra_ofs, link_ofs) ->
      let sg = get_current_function_sig() in
      let extra_sz =
       if (sg.sig_cc.cc_vararg <> None) then begin
         let n = arguments_size sg in
         if n >= 8 then 0 else align ((8 - n) * wordsize) 16
       end else 0 in
-     expand_addptrofs X2 X2 (Ptrofs.repr (Z.add sz (Z.of_uint extra_sz)))
+      expand_loadind_ptr X2 ra_ofs X1;
+      expand_addptrofs X2 X2 (Ptrofs.repr (Z.add sz (Z.of_uint extra_sz)))
 
   | Pseqw(rd, rs1, rs2) ->
       (* emulate based on the fact that x == 0 iff x <u 1 (unsigned cmp) *)

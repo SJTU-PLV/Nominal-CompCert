@@ -829,7 +829,7 @@ Definition transl_store (chunk: memory_chunk) (addr: addressing)
 (** Function epilogue *)
 
 Definition make_epilogue (f: Mach.function) (k: code) :=
-  loadind_ptr SP f.(fn_retaddr_ofs) RA
+  (* loadind_ptr SP f.(fn_retaddr_ofs) RA *)
     (Pfreeframe f.(Mach.fn_stacksize) f.(fn_retaddr_ofs) f.(fn_link_ofs) :: k).
 
 (** Translation of a Mach instruction. *)
