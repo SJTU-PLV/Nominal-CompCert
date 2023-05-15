@@ -34,14 +34,15 @@ Definition int_fptr__void_sg : signature := mksignature (AST.Tint :: AST.Tlong :
 (** registers responding to above signatures*)
 
 Require Import Conventions1.
-Compute (loc_arguments int__void_sg).
+
+(* Compute (loc_arguments int__void_sg). *)
 (* = if Archi.win64 then One (Locations.R Machregs.CX) :: nil else One (Locations.R Machregs.DI) :: nil *)
-Compute (loc_arguments int_fptr__void_sg).
+(* Compute (loc_arguments int_fptr__void_sg). *)
 (*= if Archi.win64
        then One (Locations.R Machregs.CX) :: One (Locations.R Machregs.DX) :: nil
        else One (Locations.R Machregs.DI) :: One (Locations.R Machregs.SI) :: nil
  *)
-Compute is_callee_save (Machregs.AX).
+(* Compute is_callee_save (Machregs.AX). *)
 (* = false *)
 (** * Implementation of b1.asm, corresponding to L1 *)
 
