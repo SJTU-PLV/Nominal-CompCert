@@ -28,8 +28,7 @@ Require LTL.
 Require Linear.
 Require Mach.
 Require Asm.
-(* Require SSAsm. *)
-(* Require RealAsm. *)
+
 (** Translation passes. *)
 Require Initializers.
 Require SimplExpr.

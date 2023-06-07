@@ -310,23 +310,7 @@ Section WITHGE.
   | Pfcvtsd d s =>
       Next (nextinstr (rs#d <- (Val.singleoffloat rs#s))) m
 
-(*
-  | Plabel lbl =>
-      Next (nextinstr rs) m
-  | Ploadsymbol rd s ofs =>
-      Next (nextinstr (rs#rd <- (Genv.symbol_address ge s ofs))) m
-  | Ploadsymbol_high rd s ofs =>
-      Next (nextinstr (rs#rd <- (high_half ge s ofs))) m
-  | Ploadli rd i =>
-      Next (nextinstr (rs#X31 <- Vundef #rd <- (Vlong i))) m
-  | Ploadfi rd f =>
-      Next (nextinstr (rs#X31 <- Vundef #rd <- (Vfloat f))) m
-  | Ploadsi rd f =>
-      Next (nextinstr (rs#X31 <- Vundef #rd <- (Vsingle f))) m
-  | Pbuiltin ef args res =>
-      Stuck (**r treated specially below *)
-*)
-
+           
   (** The following instructions and directives are not generated directly by Asmgen,
       so we do not model them. *)
   | Pfence
@@ -406,52 +390,5 @@ Ltac Equalities :=
   split. auto. intros. destruct B; auto. subst. auto.
 Qed.
 
-(* Definition semantics p := *)
-(*   Semantics step (initial_state p) final_state (Genv.globalenv p). *)
-
-(* Lemma semantics_determinate: forall p, determinate (semantics p). *)
-(* Proof. *)
-(* Ltac Equalities := *)
-(*   match goal with *)
-(*   | [ H1: ?a = ?b, H2: ?a = ?c |- _ ] => *)
-(*       rewrite H1 in H2; inv H2; Equalities *)
-(*   | _ => idtac *)
-(*   end. *)
-(*   intros; constructor; simpl; intros. *)
-(* - (* determ *) *)
-(*   inv H; inv H0; Equalities. *)
-(*   split. constructor. auto. *)
-(*   discriminate. *)
-(*   discriminate. *)
-(*   assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0. *)
-(*   exploit external_call_determ. eexact H5. eexact H11. intros [A B]. *)
-(*   split. auto. intros. destruct B; auto. subst. auto. *)
-(*   assert (args0 = args) by (eapply extcall_arguments_determ; eauto). subst args0. *)
-(*   exploit external_call_determ. eexact H3. eexact H8. intros [A B]. *)
-(*   split. auto. intros. destruct B; auto. subst. auto. *)
-(* - (* trace length *) *)
-(*   red; intros. inv H; simpl. *)
-(*   lia. *)
-(*   eapply external_call_trace_length; eauto. *)
-(*   eapply external_call_trace_length; eauto. *)
-(* - (* initial states *) *)
-(*   inv H; inv H0. f_equal. congruence. *)
-(* - (* final no step *) *)
-(*   assert (NOTNULL: forall b ofs, Vnullptr <> Vptr b ofs). *)
-(*   { intros; unfold Vnullptr; destruct Archi.ptr64; congruence. } *)
-(*   inv H. unfold Vzero in H0. red; intros; red; intros. *)
-(*   inv H; rewrite H0 in *; eelim NOTNULL; eauto. *)
-(* - (* final states *) *)
-(*   inv H; inv H0. congruence. *)
-(* Qed. *)
-
-(* (** Some Auxilary lemmas *) *)
-
-(* Lemma code_size_app: *)
-(*     forall c1 c2, *)
-(*       code_size instr_size (c1 ++ c2) = code_size instr_size c1 + code_size instr_size c2. *)
-(*   Proof. *)
-(*     induction c1; simpl; intros; eauto. rewrite IHc1. lia. *)
-(*   Qed. *)
   
 End INSTRSIZE.

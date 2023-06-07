@@ -362,87 +362,6 @@ Definition goto_ofs (sz:ptrofs) (ofs:Z) (rs: regset) (m: mem) :=
   | Pfcvtsd d s =>
       Next (nextinstr (rs#d <- (Val.singleoffloat rs#s))) m
 
-(** Pseudo-instructions *)
-  | Pallocframe sz _ pos =>
-    if zle 0 sz then
-      match rs # PC with
-      |Vptr (Global id) _
-       =>
-       let (m0,path) := Mem.alloc_frame m id in
-       let (m1, stk) := Mem.alloc m0 0 sz in
-       match Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame sz) with
-       |None => Stuck
-       |Some m2 =>
-        let sp := Vptr stk Ptrofs.zero in
-        match Mem.storev Mptr m2 (Val.offset_ptr sp pos) rs#SP with
-        | None => Stuck
-        | Some m3 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m3
-        end
-       end
-     |_ => Stuck
-      end
-    else Stuck
-      (* let (m1, stk) := Mem.alloc m 0 sz in *)
-      (* let sp := (Vptr stk Ptrofs.zero) in *)
-      (* match Mem.storev Mptr m1 (Val.offset_ptr sp pos) rs#SP with *)
-      (* | None => Stuck *)
-      (* | Some m2 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m2 *)
-      (* end *)
-  | Pfreeframe sz _ pos =>
-    (* if zle 0 sz then *)
-    (*   match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with *)
-    (*   | None => Stuck *)
-    (*   | Some sp => *)
-    (*     match rs#SP with *)
-    (*     | Vptr stk ofs => *)
-    (*       if check_topframe sz (Mem.astack (Mem.support m)) then *)
-    (*         if Val.eq sp (parent_sp_stree (Mem.stack (Mem.support m))) then *)
-    (*           if Val.eq (Vptr stk ofs) (top_sp_stree (Mem.stack (Mem.support m))) then *)
-    (*               match Mem.free m stk 0 fsz with *)
-    (*               | None => Stuck *)
-    (*               | Some m' => *)
-    (*                 match Mem.return_frame m' with *)
-    (*                 | None => Stuck *)
-    (*                 | Some m'' => *)
-    (*                   match Mem.pop_stage m'' with *)
-    (*                     | None => Stuck *)
-    (*                     | Some m''' => *)
-    (*                     Next (nextinstr (rs#RSP <- sp #RA <- ra)) m''' *)
-    (*                   end *)
-    (*                 end *)
-    (*               end else Stuck else Stuck else Stuck *)
-    (*           | _ => Stuck *)
-    (*           end *)
-    (*       end *)
-    (*   end else Stuck *)
-    
-      match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with
-      | None => Stuck
-      | Some v =>
-          match rs SP with
-          | Vptr stk ofs =>
-              match Mem.free m stk 0 sz with
-              | None => Stuck
-              | Some m' => Next (nextinstr (rs#SP <- v #X31 <- Vundef)) m'
-              end
-          | _ => Stuck
-          end
-      end
-  | Plabel lbl =>
-      Next (nextinstr rs) m
-  | Ploadsymbol rd s ofs =>
-      Next (nextinstr (rs#rd <- (Genv.symbol_address ge s ofs))) m
-  | Ploadsymbol_high rd s ofs =>
-      Next (nextinstr (rs#rd <- (high_half ge s ofs))) m
-  | Ploadli rd i =>
-      Next (nextinstr (rs#X31 <- Vundef #rd <- (Vlong i))) m
-  | Ploadfi rd f =>
-      Next (nextinstr (rs#X31 <- Vundef #rd <- (Vfloat f))) m
-  | Ploadsi rd f =>
-      Next (nextinstr (rs#X31 <- Vundef #rd <- (Vsingle f))) m
-  | Pbuiltin ef args res =>
-      Stuck (**r treated specially below *)
-
   (** The following instructions and directives are not generated directly by Asmgen,
       so we do not model them. *)
   | Pfence
@@ -483,7 +402,7 @@ Definition goto_ofs (sz:ptrofs) (ofs:Z) (rs: regset) (m: mem) :=
     all: try (erewrite symbol_address_pres;eauto).
     all:  try (erewrite exec_load_match_ge;eauto;eapply symbol_address_pres;eauto).
     all:  try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
-    erewrite high_half_match_ge;eauto.
+    (* erewrite high_half_match_ge;eauto. *)
   Qed.
     
   
@@ -496,18 +415,6 @@ Inductive step (ge: Genv.t): state -> trace -> state -> Prop :=
       Genv.find_instr ge (Vptr b ofs) = Some i ->
       exec_instr ge i rs m = Next rs' m' ->
       step ge (State rs m) E0 (State rs' m')
-  (* | exec_step_builtin: *)
-  (*     forall b ofs ef args res rs m vargs t vres rs' m', *)
-  (*     rs PC = Vptr b ofs -> *)
-  (*     Genv.find_ext_funct ge (Vptr b ofs) = None -> *)
-  (*     Genv.find_instr ge (Vptr b ofs) = Some (Pbuiltin ef args res)  ->       *)
-  (*     eval_builtin_args preg ge rs (rs SP) m args vargs -> *)
-  (*     external_call ef ge vargs m t vres m' -> *)
-  (*     rs' = nextinstr (Ptrofs.repr (instr_size (Pbuiltin ef args res))) *)
-  (*             (set_res res vres *)
-  (*               (undef_regs (map preg_of (destroyed_by_builtin ef)) *)
-  (*                  (rs#X31 <- Vundef))) -> *)
-  (*     step ge (State rs m) t (State rs' m') *)
   | exec_step_external:
       forall b ef args res rs m t rs' m' ofs,
       rs PC = Vptr b ofs ->
