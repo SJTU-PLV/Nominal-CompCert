@@ -71,38 +71,47 @@ Definition link_reloctable_merge (o1 o2 : option reloctable) :=
   | Some e1,Some e2 => None
   end.
 
+Definition link_reloc_prog (F V I D: Type) (p1 p2: program F V I D) : option (program F V I D) := None.
 
-Section LINKER_PROG.
+Program Instance Linker_reloc_prog (F V I D : Type) : Linker (program F V I D) :=
+{
+  link := (link_reloc_prog F V I D);
+  linkorder := fun _ _ => True;
+}.
 
-Context {F V I D: Type} {LF: Linker F} {LV: Linker V} (p1 p2: program F V I D).
+(*** TODO  *)
 
-Definition link_relocprog_check (x:ident) (e1: symbentry) :=
-  match p2.(prog_symbtable)!x with
-  | Some e2 => check_symbentry e1 e2
-  | _ => true
-  end.
-      
+(* Section LINKER_PROG. *)
 
-Definition link_reloc_prog :=
-  let ap1 := 
-      {| AST.prog_defs   := prog_defs p1;
-         AST.prog_public := prog_public p1;
-         AST.prog_main   := prog_main p1; |} in
-  let ap2 := 
-      {| AST.prog_defs   := prog_defs p2;
-         AST.prog_public := prog_public p2;
-        AST.prog_main   := prog_main p2; |} in
-  match link ap1 ap2 with
-  | None => None
-  | Some ap =>
-      if PTree_Properties.for_all p1.(prog_symbtable) link_relocprog_check then
-        Some {| prog_defs := PTree.elements (PTree.combine link_prog_merge (PTree_Properties.of_list p1.(prog_defs)) (PTree_Properties.of_list p2.(prog_defs)));
-               prog_public := p1.(prog_public) ++ p2.(prog_public);    
-               prog_main := p1.(prog_main);           
-               prog_sectable := PTree.combine link_section_merge p1.(prog_sectable) p2.(prog_sectable);
-               prog_symbtable := PTree.combine link p1.(prog_symbtable) p2.(prog_symbtable);
-               prog_reloctables := PTree.combine link_reloctable_merge p1.(prog_reloctables) p2.(prog_reloctables);
-               prog_senv := Globalenvs.Genv.to_senv (Globalenvs.Genv.globalenv ap); |}
-      else None
-    end.
+(* Context {F V I D: Type} {LF: Linker F} {LV: Linker V} (p1 p2: program F V I D). *)
+
+(* Definition link_relocprog_check (x:ident) (e1: symbentry) := *)
+(*   match p2.(prog_symbtable)!x with *)
+(*   | Some e2 => check_symbentry e1 e2 *)
+(*   | _ => true *)
+(*   end. *)
+
+
+(* Definition link_reloc_prog := *)
+(*   let ap1 :=  *)
+(*       {| AST.prog_defs   := prog_defs p1; *)
+(*          AST.prog_public := prog_public p1; *)
+(*          AST.prog_main   := prog_main p1; |} in *)
+(*   let ap2 :=  *)
+(*       {| AST.prog_defs   := prog_defs p2; *)
+(*          AST.prog_public := prog_public p2; *)
+(*         AST.prog_main   := prog_main p2; |} in *)
+(*   match link ap1 ap2 with *)
+(*   | None => None *)
+(*   | Some ap => *)
+(*       if PTree_Properties.for_all p1.(prog_symbtable) link_relocprog_check then *)
+(*         Some {| prog_defs := PTree.elements (PTree.combine link_prog_merge (PTree_Properties.of_list p1.(prog_defs)) (PTree_Properties.of_list p2.(prog_defs))); *)
+(*                prog_public := p1.(prog_public) ++ p2.(prog_public);     *)
+(*                prog_main := p1.(prog_main);            *)
+(*                prog_sectable := PTree.combine link_section_merge p1.(prog_sectable) p2.(prog_sectable); *)
+(*                prog_symbtable := PTree.combine link p1.(prog_symbtable) p2.(prog_symbtable); *)
+(*                prog_reloctables := PTree.combine link_reloctable_merge p1.(prog_reloctables) p2.(prog_reloctables); *)
+(*                prog_senv := Globalenvs.Genv.to_senv (Globalenvs.Genv.globalenv ap); |} *)
+(*       else None *)
+(*     end. *)
     

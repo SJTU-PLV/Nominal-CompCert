@@ -1337,14 +1337,14 @@ end.
 
 Lemma instr_size_bound_real : forall i, 0 < instr_size_real i <= Ptrofs.max_unsigned.
 Proof.
-(*  intros. unfold instr_size_real. unfold Ptrofs.max_unsigned.
+ intros. unfold instr_size_real. unfold Ptrofs.max_unsigned.
   destruct Archi.ptr64 eqn:PTR.
   rewrite Ptrofs.modulus_eq64;auto. rewrite Int64.modulus_power.
-  unfold Int64.zwordsize. simpl. lia.
+  unfold Int64.zwordsize. simpl. destruct i;lia.
   rewrite Ptrofs.modulus_eq32;auto. rewrite Int.modulus_power.
-  unfold Int.zwordsize. simpl. lia.
-Qed. *)
-Admitted.
+  unfold Int.zwordsize. simpl. destruct i;lia.
+Qed.
+
 
 Local Open Scope string_scope.
 
