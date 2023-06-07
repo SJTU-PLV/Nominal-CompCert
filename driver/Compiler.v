@@ -74,9 +74,7 @@ Require CleanupLabelsproof.
 Require Debugvarproof.
 Require Stackingproof.
 Require Asmgenproof.
-(* Require SSAsmproof. *)
-(* Require RealAsmproof. *)
-(* Require PseudoInstructionsproof. *)
+
 (* Assembler *)
 Require Symbtablegenproof Symbtablegenproof1.
 Require Reloctablesgenproof ReloctablesgenSize.
@@ -90,25 +88,6 @@ Require Import Compopts.
 
 (** Architecture dependent parts: targetprinter and assembler *)
 Require Import Compiler0 CompilerAux.
-(* (** RealAsm passed. *) *)
-(* (* Require RealAsmgen. *) *)
-(* Require PseudoInstructions. *)
-(* Require AsmBuiltinInline. *)
-(* (* Require AsmStructRet. *) *)
-(* (* Require AsmFloatLiteral. *) *)
-(* Require AsmLiteral. *)
-(* Require AsmPseudoInstr. *)
-(* Require Asmlabelgen. *)
-(* Require Jumptablegen. *)
-(* (** assembler passes *) *)
-(* Require Symbtablegen. *)
-(* Require Reloctablesgen. *)
-(* Require RelocBingen. *)
-(* (* Require AsmLongInt. *) *)
-(* (* Require MergeSection. *) *)
-(* (* ELF generation *) *)
-(* Require RelocElfgen. *)
-(* Require EncodeRelocElf. *)
 
 (** Pretty-printers (defined in Caml). *)
 Parameter print_Clight: Clight.program -> unit.

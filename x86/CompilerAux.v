@@ -3,7 +3,6 @@ Require Import Coqlib Errors.
 Require Import AST Linking Smallstep.
 Require Asm RealAsm.
 (** RealAsm passes  *)
-(* Require RealAsmgen. *)
 Require PseudoInstructions.
 Require AsmBuiltinInline.
 Require AsmStructRet.
@@ -20,10 +19,6 @@ Require RelocBingen.
 Require RelocElfgen.
 Require EncodeRelocElf.
 
-(** RealAsm Proof *)
-(* Require SSAsmproof.
-Require RealAsmproof. *)
-(* Require PseudoInstructionsproof. *)
 (** Assembler Proof *)
 Require Symbtablegenproof.
 Require Reloctablesgenproof.
@@ -62,11 +57,6 @@ Definition targetprinter p: res Asm.program :=
   @@@ time "Make local jumps use offsets instead of labels" Asmlabelgen.transf_program instr_size
   @@ time "Generation of the jump table" Jumptablegen.transf_program instr_size.
 
- (** Verified part from SACompcert *)
-(*  Definition targetprinter1 p: res Asm.program :=
-  OK p
-  @@ time "SSAsm" SSAsmproof.transf_program
-  @@@ time "Translation from SSAsm to RealAsm" RealAsmgen.transf_program instr_size. *)
 
 Definition match_prog_targetprinter p tp :=
   targetprinter p = OK tp.
@@ -75,25 +65,4 @@ Definition match_prog_targetprinter p tp :=
 Axiom targetprinter_fn_stack_requirements_match: forall p tp,
     match_prog_targetprinter p tp ->
     fn_stack_requirements p = fn_stack_requirements tp.
-(* Proof. *)
-(*   intros. *)
-(*   unfold match_prog_targetprinter in H. unfold targetprinter in H. *)
-(*   unfold time in H. *)
-(*   simpl in H.  *)
-(*   destruct  AsmBuiltinInline.transf_program eqn: T1; simpl in H; try discriminate. *)
-(*   destruct  AsmStructRet.transf_program eqn: T2; simpl in H; try discriminate. *)
-(*   destruct  AsmPseudoInstr.transf_program eqn: T3; simpl in H; try discriminate. *)
-(*   destruct  Asmlabelgen.transf_program eqn: T4; simpl in H; try discriminate. *)
-(*   inv H. *)
 
-  
-(*   rewrite Pseudo_fn_stack_requirements_match. *)
-(*   erewrite (BuiltInline_fn_stack_requirements_match _ _ T1). *)
-(*   erewrite (AsmStructret_fn_stack_requirements_match _ _ T2). *)
-(*   rewrite Float_fn_stack_requirements_match. *)
-(*   rewrite LongInt_fn_stack_requirements_match. *)
-(*   erewrite (AsmPseudo_fn_stack_requirements_match _ _ T3). *)
-(*   erewrite (Asmlabel_fn_stack_requirements_match _ _ T4). *)
-(*   erewrite Jumptable_fn_stack_requirements_match. *)
-(*   auto. *)
-(* Qed. *)
