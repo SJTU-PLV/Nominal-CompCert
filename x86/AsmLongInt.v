@@ -1,7 +1,3 @@
-(* *******************  *)
-(* Author: Jinhua Wu  *)
-(* Date:   Apr 6, 2022 *)
-(* *******************  *)
 Require Import Coqlib Integers AST Maps.
 Require Import Events.
 Require Import Asm.

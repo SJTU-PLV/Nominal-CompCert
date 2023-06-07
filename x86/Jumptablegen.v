@@ -1,9 +1,3 @@
-(* *******************  *)
-(* Author: Zhenguo Yin  *)
-(*         Jinhua Wu    *)
-(* Date:   Aug 04, 2020 *)
-(* Last updated:  Jan 24, 2022*)
-(* *******************  *)
 Require Import Coqlib Integers AST Maps.
 Require Import Events.
 Require Import Asm.

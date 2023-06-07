@@ -1,11 +1,3 @@
-(* *******************  *)
-(* Author: Xiangzhe Xu  *)
-(* Date:   Sep 16, 2019 *)
-(* *******************  *)
-
-
-
-
 Require Import Coqlib Integers AST Maps.
 Require Import Events.
 Require Import Asm.

@@ -1,8 +1,3 @@
-(* ******************** *)
-(* Author: Xiangzhe Xu  *)
-(*         Zhenguo Yin  *)
-(* Date:   Aug 12, 2020 *)
-(* ******************** *)
 Require Import Coqlib Integers AST Memdata Maps.
 Require Import Events.
 Require Import Asm Asmgen.

@@ -1,9 +1,3 @@
-(* *******************  *)
-(* Author: Jinhua Wu    *)
-(* Date:   Feb 1, 2022 *)
-(* Last updated: Feb 3, 2022 by Jinhua Wu *)
-(* *******************  *)
-
 (** * Linking sections of same type *)
 
 Require Import Coqlib Integers AST Maps.

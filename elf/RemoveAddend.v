@@ -1,8 +1,3 @@
-(* *******************  *)
-(* Author: Pierre Wilke  *)
-(* Date:   Jun 24, 2020 *)
-(* *******************  *)
-
 Require Import Coqlib Integers AST Maps.
 Require Import Errors.
 Require Import RelocProg RelocProgramBytes Encode.

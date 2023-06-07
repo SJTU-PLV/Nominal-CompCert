@@ -1,8 +1,3 @@
-(* *******************  *)
-(* Author: Zhenguo Yin  *)
-(* Date:   Jul 27, 2020 *)
-(* *******************  *)
-
 (* Generate the string assciated with a float literal symbol *)
 
 open Camlcoq

@@ -1,8 +1,3 @@
-(* *******************  *)
-(* Author: Jinhua Wu  *)
-(* Date:   Apr 6, 2022 *)
-(* *******************  *)
-
 (* Generate the string assciated with a int64 literal symbol *)
 
 open Camlcoq

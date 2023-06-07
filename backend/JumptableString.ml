@@ -1,8 +1,3 @@
-(* *******************  *)
-(* Author: Zhenguo Yin  *)
-(* Date:   Aug 04, 2020 *)
-(* *******************  *)
-
 (* Generate the string assciated with a jump table symbol *)
 
 open Camlcoq

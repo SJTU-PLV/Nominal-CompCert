@@ -571,17 +571,6 @@ Inductive step (ge: Genv.t) : state -> trace -> state -> Prop :=
       Genv.find_instr ge (Vptr b ofs) = Some i ->
       exec_instr ge i rs m = Next rs' m' ->
       step ge (State rs m) E0 (State rs' m')
-(* | exec_step_builtin: *)
-(*     forall b ofs ef args res rs m vargs t vres rs' m', *)
-(*       rs PC = Vptr b ofs -> *)
-(*       Genv.find_ext_funct ge (Vptr b ofs) = None -> *)
-(*       Genv.find_instr ge (Vptr b ofs) = Some (Pbuiltin ef args res)  -> *)
-(*       eval_builtin_args preg ge rs (rs RSP) m args vargs -> *)
-(*       external_call ef (Genv.genv_senv ge) vargs m t vres m' -> *)
-(*       rs' = nextinstr_nf (Ptrofs.repr (instr_size (Pbuiltin ef args res))) *)
-(*                          (set_res res vres *)
-(*                                   (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) -> *)
-(*         step ge (State rs m) t (State rs' m') *)
 | exec_step_external:
     forall b ofs ef args res rs m t rs' m',
       rs PC = Vptr b ofs ->

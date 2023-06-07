@@ -1,8 +1,3 @@
-(* *******************  *)
-(* Author: Jinhua Wu  *)
-(* Date:   Jun 19, 2022 *)
-(* *******************  *)
-
 (* Generate special section identity *)
 
 open Camlcoq

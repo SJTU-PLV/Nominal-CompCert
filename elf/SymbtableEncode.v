@@ -1,10 +1,3 @@
-(* *******************  *)
-(* Author: Yuting Wang  *)
-(*         Jinhua Wu    *)
-(* Date:   Sep 21, 2019 *)
-(* Last updated : Feb 27, 2022 *)
-(* *******************  *)
-
 (** * Encoding of the symbol table into a section *)
 
 Require Import Coqlib lib.Integers AST Maps.

@@ -5,7 +5,6 @@ encoders and decoders from specifications that precisely capture the
 instruction formats in ISA manuals. It accompanies the following paper:
 
   > Automatic Generation and Validation of Instruction Encoders and Decoders. 
-    Xiangzhe Xu, Jinhua Wu, Yuting Wang, Zhenguo Yin and Pengfei Li
 
 In the remaining sections, we will first introduce the structure of
 the artifact, then present the steps for evaluating the artifact.
