@@ -229,6 +229,71 @@ GENERATED=\
   backend/SelectDiv.v backend/SplitLong.v \
   cparser/Parser.v
 
+# LoC counting
+# ==========================================================
+
+REALASM=assembler/RealAsm.v
+
+REALASM_X86=x86/RealAsmArchi.v
+
+REALASM_RV=riscV/RealAsmArchi.v
+
+RELOCPROG=assembler/RelocProg.v assembler/RelocProgSemantics.v\
+  assembler/AsmInject.v assembler/MemoryAgree.v assembler/RelocProgGlobalenvs.v\
+  assembler/RelocProgLinking.v assembler/RelocProgSemantics1.v\
+  assembler/RelocProgSemantics2.v assembler/RelocProgramBytes.v\
+  assembler/RelocProgramBytes.v
+
+RELOCPROG_X86=x86/RelocProgSemanticsArchi.v x86/RelocProgSemanticsArchi1.v\
+  x86/AsmInjectArchi.v x86/RelocBinDecode.v x86/RelocationTypes.v
+
+RELOCPROG_RV=riscV/RelocProgSemanticsArchi.v riscV/RelocProgSemanticsArchi1.v\
+  riscV/AsmInjectArchi.v riscV/RelocBinDecode.v riscV/RelocationTypes.v
+
+RELOCELF=elf/RelocElf.v elf/MachineTypes.v elf/ElfBytesSemantics.v\
+  elf/DecodeRelocElf.v elf/RelocElfSemantics.v elf/ReloctablesDecode.v\
+  elf/SymbtableDecode.v
+
+RELOCELF_X86=x86/RelocElfArchi.v
+
+RELOCELF_RV=riscV/RelocElfArchi.v
+
+PROGGEN=assembler/Symbtablegen.v assembler/Symbtablegenproof.v\
+  assembler/Symbtablegenproof1.v
+
+PROGGEN_X86=x86/SymbtablegenArchi.v x86/SymbtablegenproofArchi.v
+
+PROGGEN_RV=riscV/SymbtablegenArchi.v riscV/SymbtablegenproofArchi.v
+
+RELOCGEN=assembler/Reloctablesgen.v assembler/Reloctablesgenproof.v
+
+RELOCGEN_X86=x86/ReloctablesgenArchi.v x86/ReloctablesgenproofArchi.v
+
+RELOCGEN_RV=riscV/ReloctablesgenArchi.v riscV/ReloctablesgenproofArchi.v
+
+INSTR=assembler/RelocBingen.v assembler/RelocBingenproof.v
+
+INSTR_X86=x86/TranslateInstr.v x86/RelocBingenproofArchi.v
+
+INSTR_RV=riscV/TranslateInstr.v riscV/RelocBingenproofArchi.v
+
+GENRELOCELF=elf/RelocElfgen.v elf/RelocElfgenproof.v elf/RelocElfgenproof0.v\
+  elf/ReloctablesEncode.v elf/SymbtableEncode.v
+
+GENRELOCELF_X86=x86/ReloctablesEncodeArchi.v x86/RelocElfgenproofArchi.v
+
+GENRELOCELF_RV=riscV/ReloctablesEncodeArchi.v riscV/RelocElfgenproofArchi.v
+
+TARGETPRINTER_X86=x86/PseudoInstructions.v x86/AsmBuiltinInline.v\
+  x86/AsmStructRet.v x86/AsmFloatLiteral.v x86/AsmLongInt.v x86/AsmPseudoInstr.v\
+  x86/Asmlabelgen.v x86/Jumptablegen.v
+
+TARGETPRINTER_RV=riscV/PseudoInstructions.v riscV/AsmFixupcode.v\
+  riscV/AsmBuiltinInline.v riscV/AsmLiteral.v\
+  riscV/AsmPseudoInstr.v riscV/Asmlabelgen.v\
+  riscV/Jumptablegen.v
+
+
 all:
 	@test -f .depend || $(MAKE) depend
 	$(MAKE) proof
@@ -243,6 +308,31 @@ endif
 ifeq ($(INSTALL_COQDEV),true)
 	$(MAKE) compcert.config
 endif
+
+count:
+	@echo REALASM && coqwc $(REALASM)
+	@echo REALASM_X86 && coqwc $(REALASM_X86)
+	@echo REALASM_RV && coqwc $(REALASM_RV)
+	@echo RELOCPROG && coqwc $(RELOCPROG)
+	@echo RELOCPROG_X86 && coqwc $(RELOCPROG_X86)
+	@echo RELOCPROG_RV && coqwc $(RELOCPROG_RV)
+	@echo RELOCELF && coqwc $(RELOCELF)
+	@echo RELOCELF_X86 && coqwc $(RELOCELF_X86)
+	@echo RELOCELF_RV && coqwc $(RELOCELF_RV)
+	@echo PROGGEN && coqwc $(PROGGEN)
+	@echo PROGGEN_X86 && coqwc $(PROGGEN_X86)
+	@echo PROGGEN_RV && coqwc $(PROGGEN_RV)
+	@echo RELOCGEN && coqwc $(RELOCGEN)
+	@echo RELOCGEN_X86 && coqwc $(RELOCGEN_X86)
+	@echo RELOCGEN_RV && coqwc $(RELOCGEN_RV)
+	@echo INSTR && coqwc $(INSTR)
+	@echo INSTR_X86 && coqwc $(INSTR_X86)	
+	@echo INSTR_RV && coqwc $(INSTR_RV)
+	@echo GENRELOCELF && coqwc $(GENRELOCELF)
+	@echo GENRELOCELF_X86 && coqwc $(GENRELOCELF_X86)
+	@echo GENRELOCELF_RV && coqwc $(GENRELOCELF_RV)
+	@echo TARGETPRINTER_X86 && coqwc $(TARGETPRINTER_X86)
+	@echo TARGETPRINTER_RV && coqwc $(TARGETPRINTER_RV)
 
 csled:
 	$(MAKE) -C csled
