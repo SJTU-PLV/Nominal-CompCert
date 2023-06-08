@@ -67,9 +67,7 @@ execution of these files on your machine.
     # Download built package from https://github.com/riscv-collab/riscv-gnu-toolchain/releases (roughly 600MB)
     cd ~ & wget https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2022.09.30/riscv32-glibc-ubuntu-20.04-nightly-2022.09.30-nightly.tar.gz -O riscv32-gnu-toolchain.tar.gz
     tar -xf riscv32-gnu-toolchain.tar.gz
-    # Add ~/riscv32-gnu-toolchain/bin to environment
-    export PATH=$PATH:$HOME/riscv32-gnu-toolchain/bin
-    riscv32-unknown-linux-gnu-gcc -v
+    ~/riscv32-gnu-toolchain/bin/riscv32-unknown-linux-gnu-gcc -v
 
     # Install Qemu
     cd ~ && wget https://download.qemu.org/qemu-7.0.0.tar.xz
@@ -107,13 +105,15 @@ execution of these files on your machine.
 ### Target RV32
 
     # Toolprefix is the prefix of the name of the external C compiler
-    ./configure rv32-linux -toolprefix riscv32-unknown-linux-gnu-
+    # Simulator is set to qemu simulator
+    # 'simu-ld' denotes the path to the linker, which is provided by riscv-gnu-toolchain
+    ./configure rv32-linux -toolprefix ~/riscv-gnu-toolchain/riscv32-unknown-linux-gnu- -simulator qemu-riscv32 -simu-ld ~/riscv-gnu-toolchain/sysroot
     make csled
     make -j$(nproc) all
 
 ### Target RV64
-
-    ./configure rv64-linux -toolprefix riscv64-linux-gnu-
+    # As we use apt to install 64-bit riscv-gnu-toolchain, their paths are in the environment
+    ./configure rv64-linux -toolprefix riscv64-linux-gnu- -simulator qemu-riscv64 -simu-ld /usr/riscv64-linux-gnu/
     make csled
     make -j$(nproc) all
 
@@ -169,4 +169,33 @@ $csled\_encode\_correct$ | encode_Instruction_consistency | [autogen/EncConsiste
 $step\_simulation_{{\mathcal{A}},{\mathcal{R}}}$ | step_simulation | [x86/SymbtablegenproofArchi.v](x86/SymbtablegenproofArchi.v) | [riscV/SymbtablegenproofArchi.v](riscV/SymbtablegenproofArchi.v) |
 $step\_simulation_{{\mathcal{R}},{\mathcal{R}}}$ | step_simulation | [assembler/Reloctablesgenproof.v](assembler/Reloctablesgenproof.v)<br>[x86/RelocBingenproofArchi.v](x86/RelocBingenproofArchi.v)<br>[x86/RelocElfgenproofArchi.v](x86/RelocElfgenproofArchi.v) | [assembler/Reloctablesgenproof.v](assembler/Reloctablesgenproof.v)<br>[riscV/RelocBingenproofArchi.v](riscV/RelocBingenproofArchi.v)<br>[riscV/RelocElfgenproofArchi.v](riscV/RelocElfgenproofArchi.v)
 
+## Evaluation
+
+### Run The Test Cases
+
+As described in Section 5 of the paper, we evaluate the generated
+assemblers with the test cases provided by CompCert. They reside in
+[test](test) folder.
+
+If you configure the assembler to X86-32/64, you can simply run the
+following code to evaluate the test：
+
+    cd test
+    # Compile the test cases
+    make all
+    # Start the test
+    make test
+
+If you configure to RV-32/64, you need to ensure that the RISC-V GNU
+Toolchain and Qemu have been installed and configured in your machine.
+The installation and configuration are introduced above. If they are
+all done, you can type the same commands to run the test.
+
+    cd test
+    # Compile the test cases
+    make all
+    # Start the test
+    make test
+
+### Performance Evaluation
 

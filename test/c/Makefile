@@ -58,12 +58,12 @@ test_gcc:
 
 bench_gcc:
 	@for i in $(PROGS); do \
-	   $(TIME) -name $$i -- ./$$i.gcc; \
+	   $(TIME) -name $$i -- $(SIMU) ./$$i.gcc; \
          done
 
 bench:
 	@for i in $(PROGS); do \
-	   $(TIME) -name $$i -- ./$$i.compcert; \
+	   $(TIME) -name $$i -- $(SIMU) ./$$i.compcert; \
          done
 
 clean:

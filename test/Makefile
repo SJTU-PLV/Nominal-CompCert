@@ -5,9 +5,6 @@ ifeq ($(CLIGHTGEN),true)
 DIRS+=clightgen
 endif
 
-# set simulator
-SIMU=qemu-riscv32
-
 all:
 	set -e; for i in $(DIRS); do $(MAKE) CCOMPOPTS='$(CCOMPOPTS)' -C $$i all; done
 

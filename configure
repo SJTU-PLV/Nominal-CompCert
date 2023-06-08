@@ -29,6 +29,8 @@ install_coqdev=false
 ignore_coq_version=false
 library_Flocq=local
 library_MenhirLib=local
+simulator=''
+simulator_ld=''
 
 usage='Usage: ./configure [options] target
 For help on options and targets, do: ./configure -help
@@ -96,6 +98,8 @@ Options:
   -clightgen           Also compile and install the clightgen tool
   -install-coqdev      Also install the Coq development (implied by -clightgen)
   -ignore-coq-version  Accept to use experimental or unsupported versions of Coq
+  -simulator <dir>     Path to the simulator that simulates the executable file
+  -simu-ld <dir>       Path to the linker of the simulator
 '
 
 #
@@ -137,6 +141,10 @@ while : ; do
         library_Flocq=external;;
     -use-external-MenhirLib|--use-external-MenhirLib)
         library_MenhirLib=external;;
+    -simulator|--simulator)
+        simulator="$2"; shift;;
+    -simu-ld|--simu-ld)
+        simulator_ld="$2"; shift;;
     -help|--help)
         echo "$help"; exit 0;;
     -*)
@@ -636,7 +644,7 @@ BITSIZE=$bitsize
 CASM=$casm
 CASM_OPTIONS=$casm_options
 CASMRUNTIME=$casmruntime
-CC=$cc $cc_options
+CC=$cc $cc_options  
 CLIGHTGEN=$clightgen
 CLINKER=$clinker
 CLINKER_OPTIONS=$clinker_options
@@ -653,6 +661,8 @@ SYSTEM=$system
 RESPONSEFILE=$responsefile
 LIBRARY_FLOCQ=$library_Flocq
 LIBRARY_MENHIRLIB=$library_MenhirLib
+QEMU_LD_PREFIX=$simulator_ld
+SIMU=$simulator -L $simulator_ld
 EOF
 else
 cat >> Makefile.config <<'EOF'
