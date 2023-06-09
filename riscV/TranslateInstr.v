@@ -134,14 +134,37 @@ Proof.
     auto. auto. 
     simpl. rewrite Heqn. reflexivity. Qed.
 
-(* Lemma int_of_bits_append: forall b l, *)
-(*   int_of_bits (b::l)= *)
-(*     if b then (two_power_nat (length l)) + int_of_bits l *)
-(*     else int_of_bits l.  *)
-(* Proof. *)
-(*   unfold int_of_bits. intros.  *)
-(*   eapply (int_of_bits'_append b l). *)
-(*   apply rev_length. Qed. *)
+Lemma int_of_bits_append: forall b l,
+  int_of_bits (l ++ [b])=
+    if b then (two_power_nat (length l)) + int_of_bits l
+    else int_of_bits l. 
+Proof.
+  intros b l.
+  induction l.
+  - destruct b.
+    reflexivity. reflexivity.
+  - destruct a.
+    + assert (int_of_bits ((true :: l) ++ [b]) = 2 * int_of_bits (l ++ [b]) + 1).
+      reflexivity.
+      destruct b.
+      -- rewrite -> H.
+         assert (two_power_nat (Datatypes.length (true :: l)) = 2 * two_power_nat (Datatypes.length l)).
+         reflexivity.
+         rewrite H0. rewrite IHl.
+         assert (int_of_bits (true :: l) = 2 * int_of_bits l + 1).
+         reflexivity. lia.
+      -- rewrite IHl in H.
+         rewrite H. reflexivity.
+    + assert (int_of_bits ((false :: l) ++ [b]) = 2 * int_of_bits (l ++ [b])).
+      reflexivity. destruct b.
+      -- assert (two_power_nat (Datatypes.length (false :: l)) = 2 * two_power_nat (Datatypes.length l)).
+         reflexivity.
+         assert (int_of_bits (false :: l) = 2 * int_of_bits l).
+         reflexivity.
+         lia.
+      -- rewrite IHl in H.
+         rewrite H. reflexivity.
+Qed.
 
 Lemma int_of_bits_range: forall l,
   -1 < int_of_bits l < two_power_nat (length l).
@@ -181,61 +204,71 @@ Lemma bits_of_int_signed_consistency: forall n ofs l,
   bits_of_int_signed n ofs = OK l ->
   int_of_bits_signed l = OK ofs.
 Proof.
-  (* unfold bits_of_int_signed,int_of_bits_signed. *)
-  (* intros. destruct n as [|n']. congruence. *)
-  (* replace (two_power_nat (S n' - 1)) with (two_power_nat n') in *. *)
-  (* do 1 destr_in H0; inversion H0. *)
-  (* assert (length l = S n'). rewrite <- H2. simpl. rewrite bits_of_int_length. auto. *)
-  (* (* rewrite H2 in *. *) *)
-  (* assert (ofs = int_of_bits l). { *)
-  (*   symmetry. apply (bits_of_int_consistency (S n')). *)
-  (*   eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2]. *)
-  (*   apply Z.leb_le in Heqb1. split. lia. *)
-  (*   apply Z.ltb_lt in Heqb2. rewrite two_power_nat_S. *)
-  (*   lia. auto. } *)
-  (* destruct l; *)
-  (* (* l=[] *)simpl in H1; try (congruence). *)
-  (* try injection H1 as H1; *)
-  (* destruct b;simpl;f_equal. *)
-  (* (* ofs >= 0; sign=1, impossible *) *)
-  (* inv H2.  *)
-  (* rewrite int_of_bits_append in H3. *)
-  (* rewrite H1 in *.  *)
-  (* assert (-1 < int_of_bits l). apply int_of_bits_range. *)
-  (* assert (ofs >= two_power_nat n'). lia.  *)
-  (* eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2]. *)
-  (* apply Z.ltb_lt in Heqb2. simpl in Heqb2. congruence. *)
-  (* (* ofs >= 0; sign=0, ok *) *)
-  (* rewrite int_of_bits_append in H3. rewrite H3. auto. *)
-  
-  (* do 1 destr_in H0. injection H0 as H0.  *)
-  (* assert (length l = S n'). rewrite <- H0. apply bits_of_int_length. *)
-  (* rewrite H0 in *.  *)
-  (* assert (ofs + two_power_nat (S n')=int_of_bits l).  *)
-  (*   symmetry. apply (bits_of_int_consistency (S n')). *)
-  (*   assert (-1 < ofs + two_power_nat (S n') < two_power_nat (S n')). *)
-  (*   { eapply andb_true_iff in Heqb0. destruct Heqb0 as [Heqb1 Heqb2]. *)
-  (*     apply Z.leb_le in Heqb1. apply Z.ltb_lt in Heqb2.  *)
-  (*     rewrite two_power_nat_S. lia. } *)
-  (*   apply H3. apply H0. *)
+  (* intros.
+  destruct (( 0 <=? ofs) && (ofs <? (two_power_nat (n-1)))) eqn: E.
+  - unfold bits_of_int_signed in H0. rewrite E in H0.
+    monadInv H0.
+    assert (last (bits_of_int n ofs) true = false).
+    induction n.
+    + unfold "<>" in H. assert (False).
+      apply H. reflexivity.
+      inversion H0.
+    +  *)
+  (* unfold bits_of_int_signed,int_of_bits_signed.
+  intros. destruct n as [|n']. congruence.
+  replace (two_power_nat (S n' - 1)) with (two_power_nat n') in *.
+  do 1 destr_in H0; inversion H0.
+  assert (length l = S n'). rewrite <- H2. simpl. rewrite bits_of_int_length. auto.
+  (* rewrite H2 in *. *)
+  assert (ofs = int_of_bits l). {
+    symmetry. apply (bits_of_int_consistency (S n')).
+    eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2].
+    apply Z.leb_le in Heqb1. split. lia.
+    apply Z.ltb_lt in Heqb2. rewrite two_power_nat_S.
+    lia. auto. }
+  destruct l;
+  (* l=[] *)simpl in H1; try (congruence).
+  try injection H1 as H1;
+  destruct b;simpl;f_equal.
+  (* ofs >= 0; sign=1, impossible *)
+  inv H2. 
+  rewrite int_of_bits_append in H3.
+  rewrite H1 in *. 
+  assert (-1 < int_of_bits l). apply int_of_bits_range.
+  assert (ofs >= two_power_nat n'). lia. 
+  eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2].
+  apply Z.ltb_lt in Heqb2. simpl in Heqb2. congruence.
+  (* ofs >= 0; sign=0, ok *)
+  rewrite int_of_bits_append in H3. rewrite H3. auto.
+    
+  do 1 destr_in H0. injection H0 as H0. 
+  assert (length l = S n'). rewrite <- H0. apply bits_of_int_length.
+  rewrite H0 in *. 
+  assert (ofs + two_power_nat (S n')=int_of_bits l). 
+    symmetry. apply (bits_of_int_consistency (S n')).
+    assert (-1 < ofs + two_power_nat (S n') < two_power_nat (S n')).
+    { eapply andb_true_iff in Heqb0. destruct Heqb0 as [Heqb1 Heqb2].
+      apply Z.leb_le in Heqb1. apply Z.ltb_lt in Heqb2. 
+      rewrite two_power_nat_S. lia. }
+    apply H3. apply H0.
 
-  (* destruct l as [|? l']; *)
-  (* (* l=[] *)simpl in H1; try (congruence); *)
-  (* injection H1 as H1. *)
-  (* destruct b;simpl;f_equal. *)
-  (* (* ofs <  0; sign=1, ok *) *)
-  (* rewrite (two_power_nat_S n') in H3. *)
-  (* rewrite int_of_bits_append in H3. rewrite H1 in *. lia. *)
-  (* (* ofs <  0; sign=0, impossible *) *)
-  (* eapply andb_true_iff in Heqb0. destruct Heqb0 as [Heqb1 Heqb2]. *)
-  (* apply Z.leb_le in Heqb1. apply Z.ltb_lt in Heqb2. *)
-  (* rewrite int_of_bits_append in H3. rewrite two_power_nat_S in H3. *)
-  (* assert (int_of_bits l' < two_power_nat n').  *)
-  (*   rewrite <- H1. apply int_of_bits_range.  *)
-  (* assert (ofs < - two_power_nat n'). lia.  *)
-  (* assert (ofs >= - two_power_nat n'). lia. *)
-  (* congruence. *)
-  (* f_equal. lia. Qed. *)
+  destruct l as [|? l'];
+  (* l=[] *)simpl in H1; try (congruence);
+  injection H1 as H1.
+  destruct b;simpl;f_equal.
+  (* ofs <  0; sign=1, ok *)
+  rewrite (two_power_nat_S n') in H3.
+  rewrite int_of_bits_append in H3. rewrite H1 in *. lia.
+  (* ofs <  0; sign=0, impossible *)
+  eapply andb_true_iff in Heqb0. destruct Heqb0 as [Heqb1 Heqb2].
+  apply Z.leb_le in Heqb1. apply Z.ltb_lt in Heqb2.
+  rewrite int_of_bits_append in H3. rewrite two_power_nat_S in H3.
+  assert (int_of_bits l' < two_power_nat n'). 
+    rewrite <- H1. apply int_of_bits_range. 
+  assert (ofs < - two_power_nat n'). lia. 
+  assert (ofs >= - two_power_nat n'). lia.
+  congruence.
+  f_equal. lia. Qed. *)
 Admitted.
 
 Program Definition zero5  : u5  := b["00000"].
@@ -760,59 +793,64 @@ Program Definition decode_immJ (J1: u8) (J2: u1) (J3: u10) (J4: u1) : res Z :=
    decode_ofs_u20 (exist _ J_bits _)
  else Error(msg "illegal length in decode_immJ").
 
+Lemma skipn_skipn : forall A (x y: nat) (l: list A), skipn x (skipn y l) = skipn (x + y) l.
+Proof.
+  intros A x y. rewrite Nat.add_comm. induction y as [|y IHy].
+  - reflexivity.
+  - intros [|].
+    + now rewrite skipn_nil.
+    + now rewrite skipn_cons, IHy.
+Qed.
+
 Theorem encode_immJ_consistency: forall Z J1 J2 J3 J4,
  encode_J1 Z = OK J1 -> encode_J2 Z = OK J2 ->
  encode_J3 Z = OK J3 -> encode_J4 Z = OK J4 ->
  decode_immJ J1 J2 J3 J4 = OK Z.
 Proof.
- (* unfold encode_J1, encode_J2, encode_J3, encode_J4, decode_immJ. intros. *)
- (* monadInv H. monadInv H0. monadInv H1. monadInv H2. *)
- (* rewrite EQ1 in EQ. inversion EQ. subst. *)
- (* rewrite EQ3 in EQ1. inversion EQ1. subst. *)
- (* rewrite EQ5 in EQ3. inversion EQ3. subst.  *)
- (* destruct (assertLength ((proj1_sig x ~@[ 9]) >@[ 1]) 8); *)
- (* destruct (assertLength ((proj1_sig x ~@[ 10]) >@[ 9]) 1); *)
- (* destruct (assertLength (proj1_sig x >@[ 10]) 10); *)
- (* destruct (assertLength (proj1_sig x ~@[ 1]) 1); *)
- (* try congruence. *)
- (* assert ((proj1_sig x ~@[ 9]) >@[ 1] =proj1_sig J1). *)
- (*   destruct J1. inversion EQ0. apply H0. *)
- (* assert ((proj1_sig x ~@[ 10]) >@[ 9] =proj1_sig J2). *)
- (*   destruct J2. inversion EQ2. apply H1. *)
- (* assert ((proj1_sig x >@[ 10]) =proj1_sig J3). *)
- (*   destruct J3. inversion EQ4. apply H2. *)
- (* assert ((proj1_sig x ~@[ 1]) =proj1_sig J4). *)
- (*   destruct J4. inversion EQ6. apply H3. *)
- (* assert (proj1_sig x ~@[ 1] ++ (proj1_sig x ~@[ 9]) >@[ 1] = proj1_sig x ~@[ 9]). *)
- (*   assert ((proj1_sig x ~@[ 9]) ~@[ 1]=proj1_sig x ~@[ 1]). *)
- (*     apply firstn_firstn. *)
- (*   rewrite <- H3. apply firstn_skipn. *)
- (* assert (proj1_sig x ~@[ 9] ++ (proj1_sig x ~@[ 10]) >@[ 9] = proj1_sig x ~@[ 10]). *)
- (*   assert ((proj1_sig x ~@[ 10]) ~@[ 9]=proj1_sig x ~@[ 9]). *)
- (*     apply firstn_firstn. *)
- (*   rewrite <- H4. apply firstn_skipn. *)
- (* assert (proj1_sig J4 ++ proj1_sig J1 ++ proj1_sig J2 ++ proj1_sig J3 = proj1_sig x). *)
- (*   rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2. *)
- (*   rewrite app_assoc. rewrite H3. *)
- (*   rewrite app_assoc. rewrite H4. *)
- (*   apply firstn_skipn. *)
- (* apply encode_ofs_u20_consistency in EQ5. *)
- (* rewrite <- EQ5.  *)
- (* destruct (assertLength *)
- (* (proj1_sig J4 ++ *)
- (*  proj1_sig J1 ++ proj1_sig J2 ++ proj1_sig J3) 20). f_equal.  *)
- (* unfold decode_immJ_obligation_1. destruct x.  *)
- (* cbn [proj1_sig] in *. *)
- (* subst. f_equal. apply Axioms.proof_irr. *)
- (* (* impossible case: total length *) *)
- (* assert (Datatypes.length (proj1_sig J4 ++ proj1_sig J1 ++ proj1_sig J2 ++ proj1_sig J3) = *)
- (* 20%nat). *)
- (* rewrite app_length. rewrite app_length. rewrite app_length. *)
- (* rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2. *)
- (* lia. congruence. *)
- (* Qed. *)
-Admitted.
-
+  unfold encode_J1, encode_J2, encode_J3, encode_J4, decode_immJ. intros.
+  monadInv H. monadInv H0. monadInv H1. monadInv H2.
+  rewrite EQ1 in EQ. inversion EQ. subst.
+  rewrite EQ3 in EQ1. inversion EQ1. subst.
+  rewrite EQ5 in EQ3. inversion EQ3. subst.
+  destruct (assertLength ((proj1_sig x >@[ 11]) ~@[ 8]) 8);
+  destruct (assertLength ((proj1_sig x >@[ 10]) ~@[ 1]) 1);
+  destruct (assertLength (proj1_sig x ~@[ 10]) 10);
+  destruct (assertLength (proj1_sig x >@[ 19]) 1);
+  try congruence.
+  assert ((proj1_sig x >@[ 11]) ~@[ 8] =proj1_sig J1).
+    destruct J1. inversion EQ0. apply H0.
+  assert ((proj1_sig x >@[ 10]) ~@[ 1] =proj1_sig J2).
+    destruct J2. inversion EQ2. apply H1.
+  assert ((proj1_sig x ~@[ 10]) =proj1_sig J3).
+    destruct J3. inversion EQ4. apply H2.
+  assert ((proj1_sig x >@[ 19]) =proj1_sig J4).
+    destruct J4. inversion EQ6. apply H3.
+  assert ((proj1_sig x >@[ 11]) ~@[ 8] ++ proj1_sig x >@[ 19] = proj1_sig x >@[ 11]).
+    assert ((proj1_sig x >@[ 11]) >@[ 8] = proj1_sig x >@[ 19]).
+      apply skipn_skipn.
+    rewrite <- H3. apply firstn_skipn.
+  assert (proj1_sig x ~@[ 10] ++ (proj1_sig x >@[ 10]) ~@[ 1] = proj1_sig x ~@[ 11]).
+    assert ((proj1_sig x ~@[ 11]) ~@[ 10] = proj1_sig x ~@[ 10]).
+      apply firstn_firstn.
+    rewrite <- H4. rewrite firstn_skipn_comm. apply firstn_skipn.
+  assert (proj1_sig J3 ++ proj1_sig J2 ++ proj1_sig J1 ++ proj1_sig J4 = proj1_sig x).
+    rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2.
+    rewrite app_assoc. rewrite H3. rewrite H4.
+    apply firstn_skipn.
+  apply encode_ofs_u20_consistency in EQ5.
+  rewrite <- EQ5.
+  destruct (assertLength
+  (proj1_sig J3 ++ proj1_sig J2 ++ proj1_sig J1 ++ proj1_sig J4) 20). f_equal.
+  unfold decode_immJ_obligation_1. destruct x.
+  cbn [proj1_sig] in *.
+  subst. f_equal. apply Axioms.proof_irr.
+  (* impossible case: total length *)
+  assert (Datatypes.length (proj1_sig J3 ++ proj1_sig J2 ++ proj1_sig J1 ++ proj1_sig J4) = 
+  20%nat).
+  rewrite app_length. rewrite app_length. rewrite app_length.
+  rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2.
+  lia. congruence.
+Qed.
 
 (* subtle: we treat imm as an offset multiple of 2 bytes, so we need to preserve the least bit
   12     10:5          4:1          11
@@ -874,53 +912,51 @@ Theorem encode_immB_consistency: forall Z B1 B2 B3 B4,
  encode_B3 Z = OK B3 -> encode_B4 Z = OK B4 ->
  decode_immB B1 B2 B3 B4 = OK Z.
 Proof.
- (* unfold encode_B1, encode_B2, encode_B3, encode_B4, decode_immB. intros. *)
- (* monadInv H. monadInv H0. monadInv H1. monadInv H2. *)
- (* rewrite EQ1 in EQ. inversion EQ. subst. *)
- (* rewrite EQ3 in EQ1. inversion EQ1. subst. *)
- (* rewrite EQ5 in EQ3. inversion EQ3. subst.  *)
- (* destruct (assertLength ((proj1_sig x ~@[ 2]) >@[ 1]) 1); *)
- (* destruct (assertLength (proj1_sig x >@[ 8]) 4); *)
- (* destruct (assertLength ((proj1_sig x ~@[ 8]) >@[ 2]) 6); *)
- (* destruct (assertLength (proj1_sig x ~@[ 1]) 1); *)
- (* try congruence. *)
- (* assert ((proj1_sig x ~@[ 2]) >@[ 1] =proj1_sig B1). *)
- (*   destruct B1. inversion EQ0. apply H0. *)
- (* assert (proj1_sig x >@[ 8] =proj1_sig B2). *)
- (*   destruct B2. inversion EQ2. apply H1. *)
- (* assert ((proj1_sig x ~@[ 8]) >@[ 2] =proj1_sig B3). *)
- (*   destruct B3. inversion EQ4. apply H2. *)
- (* assert ((proj1_sig x ~@[ 1]) =proj1_sig B4). *)
- (*   destruct B4. inversion EQ6. apply H3. *)
- (* assert (proj1_sig x ~@[ 1] ++ (proj1_sig x ~@[ 2]) >@[ 1] = proj1_sig x ~@[ 2]). *)
- (*   assert ((proj1_sig x ~@[ 2]) ~@[ 1]=proj1_sig x ~@[ 1]). *)
- (*     apply firstn_firstn. *)
- (*   rewrite <- H3. apply firstn_skipn. *)
- (* assert (proj1_sig x ~@[ 2] ++ (proj1_sig x ~@[ 8]) >@[ 2] = proj1_sig x ~@[ 8]). *)
- (*   assert ((proj1_sig x ~@[ 8]) ~@[ 2]=proj1_sig x ~@[ 2]). *)
- (*     apply firstn_firstn. *)
- (*   rewrite <- H4. apply firstn_skipn. *)
- (* assert (proj1_sig B4 ++ proj1_sig B1 ++ proj1_sig B3 ++ proj1_sig B2 = proj1_sig x). *)
- (*   rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2. *)
- (*   rewrite app_assoc. rewrite H3. *)
- (*   rewrite app_assoc. rewrite H4. *)
- (*   apply firstn_skipn. *)
- (* apply encode_ofs_u12_consistency in EQ5. *)
- (* rewrite <- EQ5.  *)
- (* destruct (assertLength *)
- (*   (proj1_sig B4 ++ *)
- (*    proj1_sig B1 ++ proj1_sig B3 ++ proj1_sig B2) *)
- (*   12). f_equal.  *)
- (* unfold decode_immJ_obligation_1. destruct x.  *)
- (* cbn [proj1_sig] in *. *)
- (* subst. f_equal. apply Axioms.proof_irr. *)
- (* (* impossible case: total length *) *)
- (* assert (Datatypes.length (proj1_sig B4 ++ proj1_sig B1 ++ proj1_sig B3 ++ proj1_sig B2) = 12%nat). *)
- (* rewrite app_length. rewrite app_length. rewrite app_length. *)
- (* rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2. *)
- (* lia. congruence. *)
- (* Qed. *)
-Admitted.
+  unfold encode_B1, encode_B2, encode_B3, encode_B4, decode_immB. intros.
+  monadInv H. monadInv H0. monadInv H1. monadInv H2.
+  rewrite EQ1 in EQ. inversion EQ. subst.
+  rewrite EQ3 in EQ1. inversion EQ1. subst.
+  rewrite EQ5 in EQ3. inversion EQ3. subst.
+  destruct (assertLength ((proj1_sig x >@[ 10]) ~@[ 1]) 1);
+  destruct (assertLength (proj1_sig x ~@[ 4]) 4);
+  destruct (assertLength ((proj1_sig x >@[ 4]) ~@[ 6]) 6);
+  destruct (assertLength (proj1_sig x >@[ 11]) 1);
+  try congruence.
+  assert ((proj1_sig x >@[ 10]) ~@[ 1] = proj1_sig B1).
+    destruct B1. inversion EQ0. apply H0.
+  assert (proj1_sig x ~@[ 4] = proj1_sig B2).
+    destruct B2. inversion EQ2. apply H1.
+  assert ((proj1_sig x >@[ 4]) ~@[ 6] = proj1_sig B3).
+    destruct B3. inversion EQ4. apply H2.
+  assert ((proj1_sig x >@[ 11]) = proj1_sig B4).
+    destruct B4. inversion EQ6. apply H3.
+  assert (proj1_sig x ~@[ 4] ++ (proj1_sig x >@[ 4]) ~@[ 6] = proj1_sig x ~@[ 10]).
+    assert ((proj1_sig x ~@[ 10]) ~@[ 4]=proj1_sig x ~@[ 4]).
+      apply firstn_firstn.
+    rewrite <- H3. rewrite firstn_skipn_comm.
+    apply firstn_skipn.
+  assert ((proj1_sig x >@[ 10]) ~@[ 1] ++ proj1_sig x >@[ 11] = proj1_sig x >@[ 10]).
+    assert ((proj1_sig x >@[ 10]) >@[ 1]=proj1_sig x >@[ 11]).
+      apply skipn_skipn.
+    rewrite <- H4. apply firstn_skipn.
+  assert (proj1_sig B2 ++ proj1_sig B3 ++ proj1_sig B1 ++ proj1_sig B4 = proj1_sig x).
+    rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2.
+    rewrite app_assoc. rewrite H3.
+    rewrite H4.
+    apply firstn_skipn.
+  apply encode_ofs_u12_consistency in EQ5.
+  rewrite <- EQ5. 
+  destruct (assertLength
+    (proj1_sig B2 ++ proj1_sig B3 ++ proj1_sig B1 ++ proj1_sig B4) 12). f_equal. 
+  unfold decode_immJ_obligation_1. destruct x.
+  cbn [proj1_sig] in *.
+  subst. f_equal. apply Axioms.proof_irr.
+  (* impossible case: total length *)
+  assert (Datatypes.length (proj1_sig B2 ++ proj1_sig B3 ++ proj1_sig B1 ++ proj1_sig B4) = 12%nat).
+  rewrite app_length. rewrite app_length. rewrite app_length.
+  rewrite <- H. rewrite <- H0. rewrite <- H1. rewrite <- H2.
+  lia. congruence.
+  Qed.
 
 Program Definition encode_shamt ofs : res u6 :=
   if Archi.ptr64 then
@@ -951,30 +987,32 @@ Definition decode_shamt (shamt: u6) : res Z :=
 Theorem encode_shamt_consistency: forall Z shamt,
   encode_shamt Z = OK shamt ->
   decode_shamt shamt = OK Z.
-  Proof.
-    (* unfold encode_shamt. unfold decode_shamt. intros. *)
-    (* do 3 destr_in H. inversion H. f_equal. *)
-    (* unfold encode_shamt_obligation_1 in *. *)
-    (* cbn [proj1_sig]. remember (bits_of_int 6 Z) as l. *)
-    (* apply (bits_of_int_consistency 6). *)
-    (* apply andb_true_iff in Heqb0. destruct Heqb0. *)
-    (* apply Z.ltb_lt in H0. apply Z.ltb_lt in H2. lia. *)
-    (* auto. *)
-  
-    (* unfold encode_shamt_obligation_2 in *. inversion H. *)
-    (* cbn [proj1_sig].  *)
-    (* assert (int_of_bits (false :: bits_of_int 5 Z) = int_of_bits (bits_of_int 5 Z)). *)
-    (* apply int_of_bits_append. *)
-    (* rewrite H0. remember (bits_of_int 5 Z) as l.  *)
-    (* assert (int_of_bits l = Z). *)
-    (* apply (bits_of_int_consistency 5). *)
-    (* apply andb_true_iff in Heqb0. destruct Heqb0. *)
-    (* apply Z.ltb_lt in H2. apply Z.ltb_lt in H3. lia. *)
-    (* rewrite Heql. reflexivity. *)
-    (* auto. *)
-    (* Qed. *)
-Admitted.
-    
+Proof.
+  unfold encode_shamt. unfold decode_shamt. intros.
+  do 3 destr_in H. inversion H.
+  - f_equal.
+  unfold encode_shamt_obligation_1 in *.
+  cbn [proj1_sig]. remember (bits_of_int 6 Z) as l.
+  apply (bits_of_int_consistency 6).
+  apply andb_true_iff in Heqb0. destruct Heqb0.
+  apply Z.ltb_lt in H0. apply Z.ltb_lt in H2. lia.
+  auto.
+
+  - unfold encode_shamt_obligation_2 in *. remember (bits_of_int 5 Z) as l.
+  inversion H.
+  cbn [proj1_sig]. 
+  assert (int_of_bits ((bits_of_int 5 Z) ++ [false]) = int_of_bits (bits_of_int 5 Z)).
+  apply int_of_bits_append. rewrite -> Heql.
+  rewrite H0.
+  assert (int_of_bits l = Z).
+  apply (bits_of_int_consistency 5).
+  apply andb_true_iff in Heqb0. destruct Heqb0.
+  apply Z.ltb_lt in H2. apply Z.ltb_lt in H3. lia.
+  rewrite Heql. reflexivity.
+  rewrite <- Heql. rewrite H2. rewrite Heqb0.
+  reflexivity.
+Qed.
+
 Definition translate_instr' (i:instruction) : res (Instruction) :=
   match i with
   | Pnop =>
