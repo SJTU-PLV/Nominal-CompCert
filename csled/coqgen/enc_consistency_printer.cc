@@ -20,8 +20,9 @@
 using namespace std;
 using namespace coq;
 
-static bool FAST_NO_CONFORM=true;
-static bool FAST_NO_ORTH=true;
+bool FAST_NO_CONFORM=false;
+bool FAST_NO_ORTH=false;
+bool FAST_NO_CONSISTENCY=false;
 
 namespace ltac {
 static string solve_try_skip_n = "solve_try_skip_n";
@@ -253,7 +254,8 @@ string EncConsistency::generateEncConsistency() {
     
         lemmaDef.body = body.str();
         //generate proof
-        lemmaDef.proof = generateConsistentProof(variantsName, def, hasAdditionalParameter, forall_params, cnt, def_num) + "Qed.\n";
+        if(FAST_NO_CONSISTENCY)lemmaDef.proof="Admitted.";
+        else lemmaDef.proof = generateConsistentProof(variantsName, def, hasAdditionalParameter, forall_params, cnt, def_num) + "Qed.\n";
 
         ++cnt;
         //lemmaDef.proof = "Admitted.";
@@ -274,7 +276,8 @@ string EncConsistency::generateEncConsistency() {
     for(auto &def:variants){
         proof << "eapply encode_" + def.first + "_consistency;eauto." <<endl;
     }
-    lemmaDef.proof=proof.str() + "Qed.\n";
+    if(FAST_NO_CONSISTENCY)lemmaDef.proof="Admitted.";
+    else lemmaDef.proof=proof.str() + "Qed.\n";
     ret+=lemmaDef.toString()+"\n";
 
     return ret;

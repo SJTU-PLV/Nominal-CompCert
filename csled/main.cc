@@ -13,7 +13,10 @@
 
 extern FILE *yyin;
 extern ast::Specification *root;
-
+// speed up of encode consistency
+extern bool FAST_NO_CONFORM;
+extern bool FAST_NO_ORTH;
+extern bool FAST_NO_CONSISTENCY;
 
 int main(int argc, char **argv) {
     if (argc < 1) {
@@ -54,6 +57,20 @@ int main(int argc, char **argv) {
         bf_os.flush();
 
         //Encode Consistency
+        // Axiomize some lemmas if necessary
+        if(argc>=2&&argv[2]!=NULL){
+            string speed_flag=argv[2];
+            if(speed_flag=="O1"){
+                FAST_NO_CONFORM=true;
+                FAST_NO_ORTH=true;
+            }
+            else if(speed_flag=="O2"){
+                FAST_NO_CONFORM=true;
+                FAST_NO_ORTH=true;
+                FAST_NO_CONSISTENCY=true;
+            }
+        }
+
         string filename_enc_consistency = string("generated/EncConsistency.v"); // change file name
         fstream enc_os(filename_enc_consistency, fstream::out);
         cout << "===========COQ Enc_Consistency PROOF CODE WRITTEN IN " + filename_enc_consistency + " ============="

@@ -188,7 +188,7 @@ ASSEMBLER = RealAsm.v \
 #   RelocBingen.v\
 
 # CSLED generation file
-AUTOGEN = VerificationCondition.v EncDecRet.v
+AUTOGEN = VerificationCondition.v EncDecRet.v EncConsistency.v
 
 # C front-end modules (in cfrontend/)
 

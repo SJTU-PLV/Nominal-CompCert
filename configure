@@ -31,6 +31,7 @@ library_Flocq=local
 library_MenhirLib=local
 simulator=''
 simulator_ld=''
+csled_opt=''
 
 usage='Usage: ./configure [options] target
 For help on options and targets, do: ./configure -help
@@ -100,6 +101,7 @@ Options:
   -ignore-coq-version  Accept to use experimental or unsupported versions of Coq
   -simulator <dir>     Path to the simulator that simulates the executable file
   -simu-ld <dir>       Path to the linker of the simulator
+  -csled-opt {O0,O1,O2}  Speed up the consistency proof generated from CSLED (default is O0)
 '
 
 #
@@ -142,9 +144,11 @@ while : ; do
     -use-external-MenhirLib|--use-external-MenhirLib)
         library_MenhirLib=external;;
     -simulator|--simulator)
-        simulator="$2"; shift;;
+        simulator="$2 -L"; shift;;
     -simu-ld|--simu-ld)
         simulator_ld="$2"; shift;;
+    -csled-opt|--csled-opt)
+        csled_opt="$2"; shift;;
     -help|--help)
         echo "$help"; exit 0;;
     -*)
@@ -662,7 +666,8 @@ RESPONSEFILE=$responsefile
 LIBRARY_FLOCQ=$library_Flocq
 LIBRARY_MENHIRLIB=$library_MenhirLib
 QEMU_LD_PREFIX=$simulator_ld
-SIMU=$simulator -L $simulator_ld
+SIMU=$simulator $simulator_ld
+CSLED_OPT=$csled_opt
 EOF
 else
 cat >> Makefile.config <<'EOF'

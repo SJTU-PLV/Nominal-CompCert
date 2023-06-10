@@ -8,14 +8,15 @@ GENERATED_DIR = generated
 
 all: generator
 ifeq ($(ARCH), x86)
-	./generator x86/x86.csled
+	./generator x86/x86.csled $(CSLED_OPT)
 else
 ifeq ($(ARCH), riscV)
-	./generator riscv/riscv.csled
+	./generator riscv/riscv.csled $(CSLED_OPT)
 endif
 endif
 	cp generated/VerificationCondition.v ../autogen
 	cp generated/EncDecRet.v ../autogen
+	cp generated/EncConsistency.v ../autogen
 
 generator: parser src
 	g++  -std=c++11 $(O_FILES) syntax.tab.o lex.yy.o  -g -o generator

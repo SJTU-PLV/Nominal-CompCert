@@ -6,7 +6,6 @@ Import List.
 Import ListNotations.
 Import Hex Bits.
 Require Import EncDecRet VerificationCondition.
-Require Import BFtrue.
 Require Import BPProperty.
 Local Open Scope error_monad_scope.
 Local Open Scope hex_scope.
