@@ -245,10 +245,10 @@ RELOCPROG=assembler/RelocProg.v assembler/RelocProgSemantics.v\
   assembler/RelocProgramBytes.v
 
 RELOCPROG_X86=x86/RelocProgSemanticsArchi.v x86/RelocProgSemanticsArchi1.v\
-  x86/AsmInjectArchi.v x86/RelocBinDecode.v x86/RelocationTypes.v
+  x86/AsmInjectArchi.v x86/RelocationTypes.v
 
 RELOCPROG_RV=riscV/RelocProgSemanticsArchi.v riscV/RelocProgSemanticsArchi1.v\
-  riscV/AsmInjectArchi.v riscV/RelocBinDecode.v riscV/RelocationTypes.v
+  riscV/AsmInjectArchi.v riscV/RelocationTypes.v
 
 RELOCELF=elf/RelocElf.v elf/MachineTypes.v elf/ElfBytesSemantics.v\
   elf/DecodeRelocElf.v elf/RelocElfSemantics.v elf/ReloctablesDecode.v\
@@ -273,9 +273,11 @@ RELOCGEN_RV=riscV/ReloctablesgenArchi.v riscV/ReloctablesgenproofArchi.v
 
 INSTR=assembler/RelocBingen.v assembler/RelocBingenproof.v
 
-INSTR_X86=x86/TranslateInstr.v x86/RelocBingenproofArchi.v
+INSTR_X86=x86/TranslateInstr.v x86/RelocBingenproofArchi.v\
+  x86/RelocBinDecode.v
 
-INSTR_RV=riscV/TranslateInstr.v riscV/RelocBingenproofArchi.v
+INSTR_RV=riscV/TranslateInstr.v riscV/RelocBingenproofArchi.v\
+  riscV/RelocBinDecode.v
 
 GENRELOCELF=elf/RelocElfgen.v elf/RelocElfgenproof.v elf/RelocElfgenproof0.v\
   elf/ReloctablesEncode.v elf/SymbtableEncode.v
