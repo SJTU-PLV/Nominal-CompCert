@@ -107,7 +107,7 @@ Proof.
   eapply bits_of_int_consistency';eauto.
 Qed.
 
-  Lemma int_of_bits'_append: forall b l,
+Lemma int_of_bits'_append: forall b l,
   int_of_bits_rec (l++[b])=
     if b then (two_power_nat (length l)) + int_of_bits_rec l
     else int_of_bits_rec l.
@@ -139,31 +139,7 @@ Lemma int_of_bits_append: forall b l,
     if b then (two_power_nat (length l)) + int_of_bits l
     else int_of_bits l. 
 Proof.
-  intros b l.
-  induction l.
-  - destruct b.
-    reflexivity. reflexivity.
-  - destruct a.
-    + assert (int_of_bits ((true :: l) ++ [b]) = 2 * int_of_bits (l ++ [b]) + 1).
-      reflexivity.
-      destruct b.
-      -- rewrite -> H.
-         assert (two_power_nat (Datatypes.length (true :: l)) = 2 * two_power_nat (Datatypes.length l)).
-         reflexivity.
-         rewrite H0. rewrite IHl.
-         assert (int_of_bits (true :: l) = 2 * int_of_bits l + 1).
-         reflexivity. lia.
-      -- rewrite IHl in H.
-         rewrite H. reflexivity.
-    + assert (int_of_bits ((false :: l) ++ [b]) = 2 * int_of_bits (l ++ [b])).
-      reflexivity. destruct b.
-      -- assert (two_power_nat (Datatypes.length (false :: l)) = 2 * two_power_nat (Datatypes.length l)).
-         reflexivity.
-         assert (int_of_bits (false :: l) = 2 * int_of_bits l).
-         reflexivity.
-         lia.
-      -- rewrite IHl in H.
-         rewrite H. reflexivity.
+  unfold int_of_bits. apply int_of_bits'_append.
 Qed.
 
 Lemma int_of_bits_range: forall l,
@@ -187,9 +163,9 @@ Definition bits_of_int_signed (n:nat) (ofs:Z) : res bits :=
 
 Definition int_of_bits_signed (l: list bool): res Z :=
   if last l true then
-    OK (int_of_bits (removelast l))
+    OK (int_of_bits (removelast l) - two_power_nat (length l - 1))
   else
-    OK (int_of_bits (removelast l) - two_power_nat (length l - 1)).
+    OK (int_of_bits (removelast l)).
     
   (* match l with *)
   (* | nil => Error (msg "need at least a sign bit!") *)
@@ -204,72 +180,83 @@ Lemma bits_of_int_signed_consistency: forall n ofs l,
   bits_of_int_signed n ofs = OK l ->
   int_of_bits_signed l = OK ofs.
 Proof.
-  (* intros.
+  intros. unfold bits_of_int_signed in H0.
+  (* unfold bits_of_int in H0. *)
   destruct (( 0 <=? ofs) && (ofs <? (two_power_nat (n-1)))) eqn: E.
-  - unfold bits_of_int_signed in H0. rewrite E in H0.
-    monadInv H0.
-    assert (last (bits_of_int n ofs) true = false).
-    induction n.
-    + unfold "<>" in H. assert (False).
-      apply H. reflexivity.
-      inversion H0.
-    +  *)
-  (* unfold bits_of_int_signed,int_of_bits_signed.
-  intros. destruct n as [|n']. congruence.
-  replace (two_power_nat (S n' - 1)) with (two_power_nat n') in *.
-  do 1 destr_in H0; inversion H0.
-  assert (length l = S n'). rewrite <- H2. simpl. rewrite bits_of_int_length. auto.
-  (* rewrite H2 in *. *)
-  assert (ofs = int_of_bits l). {
-    symmetry. apply (bits_of_int_consistency (S n')).
-    eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2].
-    apply Z.leb_le in Heqb1. split. lia.
-    apply Z.ltb_lt in Heqb2. rewrite two_power_nat_S.
-    lia. auto. }
-  destruct l;
-  (* l=[] *)simpl in H1; try (congruence).
-  try injection H1 as H1;
-  destruct b;simpl;f_equal.
-  (* ofs >= 0; sign=1, impossible *)
-  inv H2. 
-  rewrite int_of_bits_append in H3.
-  rewrite H1 in *. 
-  assert (-1 < int_of_bits l). apply int_of_bits_range.
-  assert (ofs >= two_power_nat n'). lia. 
-  eapply andb_true_iff in Heqb. destruct Heqb as [Heqb1 Heqb2].
-  apply Z.ltb_lt in Heqb2. simpl in Heqb2. congruence.
-  (* ofs >= 0; sign=0, ok *)
-  rewrite int_of_bits_append in H3. rewrite H3. auto.
-    
-  do 1 destr_in H0. injection H0 as H0. 
-  assert (length l = S n'). rewrite <- H0. apply bits_of_int_length.
-  rewrite H0 in *. 
-  assert (ofs + two_power_nat (S n')=int_of_bits l). 
-    symmetry. apply (bits_of_int_consistency (S n')).
-    assert (-1 < ofs + two_power_nat (S n') < two_power_nat (S n')).
-    { eapply andb_true_iff in Heqb0. destruct Heqb0 as [Heqb1 Heqb2].
-      apply Z.leb_le in Heqb1. apply Z.ltb_lt in Heqb2. 
-      rewrite two_power_nat_S. lia. }
-    apply H3. apply H0.
-
-  destruct l as [|? l'];
-  (* l=[] *)simpl in H1; try (congruence);
-  injection H1 as H1.
-  destruct b;simpl;f_equal.
-  (* ofs <  0; sign=1, ok *)
-  rewrite (two_power_nat_S n') in H3.
-  rewrite int_of_bits_append in H3. rewrite H1 in *. lia.
-  (* ofs <  0; sign=0, impossible *)
-  eapply andb_true_iff in Heqb0. destruct Heqb0 as [Heqb1 Heqb2].
-  apply Z.leb_le in Heqb1. apply Z.ltb_lt in Heqb2.
-  rewrite int_of_bits_append in H3. rewrite two_power_nat_S in H3.
-  assert (int_of_bits l' < two_power_nat n'). 
-    rewrite <- H1. apply int_of_bits_range. 
-  assert (ofs < - two_power_nat n'). lia. 
-  assert (ofs >= - two_power_nat n'). lia.
-  congruence.
-  f_equal. lia. Qed. *)
-Admitted.
+  - monadInv H0. remember (bits_of_int n ofs) as l.
+    assert (length l = n).
+    rewrite Heql. apply (bits_of_int_length n ofs).
+    destruct n. assert (False). apply H. reflexivity.
+    inversion H1.
+    assert (exists l' a, l = l' ++ [a] /\ Datatypes.length l' = n).
+    apply length_S_inv. apply H0. destruct H1. destruct H1.
+    destruct H1.
+    (* unfold bits_of_int in Heql. rewrite <- Heql. *)
+    rewrite H1. unfold int_of_bits_signed.
+    rewrite removelast_last. rewrite last_last. rewrite last_length.
+    simpl. replace (two_power_nat (S n - 1)) with (two_power_nat n) in *.
+    assert (ofs = int_of_bits l). {
+      symmetry. apply (bits_of_int_consistency (S n)).
+      eapply andb_true_iff in E. destruct E.
+      apply Z.leb_le in H3. apply Z.ltb_lt in H4.
+      rewrite two_power_nat_S. lia. auto.
+    }
+    assert (x0 = false). {
+    rewrite H1 in H3. rewrite int_of_bits_append in H3.
+    destruct x0. rewrite H2 in H3.
+    assert (-1 < int_of_bits x). apply int_of_bits_range.
+    assert (ofs >= two_power_nat n). lia.
+    eapply andb_true_iff in E. destruct E.
+    apply Z.ltb_lt in H7. lia. reflexivity.
+    }
+    rewrite H4. rewrite H3. rewrite H1.
+    rewrite int_of_bits_append. rewrite H4. reflexivity.
+    f_equal. lia.
+  - destruct (0 <=? ofs) eqn: Hofs.
+    apply Zle_bool_imp_le in Hofs.
+    apply Zaux.Zlt_bool_false in Hofs. rewrite Hofs in H0.
+    simpl in E. rewrite andb_false_r in H0. monadInv H0.
+    apply Z.leb_gt in Hofs. rewrite <- Z.ltb_lt in Hofs.
+    rewrite Hofs in H0.
+    destruct (- two_power_nat (n - 1) <=? ofs) eqn: Hofs2.
+    simpl in H0.
+    monadInv H0. remember (bits_of_int n (ofs + two_power_nat n)) as l.
+    assert (length l = n).
+    rewrite Heql. apply (bits_of_int_length n (ofs + two_power_nat n)).
+    destruct n. assert (False). apply H. reflexivity.
+    inversion H1.
+    assert (exists l' a, l = l' ++ [a] /\ Datatypes.length l' = n).
+    apply length_S_inv. apply H0. destruct H1. destruct H1. destruct H1.
+    assert (ofs + two_power_nat (S n) < two_power_nat (S n)).
+    apply Z.ltb_lt in Hofs. lia.
+    apply Z.leb_le in Hofs2.
+    assert (- two_power_nat (S n - 1) + two_power_nat (S n) - 1 < ofs + two_power_nat (S n)). lia.
+    assert (two_power_nat (S n - 1) = two_power_nat n).
+    f_equal. lia. rewrite H5 in H4.
+    assert (- two_power_nat n+ two_power_nat (S n) > 0).
+    rewrite two_power_nat_S. lia.
+    assert (-1 < ofs + two_power_nat (S n)). lia.
+    assert (-1 < ofs + two_power_nat (S n) < two_power_nat (S n)). auto.
+    assert (int_of_bits l = ofs + two_power_nat (S n)).
+    apply (bits_of_int_consistency (S n)). apply H8.
+    symmetry. apply Heql. rewrite H1 in H9.
+    rewrite int_of_bits_append in H9.
+    destruct x0. rewrite H1. unfold int_of_bits_signed.
+    rewrite removelast_last. rewrite last_last. rewrite last_length.
+    rewrite H1 in H0. rewrite last_length in H0.
+    assert (Datatypes.length x = n). lia. rewrite H10 in H9.
+    rewrite two_power_nat_S in H9.
+    assert (two_power_nat (S (Datatypes.length x) - 1) = two_power_nat n).
+    rewrite H10. f_equal. lia. rewrite H11.
+    assert (int_of_bits x - two_power_nat n = ofs). lia.
+    rewrite H12. reflexivity.
+    assert (ofs + two_power_nat (S n) < two_power_nat n).
+    rewrite <- H9. rewrite <- H2. apply int_of_bits_range.
+    assert (- two_power_nat n + two_power_nat (S n) - 1 = two_power_nat n - 1).
+    rewrite two_power_nat_S. lia. rewrite H11 in H4.
+    lia.
+    simpl in H0. monadInv H0.
+Qed.
 
 Program Definition zero5  : u5  := b["00000"].
 Program Definition zero12 : u12 := b["000000000000"].
