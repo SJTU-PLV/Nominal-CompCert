@@ -31,7 +31,8 @@ To compile CompCert v3.8 and our framework
 We recommend using the `opam` package manager to set up a build
 environment with the following commands:
 
-    # Initialize opam (if you haven't used it before)
+    # Install and initialize opam (if you haven't used it before)
+    sudo apt install opam
     opam init --bare
 
     # Create an "opam switch" dedicated to building the framework
@@ -51,7 +52,7 @@ environment with the following commands:
     # Install Bison v3.6 from source
     cd ~ && wget https://ftp.gnu.org/gnu/bison/bison-3.6.1.tar.xz
     tar -xf bison-3.6.1.tar.xz
-    cd bison-3.6
+    cd bison-3.6.1
     ./configure && make -j$(nproc)
     sudo make install
 
@@ -70,11 +71,17 @@ github.
 
     # Install 32-bit riscv-gnu-toolchain (required if you want to build 32-bit RISC-V assemblers)
     # Download built package (roughly 600MB)
-    cd ~ & wget https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2022.09.30/riscv32-glibc-ubuntu-20.04-nightly-2022.09.30-nightly.tar.gz -O riscv32-gnu-toolchain.tar.gz
+    cd ~ & wget https://github.com/riscv-collab/riscv-gnu-toolchain/releases\/download/2022.09.30/riscv32-glibc-ubuntu-20.04-nightly-2022.09.30-nightly.tar.gz -O riscv32-gnu-toolchain.tar.gz
     tar -xf riscv32-gnu-toolchain.tar.gz
     ~/riscv32-gnu-toolchain/bin/riscv32-unknown-linux-gnu-gcc -v
 
     # Install Qemu
+    # Prerequisites of Qemu
+    sudo apt install autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev \
+              gawk build-essential texinfo gperf libtool patchutils bc \
+              zlib1g-dev libexpat-dev pkg-config  libglib2.0-dev libpixman-1-dev libsdl2-dev \
+              git tmux python3 python3-pip ninja-build
+    # Install Qemu from source
     cd ~ && wget https://download.qemu.org/qemu-7.0.0.tar.xz
     tar -xf qemu-7.0.0.tar.xz
     cd qemu-7.0.0
@@ -105,9 +112,9 @@ github.
 
 | Options | Time Consumption |
 |---------|:----------------:|
-| O0 (no `Admitted`)     | ~1h30min         |
-| O1 (half `Admitted`)    | ~40min           |
-| O2 (all `Admitted`)     | ~5min            |
+| O0 (no `Admitted`)     | ~1h30min        |
+| O1 (half `Admitted`)   | ~40min          |
+| O2 (all `Admitted`)    | ~10min          |
 
 In the following configuration, we all set `-csled-opt` to `O2` to
 reduce the consumption of time. The generated proofs are in
@@ -133,7 +140,7 @@ them after `make csled`.
     # Toolprefix is the prefix of the name of the external C compiler
     # Simulator is set to qemu simulator
     # 'simu-ld' denotes the path to the dynamic loader, which is provided by riscv-gnu-toolchain
-    ./configure rv32-linux -toolprefix ~/riscv-gnu-toolchain/riscv32-unknown-linux-gnu- -simulator qemu-riscv32 -simu-ld ~/riscv-gnu-toolchain/sysroot -csled-opt O2
+    ./configure rv32-linux -toolprefix ~/riscv/bin/riscv32-unknown-linux-gnu- -simulator qemu-riscv32 -simu-ld ~/riscv/sysroot -csled-opt O2
     make csled
     make -j$(nproc) all
 
