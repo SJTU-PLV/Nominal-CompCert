@@ -105,9 +105,9 @@ github.
 
 | Options | Time Consumption |
 |---------|:----------------:|
-| O0      | ~1h30min         |
-| O1      | ~40min           |
-| O2      | ~5min            |
+| O0 (no `Admitted`)     | ~1h30min         |
+| O1 (half `Admitted`)    | ~40min           |
+| O2 (all `Admitted`)     | ~5min            |
 
 In the following configuration, we all set `-csled-opt` to `O2` to
 reduce the consumption of time. The generated proofs are in
@@ -326,7 +326,7 @@ summarized in the following table.
 +--------------------------------------------------------------+
 |  Supported Instructions        | 89   | 24    | 146  |  146  |
 +--------------------------------------------------------------+
-|  Instruction Encoding (Coq)    | 966  | 1356  | 2249 |  478  |
+|  Instruction Encoding (Coq)    | 966  | 1356  | 2178 |  469  |
 |  Instruction Encoding (CSLED)  | 0    | 0     | 150  |  0    |
 +--------------------------------------------------------------+
 ```
@@ -348,7 +348,7 @@ and 34 are pure 64-bit instructions). As shown in Table 1 of the
 paper, our effort is composed of two parts: 1) 150 lines of CSLED
 specifications (in [x86.csled](csled/x86/x86.csled)) for automatically
 generating encoders and decoders, and
-2) 2249 lines of specification and 478 lines of proofs (in Coq) to
+2) 2178 lines of specification and 469 lines of proofs (in Coq) to
 implement and verify the instruction translator (in
 [x86/TranslateInstr.v](x86/TranslateInstr.v) and
 [x86/RelocBinDecode.v](x86/RelocBinDecode.v)).
@@ -357,9 +357,9 @@ implement and verify the instruction translator (in
 By the above statistics, one needs to write about 72 lines of code for
 verifying one instruction in CompCertELF ( (374+1356)/24 ~= 72 ). On
 the other hand, one only needs to write about 20 lines of code for
-verifying one instruction using our framework ( (2249+478+150)/146 ~= 20
-). As the total number of instructions grows, the effort saved can be
-quite significant.
+verifying one instruction using our framework ( (2178+469+150)/146 ~=
+19 ). As the total number of instructions grows, the effort saved can
+be quite significant.
 
 Finally, CompCertELF does not support RISC-V. In comparison, we
 support all 119 RISC-V instructions used in CompCert (after pretty

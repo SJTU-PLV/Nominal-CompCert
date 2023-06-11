@@ -63,7 +63,7 @@ FLOCQ=\
   Bracket.v Div.v Operations.v Round.v Sqrt.v \
   Div_sqrt_error.v Mult_error.v Plus_error.v \
   Relative.v Sterbenz.v Round_odd.v Double_rounding.v \
-  Binary.v Bits.v
+  Binary.v flocq/IEEE754/Bits.v
 else
 FLOCQ=
 endif
@@ -160,7 +160,7 @@ endif
 
 # Encoding of data into bytes
 
-ENCODE=Encode.v Bits.v Hex.v BPProperty.v ListDestruct.v
+ENCODE=Encode.v encode/Bits.v Hex.v BPProperty.v ListDestruct.v
 
 # Elf file format (unused: MergeSection.v)
 ELF = MachineTypes.v RelocElf.v\
@@ -239,16 +239,15 @@ REALASM_X86=x86/RealAsmArchi.v
 REALASM_RV=riscV/RealAsmArchi.v
 
 RELOCPROG=assembler/RelocProg.v assembler/RelocProgSemantics.v\
-  assembler/AsmInject.v assembler/MemoryAgree.v assembler/RelocProgGlobalenvs.v\
+  assembler/MemoryAgree.v assembler/RelocProgGlobalenvs.v\
   assembler/RelocProgLinking.v assembler/RelocProgSemantics1.v\
   assembler/RelocProgSemantics2.v assembler/RelocProgramBytes.v\
-  assembler/RelocProgramBytes.v
 
 RELOCPROG_X86=x86/RelocProgSemanticsArchi.v x86/RelocProgSemanticsArchi1.v\
-  x86/AsmInjectArchi.v x86/RelocationTypes.v
+  x86/RelocationTypes.v
 
 RELOCPROG_RV=riscV/RelocProgSemanticsArchi.v riscV/RelocProgSemanticsArchi1.v\
-  riscV/AsmInjectArchi.v riscV/RelocationTypes.v
+ riscV/RelocationTypes.v
 
 RELOCELF=elf/RelocElf.v elf/MachineTypes.v elf/ElfBytesSemantics.v\
   elf/DecodeRelocElf.v elf/RelocElfSemantics.v elf/ReloctablesDecode.v\
@@ -295,6 +294,9 @@ TARGETPRINTER_RV=riscV/PseudoInstructions.v riscV/AsmFixupcode.v\
   riscV/AsmPseudoInstr.v riscV/Asmlabelgen.v\
   riscV/Jumptablegen.v
 
+INSTR_TRANSLATOR_X86=x86/TranslateInstr.v x86/RelocBinDecode.v
+
+INSTR_TRANSLATOR_RISCV=riscV/TranslateInstr.v riscV/RelocBinDecode.v
 
 all:
 	@test -f .depend || $(MAKE) depend
@@ -335,6 +337,8 @@ count:
 	@echo GENRELOCELF_RV && coqwc $(GENRELOCELF_RV)
 	@echo TARGETPRINTER_X86 && coqwc $(TARGETPRINTER_X86)
 	@echo TARGETPRINTER_RV && coqwc $(TARGETPRINTER_RV)
+	@echo INSTR_TRANSLATOR_X86 && coqwc $(INSTR_TRANSLATOR_X86)
+	@echo INSTR_TRANSLATOR_RISCV && coqwc $(INSTR_TRANSLATOR_RISCV)
 
 csled:
 	$(MAKE) -C csled
