@@ -77,7 +77,7 @@ Require Asmgenproof.
 (* Assembler *)
 Require Symbtablegenproof Symbtablegenproof1.
 Require Reloctablesgenproof ReloctablesgenSize.
-Require RelocBingenproof.
+Require RelocBingenproof EncConsistency.
 Require RelocElfgenproof0 RelocElfgenproof.
 Require EncodeElfCorrect.
 Require RelocProgLinking.
@@ -842,7 +842,9 @@ Proof.
   eapply RelocBingenproof.transf_program_correct;eauto.
   (* rev_id_eliminate preserve size *)
   unfold instr_size. eapply ReloctablesgenSize.rev_id_eliminate_size.
-  (* encode_Instruction consistency *) admit.
+  intros.
+  eapply EncConsistency.encode_Instruction_consistency;eauto.
+  (* encode_Instruction consistency *) 
 
   eapply compose_forward_simulations.
   eapply RelocElfgenproof.transf_program_correct;eauto.
@@ -850,7 +852,7 @@ Proof.
 
   apply RealAsm.real_asm_receptive.
   eapply ElfBytesSemantics.semantics_determinate.
-Admitted.
+Qed.
   
 (** * Correctness of the CompCert compiler *)
 

@@ -219,7 +219,7 @@ following code to evaluate the test：
 
     cd test
     # Compile the test cases
-    make all
+    make clean && make all
     # Start the test
     make test
 
@@ -230,7 +230,7 @@ all done, you can type the same commands to run the test.
 
     cd test
     # Compile the test cases
-    make all
+    make clean && make all
     # Start the test
     make test
 

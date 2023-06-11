@@ -423,8 +423,8 @@ string DecConsistency::generateConsistency(){
 
     lemmaDef.body=body.str();
     lemmaDef.proof=generateProof(variantsName, variants, is_instruction);
-    // TODO: FIX
-    lemmaDef.proof+="Admitted.";
+
+    lemmaDef.proof+="Qed.";
 
     return lemmaDef.toString();
 
