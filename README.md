@@ -36,6 +36,7 @@ environment with the following commands:
     opam init --bare
 
     # Create an "opam switch" dedicated to building the framework
+    opam update
     opam switch create aplas23-assembler ocaml-base-compiler.4.09.0
 
     # Install the Coq and parser

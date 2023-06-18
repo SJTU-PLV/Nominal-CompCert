@@ -601,6 +601,9 @@ Ltac solve_assertion :=
   | |- context G[ assertLength (_ _) _ ] =>
       destruct assertLength as [lef| rig] eqn:EQA in |- * at 1; [  | simpl in rig; congruence ];
       clear EQA
+  | |- context G[ assertLength _ _ ] =>
+      destruct assertLength as [lef| rig] eqn:EQA in |- * at 1; [  | simpl in rig; congruence ];
+      clear EQA  
   end.
 
 
