@@ -18,193 +18,137 @@ L2 <=injp'->injp' L3 ->
 L1 <= injp'-> injp' L3
 *)
 
+Variable cons_se2 : Genv.symtbl -> meminj -> Genv.symtbl.
+
+Section CONSTRUCT_SE2.
+
+Context (sk1 sk2 sk3 : AST.program unit unit) (se1 se3: Genv.symtbl).
+Context (f : meminj).
+
+Hypotheses COMP : Genv.skel_symtbl_compatible  sk1 sk3 se1 se3.
+Hypotheses MS : Genv.match_stbls' f se1 se3.
+Hypotheses LE1 : Genv.skel_le sk2 sk1.
+Hypotheses LE2 : Genv.skel_le sk3 sk2.
+
+Definition se2 := cons_se2 se1 f.
+(* Basiclly remove all the ids and blocks that are unmapped by f from se1 to se3 from se1*)
+
+Lemma se2_symb: forall id, Genv.find_symbol se2 id =
+                match Genv.find_symbol se1 id with
+                |Some b => if f b then Some b else None
+                |None => None
+                end.
+Admitted.
+
+Lemma se2_info: forall b, Genv.find_info se2 b =
+                       if f b then Genv.find_info se1 b else None.
+Admitted.
+
+Lemma se2_sup : forall b,
+    sup_In b (Genv.genv_sup se2) <->
+    sup_In b (Genv.genv_sup se1) /\ (exists b', f b = Some (b', 0)).
+Admitted.
+
+Lemma se2_public : forall id, Genv.public_symbol se2 id= Genv.public_symbol se1 id.
+Admitted.
+
+Theorem MS1 : Genv.match_stbls' (meminj_dom f) se1 se2.
+Proof.
+  inversion MS. unfold meminj_dom. constructor; intros; eauto.
+  - eapply se2_public.
+  - intros. unfold meminj_dom in H0.
+    destruct (f b1); inv H0; eauto.
+  - intros. exists b2. apply se2_sup in H.
+    destruct H as [A [b B]].
+    rewrite B. eauto.
+  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H.
+    setoid_rewrite se2_symb. split; intro.
+    setoid_rewrite H. rewrite Hb. reflexivity.
+    destruct Genv.find_symbol eqn:F2. destruct (f b); inv H.
+    eauto. inv H.
+  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H.
+    setoid_rewrite se2_info. rewrite Hb. eauto.
+  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H.
+    split; intro. exploit mge_dom'; eauto. intro. subst.
+    rewrite se2_sup. split; eauto.
+    rewrite se2_sup in H. destruct H. eauto.
+Qed.
+
+Theorem MS2 : Genv.match_stbls' f se2 se3.
+Proof.
+  inversion MS. constructor; intros; eauto.
+  - rewrite se2_public. eauto.
+  - eapply mge_dom'; eauto. rewrite se2_sup in H. destruct H. eauto.
+  - split; intro. setoid_rewrite se2_symb in H0.
+    destruct (Genv.find_symbol se1 id) eqn: F1; try congruence.    
+    destruct (f b) eqn: INJ; try congruence. inv H0. eapply mge_symb'; eauto.
+    eapply mge_symb' in H0; eauto. setoid_rewrite se2_symb.
+    setoid_rewrite H0. rewrite H. reflexivity.
+  - setoid_rewrite se2_info. rewrite H. eapply mge_info'; eauto.
+  - split; intro. rewrite se2_sup in H0. destruct H0. eapply mge_separated'; eauto.
+    erewrite <- mge_separated' in H0; eauto.
+    exploit mge_dom'; eauto. intro. subst.
+    rewrite se2_sup. split; eauto.
+Qed.
+
+Theorem LE: Genv.skel_le sk3 sk1.
+Proof. etransitivity; eauto. Qed.
+
+Lemma Valid2: Genv.valid_for sk2 se2.
+  red. intros.
+  (*Seems wrong here*)
+
+Abort.
+
+
+
+
+
+Lemma skel_le_defnames : forall sk1 sk2 id,
+    Genv.skel_le sk2 sk1 ->
+    In id (AST.prog_defs_names sk2) ->
+    In id (AST.prog_defs_names sk1).
+Admitted.
+
+Theorem COMP1 : Genv.skel_symtbl_compatible sk1 sk2 se1 se2.
+Proof.
+  destruct COMP as [V1 [V3 [RE MAIN]]].
+  split. eauto. split. admit.
+  split. intros.
+  - exploit RE; eauto.
+    destruct (Genv.find_symbol se2 id) as [b|] eqn:F2; try congruence.
+    rewrite se2_symb in F2.
+    destruct (Genv.find_symbol se1 id) eqn:F1; try congruence.
+    destruct (f b0) as [[tb d]|] eqn: INJ; try congruence. inv F2.
+    inv MS. eapply mge_symb' in F1 as F3; eauto. setoid_rewrite F3. congruence.
+    intro. eapply skel_le_defnames; eauto.
+  - intro. apply MAIN. red. red in H.
+    destruct H as [b [A B]].
+    exists b. split. auto.
+    destruct (Genv.find_symbol se3 (AST.prog_main sk1)) eqn:F3m; eauto.
+    inversion MS. exploit mge_img'; eauto. eapply Genv.genv_symb_range; eauto.
+    intros [b2 INJ].
+    eapply mge_symb' in F3m as F1m; eauto.
+    rewrite se2_symb in B. setoid_rewrite F1m in B. rewrite INJ in B.
+    congruence.
+Admitted.
+
+End CONSTRUCT_SE2.
+
+
+
+
+
 Section COMPOSE_FORWARD_SIMULATIONS.
 
 Context (L1: semantics li_c li_c) (L2: semantics li_c li_c) (L3: semantics li_c li_c).
 
-Definition symtbl_dom (se: Genv.symtbl) : meminj :=
-  fun b => if Mem.sup_dec b (Genv.genv_sup se) then Some (b,0)
-        else None.
 
-Definition source_inj (se: Genv.symtbl) (f : meminj) :=
-  fun b => if Mem.sup_dec b (Genv.genv_sup se) then
-        Some (b,0) else meminj_dom f b.
-
-Lemma source_inj_meminj_dom_incr : forall se f,
-    inject_incr (meminj_dom f) (source_inj se f).
-Proof.
-  intros. intro. intros.
-  unfold source_inj.
-  unfold meminj_dom in *.
-  destruct (f b); try discriminate. inv H.
-  destruct Mem.sup_dec; eauto.
-Qed.
-
-Global Instance source_inj_incr se:
-  Monotonic (@source_inj se) (inject_incr ++> inject_incr).
-Proof.
-  intros f g Hfg b b' delta Hb.
-  unfold source_inj in *.
-  destruct (Mem.sup_dec). eauto.
-  eapply meminj_dom_incr; eauto.
-Qed.
-
-Lemma source_inj_compose se f:
-  compose_meminj (source_inj se f) f = f.
-Proof.
-  apply Axioms.functional_extensionality; intros b.
-  unfold compose_meminj, source_inj, meminj_dom.
-  destruct (Mem.sup_dec).
-  destruct (f b) as [[b' ofs] | ] eqn:Hfb; eauto.
-  destruct (f b) as [[b' ofs] | ] eqn:Hfb; eauto.
-  rewrite Hfb.
-  replace (0 + ofs) with ofs by extlia.
-  reflexivity.
-Qed.
-
-Lemma block_inject_dom se f b1 b2:
-  block_inject f b1 b2 ->
-  block_inject (source_inj se f) b1 b1.
-Proof.
-  unfold source_inj,meminj_dom.
-  intros (delta & Hb).
-  exists 0.
-  rewrite Hb; eauto.
-  destruct Mem.sup_dec; eauto.
-Qed.
-
-Lemma val_inject_dom se f v1 v2:
-  Val.inject f v1 v2 ->
-  Val.inject (source_inj se f) v1 v1.
-Proof.
-  destruct 1; econstructor.
-  - unfold source_inj, meminj_dom.
-    rewrite H. destruct Mem.sup_dec; eauto.
-  - rewrite Ptrofs.add_zero.
-    reflexivity.
-Qed.
-
-Lemma memval_inject_dom se f v1 v2:
-  memval_inject f v1 v2 ->
-  memval_inject (source_inj se f) v1 v1.
-Proof.
-  destruct 1; econstructor.
-  eapply val_inject_dom; eauto.
-Qed.
-
-Lemma val_inject_list_dom se f vs1 vs2:
-  Val.inject_list f vs1 vs2 ->
-  Val.inject_list (source_inj se f) vs1 vs1.
-Proof.
-  induction 1; constructor; eauto using val_inject_dom.
-Qed.
-
-Lemma mem_mem_inj_dom se f m1 m2:
-  Mem.mem_inj f m1 m2 ->
-  Mem.mem_inj (source_inj se f) m1 m1.
-Proof.
-  intros H.
-  split.
-  - unfold source_inj, meminj_dom. intros b1 b2 delta ofs k p Hb1 Hp.
-    destruct Mem.sup_dec; destruct (f b1); inv Hb1;
-    replace (ofs + 0) with ofs by extlia; auto.
-  - unfold source_inj, meminj_dom. intros b1 b2 delta chunk ofs p Hb1 Hrp.
-    destruct (Mem.sup_dec); destruct (f b1) as [[b1' delta'] | ]; inv Hb1;
-    eauto using Z.divide_0_r.
-  - unfold source_inj, meminj_dom at 1. intros b1 ofs b2 delta Hb1 Hp.
-    destruct (Mem.sup_dec) eqn:Hs; destruct (f b1) as [[b1' delta'] | ] eqn:Hb1'; inv Hb1.
-    replace (ofs + 0) with ofs by extlia.
-    eapply memval_inject_dom.
-    eapply Mem.mi_memval; eauto.
-    replace (ofs + 0) with ofs by extlia.
-    {
-      set (mv:= (Maps.ZMap.get ofs (NMap.get (Maps.ZMap.t memval) b2 (Mem.mem_contents m1)))).
-      destruct mv; constructor.
-      destruct v; econstructor.
-      rewrite pred_dec_true. 2: eauto.
-    }
-    rewrite pred_dec_true. 2: eauto.
-    Search memval_inject.
-    eapply memval_inject_dom. admit.
-    replace (ofs + 0) with ofs by extlia.
-    eapply memval_inject_dom.
-    eapply Mem.mi_memval; eauto.
-Qed.
-
-Lemma mem_inject_dom f m1 m2:
-  Mem.inject f m1 m2 ->
-  Mem.inject (meminj_dom f) m1 m1.
-Proof.
-  intros H.
-  split.
-  - eapply mem_mem_inj_dom.
-    eapply Mem.mi_inj; eauto.
-  - unfold meminj_dom. intros.
-    erewrite Mem.mi_freeblocks; eauto.
-  - unfold meminj_dom; intros.
-    destruct (f b) as [[b'' delta'] | ] eqn:Hb; inv H0.
-    eapply Mem.valid_block_inject_1; eauto.
-  - red. unfold meminj_dom. intros.
-    destruct (f b1); inv H1.
-    destruct (f b2); inv H2.
-    eauto.
-  - unfold meminj_dom. intros.
-    destruct (f b); inv H0.
-    split; try extlia.
-    rewrite Z.add_0_r.
-    apply Ptrofs.unsigned_range_2.
-  - unfold meminj_dom. intros.
-    destruct (f b1); inv H0.
-    rewrite Z.add_0_r in H1; eauto.
-Qed.
-
-Lemma match_stbls_dom f se1 se2:
-  Genv.match_stbls f se1 se2 ->
-  Genv.match_stbls (meminj_dom f) se1 se1.
-Proof.
-  intros Hse. unfold meminj_dom. split; eauto; intros.
-  - edestruct Genv.mge_dom as (b2 & Hb2); eauto. rewrite Hb2. eauto.
-  - edestruct Genv.mge_dom as (b3 & Hb3); eauto. exists b2. rewrite Hb3. eauto.
-  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
-  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
-  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
-Qed.
-
-Lemma loc_unmapped_dom f b ofs:
-  loc_unmapped (meminj_dom f) b ofs <->
-  loc_unmapped f b ofs.
-Proof.
-  unfold meminj_dom, loc_unmapped.
-  destruct (f b) as [[b' delta] | ].
-  - split; discriminate.
-  - reflexivity.
-Qed.
-
-Lemma mem_inject_source : forall f m1 m2 se,
-    Mem.inject f m1 m2 ->
-    Mem.inject (source_inj se f) m1 m1.
-Proof.
-  intros.
-  exploit mem_inject_dom; eauto.
-  intro.
-  Search Mem.inject.
-Definition soucr_world (w: injp_world) (se:Genv.symtbl) :=
+Definition id_world (w:injp_world) :=
   match w with
-  |injpw f m1 m2 Hm =>
-     injpw (source_inj se f) m1 m1 (mem_inject_dom f m1 m2 Hm)
+    injpw f m1 m2 Hm => injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m2 Hm)
   end.
 
-Lemma match_stbls_dom' f se1 se2:
-  Genv.match_stbls' f se1 se2 ->
-  Genv.match_stbls (meminj_dom f) se1 se1.
-Proof.
-  intros Hse. unfold meminj_dom. split; eauto; intros.
-  - inv Hse.
-  - inv Hse. admit
-  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
-  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
-  - destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
-Qed.
 
 Lemma compose_fsim_components':
   fsim_components' (cc_c' injp') (cc_c' injp') L1 L2 ->
