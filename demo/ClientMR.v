@@ -7,7 +7,7 @@ Require Import Ctypes Cop Clight Clightrel.
 Require Import Clightdefs.
 
 Require Import Integers Intv.
-Require Import Server Client.
+Require Import Server.
 
 (** * spec in C language *)
 (*
@@ -26,10 +26,11 @@ void request (int r){
   else return;
 }
 *)
-(*
+
 Definition result_id := 4%positive.
 Definition request_id := 6%positive.
-*)
+Definition process_id := 3%positive. (*the same as complete in Server definition*)
+Definition r_id := 7%positive.
 
 Definition N := 10%positive.
 
