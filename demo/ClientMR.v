@@ -28,8 +28,7 @@ void request (int r){
 *)
 
 Definition result_id := 4%positive.
-Definition request_id := 6%positive.
-Definition process_id := 3%positive. (*the same as complete in Server definition*)
+Definition request_id := 3%positive.
 Definition r_id := 7%positive.
 
 Definition N := 10%positive.
@@ -70,7 +69,7 @@ Definition call_encrypt' input :=
                   Tvoid cc_default)
             )
             (*arguments*)
-            (input :: (Evar process_id (Tfunction (Tcons tint Tnil) Tvoid cc_default)) :: nil)
+            (input :: (Evar request_id (Tfunction (Tcons tint Tnil) Tvoid cc_default)) :: nil)
   ).
 
 (* the expr input[index] *)

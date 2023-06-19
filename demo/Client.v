@@ -23,7 +23,7 @@ void request (int i){
 *)
 
 Definition result_id := 4%positive.
-Definition process_id := 3%positive. (*the same as complete in Server definition*)r
+Definition process_id := 3%positive. (*the same as complete in Server definition*)
 Definition request_id := 6%positive.
 
 Definition result_def :=  {|

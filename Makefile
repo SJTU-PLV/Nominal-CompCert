@@ -197,7 +197,7 @@ DRIVER=Compopts.v CallConv.v CA.v Compiler.v
 DEMO= Demo.v Demospec.v Demoproof.v \
   Server.v Serverspec.v Serverproof.v \
   Client.v ClientServerCspec.v ClientServerCspec2.v \
-  ClientServer.v
+  ClientServer.v ClientMR.v
 
 # Additional Framework for Unusedglob
 UNUSEDGLOB = Callconv.v ForwardSim.v Unusedglob.v Unusedglobproof.v \
