@@ -161,38 +161,53 @@ Let tge2 := Genv.globalenv tse b1.
 
 Hypothesis MSTB : match_stbls injp w se tse.
 
-Inductive match_kframe_request : list (frame L) -> Prop :=
-| match_kframe_request_nil:
-  match_kframe_request nil
-| match_kframe_request_call2 output m fb:
-  match_kframe_request ((st L false (Call2 fb output m)) :: nil)
-| match_kframe_request_cons output m fb1 fb2 vargs k sp le:
-  match_kframe_request k ->
-  match_kframe_request ((st L false (Call2 fb1 output m)) :: (st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m)) :: k).
+Inductive stack_acc (w: injp_world) : injp_world -> list block -> Prop :=
+| stack_acc_nil:
+  stack_acc w w nil
+| stack_acc_cons f1 m1 tm1 w1 (Hm1: Mem.inject f1 m1 tm1) lsp tm1' sp Hm1' w2
+    (Hm1: Mem.inject f1 m1 tm1)
+    (WORLD1: w1 = injpw f1 m1 tm1 Hm1)
+    (STKB: stack_acc w w1 lsp)
+    (INJP1: injp_acc w w1)
+    (ALLOC: Mem.alloc tm1 0 4 = (tm1', sp))
+    (INJP2: injp_acc (injpw f1 m1 tm1' Hm1') w2):
+  stack_acc w w2 (sp::lsp).
+  
 
-Inductive match_kframe_encrypt : list (frame L) -> Prop :=
+Inductive match_kframe_request : list block -> list (frame L) -> Prop :=
+| match_kframe_request_nil:
+  match_kframe_request nil nil
+| match_kframe_request_call2 output m fb:
+  match_kframe_request nil ((st L false (Call2 fb output m)) :: nil)
+| match_kframe_request_cons output m fb1 fb2 vargs k le lsp sp:
+  match_kframe_request lsp k ->
+  match_kframe_request (sp::lsp) ((st L false (Call2 fb1 output m)) :: (st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m)) :: k).
+
+Inductive match_kframe_encrypt : list block -> list (frame L) -> Prop :=
 | match_kframe_encrypt_nil:
-  match_kframe_encrypt nil
+  match_kframe_encrypt nil nil
 | match_kframe_encrypt_callstate m fb sp le vargs:
-  match_kframe_encrypt ((st L true (Callstate fb vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m)) :: nil)
-| match_kframe_encrypt_cons output m fb1 fb2 vargs k sp le:
-  match_kframe_encrypt k ->
-  match_kframe_encrypt ((st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m)) :: (st L false (Call2 fb1 output m)) :: k).
+  match_kframe_encrypt (sp::nil) ((st L true (Callstate fb vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m)) :: nil)
+| match_kframe_encrypt_cons output m fb1 fb2 vargs k sp le lsp:
+  match_kframe_encrypt lsp k ->
+  match_kframe_encrypt (sp::lsp) ((st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m)) :: (st L false (Call2 fb1 output m)) :: k).
 
 
 Inductive match_state: state -> list (frame L) -> Prop :=
-| match_request_intro j r rb rb' m tm ks
+| match_request_intro j r rb rb' m tm ks w1 lsp
     (Hm: Mem.inject j m tm)
-    (INJP: injp_acc w (injpw j m tm Hm))
+    (KINJP: stack_acc w w1 lsp)
+    (INJP: injp_acc w1 (injpw j m tm Hm))
     (FINDP: Genv.find_symbol se request_id = Some rb)
     (FINJ: j rb = Some (rb',0))
-    (KFRM: match_kframe_request ks):
+    (KFRM: match_kframe_request lsp ks):
   match_state (Callrequest r m) ((st L true (Callstate (Vptr rb' Ptrofs.zero) (Vint r :: nil) Kstop tm)) :: ks)
-| match_encrypt_intro j v tv m tm input ks
+| match_encrypt_intro j v tv m tm input ks w1 lsp
     (Hm: Mem.inject j m tm)
-    (INJP: injp_acc w (injpw j m tm Hm))
+    (KINJP: stack_acc w w1 lsp)
+    (INJP: injp_acc w1 (injpw j m tm Hm))
     (VINJ: Val.inject j v tv)
-    (KFRM: match_kframe_encrypt ks):
+    (KFRM: match_kframe_encrypt lsp ks):
   match_state (Callencrypt input v m) ((st L false (Call1 tv input tm)) :: ks)
 | match_return_introc j m tm
   (Hm: Mem.inject j m tm)
@@ -223,6 +238,49 @@ Admitted.
 
 
 End MS.
+
+
+Lemma stack_acc_injp_acc: forall w1 w2 lsp,
+    stack_acc w1 w2 lsp ->
+    injp_acc w1 w2.
+Proof.
+  intros. induction H.
+  reflexivity.
+  etransitivity. eapply IHstack_acc.
+  etransitivity. 2: eapply INJP2.
+  subst.
+  assert (ro_acc m1 m1). eapply ro_acc_refl.
+  assert (ro_acc tm1 tm1'). eapply ro_acc_alloc;eauto.
+  inv H0. inv H1.
+  econstructor; eauto.
+  eapply Mem.unchanged_on_refl.
+  eapply Mem.alloc_unchanged_on;eauto.
+  eapply inject_separated_refl.
+Qed.
+
+Lemma maxv:
+  Ptrofs.max_unsigned = 18446744073709551615.
+Proof.
+  unfold Ptrofs.max_unsigned. unfold Ptrofs.modulus. unfold Ptrofs.wordsize.
+  unfold two_power_nat. unfold Wordsize_Ptrofs.wordsize.
+  replace Archi.ptr64 with true by reflexivity. reflexivity.
+Qed.
+
+
+(* idx == 0 *)
+Lemma exec_request_mem1:
+  forall ib tib sm sm1 m idx output j,
+    Mem.storev Mint32 sm (Vptr ib Ptrofs.zero) (Vint idx) = Some sm1 ->
+    Mem.inject j sm m ->
+    j ib = Some (tib,0) ->
+    exists m1 m2 m3 sp,
+      Mem.alloc m 0 4 = (m1, sp) /\
+        Mem.storev Mint32 m1 (Vptr sp Ptrofs.zero) (Vint output) = Some m2 /\
+        Mem.storev Mint32 m2 (Vptr tib Ptrofs.zero) (Vint idx) = Some m3 /\    
+        Mem.unchanged_on (fun b ofs => b = tib -> ~ 0 <= ofs < 4) m m3 /\
+        Mem.inject j sm1 m3.
+Admitted.
+
 
 Lemma top_simulation_L1:
   forward_simulation (cc_c injp) (cc_c injp) top_spec1 composed_spec1.
@@ -294,7 +352,7 @@ Proof.
        rewrite <- H.
        econstructor; eauto.
        constructor; cbn; eauto. constructor; eauto. constructor.
-      -- econstructor; eauto. reflexivity. constructor.
+      -- econstructor; eauto. eapply stack_acc_nil.  reflexivity. constructor.
     + (* initial encrypt *)
             inv Hse.
       eapply Genv.find_symbol_match in H5 as FIND'; eauto.
@@ -309,7 +367,7 @@ Proof.
          cbn;econstructor;eauto.
       -- simpl. inv H1. econstructor; eauto.
       -- inv H1.
-         econstructor;eauto. reflexivity.
+         econstructor;eauto. eapply stack_acc_nil. reflexivity.
          constructor.
   (* final state *)
   - intros s1 s2 r1 Hms Hf1. inv Hf1. inv Hms;
@@ -323,7 +381,53 @@ Proof.
       eexists. split. eauto. constructor; eauto. constructor.
   - intros. cbn in *. inv H0.
   (* step *)
-  - Admitted.
-        
+  - intros. inv H; inv H0.
+
+    (* request: index == 0 *)
+    + generalize Hse. intros Hse2.
+      inv Hse. inv INJP.
+      exploit (Genv.find_symbol_match H). eapply FINDP.
+      intros (trb & FINDP3 & FINDSYMB).
+      rewrite FINDREQ in FINDP. inv FINDP.
+      exploit (Genv.find_symbol_match H). eapply FINDIDX.
+      intros (tidb & FINDP4 & FINDTIDB).
+      (* stack_acc implies injp_acc *)
+      exploit stack_acc_injp_acc. eapply KINJP. intro INJP1.
+      inv INJP1.
+      (* introduce the memory produced by target memory *)
+      exploit (exec_request_mem1). eapply ADDIDX. eapply Hm. eapply H12. eapply H22.
+      eauto. instantiate (1:= r).
+      intros (tm1 & tm2 & tm3 & sp & ALLOCTM & STORETM1 & STORETM2 & UNCTM & INJM').
+      (* step1 : evaluate the function entry *)
+      simpl. eexists. split.
+      eapply plus_star_trans.
+      econstructor. econstructor. simpl.      
+      (* step_internal *)
+      econstructor. eapply find_request;eauto. eapply H22 in FINDP3 as FINDP3'.
+      eapply H12 in FINDP3'.
+      rewrite FINJ in FINDP3'. inv FINDP3'.  auto.
+      (* function entry *)    
+      econstructor; simpl.
+      constructor; eauto. constructor.
+      econstructor; eauto.
+      constructor.
+      econstructor; eauto. rewrite Maps.PTree.gss. reflexivity.
+      econstructor; cbn; eauto.
+      econstructor; eauto. reflexivity.
+      eapply star_step; eauto.
+      (* step2: if else condition *)
+      econstructor;simpl.
+      econstructor. econstructor. econstructor. eapply eval_Evar_global.
+      auto. eauto. econstructor. econstructor. etransitivity.
+      simpl. erewrite Mem.load_store_other. 2: eapply STORETM1.
+      eapply Mem.load_alloc_other;eauto. instantiate (1:= Vint idx).
+      exploit Mem.load_inject. eapply Hm'1. eauto. eauto.
+      rewrite Ptrofs.unsigned_zero.
+      simpl. intros (v2 & ? & ?). inv H3;try congruence.
+      left. 
+      
+Admitted.
+                                        
+      
 End MS.
 End WITH_N.
