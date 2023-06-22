@@ -424,7 +424,64 @@ Proof.
       exploit Mem.load_inject. eapply Hm'1. eauto. eauto.
       rewrite Ptrofs.unsigned_zero.
       simpl. intros (v2 & ? & ?). inv H3;try congruence.
-      left. 
+      left. unfold not. intro. eapply Mem.fresh_block_alloc. eapply ALLOCTM.
+      subst. eapply Mem.valid_block_inject_2.
+      2: eapply Hm'1. eapply H12. eapply H22.
+      eapply FINDP4.
+      reflexivity.
+      econstructor. simpl. unfold Cop.sem_cmp. simpl. unfold Cop.sem_binarith.
+      simpl. unfold Cop.sem_cast. simpl. destruct Archi.ptr64 eqn: PTR. simpl.
+      unfold Int.zero in COND. rewrite COND. simpl. reflexivity. destruct Ctypes.intsize_eq.
+      simpl. unfold Int.zero in COND. rewrite COND. simpl. reflexivity. congruence.
+      simpl. unfold Cop.bool_val. simpl. f_equal.
+      destruct (Int.eq Int.one Int.zero) eqn: EQ.
+      rewrite Int.eq_false in EQ;try congruence.
+      eapply Int.one_not_zero.
+      simpl.
+      (* step3: index plus one *)
+      eapply star_step;eauto.
+      econstructor;simpl. unfold call_encrypt_indexplus.
+      econstructor. eapply star_step;eauto. econstructor;simpl. 
+      econstructor.
+      eapply eval_Evar_global.
+      auto. eauto. econstructor. econstructor.
+      eapply eval_Evar_global.
+      auto. eauto. econstructor. econstructor.
+      (* load index: TODO requires a lemma for loading index *)
+      simpl. erewrite Mem.load_store_other. 2: eapply STORETM1.
+      eapply Mem.load_alloc_other;eauto. instantiate (1:= Vint idx).
+      exploit Mem.load_inject. eapply Hm'1. eauto. eauto.
+      rewrite Ptrofs.unsigned_zero.
+      simpl. intros (v2 & ? & ?). inv H3;try congruence.
+      left. unfold not. intro. eapply Mem.fresh_block_alloc. eapply ALLOCTM.
+      subst. eapply Mem.valid_block_inject_2.
+      2: eapply Hm'1. eapply H12. eapply H22.
+      eapply FINDP4.
+      (* evaluate add index *)
+      econstructor. simpl. unfold Cop.sem_add. simpl. unfold Cop.sem_binarith.
+      simpl. unfold Cop.sem_cast. simpl.
+      destruct Archi.ptr64 eqn: PTR. simpl. reflexivity.
+      destruct Ctypes.intsize_eq. auto. 
+      simpl. auto. unfold Cop.sem_cast. simpl.
+      destruct Archi.ptr64 eqn: PTR. simpl. reflexivity.
+      destruct Ctypes.intsize_eq. auto.
+      simpl. auto.
+      (* store index *)
+      econstructor. simpl. eauto.
+      fold Int.one. eauto.
+      (* step4: call encrypt *)
+      eapply star_step;eauto. econstructor. simpl.
+      econstructor.
+      eapply star_step;eauto. unfold call_encrypt'.
+      econstructor. simpl. 
+      econstructor. simpl. eauto.
+      econstructor. eapply eval_Evar_global. eauto.
+      (* find encrypt symbol *) admit.
+      eapply deref_loc_reference. simpl. auto. (* deref_loc *)
+      (* evaluate expression list *)
+      econstructor. econstructor. econstructor.
+      econstructor. econstructor. eapply eval_Evar_global. auto.
+      (* need find input id lemma *)
       
 Admitted.
                                         
