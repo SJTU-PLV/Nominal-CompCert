@@ -117,7 +117,7 @@ Inductive step : state -> trace -> state -> Prop :=
   (FINDE: Genv.find_symbol se encrypt_id = Some eb)
   (READIDX: Mem.loadv Mint32 m (Vptr idb Ptrofs.zero) = Some (Vint idx))
   (COND: Int.lt Int.zero idx && Int.lt idx Nint = true)
-  (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.sub (Ptrofs.of_int idx) (Ptrofs.one)))) (Vint r) = Some m')
+  (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints (Int.sub idx (Int.repr 1))))) (Vint r) = Some m')
   (ADDIDX: Mem.storev Mint32 m' (Vptr idb Ptrofs.zero) (Vint (Int.add idx Int.one)) = Some m'')
   (* 4 * (index - 1) *)
   (READINPUT: Mem.loadv Mint32 m'' (Vptr inb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints idx))) = Some (Vint input)):
@@ -127,7 +127,7 @@ Inductive step : state -> trace -> state -> Prop :=
   (FINDRES: Genv.find_symbol se result_id = Some rsb)
   (READIDX: Mem.loadv Mint32 m (Vptr idb Ptrofs.zero) = Some (Vint idx))
   (COND: Int.cmp Cge idx Nint = true)
-  (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.sub (Ptrofs.of_int idx) (Ptrofs.one)))) (Vint r) = Some m'):
+  (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints (Int.sub idx (Int.repr 1))))) (Vint r) = Some m'):
   step (Callrequest r m) E0 (Return m')
 | step_encrypt kb rb key input m output
    (FINDK: Genv.find_symbol se key_id = Some kb)
@@ -184,20 +184,16 @@ Inductive stack_acc (w: injp_world) : injp_world -> list block -> Prop :=
 Inductive match_kframe_request: list block -> list (frame L) -> Prop :=
 | match_kframe_request_nil:
   match_kframe_request nil nil
-| match_kframe_request_call2 output m fb:
-  match_kframe_request nil ((st L false (Call2 fb output m)) :: nil)
-| match_kframe_request_cons output m1 m2 fb1 fb2 vargs k le lsp sp:
-  match_kframe_encrypt lsp ((st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m2)) :: k) ->
-  match_kframe_request lsp ((st L false (Call2 fb1 output m1)) :: (st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m2)) :: k)
+| match_kframe_request_cons output m fb k lsp:
+  match_kframe_encrypt lsp k ->
+  match_kframe_request lsp ((st L false (Call2 fb output m)) :: k)
                        
 with match_kframe_encrypt : list block -> list (frame L) -> Prop :=
 | match_kframe_encrypt_nil:
   match_kframe_encrypt nil nil
-| match_kframe_encrypt_callstate m fb sp le vargs:
-  match_kframe_encrypt (sp::nil) ((st L true (Callstate fb vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m)) :: nil)
-| match_kframe_encrypt_cons output m1 m2 fb1 fb2 vargs k sp le lsp:
-  match_kframe_request lsp ((st L false (Call2 fb1 output m2)) :: k) ->
-  match_kframe_encrypt (sp::lsp) ((st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m1)) :: (st L false (Call2 fb1 output m2)) :: k).
+| match_kframe_encrypt_cons m fb vargs k sp le lsp:
+  match_kframe_request lsp k ->
+  match_kframe_encrypt (sp::lsp) (st L true (Callstate fb vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m) :: k).
 
   
   
@@ -371,6 +367,7 @@ Lemma exec_request_mem2:
       Mem.alloc tm 0 4 = (tm1, sp) /\
         Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint output) = Some tm2 /\
         Mem.loadv Mint32  tm2 (Vptr tib Ptrofs.zero) = Some (Vint idx) /\
+        Mem.loadv Mint32 tm2 (Vptr sp Ptrofs.zero) = Some (Vint r) /\
         Mem.storev Mint32 tm2 (Vptr tresb ofs1) (Vint r) = Some tm3 /\
         Mem.loadv Mint32 tm3 (Vptr tib Ptrofs.zero) = Some (Vint idx') /\
         Mem.storev Mint32 tm3 (Vptr tib Ptrofs.zero) (Vint idx'') = Some tm4 /\
@@ -390,6 +387,7 @@ Lemma exec_request_mem3:
       Mem.alloc tm 0 4 = (tm1, sp) /\
         Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint r) = Some tm2 /\
         Mem.loadv Mint32  tm2 (Vptr tib Ptrofs.zero) = Some (Vint idx) /\
+        Mem.loadv Mint32 tm2 (Vptr sp Ptrofs.zero) = Some (Vint r) /\
         Mem.storev Mint32 tm2 (Vptr tresb ofs1) (Vint r) = Some tm3 /\
         Mem.free tm3 sp 0 4 = Some tm4 /\
         (* Mem.unchanged_on (fun b ofs => b = tresb -> ~ (Ptrofs.signed ofs1) <= ofs < (Ptrofs.signed ofs1 + 4)) tm tm4 /\ *)
@@ -642,7 +640,7 @@ Proof.
       eauto.
       (* match_kframe *)
       inv KFRM. econstructor. econstructor. econstructor.
-      econstructor. econstructor. eauto.
+      econstructor. eauto.
       
     (* request: 0 < index < N *)
     + admit.
@@ -666,7 +664,7 @@ Proof.
       eapply H12. eapply H22. eauto.
       eapply H12. eapply H22. eauto.
       instantiate (2:= tm). instantiate (1:= Hm).
-      intros (tm1 & tm2 & tm3 & tm4 & sp & INJTM4 & ALLOCTM & STORETM1 & LOADTM2 & STORETM2 & FREETM3 & INJPTM4).
+      intros (tm1 & tm2 & tm3 & tm4 & sp & INJTM4 & ALLOCTM & STORETM1 & LOADTM2 & LOADSP & STORETM2 & FREETM3 & INJPTM4).
       (* step1: function entry *)
       simpl. eexists. split.
       eapply plus_star_trans.
@@ -691,7 +689,57 @@ Proof.
       (* load index *)
       eauto.
       econstructor. simpl. erewrite sem_cmp_int_int. simpl. fold Int.zero.
-        
+      rewrite ge_N_not_zero. eauto. auto.
+      simpl. unfold Cop.bool_val. simpl. rewrite Int.eq_true. eauto.
+      simpl.
+      (* step3: if(0<index<N) *)
+      unfold if_index_gt_0_lt_N. eapply star_step;eauto.
+      econstructor;simpl. econstructor. econstructor. econstructor.
+      econstructor.
+      eapply eval_Evar_global. auto. eauto.
+      econstructor. simpl. eauto.
+      eauto. econstructor. simpl. rewrite sem_cmp_int_int.
+      simpl.                    
+      eauto. econstructor. econstructor. eapply eval_Evar_global.
+      auto. eauto. econstructor. simpl. eauto. eauto.
+      econstructor. simpl. rewrite sem_cmp_int_int.
+      simpl. simpl in COND. rewrite negb_true_iff in COND.
+      unfold Nint in COND. rewrite COND. simpl. eauto.
+      eauto. unfold Val.of_bool. destruct Int.lt.
+      (* sem_and *)
+      simpl. unfold Cop.sem_and. unfold Cop.sem_binarith. unfold Cop.sem_cast. simpl.
+      destruct Archi.ptr64 eqn:PTR. simpl. rewrite Int.and_zero. eauto.
+      destruct Ctypes.intsize_eq;try congruence. simpl. rewrite Int.and_zero. eauto.
+      simpl.
+      unfold Cop.sem_and. unfold Cop.sem_binarith. unfold Cop.sem_cast. simpl.
+      destruct Archi.ptr64 eqn:PTR. simpl. rewrite Int.and_zero. eauto.
+      destruct Ctypes.intsize_eq;try congruence. simpl. rewrite Int.and_zero. eauto.
+      simpl. unfold Cop.bool_val. simpl. rewrite Int.eq_true. eauto.
+      simpl.
+      (* step4: else branch *)
+      eapply star_step;eauto. econstructor. simpl.
+      (* evaluate result index *)
+      econstructor. econstructor.  econstructor.
+      econstructor. eapply eval_Evar_global;eauto.
+      eapply deref_loc_reference. eauto.
+      econstructor. econstructor. eapply eval_Evar_global;eauto.
+      econstructor. simpl. eauto.
+      eauto. econstructor. simpl.
+      unfold Cop.sem_sub. simpl. unfold Cop.sem_binarith. simpl.
+      rewrite! sem_cast_int_int. eauto.
+      simpl. unfold Cop.sem_add. unfold Cop.sem_binarith. simpl.
+      eauto.      
+      econstructor. eapply eval_Evar_local. eapply Maps.PTree.gss.
+      econstructor. simpl. eauto. eauto.
+      simpl. erewrite sem_cast_int_int. eauto.
+      econstructor. simpl. eauto.
+      rewrite Ptrofs.add_zero_l. eauto.
+      (* step5: return state *)
+      eapply star_step;eauto. econstructor. simpl.
+      econstructor. unfold is_call_cont. auto.
+      (* free list *)
+      simpl. rewrite FREETM3. eauto.
+      
       
 Admitted.
                                         

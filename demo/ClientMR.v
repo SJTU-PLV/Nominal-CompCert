@@ -108,7 +108,7 @@ Definition if_index_gt_0_lt_N :=
     tbool.
 
 Definition assign_result:=
-  (Sassign (result_index) (Etempvar r_id tint)).
+  (Sassign (result_index) (Evar r_id tint)).
 
 Definition func_request :=
   {|
