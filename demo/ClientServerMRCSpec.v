@@ -36,6 +36,8 @@ Definition linked_skel1 : program unit unit:=
 Section WITH_N.
 
 Variable N: Z.  
+Hypothesis bound_N: 0 < N < Int.max_signed. 
+
 
 Let client := client N.
 Let func_request := func_request N.
@@ -97,32 +99,35 @@ Definition valid_query (q: query li_c) : bool :=
 Definition Nint := (Int.repr N).
 
 Inductive step : state -> trace -> state -> Prop :=
-| step_request1 r input rb idb inb idx m m'
+| step_request1 r input rb idb inb eb idx m m'
   (FINDIDX: Genv.find_symbol se index_id = Some idb)
   (FINDREQ: Genv.find_symbol se request_id = Some rb)
   (FINDINPUT: Genv.find_symbol se input_id = Some inb)
+  (FINDE: Genv.find_symbol se encrypt_id = Some eb)
   (READIDX: Mem.loadv Mint32 m (Vptr idb Ptrofs.zero) = Some (Vint idx))
   (COND: Int.eq idx Int.zero = true)
   (ADDIDX: Mem.storev Mint32 m (Vptr idb Ptrofs.zero) (Vint (Int.add idx Int.one)) = Some m')
-  (READINPUT: Mem.loadv Mint32 m' (Vptr inb (Ptrofs.sub (Ptrofs.of_int idx) (Ptrofs.one))) = Some (Vint input)):
+  (READINPUT: Mem.loadv Mint32 m' (Vptr inb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints idx))) = Some (Vint input)):
   step (Callrequest r m) E0 (Callencrypt input (Vptr rb Ptrofs.zero) m')
-| step_request2 r input rb idb inb rsb idx m m' m''
+| step_request2 r input rb idb inb rsb eb idx m m' m''
   (FINDIDX: Genv.find_symbol se index_id = Some idb)
   (FINDREQ: Genv.find_symbol se request_id = Some rb)
   (FINDINPUT: Genv.find_symbol se input_id = Some inb)
   (FINDRES: Genv.find_symbol se result_id = Some rsb)
+  (FINDE: Genv.find_symbol se encrypt_id = Some eb)
   (READIDX: Mem.loadv Mint32 m (Vptr idb Ptrofs.zero) = Some (Vint idx))
   (COND: Int.lt Int.zero idx && Int.lt idx Nint = true)
-  (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.sub (Ptrofs.of_int idx) (Ptrofs.one))) (Vint r) = Some m')
+  (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.sub (Ptrofs.of_int idx) (Ptrofs.one)))) (Vint r) = Some m')
   (ADDIDX: Mem.storev Mint32 m' (Vptr idb Ptrofs.zero) (Vint (Int.add idx Int.one)) = Some m'')
-  (READINPUT: Mem.loadv Mint32 m'' (Vptr inb (Ptrofs.sub (Ptrofs.of_int idx) (Ptrofs.one))) = Some (Vint input)):
+  (* 4 * (index - 1) *)
+  (READINPUT: Mem.loadv Mint32 m'' (Vptr inb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints idx))) = Some (Vint input)):
   step (Callrequest r m) E0 (Callencrypt input (Vptr rb Ptrofs.zero) m'')
 | step_request3 r idb rsb idx m m'
   (FINDIDX: Genv.find_symbol se index_id = Some idb)
   (FINDRES: Genv.find_symbol se result_id = Some rsb)
   (READIDX: Mem.loadv Mint32 m (Vptr idb Ptrofs.zero) = Some (Vint idx))
   (COND: Int.cmp Cge idx Nint = true)
-  (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.sub (Ptrofs.of_int idx) (Ptrofs.one))) (Vint r) = Some m'):
+  (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.sub (Ptrofs.of_int idx) (Ptrofs.one)))) (Vint r) = Some m'):
   step (Callrequest r m) E0 (Return m')
 | step_encrypt kb rb key input m output
    (FINDK: Genv.find_symbol se key_id = Some kb)
@@ -162,8 +167,9 @@ Let tge2 := Genv.globalenv tse b1.
 Hypothesis MSTB : match_stbls injp w se tse.
 
 Inductive stack_acc (w: injp_world) : injp_world -> list block -> Prop :=
-| stack_acc_nil:
-  stack_acc w w nil
+| stack_acc_nil w':
+  injp_acc w w' ->
+  stack_acc w w' nil
 | stack_acc_cons f1 m1 tm1 w1 (Hm1: Mem.inject f1 m1 tm1) lsp tm1' sp Hm1' w2
     (Hm1: Mem.inject f1 m1 tm1)
     (WORLD1: w1 = injpw f1 m1 tm1 Hm1)
@@ -174,24 +180,27 @@ Inductive stack_acc (w: injp_world) : injp_world -> list block -> Prop :=
   stack_acc w w2 (sp::lsp).
   
 
-Inductive match_kframe_request : list block -> list (frame L) -> Prop :=
+
+Inductive match_kframe_request: list block -> list (frame L) -> Prop :=
 | match_kframe_request_nil:
   match_kframe_request nil nil
 | match_kframe_request_call2 output m fb:
   match_kframe_request nil ((st L false (Call2 fb output m)) :: nil)
-| match_kframe_request_cons output m fb1 fb2 vargs k le lsp sp:
-  match_kframe_request lsp k ->
-  match_kframe_request (sp::lsp) ((st L false (Call2 fb1 output m)) :: (st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m)) :: k).
-
-Inductive match_kframe_encrypt : list block -> list (frame L) -> Prop :=
+| match_kframe_request_cons output m1 m2 fb1 fb2 vargs k le lsp sp:
+  match_kframe_encrypt lsp ((st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m2)) :: k) ->
+  match_kframe_request lsp ((st L false (Call2 fb1 output m1)) :: (st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m2)) :: k)
+                       
+with match_kframe_encrypt : list block -> list (frame L) -> Prop :=
 | match_kframe_encrypt_nil:
   match_kframe_encrypt nil nil
 | match_kframe_encrypt_callstate m fb sp le vargs:
   match_kframe_encrypt (sp::nil) ((st L true (Callstate fb vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m)) :: nil)
-| match_kframe_encrypt_cons output m fb1 fb2 vargs k sp le lsp:
-  match_kframe_encrypt lsp k ->
-  match_kframe_encrypt (sp::lsp) ((st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m)) :: (st L false (Call2 fb1 output m)) :: k).
+| match_kframe_encrypt_cons output m1 m2 fb1 fb2 vargs k sp le lsp:
+  match_kframe_request lsp ((st L false (Call2 fb1 output m2)) :: k) ->
+  match_kframe_encrypt (sp::lsp) ((st L true (Callstate fb2 vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m1)) :: (st L false (Call2 fb1 output m2)) :: k).
 
+  
+  
 
 Inductive match_state: state -> list (frame L) -> Prop :=
 | match_request_intro j r rb rb' m tm ks w1 lsp
@@ -236,6 +245,26 @@ Lemma find_encrypt:
 Proof.
 Admitted.
 
+Lemma find_encrypt_1:
+  forall rb rb' j,
+    Genv.match_stbls j se tse ->
+    Genv.find_symbol se encrypt_id = Some rb ->
+    j rb = Some (rb',0) ->
+    Genv.find_funct tge1 (Vptr rb' Ptrofs.zero) = Some (func_encrypt_external).
+Admitted.
+
+Lemma find_encrypt':
+  forall rb j,
+    Genv.match_stbls j se tse ->
+    Genv.find_symbol se encrypt_id = Some rb ->
+    exists rb', j rb = Some (rb',0) /\ Genv.find_symbol tge2 encrypt_id = Some rb' /\
+    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b1).
+Proof.
+  intros. eapply Genv.find_symbol_match in H as F; eauto.
+  destruct F as [rb' [A B]].
+  exists rb'. split. eauto. split. eauto.
+  eapply find_encrypt; eauto.
+Qed.
 
 End MS.
 
@@ -245,7 +274,7 @@ Lemma stack_acc_injp_acc: forall w1 w2 lsp,
     injp_acc w1 w2.
 Proof.
   intros. induction H.
-  reflexivity.
+  auto.
   etransitivity. eapply IHstack_acc.
   etransitivity. 2: eapply INJP2.
   subst.
@@ -258,6 +287,17 @@ Proof.
   eapply inject_separated_refl.
 Qed.
 
+Lemma stack_acc_compose_injp_acc: forall w1 w2 w3 lsp,
+    stack_acc w1 w2 lsp ->
+    injp_acc w2 w3 ->
+    stack_acc w1 w3 lsp.
+Proof.
+  intros.
+  inv H. econstructor. etransitivity;eauto.
+  econstructor;eauto. etransitivity;eauto.
+Qed.
+
+
 Lemma maxv:
   Ptrofs.max_unsigned = 18446744073709551615.
 Proof.
@@ -266,19 +306,94 @@ Proof.
   replace Archi.ptr64 with true by reflexivity. reflexivity.
 Qed.
 
+Lemma sem_cast_int_int: forall v m,
+    Cop.sem_cast (Vint v) Ctypesdefs.tint Ctypesdefs.tint m = Some (Vint v).
+Proof.
+  intros.
+  unfold Cop.sem_cast. simpl.
+  destruct Archi.ptr64. simpl. auto.
+  destruct Ctypes.intsize_eq;try congruence.
+Qed.
+
+Lemma sem_cmp_int_int: forall v1 v2 m c,
+    Cop.sem_cmp c (Vint v1) Ctypesdefs.tint (Vint v2) Ctypesdefs.tint m = Some (Val.of_bool (Int.cmp c v1 v2)).
+Proof.
+  intros. unfold Cop.sem_cmp. simpl.
+  unfold Cop.sem_binarith. simpl. repeat rewrite sem_cast_int_int.
+  auto.
+Qed.
+
+Lemma int_one_not_eq_zero:
+  Int.eq Int.one Int.zero = false.
+  destruct (Int.eq Int.one Int.zero) eqn:EQ. exfalso.
+  eapply Int.one_not_zero. exploit Int.eq_spec. rewrite EQ.
+  auto. auto.
+Qed.
+
+Lemma ge_N_not_zero: forall idx,
+  Int.cmp Cge idx Nint = true ->
+  Int.eq idx Int.zero = false.
+Admitted.
+
 
 (* idx == 0 *)
 Lemma exec_request_mem1:
-  forall ib tib sm sm1 m idx output j,
-    Mem.storev Mint32 sm (Vptr ib Ptrofs.zero) (Vint idx) = Some sm1 ->
-    Mem.inject j sm m ->
+  forall ib tib sm sm1 tm idx idx' output j inb ofs input tinb,
+    Mem.loadv Mint32 sm (Vptr ib Ptrofs.zero) = Some (Vint idx) ->
+    Mem.storev Mint32 sm (Vptr ib Ptrofs.zero) (Vint idx') = Some sm1 ->
+    Mem.loadv Mint32 sm1 (Vptr inb ofs) = Some (Vint input) ->
+    Mem.inject j sm tm ->
     j ib = Some (tib,0) ->
-    exists m1 m2 m3 sp,
-      Mem.alloc m 0 4 = (m1, sp) /\
-        Mem.storev Mint32 m1 (Vptr sp Ptrofs.zero) (Vint output) = Some m2 /\
-        Mem.storev Mint32 m2 (Vptr tib Ptrofs.zero) (Vint idx) = Some m3 /\    
-        Mem.unchanged_on (fun b ofs => b = tib -> ~ 0 <= ofs < 4) m m3 /\
-        Mem.inject j sm1 m3.
+    exists tm1 tm2 tm3 sp,
+      Mem.alloc tm 0 4 = (tm1, sp) /\
+        Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint output) = Some tm2 /\
+        Mem.storev Mint32 tm2 (Vptr tib Ptrofs.zero) (Vint idx') = Some tm3 /\
+        Mem.loadv Mint32  tm2 (Vptr tib Ptrofs.zero) = Some (Vint idx) /\
+        Mem.loadv Mint32  tm3 (Vptr tib Ptrofs.zero) = Some (Vint idx') /\
+        Mem.loadv Mint32 tm3 (Vptr tinb ofs) = Some (Vint input) /\
+        Mem.unchanged_on (fun b ofs => b = tib -> ~ 0 <= ofs < 4) tm tm3 /\
+        Mem.inject j sm1 tm3.
+Admitted.
+
+(* 0 < index < N *)
+Lemma exec_request_mem2:
+  forall ib tib sm sm1 sm2 tm idx idx' idx'' output j r ofs1 ofs2 inb tinb input resb tresb,
+    Mem.loadv Mint32 sm (Vptr ib Ptrofs.zero) = Some (Vint idx) ->
+    Mem.storev Mint32 sm (Vptr resb ofs1) (Vint r) = Some sm1 ->
+    Mem.loadv Mint32 sm1 (Vptr ib Ptrofs.zero) = Some (Vint idx') ->
+    Mem.storev Mint32 sm1 (Vptr ib Ptrofs.zero) (Vint idx'') = Some sm2 ->
+    Mem.loadv Mint32 sm2 (Vptr inb ofs2) = Some (Vint input) ->
+    Mem.inject j sm tm ->
+    j ib = Some (tib,0) ->
+    j inb = Some (tinb,0) ->
+    j resb = Some (tresb,0) ->
+    exists tm1 tm2 tm3 tm4 sp,
+      Mem.alloc tm 0 4 = (tm1, sp) /\
+        Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint output) = Some tm2 /\
+        Mem.loadv Mint32  tm2 (Vptr tib Ptrofs.zero) = Some (Vint idx) /\
+        Mem.storev Mint32 tm2 (Vptr tresb ofs1) (Vint r) = Some tm3 /\
+        Mem.loadv Mint32 tm3 (Vptr tib Ptrofs.zero) = Some (Vint idx') /\
+        Mem.storev Mint32 tm3 (Vptr tib Ptrofs.zero) (Vint idx'') = Some tm4 /\
+        Mem.loadv Mint32 tm4 (Vptr inb ofs2) = Some (Vint input) /\
+        Mem.unchanged_on (fun b ofs => (b = tib -> ~ 0 <= ofs < 4) /\ (b = tresb -> ~ (Ptrofs.signed ofs1) <= ofs < (Ptrofs.signed ofs1) + 4)) tm tm4 /\
+        Mem.inject j sm2 tm4.
+Admitted.
+
+(* idnex >= N *)
+Lemma exec_request_mem3:
+  forall ib tib sm sm1 tm idx r j ofs1 resb tresb Hm0,
+    Mem.loadv Mint32 sm (Vptr ib Ptrofs.zero) = Some (Vint idx) ->
+    Mem.storev Mint32 sm (Vptr resb ofs1) (Vint r) = Some sm1 ->
+    j ib = Some (tib,0) ->
+    j resb = Some (tresb,0) ->
+    exists tm1 tm2 tm3 tm4 sp Hm1,
+      Mem.alloc tm 0 4 = (tm1, sp) /\
+        Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint r) = Some tm2 /\
+        Mem.loadv Mint32  tm2 (Vptr tib Ptrofs.zero) = Some (Vint idx) /\
+        Mem.storev Mint32 tm2 (Vptr tresb ofs1) (Vint r) = Some tm3 /\
+        Mem.free tm3 sp 0 4 = Some tm4 /\
+        (* Mem.unchanged_on (fun b ofs => b = tresb -> ~ (Ptrofs.signed ofs1) <= ofs < (Ptrofs.signed ofs1 + 4)) tm tm4 /\ *)
+        injp_acc (injpw j sm tm Hm0) (injpw j sm1 tm4 Hm1).
 Admitted.
 
 
@@ -352,7 +467,7 @@ Proof.
        rewrite <- H.
        econstructor; eauto.
        constructor; cbn; eauto. constructor; eauto. constructor.
-      -- econstructor; eauto. eapply stack_acc_nil.  reflexivity. constructor.
+      -- econstructor; eauto. eapply stack_acc_nil.  reflexivity. reflexivity. constructor.
     + (* initial encrypt *)
             inv Hse.
       eapply Genv.find_symbol_match in H5 as FIND'; eauto.
@@ -367,7 +482,7 @@ Proof.
          cbn;econstructor;eauto.
       -- simpl. inv H1. econstructor; eauto.
       -- inv H1.
-         econstructor;eauto. eapply stack_acc_nil. reflexivity.
+         econstructor;eauto. eapply stack_acc_nil. reflexivity. reflexivity.
          constructor.
   (* final state *)
   - intros s1 s2 r1 Hms Hf1. inv Hf1. inv Hms;
@@ -385,19 +500,25 @@ Proof.
 
     (* request: index == 0 *)
     + generalize Hse. intros Hse2.
+      generalize INJP. intros INJP'.
       inv Hse. inv INJP.
       exploit (Genv.find_symbol_match H). eapply FINDP.
       intros (trb & FINDP3 & FINDSYMB).
       rewrite FINDREQ in FINDP. inv FINDP.
       exploit (Genv.find_symbol_match H). eapply FINDIDX.
       intros (tidb & FINDP4 & FINDTIDB).
+      exploit (Genv.find_symbol_match H). eapply FINDINPUT.
+      intros (tinb & FINDP5 & FINDINB).
+      exploit find_encrypt'. eauto. eauto. eapply FINDE.
+      intros (teb & FINDP6 & FINDTEB & FINDENC).
+            
       (* stack_acc implies injp_acc *)
       exploit stack_acc_injp_acc. eapply KINJP. intro INJP1.
       inv INJP1.
       (* introduce the memory produced by target memory *)
-      exploit (exec_request_mem1). eapply ADDIDX. eapply Hm. eapply H12. eapply H22.
-      eauto. instantiate (1:= r).
-      intros (tm1 & tm2 & tm3 & sp & ALLOCTM & STORETM1 & STORETM2 & UNCTM & INJM').
+      exploit (exec_request_mem1). eapply READIDX. eapply ADDIDX. eapply READINPUT. eapply Hm. eapply H12. eapply H22.
+      eauto. instantiate (2:= r). instantiate (1:= tinb).
+      intros (tm1 & tm2 & tm3 & sp & ALLOCTM & STORETM1 & STORETM2 & LOADTM2 & LOADIDXTM3 & LOADINPUTTM3 & UNCTM & INJM').
       (* step1 : evaluate the function entry *)
       simpl. eexists. split.
       eapply plus_star_trans.
@@ -418,26 +539,24 @@ Proof.
       (* step2: if else condition *)
       econstructor;simpl.
       econstructor. econstructor. econstructor. eapply eval_Evar_global.
-      auto. eauto. econstructor. econstructor. etransitivity.
-      simpl. erewrite Mem.load_store_other. 2: eapply STORETM1.
-      eapply Mem.load_alloc_other;eauto. instantiate (1:= Vint idx).
-      exploit Mem.load_inject. eapply Hm'1. eauto. eauto.
-      rewrite Ptrofs.unsigned_zero.
-      simpl. intros (v2 & ? & ?). inv H3;try congruence.
-      left. unfold not. intro. eapply Mem.fresh_block_alloc. eapply ALLOCTM.
-      subst. eapply Mem.valid_block_inject_2.
-      2: eapply Hm'1. eapply H12. eapply H22.
-      eapply FINDP4.
-      reflexivity.
-      econstructor. simpl. unfold Cop.sem_cmp. simpl. unfold Cop.sem_binarith.
-      simpl. unfold Cop.sem_cast. simpl. destruct Archi.ptr64 eqn: PTR. simpl.
-      unfold Int.zero in COND. rewrite COND. simpl. reflexivity. destruct Ctypes.intsize_eq.
-      simpl. unfold Int.zero in COND. rewrite COND. simpl. reflexivity. congruence.
-      simpl. unfold Cop.bool_val. simpl. f_equal.
-      destruct (Int.eq Int.one Int.zero) eqn: EQ.
-      rewrite Int.eq_false in EQ;try congruence.
-      eapply Int.one_not_zero.
-      simpl.
+      auto. eauto. econstructor. econstructor.
+      (* load index *)
+      eauto.
+      (* etransitivity. *)
+      (* simpl. erewrite Mem.load_store_other. 2: eapply STORETM1. *)
+      (* eapply Mem.load_alloc_other;eauto. instantiate (1:= Vint idx). *)
+      (* exploit Mem.load_inject. eapply Hm'1. eauto. eauto. *)
+      (* rewrite Ptrofs.unsigned_zero. *)
+      (* simpl. intros (v2 & ? & ?). inv H3;try congruence. *)
+      (* left. unfold not. intro. eapply Mem.fresh_block_alloc. eapply ALLOCTM. *)
+      (* subst. eapply Mem.valid_block_inject_2. *)
+      (* 2: eapply Hm'1. eapply H12. eapply H22. *)
+      (* eapply FINDP4. *)
+      (* reflexivity. *)
+      econstructor. simpl. erewrite sem_cmp_int_int. simpl. fold Int.zero.
+      rewrite COND. eauto. unfold if_index_eq_0.
+      simpl. unfold Cop.bool_val. simpl. eauto.
+      rewrite int_one_not_eq_zero. simpl.
       (* step3: index plus one *)
       eapply star_step;eauto.
       econstructor;simpl. unfold call_encrypt_indexplus.
@@ -447,25 +566,11 @@ Proof.
       auto. eauto. econstructor. econstructor.
       eapply eval_Evar_global.
       auto. eauto. econstructor. econstructor.
-      (* load index: TODO requires a lemma for loading index *)
-      simpl. erewrite Mem.load_store_other. 2: eapply STORETM1.
-      eapply Mem.load_alloc_other;eauto. instantiate (1:= Vint idx).
-      exploit Mem.load_inject. eapply Hm'1. eauto. eauto.
-      rewrite Ptrofs.unsigned_zero.
-      simpl. intros (v2 & ? & ?). inv H3;try congruence.
-      left. unfold not. intro. eapply Mem.fresh_block_alloc. eapply ALLOCTM.
-      subst. eapply Mem.valid_block_inject_2.
-      2: eapply Hm'1. eapply H12. eapply H22.
-      eapply FINDP4.
+      eauto.       (* load index *)
       (* evaluate add index *)
       econstructor. simpl. unfold Cop.sem_add. simpl. unfold Cop.sem_binarith.
-      simpl. unfold Cop.sem_cast. simpl.
-      destruct Archi.ptr64 eqn: PTR. simpl. reflexivity.
-      destruct Ctypes.intsize_eq. auto. 
-      simpl. auto. unfold Cop.sem_cast. simpl.
-      destruct Archi.ptr64 eqn: PTR. simpl. reflexivity.
-      destruct Ctypes.intsize_eq. auto.
-      simpl. auto.
+      simpl. rewrite! sem_cast_int_int. eauto.
+      rewrite! sem_cast_int_int. eauto.
       (* store index *)
       econstructor. simpl. eauto.
       fold Int.one. eauto.
@@ -476,15 +581,119 @@ Proof.
       econstructor. simpl. 
       econstructor. simpl. eauto.
       econstructor. eapply eval_Evar_global. eauto.
-      (* find encrypt symbol *) admit.
+      (* find encrypt symbol *) simpl. eauto.
       eapply deref_loc_reference. simpl. auto. (* deref_loc *)
       (* evaluate expression list *)
       econstructor. econstructor. econstructor.
       econstructor. econstructor. eapply eval_Evar_global. auto.
-      (* need find input id lemma *)
+      (* find the block for input *)
+      eauto.
+      (* eval input *)
+      eapply deref_loc_reference. simpl. auto.
+      (* input[index - 1]: evaluate index - 1 *)
+      econstructor. econstructor. eapply eval_Evar_global.
+      auto. eauto. econstructor. simpl. auto. eauto.
+      econstructor. simpl. unfold Cop.sem_sub. simpl.
+      unfold Cop.sem_binarith. simpl.
+      rewrite! sem_cast_int_int. rewrite Int.add_commut.
+      rewrite Int.sub_add_l.
+      unfold Int.one. rewrite Int.sub_idem. eauto.
+      simpl. unfold Cop.sem_add. simpl. rewrite Ptrofs.add_zero_l.
+      rewrite Int.add_zero_l. eauto.
+      (* evaluate &index + 4* (index - 1) *)
+      econstructor. simpl. eauto.
+      eauto. simpl. rewrite sem_cast_int_int. eauto.
+      (* evaluate request function ptr *)
+      econstructor. econstructor.
+      eapply eval_Evar_global. auto.
+      eauto. eapply deref_loc_reference. simpl. auto.
+      simpl. unfold Cop.sem_cast. simpl. eauto.
+      econstructor.
+      (* find encrypt definition *)
+      eapply find_encrypt_1;eauto.
+      simpl. eauto.
+      (* step5: at external *)
+      eapply star_step. eapply step_push.
+      simpl. econstructor. eapply find_encrypt_1;eauto.
+      instantiate (1:= false). simpl.
+      unfold Genv.is_internal. erewrite FINDENC. auto.
+      simpl. econstructor. erewrite FINDENC. auto.
+      eapply star_refl.
+      1-2: eauto.
+      eapply star_refl.
+      eauto.
+
+      (* match state *)
+      assert (INJ1 :Mem.inject j m tm1).
+      eapply Mem.alloc_right_inject;eauto.
+      econstructor.
+      (* stack acc *)
+      instantiate (1:= sp::lsp).
+      instantiate (1:= injpw j m' tm3 INJM').
+      econstructor.
+      eapply Hm'1. instantiate (1:= Hm). eauto.
+      eapply stack_acc_compose_injp_acc. eauto. eauto.
+      etransitivity. eapply stack_acc_injp_acc. eauto. eauto.
+      eauto.
+      (* (m,tm1,j) ~~> (m',tm3,j) *)
+      instantiate (1:= INJ1).
+      admit.      
+      reflexivity.
+      eauto.
+      (* match_kframe *)
+      inv KFRM. econstructor. econstructor. econstructor.
+      econstructor. econstructor. eauto.
+      
+    (* request: 0 < index < N *)
+    + admit.
+
+    (* request: index >= N, return *)
+    + generalize Hse. intros Hse2.
+      generalize INJP. intros INJP'.
+      inv Hse. inv INJP.
+      exploit (Genv.find_symbol_match H). eapply FINDP.
+      intros (trb & FINDP3 & FINDSYMB).
+      exploit (Genv.find_symbol_match H). eapply FINDIDX.
+      intros (tidb & FINDP4 & FINDTIDB).
+      exploit (Genv.find_symbol_match H). eapply FINDRES.
+      intros (tresb & FINDP5 & FINDRESB).
+            
+      (* stack_acc implies injp_acc *)
+      exploit stack_acc_injp_acc. eapply KINJP. intro INJP1.
+      inv INJP1.
+      (* introduce the memory produced by target memory *)
+      exploit exec_request_mem3. eapply READIDX. eapply STORERES.
+      eapply H12. eapply H22. eauto.
+      eapply H12. eapply H22. eauto.
+      instantiate (2:= tm). instantiate (1:= Hm).
+      intros (tm1 & tm2 & tm3 & tm4 & sp & INJTM4 & ALLOCTM & STORETM1 & LOADTM2 & STORETM2 & FREETM3 & INJPTM4).
+      (* step1: function entry *)
+      simpl. eexists. split.
+      eapply plus_star_trans.
+      econstructor. econstructor. simpl.      
+      (* step_internal *)
+      econstructor. eapply find_request;eauto. eapply H22 in FINDP3 as FINDP3'.
+      eapply H12 in FINDP3'.
+      rewrite FINJ in FINDP3'. inv FINDP3'.  auto.
+      (* function entry *)    
+      econstructor; simpl.
+      constructor; eauto. constructor.
+      econstructor; eauto.
+      constructor.
+      econstructor; eauto. rewrite Maps.PTree.gss. reflexivity.
+      econstructor; cbn; eauto.
+      econstructor; eauto. reflexivity.
+      eapply star_step; eauto.
+      (* step2: if(index == 0) *)
+      econstructor;simpl.
+      econstructor. econstructor. econstructor. eapply eval_Evar_global.
+      auto. eauto. econstructor. econstructor.
+      (* load index *)
+      eauto.
+      econstructor. simpl. erewrite sem_cmp_int_int. simpl. fold Int.zero.
+        
       
 Admitted.
                                         
       
-End MS.
 End WITH_N.
