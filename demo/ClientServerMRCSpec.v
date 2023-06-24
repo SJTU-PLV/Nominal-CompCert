@@ -394,7 +394,40 @@ Lemma exec_request_mem3:
         injp_acc (injpw j sm tm Hm0) (injpw j sm1 tm4 Hm1).
 Admitted.
 
-
+Lemma exec_kframe: forall lsp w1 w2 m tm j Hm  ks se,
+    stack_acc w1 w2 lsp ->
+    injp_acc w2 (injpw j m tm Hm) ->
+    match_kframe_request lsp ks ->
+    exists tm' Hm' s,
+      injp_acc w1 (injpw j m tm' Hm') /\
+        star (fun _ : unit => SmallstepLinking.step L se) tt
+          (st L true (Returnstate Vundef Kstop tm) :: ks) E0 (s :: nil) /\
+        (s = st L true (Returnstate Vundef Kstop tm') \/
+           s = st L false (Return1 tm')).
+Proof.
+  induction lsp;intros.
+  (* only returnstate *)
+  inv H1.
+  exists tm,Hm. eexists.
+  split. etransitivity. eapply stack_acc_injp_acc.
+  eauto. auto.
+  split. eapply star_refl.
+  eauto.
+  (* returnstate::call2 *)
+  inv H2.
+  exists tm,Hm. eexists.
+  split. etransitivity. eapply stack_acc_injp_acc.
+  eauto. auto.
+  split. 
+  eapply star_step. eapply step_pop. econstructor.
+  econstructor. eapply star_refl.
+  eauto. eauto.
+  
+  
+  induction H.
+  admit.
+  
+    
 Lemma top_simulation_L1:
   forward_simulation (cc_c injp) (cc_c injp) top_spec1 composed_spec1.
 Proof.
@@ -739,7 +772,16 @@ Proof.
       econstructor. unfold is_call_cont. auto.
       (* free list *)
       simpl. rewrite FREETM3. eauto.
-      
+      (* step6: execute the continuation *)
+                
+              
+               \/
+              star (fun _ : unit => SmallstepLinking.step L se2) tt
+                (st L true (Returnstate Vundef Kstop tm) :: ks) E0
+                (st L true (Returnstate Vundef Kstop tm') :: nil)
+              
+
+      eapply star_step
       
 Admitted.
                                         
