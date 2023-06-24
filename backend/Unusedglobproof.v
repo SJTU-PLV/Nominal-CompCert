@@ -409,7 +409,6 @@ Qed.
 
 Require Import LanguageInterface Inject.
 
-
 (** The initial memory injection inferred from global symbol tables *)
 Definition init_meminj (se tse: Genv.symtbl) : meminj :=
   fun b =>
@@ -1514,7 +1513,6 @@ Proof.
   eapply Forward_simulation.
   - inv MATCH1. eauto.
   - intros se1 se2 wB GE COMPAT. inversion GE. rename inj_stbls_match into MSENV.
-    (**** Assupmtions to be discharged ****)
     assert (forall b : block,
                Genv.find_symbol se1 (prog_main (skel prog)) = Some b ->
                exists b' : block, Genv.find_symbol se2 (prog_main (tskel tprog)) = Some b')
@@ -1550,8 +1548,6 @@ Proof.
     {
       inv GE. inv inj_stbls_match. eauto.
     }
-   (*  (**** End of Assupmtions ****) *)
-
     eapply forward_simulation_step
       with (match_states := match_states prog tprog used wB se1 se2).
     + intros q1 q2 QRY.
