@@ -110,13 +110,25 @@ Definition used_globals (p: program) (pm: prog_map) : option IS.t :=
 (** We also eliminate multiple definitions of the same global name, keeping only
   the last definition (in program definition order). *)
 
+
+(** Remove the code of unused functions *)
+         
+Definition empty_function : function :=
+  mkfunction (mksignature nil Tvoid cc_default) nil 0 (PTree.empty _) 1%positive.
+
+Definition remove_gfun (gd : globdef fundef unit) :=
+  match gd with
+  |Gvar v => gd
+  |Gfun f => Gfun (Internal empty_function)
+  end.
+
 Fixpoint filter_globdefs (used: IS.t) (accu defs: list (ident * globdef fundef unit)) :=
   match defs with
   | nil => accu
   | (id, gd) :: defs' =>
       if IS.mem id used
       then filter_globdefs (IS.remove id used) ((id, gd) :: accu) defs'
-      else filter_globdefs used accu defs'
+      else filter_globdefs used ((id, remove_gfun gd) :: accu) defs'
   end.
 
 (** To ensure compatibility with linking, we must ensure that all the
@@ -138,4 +150,3 @@ Definition transform_program (p: program) : res program :=
       else
         Error (msg "Unusedglob: reference to undefined global")
   end.
-

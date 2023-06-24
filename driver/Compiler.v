@@ -59,7 +59,7 @@ Require Renumber.
 Require Constprop.
 Require CSE.
 Require Deadcode.
-(*Require Unusedglob.*)
+Require Unusedglob.
 Require Allocation.
 Require Tunneling.
 Require Linearize.
@@ -80,7 +80,7 @@ Require Renumberproof.
 Require Constpropproof.
 Require CSEproof.
 Require Deadcodeproof.
-(* Require Unusedglobproof.*)
+Require Unusedglobproof.
 
 Require Allocproof.
 Require Tunnelingproof.
@@ -153,10 +153,8 @@ Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
   !@@ print (print_RTL 6)
   @@@ partial_if Compopts.optim_redundancy (time "Redundancy elimination" Deadcode.transf_program)
   !@@ print (print_RTL 7)
-(*
   @@@ time "Unused globals" Unusedglob.transform_program
-   @@ print (print_RTL 8)
-*)
+  !@@ print (print_RTL 8)
   @@@ time "Register allocation" Allocation.transf_program
   !@@ print print_LTL
   !@@ time "Branch tunneling" Tunneling.tunnel_program
@@ -264,9 +262,7 @@ Definition CompCertO's_passes :=
   ::: mkpass (match_if Compopts.optim_constprop Renumberproof.match_prog)
   ::: mkpass (match_if Compopts.optim_CSE CSEproof.match_prog)
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
-(*
   ::: mkpass Unusedglobproof.match_prog
-*)
   ::: mkpass Allocproof.match_prog
   ::: mkpass Tunnelingproof.match_prog
   ::: mkpass Linearizeproof.match_prog
@@ -316,10 +312,8 @@ Proof.
   set (p11 := total_if optim_constprop Renumber.transf_program p10) in *.
   destruct (partial_if optim_CSE CSE.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
   destruct (partial_if optim_redundancy Deadcode.transf_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
-  (*
   destruct (Unusedglob.transform_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
-   *)
-  destruct (Allocation.transf_program p13) as [p15|e] eqn:P15; simpl in T; try discriminate.
+  destruct (Allocation.transf_program p14) as [p15|e] eqn:P15; simpl in T; try discriminate.
   set (p16 := Tunneling.tunnel_program p15) in *.
   destruct (Linearize.transf_program p16) as [p17|e] eqn:P17; simpl in T; try discriminate.
   set (p18 := CleanupLabels.transf_program p17) in *.
@@ -338,9 +332,7 @@ Proof.
   exists p11; split. apply total_if_match. apply Renumberproof.transf_program_match.
   exists p12; split. eapply partial_if_match; eauto. apply CSEproof.transf_program_match.
   exists p13; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
-  (*
   exists p14; split. apply Unusedglobproof.transf_program_match; auto.
-   *)
   exists p15; split. apply Allocproof.transf_program_match; auto.
   exists p16; split. apply Tunnelingproof.transf_program_match.
   exists p17; split. apply Linearizeproof.transf_program_match; auto.
@@ -405,27 +397,6 @@ Require Import Conventions Asm Mach Lineartyping.
 (** This is the simulation convention for the whole compiler. *)
 
 (**)
-
-
-
-
-
-
-(*
-                  m1 ro <= ro m1
-m1 <- ro     -> ro     m1    
-
-                       m2          
-
-             -> ro     m3
-
-                       ..
-
-mn                     mn
-
-
-*)
-
 
 Definition cc_compcert : callconv li_c li_asm :=
        ro @ wt_c @
@@ -818,7 +789,7 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p19)).
+  assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p20)).
   {
   eapply cc_compcert_merge; eauto.
   rewrite cc_expand. rewrite <- cc_collapse at 1.
@@ -864,7 +835,7 @@ Ltac DestructM :=
     eapply Deadcodeproof.transf_program_correct'; eassumption.
     subst. apply va_interface_selfsim. }
   eapply compose_forward_simulations.
-    eapply RTLrel.semantics_rel.
+    eapply Unusedglobproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply Allocproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
