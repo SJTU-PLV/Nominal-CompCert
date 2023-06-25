@@ -170,13 +170,14 @@ Inductive stack_acc (w: injp_world) : injp_world -> list block -> Prop :=
 | stack_acc_nil w':
   injp_acc w w' ->
   stack_acc w w' nil
-| stack_acc_cons f1 m1 tm1 w1 (Hm1: Mem.inject f1 m1 tm1) lsp tm1' sp Hm1' w2
+| stack_acc_cons f1 m1 tm1 w1 (Hm1: Mem.inject f1 m1 tm1) lsp tm1' tm1'' sp Hm1' w2 r
     (Hm1: Mem.inject f1 m1 tm1)
     (WORLD1: w1 = injpw f1 m1 tm1 Hm1)
     (STKB: stack_acc w w1 lsp)
-    (INJP1: injp_acc w w1)
+    (* (INJP1: injp_acc w w1) *)
     (ALLOC: Mem.alloc tm1 0 4 = (tm1', sp))
-    (INJP2: injp_acc (injpw f1 m1 tm1' Hm1') w2):
+    (STORESP: Mem.store Mint32 tm1' sp 0 (Vint r) = Some tm1'')
+    (INJP2: injp_acc (injpw f1 m1 tm1'' Hm1') w2):
   stack_acc w w2 (sp::lsp).
   
 
@@ -265,22 +266,40 @@ Qed.
 End MS.
 
 
-Lemma stack_acc_injp_acc: forall w1 w2 lsp,
-    stack_acc w1 w2 lsp ->
-    injp_acc w1 w2.
+(* Lemma stack_acc_injp_acc: forall w1 w2 lsp, *)
+(*     stack_acc w1 w2 lsp -> *)
+(*     injp_acc w1 w2. *)
+(* Proof. *)
+(*   intros. induction H. *)
+(*   auto. *)
+(*   etransitivity. eapply IHstack_acc. *)
+(*   etransitivity. 2: eapply INJP2. *)
+(*   subst. *)
+(*   assert (ro_acc m1 m1). eapply ro_acc_refl. *)
+(*   assert (ro_acc tm1 tm1''). *)
+(*   eapply ro_acc_trans. *)
+(*   eapply ro_acc_alloc;eauto. *)
+(*   eapply ro_acc_store;eauto. *)
+(*   inv H0. inv H1. *)
+(*   econstructor; eauto. *)
+(*   eapply Mem.unchanged_on_refl. *)
+(*   eapply Mem.unchanged_on_trans. *)
+(*   eapply Mem.alloc_unchanged_on;eauto. *)
+(*   eapply Mem.store_unchanged_on;eauto. simpl. *)
+(*   intros. unfold loc_out_of_reach. intro. eapply H7. *)
+  
+(*   eapply inject_separated_refl. *)
+(* Qed. *)
+
+Lemma stack_acc_inject_incr: forall lsp j1 j2 m1 m2 tm1 tm2 Hm Htm,
+    stack_acc (injpw j1 m1 m2 Hm) (injpw j2 tm1 tm2 Htm) lsp ->
+    inject_incr j1 j2.
 Proof.
-  intros. induction H.
-  auto.
-  etransitivity. eapply IHstack_acc.
-  etransitivity. 2: eapply INJP2.
-  subst.
-  assert (ro_acc m1 m1). eapply ro_acc_refl.
-  assert (ro_acc tm1 tm1'). eapply ro_acc_alloc;eauto.
-  inv H0. inv H1.
-  econstructor; eauto.
-  eapply Mem.unchanged_on_refl.
-  eapply Mem.alloc_unchanged_on;eauto.
-  eapply inject_separated_refl.
+  induction lsp;intros. inv H. inv H0. eauto.
+  inv H.
+  inv INJP2.
+  eapply inject_incr_trans. 2: eapply H11.
+  eapply IHlsp;eauto.
 Qed.
 
 Lemma stack_acc_compose_injp_acc: forall w1 w2 w3 lsp,
@@ -349,6 +368,7 @@ Lemma exec_request_mem1:
         Mem.loadv Mint32 tm3 (Vptr tinb ofs) = Some (Vint input) /\
         Mem.unchanged_on (fun b ofs => b = tib -> ~ 0 <= ofs < 4) tm tm3 /\
         Mem.inject j sm1 tm3.
+Proof.
 Admitted.
 
 (* 0 < index < N *)
@@ -392,8 +412,65 @@ Lemma exec_request_mem3:
         Mem.free tm3 sp 0 4 = Some tm4 /\
         (* Mem.unchanged_on (fun b ofs => b = tresb -> ~ (Ptrofs.signed ofs1) <= ofs < (Ptrofs.signed ofs1 + 4)) tm tm4 /\ *)
         injp_acc (injpw j sm tm Hm0) (injpw j sm1 tm4 Hm1).
+Proof.
+  intros until Hm0.
+  intros LOADSM STORESM INJ1 INJ2.
+  destruct (Mem.alloc tm 0 4) as [tm1 sp] eqn: ALLOC.
+  exists tm1.
+  exploit Mem.alloc_right_inject;eauto. intros INJ3.
+  assert (STOREM: {m2: mem | Mem.store Mint32 tm1 sp 0 (Vint r) = Some m2}).
+  eapply Mem.valid_access_store. eapply Mem.valid_access_implies.
+  eapply Mem.valid_access_alloc_same;eauto. lia. simpl. lia. simpl.
+  eapply Z.divide_0_r. econstructor.
+  destruct STOREM as (tm2 & STOREM).
+  exists tm2.
+  (* inject sm tm2 *)
+  exploit Mem.store_outside_inject;eauto.
+  intros. eapply Mem.fresh_block_alloc;eauto.
+  eapply Mem.valid_block_inject_2;eauto.
+  intros INJ4.
+  (* loadv index from tm2 *)
+  exploit Mem.loadv_inject. eapply INJ4. eapply LOADSM.
+  eapply Val.inject_ptr;eauto.
+  intros (v2 & LOADTM2 & VINJ). inv VINJ.
+  (* loadv sp from tm2 *)
+  exploit Mem.load_store_same. eapply STOREM.
+  intros LOADSPTM2. simpl in LOADSPTM2.
+  (* store result *)
+  exploit Mem.store_mapped_inject. eapply INJ4.  
+  eapply STORESM. eauto. eapply Val.inject_int.
+  intros (tm3 & STORERESTM & INJ5).
+  exists tm3.
+  (* free *)
+  assert (FREE: {tm4:mem | Mem.free tm3 sp 0 4 = Some tm4}).
+  eapply Mem.range_perm_free.
+  unfold Mem.range_perm. intros .
+  eapply Mem.perm_store_1;eauto.
+  eapply Mem.perm_store_1;eauto.
+  eapply Mem.perm_alloc_2;eauto.
+  destruct FREE as (tm4 & FREE).
+  exists tm4, sp.
+  (* inject sm1 tm4 *)
+  exploit Mem.free_right_inject. eapply INJ5. eauto.
+  intros. eapply Mem.fresh_block_alloc;eauto.
+  eapply Mem.valid_block_inject_2;eauto.
+  intros INJ6.
+  exists INJ6.
+  rewrite Z.add_0_r in STORERESTM.
+  do 6 (split;eauto). 
+  (* injp_acc *)
+  assert (RO1: ro_acc sm sm1).
+  eapply ro_acc_store;eauto.
+  assert (RO2: ro_acc tm tm4).
+  eapply ro_acc_trans. eapply ro_acc_alloc;eauto.
+  eapply ro_acc_trans. eapply ro_acc_store;eauto.
+  eapply ro_acc_trans. eapply ro_acc_store;eauto.
+  eapply ro_acc_free;eauto.
 Admitted.
 
+  
+  
+      
 Lemma exec_kframe: forall lsp w1 w2 m tm j Hm  ks se,
     stack_acc w1 w2 lsp ->
     injp_acc w2 (injpw j m tm Hm) ->
@@ -409,27 +486,27 @@ Proof.
   (* only returnstate *)
   inv H1.
   exists tm,Hm. eexists.
-  split. etransitivity. eapply stack_acc_injp_acc.
-  eauto. auto.
+  split. inv H. etransitivity. eauto.
+  eauto.
   split. eapply star_refl.
   eauto.
   (* returnstate::call2 *)
-  inv H2.
+  inv H. inv H2.
   exists tm,Hm. eexists.
-  split. etransitivity. eapply stack_acc_injp_acc.
-  eauto. auto.
-  split. 
+  split. etransitivity. eauto.
+  eauto. split.
   eapply star_step. eapply step_pop. econstructor.
   econstructor. eapply star_step. econstructor. simpl.
   econstructor. eapply star_refl.
   eauto. eauto. auto.
   (* induction *)
   inv H1. inv H2. inv H.
-  assert (INJP3: injp_acc (injpw f1 m2 tm1' Hm1') (injpw j m tm Hm)).
+  assert (INJP3: injp_acc (injpw f1 m2 tm1'' Hm1') (injpw j m tm Hm)).
   etransitivity;eauto.
 
-  assert (FREE: {tm2:mem | Mem.free tm1' a 0 4 = Some tm2}).
+  assert (FREE: {tm2:mem | Mem.free tm1'' a 0 4 = Some tm2}).
   eapply Mem.range_perm_free. unfold Mem.range_perm. intros.
+  eapply Mem.perm_store_1;eauto. 
   eapply Mem.perm_alloc_2. eauto. auto. destruct FREE as (tm2 & FREE).
 
   generalize INJP3. intro INJP4.
@@ -454,7 +531,9 @@ Proof.
   (* try to prove  a is invalid in tm1' *)
   exploit H14. 2: eapply H. auto.
   intros (INVALID1 & INVALID2). eapply INVALID2.
-  unfold Mem.valid_block. erewrite Mem.support_alloc;eauto.
+  unfold Mem.valid_block.
+  erewrite Mem.support_store;eauto.
+  erewrite Mem.support_alloc;eauto.
   eapply Mem.sup_incr_in. left.
   eapply Mem.alloc_result;eauto.
 
@@ -464,6 +543,7 @@ Proof.
   eauto.
   assert (RO2: ro_acc tm1 tm3).
   eapply ro_acc_trans. eapply ro_acc_alloc;eauto.
+  eapply ro_acc_trans. eapply ro_acc_store;eauto.
   eapply ro_acc_trans.
   inv INJP4. econstructor. eauto.
   eapply  Mem.unchanged_on_support;eauto.
@@ -479,6 +559,9 @@ Proof.
   eapply Mem.sup_include_trans. instantiate (1 := (Mem.support tm1')).
   exploit Mem.support_alloc. eapply ALLOC. intros. rewrite H15.
   eapply Mem.sup_include_incr. eapply Mem.sup_include_trans.
+  instantiate (1 := (Mem.support tm1'')). exploit Mem.support_store.
+  eauto. intros SUPTM''. rewrite SUPTM''. eapply Mem.sup_include_refl.
+  eapply Mem.sup_include_trans.
   eapply Mem.unchanged_on_support. eauto.
   exploit Mem.support_free. eauto. intros. rewrite H15. eapply Mem.sup_include_refl.
   (* perm *)
@@ -488,10 +571,14 @@ Proof.
   split;intros.
   eapply Mem.perm_free_1;eauto.
   erewrite <- Mem.unchanged_on_perm. 2: eauto. 2:auto.
+  eapply Mem.perm_store_1;eauto.
   eapply Mem.perm_alloc_1;eauto.
+  eapply Mem.store_valid_block_1;eauto.
   eapply Mem.valid_block_alloc;eauto.
   eapply Mem.perm_alloc_4. eapply ALLOC.
+  eapply Mem.perm_store_2;eauto.
   eapply Mem.unchanged_on_perm;eauto.
+  eapply Mem.store_valid_block_1;eauto.
   eapply Mem.valid_block_alloc;eauto.
   eapply Mem.perm_free_3;eauto.
   auto.
@@ -503,12 +590,20 @@ Proof.
   eapply Mem.free_unchanged_on. eapply FREE2. instantiate (1 := fun b _ => b <> a).
   intros. intro. congruence.
   simpl. auto.
-  eapply H26;eauto. eapply Mem.valid_block_alloc;eauto.
+  eapply H26;eauto.
+  eapply Mem.store_valid_block_1;eauto.
+  eapply Mem.valid_block_alloc;eauto.
   eapply Mem.perm_valid_block;eauto.
+  eapply Mem.perm_store_1;eauto.
   eapply Mem.perm_alloc_1;eauto.
   etransitivity.
   eapply H26;eauto.
+  eapply Mem.perm_store_1;eauto.
   eapply Mem.perm_alloc_1;eauto.
+  etransitivity.
+  eapply Mem.store_unchanged_on. eauto. instantiate (1 := fun b _ => b <> a).
+  intros. simpl. congruence.
+  simpl. auto. eapply Mem.perm_alloc_1;eauto.
   eapply Mem.alloc_unchanged_on;eauto.
 
   (* inject separated *)
@@ -517,6 +612,7 @@ Proof.
   eapply H28;eauto.
   intro. eapply Mem.valid_block_alloc in H17;eauto.
   eapply H28;eauto.
+  eapply Mem.store_valid_block_1;eauto.
 
   (* use I.H. *)
   exploit IHlsp. eauto.
@@ -597,7 +693,7 @@ Proof.
         rewrite H0.
         unfold fundef_is_internal. simpl. eapply orb_true_r.
       ++ admit.
-         
+        
   - intros q1 q2 s1 Hq Hi1. inv Hq. inv H1. inv Hi1; cbn in *.
     + (* initial request *)
       inv Hse.
@@ -666,8 +762,8 @@ Proof.
       intros (teb & FINDP6 & FINDTEB & FINDENC).
             
       (* stack_acc implies injp_acc *)
-      exploit stack_acc_injp_acc. eapply KINJP. intro INJP1.
-      inv INJP1.
+      assert (H22: inject_incr f f0).
+      eapply stack_acc_inject_incr. eapply KINJP.
       (* introduce the memory produced by target memory *)
       exploit (exec_request_mem1). eapply READIDX. eapply ADDIDX. eapply READINPUT. eapply Hm. eapply H12. eapply H22.
       eauto. instantiate (2:= r). instantiate (1:= tinb).
@@ -779,20 +875,20 @@ Proof.
       (* match state *)
       assert (INJ1 :Mem.inject j m tm1).
       eapply Mem.alloc_right_inject;eauto.
+      assert (INJ2: Mem.inject j m tm2).
+      eapply Mem.store_outside_inject;eauto. intros.
+      eapply Mem.fresh_block_alloc;eauto. eapply Mem.valid_block_inject_2;eauto.
+      
       econstructor.
       (* stack acc *)
       instantiate (1:= sp::lsp).
-      instantiate (1:= injpw j m' tm3 INJM').
+      instantiate (1:= injpw j m tm2 INJ2).
       econstructor.
-      eapply Hm'1. instantiate (1:= Hm). eauto.
-      eapply stack_acc_compose_injp_acc. eauto. eauto.
-      etransitivity. eapply stack_acc_injp_acc. eauto. eauto.
-      eauto.
-      (* (m,tm1,j) ~~> (m',tm3,j) *)
-      instantiate (1:= INJ1).
-      admit.      
-      reflexivity.
-      eauto.
+      eapply Hm. instantiate (1:= Hm). eauto.
+      eapply stack_acc_compose_injp_acc. 
+      eauto. eauto. eauto. eauto.
+      reflexivity. eapply injp_acc_storev;eauto.
+      econstructor. eauto. rewrite Ptrofs.add_zero. auto.
       (* match_kframe *)
       inv KFRM. econstructor. econstructor. econstructor.
       econstructor. eauto.
@@ -812,8 +908,8 @@ Proof.
       intros (tresb & FINDP5 & FINDRESB).
             
       (* stack_acc implies injp_acc *)
-      exploit stack_acc_injp_acc. eapply KINJP. intro INJP1.
-      inv INJP1.
+      assert (H22: inject_incr f f0).
+      eapply stack_acc_inject_incr. eapply KINJP. 
       (* introduce the memory produced by target memory *)
       exploit exec_request_mem3. eapply READIDX. eapply STORERES.
       eapply H12. eapply H22. eauto.
@@ -889,7 +985,7 @@ Proof.
       unfold Cop.sem_sub. simpl. unfold Cop.sem_binarith. simpl.
       rewrite! sem_cast_int_int. eauto.
       simpl. unfold Cop.sem_add. unfold Cop.sem_binarith. simpl.
-      eauto.      
+      eauto.
       econstructor. eapply eval_Evar_local. eapply Maps.PTree.gss.
       econstructor. simpl. eauto. eauto.
       simpl. erewrite sem_cast_int_int. eauto.
