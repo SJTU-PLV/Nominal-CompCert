@@ -231,7 +231,20 @@ Lemma find_request:
     j rb = Some (rb',0) ->
     Genv.find_funct tge1 (Vptr rb' Ptrofs.zero) = Some (Ctypes.Internal func_request).
 Proof.
-Admitted.
+  intros. cbn. rewrite pred_dec_true; eauto.
+  unfold global_definitions_client. unfold Genv.find_funct_ptr.
+  rewrite Genv.find_def_spec.
+  eapply Genv.find_symbol_match in H; eauto.
+  destruct H as [tb' [A B]]. rewrite A in H1. inv H1.
+  apply Genv.find_invert_symbol in B. cbn.
+  rewrite B. rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gss. reflexivity.
+  unfold request_id, input_id. congruence.
+  unfold request_id, result_id. congruence.
+  unfold request_id, index_id. congruence.
+Qed.
 
 Lemma find_encrypt:
   forall rb rb' j,
@@ -240,7 +253,17 @@ Lemma find_encrypt:
     j rb = Some (rb',0) ->
     Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b1).
 Proof.
-Admitted.
+  intros. cbn. rewrite pred_dec_true; eauto.
+  unfold global_definitions_client. unfold Genv.find_funct_ptr.
+  unfold tge2.
+  rewrite Genv.find_def_spec.
+  eapply Genv.find_symbol_match in H; eauto.
+  destruct H as [tb' [A B]]. rewrite A in H1. inv H1.
+  apply Genv.find_invert_symbol in B. cbn.
+  rewrite B. rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gss. reflexivity.
+  unfold encrypt_id, complete_id. congruence.
+Qed.
 
 Lemma find_encrypt_1:
   forall rb rb' j,
@@ -248,7 +271,25 @@ Lemma find_encrypt_1:
     Genv.find_symbol se encrypt_id = Some rb ->
     j rb = Some (rb',0) ->
     Genv.find_funct tge1 (Vptr rb' Ptrofs.zero) = Some (func_encrypt_external).
-Admitted.
+intros. cbn. rewrite pred_dec_true; eauto.
+  unfold global_definitions_client. unfold Genv.find_funct_ptr.
+  unfold tge2.
+  rewrite Genv.find_def_spec.
+  eapply Genv.find_symbol_match in H; eauto.
+  destruct H as [tb' [A B]]. rewrite A in H1. inv H1.
+  apply Genv.find_invert_symbol in B. cbn.
+  rewrite B.
+  rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gso.
+  rewrite Maps.PTree.gss. reflexivity.
+  unfold encrypt_id, request_id. congruence.
+  unfold encrypt_id, input_id. congruence.
+  unfold encrypt_id, result_id. congruence.
+  unfold encrypt_id, index_id. congruence.
+Qed.
+
 
 Lemma find_encrypt':
   forall rb j,
@@ -399,9 +440,20 @@ Qed.
 Lemma ge_N_not_zero: forall idx,
   Int.cmp Cge idx Nint = true ->
   Int.eq idx Int.zero = false.
-Admitted.
-
-
+Proof.
+  unfold Nint.
+  intros. simpl in H.
+  destruct Int.eq eqn:EQ;try congruence.
+  exploit Int.eq_spec. rewrite EQ. intros. subst.
+  unfold Int.lt in *. unfold Int.zero in H.
+  rewrite! Int.signed_repr in H.
+  destruct zlt eqn: LT1 in H;simpl in H;try congruence. lia.
+  generalize Int.min_signed_neg. intros. lia.
+  generalize Int.min_signed_neg. intros.
+  generalize  Int.max_signed_pos. lia.
+Qed.  
+  
+  
 (* idx == 0 *)
 Lemma exec_request_mem1:
   forall ib tib sm sm1 tm idx idx' output j inb ofs input tinb,
@@ -463,7 +515,7 @@ Qed.
     
 (* 0 < index < N *)
 Lemma exec_request_mem2:
-  forall ib tib sm sm1 sm2 tm idx idx' idx'' output j r ofs1 ofs2 inb tinb input resb tresb,
+  forall ib tib sm sm1 sm2 tm idx idx' idx'' j r ofs1 ofs2 inb tinb input resb tresb,
     Mem.loadv Mint32 sm (Vptr ib Ptrofs.zero) = Some (Vint idx) ->
     Mem.storev Mint32 sm (Vptr resb ofs1) (Vint r) = Some sm1 ->
     Mem.loadv Mint32 sm1 (Vptr ib Ptrofs.zero) = Some (Vint idx') ->
@@ -475,7 +527,7 @@ Lemma exec_request_mem2:
     j resb = Some (tresb,0) ->
     exists tm1 sp tm2 tm3 tm4 Hm Hm',
       Mem.alloc tm 0 4 = (tm1, sp) /\
-        Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint output) = Some tm2 /\
+        Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint r) = Some tm2 /\
         Mem.loadv Mint32  tm2 (Vptr tib Ptrofs.zero) = Some (Vint idx) /\
         Mem.loadv Mint32 tm2 (Vptr sp Ptrofs.zero) = Some (Vint r) /\
         Mem.storev Mint32 tm2 (Vptr tresb ofs1) (Vint r) = Some tm3 /\
@@ -483,7 +535,60 @@ Lemma exec_request_mem2:
         Mem.storev Mint32 tm3 (Vptr tib Ptrofs.zero) (Vint idx'') = Some tm4 /\
         Mem.loadv Mint32 tm4 (Vptr tinb ofs2) = Some (Vint input) /\
         injp_acc (injpw j sm tm2 Hm) (injpw j sm2 tm4 Hm').
-Admitted.
+Proof.
+  intros until tresb.
+  intros LOADSM STORESM LOADSM1 STORESM1 LOADSM2 INJ INJIB INJINB INJRESB.
+  destruct (Mem.alloc tm 0 4) as [tm1 sp] eqn:ALLOCTM.
+  exists tm1,sp.
+  (* inject j sm tm1 *)
+  exploit Mem.alloc_right_inject;eauto.
+  intros INJ1.
+  assert (STOREM: {tm2: mem | Mem.store Mint32 tm1 sp 0 (Vint r) = Some tm2}).
+  eapply Mem.valid_access_store. eapply Mem.valid_access_implies.
+  eapply Mem.valid_access_alloc_same;eauto. lia. simpl. lia. simpl.
+  eapply Z.divide_0_r. econstructor.
+  destruct STOREM as (tm2 & STORETM1).
+  exists tm2.
+  (* inject j sm tm2 *)
+  exploit Mem.store_outside_inject;eauto.
+  intros. eapply Mem.fresh_block_alloc;eauto.
+  eapply Mem.valid_block_inject_2;eauto.
+  intros INJ2.
+  exploit Mem.loadv_inject. eapply INJ2.
+  eauto. eapply Val.inject_ptr. eauto.
+  rewrite Ptrofs.add_zero_l. eauto.
+  intros (v2 & LOADTM2 & VINJ). inv VINJ.
+  exploit Mem.load_store_same. eapply STORETM1. simpl.
+  intros LOADSP.
+  (* store tm2 *)
+  exploit Mem.storev_mapped_inject. eapply INJ2.
+  eauto. eapply Val.inject_ptr. eauto. eauto.
+  eapply Val.inject_int. intros (tm3 & STORETM2 & INJ3).
+  rewrite Ptrofs.add_zero in STORETM2.
+  exists tm3.
+  exploit Mem.loadv_inject. eapply INJ3.
+  eauto. eapply Val.inject_ptr. eauto.
+  rewrite Ptrofs.add_zero_l. eauto.
+  intros (v2 & LOADTM3 & VINJ). inv VINJ.
+  (* store tm3 *)
+  exploit Mem.storev_mapped_inject. eapply INJ3.
+  eauto. eapply Val.inject_ptr. eauto. eauto.
+  eapply Val.inject_int. intros (tm4 & STORETM3 & INJ4).
+  rewrite Ptrofs.add_zero_l in STORETM3.  
+  exists tm4,INJ2,INJ4.
+  exploit Mem.loadv_inject. eapply INJ4.
+  eauto. eapply Val.inject_ptr. eauto.
+  rewrite Ptrofs.add_zero. eauto.
+  intros (v2 & LOADTM4 & VINJ). inv VINJ.  
+  rewrite! Ptrofs.unsigned_zero.
+  do 8 (try split;eauto).
+  etransitivity.
+  eapply injp_acc_storev;eauto.
+  eapply Val.inject_ptr. eauto. rewrite Ptrofs.add_zero. auto.
+  instantiate (1:= INJ3).
+  eapply injp_acc_storev;eauto.
+Qed.
+  
 
 (* idnex >= N *)
 Lemma exec_request_mem3:
@@ -817,16 +922,75 @@ Proof.
     unfold Genv.is_internal.
     rewrite !Ptrofs.add_zero. subst ofs1.
     destruct (peq i 3).
-    + subst. setoid_rewrite find_request with (w:= injpw f0 m1 m2 Hm0);eauto.
-      cbn. econstructor;eauto.     
+    + subst. setoid_rewrite find_request;eauto.
+      (* cbn. econstructor;eauto.      *)
    + destruct (peq i 1).
      ++ subst i.
         exploit find_encrypt. 2: eauto.
-        instantiate (1 := injpw f0 m1 m2 Hm0). simpl.
-        econstructor;eauto. eauto. eauto. intros.
+        instantiate (1:=se2). instantiate (1 := f0). eauto.
+        eauto. intros.
         rewrite H0.
         unfold fundef_is_internal. simpl. eapply orb_true_r.
-      ++ admit.
+     ++ unfold Genv.find_funct.
+        destruct (Ptrofs.eq_dec Ptrofs.zero Ptrofs.zero);try congruence.
+        unfold Genv.find_funct_ptr.
+        assert (FIND_DEF_CLIENT: forall f, Genv.find_def (Genv.globalenv se2 (Ctypes.program_of_program client)) b2 <> Some (Gfun f)).
+         { unfold Genv.globalenv. simpl.
+           intros.
+           unfold Genv.add_globdef.
+           (* destruct all the get *)
+           simpl.
+
+           (* se2 b2 = i *)
+           assert (A: Maps.PTree.get i (Genv.genv_symb se2) = Some b2).
+           erewrite <- Genv.mge_symb. 2: eapply H2.
+           eauto. eauto.
+           (* restore the naming *)
+           destruct Maps.PTree.get as [db1|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *;
+             destruct Maps.PTree.get as [db2|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *;
+             destruct Maps.PTree.get as [db3|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *;
+             destruct Maps.PTree.get as [db4|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *;
+             destruct Maps.PTree.get as [db5|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *.           
+           all :try assert (NEQ1: b2 <> db2) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence);
+             try assert (NEQ2: b2 <> db3) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence).
+           
+           1-16: setoid_rewrite NMap.gsspec;destruct NMap.elt_eq;try congruence.
+           1-8,17-24: unfold NMap.get;erewrite NMap.gso;eauto.
+           1-4,9-12,17-20,25-28: unfold NMap.get;erewrite NMap.gso;eauto.
+           1,2,5,6,9,10,13,14,17,18,21,22,25,26,29,30: setoid_rewrite NMap.gsspec;destruct NMap.elt_eq;try congruence.
+           1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31: setoid_rewrite NMap.gsspec;destruct NMap.elt_eq;try congruence.
+           all: unfold NMap.get;rewrite NMap.gi;congruence. }
+
+         assert (FIND_DEF_SERVER: forall f, Genv.find_def (Genv.globalenv se2 Server.b1) b2 <> Some (Gfun f)).
+         { unfold Genv.globalenv. simpl.
+           intros.
+           unfold Genv.add_globdef.
+           (* se2 b2 = i *)
+           assert (A: Maps.PTree.get i (Genv.genv_symb se2) = Some b2).
+           erewrite <- Genv.mge_symb. 2: eapply H2.
+           eauto. eauto.
+           (* destruct all the get *)
+           repeat destruct Maps.PTree.get eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *.
+           1-8 :try assert (NEQ1: b2 <> b) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence);
+           try assert (NEQ2: b2 <> b0) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence).
+           1-4: erewrite NMap.gso;eauto.
+           1-2,5-6: erewrite NMap.gso;eauto.
+           2,4,6,8: erewrite NMap.gi;try congruence.
+           1-4: try setoid_rewrite NMap.gsspec;destruct NMap.elt_eq;try congruence;
+           unfold NMap.get;rewrite NMap.gi;congruence. }
+
+         assert (RHS: match i with
+           | 3%positive | 1%positive => true
+           | _ => false
+                      end = false).
+         { destruct i;try congruence;destruct i;try congruence;auto;destruct i;try congruence;auto. }
+         rewrite RHS.
+
+         destruct Genv.find_def eqn:?. destruct g. specialize (FIND_DEF_CLIENT f). contradiction.
+         destruct Genv.find_def eqn:? at 1. destruct g. rewrite Heqo0 in FIND_DEF_SERVER. specialize (FIND_DEF_SERVER f). contradiction.
+         auto. auto.
+         destruct Genv.find_def eqn:? at 1. destruct g. rewrite Heqo0 in FIND_DEF_SERVER. specialize (FIND_DEF_SERVER f). contradiction.
+         auto. auto.         
         
   - intros q1 q2 s1 Hq Hi1. inv Hq. inv H1. inv Hi1; cbn in *.
     + (* initial request *)
@@ -835,8 +999,8 @@ Proof.
       destruct FIND' as [fb' [FINJ FIND']]. inv H.
       inv H0. inv H7. inv H3.
       rewrite FINJ in H4. inv H4. rename b2 into fb'. rewrite Ptrofs.add_zero.
-      exploit find_request. instantiate (3 := injpw f m1 m2 Hm). 2-4:eauto.
-      cbn; econstructor;eauto. intro FINDR.
+      exploit find_request;eauto. 
+      intro FINDR.
       exists ((st L true (Callstate (Vptr fb' Ptrofs.zero) (Vint output :: nil) Kstop m2)) :: nil).
       split. split.
       -- simpl. unfold Genv.is_internal. setoid_rewrite FINDR. reflexivity.
@@ -856,13 +1020,11 @@ Proof.
       destruct FIND' as [fb' [FINJ FIND']]. inv H.
       inv H0. inv H7. inv H3. inv H10.
       rewrite FINJ in H4. inv H4. rename b2 into fb'. rewrite Ptrofs.add_zero.
-      exploit find_encrypt. instantiate (3 := injpw f m1 m2 Hm). 2-4:eauto.
-      cbn;econstructor;eauto. intro FINDE.
+      exploit find_encrypt;eauto. intro FINDE.
       exists ((st L false (Call1 v'0 i m2)) :: nil).
       split. split.
       -- simpl. unfold Genv.is_internal.
-         setoid_rewrite find_encrypt with (w:= injpw f m1 m2 Hm); eauto.
-         cbn;econstructor;eauto.
+         setoid_rewrite find_encrypt; eauto.
       -- simpl. inv H1. econstructor; eauto.
       -- inv H1.
          econstructor;eauto. eapply stack_acc_nil. reflexivity. reflexivity.
@@ -892,7 +1054,7 @@ Proof.
       intros (tidb & FINDP4 & FINDTIDB).
       exploit (Genv.find_symbol_match H). eapply FINDINPUT.
       intros (tinb & FINDP5 & FINDINB).
-      exploit find_encrypt'. eauto. eauto. eapply FINDE.
+      exploit find_encrypt';eauto.
       intros (teb & FINDP6 & FINDTEB & FINDENC).
             
       (* stack_acc implies inject_incr *)
@@ -1032,7 +1194,7 @@ Proof.
       intros (tidb & FINDP4 & FINDTIDB).
       exploit (Genv.find_symbol_match H). eapply FINDINPUT.
       intros (tinb & FINDP5 & FINDINB).
-      exploit find_encrypt'. eauto. eauto. eapply FINDE.
+      exploit find_encrypt';eauto.
       intros (teb & FINDP6 & FINDTEB & FINDENC).
       exploit (Genv.find_symbol_match H). eapply FINDRES.
       intros (tresb & FINDP7 & FINDRESB).
@@ -1057,7 +1219,6 @@ Proof.
       eauto. eauto. eauto.       
       eapply Hm. eapply H12. eapply H22.
       eauto. instantiate (1:= tinb). auto. eauto.
-      instantiate (1 := r).
       intros (tm1 & sp & tm2 & tm3 & tm4 & INJM & INJM'' & ALLOCTM & STORETM1 & LOADTM2 & LOADSP & STORETM2 & LOADTM3 & STORETM3 & LOADTM4 & INJPM).
       (* simplfy condition *)
       eapply andb_true_iff in COND.
@@ -1350,7 +1511,7 @@ Proof.
       intros (tkb & FINDP4 & FINDTKB).
       assert (INCR: inject_incr f f0).
       eapply stack_acc_inject_incr. eapply KINJP. 
-      exploit find_request. eapply Hse2. eauto. eauto. eauto.
+      exploit find_request;eauto.
       intros FINDFUN.
       
       inv VINJ.
@@ -1394,9 +1555,87 @@ Proof.
       econstructor;eauto.
       
   - constructor. intros. inv H.
-
-    
-Admitted.
+Qed.
                                         
-      
+
+Section RO.
+
+Variable se : Genv.symtbl.
+Variable m0 : mem.
+
+Inductive sound_state : state -> Prop :=
+| sound_Callrequest : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callrequest i m)
+| sound_Callencrypt : forall vf i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callencrypt i vf m)
+| sound_Return : forall m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Return m).
+End RO.
+
+Definition ro_inv '(row se0 m0) := sound_state se0 m0.
+
+Lemma spec1_ro : preserves top_spec1 ro ro ro_inv.
+Proof.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros. inv H0; inv H.
+    + constructor; eauto.
+      eapply ro_acc_trans; eauto.
+      eapply ro_acc_store;eauto.
+      eapply ro_acc_sound; eauto.
+      eapply ro_acc_store;eauto.
+    + constructor; eauto.
+      eapply ro_acc_trans;eauto.
+      eapply ro_acc_trans;eauto.
+      eapply ro_acc_store;eauto.
+      eapply ro_acc_store;eauto.
+      eapply ro_acc_sound; eauto.
+      eapply ro_acc_trans;eauto.
+      eapply ro_acc_store;eauto.
+      eapply ro_acc_store;eauto.      
+    + constructor; eauto.
+      eapply ro_acc_trans;eauto.     
+      eapply ro_acc_store;eauto.
+      eapply ro_acc_sound; eauto.
+      eapply ro_acc_store;eauto.
+    + constructor; eauto.      
+  - intros. inv H. inv H0. constructor; eauto.
+    eapply ro_acc_refl.
+    constructor; eauto. eapply ro_acc_refl.
+  - intros. inv H0.
+  - intros. inv H0. inv H. constructor; eauto.
+Qed.
+
+Theorem top1_ro :
+  forward_simulation ro ro top_spec1 top_spec1.
+Proof.
+  eapply preserves_fsim. eapply spec1_ro; eauto.
+Qed.
+
+
+Definition wt_inv :  (Genv.symtbl * signature) -> state -> Prop := fun _ _ => True.
+
+Lemma spec1_wt : preserves top_spec1 wt_c wt_c wt_inv.
+Proof.
+  intros [se0 sg] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros. inv H0; inv H.
+    + constructor;eauto.
+    + constructor; eauto.
+    + constructor; eauto.
+    + constructor; eauto.
+  - intros. inv H. inv H0. constructor; eauto.
+    constructor.
+  - intros. inv H0.
+  - intros. inv H0. inv H. constructor; eauto.
+Qed.
+
+Theorem top1_wt : forward_simulation wt_c wt_c top_spec1 top_spec1.
+Proof.
+  eapply preserves_fsim. eapply spec1_wt; eauto.
+Qed.
+
 End WITH_N.
