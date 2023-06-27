@@ -7,7 +7,7 @@ Require Import Ctypes Cop Clight Clightrel.
 Require Import Clightdefs.
 
 Require Import Integers Intv.
-Require Import Server Client.
+Require Import Server.
 
 (** * spec in C language *)
 (*
@@ -17,24 +17,32 @@ int index;
 
 void request (int r){
   if (index == 0) {
-    encrypt (input[index++], request);
+    index += 1;
+    encrypt(input[index - 1], request);
   }
-  else if (0 < index <= N){
-    result [index - 1] = r;
-    encrypt (input[index++], request);
+  else if (0 < index < N){
+    result[index - 1] = r;
+    index += 1;
+    encrypt(input[index - 1], request);
   }
-  else return;
+  else {
+    result[index - 1] = r;
+    return;
+  }
 }
-*)
-(*
-Definition result_id := 4%positive.
-Definition request_id := 6%positive.
+
 *)
 
-Definition N := 10%positive.
+Section WITH_N.
+
+Variable N: Z. 
+
+Definition result_id := 4%positive.
+Definition request_id := 3%positive.
+Definition r_id := 7%positive.
 
 Definition resultN_def :=  {|
-  gvar_info := Tarray tint 10 noattr;
+  gvar_info := Tarray tint N noattr;
   gvar_init := nil;
   gvar_readonly := false;
   gvar_volatile := false
@@ -42,7 +50,7 @@ Definition resultN_def :=  {|
 
 Definition input_id := 10%positive.
 Definition inputN_def :=  {|
-  gvar_info := tarray tint 10;
+  gvar_info := tarray tint N;
   gvar_init := nil;
   gvar_readonly := false;
   gvar_volatile := false
@@ -69,15 +77,19 @@ Definition call_encrypt' input :=
                   Tvoid cc_default)
             )
             (*arguments*)
-            (input :: (Evar process_id (Tfunction (Tcons tint Tnil) Tvoid cc_default)) :: nil)
+            (input :: (Evar request_id (Tfunction (Tcons tint Tnil) Tvoid cc_default)) :: nil)
   ).
 
-(* the expr input[index] *)
+(* the expr input[index-1] *)
 Definition input_index :=
-  Ederef (Ebinop Oadd (Evar input_id (tarray tint 10)) (Evar index_id tint) (tptr tint)) tint.
+  Ederef (Ebinop Oadd (Evar input_id (tarray tint N))
+            (Ebinop Osub (Evar index_id tint) (Econst_int (Int.repr 1) tint) tint)
+            (tptr tint)) tint.
 
 Definition result_index :=
-  Ederef (Ebinop Oadd (Evar result_id (tarray tint 10)) (Evar index_id tint) (tptr tint)) tint.
+  Ederef (Ebinop Oadd (Evar result_id (tarray tint N))
+            (Ebinop Osub (Evar index_id tint) (Econst_int (Int.repr 1) tint) tint)
+            (tptr tint)) tint.
 
 (* encrypt (input[index++], request); *)
 Definition call_encrypt_indexplus :=
@@ -89,11 +101,14 @@ Definition call_encrypt_indexplus :=
 Definition if_index_eq_0 :=
   Ebinop Oeq (Evar index_id tint) (Econst_int (Int.repr 0) tint) tbool.
 
-Definition if_index_gt_0_le_N :=
+Definition if_index_gt_0_lt_N :=
   Ebinop Oand
     (Ebinop Ogt (Evar index_id tint) (Econst_int (Int.repr 0) tint) tbool)
-    (Ebinop Ole (Evar index_id tint) (Econst_int (Int.repr 10) tint) tbool)
+    (Ebinop Olt (Evar index_id tint) (Econst_int (Int.repr N) tint) tbool)
     tbool.
+
+Definition assign_result:=
+  (Sassign (result_index) (Evar r_id tint)).
 
 Definition func_request :=
   {|
@@ -103,14 +118,14 @@ Definition func_request :=
     fn_vars := nil;
     fn_temps := nil;
     fn_body :=
-      (Sifthenelse if_index_eq_0 (** index == 0*)
-         call_encrypt_indexplus (** encrypt (input[index++], request) *)
-         (Sifthenelse if_index_gt_0_le_N (** 0 < index <= N*)
+      (Sifthenelse if_index_eq_0 (** index == 0 *)
+         call_encrypt_indexplus (** index+=1; encrypt (input[index-1], request) *)
+         (Sifthenelse if_index_gt_0_lt_N (** 0 < index < N*)
             (Ssequence
-               (Sassign (result_index) (Etempvar r_id tint)) (** result[index] = r*)
-               call_encrypt_indexplus (** encrypt (input[index++], request) *)
+               assign_result (** result[index] = r*)
+               call_encrypt_indexplus (** index+=1; encrypt (input[index-1], request) *)
             )
-            (Sreturn None) (** return; *)
+            assign_result (** result[index]=r; *)
          )
       )
   |}.
@@ -138,3 +153,4 @@ Definition public_idents_client : list ident :=
 Definition client : Clight.program :=
   mkprogram composites global_definitions_client public_idents_client main_id Logic.I.
 
+End WITH_N.

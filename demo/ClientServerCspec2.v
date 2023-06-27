@@ -712,8 +712,8 @@ Proof.
            1-4, 9-12: try erewrite NMap.gso;eauto.
            1-2,5-6,9-10,13-14: try erewrite NMap.gso;eauto.
            1-16: try erewrite NMap.gi;try congruence.
-           1-16: try setoid_rewrite NMap.gsspec.
-           1-16: destruct NMap.elt_eq;try congruence.
+           all: try setoid_rewrite NMap.gsspec.
+           all: destruct NMap.elt_eq;try congruence.
            1-8: unfold NMap.get;rewrite NMap.gi;congruence. }
 
          assert (FIND_DEF_SERVER: forall f, Genv.find_def (Genv.globalenv se2 Server.b2) b2 <> Some (Gfun f)).
