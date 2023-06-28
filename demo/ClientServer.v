@@ -8,7 +8,6 @@ Require Import Invariant ValueAnalysis.
 
 Require Import Client.
 Require Import Server Serverspec Serverproof ClientServerCspec ClientServerCspec2.
-
 Require Import Linking SmallstepLinking.
 
 (** part1 *)
@@ -66,10 +65,9 @@ Proof.
   apply Axioms.functional_extensionality. intros [|]; auto.
 Qed.
 
-(* Top level theorem *)
+(* Top level theorem for Non-MutRec Client and Server *)
 
 Section SPEC.
-
 
 Variable client_asm tp1 tp2 : Asm.program.
 Axiom compile: transf_clight_program client = OK client_asm.
@@ -162,3 +160,59 @@ Proof.
 Qed.
 
 End SPEC.
+
+Require Import ClientMR ClientServerMRCSpec.
+
+Definition N := 10%Z.
+
+Lemma compose_ClientMR_Server_correct1:
+  forall client_asm tp spec,
+  compose (Clight.semantics1 (client N)) L1 = Some spec ->
+  transf_clight_program (client N) = OK client_asm ->
+  link client_asm b1 = Some tp ->
+  forward_simulation cc_compcert cc_compcert spec (Asm.semantics tp).
+Proof.
+  intros.
+  rewrite <- (cc_compose_id_right cc_compcert) at 1.
+  rewrite <- (cc_compose_id_right cc_compcert) at 2.
+  eapply compose_forward_simulations.
+  2: { unfold compose in H.
+       destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel. 2: discriminate.
+       cbn in *. inv H.
+       eapply AsmLinking.asm_linking; eauto. }
+  eapply compose_simulation.
+  eapply clight_semantic_preservation; eauto using transf_clight_program_match.
+  eapply semantics_preservation_L1.
+  eauto.
+  unfold compose. cbn.
+  apply link_erase_program in H1. rewrite H1. cbn. f_equal. f_equal.
+  apply Axioms.functional_extensionality. intros [|]; auto.
+Qed.
+
+(* Top level theorem for MutRec Client and Server *)
+
+
+Section SPEC_MR.
+
+Variable client_asm tp1 tp2 : Asm.program.
+
+Axiom compile_mr : transf_clight_program (client N) = OK client_asm.
+Axiom link2_mr : link client_asm b1 = Some tp1.
+
+Theorem spec_sim_mr : forward_simulation cc_compcert cc_compcert (top_spec1 N) (Asm.semantics tp1).
+Proof.
+  rewrite ro_injp_cc_compcert at 1.
+  rewrite ro_injp_cc_compcert at 2.
+  eapply compose_forward_simulations.
+  eapply top1_wt.
+  eapply compose_forward_simulations.
+  eapply top1_ro.
+  eapply compose_forward_simulations.
+  eapply top_simulation_L1.
+  unfold Int.max_signed. unfold N. cbn. lia.
+  eapply compose_ClientMR_Server_correct1; eauto.
+  eapply compile_mr.
+  eapply link2_mr.
+Qed.
+
+End SPEC_MR.
