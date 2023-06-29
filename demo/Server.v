@@ -11,16 +11,16 @@ Require Import Integers Intv.
 (* C-level spec : in C code:
 L1:
 int key;
-void encrypt (int input, void ( *complete)(int))){
+void encrypt (int input, void ( *complete)(int*))){
   int output = input ^ key;
-  complete(output);
+  complete(&output);
 }
 
 L2:
 const int key = 42;
-void encrypt (int input, void ( *complete)(int)){
+void encrypt (int input, void ( *complete)(int*)){
   int output = input ^ key;
-  complete(output)
+  complete(&output)
 }
 *)
 Definition main_id := (42%positive).

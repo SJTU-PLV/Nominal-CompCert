@@ -15,18 +15,18 @@ Require Import Server.
 int input[N], result[N];
 int index;
 
-void request (int r){
+void request (int *r){
   if (index == 0) {
     index += 1;
     encrypt(input[index - 1], request);
   }
   else if (0 < index < N){
-    result[index - 1] = r;
+    result[index - 1] = *r;
     index += 1;
     encrypt(input[index - 1], request);
   }
   else {
-    result[index - 1] = r;
+    result[index - 1] = *r;
     return;
   }
 }

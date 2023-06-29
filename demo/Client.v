@@ -13,12 +13,13 @@ Require Import Server.
 (*
 
 int result;
-void process (int r){
-  result = r;
+void process (int *r){
+  result = *r;
 }
 
-void request (int i){
+int request (int i){
   encrypt (i,process);
+  return i;
 }
 *)
 
