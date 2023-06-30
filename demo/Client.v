@@ -36,17 +36,18 @@ Definition result_def :=  {|
 
 Definition r_id := 7%positive.
 
+Definition tintp := tptr tint.
 Definition func_process :=
   {|
     fn_return := Tvoid;
     fn_callconv := cc_default;
-    fn_params := (r_id,tint) :: nil;
+    fn_params := (r_id,tintp) :: nil;
     fn_vars := nil;
     fn_temps := nil;
     fn_body :=
       (Ssequence
-         (* result = r; *)
-         (Sassign (Evar result_id tint) (Evar r_id tint))
+         (* result = *r; *)
+         (Sassign (Evar result_id tint) (Ederef (Evar r_id tintp)  tint))
          (* return; *)
          (Sreturn None)
       )

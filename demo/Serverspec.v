@@ -29,9 +29,10 @@ Inductive state: Type :=
     (m: mem)
 | Call2
     (fptr: val)
-    (output: int)
+    (sb: block)
     (m: mem)
 | Return1
+    (sb: block)
     (m: mem)
 | Return2
     (m: mem).
@@ -57,14 +58,14 @@ Inductive initial_state2 (ge:genv) : query li_c -> state -> Prop :=
 
 Inductive at_external (ge:genv): state -> query li_c -> Prop :=
 | at_external_intro
-    m output b ofs id
-    (FIND: Genv.find_funct ge (Vptr b ofs) = Some (External (EF_external id int__void_sg))):
-    at_external ge (Call2 (Vptr b ofs) output m) (cq (Vptr b ofs) int__void_sg (Vint output :: nil) m).
+    m b ofs id sb
+    (FIND: Genv.find_funct ge (Vptr b ofs) = Some (External (EF_external id intptr__void_sg))):
+    at_external ge (Call2 (Vptr b ofs) sb m) (cq (Vptr b ofs) intptr__void_sg (Vptr sb Ptrofs.zero :: nil) m).
 
 Inductive after_external: state -> reply li_c -> state -> Prop :=
 | after_external_intro
-    vf m m' output res:
-    after_external (Call2 vf output m) (cr res m') (Return1 m').
+    vf m m' tsb res:
+    after_external (Call2 vf tsb m) (cr res m') (Return1 tsb m').
 
 Inductive final_state: state -> reply li_c  -> Prop :=
   | final_state_intro
@@ -73,13 +74,16 @@ Inductive final_state: state -> reply li_c  -> Prop :=
 
 Inductive step : state -> trace -> state -> Prop := 
 | step_xor1
-    input output m b ofs key keyb
+    input output m b ofs key keyb m' sp m''
+    (ALLOC: Mem.alloc m 0 8 = (m',sp))
     (FINDKEY: Genv.find_symbol se key_id = Some keyb)
-    (LOADKEY: Mem.loadv Mint32 m (Vptr keyb Ptrofs.zero) = Some (Vint key))
-    (XOR: output = Int.xor input key):
-  step (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) output m)
-| step_asmret m:
-    step (Return1 m) E0 (Return2 m).
+    (LOADKEY: Mem.loadv Mint32 m' (Vptr keyb Ptrofs.zero) = Some (Vint key))
+    (XOR: output = Int.xor input key)
+    (STORE: Mem.storev Many64 m' (Vptr sp Ptrofs.zero) (Vint output) = Some m''):
+  step (Call1 (Vptr b ofs) input m) E0 (Call2 (Vptr b ofs) sp m'')
+| step_asmret sp m m'
+    (FREE: Mem.free m sp 0 8 = Some m'):
+    step (Return1 sp m) E0 (Return2 m').
 (*
 Inductive step2 : state -> trace -> state -> Prop :=
 | step_xor2
