@@ -962,44 +962,47 @@ Inductive match_state_ro_c_asm : state -> (sup * Asm.state) -> Prop :=
   rs0 RSI = Vptr b' (Ptrofs.add ofs (Ptrofs.repr delta)) ->
   sound_memory_ro se m1 ->
   match_state_ro_c_asm (Call1 (Vptr b ofs) input m1) (s2, State rs0 m2 true)
-|match_call2_ro m1 b ofs j Hm (rs:regset) m1' m2' Hm' output sb b' delta eb:
-    let sp := rs RSP in let ra := rs RA in let vf := rs PC in
-    sp = Vptr sb Ptrofs.zero ->
+|match_call2_ro m1 b ofs j j' Hm (rs:regset) m1' m2' Hm' sb tsb b' delta eb:
+    let sp := Vptr sb Ptrofs.zero in let tsp :=rs RSP in let ra := rs RA in let vf := rs PC in
+    tsp = Vptr tsb Ptrofs.zero ->
     wp = injpw j m1 m2 Hm ->
-    (forall ofs, loc_out_of_reach j m1 sb ofs) ->
-    Mem.range_perm m2' sb 0 16 Cur Freeable ->
-    injp_acc wp (injpw j m1' m2' Hm') ->
+    (forall ofs, (0 <= ofs < 8 \/ 16 <= ofs < 24) -> loc_out_of_reach j' m1' tsb ofs) ->
+    Mem.range_perm m2' tsb 0 8 Cur Freeable ->
+    Mem.range_perm m2' tsb 16 24 Cur Freeable ->
+    injp_acc wp (injpw j' m1' m2' Hm') ->
     rs PC = Vptr b' (Ptrofs.add ofs (Ptrofs.repr delta)) ->
-    j b = Some (b', delta) -> rs RDI = Vint output ->
-    ra = Vptr eb (Ptrofs.repr 3) ->
+    j b = Some (b', delta) ->
+    j' sb = Some (tsb, 8) -> (forall b (d:Z) , j' b = Some (tsb, d) -> b = sb) ->
+    rs RDI = Vptr tsb (Ptrofs.repr 8) ->
+    ra = Vptr eb (Ptrofs.repr 5) ->
     Genv.find_funct_ptr tge eb = Some (Internal func_encrypt_b2) ->
-    sup_In sb (Mem.support m2') -> ~ sup_In sb s2 ->
-    (forall b d, j b = Some (sb,d) -> False) ->
+    sup_In tsb (Mem.support m2') -> ~ sup_In tsb s2 -> ~sup_In sb (Mem.support m1) ->
     vf <> Vundef ->
-    Mem.loadv Mptr m2' (Val.offset_ptr sp (Ptrofs.repr 8)) = Some ra0 ->
-    Mem.loadv Mptr m2' (Val.offset_ptr sp Ptrofs.zero) = Some sp0 ->
+    Mem.loadv Mptr m2' (Val.offset_ptr tsp (Ptrofs.repr 16)) = Some ra0 ->
+    Mem.loadv Mptr m2' (Val.offset_ptr tsp Ptrofs.zero) = Some sp0 ->
     valid_blockv s2 sp0 ->
      (forall r, is_callee_save r = true -> rs (preg_of r) = rs0 (preg_of r)) ->
      Mem.sup_include s2 (Mem.support m2')  ->
      sound_memory_ro se m1' ->
-     match_state_ro_c_asm (Call2 (Vptr b ofs) output m1') (s2, State rs m2' true)
-|match_return1_ro j j' m1 m1'' m2'' Hm Hm'' (rs:regset) eb sb:
-    let sp := rs RSP in
-    sp = Vptr sb Ptrofs.zero ->
-     wp = injpw j m1 m2 Hm ->
-     (forall ofs, loc_out_of_reach j m1 sb ofs) ->
-     Mem.range_perm m2'' sb 0 16 Cur Freeable ->
-     injp_acc wp (injpw j' m1'' m2'' Hm'') ->
-     rs PC = Vptr eb (Ptrofs.repr 3) ->
-     Genv.find_funct_ptr tge eb = Some (Internal func_encrypt_b2) ->
-     (forall b d, j' b = Some (sb,d) -> False) ->
-     Mem.loadv Mptr m2'' (Val.offset_ptr sp (Ptrofs.repr 8)) = Some ra0 ->
-     Mem.loadv Mptr m2'' (Val.offset_ptr sp Ptrofs.zero) = Some sp0 ->
-     ~ sup_In sb s2 ->
-     valid_blockv (Mem.support m2) sp0 ->
-     (forall r, is_callee_save r = true  -> rs (preg_of r) = rs0 (preg_of r)) ->
-     Mem.sup_include (Mem.support m2) (Mem.support m2'') ->
-     match_state_ro_c_asm (Return1 m1'') (s2, State rs m2'' true)
+     match_state_ro_c_asm (Call2 (Vptr b ofs) sb m1') (s2, State rs m2' true)
+|match_return1_ro j j' m1 m1'' m2'' Hm Hm'' (rs:regset) eb sb tsb:
+    let sp := Vptr sb Ptrofs.zero in let tsp := rs RSP in
+    tsp = Vptr tsb Ptrofs.zero ->
+    wp = injpw j m1 m2 Hm ->
+    (forall ofs,  (0 <= ofs < 8 \/ 16 <= ofs < 24) -> loc_out_of_reach j' m1'' tsb ofs) ->
+    Mem.range_perm m2'' tsb 0 8 Cur Freeable ->
+    Mem.range_perm m2'' tsb 16 24 Cur Freeable ->
+    injp_acc wp (injpw j' m1'' m2'' Hm'') ->
+    rs PC = Vptr eb (Ptrofs.repr 5) ->
+    Genv.find_funct_ptr tge eb = Some (Internal func_encrypt_b2) ->
+    j' sb = Some (tsb, 8) -> (forall b (d:Z) , j' b = Some (tsb, d) -> b = sb) ->
+    Mem.loadv Mptr m2'' (Val.offset_ptr tsp (Ptrofs.repr 16)) = Some ra0 ->
+    Mem.loadv Mptr m2'' (Val.offset_ptr tsp Ptrofs.zero) = Some sp0 ->
+    ~ sup_In tsb s2 -> ~sup_In sb (Mem.support m1) ->
+    valid_blockv (Mem.support m2) sp0 ->
+    (forall r, is_callee_save r = true  -> rs (preg_of r) = rs0 (preg_of r)) ->
+    Mem.sup_include (Mem.support m2) (Mem.support m2'') ->
+    match_state_ro_c_asm (Return1 sb m1'') (s2, State rs m2'' true)
 |match_return2_ro j' m2'' m1'' (rs:regset) Hm'':
   (injp_acc wp (injpw j' m1'' m2'' Hm'')) ->
    rs RSP = rs0 RSP -> rs PC = rs0 RA ->
@@ -1122,75 +1125,99 @@ Proof.
     intros. inv H. rewrite size_int_fptr__void_sg_0 in H1. extlia.
   - (* at_external*)
     intros s1 s2 q1 MS EXT1. cbn. inv EXT1. inv MS.
-    inv H. cbn in *. inv H12. cbn in *.
+    inv H. cbn in *. inv H13. cbn in *.
     symmetry in H9. inv H9.
     eapply Genv.match_stbls_incr in H2; eauto.
     2:{
-      intros. exploit H36; eauto. intros [A B].
+      intros. exploit H39; eauto. intros [A B].
       unfold Mem.valid_block in *. split; eauto with mem.
     }
-    exists ((s,row s m),(cajw (injpw f m m2' Hm'1) int__void_sg rs)).
+    rename m into m1'.
+    exists ((s,row s m1'),(cajw (injpw j' m1' m2' Hm'1) intptr__void_sg rs)).
     exists (rs,m2'). repeat apply conj.
     + econstructor; eauto.
       generalize  match_program_id'. intro TRAN.
-      rewrite H13.
-      assert (Val.inject f (Vptr b ofs) (Vptr b' (Ptrofs.add ofs (Ptrofs.repr delta)))).
+      rewrite H14.
+      assert (Val.inject j' (Vptr b ofs) (Vptr b' (Ptrofs.add ofs (Ptrofs.repr delta)))).
       econstructor; eauto.
       eapply Genv.find_funct_transf in TRAN; eauto.
-    + rename m into m'. rename m1 into m. rename m2 into tm. rename m2' into tm'.
-      exists (cq (Vptr b ofs) int__void_sg (Vint output :: nil) m'). split.
+    + rename m1 into m. rename m2 into tm. rename m2' into tm'. rename m1' into m'.
+      exists (cq (Vptr b ofs) intptr__void_sg (Vptr sb Ptrofs.zero :: nil) m'). split.
       constructor. constructor. eauto.
       econstructor; eauto.
-      -- rewrite loc_arguments_int. cbn. rewrite H15.
+      -- rewrite loc_arguments_int. cbn. rewrite H18.
          constructor; eauto.
-      -- rewrite H13. econstructor; eauto.
-      -- intros. rewrite size_int__void_sg_0 in H.
-         subst sp. rewrite H8 in H. inv H. extlia.
-      -- subst sp. rewrite H8. constructor.
-      -- subst ra. rewrite H16. constructor.
-      -- subst sp. rewrite H8. constructor. eauto.
+      -- rewrite H14. econstructor; eauto.
+      -- intros. rewrite size_intptr__void_sg_0 in H.
+         subst tsp. rewrite H8 in H. inv H. extlia.
+      -- subst tsp. rewrite H8. constructor.
+      -- subst ra. rewrite H19. constructor.
+      -- subst tsp. rewrite H8. constructor. eauto.
       -- eapply args_removed_tailcall_possible.
-         red. apply size_int__void_sg_0.
+         red. apply size_intptr__void_sg_0.
       -- congruence.
-      -- subst ra. rewrite H16. congruence.
+      -- subst ra. rewrite H19. congruence.
     + constructor; eauto.
     + constructor; eauto.
-      inversion H33. eauto with mem.
+      inversion H36. eauto with mem.
     + (*after_external*)
       intros r1' r2 s1' [r1 [Hri Hr]] Haf1.
       inv Haf1. inv Hri. inv H. inv Hr.
       cbn in *.
-      rename m into m1'. inv H0.
-      inv H39. rename m' into m1''. rename tm' into m2''.
+      inv H0.
+      inv H42. rename m' into m1''. rename tm' into m2''.
       exists ((Mem.support m2), (State rs' m2'' true)). repeat apply conj.
-      -- constructor. inversion H46; eauto.
+      -- constructor. inversion H49; eauto.
          unfold inner_sp.  cbn.
-         rewrite H42. subst sp. rewrite H8.
+         rewrite H45. subst tsp. rewrite H8.
          rewrite pred_dec_false; eauto.
       -- reflexivity.
-      -- assert ( RANGEPERM: Mem.range_perm m2'' sb 0 16 Cur Freeable). 
-         { red. intros. inversion H46.
+      -- assert ( RANGEPERM1: Mem.range_perm m2'' tsb 0 8 Cur Freeable). 
+         { red. intros. inversion H49.
            eapply unchanged_on_perm; eauto.
-           red. intros. exploit H20; eauto.
+         }
+         assert ( RANGEPERM2: Mem.range_perm m2'' tsb 16 24 Cur Freeable). 
+         { red. intros. inversion H49.
+           eapply unchanged_on_perm; eauto.
          }
          econstructor; cbn.
-         rewrite H42. eauto.
-         reflexivity. eauto. eauto. instantiate (1:= Hm'5). all: eauto.
-         ++ etransitivity. instantiate (1:= injpw f m1' m2' Hm'1).
+         rewrite H45. eauto.
+         reflexivity.
+         instantiate (1:= j'0).
+         {
+           intros. red. intros. destruct (j' b0) as [[tsb' d']|] eqn:Hinj.
+           apply H50 in Hinj as EQ. rewrite H0 in EQ. inv EQ.
+           intro. apply H10 in H.
+           red in H.  eapply H in Hinj as Hp. apply Hp.
+           apply H41; eauto.
+           apply inject_implies_dom_in in Hm9.
+           eapply Hm9; eauto.
+           exploit H51; eauto. intros [A B].
+           exfalso. apply B. eauto.
+         }
+         eauto. eauto. instantiate (1:= Hm'5). all: eauto.
+         ++ etransitivity. instantiate (1:= injpw j' m1' m2' Hm'1).
             constructor; eauto.
             constructor; eauto.
-         ++ rewrite H43. eauto.
-         ++ intros. destruct (f b0) as [[sb' d']|] eqn: Hf.
-            * apply H47 in Hf as Hf'. rewrite H in Hf'. inv Hf'. eauto.
-            * exploit H48; eauto. intros [A B]. eauto.
-         ++ rewrite H42. subst sp. rewrite H8 in *. cbn in *.
-            eapply Mem.load_unchanged_on. apply H46. 2: eauto.
-            intros. red. intros. exploit H20; eauto.
-         ++ rewrite H42. subst sp. rewrite H8 in *. cbn in *.
-            eapply Mem.load_unchanged_on. apply H46. 2: eauto.
-            intros. red. intros. exploit H20; eauto.
-         ++ intros. rewrite H40; eauto.
-         ++ inversion H46. eauto with mem.
+         ++ rewrite H46. eauto.
+         ++ intros. destruct (j' b0) as [[tsb' d']|] eqn: Hf.
+            * apply H50 in Hf as Hf'. rewrite H in Hf'. inv Hf'. eauto.
+            * exploit H51; eauto. intros [A B]. exfalso. apply B; eauto.
+         ++ rewrite H45. subst tsp. rewrite H8 in *. cbn in *.
+            eapply Mem.load_unchanged_on. apply H49. 2: eauto.
+            intros. eapply H10. right.
+            rewrite Ptrofs.add_zero_l in H.
+            rewrite Ptrofs.unsigned_repr in H.
+            rewrite size_chunk_Mptr in H. Ap64_in H. lia.
+            Plia.
+         ++ rewrite H45. subst tsp. rewrite H8 in *. cbn in *.
+            eapply Mem.load_unchanged_on. apply H49. 2: eauto.
+            intros. eapply H10. left.
+            rewrite Ptrofs.add_zero_l in H.
+            rewrite Ptrofs.unsigned_zero in H.
+            rewrite size_chunk_Mptr in H. Ap64_in H. lia.
+         ++ intros. rewrite H43; eauto.
+         ++ inversion H49. eauto with mem.
      -- reflexivity.
      -- reflexivity.            
   - (*internal_steps*)
@@ -1198,21 +1225,58 @@ Proof.
     intros. inv H; inv H0; inv H; cbn in *. inv H1.
     ++ (*step_xor*)
       inv H13. symmetry in H8. inv H8.
-      destruct (enter_fung_exec m2 rs0) as (m2'1 & m2'2 & m2'3 & m2'4 & sp &
-                                              ALLOC & STORE1 & STORE2
-                                             & LOAD1 & LOAD2 &  FREE & X & UNC); eauto.
+      destruct (enter_fung_exec m2 rs0) as (m2'1 & m2'2 & m2'3 & tsp &
+                                              ALLOC' & STORE1 & STORE2
+                                            & STEP2); eauto.
       apply Mem.fresh_block_alloc in ALLOC as FRESH.
-      exploit Mem.alloc_right_inject; eauto. intro INJ1.
+      apply Mem.fresh_block_alloc in ALLOC' as FRESH'.
+      exploit Mem.alloc_right_inject; eauto. intro INJ11.
+      exploit Mem.alloc_left_mapped_inject. eauto with mem.
+      eauto. eauto with mem. instantiate (1:= 8).
+      rlia.
+      intros. right. exploit Mem.perm_alloc_inv; eauto.
+      rewrite pred_dec_true. intro. rlia. reflexivity.
+      intros. 
+      exploit Mem.perm_alloc_2; eauto. instantiate (1:= ofs1 + 8). lia.
+      eauto with mem.
+      cbn. red. intros.
+      {
+        destruct chunk; simpl; try (exists 8; lia ); try (exists 4; lia); try (exists 2; lia); exists 1; lia.
+      }
+      intros.
+      inv Hm0. exploit mi_mappedblocks; eauto.
+      intros (f' & INJ2 & INCR & MAPSP & INCRDIF).
+      assert (NEWINJ: forall b d, f' b = Some (tsp,d) -> b = sp).
+      {
+        intros. destruct (eq_block b1 sp); auto.
+        rewrite INCRDIF in H1; eauto.
+        inv Hm0. exploit mi_mappedblocks; eauto.
+        intro. congruence.
+      }
       exploit Mem.store_outside_inject; eauto.
-      intros. inversion Hm0. eauto. intro INJ2.
+      intros. apply NEWINJ in H1 as EQ. subst b'0.
+      rewrite MAPSP in H1.  inv H1.
+      eapply Mem.perm_alloc_3 in H3; eauto.
+      rewrite Ptrofs.unsigned_zero in H4.
+      unfold Mptr in H4. Ap64_in H4. cbn in H4. extlia.
+      intro INJ3.
       exploit Mem.store_outside_inject; eauto.
-      intros. inversion Hm0. eauto. intro INJ3.
-      exploit Mem.free_right_inject; eauto.
-      intros. inversion Hm0. eauto. intro INJ4.
+       intros. apply NEWINJ in H1 as EQ. subst b'0.
+      rewrite MAPSP in H1.  inv H1.
+      eapply Mem.perm_alloc_3 in H3; eauto.
+      rewrite Ptrofs.unsigned_repr in H4.
+      unfold Mptr in H4. Ap64_in H4. cbn in H4. extlia.
+      rlia.
+      intro INJ4.
+      eapply Genv.find_symbol_match in FINDKEY as FINDK'; eauto.
+      destruct FINDK' as [b_mem' [VINJM FINDK']].
       rename H14 into Hpc. rename H18 into Hrdi. rename H19 into Hrsi.
       assert (ROREAD : key = Int.repr 42).
-      { clear - H20 FINDKEY LOADKEY Hse1.
-        inv H20.
+      { clear - H20 ALLOC FINDKEY LOADKEY Hse1.
+        apply ro_acc_alloc in ALLOC.
+        exploit ro_acc_sound; eauto. intro Hsound.
+        clear ALLOC H20.
+        inv Hsound.
         red in H. red in Hse1.
         assert (Maps.PTree.get key_id (prog_defmap (erase_program b2)) = Some (Gvar key_def_const)).
         { cbn.
@@ -1232,14 +1296,19 @@ Proof.
         rewrite INVERT. reflexivity.
         eapply romem_for_ablock; eauto. cbn.
         intros [_ [[_ B] _]].
-        exploit B. eauto. intro. cbn in H2. rewrite Ptrofs.unsigned_zero in H2.
+        exploit B; eauto. intro. cbn in H2. rewrite Ptrofs.unsigned_zero in H2.
         unfold ablock_store,ablock_load in H2. cbn in H2. rewrite Maps.ZTree.gss in H2.
         inv H2. reflexivity.
       }
       set (output := Int.xor input key).
+      exploit Mem.store_mapped_inject; eauto.
+      intros (m2'4 & STORE3 & INJ5).
+      rewrite Ptrofs.unsigned_zero in STORE3. cbn in STORE3.
+      exploit STEP2; eauto. congruence.
+      intros (LOAD2 & LOAD1 & LOAD3 & UNC1 & UNC2).
       assert (exists s2': Asm.state,
              plus (Asm.step (Mem.support m2)) (Genv.globalenv se2 b2) (State rs0 m2 true) E0 s2'
-             /\ ms (Call2 (Vptr b ofs) output m1) (Mem.support m2, s2')).
+             /\ ms (Call2 (Vptr b ofs) sp m'') (Mem.support m2, s2')).
       { 
         (*execution of Asm code*)
         eexists. split.
@@ -1248,7 +1317,7 @@ Proof.
       (*Pallocframe*)
       econstructor; eauto.
       find_instr. simpl.
-      rewrite ALLOC. rewrite Ptrofs.add_zero. rewrite STORE1.
+      rewrite ALLOC'. rewrite Ptrofs.add_zero. rewrite STORE1.
       rewrite Ptrofs.add_zero_l. rewrite STORE2. unfold nextinstr.
       repeat try Pgso. rewrite Hpc. cbn.
       rewrite Ptrofs.add_zero_l. reflexivity.
@@ -1259,51 +1328,112 @@ Proof.
       rewrite undef_regs_pc. Pgso. Pgss. cbn.
       rewrite Ptrofs.add_unsigned. rewrite Ptrofs.unsigned_one. simpl.
       reflexivity.
+      (*store output*)
+      eapply star_step; eauto. econstructor; eauto. Simplif. find_instr. cbn.
+      Ap64. unfold exec_store. cbn. unfold eval_addrmode. Ap64. simpl. cbn.
+      rewrite undef_regs_rsp. do 2 Pgso. Pgss.
+      rewrite undef_regs_rdi. Pgss. cbn. Ap64.
+      rewrite Int64.add_zero_l. rewrite Ptrofs.add_zero_l.
+      unfold Ptrofs.of_int64. rewrite Int64.unsigned_repr.
+      2: { unfold Int64.max_unsigned. cbn. lia. }
+      unfold Mem.storev.
+      Plia.
+      rewrite Hrdi. cbn. rewrite ROREAD in STORE3. rewrite STORE3.
+      unfold nextinstr_nf, nextinstr. cbn.
+      rewrite undef_regs_nil.
+      rewrite !undef_regs_pc. Pgss. cbn.
+      compute_pc. reflexivity.
+      (*read address to RDI*)
+      eapply star_step; eauto. econstructor; eauto. Simplif. find_instr. cbn.
+      rewrite undef_regs_rsp. repeat Pgso. rewrite undef_regs_rsp.
+      do 2 Pgso. Pgss. cbn. Ap64.
+      rewrite Int64.add_zero_l. rewrite Ptrofs.add_zero_l.
+      unfold Ptrofs.of_int64. rewrite Int64.unsigned_repr.
+      2: { unfold Int64.max_unsigned. cbn. lia. }
+      unfold nextinstr. cbn.
+      compute_pc. reflexivity.
       (*call*)
       eapply star_step; eauto. econstructor; eauto. Simplif. find_instr. cbn.
       compute_pc. reflexivity.
       apply star_refl. traceEq.
         - constructor; eauto.
           econstructor; eauto.
-          + do 3 Pgso. rewrite undef_regs_rsp.
-            Pgso. Pgso. 
+          + do 5 Pgso. rewrite undef_regs_rsp.
+            Pgso. rewrite undef_regs_rsp. do 2 Pgso.
             Pgss. reflexivity.
           + simpl. reflexivity.
-          + intros. red. intros. inversion Hm0. exploit mi_mappedblocks; eauto.
-          + apply Mem.free_range_perm in FREE. eauto.
-          + instantiate (1:= INJ3).
-          constructor; eauto.
-          -- red. eauto.
-          -- eapply Mem.ro_unchanged_trans.
-             eapply Mem.ro_unchanged_alloc; eauto.
-             eapply Mem.ro_unchanged_trans.
-             eapply Mem.ro_unchanged_store; eauto.
-             eapply Mem.ro_unchanged_store; eauto.
-             erewrite <- Mem.support_store; eauto.
-             red. eauto using Mem.perm_store_2.
-             red. intro. eapply Mem.valid_block_alloc; eauto.
-             red. intros. eapply Mem.perm_alloc_4; eauto.
-             intro. apply Mem.fresh_block_alloc in ALLOC.
-             subst. congruence.
-          -- red. intros.
-             inversion X. eapply unchanged_on_perm; eauto.
-          -- eauto with mem.
-          -- eapply Mem.unchanged_on_implies; eauto.
-             intros. cbn. eauto.
-          -- red. intros. congruence.
-          + repeat Pgso. rewrite undef_regs_rdi. Pgss.
-            unfold output. rewrite Hrdi. subst. reflexivity.
+          + intros. red. intros. intro.
+            apply NEWINJ in H3 as EQ. subst b1.
+            rewrite MAPSP in H3. inv H3.
+            exploit Mem.perm_alloc_3. apply ALLOC.
+            eapply Mem.perm_store_2; eauto. intro.
+            extlia.
+          + red. intros. eapply Mem.perm_store_1; eauto.
+            eapply Mem.perm_store_1; eauto.
+            eapply Mem.perm_store_1; eauto.
+            eapply Mem.perm_alloc_2; eauto. lia.
+          + red. intros. eapply Mem.perm_store_1; eauto.
+            eapply Mem.perm_store_1; eauto.
+            eapply Mem.perm_store_1; eauto.
+            eapply Mem.perm_alloc_2; eauto. lia.
+          + instantiate (1:= INJ5).
+            constructor; eauto.
+              -- red.
+               eapply Mem.ro_unchanged_trans.
+               eapply Mem.ro_unchanged_alloc; eauto.
+               eapply Mem.ro_unchanged_store; eauto.
+               red. intro. eapply Mem.valid_block_alloc; eauto.
+               red. intros. eauto with mem.
+            -- eapply Mem.ro_unchanged_trans.
+               eapply Mem.ro_unchanged_alloc; eauto.
+               eapply Mem.ro_unchanged_trans.
+               eapply Mem.ro_unchanged_store; eauto.
+               eapply Mem.ro_unchanged_trans.
+               eapply Mem.ro_unchanged_store; eauto.
+               eapply Mem.ro_unchanged_store; eauto.
+               erewrite <- Mem.support_store; eauto.
+               red. eauto using Mem.perm_store_2.
+               erewrite <- Mem.support_store; eauto.
+               red. eauto using Mem.perm_store_2.
+               red. intro. eapply Mem.valid_block_alloc; eauto.
+               red. intros. eapply Mem.perm_alloc_4; eauto.
+               intro. apply Mem.fresh_block_alloc in ALLOC.
+               subst. congruence.
+            -- red. intros. eauto with mem.
+            -- red. intros. inv UNC2. eapply unchanged_on_perm; eauto.
+            -- assert (X : Mem.unchanged_on (fun _ _ => True) m1 m').
+               eapply Mem.alloc_unchanged_on; eauto.
+               assert (Y: Mem.unchanged_on (fun b ofs => b <> sp) m' m'').
+               eapply Mem.store_unchanged_on; eauto.
+               inv X. inv Y. constructor.
+               eauto with mem.
+               intros. etransitivity. eauto. apply unchanged_on_perm0.
+               intro. subst.
+               apply Mem.alloc_result in ALLOC. rewrite ALLOC in H3. exploit freshness; eauto.
+               eauto with mem.
+               intros. etransitivity. apply unchanged_on_contents0.
+               intros. subst. apply Mem.perm_valid_block in H3. intro. subst.
+               apply Mem.alloc_result in ALLOC. rewrite ALLOC in H3. exploit freshness; eauto.
+               eauto with mem.
+               eauto.
+            -- eapply Mem.unchanged_on_implies; eauto.
+               intros. cbn. auto.
+            -- red. intros. destruct (eq_block b1 sp).
+               subst. rewrite MAPSP in H3. inv H3. split; eauto.
+               rewrite INCRDIF in H3. congruence. eauto.
           + Pgso. Pgss. reflexivity.
-          + apply Mem.valid_new_block in ALLOC as VALID. unfold Mem.valid_block in *.
-          erewrite Mem.support_store. 2: eauto.
-          erewrite Mem.support_store; eauto.
-          + intros.
-            inversion Hm0. exploit mi_mappedblocks; eauto.
-          + Pgss. rewrite undef_regs_rsi. repeat Pgso.
-          + cbn. rewrite <- H. constructor; eauto.
+          + apply Mem.valid_new_block in ALLOC' as VALID. unfold Mem.valid_block in *.
+            erewrite Mem.support_store. 2: eauto.
+            erewrite Mem.support_store. 2: eauto.
+            erewrite Mem.support_store; eauto.
+          + Pgss. rewrite undef_regs_rsi. repeat Pgso. rewrite undef_regs_rsi.
+            repeat Pgso.
+          + cbn. rewrite <- H. constructor. eauto.
           + intros. cbn. repeat try Pgso; destruct r; cbn in *; try congruence; eauto.
-            rewrite not_win in H1. inv H1.
-          +  cbn. inversion X. eauto.
+            rewrite not_win in H1. inv H1. Ap64_in H1. rewrite not_win in H1. inv H1.
+          + cbn. inversion UNC2. eauto.
+          + eapply ro_acc_sound; eauto. eapply ro_acc_trans.
+            eapply ro_acc_alloc; eauto. eapply ro_acc_store; eauto.
       }
       destruct H1 as [s2' [STEP MS]]. cbn.
       exists (Mem.support m2, s2'). intuition eauto.
@@ -1313,24 +1443,41 @@ Proof.
     * eapply plus_trans; eauto.
       apply plus_one. auto.
       ++ (*step_free*)
-     assert ({m2''1| Mem.free m2'' sb 0 16 = Some m2''1}).
+           assert ({m2''1| Mem.free m2'' tsb 0 24 = Some m2''1}).
      {
        apply Mem.range_perm_free; eauto.
+       red. intros.
+       apply Mem.free_range_perm in FREE as Rperm1.
+       eapply Mem.range_perm_inject in H14; eauto. cbn in H14.
+       assert (0<= ofs < 8 \/ (8 <= ofs <16 \/ 16 <= ofs < 24)). lia.
+       destruct H0 as [A | [B | C]].
+       eapply H9; eauto. eapply H14; eauto. eapply H10; eauto.
      }
      destruct X as [m2'1 FREE'].
-     exploit Mem.free_right_inject. apply Hm''. eauto.
-     intros. exploit H12; eauto. intro INJ'.
-     symmetry in H3. inv H3. inv H16.
+     exploit Mem.free_left_inject. apply Hm''. eauto. intro INJ'0.
+     exploit Mem.free_right_inject. apply INJ'0. eauto.
+     intros. apply H15 in H as EQ. subst b1. rewrite H14 in H. inv H.
+     assert (0 <= ofs + 8 < 8 \/ (8 <= ofs + 8 < 16 \/ 16 <= ofs + 8 < 24)). lia.
+     destruct H as [A | [b | C]].
+     assert (loc_out_of_reach j' m tsb (ofs + 8)).  eapply H8; eauto.
+     red in H. exploit H; eauto. replace (ofs + 8 - 8) with ofs by lia.
+     eauto with mem.
+     eapply Mem.perm_free_4 in H0; eauto. destruct H0. congruence. extlia.
+     assert (loc_out_of_reach j' m tsb (ofs + 8)).  eapply H8; eauto.
+     red in H. exploit H; eauto. replace (ofs + 8 - 8) with ofs by lia.
+     eauto with mem.
+     intro INJ'.
+     symmetry in H7. inv H7. inv H20.
      assert (exists s2': Asm.state,
              plus (Asm.step (Mem.support m2)) (Genv.globalenv se2 b2) (State rs m2'' true) E0 s2'
-             /\ ms (Return2 m) (Mem.support m2, s2')).
+             /\ ms (Return2 m') (Mem.support m2, s2')).
      {
        eexists. split.
        econstructor. econstructor; eauto. find_instr.
       (* Pfreeframe *)
-       simpl. cbn. unfold Mem.loadv. subst sp. inv H1. rewrite <- H0 in *.
-       cbn in H13. cbn in H14. cbn. rewrite H13. rewrite H14.
-       Plia. cbn. rewrite FREE'. unfold nextinstr. cbn. rewrite H10.
+       simpl. cbn. unfold Mem.loadv. subst tsp. rewrite H4 in *.
+       cbn in H16. cbn in H17. cbn. rewrite H16. rewrite H17.
+       Plia. cbn. rewrite FREE'. unfold nextinstr. cbn. rewrite H12.
        cbn. compute_pc. reflexivity.
        (*Pret*)
        eapply star_step; eauto. econstructor; eauto. Simplif.
@@ -1339,23 +1486,31 @@ Proof.
        eapply star_refl. traceEq.
       - constructor; eauto.
         econstructor. instantiate (1:= INJ'). all: eauto.
-        + cbn. inv H9.
+        + cbn. inv H11.
           constructor; eauto.
           -- eapply Mem.ro_unchanged_trans; eauto.
              eapply Mem.ro_unchanged_free; eauto.
+             inversion H30. eauto.
+          -- eapply Mem.ro_unchanged_trans; eauto.
+             eapply Mem.ro_unchanged_free; eauto.
+          -- red. eauto using Mem.perm_free_3.
           -- red. eauto using Mem.perm_free_3.
           -- eapply mem_unchanged_on_trans_implies_valid. eauto.
-             instantiate (1 := fun b ofs => loc_out_of_reach f m1 b ofs /\ b <> sb).
+             instantiate (1:= fun b ofs => loc_unmapped f b ofs /\ Mem.valid_block m1 b).
              eapply Mem.free_unchanged_on; eauto.
-             intros. intros [A B]. congruence.
-             intros. simpl. intuition auto. subst.
-             unfold Mem.valid_block in H16. cbn in H15. congruence.
+             intros. intros [A B]. apply H19. eauto.
+             intros. constructor; eauto.
+          -- eapply mem_unchanged_on_trans_implies_valid. eauto.
+             instantiate (1 := fun b ofs => loc_out_of_reach f m1 b ofs /\ Mem.valid_block m2 b).
+             eapply Mem.free_unchanged_on; eauto.
+             intros. intros [A B]. apply H18; eauto.
+             intros. simpl. intuition auto.
         + intros. cbn.
           cbn. repeat try Pgso; eauto; destruct r; cbn in *; try congruence; eauto.
-        + cbn. inv H9.
-          erewrite (Mem.support_free _ _ _ _ _ FREE'). inv H29. eauto.
+        + cbn. inv H11.
+          erewrite (Mem.support_free _ _ _ _ _ FREE'). inv H31. eauto.
       }
-      destruct H16 as [s2' [STEP MS]].  cbn.
+      destruct H3 as [s2' [STEP MS]].  cbn.
       exists (Mem.support m2, s2'). intuition eauto.
       revert STEP. generalize (Mem.support m2), (Genv.globalenv se2 b2); clear; intros.
       pattern (State rs m2'' true),E0,s2'. eapply plus_ind2; eauto; intros.
@@ -1384,7 +1539,7 @@ Proof.
     constructor; eauto.
     cbn. inv H0. constructor; eauto.
   - intros. subst.
-    exists (se2, int__void_sg).
+    exists (se2, intptr__void_sg).
     exists q1. inv H. repeat apply conj; simpl; auto.
     + inv H0. constructor; cbn; eauto.
     + constructor; eauto.

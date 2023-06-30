@@ -124,12 +124,12 @@ Pret
 
 *)
 Definition code_b2: list instruction :=
-   Pallocframe 16 (Ptrofs.repr 8) Ptrofs.zero ::
+   Pallocframe 24 (Ptrofs.repr 16) Ptrofs.zero ::
      Pxorl_ri RDI (Int.repr 42) ::
      Pmov_mr_a (Addrmode (Some RSP) None (inl 8)) RDI ::
      Pleaq RDI (Addrmode (Some RSP) None (inl 8)) ::
      Pcall_r RSI (intptr__void_sg) ::
-     Pfreeframe 16 (Ptrofs.repr 8) Ptrofs.zero ::
+     Pfreeframe 24 (Ptrofs.repr 16) Ptrofs.zero ::
      Pret ::
      nil.
 
