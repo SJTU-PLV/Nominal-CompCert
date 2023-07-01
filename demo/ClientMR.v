@@ -107,14 +107,16 @@ Definition if_index_gt_0_lt_N :=
     (Ebinop Olt (Evar index_id tint) (Econst_int (Int.repr N) tint) tbool)
     tbool.
 
+Definition tintp := tptr tint.
+
 Definition assign_result:=
-  (Sassign (result_index) (Evar r_id tint)).
+  (Sassign (result_index) (Ederef (Evar r_id tintp) tint)).
 
 Definition func_request :=
   {|
     fn_return := Tvoid;
     fn_callconv := cc_default;
-    fn_params := (r_id,tint) :: nil;
+    fn_params := (r_id,tintp) :: nil;
     fn_vars := nil;
     fn_temps := nil;
     fn_body :=

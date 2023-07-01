@@ -59,8 +59,8 @@ Qed.
 (** * C-level top specification *)
 
 Inductive state : Type :=
-| Callrequest (input : int) (m:mem)
-| Callencrypt (input : int) (fptr : val) (m:mem)
+| Callrequest (sps : list block) (m:mem)
+| Callencrypt (input : int) (sps: list block) (fptr : val) (m:mem)
 | Return (m:mem).
 
 Definition genv := Genv.t unit unit.
@@ -69,14 +69,14 @@ Section WITH_SE.
 Context (se:Genv.symtbl).
 
 Inductive initial_state : query li_c ->  state -> Prop :=
-|initial_request output m fb
+|initial_request sp m fb
    (FIND: Genv.find_symbol se request_id = Some fb):
-  initial_state (cq (Vptr fb Ptrofs.zero) int__void_sg ((Vint output) :: nil) m)
-    (Callrequest output m)
+  initial_state (cq (Vptr fb Ptrofs.zero) intptr__void_sg ((Vptr sp Ptrofs.zero) :: nil) m)
+    (Callrequest (sp :: nil) m)
 |initial_encrypt i fb b ofs m
    (FIND: Genv.find_symbol se encrypt_id = Some fb):
   initial_state (cq (Vptr fb Ptrofs.zero) int_fptr__void_sg ((Vint i) :: (Vptr b ofs) :: nil) m)
-    (Callencrypt i (Vptr b ofs) m).
+    (Callencrypt i nil (Vptr b ofs) m).
 
 Inductive at_external : state -> query li_c -> Prop :=.
 Inductive after_external : state -> c_reply -> state -> Prop := .
@@ -99,7 +99,7 @@ Definition valid_query (q: query li_c) : bool :=
 Definition Nint := (Int.repr N).
 
 Inductive step : state -> trace -> state -> Prop :=
-| step_request1 r input rb idb inb eb idx m m'
+| step_request1 input rb idb inb eb idx m m' sps
   (FINDIDX: Genv.find_symbol se index_id = Some idb)
   (FINDREQ: Genv.find_symbol se request_id = Some rb)
   (FINDINPUT: Genv.find_symbol se input_id = Some inb)
@@ -108,33 +108,37 @@ Inductive step : state -> trace -> state -> Prop :=
   (COND: Int.eq idx Int.zero = true)
   (ADDIDX: Mem.storev Mint32 m (Vptr idb Ptrofs.zero) (Vint (Int.add idx Int.one)) = Some m')
   (READINPUT: Mem.loadv Mint32 m' (Vptr inb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints idx))) = Some (Vint input)):
-  step (Callrequest r m) E0 (Callencrypt input (Vptr rb Ptrofs.zero) m')
-| step_request2 r input rb idb inb rsb eb idx m m' m''
+  step (Callrequest sps m) E0 (Callencrypt input sps (Vptr rb Ptrofs.zero) m')
+| step_request2 r input rb idb inb rsb eb idx m m' m'' sp sps
   (FINDIDX: Genv.find_symbol se index_id = Some idb)
   (FINDREQ: Genv.find_symbol se request_id = Some rb)
   (FINDINPUT: Genv.find_symbol se input_id = Some inb)
   (FINDRES: Genv.find_symbol se result_id = Some rsb)
   (FINDE: Genv.find_symbol se encrypt_id = Some eb)
+  (READR: Mem.loadv Mint32 m (Vptr sp Ptrofs.zero) = Some (Vint r))
   (READIDX: Mem.loadv Mint32 m (Vptr idb Ptrofs.zero) = Some (Vint idx))
   (COND: Int.lt Int.zero idx && Int.lt idx Nint = true)
   (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints (Int.sub idx (Int.repr 1))))) (Vint r) = Some m')
   (ADDIDX: Mem.storev Mint32 m' (Vptr idb Ptrofs.zero) (Vint (Int.add idx Int.one)) = Some m'')
   (* 4 * (index - 1) *)
   (READINPUT: Mem.loadv Mint32 m'' (Vptr inb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints idx))) = Some (Vint input)):
-  step (Callrequest r m) E0 (Callencrypt input (Vptr rb Ptrofs.zero) m'')
-| step_request3 r idb rsb idx m m'
+  step (Callrequest (sp::sps) m) E0 (Callencrypt input (sp::sps) (Vptr rb Ptrofs.zero) m'')
+| step_request3 r idb rsb idx m m' m'' sps
   (FINDIDX: Genv.find_symbol se index_id = Some idb)
   (FINDRES: Genv.find_symbol se result_id = Some rsb)
   (READIDX: Mem.loadv Mint32 m (Vptr idb Ptrofs.zero) = Some (Vint idx))
   (COND: Int.cmp Cge idx Nint = true)
-  (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints (Int.sub idx (Int.repr 1))))) (Vint r) = Some m'):
-  step (Callrequest r m) E0 (Return m')
-| step_encrypt kb rb key input m output
+  (STORERES: Mem.storev Mint32 m (Vptr rsb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints (Int.sub idx (Int.repr 1))))) (Vint r) = Some m')
+  (FREE: Mem.free_list m' (map (fun b => (b,0,8)) sps) = Some m''):
+  step (Callrequest sps m) E0 (Return m')
+| step_encrypt kb rb key input m m' m'' output sp sps
    (FINDK: Genv.find_symbol se key_id = Some kb)
    (FINDP: Genv.find_symbol se request_id = Some rb)
-   (READ: Mem.loadv Mint32 m (Vptr kb Ptrofs.zero) = Some (Vint key))
+   (ALLOC: Mem.alloc m 0 8 = (m', sp))
+   (READ: Mem.loadv Mint32 m' (Vptr kb Ptrofs.zero) = Some (Vint key))
+   (STORE: Mem.storev Many64 m' (Vptr sp Ptrofs.zero) (Vint output) = Some m'')
    (XOR: output = Int.xor input key):
-  step (Callencrypt input (Vptr rb Ptrofs.zero) m) E0 (Callrequest output m).
+  step (Callencrypt input sps (Vptr rb Ptrofs.zero) m) E0 (Callrequest (sp::sps) m'').
 
 End WITH_SE.
 
@@ -180,34 +184,30 @@ Inductive stack_acc (w: injp_world) : injp_world -> list block -> Prop :=
     (INJP2: injp_acc (injpw f1 m1 tm1'' Hm1') w2):
   stack_acc w w2 (sp::lsp).
   
-
-
-Inductive match_kframe_request: list block -> list (frame L) -> Prop :=
+Inductive match_kframe_request: list block -> list block -> list (frame L) -> Prop :=
 | match_kframe_request_nil:
-  match_kframe_request nil nil
-| match_kframe_request_cons output m fb k lsp:
-  match_kframe_encrypt lsp k ->
-  match_kframe_request lsp ((st L false (Call2 fb output m)) :: k)
+  match_kframe_request nil nil nil
+| match_kframe_request_cons lsp ssp m fb k slsp:
+  match_kframe_encrypt lsp slsp k ->
+  match_kframe_request lsp (ssp::slsp) ((st L false (Call2 fb ssp m)) :: k)
                        
-with match_kframe_encrypt : list block -> list (frame L) -> Prop :=
+with match_kframe_encrypt : list block -> list block -> list (frame L) -> Prop :=
 | match_kframe_encrypt_nil:
-  match_kframe_encrypt nil nil
-| match_kframe_encrypt_cons m fb vargs k sp le lsp:
-  match_kframe_request lsp k ->
-  match_kframe_encrypt (sp::lsp) (st L true (Callstate fb vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m) :: k).
+  match_kframe_encrypt nil nil nil
+| match_kframe_encrypt_cons m fb vargs k sp le lsp slsp:
+  match_kframe_request lsp slsp k ->
+  match_kframe_encrypt (sp::lsp) slsp (st L true (Callstate fb vargs (Kcall None func_request (Maps.PTree.set r_id (sp, Ctypesdefs.tint) empty_env) le Kstop) m) :: k).
 
-  
-  
-
+(*TODO: need to use a invariant link stack_acc to keep the injection relation of stack block of encrypt *)
 Inductive match_state: state -> list (frame L) -> Prop :=
-| match_request_intro j r rb rb' m tm ks w1 lsp
+| match_request_intro j r rb rb' m tm ks w1 lsp slsp
     (Hm: Mem.inject j m tm)
     (KINJP: stack_acc w w1 lsp)
     (INJP: injp_acc w1 (injpw j m tm Hm))
     (FINDP: Genv.find_symbol se request_id = Some rb)
     (FINJ: j rb = Some (rb',0))
-    (KFRM: match_kframe_request lsp ks):
-  match_state (Callrequest r m) ((st L true (Callstate (Vptr rb' Ptrofs.zero) (Vint r :: nil) Kstop tm)) :: ks)
+    (KFRM: match_kframe_request lsp slsp ks):
+  match_state (Callrequest r m) ((st L true (Callstate (Vptr rb' Ptrofs.zero) (Vptr sb (Ptrofs.repr) :: nil) Kstop tm)) :: ks)
 | match_encrypt_intro j v tv m tm input ks w1 lsp
     (Hm: Mem.inject j m tm)
     (KINJP: stack_acc w w1 lsp)
