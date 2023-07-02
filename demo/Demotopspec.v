@@ -104,12 +104,12 @@ Inductive sum_cache_memo mb sb m: nat -> int -> mem -> Prop :=
 | sum_cache_memo_cached n i sum
     (IEQ: i = Int.repr (Z.of_nat n))
     (INZ: i.(Int.intval) <> 0%Z)
-    (LOAD: Mem.loadv Mint32 m (Vptr mb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_int i))) = Some (Vint sum))
+    (LOAD: Mem.loadv Mint32 m (Vptr mb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints i))) = Some (Vint sum))
     (SUMNZERO: sum.(Int.intval) <> 0%Z):
   sum_cache_memo mb sb m n sum m
 | sum_cachef_memo_S n csum sum sum' m1 m2 i
     (IEQ: i = (Int.repr (Z.of_nat (S n))))
-    (LOAD: Mem.loadv Mint32 m (Vptr mb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_int i))) = Some (Vint csum))
+    (LOAD: Mem.loadv Mint32 m (Vptr mb (Ptrofs.mul (Ptrofs.repr 4) (Ptrofs.of_ints i))) = Some (Vint csum))
     (CSUMZERO: csum.(Int.intval) = 0%Z)
       (* sum = 1+2+..+n *)
     (CACHES: sum_cache_s mb sb m n sum m1)    
@@ -484,7 +484,7 @@ Proof.
         (* one step from returnstateg to returnstatef *)
         eapply star_step;eauto. econstructor. econstructor.
         simpl. unfold Genv.symbol_address. rewrite FIND1.
-        eauto. unfold Ptrofs.of_int. rewrite Int.unsigned_repr.
+        eauto. unfold Ptrofs.of_ints. rewrite Int.signed_repr.
         eauto. unfold Int.max_unsigned. lia.
         eauto.
         eapply star_refl.

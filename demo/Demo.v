@@ -136,14 +136,14 @@ Definition func_f := {|
   fn_temps := ((_t, tint) :: (_t'1, tint) :: nil);
   fn_body :=
 (Ssequence
-  (Sifthenelse (Ebinop Oeq (Etempvar _x tint) (Econst_int (Int.repr 0) tint)
+  (Sifthenelse (Ebinop Oeq (Evar _x tint) (Econst_int (Int.repr 0) tint)
                  tint)
     (Sreturn (Some (Econst_int (Int.repr 0) tint)))
     Sskip)
   (Ssequence
     (Sset _t
       (Ederef
-        (Ebinop Oadd (Evar _memoized (tarray tint 1000)) (Etempvar _x tint)
+        (Ebinop Oadd (Evar _memoized (tarray tint 1000)) (Evar _x tint)
           (tptr tint)) tint))
     (Ssequence
       (Sifthenelse (Ebinop Oeq (Etempvar _t tint)
@@ -152,14 +152,14 @@ Definition func_f := {|
           (Ssequence
             (Scall (Some _t'1)
               (Evar g_id (Tfunction (Tcons tint Tnil) tint cc_default))
-              ((Ebinop Osub (Etempvar _x tint) (Econst_int (Int.repr 1) tint)
+              ((Ebinop Osub (Evar _x tint) (Econst_int (Int.repr 1) tint)
                  tint) :: nil))
             (Sset _t
-              (Ebinop Oadd (Etempvar _t'1 tint) (Etempvar _x tint) tint)))
+              (Ebinop Oadd (Etempvar _t'1 tint) (Evar _x tint) tint)))
           (Sassign
             (Ederef
               (Ebinop Oadd (Evar _memoized (tarray tint 1000))
-                (Etempvar _x tint) (tptr tint)) tint) (Etempvar _t tint)))
+                (Evar _x tint) (tptr tint)) tint) (Etempvar _t tint)))
         Sskip)
       (Sreturn (Some (Etempvar _t tint))))))
 |}.
