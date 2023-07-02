@@ -185,19 +185,21 @@ Inductive stack_acc_request (w: injp_world) : injp_world -> list block -> Prop :
     (INJP2: injp_acc (injpw f1 m1 tm1'' Hm1') w2):
   stack_acc_request w w2 (sp::lsp).
 *)
-Inductive match_kframe_request: list block -> list block -> list (frame L) -> Prop :=
-| match_kframe_request_nil:
-  match_kframe_request nil nil nil
-| match_kframe_request_cons lsp_re lsp_en m fb k sp_en:
-  match_kframe_encrypt lsp_re lsp_en k ->
-  match_kframe_request lsp_re (sp_en :: lsp_en) ((st L false (Call2 fb sp_en m)) :: k)
+Inductive match_kframe_request : meminj -> list block -> list block -> list (frame L) -> Prop :=
+| match_kframe_request_nil j:
+  match_kframe_request j nil nil nil
+| match_kframe_request_cons lsp_re lsp_en m fb k sp_en tsp_en j j':
+  match_kframe_encrypt j lsp_re lsp_en k ->
+  inject_incr j j' -> j' sp_en = Some (tsp_en,0) ->
+  match_kframe_request j' lsp_re (sp_en :: lsp_en) ((st L false (Call2 fb tsp_en m)) :: k)
                        
-with match_kframe_encrypt : list block -> list block -> list (frame L) -> Prop :=
-| match_kframe_encrypt_nil:
-  match_kframe_encrypt nil nil nil
-| match_kframe_encrypt_cons m fb vargs k le lsp_re lsp_en sp_re:
-  match_kframe_request lsp_re lsp_en k ->
-  match_kframe_encrypt (sp_re::lsp_re) lsp_en (st L true (Callstate fb vargs (Kcall None func_request (Maps.PTree.set r_id (sp_re, tintp) empty_env) le Kstop) m) :: k).
+with match_kframe_encrypt : meminj -> list block -> list block -> list (frame L) -> Prop :=
+| match_kframe_encrypt_nil j:
+  match_kframe_encrypt j nil nil nil
+| match_kframe_encrypt_cons m fb vargs k le lsp_re lsp_en sp_re j j':
+  match_kframe_request j lsp_re lsp_en k ->
+  inject_incr j j' ->
+  match_kframe_encrypt j' (sp_re::lsp_re) lsp_en (st L true (Callstate fb vargs (Kcall None func_request (Maps.PTree.set r_id (sp_re, tintp) empty_env) le Kstop) m) :: k).
 
 (*TODO: need to use a invariant link stack_acc to keep the injection relation of stack block of encrypt *)
 Inductive match_state: state -> list (frame L) -> Prop :=
@@ -208,14 +210,14 @@ Inductive match_state: state -> list (frame L) -> Prop :=
     (FINDP: Genv.find_symbol se request_id = Some rb)
     (RINJ: j b_r = Some (tb_r, delta))
     (FINJ: j rb = Some (rb',0))
-    (KFRM: match_kframe_request lsp_re lsp_en ks):
+    (KFRM: match_kframe_request j lsp_re lsp_en ks):
   match_state (Callrequest b_r lsp_en m) ((st L true (Callstate (Vptr rb' Ptrofs.zero) (Vptr tb_r (Ptrofs.repr delta) :: nil) Kstop tm)) :: ks)
 | match_encrypt_intro j v tv m tm input ks lsp_re lsp_en
     (Hm: Mem.inject j m tm)
     (* (KINJP: stack_acc w w1 lsp) *)
     (INJP: injp_acc w (injpw j m tm Hm))
     (VINJ: Val.inject j v tv)
-    (KFRM: match_kframe_encrypt lsp_re lsp_en ks):
+    (KFRM: match_kframe_encrypt j lsp_re lsp_en ks):
   match_state (Callencrypt input lsp_en v m) ((st L false (Call1 tv input tm)) :: ks)
 | match_return_introc j m tm
   (Hm: Mem.inject j m tm)
@@ -1176,7 +1178,18 @@ Proof.
       instantiate (1:= INJM').
       etransitivity. 2: eauto.
       etransitivity. eauto.
-      admit. (* correct, to be made a lemma*)
+      assert (ro_acc tm tm2). eapply ro_acc_trans.
+      eapply ro_acc_alloc; eauto. eapply ro_acc_store; eauto.
+      inv H2.
+      constructor; eauto with mem. red. eauto.
+      set (P:= fun b (ofs:Z) => b <> sp).
+      eapply Mem.unchanged_on_implies. instantiate (1:= P).
+      eapply Mem.unchanged_on_trans.
+      eapply Mem.alloc_unchanged_on; eauto.
+      eapply Mem.store_unchanged_on; eauto.
+      intros. unfold P. intro. subst.
+      apply Mem.fresh_block_alloc in ALLOCTM.
+      congruence. red. intros. congruence.
       econstructor; eauto.
       (* stack acc *)
       (* instantiate (1:= sp::lsp).
@@ -1190,7 +1203,7 @@ Proof.
        *)
       (* match_kframe *)
       instantiate (1:= sp :: lsp_re).
-      econstructor. eauto.
+      econstructor; eauto.
       
     (* request: 0 < index < N *)
     + generalize Hse. intros Hse2.
@@ -1390,7 +1403,19 @@ Proof.
       (* match state *)
       econstructor.
       etransitivity. eauto.
-      etransitivity. 2: eauto. admit.
+      etransitivity. 2: eauto.
+      assert (ro_acc tm tm2). eapply ro_acc_trans.
+      eapply ro_acc_alloc; eauto. eapply ro_acc_store; eauto.
+      inv H2.
+      constructor; eauto with mem. red. eauto.
+      set (P:= fun b (ofs:Z) => b <> tsp).
+      eapply Mem.unchanged_on_implies. instantiate (1:= P).
+      eapply Mem.unchanged_on_trans.
+      eapply Mem.alloc_unchanged_on; eauto.
+      eapply Mem.store_unchanged_on; eauto.
+      intros. unfold P. intro. subst.
+      apply Mem.fresh_block_alloc in ALLOCTM.
+      congruence. red. intros. congruence.
       econstructor; eauto.
       (* stack acc *)
       (* instantiate (1:= sp::lsp).
@@ -1590,8 +1615,7 @@ Proof.
       instantiate (1:= INJ'').
       etransitivity. eauto. etransitivity; eauto.
       instantiate (1:= lsp_re). rewrite Ptrofs.add_zero_l.
-      admit.
-      
+      econstructor; eauto.
   - constructor. intros. inv H.
 Admitted.
                                         
