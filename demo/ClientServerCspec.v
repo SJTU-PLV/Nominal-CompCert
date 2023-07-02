@@ -208,24 +208,21 @@ Proof.
 Qed.
 
 
-Definition wt_inv :  (Genv.symtbl * signature) -> state -> Prop :=
-  fun _ _ => True.
+Definition wt_inv : (Genv.symtbl * signature) -> state -> Prop :=
+  fun a b => proj_sig_res (snd a) = Tint.
 
 Lemma spec1_wt : preserves top_spec1 wt_c wt_c wt_inv.
 Proof.
   intros [se0 sg] se1 Hse Hw. cbn in Hw. subst.
   split; cbn in *.
-  - intros. inv H0; inv H.
-    + simpl in SET. constructor.
-    + constructor; eauto.
-    + constructor; eauto.
-    + constructor; eauto.
+  - intros. inv H0; inv H;
+    unfold wt_inv; simpl; eauto.
   - intros. inv H. inv H0. constructor; eauto.
     constructor. constructor.
   - intros. inv H0.
   - intros. inv H0; inv H. constructor; eauto.
-    simpl. admit.
-Admitted.
+    simpl. rewrite H1. eauto.
+Qed.
 
 Theorem top1_wt : forward_simulation wt_c wt_c top_spec1 top_spec1.
 Proof.
