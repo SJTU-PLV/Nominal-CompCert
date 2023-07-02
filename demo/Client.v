@@ -56,7 +56,7 @@ Definition func_process :=
 Definition i_id := 8%positive.
 Definition func_request :=
   {|
-    fn_return := Tvoid;
+    fn_return := tint;
     fn_callconv := cc_default;
     fn_params := (i_id, tint) :: nil;
     fn_vars := nil;
@@ -77,7 +77,7 @@ Definition func_request :=
             (*arguments*)
             ((Evar i_id tint) :: (Evar process_id (Tfunction (Tcons tint Tnil) Tvoid cc_default)) :: nil)
          )
-         (Sreturn None)
+         (Sreturn (Some (Evar i_id tint)))
       )
   |}.
 
