@@ -39,43 +39,45 @@ Proof.
 Qed.
 
 
-
 (** * C-level top specification *)
+
 
 Inductive state : Type :=
 | Callrequest (input : int) (m:mem)
-| Callencrypt (input : int) (fptr : val) (m:mem)
-| Callprocess (flag: bool)(sp : block) (m:mem)
+| Callencrypt (flag: bool) (input : int) (fptr : val) (m:mem)
+| Callprocess (flag: bool) (retv: option int) (sp : block) (m:mem)
               (*flag = true means internally invoked, need to free the sp
-                for encrypt, flag = false means externally invoked.*)
-| Return (m:mem).
+               flag = false means externally invoked.*)
+| Return (retv : option int) (m:mem).
 
 Definition genv := Genv.t unit unit.
 
 Section WITH_SE.
 Context (se:Genv.symtbl).
 
-Definition int__void_sg : signature := mksignature (AST.Tint :: nil) Tvoid cc_default.
+Definition int__int_sg : signature := mksignature (AST.Tint :: nil) Tint cc_default.
 
 Inductive initial_state : query li_c ->  state -> Prop :=
 |initial_process sp m fb
    (FIND: Genv.find_symbol se process_id = Some fb):
   initial_state (cq (Vptr fb Ptrofs.zero) intptr__void_sg ((Vptr sp Ptrofs.zero) :: nil) m)
-    (Callprocess false sp m)
+    (Callprocess false None sp m)
 |initial_encrypt i fb b ofs m
    (FIND: Genv.find_symbol se encrypt_id = Some fb):
   initial_state (cq (Vptr fb Ptrofs.zero) int_fptr__void_sg ((Vint i) :: (Vptr b ofs) :: nil) m)
-    (Callencrypt i (Vptr b ofs) m) 
+    (Callencrypt false i (Vptr b ofs) m) 
 |initial_request i m fb
    (FIND: Genv.find_symbol se request_id = Some fb):
-  initial_state (cq (Vptr fb Ptrofs.zero) int__void_sg ((Vint i) :: nil) m) (Callrequest i m).
+  initial_state (cq (Vptr fb Ptrofs.zero) int__int_sg ((Vint i) :: nil) m) (Callrequest i m).
     
 Inductive at_external : state -> query li_c -> Prop :=.
 Inductive after_external : state -> c_reply -> state -> Prop := .
 
 Inductive final_state : state -> reply li_c -> Prop :=
-|final_process m:
-  final_state (Return m) (cr Vundef m).
+|final_None m:
+  final_state (Return None m) (cr Vundef m)
+|final_input i m:
+  final_state (Return (Some i) m) (cr (Vint i) m).
 
 Definition valid_query (q: query li_c) : bool :=
   match (cq_vf q) with
@@ -90,31 +92,42 @@ Definition valid_query (q: query li_c) : bool :=
   |_  => false
   end.
 
+Definition ret_value : option int -> val :=
+  fun oi =>
+    match oi with
+    |Some i => Vint i
+    |None => Vundef
+    end.
+
+Definition choose_oi (flag: bool) (i : int) : option int :=
+  if flag then Some i else None.
+
 Inductive step : state -> trace -> state -> Prop :=
-|step_process_false output m m' b sp
+|step_process_false output m m' b sp oi
   (FIND: Genv.find_symbol se result_id = Some b)
   (READ: Mem.loadv Mint32 m (Vptr sp Ptrofs.zero) = Some (Vint output))
   (SET: Mem.storev Mint32 m (Vptr b Ptrofs.zero) (Vint output) = Some m'):
-  step (Callprocess false sp m) E0 (Return m')
-|step_process_true output m m' b sp m''
+  step (Callprocess false oi sp m) E0 (Return oi m')
+|step_process_true output m m' b sp m'' oi
   (FIND: Genv.find_symbol se result_id = Some b)
   (READ: Mem.loadv Mint32 m (Vptr sp Ptrofs.zero) = Some (Vint output))
   (SET: Mem.storev Mint32 m (Vptr b Ptrofs.zero) (Vint output) = Some m')
   (FREE: Mem.free m' sp 0 8 = Some m'' ):
-  step (Callprocess true sp m) E0 (Return m'')
-|step_encrypt kb pb key input m output m' m'' sp
+  step (Callprocess true oi sp m) E0 (Return oi m'')
+|step_encrypt kb pb key input m output m' m'' sp oi (flag : bool)
    (FINDK: Genv.find_symbol se key_id = Some kb)
    (FINDP: Genv.find_symbol se process_id = Some pb)
    (XOR: output = Int.xor input key)
    (ALLOC: Mem.alloc m 0 8 = (m',sp))
    (READ: Mem.loadv Mint32 m' (Vptr kb Ptrofs.zero) = Some (Vint key))
    (STORE: Mem.storev Many64 m' (Vptr sp Ptrofs.zero) (Vint output) = Some m'')
+   (CHOOOSE: oi = if flag then Some input else None)
   :
-  step (Callencrypt input (Vptr pb Ptrofs.zero) m) E0 (Callprocess true sp m'')
+  step (Callencrypt flag input (Vptr pb Ptrofs.zero) m) E0 (Callprocess true oi sp m'')
 |step_request input pb m eb
    (FINDP: Genv.find_symbol se process_id = Some pb)
    (FINDE: Genv.find_symbol se encrypt_id = Some eb):
-  step (Callrequest input m) E0 (Callencrypt input (Vptr pb Ptrofs.zero) m).
+  step (Callrequest input m) E0 (Callencrypt true input (Vptr pb Ptrofs.zero) m).
 
 End WITH_SE.
 
@@ -145,15 +158,15 @@ Inductive sound_state : state -> Prop :=
 | sound_Callrequest : forall i m,
     ro_acc m0 m -> sound_memory_ro se m ->
     sound_state (Callrequest i m)
-| sound_Callencrypt : forall vf i m,
+| sound_Callencrypt : forall vf i m b,
     ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Callencrypt i vf m)
-| sound_Callprocess : forall b i m,
+    sound_state (Callencrypt b i vf m)
+| sound_Callprocess : forall b i m oi,
     ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Callprocess b i m)
-| sound_Return : forall m,
+    sound_state (Callprocess b oi i m)
+| sound_Return : forall m oi,
     ro_acc m0 m -> sound_memory_ro se m ->
-    sound_state (Return m).
+    sound_state (Return oi m).
 End RO.
 
 Definition ro_inv '(row se0 m0) := sound_state se0 m0.
@@ -187,7 +200,7 @@ Proof.
     constructor; eauto. eapply ro_acc_refl.
     constructor; eauto. eapply ro_acc_refl.
   - intros. inv H0.
-  - intros. inv H0. inv H. constructor; eauto.
+  - intros. inv H0; inv H; constructor; eauto.
 Qed.
 
 Theorem top2_ro :
@@ -197,7 +210,8 @@ Proof.
 Qed.
 
 
-Definition wt_inv :  (Genv.symtbl * signature) -> state -> Prop := fun _ _ => True.
+Definition wt_inv :  (Genv.symtbl * signature) -> state -> Prop :=
+  fun _ _ => True.
 
 Lemma spec2_wt : preserves top_spec2 wt_c wt_c wt_inv.
 Proof.
@@ -211,8 +225,9 @@ Proof.
   - intros. inv H. inv H0. constructor; eauto.
     constructor. constructor.
   - intros. inv H0.
-  - intros. inv H0. inv H. constructor; eauto.
-Qed.
+  - intros. inv H0; inv H. constructor; eauto.
+    simpl. admit.
+Admitted.
 
 Theorem top2_wt : forward_simulation wt_c wt_c top_spec2 top_spec2.
 Proof.
@@ -221,7 +236,7 @@ Qed.
 
 
 
-(** Proof of top_spec -> composed_spec2 *)
+(** Proof of top_spec -> composed_spec1 *)
 
 Section MS.
 
@@ -232,16 +247,43 @@ Let tge1 := Clight.globalenv tse client.
 Let tge2 := Genv.globalenv tse b2.
 
 Hypothesis MSTB : match_stbls injp w se tse.
-
-Inductive match_state : state -> list (frame L) -> Prop :=
-|match_return_introc (j:meminj) m tm
+(*
+Inductive match_client_state : state -> Clight.state -> Prop :=
+|match_process (j:meminj) m tm output pb pb'
+  (Hm: Mem.inject j m tm)
+  (FINDP : Genv.find_symbol se process_id = Some pb)
+  (FINJ: j pb = Some (pb',0))
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_client_state (Callprocess output m) (Callstate (Vptr pb' Ptrofs.zero) (Vint output :: nil) Kstop tm)
+|match_request (j:meminj) m tm input rb rb'
+   (Hm: Mem.inject j m tm)
+  (FINDP : Genv.find_symbol se request_id = Some rb)
+  (FINJ: j rb = Some (rb',0))
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_client_state (Callrequest input m) (Callstate (Vptr rb' Ptrofs.zero) (Vint input :: nil) Kstop tm).
+(*|match_return (j:meminj) m tm
   (Hm: Mem.inject j m tm)
   (INJP : injp_acc w (injpw j m tm Hm)):
-  match_state (Return m) (st L true (Returnstate Vundef Kstop tm) :: nil)
+  match_client_state (Return m) (Returnstate Vundef Kstop tm). *)
+
+Inductive match_server_state : state -> Serverspec.state -> Prop :=
+|match_encrypt (j:meminj) m tm pb pb' input
+   (Hm: Mem.inject j m tm)
+  (FINDP : Genv.find_symbol se process_id = Some pb)
+  (FINJ: j pb = Some (pb',0))
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_server_state (Callencrypt input (Vptr pb Ptrofs.zero) m) (Call1 (Vptr pb' Ptrofs.zero) input tm).
+ *)
+
+Inductive match_state : state -> list (frame L) -> Prop :=
+|match_return_introc (j:meminj) m tm oi
+  (Hm: Mem.inject j m tm)
+  (INJP : injp_acc w (injpw j m tm Hm)):
+  match_state (Return oi m) (st L true (Returnstate (ret_value oi) Kstop tm) :: nil)
 |match_return_intros (j:meminj) m tm
   (Hm: Mem.inject j m tm)
   (INJP : injp_acc w (injpw j m tm Hm)):
-  match_state (Return m) ((st L false (Return2 tm)) :: nil)
+  match_state (Return None m) ((st L false (Return2 tm)) :: nil)
 |match_request_intro
   (j:meminj) m tm input rb rb'
   (Hm: Mem.inject j m tm)
@@ -255,27 +297,27 @@ Inductive match_state : state -> list (frame L) -> Prop :=
   (* (FINDP : Genv.find_symbol se process_id = Some pb) *)
   (VINJ: Val.inject j v tv)
   (INJP : injp_acc w (injpw j m tm Hm)):
-  match_state  (Callencrypt input v m)
+  match_state  (Callencrypt false input v m)
     ((st L false (Call1 tv input tm)) ::nil)
-|match_encrypt_intro2 (j:meminj) m tm tm' input vf args v tv sp le i tm0 tm1 tm2 m0 f Hm0 Hm1
+|match_encrypt_intro2 (j:meminj) m tm tm' input vf args v tv sp le tm0 tm1 tm2 m0 f Hm0 Hm1
    (Hm: Mem.inject j m tm)
    (*(FINDP : Genv.find_symbol se process_id = Some pb)
    (FINJ: j pb = Some (pb',0)) *)
    (VINJ: Val.inject j v tv)
    (INJP1: injp_acc w (injpw f m0 tm0 Hm0))
    (ALLOC: Mem.alloc tm0 0 4 = (tm1, sp))
-   (STORE: Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint i) = Some tm2)
+   (STORE: Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint input) = Some tm2)
    (INJP : injp_acc (injpw f m0 tm2 Hm1) (injpw j m tm Hm)):
-  match_state  (Callencrypt input v m)
+  match_state  (Callencrypt true input v m)
     ((st L false (Call1 tv input tm)) ::
-       (st L true (Callstate vf args (Kcall None func_request ((Maps.PTree.set i_id (sp, Ctypesdefs.tint) empty_env)) le (Kseq (Sreturn None) Kstop)) tm')) ::nil)
+       (st L true (Callstate vf args (Kcall None func_request ((Maps.PTree.set i_id (sp, Ctypesdefs.tint) empty_env)) le (Kseq (Sreturn (Some (Evar i_id Ctypesdefs.tint))) Kstop)) tm')) ::nil)
 |match_process_intro1 (j:meminj) m tm sb sb' pb pb' delta
   (Hm: Mem.inject j m tm)
   (FINDP : Genv.find_symbol se process_id = Some pb)
   (FINJ: j pb = Some (pb',0))
   (SPINJ: j sb = Some (sb',delta))
   (INJP : injp_acc w (injpw j m tm Hm)):
-  match_state (Callprocess false sb m)
+  match_state (Callprocess false None sb m)
     ((st L true(Callstate (Vptr pb' Ptrofs.zero) ((Vptr sb' (Ptrofs.repr delta)) :: nil) Kstop tm)):: nil)
 |match_process_intro2 (j:meminj) m tm  pb pb' vf tm' sb sb'
   (Hm: Mem.inject j m tm)
@@ -283,7 +325,7 @@ Inductive match_state : state -> list (frame L) -> Prop :=
   (FINJ: j pb = Some (pb',0))
   (SPINJ: j sb = Some (sb',0))
   (INJP : injp_acc w (injpw j m tm Hm)):
-  match_state (Callprocess true sb m)
+  match_state (Callprocess true None sb m)
     ((st L true(Callstate (Vptr pb' Ptrofs.zero) ((Vptr sb' Ptrofs.zero) :: nil) Kstop tm)) ::
        (st L false (Call2 vf sb' tm')) :: nil)
 |match_process_intro3 (j:meminj) m tm  pb pb' vf tm' vf' args tm'' sp le i tm0 tm1 tm2 m0 f Hm0 Hm1 sb sb'
@@ -296,10 +338,10 @@ Inductive match_state : state -> list (frame L) -> Prop :=
   (ALLOC: Mem.alloc tm0 0 4 = (tm1, sp))
   (STORE: Mem.storev Mint32 tm1 (Vptr sp Ptrofs.zero) (Vint i) = Some tm2)
   (INJP : injp_acc (injpw f m0 tm2 Hm1) (injpw j m tm Hm)):
-  match_state (Callprocess true sb m)
+  match_state (Callprocess true (Some i) sb m)
     ((st L true(Callstate (Vptr pb' Ptrofs.zero) ((Vptr sb' Ptrofs.zero) :: nil) Kstop tm)) ::
        (st L false (Call2 vf sb' tm')) ::
-        (st L true (Callstate vf' args (Kcall None func_request ((Maps.PTree.set i_id (sp, Ctypesdefs.tint) empty_env)) le (Kseq (Sreturn None) Kstop)) tm'')) :: nil).
+        (st L true (Callstate vf' args (Kcall None func_request ((Maps.PTree.set i_id (sp, Ctypesdefs.tint) empty_env)) le (Kseq (Sreturn (Some (Evar i_id Ctypesdefs.tint))) Kstop)) tm'')) :: nil).
 
 Lemma find_request:
   forall rb rb' j,
@@ -438,6 +480,9 @@ Proof.
 Qed.
   
 End MS.
+
+
+
 
 Lemma maxv:
   Ptrofs.max_unsigned = 18446744073709551615.
@@ -964,19 +1009,22 @@ Proof.
       -- simpl. unfold Genv.is_internal. setoid_rewrite FINDR. reflexivity.
       -- simpl.
          set (targs := (Ctypes.Tcons Ctypesdefs.tint Ctypes.Tnil)).
-         assert (Ctypes.signature_of_type targs Ctypes.Tvoid cc_default = int__void_sg).
+         assert (Ctypes.signature_of_type targs Ctypesdefs.tint cc_default = int__int_sg).
          reflexivity.
          rewrite <- H.
          econstructor; eauto.
          constructor; cbn; eauto. constructor; eauto. constructor.
       -- econstructor; eauto. reflexivity.
-  - intros s1 s2 r1 Hms Hf1. inv Hf1. inv Hms;
+  - intros s1 s2 r1 Hms Hf1. inv Hf1; inv Hms;
       try inv H; cbn in *.
     + (*final of server*)
     exists (cr Vundef tm). split. cbn.
     constructor. constructor.
     eexists. split. eauto. constructor; eauto. constructor.
-    +  exists (cr Vundef tm). split. cbn.
+    + exists (cr Vundef tm). split. cbn.
+    constructor. constructor.
+    eexists. split. eauto. constructor; eauto. constructor.
+    + exists (cr (Vint i) tm). split. cbn.
     constructor. constructor.
     eexists. split. eauto. constructor; eauto. constructor.
   - intros. cbn in *. inv H0.
@@ -1096,10 +1144,10 @@ Proof.
       simpl. eexists.
       split.
       eapply plus_trans.
-      instantiate (1:= (st L true (Returnstate Vundef Kstop m6) :: st L false (Call2 vf sb' tm') :: st L true (Callstate vf' args (Kcall None func_request (Maps.PTree.set i_id (sp0, Ctypesdefs.tint) empty_env) le (Kseq (Sreturn None) Kstop)) tm'') :: nil) ).
+      instantiate (1:= (st L true (Returnstate Vundef Kstop m6) :: st L false (Call2 vf sb' tm') :: st L true (Callstate vf' args (Kcall None func_request (Maps.PTree.set i_id (sp0, Ctypesdefs.tint) empty_env) le (Kseq (Sreturn (Some (Evar i_id Ctypesdefs.tint))) Kstop)) tm'') :: nil) ).
       instantiate (1:= E0).
-      exploit find_process';eauto. intros (rb' & INJP1 & FINDP1 & FINDP2).     
-      eapply exec_process_plus_false;eauto.
+      exploit find_process';eauto. intros (rb' & INJP1 & FINDP1 & FINDP2).
+      eapply exec_process_plus_false; eauto.
       eapply H14 in INJP1. eapply H22 in INJP1. rewrite FINJ in INJP1. inv INJP1. auto.
       (* final state in client *)
       econstructor. eapply step_pop.
@@ -1112,6 +1160,35 @@ Proof.
       eapply star_step. econstructor. simpl. econstructor.
       eapply star_step. econstructor. simpl. econstructor.
       eapply star_step. econstructor. simpl. econstructor.
+      simpl. econstructor. econstructor.
+      rewrite Maps.PTree.gss. reflexivity.
+      econstructor. simpl. reflexivity. instantiate (1:= Vint i).
+      {
+        assert (VALIDtm1: Mem.valid_block tm1 sp0). eauto with mem.
+        assert (VALIDtm: Mem.valid_block tm2 sp0).
+        eapply Mem.store_valid_block_1; eauto.
+        assert (VALIDtm0: Mem.valid_block tm sp0).
+        inversion H21. apply unchanged_on_support; eauto.
+        apply Mem.fresh_block_alloc in ALLOC as NONVALIDtm0.
+        apply Mem.fresh_block_alloc in ALLOC1 as NONVALIDtm0sp1.
+        assert (LOADtm: Mem.loadv Mint32 tm (Vptr sp0 Ptrofs.zero) = Some (Vint i)).
+        apply Mem.load_store_same in STORE as LOAD1. simpl in *.
+        erewrite Mem.load_unchanged_on_1; eauto.
+        intros. red. intros. inv Hm'0.
+        exploit mi_mappedblocks; eauto.
+        assert (sp0 <> sp1). congruence.
+        assert (sp0 <> sb'). congruence.
+        assert (Mem.unchanged_on (fun b ofs => b = sp0) tm m7).
+        eapply Mem.unchanged_on_trans. eapply Mem.alloc_unchanged_on; eauto.
+        eapply Mem.unchanged_on_trans. eapply Mem.store_unchanged_on; eauto.
+        eapply Mem.unchanged_on_trans. eapply Mem.store_unchanged_on; eauto.
+        eapply Mem.unchanged_on_trans. eapply Mem.free_unchanged_on; eauto.
+        eapply Mem.free_unchanged_on; eauto.
+        simpl. simpl in LOADtm.
+        erewrite Mem.load_unchanged_on_1; eauto.
+        intros. simpl. reflexivity.
+      }
+      simpl. unfold Cop.sem_cast;simpl;destruct Archi.ptr64;eauto.
       (* free the argument block in request *)
       simpl.
       rewrite FREE3. eauto.
@@ -1369,7 +1446,7 @@ Proof.
       constructor; eauto. traceEq.
       simpl.
       (*ms*)
-      inv INJP.
+      inv INJP. simpl.
       econstructor. eauto. instantiate (1:= Hm'0).
       econstructor; eauto. eauto. eauto.
       instantiate (1:= INJ2). instantiate (1:= INJ2).
