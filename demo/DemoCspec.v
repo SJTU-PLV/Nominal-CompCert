@@ -215,13 +215,103 @@ Qed.
 
 (* i == 0 *)
 Lemma exec_mem1: forall j m tm i (Hm :Mem.inject j m tm),
-  exists tm1 sp tm2 tm3 Hm',
+  exists tm1 sp tm2 tm3 Hm' Hm'',
     Mem.alloc tm 0 4 =(tm1,sp) /\
       Mem.store Mint32 tm1 sp 0 (Vint i) = Some tm2 /\
       Mem.free tm2 sp 0 4 = Some tm3 /\
-      injp_acc (injpw j m tm Hm) (injpw j m tm3 Hm').
-Admitted.
+      injp_acc (injpw j m tm Hm) (injpw j m tm2 Hm') /\
+      injp_acc (injpw j m tm Hm) (injpw j m tm3 Hm'').
+Proof.
+  intros.
+  destruct (Mem.alloc tm 0 4) as [tm1 sp] eqn:ALLOCTM .
+  exists tm1,sp.
+  exploit Mem.alloc_right_inject;eauto. intros INJ1.
+  assert ({ tm2 : mem | Mem.store Mint32 tm1 sp 0 (Vint i) = Some tm2}).
+  eapply Mem.valid_access_store.
+  eapply Mem.valid_access_implies.
+  eapply Mem.valid_access_alloc_same;simpl;eauto.
+  lia. lia. apply Z.divide_0_r. econstructor.
+  destruct X as (tm2 & STORETM1).
+  exists tm2.
+  exploit Mem.store_outside_inject;eauto.
+  intros. eapply Mem.fresh_block_alloc;eauto.
+  eapply Mem.valid_block_inject_2;eauto.
+  intros INJ2.
+  (* free *)
+  assert (FREE: {tm3:mem | Mem.free tm2 sp 0 4 = Some tm3}).
+  eapply Mem.range_perm_free.
+  unfold Mem.range_perm. intros .
+  eapply Mem.perm_store_1;eauto.
+  eapply Mem.perm_alloc_2;eauto.
+  destruct FREE as (tm3 & FREE).
+  exists tm3.
+  exploit Mem.free_right_inject. eapply INJ2. eauto.
+  intros.  eapply Mem.fresh_block_alloc;eauto.
+  eapply Mem.valid_block_inject_2;eauto.
+  intros INJ3.
+  exists INJ2,INJ3.
+  (* injp acc *)
+  assert (RO1: ro_acc m m).
+  eapply ro_acc_refl.
+  assert (RO3: ro_acc tm tm3).
+  eapply ro_acc_trans. eapply ro_acc_alloc;eauto.
+  eapply ro_acc_trans. eapply ro_acc_store;eauto.
+  eapply ro_acc_free;eauto.
+  assert (RO2: ro_acc tm tm2).
+  eapply ro_acc_trans. eapply ro_acc_alloc;eauto.
+  eapply ro_acc_store;eauto.
+  inv RO1. inv RO2. inv RO3.
+  assert (INJP1: injp_acc (injpw j m tm Hm) (injpw j m tm2 INJ2)).  
+  econstructor;eauto.
+  eapply Mem.unchanged_on_refl.
+  econstructor;eauto.
+  (* unchanged_on_perm *)
+  intros.
+  assert (b<>sp). intro. eapply Mem.fresh_block_alloc;eauto.
+  subst. auto.
+  eapply iff_trans. split. eapply Mem.perm_alloc_1;eauto.
+  intros. eapply Mem.perm_alloc_4;eauto.
+  split. eapply Mem.perm_store_1;eauto.
+  eapply Mem.perm_store_2;eauto.
+  (* mem contents *)
+  intros.
+  assert (b<>sp). intro. eapply Mem.fresh_block_alloc;eauto.
+  subst. eapply Mem.perm_valid_block;eauto.
+  assert (PERM1: Mem.perm tm1 b ofs Cur Readable).
+  eapply Mem.perm_alloc_1;eauto.
+  assert (PERM2: Mem.perm tm2 b ofs Cur Readable).
+  eapply Mem.perm_store_1;eauto.
+  etransitivity.
+  eapply Mem.store_unchanged_on with (P:= fun b _ => b <> sp);eauto.
+  eapply Mem.alloc_unchanged_on;eauto.
+  eapply inject_separated_refl.
+  repeat apply conj;eauto.
+  econstructor;eauto.
+  eapply Mem.unchanged_on_refl.
+  inv INJP1.
+  econstructor;eauto;intros.  
+  assert (b<>sp). intro. eapply Mem.fresh_block_alloc;eauto.
+  subst. auto.
+  etransitivity. eapply H19;eauto.    
+  split. eapply Mem.perm_free_1;eauto.
+  eapply Mem.perm_free_3;eauto.
+  assert (b<>sp). intro. eapply Mem.fresh_block_alloc;eauto.
+  subst. eapply Mem.perm_valid_block;eauto.
+  assert (PERM1: Mem.perm tm1 b ofs Cur Readable).
+  eapply Mem.perm_alloc_1;eauto.
+  assert (PERM2: Mem.perm tm2 b ofs Cur Readable).
+  eapply Mem.perm_store_1;eauto.
+  assert (PERM3: Mem.perm tm3 b ofs Cur Readable).
+  eapply Mem.perm_free_1;eauto.
+  etransitivity.
+  eapply Mem.free_unchanged_on with (P:= fun b _ => b <> sp);eauto.
+  eapply H19;eauto.
+  eapply inject_separated_refl.
+Qed.
 
+  
+  
+  
 (* i<>0. sum<>0 *)
 Lemma exec_mem2: forall j m tm i mb tmb ofs sum (Hm :Mem.inject j m tm),
     Mem.loadv Mint32 m (Vptr mb ofs) = Some (Vint sum) ->
@@ -232,7 +322,20 @@ Lemma exec_mem2: forall j m tm i mb tmb ofs sum (Hm :Mem.inject j m tm),
       Mem.loadv Mint32 tm2 (Vptr tmb ofs) = Some (Vint sum) /\
       Mem.free tm2 sp 0 4 = Some tm3 /\
       injp_acc (injpw j m tm Hm) (injpw j m tm3 Hm').
-Admitted.
+Proof.
+  intros until Hm. intros LOADM INJMB.
+  exploit exec_mem1.  
+  intros (tm1 & sp & tm2 & tm3 & Hm' & Hm'' & ALLOCTM & STORETM1 & FREETM2 & INJP1 & INJP2).
+  instantiate (1:= tm) in ALLOCTM.
+  instantiate (1:= m) in Hm'. instantiate (1:= j) in Hm'.
+  exists tm1,sp,tm2.
+  exploit Mem.load_inject. eapply Hm'. eapply LOADM. eauto.
+  rewrite Z.add_0_r. intros (v & LOADTM2 & VINJ).
+  inv VINJ.
+  exists tm3,Hm''.
+  repeat eapply conj;eauto.
+Qed.
+  
 
 (* i<>0. sum==0, before call g *)
 Lemma exec_mem3: forall j m tm i mb tmb ofs sum (Hm :Mem.inject j m tm),
@@ -244,7 +347,21 @@ Lemma exec_mem3: forall j m tm i mb tmb ofs sum (Hm :Mem.inject j m tm),
       Mem.loadv Mint32 tm2 (Vptr tmb ofs) = Some (Vint sum) /\
       Mem.range_perm tm2 sp 0 4 Cur Freeable /\
       injp_acc (injpw j m tm Hm) (injpw j m tm2 Hm').
-Admitted.
+Proof.
+  intros until Hm. intros LOADM INJMB.
+  exploit exec_mem1.  
+  intros (tm1 & sp & tm2 & tm3 & Hm' & Hm'' & ALLOCTM & STORETM1 & FREETM2 & INJP1 & INJP2).
+  instantiate (1:= tm) in ALLOCTM.
+  instantiate (1:= m) in Hm'. instantiate (1:= j) in Hm'.
+  exists tm1,sp,tm2.
+  exploit Mem.load_inject. eapply Hm'. eapply LOADM. eauto.
+  rewrite Z.add_0_r. intros (v & LOADTM2 & VINJ).
+  inv VINJ.
+  exists Hm'.
+  repeat apply conj;eauto.
+  (* range perm freeable *)
+  eapply Mem.free_range_perm;eauto.
+Qed.  
 
 (* continuation after returning from g *)
 Lemma exec_mem4: forall j m m1 tm mb tmb sp ofs sum (Hm: Mem.inject j m tm),
@@ -257,8 +374,35 @@ Lemma exec_mem4: forall j m m1 tm mb tmb sp ofs sum (Hm: Mem.inject j m tm),
               Mem.free tm1 sp 0 4 = Some tm2 /\
               injp_acc (injpw j m tm Hm) (injpw j m1 tm1 Hm') /\
               Mem.inject j m1 tm2.
-Admitted.
-
+Proof.
+  intros until Hm.
+  intros STORE INJMB PERM OUT.
+  exploit Mem.store_mapped_inject;eauto.
+  intros (tm1 & STORETM & INJ1).
+  assert (FREE: { tm2: mem | Mem.free tm1 sp 0 4 = Some tm2}).
+  eapply Mem.range_perm_free. unfold Mem.range_perm. intros.
+  eapply Mem.perm_store_1;eauto.
+  destruct FREE as (tm2 & FREE).
+  exists tm1,tm2,INJ1.
+  exploit Mem.free_right_inject;eauto.
+  assert (OUT1: forall ofs : Z, 0 <= ofs < 4 -> loc_out_of_reach j m1 sp ofs).
+  { intros. unfold loc_out_of_reach.
+    intros. intro. eapply OUT;eauto.
+    eapply Mem.perm_store_2;eauto. }    
+  intros.
+  eapply OUT1. instantiate (1 := ofs0 + delta).
+  eauto. eauto. rewrite <-Z.add_sub_assoc.
+  rewrite Z.sub_diag. rewrite Z.add_0_r.
+  eapply Mem.perm_implies. instantiate (1:= p).
+  destruct k. eauto.
+  eapply Mem.perm_cur_max. eauto. destruct p;econstructor.
+  intros INJ2.
+  rewrite Z.add_0_r in *.
+  repeat eapply conj;eauto.
+  (* injp_acc *)
+  eapply injp_acc_store;eauto. rewrite Z.add_0_r.
+  auto.
+Qed.
 
 Lemma match_program_id :
   match_program (fun _ f0 tf => tf = id f0) eq M_C M_C.
@@ -382,7 +526,8 @@ Proof.
       generalize INJP. intros INJP1.
       inv INJP1. inv Hse.           
       exploit (exec_mem1 j m tm i). instantiate (1 := Hm).
-      intros (tm1 & sp & tm2 & tm3 & Hm' & ALLOCTM & STORETM1 & FREETM2 & INJP2).
+      intros (tm1 & sp & tm2 & tm3 & Hm'' & Hm' & ALLOCTM & STORETM1 & FREETM2 & INJPUNUSE & INJP2).
+      clear Hm'' INJPUNUSE.
       eexists. split.
       econstructor.
       (* function entry *)
