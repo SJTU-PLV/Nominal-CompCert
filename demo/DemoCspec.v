@@ -2,7 +2,7 @@ Require Import Coqlib Errors.
 Require Import AST Linking Values Events Globalenvs Memory Smallstep.
 Require Import ValueAnalysis.
 Require Import LanguageInterface.
-Require Import CallConv Compiler.
+Require Import CallConv Compiler Invariant.
 Require Import CKLRAlgebra Extends Inject InjectFootprint.
 Require Import Asm Asmrel.
 Require Import Integers.
@@ -841,4 +841,94 @@ Proof.
 
   - constructor. intros. inv H.
 Qed.
+
+
+Section RO.
+
+Variable se : Genv.symtbl.
+Variable m0 : mem.
+
+Inductive sound_state : state -> Prop :=
+| sound_callf : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callstatef i m)
+| sound_callg : forall i m vg,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callstateg vg i m)
+| sound_returnf : forall i sum m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Returnstateg i sum m)
+| sound_returng : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Returnstatef i m).
+
+End RO.
+
+Definition ro_inv '(row se0 m0) := sound_state se0 m0.
+
+Lemma LC_ro : preserves L_C ro ro ro_inv.
+Proof.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros. inv H0;inv H.
+    + econstructor;eauto.
+    + econstructor;eauto.
+    + econstructor;eauto.
+    + econstructor;eauto.
+      eapply ro_acc_trans. eauto.
+      eapply ro_acc_store. eauto.
+      eapply ro_acc_sound. eauto.
+      eapply ro_acc_store. eauto.
+  - intros.
+    inv H;inv H0.
+    econstructor. eapply ro_acc_refl.
+    eauto.
+  - intros. inv H0;inv H.
+    exists (row se1 m). split;auto.
+    split. econstructor. eauto.
+    intros.
+    inv H;inv H0. econstructor;eauto.
+    eapply ro_acc_trans;eauto.
+    eapply ro_acc_sound;eauto.
+  - intros. inv H0;inv H.    
+    econstructor. auto.
+Qed.
+
+Theorem cspec_ro :
+  forward_simulation ro ro L_C L_C.
+Proof.
+  eapply preserves_fsim. eapply LC_ro; eauto.
+Qed.
+
+Theorem cspec_self_simulation_wt :
+  forward_simulation wt_c wt_c L_C L_C.
+Proof.
+  constructor. econstructor; eauto.
+  intros se1 se2 w Hse Hse1. cbn in *.
+  destruct w as [se' sg].
+  subst. inv Hse.
+  instantiate (1 := fun se1 se2 w _ => (fun s1 s2 => s1 = s2 /\ snd w = int_int_sg)). cbn beta. simpl.
+  instantiate (1 := state).
+  instantiate (1 := fun s1 s2 => False).
+  constructor; eauto.
+  - intros. simpl. inv H. reflexivity.
+  - intros. inv H. exists s1. exists s1. constructor; eauto. inv H0.
+    inv H1. cbn. eauto.   
+  - intros. inv H. exists r1.
+    constructor; eauto.
+    constructor; eauto.
+    cbn. inv H0. constructor; eauto.
+  - intros. subst.
+    exists (se2, int_int_sg).
+    exists q1. inv H. repeat apply conj; simpl; auto.
+    + inv H0. econstructor. simpl. auto.
+    + constructor; eauto.
+    + intros. exists s1'. exists s1'. split; eauto.
+      inv H.  auto.
+  - intros. inv H0. exists s1', s1'. split. left. econstructor; eauto.
+    econstructor. traceEq.
+    eauto.
+  - constructor. intros. inv H.
+Qed.
+
 

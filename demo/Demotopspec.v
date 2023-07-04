@@ -4,7 +4,7 @@ Require Import InjectFootprint Invariant ValueAnalysis.
 Require Import CA Asm CallConv CKLRAlgebra.
 Require Import Demo Demospec DemoCspec.
 Require Import Smallstep Linking SmallstepLinking.
-Require Import LanguageInterface.
+Require Import LanguageInterface Compiler.
 
 
 Definition s_unit :=
@@ -58,11 +58,15 @@ Context (se:Genv.symtbl).
 
 
 Inductive initial_state : c_query -> state -> Prop :=
-| initf i m fb
-    (FINDF: Genv.find_symbol se f_id = Some fb):
+| initf i m fb n
+    (FINDF: Genv.find_symbol se f_id = Some fb)
+    (IEQ:  i = (Int.repr (Z.of_nat n)))
+    (BOUND: Int.min_signed <= Z.of_nat n <= Int.max_signed):
     initial_state (cq (Vptr fb Ptrofs.zero) int_int_sg (Vint i :: nil) m) (Callf i m)
-| initg i m gb
-    (FINDF: Genv.find_symbol se g_id = Some gb):
+| initg i m gb n
+    (FINDF: Genv.find_symbol se g_id = Some gb)
+    (IEQ:  i = (Int.repr (Z.of_nat n)))
+    (BOUND: Int.min_signed <= Z.of_nat n <= Int.max_signed):
     initial_state (cq (Vptr gb Ptrofs.zero) int_int_sg (Vint i :: nil) m) (Callg i m).
 
 Inductive at_external : state -> c_query -> Prop :=.
@@ -141,6 +145,7 @@ with sum_cache_s mb sb m : nat -> int ->  mem -> Prop :=
 Inductive step : state -> trace -> state -> Prop :=
 | stepf i n m m' mb sb sum fb gb
     (ItoN: Int.repr (Z.of_nat n) = i)
+    (BOUND: Int.min_signed <= Z.of_nat n <= Int.max_signed)
     (FINDMEMO: Genv.find_symbol se _memoized = Some mb)
     (FINDS: Genv.find_symbol se _s = Some sb)
     (FINDF: Genv.find_symbol se f_id = Some fb)
@@ -149,6 +154,7 @@ Inductive step : state -> trace -> state -> Prop :=
   step (Callf i m) E0 (Returnf sum m')
 | stepg i n m m' mb sb sum fb gb
     (ItoN: Int.repr (Z.of_nat n) = i)
+    (BOUND: Int.min_signed <= Z.of_nat n <= Int.max_signed)
     (FINDMEMO: Genv.find_symbol se _memoized = Some mb)
     (FINDS: Genv.find_symbol se _s = Some sb)
     (FINDF: Genv.find_symbol se f_id = Some fb)
@@ -189,11 +195,15 @@ Let tge2 := Genv.globalenv tse M_A.
 Hypothesis MSTB : match_stbls injp w se tse.
 
 Inductive match_state: state -> list (frame L) -> Prop :=
-| match_callf i m tm j Hm
-  (INJP: injp_acc w (injpw j m tm Hm)):
+| match_callf i m tm j Hm n
+    (INJP: injp_acc w (injpw j m tm Hm))
+    (IEQ:  i = (Int.repr (Z.of_nat n)))
+    (BOUND: Int.min_signed <= Z.of_nat n <= Int.max_signed):
   match_state (Callf i m) (st L true (DemoCspec.Callstatef i tm) :: nil)
-| match_callg i m tm j Hm
-  (INJP: injp_acc w (injpw j m tm Hm)):
+| match_callg i m tm j Hm n
+    (INJP: injp_acc w (injpw j m tm Hm))
+    (IEQ:  i = (Int.repr (Z.of_nat n)))
+    (BOUND: Int.min_signed <= Z.of_nat n <= Int.max_signed):  
   match_state (Callg i m) (st L false (Demospec.Callstateg i tm) :: nil)
 | match_returnf i m tm j Hm
   (INJP: injp_acc w (injpw j m tm Hm)):
@@ -204,6 +214,13 @@ Inductive match_state: state -> list (frame L) -> Prop :=
 
 End MS.
 
+Lemma int_modulus: Int.modulus = 4294967296.
+  reflexivity.
+Qed.
+
+Lemma int_half_modulus: Int.half_modulus = 2147483648.
+  reflexivity.
+Qed.
 
 Lemma intval_zero:
   Int.intval (Int.repr 0) = 0.
@@ -216,12 +233,16 @@ Lemma intval_repr: forall z,
   auto.
 Qed.
 
+
 Lemma intval_Sn_nz: forall n,
     (Z.of_nat (S n)) < Int.modulus ->
     Int.intval (Int.repr (Z.of_nat (S n))) <> 0.
 Proof.
-  intro. rewrite intval_repr. rewrite Int.Z_mod_modulus_eq.
-  rewrite Nat2Z.inj_succ. unfold Z.succ. intro.
+  intros.
+  (* assert (Z.of_nat (S n) < Int.modulus). *)
+  (* rewrite int_modulus. rewrite int_half_modulus in H. lia. *)
+  rewrite intval_repr. rewrite Int.Z_mod_modulus_eq.
+  rewrite Nat2Z.inj_succ. unfold Z.succ. 
   rewrite Z.mod_small. lia.
   lia.
 Qed.
@@ -421,29 +442,29 @@ Qed.
   
 Lemma exec_state: forall n i m m' mb sb fb gb sum k,
     i = Int.repr (Z.of_nat n) ->
-    (Z.of_nat n) < Int.modulus ->
+    (Z.of_nat n) < Int.half_modulus ->
     Genv.find_symbol tse _memoized = Some mb ->
     Genv.find_symbol tse _s = Some sb ->
     Genv.find_symbol tse f_id = Some fb ->
     Genv.find_symbol tse g_id = Some gb ->
     (sum_cache_memo mb sb m n sum m' ->
-     star (fun _ : unit => SmallstepLinking.step L tse) tt
+     plus (fun _ : unit => SmallstepLinking.step L tse) tt
        (st L true (DemoCspec.Callstatef i m) :: k) E0 (st L true (DemoCspec.Returnstatef sum m') :: k)) /\
     (sum_cache_s mb sb m n sum m' ->
-     star (fun _ : unit => SmallstepLinking.step L tse) tt
+     plus (fun _ : unit => SmallstepLinking.step L tse) tt
        (st L false (Demospec.Callstateg i m) :: k) E0 (st L false (Demospec.Returnstateg sum m') :: k)).
 Proof.
   induction n.
   - intros until k.
     intros IEQ LT FIND1 FIND2 FIND3 FIND4. split;intros SUMCACHE.
     + inv SUMCACHE.
-      * eapply star_step;eauto. econstructor.
+      * eapply plus_left;eauto. econstructor.
         simpl. eapply DemoCspec.step_zero. eauto.
         eapply star_refl;eauto. auto.
       * simpl in INZ. rewrite intval_zero in INZ.
         congruence.
     + inv SUMCACHE.
-      * eapply star_step;eauto. econstructor.
+      * eapply plus_left;eauto. econstructor.
         simpl. eapply Demospec.step_zero. eauto.
         eapply star_refl;eauto. auto.
       * simpl in INZ. rewrite intval_zero in INZ.
@@ -453,15 +474,18 @@ Proof.
     split;intros SUMCACHE.
     + inv SUMCACHE.
       (* cache hits *)
-      * eapply star_step;eauto. econstructor.
+      * eapply plus_left;eauto. econstructor.
         simpl. eapply DemoCspec.step_sum_nz. eapply INZ.
         eapply SUMNZERO.
         eauto. eauto.
         eapply star_refl;eauto. auto.
       (* cache miss *)
-      * eapply star_step;eauto. econstructor.
+      * eapply plus_left;eauto. econstructor.
         eapply DemoCspec.step_call. 
-        eapply intval_Sn_nz. lia.
+        eapply intval_Sn_nz.
+        rewrite Int.half_modulus_modulus.
+        generalize Int.modulus_pos.
+        lia.
         eapply CSUMZERO. eauto.
         eauto. simpl. unfold Genv.symbol_address. rewrite FIND4.
         eauto. congruence.
@@ -475,31 +499,39 @@ Proof.
         econstructor. eapply find_fung_ing;eauto.
         (* use I.H. *)
         rewrite! int_sub_one_sn.
-        eapply star_trans.
+        eapply plus_star.
+        eapply plus_trans.
         exploit IHn;eauto. lia.
         intros (P1 & P2). eapply P2. eauto. 
         (* return from L_A *)
-        eapply star_step;eauto. eapply step_pop.
+        eapply plus_left;eauto. eapply step_pop.
         simpl. econstructor. simpl. econstructor.
         (* one step from returnstateg to returnstatef *)
         eapply star_step;eauto. econstructor. econstructor.
         simpl. unfold Genv.symbol_address. rewrite FIND1.
         eauto. unfold Ptrofs.of_ints. rewrite Int.signed_repr.
-        eauto. unfold Int.max_unsigned. lia.
+        eauto.
+        generalize (Int.min_signed_neg).
+        split. lia.        
+        unfold Int.max_signed. lia.
         eauto.
         eapply star_refl.
         all: eauto.
+        rewrite Int.half_modulus_modulus. lia.
+        
     + inv SUMCACHE.
       (* cache hits *)
-      * eapply star_step;eauto. econstructor.
+      * eapply plus_left;eauto. econstructor.
         simpl. eapply Demospec.step_read. eapply INZ.
         eapply IEQI'.
         eauto. eauto. eauto.
         eapply star_refl;eauto. auto.
       (* cache miss *)
-      * eapply star_step;eauto. econstructor.
+      * eapply plus_left;eauto. econstructor.
         eapply Demospec.step_call. 
-        eapply intval_Sn_nz. lia.
+        eapply intval_Sn_nz.
+        rewrite Int.half_modulus_modulus.
+        lia.
         eauto.       
         eauto. simpl. unfold Genv.symbol_address. rewrite FIND3.
         eauto. congruence.
@@ -514,11 +546,12 @@ Proof.
         econstructor. eapply find_funf_inf;eauto.
         (* use I.H. *)
         rewrite! int_sub_one_sn.
-        eapply star_trans.
+        eapply plus_star.
+        eapply plus_trans.
         exploit IHn;eauto. lia.
         intros (P1 & P2). eapply P1. eauto. 
         (* return from L_A *)
-        eapply star_step;eauto. eapply step_pop.
+        eapply plus_left;eauto. eapply step_pop.
         simpl. econstructor. simpl. econstructor.
         (* one step from returnstateg to returnstatef *)
         eapply star_step;eauto. econstructor. econstructor.
@@ -526,6 +559,459 @@ Proof.
         eauto. eauto. eauto. 
         eapply star_refl.
         all: eauto.
+        rewrite Int.half_modulus_modulus.
+        lia.
 Qed.
 
 End FIND_FUNCT.
+
+
+Lemma int_repr_eq: forall n1 n2,
+    Int.min_signed <= Z.of_nat n1 <= Int.max_signed ->
+    Int.min_signed <= Z.of_nat n2 <= Int.max_signed ->
+    Int.repr (Z.of_nat n1) = Int.repr (Z.of_nat n2) ->
+    n1 = n2.
+Proof.
+  intros.
+  assert (Int.signed (Int.repr (Z.of_nat n1)) = Int.signed (Int.repr (Z.of_nat n2))).
+  f_equal. auto.
+  rewrite! Int.signed_repr in H2.    
+  eapply Nat2Z.inj.  auto.
+  lia. lia.
+Qed.
+
+Theorem top_simulation:
+  forward_simulation (cc_c injp) (cc_c injp) top_spec composed_spec.
+Proof.
+   constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
+  intros se1 se2 w Hse Hse1. cbn in *. subst.
+  pose (ms := fun s1 s2 => match_state w s1 s2).
+  eapply forward_simulation_plus with (match_states := ms).
+  destruct w as [f0 m0 tm0 Hm0]; cbn in Hse; inv Hse; subst; cbn in *; eauto.
+   (* valid query *)
+   - intros. inv H.
+     unfold SmallstepLinking.valid_query.
+     simpl. unfold valid_query. simpl.
+     inv H0;simpl in *;auto;try congruence.
+     destruct (Genv.invert_symbol se1 b1) eqn:INV.
+     2: {
+      unfold Genv.is_internal, Genv.find_funct, Genv.find_funct_ptr.
+      rewrite !Genv.find_def_spec.
+      assert (Genv.invert_symbol se2 b2 = None).
+      destruct (Genv.invert_symbol se2 b2) as [i|] eqn:FIND2; eauto.
+      apply Genv.invert_find_symbol in FIND2.
+      inv H2.
+      eapply mge_symb in FIND2 as FIND1; eauto.
+      apply Genv.find_invert_symbol in FIND1. congruence.
+      rewrite H0.
+      destruct Ptrofs.eq_dec; destruct Ptrofs.eq_dec; eauto.
+    }
+    apply Genv.invert_find_symbol in INV as FIND.
+    assert (delta = 0).
+    { inv H2. exploit mge_dom. eapply Genv.genv_symb_range; eauto.
+      intros [a b]. rewrite H in b. inv b. reflexivity.
+    }
+    subst delta.
+     destruct (Ptrofs.eq_dec ofs1 Ptrofs.zero).
+    2: {
+      unfold Genv.is_internal. unfold Genv.find_funct.
+      rewrite !pred_dec_false. reflexivity.
+      rewrite Ptrofs.add_zero. auto.
+      rewrite Ptrofs.add_zero. auto.
+    }
+    unfold Genv.is_internal.
+    rewrite !Ptrofs.add_zero. subst ofs1.
+    destruct (peq i 154).
+     + subst.
+       eapply Genv.find_symbol_match in FIND. 2: eapply H2.
+       destruct FIND as (tb1 & INJ & FINDT).
+       rewrite INJ in H. inv H.
+       exploit find_funf_inf. simpl. eapply FINDT.
+       intros FINDFUNF. simpl in *. rewrite FINDFUNF.
+       simpl. auto.
+     + destruct (peq i 176).
+       * eapply Genv.find_symbol_match in FIND. 2: eapply H2.
+         destruct FIND as (tb1 & INJ & FINDT).
+         rewrite INJ in H. inv H.
+         exploit find_fung_ing. simpl. eapply FINDT.
+         intros FINDFUNG. simpl in *. rewrite FINDFUNG.         
+         eapply orb_true_intro. right. auto.
+       * unfold Genv.find_funct.
+         destruct (Ptrofs.eq_dec Ptrofs.zero Ptrofs.zero);try congruence.
+         unfold Genv.find_funct_ptr.
+         assert (FIND_DEF_MC: forall f, Genv.find_def (Genv.globalenv se2 (Ctypes.program_of_program M_C)) b2 <> Some (Gfun f)).
+         { unfold Genv.globalenv. simpl.
+           intros.
+           unfold Genv.add_globdef.
+           (* destruct all the get *)
+           simpl.
+           (* se2 b2 = i *)
+           assert (A: Maps.PTree.get i (Genv.genv_symb se2) = Some b2).
+           erewrite <- Genv.mge_symb. 2: eapply H2.
+           eauto. eauto.
+           (* destruct and denote the names *)
+            destruct Maps.PTree.get as [db1|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *;
+             destruct Maps.PTree.get as [db2|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *;
+              destruct Maps.PTree.get as [db3|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *.
+             all :try assert (NEQ1: b2 <> db2) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence);
+               try assert (NEQ2: b2 <> db3) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence).
+
+             1-4: setoid_rewrite NMap.gsspec;destruct NMap.elt_eq;try congruence.
+             1-2,5-6: unfold NMap.get;erewrite NMap.gso;eauto.
+             1,3,5,7: unfold NMap.get;erewrite NMap.gso;eauto.
+             all: unfold NMap.get;rewrite NMap.gi;congruence. }
+
+         assert (FIND_DEF_MA: forall f, Genv.find_def (Genv.globalenv se2 M_A) b2 <> Some (Gfun f)).
+         { unfold Genv.globalenv. simpl.
+           intros.
+           unfold Genv.add_globdef.
+           (* destruct all the get *)
+           simpl.
+           (* se2 b2 = i *)
+           assert (A: Maps.PTree.get i (Genv.genv_symb se2) = Some b2).
+           erewrite <- Genv.mge_symb. 2: eapply H2.
+           eauto. eauto.
+           (* destruct and denote the names *)
+            destruct Maps.PTree.get as [db1|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *;
+             destruct Maps.PTree.get as [db2|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *;
+              destruct Maps.PTree.get as [db3|] eqn:? at 1;unfold Maps.PTree.prev in *; simpl in *.
+             all :try assert (NEQ1: b2 <> db1) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence);
+               try assert (NEQ2: b2 <> db3) by (unfold not; intros; subst; exploit Genv.genv_vars_inj;[eapply A | eauto | eauto]; intros; congruence).
+
+             1-4: unfold NMap.get;erewrite NMap.gso;eauto.            
+             1-2,5-6: setoid_rewrite NMap.gsspec;destruct NMap.elt_eq;try congruence.
+             1,3,5,7: unfold NMap.get;erewrite NMap.gso;eauto.
+             all: unfold NMap.get;rewrite NMap.gi;congruence. }
+
+          assert (RHS: match i with
+           | 154%positive | 176%positive => true
+           | _ => false
+                      end = false).
+         { destruct i;try congruence;destruct i;try congruence;auto;
+             destruct i;try congruence;auto;destruct i;try congruence;auto;
+             destruct i;try congruence;destruct i;try congruence;
+             destruct i;try congruence;destruct i;try congruence. }
+         rewrite RHS.
+
+         destruct Genv.find_def eqn:?. destruct g. specialize (FIND_DEF_MC f). contradiction.
+         destruct Genv.find_def eqn:? at 1. destruct g. rewrite Heqo0 in FIND_DEF_MA. specialize (FIND_DEF_MA f). contradiction.
+         auto. auto.
+         destruct Genv.find_def eqn:? at 1. destruct g. rewrite Heqo0 in FIND_DEF_MA. specialize (FIND_DEF_MA f). contradiction.
+         auto. auto.    
+           
+   (* initial state *)
+   - intros.
+     generalize Hse. intros Hse'.
+     inv Hse.
+     inv H. inv H0.
+     + inv H5. inv H8. inv H10. inv H4. inv H6.
+       simpl in *.
+       (* find symbol *)
+       eapply Genv.find_symbol_match in FINDF.
+       2: eapply H1.
+       destruct FINDF as (tb1 & INJ & FINDF). rewrite H5 in INJ.
+       inv INJ. fold Ptrofs.zero.       
+       (* find funct *)
+       exploit find_funf_inf. simpl. eapply FINDF.
+       intros FINDFUNF.     
+       simpl in *. rewrite Ptrofs.add_zero_l.       
+       eexists. split.
+       econstructor. instantiate (1:= true).
+       (* valid query *)
+       simpl. unfold Genv.is_internal.
+       simpl in *. rewrite FINDFUNF.
+       auto.
+       (* initial *)
+       simpl. econstructor.
+       simpl. rewrite FINDFUNF. auto.
+       (* match state *)
+       econstructor. reflexivity.
+       eauto. auto.
+     + inv H5. inv H8. inv H10. inv H4. inv H6.
+       simpl in *.
+       (* find symbol *)
+       eapply Genv.find_symbol_match in FINDF.
+       2: eapply H1.
+       destruct FINDF as (tb1 & INJ & FINDF). rewrite H5 in INJ.
+       inv INJ. fold Ptrofs.zero.       
+       (* find funct *)
+       exploit find_fung_ing. simpl. eapply FINDF.
+       intros FINDFUNF.     
+       simpl in *. rewrite Ptrofs.add_zero_l.       
+       eexists. split.
+       econstructor. instantiate (1:= false).
+       (* valid query *)
+       simpl. unfold Genv.is_internal.
+       simpl in *. rewrite FINDFUNF.
+       auto.
+       (* initial *)
+       simpl. econstructor.
+       simpl. rewrite FINDFUNF. auto.
+       (* match state *)
+       econstructor. reflexivity.
+       eauto. auto.
+
+   (* final state *)
+   - intros. inv H0;inv H.
+     + eexists. split. econstructor.
+       econstructor. econstructor.
+       split. eauto. econstructor.
+       simpl. econstructor.
+       simpl. econstructor.
+     + eexists. split. econstructor.
+       econstructor. econstructor.
+       split. eauto. econstructor.
+       simpl. econstructor.
+       simpl. econstructor.
+
+   - simpl. intros. inv H0.
+   (* step *)
+   - simpl. intros.
+     inv H;inv H0.
+     + inv Hse.
+       eapply int_repr_eq in IEQ;eauto. subst.
+       exploit (match_stbls_acc injp); eauto.
+       econstructor. eauto. eauto. eauto.
+       intros Hse'. inv Hse'.
+       
+       (* find symbol match *)
+       eapply (Genv.find_symbol_match H5) in FINDMEMO.
+       destruct FINDMEMO as (tmb & FINDTMB & FINDMEMO).
+       eapply (Genv.find_symbol_match H5) in FINDS.
+       destruct FINDS as (tsb & FINDTSB & FINDS).
+       eapply (Genv.find_symbol_match H5) in FINDF.
+       destruct FINDF as (tfb & FINDTFB & FINDF).
+       eapply (Genv.find_symbol_match H5) in FINDG.
+       destruct FINDG as (tgb & FINDTGB & FINDG).
+       
+       exploit exec_mem. instantiate (1:= n0).
+       eauto.
+       unfold Int.max_signed in *. rewrite Int.half_modulus_modulus.
+       generalize (Int.modulus_pos). lia.
+       eapply FINDTMB. eapply FINDTSB.
+       intros P. eapply P in CACHE. clear P.
+       destruct CACHE as (tm' & Hm' & CACHE' & INJP1).
+       
+       exploit exec_state. instantiate (1:= n0).
+       eauto. 
+       unfold Int.max_signed in *. 
+       generalize (Int.modulus_pos). lia.
+       eauto. eauto. eauto. eauto.
+       intros P.
+       eapply P in CACHE'. clear P.
+
+       eexists. split. eauto.
+       econstructor. etransitivity. eauto.
+       eauto.
+
+     + inv Hse.
+       eapply int_repr_eq in IEQ;eauto. subst.
+       exploit (match_stbls_acc injp); eauto.
+       econstructor. eauto. eauto. eauto.
+       intros Hse'. inv Hse'.
+       
+       (* find symbol match *)
+       eapply (Genv.find_symbol_match H5) in FINDMEMO.
+       destruct FINDMEMO as (tmb & FINDTMB & FINDMEMO).
+       eapply (Genv.find_symbol_match H5) in FINDS.
+       destruct FINDS as (tsb & FINDTSB & FINDS).
+       eapply (Genv.find_symbol_match H5) in FINDF.
+       destruct FINDF as (tfb & FINDTFB & FINDF).
+       eapply (Genv.find_symbol_match H5) in FINDG.
+       destruct FINDG as (tgb & FINDTGB & FINDG).
+       
+       exploit exec_mem. instantiate (1:= n0).
+       eauto.
+       unfold Int.max_signed in *. rewrite Int.half_modulus_modulus.
+       generalize (Int.modulus_pos). lia.
+       eapply FINDTMB. eapply FINDTSB.
+       intros P. eapply P in CACHE. clear P.
+       destruct CACHE as (tm' & Hm' & CACHE' & INJP1).
+       
+       exploit exec_state. instantiate (1:= n0).
+       eauto. 
+       unfold Int.max_signed in *. 
+       generalize (Int.modulus_pos). lia.
+       eauto. eauto. eauto. eauto.
+       intros P.
+       eapply P in CACHE'. clear P.
+
+       eexists. split. eauto.
+       econstructor. etransitivity. eauto.
+       eauto.
+       
+   - econstructor. intros. inv H.
+Qed.
+
+
+Section RO.
+
+Variable se : Genv.symtbl.
+Variable m0 : mem.
+
+Inductive sound_state : state -> Prop :=
+| sound_callf : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callf i m)
+| sound_callg : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Callg i m)
+| sound_returnf : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Returnf i m)
+| sound_returng : forall i m,
+    ro_acc m0 m -> sound_memory_ro se m ->
+    sound_state (Returng i m).
+
+End RO.
+
+Definition ro_inv '(row se0 m0) := sound_state se0 m0.
+
+Lemma cache_ro_acc: forall n mb sb m1 i m2,
+    (sum_cache_memo mb sb m1 n i m2 \/ sum_cache_s mb sb m1 n i m2) ->
+    ro_acc m1 m2.
+Proof.
+  induction n;simpl;intros.
+  - destruct H.
+    + inv H. eapply ro_acc_refl. eapply ro_acc_refl.
+    + inv H. eapply ro_acc_refl. eapply ro_acc_refl.
+  - destruct H.
+    + inv H.
+      * eapply ro_acc_refl.
+      * eapply ro_acc_trans.
+        eapply IHn. right. eauto.
+        eapply ro_acc_store;eauto.
+    + inv H.
+      * eapply ro_acc_refl.
+      * eapply ro_acc_trans.
+        eapply IHn. left. eauto.
+        eapply ro_acc_trans.
+        eapply ro_acc_store;eauto.
+        eapply ro_acc_store;eauto.
+Qed.
+
+        
+Lemma topspec_ro : preserves top_spec ro ro ro_inv.
+Proof.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros.  inv H0;inv H.
+    + assert (RO: ro_acc m m').
+      eapply cache_ro_acc;eauto.
+      econstructor.
+      eapply ro_acc_trans. eapply H2.
+      eauto.
+      eapply ro_acc_sound;eauto.
+    + assert (RO: ro_acc m m').
+      eapply cache_ro_acc;eauto.
+      econstructor.
+      eapply ro_acc_trans. eapply H2.
+      eauto.
+      eapply ro_acc_sound;eauto.
+  - intros.
+    inv H;inv H0.
+    + econstructor;eauto.
+      eapply ro_acc_refl.
+    + econstructor;eauto.
+      eapply ro_acc_refl.
+  - intros. inv H0;inv H.
+  - intros. inv H0;inv H.
+    + econstructor;eauto.
+    + econstructor;eauto.
+Qed.
+
+Theorem top_ro :
+  forward_simulation ro ro top_spec top_spec.
+Proof.
+  eapply preserves_fsim. eapply topspec_ro; eauto.
+Qed.
+
+
+Theorem topspec_self_simulation_wt :
+  forward_simulation wt_c wt_c top_spec top_spec.
+Proof.
+  constructor. econstructor; eauto.
+  intros se1 se2 w Hse Hse1. cbn in *.
+  destruct w as [se' sg].
+  subst. inv Hse.
+  instantiate (1 := fun se1 se2 w _ => (fun s1 s2 => s1 = s2 /\ snd w = int_int_sg)). cbn beta. simpl.
+  instantiate (1 := state).
+  instantiate (1 := fun s1 s2 => False).
+  constructor; eauto.
+  - intros. simpl. inv H. reflexivity.
+  - intros. inv H. exists s1. exists s1. constructor; eauto. inv H0.
+    inv H1. cbn. eauto.
+    inv H1. cbn. eauto.
+  - intros. inv H. exists r1.
+    constructor; eauto.
+    constructor; eauto.
+    cbn. inv H0. constructor; eauto.
+    constructor; eauto.
+  - intros. subst.
+    exists (se2, int_int_sg).
+    exists q1. inv H. repeat apply conj; simpl; auto.
+    + inv H0.
+    + constructor; eauto.
+    + intros. exists s1'. exists s1'. split; eauto.
+      inv H0. 
+  - intros. inv H0. exists s1', s1'. split. left. econstructor; eauto.
+    econstructor. traceEq.
+    eauto.
+  - constructor. intros. inv H.
+Qed.
+
+Require Import CallconvAlgebra InjectFootprint CKLRAlgebra CA CallConv.
+Require Import Errors ClientServer Demoproof.
+
+(** * L_C ⊕ L_A ⊑ sem(Compile(M_C) + M_A) *)
+Lemma compose_LC_LA_correct:
+  forall tp M_C',
+    transf_clight_program M_C = OK M_C' ->
+    link M_C' M_A = Some tp ->
+    forward_simulation cc_compcert cc_compcert composed_spec (Asm.semantics tp).
+Proof.
+  intros.
+  rewrite <- (cc_compose_id_right cc_compcert) at 1.
+  rewrite <- (cc_compose_id_right cc_compcert) at 2.
+  eapply compose_forward_simulations.
+  2: { unfold compose in H.
+       eapply AsmLinking.asm_linking; eauto. }  
+  eapply compose_simulation.
+  (* L_C ⊑ M_C *)
+  rewrite ro_injp_cc_compcert at 1.
+  rewrite ro_injp_cc_compcert at 2.
+  eapply compose_forward_simulations.
+  eapply cspec_self_simulation_wt.
+  eapply compose_forward_simulations.
+  eapply cspec_ro.  
+  eapply compose_forward_simulations.
+  eapply cspec_simulation.
+  (* M_C ⊑ Compile(M_C) *)
+  eapply clight_semantic_preservation; eauto using transf_clight_program_match.
+  (* L_A ⊑ M_A *)
+  eapply M_A_semantics_preservation.
+  eapply link_result.
+  unfold compose. cbn.
+  apply link_erase_program in H0. rewrite H0. cbn. f_equal. f_equal.
+  apply Axioms.functional_extensionality. intros [|]; auto.
+Qed.
+
+
+(** *Final theorem : topspec ⊑ sem(Compile(M_C) + M_A) *)
+Theorem topspec_correct:
+  forall tp M_C',
+    transf_clight_program M_C = OK M_C' ->
+    link M_C' M_A = Some tp ->
+    forward_simulation cc_compcert cc_compcert top_spec (Asm.semantics tp).
+Proof.
+  intros.
+  rewrite ro_injp_cc_compcert at 1.
+  rewrite ro_injp_cc_compcert at 2.
+  eapply compose_forward_simulations.
+  eapply topspec_self_simulation_wt.
+  eapply compose_forward_simulations.
+  eapply top_ro.
+  eapply compose_forward_simulations.
+  eapply top_simulation.
+  eapply compose_LC_LA_correct;eauto.
+Qed.  
