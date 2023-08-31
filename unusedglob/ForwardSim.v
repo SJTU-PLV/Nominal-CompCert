@@ -321,3 +321,105 @@ Arguments Forward_simulation' {_ _ ccA _ _ ccB L1 L2 fsim_index'}.
 
 Definition forward_simulation' {liA1 liA2} ccA {liB1 liB2} ccB L1 L2 :=
   inhabited (@fsim_components' liA1 liA2 ccA liB1 liB2 ccB L1 L2).
+(*
+Section COMPOSE_FORWARD_SIMULATIONS.
+
+Context {liA1 liA2 liA3} {ccA12: callconv' liA1 liA2} {ccA23: callconv' liA2 liA3}.
+Context {liB1 liB2 liB3} {ccB12: callconv' liB1 liB2} {ccB23: callconv' liB2 liB3}.
+Context (L1: semantics liA1 liB1) (L2: semantics liA2 liB2) (L3: semantics liA3 liB3).
+
+Require Import Coq.Program.Equality.
+
+Lemma compose_fsim_components:
+  fsim_components' ccA12 ccB12 L1 L2 ->
+  fsim_components' ccA23 ccB23 L2 L3 ->
+  fsim_components' (cc_compose ccA12 ccA23) (cc_compose ccB12 ccB23) L1 L3.
+Proof.
+  intros [index order match_states path12 props order_wf].
+  intros [index' order' match_states' path23 props' order_wf'].
+  set (sk2 := skel L2).
+  set (ff_index := (index' * index)%type).
+  set (ff_order := lex_ord (clos_trans _ order') order).
+  set (ff_match_states :=
+         fun se1 se2 '(w, w') (i: ff_index) (s1: state L1) (s3: state L3) =>
+           exists s2,
+             match_states se1 se1 w (snd i) s1 s2 /\
+             match_states' se1 se2 w' (fst i) s2 s3).
+  apply Forward_simulation'
+    with ff_order ff_match_states. etransitivity; eauto.
+  2: { unfold ff_order. auto using wf_lex_ord, wf_clos_trans. }
+  intros se1 se2 [w w'] [Hse1 Hse2] [Hv1 [Hv3 Hcom]]. cbn in *.
+  assert (COMPAT1: Genv.skel_symtbl_compatible (skel L1) (skel L2) se1 se1).
+  {
+    constructor. eauto. split.
+    - clear - Hv1 path12.
+      red in Hv1. red. intros.
+      eapply Hv1. clear - path12 H.
+      inv path12. eauto.
+    - clear - Hv1. red in Hv1.
+      split. intros.
+      edestruct AST.prog_defmap_dom as [g A]. eauto.
+      exploit Hv1; eauto.
+      intros (b & g' & B & C & D). 
+      intro. destruct H as [g [A B]]. congruence.
+      destruct Hcom as [A B].
+      split.
+      intros. inv path23.
+      exploit A; eauto.
+  }
+  constructor.
+- (* valid query *)
+  intros q1 q3 (q2 & Hq12 & Hq23).
+  erewrite fsim_match_valid_query by eauto.
+  eapply fsim_match_valid_query; eauto.
+- (* initial states *)
+  intros q1 q3 s1 (q2 & Hq12 & Hq23) Hs1.
+  edestruct (@fsim_match_initial_states liA1) as (i & s2 & A & B); eauto.
+  edestruct (@fsim_match_initial_states liA2) as (i' & s3 & C & D); eauto.
+  exists (i', i); exists s3; split; auto. exists s2. eexists. eexists. all: auto.
+- (* final states *)
+  intros. cbn. destruct H as (s3 & x & y & HH & A & B).
+  edestruct PATH_EQ as [X Y]; eauto. subst.
+  edestruct (@fsim_match_final_states liA1) as (r2 & Hr2 & Hr12); eauto.
+  edestruct (@fsim_match_final_states liA2) as (r3 & Hr3 & Hr23); eauto.
+- (* external states *)
+  intros. destruct H as (s3 & x & y & HH & A & B).
+  edestruct PATH_EQ as [X Y]; eauto. subst.
+  edestruct (@fsim_match_external liA1) as (w12 & q2 & Hq2 & Hq12 & Hw12 & Hk12); eauto.
+  edestruct (@fsim_match_external liA2) as (w23 & q3 & Hq3 & Hq23 & Hw23 & Hk23); eauto.
+  exists (se2, w12, w23), q3. cbn; repeat apply conj; eauto.
+  { constructor; eauto. }
+  intros r1 r3 s1' (r2 & Hr12 & Hr23) Hs1'.
+  edestruct Hk12 as (i12' & s2' & Hs2' & Hs12'); eauto.
+  edestruct Hk23 as (i23' & s3' & Hs3' & Hs23'); eauto.
+  exists (i23', i12'), s3'. split; auto. exists s2'. eexists. eexists. all : eauto.
+- (* simulation *)
+  intros. destruct H0 as (s3 & x & y & HH & A & B).
+  edestruct PATH_EQ as [X Y]; eauto. subst.
+  destruct i as [i2 i1]; simpl in *.
+  edestruct (@fsim_simulation' liA1) as [(i1' & s3' & C & D) | (i1' & C & D & E)]; eauto.
++ (* L2 makes one or several steps. *)
+  edestruct (@simulation_plus liA2) as [(i2' & s2' & P & Q) | (i2' & P & Q & R)]; eauto.
+* (* L3 makes one or several steps *)
+  exists (i2', i1'); exists s2'; split. auto. exists s3'. eexists. eexists. all: eauto.
+* (* L3 makes no step *)
+  exists (i2', i1'); exists s2; split.
+  right; split. subst t; apply star_refl. red. left. auto.
+  exists s3'. eexists. eexists. all: auto.
++ (* L2 makes no step *)
+  exists (i2, i1'); exists s2; split.
+  right; split. subst t; apply star_refl. red. right. auto.
+  exists s3. eexists. eexists. auto.
+Qed.
+
+Lemma compose_forward_simulations:
+  forward_simulation ccA12 ccB12 L1 L2 ->
+  forward_simulation ccA23 ccB23 L2 L3 ->
+  forward_simulation (ccA12 @ ccA23) (ccB12 @ ccB23) L1 L3.
+Proof.
+  intros [X] [Y]. constructor.
+  apply compose_fsim_components; auto.
+Qed.
+
+End COMPOSE_FORWARD_SIMULATIONS.
+*)

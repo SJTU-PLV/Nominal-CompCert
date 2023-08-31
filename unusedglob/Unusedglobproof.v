@@ -558,7 +558,21 @@ Lemma remove_unused_consistent: forall id gd b,
 Proof.
   intros.
   destruct compat as (valid1 & valid2 & compatible & main).
-  exploit compatible; eauto.
+  destruct (In_dec peq id (prog_defs_names tskel)).
+  -  inv TRANSF. unfold tskel in *. unfold skel in *.
+     rewrite erase_program_defmap in *.
+     unfold option_map in *.
+     rewrite match_prog_def0.
+     destruct (IS.mem id used) eqn:IN.
+     + eauto.
+     + exfalso.
+       apply prog_defmap_dom in i.
+       destruct i as [g H1].
+       rewrite erase_program_defmap in H1.
+       rewrite match_prog_def0 in H1.
+       rewrite IN in H1. cbn in H1.
+    congruence.
+  -  exploit compatible; eauto.
   eapply map_fst_in.
   eapply in_prog_defmap; eauto. congruence.
   intro. inv TRANSF.
@@ -576,7 +590,6 @@ Proof.
     rewrite IN in H1. cbn in H1.
     congruence.
 Qed.
-
 
 Lemma remove_unused_consistent_p :forall id gd b,
     (prog_defmap p) ! id = Some gd -> 

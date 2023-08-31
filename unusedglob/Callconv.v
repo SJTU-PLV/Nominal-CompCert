@@ -183,8 +183,34 @@ Global Existing Instances cklr_storebytes.
 Local Existing Instances cklr_perm.
 Global Existing Instances cklr_valid_block.
 
-
 Arguments callconv': clear implicits.
+
+Program Definition cc_id {li}: callconv' li li :=
+  {|
+    ccworld' := unit;
+    match_senv' w se1 se2  := se1 = se2;
+    match_query' w := eq;
+    match_reply' w := eq;
+  |}.
+
+Program Definition cc_compose {li1 li2 li3} (cc12: callconv' li1 li2) (cc23: callconv' li2 li3) :=
+  {|
+    ccworld' := ccworld' cc12 * ccworld' cc23;
+    match_senv' '(w12, w23) se1 se2 := match_senv' cc12 w12 se1 se1 /\ match_senv' cc23 w23 se1 se2;
+    match_query' '(w12, w23) q1 q3 :=
+      exists q2,
+        match_query' cc12 w12 q1 q2 /\
+        match_query' cc23 w23 q2 q3;
+    match_reply' '(w12, w23) r1 r3 :=
+      exists r2,
+        match_reply' cc12 w12 r1 r2 /\
+        match_reply' cc23 w23 r2 r3;
+  |}.
+Next Obligation.
+  eapply match_senv_public_preserved'. eauto.
+Qed.
+
+Infix "@" := cc_compose (at level 30, right associativity) : cc_scope'.
 
 Inductive cc_c_query' R (w: world R): relation c_query :=
   | cc_c_query_intro vf1 vf2 sg vargs1 vargs2 m1 m2:
@@ -210,6 +236,8 @@ Program Definition cc_c' (R: cklr'): callconv' li_c li_c :=
 Next Obligation.
   intros. eapply match_stbls_proj in H. eapply Genv.mge_public'; eauto.
 Qed.
+
+
 
 
 (** * New Version of inj - now used for Unusedglob *)
