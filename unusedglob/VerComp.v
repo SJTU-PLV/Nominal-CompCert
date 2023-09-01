@@ -250,7 +250,6 @@ Lemma compose_fsim_components_old_new:
   intros [index' order' match_states' Hsk' props' order_wf'].
   set (ff_index := (index' * index)%type).
   set (ff_order := lex_ord (clos_trans _ order') order).
-  (*How to construct w1 here? add the well-form condition into fsim_components *)
   set (ff_match_states :=
          fun se1 se3 (w: injp_world) (i: ff_index) (s1: state L1) (s3: state L3) =>
            exists s2 w12 w23,
@@ -302,9 +301,46 @@ Lemma compose_fsim_components_old_new:
   }
   edestruct (@fsim_match_initial_states) as (i & s2 & A & B); eauto.
   edestruct (@fsim_match_initial_states') as (i' & s3 & C & D); eauto.
-  exists (i', i); exists s3; split; auto. exists s2; eauto.
-  intuition eauto.
-  admit. (*TODO, compose proof in Injectfootprint and the oracle*)
+  exists (i', i); exists s3; split; auto. exists s2.
+  exists w1,(injpw j m1 m2 Hm). repeat apply conj; cbn; eauto.
+  intros r1 r2 r3 [[w1' [Hw1 Hr1]] [w2' [Hw2 Hr2]]].
+  destruct w1' as [j12' m1' m2' Hm12'].
+  destruct w2' as [j23' m2'x m3' Hm23'].
+  inv Hr1. inv Hr2. cbn in *. inv H1.  inv H9.
+  rename m1'0 into m1'. rename m2'0 into m2'. rename m2'1 into m3'.
+  exists (injpw (compose_meminj j12' j23') m1' m3' (Mem.inject_compose j12' j23' _ _ _ Hm12' Hm23')). repeat apply conj.
+  +  (*injp acc*)
+    unfold w1 in Hw1. inv Hw1. inv Hw2.
+    constructor; eauto.
+    -- (* m1 - unmapped *)
+      admit. (*TODO here: *)
+    -- (*inject_incr*)
+      rewrite <- source_inj_compose with (se := se1) (f := j).
+      rauto.
+    -- (*prove that the mapping we added to j12 does not involve j13 and j13'*)
+      intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
+      destruct (j12' b1) as [[bi delta12] | ] eqn:Hb1; try discriminate.
+        destruct (j23' bi) as [[xb2 delta23] | ] eqn:Hb2; try discriminate.
+        inv Hb'.
+        edestruct H18; eauto.
+        unfold source_inj. destruct Mem.sup_dec.
+      ++ (*b1 is added as static variables which are removed from L2 to L3*)
+        (*we show that the same block bi for same variable is unmapped in j23 and j23'*)
+        assert ((source_inj se1 j) b1 = Some (b1,0)).
+        unfold source_inj. rewrite pred_dec_true. eauto. eauto.
+        erewrite H17 in Hb1; eauto. inv Hb1.
+        exploit H26; eauto. intros [E F].
+        clear - Hse1 E s.
+        unfold w1 in Hse1. inv Hse1.
+        exfalso. eapply E. eapply H6. eauto.
+      ++ unfold meminj_dom. rewrite Hb. auto.
+      ++ 
+        destruct (j bi) as [[? ?] | ] eqn:Hfbi.
+        {
+          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
+        }
+        edestruct H26; eauto.
+  + econstructor; cbn ; eauto. eapply val_inject_compose; eauto.
 - (* final states *)
   intros. destruct H as (s3 & w12 & w23 & A & B & C & D & E).
   edestruct (@fsim_match_final_states) as (r2 & Hr2 & Hr12); eauto.
@@ -380,7 +416,8 @@ Lemma compose_fsim_components_old_new:
       eapply MAXPERM2; eauto.
       eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
       constructor; eauto. constructor.
-      exists (i23', i12'), s3'. split; auto. exists s2', w12, w23; eauto.
+      exists (i23', i12'), s3'. split; auto. exists s2', w12, w23; intuition eauto.
+      
   }
 - (* simulation *)
   intros. destruct H0 as (s3 & w12 & w23 & MS1 & MS2 & MENV1 & MENV2 & RESULT).
