@@ -51,6 +51,7 @@ class Instruction =
 |constr Pmovl_mr [reg_op, AddrE] (Opcode = 0x89 ; fld %1 & cls %2)
 |constr Pmovl_rm [reg_op, AddrE] (Opcode = 0x8b ; fld %1 & cls %2)
 // movsd or movss depend on Grp1 prefix
+// |constr Pmovapd_fm [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0x28 ; fld %1 & cls %2)
 |constr Pmovss_d_mf [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0x11 ; fld %1 & cls %2)
 |constr Pmovss_d_fm [reg_op, AddrE] (Opcode = 0xf ; Opcode = 0x10 ; fld %1 & cls %2)
 |constr Pfldl_m [AddrE] (Opcode = 0xdd ; reg_op = 0x0 & cls %1)

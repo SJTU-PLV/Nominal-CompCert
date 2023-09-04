@@ -19,11 +19,15 @@ PROGS=fib integr qsort fft fftsp fftw sha1 sha3 aes almabench \
 
 all: $(PROGS:%=%.compcert)
 
+all_compcert_gcc: $(PROGS:%=%.compcert_gcc)
+
 all_s: $(PROGS:%=%.s)
 
 all_gcc: $(PROGS:%=%.gcc)
 
 all_myelf: $(PROGS:%=%.myelf)
+
+all_myelf_gcc: $(PROGS:%=%.myelf_gcc)
 
 %.compcert: %.c
 	$(CCOMP) $(CCOMPFLAGS) -o $*.compcert $*.c $(LIBS)
@@ -33,6 +37,9 @@ all_myelf: $(PROGS:%=%.myelf)
 
 %.myelf: %.c
 	$(CCOMP) $(CCOMPFLAGS) -c $*.c -o $*.myelf $(LIBS)
+
+%.myelf_gcc: %.c
+	$(CCOMP) $(CCOMPFLAGS_GCC) -c $*.c -o $*.myelf_gcc $(LIBS)
 
 %.s: %.c
 	$(CCOMP) $(CCOMPFLAGS) -S $*.c
@@ -61,11 +68,16 @@ bench_gcc:
 	   $(TIME) -name $$i -- $(SIMU) ./$$i.gcc; \
          done
 
+bench_compcert_gcc:
+	@for i in $(PROGS); do \
+	   $(TIME) -name $$i -- $(SIMU) ./$$i.compcert_gcc; \
+         done
+
 bench:
 	@for i in $(PROGS); do \
 	   $(TIME) -name $$i -- $(SIMU) ./$$i.compcert; \
          done
 
 clean:
-	rm -f *.compcert *.gcc
+	rm -f *.compcert *.gcc *.compcert_gcc *.myelf *.myelf_gcc
 	rm -f *.compcert.c *.light.c *.parsed.c *.s *.o *.sdump *~ 

@@ -700,6 +700,12 @@ Definition translate_instr (i:instruction) : res (list Instruction) :=
     let (oREX_rdbits, rsbits) := rex_rr in
     let (orex, rdbits) := oREX_rdbits in
     OK ([REPNZ] ++ orex ++ [Pmovss_d_fm (AddrE0 rsbits) rdbits])
+  (* | Asm.Pmovsd_ff rd rs => *)
+  (*   do rex_rr <- encode_rex_prefix_ff rd rs; *)
+  (*   let (oREX_rdbits, rsbits) := rex_rr in *)
+  (*   let (orex, rdbits) := oREX_rdbits in *)
+  (*   OK ([Override] ++ orex ++ [Pmovapd_fm (AddrE0 rsbits) rdbits]) *)
+
   | Asm.Pmovsd_fm rd addr =>
     do rex_ra <- encode_rex_prefix_fa rd addr;
     let (oREX_rdbits, a) := rex_ra in

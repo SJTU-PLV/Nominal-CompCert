@@ -829,6 +829,11 @@ Definition decode_instr_rex (W R X B: bool) (i: Instruction) : res instruction :
 Definition decode_instr_override (W R X B: bool) (i: Instruction) : res instruction :=
   let translate_AddrE_Addrmode := translate_AddrE_Addrmode X B in
   match i with
+  (* | Pmovapd_fm (AddrE0 rsbits) rdbits => *)
+  (*   let rd := decode_freg_u4 R rdbits in *)
+  (*   let rs := decode_freg_u4 B rsbits in *)
+  (*   OK (Asm.Pmovsd_ff rd rs) *)
+
   | Pmovl_rm a rdbits =>
     let rd := decode_ireg_u4 R rdbits in
     do addr <- translate_AddrE_Addrmode a;
