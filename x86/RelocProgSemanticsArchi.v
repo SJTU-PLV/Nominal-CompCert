@@ -124,7 +124,7 @@ Section WITH_INSTR_SIZE.
 
 (** Execution of instructions *)
 
-Definition exec_instr (ge: Genv.t) (i: instruction) (rs: regset) (m: mem) : outcome :=
+Definition exec_instr' (ge: Genv.t) (i: instruction) (rs: regset) (m: mem) : outcome :=
   let sz := Ptrofs.repr (instr_size i) in
   let nextinstr := nextinstr sz in
   let nextinstr_nf := nextinstr_nf sz in
@@ -541,6 +541,74 @@ Definition exec_instr (ge: Genv.t) (i: instruction) (rs: regset) (m: mem) : outc
   | _ => Stuck
   end.
 
+Definition exec_instr (ge: Genv.t) (i: instruction) (rs: regset) (m: mem) : outcome :=
+      let isz := Ptrofs.repr (instr_size i) in
+    match i with
+    (* The eliminated pseudo instructions *)
+    | Pallocframe _ _ _
+    | Pfreeframe  _ _ _
+    (* AsmBuiltinInline.v *)
+    | Pbuiltin _ _ _
+    (* AsmFloatLiteral.v *)
+    | Pmovsd_fi _ _
+    | Pmovss_fi _ _
+    | Pnegd _
+    | Pnegs _
+    | Pabsd _
+    | Pabss _
+    (* AsmLongInt.v *)
+    | Pmovq_ri _ _
+    | Paddq_ri _ _               
+    | Psubq_ri _ _
+    | Pimulq_ri _ _
+    | Pandq_ri _ _
+    | Porq_ri _ _
+    | Pxorq_ri _ _
+    | Pcmpq_ri _ _
+    | Ptestq_ri _ _
+    (* Some uncategorized pseudo instructions *)
+    | Psetcc _ _
+    | Pjcc2 _ _ _
+    | Pbswap16 _
+    (* instructions with `any' type *)
+    | Pmovsd_mf_a _ _
+    | Pmovsd_fm_a _ _
+    | Pmov_mr_a _ _
+    | Pmov_rm_a _ _
+    | Pxorq_r _
+    | Pxorl_r _
+    | Pmovls_rr _
+    (* zero extened move, just replace with normal move *)
+    | Pmovzl_rr _ _
+    (* jump to label => jump to relative address *)
+    | Pjmp_l _
+    | Pjcc _ _
+    | Pjmptbl _ _
+    | Plabel _
+    | Pjmptbl_rel _ _ => Stuck
+                  
+    (* TODO: We need to define the semantics of new introduced instructions,
+    which are undefined in Asm.v *)
+    | Pret_iw _
+    | Pxorpd_fm _ _
+    | Pandpd_fm _ _ 
+    | Pxorps_fm _ _
+    | Pandps_fm _ _
+    | Pjmp_m _
+    | Prolw_ri _ _               
+    | Paddq_rm _ _
+    | Psubq_rm _ _
+    | Pimulq_rm _ _
+    | Pandq_rm _ _
+    | Porq_rm  _ _
+    | Pxorq_rm _ _
+    | Pcmpq_rm _ _                         
+    | Ptestq_rm _ _  => Stuck    (* TODO! *)
+    (* For other instructions, we just reuse Asm.v *)
+    | _ => exec_instr' ge i rs m
+    end.
+                     
+
 Lemma exec_instr_refl: forall i rs m ge tge
     (symbol_address_pres: forall id ofs,
     RelocProgGlobalenvs.Genv.symbol_address ge id ofs =
@@ -548,9 +616,9 @@ Lemma exec_instr_refl: forall i rs m ge tge
     exec_instr ge i rs m = exec_instr tge i rs m.
 Proof.
   destruct i;simpl;auto;intros.
-  1-27: try (erewrite symbol_address_pres;eauto).
-  1-24: try (erewrite exec_load_match_ge;eauto;eapply symbol_address_pres;eauto).
-  1-12: try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
+  1-23: try (erewrite symbol_address_pres;eauto).
+  1-20: try (erewrite exec_load_match_ge;eauto;eapply symbol_address_pres;eauto).
+  1-10: try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
   do 3 f_equal.
   unfold eval_addrmode32.
   destruct a. f_equal.

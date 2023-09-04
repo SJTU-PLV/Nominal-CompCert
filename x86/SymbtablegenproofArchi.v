@@ -558,10 +558,10 @@ Proof.
     destruct v;solve_match_states.
     
     
-  - (* Pjmp_l *)
-    assert (instr_valid (Pjmp_l l)) as NJ.
-    { eapply instr_is_valid; eauto. }
-    red in NJ. cbn in NJ. contradiction.
+  (* - (* Pjmp_l *) *)
+  (*   assert (instr_valid (Pjmp_l l)) as NJ. *)
+  (*   { eapply instr_is_valid; eauto. } *)
+  (*   red in NJ. cbn in NJ. contradiction. *)
 
   - (* Pjmp_s *)
     repeat destr_in H4.    
@@ -583,20 +583,20 @@ Proof.
     econstructor; eauto.
     apply regset_inject_expand; auto.
       
-  - (* Pjcc *)
-    assert (instr_valid (Pjcc c l)) as NJ.
-    { eapply instr_is_valid; eauto. }
-    red in NJ. cbn in NJ. contradiction.
+  (* - (* Pjcc *) *)
+  (*   assert (instr_valid (Pjcc c l)) as NJ. *)
+  (*   { eapply instr_is_valid; eauto. } *)
+  (*   red in NJ. cbn in NJ. contradiction. *)
     
-  - (* Pjcc2 *)
-    assert (instr_valid (Pjcc2 c1 c2 l)) as NJ.
-    { eapply instr_is_valid; eauto. }
-    red in NJ. cbn in NJ. contradiction.
+  (* - (* Pjcc2 *) *)
+  (*   assert (instr_valid (Pjcc2 c1 c2 l)) as NJ. *)
+  (*   { eapply instr_is_valid; eauto. } *)
+  (*   red in NJ. cbn in NJ. contradiction. *)
 
-  - (* Pjmptbl *)
-    assert (instr_valid (Pjmptbl r tbl)) as NJ.
-    { eapply instr_is_valid; eauto. }
-    red in NJ. cbn in NJ. contradiction.
+  (* - (* Pjmptbl *) *)
+  (*   assert (instr_valid (Pjmptbl r tbl)) as NJ. *)
+  (*   { eapply instr_is_valid; eauto. } *)
+  (*   red in NJ. cbn in NJ. contradiction. *)
 
   - (* Pcall_s *)
     repeat destr_in H4.
@@ -644,15 +644,15 @@ Proof.
     repeat apply regset_inject_expand; auto;
     try apply Val.offset_ptr_inject; eauto.
     
-  - (* Pallocframe *)
-    assert (instr_valid (Pallocframe sz ofs_ra ofs_link)) as NJ.
-    { eapply instr_is_valid; eauto. }
-    red in NJ. cbn in NJ. contradiction.
+  (* - (* Pallocframe *) *)
+  (*   assert (instr_valid (Pallocframe sz ofs_ra ofs_link)) as NJ. *)
+  (*   { eapply instr_is_valid; eauto. } *)
+  (*   red in NJ. cbn in NJ. contradiction. *)
 
-  - (* Pfreeframe *)
-    assert (instr_valid (Pfreeframe sz ofs_ra ofs_link)) as NJ.
-    { eapply instr_is_valid; eauto. }
-    red in NJ. cbn in NJ. contradiction.
+  (* - (* Pfreeframe *) *)
+  (*   assert (instr_valid (Pfreeframe sz ofs_ra ofs_link)) as NJ. *)
+  (*   { eapply instr_is_valid; eauto. } *)
+  (*   red in NJ. cbn in NJ. contradiction. *)
     
   - (* Pjmp_l_rel *)
     unfold Asm.goto_ofs in H4.
@@ -700,24 +700,10 @@ Proof.
     exists rs2', m2. split; auto.
     eapply match_states_intro; eauto.
 
-  - (* Pjmptbl_rel *)
-    assert (instr_valid (Pjmptbl_rel r tbl)) as NJ.
-    { eapply instr_is_valid; eauto. }
-    red in NJ. cbn in NJ. contradiction.
-(***** Remove Proofs By Chris Start ******)
-(*       *)
-(*     destruct (rs1 r) eqn:REQ; inv H4. *)
-(*     destruct (list_nth_z tbl (Int.unsigned i)) eqn:LEQ; inv H3. *)
-(*     assert (rs2 r = Vint i) by *)
-(*         (generalize (RSINJ r); rewrite REQ; inversion 1; auto). *)
-(*     exploit goto_ofs_pres_mem; eauto. intros. subst. *)
-(*     generalize (goto_ofs_inject' _ _ _ _ _ m1' m2 _ _ RSINJ H4). *)
-(*     intros (rs2' & GLBL & RSINJ'). *)
-(*     exists rs2', m2. rewrite H2. rewrite LEQ. *)
-(*     split; auto. *)
-(*     eapply match_states_intro; eauto. *)
-(* *)
-(***** Remove Proofs By Chris End ******)
+  (* - (* Pjmptbl_rel *) *)
+  (*   assert (instr_valid (Pjmptbl_rel r tbl)) as NJ. *)
+  (*   { eapply instr_is_valid; eauto. } *)
+  (*   red in NJ. cbn in NJ. contradiction. *)
 Qed.
 
 

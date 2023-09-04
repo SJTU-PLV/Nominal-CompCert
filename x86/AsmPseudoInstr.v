@@ -41,7 +41,7 @@ Definition transf_instr (i: instruction) (code: code) : res (list instruction) :
   (* ambiguous instructions pair *)
   | Pmovsd_mf_a a1 f1 =>
     OK [Pmovsd_mf a1 f1]
-  | Pmovsd_fm f1 a1 =>
+  | Pmovsd_fm_a f1 a1 =>
     OK [Pmovsd_fm f1 a1]
   | Pmov_mr_a a1 f1 =>
     if Archi.ptr64 then

@@ -24,23 +24,82 @@ Variable instr_size : instruction -> Z.
 Section WITHGE.
   Variable ge : Genv.t Asm.fundef unit.
 
-  Definition exec_instr f i rs (m: mem) :=
+  Definition exec_instr f i rs (m: mem) :=    
     let isz := Ptrofs.repr (instr_size i) in
     match i with
-    | Pallocframe sz ofs_ra ofs_link =>
-      let aligned_sz := (* align sz 8 *) sz in
-      let psp := (Val.offset_ptr (rs#RSP) (Ptrofs.repr (size_chunk Mptr))) in (* parent stack pointer *)
-      let sp := Val.offset_ptr (rs#RSP) (Ptrofs.neg (Ptrofs.sub (Ptrofs.repr aligned_sz) (Ptrofs.repr (size_chunk Mptr)))) in
-      match Mem.storev Mptr m (Val.offset_ptr sp ofs_link) psp with
-        |None => Stuck
-        |Some m1 =>
-      Next (nextinstr_nf isz (rs #RAX <- (Val.offset_ptr (rs RSP) (Ptrofs.repr (size_chunk Mptr))) #RSP <- sp)) m1
-      end
-    | Pfreeframe sz ofs_ra ofs_link =>
-      let sp := Val.offset_ptr (rs RSP) (Ptrofs.sub (Ptrofs.repr (*(align sz 8)*) sz) (Ptrofs.repr (size_chunk Mptr))) in
-      Next (nextinstr isz (rs#RSP <- sp)) m
+    (* The eliminated pseudo instructions *)
+    | Pallocframe _ _ _
+    | Pfreeframe  _ _ _
+    (* AsmBuiltinInline.v *)
+    | Pbuiltin _ _ _
+    (* AsmFloatLiteral.v *)
+    | Pmovsd_fi _ _
+    | Pmovss_fi _ _
+    | Pnegd _
+    | Pnegs _
+    | Pabsd _
+    | Pabss _
+    (* AsmLongInt.v *)
+    | Pmovq_ri _ _
+    | Paddq_ri _ _               
+    | Psubq_ri _ _
+    | Pimulq_ri _ _
+    | Pandq_ri _ _
+    | Porq_ri _ _
+    | Pxorq_ri _ _
+    | Pcmpq_ri _ _
+    | Ptestq_ri _ _
+    (* Some uncategorized pseudo instructions *)
+    | Psetcc _ _
+    | Pjcc2 _ _ _
+    | Pbswap16 _
+    (* instructions with `any' type *)
+    | Pmovsd_mf_a _ _
+    | Pmovsd_fm_a _ _
+    | Pmov_mr_a _ _
+    | Pmov_rm_a _ _
+    | Pxorq_r _
+    | Pxorl_r _
+    | Pmovls_rr _
+    (* zero extened move, just replace with normal move *)
+    | Pmovzl_rr _ _
+    (* jump to label => jump to relative address *)
+    | Pjmp_l _
+    | Pjcc _ _
+    | Pjmptbl _ _
+    | Plabel _
+    | Pjmptbl_rel _ _ => Stuck
+                  
+    (* TODO: We need to define the semantics of new introduced instructions,
+    which are undefined in Asm.v *)
+    | Pret_iw _
+        (* if check_ra_after_call instr_size ge (rs#RA) then *)
+        (*   (* pop n bytes from the stack  *) *)
+        (*   let psp := (Val.offset_ptr (rs#RSP) (Ptrofs.repr (Int.unsigned n))) in *)
+        (*   Next (rs#PC <- (rs#RA) #RA <- Vundef #RSP <- psp) m *)
+        (* else Stuck                *)
+    | Pxorpd_fm _ _
+        (* load memory values *)
+        (* match Mem.loadv Mfloat64 m (eval_addrmode ge a rs) with *)
+        (* | Some v => Stuck             (* there is no xor for floats *) *)
+        (* | None => Stuck *)
+        (* end *)
+    | Pandpd_fm _ _ 
+    | Pxorps_fm _ _
+    | Pandps_fm _ _
+    | Pjmp_m _
+    | Prolw_ri _ _               
+    | Paddq_rm _ _
+    | Psubq_rm _ _
+    | Pimulq_rm _ _
+    | Pandq_rm _ _
+    | Porq_rm  _ _
+    | Pxorq_rm _ _
+    | Pcmpq_rm _ _                         
+    | Ptestq_rm _ _  => Stuck    (* TODO! *)
+    (* For other instructions, we just reuse Asm.v *)
     | Pcall_s i sg =>
-      let sp := Val.offset_ptr (rs RSP) (Ptrofs.neg (Ptrofs.repr (size_chunk Mptr))) in
+        let sp := Val.offset_ptr (rs RSP) (Ptrofs.neg (Ptrofs.repr (size_chunk Mptr))) in
       match Mem.storev Mptr m sp (Val.offset_ptr rs#PC isz) with
         |None => Stuck
         |Some m1 =>
@@ -139,3 +198,4 @@ Proof.
 Qed.
 
 End INSTRSIZE.
+ 
