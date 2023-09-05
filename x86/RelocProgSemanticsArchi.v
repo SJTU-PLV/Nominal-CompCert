@@ -589,21 +589,86 @@ Definition exec_instr (ge: Genv.t) (i: instruction) (rs: regset) (m: mem) : outc
                   
     (* TODO: We need to define the semantics of new introduced instructions,
     which are undefined in Asm.v *)
-    | Pret_iw _
+    | Pret_iw n =>
+        (* pop n bytes from the stack  *)
+        match loadvv Mptr m rs#RSP with
+        | None => Stuck
+        | Some ra =>
+            let sp := Val.offset_ptr (rs RSP) (Ptrofs.add (Ptrofs.repr (size_chunk Mptr)) (Ptrofs.repr (Int.unsigned n))) in
+            Next (rs #RSP <- sp
+                              #PC <- ra
+                                      #RA <- Vundef) m
+        end
+
     | Pxorpd_fm _ _
     | Pandpd_fm _ _ 
     | Pxorps_fm _ _
-    | Pandps_fm _ _
-    | Pjmp_m _
-    | Prolw_ri _ _               
-    | Paddq_rm _ _
-    | Psubq_rm _ _
-    | Pimulq_rm _ _
-    | Pandq_rm _ _
-    | Porq_rm  _ _
-    | Pxorq_rm _ _
-    | Pcmpq_rm _ _                         
-    | Ptestq_rm _ _  => Stuck    (* TODO! *)
+    | Pandps_fm _ _ => Stuck
+    | Pjmp_m a =>
+        let addr := eval_addrmode ge a rs in
+        match loadvv (if Archi.ptr64 then Many64 else Many32) m addr with
+        | Some v =>
+            Next (rs#PC <- v) m
+        | None => Stuck
+        end
+    | Prolw_ri rd n =>
+        Next (nextinstr_nf isz (rs#rd <- (Val.rol rs#rd (Vint n)))) m
+    | Paddq_rm rd a =>
+        let addr := eval_addrmode ge a rs in
+        match loadvv Mint64 m addr with
+        | Some v =>
+            Next (nextinstr_nf isz (rs#rd <- (Val.addl rs#rd v))) m
+        | None => Stuck
+        end
+    | Psubq_rm rd a =>
+        let addr := eval_addrmode ge a rs in
+        match loadvv Mint64 m addr with
+        | Some v =>
+            Next (nextinstr_nf isz (rs#rd <- (Val.subl rs#rd v))) m
+        | None => Stuck
+        end
+    | Pimulq_rm rd a =>
+        let addr := eval_addrmode ge a rs in
+        match loadvv Mint64 m addr with
+        | Some v =>
+            Next (nextinstr_nf isz (rs#rd <- (Val.mull rs#rd v))) m
+        | None => Stuck
+        end
+    | Pandq_rm rd a =>
+        let addr := eval_addrmode ge a rs in
+        match loadvv Mint64 m addr with
+        | Some v =>
+            Next (nextinstr_nf isz (rs#rd <- (Val.andl rs#rd v))) m
+        | None => Stuck
+        end
+    | Porq_rm rd a =>
+        let addr := eval_addrmode ge a rs in
+        match loadvv Mint64 m addr with
+        | Some v =>
+            Next (nextinstr_nf isz (rs#rd <- (Val.orl rs#rd v))) m
+        | None => Stuck
+        end
+    | Pxorq_rm rd a =>
+        let addr := eval_addrmode ge a rs in
+        match loadvv Mint64 m addr with
+        | Some v =>
+            Next (nextinstr_nf isz (rs#rd <- (Val.xorl rs#rd v))) m
+        | None => Stuck
+        end
+    | Pcmpq_rm rd a =>
+        let addr := eval_addrmode ge a rs in
+        match loadvv Mint64 m addr with
+        | Some v =>
+            Next (nextinstr_nf isz (compare_longs (rs rd) v rs m)) m
+        | None => Stuck
+        end
+    | Ptestq_rm rd a =>
+        let addr := eval_addrmode ge a rs in
+        match loadvv Mint64 m addr with
+        | Some v =>
+            Next (nextinstr_nf isz (compare_longs (Val.andl (rs rd) v) (Vlong Int64.zero) rs m)) m
+        | None => Stuck
+        end
     (* For other instructions, we just reuse Asm.v *)
     | _ => exec_instr' ge i rs m
     end.
@@ -616,19 +681,20 @@ Lemma exec_instr_refl: forall i rs m ge tge
     exec_instr ge i rs m = exec_instr tge i rs m.
 Proof.
   destruct i;simpl;auto;intros.
-  1-23: try (erewrite symbol_address_pres;eauto).
-  1-20: try (erewrite exec_load_match_ge;eauto;eapply symbol_address_pres;eauto).
-  1-10: try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
+  all: try (erewrite symbol_address_pres;eauto).
+  all: try (erewrite exec_load_match_ge;eauto;eapply symbol_address_pres;eauto).
+  all: try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
+  all: try (erewrite eval_addrmode_match_ge;eauto;eapply symbol_address_pres;eauto).
   do 3 f_equal.
   unfold eval_addrmode32.
   destruct a. f_equal.
   f_equal. destr.
   destruct p. eapply symbol_address_pres;eauto.
-  do 3 f_equal.
-  unfold eval_addrmode64.
-  destruct a. f_equal.
-  f_equal. destr.
-  destruct p. eapply symbol_address_pres;eauto.
+  (* do 3 f_equal. *)
+  (* unfold eval_addrmode64. *)
+  (* destruct a. f_equal. *)
+  (* f_equal. destr. *)
+  (* destruct p. eapply symbol_address_pres;eauto. *)
 Qed.
 
 Inductive step (ge: Genv.t) : state -> trace -> state -> Prop :=

@@ -55,6 +55,23 @@ Proof.
   - apply subl_overflow_inject; auto.
 Qed.
 
+(* Move to Memoryagree *)
+Theorem loadvv_inject:
+  forall f m1 m2 chunk a1 a2 v1,
+  magree f m1 m2 ->
+  loadvv chunk m1 a1 = Some v1 ->
+  Val.inject f a1 a2 ->
+  exists v2, loadvv chunk m2 a2 = Some v2 /\ Val.inject f v1 v2.
+Proof.
+  intros. inv H1; simpl in H0; try discriminate.
+  unfold loadvv in *. 
+  destruct (Mem.loadv chunk m1 (Vptr b1 ofs1)) eqn: LOADV.
+  2: { congruence. }
+  exploit loadv_inject;eauto.
+  intros (v2 & LOADV1 & INJ1).
+  rewrite LOADV1.
+  exists v2. destruct v;destruct v2;try congruence;inv H0;inv INJ1;eauto.
+Qed.
 
 Lemma prog_instr_valid: forall prog tprog,
     transf_program instr_size prog = OK tprog ->
@@ -359,11 +376,28 @@ Ltac solve_store_load :=
     exploit exec_load_step; eauto
   end.
 
+(* some ad-hoc ltac *)
+Ltac solve_loadvv H:=
+  repeat destr_in H;
+  exploit loadvv_inject;eauto with inject_db;
+  intros (v2 & LD & VI); rewrite LD;
+  do 2 eexists; split; eauto; simpl;
+  econstructor;eauto;eauto with inject_db.
+
 Lemma eval_testcond_inject: forall j c rs1 rs2,
     regset_inject j rs1 rs2 ->
     Val.opt_lessdef (Asm.eval_testcond c rs1) (Asm.eval_testcond c rs2).
 Proof.
   intros. destruct c; simpl; try solve_opt_lessdef.
+Qed.
+
+(* Move it to Value.v *)
+Lemma rol_inject : forall v1 v2 v1' v2' f,
+    Val.inject f v1 v2 -> Val.inject f v1' v2' -> Val.inject f (Val.rol v1 v1') (Val.rol v2 v2').
+Proof.
+  intros. unfold Val.rol. 
+  destruct v1; auto. inv H. 
+  destruct v1'; auto. inv H0. auto.
 Qed.
 
 
@@ -380,7 +414,7 @@ Hint Resolve nextinstr_nf_pres_inject nextinstr_pres_inject regset_inject_expand
   Val.mullhs_inject Val.mullhu_inject Val.shr_inject Val.shrl_inject Val.or_inject Val.orl_inject
   Val.xor_inject Val.xorl_inject Val.and_inject Val.andl_inject Val.notl_inject
   Val.shl_inject Val.shll_inject Val.vzero_inject Val.notint_inject
-  Val.shru_inject Val.shrlu_inject Val.ror_inject Val.rorl_inject
+  Val.shru_inject Val.shrlu_inject Val.ror_inject Val.rorl_inject rol_inject
   compare_ints_inject compare_longs_inject compare_floats_inject compare_floats32_inject
   Val.addf_inject Val.subf_inject Val.mulf_inject Val.divf_inject Val.negf_inject Val.absf_inject
   Val.addfs_inject Val.subfs_inject Val.mulfs_inject Val.divfs_inject Val.negfs_inject Val.absfs_inject
@@ -509,7 +543,8 @@ Proof.
   intros.
   destruct i; inv H2; simpl in *;
     try first [solve_store_load |
-               solve_match_states].
+                solve_match_states |
+                solve_loadvv H4].
 
   - (* Pmov_rs *)
     apply nextinstr_nf_pres_inject.
@@ -548,7 +583,7 @@ Proof.
     rewrite EQ, EQ0, EQ1. inversion 1; subst. inversion 1; subst. inversion 1; subst.
     eexists; eexists. split. simpl. rewrite EQ2. auto.
     eapply match_states_intro; eauto with inject_db.
-     
+    
   - (* Pcmov *)
     exploit (eval_testcond_inject (Mem.flat_inj (Mem.support m1')) c rs1 rs2); eauto.
     intros. inv H2.
@@ -634,15 +669,15 @@ Proof.
     apply Val.offset_ptr_inject. eauto.
     eapply storev_pres_glob_block_valid; eauto.
     
-  - (* Pret *)
-    repeat destr_in H4. simpl.
-    unfold loadvv in *. destr_in Heqo. 
-    exploit loadv_inject;eauto. intros (v2 & LD & VI). rewrite LD.
-    destr_in Heqo;inv Heqo;inv VI;
-    eexists _, _; split; eauto;
-    econstructor; eauto;
-    repeat apply regset_inject_expand; auto;
-    try apply Val.offset_ptr_inject; eauto.
+  (* - (* Pret *) *)
+  (*   repeat destr_in H4. simpl. *)
+  (*   unfold loadvv in *. destr_in Heqo.  *)
+  (*   exploit loadv_inject;eauto. intros (v2 & LD & VI). rewrite LD. *)
+  (*   destr_in Heqo;inv Heqo;inv VI; *)
+  (*   eexists _, _; split; eauto; *)
+  (*   econstructor; eauto; *)
+  (*   repeat apply regset_inject_expand; auto; *)
+  (*   try apply Val.offset_ptr_inject; eauto. *)
     
   (* - (* Pallocframe *) *)
   (*   assert (instr_valid (Pallocframe sz ofs_ra ofs_link)) as NJ. *)
@@ -653,6 +688,13 @@ Proof.
   (*   assert (instr_valid (Pfreeframe sz ofs_ra ofs_link)) as NJ. *)
   (*   { eapply instr_is_valid; eauto. } *)
   (*   red in NJ. cbn in NJ. contradiction. *)
+
+  (* Pret_iw *)
+  (* -  repeat destr_in H4. *)
+  (*   exploit loadvv_inject;eauto with inject_db. *)
+  (*   intros (v2 & LD & VI). rewrite LD. *)
+  (*   do 2 eexists; split; eauto. simpl. *)
+  (*   econstructor;eauto. eauto with inject_db.    *)
     
   - (* Pjmp_l_rel *)
     unfold Asm.goto_ofs in H4.

@@ -162,19 +162,20 @@ Proof.
       eauto. eapply program_equiv_sym. eauto.
     + apply program_equiv_sym in E2.
       destruct i;simpl in *;auto.
-      1-27: try (erewrite program_equiv_symbol_address1;eauto).
-      1-24: try (erewrite exec_load_match_ge;eauto;eapply program_equiv_symbol_address1;eauto).
-      1-12: try (erewrite exec_store_match_ge;eauto;eapply program_equiv_symbol_address1;eauto).
+      all: try (erewrite program_equiv_symbol_address1;eauto).
+      all: try (erewrite exec_load_match_ge;eauto;eapply program_equiv_symbol_address1;eauto).
+      all: try (erewrite exec_store_match_ge;eauto;eapply program_equiv_symbol_address1;eauto).
+      all: try (erewrite eval_addrmode_match_ge;eauto;eapply program_equiv_symbol_address1;eauto).
       rewrite <- H3. do 3 f_equal.
       unfold eval_addrmode32.
       destruct a. f_equal.
       f_equal. destr.
       destruct p0. eapply program_equiv_symbol_address1;eauto.
-      rewrite <- H3. do 3 f_equal.
-      unfold eval_addrmode64.
-      destruct a. f_equal.
-      f_equal. destr.
-      destruct p0. eapply program_equiv_symbol_address1;eauto.
+      (* rewrite <- H3. do 3 f_equal. *)
+      (* unfold eval_addrmode64. *)
+      (* destruct a. f_equal. *)
+      (* f_equal. destr. *)
+      (* destruct p0. eapply program_equiv_symbol_address1;eauto. *)
 
   (* - eapply exec_step_builtin with (vargs:= vargs);eauto. *)
   (*   + unfold RelocProgGlobalenvs.Genv.find_ext_funct in *. *)
