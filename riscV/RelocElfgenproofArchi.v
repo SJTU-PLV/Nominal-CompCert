@@ -165,13 +165,17 @@ Lemma initial_state_gen_match: forall D rs m st (p tp: RelocProg.program fundef 
     exists st', initial_state_gen instr_size (decode_program instr_size tp) rs m st' /\ st = st'.
 Proof.
   intros.
-  inv H0.
-  set (ge' := RelocProgGlobalenvs.globalenv instr_size (decode_program instr_size tp)).
-  set (rs0' :=(((Pregmap.init Vundef) # PC <-
+  inv H0. 
+
+  set (ge':= RelocProgGlobalenvs.globalenv instr_size (decode_program instr_size tp)).
+  set (rs0':= (((Pregmap.init Vundef) # PC <-
            (Genv.symbol_address ge' (RelocProg.prog_main (decode_program instr_size tp)) Ptrofs.zero))
-          # X2 <- Vnullptr) # X1 <- Vnullptr).
+          # X2 <-
+          (Vptr stk
+             (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8))
+                (Ptrofs.repr (size_chunk Mptr))))) # X1 <- Vnullptr).
   
-  exists (State rs0' m). split;auto.
+  exists (State rs0' m2). split;auto.
   econstructor;eauto.
   f_equal.
   unfold rs0,rs0'.

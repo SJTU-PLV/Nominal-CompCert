@@ -83,11 +83,14 @@ Proof.
   set (ge2:= (globalenv instr_size (decode_program instr_size tprog'))).
   set (rs0':= (((Pregmap.init Vundef) # PC <-
            (Genv.symbol_address ge2 (prog_main (decode_program instr_size tprog')) Ptrofs.zero))
-                 # X2 <- Vnullptr) # X1 <- Vnullptr).
+          # X2 <-
+          (Vptr stk
+             (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8))
+                (Ptrofs.repr (size_chunk Mptr))))) # X1 <- Vnullptr).
   
-  exists (State rs0' m).
+  exists (State rs0' m2).
   split.
-  econstructor;eauto.
+  econstructor;eauto.  
   f_equal. unfold rs0,rs0'.
   generalize  symbol_address_pres.
   unfold ge,tge. unfold RelocProgSemantics1.globalenv,RelocProgSemantics2.globalenv.

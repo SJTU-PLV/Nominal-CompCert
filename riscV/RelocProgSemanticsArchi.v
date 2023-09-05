@@ -425,14 +425,16 @@ Inductive step (ge: Genv.t): state -> trace -> state -> Prop :=
       step ge (State rs m) t (State rs' m').
 
 Inductive initial_state_gen {D: Type} (p: RelocProg.program fundef unit instruction D) (rs: regset) m: state -> Prop :=
-| initial_state_gen_intro:
-  let ge := globalenv instr_size p in
-  let rs0 :=
-    (Pregmap.init Vundef)
-      # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
-      # SP <- Vnullptr
-      # RA <- Vnullptr in
-  initial_state_gen p rs m (State rs0 m).
+| initial_state_archi_archi: forall m1 m2 stk
+      (MALLOC: Mem.alloc m 0 (max_stacksize + align (size_chunk Mptr) 8) = (m1,stk))
+      (MST: Mem.storev Mptr m1 (Vptr stk (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8 - size_chunk Mptr))) Vnullptr = Some m2),
+    let ge := (globalenv instr_size p) in
+    let rs0 :=
+      (Pregmap.init Vundef)
+        # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
+        # SP <- (Vptr stk (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr))))
+        # RA <- Vnullptr in    
+    initial_state_gen p rs m (State rs0 m2).
 
 
 (** Determinacy of the [Asm] semantics: architecture dependent part . *)
@@ -464,7 +466,10 @@ Lemma  initial_state_gen_determinate : forall D (p:RelocProg.program fundef unit
     s1 = s2.
 Proof.
   intros. inv H;inv H0.
-  auto.
+  assert (m1 = m0) by congruence. subst. (* inv H2; inv H3. *)
+  assert (stk = stk0) by intuition congruence. subst.
+  assert (m2 = m3) by congruence. subst.
+  f_equal. 
 Qed.
 
 (* Theorem reloc_prog_single_events p: *)

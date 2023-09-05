@@ -361,15 +361,20 @@ Inductive step: state -> trace -> state -> Prop :=
 
 End WITHGE.
 
+(* single stack allocation *)
 Inductive initial_stack_regset (p: Asm.program) (m0: mem) : mem -> regset -> Prop :=
-| initial_state_archi_archi:
+| initial_state_archi_archi: forall m1 m2 stk,
+  Mem.alloc m0 0 (max_stacksize + (align (size_chunk Mptr) 8)) = (m1, stk) ->
+  Mem.storev Mptr m1 (Vptr stk (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8 - size_chunk Mptr))) Vnullptr = Some m2 ->
     let ge := Genv.globalenv p in
     let rs0 :=
       (Pregmap.init Vundef)
         # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
-        # SP <- Vnullptr
+        # SP <- (Val.offset_ptr
+                   (Vptr stkblock (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8)))
+                   (Ptrofs.neg (Ptrofs.repr (size_chunk Mptr))))
         # RA <- Vnullptr in    
-    initial_stack_regset p m0 m0 rs0.
+    initial_stack_regset p m0 m2 rs0.
 
 Lemma semantics_determinate_step : forall p s s1 s2 t1 t2,
   step (Genv.globalenv p) s t1 s1 ->

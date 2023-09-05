@@ -188,6 +188,10 @@ Proof.
 Qed.
 
 
+Let alloc_stack_pres_inject := alloc_stack_pres_inject instr_size instr_size_bound prog tprog TRANSF.
+Let storev_pres_match_inj := storev_pres_match_inj instr_size prog tprog.
+Let agree_inj_globs := agree_inj_globs instr_size prog tprog.
+
 Lemma initial_state_gen_pres_match: forall m0 m0' m1 rs0 rs
     (INIT: Genv.init_mem prog = Some m0)
     (INIT': init_mem instr_size tprog = Some m0'),
@@ -196,25 +200,67 @@ Lemma initial_state_gen_pres_match: forall m0 m0' m1 rs0 rs
     exists st, initial_state_gen instr_size tprog rs m0' st /\ match_states (State rs0 m1) st.
 Proof.
   intros. inv H0.
+  exploit (Mem.valid_new_block m0);eauto. unfold Mem.valid_block. intros VALIDSTK.
+  caseEq (Mem.alloc m0' 0 (max_stacksize + align (size_chunk Mptr) 8)).
+  intros m1'  stk'  H0'.
+  exploit (alloc_stack_pres_inject  m0 m0');eauto.
+  intros (MINJ1 &  STK &  MATINJ1). subst.
+  exploit (storev_pres_match_inj Mptr m2 m1);eauto.
+  intros MATINJ2.
+  edestruct storev_pres_inject as (m2' & ST & SMINJ). apply H2. apply MINJ1.
+  instantiate (1:= Vnullptr).
+  unfold Vnullptr. destruct Archi.ptr64;econstructor.
+  econstructor.
+  (* stk' is valid *)
+  unfold Mem.flat_inj. destruct (Mem.sup_dec stk' (Mem.support m2)).
+  eauto. congruence.
+  eapply eq_refl. constructor.
+  
   (* regset *)
   set (rs1' := Pregmap.set X1 Vnullptr
-                 (Pregmap.set X2 Vnullptr
+                 (Pregmap.set X2 (Vptr stk' (Ptrofs.sub (Ptrofs.repr (max_stacksize + align (size_chunk Mptr) 8)) (Ptrofs.repr (size_chunk Mptr))))
                     (Pregmap.set PC (Genv.symbol_address tge (AST.prog_main prog) Ptrofs.zero)
                        (Pregmap.init Vundef)))).
-  exists (State rs1' m0').
+  exists (State rs1' m2').
   split.
   - unfold rs1'. unfold tge.
-    erewrite -> prog_main_eq. econstructor.
+    erewrite -> prog_main_eq. econstructor;eauto.
+    rewrite Ptrofs.add_zero in ST. eauto.
+    
   - econstructor;eauto.
-    + exploit init_meminj_match_sminj;eauto.
+    (* + exploit init_meminj_match_sminj;eauto. *)
     + unfold rs1,rs1'. repeat apply regset_inject_expand;eauto.
       unfold regset_inject. intros. unfold Pregmap.init. econstructor.
       eapply inject_symbol_address.
       exploit init_meminj_match_sminj;eauto.
+      (* prove SSAsm.stkblock = stk' = stk *)
+      exploit (Genv.init_mem_stack). eapply INIT. intros.
+      exploit (init_mem_stack). eapply INIT'. intros.
+      assert (stk' = RealAsmArchi.stkblock).
+      exploit Mem.alloc_result. eapply H1.
+      unfold Mem.nextblock. unfold Mem.fresh_block. rewrite H0.
+      simpl. intros. rewrite H4. unfold RealAsmArchi.stkblock. auto.
+      
+      (* prove stk' in support m2 *)
+      rewrite <- H4. unfold Val.offset_ptr. rewrite Ptrofs.sub_add_opp.
+      econstructor. 
+      exploit Mem.support_storev. apply H2. intros.
+      rewrite <- H5. unfold Mem.flat_inj.
+      destruct (Mem.sup_dec). eauto.
+      congruence.
+      rewrite Ptrofs.add_zero. auto.
+      (* glob block valid *)
+      
       unfold Vnullptr. destr;eauto.
-      unfold Vnullptr. destr;eauto.
-    + unfold Symbtablegenproof.glob_block_valid. intros.      
-      exploit (Genv.find_def_not_fresh). apply INIT. apply H0. auto.
+      (* unfold Vnullptr. destr;eauto. *)
+    + unfold Symbtablegenproof.glob_block_valid. intros.
+      exploit (Genv.find_def_not_fresh). apply INIT. apply H0.
+      unfold Mem.valid_block. intros.
+      exploit Mem.support_alloc. apply H1. 
+      exploit Mem.support_storev. apply H2.
+      intros. rewrite <- H4. rewrite H5.
+      exploit Mem.sup_include_incr. apply H3. auto.
+
 Qed.
 
 
