@@ -513,6 +513,18 @@ print-includes:
 CoqProject:
 	@echo $(COQINCLUDES) > _CoqProject
 
+verified-assembler: FORCE
+	rm -rf $@.n $@
+	mkdir $@.n
+	git archive HEAD | tar -C $@.n -x
+	mv $@.n $@
+
+%.tar.bz2: %
+	tar -cjf $@.n $<
+	mv $@.n $@
+
+artifact: verified-assembler.tar.bz2
+
 -include .depend
 
 FORCE:
