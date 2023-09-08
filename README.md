@@ -3,13 +3,14 @@
 This material contains the implementation and applications of the
 framework presented in our paper. The framework is a template of
 verified assemblers that implements the architecture-independent
-components. Its code mainly resides in [assembler](assembler) directory. Beside
-that, we utilize CSLED[^1] to simplify the implementation and verification
-of the instruction encoding, whose code resides in [csled](csled) directory.
-As discussed in Section 4 and Section 5 of the paper, we apply our
-framework to X86 and RISC-V to generate verified assemblers and
-connect them to the backend of Stack-Aware CompCert (based on CompCert
-v3.8). These code respectively reside in [x86](x86) and [riscV](riscV) directories.
+components. Its code mainly resides in [assembler](assembler)
+directory. Beside that, we utilize CSLED[^1] to simplify the
+implementation and verification of the instruction encoding, whose
+code resides in [csled](csled) directory. As discussed in Section 4
+and Section 5 of the paper, we apply our framework to X86 and RISC-V
+to generate verified assemblers and connect them to the backend of
+Stack-Aware CompCert (based on CompCert v3.8). These code respectively
+reside in [x86](x86) and [riscV](riscV) directories.
 
 ## Prerequisites
 
@@ -288,4 +289,4 @@ Silva, A., Leino, K.R.M. (eds) Computer Aided Verification. CAV 2021.
 Lecture Notes in Computer Science(), vol 12760. Springer, Cham.
 https://doi.org/10.1007/978-3-030-81688-9_34
 
-[^2]: Wang Y, Xu X, Wilke P, et al. CompCertELF: verified separate compilation of C programs into ELF object files[J]. Proceedings of the ACM on Programming Languages, 2020, 4(OOPSLA): 1-28.
+[^2]: Wang Y, Xu X, Wilke P, et al. CompCertELF: verified separate compilation of C programs into ELF object files[J]. Proceedings of the ACM on Programming Languages, 2020, 4(OOPSLA): 1-28. https://dl.acm.org/doi/abs/10.1145/3428265
