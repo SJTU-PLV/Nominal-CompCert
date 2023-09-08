@@ -4,7 +4,7 @@ This material contains the implementation and applications of the
 framework presented in our paper. The framework is a template of
 verified assemblers that implements the architecture-independent
 components. Its code mainly resides in [assembler](assembler) directory. Beside
-that, we utilize CSLED to simplify the implementation and verification
+that, we utilize CSLED[^1] to simplify the implementation and verification
 of the instruction encoding, whose code resides in [csled](csled) directory.
 As discussed in Section 4 and Section 5 of the paper, we apply our
 framework to X86 and RISC-V to generate verified assemblers and
@@ -158,12 +158,12 @@ We show the structure following Table 1 in our paper.
 | Components            | Framework       | Application of X86 |Application of RISCV       |
 |----------------------|-----------------|---------------------|-------------------------|
 | $P_{\mathcal{A}}$: Realistic Assembly   | [assembler/RealAsm.v](assembler/RealAsm.v) | [x86/RealAsmArchi.v](x86/RealAsmArchi.v)<br>[x86/Asm.v](x86/Asm.v)  | [riscV/RealAsmArchi.v](riscV/RealAsmArchi.v)<br>[riscV/Asm.v](riscV/Asm.v)|
-| $P_{\mathcal{R}}$: Relocatable Programs | [assembler/RelocProg.v](assembler/RelocProg.v)<br>[assembler/RelocProgSemantics.v](assembler/RelocProgSemantics.v)($[\![P_1]\!]$)<br>[assembler/RelocProgSemantics1.v](assembler/RelocProgSemantics1.v)($[\![P_2]\!]$)<br>[assembler/RelocProgSemantics2.v](assembler/RelocProgSemantics2.v)($[\![P_3]\!]$) | [x86/RelocProgSemanticsArchi.v](x86/RelocProgSemanticsArchi.v)<br>[x86/RelocProgSemanticsArchi1.v](x86/RelocProgSemanticsArchi1.v) | [riscV/RelocProgSemanticsArchi.v](riscV/RelocProgSemanticsArchi.v)<br>[riscV/RelocProgSemanticsArchi1.v](riscV/RelocProgSemanticsArchi1.v) | 
-| $P_{\mathcal{E}}$: Relocatable ELF | [elf/RelocElf.v](elf/RelocElf.v)<br>[elf/RelocElfSemantics.v](elf/RelocElfSemantics.v)($[\![P_4]\!]$) | [x86/RelocElfArchi.v](x86/RelocElfArchi.v) | [riscV/RelocElfArchi.v](x86/RelocElfArchi.v) |
-$\mathbb{C}_1$: Generation of Relocatable Programs | [assembler/Symbtablegen.v](assembler/Symbtablegen.v)<br>[assembler/Symbtablegenproof.v](assembler/Symbtablegenproof.v) | [x86/SymbtablegenproofArchi.v](x86/SymbtablegenproofArchi.v) | [riscV/SymbtablegenproofArchi.v](riscV/SymbtablegenproofArchi.v) |
-$\mathbb{C}_2$: Generation of Relocation Table | [assembler/Reloctablesgen.v](assembler/Reloctablesgen.v)<br>[assembler/Reloctablesgenproof.v](assembler/Reloctablesgenproof.v) | [x86/ReloctablesgenArchi.v](x86/ReloctablesgenArchi.v)<br>[x86/ReloctablesgenproofArchi.v](x86/ReloctablesgenproofArchi.v) | [riscV/ReloctablesgenArchi.v](x86/ReloctablesgenArchi.v)<br>[riscV/ReloctablesgenproofArchi.v](x86/ReloctablesgenproofArchi.v) |
-$\mathbb{C}_3$: Instruction and Data Encoding | [assembler/RelocBingen.v](assembler/RelocBingen.v)<br>[assembler/RelocBingenproof.v](assembler/RelocBingenproof.v) | Translators: [x86/TranslateInstr.v](x86/TranslateInstr.v)<br>[x86/RelocBinDecode.v](x86/RelocBinDecode.v)<br>CSLED Spec: [x86.csled](csled/x86/x86.csled) | Translators: [riscV/TranslateInstr.v](riscV/TranslateInstr.v)<br>[riscV/RelocBinDecode.v](riscV/RelocBinDecode.v)<br>CSLED Spec: [riscv.csled](csled/riscv/riscv.csled) |
-$\mathbb{C}_4$: Generation of Relocatable ELF | [elf/RelocElfgen.v](elf/RelocElfgen.v)<br>[elf/RelocElfgenproof.v](elf/RelocElfgenproof.v) | [x86/RelocElfgenproofArchi.v](x86/RelocElfgenproofArchi.v) | [riscV/RelocElfgenproofArchi.v](riscV/RelocElfgenproofArchi.v) |
+| $P_{\mathcal{R}}$: Relocatable Programs | [assembler/RelocProg.v](assembler/RelocProg.v)<br>[assembler/RelocProgSemantics.v](assembler/RelocProgSemantics.v)($[\![P_0]\!]$)<br>[assembler/RelocProgSemantics1.v](assembler/RelocProgSemantics1.v)($[\![P_1]\!]$)<br>[assembler/RelocProgSemantics2.v](assembler/RelocProgSemantics2.v)($[\![P_2]\!]$) | [x86/RelocProgSemanticsArchi.v](x86/RelocProgSemanticsArchi.v)<br>[x86/RelocProgSemanticsArchi1.v](x86/RelocProgSemanticsArchi1.v) | [riscV/RelocProgSemanticsArchi.v](riscV/RelocProgSemanticsArchi.v)<br>[riscV/RelocProgSemanticsArchi1.v](riscV/RelocProgSemanticsArchi1.v) | 
+| $P_{\mathcal{E}}$: Relocatable ELF | [elf/RelocElf.v](elf/RelocElf.v)<br>[elf/RelocElfSemantics.v](elf/RelocElfSemantics.v)($[\![P_3]\!]$) | [x86/RelocElfArchi.v](x86/RelocElfArchi.v) | [riscV/RelocElfArchi.v](x86/RelocElfArchi.v) |
+$\mathbb{C}_0$: Generation of Relocatable Programs | [assembler/Symbtablegen.v](assembler/Symbtablegen.v)<br>[assembler/Symbtablegenproof.v](assembler/Symbtablegenproof.v) | [x86/SymbtablegenproofArchi.v](x86/SymbtablegenproofArchi.v) | [riscV/SymbtablegenproofArchi.v](riscV/SymbtablegenproofArchi.v) |
+$\mathbb{C}_1$: Generation of Relocation Table | [assembler/Reloctablesgen.v](assembler/Reloctablesgen.v)<br>[assembler/Reloctablesgenproof.v](assembler/Reloctablesgenproof.v) | [x86/ReloctablesgenArchi.v](x86/ReloctablesgenArchi.v)<br>[x86/ReloctablesgenproofArchi.v](x86/ReloctablesgenproofArchi.v) | [riscV/ReloctablesgenArchi.v](x86/ReloctablesgenArchi.v)<br>[riscV/ReloctablesgenproofArchi.v](x86/ReloctablesgenproofArchi.v) |
+$\mathbb{C}_2$: Instruction and Data Encoding | [assembler/RelocBingen.v](assembler/RelocBingen.v)<br>[assembler/RelocBingenproof.v](assembler/RelocBingenproof.v) | Translators: [x86/TranslateInstr.v](x86/TranslateInstr.v)<br>[x86/RelocBinDecode.v](x86/RelocBinDecode.v)<br>CSLED Spec: [x86.csled](csled/x86/x86.csled) | Translators: [riscV/TranslateInstr.v](riscV/TranslateInstr.v)<br>[riscV/RelocBinDecode.v](riscV/RelocBinDecode.v)<br>CSLED Spec: [riscv.csled](csled/riscv/riscv.csled) |
+$\mathbb{C}_3$: Generation of Relocatable ELF | [elf/RelocElfgen.v](elf/RelocElfgen.v)<br>[elf/RelocElfgenproof.v](elf/RelocElfgenproof.v) | [x86/RelocElfgenproofArchi.v](x86/RelocElfgenproofArchi.v) | [riscV/RelocElfgenproofArchi.v](riscV/RelocElfgenproofArchi.v) |
 
 By the way, the top-level definitions of the target printers are defined
 in [x86/CompilerAux.v](x86/CompilerAux.v) and [riscV/CompilerAux.v](riscV/CompilerAux.v).
@@ -225,8 +225,8 @@ the code multiple times. and calculating their average value.
 
 ### Comparison of development with CompCertELF
 
-We show a comparison with CompCert in terms of the work of
-implementaion and proof in Section 5.2 of the paper. Here we give
+We show a comparison with CompCertELF[^2] in terms of the work of
+implementation and proof in Section 5.2 of the paper. Here we give
 detailed explanation.
 
 The effort for supporting verified instruction encoding for X86 is
@@ -279,3 +279,13 @@ Finally, CompCertELF does not support RISC-V. In comparison, we
 support all 119 RISC-V instructions used in CompCert (after pretty
 printing) with statistics in Table 1 of our paper (which we do not
 repeat here).
+
+### Reference
+
+[^1]: Xu, X., Wu, J., Wang, Y., Yin, Z., Li, P. (2021). Automatic
+Generation and Validation of Instruction Encoders and Decoders. In:
+Silva, A., Leino, K.R.M. (eds) Computer Aided Verification. CAV 2021.
+Lecture Notes in Computer Science(), vol 12760. Springer, Cham.
+https://doi.org/10.1007/978-3-030-81688-9_34
+
+[^2]: Wang Y, Xu X, Wilke P, et al. CompCertELF: verified separate compilation of C programs into ELF object files[J]. Proceedings of the ACM on Programming Languages, 2020, 4(OOPSLA): 1-28.
