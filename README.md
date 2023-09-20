@@ -9,8 +9,9 @@ implementation and verification of the instruction encoding, whose
 code resides in [csled](csled) directory. As discussed in Section 4
 and Section 5 of the paper, we apply our framework to X86 and RISC-V
 to generate verified assemblers and connect them to the backend of
-Stack-Aware CompCert (based on CompCert v3.8). These code respectively
-reside in [x86](x86) and [riscV](riscV) directories.
+Stack-Aware CompCert (based on [CompCert
+v3.8](https://github.com/AbsInt/CompCert/tree/v3.8)). These code
+respectively reside in [x86](x86) and [riscV](riscV) directories.
 
 ## Prerequisites
 
@@ -281,7 +282,21 @@ support all 119 RISC-V instructions used in CompCert (after pretty
 printing) with statistics in Table 1 of our paper (which we do not
 repeat here).
 
-### Reference
+## License
+CompCert is not free software.  This non-commercial release can only
+be used for evaluation, research, educational and personal purposes.
+A commercial version of CompCert, without this restriction and with
+professional support and extra features, can be purchased from
+[AbsInt](https://www.absint.com).  See the file `LICENSE` for more
+information.
+
+## Copyright
+The CompCert verified compiler is Copyright Institut National de
+Recherche en Informatique et en Automatique (INRIA) and 
+AbsInt Angewandte Informatik GmbH.
+
+
+## Reference
 
 [^1]: Xu, X., Wu, J., Wang, Y., Yin, Z., Li, P. (2021). Automatic
 Generation and Validation of Instruction Encoders and Decoders. In:

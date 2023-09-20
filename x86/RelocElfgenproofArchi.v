@@ -167,7 +167,7 @@ Proof.
       all: try (erewrite exec_store_match_ge;eauto;eapply program_equiv_symbol_address1;eauto).
       all: try (erewrite eval_addrmode_match_ge;eauto;eapply program_equiv_symbol_address1;eauto).
       rewrite <- H3. do 3 f_equal.
-      unfold eval_addrmode32.
+      unfold eval_addrmode32, eval_addrmode64.
       destruct a. f_equal.
       f_equal. destr.
       destruct p0. eapply program_equiv_symbol_address1;eauto.

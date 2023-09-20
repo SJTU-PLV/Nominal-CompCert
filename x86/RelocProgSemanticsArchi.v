@@ -686,7 +686,7 @@ Proof.
   all: try (erewrite exec_store_match_ge;eauto;eapply symbol_address_pres;eauto).
   all: try (erewrite eval_addrmode_match_ge;eauto;eapply symbol_address_pres;eauto).
   do 3 f_equal.
-  unfold eval_addrmode32.
+  unfold eval_addrmode32,eval_addrmode64.
   destruct a. f_equal.
   f_equal. destr.
   destruct p. eapply symbol_address_pres;eauto.
