@@ -113,16 +113,19 @@ You can refer the [CompCertO documentation page](doc/index.html) for further det
 
 * Unification of the simulation conventions.
    
-  The direct simulation convention $\mathit{ro} \cdot \mathit{wt} \cdot \mathit{CAinjp} \cdot \mathit{asm}_{\mathit{injp}}$
-  is defined as [cc_compcert](doc/Compiler.html#cc_compcert) in [driver/Compiler.v](doc/Compiler.html). The unification of simulation 
-  convention at the incoming and outgoing side are carried out in the lemmas [cc_expand](doc/Compiler.html#cc_expand) and 
-  [cc_collapse](doc/Compiler.html#cc_collapse).
-
   The basic simulation convention between C and assembly [$\mathit{CA}$](doc/CA.html#cc_c_asm) and [$\mathit{CAinjp}$](doc/CA.html#cc_c_asm_injp)
-  are defined in [driver/CA.v](doc/CA.html). The proof of [$\mathit{c}_{\mathit{injp}} \cdot \mathit{CA} \equiv \mathit{CAinjp}$](towrite) 
-  can also be found here. We add some refinements about `wt` and `ro` in the end of [driver/CallConv.v], behind the refinements provided 
-  by CompCertO. Other new refinement properties about `injp` can be found in the end of [cklr/InjectFootprint.v].
+  are defined in [driver/CA.v](doc/CA.html). The proof of
+  [$\mathit{c}_{\mathit{injp}} \cdot \mathit{CA} \equiv \mathit{CAinjp}$](doc/CA.html#ccinjp__injp_ca_equiv) 
+  can also be found here. We add some refinements about `wt` and `ro` in the end of [driver/CallConv.v](doc/CallConv.v).
+  Some new refinement properties about `injp` can be found in the end of [cklr/InjectFootprint.v].
 
+  The direct simulation convention $\mathit{ro} \cdot \mathit{wt} \cdot \mathit{CAinjp} \cdot \mathit{asm}_{\mathit{injp}}$
+  is defined as [cc_compcert](doc/Compiler.html#cc_compcert) in [driver/Compiler.v](doc/Compiler.html). 
+  
+  The unification of simulation convention at the incoming and outgoing side is also carried out here. The implementation is
+  actually "expanding" the [cc_compcert](doc/Compiler.html#cc_compcert) step by step to satisty the requirement of all compilation
+  passes. For examples, the lemmas [cc_expand](doc/Compiler.html#cc_expand) and [cc_collapse](doc/Compiler.html#cc_collapse) describe
+  the main result of the incoming and outgoing side.
 
 ### Examples of end-to-end verification
 
