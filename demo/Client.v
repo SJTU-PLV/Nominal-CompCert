@@ -11,8 +11,12 @@ Require Import Server.
 
 (** * spec in C language *)
 (*
+/* client.c */
 
 int result;
+
+void encrypt(int i, void(*p)(int*));
+
 void process (int *r){
   result = *r;
 }
@@ -36,6 +40,7 @@ Definition result_def :=  {|
 
 Definition r_id := 7%positive.
 
+(** Definition of the function 'process' *)
 Definition tintp := tptr tint.
 Definition func_process :=
   {|
@@ -53,6 +58,7 @@ Definition func_process :=
       )
   |}.
 
+(** Definition of the function 'request' *)
 Definition i_id := 8%positive.
 Definition func_request :=
   {|
@@ -83,7 +89,7 @@ Definition func_request :=
 
 Definition composites : list composite_definition := nil.
 
-
+(** Declaration of the external function encrypt *)
 Definition func_encrypt_external : fundef :=
   (External (EF_external "encrypt" int_fptr__void_sg)
           (Tcons tint (Tcons (Tpointer (Tfunction (Tcons tint Tnil) Tvoid cc_default) noattr)  Tnil))
@@ -101,6 +107,7 @@ Definition global_definitions_client : list (ident * globdef fundef type) :=
 Definition public_idents_client : list ident :=
 (encrypt_id :: request_id :: process_id :: result_id :: nil).
 
+(** Definition of the client.c *)
 Definition client : Clight.program :=
   mkprogram composites global_definitions_client public_idents_client main_id Logic.I.
 

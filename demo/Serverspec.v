@@ -94,6 +94,7 @@ Inductive step2 : state -> trace -> state -> Prop :=
  *)                                  
 End WITH_SE.
 
+(** LTS of the server.s with C language interface  *)
 Program Definition L1 : Smallstep.semantics li_c li_c :=
   {|
    Smallstep.skel := erase_program b1;
@@ -111,6 +112,7 @@ Program Definition L1 : Smallstep.semantics li_c li_c :=
      |}
   |}.
 
+(** LTS of the server_opt.s with C language interface. *)
 Program Definition L2 : Smallstep.semantics li_c li_c :=
   {|
    Smallstep.skel := erase_program b2;

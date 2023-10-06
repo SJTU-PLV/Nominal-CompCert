@@ -9,14 +9,14 @@ Require Import Integers Intv.
 (** *Implementation of Server in Asm *)
 
 (* C-level spec : in C code:
-L1:
+L1 (server.s) :
 int key;
 void encrypt (int input, void ( *complete)(int* __ ))){
   int output = input ^ key;
   complete(&output);
 }
 
-L2:
+L2 (server_opt.s) :
 const int key = 42;
 void encrypt (int input, void ( *complete)(int* __ )){
   int output = input ^ key;
@@ -32,20 +32,10 @@ Definition complete_id := (3%positive).
 Definition intptr__void_sg : signature := mksignature (AST.Tlong :: nil) Tvoid cc_default.
 Definition int_fptr__void_sg : signature := mksignature (AST.Tint :: AST.Tlong :: nil) Tint cc_default.
 
-(** registers responding to above signatures*)
 
 Require Import Conventions1.
-(* Compute (is_callee_save Machregs.DI). *)
-(* Compute (loc_arguments int__void_sg). *)
-(* = if Archi.win64 then One (Locations.R Machregs.CX) :: nil else One (Locations.R Machregs.DI) :: nil *)
-(* Compute (loc_arguments int_fptr__void_sg). *)
-(*= if Archi.win64
-       then One (Locations.R Machregs.CX) :: One (Locations.R Machregs.DX) :: nil
-       else One (Locations.R Machregs.DI) :: One (Locations.R Machregs.SI) :: nil
- *)
-(* Compute is_callee_save (Machregs.AX). *)
-(* = false *)
-(** * Implementation of b1.asm, corresponding to L1 *)
+
+(** * Implementation of server.s. *)
 
 Definition key_def := {|
   gvar_info := tt;
@@ -54,6 +44,7 @@ Definition key_def := {|
   gvar_volatile := false
 |}.
 
+(** Instructions sequence in server.s (denoted by b1) *)
 (*
 L1: 
 Pallocframe 24 16 0
@@ -91,9 +82,11 @@ Definition global_definitions_b1 : list (ident * globdef fundef unit) :=
 Definition public_idents : list ident :=
 (key_id :: encrypt_id :: complete_id :: nil).
 
+(** Top-level definition of server.s  *)
 Definition b1: program := mkprogram global_definitions_b1 public_idents main_id.
 
-(** * Implementation of b2.asm, corresponding to L2 *)
+
+(** * Implementation of server_opt.s *)
 
 Definition key_def_const := {|
   gvar_info := tt;
@@ -142,4 +135,5 @@ Definition global_definitions_b2 : list (ident * globdef fundef unit) :=
   (complete_id, Gfun(External (EF_external "complete" intptr__void_sg))) ::
   nil.
 
+(** Top-level definition of server_opt.s *)
 Definition b2: program := mkprogram global_definitions_b2 public_idents main_id.

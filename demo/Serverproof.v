@@ -15,6 +15,10 @@ Require Import CKLRAlgebra Extends Inject InjectFootprint.
 
 Require Import Asmgenproof0 Asmgenproof1.
 
+(** Refinement between the hand-written specification and the assembly
+semantics of `server.s` (`server_opt.s`) *)
+
+
 Section MS.
 
 Variable w: ccworld (cc_c_asm_injp).
@@ -910,6 +914,7 @@ Proof.
   eapply preserves_fsim. eapply L1_ro; eauto.
 Qed.
 
+(** L_1 ⩽ [[server.s]] *)
 Lemma semantics_preservation_L1:
   forward_simulation cc_compcert cc_compcert L1 (Asm.semantics b1).
 Proof.
@@ -1566,7 +1571,8 @@ Proof.
   rewrite inv_commute_ref. rewrite cc_compose_assoc.
   reflexivity. reflexivity.
 Qed.
-  
+
+(** L_2 ⩽ [[server_opt.s]] *)
 Lemma semantics_preservation_L2:
   forward_simulation cc_compcert cc_compcert L2 (Asm.semantics b2).
 Proof.
