@@ -1,5 +1,4 @@
-(** This file defines the overall calling convention for CompCertO
-  and provides the simulation convention algebra used in the
+(** This file  provides the simulation convention algebra used in the
   [driver.Compiler] library to compose passes into the corresponding
   correctness theorem. *)
 
@@ -15,28 +14,14 @@
 (** More precisely, for a structural component [CC], we make sure that
   the following holds for all CKLRs [R]:
 <<
-                    ccref (CC @ R) (R @ CC)1
+                    ccref (CC @ R) (R @ CC)
 >>
   In the context of external calls, this allows us to propagate CKLRs
   towards the source level, where they can be satisfied by the
   relational parametricity property of Clight. For incoming calls,
   this allows a target-level injection to be duplicated and propagated
   in order to satisfy the incoming simulation convention of the
-  various compiler passes. Ultimately, we can formulate a simulation
-  convention for the whole compiler of the form:
-<<
-         (R1 + ... + Rn)^{*} @ (CC1 @ ... @ CCk) @ vainj
->>
-  The first component expresses source-level compatibility with the
-  various CKLRs [R1], ..., [Rn] (and hence, thanks to commutation
-  properties, overall compatibility with CKLRs for incoming calls).
-  The second component encodes the structural aspects of the
-  relationship between source- and target-level calls. The last
-  component represents a minimal CKLR: a memory injection is necessary
-  since the target program will allocate stack frames instead of
-  individual memory blocks for local variable, and queries must
-  contain memory states which conform to the invariants used by the
-  ValueAnalysis passes. *)
+  various compiler passes. *)
 
 Require Import LanguageInterface CallconvAlgebra Invariant.
 Require Import CKLR Inject InjectFootprint Extends.
@@ -432,38 +417,6 @@ Proof.
   eapply Mem.val_inject_lessdef_compose; eauto.
 Qed.
 
-Definition wt_c_R_refinement R:
-  ccref (cc_c R @ (wt_c @ lessdef_c)) ((wt_c @ lessdef_c) @ cc_c R).
-Proof.
-  rewrite cc_compose_assoc. rewrite lessdef_c_cklr.
-  intros [[se wR][[se' [se'' sg]] ?]].
-  intros se1 se2 q1 q2 [Hse1 [Hse2 Hse3]] [q2' [Hq1 [q2'' [Hq2 Hq3]]]].
-  inv Hse2. inv Hse3. cbn in H. cbn in Hq1. subst se''.
-  inv Hq1. inv Hq2. inv Hq3. cbn in H3. destruct H3 as [? TYPE]. subst.
-  exists (se1,(se1,sg0),wR). repeat apply conj.
-  - constructor; cbn; eauto. constructor; eauto.
-  - cbn in H0. cbn in H.
-    exists (cq vf1 sg0 vargs1 m1). split.
-    econstructor; eauto. split.
-    econstructor; eauto.
-    eapply val_has_type_list_inject; eauto.
-    econstructor; eauto.
-    eapply val_inject_lessdef_list_compose; eauto.
-  - intros r1 r2 [r1' [Hr1 Hr2]].
-    inv Hr1. cbn in H3.
-    destruct Hr2 as [w [Hw Hr2]].
-    inv Hr2.
-    set (res' := Val.ensure_type vres2 (proj_sig_res sg0) ).
-    exists (cr res' m2'). split. exists w. split. eauto.
-    econstructor; eauto.
-    unfold res'.
-    apply has_type_inject; eauto.
-    exists (cr res' m2'). split.
-    constructor; eauto. cbn. unfold res'. apply Val.ensure_has_type.
-    constructor; eauto. unfold res'.
-    destruct vres2, (proj_sig_res sg0); auto.
-Qed.
-
 (** ** Locset-level typing constraints *)
 
 Inductive lessdef_loc_mq sg: locset_query -> locset_query -> Prop :=
@@ -553,377 +506,6 @@ Proof.
   - repeat rstep. apply cc_join_ub_l.
 Qed.
 
-
-(** * Readonly Interface *)
-
-Require Import ValueDomain ValueAnalysis.
-Require Import Clight.
-
-Inductive sound_state se0 m0 : state -> Prop :=
-|ro_inv_state f s c e te m:
-  sound_memory_ro se0 m -> ro_acc m0 m ->
-  sound_state se0 m0 (State f s c e te m)
-|ro_inv_callstate v args c m:
-  sound_memory_ro se0 m -> ro_acc m0 m ->
-  sound_state se0 m0 (Callstate v args c m)
-|ro_inv_returnstate v c m:
-  sound_memory_ro se0 m -> ro_acc m0 m ->
-  sound_state se0 m0 (Returnstate v c m).
-
-Definition ro_inv '(row se m) := sound_state se m.
-
-Lemma ro_acc_storebytes : forall m m' b ofs bytes,
-    Mem.storebytes m b ofs bytes = Some m' ->
-    ro_acc m m'.
-Proof.
-  intros. constructor.
-  - red. intros.
-    destruct (Z_le_gt_dec n 0).
-    rewrite Mem.loadbytes_empty in H1; eauto. inv H1.
-    rewrite Mem.loadbytes_empty. eauto. auto.
-    destruct (Z_le_gt_dec (Z.of_nat (Datatypes.length bytes)) 0).
-    destruct bytes. simpl in l. inv H.
-    assert (m = m'). {
-      eapply Mem.storebytes_empty; eauto.
-    }
-    subst. eauto. cbn in l. extlia.
-    erewrite <- Mem.loadbytes_storebytes_other; eauto. lia.
-    apply Mem.storebytes_range_perm in H. red in H.
-    destruct (eq_block b0 b). subst. right.
-    destruct (Z_le_gt_dec (ofs0+n) ofs).
-    left. auto.
-    destruct (Z_le_gt_dec (ofs + Z.of_nat (Datatypes.length bytes)) ofs0).
-    right. auto.
-    exfalso.
-    destruct (Z_le_gt_dec ofs ofs0).
-    exploit H. instantiate (1:= ofs0). lia. intro PERM.
-    exploit H2. instantiate (1:= ofs0). lia.  eauto with mem. auto.
-    exploit H. instantiate (1:= ofs). lia. intro PERM.
-    exploit H2. instantiate (1:= ofs). lia. eauto with mem. auto.
-    left. auto.
-  - erewrite <- Mem.support_storebytes; eauto.
-  - red. eauto using Mem.perm_storebytes_2.
-Qed.
-
-                            
-Lemma ro_acc_assign_loc : forall m m' ce t b ofs bt v,
-    assign_loc ce t m b ofs bt v m' ->
-    ro_acc m m'.
-Proof.
-  intros. inv H.
-  - unfold Mem.storev in H1. eapply ro_acc_store; eauto.
-  - eapply ro_acc_storebytes; eauto.
-  - inv H0. cbn in H5. eapply ro_acc_store; eauto.
-Qed.
-
-Lemma ro_acc_free_list : forall l m m',
-    Mem.free_list m l = Some m' ->
-    ro_acc m m'.
-Proof.
-  induction l; intros.
-  inv H. eapply ro_acc_refl.
-  simpl in H. destruct a. destruct p.
-  destruct (Mem.free) eqn:F; try congruence.
-  eapply ro_acc_trans. eapply ro_acc_free; eauto.
-  eapply IHl. eauto.
-Qed.
-
-Lemma ro_acc_bind : forall m m' ge e params args,
-    bind_parameters ge e m params args m' -> ro_acc m m'.
-Proof.
-  intros. induction H. eapply ro_acc_refl.
-  eapply ro_acc_trans. eapply ro_acc_assign_loc; eauto.
-  eauto.
-Qed.
-
-Lemma ro_acc_allocs : forall m m' ge pa e1 e2,
-    alloc_variables ge e1 m pa e2 m' -> ro_acc m m'.
-Proof.
-  intros. induction H. eapply ro_acc_refl.
-  eapply ro_acc_trans. eapply ro_acc_alloc; eauto. auto.
-Qed.
-
-Lemma ro_acc_fe : forall m m' ge f args e te,
-    function_entry1 ge f args m e te m' ->
-    ro_acc m m'.
-Proof.
-  intros. inv H.
-  eapply ro_acc_trans.
-  eapply ro_acc_allocs; eauto.
-  eapply ro_acc_bind; eauto.
-Qed.
-
-Lemma top_ro_preserves prog:
-  preserves (semantics1 prog) ro ro ro_inv.
-Proof.
-  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
-  split; cbn in *.
-  - intros.
-    Ltac Solve :=
-      match goal with
-      | [H: assign_loc _ _ _ _ _ _ _ _  |- _] => apply ro_acc_assign_loc in H
-      | [H: external_call _ _ _ _ _ _ _ |- _] => apply ro_acc_external in H
-      | [H: Mem.free_list _ _ = Some _ |- _] => apply ro_acc_free_list in H
-      | [H: function_entry1 _ _ _ _ _ _ _ |- _ ] => apply ro_acc_fe in H
-      | _ => idtac
-      end.  
-    inv H0; inv H; Solve; constructor; eauto using ro_acc_sound, ro_acc_trans.
-  - intros. inv H0. inv H. constructor; eauto.
-    constructor; eauto. red. eauto.
-  - intros. inv H0. inv H. simpl.
-    exists (row se1 m). split; eauto.
-    constructor; eauto. constructor; eauto.
-    intros r s' Hr AFTER. inv Hr. inv AFTER.
-    constructor.
-    eapply ro_acc_sound; eauto.
-    eapply ro_acc_trans; eauto.
-  - intros. inv H0. inv H. constructor; eauto.
-Qed.
-
-Lemma top_ro_selfsim:
-  forall p: (Clight.program),
-    let sem := semantics1 p in
-    forward_simulation ro ro sem sem.
-Proof.
-  intros. eapply preserves_fsim. eapply top_ro_preserves.
-Qed.
-
-Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
-    Val.inject (compose_meminj j1 j2) v1 v3 ->
-    exists v2, Val.inject j1 v1 v2 /\ Val.inject j2 v2 v3.
-Proof.
-  intros. inv H.
-  eexists. split; econstructor; eauto.
-  eexists. split; econstructor; eauto.
-  eexists. split; econstructor; eauto.
-  eexists. split; econstructor; eauto.
-  unfold compose_meminj in H0.
-  destruct (j1 b1) as [[b2' d1]|] eqn:M1; try congruence.
-  destruct (j2 b2') as [[b3' d2]|] eqn:M2; inv H0.
-  eexists. split. econstructor; eauto.
-  econstructor; eauto. rewrite add_repr.
-  rewrite Ptrofs.add_assoc. auto.
-  exists Vundef. split; constructor.
-Qed.
-
-Lemma trans_injp_inv_incoming (I: invariant li_c) :
-  ccref (I @ injp) ((I @ injp) @ (I @ injp)).
-Proof.
-  red. intros [[se wi] w] se1 se2 q1' q2 [Hse1 Hse2] [q1 [Hq1 Hq2]].
-  inv Hse1. inv Hq1. inv Hse2. inv Hq2. inv H6. rename m0 into m1.
-  rename m3 into m2. cbn in H4, H5.
-  exists (se, (se,wi, (injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m2 Hm))),
-      (se,wi, (injpw f m1 m2 Hm))). repeat apply conj.
-  - constructor. constructor. red. cbn. constructor. auto.
-    constructor; eauto. eapply match_stbls_dom; eauto.
-    constructor. constructor. auto.
-    constructor; eauto.
-  - eexists (cq vf1 sg vargs1 m1). split. eexists. split. constructor. eauto.
-    econstructor; cbn; eauto.
-    eapply val_inject_dom; eauto.
-    eapply val_inject_list_dom; eauto.
-    eexists. split. constructor. eauto. constructor; eauto. constructor.
-  - intros r1' r3 [r2' [[r1 [Hi1 Hr1]] [r2 [Hi2 Hr2]]]].
-    inv Hi1. inv Hi2.
-    exists r1. split. red. cbn. constructor. auto.
-    clear H6 H8 H0 H.
-    destruct Hr1 as [w12' [Hw12' Hr12']]. destruct Hr2 as [w23' [Hw23' Hr23']].
-    destruct w12' as [f12' m1' m2' Hm12']. destruct w23' as [f23' m2'' m3' Hm23'].
-    inv Hw12'. inv Hw23'. cbn in *.
-    inv Hr12'. inv Hr23'. cbn in *. inv H0. inv H27.
-    rename m1'0 into m1'. rename m2'0 into m2'. rename m2'1 into m3'.
-    eexists (injpw (compose_meminj f12' f23') m1' m3'
-               (Mem.inject_compose f12' f23' _ _ _ Hm12' Hm23')
-            ).
-    repeat apply conj.
-    + constructor; eauto.
-      * eapply Mem.unchanged_on_implies; eauto.
-        intros. red. unfold meminj_dom. rewrite H0. reflexivity.
-      * red. intros. unfold compose_meminj.
-        erewrite H17. erewrite H25; eauto.
-        2: unfold meminj_dom; rewrite H0; reflexivity.
-        rewrite Z.add_0_l. reflexivity.
-      * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
-        destruct (f12' b1) as [[bi delta12] | ] eqn:Hb1; try discriminate.
-        destruct (f23' bi) as [[xb2 delta23] | ] eqn:Hb2; try discriminate.
-        inv Hb'.
-        edestruct H18; eauto. unfold meminj_dom. rewrite Hb. auto.
-        destruct (f bi) as [[? ?] | ] eqn:Hfbi.
-        {
-          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
-        }
-        edestruct H26; eauto.
-    + constructor; cbn; eauto with mem.
-      eapply Values.val_inject_compose; eauto.
-Qed.
-
-Lemma trans_injp_ro_outgoing:
-  ccref ((ro @ injp) @ (ro @ injp)) (ro @ injp).
-Proof.
-  red.
-  intros w se1' se3 q1 q3 MSTBL13 MMEM13.
-  destruct w as [[se2' [[se1 wi1] w12]] [[se2 wi2] w23]].
-  destruct MSTBL13 as [[Hsi1 MSTBL12] [Hsi2 MSTBL23]].
-  destruct MMEM13 as [m2 [[q1' [Hmi1 MMEM12]] [q2' [Hmi2 MMEM23]]]].
-  inv Hsi1. inv Hsi2. inv Hmi1. inv Hmi2. rename q1' into q1. rename q2' into q2.
-  inv MMEM12. inv H5. rename f into j12. rename Hm0 into INJ12. clear Hm1.
-  inv MMEM23. inv H13. rename f into j23. rename Hm1 into INJ23. clear Hm2.
-  cbn in H12, MSTBL12, H10, MSTBL23,H3, H4. destruct wi1. inv H. inv H1.
-  destruct wi2. inv H0. inv H2.
-  exists (se1, (row se1 m1), (injpw (compose_meminj j12 j23)
-          m1 m3 (Mem.inject_compose _ _ _ _ _ INJ12 INJ23))).
-  simpl.
-  repeat apply conj.
-  - constructor. eauto.
-  - inv MSTBL12. inv MSTBL23.
-    econstructor; simpl; auto.
-    eapply Genv.match_stbls_compose; eauto.
-  - exists (cq vf1 sg vargs1 m1). split. constructor; eauto. constructor; eauto.
-    constructor; cbn; eauto.
-    eapply val_inject_compose; eauto.
-    eapply CKLRAlgebra.val_inject_list_compose.
-    econstructor; eauto.
-  - intros r1 r3 [r2 [Hi2 [w13' [INCR13' Hr13]]]].
-    inv Hr13. inv H1. rename f into j13'. rename Hm3 into INJ13'.
-    cbn in INCR13'. rename m2' into m3'.
-    inversion INCR13' as [? ? ? ? ? ? ? ? RO1 RO3 MAXPERM1 MAXPERM3 UNCHANGE1 UNCHANGE3 INCR13 DISJ13]. subst.
-    generalize (inject_implies_image_in _ _ _ INJ12).
-    intros IMGIN12.
-    generalize (inject_implies_image_in _ _ _ INJ23).
-    intros IMGIN23.
-    generalize (inject_implies_dom_in _ _ _ INJ12).
-    intros DOMIN12.
-    generalize (inject_implies_dom_in _ _ _ INJ23).
-    intros DOMIN23.
-    generalize (inject_implies_dom_in _ _ _ INJ13').
-    intros DOMIN13'.
-    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE1).
-    intros SUPINCL1.
-    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE3).
-    intros SUPINCL3.
-    generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
-    intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
-    subst. cbn in *.
-    set (m2' := m2' m1 m2 m1' j12 j23 j12' m2'_sup INJ12 ).
-    assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
-    assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
-    set (w1' := injpw j12' m1' m2' INJ12').
-    set (w2' := injpw j23' m2' m3' INJ23').
-    rename vres2 into vres3.
-    exploit compose_meminj_midvalue; eauto.
-    intros [vres2 [RES1 RES2]].
-    assert (UNC21:Mem.unchanged_on (loc_out_of_reach j12 m1) m2 m2').
-    eapply UNCHANGE21; eauto.
-    exists (cr vres2 m2'). split.
-    + 
-      exists (cr vres1 m1'). split. cbn. auto.
-      exists w1'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
-      eapply MAXPERM2; eauto.
-      eapply Mem.unchanged_on_implies; eauto.
-      intros. red. unfold compose_meminj.
-      rewrite H1. reflexivity.
-      constructor; eauto. constructor; eauto.
-    + exists (cr vres2 m2'). split. cbn. econstructor. constructor.
-      constructor. eapply ROUNC2; eauto.
-      inversion UNC21. eauto.
-      eapply MAXPERM2; eauto.
-      exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
-      eapply MAXPERM2; eauto.
-      eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
-      econstructor; eauto. constructor; eauto.
-Qed.
-
-(** Lemmas for Deadcode *)
-(** The match_state relation used in Deadcode is magree instead of Mem.inject.
-    As a result, proving injp for the incoming side is relatively complicated.
-    We prove ro @ injp ->> ro @ inj and turns it to ro @ injp -> ro @ injp using
-    self-sim using ro and injp at RTL level and following refinement.
-
-    ro @ injp ⊑ ro @ injp @ ro @ injp @ injp  --> ro @ injp @ ro @ inj @ injp ⊑ ro @ injp
-
-    Outgoing side is trivial from ro @ injp ⊑ ro @ injp @ ro @ injp.
-    Incoming side is proved using the same pattern as injp @ inj @ injp ⊑ injp.
- *)
-
-Lemma ro_injp_inj_I_incoming (I: invariant li_c) :
-  ccref (ro @ injp) ((ro @ injp) @ (ro @ inj) @ injp).
-Proof.
-  red. intros [[se wi] w] se1 se4 q1 q4 [Hse1 Hse4] [q1' [Hq1 Hq4]].
-  inv Hse1. inv Hq1. inv Hse4. inv Hq4. simpl in H4,H5. inv H6.
-  rename m0 into m1. rename m3 into m4. clear Hm2 Hm3.
-  assert (Hm12: Mem.inject (meminj_dom f) m1 m1).
-  eapply mem_inject_dom; eauto.
-  exists (se,(se,wi,injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m4 Hm1)),
-      (se,(se,wi,injw (meminj_dom f) (Mem.support m1) (Mem.support m1)),
-        (injpw f m1 m4 Hm1))).
-  repeat apply conj.
-  - constructor; eauto. constructor; eauto. constructor; eauto.
-    constructor; eauto. eapply match_stbls_dom; eauto.
-    constructor; eauto. constructor; eauto. constructor; eauto.
-    constructor; eauto. simpl. eapply match_stbls_dom; eauto.
-    constructor; eauto.
-  - exists (cq vf1 sg vargs1 m1). split.
-    repeat econstructor; eauto. simpl. eapply val_inject_dom; eauto.
-    simpl. eapply val_inject_list_dom; eauto.
-    exists (cq vf1 sg vargs1 m1). split.
-    econstructor; eauto. split. econstructor; eauto. econstructor; cbn; eauto.
-    eapply val_inject_dom; eauto.
-    simpl. eapply val_inject_list_dom; eauto.
-    constructor; simpl; eauto.
-  - intros r1 r4 [r2 [Hr1 [r3 [Hr2 Hr3]]]].
-    destruct Hr1 as [r1' [x Hr1]]. inv x. rename r1' into r1.
-    destruct Hr2 as [r2' [x Hr2]]. inv x. rename r2' into r2.
-    destruct Hr1 as [w12' [Hw1' Hr1]].
-    destruct Hr2 as [w23' [Hw2' Hr2]].
-    destruct Hr3 as [w34' [Hw3' Hr3]].
-    destruct w12' as [f12 m1' m2' Hm12'].
-    destruct w23' as [f23 xm2' xm3' ].
-    destruct w34' as [f34 m3' m4' Hm34'].
-    inv Hr1. inv H10. inv Hr2. inv H14. inv Hr3. inv H15.
-    inv Hw1'.
-    inv Hw2'.
-    inv Hw3'.
-    rename m1'0 into m1'. rename m2' into m3'. rename m2'1 into m4'. rename m2'0 into m2'.
-    assert (Hm14' :  Mem.inject (compose_meminj f12 (compose_meminj f23 f34)) m1' m4').
-    eapply Mem.inject_compose; eauto.
-    eapply Mem.inject_compose; eauto.
-    exists (cr vres1 m1'). split. constructor; eauto.
-    exists (injpw (compose_meminj f12 (compose_meminj f23 f34)) m1' m4' Hm14').
-    repeat apply conj.
-    + constructor; eauto.
-      * eapply Mem.unchanged_on_implies; eauto.
-        intros. apply loc_unmapped_dom; eauto.
-      * rewrite <- (meminj_dom_compose f).
-        rewrite <- (meminj_dom_compose f) at 2.
-        rauto.
-      * red. intros b1 b4 d f14 INJ. unfold compose_meminj in INJ.
-        destruct (f12 b1) as [[b2 d1]|] eqn: INJ1; try congruence.
-        destruct (f23 b2) as [[b3 d2]|] eqn: INJ2; try congruence.
-        destruct (f34 b3) as [[b4' d3]|] eqn: INJ3; try congruence. inv INJ.
-        exploit H26; eauto. unfold meminj_dom. rewrite f14. auto.
-        intros [A B].
-        exploit H28; eauto. inversion Hm12. apply mi_freeblocks; eauto.
-        intros [C D].
-        exploit H38. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
-        intros [E F]. split; eauto.
-    + constructor; eauto. cbn.
-      eapply val_inject_compose; eauto.
-      eapply val_inject_compose; eauto.
-      constructor.
-Qed.
-
-Lemma Deadcode_ext_out:
-  ccref ((ro @ injp) @ (ro @ injp) @ injp) (ro @ injp).
-Proof.
-  etransitivity.
-  rewrite <- (cc_compose_assoc (ro @ injp)).
-  rewrite trans_injp_ro_outgoing.
-  rewrite cc_compose_assoc.
-  assert (ccref (injp @ injp) injp).
-  rewrite <- CKLRAlgebra.cc_c_compose.
-  rewrite injp_injp2. reflexivity.
-  rewrite H. reflexivity. reflexivity.
-Qed.
 
 (** * Stacking *)
 
@@ -1908,4 +1490,414 @@ Proof.
   intros. eapply val_has_type_inject; eauto. red. eauto.
 Qed.
 
+
+
+(** * Refinement Properties for Direct Refinement *)
+
+(** ** Properties about ro *)
+Require Import ValueDomain ValueAnalysis.
+Require Import Clight.
+
+Inductive sound_state se0 m0 : state -> Prop :=
+|ro_inv_state f s c e te m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state se0 m0 (State f s c e te m)
+|ro_inv_callstate v args c m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state se0 m0 (Callstate v args c m)
+|ro_inv_returnstate v c m:
+  sound_memory_ro se0 m -> ro_acc m0 m ->
+  sound_state se0 m0 (Returnstate v c m).
+
+Definition ro_inv '(row se m) := sound_state se m.
+
+Lemma ro_acc_storebytes : forall m m' b ofs bytes,
+    Mem.storebytes m b ofs bytes = Some m' ->
+    ro_acc m m'.
+Proof.
+  intros. constructor.
+  - red. intros.
+    destruct (Z_le_gt_dec n 0).
+    rewrite Mem.loadbytes_empty in H1; eauto. inv H1.
+    rewrite Mem.loadbytes_empty. eauto. auto.
+    destruct (Z_le_gt_dec (Z.of_nat (Datatypes.length bytes)) 0).
+    destruct bytes. simpl in l. inv H.
+    assert (m = m'). {
+      eapply Mem.storebytes_empty; eauto.
+    }
+    subst. eauto. cbn in l. extlia.
+    erewrite <- Mem.loadbytes_storebytes_other; eauto. lia.
+    apply Mem.storebytes_range_perm in H. red in H.
+    destruct (eq_block b0 b). subst. right.
+    destruct (Z_le_gt_dec (ofs0+n) ofs).
+    left. auto.
+    destruct (Z_le_gt_dec (ofs + Z.of_nat (Datatypes.length bytes)) ofs0).
+    right. auto.
+    exfalso.
+    destruct (Z_le_gt_dec ofs ofs0).
+    exploit H. instantiate (1:= ofs0). lia. intro PERM.
+    exploit H2. instantiate (1:= ofs0). lia.  eauto with mem. auto.
+    exploit H. instantiate (1:= ofs). lia. intro PERM.
+    exploit H2. instantiate (1:= ofs). lia. eauto with mem. auto.
+    left. auto.
+  - erewrite <- Mem.support_storebytes; eauto.
+  - red. eauto using Mem.perm_storebytes_2.
+Qed.
+
+                            
+Lemma ro_acc_assign_loc : forall m m' ce t b ofs bt v,
+    assign_loc ce t m b ofs bt v m' ->
+    ro_acc m m'.
+Proof.
+  intros. inv H.
+  - unfold Mem.storev in H1. eapply ro_acc_store; eauto.
+  - eapply ro_acc_storebytes; eauto.
+  - inv H0. cbn in H5. eapply ro_acc_store; eauto.
+Qed.
+
+Lemma ro_acc_free_list : forall l m m',
+    Mem.free_list m l = Some m' ->
+    ro_acc m m'.
+Proof.
+  induction l; intros.
+  inv H. eapply ro_acc_refl.
+  simpl in H. destruct a. destruct p.
+  destruct (Mem.free) eqn:F; try congruence.
+  eapply ro_acc_trans. eapply ro_acc_free; eauto.
+  eapply IHl. eauto.
+Qed.
+
+Lemma ro_acc_bind : forall m m' ge e params args,
+    bind_parameters ge e m params args m' -> ro_acc m m'.
+Proof.
+  intros. induction H. eapply ro_acc_refl.
+  eapply ro_acc_trans. eapply ro_acc_assign_loc; eauto.
+  eauto.
+Qed.
+
+Lemma ro_acc_allocs : forall m m' ge pa e1 e2,
+    alloc_variables ge e1 m pa e2 m' -> ro_acc m m'.
+Proof.
+  intros. induction H. eapply ro_acc_refl.
+  eapply ro_acc_trans. eapply ro_acc_alloc; eauto. auto.
+Qed.
+
+Lemma ro_acc_fe : forall m m' ge f args e te,
+    function_entry1 ge f args m e te m' ->
+    ro_acc m m'.
+Proof.
+  intros. inv H.
+  eapply ro_acc_trans.
+  eapply ro_acc_allocs; eauto.
+  eapply ro_acc_bind; eauto.
+Qed.
+
+(** Any Clight program can preserve the invariant ro *)
+Lemma top_ro_preserves prog:
+  preserves (semantics1 prog) ro ro ro_inv.
+Proof.
+  intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
+  split; cbn in *.
+  - intros.
+    Ltac Solve :=
+      match goal with
+      | [H: assign_loc _ _ _ _ _ _ _ _  |- _] => apply ro_acc_assign_loc in H
+      | [H: external_call _ _ _ _ _ _ _ |- _] => apply ro_acc_external in H
+      | [H: Mem.free_list _ _ = Some _ |- _] => apply ro_acc_free_list in H
+      | [H: function_entry1 _ _ _ _ _ _ _ |- _ ] => apply ro_acc_fe in H
+      | _ => idtac
+      end.  
+    inv H0; inv H; Solve; constructor; eauto using ro_acc_sound, ro_acc_trans.
+  - intros. inv H0. inv H. constructor; eauto.
+    constructor; eauto. red. eauto.
+  - intros. inv H0. inv H. simpl.
+    exists (row se1 m). split; eauto.
+    constructor; eauto. constructor; eauto.
+    intros r s' Hr AFTER. inv Hr. inv AFTER.
+    constructor.
+    eapply ro_acc_sound; eauto.
+    eapply ro_acc_trans; eauto.
+  - intros. inv H0. inv H. constructor; eauto.
+Qed.
+
+(** Any Client program can be self-simulated using ro *)
+Lemma top_ro_selfsim:
+  forall p: (Clight.program),
+    let sem := semantics1 p in
+    forward_simulation ro ro sem sem.
+Proof.
+  intros. eapply preserves_fsim. eapply top_ro_preserves.
+Qed.
+
+Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
+    Val.inject (compose_meminj j1 j2) v1 v3 ->
+    exists v2, Val.inject j1 v1 v2 /\ Val.inject j2 v2 v3.
+Proof.
+  intros. inv H.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  unfold compose_meminj in H0.
+  destruct (j1 b1) as [[b2' d1]|] eqn:M1; try congruence.
+  destruct (j2 b2') as [[b3' d2]|] eqn:M2; inv H0.
+  eexists. split. econstructor; eauto.
+  econstructor; eauto. rewrite add_repr.
+  rewrite Ptrofs.add_assoc. auto.
+  exists Vundef. split; constructor.
+Qed.
+
+(** I ⋅ injp ⋅ I ⋅ injp ⊑  I ⋅ injp for any C-level invariant I*)
+Lemma trans_injp_inv_incoming (I: invariant li_c) :
+  ccref (I @ injp) ((I @ injp) @ (I @ injp)).
+Proof.
+  red. intros [[se wi] w] se1 se2 q1' q2 [Hse1 Hse2] [q1 [Hq1 Hq2]].
+  inv Hse1. inv Hq1. inv Hse2. inv Hq2. inv H6. rename m0 into m1.
+  rename m3 into m2. cbn in H4, H5.
+  exists (se, (se,wi, (injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m2 Hm))),
+      (se,wi, (injpw f m1 m2 Hm))). repeat apply conj.
+  - constructor. constructor. red. cbn. constructor. auto.
+    constructor; eauto. eapply match_stbls_dom; eauto.
+    constructor. constructor. auto.
+    constructor; eauto.
+  - eexists (cq vf1 sg vargs1 m1). split. eexists. split. constructor. eauto.
+    econstructor; cbn; eauto.
+    eapply val_inject_dom; eauto.
+    eapply val_inject_list_dom; eauto.
+    eexists. split. constructor. eauto. constructor; eauto. constructor.
+  - intros r1' r3 [r2' [[r1 [Hi1 Hr1]] [r2 [Hi2 Hr2]]]].
+    inv Hi1. inv Hi2.
+    exists r1. split. red. cbn. constructor. auto.
+    clear H6 H8 H0 H.
+    destruct Hr1 as [w12' [Hw12' Hr12']]. destruct Hr2 as [w23' [Hw23' Hr23']].
+    destruct w12' as [f12' m1' m2' Hm12']. destruct w23' as [f23' m2'' m3' Hm23'].
+    inv Hw12'. inv Hw23'. cbn in *.
+    inv Hr12'. inv Hr23'. cbn in *. inv H0. inv H27.
+    rename m1'0 into m1'. rename m2'0 into m2'. rename m2'1 into m3'.
+    eexists (injpw (compose_meminj f12' f23') m1' m3'
+               (Mem.inject_compose f12' f23' _ _ _ Hm12' Hm23')
+            ).
+    repeat apply conj.
+    + constructor; eauto.
+      * eapply Mem.unchanged_on_implies; eauto.
+        intros. red. unfold meminj_dom. rewrite H0. reflexivity.
+      * red. intros. unfold compose_meminj.
+        erewrite H17. erewrite H25; eauto.
+        2: unfold meminj_dom; rewrite H0; reflexivity.
+        rewrite Z.add_0_l. reflexivity.
+      * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
+        destruct (f12' b1) as [[bi delta12] | ] eqn:Hb1; try discriminate.
+        destruct (f23' bi) as [[xb2 delta23] | ] eqn:Hb2; try discriminate.
+        inv Hb'.
+        edestruct H18; eauto. unfold meminj_dom. rewrite Hb. auto.
+        destruct (f bi) as [[? ?] | ] eqn:Hfbi.
+        {
+          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
+        }
+        edestruct H26; eauto.
+    + constructor; cbn; eauto with mem.
+      eapply Values.val_inject_compose; eauto.
+Qed.
+
+(** ro ⋅ injp ⊑ ro ⋅ injp ⋅ ro ⋅ injp *)
+Lemma trans_injp_ro_outgoing:
+  ccref ((ro @ injp) @ (ro @ injp)) (ro @ injp).
+Proof.
+  red.
+  intros w se1' se3 q1 q3 MSTBL13 MMEM13.
+  destruct w as [[se2' [[se1 wi1] w12]] [[se2 wi2] w23]].
+  destruct MSTBL13 as [[Hsi1 MSTBL12] [Hsi2 MSTBL23]].
+  destruct MMEM13 as [m2 [[q1' [Hmi1 MMEM12]] [q2' [Hmi2 MMEM23]]]].
+  inv Hsi1. inv Hsi2. inv Hmi1. inv Hmi2. rename q1' into q1. rename q2' into q2.
+  inv MMEM12. inv H5. rename f into j12. rename Hm0 into INJ12. clear Hm1.
+  inv MMEM23. inv H13. rename f into j23. rename Hm1 into INJ23. clear Hm2.
+  cbn in H12, MSTBL12, H10, MSTBL23,H3, H4. destruct wi1. inv H. inv H1.
+  destruct wi2. inv H0. inv H2.
+  exists (se1, (row se1 m1), (injpw (compose_meminj j12 j23)
+          m1 m3 (Mem.inject_compose _ _ _ _ _ INJ12 INJ23))).
+  simpl.
+  repeat apply conj.
+  - constructor. eauto.
+  - inv MSTBL12. inv MSTBL23.
+    econstructor; simpl; auto.
+    eapply Genv.match_stbls_compose; eauto.
+  - exists (cq vf1 sg vargs1 m1). split. constructor; eauto. constructor; eauto.
+    constructor; cbn; eauto.
+    eapply val_inject_compose; eauto.
+    eapply CKLRAlgebra.val_inject_list_compose.
+    econstructor; eauto.
+  - intros r1 r3 [r2 [Hi2 [w13' [INCR13' Hr13]]]].
+    inv Hr13. inv H1. rename f into j13'. rename Hm3 into INJ13'.
+    cbn in INCR13'. rename m2' into m3'.
+    inversion INCR13' as [? ? ? ? ? ? ? ? RO1 RO3 MAXPERM1 MAXPERM3 UNCHANGE1 UNCHANGE3 INCR13 DISJ13]. subst.
+    generalize (inject_implies_image_in _ _ _ INJ12).
+    intros IMGIN12.
+    generalize (inject_implies_image_in _ _ _ INJ23).
+    intros IMGIN23.
+    generalize (inject_implies_dom_in _ _ _ INJ12).
+    intros DOMIN12.
+    generalize (inject_implies_dom_in _ _ _ INJ23).
+    intros DOMIN23.
+    generalize (inject_implies_dom_in _ _ _ INJ13').
+    intros DOMIN13'.
+    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE1).
+    intros SUPINCL1.
+    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE3).
+    intros SUPINCL3.
+    generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
+    intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
+    subst. cbn in *.
+    set (m2' := m2' m1 m2 m1' j12 j23 j12' m2'_sup INJ12 ).
+    assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
+    assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
+    set (w1' := injpw j12' m1' m2' INJ12').
+    set (w2' := injpw j23' m2' m3' INJ23').
+    rename vres2 into vres3.
+    exploit compose_meminj_midvalue; eauto.
+    intros [vres2 [RES1 RES2]].
+    assert (UNC21:Mem.unchanged_on (loc_out_of_reach j12 m1) m2 m2').
+    eapply UNCHANGE21; eauto.
+    exists (cr vres2 m2'). split.
+    + 
+      exists (cr vres1 m1'). split. cbn. auto.
+      exists w1'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
+      eapply MAXPERM2; eauto.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. red. unfold compose_meminj.
+      rewrite H1. reflexivity.
+      constructor; eauto. constructor; eauto.
+    + exists (cr vres2 m2'). split. cbn. econstructor. constructor.
+      constructor. eapply ROUNC2; eauto.
+      inversion UNC21. eauto.
+      eapply MAXPERM2; eauto.
+      exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
+      eapply MAXPERM2; eauto.
+      eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
+      econstructor; eauto. constructor; eauto.
+Qed.
+
+(** ** Properties for the Deadcode pass *)
+(** The [match_state] relation for Deadcode uses [magree] instead of [Mem.inject].
+    As a result, proving injp for the incoming side is relatively complicated.
+    We prove ro ⋅ injp ->> ro ⋅ inj and turns it to ro ⋅ injp -> ro ⋅ injp with the help
+    of self-simulations using ro and injp at RTL level and following refinement.
+
+    ro ⋅ injp ⊑ ro ⋅ injp ⋅ ro ⋅ injp ⋅ injp  --> ro ⋅ injp ⋅ ro ⋅ inj ⋅ injp ⊑ ro ⋅ injp
+
+    Outgoing side is trivial from ro ⋅ injp ⊑ ro ⋅ injp ⋅ ro ⋅ injp.
+    Incoming side is proved using the same pattern as injp ⋅ inj ⋅ injp ⊑ injp.
+ *)
+
+Lemma ro_injp_inj_I_incoming (I: invariant li_c) :
+  ccref (ro @ injp) ((ro @ injp) @ (ro @ inj) @ injp).
+Proof.
+  red. intros [[se wi] w] se1 se4 q1 q4 [Hse1 Hse4] [q1' [Hq1 Hq4]].
+  inv Hse1. inv Hq1. inv Hse4. inv Hq4. simpl in H4,H5. inv H6.
+  rename m0 into m1. rename m3 into m4. clear Hm2 Hm3.
+  assert (Hm12: Mem.inject (meminj_dom f) m1 m1).
+  eapply mem_inject_dom; eauto.
+  exists (se,(se,wi,injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m4 Hm1)),
+      (se,(se,wi,injw (meminj_dom f) (Mem.support m1) (Mem.support m1)),
+        (injpw f m1 m4 Hm1))).
+  repeat apply conj.
+  - constructor; eauto. constructor; eauto. constructor; eauto.
+    constructor; eauto. eapply match_stbls_dom; eauto.
+    constructor; eauto. constructor; eauto. constructor; eauto.
+    constructor; eauto. simpl. eapply match_stbls_dom; eauto.
+    constructor; eauto.
+  - exists (cq vf1 sg vargs1 m1). split.
+    repeat econstructor; eauto. simpl. eapply val_inject_dom; eauto.
+    simpl. eapply val_inject_list_dom; eauto.
+    exists (cq vf1 sg vargs1 m1). split.
+    econstructor; eauto. split. econstructor; eauto. econstructor; cbn; eauto.
+    eapply val_inject_dom; eauto.
+    simpl. eapply val_inject_list_dom; eauto.
+    constructor; simpl; eauto.
+  - intros r1 r4 [r2 [Hr1 [r3 [Hr2 Hr3]]]].
+    destruct Hr1 as [r1' [x Hr1]]. inv x. rename r1' into r1.
+    destruct Hr2 as [r2' [x Hr2]]. inv x. rename r2' into r2.
+    destruct Hr1 as [w12' [Hw1' Hr1]].
+    destruct Hr2 as [w23' [Hw2' Hr2]].
+    destruct Hr3 as [w34' [Hw3' Hr3]].
+    destruct w12' as [f12 m1' m2' Hm12'].
+    destruct w23' as [f23 xm2' xm3' ].
+    destruct w34' as [f34 m3' m4' Hm34'].
+    inv Hr1. inv H10. inv Hr2. inv H14. inv Hr3. inv H15.
+    inv Hw1'.
+    inv Hw2'.
+    inv Hw3'.
+    rename m1'0 into m1'. rename m2' into m3'. rename m2'1 into m4'. rename m2'0 into m2'.
+    assert (Hm14' :  Mem.inject (compose_meminj f12 (compose_meminj f23 f34)) m1' m4').
+    eapply Mem.inject_compose; eauto.
+    eapply Mem.inject_compose; eauto.
+    exists (cr vres1 m1'). split. constructor; eauto.
+    exists (injpw (compose_meminj f12 (compose_meminj f23 f34)) m1' m4' Hm14').
+    repeat apply conj.
+    + constructor; eauto.
+      * eapply Mem.unchanged_on_implies; eauto.
+        intros. apply loc_unmapped_dom; eauto.
+      * rewrite <- (meminj_dom_compose f).
+        rewrite <- (meminj_dom_compose f) at 2.
+        rauto.
+      * red. intros b1 b4 d f14 INJ. unfold compose_meminj in INJ.
+        destruct (f12 b1) as [[b2 d1]|] eqn: INJ1; try congruence.
+        destruct (f23 b2) as [[b3 d2]|] eqn: INJ2; try congruence.
+        destruct (f34 b3) as [[b4' d3]|] eqn: INJ3; try congruence. inv INJ.
+        exploit H26; eauto. unfold meminj_dom. rewrite f14. auto.
+        intros [A B].
+        exploit H28; eauto. inversion Hm12. apply mi_freeblocks; eauto.
+        intros [C D].
+        exploit H38. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
+        intros [E F]. split; eauto.
+    + constructor; eauto. cbn.
+      eapply val_inject_compose; eauto.
+      eapply val_inject_compose; eauto.
+      constructor.
+Qed.
+
+Lemma Deadcode_ext_out:
+  ccref ((ro @ injp) @ (ro @ injp) @ injp) (ro @ injp).
+Proof.
+  etransitivity.
+  rewrite <- (cc_compose_assoc (ro @ injp)).
+  rewrite trans_injp_ro_outgoing.
+  rewrite cc_compose_assoc.
+  assert (ccref (injp @ injp) injp).
+  rewrite <- CKLRAlgebra.cc_c_compose.
+  rewrite injp_injp2. reflexivity.
+  rewrite H. reflexivity. reflexivity.
+Qed.
+
+(** ** The reversed version of [commut_wt_c] *)
+Theorem wt_c_R_refinement R:
+  ccref (cc_c R @ (wt_c @ lessdef_c)) ((wt_c @ lessdef_c) @ cc_c R).
+Proof.
+  rewrite cc_compose_assoc. rewrite lessdef_c_cklr.
+  intros [[se wR][[se' [se'' sg]] ?]].
+  intros se1 se2 q1 q2 [Hse1 [Hse2 Hse3]] [q2' [Hq1 [q2'' [Hq2 Hq3]]]].
+  inv Hse2. inv Hse3. cbn in H. cbn in Hq1. subst se''.
+  inv Hq1. inv Hq2. inv Hq3. cbn in H3. destruct H3 as [? TYPE]. subst.
+  exists (se1,(se1,sg0),wR). repeat apply conj.
+  - constructor; cbn; eauto. constructor; eauto.
+  - cbn in H0. cbn in H.
+    exists (cq vf1 sg0 vargs1 m1). split.
+    econstructor; eauto. split.
+    econstructor; eauto.
+    eapply val_has_type_list_inject; eauto.
+    econstructor; eauto.
+    eapply val_inject_lessdef_list_compose; eauto.
+  - intros r1 r2 [r1' [Hr1 Hr2]].
+    inv Hr1. cbn in H3.
+    destruct Hr2 as [w [Hw Hr2]].
+    inv Hr2.
+    set (res' := Val.ensure_type vres2 (proj_sig_res sg0) ).
+    exists (cr res' m2'). split. exists w. split. eauto.
+    econstructor; eauto.
+    unfold res'.
+    apply has_type_inject; eauto.
+    exists (cr res' m2'). split.
+    constructor; eauto. cbn. unfold res'. apply Val.ensure_has_type.
+    constructor; eauto. unfold res'.
+    destruct vres2, (proj_sig_res sg0); auto.
+Qed.
 

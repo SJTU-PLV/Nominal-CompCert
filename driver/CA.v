@@ -7,11 +7,14 @@ Require Import Locations CallConv.
 Require Import Inject InjectFootprint.
 
 (*
-   cc_c_asm_injp   ==    injp      === injp
-                          CA           CL
-                                       LM
-                                       MA
-*)
+   cc_c_asm_injp   ≡    c_injp @  ≡ c_injp @
+                        cc_c_asm    cc_c_locset @
+                                    cc_locset_mach @
+                                    cc_mach_asm
+ *)
+
+(** Definition of CA, the pure structure calling convention between C and assembly.
+In CA, the only difference between the source and target memories is the outgoing arguments *)
 Record cc_ca_world :=
   caw{
       caw_sg : signature;
@@ -128,8 +131,13 @@ Proof.
     inversion H8. eauto.
 Qed.
 
+Lemma ca_cllmma_equiv :
+  cceqv cc_c_asm (cc_c_locset @ cc_locset_mach @ cc_mach_asm).
+Proof. split. apply cc_ca_cllmma. apply cc_cllmma_ca. Qed.
 
-(** cc_c_asm_injp as a whole calling convention *)
+
+(** Definition of cc_c_asm_injp (CAinjp) as the general calling convention between C and assembly.
+The memory and arguments are related by some injection function. *)
 
 Record cc_cainjp_world :=
   cajw {
@@ -320,7 +328,6 @@ Proof.
            eapply Mem.perm_free_2; eauto.
 Qed.
 
-(*directly used in later proof*)
 Lemma not_init_args_dec:
   forall sz sp b ofs,
     {not_init_args sz sp b ofs} + {~not_init_args sz sp b ofs}.
@@ -540,5 +547,7 @@ Proof.
 Qed.
 
 
-
+Lemma cainjp__injp_ca_equiv:
+  cceqv cc_c_asm_injp (cc_c injp @ cc_c_asm).
+Proof. split. apply cc_cainjp__injp_ca. apply cc_injpca_cainjp. Qed.
 
