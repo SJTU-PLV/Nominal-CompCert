@@ -8,6 +8,7 @@ Require Import Integers.
 
 Require Import Demo.
 
+(** * C Specification of M_A *)
 
 Inductive state: Type :=
 | Callstateg
@@ -83,6 +84,7 @@ Inductive final_state: state -> reply li_c  -> Prop :=
 
 End WITH_SE.
 
+(** Specification of M_A *)
 Program Definition L_A : Smallstep.semantics li_c li_c :=
   {|
    Smallstep.skel := erase_program M_A;

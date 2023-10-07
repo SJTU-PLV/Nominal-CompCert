@@ -6,7 +6,7 @@ Require Import Asm Asmrel.
 
 Require Import Integers Intv.
 
-(** *Implementation of Server in Asm *)
+(** * Implementation of the Server in Assembly *)
 
 (* C-level spec : in C code:
 L1 (server.s) :

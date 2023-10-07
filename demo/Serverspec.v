@@ -8,7 +8,7 @@ Require Import Integers.
 
 Require Import Server.
 
-(** * pseudo code *)
+(** * Specification of server.s/server_opt.s *)
 
 (*
 //L1

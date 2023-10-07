@@ -86,10 +86,11 @@ Inductive final_state: state -> reply li_c  -> Prop :=
 
 End WITH_SE.
 
+(** The specification of M_C  *)
 Definition L_C : Smallstep.semantics li_c li_c :=
   Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv M_C.
 
-(** * L_C ⊑ (semantics M_C) *)
+(** ** Refinement: L_C ⫹ (semantics M_C) *)
 
 Definition cont_callg sp le:=
   (Kcall (Some _t'1) func_f (Maps.PTree.set _x (sp, tint) empty_env)
@@ -113,7 +114,7 @@ Let tge := Clight.globalenv tse M_C.
 
 Hypothesis MSTB : match_stbls injp w se tse.
 
-
+(** Definition of the simulation relation  *)
 Inductive match_state : state -> Clight.state -> Prop :=
 | match_callf i m tm vf j Hm
     (FINDF: Genv.find_funct tge vf = Some (Ctypes.Internal func_f))
@@ -171,6 +172,7 @@ Qed.
 
 Lemma int_one_not_eq_zero:
   Int.eq Int.one Int.zero = false.
+Proof.
   destruct (Int.eq Int.one Int.zero) eqn:EQ. exfalso.
   eapply Int.one_not_zero. exploit Int.eq_spec. rewrite EQ.
   auto. auto.
@@ -417,6 +419,7 @@ Proof.
     constructor.
 Qed.
 
+(** L_C ⫹_injp (semantics M_C) *)
 Lemma cspec_simulation:
   forward_simulation (cc_c injp) (cc_c injp) L_C (Clight.semantics1 M_C).
 Proof.
@@ -894,12 +897,14 @@ Proof.
     econstructor. auto.
 Qed.
 
+(** L_C ⫹_ro L_C  *)
 Theorem cspec_ro :
   forward_simulation ro ro L_C L_C.
 Proof.
   eapply preserves_fsim. eapply LC_ro; eauto.
 Qed.
 
+(** L_C ⫹_wt L_C  *)
 Theorem cspec_self_simulation_wt :
   forward_simulation wt_c wt_c L_C L_C.
 Proof.

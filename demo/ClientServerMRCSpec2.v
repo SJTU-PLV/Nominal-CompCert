@@ -277,6 +277,7 @@ Lemma find_encrypt_1:
     Genv.find_symbol se encrypt_id = Some rb ->
     j rb = Some (rb',0) ->
     Genv.find_funct tge1 (Vptr rb' Ptrofs.zero) = Some (func_encrypt_external).
+Proof.
 intros. cbn. rewrite pred_dec_true; eauto.
   unfold global_definitions_client. unfold Genv.find_funct_ptr.
   unfold tge2.
@@ -367,6 +368,7 @@ Qed.
 
 Lemma int_one_not_eq_zero:
   Int.eq Int.one Int.zero = false.
+Proof.
   destruct (Int.eq Int.one Int.zero) eqn:EQ. exfalso.
   eapply Int.one_not_zero. exploit Int.eq_spec. rewrite EQ.
   auto. auto.

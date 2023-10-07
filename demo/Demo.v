@@ -6,6 +6,8 @@ Require Import Asm Asmrel.
 
 Require Import Integers Intv.
 
+(** * Implementation of the Mutual Summation Example *)
+
 Definition main_id := (77%positive).
 Definition f_id := (154%positive).
 Definition g_id := (176%positive).
@@ -17,7 +19,7 @@ Definition sum (i: int): int :=
 
 Definition int_int_sg : signature := mksignature (AST.Tint :: nil) (Tret AST.Tint) cc_default.
 
-(** * Implementation of M_A *)
+(** ** Implementation of M_A *)
 
 Definition _s : positive := 60%positive.
 Definition lb0: label := 1%positive.
@@ -110,7 +112,7 @@ Definition M_A: program := mkprogram global_definitions public_idents main_id.
 
 Definition asm_semantics := Asm.semantics M_A.
 
-(** * Clight implementation of M_C *)
+(** ** Clight implementation of M_C *)
 Require Import Ctypes Cop Clight Clightrel.
 Require Import Clightdefs.
 

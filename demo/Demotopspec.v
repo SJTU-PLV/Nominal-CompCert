@@ -6,6 +6,9 @@ Require Import Demo Demospec DemoCspec.
 Require Import Smallstep Linking SmallstepLinking.
 Require Import LanguageInterface Compiler.
 
+(** * C-level composed specification *)
+
+(** Definition of the semantics linking between L_C (specification of M_C) and L_A (specification of M_A) *)
 
 Definition s_unit :=
   {|
@@ -42,7 +45,7 @@ Proof.
 Qed.
 
 
-(** * C-level top specification *)
+(** ** C-level top specification *)
 
 Inductive state :=
 | Callf (i:int) (m:mem)
@@ -164,6 +167,7 @@ Inductive step : state -> trace -> state -> Prop :=
 
 End WITH_SE.
 
+(** The definition of the top specification  *)
 Program Definition top_spec : Smallstep.semantics li_c li_c :=
     {|
       Smallstep.skel := linked_skel;
@@ -182,7 +186,7 @@ Program Definition top_spec : Smallstep.semantics li_c li_c :=
 
 
 
-(** * top_spec ⊑ (L_C ⊕ L_A) *)
+(** ** Refinement: top_spec ⫹ (L_C ⊕ L_A) *)
 
 Section MS.
 
@@ -194,6 +198,7 @@ Let tge2 := Genv.globalenv tse M_A.
 
 Hypothesis MSTB : match_stbls injp w se tse.
 
+(** The definition of the simulation relation  *)
 Inductive match_state: state -> list (frame L) -> Prop :=
 | match_callf i m tm j Hm n
     (INJP: injp_acc w (injpw j m tm Hm))
@@ -215,10 +220,12 @@ Inductive match_state: state -> list (frame L) -> Prop :=
 End MS.
 
 Lemma int_modulus: Int.modulus = 4294967296.
+Proof.
   reflexivity.
 Qed.
 
 Lemma int_half_modulus: Int.half_modulus = 2147483648.
+Proof.
   reflexivity.
 Qed.
 
@@ -230,6 +237,7 @@ Qed.
 
 Lemma intval_repr: forall z,
     Int.intval (Int.repr z) = Int.Z_mod_modulus z.
+Proof.
   auto.
 Qed.
 
@@ -580,6 +588,7 @@ Proof.
   lia. lia.
 Qed.
 
+(** top_spec ⫹_injp (L_C ⊕ L_A)  *)
 Theorem top_simulation:
   forward_simulation (cc_c injp) (cc_c injp) top_spec composed_spec.
 Proof.
@@ -920,13 +929,14 @@ Proof.
     + econstructor;eauto.
 Qed.
 
+(** top_spec ⫹_ro top_spec  *)
 Theorem top_ro :
   forward_simulation ro ro top_spec top_spec.
 Proof.
   eapply preserves_fsim. eapply topspec_ro; eauto.
 Qed.
 
-
+(** top_spec ⫹_wt top_spec  *)
 Theorem topspec_self_simulation_wt :
   forward_simulation wt_c wt_c top_spec top_spec.
 Proof.
@@ -963,7 +973,7 @@ Qed.
 Require Import CallconvAlgebra InjectFootprint CKLRAlgebra CA CallConv.
 Require Import Errors ClientServer Demoproof.
 
-(** * L_C ⊕ L_A ⊑ sem(Compile(M_C) + M_A) *)
+(** ** L_C ⊕ L_A ⫹ sem(Compile(M_C) + M_A) *)
 Lemma compose_LC_LA_correct:
   forall tp M_C',
     transf_clight_program M_C = OK M_C' ->
@@ -997,7 +1007,7 @@ Proof.
 Qed.
 
 
-(** *Final theorem : topspec ⊑ sem(Compile(M_C) + M_A) *)
+(** ** Final theorem : topspec ⫹ sem(Compile(M_C) + M_A) *)
 Theorem topspec_correct:
   forall tp M_C',
     transf_clight_program M_C = OK M_C' ->

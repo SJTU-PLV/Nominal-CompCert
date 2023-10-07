@@ -15,8 +15,7 @@ Require Import CKLRAlgebra Extends Inject InjectFootprint.
 
 Require Import Asmgenproof0 Asmgenproof1.
 
-(** Refinement between the hand-written specification and the assembly
-semantics of `server.s` (`server_opt.s`) *)
+(** *Refinement between the hand-written specification and the assembly semantics of `server.s` (`server_opt.s`) *)
 
 
 Section MS.
@@ -39,6 +38,7 @@ Let vf0 := rs0 PC.
 Inductive new_blockv (s:sup) : val -> Prop :=
   new_blockv_intro : forall b ofs, ~ sup_In b s -> new_blockv s (Vptr b ofs).
 
+(** Simulation relation  *)
 Inductive match_state_c_asm : state -> (sup * Asm.state) -> Prop :=
 |match_call1 m1 b b' ofs eb input j Hm delta:
   wp = injpw j m1 m2 Hm ->
@@ -397,6 +397,7 @@ Proof.
   rewrite !H3. eauto.
 Qed.
 
+(** L1 ⫹_injp [[server.s]]  *)
 Lemma CAinjp_simulation_L1: forward_simulation
                  (cc_c_asm_injp)
                  (cc_c_asm_injp)
@@ -821,7 +822,7 @@ Proof.
   - constructor. intros. inv H.
 Qed.
 
-
+(** L1 ⫹_wt L1 *)
 Theorem self_simulation_wt :
   forward_simulation wt_c wt_c L1 L1.
 Proof.
@@ -880,6 +881,7 @@ End RO.
 
 Definition ro_inv '(row se0 m0) := sound_state se0 m0.
 
+(** L1 ⫹_ro L1 *)
 Lemma L1_ro : preserves L1 ro ro ro_inv.
 Proof.
   intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
@@ -928,7 +930,7 @@ Proof.
   eapply semantics_asm_rel; eauto.
 Qed.
 
-(** L2 --> b2*)
+(** * Refinement between L2 and the LTS of server_opt.s *)
 
 Section MS.
 
@@ -954,6 +956,7 @@ Let sp0 := rs0 RSP.
 Let ra0 := rs0 RA.
 Let vf0 := rs0 PC.
 
+(** Simulation relation *)
 Inductive match_state_ro_c_asm : state -> (sup * Asm.state) -> Prop :=
 |match_call1_ro m1 b b' ofs eb input j Hm delta:
   wp = injpw j m1 m2 Hm ->
@@ -1082,6 +1085,7 @@ Proof.
   eapply Genv.genv_symb_range; eauto.
 Qed.
 
+(** L2 ⫹_{ro⋅injp} [[server_opt.s]]  *)
 Lemma CAinjp_simulation_L2: forward_simulation
                  (ro @ cc_c_asm_injp)
                  (ro @ cc_c_asm_injp)
@@ -1525,6 +1529,7 @@ Proof.
   - constructor. intros. inv H.
 Qed.
 
+(** L2 ⫹_wt L2 *)
 Theorem self_simulation_wt' :
   forward_simulation wt_c wt_c L2 L2.
 Proof.
@@ -1557,7 +1562,7 @@ Proof.
   - constructor. intros. inv H.
 Qed.
 
-
+(** wt ⋅ (ro ⋅ CAinjp) ⋅ CAinjp ≡ cc_compcert *)
 Lemma cc_compcert_wt_ro:
   cceqv cc_compcert (wt_c @ (ro @ cc_c_asm_injp) @ cc_asm injp).
 Proof.

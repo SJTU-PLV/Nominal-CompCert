@@ -15,6 +15,8 @@ Require Import CKLRAlgebra Extends Inject InjectFootprint.
 
 Require Import Asmgenproof0 Asmgenproof1.
 
+(** * Refinement between the C specifiaction of M_A and the assembly semantics of M_A  *)
+
 Section injp_CA.
 (* The proof here uses cc_c injp @ cc_c_asm which is equivalent to cc_c_asm_injp *)
 
@@ -38,6 +40,7 @@ Inductive new_blockv (s:sup) : val -> Prop :=
 
 Definition ge := Genv.globalenv se M_A.
 
+(** Definition of the simulation relation *)
 Inductive match_state_c_asm : state -> (sup * Asm.state) -> Prop :=
   |match_ca_callg i j m1 b Hm:
      let sp := rs0 RSP in let ra := rs0 RA in
@@ -1194,7 +1197,7 @@ Qed.
 
 End injp_CA.
 
-(* L_A <=  wt ->> wt L_A*)
+(** L_A ⫹_wt L_A *)
 Theorem self_simulation_wt :
   forward_simulation wt_c wt_c L_A L_A.
 Proof.
@@ -1276,12 +1279,14 @@ Proof.
   - intros. inv H0. inv H. constructor; eauto.
 Qed.
 
+(** L_A ⫹_ro L_A *)
 Theorem self_simulation_ro :
   forward_simulation ro ro L_A L_A.
 Proof.
   eapply preserves_fsim. eapply L_A_ro; eauto.
 Qed.
 
+(** L_A ⫹ (Asm.semantics M_A) *)
 Lemma M_A_semantics_preservation:
   forward_simulation cc_compcert cc_compcert L_A (Asm.semantics M_A).
 Proof.
@@ -1301,6 +1306,7 @@ Qed.
 (* Final theorem *)
 Require Import Linking Smallstep SmallstepLinking.
 
+(** [[M_C]] ⊕ L_A ⫹ [[CompCert(M_C) + M_A]] *)
 Lemma compose_transf_Clight_Asm_correct:
   forall M_C' tp spec,
   compose (Clight.semantics1 M_C) L_A = Some spec ->
