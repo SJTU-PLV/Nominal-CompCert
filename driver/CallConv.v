@@ -1776,7 +1776,7 @@ Proof.
       econstructor; eauto. constructor; eauto.
 Qed.
 
-Theorem ro_injp_transivity:
+Theorem ro_injp_trans:
   cceqv ((ro @ injp) @ (ro @ injp)) (ro @ injp).
 Proof. split. eapply trans_injp_ro_outgoing. eapply trans_injp_inv_incoming. Qed.
 
