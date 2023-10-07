@@ -396,13 +396,12 @@ Require Import Conventions Asm Mach Lineartyping.
 
 (** This is the simulation convention for the whole compiler. *)
 
-(**)
-
 Definition cc_compcert : callconv li_c li_asm :=
        ro @ wt_c @
        cc_c_asm_injp @
        cc_asm injp.
 
+(** The C-level simulation convention *)
 Definition cc_c_level : callconv li_c li_c := ro @ wt_c @ injp.
 
 Definition cc_compcert_cod : callconv li_c li_asm :=
@@ -427,6 +426,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** The first expand of cc_compcert for both directions *)
 Theorem cc_compcert_merge:
   forall p tp,
   forward_simulation cc_compcert_dom cc_compcert_cod (Clight.semantics1 p) (Asm.semantics tp) ->
@@ -447,6 +447,7 @@ Proof.
   eapply semantics_asm_rel.
 Qed.
 
+(** Derivation of the simulation conventions after C-level at the incoming side *)
 Lemma cc_compcert_expand:
   ccref
     cc_compcert_cod
@@ -488,6 +489,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Derivation of the simulation conventions after C-level at the outgoing side *)
 Lemma cc_compcert_collapse:
   ccref
     (cc_c_level @                                 (* Passes up to Alloc *)
@@ -524,9 +526,9 @@ Proof.
   (* move the wt_c to top level *)
   rewrite <- (lessdef_c_cklr ext) , cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
   rewrite <- (cc_compose_assoc inj).
-  rewrite !wt_c_R_refinement. rewrite cc_compose_assoc.
+  rewrite !wt_R_refinement. rewrite cc_compose_assoc.
   rewrite <- (cc_compose_assoc injp).
-  rewrite wt_c_R_refinement. rewrite !cc_compose_assoc.
+  rewrite wt_R_refinement. rewrite !cc_compose_assoc.
   rewrite <- (cc_compose_assoc lessdef_c).
   rewrite lessdef_c_cklr.
 
@@ -546,6 +548,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Derivation of the simulation conventions for C-level at the incoming side *)
 Lemma cc_c_level_expand:
   ccref cc_c_level
         ( ro @ cc_c injp @ 
@@ -596,34 +599,7 @@ Proof.
   repeat rstep.
 Qed.
 
-(* wrong, this need inv_reply can trans downside through R*)
-(*
-Lemma trans_R_inv_outgoing {li} (R: callconv li li) (I : invariant li):
-  ccref (R @ R) R ->
-  ccref ((I @ R) @ (I @ R)) (I @ R).
-Proof.
-  intros. red in H. red.
-  intros [[se1 [[se1' wi1] w1]] [[se2 wi2] w2]] se1'' se3 q1 q3
-    [Hse1 Hse2] [q2 [[q1' [Hqi1 Hq1]] [q2' [Hqi2 Hq2]]]].
-  inv Hse1. inv H0. inv Hse2. inv H0. rename se1' into se1.
-  inv Hqi1. inv Hqi2. rename q1' into q1. rename q2' into q2.
-  assert (MSE: match_senv (R @ R) (se2,w1,w2) se1 se3).
-  constructor; eauto.
-  assert (MQ: match_query (R @ R) (se2,w1,w2) q1 q3).
-  econstructor; eauto.
-  exploit H; eauto.
-  intros (w' & Hs & Hq & Hr).
-  exists (se1,wi1,w'). repeat apply conj.
-  - constructor; eauto. constructor. eauto.
-  - exists q1. split; eauto. constructor; eauto.
-  - intros r1' r2 [r1 [Hri Hr']]. inv Hri.
-    exploit Hr; eauto. intros [r1' [A B]].
-    exists r1'. split. exists r1. split. constructor. eauto.
-    eauto. exists r1'. split; eauto. constructor.
-    admit.
-Abort.
- *)
-
+(** Derivation of the simulation conventions for C-level at the outgoing side *)
 Lemma cc_c_level_collapse:
   ccref (ro @ cc_c injp @ cc_c injp @
               (wt_c @ cc_c ext) @ cc_c ext @
@@ -639,7 +615,7 @@ Proof.
   rewrite <- (lessdef_c_cklr ext) at 1. rewrite !cc_compose_assoc.
   rewrite <- (cc_compose_assoc wt_c).
   rewrite <- (cc_compose_assoc injp).
-  rewrite wt_c_R_refinement.
+  rewrite wt_R_refinement.
   rewrite !cc_compose_assoc.
   rewrite <- (cc_compose_assoc lessdef_c).
   rewrite lessdef_c_cklr.
@@ -660,6 +636,7 @@ Proof.
   rewrite !(trans_injp_ro_outgoing); eauto. reflexivity.
 Qed.
 
+(** Unification of the incoming side *)
 Lemma cc_expand :
   ccref 
     cc_compcert_cod
@@ -684,6 +661,7 @@ Proof.
   reflexivity.
 Qed.
 
+(** Unification of the outgoing side *)
 Lemma cc_collapse :
   ccref
     ( ro @ cc_c injp @ 
