@@ -9,9 +9,9 @@ Require Import Clightdefs.
 Require Import Integers Intv.
 Require Import Server.
 
-(** * spec in C language *)
+(** * Specification of client_mr.c *)
 (*
-
+/* client_mr.c */
 int input[N], result[N];
 int index;
 
@@ -64,7 +64,7 @@ Definition index_def :=  {|
   gvar_volatile := false
 |}.
 
-(* The call instruction of encrypt with argument input *)
+(** The call instruction of encrypt with argument input *)
 Definition call_encrypt' input :=
   (Scall None
             (*function name and signature*)
@@ -80,7 +80,7 @@ Definition call_encrypt' input :=
             (input :: (Evar request_id (Tfunction (Tcons tint Tnil) Tvoid cc_default)) :: nil)
   ).
 
-(* the expr input[index-1] *)
+(** The expression input[index-1] *)
 Definition input_index :=
   Ederef (Ebinop Oadd (Evar input_id (tarray tint N))
             (Ebinop Osub (Evar index_id tint) (Econst_int (Int.repr 1) tint) tint)
@@ -91,7 +91,7 @@ Definition result_index :=
             (Ebinop Osub (Evar index_id tint) (Econst_int (Int.repr 1) tint) tint)
             (tptr tint)) tint.
 
-(* encrypt (input[index++], request); *)
+(** encrypt (input[index++], request); *)
 Definition call_encrypt_indexplus :=
   Ssequence
     (* index = index + 1*)
@@ -112,6 +112,7 @@ Definition tintp := tptr tint.
 Definition assign_result:=
   (Sassign (result_index) (Ederef (Evar r_id tintp) tint)).
 
+(** Definition of request  *)
 Definition func_request :=
   {|
     fn_return := Tvoid;
@@ -152,6 +153,7 @@ Definition global_definitions_client : list (ident * globdef fundef type) :=
 Definition public_idents_client : list ident :=
 (encrypt_id :: request_id :: input_id :: result_id :: index_id :: nil).
 
+(** Definition of client_mr  *)
 Definition client : Clight.program :=
   mkprogram composites global_definitions_client public_idents_client main_id Logic.I.
 

@@ -8,7 +8,7 @@ Require Import LanguageInterface.
 
 (** * C-level composed specification *)
 
-(** Definition of the semantics linking between client_mr.c and L1 (specification of server.s) *)
+(** Definition of the semantics linking between client_mr.c and L2 (specification of server_opt.s) *)
 
 Definition result_def_unit :=
   {|
@@ -25,9 +25,9 @@ Definition input_index_def_unit :=
     gvar_volatile := false |}.
 
 
-Definition linked_skel1 : program unit unit:=
+Definition linked_skel2 : program unit unit:=
   {|
-    prog_defs := (result_id, Gvar result_def_unit) :: (key_id, Gvar key_def) ::
+    prog_defs := (result_id, Gvar result_def_unit) :: (key_id, Gvar key_def_const) ::
                    (input_id, Gvar input_index_def_unit) ::
                    (encrypt_id, Gfun tt) :: (request_id, Gfun tt) ::
                    (index_id, Gvar input_index_def_unit) :: nil;
@@ -45,17 +45,17 @@ Hypothesis bound_N: 0 < N < Int.max_signed.
 Let client := client N.
 Let func_request := func_request N.
 
-Theorem link_ok1 :
-  link (skel (Clight.semantics1 client)) (skel L1) = Some linked_skel1.
-Proof. reflexivity. Qed.
+Theorem link_ok2 :
+  link (skel (Clight.semantics1 client)) (skel L2) = Some linked_skel2.
+Proof.  reflexivity. Qed.
 
-Definition L := fun i : bool => if i then (Clight.semantics1 client) else L1.
-Definition composed_spec1 := semantics L linked_skel1.
+Definition L := fun i : bool => if i then (Clight.semantics1 client) else L2.
+Definition composed_spec2 := semantics L linked_skel2.
 
 Theorem link_result :
-  compose (Clight.semantics1 client) L1 = Some composed_spec1.
+  compose (Clight.semantics1 client) L2 = Some composed_spec2.
 Proof.
-  unfold compose. rewrite link_ok1. simpl. reflexivity.
+  unfold compose. rewrite link_ok2. simpl. reflexivity.
 Qed.
 
 
@@ -147,9 +147,9 @@ Inductive step : state -> trace -> state -> Prop :=
 End WITH_SE.
 
 (** Definition of the top-level specification  *)
-Program Definition top_spec1 : Smallstep.semantics li_c li_c :=
+Program Definition top_spec2 : Smallstep.semantics li_c li_c :=
     {|
-      Smallstep.skel := linked_skel1;
+      Smallstep.skel := linked_skel2;
       Smallstep.state := state;
       Smallstep.activate se :=
         {|
@@ -171,24 +171,9 @@ Variable w: injp_world.
 Variable se tse : Genv.symtbl.
 
 Let tge1 := Clight.globalenv tse client.
-Let tge2 := Genv.globalenv tse b1.
+Let tge2 := Genv.globalenv tse b2.
 
 Hypothesis MSTB : match_stbls injp w se tse.
-(*
-Inductive stack_acc_request (w: injp_world) : injp_world -> list block -> Prop :=
-| stack_acc_nil w':
-  injp_acc w w' ->
-  stack_acc_request w w' nil
-| stack_acc_cons f1 m1 tm1 w1 (Hm1: Mem.inject f1 m1 tm1) lsp tm1' tm1'' sp Hm1' w2 r
-    (Hm1: Mem.inject f1 m1 tm1)
-    (WORLD1: w1 = injpw f1 m1 tm1 Hm1)
-    (STKB: stack_acc_request w w1 lsp)
-    (* (INJP1: injp_acc w w1) *)
-    (ALLOC: Mem.alloc tm1 0 4 = (tm1', sp))
-    (STORESP: Mem.store Mint32 tm1' sp 0 (Vint r) = Some tm1'')
-    (INJP2: injp_acc (injpw f1 m1 tm1'' Hm1') w2):
-  stack_acc_request w w2 (sp::lsp).
- *)
 
 Definition initial_tm := match w with injpw _ _ tm _ => tm end.
 
@@ -272,7 +257,7 @@ Lemma find_encrypt:
     Genv.match_stbls j se tse ->
     Genv.find_symbol se encrypt_id = Some rb ->
     j rb = Some (rb',0) ->
-    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b1).
+    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b2).
 Proof.
   intros. cbn. rewrite pred_dec_true; eauto.
   unfold global_definitions_client. unfold Genv.find_funct_ptr.
@@ -311,13 +296,13 @@ intros. cbn. rewrite pred_dec_true; eauto.
   unfold encrypt_id, index_id. congruence.
 Qed.
 
-(** Helper lemmas *)
+
 Lemma find_encrypt':
   forall rb j,
     Genv.match_stbls j se tse ->
     Genv.find_symbol se encrypt_id = Some rb ->
     exists rb', j rb = Some (rb',0) /\ Genv.find_symbol tge2 encrypt_id = Some rb' /\
-    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b1).
+    Genv.find_funct tge2 (Vptr rb' Ptrofs.zero) = Some (Internal func_encrypt_b2).
 Proof.
   intros. eapply Genv.find_symbol_match in H as F; eauto.
   destruct F as [rb' [A B]].
@@ -839,8 +824,8 @@ Proof.
 Qed.
 
 (** top_spec1 ⫹_injp composed_spec1  *)
-Lemma top_simulation_L1:
-  forward_simulation (cc_c injp) (cc_c injp) top_spec1 composed_spec1.
+Lemma top_simulation_L2:
+  forward_simulation (cc_c injp) (cc_c injp) top_spec2 composed_spec2.
 Proof.
   constructor. econstructor; eauto. instantiate (1 := fun _ _ _ => _). cbn beta.
   intros se1 se2 w Hse Hse1. cbn in *. subst.
@@ -920,7 +905,7 @@ Proof.
            1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31: setoid_rewrite NMap.gsspec;destruct NMap.elt_eq;try congruence.
            all: unfold NMap.get;rewrite NMap.gi;congruence. }
 
-         assert (FIND_DEF_SERVER: forall f, Genv.find_def (Genv.globalenv se2 Server.b1) b2 <> Some (Gfun f)).
+         assert (FIND_DEF_SERVER: forall f, Genv.find_def (Genv.globalenv se2 Server.b2) b2 <> Some (Gfun f)).
          { unfold Genv.globalenv. simpl.
            intros.
            unfold Genv.add_globdef.
@@ -1629,7 +1614,7 @@ End RO.
 
 Definition ro_inv '(row se0 m0) := sound_state se0 m0.
 
-Lemma spec1_ro : preserves top_spec1 ro ro ro_inv.
+Lemma spec2_ro : preserves top_spec2 ro ro ro_inv.
 Proof.
   intros [se0 m0] se1 Hse Hw. cbn in Hw. subst.
   split; cbn in *.
@@ -1669,17 +1654,17 @@ Proof.
   - intros. inv H0. inv H. constructor; eauto.
 Qed.
 
-(** top_spec1 ⫹_ro top_spec1  *)
-Theorem top1_ro :
-  forward_simulation ro ro top_spec1 top_spec1.
+(** top_spec2 ⫹_ro top_spec2  *)
+Theorem top2_ro :
+  forward_simulation ro ro top_spec2 top_spec2.
 Proof.
-  eapply preserves_fsim. eapply spec1_ro; eauto.
+  eapply preserves_fsim. eapply spec2_ro; eauto.
 Qed.
 
 
 Definition wt_inv :  (Genv.symtbl * signature) -> state -> Prop := fun _ _ => True.
 
-Lemma spec1_wt : preserves top_spec1 wt_c wt_c wt_inv.
+Lemma spec2_wt : preserves top_spec2 wt_c wt_c wt_inv.
 Proof.
   intros [se0 sg] se1 Hse Hw. cbn in Hw. subst.
   split; cbn in *.
@@ -1694,10 +1679,10 @@ Proof.
   - intros. inv H0. inv H. constructor; eauto.
 Qed.
 
-(** top_spec1 ⫹_wt top_spec1  *)
-Theorem top1_wt : forward_simulation wt_c wt_c top_spec1 top_spec1.
+(** top_spec2 ⫹_wt top_spec2  *)
+Theorem top2_wt : forward_simulation wt_c wt_c top_spec2 top_spec2.
 Proof.
-  eapply preserves_fsim. eapply spec1_wt; eauto.
+  eapply preserves_fsim. eapply spec2_wt; eauto.
 Qed.
 
 End WITH_N.

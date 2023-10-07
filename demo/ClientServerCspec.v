@@ -5,7 +5,10 @@ Require Import CA Asm CallConv CKLRAlgebra.
 Require Import Client Server Serverspec.
 Require Import Smallstep Linking SmallstepLinking.
 Require Import LanguageInterface.
+
 (** * C-level composed specification *)
+
+(** Definition of the semantics linking between client.c and L1 (specification of server.s) *)
 
 Definition result_def_unit :=
   {|
@@ -37,8 +40,8 @@ Proof.
   unfold compose. rewrite link_ok. simpl. reflexivity.
 Qed.
 
-(** * C-level top specification *)
 
+(** * C-level top specification *)
 
 Inductive state : Type :=
 | Callrequest (input : int) (m:mem)
@@ -129,6 +132,7 @@ Inductive step : state -> trace -> state -> Prop :=
 
 End WITH_SE.
 
+(** Definition of the top-level specification  *)
 Program Definition top_spec1 : Smallstep.semantics li_c li_c :=
     {|
       Smallstep.skel := linked_skel1;
@@ -144,6 +148,7 @@ Program Definition top_spec1 : Smallstep.semantics li_c li_c :=
           globalenv := tt;
         |}
     |}.
+
 
 (** Top invariant of top_spec1*)
 
@@ -201,6 +206,7 @@ Proof.
   - intros. inv H0; inv H; constructor; eauto.
 Qed.
 
+(** top_spec1 ⫹_ro top_spec1  *)
 Theorem top1_ro :
   forward_simulation ro ro top_spec1 top_spec1.
 Proof.
@@ -224,6 +230,7 @@ Proof.
     simpl. rewrite H1. eauto.
 Qed.
 
+(** top_spec1 ⫹_wt top_spec1  *)
 Theorem top1_wt : forward_simulation wt_c wt_c top_spec1 top_spec1.
 Proof.
   eapply preserves_fsim. eapply spec1_wt; eauto.
@@ -231,7 +238,7 @@ Qed.
 
 
 
-(** Proof of top_spec -> composed_spec1 *)
+(** * Refinement between the top-level specification and the linked semantics *)
 
 Section MS.
 
@@ -242,34 +249,8 @@ Let tge1 := Clight.globalenv tse client.
 Let tge2 := Genv.globalenv tse b1.
 
 Hypothesis MSTB : match_stbls injp w se tse.
-(*
-Inductive match_client_state : state -> Clight.state -> Prop :=
-|match_process (j:meminj) m tm output pb pb'
-  (Hm: Mem.inject j m tm)
-  (FINDP : Genv.find_symbol se process_id = Some pb)
-  (FINJ: j pb = Some (pb',0))
-  (INJP : injp_acc w (injpw j m tm Hm)):
-  match_client_state (Callprocess output m) (Callstate (Vptr pb' Ptrofs.zero) (Vint output :: nil) Kstop tm)
-|match_request (j:meminj) m tm input rb rb'
-   (Hm: Mem.inject j m tm)
-  (FINDP : Genv.find_symbol se request_id = Some rb)
-  (FINJ: j rb = Some (rb',0))
-  (INJP : injp_acc w (injpw j m tm Hm)):
-  match_client_state (Callrequest input m) (Callstate (Vptr rb' Ptrofs.zero) (Vint input :: nil) Kstop tm).
-(*|match_return (j:meminj) m tm
-  (Hm: Mem.inject j m tm)
-  (INJP : injp_acc w (injpw j m tm Hm)):
-  match_client_state (Return m) (Returnstate Vundef Kstop tm). *)
 
-Inductive match_server_state : state -> Serverspec.state -> Prop :=
-|match_encrypt (j:meminj) m tm pb pb' input
-   (Hm: Mem.inject j m tm)
-  (FINDP : Genv.find_symbol se process_id = Some pb)
-  (FINJ: j pb = Some (pb',0))
-  (INJP : injp_acc w (injpw j m tm Hm)):
-  match_server_state (Callencrypt input (Vptr pb Ptrofs.zero) m) (Call1 (Vptr pb' Ptrofs.zero) input tm).
- *)
-
+(** Definition of the simulation relation for the refinement *)
 Inductive match_state : state -> list (frame L) -> Prop :=
 |match_return_introc (j:meminj) m tm oi
   (Hm: Mem.inject j m tm)
@@ -847,6 +828,7 @@ Proof.
   - constructor; congruence.
 Qed.
 
+(** top_spec1 ⫹_injp composed_spec1  *)
 Lemma top_simulation_L1:
   forward_simulation (cc_c injp) (cc_c injp) top_spec1 composed_spec1.
 Proof.

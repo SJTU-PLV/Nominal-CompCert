@@ -9,7 +9,8 @@ Require Import Clightdefs.
 Require Import Integers Intv.
 Require Import Server.
 
-(** * spec in C language *)
+(** * Specification of client.c *)
+
 (*
 /* client.c */
 
@@ -27,6 +28,7 @@ int request (int i){
 }
 *)
 
+(** Identifier definitions *)
 Definition result_id := 4%positive.
 Definition process_id := 3%positive. (*the same as complete in Server definition*)
 Definition request_id := 6%positive.
@@ -40,7 +42,7 @@ Definition result_def :=  {|
 
 Definition r_id := 7%positive.
 
-(** Definition of the function 'process' *)
+(** Definition of the function process *)
 Definition tintp := tptr tint.
 Definition func_process :=
   {|
@@ -58,7 +60,7 @@ Definition func_process :=
       )
   |}.
 
-(** Definition of the function 'request' *)
+(** Definition of the function request *)
 Definition i_id := 8%positive.
 Definition func_request :=
   {|

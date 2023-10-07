@@ -10,13 +10,10 @@ Require Import Client.
 Require Import Server Serverspec Serverproof ClientServerCspec ClientServerCspec2.
 Require Import Linking SmallstepLinking.
 
-(** part1 *)
+(** * Top-level Theorems for The Client-Server Examples *)
 
-(*
-client ⊕ L1 ≤ client_asm ⊕ b1
-client ⊕ L2 ≤ client_asm ⊕ b2
- *)
 
+(** [[client.c]] ⊕ L1 ⫹ [[CompCert(client.c) + server.s]] *)
 Lemma compose_Client_Server_correct1:
   forall client_asm tp spec,
   compose (Clight.semantics1 client) L1 = Some spec ->
@@ -41,6 +38,7 @@ Proof.
   apply Axioms.functional_extensionality. intros [|]; auto.
 Qed.
 
+(** [[client.c]] ⊕ L2 ⫹ [[CompCert(client.c) + server_opt.s]] *)
 Lemma compose_Client_Server_correct2:
   forall client_asm tp spec,
   compose (Clight.semantics1 client) L2 = Some spec ->
@@ -74,6 +72,7 @@ Axiom compile: transf_clight_program client = OK client_asm.
 Axiom link1 : link client_asm b1 = Some tp1.
 Axiom link2 : link client_asm b2 = Some tp2.
 
+(** cc_compcert ≡ wt ⋅ ro ⋅ injp ⋅ cc_compcert   *)
 Lemma ro_injp_cc_compcert:
   cceqv cc_compcert (wt_c @ ro @ cc_c injp @ cc_compcert).
 Proof.
@@ -126,7 +125,8 @@ Proof.
     rewrite <- (cc_compose_assoc injp).
   rewrite cc_injpca_cainjp. reflexivity.
 Qed.
-  
+
+(** top_spec1 (L_CS in the paper) ⫹ [[CompCert(client.c) + server.s]] *)
 Theorem spec_sim_1 : forward_simulation cc_compcert cc_compcert top_spec1 (Asm.semantics tp1).
 Proof.
   rewrite ro_injp_cc_compcert at 1.
@@ -142,8 +142,7 @@ Proof.
   eapply link1.
 Qed.
 
-(*To be moved to ClightServerCspec2.v *)
-
+(** top_spec2 ⫹ [[CompCert(client.c) + server_opt.s]] *)
 Theorem spec_sim_2 : forward_simulation cc_compcert cc_compcert top_spec2 (Asm.semantics tp2).
 Proof.
   rewrite ro_injp_cc_compcert at 1.
@@ -161,10 +160,14 @@ Qed.
 
 End SPEC.
 
-Require Import ClientMR ClientServerMRCSpec.
+
+(** Top Level Theorems for The Mutual Recursive Client-Server Example *)
+
+Require Import ClientMR ClientServerMRCSpec ClientServerMRCSpec2.
 
 Definition N := 10%Z.
 
+(** [[client_mr.c]] ⊕ L1 ⫹ [[CompCert(client_mr.c) + server.s]] *)
 Lemma compose_ClientMR_Server_correct1:
   forall client_asm tp spec,
   compose (Clight.semantics1 (client N)) L1 = Some spec ->
@@ -189,6 +192,32 @@ Proof.
   apply Axioms.functional_extensionality. intros [|]; auto.
 Qed.
 
+(** [[client_mr.c]] ⊕ L2 ⫹ [[CompCert(client_mr.c) + server_opt.s]] *)
+Lemma compose_ClientMR_Server_correct2:
+  forall client_asm tp spec,
+  compose (Clight.semantics1 (client N)) L2 = Some spec ->
+  transf_clight_program (client N) = OK client_asm ->
+  link client_asm b2 = Some tp ->
+  forward_simulation cc_compcert cc_compcert spec (Asm.semantics tp).
+Proof.
+  intros.
+  rewrite <- (cc_compose_id_right cc_compcert) at 1.
+  rewrite <- (cc_compose_id_right cc_compcert) at 2.
+  eapply compose_forward_simulations.
+  2: { unfold compose in H.
+       destruct (@link (AST.program unit unit)) as [skel|] eqn:Hskel. 2: discriminate.
+       cbn in *. inv H.
+       eapply AsmLinking.asm_linking; eauto. }
+  eapply compose_simulation.
+  eapply clight_semantic_preservation; eauto using transf_clight_program_match.
+  eapply semantics_preservation_L2.
+  eauto.
+  unfold compose. cbn.
+  apply link_erase_program in H1. rewrite H1. cbn. f_equal. f_equal.
+  apply Axioms.functional_extensionality. intros [|]; auto.
+Qed.
+
+
 (* Top level theorem for MutRec Client and Server *)
 
 
@@ -198,7 +227,9 @@ Variable client_asm tp1 tp2 : Asm.program.
 
 Axiom compile_mr : transf_clight_program (client N) = OK client_asm.
 Axiom link2_mr : link client_asm b1 = Some tp1.
+Axiom link2_mr2 : link client_asm b2 = Some tp2.
 
+(** ClientServerMRCSpec.top_spec1 ⫹ [[CompCert(client_mr.c) + server.s]] *)
 Theorem spec_sim_mr : forward_simulation cc_compcert cc_compcert (top_spec1 N) (Asm.semantics tp1).
 Proof.
   rewrite ro_injp_cc_compcert at 1.
@@ -214,5 +245,23 @@ Proof.
   eapply compile_mr.
   eapply link2_mr.
 Qed.
+
+(** ClientServerMRCSpec.top_spec2 ⫹ [[CompCert(client_mr.c) + server_opt.s]] *)
+Theorem spec_sim_mr2 : forward_simulation cc_compcert cc_compcert (top_spec2 N) (Asm.semantics tp2).
+Proof.
+  rewrite ro_injp_cc_compcert at 1.
+  rewrite ro_injp_cc_compcert at 2.
+  eapply compose_forward_simulations.
+  eapply top2_wt.
+  eapply compose_forward_simulations.
+  eapply top2_ro.
+  eapply compose_forward_simulations.
+  eapply top_simulation_L2.
+  unfold Int.max_signed. unfold N. cbn. lia.
+  eapply compose_ClientMR_Server_correct2; eauto.
+  eapply compile_mr.
+  eapply link2_mr2.
+Qed.
+
 
 End SPEC_MR.
