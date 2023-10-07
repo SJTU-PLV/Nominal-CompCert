@@ -1869,7 +1869,7 @@ Proof.
 Qed.
 
 (** ** The reversed version of [commut_wt_c] *)
-Theorem wt_c_R_refinement R:
+Theorem wt_R_refinement R:
   ccref (cc_c R @ (wt_c @ lessdef_c)) ((wt_c @ lessdef_c) @ cc_c R).
 Proof.
   rewrite cc_compose_assoc. rewrite lessdef_c_cklr.
@@ -1899,5 +1899,62 @@ Proof.
     constructor; eauto. cbn. unfold res'. apply Val.ensure_has_type.
     constructor; eauto. unfold res'.
     destruct vres2, (proj_sig_res sg0); auto.
+Qed.
+
+(** Properties of wt_c. lessdef_c here is a helper simulation convention. 
+    We have lessdef_c ⋅ R ≡ R ([lessdef_c_cklr]), i.e., lessdef_c 
+    can be absorbed into or create from a later simulation convention R.
+    The following lemmas depend on this techinique.
+*)
+
+(** The helping lemma depends on lessdef_c *)
+Theorem wt_lessdef_R_equiv R:
+  cceqv (cc_c R @ (wt_c @ lessdef_c)) ((wt_c @ lessdef_c) @ cc_c R).
+Proof. split. apply wt_R_refinement. apply commut_wt_c. Qed.
+
+(** R ⋅ wt ⊑ wt ⋅ R ⋅ wt, this lemma does not depend on lessdef_c  *)
+Theorem R_wt__wt_R_wt R:
+  ccref (wt_c @ (cc_c R) @ wt_c) ((cc_c R) @ wt_c).
+Proof. apply inv_drop. apply wt_c_reply_prop. Qed.
+
+(** wt ⋅ R ⋅ wt ⊑ R ⋅ wt, this lemma depends on a following R' *)
+Theorem wt_R_wt__R_wt R R':
+  ccref ((cc_c R) @ wt_c @ (cc_c R')) (wt_c @ (cc_c R) @ wt_c @ (cc_c R')).
+Proof.
+  etransitivity. rewrite <- (lessdef_c_cklr R').
+  rewrite <- (cc_compose_assoc wt_c).
+  rewrite <- (cc_compose_assoc R).
+  rewrite wt_lessdef_R_equiv.
+  rewrite (inv_dup wt_c). rewrite !cc_compose_assoc.
+  rewrite <- (cc_compose_assoc wt_c lessdef_c).
+  rewrite <- (cc_compose_assoc (wt_c @ lessdef_c)).
+  rewrite <- wt_lessdef_R_equiv.
+  rewrite !cc_compose_assoc.
+  rewrite lessdef_c_cklr. reflexivity. reflexivity.
+Qed.
+
+(** R ⋅ wt ⊑ wt ⋅ R, this lemma depends on a following R' *)
+Theorem R_wt__wt_R R R':
+  ccref (wt_c @ (cc_c R) @ (cc_c R')) ((cc_c R) @ wt_c @ (cc_c R')).
+Proof.
+  etransitivity.
+  rewrite <- lessdef_c_cklr. rewrite <- !cc_compose_assoc.
+  rewrite <- wt_lessdef_R_equiv.
+  rewrite !cc_compose_assoc. rewrite lessdef_c_cklr.
+  reflexivity. reflexivity.
+Qed.
+
+(** wt ⋅ R ⊑ R ⋅ wt, this lemma depends on a following R' *)
+Theorem wt_R__R_wt R R':
+  ccref ((cc_c R) @ wt_c @ (cc_c R')) (wt_c @ (cc_c R) @ (cc_c R')).
+Proof.
+  etransitivity.
+  rewrite <- (lessdef_c_cklr R'). rewrite <- (cc_compose_assoc wt_c).
+  rewrite <- (cc_compose_assoc R).
+  rewrite wt_lessdef_R_equiv.
+  rewrite !cc_compose_assoc.
+  rewrite <- (cc_compose_assoc lessdef_c).
+  rewrite lessdef_c_cklr.
+  reflexivity. reflexivity.
 Qed.
 
