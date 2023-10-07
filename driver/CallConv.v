@@ -1776,6 +1776,10 @@ Proof.
       econstructor; eauto. constructor; eauto.
 Qed.
 
+Theorem ro_injp_transivity:
+  cceqv ((ro @ injp) @ (ro @ injp)) (ro @ injp).
+Proof. split. eapply trans_injp_ro_outgoing. eapply trans_injp_inv_incoming. Qed.
+
 (** ** Properties for the Deadcode pass *)
 (** The [match_state] relation for Deadcode uses [magree] instead of [Mem.inject].
     As a result, proving injp for the incoming side is relatively complicated.
