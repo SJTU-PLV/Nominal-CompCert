@@ -1902,12 +1902,12 @@ Proof.
 Qed.
 
 (** Properties of wt_c. lessdef_c here is a helper simulation convention. 
-    We have lessdef_c ⋅ R ≡ R ([lessdef_c_cklr]), i.e., lessdef_c 
-    can be absorbed into or create from a later simulation convention R.
+    We have lessdef_c ⋅ R' ≡ R' ([lessdef_c_cklr]), i.e., lessdef_c 
+    can be absorbed into or create from a later simulation convention R'.
     The following lemmas depend on this techinique.
 *)
 
-(** The helping lemma depends on lessdef_c *)
+(** The helping lemma using lessdef_c, it claims that wt_c ⋅ lessdef_c can commute with R *)
 Theorem wt_lessdef_R_equiv R:
   cceqv (cc_c R @ (wt_c @ lessdef_c)) ((wt_c @ lessdef_c) @ cc_c R).
 Proof. split. apply wt_R_refinement. apply commut_wt_c. Qed.
