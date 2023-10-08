@@ -81,7 +81,7 @@ void request (int *r){
   (the `request` function in client) to encrypt the subsequent data.
 * The top level specification is defined by `top_spec1` in
   [ClientServerMRCSpec.v](demo/ClientServerMRCSpec.v).
-* The refinement $\texttt{top}\_\texttt{spec1} \leqslant_{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c}_{\texttt{injp}}} [\![\texttt{client\_mr.c}]\!] \oplus \texttt{L1}$ is defined by `top_simulation_L1`, `top1_ro` and `top1_wt` in [ClientServerMRCspec.v](demo/ClientServerMRCSpec.v).
+* The refinement $\texttt{top}\_\texttt{spec1} \leqslant_{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c}_{\texttt{injp}}} [\![\texttt{client}\_\texttt{mr.c}]\!] \oplus \texttt{L1}$ is defined by `top_simulation_L1`, `top1_ro` and `top1_wt` in [ClientServerMRCspec.v](demo/ClientServerMRCSpec.v).
 * The final theorem $\texttt{top\_spec1} \leqslant_{\mathbb{C}} [\![\texttt{CompCert}(\texttt{client\_mr.c}) + \texttt{server.s}]\!]$ is defined by `spec_sim_mr` in [ClientServer.v](demo/ClientServer.v).
 
 #### Mutual Summation Example
