@@ -18,18 +18,18 @@ are shown in Figure 3 in our paper.
 * (Definition 5.1) The hand-written specification ($L_S$) for the
   optimized server (i.e., `server_opt.s`) is defined by `L2` in [Serverspec.v](demo/Serverspec.v#L116). The hand-written specification (not
   discussed in the paper) for `server.s` is defined by `L1` in [Serverspec.v](demo/Serverspec.v#L98).
-* (Theorem 5.2) The theorem of $L_S
-  \leqslant_{\mathbb{C}}[\! [\texttt{server}\_ \texttt{opt.s}]\! ]$ is defined by
+* (Theorem 5.2) The theorem of $`L_S
+  \leqslant_{\mathbb{C}}[\! [\texttt{server}\_ \texttt{opt.s}]\! ]`$ is defined by
   `semantics_preservation_L2` in [Serverproof.v](demo/Serverproof.v).
-  This proof is decomposed into  $L_S \leqslant_{\texttt{wt}} L_S$ and
-  $L_S \leqslant_{\texttt{ro} \cdot \texttt{CAinjp}}
-  [\! [\texttt{server}\_ \texttt{opt.s}]\! ]$, which are stated in
-  `self_simulation_wt'` and `CAinjp_simulation_L2`, respectively. More specifically, for the verification of $L_S \leqslant_{\texttt{ro}\cdot\texttt{CAinjp}} [\! [\texttt{server}\_ \texttt{opt.s}]\! ]$, the simulation relation is defined by `match_state_c_asm` in [Serverproof.v](demo/Serverproof.v).
+  This proof is decomposed into  $`L_S \leqslant_{\texttt{wt}} L_S`$ and
+  $`L_S \leqslant_{\texttt{ro} \cdot \texttt{CAinjp}}
+  [\! [\texttt{server}\_ \texttt{opt.s}]\! ]`$, which are stated in
+  `self_simulation_wt'` and `CAinjp_simulation_L2`, respectively. More specifically, for the verification of $`L_S \leqslant_{\texttt{ro}\cdot\texttt{CAinjp}} [\! [\texttt{server}\_ \texttt{opt.s}]\! ]`$, the simulation relation is defined by `match_state_c_asm` in [Serverproof.v](demo/Serverproof.v).
 
 ### End-to-End Correctness Theorem (Section 5.2)
 
 * Definition of the top-level specification (optimized version) $L_{\texttt{CS}}$ is by `top_spec2` in [ClientServerCspec2.v](demo/ClientServerCspec2.v). The unoptimized top-level specification is defined by `top_spec1` in [ClientServerCspec1.v](demo/ClientServerCspec2.v).
-* (Lemma 5.3) $L_{\texttt{CS}} \leqslant _{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c} _{\texttt{injp}}} [\! [\texttt{client.c}]\! ] \oplus L_S$ is defined by `top_simulation_L2` in [ClientServerCspec2.v](demo/ClientServerCspec2.v). The simulation relation is defined by `match_state` in the same file. Note that `top_simulation_L1` is the refinement theorem for the unoptimized server, i.e., $L_S$ and $L_{\texttt{CS}}$ in $L_{\texttt{CS}} \leqslant _{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c} _{\texttt{injp}}} [\! [\texttt{client.c}]\! ] \oplus L_S$ are replaced by `L1` and `top_spec1`, respectively.
+* (Lemma 5.3) $`L_{\texttt{CS}} \leqslant_{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c} _{\texttt{injp}}} [\! [\texttt{client.c}]\! ] \oplus L_S`$ is defined by `top_simulation_L2` in [ClientServerCspec2.v](demo/ClientServerCspec2.v). The simulation relation is defined by `match_state` in the same file. Note that `top_simulation_L1` is the refinement theorem for the unoptimized server, i.e., $L_S$ and $`L_{\texttt{CS}}`$ in $`L_{\texttt{CS}} \leqslant_{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c}_{\texttt{injp}}} [\! [\texttt{client.c}]\! ] \oplus L_S`$ are replaced by `L1` and `top_spec1`, respectively.
 * (Theorem 5.4) `compose_simulation` in [Smallstep.v](common/Smallstep.v) and `asm_linking` in [AsmLinking.v](x86/AsmLinking.v).
 * (Lemma 5.5) `compose_Client_Server_correct2` in [ClientServer.v](demo/ClientServer.v).
 * (Lemma 5.6) `ro_injp_cc_compcert` in [ClientServer.v](demo/ClientServer.v).
@@ -82,7 +82,7 @@ void request (int *r){
 * The top level specification is defined by `top_spec1` in
   [ClientServerMRCSpec.v](demo/ClientServerMRCSpec.v).
 * The refinement $`\texttt{top}\_ \texttt{spec1} \leqslant_{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c}_{\texttt{injp}}} [\![\texttt{client}\_ \texttt{mr.c}]\!] \oplus \texttt{L1}`$ is defined by `top_simulation_L1`, `top1_ro` and `top1_wt` in [ClientServerMRCspec.v](demo/ClientServerMRCSpec.v).
-* The final theorem $\texttt{top\_spec1} \leqslant_{\mathbb{C}} [\![\texttt{CompCert}(\texttt{client\_mr.c}) + \texttt{server.s}]\!]$ is defined by `spec_sim_mr` in [ClientServer.v](demo/ClientServer.v).
+* The final theorem $`\texttt{top}\_ \texttt{spec1} \leqslant_{\mathbb{C}} [\! [\texttt{CompCert}(\texttt{client}\_ \texttt{mr.c}) + \texttt{server.s}]\! ]`$ is defined by `spec_sim_mr` in [ClientServer.v](demo/ClientServer.v).
 
 #### Mutual Summation Example
 
