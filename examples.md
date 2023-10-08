@@ -81,7 +81,7 @@ void request (int *r){
   (the `request` function in client) to encrypt the subsequent data.
 * The top level specification is defined by `top_spec1` in
   [ClientServerMRCSpec.v](demo/ClientServerMRCSpec.v).
-* The refinement $\texttt{top\_spec1} \leqslant_{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c}_{\texttt{injp}}} [\![\texttt{client\_mr.c}]\!] \oplus \texttt{L1}$ is defined by `top_simulation_L1`, `top1_ro` and `top1_wt` in [ClientServerMRCspec.v](demo/ClientServerMRCSpec.v).
+* The refinement $\texttt{top}\_\texttt{spec1} \leqslant_{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c}_{\texttt{injp}}} [\![\texttt{client\_mr.c}]\!] \oplus \texttt{L1}$ is defined by `top_simulation_L1`, `top1_ro` and `top1_wt` in [ClientServerMRCspec.v](demo/ClientServerMRCSpec.v).
 * The final theorem $\texttt{top\_spec1} \leqslant_{\mathbb{C}} [\![\texttt{CompCert}(\texttt{client\_mr.c}) + \texttt{server.s}]\!]$ is defined by `spec_sim_mr` in [ClientServer.v](demo/ClientServer.v).
 
 #### Mutual Summation Example
@@ -149,6 +149,7 @@ The procedure of the refinement is shown below:
 * Second, for `M_C`, we also define a specification `L_C` and show that $\texttt{L\_C} \leqslant_{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c}_{\texttt{injp}}}[\![\texttt{M\_C}]\!]$. `L_C` is defined by `L_C` in [DemoCspec.v](demo/DemoCspec.v) and the refinement is defined by `cspec_simulation`, `cspec_ro` and `cspec_self_simulation_wt` in [DemoCspec.v](demo/DemoCspec.v).
 * With the above definitions, we define a top-level specification called `top_spec` in [Demotopspec.v](demo/Demotopspec.v). We prove that $\texttt{top\_spec}  \leqslant_{\texttt{ro}\cdot\texttt{wt}\cdot \texttt{c}_{\texttt{injp}}} \texttt{L\_C} \oplus \texttt{L\_A}$ in [Demotopspec.v](demo/Demotopspec.v) by `top_simulation`, `top_ro` and `topspec_self_simulation_wt`.
 * Finally, with the above refinements and the correctness of CompCert(O), we show $\texttt{top\_spec} \leqslant_\mathbb{C} \texttt{CompCert}(\texttt{M\_C}) \oplus [\![\texttt{M\_A}]\!]$ in `topspec_correct` in [Demotopspec.v](demo/Demotopspec.v).
+
 
 ## Reference
 
