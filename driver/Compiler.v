@@ -452,7 +452,7 @@ Lemma cc_compcert_expand:
   ccref
     cc_compcert_cod
     (cc_c_level @                                          (* Passes up to Alloc *)
-     cc_c inj @                                            (* to compose the ext downside*)
+     cc_c inj @                                            (* Unusedglob *)
      (wt_c @ cc_c ext @ cc_c_locset) @                     (* Alloc *)
      cc_locset ext @                                       (* Tunneling *)
      (wt_loc @ cc_locset_mach @ cc_mach inj) @             (* Stacking *)
@@ -493,7 +493,7 @@ Qed.
 Lemma cc_compcert_collapse:
   ccref
     (cc_c_level @                                 (* Passes up to Alloc *)
-     cc_c inj @                                   (* to compose the ext downside*)
+     cc_c inj @                                   (* Unusedglob  *)
      (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
      cc_locset ext @                              (* Tunneling *)
      (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)
@@ -526,9 +526,9 @@ Proof.
   (* move the wt_c to top level *)
   rewrite <- (lessdef_c_cklr ext) , cc_compose_assoc, <- (cc_compose_assoc wt_c) at 1.
   rewrite <- (cc_compose_assoc inj).
-  rewrite !wt_c_R_refinement. rewrite cc_compose_assoc.
+  rewrite !wt_R_refinement. rewrite cc_compose_assoc.
   rewrite <- (cc_compose_assoc injp).
-  rewrite wt_c_R_refinement. rewrite !cc_compose_assoc.
+  rewrite wt_R_refinement. rewrite !cc_compose_assoc.
   rewrite <- (cc_compose_assoc lessdef_c).
   rewrite lessdef_c_cklr.
 
@@ -615,7 +615,7 @@ Proof.
   rewrite <- (lessdef_c_cklr ext) at 1. rewrite !cc_compose_assoc.
   rewrite <- (cc_compose_assoc wt_c).
   rewrite <- (cc_compose_assoc injp).
-  rewrite wt_c_R_refinement.
+  rewrite wt_R_refinement.
   rewrite !cc_compose_assoc.
   rewrite <- (cc_compose_assoc lessdef_c).
   rewrite lessdef_c_cklr.
@@ -648,10 +648,10 @@ Lemma cc_expand :
       cc_c inj @
       cc_c ext @ cc_c inj @ cc_c injp @
       (ro @ injp) @ (ro @ injp) @ (ro @ injp) @
-    cc_c inj @                                              (* to compose the ext downside*)
+    cc_c inj @                                   (* Unusedglob *)
     (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
     cc_locset ext @                              (* Tunneling *)
-    (wt_loc @ cc_locset_mach @ cc_mach inj ) @ (* Stacking *)
+    (wt_loc @ cc_locset_mach @ cc_mach inj ) @   (* Stacking *)
     (cc_mach ext @ cc_mach_asm) @
     cc_asm inj
     ).
@@ -670,7 +670,7 @@ Lemma cc_collapse :
       cc_c inj @
       cc_c ext @ cc_c injp @ cc_c injp @
       (ro @ injp) @ (ro @ injp) @ (ro @ injp) @
-      cc_c inj @                                              (* to compose the ext downside*)
+      cc_c inj @                                   (* Unusedglob *)
       (wt_c @ cc_c ext @ cc_c_locset) @            (* Alloc *)
       cc_locset ext @                              (* Tunneling *)
       (wt_loc @ cc_locset injp @ cc_locset_mach) @ (* Stacking *)

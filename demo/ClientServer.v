@@ -94,7 +94,7 @@ Proof.
   repeat (rstep; [rauto | ]).  
   rewrite <- (cc_compose_assoc wt_c).
   rewrite <- (cc_compose_assoc injp).
-  rewrite wt_c_R_refinement, !cc_compose_assoc.
+  rewrite wt_R_refinement, !cc_compose_assoc.
   rewrite <- (cc_compose_assoc lessdef_c), lessdef_c_cklr.
   repeat (rstep; [rauto|]).
   rewrite <- (cc_compose_assoc injp).
@@ -117,7 +117,7 @@ Proof.
     reflexivity.
     rstep; [rauto |].
     rewrite <- (cc_compose_assoc injp).
-    rewrite wt_c_R_refinement, !cc_compose_assoc.
+    rewrite wt_R_refinement, !cc_compose_assoc.
     rstep; [rauto|].
     rewrite <- (cc_compose_assoc). rewrite lessdef_c_cklr.
     rewrite <- cc_compose_assoc. rewrite <- cc_c_compose.
