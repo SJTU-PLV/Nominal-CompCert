@@ -413,32 +413,37 @@ Inductive state: Type :=
 
 
 (** Drop a place and its children based on its type  *)
-Inductive drop_place_rec (owned: list place) (p: place) (m: mem) (b: block) (ofs: Z) : mem -> Prop :=
-| Drop_base: forall ty m',
+Inductive drop_place' (owned: list place) (p: place) (m: mem) (b: block) (ofs: ptrofs) : mem -> Prop :=
+| drop_base: forall ty,
     typeof_place p = ty ->
+    (* It is not of type [Tbox] *)
     not_owned_type ty = true ->
-    (* ensure that eval_place e m p b ofs *)
-    Mem.free m b ofs (ofs + sizeof ty) = Some m' ->
-    drop_place_rec owned p m b ofs m'
-| Drop_box: forall ty ty' m' m'' b' ofs',
+    drop_place' owned p m b ofs m
+| drop_not_own: forall ty,
+    not_owned_type ty = false ->
+    (* Although p has type [Tbox], p has been moved out *)
+    not (In p owned) ->
+    drop_place' owned p m b ofs m
+| drop_box: forall ty ty' m' m'' b' ofs',
     not_owned_type ty = false ->
     deref_type ty = Some ty' ->
-    In (Pderef p ty') owned ->
-    Mem.load Mptr m b ofs = Some (Vptr b' ofs') ->
-    drop_place_rec owned (Pderef p ty') m b' (Ptrofs.signed ofs') m' ->
-    Mem.free m' b ofs (ofs + sizeof ty) = Some m'' ->
-    drop_place_rec owned p m b ofs m''.
-
-(** Free {*p, **p ,... } which are included in 'owned'  *)
-Inductive drop_place (e: env) (me: mvenv) (owned: list place) (p: place) (m: mem) : mem -> Prop :=
-| Drop_gen: forall ty ty' b b' ofs ofs' m',
-    eval_place e m p b ofs ->
-    typeof_place p = ty ->
-    deref_type ty = Some ty' ->
-    In (Pderef p ty') owned ->
+    (* p owns the location it points to *)
+    In p owned ->
+    (* The contents in [p] is (Vptr b' ofs') *)
     Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
-    drop_place_rec owned (Pderef p ty') m b' (Ptrofs.signed ofs') m' ->
-    drop_place e me owned p m m'.
+    drop_place' owned (Pderef p ty') m b' ofs' m' ->
+    (* Free the contents in (b',ofs') *)
+    Mem.free m' b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ty') = Some m'' ->
+    drop_place' owned p m b ofs m''.
+
+(** Free {*p, **p ,... } according to me  *)
+Inductive drop_place (e: env) (me: mvenv) (p: place) (m: mem) : mem -> Prop :=
+| drop_gen: forall b ofs m' id owned,
+    eval_place e m p b ofs ->
+    local_of_place p = id ->
+    PTree.get id me = Some owned ->
+    drop_place' owned p m b ofs m' ->
+    drop_place e me p m m'.
   
 Variable function_entry: function -> list val -> mem -> env -> mvenv -> mem -> Prop.
 
@@ -458,18 +463,16 @@ Fixpoint drop_obligations (p: place) (ty: type) : list place :=
 
 Inductive step: state -> trace -> state -> Prop :=
 
-| step_assign_drop: forall f rv p k le me me' m1 m2 m3 m4 b ofs ty owned v id,
+| step_assign_drop: forall f rv p k le me me' m1 m2 m3 m4 b ofs ty v,
     typeof_place p = ty ->
     typeof_rvalue rv = ty ->             (* just forbid type casting *)
     not_owned_type ty = false ->
-    local_of_place p = id ->
-    PTree.get id me = Some owned ->
     (* get the location of the place *)
     eval_place le m1 p b ofs ->
     (* evaluate the rvalue, updated the move env and memory (for Box) *)
     eval_rvalue le m1 me rv v me' m2 ->
     (* drop the successors of p (i.e., *p, **p, ... *)
-    drop_place le me' owned p m2 m3 ->
+    drop_place le me' p m2 m3 ->
     (* assign to p  *)    
     assign_loc ty m3 b ofs v m4 ->
     step (State f (Sassign p rv) k le me m1) E0 (State f Sskip k le me' m4)
