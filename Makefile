@@ -167,9 +167,9 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v \
   Clight.v SimplLocals.v SimplLocalsproof.v \
   Cshmgen.v Cshmgenproof.v \
   Csharpminor.v Cminorgen.v Cminorgenproof.v \
-
+  Initializers.v
 # ClightBigstep.v
-# Initializers.v
+
 # Initializersproof.v
 # Cexec.v
 
