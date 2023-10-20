@@ -114,7 +114,8 @@ Definition used_globals (p: program) (pm: prog_map) : option IS.t :=
 (** Remove the code of unused functions *)
          
 Definition empty_function : function :=
-  mkfunction (mksignature nil Tvoid cc_default) nil 0 (PTree.empty _) 1%positive.
+  mkfunction (mksignature nil Tvoid cc_default) nil 0
+    (PTree.set 1 (Ireturn None) (PTree.empty _)) 1%positive.
 
 Definition remove_gfun (gd : globdef fundef unit) :=
   match gd with

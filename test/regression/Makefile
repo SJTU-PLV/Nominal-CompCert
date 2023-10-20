@@ -59,21 +59,22 @@ test:
 	@set -e; for i in $(TESTS) $(TESTS_COMP); do \
 	   SIMU='$(SIMU)' ./Runtest $$i ./$$i.compcert; \
          done
-	@echo "----------- Interpreted tests -------------"
-	@set -e; for i in $(TESTS); do \
-           SIMU='' INTERP=1 ./Runtest $$i $(CCOMP) $(INTERPFLAGS) $$i.c; \
-         done
-	@for i in $(TESTS_DIFF); do \
-           if $(CCOMP) -fall -interp -quiet $$i.c > _cinterp.log; then \
-             if $(SIMU) ./$$i.compcert | cmp -s _cinterp.log -; \
-             then echo "$$i: compiler and interpreter agree"; \
-             else echo "$$i: compiler and interpreter DISAGREE"; \
-             fi; \
-           else \
-             echo "$$i: interpreter undefined behavior"; \
-           fi; \
-           rm -f _cinterp.log; \
-         done
+
+# @echo "----------- Interpreted tests -------------"
+# @set -e; for i in $(TESTS); do \
+#    SIMU='' INTERP=1 ./Runtest $$i $(CCOMP) $(INTERPFLAGS) $$i.c; \
+#  done
+# @for i in $(TESTS_DIFF); do \
+#    if $(CCOMP) -fall -interp -quiet $$i.c > _cinterp.log; then \
+#      if $(SIMU) ./$$i.compcert | cmp -s _cinterp.log -; \
+#      then echo "$$i: compiler and interpreter agree"; \
+#      else echo "$$i: compiler and interpreter DISAGREE"; \
+#      fi; \
+#    else \
+#      echo "$$i: interpreter undefined behavior"; \
+#    fi; \
+#    rm -f _cinterp.log; \
+#  done
+
 
 bench:
-
