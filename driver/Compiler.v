@@ -46,7 +46,7 @@ Require Linear.
 Require Mach.
 Require Asm.
 (** Translation passes. *)
-(*Require Initializers.*)
+Require Initializers.
 Require SimplExpr.
 Require SimplLocals.
 Require Cshmgen.
@@ -187,9 +187,9 @@ Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
 
 (** Force [Initializers] and [Cexec] to be extracted as well. *)
 
-(*
+
 Definition transl_init := Initializers.transl_init.
-Definition cexec_do_step := Cexec.do_step.
+(* Definition cexec_do_step := Cexec.do_step.
 *)
 
 (** The following lemmas help reason over compositions of passes. *)
