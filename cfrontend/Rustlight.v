@@ -449,12 +449,19 @@ Variable function_entry: function -> list val -> mem -> env -> mvenv -> mem -> P
 
 (** Transition relation *)
 
-(** If a place [p] own a location through box, it has the drop obligations. In other words, if the evaluation of [p = v] requires [*p] to be droped, then [*p] must be in the drop obligations *)
+(** If a place [p] owns a location through box, it has the drop
+obligations. In other words, if [p] has type [Tbox] then [p] in its
+drop obligation list. A special case is the mutable reference, if [p]
+has type [&mut T], then we should not terminate the obligation
+generation, instead we should generate the obligations for [*p] (i.e.,
+skip [p]). For example, if [p:&mut Box<i32> = &mut x] and [*p =
+new_box], we should drop *p. Note that when x goes out of scope, it
+would drop the [new_box]. *)
 Fixpoint drop_obligations (p: place) (ty: type) : list place :=
   match ty with
   | Tbox ty' =>
       let deref := Pderef p ty' in
-      deref :: drop_obligations deref ty'
+      p :: drop_obligations deref ty'
   | Treference ty' Mutable _ =>
       let deref := Pderef p ty' in
       drop_obligations deref ty'
@@ -487,17 +494,28 @@ Inductive step: state -> trace -> state -> Prop :=
     eval_rvalue le m1 me rv v me' m2 ->
     (* assign to p  *)    
     assign_loc ty m2 b ofs v m3 ->
-    step (State f (Sassign p rv) k le me m1) E0 (State f Sskip k le me' m3).
+    step (State f (Sassign p rv) k le me m1) E0 (State f Sskip k le me' m3)
 
-｜ step_let: forall,
+| step_let: forall f rv v ty id me1 me2 me3 m1 m2 m3 le1 le2 b k stmt,
     typeof_rvalue rv = ty ->
-    eval_rvalue le m1 me1 rv v me2 m2 ->
+    eval_rvalue le1 m1 me1 rv v me2 m2 ->
     (* allocate the block for id *)
     Mem.alloc m2 0 (sizeof ty) = (m3, b) ->
     (* update the local env *)
-    PTree.set id (b, ty) le = le' ->
+    PTree.set id (b, ty) le1 = le2 ->
     (* update the drop obligations environment *)
- 
-    
-    step (State f (Slet id ty rv stmt) k le me m1) E0 (State f stmt k le me' m)
-    
+    PTree.set id (drop_obligations (Plocal id ty) ty) me2 = me3 ->
+    step (State f (Slet id ty rv stmt) k le1 me1 m1) E0 (State f stmt (Klet id k) le2 me3 m3)
+
+(* End of a let statement, free the place and its drop obligations *)
+| step_end_let: forall f id k le1 le2 me1 me2 m1 m2 m3 ty b,
+    PTree.get id le1 = Some (b, ty) ->
+    (* free {*id, **id, ...} if necessary *)
+    drop_place le1 me1 (Plocal id ty) m1 m2 ->
+    (* free the block [b] *)
+    Mem.free m2 b 0 (sizeof ty) = Some m3 ->
+    (* clear [id] in the local env and move env. Is it necessary ? *)
+    PTree.remove id le1 = le2 ->
+    PTree.remove id me1 = me2 ->
+    step (State f Sskip (Klet id k) le1 me1 m1) E0 (State f Sskip k le2 me2 m3).
+         
