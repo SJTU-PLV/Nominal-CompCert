@@ -132,7 +132,7 @@ Inductive statement : Type :=
   | Sskip : statement                   (**r do nothing *)
   | Slet : ident -> type -> rvalue -> statement -> statement (**r let ident: type = rvalue in *)
   | Sassign : place -> rvalue -> statement (**r assignment [place = rvalue] *)
-  | Scall: option ident -> expr -> list expr -> statement (**r function call *)
+  | Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...) *)
   | Ssequence : statement -> statement -> statement  (**r sequence *)
   | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
   | Sloop: statement -> statement -> statement (**r infinite loop *)
@@ -148,11 +148,44 @@ Record function : Type := mkfunction {
   fn_body: statement
 }.  
 
+Definition var_names (vars: list(ident * type)) : list ident :=
+  List.map (@fst ident type) vars.
+
 Definition fundef := AST.fundef function.
 
-Definition program := AST.program function type.
+Definition program := AST.program fundef type.
+
+(** copy from Ctypes.v *)
+Fixpoint type_of_params (params: list (ident * type)) : typelist :=
+  match params with
+  | nil => Tnil
+  | (id, ty) :: rem => Tcons ty (type_of_params rem)
+  end.
+
+(** The type of a function definition. *)
+
+Definition type_of_function (f: function) : type :=
+  Tfunction (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
+
+Definition type_of_fundef (f: fundef) : type :=
+  match f with
+  | AST.Internal fd => type_of_function fd
+  | AST.External ef =>
+      let sig := ef_sig ef in
+      (** TODO *)
+      Tfunction Tnil Tunit cc_default                
+  end.
 
 (** * Operational Semantics  *)
+
+
+(** ** Global environment  *)
+
+Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
+
+
+Definition globalenv (se: Genv.symtbl) (p: program) :=
+  {| genv_genv := Genv.globalenv se p; genv_cenv := PTree.empty composite |}. (** FIXME: for now, we do not support composite environment  *)
 
 
 (** ** Local environment  *)
@@ -291,7 +324,19 @@ Definition legal_move (p: place) : bool :=
       | _ => false
       end
   end.
-                                     
+
+(** Classify function (copy from Cop.v)  *)
+Inductive classify_fun_cases : Type :=
+  | fun_case_f (targs: typelist) (tres: type) (cc: calling_convention) (**r (pointer to) function *)
+| fun_default.
+
+Definition classify_fun (ty: type) :=
+  match ty with
+  | Tfunction args res cc => fun_case_f args res cc
+  (** TODO: do we allow function pointer?  *)
+  (* | Treference (Tfunction args res cc) _ => fun_case_f args res cc *)
+  | _ => fun_default
+  end.
   
 Section SEMANTICS.
 
@@ -347,6 +392,17 @@ Inductive eval_expr (me: mvenv) : expr -> val -> mvenv -> Prop :=
     eval_place p b ofs ->
     eval_expr me (Eplace mut p ty) (Vptr b ofs) me.
 
+Inductive eval_exprlist (me: mvenv) : list expr -> typelist -> list val -> mvenv -> Prop :=
+| eval_Enil:
+  eval_exprlist me nil Tnil nil me
+| eval_Econs:   forall a bl ty tyl v1 v2 vl me' me'',
+    (* For now, we does not allow type cast *)
+    typeof a = ty ->
+    eval_expr me a v1 me' ->
+    (* sem_cast v1 (typeof a) ty m = Some v2 -> *) 
+    eval_exprlist me' bl tyl vl me'' ->
+    eval_exprlist me (a :: bl) (Tcons ty tyl) (v2 :: vl) me''.
+
 Inductive eval_rvalue (me: mvenv) : rvalue -> val -> mvenv -> mem -> Prop :=
 | eval_Rexpr: forall e v me',
     eval_expr me e v me' ->
@@ -370,7 +426,7 @@ Inductive cont : Type :=
 | Klet: ident -> cont -> cont
 | Kloop1: statement -> statement -> cont -> cont
 | Kloop2: statement -> statement -> cont -> cont
-| Kcall: option ident -> function -> env -> mvenv -> cont -> cont.
+| Kcall: option place  -> function -> env -> mvenv -> cont -> cont.
 
 
 (** Pop continuation until a call or stop *)
@@ -445,7 +501,7 @@ Inductive drop_place (e: env) (me: mvenv) (p: place) (m: mem) : mem -> Prop :=
     drop_place' owned p m b ofs m' ->
     drop_place e me p m m'.
   
-Variable function_entry: function -> list val -> mem -> env -> mvenv -> mem -> Prop.
+(* Variable function_entry: function -> list val -> mem -> env -> mvenv -> mem -> Prop. *)
 
 (** Transition relation *)
 
@@ -467,6 +523,47 @@ Fixpoint drop_obligations (p: place) (ty: type) : list place :=
       drop_obligations deref ty'
   | _ => nil
   end.
+
+(** Allocate memory blocks for function parameters and build the local environment and move environment  *)
+Inductive alloc_variables: env -> mvenv -> mem ->
+                           list (ident * type) ->
+                           env -> mvenv -> mem -> Prop :=
+| alloc_variables_nil:
+  forall e me m,
+    alloc_variables e me m nil e me m
+| alloc_variables_cons:
+  forall e me m id ty vars m1 b1 m2 e2 me2 drops,
+    Mem.alloc m 0 (sizeof ty) = (m1, b1) ->
+    (* get the drop obligations based on ty *)
+    drop_obligations (Plocal id ty) ty = drops ->
+    alloc_variables (PTree.set id (b1, ty) e) (PTree.set id drops me) m1 vars e2 me2 m2 ->
+    alloc_variables e me m ((id, ty) :: vars) e2 me2 m2.
+
+(** Assign the values to the memory blocks of the function parameters  *)
+Inductive bind_parameters (e: env):
+                           mem -> list (ident * type) -> list val ->
+                           mem -> Prop :=
+  | bind_parameters_nil:
+      forall m,
+      bind_parameters e m nil nil m
+  | bind_paranmeters_cons:
+      forall m id ty params v1 vl b m1 m2,
+      PTree.get id e = Some(b, ty) ->
+      assign_loc ty m b Ptrofs.zero v1 m1 ->
+      bind_parameters e m1 params vl m2 ->
+      bind_parameters e m ((id, ty) :: params) (v1 :: vl) m2.
+
+
+(** Function entry semantics: the key is to instantiate the move environments  *)
+Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (me: mvenv) (m': mem) : Prop :=
+| function_entry_intro: forall m1,
+    list_norepet (var_names f.(fn_params)) ->
+    alloc_variables empty_env empty_mvenv m f.(fn_params) e me m1 ->
+    bind_parameters e m1 f.(fn_params) vargs m' ->
+    function_entry ge f vargs m e me m'.
+
+    
+Variable ge: genv.
 
 Inductive step: state -> trace -> state -> Prop :=
 
@@ -506,7 +603,16 @@ Inductive step: state -> trace -> state -> Prop :=
     (* update the drop obligations environment *)
     PTree.set id (drop_obligations (Plocal id ty) ty) me2 = me3 ->
     step (State f (Slet id ty rv stmt) k le1 me1 m1) E0 (State f stmt (Klet id k) le2 me3 m3)
+         
+| step_call: forall f optp a al k le me1 me2 me3 m vargs tyargs vf fd cconv tyres,
+    classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
+    eval_expr le m me1 a vf me2 ->
+    eval_exprlist le m me2 al tyargs vargs me3 ->
+    Genv.find_funct ge vf = Some fd ->
+    type_of_fundef fd = Tfunction tyargs tyres cconv ->
+    step (State f (Scall optp a al) k le me1 m) E0 (Callstate vf vargs (Kcall optp f le me3 k) m)
 
+         
 (* End of a let statement, free the place and its drop obligations *)
 | step_end_let: forall f id k le1 le2 me1 me2 m1 m2 m3 ty b,
     PTree.get id le1 = Some (b, ty) ->
@@ -518,4 +624,5 @@ Inductive step: state -> trace -> state -> Prop :=
     PTree.remove id le1 = le2 ->
     PTree.remove id me1 = me2 ->
     step (State f Sskip (Klet id k) le1 me1 m1) E0 (State f Sskip k le2 me2 m3).
-         
+
+(** TODO: define the step_function_entry and step_return  *)
