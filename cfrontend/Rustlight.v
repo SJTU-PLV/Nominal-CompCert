@@ -11,6 +11,7 @@ Require Import Globalenvs.
 Require Import Smallstep.
 Require Import Ctypes.
 Require Import Cop.
+Require Import LanguageInterface.
 
 (** * High-level Rust-like language  *)
 
@@ -78,6 +79,9 @@ Fixpoint typeof_rvalue (r: rvalue) : type :=
   | Rbox r' => Tbox (typeof_rvalue r')
   end.
 
+(* what Tbox corresponds to? *)
+(** TODO: Tbox -> None. reference -> None, raw poinetr -> C pointer,
+Option<reference> -> C pointer *)
 Fixpoint to_ctype (ty: type) : option Ctypes.type :=
   match ty with
   | Tunit => Some Tvoid 
@@ -595,7 +599,8 @@ Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e:
     bind_parameters e m1 f.(fn_params) vargs m' ->
     function_entry ge f vargs m e me m'.
 
-    
+Section WITH_GE.
+
 Variable ge: genv.
 
 Inductive step: state -> trace -> state -> Prop :=
@@ -700,6 +705,80 @@ Inductive step: state -> trace -> state -> Prop :=
     allocated in the call site *)
     PTree.get id e = Some (b,ty) ->
     assign_loc ty m b Ptrofs.zero v m' ->    
-    step (Returnstate v (Kcall (Some id) f e me k) m) E0 (State f Sskip k e me m')         
+    step (Returnstate v (Kcall (Some id) f e me k) m) E0 (State f Sskip k e me m')
+
+(* Control flow statements *)
+| step_seq:  forall f s1 s2 k e me m,
+    step (State f (Ssequence s1 s2) k e me m)
+      E0 (State f s1 (Kseq s2 k) e me m)
+| step_skip_seq: forall f s k e me m,
+    step (State f Sskip (Kseq s k) e me m)
+      E0 (State f s k e me m)
+| step_continue_seq: forall f s k e me m,
+    step (State f Scontinue (Kseq s k) e me m)
+      E0 (State f Scontinue k e me m)
+| step_break_seq: forall f s k e me m,
+    step (State f Sbreak (Kseq s k) e me m)
+      E0 (State f Sbreak k e me m)
+| step_ifthenelse:  forall f a s1 s2 k e me me' m v1 b ty,
+    eval_expr e m me a v1 me' ->
+    to_ctype (typeof a) = Some ty ->
+    bool_val v1 ty m = Some b ->
+    step (State f (Sifthenelse a s1 s2) k e me m)
+      E0 (State f (if b then s1 else s2) k e me' m)
+| step_loop: forall f s1 s2 k e me m,
+    step (State f (Sloop s1 s2) k e me m)
+      E0 (State f s1 (Kloop1 s1 s2 k) e me m)
+| step_skip_or_continue_loop1:  forall f s1 s2 k e me m x,
+    x = Sskip \/ x = Scontinue ->
+    step (State f x (Kloop1 s1 s2 k) e me m)
+      E0 (State f s2 (Kloop2 s1 s2 k) e me m)
+| step_break_loop1:  forall f s1 s2 k e me m,
+    step (State f Sbreak (Kloop1 s1 s2 k) e me m)
+      E0 (State f Sskip k e me m)
+| step_skip_loop2: forall f s1 s2 k e me m,
+    step (State f Sskip (Kloop2 s1 s2 k) e me m)
+      E0 (State f (Sloop s1 s2) k e me m)
+| step_break_loop2: forall f s1 s2 k e me m,
+    step (State f Sbreak (Kloop2 s1 s2 k) e me m)
+      E0 (State f Sskip k e me m)
+        
 .
 
+(** Open semantics *)
+
+(** IDEAS: can we check the validity of the input values based on the
+function types?  *)
+Inductive initial_state: c_query -> state -> Prop :=
+| initial_state_intro: forall vf f targs tres tcc ctargs ctres vargs m,
+    Genv.find_funct ge vf = Some (AST.Internal f) ->
+    type_of_function f = Tfunction targs tres tcc ->
+    (** TODO: val_casted_list *)
+    Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
+    to_ctypelist targs = Some ctargs ->
+    to_ctype tres = Some ctres ->
+    initial_state (cq vf (signature_of_type ctargs ctres tcc) vargs m)
+                  (Callstate vf vargs Kstop m).
+    
+Inductive at_external: state -> c_query -> Prop:=
+| at_external_intro: forall vf name sg args k m,
+    Genv.find_funct ge vf = Some (AST.External (EF_external name sg)) ->    
+    at_external (Callstate vf args k m) (cq vf sg args m).
+
+Inductive after_external: state -> c_reply -> state -> Prop:=
+| after_external_intro: forall vf args k m m' v,
+    after_external
+      (Callstate vf args k m)
+      (cr v m')
+      (Returnstate v k m').
+
+Inductive final_state: state -> c_reply -> Prop:=
+| final_state_intro: forall v m,
+    final_state (Returnstate v Kstop m) (cr v m).
+
+End WITH_GE.
+
+  
+Definition semantics (p: program) :=
+  Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
+  
