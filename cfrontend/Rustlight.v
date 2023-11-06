@@ -132,7 +132,7 @@ Inductive statement : Type :=
   | Sskip : statement                   (**r do nothing *)
   | Slet : ident -> type -> rvalue -> statement -> statement (**r let ident: type = rvalue in *)
   | Sassign : place -> rvalue -> statement (**r assignment [place = rvalue] *)
-  | Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...) *)
+  | Scall: option ident -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
   | Ssequence : statement -> statement -> statement  (**r sequence *)
   | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
   | Sloop: statement -> statement -> statement (**r infinite loop *)
@@ -426,7 +426,7 @@ Inductive cont : Type :=
 | Klet: ident -> cont -> cont
 | Kloop1: statement -> statement -> cont -> cont
 | Kloop2: statement -> statement -> cont -> cont
-| Kcall: option place  -> function -> env -> mvenv -> cont -> cont.
+| Kcall: option ident  -> function -> env -> mvenv -> cont -> cont.
 
 
 (** Pop continuation until a call or stop *)
@@ -600,7 +600,7 @@ Variable ge: genv.
 
 Inductive step: state -> trace -> state -> Prop :=
 
-| step_assign_drop: forall f rv p k le me me' m1 m2 m3 m4 b ofs ty v,
+| step_assign: forall f rv p k le me me' m1 m2 m3 m4 b ofs ty v,
     typeof_place p = ty ->
     typeof_rvalue rv = ty ->             (* just forbid type casting *)
     not_owned_type ty = false ->
@@ -608,25 +608,14 @@ Inductive step: state -> trace -> state -> Prop :=
     eval_place le m1 p b ofs ->
     (* evaluate the rvalue, updated the move env and memory (for Box) *)
     eval_rvalue le m1 me rv v me' m2 ->
-    (* drop the successors of p (i.e., *p, **p, ... *)
+    (* drop the successors of p (i.e., *p, **p, ...). If ty is not
+    owned type, drop_place has no effect *)
     drop_place le me' p m2 m3 ->
     (* assign to p  *)    
     assign_loc ty m3 b ofs v m4 ->
     step (State f (Sassign p rv) k le me m1) E0 (State f Sskip k le me' m4)
          
-| step_assign_normal: forall f rv p k le me me' m1 m2 m3 b ofs ty v,
-    typeof_place p = ty ->
-    typeof_rvalue rv = ty ->
-    not_owned_type ty = true ->
-    (* get the location of the place *)
-    eval_place le m1 p b ofs ->
-    (* evaluate the rvalue. rv must be an expression because it is not box type *)
-    eval_rvalue le m1 me rv v me' m2 ->
-    (* assign to p  *)    
-    assign_loc ty m2 b ofs v m3 ->
-    step (State f (Sassign p rv) k le me m1) E0 (State f Sskip k le me' m3)
-
-| step_let: forall f rv v ty id me1 me2 me3 m1 m2 m3 le1 le2 b k stmt,
+| step_let: forall f rv v ty id me1 me2 me3 m1 m2 m3 m4 le1 le2 b k stmt,
     typeof_rvalue rv = ty ->
     eval_rvalue le1 m1 me1 rv v me2 m2 ->
     (* allocate the block for id *)
@@ -635,18 +624,29 @@ Inductive step: state -> trace -> state -> Prop :=
     PTree.set id (b, ty) le1 = le2 ->
     (* update the drop obligations environment *)
     PTree.set id (drop_obligations (Plocal id ty) ty) me2 = me3 ->
-    step (State f (Slet id ty rv stmt) k le1 me1 m1) E0 (State f stmt (Klet id k) le2 me3 m3)
+    (* assign [v] to [b] *)
+    assign_loc ty m3 b Ptrofs.zero v m4 ->
+    step (State f (Slet id ty rv stmt) k le1 me1 m1) E0 (State f stmt (Klet id k) le2 me3 m4)
          
-| step_call: forall f optp a al k le me1 me2 me3 m vargs tyargs vf fd cconv tyres,
+| step_call_0: forall f a al k le me1 me2 me3 m vargs tyargs vf fd cconv tyres,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr le m me1 a vf me2 ->
     eval_exprlist le m me2 al tyargs vargs me3 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction tyargs tyres cconv ->
-    (** TODO: how to deal with the return value variable? Drop it before entering the function or drop it in the step_returnstate ??  *)
-    step (State f (Scall optp a al) k le me1 m) E0 (Callstate vf vargs (Kcall optp f le me3 k) m)
-
-         
+    step (State f (Scall None a al) k le me1 m) E0 (Callstate vf vargs (Kcall None f le me3 k) m)         
+| step_call_1: forall f a al k le le' me1 me2 me3 me4 m m' b vargs tyargs vf fd cconv tyres id,
+    classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
+    eval_expr le m me1 a vf me2 ->
+    eval_exprlist le m me2 al tyargs vargs me3 ->
+    Genv.find_funct ge vf = Some fd ->
+    type_of_fundef fd = Tfunction tyargs tyres cconv ->
+    (* allocate memory block and update the env/mvenv for id, just like step_let *)
+    Mem.alloc m 0 (sizeof tyres) = (m', b) ->
+    PTree.set id (b, tyres) le = le' ->
+    PTree.set id (drop_obligations (Plocal id tyres) tyres) me3 = me4 ->
+    step (State f (Scall (Some id) a al) k le me1 m) E0 (Callstate vf vargs (Kcall (Some id) f le' me4 k) m')
+                 
 (* End of a let statement, free the place and its drop obligations *)
 | step_end_let: forall f id k le1 le2 me1 me2 m1 m2 m3 ty b,
     PTree.get id le1 = Some (b, ty) ->
@@ -677,7 +677,6 @@ Inductive step: state -> trace -> state -> Prop :=
     (* drop the stack blocks *)
     Mem.free_list m2 lb = Some m3 ->    
     step (State f (Sreturn None) k e me m1) E0 (Returnstate Vundef (call_cont k) m3)
-
 | step_return_1: forall e a v me0 me lp lb m1 m2 m3 f k ,
     eval_expr e m1 me0 a v me ->
     places_of_env e = lp ->
@@ -685,7 +684,6 @@ Inductive step: state -> trace -> state -> Prop :=
     blocks_of_env e = lb ->
     Mem.free_list m2 lb = Some m3 ->
     step (State f (Sreturn (Some a)) k e me m1) E0 (Returnstate v (call_cont k) m3)
-
 (* no return statement but reach the end of the function *)
 | step_skip_call: forall e me lp lb m1 m2 m3 f k,
     is_call_cont k ->
@@ -693,17 +691,15 @@ Inductive step: state -> trace -> state -> Prop :=
     drop_place_list e me m1 lp m2 ->
     blocks_of_env e = lb ->
     Mem.free_list m2 lb = Some m3 ->
-    step (State f Sskip k e me m1) E0 (Returnstate Vundef (call_cont k) m3).
-
-| step_returnstate_0: forall,
-    (** TODO: in clight, the return value is stored to a temporary variable. How to do in rust? *)
-    typeof_place p = ty ->
-    typeof_rvalue rv = ty ->             (* just forbid type casting *)
-    not_owned_type ty = false ->
-    (* get the location of the place *)
-    eval_place le m1 p b ofs ->
-
-    (* Note that we need to consider updating the move environment *)
-    step (Returnstate v (Kcall (Some p) f e me k) m) (State f Sskip k e me m')
+    step (State f Sskip k e me m1) E0 (Returnstate Vundef (call_cont k) m3)
+         
+| step_returnstate_0: forall v m e me f k,
+    step (Returnstate v (Kcall None f e me k) m) E0 (State f Sskip k e me m)
+| step_returnstate_1: forall id v b ty m m' e me f k,
+    (* Note that the memory location of the return value has been
+    allocated in the call site *)
+    PTree.get id e = Some (b,ty) ->
+    assign_loc ty m b Ptrofs.zero v m' ->    
+    step (Returnstate v (Kcall (Some id) f e me k) m) E0 (State f Sskip k e me m')         
 .
 
