@@ -436,6 +436,8 @@ Fixpoint call_cont (k: cont) : cont :=
   | Kseq s k => call_cont k
   | Kloop1 s1 s2 k => call_cont k
   | Kloop2 s1 s2 k => call_cont k
+  (* pop Klet *)
+  | Klet id k => call_cont k
   | _ => k
   end.
 
@@ -468,7 +470,11 @@ Inductive state: Type :=
 
 
 
-(** Drop a place and its children based on its type  *)
+(** Drop the owned chain of the place [p] until it meets an unowned
+type or the place is not in the drop obligations. For example, if
+there is a chain "[p] -own-> [*p] -own-> [**p] -mut-> [***p] -own->
+[****p]", and the drop obligations for [p] is {p, *p, ***p}, then
+drop_place' would drop the location pointed by [p] and [*p]. *)
 Inductive drop_place' (owned: list place) (p: place) (m: mem) (b: block) (ofs: ptrofs) : mem -> Prop :=
 | drop_base: forall ty,
     typeof_place p = ty ->
@@ -500,7 +506,17 @@ Inductive drop_place (e: env) (me: mvenv) (p: place) (m: mem) : mem -> Prop :=
     PTree.get id me = Some owned ->
     drop_place' owned p m b ofs m' ->
     drop_place e me p m m'.
+
+Inductive drop_place_list (e: env) (me: mvenv) (m: mem) : list place -> mem -> Prop :=
+| drop_place_list_base:
+    drop_place_list e me m nil m
+| drop_place_list_cons: forall p lp m' m'',
+    drop_place e me p m m' ->
+    drop_place_list e me m' lp m'' ->
+    drop_place_list e me m (p::lp) m''.
   
+       
+
 (* Variable function_entry: function -> list val -> mem -> env -> mvenv -> mem -> Prop. *)
 
 (** Transition relation *)
@@ -553,6 +569,23 @@ Inductive bind_parameters (e: env):
       bind_parameters e m1 params vl m2 ->
       bind_parameters e m ((id, ty) :: params) (v1 :: vl) m2.
 
+(** Return the list of blocks in the codomain of [e], with low and high bounds. *)
+
+Definition block_of_binding (id_b_ty: ident * (block * type)) :=
+  match id_b_ty with (id, (b, ty)) => (b, 0, sizeof ty) end.
+
+Definition blocks_of_env (e: env) : list (block * Z * Z) :=
+  List.map block_of_binding (PTree.elements e).
+
+(** Return the list of places in local environment  *)
+
+Definition place_of_binding (id_b_ty: ident * (block * type)) :=
+  match id_b_ty with (id, (b, ty)) => Plocal id ty end.
+
+Definition places_of_env (e:env) : list place :=
+  List.map place_of_binding (PTree.elements e).
+                                  
+
 
 (** Function entry semantics: the key is to instantiate the move environments  *)
 Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (me: mvenv) (m': mem) : Prop :=
@@ -598,7 +631,7 @@ Inductive step: state -> trace -> state -> Prop :=
     eval_rvalue le1 m1 me1 rv v me2 m2 ->
     (* allocate the block for id *)
     Mem.alloc m2 0 (sizeof ty) = (m3, b) ->
-    (* update the local env *)
+    (* uppdate the local env *)
     PTree.set id (b, ty) le1 = le2 ->
     (* update the drop obligations environment *)
     PTree.set id (drop_obligations (Plocal id ty) ty) me2 = me3 ->
@@ -610,6 +643,7 @@ Inductive step: state -> trace -> state -> Prop :=
     eval_exprlist le m me2 al tyargs vargs me3 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction tyargs tyres cconv ->
+    (** TODO: how to deal with the return value variable? Drop it before entering the function or drop it in the step_returnstate ??  *)
     step (State f (Scall optp a al) k le me1 m) E0 (Callstate vf vargs (Kcall optp f le me3 k) m)
 
          
@@ -618,11 +652,58 @@ Inductive step: state -> trace -> state -> Prop :=
     PTree.get id le1 = Some (b, ty) ->
     (* free {*id, **id, ...} if necessary *)
     drop_place le1 me1 (Plocal id ty) m1 m2 ->
-    (* free the block [b] *)
+    (* free the block [b] of the local variable *)
     Mem.free m2 b 0 (sizeof ty) = Some m3 ->
-    (* clear [id] in the local env and move env. Is it necessary ? *)
+    (* clear [id] in the local env and move env. It is necessary for the memory deallocation in return state *)
     PTree.remove id le1 = le2 ->
     PTree.remove id me1 = me2 ->
-    step (State f Sskip (Klet id k) le1 me1 m1) E0 (State f Sskip k le2 me2 m3).
+    step (State f Sskip (Klet id k) le1 me1 m1) E0 (State f Sskip k le2 me2 m3)
 
-(** TODO: define the step_function_entry and step_return  *)
+| step_internal_function: forall vf f vargs k m e me m'
+    (FIND: Genv.find_funct ge vf = Some (AST.Internal f)),
+    function_entry ge f vargs m e me m' ->
+    step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e me m')
+
+(** Return cases  *)
+| step_return_0: forall e me lp lb m1 m2 m3 f k ,
+    (* Q1: if there is a drop obligations list {*p ...} but the type
+    of p is [&mut Box<T>]. Do we need to drop *p ? Although we need to
+    drop [*p] then [*p] is reassign but I don't think it is correct to
+    drop *p when at the function return *)
+    places_of_env e = lp ->
+    (* drop the lived drop obligations *)
+    drop_place_list e me m1 lp m2 ->
+    blocks_of_env e = lb ->
+    (* drop the stack blocks *)
+    Mem.free_list m2 lb = Some m3 ->    
+    step (State f (Sreturn None) k e me m1) E0 (Returnstate Vundef (call_cont k) m3)
+
+| step_return_1: forall e a v me0 me lp lb m1 m2 m3 f k ,
+    eval_expr e m1 me0 a v me ->
+    places_of_env e = lp ->
+    drop_place_list e me m1 lp m2 ->
+    blocks_of_env e = lb ->
+    Mem.free_list m2 lb = Some m3 ->
+    step (State f (Sreturn (Some a)) k e me m1) E0 (Returnstate v (call_cont k) m3)
+
+(* no return statement but reach the end of the function *)
+| step_skip_call: forall e me lp lb m1 m2 m3 f k,
+    is_call_cont k ->
+    places_of_env e = lp ->
+    drop_place_list e me m1 lp m2 ->
+    blocks_of_env e = lb ->
+    Mem.free_list m2 lb = Some m3 ->
+    step (State f Sskip k e me m1) E0 (Returnstate Vundef (call_cont k) m3).
+
+| step_returnstate_0: forall,
+    (** TODO: in clight, the return value is stored to a temporary variable. How to do in rust? *)
+    typeof_place p = ty ->
+    typeof_rvalue rv = ty ->             (* just forbid type casting *)
+    not_owned_type ty = false ->
+    (* get the location of the place *)
+    eval_place le m1 p b ofs ->
+
+    (* Note that we need to consider updating the move environment *)
+    step (Returnstate v (Kcall (Some p) f e me k) m) (State f Sskip k e me m')
+.
+
