@@ -37,7 +37,11 @@ with typelist : Type :=
   | Tcons: type -> typelist -> typelist.
 
 
-(** ** Place (Lvalue)  *)
+(** ** Place (used to build lvalue expression) *)
+
+(* Q: Is place the unit of drop operation? It is the root of partial
+move. Can we just use identity? Because this can let us get away from
+partial move *)
 
 Inductive place : Type :=
 | Plocal : ident -> type -> place
@@ -53,15 +57,15 @@ Definition typeof_place p :=
 
 Inductive expr : Type :=
 | Econst_int: int -> type -> expr       (**r integer literal *)
-| Eplace: usekind -> place -> type -> expr (**r use of a variable *)
+| Eplace: usekind -> place -> type -> expr (**r use of a variable, the only lvalue expression *)
 | Eref: mutkind -> place -> type -> expr         (**r reference operator ([& mut?]) *)
 | Eunop: unary_operation -> expr -> type -> expr  (**r unary operation *)
 | Ebinop: binary_operation -> expr -> expr -> type -> expr. (**r binary operation *)
 
-(* evaluate an expr has no side effect. But evaluate an rvalue has side effect *)
-Inductive rvalue : Type :=
-| Rexpr: expr -> rvalue
-| Rbox: rvalue -> rvalue.
+(* evaluate an expr has no side effect. But evaluate a boxexpr may allocate a new block *)
+Inductive boxexpr : Type :=
+| Bexpr: expr -> boxexpr
+| Box: boxexpr -> boxexpr.
 
 
 Definition typeof (e: expr) : type :=
@@ -73,10 +77,10 @@ Definition typeof (e: expr) : type :=
   | Ebinop _ _ _ ty => ty
   end.
 
-Fixpoint typeof_rvalue (r: rvalue) : type :=
+Fixpoint typeof_boxexpr (r: boxexpr) : type :=
   match r with
-  | Rexpr e => typeof e
-  | Rbox r' => Tbox (typeof_rvalue r')
+  | Bexpr e => typeof e
+  | Box r' => Tbox (typeof_boxexpr r')
   end.
 
 (* what Tbox corresponds to? *)
@@ -134,8 +138,8 @@ Definition deref_type (ty: type) : option type :=
 
 Inductive statement : Type :=
   | Sskip : statement                   (**r do nothing *)
-  | Slet : ident -> type -> rvalue -> statement -> statement (**r let ident: type = rvalue in *)
-  | Sassign : place -> rvalue -> statement (**r assignment [place = rvalue] *)
+  | Slet : ident -> type -> boxexpr -> statement -> statement (**r let ident: type = rvalue in *)
+  | Sassign : place -> boxexpr -> statement (**r assignment [place = rvalue] *)
   | Scall: option ident -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
   | Ssequence : statement -> statement -> statement  (**r sequence *)
   | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
@@ -317,6 +321,22 @@ Definition erase_move_paths (me: mvenv) (p: place) : option mvenv :=
   | None => None
   end.
 
+Definition updated_move_env (me: mvenv) (op: option place) (ty: type) : option mvenv :=
+  match op, ty with
+  | Some p, Tbox _ => erase_move_paths me p
+  | _, _ => Some me
+  end.
+
+Fixpoint updated_move_env_list (me: mvenv) (opl: list (option place)) (tyl: typelist) : option mvenv :=
+  match opl, tyl with
+  | op::opl', Tcons ty tyl' =>
+      match updated_move_env me op ty with
+      | Some me' => updated_move_env_list me' opl' tyl'
+      | None => None
+      end
+  | _,_ => None
+  end.
+  
 (** If [p:Box<ty>] then p can be moved; If [*p:Box<ty>] and [p:Box<..>] then *p can be moved *)
 Definition legal_move (p: place) : bool :=
   match p with
@@ -351,6 +371,7 @@ Section EXPR.
 Variable e: env.
 Variable m: mem.
 
+(* similar to eval_lvalue in Clight.v *)
 Inductive eval_place : place -> block -> ptrofs -> Prop :=
 | eval_Plocal: forall id l ty,
     e!id = Some (l, ty) ->
@@ -360,16 +381,19 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     deref_loc ty m l ofs (Vptr l' ofs') ->
     eval_place (Pderef p ty) l' ofs'.
 
-(* side effect: it may change the move environment when evaluating Eplace *)
-Inductive eval_expr (me: mvenv) : expr -> val -> mvenv -> Prop :=
+(* eval_expr would produce a pair (v, op). Here [op] has type [Option
+place], if [op] is equal to [Some p], it means that this expression is
+a xvalue expression and the [p] is the place to be moved from.  *)
+
+Inductive eval_expr : expr -> val -> option place ->  Prop :=
 | eval_Econst_int:   forall i ty,
-    eval_expr me (Econst_int i ty) (Vint i) me
-| eval_Eunop:  forall op a ty v1 v aty me',
-    eval_expr me a v1 me' ->
+    eval_expr (Econst_int i ty) (Vint i) None
+| eval_Eunop:  forall op a ty v1 v aty mp,
+    eval_expr a v1 mp ->
     (* Note that to_ctype Tbox = None *)
     to_ctype (typeof a) = Some aty ->
     sem_unary_operation op v1 aty m = Some v ->
-    eval_expr me (Eunop op a ty) v me'
+    eval_expr (Eunop op a ty) v mp
 (* undecided global environment *)
 (** TODO: remove the composite_env in sem_binary_operation *)
 (* | eval_Ebinop: forall op a1 a2 ty v1 v2 v ty1 ty2, *)
@@ -382,39 +406,40 @@ Inductive eval_expr (me: mvenv) : expr -> val -> mvenv -> Prop :=
 | eval_Eplace_copy: forall p b ofs ty m v,
     eval_place p b ofs ->
     deref_loc ty m b ofs v ->
-    eval_expr me (Eplace Copy p ty) v me
-| eval_Eplace_move: forall p b ofs ty m v me',
+    eval_expr (Eplace Copy p ty) v None
+| eval_Eplace_move: forall p b ofs ty m v,
     eval_place p b ofs ->
     deref_loc ty m b ofs v ->
-    (* Before move out a place, we should ensure that it is legal to move it *)
-    legal_move p = true ->
-    (* erase {p, *p, **p, ...} in the move env because after being
-    moved out, [p] no longer owns the location it points to *)
-    erase_move_paths me p = Some me' ->
-    eval_expr me (Eplace Move p ty) v me'
+    (* Old design: clear the move environment in the evaluation of expression
+    (* (* Before move out a place, we should ensure that it is legal to move it *) *)
+    (* legal_move p = true -> *)
+    (* (* erase {p, *p, **p, ...} in the move env because after being *)
+    (* moved out, [p] no longer owns the location it points to *) *)
+    (* erase_move_paths me p = Some me' -> *) *)
+    eval_expr (Eplace Move p ty) v (Some p)
 | eval_Eref: forall p b ofs mut ty,
     eval_place p b ofs ->
-    eval_expr me (Eplace mut p ty) (Vptr b ofs) me.
+    eval_expr (Eplace mut p ty) (Vptr b ofs) None.
 
-Inductive eval_exprlist (me: mvenv) : list expr -> typelist -> list val -> mvenv -> Prop :=
+Inductive eval_exprlist : list expr -> typelist -> list val -> list (option place) -> Prop :=
 | eval_Enil:
-  eval_exprlist me nil Tnil nil me
-| eval_Econs:   forall a bl ty tyl v1 v2 vl me' me'',
+  eval_exprlist nil Tnil nil nil
+| eval_Econs:   forall a bl ty tyl v1 v2 vl op opl,
     (* For now, we does not allow type cast *)
     typeof a = ty ->
-    eval_expr me a v1 me' ->
+    eval_expr a v1 op ->
     (* sem_cast v1 (typeof a) ty m = Some v2 -> *) 
-    eval_exprlist me' bl tyl vl me'' ->
-    eval_exprlist me (a :: bl) (Tcons ty tyl) (v2 :: vl) me''.
+    eval_exprlist bl tyl vl opl ->
+    eval_exprlist (a :: bl) (Tcons ty tyl) (v2 :: vl) (op :: opl).
 
-Inductive eval_rvalue (me: mvenv) : rvalue -> val -> mvenv -> mem -> Prop :=
-| eval_Rexpr: forall e v me',
-    eval_expr me e v me' ->
-    eval_rvalue me (Rexpr e) v me' m
-| eval_Rbox: forall r v me' me'' m' m'' b,
-    eval_rvalue me r v me' m' ->
-    Mem.alloc m' 0 (sizeof (typeof_rvalue r)) = (m'', b) ->
-    eval_rvalue me (Rbox r) (Vptr b Ptrofs.zero) me'' m''.
+Inductive eval_boxexpr : boxexpr -> val -> option place -> mem -> Prop :=
+| eval_Rexpr: forall e v op,
+    eval_expr e v op ->
+    eval_boxexpr (Bexpr e) v op m
+| eval_Rbox: forall r v op m' m'' b,
+    eval_boxexpr r v op m' ->
+    Mem.alloc m' 0 (sizeof (typeof_boxexpr r)) = (m'', b) ->
+    eval_boxexpr (Box r) (Vptr b Ptrofs.zero) op m''.
 
 
 End EXPR.
@@ -598,31 +623,35 @@ Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e:
     alloc_variables empty_env empty_mvenv m f.(fn_params) e me m1 ->
     bind_parameters e m1 f.(fn_params) vargs m' ->
     function_entry ge f vargs m e me m'.
-
+ 
 Section WITH_GE.
 
 Variable ge: genv.
 
 Inductive step: state -> trace -> state -> Prop :=
 
-| step_assign: forall f rv p k le me me' m1 m2 m3 m4 b ofs ty v,
+| step_assign: forall f be p op k le me me' m1 m2 m3 m4 b ofs ty v,
     typeof_place p = ty ->
-    typeof_rvalue rv = ty ->             (* just forbid type casting *)
-    not_owned_type ty = false ->
+    typeof_boxexpr be = ty ->             (* for now, just forbid type casting *)
     (* get the location of the place *)
     eval_place le m1 p b ofs ->
-    (* evaluate the rvalue, updated the move env and memory (for Box) *)
-    eval_rvalue le m1 me rv v me' m2 ->
+    (* evaluate the boxexpr, return the value and the moved place (optional) *)
+    eval_boxexpr le m1 be v op m2 ->
+    (* update the move environment based on [op] and [ty] *)
+    updated_move_env me op ty = Some me' ->
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
-    owned type, drop_place has no effect *)
+    owned type, drop_place has no effect. We must first update the me
+    and then drop p, consider [ *p=move *p ] *)
     drop_place le me' p m2 m3 ->
     (* assign to p  *)    
     assign_loc ty m3 b ofs v m4 ->
-    step (State f (Sassign p rv) k le me m1) E0 (State f Sskip k le me' m4)
+    step (State f (Sassign p be) k le me m1) E0 (State f Sskip k le me' m4)
          
-| step_let: forall f rv v ty id me1 me2 me3 m1 m2 m3 m4 le1 le2 b k stmt,
-    typeof_rvalue rv = ty ->
-    eval_rvalue le1 m1 me1 rv v me2 m2 ->
+| step_let: forall f be op v ty id me1 me2 me3 m1 m2 m3 m4 le1 le2 b k stmt,
+    typeof_boxexpr be = ty ->
+    eval_boxexpr le1 m1 be v op m2 ->
+    (* update the move environment *)
+    updated_move_env me1 op ty = Some me2 ->
     (* allocate the block for id *)
     Mem.alloc m2 0 (sizeof ty) = (m3, b) ->
     (* uppdate the local env *)
@@ -631,26 +660,30 @@ Inductive step: state -> trace -> state -> Prop :=
     PTree.set id (drop_obligations (Plocal id ty) ty) me2 = me3 ->
     (* assign [v] to [b] *)
     assign_loc ty m3 b Ptrofs.zero v m4 ->
-    step (State f (Slet id ty rv stmt) k le1 me1 m1) E0 (State f stmt (Klet id k) le2 me3 m4)
+    step (State f (Slet id ty be stmt) k le1 me1 m1) E0 (State f stmt (Klet id k) le2 me3 m4)
          
-| step_call_0: forall f a al k le me1 me2 me3 m vargs tyargs vf fd cconv tyres,
+| step_call_0: forall f a al optlp k le me1 me2 m vargs tyargs vf fd cconv tyres,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr le m me1 a vf me2 ->
-    eval_exprlist le m me2 al tyargs vargs me3 ->
+    eval_expr le m a vf None ->
+    eval_exprlist le m al tyargs vargs optlp ->
+    (* CHECKME: update the move environment *)
+    updated_move_env_list me1 optlp tyargs = Some me2 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction tyargs tyres cconv ->
-    step (State f (Scall None a al) k le me1 m) E0 (Callstate vf vargs (Kcall None f le me3 k) m)         
-| step_call_1: forall f a al k le le' me1 me2 me3 me4 m m' b vargs tyargs vf fd cconv tyres id,
+    step (State f (Scall None a al) k le me1 m) E0 (Callstate vf vargs (Kcall None f le me2 k) m)         
+| step_call_1: forall f a al optlp k le le' me1 me2 me3 m m' b vargs tyargs vf fd cconv tyres id,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr le m me1 a vf me2 ->
-    eval_exprlist le m me2 al tyargs vargs me3 ->
+    eval_expr le m a vf None ->
+    eval_exprlist le m al tyargs vargs optlp ->
+    (* CHECKME: update the move environment *)
+    updated_move_env_list me1 optlp tyargs = Some me2 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction tyargs tyres cconv ->
     (* allocate memory block and update the env/mvenv for id, just like step_let *)
     Mem.alloc m 0 (sizeof tyres) = (m', b) ->
     PTree.set id (b, tyres) le = le' ->
-    PTree.set id (drop_obligations (Plocal id tyres) tyres) me3 = me4 ->
-    step (State f (Scall (Some id) a al) k le me1 m) E0 (Callstate vf vargs (Kcall (Some id) f le' me4 k) m')
+    PTree.set id (drop_obligations (Plocal id tyres) tyres) me2 = me3 ->
+    step (State f (Scall (Some id) a al) k le me1 m) E0 (Callstate vf vargs (Kcall (Some id) f le' me3 k) m')
                  
 (* End of a let statement, free the place and its drop obligations *)
 | step_end_let: forall f id k le1 le2 me1 me2 m1 m2 m3 ty b,
@@ -682,13 +715,17 @@ Inductive step: state -> trace -> state -> Prop :=
     (* drop the stack blocks *)
     Mem.free_list m2 lb = Some m3 ->    
     step (State f (Sreturn None) k e me m1) E0 (Returnstate Vundef (call_cont k) m3)
-| step_return_1: forall e a v me0 me lp lb m1 m2 m3 f k ,
-    eval_expr e m1 me0 a v me ->
-    places_of_env e = lp ->
-    drop_place_list e me m1 lp m2 ->
-    blocks_of_env e = lb ->
+| step_return_1: forall le a v op me me' lp lb m1 m2 m3 f k ,
+    eval_expr le m1 a v op ->
+    (* CHECKME: update move environment, because some place may be
+    moved out to the callee *)
+    updated_move_env me op (typeof a) = Some me' ->
+    places_of_env le = lp ->
+    drop_place_list le me' m1 lp m2 ->
+    (* drop the stack blocks *)
+    blocks_of_env le = lb ->
     Mem.free_list m2 lb = Some m3 ->
-    step (State f (Sreturn (Some a)) k e me m1) E0 (Returnstate v (call_cont k) m3)
+    step (State f (Sreturn (Some a)) k le me m1) E0 (Returnstate v (call_cont k) m3)
 (* no return statement but reach the end of the function *)
 | step_skip_call: forall e me lp lb m1 m2 m3 f k,
     is_call_cont k ->
@@ -721,7 +758,8 @@ Inductive step: state -> trace -> state -> Prop :=
     step (State f Sbreak (Kseq s k) e me m)
       E0 (State f Sbreak k e me m)
 | step_ifthenelse:  forall f a s1 s2 k e me me' m v1 b ty,
-    eval_expr e m me a v1 me' ->
+    (* there is no receiver for the moved place, so it must be None *)
+    eval_expr e m a v1 None ->
     to_ctype (typeof a) = Some ty ->
     bool_val v1 ty m = Some b ->
     step (State f (Sifthenelse a s1 s2) k e me m)
