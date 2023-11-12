@@ -2522,39 +2522,35 @@ Proof.
       -- intros [ ]. congruence.
       -- generalize (sizeof_pos (prog_comp_env prog) (typeof a1)). intro.
          rewrite <- SIZE in H17. extlia.
-    + subst v0 v1 m'0 m'1. inv H3. inv H7.
-      rewrite <- Hw in *.
+    + subst v0 v1 m'0 m'1. inversion H3; inversion H7; try congruence.
+      rewrite <- Hw in *. subst. inv H8.
       unfold Mem.storev in *.
       eapply Mem.unchanged_on_implies.
       eapply store_unchanged_on_1; eauto.
-      intros. destruct H7. apply Mem.out_of_reach_reverse in H26.
+      intros. destruct H4. apply Mem.out_of_reach_reverse in H19.
       destruct (eq_block b tb).
       -- subst b.
          intros [Z1 Z2]. inversion F. subst b1 ofs1 b2 ofs2.
          destruct (f0 loc) as [[tb' delta']|] eqn: Hf0loc.
-         ++ admit.
-           (*(* f0 = Some, proof the perm *)
+         ++ 
+           (* f0 = Some, proof the perm *)
            apply H15 in Hf0loc as Hj.
-           rewrite H30 in Hj. inversion Hj. subst tb' delta'. clear Hj.
-           apply H26. red.
+           rewrite H25 in Hj. inversion Hj. subst tb' delta'. clear Hj.
+           apply H19. red.
            exists loc,delta. split. auto.
            apply H11.
            eapply Mem.valid_block_inject_1; eauto.
-           apply Mem.store_valid_access_3 in H21 as VALID.
+           apply Mem.store_valid_access_3 in H37 as VALID.
            destruct VALID as [RANGE ALIGN]. red in RANGE.
            exploit RANGE. instantiate (1:=Ptrofs.unsigned ofs). lia.
            intros PERM0.
            inversion Hm'1.
            exploit mi_representable; eauto. left. eauto with mem.
            intro RANGE1.
-           exploit RANGE.
-           2:{ instantiate (1:= ofs0 - delta).  admit. }
-
+           exploit RANGE. 2: eauto with mem.
            subst tofs.
            clear - RANGE1 Z2. destruct RANGE1.
-           rewrite <- representable_ofs_range_offset in Z2. lia.
-           }
-*)
+           rewrite <- representable_ofs_range_offset in Z2; lia.
          ++  exploit H16; eauto. intros [Z3 Z4].
              congruence.
       -- intros [Z1 Z2]. congruence.
@@ -2840,7 +2836,7 @@ Proof.
   apply plus_one. econstructor.
   econstructor; eauto with compat.
   eapply match_envs_set_opttemp; eauto.
-Admitted. 
+Qed.
 
 Lemma initial_states_simulation:
   forall q1 q2 S, match_query (cc_c injp) w q1 q2 -> initial_state ge q1 S ->
