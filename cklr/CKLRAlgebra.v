@@ -232,7 +232,7 @@ Proof.
     split; constructor; eauto.
   - intros r1 r3 (r2 & H12 & H23).
     destruct H12; inv H23.
-    assert (sz0 = sz) by omega; subst.
+    assert (sz0 = sz) by lia; subst.
     constructor.
     apply ptr_inject_compose.
     eexists; split; eauto.

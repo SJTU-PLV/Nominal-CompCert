@@ -136,7 +136,7 @@ Proof.
   + eapply alignof_blockcopy_1248.
   + eapply sizeof_alignof_blockcopy_compat.
   + eapply Hperm.
-    omega.
+    lia.
 Qed.
 
 Global Instance assign_loc_match R:
@@ -166,7 +166,7 @@ Proof.
         * eapply Mem.storebytes_range_perm; eauto.
         * erewrite (Mem.loadbytes_length m1) by eauto.
           apply Z2Nat.id.
-          omega.
+          lia.
       + constructor.
     }
     assert
@@ -192,12 +192,12 @@ Proof.
       {
         rewrite Hsz.
         right.
-        omega.
+        lia.
       }
       assert (Hsz' : sizeof ce ty > 0).
       {
         pose proof (sizeof_pos ce ty).
-        omega.
+        lia.
       }
       inv Hptr.
       inv H7.
@@ -210,9 +210,9 @@ Proof.
         eapply Mem.perm_cur_max.
         eapply H5; eauto.
       * eapply H5; eauto.
-        omega.
+        lia.
       * eapply H6; eauto.
-        omega.
+        lia.
     + eassumption.
     + eassumption.
     + rauto.
@@ -738,7 +738,7 @@ Proof.
 Qed.
 
 Global Instance step1_rel_params:
-  Params (@step1) 3.
+  Params (@step1) 3 := {}.
 
 Global Instance step2_rel R:
   Monotonic
@@ -749,7 +749,7 @@ Proof.
 Qed.
 
 Global Instance step2_rel_params:
-  Params (@step2) 3.
+  Params (@step2) 3 := {}.
 
 End PROG.
 

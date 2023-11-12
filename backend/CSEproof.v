@@ -1346,9 +1346,11 @@ Proof.
   intros (tf & FIND & TFD).
   exists (Callstate nil vf2 vargs2 m2); repeat apply conj.
   - setoid_rewrite <- (sig_preserved (romem_for prog) (Internal f)); eauto.
-    monadInv TFD. constructor; auto. rewrite H3. eauto.
-  - cbn in *. econstructor; eauto. constructor.  rewrite H0. reflexivity.
-  - eapply sound_memory_ro_sound_state; eauto. inversion GE. eauto.
+    monadInv TFD. constructor; auto.
+  - rewrite <- H0 in *. cbn in *. econstructor. 4: { instantiate (1:= Hm). rewrite <- H0. reflexivity. }
+    constructor. eauto. eauto.
+  - rewrite <- H0 in *. cbn in *.
+    eapply sound_memory_ro_sound_state; eauto. inversion GE. eauto.
 Qed.
 
 Lemma transf_final_states:

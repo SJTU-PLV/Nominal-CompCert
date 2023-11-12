@@ -108,7 +108,7 @@ Inductive ptr_inject (f: meminj): relation (block * Z) :=
     f b1 = Some (b2, delta) ->
     ptr_inject f (b1, ofs1) (b2, ofs1 + delta).
 
-Hint Constructors ptr_inject.
+Hint Constructors ptr_inject : core.
 
 Global Instance ptr_inject_incr:
   Monotonic (@ptr_inject) (inject_incr ++> subrel).
@@ -129,7 +129,7 @@ Inductive ptrbits_inject (f: meminj): relation (block * ptrofs) :=
     f b1 = Some (b2, delta) ->
     ptrbits_inject f (b1, ofs1) (b2, Ptrofs.add ofs1 (Ptrofs.repr delta)).
 
-Hint Constructors ptrbits_inject.
+Hint Constructors ptrbits_inject : core.
 
 Global Instance ptrbits_inject_incr:
   Monotonic (@ptrbits_inject) (inject_incr ++> subrel).
@@ -171,7 +171,7 @@ Inductive ptrrange_inject (f: meminj): relation (block * Z * Z) :=
       (ptr_inject f (b1, ofs1) (b2, ofs2))
       (ptrrange_inject f) (b1, ofs1, ofs1+sz) (b2, ofs2, ofs2+sz).
 
-Hint Constructors ptrrange_inject.
+Hint Constructors ptrrange_inject : core.
 Global Existing Instance ptrrange_inject_intro.
 
 Global Instance ptrrange_inject_incr:
@@ -199,8 +199,8 @@ Definition block_inject (f: meminj) b1 b2 :=
 Definition block_inject_sameofs (f: meminj) b1 b2 :=
   f b1 = Some (b2, 0%Z).
 
-Hint Unfold block_inject.
-Hint Unfold block_inject_sameofs.
+Hint Unfold block_inject : core.
+Hint Unfold block_inject_sameofs : core.
 
 Global Instance block_inject_incr:
   Monotonic (@block_inject) (inject_incr ++> subrel).
@@ -300,8 +300,8 @@ Lemma ptr_ptrrange_inject f b1 lo1 hi1 b2 lo2 hi2:
     (ptrrange_inject f) (b1, lo1, hi1) (b2, lo2, hi2).
 Proof.
   intros [Hlo Hhi].
-  replace hi1 with (lo1 + (hi1 - lo1))%Z by omega.
-  replace hi2 with (lo2 + (hi1 - lo1))%Z by omega.
+  replace hi1 with (lo1 + (hi1 - lo1))%Z by lia.
+  replace hi2 with (lo2 + (hi1 - lo1))%Z by lia.
   constructor; eauto.
 Qed.
 
@@ -321,7 +321,7 @@ Lemma ptr_block_sameofs_inject f b1 b2 ofs:
   block_inject_sameofs f b1 b2.
 Proof.
   inversion 1.
-  assert (delta = 0) by omega.
+  assert (delta = 0) by lia.
   red.
   congruence.
 Qed.
@@ -396,7 +396,7 @@ Proof.
   intros [delta H].
   exists (lo1 + delta)%Z, ((lo1 + delta) + (hi1 - lo1))%Z.
   pattern hi1 at 1.
-  replace hi1 with (lo1 + (hi1 - lo1))%Z by omega.
+  replace hi1 with (lo1 + (hi1 - lo1))%Z by lia.
   constructor.
   constructor.
   assumption.
@@ -413,7 +413,7 @@ Proof.
   red in Hb.
   destruct Hofs.
   pattern ofs1 at 2.
-  replace ofs1 with (ofs1 + 0)%Z by omega.
+  replace ofs1 with (ofs1 + 0)%Z by lia.
   constructor; eauto.
 Qed.
 
@@ -558,8 +558,8 @@ Lemma ptrrange_inject_shift f b1 ofs1 sz1 b2 ofs2 sz2 delta:
   ptrrange_inject f (b1, ofs1 + delta, sz1)%Z (b2, ofs2 + delta, sz2)%Z.
 Proof.
   inversion 1; subst.
-  replace (ofs1 + sz)%Z with ((ofs1 + delta) + (sz - delta))%Z by omega.
-  replace (ofs2 + sz)%Z with ((ofs2 + delta) + (sz - delta))%Z by omega.
+  replace (ofs1 + sz)%Z with ((ofs1 + delta) + (sz - delta))%Z by lia.
+  replace (ofs2 + sz)%Z with ((ofs2 + delta) + (sz - delta))%Z by lia.
   constructor.
   eapply ptr_inject_shift; eauto.
 Qed.
@@ -678,7 +678,7 @@ Qed.
 (** ** Interpretation as a boolean *)
 
 Global Instance val_bool_of_val_inject f:
-  Monotonic (@Val.bool_of_val) (Val.inject f ++> set_le Bool.leb).
+  Monotonic (@Val.bool_of_val) (Val.inject f ++> set_le Bool.le).
 Proof.
   intros v1 v2 Hv b1 Hb1.
   destruct Hb1. inv Hv. eexists. split; [constructor|].

@@ -178,9 +178,9 @@ Record cklr :=
 Global Existing Instance cklr_kf.
 Global Existing Instance acc_preorder.
 Global Existing Instance mi_acc.
-Global Instance mi_acc_params: Params (@mi) 2.
+Global Instance mi_acc_params: Params (@mi) 2 := {}.
 Global Existing Instance match_stbls_acc.
-Global Instance match_stbls_params: Params (@match_stbls) 3.
+Global Instance match_stbls_params: Params (@match_stbls) 3 := {}.
 
 Global Existing Instances cklr_alloc.
 Local Existing Instances cklr_free.
@@ -331,7 +331,7 @@ Proof.
   repeat rstep.
   eapply ptrbits_ptr_inject; eauto.
   eapply Mem.load_valid_access; eauto.
-  generalize (size_chunk_pos a); omega.
+  generalize (size_chunk_pos a); lia.
 Qed.
 
 Global Instance cklr_storev R:
@@ -348,7 +348,7 @@ Proof.
   repeat rstep.
   eapply ptrbits_ptr_inject; eauto.
   eapply Mem.store_valid_access_3; eauto.
-  generalize (size_chunk_pos a); omega.
+  generalize (size_chunk_pos a); lia.
 Qed.
 
 (** Maybe it's possible to prove [cklr_storebytes] from [cklr_store]
@@ -376,7 +376,7 @@ Qed.
 Local Instance mem_valid_pointer_match R w:
   Monotonic
     (@Mem.valid_pointer)
-    (match_mem R w ++> % ptr_inject (mi R w) ++> Bool.leb).
+    (match_mem R w ++> % ptr_inject (mi R w) ++> Bool.le).
 Proof.
   intros m1 m2 Hm [b1 ofs1] [b2 ofs2] Hp.
   simpl.
@@ -389,7 +389,7 @@ Qed.
 Local Instance mem_weak_valid_pointer_match R w:
   Monotonic
     (@Mem.weak_valid_pointer)
-    (match_mem R w ++> % ptr_inject (mi R w) ++> Bool.leb).
+    (match_mem R w ++> % ptr_inject (mi R w) ++> Bool.le).
 Proof.
   intros m1 m2 Hm [b1 ofs1] [b2 ofs2] Hp.
   simpl.
@@ -491,7 +491,7 @@ Qed.
 Global Instance valid_pointer_match R w:
   Monotonic
     (@Mem.valid_pointer)
-    (match_mem R w ++> % rptr_inject (mi R w) ++> Bool.leb).
+    (match_mem R w ++> % rptr_inject (mi R w) ++> Bool.le).
 Proof.
   intros m1 m2 Hm [b1 ofs1] [b2 ofs2] Hptr.
   simpl.
@@ -507,7 +507,7 @@ Qed.
 Global Instance weak_valid_pointer_match R w:
   Monotonic
     (@Mem.weak_valid_pointer)
-    (match_mem R w ++> % rptr_inject (mi R w) ++> Bool.leb).
+    (match_mem R w ++> % rptr_inject (mi R w) ++> Bool.le).
 Proof.
   intros m1 m2 Hm [b1 ofs1] [b2 ofs2] Hptr.
   simpl.
@@ -523,7 +523,7 @@ Global Instance valid_pointer_weaken_match R w:
   Related
     (@Mem.valid_pointer)
     (@Mem.weak_valid_pointer)
-    (match_mem R w ++> % rptr_inject (mi R w) ++> Bool.leb).
+    (match_mem R w ++> % rptr_inject (mi R w) ++> Bool.le).
 Proof.
   intros m1 m2 Hm [b1 ofs1] [b2 ofs2] H.
   simpl.
@@ -617,7 +617,7 @@ Lemma Z_eqb_shift x y d:
 Proof.
   apply eq_iff_eq_true.
   repeat rewrite Z.eqb_eq.
-  omega.
+  lia.
 Qed.
 
 Lemma ptrofs_ltu_Z_ltb x y:
@@ -634,7 +634,7 @@ Lemma Z_ltb_shift x y d:
 Proof.
   apply eq_iff_eq_true.
   repeat rewrite Z.ltb_lt.
-  omega.
+  lia.
 Qed.
 
 Definition Z_cmpb c :=

@@ -18,8 +18,8 @@ Require Import AST.
 Require Import Values.
 Require Import Memory.
 Require Import LanguageInterface.
-Require Import Locations.
 Require Import CKLR.
+Require Import Locations.
 Require Export Conventions1.
 
 (** The processor-dependent and EABI-dependent definitions are in
@@ -173,7 +173,7 @@ Proof.
   pose proof Hl as Hacc. apply loc_arguments_acceptable_2 in Hacc.
   destruct l as [ | [ ]]; cbn in *; auto.
   pose proof Hl as Hbnd. apply loc_arguments_bounded in Hbnd.
-  pose proof (typesize_pos ty). red in Hsg. omega.
+  pose proof (typesize_pos ty). red in Hsg. lia.
 Qed.
 
 Lemma zero_size_arguments_tailcall_possible:

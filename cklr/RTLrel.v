@@ -141,7 +141,7 @@ Proof.
 Qed.
 
 Global Instance map_inject_list_params:
-  Params (@map) 2.
+  Params (@map) 2 := {}.
 
 
 (** The [option] equivalent of [R ++> impl]. *)
@@ -156,7 +156,7 @@ Proof.
 Qed.
 
 Global Instance option_impl_subrel_params:
-  Params (@option_impl) 3.
+  Params (@option_impl) 3 := {}.
 
 Global Instance option_impl_bot {A B} (R: rel A B) y:
   Related None y (option_impl R).

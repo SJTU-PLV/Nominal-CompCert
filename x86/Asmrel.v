@@ -140,7 +140,7 @@ Section PROG.
   Proof.
     unfold regset_inject, Pregmap.set. rauto.
   Qed.
-  Instance set_params: Params (@Pregmap.set) 4.
+  Instance set_params: Params (@Pregmap.set) 4 := {}.
 
   Global Instance get_inject R w rs1 rs2 r:
     RStep
@@ -319,16 +319,16 @@ Section PROG.
       apply block_sameofs_ptrbits_inject; split; rauto.
     - destruct (zlt 0 sz).
       + (* sz > 0 *)
-        unfold free'. repeat rewrite zlt_true by omega.
+        unfold free'. repeat rewrite zlt_true by lia.
         destruct Mem.free eqn: Hfree; try rauto.
         inv H. erewrite cklr_address_inject; eauto.
         * eapply transport in Hfree as (m' & Hfree' & Hm');
             [ | clear Hfree; repeat rstep; eauto ].
           destruct Hm' as (w' & Hw' & Hm'). rewrite Hfree'.
           exists w'. split; rauto.
-        * eapply Mem.free_range_perm in Hfree. apply Hfree. omega.
+        * eapply Mem.free_range_perm in Hfree. apply Hfree. lia.
       + (* sz <= 0 *)
-        unfold free'. repeat rewrite zlt_false by omega.
+        unfold free'. repeat rewrite zlt_false by lia.
         exists w. split; rauto.
   Qed.
 

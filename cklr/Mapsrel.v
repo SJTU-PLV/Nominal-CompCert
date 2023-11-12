@@ -23,7 +23,7 @@ Module TreeRel (T: TREE).
   Qed.
 
   Global Instance r_subrel_params:
-    Params (@r) 3.
+    Params (@r) 3 := {}.
 
   (** Note that for empty trees to be related, the source relation has
     to contain ([@None A], [@None B]). To express this, we formulate
@@ -152,7 +152,7 @@ Module MapRel (M: MAP).
   Qed.
 
   Global Instance r_subrel_params:
-    Params (@r) 3.
+    Params (@r) 3 := {}.
 
   Global Instance init_rel:
     Monotonic (@M.init) (forallr R, R ++> r R).

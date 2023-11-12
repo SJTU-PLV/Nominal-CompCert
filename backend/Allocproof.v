@@ -2481,14 +2481,16 @@ Proof.
   inversion Hqi2; clear Hqi2. subst sg. subst. inv Hst1.
   exploit functions_translated; eauto. intros [tf [FIND TR]].
   exploit sig_function_translated; eauto. intros SIG.
-  monadInv TR. subst tf. cbn in *. rewrite <- SIG.
+  monadInv TR. cbn in *. rewrite <- SIG.
   set (rs0 := initial_regs (fn_sig x) rs).
   exists (LTL.Callstate (Stackbase rs0 :: nil) vf rs0 m2).
   split; econstructor; eauto.
   - cbn. rewrite H4. constructor; auto.
-  - cbn. subst rs0. rewrite SIG. erewrite map_ext_in; eauto. clear.
-    intros p Hp. cbn. apply getpair_initial_regs; auto.
-  - intros l Hl. reflexivity.
+  - cbn. subst rs0. erewrite map_ext_in with (g:= (fun p : rpair loc => Locmap.getpair p rs)); eauto.
+    rewrite H4. eauto.
+    intros p Hp. cbn. apply getpair_initial_regs; auto. rewrite SIG. eauto.
+  - intros l Hl. simpl. reflexivity.
+  - simpl. rewrite H4. eauto.
 Qed.
 
 Lemma final_states_simulation:

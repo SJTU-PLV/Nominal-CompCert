@@ -35,7 +35,7 @@ Proof.
   apply H. auto. apply H0. apply H1. eauto. auto.
 Qed.
 
-Hint Resolve max_perm_decrease_refl max_perm_decrease_trans.
+Hint Resolve max_perm_decrease_refl max_perm_decrease_trans : core.
 
 (** In addition to the criteria in [ec_mem_inject] in Events.v, we introduce 
     [Mem.ro_unchanged] and [injp_max_perm_decrease] which correspond to 
@@ -66,7 +66,7 @@ Inductive injp_match_stbls: injp_world -> relation Genv.symtbl :=
     Mem.sup_include (Genv.genv_sup se2) (Mem.support m2) ->
     injp_match_stbls (injpw f m1 m2 Hm) se1 se2.
 
-Hint Constructors injp_match_mem injp_match_stbls.
+Hint Constructors injp_match_mem injp_match_stbls : core.
 
 (** ** Properties *)
 

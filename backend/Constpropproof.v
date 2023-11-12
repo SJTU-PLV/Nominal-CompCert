@@ -722,9 +722,11 @@ Proof.
   exists O; exists (Callstate nil vf2 vargs2 m2); repeat apply conj.
   - setoid_rewrite <- (sig_function_translated (romem_for prog) (Internal f)).
     constructor; auto.
-  - cbn in *. econstructor; eauto. constructor.  rewrite H0. reflexivity.
+  - rewrite <- H0 in *. cbn in *. econstructor. 
+    4: { instantiate (1:= Hm). rewrite <- H0. reflexivity. }
+    all : eauto. constructor.
     eapply ro_acc_refl.
-  - eapply sound_memory_ro_sound_state; eauto.
+  - rewrite <- H0 in *. cbn in *. eapply sound_memory_ro_sound_state; eauto.
     inversion GE. eauto.
 Qed.
 
@@ -778,7 +780,8 @@ Proof.
       intro. apply  H in Hinv. congruence.
       split. intro. congruence. intro. apply H in H1.
       apply Genv.find_invert_symbol in H1. cbn in *. congruence.
-      inv GE. inversion INCR. inversion H15. eauto.
+      inv GE. rewrite <- H4 in INCR.
+      inversion INCR. inversion H15. eauto.
     }
     eexists. split. constructor. constructor; eauto.
     econstructor; eauto.
@@ -794,10 +797,11 @@ Proof.
     + constructor; eauto.
     + unfold Genv.find_funct in H. destruct vf; try congruence; eauto.
   - constructor; eauto.
-  - inv GE. inversion INCR. constructor.
+  - inv GE. rewrite <- H4 in INCR. inversion INCR. constructor.
     eapply Genv.match_stbls_compose.
     eapply inj_of_bc_preserves_globals; eauto.
-    apply MSTB. inversion H15. eauto. inversion H16. eauto.
+    apply MSTB.
+    inversion H15. eauto. inversion H16. eauto.
   - inv H2. destruct H1 as (r3 & Hr1& Hr2). inv Hr1. inv H1. rename H3 into ROACC.
     destruct Hr2 as ([j' s1 s2 MEM''] & Hw' & Hr).
     inv Hw'.

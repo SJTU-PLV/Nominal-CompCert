@@ -992,7 +992,7 @@ Qed.
 
 Lemma invert_eval_builtin_arg:
   forall a v,
-  eval_builtin_arg ge sp e m a v ->
+  CminorSel.eval_builtin_arg ge sp e m a v ->
   exists vl,
      eval_exprlist ge sp e m nil (exprlist_of_expr_list (params_of_builtin_arg a)) vl
   /\ Events.eval_builtin_arg ge (fun v => v) sp m (fst (convert_builtin_arg a vl)) v
@@ -1013,7 +1013,7 @@ Qed.
 
 Lemma invert_eval_builtin_args:
   forall al vl,
-  list_forall2 (eval_builtin_arg ge sp e m) al vl ->
+  list_forall2 (CminorSel.eval_builtin_arg ge sp e m) al vl ->
   exists vl',
      eval_exprlist ge sp e m nil (exprlist_of_expr_list (params_of_builtin_args al)) vl'
   /\ Events.eval_builtin_args ge (fun v => v) sp m (convert_builtin_args al vl') vl.

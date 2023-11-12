@@ -1581,7 +1581,7 @@ Inductive val_casted_list: list val -> typelist -> Prop :=
       val_casted v1 ty1 -> val_casted_list vl tyl ->
       val_casted_list (v1 :: vl) (Tcons  ty1 tyl).
 
-Hint Constructors val_casted.
+Hint Constructors val_casted : core.
 
 Remark cast_int_int_idem:
   forall sz sg i, cast_int_int sz sg (cast_int_int sz sg i) = cast_int_int sz sg i.

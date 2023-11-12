@@ -96,8 +96,8 @@ Proof.
   destruct 1; auto.
 Qed.
 
-Hint Constructors inj_mem inj_incr.
-Hint Resolve inj_mem_inject.
+Hint Constructors inj_mem inj_incr : core.
+Hint Resolve inj_mem_inject : core.
 
 (** ** CKLR definition *)
 

@@ -1471,7 +1471,7 @@ Proof.
   - setoid_rewrite <- (sig_function_translated (romem_for prog) (Internal f)); eauto.
     monadInv TFD. constructor; auto.
   - cbn in *. econstructor; eauto.
-    constructor.  rewrite H5. eapply ro_acc_refl.
+    constructor.  eapply ro_acc_refl.
     destruct w. simpl. cbn in *. inv H9. reflexivity.
   - eapply sound_memory_ro_sound_state; eauto. inversion GE. eauto.
 Qed.

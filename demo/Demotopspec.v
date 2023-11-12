@@ -1001,7 +1001,7 @@ Proof.
   (* L_A ⊑ M_A *)
   eapply M_A_semantics_preservation.
   eapply link_result.
-  unfold compose. cbn.
+  unfold SmallstepLinking.compose. cbn.
   apply link_erase_program in H0. rewrite H0. cbn. f_equal. f_equal.
   apply Axioms.functional_extensionality. intros [|]; auto.
 Qed.

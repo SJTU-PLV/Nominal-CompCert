@@ -6,10 +6,11 @@ The compiler is based on CompCertO and CompCert v3.10. You can find the user man
 CompCert [here](http://compcert.inria.fr/man/).
 
 The development is known to compile with the following software:
-- Menhir v.20201216
-- Coq v8.9.1
-- OCaml v4.08.1
+- Menhir v.20220210
+- Coq v8.12.0
+- OCaml v4.10.1
 
+========================================== NOT UPDATED BELOW
 ## Instructions for compiling
 
 We recommend using the `opam` package manager to set up a build environment. 

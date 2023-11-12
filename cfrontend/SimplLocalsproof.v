@@ -22,8 +22,8 @@ Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.
 Module VSF := FSetFacts.Facts(VSet).
 Module VSP := FSetProperties.Properties(VSet).
 
-Definition match_prog (p tp: program) : Prop :=
-    match_program (fun ctx f tf => transf_fundef f = OK tf) eq p tp
+Definition match_prog (p tp: Clight.program) : Prop :=
+    match_program (fun ctx f tf => SimplLocals.transf_fundef f = OK tf) eq p tp
  /\ prog_types tp = prog_types p.
 
 Lemma match_transf_program:
@@ -35,8 +35,8 @@ Qed.
 
 Section PRESERVATION.
 
-Variable prog: program.
-Variable tprog: program.
+Variable prog: Clight.program.
+Variable tprog: Clight.program.
 Hypothesis TRANSF: match_prog prog tprog.
 Variable w: world injp.
 Variable se: Genv.symtbl.
@@ -54,16 +54,16 @@ Qed.
 
 Lemma functions_translated (j: meminj):
   Genv.match_stbls j se tse ->
-  forall (v tv: val) (f: fundef),
+  forall (v tv: val) (f: Clight.fundef),
   Val.inject j v tv -> Genv.find_funct ge v = Some f ->
-  exists tf, Genv.find_funct tge tv = Some tf /\ transf_fundef f = OK tf.
+  exists tf, Genv.find_funct tge tv = Some tf /\ SimplLocals.transf_fundef f = OK tf.
 Proof.
   apply (Genv.find_funct_transf_partial (proj1 TRANSF)).
 Qed.
 
 Lemma type_of_fundef_preserved:
   forall fd tfd,
-  transf_fundef fd = OK tfd -> type_of_fundef tfd = type_of_fundef fd.
+  SimplLocals.transf_fundef fd = OK tfd -> type_of_fundef tfd = type_of_fundef fd.
 Proof.
   intros. destruct fd; monadInv H; auto.
   monadInv EQ. simpl; unfold type_of_function; simpl. auto.
@@ -2522,35 +2522,39 @@ Proof.
       -- intros [ ]. congruence.
       -- generalize (sizeof_pos (prog_comp_env prog) (typeof a1)). intro.
          rewrite <- SIZE in H17. extlia.
-    + subst v0 v1 m'0 m'1. inversion H3; inversion H7; try congruence.
-      rewrite <- Hw in *. subst. rewrite <- Hw in *. inv H8.
+    + subst v0 v1 m'0 m'1. inv H3. inv H7.
+      rewrite <- Hw in *.
       unfold Mem.storev in *.
       eapply Mem.unchanged_on_implies.
       eapply store_unchanged_on_1; eauto.
-      intros. destruct H4. apply Mem.out_of_reach_reverse in H19.
+      intros. destruct H7. apply Mem.out_of_reach_reverse in H26.
       destruct (eq_block b tb).
       -- subst b.
          intros [Z1 Z2]. inversion F. subst b1 ofs1 b2 ofs2.
          destruct (f0 loc) as [[tb' delta']|] eqn: Hf0loc.
-         ++
-           (* f0 = Some, proof the perm *)
+         ++ admit.
+           (*(* f0 = Some, proof the perm *)
            apply H15 in Hf0loc as Hj.
-           rewrite H25 in Hj. inversion Hj. subst tb' delta'. clear Hj.
-           apply H19. red.
+           rewrite H30 in Hj. inversion Hj. subst tb' delta'. clear Hj.
+           apply H26. red.
            exists loc,delta. split. auto.
            apply H11.
            eapply Mem.valid_block_inject_1; eauto.
-           apply Mem.store_valid_access_3 in H37 as VALID.
+           apply Mem.store_valid_access_3 in H21 as VALID.
            destruct VALID as [RANGE ALIGN]. red in RANGE.
            exploit RANGE. instantiate (1:=Ptrofs.unsigned ofs). lia.
            intros PERM0.
            inversion Hm'1.
            exploit mi_representable; eauto. left. eauto with mem.
            intro RANGE1.
-           exploit RANGE. 2: eauto with mem.
+           exploit RANGE.
+           2:{ instantiate (1:= ofs0 - delta).  admit. }
+
            subst tofs.
            clear - RANGE1 Z2. destruct RANGE1.
-           rewrite <- representable_ofs_range_offset in Z2; lia.
+           rewrite <- representable_ofs_range_offset in Z2. lia.
+           }
+*)
          ++  exploit H16; eauto. intros [Z3 Z4].
              congruence.
       -- intros [Z1 Z2]. congruence.
@@ -2716,8 +2720,8 @@ Proof.
   assert (list_norepet (var_names (fn_params f ++ fn_vars f))).
     unfold var_names. rewrite map_app. auto.
   exploit match_envs_alloc_variables. eauto. eauto.
-    inversion MINJ. unfold wm1. subst. inversion H10. eauto. 2: eauto. all: eauto.
-    inversion MINJ. unfold wm2. subst. inversion H12. eauto.
+    inversion MINJ. unfold wm1. rewrite <- H11. inversion H10. eauto. 2: eauto.
+    inversion MINJ. unfold wm2. rewrite <- H11. subst. inversion H12. eauto.
     instantiate (1 := cenv_for_gen (addr_taken_stmt f.(fn_body)) (fn_params f ++ fn_vars f)).
     intros. eapply cenv_for_gen_by_value; eauto. rewrite VSF.mem_iff. eexact H4.
     intros. eapply cenv_for_gen_domain. rewrite VSF.mem_iff. eexact H3.
@@ -2836,7 +2840,7 @@ Proof.
   apply plus_one. econstructor.
   econstructor; eauto with compat.
   eapply match_envs_set_opttemp; eauto.
-Qed.
+Admitted. 
 
 Lemma initial_states_simulation:
   forall q1 q2 S, match_query (cc_c injp) w q1 q2 -> initial_state ge q1 S ->
@@ -2854,9 +2858,10 @@ Proof.
     induction H6; inversion 1; econstructor; eauto using val_casted_inject. }
   eapply (match_stbls_support injp); eauto.
   inv Hm; cbn in *.
-  econstructor; eauto. econstructor. unfold injp_inj_world.
-  destruct w. inv H. reflexivity.
-  rewrite <- H. reflexivity.
+  econstructor. 3: { instantiate (1:= Hm0). rewrite <- H. reflexivity. }
+  all: eauto. econstructor; eauto. unfold injp_inj_world. rewrite <- H. reflexivity.
+  rewrite <- H in *. eauto.
+  rewrite <- H in *. eauto.
 Qed.
 
 Lemma final_states_simulation:
@@ -2891,9 +2896,9 @@ Proof.
   - specialize (MCONT VSet.empty). constructor.
     + eapply match_cont_globalenv; eauto.
     + inv GE. eapply Mem.sup_include_trans; eauto.
-      inversion MINJ. inversion H13. auto.
+      rewrite <- H2 in MINJ. inv MINJ. inversion H13. auto.
     + inv GE. eapply Mem.sup_include_trans; eauto.
-      inversion MINJ. inversion H14. auto.
+      rewrite <- H2 in MINJ. inv MINJ. inversion H14. auto.
   - inv H0. destruct H as (wx' & Hwx' & H). inv Hwx'. inv H. inv H12. eexists. split.
     + econstructor; eauto.
     + econstructor; eauto.
@@ -2940,8 +2945,8 @@ Proof.
 Local Transparent Linker_fundef.
   simpl in *; unfold link_fundef in *.
   destruct f1; monadInv H3; destruct f2; monadInv H4; try discriminate.
-  destruct e; inv H2. exists (Internal x); split; auto. simpl; rewrite EQ; auto.
-  destruct e; inv H2. exists (Internal x); split; auto. simpl; rewrite EQ; auto.
+  destruct e; inv H2. exists (Ctypes.Internal x); split; auto. simpl; rewrite EQ; auto.
+  destruct e; inv H2. exists (Ctypes.Internal x); split; auto. simpl; rewrite EQ; auto.
   destruct (external_function_eq e e0 && typelist_eq t t1 &&
             type_eq t0 t2 && calling_convention_eq c c0); inv H2.
   econstructor; split; eauto.

@@ -20,7 +20,7 @@ Require Import Asmgen Asmgenproof0 Asmgenproof1.
 Require Import LanguageInterface CKLR Extends.
 
 Definition match_prog (p: Mach.program) (tp: Asm.program) :=
-  match_program (fun _ f tf => transf_fundef f = OK tf) eq p tp.
+  match_program (fun _ f tf => Asmgen.transf_fundef f = OK tf) eq p tp.
 
 Lemma transf_program_match:
   forall p tp, transf_program p = OK tp -> match_prog p tp.
@@ -42,7 +42,7 @@ Lemma functions_translated:
   forall vf f,
   Genv.find_funct ge vf = Some f ->
   exists b tf,
-  Genv.find_funct_ptr tge b = Some tf /\ transf_fundef f = OK tf /\ vf = Vptr b Ptrofs.zero.
+  Genv.find_funct_ptr tge b = Some tf /\ Asmgen.transf_fundef f = OK tf /\ vf = Vptr b Ptrofs.zero.
 Proof.
   intros.
   destruct vf; try discriminate. simpl in H. destruct Ptrofs.eq_dec; try discriminate; subst.
@@ -706,7 +706,7 @@ Opaque loadind.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
     simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
     rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
-    unfold free'. rewrite zlt_false by omega. eauto.
+    unfold free'. rewrite zlt_false by lia. eauto.
     apply star_one. eapply exec_step_internal.
     transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
@@ -725,7 +725,7 @@ Opaque loadind.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
     simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
     rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
-    unfold free'. rewrite zlt_true by omega. rewrite E. eauto.
+    unfold free'. rewrite zlt_true by lia. rewrite E. eauto.
     apply star_one. eapply exec_step_internal.
     transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
@@ -746,7 +746,7 @@ Opaque loadind.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
     simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
     rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
-    unfold free'. rewrite zlt_false by omega. eauto.
+    unfold free'. rewrite zlt_false by lia. eauto.
     apply star_one. eapply exec_step_internal.
     transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
@@ -762,7 +762,7 @@ Opaque loadind.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
     simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
     rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
-    unfold free'. rewrite zlt_true by omega. rewrite E. eauto.
+    unfold free'. rewrite zlt_true by lia. rewrite E. eauto.
     apply star_one. eapply exec_step_internal.
     transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
@@ -935,7 +935,7 @@ Transparent destroyed_by_jumptable.
     eapply plus_left. eapply exec_step_internal. eauto.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
     simpl. rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
-    unfold free'. rewrite zlt_false by omega. eauto.
+    unfold free'. rewrite zlt_false by lia. eauto.
     apply star_one. eapply exec_step_internal.
     transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
@@ -950,7 +950,7 @@ Transparent destroyed_by_jumptable.
     eapply plus_left. eapply exec_step_internal. eauto.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.
     simpl. rewrite C. rewrite A. rewrite <- (sp_val _ _ _ AG).
-    unfold free'. rewrite zlt_true by omega. rewrite E. eauto.
+    unfold free'. rewrite zlt_true by lia. rewrite E. eauto.
     apply star_one. eapply exec_step_internal.
     transitivity (Val.offset_ptr rs0#PC Ptrofs.one). auto. rewrite <- H3. simpl. eauto.
     eapply functions_transl; eauto. eapply find_instr_tail; eauto.

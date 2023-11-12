@@ -35,7 +35,7 @@ Qed.
 Section TRANSLATION.
 
 Variable prog: Csharpminor.program.
-Variable tprog: program.
+Variable tprog: Cminor.program.
 Hypothesis TRANSL: match_prog prog tprog.
 Variable w: world inj.
 Variable se: Genv.symtbl.
@@ -2188,6 +2188,7 @@ Proof.
   econstructor; split.
   econstructor; eauto.
   cbn in Hm. inv Hm; cbn in *.
+  rewrite <- H0 in *. cbn in *.
   eapply match_callstate with (f := f0) (cs := @nil frame) (cenv := PTree.empty Z); auto.
   - apply mcs_nil. rewrite H0. reflexivity.
   - constructor.
