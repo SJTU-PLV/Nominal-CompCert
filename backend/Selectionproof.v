@@ -1476,6 +1476,22 @@ Qed.
 
 End PRESERVATION.
 
+
+Lemma eventually_restrict: forall n prog se1 S P I I_inv,
+          eventually prog se1 n S P ->
+          Eventually (restrict (Cminor.semantics prog) I I I_inv se1) n S P.
+Proof.
+  induction n; intros; inv H. constructor; eauto.
+  constructor.
+  - intros. intro. eapply H1; eauto.
+    simpl in H. destruct H. eauto.
+  - intros. intro. eapply H2; eauto.
+    simpl in H. destruct H. eauto.
+  - intros. exploit H3; eauto. destruct H. eauto.
+    intros [X Y]. split. eauto.
+    eapply IHn; eauto.
+Qed.
+
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (wt_c @ cc_c ext) (wt_c @ cc_c ext)
@@ -1517,9 +1533,9 @@ Proof.
     apply eventually_and_invariant; eauto using subject_reduction, wt_prog.
     -- intros. destruct H0 as [sg H0]. cbn in H. destruct H.
        exists sg. eapply subject_reduction; eauto. eapply wt_prog. eauto.
-    -- admit.
+    -- apply eventually_restrict. eauto.
 - auto using wf_lex_ord, well_founded_ltof, lt_wf.
-Admitted.
+Qed.
 
 (** ** Commutation with linking *)
 
