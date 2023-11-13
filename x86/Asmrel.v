@@ -283,6 +283,18 @@ Section PROG.
     unfold init_nb_match. repeat rstep. eauto.
   Qed.
 
+ Instance op_maxf_rel f:
+    Monotonic Op.maxf (Val.inject f ++> Val.inject f ++> Val.inject f).
+  Proof.
+    unfold Op.maxf; rauto.
+  Qed.
+
+  Instance op_minf_rel f:
+    Monotonic Op.minf (Val.inject f ++> Val.inject f ++> Val.inject f).
+  Proof.
+    unfold Op.minf; rauto.
+  Qed.
+  
   Global Instance exec_instr_match R:
     Monotonic
       (@exec_instr)

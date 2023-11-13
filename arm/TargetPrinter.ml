@@ -24,7 +24,6 @@ open Fileinfo
 module type PRINTER_OPTIONS =
 sig
   val vfpv3: bool
-  val hardware_idiv: bool
 end
 
 (* Basic printing functions *)
@@ -150,9 +149,12 @@ struct
     | Section_data i | Section_small_data i ->
         variable_section ~sec:".data" ~bss:".bss" i
     | Section_const i | Section_small_const i ->
-        variable_section ~sec:".section	.rodata" i
-    | Section_string -> ".section	.rodata"
-    | Section_literal -> ".text"
+        variable_section
+          ~sec:".section      .rodata"
+          ~reloc:".section    .data.rel.ro,\"aw\",%progbits"
+          i
+    | Section_string _ -> ".section	.rodata"
+    | Section_literal _ -> ".text"
     | Section_jumptable -> ".text"
     | Section_user(s, wr, ex) ->
       sprintf ".section	\"%s\",\"a%s%s\",%%progbits"
@@ -208,7 +210,7 @@ struct
       fprintf oc "	adc	%a, %a, %a\n" ireg r1 ireg r2 shift_op so
     | Padd(r1, r2, so) ->
       fprintf oc "	add%s	%a, %a, %a\n"
-        (if !Clflags.option_mthumb && r2 <> IR14 then "s" else "")
+        (if !Clflags.option_mthumb && r2 <> IR13 then "s" else "")
         ireg r1 ireg r2 shift_op so
     | Padds (r1,r2,so) ->
       fprintf oc "	adds	%a, %a, %a\n" ireg r1 ireg r2 shift_op so
@@ -274,9 +276,9 @@ struct
         thumbS ireg r1 ireg r2 ireg r3
     | Pmla(r1, r2, r3, r4) ->
       fprintf oc "	mla	%a, %a, %a, %a\n" ireg r1 ireg r2 ireg r3 ireg r4
-    | Pmov(r1, (SOimm _ | SOreg _ as so)) ->
+    | Pmov(r1, SOreg reg) ->
       (* No S flag even in Thumb2 mode *)
-      fprintf oc "	mov	%a, %a\n" ireg r1 shift_op so
+      fprintf oc "	mov	%a, %a\n" ireg r1 ireg reg
     | Pmov(r1, so) ->
       fprintf oc "	mov%t	%a, %a\n" thumbS ireg r1 shift_op so
     | Pmovw(r1, n) ->
@@ -320,9 +322,9 @@ struct
       fprintf oc "	strb	%a, [%a], %a\n" ireg r1 ireg r2 shift_op sa
     | Pstrh_p(r1, r2, sa) ->
       fprintf oc "	strh	%a, [%a], %a\n" ireg r1 ireg r2 shift_op sa
-    | Psdiv ->
-      if Opt.hardware_idiv then
-        fprintf oc "	sdiv	r0, r0, r1\n"
+    | Psdiv (r, r1, r2) ->
+      if Archi.hardware_idiv () then
+        fprintf oc "	sdiv	%a, %a, %a\n" ireg r ireg r1 ireg r2
       else
         fprintf oc "	bl	__aeabi_idiv\n"
     | Psbfx(r1, r2, lsb, sz) ->
@@ -330,14 +332,15 @@ struct
     | Psmull(r1, r2, r3, r4) ->
       fprintf oc "	smull	%a, %a, %a, %a\n" ireg r1 ireg r2 ireg r3 ireg r4
     | Psub(r1, r2, so) ->
-      fprintf oc "	sub%t	%a, %a, %a\n"
-        thumbS ireg r1 ireg r2 shift_op so
+      fprintf oc "	sub%s	%a, %a, %a\n"
+        (if !Clflags.option_mthumb && r2 <> IR13 then "s" else "")
+        ireg r1 ireg r2 shift_op so
     | Psubs(r1, r2, so) ->
       fprintf oc "	subs	%a, %a, %a\n"
         ireg r1 ireg r2 shift_op so
-    | Pudiv ->
-      if Opt.hardware_idiv then
-        fprintf oc "	udiv	r0, r0, r1\n"
+    | Pudiv (r, r1, r2) ->
+      if Archi.hardware_idiv () then
+        fprintf oc "	udiv	%a, %a, %a\n" ireg r ireg r1 ireg r2
       else
          fprintf oc "	bl	__aeabi_uidiv\n"
     | Pumull(r1, r2, r3, r4) ->
@@ -529,13 +532,6 @@ struct
         ireg r1 print_label lbl comment symbol_offset (id, ofs)
 
 
-  let get_section_names name =
-    let (text, lit) =
-      match C2C.atom_sections name with
-      | t :: l :: _ -> (t, l)
-      | _    -> (Section_text, Section_literal) in
-    text,lit,Section_jumptable
-
   let print_align oc alignment =
     fprintf oc "	.balign %d\n" alignment
 
@@ -569,15 +565,6 @@ struct
     current_function_sig := fn.fn_sig;
     List.iter (print_instruction oc) fn.fn_code
 
-
-  let emit_constants oc lit =
-    if not !Constantexpand.literals_in_code && exists_constants () then begin
-      section oc lit;
-      fprintf oc "	.balign 4\n";
-      Hashtbl.iter (print_literal64 oc) literal64_labels;
-    end;
-    reset_constants ()
-
   (* Data *)
 
   let print_prologue oc =
@@ -592,7 +579,12 @@ struct
        | _ -> "armv7");
     fprintf oc "	.fpu	%s\n"
       (if Opt.vfpv3 then "vfpv3-d16" else "vfpv2");
-    fprintf oc "	.%s\n" (if !Clflags.option_mthumb then "thumb" else "arm");
+    fprintf oc "	.eabi_attribute Tag_ABI_VFP_args, %d\n"
+      (match Configuration.abi with
+       | "hardfloat" -> 1
+       | _ -> 0);
+    fprintf oc "	.%s\n"
+      (if !Clflags.option_mthumb then "thumb" else "arm");
     if !Clflags.option_g then begin
       section oc Section_text;
       cfi_section oc
@@ -613,11 +605,6 @@ let sel_target () =
   let module S : PRINTER_OPTIONS = struct
 
     let vfpv3 = Configuration.model >= "armv7"
-
-    let hardware_idiv  =
-      match  Configuration.model with
-      | "armv7r" | "armv7m" -> !Clflags.option_mthumb
-      | _ -> false
 
   end in
   (module Target(S):TARGET)

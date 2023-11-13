@@ -37,29 +37,16 @@ let _64 = coqint_of_camlint 64l
 (* No S suffix because they are applied to SP most of the time. *)
 
 let expand_movimm dst n =
-  match Asmgen.decompose_int n with
-  | [] -> assert false
-  | hd::tl->
-     emit (Pmov (dst,SOimm hd));
-     List.iter
-       (fun n -> emit (Porr (dst,dst, SOimm n))) tl
+  List.iter emit (Asmgen.loadimm dst n [])
 
 let expand_subimm dst src n =
   if dst <> src || n <> _0 then begin
-    match Asmgen.decompose_int n with
-    | [] -> assert false
-    | hd::tl ->
-       emit (Psub(dst,src,SOimm hd));
-       List.iter (fun n -> emit (Psub (dst,dst,SOimm n))) tl
+    List.iter emit (Asmgen.addimm dst src (Int.neg n) [])
   end
 
 let expand_addimm dst src n =
   if dst <> src || n <> _0 then begin
-    match Asmgen.decompose_int n with
-    | [] -> assert false
-    | hd::tl ->
-       emit (Padd (dst,src,SOimm hd));
-       List.iter (fun n -> emit (Padd (dst,dst,SOimm n))) tl
+    List.iter emit (Asmgen.addimm dst src n [])
   end
 
 let expand_int64_arith conflict rl fn =
@@ -95,10 +82,9 @@ let expand_annot_val kind txt targ args res =
 (* The ARM has strict alignment constraints for 2 and 4 byte accesses.
    8-byte accesses must be 4-aligned. *)
 
-let offset_in_range ofs =
-  let n = camlint_of_coqint ofs in n <= 128l && n >= -128l
-
 let memcpy_small_arg sz arg tmp =
+  let offset_in_range ofs =
+    let n = camlint_of_coqint ofs in n <= 128l && n >= -128l in
   match arg with
   | BA (IR r) ->
       (r, _0)
@@ -175,6 +161,22 @@ let expand_builtin_memcpy  sz al args =
 
 (* Handling of volatile reads and writes *)
 
+(* Offset checks *)
+
+let offset_in_range chunk ofs =
+  match chunk with
+  | Mint8signed | Mint16signed | Mint16unsigned  ->
+    Int.eq (Asmgen.mk_immed_mem_small ofs) ofs
+  | Mint8unsigned | Mint32 ->
+    Int.eq (Asmgen.mk_immed_mem_word ofs) ofs
+  | Mfloat32 | Mfloat64 ->
+    Int.eq (Asmgen.mk_immed_mem_float ofs) ofs
+  | Mint64 ->
+    Int.eq (Asmgen.mk_immed_mem_word ofs) ofs &&
+    Int.eq (Asmgen.mk_immed_mem_word (Int.add ofs _4)) (Int.add ofs _4)
+  | _ ->
+    assert false
+
 let expand_builtin_vload_common chunk base ofs res =
   match chunk, res with
   | Mint8unsigned, BR(IR res) ->
@@ -209,7 +211,7 @@ let expand_builtin_vload chunk args res =
   | [BA(IR addr)] ->
       expand_builtin_vload_common chunk addr _0 res
   | [BA_addrstack ofs] ->
-      if offset_in_range (Int.add ofs (Memdata.size_chunk chunk)) then
+      if offset_in_range chunk ofs then
         expand_builtin_vload_common chunk IR13 ofs res
       else begin
         expand_addimm IR14 IR13 ofs;
@@ -219,7 +221,7 @@ let expand_builtin_vload chunk args res =
       emit (Ploadsymbol (IR14,id,ofs));
       expand_builtin_vload_common chunk IR14 _0 res
   | [BA_addptr(BA(IR addr), BA_int ofs)] ->
-      if offset_in_range (Int.add ofs (Memdata.size_chunk chunk)) then
+      if offset_in_range chunk ofs then
         expand_builtin_vload_common chunk addr ofs res
       else begin
         expand_addimm IR14 addr ofs;
@@ -253,7 +255,7 @@ let expand_builtin_vstore chunk args =
   | [BA(IR addr); src] ->
       expand_builtin_vstore_common chunk addr _0 src
   | [BA_addrstack ofs; src] ->
-      if offset_in_range (Int.add ofs (Memdata.size_chunk chunk)) then
+      if offset_in_range chunk ofs then
         expand_builtin_vstore_common chunk IR13 ofs src
       else begin
         expand_addimm IR14 IR13 ofs;
@@ -263,7 +265,7 @@ let expand_builtin_vstore chunk args =
       emit (Ploadsymbol (IR14,id,ofs));
       expand_builtin_vstore_common chunk IR14 _0 src
   | [BA_addptr(BA(IR addr), BA_int ofs); src] ->
-      if offset_in_range (Int.add ofs (Memdata.size_chunk chunk)) then
+      if offset_in_range chunk ofs then
         expand_builtin_vstore_common chunk addr ofs src
       else begin
         expand_addimm IR14 addr ofs;
@@ -600,7 +602,7 @@ let expand_instruction instr =
        then coqint_of_camlint (Int32.add 16l (camlint_of_coqint sz))
        else sz in
      if Asmgen.is_immed_arith sz
-     then emit (Padd (IR13,IR13,SOimm sz))
+     then expand_addimm IR13 IR13 sz
      else begin
        if camlint_of_coqint ofs >= 4096l then begin
          expand_addimm IR13 IR13 ofs;

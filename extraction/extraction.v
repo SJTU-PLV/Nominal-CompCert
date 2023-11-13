@@ -152,12 +152,14 @@ Extraction Blacklist List String Int.
 
 Extraction Floats.Float. 
 
+(*
 (* Cutting the dependency to R. *)
 Extract Inlined Constant Defs.F2R => "fun _ -> assert false".
 Extract Inlined Constant Binary.FF2R => "fun _ -> assert false".
 Extract Inlined Constant Binary.B2R => "fun _ -> assert false".
 Extract Inlined Constant Binary.round_mode => "fun _ -> assert false".
 Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
+*)
 
 (* Needed in Coq 8.4 to avoid problems with Function definitions. *)
 Set Extraction AccessOpaque.
@@ -169,7 +171,8 @@ Cd "extraction".
 Separate Extraction
    Compiler.transf_c_program Compiler.transf_cminor_program
    (* Cexec.do_initial_state Cexec.do_step Cexec.at_final_state *)
-   Ctypes.merge_attributes Ctypes.remove_attributes Ctypes.build_composite_env
+   Ctypes.merge_attributes Ctypes.remove_attributes 
+   Ctypes.build_composite_env Ctypes.layout_struct
    Initializers.transl_init Initializers.constval
    Csyntax.Eindex Csyntax.Epreincr Csyntax.Eselection
    Ctyping.typecheck_program
@@ -181,6 +184,7 @@ Separate Extraction
    Conventions1.int_caller_save_regs Conventions1.float_caller_save_regs
    Conventions1.int_callee_save_regs Conventions1.float_callee_save_regs
    Conventions1.dummy_int_reg Conventions1.dummy_float_reg
+   Conventions1.allocatable_registers
    RTL.instr_defs RTL.instr_uses
    Machregs.mregs_for_operation Machregs.mregs_for_builtin
    Machregs.two_address_op Machregs.is_stack_reg

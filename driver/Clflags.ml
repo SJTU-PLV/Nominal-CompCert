@@ -20,6 +20,7 @@ let option_fstruct_passing = ref false
 let option_fvararg_calls = ref true
 let option_funprototyped = ref true
 let option_fpacked_structs = ref false
+let option_funstructured_switch = ref false
 let option_ffpu = ref true
 let option_ffloatconstprop = ref 2
 let option_ftailcalls = ref true
@@ -64,6 +65,7 @@ let option_small_data =
        then 8 else 0)
 let option_small_const = ref (!option_small_data)
 let option_timings = ref false
+let option_std = ref "c99"
 let stdlib_path = ref Configuration.stdlib_path
 let use_standard_headers =  ref Configuration.has_standard_headers
 let main_function_name = ref "main"

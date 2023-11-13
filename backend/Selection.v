@@ -337,20 +337,29 @@ Definition sel_switch_long :=
 
 (** Recognition of "then" and "else" statements that support if-conversion.
   Basically we are interested in assignments to local variables [id = e].
-  However the front-end may have put [skip] statements around these
-  assignments. *)
+  However the front-end may have put [skip] statements and debug annotations
+  around these assignments. *)
 
 Inductive stmt_class : Type :=
   | SCskip
   | SCassign (id: ident) (a: Cminor.expr)
   | SCother.
 
-Function classify_stmt (s: Cminor.stmt) : stmt_class :=
+Fixpoint classify_stmt (s: Cminor.stmt) : stmt_class :=
   match s with
   | Cminor.Sskip => SCskip
-  | Cminor.Sassign id a => SCassign id a
-  | Cminor.Sseq Cminor.Sskip s => classify_stmt s
-  | Cminor.Sseq s Cminor.Sskip => classify_stmt s
+  | Cminor.Sassign id a =>
+      match a with
+      | Cminor.Evar id2 => if ident_eq id id2 then SCskip else SCassign id a
+      | _ =>  SCassign id a
+      end
+  | Cminor.Sbuiltin None (EF_debug _ _ _) _ => SCskip
+  | Cminor.Sseq s1 s2 =>
+      match classify_stmt s1, classify_stmt s2 with
+      | SCskip, c2 => c2
+      | c1, SCskip => c1
+      | _, _ => SCother
+      end
   | _ => SCother
   end.
 

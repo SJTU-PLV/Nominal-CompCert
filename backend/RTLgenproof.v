@@ -55,11 +55,11 @@ Proof.
   intros until r0. repeat rewrite PTree.gsspec.
   destruct (peq id1 name); destruct (peq id2 name).
   congruence.
-  intros. inv H. elimtype False.
+  intros. inv H. exfalso.
   apply valid_fresh_absurd with r0 s1.
   apply H1. left; exists id2; auto.
   eauto with rtlg.
-  intros. inv H2. elimtype False.
+  intros. inv H2. exfalso.
   apply valid_fresh_absurd with r0 s1.
   apply H1. left; exists id1; auto.
   eauto with rtlg.
@@ -389,9 +389,8 @@ Lemma sig_transl_function:
 Proof.
   intros until tf. unfold transl_fundef, transf_partial_fundef.
   case f; intro.
-  unfold transl_function.
-  destruct (reserve_labels (fn_body f0) (PTree.empty node, init_state)) as [ngoto s0].
-  case (transl_fun f0 ngoto s0); simpl; intros.
+  unfold transl_function. 
+  case (transl_fun f0 (init_state)); simpl; intros.
   discriminate.
   destruct p. simpl in H. inversion H. reflexivity.
   intro. inversion H. reflexivity.
@@ -998,9 +997,10 @@ Lemma invert_eval_builtin_arg:
   /\ Events.eval_builtin_arg ge (fun v => v) sp m (fst (convert_builtin_arg a vl)) v
   /\ (forall vl', convert_builtin_arg a (vl ++ vl') = (fst (convert_builtin_arg a vl), vl')).
 Proof.
-  induction 1; simpl; try (econstructor; intuition eauto with evalexpr barg; fail).
+  induction 1; simpl. 2-8: try (econstructor; intuition eauto with evalexpr barg; fail).
 - econstructor; split; eauto with evalexpr. split. constructor. auto. 
-- econstructor; split; eauto with evalexpr. split. repeat constructor. auto. 
+- econstructor; split; eauto with evalexpr. split. repeat constructor. auto.
+- econstructor; split; eauto with evalexpr. split. repeat constructor. auto.
 - destruct IHeval_builtin_arg1 as (vl1 & A1 & B1 & C1).
   destruct IHeval_builtin_arg2 as (vl2 & A2 & B2 & C2).
   destruct (convert_builtin_arg a1 vl1) as [a1' rl1] eqn:E1; simpl in *.

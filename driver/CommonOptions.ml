@@ -10,20 +10,21 @@
 (*                                                                     *)
 (* *********************************************************************)
 
+open Printf
 open Clflags
 open Commandline
 
 (* The version string for [tool_name] *)
 let version_string tool_name =
   if Version.buildnr <> "" && Version.tag <> "" && Version.branch <> "" then
-    Printf.sprintf "The CompCert %s, Release: %s, Build: %s, Tag: %s, Branch: %s\n"
+    sprintf "The CompCert %s, Release: %s, Build: %s, Tag: %s, Branch: %s\n"
       tool_name Version.version Version.buildnr Version.tag Version.branch
   else
-    Printf.sprintf "The CompCert %s, version %s\n" tool_name Version.version
+    sprintf "The CompCert %s, version %s\n" tool_name Version.version
 
 (* Print the version string and exit the program *)
 let print_version_and_exit tool_name () =
-  Printf.printf "%s" (version_string tool_name); exit 0
+  printf "%s" (version_string tool_name); exit 0
 
 let version_options tool_name =
   [ Exact "-version", Unit (print_version_and_exit tool_name);
@@ -34,7 +35,7 @@ let version_options tool_name =
 let all_language_support_options = [
   option_flongdouble;
   option_fstruct_passing; option_fvararg_calls; option_funprototyped;
-  option_fpacked_structs; option_finline_asm
+  option_fpacked_structs; option_finline_asm; option_funstructured_switch
 ]
 
 let f_opt name ref =
@@ -42,8 +43,21 @@ let f_opt name ref =
 let set_all opts () = List.iter (fun r -> r := true) opts
 let unset_all opts () = List.iter (fun r -> r := false) opts
 
+let set_std s =
+  let s = String.lowercase_ascii s in
+  option_std := s;
+  match s with
+  | "c99" ->
+      Diagnostics.(activate_warning Celeven_extension ())
+  | "c11" | "c18" ->
+      Diagnostics.(deactivate_warning Celeven_extension ())
+  | _ ->
+      raise (CmdError (sprintf
+                         "wrong -std option: unknown standard '%s'" s))
+
 let language_support_options =
-  [ Exact "-fall", Unit (set_all all_language_support_options);
+  [ longopt "-std" set_std;
+    Exact "-fall", Unit (set_all all_language_support_options);
     Exact "-fnone", Unit (unset_all all_language_support_options);
     Exact "-fbitfields", Unit (fun () -> ()); ]
   @ f_opt "longdouble" option_flongdouble
@@ -51,17 +65,21 @@ let language_support_options =
   @ f_opt "struct-passing" option_fstruct_passing
   @ f_opt "vararg-calls" option_fvararg_calls
   @ f_opt "unprototyped" option_funprototyped
+  @ f_opt "unstructured-switch" option_funstructured_switch
   @ f_opt "packed-structs" option_fpacked_structs
   @ f_opt "inline-asm" option_finline_asm
 
 let language_support_help =
   {|Language support options (use -fno-<opt> to turn off -f<opt>) :
+  -std=c99  or  -std=c11  or  -std=c18
+                 Choose the ISO C language standard used: C99, C11 or C18.
   -flongdouble   Treat 'long double' as 'double' [off]
   -fstruct-passing  Support passing structs and unions by value as function
                     results or function arguments [off]
   -fstruct-return   Like -fstruct-passing (deprecated)
   -fvararg-calls Support calls to variable-argument functions [on]
   -funprototyped Support calls to old-style functions without prototypes [on]
+  -funstructured-switch Support non-structured 'switch' statements [off]
   -fpacked-structs  Emulate packed structs [off]
   -finline-asm   Support inline 'asm' statements [off]
   -fall          Activate all language support options above

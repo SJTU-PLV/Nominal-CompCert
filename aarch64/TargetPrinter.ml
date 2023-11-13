@@ -164,9 +164,14 @@ module ELF_System : SYSTEM =
       | Section_data i | Section_small_data i ->
           variable_section ~sec:".data" ~bss:".bss" i
       | Section_const i | Section_small_const i ->
-          variable_section ~sec:".section	.rodata" i
-      | Section_string       -> ".section	.rodata"
-      | Section_literal      -> ".section	.rodata"
+          variable_section
+            ~sec:".section      .rodata"
+            ~reloc:".section    .data.rel.ro,\"aw\",@progbits"
+            i
+      | Section_string sz ->
+          elf_mergeable_string_section sz ".section	.rodata"
+      | Section_literal sz ->
+          elf_mergeable_literal_section sz ".section	.rodata"
       | Section_jumptable    -> ".section	.rodata"
       | Section_debug_info _ -> ".section	.debug_info,\"\",%progbits"
       | Section_debug_loc    -> ".section	.debug_loc,\"\",%progbits"
@@ -227,8 +232,10 @@ module MacOS_System : SYSTEM =
           variable_section ~sec:".data" i
       | Section_const i  | Section_small_const i ->
           variable_section ~sec:".const" ~reloc:".const_data" i
-      | Section_string -> ".const"
-      | Section_literal -> ".const"
+      | Section_string sz -> 
+          macos_mergeable_string_section sz
+      | Section_literal sz ->
+          macos_mergeable_literal_section sz
       | Section_jumptable -> ".text"
       | Section_user(s, wr, ex) ->
           sprintf ".section	\"%s\", %s, %s"
@@ -269,29 +276,6 @@ module Target(System: SYSTEM): TARGET =
 
     let section oc sec =
       fprintf oc "	%s\n" (name_of_section sec)
-
-(* Associate labels to floating-point constants and to symbols. *)
-
-    let emit_constants oc lit =
-      if exists_constants () then begin
-         section oc lit;
-         if Hashtbl.length literal64_labels > 0 then
-           begin
-             fprintf oc "	.balign 8\n";
-             Hashtbl.iter
-               (fun bf lbl -> fprintf oc "%a:	.quad	0x%Lx\n" label lbl bf)
-               literal64_labels
-           end;
-         if Hashtbl.length literal32_labels > 0 then
-           begin
-             fprintf oc "	.balign	4\n";
-             Hashtbl.iter
-               (fun bf lbl ->
-                  fprintf oc "%a:	.long	0x%lx\n" label lbl bf)
-               literal32_labels
-           end;
-         reset_literals ()
-      end
 
 (* Emit .file / .loc debugging directives *)
 
@@ -644,17 +628,10 @@ module Target(System: SYSTEM): TARGET =
              assert false
         end
 
-    let get_section_names name =
-      let (text, lit) =
-        match C2C.atom_sections name with
-        | t :: l :: _ -> (t, l)
-        | _    -> (Section_text, Section_literal) in
-      text,lit,Section_jumptable
-
     let print_align oc alignment =
       fprintf oc "	.balign %d\n" alignment
 
-    let print_jumptable oc jmptbl =
+    let print_jumptable oc _jmptbl =
       let print_tbl oc (lbl, tbl) =
         fprintf oc "%a:\n" label lbl;
         List.iter
@@ -663,7 +640,7 @@ module Target(System: SYSTEM): TARGET =
           tbl in
       if !jumptables <> [] then
         begin
-          section oc jmptbl;
+          section oc Section_jumptable;
           fprintf oc "	.balign 4\n";
           List.iter (print_tbl oc) !jumptables;
           jumptables := []

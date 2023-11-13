@@ -469,6 +469,61 @@ Proof.
   auto.
 Qed.
 
+(** [eventually n s P]: all transition sequences of length [n] starting from [s]
+    are silent and lead to a state satisfying [P].  However, some transitions can
+    get stuck on non-final states. *)
+
+Variable query reply : Type.
+Variable at_external: state -> query -> Prop.
+Variable final_state: state -> reply -> Prop.
+
+Inductive eventually (ge: genv): nat -> state -> (state -> Prop) -> Prop :=
+  | eventually_now: forall s (P: state -> Prop),
+      P s ->
+      eventually ge O s P
+  | eventually_later: forall n s (P: state -> Prop),
+      (forall r, ~ final_state s r) ->
+      (forall q, ~ at_external s q) -> (* external call is considered not silent *)
+      (forall t s', step ge s t s' -> t = E0 /\ eventually ge n s' P) ->
+      eventually ge (S n) s P.
+
+Lemma eventually_one: forall ge s (P: state -> Prop),
+  (forall r, ~ final_state s r) -> (forall q, ~ at_external s q) ->
+  (forall t s', step ge s t s' -> t = E0 /\ P s') ->
+  eventually ge 1%nat s P.
+Proof.
+  intros. apply eventually_later; auto. intros.
+  apply H1 in H2. intuition auto using eventually.
+Qed.
+
+Lemma eventually_trans: forall ge n1 s1 P1 n2 P2,
+  eventually ge n1 s1 P1 -> 
+  (forall s2, P1 s2 -> eventually ge n2 s2 P2) ->
+  eventually ge (n1 + n2)%nat s1 P2.
+Proof.
+  intros. revert n1 s1 H. induction n1; intros s1 EV; inv EV; simpl.
+- apply H0; assumption.
+- apply eventually_later; auto. intros t s' ST. destruct (H3 t s' ST) as [U V]. auto.
+Qed.
+
+Corollary eventually_implies: forall ge n s (P1 P2: state -> Prop),
+  eventually ge n s P1 ->
+  (forall s, P1 s -> P2 s) ->
+  eventually ge n s P2.
+Proof.
+  intros. replace n with (n + 0)%nat by lia. eapply eventually_trans; eauto using eventually_now.
+Qed.
+
+Lemma eventually_and_invariant: forall ge (Inv: state -> Prop) n s P,
+  (forall s t s', step ge s t s' -> Inv s -> Inv s') ->
+  eventually ge n s P -> Inv s ->
+  eventually ge n s (fun s' => P s' /\ Inv s').
+Proof.
+  intros. revert n s H0 H1. induction n; intros s EV IV; inv EV.
+- apply eventually_now. auto.
+- apply eventually_later; auto. intros. edestruct H3; eauto. 
+Qed.
+
 End CLOSURES.
 
 (** * Transition semantics *)
@@ -513,13 +568,15 @@ Notation Semantics_gen step initial_state at_ext after_ext final_state globalenv
 Notation Semantics step initial_state at_ext after_ext final_state p :=
   (Semantics_gen step initial_state at_ext (fun _ => after_ext) (fun _ => final_state) (@Genv.globalenv _ _) p).
 
+Declare Scope smallstep_scope.
+
 Notation " 'Step' L " := (step L (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Star' L " := (star (step L) (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Plus' L " := (plus (step L) (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Forever_silent' L " := (forever_silent (step L) (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Forever_reactive' L " := (forever_reactive (step L) (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Nostep' L " := (nostep (step L) (globalenv L)) (at level 1) : smallstep_scope.
-
+Notation " 'Eventually' L " := (eventually (step L) (at_external L) (final_state L) (globalenv L)) (at level 1) : smallstep_scope.
 Open Scope smallstep_scope.
 
 (** * Forward simulations between two transition semantics. *)
@@ -738,6 +795,219 @@ Qed.
 End SIMULATION_OPT.
 
 End FORWARD_SIMU_DIAGRAMS.
+
+
+(** ** Forward simulation with the "eventually" modality *)
+
+(** A forward simulation diagram where the first semantics can take some extra steps
+    before reaching a state that restores the simulation relation. *)
+
+Section FORWARD_SIMU_EVENTUALLY.
+
+Variable L1: lts liA1 liB1 state1.
+Variable L2: lts liA2 liB2 state2.
+Variable index: Type.
+Variable order: index -> index -> Prop.
+Variable match_states: index -> state1 -> state2 -> Prop.
+
+Hypothesis order_wf: well_founded order.
+Hypothesis match_valid_query:
+  forall q1 q2, match_query ccB wB q1 q2 ->
+  valid_query L2 q2 = valid_query L1 q1.
+
+Hypothesis initial_states:
+  forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1 ->
+  exists i, exists s2, initial_state L2 q2 s2 /\ match_states i s1 s2.
+Hypothesis final_states:
+  forall i s1 s2 r1,
+    match_states i s1 s2 -> final_state L1 s1 r1 ->
+    exists r2, final_state L2 s2 r2 /\ match_reply ccB wB r1 r2.
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall i s2, match_states i s1 s2 ->
+  exists n i' s2',
+     (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ order i' i))
+     /\ Eventually L1 n s1' (fun s1'' => match_states i' s1'' s2').
+Hypothesis match_external:
+  forall i s1 s2 q1, match_states i s1 s2 -> at_external L1 s1 q1 ->
+  exists wA q2, at_external L2 s2 q2 /\ match_query ccA wA q1 q2 /\ match_senv ccA wA se1 se2 /\
+  forall r1 r2 s1', match_reply ccA wA r1 r2 -> after_external L1 s1 r1 s1' ->
+               exists i' s2', after_external L2 s2 r2 s2' /\ match_states i' s1' s2'.
+
+(*Hypothesis public_preserved:
+  forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id. *)
+
+Let ms := fun i s1 s2 => Eventually L1 (snd i) s1 (fun s1'' => match_states (fst i) s1'' s2).
+Let index' :=  (index * nat)%type.
+Let order' := lex_ord order Nat.lt. 
+Lemma forward_simulation_eventually: fsim_properties L1 L2 index' order' ms.
+Proof.
+  constructor.
+- auto.
+- intros. exploit initial_states; eauto. intros (i & s2 & A & B).
+  exists (i, O), s2; split; auto using eventually_now.
+  constructor. simpl. eauto.
+- intros [i n] s1 s2 r EV FS; simpl in *. inv EV.
+  + eapply final_states; eauto.
+  + eelim H; eauto.
+- intros [i n] s1 s2 q1 EV AT. simpl in *. inv EV.
+  + exploit match_external; eauto. intros (wA & q2 & AT' & MQ & MS & AFTER).
+    exists wA, q2. intuition eauto. exploit AFTER; eauto.
+    intros (i' & s2' & A & B).
+    exists (i', O), s2'. split. eauto. constructor. simpl. eauto.
+  + eelim H0; eauto.
+- intros s1 t s1' ST [i n] s2 EV; simpl in *. inv EV.
+  + exploit simulation; eauto. intros (n' & i' & s2' & A & B).
+    exists (i', n'), s2'; split; auto.
+    destruct A as [P | [P Q]]; auto using lex_ord_left.
+    right. split. eauto. constructor. eauto.
+  + apply H1 in ST. destruct ST as (A & B). subst t.
+    exists (i, n0), s2; split.
+    right; split. apply star_refl. 
+    apply lex_ord_right. simpl in H2. lia.
+    exact B.
+Qed.
+    
+End FORWARD_SIMU_EVENTUALLY.
+
+(** Two simplified diagrams. *)
+
+Section FORWARD_SIMU_EVENTUALLY_SIMPL.
+
+Variable L1: lts liA1 liB1 state1.
+Variable L2: lts liA2 liB2 state2.
+Variable match_states: state1 -> state2 -> Prop.
+
+(*Hypothesis public_preserved:
+  forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id. *)
+Hypothesis match_valid_query:
+  forall q1 q2, match_query ccB wB q1 q2 ->
+           valid_query L2 q2 = valid_query L1 q1.
+Hypothesis initial_states:
+  forall q1 q2 s1, match_query ccB wB q1 q2 -> initial_state L1 q1 s1  ->
+  exists s2, initial_state L2 q2 s2 /\ match_states s1 s2.
+Hypothesis final_states:
+  forall s1 s2 r1,
+    match_states s1 s2 -> final_state L1 s1 r1 ->
+    exists r2, final_state L2 s2 r2 /\ match_reply ccB wB r1 r2.
+Hypothesis match_external:
+  forall s1 s2 q1, match_states s1 s2 -> at_external L1 s1 q1 ->
+  exists wA q2, at_external L2 s2 q2 /\ match_query ccA wA q1 q2 /\ match_senv ccA wA se1 se2 /\
+  forall r1 r2 s1', match_reply ccA wA r1 r2 -> after_external L1 s1 r1 s1' ->
+  exists s2', after_external L2 s2 r2 s2' /\ match_states s1' s2'.
+
+(** Simplified "plus" simulation diagram, when L2 always makes at least one transition. *)
+
+Section FORWARD_SIMU_EVENTUALLY_PLUS.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2, match_states s1 s2 ->
+  exists n s2',
+     Plus L2 s2 t s2'
+  /\ Eventually L1 n s1' (fun s1'' => match_states s1'' s2').
+
+Let ms' := fun (i:nat) s1 s2 => match_states s1 s2.
+Let ms := fun i s1 s2 => Eventually L1 (snd i) s1 (fun s1'' => ms' (fst i) s1'' s2).
+Let index' :=  (nat * nat)%type.
+Let order' := lex_ord lt Nat.lt. 
+
+Lemma forward_simulation_eventually_plus: fsim_properties L1 L2 index' order' ms.
+Proof.
+  apply forward_simulation_eventually.
+- auto.
+- intros. exploit initial_states. eauto. eauto.
+  intros (s2 & A & B). exists O, s2; auto.
+- intros. eapply final_states; eauto.
+- intros. exploit simulation; eauto. intros (n & s2' & A & B).
+  exists n, O, s2'; eauto.  
+- intros. exploit match_external; eauto.
+  intros (wA & q2 & A & B & C & D). exists wA, q2. repeat apply conj.
+  eauto. eauto. eauto. intros. exploit D. eauto. eauto.
+  intros (s2' & A' & B'). exists O, s2'; auto.
+Qed.
+
+End FORWARD_SIMU_EVENTUALLY_PLUS.
+
+(** Simplified "star" simulation diagram, with a decreasing, well-founded order on L1 states. *)
+
+Section FORWARD_SIMU_EVENTUALLY_STAR_WF.
+
+Variable order: state1 -> state1 -> Prop.
+(* Hypothesis order_wf: well_founded order. *)
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2, match_states s1 s2 ->
+     (exists s2',
+        (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ order s1' s1)) /\ match_states s1' s2')
+  \/ (exists n s2',
+        Plus L2 s2 t s2' /\ Eventually L1 n s1' (fun s1'' => match_states s1'' s2')).
+
+Let index' := (nat * state1)%type.
+Let order' := lex_ord Nat.lt order.
+Let ms := fun i s1 s2 => snd i = s1 /\ Eventually L1 (fst i) s1 (fun s1'' => match_states s1'' s2).
+Lemma forward_simulation_eventually_star_wf: fsim_properties L1 L2 index' order' ms.
+Proof.
+  constructor; intros.
+- auto.
+- exploit initial_states; eauto. intros (s2 & A & B).
+  exists (O, s1), s2. split. auto. constructor. auto. auto using eventually_now.
+- destruct i as [n s11]; destruct H as [P Q]; simpl in *; subst s11.
+  inv Q.
+  + eapply final_states; eauto.
+  + eelim H; eauto.
+- destruct i as [n s11]; destruct H as [P Q]; simpl in *; subst s11.
+  inv Q.
+  + exploit match_external; eauto. intros (wA & q2 & A & B & C & D).
+    exists wA, q2. intuition eauto. exploit D; eauto.
+    intros (s2' & A' & B'). exists (O, s1'). exists s2'. split. eauto.
+    unfold ms. split. eauto. constructor. eauto.
+  + eelim H1; eauto.
+- destruct i as [n s11]; destruct H0 as [P Q]; simpl in *; subst s11.
+  inv Q.
+  + exploit simulation; eauto. intros [(s2' & A & B) | (n & s2' & A & B)].
+    * exists (O, s1'), s2'; split. 
+      destruct A as [A | [A1 A2]]. eauto. right. split; auto using lex_ord_right.
+      eapply lex_ord_right. eauto. constructor; eauto using eventually_now.
+    * exists (n, s1'), s2'; unfold ms; auto.
+  + apply H2 in H. destruct H. subst t.
+    exists (n0, s1'), s2; split.
+    right; split. apply star_refl. apply lex_ord_left; lia.
+    unfold ms. auto.
+Qed.
+
+End FORWARD_SIMU_EVENTUALLY_STAR_WF.
+
+(** Simplified "star" simulation diagram, with a decreasing measure on L1 states. *)
+
+Section FORWARD_SIMU_EVENTUALLY_STAR.
+
+Variable measure: state1 -> nat.
+
+Hypothesis simulation:
+  forall s1 t s1', Step L1 s1 t s1' ->
+  forall s2, match_states s1 s2 ->
+     (exists s2',
+        (Plus L2 s2 t s2' \/ (Star L2 s2 t s2' /\ measure s1' < measure s1))%nat
+        /\ match_states s1' s2')
+  \/ (exists n s2',
+        Plus L2 s2 t s2' /\ Eventually L1 n s1' (fun s1'' => match_states s1'' s2')).
+
+Let order := (ltof _ measure).
+Let index' := (nat * state1)%type.
+Let order' := lex_ord Nat.lt order.
+Let ms := fun i s1 s2 => snd i = s1 /\ Eventually L1 (fst i) s1 (fun s1'' => match_states s1'' s2).
+Lemma forward_simulation_eventually_star: fsim_properties L1 L2 index' order' ms.
+Proof.
+  apply forward_simulation_eventually_star_wf.
+- exact simulation.
+Qed.
+
+End FORWARD_SIMU_EVENTUALLY_STAR.
+
+End FORWARD_SIMU_EVENTUALLY_SIMPL.
+
 
 (** ** Forward simulation of transition sequences *)
 
@@ -1111,7 +1381,7 @@ Inductive match_states_later: index * nat -> state1 -> state2 -> Prop :=
 Lemma star_match_states_later:
   forall s1 s1', Star L1 s1 E0 s1' ->
   forall i s2, match_states i s1' s2 ->
-  exists n, match_states_later (i, n) s1 s2.
+  exists n, match_states_later (i, n) s1 s2. 
 Proof.
   intros s10 s10' STAR0. pattern s10, s10'; eapply star_E0_ind; eauto.
   - intros s1 i s2 M. exists O; constructor; auto.

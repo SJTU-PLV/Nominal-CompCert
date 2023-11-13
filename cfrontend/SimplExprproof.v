@@ -1598,7 +1598,7 @@ Ltac NOTIN :=
   apply push_seq. reflexivity. reflexivity.
   rewrite <- Kseqlist_app.
   eapply match_exprstates; eauto.
-  apply S. apply tr_paren_set with (a1 := a2) (t := sd_temp sd); auto.
+  apply S. apply tr_paren_set with (a1 := a2) (t := t); auto.
   apply tr_expr_monotone with tmp2; eauto. auto. auto.
 - (* seqand false *)
   exploit tr_top_leftcontext; eauto. clear TR.
@@ -1707,7 +1707,7 @@ Ltac NOTIN :=
   apply push_seq. reflexivity. reflexivity.
   rewrite <- Kseqlist_app.
   eapply match_exprstates; eauto.
-  apply S. apply tr_paren_set with (a1 := a2) (t := sd_temp sd); auto.
+  apply S. apply tr_paren_set with (a1 := a2) (t := t); auto.
   apply tr_expr_monotone with tmp2; eauto. auto. auto.
 - (* condition *)
   exploit tr_top_leftcontext; eauto. clear TR.
@@ -1961,7 +1961,7 @@ Ltac NOTIN :=
   exploit tr_simple_rvalue; eauto. simpl; intro SL1.
   subst sl0; simpl Kseqlist.
   econstructor; split.
-  right; split. apply star_refl. simpl. apply plus_lt_compat_r.
+  right; split. apply star_refl. simpl. apply Nat.add_lt_mono_r.
   apply (leftcontext_size _ _ _ H). simpl. lia.
   econstructor; eauto. apply S.
   eapply tr_expr_monotone; eauto.
@@ -1983,7 +1983,7 @@ Ltac NOTIN :=
   auto.
 + (* for effects *)
   econstructor; split.
-  right; split. apply star_refl. simpl. apply plus_lt_compat_r.
+  right; split. apply star_refl. simpl. apply Nat.add_lt_mono_r.
   apply (leftcontext_size _ _ _ H). simpl. lia.
   econstructor; eauto.
   exploit tr_simple_rvalue; eauto. simpl. intros A. subst sl1.

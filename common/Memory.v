@@ -2174,7 +2174,7 @@ Proof.
   intros. unfold load.
   destruct (valid_access_dec m2 chunk b' ofs Readable).
   exploit valid_access_alloc_inv; eauto. destruct (eq_block b' b); intros.
-  subst b'. elimtype False. eauto with mem.
+  subst b'. exfalso. eauto with mem.
   rewrite pred_dec_true; auto.
   injection ALLOC; intros. rewrite <- H2; simpl.
   setoid_rewrite NMap.gso. auto. rewrite H1. apply not_eq_sym; eauto with mem.
@@ -2316,7 +2316,7 @@ Proof.
   rewrite setpermN_inv.
   destruct (zle lo ofs); simpl.
   destruct (zlt ofs hi); simpl.
-  elimtype False; intuition.
+  exfalso; intuition.
   auto. auto.
   auto.
 Qed.

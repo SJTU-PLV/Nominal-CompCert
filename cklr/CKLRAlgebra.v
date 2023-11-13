@@ -551,6 +551,7 @@ Next Obligation. (* sup include *)
   etransitivity; eapply cklr_sup_include; eauto; eexists; split; eauto.
 Qed.
 
+Declare Scope cklr_scope.
 Bind Scope cklr_scope with cklr.
 Delimit Scope cklr_scope with cklr.
 Infix "@" := cklr_compose (at level 30, right associativity) : cklr_scope.

@@ -28,13 +28,11 @@ module type TARGET =
       val print_comm_symb:  out_channel -> Z.t -> P.t -> int -> unit
       val print_var_info: out_channel -> P.t -> unit
       val print_fun_info: out_channel -> P.t -> unit
-      val get_section_names: P.t -> section_name * section_name * section_name
       val print_file_line: out_channel -> string -> int -> unit
       val print_optional_fun_info: out_channel -> unit
       val cfi_startproc: out_channel -> unit
       val print_instructions: out_channel -> coq_function -> unit
       val cfi_endproc: out_channel -> unit
-      val emit_constants: out_channel -> section_name -> unit
       val print_jumptable: out_channel -> section_name -> unit
       val section: out_channel -> section_name -> unit
       val name_of_section: section_name -> string
@@ -84,16 +82,21 @@ let literal64_labels   = (Hashtbl.create 39 : (int64, int) Hashtbl.t)
 let label_literal32 bf = label_constant literal32_labels bf
 let label_literal64 n = label_constant literal64_labels n
 
+(* Sort by label before iteration, to make compilations more reproducible *)
+
+let iter_literal32 f =
+  List.iter (fun (n, lbl) -> f n lbl)
+    (List.fast_sort (fun (n1, lbl1) (n2, lbl2) -> compare lbl1 lbl2)
+       (Hashtbl.fold (fun n lbl accu -> (n, lbl) :: accu) literal32_labels []))
+
+let iter_literal64 f =
+  List.iter (fun (n, lbl) -> f n lbl)
+    (List.fast_sort (fun (n1, lbl1) (n2, lbl2) -> compare lbl1 lbl2)
+       (Hashtbl.fold (fun n lbl accu -> (n, lbl) :: accu) literal64_labels []))
+
 let reset_literals () =
   Hashtbl.clear literal32_labels;
   Hashtbl.clear literal64_labels
-
-let reset_constants () =
-  jumptables := [];
-  reset_literals ()
-
-let exists_constants () =
-  Hashtbl.length literal32_labels > 0 || Hashtbl.length literal64_labels > 0
 
 (* Variables used for the handling of varargs *)
 
@@ -328,3 +331,29 @@ let variable_section ~sec ?bss ?reloc ?(common = !Clflags.option_fcommon) i =
   | Init -> sec
   | Init_reloc ->
       begin match reloc with Some s -> s | None -> sec end
+
+(** ELF and macOS mergeable section names for literals and strings. *)
+
+let elf_mergeable_literal_section sz sec =
+  match sz with
+  | 0 -> sec
+  | 4 | 8 | 16 -> sprintf "%s.cst%d,\"aM\",@progbits,%d" sec sz sz
+  | _ -> assert false
+
+let elf_mergeable_string_section sz sec =
+  match sz with
+  | 0 -> sec
+  | 1 | 2 | 4 -> sprintf "%s.str%d.%d,\"aMS\",@progbits,%d" sec sz sz sz
+  | _ -> assert false
+
+let macos_mergeable_literal_section sz =
+  match sz with
+  | 0 -> ".const"
+  | 4 | 8 | 16 -> sprintf ".literal%d" sz
+  | _ -> assert false
+
+let macos_mergeable_string_section sz =
+  match sz with
+  | 0 | 2 | 4 -> ".const"
+  | 1 -> ".cstring"
+  | _ -> assert false

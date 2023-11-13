@@ -121,6 +121,20 @@ Proof.
   repeat rstep; congruence.
 Qed.
 
+Global Instance maxf_rel f:
+  Monotonic (@maxf) (Val.inject f ++> Val.inject f ++> Val.inject f).
+Proof.
+  unfold maxf.
+  rauto.
+Qed.
+
+Global Instance minf_rel f:
+  Monotonic (@minf) (Val.inject f ++> Val.inject f ++> Val.inject f).
+Proof.
+  unfold minf.
+  rauto.
+Qed.
+
 Global Instance eval_operation_rel R w:
   Monotonic
     (@eval_operation)

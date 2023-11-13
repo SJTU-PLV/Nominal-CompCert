@@ -137,9 +137,14 @@ module ELF_System : SYSTEM =
       | Section_data i | Section_small_data i ->
           variable_section ~sec:".data" ~bss:".bss" i
       | Section_const i | Section_small_const i ->
-          variable_section ~sec:".section	.rodata" i
-      | Section_string -> ".section	.rodata"
-      | Section_literal -> ".section	.rodata.cst8,\"aM\",@progbits,8"
+          variable_section
+            ~sec:".section      .rodata"
+            ~reloc:".section    .data.rel.ro,\"aw\",@progbits"
+            i
+      | Section_string sz ->
+          elf_mergeable_string_section sz ".section	.rodata"
+      | Section_literal sz ->
+          elf_mergeable_literal_section sz ".section	.rodata"
       | Section_jumptable -> ".text"
       | Section_user(s, wr, ex) ->
           sprintf ".section	\"%s\",\"a%s%s\",@progbits"
@@ -200,8 +205,10 @@ module MacOS_System : SYSTEM =
           variable_section ~sec:".data" i
       | Section_const i  | Section_small_const i ->
           variable_section ~sec:".const" ~reloc:".const_data" i
-      | Section_string -> ".const"
-      | Section_literal -> ".const"
+      | Section_string sz -> 
+          macos_mergeable_string_section sz
+      | Section_literal sz ->
+          macos_mergeable_literal_section sz
       | Section_jumptable -> ".text"
       | Section_user(s, wr, ex) ->
           sprintf ".section	\"%s\", %s, %s"
@@ -247,8 +254,7 @@ module Cygwin_System : SYSTEM =
     (* The comment delimiter *)
     let comment = "#"
 
-    let symbol_prefix =
-      if Archi.ptr64 then "" else "_"
+    let symbol_prefix = ""
 
     let raw_symbol oc s =
        fprintf oc "%s%s" symbol_prefix s
@@ -265,8 +271,8 @@ module Cygwin_System : SYSTEM =
           variable_section ~sec:".data" ~bss:".bss" i
       | Section_const i | Section_small_const i ->
           variable_section ~sec:".section	.rdata,\"dr\"" i
-      | Section_string -> ".section	.rdata,\"dr\""
-      | Section_literal -> ".section	.rdata,\"dr\""
+      | Section_string _ -> ".section	.rdata,\"dr\""
+      | Section_literal _ -> ".section	.rdata,\"dr\""
       | Section_jumptable -> ".text"
       | Section_user(s, wr, ex) ->
           sprintf ".section	%s, \"%s\"\n"
@@ -280,7 +286,6 @@ module Cygwin_System : SYSTEM =
       | Section_ais_annotation -> assert false (* Not supported for coff binaries *)
 
     let stack_alignment = 8
-      (* minimum is 4 for 32 bits, 8 for 64 bits; 8 is better for perfs *)
 
     let print_align oc n =
       fprintf oc "	.balign	%d\n" n
@@ -288,13 +293,10 @@ module Cygwin_System : SYSTEM =
     let indirect_symbols : StringSet.t ref = ref StringSet.empty
 
     let print_mov_rs oc rd id =
-      if Archi.ptr64 then begin
-        let s = extern_atom id in
-        indirect_symbols := StringSet.add s !indirect_symbols;
-        fprintf oc "	movq	.refptr.%s(%%rip), %a\n" s ireg rd
-      end else begin
-        fprintf oc "	movl	$%a, %a\n" symbol id ireg rd
-      end
+      assert Archi.ptr64;
+      let s = extern_atom id in
+      indirect_symbols := StringSet.add s !indirect_symbols;
+      fprintf oc "	movq	.refptr.%s(%%rip), %a\n" s ireg rd
 
     let print_fun_info _ _  = ()
 
@@ -308,10 +310,8 @@ module Cygwin_System : SYSTEM =
       fprintf oc "	.quad	%s\n" s
 
     let print_epilogue oc =
-      if Archi.ptr64 then begin
-        StringSet.iter (declare_indirect_symbol oc) !indirect_symbols;
-        indirect_symbols := StringSet.empty
-      end
+      StringSet.iter (declare_indirect_symbol oc) !indirect_symbols;
+      indirect_symbols := StringSet.empty
 
     let print_comm_decl oc name sz al =
       fprintf oc "	.comm   %a, %s, %d\n" 
@@ -432,7 +432,9 @@ module Target(System: SYSTEM):TARGET =
       | Pmovq_ri(rd, n) ->
           let n1 = camlint64_of_coqint n in
           let n2 = Int64.to_int32 n1 in
-          if n1 = Int64.of_int32 n2 then
+          if Int64.shift_right_logical n1 32 = Int64.zero then
+            fprintf oc "	movl	$%Ld, %a\n" n1 ireg32 rd
+          else if n1 = Int64.of_int32 n2 then
             fprintf oc "	movq	$%ld, %a\n" n2 ireg64 rd
           else
             fprintf oc "	movabsq	$%Ld, %a\n" n1 ireg64 rd
@@ -854,11 +856,6 @@ module Target(System: SYSTEM):TARGET =
               assert false
           end
 
-    let print_literal64 oc n lbl =
-      fprintf oc "%a:	.quad	0x%Lx\n" label lbl n
-    let print_literal32 oc n lbl =
-      fprintf oc "%a:	.long	0x%lx\n" label lbl n
-
     let print_jumptable oc jmptbl =
       let print_jumptable (lbl, tbl) =
         let print_entry l =
@@ -886,15 +883,6 @@ module Target(System: SYSTEM):TARGET =
 
     let name_of_section = name_of_section
 
-    let emit_constants oc lit =
-       if exists_constants () then begin
-         section oc lit;
-         print_align oc 8;
-         Hashtbl.iter (print_literal64 oc) literal64_labels;
-         Hashtbl.iter (print_literal32 oc) literal32_labels;
-         reset_literals ()
-       end
-
     let cfi_startproc = cfi_startproc
     let cfi_endproc = cfi_endproc
 
@@ -904,11 +892,6 @@ module Target(System: SYSTEM):TARGET =
 
     let print_optional_fun_info _ = ()
 
-    let get_section_names name =
-      match C2C.atom_sections name with
-      | [t;l;j] -> (t, l, j)
-      |    _    -> (Section_text, Section_literal, Section_jumptable)
-
     let print_fun_info = print_fun_info
 
     let print_var_info = print_var_info
@@ -917,12 +900,12 @@ module Target(System: SYSTEM):TARGET =
       need_masks := false;
       if !Clflags.option_g then begin
         section oc Section_text;
-        if Configuration.system <> "bsd" then cfi_section oc
+        cfi_section oc
       end
 
     let print_epilogue oc =
       if !need_masks then begin
-        section oc Section_literal;
+        section oc (Section_literal 16);
         print_align oc 16;
         fprintf oc "%a:	.quad   0x8000000000000000, 0\n"
           raw_symbol "__negd_mask";
