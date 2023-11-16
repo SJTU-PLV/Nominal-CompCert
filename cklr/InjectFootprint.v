@@ -28,11 +28,11 @@ Lemma max_perm_decrease_trans :
   forall m1 m2 m3,
     injp_max_perm_decrease m1 m2 ->
     injp_max_perm_decrease m2 m3 ->
-    Mem.sup_include (Mem.support m1) (Mem.support m2) ->
+    Ple (Mem.nextblock m1) (Mem.nextblock m2) ->
     injp_max_perm_decrease m1 m3.
 Proof.
   intros. red in *. intros.
-  apply H. auto. apply H0. apply H1. eauto. auto.
+  apply H; eauto. apply H0. unfold Mem.valid_block in *. extlia. eauto.
 Qed.
 
 Hint Resolve max_perm_decrease_refl max_perm_decrease_trans : core.
@@ -62,22 +62,22 @@ Inductive injp_match_mem: injp_world -> relation mem :=
 Inductive injp_match_stbls: injp_world -> relation Genv.symtbl :=
   injp_match_stbls_intro f m1 m2 Hm se1 se2:
     Genv.match_stbls f se1 se2 ->
-    Mem.sup_include (Genv.genv_sup se1) (Mem.support m1) ->
-    Mem.sup_include (Genv.genv_sup se2) (Mem.support m2) ->
+    Ple (Genv.genv_next se1) (Mem.nextblock m1) ->
+    Ple (Genv.genv_next se2) (Mem.nextblock m2) ->
     injp_match_stbls (injpw f m1 m2 Hm) se1 se2.
 
 Hint Constructors injp_match_mem injp_match_stbls : core.
 
 (** ** Properties *)
 
-Definition inject_dom_in (f:meminj) (s:sup) :=
-  forall b b' o, f b = Some (b', o) -> Mem.sup_In b s.
+Definition inject_dom_in (f:meminj) (s:block) :=
+  forall b b' o, f b = Some (b', o) -> Plt b s.
 
-Definition inject_image_in (f:meminj) (s:sup) :=
-  forall b b' o, f b = Some (b', o) -> Mem.sup_In b' s.
+Definition inject_image_in (f:meminj) (s:block) :=
+  forall b b' o, f b = Some (b', o) -> Plt b' s.
 
-Definition inject_image_eq (f:meminj) (s:sup) :=
-  forall b b' o, f b = Some (b', o) <-> Mem.sup_In b' s.
+Definition inject_image_eq (f:meminj) (s:block) :=
+  forall b b' o, f b = Some (b', o) <-> Plt b' s.
 
 
 (** Proving the transitivity of the accessibility relation is somewhat
@@ -118,10 +118,10 @@ Proof.
     inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hr1' Hr2' Hp1' Hp2' H1' H2' Hf' Hs']; subst.
     constructor.
     + red. intros. eapply Hr1; eauto. eapply Hr1'; eauto.
-      inversion H1. apply unchanged_on_support; eauto.
+      inversion H1. unfold Mem.valid_block in *. extlia.
       intros. intro. eapply H3; eauto.
     + red. intros. eapply Hr2; eauto. eapply Hr2'; eauto.
-      inversion H2. apply unchanged_on_support; eauto.
+      inversion H2. unfold Mem.valid_block in *. extlia.
       intros. intro. eapply H3; eauto.
     + intros b ofs p Hb ?.
       eapply Hp1, Hp1'; eauto using Mem.valid_block_unchanged_on.
@@ -297,9 +297,9 @@ Next Obligation. (* ~> vs. match_stbls *)
   constructor.
   - eapply Genv.match_stbls_incr; eauto.
     intros b1 b2 delta Hb Hb'. specialize (H11 b1 b2 delta Hb Hb').
-    unfold Mem.valid_block in H11. split; inv H11; eauto.
-  - apply Mem.unchanged_on_support in H7. eauto.
-  - apply Mem.unchanged_on_support in H8. eauto.
+    unfold Mem.valid_block in H11. split; inv H11; extlia.
+  - apply Mem.unchanged_on_nextblock in H7. extlia.
+  - apply Mem.unchanged_on_nextblock in H8. extlia.
 Qed.
 
 Next Obligation. (* match_stbls vs. Genv.match_stbls *)
@@ -465,7 +465,7 @@ Qed.
 Next Obligation.
   destruct H0 as (w' & Hw' & Hm').
   destruct Hw'. inv H. inv Hm'.
-  split; eauto using Mem.unchanged_on_support.
+  split; eauto using Mem.unchanged_on_nextblock.
 Qed.
 
 (** injp ⋅ injp ⊑ injp, the injp refinement for incoming side. *)
@@ -517,7 +517,7 @@ Qed.
 (* Injection implies image is in the support *)
 
 Lemma inject_implies_image_in: forall f m1 m2,
-  Mem.inject f m1 m2 -> inject_image_in f (Mem.support m2).
+  Mem.inject f m1 m2 -> inject_image_in f (Mem.nextblock m2).
 Proof.
   intros f m1 m2 INJ.
   red.
@@ -530,7 +530,7 @@ Qed.
 
 (* Injection implies domain is in the support *)
 Lemma inject_implies_dom_in: forall f m1 m2,
-  Mem.inject f m1 m2 -> inject_dom_in f (Mem.support m1).
+  Mem.inject f m1 m2 -> inject_dom_in f (Mem.nextblock m1).
 Proof.
   intros f m1 m2 INJ.
   red.
@@ -542,7 +542,7 @@ Proof.
 Qed.
 
 Lemma inject_dom_in_inv: forall f s b,
-    inject_dom_in f s -> ~sup_In b s -> f b = None.
+    inject_dom_in f s -> ~ Plt b s -> f b = None.
 Proof.
   intros. destruct (f b) eqn:?. destruct p.
   apply H in Heqo. congruence. auto.
@@ -587,17 +587,16 @@ Proof.
 Qed.
 
 (** The constrution of memory injections *)
-Fixpoint update_meminj12 (sd1': list block) (j1 j2 j': meminj) (si1: sup) :=
+Fixpoint update_meminj12 (sd1': list block) (j1 j2 j': meminj) (nb1: block) :=
   match sd1' with
-    |nil => (j1,j2,si1)
+    |nil => (j1,j2,nb1)
     |hd::tl =>
        match compose_meminj j1 j2 hd, (j' hd) with
        | None , Some (b2,ofs) =>
-         let b0 := fresh_block si1 in
-         update_meminj12 tl (meminj_add j1 hd (b0,0) )
-                         (meminj_add j2 (fresh_block si1) (b2,ofs))
-                         j' (sup_incr si1)
-       | _,_ => update_meminj12 tl j1 j2 j' si1
+         update_meminj12 tl (meminj_add j1 hd (nb1,0) )
+                         (meminj_add j2 nb1 (b2,ofs))
+                         j' (Pos.succ nb1)
+       | _,_ => update_meminj12 tl j1 j2 j' nb1
        end
   end.
 
@@ -638,7 +637,7 @@ Lemma update_properties: forall s1' s1 j1 j2 s2 s2' j1' j2' j' s3,
     inject_incr_disjoint (compose_meminj j1 j2) j' s1 s3 ->
     inject_incr j1 j1'
     /\ inject_incr j2 j2'
-    /\ Mem.sup_include s2 s2'
+    /\ Ple s2 s2'
     /\ inject_image_in j1' s2'
     /\ inject_dom_in j2' s2'
     /\ inject_incr_disjoint j1 j1' s1 s2
@@ -651,7 +650,7 @@ Lemma update_properties: forall s1' s1 j1 j2 s2 s2' j1' j2' j' s3,
 Proof.
   induction s1'.
   - (*base*)
-    intros; inv H. repeat apply conj; try congruence; eauto.
+    intros; inv H. repeat apply conj; try congruence; eauto. apply Ple_refl.
   - (*induction*)
     intros until s3. intros UPDATE DOMIN12 IMGIN12 DOMIN23
            INCR13 INCRDISJ13. inv UPDATE.
@@ -659,15 +658,15 @@ Proof.
     destruct (j' a) as [[b z]|] eqn:Hj'a; eauto.
     exploit INCRDISJ13; eauto. intros [a_notin_sd1 b_notin_si2].
     (* facts *)
-    assert (MIDINCR1: inject_incr j1 (meminj_add j1 a (fresh_block s2,0))).
+    assert (MIDINCR1: inject_incr j1 (meminj_add j1 a (s2,0))).
     {
       unfold meminj_add. red. intros. destruct eq_block; eauto.
-      apply DOMIN12 in H. congruence.
+      apply DOMIN12 in H. extlia.
     }
-    assert (MIDINCR2: inject_incr j2 (meminj_add j2 (fresh_block s2) (b,z))).
+    assert (MIDINCR2: inject_incr j2 (meminj_add j2 (s2) (b,z))).
     {
       unfold meminj_add. red. intros. destruct eq_block; eauto.
-      apply DOMIN23 in H. subst. apply freshness in H. inv H.
+      apply DOMIN23 in H. subst. extlia.
     }
     assert (MIDINCR3: inject_incr (meminj_add (compose_meminj j1 j2) a (b,z)) j').
     {

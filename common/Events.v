@@ -1518,15 +1518,6 @@ Qed.
 
 (** Corollary of [external_call_valid_block]. *)
 
-Lemma external_call_support:
-  forall ef ge vargs m1 t vres m2,
-  external_call ef ge vargs m1 t vres m2 ->
-  Mem.sup_include (Mem.support m1) (Mem.support m2).
-Proof.
-  intros. unfold Mem.sup_include. intros.
-  exploit external_call_valid_block. eauto. apply H0.
-  auto.
-Qed.
 (** Special case of [external_call_mem_inject_gen] (for backward compatibility) *)
 
 Lemma external_call_mem_inject:

@@ -273,7 +273,7 @@ Lemma flat_inj_idemp thr:
 Proof.
   apply functional_extensionality; intros b.
   unfold compose_meminj, Mem.flat_inj.
-  destruct Mem.sup_dec eqn:Hb; eauto.
+  destruct plt eqn:Hb; eauto.
   rewrite Hb.
   reflexivity.
 Qed.
@@ -348,8 +348,8 @@ Qed.
 
 Next Obligation.
   destruct H as (sei & Hse1i & Hsei2), H0 as (mi & Hm1i & Hmi2). cbn in *.
-  eapply (match_stbls_support R2); eauto.
-  eapply (match_stbls_support R1); eauto.
+  eapply (match_stbls_nextblock R2); eauto.
+  eapply (match_stbls_nextblock R1); eauto.
 Qed.
 
 Next Obligation.
@@ -548,7 +548,7 @@ Next Obligation. (* sup include *)
   destruct H0 as ([w' w0'] & Hw' & mI' & Hm1I' & Hm2I').
   cbn [fst snd] in *. unfold Ple in *.
   inv Hw'; cbn in *.
-  etransitivity; eapply cklr_sup_include; eauto; eexists; split; eauto.
+  etransitivity; eapply cklr_nextblock_incr; eauto; eexists; split; eauto.
 Qed.
 
 Bind Scope cklr_scope with cklr.

@@ -83,7 +83,7 @@ Qed.
 Inductive perm_kind: Type :=
   | Max: perm_kind
   | Cur: perm_kind.
-
+(*
 Module Type SUP.
 
 Parameter sup: Type.
@@ -126,11 +126,11 @@ Proof.
 Qed.
 
 End SUP.
-
+*)
 
 Module Type MEM.
 
-Include SUP.
+(* Include SUP. *)
 (** The abstract type of memory states. *)
 Parameter mem: Type.
 
@@ -219,7 +219,7 @@ Parameter drop_perm: forall (m: mem) (b: block) (lo hi: Z) (p: permission), opti
   a block identifier remains valid after a [free] operation over this
   block. *)
 
-Parameter support: mem -> sup.
+(* Parameter support: mem -> sup. *)
 Parameter nextblock: mem -> block.
 
 Parameter valid_block: mem->block->Prop.
@@ -321,7 +321,7 @@ Axiom valid_pointer_implies:
 (** * Properties of the memory operations *)
 
 (** ** Properties of the initial memory state. *)
-Axiom support_empty : support empty = sup_empty.
+Axiom nextblock_empty : nextblock empty = 1%positive.
 Axiom perm_empty: forall b ofs k p, ~perm empty b ofs k p.
 Axiom valid_access_empty:
   forall chunk b ofs p, ~valid_access empty chunk b ofs p.
@@ -1244,39 +1244,39 @@ Axiom drop_outside_inject:
 
 (** Memory states that inject into themselves. *)
 
-Definition flat_inj (s: sup) : meminj :=
-  fun (b: block) => if sup_dec b s then Some(b, 0) else None.
+Definition flat_inj (thr: block) : meminj :=
+  fun (b: block) => if plt b thr then Some(b, 0) else None.
 
-Parameter inject_neutral: forall (s: sup) (m: mem), Prop.
+Parameter inject_neutral: forall (thr: block) (m: mem), Prop.
 
 Axiom neutral_inject:
-  forall m, inject_neutral (support m) m ->
-  inject (flat_inj (support m)) m m.
+  forall m, inject_neutral (nextblock m) m ->
+  inject (flat_inj (nextblock m)) m m.
 
 Axiom empty_inject_neutral:
-  forall s, inject_neutral s empty.
+  forall thr, inject_neutral thr empty.
 
 Axiom alloc_inject_neutral:
-  forall s m lo hi b m',
+  forall thr m lo hi b m',
   alloc m lo hi = (m', b) ->
-  inject_neutral s m ->
-  sup_include (sup_incr (support m)) s ->
-  inject_neutral s m'.
+  inject_neutral thr m ->
+  Plt (nextblock m) thr ->
+  inject_neutral thr m'.
 
 Axiom store_inject_neutral:
-  forall chunk m b ofs v m' s,
+  forall chunk m b ofs v m' thr,
   store chunk m b ofs v = Some m' ->
-  inject_neutral s m ->
-  sup_In b s->
-  Val.inject (flat_inj s) v v ->
-  inject_neutral s m'.
+  inject_neutral thr m ->
+  Plt b thr ->
+  Val.inject (flat_inj thr) v v ->
+  inject_neutral thr m'.
 
 Axiom drop_inject_neutral:
-  forall m b lo hi p m' s,
+  forall m b lo hi p m' thr,
   drop_perm m b lo hi p = Some m' ->
-  inject_neutral s m ->
-  sup_In b s ->
-  inject_neutral s m'.
+  inject_neutral thr m ->
+  Plt b thr ->
+  inject_neutral thr m'.
 
 End MEM.
 

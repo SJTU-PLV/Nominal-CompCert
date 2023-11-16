@@ -830,24 +830,24 @@ Qed.
 Program Definition globalenv_inject (ge1 ge2: Genv.symtbl) (j: meminj) (m1: mem) : massert := {|
   m_pred := fun m =>
     Genv.match_stbls j ge1 ge2 /\
-    Mem.sup_include (Genv.genv_sup ge1) (Mem.support m1) /\
-    Mem.sup_include (Genv.genv_sup ge2) (Mem.support m);
+    Ple (Genv.genv_next ge1) (Mem.nextblock m1) /\
+    Ple (Genv.genv_next ge2) (Mem.nextblock m);
   m_footprint := fun b ofs => False
 |}.
 Next Obligation.
-  intuition auto. eapply Mem.sup_include_trans; eauto. eapply Mem.unchanged_on_support; eauto.
+  intuition auto. eapply Ple_trans; eauto. eapply Mem.unchanged_on_nextblock; eauto.
 Qed.
 Next Obligation.
   tauto.
 Qed.
 
-Lemma globalenv_support:
+Lemma globalenv_nextblock:
   forall ge1 ge2 j m1 m1',
-  Mem.sup_include (Mem.support m1) (Mem.support m1') ->
+  Pos.le (Mem.nextblock m1) (Mem.nextblock m1') ->
   massert_imp (globalenv_inject ge1 ge2 j m1) (globalenv_inject ge1 ge2 j m1').
 Proof.
   intros. split; auto. intros m2 (? & ? & ?).
-  constructor; eauto.
+  constructor; auto. extlia.
 Qed.
 
 Lemma globalenv_inject_incr:
@@ -855,7 +855,7 @@ Lemma globalenv_inject_incr:
   inject_incr j j' ->
   inject_separated j j' m1 m2 ->
   m2 |= globalenv_inject ge1 ge2 j m1 ** P ->
-  Mem.sup_include (Mem.support m1) (Mem.support m1') ->
+  Pos.le (Mem.nextblock m1) (Mem.nextblock m1') ->
   m2 |= globalenv_inject ge1 ge2 j' m1' ** P.
 Proof.
   intros. destruct H1 as ((D & E) & B & C).
@@ -863,8 +863,8 @@ Proof.
   - eapply Genv.match_stbls_incr; eauto.
     intros b1 b2 delta Hb Hb'.
     specialize (H0 b1 b2 delta Hb Hb') as [Hb1' Hb2'].
-    unfold Mem.valid_block in *. split; eauto.
-  - eauto.
+    unfold Mem.valid_block in *. extlia.
+  - extlia.
 Qed.
 
 Lemma external_call_parallel_rule:
@@ -892,7 +892,7 @@ Proof.
 - exact INJ'.
 - apply (m_invar _ m2).
 + apply globalenv_inject_incr with j m1; auto.
-  eapply Mem.unchanged_on_support; eauto.
+  eapply Mem.unchanged_on_nextblock; eauto.
 + eapply Mem.unchanged_on_implies; eauto.
   intros; red; intros; red; intros.
   eelim C; eauto. simpl. exists b0, delta; auto.
@@ -938,7 +938,7 @@ Proof.
   rewrite sep_swap4 in A. rewrite sep_swap4. apply globalenv_inject_incr with j1 m1; eauto.
 - red; unfold j1; intros. destruct (eq_block b b1). congruence. rewrite D; auto.
 - red; unfold j1; intros. destruct (eq_block b0 b1). congruence. rewrite D in H9 by auto. congruence.
-- rewrite (Mem.support_alloc m1 0 sz1 m1' b1); eauto.
+- rewrite (Mem.nextblock_alloc m1 0 sz1 m1' b1); eauto. extlia.
 - split; auto.
   split; auto.
   red. intros b0 b3 delta0 H8 H9.
@@ -947,4 +947,5 @@ Proof.
     rewrite C in H9. inversion H9. subst delta0 b3.
     eauto with mem.
   + rewrite D in H9; congruence.
+- reflexivity.
 Qed.

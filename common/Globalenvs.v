@@ -79,10 +79,10 @@ Variable V: Type.  (**r The type of information attached to variables *)
 Record symtbl: Type := mkstbl {
   genv_public: list ident;              (**r which symbol names are public *)
   genv_symb: PTree.t block;             (**r mapping symbol -> block *)
-  genv_info: NMap.t (option (globdef unit unit));
-  genv_sup: sup;                     (**r next symbol pointer *)
-  genv_symb_range: forall id b, PTree.get id genv_symb = Some b -> sup_In b genv_sup;
-  genv_info_range: forall b g, NMap.get _ b genv_info = Some g -> sup_In b genv_sup;
+  genv_info: PTree.t (globdef unit unit);
+  genv_next: block;                     (**r next symbol pointer *)
+  genv_symb_range: forall id b, PTree.get id genv_symb = Some b -> Plt b genv_next;
+  genv_info_range: forall b g, PTree.get b genv_info = Some g -> Plt b genv_next;
   genv_vars_inj: forall id1 id2 b,
     PTree.get id1 genv_symb = Some b -> PTree.get id2 genv_symb = Some b -> id1 = id2
 }.
@@ -91,8 +91,8 @@ Record symtbl: Type := mkstbl {
 
 Record t: Type := mkgenv {
   to_senv :> symtbl;
-  genv_defs: NMap.t (option (globdef F V));  (**r mapping block -> definition *)
-  genv_defs_range: forall b g, NMap.get _ b genv_defs = Some g -> sup_In b (genv_sup to_senv);
+  genv_defs: PTree.t (globdef F V);  (**r mapping block -> definition *)
+  genv_defs_range: forall b g, PTree.get b genv_defs = Some g -> Plt b (genv_next to_senv);
 }.
 
 (** ** Lookup functions *)
@@ -126,12 +126,12 @@ Definition public_symbol (ge: symtbl) (id: ident) : bool :=
 (** [find_info ge b] returns the symbol information associated with the given address. *)
 
 Definition find_info (ge: symtbl) (b: block) : option (globdef unit unit) :=
-  NMap.get _ b ge.(genv_info).
+  PTree.get b ge.(genv_info).
 
 (** [find_def ge b] returns the global definition associated with the given address. *)
 
 Definition find_def (ge: t) (b: block) : option (globdef F V) :=
-  NMap.get _ b ge.(genv_defs).
+  PTree.get b ge.(genv_defs).
 
 (** [find_funct_ptr ge b] returns the function description associated with
     the given address. *)
@@ -165,7 +165,7 @@ Definition find_var_info (ge: symtbl) (b: block) : option (globvar unit) :=
   of volatile type, [false] otherwise. *)
 
 Definition block_is_volatile (ge: symtbl) (b: block) : bool :=
-  match NMap.get _ b ge.(genv_info) with
+  match PTree.get b ge.(genv_info) with
   | Some (Gvar gv) => gv.(gvar_volatile)
   | _ => false
   end.
@@ -183,27 +183,28 @@ Definition is_internal `{Fii: FundefIsInternal F} (ge: t) (v: val) :=
 Program Definition add_global (ge: symtbl) (idg: ident * globdef unit unit) : symtbl :=
   @mkstbl
     ge.(genv_public)
-    (PTree.set idg#1 (fresh_block ge.(genv_sup)) ge.(genv_symb))
-    (NMap.set _ (fresh_block ge.(genv_sup)) (Some (idg#2)) ge.(genv_info))
-    (sup_incr (ge.(genv_sup)))
+    (PTree.set idg#1 ge.(genv_next) ge.(genv_symb))
+    (PTree.set ge.(genv_next) idg#2 ge.(genv_info))
+    (Pos.succ ge.(genv_next))
     _ _ _.
 Next Obligation.
   destruct ge; simpl in *.
-  rewrite PTree.gsspec in H. destruct (peq id i). inv H. apply Mem.sup_incr_in1.
-  apply Mem.sup_incr_in2. eauto.
+  rewrite PTree.gsspec in H. destruct (peq id i). inv H. apply Plt_succ.
+  apply Plt_trans_succ; eauto.
 Qed.
 Next Obligation.
   destruct ge; simpl in *.
-  rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (fresh_block genv_sup0)).
-  inv H. apply Mem.sup_incr_in1. apply Mem.sup_incr_in2. eauto.
+  rewrite PTree.gsspec in H. destruct (peq b genv_next0).
+  inv H. apply Plt_succ.
+  apply Plt_trans_succ; eauto.
 Qed.
 Next Obligation.
   destruct ge; simpl in *.
   rewrite PTree.gsspec in H. rewrite PTree.gsspec in H0.
   destruct (peq id1 i); destruct (peq id2 i).
   congruence.
-  inv H. apply genv_symb_range0 in H0. apply freshness in H0. destruct H0.
-  inv H. inv H0. apply genv_symb_range0 in H2. apply freshness in H2. destruct H2.
+  inv H. eelim Plt_strict. eapply genv_symb_range0; eauto.
+  inv H0. eelim Plt_strict. eapply genv_symb_range0; eauto.
   eauto.
 Qed.
 
@@ -218,7 +219,7 @@ Proof.
 Qed.
 
 Program Definition empty_stbl (pub: list ident): symtbl :=
-  @mkstbl pub (PTree.empty _) (NMap.init _ None) sup_empty _ _ _.
+  @mkstbl pub (PTree.empty _) (PTree.empty _) 1%positive _ _ _.
 
 Definition symboltbl (p: program unit unit) :=
   add_globals (empty_stbl p.(prog_public)) p.(prog_defs).
@@ -301,22 +302,22 @@ End GLOBALENV_PRINCIPLES.
 Variable se: symtbl.
 
 Definition add_globdef
-  (defs: NMap.t (option (globdef F V))) (id: ident) (g: globdef F V) :=
+  (defs: PTree.t _) (id: ident) (g: globdef F V) :=
   match (genv_symb se) ! id with
-    | Some b => NMap.set _ b (Some g) defs
+    | Some b => PTree.set b g defs
     | None => defs
   end.
 
 Program Definition globalenv (p: program F V): t :=
-  mkgenv se (PTree.fold add_globdef (prog_defmap p) (NMap.init _ None)) _.
+  mkgenv se (PTree.fold add_globdef (prog_defmap p) (PTree.empty _)) _.
 Next Obligation.
   revert H. rewrite PTree.fold_spec.
   pattern (PTree.elements (prog_defmap p)). apply rev_ind.
-  - simpl. unfold NMap.get. rewrite NMap.gi.  discriminate.
+  - rewrite PTree.gempty. discriminate.
   - intros idg defs IH. rewrite fold_left_app. simpl. unfold add_globdef at 1.
     destruct ((genv_symb se) ! (idg#1)) eqn:H; auto.
     apply genv_symb_range in H.
-    rewrite NMap.gsspec. destruct eq_block; subst; eauto.
+    rewrite PTree.gsspec. destruct peq; subst; eauto.
 Qed.
 
 (** ** Compatibility between symbol tables and skeletons *)
@@ -465,12 +466,12 @@ Definition advance_next (gl: list (ident * globdef unit unit)) (x: positive) :=
   List.fold_left (fun n g => Pos.succ n) gl x.
 *)
 
-Definition advance_next (gl: list (ident * globdef unit unit)) (s: sup) :=
-  List.fold_left (fun s g => sup_incr s) gl s.
+Definition advance_next (gl: list (ident * globdef unit unit)) (x: positive) :=
+  List.fold_left (fun n g => Pos.succ n) gl x.
 
 Remark genv_next_add_globals:
   forall gl ge,
-  genv_sup (add_globals ge gl) = advance_next gl (genv_sup ge).
+  genv_next (add_globals ge gl) = advance_next gl (genv_next ge).
 Proof.
   induction gl; simpl; intros.
   auto.
@@ -493,10 +494,10 @@ Proof.
 Qed.
 
 Theorem block_is_volatile_below:
-  forall ge b, block_is_volatile ge b = true ->  sup_In b ge.(genv_sup).
+  forall ge b, block_is_volatile ge b = true ->  Plt b ge.(genv_next).
 Proof.
   unfold block_is_volatile; intros.
-  destruct NMap.get as [[|gv]|] eqn:FV; try discriminate.
+  destruct PTree.get as [[|gv]|] eqn:FV; try discriminate.
   eapply genv_info_range; eauto.
 Qed.
 
@@ -517,16 +518,14 @@ Proof.
     unfold find_symbol, find_info in *. cbn.
     destruct (peq id i).
     + subst. rewrite !PTree.gss. split.
-      * inversion 1; subst. eexists. split; eauto. rewrite NMap.gss. auto.
-      * intros (b & Hb & ?). inv Hb. rewrite NMap.gss in *. auto.
+      * inversion 1; subst. eexists. split; eauto. rewrite PTree.gss. auto.
+      * intros (b & Hb & ?). inv Hb. rewrite PTree.gss in *. auto.
     + rewrite PTree.gso by auto. rewrite IHdefs. split.
       * intros (b & Hb & ?). eexists. rewrite PTree.gso by auto. split; eauto.
-        rewrite NMap.gso; eauto. apply genv_symb_range in Hb.
-        intro. subst. exploit freshness; eauto.
+        rewrite PTree.gso; eauto. apply genv_symb_range in Hb. extlia.
       * intros (b & Hb & ?). rewrite PTree.gso in * by auto.
-        eexists. split; eauto. rewrite NMap.gso in *; auto.
-        apply genv_symb_range in Hb.
-        intro. subst. exploit freshness; eauto.
+        eexists. split; eauto. rewrite PTree.gso in *; auto.
+        apply genv_symb_range in Hb. extlia.
 Qed.
 
 (** ** Properties of [globalenv] *)
@@ -544,17 +543,17 @@ Proof.
   unfold find_def. cbn.
   eapply PTree_Properties.fold_rec.
   - intros m m' a Hm. destruct invert_symbol; congruence.
-  - destruct invert_symbol; rewrite !NMap.gi; auto.
+  - destruct invert_symbol; rewrite !PTree.gempty; auto.
   - intros defmap defs id gd Hprog_id Hdefmap_id IH. unfold add_globdef.
     destruct invert_symbol as [id'|] eqn:Hb.
     + apply invert_find_symbol in Hb. unfold find_symbol in Hb.
       destruct (peq id' id).
-      * subst. rewrite Hb, !PTree.gss. rewrite NMap.gss. auto.
+      * subst. rewrite Hb, !PTree.gss. auto.
       * rewrite !PTree.gso by auto.
         destruct (genv_symb se) ! id as [b'|] eqn:Hb'; auto.
-        rewrite NMap.gso; auto. intro. subst. eauto using genv_vars_inj.
+        rewrite PTree.gso; auto. intro. subst. eauto using genv_vars_inj.
     + destruct (genv_symb se) ! id as [b'|] eqn:Hb'; auto.
-      apply find_invert_symbol in Hb'. rewrite NMap.gso; congruence.
+      apply find_invert_symbol in Hb'. rewrite PTree.gso; congruence.
 Qed.
 
 Theorem find_funct_prop:
@@ -688,59 +687,35 @@ Proof.
   destruct (find_symbol ge i); try congruence. eapply Mem.nextblock_store; eauto.
 Qed.
 
-Remark store_zeros_support:
-  forall m b p n m', store_zeros m b p n = Some m' -> Mem.support m' = Mem.support m.
-Proof.
-  intros until n. functional induction (store_zeros m b p n); intros.
-  inv H; auto.
-  apply Mem.support_store in e0.
-  rewrite <- e0. apply IHo. auto.
-  congruence.
-Qed.
-
-Remark store_init_data_list_support:
-  forall idl b m p m',
-  store_init_data_list m b p idl = Some m' ->
-  Mem.support m' = Mem.support m.
-Proof.
-  induction idl; simpl; intros until m'.
-  intros. congruence.
-  caseEq (store_init_data m b p a); try congruence. intros.
-  transitivity (Mem.support m0). eauto.
-  destruct a; simpl in H; try (eapply Mem.support_store; eauto; fail).
-  congruence.
-  destruct (find_symbol ge i); try congruence. eapply Mem.support_store; eauto.
-Qed.
-
-Remark alloc_global_support:
+Remark alloc_global_nextblock:
   forall g m m',
     alloc_global m g = Some m' ->
-    Mem.support m' = sup_incr (Mem.support m).
+    Mem.nextblock m' = Pos.succ (Mem.nextblock m).
 Proof.
   unfold alloc_global. intros.
   destruct g as [id [f|v]].
   - destruct (Mem.alloc m 0 1) as [m1 b] eqn:?.
-    erewrite Mem.support_drop; eauto. erewrite Mem.support_alloc;eauto.
+    erewrite Mem.nextblock_drop; eauto. erewrite Mem.nextblock_alloc;eauto.
   - set (init := gvar_init v) in *.
   set (sz := init_data_list_size init) in *.
   destruct (Mem.alloc m 0 sz) as [m1 b] eqn:?.
   destruct (store_zeros m1 b 0 sz) as [m2|] eqn:?; try discriminate.
   destruct (store_init_data_list m2 b 0 init) as [m3|] eqn:?; try discriminate.
-  erewrite Mem.support_drop; eauto.
-  erewrite store_init_data_list_support; eauto.
-  erewrite store_zeros_support; eauto.
-  erewrite Mem.support_alloc; eauto.
+  erewrite Mem.nextblock_drop; eauto.
+  erewrite store_init_data_list_nextblock; eauto.
+  erewrite store_zeros_nextblock; eauto.
+  erewrite Mem.nextblock_alloc; eauto.
 Qed.
 
-Remark alloc_globals_support:
+Remark alloc_globals_nextblock:
   forall gl m m',
   alloc_globals m gl = Some m' ->
-  Mem.support m' = advance_next gl (Mem.support m).
+  Mem.nextblock m' = advance_next gl (Mem.nextblock m).
 Proof.
   induction gl; simpl; intros.
   congruence.
   destruct (alloc_global m a) as [m1|] eqn:?; try discriminate.
-  erewrite IHgl; eauto. erewrite alloc_global_support;eauto.
+  erewrite IHgl; eauto. erewrite alloc_global_nextblock;eauto.
 Qed.
 
 (** Permissions *)
@@ -825,8 +800,8 @@ Proof.
   simpl; intros. inv H. tauto.
   simpl; intros. destruct (alloc_global m a) as [m1|] eqn:?; try discriminate.
   erewrite alloc_global_perm; eauto. eapply IHgl; eauto.
-  unfold Mem.valid_block in *. erewrite alloc_global_support; eauto.
-  apply Mem.sup_incr_in2. auto.
+  unfold Mem.valid_block in *. erewrite alloc_global_nextblock; eauto.
+  apply Plt_trans_succ; auto.
 Qed.
 
 (** Data preservation properties *)
@@ -1171,20 +1146,20 @@ Definition globals_initialized (g: symtbl) (m: mem) :=
 
 Lemma alloc_global_initialized:
   forall g m id gd m',
-  genv_sup g = Mem.support m ->
+  genv_next g = Mem.nextblock m ->
   alloc_global m (id, gd) = Some m' ->
   globals_initialized g m ->
      globals_initialized (add_global g (id, gd)) m'
-  /\ genv_sup (add_global g (id, gd)) = Mem.support m'.
+  /\ genv_next (add_global g (id, gd)) = Mem.nextblock m'.
 Proof.
   intros.
-  exploit alloc_global_support; eauto. intros NB. split.
+  exploit alloc_global_nextblock; eauto. intros NB. split.
 - (* globals-initialized *)
   red; intros. unfold find_info in H2; simpl in H2.
-  rewrite NMap.gsspec in H2. destruct (NMap.elt_eq b (fresh_block (genv_sup g))).
+  rewrite PTree.gsspec in H2. destruct (peq b (genv_next g)). 
 + inv H2. destruct gd0 as [f|v]; simpl in H0.
 * destruct (Mem.alloc m 0 1) as [m1 b] eqn:ALLOC.
-  exploit Mem.alloc_result; eauto. intros RES. unfold Mem.nextblock in RES.
+  exploit Mem.alloc_result; eauto. intros RES.
   rewrite H, <- RES. split.
   eapply Mem.perm_drop_1; eauto. lia.
   intros.
@@ -1196,8 +1171,8 @@ Proof.
   destruct (Mem.alloc m 0 sz) as [m1 b] eqn:?.
   destruct (store_zeros m1 b 0 sz) as [m2|] eqn:?; try discriminate.
   destruct (store_init_data_list m2 b 0 init) as [m3|] eqn:?; try discriminate.
-  exploit Mem.alloc_result; eauto. intro RES. unfold Mem.nextblock in RES.
-  replace (fresh_block(genv_sup g)) with b by congruence.
+  exploit Mem.alloc_result; eauto. intro RES.
+  replace (genv_next g) with b by congruence.
   split. red; intros. eapply Mem.perm_drop_1; eauto.
   split. intros.
   assert (0 <= ofs < sz).
@@ -1232,13 +1207,13 @@ Proof.
   intros. apply load_store_init_data_invariant with m; auto.
   intros. eapply Mem.load_unchanged_on_1; eauto. intros; exact I.
   intros. eapply Mem.loadbytes_unchanged_on; eauto. intros; exact I.
-- simpl. unfold Mem.nextblock in NB. congruence.
+- simpl. congruence.
 Qed.
 
 Lemma alloc_globals_initialized:
   forall gl ge m m',
   alloc_globals m gl = Some m' ->
-  genv_sup ge = Mem.support m ->
+  genv_next ge = Mem.nextblock m ->
   globals_initialized ge m ->
   globals_initialized (add_globals ge gl) m'.
 Proof.
@@ -1254,14 +1229,14 @@ End INITMEM.
 Definition init_mem (p: program unit unit) :=
   alloc_globals (symboltbl p) Mem.empty p.(prog_defs).
 
-Lemma init_mem_genv_sup: forall p m,
+Lemma init_mem_genv_next: forall p m,
   init_mem p = Some m ->
-  genv_sup (symboltbl p) = Mem.support m.
+  genv_next (symboltbl p) = Mem.nextblock m.
 Proof.
   unfold init_mem; intros.
-  exploit alloc_globals_support; eauto. rewrite Mem.support_empty. intro.
+  exploit alloc_globals_nextblock; eauto. rewrite Mem.nextblock_empty. intro.
   generalize (genv_next_add_globals (prog_defs p) (empty_stbl (prog_public p))).
-  fold (symboltbl p). simpl genv_sup. intros. congruence.
+  fold (symboltbl p). simpl genv_next. intros. congruence.
 Qed.
 
 Theorem find_symbol_not_fresh:
@@ -1269,7 +1244,7 @@ Theorem find_symbol_not_fresh:
   init_mem p = Some m ->
   find_symbol (symboltbl p) id = Some b -> Mem.valid_block m b.
 Proof.
-  intros. red. erewrite <- init_mem_genv_sup; eauto.
+  intros. red. erewrite <- init_mem_genv_next; eauto.
   eapply genv_symb_range; eauto.
 Qed.
 
@@ -1279,7 +1254,7 @@ Lemma init_mem_characterization_gen:
   globals_initialized (symboltbl p) (symboltbl p) m.
 Proof.
   intros. apply alloc_globals_initialized with Mem.empty. auto.
-  rewrite Mem.support_empty. auto.
+  rewrite Mem.nextblock_empty. auto.
   red; intros. unfold find_info in H0; simpl in H0;  discriminate.
 Qed.
 
@@ -1304,13 +1279,13 @@ Qed.
 Section INITMEM_INJ.
 
 Variable ge: symtbl.
-Variable s: sup.
-Hypothesis symb_inject: forall id b, find_symbol ge id = Some b -> sup_In b s.
+Variable s: block.
+Hypothesis symb_inject: forall id b, find_symbol ge id = Some b -> Plt b s.
 
 Lemma store_zeros_neutral:
   forall m b p n m',
   Mem.inject_neutral s m ->
-  sup_In b s ->
+  Plt b s ->
   store_zeros m b p n = Some m' ->
   Mem.inject_neutral s m'.
 Proof.
@@ -1323,7 +1298,7 @@ Qed.
 Lemma store_init_data_neutral:
   forall m b p id m',
   Mem.inject_neutral s m ->
-  sup_In b s ->
+  Plt b s ->
   store_init_data ge m b p id = Some m' ->
   Mem.inject_neutral s m'.
 Proof.
@@ -1339,7 +1314,7 @@ Qed.
 Lemma store_init_data_list_neutral:
   forall b idl m p m',
   Mem.inject_neutral s m ->
-  sup_In b s ->
+  Plt b s ->
   store_init_data_list ge m b p idl = Some m' ->
   Mem.inject_neutral s m'.
 Proof.
@@ -1353,14 +1328,13 @@ Lemma alloc_global_neutral:
   forall idg m m',
   alloc_global ge m idg = Some m' ->
   Mem.inject_neutral s m ->
-  Mem.sup_include (sup_incr (Mem.support m)) s ->
+  Plt (Mem.nextblock m) s ->
   Mem.inject_neutral s m'.
 Proof.
-  intros. destruct idg as [id [f|v]]; simpl in H.
+    intros. destruct idg as [id [f|v]]; simpl in H.
   (* function *)
   destruct (Mem.alloc m 0 1) as [m1 b] eqn:?.
-  assert (b = Mem.nextblock m). rewrite (Mem.alloc_result _ _ _ _ _ Heqp). reflexivity.
-  assert (sup_In b s). apply H1. subst b. apply Mem.sup_incr_in1.  auto. subst b.
+  assert (Plt b s). rewrite (Mem.alloc_result _ _ _ _ _ Heqp). auto.
   eapply Mem.drop_inject_neutral; eauto.
   eapply Mem.alloc_inject_neutral; eauto.
   (* variable *)
@@ -1369,36 +1343,35 @@ Proof.
   destruct (Mem.alloc m 0 sz) as [m1 b] eqn:?.
   destruct (store_zeros m1 b 0 sz) as [m2|] eqn:?; try discriminate.
   destruct (store_init_data_list ge m2 b 0 init) as [m3|] eqn:?; try discriminate.
-  assert (b = Mem.nextblock m). rewrite (Mem.alloc_result _ _ _ _ _ Heqp). reflexivity.
-  assert (sup_In b s). apply H1. subst b. apply Mem.sup_incr_in1. auto. subst b.
-
+  assert (Plt b s). rewrite (Mem.alloc_result _ _ _ _ _ Heqp). auto.
   eapply Mem.drop_inject_neutral; eauto.
-  eapply store_init_data_list_neutral with (m := m2) (b := Mem.nextblock m); eauto.
+  eapply store_init_data_list_neutral with (m := m2) (b := b); eauto.
   eapply store_zeros_neutral with (m := m1); eauto.
   eapply Mem.alloc_inject_neutral; eauto.
 Qed.
 
-Remark advance_next_le: forall gl s, Mem.sup_include s (advance_next gl s).
+Remark advance_next_le: forall gl s, Ple s (advance_next gl s).
 Proof.
   induction gl; simpl; intros.
-  apply Mem.sup_include_refl.
-  apply Mem.sup_include_trans with (sup_incr s0). intro. intro.  apply Mem.sup_incr_in2. auto.  eauto.
+  apply Ple_refl.
+  apply Ple_trans with (Pos.succ s0). apply Ple_succ. eauto.
 Qed.
 
 Lemma alloc_globals_neutral:
   forall gl m m',
   alloc_globals ge m gl = Some m' ->
   Mem.inject_neutral s m ->
-  Mem.sup_include (Mem.support m') s ->
+  Ple (Mem.nextblock m') s ->
   Mem.inject_neutral s m'.
 Proof.
   induction gl; intros.
   simpl in *. congruence.
-  exploit alloc_globals_support; eauto. intros EQ.
+  exploit alloc_globals_nextblock; eauto. intros EQ.
   simpl in *. destruct (alloc_global ge m a) as [m1|] eqn:E; try discriminate.
   exploit alloc_global_neutral; eauto.
-  apply Mem.sup_include_trans with (Mem.support m').
-  rewrite EQ. apply advance_next_le. auto.
+  assert (Ple (Pos.succ (Mem.nextblock m)) (Mem.nextblock m')).
+  { rewrite EQ. apply advance_next_le. }
+  unfold Plt, Ple in *; zify; lia.
 Qed.
 
 End INITMEM_INJ.
@@ -1406,13 +1379,14 @@ End INITMEM_INJ.
 Theorem initmem_inject:
   forall p m,
   init_mem p = Some m ->
-  Mem.inject (Mem.flat_inj (Mem.support m)) m m.
+  Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m.
 Proof.
-  unfold init_mem; intros.
+    unfold init_mem; intros.
   apply Mem.neutral_inject.
   eapply alloc_globals_neutral; eauto.
   intros. exploit find_symbol_not_fresh; eauto.
   apply Mem.empty_inject_neutral.
+  apply Ple_refl.
 Qed.
 
 (** ** Sufficient and necessary conditions for the initial memory to exist. *)
@@ -1625,20 +1599,20 @@ Record match_stbls (f: meminj) (ge1: symtbl) (ge2: symtbl) := {
   mge_public:
     forall id, Genv.public_symbol ge2 id = Genv.public_symbol ge1 id;
   mge_dom:
-    forall b1, sup_In b1 (genv_sup ge1) ->
+    forall b1, Plt b1 (genv_next ge1) ->
     exists b2, f b1 = Some (b2, 0); (* kept *)
   mge_img:
-    forall b2, sup_In b2 (genv_sup ge2) ->
+    forall b2, Plt b2 (genv_next ge2) ->
     exists b1, f b1 = Some (b2, 0);
   mge_symb:
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
     forall id, (Genv.genv_symb ge1) ! id = Some b1 <-> (Genv.genv_symb ge2) ! id = Some b2;
   mge_info:
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
-    NMap.get _ b1 ge1.(genv_info) = NMap.get _ b2 ge2.(genv_info);
+    PTree.get b1 ge1.(genv_info) = PTree.get b2 ge2.(genv_info);
   mge_separated:
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
-    sup_In b1 (genv_sup ge1) <-> sup_In b2 (genv_sup ge2)
+    Plt b1 (genv_next ge1) <-> Plt b2 (genv_next ge2)
     (* Pos.le (genv_next ge1) b1 <-> Pos.le (genv_next ge2) b2; clean *)
 
 }.
@@ -1647,7 +1621,7 @@ Record match_genvs {A B V W} (f: meminj) R (ge1: t A V) (ge2: t B W) := {
   mge_stbls :> match_stbls f ge1 ge2;
   mge_defs:
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
-    option_rel R (NMap.get _ b1 ge1.(genv_defs)) (NMap.get _ b2 ge2.(genv_defs));
+    option_rel R (PTree.get b1 ge1.(genv_defs)) (PTree.get b2 ge2.(genv_defs));
 }.
 
 Theorem match_stbls_id ge:
@@ -1667,12 +1641,12 @@ Proof.
   intros H12 H23. split; intros.
   - erewrite !mge_public by eauto. reflexivity.
   - edestruct (mge_dom H12) as (b2 & Hb12); eauto.
-    assert (sup_In b2 (genv_sup ge2)).
+    assert (Plt b2 (genv_next ge2)).
     { pose proof (mge_separated H12 _ Hb12). apply H0,H. }
     edestruct (mge_dom H23) as (b3 & Hb23); eauto.
     eexists. unfold compose_meminj. rewrite Hb12, Hb23. reflexivity.
   - edestruct (mge_img H23) as (bi & Hbi2); eauto.
-    assert (sup_In bi (genv_sup ge2)).
+    assert (Plt bi (genv_next ge2)).
     { pose proof (mge_separated H23 _ Hbi2). apply H0,H. }
     edestruct (mge_img H12) as (b1 & Hb12); eauto.
     eexists. unfold compose_meminj. rewrite Hb12, Hbi2. reflexivity.
@@ -1701,7 +1675,7 @@ Context {f se tse} (Hse: match_stbls f se tse).
 Theorem match_stbls_incr f':
   inject_incr f f' ->
   (forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) ->
-   ~sup_In b1 se.(genv_sup) /\ ~sup_In b2 tse.(genv_sup)) ->
+   ~Plt b1 se.(genv_next) /\ ~Plt b2 tse.(genv_next)) ->
   match_stbls f' se tse.
 Proof.
   intros Hf' SEP. split.
@@ -1719,8 +1693,8 @@ Proof.
     + rewrite (Hf' _ _ _ Hb) in Hb'. inv Hb'.
       eapply mge_info; eauto.
     + edestruct SEP; eauto.
-      destruct (NMap.get _ b1 (genv_info se)) eqn:H1. apply genv_info_range in H1. congruence.
-      destruct (NMap.get _ b2 (genv_info tse)) eqn:H2. apply genv_info_range in H2. congruence.
+      destruct (PTree.get b1 (genv_info se)) eqn:H1. apply genv_info_range in H1. congruence.
+      destruct (PTree.get b2 (genv_info tse)) eqn:H2. apply genv_info_range in H2. congruence.
       reflexivity.
   - intros b1 b2 delta Hb'.
     destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
@@ -1773,13 +1747,13 @@ Theorem find_def_match_genvs ge tge:
   delta = 0.
 Proof.
   clear. intros. unfold Genv.find_def in *.
-  assert (sup_In b (genv_sup ge)) by eauto using Genv.genv_defs_range.
+  assert (Plt b (genv_next ge)) by eauto using Genv.genv_defs_range.
   edestruct mge_dom; eauto using mge_stbls.
   destruct (mge_defs H b H1); try congruence.
   exists y. intuition eauto; congruence.
 Qed.
 
-Local Notation "a # b" := (NMap.get _ b a) (at level 1).
+Local Notation "a # b" := (PTree.get b a) (at level 1).
 
 Lemma add_globdef_match:
   forall b1 b2 delta defs1 defs2 id gd1 gd2,
@@ -1794,15 +1768,15 @@ Proof.
     pose proof Hb1' as Hb2'. erewrite mge_symb in Hb2' by eauto. rewrite Hb2'.
     destruct (eq_block b1' b1); subst.
     + assert (b2' = b2) by congruence; subst.
-      rewrite !NMap.gsspec.
+      rewrite !PTree.gsspec.
       rewrite !pred_dec_true; auto. constructor. auto.
     + assert (b2' <> b2).
       { intro. subst. erewrite <- (mge_symb Hse b1) in Hb2' by eauto. congruence. }
-      rewrite !NMap.gsspec, !pred_dec_false. assumption. auto. auto.
+      rewrite !PTree.gsspec, !pred_dec_false. assumption. auto. auto.
   - destruct ((genv_symb tse) ! id) as [b2' | ] eqn:Hb2'; auto.
     destruct (eq_block b2' b2); subst.
     + erewrite <- mge_symb in Hb2' by eauto. congruence.
-    + rewrite NMap.gsspec, pred_dec_false. auto. auto.
+    + rewrite PTree.gsspec, pred_dec_false. auto. auto.
 Qed.
 
 End MATCH_GENVS.
@@ -1837,16 +1811,12 @@ Proof.
   rewrite !PTree.fold_spec.
   apply PTree.elements_canonical_order' in Hd. revert Hd.
   generalize (prog_defmap p), (prog_defmap tp). intros d1 d2 Hd.
-(*   cut (option_rel match_gd (PTree.empty _)!b1 (PTree.empty _)!b2). *)
-  cut (option_rel match_gd
-      (NMap.get _ b1 (NMap.init (option (globdef F1 V1)) None ))
-      (NMap.get _ b2 (NMap.init (option (globdef F2 V2)) None ))).
-  - generalize (NMap.init (option (globdef F1 V1)) None),
-               (NMap.init (option (globdef F2 V2)) None).
+  cut (option_rel match_gd (PTree.empty _)!b1 (PTree.empty _)!b2).
+  - generalize (PTree.empty (globdef F1 V1)), (PTree.empty (globdef F2 V2)).
     induction Hd as [ | [id1 g1] l1 [id2 g2] l2 [Hi Hg] Hl IH]; cbn in *; eauto.
-    intros t1 t2 Ht. eapply IH. eauto. rewrite Hi.
+    intros t1 t2 Ht. eapply IH; eauto. rewrite Hi.
     eapply add_globdef_match; eauto.
-  - unfold NMap.get. rewrite !NMap.gi. constructor.
+  - rewrite !PTree.gempty. constructor.
 Qed.
 
 Theorem find_def_match:
@@ -1882,8 +1852,8 @@ Theorem find_funct_none:
   v <> Vundef ->
   find_funct (globalenv tse tp) tv = None.
 Proof.
-  intros v tv Hf1 INJ Hv. destruct INJ; auto; try congruence.
-  destruct (Mem.sup_dec b1 se.(genv_sup)).
+    intros v tv Hf1 INJ Hv. destruct INJ; auto; try congruence.
+  destruct (plt b1 se.(genv_next)).
   - edestruct mge_dom; eauto. rewrite H1 in H. inv H.
     rewrite Ptrofs.add_zero. revert Hf1.
     unfold find_funct, find_funct_ptr, find_def.
@@ -1892,10 +1862,9 @@ Proof.
     destruct H; congruence.
   - unfold find_funct, find_funct_ptr, find_def.
     destruct Ptrofs.eq_dec; auto.
-    destruct NMap.get as [[|]|] eqn:Hdef; auto. exfalso.
+    destruct PTree.get as [[|]|] eqn:Hdef; auto. exfalso.
     apply genv_defs_range in Hdef.
-    eapply mge_separated in H; eauto. cbn in *.
-    apply n,H,Hdef.
+    eapply mge_separated in H; eauto. cbn in *. extlia.
 Qed.
 
 Theorem is_internal_match `{I1: FundefIsInternal F1} `{I2: FundefIsInternal F2}:
