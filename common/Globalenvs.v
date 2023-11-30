@@ -1807,6 +1807,190 @@ Qed.
 
 End MATCH_GENVS.
 
+Definition skel_removed_symbol (sk1 sk2: AST.program unit unit) (id: ident) : Prop :=
+  In id (prog_defs_names sk1) /\ ~In id (prog_defs_names sk2).
+
+Definition removed_symbol (se1 se2: Genv.symtbl) (id: ident): Prop :=
+  exists b, Genv.find_symbol se1 id = Some b /\ Genv.find_symbol se2 id = None.
+
+
+Definition removed_compatible (sk1 sk2: AST.program unit unit) (se1 se2: Genv.symtbl) :=
+  (forall id, In id (prog_defs_names sk1) -> Genv.find_symbol se2 id <> None -> In id (prog_defs_names sk2))
+  /\ ~ removed_symbol se1 se2 (prog_main sk1).
+ (* main is defined as kept in Unusedglob, thus we need to ensure that it can not be 
+    droped by symtbl *)
+
+Definition skel_symtbl_compatible (sk1 sk2: AST.program unit unit) (se1 se2: Genv.symtbl) :=
+  valid_for sk1 se1 /\ valid_for sk2 se2 /\ removed_compatible sk1 sk2 se1 se2.
+
+Definition skel_le (sk1 sk2: AST.program unit unit): Prop :=
+  (forall id g, (prog_defmap sk1) ! id = Some g -> (prog_defmap sk2) ! id = Some g)
+  /\ (forall id g, (prog_defmap sk2)! id = Some g -> In id (prog_public sk2) ->
+             (prog_defmap sk1)! id = Some g)
+  /\ (prog_public sk2 = prog_public sk1).
+
+Instance skel_le_refl: RelationClasses.Reflexive skel_le.
+Proof.
+  intro sk. split; intros; auto.
+Qed.
+
+Instance skel_le_tran: RelationClasses.Transitive skel_le.
+Proof.
+  intros sk1 sk2 sk3 [H11 [H12 H13]] [H21 [H22 H23]].
+  split.
+  intros. eauto.
+  split.
+  intros. eapply H12; eauto. rewrite <- H23. eauto.
+  congruence.
+Qed.
+
+Section MATCH_GENVS'.
+
+Record match_stbls' (f: meminj) (ge1: symtbl) (ge2: symtbl) := {
+  mge_public':
+    forall id, Genv.public_symbol ge2 id = Genv.public_symbol ge1 id;
+  mge_dom':
+    forall b1 b2 delta, sup_In b1 (genv_sup ge1) -> f b1 = Some (b2, delta) ->
+                   delta = 0;
+  mge_img':
+    forall b2, sup_In b2 (genv_sup ge2) ->
+    exists b1, f b1 = Some (b2, 0);
+  mge_symb':
+    forall b1 b2 delta, f b1 = Some (b2, delta) ->
+    forall id, (Genv.genv_symb ge1) ! id = Some b1 <-> (Genv.genv_symb ge2) ! id = Some b2;
+  mge_info':
+    forall b1 b2 delta, f b1 = Some (b2, delta) ->
+    NMap.get _ b1 ge1.(genv_info) = NMap.get _ b2 ge2.(genv_info);
+  mge_separated':
+    forall b1 b2 delta, f b1 = Some (b2, delta) ->
+    sup_In b1 (genv_sup ge1) <-> sup_In b2 (genv_sup ge2);
+}.
+
+Record match_genvs' {A B V W} (f: meminj) R (ge1: t A V) (ge2: t B W) := {
+  mge_stbls' :> match_stbls' f ge1 ge2;
+  mge_defs':
+    forall b1 b2 delta, f b1 = Some (b2, delta) ->
+    option_rel R (NMap.get _ b1 ge1.(genv_defs)) (NMap.get _ b2 ge2.(genv_defs));
+}.
+
+Theorem match_stbls_id' ge:
+  match_stbls' inject_id ge ge.
+Proof.
+  unfold inject_id. split; eauto.
+  - inversion 2. reflexivity.
+  - inversion 1. reflexivity.
+  - inversion 1. auto.
+  - inversion 1. reflexivity.
+Qed.
+
+Theorem match_stbls'_compose f g ge1 ge2 ge3:
+  match_stbls' f ge1 ge2 ->
+  match_stbls' g ge2 ge3 ->
+  match_stbls' (compose_meminj f g) ge1 ge3.
+Proof.
+  intros H12 H23. split; intros.
+  - erewrite !mge_public' by eauto. reflexivity.
+  - unfold compose_meminj in H0.
+    destruct (f b1) as [[b1' d] |] eqn:INJ1; try discriminate.
+    exploit (mge_dom' H12); eauto. intro. subst.
+    destruct (g b1') as [[b2' d]|] eqn:INJ2; try discriminate.
+    inv H0.
+    assert (sup_In b1' (genv_sup ge2)).
+    { pose proof (mge_separated' H12 _ INJ1). apply H0. eauto. }
+    exploit (mge_dom' H23); eauto.
+  - edestruct (mge_img' H23) as (bi & Hbi2); eauto.
+    assert (sup_In bi (genv_sup ge2)).
+    { pose proof (mge_separated' H23 _ Hbi2). apply H0. eauto. } 
+    edestruct (mge_img' H12) as (b1 & Hb12); eauto.
+    eexists. unfold compose_meminj. rewrite Hb12, Hbi2. reflexivity.
+  - unfold compose_meminj in H. rename b2 into b3.
+    destruct (f b1) as [[b2 delta12] | ] eqn:Hb12; try discriminate.
+    destruct (g b2) as [[xb3 delta23] | ] eqn:Hb23; inv H.
+    eapply mge_symb' in Hb12; eauto.
+    eapply mge_symb' in Hb23; eauto.
+    etransitivity; eauto.
+  - unfold compose_meminj in H. rename b2 into b3.
+    destruct (f b1) as [[b2 delta12] | ] eqn:Hb12; try discriminate.
+    destruct (g b2) as [[xb3 delta23] | ] eqn:Hb23; inv H.
+    eapply mge_info' in Hb12; eauto.
+    eapply mge_info' in Hb23; eauto.
+    etransitivity; eauto.
+  - unfold compose_meminj in H. rename b2 into b3.
+    destruct (f b1) as [[b2 delta12] | ] eqn:Hb12; try discriminate.
+    destruct (g b2) as [[xb3 delta23] | ] eqn:Hb23; inv H.
+    eapply mge_separated' in Hb12; eauto.
+    eapply mge_separated' in Hb23; eauto.
+    etransitivity; eauto.
+Qed.
+
+Context {f se tse} (Hse: match_stbls' f se tse).
+
+Theorem match_stbls_incr' f':
+  inject_incr f f' ->
+  (forall b1 b2 delta, f b1 = None -> f' b1 = Some (b2, delta) ->
+   ~ sup_In b1 se.(genv_sup) /\ ~sup_In b2 tse.(genv_sup)) ->
+  match_stbls' f' se tse.
+Proof.
+  intros Hf' SEP. split.
+  - eapply mge_public'; eauto.
+  - intros. eapply mge_dom'; eauto.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+    + rewrite (Hf' _ _ _ Hb) in H0. inv H0.
+      reflexivity.
+    + exploit SEP; eauto. intros [A B]. congruence.
+  - intros. edestruct mge_img' as (bi & Hbi); eauto.
+  - intros. split.
+    + intros Hb1. destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+      * rewrite (Hf' _ _ _ Hb) in H. inv H.
+        inv Hse. eapply mge_symb'0; eauto.
+      * exploit SEP; eauto. intros [A B]. apply Genv.genv_symb_range in Hb1. congruence.
+    + intros Hb2. destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+      * rewrite (Hf' _ _ _ Hb) in H. inv H. rewrite mge_symb'; eauto.
+      * edestruct SEP; eauto. apply genv_symb_range in Hb2. congruence.
+  - intros b1 b2 delta Hb'.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+    + rewrite (Hf' _ _ _ Hb) in Hb'. inv Hb'.
+      eapply mge_info'; eauto.
+    + edestruct SEP; eauto.
+      destruct (NMap.get _ b1 (genv_info se)) eqn:H1. apply genv_info_range in H1. congruence.
+      destruct (NMap.get _ b2 (genv_info tse)) eqn:H2. apply genv_info_range in H2. congruence.
+      reflexivity.
+  - intros b1 b2 delta Hb'.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+    + rewrite (Hf' _ _ _ Hb) in Hb'. inv Hb'.
+      eapply mge_separated'; eauto.
+    + edestruct SEP; eauto. tauto.
+Qed.
+
+End MATCH_GENVS'.
+
+
+Lemma match_stbls_stbls' :
+  forall j se tse, match_stbls j se tse -> match_stbls' j se tse.
+Proof.
+  intros. inv H. constructor; intros; eauto.
+  exploit mge_dom0; eauto. intros [b2' INJ].
+  rewrite H0 in INJ. inv INJ. reflexivity.
+Qed.
+
+Lemma match_stbls_stbls'_compose  f g ge1 ge2 ge3:
+  match_stbls f ge1 ge2 ->
+  match_stbls' g ge2 ge3 ->
+  match_stbls' (compose_meminj f g) ge1 ge3.
+Proof.
+  intros. eapply match_stbls'_compose; eauto.
+  eapply match_stbls_stbls'; eauto.
+Qed.
+
+Lemma match_stbls'_stbls_compose  f g ge1 ge2 ge3:
+  match_stbls f ge1 ge2 ->
+  match_stbls' g ge2 ge3 ->
+  match_stbls' (compose_meminj f g) ge1 ge3.
+Proof.
+  intros. eapply match_stbls'_compose; eauto.
+  eapply match_stbls_stbls'; eauto.
+Qed.
+
 Section MATCH_PROGRAMS.
 
 Context {C F1 V1 F2 V2: Type} {LC: Linker C} {LF: Linker F1} {LV: Linker V1}.

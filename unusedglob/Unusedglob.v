@@ -110,38 +110,14 @@ Definition used_globals (p: program) (pm: prog_map) : option IS.t :=
 (** We also eliminate multiple definitions of the same global name, keeping only
   the last definition (in program definition order). *)
 
-
-(** Remove the code of unused functions *)
-         
-Definition empty_function : function :=
-  mkfunction (mksignature nil Tvoid cc_default) nil 0
-    (PTree.set 1 (Ireturn None) (PTree.empty _)) 1%positive.
-
-Definition remove_gfun (gd : globdef fundef unit) :=
-  match gd with
-  |Gvar v => gd
-  |Gfun f => Gfun (Internal empty_function)
-  end.
-
-(*
 Fixpoint filter_globdefs (used: IS.t) (accu defs: list (ident * globdef fundef unit)) :=
   match defs with
   | nil => accu
   | (id, gd) :: defs' =>
       if IS.mem id used
       then filter_globdefs (IS.remove id used) ((id, gd) :: accu) defs'
-      else filter_globdefs used ((id, remove_gfun gd) :: accu) defs'
+      else filter_globdefs used accu defs'
   end.
- *)
-
-
-Definition filter_globdef (used: IS.t) (def: ident * globdef fundef unit) :=
-  match def with (id,gd) =>
-                   if IS.mem id used then (id,gd) else (id, remove_gfun gd)
-  end.
-
-Definition filter_globdefs (used: IS.t) (defs : list (ident * globdef fundef unit)) :=
-  map (filter_globdef used) defs.
 
 (** To ensure compatibility with linking, we must ensure that all the
   global names referenced are defined in the compilation unit, with
@@ -156,27 +132,9 @@ Definition transform_program (p: program) : res program :=
   | None => Error (msg "Unusedglob: analysis failed")
   | Some used =>
       if IS.for_all (global_defined p pm) used then
-        OK {| prog_defs := filter_globdefs used p.(prog_defs);
+        OK {| prog_defs := filter_globdefs used nil (List.rev p.(prog_defs));
               prog_public := p.(prog_public);
               prog_main := p.(prog_main) |}
       else
         Error (msg "Unusedglob: reference to undefined global")
   end.
-
-Lemma transform_skel : forall p tp, transform_program p = OK tp ->
-                     erase_program tp = erase_program p.
-Proof.
-  intros. unfold transform_program in H.
-  destruct used_globals; try discriminate.
-  destruct IS.for_all;try discriminate.
-  inv H.  unfold erase_program.
-  simpl. f_equal.
-  unfold filter_globdefs.
-  rewrite map_map.
-  eapply map_ext.
-  intros. destruct a. simpl.
-  destruct IS.mem.
-  - eauto.
-  - destruct g; simpl; reflexivity.
-Qed.
-        
