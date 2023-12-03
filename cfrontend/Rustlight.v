@@ -202,17 +202,24 @@ Definition env := PTree.t (block * type). (* map variable -> location & type *)
 
 Definition empty_env: env := (PTree.empty (block * type)).
 
-(** ** Move environment  *)
+(** ** Initialized place environment  *)
 
-(** It records the drop obligations for a local variable and its
+(** It records the information of whether a place is initialized or
+not. We only record the place whose type is [Tbox] or [Treference mut]
+for now (because if a new type is not copy, it must be recorded.  For
+example, if [x] has type [Tbox<T>] and [x] is not move from, then [x]
+is an initialized [Box]. After evaluate [move x], [x] is removed from
+the initialized place env *)
+
+(** [TODEL] It records the drop obligations for a local variable and its
 successors. If [x] owns a memory location (i.e., x has type [Tbox],
 before freeing [x], we must first free the memory block of [*x]. In a
 high level, if a place [p] is in the mvenv, then we should free the
 memory location [p] points to when we free [p] *)
 
-Definition mvenv := PTree.t (list place).
+Definition init_env := PTree.t (list place).
 
-Definition empty_mvenv : mvenv := PTree.empty (list place).
+Definition empty_init_env : init_env := PTree.empty (list place).
 
 (** access mode for Rust types  *)
 Definition access_mode (ty: type) : mode :=
@@ -312,42 +319,31 @@ Fixpoint local_of_place (p: place) :=
   end.
 
 
-Definition erase_move_paths (me: mvenv) (p: place) : option mvenv :=
+Definition erase_init_paths (ie: init_env) (p: place) : option init_env :=
   let id := local_of_place p in
-  match PTree.get id me with
-  | Some drop_obligations =>
-      let erased := filter (fun p1 => negb (is_prefix p p1)) drop_obligations in
-      Some (PTree.set id erased me)
+  match PTree.get id ie with
+  | Some init_path =>
+      let erased := filter (fun p1 => negb (is_prefix p p1)) init_path in
+      Some (PTree.set id erased ie)
   | None => None
   end.
 
-Definition updated_move_env (me: mvenv) (op: option place) (ty: type) : option mvenv :=
+Definition update_init_env (ie: init_env) (op: option place) (ty: type) : option init_env :=
   match op, ty with
-  | Some p, Tbox _ => erase_move_paths me p
-  | _, _ => Some me
+  | Some p, Tbox _ => erase_init_paths ie p
+  | _, _ => Some ie
   end.
 
-Fixpoint updated_move_env_list (me: mvenv) (opl: list (option place)) (tyl: typelist) : option mvenv :=
+Fixpoint update_init_env_list (ie: init_env) (opl: list (option place)) (tyl: typelist) : option init_env :=
   match opl, tyl with
   | op::opl', Tcons ty tyl' =>
-      match updated_move_env me op ty with
-      | Some me' => updated_move_env_list me' opl' tyl'
+      match update_init_env ie op ty with
+      | Some ie' => update_init_env_list ie' opl' tyl'
       | None => None
       end
   | _,_ => None
   end.
   
-(** If [p:Box<ty>] then p can be moved; If [*p:Box<ty>] and [p:Box<..>] then *p can be moved *)
-Definition legal_move (p: place) : bool :=
-  match p with
-  | Plocal id ty =>
-      negb (not_owned_type ty)
-  | Pderef p' ty' =>
-      match typeof_place p' with
-      | Tbox _ => negb (not_owned_type ty')
-      | _ => false
-      end
-  end.
 
 (** Classify function (copy from Cop.v)  *)
 Inductive classify_fun_cases : Type :=
@@ -455,7 +451,7 @@ Inductive cont : Type :=
 | Klet: ident -> cont -> cont
 | Kloop1: statement -> statement -> cont -> cont
 | Kloop2: statement -> statement -> cont -> cont
-| Kcall: option ident  -> function -> env -> mvenv -> cont -> cont.
+| Kcall: option ident  -> function -> env -> init_env -> cont -> cont.
 
 
 (** Pop continuation until a call or stop *)
@@ -485,7 +481,7 @@ Inductive state: Type :=
       (s: statement)
       (k: cont)
       (e: env)
-      (me: mvenv)
+      (me: init_env)
       (m: mem) : state
   | Callstate
       (vf: val)
@@ -502,8 +498,9 @@ Inductive state: Type :=
 (** Drop the owned chain of the place [p] until it meets an unowned
 type or the place is not in the drop obligations. For example, if
 there is a chain "[p] -own-> [*p] -own-> [**p] -mut-> [***p] -own->
-[****p]", and the drop obligations for [p] is {p, *p, ***p}, then
-drop_place' would drop the location pointed by [p] and [*p]. *)
+[****p]", and the initialized env for [p] is {p, *p, **p, ***p}, then
+drop_place' would drop the location pointed by [p] and [*p] because
+[**p] is not an owned pointer. *)
 Inductive drop_place' (owned: list place) (p: place) (m: mem) (b: block) (ofs: ptrofs) : mem -> Prop :=
 | drop_base: forall ty,
     typeof_place p = ty ->
@@ -528,21 +525,21 @@ Inductive drop_place' (owned: list place) (p: place) (m: mem) (b: block) (ofs: p
     drop_place' owned p m b ofs m''.
 
 (** Free {*p, **p ,... } according to me  *)
-Inductive drop_place (e: env) (me: mvenv) (p: place) (m: mem) : mem -> Prop :=
+Inductive drop_place (e: env) (ie: init_env) (p: place) (m: mem) : mem -> Prop :=
 | drop_gen: forall b ofs m' id owned,
     eval_place e m p b ofs ->
     local_of_place p = id ->
-    PTree.get id me = Some owned ->
+    PTree.get id ie = Some owned ->
     drop_place' owned p m b ofs m' ->
-    drop_place e me p m m'.
+    drop_place e ie p m m'.
 
-Inductive drop_place_list (e: env) (me: mvenv) (m: mem) : list place -> mem -> Prop :=
+Inductive drop_place_list (e: env) (ie: init_env) (m: mem) : list place -> mem -> Prop :=
 | drop_place_list_base:
-    drop_place_list e me m nil m
+    drop_place_list e ie m nil m
 | drop_place_list_cons: forall p lp m' m'',
-    drop_place e me p m m' ->
-    drop_place_list e me m' lp m'' ->
-    drop_place_list e me m (p::lp) m''.
+    drop_place e ie p m m' ->
+    drop_place_list e ie m' lp m'' ->
+    drop_place_list e ie m (p::lp) m''.
   
        
 
@@ -550,7 +547,7 @@ Inductive drop_place_list (e: env) (me: mvenv) (m: mem) : list place -> mem -> P
 
 (** Transition relation *)
 
-(** If a place [p] owns a location through box, it has the drop
+(** [TODEL] If a place [p] owns a location through box, it has the drop
 obligations. In other words, if [p] has type [Tbox] then [p] in its
 drop obligation list. A special case is the mutable reference, if [p]
 has type [&mut T], then we should not terminate the obligation
@@ -558,31 +555,45 @@ generation, instead we should generate the obligations for [*p] (i.e.,
 skip [p]). For example, if [p:&mut Box<i32> = &mut x] and [*p =
 new_box], we should drop *p. Note that when x goes out of scope, it
 would drop the [new_box]. *)
-Fixpoint drop_obligations (p: place) (ty: type) : list place :=
+(* Fixpoint drop_obligations (p: place) (ty: type) : list place := *)
+(*   match ty with *)
+(*   | Tbox ty' => *)
+(*       let deref := Pderef p ty' in *)
+(*       p :: drop_obligations deref ty' *)
+(*   | Treference ty' Mutable _ => *)
+(*       let deref := Pderef p ty' in *)
+(*       drop_obligations deref ty' *)
+(*   | _ => nil *)
+(*   end. *)
+
+Fixpoint init_path (p: place) (ty: type) : list place :=
   match ty with
   | Tbox ty' =>
       let deref := Pderef p ty' in
-      p :: drop_obligations deref ty'
+      p :: init_path deref ty'
   | Treference ty' Mutable _ =>
       let deref := Pderef p ty' in
-      drop_obligations deref ty'
+      p :: init_path deref ty'
   | _ => nil
   end.
+  
+
+
 
 (** Allocate memory blocks for function parameters and build the local environment and move environment  *)
-Inductive alloc_variables: env -> mvenv -> mem ->
+Inductive alloc_variables: env -> init_env -> mem ->
                            list (ident * type) ->
-                           env -> mvenv -> mem -> Prop :=
+                           env -> init_env -> mem -> Prop :=
 | alloc_variables_nil:
-  forall e me m,
-    alloc_variables e me m nil e me m
+  forall e ie m,
+    alloc_variables e ie m nil e ie m
 | alloc_variables_cons:
-  forall e me m id ty vars m1 b1 m2 e2 me2 drops,
+  forall e ie m id ty vars m1 b1 m2 e2 ie2 drops,
     Mem.alloc m 0 (sizeof ty) = (m1, b1) ->
-    (* get the drop obligations based on ty *)
-    drop_obligations (Plocal id ty) ty = drops ->
-    alloc_variables (PTree.set id (b1, ty) e) (PTree.set id drops me) m1 vars e2 me2 m2 ->
-    alloc_variables e me m ((id, ty) :: vars) e2 me2 m2.
+    (* get the initialized path based on ty *)
+    init_path (Plocal id ty) ty = drops ->
+    alloc_variables (PTree.set id (b1, ty) e) (PTree.set id drops ie) m1 vars e2 ie2 m2 ->
+    alloc_variables e ie m ((id, ty) :: vars) e2 ie2 m2.
 
 (** Assign the values to the memory blocks of the function parameters  *)
 Inductive bind_parameters (e: env):
@@ -617,12 +628,12 @@ Definition places_of_env (e:env) : list place :=
 
 
 (** Function entry semantics: the key is to instantiate the move environments  *)
-Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (me: mvenv) (m': mem) : Prop :=
+Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (ie: init_env) (m': mem) : Prop :=
 | function_entry_intro: forall m1,
     list_norepet (var_names f.(fn_params)) ->
-    alloc_variables empty_env empty_mvenv m f.(fn_params) e me m1 ->
+    alloc_variables empty_env empty_init_env m f.(fn_params) e ie m1 ->
     bind_parameters e m1 f.(fn_params) vargs m' ->
-    function_entry ge f vargs m e me m'.
+    function_entry ge f vargs m e ie m'.
  
 Section WITH_GE.
 
@@ -630,60 +641,60 @@ Variable ge: genv.
 
 Inductive step: state -> trace -> state -> Prop :=
 
-| step_assign: forall f be p op k le me me' m1 m2 m3 m4 b ofs ty v,
+| step_assign: forall f be p op k le ie ie' m1 m2 m3 m4 b ofs ty v,
     typeof_place p = ty ->
     typeof_boxexpr be = ty ->             (* for now, just forbid type casting *)
     (* get the location of the place *)
     eval_place le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
     eval_boxexpr le m1 be v op m2 ->
-    (* update the move environment based on [op] and [ty] *)
-    updated_move_env me op ty = Some me' ->
+    (* update the initialized environment based on [op] and [ty] *)
+    update_init_env ie op ty = Some ie' ->
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
     owned type, drop_place has no effect. We must first update the me
     and then drop p, consider [ *p=move *p ] *)
-    drop_place le me' p m2 m3 ->
+    drop_place le ie' p m2 m3 ->
     (* assign to p  *)    
     assign_loc ty m3 b ofs v m4 ->
-    step (State f (Sassign p be) k le me m1) E0 (State f Sskip k le me' m4)
+    step (State f (Sassign p be) k le ie m1) E0 (State f Sskip k le ie' m4)
          
-| step_let: forall f be op v ty id me1 me2 me3 m1 m2 m3 m4 le1 le2 b k stmt,
+| step_let: forall f be op v ty id ie1 ie2 ie3 m1 m2 m3 m4 le1 le2 b k stmt,
     typeof_boxexpr be = ty ->
     eval_boxexpr le1 m1 be v op m2 ->
     (* update the move environment *)
-    updated_move_env me1 op ty = Some me2 ->
+    update_init_env ie1 op ty = Some ie2 ->
     (* allocate the block for id *)
     Mem.alloc m2 0 (sizeof ty) = (m3, b) ->
     (* uppdate the local env *)
     PTree.set id (b, ty) le1 = le2 ->
-    (* update the drop obligations environment *)
-    PTree.set id (drop_obligations (Plocal id ty) ty) me2 = me3 ->
+    (* update the initialized environment *)
+    PTree.set id (init_path (Plocal id ty) ty) ie2 = ie3 ->
     (* assign [v] to [b] *)
     assign_loc ty m3 b Ptrofs.zero v m4 ->
-    step (State f (Slet id ty be stmt) k le1 me1 m1) E0 (State f stmt (Klet id k) le2 me3 m4)
+    step (State f (Slet id ty be stmt) k le1 ie1 m1) E0 (State f stmt (Klet id k) le2 ie3 m4)
          
-| step_call_0: forall f a al optlp k le me1 me2 m vargs tyargs vf fd cconv tyres,
+| step_call_0: forall f a al optlp k le ie1 ie2 m vargs tyargs vf fd cconv tyres,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr le m a vf None ->
     eval_exprlist le m al tyargs vargs optlp ->
-    (* CHECKME: update the move environment *)
-    updated_move_env_list me1 optlp tyargs = Some me2 ->
+    (* CHECKME: update the initialized environment *)
+    update_init_env_list ie1 optlp tyargs = Some ie2 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction tyargs tyres cconv ->
-    step (State f (Scall None a al) k le me1 m) E0 (Callstate vf vargs (Kcall None f le me2 k) m)         
-| step_call_1: forall f a al optlp k le le' me1 me2 me3 m m' b vargs tyargs vf fd cconv tyres id,
+    step (State f (Scall None a al) k le ie1 m) E0 (Callstate vf vargs (Kcall None f le ie2 k) m)         
+| step_call_1: forall f a al optlp k le le' ie1 ie2 ie3 m m' b vargs tyargs vf fd cconv tyres id,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr le m a vf None ->
     eval_exprlist le m al tyargs vargs optlp ->
     (* CHECKME: update the move environment *)
-    updated_move_env_list me1 optlp tyargs = Some me2 ->
+    update_init_env_list ie1 optlp tyargs = Some ie2 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction tyargs tyres cconv ->
     (* allocate memory block and update the env/mvenv for id, just like step_let *)
     Mem.alloc m 0 (sizeof tyres) = (m', b) ->
     PTree.set id (b, tyres) le = le' ->
-    PTree.set id (drop_obligations (Plocal id tyres) tyres) me2 = me3 ->
-    step (State f (Scall (Some id) a al) k le me1 m) E0 (Callstate vf vargs (Kcall (Some id) f le' me3 k) m')
+    PTree.set id (init_path (Plocal id tyres) tyres) ie2 = ie3 ->
+    step (State f (Scall (Some id) a al) k le ie1 m) E0 (Callstate vf vargs (Kcall (Some id) f le' ie3 k) m')
                  
 (* End of a let statement, free the place and its drop obligations *)
 | step_end_let: forall f id k le1 le2 me1 me2 m1 m2 m3 ty b,
@@ -703,29 +714,29 @@ Inductive step: state -> trace -> state -> Prop :=
     step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e me m')
 
 (** Return cases  *)
-| step_return_0: forall e me lp lb m1 m2 m3 f k ,
+| step_return_0: forall e ie lp lb m1 m2 m3 f k ,
     (* Q1: if there is a drop obligations list {*p ...} but the type
     of p is [&mut Box<T>]. Do we need to drop *p ? Although we need to
     drop [*p] then [*p] is reassign but I don't think it is correct to
     drop *p when at the function return *)
     places_of_env e = lp ->
     (* drop the lived drop obligations *)
-    drop_place_list e me m1 lp m2 ->
+    drop_place_list e ie m1 lp m2 ->
     blocks_of_env e = lb ->
     (* drop the stack blocks *)
     Mem.free_list m2 lb = Some m3 ->    
-    step (State f (Sreturn None) k e me m1) E0 (Returnstate Vundef (call_cont k) m3)
-| step_return_1: forall le a v op me me' lp lb m1 m2 m3 f k ,
+    step (State f (Sreturn None) k e ie m1) E0 (Returnstate Vundef (call_cont k) m3)
+| step_return_1: forall le a v op ie ie' lp lb m1 m2 m3 f k ,
     eval_expr le m1 a v op ->
     (* CHECKME: update move environment, because some place may be
     moved out to the callee *)
-    updated_move_env me op (typeof a) = Some me' ->
+    update_init_env ie op (typeof a) = Some ie' ->
     places_of_env le = lp ->
-    drop_place_list le me' m1 lp m2 ->
+    drop_place_list le ie' m1 lp m2 ->
     (* drop the stack blocks *)
     blocks_of_env le = lb ->
     Mem.free_list m2 lb = Some m3 ->
-    step (State f (Sreturn (Some a)) k le me m1) E0 (Returnstate v (call_cont k) m3)
+    step (State f (Sreturn (Some a)) k le ie m1) E0 (Returnstate v (call_cont k) m3)
 (* no return statement but reach the end of the function *)
 | step_skip_call: forall e me lp lb m1 m2 m3 f k,
     is_call_cont k ->
