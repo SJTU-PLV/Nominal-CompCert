@@ -475,17 +475,19 @@ Variable se tse: Genv.symtbl.
 Definition skel := erase_program p.
 Definition tskel := erase_program tp.
 
-Hypothesis compat : Genv.skel_symtbl_compatible skel tskel se tse.
+(* Hypothesis compat : Genv.skel_symtbl_compatible skel tskel se tse. *)
 Hypothesis GE' : inj_stbls' w se tse.
 
-Theorem valid1: Genv.valid_for skel se.
-Proof. destruct compat as (A & B & C). eauto. Qed.
+Hypothesis valid1: Genv.valid_for skel se.
+(* Proof. destruct compat as (A & B & C). eauto. Qed. *)
        
-Theorem valid2: Genv.valid_for tskel tse.
-Proof. destruct compat as (A & B & C). eauto. Qed.
+Hypothesis valid2: Genv.valid_for tskel tse.
+(* Proof. destruct compat as (A & B & C). eauto. Qed. *)
 
-Theorem compatible : Genv.removed_compatible skel tskel se tse.
-Proof. destruct compat as (A & B & C). eauto. Qed.
+(*Theorem compatible : Genv.removed_compatible skel tskel se tse.
+Proof. destruct compat as (A & B & C). eauto. Qed. *)
+
+Hypothesis removed_main: ~ Genv.removed_symbol se tse (prog_main skel).
 
 Theorem GE: Genv.match_stbls' w se tse.
 Proof. inv GE'. eauto. Qed.
@@ -494,11 +496,11 @@ Lemma main_symb_pres: forall b,
     Genv.find_symbol se (prog_main skel) = Some b -> 
     exists b', Genv.find_symbol tse (prog_main tskel) = Some b'.
 Proof.
-  intros. destruct compatible.
+  intros. 
   simpl in *. inv TRANSF. rewrite match_prog_main0.
   destruct (Genv.find_symbol tse (prog_main p)) eqn : F'.
   eexists. eauto.
-  exfalso. apply H1. exists b. split; eauto.
+  exfalso. apply removed_main.  exists b. split; eauto.
 Qed.
 
 Lemma symb_incl: forall id b,
@@ -551,7 +553,7 @@ Proof.
     left. auto.
     right. eauto.
 Qed.
-
+(*
 Lemma remove_unused_consistent: forall id gd b,
     (prog_defmap skel) ! id = Some gd -> 
     Genv.find_symbol tse id = Some b -> 
@@ -614,7 +616,7 @@ Proof.
   rewrite H in TDEF'. inv TDEF'.
   reflexivity.
 Qed.
-
+*)
 
 (*
 (** Hypothesis about symbol tables *)
@@ -916,115 +918,6 @@ Proof.
     inv TRANSF. rewrite match_prog_def0 in A. rewrite MEM in A.
     congruence.
 Qed.
-(*
-Remark inj_eq:
-  forall id b b',
-  Genv.find_symbol se id = Some b -> Genv.find_symbol tse id = Some b' ->
-  injw_meminj w b = Some(b', 0).
-Proof.
-  intros.
-  inv GE. exploit Genv.mge_img; eauto.
-  eapply Genv.genv_symb_range; eauto.
-  intros (b1 & INJ1).
-  exploit Genv.mge_symb; eauto.
-  intro EQ. apply EQ in H0 as F'.
-  setoid_rewrite F' in H. inv H. eauto.
-Qed.
-*)
-(*
-Lemma inj_world_preserves_globals:
-  meminj_preserves_globals w.
-Proof.
-  constructor.
-  - intros. inv GE. inv inj_stbls_match.
-    exploit mge_dom; eauto.
-    eapply Genv.genv_symb_range; eauto.
-    intro. subst.
-    exploit mge_symb; eauto.
-    intro EQ. apply EQ in H0.
-    destruct H1 as [A B]. rewrite H in B. inv B.
-    split; eauto.
-  - intros. exploit symb_incl; eauto.
-    intros [b0 FIND]. exists b0. split. auto.
-    eapply inj_eq; eauto.
-  - intros.
-    exploit symbols_inject_init_public; eauto.
-    intros [b' [FIND _]]. exists b'. split. auto.
-    eapply inj_eq; eauto.
-  - intros. inv GE. inv inj_stbls_match. split.
-    erewrite <- mge_info; eauto.
-    exploit mge_dom; eauto.
-    eapply Genv.genv_info_range; eauto.
-    intros [b2 INJ]. rewrite H in INJ. congruence.
-  - intros.  inv GE. inv inj_stbls_match. split.
-    erewrite mge_info; eauto.
-    exploit mge_img; eauto. eapply Genv.genv_info_range; eauto.
-    intros [b1 INJ].
-    erewrite <- mge_info in H0. 2: apply H.
-    exploit mge_dom; eauto.
-    eapply Genv.genv_info_range; eauto.
-    intros [b2 INJ']. rewrite H in INJ'. congruence.
-  - intros.
-    exploit transform_find_symbol_1; eauto.
-    intros (b' & FIND'). exists b'. split. auto.
-    eapply inj_eq; eauto.
-  - intros.
-    inversion GE. inversion inj_stbls_match.
-    unfold ge in H0. rewrite Genv.find_def_spec in H0.
-    destruct (Genv.invert_symbol se b) eqn:REV1; try discriminate.
-    apply Genv.invert_find_symbol in REV1 as FIND1.
-    unfold tge. rewrite Genv.find_def_spec.
-    exploit mge_symb; eauto. intro FINDEQ.
-    apply FINDEQ in FIND1 as FIND2.
-    apply Genv.find_invert_symbol in FIND2 as REV2.
-    rewrite REV2.
-    exploit mge_dom; eauto. eapply Genv.genv_symb_range; eauto.
-    intro. subst.
-    exploit remove_unused_consistent_p; eauto.
-    intro A.
-    split. auto. split.
-    destruct H1 as [b2 INJ]. rewrite H in INJ. congruence.
-    destruct (IS.mem i used) eqn:MEM; try discriminate.
-    inv USED_VALID.
-    intros. 
-    apply used_closed0 with i gd; eauto.
-    apply IS.mem_2; eauto.
-    erewrite inj_preserved in MEM; eauto. congruence.
-Qed.
-*)
-(*  generalize init_meminj_preserves_globals.
-  intros PRES. 
-  constructor.
-  - inv PRES. intros.
-    eapply symbols_inject_4; eauto.    
-    eapply winj_consistent_1; eauto.
-    eapply Genv.genv_symb_range; eauto.
-  - inv PRES. intros. 
-    exploit symbols_inject_5; eauto.
-    intros (b & FND & INIT).
-    exists b; split; auto.
-  - inv PRES. intros.
-    exploit symbols_inject_public0; eauto.
-    intros (b' & FND & INIT).
-    exists b'; split; auto.
-  - inv PRES. intros.
-    eapply info_inject0; eauto.
-    eapply winj_consistent_1; eauto.
-    eapply Genv.genv_info_range; eauto.
-  - inv PRES. intros.
-    exploit info_rev_inject0; eauto.
-    eapply winj_consistent_2; eauto.
-    eapply Genv.genv_info_range; eauto.
-  - inv PRES. intros.
-    exploit symbols_inject_6; eauto.
-    intros (b' & FND & INIT).
-    exists b'; split; auto.
-  - inv PRES. intros.
-    eapply defs_inject0; eauto.
-    eapply winj_consistent_1; eauto.
-    exploit Genv.genv_defs_range; eauto.
-Qed.
-    *)
 
 Lemma globals_symbols_inject:
   forall j, meminj_preserves_globals j -> symbols_inject j ge tge.
