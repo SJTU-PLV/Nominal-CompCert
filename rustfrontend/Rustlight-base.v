@@ -170,40 +170,6 @@ Inductive deref_loc (ty: type) (m: mem) (b: block) (ofs: ptrofs) : val -> Prop :
       deref_loc ty m b ofs (Vptr b ofs).
 
 
-(** Size of a type  *)
-
-Definition sizeof (env: composite_env) (t: type) : Z :=
-  match t with
-  | Tunit => 1
-  | Tint I8 _ _ => 1
-  | Tint I16 _ _ => 2
-  | Tint I32 _ _ => 4
-  | Tint IBool _ _ => 1
-  | Tfunction _ _ _ => 1
-  | Tstruct id _
-  | Tunion id _ =>
-      match env!id with
-      | Some co => co_sizeof co
-      | None => 0
-      end                    
-  end.
-
-Definition alignof_blockcopy (env: composite_env) (t: type) : Z :=
-  match t with
-  | Tunit => 1
-  | Tint I8 _ _ => 1
-  | Tint I16 _ _ => 2
-  | Tint I32 _ _ => 4
-  | Tint IBool _ _ => 1
-  | Tfunction _ _ _ => 1
-  | Tstruct id _
-  | Tunion id _ =>
-      match env!id with
-      | Some co => Z.min 8 (co_alignof co)
-      | None => 1
-      end
-  end.
-
 (** Assign a value to a location  *)
 
 Inductive assign_loc (ty: type) (m: mem) (b: block) (ofs: ptrofs): val -> mem -> Prop :=
