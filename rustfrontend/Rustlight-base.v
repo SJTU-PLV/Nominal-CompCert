@@ -9,48 +9,24 @@ Require Import Memory.
 Require Import Events.
 Require Import Globalenvs.
 Require Import Smallstep.
-Require Import Ctypes.
+Require Import Ctypes Rusttypes.
 Require Import Cop.
 Require Import LanguageInterface.
 
 (** * High-level Rust-like language  *)
 
-Inductive usekind : Type :=
-| Copy
-| Move.                        (**r used for types that are unsafe for copying *)
-
-Inductive mutkind : Type :=
-| Immutable
-| Mutable.
-
-
-(** ** Types  *)
-
-Inductive type : Type :=
-  | Tunit: type                                    (**r the [unit] type *)
-  | Tbox : type -> type                             (**r heap allocated [Box ty] *)
-  | Tint: intsize -> signedness -> attr -> type       (**r integer types *)
-  | Treference: type -> mutkind -> attr -> type       (**r reference types ([&mut? ty]) *)
-  | Tfunction: typelist -> type -> calling_convention -> type    (**r function types *)
-with typelist : Type :=
-  | Tnil: typelist
-  | Tcons: type -> typelist -> typelist.
-
 
 (** ** Place (used to build lvalue expression) *)
 
-(* Q: Is place the unit of drop operation? It is the root of partial
-move. Can we just use identity? Because this can let us get away from
-partial move *)
-
 Inductive place : Type :=
 | Plocal : ident -> type -> place
-| Pderef: place -> type -> place.          (* [*] operand *)
+| Pfield : place -> ident -> type -> place (**r access a field of struct or union: p.(id)  *)
+.
 
 Definition typeof_place p :=
   match p with
   | Plocal _ ty => ty
-  | Pderef _ ty => ty
+  | Pfield _ _ ty => ty
   end.
 
 (** ** Expression *)
@@ -58,49 +34,30 @@ Definition typeof_place p :=
 Inductive expr : Type :=
 | Econst_int: int -> type -> expr       (**r integer literal *)
 | Eplace: usekind -> place -> type -> expr (**r use of a variable, the only lvalue expression *)
-| Eref: mutkind -> place -> type -> expr         (**r reference operator ([& mut?]) *)
 | Eunop: unary_operation -> expr -> type -> expr  (**r unary operation *)
 | Ebinop: binary_operation -> expr -> expr -> type -> expr. (**r binary operation *)
-
-(* evaluate an expr has no side effect. But evaluate a boxexpr may allocate a new block *)
-Inductive boxexpr : Type :=
-| Bexpr: expr -> boxexpr
-| Box: boxexpr -> boxexpr.
 
 
 Definition typeof (e: expr) : type :=
   match e with
   | Econst_int _ ty 
   | Eplace _ _ ty
-  | Eref _ _ ty
   | Eunop _ _ ty
   | Ebinop _ _ _ ty => ty
   end.
 
-Fixpoint typeof_boxexpr (r: boxexpr) : type :=
-  match r with
-  | Bexpr e => typeof e
-  | Box r' => Tbox (typeof_boxexpr r')
-  end.
 
-(* what Tbox corresponds to? *)
-(** TODO: Tbox -> None. reference -> None, raw poinetr -> C pointer,
-Option<reference> -> C pointer *)
 Fixpoint to_ctype (ty: type) : option Ctypes.type :=
   match ty with
   | Tunit => Some Tvoid 
-  | Tbox _  => None
   | Tint sz si attr => Some (Ctypes.Tint sz si attr)
-  | Treference ty mut attr =>
-      match to_ctype ty with
-      | Some ty => Some (Tpointer ty attr)
-      | None => None
-      end
   | Tfunction tyl ty cc =>
       match to_ctype ty, to_ctypelist tyl with
       | Some ty, Some tyl => Some (Ctypes.Tfunction tyl ty cc)
       | _, _ => None
       end
+  | Tstruct id attr => Some (Ctypes.Tstruct id attr)
+  | Tunion id attr => Some (Ctypes.Tunion id attr)
   end
     
 with to_ctypelist (tyl: typelist) : option (Ctypes.typelist) :=
@@ -113,33 +70,11 @@ with to_ctypelist (tyl: typelist) : option (Ctypes.typelist) :=
            end
        end.
                                     
-Definition copy_safe (ty: type) :=
-  match ty with
-  | Tbox _ => false
-  | Treference _ Mutable _ => false
-  | _ => true
-  end.
-
-Definition not_owned_type (ty: type) :=
-  match ty with
-  | Tbox _ => false
-  | _ => true
-  end.
-
-
-Definition deref_type (ty: type) : option type :=
-  match ty with
-  | Tbox ty' => Some ty'
-  | Treference ty' _ _ => Some ty'
-  | _ => None
-  end.
-                      
-
 
 Inductive statement : Type :=
   | Sskip : statement                   (**r do nothing *)
-  | Slet : ident -> type -> boxexpr -> statement -> statement (**r let ident: type = rvalue in *)
-  | Sassign : place -> boxexpr -> statement (**r assignment [place = rvalue] *)
+  | Slet : ident -> type -> expr -> statement -> statement (**r let ident: type = rvalue in *)
+  | Sassign : place -> expr -> statement (**r assignment [place = rvalue] *)
   | Scall: option ident -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
   | Ssequence : statement -> statement -> statement  (**r sequence *)
   | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
@@ -159,30 +94,27 @@ Record function : Type := mkfunction {
 Definition var_names (vars: list(ident * type)) : list ident :=
   List.map (@fst ident type) vars.
 
-Definition fundef := AST.fundef function.
+Definition fundef := Rusttypes.fundef function.
 
-Definition program := AST.program fundef type.
+Definition program := Rusttypes.program function.
 
-(** copy from Ctypes.v *)
 Fixpoint type_of_params (params: list (ident * type)) : typelist :=
   match params with
   | nil => Tnil
   | (id, ty) :: rem => Tcons ty (type_of_params rem)
   end.
 
-(** The type of a function definition. *)
 
 Definition type_of_function (f: function) : type :=
   Tfunction (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
 
 Definition type_of_fundef (f: fundef) : type :=
   match f with
-  | AST.Internal fd => type_of_function fd
-  | AST.External ef =>
-      let sig := ef_sig ef in
-      (** TODO *)
-      Tfunction Tnil Tunit cc_default                
+  | Internal _ fd => type_of_function fd
+  | External _ ef typs typ cc =>     
+      Tfunction typs typ cc                
   end.
+
 
 (** * Operational Semantics  *)
 
@@ -193,7 +125,7 @@ Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
 
 
 Definition globalenv (se: Genv.symtbl) (p: program) :=
-  {| genv_genv := Genv.globalenv se p; genv_cenv := PTree.empty composite |}. (** FIXME: for now, we do not support composite environment  *)
+  {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env function) |}.
 
 
 (** ** Local environment  *)
@@ -202,24 +134,11 @@ Definition env := PTree.t (block * type). (* map variable -> location & type *)
 
 Definition empty_env: env := (PTree.empty (block * type)).
 
-(** ** Initialized place environment  *)
+(** ** Ownership environment  *)
 
-(** It records the information of whether a place is initialized or
-not. We only record the place whose type is [Tbox] or [Treference mut]
-for now (because if a new type is not copy, it must be recorded.  For
-example, if [x] has type [Tbox<T>] and [x] is not move from, then [x]
-is an initialized [Box]. After evaluate [move x], [x] is removed from
-the initialized place env *)
+Definition own_env := PTree.t (list place).
 
-(** [TODEL] It records the drop obligations for a local variable and its
-successors. If [x] owns a memory location (i.e., x has type [Tbox],
-before freeing [x], we must first free the memory block of [*x]. In a
-high level, if a place [p] is in the mvenv, then we should free the
-memory location [p] points to when we free [p] *)
-
-Definition init_env := PTree.t (list place).
-
-Definition empty_init_env : init_env := PTree.empty (list place).
+Definition empty_own_env : own_env := PTree.empty (list place).
 
 (** access mode for Rust types  *)
 Definition access_mode (ty: type) : mode :=
@@ -230,11 +149,10 @@ Definition access_mode (ty: type) : mode :=
   | Tint I16 Unsigned _ => By_value Mint16unsigned
   | Tint I32 _ _ => By_value Mint32
   | Tint IBool _ _ => By_value Mint8unsigned
-  | Tbox _ => By_value Mptr
   | Tunit => By_nothing
-  | Treference _ _ _ => By_value Mptr
   | Tfunction _ _ _ => By_reference
-
+  | Tstruct _ _ => By_copy
+  | Tunion _ _ => By_copy
 end.
 
 (** Deference a location based on the type  *)
@@ -254,28 +172,36 @@ Inductive deref_loc (ty: type) (m: mem) (b: block) (ofs: ptrofs) : val -> Prop :
 
 (** Size of a type  *)
 
-Definition sizeof (t: type) : Z :=
+Definition sizeof (env: composite_env) (t: type) : Z :=
   match t with
   | Tunit => 1
   | Tint I8 _ _ => 1
   | Tint I16 _ _ => 2
   | Tint I32 _ _ => 4
   | Tint IBool _ _ => 1
-  | Tbox _ => if Archi.ptr64 then 8 else 4
-  | Treference _ _ _ => if Archi.ptr64 then 8 else 4
   | Tfunction _ _ _ => 1
+  | Tstruct id _
+  | Tunion id _ =>
+      match env!id with
+      | Some co => co_sizeof co
+      | None => 0
+      end                    
   end.
 
-Definition alignof_blockcopy (t: type) : Z :=
+Definition alignof_blockcopy (env: composite_env) (t: type) : Z :=
   match t with
   | Tunit => 1
   | Tint I8 _ _ => 1
   | Tint I16 _ _ => 2
   | Tint I32 _ _ => 4
   | Tint IBool _ _ => 1
-  | Tbox _ => if Archi.ptr64 then 8 else 4
-  | Treference _ _ _ => if Archi.ptr64 then 8 else 4
   | Tfunction _ _ _ => 1
+  | Tstruct id _
+  | Tunion id _ =>
+      match env!id with
+      | Some co => Z.min 8 (co_alignof co)
+      | None => 1
+      end
   end.
 
 (** Assign a value to a location  *)
@@ -287,11 +213,14 @@ Inductive assign_loc (ty: type) (m: mem) (b: block) (ofs: ptrofs): val -> mem ->
       assign_loc ty m b ofs v m'
   | assign_loc_copy: forall b' ofs' bytes m',
       access_mode ty = By_copy ->
+      (* consider a = b ( a and b are struct ) *)
+      (* evaluate b is (Vptr b' ofs'), evaluate a is (b,ofs) *)      
       (sizeof ty > 0 -> (alignof_blockcopy ty | Ptrofs.unsigned ofs')) ->
       (sizeof ty > 0 -> (alignof_blockcopy ty | Ptrofs.unsigned ofs)) ->
+      (* a and b are disjoint or equal *)
       b' <> b \/ Ptrofs.unsigned ofs' = Ptrofs.unsigned ofs
-              \/ Ptrofs.unsigned ofs' + sizeof ty <= Ptrofs.unsigned ofs
-              \/ Ptrofs.unsigned ofs + sizeof ty <= Ptrofs.unsigned ofs' ->
+             \/ Ptrofs.unsigned ofs' + sizeof ty <= Ptrofs.unsigned ofs
+             \/ Ptrofs.unsigned ofs + sizeof ty <= Ptrofs.unsigned ofs' ->
       Mem.loadbytes m b' (Ptrofs.unsigned ofs') (sizeof ty) = Some bytes ->
       Mem.storebytes m b (Ptrofs.unsigned ofs) bytes = Some m' ->
       assign_loc ty m b ofs (Vptr b' ofs') m'.
