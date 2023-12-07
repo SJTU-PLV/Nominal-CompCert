@@ -321,11 +321,12 @@ Qed.
 Lemma injp__injp_ext_injp:
   subcklr injp (injp @ ext @ injp).
 Proof.
-  intros [f m1 m4 Hm14] se1 se4 ? ? STBL MEM. inv MEM.
+  intros [f ? ? m1 m4 Hm14] se1 se4 ? ? STBL MEM. inv MEM.
   inv STBL. clear Hm0 Hm1 Hm2 Hm3 Hm4 Hm5. rename m2 into m4. rename m0 into m1.
-  generalize (mem_inject_dom f m1 m4 Hm14). intro Hm12.
-  exists (injpw (meminj_dom f) m1 m1 (mem_inject_dom f m1 m4 Hm14),(tt,
-            injpw f m1 m4 Hm14)).
+  generalize (mem_inject_dom f m1 m4 Hm14). intro Hm12. clear gs0 gs3. rename gs4 into gs1.
+  rename gs5 into gs2.
+  exists (injpw (meminj_dom f) gs1 gs1 m1 m1 (mem_inject_dom f m1 m4 Hm14),(tt,
+            injpw f gs1 gs2 m1 m4 Hm14)).
   simpl.
   repeat apply conj.
   - exists se1. split. constructor; eauto.
@@ -341,28 +342,28 @@ Proof.
   - intros (w12' & w23' & w34') m1' m4'.
     intros (m2' & Hm12' & m3' & Hm23' & Hm34').
     intros (H12 & H23 & H34). simpl in *.
-    destruct Hm12' as [f12 m1' m2' Hm12'].
-    destruct Hm34' as [f34 m3' m4' Hm34'].
+    destruct Hm12' as [f12 ? ? m1' m2' Hm12'].
+    destruct Hm34' as [f34 ? ? m3' m4' Hm34'].
     inv H12.
     inv H23.
     inv H34.
     assert (Hm14' :  Mem.inject (compose_meminj f12 f34) m1' m4').
     eapply Mem.inject_compose; eauto.
     eapply Mem.extends_inject_compose; eauto.
-    eexists (injpw (compose_meminj f12 f34) m1' m4' Hm14').
+    eexists (injpw (compose_meminj f12 f34) gs1 gs2 m1' m4' Hm14').
     repeat apply conj.
     + constructor; eauto.
     + constructor; eauto.
       * eapply Mem.unchanged_on_implies; eauto.
-        intros. apply loc_unmapped_dom; eauto.
+        intros. destruct H. split. apply loc_unmapped_dom; eauto. eauto.
       * rewrite <- (meminj_dom_compose f).
         rauto.
       * red. intros b1 b4 d f14 INJ. unfold compose_meminj in INJ.
         destruct (f12 b1) as [[b2 d1]|] eqn: INJ1; try congruence.
         destruct (f34 b2) as [[b3 d3]|] eqn: INJ3; try congruence. inv INJ.
-        exploit H16; eauto. unfold meminj_dom. rewrite f14. auto.
+        exploit H20; eauto. unfold meminj_dom. rewrite f14. auto.
         intros [A B].
-        exploit H23. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
+        exploit H27. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
         intros [E F]. split; eauto.
     + rewrite compose_meminj_id_left.
       repeat rstep; eauto.

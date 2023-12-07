@@ -822,6 +822,8 @@ Hypothesis TRANSF: match_prog prog tprog.
 
 Let ge := Genv.globalenv se prog.
 Let tge := Genv.globalenv tse tprog.
+Let gs := Genv.genv_sup se.
+Let tgs := Genv.genv_sup tse.
 
 Lemma functions_translated (j:meminj):
   forall (v tv: val) (f: RTL.fundef),
@@ -1001,7 +1003,7 @@ Inductive match_states: state -> state -> Prop :=
              (ANALYZE: analyze prog f = Some approx)
              (SAT: exists valu, numbering_holds valu ge (Vptr sp Ptrofs.zero) rs m approx!!pc)
              (REGS: regset_inject j rs rs')
-             (INCR: injp_acc w (injpw j m m' MEM))
+             (INCR: injp_acc w (injpw j gs tgs m m' MEM))
              (STACKS: match_stackframes j s s')
              (SP: j sp = Some (sp',0)),
       match_states (State s f (Vptr sp Ptrofs.zero) pc rs m)
@@ -1011,20 +1013,20 @@ Inductive match_states: state -> state -> Prop :=
              (STACKS: match_stackframes j s s')
              (VF: Val.inject j vf vf')
              (ARGS: Val.inject_list j args args')
-             (INCR: injp_acc w (injpw j m m' MEM)),
+             (INCR: injp_acc w (injpw j gs tgs m m' MEM)),
       match_states (Callstate s vf args m)
                    (Callstate s' vf' args' m')
   | match_states_return:
       forall s s' v v' m m' j MEM
              (STACK: match_stackframes j s s')
              (RES: Val.inject j v v')
-             (INCR: injp_acc w (injpw j m m' MEM)),
+             (INCR: injp_acc w (injpw j gs tgs m m' MEM)),
       match_states (Returnstate s v m)
                    (Returnstate s' v' m').
 
 
 Lemma match_stbls_incr : forall j m1 m2 MEM,
-    injp_acc w (injpw j m1 m2 MEM) ->
+    injp_acc w (injpw j gs tgs m1 m2 MEM) ->
     Genv.match_stbls j ge tge.
 Proof.
   intros.
@@ -1259,6 +1261,8 @@ Proof.
       red. eauto using external_call_readonly.
       red. intros. eapply external_call_max_perm; eauto.
       red. intros. eapply external_call_max_perm; eauto.
+      eapply Mem.unchanged_on_implies. eauto. intros b ofs [X Y] Z. eauto.
+      eapply Mem.unchanged_on_implies. eauto. intros b ofs [X Y] Z. eauto.
 
 - (* Icond *)
   destruct (valnum_regs approx!!pc args) as [n1 vl] eqn:?.
@@ -1321,6 +1325,8 @@ Proof.
   red. eauto using external_call_readonly.
   red. intros. eapply external_call_max_perm; eauto.
   red. intros. eapply external_call_max_perm; eauto.
+  eapply Mem.unchanged_on_implies. eauto. intros b ofs [X Y] Z. eauto.
+  eapply Mem.unchanged_on_implies. eauto. intros b ofs [X Y] Z. eauto.
   
 - (* return *)
   inv STACK.
@@ -1331,7 +1337,7 @@ Proof.
 Qed.
 
 Definition m01 := match w with
-                 | injpw f m1 m2 Hm => m1
+                 | injpw f _ _ m1 m2 Hm => m1
                   end.
 
 Definition ro_w := (se, (row ge m01), w).
@@ -1347,7 +1353,7 @@ Proof.
   exists (Callstate nil vf2 vargs2 m2); repeat apply conj.
   - setoid_rewrite <- (sig_preserved (romem_for prog) (Internal f)); eauto.
     monadInv TFD. constructor; auto.
-  - rewrite <- H0 in *. cbn in *. econstructor. 4: { instantiate (1:= Hm). rewrite <- H0. reflexivity. }
+  - rewrite <- H0 in *. cbn in *. econstructor. 4: { instantiate (1:= Hm). rewrite <- H0. inv GE. reflexivity. }
     constructor. eauto. eauto.
   - rewrite <- H0 in *. cbn in *.
     eapply sound_memory_ro_sound_state; eauto. inversion GE. eauto.
@@ -1362,10 +1368,26 @@ Proof.
   exists (cr v' m'). split. constructor; eauto.  
   eexists; split. constructor; eauto.
   constructor; eauto. unfold m01. rewrite <- H7. constructor; eauto.
-  inversion H6. eauto.
-  exists (injpw j m m' Hm'0).
+  inversion H9. eauto.
+  exists (injpw j gs tgs m m' Hm'0).
   split; eauto. rewrite <- H7. econstructor; eauto.
   econstructor; eauto. constructor.
+Qed.
+
+Lemma BCinvalid_not_global : forall j b1 b2 se1 se2 (bc: block_classification) delta,
+    j b1 = Some (b2 ,delta) ->
+    bc b1 = BCinvalid ->
+    genv_match bc se1 ->
+    Genv.match_stbls j se1 se2 ->
+    ~ sup_In b1 (Genv.genv_sup se1) /\ ~ sup_In b2 (Genv.genv_sup se2). 
+Proof.
+  intros.
+  destruct H1 as [X Y].
+  assert (~ sup_In b1 (Genv.genv_sup se1)).
+  intro. exploit Y; eauto.
+  intros [A B]. congruence.
+  split. eauto.
+  intro. apply H1. eapply Genv.mge_separated; eauto.
 Qed.
 
 Lemma transf_external_states:
@@ -1391,7 +1413,7 @@ Proof.
     destruct (bc b); simpl; eauto;
     destruct (j b) as [[x y]|]; eauto.
   }
-  eexists (se,(row se m),(injpw _ _ _ MEM')). eexists. cbn. intuition idtac.
+  eexists (se,(row se m),(injpw _ _ _ _  _ MEM')). eexists. cbn. intuition idtac.
   - econstructor; eauto.
   - assert (sound_memory_ro ge m).
     {
@@ -1405,7 +1427,7 @@ Proof.
       intro. apply  H in Hinv. congruence.
       split. intro. congruence. intro. apply H in H1.
       apply Genv.find_invert_symbol in H1. cbn in *. congruence.
-      inv GE. inversion INCR. inversion H14. eauto.
+      inv GE. inversion INCR. inversion H16. eauto.
     }
     
     eexists. split. constructor. constructor; eauto.
@@ -1425,9 +1447,9 @@ Proof.
   - inv GE. inversion INCR. constructor.
     eapply Genv.match_stbls_compose.
     eapply inj_of_bc_preserves_globals; eauto.
-    apply MSTB. inversion H14. eauto. inversion H15. eauto.
+    apply MSTB. inversion H16. eauto. inversion H17. eauto.
   - inv H2. destruct H1 as (r3 & Hr1& Hr2). inv Hr1. inv H1. rename H3 into ROACC.
-    destruct Hr2 as ([j' s1 s2 MEM''] & Hw' & Hr).
+    destruct Hr2 as ([j' gs1 gs2 s1 s2 MEM''] & Hw' & Hr).
     inv Hw'.
     inv Hr. cbn in *. inv H5. simpl in *.
     eexists (Returnstate s' vres2 m2'); split.
@@ -1443,7 +1465,7 @@ Proof.
       { red. intros. destruct (block_class_eq (bc b) BCinvalid).
         unfold j''; rewrite e; eauto. rewrite H1.
         reflexivity.
-        unfold j''. destruct (bc b) eqn:BC; try congruence; apply H13;
+        unfold j''. destruct (bc b) eqn:BC; try congruence; apply H17;
         unfold compose_meminj, inj_of_bc;
         rewrite BC, H1; reflexivity.
       }
@@ -1452,14 +1474,15 @@ Proof.
         destruct (bc b) eqn:BC;
           unfold j''; rewrite BC; eauto.
         destruct (j b) as [[b'' d']|] eqn :Hj.
-        exploit H14; eauto. unfold compose_meminj, inj_of_bc.
+        exploit H18; eauto. unfold compose_meminj, inj_of_bc.
         rewrite BC. reflexivity. intros [A B].
         inversion MEM. exploit mi_freeblocks; eauto. intro. congruence.
         eauto.
       }
       assert(MEM''' : Mem.inject j'' m'0 m2').
       {
-       clear - JBC_COMPOSE MEM MEM'' INCR1 INCR2 H7 H8 H9 H10 H11 H12 H13 H14.
+        exploit match_stbls_incr; eauto. intro MSTBL.
+       clear - JBC_COMPOSE MEM MEM'' MSTBL GE0 INCR1 INCR2 H10 H12 H13 H14 H15 H16 H17 H18.
         assert (j''_INV: forall b b' d, j'' b = Some (b',d) -> (j' b = Some (b',d)) \/
                                                            (j b = Some (b',d) /\ bc b = BCinvalid)).
         {
@@ -1471,10 +1494,10 @@ Proof.
         {
           intros. destruct (jbc b) as [[b'' d']|] eqn:Hjbc.
           right.
-          rewrite <- JBC_COMPOSE in Hjbc. erewrite H13 in H; eauto. inv H.
+          rewrite <- JBC_COMPOSE in Hjbc. erewrite H17 in H; eauto. inv H.
           rewrite JBC_COMPOSE in Hjbc.  unfold jbc in Hjbc.
           destruct (bc b); try congruence; split; try congruence; eauto.
-          left. exploit H14; eauto. rewrite JBC_COMPOSE. eauto.
+          left. exploit H18; eauto. rewrite JBC_COMPOSE. eauto.
           intros [A B]. eauto.
         }
         inv MEM''.
@@ -1501,44 +1524,48 @@ Proof.
         -- inv mi_inj. constructor; eauto.
            ++ intros. destruct (bc b1) eqn:BC;
               unfold j'' in H; rewrite BC in H; eauto.
-              destruct (j b1) as [[b2' d']|] eqn:Hjb1; eauto.
+              destruct (j b1) as [[b2' d']|] eqn:Hjb1; eauto. inv H.
+              exploit BCinvalid_not_global; eauto. intros [STK1 STK2].
               assert (P1: Mem.perm m b1 ofs k p).
               {
-                inversion H11. apply unchanged_on_perm; eauto.
+                inversion H15. apply unchanged_on_perm; eauto.
                 inv MEM. destruct (Mem.sup_dec b1 (Mem.support m)).
                 eauto. exploit mi_freeblocks0; eauto. congruence.
               }
-              inv H. inversion H12. eapply unchanged_on_perm; eauto.
+              inversion H16. eapply unchanged_on_perm; eauto.
               inv MEM. eauto.
               eapply Mem.perm_inject; eauto.
            ++ intros. destruct (bc b1) eqn:BC; unfold j'' in H; rewrite BC in H; eauto.
-              destruct (j b1) as [[b2' d']|] eqn:Hjb1; eauto.
-              inv H. inversion MEM. inv mi_inj. eapply mi_align0; eauto.
+              destruct (j b1) as [[b2' d']|] eqn:Hjb1; eauto. inv H.
+              exploit BCinvalid_not_global; eauto. intros [STK1 STK2].
+              inversion MEM. inv mi_inj. eapply mi_align0; eauto.
               red. intros. exploit H0; eauto.
-              intro. inv H11. eapply unchanged_on_perm; eauto with mem.
+              intro. inv H15. eapply unchanged_on_perm; eauto with mem.
               eapply Mem.valid_block_inject_1; eauto.
            ++ intros. destruct (bc b1) eqn:BC; unfold j'' in H; rewrite BC in H.
               destruct (j b1) as [[b2' d']|] eqn:Hjb1; eauto.
               inv H.
+              exploit BCinvalid_not_global; eauto. intros [STK1 STK2].
               assert (P1: Mem.perm m b1 ofs Cur Readable).
               {
-                inversion H11. apply unchanged_on_perm; eauto.
+                inversion H15. apply unchanged_on_perm; eauto.
                 inv MEM. destruct (Mem.sup_dec b1 (Mem.support m)).
                 eauto. exploit mi_freeblocks0; eauto. congruence.
               }
               erewrite Mem.unchanged_on_contents; eauto.
-              inv H12.
+              inv H16.
               rewrite unchanged_on_contents; eauto.
               2: eapply Mem.perm_inject; eauto. inv MEM. inv mi_inj.
+              eapply memval_inject_incr; eauto. split; eauto.
               all: (eapply memval_inject_incr; eauto).
         -- (* source_range *)
           intros. unfold j''. destruct (bc b); eauto.
           destruct (j b) as [[b' d']|] eqn:Hjb; eauto.
-          inv H11. exploit Mem.valid_block_inject_1; eauto. intro.
+          inv H15. exploit Mem.valid_block_inject_1; eauto. intro.
           exfalso. apply H. eapply unchanged_on_support; eauto.
         -- intros. unfold j'' in H. destruct (bc b); eauto.
            destruct (j b) as [[b'' d']|] eqn:Hjb; eauto. inv H.
-           inv H12. exploit Mem.valid_block_inject_2; eauto. intro.
+           inv H16. exploit Mem.valid_block_inject_2; eauto. intro.
            eapply unchanged_on_support; eauto.
         -- red. intros.
            destruct (j''_INV _ _ _ H0) as [A|[A1 A2]];
@@ -1546,27 +1573,28 @@ Proof.
            ++ destruct (j'_INV _ _ _ A) as [C|[C1 C2]]; eauto.
               left. exploit Mem.valid_block_inject_2; eauto. intro. congruence.
               inversion MEM. eapply mi_no_overlap0; eauto.
-              eapply H9; eauto. eapply Mem.valid_block_inject_1; eauto.
-              eapply H9; eauto. eapply Mem.valid_block_inject_1; eauto.
+              eapply H13; eauto. eapply Mem.valid_block_inject_1; eauto.
+              eapply H13; eauto. eapply Mem.valid_block_inject_1; eauto.
            ++ destruct (j'_INV _ _ _ B) as [C|[C1 C2]]; eauto.
               left. exploit Mem.valid_block_inject_2. apply A1. eauto. intro. congruence.
               inversion MEM. eapply mi_no_overlap0; eauto.
-              eapply H9; eauto. eapply Mem.valid_block_inject_1; eauto.
-              eapply H9; eauto. eapply Mem.valid_block_inject_1; eauto.
+              eapply H13; eauto. eapply Mem.valid_block_inject_1; eauto.
+              eapply H13; eauto. eapply Mem.valid_block_inject_1; eauto.
            ++ inversion MEM. eapply mi_no_overlap0; eauto.
-              eapply H9; eauto. eapply Mem.valid_block_inject_1; eauto.
-              eapply H9; eauto. eapply Mem.valid_block_inject_1; eauto.
+              eapply H13; eauto. eapply Mem.valid_block_inject_1; eauto.
+              eapply H13; eauto. eapply Mem.valid_block_inject_1; eauto.
         -- intros. destruct (j''_INV _ _ _ H) as [A|[A1 A2]]; eauto.
            inversion MEM. eapply mi_representable0; eauto.
-           destruct H0. left. eapply H9; eauto. eapply Mem.valid_block_inject_1; eauto.
-           right. eapply H9; eauto. eapply Mem.valid_block_inject_1; eauto.
+           destruct H0. left. eapply H13; eauto. eapply Mem.valid_block_inject_1; eauto.
+           right. eapply H13; eauto. eapply Mem.valid_block_inject_1; eauto.
         -- intros. destruct (j''_INV _ _ _ H) as [A|[A1 A2]]; eauto.
+           exploit BCinvalid_not_global; eauto. intros [STK1 STK2].
            destruct (Mem.perm_dec m'0 b1 ofs Max Nonempty); eauto.
-           apply H9 in p0. left.
+           apply H13 in p0. left.
            inversion MEM. exploit mi_perm_inv0; eauto.
-           inv H12. eapply unchanged_on_perm; eauto.
+           inv H16. eapply unchanged_on_perm; eauto.
            intros [A|B].
-           inv H11. eapply unchanged_on_perm; eauto with mem. congruence.
+           inv H15. eapply unchanged_on_perm; eauto with mem. congruence.
            eapply Mem.valid_block_inject_1; eauto. 
       }
       econstructor.
@@ -1575,15 +1603,15 @@ Proof.
       * eauto.
       * etransitivity; eauto. instantiate (1:= MEM'''). econstructor; eauto.
         eapply Mem.unchanged_on_implies; eauto.
-        intros. red. red in H1. unfold compose_meminj, inj_of_bc.
+        intros. destruct H1. split; eauto. red. red in H1. unfold compose_meminj, inj_of_bc.
         destruct (bc b); simpl; try (rewrite H1); eauto.
         eapply Mem.unchanged_on_implies; eauto.
-        intros. red. red in H1. intros. eapply H1; eauto.
-        unfold compose_meminj,inj_of_bc in H4.
-        destruct (bc b0); simpl in H4; try congruence;
+        intros. destruct H1. split; eauto. red. red in H1. intros. eapply H1; eauto.
+        unfold compose_meminj,inj_of_bc in H5.
+        destruct (bc b0); simpl in H5; try congruence;
         destruct (j b0) as [[b1 d1]|]; eauto.
         red. intros.
-        eapply H14; eauto. unfold compose_meminj, inj_of_bc.
+        eapply H18; eauto. unfold compose_meminj, inj_of_bc.
         destruct (bc b1) eqn:BC; try (rewrite H1; reflexivity). reflexivity.
         unfold j'' in H2.
         destruct (bc b1) eqn:BC; eauto. rewrite H1 in H2. eauto.
@@ -1593,9 +1621,9 @@ Proof.
       {
         intros. destruct (jbc b) as [[b' delta] | ] eqn:EQ.
         rewrite <- JBC_COMPOSE in EQ.
-        eapply H13; eauto.
+        eapply H17; eauto.
         destruct (j' b) as [[b'' delta'] | ] eqn:EQ'; auto.
-        exploit H14; eauto. rewrite JBC_COMPOSE. eauto.
+        exploit H18; eauto. rewrite JBC_COMPOSE. eauto.
         intros [A B]. exfalso. eauto.
       }
       set (f := fun b => if Mem.sup_dec b (Mem.support m)
@@ -1656,30 +1684,33 @@ Proof.
       inv MM. exploit mmatch_top. eauto.
       intros [D E]. eapply D; eauto.
       erewrite Mem.load_unchanged_on_1 in H2; eauto.
-      intros. red. unfold compose_meminj, inj_of_bc.
+      intros. split; eauto. red. unfold compose_meminj, inj_of_bc.
       destruct (bc b); try congruence. rewrite B. reflexivity.
       rewrite B. reflexivity. rewrite B. reflexivity.
+      intro. inv MSTB. exploit mge_dom; eauto. intros [b2 X]. congruence.
     - exploit BC'INV; eauto. intros [(b'' & delta & J') | [A [B C]]].
       exploit Mem.loadbytes_inject. eexact Hm3. eauto. eauto. intros (bytes & A & B).
-      inv B. inv H6. inv H18. eapply PMTOP; eauto.
+      inv B. inv H6. inv H11. eapply PMTOP; eauto.
       eapply pmatch_incr; eauto.
       inv MM. exploit mmatch_top. eauto.
       intros [D E]. eapply E; eauto.
       erewrite Mem.loadbytes_unchanged_on_1 in H2; eauto.
-      intros. red. unfold compose_meminj, inj_of_bc.
+      intros. split. red. unfold compose_meminj, inj_of_bc.
       destruct (bc b); try congruence. rewrite B. reflexivity.
       rewrite B. reflexivity. rewrite B. reflexivity.
+      intro. inv MSTB. exploit mge_dom; eauto. intros [b2 X]. congruence.
   }
       econstructor; eauto.
       * (*sound_stack*)
         eapply sound_stack_new_bound.
-        2: inversion H11; eauto.
+        2: inversion H15; eauto.
         eapply sound_stack_exten.
         instantiate (1:= bc).
         eapply sound_stack_inv; eauto. intros.
         eapply Mem.loadbytes_unchanged_on_1; eauto.
-        intros. red. rewrite JBC_COMPOSE.
+        intros. split. red. rewrite JBC_COMPOSE.
         unfold jbc. rewrite H2. reflexivity.
+        intro. destruct GE0. exploit H8; eauto. intros [X Y]. congruence.
         intros.
         unfold bc'.  simpl. rewrite pred_dec_true; eauto.
       * (*romatch*)
@@ -1699,7 +1730,7 @@ Proof.
         -- apply SMTOP; auto.
         -- apply SMTOP; auto.
         -- red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
-           inv H11. eauto.
+           inv H15. eauto.
            destruct (j' b) as [[bx deltax] | ] eqn:J'.
            eapply Mem.valid_block_inject_1; eauto.
            congruence.
@@ -1727,7 +1758,7 @@ Theorem transf_program_correct prog tprog:
     (RTL.semantics prog) (RTL.semantics tprog).
 Proof.
   fsim (eapply forward_simulation_step with
-                                          (match_states := fun s1 s2 => match_states prog (fst (fst w))(snd w) s1 s2
+                                          (match_states := fun s1 s2 => match_states prog se1 se2 (snd w) s1 s2
                                                                        /\ sound_state prog se1 s1
                                                                        /\ ro_mem (snd (fst w)) = m01 (snd w) )).
 - destruct w as [[se rw] w]. cbn in *. destruct Hse as [Hser Hse].
@@ -1743,7 +1774,8 @@ Proof.
   intros q1' q2 s1 [q1 [Hqr Hq]] Hs1. inv Hqr. inv Hq. cbn in *. inv H2.
   inv H. cbn in *. inv Hse. cbn in *. clear Hm Hm1.
   exploit transf_initial_states; eauto.
-  instantiate (2:= injpw f m1 m2 Hm0).
+  instantiate (1:= se2).
+  instantiate (1:= injpw f (Genv.genv_sup se) (Genv.genv_sup se2) m1 m2 Hm0).
   econstructor; eauto.
   eexists. split.
   econstructor; eauto. econstructor. eauto.

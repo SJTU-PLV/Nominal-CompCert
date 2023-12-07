@@ -2437,7 +2437,7 @@ Proof.
   edestruct functions_translated as (tf & TFIND & TRANSL); eauto. apply SEP.
   simpl in TRANSL. inv TRANSL.
   assert (MINJ: Mem.inject j m m') by apply SEP.
-  eexists (stkw injp (injpw _ _ _ MINJ) _ ls (parent_sp cs') m'), _. repeat apply conj.
+  eexists (stkw injp (injpw _ _ _ _ _ MINJ) _ ls (parent_sp cs') m'), _. repeat apply conj.
   - econstructor; eauto.
   - eapply match_stacks_init_args in SEP; eauto.
     econstructor; eauto.
@@ -2455,18 +2455,24 @@ Proof.
     + econstructor; eauto.
     + eapply match_states_return with (j := f'); eauto.
       * eauto.
-        apply Mem.unchanged_on_support in H12; eauto.
+        apply Mem.unchanged_on_support in H15; eauto.
       * eapply match_stacks_change_meminj; eauto.
         eapply stack_contents_support; eauto. apply SEP.
       * intros r. cbn. destruct in_dec; eauto.
         destruct is_callee_save eqn:Hr; eauto.
-      * eapply stack_contents_change_meminj; eauto.
+      * assert (MSTB: Genv.match_stbls j se tse). apply SEP.
+        eapply stack_contents_change_meminj; eauto.
         rewrite sep_comm, sep_assoc in SEP |- *.
         eapply minjection_incr; eauto.
         rewrite sep_comm, sep_assoc in SEP |- *.
         eapply globalenv_inject_incr; eauto.
         eapply Mem.unchanged_on_support; eauto.
-Qed.
+        eapply Mem.unchanged_on_implies. eauto.
+        intros. split. eauto. red in H.
+        intro. exploit Genv.mge_dom; eauto.
+        intros [b2 X]. congruence.
+        admit.
+Admitted.
 
 Lemma wt_prog:
   forall i fd, In (i, Gfun fd) prog.(prog_defs) -> wt_fundef fd.
