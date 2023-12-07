@@ -28,6 +28,11 @@ with typelist : Type :=
 | Tnil: typelist
 | Tcons: type -> typelist -> typelist.
 
+Definition own_type (ty: type) : bool :=
+  match ty with
+  | Tstruct _ _ => true
+  | _ => false
+  end.
 
 Lemma type_eq: forall (ty1 ty2: type), {ty1=ty2} + {ty1<>ty2}
 with typelist_eq: forall (tyl1 tyl2: typelist), {tyl1=tyl2} + {tyl1<>tyl2}.
@@ -50,6 +55,24 @@ Definition attr_of_type (ty: type) :=
   | Tstruct id a => a
   | Tunion id a => a
   end.
+
+(** access mode for Rust types  *)
+Definition access_mode (ty: type) : mode :=
+  match ty with
+  | Tint I8 Signed _ => By_value Mint8signed
+  | Tint I8 Unsigned _ => By_value Mint8unsigned
+  | Tint I16 Signed _ => By_value Mint16signed
+  | Tint I16 Unsigned _ => By_value Mint16unsigned
+  | Tint I32 _ _ => By_value Mint32
+  | Tint IBool _ _ => By_value Mint8unsigned
+  | Tlong _ _ => By_value Mint64
+  | Tfloat F32 _ => By_value Mfloat32
+  | Tfloat F64 _ => By_value Mfloat64                                   
+  | Tunit => By_nothing
+  | Tfunction _ _ _ => By_reference
+  | Tstruct _ _ => By_copy
+  | Tunion _ _ => By_copy
+end.
 
 
 (** Composite  *)
@@ -118,7 +141,7 @@ Definition composite_env : Type := PTree.t composite.
   unless they occur under a pointer or function type.  [void] and
   function types are incomplete types. *)
 
-Fixpoint complete_type (env: composite_env) (t: type) : bool :=
+Definition complete_type (env: composite_env) (t: type) : bool :=
   match t with
   | Tunit => false
   | Tint _ _ _ => true
@@ -433,7 +456,7 @@ Qed.
   Type ranks ensure that type expressions (ignoring pointer and function types)
   have an inductive structure. *)
 
-Fixpoint rank_type (ce: composite_env) (t: type) : nat :=
+Definition rank_type (ce: composite_env) (t: type) : nat :=
   match t with
   | Tstruct id _ | Tunion id _ =>
       match ce!id with
@@ -530,6 +553,208 @@ Fixpoint add_composite_definitions (env: composite_env) (defs: list composite_de
 
 Definition build_composite_env (defs: list composite_definition) :=
   add_composite_definitions (PTree.empty _) defs.
+
+
+(** ** Byte offset and bitfield designator for a field of a structure *)
+
+Fixpoint field_type (id: ident) (ms: members) {struct ms} : res type :=
+  match ms with
+  | nil => Error (MSG "Unknown field " :: CTX id :: nil)
+  | m :: ms => if ident_eq id (name_member m) then OK (type_member m) else field_type id ms
+  end.
+
+(** [field_offset env id fld] returns the byte offset for field [id]
+  in a structure whose members are [fld].  It also returns a
+  bitfield designator, giving the location of the bits to access
+  within the storage unit for the bitfield. *)
+
+Fixpoint field_offset_rec (env: composite_env) (id: ident) (ms: members) (pos: Z)
+                          {struct ms} : res (Z * bitfield) :=
+  match ms with
+  | nil => Error (MSG "Unknown field " :: CTX id :: nil)
+  | m :: ms =>
+      if ident_eq id (name_member m)
+      then layout_field env pos m
+      else field_offset_rec env id ms (next_field env pos m)
+  end.
+
+Definition field_offset (env: composite_env) (id: ident) (ms: members) : res (Z * bitfield) :=
+  field_offset_rec env id ms 0.
+
+(* [field_zero_or_padding m] returns true if the field is a zero length bitfield
+   or does not have a name *)
+Definition field_zero_or_padding (m: member) : bool :=
+  match m with
+  | Member_plain _ _ => false
+  (* | Member_bitfield _ _ _ _ w p => orb (zle w 0) p *)
+  end.
+
+(** [layout_struct env ms accu pos] computes the layout of all fields of a struct that
+    are not unnamed or zero width bitfield members *)
+Fixpoint layout_struct_rec (env: composite_env) (ms: members)
+                           (accu: list (ident * Z * bitfield)) (pos: Z)
+                           {struct ms} : res (list (ident * Z * bitfield)) :=
+  match ms with
+  | nil => OK accu
+  | m :: ms =>
+      if field_zero_or_padding m then
+        layout_struct_rec env ms accu (next_field env pos m)
+      else
+        do (p, b) <- layout_field env pos m;
+        layout_struct_rec env ms (((name_member m), p ,b) :: accu) (next_field env pos m)
+  end.
+
+Definition layout_struct (env: composite_env) (ms: members) : res (list (ident * Z * bitfield)) :=
+  layout_struct_rec env ms nil 0.
+
+(** Some sanity checks about field offsets.  First, field offsets are
+  within the range of acceptable offsets. *)
+
+Remark field_offset_rec_in_range:
+  forall env id ofs bf ty ms pos,
+  field_offset_rec env id ms pos = OK (ofs, bf) -> field_type id ms = OK ty ->
+  pos <= layout_start ofs bf
+  /\ layout_start ofs bf + layout_width env ty bf <= bitsizeof_struct env pos ms.
+Proof.
+  induction ms as [ | m ms]; simpl; intros.
+- discriminate.
+- destruct (ident_eq id (name_member m)).
+  + inv H0. 
+    exploit layout_field_range; eauto.
+    generalize (bitsizeof_struct_incr env ms (next_field env pos m)).
+    lia.
+  + exploit IHms; eauto.
+    generalize (next_field_incr env pos m).
+    lia.
+Qed.
+
+Lemma field_offset_in_range_gen:
+  forall env ms id ofs bf ty,
+  field_offset env id ms = OK (ofs, bf) -> field_type id ms = OK ty ->
+  0 <= layout_start ofs bf
+  /\ layout_start ofs bf + layout_width env ty bf <= bitsizeof_struct env 0 ms.
+Proof.
+  intros. eapply field_offset_rec_in_range; eauto.
+Qed.
+
+Corollary field_offset_in_range:
+  forall env ms id ofs ty,
+  field_offset env id ms = OK (ofs, Full) -> field_type id ms = OK ty ->
+  0 <= ofs /\ ofs + sizeof env ty <= sizeof_struct env ms.
+Proof.
+  intros. exploit field_offset_in_range_gen; eauto. 
+  unfold layout_start, layout_width, bitsizeof, sizeof_struct. intros [A B].
+  assert (C: forall x y, x * 8 <= y -> x <= bytes_of_bits y).
+  { unfold bytes_of_bits; intros. 
+    assert (P: 8 > 0) by lia.
+    generalize (Z_div_mod_eq (y + 7) 8 P) (Z_mod_lt (y + 7) 8 P).
+    lia. }
+  split. lia. apply C. lia.
+Qed.
+
+(** Second, two distinct fields do not overlap *)
+
+Lemma field_offset_no_overlap:
+  forall env id1 ofs1 bf1 ty1 id2 ofs2 bf2 ty2 fld,
+  field_offset env id1 fld = OK (ofs1, bf1) -> field_type id1 fld = OK ty1 ->
+  field_offset env id2 fld = OK (ofs2, bf2) -> field_type id2 fld = OK ty2 ->
+  id1 <> id2 ->
+  layout_start ofs1 bf1 + layout_width env ty1 bf1 <= layout_start ofs2 bf2
+  \/ layout_start ofs2 bf2 + layout_width env ty2 bf2 <= layout_start ofs1 bf1.
+Proof.
+  intros until fld. unfold field_offset. generalize 0 as pos.
+  induction fld as [|m fld]; simpl; intros.
+- discriminate.
+- destruct (ident_eq id1 (name_member m)); destruct (ident_eq id2 (name_member m)).
++ congruence.
++ inv H0.
+  exploit field_offset_rec_in_range; eauto.
+  exploit layout_field_range; eauto. lia.
++ inv H2.
+  exploit field_offset_rec_in_range; eauto.
+  exploit layout_field_range; eauto. lia.
++ eapply IHfld; eauto.
+Qed.
+
+(** Third, if a struct is a prefix of another, the offsets of common fields
+    are the same. *)
+
+Lemma field_offset_prefix:
+  forall env id ofs bf fld2 fld1,
+  field_offset env id fld1 = OK (ofs, bf) ->
+  field_offset env id (fld1 ++ fld2) = OK (ofs, bf).
+Proof.
+  intros until fld1. unfold field_offset. generalize 0 as pos.
+  induction fld1 as [|m fld1]; simpl; intros.
+- discriminate.
+- destruct (ident_eq id (name_member m)); auto.
+Qed.
+
+(** Fourth, the position of each field respects its alignment. *)
+
+Lemma field_offset_aligned_gen:
+  forall env id fld ofs bf ty,
+  field_offset env id fld = OK (ofs, bf) -> field_type id fld = OK ty ->
+  (layout_alignment env ty bf | ofs).
+Proof.
+  intros until ty. unfold field_offset. generalize 0 as pos. revert fld.
+  induction fld as [|m fld]; simpl; intros.
+- discriminate.
+- destruct (ident_eq id (name_member m)).
++ inv H0. eapply layout_field_alignment; eauto.
++ eauto.
+Qed.
+
+Corollary field_offset_aligned:
+  forall env id fld ofs ty,
+  field_offset env id fld = OK (ofs, Full) -> field_type id fld = OK ty ->
+  (alignof env ty | ofs).
+Proof.
+  intros. exploit field_offset_aligned_gen; eauto.
+Qed.
+
+(** [union_field_offset env id ms] returns the byte offset and
+    bitfield designator for accessing a member named [id] of a union
+    whose members are [ms].  The byte offset is always 0. *)
+
+Fixpoint union_field_offset (env: composite_env) (id: ident) (ms: members)
+                          {struct ms} : res (Z * bitfield) :=
+  match ms with
+  | nil => Error (MSG "Unknown field " :: CTX id :: nil)
+  | m :: ms =>
+      if ident_eq id (name_member m)
+      then layout_field env 0 m
+      else union_field_offset env id ms
+  end.
+
+(** Some sanity checks about union field offsets.  First, field offsets
+    fit within the size of the union. *)
+
+Lemma union_field_offset_in_range_gen:
+  forall env id ofs bf ty ms,
+  union_field_offset env id ms = OK (ofs, bf) -> field_type id ms = OK ty ->
+  ofs = 0 /\ 0 <= layout_start ofs bf /\ layout_start ofs bf + layout_width env ty bf <= sizeof_union env ms * 8.
+Proof.
+  induction ms as [ | m ms]; simpl; intros.
+- discriminate.
+- destruct (ident_eq id (name_member m)).
+  + inv H0. set (ty := type_member m) in *.
+    destruct m; simpl in H.
+    * inv H. unfold layout_start, layout_width. 
+      rewrite align_same. change (0 / 8) with 0. unfold bitsizeof. lia.
+      unfold bitalignof. generalize (alignof_pos env t). lia.
+      apply Z.divide_0_r.
+      + exploit IHms; eauto. lia.
+Qed.
+
+Corollary union_field_offset_in_range:
+  forall env ms id ofs ty,
+  union_field_offset env id ms = OK (ofs, Full) -> field_type id ms = OK ty ->
+  ofs = 0 /\ sizeof env ty <= sizeof_union env ms.
+Proof.
+  intros. exploit union_field_offset_in_range_gen; eauto. 
+  unfold layout_start, layout_width, bitsizeof. lia.
+Qed.
 
 Section PROGRAMS.
 
