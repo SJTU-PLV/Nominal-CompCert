@@ -83,7 +83,7 @@ Inductive statement : Type :=
   | Sskip : statement                   (**r do nothing *)
   | Slet : ident -> type -> expr -> statement -> statement (**r let ident: type = rvalue in *)
   | Sassign : place -> expr -> statement (**r assignment [place = rvalue] *)
-  | Scall: option ident -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
+  | Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
   | Ssequence : statement -> statement -> statement  (**r sequence *)
   | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
   | Sloop: statement -> statement -> statement (**r infinite loop *)
@@ -375,7 +375,7 @@ Inductive cont : Type :=
 | Klet: ident -> cont -> cont
 | Kloop1: statement -> statement -> cont -> cont
 | Kloop2: statement -> statement -> cont -> cont
-| Kcall: option ident  -> function -> env -> own_env -> cont -> cont.
+| Kcall: option place  -> function -> env -> own_env -> cont -> cont.
 
 
 (** Pop continuation until a call or stop *)
@@ -418,7 +418,7 @@ Inductive state: Type :=
       (m: mem) : state.                          
        
 
-Fixpoint own_path (ce: composite_env) (p: place) (ty: type) : list place :=
+Definition own_path (ce: composite_env) (p: place) (ty: type) : list place :=
   match ty with
   (* | Tbox ty' => *)
   (*     let deref := Pderef p ty' in *)
@@ -487,17 +487,17 @@ Definition places_of_env (e:env) : list place :=
                                   
 
 (** Function entry semantics: the key is to instantiate the move environments  *)
-Inductive function_entry (ge: genv) (ce: composite_env) (f: function) (vargs: list val) (m: mem) (e: env) (own: own_env) (m': mem) : Prop :=
+Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (own: own_env) (m': mem) : Prop :=
 | function_entry_intro: forall m1,
     list_norepet (var_names f.(fn_params)) ->
-    alloc_variables ce empty_env empty_own_env m f.(fn_params) e own m1 ->
-    bind_parameters ce e m1 f.(fn_params) vargs m' ->
-    function_entry ge ce f vargs m e own m'.
+    alloc_variables ge empty_env empty_own_env m f.(fn_params) e own m1 ->
+    bind_parameters ge e m1 f.(fn_params) vargs m' ->
+    function_entry ge f vargs m e own m'.
 
 
 Inductive step : state -> trace -> state -> Prop :=
 
-| step_assign: forall f be p op k le own own' own'' m1 m2 m3 m4 b ofs ty v,
+| step_assign: forall f be p op k le own own' own'' m1 m2 b ofs ty v,
     typeof_place p = ty ->
     typeof be = ty ->             (* for now, just forbid type casting *)
     (* get the location of the place *)
@@ -513,105 +513,102 @@ Inductive step : state -> trace -> state -> Prop :=
     (* update the init env for p *)
     PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own' = own'' ->    
     (* assign to p  *)    
-    assign_loc ty m3 b ofs v m4 ->
-    step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m4)
+    assign_loc ge ty m1 b ofs v m2 ->
+    step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m2)
          
-| step_let: forall f be op v ty id ie1 ie2 ie3 m1 m2 m3 m4 le1 le2 b k stmt,
-    typeof_boxexpr be = ty ->
-    eval_boxexpr le1 m1 be v op m2 ->
+| step_let: forall f be op v ty id own1 own2 own3 m1 m2 m3 m4 le1 le2 b k stmt,
+    typeof be = ty ->
+    eval_expr le1 m1 be v op ->
     (* update the move environment *)
-    uninit_env ie1 op = Some ie2 ->
+    remove_own own1 op = Some own2 ->
     (* allocate the block for id *)
-    Mem.alloc m2 0 (sizeof ty) = (m3, b) ->
+    Mem.alloc m2 0 (sizeof ge ty) = (m3, b) ->
     (* uppdate the local env *)
     PTree.set id (b, ty) le1 = le2 ->
-    (* update the initialized environment *)
-    PTree.set id (init_path (Plocal id ty) ty) ie2 = ie3 ->
+    (* update the ownership environment *)
+    PTree.set id (own_path ge (Plocal id ty) ty) own2 = own3 ->
     (* assign [v] to [b] *)
-    assign_loc ty m3 b Ptrofs.zero v m4 ->
-    step (State f (Slet id ty be stmt) k le1 ie1 m1) E0 (State f stmt (Klet id k) le2 ie3 m4)
+    assign_loc ge ty m3 b Ptrofs.zero v m4 ->
+    step (State f (Slet id ty be stmt) k le1 own1 m1) E0 (State f stmt (Klet id k) le2 own3 m4)
          
-| step_call_0: forall f a al optlp k le ie1 ie2 m vargs tyargs vf fd cconv tyres,
+| step_call_0: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr le m a vf None ->
     eval_exprlist le m al tyargs vargs optlp ->
     (* CHECKME: update the initialized environment *)
-    uninit_env_list ie1 optlp = Some ie2 ->
+    remove_own_list own1 optlp = Some own2 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction tyargs tyres cconv ->
-    step (State f (Scall None a al) k le ie1 m) E0 (Callstate vf vargs (Kcall None f le ie2 k) m)         
-| step_call_1: forall f a al optlp k le le' ie1 ie2 ie3 m m' b vargs tyargs vf fd cconv tyres id,
+    step (State f (Scall None a al) k le own1 m) E0 (Callstate vf vargs (Kcall None f le own2 k) m)
+| step_call_1: forall f a al optlp k le le' own1 own2 m vargs tyargs vf fd cconv tyres p,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr le m a vf None ->
     eval_exprlist le m al tyargs vargs optlp ->
     (* CHECKME: update the move environment *)
-    uninit_env_list ie1 optlp = Some ie2 ->
+    remove_own_list own1 optlp = Some own2 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction tyargs tyres cconv ->
-    (* allocate memory block and update the env/mvenv for id, just like step_let *)
-    Mem.alloc m 0 (sizeof tyres) = (m', b) ->
-    PTree.set id (b, tyres) le = le' ->
-    PTree.set id (init_path (Plocal id tyres) tyres) ie2 = ie3 ->
-    step (State f (Scall (Some id) a al) k le ie1 m) E0 (Callstate vf vargs (Kcall (Some id) f le' ie3 k) m')
+    step (State f (Scall (Some p) a al) k le own1 m) E0 (Callstate vf vargs (Kcall (Some p) f le' own2 k) m)
                  
 (* End of a let statement, free the place and its drop obligations *)
-| step_end_let: forall f id k le1 le2 me1 me2 m1 m2 m3 ty b,
+| step_end_let: forall f id k le1 le2 own1 own2 m1 m2 m3 ty b,
     PTree.get id le1 = Some (b, ty) ->
     (* free {*id, **id, ...} if necessary *)
-    drop_place le1 me1 (Plocal id ty) m1 m2 ->
+    (* drop_place le1 me1 (Plocal id ty) m1 m2 -> *)
     (* free the block [b] of the local variable *)
-    Mem.free m2 b 0 (sizeof ty) = Some m3 ->
+    Mem.free m1 b 0 (sizeof ge ty) = Some m2 ->
     (* clear [id] in the local env and move env. It is necessary for the memory deallocation in return state *)
     PTree.remove id le1 = le2 ->
-    PTree.remove id me1 = me2 ->
-    step (State f Sskip (Klet id k) le1 me1 m1) E0 (State f Sskip k le2 me2 m3)
+    PTree.remove id own1 = own2 ->
+    step (State f Sskip (Klet id k) le1 own1 m1) E0 (State f Sskip k le2 own2 m3)
 
 | step_internal_function: forall vf f vargs k m e me m'
-    (FIND: Genv.find_funct ge vf = Some (AST.Internal f)),
+    (FIND: Genv.find_funct ge vf = Some (Internal function f)),
     function_entry ge f vargs m e me m' ->
     step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e me m')
 
+| step_external_function: forall vf vargs k m m' cc ty typs ef v t
+    (FIND: Genv.find_funct ge vf = Some (External function ef typs ty cc)),
+    external_call ef ge vargs m t v m' ->
+    step (Callstate vf vargs k m) t (Returnstate v k m')
+
 (** Return cases  *)
-| step_return_0: forall e ie lp lb m1 m2 m3 f k ,
-    (* Q1: if there is a drop obligations list {*p ...} but the type
-    of p is [&mut Box<T>]. Do we need to drop *p ? Although we need to
-    drop [*p] then [*p] is reassign but I don't think it is correct to
-    drop *p when at the function return *)
+| step_return_0: forall e ie lp lb m1 m2 f k ,
     places_of_env e = lp ->
     (* drop the lived drop obligations *)
-    drop_place_list e ie m1 lp m2 ->
-    blocks_of_env e = lb ->
+    (* drop_place_list e ie m1 lp m2 -> *)
+    blocks_of_env ge e = lb ->
     (* drop the stack blocks *)
-    Mem.free_list m2 lb = Some m3 ->    
-    step (State f (Sreturn None) k e ie m1) E0 (Returnstate Vundef (call_cont k) m3)
-| step_return_1: forall le a v op ie ie' lp lb m1 m2 m3 f k ,
+    Mem.free_list m1 lb = Some m2 ->
+    step (State f (Sreturn None) k e ie m1) E0 (Returnstate Vundef (call_cont k) m2)
+| step_return_1: forall le a v op own own' lp lb m1 m2 f k ,
     eval_expr le m1 a v op ->
     (* CHECKME: update move environment, because some place may be
     moved out to the callee *)
-    uninit_env ie op = Some ie' ->
+    remove_own own op = Some own' ->
     places_of_env le = lp ->
-    drop_place_list le ie' m1 lp m2 ->
+    (* drop_place_list le own' m1 lp m2 -> *)
     (* drop the stack blocks *)
-    blocks_of_env le = lb ->
-    Mem.free_list m2 lb = Some m3 ->
-    step (State f (Sreturn (Some a)) k le ie m1) E0 (Returnstate v (call_cont k) m3)
+    blocks_of_env ge le = lb ->
+    Mem.free_list m1 lb = Some m2 ->
+    step (State f (Sreturn (Some a)) k le own m1) E0 (Returnstate v (call_cont k) m2)
 (* no return statement but reach the end of the function *)
-| step_skip_call: forall e me lp lb m1 m2 m3 f k,
+| step_skip_call: forall e own lp lb m1 m2 f k,
     is_call_cont k ->
     places_of_env e = lp ->
-    drop_place_list e me m1 lp m2 ->
-    blocks_of_env e = lb ->
-    Mem.free_list m2 lb = Some m3 ->
-    step (State f Sskip k e me m1) E0 (Returnstate Vundef (call_cont k) m3)
+    (* drop_place_list e me m1 lp m2 -> *)
+    blocks_of_env ge e = lb ->
+    Mem.free_list m1 lb = Some m2 ->
+    step (State f Sskip k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
          
 | step_returnstate_0: forall v m e me f k,
     step (Returnstate v (Kcall None f e me k) m) E0 (State f Sskip k e me m)
-| step_returnstate_1: forall id v b ty m m' e me f k,
-    (* Note that the memory location of the return value has been
-    allocated in the call site *)
-    PTree.get id e = Some (b,ty) ->
-    assign_loc ty m b Ptrofs.zero v m' ->    
-    step (Returnstate v (Kcall (Some id) f e me k) m) E0 (State f Sskip k e me m')
+| step_returnstate_1: forall p v b ofs ty m m' e own f k,
+    (* update ownership environment for p *)
+    (** TODO: insert drop here *)
+    eval_place e p b ofs ->
+    assign_loc ge ty m b ofs v m' ->    
+    step (Returnstate v (Kcall (Some p) f e own k) m) E0 (State f Sskip k e own m')
 
 (* Control flow statements *)
 | step_seq:  forall f s1 s2 k e me m,
@@ -658,18 +655,16 @@ Inductive step : state -> trace -> state -> Prop :=
 function types?  *)
 Inductive initial_state: c_query -> state -> Prop :=
 | initial_state_intro: forall vf f targs tres tcc ctargs ctres vargs m,
-    Genv.find_funct ge vf = Some (AST.Internal f) ->
+    Genv.find_funct ge vf = Some (Internal function f) ->
     type_of_function f = Tfunction targs tres tcc ->
     (** TODO: val_casted_list *)
     Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
-    to_ctypelist targs = Some ctargs ->
-    to_ctype tres = Some ctres ->
     initial_state (cq vf (signature_of_type ctargs ctres tcc) vargs m)
                   (Callstate vf vargs Kstop m).
     
 Inductive at_external: state -> c_query -> Prop:=
-| at_external_intro: forall vf name sg args k m,
-    Genv.find_funct ge vf = Some (AST.External (EF_external name sg)) ->    
+| at_external_intro: forall vf name sg args k m targs tres cconv,
+    Genv.find_funct ge vf = Some (External function (EF_external name sg) targs tres cconv) ->    
     at_external (Callstate vf args k m) (cq vf sg args m).
 
 Inductive after_external: state -> c_reply -> state -> Prop:=
@@ -683,9 +678,8 @@ Inductive final_state: state -> c_reply -> Prop:=
 | final_state_intro: forall v m,
     final_state (Returnstate v Kstop m) (cr v m).
 
-End WITH_GE.
+End SEMANTICS.
 
-  
 Definition semantics (p: program) :=
   Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
   

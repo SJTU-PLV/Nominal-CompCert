@@ -473,6 +473,53 @@ Fixpoint rank_members (ce: composite_env) (m: members) : nat :=
   end.
 
 
+(** ** C types and back-end types *)
+
+(** Extracting a type list from a function parameter declaration. *)
+
+Fixpoint type_of_params (params: list (ident * type)) : typelist :=
+  match params with
+  | nil => Tnil
+  | (id, ty) :: rem => Tcons ty (type_of_params rem)
+  end.
+
+(** Translating C types to Cminor types and function signatures. *)
+
+Definition typ_of_type (t: type) : AST.typ :=
+  match t with
+  | Tunit => AST.Tint
+  | Tint _ _ _ => AST.Tint
+  | Tlong _ _ => AST.Tlong
+  | Tfloat F32 _ => AST.Tsingle
+  | Tfloat F64 _ => AST.Tfloat
+  | Tfunction _ _ _ | Tstruct _ _ | Tunion _ _ => AST.Tptr
+  end.
+
+Definition rettype_of_type (t: type) : AST.rettype :=
+  match t with
+  | Tunit => AST.Tvoid
+  | Tint I32 _ _ => AST.Tint
+  | Tint I8 Signed _ => AST.Tint8signed
+  | Tint I8 Unsigned _ => AST.Tint8unsigned
+  | Tint I16 Signed _ => AST.Tint16signed
+  | Tint I16 Unsigned _ => AST.Tint16unsigned
+  | Tint IBool _ _ => AST.Tint8unsigned
+  | Tlong _ _ => AST.Tlong
+  | Tfloat F32 _ => AST.Tsingle
+  | Tfloat F64 _ => AST.Tfloat
+  | Tfunction _ _ _ | Tstruct _ _ | Tunion _ _ => AST.Tvoid
+  end.
+
+Fixpoint typlist_of_typelist (tl: typelist) : list AST.typ :=
+  match tl with
+  | Tnil => nil
+  | Tcons hd tl => typ_of_type hd :: typlist_of_typelist tl
+  end.
+
+Definition signature_of_type (args: typelist) (res: type) (cc: calling_convention): signature :=
+  mksignature (typlist_of_typelist args) (rettype_of_type res) cc.
+
+
 (** * Construction of the composite environment *)
 
 Definition sizeof_composite (env: composite_env) (su: struct_or_union) (m: members) : Z :=
@@ -765,6 +812,12 @@ Inductive fundef : Type :=
 | Internal: F -> fundef
 | External: external_function -> typelist -> type -> calling_convention -> fundef.
 
+Global Instance rustlight_fundef_is_internal : FundefIsInternal fundef :=
+  fun f =>
+    match f with
+      | Internal _ => true
+      | _ => false
+    end.
 
 Record program : Type := {
   prog_defs: list (ident * globdef fundef type);
