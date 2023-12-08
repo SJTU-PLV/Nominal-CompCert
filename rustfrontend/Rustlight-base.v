@@ -624,7 +624,7 @@ Inductive step : state -> trace -> state -> Prop :=
     typeof_place p = ty ->
     typeof be = ty ->             (* for now, just forbid type casting *)
     (* get the location of the place *)
-    eval_place le p b ofs ->
+    eval_place le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
     eval_expr le m1 be v op ->
     (* update the initialized environment based on [op] *)
@@ -632,27 +632,27 @@ Inductive step : state -> trace -> state -> Prop :=
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
     owned type, drop_place has no effect. We must first update the me
     and then drop p, consider [ *p=move *p ] *)
-    (* drop_place le ie' p m2 m3 -> *)
-    (* update the init env for p *)
-    PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own' = own'' ->    
-    (* assign to p  *)    
+    drop_place ge le own' p m1 m2 ->
+    (* update the ownership env for p *)
+    PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own' = own'' ->
+    (* assign to p  *)
     assign_loc ge ty m1 b ofs v m2 ->
     step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m2)
          
-| step_let: forall f be op v ty id own1 own2 own3 m1 m2 m3 m4 le1 le2 b k stmt,
+| step_let: forall f be op v ty id own1 own2 own3 m1 m2 m3 le1 le2 b k stmt,
     typeof be = ty ->
     eval_expr le1 m1 be v op ->
     (* update the move environment *)
     remove_own own1 op = Some own2 ->
     (* allocate the block for id *)
-    Mem.alloc m2 0 (sizeof ge ty) = (m3, b) ->
+    Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
     (* uppdate the local env *)
     PTree.set id (b, ty) le1 = le2 ->
     (* update the ownership environment *)
     PTree.set id (own_path ge (Plocal id ty) ty) own2 = own3 ->
     (* assign [v] to [b] *)
-    assign_loc ge ty m3 b Ptrofs.zero v m4 ->
-    step (State f (Slet id ty be stmt) k le1 own1 m1) E0 (State f stmt (Klet id k) le2 own3 m4)
+    assign_loc ge ty m2 b Ptrofs.zero v m3 ->
+    step (State f (Slet id ty be stmt) k le1 own1 m1) E0 (State f stmt (Klet id k) le2 own3 m3)
          
 | step_call_0: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
@@ -677,7 +677,7 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_end_let: forall f id k le1 le2 own1 own2 m1 m2 m3 ty b,
     PTree.get id le1 = Some (b, ty) ->
     (* free {*id, **id, ...} if necessary *)
-    (* drop_place le1 me1 (Plocal id ty) m1 m2 -> *)
+    drop_place ge le1 own1 (Plocal id ty) m1 m2 ->
     (* free the block [b] of the local variable *)
     Mem.free m1 b 0 (sizeof ge ty) = Some m2 ->
     (* clear [id] in the local env and move env. It is necessary for the memory deallocation in return state *)
@@ -696,14 +696,14 @@ Inductive step : state -> trace -> state -> Prop :=
     step (Callstate vf vargs k m) t (Returnstate v k m')
 
 (** Return cases  *)
-| step_return_0: forall e ie lp lb m1 m2 f k ,
+| step_return_0: forall e own lp lb m1 m2 f k ,
     places_of_env e = lp ->
     (* drop the lived drop obligations *)
-    (* drop_place_list e ie m1 lp m2 -> *)
+    drop_place_list ge e own m1 lp m2 ->
     blocks_of_env ge e = lb ->
     (* drop the stack blocks *)
     Mem.free_list m1 lb = Some m2 ->
-    step (State f (Sreturn None) k e ie m1) E0 (Returnstate Vundef (call_cont k) m2)
+    step (State f (Sreturn None) k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
 | step_return_1: forall le a v op own own' lp lb m1 m2 f k ,
     eval_expr le m1 a v op ->
     (* CHECKME: update move environment, because some place may be
@@ -729,7 +729,7 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_returnstate_1: forall p v b ofs ty m m' e own f k,
     (* update ownership environment for p *)
     (** TODO: insert drop here *)
-    eval_place e p b ofs ->
+    eval_place e m p b ofs ->
     assign_loc ge ty m b ofs v m' ->    
     step (Returnstate v (Kcall (Some p) f e own k) m) E0 (State f Sskip k e own m')
 
