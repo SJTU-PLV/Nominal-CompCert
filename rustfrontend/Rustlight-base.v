@@ -126,6 +126,7 @@ Definition type_of_fundef (f: fundef) : type :=
 
 (** * Operational Semantics  *)
 
+Definition own_fuel := 10%nat.
 
 (** ** Global environment  *)
 
@@ -227,14 +228,8 @@ Definition remove_own' (own: own_env) (p: place) : option own_env :=
 
 Definition remove_own (own: own_env) (op: option place) : option own_env :=
   match op with
-  | Some p =>
-      match typeof_place p with
-      (* we assume all the struct is not copyable *)
-      | Tstruct _ _ => remove_own' own p
-      (* | Tbox _ => remove_own' own p *)
-      (* | Treference _ Mutable _ => remove_own' own p *)
-      | _ => Some own
-      end
+  | Some p =>      
+      remove_own' own p
   | _ => Some own
   end.
 
@@ -274,30 +269,38 @@ Variable e: env.
 Variable m: mem.
 
 (* similar to eval_lvalue in Clight.v *)
-Inductive eval_place : place -> block -> ptrofs -> Prop :=
+Inductive eval_place (m:mem) : place -> block -> ptrofs -> Prop :=
 | eval_Plocal: forall id b ty,
     (** TODO: there is no global variable, so we do not consider the
     gloabl environment *)
     e!id = Some (b, ty) ->
-    eval_place (Plocal id ty) b Ptrofs.zero
+    eval_place m (Plocal id ty) b Ptrofs.zero
 | eval_Pfield_struct: forall p ty b ofs delta id i co bf attr,
-    eval_place p b ofs ->
+    eval_place m p b ofs ->
     ty = Tstruct id attr ->
     ge.(genv_cenv) ! id = Some co ->
     field_offset ge i (co_members co) = OK (delta, bf) ->
-    eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
+    eval_place m (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
 | eval_Pfield_union: forall p ty b ofs delta id i co bf attr,
-    eval_place p b ofs ->
+    eval_place m p b ofs ->
     ty = Tunion id attr ->
     ge.(genv_cenv) ! id = Some co ->
     union_field_offset ge i (co_members co) = OK (delta, bf) ->
-    eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta)).
-    
+    eval_place m (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta)).
+
 (* | eval_Pderef: forall p ty l ofs l' ofs', *)
 (*     eval_place p l ofs -> *)
 (*     deref_loc ty m l ofs (Vptr l' ofs') -> *)
 (*     eval_place (Pderef p ty) l' ofs'. *)
- 
+
+Inductive eval_place_list : list place -> list block -> list ptrofs -> Prop :=
+| eval_Pnil: eval_place_list nil nil nil
+| eval_Pcons: forall p b ofs lp lb lofs,
+    eval_place m p b ofs ->
+    eval_place_list lp lb lofs ->    
+    eval_place_list (p :: lp) (b :: lb) (ofs :: lofs).
+
+
 (* eval_expr would produce a pair (v, op). Here [op] has type [Option
 place], if [op] is equal to [Some p], it means that this expression is
 a xvalue expression and the [p] is the place to be moved from.  *)
@@ -327,15 +330,15 @@ Inductive eval_expr : expr -> val -> option place ->  Prop :=
 (*     (* For now, we do not return moved place in binary operation *) *)
 (*     eval_expr (Ebinop op a1 a2 ty) v None. *)
 | eval_Eplace_copy: forall p b ofs ty m v,
-    eval_place p b ofs ->
+    eval_place m p b ofs ->
     deref_loc ty m b ofs v ->
     eval_expr (Eplace Copy p ty) v None
 | eval_Eplace_move: forall p b ofs ty m v,
-    eval_place p b ofs ->
+    eval_place m p b ofs ->
     deref_loc ty m b ofs v ->
     eval_expr (Eplace Move p ty) v (Some p)
 | eval_Eref: forall p b ofs mut ty,
-    eval_place p b ofs ->
+    eval_place m p b ofs ->
     eval_expr (Eplace mut p ty) (Vptr b ofs) None.
 
 Inductive eval_exprlist : list expr -> typelist -> list val -> list (option place) -> Prop :=
@@ -416,29 +419,149 @@ Inductive state: Type :=
       (res: val)
       (k: cont)
       (m: mem) : state.                          
-       
 
-Definition own_path (ce: composite_env) (p: place) (ty: type) : list place :=
+
+(** Automatic drop  *)
+
+Definition copy_type (ty: type) :=
   match ty with
-  (* | Tbox ty' => *)
-  (*     let deref := Pderef p ty' in *)
-  (*     p :: init_path deref ty' *)
-  (* | Treference ty' Mutable _ => *)
-  (*     let deref := Pderef p ty' in *)
-  (*     p :: init_path deref ty' *)
-  | Tstruct id attr =>
-      let co := ce ! id in
-      match co with
-      | Some co =>
-          let fields := map (fun m => match m with | Member_plain id ty => (Pfield p id ty) end) co.(co_members) in
-          p :: fields
-      | _ => p :: nil
+  | Tunit
+  | Tint _ _ _
+  | Tlong _ _
+  | Tfloat _ _
+  | Tfunction _ _ _ => true
+  | _ => false
+  end.
+              
+
+Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> block -> ptrofs -> mem -> Prop :=
+| drop_base: forall ty p m b ofs,
+    typeof_place p = ty ->
+    (* It is not of type [Tbox] *)
+    copy_type ty = true ->
+    drop_place' ce owned p m b ofs m
+| drop_moved: forall  p m b ofs,
+    not (In p owned) ->
+    drop_place' ce owned p m b ofs m
+| drop_struct: forall p m b ofs id attr co m' lb lofs lofsbit fields,
+    typeof_place p = Tstruct id attr ->
+    ce ! id = Some co ->
+    fields = map (fun memb => match memb with | Member_plain fid fty => Pfield p fid fty end) co.(co_members) ->
+    (* do not use eval_place_list, directly compute the field offset *)
+    field_offset_all ce co.(co_members) = OK lofsbit ->
+    lofs = map (fun ofsbit => Ptrofs.add ofs (Ptrofs.repr (fst ofsbit))) lofsbit ->
+    lb = repeat b (length co.(co_members)) ->
+    drop_place_list' ce owned fields m lb lofs m' ->
+    drop_place' ce owned p m b ofs m'
+(* | drop_box: forall ty ty' m' m'' b' ofs', *)
+(*     ty = Tbox ty' -> *)
+(*     (* p owns the location it points to *) *)
+(*     In p owned -> *)
+(*     (* The contents in [p] is (Vptr b' ofs') *) *)
+(*     Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') -> *)
+(*     drop_place' owned (Pderef p ty') m b' ofs' m' -> *)
+(*     (* Free the contents in (b',ofs') *) *)
+(*     Mem.free m' b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ty') = Some m'' -> *)
+(*     drop_place' owned p m b ofs m'' *)
+
+with drop_place_list' (ce: composite_env) (owned: list place) : list place -> mem -> list block -> list ptrofs -> mem -> Prop :=
+| drop_list_nil: forall m,
+    drop_place_list' ce owned nil m nil nil m
+| drop_list_cons: forall p lp' b lb' ofs lofs' m m' m'',
+    drop_place' ce owned p m b ofs m' ->
+    drop_place_list' ce owned lp' m' lb' lofs' m'' ->
+    drop_place_list' ce owned (p :: lp') m (b :: lb') (ofs :: lofs') m''.
+
+  
+(** Free {*p, **p ,... } according to me  *)
+Inductive drop_place (ce: composite_env) (e: env) (ie: own_env) (p: place) (m: mem) : mem -> Prop :=
+| drop_gen: forall b ofs m' id owned,
+    eval_place e m p b ofs ->
+    local_of_place p = id ->
+    PTree.get id ie = Some owned ->
+    drop_place' ce owned p m b ofs m' ->
+    drop_place ce e ie p m m'.
+
+Inductive drop_place_list (ce: composite_env) (e: env) (own: own_env) (m: mem) : list place -> mem -> Prop :=
+| drop_place_list_base:
+    drop_place_list ce e own m nil m
+| drop_place_list_cons: forall p lp m' m'',
+    drop_place ce e own p m m' ->
+    drop_place_list ce e own m' lp m'' ->
+    drop_place_list ce e own m (p::lp) m''.
+
+
+(** A more comprehensive drop implementation  *)
+(* Inductive drop_place'' (ce: composite_env) (owned: list place) : place -> mem -> mem -> Prop := *)
+(* | drop_base: forall ty p m, *)
+(*     typeof_place p = ty -> *)
+(*     (* It is not of type [Tbox] *) *)
+(*     copy_type ty = true -> *)
+(*     drop_place'' ce owned p m m *)
+(* | drop_moved: forall  p m, *)
+(*     not (In p owned) -> *)
+(*     drop_place'' ce owned p m m *)
+(* | drop_struct: forall p m id attr co m' fields,  *)
+(*     typeof_place p = Tstruct id attr -> *)
+(*     ce ! id = Some co -> *)
+(*     fields = map (fun memb => match memb with | Member_plain fid fty => Pfield p fid fty end) co.(co_members) -> *)
+(*     drop_place_list'' ce owned fields m m' -> *)
+(*     drop_place'' ce owned p m m' *)
+(* (* | drop_box: forall ty ty' m' m'' b' ofs', *) *)
+(* (*     ty = Tbox ty' -> *) *)
+(* (*     (* p owns the location it points to *) *) *)
+(* (*     In p owned -> *) *)
+(* (*     (* The contents in [p] is (Vptr b' ofs') *) *) *)
+(* (*     Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') -> *) *)
+(* (*     drop_place' owned (Pderef p ty') m b' ofs' m' -> *) *)
+(* (*     (* Free the contents in (b',ofs') *) *) *)
+(* (*     Mem.free m' b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ty') = Some m'' -> *) *)
+(* (*     drop_place' owned p m b ofs m'' *) *)
+
+(* with drop_place_list'' (ce: composite_env) (owned: list place) : list place -> mem -> mem -> Prop := *)
+(* | drop_list_nil: forall m, *)
+(*     drop_place_list'' ce owned nil m m *)
+(* | drop_list_cons: forall p lp' m m' m'', *)
+(*     drop_place'' ce owned p m m' -> *)
+(*     drop_place_list'' ce owned lp' m' m'' -> *)
+(*     drop_place_list'' ce owned (p :: lp') m m''. *)
+
+
+
+
+(** Ownership path  *)
+
+Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place) (ty: type) : list place :=
+  match fuel with
+  | O => nil
+  | S fuel' =>
+      match ty with
+      (* | Tbox ty' => *)
+     (*     let deref := Pderef p ty' in *)
+      (*     p :: own_path fuel' ce deref ty' *)
+      (* | Treference ty' Mutable _ => *)
+      (*     let deref := Pderef p ty' in *)
+      (*     p :: init_path deref ty' *)
+      | Tstruct id _ | Tunion id _ =>
+          match ce ! id with
+          | Some co =>
+              let acc flds m :=
+                let p' := match m with | Member_plain id ty => (Pfield p id ty) end in
+                flds ++ own_path fuel' ce p' ty
+              in
+              let fields := fold_left acc co.(co_members) nil in
+              (* if fields is empty, p is not returned *)
+              match fields with
+              | nil => nil
+              | _ => p :: fields
+              end
+          | _ => p :: nil
+          end
+      | _ => nil
       end
-  (* For now, we do not consider Tunion as own type *)
-  | _ => nil
   end.
   
-
+Let own_path := own_path own_fuel.
 
 (** Allocate memory blocks for function parameters and build the local environment and move environment  *)
 Inductive alloc_variables (ce: composite_env) : env -> own_env -> mem ->

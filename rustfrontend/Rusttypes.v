@@ -28,12 +28,6 @@ with typelist : Type :=
 | Tnil: typelist
 | Tcons: type -> typelist -> typelist.
 
-Definition own_type (ty: type) : bool :=
-  match ty with
-  | Tstruct _ _ => true
-  | _ => false
-  end.
-
 Lemma type_eq: forall (ty1 ty2: type), {ty1=ty2} + {ty1<>ty2}
 with typelist_eq: forall (tyl1 tyl2: typelist), {tyl1=tyl2} + {tyl1<>tyl2}.
 Proof.
@@ -221,6 +215,32 @@ Lemma alignof_pos:
 Proof.
   intros. destruct (alignof_two_p env t) as [n EQ]. rewrite EQ. apply two_power_nat_pos.
 Qed.
+
+(** Ownership type  *)
+
+Fixpoint own_type (fuel: nat) (ce: composite_env) (ty: type) : bool :=
+  match fuel with
+  | O => false
+  | S fuel' =>
+      match ty with
+      | Tstruct id _ | Tunion id _ =>
+          match ce ! id with
+          | Some co =>
+              let acc res m :=
+                let own := (match m with
+                            | Member_plain fid fty =>
+                                own_type fuel' ce fty
+                            end) in
+                orb res own in
+              fold_left acc co.(co_members) false
+          | None => false
+          end
+      (** TODO: unique pointer and mutable reference are own type  *)
+      | _ => false
+      end
+  end.
+
+
 
 (** Size of a type  *)
 
@@ -627,6 +647,21 @@ Fixpoint field_offset_rec (env: composite_env) (id: ident) (ms: members) (pos: Z
 
 Definition field_offset (env: composite_env) (id: ident) (ms: members) : res (Z * bitfield) :=
   field_offset_rec env id ms 0.
+
+(** field_offset_all returns all the byte offset for fileds in a structure  *)
+
+Fixpoint field_offset_all_rec (env: composite_env) (ms: members) (pos: Z)
+                          {struct ms} : res (list (Z * bitfield)) :=
+  match ms with
+  | nil => OK nil
+  | m :: ms =>
+      do ofsm <- layout_field env pos m;
+      do ofsms <- field_offset_all_rec env ms (next_field env pos m);
+      OK (ofsm :: ofsms)
+  end.
+
+Definition field_offset_all (env: composite_env) (ms: members) : res (list (Z * bitfield)) :=
+  field_offset_all_rec env ms 0.
 
 (* [field_zero_or_padding m] returns true if the field is a zero length bitfield
    or does not have a name *)
