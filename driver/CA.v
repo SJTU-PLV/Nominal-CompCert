@@ -147,7 +147,7 @@ Record cc_cainjp_world :=
     }.
 
 Inductive cc_c_asm_injp_mq : cc_cainjp_world -> c_query -> query li_asm -> Prop:=
-  cc_c_asm_injp_mq_intro sg args m j (rs: regset) tm tm0 vf
+  cc_c_asm_injp_mq_intro sg args m j (rs: regset) tm tm0 vf gs tgs
     (Hm: Mem.inject j m tm):
     let tsp := rs#SP in let tra := rs#RA in let tvf := rs#PC in
     let targs := (map (fun p => Locmap.getpair p (make_locset_rs rs tm tsp))
@@ -162,22 +162,22 @@ Inductive cc_c_asm_injp_mq : cc_cainjp_world -> c_query -> query li_asm -> Prop:
     args_removed sg tsp tm tm0 -> (* The Outgoing arguments are readable and freeable in tm *)
     vf <> Vundef -> tra <> Vundef ->
     cc_c_asm_injp_mq
-      (cajw (injpw j m tm Hm) sg rs)
+      (cajw (injpw j gs tgs m tm Hm) sg rs)
       (cq vf sg args m)
       (rs,tm).
 
 Inductive cc_c_asm_injp_mr : cc_cainjp_world -> c_reply -> reply li_asm -> Prop :=
-  cc_c_asm_injp_mr_intro sg res j m tm Hm j' m' tm' Hm' (rs rs' :regset) :
+  cc_c_asm_injp_mr_intro sg res j m tm Hm j' m' tm' Hm' (rs rs' :regset) gs tgs:
      let tsp := rs#SP in
      let tres := rs_getpair (map_rpair preg_of (loc_result sg)) rs' in
      Val.inject j' res tres ->
-     injp_acc (injpw j m tm Hm) (injpw j' m' tm' Hm') ->
+     injp_acc (injpw j gs tgs m tm Hm) (injpw j' gs tgs m' tm' Hm') ->
      (forall r, is_callee_save r = true -> rs' (preg_of r) = rs (preg_of r)) ->
      (forall b ofs, loc_init_args (size_arguments sg) tsp b ofs ->
               loc_out_of_reach j m b ofs) ->
      rs'#SP = rs#SP -> rs'#PC = rs#RA ->
      cc_c_asm_injp_mr
-       (cajw (injpw j m tm Hm) sg rs)
+       (cajw (injpw j gs tgs m tm Hm) sg rs)
        (cr res m')
        (rs', tm').
 
@@ -200,32 +200,33 @@ Qed.
 Lemma cc_injpca_cainjp :
   ccref (cc_c injp @ cc_c_asm) (cc_c_asm_injp).
 Proof.
-  intros [[se2 [j m tm Hm']] [sg rs]] se1 se2' q1 q2 Hse Hq.
+  intros [[se2 [j ? ? m tm Hm']] [sg rs]] se1 se2' q1 q2 Hse Hq.
   destruct Hse. inv H. destruct H0.
   destruct Hq as [q1' [Hq1 Hq2]]. cbn in *.
   inv Hq1. cbn in *. inv H1. rename m1 into m. rename m2 into tm0.
   inv Hq2. cbn in *. rename caw_m0 into tm. rename sg0 into sg.
-  inv H14.
+  inv H14. subst gs4 gs5. rename gs0 into gs1. rename gs3 into gs2.
   - (*easy: no Outgoing part*)
     rename tm0 into tm.
-    exists (cajw (injpw j m tm Hm3) sg rs).
+    exists (cajw (injpw j gs1 gs2 m tm Hm3) sg rs).
     repeat apply conj; eauto.
     + constructor; eauto.
     + econstructor; eauto.
-      intros. inv H3. red in H1. rewrite H1 in H6. extlia.
+      intros. inv H3. red in H1. rewrite H1 in H5. extlia.
       constructor; eauto.
     + intros r1 r2 Hr. inversion Hr. subst.
       exists (cr tres tm'). split.
       * econstructor; eauto. split.
-        instantiate (1:= injpw j' m' tm' Hm'0).
-        inv H12.
+        instantiate (1:= injpw j' gs1 gs2 m' tm' Hm'0).
+        inv H21.
         constructor; eauto.
         constructor; eauto.
         constructor; eauto.
       * constructor; eauto with mem.
-        inv H12.
+        inv H21.
         eapply Mem.unchanged_on_implies; eauto.
-        intros. inv H3. red in H1. rewrite H1 in H6. extlia.
+        intros. split. eauto. inv H3. red in H1. rewrite H1 in H6. extlia.
+        intros. inv H3. red in H1. rewrite H1 in H5. extlia.
   - (*with Outgoing part*)
     assert (Htm: Mem.inject j m tm).
     { clear - Hm3 H3. inversion Hm3.
@@ -247,7 +248,7 @@ Proof.
           eapply Mem.perm_free_2 in H3 as NOPERMtm0; eauto.
         + eapply mi_perm_inv; eauto.
     }
-    exists (cajw (injpw j m tm Htm) sg rs).
+    exists (cajw (injpw j gs1 gs2 m tm Htm) sg rs).
     repeat apply conj; eauto.
     + constructor; eauto.
       erewrite <- Mem.support_free; eauto.

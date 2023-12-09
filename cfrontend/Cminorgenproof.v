@@ -42,6 +42,8 @@ Variable se: Genv.symtbl.
 Variable tse: Genv.symtbl.
 Let ge : Csharpminor.genv := Genv.globalenv se prog.
 Let tge: genv := Genv.globalenv tse tprog.
+Let gs : sup := Genv.genv_sup se.
+Let tgs : sup := Genv.genv_sup tse.
 
 Hypothesis GE: match_stbls inj w se tse.
 
@@ -468,6 +470,15 @@ Proof.
   eapply match_stbls_acc in GE; cbn; eauto. apply GE.
 Qed.
 
+Lemma match_callstack_tsup:
+  forall f m tm cs bound tbound,
+  match_callstack f m tm cs bound tbound ->
+  Mem.sup_include tgs tbound.
+Proof.
+  induction 1; eauto. inv GE.
+  inv H. eauto.
+Qed.
+
 (** Invariance properties for [match_callstack]. *)
 
 Lemma match_callstack_invariant:
@@ -594,8 +605,8 @@ Qed.
 
 Lemma match_callstack_external_call:
   forall f1 f2 m1 m2 m1' m2',
-  Mem.unchanged_on (loc_unmapped f1) m1 m2 ->
-  Mem.unchanged_on (loc_out_of_reach f1 m1) m1' m2' ->
+  Mem.unchanged_on (fun b z => loc_unmapped f1 b z /\ ~ sup_In b gs) m1 m2 ->
+  Mem.unchanged_on (fun b z => loc_out_of_reach f1 m1 b z /\ ~ sup_In b tgs) m1' m2' ->
   inject_incr f1 f2 ->
   inject_separated f1 f2 m1 m1' ->
   (forall b ofs p, Mem.valid_block m1 b -> Mem.perm m2 b ofs Max p -> Mem.perm m1 b ofs Max p) ->
@@ -639,11 +650,13 @@ Proof.
   inv H3. right. apply is_reachable_intro with id b sz delta; auto.
   exploit PERM; eauto. intros [A|A]; try contradiction.
   left. eapply Mem.perm_unchanged_on; eauto.
+  split.
   red; intros; red; intros. elim H3.
   exploit me_inv; eauto. intros [id [lv B]].
   exploit BOUND0; eauto. intros C.
   apply is_reachable_intro with id b0 lv delta; auto; lia.
-  eauto with mem.
+  apply match_callstack_tsup in H. intro.
+  eapply freshness; eauto.
   (* induction *)
   eapply IHmatch_callstack; eauto. inv MENV.
   eapply Mem.sup_include_trans; eauto.
@@ -2011,6 +2024,8 @@ Proof.
                  (Mem.support m') (Mem.support tm')).
     apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
     eapply match_callstack_external_call; eauto.
+    eapply Mem.unchanged_on_implies; intuition eauto.
+    eapply Mem.unchanged_on_implies; intuition eauto.
     intros. eapply external_call_max_perm; eauto.
     eapply external_call_support; eauto.
     eapply external_call_support; eauto.
@@ -2164,6 +2179,8 @@ Opaque PTree.set.
   econstructor; eauto.
   apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
   eapply match_callstack_external_call; eauto.
+  eapply Mem.unchanged_on_implies; intuition eauto.
+  eapply Mem.unchanged_on_implies; intuition eauto.
   intros. eapply external_call_max_perm; eauto.
   eapply external_call_support; eauto.
   eapply external_call_support; eauto.
@@ -2218,7 +2235,7 @@ Proof.
   eapply functions_translated in H as (tfd & TFIND & TRFD);
     eauto using match_callstack_match_globalenvs.
   monadInv TRFD.
-  eexists (injpw f m tm MINJ), _. intuition idtac.
+  eexists (injpw f _ _ m tm MINJ), _. intuition idtac.
   - econstructor; eauto.
   - econstructor; eauto. constructor.
   - constructor; eauto using match_callstack_match_globalenvs.
@@ -2228,7 +2245,7 @@ Proof.
       clear - MCS. induction MCS; cbn in *; eauto. inv H; cbn; auto.
   - destruct H as (wx' & Hwx' & H). inv Hwx'. inv H1. inv H. eexists. split.
     + econstructor; eauto.
-    + inv H11. econstructor; eauto.
+    + inv H5. econstructor; eauto. cbn. eauto.
       apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
       eapply match_callstack_external_call; eauto.
       eapply Mem.unchanged_on_support; eauto.
