@@ -704,34 +704,36 @@ Inductive step : state -> trace -> state -> Prop :=
     (* drop the stack blocks *)
     Mem.free_list m1 lb = Some m2 ->
     step (State f (Sreturn None) k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
-| step_return_1: forall le a v op own own' lp lb m1 m2 f k ,
+| step_return_1: forall le a v op own own' lp lb m1 m2 m3 f k ,
     eval_expr le m1 a v op ->
     (* CHECKME: update move environment, because some place may be
     moved out to the callee *)
     remove_own own op = Some own' ->
     places_of_env le = lp ->
-    (* drop_place_list le own' m1 lp m2 -> *)
+    drop_place_list ge le own' m1 lp m2 ->
     (* drop the stack blocks *)
     blocks_of_env ge le = lb ->
-    Mem.free_list m1 lb = Some m2 ->
-    step (State f (Sreturn (Some a)) k le own m1) E0 (Returnstate v (call_cont k) m2)
+    Mem.free_list m2 lb = Some m3 ->
+    step (State f (Sreturn (Some a)) k le own m1) E0 (Returnstate v (call_cont k) m3)
 (* no return statement but reach the end of the function *)
-| step_skip_call: forall e own lp lb m1 m2 f k,
+| step_skip_call: forall e own lp lb m1 m2 m3 f k,
     is_call_cont k ->
     places_of_env e = lp ->
-    (* drop_place_list e me m1 lp m2 -> *)
+    drop_place_list ge e own m1 lp m2 ->
     blocks_of_env ge e = lb ->
-    Mem.free_list m1 lb = Some m2 ->
-    step (State f Sskip k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
+    Mem.free_list m2 lb = Some m3 ->
+    step (State f Sskip k e own m1) E0 (Returnstate Vundef (call_cont k) m3)
          
 | step_returnstate_0: forall v m e me f k,
     step (Returnstate v (Kcall None f e me k) m) E0 (State f Sskip k e me m)
-| step_returnstate_1: forall p v b ofs ty m m' e own f k,
-    (* update ownership environment for p *)
-    (** TODO: insert drop here *)
-    eval_place e m p b ofs ->
-    assign_loc ge ty m b ofs v m' ->    
-    step (Returnstate v (Kcall (Some p) f e own k) m) E0 (State f Sskip k e own m')
+| step_returnstate_1: forall p v b ofs ty m m' m'' e own own' f k,
+    (* drop and replace *)
+    drop_place ge e own p m m' ->
+    (* update the ownership environment *)
+    PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own = own' ->
+    eval_place e m' p b ofs ->
+    assign_loc ge ty m' b ofs v m'' ->    
+    step (Returnstate v (Kcall (Some p) f e own k) m) E0 (State f Sskip k e own' m'')
 
 (* Control flow statements *)
 | step_seq:  forall f s1 s2 k e me m,
