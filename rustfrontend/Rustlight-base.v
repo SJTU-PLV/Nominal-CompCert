@@ -454,6 +454,41 @@ Definition copy_type (ty: type) :=
   end.
               
 
+(* normal recursive drop (do not consider own path): used for variant *)
+Inductive drop_place_type (ce: composite_env) : type -> mem -> block -> ptrofs -> mem -> Prop :=
+| drop_base_copy: forall m b ofs ty,
+    copy_type ty = true ->
+    drop_place_type ce ty m b ofs m
+| drop_base_struct: forall m b ofs id attr co m' lb lofs lofsbit lty,
+    ce ! id = Some co ->
+    (* do not use eval_place_list, directly compute the field offset *)
+    field_offset_all ce co.(co_members) = OK lofsbit ->
+    lofs = map (fun ofsbit => Ptrofs.add ofs (Ptrofs.repr (fst ofsbit))) lofsbit ->
+    lb = repeat b (length co.(co_members)) ->
+    lty = map type_member co.(co_members) ->
+    drop_place_type_list ce lty m lb lofs m' ->
+    drop_place_type ce (Tstruct id attr) m b ofs m'
+| drop_base_variant: forall m b ofs id attr co m' tag memb fid ofs' bf,
+    ce ! id = Some co ->
+    (* load tag  *)
+    Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
+    (* use tag to choose the member *)
+    list_nth_z co.(co_members) (Int.unsigned tag) = Some memb ->
+    fid = name_member memb ->
+    variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
+    (* drop the selected type *)
+    drop_place_type ce (type_member memb) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) m' ->
+    drop_place_type ce (Tvariant id attr) m b ofs m'
+                    
+with drop_place_type_list (ce: composite_env) : list type -> mem -> list block -> list ptrofs -> mem -> Prop :=
+| drop_type_list_nil: forall m,
+    drop_place_type_list ce nil m nil nil m
+| drop_type_list_cons: forall b ty tys' lb' ofs lofs' m m' m'',
+    drop_place_type ce ty m b ofs m' ->
+    drop_place_type_list ce tys' m' lb' lofs' m'' ->
+    drop_place_type_list ce (ty :: tys') m (b :: lb') (ofs :: lofs') m''.
+
+  
 Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> block -> ptrofs -> mem -> Prop :=
 | drop_base: forall ty p m b ofs,
     typeof_place p = ty ->
@@ -474,18 +509,11 @@ Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> 
     lb = repeat b (length co.(co_members)) ->
     drop_place_list' ce owned fields m lb lofs m' ->
     drop_place' ce owned p m b ofs m'
-| drop_variant: forall p m b ofs id attr co m' tag memb fid ofs' bf,
+| drop_variant: forall p m b ofs id attr m',
     (* select the type based on the tag value *)
     typeof_place p = Tvariant id attr ->
-    ce ! id = Some co ->
-    (* load tag  *)
-    Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
-    (* use tag to choose the member *)
-    list_nth_z co.(co_members) (Int.unsigned tag) = Some memb ->
-    fid = name_member memb ->
-    variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
-    (* drop the selected type *)
-    drop_place' ce owned (Pfield p fid (type_member memb)) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) m' ->
+    (* p is in owned, so we just use type to destruct the variant *)
+    drop_place_type ce (Tvariant id attr) m b ofs m' ->
     drop_place' ce owned p m b ofs m'
     
 (* | drop_box: forall ty ty' m' m'' b' ofs', *)
@@ -577,7 +605,7 @@ Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place) (ty: type) : list p
       (* | Treference ty' Mutable _ => *)
       (*     let deref := Pderef p ty' in *)
       (*     p :: init_path deref ty' *)
-      | Tstruct id _ | Tvariant id _ =>
+      | Tstruct id _ =>
           match ce ! id with
           | Some co =>
               let acc flds m :=
@@ -592,6 +620,9 @@ Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place) (ty: type) : list p
               end
           | _ => p :: nil
           end
+      | Tvariant _ _ =>
+          if own_type own_fuel ce ty then p :: nil
+          else nil
       | _ => nil
       end
   end.
@@ -655,7 +686,7 @@ Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e:
 
 Inductive step : state -> trace -> state -> Prop :=
 
-| step_assign: forall f be p op k le own own' own'' m1 m2 b ofs v,
+| step_assign: forall f be p op k le own own' own'' m1 m2 m3 b ofs v,
     (* get the location of the place *)
     eval_place le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
@@ -671,8 +702,8 @@ Inductive step : state -> trace -> state -> Prop :=
     (* assign to p  *)
     (* note that the type is the expreesion type, consider [a = 1]
     where a is [variant{int,float} *)
-    assign_loc ge (typeof be) m1 b ofs v m2 ->    
-    step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m2)
+    assign_loc ge (typeof be) m2 b ofs v m3 ->
+    step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m3)
 
 | step_assign_variant: forall f be p op k le own own' own'' m1 m2 m3 b ofs ofs' v tag bf co id fid attr ,
     typeof_place p = Tvariant id attr ->
@@ -693,7 +724,7 @@ Inductive step : state -> trace -> state -> Prop :=
     ge.(genv_cenv) ! id = Some co ->
     type_tag (typeof be) co.(co_members) = Some (fid,tag) ->
     (* set the tag *)
-    Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
+    Mem.storev Mint32 m2 (Vptr b ofs) (Vint (Int.repr tag)) = Some m3 ->
     field_offset ge fid co.(co_members) = OK (ofs', bf) ->
     (* set the value *)
     assign_loc ge (typeof be) m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m3 ->
@@ -830,8 +861,7 @@ Inductive step : state -> trace -> state -> Prop :=
       E0 (State f (Sloop s1 s2) k e me m)
 | step_break_loop2: forall f s1 s2 k e me m,
     step (State f Sbreak (Kloop2 s1 s2 k) e me m)
-      E0 (State f Sskip k e me m)
-        
+      E0 (State f Sskip k e me m)      
 .
 
 (** Open semantics *)
