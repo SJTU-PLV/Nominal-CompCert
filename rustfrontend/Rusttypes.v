@@ -23,7 +23,7 @@ Inductive type : Type :=
 | Tfloat : floatsize -> attr -> type
 | Tfunction: typelist -> type -> calling_convention -> type    (**r function types *)
 | Tstruct: ident -> attr -> type                              (**r struct types  *)
-| Tunion: ident -> attr -> type                               (**r union types *)
+| Tvariant: ident -> attr -> type                             (**r tagged union types *)
 with typelist : Type :=
 | Tnil: typelist
 | Tcons: type -> typelist -> typelist.
@@ -39,6 +39,8 @@ Proof.
   decide equality.
 Defined.
 
+Global Opaque type_eq typelist_eq.
+
 Definition attr_of_type (ty: type) :=
   match ty with
   | Tunit => noattr
@@ -47,7 +49,7 @@ Definition attr_of_type (ty: type) :=
   | Tfloat sz a => a
   | Tfunction args res cc => noattr
   | Tstruct id a => a
-  | Tunion id a => a
+  | Tvariant id a => a
   end.
 
 (** access mode for Rust types  *)
@@ -65,11 +67,13 @@ Definition access_mode (ty: type) : mode :=
   | Tunit => By_nothing
   | Tfunction _ _ _ => By_reference
   | Tstruct _ _ => By_copy
-  | Tunion _ _ => By_copy
+  | Tvariant _ _ => By_copy
 end.
 
 
 (** Composite  *)
+
+Inductive struct_or_variant : Set :=  Struct : struct_or_variant | TaggedUnion : struct_or_variant.
 
 Inductive member : Type :=
   | Member_plain (id: ident) (t: type).
@@ -77,7 +81,7 @@ Inductive member : Type :=
 Definition members : Type := list member.
 
 Inductive composite_definition : Type :=
-  Composite (id: ident) (su: struct_or_union) (m: members) (a: attr).
+  Composite (id: ident) (su: struct_or_variant) (m: members) (a: attr).
 
 Definition name_member (m: member) : ident :=
   match m with
@@ -115,7 +119,7 @@ Global Opaque composite_def_eq.
   the [composite_definition], such as size and alignment information. *)
 
 Record composite : Type := {
-  co_su: struct_or_union;
+  co_sv: struct_or_variant;
   co_members: members;
   co_attr: attr;
   co_sizeof: Z;
@@ -142,7 +146,7 @@ Definition complete_type (env: composite_env) (t: type) : bool :=
   | Tlong _ _ => true
   | Tfloat _ _ => true
   | Tfunction _ _ _ => false
-  | Tstruct id _ | Tunion id _ =>
+  | Tstruct id _ | Tvariant id _ =>
       match env!id with Some co => true | None => false end
   end.
 
@@ -177,7 +181,7 @@ Definition alignof (env: composite_env) (t: type) : Z :=
       | Tfloat F32 _ => 4
       | Tfloat F64 _ => Archi.align_float64
       | Tfunction _ _ _ => 1
-      | Tstruct id _ | Tunion id _ =>
+      | Tstruct id _ | Tvariant id _ =>
           match env!id with Some co => co_alignof co | None => 1 end
     end).
 
@@ -223,7 +227,7 @@ Fixpoint own_type (fuel: nat) (ce: composite_env) (ty: type) : bool :=
   | O => false
   | S fuel' =>
       match ty with
-      | Tstruct id _ | Tunion id _ =>
+      | Tstruct id _ | Tvariant id _ =>
           match ce ! id with
           | Some co =>
               let acc res m :=
@@ -256,7 +260,7 @@ Definition sizeof (env: composite_env) (t: type) : Z :=
   | Tfloat F64 _ => 8
   | Tfunction _ _ _ => 1
   | Tstruct id _
-  | Tunion id _ =>
+  | Tvariant id _ =>
       match env!id with
       | Some co => co_sizeof co
       | None => 0
@@ -288,13 +292,12 @@ Definition alignof_blockcopy (env: composite_env) (t: type) : Z :=
   | Tint IBool _ _ => 1
   | Tfunction _ _ _ => 1
   | Tstruct id _
-  | Tunion id _ =>
+  | Tvariant id _ =>
       match env!id with
       | Some co => Z.min 8 (co_alignof co)
       | None => 1
       end
   end.
-
 
 
 (** ** Layout of struct fields *)
@@ -313,6 +316,38 @@ Definition bitalignof_intsize (sz: intsize) : Z :=
   | I16 => 16
   | I32 => 32
   end.
+
+(* The index of the variant *)
+Fixpoint field_tag' (fid: ident) (ms: members) (pos: Z) : option Z :=
+  match ms with
+  | nil => None
+  | m::ms =>
+      match m with
+      | Member_plain id _ =>
+          if Pos.eqb fid id
+          then Some pos
+          else field_tag' fid ms (pos + 1)
+      end
+  end.
+
+Definition field_tag (fid: ident) (ms:members) : option Z :=
+  field_tag' fid ms 0.
+
+Fixpoint type_tag' (ty: type) (ms: members) (pos: Z) {struct ms} : option (ident * Z) :=
+  match ms with
+  | nil => None
+  | m::ms =>
+      match m with
+      | Member_plain id ty' =>
+          if type_eq ty ty' then
+            Some (id,pos)
+          else
+            type_tag' ty ms (pos + 1) 
+      end
+  end.
+
+Definition type_tag (ty: type) (ms:members) : option (ident*Z) :=
+  type_tag' ty ms 0.
 
 Definition next_field (pos: Z) (m: member) : Z :=
   match m with
@@ -396,7 +431,7 @@ End LAYOUT.
 
 (** ** Size and alignment for composite definitions *)
 
-(** The alignment for a structure or union is the max of the alignment
+(** The alignment for a structure or variant is the max of the alignment
   of its members.  Padding bitfields are ignored. *)
 
 Fixpoint alignof_composite (env: composite_env) (ms: members) : Z :=
@@ -424,14 +459,17 @@ Definition bytes_of_bits (n: Z) := (n + 7) / 8.
 Definition sizeof_struct (env: composite_env) (m: members) : Z :=
   bytes_of_bits (bitsizeof_struct env 0 m).
 
-(** The size of an union is the max of the sizes of its members. *)
+(** The size of an variant is the size of tagged (4 bytes) plus the
+max of the sizes of its members. *)
 
-Fixpoint sizeof_union (env: composite_env) (ms: members) : Z :=
-  match ms with
+Fixpoint sizeof_variant' (env: composite_env) (ms: members) : Z :=
+  (match ms with
   | nil => 0
-  | m :: ms => Z.max (sizeof env (type_member m)) (sizeof_union env ms)
-  end.
+  | m :: ms => Z.max (sizeof env (type_member m)) (sizeof_variant' env ms)
+  end).
 
+Definition sizeof_variant (env: composite_env) (ms: members) : Z :=
+  sizeof_variant' env ms + 4.
 
 (** Some properties *)
 
@@ -462,12 +500,20 @@ Proof.
   apply next_field_incr. apply IHm.
 Qed.
 
-Lemma sizeof_union_pos:
-  forall env m, 0 <= sizeof_union env m.
+Lemma sizeof_variant'_pos:
+  forall env m, 0 <= sizeof_variant' env m.
 Proof.
-  induction m; simpl; extlia.
+  induction m; simpl; extlia.  
 Qed.
 
+Lemma sizeof_variant_pos:
+  forall env m, 0 <= sizeof_variant env m.
+Proof.
+  intros. unfold sizeof_variant.
+  generalize (sizeof_variant'_pos env m).
+  lia.
+Qed.
+  
 (** Type ranks *)
 
 (** The rank of a type is a nonnegative integer that measures the direct nesting
@@ -478,7 +524,7 @@ Qed.
 
 Definition rank_type (ce: composite_env) (t: type) : nat :=
   match t with
-  | Tstruct id _ | Tunion id _ =>
+  | Tstruct id _ | Tvariant id _ =>
       match ce!id with
       | None => O
       | Some co => S (co_rank co)
@@ -493,7 +539,7 @@ Fixpoint rank_members (ce: composite_env) (m: members) : nat :=
   end.
 
 
-(** ** C types and back-end types *)
+(** ** Rust types and back-end types *)
 
 (** Extracting a type list from a function parameter declaration. *)
 
@@ -512,7 +558,7 @@ Definition typ_of_type (t: type) : AST.typ :=
   | Tlong _ _ => AST.Tlong
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
-  | Tfunction _ _ _ | Tstruct _ _ | Tunion _ _ => AST.Tptr
+  | Tfunction _ _ _ | Tstruct _ _ | Tvariant _ _ => AST.Tptr
   end.
 
 Definition rettype_of_type (t: type) : AST.rettype :=
@@ -527,7 +573,7 @@ Definition rettype_of_type (t: type) : AST.rettype :=
   | Tlong _ _ => AST.Tlong
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
-  | Tfunction _ _ _ | Tstruct _ _ | Tunion _ _ => AST.Tvoid
+  | Tfunction _ _ _ | Tstruct _ _ | Tvariant _ _ => AST.Tvoid
   end.
 
 Fixpoint typlist_of_typelist (tl: typelist) : list AST.typ :=
@@ -542,10 +588,10 @@ Definition signature_of_type (args: typelist) (res: type) (cc: calling_conventio
 
 (** * Construction of the composite environment *)
 
-Definition sizeof_composite (env: composite_env) (su: struct_or_union) (m: members) : Z :=
-  match su with
+Definition sizeof_composite (env: composite_env) (sv: struct_or_variant) (m: members) : Z :=
+  match sv with
   | Struct => sizeof_struct env m
-  | Union  => sizeof_union env m
+  | TaggedUnion  => sizeof_variant env m
   end.
 
 Lemma sizeof_composite_pos:
@@ -555,7 +601,7 @@ Proof.
 - unfold sizeof_struct, bytes_of_bits.
   assert (0 <= bitsizeof_struct env 0 m) by apply bitsizeof_struct_incr.
   change 0 with (0 / 8) at 1. apply Z.div_le_mono; lia.
-- apply sizeof_union_pos.
+- apply sizeof_variant_pos.
 Qed.
 
 Fixpoint complete_members (env: composite_env) (ms: members) : bool :=
@@ -574,7 +620,7 @@ Proof.
 Qed.
 
 Program Definition composite_of_def
-     (env: composite_env) (id: ident) (su: struct_or_union) (m: members) (a: attr)
+     (env: composite_env) (id: ident) (su: struct_or_variant) (m: members) (a: attr)
      : res composite :=
   match env!id, complete_members env m return _ with
   | Some _, _ =>
@@ -583,7 +629,7 @@ Program Definition composite_of_def
       Error (MSG "Incomplete struct or union " :: CTX id :: nil)
   | None, true =>
       let al := align_attr a (alignof_composite env m) in
-      OK {| co_su := su;
+      OK {| co_sv := su;
             co_members := m;
             co_attr := a;
             co_sizeof := align (sizeof_composite env su m) al;
@@ -795,48 +841,23 @@ Proof.
   intros. exploit field_offset_aligned_gen; eauto.
 Qed.
 
-(** [union_field_offset env id ms] returns the byte offset and
+(** [union_field_offset env id ms] returns the byte offset (plus 4 bytes) and
     bitfield designator for accessing a member named [id] of a union
     whose members are [ms].  The byte offset is always 0. *)
 
-Fixpoint union_field_offset (env: composite_env) (id: ident) (ms: members)
+Fixpoint variant_field_offset (env: composite_env) (id: ident) (ms: members)
                           {struct ms} : res (Z * bitfield) :=
   match ms with
   | nil => Error (MSG "Unknown field " :: CTX id :: nil)
   | m :: ms =>
       if ident_eq id (name_member m)
-      then layout_field env 0 m
-      else union_field_offset env id ms
+      then layout_field env 4 m
+      else variant_field_offset env id ms
   end.
+
 
 (** Some sanity checks about union field offsets.  First, field offsets
     fit within the size of the union. *)
-
-Lemma union_field_offset_in_range_gen:
-  forall env id ofs bf ty ms,
-  union_field_offset env id ms = OK (ofs, bf) -> field_type id ms = OK ty ->
-  ofs = 0 /\ 0 <= layout_start ofs bf /\ layout_start ofs bf + layout_width env ty bf <= sizeof_union env ms * 8.
-Proof.
-  induction ms as [ | m ms]; simpl; intros.
-- discriminate.
-- destruct (ident_eq id (name_member m)).
-  + inv H0. set (ty := type_member m) in *.
-    destruct m; simpl in H.
-    * inv H. unfold layout_start, layout_width. 
-      rewrite align_same. change (0 / 8) with 0. unfold bitsizeof. lia.
-      unfold bitalignof. generalize (alignof_pos env t). lia.
-      apply Z.divide_0_r.
-      + exploit IHms; eauto. lia.
-Qed.
-
-Corollary union_field_offset_in_range:
-  forall env ms id ofs ty,
-  union_field_offset env id ms = OK (ofs, Full) -> field_type id ms = OK ty ->
-  ofs = 0 /\ sizeof env ty <= sizeof_union env ms.
-Proof.
-  intros. exploit union_field_offset_in_range_gen; eauto. 
-  unfold layout_start, layout_width, bitsizeof. lia.
-Qed.
 
 Section PROGRAMS.
 
