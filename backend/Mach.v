@@ -698,20 +698,23 @@ Qed.
   and a [Vptr] value. We may want to switch back to a characterization
   where non-pointer values are allowed as well, so that [Vnullptr]
   qualifies. [Vnullptr] which is a [Vint]/[Vlong] null value used in
-  the original Compcert semantics as the initial stack pointer. *)
+  the original Compcert semantics as the initial stack pointer. 
 
-Inductive valid_blockv (s: sup): val -> Prop :=
+  For the extension of injp for supporting Unusedglob, we need to express
+  that the stack pointer does not point to a global block.
+*)
+
+Inductive valid_blockv (gs: sup) (s: sup): val -> Prop :=
   | valid_blockv_intro b ofs:
-      sup_In b s ->
-      valid_blockv s (Vptr b ofs).
+      ~ sup_In b gs -> sup_In b s ->
+      valid_blockv gs s (Vptr b ofs).
 
-Lemma valid_blockv_support s s' v:
-  valid_blockv s v ->
+Lemma valid_blockv_support gs s s' v:
+  valid_blockv gs s v ->
   Mem.sup_include s s' ->
-  valid_blockv s' v.
+  valid_blockv gs s' v.
 Proof.
-  destruct 1. constructor.
-  unfold Mem.valid_block in *. eauto.
+  destruct 1. intro. constructor; eauto.
 Qed.
 
 (** * Leaf functions *)

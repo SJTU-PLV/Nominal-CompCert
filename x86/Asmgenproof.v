@@ -38,6 +38,8 @@ Variable se: Genv.symtbl.
 Let ge := Genv.globalenv se prog.
 Let tge := Genv.globalenv se tprog.
 
+Let gs := Genv.genv_sup se.
+
 Lemma functions_translated:
   forall vf f,
   Genv.find_funct ge vf = Some f ->
@@ -381,7 +383,7 @@ Inductive match_states: Mach.state -> Asm.state -> Prop :=
   | match_states_intro:
       forall s fb sp c ep ms m m' rs f tf tc
         (STACKS: match_stack ge init_rs init_sup (Mem.support m') s)
-        (SPVB: valid_blockv (Mem.support m') sp)
+        (SPVB: valid_blockv gs (Mem.support m') sp)
         (SPLT: inner_sp init_sup sp = Some true)
         (FIND: Genv.find_funct_ptr ge fb = Some (Internal f))
         (MEXT: Mem.extends m m')
@@ -438,8 +440,8 @@ Qed.
 
 Lemma exec_straight_support tf c rs m k rs' m':
   exec_straight init_sup tge tf c rs m k rs' m' ->
-  valid_blockv (Mem.support m) init_rs#SP ->
-  valid_blockv (Mem.support m') init_rs#SP.
+  valid_blockv gs (Mem.support m) init_rs#SP ->
+  valid_blockv gs (Mem.support m') init_rs#SP.
 Proof.
   induction 1; eauto using valid_blockv_support, exec_instr_support.
 Qed.
@@ -451,7 +453,7 @@ Lemma exec_straight_steps:
   Genv.find_funct_ptr ge fb = Some (Internal f) ->
   transl_code_at_pc ge (rs1 PC) fb f (i :: c) ep tf tc ->
   inner_sp init_sup sp = Some true ->
-  valid_blockv (Mem.support m2') sp ->
+  valid_blockv gs (Mem.support m2') sp ->
   (forall k c (TR: transl_instr f i ep k = OK c),
    exists rs2,
        exec_straight init_sup tge tf c rs1 m1' k rs2 m2'
@@ -478,7 +480,7 @@ Lemma exec_straight_steps_goto:
   transl_code_at_pc ge (rs1 PC) fb f (i :: c) ep tf tc ->
   it1_is_parent ep i = false ->
   inner_sp init_sup sp = Some true ->
-  valid_blockv (Mem.support m2') sp ->
+  valid_blockv gs (Mem.support m2') sp ->
   (forall k c (TR: transl_instr f i ep k = OK c),
    exists jmp, exists k', exists rs2,
        exec_straight init_sup tge tf c rs1 m1' (jmp :: k') rs2 m2'
@@ -543,6 +545,12 @@ Proof.
   apply Mem.support_store.
 Qed.
 
+Lemma match_stack_sup : forall ge rs init_sup bound l,
+    match_stack ge rs init_sup bound l -> Mem.sup_include (Genv.genv_sup ge) bound.
+Proof.
+  induction 1; intros; eauto.
+Qed.
+                                        
 (** This is the simulation diagram.  We prove it by case analysis on the Mach transition. *)
 
 Theorem step_simulation:
@@ -990,7 +998,11 @@ Transparent destroyed_by_jumptable.
   }
   econstructor; eauto.
   eapply match_stack_incr_bound. rewrite H3. eauto. eauto.
-  constructor. rewrite H3.
+  constructor.
+  apply match_stack_sup in STACKS.
+  intro. eapply Mem.fresh_block_alloc; eauto.
+  apply STACKS. eauto.
+  rewrite H3.
   erewrite <- Mem.support_alloc; eauto.
   eapply Mem.valid_new_block; eauto.
   eapply alloc_sp_fresh; eauto. eapply match_stack_support; eauto.
@@ -1047,7 +1059,7 @@ End WITH_WORLD.
 Let cc : callconv li_mach li_asm := cc_mach ext @ cc_mach_asm.
 
 Lemma transf_initial_states:
-  forall rs0 nb0 q1 q2 st1, match_query cc (se, tt, (rs0, nb0)) q1 q2 -> Mach.initial_state ge q1 st1 ->
+  forall rs0 nb0 q1 q2 st1, match_query cc (se, tt, (gs, rs0, nb0)) q1 q2 -> Mach.initial_state ge q1 st1 ->
   exists st2, Asm.initial_state tge q2 st2 /\ match_states rs0 nb0 st1 st2.
 Proof.
   intros. destruct H as (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. inv H0.
@@ -1062,9 +1074,9 @@ Proof.
   - econstructor; eauto.
     rewrite <- H9. eauto.
   - constructor; cbn; eauto.
-    + constructor; eauto.
+    + constructor; eauto.      
     + split; auto.
-      setoid_rewrite <- H18; eauto.
+      setoid_rewrite <- H19; eauto.
 Qed.
 
 Lemma transf_external_states:
@@ -1076,7 +1088,7 @@ Proof.
   intros rs0 nb0 st1 st2 q1 Hst Hq1. inv Hq1. inv Hst.
   edestruct functions_translated as (fb & tf & TFIND & Htf & ?); eauto.
   subst. inv ATPC. monadInv Htf.
-  eexists (se, tt, (rs1, Mem.support m')), (rs1, m'). intuition idtac.
+  eexists (se, tt, (gs, rs1, Mem.support m')), (rs1, m'). intuition idtac.
   - econstructor.
     rewrite <- H2. cbn. destruct Ptrofs.eq_dec; try congruence. eauto.
   - eexists (mq _ _ _ (fun r => rs1 (preg_of r)) m'). split.
@@ -1091,8 +1103,9 @@ Proof.
       * erewrite agree_sp; eauto.
         inv STACKS; cbn; eauto.
         eapply valid_blockv_support; eauto.
+      * unfold gs. apply match_stack_sup in STACKS. eauto.
       * rewrite ATLR. eapply parent_ra_def; eauto.
-  - cbn. auto.
+  - cbn. split; auto. constructor.
   - inv H1. cbn in H0. destruct H0 as (ri & ([ ] & _ & Hr1i) & Hri2).
     inv Hri2. inv Hr1i.
     assert (exists b, inner_sp nb0 (rs'0#SP) = Some b) as [? LIVE].
@@ -1110,7 +1123,7 @@ Qed.
 
 Lemma transf_final_states:
   forall rs0 nb0 st1 st2 r1, match_states rs0 nb0 st1 st2 -> Mach.final_state st1 r1 ->
-  exists r2, Asm.final_state st2 r2 /\ match_reply cc (se, tt, (rs0, nb0)) r1 r2.
+  exists r2, Asm.final_state st2 r2 /\ match_reply cc (se, tt, (gs, rs0, nb0)) r1 r2.
 Proof.
   intros. inv H0. inv H. cbn in *.
   inv STACKS. erewrite agree_sp in LIVE; eauto.
@@ -1132,12 +1145,12 @@ Theorem transf_program_correct prog tprog:
     (Mach.semantics return_address_offset prog)
     (Asm.semantics tprog).
 Proof.
-  set (ms := fun '(se, tt, (rs0, nb0)) s1 '(nb, s2) =>
-               match_states prog se rs0 nb0 s1 s2 /\ nb = nb0). 
+  set (ms := fun '(se, tt, (gs, rs0, nb0)) s1 '(nb, s2) =>
+               match_states prog se rs0 nb0 s1 s2 /\ nb = nb0 /\ gs = Genv.genv_sup se). 
   fsim eapply forward_simulation_star with
       (match_states := ms w)
       (measure := measure);
-    destruct w as [[se [ ]] [rs0 nb0]], Hse as [[ ] [ ]];
+    destruct w as [[se [ ]] [[gs0 rs0] nb0]], Hse as [[ ] [ ]];
     intros.
   - destruct H as (qi & Hq1i & Hqi2). destruct Hq1i. inv Hqi2. cbn.
     setoid_rewrite ext_lessdef in H2. inv H2; try congruence.
@@ -1149,12 +1162,12 @@ Proof.
     destruct H as (? & ? & ?). destruct H1. auto.
   - destruct s2 as [nb s2], H as [H Hnb]; subst.
     edestruct transf_final_states as (? & ? & ?); cbn; eauto.
-  - destruct s2 as [nb s2], H as [H Hnb]; subst.
+  - destruct s2 as [nb s2], H as [H [Hnb Hgs]]; subst.
     edestruct transf_external_states as (wA & q2 & Hq2 & Hq & Hse & Hr); eauto.
     exists wA, q2. intuition auto.
     edestruct Hr as (s2' & Hs2' & Hs'); eauto.
-    eexists (_, s2'); cbn; eauto.
-  - destruct s2 as [nb s2], H0 as [H0 Hnb]; subst.
+    eexists (_, s2'). split; cbn; eauto.
+  - destruct s2 as [nb s2], H0 as [H0 [Hnb Hgs]]; subst.
     edestruct step_simulation as [(s2' & Hs2' & Hs') | ?]; cbn in *; intuition eauto 10.
     left. eexists (_, _). intuition eauto.
     revert Hs2'. generalize nb0, (Genv.globalenv se1 tprog); clear; intros.

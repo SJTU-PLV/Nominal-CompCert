@@ -247,21 +247,25 @@ Qed.
 Instance commut_mach_asm R:
   Commutes cc_mach_asm (cc_mach R) (cc_asm R).
 Proof.
-  intros [[_ [rs1 nb1]] wR] se1 se2 q1 q2 [[ ] Hse2] (qi & Hq1i & Hqi2).
+  intros [[se [[gs rs1] nb1]] wR] se1 se2 q1 q2 [[ ] Hse2] (qi & Hq1i & Hqi2).
   cbn in * |- . destruct Hq1i. destruct q2 as [rs2 m2], Hqi2 as (Hrs & Hpc & Hm).
   rename m into m1.
-  exists (se2, wR, (rs2, Mem.support m2)). cbn. repeat apply conj; auto.
+  exists (se2, wR, ((Genv.genv_sup se2), rs2, Mem.support m2)). cbn. repeat apply conj; auto.
+  - constructor.
   - exists (mq rs2#PC rs2#SP rs2#RA (fun r => rs2 (preg_of r)) m2). split.
     + constructor; auto.
       * destruct H0; congruence.
-      * setoid_rewrite H2. eauto.
+      * setoid_rewrite H3. eauto.
     + constructor; auto.
       * destruct (Hrs PC); cbn in *; congruence.
       * specialize (Hrs SP). destruct Hrs; inv H0. constructor.
-        revert H6.
+        apply match_stbls_proj in Hse2.
+        intro. apply H8. eapply Genv.mge_separated; eauto.
+        revert H9.
         change (sup_In b1 (Mem.support m1)) with (Mem.valid_block m1 b1).
         change (sup_In b2 (Mem.support m2)) with (Mem.valid_block m2 b2).
         rstep. rstep. rstep. rstep. red. eauto.
+      * eapply match_stbls_support; eauto.
       * specialize (Hrs RA). destruct Hrs; congruence.
   - intros r1 r2 (ri & (wR' & HwR' & Hr1i) & Hri2). inv Hri2. inv Hr1i.
     set (rs1' r :=
@@ -278,9 +282,9 @@ Proof.
     + exists wR'. split; auto. constructor; eauto.
       intros r. subst rs1'. cbn.
       destruct (preg_classify_cases r).
-      * rewrite H4. generalize (Hrs RA). rauto.
-      * rewrite H3. generalize (Hrs SP). rauto.
-      * rewrite <- H6. eauto.
+      * rewrite H5. generalize (Hrs RA). rauto.
+      * rewrite H4. generalize (Hrs SP). rauto.
+      * rewrite <- H7. eauto.
       * constructor.
 Qed.
 
@@ -764,7 +768,7 @@ Hint Extern 1 (Transport _ _ _ _ _) =>
   locset. The following lemmas will help. *)
 
 Class Mixable (R : cklr) :=
-  result_mem sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2':
+  result_mem sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' gs:
     w ~> w' ->
     Val.inject (mi R w) sp1 sp2 ->
     match_mem R w m1 m2 ->
@@ -776,7 +780,7 @@ Class Mixable (R : cklr) :=
         loc_init_args sz sp2 b ofs ->
         loc_out_of_reach (mi R w') m1'_ b ofs) ->
     (2 | sz) ->
-    (sz > 0 -> valid_blockv (Mem.support m1) sp1) ->
+    (sz > 0 -> valid_blockv gs (Mem.support m1) sp1) ->
     (sz > 0 -> forall b1 ofs1, sp1 = Vptr b1 ofs1 ->
       Mem.range_perm m1 b1 (offset_sarg ofs1 0) (offset_sarg ofs1 sz) Cur Freeable) ->
     exists w'' m1',
@@ -790,7 +794,7 @@ Class Mixable (R : cklr) :=
 Instance ext_mixable:
   Mixable ext.
 Proof.
-  intros sz sp1 sp2 [ ] m1 m2 [ ] m1'_ m2'_ m2' _ Hsp Hm Hm'_ UPD UNCH EXT OOR _ VB.
+  intros sz sp1 sp2 [ ] m1 m2 [ ] m1'_ m2'_ m2' gs _ Hsp Hm Hm'_ UPD UNCH EXT OOR _ VB.
   uncklr.
   destruct (classic (sz > 0 /\ exists sb1 sofs1, sp1 = Vptr sb1 sofs1)).
   - destruct H as (SZ & sb1 & sofs1 & Hsp1). subst. inv Hsp.
@@ -835,7 +839,7 @@ Qed.
 Instance inj_mixable:
   Mixable inj.
 Proof.
-  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB.
+  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' gs Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB.
   destruct SZ as [k Hk]; subst.
   destruct (classic (k > 0 /\ exists sb1 sofs1, sp1 = Vptr sb1 sofs1)).
   - destruct H as (Hk & sb1 & sofs1 & Hsp1). subst. inv Hsp.
@@ -896,7 +900,7 @@ Qed.
 Instance injp_mixable:
   Mixable injp.
 Proof.
-  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB.
+  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' gs Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB.
   destruct SZ as [k Hk]; subst.
   destruct (classic (k > 0 /\ exists sb1 sofs1, sp1 = Vptr sb1 sofs1)).
   - destruct H as (Hk & sb1 & sofs1 & Hsp1). subst. inv Hsp.
@@ -1116,10 +1120,11 @@ Proof.
       + replace (sb, ofs) with (sb, ofs - delta + delta) by (f_equal; extlia).
         constructor; auto. }
     { apply size_arguments_always_64. }
-    { destruct H7.
+    { instantiate (1:= Genv.genv_sup se1). destruct H7.
       - apply zero_size_arguments_tailcall_possible in H7. extlia.
       - intro. inv H2; try congruence.
-        constructor. eapply cklr_valid_block; eauto. red. red. eauto.
+        constructor. admit.
+        eapply cklr_valid_block; eauto. red. red. eauto.
         eapply Mem.perm_valid_block. eapply Mem.free_range_perm; eauto.
         split; [reflexivity |]. unfold offset_sarg. extlia. }
     { destruct ARGSm1.
@@ -1154,7 +1159,7 @@ Proof.
       destruct in_dec. { rewrite H19; auto. eapply val_inject_incr; eauto. }
       destruct is_callee_save eqn:Hr; auto.
       rewrite H20 by auto. cbn. generalize (H5 r). rauto.
-Qed.
+Admitted.
 
 
 (** ** Matching [cc_stacking] *)

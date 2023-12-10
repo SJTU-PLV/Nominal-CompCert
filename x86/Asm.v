@@ -1321,32 +1321,43 @@ Unset Program Cases.
 
 (** ** Calling convention from [li_mach] *)
 
-Inductive cc_mach_asm_mq (rs: regset): sup -> mach_query -> query li_asm -> Prop :=
+Inductive cc_mach_asm_mq (gs: sup) (rs: regset): sup -> mach_query -> query li_asm -> Prop :=
   cc_mach_asm_mq_intro (mrs: Mach.regset) m:
     rs#PC <> Vundef ->
-    valid_blockv (Mem.support m) rs#SP ->
+    valid_blockv gs (Mem.support m) rs#SP ->
+    Mem.sup_include gs (Mem.support m) ->
     rs#RA <> Vundef ->
     (forall r, mrs r = rs (preg_of r)) ->
-    cc_mach_asm_mq rs
+    cc_mach_asm_mq gs rs
       (Mem.support m)
       (mq rs#PC rs#SP rs#RA mrs m)
       (rs, m).
 
-Inductive cc_mach_asm_mr (rs: regset) (s: sup): mach_reply -> reply li_asm -> Prop :=
+Inductive cc_mach_asm_mr (gs: sup) (rs: regset) (s: sup): mach_reply -> reply li_asm -> Prop :=
   cc_mach_asm_mr_intro (mrs': Mach.regset) (rs': regset) m':
     rs'#SP = rs#SP ->
     rs'#PC = rs#RA ->
     Mem.sup_include s (Mem.support m') ->
     (forall r, mrs' r = rs' (preg_of r)) ->
-    cc_mach_asm_mr rs s (mr mrs' m') (rs', m').
+    cc_mach_asm_mr gs rs s (mr mrs' m') (rs', m').
+
+Inductive cc_mach_asm_ms : sup -> Genv.symtbl -> Genv.symtbl -> Prop :=
+  cc_mach_asm_ms_intro se:
+    cc_mach_asm_ms (Genv.genv_sup se) se se.
 
 Program Definition cc_mach_asm : callconv li_mach li_asm :=
   {|
-    match_senv _ := eq;
-    match_query '(rs, nb) := cc_mach_asm_mq rs nb;
-    match_reply '(rs, nb) := cc_mach_asm_mr rs nb;
+    match_senv '(gs, _, _) := cc_mach_asm_ms gs;
+    match_query '(gs, rs, nb) := cc_mach_asm_mq gs rs nb;
+    match_reply '(gs, rs, nb) := cc_mach_asm_mr gs rs nb;
   |}.
-
+Next Obligation.
+  inv H. reflexivity.
+Qed.
+Next Obligation.
+  inv H. auto.
+Qed.
+  
 (** ** CKLR simulation convention *)
 
 Definition cc_asm_match R w '(rs1, m1) '(rs2, m2) :=

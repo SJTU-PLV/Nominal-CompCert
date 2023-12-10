@@ -966,6 +966,8 @@ Variable ge: Mach.genv.
 Variable init_rs: regset.
 Variable init_sup: sup.
 
+Let gs := (Genv.genv_sup ge).
+
 (** We maintain the invariant that successive stack frames have
   increasing block identifiers. This allows us to prove that a new
   stack block is distinct from all previous ones (and in particular,
@@ -976,17 +978,15 @@ Inductive match_stack (bound: sup): list Mach.stackframe -> Prop :=
   | match_stack_nil:
       init_rs#SP <> Vundef ->
       init_rs#RA <> Vundef ->
-      (* problem here? init_sup used as support
-        valid_blockv init_sup init_rs#SP ->
-      Ple init_sup bound -> *)
-      valid_blockv init_sup init_rs#SP ->
+      valid_blockv gs init_sup init_rs#SP ->
+      Mem.sup_include gs init_sup ->
       Mem.sup_include init_sup bound ->
       match_stack bound (Stackbase init_rs#SP init_rs#RA :: nil)
   | match_stack_cons: forall fb sp ra c s f tf tc,
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       transl_code_at_pc ge ra fb f c false tf tc ->
       inner_sp init_sup sp = Some true ->
-      valid_blockv bound sp ->
+      valid_blockv gs bound sp ->
       match_stack bound s ->
       match_stack bound (Stackframe (Vptr fb Ptrofs.zero) sp ra c :: s).
 
