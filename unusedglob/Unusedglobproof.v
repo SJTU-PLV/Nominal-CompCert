@@ -475,17 +475,17 @@ Variable se tse: Genv.symtbl.
 Definition skel := erase_program p.
 Definition tskel := erase_program tp.
 
-(* Hypothesis compat : Genv.skel_symtbl_compatible skel tskel se tse. *)
+Hypothesis compat : Genv.skel_symtbl_compatible skel tskel se tse.
 Hypothesis GE' : inj_stbls' w se tse.
 
-Hypothesis valid1: Genv.valid_for skel se.
-(* Proof. destruct compat as (A & B & C). eauto. Qed. *)
+Lemma valid1: Genv.valid_for skel se.
+Proof. destruct compat as (A & B & C). eauto. Qed.
        
-Hypothesis valid2: Genv.valid_for tskel tse.
-(* Proof. destruct compat as (A & B & C). eauto. Qed. *)
+Lemma valid2: Genv.valid_for tskel tse.
+Proof. destruct compat as (A & B & C). eauto. Qed.
 
-(*Theorem compatible : Genv.removed_compatible skel tskel se tse.
-Proof. destruct compat as (A & B & C). eauto. Qed. *)
+Theorem compatible : Genv.removed_compatible skel tskel se tse.
+Proof. destruct compat as (A & B & C). eauto. Qed.
 
 Hypothesis removed_main: ~ Genv.removed_symbol se tse (prog_main skel).
 
@@ -553,7 +553,7 @@ Proof.
     left. auto.
     right. eauto.
 Qed.
-(*
+
 Lemma remove_unused_consistent: forall id gd b,
     (prog_defmap skel) ! id = Some gd -> 
     Genv.find_symbol tse id = Some b -> 
@@ -616,7 +616,7 @@ Proof.
   rewrite H in TDEF'. inv TDEF'.
   reflexivity.
 Qed.
-*)
+
 
 (*
 (** Hypothesis about symbol tables *)
@@ -1618,6 +1618,7 @@ Proof.
       as MAIN_SYM_PRES.
     { 
       eapply main_symb_pres; eauto.
+      destruct COMPAT as [A [B [C D]]]. eauto.
     }
     assert (forall (id : ident) (b : block),
                Genv.find_symbol se2 id = Some b ->
@@ -1694,7 +1695,7 @@ Proof.
       destruct ( Ptrofs.eq_dec i Ptrofs.zero); eauto.
     + intros q1 q2 s1 MQUERY INIT.
       eapply transf_initial_states with (se := se1) (tse := se2); eauto.
-      
+      destruct COMPAT as [A [B [C D]]]. eauto.
     + intros s1 s2 r1 MSTATE FINAL.
       eapply transf_final_states with (se := se1) (tse := se2); eauto.
     + intros s1 s2 q1 MSTATE ATEXT.

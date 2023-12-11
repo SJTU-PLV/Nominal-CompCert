@@ -1235,8 +1235,9 @@ Proof.
       as (w'' & m1'' & Hw'' & INCR & ? & ? & ? & NB); eauto using Mem.unchanged_on_refl.
     { apply Mem.extends_refl. }
     { apply size_arguments_always_64. }
-    { destruct H12. apply zero_size_arguments_tailcall_possible in H7. extlia.
-      intro. constructor. eapply Mem.perm_valid_block.
+    { instantiate (1:= Genv.genv_sup se1).
+      destruct H12. apply zero_size_arguments_tailcall_possible in H7. extlia.
+      intro. constructor. admit. eapply Mem.perm_valid_block.
       eapply Mem.free_range_perm; eauto. split. reflexivity.
       unfold offset_sarg. extlia. }
     { destruct H12.
@@ -1278,7 +1279,7 @@ Proof.
       * intros r. subst rs1'. cbn.
         destruct is_callee_save eqn:CSR; eauto.
         destruct in_dec; eauto.
-Qed.
+Admitted.
 
 (** *** Outgoing calls *)
 
