@@ -767,8 +767,12 @@ Hint Extern 1 (Transport _ _ _ _ _) =>
   original callee-save registers and results from the reply's
   locset. The following lemmas will help. *)
 
+Inductive valid_blockv' : sup -> val -> Prop :=
+  valid_blockv'_intro : forall b ofs sup,
+      sup_In b sup -> valid_blockv' sup (Vptr b ofs).
+
 Class Mixable (R : cklr) :=
-  result_mem sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' gs:
+  result_mem sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2':
     w ~> w' ->
     Val.inject (mi R w) sp1 sp2 ->
     match_mem R w m1 m2 ->
@@ -780,7 +784,7 @@ Class Mixable (R : cklr) :=
         loc_init_args sz sp2 b ofs ->
         loc_out_of_reach (mi R w') m1'_ b ofs) ->
     (2 | sz) ->
-    (sz > 0 -> valid_blockv gs (Mem.support m1) sp1) ->
+    (sz > 0 -> valid_blockv' (Mem.support m1) sp1) ->
     (sz > 0 -> forall b1 ofs1, sp1 = Vptr b1 ofs1 ->
       Mem.range_perm m1 b1 (offset_sarg ofs1 0) (offset_sarg ofs1 sz) Cur Freeable) ->
     exists w'' m1',
@@ -794,7 +798,7 @@ Class Mixable (R : cklr) :=
 Instance ext_mixable:
   Mixable ext.
 Proof.
-  intros sz sp1 sp2 [ ] m1 m2 [ ] m1'_ m2'_ m2' gs _ Hsp Hm Hm'_ UPD UNCH EXT OOR _ VB.
+  intros sz sp1 sp2 [ ] m1 m2 [ ] m1'_ m2'_ m2' _ Hsp Hm Hm'_ UPD UNCH EXT OOR _ VB.
   uncklr.
   destruct (classic (sz > 0 /\ exists sb1 sofs1, sp1 = Vptr sb1 sofs1)).
   - destruct H as (SZ & sb1 & sofs1 & Hsp1). subst. inv Hsp.
@@ -839,7 +843,7 @@ Qed.
 Instance inj_mixable:
   Mixable inj.
 Proof.
-  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' gs Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB.
+  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB.
   destruct SZ as [k Hk]; subst.
   destruct (classic (k > 0 /\ exists sb1 sofs1, sp1 = Vptr sb1 sofs1)).
   - destruct H as (Hk & sb1 & sofs1 & Hsp1). subst. inv Hsp.
@@ -900,7 +904,7 @@ Qed.
 Instance injp_mixable:
   Mixable injp.
 Proof.
-  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' gs Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB.
+  intros sz sp1 sp2 w m1 m2 w' m1'_ m2'_ m2' Hw Hsp Hm Hm'_ UPD UNCH EXT OOR SZ VB.
   destruct SZ as [k Hk]; subst.
   destruct (classic (k > 0 /\ exists sb1 sofs1, sp1 = Vptr sb1 sofs1)).
   - destruct H as (Hk & sb1 & sofs1 & Hsp1). subst. inv Hsp.
@@ -1120,10 +1124,10 @@ Proof.
       + replace (sb, ofs) with (sb, ofs - delta + delta) by (f_equal; extlia).
         constructor; auto. }
     { apply size_arguments_always_64. }
-    { instantiate (1:= Genv.genv_sup se1). destruct H7.
+    { destruct H7.
       - apply zero_size_arguments_tailcall_possible in H7. extlia.
       - intro. inv H2; try congruence.
-        constructor. admit.
+        constructor.
         eapply cklr_valid_block; eauto. red. red. eauto.
         eapply Mem.perm_valid_block. eapply Mem.free_range_perm; eauto.
         split; [reflexivity |]. unfold offset_sarg. extlia. }
@@ -1159,7 +1163,7 @@ Proof.
       destruct in_dec. { rewrite H19; auto. eapply val_inject_incr; eauto. }
       destruct is_callee_save eqn:Hr; auto.
       rewrite H20 by auto. cbn. generalize (H5 r). rauto.
-Admitted.
+Qed.
 
 
 (** ** Matching [cc_stacking] *)
@@ -1235,9 +1239,9 @@ Proof.
       as (w'' & m1'' & Hw'' & INCR & ? & ? & ? & NB); eauto using Mem.unchanged_on_refl.
     { apply Mem.extends_refl. }
     { apply size_arguments_always_64. }
-    { instantiate (1:= Genv.genv_sup se1).
+    { 
       destruct H12. apply zero_size_arguments_tailcall_possible in H7. extlia.
-      intro. constructor. admit. eapply Mem.perm_valid_block.
+      intro. constructor. eapply Mem.perm_valid_block.
       eapply Mem.free_range_perm; eauto. split. reflexivity.
       unfold offset_sarg. extlia. }
     { destruct H12.
@@ -1279,7 +1283,7 @@ Proof.
       * intros r. subst rs1'. cbn.
         destruct is_callee_save eqn:CSR; eauto.
         destruct in_dec; eauto.
-Admitted.
+Qed.
 
 (** *** Outgoing calls *)
 
