@@ -262,13 +262,12 @@ Definition classify_fun (ty: type) :=
   end.
   
 Section SEMANTICS.
-
-Variable ge: genv.
   
 (** ** Evaluation of expressions *)
 
 Section EXPR.
 
+Variable ce: composite_env.
 Variable e: env.
 Variable m: mem.
 
@@ -282,8 +281,8 @@ Inductive eval_place (m:mem) : place -> block -> ptrofs -> Prop :=
 | eval_Pfield_struct: forall p ty b ofs delta id i co bf attr,
     eval_place m p b ofs ->
     ty = Tstruct id attr ->
-    ge.(genv_cenv) ! id = Some co ->
-    field_offset ge i (co_members co) = OK (delta, bf) ->
+    ce ! id = Some co ->
+    field_offset ce i (co_members co) = OK (delta, bf) ->
     eval_place m (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta)).
 
 (* | eval_Pderef: forall p ty l ofs l' ofs', *)
@@ -337,19 +336,19 @@ Inductive eval_expr : expr -> val -> option place ->  Prop :=
     eval_expr (Eplace Move p ty) v (Some p)
 | eval_Eget_copy: forall p b ofs ofs' ty m v id fid attr co bf,
     typeof_place p = Tvariant id attr ->
-    ge.(genv_cenv) ! id = Some co ->
+    ce ! id = Some co ->
     eval_place m p b ofs ->
-    variant_field_offset ge fid co.(co_members) = OK (ofs', bf) ->
+    variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
     (* load the value *)
     deref_loc ty m b (Ptrofs.add ofs (Ptrofs.repr ofs')) v ->
     (** what if p is an own type? *)
     eval_expr (Eget Copy p fid ty) v None
 | eval_Eget_move: forall p b ofs ofs' ty m v id fid attr co bf,
     typeof_place p = Tvariant id attr ->
-    ge.(genv_cenv) ! id = Some co ->
+    ce ! id = Some co ->
     eval_place m p b ofs ->
     (* do not check the tag. we can use Ecktag to check it *)
-    variant_field_offset ge fid co.(co_members) = OK (ofs', bf) ->
+    variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
     (* load the value *)
     deref_loc ty m b (Ptrofs.add ofs (Ptrofs.repr ofs')) v ->
     eval_expr (Eget Move p fid ty) v (Some p)
@@ -359,7 +358,7 @@ Inductive eval_expr : expr -> val -> option place ->  Prop :=
     (* load the tag *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
     typeof_place p = Tvariant id attr ->
-    ge.(genv_cenv) ! id = Some co ->
+    ce ! id = Some co ->
     field_tag fid co.(co_members) = Some tagz ->
     eval_expr (Ecktag p fid ty) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz)) None.
 
@@ -455,6 +454,7 @@ Definition copy_type (ty: type) :=
               
 
 (* normal recursive drop (do not consider own path): used for variant *)
+(* It drop the resource assuming there is no partial move *)
 Inductive drop_place_type (ce: composite_env) : type -> mem -> block -> ptrofs -> mem -> Prop :=
 | drop_base_copy: forall m b ofs ty,
     copy_type ty = true ->
@@ -488,7 +488,7 @@ with drop_place_type_list (ce: composite_env) : list type -> mem -> list block -
     drop_place_type_list ce tys' m' lb' lofs' m'' ->
     drop_place_type_list ce (ty :: tys') m (b :: lb') (ofs :: lofs') m''.
 
-  
+(* It drop the resource assuming there may be partial moved paths *)
 Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> block -> ptrofs -> mem -> Prop :=
 | drop_base: forall ty p m b ofs,
     typeof_place p = ty ->
@@ -539,7 +539,7 @@ with drop_place_list' (ce: composite_env) (owned: list place) : list place -> me
 (** Free {*p, **p ,... } according to me  *)
 Inductive drop_place (ce: composite_env) (e: env) (ie: own_env) (p: place) (m: mem) : mem -> Prop :=
 | drop_gen: forall b ofs m' id owned,
-    eval_place e m p b ofs ->
+    eval_place ce e m p b ofs ->
     local_of_place p = id ->
     PTree.get id ie = Some owned ->
     drop_place' ce owned p m b ofs m' ->
@@ -683,14 +683,17 @@ Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e:
     bind_parameters ge e m1 f.(fn_params) vargs m' ->
     function_entry ge f vargs m e own m'.
 
+Section SMALLSTEP.
+
+Variable ge: genv.
 
 Inductive step : state -> trace -> state -> Prop :=
 
 | step_assign: forall f be p op k le own own' own'' m1 m2 m3 b ofs v,
     (* get the location of the place *)
-    eval_place le m1 p b ofs ->
+    eval_place ge le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
-    eval_expr le m1 be v op ->
+    eval_expr ge le m1 be v op ->
     (* update the initialized environment based on [op] *)
     remove_own own op = Some own' ->
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
@@ -708,9 +711,9 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_assign_variant: forall f be p op k le own own' own'' m1 m2 m3 b ofs ofs' v tag bf co id fid attr ,
     typeof_place p = Tvariant id attr ->
     (* get the location of the place *)
-    eval_place le m1 p b ofs ->
+    eval_place ge le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
-    eval_expr le m1 be v op ->
+    eval_expr ge le m1 be v op ->
     (* update the initialized environment based on [op] *)
     remove_own own op = Some own' ->
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
@@ -732,7 +735,7 @@ Inductive step : state -> trace -> state -> Prop :=
          
 | step_let: forall f be op v ty id own1 own2 own3 m1 m2 m3 le1 le2 b k stmt,
     typeof be = ty ->
-    eval_expr le1 m1 be v op ->
+    eval_expr ge le1 m1 be v op ->
     (* update the move environment *)
     remove_own own1 op = Some own2 ->
     (* allocate the block for id *)
@@ -747,8 +750,8 @@ Inductive step : state -> trace -> state -> Prop :=
          
 | step_call_0: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr le m a vf None ->
-    eval_exprlist le m al tyargs vargs optlp ->
+    eval_expr ge le m a vf None ->
+    eval_exprlist ge le m al tyargs vargs optlp ->
     (* CHECKME: update the initialized environment *)
     remove_own_list own1 optlp = Some own2 ->
     Genv.find_funct ge vf = Some fd ->
@@ -756,8 +759,8 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Scall None a al) k le own1 m) E0 (Callstate vf vargs (Kcall None f le own2 k) m)
 | step_call_1: forall f a al optlp k le le' own1 own2 m vargs tyargs vf fd cconv tyres p,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr le m a vf None ->
-    eval_exprlist le m al tyargs vargs optlp ->
+    eval_expr ge le m a vf None ->
+    eval_exprlist ge le m al tyargs vargs optlp ->
     (* CHECKME: update the move environment *)
     remove_own_list own1 optlp = Some own2 ->
     Genv.find_funct ge vf = Some fd ->
@@ -796,7 +799,7 @@ Inductive step : state -> trace -> state -> Prop :=
     Mem.free_list m1 lb = Some m2 ->
     step (State f (Sreturn None) k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
 | step_return_1: forall le a v op own own' lp lb m1 m2 m3 f k ,
-    eval_expr le m1 a v op ->
+    eval_expr ge le m1 a v op ->
     (* CHECKME: update move environment, because some place may be
     moved out to the callee *)
     remove_own own op = Some own' ->
@@ -822,7 +825,7 @@ Inductive step : state -> trace -> state -> Prop :=
     drop_place ge e own p m m' ->
     (* update the ownership environment *)
     PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own = own' ->
-    eval_place e m' p b ofs ->
+    eval_place ge e m' p b ofs ->
     assign_loc ge ty m' b ofs v m'' ->    
     step (Returnstate v (Kcall (Some p) f e own k) m) E0 (State f Sskip k e own' m'')
 
@@ -841,7 +844,7 @@ Inductive step : state -> trace -> state -> Prop :=
       E0 (State f Sbreak k e me m)
 | step_ifthenelse:  forall f a s1 s2 k e me me' m v1 b ty,
     (* there is no receiver for the moved place, so it must be None *)
-    eval_expr e m a v1 None ->
+    eval_expr ge e m a v1 None ->
     to_ctype (typeof a) = Some ty ->
     bool_val v1 ty m = Some b ->
     step (State f (Sifthenelse a s1 s2) k e me m)
@@ -863,6 +866,7 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f Sbreak (Kloop2 s1 s2 k) e me m)
       E0 (State f Sskip k e me m)      
 .
+
 
 (** Open semantics *)
 
@@ -892,6 +896,8 @@ Inductive after_external: state -> c_reply -> state -> Prop:=
 Inductive final_state: state -> c_reply -> Prop:=
 | final_state_intro: forall v m,
     final_state (Returnstate v Kstop m) (cr v m).
+
+End SMALLSTEP.
 
 End SEMANTICS.
 
