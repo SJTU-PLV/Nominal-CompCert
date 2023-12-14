@@ -43,6 +43,10 @@ Record basic_block :=
   { stmts : list statement;
     nextb: terminator }.
 
+Definition empty_block (t: terminator) :=
+    {| stmts := nil;
+       nextb := t |}.
+
 Definition cfg := PTree.t basic_block.
 
 Record function :=

@@ -23,6 +23,14 @@ Inductive place : Type :=
 | Pfield : place -> ident -> type -> place (**r access a field of struct: p.(id)  *)
 .
 
+Lemma place_eq: forall (p1 p2: place), {p1=p2} + {p1<>p2}.
+Proof.
+  generalize type_eq ident_eq. intros.
+  decide equality.
+Qed.
+
+Global Opaque place_eq.
+
 Definition typeof_place p :=
   match p with
   | Plocal _ ty => ty
