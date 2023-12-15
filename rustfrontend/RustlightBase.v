@@ -98,7 +98,7 @@ Inductive statement : Type :=
   | Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
   | Ssequence : statement -> statement -> statement  (**r sequence *)
   | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
-  | Sloop: statement -> statement -> statement (**r infinite loop *)
+  | Sloop: statement -> statement (**r infinite loop *)
   | Sbreak : statement                      (**r [break] statement *)
   | Scontinue : statement                   (**r [continue] statement *)
   | Sreturn : option expr -> statement.      (**r [return] statement *)
@@ -403,8 +403,7 @@ Inductive cont : Type :=
 | Kstop: cont
 | Kseq: statement -> cont -> cont
 | Klet: ident -> cont -> cont
-| Kloop1: statement -> statement -> cont -> cont
-| Kloop2: statement -> statement -> cont -> cont
+| Kloop: statement -> cont -> cont
 | Kcall: option place  -> function -> env -> own_env -> cont -> cont.
 
 
@@ -413,8 +412,7 @@ Inductive cont : Type :=
 Fixpoint call_cont (k: cont) : cont :=
   match k with
   | Kseq s k => call_cont k
-  | Kloop1 s1 s2 k => call_cont k
-  | Kloop2 s1 s2 k => call_cont k
+  | Kloop s k => call_cont k
   (* pop Klet *)
   | Klet id k => call_cont k
   | _ => k
@@ -776,7 +774,8 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Scall (Some p) a al) k le own1 m) E0 (Callstate vf vargs (Kcall (Some p) f le' own2 k) m)
                  
 (* End of a let statement, free the place and its drop obligations *)
-| step_end_let: forall f id k le1 le2 own1 own2 m1 m2 m3 ty b,
+| step_end_let: forall f id k le1 le2 own1 own2 m1 m2 m3 ty b s,
+    s = Sskip \/ s = Sbreak \/ s = Scontinue ->
     PTree.get id le1 = Some (b, ty) ->
     (* free {*id, **id, ...} if necessary *)
     drop_place ge le1 own1 (Plocal id ty) m1 m2 ->
@@ -785,7 +784,7 @@ Inductive step : state -> trace -> state -> Prop :=
     (* clear [id] in the local env and move env. It is necessary for the memory deallocation in return state *)
     PTree.remove id le1 = le2 ->
     PTree.remove id own1 = own2 ->
-    step (State f Sskip (Klet id k) le1 own1 m1) E0 (State f Sskip k le2 own2 m3)
+    step (State f s (Klet id k) le1 own1 m1) E0 (State f s k le2 own2 m3)
 
 | step_internal_function: forall vf f vargs k m e me m'
     (FIND: Genv.find_funct ge vf = Some (Internal function f)),
@@ -857,22 +856,16 @@ Inductive step : state -> trace -> state -> Prop :=
     bool_val v1 ty m = Some b ->
     step (State f (Sifthenelse a s1 s2) k e me m)
       E0 (State f (if b then s1 else s2) k e me' m)
-| step_loop: forall f s1 s2 k e me m,
-    step (State f (Sloop s1 s2) k e me m)
-      E0 (State f s1 (Kloop1 s1 s2 k) e me m)
-| step_skip_or_continue_loop1:  forall f s1 s2 k e me m x,
+| step_loop: forall f s k e me m,
+    step (State f (Sloop s) k e me m)
+      E0 (State f s (Kloop s k) e me m)
+| step_skip_or_continue_loop:  forall f s k e me m x,
     x = Sskip \/ x = Scontinue ->
-    step (State f x (Kloop1 s1 s2 k) e me m)
-      E0 (State f s2 (Kloop2 s1 s2 k) e me m)
-| step_break_loop1:  forall f s1 s2 k e me m,
-    step (State f Sbreak (Kloop1 s1 s2 k) e me m)
+    step (State f x (Kloop s k) e me m)
+      E0 (State f s (Kloop s k) e me m)
+| step_break_loop:  forall f s k e me m,
+    step (State f Sbreak (Kloop s k) e me m)
       E0 (State f Sskip k e me m)
-| step_skip_loop2: forall f s1 s2 k e me m,
-    step (State f Sskip (Kloop2 s1 s2 k) e me m)
-      E0 (State f (Sloop s1 s2) k e me m)
-| step_break_loop2: forall f s1 s2 k e me m,
-    step (State f Sbreak (Kloop2 s1 s2 k) e me m)
-      E0 (State f Sskip k e me m)      
 .
 
 
