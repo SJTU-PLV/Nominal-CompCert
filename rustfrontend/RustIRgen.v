@@ -143,14 +143,17 @@ Definition add_instr (stmt: statement) : mon unit :=
     OK tt (mkstate s.(st_nextblock) s.(st_code) (stmt :: s.(st_stmts)) s.(st_term)) (add_instr_incr s stmt).
 
 (* add drop statement *)
-Definition add_drop (p: place) : mon unit :=
-  do _ <- add_instr (Sdrop p);
-  ret tt.
+Definition add_drop (ce: composite_env) (p: place) : mon unit :=
+  match own_type own_fuel ce (typeof_place p) with
+  | Some true => do _ <- add_instr (Sdrop p); ret tt
+  | Some false => ret tt
+  | None => error (Errors.msg "Running out of fuel in own_type in add_drop.")
+  end.
 
 
-Definition add_instr_endlet (local: ident) (ty: type) : mon unit :=
-  do _ <- add_drop (Plocal local ty);
+Definition add_instr_endlet (ce: composite_env) (local: ident) (ty: type) : mon unit :=
   do _ <- add_instr (Sstoragedead local);
+  do _ <- add_drop ce (Plocal local ty);
   ret tt.
 
 (** Generate a new basic block  *)
@@ -242,8 +245,8 @@ Definition list_list_cons {A: Type} (e: A) (l: list (list A)) :=
   end.
 
 
-Definition add_drop_list (locals: list (ident * type)) : mon unit :=
-  fold_right (fun elt acc => do _ <- acc; add_instr_endlet (fst elt) (snd elt)) (ret tt) locals.
+Definition add_drop_list (ce: composite_env) (locals: list (ident * type)) : mon unit :=
+  fold_right (fun elt acc => do _ <- acc; add_instr_endlet ce (fst elt) (snd elt)) (ret tt) locals.
 
 (** Translation of expression  *)
 (* unused: drop flag is generated in next pass *)
@@ -267,18 +270,22 @@ Fixpoint transl_expr (me: move_path_env) (e: expr) : mon (list statement) :=
 
 (** Translation of statement *)
 
+Section COMPOSITE_ENV.
+
+Variable (ce: composite_env).
+
 Fixpoint transl_stmt (stmt: RustlightBase.statement) (succ: bb) (live_vars: list (list (ident * type))) (cont: option bb) (break: option bb) {struct stmt} : mon bb :=
     match stmt with
     | Sskip =>
         ret succ
     | Slet id ty e stmt' =>
-        do _ <- add_instr_endlet id ty;
+        do _ <- add_instr_endlet ce id ty;
         do succ' <- transl_stmt stmt' succ (list_list_cons (id,ty) live_vars) cont break;
         do _ <- add_instr (Sassign (Plocal id ty) e);
         do _ <- add_instr (Sstoragelive id);
         ret succ'
     | RustlightBase.Sassign p e =>
-        do _ <- add_drop p;
+        do _ <- add_drop ce p;
         do _ <- add_instr (Sassign p e);
         ret succ
     | Ssequence stmt1 stmt2 =>
@@ -298,7 +305,8 @@ Fixpoint transl_stmt (stmt: RustlightBase.statement) (succ: bb) (live_vars: list
         do body_start <- transl_stmt stmt body_end (nil::live_vars) (Some loop_start) (Some succ);
         do _ <- construct_block body_start;
         do _ <- update_terminator (Tgoto body_start);
-        ret loop_start          (* to construct the block for loop_start *)
+        do loop_start_prev <- add_block loop_start (Tgoto loop_start);
+        ret loop_start_prev     (* loop start has no statements *)
     | Sbreak =>
         match break with
         | None =>
@@ -311,7 +319,7 @@ Fixpoint transl_stmt (stmt: RustlightBase.statement) (succ: bb) (live_vars: list
             | locals :: _ =>
                 do drop_block <- add_block succ (Tgoto brk);
                 (* insert drops in drop_block *)                              
-                do _ <- add_drop_list locals;
+                do _ <- add_drop_list ce locals;
                 do prev <- add_block drop_block (Tgoto drop_block);
                 ret prev
             end
@@ -328,7 +336,7 @@ Fixpoint transl_stmt (stmt: RustlightBase.statement) (succ: bb) (live_vars: list
             | locals :: _ =>
                 do drop_block <- add_block succ (Tgoto cont);
                 (* insert drops in drop_block *)                              
-                do _ <- add_drop_list locals;
+                do _ <- add_drop_list ce locals;
                 do prev <- add_block drop_block (Tgoto drop_block);
                 ret prev
             end
@@ -339,7 +347,8 @@ Fixpoint transl_stmt (stmt: RustlightBase.statement) (succ: bb) (live_vars: list
     | Sreturn e =>
         do return_block <- add_block succ (Treturn e);      
         let locals := concat live_vars in        
-        do _ <- add_drop_list locals;
+        do _ <- add_drop_list ce locals;
+        (* Is it necessary to construct a new block? *)
         do prev <- add_block return_block (Tgoto return_block);
         ret prev
     end.
@@ -364,7 +373,7 @@ Fixpoint extract_vars (stmt: RustlightBase.statement) : list (ident * type) :=
 Definition transl_fun (f: RustlightBase.function) : mon bb :=
   do return_block <- reserve_block;
   (* add drops for the function parameter in return_block *)
-  do _ <- fold_right (fun elt acc => do _ <- acc; add_drop (Plocal (fst elt) (snd elt))) (ret tt) f.(RustlightBase.fn_params);
+  do _ <- fold_right (fun elt acc => do _ <- acc; add_drop ce (Plocal (fst elt) (snd elt))) (ret tt) f.(RustlightBase.fn_params);
   do return_prev <- add_block return_block (Tgoto return_block);
   do entry <- transl_stmt f.(RustlightBase.fn_body) return_prev (f.(RustlightBase.fn_params) :: nil) None None;
   do _ <- construct_block entry;
@@ -386,4 +395,25 @@ Definition transl_function (f: RustlightBase.function) : Errors.res function :=
                    s.(st_code)
                   entry)
   end.
-  
+
+Global Open Scope error_monad_scope.
+
+Definition transl_fundef (fd: RustlightBase.fundef) : Errors.res fundef :=
+  match fd with
+  | Internal f => do tf <- transl_function f; Errors.OK (Internal tf)
+  | External _ ef targs tres cconv => Errors.OK (External function ef targs tres cconv)
+  end.
+
+End COMPOSITE_ENV.
+
+
+(** Translation of a whole program. *)
+
+Definition transl_program (p: RustlightBase.program) : Errors.res RustIR.program :=
+  do p1 <- transform_partial_program (transl_fundef p.(prog_comp_env)) p;
+  Errors.OK {| prog_defs := AST.prog_defs p1;
+        prog_public := AST.prog_public p1;
+        prog_main := AST.prog_main p1;
+        prog_types := prog_types p;
+        prog_comp_env := prog_comp_env p;
+        prog_comp_env_eq := prog_comp_env_eq p |}.

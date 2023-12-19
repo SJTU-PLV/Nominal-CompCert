@@ -68,7 +68,7 @@ Definition type_of_function (f: function) : type :=
 
 Definition type_of_fundef (f: fundef) : type :=
   match f with
-  | Internal _ fd => type_of_function fd
+  | Internal fd => type_of_function fd
   | External _ ef typs typ cc =>     
       Tfunction typs typ cc                
   end.
@@ -85,7 +85,7 @@ Record genv := {genv_genv :> Genv.t fundef type; genv_cenv :> composite_env}.
 
 
 Definition globalenv (se: Genv.symtbl) (p: program) :=
-  {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env function) |}.
+  {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env) |}.
 
 
 Section SEMANTICS.
@@ -229,7 +229,7 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State stk f bid pc e le m) E0 (Returnstate stk v m)
 
 | step_internal_function: forall f stk e le m m' vargs vf
-    (FIND: Genv.find_funct ge vf = Some (Internal function f)),
+    (FIND: Genv.find_funct ge vf = Some (Internal f)),
   function_entry ge f vargs m e le m' ->
   step (Callstate stk vf vargs m) E0 (State stk f f.(fn_entryblock) O e le m')
 | step_external_function: forall stk vf vargs m m' cc ty typs ef v t
@@ -249,7 +249,7 @@ Inductive step : state -> trace -> state -> Prop :=
 
 Inductive initial_state: c_query -> state -> Prop :=
 | initial_state_intro: forall vf f targs tres tcc ctargs ctres vargs m,
-    Genv.find_funct ge vf = Some (Internal function f) ->
+    Genv.find_funct ge vf = Some (Internal f) ->
     type_of_function f = Tfunction targs tres tcc ->
     Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
     initial_state (cq vf (signature_of_type ctargs ctres tcc) vargs m)

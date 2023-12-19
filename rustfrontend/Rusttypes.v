@@ -222,9 +222,10 @@ Qed.
 
 (** Ownership type  *)
 
-Fixpoint own_type (fuel: nat) (ce: composite_env) (ty: type) : bool :=
+(* If run out of fuel, return none *)
+Fixpoint own_type (fuel: nat) (ce: composite_env) (ty: type) : option bool :=
   match fuel with
-  | O => false
+  | O => None
   | S fuel' =>
       match ty with
       | Tstruct id _ | Tvariant id _ =>
@@ -235,12 +236,16 @@ Fixpoint own_type (fuel: nat) (ce: composite_env) (ty: type) : bool :=
                             | Member_plain fid fty =>
                                 own_type fuel' ce fty
                             end) in
-                orb res own in
-              fold_left acc co.(co_members) false
-          | None => false
+                match res,own with
+                | None, _ => None
+                | _, None => None
+                | Some res, Some own => Some (orb res own)
+                end in          
+              fold_left acc co.(co_members) (Some false)
+          | None => Some false
           end
       (** TODO: unique pointer and mutable reference are own type  *)
-      | _ => false
+      | _ => Some false
       end
   end.
 
@@ -858,6 +863,8 @@ Fixpoint variant_field_offset (env: composite_env) (id: ident) (ms: members)
 
 (** Some sanity checks about union field offsets.  First, field offsets
     fit within the size of the union. *)
+
+Set Implicit Arguments.
 
 Section PROGRAMS.
 

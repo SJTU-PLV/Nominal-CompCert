@@ -165,7 +165,8 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v \
 
 # Rust front-end
 
-RUSTFRONTENT=Rusttypes.v RustlightBase.v RustIR.v RustIRgen.v
+RUSTFRONTENT=Rusttypes.v RustlightBase.v RustIR.v\
+  RustIRgen.v ElaborateDrop.v\
 
 # Parser
 
