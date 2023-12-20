@@ -1,7 +1,8 @@
 Require Import Coqlib.
 Require Import Maps.
 Require Import Lattice.
-Require Import RustlightBase.
+Require Import AST.
+Require Import Rusttypes RustlightBase.
 
 Definition paths := list place.
 
@@ -117,3 +118,48 @@ Module LPaths <: SEMILATTICE.
 End LPaths.
 
 Module PathMap := LPMap1(LPaths).
+
+Section COMPOSITE_ENV.
+
+Variable ce: composite_env.
+  
+(* The most difficult part is the move of structural data *)
+
+Definition add_path (p: place) (l: LPaths.t) : LPaths.t :=
+  match filter (fun p' => is_prefix p' p) l with
+  | nil => p :: l
+  | _ => l
+  end.
+
+Fixpoint remove_path' (p: place) (l: LPaths.t) {struct p} : option LPaths.t :=
+  match filter (fun p' => place_eq p' p) l with
+  | nil =>
+      (* p is not in l, remove the parent of p and add the siblings of p in l *)
+      match p with
+      | Plocal id ty =>
+          None                  (* as a local, p must be in l *)
+      | Pfield p' fid ty =>         
+          match remove_path' p' l, typeof_place p' with
+          | Some l', Tstruct id _ =>
+              (* add all the siblings of p'.fid in l' *)
+              match ce!id with
+              | Some co =>
+                  let lp := map (fun m => match m with | Member_plain fid' ty' => Pfield p' fid' ty' end) co.(co_members) in
+                  let lp' := filter (fun p' => negb (place_eq p' p)) lp in
+                  Some (lp' ++ l')
+              | None => None
+              end
+          | _, _ => None
+          end
+      end
+  | _ => Some (remove place_eq p l)
+  end.
+      
+                   
+Definition remove_path (p: place) (l: LPaths.t) : LPaths.t :=
+  match remove_path' p l with
+  | None => l
+  | Some l' => l'
+  end.
+
+End COMPOSITE_ENV.

@@ -18,37 +18,34 @@ operation based on the ownership semantics in the source program. *)
 (** * Translation state *)
 
 Record state: Type := mkstate {
-  st_nextblock: bb;
-  st_code: cfg;
-  st_stmts: list statement;
-  st_term: terminator                        
-  (* st_wf: forall (bid: bb), Plt bid st_nextblock \/ st_code!bid = None *)
+  st_nextnode: node;
+  st_code: code;
+  st_wf: forall (pc: node), Plt pc st_nextnode \/ st_code!pc = None
 }.
 
 
 Inductive state_incr: state -> state -> Prop :=
   state_incr_intro:
     forall (s1 s2: state),
-    Ple s1.(st_nextblock) s2.(st_nextblock) ->
-    (* (forall bid, *)
-    (*     (** FIXME: exists stmts, s2.stmt = s1.stmt + stmts *) *)
-    (*   s1.(st_code)!bid = None \/ s2.(st_code)!bid = s1.(st_code)!bid) -> *)
+    Ple s1.(st_nextnode) s2.(st_nextnode) ->
+    (forall pc,
+        s1.(st_code)!pc = None \/ s2.(st_code)!pc = s1.(st_code)!pc) ->
     state_incr s1 s2.
-
 
 Lemma state_incr_refl:
   forall s, state_incr s s.
 Proof.
   intros. apply state_incr_intro.
-  apply Ple_refl. 
+  apply Ple_refl.
+  intros. auto.
 Qed.
 
 Lemma state_incr_trans:
   forall s1 s2 s3, state_incr s1 s2 -> state_incr s2 s3 -> state_incr s1 s3.
 Proof.
   intros. inv H; inv H0. apply state_incr_intro.
-  apply Ple_trans with (st_nextblock s2); assumption.
-  (* intros. generalize (H3 bid) (H5 bid). intuition congruence. *)
+  apply Ple_trans with (st_nextnode s2); assumption.
+  intros. generalize (H2 pc) (H3 pc). intuition congruence.
 Qed.
 
 (** ** The state and error monad *)
@@ -118,125 +115,138 @@ Definition move_path_index (me: move_path_env) (p: place) : option ident :=
 
 (** The initial state (empty CFG). *)
 
-Definition init_state (t: terminator) : state :=
-  mkstate 1%positive (PTree.empty basic_block) nil t.
+Remark init_state_wf:
+  forall pc, Plt pc 1%positive \/ (PTree.empty statement)!pc = None.
+Proof. intros; right; apply PTree.gempty. Qed.
+
+Definition init_state : state :=
+  mkstate 1%positive (PTree.empty statement) init_state_wf.
 
 
-(** Add IR statement in the current block *)
-
-Remark add_instr_incr:
-  forall s stmt,
-    state_incr s (mkstate
-                    s.(st_nextblock)
-                    s.(st_code)
-                    (stmt :: s.(st_stmts))
-                    s.(st_term)).
+Remark add_instr_wf:
+  forall s i pc,
+  let n := s.(st_nextnode) in
+  Plt pc (Pos.succ n) \/ (PTree.set n i s.(st_code))!pc = None.
 Proof.
-  constructor; simpl.
-  apply Ple_refl.
-  (* intros. destruct (st_wf s pc). right. apply PTree.gso. apply Plt_ne; auto. auto. *)
+  intros. case (peq pc n); intro.
+  subst pc; left; apply Plt_succ.
+  rewrite PTree.gso; auto.
+  elim (st_wf s pc); intro.
+  left. apply Plt_trans_succ. exact H.
+  right; assumption.
 Qed.
 
+Remark add_instr_incr:
+  forall s i,
+  let n := s.(st_nextnode) in
+  state_incr s (mkstate (Pos.succ n)
+                  (PTree.set n i s.(st_code))
+                  (add_instr_wf s i)).
+Proof.
+  constructor; simpl.
+  apply Ple_succ.
+  intros. destruct (st_wf s pc). right. apply PTree.gso. apply Plt_ne; auto. auto.
+Qed.
 
-Definition add_instr (stmt: statement) : mon unit :=
+Definition add_instr (i: statement) : mon node :=
+  fun s =>
+    let n := s.(st_nextnode) in
+    OK n
+       (mkstate (Pos.succ n) (PTree.set n i s.(st_code))
+                (add_instr_wf s i))
+       (add_instr_incr s i).
+
+(** [add_instr] can be decomposed in two steps: reserving a fresh
+  CFG node, and filling it later with an instruction.  This is needed
+  to compile loops. *)
+
+Remark reserve_instr_wf:
+  forall s pc,
+  Plt pc (Pos.succ s.(st_nextnode)) \/ s.(st_code)!pc = None.
+Proof.
+  intros. elim (st_wf s pc); intro.
+  left; apply Plt_trans_succ; auto.
+  right; auto.
+Qed.
+
+Remark reserve_instr_incr:
+  forall s,
+  let n := s.(st_nextnode) in
+  state_incr s (mkstate (Pos.succ n)
+                  s.(st_code)
+                      (reserve_instr_wf s)).
+Proof.
+  intros; constructor; simpl.
+  apply Ple_succ.
+  auto.
+Qed.
+
+Definition reserve_instr: mon node :=
   fun (s: state) =>
-    OK tt (mkstate s.(st_nextblock) s.(st_code) (stmt :: s.(st_stmts)) s.(st_term)) (add_instr_incr s stmt).
+  let n := s.(st_nextnode) in
+  OK n
+     (mkstate (Pos.succ n) s.(st_code) (reserve_instr_wf s))
+     (reserve_instr_incr s).
+
+Remark update_instr_wf:
+  forall s n i,
+  Plt n s.(st_nextnode) ->
+  forall pc,
+  Plt pc s.(st_nextnode) \/ (PTree.set n i s.(st_code))!pc = None.
+Proof.
+  intros.
+  case (peq pc n); intro.
+  subst pc; left; assumption.
+  rewrite PTree.gso; auto. exact (st_wf s pc).
+Qed.
+
+Remark update_instr_incr:
+  forall s n i (LT: Plt n s.(st_nextnode)),
+  s.(st_code)!n = None ->
+  state_incr s
+             (mkstate s.(st_nextnode) (PTree.set n i s.(st_code))
+                     (update_instr_wf s n i LT)).
+Proof.
+  intros.
+  constructor; simpl; intros.
+  apply Ple_refl.
+  rewrite PTree.gsspec. destruct (peq pc n). left; congruence. right; auto.
+Qed.
+
+Definition check_empty_node:
+  forall (s: state) (n: node), { s.(st_code)!n = None } + { True }.
+Proof.
+  intros. case (s.(st_code)!n); intros. right; auto. left; auto.
+Defined.
+
+Definition update_instr (n: node) (i: statement) : mon unit :=
+  fun s =>
+    match plt n s.(st_nextnode), check_empty_node s n with
+    | left LT, left EMPTY =>
+        OK tt
+           (mkstate s.(st_nextnode) (PTree.set n i s.(st_code))
+                    (update_instr_wf s n i LT))
+           (update_instr_incr s n i LT EMPTY)
+    | _, _ =>
+        Error (Errors.msg "RTLgen.update_instr")
+    end.             
 
 (* add drop statement *)
-Definition add_drop (ce: composite_env) (p: place) : mon unit :=
+Definition add_drop (ce: composite_env) (p: place) (succ: node) : mon node :=
   match own_type own_fuel ce (typeof_place p) with
-  | Some true => do _ <- add_instr (Sdrop p); ret tt
-  | Some false => ret tt
+  | Some true => add_instr (Sdrop p succ)
+  | Some false => ret succ
   | None => error (Errors.msg "Running out of fuel in own_type in add_drop.")
   end.
 
+Definition add_instr_endscope (ce: composite_env) (local: ident) (ty: type) (succ: node): mon node :=
+  do n1 <- add_instr (Sstoragedead local succ);
+  do n2 <- add_drop ce (Plocal local ty) n1;
+  ret n2.
 
-Definition add_instr_endlet (ce: composite_env) (local: ident) (ty: type) : mon unit :=
-  do _ <- add_instr (Sstoragedead local);
-  do _ <- add_drop ce (Plocal local ty);
-  ret tt.
-
-(** Generate a new basic block  *)
-
-Remark add_block_incr:
-  forall s c stmts term,
-    state_incr s (mkstate                  
-                    (Pos.succ s.(st_nextblock))
-                    c
-                    stmts
-                    term).
-Proof.
-  constructor; simpl.
-  apply Ple_succ.
-  (* intros. destruct (st_wf s pc). right. apply PTree.gso. apply Plt_ne; auto. auto. *)
-Qed.
-
-(* very strange function: it build a basic block from the current
-state, then use the new_term as the terminator for the next basic
-block to be built, and return the latest block id *)
-Definition add_block (cur: bb) (new_term: terminator) : mon bb :=
-  fun (s: state) =>
-    match plt cur s.(st_nextblock) with
-    | left LT =>        
-        let nb := Build_basic_block s.(st_stmts) s.(st_term) in
-        let c := PTree.set cur nb s.(st_code) in
-        OK s.(st_nextblock) (mkstate (Pos.succ s.(st_nextblock)) c nil new_term) (add_block_incr s c nil new_term)
-    | _ =>
-        Error (Errors.msg "RustIRgen.add_block")
-    end.
-
-Remark reserve_block_incr:
-  forall s,
-    state_incr s (mkstate (Pos.succ s.(st_nextblock)) s.(st_code) s.(st_stmts) s.(st_term)).
-Proof.
-  constructor; simpl.
-  apply Ple_succ.
-Qed.
-
-Definition reserve_block : mon bb :=
-  fun (s: state) =>
-    OK s.(st_nextblock) (mkstate (Pos.succ s.(st_nextblock)) s.(st_code) s.(st_stmts) s.(st_term)) (reserve_block_incr s).
-
-
-Remark construct_block_incr:
-  forall s c stmts,
-    state_incr s (mkstate                  
-                    s.(st_nextblock)
-                    c
-                    stmts
-                    s.(st_term)).
-Proof.
-  constructor; simpl.
-  apply Ple_refl.
-  (* intros. destruct (st_wf s pc). right. apply PTree.gso. apply Plt_ne; auto. auto. *)
-Qed.
-
-Definition construct_block (cur: bb) : mon unit :=
-  fun (s: state) =>
-    match plt cur s.(st_nextblock) with
-    | left LT =>        
-        let nb := Build_basic_block s.(st_stmts) s.(st_term) in
-        let c := PTree.set cur nb s.(st_code) in
-        OK tt (mkstate s.(st_nextblock) c nil s.(st_term)) (construct_block_incr s c nil)
-    | _ =>
-        Error (Errors.msg "RustIRgen.construct_block")
-    end.
-
-Remark update_terminator_incr:
-  forall s t,
-    state_incr s (mkstate                  
-                    s.(st_nextblock)
-                    s.(st_code)
-                    s.(st_stmts)
-                    t).
-Proof.
-  constructor; simpl.
-  apply Ple_refl.
-Qed.
-
-Definition update_terminator (t: terminator) : mon unit :=
-  fun (s: state) =>
-    OK tt (mkstate s.(st_nextblock) s.(st_code) s.(st_stmts) t) (update_terminator_incr s t).
+(* when a list of locals go out of scope, add [Drop] and [Sstoragedead] for them *)
+Definition add_endscope_list (ce: composite_env) (locals: list (ident * type)) (succ: node) : mon node :=
+  fold_right (fun elt acc => do n <- acc; add_instr_endscope ce (fst elt) (snd elt) n) (ret succ) locals.
 
 Definition list_list_cons {A: Type} (e: A) (l: list (list A)) :=
   match l with
@@ -244,84 +254,53 @@ Definition list_list_cons {A: Type} (e: A) (l: list (list A)) :=
   | l' :: l => (e::l') :: l
   end.
 
-
-Definition add_drop_list (ce: composite_env) (locals: list (ident * type)) : mon unit :=
-  fold_right (fun elt acc => do _ <- acc; add_instr_endlet ce (fst elt) (snd elt)) (ret tt) locals.
-
-(** Translation of expression  *)
-(* unused: drop flag is generated in next pass *)
-Fixpoint transl_expr (me: move_path_env) (e: expr) : mon (list statement) :=
-  match e with
-  | Eplace Move p ty =>
-      match move_path_index me p with
-      | Some id =>
-          ret ((Sset id (Econst_int Int.zero (Tint IBool Signed noattr))) :: nil)
-      | _ => ret nil
-      end
-  | Eunop _ e ty => transl_expr me e
-  | Ebinop _ e1 e2 ty =>
-      do stmts1 <- transl_expr me e1;
-      do stmts2 <- transl_expr me e2;
-      ret (stmts1 ++ stmts2)
-  | _ => ret nil
-  end.
-             
- 
-
 (** Translation of statement *)
 
 Section COMPOSITE_ENV.
 
 Variable (ce: composite_env).
 
-Fixpoint transl_stmt (stmt: RustlightBase.statement) (succ: bb) (live_vars: list (list (ident * type))) (cont: option bb) (break: option bb) {struct stmt} : mon bb :=
+Fixpoint transl_stmt (stmt: RustlightBase.statement) (succ: node) (live_vars: list (list (ident * type))) (cont: option node) (break: option node) {struct stmt} : mon node :=
     match stmt with
-    | Sskip =>
-        ret succ
+    | RustlightBase.Sskip =>
+        add_instr (Sskip succ)
     | Slet id ty e stmt' =>
-        do _ <- add_instr_endlet ce id ty;
-        do succ' <- transl_stmt stmt' succ (list_list_cons (id,ty) live_vars) cont break;
-        do _ <- add_instr (Sassign (Plocal id ty) e);
-        do _ <- add_instr (Sstoragelive id);
-        ret succ'
+        do n1 <- add_instr_endscope ce id ty succ;
+        do n2 <- transl_stmt stmt' n1 (list_list_cons (id,ty) live_vars) cont break;
+        do n3 <- add_instr (Sassign (Plocal id ty) e n2);
+        do n4 <- add_instr (Sstoragelive id n3);
+        ret n4
     | RustlightBase.Sassign p e =>
-        do _ <- add_drop ce p;
-        do _ <- add_instr (Sassign p e);
-        ret succ
+        do n1 <- add_drop ce p succ;
+        do n2 <- add_instr (Sassign p e n1);
+        ret n2
     | Ssequence stmt1 stmt2 =>
         do succ2 <- transl_stmt stmt2 succ live_vars cont break;
         do succ1 <- transl_stmt stmt1 succ2 live_vars cont break;
         ret succ1
-    | Sifthenelse e stmt1 stmt2 =>
-        do prev_succ1 <- add_block succ (Tgoto succ);
-        do bb1 <- transl_stmt stmt1 prev_succ1 live_vars cont break;
-        do prev_succ2 <- add_block bb1 (Tgoto succ);
-        do bb2 <- transl_stmt stmt2 prev_succ2 live_vars cont break;
-        do retb <- add_block bb2 (Tifthenelse e bb1 bb2);
-        ret retb
+    | RustlightBase.Sifthenelse e stmt1 stmt2 =>
+        do n1 <- transl_stmt stmt1 succ live_vars cont break;
+        do n2 <- transl_stmt stmt2 succ live_vars cont break;
+        do n3 <- add_instr (Sifthenelse e n1 n2);
+        ret n3
     | Sloop stmt =>
-        do loop_start <- reserve_block;
-        do body_end <- add_block succ (Tgoto loop_start);
-        do body_start <- transl_stmt stmt body_end (nil::live_vars) (Some loop_start) (Some succ);
-        do _ <- construct_block body_start;
-        do _ <- update_terminator (Tgoto body_start);
-        do loop_start_prev <- add_block loop_start (Tgoto loop_start);
-        ret loop_start_prev     (* loop start has no statements *)
+        do loop_start <- reserve_instr;
+        do body_start <- transl_stmt stmt succ (nil::live_vars) (Some loop_start) (Some succ);
+        do _ <- update_instr loop_start (Sskip body_start);
+        ret loop_start
     | Sbreak =>
         match break with
         | None =>
             error (Errors.msg "No loop outside the break")
-        | Some brk =>            
+        | Some brk =>
             match live_vars with
             | nil =>             (* nothing to drop *)
-                do prev <- add_block succ (Tgoto brk);
-                ret prev
+                do succ' <- add_instr (Sskip brk);
+                ret succ'
             | locals :: _ =>
-                do drop_block <- add_block succ (Tgoto brk);
-                (* insert drops in drop_block *)                              
-                do _ <- add_drop_list ce locals;
-                do prev <- add_block drop_block (Tgoto drop_block);
-                ret prev
+                do drop_start <- add_endscope_list ce locals brk;
+                do succ' <- add_instr (Sskip drop_start);
+                ret succ'
             end
         end
     | Scontinue =>
@@ -331,26 +310,23 @@ Fixpoint transl_stmt (stmt: RustlightBase.statement) (succ: bb) (live_vars: list
         | Some cont =>            
             match live_vars with
             | nil =>
-                do prev <- add_block succ (Tgoto cont);
-                ret prev
+                do succ' <- add_instr (Sskip cont);
+                ret succ'
             | locals :: _ =>
-                do drop_block <- add_block succ (Tgoto cont);
-                (* insert drops in drop_block *)                              
-                do _ <- add_drop_list ce locals;
-                do prev <- add_block drop_block (Tgoto drop_block);
-                ret prev
+                do drop_start <- add_endscope_list ce locals cont;
+                do succ' <- add_instr (Sskip drop_start);
+                ret succ'
             end
         end
-    | Scall p a al =>
-        do call_block <- add_block succ (Tcall p a al succ);
-        ret call_block
-    | Sreturn e =>
-        do return_block <- add_block succ (Treturn e);      
+    | RustlightBase.Scall p a al =>
+        do succ' <- add_instr (Scall p a al succ);
+        ret succ'
+    | RustlightBase.Sreturn e =>
+        do n1 <- add_instr (Sreturn e);
         let locals := concat live_vars in        
-        do _ <- add_drop_list ce locals;
-        (* Is it necessary to construct a new block? *)
-        do prev <- add_block return_block (Tgoto return_block);
-        ret prev
+        do n2 <- add_endscope_list ce locals n1;
+        do n3 <- add_instr (Sskip n2);
+        ret n3
     end.
 
 
@@ -360,7 +336,7 @@ Fixpoint extract_vars (stmt: RustlightBase.statement) : list (ident * type) :=
       (id,ty) :: extract_vars s
   | Ssequence s1 s2 =>
       extract_vars s1 ++ extract_vars s2
-  | Sifthenelse _ s1 s2 =>
+  | RustlightBase.Sifthenelse _ s1 s2 =>
       extract_vars s1 ++ extract_vars s2
   | Sloop s =>
       extract_vars s
@@ -370,19 +346,20 @@ Fixpoint extract_vars (stmt: RustlightBase.statement) : list (ident * type) :=
 (** Translation of function  *)
 
 (* return the entry block and the temporary variables *)
-Definition transl_fun (f: RustlightBase.function) : mon bb :=
-  do return_block <- reserve_block;
+Definition transl_fun (f: RustlightBase.function) : mon node :=
+  (* add this return statement in case of there is no return in f *)
+  do return_node <- add_instr (Sreturn None);
   (* add drops for the function parameter in return_block *)
-  do _ <- fold_right (fun elt acc => do _ <- acc; add_drop ce (Plocal (fst elt) (snd elt))) (ret tt) f.(RustlightBase.fn_params);
-  do return_prev <- add_block return_block (Tgoto return_block);
-  do entry <- transl_stmt f.(RustlightBase.fn_body) return_prev (f.(RustlightBase.fn_params) :: nil) None None;
-  do _ <- construct_block entry;
-  ret entry.
+  do drop_start <- add_endscope_list ce f.(RustlightBase.fn_params) return_node;
+  do entry <- transl_stmt f.(RustlightBase.fn_body) drop_start (f.(RustlightBase.fn_params) :: nil) None None;
+  (* add storagelive for parameters *)
+  do entry' <- fold_right (fun elt acc => do n <- acc; add_instr (Sstoragelive (fst elt) n)) (ret entry) f.(RustlightBase.fn_params);
+  ret entry'.
 
 
 Definition transl_function (f: RustlightBase.function) : Errors.res function :=
   let vars := extract_vars f.(RustlightBase.fn_body) in
-  let init_state := init_state (Treturn None) in
+  let init_state := init_state in
   match transl_fun f init_state with
   | Error msg => Errors.Error msg
   | OK entry s i =>
