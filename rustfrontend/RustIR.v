@@ -28,7 +28,7 @@ Definition node := positive.
 Inductive statement :=
 | Sskip : node -> statement
 | Sassign : place -> expr -> node -> statement
-| Sset : ident -> expr -> node -> statement
+| Sset : ident -> expr -> node -> statement (* stuck if there is move in expr *)
 | Sstoragelive: ident -> node -> statement
 | Sstoragedead: ident -> node -> statement
 | Sdrop: place -> node -> statement
@@ -60,4 +60,17 @@ Definition type_of_fundef (f: fundef) : type :=
   | Internal fd => type_of_function fd
   | External _ ef typs typ cc =>     
       Tfunction typs typ cc                
+  end.
+
+Definition successors (stmt: statement) : list node :=
+  match stmt with
+  | Sskip n => n :: nil
+  | Sassign _ _ n => n :: nil
+  | Sset _ _ n => n :: nil
+  | Sstoragelive _ n => n :: nil
+  | Sstoragedead _ n => n :: nil
+  | Sdrop _ n => n :: nil
+  | Scall _ _ _ n => n :: nil
+  | Sifthenelse _ n1 n2 => n1 :: n2 :: nil
+  | Sreturn _ => nil
   end.
