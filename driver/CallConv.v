@@ -432,7 +432,7 @@ Proof.
   eapply Mem.val_inject_lessdef_compose; eauto.
 Qed.
 
-Definition wt_c_R_refinement R:
+Definition wt_R_refinement R:
   ccref (cc_c R @ (wt_c @ lessdef_c)) ((wt_c @ lessdef_c) @ cc_c R).
 Proof.
   rewrite cc_compose_assoc. rewrite lessdef_c_cklr.
