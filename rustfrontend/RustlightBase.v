@@ -185,6 +185,51 @@ Definition own_env := PTree.t (list place).
 
 Definition empty_own_env : own_env := PTree.empty (list place).
 
+(** TODO: Ownership type-state  *)
+
+(* tss for Type-State System *)
+(* Class Typestate (op: Type) : Type := { *)
+(*     state: Type; *)
+(*     init: state; *)
+(*     valid: state -> bool; *)
+(*     trans: state -> op -> state; *)
+(*   }. *)
+
+
+(* The basic state transitions
+
+      ---------    (→ Init)    ---------
+   →  | Unown |       ↔        |  Own  |
+      ---------    (← Move)    ---------
+          ↓ (Drop)
+      ---------
+      | Error |
+      ---------
+ *)
+ 
+Inductive own_state : Type :=
+| Own : own_state | Unown : own_state | Ownerror: own_state.
+
+Inductive own_op: Type :=
+| Init: own_op | Deinit: own_op.
+
+Definition own_trans (s: own_state) (op: own_op) :=
+  match s,op with
+  | Own, Deinit => Unown
+  | Own, Init => Own
+  | Unown, Init => Own
+  | _,_ => Ownerror
+  end.
+
+Definition own_valid (s: own_state) :=
+  match s with
+  | Ownerror => false
+  | _ => true
+  end.
+
+(* Definition own_tss := *)
+(*   Build_tss own_op own_state Unown own_valid own_trans. *)
+
 
 (** Deference a location based on the type  *)
 
@@ -531,7 +576,7 @@ Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> 
 | drop_base: forall ty p m b ofs,
     typeof_place p = ty ->
     (* It is not of type [Tbox] *)
-    copy_type ty = true ->
+    definite_copy_type ty = true ->
     drop_place' ce owned p m b ofs m
 | drop_moved: forall  p m b ofs,
     not (In p owned) ->
@@ -551,19 +596,16 @@ Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> 
     (* select the type based on the tag value *)
     typeof_place p = Tvariant id attr ->
     (* p is in owned, so we just use type to destruct the variant *)
-    drop_place_type ce (Tvariant id attr) m b ofs m' ->
+    drop_in_place ce (Tvariant id attr) m b ofs m' ->
     drop_place' ce owned p m b ofs m'
-    
-(* | drop_box: forall ty ty' m' m'' b' ofs', *)
-(*     ty = Tbox ty' -> *)
-(*     (* p owns the location it points to *) *)
-(*     In p owned -> *)
-(*     (* The contents in [p] is (Vptr b' ofs') *) *)
-(*     Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') -> *)
-(*     drop_place' owned (Pderef p ty') m b' ofs' m' -> *)
-(*     (* Free the contents in (b',ofs') *) *)
-(*     Mem.free m' b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ty') = Some m'' -> *)
-(*     drop_place' owned p m b ofs m'' *)
+| drop_box: forall p attr ty m m' m'' b' b ofs ofs',
+    typeof_place p = Tbox ty attr ->
+    (* The contents in [p] is (Vptr b' ofs') *)
+    Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
+    drop_place' ce owned (Pderef p ty) m b' ofs' m' ->
+    (* Free the contents in (b',ofs') *)
+    Mem.free m' b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ce ty) = Some m'' ->
+    drop_place' ce owned p m b ofs m''
 
 with drop_place_list' (ce: composite_env) (owned: list place) : list place -> mem -> list block -> list ptrofs -> mem -> Prop :=
 | drop_list_nil: forall m,
@@ -637,9 +679,9 @@ Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place) (ty: type) : list p
   | O => nil
   | S fuel' =>
       match ty with
-      (* | Tbox ty' => *)
-     (*     let deref := Pderef p ty' in *)
-      (*     p :: own_path fuel' ce deref ty' *)
+      | Tbox ty' _ =>
+          let deref := Pderef p ty' in
+          p :: own_path fuel' ce deref ty'
       (* | Treference ty' Mutable _ => *)
       (*     let deref := Pderef p ty' in *)
       (*     p :: init_path deref ty' *)
@@ -727,64 +769,65 @@ Variable ge: genv.
 
 Inductive step : state -> trace -> state -> Prop :=
 
-| step_assign: forall f be p op k le own own' own'' m1 m2 m3 b ofs v,
+| step_assign: forall f be p op k le own own' own'' m1 m2 m3 m4 b ofs v id attr,
+    typeof_place p <> Tvariant id attr ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
-    eval_expr ge le m1 be v op ->
+    eval_boxexpr ge le m1 be v op m2 ->
     (* update the initialized environment based on [op] *)
     remove_own own op = Some own' ->
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
     owned type, drop_place has no effect. We must first update the me
     and then drop p, consider [ *p=move *p ] *)
-    drop_place ge le own' p m1 m2 ->
+    drop_place ge le own' p m2 m3 ->
     (* update the ownership env for p *)
     PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own' = own'' ->
     (* assign to p  *)
     (* note that the type is the expreesion type, consider [a = 1]
     where a is [variant{int,float} *)
-    assign_loc ge (typeof be) m2 b ofs v m3 ->
-    step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m3)
+    assign_loc ge (typeof_boxexpr be) m3 b ofs v m4 ->
+    step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m4)
 
-| step_assign_variant: forall f be p op k le own own' own'' m1 m2 m3 b ofs ofs' v tag bf co id fid attr ,
+| step_assign_variant: forall f be p op k le own own' own'' m1 m2 m3 m4 m5 b ofs ofs' v tag bf co id fid attr ,
     typeof_place p = Tvariant id attr ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
-    eval_expr ge le m1 be v op ->
+    eval_boxexpr ge le m1 be v op m2 ->
     (* update the initialized environment based on [op] *)
     remove_own own op = Some own' ->
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
     owned type, drop_place has no effect. We must first update the me
     and then drop p, consider [ *p=move *p ] *)
-    drop_place ge le own' p m1 m2 ->
+    drop_place ge le own' p m2 m3 ->
     (* update the ownership env for p *)
     PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own' = own'' ->
     (* assign to p  *)
     (** different from normal assignment: update the tag and assign value *)
     ge.(genv_cenv) ! id = Some co ->
-    type_tag (typeof be) co.(co_members) = Some (fid,tag) ->
+    type_tag (typeof_boxexpr be) co.(co_members) = Some (fid,tag) ->
     (* set the tag *)
-    Mem.storev Mint32 m2 (Vptr b ofs) (Vint (Int.repr tag)) = Some m3 ->
+    Mem.storev Mint32 m3 (Vptr b ofs) (Vint (Int.repr tag)) = Some m4 ->
     field_offset ge fid co.(co_members) = OK (ofs', bf) ->
     (* set the value *)
-    assign_loc ge (typeof be) m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m3 ->
-    step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m3)         
+    assign_loc ge (typeof_boxexpr be) m4 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m5 ->
+    step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m5)
          
-| step_let: forall f be op v ty id own1 own2 own3 m1 m2 m3 le1 le2 b k stmt,
-    typeof be = ty ->
-    eval_expr ge le1 m1 be v op ->
+| step_let: forall f be op v ty id own1 own2 own3 m1 m2 m3 m4 le1 le2 b k stmt,
+    typeof_boxexpr be = ty ->
+    eval_boxexpr ge le1 m1 be v op m2 ->
     (* update the move environment *)
     remove_own own1 op = Some own2 ->
     (* allocate the block for id *)
-    Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
+    Mem.alloc m2 0 (sizeof ge ty) = (m3, b) ->
     (* uppdate the local env *)
     PTree.set id (b, ty) le1 = le2 ->
     (* update the ownership environment *)
     PTree.set id (own_path ge (Plocal id ty) ty) own2 = own3 ->
     (* assign [v] to [b] *)
-    assign_loc ge ty m2 b Ptrofs.zero v m3 ->
-    step (State f (Slet id ty be stmt) k le1 own1 m1) E0 (State f stmt (Klet id k) le2 own3 m3)
+    assign_loc ge ty m3 b Ptrofs.zero v m4 ->
+    step (State f (Slet id ty be stmt) k le1 own1 m1) E0 (State f stmt (Klet id k) le2 own3 m4)
          
 | step_call_0: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->

@@ -27,8 +27,8 @@ Definition node := positive.
 
 Inductive statement :=
 | Sskip : node -> statement
-| Sassign : place -> expr -> node -> statement
-| Sset : ident -> expr -> node -> statement (* stuck if there is move in expr *)
+| Sassign : place -> boxexpr -> node -> statement
+| Sset : ident -> boxexpr -> node -> statement (* stuck if there is move in expr *)
 | Sstoragelive: ident -> node -> statement
 | Sstoragedead: ident -> node -> statement
 | Sdrop: place -> node -> statement
