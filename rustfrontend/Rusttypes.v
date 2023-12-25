@@ -22,6 +22,7 @@ Inductive type : Type :=
 | Tlong : signedness -> attr -> type
 | Tfloat : floatsize -> attr -> type
 | Tfunction: typelist -> type -> calling_convention -> type    (**r function types *)
+| Tbox: type -> attr -> type                                         (**r unique pointer  *)
 | Tstruct: ident -> attr -> type                              (**r struct types  *)
 | Tvariant: ident -> attr -> type                             (**r tagged union types *)
 with typelist : Type :=
@@ -48,6 +49,7 @@ Definition attr_of_type (ty: type) :=
   | Tlong si a => a
   | Tfloat sz a => a
   | Tfunction args res cc => noattr
+  | Tbox p a => a
   | Tstruct id a => a
   | Tvariant id a => a
   end.
@@ -66,6 +68,7 @@ Definition access_mode (ty: type) : mode :=
   | Tfloat F64 _ => By_value Mfloat64                                   
   | Tunit => By_nothing
   | Tfunction _ _ _ => By_reference
+  | Tbox _ _ => By_value Mptr
   | Tstruct _ _ => By_copy
   | Tvariant _ _ => By_copy
 end.
@@ -146,6 +149,7 @@ Definition complete_type (env: composite_env) (t: type) : bool :=
   | Tlong _ _ => true
   | Tfloat _ _ => true
   | Tfunction _ _ _ => false
+  | Tbox _ _ => true
   | Tstruct id _ | Tvariant id _ =>
       match env!id with Some co => true | None => false end
   end.
@@ -172,15 +176,16 @@ Definition align_attr (a: attr) (al: Z) : Z :=
 Definition alignof (env: composite_env) (t: type) : Z :=
   align_attr (attr_of_type t)
    (match t with
-      | Tunit => 1
-      | Tint I8 _ _ => 1
-      | Tint I16 _ _ => 2
-      | Tint I32 _ _ => 4
-      | Tint IBool _ _ => 1
-      | Tlong _ _ => Archi.align_int64
-      | Tfloat F32 _ => 4
-      | Tfloat F64 _ => Archi.align_float64
-      | Tfunction _ _ _ => 1
+    | Tunit => 1
+    | Tint I8 _ _ => 1
+    | Tint I16 _ _ => 2
+    | Tint I32 _ _ => 4
+    | Tint IBool _ _ => 1
+    | Tlong _ _ => Archi.align_int64
+    | Tfloat F32 _ => 4
+    | Tfloat F64 _ => Archi.align_float64
+    | Tfunction _ _ _ => 1
+    | Tbox _ _ => if Archi.ptr64 then 8 else 4                      
       | Tstruct id _ | Tvariant id _ =>
           match env!id with Some co => co_alignof co | None => 1 end
     end).
@@ -209,9 +214,10 @@ Proof.
   destruct f.
     exists 2%nat; auto.
     unfold Archi.align_float64. destruct Archi.ptr64; ((exists 2%nat; reflexivity) || (exists 3%nat; reflexivity)).
-  exists 0%nat; auto.
-  destruct (env!i). apply co_alignof_two_p. exists 0%nat; auto.
-  destruct (env!i). apply co_alignof_two_p. exists 0%nat; auto.
+    exists 0%nat; auto.
+    destruct Archi.ptr64; ((exists 2%nat; reflexivity) || (exists 3%nat; reflexivity)).
+    destruct (env!i). apply co_alignof_two_p. exists 0%nat; auto.
+    destruct (env!i). apply co_alignof_two_p. exists 0%nat; auto.
 Qed.
 
 Lemma alignof_pos:
@@ -245,6 +251,7 @@ Fixpoint own_type (fuel: nat) (ce: composite_env) (ty: type) : option bool :=
           | None => Some false
           end
       (** TODO: unique pointer and mutable reference are own type  *)
+      | Tbox _ _ => Some true
       | _ => Some false
       end
   end.
@@ -264,6 +271,7 @@ Definition sizeof (env: composite_env) (t: type) : Z :=
   | Tlong _ _
   | Tfloat F64 _ => 8
   | Tfunction _ _ _ => 1
+  | Tbox _ _ => if Archi.ptr64 then 8 else 4
   | Tstruct id _
   | Tvariant id _ =>
       match env!id with
@@ -281,6 +289,7 @@ Proof.
 - lia.
 - destruct f; lia.
 - destruct Archi.ptr64; lia.
+- destruct Archi.ptr64; lia.
 - destruct (env!i). apply co_sizeof_pos. lia.
 - destruct (env!i). apply co_sizeof_pos. lia.
 Qed.
@@ -296,6 +305,7 @@ Definition alignof_blockcopy (env: composite_env) (t: type) : Z :=
   | Tfloat F64 _ => 8
   | Tint IBool _ _ => 1
   | Tfunction _ _ _ => 1
+  | Tbox _ _ => if Archi.ptr64 then 8 else 4
   | Tstruct id _
   | Tvariant id _ =>
       match env!id with
@@ -563,7 +573,7 @@ Definition typ_of_type (t: type) : AST.typ :=
   | Tlong _ _ => AST.Tlong
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
-  | Tfunction _ _ _ | Tstruct _ _ | Tvariant _ _ => AST.Tptr
+  | Tfunction _ _ _ | Tbox _ _ | Tstruct _ _ | Tvariant _ _ => AST.Tptr
   end.
 
 Definition rettype_of_type (t: type) : AST.rettype :=
@@ -578,6 +588,7 @@ Definition rettype_of_type (t: type) : AST.rettype :=
   | Tlong _ _ => AST.Tlong
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
+  | Tbox _ _ => Tptr
   | Tfunction _ _ _ | Tstruct _ _ | Tvariant _ _ => AST.Tvoid
   end.
 

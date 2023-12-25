@@ -21,6 +21,7 @@ Require Import LanguageInterface.
 Inductive place : Type :=
 | Plocal : ident -> type -> place
 | Pfield : place -> ident -> type -> place (**r access a field of struct: p.(id)  *)
+| Pderef : place -> type -> place
 .
 
 Lemma place_eq: forall (p1 p2: place), {p1=p2} + {p1<>p2}.
@@ -35,6 +36,7 @@ Definition typeof_place p :=
   match p with
   | Plocal _ ty => ty
   | Pfield _ _ ty => ty
+  | Pderef _ ty => ty
   end.
 
 (** ** Expression *)
@@ -51,6 +53,12 @@ Inductive expr : Type :=
 | Ebinop: binary_operation -> expr -> expr -> type -> expr. (**r binary operation *)
 
 
+(* evaluate an expr has no side effect. But evaluate a boxexpr may
+allocate a new block *)
+Inductive boxexpr : Type :=
+| Bexpr: expr -> boxexpr
+| Box: boxexpr -> boxexpr.
+
 Definition typeof (e: expr) : type :=
   match e with
   | Econst_int _ ty
@@ -64,6 +72,16 @@ Definition typeof (e: expr) : type :=
   | Ebinop _ _ _ ty => ty
   end.
 
+Fixpoint typeof_boxexpr (r: boxexpr) : type :=
+  match r with
+  | Bexpr e => typeof e
+  | Box r' => Tbox (typeof_boxexpr r') noattr
+  end.
+
+
+(* What Tbox corresponds to? *)
+(** TODO: Tbox -> None. reference -> None, raw poinetr -> C pointer,
+Option<reference> -> C pointer *)
 Fixpoint to_ctype (ty: type) : option Ctypes.type :=
   match ty with
   | Tunit => Some Tvoid 
@@ -73,6 +91,12 @@ Fixpoint to_ctype (ty: type) : option Ctypes.type :=
   | Tfloat fz attr => Some (Ctypes.Tfloat fz attr)
   | Tstruct id attr => Some (Ctypes.Tstruct id attr)
   | Tvariant id attr => Some (Ctypes.Tunion id attr)
+  | Tbox ty attr => None
+      (* match (to_ctype ty) with *)
+      (* | Some ty' =>  *)
+      (*     Some (Ctypes.Tpointer ty' attr) *)
+      (* | _ => None *)
+      (* end *)
   | Tfunction tyl ty cc =>
       match to_ctype ty, to_ctypelist tyl with
       | Some ty, Some tyl => Some (Ctypes.Tfunction tyl ty cc)
@@ -93,8 +117,8 @@ with to_ctypelist (tyl: typelist) : option (Ctypes.typelist) :=
 
 Inductive statement : Type :=
   | Sskip : statement                   (**r do nothing *)
-  | Slet : ident -> type -> expr -> statement -> statement (**r let ident: type = rvalue in *)
-  | Sassign : place -> expr -> statement (**r assignment [place = rvalue] *)
+  | Slet : ident -> type -> boxexpr -> statement -> statement (**r let ident: type = rvalue in *)
+  | Sassign : place -> boxexpr -> statement (**r assignment [place = rvalue] *)
   | Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
   | Ssequence : statement -> statement -> statement  (**r sequence *)
   | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
@@ -205,8 +229,8 @@ Fixpoint is_prefix (p1 p2: place) : bool :=
   | Plocal id1 _, Plocal id2 _ => Pos.eqb id1 id2
   | Plocal id1 _, Pfield p2' _ _ => is_prefix p1 p2'
   | Pfield p1' _ _, Pfield p2' _ _ => is_prefix p1' p2'
-  (* | Plocal id1 _, Pderef p2' _ => is_prefix p1 p2' *)
-  (* | Pderef p1' _, Pderef p2' _ => is_prefix p1' p2' *)
+  | Plocal id1 _, Pderef p2' _ => is_prefix p1 p2'
+  | Pderef p1' _, Pderef p2' _ => is_prefix p1' p2'
   | _ ,_ => false
   end.
 
@@ -214,7 +238,7 @@ Definition is_prefix_strict (p1 p2: place) : bool :=
   match p2 with
   | Plocal _ _ => false
   | Pfield p2' _ _ => is_prefix p1 p2'
-  (* | Pderef p2' _  => is_prefix p1 p2' *)
+  | Pderef p2' _  => is_prefix p1 p2'
   end.
 
 
@@ -222,6 +246,7 @@ Fixpoint local_of_place (p: place) :=
   match p with
   | Plocal id _ => id
   | Pfield p' _ _ => local_of_place p'
+  | Pderef p' _ => local_of_place p'
   end.
 
 Definition is_sibling (p1 p2: place) : bool :=
@@ -280,28 +305,27 @@ Variable e: env.
 Variable m: mem.
 
 (* similar to eval_lvalue in Clight.v *)
-Inductive eval_place (m:mem) : place -> block -> ptrofs -> Prop :=
+Inductive eval_place : place -> block -> ptrofs -> Prop :=
 | eval_Plocal: forall id b ty,
     (** TODO: there is no global variable, so we do not consider the
     gloabl environment *)
     e!id = Some (b, ty) ->
-    eval_place m (Plocal id ty) b Ptrofs.zero
+    eval_place (Plocal id ty) b Ptrofs.zero
 | eval_Pfield_struct: forall p ty b ofs delta id i co bf attr,
-    eval_place m p b ofs ->
+    eval_place p b ofs ->
     ty = Tstruct id attr ->
     ce ! id = Some co ->
     field_offset ce i (co_members co) = OK (delta, bf) ->
-    eval_place m (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta)).
-
-(* | eval_Pderef: forall p ty l ofs l' ofs', *)
-(*     eval_place p l ofs -> *)
-(*     deref_loc ty m l ofs (Vptr l' ofs') -> *)
-(*     eval_place (Pderef p ty) l' ofs'. *)
+    eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
+| eval_Pderef: forall p ty l ofs l' ofs',
+    eval_place p l ofs ->
+    deref_loc ty m l ofs (Vptr l' ofs') ->
+    eval_place (Pderef p ty) l' ofs'.
 
 Inductive eval_place_list : list place -> list block -> list ptrofs -> Prop :=
 | eval_Pnil: eval_place_list nil nil nil
 | eval_Pcons: forall p b ofs lp lb lofs,
-    eval_place m p b ofs ->
+    eval_place p b ofs ->
     eval_place_list lp lb lofs ->    
     eval_place_list (p :: lp) (b :: lb) (ofs :: lofs).
 
@@ -335,17 +359,17 @@ Inductive eval_expr : expr -> val -> option place ->  Prop :=
 (*     (* For now, we do not return moved place in binary operation *) *)
 (*     eval_expr (Ebinop op a1 a2 ty) v None. *)
 | eval_Eplace_copy: forall p b ofs ty m v,
-    eval_place m p b ofs ->
+    eval_place p b ofs ->
     deref_loc ty m b ofs v ->
     eval_expr (Eplace Copy p ty) v None
 | eval_Eplace_move: forall p b ofs ty m v,
-    eval_place m p b ofs ->
+    eval_place p b ofs ->
     deref_loc ty m b ofs v ->
     eval_expr (Eplace Move p ty) v (Some p)
 | eval_Eget_copy: forall p b ofs ofs' ty m v id fid attr co bf,
     typeof_place p = Tvariant id attr ->
     ce ! id = Some co ->
-    eval_place m p b ofs ->
+    eval_place p b ofs ->
     variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
     (* load the value *)
     deref_loc ty m b (Ptrofs.add ofs (Ptrofs.repr ofs')) v ->
@@ -354,7 +378,7 @@ Inductive eval_expr : expr -> val -> option place ->  Prop :=
 | eval_Eget_move: forall p b ofs ofs' ty m v id fid attr co bf,
     typeof_place p = Tvariant id attr ->
     ce ! id = Some co ->
-    eval_place m p b ofs ->
+    eval_place p b ofs ->
     (* do not check the tag. we can use Ecktag to check it *)
     variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
     (* load the value *)
@@ -362,7 +386,7 @@ Inductive eval_expr : expr -> val -> option place ->  Prop :=
     eval_expr (Eget Move p fid ty) v (Some p)
 
 | eval_Ecktag: forall p b ofs ty m tag tagz id fid attr co,
-    eval_place m p b ofs ->
+    eval_place p b ofs ->
     (* load the tag *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
     typeof_place p = Tvariant id attr ->
@@ -381,18 +405,17 @@ Inductive eval_exprlist : list expr -> typelist -> list val -> list (option plac
     eval_exprlist bl tyl vl opl ->
     eval_exprlist (a :: bl) (Tcons ty tyl) (v2 :: vl) (op :: opl).
 
-(* Inductive eval_boxexpr : boxexpr -> val -> option place -> mem -> Prop := *)
-(* | eval_Rexpr: forall e v op, *)
-(*     eval_expr e v op -> *)
-(*     eval_boxexpr (Bexpr e) v op m *)
-(* | eval_Rbox: forall r v op m' m'' m''' b ty chunk, *)
-(*     typeof_boxexpr r = ty -> *)
-(*     eval_boxexpr r v op m' -> *)
-(*     Mem.alloc m' 0 (sizeof ty) = (m'', b) -> *)
-(*     access_mode ty = By_value chunk -> *)
-(*     Mem.store chunk m'' b 0 v = Some m''' -> *)
-(*     eval_boxexpr (Box r) (Vptr b Ptrofs.zero) op m'''. *)
-
+Inductive eval_boxexpr : boxexpr -> val -> option place -> mem -> Prop :=
+| eval_Bexpr: forall e v op,
+    eval_expr e v op ->
+    eval_boxexpr (Bexpr e) v op m
+| eval_Box: forall r v op m' m'' m''' b ty chunk,
+    typeof_boxexpr r = ty ->
+    eval_boxexpr r v op m' ->
+    Mem.alloc m' 0 (sizeof ce ty) = (m'', b) ->
+    access_mode ty = By_value chunk ->
+    Mem.store chunk m'' b 0 v = Some m''' ->
+    eval_boxexpr (Box r) (Vptr b Ptrofs.zero) op m'''.
 
 End EXPR.
 
@@ -448,7 +471,7 @@ Inductive state: Type :=
 
 (** Automatic drop  *)
 
-Definition copy_type (ty: type) :=
+Definition definite_copy_type (ty: type) :=
   match ty with
   | Tunit
   | Tint _ _ _
@@ -457,24 +480,24 @@ Definition copy_type (ty: type) :=
   | Tfunction _ _ _ => true
   | _ => false
   end.
-              
+
 
 (* normal recursive drop (do not consider own path): used for variant *)
 (* It drop the resource assuming there is no partial move *)
-Inductive drop_place_type (ce: composite_env) : type -> mem -> block -> ptrofs -> mem -> Prop :=
-| drop_base_copy: forall m b ofs ty,
-    copy_type ty = true ->
-    drop_place_type ce ty m b ofs m
-| drop_base_struct: forall m b ofs id attr co m' lb lofs lofsbit lty,
+Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> mem -> Prop :=
+| drop_in_base: forall m b ofs ty,
+    definite_copy_type ty = true ->
+    drop_in_place ce ty m b ofs m
+| drop_in_struct: forall m b ofs id attr co m' lb lofs lofsbit lty,
     ce ! id = Some co ->
     (* do not use eval_place_list, directly compute the field offset *)
     field_offset_all ce co.(co_members) = OK lofsbit ->
     lofs = map (fun ofsbit => Ptrofs.add ofs (Ptrofs.repr (fst ofsbit))) lofsbit ->
     lb = repeat b (length co.(co_members)) ->
     lty = map type_member co.(co_members) ->
-    drop_place_type_list ce lty m lb lofs m' ->
-    drop_place_type ce (Tstruct id attr) m b ofs m'
-| drop_base_variant: forall m b ofs id attr co m' tag memb fid ofs' bf,
+    drop_in_place_list ce lty m lb lofs m' ->
+    drop_in_place ce (Tstruct id attr) m b ofs m'
+| drop_in_variant: forall m b ofs id attr co m' tag memb fid ofs' bf,
     ce ! id = Some co ->
     (* load tag  *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
@@ -483,16 +506,25 @@ Inductive drop_place_type (ce: composite_env) : type -> mem -> block -> ptrofs -
     fid = name_member memb ->
     variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
     (* drop the selected type *)
-    drop_place_type ce (type_member memb) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) m' ->
-    drop_place_type ce (Tvariant id attr) m b ofs m'
+    drop_in_place ce (type_member memb) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) m' ->
+    drop_in_place ce (Tvariant id attr) m b ofs m
+| drop_in_box: forall ty ty' attr m m' m'' b ofs b' ofs',
+    ty = Tbox ty' attr ->
+    (* The contents in [p] is (Vptr b' ofs') *)
+    Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
+    drop_in_place ce ty' m b' ofs' m' ->
+    (* Free the contents in (b',ofs') *)
+    Mem.free m' b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ce ty') = Some m'' ->
+    drop_in_place ce ty m b ofs m''
+
                     
-with drop_place_type_list (ce: composite_env) : list type -> mem -> list block -> list ptrofs -> mem -> Prop :=
+with drop_in_place_list (ce: composite_env) : list type -> mem -> list block -> list ptrofs -> mem -> Prop :=
 | drop_type_list_nil: forall m,
-    drop_place_type_list ce nil m nil nil m
+    drop_in_place_list ce nil m nil nil m
 | drop_type_list_cons: forall b ty tys' lb' ofs lofs' m m' m'',
-    drop_place_type ce ty m b ofs m' ->
-    drop_place_type_list ce tys' m' lb' lofs' m'' ->
-    drop_place_type_list ce (ty :: tys') m (b :: lb') (ofs :: lofs') m''.
+    drop_in_place ce ty m b ofs m' ->
+    drop_in_place_list ce tys' m' lb' lofs' m'' ->
+    drop_in_place_list ce (ty :: tys') m (b :: lb') (ofs :: lofs') m''.
 
 (* It drop the resource assuming there may be partial moved paths *)
 Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> block -> ptrofs -> mem -> Prop :=
