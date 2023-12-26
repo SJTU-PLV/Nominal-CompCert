@@ -8,22 +8,12 @@ Require Import Rusttypes RustlightBase RustIR.
 
 Local Open Scope list_scope.
 
-(* similart to is_prefix, but is_prefix p *p = true and contains p *p
-= false. Because contains represents the memory inclusion between p1
-and p2 *)
-Fixpoint contains (p1 p2: place) : bool :=
-  match p1, p2 with
-  | Plocal id1 _, Plocal id2 _ => Pos.eqb id1 id2
-  | Plocal id1 _, Pfield p2' _ _ => contains p1 p2'
-  | Pfield p1' _ _, Pfield p2' _ _ => contains p1' p2'
-  | _, _ => false
-  end.
 
-Lemma contains_refl: forall p, is_prefix p p = true.
+Lemma is_prefix_refl: forall p, is_prefix p p = true.
 Admitted.
 
 
-Lemma contains_trans: forall p1 p2 p3, contains p1 p2 = true -> is_prefix p2 p3 = true -> contains p1 p3 = true.
+Lemma is_prefix_trans: forall p1 p2 p3, is_prefix p1 p2 = true -> is_prefix p2 p3 = true -> is_prefix p1 p3 = true.
 Admitted.
 
 
@@ -59,7 +49,8 @@ Definition places_of_members (p: place) (mems: members) :=
 Section COMP_ENV.
 
 Variable ce : composite_env.
-  
+
+(* siblings of p *)
 Definition siblings (p: place) : Paths.t :=
   match p with
   | Plocal _ _ => Paths.empty
@@ -75,6 +66,7 @@ Definition siblings (p: place) : Paths.t :=
           end
       | _ => Paths.empty
       end
+  | Pderef p' _ => Paths.empty      
   end.
                                                         
 
@@ -82,19 +74,62 @@ Fixpoint parents (p: place) : Paths.t :=
   match p with
   | Plocal _ _ => Paths.empty
   | Pfield p' _ _ => Paths.add p' (parents p')
+  | Pderef p' _ => Paths.add p' (parents p')
   end.
 
-Definition collect (p: place) (l: Paths.t) : Paths.t :=
+
+(* The whole set [S] and a place [p] s.t. [p] ∈ [S]:
+
+1. If [p] is [Plocal id ty]: if [ty] = [Tstruct], it means that [p]'s
+   children are not mentioned in this function and [p] is only moved
+   or assigned entirely; if [ty] = [Tbox] and their are no [p]'s
+   successors in [S], it means that [p] can be drop with its drop
+   glue, otherwise, we should check [*p]'s initialized information to
+   determine how to drop the subpath of [p].
+
+ ___________                                                  
+|_f_|_g_|_h_|
+             
+2. If [p] is [Pfield p' fid ty], it means that [p] and its disjoint
+   siblings (e.g., [a] and [b]) which construct continious memory are
+   in [S]. [p'] must be not in [S] to avoid ambiguity.
+
+   The complicated case is that if [p] is [**a.f] which means that
+   [**a.g] and [**a.h] are in [S], but what about [*a]?
+
+3. If [p] is [Pderef p' ty], it means that [p'] is also in [S],
+   because we have to consider how to drop [p']. If [p'] is not in
+   [S], we don't how the initialized information about it.
+
+
+Note: if [p] ∉ [S] then [p] must not be mentioned in the function. *)
+
+
+
+(** The core function of adding a place [p] to the whole set [l] *)
+(* add [p] to the paths [l]: If [p] is [Pderef p' ty], then
+recursively add p' and its parents to paths [l]; If [p] is [Pfield p'
+fid ty], then add [p']'s siblings and [p']'s parent to paths [l]*)
+Fixpoint collect (p: place) (l: Paths.t) : Paths.t :=
   if own_type own_fuel ce (typeof_place p) then
-    if Paths.mem p l then l
-    else  
-      let l' := Paths.filter (fun p' => contains p' p) l in    
-      if Paths.is_empty l' then Paths.add p l
-      else
-        let parents := Paths.add p (parents p) in
-        let siblings := Paths.fold (fun elt acc => Paths.union acc (siblings elt)) parents Paths.empty in
-        Paths.union (Paths.diff l l') (Paths.add p siblings)
-    else l.
+    (* If there are some children of [p] in [l], do nothing. *)
+    if Paths.is_empty (Paths.filter (fun elt => is_prefix p elt) l) then
+      match p with
+      | Plocal _ _ =>
+          Paths.add p l
+      | Pfield p' _ _ =>
+          (* difficult case: assume p = [**(a.f).g], p' = [**(a.f)], l = ∅ *)
+          let l' := collect p' l in (* l' = {**(a.f), *(a.f), a.f, a.h} *)
+          let siblings := siblings p in (* sib = {**(a.f).k, **(a.f).l} *)
+          (* l'\{p'} ∪ siblings ∪ {p} *)
+          (* ret = {*(a.f), a.f, a.h, **(a.f).k, **(a.f).l, **(a.f).f} *)
+          (* we can see that each element occupies a memory location *)
+          Paths.union (Paths.remove p' l') (Paths.add p siblings)
+      | Pderef p' _ =>
+          Paths.add p' (collect p' l)
+      end
+    else l
+  else l.
 
     
 Definition collect_place (p: place) (m: PathsMap.t) : PathsMap.t :=
@@ -132,11 +167,17 @@ Definition collect_exprlist (el: list expr) : list place :=
        | None => acc
        end) nil el.
 
+Fixpoint collect_boxexpr (be: boxexpr) : option place :=
+  match be with
+  | Box be' => collect_boxexpr be'
+  | Bexpr e => collect_expr e
+  end.
+
 
 Definition collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
   match s with
   | Sassign p e _ =>
-      collect_place p (collect_option_place (collect_expr e) m)
+      collect_place p (collect_option_place (collect_boxexpr e) m)
   | Scall op _ al _ =>
       let pl := collect_exprlist al in
       let m' := fold_right collect_place m pl in
@@ -162,7 +203,7 @@ End COMP_ENV.
 Definition remove_place (p: place) (m: PathsMap.t) : PathsMap.t :=
   let id := local_of_place p in
   let l := PathsMap.get id m in  
-  let rm := Paths.filter (fun elt => contains p elt) l in
+  let rm := Paths.filter (fun elt => is_prefix p elt) l in
   PathsMap.set id (Paths.diff l rm) m.
 
 Definition remove_option (p: option place) (m: PathsMap.t) : PathsMap.t :=
@@ -171,13 +212,13 @@ Definition remove_option (p: option place) (m: PathsMap.t) : PathsMap.t :=
   | None => m
   end.
 
-(* Gen function: if add {p' | contains p p' /\ p' ∈ S} to m[id]. Here
+(* Gen function: if add {p' | is_prefix p p' /\ p' ∈ S} to m[id]. Here
 [S] is the whole set *)
 Definition add_place (S: PathsMap.t) (p: place) (m: PathsMap.t) : PathsMap.t :=
   let id := local_of_place p in
   let l := PathsMap.get id m in
   let whole := PathsMap.get id S in
-  let add := Paths.filter (fun elt => contains p elt) whole in
+  let add := Paths.filter (fun elt => is_prefix p elt) whole in
   PathsMap.set id (Paths.union l add) m.
 
 Definition add_option (S: PathsMap.t) (p: option place) (m: PathsMap.t) : PathsMap.t :=
@@ -196,7 +237,7 @@ Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (pc: node) (befor
     | Some s =>
         match s with
         | Sassign p e _ =>
-            let p' := collect_expr e in
+            let p' := collect_boxexpr e in
             if flag then
               add_place S p (remove_option p' before)
             else
