@@ -105,6 +105,13 @@ Fixpoint parents (p: place) : Paths.t :=
 Note: if [p] ∉ [S] then [p] must not be mentioned in the function. *)
 
 
+Fixpoint own_path_box (p: place) (ty: type) :=
+  match ty with
+  | Tbox ty' _ =>
+      let p' := Pderef p ty' in
+      Paths.add p' (own_path_box p' ty')
+  | _ => Paths.empty
+  end.
 
 (** The core function of adding a place [p] to the whole set [l] *)
 (* add [p] to the paths [l]: If [p] is [Pderef p' ty], then
@@ -125,8 +132,11 @@ Fixpoint collect (p: place) (l: Paths.t) : Paths.t :=
           (* ret = {*(a.f), a.f, a.h, **(a.f).k, **(a.f).l, **(a.f).f} *)
           (* we can see that each element occupies a memory location *)
           Paths.union (Paths.remove p' l') (Paths.add p siblings)
-      | Pderef p' _ =>
-          Paths.add p' (collect p' l)
+      | Pderef p' ty =>
+          (* If type of [p] is [Tbox^n<T>] then add its n children to [l] *)
+          let children := own_path_box p ty in
+          let l' := Paths.union l children in
+          Paths.add p' (collect p' l')
       end
     else l
   else l.
