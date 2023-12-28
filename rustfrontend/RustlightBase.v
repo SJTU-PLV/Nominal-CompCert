@@ -814,20 +814,20 @@ Inductive step : state -> trace -> state -> Prop :=
     assign_loc ge (typeof_boxexpr be) m4 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m5 ->
     step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m5)
          
-| step_let: forall f be op v ty id own1 own2 own3 m1 m2 m3 m4 le1 le2 b k stmt,
-    typeof_boxexpr be = ty ->
-    eval_boxexpr ge le1 m1 be v op m2 ->
+| step_let: forall f be op v ty id own1 own2 own3 m1 m2 m3 le1 le2 b k stmt,
+    typeof be = ty ->
+    eval_expr ge le1 m1 be v op ->
     (* update the move environment *)
     remove_own own1 op = Some own2 ->
     (* allocate the block for id *)
-    Mem.alloc m2 0 (sizeof ge ty) = (m3, b) ->
+    Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
     (* uppdate the local env *)
     PTree.set id (b, ty) le1 = le2 ->
     (* update the ownership environment *)
     PTree.set id (own_path ge (Plocal id ty) ty) own2 = own3 ->
     (* assign [v] to [b] *)
-    assign_loc ge ty m3 b Ptrofs.zero v m4 ->
-    step (State f (Slet id ty be stmt) k le1 own1 m1) E0 (State f stmt (Klet id k) le2 own3 m4)
+    assign_loc ge ty m2 b Ptrofs.zero v m3 ->
+    step (State f (Slet id ty be stmt) k le1 own1 m1) E0 (State f stmt (Klet id k) le2 own3 m3)
          
 | step_call_0: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
