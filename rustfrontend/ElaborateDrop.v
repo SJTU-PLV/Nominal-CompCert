@@ -118,18 +118,253 @@ Definition collect_elaborate_drops_acc (ce: composite_env) (pcstmt: node * state
 
 End INIT_UNINIT.
 
+(** State monad. We use the technique in [Inlining.v] to insert new
+instructions *)
+
+Record state : Type := mkstate {
+  st_nextnode: positive;                (**r last used CFG node *)
+  st_code: code                         (**r current CFG  *)
+}.
+
+Inductive sincr (s1 s2: state) : Prop :=
+  Sincr (NEXTNODE: Ple s1.(st_nextnode) s2.(st_nextnode)).
 
 
-Definition transf_function (ce: composite_env) (f: function) :=
+Remark sincr_refl: forall s, sincr s s.
+Proof.
+  intros; constructor; extlia.
+Qed.
+
+Lemma sincr_trans: forall s1 s2 s3, sincr s1 s2 -> sincr s2 s3 -> sincr s1 s3.
+Proof.
+  intros. inv H; inv H0. constructor; extlia.
+Qed.
+
+(** Dependently-typed state monad, ensuring that the final state is
+  greater or equal (in the sense of predicate [sincr] above) than
+  the initial state. *)
+
+Inductive res {A: Type} {s: state}: Type := R (x: A) (s': state) (I: sincr s s').
+
+Definition mon (A: Type) : Type := forall (s: state), @res A s.
+
+(** Operations on this monad. *)
+
+Definition ret {A: Type} (x: A): mon A :=
+  fun s => R x s (sincr_refl s).
+
+Definition bind {A B: Type} (x: mon A) (f: A -> mon B): mon B :=
+  fun s1 => match x s1 with R vx s2 I1 =>
+              match f vx s2 with R vy s3 I2 =>
+                R vy s3 (sincr_trans s1 s2 s3 I1 I2)
+              end
+            end.
+
+Notation "'do' X <- A ; B" := (bind A (fun X => B))
+   (at level 200, X ident, A at level 100, B at level 200).
+
+Definition initstate :=
+  mkstate 1%positive (PTree.empty statement).
+
+Program Definition set_instr (pc: node) (i: statement): mon unit :=
+  fun s =>
+    R tt
+      (mkstate s.(st_nextnode) (PTree.set pc i s.(st_code)))
+      _.
+Next Obligation.
+  intros; constructor; simpl; extlia.
+Qed.
+
+Program Definition add_instr (i: statement): mon node :=
+  fun s =>
+    let pc := s.(st_nextnode) in
+    R pc
+      (mkstate (Pos.succ pc) (PTree.set pc i s.(st_code)))
+      _.
+Next Obligation.
+  intros; constructor; simpl; extlia.
+Qed.
+
+Program Definition reserve_nodes (numnodes: positive): mon node :=
+  fun s =>
+    R s.(st_nextnode)
+      (mkstate (Pos.add s.(st_nextnode) numnodes) s.(st_code))
+      _.
+Next Obligation.
+  intros; constructor; simpl; extlia.
+Qed.
+
+
+Program Definition ptree_mfold {A: Type} (f: positive -> A -> mon unit) (t: PTree.t A): mon unit :=
+  fun s =>
+    R tt
+      (PTree.fold (fun s1 k v => match f k v s1 return _ with R _ s2 _ => s2 end) t s)
+      _.
+Next Obligation.
+  apply PTree_Properties.fold_rec.
+  auto.
+  apply sincr_refl.
+  intros. destruct (f k v a). eapply sincr_trans; eauto.
+Qed.
+
+
+Definition get_dropflag_temp (p: place) (m: PTree.t (list (place * option ident))) : option ident :=
+  let id := local_of_place p in
+  match m!id with
+  | Some l =>
+      match find (fun elt => place_eq p (fst elt)) l with
+      | Some (_, optfid) => optfid
+      | _ => None
+      end
+  | _ => None
+  end.
+
+Definition type_bool := Tint IBool Signed noattr.  
+
+Definition Ibool (b: bool) := Econst_int (if b then Int.one else Int.zero) type_bool.
+
+Definition insert_dropflag (id: ident) (flag: bool) (succ: node) : mon node :=
+  add_instr (Sset id (Ibool flag) succ).
+
+Definition insert_dropflag_option (id: option ident) (flag: bool) (succ: node) : mon node :=
+  match id with
+  | Some id =>
+      add_instr (Sset id (Ibool flag) succ)
+  | None => ret succ
+  end.
+
+Definition add_dropflag (p: place) (m: PTree.t (list (place * option ident))) (flag: bool) (succ: node) : mon node :=
+  insert_dropflag_option (get_dropflag_temp p m) flag succ.
+
+
+Definition add_dropflag_option (p: option place) (m: PTree.t (list (place * option ident))) (flag: bool) (succ: node) : mon node :=
+  match p with
+  | Some p => add_dropflag p m flag succ
+  | _ => ret succ
+  end.
+
+Definition add_dropflag_option_list (l: list (option place)) (m: PTree.t (list (place * option ident))) (flag: bool) (succ: node) : mon node :=
+  fold_left (fun acc elt => do n <- acc;
+                         do n' <- add_dropflag_option elt m flag n;
+                         ret n') l (ret succ).
+
+Definition add_drop (p: place) (flag: option ident) (succ: node) : mon node :=
+  match flag with
+  | Some id =>     
+      do n1 <- add_instr (Sdrop p succ);
+      do n2 <- add_instr (Sifthenelse (Etempvar id type_bool) n1 succ);
+      ret n2
+  | None => ret succ
+  end.                        
+
+Section DROP_FLAGS.
+
+Variable flagm: PTree.t (list (place * option ident)).
+
+Definition expand_stmt (pc: node) (stmt: statement) : mon unit :=
+  match stmt with
+  | Sassign p be n =>
+      (*  pred -> pc (Sassign) -> succ
+      pred -> pc (Sskip) -> n3 -> n2 -> n1 (Sassign) -> succ *)
+      do n1 <- add_instr stmt;
+      (* set p's flag if necessary *)
+      do n2 <- add_dropflag p flagm true n1;
+      let deinit := collect_boxexpr be in
+      (* set deinit *)
+      do n3 <- add_dropflag_option deinit flagm false n2;
+      (* use an empty node to replace stmt in pc, so that it's predecessor can goto it *)
+      set_instr pc (Sskip n3)
+  | Scall op _ el n =>
+      (* pred -> pc (Scall) -> succ
+         pred -> pc (Sskip) -> n3 ... (dropflags for el) -> n2 (Scall) -> n1 (dropflag for op) -> succ *)
+      do n1 <- add_dropflag_option op flagm true n;
+      do n2 <- add_instr stmt;
+      let mvpaths := map collect_expr el in
+      do n3 <- add_dropflag_option_list mvpaths flagm false n2;
+      set_instr pc (Sskip n3)      
+  | Sreturn (Some e) =>
+      let deinit := collect_expr e in
+      do n1 <- add_instr stmt;
+      do n2 <- add_dropflag_option deinit flagm false n1;
+      set_instr pc (Sskip n2)
+  | Sdrop p n =>
+      (** Core of elaboration of drop  *)
+      let id := local_of_place p in
+      match flagm!id with
+      | None =>
+          (* no need to drop p *)
+          set_instr pc (Sskip n)
+      | Some l =>
+          (* pred -> pc -> succ
+             pred -> pc (Sskip) -> n1 ... (drops) -> succ *)
+          do n1 <- fold_left (fun acc elt => do n <- acc;
+                                         do n' <- add_drop (fst elt) (snd elt) n;
+                                         ret n') l (ret n);
+          set_instr pc (Sskip n1)
+      end
+  | _ => set_instr pc stmt
+  end.
+
+
+Definition expand_function (f: function) : mon node :=
+  (* reserve pc *)
+  let maxpc := max_pc_function f in
+  do _  <- reserve_nodes maxpc;
+  (* set all drop flags to false *)
+  let (_, flags) := split (PTree.elements flagm) in
+  (** TODO: change fold_left to something like ptree_mfold  *)
+  do entry <- fold_left (fun acc elt => do n <- acc;
+                                    insert_dropflag_option (snd elt) false n)
+               (concat flags) (ret f.(fn_entryblock));
+  do _ <- ptree_mfold expand_stmt f.(fn_body);
+  ret entry.
+      
+End DROP_FLAGS.
+
+  
+
+Definition transf_function (ce: composite_env) (f: function) : Errors.res function :=
   match analyze ce f with
-  | Some mayinit, Some mayuninit =>
+  | Some (mayinit, mayuninit) =>
       let vars := var_names (f.(fn_vars) ++ f.(fn_params)) in
-      let next_flag := fold_left Pos.max vars 0%positive in
+      let next_flag := fold_left Pos.max vars 1%positive in
       let stmts := PTree.elements f.(fn_body) in
       do (m, flags) <- fold_right (collect_elaborate_drops_acc mayinit mayuninit ce) (OK (PTree.empty (list (place * option ident)), (next_flag, nil))) stmts;
       let (_, temps) := flags in
-      (** Now elaborate the drop statement and insert the update of
-      drop flag in move or assign *)
-      
-  
-     
+      let temps_typs := combine temps (repeat type_bool (length temps)) in
+      (** Now elaborate the drop statements and insert the update of drop flags *)
+      let '(R entry s _) := expand_function m f initstate in
+      if Nat.eqb (length f.(fn_temps)) 0%nat then             
+        OK (Build_function f.(fn_return)
+                        f.(fn_callconv)
+                        f.(fn_params)
+                        f.(fn_vars)
+                        temps_typs
+                        s.(st_code)
+                            entry)
+      else
+        Error(msg "ElaborateDrop: Temporary variables are not empty")
+  | _ =>
+      Error(msg "ElaborateDrop: Initialized analysis errors")
+  end.
+
+Local Open Scope error_monad_scope.
+
+Definition transf_fundef (ce: composite_env) (fd: fundef) : Errors.res fundef :=
+  match fd with
+  | Internal f => do tf <- transf_function ce f; Errors.OK (Internal tf)
+  | External _ ef targs tres cconv => Errors.OK (External function ef targs tres cconv)
+  end.
+
+
+(** Translation of a whole program. *)
+
+Definition transl_program (p: program) : Errors.res program :=
+  do p1 <- transform_partial_program (transf_fundef p.(prog_comp_env)) p;
+  Errors.OK {| prog_defs := AST.prog_defs p1;
+              prog_public := AST.prog_public p1;
+              prog_main := AST.prog_main p1;
+              prog_types := prog_types p;
+              prog_comp_env := prog_comp_env p;
+              prog_comp_env_eq := prog_comp_env_eq p |}.
+

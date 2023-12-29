@@ -21,14 +21,53 @@ with StorageLive (StorageDead) statements, use CFG to represent the
 program (better for analysis) and insert explicit drop operations (so
 that the RustIR has no ownership semantics) *)
 
-(** The definitions of place and expression are the same as Rustlight *)
+(** The definitions of place and expression are almost the same as Rustlight *)
+
+Inductive expr : Type :=
+| Econst_int: int -> type -> expr       (**r integer literal *)
+| Econst_float: float -> type -> expr   (**r double float literal *)
+| Econst_single: float32 -> type -> expr (**r single float literal *)
+| Econst_long: int64 -> type -> expr    (**r long integer literal *)
+| Eplace: usekind -> place -> type -> expr (**r use of a variable, the only lvalue expression *)
+| Eget: usekind -> place -> ident -> type -> expr (**r get<fid>(a), variant get operation *)
+| Ecktag: place -> ident -> type -> expr           (**r check the tag of variant, e.g. [Ecktag p.(fid)] *)
+| Etempvar: ident -> type -> expr                  (**r value of the temporary variable *)
+| Eunop: unary_operation -> expr -> type -> expr  (**r unary operation *)
+| Ebinop: binary_operation -> expr -> expr -> type -> expr. (**r binary operation *)
+
+
+
+Inductive boxexpr : Type :=
+| Bexpr: expr -> boxexpr
+| Box: boxexpr -> boxexpr.
+
+Definition typeof (e: expr) : type :=
+  match e with
+  | Econst_int _ ty
+  | Econst_float _ ty
+  | Econst_single _ ty
+  | Econst_long _ ty                
+  | Eplace _ _ ty
+  | Ecktag _ _ ty
+  | Etempvar _ ty
+  | Eget _ _ _ ty
+  | Eunop _ _ ty
+  | Ebinop _ _ _ ty => ty
+  end.
+
+Fixpoint typeof_boxexpr (r: boxexpr) : type :=
+  match r with
+  | Bexpr e => typeof e
+  | Box r' => Tbox (typeof_boxexpr r') noattr
+  end.
+
 
 Definition node := positive.
 
 Inductive statement :=
 | Sskip : node -> statement
 | Sassign : place -> boxexpr -> node -> statement
-| Sset : ident -> boxexpr -> node -> statement (* stuck if there is move in expr *)
+| Sset : ident -> expr -> node -> statement (* stuck if there is move in expr. TODO: change expr to pure expression in set statement *)
 | Sstoragelive: ident -> node -> statement
 | Sstoragedead: ident -> node -> statement
 | Sdrop: place -> node -> statement
@@ -74,3 +113,9 @@ Definition successors (stmt: statement) : list node :=
   | Sifthenelse _ n1 n2 => n1 :: n2 :: nil
   | Sreturn _ => nil
   end.
+
+(** Maximum PC (node number) in the CFG of a function.  All nodes of
+  the CFG of [f] are between 1 and [max_pc_function f] (inclusive). *)
+
+Definition max_pc_function (f: function) :=
+  PTree.fold (fun m pc i => Pos.max m pc) f.(fn_body) 1%positive.
