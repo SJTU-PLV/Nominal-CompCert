@@ -82,36 +82,30 @@ Fixpoint typeof_boxexpr (r: boxexpr) : type :=
 (* What Tbox corresponds to? *)
 (** TODO: Tbox -> None. reference -> None, raw poinetr -> C pointer,
 Option<reference> -> C pointer *)
-Fixpoint to_ctype (ty: type) : option Ctypes.type :=
+Fixpoint to_ctype (ty: type) : Ctypes.type :=
   match ty with
-  | Tunit => Some Tvoid 
+  | Tunit => Tvoid 
   (* | Tbox _  => None *)
-  | Tint sz si attr => Some (Ctypes.Tint sz si attr)
-  | Tlong si attr => Some (Ctypes.Tlong si attr)
-  | Tfloat fz attr => Some (Ctypes.Tfloat fz attr)
-  | Tstruct id attr => Some (Ctypes.Tstruct id attr)
-  | Tvariant id attr => Some (Ctypes.Tunion id attr)
-  | Tbox ty attr => None
+  | Tint sz si attr => Ctypes.Tint sz si attr
+  | Tlong si attr => Ctypes.Tlong si attr
+  | Tfloat fz attr => Ctypes.Tfloat fz attr
+  | Tstruct id attr => Ctypes.Tstruct id attr
+  | Tvariant id attr => Ctypes.Tunion id attr
+  | Tbox ty attr => Tpointer (to_ctype ty) attr
       (* match (to_ctype ty) with *)
       (* | Some ty' =>  *)
       (*     Some (Ctypes.Tpointer ty' attr) *)
       (* | _ => None *)
       (* end *)
   | Tfunction tyl ty cc =>
-      match to_ctype ty, to_ctypelist tyl with
-      | Some ty, Some tyl => Some (Ctypes.Tfunction tyl ty cc)
-      | _, _ => None
-      end
+      Ctypes.Tfunction (to_ctypelist tyl) (to_ctype ty) cc
   end
     
-with to_ctypelist (tyl: typelist) : option (Ctypes.typelist) :=
+with to_ctypelist (tyl: typelist) : Ctypes.typelist :=
        match tyl with
-       | Tnil => Some (Ctypes.Tnil)
+       | Tnil => Ctypes.Tnil
        | Tcons ty tyl =>
-           match to_ctype ty, to_ctypelist tyl with
-           | Some ty, Some tyl => Some (Ctypes.Tcons ty tyl)
-           | _, _ => None
-           end
+           Ctypes.Tcons (to_ctype ty) (to_ctypelist tyl)
        end.
                                     
 
@@ -391,7 +385,7 @@ Inductive eval_expr : expr -> val -> option place ->  Prop :=
 | eval_Eunop:  forall op a ty v1 v aty mp,
     eval_expr a v1 mp ->
     (* Note that to_ctype Tbox = None *)
-    to_ctype (typeof a) = Some aty ->
+    to_ctype (typeof a) = aty ->
     (** TODO: define a rust-specific sem_unary_operation  *)
     sem_unary_operation op v1 aty m = Some v ->
     eval_expr (Eunop op a ty) v mp
@@ -927,7 +921,7 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_ifthenelse:  forall f a s1 s2 k e me me' m v1 b ty,
     (* there is no receiver for the moved place, so it must be None *)
     eval_expr ge e m a v1 None ->
-    to_ctype (typeof a) = Some ty ->
+    to_ctype (typeof a) = ty ->
     bool_val v1 ty m = Some b ->
     step (State f (Sifthenelse a s1 s2) k e me m)
       E0 (State f (if b then s1 else s2) k e me' m)
