@@ -90,7 +90,8 @@ Fixpoint to_ctype (ty: type) : Ctypes.type :=
   | Tlong si attr => Ctypes.Tlong si attr
   | Tfloat fz attr => Ctypes.Tfloat fz attr
   | Tstruct id attr => Ctypes.Tstruct id attr
-  | Tvariant id attr => Ctypes.Tunion id attr
+  (* variant = Struct {tag: .. ; f: union} *)
+  | Tvariant id attr => Ctypes.Tstruct id attr
   | Tbox ty attr => Tpointer (to_ctype ty) attr
       (* match (to_ctype ty) with *)
       (* | Some ty' =>  *)
