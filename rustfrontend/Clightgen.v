@@ -198,6 +198,7 @@ Variable unvisited: PMap.t bool.
 
 Variable label_of_node : positive -> label.
 
+Variable dropm: PTree.t ident.  (* map from composite id to its drop glue id *)
 
 Definition encounter_extended_block (n: node) (stmt: Clight.statement) (f: node -> mon (option node * Clight.statement)) :=
   if extended!!n then
@@ -322,6 +323,11 @@ Fixpoint build_stmt_until_extended_block (fuel: nat) (code: PTree.t statement) (
   end.
 
 
+(* Fixpoint expand_drop (temp: ident) (ty: type) := *)
+(*   match ty with *)
+(*   | Tbox ty' attr => *)
+      
+
 Fixpoint transl_extened_block (fuel: nat) (code: PTree.t statement) (pc: node)  : mon Clight.statement :=
   match fuel with
   | O => error (msg "Running out of fuel in transl_extended_block")
@@ -399,7 +405,7 @@ Definition transl_composite_member (m: member) : Ctypes.member :=
       Ctypes.Member_plain fid (to_ctype ty)
   end.
           
-
+(* Variant {a, b, c} => Struct {tag_fid: int; union_fid: {a,b,c}} *)
 Definition transl_composite_def (union_map: PTree.t (ident * attr)) (co: composite_definition) :res Ctypes.composite_definition :=
   match co with
   | Composite id Struct ms attr =>
@@ -445,20 +451,144 @@ Definition transl_composites (l: list composite_definition) : res (list Ctypes.c
   OK (composites ++ unions).
 
 
+
+(** ** Generate drop glue for each composite with ownership type *)
+
+Section COMPOSITE_ENV.
+
+Variable ce: composite_env.
+Variable tce: Ctypes.composite_env.
+
+Definition free_fun_expr (ty: Ctypes.type) : Clight.expr :=
+  let argty := (Ctypes.Tpointer ty noattr) in
+  Evar free_id (Ctypes.Tfunction (Ctypes.Tcons argty Ctypes.Tnil) Ctypes.Tvoid cc_default).
+
+(* return [free(arg)], ty is the type arg points to, i.e. [arg: *ty] *)
+Definition call_free (ty: Ctypes.type) (arg: Clight.expr) : Clight.statement :=
+  Clight.Scall None (free_fun_expr ty) (arg :: nil).
+
+Fixpoint drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) : list Clight.statement :=
+  match ty with
+  | Tbox ty' attr =>
+      let cty' := (to_ctype ty') in
+      (* free(arg) *)
+      let stmt := call_free cty' arg in
+      (* return [free(arg); free(deref arg); ...] *)
+      stmt :: drop_glue_for_type m (Ederef arg cty') ty'
+  | Tstruct id attr
+  | Tvariant id attr =>
+      match m ! id with
+      | None => nil
+      | Some id' =>
+          (* call the drop glue of this struct: what is the type of this drop glue ? *)
+          let ref_arg_ty := (Ctypes.Tpointer (to_ctype ty) noattr ) in
+          let glue_ty := Ctypes.Tfunction (Ctypes.Tcons ref_arg_ty Ctypes.Tnil) Tvoid cc_default in
+          (* drop_in_place_xxx(&arg) *)
+          let call_stmt := Clight.Scall None (Evar free_id glue_ty) ((Eaddrof arg ref_arg_ty) :: nil) in
+          call_stmt :: nil
+      end
+  | _ => nil
+  end.
+            
+(* Some example: 
+drop_in_place_xxx(&Struct{a,b,c} param) {
+    drop_in_place_a(&((deref param).a));
+    drop_in_place_a(&((deref param).b));
+    drop_in_place_a(&((deref param).c));
+} *)
+
+(* we assume deref_param is the dereference of the parameter *)
+Definition drop_glue_for_member (m: PTree.t ident) (deref_param: Clight.expr) (memb: member) : list Clight.statement :=
+  match memb with
+  | Member_plain fid ty =>      
+      if own_type own_fuel ce ty then
+        let cty := (to_ctype ty) in
+        let arg := Efield deref_param fid cty in
+        drop_glue_for_type m arg ty
+      else
+        nil
+  end.
+        
+Definition make_labelled_stmts (drops_list: list (list Clight.statement)) :=
+  let branch idx elt ls := LScons (Some idx) (Clight.Ssequence (makeseq elt) Clight.Sbreak) ls in
+  fold_right
+    (fun elt acc => let '(idx, ls) := acc in (idx-1, branch idx elt ls))
+    ((list_length_z drops_list) - 1, LSnil) drops_list.
+
+(* m: maps composite id to drop function id *)
+Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition) : res (option Clight.function) :=
+  (* The only function parameter *)
+  let param := first_unused_ident tt in
+  match co with
+  | Composite co_id Struct ms attr =>
+      let co_ty := (Ctypes.Tstruct co_id attr) in
+      let param_ty := Tpointer co_ty noattr in
+      let deref_param := Ederef (Evar param param_ty) co_ty in
+      let stmt_list := fold_right (fun elt acc => drop_glue_for_member m deref_param elt ++ acc) nil ms in
+      match stmt_list with
+      | nil => OK None
+      | _ =>
+          (* generate function *)
+          let stmt := (Clight.Ssequence (makeseq stmt_list) (Clight.Sreturn None)) in
+          OK (Some (Clight.mkfunction Tvoid cc_default ((param, param_ty)::nil) nil nil stmt))
+      end
+  | Composite co_id TaggedUnion ms attr =>
+      let co_ty := (Ctypes.Tstruct co_id attr) in
+      let param_ty := Tpointer co_ty noattr in
+      let deref_param := Ederef (Evar param param_ty) co_ty in
+      (* check tag and then call corresponded drop glue *)
+      match tce ! co_id with
+      | Some tco =>
+          match tco.(co_su), tco.(Ctypes.co_members) with
+          | Ctypes.Struct, Ctypes.Member_plain tag_id tag_ty :: Ctypes.Member_plain union_id _ :: nil =>
+              (* get tag expr *)
+              let get_tag := Efield deref_param tag_id tag_ty in
+              (* use switch statements to model the pattern match? *)
+              (* drops_list is [[case 0: drop(m1)];[case 1: drop(m2)]]*)
+              let drops_list := fold_right (fun elt acc => (drop_glue_for_member m deref_param elt) :: acc) (@nil (list Clight.statement)) ms in
+              let (_, switch_branches) := make_labelled_stmts drops_list in
+              (* generate function *)
+              let stmt := (Clight.Sswitch get_tag switch_branches) in
+              OK (Some (Clight.mkfunction Tvoid cc_default ((param, param_ty)::nil) nil nil stmt))
+          | _, _ => Error (msg "Variant is not correctly converted to C struct: drop_glue_for_composite")
+          end
+      | _ => Error (msg "The conversion of variant does not exist in the C composite environment")
+      end
+  end.
+                
+
+(* take the ident of a composite and return the ident of the drop glue function *)
+Parameter create_dropglue_ident : ident -> ident.
+
+
+Definition drop_glue_globdef (f: Clight.function) : globdef (Ctypes.fundef Clight.function) Ctypes.type :=
+  Gfun (Ctypes.Internal f).
+
 (** Generate drop glue for each composite that is movable *)
 
-Definition generate_drops (l: list composite_definition) : res (list (ident * globdef (Ctypes.fundef Clight.function) Ctypes.type)) :=
-  Error (msg "Unsupported generated_drop_functions").
-
+(* also return the map from composite id to drop glue id *)
+Definition generate_drops (l: list composite_definition) : res ((list (ident * globdef (Ctypes.fundef Clight.function) Ctypes.type)) * PTree.t ident) :=
+  (* first build the mapping from composite id to function id *)
+  let ids := map (fun elt => match elt with | Composite id _ _ _ => (id, create_dropglue_ident id) end) l in
+  let m := fold_left (fun acc elt => PTree.set (fst elt) (snd elt) acc) ids (PTree.empty ident) in   
+  (* how to construct the string of this fuction  *)        
+  do globs <- fold_right (fun elt acc => do acc' <- acc;
+                                     do glue <- drop_glue_for_composite m elt;
+                                     match glue with
+                                     | Some glue' => OK (drop_glue_globdef glue' :: acc')
+                                     | _ => OK acc'
+                                     end) (OK nil) l;
+  OK ((combine (snd (split ids)) globs), m).
+                          
 
 (* Translation of a whole program *)
 
 Definition transl_globvar (id: ident) (ty: type) := OK (to_ctype ty).
 
-Definition transl_program (p: program) : res Clight.program :=
+ Definition transl_program (p: program) : res Clight.program :=
   do co_defs <- transl_composites p.(prog_types);
   (* generate drop glue for ownership type *)
-  do drops <- generate_drops p.(prog_types);
+  do (drops, m) <- generate_drops p.(prog_types);
   (** TODO: need a drop glue map in transl_fundef *)
   let ce := Ctypes.build_composite_env co_defs in
   (match ce as m return (ce = m) -> res Clight.program with
@@ -473,5 +603,4 @@ Definition transl_program (p: program) : res Clight.program :=
               Ctypes.prog_comp_env_eq := Hyp |}
    | Error msg => fun _ => Error msg
    end) (eq_refl ce).
-
-  
+ 
