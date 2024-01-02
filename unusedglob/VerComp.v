@@ -270,6 +270,145 @@ End CC_COMPOSE2.
 
 
 
+
+
+(** * Definition of new callconv refinement *)
+(* From common/CallconvAlgebra.v *)
+
+
+Definition ccref' {li1 li2} (cc cc': callconv' li1 li2) :=
+  forall w se1 se2 q1 q2,
+    match_senv' cc w se1 se2 ->
+    match_query' cc w q1 q2 ->
+    exists w',
+      match_senv' cc' w' se1 se2 /\
+      match_query' cc' w' q1 q2 /\
+      forall r1 r2,
+        match_reply' cc' w' r1 r2 ->
+        match_reply' cc w r1 r2.
+
+Definition cceqv' {li1 li2} (cc cc': callconv' li1 li2) :=
+  ccref' cc cc' /\ ccref' cc' cc.
+
+Global Instance ccref_preo' li1 li2:
+  PreOrder (@ccref' li1 li2).
+Proof.
+  split.
+  - intros cc w q1 q2 Hq.
+    eauto.
+  - intros cc cc' cc'' H' H'' w se1 se2 q1 q2 Hse Hq.
+    edestruct H' as (w' & Hse' & Hq' & Hr'); eauto.
+    edestruct H'' as (w'' & Hse'' & Hq'' & Hr''); eauto 10.
+Qed.
+
+Global Instance cceqv_equiv' li1 li2:
+  Equivalence (@cceqv' li1 li2).
+Proof.
+  split.
+  - intros cc.
+    split; reflexivity.
+  - intros cc1 cc2. unfold cceqv'.
+    tauto.
+  - intros cc1 cc2 cc3 [H12 H21] [H23 H32].
+    split; etransitivity; eauto.
+Qed.
+
+Global Instance ccref_po' li1 li2:
+  PartialOrder (@cceqv' li1 li2) (@ccref' li1 li2).
+Proof.
+  firstorder.
+Qed.
+
+(** ** Relation to forward simulations *)
+
+Global Instance open_fsim_ccref':
+  Monotonic
+    (@forward_simulation')
+    (forallr - @ liA1, forallr - @ liA2, ccref' ++>
+     forallr - @ liB1, forallr - @ liB2, ccref' -->
+     subrel).
+Proof.
+  intros liA1 liA2 ccA ccA' HA liB1 liB2 ccB ccB' HB sem1 sem2 [FS].
+  destruct FS as [index order match_states SKEL PROP WF].
+  constructor.
+  set (ms se1 se2 w' idx s1 s2 :=
+         exists w : ccworld' ccB,
+           match_states se1 se2 w idx s1 s2 /\
+           match_senv' ccB w se1 se2 /\
+           forall r1 r2, match_reply' ccB w r1 r2 -> match_reply' ccB' w' r1 r2).
+  eapply Forward_simulation' with order ms; auto.
+  intros se1 se2 wB' Hse' Hse1.
+  split.
+  - intros q1 q2 Hq'.
+    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    eapply fsim_match_valid_query'; eauto.
+  - intros q1 q2 s1 Hq' Hs1.
+    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    edestruct @fsim_match_initial_states' as (i & s2 & Hs2 & Hs); eauto.
+    exists i, s2. split; auto. exists wB; auto.
+  - intros i s1 s2 r1 (wB & Hs & Hse & Hr') Hr1.
+    edestruct @fsim_match_final_states' as (r2 & Hr2 & Hr); eauto.
+  - intros i s1 s2 qA1 (wB & Hs & Hse & Hr') HqA1.
+    edestruct @fsim_match_external' as (wA & qA2 & HqA2 & HqA & HseA & ?); eauto.
+    edestruct HA as (wA' & HseA' & HqA' & Hr); eauto.
+    exists wA', qA2. intuition auto.
+    edestruct H as (i' & s2' & Hs2' & Hs'); eauto.
+    exists i', s2'. split; auto. exists wB; eauto.
+  - intros s1 t s1' Hs1' i s2 (wB & Hs & Hse & Hr').
+    edestruct @fsim_simulation'_1; eauto.
+    destruct H as (i' & s2' & Hs2' & Hs').
+    exists i', s2'. split; auto. exists wB; eauto.
+    destruct H as (i' & C & D & E).
+    exists i', s2. split; auto. right. split.
+    subst. eapply star_refl. eauto. exists wB; eauto.
+Qed.
+(*
+Global Instance open_bsim_ccref':
+  Monotonic
+    (@backward_simulation')
+    (forallr - @ liA1, forallr - @ liA2, ccref' ++>
+     forallr - @ liB1, forallr - @ liB2, ccref' -->
+     subrel).
+Proof.
+  intros liA1 liA2 ccA ccA' HA liB1 liB2 ccB ccB' HB sem1 sem2 [FS].
+  destruct FS as [index order match_states SKEL PROP WF].
+  constructor.
+  set (ms se1 se2 w' idx s1 s2 :=
+         exists w : ccworld ccB,
+           match_states se1 se2 w idx s1 s2 /\
+           match_senv ccB w se1 se2 /\
+           forall r1 r2, match_reply ccB w r1 r2 -> match_reply ccB' w' r1 r2).
+  eapply Backward_simulation with order ms; auto.
+  intros se1 se2 wB' Hse' Hse1.
+  split.
+  - intros q1 q2 Hq'.
+    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    eapply bsim_match_valid_query; eauto.
+  - intros q1 q2 Hq'.
+    destruct (HB wB' se1 se2 q1 q2) as (wB & Hse & Hq & Hr); auto.
+    edestruct @bsim_match_initial_states as [EXIST MATCH]; eauto.
+    split; auto.
+    intros. edestruct MATCH as (s1' & Hs1' & i & Hs); eauto. 
+    exists s1'. split; auto. exists i, wB; auto.
+  - intros i s1 s2 r1 (wB & Hs & Hse & Hr') SAFE Hr1.
+    edestruct @bsim_match_final_states as (s2' & r2 & Hs2' & Hr2 & Hr); eauto 10.
+  - intros i s1 s2 qA1 (wB & Hs & Hse & Hr') SAFE HqA1.
+    edestruct @bsim_match_external as (wA & s1' & qA2 & Hs1' & HqA2 & HqA & HseA & ?); eauto.
+    edestruct HA as (wA' & HseA' & HqA' & Hr); eauto.
+    exists wA', s1', qA2. intuition auto.
+    edestruct H as [EXIST MATCH]; eauto. split; auto.
+    intros. edestruct MATCH as (s1'' & Hs1'' & j & Hs''); eauto.
+    exists s1''. split; auto.
+    exists j. red. eauto 10.
+  - intros i s1 s2 (wB & Hs & Hse & Hr') SAFE.
+    eapply bsim_progress; eauto.
+  - intros s2 t s2' Hs2' i s1 (wB & Hs & Hse & Hr') SAFE.
+    edestruct @bsim_simulation as (i' & s1' & Hs1' & Hs'); eauto.
+    exists i', s1'. split; auto. exists wB; eauto.
+Qed.
+*)
+
+(*
 (** * Test1: compose injp' ⋅ injp' = injp' *)
 
 (*
@@ -779,3 +918,4 @@ Proof.
 Qed.
 
 End COMPOSE_FORWARD_SIMULATIONS.
+*)

@@ -89,6 +89,13 @@ Require CleanupLabelsproof.
 Require Debugvarproof.
 Require Stackingproof.
 Require Asmgenproof.
+
+(** Properties of generalized simulation *)
+
+Require Callconv.
+Require ForwardSim.
+Require VerComp.
+
 (** Command-line flags. *)
 Require Import Compopts.
 
