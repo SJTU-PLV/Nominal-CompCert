@@ -152,6 +152,15 @@ Section MALLOC_FREE.
   
 Variable (malloc_id free_id: ident).
 
+Definition free_fun_expr (ty: Ctypes.type) : Clight.expr :=
+  let argty := (Ctypes.Tpointer ty noattr) in
+  Evar free_id (Ctypes.Tfunction (Ctypes.Tcons argty Ctypes.Tnil) Ctypes.Tvoid cc_default).
+
+(* return [free(arg)], ty is the type arg points to, i.e. [arg: *ty] *)
+Definition call_free (ty: Ctypes.type) (arg: Clight.expr) : Clight.statement :=
+  Clight.Scall None (free_fun_expr ty) (arg :: nil).
+
+
 Fixpoint transl_boxexpr (ce: Ctypes.composite_env) (be: boxexpr) : mon (list Clight.statement * Clight.expr) :=
   match be with
   | Box be' =>
@@ -191,14 +200,46 @@ Definition makeseq (l: list Clight.statement) : Clight.statement :=
 Section STMT_FROM_EB.
 
 Variable ce: Ctypes.composite_env.
-  
+
+Variable dropm: PTree.t ident.  (* map from composite id to its drop glue id *)
+
 Variable extended: PMap.t bool.
 
 Variable unvisited: PMap.t bool.
 
 Variable label_of_node : positive -> label.
 
-Variable dropm: PTree.t ident.  (* map from composite id to its drop glue id *)
+
+(* expand drop(temp), temp is a reference, ty is the type of
+[*temp]. It is different from drop_glue_for_type because the expansion
+is in the caller side. We need to use the reference to build the call
+statement *)
+Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
+  match ty with
+  (* drop a box only drop the memory it points to, we do not care
+  about the point-to type *)
+  | Tbox ty' attr =>
+      (* free(cty (deref temp)), deref temp has type [cty] and [deref
+      temp] points to type [cty'] *)      
+      let cty := to_ctype ty in
+      let cty' := to_ctype ty' in
+      let deref_temp := Ederef (Clight.Etempvar temp (Tpointer cty noattr)) cty in
+      Some (call_free cty' deref_temp)
+  | Tstruct id attr
+  | Tvariant id attr =>
+      match dropm ! id with
+      | None => None
+      | Some id' =>
+          (* temp has type [ref_cty] *)
+          let ref_cty := Tpointer (to_ctype ty) noattr in
+          let glue_ty := Ctypes.Tfunction (Ctypes.Tcons ref_cty Ctypes.Tnil) Tvoid cc_default in
+          (* drop_in_place_xxx(temp) *)
+          let call_stmt := Clight.Scall None (Evar id' glue_ty) ((Clight.Etempvar temp ref_cty) :: nil) in
+          Some call_stmt
+      end
+  | _ => None
+  end.
+
 
 Definition encounter_extended_block (n: node) (stmt: Clight.statement) (f: node -> mon (option node * Clight.statement)) :=
   if extended!!n then
@@ -317,17 +358,26 @@ Fixpoint build_stmt_until_extended_block (fuel: nat) (code: PTree.t statement) (
       | Sstoragelive _ n
       | Sstoragedead _ n =>
           encounter_extended_block n Clight.Sskip build_rec
-      | Sdrop p n =>  error (msg "Unsupported")
+      | Sdrop p n =>
+          (* expand drop(&p), first introduce a temp var [temp] and than set it to [&p] *)
+          let ty := (typeof_place p) in
+          let cty := (to_ctype ty) in
+          let ref_cty := Tpointer cty noattr in
+          do temp <- gensym ref_cty;
+          (* [temp=&p] *)
+          let set_stmt := Clight.Sset temp (Eaddrof (place_to_cexpr p) ref_cty) in
+          match expand_drop temp ty with
+          | Some drop_stmt =>
+              let stmt' := Clight.Ssequence set_stmt drop_stmt in
+              encounter_extended_block n stmt' build_rec
+          | None =>
+              error (msg "Cannot find drop glue when expanding drop: build_stmt_until_extended_block")
+          end
       end
   end
-  end.
+  end.      
 
-
-(* Fixpoint expand_drop (temp: ident) (ty: type) := *)
-(*   match ty with *)
-(*   | Tbox ty' attr => *)
       
-
 Fixpoint transl_extened_block (fuel: nat) (code: PTree.t statement) (pc: node)  : mon Clight.statement :=
   match fuel with
   | O => error (msg "Running out of fuel in transl_extended_block")
@@ -362,7 +412,7 @@ Definition make_extened_basic_block (entry: node) (preds: PTree.t (list positive
 Local Open Scope error_monad_scope.
 
 (* top level translation *)
-Fixpoint transl_function (ce: Ctypes.composite_env) (f: function) : res Clight.function :=
+Fixpoint transl_function (ce: Ctypes.composite_env) (dropm: PTree.t ident) (f: function) : res Clight.function :=
   (** FIXME: we use first_unused_ident from CamlCoq.ml to get a fresh identifier  *)
   (* let vars := var_names (f.(fn_vars) ++ f.(fn_params) ++ f.(fn_temps)) in *)
   (* let next_temp := Pos.succ (fold_left Pos.max vars 1%positive) in *)
@@ -372,7 +422,7 @@ Fixpoint transl_function (ce: Ctypes.composite_env) (f: function) : res Clight.f
   let extended := make_extened_basic_block f.(fn_entryblock) preds in
   let unvisited := extended in
   (** FIXME: for now we just use identity function as the label_of_node *)
-  match transl_extened_block ce (false, extended) (false, unvisited) id (PTree_Properties.cardinal f.(fn_body)) f.(fn_body) f.(fn_entryblock) gen with
+  match transl_extened_block ce dropm (false, extended) (false, unvisited) id (PTree_Properties.cardinal f.(fn_body)) f.(fn_body) f.(fn_entryblock) gen with
   | Err msg => Error msg
   | Res tbody g _ =>
       let params := map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) in
@@ -387,10 +437,10 @@ Fixpoint transl_function (ce: Ctypes.composite_env) (f: function) : res Clight.f
   end.
 
 
-Definition transl_fundef (ce: Ctypes.composite_env) (id: ident) (fd: fundef) : res Clight.fundef :=
+Definition transl_fundef (ce: Ctypes.composite_env) (dropm: PTree.t ident) (id: ident) (fd: fundef) : res Clight.fundef :=
   match fd with
   | Internal f =>
-      do tf <- transl_function ce f;
+      do tf <- transl_function ce dropm f;
       OK (Ctypes.Internal tf)
   | External _ ef targs tres cconv =>
       OK (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv)
@@ -459,13 +509,6 @@ Section COMPOSITE_ENV.
 Variable ce: composite_env.
 Variable tce: Ctypes.composite_env.
 
-Definition free_fun_expr (ty: Ctypes.type) : Clight.expr :=
-  let argty := (Ctypes.Tpointer ty noattr) in
-  Evar free_id (Ctypes.Tfunction (Ctypes.Tcons argty Ctypes.Tnil) Ctypes.Tvoid cc_default).
-
-(* return [free(arg)], ty is the type arg points to, i.e. [arg: *ty] *)
-Definition call_free (ty: Ctypes.type) (arg: Clight.expr) : Clight.statement :=
-  Clight.Scall None (free_fun_expr ty) (arg :: nil).
 
 Fixpoint drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) : list Clight.statement :=
   match ty with
@@ -484,7 +527,7 @@ Fixpoint drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) : l
           let ref_arg_ty := (Ctypes.Tpointer (to_ctype ty) noattr ) in
           let glue_ty := Ctypes.Tfunction (Ctypes.Tcons ref_arg_ty Ctypes.Tnil) Tvoid cc_default in
           (* drop_in_place_xxx(&arg) *)
-          let call_stmt := Clight.Scall None (Evar free_id glue_ty) ((Eaddrof arg ref_arg_ty) :: nil) in
+          let call_stmt := Clight.Scall None (Evar id' glue_ty) ((Eaddrof arg ref_arg_ty) :: nil) in
           call_stmt :: nil
       end
   | _ => nil
@@ -580,27 +623,29 @@ Definition generate_drops (l: list composite_definition) : res ((list (ident * g
                                      end) (OK nil) l;
   OK ((combine (snd (split ids)) globs), m).
                           
+End COMPOSITE_ENV.
 
 (* Translation of a whole program *)
 
 Definition transl_globvar (id: ident) (ty: type) := OK (to_ctype ty).
 
- Definition transl_program (p: program) : res Clight.program :=
-  do co_defs <- transl_composites p.(prog_types);
-  (* generate drop glue for ownership type *)
-  do (drops, m) <- generate_drops p.(prog_types);
-  (** TODO: need a drop glue map in transl_fundef *)
-  let ce := Ctypes.build_composite_env co_defs in
-  (match ce as m return (ce = m) -> res Clight.program with
-   | OK ce =>            
+Definition transl_program (p: program) : res Clight.program :=
+  (* rust composite to c composite: generate union for each variant *)
+  do co_defs <- transl_composites p.(prog_types);  
+  let tce := Ctypes.build_composite_env co_defs in
+  (match tce as m return (tce = m) -> res Clight.program with
+   | OK tce =>            
        fun Hyp =>
-         do p1 <- transform_partial_program2 (transl_fundef ce) transl_globvar p;
+         let ce := p.(prog_comp_env) in
+         do (drops, dropm) <- generate_drops ce tce p.(prog_types);
+         do p1 <- transform_partial_program2 (transl_fundef tce dropm) transl_globvar p;
          OK {| Ctypes.prog_defs := AST.prog_defs p1 ++ drops;
               Ctypes.prog_public := AST.prog_public p1;
               Ctypes.prog_main := AST.prog_main p1;
               Ctypes.prog_types := co_defs;
-              Ctypes.prog_comp_env := ce;
+              Ctypes.prog_comp_env := tce;
               Ctypes.prog_comp_env_eq := Hyp |}
    | Error msg => fun _ => Error msg
-   end) (eq_refl ce).
+   end) (eq_refl tce).
  
+End MALLOC_FREE.
