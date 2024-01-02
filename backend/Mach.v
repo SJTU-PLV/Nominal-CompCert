@@ -517,10 +517,7 @@ Program Definition cc_mach R: callconv li_mach li_mach :=
     match_reply := (<> cc_mach_mr R)%klr;
   |}.
 Next Obligation.
-  eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
-Qed.
-Next Obligation.
-  eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  eapply match_stbls_proj in H. eauto.
 Qed.
 
 (** ** Calling convention from [li_locset] *)
@@ -681,9 +678,7 @@ Program Definition cc_stacking R: callconv li_locset li_mach :=
 Next Obligation.
   eapply (LanguageInterface.cc_c_obligation_1 R w se1 se2 H); eauto.
 Qed.
-Next Obligation.
-  eapply (LanguageInterface.cc_c_obligation_2 R w se1 se2 sk H); eauto.
-Qed.
+
 
 (** ** To relocate or remove *)
 

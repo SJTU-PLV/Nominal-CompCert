@@ -464,8 +464,10 @@ Program Definition cc_locset R :=
     match_reply '(sg, w) := (<> cc_locset_reply R sg)%klr w;
   |}.
 Next Obligation.
-  eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
+  eexists. eapply Genv.match_stbls_id; eauto.
 Qed.
 Next Obligation.
-  eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  eexists. eapply match_stbls_proj; eauto.
 Qed.
+
+       

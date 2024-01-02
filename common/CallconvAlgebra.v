@@ -268,10 +268,7 @@ Section JOIN.
       match_reply := copair (match_reply cc1) (match_reply cc2);
     |}.
   Next Obligation.
-    destruct w; cbn in *; eauto using match_senv_public_preserved.
-  Qed.
-  Next Obligation.
-    destruct w; cbn in *; eauto using match_senv_valid_for.
+    destruct w; cbn in *; eauto using match_senv_match_stbls.
   Qed.
 
   (** *** Properties *)
@@ -448,10 +445,7 @@ Program Definition cc_both {liA liB} (cc1 cc2: callconv liA liB): callconv liA l
     match_reply := fun '(w1, w2) => match_reply cc1 w1 /\ match_reply cc2 w2;
   |}%rel.
 Next Obligation.
-  destruct H. eapply match_senv_public_preserved; eauto.
-Qed.
-Next Obligation.
-  destruct H. eapply match_senv_valid_for; eauto.
+  destruct H. eapply match_senv_match_stbls; eauto.
 Qed.
 
 Global Instance cc_both_ref:
@@ -512,15 +506,11 @@ Section STAR.
     |}.
   Next Obligation.
     induction w.
-    - inv H; auto.
+    - inv H. eexists. eapply Genv.match_stbls_id.
     - destruct X as [[sei x1] x2], H as [? ?].
-      etransitivity; eauto using match_senv_public_preserved.
-  Qed.
-  Next Obligation.
-    induction w.
-    - inv H; auto.
-    - destruct X as [[sei x1] x2], H as [? ?].
-      eauto using match_senv_valid_for.
+      eapply match_senv_match_stbls in H. destruct H as [j1 H].
+      eapply match_senv_match_stbls in H0. destruct H0 as [j2 H0].
+      eexists. eapply Genv.match_stbls_compose; eauto.
   Qed.
 
   (** *** Properties *)

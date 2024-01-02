@@ -100,8 +100,9 @@ Program Coercion cc_inv {li} (I: invariant li): callconv li li :=
     match_query w := rel_inv (query_inv I w);
     match_reply w := rel_inv (reply_inv I w);
   |}.
-Solve All Obligations with
-  cbn; intros; destruct H; auto.
+Next Obligation.
+  destruct H. eexists. eapply Genv.match_stbls_id.
+Qed.
 
 (** With this, an invariant preservation proof can itself be lifted
   into a self-simulation by the invariant calling conventions. *)

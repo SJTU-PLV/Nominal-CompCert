@@ -52,15 +52,11 @@ Record callconv {li1 li2} :=
     match_query: ccworld -> query li1 -> query li2 -> Prop;
     match_reply: ccworld -> reply li1 -> reply li2 -> Prop;
 
-    match_senv_public_preserved:
+
+    match_senv_match_stbls:
       forall w se1 se2,
         match_senv w se1 se2 ->
-        forall id, Genv.public_symbol se2 id = Genv.public_symbol se1 id;
-    match_senv_valid_for:
-      forall w se1 se2 sk,
-        match_senv w se1 se2 ->
-        Genv.valid_for sk se1 ->
-        Genv.valid_for sk se2;
+        exists j, Genv.match_stbls j se1 se2
   }.
 
 Arguments callconv: clear implicits.
@@ -69,6 +65,32 @@ Delimit Scope cc_scope with cc.
 Bind Scope cc_scope with callconv.
 Local Obligation Tactic := cbn; eauto.
 
+Section MSENV.
+  Context {li1 li2} {cc: callconv li1 li2}.
+
+  
+Lemma match_senv_public_preserved :
+  forall (w: ccworld cc) se1 se2,
+    match_senv cc w se1 se2 ->
+    forall id, Genv.public_symbol se2 id = Genv.public_symbol se1 id.
+Proof.
+  intros. apply match_senv_match_stbls in H.
+  destruct H as [j H].
+  eapply Genv.mge_public; eauto.
+Qed.
+
+Lemma match_senv_valid_for:
+  forall w se1 se2 sk,
+    match_senv cc w se1 se2 ->
+    Genv.valid_for sk se1 ->
+    Genv.valid_for sk se2.
+Proof.
+  intros. apply match_senv_match_stbls in H.
+  destruct H as [j H].
+  erewrite <- Genv.valid_for_match; eauto.
+Qed.
+
+End MSENV.
 (** ** Identity *)
 
 Program Definition cc_id {li}: callconv li li :=
@@ -78,8 +100,9 @@ Program Definition cc_id {li}: callconv li li :=
     match_query w := eq;
     match_reply w := eq;
   |}.
-Solve All Obligations with
-  cbn; intros; subst; auto.
+Next Obligation.
+  intros. subst. eexists. apply Genv.match_stbls_id.
+Qed.
 
 Notation "1" := cc_id : cc_scope.
 
@@ -101,12 +124,10 @@ Program Definition cc_compose {li1 li2 li3} (cc12: callconv li1 li2) (cc23: call
         match_reply cc23 w23 r2 r3;
   |}.
 Next Obligation.
-  intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 (H12 & H23) id.
-  etransitivity; eauto using match_senv_public_preserved.
-Qed.
-Next Obligation.
-  intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 sk [Hse12 Hse23] H.
-  eauto using match_senv_valid_for.
+  intros li1 li2 li3 cc12 cc23 [[se2 w12] w23] se1 se3 (H12 & H23).
+  apply match_senv_match_stbls in H12. destruct H12 as [j12 H12].
+  apply match_senv_match_stbls in H23. destruct H23 as [j23 H23].
+  eexists. eapply Genv.match_stbls_compose; eauto.
 Qed.
 
 Infix "@" := cc_compose (at level 30, right associativity) : cc_scope.
@@ -167,8 +188,6 @@ Program Definition cc_c (R: cklr): callconv li_c li_c :=
     match_reply := (<> cc_c_reply R)%klr;
   |}.
 Next Obligation.
-  intros. eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
-Qed.
-Next Obligation.
-  intros. eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  intros. simpl in H.
+  eexists. eapply match_stbls_proj; eauto.
 Qed.

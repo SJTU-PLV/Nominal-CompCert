@@ -1352,10 +1352,7 @@ Program Definition cc_mach_asm : callconv li_mach li_asm :=
     match_reply '(gs, rs, nb) := cc_mach_asm_mr gs rs nb;
   |}.
 Next Obligation.
-  inv H. reflexivity.
-Qed.
-Next Obligation.
-  inv H. auto.
+  inv H. eexists. eapply Genv.match_stbls_id.
 Qed.
   
 (** ** CKLR simulation convention *)
@@ -1376,10 +1373,7 @@ Program Definition cc_asm R : callconv li_asm li_asm :=
     match_reply := (<> cc_asm_match R)%klr;
   |}.
 Next Obligation.
-  eapply match_stbls_proj in H. eapply Genv.mge_public; eauto.
-Qed.
-Next Obligation.
-  eapply match_stbls_proj in H. erewrite <- Genv.valid_for_match; eauto.
+  eapply match_stbls_proj in H. eauto. 
 Qed.
 
 Instance cc_asm_ref:

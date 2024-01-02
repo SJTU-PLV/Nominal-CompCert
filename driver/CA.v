@@ -80,10 +80,7 @@ Program Definition cc_c_asm : callconv li_c li_asm :=
     match_reply := cc_c_asm_mr
   |}.
 Next Obligation.
-  inv H. reflexivity.
-Qed.
-Next Obligation.
-  inv H. auto.
+  inv H. eexists. eapply Genv.match_stbls_id.
 Qed.
   
 Definition rs_to_mrs (rs : regset) :=
@@ -204,12 +201,7 @@ Program Definition cc_c_asm_injp : callconv li_c li_asm :=
     match_reply := cc_c_asm_injp_mr
   |}.
 Next Obligation.
-  inv H. inv H1. eauto.
-Qed.
-Next Obligation.
-  inv H.
-  eapply Genv.valid_for_match in H2.
-  apply H2. eauto.
+  inv H. eauto.
 Qed.
 
 

@@ -73,8 +73,12 @@ Proof.
     destruct COMPAT13.
     split. intros. rewrite <- Hsk in H1. eauto.
     intro. apply H0. red.
-    destruct H1 as [b1 [A B]].
-    admit. (*need more requirement about main of general match_senv*)
+    destruct H1 as [b2 [A B]]. rewrite Hsk.
+    apply match_senv_match_stbls in Hse12. destruct Hse12 as [j1 Hse12].
+    inversion Hse12.
+    exploit mge_img; eauto. eapply Genv.genv_symb_range. eauto.
+    intros [b1 INJ12].
+    setoid_rewrite <- Genv.mge_symb in A; eauto.
   }
   constructor.
 - (* valid query *)
@@ -114,8 +118,7 @@ Proof.
   exists (i2, i1'); exists s2; split.
   right; split. subst t; apply star_refl. red. right. auto.
   exists s3; auto.
-Admitted.
-
+Qed.
 
 Lemma compose_forward_simulations_1:
   forward_simulation ccA12 ccB12 L1 L2 ->
@@ -153,6 +156,23 @@ Qed.
 Infix "@2" := cc_compose_1 (at level 30, right associativity) : cc_scope.
 
 
+Lemma match_stbls_find_none:
+  forall j se1 se2 id,
+    Genv.match_stbls j se1 se2 ->
+    Genv.find_symbol se1 id = None <-> Genv.find_symbol se2 id = None.
+Proof.
+  intros. destruct (Genv.find_symbol se1 id) eqn: F1.
+  - inv H. exploit mge_dom; eauto. eapply Genv.genv_symb_range. eauto.
+    intros [b2 INJ]. setoid_rewrite mge_symb in F1; eauto.
+    setoid_rewrite F1. split; congruence.
+  - destruct (Genv.find_symbol se2 id) eqn: F2.
+    exfalso. inv H.
+    exploit mge_img; eauto. eapply Genv.genv_symb_range. eauto.
+    intros [b1 INJ]. setoid_rewrite <- mge_symb in F2; eauto.
+    unfold Genv.find_symbol in F1. congruence.
+    split; eauto.
+Qed.
+
 Section CC_COMPOSE2.
 
 Context {liA1 liA2 liA3} {ccA12: callconv' liA1 liA2} {ccA23: callconv liA2 liA3}.
@@ -179,35 +199,42 @@ Proof.
   1: { rewrite <- Hsk'. congruence. }
   intros se1 se3 [[se2 w] w'] (Hse12 & Hse23) Hse1. cbn in *.
   destruct Hse1 as [Hvalid1 [Hvalid3 COMPAT13]].
+  apply match_senv_match_stbls in Hse23 as Hse23'. destruct Hse23' as [j2 Hse23'].
   assert (Hvalid2: Genv.valid_for (skel L2) se2).
-  { rewrite <- Hsk. eapply match_senv_valid_for; eauto. }
-  assert (Hse2: Genv.skel_symtbl_compatible (skel L2) (skel L3) se2 se3).
+  { rewrite  Hsk'.
+    erewrite Genv.valid_for_match; eauto.
+  }
+  assert (Hse2: Genv.skel_symtbl_compatible (skel L1) (skel L2) se1 se2).
   {
     constructor; eauto. split. eauto.
     destruct COMPAT13.
-    split. intros. rewrite <- Hsk in H1. eauto.
-    intro. apply H0. red.
+    split. intros. rewrite Hsk'.
+    apply H. eauto.
+    rewrite <- match_stbls_find_none; eauto.
+    intro. apply H0.
+    red. red in H1.
     destruct H1 as [b1 [A B]].
-    admit. (*need more requirement about main of general match_senv*)
+    exists b1. split. eauto.
+    rewrite <- match_stbls_find_none; eauto.
   }
   constructor.
 - (* valid query *)
   intros q1 q3 (q2 & Hq12 & Hq23).
-  erewrite fsim_match_valid_query'. 2: eapply props'; eauto.
-  eapply fsim_match_valid_query; eauto. eauto.
+  erewrite fsim_match_valid_query. 2: eapply props'; eauto.
+  eapply fsim_match_valid_query'; eauto. eauto.
 - (* initial states *)
   intros q1 q3 s1 (q2 & Hq12 & Hq23) Hs1.
-  edestruct (@fsim_match_initial_states liA1) as (i & s2 & A & B); eauto.
-  edestruct (@fsim_match_initial_states' liA2) as (i' & s3 & C & D); eauto.
+  edestruct (@fsim_match_initial_states' liA1) as (i & s2 & A & B); eauto.
+  edestruct (@fsim_match_initial_states liA2) as (i' & s3 & C & D); eauto.
   exists (i', i); exists s3; split; auto. exists s2; auto.
 - (* final states *)
   intros. cbn. destruct H as (s3 & A & B).
-  edestruct (@fsim_match_final_states liA1) as (r2 & Hr2 & Hr12); eauto.
-  edestruct (@fsim_match_final_states' liA2) as (r3 & Hr3 & Hr23); eauto.
+  edestruct (@fsim_match_final_states' liA1) as (r2 & Hr2 & Hr12); eauto.
+  edestruct (@fsim_match_final_states liA2) as (r3 & Hr3 & Hr23); eauto.
 - (* external states *)
   intros. destruct H as [s3 [A B]].
-  edestruct (@fsim_match_external liA1) as (w12 & q2 & Hq2 & Hq12 & Hw12 & Hk12); eauto.
-  edestruct (@fsim_match_external' liA2) as (w23 & q3 & Hq3 & Hq23 & Hw23 & Hk23); eauto.
+  edestruct (@fsim_match_external' liA1) as (w12 & q2 & Hq2 & Hq12 & Hw12 & Hk12); eauto.
+  edestruct (@fsim_match_external liA2) as (w23 & q3 & Hq3 & Hq23 & Hw23 & Hk23); eauto.
   exists (se2, w12, w23), q3. cbn; repeat apply conj; eauto.
   intros r1 r3 s1' (r2 & Hr12 & Hr23) Hs1'.
   edestruct Hk12 as (i12' & s2' & Hs2' & Hs12'); eauto.
@@ -215,9 +242,9 @@ Proof.
   exists (i23', i12'), s3'. split; auto. exists s2'; auto.
 - (* simulation *)
   intros. destruct H0 as [s3 [A B]]. destruct i as [i2 i1]; simpl in *.
-  edestruct (@fsim_simulation' liA1) as [(i1' & s3' & C & D) | (i1' & C & D & E)]; eauto.
+  edestruct (@fsim_simulation'_1 liA1) as [(i1' & s3' & C & D) | (i1' & C & D & E)]; eauto.
 + (* L2 makes one or several steps. *)
-  edestruct (@simulation_plus' liA2) as [(i2' & s2' & P & Q) | (i2' & P & Q & R)]; eauto.
+  edestruct (@simulation_plus liA2) as [(i2' & s2' & P & Q) | (i2' & P & Q & R)]; eauto.
 * (* L3 makes one or several steps *)
   exists (i2', i1'); exists s2'; split. auto. exists s3'; auto.
 * (* L3 makes no step *)
@@ -228,19 +255,18 @@ Proof.
   exists (i2, i1'); exists s2; split.
   right; split. subst t; apply star_refl. red. right. auto.
   exists s3; auto.
-Admitted.
-
-
-Lemma compose_forward_simulations_1:
-  forward_simulation ccA12 ccB12 L1 L2 ->
-  forward_simulation' ccA23 ccB23 L2 L3 ->
-  forward_simulation' (cc_compose_1 ccA12 ccA23) (cc_compose_1 ccB12 ccB23) L1 L3.
-Proof.
-  intros [X] [Y]. constructor.
-  apply compose_fsim_components_1; auto.
 Qed.
 
-End CC_COMPOSE1.
+Lemma compose_forward_simulations_2:
+  forward_simulation' ccA12 ccB12 L1 L2 ->
+  forward_simulation ccA23 ccB23 L2 L3 ->
+  forward_simulation' (cc_compose_2 ccA12 ccA23) (cc_compose_2 ccB12 ccB23) L1 L3.
+Proof.
+  intros [X] [Y]. constructor.
+  apply compose_fsim_components_2; auto.
+Qed.
+
+End CC_COMPOSE2.
 
 
 
