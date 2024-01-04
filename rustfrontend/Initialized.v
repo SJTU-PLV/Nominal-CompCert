@@ -8,7 +8,6 @@ Require Import Rusttypes RustlightBase RustIR.
 
 Local Open Scope list_scope.
 
-
 Lemma is_prefix_refl: forall p, is_prefix p p = true.
 Admitted.
 
@@ -30,6 +29,7 @@ Module Paths := FSetWeakList.Make(Place).
 
 Module LPaths := LFSet(Paths).
 
+(* why we need this PathsMap, instead of just a set? *)
 Module PathsMap := LPMap1(LPaths).
 
 (** Collect places : if [p] is in the collection, do nothing; if [p]'s
@@ -184,28 +184,34 @@ Fixpoint collect_boxexpr (be: boxexpr) : option place :=
   end.
 
 
-Definition collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
+Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
   match s with
-  | Sassign p e _ =>
+  | Sassign p e  =>
       collect_place p (collect_option_place (collect_boxexpr e) m)
-  | Scall op _ al _ =>
+  | Scall op _ al =>
       let pl := collect_exprlist al in
       let m' := fold_right collect_place m pl in
       collect_option_place op m'
   | Sreturn (Some e) =>
       collect_option_place (collect_expr e) m
+  | Ssequence s1 s2 =>
+      collect_stmt s1 (collect_stmt s2 m)
+  | Sifthenelse e s1 s2 =>
+      collect_option_place (collect_expr e) (collect_stmt s1 (collect_stmt s2 m))
+  | Sloop s =>
+      collect_stmt s m
   | _ => m
   end.
 
-Definition collect_func (f: function) : res PathsMap.t :=
+Definition collect_func (f: function) : Errors.res PathsMap.t :=
   let vars := f.(fn_params) ++ f.(fn_vars) in  
   if list_norepet_dec ident_eq (map fst vars) then
     let l := map (fun elt => (Plocal (fst elt) (snd elt))) vars in
+    (** TODO: add all the parameters and variables to l (may be useless?) *)
     let init_map := fold_right collect_place (PTree.empty LPaths.t) l in
-    let (_ ,stmts) := split (PTree.elements f.(fn_body)) in
-    OK (fold_right collect_stmt init_map stmts)
+    Errors.OK (collect_stmt f.(fn_body) init_map)
   else
-    Error (MSG "Repeated identifiers in variables and parameters: collect_func" :: nil).
+    Errors.Error (MSG "Repeated identifiers in variables and parameters: collect_func" :: nil).
         
 End COMP_ENV.
 
@@ -239,20 +245,26 @@ Definition add_option (S: PathsMap.t) (p: option place) (m: PathsMap.t) : PathsM
 
     
 (* S is the whole set, flag = true indicates that it computes the MaybeInit set *)
-Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (pc: node) (before: PathsMap.t) : PathsMap.t :=
+Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (pc: node) (before: PathsMap.t) : PathsMap.t :=
   if PathsMap.beq before PathsMap.bot then PathsMap.bot
   else
-    match f.(fn_body)!pc with
+    match cfg ! pc with
     | None => PathsMap.bot
-    | Some s =>
+    | Some (Inop _) => before
+    | Some (Icond _ _ _) => before
+    | Some Iend => before
+    | Some (Isel sel _) =>
+        match select_stmt f.(fn_body) sel with
+        | None => PathsMap.bot
+        | Some s =>
         match s with
-        | Sassign p e _ =>
+        | Sassign p e =>
             let p' := collect_boxexpr e in
             if flag then
               add_place S p (remove_option p' before)
             else
               remove_place p (add_option S p' before)
-        | Scall op _ al _ =>
+        | Scall op _ al =>
             let pl := collect_exprlist al in
             if flag then
               add_option S op (fold_right remove_place before pl)
@@ -266,26 +278,29 @@ Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (pc: node) (befor
               add_option S p' before
         | _ => before
         end
+        end
     end.
                                       
 Module DS := Dataflow_Solver(PathsMap)(NodeSetForward).
 
+Local Open Scope error_monad_scope.
 
 (* The analyze returns the MaybeInit and MaybeUninit sets *)
-Definition analyze (ce: composite_env) (f: function) : option (PMap.t PathsMap.t * PMap.t PathsMap.t) :=
+Definition analyze (ce: composite_env) (f: function) : Errors.res (PMap.t PathsMap.t * PMap.t PathsMap.t) :=
   (* collect the whole set in order to simplify the gen and kill operation *)
-  let (_, stmts) := split (PTree.elements f.(fn_body)) in (* there may be some unreachable nodes, does it matter? *)
-  let whole := fold_right (collect_stmt ce) (PTree.empty LPaths.t) stmts in
+  do whole <- collect_func ce f;
   (* initialize maybeInit set with parameters *)
   let pl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_params) in
   let maybeInit := fold_right (add_place whole) (PTree.empty LPaths.t) pl in
   (* initialize maybeUninit with the variables *)
   let vl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_vars) in
   let maybeUninit := fold_right (add_place whole) (PTree.empty LPaths.t) vl in
-  let initMap := DS.fixpoint f.(fn_body) successors (transfer whole true f) f.(fn_entryblock) maybeInit in
-  let uninitMap := DS.fixpoint f.(fn_body) successors (transfer whole false f) f.(fn_entryblock) maybeUninit in
+  (* generate selector-based CFG for analysis *)
+  do (entry, cfg) <- generate_cfg f.(fn_body);
+  let initMap := DS.fixpoint cfg successors_instr (transfer whole true f cfg) entry maybeInit in
+  let uninitMap := DS.fixpoint cfg successors_instr (transfer whole false f cfg) entry maybeUninit in
   match initMap, uninitMap with
-  | Some initMap, Some uninitMap => Some (initMap, uninitMap)
-  | _, _ => None
+  | Some initMap, Some uninitMap => Errors.OK (initMap, uninitMap)
+  | _, _ => Errors.Error (msg "Error in initialize analysis")
   end.
   

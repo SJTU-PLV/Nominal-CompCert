@@ -60,6 +60,18 @@ Definition fundef := Rusttypes.fundef function.
 Definition program := Rusttypes.program function.
 
 
+(* some helper function *)
+
+Fixpoint makeseq_rec (s: statement) (l: list statement) : statement :=
+  match l with
+  | nil => s
+  | s' :: l' => makeseq_rec (Ssequence s s') l'
+  end.
+
+Definition makeseq (l: list statement) : statement :=
+  makeseq_rec Sskip l.
+
+
 (** ** Definition of selector. It is the program pointer in AST-like program.  *)
 
 Inductive selector : Type :=
@@ -94,6 +106,14 @@ Inductive instruction : Type :=
 
 Definition rustcfg := PTree.t instruction.
 
+Definition successors_instr (i: instruction) : list node :=
+  match i with
+  | Inop n => n :: nil
+  | Isel _ n => n :: nil
+  | Icond _ n1 n2 => n1 :: n2 :: nil
+  | Iend => nil
+  end.
+
 Definition get_stmt (stmt: statement) (cfg: rustcfg) (pc: node) : option statement :=
   match cfg!pc with
   | Some instr =>
@@ -103,6 +123,26 @@ Definition get_stmt (stmt: statement) (cfg: rustcfg) (pc: node) : option stateme
       | _ => None
       end
   | None => None
+  end.
+
+(* Change in place the statement resided in this selector to an another
+statement. And return the modified statement *)
+Fixpoint update_stmt (root: statement) (sel: selector) (stmt: statement): statement :=
+  match root, sel with
+  | Ssequence s1 s2, Selseqleft sel' =>
+      Ssequence (update_stmt s1 sel' stmt) s2
+  | Ssequence s1 s2, Selseqright sel' =>
+      Ssequence s1 (update_stmt s2 sel' stmt)
+  | Sifthenelse e s1 s2, Selifthen sel' =>
+      Sifthenelse e (update_stmt s1 sel' stmt) s2
+  | Sifthenelse e s1 s2, Selifelse sel' =>
+      Sifthenelse e s1 (update_stmt s2 sel' stmt)
+  | Sloop s, Selloop sel' =>
+      Sloop (update_stmt s sel' stmt)
+  | _, Selbase =>
+      stmt
+  | _, _ =>                      (* e.g., Ssequence, Selifthen *)
+      root
   end.
 
 (** ** Genenrate CFG from a statement *)

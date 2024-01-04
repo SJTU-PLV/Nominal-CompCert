@@ -7,7 +7,7 @@ Require Import Values.
 Require Import AST.
 Require Import Ctypes Rusttypes.
 Require Import Cop.
-Require Import RustlightBase Selector.
+Require Import RustlightBase RustIR.
 
 
 (** Translation from Rustlight to RustIR. The main step is to generate
@@ -21,15 +21,6 @@ Definition list_list_cons {A: Type} (e: A) (l: list (list A)) :=
   | nil => (e::nil)::nil
   | l' :: l => (e::l') :: l
   end.
-
-Fixpoint makeseq_rec (s: statement) (l: list statement) : statement :=
-  match l with
-  | nil => s
-  | s' :: l' => makeseq_rec (Ssequence s s') l'
-  end.
-
-Definition makeseq (l: list statement) : statement :=
-  makeseq_rec Sskip l.
 
 Definition gen_drops (l: list (ident * type)) : statement :=
   let drops := map (fun elt => (Sdrop (Plocal (fst elt) (snd elt)))) l in
