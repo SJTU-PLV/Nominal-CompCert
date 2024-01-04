@@ -17,105 +17,363 @@ Require Import Clight RustlightBase.
 (** * Rust Intermediate Rrepresentation  *)
 
 (** To compile Rustlight to RustIR, we replace the scopes (let stmt)
-with StorageLive (StorageDead) statements, use CFG to represent the
-program (better for analysis) and insert explicit drop operations (so
-that the RustIR has no ownership semantics) *)
-
-(** The definitions of place and expression are almost the same as Rustlight *)
-
-Inductive expr : Type :=
-| Econst_int: int -> type -> expr       (**r integer literal *)
-| Econst_float: float -> type -> expr   (**r double float literal *)
-| Econst_single: float32 -> type -> expr (**r single float literal *)
-| Econst_long: int64 -> type -> expr    (**r long integer literal *)
-| Eplace: usekind -> place -> type -> expr (**r use of a variable, the only lvalue expression *)
-| Eget: usekind -> place -> ident -> type -> expr (**r get<fid>(a), variant get operation *)
-| Ecktag: place -> ident -> type -> expr           (**r check the tag of variant, e.g. [Ecktag p.(fid)] *)
-| Etempvar: ident -> type -> expr                  (**r value of the temporary variable *)
-| Eunop: unary_operation -> expr -> type -> expr  (**r unary operation *)
-| Ebinop: binary_operation -> expr -> expr -> type -> expr. (**r binary operation *)
+with StorageLive (StorageDead) statements, use AST to represent the
+program, analyze the AST by first transforming it to CFG (using
+selector technique) and insert explicit drop operations (so that the
+RustIR has no ownership semantics) *)
 
 
+(* The definitions of expression and place are the same as Rustlight *)
 
-Inductive boxexpr : Type :=
-| Bexpr: expr -> boxexpr
-| Box: boxexpr -> boxexpr.
+(** Statement: we add [Storagelive] and [Storagedead] to indicate the
+lifetime of a local variable, because all the variables are declared
+in the entry of function which is different from Rustlight. For now,
+this two statements have no semantics. They are used for borrow
+checking. We use [drop(p)] statement to indicate that we may need to
+drop the content of [p] depending on the ownership environment. *)
 
-Definition typeof (e: expr) : type :=
-  match e with
-  | Econst_int _ ty
-  | Econst_float _ ty
-  | Econst_single _ ty
-  | Econst_long _ ty                
-  | Eplace _ _ ty
-  | Ecktag _ _ ty
-  | Etempvar _ ty
-  | Eget _ _ _ ty
-  | Eunop _ _ ty
-  | Ebinop _ _ _ ty => ty
-  end.
-
-Fixpoint typeof_boxexpr (r: boxexpr) : type :=
-  match r with
-  | Bexpr e => typeof e
-  | Box r' => Tbox (typeof_boxexpr r') noattr
-  end.
+Inductive statement : Type :=
+| Sskip : statement                   (**r do nothing *)
+| Sassign : place -> boxexpr -> statement (**r assignment [place = rvalue] *)
+| Sstoragelive: ident -> statement       (**r id becomes avalible *)
+| Sstoragedead: ident -> statement       (**r id becomes un-avalible *)
+| Sdrop : place -> statement             (**r conditionally drop the place [p] *)
+| Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
+| Ssequence : statement -> statement -> statement  (**r sequence *)
+| Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
+| Sloop: statement -> statement (**r infinite loop *)
+| Sbreak : statement                      (**r [break] statement *)
+| Scontinue : statement                   (**r [continue] statement *)
+| Sreturn : option expr -> statement.      (**r [return] statement *)
 
 
-Definition node := positive.
-
-Inductive statement :=
-| Sskip : node -> statement
-| Sassign : place -> boxexpr -> node -> statement
-| Sset : ident -> expr -> node -> statement (* stuck if there is move in expr. TODO: change expr to pure expression in set statement *)
-| Sstoragelive: ident -> node -> statement
-| Sstoragedead: ident -> node -> statement
-| Sdrop: place -> node -> statement
-| Scall: option place -> expr -> list expr -> node -> statement
-| Sifthenelse: expr -> node -> node -> statement
-| Sreturn: option expr -> statement.
-
-Definition code: Type := PTree.t statement.
-
-Record function :=
-  { fn_return : type;
-    fn_callconv: calling_convention;
-    fn_params: list (ident * type);
-    fn_vars: list (ident * type);
-    fn_temps: list (ident * type); (* for drop flag *)
-    fn_body: code;
-    fn_entryblock : node }.
+Record function : Type := mkfunction {
+  fn_return: type;
+  fn_callconv: calling_convention;
+  fn_vars: list (ident * type);
+  fn_params: list (ident * type);
+  fn_body: statement
+}.
 
 Definition fundef := Rusttypes.fundef function.
 
 Definition program := Rusttypes.program function.
 
 
-Definition type_of_function (f: function) : type :=
-  Tfunction (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
+(** ** Definition of selector. It is the program pointer in AST-like program.  *)
 
-Definition type_of_fundef (f: fundef) : type :=
-  match f with
-  | Internal fd => type_of_function fd
-  | External _ ef typs typ cc =>     
-      Tfunction typs typ cc                
+Inductive selector : Type :=
+| Selbase: selector
+| Selseqleft: selector -> selector
+| Selseqright: selector -> selector
+| Selifthen: selector -> selector
+| Selifelse: selector -> selector
+| Selloop: selector -> selector.
+
+Fixpoint select_stmt (stmt: statement) (sel: selector) : option statement :=
+  match stmt, sel with
+  | Ssequence s1 s2, Selseqleft sel' => select_stmt s1 sel'
+  | Ssequence s1 s2, Selseqright sel' => select_stmt s2 sel'
+  | Sifthenelse _ s1 s2, Selifthen sel' => select_stmt s1 sel'
+  | Sifthenelse _ s1 s2, Selifelse sel' => select_stmt s2 sel'
+  | Sloop s, Selloop sel' => select_stmt s sel'
+  | _, Selbase => Some stmt
+  | _, _ => None
   end.
 
-Definition successors (stmt: statement) : list node :=
+(** ** Control flow graph based on selector *)
+
+Definition node := positive.
+
+(* An instruction is either a selector or a control command (e.g., if-then-else *)
+Inductive instruction : Type :=
+  | Inop: node -> instruction
+  | Isel: selector -> node -> instruction
+  | Icond: expr -> node -> node -> instruction
+  | Iend: instruction.
+
+Definition rustcfg := PTree.t instruction.
+
+Definition get_stmt (stmt: statement) (cfg: rustcfg) (pc: node) : option statement :=
+  match cfg!pc with
+  | Some instr =>
+      match instr with
+      | Isel sel _ =>
+          select_stmt stmt sel
+      | _ => None
+      end
+  | None => None
+  end.
+
+(** ** Genenrate CFG from a statement *)
+
+(** * Translation state *)
+
+Record state: Type := mkstate {
+  st_nextnode: node;
+  st_code: rustcfg;
+  st_wf: forall (pc: node), Plt pc st_nextnode \/ st_code!pc = None
+}.
+
+
+Inductive state_incr: state -> state -> Prop :=
+  state_incr_intro:
+    forall (s1 s2: state),
+    Ple s1.(st_nextnode) s2.(st_nextnode) ->
+    (forall pc,
+        s1.(st_code)!pc = None \/ s2.(st_code)!pc = s1.(st_code)!pc) ->
+    state_incr s1 s2.
+
+Lemma state_incr_refl:
+  forall s, state_incr s s.
+Proof.
+  intros. apply state_incr_intro.
+  apply Ple_refl.
+  intros. auto.
+Qed.
+
+Lemma state_incr_trans:
+  forall s1 s2 s3, state_incr s1 s2 -> state_incr s2 s3 -> state_incr s1 s3.
+Proof.
+  intros. inv H; inv H0. apply state_incr_intro.
+  apply Ple_trans with (st_nextnode s2); assumption.
+  intros. generalize (H2 pc) (H3 pc). intuition congruence.
+Qed.
+
+(** ** The state and error monad *)
+
+(* just copy from RTLgen *)
+
+Inductive res (A: Type) (s: state): Type :=
+  | Error: Errors.errmsg -> res A s
+  | OK: A -> forall (s': state), state_incr s s' -> res A s.
+
+Arguments OK [A s].
+Arguments Error [A s].
+
+Definition mon (A: Type) : Type := forall (s: state), res A s.
+
+Definition ret {A: Type} (x: A) : mon A :=
+  fun (s: state) => OK x s (state_incr_refl s).
+
+
+Definition error {A: Type} (msg: Errors.errmsg) : mon A := fun (s: state) => Error msg.
+
+Definition bind {A B: Type} (f: mon A) (g: A -> mon B) : mon B :=
+  fun (s: state) =>
+    match f s with
+    | Error msg => Error msg
+    | OK a s' i =>
+        match g a s' with
+        | Error msg => Error msg
+        | OK b s'' i' => OK b s'' (state_incr_trans s s' s'' i i')
+        end
+    end.
+
+Definition bind2 {A B C: Type} (f: mon (A * B)) (g: A -> B -> mon C) : mon C :=
+  bind f (fun xy => g (fst xy) (snd xy)).
+
+Notation "'do' X <- A ; B" := (bind A (fun X => B))
+   (at level 200, X ident, A at level 100, B at level 200).
+Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
+   (at level 200, X ident, Y ident, A at level 100, B at level 200).
+
+Definition handle_error {A: Type} (f g: mon A) : mon A :=
+  fun (s: state) =>
+    match f s with
+    | OK a s' i => OK a s' i
+    | Error _ => g s
+    end.
+
+
+
+(** ** Operations on state *)
+
+(** The initial state (empty CFG). *)
+
+Remark init_state_wf:
+  forall pc, Plt pc 1%positive \/ (PTree.empty instruction)!pc = None.
+Proof. intros; right; apply PTree.gempty. Qed.
+
+Definition init_state : state :=
+  mkstate 1%positive (PTree.empty instruction) init_state_wf.
+
+
+Remark add_instr_wf:
+  forall s i pc,
+  let n := s.(st_nextnode) in
+  Plt pc (Pos.succ n) \/ (PTree.set n i s.(st_code))!pc = None.
+Proof.
+  intros. case (peq pc n); intro.
+  subst pc; left; apply Plt_succ.
+  rewrite PTree.gso; auto.
+  elim (st_wf s pc); intro.
+  left. apply Plt_trans_succ. exact H.
+  right; assumption.
+Qed.
+
+Remark add_instr_incr:
+  forall s i,
+  let n := s.(st_nextnode) in
+  state_incr s (mkstate (Pos.succ n)
+                  (PTree.set n i s.(st_code))
+                  (add_instr_wf s i)).
+Proof.
+  constructor; simpl.
+  apply Ple_succ.
+  intros. destruct (st_wf s pc). right. apply PTree.gso. apply Plt_ne; auto. auto.
+Qed.
+
+Definition add_instr (i: instruction) : mon node :=
+  fun s =>
+    let n := s.(st_nextnode) in
+    OK n
+       (mkstate (Pos.succ n) (PTree.set n i s.(st_code))
+                (add_instr_wf s i))
+       (add_instr_incr s i).
+
+(** [add_instr] can be decomposed in two steps: reserving a fresh
+  CFG node, and filling it later with an instruction.  This is needed
+  to compile loops. *)
+
+Remark reserve_instr_wf:
+  forall s pc,
+  Plt pc (Pos.succ s.(st_nextnode)) \/ s.(st_code)!pc = None.
+Proof.
+  intros. elim (st_wf s pc); intro.
+  left; apply Plt_trans_succ; auto.
+  right; auto.
+Qed.
+
+Remark reserve_instr_incr:
+  forall s,
+  let n := s.(st_nextnode) in
+  state_incr s (mkstate (Pos.succ n)
+                  s.(st_code)
+                      (reserve_instr_wf s)).
+Proof.
+  intros; constructor; simpl.
+  apply Ple_succ.
+  auto.
+Qed.
+
+Definition reserve_instr: mon node :=
+  fun (s: state) =>
+  let n := s.(st_nextnode) in
+  OK n
+     (mkstate (Pos.succ n) s.(st_code) (reserve_instr_wf s))
+     (reserve_instr_incr s).
+
+Remark update_instr_wf:
+  forall s n i,
+  Plt n s.(st_nextnode) ->
+  forall pc,
+  Plt pc s.(st_nextnode) \/ (PTree.set n i s.(st_code))!pc = None.
+Proof.
+  intros.
+  case (peq pc n); intro.
+  subst pc; left; assumption.
+  rewrite PTree.gso; auto. exact (st_wf s pc).
+Qed.
+
+Remark update_instr_incr:
+  forall s n i (LT: Plt n s.(st_nextnode)),
+  s.(st_code)!n = None ->
+  state_incr s
+             (mkstate s.(st_nextnode) (PTree.set n i s.(st_code))
+                     (update_instr_wf s n i LT)).
+Proof.
+  intros.
+  constructor; simpl; intros.
+  apply Ple_refl.
+  rewrite PTree.gsspec. destruct (peq pc n). left; congruence. right; auto.
+Qed.
+
+Definition check_empty_node:
+  forall (s: state) (n: node), { s.(st_code)!n = None } + { True }.
+Proof.
+  intros. case (s.(st_code)!n); intros. right; auto. left; auto.
+Defined.
+
+Definition update_instr (n: node) (i: instruction) : mon unit :=
+  fun s =>
+    match plt n s.(st_nextnode), check_empty_node s n with
+    | left LT, left EMPTY =>
+        OK tt
+           (mkstate s.(st_nextnode) (PTree.set n i s.(st_code))
+                    (update_instr_wf s n i LT))
+           (update_instr_incr s n i LT EMPTY)
+    | _, _ =>
+        Error (Errors.msg "RTLgen.update_instr")
+    end. 
+
+
+
+(** Translation of statement *)
+
+Section COMPOSITE_ENV.
+
+Variable (ce: composite_env).
+
+Fixpoint transl_stmt (stmt: statement) (sel: selector) (succ: node) (cont: option node) (break: option node) {struct stmt} : mon node :=
   match stmt with
-  | Sskip n => n :: nil
-  | Sassign _ _ n => n :: nil
-  | Sset _ _ n => n :: nil
-  | Sstoragelive _ n => n :: nil
-  | Sstoragedead _ n => n :: nil
-  | Sdrop _ n => n :: nil
-  | Scall _ _ _ n => n :: nil
-  | Sifthenelse _ n1 n2 => n1 :: n2 :: nil
-  | Sreturn _ => nil
+  | Sskip =>
+      add_instr (Isel sel succ)
+  | Sassign p e =>
+      add_instr (Isel sel succ)
+  | Ssequence stmt1 stmt2 =>
+      do succ2 <- transl_stmt stmt2 (Selseqright sel) succ cont break;
+      do succ1 <- transl_stmt stmt1 (Selseqleft sel) succ2 cont break;
+      ret succ1
+  | Sifthenelse e stmt1 stmt2 =>
+      do n1 <- transl_stmt stmt1 (Selifthen sel) succ cont break;
+      do n2 <- transl_stmt stmt2 (Selifelse sel) succ cont break;
+      do n3 <- add_instr (Icond e n1 n2);
+      ret n3
+  | Sloop stmt =>
+        do loop_start <- reserve_instr;
+        do body_start <- transl_stmt stmt (Selloop sel) succ (Some loop_start) (Some succ);
+        do _ <- update_instr loop_start (Inop body_start);
+        ret loop_start
+    | Sbreak =>
+        match break with
+        | None =>
+            error (Errors.msg "No loop outside the break: transl_stmt")
+        | Some brk =>
+            add_instr (Inop brk)
+        end
+    | Scontinue =>
+        match cont with
+        | None =>
+            error (Errors.msg "No loop outside the continue")
+        | Some cont =>
+            add_instr (Inop cont)
+        end
+  | Sstoragelive id =>
+      add_instr (Isel sel succ)
+  | Sstoragedead id =>
+      add_instr (Isel sel succ)
+  | Sdrop p =>
+      add_instr (Isel sel succ)
+  | Scall p a al =>
+      add_instr (Isel sel succ)
+  | Sreturn e =>
+      do n <- add_instr Iend;
+      add_instr (Isel sel n)      
+    end.
+
+Definition generate_cfg' (stmt: statement): mon node :=
+  (* return node *)
+  do return_node <- add_instr Iend;
+  transl_stmt stmt Selbase return_node None None.
+
+Definition generate_cfg (stmt: statement): Errors.res (node * rustcfg) :=  
+  match generate_cfg' stmt init_state with
+  | OK start st _ =>
+      Errors.OK (start, st.(st_code))
+  | Error msg =>
+      Errors.Error msg
   end.
+  
 
-(** Maximum PC (node number) in the CFG of a function.  All nodes of
-  the CFG of [f] are between 1 and [max_pc_function f] (inclusive). *)
-
-Definition max_pc_function (f: function) :=
-  PTree.fold (fun m pc i => Pos.max m pc) f.(fn_body) 1%positive.
+End COMPOSITE_ENV.
