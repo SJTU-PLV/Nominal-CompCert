@@ -6185,14 +6185,13 @@ Qed.
  *)
 
 
-Section STEP23.
+Section STEP234.
   
-Variable m1 m2 m3 m1' : mem.
+Variable m1 m2 m1' : mem.
 Variable s2' : sup.  
 Variable j12 j23 j12' j23': meminj.
 
 Hypothesis INJ1: inject j12 m1 m2.
-Hypothesis INJ2: inject j23 m2 m3.
 Hypothesis SUPINCR2 : sup_include (support m2) s2'.
 
 (** The construction step (2) in appendix *)
@@ -6747,6 +6746,7 @@ Proof.
   intro. unfold perm in H0. rewrite H1 in H0. inv H0.
 Qed.
 
+(* copy the permissions and value from m1' *)
  Program Definition copy_block b2 m : mem :=
    if j23 b2 then
       if (sup_dec b2 (Mem.support m)) then
@@ -6816,7 +6816,137 @@ Qed.
    eauto.
  Qed.
 
-End STEP23.
+ (** step4: remove the permission of global blocks in m2, where the corresponding blocks in
+     m1 have no permission *)
+
+ (** another find function : determine whether (b2,o2) in m2 have a preimage (b1,o1) in m1 s.t. 
+     j1 b1 = Some (b2, o2-o1).
+     The difference with loc_in_reach_find is that we do not require (b1,o1) have 
+     nonempty permission in m1, instead of it we require it have EMPTY permission.
+     In such case the permission of (b2,o2) in m2' should also be set to EMPTY *)
+
+ Definition block_find_global b1 b2 o2 : option (block * Z) :=
+    match j12 b1 with
+    |Some (b2',delta) =>
+       if eq_block b2 b2' then
+         let pmap1 := (mem_access m1 b1) in
+         let elements := perm_elements_any (ZMap.elements pmap1) in
+         match find (check_position (o2 - delta)) elements with
+         |Some (o1,_) => None
+         |None => Some (b1, o2 - delta)
+         end
+       else None
+    |_ => None
+    end.
+
+  (* find (b_1,o_1) in all blocks in s *)
+  Fixpoint empty_global_find' (b2: block) (o2: Z) (s : sup): option (block * Z) :=
+    match s with
+    | nil => None
+    | hd :: tl =>
+        match block_find_global hd b2 o2 with
+        | Some a => Some a
+        | None => empty_global_find' b2 o2 tl
+        end
+    end.
+
+  (*specific find function, find (b_1,o_1) in sup(ge1)*)
+  (* Use Mem.support m1 here is also OK *)
+  Definition empty_global_find (b2: block) (o2: Z) :=
+    empty_global_find' b2 o2 (Mem.support m1).
+
+  Fixpoint empty_global_filter' (vl2 : list (Z * memperm)) (b2: block): list (Z * memperm) :=
+  match vl2 with
+  | nil => nil
+  | (o2,_) :: tl =>
+      match (empty_global_find b2 o2) with
+      |Some (b1,o1) => (o2,(fun k => None)) :: (empty_global_filter' tl b2)
+      |None => (empty_global_filter' tl b2)
+      end
+  end.
+
+  Definition empty_global_filter (b2 : block) :=
+  let elements := ZMap.elements ((mem_access m2) # b2) in
+  empty_global_filter' elements b2.
+
+  Definition empty_global_access (b2: block) (map2: perm_map) :=
+  let elements2 := empty_global_filter b2 in
+  setN' elements2 map2.
+
+  (** peoperties *)
+
+  Lemma global_access_result:
+  forall b2 map2 o2 p,
+    ((empty_global_access b2 map2)##o2) p =
+      match (empty_global_find b2 o2) with
+      | Some (b1,o1) => None
+      | None =>  map2##o2 p
+   end.
+  Proof.
+    Admitted.
+  
+   Program Definition set_empty_global b2 m : mem :=
+   if j23 b2 then
+      if (sup_dec b2 (Mem.support m)) then
+      {|
+        mem_contents := (mem_contents m);
+        mem_access := pmap_update b2
+                        (empty_global_access b2)
+                        (mem_access m);
+        support := (Mem.support m);
+      |}
+        else m
+   else m.
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct NMap.elt_eq.
+   - repeat rewrite global_access_result.
+     destruct empty_global_find.
+     + destruct p. constructor.
+     + apply access_max.
+   - apply access_max.
+ Qed.
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct NMap.elt_eq.
+   - subst. congruence.
+   - apply nextblock_noaccess; eauto.
+ Qed.
+ Next Obligation.
+   apply contents_default.
+ Qed.
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct eq_block; try apply access_default.
+   unfold empty_global_access. rewrite setN'_default.
+   apply access_default.
+ Qed.
+
+ Fixpoint set_empty_sup (s:sup) m : mem :=
+   match s with
+   | nil => m
+   | hd :: tl => set_empty_global hd (set_empty_sup tl m)
+   end.
+
+ (* Definition step4 m := set_empty_sup gsup2 m. *)
+ 
+  Lemma set_empty_global_support : forall b m,
+      support (set_empty_global b m) = support m.
+  Proof.
+    intros. subst. unfold set_empty_global.
+    destruct (j23 b); auto.
+    destruct (sup_dec); auto.
+  Qed.
+  
+  Lemma set_empty_sup_support : forall s m,
+      support (set_empty_sup s m) = support m.
+  Proof.
+    induction s; intros; subst; simpl; eauto.
+    erewrite set_empty_global_support.
+    eauto.
+  Qed.
+  
+End STEP234.
 
 End Mem.
 

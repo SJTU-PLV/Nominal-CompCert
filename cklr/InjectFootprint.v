@@ -1193,7 +1193,9 @@ Section CONSTR_PROOF.
   (** step2 of Definition C.7, defined in common/Memory.v as memory operation *)
   Definition m2'1 := Mem.step2 m1 m2 m1' s2' j1'.
   (** step3 of Definition C.7, in common/Memory.v *)
-  Definition m2' := Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 (Mem.support m2) m2'1.
+  Definition m2'2 := Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 (Mem.support m2) m2'1.
+  (** step4 *)
+  Definition m2' := Mem.set_empty_sup m1 m2 m1' s2' j1 j2 j1' j2' INJ12 SUPINCL2 gs2 m2'2.
   
   Lemma INJNOLAP1' : Mem.meminj_no_overlap j1' m1'.
   Proof. eapply update_meminj_no_overlap1; eauto. Qed.
@@ -1341,46 +1343,97 @@ Qed.
       eauto.
   Qed.
   
-  Lemma unchanged1_step3: Mem.unchanged_on (loc_out_of_reach j1 m1) m2'1 m2'.
+  Lemma unchanged1_step3: Mem.unchanged_on (loc_out_of_reach j1 m1) m2'1 m2'2.
   Proof.
-    unfold m2'.
+    unfold m2'2.
     eapply unchanged_on_copy'1; eauto.
   Qed.
 
-  Lemma unchanged2_step3: Mem.unchanged_on (loc_unmapped j2) m2'1 m2'.
+  Lemma unchanged_on_empty_block : forall b m m',
+      Mem.set_empty_global m1 m2 m1' s2' j1 j2 j1' j2' INJ12 SUPINCL2 b m = m' ->
+      Mem.unchanged_on (fun b1 _ => ~ b = b1) m m'.
   Proof.
-    unfold m2'.
+  Admitted.
+  
+  Lemma unchanged_on_empty : forall s m m',
+      Mem.set_empty_sup m1 m2 m1' s2' j1 j2 j1' j2' INJ12 SUPINCL2 s m = m' ->
+      Mem.unchanged_on (fun b ofs => ~ sup_In b s) m m'.
+  Proof.
+    induction s; intros; subst; simpl.
+    - eauto with mem.
+    - eapply Mem.unchanged_on_trans.
+      eapply Mem.unchanged_on_implies. eapply IHs. reflexivity.
+      intros. red. intro. apply H. right. eauto.
+      eapply Mem.unchanged_on_implies. eapply unchanged_on_empty_block; eauto.
+      intros. red. intro. apply H. eauto.
+  Qed.
+
+  Lemma unchanged2_step3: Mem.unchanged_on (loc_unmapped j2) m2'1 m2'2.
+  Proof.
+    unfold m2'2.
     eapply unchanged_on_copy'2; eauto.
   Qed.
 
-  (** Lemma C.8(1) *)
-  Theorem UNCHANGE21' : Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'.
+  Definition footprint_step4 (b2 : block) (ofs2 : Z) : Prop :=
+    sup_In b2 gs2 /\ ~ exists b1 ofs1, j1 b1 = Some (b2, ofs2 - ofs1) /\ Mem.perm m1 b1 ofs1 Max Nonempty.
+
+  Lemma unchanged_step4: Mem.unchanged_on (fun b ofs => ~ footprint_step4 b ofs) m2'2 m2'.
+  Admitted.
+
+  Lemma unchanged_content_step4 : forall b2 o2,
+      mem_memval m2' b2 o2 = mem_memval m2'2 b2 o2.
   Proof.
-    eapply Mem.unchanged_on_trans; eauto.
-    eapply unchanged1_step2.
-    eapply unchanged1_step3.
+  Admitted.
+
+  Lemma unchanged_step4_gs: Mem.unchanged_on (fun b _ => ~ sup_In b gs2) m2'2 m2'.
+  Proof.
+    unfold m2'.
+    eapply unchanged_on_empty; eauto.
   Qed.
+
+  (** Lemma C.8(1) *)
 
   Theorem UNCHANGE21: Mem.unchanged_on (fun b ofs => loc_out_of_reach j1 m1 b ofs /\ ~ sup_In b gs2) m2 m2'.
   Proof.
+    eapply Mem.unchanged_on_trans; eauto.
+    (* step2 *)
     eapply Mem.unchanged_on_implies.
-    apply UNCHANGE21'.
+    eapply unchanged1_step2.
+    intros. apply H.
+    eapply Mem.unchanged_on_trans.
+    (* step3 *)
+    eapply Mem.unchanged_on_implies.
+    eapply unchanged1_step3.
+    intros. apply H.
+    (* step4 *)
+    eapply Mem.unchanged_on_implies.
+    apply unchanged_step4_gs.
     intros. apply H.
   Qed.
-    
-
+   
   (** Lemma C.8(2) *)
-  Theorem UNCHANGE22' : Mem.unchanged_on (loc_unmapped j2) m2 m2'.
+  (* Theorem UNCHANGE22' : Mem.unchanged_on (loc_unmapped j2) m2 m2'.
   Proof.
     eapply Mem.unchanged_on_trans; eauto.
     eapply unchanged2_step2.
     eapply unchanged2_step3.
   Qed.
-
+   *)
+  
   Theorem UNCHANGE22 : Mem.unchanged_on (fun b ofs => loc_unmapped j2 b ofs /\ ~ sup_In b gs2) m2 m2'.
   Proof.
+        eapply Mem.unchanged_on_trans; eauto.
+    (* step2 *)
     eapply Mem.unchanged_on_implies.
-    apply UNCHANGE22'.
+    eapply unchanged2_step2.
+    intros. apply H.
+    eapply Mem.unchanged_on_trans.
+    (* step3 *)
+    eapply Mem.unchanged_on_implies.
+    eapply unchanged2_step3.
+    intros. apply H.
+    eapply Mem.unchanged_on_implies.
+    apply unchanged_step4_gs.
     intros. apply H.
   Qed.
   
@@ -1401,8 +1454,10 @@ Qed.
 
   Lemma m2'1_support : Mem.support m2'1 = s2'.
   Proof. unfold m2'1. erewrite Mem.step2_support; eauto. Qed.
+  Lemma m2'2_support : Mem.support m2'2 = s2'.
+  Proof. unfold m2'2. erewrite Mem.copy_sup_support; eauto. erewrite m2'1_support; eauto. Qed.
   Lemma m2'_support : Mem.support m2' = s2'.
-  Proof. unfold m2'. erewrite Mem.copy_sup_support; eauto. erewrite m2'1_support; eauto. Qed.
+  Proof. unfold m2'. erewrite Mem.set_empty_sup_support; eauto. apply m2'2_support. Qed.
 
   Lemma copy_block_perm1 : forall m b1 o1 b2 o2 k p,
       j1 b1 = Some (b2, o2 - o1) ->
@@ -1475,7 +1530,16 @@ Qed.
           ~ (j2 b2 = None) ->
           Mem.perm m2' b2 o2 k p <-> Mem.perm m1' b1 o1 k p.
   Proof.
-    intros. eapply copy_sup_perm; eauto.
+    intros. etransitivity. instantiate (1:= Mem.perm m2'2 b2 o2 k p).
+    symmetry.
+    eapply Mem.unchanged_on_perm.
+    apply unchanged_step4.
+    red. intro. destruct H2 as [A B].
+    apply B. eauto.
+    unfold Mem.valid_block. rewrite m2'2_support.
+    apply SUPINCL2.
+    inv INJ12. eapply mi_mappedblocks; eauto.
+    eapply copy_sup_perm; eauto.
     inversion INJ12. eapply mi_mappedblocks; eauto.
     apply m2'1_support.
   Qed.
@@ -1608,7 +1672,10 @@ Qed.
       ~ (j2 b2 = None) ->
       mem_memval m2' b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
   Proof.
-    intros. eapply copy_sup_content; eauto.
+    intros.
+    etransitivity.
+    apply unchanged_content_step4.
+    eapply copy_sup_content; eauto.
     inversion INJ12. eapply mi_mappedblocks; eauto.
     apply m2'1_support.
   Qed.
@@ -1619,8 +1686,10 @@ Qed.
       ~ (j2 b2 = None) ->
       mem_memval m2' b2 o2 = mem_memval m2 b2 o2.
   Proof.
-    intros. etransitivity.
-    unfold m2'. eapply copy_sup_content_2; eauto.
+    intros. transitivity (mem_memval m2'2 b2 o2).
+    apply unchanged_content_step4.
+    etransitivity.
+    unfold m2'2. eapply copy_sup_content_2; eauto.
     apply m2'1_support.
     apply Mem.ro_unchanged_memval_bytes in ROUNC1.
     exploit ROUNC1; eauto. eapply Mem.valid_block_inject_1; eauto.
@@ -1983,11 +2052,15 @@ Qed.
       reflexivity. eauto. eauto.
       unfold Mem.supext. destruct Mem.sup_include_dec. eauto. congruence.
       eauto. eauto. eauto.
-    - unfold m2'.
+    - transitivity (Mem.perm m2'2 b2 o2 k p).
+      unfold m2'2.
       exploit unchanged_on_copy_sup_old.
-      instantiate (1:= m2'). reflexivity.
+      instantiate (1:= m2'2). reflexivity.
       intro. inversion H2. eapply unchanged_on_perm; eauto.
       unfold Mem.valid_block. rewrite m2'1_support. eauto.
+      eapply Mem.unchanged_on_perm. eapply unchanged_step4_gs.
+      red. intros. inv MSTBL12. apply NOTIN2. eauto.
+      unfold Mem.valid_block. rewrite m2'2_support. eauto.
   Qed.
 
   Lemma step2_perm2: forall b1 o1 b2 o2 k p,
@@ -1999,19 +2072,23 @@ Qed.
     exploit INCRDISJ1; eauto. intros [NOTIN1 NOTIN2].
     assert (IN: sup_In b2 s2').
     { eapply IMGIN1'; eauto. }
+    erewrite <- Mem.unchanged_on_perm in H1.
+    2: apply unchanged_step4_gs.
     assert (Mem.perm m2'1 b2 o2 k p).
-    - unfold m2'.
-      exploit unchanged_on_copy_sup_old.
-      instantiate (1:= m2'). reflexivity.
+    { exploit unchanged_on_copy_sup_old.
+      instantiate (1:= m2'2). reflexivity.
       intro. inversion H2. eapply unchanged_on_perm; eauto.
       unfold Mem.valid_block. rewrite m2'1_support. eauto.
-    - unfold m2'1. unfold Mem.step2.
-      assert (EXT_EMPTY: ~ Mem.perm (Mem.supext s2' m2) b2 o2 Max Nonempty).
-      eapply supext_empty. eauto.
-      exploit map_sup_1. instantiate (1:= (Mem.map_sup m1 m1' j1' (Mem.support m1') (Mem.supext s2' m2))).
-      reflexivity. eauto. eauto.
-      unfold Mem.supext. destruct Mem.sup_include_dec. eauto. congruence. eauto. eauto.
-      intro. unfold m2'1 in H2. apply H3. eauto.
+    }
+    unfold m2'1. unfold Mem.step2.
+    assert (EXT_EMPTY: ~ Mem.perm (Mem.supext s2' m2) b2 o2 Max Nonempty).
+    eapply supext_empty. eauto.
+    exploit map_sup_1. instantiate (1:= (Mem.map_sup m1 m1' j1' (Mem.support m1') (Mem.supext s2' m2))).
+    reflexivity. eauto. eauto.
+    unfold Mem.supext. destruct Mem.sup_include_dec. eauto. congruence. eauto. eauto.
+    intro. unfold m2'1 in H2. apply H3. eauto.
+    red. intro. inv MSTBL12. subst. apply NOTIN2. apply H12. subst gs4 gs6. rewrite H5. eauto.
+    unfold Mem.valid_block. rewrite m2'2_support. eauto.
   Qed.
 
   Lemma step2_content: forall b1 o1 b2 o2,
@@ -2285,13 +2362,13 @@ Qed.
       + (*perm*)
         intros b2 b3 d2 o2 k p MAP2' PERM2'.
         destruct (Mem.sup_dec b2 (Mem.support m2)).
-        * assert (MAP2: j2 b2 = Some (b3,d2)).
+        (* old memory *)
+        * assert (MAP2: j2 b2 = Some (b3,d2)). (* we have j2' b2 = Some [] here *)
           destruct (subinj_dec _ _ _ _ _ INCR2 MAP2'); auto.
           exploit INCRDISJ2; eauto. intros [A B]. congruence.
           destruct (Mem.loc_in_reach_find m1 j1 b2 o2) as [[b1 o1]|] eqn:LOCIN.
-          --
-            eapply Mem.loc_in_reach_find_valid in LOCIN; eauto. destruct LOCIN as [MAP1 PERM1].
-            
+          -- (* old & public in m1 *)
+            eapply Mem.loc_in_reach_find_valid in LOCIN; eauto. destruct LOCIN as [MAP1 PERM1].            
             exploit copy_perm_2; eauto. congruence.
             intro PERM1'.
             apply INCR1 in MAP1 as MAP1'.
@@ -2299,7 +2376,7 @@ Qed.
             unfold compose_meminj. rewrite MAP1', MAP2'.
             reflexivity. intro. replace (o1 + (o2 - o1 + d2)) with (o2 + d2) in H by lia.
             auto.
-          --
+          -- (* old & private *)
             eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
             red in LOCIN.
             assert ({exists b1 delta, j1 b1 = Some (b2,delta)} + {forall b1 delta, ~ j1 b1 = Some (b2, delta)}).
