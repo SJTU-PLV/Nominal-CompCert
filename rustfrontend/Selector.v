@@ -50,7 +50,8 @@ Inductive statement : Type :=
 Record function : Type := mkfunction {
   fn_return: type;
   fn_callconv: calling_convention;
-  fn_params: list (ident * type); 
+  fn_vars: list (ident * type);
+  fn_params: list (ident * type);
   fn_body: statement
 }.
 
@@ -357,7 +358,8 @@ Fixpoint transl_stmt (stmt: statement) (sel: selector) (succ: node) (cont: optio
   | Scall p a al =>
       add_instr (Isel sel succ)
   | Sreturn e =>
-      add_instr (Isel sel succ)
+      do n <- add_instr Iend;
+      add_instr (Isel sel n)      
     end.
 
 Definition generate_cfg' (stmt: statement): mon node :=
