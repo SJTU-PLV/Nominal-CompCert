@@ -6825,44 +6825,43 @@ Qed.
      nonempty permission in m1, instead of it we require it have EMPTY permission.
      In such case the permission of (b2,o2) in m2' should also be set to EMPTY *)
 
- Definition block_find_global b1 b2 o2 : option (block * Z) :=
+ (* true means that we found (b1,o1) with permission in b1 *)
+ Definition block_find_global b1 b2 o2 : bool :=
     match j12 b1 with
     |Some (b2',delta) =>
        if eq_block b2 b2' then
          let pmap1 := (mem_access m1 b1) in
          let elements := perm_elements_any (ZMap.elements pmap1) in
          match find (check_position (o2 - delta)) elements with
-         |Some (o1,_) => None
-         |None => Some (b1, o2 - delta)
+         |Some (_ , _) => true
+         |None => false
          end
-       else None
-    |_ => None
+       else false
+    |_ => false
     end.
 
-  (* find (b_1,o_1) in all blocks in s *)
-  Fixpoint empty_global_find' (b2: block) (o2: Z) (s : sup): option (block * Z) :=
+  (* true means that we found (b1,o1) with permission in s *)
+  Fixpoint empty_global_find' (b2: block) (o2: Z) (s : sup): bool :=
     match s with
-    | nil => None
+    | nil => false
     | hd :: tl =>
-        match block_find_global hd b2 o2 with
-        | Some a => Some a
-        | None => empty_global_find' b2 o2 tl
-        end
+        if block_find_global hd b2 o2 then true
+        else empty_global_find' b2 o2 tl
     end.
 
   (*specific find function, find (b_1,o_1) in sup(ge1)*)
-  (* Use Mem.support m1 here is also OK *)
   Definition empty_global_find (b2: block) (o2: Z) :=
     empty_global_find' b2 o2 (Mem.support m1).
 
+
+  (* if we can found (b1,o1) with permission for (b2,o2), then it's not added to the update list,
+     otherwise the permission of (b2,o2) should be set to empty *)
   Fixpoint empty_global_filter' (vl2 : list (Z * memperm)) (b2: block): list (Z * memperm) :=
   match vl2 with
   | nil => nil
   | (o2,_) :: tl =>
-      match (empty_global_find b2 o2) with
-      |Some (b1,o1) => (o2,(fun k => None)) :: (empty_global_filter' tl b2)
-      |None => (empty_global_filter' tl b2)
-      end
+      if (empty_global_find b2 o2) then empty_global_filter' tl b2 else
+        (o2,(fun k => None)) :: (empty_global_filter' tl b2)
   end.
 
   Definition empty_global_filter (b2 : block) :=
@@ -6878,7 +6877,7 @@ Qed.
   Lemma global_access_result:
   forall b2 map2 o2 p,
     ((empty_global_access b2 map2)##o2) p =
-      match (empty_global_find b2 o2) with
+      if (empty_global_find b2 o2) 
       | Some (b1,o1) => None
       | None =>  map2##o2 p
    end.

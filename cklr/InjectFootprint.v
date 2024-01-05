@@ -1380,8 +1380,17 @@ Qed.
   Lemma unchanged_step4: Mem.unchanged_on (fun b ofs => ~ footprint_step4 b ofs) m2'2 m2'.
   Admitted.
 
+  Lemma freed_step4:  forall b2 o2 k p,
+      footprint_step4 b2 o2 -> ~ Mem.perm m2' b2 o2 k p.
+  Proof.
+  Admitted.
   Lemma unchanged_content_step4 : forall b2 o2,
       mem_memval m2' b2 o2 = mem_memval m2'2 b2 o2.
+  Proof.
+  Admitted.
+
+  Lemma perm_decrease_step4: forall b2 o2 k p,
+      Mem.perm m2' b2 o2 k p -> Mem.perm m2'2 b2 o2 k p.
   Proof.
   Admitted.
 
@@ -1393,6 +1402,13 @@ Qed.
 
   (** Lemma C.8(1) *)
 
+  Theorem UNCHANGE21': Mem.unchanged_on (loc_out_of_reach j1 m1) m2 m2'2.
+  Proof.
+    eapply Mem.unchanged_on_trans.
+    eapply unchanged1_step2.
+    eapply unchanged1_step3.
+  Qed.
+  
   Theorem UNCHANGE21: Mem.unchanged_on (fun b ofs => loc_out_of_reach j1 m1 b ofs /\ ~ sup_In b gs2) m2 m2'.
   Proof.
     eapply Mem.unchanged_on_trans; eauto.
@@ -1412,14 +1428,13 @@ Qed.
   Qed.
    
   (** Lemma C.8(2) *)
-  (* Theorem UNCHANGE22' : Mem.unchanged_on (loc_unmapped j2) m2 m2'.
+  Theorem UNCHANGE22' : Mem.unchanged_on (loc_unmapped j2) m2 m2'2.
   Proof.
     eapply Mem.unchanged_on_trans; eauto.
     eapply unchanged2_step2.
     eapply unchanged2_step3.
   Qed.
-   *)
-  
+
   Theorem UNCHANGE22 : Mem.unchanged_on (fun b ofs => loc_unmapped j2 b ofs /\ ~ sup_In b gs2) m2 m2'.
   Proof.
         eapply Mem.unchanged_on_trans; eauto.
@@ -2100,13 +2115,22 @@ Qed.
     exploit INCRDISJ1; eauto. intros [NOTIN1 NOTIN2].
     assert (IN: sup_In b2 s2').
     { eapply IMGIN1'; eauto. }
-    exploit unchanged_on_copy_sup_old. instantiate (1:= m2'). reflexivity.
+    etransitivity. eapply unchanged_content_step4.
+    exploit unchanged_on_copy_sup_old. instantiate (1:= m2'2). reflexivity.
     intro UNC2.
     assert (Mem.perm m2'1 b2 o2 Cur Readable).
-    { unfold m2'.
+    { unfold m2'2.
       inversion UNC2. eapply unchanged_on_perm; eauto.
       unfold Mem.valid_block. rewrite m2'1_support. eauto.
-      eapply step2_perm; eauto. eauto with mem.
+      eapply unchanged_on_perm. eauto. unfold Mem.valid_block. rewrite m2'1_support. eauto.
+      unfold m2'1. unfold Mem.step2.
+      assert (EXT_EMPTY: ~ Mem.perm (Mem.supext s2' m2) b2 o2 Max Nonempty).
+      eapply supext_empty. eauto.
+      exploit map_sup_1. instantiate (1:= (Mem.map_sup m1 m1' j1' (Mem.support m1') (Mem.supext s2' m2))).
+      reflexivity. eauto. eauto. eauto.
+      unfold Mem.supext. destruct Mem.sup_include_dec. eauto. congruence. eauto. eauto.
+      intro. apply H2. eauto.
+      (* eapply step2_perm; eauto. eauto with mem. *)
     }
     - etransitivity. inversion UNC2.
       setoid_rewrite unchanged_on_contents. reflexivity. eauto.
@@ -2140,8 +2164,17 @@ Qed.
     intros. exploit step2_perm; eauto.
     intro HH. eapply HH; eauto.
   Qed.
+
+    Lemma m2_notglobal : forall b2, j2 b2 = None -> ~ sup_In b2 gs2.
+  Proof.
+    inv MSTBL23. intros.
+    intro. inv H6. exploit mge_dom; eauto.
+    intros [b3 A]. congruence.
+  Qed.
   
+
   (** Lemma C.10 *)
+  
   Theorem MAXPERM2 : injp_max_perm_decrease m2 m2'.
   Proof.
     red. intros b2 o2 p VALID PERM2.
@@ -2156,16 +2189,28 @@ Qed.
         intro PERM1.
         replace o2 with (o1 + (o2 - o1)) by lia.
         eapply Mem.perm_inject; eauto.
-      + generalize (UNCHANGE22'). intro UNC2.
+      + generalize (UNCHANGE22). intro UNC2.
         inversion UNC2. eapply unchanged_on_perm; eauto.
+        split. eauto. apply m2_notglobal. eauto.
     - generalize (UNCHANGE21'). intro UNC1.
       inversion UNC1. eapply unchanged_on_perm; eauto.
       eapply Mem.loc_in_reach_find_none; eauto.
+      eapply perm_decrease_step4. eauto.
   Qed.
 
+  Lemma ro_unc_step4: Mem.ro_unchanged m2'2 m2'.
+  Proof.
+    apply Mem.ro_unchanged_memval_bytes.
+    red. intros.
+    split. eapply perm_decrease_step4. eauto.
+    setoid_rewrite unchanged_content_step4. reflexivity.
+  Qed.
+    
   (** Lemma C.11 *)
   Theorem ROUNC2 : Mem.ro_unchanged m2 m2'.
   Proof.
+   (* eapply Mem.ro_unchanged_trans.
+    2: apply ro_unc_step4. 2: {rewrite m2'2_support. eauto. } 2: apply *)
     apply Mem.ro_unchanged_memval_bytes.
     red. intros b2 o2 VALID PERM2' NOPERM2.
     destruct (Mem.loc_in_reach_find m1 j1 b2 o2) as [[b1 o1]|] eqn:LOCIN.
@@ -2183,24 +2228,23 @@ Qed.
         replace o2 with (o1 + (o2 - o1)) by lia.
         eapply Mem.perm_inject; eauto.
         symmetry. eapply copy_content_2; eauto. congruence.
-      + generalize UNCHANGE22'. intro UNC22. split; inv UNC22.
-        rewrite unchanged_on_perm; eauto.
+      + generalize UNCHANGE22. intro UNC22. split; inv UNC22.
+        rewrite unchanged_on_perm; eauto. split. eauto.
+        apply m2_notglobal. eauto.
         symmetry. eapply unchanged_on_contents; eauto.
+        split; eauto. apply m2_notglobal. eauto.
         eapply unchanged_on_perm; eauto.
+        split; eauto. apply m2_notglobal. eauto.
     - eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
       generalize UNCHANGE21'. intro UNC21.
       split; inv UNC21. rewrite unchanged_on_perm; eauto.
-      symmetry. eapply unchanged_on_contents; eauto.
+      eapply perm_decrease_step4. eauto.
+      symmetry. setoid_rewrite unchanged_content_step4.
+      eapply unchanged_on_contents; eauto.
       eapply unchanged_on_perm; eauto.
+      eapply perm_decrease_step4. eauto.
   Qed.
 
-  Lemma m2_notglobal : forall b2, j2 b2 = None -> ~ sup_In b2 gs2.
-  Proof.
-    inv MSTBL23. intros.
-    intro. inv H6. exploit mge_dom; eauto.
-    intros [b3 A]. congruence.
-  Qed.
-  
   (** Lemma C.13 *)
   Theorem INJ12' : Mem.inject j1' m1' m2'.
   Proof.
@@ -2213,14 +2257,16 @@ Qed.
              replace (ofs + delta - ofs) with delta by lia. eauto.
              eapply MAXPERM1; eauto. unfold Mem.valid_block. eauto.
              eauto with mem. congruence.
-          -- generalize UNCHANGE22'. intro UNCHANGE22.
+          -- generalize UNCHANGE22. intro UNCHANGE22.
+             assert (A: loc_unmapped j2 b2 (ofs + delta) /\ ~ sup_In b2 gs2).
+             split. eauto. apply m2_notglobal. eauto.
+             destruct A as [A B].
              inversion UNCHANGE22. apply unchanged_on_perm; eauto.
              inversion INJ12. eauto.
              eapply Mem.perm_inject; eauto.
              inversion UNCHANGE1. eapply unchanged_on_perm0; eauto.
              split. red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
-             assert (~ sup_In b2 gs2). apply m2_notglobal. eauto.
-             intro. apply H1. inv MSTBL12. unfold gs6.
+             intro. apply B. inv MSTBL12. unfold gs6.
              erewrite <- Genv.mge_separated; eauto.
              unfold Mem.valid_block. eauto.
         * exploit ADDZERO; eauto. intro. subst.
@@ -2239,17 +2285,18 @@ Qed.
         * destruct (j2 b2) as [[b3 delta2]|] eqn:j2b2.
           -- destruct (Mem.perm_dec m1 b1 ofs Max Writable).
              ++ 
-               eapply copy_content_inject; eauto.
-               replace (ofs + delta - ofs) with delta by lia. eauto. congruence.
+                eapply copy_content_inject; eauto.
+                replace (ofs + delta - ofs) with delta by lia. eauto. congruence.
              ++ generalize ROUNC2. intro ROUNC2.
                 apply Mem.ro_unchanged_memval_bytes in ROUNC2.
-                apply Mem.ro_unchanged_memval_bytes in ROUNC1.
-                exploit ROUNC1; eauto.
+                apply Mem.ro_unchanged_memval_bytes in ROUNC1 as ROUNC1'.
+                exploit ROUNC1'; eauto.
                 eapply Mem.valid_block_inject_1; eauto.
                 intros [PERM1 MVAL1]. rewrite <- MVAL1.
-                exploit ROUNC2; eauto.
-                eapply Mem.valid_block_inject_2. apply e. eauto.
-                eapply copy_perm_1; eauto with mem. instantiate (1:= ofs + delta).
+                exploit ROUNC2; eauto. instantiate (1:= b2).
+                eapply Mem.valid_block_inject_2. apply e. apply INJ12.
+                instantiate (1:= ofs + delta).
+                eapply copy_perm_1; eauto with mem.
                 replace (ofs + delta - ofs) with delta by lia. eauto. congruence.
                 intro. eapply n. inversion INJ12.
                 exploit mi_perm_inv; eauto. intros [|]. auto.
@@ -2379,23 +2426,20 @@ Qed.
           -- (* old & private *)
             eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
             red in LOCIN.
-            assert ({exists b1 delta, j1 b1 = Some (b2,delta)} + {forall b1 delta, ~ j1 b1 = Some (b2, delta)}).
-            admit.
-            destruct H.
+            destruct (Mem.sup_dec b2 gs2).
             ++
-              admit.
+              exfalso. eapply freed_step4. split. eauto.
+              intros [b1 [ofs1 [A B]]]. eapply LOCIN. eauto.
+              instantiate (1:= o2). 2: eauto.
+              replace (o2 - (o2 - ofs1 )) with ofs1 by lia. eauto.
             ++
-              assert (~ sup_In b2 gs2). inv MSTBL12. inv H6.
-              intro. exploit mge_img; eauto. intros [b1 A].
-              eapply n; eauto.
-               
             assert (PERM2 : Mem.perm m2 b2 o2 k p).
             generalize UNCHANGE21. intro UNC2. inversion UNC2.
             eapply unchanged_on_perm; eauto.
             assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
             eapply loc_out_of_reach_trans; eauto.
             inversion UNCHANGE3. eapply unchanged_on_perm; eauto. split. eauto.
-            inv MSTBL23. intro. apply H. unfold gs0. rewrite Genv.mge_separated; eauto.
+            inv MSTBL23. intro. apply n. subst gs0. rewrite <- H1. rewrite Genv.mge_separated; eauto.
             inversion INJ23. eauto.
             eapply Mem.perm_inject; eauto.
         * assert (MAP2: j2 b2 = None).
@@ -2453,11 +2497,11 @@ Qed.
                instantiate (3:= o1). replace (o1 + (o2 - o1)) with o2 by lia. eauto.
                intros [|]. eauto. congruence.
                exploit ROUNC2; eauto. intros [PERM2 MVAL2]. rewrite <- MVAL2.
-               apply Mem.ro_unchanged_memval_bytes in ROUNC3.
+               apply Mem.ro_unchanged_memval_bytes in ROUNC3 as ROUNC3'.
                assert (NOWRIT3 : ~ Mem.perm m3 b3 (o2 + d2) Max Writable).
                intro. apply NOWRIT2. inversion INJ23. exploit mi_perm_inv; eauto.
                intros [|]. eauto. exfalso. apply H0. eauto with mem.
-               exploit ROUNC3; eauto. eapply Mem.valid_block_inject_2; eauto.
+               exploit ROUNC3'; eauto. eapply Mem.valid_block_inject_2; eauto.
                exploit copy_perm_2; eauto. congruence.
                intro PERM1'.
                exploit Mem.perm_inject. 2: apply INJ13'. 2: apply PERM1'.
@@ -2466,11 +2510,16 @@ Qed.
                auto.
                intros [PERM3 MVAL3]. rewrite <- MVAL3.
                inversion INJ23. inversion mi_inj. eapply memval_inject_incr; eauto.
-          -- admit.
-            (*eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
+          -- 
+            eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
+            red in LOCIN.
+            destruct (Mem.sup_dec b2 gs2).
+            exfalso. eapply freed_step4. split; eauto.
+            intros [b1 [ofs1 [A B]]]. eapply LOCIN; eauto. 2: eauto.
+            replace (o2 - (o2 - ofs1)) with ofs1 by lia. eauto.
             assert (PERM2 : Mem.perm m2 b2 o2 Cur Readable).
             generalize UNCHANGE21. intro UNC2. inversion UNC2.
-            eapply unchanged_on_perm; eauto. split.
+            eapply unchanged_on_perm; eauto.
             assert (PERM3 : Mem.perm m3 b3 (o2 + d2) Cur Readable).
             eapply Mem.perm_inject; eauto.
             assert (loc_out_of_reach (compose_meminj j1 j2) m1 b3 (o2 + d2)).
@@ -2479,7 +2528,10 @@ Qed.
             generalize UNCHANGE21. intro UNC2. inversion UNC2.
             erewrite unchanged_on_contents0; eauto.
             eapply memval_inject_incr; eauto.
-            inversion INJ23. inversion mi_inj. eauto. *)
+            inversion INJ23. inversion mi_inj. eauto.
+            split. eauto. inv MSTBL23.
+            unfold gs6.
+            rewrite <- Genv.mge_separated; eauto. subst gs0. rewrite H1. eauto.
         * assert (MAP2: j2 b2 = None).
           { inversion INJ23. eauto. }
           exploit ADDSAME; eauto. intros (b1 & MAP1' & SAME).
@@ -2557,8 +2609,13 @@ Qed.
           eauto. intros [A | B].
           left. eapply copy_perm; eauto. congruence.
           right. intro. apply B. eapply copy_perm; eauto. congruence.
-        * admit.
-          (*eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
+        * eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
+          destruct (Mem.sup_dec b2 gs2).
+          (*freed by step4*)
+          right. eapply freed_step4. split.
+          eauto. intros [b1 [ofs1 [A B]]]. eapply LOCIN. eauto.
+          replace (o2 - (o2 - ofs1)) with ofs1 by lia. eauto.
+          (**)
           destruct (Mem.perm_dec m2' b2 o2 Max Nonempty); auto.
           left. generalize UNCHANGE21. intro UNC2.
           assert (PERM2: Mem.perm m2 b2 o2 Max Nonempty).
@@ -2567,10 +2624,13 @@ Qed.
           eapply loc_out_of_reach_trans; eauto.
           assert (PERM3: Mem.perm m3 b3 (o2 + d2) k p).
           inversion UNCHANGE3. eapply unchanged_on_perm; eauto.
+          split. eauto.
+          inv MSTBL23. subst gs6.
+          erewrite <- Genv.mge_separated; eauto. subst gs0. rewrite H1. eauto.
           eapply IMGIN2; eauto.
           inversion INJ23. exploit mi_perm_inv. eauto. apply PERM3.
           intros [A|B]; try congruence.
-          inversion UNC2. eapply unchanged_on_perm; eauto. eapply DOMIN2; eauto. *)
+          inversion UNC2. eapply unchanged_on_perm; eauto. eapply DOMIN2; eauto.
       + exploit INCRDISJ2; eauto. intros [A B].
         exploit ADDSAME; eauto. intros [b1 [MAP1' SAME]].
         inversion INJ13'. exploit mi_perm_inv.
@@ -2582,7 +2642,7 @@ Qed.
         left. eapply step2_perm1; eauto. replace (o2 - o2) with 0 by lia. eauto. eauto with mem.
         right. intro. apply P1. eapply step2_perm2; eauto.
         replace (o2 - o2) with 0 by lia. eauto.
-  Admitted.
+Qed.
 
 End CONSTR_PROOF.
 
@@ -2667,7 +2727,7 @@ Proof.
     generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
     intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
     subst.
-    set (m2' := m2' m1 m2 m1' j12 j23 j12' m2'_sup INJ12 ).
+    set (m2' := m2' m1 m2 m1' j12 j23 j12' j23' gs2 m2'_sup INJ12 SUPINCL2).
     assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
     assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
     set (w1' := injpw j12' gs0 gs2 m1' m2' INJ12').
