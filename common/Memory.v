@@ -6819,12 +6819,7 @@ Qed.
  (** step4: remove the permission of global blocks in m2, where the corresponding blocks in
      m1 have no permission *)
 
- (** another find function : determine whether (b2,o2) in m2 have a preimage (b1,o1) in m1 s.t. 
-     j1 b1 = Some (b2, o2-o1).
-     The difference with loc_in_reach_find is that we do not require (b1,o1) have 
-     nonempty permission in m1, instead of it we require it have EMPTY permission.
-     In such case the permission of (b2,o2) in m2' should also be set to EMPTY *)
-
+ (*
  (* true means that we found (b1,o1) with permission in b1 *)
  Definition block_find_global b1 b2 o2 : bool :=
     match j12 b1 with
@@ -6853,15 +6848,17 @@ Qed.
   Definition empty_global_find (b2: block) (o2: Z) :=
     empty_global_find' b2 o2 (Mem.support m1).
 
-
+*)
   (* if we can found (b1,o1) with permission for (b2,o2), then it's not added to the update list,
      otherwise the permission of (b2,o2) should be set to empty *)
   Fixpoint empty_global_filter' (vl2 : list (Z * memperm)) (b2: block): list (Z * memperm) :=
   match vl2 with
   | nil => nil
   | (o2,_) :: tl =>
-      if (empty_global_find b2 o2) then empty_global_filter' tl b2 else
-        (o2,(fun k => None)) :: (empty_global_filter' tl b2)
+      match (loc_in_reach_find b2 o2) with
+      |Some _ =>  empty_global_filter' tl b2
+      |None => (o2,(fun k => None)) :: (empty_global_filter' tl b2)
+      end
   end.
 
   Definition empty_global_filter (b2 : block) :=
@@ -6877,12 +6874,15 @@ Qed.
   Lemma global_access_result:
   forall b2 map2 o2 p,
     ((empty_global_access b2 map2)##o2) p =
-      if (empty_global_find b2 o2) 
-      | Some (b1,o1) => None
-      | None =>  map2##o2 p
+      match (loc_in_reach_find b2 o2) with
+      | Some _ => map2##o2 p
+      | None => None
    end.
   Proof.
-    Admitted.
+    intros. unfold empty_global_access.
+    destruct (loc_in_reach_find) as [[b1 o1]|] eqn:FIND.
+    - erewrite setN'_outside; eauto.
+  Admitted.
   
    Program Definition set_empty_global b2 m : mem :=
    if j23 b2 then
@@ -6900,9 +6900,8 @@ Qed.
    unfold pmap_update. rewrite NMap.gsspec.
    destruct NMap.elt_eq.
    - repeat rewrite global_access_result.
-     destruct empty_global_find.
-     + destruct p. constructor.
-     + apply access_max.
+     destruct loc_in_reach_find.
+     apply access_max. constructor.
    - apply access_max.
  Qed.
  Next Obligation.
