@@ -1983,8 +1983,8 @@ Proof.
 Qed.
 
 Lemma match_stbls'_stbls_compose  f g ge1 ge2 ge3:
-  match_stbls f ge1 ge2 ->
-  match_stbls' g ge2 ge3 ->
+  match_stbls' f ge1 ge2 ->
+  match_stbls g ge2 ge3 ->
   match_stbls' (compose_meminj f g) ge1 ge3.
 Proof.
   intros. eapply match_stbls'_compose; eauto.
