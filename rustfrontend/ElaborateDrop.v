@@ -166,7 +166,7 @@ Definition generate_drop (p: place) (flag: option ident) : statement :=
   let drop := Sdrop p in
   match flag with
   | Some id =>     
-      Sifthenelse (Eplace Copy (Plocal id type_bool) type_bool) drop Sskip
+      Sifthenelse (Epure (Eplace (Plocal id type_bool) type_bool)) drop Sskip
   | None => drop
   end.                        
 
@@ -217,7 +217,7 @@ Definition get_dropflag_temp (p: place) : option ident :=
   | _ => None
   end.
 
-Definition Ibool (b: bool) := Econst_int (if b then Int.one else Int.zero) type_bool.
+Definition Ibool (b: bool) := Epure (Econst_int (if b then Int.one else Int.zero) type_bool).
 
 Definition set_dropflag (id: ident) (flag: bool) : statement :=
   Sassign (Plocal id type_bool) (Bexpr (Ibool flag)).
@@ -239,21 +239,21 @@ Definition add_dropflag_option (p: option place) (flag: bool) : statement :=
   | _ => Sskip
   end.
 
-Definition add_dropflag_option_list (l: list (option place)) (flag: bool) : statement :=
-  let stmts := fold_right (fun elt acc => add_dropflag_option elt flag :: acc) nil l in
+Definition add_dropflag_list (l: list place) (flag: bool) : statement :=
+  let stmts := fold_right (fun elt acc => add_dropflag elt flag :: acc) nil l in
   makeseq stmts.
 
 (** FIXME: It may generate lots of Sskip *)
 Fixpoint transl_stmt (stmt: statement) : statement :=
   match stmt with
   | Sassign p be =>
-      let deinit := collect_boxexpr be in
+      let deinit := moved_place_boxexpr be in
       let stmt1 := add_dropflag_option deinit false in
       let stmt2 := add_dropflag p true in
       makeseq (stmt1 :: stmt2 :: stmt :: nil)
   | Scall p e el =>
-      let mvpaths := map collect_expr el in
-      let stmt1 := add_dropflag_option_list mvpaths false in
+      let mvpaths := moved_place_list el in
+      let stmt1 := add_dropflag_list mvpaths false in
       let stmt2 := add_dropflag_option p true in
       makeseq (stmt1 :: stmt :: stmt2 :: nil)
   | Ssequence s1 s2 =>

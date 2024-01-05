@@ -41,17 +41,22 @@ Definition typeof_place p :=
 
 (** ** Expression *)
 
-Inductive expr : Type :=
-| Econst_int: int -> type -> expr       (**r integer literal *)
-| Econst_float: float -> type -> expr   (**r double float literal *)
-| Econst_single: float32 -> type -> expr (**r single float literal *)
-| Econst_long: int64 -> type -> expr    (**r long integer literal *)
-| Eplace: usekind -> place -> type -> expr (**r use of a variable, the only lvalue expression *)
-| Eget: usekind -> place -> ident -> type -> expr (**r get<fid>(a), variant get operation *)
-| Ecktag: place -> ident -> type -> expr           (**r check the tag of variant, e.g. [Ecktag p.(fid)] *)
-| Eunop: unary_operation -> expr -> type -> expr  (**r unary operation *)
-| Ebinop: binary_operation -> expr -> expr -> type -> expr. (**r binary operation *)
+Inductive pexpr : Type :=
+| Econst_int: int -> type -> pexpr       (**r integer literal *)
+| Econst_float: float -> type -> pexpr   (**r double float literal *)
+| Econst_single: float32 -> type -> pexpr (**r single float literal *)
+| Econst_long: int64 -> type -> pexpr    (**r long integer literal *)
+| Eplace: place -> type -> pexpr (**r use of a variable, the only lvalue expression *)
+| Eget: place -> ident -> type -> pexpr (**r get<fid>(a), variant get operation *)
+| Ecktag: place -> ident -> type -> pexpr           (**r check the tag of variant, e.g. [Ecktag p.(fid)] *)
+| Eunop: unary_operation -> pexpr -> type -> pexpr  (**r unary operation *)
+| Ebinop: binary_operation -> pexpr -> pexpr -> type -> pexpr. (**r binary operation *)
 
+(* The evaluaiton of expr may produce a moved-out place *)
+Inductive expr : Type :=
+| Emoveplace: place -> type -> expr
+| Emoveget: place -> ident -> type -> expr
+| Epure: pexpr -> expr.
 
 (* evaluate an expr has no side effect. But evaluate a boxexpr may
 allocate a new block *)
@@ -59,18 +64,25 @@ Inductive boxexpr : Type :=
 | Bexpr: expr -> boxexpr
 | Box: boxexpr -> boxexpr.
 
-Definition typeof (e: expr) : type :=
-  match e with
+Definition typeof_pexpr (pe: pexpr) : type :=
+  match pe with
   | Econst_int _ ty
   | Econst_float _ ty
   | Econst_single _ ty
   | Econst_long _ ty                
-  | Eplace _ _ ty
+  | Eplace _ ty
   | Ecktag _ _ ty
-  | Eget _ _ _ ty
+  | Eget _ _ ty
   | Eunop _ _ ty
   | Ebinop _ _ _ ty => ty
   end.
+
+Definition typeof (e: expr) : type :=
+  match e with
+  | Emoveplace _ ty => ty
+  | Emoveget _ _ ty => ty
+  | Epure pe => typeof_pexpr pe
+    end.
 
 Fixpoint typeof_boxexpr (r: boxexpr) : type :=
   match r with
@@ -294,7 +306,7 @@ Definition is_sibling (p1 p2: place) : bool :=
   && negb (is_prefix p1 p2 && is_prefix p2 p1).
 
 
-Definition remove_own' (own: own_env) (p: place) : option own_env :=
+Definition remove_own (own: own_env) (p: place) : option own_env :=
   let id := local_of_place p in
   match PTree.get id own with
   | Some own_path =>
@@ -303,18 +315,18 @@ Definition remove_own' (own: own_env) (p: place) : option own_env :=
   | None => None
   end.
 
-Definition remove_own (own: own_env) (op: option place) : option own_env :=
+Definition remove_own_option (own: own_env) (op: option place) : option own_env :=
   match op with
-  | Some p =>      
-      remove_own' own p
-  | _ => Some own
+  | None => Some own
+  | Some p => remove_own own p
   end.
+  
 
-Fixpoint remove_own_list (own: own_env) (opl: list (option place)) : option own_env :=
-  match opl with
-  | op::opl' =>
-      match remove_own own op with
-      | Some own' => remove_own_list own' opl'
+Fixpoint remove_own_list (own: own_env) (pl: list place) : option own_env :=
+  match pl with
+  | p :: pl' =>
+      match remove_own own p with
+      | Some own' => remove_own_list own' pl'
       | None => None
       end
   | _ => None
@@ -370,26 +382,25 @@ Inductive eval_place_list : list place -> list block -> list ptrofs -> Prop :=
     eval_place_list (p :: lp) (b :: lb) (ofs :: lofs).
 
 
-(* eval_expr would produce a pair (v, op). Here [op] has type [Option
-place], if [op] is equal to [Some p], it means that this expression is
-a xvalue expression and the [p] is the place to be moved from.  *)
+(* Evaluation of pure expression *)
 
-Inductive eval_expr : expr -> val -> option place ->  Prop :=
+Inductive eval_pexpr: pexpr -> val ->  Prop :=
 | eval_Econst_int:   forall i ty,
-    eval_expr (Econst_int i ty) (Vint i) None
+    eval_pexpr (Econst_int i ty) (Vint i)
 | eval_Econst_float:   forall f ty,
-    eval_expr (Econst_float f ty) (Vfloat f) None
+    eval_pexpr (Econst_float f ty) (Vfloat f)
 | eval_Econst_single:   forall f ty,
-    eval_expr (Econst_single f ty) (Vsingle f) None
+    eval_pexpr (Econst_single f ty) (Vsingle f)
 | eval_Econst_long:   forall i ty,
-    eval_expr (Econst_long i ty) (Vlong i) None
-| eval_Eunop:  forall op a ty v1 v aty mp,
-    eval_expr a v1 mp ->
+    eval_pexpr (Econst_long i ty) (Vlong i)
+| eval_Eunop:  forall op a ty v1 v aty,
+    eval_pexpr a v1 ->
     (* Note that to_ctype Tbox = None *)
-    to_ctype (typeof a) = aty ->
+    to_ctype (typeof_pexpr a) = aty ->
     (** TODO: define a rust-specific sem_unary_operation  *)
     sem_unary_operation op v1 aty m = Some v ->
-    eval_expr (Eunop op a ty) v mp
+    eval_pexpr (Eunop op a ty) v
+(** TODO: fix this binary operation  *)
 (* | eval_Ebinop: forall op a1 a2 ty v1 v2 v ty1 ty2 mp1 mp2, *)
 (*     eval_expr a1 v1 mp1 -> *)
 (*     eval_expr a2 v2 mp2 -> *)
@@ -398,15 +409,11 @@ Inductive eval_expr : expr -> val -> option place ->  Prop :=
 (*     sem_binary_operation ge op v1 ty1 v2 ty2 m = Some v -> *)
 (*     (* For now, we do not return moved place in binary operation *) *)
 (*     eval_expr (Ebinop op a1 a2 ty) v None. *)
-| eval_Eplace_copy: forall p b ofs ty m v,
+| eval_Eplace: forall p b ofs ty m v,
     eval_place p b ofs ->
     deref_loc ty m b ofs v ->
-    eval_expr (Eplace Copy p ty) v None
-| eval_Eplace_move: forall p b ofs ty m v,
-    eval_place p b ofs ->
-    deref_loc ty m b ofs v ->
-    eval_expr (Eplace Move p ty) v (Some p)
-| eval_Eget_copy: forall p b ofs ofs' ty m v id fid attr co bf,
+    eval_pexpr (Eplace p ty) v
+| eval_Eget: forall p b ofs ofs' ty m v id fid attr co bf,
     typeof_place p = Tvariant id attr ->
     ce ! id = Some co ->
     eval_place p b ofs ->
@@ -414,16 +421,7 @@ Inductive eval_expr : expr -> val -> option place ->  Prop :=
     (* load the value *)
     deref_loc ty m b (Ptrofs.add ofs (Ptrofs.repr ofs')) v ->
     (** what if p is an own type? *)
-    eval_expr (Eget Copy p fid ty) v None
-| eval_Eget_move: forall p b ofs ofs' ty m v id fid attr co bf,
-    typeof_place p = Tvariant id attr ->
-    ce ! id = Some co ->
-    eval_place p b ofs ->
-    (* do not check the tag. we can use Ecktag to check it *)
-    variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
-    (* load the value *)
-    deref_loc ty m b (Ptrofs.add ofs (Ptrofs.repr ofs')) v ->
-    eval_expr (Eget Move p fid ty) v (Some p)
+    eval_pexpr (Eget p fid ty) v
 
 | eval_Ecktag: forall p b ofs ty m tag tagz id fid attr co,
     eval_place p b ofs ->
@@ -432,30 +430,68 @@ Inductive eval_expr : expr -> val -> option place ->  Prop :=
     typeof_place p = Tvariant id attr ->
     ce ! id = Some co ->
     field_tag fid co.(co_members) = Some tagz ->
-    eval_expr (Ecktag p fid ty) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz)) None.
+    eval_pexpr (Ecktag p fid ty) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz)).
 
-Inductive eval_exprlist : list expr -> typelist -> list val -> list (option place) -> Prop :=
+(* expression evaluation has two phase: evaluate the value and produce
+the moved-out place *)
+Inductive eval_expr: expr -> val -> Prop :=
+| eval_Emoveplace: forall p ty v,
+    eval_pexpr (Eplace p ty) v ->
+    eval_expr (Emoveplace p ty) v
+| eval_Emoveget: forall p fid ty v,
+    eval_pexpr (Eget p fid ty) v ->
+    eval_expr (Emoveget p fid ty) v
+| eval_Epure: forall pe v,
+    eval_pexpr pe v ->
+    eval_expr (Epure pe) v.
+
+Inductive eval_exprlist : list expr -> typelist -> list val -> Prop :=
 | eval_Enil:
-  eval_exprlist nil Tnil nil nil
-| eval_Econs:   forall a bl ty tyl v1 v2 vl op opl,
+  eval_exprlist nil Tnil nil
+| eval_Econs:   forall a bl ty tyl v1 v2 vl,
     (* For now, we does not allow type cast *)
     typeof a = ty ->
-    eval_expr a v1 op ->
+    eval_expr a v1 ->
     (* sem_cast v1 (typeof a) ty m = Some v2 -> *) 
-    eval_exprlist bl tyl vl opl ->
-    eval_exprlist (a :: bl) (Tcons ty tyl) (v2 :: vl) (op :: opl).
+    eval_exprlist bl tyl vl ->
+    eval_exprlist (a :: bl) (Tcons ty tyl) (v2 :: vl).
 
-Inductive eval_boxexpr : boxexpr -> val -> option place -> mem -> Prop :=
-| eval_Bexpr: forall e v op,
-    eval_expr e v op ->
-    eval_boxexpr (Bexpr e) v op m
-| eval_Box: forall r v op m' m'' m''' b ty chunk,
+(* The second phase of evaluation of expression *)
+
+Definition moved_place (e: expr) : option place :=
+  match e with
+  | Emoveplace p _
+  | Emoveget p _ _ =>
+      Some p
+  | _ => None
+  end.
+
+Definition moved_place_list (el: list expr) : list place :=
+  fold_right
+    (fun (elt : expr) (acc : list place) =>
+       match moved_place elt with
+       | Some p => p :: acc
+       | None => acc
+       end) nil el.
+
+Fixpoint moved_place_boxexpr (be: boxexpr) : option place :=
+  match be with
+  | Box be' => moved_place_boxexpr be'
+  | Bexpr e => moved_place e
+  end.
+
+
+Inductive eval_boxexpr : boxexpr -> val -> mem -> Prop :=
+| eval_Bexpr: forall e v,
+    eval_expr e v ->
+    eval_boxexpr (Bexpr e) v m
+| eval_Box: forall r v m' m'' m''' b ty chunk,
     typeof_boxexpr r = ty ->
-    eval_boxexpr r v op m' ->
+    eval_boxexpr r v m' ->
     Mem.alloc m' 0 (sizeof ce ty) = (m'', b) ->
     access_mode ty = By_value chunk ->
     Mem.store chunk m'' b 0 v = Some m''' ->
-    eval_boxexpr (Box r) (Vptr b Ptrofs.zero) op m'''.
+    eval_boxexpr (Box r) (Vptr b Ptrofs.zero) m'''.
 
 End EXPR.
 
@@ -769,9 +805,10 @@ Inductive step : state -> trace -> state -> Prop :=
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
-    eval_boxexpr ge le m1 be v op m2 ->
+    eval_boxexpr ge le m1 be v m2 ->
+    moved_place_boxexpr be = op ->
     (* update the initialized environment based on [op] *)
-    remove_own own op = Some own' ->
+    remove_own_option own op = Some own' ->
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
     owned type, drop_place has no effect. We must first update the me
     and then drop p, consider [ *p=move *p ] *)
@@ -789,9 +826,10 @@ Inductive step : state -> trace -> state -> Prop :=
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
-    eval_boxexpr ge le m1 be v op m2 ->
+    eval_boxexpr ge le m1 be v m2 ->
+    moved_place_boxexpr be = op ->
     (* update the initialized environment based on [op] *)
-    remove_own own op = Some own' ->
+    remove_own_option own op = Some own' ->
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
     owned type, drop_place has no effect. We must first update the me
     and then drop p, consider [ *p=move *p ] *)
@@ -836,8 +874,9 @@ can initialize struct *)
          
 | step_call_0: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr ge le m a vf None ->
-    eval_exprlist ge le m al tyargs vargs optlp ->
+    eval_expr ge le m a vf ->
+    eval_exprlist ge le m al tyargs vargs ->
+    moved_place_list al = optlp ->
     (* CHECKME: update the initialized environment *)
     remove_own_list own1 optlp = Some own2 ->
     Genv.find_funct ge vf = Some fd ->
@@ -845,8 +884,9 @@ can initialize struct *)
     step (State f (Scall None a al) k le own1 m) E0 (Callstate vf vargs (Kcall None f le own2 k) m)
 | step_call_1: forall f a al optlp k le le' own1 own2 m vargs tyargs vf fd cconv tyres p,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr ge le m a vf None ->
-    eval_exprlist ge le m al tyargs vargs optlp ->
+    eval_expr ge le m a vf ->
+    eval_exprlist ge le m al tyargs vargs ->
+    moved_place_list al = optlp ->
     (* CHECKME: update the move environment *)
     remove_own_list own1 optlp = Some own2 ->
     Genv.find_funct ge vf = Some fd ->
@@ -886,10 +926,11 @@ can initialize struct *)
     Mem.free_list m1 lb = Some m2 ->
     step (State f (Sreturn None) k e own m1) E0 (Returnstate Vundef (call_cont k) m2)
 | step_return_1: forall le a v op own own' lp lb m1 m2 m3 f k ,
-    eval_expr ge le m1 a v op ->
+    eval_expr ge le m1 a v ->
+    moved_place a = op ->
     (* CHECKME: update move environment, because some place may be
     moved out to the callee *)
-    remove_own own op = Some own' ->
+    remove_own_option own op = Some own' ->
     places_of_env le = lp ->
     drop_place_list ge le own' m1 lp m2 ->
     (* drop the stack blocks *)
@@ -931,7 +972,7 @@ can initialize struct *)
       E0 (State f Sbreak k e me m)
 | step_ifthenelse:  forall f a s1 s2 k e me me' m v1 b ty,
     (* there is no receiver for the moved place, so it must be None *)
-    eval_expr ge e m a v1 None ->
+    eval_expr ge e m a v1 ->
     to_ctype (typeof a) = ty ->
     bool_val v1 ty m = Some b ->
     step (State f (Sifthenelse a s1 s2) k e me m)

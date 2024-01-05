@@ -153,51 +153,21 @@ Definition collect_option_place (p: option place) (m: PathsMap.t) : PathsMap.t :
   | None => m
   end.
 
-Fixpoint collect_expr (e: expr) : option place :=
-  match e with
-  | Eplace Move p _
-  | Eget Move p _ _ =>
-      Some p
-  (* | Ecktag p _ _ => ?? *)
-  | Eunop _ e _ => collect_expr e
-  | Ebinop _ e1 e2 _ =>
-      match collect_expr e1, collect_expr e2 with
-      | Some p, None => Some p
-      | None, Some p => Some p
-      | _, _ => None
-      end
-  | _ => None          
-  end.
-
-Definition collect_exprlist (el: list expr) : list place :=
-  fold_right
-    (fun (elt : expr) (acc : list place) =>
-       match collect_expr elt with
-       | Some p => p :: acc
-       | None => acc
-       end) nil el.
-
-Fixpoint collect_boxexpr (be: boxexpr) : option place :=
-  match be with
-  | Box be' => collect_boxexpr be'
-  | Bexpr e => collect_expr e
-  end.
-
 
 Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
   match s with
   | Sassign p e  =>
-      collect_place p (collect_option_place (collect_boxexpr e) m)
+      collect_place p (collect_option_place (moved_place_boxexpr e) m)
   | Scall op _ al =>
-      let pl := collect_exprlist al in
+      let pl := moved_place_list al in
       let m' := fold_right collect_place m pl in
       collect_option_place op m'
   | Sreturn (Some e) =>
-      collect_option_place (collect_expr e) m
+      collect_option_place (moved_place e) m
   | Ssequence s1 s2 =>
       collect_stmt s1 (collect_stmt s2 m)
   | Sifthenelse e s1 s2 =>
-      collect_option_place (collect_expr e) (collect_stmt s1 (collect_stmt s2 m))
+      collect_option_place (moved_place e) (collect_stmt s1 (collect_stmt s2 m))
   | Sloop s =>
       collect_stmt s m
   | _ => m
@@ -259,19 +229,19 @@ Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (p
         | Some s =>
         match s with
         | Sassign p e =>
-            let p' := collect_boxexpr e in
+            let p' := moved_place_boxexpr e in
             if flag then
               add_place S p (remove_option p' before)
             else
               remove_place p (add_option S p' before)
         | Scall op _ al =>
-            let pl := collect_exprlist al in
+            let pl := moved_place_list al in
             if flag then
               add_option S op (fold_right remove_place before pl)
             else
               remove_option op (fold_right (add_place S) before pl)
         | Sreturn (Some e) =>
-            let p' := collect_expr e in
+            let p' := moved_place e in
             if flag then
               remove_option p' before
             else

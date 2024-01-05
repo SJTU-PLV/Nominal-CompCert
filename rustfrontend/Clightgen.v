@@ -325,14 +325,14 @@ Variable tce: Ctypes.composite_env.
 
 Variable dropm: PTree.t ident.  (* map from composite id to its drop glue id *)
 
-Fixpoint expr_to_cexpr (e: expr) : mon Clight.expr :=
+Fixpoint pexpr_to_cexpr (e: pexpr) : mon Clight.expr :=
   match e with
   | Econst_int i ty => ret (Clight.Econst_int i (to_ctype ty))
   | Econst_float f ty => ret (Clight.Econst_float f (to_ctype ty))
   | Econst_single f ty => ret (Clight.Econst_single f (to_ctype ty))
   | Econst_long l ty => ret (Clight.Econst_long l (to_ctype ty))
-  | Eplace _ p _ => ret (place_to_cexpr p)
-  | Eget _ p fid ty =>
+  | Eplace p _ => ret (place_to_cexpr p)
+  | Eget p fid ty =>
       (** FIXME: how to translate the get expression? *)
       match typeof_place p with
       | Tvariant id _ =>
@@ -360,13 +360,23 @@ Fixpoint expr_to_cexpr (e: expr) : mon Clight.expr :=
       | _ => error (msg "Error in Ecktag 3, type error: expr_to_cexpr")
       end
   | Eunop uop e ty =>
-      do e' <- expr_to_cexpr e;
+      do e' <- pexpr_to_cexpr e;
       ret (Clight.Eunop uop e' (to_ctype ty))
   | Ebinop binop e1 e2 ty =>
-      do e1' <- expr_to_cexpr e1;
-      do e2' <- expr_to_cexpr e2;
+      do e1' <- pexpr_to_cexpr e1;
+      do e2' <- pexpr_to_cexpr e2;
       ret (Clight.Ebinop binop e1' e2' (to_ctype ty))
   end.
+
+Definition expr_to_cexpr (e: expr) : mon Clight.expr :=
+  match e with
+  | Emoveplace p ty =>
+      pexpr_to_cexpr (Eplace p ty)
+  | Emoveget p fid ty =>
+      pexpr_to_cexpr (Eget p fid ty)
+  | Epure pe =>
+      pexpr_to_cexpr pe
+end.
 
 
 Fixpoint transl_boxexpr (be: boxexpr) : mon (list Clight.statement * Clight.expr) :=
