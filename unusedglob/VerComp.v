@@ -1142,6 +1142,24 @@ Proof.
       eapply Values.val_inject_compose; eauto.
 Admitted.
 
+Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
+    Val.inject (compose_meminj j1 j2) v1 v3 ->
+    exists v2, Val.inject j1 v1 v2 /\ Val.inject j2 v2 v3.
+Proof.
+  intros. inv H.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  unfold compose_meminj in H0.
+  destruct (j1 b1) as [[b2' d1]|] eqn:M1; try congruence.
+  destruct (j2 b2') as [[b3' d2]|] eqn:M2; inv H0.
+  eexists. split. econstructor; eauto.
+  econstructor; eauto. rewrite add_repr.
+  rewrite Ptrofs.add_assoc. auto.
+  exists Vundef. split; constructor.
+Qed.
+
 Theorem injp'_injp_ref2:
   ccref' (cc_compose_2 (cc_c' injp') (cc_c injp)) (cc_c' injp') .
 Proof.
@@ -1160,7 +1178,63 @@ Proof.
   simpl. repeat apply conj.
   - inv MSTBL12. inv MSTBL23.
     econstructor; simpl; auto.
-    eapply Genv.match_stbls_stbls'_compose; eauto.
+    eapply Genv.match_stbls'_stbls_compose; eauto.
+  - constructor; cbn; eauto.
+    eapply val_inject_compose; eauto.
+     eapply CKLRAlgebra.val_inject_list_compose.
+     econstructor; eauto.
+  - intros r1 r3 [w13' [INCR13' Hr13]].
+    inv Hr13. inv H3. cbn in H1. rename f into j13'. rename Hm3 into INJ13'.
+    cbn in INCR13'. rename m2' into m3'.
+    inversion INCR13' as [? ? ? ? ? ? ? ? ? ?  RO1 RO3 MAXPERM1 MAXPERM3 UNCHANGE1 UNCHANGE3 INCR13 DISJ13]. subst.
+    generalize (inject_implies_image_in _ _ _ INJ12).
+    intros IMGIN12.
+    generalize (inject_implies_image_in _ _ _ INJ23).
+    intros IMGIN23.
+    generalize (inject_implies_dom_in _ _ _ INJ12).
+    intros DOMIN12.
+    generalize (inject_implies_dom_in _ _ _ INJ23).
+    intros DOMIN23.
+    generalize (inject_implies_dom_in _ _ _ INJ13').
+    intros DOMIN13'.
+    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE1).
+    intros SUPINCL1.
+    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE3).
+    intros SUPINCL3.
+    generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
+    intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
+    subst. cbn in *.
+    set (m2' := m2' m1 m2 m1' j12 j23 j12' j23' gs2 m2'_sup INJ12 SUPINCL2).
+    assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
+    admit.
+    assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
+    admit.
+    rename gs0 into gs1. rename gs4 into gs3.
+    set (w1' := injpw j12' gs1 gs2 m1' m2' INJ12').
+    set (w2' := injpw j23' gs2 gs3 m2' m3' INJ23').
+    rename vres2 into vres3.
+    exploit compose_meminj_midvalue; eauto.
+    intros [vres2 [RES1 RES2]].
+    assert (UNC21:Mem.unchanged_on (fun b z => loc_out_of_reach j12 m1 b z /\ ~ sup_In b gs2) m2 m2').
+    eapply UNCHANGE21; eauto.
+    admit.
+    exists (cr vres2 m2'). split.
+    + exists w1'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
+      admit.
+      eapply MAXPERM2; eauto.
+      admit.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. destruct H1. split; eauto. red. unfold compose_meminj.
+      rewrite H1. reflexivity.
+      constructor; eauto. constructor; eauto.
+    + exists (cr vres2 m2'). split. cbn. econstructor. constructor.
+      constructor. eapply ROUNC2; eauto.
+      inversion UNC21. eauto.
+      eapply MAXPERM2; eauto.
+      exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
+      eapply MAXPERM2; eauto.
+      eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
+      econstructor; eauto. constructor; eauto.
     eapply Genv.match_stbls_compose; eauto.
   red. intros w se1 se2 q1 q2 Hse Hq.
   inv Hse. inv Hq. cbn in H2, H3. inv H4. rename m0 into m1. rename m3 into m2.
