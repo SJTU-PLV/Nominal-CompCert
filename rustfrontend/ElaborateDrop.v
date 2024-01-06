@@ -220,7 +220,7 @@ Definition get_dropflag_temp (p: place) : option ident :=
 Definition Ibool (b: bool) := Epure (Econst_int (if b then Int.one else Int.zero) type_bool).
 
 Definition set_dropflag (id: ident) (flag: bool) : statement :=
-  Sassign (Plocal id type_bool) (Bexpr (Ibool flag)).
+  Sassign (Plocal id type_bool) (Ibool flag).
 
 Definition set_dropflag_option (id: option ident) (flag: bool) : statement :=
   match id with
@@ -246,11 +246,12 @@ Definition add_dropflag_list (l: list place) (flag: bool) : statement :=
 (** FIXME: It may generate lots of Sskip *)
 Fixpoint transl_stmt (stmt: statement) : statement :=
   match stmt with
-  | Sassign p be =>
-      let deinit := moved_place_boxexpr be in
+  | Sassign p e
+  | Sbox p e =>
+      let deinit := moved_place e in
       let stmt1 := add_dropflag_option deinit false in
       let stmt2 := add_dropflag p true in
-      makeseq (stmt1 :: stmt2 :: stmt :: nil)
+      makeseq (stmt1 :: stmt2 :: stmt :: nil)  
   | Scall p e el =>
       let mvpaths := moved_place_list el in
       let stmt1 := add_dropflag_list mvpaths false in

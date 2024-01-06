@@ -60,6 +60,7 @@ Inductive expr : Type :=
 
 (* evaluate an expr has no side effect. But evaluate a boxexpr may
 allocate a new block *)
+(** Unused  *)
 Inductive boxexpr : Type :=
 | Bexpr: expr -> boxexpr
 | Box: boxexpr -> boxexpr.
@@ -123,16 +124,17 @@ with to_ctypelist (tyl: typelist) : Ctypes.typelist :=
                                     
 
 Inductive statement : Type :=
-  | Sskip : statement                   (**r do nothing *)
-  | Slet : ident -> type -> statement -> statement (**r declare a variable. let ident: type in *)
-  | Sassign : place -> boxexpr -> statement (**r assignment [place = rvalue] *)
-  | Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
-  | Ssequence : statement -> statement -> statement  (**r sequence *)
-  | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
-  | Sloop: statement -> statement (**r infinite loop *)
-  | Sbreak : statement                      (**r [break] statement *)
-  | Scontinue : statement                   (**r [continue] statement *)
-  | Sreturn : option expr -> statement.      (**r [return] statement *)
+| Sskip : statement                   (**r do nothing *)
+| Slet : ident -> type -> statement -> statement (**r declare a variable. let ident: type in *)
+| Sassign : place -> expr -> statement (**r assignment [place = rvalue] *)
+| Sbox: place -> expr -> statement        (**r box assignment [place = Box::new(expr)]  *)
+| Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
+| Ssequence : statement -> statement -> statement  (**r sequence *)
+| Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
+| Sloop: statement -> statement (**r infinite loop *)
+| Sbreak : statement                      (**r [break] statement *)
+| Scontinue : statement                   (**r [continue] statement *)
+| Sreturn : option expr -> statement.      (**r [return] statement *)
 
 
 Record function : Type := mkfunction {
@@ -176,7 +178,7 @@ Declare Custom Entry rustlight_aux.
 Notation "<{ s }>" := s (s custom rustlight_aux) : rustlight_scope.
 Notation "s" := s (in custom rustlight_aux at level 0, s custom rustlight) : rustlight_scope.
 
-Notation "'if' e 'then' s1 'else' s2 'end'" := (Sifthenelse e s1 s2) (in custom rustlight at level 89, e constr at level 99, s1 at level 99, s2 at level 99, right associativity) : rustlight_scope.
+Notation "'if' e 'then' s1 'else' s2 'end'" := (Sifthenelse e s1 s2) (in custom rustlight at level 89, e constr at level 99, right associativity) : rustlight_scope.
 Notation "s1 ; s2" := (Ssequence s1 s2) (in custom rustlight at level 90, right associativity) : rustlight_scope.
 Notation "'skip'" := Sskip (in custom rustlight at level 0) : rustlight_scope.
 Notation "'break'" := Sbreak (in custom rustlight at level 0) : rustlight_scope.
@@ -189,7 +191,10 @@ Notation "p := f ( l ) " := (Scall (Some p) f l) (in custom rustlight at level 5
 Notation " f ( l )" := (Scall None f l) (in custom rustlight at level 5, f constr at level 99, l constr at level 99, no associativity) : rustlight_scope.
 Notation "'loop' s 'end'" := (Sloop s) (in custom rustlight at level 20, no associativity) : rustlight_scope.
 
-Open Scope rustlight_scope.
+
+(* Print Grammar constr. *)
+
+Local Open Scope rustlight_scope.
 
 Definition A : ident := 1%positive.
 Definition B : ident := 2%positive.
@@ -198,14 +203,17 @@ Definition D : ident := 4%positive.
 Definition E : ident := 5%positive.
 
 
-Print Custom Grammar rustlight.
+(* Print Custom Grammar rustlight. *)
 
 Definition ident_to_place_int32s (id: ident) : place := Plocal id type_int32s.
 
 Definition place_to_expr (p: place) : expr := (Epure (Eplace p (typeof_place p))).
 
+Definition expr_to_boxexpr (e: expr) : boxexpr := (Bexpr e).
+
 Coercion ident_to_place_int32s : ident >-> place.
 Coercion place_to_expr: place >-> expr.
+Coercion expr_to_boxexpr: expr >-> boxexpr.
 
 Fail Definition test_option_ident_to_expr : option expr  := Some A.
 Definition test_option_ident_to_expr : option expr  := @Some expr A.
@@ -215,12 +223,22 @@ Definition test_option_ident_to_expr : option expr  := @Some expr A.
 
 Definition test : statement :=
   <{ let A : type_int32s in
-     (* A := Econst_int Int.one type_int32s; *)
-     (*     A := Econst_int Int.zero type_int32s; *)
-     (* return A *)
-     skip; break; return; return A
+     A := (Epure (Econst_int Int.one type_int32s));
+     A := (Epure (Econst_int Int.zero type_int32s));
+     return A;
+     skip; break; return; return A;
+     if (Epure (Econst_int Int.zero type_int32s)) then
+       B := C;
+       A := B
+     else
+       A := C
+     end;
+     loop
+       A := C;
+       B := A
+     end;
+     return
      end }>.
-
 
 
 (** * Operational Semantics  *)
@@ -231,7 +249,6 @@ Definition own_fuel := 10%nat.
 
 Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
 
-Print genv.
 
 Definition globalenv (se: Genv.symtbl) (p: program) :=
   {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env) |}.
@@ -531,24 +548,25 @@ Definition moved_place_list (el: list expr) : list place :=
        | None => acc
        end) nil el.
 
-Fixpoint moved_place_boxexpr (be: boxexpr) : option place :=
-  match be with
-  | Box be' => moved_place_boxexpr be'
-  | Bexpr e => moved_place e
-  end.
+(** Unused  *)
+(* Fixpoint moved_place_boxexpr (be: boxexpr) : option place := *)
+(*   match be with *)
+(*   | Box be' => moved_place_boxexpr be' *)
+(*   | Bexpr e => moved_place e *)
+(*   end. *)
 
 
-Inductive eval_boxexpr : boxexpr -> val -> mem -> Prop :=
-| eval_Bexpr: forall e v,
-    eval_expr e v ->
-    eval_boxexpr (Bexpr e) v m
-| eval_Box: forall r v m' m'' m''' b ty chunk,
-    typeof_boxexpr r = ty ->
-    eval_boxexpr r v m' ->
-    Mem.alloc m' 0 (sizeof ce ty) = (m'', b) ->
-    access_mode ty = By_value chunk ->
-    Mem.store chunk m'' b 0 v = Some m''' ->
-    eval_boxexpr (Box r) (Vptr b Ptrofs.zero) m'''.
+(* Inductive eval_boxexpr : boxexpr -> val -> mem -> Prop := *)
+(* | eval_Bexpr: forall e v, *)
+(*     eval_expr e v -> *)
+(*     eval_boxexpr (Bexpr e) v m *)
+(* | eval_Box: forall r v m' m'' m''' b ty chunk, *)
+(*     typeof_boxexpr r = ty -> *)
+(*     eval_boxexpr r v m' -> *)
+(*     Mem.alloc m' 0 (sizeof ce ty) = (m'', b) -> *)
+(*     access_mode ty = By_value chunk -> *)
+(*     Mem.store chunk m'' b 0 v = Some m''' -> *)
+(*     eval_boxexpr (Box r) (Vptr b Ptrofs.zero) m'''. *)
 
 End EXPR.
 
@@ -857,53 +875,73 @@ Variable ge: genv.
 
 Inductive step : state -> trace -> state -> Prop :=
 
-| step_assign: forall f be p op k le own own' own'' m1 m2 m3 m4 b ofs v id attr,
-    typeof_place p <> Tvariant id attr ->
+| step_assign: forall f e p ty op k le own own' own'' m1 m2 m3 b ofs v id attr,
+    (** FIXME: some ugly restriction  *)
+    typeof_place p = ty ->
+    typeof e = ty ->
+    ty <> Tvariant id attr ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
-    (* evaluate the boxexpr, return the value and the moved place (optional) *)
-    eval_boxexpr ge le m1 be v m2 ->
-    moved_place_boxexpr be = op ->
+    (* evaluate the expr, return the value and the moved place (optional) *)
+    eval_expr ge le m1 e v ->
+    moved_place e = op ->
     (* update the initialized environment based on [op] *)
     remove_own_option own op = Some own' ->
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
     owned type, drop_place has no effect. We must first update the me
     and then drop p, consider [ *p=move *p ] *)
-    drop_place ge le own' p m2 m3 ->
+    drop_place ge le own' p m1 m2 ->
     (* update the ownership env for p *)
     PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own' = own'' ->
     (* assign to p  *)
     (* note that the type is the expreesion type, consider [a = 1]
     where a is [variant{int,float} *)
-    assign_loc ge (typeof_boxexpr be) m3 b ofs v m4 ->
-    step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m4)
+    assign_loc ge ty m2 b ofs v m3 ->
+    step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m3)
 
-| step_assign_variant: forall f be p op k le own own' own'' m1 m2 m3 m4 m5 b ofs ofs' v tag bf co id fid attr ,
-    typeof_place p = Tvariant id attr ->
+| step_assign_variant: forall f e p ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid attr ,
+    typeof_place p = ty ->
+    typeof e = ty ->
+    ty = Tvariant id attr ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
-    eval_boxexpr ge le m1 be v m2 ->
-    moved_place_boxexpr be = op ->
+    eval_expr ge le m1 e v ->
+    moved_place e = op ->
     (* update the initialized environment based on [op] *)
     remove_own_option own op = Some own' ->
     (* drop the successors of p (i.e., *p, **p, ...). If ty is not
     owned type, drop_place has no effect. We must first update the me
     and then drop p, consider [ *p=move *p ] *)
-    drop_place ge le own' p m2 m3 ->
+    drop_place ge le own' p m1 m2 ->
     (* update the ownership env for p *)
     PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own' = own'' ->
     (* assign to p  *)
     (** different from normal assignment: update the tag and assign value *)
     ge.(genv_cenv) ! id = Some co ->
-    type_tag (typeof_boxexpr be) co.(co_members) = Some (fid,tag) ->
+    type_tag ty co.(co_members) = Some (fid,tag) ->
     (* set the tag *)
-    Mem.storev Mint32 m3 (Vptr b ofs) (Vint (Int.repr tag)) = Some m4 ->
+    Mem.storev Mint32 m2 (Vptr b ofs) (Vint (Int.repr tag)) = Some m3 ->
     field_offset ge fid co.(co_members) = OK (ofs', bf) ->
     (* set the value *)
-    assign_loc ge (typeof_boxexpr be) m4 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m5 ->
-    step (State f (Sassign p be) k le own m1) E0 (State f Sskip k le own'' m5)
+    assign_loc ge ty m3 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m4 ->
+    step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m4)
 
+| step_box: forall f e p ty op k le own1 own2 own3 m1 m2 m3 b v,
+    typeof e = ty ->
+    typeof_place p = ty ->
+    eval_expr ge le m1 e v ->
+    (* allocate the memory block *)
+    Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
+    (* assign the value *)
+    assign_loc ge ty m2 b Ptrofs.zero v m3 ->
+    (* update the ownership environment *)
+    moved_place e = op ->
+    remove_own_option own1 op = Some own2 ->
+    (* update the ownership env for p *)
+    PTree.set (local_of_place p) (own_path ge p ty) own2 = own3 ->
+    step (State f (Sbox p e) k le own1 m1) E0 (* may be we can change the effect *) (State f Sskip k le own3 m3)  
+         
 | step_let: forall f ty id own m1 m2 le1 le2 b k stmt,
     (* allocate the block for id *)
     Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->

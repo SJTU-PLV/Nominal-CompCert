@@ -22,7 +22,6 @@ Inductive expr : Type :=
 | Efield (l: expr) (f: ident) (ty: type) (**r access to a member of a struct *)
 | Eget (l: expr) (f: ident) (ty: type) (**r access to a member of a variant *)
 | Etag (l: expr) (ty: type) (**r get the tag of [l] *)
-| Euse (l: expr) (ty: type)              (**r l-value used as a r-value *)
 | Ederef (r: expr) (ty: type)        (**r pointer dereference (unary [*]) *)
 | Eunop (op: unary_operation) (r: expr) (ty: type)
 (**r unary arithmetic operation *)

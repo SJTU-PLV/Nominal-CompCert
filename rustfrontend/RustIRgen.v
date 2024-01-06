@@ -35,8 +35,10 @@ Fixpoint transl_stmt (stmt: RustlightBase.statement) (vars: list (list (ident * 
       let s := transl_stmt stmt' (list_list_cons (id,ty) vars) in
       let drop := Sdrop (Plocal id ty) in
       Ssequence (Sstoragelive id) (Ssequence s (Ssequence drop (Sstoragedead id)))
-  | RustlightBase.Sassign p be =>
-      Sassign p be
+  | RustlightBase.Sassign p e =>
+      Sassign p e
+  | RustlightBase.Sbox p e =>
+      Sbox p e
   | RustlightBase.Scall p e el =>
       Scall p e el
   | RustlightBase.Ssequence s1 s2 =>

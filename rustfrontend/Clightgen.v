@@ -378,29 +378,46 @@ Definition expr_to_cexpr (e: expr) : mon Clight.expr :=
       pexpr_to_cexpr pe
 end.
 
+(** Unused  *)
+(* Fixpoint transl_boxexpr (be: boxexpr) : mon (list Clight.statement * Clight.expr) := *)
+(*   match be with *)
+(*   | Box be' => *)
+(*       (* transl(be') -> (stmts, e); *)
+(*          temp = malloc(sz); *)
+(*          *temp = e; *)
+(*          temp *) *)
+(*       do (stmts, e) <- transl_boxexpr be'; *)
+(*       let ty := to_ctype (typeof_boxexpr be) in *)
+(*       let ty' := Clight.typeof e in *)
+(*       do temp <- gensym ty; *)
+(*       let sz := Ctypes.sizeof tce ty' in *)
+(*       let tempvar := Clight.Etempvar temp ty in *)
+(*       let malloc := (Evar malloc_id (Ctypes.Tfunction (Ctypes.Tcons (Tpointer ty' noattr) Ctypes.Tnil) (Tpointer ty' noattr) cc_default)) in *)
+(*       let sz_expr := Clight.Econst_int (Int.repr sz) Ctypes.type_int32s in *)
+(*       let call_malloc:= (Clight.Scall (Some temp) malloc (sz_expr :: nil)) in *)
+(*       let assign_deref_temp := Clight.Sassign (Ederef tempvar ty') e in *)
+(*       ret (stmts ++ (call_malloc :: assign_deref_temp :: nil), tempvar) *)
+(*   | Bexpr e => *)
+(*       do e' <- expr_to_cexpr e; *)
+(*       ret (nil, e')      *)
+(*   end. *)
 
-Fixpoint transl_boxexpr (be: boxexpr) : mon (list Clight.statement * Clight.expr) :=
-  match be with
-  | Box be' =>
-      (* transl(be') -> (stmts, e);
-         temp = malloc(sz);
-         *temp = e;
-         temp *)
-      do (stmts, e) <- transl_boxexpr be';
-      let ty := to_ctype (typeof_boxexpr be) in
-      let ty' := Clight.typeof e in
-      do temp <- gensym ty;
-      let sz := Ctypes.sizeof tce ty' in
-      let tempvar := Clight.Etempvar temp ty in
-      let malloc := (Evar malloc_id (Ctypes.Tfunction (Ctypes.Tcons (Tpointer ty' noattr) Ctypes.Tnil) (Tpointer ty' noattr) cc_default)) in
-      let sz_expr := Clight.Econst_int (Int.repr sz) Ctypes.type_int32s in
-      let call_malloc:= (Clight.Scall (Some temp) malloc (sz_expr :: nil)) in
-      let assign_deref_temp := Clight.Sassign (Ederef tempvar ty') e in
-      ret (stmts ++ (call_malloc :: assign_deref_temp :: nil), tempvar)
-  | Bexpr e =>
-      do e' <- expr_to_cexpr e;
-      ret (nil, e')     
-  end.
+Definition transl_Sbox (e: expr) : mon (list Clight.statement * Clight.expr) :=
+  (* temp = malloc(sz);
+     *temp = e;
+     temp *)
+  do e' <- expr_to_cexpr e;
+  let e_ty := Clight.typeof e' in
+  let temp_ty := Tpointer e_ty noattr in
+  do temp <- gensym temp_ty;
+  let sz := Ctypes.sizeof tce e_ty in
+  let tempvar := Clight.Etempvar temp temp_ty in
+  let malloc := (Evar malloc_id (Ctypes.Tfunction (Ctypes.Tcons Ctypes.type_int32s Ctypes.Tnil) temp_ty cc_default)) in
+  let sz_expr := Clight.Econst_int (Int.repr sz) Ctypes.type_int32s in
+  let call_malloc:= (Clight.Scall (Some temp) malloc (sz_expr :: nil)) in
+  let assign_deref_temp := Clight.Sassign (Ederef tempvar e_ty) e' in
+  ret ((call_malloc :: assign_deref_temp :: nil), tempvar).
+
 
 
 (* expand drop_in_place(temp), temp is a reference, ty is the type of
@@ -437,10 +454,16 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
 Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
   match stmt with
   | Sskip => ret Clight.Sskip
-  | Sassign p be =>
-      do (stmts, e') <- transl_boxexpr be;
+  | Sassign p e =>      
+      do e' <- expr_to_cexpr e;
       let assign := Clight.Sassign (place_to_cexpr p) e' in
-      ret (Clight.Ssequence (makeseq stmts) assign)
+      ret assign
+  | Sbox p e =>
+      (* temp = malloc(sizeof(e));
+       *temp = e;
+       p = temp *)       
+      do (stmt, e') <- transl_Sbox e;
+      ret (Clight.Ssequence (makeseq stmt) (Clight.Sassign (place_to_cexpr p) e'))
   | Sstoragelive _
   | Sstoragedead _ =>
       ret Clight.Sskip

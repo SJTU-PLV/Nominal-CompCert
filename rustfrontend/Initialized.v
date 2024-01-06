@@ -157,7 +157,9 @@ Definition collect_option_place (p: option place) (m: PathsMap.t) : PathsMap.t :
 Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
   match s with
   | Sassign p e  =>
-      collect_place p (collect_option_place (moved_place_boxexpr e) m)
+      collect_place p (collect_option_place (moved_place e) m)
+  | Sbox p e =>
+      collect_place p (collect_option_place (moved_place e) m)
   | Scall op _ al =>
       let pl := moved_place_list al in
       let m' := fold_right collect_place m pl in
@@ -228,8 +230,9 @@ Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (p
         | None => PathsMap.bot
         | Some s =>
         match s with
-        | Sassign p e =>
-            let p' := moved_place_boxexpr e in
+        | Sassign p e
+        | Sbox p e =>
+            let p' := moved_place e in
             if flag then
               add_place S p (remove_option p' before)
             else

@@ -33,18 +33,19 @@ checking. We use [drop(p)] statement to indicate that we may need to
 drop the content of [p] depending on the ownership environment. *)
 
 Inductive statement : Type :=
-| Sskip : statement                   (**r do nothing *)
-| Sassign : place -> boxexpr -> statement (**r assignment [place = rvalue] *)
+| Sskip: statement                   (**r do nothing *)
+| Sassign: place -> expr -> statement (**r assignment [place = rvalue] *)
+| Sbox: place -> expr -> statement       (**r [place = Box::new(expr)]  *)
 | Sstoragelive: ident -> statement       (**r id becomes avalible *)
 | Sstoragedead: ident -> statement       (**r id becomes un-avalible *)
-| Sdrop : place -> statement             (**r conditionally drop the place [p] *)
+| Sdrop: place -> statement             (**r conditionally drop the place [p] *)
 | Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
-| Ssequence : statement -> statement -> statement  (**r sequence *)
-| Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
+| Ssequence: statement -> statement -> statement  (**r sequence *)
+| Sifthenelse: expr  -> statement -> statement -> statement (**r conditional *)
 | Sloop: statement -> statement (**r infinite loop *)
-| Sbreak : statement                      (**r [break] statement *)
-| Scontinue : statement                   (**r [continue] statement *)
-| Sreturn : option expr -> statement.      (**r [return] statement *)
+| Sbreak: statement                      (**r [break] statement *)
+| Scontinue: statement                   (**r [continue] statement *)
+| Sreturn: option expr -> statement.      (**r [return] statement *)
 
 
 Record function : Type := mkfunction {
@@ -355,19 +356,21 @@ Section COMPOSITE_ENV.
 
 Variable (ce: composite_env).
 
-Fixpoint transl_stmt (stmt: statement) (sel: selector) (succ: node) (cont: option node) (break: option node) {struct stmt} : mon node :=
+Fixpoint transl_stmt (stmt: statement) (sel: selector) (succ: node) (cont: option node) (brk: option node) {struct stmt} : mon node :=
   match stmt with
   | Sskip =>
       add_instr (Isel sel succ)
   | Sassign p e =>
       add_instr (Isel sel succ)
+  | Sbox p e =>
+      add_instr (Isel sel succ)
   | Ssequence stmt1 stmt2 =>
-      do succ2 <- transl_stmt stmt2 (Selseqright sel) succ cont break;
-      do succ1 <- transl_stmt stmt1 (Selseqleft sel) succ2 cont break;
+      do succ2 <- transl_stmt stmt2 (Selseqright sel) succ cont brk;
+      do succ1 <- transl_stmt stmt1 (Selseqleft sel) succ2 cont brk;
       ret succ1
   | Sifthenelse e stmt1 stmt2 =>
-      do n1 <- transl_stmt stmt1 (Selifthen sel) succ cont break;
-      do n2 <- transl_stmt stmt2 (Selifelse sel) succ cont break;
+      do n1 <- transl_stmt stmt1 (Selifthen sel) succ cont brk;
+      do n2 <- transl_stmt stmt2 (Selifelse sel) succ cont brk;
       do n3 <- add_instr (Icond e n1 n2);
       ret n3
   | Sloop stmt =>
@@ -376,7 +379,7 @@ Fixpoint transl_stmt (stmt: statement) (sel: selector) (succ: node) (cont: optio
         do _ <- update_instr loop_start (Inop body_start);
         ret loop_start
     | Sbreak =>
-        match break with
+        match brk with
         | None =>
             error (Errors.msg "No loop outside the break: transl_stmt")
         | Some brk =>
