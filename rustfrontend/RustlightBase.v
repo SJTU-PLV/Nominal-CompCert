@@ -167,6 +167,62 @@ Definition type_of_fundef (f: fundef) : type :=
   end.
 
 
+(** ** Notations of Rustlight program *)
+
+Declare Custom Entry rustlight.
+Declare Scope rustlight_scope.
+Declare Custom Entry rustlight_aux.
+
+Notation "<{ s }>" := s (s custom rustlight_aux) : rustlight_scope.
+Notation "s" := s (in custom rustlight_aux at level 0, s custom rustlight) : rustlight_scope.
+
+Notation "'if' e 'then' s1 'else' s2 'end'" := (Sifthenelse e s1 s2) (in custom rustlight at level 89, e constr at level 99, s1 at level 99, s2 at level 99, right associativity) : rustlight_scope.
+Notation "s1 ; s2" := (Ssequence s1 s2) (in custom rustlight at level 90, right associativity) : rustlight_scope.
+Notation "'skip'" := Sskip (in custom rustlight at level 0) : rustlight_scope.
+Notation "'break'" := Sbreak (in custom rustlight at level 0) : rustlight_scope.
+Notation "'continue'" := Scontinue (in custom rustlight at level 0) : rustlight_scope.
+Notation "'return'" := (Sreturn None) (in custom rustlight at level 10) : rustlight_scope.
+Notation "'return' e" := (Sreturn (@Some expr e)) (in custom rustlight at level 10, e constr) : rustlight_scope.
+Notation "p := e" := (Sassign p e) (in custom rustlight at level 5, p constr at level 99, e constr at level 99, no associativity) : rustlight_scope.
+Notation "'let' x : t 'in' s 'end' " := (Slet x t s) (in custom rustlight at level 5, x constr at level 99, t constr at level 99, no associativity) : rustlight_scope.
+Notation "p := f ( l ) " := (Scall (Some p) f l) (in custom rustlight at level 5, p constr at level 99, f constr at level 99, l constr at level 99, no associativity) : rustlight_scope.
+Notation " f ( l )" := (Scall None f l) (in custom rustlight at level 5, f constr at level 99, l constr at level 99, no associativity) : rustlight_scope.
+Notation "'loop' s 'end'" := (Sloop s) (in custom rustlight at level 20, no associativity) : rustlight_scope.
+
+Open Scope rustlight_scope.
+
+Definition A : ident := 1%positive.
+Definition B : ident := 2%positive.
+Definition C : ident := 3%positive.
+Definition D : ident := 4%positive.
+Definition E : ident := 5%positive.
+
+
+Print Custom Grammar rustlight.
+
+Definition ident_to_place_int32s (id: ident) : place := Plocal id type_int32s.
+
+Definition place_to_expr (p: place) : expr := (Epure (Eplace p (typeof_place p))).
+
+Coercion ident_to_place_int32s : ident >-> place.
+Coercion place_to_expr: place >-> expr.
+
+Fail Definition test_option_ident_to_expr : option expr  := Some A.
+Definition test_option_ident_to_expr : option expr  := @Some expr A.
+
+(* Print Graph. *)
+(* Print Coercion Paths ident expr. *)
+
+Definition test : statement :=
+  <{ let A : type_int32s in
+     (* A := Econst_int Int.one type_int32s; *)
+     (*     A := Econst_int Int.zero type_int32s; *)
+     (* return A *)
+     skip; break; return; return A
+     end }>.
+
+
+
 (** * Operational Semantics  *)
 
 Definition own_fuel := 10%nat.
@@ -175,6 +231,7 @@ Definition own_fuel := 10%nat.
 
 Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
 
+Print genv.
 
 Definition globalenv (se: Genv.symtbl) (p: program) :=
   {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env) |}.
