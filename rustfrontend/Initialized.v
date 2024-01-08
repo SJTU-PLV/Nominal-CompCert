@@ -118,7 +118,7 @@ Fixpoint own_path_box (p: place) (ty: type) :=
 recursively add p' and its parents to paths [l]; If [p] is [Pfield p'
 fid ty], then add [p']'s siblings and [p']'s parent to paths [l]*)
 Fixpoint collect (p: place) (l: Paths.t) : Paths.t :=
-  if own_type own_fuel ce (typeof_place p) then
+  if own_type ce (typeof_place p) then
     (* If there are some children of [p] in [l], do nothing. *)
     if Paths.is_empty (Paths.filter (fun elt => is_prefix p elt) l) then
       match p with

@@ -233,7 +233,7 @@ Definition update_instr (n: node) (i: statement) : mon unit :=
 
 (* add drop statement *)
 Definition add_drop (ce: composite_env) (p: place) (succ: node) : mon node :=
-  match own_type own_fuel ce (typeof_place p) with
+  match own_type ce (typeof_place p) with
   | Some true => add_instr (Sdrop p succ)
   | Some false => ret succ
   | None => error (Errors.msg "Running out of fuel in own_type in add_drop.")

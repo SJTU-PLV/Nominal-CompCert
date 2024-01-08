@@ -39,7 +39,7 @@ Inductive statement : Type :=
 | Sstoragelive: ident -> statement       (**r id becomes avalible *)
 | Sstoragedead: ident -> statement       (**r id becomes un-avalible *)
 | Sdrop: place -> statement             (**r conditionally drop the place [p] *)
-| Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
+| Scall: place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
 | Ssequence: statement -> statement -> statement  (**r sequence *)
 | Sifthenelse: expr  -> statement -> statement -> statement (**r conditional *)
 | Sloop: statement -> statement (**r infinite loop *)

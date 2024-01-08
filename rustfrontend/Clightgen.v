@@ -6,7 +6,6 @@ Require Import Values.
 Require Import AST.
 Require Import Ctypes Rusttypes.
 Require Import Cop.
-Require Import Kildall.
 Require Import Clight.
 Require Import RustlightBase RustIR.
 Require Import Errors.
@@ -144,7 +143,7 @@ drop_in_place_xxx(&Struct{a,b,c} param) {
 Definition drop_glue_for_member (m: PTree.t ident) (deref_param: Clight.expr) (memb: member) : list Clight.statement :=
   match memb with
   | Member_plain fid ty =>      
-      if own_type own_fuel ce ty then
+      if own_type ce ty then
         let cty := (to_ctype ty) in
         let arg := Efield deref_param fid cty in
         drop_glue_for_type m arg ty
@@ -475,16 +474,11 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       do e' <- expr_to_cexpr e;
       (* temp = f();
          p = temp *)
-      match p with
-      | Some p =>
-          let ty := typeof_place p in
-          let cty := to_ctype ty in
-          do temp <- gensym cty;
-          let assign := Clight.Sassign (place_to_cexpr p) (Etempvar temp cty) in
-          ret (Clight.Ssequence (Clight.Scall (Some temp) e' el') assign)
-      | None =>
-          ret (Clight.Scall None e' el')
-      end
+      let ty := typeof_place p in
+      let cty := to_ctype ty in
+      do temp <- gensym cty;
+      let assign := Clight.Sassign (place_to_cexpr p) (Etempvar temp cty) in
+      ret (Clight.Ssequence (Clight.Scall (Some temp) e' el') assign)      
   | Ssequence s1 s2 =>
       do s1' <- transl_stmt s1;
       do s2' <- transl_stmt s2;

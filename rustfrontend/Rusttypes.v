@@ -232,33 +232,106 @@ Qed.
 
 (** Ownership type  *)
 
-(* If run out of fuel, return none *)
-Fixpoint own_type (fuel: nat) (ce: composite_env) (ty: type) : option bool :=
-  match fuel with
-  | O => None
-  | S fuel' =>
-      match ty with
-      | Tstruct id _ | Tvariant id _ =>
-          match ce ! id with
-          | Some co =>
-              let acc res m :=
-                let own := (match m with
-                            | Member_plain fid fty =>
-                                own_type fuel' ce fty
-                            end) in
-                match res,own with
-                | None, _ => None
-                | _, None => None
-                | Some res, Some own => Some (orb res own)
-                end in          
-              fold_left acc co.(co_members) (Some false)
-          | None => Some false
-          end
-      (** TODO: unique pointer and mutable reference are own type  *)
-      | Tbox _ _ => Some true
-      | _ => Some false
-      end
+(** Program Fixpoint version of own_type. But the proof is compilated  *)
+(* Program Fixpoint own_type (ce: composite_env) (ty: type) {measure (PTree_Properties.cardinal ce)} :  bool := *)
+(*   match ty with *)
+(*   | Tstruct id _ *)
+(*   | Tvariant id _ => *)
+(*       match ce ! id with *)
+(*       | Some co => *)
+(*           let ce' := PTree.remove id ce in *)
+(*           let acc res m := *)
+(*             let own := (match m with *)
+(*                         | Member_plain fid fty => *)
+(*                             own_type ce' fty *)
+(*                         end) in *)
+(*             (orb res own) in           *)
+(*           fold_left acc co.(co_members) false *)
+(*       | None => false *)
+(*       end *)
+(*   (** TODO: unique pointer and mutable reference are own type  *) *)
+(*   | Tbox _ _ => true *)
+(*   | Tunit | Tint _ _ _ | Tlong _ _ | Tfloat _ _ | Tfunction _ _ _ => false *)
+(*   end. *)
+(* Next Obligation. *)
+(*   eapply PTree_Properties.cardinal_remove;eauto. *)
+(* Defined. *)
+(* Next Obligation. *)
+(*   eapply PTree_Properties.cardinal_remove;eauto. *)
+(* Defined. *)
+
+(** Recursion borrowed from Inlining.v  *)
+Section OWN_TYPE.
+
+Variable ce: composite_env.
+
+Variable rec: forall (ce': composite_env), (PTree_Properties.cardinal ce' < PTree_Properties.cardinal ce)%nat -> type -> bool.
+
+Inductive composite_result : Type :=
+| co_none : composite_result
+| co_some (id: ident) (co: composite) (P: ce ! id = Some co).
+
+Program Definition get_composite (id: ident) : composite_result :=
+  match ce ! id with
+  | None => co_none
+  | Some co => co_some id co _
   end.
+
+Definition own_type' (ty: type) : bool :=
+  match ty with
+  | Tstruct id _
+  | Tvariant id _ =>
+      match get_composite id with
+      | co_some i co P =>
+          let acc res m :=
+            let own := (match m with
+                        | Member_plain fid fty =>
+                            rec (PTree.remove i ce) (PTree_Properties.cardinal_remove P) fty
+                        end) in
+            (orb res own) in
+          fold_left acc co.(co_members) false
+      | co_none => false
+      end
+  (** TODO: unique pointer and mutable reference are own type  *)
+  | Tbox _ _ => true
+  | _ => false
+  end.
+ 
+End OWN_TYPE.                                    
+
+Require Import Wfsimpl.
+
+Definition own_type (ce: composite_env) : type -> bool :=
+  Fixm (@PTree_Properties.cardinal composite) own_type' ce.
+
+(** Fuel version own_type  *)
+(* (* If run out of fuel, return none *) *)
+(* Fixpoint own_type (fuel: nat) (ce: composite_env) (ty: type) : option bool := *)
+(*   match fuel with *)
+(*   | O => None *)
+(*   | S fuel' => *)
+(*       match ty with *)
+(*       | Tstruct id _ | Tvariant id _ => *)
+(*           match ce ! id with *)
+(*           | Some co => *)
+(*               let acc res m := *)
+(*                 let own := (match m with *)
+(*                             | Member_plain fid fty => *)
+(*                                 own_type fuel' ce fty *)
+(*                             end) in *)
+(*                 match res,own with *)
+(*                 | None, _ => None *)
+(*                 | _, None => None *)
+(*                 | Some res, Some own => Some (orb res own) *)
+(*                 end in           *)
+(*               fold_left acc co.(co_members) (Some false) *)
+(*           | None => Some false *)
+(*           end *)
+(*       (** TODO: unique pointer and mutable reference are own type  *) *)
+(*       | Tbox _ _ => Some true *)
+(*       | _ => Some false *)
+(*       end *)
+(*   end. *)
 
 
 

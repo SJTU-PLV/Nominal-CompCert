@@ -128,7 +128,9 @@ Inductive statement : Type :=
 | Slet : ident -> type -> statement -> statement (**r declare a variable. let ident: type in *)
 | Sassign : place -> expr -> statement (**r assignment [place = rvalue] *)
 | Sbox: place -> expr -> statement        (**r box assignment [place = Box::new(expr)]  *)
-| Scall: option place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
+| Scall: place -> expr -> list expr -> statement (**r function call, p =
+  f(...). The assignee is mandatory, because we need to ensure that
+  the return value (may be a box) is received *)
 | Ssequence : statement -> statement -> statement  (**r sequence *)
 | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
 | Sloop: statement -> statement (**r infinite loop *)
@@ -207,13 +209,13 @@ Definition E : ident := 5%positive.
 
 Definition ident_to_place_int32s (id: ident) : place := Plocal id type_int32s.
 
-Definition place_to_expr (p: place) : expr := (Epure (Eplace p (typeof_place p))).
+Definition place_to_pexpr (p: place) : pexpr := (Eplace p (typeof_place p)).
 
-Definition expr_to_boxexpr (e: expr) : boxexpr := (Bexpr e).
+Definition pexpr_to_expr (pe: pexpr) : expr := Epure pe.
 
 Coercion ident_to_place_int32s : ident >-> place.
-Coercion place_to_expr: place >-> expr.
-Coercion expr_to_boxexpr: expr >-> boxexpr.
+Coercion place_to_pexpr: place >-> pexpr.
+Coercion pexpr_to_expr: pexpr >-> expr.
 
 Fail Definition test_option_ident_to_expr : option expr  := Some A.
 Definition test_option_ident_to_expr : option expr  := @Some expr A.
@@ -578,7 +580,7 @@ Inductive cont : Type :=
 | Kseq: statement -> cont -> cont
 | Klet: ident -> cont -> cont
 | Kloop: statement -> cont -> cont
-| Kcall: option place  -> function -> env -> own_env -> cont -> cont.
+| Kcall: place  -> function -> env -> own_env -> cont -> cont.
 
 
 (** Pop continuation until a call or stop *)
@@ -807,7 +809,7 @@ Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place) (ty: type) : list p
           | _ => p :: nil
           end
       | Tvariant _ _ =>
-          if own_type own_fuel ce ty then p :: nil
+          if own_type ce ty then p :: nil
           else nil
       | _ => nil
       end
@@ -967,16 +969,16 @@ can initialize struct *)
 (*     assign_loc ge ty m3 b Ptrofs.zero v m4 -> *)
 (*     step (State f (Slet id ty be stmt) k le1 own1 m1) E0 (State f stmt (Klet id k) le2 own3 m3) *)
          
-| step_call_0: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres,
-    classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
-    eval_expr ge le m a vf ->
-    eval_exprlist ge le m al tyargs vargs ->
-    moved_place_list al = optlp ->
-    (* CHECKME: update the initialized environment *)
-    remove_own_list own1 optlp = Some own2 ->
-    Genv.find_funct ge vf = Some fd ->
-    type_of_fundef fd = Tfunction tyargs tyres cconv ->
-    step (State f (Scall None a al) k le own1 m) E0 (Callstate vf vargs (Kcall None f le own2 k) m)
+(* | step_call_0: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres, *)
+(*     classify_fun (typeof a) = fun_case_f tyargs tyres cconv -> *)
+(*     eval_expr ge le m a vf -> *)
+(*     eval_exprlist ge le m al tyargs vargs -> *)
+(*     moved_place_list al = optlp -> *)
+(*     (* CHECKME: update the initialized environment *) *)
+(*     remove_own_list own1 optlp = Some own2 -> *)
+(*     Genv.find_funct ge vf = Some fd -> *)
+(*     type_of_fundef fd = Tfunction tyargs tyres cconv -> *)
+(*     step (State f (Scall None a al) k le own1 m) E0 (Callstate vf vargs (Kcall None f le own2 k) m) *)
 | step_call_1: forall f a al optlp k le le' own1 own2 m vargs tyargs vf fd cconv tyres p,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
@@ -986,7 +988,7 @@ can initialize struct *)
     remove_own_list own1 optlp = Some own2 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction tyargs tyres cconv ->
-    step (State f (Scall (Some p) a al) k le own1 m) E0 (Callstate vf vargs (Kcall (Some p) f le' own2 k) m)
+    step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le' own2 k) m)
                  
 (* End of a let statement, free the place and its drop obligations *)
 | step_end_let: forall f id k le1 le2 own1 own2 m1 m2 m3 ty b s,
@@ -1041,8 +1043,8 @@ can initialize struct *)
     Mem.free_list m2 lb = Some m3 ->
     step (State f Sskip k e own m1) E0 (Returnstate Vundef (call_cont k) m3)
          
-| step_returnstate_0: forall v m e me f k,
-    step (Returnstate v (Kcall None f e me k) m) E0 (State f Sskip k e me m)
+(* | step_returnstate_0: forall v m e me f k, *)
+(*     step (Returnstate v (Kcall None f e me k) m) E0 (State f Sskip k e me m) *)
 | step_returnstate_1: forall p v b ofs ty m m' m'' e own own' f k,
     (* drop and replace *)
     drop_place ge e own p m m' ->
@@ -1050,7 +1052,7 @@ can initialize struct *)
     PTree.set (local_of_place p) (own_path ge p (typeof_place p)) own = own' ->
     eval_place ge e m' p b ofs ->
     assign_loc ge ty m' b ofs v m'' ->    
-    step (Returnstate v (Kcall (Some p) f e own k) m) E0 (State f Sskip k e own' m'')
+    step (Returnstate v (Kcall p f e own k) m) E0 (State f Sskip k e own' m'')
 
 (* Control flow statements *)
 | step_seq:  forall f s1 s2 k e me m,

@@ -20,8 +20,6 @@ Inductive expr : Type :=
 | Evar (x: ident) (ty: type)                                (**r variable *)
 | Ebox (r: expr) (ty: type)                                 (**r allocate a heap block *)
 | Efield (l: expr) (f: ident) (ty: type) (**r access to a member of a struct *)
-| Eget (l: expr) (f: ident) (ty: type) (**r access to a member of a variant *)
-| Etag (l: expr) (ty: type) (**r get the tag of [l] *)
 | Ederef (r: expr) (ty: type)        (**r pointer dereference (unary [*]) *)
 | Eunop (op: unary_operation) (r: expr) (ty: type)
 (**r unary arithmetic operation *)
@@ -34,27 +32,39 @@ with exprlist : Type :=
   | Enil
   | Econs (r1: expr) (rl: exprlist).
 
+Definition typeof (e: expr) : type :=
+  match e with
+  | Eval _ ty
+  | Evar _ ty
+  | Ebox _ ty
+  | Efield _ _ ty
+  | Ederef _ ty
+  | Eunop _ _ ty
+  | Ebinop _ _ _ ty                  
+  | Eassign _ _ ty
+  | Ecall _ _ ty => ty
+end.
 
 Inductive statement : Type :=
 | Sskip : statement                   (**r do nothing *)
 | Sdo : expr -> statement            (**r evaluate expression for side effects *)
-| Slet: ident -> option expr -> statement         (**r the start of a variable  *)
+| Slet: ident -> type -> statement -> statement  (**r [Slet id ty] opens a new scope with one variable of type ty *)
 | Ssequence : statement -> statement -> statement  (**r sequence *)
 | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
 | Swhile : expr -> statement -> statement   (**r [while] loop *)
-| Sdowhile : expr -> statement -> statement (**r [do] loop *)
 | Sfor: statement -> expr -> statement -> statement -> statement (**r [for] loop *)
 | Sloop: statement -> statement                               (**r infinite loop *)
 | Sbreak : statement                      (**r [break] statement *)
 | Scontinue : statement                   (**r [continue] statement *)
 | Sreturn : option expr -> statement     (**r [return] statement *)
-| Smatch : expr -> stmtlist -> statement  (**r pattern match statements *)
+| Smatch : expr -> arm_statements -> statement  (**r pattern match statements *)
 
-with stmtlist : Type :=
-  | Snil
-  | Scons (s1: statement) (sl: stmtlist).
+with arm_statements : Type :=            (**r cases of a [match] *)
+  | ASnil: arm_statements
+  | AScons: option (ident * ident) -> statement -> arm_statements -> arm_statements.
+                      (**r [None] is [default], [Some (fid, id)] is [case fid (id)] *)
 
-                                          
+
 Record function : Type := mkfunction {
   fn_return: type;
   fn_callconv: calling_convention;
