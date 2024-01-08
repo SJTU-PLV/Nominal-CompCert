@@ -31,13 +31,18 @@ End BLOCK.
 (*
 Declare Module Block : BLOCK.
 *)
-Module Block <: BLOCK.
-Definition block := positive.
-Definition eq_block := peq.
+Module Block <: Maps.INDEXED_TYPE.
+  
+  Definition t := positive.
+  Definition index (x: t) := x.
+  Definition eq := peq.
+
+  Theorem index_inj: forall x y, index x = index y -> x = y.
+  Proof. intros. simpl in H. eauto. Qed.
 End Block.
 
-Definition block := Block.block.
-Definition eq_block := Block.eq_block.
+Definition block := Block.t.
+Definition eq_block := Block.eq.
 
 
 (** A value is either:

@@ -44,7 +44,7 @@ Require Export Memtype.
 (* To avoid useless definitions of inductors in extracted code. *)
 Local Unset Elimination Schemes.
 Local Unset Case Analysis Schemes.
-
+(*
 Module NMap.
   Definition elt := block.
   Definition elt_eq := eq_block.
@@ -109,7 +109,7 @@ Qed.
     intro. subst. auto.
   Qed.
 End NMap.
-
+*)
 
 (* Declare Module Sup: SUP. *)
 
@@ -234,9 +234,11 @@ Qed.
 
 End Sup.
 
+Module NMap := IMap(Block).
 Module Mem <: MEM.
 Include Sup.
-Local Notation "a # b" := (NMap.get _ b a) (at level 1).
+
+Local Notation "a # b" := (NMap.get b a) (at level 1).
 Local Notation "a ## b" := (ZMap.get b a) (at level 1).
 
 Definition perm_order' (po: option permission) (p: permission) :=
@@ -542,8 +544,8 @@ Qed.
 (** The initial store *)
 
 Program Definition empty: mem :=
-  mkmem (NMap.init _ (ZMap.init Undef))
-        (NMap.init _ (ZMap.init (fun k => None)))
+  mkmem (NMap.init (ZMap.init Undef))
+        (NMap.init (ZMap.init (fun k => None)))
         sup_empty  _ _ _ _.
 
 (** Allocation of a fresh block with the given bounds.  Return an updated
@@ -666,33 +668,33 @@ Proof.
 Qed.
 
 Program Definition alloc (m: mem) (lo hi: Z) :=
-  (mkmem (NMap.set _ (nextblock m)
+  (mkmem (NMap.set (nextblock m)
                    (ZMap.init Undef)
                    m.(mem_contents))
-         (NMap.set _ (nextblock m)
+         (NMap.set (nextblock m)
                    (setpermN lo hi (Some Freeable) (ZMap.init (fun k => None)))
                    m.(mem_access))
          (sup_incr (m.(support)))
          _ _ _ _,
    (nextblock m)).
 Next Obligation.
-  repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)).
+  repeat rewrite NMap.gsspec. destruct (Block.eq b (nextblock m)).
   subst b. rewrite setpermN_inv.
   destruct (zle lo ofs && zlt ofs hi). constructor.
   simpl. auto.
   apply access_max.
 Qed.
 Next Obligation.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)).
+  rewrite NMap.gsspec. destruct (Block.eq b (nextblock m)).
   subst b. elim H. apply mem_incr_1.
   apply nextblock_noaccess. red; intros; elim H.
   apply mem_incr_2. auto.
 Qed.
 Next Obligation.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)). auto. apply contents_default.
+  rewrite NMap.gsspec. destruct (Block.eq b (nextblock m)). auto. apply contents_default.
 Qed.
 Next Obligation.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b (nextblock m)). auto.
+  rewrite NMap.gsspec. destruct (Block.eq b (nextblock m)). auto.
   rewrite setpermN_default. auto. apply access_default.
 Qed.
 
@@ -703,19 +705,19 @@ Qed.
 
 Program Definition unchecked_free (m: mem) (b: block) (lo hi: Z): mem :=
   mkmem m.(mem_contents)
-        (NMap.set _ b
+        (NMap.set b
                 (setpermN lo hi None (m.(mem_access)#b))
                 m.(mem_access))
         m.(support) _ _ _ _.
 Next Obligation.
-  repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b).
+  repeat rewrite NMap.gsspec. destruct (Block.eq b0 b).
   subst.
   rewrite setpermN_inv.
   destruct (zle lo ofs && zlt ofs hi). constructor.
   apply access_max.  apply access_max.
 Qed.
 Next Obligation.
-  repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst.
+  repeat rewrite NMap.gsspec. destruct (Block.eq b0 b). subst.
   destruct (Z_le_dec lo ofs); destruct (Z_lt_dec ofs hi).
   rewrite setpermN_inside. constructor. lia.
   rewrite setpermN_outside. apply nextblock_noaccess; auto. lia.
@@ -727,7 +729,7 @@ Next Obligation.
   apply contents_default.
 Qed.
 Next Obligation.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst.
+  rewrite NMap.gsspec. destruct (Block.eq b0 b). subst.
   rewrite setpermN_default.
   apply access_default.
   apply access_default.
@@ -869,7 +871,7 @@ Qed.
 
 Program Definition store (chunk: memory_chunk) (m: mem) (b: block) (ofs: Z) (v: val): option mem :=
   if valid_access_dec m chunk b ofs Writable then
-    Some (mkmem (NMap.set _ b
+    Some (mkmem (NMap.set b
                           (setN (encode_val chunk v) ofs (m.(mem_contents)#b))
                           m.(mem_contents))
                 m.(mem_access)
@@ -880,7 +882,7 @@ Program Definition store (chunk: memory_chunk) (m: mem) (b: block) (ofs: Z) (v: 
 Next Obligation. apply access_max. Qed.
 Next Obligation. apply nextblock_noaccess; auto. Qed.
 Next Obligation.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b).
+  rewrite NMap.gsspec. destruct (Block.eq b0 b).
   rewrite setN_default. apply contents_default.
   apply contents_default.
 Qed.
@@ -912,10 +914,14 @@ Qed.
   starting at location [(b, ofs)].  Returns updated memory state
   or [None] if the accessed locations are not writable. *)
 
+Lemma empty_check : forall (l : list memval), {l = nil} + {l <> nil}.
+Proof. intros. destruct l. left. eauto. right. congruence. Qed.
+  
 Program Definition storebytes (m: mem) (b: block) (ofs: Z) (bytes: list memval) : option mem :=
+  if empty_check bytes then Some m else 
   if range_perm_dec m b ofs (ofs + Z.of_nat (length bytes)) Cur Writable then
     Some (mkmem
-             (NMap.set _ b (setN bytes ofs (m.(mem_contents)#b)) m.(mem_contents))
+             (NMap.set b (setN bytes ofs (m.(mem_contents)#b)) m.(mem_contents))
              m.(mem_access)
              m.(support)
              _ _ _ _)
@@ -924,7 +930,7 @@ Program Definition storebytes (m: mem) (b: block) (ofs: Z) (bytes: list memval) 
 Next Obligation. apply access_max. Qed.
 Next Obligation. apply nextblock_noaccess; auto. Qed.
 Next Obligation.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b).
+  rewrite NMap.gsspec. destruct (Block.eq b0 b).
   rewrite setN_default. apply contents_default.
   apply contents_default.
 Qed.
@@ -938,19 +944,19 @@ Next Obligation. apply access_default. Qed.
 Program Definition drop_perm (m: mem) (b: block) (lo hi: Z) (p: permission): option mem :=
   if range_perm_dec m b lo hi Cur Freeable then
     Some (mkmem m.(mem_contents)
-                (NMap.set _ b
+                (NMap.set b
                         (setpermN lo hi (Some p) (mem_access m) # b)
                         m.(mem_access))
                 m.(support) _ _ _ _)
   else None.
 Next Obligation.
-  repeat rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst b0.
+  repeat rewrite NMap.gsspec. destruct (Block.eq b0 b). subst b0.
   rewrite setpermN_inv. destruct (zle lo ofs && zlt ofs hi).
   constructor. apply access_max. apply access_max.
 Qed.
 Next Obligation.
   specialize (nextblock_noaccess m b0 ofs k H0). intros.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst b0.
+  rewrite NMap.gsspec. destruct (Block.eq b0 b). subst b0.
   rewrite setpermN_inv.
   destruct (zle lo ofs); destruct (zlt ofs hi); simpl.
   assert (perm m b ofs k Freeable). apply perm_cur. apply H; auto.
@@ -961,7 +967,7 @@ Next Obligation.
   apply contents_default.
 Qed.
 Next Obligation.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b). subst b0.
+  rewrite NMap.gsspec. destruct (Block.eq b0 b). subst b0.
   rewrite setpermN_default.
   apply access_default. apply access_default.
 Qed.
@@ -1329,7 +1335,7 @@ Proof.
 Qed.
 
 Lemma store_mem_contents:
-  mem_contents m2 = NMap.set _ b (setN (encode_val chunk v) ofs m1.(mem_contents)#b) m1.(mem_contents).
+  mem_contents m2 = NMap.set b (setN (encode_val chunk v) ofs m1.(mem_contents)#b) m1.(mem_contents).
 Proof.
   unfold store in STORE. destruct (valid_access_dec m1 chunk b ofs Writable); inv STORE.
   auto.
@@ -1452,7 +1458,7 @@ Proof.
   destruct (valid_access_dec m1 chunk' b' ofs' Readable).
   rewrite pred_dec_true.
   decEq. decEq. rewrite store_mem_contents; simpl.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b' b). subst b'.
+  rewrite NMap.gsspec. destruct (Block.eq b' b). subst b'.
   apply getN_setN_outside. rewrite encode_val_length. repeat rewrite <- size_chunk_conv.
   intuition.
   auto.
@@ -1486,7 +1492,7 @@ Proof.
   destruct (range_perm_dec m1 b' ofs' (ofs' + n) Cur Readable).
   rewrite pred_dec_true.
   decEq. rewrite store_mem_contents; simpl.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b' b). subst b'.
+  rewrite NMap.gsspec. destruct (Block.eq b' b). subst b'.
   destruct H. congruence.
   destruct (zle n 0) as [z | n0].
   rewrite (Z_to_nat_neg _ z). auto.
@@ -1608,7 +1614,7 @@ Theorem load_pointer_store:
   \/ (b' <> b \/ ofs' + size_chunk chunk' <= ofs \/ ofs + size_chunk chunk <= ofs').
 Proof.
   intros.
-  destruct (NMap.elt_eq b' b); auto. subst b'.
+  destruct (Block.eq b' b); auto. subst b'.
   destruct (zle (ofs' + size_chunk chunk') ofs); auto.
   destruct (zle (ofs + size_chunk chunk) ofs'); auto.
   exploit load_store_overlap; eauto.
@@ -1757,10 +1763,19 @@ Theorem range_perm_storebytes:
   { m2 : mem | storebytes m1 b ofs bytes = Some m2 }.
 Proof.
   intros. unfold storebytes.
+  destruct empty_check. econstructor; reflexivity.
   destruct (range_perm_dec m1 b ofs (ofs + Z.of_nat (length bytes)) Cur Writable).
   econstructor; reflexivity.
   contradiction.
 Defined.
+
+Lemma encode_val_nonempty : forall chunk v, encode_val chunk v <> nil.
+Proof.
+  intros. intro.
+  generalize (encode_val_length chunk v). intro. rewrite H in H0. simpl in H0.
+  generalize (size_chunk_conv chunk). intro. rewrite <- H0 in H1. simpl in H1.
+  destruct chunk; cbn in H1; inv H1.
+Qed.
 
 Theorem storebytes_store:
   forall m1 b ofs chunk v m2,
@@ -1769,6 +1784,7 @@ Theorem storebytes_store:
   store chunk m1 b ofs v = Some m2.
 Proof.
   unfold storebytes, store. intros.
+  rewrite pred_dec_false in H. 2: { apply encode_val_nonempty. }
   destruct (range_perm_dec m1 b ofs (ofs + Z.of_nat (length (encode_val chunk v))) Cur Writable); inv H.
   destruct (valid_access_dec m1 chunk b ofs Writable).
   f_equal. apply mkmem_ext; auto.
@@ -1781,12 +1797,13 @@ Theorem store_storebytes:
   store chunk m1 b ofs v = Some m2 ->
   storebytes m1 b ofs (encode_val chunk v) = Some m2.
 Proof.
-  unfold storebytes, store. intros.
+  unfold storebytes, store. intros. rewrite pred_dec_false.
   destruct (valid_access_dec m1 chunk b ofs Writable); inv H.
   destruct (range_perm_dec m1 b ofs (ofs + Z.of_nat (length (encode_val chunk v))) Cur Writable).
   f_equal. apply mkmem_ext; auto.
   destruct v0.  elim n.
   rewrite encode_val_length. rewrite <- size_chunk_conv. auto.
+  apply encode_val_nonempty.
 Qed.
 
 Section STOREBYTES.
@@ -1799,24 +1816,23 @@ Hypothesis STORE: storebytes m1 b ofs bytes = Some m2.
 
 Lemma storebytes_empty : bytes = nil -> m1 = m2.
   intro. subst. inv STORE. unfold storebytes in H0.
-  destruct range_perm_dec; try congruence.
-  inv H0. destruct m1.
-  apply mkmem_ext; eauto. cbn.
-  apply NMap.set3.
+  rewrite pred_dec_true in H0. congruence. reflexivity.
 Qed.
 
 Lemma storebytes_access: mem_access m2 = mem_access m1.
 Proof.
-  unfold storebytes in STORE.
+  unfold storebytes in STORE. destruct empty_check; try congruence.
   destruct (range_perm_dec m1 b ofs (ofs + Z.of_nat (length bytes)) Cur Writable);
   inv STORE.
   auto.
 Qed.
 
-Lemma storebytes_mem_contents:
-   mem_contents m2 = NMap.set _ b (setN bytes ofs m1.(mem_contents)#b) m1.(mem_contents).
+Lemma storebytes_mem_contents: forall b',
+   (mem_contents m2) # b' = (NMap.set b (setN bytes ofs m1.(mem_contents)#b) m1.(mem_contents)) # b'.
 Proof.
-  unfold storebytes in STORE.
+  intros. unfold storebytes in STORE. destruct empty_check. rewrite e. inv STORE.
+  simpl.
+  rewrite NMap.gsspec. destruct (Block.eq); congruence.
   destruct (range_perm_dec m1 b ofs (ofs + Z.of_nat (length bytes)) Cur Writable);
   inv STORE.
   auto.
@@ -1857,6 +1873,7 @@ Theorem nextblock_storebytes:
 Proof.
   intros.
   unfold storebytes in STORE.
+  destruct empty_check; try congruence.
   destruct (range_perm_dec m1 b ofs (ofs + Z.of_nat (length bytes)) Cur Writable);
   inv STORE.
   auto.
@@ -1866,7 +1883,7 @@ Theorem support_storebytes:
   support m2 = support m1.
 Proof.
   intros.
-  unfold storebytes in STORE.
+  unfold storebytes in STORE. destruct empty_check; try congruence.
   destruct (range_perm_dec m1 b ofs (ofs + Z.of_nat (length bytes)) Cur Writable);
   inv STORE.
   auto.
@@ -1891,6 +1908,7 @@ Theorem storebytes_range_perm:
 Proof.
   intros.
   unfold storebytes in STORE.
+  destruct empty_check. rewrite e. simpl. red. intros. extlia.
   destruct (range_perm_dec m1 b ofs (ofs + Z.of_nat (length bytes)) Cur Writable);
   inv STORE.
   auto.
@@ -1900,6 +1918,8 @@ Theorem loadbytes_storebytes_same:
   loadbytes m2 b ofs (Z.of_nat (length bytes)) = Some bytes.
 Proof.
   intros. assert (STORE2:=STORE). unfold storebytes in STORE2. unfold loadbytes.
+  destruct (empty_check). rewrite e. simpl. rewrite pred_dec_true. reflexivity.
+  red. intros. extlia.
   destruct (range_perm_dec m1 b ofs (ofs + Z.of_nat (length bytes)) Cur Writable);
   try discriminate.
   rewrite pred_dec_true.
@@ -1917,8 +1937,9 @@ Proof.
   intros. unfold loadbytes.
   destruct (range_perm_dec m1 b' ofs' (ofs' + len) Cur Readable).
   rewrite pred_dec_true.
+  
   rewrite storebytes_mem_contents. decEq.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b' b). subst b'.
+  rewrite NMap.gsspec. destruct (Block.eq b' b). subst b'.
   apply getN_setN_disjoint. rewrite Z2Nat.id by lia. intuition congruence.
   auto.
   red; auto with mem.
@@ -1949,7 +1970,7 @@ Proof.
   destruct (valid_access_dec m1 chunk b' ofs' Readable).
   rewrite pred_dec_true.
   rewrite storebytes_mem_contents. decEq.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b' b). subst b'.
+  rewrite NMap.gsspec. destruct (Block.eq b' b). subst b'.
   rewrite getN_setN_outside. auto. rewrite <- size_chunk_conv. intuition congruence.
   auto.
   destruct v; split; auto. red; auto with mem.
@@ -1976,17 +1997,24 @@ Theorem storebytes_concat:
 Proof.
   intros. generalize H; intro ST1. generalize H0; intro ST2.
   unfold storebytes; unfold storebytes in ST1; unfold storebytes in ST2.
+  destruct (empty_check bytes1). rewrite e in *. cbn in *. inv ST1.
+  rewrite Z.add_0_r in ST2. apply ST2.
+  destruct (empty_check bytes2). rewrite e in *. inv ST2. rewrite pred_dec_false.
+  rewrite app_nil_r. eauto. rewrite app_nil_r. eauto.
+  rewrite pred_dec_false.
   destruct (range_perm_dec m b ofs (ofs + Z.of_nat(length bytes1)) Cur Writable); try congruence.
   destruct (range_perm_dec m1 b (ofs + Z.of_nat(length bytes1)) (ofs + Z.of_nat(length bytes1) + Z.of_nat(length bytes2)) Cur Writable); try congruence.
   destruct (range_perm_dec m b ofs (ofs + Z.of_nat (length (bytes1 ++ bytes2))) Cur Writable).
   inv ST1; inv ST2; simpl. decEq. apply mkmem_ext; auto.
   setoid_rewrite NMap.gss.  rewrite setN_concat. symmetry. apply NMap.set2.
-  elim n.
+  elim n1.
   rewrite app_length. rewrite Nat2Z.inj_add. red; intros.
   destruct (zlt ofs0 (ofs + Z.of_nat(length bytes1))).
   apply r. lia.
   eapply perm_storebytes_2; eauto. apply r0. lia.
+  intro. destruct bytes1; try congruence. destruct bytes2; simpl in H1; congruence.
 Qed.
+
 
 Theorem storebytes_split:
   forall m b ofs bytes1 bytes2 m2,
@@ -2105,7 +2133,7 @@ Theorem perm_alloc_1:
   forall b' ofs k p, perm m1 b' ofs k p -> perm m2 b' ofs k p.
 Proof.
   unfold perm; intros. injection ALLOC; intros. rewrite <- H1; simpl.
-  subst b. rewrite NMap.gsspec. destruct (NMap.elt_eq b' (nextblock m1)); auto.
+  subst b. rewrite NMap.gsspec. destruct (Block.eq b' (nextblock m1)); auto.
   rewrite nextblock_noaccess in H. contradiction. subst b'. apply freshness.
 Qed.
 
@@ -2123,7 +2151,7 @@ Theorem perm_alloc_inv:
   if eq_block b' b then lo <= ofs < hi else perm m1 b' ofs k p.
 Proof.
   intros until p; unfold perm. inv ALLOC. simpl.
-  rewrite NMap.gsspec.  destruct (NMap.elt_eq b' (nextblock m1)); intros.
+  rewrite NMap.gsspec.  destruct (Block.eq b' (nextblock m1)); intros.
   assert (zle lo ofs && zlt ofs hi = true).
     rewrite setpermN_inv in H.
     destruct(zle lo ofs && zlt ofs hi). reflexivity. contradiction.
@@ -2337,7 +2365,7 @@ Theorem perm_free_1:
   perm m2 b ofs k p.
 Proof.
   intros. rewrite free_result. unfold perm, unchecked_free; simpl.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b bf). subst b.
+  rewrite NMap.gsspec. destruct (Block.eq b bf). subst b.
   rewrite setpermN_inv.
   destruct (zle lo ofs); simpl.
   destruct (zlt ofs hi); simpl.
@@ -2361,7 +2389,7 @@ Theorem perm_free_3:
   perm m2 b ofs k p -> perm m1 b ofs k p.
 Proof.
   intros until p. rewrite free_result. unfold perm, unchecked_free; simpl.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b bf). subst b.
+  rewrite NMap.gsspec. destruct (Block.eq b bf). subst b.
   rewrite setpermN_inv.
   destruct (zle lo ofs); simpl.
   destruct (zlt ofs hi); simpl. tauto.
@@ -2374,7 +2402,7 @@ Theorem perm_free_4:
 Proof.
   intros until p.
   rewrite free_result. unfold perm, unchecked_free; simpl.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b bf). subst b.
+  rewrite NMap.gsspec. destruct (Block.eq b bf). subst b.
   - 
   rewrite setpermN_inv.
   destruct (zle lo ofs); simpl.
@@ -2389,7 +2417,7 @@ Theorem perm_free_inv:
   (b = bf /\ lo <= ofs < hi) \/ perm m2 b ofs k p.
 Proof.
   intros. rewrite free_result. unfold perm, unchecked_free; simpl.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b bf); auto. subst b.
+  rewrite NMap.gsspec. destruct (Block.eq b bf); auto. subst b.
   rewrite setpermN_inv.
   destruct (zle lo ofs); simpl; auto.
   destruct (zlt ofs hi); simpl; auto.
@@ -2428,7 +2456,7 @@ Proof.
   intros. destruct H. split; auto.
   red; intros. generalize (H ofs0 H1).
   rewrite free_result. unfold perm, unchecked_free; simpl.
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b bf). subst b.
+  rewrite NMap.gsspec. destruct (Block.eq b bf). subst b.
   rewrite setpermN_inv.
   destruct (zle lo ofs0); simpl.
   destruct (zlt ofs0 hi); simpl.
@@ -2578,7 +2606,7 @@ Theorem perm_drop_3:
 Proof.
   intros.
   unfold drop_perm in DROP. destruct (range_perm_dec m b lo hi Cur Freeable); inv DROP.
-  unfold perm; simpl. rewrite NMap.gsspec. destruct (NMap.elt_eq b' b). subst b'.
+  unfold perm; simpl. rewrite NMap.gsspec. destruct (Block.eq b' b). subst b'.
   rewrite setpermN_inv.
   unfold proj_sumbool. destruct (zle lo ofs). destruct (zlt ofs hi).
   byContradiction. intuition lia.
@@ -2590,7 +2618,7 @@ Theorem perm_drop_4:
 Proof.
   intros.
   unfold drop_perm in DROP. destruct (range_perm_dec m b lo hi Cur Freeable); inv DROP.
-  revert H. unfold perm; simpl. rewrite NMap.gsspec. destruct (NMap.elt_eq b' b).
+  revert H. unfold perm; simpl. rewrite NMap.gsspec. destruct (Block.eq b' b).
   subst b'.  rewrite setpermN_inv. unfold proj_sumbool. destruct (zle lo ofs). destruct (zlt ofs hi).
   simpl. intros. apply perm_implies with p. apply perm_implies with Freeable. apply perm_cur.
   apply r. tauto. auto with mem. auto.
@@ -2853,14 +2881,14 @@ Proof.
   rewrite (store_mem_contents _ _ _ _ _ _ H0).
   rewrite (store_mem_contents _ _ _ _ _ _ STORE).
   rewrite ! NMap.gsspec.
-  destruct (NMap.elt_eq b0 b1). subst b0.
+  destruct (Block.eq b0 b1). subst b0.
   (* block = b1, block = b2 *)
   assert (b3 = b2) by congruence. subst b3.
   assert (delta0 = delta) by congruence. subst delta0.
   rewrite neq_true.
   apply setN_inj with (access := fun ofs => perm m1 b1 ofs Cur Readable).
   apply encode_val_inject; auto. intros. eapply mi_memval; eauto. eauto with mem.
-  destruct (NMap.elt_eq b3 b2). subst b3.
+  destruct (Block.eq b3 b2). subst b3.
   (* block <> b1, block = b2 *)
   rewrite setN_other. eapply mi_memval; eauto. eauto with mem.
   rewrite encode_val_length. rewrite <- size_chunk_conv. intros.
@@ -2911,7 +2939,7 @@ Proof.
 (* mem_contents *)
   intros.
   rewrite (store_mem_contents _ _ _ _ _ _ H1).
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b2 b). subst b2.
+  rewrite NMap.gsspec. destruct (Block.eq b2 b). subst b2.
   rewrite setN_outside. auto.
   rewrite encode_val_length. rewrite <- size_chunk_conv.
   destruct (zlt (ofs0 + delta) ofs); auto.
@@ -2954,13 +2982,13 @@ Proof.
   assert (perm m1 b0 ofs0 Cur Readable). eapply perm_storebytes_2; eauto.
   rewrite (storebytes_mem_contents _ _ _ _ _ H0).
   rewrite (storebytes_mem_contents _ _ _ _ _ STORE).
-  rewrite ! NMap.gsspec. destruct (NMap.elt_eq b0 b1). subst b0.
+  rewrite ! NMap.gsspec. destruct (Block.eq b0 b1). subst b0.
   (* block = b1, block = b2 *)
   assert (b3 = b2) by congruence. subst b3.
   assert (delta0 = delta) by congruence. subst delta0.
   rewrite neq_true.
   apply setN_inj with (access := fun ofs => perm m1 b1 ofs Cur Readable); auto.
-  destruct (NMap.elt_eq b3 b2). subst b3.
+  destruct (Block.eq b3 b2). subst b3.
   (* block <> b1, block = b2 *)
   rewrite setN_other. auto.
   intros.
@@ -3014,7 +3042,7 @@ Proof.
 (* mem_contents *)
   intros.
   rewrite (storebytes_mem_contents _ _ _ _ _ H1).
-  rewrite NMap.gsspec. destruct (NMap.elt_eq b2 b). subst b2.
+  rewrite NMap.gsspec. destruct (Block.eq b2 b). subst b2.
   rewrite setN_outside. auto.
   destruct (zlt (ofs0 + delta) ofs); auto.
   destruct (zle (ofs + Z.of_nat (length bytes2)) (ofs0 + delta)). lia.
@@ -3044,7 +3072,7 @@ Proof.
   rewrite (storebytes_mem_contents _ _ _ _ _ H0).
   rewrite (storebytes_mem_contents _ _ _ _ _ H1).
   simpl. rewrite ! NMap.gsspec.
-  destruct (NMap.elt_eq b0 b1); destruct (NMap.elt_eq b3 b2); subst; eapply mi_memval0; eauto.
+  destruct (Block.eq b0 b1); destruct (Block.eq b3 b2); subst; eapply mi_memval0; eauto.
 Qed.
 
 (** Preservation of allocations *)
@@ -3089,7 +3117,7 @@ Proof.
   injection H0; intros NEXT MEM. intros.
   rewrite <- MEM; simpl. rewrite NEXT.
   exploit perm_alloc_inv; eauto. intros.
-  rewrite NMap.gsspec. (*unfold eq_block in H4.*) destruct (NMap.elt_eq b0 b1).
+  rewrite NMap.gsspec. (*unfold eq_block in H4.*) destruct (Block.eq b0 b1).
   rewrite ZMap.gi. constructor. apply mi_memval0. auto. eapply perm_alloc_4 in H0. apply H0. auto. auto.
 Qed.
 
@@ -3126,7 +3154,7 @@ Proof.
   intros. rewrite <- MEM; simpl. rewrite NEXT.
   exploit perm_alloc_inv; eauto. intros.
   rewrite NMap.gsspec.
-  destruct (NMap.elt_eq b0 b1). rewrite ZMap.gi. constructor.
+  destruct (Block.eq b0 b1). rewrite ZMap.gi. constructor.
   apply mi_memval. auto. auto. eapply perm_alloc_4 in H0. eauto. auto. auto.
 Qed.
 
@@ -4730,8 +4758,8 @@ Record unchanged_on (m_before m_after: mem) : Prop := mk_unchanged_on {
   unchanged_on_contents:
     forall b ofs,
     P b ofs -> perm m_before b ofs Cur Readable ->
-    ZMap.get ofs (NMap.get _ b m_after.(mem_contents)) =
-    ZMap.get ofs (NMap.get _ b m_before.(mem_contents))
+    ZMap.get ofs (NMap.get b m_after.(mem_contents)) =
+    ZMap.get ofs (NMap.get b m_before.(mem_contents))
 }.
 
 Lemma unchanged_on_refl:
@@ -4844,7 +4872,7 @@ Proof.
 - rewrite (support_store _ _ _ _ _ _ H). apply sup_include_refl.
 - split; intros; eauto with mem.
 - erewrite store_mem_contents; eauto. rewrite NMap.gsspec.
-  destruct (NMap.elt_eq b0 b); auto. subst b0. apply setN_outside.
+  destruct (Block.eq b0 b); auto. subst b0. apply setN_outside.
   rewrite encode_val_length. rewrite <- size_chunk_conv.
   destruct (zlt ofs0 ofs); auto.
   destruct (zlt ofs0 (ofs + size_chunk chunk)); auto.
@@ -4861,7 +4889,7 @@ Proof.
 - rewrite (support_storebytes _ _ _ _ _ H). apply sup_include_refl.
 - split; intros. eapply perm_storebytes_1; eauto. eapply perm_storebytes_2; eauto.
 - erewrite storebytes_mem_contents; eauto. rewrite NMap.gsspec.
-  destruct (NMap.elt_eq b0 b); auto. subst b0. apply setN_outside.
+  destruct (Block.eq b0 b); auto. subst b0. apply setN_outside.
   destruct (zlt ofs0 ofs); auto.
   destruct (zlt ofs0 (ofs + Z.of_nat (length bytes))); auto.
   elim (H0 ofs0). lia. auto.
@@ -5060,7 +5088,7 @@ Definition ro_unchanged_memval m m' : Prop :=
       perm m' b ofs Cur Readable ->
       ~ perm m b ofs Max Writable ->
       perm m b ofs Cur Readable /\
-        ZMap.get ofs (NMap.get _ b (mem_contents m)) = ZMap.get ofs (NMap.get _ b (mem_contents m')).
+        ZMap.get ofs (NMap.get b (mem_contents m)) = ZMap.get ofs (NMap.get b (mem_contents m')).
 
 Lemma ro_unchanged_memval_bytes: forall m m',
     ro_unchanged m m' <-> ro_unchanged_memval m m'.
@@ -5068,7 +5096,7 @@ Proof.
   intros. split.
   - intros. red in H. red. intros.
     exploit H. eauto. instantiate (2:= 1).
-    instantiate (2:= ofs). instantiate (1:= ZMap.get ofs (NMap.get _ b (mem_contents m')) :: nil).
+    instantiate (2:= ofs). instantiate (1:= ZMap.get ofs (NMap.get b (mem_contents m')) :: nil).
     unfold loadbytes. destruct range_perm_dec.
     simpl. reflexivity. exfalso. apply n. red.
     intros. destruct (zeq ofs0 ofs). subst. eauto. extlia.
@@ -5250,7 +5278,7 @@ Qed.
   from [m] into [m']. *)
 
 Definition pmap_update {A} b (f : A -> A) (t : NMap.t A) : NMap.t A :=
-  NMap.set A b (f (NMap.get A b t)) t.
+  NMap.set b (f (NMap.get b t)) t.
 
 Fixpoint update_elements' (lo:Z) (l:nat) (pm: ZMap.t (perm_kind -> option permission)) :=
   match l with
@@ -5357,10 +5385,10 @@ Program Definition mix m' b lo hi m : option mem :=
   if mixable_dec m' b m then
     Some {|
       mem_contents :=
-        let bytes := Mem.getN (Z.to_nat (hi - lo)) lo (NMap.get _ b (Mem.mem_contents m)) in
+        let bytes := Mem.getN (Z.to_nat (hi - lo)) lo (NMap.get b (Mem.mem_contents m)) in
         pmap_update b (Mem.setN bytes lo) (Mem.mem_contents m');
       mem_access :=
-        let perms := NMap.get _ b (Mem.mem_access m) in
+        let perms := NMap.get b (Mem.mem_access m) in
         pmap_update b (mix_perms lo hi perms) (Mem.mem_access m');
       support :=
         Mem.support m';
@@ -6334,7 +6362,7 @@ Section REVERSE.
     match j12 b1 with
     |Some (b2',delta) =>
        if eq_block b2 b2' then
-         let pmap1 := (mem_access m1 b1) in
+         let pmap1 := ((mem_access m1) # b1) in
          let elements := perm_elements_any (ZMap.elements pmap1) in
          match find (check_position (o2 - delta)) elements with
          |Some (o1,_) => Some (b1,o2 - delta)
@@ -6375,8 +6403,7 @@ Section REVERSE.
     unfold perm. unfold perm_order'.
     apply in_perm_any_1 in H.
     destruct H as [PERM IN].
-    apply ZMap.elements_complete in IN.
-    unfold NMap.get.
+    apply ZMap.elements_complete in IN. 
     rewrite IN. destruct (m Max); eauto.
     constructor.
   Qed.
@@ -6410,15 +6437,14 @@ Section REVERSE.
     rewrite pred_dec_true in H; eauto.
     destruct find eqn:FIND; try congruence.
     destruct p. inv H.
-
-    assert (forall z, In z (perm_elements_any (ZMap.elements (mem_access m1 b)))
+    assert (forall z, In z (perm_elements_any (ZMap.elements ((mem_access m1)# b)))
                  -> check_position (o0 - d) z = false).
     apply find_none. eauto.
     unfold perm. unfold perm_order'.
     destruct (((mem_access m1) # b) ## (o0 - d) Max) eqn:PERM.
     exploit H0. eapply in_perm_any; eauto.
     eapply elements_correct'. setoid_rewrite access_default.
-    unfold NMap.get in PERM. intro. rewrite H1 in PERM. congruence.
+    intro. rewrite H1 in PERM. congruence.
     unfold check_position. simpl.
     rewrite pred_dec_true; eauto. intro. congruence. eauto.
   Qed.
@@ -6788,7 +6814,7 @@ Qed.
    else m.
  Next Obligation.
    unfold pmap_update. rewrite NMap.gsspec.
-   destruct NMap.elt_eq.
+   destruct Block.eq.
    - repeat rewrite copy_access_block_result.
      destruct loc_in_reach_find.
      + destruct p. apply access_max.
@@ -6797,13 +6823,13 @@ Qed.
  Qed.
  Next Obligation.
    unfold pmap_update. rewrite NMap.gsspec.
-   destruct NMap.elt_eq.
+   destruct Block.eq.
    - subst. congruence.
    - apply nextblock_noaccess; eauto.
  Qed.
  Next Obligation.
    unfold pmap_update. rewrite NMap.gsspec.
-   destruct NMap.elt_eq.
+   destruct Block.eq.
    - subst. unfold copy_content_block. rewrite setN'_default.
      apply contents_default.
    - apply contents_default.
@@ -6923,7 +6949,7 @@ Qed.
    else m.
  Next Obligation.
    unfold pmap_update. rewrite NMap.gsspec.
-   destruct NMap.elt_eq.
+   destruct Block.eq.
    - repeat rewrite global_access_result.
      destruct loc_in_reach_find.
      apply access_max. constructor.
@@ -6931,7 +6957,7 @@ Qed.
  Qed.
  Next Obligation.
    unfold pmap_update. rewrite NMap.gsspec.
-   destruct NMap.elt_eq.
+   destruct Block.eq.
    - subst. congruence.
    - apply nextblock_noaccess; eauto.
  Qed.
