@@ -1158,6 +1158,32 @@ Proof.
   - constructor.
 Qed.
 
+(** Test : can we define the validity of global blocks using this? *)
+
+Definition valid_b (j:meminj) b gs : bool := if j b then true
+                                          else if Mem.sup_dec b gs then true else false.
+
+Definition valid_memval (j: meminj) (mv: memval) (gs : sup) : Prop :=
+  match mv with
+  |Fragment (Vptr b ofs) _ _ => if valid_b j b gs then True else False
+  |_ => True
+  end.
+
+Definition valid_global m j gs: Prop :=
+  forall b ofs, sup_In b gs  -> Mem.perm m b ofs Max Nonempty ->
+           valid_memval j (mem_memval m b ofs) gs.
+
+Lemma memval_compose_3:
+  forall mv j,
+    valid_memval j mv ->
+    memval_inject j mv (Mem.memval_map j mv).
+Proof.
+  intros. destruct mv; cbn; try constructor.
+  destruct v; cbn; repeat constructor.
+  simpl in H. destruct (j b) as [[b' ofs]|] eqn:Hj; try inv H.
+  constructor. econstructor. eauto. reflexivity.
+Qed.
+
 (** * The construction of intermidiate memory state m2' *)
 Section CONSTR_PROOF.
   Variable m1 m2 m3 m1' m3': mem.
@@ -1177,6 +1203,9 @@ Section CONSTR_PROOF.
   Hypothesis UNCHANGE3: Mem.unchanged_on (fun b ofs => loc_out_of_reach (compose_meminj j1 j2) m1 b ofs /\ ~ sup_In b gs3) m3 m3'.
   Hypothesis INJ12 Hm1: Mem.inject j1 m1 m2.
   Hypothesis INJ23 Hm2: Mem.inject j2 m2 m3.
+  Search memval_inject.
+  Hypothesis GVALUE1 : valid_global m1 j1 gs1.
+  Hypothesis GVALUE2 : valid_global m2 j2 gs2.
 
   (*
   Hypothesis MSTBL12: injp_match_stbls (injpw j1 gs1 gs2 m1 m2 Hm1) se1 se2.
@@ -1190,6 +1219,8 @@ Section CONSTR_PROOF.
 
   
   Hypothesis INJ13': Mem.inject (compose_meminj j1' j2') m1' m3'.
+  Hypothesis GVALUE1' : forall b1 ofs1, sup_In b1 gs1 -> valid_memval (compose_meminj j1' j2') (mem_memval m1' b1 ofs1).
+  
   Hypothesis SUPINCL2 : Mem.sup_include (Mem.support m2) s2'.
   Hypothesis SUPINCL3 : Mem.sup_include (Mem.support m3) (Mem.support m3').
   Hypothesis INCR1 : inject_incr j1 j1'.
@@ -1210,6 +1241,14 @@ Section CONSTR_PROOF.
   Definition m2'2 := Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 (Mem.support m2) gs2 m2'1.
   (** step4 *)
   Definition m2' := Mem.set_empty_sup m1 m2 m1' s2' j1 j2 j1' j2' INJ12 SUPINCL2 gs2 m2'2.
+
+
+
+  (*test for GVALUE*)
+
+
+
+  
   
   Lemma INJNOLAP1' : Mem.meminj_no_overlap j1' m1'.
   Proof. eapply update_meminj_no_overlap1; eauto. Qed.
@@ -1815,7 +1854,7 @@ Qed.
     eapply Mem.perm_inject; eauto.
   Qed.
 
-  Lemma copy_content_inject : forall b1 o1 b2 o2,
+   Lemma copy_content_inject : forall b1 o1 b2 o2,
           j1 b1 = Some (b2, o2 - o1) ->
           Mem.perm m1' b1 o1 Cur Readable ->
           Mem.perm m1 b1 o1 Max Writable ->
@@ -1831,7 +1870,10 @@ Qed.
     inversion INJ13'. inversion mi_inj.
     eapply mi_memval; eauto. unfold compose_meminj.
     rewrite MAP1', MAP2'. reflexivity.
-    - 
+    - destruct H2; try congruence.
+      inv MSTBL12. eapply mge_separated' in H2; eauto.
+      eapply memval_compose_3. exploit GVALUE1'; eauto.
+      instantiate (1:= o1). intro.
   Qed.
 
   Lemma copy_perm_1 : forall b1 o1 b2 o2 k p,
