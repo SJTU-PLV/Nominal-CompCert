@@ -6747,7 +6747,7 @@ Proof.
 Qed.
 
 (* copy the permissions and value from m1' *)
- Program Definition copy_block b2 m : mem :=
+ Program Definition copy_block b2 gs2 m : mem :=
    if j23 b2 then
       if (sup_dec b2 (Mem.support m)) then
       {|
@@ -6759,8 +6759,48 @@ Qed.
                         (mem_access m);
         support := (Mem.support m);
       |}
-        else m
-   else m.
+      else m             
+   else if (sup_dec b2 gs2) then
+          if (sup_dec b2 (Mem.support m)) then
+      {|
+        mem_contents := pmap_update b2
+                          (copy_content_block b2)
+                          (mem_contents m);
+        mem_access := pmap_update b2
+                        (copy_access_block b2)
+                        (mem_access m);
+        support := (Mem.support m);
+      |}
+      else m             
+          else m.
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct NMap.elt_eq.
+   - repeat rewrite copy_access_block_result.
+     destruct loc_in_reach_find.
+     + destruct p. apply access_max.
+     + apply access_max.
+   - apply access_max.
+ Qed.
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct NMap.elt_eq.
+   - subst. congruence.
+   - apply nextblock_noaccess; eauto.
+ Qed.
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct NMap.elt_eq.
+   - subst. unfold copy_content_block. rewrite setN'_default.
+     apply contents_default.
+   - apply contents_default.
+ Qed.
+ Next Obligation.
+   unfold pmap_update. rewrite NMap.gsspec.
+   destruct eq_block; try apply access_default.
+   unfold copy_access_block. rewrite setN'_default.
+   apply access_default.
+ Qed.
  Next Obligation.
    unfold pmap_update. rewrite NMap.gsspec.
    destruct NMap.elt_eq.
@@ -6790,25 +6830,26 @@ Qed.
    apply access_default.
  Qed.
 
-
- Fixpoint copy_sup (s:sup) m : mem :=
+ Fixpoint copy_sup (s:sup) (gs2: sup) m : mem :=
    match s with
    | nil => m
-   | hd :: tl => copy_block hd (copy_sup tl m)
+   | hd :: tl => copy_block hd gs2 (copy_sup tl gs2 m)
    end.
 
  (** lemmas about step3 *)
- Lemma copy_block_support : forall b m m',
-     copy_block b m = m' ->
+ Lemma copy_block_support : forall b gs m m',
+     copy_block b gs m = m' ->
      support m' = support m.
  Proof.
    intros. subst. unfold copy_block.
    destruct (j23 b); auto.
    destruct (sup_dec); auto.
+   destruct (sup_dec); auto.
+   destruct (sup_dec); auto.
  Qed.
 
- Lemma copy_sup_support : forall s m m',
-     copy_sup s m = m' ->
+ Lemma copy_sup_support : forall s gs m m',
+     copy_sup s gs m = m' ->
      support m' = support m.
  Proof.
    induction s; intros; subst; simpl; eauto.
