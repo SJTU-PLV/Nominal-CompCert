@@ -1991,9 +1991,7 @@ Proof.
   eapply match_stbls_stbls'; eauto.
 Qed.
 
-(*
-Search find_symbol.
-Search PTree.remove.
+
 Program Definition remove_global (ge: symtbl) (b: block) : symtbl :=
   match invert_symbol ge b with
   |None => ge
@@ -2001,30 +1999,30 @@ Program Definition remove_global (ge: symtbl) (b: block) : symtbl :=
      @mkstbl
        ge.(genv_public)
        (PTree.remove id ge.(genv_symb))
-       (NMap.t remove _ (fresh_block ge.(genv_sup)) (Some (idg#2)) ge.(genv_info))
-       (sup_incr (ge.(genv_sup)))
-       _ _ _.
+       (NMap.set b None ge.(genv_info))
+       (Mem.sup_remove (ge.(genv_sup)) b)
+       _ _ _
+  end.
 Next Obligation.
-  destruct ge; simpl in *.
-  rewrite PTree.gsspec in H. destruct (peq id i). inv H. apply Mem.sup_incr_in1.
-  apply Mem.sup_incr_in2. eauto.
+  symmetry in Heq_anonymous. apply invert_find_symbol in Heq_anonymous.
+  rewrite PTree.grspec in H. destruct PTree.elt_eq. congruence.
+  apply Mem.sup_remove_some.
+  - apply find_invert_symbol in Heq_anonymous. apply find_invert_symbol in H.
+    congruence.
+  - apply genv_symb_range in H. eauto.
 Qed.
 Next Obligation.
-  destruct ge; simpl in *.
-  rewrite NMap.gsspec in H. destruct (Block.eq b (fresh_block genv_sup0)).
-  inv H. apply Mem.sup_incr_in1. apply Mem.sup_incr_in2. eauto.
+  rewrite NMap.gsspec in H. destruct Block.eq. congruence.
+  apply Mem.sup_remove_some. eauto. eapply genv_info_range; eauto.
 Qed.
 Next Obligation.
-  destruct ge; simpl in *.
-  rewrite PTree.gsspec in H. rewrite PTree.gsspec in H0.
-  destruct (peq id1 i); destruct (peq id2 i).
+  rewrite PTree.grspec in *. destruct PTree.elt_eq; try congruence.
+  destruct PTree.elt_eq; try congruence.
+  apply find_invert_symbol in H. apply find_invert_symbol in H0.
   congruence.
-  inv H. apply genv_symb_range0 in H0. apply freshness in H0. destruct H0.
-  inv H. inv H0. apply genv_symb_range0 in H2. apply freshness in H2. destruct H2.
-  eauto.
 Qed.
+
 Section SYMTBL_CONSTR.
-*)
 
 
 
