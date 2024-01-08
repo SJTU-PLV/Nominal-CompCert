@@ -207,6 +207,31 @@ Proof.
   intros. apply sup_incr_in2.
 Qed.
 
+Fixpoint sup_remove (s: sup) (b: block) : sup :=
+  match s with
+  |nil => nil
+  |hd :: tl => if eq_block hd b then sup_remove tl b else hd :: sup_remove tl b
+  end.
+
+Lemma sup_remove_none : forall s b, ~ sup_In b (sup_remove s b).
+Proof.
+  induction s; intros; intro. inv H. simpl in H. destruct (eq_block).
+  subst. eapply IHs; eauto. simpl in H. destruct H; eauto. eapply IHs. eauto.
+Qed.
+
+Lemma sup_remove_some : forall s b a, a <> b -> sup_In a s <-> sup_In a (sup_remove s b).
+Proof.
+  induction s; intros; simpl; eauto. reflexivity.
+  split.
+  - intros [A|A]; destruct eq_block; subst; try congruence.
+    + left. eauto.
+    + eapply IHs; eauto.
+    + right. eapply IHs; eauto.
+  - intros A. destruct eq_block; subst; try congruence.
+    + right. eapply IHs; eauto.
+    + destruct A. subst. left. reflexivity. right. eapply IHs; eauto.
+Qed.
+
 End Sup.
 
 Module Mem <: MEM.

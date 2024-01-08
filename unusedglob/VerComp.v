@@ -771,13 +771,14 @@ Next Obligation.
   destruct H as ([[b2 lo2] hi2] & Hr12 & Hr23).
   simpl in *. red.
   destruct (Mem.free m1 _ _ _) as [m1'|] eqn:H1; [|constructor].
-  (* transport H1.
+  generalize (cklr_free). intro R.
+  transport H1.
   transport H.
   rewrite H1. constructor.
   exists (w12', w23').
   split; [rauto | ].
-  eexists; split; rauto. *)
-Admitted.
+  eexists; split; rauto.
+Qed.
 
 Next Obligation.
   intros [w12 w23] chunk m1 m3 (m2 & Hm12 & Hm23) [b1 ofs1] [b3 ofs3] Hptr.
@@ -786,8 +787,9 @@ Next Obligation.
   red. simpl in *. unfold klr_pullw.
   rewrite val_inject_compose.
   apply option_le_compose.
-  eexists; split.
-Admitted.
+  generalize (cklr_load). intro R.
+  eexists; split; rauto.
+Qed.
 
 Next Obligation.
   intros [w12 w23] chunk m1 m3 (m2 & Hm12 & Hm23) [b1 o1] [b3 o3] Hptr v1 v3 Hv.
@@ -795,15 +797,13 @@ Next Obligation.
   apply ptr_inject_compose in Hptr. destruct Hptr as ([b2 o2] & Hp12 & Hp23).
   apply val_inject_compose in Hv. destruct Hv as (v2 & Hv12 & Hv23).
   destruct (Mem.store chunk m1 b1 o1 v1) as [m1'|] eqn:H1; [|constructor].
-(*
+  generalize (cklr_store). intro R.
   transport H1.
   transport H.
   rewrite H1. constructor.
   exists (w12', w23'); split; [rauto | ].
   eexists; split; try rauto.
 Qed.
- *)
-Admitted.
 
 Next Obligation.
   intros [w12 w23] m1 m3 (m2 & Hm12 & Hm23) [b1 ofs1] [b3 ofs3] Hptr sz.
@@ -817,11 +817,9 @@ Next Obligation.
   }
   rewrite list_rel_compose.
   apply option_le_compose.
-Admitted.
-(*
+  generalize (cklr_loadbytes). intro R.
   eexists; split; rauto.
 Qed.
- *)
 
 Next Obligation.
   intros [w12 w23] m1 m3 (m2 & Hm12 & Hm23) [b1 o1] [b3 o3] Hptr v1 v3 Hv.
@@ -1092,20 +1090,31 @@ Definition callconv_gen (R : cklr) : cklr' :=
     match_mem w := (CKLR.match_mem R) w;
   |}.
 *)
-  
+
+Section SYMTBL_CONSTR.
+
+  Variable se1 se2 : Genv.symtbl.
+  Variable f : meminj.
+
+  Hypothesis MSE: Genv.match_stbls' f se1 se2.
+
+  Definition remove_block (b: block) (se : Genv.symtbl) : symtbl :=
+    Genv.mkstbl.
+
 
 Theorem injp'_injp_ref1:
   ccref'  (cc_c' injp') (cc_compose_2 (cc_c' injp') (cc_c injp)).
 Proof.
-  red. intros w se1 se2 q1 q2 Hse Hq.
+  red. intros w se1 se3 q1 q2 Hse Hq.
   inv Hse. inv Hq. cbn in H2, H3. inv H4. rename m0 into m1. rename m3 into m2.
-  exists (se1, (injpw (meminj_dom f) (Genv.genv_sup se1) (Genv.genv_sup se1) m1 m1 (mem_inject_dom f m1 m2 Hm)),
-      (injpw f (Genv.genv_sup se1) (Genv.genv_sup se2) m1 m2 Hm)).
+  assert (exists se2, Genv.match_stbls' (meminj_dom f) se1 se2 /\ Genv.match_stbls f se2 se3).
+  admit.
+  destruct H4 as [se2 [MSE1 MSE2]].
+  exists (se2, (injpw (meminj_dom f) (Genv.genv_sup se1) (Genv.genv_sup se2) m1 m1 (mem_inject_dom f m1 m2 Hm)),
+      (injpw f (Genv.genv_sup se2) (Genv.genv_sup se3) m1 m2 Hm)).
   repeat apply conj.
-  - constructor.
-    (* problem here... we need to construct a reduced se1? *)
-    admit.
-    admit.
+  - split; constructor; eauto.
+    admit. admit.
   - exists (cq vf1 sg vargs1 m1). split.
     econstructor; cbn; eauto.
     eapply val_inject_dom; eauto.
@@ -1117,7 +1126,7 @@ Proof.
     inv Hw12. inv Hw23. cbn in *.
     inv Hr1. inv Hr2. cbn in *. inv H6. inv H11.
     rename m1'0 into m1'. rename m2'0 into m2'. rename m2'1 into m3'.
-    eexists (injpw (compose_meminj f12' f23') (Genv.genv_sup se1) (Genv.genv_sup se2) m1' m3'
+    eexists (injpw (compose_meminj f12' f23') (Genv.genv_sup se1) (Genv.genv_sup se3) m1' m3'
                (Mem.inject_compose f12' f23' _ _ _ Hm12' Hm23')
             ).
     repeat apply conj.

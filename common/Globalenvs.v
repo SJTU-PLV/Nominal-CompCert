@@ -1991,6 +1991,45 @@ Proof.
   eapply match_stbls_stbls'; eauto.
 Qed.
 
+(*
+Search find_symbol.
+Search PTree.remove.
+Program Definition remove_global (ge: symtbl) (b: block) : symtbl :=
+  match invert_symbol ge b with
+  |None => ge
+  |Some id =>
+     @mkstbl
+       ge.(genv_public)
+       (PTree.remove id ge.(genv_symb))
+       (NMap.t remove _ (fresh_block ge.(genv_sup)) (Some (idg#2)) ge.(genv_info))
+       (sup_incr (ge.(genv_sup)))
+       _ _ _.
+Next Obligation.
+  destruct ge; simpl in *.
+  rewrite PTree.gsspec in H. destruct (peq id i). inv H. apply Mem.sup_incr_in1.
+  apply Mem.sup_incr_in2. eauto.
+Qed.
+Next Obligation.
+  destruct ge; simpl in *.
+  rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (fresh_block genv_sup0)).
+  inv H. apply Mem.sup_incr_in1. apply Mem.sup_incr_in2. eauto.
+Qed.
+Next Obligation.
+  destruct ge; simpl in *.
+  rewrite PTree.gsspec in H. rewrite PTree.gsspec in H0.
+  destruct (peq id1 i); destruct (peq id2 i).
+  congruence.
+  inv H. apply genv_symb_range0 in H0. apply freshness in H0. destruct H0.
+  inv H. inv H0. apply genv_symb_range0 in H2. apply freshness in H2. destruct H2.
+  eauto.
+Qed.
+Section SYMTBL_CONSTR.
+*)
+
+
+
+
+
 Section MATCH_PROGRAMS.
 
 Context {C F1 V1 F2 V2: Type} {LC: Linker C} {LF: Linker F1} {LV: Linker V1}.
