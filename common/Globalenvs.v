@@ -82,7 +82,7 @@ Record symtbl: Type := mkstbl {
   genv_info: NMap.t (option (globdef unit unit));
   genv_sup: sup;                     (**r next symbol pointer *)
   genv_symb_range: forall id b, PTree.get id genv_symb = Some b -> sup_In b genv_sup;
-  genv_info_range: forall b g, NMap.get _ b genv_info = Some g -> sup_In b genv_sup;
+  genv_info_range: forall b g, NMap.get b genv_info = Some g -> sup_In b genv_sup;
   genv_vars_inj: forall id1 id2 b,
     PTree.get id1 genv_symb = Some b -> PTree.get id2 genv_symb = Some b -> id1 = id2
 }.
@@ -92,7 +92,7 @@ Record symtbl: Type := mkstbl {
 Record t: Type := mkgenv {
   to_senv :> symtbl;
   genv_defs: NMap.t (option (globdef F V));  (**r mapping block -> definition *)
-  genv_defs_range: forall b g, NMap.get _ b genv_defs = Some g -> sup_In b (genv_sup to_senv);
+  genv_defs_range: forall b g, NMap.get b genv_defs = Some g -> sup_In b (genv_sup to_senv);
 }.
 
 (** ** Lookup functions *)
@@ -126,12 +126,12 @@ Definition public_symbol (ge: symtbl) (id: ident) : bool :=
 (** [find_info ge b] returns the symbol information associated with the given address. *)
 
 Definition find_info (ge: symtbl) (b: block) : option (globdef unit unit) :=
-  NMap.get _ b ge.(genv_info).
+  NMap.get b ge.(genv_info).
 
 (** [find_def ge b] returns the global definition associated with the given address. *)
 
 Definition find_def (ge: t) (b: block) : option (globdef F V) :=
-  NMap.get _ b ge.(genv_defs).
+  NMap.get b ge.(genv_defs).
 
 (** [find_funct_ptr ge b] returns the function description associated with
     the given address. *)
@@ -165,7 +165,7 @@ Definition find_var_info (ge: symtbl) (b: block) : option (globvar unit) :=
   of volatile type, [false] otherwise. *)
 
 Definition block_is_volatile (ge: symtbl) (b: block) : bool :=
-  match NMap.get _ b ge.(genv_info) with
+  match NMap.get b ge.(genv_info) with
   | Some (Gvar gv) => gv.(gvar_volatile)
   | _ => false
   end.
@@ -184,7 +184,7 @@ Program Definition add_global (ge: symtbl) (idg: ident * globdef unit unit) : sy
   @mkstbl
     ge.(genv_public)
     (PTree.set idg#1 (fresh_block ge.(genv_sup)) ge.(genv_symb))
-    (NMap.set _ (fresh_block ge.(genv_sup)) (Some (idg#2)) ge.(genv_info))
+    (NMap.set (fresh_block ge.(genv_sup)) (Some (idg#2)) ge.(genv_info))
     (sup_incr (ge.(genv_sup)))
     _ _ _.
 Next Obligation.
@@ -194,7 +194,7 @@ Next Obligation.
 Qed.
 Next Obligation.
   destruct ge; simpl in *.
-  rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (fresh_block genv_sup0)).
+  rewrite NMap.gsspec in H. destruct (Block.eq b (fresh_block genv_sup0)).
   inv H. apply Mem.sup_incr_in1. apply Mem.sup_incr_in2. eauto.
 Qed.
 Next Obligation.
@@ -218,7 +218,7 @@ Proof.
 Qed.
 
 Program Definition empty_stbl (pub: list ident): symtbl :=
-  @mkstbl pub (PTree.empty _) (NMap.init _ None) sup_empty _ _ _.
+  @mkstbl pub (PTree.empty _) (NMap.init None) sup_empty _ _ _.
 
 Definition symboltbl (p: program unit unit) :=
   add_globals (empty_stbl p.(prog_public)) p.(prog_defs).
@@ -303,12 +303,12 @@ Variable se: symtbl.
 Definition add_globdef
   (defs: NMap.t (option (globdef F V))) (id: ident) (g: globdef F V) :=
   match (genv_symb se) ! id with
-    | Some b => NMap.set _ b (Some g) defs
+    | Some b => NMap.set b (Some g) defs
     | None => defs
   end.
 
 Program Definition globalenv (p: program F V): t :=
-  mkgenv se (PTree.fold add_globdef (prog_defmap p) (NMap.init _ None)) _.
+  mkgenv se (PTree.fold add_globdef (prog_defmap p) (NMap.init None)) _.
 Next Obligation.
   revert H. rewrite PTree.fold_spec.
   pattern (PTree.elements (prog_defmap p)). apply rev_ind.
@@ -1181,7 +1181,7 @@ Proof.
   exploit alloc_global_support; eauto. intros NB. split.
 - (* globals-initialized *)
   red; intros. unfold find_info in H2; simpl in H2.
-  rewrite NMap.gsspec in H2. destruct (NMap.elt_eq b (fresh_block (genv_sup g))).
+  rewrite NMap.gsspec in H2. destruct (Block.eq b (fresh_block (genv_sup g))).
 + inv H2. destruct gd0 as [f|v]; simpl in H0.
 * destruct (Mem.alloc m 0 1) as [m1 b] eqn:ALLOC.
   exploit Mem.alloc_result; eauto. intros RES. unfold Mem.nextblock in RES.
@@ -1635,7 +1635,7 @@ Record match_stbls (f: meminj) (ge1: symtbl) (ge2: symtbl) := {
     forall id, (Genv.genv_symb ge1) ! id = Some b1 <-> (Genv.genv_symb ge2) ! id = Some b2;
   mge_info:
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
-    NMap.get _ b1 ge1.(genv_info) = NMap.get _ b2 ge2.(genv_info);
+    NMap.get b1 ge1.(genv_info) = NMap.get b2 ge2.(genv_info);
   mge_separated:
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
     sup_In b1 (genv_sup ge1) <-> sup_In b2 (genv_sup ge2)
@@ -1647,7 +1647,7 @@ Record match_genvs {A B V W} (f: meminj) R (ge1: t A V) (ge2: t B W) := {
   mge_stbls :> match_stbls f ge1 ge2;
   mge_defs:
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
-    option_rel R (NMap.get _ b1 ge1.(genv_defs)) (NMap.get _ b2 ge2.(genv_defs));
+    option_rel R (NMap.get b1 ge1.(genv_defs)) (NMap.get b2 ge2.(genv_defs));
 }.
 
 Theorem match_stbls_id ge:
@@ -1719,8 +1719,8 @@ Proof.
     + rewrite (Hf' _ _ _ Hb) in Hb'. inv Hb'.
       eapply mge_info; eauto.
     + edestruct SEP; eauto.
-      destruct (NMap.get _ b1 (genv_info se)) eqn:H1. apply genv_info_range in H1. congruence.
-      destruct (NMap.get _ b2 (genv_info tse)) eqn:H2. apply genv_info_range in H2. congruence.
+      destruct (NMap.get b1 (genv_info se)) eqn:H1. apply genv_info_range in H1. congruence.
+      destruct (NMap.get b2 (genv_info tse)) eqn:H2. apply genv_info_range in H2. congruence.
       reflexivity.
   - intros b1 b2 delta Hb'.
     destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
@@ -1779,7 +1779,7 @@ Proof.
   exists y. intuition eauto; congruence.
 Qed.
 
-Local Notation "a # b" := (NMap.get _ b a) (at level 1).
+Local Notation "a # b" := (NMap.get b a) (at level 1).
 
 Lemma add_globdef_match:
   forall b1 b2 delta defs1 defs2 id gd1 gd2,
@@ -1860,7 +1860,7 @@ Record match_stbls' (f: meminj) (ge1: symtbl) (ge2: symtbl) := {
     forall id, (Genv.genv_symb ge1) ! id = Some b1 <-> (Genv.genv_symb ge2) ! id = Some b2;
   mge_info':
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
-    NMap.get _ b1 ge1.(genv_info) = NMap.get _ b2 ge2.(genv_info);
+    NMap.get b1 ge1.(genv_info) = NMap.get b2 ge2.(genv_info);
   mge_separated':
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
     sup_In b1 (genv_sup ge1) <-> sup_In b2 (genv_sup ge2);
@@ -1870,7 +1870,7 @@ Record match_genvs' {A B V W} (f: meminj) R (ge1: t A V) (ge2: t B W) := {
   mge_stbls' :> match_stbls' f ge1 ge2;
   mge_defs':
     forall b1 b2 delta, f b1 = Some (b2, delta) ->
-    option_rel R (NMap.get _ b1 ge1.(genv_defs)) (NMap.get _ b2 ge2.(genv_defs));
+    option_rel R (NMap.get b1 ge1.(genv_defs)) (NMap.get b2 ge2.(genv_defs));
 }.
 
 Theorem match_stbls_id' ge:
@@ -1952,8 +1952,8 @@ Proof.
     + rewrite (Hf' _ _ _ Hb) in Hb'. inv Hb'.
       eapply mge_info'; eauto.
     + edestruct SEP; eauto.
-      destruct (NMap.get _ b1 (genv_info se)) eqn:H1. apply genv_info_range in H1. congruence.
-      destruct (NMap.get _ b2 (genv_info tse)) eqn:H2. apply genv_info_range in H2. congruence.
+      destruct (NMap.get b1 (genv_info se)) eqn:H1. apply genv_info_range in H1. congruence.
+      destruct (NMap.get b2 (genv_info tse)) eqn:H2. apply genv_info_range in H2. congruence.
       reflexivity.
   - intros b1 b2 delta Hb'.
     destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
@@ -2011,7 +2011,7 @@ Next Obligation.
 Qed.
 Next Obligation.
   destruct ge; simpl in *.
-  rewrite NMap.gsspec in H. destruct (NMap.elt_eq b (fresh_block genv_sup0)).
+  rewrite NMap.gsspec in H. destruct (Block.eq b (fresh_block genv_sup0)).
   inv H. apply Mem.sup_incr_in1. apply Mem.sup_incr_in2. eauto.
 Qed.
 Next Obligation.
@@ -2049,6 +2049,20 @@ Variable se: symtbl.
 Variable tse: symtbl.
 Hypothesis sematch: match_stbls j se tse.
 
+
+Lemma list_option_rel: forall d1 d2 m1 m2 b1 b2 delta,
+    j b1 = Some (b2, delta) ->
+        list_forall2
+         (fun i_x i_y => i_x#1 = i_y#1 /\ match_gd i_x#2 i_y#2) (PTree.elements d1) (PTree.elements d2) ->
+        option_rel match_gd (NMap.get b1 m1) (NMap.get b2 m2) ->
+        option_rel match_gd (NMap.get b1 (fold_left (fun a p0 => add_globdef se a p0#1 p0#2) (PTree.elements d1) m1)) (NMap.get b2 (fold_left (fun a p0 => add_globdef tse a p0#1 p0#2) (PTree.elements d2) m2)).
+Proof.
+  intros d1 d2 m1 m2 b1 b2 delta A B. generalize m1 m2.
+  induction B as [ | [id1 g1] l1 [id2 g2] l2 [Hi Hg] Hl IH]; cbn in *; eauto.
+    intros t1 t2 Ht. eapply IH. eauto. rewrite Hi.
+    eapply add_globdef_match; eauto.
+Qed.
+
 Lemma globalenvs_match:
   match_genvs j (match_globdef match_fundef match_varinfo ctx) (globalenv se p) (globalenv tse tp).
 Proof.
@@ -2060,15 +2074,10 @@ Proof.
   rewrite !PTree.fold_spec.
   apply PTree.elements_canonical_order' in Hd. revert Hd.
   generalize (prog_defmap p), (prog_defmap tp). intros d1 d2 Hd.
-(*   cut (option_rel match_gd (PTree.empty _)!b1 (PTree.empty _)!b2). *)
   cut (option_rel match_gd
-      (NMap.get _ b1 (NMap.init (option (globdef F1 V1)) None ))
-      (NMap.get _ b2 (NMap.init (option (globdef F2 V2)) None ))).
-  - generalize (NMap.init (option (globdef F1 V1)) None),
-               (NMap.init (option (globdef F2 V2)) None).
-    induction Hd as [ | [id1 g1] l1 [id2 g2] l2 [Hi Hg] Hl IH]; cbn in *; eauto.
-    intros t1 t2 Ht. eapply IH. eauto. rewrite Hi.
-    eapply add_globdef_match; eauto.
+      (NMap.get b1 (NMap.init None ))
+      (NMap.get b2 (NMap.init None ))).
+  - eapply list_option_rel; eauto.
   - unfold NMap.get. rewrite !NMap.gi. constructor.
 Qed.
 

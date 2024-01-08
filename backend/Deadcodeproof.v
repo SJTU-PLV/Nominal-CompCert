@@ -53,8 +53,8 @@ Record magree (f:meminj) (m1 m2: mem) (P: locset) : Prop := mk_magree {
     forall b1 b2 delta ofs, f b1 = Some (b2, delta) ->
     Mem.perm m1 b1 ofs Cur Readable ->
     P b1 ofs ->
-    memval_inject f (ZMap.get ofs (NMap.get _ b1 (Mem.mem_contents m1)))
-      (ZMap.get (ofs + delta) (NMap.get _ b2 (Mem.mem_contents m2)));
+    memval_inject f (ZMap.get ofs (NMap.get b1 (Mem.mem_contents m1)))
+      (ZMap.get (ofs + delta) (NMap.get b2 (Mem.mem_contents m2)));
   ma_freeblocks:
     forall b, ~ Mem.valid_block m1 b -> f b = None;
   ma_mappedblocks:                                                           
@@ -181,12 +181,12 @@ Proof.
   intuition eauto using Mem.perm_storebytes_1, Mem.perm_storebytes_2.
 - rewrite (Mem.storebytes_mem_contents _ _ _ _ _ H0).
   rewrite (Mem.storebytes_mem_contents _ _ _ _ _ ST2).
-  rewrite ! NMap.gsspec. destruct (NMap.elt_eq b0 b1).
+  rewrite ! NMap.gsspec. destruct (Block.eq b0 b1).
 + subst b0. rewrite H1 in H4. inv H4. rewrite pred_dec_true; auto.
   apply SETN with (access := fun ofs => Mem.perm m1' b1 ofs Cur Readable /\ Q b1 ofs); auto.
   intros. destruct H4. eapply ma_memval; eauto.
   eapply Mem.perm_storebytes_2; eauto.
-+ destruct (NMap.elt_eq b3 b2).
++ destruct (Block.eq b3 b2).
   * subst. rewrite Mem.setN_other. eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
     intros.  assert (b2 <> b2 \/ ofs0 + delta0 <> (r - delta) + delta).
     eapply ma_no_overlap; eauto 6 with mem.
@@ -242,7 +242,7 @@ Proof.
   - exploit ma_perm_inv; eauto.
     intuition eauto using Mem.perm_storebytes_1, Mem.perm_storebytes_2.
   - rewrite (Mem.storebytes_mem_contents _ _ _ _ _ H0).
-    rewrite NMap.gsspec. destruct (NMap.elt_eq b0 b1).
+    rewrite NMap.gsspec. destruct (Block.eq b0 b1).
     + subst b0. rewrite Mem.setN_outside. eapply ma_memval; eauto. eapply Mem.perm_storebytes_2; eauto.
       destruct (zlt ofs0 ofs); auto. destruct (zle (ofs + Z.of_nat (length bytes1)) ofs0); try lia.
       assert(ofs <= ofs0 < ofs + Z.of_nat(Datatypes.length bytes1)) by lia.

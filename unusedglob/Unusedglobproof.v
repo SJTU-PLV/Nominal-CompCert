@@ -757,12 +757,12 @@ Record meminj_preserves_globals (f: meminj) : Prop := {
     exists b', Genv.find_symbol tge id = Some b' /\ f b = Some(b', 0);
   info_inject: forall b b' delta gd,
     f b = Some(b', delta) ->
-    NMap.get _ b (Genv.genv_info ge) = Some gd ->
-    NMap.get _ b' (Genv.genv_info tge)  = Some gd /\ delta = 0;
+    NMap.get b (Genv.genv_info ge) = Some gd ->
+    NMap.get b' (Genv.genv_info tge)  = Some gd /\ delta = 0;
   info_rev_inject: forall b b' delta gd,
     f b = Some(b', delta) ->
-    NMap.get _ b' (Genv.genv_info tge) = Some gd ->
-    NMap.get _ b (Genv.genv_info ge) = Some gd /\ delta = 0;
+    NMap.get b' (Genv.genv_info tge) = Some gd ->
+    NMap.get b (Genv.genv_info ge) = Some gd /\ delta = 0;
 
   (** Invariants for module-local injections *)
   symbols_inject_2: forall id b,
@@ -931,11 +931,11 @@ Proof.
     intros (b' & FND & INJ).
     eauto.
   + unfold Genv.block_is_volatile.
-    destruct (NMap.get _ b1 (Genv.genv_info ge)) as [gd|] eqn:V1.
+    destruct (NMap.get b1 (Genv.genv_info ge)) as [gd|] eqn:V1.
     - generalize (info_inject _ H _ _ _ _ H0 V1); eauto.
       intros (V2 & D). subst.
       rewrite V2. auto.
-    - destruct (NMap.get _ b2 (Genv.genv_info tge)) as [gd2|] eqn:V2; auto.
+    - destruct (NMap.get b2 (Genv.genv_info tge)) as [gd2|] eqn:V2; auto.
       destruct gd2; auto.
       generalize (info_rev_inject _ H _ _ _ _ H0 V2).
       intros (V3 & D). subst.

@@ -1071,14 +1071,14 @@ Qed.
 Lemma pmap_update_diff: forall (A:Type) b f (map1 map2: NMap.t A) b',
   Mem.pmap_update b f map1 = map2 ->
   b <> b' ->
-  NMap.get _ b' map1 = NMap.get _ b' map2.
+  NMap.get b' map1 = NMap.get b' map2.
 Proof.
   intros. rewrite <- H. unfold Mem.pmap_update.
   rewrite NMap.gsspec. rewrite pred_dec_false; auto.
 Qed.
 
 Definition mem_memval (m:mem) b ofs : memval :=
-  Maps.ZMap.get ofs (NMap.get _ b (Mem.mem_contents m)).
+  Maps.ZMap.get ofs (NMap.get b (Mem.mem_contents m)).
 
 Lemma loc_out_of_reach_incr : forall j1 j1' m1 m2 m1' b ofs,
     loc_out_of_reach j1 m1 b ofs ->
@@ -1204,7 +1204,7 @@ Section CONSTR_PROOF.
 
   Lemma pmap_update_diff': forall (A:Type) b f (map: NMap.t A) b',
   b <> b' ->
-  NMap.get _ b' (Mem.pmap_update b f map) = NMap.get _ b' map.
+  NMap.get b' (Mem.pmap_update b f map) = NMap.get b' map.
   Proof.
     intros. unfold Mem.pmap_update.
     rewrite NMap.gsspec. rewrite pred_dec_false; auto.
@@ -1805,11 +1805,11 @@ Qed.
   (*TODO: to mem*)
   Lemma perm_check_true1:
     forall m b o, Mem.perm m b o Max Nonempty ->
-             Mem.perm_check_any  (NMap.get (Maps.ZMap.t Mem.memperm) b (Mem.mem_access m)) o = true.
+             Mem.perm_check_any  (NMap.get b (Mem.mem_access m)) o = true.
   Proof.
     intros. unfold Mem.perm_check_any.
     unfold Mem.perm in H.
-    destruct (Maps.ZMap.get o (NMap.get (Maps.ZMap.t Mem.memperm) b (Mem.mem_access m)) Max) eqn:P; simpl;
+    destruct (Maps.ZMap.get o (NMap.get b (Mem.mem_access m)) Max) eqn:P; simpl;
       setoid_rewrite P.
     - destruct p; simpl; inv H; eauto.
     - inv H.
@@ -1817,11 +1817,11 @@ Qed.
   
   Lemma perm_check_true2:
     forall m b o, Mem.perm m b o Cur Readable ->
-             Mem.perm_check_readable  (NMap.get (Maps.ZMap.t Mem.memperm) b (Mem.mem_access m)) o = true.
+             Mem.perm_check_readable  (NMap.get b (Mem.mem_access m)) o = true.
   Proof.
     intros. unfold Mem.perm_check_readable.
     unfold Mem.perm in H.
-    destruct (Maps.ZMap.get o (NMap.get (Maps.ZMap.t Mem.memperm) b (Mem.mem_access m)) Cur) eqn:P; simpl;
+    destruct (Maps.ZMap.get o (NMap.get b (Mem.mem_access m)) Cur) eqn:P; simpl;
       setoid_rewrite P.
     - destruct p; simpl; inv H; eauto.
     - inv H.

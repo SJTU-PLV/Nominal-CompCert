@@ -1114,7 +1114,7 @@ Definition check_add_global (se : Genv.symtbl)
   (b:block)(rm : romem) : romem :=
   match Genv.invert_symbol se b with
   | Some id =>
-      match NMap.get _ b (Genv.find_info se) with
+      match (Genv.find_info se) b with
       | Some (Gvar v) =>
           if v.(gvar_readonly) && negb v.(gvar_volatile) && definitive_initializer v.(gvar_init)
           then PTree.set id (store_init_data_list (ablock_init Pbot) 0 v.(gvar_init)) rm
@@ -1140,7 +1140,7 @@ Proof.
     apply Genv.invert_find_symbol in INV.
     congruence.
   }
-  destruct NMap.get eqn:INFO; eauto.
+  destruct (Genv.find_info se a); eauto.
   destruct g; eauto.
   rewrite PTree.gro; eauto.
   destruct ( gvar_readonly v && negb (gvar_volatile v) && definitive_initializer (gvar_init v)).
