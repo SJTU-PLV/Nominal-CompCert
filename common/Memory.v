@@ -914,9 +914,26 @@ Qed.
   starting at location [(b, ofs)].  Returns updated memory state
   or [None] if the accessed locations are not writable. *)
 
+
+(** This modification is used to prove storebytes_empty below. It seems to be trivially
+    true. But if the NMap.set points to invalid block, the 'mem_content' is changed. 
+
+    The operation will 'get' mem_contents#b and set it back.
+    This will change the 'PTree' part of 'PMap'.
+
+    Before the operation, PTree.get b will return None
+    After the operation, it will return the default value (ZMap.init Undef).
+
+    Although the PMap.get will returns the same value, the extensionality is only
+    proved on PTree but not on PMap.
+
+    Maybe another solution is release mkmem_ext a little bit more. :)
+
+ *)
 Lemma empty_check : forall (l : list memval), {l = nil} + {l <> nil}.
 Proof. intros. destruct l. left. eauto. right. congruence. Qed.
-  
+
+
 Program Definition storebytes (m: mem) (b: block) (ofs: Z) (bytes: list memval) : option mem :=
   if empty_check bytes then Some m else 
   if range_perm_dec m b ofs (ofs + Z.of_nat (length bytes)) Cur Writable then
