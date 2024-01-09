@@ -52,7 +52,6 @@ Inductive statement : Type :=
 | Ssequence : statement -> statement -> statement  (**r sequence *)
 | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
 | Swhile : expr -> statement -> statement   (**r [while] loop *)
-| Sfor: statement -> expr -> statement -> statement -> statement (**r [for] loop *)
 | Sloop: statement -> statement                               (**r infinite loop *)
 | Sbreak : statement                      (**r [break] statement *)
 | Scontinue : statement                   (**r [continue] statement *)
