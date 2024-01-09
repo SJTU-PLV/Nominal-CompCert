@@ -81,9 +81,23 @@ Inductive use_mode : Type :=
 | Use_reference: use_mode.     (**r just use the address of this l-value *)
 
 
+(** TODO: for_set is useful in reducing the number of temporary
+variables, because in most of the time we create a temp var to store
+the result of the value expression and return Eplace/Emoveplace. But
+with for_set, we can just use the set destination to store the result
+of the value expression *)
 Inductive destination : Type :=
 | For_val
-| For_effects.
+| For_effects
+| For_set (p: place).
+
+Definition finish (dst: destination) (sl: list statement) (a: expr) :=
+  match dst with
+  | For_val => (sl, a)
+  | For_effects => (sl, a)
+  | For_set sd => (sl ++ (Sassign sd a :: nil), a)
+  end.
+
 
 Definition dummy_expr := Econst_int Int.zero type_int32s.
 
@@ -222,6 +236,19 @@ with transl_exprlist (el: Rustsyntax.exprlist) : mon (list statement * list expr
 
 End NOTATION.
 
+Definition value_or_place (e: Rustsyntax.expr) : bool :=
+  match e with
+  | Rustsyntax.Eval _ _ => true
+  | Rustsyntax.Evar _ _ => false
+  | Rustsyntax.Ebox _ _ => true
+  | Rustsyntax.Efield _ _ _ => false
+  | Rustsyntax.Ederef _ _ => false
+  | Rustsyntax.Eunop _ _ _ => true
+  | Rustsyntax.Ebinop _ _ _ _ => true
+  | Rustsyntax.Eassign _ _ _ => true
+  | Rustsyntax.Ecall _ _ _ => true
+  end.
+           
 Fixpoint generate_lets (l: list (ident * type)) (body: statement) : statement :=
   match l with
   | nil => body
@@ -242,6 +269,12 @@ Definition finish_stmt (sl: list statement) : mon statement :=
   fun (g: generator) =>
     let s := makeseq sl in
     Res (generate_lets (gen_trail g) s)
+      (mkgenerator (gen_next g) nil)
+      (Ple_refl (gen_next g)).
+
+Definition extract_temps : mon (list (ident * type)) :=
+  fun (g: generator) =>
+    Res (gen_trail g)
       (mkgenerator (gen_next g) nil)
       (Ple_refl (gen_next g)).
 
@@ -304,15 +337,87 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
       do cond <- transl_if e Sskip Sbreak;
       do body' <- transl_stmt body;
       ret (Sloop (Ssequence cond body'))
-  | Sfor s1 e2 s3 s4 =>
-      do ts1 <- transl_stmt s1;
-      do s' <- transl_if e2 Sskip Sbreak;
-      do ts3 <- transl_stmt s3;
-      do ts4 <- transl_stmt s4;
-      (** FIXME: it is incorrect. We should rewrite the Sloop!! *)
-      ret (Ssequence ts1 (Sloop (Ssequence (Ssequence s' ts4) ts3)))
-  | _ => error (msg "Unsupported")
+  | Rustsyntax.Sloop s =>
+      do s' <- transl_stmt s;
+      ret (Sloop s')
+  | Rustsyntax.Sreturn e =>
+      match e with
+      | Some e =>
+          do (sl, e') <- transl_value_expr e;
+          do s' <- finish_stmt sl;
+          ret (Ssequence s' (Sreturn (Some e')))
+      | None =>
+          ret (Sreturn None)
+      end
+  | Rustsyntax.Sbreak =>
+      ret Sbreak
+  | Rustsyntax.Scontinue =>
+      ret Scontinue
+  | Rustsyntax.Smatch e arm_body =>
+      (** FIXME: too complicated  *)
+      (* we want to store e into a place *)
+      let ty := Rustsyntax.typeof e in
+      match ty with
+      | Tvariant id _ =>
+          match ce!id with
+          | Some co =>
+              if value_or_place e then
+                (* let .. (generate_lets)
+                   cond_sl; (eval_cond)
+                   let temp;                  -| 
+                   temp = e'; (assign_temp)    |-> temp_decl_arm
+                   if cktag(temp,fid1) ...    _|  *)
+                do temp_id <- gensym ty;
+                let temp := Plocal temp_id ty in
+                do (cond_sl, e') <- transl_value_expr e;
+                let eval_cond := makeseq cond_sl in
+                let assign_temp := Sassign temp e' in
+                (* clear the temps in state *)
+                do temps <- extract_temps;
+                do arm_stmt <- transl_arm_statements arm_body temp (own_type ce ty) co;
+                (* concat the condition statements and generate let stmts *)
+                let temp_decl_arm := Slet temp_id ty (Ssequence assign_temp arm_stmt) in
+                ret (generate_lets temps temp_decl_arm)
+              else
+                do (cond_sl, p) <- transl_place_expr e;
+                let eval_cond := makeseq cond_sl in
+                do temps <- extract_temps;
+                do arm_stmt <- transl_arm_statements arm_body p (own_type ce ty) co;
+                ret (generate_lets temps (Ssequence eval_cond arm_stmt))                
+          | None => error (msg "Variant type does not exist: Rustlightgen.simpl_stmt")
+          end
+      | _ => error (msg "Type error in match: Rustlightgen.simpl_stmt")
+      end        
+  end
+
+with transl_arm_statements (sl: arm_statements) (p: place) (moved: bool) (co: composite) : mon statement :=
+  match sl with
+  | ASnil => ret Sskip
+  | AScons ids arm sl' =>
+      do arm' <- transl_stmt arm;
+      match ids with
+      | Some (fid, temp_id) =>
+          match find (fun elt => ident_eq (name_member elt) fid) co.(co_members) with
+          | Some m =>              
+              (* if cond then
+                   let temp: ty;
+                   temp = Eget(p, fid, ty);
+                   arm'
+                else else_stmt *)
+              do else_stmt <- transl_arm_statements sl' p moved co;
+              let ty := type_member m in
+              let cond := Ecktag p fid type_bool in                              
+              let destruct_place := if moved then Emoveget p fid ty else (Epure (Eget p fid ty)) in
+              let assign_temp := Sassign (Plocal temp_id ty) destruct_place in
+              let then_stmt := Slet temp_id ty (Ssequence assign_temp arm') in              
+              ret (Sifthenelse cond then_stmt else_stmt)
+          | _ => error (msg "Cannot find the member: Rustlightgen.transl_arm_statements")
+          end
+      | None =>
+          (* default arm: else_stmt is useless *)
+          ret arm'
+      end
   end.
-      
+          
       
 End SIMPL_EXPR.
