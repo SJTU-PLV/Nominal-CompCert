@@ -2022,11 +2022,6 @@ Next Obligation.
   congruence.
 Qed.
 
-Section SYMTBL_CONSTR.
-
-
-
-
 
 Section MATCH_PROGRAMS.
 
