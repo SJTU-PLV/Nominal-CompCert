@@ -281,7 +281,7 @@ Definition extract_temps : mon (list (ident * type)) :=
 
 (** Smart constructor for [if ... then ... else]. (copy from SimplExpr.v) *)
 
-Fixpoint eval_simpl_expr (a: expr) : option val := 
+Definition eval_simpl_expr (a: expr) : option val := 
   match a with
   | Epure pe =>
       match pe with
@@ -295,7 +295,7 @@ Fixpoint eval_simpl_expr (a: expr) : option val :=
   end.
 
 (** TODO: some optimizations  *)
-Function makeif (a: expr) (s1 s2: statement) : statement :=
+Definition makeif (a: expr) (s1 s2: statement) : statement :=
   (* match eval_simpl_expr a with *)
   (* | Some v => *)
   (*     match bool_val v (typeof a) Mem.empty with *)
@@ -418,6 +418,42 @@ with transl_arm_statements (sl: arm_statements) (p: place) (moved: bool) (co: co
           ret arm'
       end
   end.
-          
-      
+
+
+Open Scope error_monad_scope.
+
+Definition transl_function (f: Rustsyntax.function) : Errors.res function :=
+  let vars := var_names f.(Rustsyntax.fn_params) in
+  let next_temp := Pos.succ (fold_left (fun acc elt => Pos.max acc elt) vars 1%positive) in
+  let init_gen := initial_generator next_temp in
+  match transl_stmt f.(Rustsyntax.fn_body) init_gen with
+  | Res stmt _ _ =>
+      Errors.OK (mkfunction f.(Rustsyntax.fn_return)
+                            f.(Rustsyntax.fn_callconv)
+                            f.(Rustsyntax.fn_params)
+                            stmt)
+  | Err msg => Errors.Error msg
+  end.
+
+Definition transl_fundef (fd: Rustsyntax.fundef) : Errors.res fundef :=
+  match fd with
+  | Internal f =>
+      do tf <- transl_function f;
+      Errors.OK (Internal tf)
+  | External _ ef targs tres cconv =>
+      Errors.OK (External _ ef targs tres cconv)
+  end.
+
 End SIMPL_EXPR.
+
+Open Scope error_monad_scope.
+
+Definition transl_program (p: Rustsyntax.program) : Errors.res program :=
+  do p1 <- transform_partial_program (transl_fundef p.(prog_comp_env)) p;
+  Errors.OK
+    {| prog_defs := p1.(AST.prog_defs);
+    prog_public := p1.(AST.prog_public);
+    prog_main := p1.(AST.prog_main);
+    prog_types := p.(prog_types);
+    prog_comp_env := p.(prog_comp_env);
+    prog_comp_env_eq := p.(prog_comp_env_eq) |}.
