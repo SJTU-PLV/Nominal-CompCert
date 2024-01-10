@@ -92,38 +92,94 @@ Declare Custom Entry rustsyntax_aux.
 Notation "<{ s }>" := s (s custom rustsyntax_aux) : rustsyntax_scope.
 Notation "s" := s (in custom rustsyntax_aux at level 0, s custom rustsyntax) : rustsyntax_scope.
 
+Notation "x" := x (in custom rustsyntax at level 0, x global). (* It indicate that the custom entry should parse global *)
+
 (* Notations for statement *)
-Notation "'if' e 'then' s1 'else' s2 'end'" := (Sifthenelse e s1 s2) (in custom rustsyntax at level 89, right associativity) : rustsyntax_scope.
-Notation "s1 ; s2" := (Ssequence s1 s2) (in custom rustsyntax at level 90, right associativity) : rustsyntax_scope.
-Notation "'do' e" := (Sdo e) (in custom rustsyntax at level 80) : rustsyntax_scope.
+Notation "'if' e 'then' s1 'else' s2 'end'" := (Sifthenelse e s1 s2) (in custom rustsyntax at level 80, s1 at level 99, s2 at level 99) : rustsyntax_scope.
+Notation "s1 ; s2" := (Ssequence s1 s2) (in custom rustsyntax at level 99, right associativity) : rustsyntax_scope.
+Notation "'do' e" := (Sdo e) (in custom rustsyntax at level 80, e at level 20) : rustsyntax_scope.
 Notation "'skip'" := Sskip (in custom rustsyntax at level 0) : rustsyntax_scope.
 Notation "'break'" := Sbreak (in custom rustsyntax at level 0) : rustsyntax_scope.
 Notation "'continue'" := Scontinue (in custom rustsyntax at level 0) : rustsyntax_scope.
-Notation "'return'" := (Sreturn None) (in custom rustsyntax at level 10) : rustsyntax_scope.
-Notation "'return' e" := (Sreturn (@Some expr e)) (in custom rustsyntax at level 10) : rustsyntax_scope.
-Notation "'let' x : t 'in' s 'end' " := (Slet x t s) (in custom rustsyntax at level 5, x constr at level 99, t constr at level 99) : rustsyntax_scope.
-Notation "'loop' s 'end'" := (Sloop s) (in custom rustsyntax at level 20) : rustsyntax_scope.
-Notation "'while' e 'do' s 'end'" := (Swhile e s) (in custom rustsyntax at level 20) : rustsyntax_scope.
+Notation "'return'" := (Sreturn None) (in custom rustsyntax at level 0) : rustsyntax_scope.
+Notation "'return' e" := (Sreturn (@Some expr e)) (in custom rustsyntax at level 80, e at level 20) : rustsyntax_scope.
+Notation "'let' x : t 'in' s 'end' " := (Slet x t s) (in custom rustsyntax at level 80, s at level 99) : rustsyntax_scope.
+Notation "'loop' s 'end'" := (Sloop s) (in custom rustsyntax at level 80, s at level 99) : rustsyntax_scope.
+Notation "'while' e 'do' s 'end'" := (Swhile e s) (in custom rustsyntax at level 80, e at level 20, s at level 99) : rustsyntax_scope.
 (** TODO: define the notations for match statement *)
 
 (* Notations for expression *)
 
-Notation " 'Var' x # t " := (Evar x t) (in custom rustsyntax at level 10, x global, t global).
-Notation "'Box' < t > ( e )" := (Ebox e t) (in custom rustsyntax at level 10, t global).
+Definition deref_type (ty: type) : type :=
+  match ty with
+  | Tbox ty' attr => ty'
+  | _ => Tunit
+  end.
 
-Print Grammar constr.
+(* expression is at level 20 *)
+Notation " ( x ) " := x (in custom rustsyntax at level 20).
+Notation " x # t " := (Evar x t) (in custom rustsyntax at level 0).
+Notation "'Box' ( e )" := (Ebox e (Tbox (typeof e) noattr)) (in custom rustsyntax at level 10, e at level 20).
+Notation " ! e " := (Ederef e (deref_type (typeof e))) (in custom rustsyntax at level 10, e at level 20).
+Notation " e . x < t > " := (Efield e x t) (in custom rustsyntax at level 10, t global).
+Notation " l := r " := (Eassign l r Tunit) (in custom rustsyntax at level 17, r at level 20).
+Notation " { x , .. , y } " := (Econs x .. (Econs y Enil) .. ) (in custom rustsyntax at level 20).
+Notation " f @ l " := (Ecall f l) (in custom rustsyntax at level 10, l at level 10) : rustsyntax_scope.
+Notation " e1 < e2 " := (Ebinop Ole e1 e2 type_bool) (in custom rustsyntax at level 15, e2 at level 20, left associativity) : rustsyntax_scope.
+Notation " $ k " := (Eval (Vint (Int.repr k)) type_int32s) (in custom rustsyntax at level 10, k constr) : rustsyntax_scope.
+Notation " e1 * e2 " := (Ebinop Omul e1 e2 (typeof e1))  (in custom rustsyntax at level 15, e2 at level 20, left associativity) : rustsyntax_scope.
+Notation " e1 - e2 " := (Ebinop Osub e1 e2 (typeof e1))  (in custom rustsyntax at level 15, e2 at level 20, left associativity) : rustsyntax_scope.
+
+
+(* Print Grammar constr. *)
 Print Custom Grammar rustsyntax.
 
 Open Scope rustsyntax_scope.
 
-Definition var_a : expr := <{ Var A # type_int32s }>.
-Definition box_a : expr := <{ Box< type_int32s >(Var A # type_int32s) }>.
+Definition var_a : expr := <{ A # type_int32s }>.
+Definition box_a : expr := <{ Box(A # type_int32s) }>.
+Definition deref_box_a_global : expr := <{ ! box_a }>.
+Definition deref_box_a : expr := <{ ! Box(A # type_int32s) }>.
 
 
-Notation "p := f ( l ) " := (Scall (Some p) f l) (in custom rustsyntax at level 5, p constr at level 99, f constr at level 99, l constr at level 99, no associativity) : rustsyntax_scope.
-Notation " f ( l )" := (Scall None f l) (in custom rustsyntax at level 5, f constr at level 99, l constr at level 99, no associativity) : rustsyntax_scope.
+(* Example 1 *)
+
+Definition box_int := Tbox type_int32s noattr.
+
+Definition ex1 (a b: ident) :=
+  <{ do (a#type_int32s) := !(b#box_int);
+     let C : box_int in
+     if ((a#type_int32s) < !(b#box_int)) then
+       do (C#box_int) := (b#box_int)
+     else
+       do (b#box_int) := Box($3)
+     end
+     end
+    }>.
 
 
-(* Print Grammar constr. *)
+(* Example 2 *)
 
 
+(* Print Custom Grammar rustsyntax. *)
+
+Definition N : ident := 30%positive.
+
+Definition fact (n: Z) :=
+  <{ let N : type_int32s in
+     do (N#type_int32s) := $n;
+     let A : type_int32s in
+     do (A#type_int32s) := $1;
+     let B : box_int in
+     do (B#box_int) := Box(!A#type_int32s);
+     while (($0) < (N#type_int32s)) do
+       let C : box_int in
+       do (C#box_int) := Box(!B#box_int); (* comment it to check the init analysis *)
+       do (!C#box_int) := Box(!B#box_int) * (N#type_int32s);
+       do (N#type_int32s) := (N#type_int32s) - $1;
+       do (B#box_int) := (C#box_int)
+       end                       
+     end
+     end end end
+    }>.
+  
