@@ -409,8 +409,8 @@ Next Obligation. (* nextblock incr *)
 Qed.
 
 (** * New Version of injp - now used for Unusedglob *)
-
 Require Import InjectFootprint.
+
 
 Inductive injp_match_stbls': injp_world -> relation Genv.symtbl :=
   injp_match_stbls_intro f m1 m2 Hm se1 se2:
@@ -419,6 +419,37 @@ Inductive injp_match_stbls': injp_world -> relation Genv.symtbl :=
     Mem.sup_include (Genv.genv_sup se2) (Mem.support m2) ->
     injp_match_stbls' (injpw f (Genv.genv_sup se1) (Genv.genv_sup se2) m1 m2 Hm) se1 se2.
 
+Definition valid_b (j:meminj) b gs : bool := if j b then true
+                                          else if Mem.sup_dec b gs then true else false.
+
+Definition valid_memval (j: meminj) (mv: memval) (gs : sup) : Prop :=
+  match mv with
+  |Fragment (Vptr b ofs) _ _ => if valid_b j b gs then True else False
+  |_ => True
+  end.
+
+Definition valid_global m j gs: Prop :=
+  forall b ofs, sup_In b gs  -> Mem.perm m b ofs Cur Readable ->
+           valid_memval j (mem_memval m b ofs) gs.
+
+(* To be moved to proof
+ 
+ Lemma memval_compose_3:
+  forall mv j,
+    valid_memval j mv ->
+    memval_inject j mv (Mem.memval_map j mv).
+Proof.
+  intros. destruct mv; cbn; try constructor.
+  destruct v; cbn; repeat constructor.
+  simpl in H. destruct (j b) as [[b' ofs]|] eqn:Hj; try inv H.
+  constructor. econstructor. eauto. reflexivity.
+Qed.
+*)
+
+Inductive injp_match_mem': injp_world -> relation mem :=
+  injp_match_mem_intro' f gs1 gs2 m1 m2 Hm:
+    valid_global m1 f gs1 ->
+    injp_match_mem' (injpw f gs1 gs2 m1 m2 Hm) m1 m2.
 
 Program Definition injp': cklr' :=
   {|
