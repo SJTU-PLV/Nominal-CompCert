@@ -92,6 +92,18 @@ Require Asmgenproof.
 (** Command-line flags. *)
 Require Import Compopts.
 
+(** Rust frontend *)
+Require Rusttypes.
+Require Rustsyntax.
+Require RustlightBase.
+Require RustIR.
+
+Require Rustlightgen.
+Require RustIRgen.
+Require InitAnalysis.
+Require ElaborateDrop.
+Require Clightgen.
+
 (** Pretty-printers (defined in Caml). *)
 Parameter print_Clight: Clight.program -> unit.
 Parameter print_Cminor: Cminor.program -> unit.
@@ -192,6 +204,16 @@ Definition transl_init := Initializers.transl_init.
 (* Definition cexec_do_step := Cexec.do_step.
 *)
 
+(** * Rust frontend compiler  *)
+
+Definition transf_rust_program (p: Rustsyntax.program) : res Asm.program :=
+  OK p
+  @@@ time "Rustsyntax to Rustlight" Rustlightgen.transl_program
+  !@@ time "Rustlight to RustIR" RustIRgen.transl_program
+  @@@ time "Elaborate drop in RustIR" ElaborateDrop.transl_program
+  @@@ time "Generate Clight and insert drop glue" Clightgen.transl_program
+  @@@ transf_clight_program.
+  
 (** The following lemmas help reason over compositions of passes. *)
 
 Lemma print_identity:

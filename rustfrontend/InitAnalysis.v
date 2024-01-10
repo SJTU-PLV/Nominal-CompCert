@@ -160,10 +160,10 @@ Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
       collect_place p (collect_option_place (moved_place e) m)
   | Sbox p e =>
       collect_place p (collect_option_place (moved_place e) m)
-  | Scall op _ al =>
+  | Scall p _ al =>
       let pl := moved_place_list al in
       let m' := fold_right collect_place m pl in
-      collect_option_place op m'
+      collect_place p m'
   | Sreturn (Some e) =>
       collect_option_place (moved_place e) m
   | Ssequence s1 s2 =>
@@ -237,12 +237,12 @@ Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (p
               add_place S p (remove_option p' before)
             else
               remove_place p (add_option S p' before)
-        | Scall op _ al =>
+        | Scall p _ al =>
             let pl := moved_place_list al in
             if flag then
-              add_option S op (fold_right remove_place before pl)
+              add_place S p (fold_right remove_place before pl)
             else
-              remove_option op (fold_right (add_place S) before pl)
+              remove_place p (fold_right (add_place S) before pl)
         | Sreturn (Some e) =>
             let p' := moved_place e in
             if flag then

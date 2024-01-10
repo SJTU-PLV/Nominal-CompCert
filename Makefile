@@ -168,7 +168,7 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v \
 RUSTFRONTENT=Rusttypes.v Rustsyntax.v RustlightBase.v RustIR.v\
   Rustlightgen.v\
   RustIRgen.v \
-  Initialized.v ElaborateDrop.v\
+  InitAnalysis.v ElaborateDrop.v\
   Clightgen.v 
 
 # Parser

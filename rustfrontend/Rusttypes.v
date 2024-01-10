@@ -33,6 +33,12 @@ with typelist : Type :=
 Definition type_int32s := Tint I32 Signed noattr.
 Definition type_bool := Tint IBool Signed noattr.  
 
+Definition deref_type (ty: type) : type :=
+  match ty with
+  | Tbox ty' attr => ty'
+  | _ => Tunit
+  end.
+
 Lemma type_eq: forall (ty1 ty2: type), {ty1=ty2} + {ty1<>ty2}
 with typelist_eq: forall (tyl1 tyl2: typelist), {tyl1=tyl2} + {tyl1<>tyl2}.
 Proof.

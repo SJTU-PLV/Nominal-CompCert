@@ -8,11 +8,11 @@ Require Import AST.
 Require Import Ctypes Rusttypes.
 Require Import Cop.
 Require Import RustlightBase RustIR.
-Require Import Initialized.
+Require Import InitAnalysis.
 
 Local Open Scope error_monad_scope.
 
-(** Use the analysis from Initialized.v to elaborate the drop
+(** Use the analysis from InitAnalysis.v to elaborate the drop
 statements. After this pass, the ownership semantics is removed. The
 memory deallocation would be explicit and deterministic *)
 
@@ -255,7 +255,7 @@ Fixpoint transl_stmt (stmt: statement) : statement :=
   | Scall p e el =>
       let mvpaths := moved_place_list el in
       let stmt1 := add_dropflag_list mvpaths false in
-      let stmt2 := add_dropflag_option p true in
+      let stmt2 := add_dropflag p true in
       makeseq (stmt1 :: stmt :: stmt2 :: nil)
   | Ssequence s1 s2 =>
       Ssequence (transl_stmt s1) (transl_stmt s2)

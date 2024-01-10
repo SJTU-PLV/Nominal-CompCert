@@ -457,3 +457,21 @@ Definition transl_program (p: Rustsyntax.program) : Errors.res program :=
     prog_types := p.(prog_types);
     prog_comp_env := p.(prog_comp_env);
     prog_comp_env_eq := p.(prog_comp_env_eq) |}.
+
+(** Test the compiler  *)
+
+Open Scope rustlight_scope.
+
+Definition empty_ce : composite_env := PTree.empty composite.
+
+Definition test1 := ex1 A B.
+
+Definition test1_result  :=
+  let init_gen := initial_generator 4%positive in
+  match transl_stmt empty_ce test1 init_gen with
+  | Res stmt _ _ => stmt
+  | _ => Sskip
+  end.
+
+(** Pretty-printing is obscure  *)
+Compute test1_result.
