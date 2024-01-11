@@ -1,0 +1,163 @@
+open Format
+open Camlcoq
+(* open PrintAST *)
+(* open Rusttypes *)
+open Ctypes
+open Cop
+open RustlightBase
+open PrintCsyntax
+open PrintRustsyntax
+
+let temp_name (id: AST.ident) =
+  try
+    "$" ^ Hashtbl.find string_of_atom id
+  with Not_found ->
+    Printf.sprintf "$%d" (P.to_int id)
+
+let rec print_place out (p: place) =
+  match p with
+  | Plocal(id, _) ->
+    fprintf out "%s" (extern_atom id)
+  | Pderef(p', _) ->
+    fprintf out "*%a" print_place p'
+  | Pfield(p', fid, _) ->
+    fprintf out "%a.%s" print_place p' (extern_atom fid)
+
+(* Precedences and associativity (copy from PrintClight.ml) *)
+
+let precedence' = function
+  | Econst_int _ -> (16, NA)
+  | Econst_float _ -> (16, NA)
+  | Econst_single _ -> (16, NA)
+  | Econst_long _ -> (16, NA)
+  | Eunop _ -> (15, RtoL)
+  | Ebinop((Omul|Odiv|Omod), _, _, _) -> (13, LtoR)
+  | Ebinop((Oadd|Osub), _, _, _) -> (12, LtoR)
+  | Ebinop((Oshl|Oshr), _, _, _) -> (11, LtoR)
+  | Ebinop((Olt|Ogt|Ole|Oge), _, _, _) -> (10, LtoR)
+  | Ebinop((Oeq|Cop.One), _, _, _) -> (9, LtoR)
+  | Ebinop(Oand, _, _, _) -> (8, LtoR)
+  | Ebinop(Oxor, _, _, _) -> (7, LtoR)
+  | Ebinop(Oor, _, _, _) -> (6, LtoR)
+  | Eplace(_, _) -> (16,NA)
+  | Ecktag(_, _, _) -> (15, RtoL)
+  | Eget(_, _, _) -> (15, RtoL)
+
+let precedence = function
+  | Emoveplace(_,_) -> (16,NA)
+  | Emoveget(_, _, _) -> (15, RtoL)
+  | Epure pe -> precedence' pe
+
+(* Expressions *)
+
+let rec pexpr p (prec, e) =
+  let (prec', assoc) = precedence' e in
+  let (prec1, prec2) =
+    if assoc = LtoR
+    then (prec', prec' + 1)
+    else (prec' + 1, prec') in
+  if prec' < prec
+  then fprintf p "@[<hov 2>("
+  else fprintf p "@[<hov 2>";
+  match e with
+  | Eplace(v, _) ->
+    fprintf p "%a" print_place v
+  | Econst_int(n, Rusttypes.Tint(I32, Unsigned, _)) ->
+    fprintf p "%luU" (camlint_of_coqint n)
+  | Econst_int(n, _) ->
+    fprintf p "%ld" (camlint_of_coqint n)
+  | Econst_float(f, _) ->
+    fprintf p "%.18g" (camlfloat_of_coqfloat f)
+  | Econst_single(f, _) ->
+    fprintf p "%.18gf" (camlfloat_of_coqfloat32 f)
+  | Econst_long(n, Rusttypes.Tlong(Unsigned, _)) ->
+    fprintf p "%LuLLU" (camlint64_of_coqint n)
+  | Econst_long(n, _) ->
+    fprintf p "%LdLL" (camlint64_of_coqint n)
+  | Eunop(Oabsfloat, a1, _) ->
+    fprintf p "__builtin_fabs(%a)" pexpr (2, a1)
+  | Eunop(op, a1, _) ->
+    fprintf p "%s%a" (name_unop op) pexpr (prec', a1)
+  | Ebinop(op, a1, a2, _) ->
+    fprintf p "%a@ %s %a"
+      pexpr (prec1, a1) (name_binop op) pexpr (prec2, a2)
+  | Ecktag(v, fid, _) ->
+    fprintf p "%s(%a, %s)" "cktag" print_place v (extern_atom fid)
+  | Eget(v, fid, _) ->
+    fprintf p "%s(%a, %s)" "get" print_place v (extern_atom fid)
+
+let expr p (prec, e) =
+  let (prec', assoc) = precedence e in
+  if prec' < prec
+  then fprintf p "@[<hov 2>("
+  else fprintf p "@[<hov 2>";
+  begin match e with
+  | Epure pe -> pexpr p (prec, pe)
+  | Emoveplace(v, _) -> fprintf p "move %a" print_place v
+  | Emoveget(v, fid, _) ->
+    fprintf p "%s(move %a, %s)" "get" print_place v (extern_atom fid)
+  end;
+  if prec' < prec then fprintf p ")@]" else fprintf p "@]"
+
+let print_expr p e = expr p (0, e)
+
+let rec print_expr_list p (first, rl) =
+  match rl with
+  | [] -> ()
+  | r :: rl ->
+      if not first then fprintf p ",@ ";
+      expr p (2, r);
+      print_expr_list p (false, rl)
+
+
+let rec print_stmt p (s: RustlightBase.statement) =
+  match s with
+  | Sskip ->
+    (* comment *)
+    fprintf p "/*skip*/"
+  | Sassign(v, e) ->
+    fprintf p "@[<hv 2>%a =@ %a;@]" print_place v print_expr e
+  | Scall(v, e1, el) ->
+    fprintf p "@[<hv 2>%a =@ %a@,(@[<hov 0>%a@]);@]"
+              print_place v
+              expr (15, e1)
+              print_expr_list (true, el)
+  | Ssequence(Sskip, s2) ->
+      print_stmt p s2
+  | Ssequence(s1, Sskip) ->
+      print_stmt p s1
+  | Ssequence(s1, s2) ->
+      fprintf p "%a@ %a" print_stmt s1 print_stmt s2
+  | Sifthenelse(e, s1, Sskip) ->
+      fprintf p "@[<v 2>if (%a) {@ %a@;<0 -2>}@]"
+              print_expr e
+              print_stmt s1
+  | Sifthenelse(e, Sskip, s2) ->
+    fprintf p "@[<v 2>if (! %a) {@ %a@;<0 -2>}@]"
+              expr (15, e)
+              print_stmt s2
+  | Sifthenelse(e, s1, s2) ->
+    fprintf p "@[<v 2>if (%a) {@ %a@;<0 -2>} else {@ %a@;<0 -2>}@]"
+              print_expr e
+              print_stmt s1
+              print_stmt s2
+  | Sloop(s1) ->
+    fprintf p "@[<v 2>while (1) {@ %a@;<0 -2>}@]"
+              print_stmt s1
+  | Sbreak ->
+    fprintf p "break;"
+  | Scontinue ->
+    fprintf p "continue;"
+  | Sreturn None ->
+    fprintf p "return;"
+  | Sreturn (Some e) ->
+    fprintf p "return %a;" print_expr e
+  | Sbox(v, e) ->
+    fprintf p "@[<hv 2>%a =@ Box::new(%a);@]" print_place v print_expr e
+  | Slet(id, ty, s) ->
+    fprintf p "@[<v 2>let %s : %s in {@ %a@;<0 -2>}@]"
+            (extern_atom id)
+            (name_rust_type ty)
+            print_stmt s
+
+let print_stmt_direct stmt = print_stmt (formatter_of_out_channel stdout) stmt

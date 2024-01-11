@@ -141,13 +141,13 @@ Definition deref_box_a : expr := <{ ! Box(A # type_int32s) }>.
 
 Definition box_int := Tbox type_int32s noattr.
 
-Definition ex1 (a b: ident) :=
-  <{ do (a#type_int32s) := !(b#box_int);
+Definition ex1 :=
+  <{ do (A#type_int32s) := !(B#box_int);
      let C : box_int in
-     if ((a#type_int32s) < !(b#box_int)) then
-       do (C#box_int) := (b#box_int)
+     if ((A#type_int32s) < !(B#box_int)) then
+       do (C#box_int) := (B#box_int)
      else
-       do (b#box_int) := Box($3)
+       do (B#box_int) := Box($3)
      end
      end
     }>.

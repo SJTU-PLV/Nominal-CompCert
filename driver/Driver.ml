@@ -398,7 +398,18 @@ let cmdline_actions =
       push_action process_h_file s; incr num_source_files; incr num_input_files);
   ]
 
+(* Debug the Rust compiler *)
+
+let debug_rust = true
+
 let _ =
+  if debug_rust then
+    let rustlight_stmt = Rustlightgen.transl_stmt Rustlightgen.empty_ce Rustsyntax.ex1 Rustlightgen.init_gen in
+    match rustlight_stmt with
+    | Rustlightgen.Res (rustlight_stmt, _) ->
+      PrintRustlight.print_stmt_direct rustlight_stmt
+    | Rustlightgen.Err msg -> fatal_error no_loc "Compilation of Rust statement fails"
+  else
   try
     Gc.set { (Gc.get()) with
                 Gc.minor_heap_size = 524288; (* 512k *)

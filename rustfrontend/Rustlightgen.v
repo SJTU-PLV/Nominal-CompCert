@@ -457,3 +457,12 @@ Definition transl_program (p: Rustsyntax.program) : Errors.res program :=
     prog_types := p.(prog_types);
     prog_comp_env := p.(prog_comp_env);
     prog_comp_env_eq := p.(prog_comp_env_eq) |}.
+
+
+(** TO DELETE  *)
+
+(* Definitions for compilation *)
+
+Definition empty_ce := PTree.empty composite.
+
+Definition init_gen := initial_generator 10%positive.
