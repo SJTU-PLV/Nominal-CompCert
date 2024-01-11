@@ -171,102 +171,6 @@ Definition type_of_fundef (f: fundef) : type :=
   end.
 
 
-(** ** Notations of Rustlight program *)
-
-Declare Custom Entry rustlight.
-Declare Scope rustlight_scope.
-Declare Custom Entry rustlight_aux.
-Declare Custom Entry rustlight_place.
-Declare Custom Entry rustlight_expr.
-
-Notation "<{ s }>" := s (s custom rustlight_aux) : rustlight_scope.
-Notation "s" := s (in custom rustlight_aux at level 0, s custom rustlight) : rustlight_scope.
-
-(* Notations for statement (level > 50) *)
-Notation "'if' e 'then' s1 'else' s2 'end'" := (Sifthenelse e s1 s2) (in custom rustlight at level 80, e custom rustlight_expr at level 20, s1 at level 99, s2 at level 99) : rustlight_scope.
-Notation "s1 ; s2" := (Ssequence s1 s2) (in custom rustlight at level 99, right associativity) : rustlight_scope.
-Notation "'skip'" := Sskip (in custom rustlight at level 0) : rustlight_scope.
-Notation "'break'" := Sbreak (in custom rustlight at level 0) : rustlight_scope.
-Notation "'continue'" := Scontinue (in custom rustlight at level 0) : rustlight_scope.
-Notation "'return0'" := (Sreturn None) (in custom rustlight at level 0) : rustlight_scope.
-Notation "'return' e" := (Sreturn (@Some expr e)) (in custom rustlight at level 80, e custom rustlight_expr at level 20) : rustlight_scope.
-Notation "'let' x : t 'in' s 'end' " := (Slet x t s) (in custom rustlight at level 80, s at level 99, x global, t global) : rustlight_scope.
-Notation "'loop' s 'end'" := (Sloop s) (in custom rustlight at level 80, s at level 99) : rustlight_scope.
-Notation "'Box' p := ( e ) " := (Sbox p e) (in custom rustlight at level 80, p custom rustlight_place at level 20, e custom rustlight_expr at level 20) : rustlight_scope.
-Notation " p := e " := (Sassign p e) (in custom rustlight at level 80, p custom rustlight_place at level 20, e custom rustlight_expr at level 20) : rustlight_scope.
-Notation " p <- f @ l " := (Scall p f l) (in custom rustlight at level 80, p custom rustlight_place at level 20, f custom rustlight_expr at level 20, l custom rustlight_expr at level 20) : rustlight_scope.
-
-
-(* Notation for place *)
-
-Notation " ( x ) " := x (in custom rustlight_place at level 20) : rustlight_scope.
-Notation " x # t " := (Plocal x t) (in custom rustlight_place at level 0, x global, t global) : rustlight_scope.
-Notation " ! p " := (Pderef p (deref_type (typeof_pexpr p))) (in custom rustlight_place at level 10, p at level 20) : rustlight_scope.
-Notation " p . x < t > " := (Pfield p x t) (in custom rustlight_place at level 10, x global, t global) : rustlight_scope.
-
-
-(* Notations for expression. Expression is at level 20 *)
-
-Notation " ( x ) " := x (in custom rustlight_expr at level 20) : rustlight_scope.
-Notation " { x , .. , y } " := (cons x .. (cons y nil) .. ) (in custom rustlight_expr at level 20) : rustlight_scope.
-Notation " e1 < e2 " := ((Ebinop Ole e1 e2 type_bool)) (in custom rustlight_expr at level 15, e2 at level 20, left associativity) : rustlight_scope.
-Notation " $ k " := ((Econst_int (Int.repr k) type_int32s)) (in custom rustlight_expr at level 10, k constr) : rustlight_scope.
-Notation " e1 * e2 " := ((Ebinop Omul e1 e2 (typeof e1)))  (in custom rustlight_expr at level 15, e2 at level 20, left associativity) : rustlight_scope.
-Notation " e1 - e2 " := ((Ebinop Osub e1 e2 (typeof e1)))  (in custom rustlight_expr at level 15, e2 at level 20, left associativity) : rustlight_scope.
-Notation " 'copy' p " := ((Eplace p (typeof_place p))) (in custom rustlight_expr at level 20, p custom rustlight_place at level 20) : rustlight_scope.
-Notation " 'move' p " := (Emoveplace p (typeof_place p)) (in custom rustlight_expr at level 20, p custom rustlight_place at level 20) : rustlight_scope.
-(* TODO: Ecktag and Eget/Emoveget *)
-
-
-(* Print Grammar constr. *)
-
-Local Open Scope rustlight_scope.
-
-Definition A : ident := 1%positive.
-Definition B : ident := 2%positive.
-Definition C : ident := 3%positive.
-Definition D : ident := 4%positive.
-Definition E : ident := 5%positive.
-
-
-(* Print Custom Grammar rustlight. *)
-
-Definition ident_to_place_int32s (id: ident) : place := Plocal id type_int32s.
-
-Definition place_to_pexpr (p: place) : pexpr := (Eplace p (typeof_place p)).
-
-Definition pexpr_to_expr (pe: pexpr) : expr := Epure pe.
-
-Coercion ident_to_place_int32s : ident >-> place.
-Coercion place_to_pexpr: place >-> pexpr.
-Coercion pexpr_to_expr: pexpr >-> expr.
-
-Fail Definition test_option_ident_to_expr : option expr  := Some A.
-Definition test_option_ident_to_expr : option expr  := @Some expr A.
-
-(* Print Graph. *)
-(* Print Coercion Paths ident expr. *)
-
-Definition test : statement :=
-  <{ let A : type_int32s in
-     A#type_int32s := $1;
-     A#type_int32s := $0;
-     return (copy A#type_int32s);
-     skip; break; return0; return (move A#type_int32s);
-     if (($1) < ($0)) then
-       B#type_int32s := copy C#type_int32s;
-       A#type_int32s := copy B#type_int32s
-     else
-       A#type_int32s := copy C#type_int32s
-     end;
-     loop
-       A#type_int32s := copy C#type_int32s;
-       B#type_int32s := copy A#type_int32s
-     end;
-     return0
-     end }>.
-
-
 (** * Operational Semantics  *)
 
 Definition own_fuel := 10%nat.
@@ -1146,4 +1050,101 @@ End SEMANTICS.
 
 Definition semantics (p: program) :=
   Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
-  
+
+
+(** ** Notations of Rustlight program *)
+
+Declare Custom Entry rustlight.
+Declare Scope rustlight_scope.
+Declare Custom Entry rustlight_aux.
+Declare Custom Entry rustlight_place.
+Declare Custom Entry rustlight_expr.
+
+Notation "<{ s }>" := s (s custom rustlight_aux) : rustlight_scope.
+Notation "s" := s (in custom rustlight_aux at level 0, s custom rustlight) : rustlight_scope.
+
+(* Notations for statement (level > 50) *)
+Notation "'if' e 'then' s1 'else' s2 'end'" := (Sifthenelse e s1 s2) (in custom rustlight at level 80, e custom rustlight_expr at level 20, s1 at level 99, s2 at level 99) : rustlight_scope.
+Notation "s1 ; s2" := (Ssequence s1 s2) (in custom rustlight at level 99, right associativity) : rustlight_scope.
+Notation "'skip'" := Sskip (in custom rustlight at level 0) : rustlight_scope.
+Notation "'break'" := Sbreak (in custom rustlight at level 0) : rustlight_scope.
+Notation "'continue'" := Scontinue (in custom rustlight at level 0) : rustlight_scope.
+Notation "'return0'" := (Sreturn None) (in custom rustlight at level 0) : rustlight_scope.
+Notation "'return' e" := (Sreturn (@Some expr e)) (in custom rustlight at level 80, e custom rustlight_expr at level 20) : rustlight_scope.
+Notation "'let' x : t 'in' s 'end' " := (Slet x t s) (in custom rustlight at level 80, s at level 99, x global, t global) : rustlight_scope.
+Notation "'loop' s 'end'" := (Sloop s) (in custom rustlight at level 80, s at level 99) : rustlight_scope.
+Notation "'Box' p := ( e ) " := (Sbox p e) (in custom rustlight at level 80, p custom rustlight_place at level 20, e custom rustlight_expr at level 20) : rustlight_scope.
+Notation " p := e " := (Sassign p e) (in custom rustlight at level 80, p custom rustlight_place at level 20, e custom rustlight_expr at level 20) : rustlight_scope.
+Notation " p <- f @ l " := (Scall p f l) (in custom rustlight at level 80, p custom rustlight_place at level 20, f custom rustlight_expr at level 20, l custom rustlight_expr at level 20) : rustlight_scope.
+
+
+(* Notation for place *)
+
+Notation " ( x ) " := x (in custom rustlight_place at level 20) : rustlight_scope.
+Notation " x # t " := (Plocal x t) (in custom rustlight_place at level 0, x global, t global) : rustlight_scope.
+Notation " ! p " := (Pderef p (deref_type (typeof_pexpr p))) (in custom rustlight_place at level 10, p at level 20) : rustlight_scope.
+Notation " p . x < t > " := (Pfield p x t) (in custom rustlight_place at level 10, x global, t global) : rustlight_scope.
+
+
+(* Notations for expression. Expression is at level 20 *)
+
+Notation " ( x ) " := x (in custom rustlight_expr at level 20) : rustlight_scope.
+Notation " { x , .. , y } " := (cons x .. (cons y nil) .. ) (in custom rustlight_expr at level 20) : rustlight_scope.
+Notation " e1 < e2 " := ((Ebinop Ole e1 e2 type_bool)) (in custom rustlight_expr at level 15, e2 at level 20, left associativity) : rustlight_scope.
+Notation " $ k " := ((Econst_int (Int.repr k) type_int32s)) (in custom rustlight_expr at level 10, k constr) : rustlight_scope.
+Notation " e1 * e2 " := ((Ebinop Omul e1 e2 (typeof e1)))  (in custom rustlight_expr at level 15, e2 at level 20, left associativity) : rustlight_scope.
+Notation " e1 - e2 " := ((Ebinop Osub e1 e2 (typeof e1)))  (in custom rustlight_expr at level 15, e2 at level 20, left associativity) : rustlight_scope.
+Notation " 'copy' p " := ((Eplace p (typeof_place p))) (in custom rustlight_expr at level 20, p custom rustlight_place at level 20) : rustlight_scope.
+Notation " 'move' p " := (Emoveplace p (typeof_place p)) (in custom rustlight_expr at level 20, p custom rustlight_place at level 20) : rustlight_scope.
+(* TODO: Ecktag and Eget/Emoveget *)
+
+
+(* Print Grammar constr. *)
+
+Local Open Scope rustlight_scope.
+
+Definition A : ident := 1%positive.
+Definition B : ident := 2%positive.
+Definition C : ident := 3%positive.
+Definition D : ident := 4%positive.
+Definition E : ident := 5%positive.
+
+
+(* Print Custom Grammar rustlight. *)
+
+Definition ident_to_place_int32s (id: ident) : place := Plocal id type_int32s.
+
+Definition place_to_pexpr (p: place) : pexpr := (Eplace p (typeof_place p)).
+
+Definition pexpr_to_expr (pe: pexpr) : expr := Epure pe.
+
+Coercion ident_to_place_int32s : ident >-> place.
+Coercion place_to_pexpr: place >-> pexpr.
+Coercion pexpr_to_expr: pexpr >-> expr.
+
+Fail Definition test_option_ident_to_expr : option expr  := Some A.
+Definition test_option_ident_to_expr : option expr  := @Some expr A.
+
+(* Print Graph. *)
+(* Print Coercion Paths ident expr. *)
+
+Definition test : statement :=
+  <{ let A : type_int32s in
+     A#type_int32s := $1;
+     A#type_int32s := $0;
+     return (copy A#type_int32s);
+     skip; break; return0; return (move A#type_int32s);
+     if (($1) < ($0)) then
+       B#type_int32s := copy C#type_int32s;
+       A#type_int32s := copy B#type_int32s
+     else
+       A#type_int32s := copy C#type_int32s
+     end;
+     loop
+       A#type_int32s := copy C#type_int32s;
+       B#type_int32s := copy A#type_int32s
+     end;
+     return0
+     end }>.
+
+(** ** Pretty printing for Rustlight programs  *)

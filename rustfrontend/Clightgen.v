@@ -92,7 +92,9 @@ Definition makeseq (l: list Clight.statement) : Clight.statement :=
 
 
 (* To specify *)
-Parameter (malloc_id free_id: ident).
+(* Parameter (malloc_id free_id: ident). *)
+Definition malloc_id : ident := 42%positive.
+Definition free_id : ident := 53%positive.
 
 Definition free_fun_expr (ty: Ctypes.type) : Clight.expr :=
   let argty := (Ctypes.Tpointer ty noattr) in

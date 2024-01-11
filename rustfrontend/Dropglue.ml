@@ -6,7 +6,7 @@ let litNum = ref 0
 let dropglue_tbl = (Hashtbl.create 10 : (positive, bool) Hashtbl.t)
                    
 let create_dropglue_ident (a: positive) : positive =
-  (**TODO: use the name of a in the end of drop in place *)
+  (* TODO: use the name of a in the end of drop in place *)
   incr litNum;
   (* let str = extern_atom a in *)
   let name = Printf.sprintf "__drop_in_place_%d" (!litNum) in

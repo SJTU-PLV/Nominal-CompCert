@@ -44,7 +44,7 @@ cparser/pre_parser_messages.ml:
 # Directories containing plain Caml code
 
 DIRS=extraction \
-  lib common $(ARCH) backend cfrontend cparser driver \
+  lib common $(ARCH) backend cfrontend cparser driver rustfrontend\
   export debug
 
 INCLUDES=$(patsubst %,-I %, $(DIRS))
