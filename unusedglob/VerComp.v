@@ -1097,8 +1097,8 @@ Definition callconv_gen (R : cklr) : cklr' :=
 
 (** * hard part : compose injp ⋅ injp' ≡ injp' *)
 
-Definition source_inj (se: Genv.symtbl) (f : meminj) :=
-  fun b => if Mem.sup_dec b (Genv.genv_sup se) then
+Definition source_inj (gs : sup) (f : meminj) :=
+  fun b => if Mem.sup_dec b gs  then
         Some (b,0) else meminj_dom f b.
 
 Lemma source_inj_meminj_dom_incr : forall se f,
@@ -1169,7 +1169,7 @@ Lemma val_inject_list_dom se f vs1 vs2:
 Proof.
   induction 1; constructor; eauto using val_inject_dom.
 Qed.
-
+(*
 Lemma global_blocks_pointer:
   forall se m b ofs q n b' ofs',
     Maps.ZMap.get ofs (NMap.get b (Mem.mem_contents m)) = (Fragment (Vptr b' ofs') q n) ->
@@ -1177,8 +1177,24 @@ Lemma global_blocks_pointer:
     sup_In b' (Genv.genv_sup se).
 Proof.
 Admitted.
+ *)
+
+Lemma memval_valid_inject : forall mv f gs,
+    valid_memval f mv gs ->
+    memval_inject (source_inj gs f) mv mv.
+Proof.
+  intros. destruct mv; simpl in *; constructor; eauto.
+  destruct v; simpl in *; try constructor; eauto.
+  unfold valid_b in H. unfold source_inj.
+  destruct (f b) as [[b' d]|] eqn: Hj; try congruence.
+  - econstructor. destruct Mem.sup_dec; eauto. unfold meminj_dom. rewrite Hj. eauto.
+    rewrite Ptrofs.add_zero. reflexivity.
+  - econstructor. destruct Mem.sup_dec; eauto. inv H.
+    rewrite Ptrofs.add_zero. reflexivity.
+Qed.
 
 Lemma mem_mem_inj_dom se f m1 m2:
+  valid_global m1 f se ->
   Mem.mem_inj f m1 m2 ->
   Mem.mem_inj (source_inj se f) m1 m1.
 Proof.
@@ -1191,68 +1207,60 @@ Proof.
     destruct (Mem.sup_dec); destruct (f b1) as [[b1' delta'] | ]; inv Hb1;
     eauto using Z.divide_0_r.
   - unfold source_inj, meminj_dom at 1. intros b1 ofs b2 delta Hb1 Hp.
-    destruct (Mem.sup_dec) ; destruct (f b1) as [[b1' delta'] | ] eqn:Hb1'; inv Hb1.
-    replace (ofs + 0) with ofs by extlia.
-    eapply memval_inject_dom.
-    eapply Mem.mi_memval; eauto.
-    replace (ofs + 0) with ofs by extlia.
-    {
-      set (mv:= (Maps.ZMap.get ofs (NMap.get b2 (Mem.mem_contents m1)))).
-      destruct mv eqn:Hmem; constructor.
-      destruct v eqn:Hv; econstructor.
-      rewrite pred_dec_true. reflexivity.
-      eapply global_blocks_pointer; eauto.
-      rewrite Ptrofs.add_zero. reflexivity.
-    }
-    replace (ofs + 0) with ofs by extlia.
-    eapply memval_inject_dom.
-    eapply Mem.mi_memval; eauto.
+    destruct (Mem.sup_dec) ; destruct (f b1) as [[b1' delta'] | ] eqn:Hb1'; inv Hb1;
+      replace (ofs + 0) with ofs by extlia.
+    + eapply memval_inject_dom.
+      eapply Mem.mi_memval; eauto.
+    + eapply memval_valid_inject. eapply H; eauto.
+    + eapply memval_inject_dom.
+      eapply Mem.mi_memval; eauto.
 Qed.
 
-Lemma mem_source_inj se f m1 m2:
-  Mem.sup_include (Genv.genv_sup se) (Mem.support m1) ->
+Lemma mem_source_inj gs f m1 m2:
+  valid_global m1 f gs ->
+  Mem.sup_include gs (Mem.support m1) ->
   Mem.inject f m1 m2 ->
-  Mem.inject (source_inj se f) m1 m1.
+  Mem.inject (source_inj gs f) m1 m1.
 Proof.
   intros H.
   split.
-  - eapply mem_mem_inj_dom.
+  - eapply mem_mem_inj_dom; eauto.
     eapply Mem.mi_inj; eauto.
   - unfold source_inj, meminj_dom. intros.
     erewrite Mem.mi_freeblocks; eauto.
     rewrite pred_dec_false; eauto.
-    intro. apply H1. apply H. eauto.
+    intro. apply H2. apply H0. eauto.
   - unfold source_inj, meminj_dom; intros.
-    destruct Mem.sup_dec; eauto. inv H1. apply H; eauto.
-    destruct (f b) as [[b'' delta'] | ] eqn:Hb; inv H1.
+    destruct Mem.sup_dec; eauto. inv H2. apply H0; eauto.
+    destruct (f b) as [[b'' delta'] | ] eqn:Hb; inv H2.
     eapply Mem.valid_block_inject_1; eauto.
   - red. unfold source_inj, meminj_dom. intros.
-    destruct Mem.sup_dec; inv H2; eauto.
     destruct Mem.sup_dec; inv H3; eauto.
-    destruct (f b2); inv H6; eauto.
-    destruct Mem.sup_dec; inv H3; eauto.
-    destruct (f b1); inv H7; eauto.                              
-    destruct (f b1); inv H7.
-    destruct (f b2); inv H6.
+    destruct Mem.sup_dec; inv H4; eauto.
+    destruct (f b2); inv H7; eauto.
+    destruct Mem.sup_dec; inv H4; eauto.
+    destruct (f b1); inv H8; eauto.                              
+    destruct (f b1); inv H8.
+    destruct (f b2); inv H7.
     eauto.
   - unfold source_inj, meminj_dom. intros.
-    destruct (Mem.sup_dec); eauto. inv H1.
+    destruct (Mem.sup_dec); eauto. inv H2.
     split; try extlia. rewrite Z.add_0_r.
     apply Ptrofs.unsigned_range_2.
-    destruct (f b); inv H1.
+    destruct (f b); inv H2.
     split; try extlia.
     rewrite Z.add_0_r.
     apply Ptrofs.unsigned_range_2.
   - unfold source_inj, meminj_dom. intros.
-    destruct Mem.sup_dec; inv H1.
-    rewrite Z.add_0_r in H2; eauto.
-    destruct (f b1); inv H4.
-    rewrite Z.add_0_r in H2; eauto.
+    destruct Mem.sup_dec; inv H2.
+    rewrite Z.add_0_r in H3; eauto.
+    destruct (f b1); inv H5.
+    rewrite Z.add_0_r in H3; eauto.
 Qed.
 
 Lemma match_stbls'_dom f se1 se2:
   Genv.match_stbls' f se1 se2 ->
-  Genv.match_stbls' (source_inj se1 f) se1 se1.
+  Genv.match_stbls' (source_inj (Genv.genv_sup se1) f) se1 se1.
 Proof.
   intros Hse. unfold source_inj, meminj_dom. split; eauto; intros.
   - rewrite pred_dec_true in H0; eauto. inv H0. reflexivity.
@@ -1275,12 +1283,13 @@ Proof.
   - reflexivity.
 Qed.
 
-Definition source_world f m1 m2 (Hm: Mem.inject f m1 m2) (se:Genv.symtbl) (Hse: Mem.sup_include (Genv.genv_sup se) (Mem.support m1)) :=
-     injpw (source_inj se f) (Genv.genv_sup se) (Genv.genv_sup se) m1 m1 (mem_source_inj se f m1 m2 Hse Hm).
+Definition source_world f m1 m2 (Hm: Mem.inject f m1 m2) (se:Genv.symtbl) (Hse: Mem.sup_include (Genv.genv_sup se) (Mem.support m1)) (Hv: valid_global m1 f (Genv.genv_sup se)) :=
+  let gs := Genv.genv_sup se in
+      injpw (source_inj gs f) gs gs m1 m1 (mem_source_inj gs f m1 m2 Hv Hse Hm).
 
 Lemma match_stbls_dom' f se1 se2:
   Genv.match_stbls' f se1 se2 ->
-  Genv.match_stbls (source_inj se1 f) se1 se1.
+  Genv.match_stbls (source_inj (Genv.genv_sup se1) f) se1 se1.
 Proof.
   intros Hse. unfold source_inj. unfold meminj_dom. split; eauto; intros.
   - destruct Mem.sup_dec; try congruence. eauto.
@@ -1310,7 +1319,9 @@ Theorem injp_injp'_ref1:
 Proof.
   red. intros w se1 se3 q1 q2 Hse Hq.
   inv Hse. inv Hq. cbn in H2, H3. inv H4. rename m0 into m1. rename m3 into m2.
-  exists (se1, (injpw (source_inj se1 f) (Genv.genv_sup se1) (Genv.genv_sup se1) m1 m1 (mem_source_inj se1 f m1 m2 H0 Hm)),
+  rename H13 into Hv.
+  set (gs1 := Genv.genv_sup se1).
+  exists (se1, (injpw (source_inj gs1 f) gs1 gs1 m1 m1 (mem_source_inj gs1 f m1 m2 Hv H0 Hm)),
       (injpw f (Genv.genv_sup se1) (Genv.genv_sup se3) m1 m2 Hm)).
   repeat apply conj.
   - split. constructor; eauto. eapply match_stbls_dom'; eauto.
@@ -1319,6 +1330,7 @@ Proof.
     constructor; cbn; eauto.
     eapply val_inject_dom; eauto. eapply val_inject_list_dom; eauto.
     constructor; cbn; eauto.
+    constructor; eauto.
   - intros r1 r3 [r2 [Hr1 Hr2]].
     destruct Hr1 as [w12' [Hw12 Hr1]]. destruct Hr2 as [w23' [Hw23 Hr2]].
     destruct w12' as [f12' ? ? m1' m2' Hm12']. destruct w23' as [f23' ? ? m2'' m3' Hm23'].
@@ -1360,6 +1372,38 @@ Proof.
         edestruct H30; eauto.
     + constructor; cbn; eauto with mem.
       eapply Values.val_inject_compose; eauto.
+      (* The validity of source memory after external calls *)
+      constructor; eauto.
+      red. intros. red.
+      set (mv1 := mem_memval m1' b ofs).
+      set (mv2 := mem_memval m2' b ofs).
+      assert (source_inj gs1 f b = Some (b,0)).
+      unfold source_inj. rewrite pred_dec_true. reflexivity. eauto.
+      apply H21 in H8.
+      assert (MVALINJ12: memval_inject f12' mv1 mv2).      
+      inv Hm'0. inv mi_inj. exploit mi_memval; eauto.
+      rewrite Z.add_0_r. eauto.
+      destruct mv1 eqn: Hv1; eauto.
+      destruct v; eauto.
+      inv MVALINJ12. inv H11.
+      rename b into bg. rename b0 into b1.
+      unfold valid_b. 
+      unfold compose_meminj. rewrite H13.
+      destruct (f23' b2) as [[b3 d3]|] eqn:Hj3; eauto.
+      destruct (Mem.sup_dec); eauto.
+      exploit H31; eauto. eapply Mem.perm_inject; eauto.
+      intro. red in H10. unfold mv2 in H23.
+      replace ofs with (ofs + 0) in H23 by lia.
+      rewrite <- H23 in H10.
+      unfold valid_b in H10. rewrite Hj3 in H10.
+      rewrite pred_dec_false in H10. eauto.
+      assert (Genv.match_stbls (source_inj gs1 f) se1 se1).
+      eapply match_stbls_dom'; eauto.
+      eapply Genv.match_stbls_incr in H11; eauto.
+      inv H11. rewrite <- mge_separated; eauto.
+      intros. exploit H22; eauto. intros [A B].
+      split; eauto. intro. eapply A. apply H0. eauto.
+      intro. eapply B. apply H0. eauto.
 Qed.
 
 Theorem injp_injp'_ref2:
@@ -1383,8 +1427,10 @@ Proof.
     eapply Genv.match_stbls_stbls'_compose; eauto.
   - constructor; cbn; eauto.
     eapply val_inject_compose; eauto.
-     eapply CKLRAlgebra.val_inject_list_compose.
-     econstructor; eauto.
+    eapply CKLRAlgebra.val_inject_list_compose.
+    econstructor; eauto.
+    constructor; eauto.
+    
   - intros r1 r3 [w13' [INCR13' Hr13]].
     inv Hr13. inv H3. cbn in H1. rename f into j13'. rename Hm3 into INJ13'.
     cbn in INCR13'. rename m2' into m3'.
