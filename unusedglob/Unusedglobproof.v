@@ -1171,6 +1171,7 @@ Inductive match_states: state -> state -> Prop :=
          (SPINJ: j sp = Some(tsp, 0))
          (REGINJ: regset_inject j rs trs)
          (MEMINJ: injp_acc w (injpw j gs tgs m tm Hm))
+         (VALID: valid_global m j gs)
          (SUPINC: Mem.sup_include sps (Mem.support m))
          (TSUPINC: Mem.sup_include tsps (Mem.support tm)),
       match_states (State s f (Vptr sp Ptrofs.zero) pc rs m)
@@ -1181,13 +1182,15 @@ Inductive match_states: state -> state -> Prop :=
          (FUNINJ: Val.inject j vf tvf)
          (KEPT: forall id, ref_fundef fd id -> kept id)
          (ARGINJ: Val.inject_list j args targs)
-         (MEMINJ: injp_acc w (injpw j gs tgs m tm Hm)),
+         (MEMINJ: injp_acc w (injpw j gs tgs m tm Hm))
+         (VALID: valid_global m j gs),
       match_states (Callstate s vf args m)
                    (Callstate ts tvf targs tm)
   | match_states_return: forall s res m ts tres tm j Hm
          (STACKS: match_stacks j s ts (Mem.support m) (Mem.support tm))
          (RESINJ: Val.inject j res tres)
-         (MEMINJ: injp_acc w (injpw j gs tgs m tm Hm)),
+         (MEMINJ: injp_acc w (injpw j gs tgs m tm Hm))
+         (VALID: valid_global m j gs),
       match_states (Returnstate s res m)
         (Returnstate ts tres tm).
 
@@ -1325,6 +1328,24 @@ Proof.
   exists (v1' :: vl'); split; constructor; auto.
 Qed.
 
+Lemma valid_global_external:
+      forall m m' j j' gs tm',
+        valid_global m j gs ->
+        Mem.unchanged_on (loc_unmapped j) m m' ->
+        Mem.inject j' m' tm' ->
+        inject_incr j j' ->
+        Mem.sup_include gs (Mem.support m) ->
+        valid_global m' j' gs.
+Proof.             
+  red. intros. destruct (j b) as [[b' d]|] eqn: Hinj.
+  * eapply memval_inject_valid. inv H1.
+    inv mi_inj. eapply mi_memval; eauto.
+  * inv H0. apply unchanged_on_perm in H5 as H5'; eauto.
+    setoid_rewrite unchanged_on_contents; eauto.
+    eapply valid_memval_incr; eauto.
+    apply H3. eauto.
+Qed.
+      
 Theorem step_simulation:
   forall S1 t S2, step ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'),
@@ -1385,6 +1406,8 @@ Proof.
   econstructor; split. eapply exec_Istore; eauto.
   econstructor; eauto. instantiate (1:= E).
   etransitivity. eauto. eapply injp_acc_storev; eauto.
+  unfold Mem.storev in H1. destruct a; try congruence.
+  eapply valid_global_store; eauto.
   erewrite <- Mem.support_storev; eauto.
   erewrite <- Mem.support_storev; eauto.
 
@@ -1433,7 +1456,7 @@ Proof.
   + instantiate (1:= D). etransitivity. eauto. eapply injp_acc_free; eauto.
     instantiate (2:= 0). rewrite Z.add_0_l. eauto.
     rewrite !Z.add_0_l. rewrite Z.add_0_r. eauto.
-
+  + eapply valid_global_free; eauto.
 - (* builtin *)
   exploit eval_builtin_args_inject; eauto.
   eapply match_stacks_preserves_globals; eauto.
@@ -1459,6 +1482,8 @@ Proof.
     red. intros. eapply external_call_max_perm; eauto.
     eapply Mem.unchanged_on_implies; eauto. intros b ofs [? ?] X. eauto.
     eapply Mem.unchanged_on_implies; eauto. intros b ofs [? ?] X. eauto.
+  + eapply valid_global_external; eauto.
+      apply match_stacks_bound1 in STACKS. eauto with mem.
   + inversion D. eauto with mem.
   + inversion E. eauto with mem.
 
@@ -1488,6 +1513,7 @@ Proof.
   eapply injp_acc_free; eauto.
   instantiate (2:= 0). rewrite Z.add_0_l. eauto.
   rewrite !Z.add_0_l. rewrite Z.add_0_r. eauto.
+  eapply valid_global_free; eauto.
 
 - (* internal function *)
   exploit Mem.alloc_parallel_inject. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
@@ -1515,6 +1541,7 @@ Proof.
   + intros id REF. rewrite FIND in FUN. inv FUN. auto.
   + apply init_regs_inject; auto. apply val_inject_list_incr with j; auto.
   + instantiate (1:= D). etransitivity. eauto. eapply injp_acc_alloc; eauto.
+  + eapply valid_global_alloc; eauto.
   + rewrite (Mem.support_alloc _ _ _ _ _  H). apply Mem.sup_incr_in2.
   + rewrite (Mem.support_alloc _ _ _ _ _  C). apply Mem.sup_incr_in2.
 
@@ -1540,7 +1567,7 @@ Proof.
   red. intros. eapply external_call_max_perm; eauto.
   eapply Mem.unchanged_on_implies; eauto. intros b ofs [? ?] X. eauto.
   eapply Mem.unchanged_on_implies; eauto. intros b ofs [? ?] X. eauto.
-
+  eapply valid_global_external; eauto. apply match_stacks_bound1 in STACKS. eauto.
 - (* return *)
   inv STACKS. econstructor; split.
   eapply exec_return.
@@ -1562,15 +1589,15 @@ Proof.
   - constructor.
     generalize (find_function_inject _ _ _ _ PRES H H8).
     intros (FINDFUN & KEPT). auto.
-  - inv H1. inversion GE'. subst. rewrite <- H6 in H3.
-    inv H3. unfold j0,m0,tm0 in *. rewrite <- H6 in *. cbn in *.
+  - inv H1. inversion GE'. subst. rewrite <- H7 in H4.
+    inv H4. unfold j0,m0,tm0 in *. rewrite <- H7 in *. cbn in *.
     econstructor; eauto.
-    3 : { instantiate (1:= Hm2). rewrite <- H6. reflexivity. }
+    3 : { instantiate (1:= Hm2). rewrite <- H7. reflexivity. }
     constructor; eauto. constructor; cbn; try congruence; eauto.
-    unfold j0. rewrite <- H6. eauto.
-    unfold j0. rewrite <- H6. constructor; try congruence; eauto.
-    unfold m0. rewrite <- H6. eauto.
-    unfold tm0. rewrite <- H6. eauto.
+    unfold j0. rewrite <- H7. eauto.
+    unfold j0. rewrite <- H7. constructor; try congruence; eauto.
+    unfold m0. rewrite <- H7. eauto.
+    unfold tm0. rewrite <- H7. eauto.
     generalize (find_function_inject _ _ _ _ PRES H H8).
     intros (FINDFUN & KEPT). auto.
 Qed.
