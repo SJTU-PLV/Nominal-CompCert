@@ -2197,6 +2197,21 @@ Qed.
 
 Local Hint Resolve perm_alloc_1 perm_alloc_2 perm_alloc_3 perm_alloc_4: mem.
 
+Theorem memval_alloc_new : forall ofs,
+    (mem_contents m2) # b ## ofs = Undef.
+Proof.
+  intros. inv ALLOC. simpl.
+  rewrite NMap.gss. reflexivity.
+Qed.
+
+Lemma memval_alloc_other : forall b' ofs,
+    b <> b' ->
+    (mem_contents m2) # b' ## ofs = (mem_contents m1) # b' ## ofs.
+Proof.
+  intros. inv ALLOC. simpl.
+  rewrite NMap.gso; eauto.
+Qed.
+
 Theorem valid_access_alloc_other:
   forall chunk b' ofs p,
   valid_access m1 chunk b' ofs p ->
@@ -2438,6 +2453,12 @@ Proof.
   rewrite setpermN_inv.
   destruct (zle lo ofs); simpl; auto.
   destruct (zlt ofs hi); simpl; auto.
+Qed.
+
+Lemma memval_free: forall b ofs,
+    (mem_contents m2) # b ## ofs  = (mem_contents m1) # b ## ofs.
+Proof.
+  intros. rewrite free_result. unfold unchecked_free; eauto.
 Qed.
 
 Theorem valid_access_free_1:

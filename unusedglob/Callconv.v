@@ -456,7 +456,7 @@ Program Definition injp': cklr' :=
     world := injp_world;
     wacc := injp_acc;
     mi := injp_mi;
-    match_mem := injp_match_mem;
+    match_mem := injp_match_mem';
     match_stbls := injp_match_stbls';
   |}.
 
@@ -490,6 +490,19 @@ Next Obligation.
   destruct H. inv H0. auto.
 Qed.
 
+Lemma valid_memval_incr : forall f f' mv gs,
+    inject_incr f f' ->
+    valid_memval f mv gs ->
+    valid_memval f' mv gs.
+Proof.
+  intros.
+  red. red in H0. destruct mv; eauto.
+  destruct v; eauto. unfold valid_b in *.
+  destruct (f b) as [[bb dd]|] eqn: HH.
+  erewrite H; eauto.
+  destruct Mem.sup_dec; destruct (f' b); eauto.
+Qed.
+    
 Next Obligation. (* Mem.alloc *)
   intros _ _ _ [f ? ? m1 m2 Hm] lo hi.
   destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:Hm1'.
@@ -499,18 +512,27 @@ Next Obligation. (* Mem.alloc *)
   rewrite Hm2'.
   exists (injpw f' gs1 gs2 m1' m2' Hm'); split; repeat rstep; eauto.
   eapply injp_acc_alloc; eauto.
+  constructor; eauto.
+  red. intros. destruct (eq_block b b1).
+  - subst. red. unfold mem_memval. erewrite Mem.memval_alloc_new; eauto.
+  - exploit H; eauto. eapply Mem.perm_alloc_4; eauto.
+    intros. unfold mem_memval. erewrite Mem.memval_alloc_other; eauto.
+    eapply valid_memval_incr; eauto.
 Qed.
 
 Next Obligation. (* Mem.free *)
   intros _ _ _ [f ? ? m1 m2 Hm] [[b1 lo1] hi1] [[b2 lo2] hi2] Hr.
   simpl. red.
   destruct (Mem.free m1 b1 lo1 hi1) as [m1'|] eqn:Hm1'; [|rauto].
-  inv Hr. inv H0. simpl in H1.
+  inv Hr. inv H1. simpl in H2.
   edestruct Mem.free_parallel_inject as (m2' & Hm2' & Hm'); eauto.
   replace (lo1 + delta + sz) with (lo1 + sz + delta) by extlia.
   rewrite Hm2'. repeat rstep.
   exists (injpw f gs1 gs2 m1' m2' Hm'); split; repeat rstep; eauto.
   eapply injp_acc_free; eauto.
+  constructor; eauto. red. intros.
+  exploit H; eauto. eapply Mem.perm_free_3; eauto.
+  intros. unfold mem_memval. erewrite Mem.memval_free; eauto.
 Qed.
 
 Next Obligation. (* Mem.load *)
@@ -521,6 +543,23 @@ Next Obligation. (* Mem.load *)
   rewrite Hv2. rauto.
 Qed.
 
+(*
+Lemma store_memval_other : forall chunk m b ofs v m' b' ofs',
+    Mem.store chunk m b ofs v = Some m' ->
+    b' <> b \/ ofs' <= ofs \/ ofs + size_chunk chunk <= ofs' ->
+    mem_memval m' b' ofs' = mem_memval m b' ofs'.
+Admitted.
+ *)
+
+Lemma memval_inject_valid: forall mv mv' f gs,
+    memval_inject f mv mv' ->
+    valid_memval f mv gs.
+Proof.
+  intros. destruct mv; simpl in *; eauto.
+  destruct v; simpl in *; eauto. unfold valid_b.
+  inv H. inv H4. rewrite H1. eauto.
+Qed.
+
 Next Obligation. (* Mem.store *)
   intros _ chunk _ _ [f ? ? m1 m2 Hm] _ _ [b1 ofs1 b2 delta Hptr] v1 v2 Hv.
   simpl in *. red.
@@ -529,6 +568,28 @@ Next Obligation. (* Mem.store *)
   rewrite Hm2'. repeat rstep.
   exists (injpw f gs1 gs2 m1' m2' Hm'); split; repeat rstep; eauto.
   eapply injp_acc_store; eauto.
+  econstructor; eauto. red. intros.
+  exploit H; eauto. eapply Mem.perm_store_2; eauto.
+  intro Hv1.
+  apply Mem.store_storebytes in Hm1'.
+  unfold mem_memval.
+  erewrite Mem.storebytes_mem_contents; eauto.
+  destruct (eq_block b b1).
+  - subst. rewrite NMap.gss.
+    destruct (zlt ofs ofs1).
+    + rewrite Mem.setN_outside. eauto. lia.
+    + destruct (zle (ofs1 + Z.of_nat (length (encode_val chunk v1))) ofs).
+      rewrite Mem.setN_outside. eauto.
+      right. lia.
+      assert (ofs1 <= ofs < ofs1 + Z.of_nat (Datatypes.length (encode_val chunk v1))).
+      split; lia.
+      exploit Mem.setN_in; eauto. instantiate (1:= (NMap.get b1 (Mem.mem_contents m1))).
+      intro. exploit encode_val_inject; eauto. instantiate (1:= chunk).
+      cbn. intro MEMV.
+      exploit list_forall2_in_left; eauto.
+      intros [x2 [A B]].
+      eapply memval_inject_valid; eauto.
+  - rewrite NMap.gso; eauto.
 Qed.
 
 Next Obligation. (* Mem.loadbytes *)
@@ -564,7 +625,7 @@ Next Obligation. (* Mem.storebytes *)
       * eapply Mem.storebytes_unchanged_on; eauto.
         simpl. intro. extlia.
       * apply inject_separated_refl.
-    + constructor; eauto.
+    + constructor; eauto. apply Mem.storebytes_empty in Hm1'; eauto. subst. eauto.
   - assert (ptr_inject f (b1, ofs1) (b2, ofs2)) as Hptr'.
     {
       destruct Hptr as [Hptr|Hptr]; eauto.
@@ -590,8 +651,8 @@ Next Obligation. (* Mem.storebytes *)
       unfold loc_unmapped. intros. intros [A B]. congruence.
     + eapply Mem.storebytes_unchanged_on; eauto.
       unfold loc_out_of_reach.
-      intros ofs Hofs [H1 H2].
-      eelim H1; eauto.
+      intros ofs Hofs [H2 H3].
+      eelim H2; eauto.
       eapply Mem.perm_cur_max.
       eapply Mem.perm_implies; [ | eapply perm_any_N].
       eapply Mem.storebytes_range_perm; eauto.
@@ -599,10 +660,33 @@ Next Obligation. (* Mem.storebytes *)
       extlia.
     + apply inject_incr_refl.
     + apply inject_separated_refl.
+    + constructor; eauto.
+      red. intros. exploit H; eauto.
+      eapply Mem.perm_storebytes_2; eauto.
+      intros.
+      unfold mem_memval.
+      erewrite Mem.storebytes_mem_contents; eauto.
+      destruct (eq_block b b1).
+      * subst. rewrite NMap.gss.
+        destruct (zlt ofs ofs1).
+        -- rewrite Mem.setN_outside. eauto. lia.
+        -- destruct (zle (ofs1 + Z.of_nat (length vs1)) ofs).
+           rewrite Mem.setN_outside. eauto.
+           right. lia.
+           assert (ofs1 <= ofs < ofs1 + Z.of_nat (Datatypes.length vs1)).
+           split; lia.
+           exploit Mem.setN_in; eauto. instantiate (1:= (NMap.get b1 (Mem.mem_contents m1))).
+           intro IN.
+           red in Hvs. Search list_rel.
+           apply CKLR.list_rel_forall2 in Hvs.
+           exploit list_forall2_in_left; eauto.
+           intros [x2 [A B]].
+           eapply memval_inject_valid; eauto.
+      * rewrite NMap.gso; eauto.
 Qed.
 
 Next Obligation. (* Mem.perm *)
-  intros _ _ _ [f m1 m2 Hm] _ _ [b1 ofs1 b2 delta Hb] p k H.
+  intros _ _ _ [f m1 m2 Hm] _ _ [b1 ofs1 b2 delta Hb] p k H1.
   eapply Mem.perm_inject; eauto.
 Qed.
 
