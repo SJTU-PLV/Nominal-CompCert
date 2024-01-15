@@ -1383,7 +1383,7 @@ Qed.
   Qed.
 
   Definition footprint_step4 (b2 : block) (ofs2 : Z) : Prop :=
-    sup_In b2 gs2 /\ ~ exists b1 ofs1, j1 b1 = Some (b2, ofs2 - ofs1) /\ Mem.perm m1 b1 ofs1 Max Nonempty.
+    sup_In b2 gs2 /\ loc_out_of_reach j1 m1 b2 ofs2.
 
   (*Lemma unchanged_on_footprint_block : forall b m m',
       Mem.set_empty_global m1 j1 j2 b m = m' ->
@@ -1452,13 +1452,9 @@ Qed.
     eapply unchanged_on_and.
     eapply unchanged_on_empty. reflexivity.
     eapply unchanged_on_empty_inreach. reflexivity.
-    intros. cbn. unfold footprint_step4 in H.
-    destruct (Mem.sup_dec b gs2).
-    - right. intro. red in H1.
-      apply H. split; eauto. intros [b' [o' [A B]]].
-      eapply H1; eauto. replace (ofs - (ofs - o')) with o' by lia.
-      eauto.
-    - left. eauto.
+    intros. cbn.  unfold footprint_step4 in H.
+    destruct (Mem.sup_dec b gs2). right.
+    intro. apply H. split; eauto. left. eauto.
   Qed.
 
 
@@ -1481,6 +1477,22 @@ Qed.
     intros. eapply unchanged_content_empty; eauto. reflexivity.
   Qed.
 
+  Lemma perm_decrease_empty_block : forall b m m' b2 o2 k p,
+      Mem.set_empty_global m1 j1 j2 b m = m' ->
+      Mem.perm m' b2 o2 k p -> Mem.perm m b2 o2 k p.
+  Proof.
+    intros.
+    unfold Mem.set_empty_global in H.
+    destruct (j2 b); try subst; eauto.
+    destruct (Mem.sup_dec); try subst; eauto.
+    unfold Mem.perm in H0. simpl in H0.
+    unfold Mem.perm.
+    destruct (eq_block b2 b). subst.
+    unfold Mem.pmap_update in H0. rewrite NMap.gss in H0.
+    rewrite Mem.global_access_result in H0. destruct Mem.loc_in_reach_find.
+    eauto. inv H0. rewrite pmap_update_diff' in H0. eauto. congruence.
+  Qed.
+  
   Lemma perm_decrease_empty: forall s m m' b2 o2 k p,
       Mem.set_empty_sup m1 j1 j2 s m = m' ->
       Mem.perm m' b2 o2 k p -> Mem.perm m b2 o2 k p.
@@ -1489,16 +1501,7 @@ Qed.
     - eauto with mem.
     - simpl in H0. 
       assert (Mem.perm (Mem.set_empty_sup m1 j1 j2 s m) b2 o2 k p).
-      unfold Mem.set_empty_global in H0.
-      destruct (j2 a); eauto.
-      destruct (Mem.sup_dec); eauto.
-      unfold Mem.perm in H0. simpl in H0.
-      unfold Mem.perm. simpl.
-      destruct (eq_block b2 a). subst.
-      unfold Mem.pmap_update in H0. rewrite NMap.gss in H0.
-      rewrite Mem.global_access_result in H0. destruct Mem.loc_in_reach_find.
-      eauto. inv H0. rewrite pmap_update_diff' in H0. eauto. congruence.
-      eapply IHs; eauto.
+      eapply perm_decrease_empty_block; eauto. eauto.
   Qed.
   
   Lemma perm_decrease_step4: forall b2 o2 k p,
@@ -1507,10 +1510,44 @@ Qed.
     intros. eapply perm_decrease_empty; eauto.
   Qed.
 
-  Lemma freed_step4:  forall b2 o2 k p,
-      footprint_step4 b2 o2 -> ~ Mem.perm m2' b2 o2 k p.
+  Lemma freed_sup : forall s m m' b2 o2 k p,
+      Mem.set_empty_sup m1 j1 j2 s m = m' ->
+      sup_In b2 s ->
+      loc_out_of_reach j1 m1 b2 o2 ->
+      j2 b2 <> None ->
+      ~ Mem.perm m' b2 o2 k p.
   Proof.
-  Admitted.
+    induction s; intros.
+    - inv H0.
+    - simpl in H0. destruct H0.
+      + subst. simpl. unfold Mem.set_empty_global.
+        destruct (j2 b2); try congruence.
+        destruct (Mem.sup_dec).
+        unfold Mem.perm.
+        simpl. unfold Mem.pmap_update. rewrite NMap.gss.
+        rewrite Mem.global_access_result.
+        destruct Mem.loc_in_reach_find eqn:Hf.
+        destruct p1.
+        eapply Mem.loc_in_reach_find_valid in Hf.
+        destruct Hf as [A B].
+        exfalso. eapply H1; eauto.
+        replace (o2 - (o2 - z)) with z by lia. eauto.
+        intro A. inv A.
+        intro. apply Mem.perm_valid_block in H.
+        apply n. eauto.
+      + simpl in H.
+        set (m'0 := (Mem.set_empty_sup m1 j1 j2 s m)).
+        assert (~ Mem.perm m'0 b2 o2 k p).
+        eapply IHs; eauto. reflexivity.
+        intro. apply H3.
+        eapply perm_decrease_empty_block; eauto.
+  Qed.
+  
+  Lemma freed_step4:  forall b2 o2 k p,
+      j2 b2 <> None -> footprint_step4 b2 o2 -> ~ Mem.perm m2' b2 o2 k p.
+  Proof.
+    intros. destruct H0. eapply freed_sup; eauto. reflexivity.
+  Qed.
 
   Lemma unchanged_step4_gs: Mem.unchanged_on (fun b _ => ~ sup_In b gs2) m2'2 m2'.
   Proof.
@@ -1668,7 +1705,8 @@ Qed.
     eapply Mem.unchanged_on_perm.
     apply unchanged_step4.
     red. intro. destruct H2 as [A B].
-    apply B. eauto.
+    eapply B; eauto.
+    replace (o2 - (o2 - o1)) with o1 by lia. eauto.
     unfold Mem.valid_block. rewrite m2'2_support.
     apply SUPINCL2.
     inv INJ12. eapply mi_mappedblocks; eauto.
@@ -2546,10 +2584,7 @@ Qed.
             red in LOCIN.
             destruct (Mem.sup_dec b2 gs2).
             ++
-              exfalso. eapply freed_step4. split. eauto.
-              intros [b1 [ofs1 [A B]]]. eapply LOCIN. eauto.
-              instantiate (1:= o2). 2: eauto.
-              replace (o2 - (o2 - ofs1 )) with ofs1 by lia. eauto.
+              exfalso. eapply freed_step4; eauto. congruence. split; eauto.
             ++
             assert (PERM2 : Mem.perm m2 b2 o2 k p).
             generalize UNCHANGE21. intro UNC2. inversion UNC2.
@@ -2632,9 +2667,7 @@ Qed.
             eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
             red in LOCIN.
             destruct (Mem.sup_dec b2 gs2).
-            exfalso. eapply freed_step4. split; eauto.
-            intros [b1 [ofs1 [A B]]]. eapply LOCIN; eauto. 2: eauto.
-            replace (o2 - (o2 - ofs1)) with ofs1 by lia. eauto.
+            exfalso. eapply freed_step4; eauto. congruence. split; eauto.
             assert (PERM2 : Mem.perm m2 b2 o2 Cur Readable).
             generalize UNCHANGE21. intro UNC2. inversion UNC2.
             eapply unchanged_on_perm; eauto.
@@ -2730,9 +2763,7 @@ Qed.
         * eapply Mem.loc_in_reach_find_none in LOCIN; eauto.
           destruct (Mem.sup_dec b2 gs2).
           (*freed by step4*)
-          right. eapply freed_step4. split.
-          eauto. intros [b1 [ofs1 [A B]]]. eapply LOCIN. eauto.
-          replace (o2 - (o2 - ofs1)) with ofs1 by lia. eauto.
+          right. eapply freed_step4; eauto. congruence. split; eauto.
           (**)
           destruct (Mem.perm_dec m2' b2 o2 Max Nonempty); auto.
           left. generalize UNCHANGE21. intro UNC2.
