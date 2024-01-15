@@ -1767,7 +1767,7 @@ Proof.
     generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
     intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
     subst. cbn in *.
-    set (m2' := m2' m1 m2 m1' j12 j23 j12' j23' gs2 m2'_sup INJ12 SUPINCL2).
+    set (m2' := m2' m1 m2 m1' j12 j23 j12' gs2 m2'_sup INJ12).
     assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
     assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
     rename gs0 into gs1. rename gs4 into gs3.

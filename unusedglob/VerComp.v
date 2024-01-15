@@ -1372,8 +1372,9 @@ Proof.
         edestruct H30; eauto.
     + constructor; cbn; eauto with mem.
       eapply Values.val_inject_compose; eauto.
-      (* The validity of source memory after external calls *)
       constructor; eauto.
+      (* The validity of source memory after external calls *)
+      (* TODO: define this into a lemma *)
       red. intros. red.
       set (mv1 := mem_memval m1' b ofs).
       set (mv2 := mem_memval m2' b ofs).
@@ -1430,9 +1431,34 @@ Proof.
     eapply CKLRAlgebra.val_inject_list_compose.
     econstructor; eauto.
     constructor; eauto.
-    
+    (* TODO : define this into a lemma *)
+    red. intros.
+    red.
+    red in H1.
+    inv MSTBL12. inv H15.
+    exploit mge_dom; eauto.
+    intros [b2 Hj1]. rename b into b1.
+    eapply mge_separated in H3 as HSUP2; eauto.
+    exploit H1; eauto. eapply Mem.perm_inject; eauto.
+    rewrite Z.add_0_r. intro Hmv2. red in Hmv2.
+    destruct (mem_memval m1 b1 ofs) eqn:Hmv1; eauto.
+    destruct v; eauto.
+    inv INJ12. inv mi_inj.
+    exploit mi_memval; eauto.
+    intro Hmvinject.
+
+    setoid_rewrite Hmv1 in Hmvinject.
+    inv Hmvinject. inv H7.
+    rewrite Z.add_0_r in H12.
+    symmetry in H12. unfold mem_memval in Hmv2.
+    rewrite H12 in Hmv2. unfold compose_meminj.
+    unfold valid_b in *. rewrite H11.
+    destruct (j23 b3). destruct p. eauto.
+    rewrite pred_dec_true. eauto.
+    destruct (Mem.sup_dec b3 gs4); try inv Hmv2.
+    eapply mge_separated; eauto.
   - intros r1 r3 [w13' [INCR13' Hr13]].
-    inv Hr13. inv H3. cbn in H1. rename f into j13'. rename Hm3 into INJ13'.
+    inv Hr13. inv H4. cbn in H3. rename f into j13'. rename Hm3 into INJ13'.
     cbn in INCR13'. rename m2' into m3'.
     inversion INCR13' as [? ? ? ? ? ? ? ? ? ?  RO1 RO3 MAXPERM1 MAXPERM3 UNCHANGE1 UNCHANGE3 INCR13 DISJ13]. subst.
     generalize (inject_implies_image_in _ _ _ INJ12).
@@ -1452,7 +1478,7 @@ Proof.
     generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
     intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
     subst. cbn in *.
-    set (m2' := m2' m1 m2 m1' j12 j23 j12' j23' gs2 m2'_sup INJ12 SUPINCL2).
+    set (m2' := m2' m1 m2 m1' j12 j23 j12' gs2 m2'_sup INJ12).
     assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
     admit.
     assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
@@ -1461,7 +1487,7 @@ Proof.
     set (w1' := injpw j12' gs1 gs2 m1' m2' INJ12').
     set (w2' := injpw j23' gs2 gs3 m2' m3' INJ23').
     rename vres2 into vres3.
-    exploit compose_meminj_midvalue; eauto.
+    exploit Mem.compose_meminj_midvalue; eauto.
     intros [vres2 [RES1 RES2]].
     assert (UNC21:Mem.unchanged_on (fun b z => loc_out_of_reach j12 m1 b z /\ ~ sup_In b gs2) m2 m2').
     eapply UNCHANGE21; eauto.
