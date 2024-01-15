@@ -6950,13 +6950,14 @@ Qed.
       end
   end.
 
-  Definition empty_global_filter (b2 : block) :=
+  (*Definition empty_global_filter (b2 : block) :=
   let elements := ZMap.elements ((mem_access m2) # b2) in
   empty_global_filter' elements b2.
-
-  Definition empty_global_access (b2: block) (map2: perm_map) :=
-  let elements2 := empty_global_filter b2 in
-  setN' elements2 map2.
+   *)
+  
+  Definition empty_global_access (b2: block) (map: perm_map) :=
+  let elements2 := empty_global_filter' (ZMap.elements map) b2 in
+  setN' elements2 map.
 
   (** peoperties *)
   
@@ -7053,10 +7054,10 @@ Qed.
   Qed.
                
   Lemma global_access_result:
-  forall b2 o2 p,
-    ((empty_global_access b2 ((mem_access m2) # b2))##o2) p =
+  forall b2 o2 p m,
+    ((empty_global_access b2 ((mem_access m) # b2))##o2) p =
       match (loc_in_reach_find b2 o2) with
-      | Some _ => ((mem_access m2) # b2)##o2 p
+      | Some _ => ((mem_access m) # b2)##o2 p
       | None => None
    end.
   Proof.
@@ -7065,7 +7066,7 @@ Qed.
     - erewrite setN'_outside; eauto.
       eapply empty_global_filter'_some; eauto.
     - 
-      destruct (((mem_access m2) # b2) ## o2 Max) eqn:Hp.
+      destruct (((mem_access m) # b2) ## o2 Max) eqn:Hp.
       + (*with perm*)
       erewrite setN'_inside. instantiate (1:= fun k => None).
       reflexivity.
@@ -7077,15 +7078,15 @@ Qed.
       rewrite access_default. intro.
       rewrite H in Hp. congruence.
       + (*without*)
-        set (perm := ((mem_access m2) # b2) ## o2).
+        set (perm := ((mem_access m) # b2) ## o2).
         assert (perm = fun k => None).
         {
           apply extensionality. intros. destruct x. eauto.
-          generalize (access_max m2 b2 o2). intro.
+          generalize (access_max m b2 o2). intro.
           rewrite Hp in H. fold perm in H.
           destruct (perm Cur). inv H. reflexivity.
         }
-        destruct (in_dec perm_pair_dec (o2, perm) (ZMap.elements ((mem_access m2) # b2))).
+        destruct (in_dec perm_pair_dec (o2, perm) (ZMap.elements ((mem_access m) # b2))).
         -- (* updated, trivially *)
           erewrite setN'_inside; eauto.
           instantiate (1:= perm). rewrite H. eauto.
@@ -7102,7 +7103,7 @@ Qed.
           apply in_map_fst in H0.
           destruct H0 as [b H0].
           apply ZMap.elements_complete in H0 as H1.
-          subst perm. rewrite H1. eauto.
+          subst perm. setoid_rewrite H1. eauto.
   Qed.
   
    Program Definition set_empty_global b2 m : mem :=
