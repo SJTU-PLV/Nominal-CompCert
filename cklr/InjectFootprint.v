@@ -1195,7 +1195,7 @@ Section CONSTR_PROOF.
   (** step3 of Definition C.7, in common/Memory.v *)
   Definition m2'2 := Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 (Mem.support m2) m2'1.
   (** step4 *)
-  Definition m2' := Mem.set_empty_sup m1 m2 m1' s2' j1 j2 j1' j2' INJ12 SUPINCL2 gs2 m2'2.
+  Definition m2' := Mem.set_empty_sup m1 j1 j2 gs2 m2'2.
   
   Lemma INJNOLAP1' : Mem.meminj_no_overlap j1' m1'.
   Proof. eapply update_meminj_no_overlap1; eauto. Qed.
@@ -1349,14 +1349,28 @@ Qed.
     eapply unchanged_on_copy'1; eauto.
   Qed.
 
+    Lemma unchanged2_step3: Mem.unchanged_on (loc_unmapped j2) m2'1 m2'2.
+  Proof.
+    unfold m2'2.
+    eapply unchanged_on_copy'2; eauto.
+  Qed.
+
+
+  (*properties of step4 *)
   Lemma unchanged_on_empty_block : forall b m m',
-      Mem.set_empty_global m1 m2 m1' s2' j1 j2 j1' j2' INJ12 SUPINCL2 b m = m' ->
+      Mem.set_empty_global m1 j1 j2 b m = m' ->
       Mem.unchanged_on (fun b1 _ => ~ b = b1) m m'.
   Proof.
-  Admitted.
+    intros. unfold Mem.set_empty_global in H.
+    destruct (j2 b) as [[b3 d]|] eqn:Hj2; try (subst; eauto with mem).
+    destruct Mem.sup_dec; eauto with mem.
+    constructor; cbn; eauto.
+    intros. unfold Mem.perm. simpl.
+    rewrite pmap_update_diff'. reflexivity. eauto.
+  Qed.
   
   Lemma unchanged_on_empty : forall s m m',
-      Mem.set_empty_sup m1 m2 m1' s2' j1 j2 j1' j2' INJ12 SUPINCL2 s m = m' ->
+      Mem.set_empty_sup m1 j1 j2 s m = m' ->
       Mem.unchanged_on (fun b ofs => ~ sup_In b s) m m'.
   Proof.
     induction s; intros; subst; simpl.
@@ -1368,29 +1382,133 @@ Qed.
       intros. red. intro. apply H. eauto.
   Qed.
 
-  Lemma unchanged2_step3: Mem.unchanged_on (loc_unmapped j2) m2'1 m2'2.
-  Proof.
-    unfold m2'2.
-    eapply unchanged_on_copy'2; eauto.
-  Qed.
-
   Definition footprint_step4 (b2 : block) (ofs2 : Z) : Prop :=
     sup_In b2 gs2 /\ ~ exists b1 ofs1, j1 b1 = Some (b2, ofs2 - ofs1) /\ Mem.perm m1 b1 ofs1 Max Nonempty.
 
-  Lemma unchanged_step4: Mem.unchanged_on (fun b ofs => ~ footprint_step4 b ofs) m2'2 m2'.
-  Admitted.
-
-  Lemma freed_step4:  forall b2 o2 k p,
-      footprint_step4 b2 o2 -> ~ Mem.perm m2' b2 o2 k p.
+  (*Lemma unchanged_on_footprint_block : forall b m m',
+      Mem.set_empty_global m1 j1 j2 b m = m' ->
+      Mem.unchanged_on (fun b ofs => ~ footprint_step4 b ofs) m m'.
   Proof.
-  Admitted.
+    intros.
+    unfold Mem.set_empty_global in H.
+    destruct (j2 b) as [[b3 d]|] eqn:Hj2; try (subst; eauto with mem).
+    destruct Mem.sup_dec; eauto with mem.
+    constructor; cbn; eauto.
+    intros. unfold Mem.perm. simpl.
+    destruct (eq_block b b0). subst.
+    - 
+    - rewrite pmap_update_diff'. reflexivity. eauto.
+   *)
+  Lemma unchanged_on_and:
+    forall P Q m m',
+      Mem.unchanged_on P m m' ->
+      Mem.unchanged_on Q m m' ->
+      Mem.unchanged_on (fun b ofs => P b ofs \/ Q b ofs) m m'.
+  Proof.
+    intros.
+    constructor.
+    - inv H. eauto.
+    - intros. destruct H1.
+      inv H. eapply unchanged_on_perm; eauto.
+      inv H0. eapply unchanged_on_perm; eauto.
+    - intros. destruct H1.
+      inv H. eapply unchanged_on_contents; eauto.
+      inv H0. eapply unchanged_on_contents; eauto.
+  Qed.
+
+
+  Lemma unchanged_on_empty_inreach_block: forall b m m',
+      Mem.set_empty_global m1 j1 j2 b m = m' ->
+      Mem.unchanged_on (fun b ofs => ~ loc_out_of_reach j1 m1 b ofs) m m'.
+  Proof.
+    intros. unfold Mem.set_empty_global in H.
+    destruct (j2 b) as [[b3 d]|] eqn:Hj2; try (subst; eauto with mem).
+    destruct Mem.sup_dec; eauto with mem.
+    constructor; cbn; eauto.
+    intros. unfold Mem.perm. simpl.
+    destruct (eq_block b b0).
+    - 
+    subst. unfold Mem.pmap_update. rewrite NMap.gss.
+    rewrite Mem.global_access_result. destruct Mem.loc_in_reach_find eqn:Hf.
+    reflexivity.
+    eapply Mem.loc_in_reach_find_none in Hf. exfalso. apply H.
+    eapply Hf; eauto. eapply INJ12.
+    - rewrite pmap_update_diff'. reflexivity. eauto.
+  Qed.
+
+  Lemma unchanged_on_empty_inreach: forall s m m',
+      Mem.set_empty_sup m1 j1 j2 s m = m' ->
+      Mem.unchanged_on (fun b ofs => ~ loc_out_of_reach j1 m1 b ofs) m m'.
+  Proof.
+    induction s; intros; subst; simpl.
+    - eauto with mem.
+    - eapply Mem.unchanged_on_trans. eapply IHs. reflexivity.
+      eapply unchanged_on_empty_inreach_block; eauto.
+  Qed.
+
+  Lemma unchanged_step4: Mem.unchanged_on (fun b ofs => ~ footprint_step4 b ofs) m2'2 m2'.
+  Proof.
+    eapply Mem.unchanged_on_implies.
+    eapply unchanged_on_and.
+    eapply unchanged_on_empty. reflexivity.
+    eapply unchanged_on_empty_inreach. reflexivity.
+    intros. cbn. unfold footprint_step4 in H.
+    destruct (Mem.sup_dec b gs2).
+    - right. intro. red in H1.
+      apply H. split; eauto. intros [b' [o' [A B]]].
+      eapply H1; eauto. replace (ofs - (ofs - o')) with o' by lia.
+      eauto.
+    - left. eauto.
+  Qed.
+
+
+  Lemma unchanged_content_empty: forall s m m' b2 o2,
+      Mem.set_empty_sup m1 j1 j2 s m = m' ->
+      mem_memval m' b2 o2 = mem_memval m b2 o2.
+  Proof.
+    induction s; intros; subst; simpl.
+    - eauto with mem.
+    - etransitivity.
+      2: {eapply IHs. reflexivity. }
+      unfold Mem.set_empty_global.
+      destruct (j2 a); eauto.
+      destruct (Mem.sup_dec); eauto.
+  Qed.
+
   Lemma unchanged_content_step4 : forall b2 o2,
       mem_memval m2' b2 o2 = mem_memval m2'2 b2 o2.
   Proof.
-  Admitted.
+    intros. eapply unchanged_content_empty; eauto. reflexivity.
+  Qed.
 
+  Lemma perm_decrease_empty: forall s m m' b2 o2 k p,
+      Mem.set_empty_sup m1 j1 j2 s m = m' ->
+      Mem.perm m' b2 o2 k p -> Mem.perm m b2 o2 k p.
+  Proof.
+    induction s; intros; subst; simpl.
+    - eauto with mem.
+    - simpl in H0. 
+      assert (Mem.perm (Mem.set_empty_sup m1 j1 j2 s m) b2 o2 k p).
+      unfold Mem.set_empty_global in H0.
+      destruct (j2 a); eauto.
+      destruct (Mem.sup_dec); eauto.
+      unfold Mem.perm in H0. simpl in H0.
+      unfold Mem.perm. simpl.
+      destruct (eq_block b2 a). subst.
+      unfold Mem.pmap_update in H0. rewrite NMap.gss in H0.
+      rewrite Mem.global_access_result in H0. destruct Mem.loc_in_reach_find.
+      eauto. inv H0. rewrite pmap_update_diff' in H0. eauto. congruence.
+      eapply IHs; eauto.
+  Qed.
+  
   Lemma perm_decrease_step4: forall b2 o2 k p,
       Mem.perm m2' b2 o2 k p -> Mem.perm m2'2 b2 o2 k p.
+  Proof.
+    intros. eapply perm_decrease_empty; eauto.
+  Qed.
+
+  Lemma freed_step4:  forall b2 o2 k p,
+      footprint_step4 b2 o2 -> ~ Mem.perm m2' b2 o2 k p.
   Proof.
   Admitted.
 
@@ -2727,7 +2845,7 @@ Proof.
     generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
     intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
     subst.
-    set (m2' := m2' m1 m2 m1' j12 j23 j12' j23' gs2 m2'_sup INJ12 SUPINCL2).
+    set (m2' := m2' m1 m2 m1' j12 j23 j12' gs2 m2'_sup INJ12).
     assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
     assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
     set (w1' := injpw j12' gs0 gs2 m1' m2' INJ12').
