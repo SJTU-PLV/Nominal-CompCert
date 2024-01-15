@@ -6959,19 +6959,151 @@ Qed.
   setN' elements2 map2.
 
   (** peoperties *)
+  
+  Lemma empty_global_filter'_some: forall map b2 o2 b1 o1,
+    loc_in_reach_find b2 o2 = Some (b1, o1) ->
+   ~ In o2 (List.map fst (empty_global_filter' (ZMap.elements map) b2)).
+  Proof.
+    intros.
+    induction (ZMap.elements map); intros.
+    - simpl. eauto.
+    - simpl. destruct a.
+      destruct (loc_in_reach_find b2 t) eqn:FIND; eauto.
+      intro. destruct H0. inv H0. simpl in H. congruence. congruence.
+  Qed.
 
+  Lemma empty_global_filter'_rec : forall vl b2 o2,
+    loc_in_reach_find b2 o2 = None ->
+    In o2 (List.map fst vl) ->
+    In (o2, fun _ => None) (empty_global_filter' vl b2).
+  Proof.
+    induction vl; intros.
+    - inv H0.
+    - simpl in *. destruct a.
+      destruct H0.
+      + simpl in H0. subst.
+        rewrite H. left. reflexivity.
+      + destruct (loc_in_reach_find b2 z) eqn:FIND'.
+        * destruct p. eauto.
+        * right. eapply IHvl; eauto.
+  Qed.
+
+  Lemma empty_global_filter'_in:
+    forall z vl b,
+      In z (map fst (empty_global_filter' vl b)) ->
+      In z (map fst vl).
+  Proof.
+    induction vl; intros; simpl in H. inv H.
+    destruct a. destruct (loc_in_reach_find).
+    - 
+      simpl. right. eapply IHvl; eauto.
+    - simpl in H. destruct H.
+      left. eauto. right. eauto.
+  Qed.
+
+  Lemma list_norepet_empty_global_filter':
+  forall vl b,
+    list_norepet (List.map fst vl) ->
+    list_norepet (List.map fst (empty_global_filter' vl b)).
+  Proof.
+    induction vl; intros.
+    - constructor.
+    - simpl in H. inv H. simpl. destruct a.
+      destruct loc_in_reach_find eqn:Hfind; eauto.
+      simpl. constructor; eauto.
+      intro. apply H2.
+      simpl. eapply empty_global_filter'_in; eauto.
+  Qed.
+
+  Lemma permission_dec : forall (x y : permission),
+      {x = y} + {x <> y}.
+  Proof.
+    intros. destruct x; destruct y;
+      try (right; congruence); left; reflexivity.
+  Qed.
+  
+  Lemma memperm_dec: forall (x y: memperm),
+      {x = y} + {x <> y}.
+  Proof.
+    intros.
+    destruct (x Max) eqn: HxM; destruct (y Max) eqn:HyM;
+      destruct (x Cur) eqn: HxC; destruct (y Cur) eqn:HyC;
+      try (right; intro; congruence).
+    - destruct (permission_dec p p0);
+        destruct (permission_dec p1 p2);
+        try (right; intro; congruence ). left.
+      apply extensionality. intros. destruct x0; congruence.
+    -  destruct (permission_dec p p0);
+        try (right; intro; congruence ). left.
+       apply extensionality. intros. destruct x0; congruence.
+    -  destruct (permission_dec p p0);
+        try (right; intro; congruence ). left.
+       apply extensionality. intros. destruct x0; congruence.
+    - left. apply extensionality. intros. destruct x0; congruence.
+  Qed.
+  
+  Lemma perm_pair_dec: forall (x y : Z * memperm),
+      {x = y} + {x <> y}.
+  Proof.
+    intros. destruct x. destruct y.
+    destruct (zeq z z0).
+    - subst. destruct (memperm_dec m m0).
+      subst. left. reflexivity. right. congruence.
+    - right. congruence.
+  Qed.
+               
   Lemma global_access_result:
-  forall b2 map2 o2 p,
-    ((empty_global_access b2 map2)##o2) p =
+  forall b2 o2 p,
+    ((empty_global_access b2 ((mem_access m2) # b2))##o2) p =
       match (loc_in_reach_find b2 o2) with
-      | Some _ => map2##o2 p
+      | Some _ => ((mem_access m2) # b2)##o2 p
       | None => None
    end.
   Proof.
     intros. unfold empty_global_access.
     destruct (loc_in_reach_find) as [[b1 o1]|] eqn:FIND.
     - erewrite setN'_outside; eauto.
-  Admitted.
+      eapply empty_global_filter'_some; eauto.
+    - 
+      destruct (((mem_access m2) # b2) ## o2 Max) eqn:Hp.
+      + (*with perm*)
+      erewrite setN'_inside. instantiate (1:= fun k => None).
+      reflexivity.
+      eapply list_norepet_empty_global_filter'.
+      eapply ZMap.elements_keys_norepet; eauto.
+      eapply empty_global_filter'_rec; eauto.
+      exploit elements_correct'.
+      2: eapply in_map_fst_2.
+      rewrite access_default. intro.
+      rewrite H in Hp. congruence.
+      + (*without*)
+        set (perm := ((mem_access m2) # b2) ## o2).
+        assert (perm = fun k => None).
+        {
+          apply extensionality. intros. destruct x. eauto.
+          generalize (access_max m2 b2 o2). intro.
+          rewrite Hp in H. fold perm in H.
+          destruct (perm Cur). inv H. reflexivity.
+        }
+        destruct (in_dec perm_pair_dec (o2, perm) (ZMap.elements ((mem_access m2) # b2))).
+        -- (* updated, trivially *)
+          erewrite setN'_inside; eauto.
+          instantiate (1:= perm). rewrite H. eauto.
+          eapply list_norepet_empty_global_filter'.
+          eapply ZMap.elements_keys_norepet; eauto.
+          rewrite H.
+          eapply empty_global_filter'_rec; eauto.
+          eapply in_map_fst_2; eauto.
+        -- (* not updated *)
+          erewrite setN'_outside. subst perm. rewrite H. eauto.
+          intro. apply n.
+          apply  empty_global_filter'_in in H0.
+          clear - H0.
+          apply in_map_fst in H0.
+          destruct H0 as [b H0].
+          apply ZMap.elements_complete in H0 as H1.
+          subst perm. rewrite H1. eauto.
+  Qed.
   
    Program Definition set_empty_global b2 m : mem :=
    if j23 b2 then
