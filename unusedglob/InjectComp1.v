@@ -1551,19 +1551,30 @@ End SYMTBL_CONSTR.
 
 Require Import VerComp.
 
+Lemma valid_global_dom : forall f se m,
+    valid_global m f se ->
+    valid_global m (meminj_dom f) se.
+Proof.
+  intros. red in *. intros.
+  exploit H; eauto. unfold valid_memval.
+  destruct (mem_memval m b ofs); eauto.
+  destruct v; eauto.
+  unfold valid_b, meminj_dom. destruct (f b0); eauto.
+Qed.
+(* injp' ⋅ injp ⊑ injp' *)
 Theorem injp'_injp_ref1:
   ccref'  (cc_c' injp') (cc_compose_2 (cc_c' injp') (cc_c injp)).
 Proof.
   red. intros w se1 se3 q1 q2 Hse Hq.
   inv Hse. inv Hq. cbn in H2, H3. inv H4. rename m0 into m1. rename m3 into m2.
-  set (se2 := se2 se1 f).
+  set (se2 := se2 se1 f). 
+  exploit Hse1; eauto. intro Hse1. fold se2 in Hse1.
+  exploit Hse2. eapply H. intro Hse2. fold se2 in Hse2.
   exists (se2, (injpw (meminj_dom f) (Genv.genv_sup se1) (Genv.genv_sup se2) m1 m1 (mem_inject_dom f m1 m2 Hm)),
       (injpw f (Genv.genv_sup se2) (Genv.genv_sup se3) m1 m2 Hm)).
   repeat apply conj.
   - split; constructor; eauto.
-    eapply Hse1; eauto.
     eapply Mem.sup_include_trans. eapply SUP; eauto. eauto.
-    eapply Hse2; eauto.
     eapply Mem.sup_include_trans. eapply SUP; eauto. eauto.
   - exists (cq vf1 sg vargs1 m1). split.
     econstructor; cbn; eauto.
@@ -1571,13 +1582,7 @@ Proof.
     eapply Inject.val_inject_list_dom; eauto.
     (*TODO: a lemma about valid_global here*)
     constructor; cbn; eauto.
-    red. red in H13. intros.
-    exploit H13; eauto.
-    intro HH. red in HH. red.
-    destruct (mem_memval m1 b ofs); eauto.
-    destruct v; eauto.
-    unfold meminj_dom. unfold valid_b in *.
-    destruct (f b0); eauto.
+    eapply valid_global_dom; eauto.
     constructor; eauto. constructor; eauto.
   - intros r1 r3 [r2 [Hr1 Hr2]].
     destruct Hr1 as [w12' [Hw12 Hr1]]. destruct Hr2 as [w23' [Hw23 Hr2]].
@@ -1609,6 +1614,17 @@ Proof.
     + constructor; cbn; eauto with mem.
       eapply Values.val_inject_compose; eauto.
       constructor; eauto.
+      
+      (*red.
+      intros. red. destruct (mem_memval m1' b ofs) eqn:Hmv1; eauto.
+      destruct v; eauto. rename b0 into b1'. rename b into b1.
+      red. unfold compose_meminj.
+      exploit Genv.mge_dom. eauto.
+      inv MSTBL12.
+      assert
+      destruct (f12' b1').
+      *)
+      
       (*TODO: A lemma here*)
       admit.
 Admitted.
