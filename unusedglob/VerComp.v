@@ -1407,6 +1407,24 @@ Proof.
       intro. eapply B. apply H0. eauto.
 Qed.
 
+Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
+    Val.inject (compose_meminj j1 j2) v1 v3 ->
+    exists v2, Val.inject j1 v1 v2 /\ Val.inject j2 v2 v3.
+Proof.
+  intros. inv H.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  unfold compose_meminj in H0.
+  destruct (j1 b1) as [[b2' d1]|] eqn:M1; try congruence.
+  destruct (j2 b2') as [[b3' d2]|] eqn:M2; inv H0.
+  eexists. split. econstructor; eauto.
+  econstructor; eauto. rewrite add_repr.
+  rewrite Ptrofs.add_assoc. auto.
+  exists Vundef. split; constructor.
+Qed.
+
 Theorem injp_injp'_ref2:
   ccref' (cc_compose_1 (cc_c injp) (cc_c' injp')) (cc_c' injp') .
 Proof.
@@ -1446,7 +1464,6 @@ Proof.
     inv INJ12. inv mi_inj.
     exploit mi_memval; eauto.
     intro Hmvinject.
-
     setoid_rewrite Hmv1 in Hmvinject.
     inv Hmvinject. inv H7.
     rewrite Z.add_0_r in H12.
@@ -1487,26 +1504,34 @@ Proof.
     set (w1' := injpw j12' gs1 gs2 m1' m2' INJ12').
     set (w2' := injpw j23' gs2 gs3 m2' m3' INJ23').
     rename vres2 into vres3.
-    exploit Mem.compose_meminj_midvalue; eauto.
+    exploit compose_meminj_midvalue; eauto.
     intros [vres2 [RES1 RES2]].
     assert (UNC21:Mem.unchanged_on (fun b z => loc_out_of_reach j12 m1 b z /\ ~ sup_In b gs2) m2 m2').
     eapply UNCHANGE21; eauto.
-    admit.
     exists (cr vres2 m2'). split.
     + exists w1'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
       admit.
       eapply MAXPERM2; eauto.
       admit.
       eapply Mem.unchanged_on_implies; eauto.
-      intros. destruct H3. split; eauto. red. unfold compose_meminj.
-      rewrite H3. reflexivity.
+      intros. destruct H4. split; eauto. red. unfold compose_meminj.
+      rewrite H4. reflexivity.
       constructor; eauto. constructor; eauto.
     +
       exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto. admit.
       eapply MAXPERM2; eauto. admit.
-      eapply UNCHANGE22; eauto. admit. eapply out_of_reach_trans; eauto.
+      eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
       econstructor; eauto. constructor; eauto.
+      (*TODO: the third valid_global*)
+      red. intros. red.
+      inv MSTBL12. subst gs5 gs6.
+      exploit Genv.mge_img; eauto. intros [b1 Hj1].
+      exploit Genv.mge_separated; eauto. intro SEP.
+      apply SEP in H4 as HSUP1.
+      (*question: the corresponding position in m1' may have no permission? *)
+      admit.
 Admitted.
+
 
 Theorem refinement_injp_injp'_c:
   cceqv' (cc_c' injp') (cc_compose_1 (cc_c injp) (cc_c' injp')).

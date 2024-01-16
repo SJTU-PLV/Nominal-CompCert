@@ -95,6 +95,8 @@ Require Asmgenproof.
 Require Callconv.
 Require ForwardSim.
 Require VerComp.
+Require InjectComp1.
+Require InjectComp2.
 
 (** Command-line flags. *)
 Require Import Compopts.

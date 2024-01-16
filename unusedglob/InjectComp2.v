@@ -21,7 +21,7 @@ Section CONSTR_PROOF.
   Hypothesis UNCHANGE3: Mem.unchanged_on (fun b ofs => loc_out_of_reach (compose_meminj j1 j2) m1 b ofs /\ ~ sup_In b gs3) m3 m3'.
   Hypothesis INJ12 Hm1: Mem.inject j1 m1 m2.
   Hypothesis INJ23 Hm2: Mem.inject j2 m2 m3.
-  Hypothesis MSTBL12: injp_match_stbls' (injpw j1 gs1 gs2 m1 m2 Hm1) se1 se2.
+  Hypothesis MSTBL12: injp_match_stbls (injpw j1 gs1 gs2 m1 m2 Hm1) se1 se2.
   Hypothesis MSTBL23 : injp_match_stbls (injpw j2 gs2 gs3 m2 m3 Hm2) se2 se3.
   Hypothesis INJ13': Mem.inject (compose_meminj j1' j2') m1' m3'.
   Hypothesis SUPINCL2 : Mem.sup_include (Mem.support m2) s2'.
@@ -197,30 +197,126 @@ Qed.
     eapply unchanged_on_copy'1; eauto.
   Qed.
 
-  Lemma unchanged2_step3: Mem.unchanged_on (loc_unmapped j2) m2'1 m2'2.
+    Lemma unchanged2_step3: Mem.unchanged_on (loc_unmapped j2) m2'1 m2'2.
   Proof.
     unfold m2'2.
     eapply unchanged_on_copy'2; eauto.
   Qed.
 
-   Definition footprint_step4 (b2 : block) (ofs2 : Z) : Prop :=
-     sup_In b2 gs2 /\ loc_out_of_reach j1 m1 b2 ofs2.
 
-   Lemma unchanged_step4: Mem.unchanged_on (fun b ofs => ~ footprint_step4 b ofs) m2'2 m2'.
-   Proof.
-     eapply Mem.unchanged_on_implies.
-     eapply unchanged_on_and.
-     eapply unchanged_on_empty. reflexivity.
-     eapply unchanged_on_empty_inreach. 2: reflexivity. eauto.
-     intros. cbn.  unfold footprint_step4 in H.
-     destruct (Mem.sup_dec b gs2). right.
-     intro. apply H. split; eauto. left. eauto.
-   Qed.
-
-  Lemma freed_step4:  forall b2 o2 k p,
-      j2 b2 <> None -> footprint_step4 b2 o2 -> ~ Mem.perm m2' b2 o2 k p.
+  (*properties of step4 *)
+  Lemma unchanged_on_empty_block : forall b m m',
+      Mem.set_empty_global m1 j1 j2 b m = m' ->
+      Mem.unchanged_on (fun b1 _ => ~ b = b1) m m'.
   Proof.
-     intros. destruct H0. eapply freed_sup; eauto. reflexivity.
+    intros. unfold Mem.set_empty_global in H.
+    destruct (j2 b) as [[b3 d]|] eqn:Hj2; try (subst; eauto with mem).
+    destruct Mem.sup_dec; eauto with mem.
+    constructor; cbn; eauto.
+    intros. unfold Mem.perm. simpl.
+    rewrite pmap_update_diff'. reflexivity. eauto.
+  Qed.
+  
+  Lemma unchanged_on_empty : forall s m m',
+      Mem.set_empty_sup m1 j1 j2 s m = m' ->
+      Mem.unchanged_on (fun b ofs => ~ sup_In b s) m m'.
+  Proof.
+    induction s; intros; subst; simpl.
+    - eauto with mem.
+    - eapply Mem.unchanged_on_trans.
+      eapply Mem.unchanged_on_implies. eapply IHs. reflexivity.
+      intros. red. intro. apply H. right. eauto.
+      eapply Mem.unchanged_on_implies. eapply unchanged_on_empty_block; eauto.
+      intros. red. intro. apply H. eauto.
+  Qed.
+
+  Definition footprint_step4 (b2 : block) (ofs2 : Z) : Prop :=
+    sup_In b2 gs2 /\ loc_out_of_reach j1 m1 b2 ofs2.
+
+  (*Lemma unchanged_on_footprint_block : forall b m m',
+      Mem.set_empty_global m1 j1 j2 b m = m' ->
+      Mem.unchanged_on (fun b ofs => ~ footprint_step4 b ofs) m m'.
+  Proof.
+    intros.
+    unfold Mem.set_empty_global in H.
+    destruct (j2 b) as [[b3 d]|] eqn:Hj2; try (subst; eauto with mem).
+    destruct Mem.sup_dec; eauto with mem.
+    constructor; cbn; eauto.
+    intros. unfold Mem.perm. simpl.
+    destruct (eq_block b b0). subst.
+    - 
+    - rewrite pmap_update_diff'. reflexivity. eauto.
+   *)
+  Lemma unchanged_on_and:
+    forall P Q m m',
+      Mem.unchanged_on P m m' ->
+      Mem.unchanged_on Q m m' ->
+      Mem.unchanged_on (fun b ofs => P b ofs \/ Q b ofs) m m'.
+  Proof.
+    intros.
+    constructor.
+    - inv H. eauto.
+    - intros. destruct H1.
+      inv H. eapply unchanged_on_perm; eauto.
+      inv H0. eapply unchanged_on_perm; eauto.
+    - intros. destruct H1.
+      inv H. eapply unchanged_on_contents; eauto.
+      inv H0. eapply unchanged_on_contents; eauto.
+  Qed.
+
+
+  Lemma unchanged_on_empty_inreach_block: forall b m m',
+      Mem.set_empty_global m1 j1 j2 b m = m' ->
+      Mem.unchanged_on (fun b ofs => ~ loc_out_of_reach j1 m1 b ofs) m m'.
+  Proof.
+    intros. unfold Mem.set_empty_global in H.
+    destruct (j2 b) as [[b3 d]|] eqn:Hj2; try (subst; eauto with mem).
+    destruct Mem.sup_dec; eauto with mem.
+    constructor; cbn; eauto.
+    intros. unfold Mem.perm. simpl.
+    destruct (eq_block b b0).
+    - 
+    subst. unfold Mem.pmap_update. rewrite NMap.gss.
+    rewrite Mem.global_access_result. destruct Mem.loc_in_reach_find eqn:Hf.
+    reflexivity.
+    eapply Mem.loc_in_reach_find_none in Hf. exfalso. apply H.
+    eapply Hf; eauto. eapply INJ12.
+    - rewrite pmap_update_diff'. reflexivity. eauto.
+  Qed.
+
+  Lemma unchanged_on_empty_inreach: forall s m m',
+      Mem.set_empty_sup m1 j1 j2 s m = m' ->
+      Mem.unchanged_on (fun b ofs => ~ loc_out_of_reach j1 m1 b ofs) m m'.
+  Proof.
+    induction s; intros; subst; simpl.
+    - eauto with mem.
+    - eapply Mem.unchanged_on_trans. eapply IHs. reflexivity.
+      eapply unchanged_on_empty_inreach_block; eauto.
+  Qed.
+
+  Lemma unchanged_step4: Mem.unchanged_on (fun b ofs => ~ footprint_step4 b ofs) m2'2 m2'.
+  Proof.
+    eapply Mem.unchanged_on_implies.
+    eapply unchanged_on_and.
+    eapply unchanged_on_empty. reflexivity.
+    eapply unchanged_on_empty_inreach. reflexivity.
+    intros. cbn.  unfold footprint_step4 in H.
+    destruct (Mem.sup_dec b gs2). right.
+    intro. apply H. split; eauto. left. eauto.
+  Qed.
+
+
+  Lemma unchanged_content_empty: forall s m m' b2 o2,
+      Mem.set_empty_sup m1 j1 j2 s m = m' ->
+      mem_memval m' b2 o2 = mem_memval m b2 o2.
+  Proof.
+    induction s; intros; subst; simpl.
+    - eauto with mem.
+    - etransitivity.
+      2: {eapply IHs. reflexivity. }
+      unfold Mem.set_empty_global.
+      destruct (j2 a); eauto.
+      destruct (Mem.sup_dec); eauto.
   Qed.
 
   Lemma unchanged_content_step4 : forall b2 o2,
@@ -229,10 +325,76 @@ Qed.
     intros. eapply unchanged_content_empty; eauto. reflexivity.
   Qed.
 
+  Lemma perm_decrease_empty_block : forall b m m' b2 o2 k p,
+      Mem.set_empty_global m1 j1 j2 b m = m' ->
+      Mem.perm m' b2 o2 k p -> Mem.perm m b2 o2 k p.
+  Proof.
+    intros.
+    unfold Mem.set_empty_global in H.
+    destruct (j2 b); try subst; eauto.
+    destruct (Mem.sup_dec); try subst; eauto.
+    unfold Mem.perm in H0. simpl in H0.
+    unfold Mem.perm.
+    destruct (eq_block b2 b). subst.
+    unfold Mem.pmap_update in H0. rewrite NMap.gss in H0.
+    rewrite Mem.global_access_result in H0. destruct Mem.loc_in_reach_find.
+    eauto. inv H0. rewrite pmap_update_diff' in H0. eauto. congruence.
+  Qed.
+  
+  Lemma perm_decrease_empty: forall s m m' b2 o2 k p,
+      Mem.set_empty_sup m1 j1 j2 s m = m' ->
+      Mem.perm m' b2 o2 k p -> Mem.perm m b2 o2 k p.
+  Proof.
+    induction s; intros; subst; simpl.
+    - eauto with mem.
+    - simpl in H0. 
+      assert (Mem.perm (Mem.set_empty_sup m1 j1 j2 s m) b2 o2 k p).
+      eapply perm_decrease_empty_block; eauto. eauto.
+  Qed.
+  
   Lemma perm_decrease_step4: forall b2 o2 k p,
       Mem.perm m2' b2 o2 k p -> Mem.perm m2'2 b2 o2 k p.
   Proof.
     intros. eapply perm_decrease_empty; eauto.
+  Qed.
+
+  Lemma freed_sup : forall s m m' b2 o2 k p,
+      Mem.set_empty_sup m1 j1 j2 s m = m' ->
+      sup_In b2 s ->
+      loc_out_of_reach j1 m1 b2 o2 ->
+      j2 b2 <> None ->
+      ~ Mem.perm m' b2 o2 k p.
+  Proof.
+    induction s; intros.
+    - inv H0.
+    - simpl in H0. destruct H0.
+      + subst. simpl. unfold Mem.set_empty_global.
+        destruct (j2 b2); try congruence.
+        destruct (Mem.sup_dec).
+        unfold Mem.perm.
+        simpl. unfold Mem.pmap_update. rewrite NMap.gss.
+        rewrite Mem.global_access_result.
+        destruct Mem.loc_in_reach_find eqn:Hf.
+        destruct p1.
+        eapply Mem.loc_in_reach_find_valid in Hf.
+        destruct Hf as [A B].
+        exfalso. eapply H1; eauto.
+        replace (o2 - (o2 - z)) with z by lia. eauto.
+        intro A. inv A.
+        intro. apply Mem.perm_valid_block in H.
+        apply n. eauto.
+      + simpl in H.
+        set (m'0 := (Mem.set_empty_sup m1 j1 j2 s m)).
+        assert (~ Mem.perm m'0 b2 o2 k p).
+        eapply IHs; eauto. reflexivity.
+        intro. apply H3.
+        eapply perm_decrease_empty_block; eauto.
+  Qed.
+  
+  Lemma freed_step4:  forall b2 o2 k p,
+      j2 b2 <> None -> footprint_step4 b2 o2 -> ~ Mem.perm m2' b2 o2 k p.
+  Proof.
+    intros. destruct H0. eapply freed_sup; eauto. reflexivity.
   Qed.
 
   Lemma unchanged_step4_gs: Mem.unchanged_on (fun b _ => ~ sup_In b gs2) m2'2 m2'.
@@ -390,7 +552,8 @@ Qed.
     symmetry.
     eapply Mem.unchanged_on_perm.
     apply unchanged_step4.
-    red. intros [A B]. eapply B; eauto.
+    red. intro. destruct H2 as [A B].
+    eapply B; eauto.
     replace (o2 - (o2 - o1)) with o1 by lia. eauto.
     unfold Mem.valid_block. rewrite m2'2_support.
     apply SUPINCL2.
@@ -943,7 +1106,7 @@ Qed.
     reflexivity. eauto. eauto.
     unfold Mem.supext. destruct Mem.sup_include_dec. eauto. congruence. eauto. eauto.
     intro. unfold m2'1 in H2. apply H3. eauto.
-    red. intro. inv MSTBL12. apply NOTIN2. apply H12. rewrite H5. eauto.
+    red. intro. inv MSTBL12. subst. apply NOTIN2. apply H12. subst gs4 gs6. rewrite H5. eauto.
     unfold Mem.valid_block. rewrite m2'2_support. eauto.
   Qed.
 
@@ -1107,8 +1270,8 @@ Qed.
              eapply Mem.perm_inject; eauto.
              inversion UNCHANGE1. eapply unchanged_on_perm0; eauto.
              split. red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
-             intro. apply B. inv MSTBL12.
-             erewrite <- Genv.mge_separated'; eauto.
+             intro. apply B. inv MSTBL12. unfold gs6.
+             erewrite <- Genv.mge_separated; eauto.
              unfold Mem.valid_block. eauto.
         * exploit ADDZERO; eauto. intro. subst.
           replace (ofs + 0) with ofs by lia.
@@ -1149,8 +1312,8 @@ Qed.
              inversion UNCHANGE1. eapply unchanged_on_perm; eauto. split.
              red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
              assert (~ sup_In b2 gs2). apply m2_notglobal. eauto.
-             intro. apply H1. inv MSTBL12.
-             erewrite <- Genv.mge_separated'; eauto.
+             intro. apply H1. inv MSTBL12. unfold gs6.
+             erewrite <- Genv.mge_separated; eauto.
              unfold Mem.valid_block. eauto.
              assert (PERM2 : Mem.perm m2 b2 (ofs + delta) Cur Readable).
              eapply Mem.perm_inject; eauto.
@@ -1163,8 +1326,8 @@ Qed.
              split.
              red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
               assert (~ sup_In b2 gs2). apply m2_notglobal. eauto.
-             intro. apply H1. inv MSTBL12.
-             erewrite <- Genv.mge_separated'; eauto.
+             intro. apply H1. inv MSTBL12. unfold gs6.
+             erewrite <- Genv.mge_separated; eauto.
              split. eauto.
              apply m2_notglobal. eauto.
         * eapply step2_content_inject; eauto. replace (ofs + delta - ofs) with delta by lia.
@@ -1208,15 +1371,15 @@ Qed.
              split.
              red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
               assert (~ sup_In b2 gs2). apply m2_notglobal. eauto.
-             intro. apply H1. inv MSTBL12.
-             erewrite <- Genv.mge_separated'; eauto.
+             intro. apply H1. inv MSTBL12. unfold gs6.
+             erewrite <- Genv.mge_separated; eauto.
              unfold Mem.valid_block. eauto.
              right. intro. apply B.
              inversion UNCHANGE1. eapply unchanged_on_perm0; eauto. split.
              red. unfold compose_meminj. rewrite e, j2b2. reflexivity.
              assert (~ sup_In b2 gs2). apply m2_notglobal. eauto.
-             intro. apply H2. inv MSTBL12.
-             erewrite <- Genv.mge_separated'; eauto.
+             intro. apply H2. inv MSTBL12. unfold gs6.
+             erewrite <- Genv.mge_separated; eauto.
              unfold Mem.valid_block. eauto. split. eauto.
              apply m2_notglobal. eauto.
              inversion INJ12. eapply mi_mappedblocks; eauto.
@@ -1449,6 +1612,7 @@ Qed.
           destruct (Mem.sup_dec b2 gs2).
           (*freed by step4*)
           right. eapply freed_step4; eauto. congruence. split; eauto.
+          (**)
           destruct (Mem.perm_dec m2' b2 o2 Max Nonempty); auto.
           left. generalize UNCHANGE21. intro UNC2.
           assert (PERM2: Mem.perm m2 b2 o2 Max Nonempty).
@@ -1478,212 +1642,3 @@ Qed.
 Qed.
 
 End CONSTR_PROOF.
-
-Section SYMTBL_CONSTR.
-
-Variable se1 se3 : Genv.symtbl.
-Variable f : meminj.
-
-Hypothesis MSE: Genv.match_stbls' f se1 se3.
-  
-Fixpoint remove_sup (se : Genv.symtbl) (s : sup) :=
-  match s with
-  | nil => se
-  | hd :: tl => remove_sup (Genv.remove_global se hd) tl
-  end.
-
-Definition unmap_se1 := filter (fun b => if f b then false else true) (Genv.genv_sup se1).
-
-Definition se2 := remove_sup se1 unmap_se1.
-
-Lemma se2_public : Genv.public_symbol se1 = Genv.public_symbol se2.
-Admitted.
-
-Lemma se2_sup : forall b, sup_In b (Genv.genv_sup se2) <-> sup_In b (Genv.genv_sup se1) /\ f b <> None.
-Admitted.
-
-Lemma se2_symb : forall b1 b2 d, f b1 = Some (b2, d) ->
-                            forall id, Genv.find_symbol se1 id = Some b1 <-> Genv.find_symbol se2 id = Some b1.
-Admitted.
-
-Lemma se2_info : forall b1 b2 d, f b1 = Some (b2, d) ->
-                            Genv.find_info se1 b1 = Genv.find_info se2 b1.
-Admitted.
-
-Theorem SUP : Mem.sup_include (Genv.genv_sup se2) (Genv.genv_sup se1).
-Proof.
-  red. intros. apply se2_sup in H. apply H.
-Qed.
-
-Theorem Hse1 : Genv.match_stbls' (meminj_dom f) se1 se2.
-Proof.
-  constructor.
-  - intros. rewrite se2_public. reflexivity.
-  - intros. unfold meminj_dom in H0. destruct (f b1); simpl in H0; try congruence.
-  - intros. apply se2_sup in H. destruct H. exists b2. unfold meminj_dom.
-    destruct (f b2) eqn:H1. reflexivity. congruence.
-  - intros. unfold meminj_dom in H.  destruct (f b1) as [[b2' d]|] eqn:Hinj; inv H.
-    eapply se2_symb; eauto.
-  - intros. unfold meminj_dom in H.  destruct (f b1) as [[b2' d]|] eqn:Hinj; inv H.
-    eapply se2_info; eauto.
-  - intros. unfold meminj_dom in H.  destruct (f b1) as [[b2' d]|] eqn:Hinj; inv H.
-    split; intros. eapply se2_sup; eauto. split; eauto. congruence.
-    apply se2_sup in H. apply H.
-Qed. (* ok *)
-
-Theorem Hse2 : Genv.match_stbls f se2 se3.
-Proof.
-  constructor.
-  - intros. inversion MSE. etransitivity. eauto. rewrite se2_public. reflexivity.
-  - intros. apply se2_sup in H. destruct H. destruct (f b1) as [[b2 d]|] eqn:Hinj; try congruence.
-    inv MSE. exploit mge_dom'; eauto. intro. subst. eauto.
-  - intros. inv MSE. eapply mge_img'; eauto.
-  - intros. inversion MSE. setoid_rewrite <- se2_symb; eauto.
-    eapply mge_symb'; eauto.
-  - intros. inversion MSE. setoid_rewrite <- se2_info; eauto.
-    eapply mge_info'; eauto.
-  - intros. inversion MSE. split; intros. eapply mge_separated'; eauto.
-    eapply se2_sup; eauto. eapply se2_sup. split; eauto.
-    eapply mge_separated'; eauto. congruence.
-Qed.
-
-End SYMTBL_CONSTR.
-
-Require Import VerComp.
-
-Theorem injp'_injp_ref1:
-  ccref'  (cc_c' injp') (cc_compose_2 (cc_c' injp') (cc_c injp)).
-Proof.
-  red. intros w se1 se3 q1 q2 Hse Hq.
-  inv Hse. inv Hq. cbn in H2, H3. inv H4. rename m0 into m1. rename m3 into m2.
-  set (se2 := se2 se1 f).
-  exists (se2, (injpw (meminj_dom f) (Genv.genv_sup se1) (Genv.genv_sup se2) m1 m1 (mem_inject_dom f m1 m2 Hm)),
-      (injpw f (Genv.genv_sup se2) (Genv.genv_sup se3) m1 m2 Hm)).
-  repeat apply conj.
-  - split; constructor; eauto.
-    eapply Hse1; eauto.
-    eapply Mem.sup_include_trans. eapply SUP; eauto. eauto.
-    eapply Hse2; eauto.
-    eapply Mem.sup_include_trans. eapply SUP; eauto. eauto.
-  - exists (cq vf1 sg vargs1 m1). split.
-    econstructor; cbn; eauto.
-    eapply Inject.val_inject_dom; eauto.
-    eapply Inject.val_inject_list_dom; eauto.
-    (*TODO: a lemma about valid_global here*)
-    constructor; cbn; eauto.
-    red. red in H13. intros.
-    exploit H13; eauto.
-    intro HH. red in HH. red.
-    destruct (mem_memval m1 b ofs); eauto.
-    destruct v; eauto.
-    unfold meminj_dom. unfold valid_b in *.
-    destruct (f b0); eauto.
-    constructor; eauto. constructor; eauto.
-  - intros r1 r3 [r2 [Hr1 Hr2]].
-    destruct Hr1 as [w12' [Hw12 Hr1]]. destruct Hr2 as [w23' [Hw23 Hr2]].
-    destruct w12' as [f12' ? ? m1' m2' Hm12']. destruct w23' as [f23' ? ? m2'' m3' Hm23'].
-    inv Hw12. inv Hw23. cbn in *.
-    inv Hr1. inv Hr2. cbn in *. inv H6. inv H11.
-    rename m1'0 into m1'. rename m2'0 into m2'. rename m2'3 into m3'.
-    eexists (injpw (compose_meminj f12' f23') (Genv.genv_sup se1) (Genv.genv_sup se3) m1' m3'
-               (Mem.inject_compose f12' f23' _ _ _ Hm12' Hm23')
-            ).
-    repeat apply conj.
-    + constructor; eauto.
-      * eapply Mem.unchanged_on_implies; eauto.
-        intros. destruct H6. split. red. unfold meminj_dom. rewrite H6. reflexivity. eauto.
-      * red. intros. unfold compose_meminj.
-        erewrite H22. erewrite H30; eauto.
-        2: unfold meminj_dom; rewrite H6; reflexivity.
-        rewrite Z.add_0_l. reflexivity.
-      * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
-        destruct (f12' b1) as [[bi delta12] | ] eqn:Hb1; try discriminate.
-        destruct (f23' bi) as [[xb2 delta23] | ] eqn:Hb2; try discriminate.
-        inv Hb'.
-        edestruct H23; eauto. unfold meminj_dom. rewrite Hb. auto.
-        destruct (f bi) as [[? ?] | ] eqn:Hfbi.
-        {
-          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
-        }
-        edestruct H31; eauto.
-    + constructor; cbn; eauto with mem.
-      eapply Values.val_inject_compose; eauto.
-      constructor; eauto.
-      (*TODO: A lemma here*)
-      admit.
-Admitted.
-
-Theorem injp'_injp_ref2:
-  ccref' (cc_compose_2 (cc_c' injp') (cc_c injp)) (cc_c' injp') .
-Proof.
-  red.
-  intros w se1 se3 q1 q3 MSTBL13 MMEM13.
-  destruct w as [[se2 w12] w23].
-  destruct MSTBL13 as [MSTBL12 MSTBL23].
-  destruct MMEM13 as [q2 [MMEM12 MMEM23]].
-  inv MMEM12. inv H1. rename f into j12. rename Hm0 into INJ12. clear Hm1.
-  inv MMEM23. inv H10. rename f into j23. rename Hm1 into INJ23. clear Hm2.
-  cbn in H9, H7, MSTBL23, MSTBL12, H, H0.
-  assert (gs0 = gs2).
-  inv MSTBL12. inv MSTBL23. eauto. subst gs0.                
-  exists ((injpw (compose_meminj j12 j23) gs1 gs3
-          m1 m3 (Mem.inject_compose _ _ _ _ _ INJ12 INJ23))).
-  simpl. repeat apply conj.
-  - inv MSTBL12. inv MSTBL23.
-    econstructor; simpl; auto.
-    eapply Genv.match_stbls'_stbls_compose; eauto.
-  - constructor; cbn; eauto.
-    eapply val_inject_compose; eauto.
-     eapply CKLRAlgebra.val_inject_list_compose.
-     econstructor; eauto.
-     constructor; eauto.
-     admit.
-  - intros r1 r3 [w13' [INCR13' Hr13]].
-    inv Hr13. inv H3. cbn in H1. rename f into j13'. rename Hm3 into INJ13'.
-    cbn in INCR13'. rename m2'0 into m3'.
-    inversion INCR13' as [? ? ? ? ? ? ? ? ? ?  RO1 RO3 MAXPERM1 MAXPERM3 UNCHANGE1 UNCHANGE3 INCR13 DISJ13]. subst.
-    generalize (inject_implies_image_in _ _ _ INJ12).
-    intros IMGIN12.
-    generalize (inject_implies_image_in _ _ _ INJ23).
-    intros IMGIN23.
-    generalize (inject_implies_dom_in _ _ _ INJ12).
-    intros DOMIN12.
-    generalize (inject_implies_dom_in _ _ _ INJ23).
-    intros DOMIN23.
-    generalize (inject_implies_dom_in _ _ _ INJ13').
-    intros DOMIN13'.
-    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE1).
-    intros SUPINCL1.
-    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE3).
-    intros SUPINCL3.
-    generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
-    intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
-    subst. cbn in *.
-    set (m2' := m2' m1 m2 m1' j12 j23 j12' j23' gs2 m2'_sup INJ12 SUPINCL2).
-    assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
-    assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
-    rename gs0 into gs1. rename gs4 into gs3.
-    set (w1' := injpw j12' gs1 gs2 m1' m2' INJ12').
-    set (w2' := injpw j23' gs2 gs3 m2' m3' INJ23').
-    rename vres2 into vres3.
-    exploit compose_meminj_midvalue; eauto.
-    intros [vres2 [RES1 RES2]].
-    assert (UNC21:Mem.unchanged_on (fun b z => loc_out_of_reach j12 m1 b z /\ ~ sup_In b gs2) m2 m2').
-    eapply UNCHANGE21; eauto.
-    exists (cr vres2 m2'). split.
-    + exists w1'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
-      eapply MAXPERM2; eauto.
-      eapply Mem.unchanged_on_implies; eauto.
-      intros. destruct H3. split; eauto. red. unfold compose_meminj.
-      rewrite H3. reflexivity.
-      constructor; eauto. constructor; eauto.
-    +
-      exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
-      eapply MAXPERM2; eauto.
-      eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
-      econstructor; eauto. constructor; eauto.
-Qed.
-
-Theorem injp'_injp_c_equiv:
-  cceqv' (cc_c' injp') (cc_compose_2 (cc_c' injp') (cc_c injp)).
-Proof. split. apply injp'_injp_ref1. apply injp'_injp_ref2. Qed.
