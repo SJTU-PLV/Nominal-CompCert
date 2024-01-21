@@ -1169,15 +1169,6 @@ Lemma val_inject_list_dom se f vs1 vs2:
 Proof.
   induction 1; constructor; eauto using val_inject_dom.
 Qed.
-(*
-Lemma global_blocks_pointer:
-  forall se m b ofs q n b' ofs',
-    Maps.ZMap.get ofs (NMap.get b (Mem.mem_contents m)) = (Fragment (Vptr b' ofs') q n) ->
-    sup_In b (Genv.genv_sup se) ->
-    sup_In b' (Genv.genv_sup se).
-Proof.
-Admitted.
- *)
 
 Lemma memval_valid_inject : forall mv f gs,
     valid_memval f mv gs ->
@@ -1528,6 +1519,25 @@ Proof.
       exploit Genv.mge_img; eauto. intros [b1 Hj1].
       exploit Genv.mge_separated; eauto. intro SEP.
       apply SEP in H4 as HSUP1.
+
+      (*
+
+      [] []     []  []         []  []      []  []
+
+      [] [] =>           -->           =>  []  [?]
+
+      []        []             []          []
+
+
+
+      *It's meaningless to discuss such things here when the composition of comp2 is unfinished*
+      if m2'[b2] contains ill pointer Vptr b2' ofs
+      then we need to derive that m1' is not valid
+
+      1) there exists b1, s.t. j12 b1 = Some (b2,0)
+      2) it is possible that (b1,o1) have no permission in m1
+           a) if it has permission, then m2'[b2,o2] is a copied value from m1'.
+       *)
       (*question: the corresponding position in m1' may have no permission? *)
       admit.
 Admitted.

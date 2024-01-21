@@ -1614,7 +1614,43 @@ Proof.
     + constructor; cbn; eauto with mem.
       eapply Values.val_inject_compose; eauto.
       constructor; eauto.
-      
+
+      (*
+      [] []          []  []         []    []       []    []
+
+
+               =>    []       ~>    []         =>  []
+
+
+      []             []             []             []
+
+
+      If m1'[b1,o1] is readable and has a ill-defined value Vptr b1' o1'
+      we know 1) b1' ∉ sup (ge1)
+              2) j23' ∘ j12' (b1') = None
+
+      which means
+            a) j12' b1' = None , which is impossible because m1' is valid via j12'
+         or b) j12' b1' = Some (b2',o2') and j23' b2' = None
+
+      what we know is that m1 is valid via j,
+      also inject_incr (meminj_dom f) j12' and
+
+
+      It seems that it is possible to have a ill-defined value after external calls,
+      but why?
+
+      if a value is well-defined in minj m1' m2', it may be ill-defined in minj m1' m3'
+
+      So it indicates that our now invariant is too strong? not suitable for composition?
+
+      1) release it to a way? but it is quite tight for the upper-level self-simulation using old fsim
+      2) do not require the valid_global property on reply sides: But what's the intuition for this?
+
+      Does this indicates a bug or something? what if the ill-type value shows up in real compoilation and execution?
+
+
+       *)
       (*red.
       intros. red. destruct (mem_memval m1' b ofs) eqn:Hmv1; eauto.
       destruct v; eauto. rename b0 into b1'. rename b into b1.
