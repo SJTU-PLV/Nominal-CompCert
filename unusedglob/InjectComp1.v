@@ -1496,7 +1496,21 @@ Definition unmap_se1 := filter (fun b => if f b then false else true) (Genv.genv
 
 Definition se2 := remove_sup se1 unmap_se1.
 
+
+Lemma remove_sup_public : forall sup se,
+    Genv.public_symbol se = Genv.public_symbol (remove_sup se sup).
+Proof.
+  induction sup; intros; cbn; eauto.
+  unfold Genv.remove_global.
+Abort.
+
+                                               
+                            
+
+
 Lemma se2_public : Genv.public_symbol se1 = Genv.public_symbol se2.
+Proof.
+  unfold se2. unfold remove_sup.
 Admitted.
 
 Lemma se2_sup : forall b, sup_In b (Genv.genv_sup se2) <-> sup_In b (Genv.genv_sup se1) /\ f b <> None.
@@ -1689,9 +1703,16 @@ Proof.
      eapply CKLRAlgebra.val_inject_list_compose.
      econstructor; eauto.
      constructor; eauto.
-     admit.
+     red. red in H3.
+     intros. exploit H3; eauto.
+     destruct (mem_memval m1 b ofs); eauto.
+     destruct v; eauto. unfold compose_meminj.
+     cbn. unfold valid_b. destruct (j12 b0) as [[b2 d]|] eqn:Hj1; eauto.
+     inv MSTBL12. inv MSTBL23.
+     admit. (*seems wrong here*)
+
   - intros r1 r3 [w13' [INCR13' Hr13]].
-    inv Hr13. inv H3. cbn in H1. rename f into j13'. rename Hm3 into INJ13'.
+    inv Hr13. inv H4. cbn in H1. rename f into j13'. rename Hm3 into INJ13'.
     cbn in INCR13'. rename m2'0 into m3'.
     inversion INCR13' as [? ? ? ? ? ? ? ? ? ?  RO1 RO3 MAXPERM1 MAXPERM3 UNCHANGE1 UNCHANGE3 INCR13 DISJ13]. subst.
     generalize (inject_implies_image_in _ _ _ INJ12).
@@ -1711,7 +1732,7 @@ Proof.
     generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
     intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
     subst. cbn in *.
-    set (m2' := m2' m1 m2 m1' j12 j23 j12' j23' gs2 m2'_sup INJ12 SUPINCL2).
+    set (m2' := m2' m1 m2 m1' j12 j23 j12' gs2 m2'_sup INJ12).
     assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
     assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
     rename gs0 into gs1. rename gs4 into gs3.
@@ -1726,15 +1747,16 @@ Proof.
     + exists w1'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
       eapply MAXPERM2; eauto.
       eapply Mem.unchanged_on_implies; eauto.
-      intros. destruct H3. split; eauto. red. unfold compose_meminj.
-      rewrite H3. reflexivity.
+      intros. destruct H4. split; eauto. red. unfold compose_meminj.
+      rewrite H4. reflexivity.
       constructor; eauto. constructor; eauto.
+      admit.
     +
       exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
       eapply MAXPERM2; eauto.
       eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
       econstructor; eauto. constructor; eauto.
-Qed.
+Admitted.
 
 Theorem injp'_injp_c_equiv:
   cceqv' (cc_c' injp') (cc_compose_2 (cc_c' injp') (cc_c injp)).
