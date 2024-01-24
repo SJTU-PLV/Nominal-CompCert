@@ -1,4 +1,4 @@
-open Format
+(* open Printf *)
 open Camlcoq
 (* open Values *)
 open AST
@@ -19,11 +19,7 @@ let rec name_rust_decl id ty =
   | Rusttypes.Tlong(sg, a) ->
       name_longtype sg ^ attributes a ^ name_optid id
   | Tbox(t, a) ->
-      let id' =
-        match t with
-        | Tfunction _ -> sprintf "(Box<%s%s>)" (attributes_space a) id
-        | _                      -> sprintf "Box<%s%s>" (attributes_space a) id in
-      name_rust_decl id' t
+      "Box<" ^ (name_rust_decl ""  t) ^ ">"
   | Tfunction(args, res, cconv) ->
       let b = Buffer.create 20 in
       if id = ""
@@ -54,3 +50,23 @@ let rec name_rust_decl id ty =
 (* Type *)
 
 let name_rust_type ty = name_rust_decl "" ty
+
+let name_function_parameters name_param fun_name params cconv =
+    let b = Buffer.create 20 in
+    Buffer.add_string b fun_name;
+    Buffer.add_char b '(';
+    begin match params with
+    | [] ->
+        Buffer.add_string b (if cconv.cc_vararg <> None then "..." else "")
+    | _ ->
+        let rec add_params first = function
+        | [] ->
+            if cconv.cc_vararg <> None then Buffer.add_string b ",..."
+        | (id, ty) :: rem ->
+            if not first then Buffer.add_string b ", ";
+            Buffer.add_string b ((name_param id)^(name_rust_decl "" ty));
+            add_params false rem in
+        add_params true params
+    end;
+    Buffer.add_char b ')';
+    Buffer.contents b

@@ -1,4 +1,4 @@
-open Format
+open Printf
 open Camlcoq
 (* open PrintAST *)
 (* open Rusttypes *)
@@ -160,4 +160,11 @@ let rec print_stmt p (s: RustlightBase.statement) =
             (name_rust_type ty)
             print_stmt s
 
-let print_stmt_direct stmt = print_stmt (formatter_of_out_channel stdout) stmt
+let print_stmt_direct stmt = print_stmt stdout stmt
+
+let print_function p id f =
+  fprintf p "%s@ "
+            (name_rust_decl (PrintRustsyntax.name_function_parameters extern_atom (extern_atom id) f.fn_params f.fn_callconv) f.fn_return);
+  fprintf p "@[<v 2>{@ ";
+  print_stmt p f.fn_body;
+  fprintf p "@;<0 -2>}@]@ @ "
