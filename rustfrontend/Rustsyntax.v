@@ -75,9 +75,19 @@ Definition fundef := Rusttypes.fundef function.
 
 Definition program := Rusttypes.program function.
 
+(* Type of function *)
+
+Definition type_of_function (f: function) : type :=
+  Tfunction (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
+
+Definition type_of_fundef (f: fundef) : type :=
+  match f with
+  | Internal fd => type_of_function fd
+  | External _ ef typs typ cc =>     
+      Tfunction typs typ cc                
+  end.
 
 (** Notations for Rustsyntax programs *)
-
 
 Definition A : ident := 1%positive.
 Definition B : ident := 2%positive.

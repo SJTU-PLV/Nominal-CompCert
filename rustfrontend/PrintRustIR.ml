@@ -1,8 +1,8 @@
 open Printf
 open Camlcoq
 (* open PrintAST *)
-(* open Rusttypes *)
-open Ctypes
+open Rusttypes
+(* open Ctypes *)
 open Cop
 open RustIR
 (* open PrintCsyntax *)
@@ -119,3 +119,51 @@ let print_cfg pp id f =
   | Errors.Error msg ->
     Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG"
  
+(* Print program *)
+
+
+let print_fundef p id fd =
+  match fd with
+  | Rusttypes.External(_, _, _, _) ->
+      ()
+  | Internal f ->
+      print_function p id f
+
+let print_fundecl p id fd =
+  match fd with
+  | External((AST.EF_external _ | AST.EF_runtime _ | AST.EF_malloc | AST.EF_free), args, res, cconv) ->
+      fprintf p "extern %s;@ "
+                (name_rust_decl (extern_atom id) (Tfunction(args, res, cconv)))
+  | External(_, _, _, _) ->
+      ()
+  | Internal f ->
+      fprintf p "%s;@ "
+                (name_rust_decl (extern_atom id) (RustlightBase.type_of_function f))
+
+let print_globdef p (id, gd) =
+  match gd with
+  | AST.Gfun f -> print_fundef p id f
+  | AST.Gvar v -> PrintRustsyntax.print_globvar p id v  (* from PrintRustsyntax.ml *)
+
+let print_globdecl p (id, gd) =
+  match gd with
+  | AST.Gfun f -> print_fundecl p id f
+  | AST.Gvar v -> ()
+
+let print_program p prog =
+  fprintf p "@[<v 0>";
+  List.iter (PrintRustsyntax.declare_composite p) prog.prog_types;
+  List.iter (PrintRustsyntax.define_composite p) prog.prog_types;
+  List.iter (print_globdecl p) prog.prog_defs;
+  List.iter (print_globdef p) prog.prog_defs;
+  fprintf p "@]@."
+
+let destination : string option ref = ref None
+
+let print_if prog =
+  match !destination with
+  | None -> ()
+  | Some f ->
+      let oc = open_out f in
+      print_program oc prog;
+      close_out oc

@@ -1,4 +1,4 @@
-(* open Printf *)
+open Printf
 open Camlcoq
 (* open Values *)
 open AST
@@ -51,6 +51,8 @@ let rec name_rust_decl id ty =
 
 let name_rust_type ty = name_rust_decl "" ty
 
+(* TODO: print expressions and statements *)
+
 let name_function_parameters name_param fun_name params cconv =
     let b = Buffer.create 20 in
     Buffer.add_string b fun_name;
@@ -70,3 +72,68 @@ let name_function_parameters name_param fun_name params cconv =
     end;
     Buffer.add_char b ')';
     Buffer.contents b
+
+let print_fundecl p id fd =
+  match fd with
+  | Ctypes.Internal f ->
+      let linkage = if C2C.atom_is_static id then "static" else "extern" in
+      fprintf p "%s %s;@ @ " linkage
+                (name_rust_decl (extern_atom id) (Rustsyntax.type_of_function f))
+  | _ -> ()
+
+let print_globvar p id v =
+  let name1 = extern_atom id in
+  let name2 = if v.gvar_readonly then "const " ^ name1 else name1 in
+  match v.gvar_init with
+  | [] ->
+      fprintf p "extern %s;@ @ "
+              (name_rust_decl name2 v.gvar_info)
+  | [Init_space _] ->
+      fprintf p "%s;@ @ "
+              (name_rust_decl name2 v.gvar_info)
+  | _ ->
+      fprintf p "@[<hov 2>%s = "
+              (name_rust_decl name2 v.gvar_info);
+      begin match v.gvar_info, v.gvar_init with
+      | (Rusttypes.Tint _ | Rusttypes.Tlong _ | Rusttypes.Tfloat _ | Tfunction _),
+        [i1] ->
+          print_init (Format.formatter_of_out_channel p) i1
+      | _, il ->
+          if Str.string_match re_string_literal (extern_atom id) 0
+          && List.for_all (function Init_int8 _ -> true | _ -> false) il
+          then fprintf p "\"%s\"" (string_of_init (chop_last_nul il))
+          else print_composite_init (Format.formatter_of_out_channel p) il
+      end;
+      fprintf p ";@]@ @ "
+
+let print_globvardecl p id v =
+  let name = extern_atom id in
+  let name = if v.gvar_readonly then "const "^name else name in
+  let linkage = if C2C.atom_is_static id then "static" else "extern" in
+  fprintf p "%s %s;@ @ " linkage (name_rust_decl name v.gvar_info)
+
+let print_globdecl p (id,gd) =
+  match gd with
+  | Gfun f -> print_fundecl p id f
+  | Gvar v -> print_globvardecl p id v
+
+(* TODO *)
+(* let print_globdef p (id, gd) =
+  match gd with
+  | Gfun f -> print_fundef p id f
+  | Gvar v -> print_globvar p id v *)
+
+let struct_or_variant = function Struct -> "struct" | TaggedUnion -> "variant"
+
+let declare_composite p (Composite(id, su, m, a)) =
+  fprintf p "%s %s;@ " (struct_or_variant su) (extern_atom id)
+
+let print_member p = function
+  | Member_plain(id, ty) ->
+      fprintf p "@ %s;" (name_rust_decl (extern_atom id) ty)
+
+let define_composite p (Composite(id, su, m, a)) =
+  fprintf p "@[<v 2>%s %s%s {"
+          (struct_or_variant su) (extern_atom id) (attributes a);
+  List.iter (print_member p) m;
+  fprintf p "@;<0 -2>};@]@ @ "
