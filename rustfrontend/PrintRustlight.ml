@@ -59,7 +59,7 @@ let rec pexpr p (prec, e) =
   if prec' < prec
   then fprintf p "@[<hov 2>("
   else fprintf p "@[<hov 2>";
-  match e with
+  begin match e with
   | Eplace(v, _) ->
     fprintf p "%a" print_place v
   | Econst_int(n, Rusttypes.Tint(I32, Unsigned, _)) ->
@@ -85,6 +85,8 @@ let rec pexpr p (prec, e) =
     fprintf p "%s(%a, %s)" "cktag" print_place v (extern_atom fid)
   | Eget(v, fid, _) ->
     fprintf p "%s(%a, %s)" "get" print_place v (extern_atom fid)
+  end;
+  if prec' < prec then fprintf p ")@]" else fprintf p "@]"
 
 let expr p (prec, e) =
   let (prec', assoc) = precedence e in
