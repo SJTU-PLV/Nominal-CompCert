@@ -90,30 +90,32 @@ Definition makeseq (l: list statement) : statement :=
 
 (** ** Definition of selector. It is the program pointer in AST-like program.  *)
 
-Inductive selector : Type :=
-| Selbase: selector
-| Selseqleft: selector -> selector
-| Selseqright: selector -> selector
-| Selifthen: selector -> selector
-| Selifelse: selector -> selector
-| Selloop: selector -> selector.
+Inductive select_kind : Type :=
+| Selseqleft: select_kind
+| Selseqright: select_kind
+| Selifthen: select_kind
+| Selifelse: select_kind
+| Selloop: select_kind.
+
+Definition selector := list select_kind.
 
 Fixpoint select_stmt (stmt: statement) (sel: selector) : option statement :=
-  match stmt, sel with
-  | Ssequence s1 s2, Selseqleft sel' => select_stmt s1 sel'
-  | Ssequence s1 s2, Selseqright sel' => select_stmt s2 sel'
-  | Sifthenelse _ s1 s2, Selifthen sel' => select_stmt s1 sel'
-  | Sifthenelse _ s1 s2, Selifelse sel' => select_stmt s2 sel'
-  | Sloop s, Selloop sel' => select_stmt s sel'
-  | _, Selbase => Some stmt
+  match sel, stmt with
+  | nil, _ => Some stmt
+  | Selseqleft :: sel', Ssequence s1 s2 => select_stmt s1 sel'
+  | Selseqright :: sel', Ssequence s1 s2 => select_stmt s2 sel'
+  | Selifthen :: sel', Sifthenelse _ s1 s2 => select_stmt s1 sel'
+  | Selifelse :: sel', Sifthenelse _ s1 s2 => select_stmt s2 sel'
+  | Selloop :: sel', Sloop s => select_stmt s sel'
   | _, _ => None
   end.
+        
 
 (** ** Control flow graph based on selector *)
 
 Definition node := positive.
 
-(* An instruction is either a selector or a control command (e.g., if-then-else *)
+(* An instruction is either a selector or a control command (e.g., if-then-else) *)
 Inductive instruction : Type :=
   | Inop: node -> instruction
   | Isel: selector -> node -> instruction
@@ -144,21 +146,14 @@ Definition get_stmt (stmt: statement) (cfg: rustcfg) (pc: node) : option stateme
 (* Change in place the statement resided in this selector to an another
 statement. And return the modified statement *)
 Fixpoint update_stmt (root: statement) (sel: selector) (stmt: statement): statement :=
-  match root, sel with
-  | Ssequence s1 s2, Selseqleft sel' =>
-      Ssequence (update_stmt s1 sel' stmt) s2
-  | Ssequence s1 s2, Selseqright sel' =>
-      Ssequence s1 (update_stmt s2 sel' stmt)
-  | Sifthenelse e s1 s2, Selifthen sel' =>
-      Sifthenelse e (update_stmt s1 sel' stmt) s2
-  | Sifthenelse e s1 s2, Selifelse sel' =>
-      Sifthenelse e s1 (update_stmt s2 sel' stmt)
-  | Sloop s, Selloop sel' =>
-      Sloop (update_stmt s sel' stmt)
-  | _, Selbase =>
-      stmt
-  | _, _ =>                      (* e.g., Ssequence, Selifthen *)
-      root
+  match sel, root with
+  | nil, _ => stmt
+  | Selseqleft :: sel', Ssequence s1 s2 => update_stmt s1 sel' stmt
+  | Selseqright :: sel', Ssequence s1 s2 => update_stmt s2 sel' stmt
+  | Selifthen :: sel', Sifthenelse _ s1 s2 => update_stmt s1 sel' stmt
+  | Selifelse :: sel', Sifthenelse _ s1 s2 => update_stmt s2 sel' stmt
+  | Selloop :: sel', Sloop s => update_stmt s sel' stmt
+  | _, _ => root  (* FIXME: may be this is a partial function *)
   end.
 
 (** ** Genenrate CFG from a statement *)
@@ -371,6 +366,8 @@ Section COMPOSITE_ENV.
 
 Variable (ce: composite_env).
 
+Import ListNotations.
+
 Fixpoint transl_stmt (stmt: statement) (sel: selector) (succ: node) (cont: option node) (brk: option node) {struct stmt} : mon node :=
   match stmt with
   | Sskip =>
@@ -380,17 +377,17 @@ Fixpoint transl_stmt (stmt: statement) (sel: selector) (succ: node) (cont: optio
   | Sbox p e =>
       add_instr (Isel sel succ)
   | Ssequence stmt1 stmt2 =>
-      do succ2 <- transl_stmt stmt2 (Selseqright sel) succ cont brk;
-      do succ1 <- transl_stmt stmt1 (Selseqleft sel) succ2 cont brk;
+      do succ2 <- transl_stmt stmt2 (sel ++ [Selseqright]) succ cont brk;
+      do succ1 <- transl_stmt stmt1 (sel ++ [Selseqleft]) succ2 cont brk;
       ret succ1
   | Sifthenelse e stmt1 stmt2 =>
-      do n1 <- transl_stmt stmt1 (Selifthen sel) succ cont brk;
-      do n2 <- transl_stmt stmt2 (Selifelse sel) succ cont brk;
+      do n1 <- transl_stmt stmt1 (sel ++ [Selifthen]) succ cont brk;
+      do n2 <- transl_stmt stmt2 (sel ++ [Selifelse]) succ cont brk;
       do n3 <- add_instr (Icond e n1 n2);
       ret n3
   | Sloop stmt =>
         do loop_start <- reserve_instr;
-        do body_start <- transl_stmt stmt (Selloop sel) succ (Some loop_start) (Some succ);
+        do body_start <- transl_stmt stmt (sel ++ [Selloop]) succ (Some loop_start) (Some succ);
         do _ <- update_instr loop_start (Inop body_start);
         ret loop_start
     | Sbreak =>
@@ -423,7 +420,7 @@ Fixpoint transl_stmt (stmt: statement) (sel: selector) (succ: node) (cont: optio
 Definition generate_cfg' (stmt: statement): mon node :=
   (* return node *)
   do return_node <- add_instr Iend;
-  transl_stmt stmt Selbase return_node None None.
+  transl_stmt stmt nil return_node None None.
 
 Definition generate_cfg (stmt: statement): Errors.res (node * rustcfg) :=  
   match generate_cfg' stmt init_state with

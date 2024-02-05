@@ -74,7 +74,8 @@ let print_instruction pp prog (pc, i) =
   | Isel(sel, s) ->
     (match select_stmt prog sel with
     | Some stmt ->
-      print_stmt pp stmt
+      print_stmt pp stmt;
+      fprintf pp "\n"
     | None ->
       fprintf pp "Error: cannot find statement\n")
   | Icond(e, s1, s2) ->
@@ -104,7 +105,7 @@ let print_function pp id f =
   print_stmt pp f.fn_body;
   fprintf pp "@;<0 -2>}@]@ @ "
 
-let print_cfg_body pp body entry cfg = 
+let print_cfg_body pp (body, entry, cfg) = 
   let instrs =
     List.sort
     (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
@@ -120,7 +121,7 @@ let print_cfg pp id f =
   match generate_cfg f.fn_body with
   | Errors.OK(entry, cfg) ->
     fprintf pp "%s(%a) {\n" (extern_atom id) print_params f.fn_params;
-    print_cfg_body pp f.fn_body entry cfg
+    print_cfg_body pp (f.fn_body, entry, cfg)
   | Errors.Error msg ->
     Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG"
  
