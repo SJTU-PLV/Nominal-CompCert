@@ -402,12 +402,28 @@ let cmdline_actions =
 
 let debug_rust = true
 
+let test_case = Rustsyntax.ex1 
+
+let fun_atom = BinNums.Coq_xH
+
 let _ =
   if debug_rust then
-    let rustlight_stmt = Rustlightgen.transl_stmt Rustlightgen.empty_ce Rustsyntax.ex1 Rustlightgen.init_gen in
+    let rustlight_stmt = Rustlightgen.transl_stmt Rustlightgen.empty_ce test_case Rustlightgen.init_gen in
+    (* Print Rustlight *)
     match rustlight_stmt with
     | Rustlightgen.Res (rustlight_stmt, _) ->
-      PrintRustlight.print_stmt_direct rustlight_stmt
+      fprintf stdout "Rustlight: \n";
+      PrintRustlight.print_stmt_direct rustlight_stmt;
+      fprintf stdout "\nRustIR: \n";
+      let rustir_stmt = RustIRgen.transl_stmt rustlight_stmt [] in
+      PrintRustIR.print_stmt (Format.formatter_of_out_channel stdout) rustir_stmt;
+      (* Print RustIR and CFG *)
+      (match RustIR.generate_cfg rustir_stmt with
+      | Errors.OK(entry, cfg) ->
+        fprintf stdout "\nRustIR CFG: \n";
+        PrintRustIR.print_cfg_body (Format.formatter_of_out_channel stdout) rustir_stmt entry cfg
+      | Errors.Error msg -> fatal_error no_loc "Generation of CFG fails");
+      (* TODO: Print RustIR after the drop elaboration *)
     | Rustlightgen.Err msg -> fatal_error no_loc "Compilation of Rust statement fails"
   else
   try

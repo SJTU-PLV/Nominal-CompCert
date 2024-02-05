@@ -1,9 +1,8 @@
-open Printf
+open Format
 open Camlcoq
 (* open PrintAST *)
 open Rusttypes
 (* open Ctypes *)
-open Cop
 open RustIR
 (* open PrintCsyntax *)
 open PrintRustsyntax
@@ -55,13 +54,13 @@ let rec print_stmt p (s: RustIR.statement) =
   | Sbox(v, e) ->
     fprintf p "@[<hv 2>%a =@ Box::new(%a);@]" print_place v   print_expr e
   | Sstoragelive id ->
-    fprintf p "storagelive %s" (extern_atom id)
+    fprintf p "storagelive %s;" (extern_atom id)
   | Sstoragedead id ->
-    fprintf p "storagedead %s" (extern_atom id)
+    fprintf p "storagedead %s;" (extern_atom id)
   | Sdrop v ->
-    fprintf p "drop(%a of %s)" print_place v (name_rust_type (RustlightBase.typeof_place v))
+    fprintf p "drop(%a of %s);" print_place v (name_rust_type (RustlightBase.typeof_place v))
     
-    
+
 (* Print cfg of RustIR *)
 
 let print_instruction pp prog (pc, i) =
@@ -94,6 +93,10 @@ let print_param pp param =
   | [r] -> print_param pp r
   | r1::rl -> fprintf pp "%a, %a" print_param r1 print_params rl
 
+let print_succ pp s dfl =
+  let s = P.to_int s in
+  if s <> dfl then fprintf pp "\tgoto %d\n" s
+
 let print_function pp id f =
   fprintf pp "%s@ "
             (name_rust_decl (PrintRustsyntax.name_function_parameters extern_atom (extern_atom id) f.fn_params f.fn_callconv) f.fn_return);
@@ -101,21 +104,23 @@ let print_function pp id f =
   print_stmt pp f.fn_body;
   fprintf pp "@;<0 -2>}@]@ @ "
 
+let print_cfg_body pp body entry cfg = 
+  let instrs =
+    List.sort
+    (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
+    (List.rev_map
+      (fun (pc, i) -> (P.to_int pc, i))
+      (PTree.elements cfg)) in
+  print_succ pp entry
+    (match instrs with (pc1, _) :: _ -> pc1 | [] -> -1);
+  List.iter (print_instruction pp body) instrs;
+  fprintf pp "}\n\n"
 
 let print_cfg pp id f =
   match generate_cfg f.fn_body with
   | Errors.OK(entry, cfg) ->
     fprintf pp "%s(%a) {\n" (extern_atom id) print_params f.fn_params;
-    let instrs =
-      List.sort
-      (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
-      (List.rev_map
-        (fun (pc, i) -> (P.to_int pc, i))
-        (PTree.elements cfg)) in
-    PrintRTL.print_succ pp entry
-      (match instrs with (pc1, _) :: _ -> pc1 | [] -> -1);
-    List.iter (print_instruction pp f.fn_body) instrs;
-    fprintf pp "}\n\n"
+    print_cfg_body pp f.fn_body entry cfg
   | Errors.Error msg ->
     Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG"
  
@@ -138,7 +143,7 @@ let print_fundecl p id fd =
       ()
   | Internal f ->
       fprintf p "%s;@ "
-                (name_rust_decl (extern_atom id) (RustlightBase.type_of_function f))
+                (name_rust_decl (extern_atom id) (RustIR.type_of_function f))
 
 let print_globdef p (id, gd) =
   match gd with
@@ -165,5 +170,5 @@ let print_if prog =
   | None -> ()
   | Some f ->
       let oc = open_out f in
-      print_program oc prog;
+      print_program (formatter_of_out_channel oc) prog;
       close_out oc

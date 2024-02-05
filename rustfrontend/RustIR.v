@@ -60,6 +60,21 @@ Definition fundef := Rusttypes.fundef function.
 
 Definition program := Rusttypes.program function.
 
+Fixpoint type_of_params (params: list (ident * type)) : typelist :=
+  match params with
+  | nil => Tnil
+  | (id, ty) :: rem => Tcons ty (type_of_params rem)
+  end.
+
+Definition type_of_function (f: function) : type :=
+  Tfunction (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
+
+Definition type_of_fundef (f: fundef) : type :=
+  match f with
+  | Internal fd => type_of_function fd
+  | External _ ef typs typ cc =>     
+      Tfunction typs typ cc                
+  end.
 
 (* some helper function *)
 

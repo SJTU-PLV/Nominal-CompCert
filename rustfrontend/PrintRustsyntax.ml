@@ -1,4 +1,4 @@
-open Printf
+open Format
 open Camlcoq
 (* open Values *)
 open AST
@@ -97,12 +97,12 @@ let print_globvar p id v =
       begin match v.gvar_info, v.gvar_init with
       | (Rusttypes.Tint _ | Rusttypes.Tlong _ | Rusttypes.Tfloat _ | Tfunction _),
         [i1] ->
-          print_init (Format.formatter_of_out_channel p) i1
+          print_init p i1
       | _, il ->
           if Str.string_match re_string_literal (extern_atom id) 0
           && List.for_all (function Init_int8 _ -> true | _ -> false) il
           then fprintf p "\"%s\"" (string_of_init (chop_last_nul il))
-          else print_composite_init (Format.formatter_of_out_channel p) il
+          else print_composite_init p il
       end;
       fprintf p ";@]@ @ "
 

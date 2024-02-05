@@ -1,4 +1,4 @@
-open Printf
+open Format
 open Camlcoq
 (* open PrintAST *)
 (* open Rusttypes *)
@@ -160,7 +160,7 @@ let rec print_stmt p (s: RustlightBase.statement) =
             (name_rust_type ty)
             print_stmt s
 
-let print_stmt_direct stmt = print_stmt stdout stmt
+let print_stmt_direct stmt = print_stmt (formatter_of_out_channel stdout) stmt
 
 let print_function p id f =
   fprintf p "%s@ "
@@ -212,5 +212,5 @@ let print_if prog =
   | None -> ()
   | Some f ->
       let oc = open_out f in
-      print_program oc prog;
+      print_program (formatter_of_out_channel oc) prog;
       close_out oc

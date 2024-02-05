@@ -179,6 +179,7 @@ Separate Extraction
    Rustlightgen.empty_ce Rustlightgen.init_gen
    Rustsyntax.type_of_function
    RustlightBase.type_of_function
+   RustIR.type_of_function
    (* Cexec.do_initial_state Cexec.do_step Cexec.at_final_state *)
    Ctypes.merge_attributes Ctypes.remove_attributes 
    Ctypes.build_composite_env Ctypes.layout_struct
