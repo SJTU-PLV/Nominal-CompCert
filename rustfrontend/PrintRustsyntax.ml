@@ -66,7 +66,7 @@ let name_function_parameters name_param fun_name params cconv =
             if cconv.cc_vararg <> None then Buffer.add_string b ",..."
         | (id, ty) :: rem ->
             if not first then Buffer.add_string b ", ";
-            Buffer.add_string b ((name_param id)^(name_rust_decl "" ty));
+            Buffer.add_string b ((name_param id)^": "^(name_rust_decl "" ty));
             add_params false rem in
         add_params true params
     end;

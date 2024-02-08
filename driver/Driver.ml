@@ -408,25 +408,25 @@ let fun_atom = BinNums.Coq_xH
 
 let print_to_stdout print input = Format.fprintf (Format.formatter_of_out_channel stdout) "@[<v 0>%a@]" print input
 
+let stdout_format = Format.formatter_of_out_channel stdout
+
 let _ =
   if debug_rust then
-    let rustlight_stmt = Rustlightgen.transl_stmt Rustlightgen.empty_ce test_case Rustlightgen.init_gen in
+    let rustlight_func = Rustlightgen.transl_function Rustlightgen.empty_ce test_case in
     (* Print Rustlight *)
-    match rustlight_stmt with
-    | Rustlightgen.Res (rustlight_stmt, _) ->
-      fprintf stdout "Rustlight: \n";
-      print_to_stdout PrintRustlight.print_stmt rustlight_stmt;
-      fprintf stdout "\nRustIR: \n";
-      let rustir_stmt = RustIRgen.transl_stmt rustlight_stmt [] in
-      print_to_stdout PrintRustIR.print_stmt rustir_stmt;
-      (* Print RustIR and CFG *)
-      (match RustIR.generate_cfg rustir_stmt with
-      | Errors.OK(entry, cfg) ->
-        fprintf stdout "\nRustIR CFG: \n";
-        print_to_stdout PrintRustIR.print_cfg_body (rustir_stmt, entry, cfg)
-      | Errors.Error msg -> fatal_error no_loc "Generation of CFG fails");
+    match rustlight_func with
+    | Errors.OK rustlight_func ->
+      Format.fprintf stdout_format "Rustlight: @.";
+      PrintRustlight.print_function stdout_format fun_atom rustlight_func;
+      (* Print RustIR *)
+      Format.fprintf stdout_format "@.RustIR: @.";
+      let rustir_func = RustIRgen.transl_function rustlight_func in
+      PrintRustIR.print_function stdout_format fun_atom rustir_func;
+      (* Print CFG *)
+      Format.fprintf stdout_format "@.Rust CFG: @.";
+      PrintRustIR.print_cfg stdout_format fun_atom rustir_func
       (* TODO: Print RustIR after the drop elaboration *)
-    | Rustlightgen.Err msg -> fatal_error no_loc "Compilation of Rust statement fails"
+    | Errors.Error msg -> fatal_error no_loc "Compilation of Rust statement fails"
   else
   try
     Gc.set { (Gc.get()) with

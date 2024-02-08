@@ -151,7 +151,7 @@ Definition deref_box_a : expr := <{ ! Box(A # type_int32s) }>.
 
 Definition box_int := Tbox type_int32s noattr.
 
-Definition ex1 :=
+Definition ex1_body :=
   <{ do (A#type_int32s) := !(B#box_int);
      let C : box_int in
      if ((A#type_int32s) < !(B#box_int)) then
@@ -162,6 +162,12 @@ Definition ex1 :=
      end
     }>.
 
+Definition ex1 : function :=
+  {| fn_return := Tunit;
+    fn_callconv := cc_default;
+    fn_params := (A , type_int32s) :: (B , box_int) :: nil;
+    fn_body := ex1_body |}.
+                                   
 
 (* Example 2 *)
 

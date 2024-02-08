@@ -83,8 +83,8 @@ Definition transl_function (f: RustlightBase.function) : function :=
   let vars := extract_vars f.(RustlightBase.fn_body) in
   mkfunction f.(RustlightBase.fn_return)
              f.(RustlightBase.fn_callconv)
-             f.(RustlightBase.fn_params)
              vars
+             f.(RustlightBase.fn_params)
              (transl_stmt f.(RustlightBase.fn_body) nil).
 
 Definition transl_fundef (fd: RustlightBase.fundef) : fundef :=

@@ -69,21 +69,20 @@ let print_instruction pp prog (pc, i) =
   | Inop s ->
     let s = P.to_int s in
     if s = pc - 1
-    then fprintf pp "nop\n"
-    else fprintf pp "goto %d\n" s
+    then fprintf pp "nop@."
+    else fprintf pp "goto %d@." s
   | Isel(sel, s) ->
     (match select_stmt prog sel with
     | Some stmt ->
-      print_stmt pp stmt;
-      fprintf pp "\n"
+      fprintf pp "%a@." print_stmt stmt
     | None ->
-      fprintf pp "Error: cannot find statement\n")
+      fprintf pp "Error: cannot find statement@.")
   | Icond(e, s1, s2) ->
-    fprintf pp "if (%a) goto %d else goto %d\n"
+    fprintf pp "if (%a) goto %d else goto %d@."
         PrintRustlight.print_expr e
         (P.to_int s1) (P.to_int s2)
   | Iend ->
-    fprintf pp "return\n"
+    fprintf pp "return@."
 
 let print_param pp param =
   let (id,ty) = param in
