@@ -420,13 +420,19 @@ let _ =
       PrintRustlight.print_function stdout_format fun_atom rustlight_func;
       (* Print RustIR *)
       Format.fprintf stdout_format "@.RustIR: @.";
-      let rustir_func = RustIRgen.transl_function rustlight_func in
+      let rustir_func = RustIRgen.transl_function Rustlightgen.empty_ce rustlight_func in
       PrintRustIR.print_function stdout_format fun_atom rustir_func;
       (* Print CFG *)
       Format.fprintf stdout_format "@.Rust CFG: @.";
-      PrintRustIR.print_cfg stdout_format fun_atom rustir_func
-      (* TODO: Print RustIR after the drop elaboration *)
-    | Errors.Error msg -> fatal_error no_loc "Compilation of Rust statement fails"
+      PrintRustIR.print_cfg stdout_format fun_atom rustir_func;
+      (* Print RustIR after the drop elaboration *)
+      begin match ElaborateDrop.transf_function Rustlightgen.empty_ce rustir_func with
+      | Errors.OK rustir_func_drop ->
+        Format.fprintf stdout_format "@.Elaborate Drop: @.";
+        PrintRustIR.print_function stdout_format fun_atom rustir_func_drop;
+      | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
+      end;
+    | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
   else
   try
     Gc.set { (Gc.get()) with

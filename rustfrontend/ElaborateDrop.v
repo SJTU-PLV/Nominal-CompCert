@@ -100,8 +100,9 @@ Local Open Scope gensym_monad_scope.
 
 (* For each drop(p) statement, return list of places and their
 optional drop flag. Each place is used to generate a deterministic
-drop statement. For now, we do not consider fully owned or partial
-moved Box types. *)
+drop statement. For now, we do not distinguish fully owned or partial
+moved Box types, i.e., we do not use a single drop_in_place function
+to recursively drop the fully owned box *)
 Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (ce: composite_env) (p: place) : mon (list (place * option ident)) :=
   match fuel with
   | O => error (msg "Running out of fuel in elaborate_drop_for")
@@ -123,6 +124,7 @@ Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (c
             (** TODO: we need to check if p is fully owned, in order
             to just use one function to drop all its successor *)
             (* first drop *p if necessary *)
+            (** FIXME: This is the non-structrual recursion *)
             do drops <- elaborate_drop_for (Pderef p ty);
             if Paths.mem p mayinit then
               if Paths.mem p mayuninit then (* need drop flag *)
@@ -186,7 +188,7 @@ Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instructi
             let uninit := PathsMap.get id mayuninit in
             let universe := Paths.union init uninit in
             (* drops are the list of to-drop places and their drop flags *)
-            do drops <- elaborate_drop_for init uninit universe own_fuel ce p;
+            do drops <- elaborate_drop_for init uninit universe own_fuel ce p;            
             let drop_stmts := map (fun elt => generate_drop (fst elt) (snd elt)) drops in
             set_stmt sel (makeseq drop_stmts)
       | _ => ret tt

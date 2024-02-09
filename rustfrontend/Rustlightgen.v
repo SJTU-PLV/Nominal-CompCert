@@ -419,11 +419,25 @@ with transl_arm_statements (sl: arm_statements) (p: place) (moved: bool) (co: co
       end
   end.
 
+(* Extract the let declared variables *)
+Fixpoint extract_vars (stmt: Rustsyntax.statement) : list (ident * type) :=
+  match stmt with
+  | Rustsyntax.Slet id ty s =>
+      (id,ty) :: extract_vars s
+  | Rustsyntax.Ssequence s1 s2 =>
+      extract_vars s1 ++ extract_vars s2
+  | Rustsyntax.Sifthenelse _ s1 s2 =>
+      extract_vars s1 ++ extract_vars s2
+  | Rustsyntax.Sloop s =>
+      extract_vars s
+  | _ => nil
+  end.
+
 
 Open Scope error_monad_scope.
 
 Definition transl_function (f: Rustsyntax.function) : Errors.res function :=
-  let vars := var_names f.(Rustsyntax.fn_params) in
+  let vars := var_names (f.(Rustsyntax.fn_params) ++ (extract_vars f.(Rustsyntax.fn_body))) in
   let next_temp := Pos.succ (fold_left (fun acc elt => Pos.max acc elt) vars 1%positive) in
   let init_gen := initial_generator next_temp in
   match transl_stmt f.(Rustsyntax.fn_body) init_gen with

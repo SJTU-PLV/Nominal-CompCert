@@ -22,19 +22,32 @@ Definition list_list_cons {A: Type} (e: A) (l: list (list A)) :=
   | l' :: l => (e::l') :: l
   end.
 
+Section COMPOSITE_ENV.
+
+Variable ce: composite_env.
+
 Definition gen_drops (l: list (ident * type)) : statement :=
-  let drops := map (fun elt => (Sdrop (Plocal (fst elt) (snd elt)))) l in
+  let drops := fold_right
+                 (fun elt acc =>
+                    if own_type ce (snd elt) then
+                      (Sdrop (Plocal (fst elt) (snd elt))) :: acc
+                    else acc) nil l in                
   makeseq drops.
 
 (* [vars] is a stack of variable list. Eack stack frame corresponds to
-a loop where these variables are declared *)
-Fixpoint transl_stmt (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
+a loop where these variables are declared. [params_drops] are the
+statement for dropping the parameters *)
+Fixpoint transl_stmt (params_drops: statement) (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
+  let transl_stmt := transl_stmt params_drops in
   match stmt with
   | RustlightBase.Sskip => Sskip
   | Slet id ty stmt' =>
       let s := transl_stmt stmt' (list_list_cons (id,ty) vars) in
       let drop := Sdrop (Plocal id ty) in
-      Ssequence (Sstoragelive id) (Ssequence s (Ssequence drop (Sstoragedead id)))
+      if own_type ce ty then
+        Ssequence (Sstoragelive id) (Ssequence s (Ssequence drop (Sstoragedead id)))
+      else
+        Ssequence (Sstoragelive id) s
   | RustlightBase.Sassign p e =>
       Sassign p e
   | RustlightBase.Sbox p e =>
@@ -59,7 +72,7 @@ Fixpoint transl_stmt (stmt: RustlightBase.statement) (vars: list (list (ident * 
       let drops := gen_drops (hd nil vars) in
       Ssequence drops Scontinue
   | RustlightBase.Sreturn e =>
-      Sreturn e
+      makeseq (params_drops :: (Sreturn e) :: nil)
   end.
 
 
@@ -77,15 +90,26 @@ Fixpoint extract_vars (stmt: RustlightBase.statement) : list (ident * type) :=
   | _ => nil
   end.
 
+Fixpoint elaborate_return (stmt: RustlightBase.statement) : RustlightBase.statement :=
+  match stmt with
+  | RustlightBase.Ssequence _ s =>
+      elaborate_return s
+  | RustlightBase.Sreturn _ => stmt
+  | _ => RustlightBase.Ssequence stmt (RustlightBase.Sreturn None)
+  end.
+
 
 (* The main job is to extract the variables and translate the statement *)
 Definition transl_function (f: RustlightBase.function) : function :=
   let vars := extract_vars f.(RustlightBase.fn_body) in
+  (* drop statements for parameters *)
+  let params_drops := gen_drops f.(RustlightBase.fn_params) in
+  let body := elaborate_return f.(RustlightBase.fn_body) in
   mkfunction f.(RustlightBase.fn_return)
              f.(RustlightBase.fn_callconv)
              vars
              f.(RustlightBase.fn_params)
-             (transl_stmt f.(RustlightBase.fn_body) nil).
+             (transl_stmt params_drops body nil).
 
 Definition transl_fundef (fd: RustlightBase.fundef) : fundef :=
   match fd with
@@ -93,8 +117,10 @@ Definition transl_fundef (fd: RustlightBase.fundef) : fundef :=
   | External _ ef targs tres cconv => External function ef targs tres cconv
   end.
 
+End COMPOSITE_ENV.
+
 Definition transl_program (p: RustlightBase.program) : program :=
-  let p1 := transform_program transl_fundef p in
+  let p1 := transform_program (transl_fundef p.(prog_comp_env)) p in
   {| prog_defs := AST.prog_defs p1;
     prog_public := AST.prog_public p1;
     prog_main := AST.prog_main p1;

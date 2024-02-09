@@ -368,7 +368,8 @@ Variable (ce: composite_env).
 
 Import ListNotations.
 
-Fixpoint transl_stmt (stmt: statement) (sel: selector) (succ: node) (cont: option node) (brk: option node) {struct stmt} : mon node :=
+Fixpoint transl_stmt (end_node: node) (stmt: statement) (sel: selector) (succ: node) (cont: option node) (brk: option node) {struct stmt} : mon node :=
+  let transl_stmt := transl_stmt end_node in
   match stmt with
   | Sskip =>
       add_instr (Isel sel succ)
@@ -413,14 +414,13 @@ Fixpoint transl_stmt (stmt: statement) (sel: selector) (succ: node) (cont: optio
   | Scall p a al =>
       add_instr (Isel sel succ)
   | Sreturn e =>
-      do n <- add_instr Iend;
-      add_instr (Isel sel n)      
+      add_instr (Isel sel end_node)
     end.
 
 Definition generate_cfg' (stmt: statement): mon node :=
   (* return node *)
   do return_node <- add_instr Iend;
-  transl_stmt stmt nil return_node None None.
+  transl_stmt return_node stmt nil return_node None None.
 
 Definition generate_cfg (stmt: statement): Errors.res (node * rustcfg) :=  
   match generate_cfg' stmt init_state with
