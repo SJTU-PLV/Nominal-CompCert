@@ -109,7 +109,7 @@ Fixpoint own_path_box (p: place) (ty: type) :=
   match ty with
   | Tbox ty' _ =>
       let p' := Pderef p ty' in
-      Paths.add p' (own_path_box p' ty')
+      Paths.add p (own_path_box p' ty')
   | _ => Paths.empty
   end.
 
@@ -119,7 +119,8 @@ recursively add p' and its parents to paths [l]; If [p] is [Pfield p'
 fid ty], then add [p']'s siblings and [p']'s parent to paths [l]*)
 Fixpoint collect (p: place) (l: Paths.t) : Paths.t :=
   if own_type ce (typeof_place p) then
-    (* If there are some children of [p] in [l], do nothing. *)
+    (** FIXME: WHY? If there are some children of [p] in [l], do
+    nothing. *)
     if Paths.is_empty (Paths.filter (fun elt => is_prefix p elt) l) then
       match p with
       | Plocal _ _ =>
@@ -134,9 +135,9 @@ Fixpoint collect (p: place) (l: Paths.t) : Paths.t :=
           Paths.union (Paths.remove p' l') (Paths.add p siblings)
       | Pderef p' ty =>
           (* If type of [p] is [Tbox^n<T>] then add its n children to [l] *)
-          let children := own_path_box p ty in
-          let l' := Paths.union l children in
-          Paths.add p' (collect p' l')
+          (* let children := own_path_box p ty in *)
+          (* let l' := Paths.union l children in *)
+          Paths.add p (collect p' l)
       end
     else l
   else l.

@@ -98,12 +98,12 @@ Definition set_stmt (sel: selector) (stmt: statement) : mon unit :=
 
 Local Open Scope gensym_monad_scope.
 
-(* For each drop(p) statement, return list of places and their
-optional drop flag. Each place is used to generate a deterministic
-drop statement. For now, we do not distinguish fully owned or partial
-moved Box types, i.e., we do not use a single drop_in_place function
-to recursively drop the fully owned box *)
-Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (ce: composite_env) (p: place) : mon (list (place * option ident)) :=
+(* For each drop(p) statement, return list of places, their optional
+drop flag, and whether it is fully own. Each place is used to generate
+a deterministic drop statement. For now, we do not distinguish fully
+owned or partial moved Box types, i.e., we do not use a single
+drop_in_place function to recursively drop the fully owned box *)
+Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (ce: composite_env) (p: place) : mon (list (place * option ident * bool)) :=
   match fuel with
   | O => error (msg "Running out of fuel in elaborate_drop_for")
   | S fuel' =>
@@ -115,25 +115,35 @@ Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (c
             if Paths.mem p mayinit then
               if Paths.mem p mayuninit then (* need drop flag *)
                 do drop_flag <- gensym type_bool p;
-                ret ((p, Some drop_flag) :: nil)
+                ret ((p, Some drop_flag, true) :: nil)
               else                         (* must initialized *)
-                ret ((p, None) :: nil)
+                ret ((p, None, true) :: nil)
             else                (* must uninitialized *)
               ret nil
         | Tbox ty _ =>
             (** TODO: we need to check if p is fully owned, in order
             to just use one function to drop all its successor *)
             (* first drop *p if necessary *)
-            (** FIXME: This is the non-structrual recursion *)
-            do drops <- elaborate_drop_for (Pderef p ty);
-            if Paths.mem p mayinit then
-              if Paths.mem p mayuninit then (* need drop flag *)
-                do drop_flag <- gensym type_bool p;
-                ret ((p, Some drop_flag) :: drops)
-              else                         (* must initialized *)
-                ret ((p, None) :: drops)
-            else                (* must uninitialized *)
-              ret drops
+            if Paths.is_empty (Paths.filter (fun elt => is_prefix p elt) universe) then (* p fully owns *)
+              if Paths.mem p mayinit then
+                if Paths.mem p mayuninit then (* need drop flag *)
+                  do drop_flag <- gensym type_bool p;
+                  ret ((p, Some drop_flag, true) :: nil)
+                else                         (* must initialized *)
+                  ret ((p, None, true) :: nil)
+              else                (* must uninitialized *)
+                ret nil
+            else (* It is partially owns *)
+              (* first we elaborate drops for its children *)
+              do drops <- elaborate_drop_for (Pderef p ty);
+              if Paths.mem p mayinit then
+                if Paths.mem p mayuninit then (* need drop flag *)
+                  do drop_flag <- gensym type_bool p;
+                  ret ((p, Some drop_flag, false) :: drops)
+                else                         (* must initialized *)
+                  ret ((p, None, false) :: drops)
+              else                (* must uninitialized *)
+                ret drops              
         | _ => error (msg "Normal types do not need drop: elaborate_drop_for")
         end
       else (* split p into its children and drop them *)
@@ -163,14 +173,28 @@ Section INIT_UNINIT.
 
 Variable (maybeInit maybeUninit: PMap.t PathsMap.t).
 
+Fixpoint drop_fully_own (ce: composite_env) (p: place) (ty: type) :=
+  match ty with
+  | Tbox ty' _ =>
+      Ssequence (drop_fully_own ce (Pderef p ty') ty') (Sdrop p)
+  | Tstruct _ _
+  | Tvariant _ _ =>
+      if own_type ce ty then
+        Sdrop p
+      else Sskip
+  | _ => Sskip
+  end.
+
 (* create a drop statement using drop flag optionally *)
-Definition generate_drop (p: place) (flag: option ident) : statement :=
-  let drop := Sdrop p in
+Definition generate_drop (ce: composite_env) (p: place) (flag: option ident) (full: bool) : statement :=
+  let drop := if full then
+                drop_fully_own ce p (typeof_place p)
+              else Sdrop p in
   match flag with
   | Some id =>     
       Sifthenelse (Epure (Eplace (Plocal id type_bool) type_bool)) drop Sskip
   | None => drop
-  end.                        
+  end.             
 
 (* Collect the to-drop places and its drop flag from a statement, meanwhile updating the statement *)
 Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instruction) (pc: node) : mon unit :=
@@ -189,7 +213,7 @@ Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instructi
             let universe := Paths.union init uninit in
             (* drops are the list of to-drop places and their drop flags *)
             do drops <- elaborate_drop_for init uninit universe own_fuel ce p;            
-            let drop_stmts := map (fun elt => generate_drop (fst elt) (snd elt)) drops in
+            let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
             set_stmt sel (makeseq drop_stmts)
       | _ => ret tt
       end
