@@ -402,7 +402,7 @@ let cmdline_actions =
 
 let debug_rust = true
 
-let test_case = Rustsyntax.ex1 
+let test_case = Rustsyntax.init_test1 
 
 let fun_atom = BinNums.Coq_xH
 
@@ -425,6 +425,9 @@ let _ =
       (* Print CFG *)
       Format.fprintf stdout_format "@.Rust CFG: @.";
       PrintRustIR.print_cfg stdout_format fun_atom rustir_func;
+      (* Print the result of InitAnalysis *)
+      Format.fprintf stdout_format "@.Initialized Analysis: @.";
+      PrintRustIR.print_cfg_debug stdout_format fun_atom rustir_func Rustlightgen.empty_ce;
       (* Print RustIR after the drop elaboration *)
       begin match ElaborateDrop.transf_function Rustlightgen.empty_ce rustir_func with
       | Errors.OK rustir_func_drop ->

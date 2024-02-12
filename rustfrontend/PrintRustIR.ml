@@ -8,6 +8,7 @@ open RustIR
 open PrintRustsyntax
 open PrintRustlight
 open Maps
+open InitAnalysis
 
 let rec print_stmt p (s: RustIR.statement) =
   match s with
@@ -124,6 +125,70 @@ let print_cfg pp id f =
   | Errors.Error msg ->
     Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG"
  
+(* Print CFG with MaybeInit and MaybeUninit *)
+
+let print_paths_map pp (name, (pathmap: InitAnalysis.PathsMap.t)) =
+  let (_, l') = List.split (PTree.elements pathmap) in
+  let l = List.concat l' in
+  fprintf pp "%s: {@[<hov>%a@]}@ "
+    name
+    (pp_print_list ~pp_sep: (fun out () -> fprintf out ";@ ") print_place) l
+
+let print_instruction_debug pp prog (pc, (i, (mayinit, mayuninit))) =
+  fprintf pp "%5d:\t" pc;
+  begin match i with
+  | Inop s ->
+    let s = P.to_int s in
+    if s = pc - 1
+    then fprintf pp "nop@ "
+    else fprintf pp "goto %d@ " s
+  | Isel(sel, s) ->
+    (match select_stmt prog sel with
+    | Some stmt ->
+      fprintf pp "%a@ " print_stmt stmt
+    | None ->
+      fprintf pp "Error: cannot find statement@ ")
+  | Icond(e, s1, s2) ->
+    fprintf pp "if (%a) goto %d else goto %d@ "
+        PrintRustlight.print_expr e
+        (P.to_int s1) (P.to_int s2)
+  | Iend ->
+    fprintf pp "return@ "
+  end;
+  fprintf pp "%a@ %a@."
+    print_paths_map ("MayInit", mayinit)
+    print_paths_map ("MayUninit", mayuninit)
+
+let combine x y =
+  match x,y with
+  | Some x, Some y -> Some (x,y)
+  | _, _ -> None
+
+let print_cfg_body_debug pp (body, entry, cfg) mayinit mayuninit = 
+  let cfg' = PTree.combine combine cfg (PTree.combine combine mayinit mayuninit) in
+  let instrs =
+    List.sort
+    (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
+    (List.rev_map
+      (fun (pc, i) -> (P.to_int pc, i))
+      (PTree.elements cfg')) in
+  print_succ pp entry
+    (match instrs with (pc1, _) :: _ -> pc1 | [] -> -1);
+  List.iter (print_instruction_debug pp body) instrs;
+  fprintf pp "}\n\n"
+
+let print_cfg_debug pp id f ce =
+  match generate_cfg f.fn_body with
+  | Errors.OK(entry, cfg) ->
+    (match analyze ce f with
+    | Errors.OK (mayinit, mayuninit) ->
+      fprintf pp "%s(%a) {\n" (extern_atom id) print_params f.fn_params;
+      print_cfg_body_debug pp (f.fn_body, entry, cfg) (snd mayinit) (snd mayuninit)
+    | Errors.Error msg ->
+      Diagnostics.fatal_error Diagnostics.no_loc "Error in InitAnalysis")
+  | Errors.Error msg ->
+    Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG"
+
 (* Print program *)
 
 

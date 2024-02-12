@@ -175,7 +175,9 @@ Cd "extraction".
 Separate Extraction
    Compiler.transf_c_program Compiler.transf_cminor_program
    (* rust *)
-   Compiler.transf_rust_program Rustsyntax.ex1 Rustsyntax.fact
+   Compiler.transf_rust_program 
+   (* Test cases *)
+   Rustsyntax.ex1 Rustsyntax.fact Rustsyntax.init_test1 Rustsyntax.init_test2
    Rustlightgen.empty_ce Rustlightgen.init_gen
    Rustsyntax.type_of_function
    RustlightBase.type_of_function

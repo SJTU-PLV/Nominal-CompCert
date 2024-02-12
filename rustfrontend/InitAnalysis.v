@@ -254,7 +254,7 @@ Definition transfer (S: PathsMap.t) (flag: bool) (f: function) (cfg: rustcfg) (p
         end
         end
     end.
-                                      
+
 Module DS := Dataflow_Solver(PathsMap)(NodeSetForward).
 
 Local Open Scope error_monad_scope.

@@ -146,10 +146,42 @@ Definition box_a : expr := <{ Box(A # type_int32s) }>.
 (* Definition deref_box_a_global : expr := <{ ! box_a }>. *)
 Definition deref_box_a : expr := <{ ! Box(A # type_int32s) }>.
 
+Definition box_int := Tbox type_int32s noattr.
+
+(* InitAnalysis Test 1 *)
+
+Definition init_test1_body :=
+  <{ let A : box_int in
+     do (A#box_int) := Box($3);
+     let B : box_int in
+     do (B#box_int) := (A#box_int)
+     end
+     end }>.
+
+Definition init_test1 :=
+  {| fn_return := Tunit;
+    fn_callconv := cc_default;
+    fn_params := nil;
+    fn_body := init_test1_body |}.
+
+(* InitAnalysis Test 2 *)
+
+Definition init_test2_body :=
+  <{ let A : box_int in
+     do (A#box_int) := (C#box_int);
+     let B : box_int in
+     do (B#box_int) := (A#box_int)
+     end
+     end }>.
+
+Definition init_test2 :=
+  {| fn_return := Tunit;
+    fn_callconv := cc_default;
+    fn_params := (C, box_int) :: nil;
+    fn_body := init_test1_body |}.
+
 
 (* Example 1 *)
-
-Definition box_int := Tbox type_int32s noattr.
 
 Definition ex1_body :=
   <{ do (A#type_int32s) := !(B#box_int);
