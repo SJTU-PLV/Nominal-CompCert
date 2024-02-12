@@ -201,7 +201,7 @@ Definition remove_option (p: option place) (m: PathsMap.t) : PathsMap.t :=
   | None => m
   end.
 
-(* Gen function: if add {p' | is_prefix p p' /\ p' ∈ S} to m[id]. Here
+(* Gen function: it add {p' | is_prefix p p' /\ p' ∈ S} to m[id]. Here
 [S] is the whole set *)
 Definition add_place (S: PathsMap.t) (p: place) (m: PathsMap.t) : PathsMap.t :=
   let id := local_of_place p in
@@ -265,10 +265,13 @@ Definition analyze (ce: composite_env) (f: function) : Errors.res (PMap.t PathsM
   do whole <- collect_func ce f;
   (* initialize maybeInit set with parameters *)
   let pl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_params) in
-  let maybeInit := fold_right (add_place whole) (PTree.empty LPaths.t) pl in
+  (* It is necessary because we have to guarantee that the map is not
+  PathMap.bot in the 'transfer' function *)
+  let empty_pathmap := PTree.map (fun _ elt => Paths.empty) whole in
+  let maybeInit := fold_right (add_place whole) empty_pathmap pl in
   (* initialize maybeUninit with the variables *)
   let vl := map (fun elt => Plocal (fst elt) (snd elt)) f.(fn_vars) in
-  let maybeUninit := fold_right (add_place whole) (PTree.empty LPaths.t) vl in
+  let maybeUninit := fold_right (add_place whole) empty_pathmap vl in
   (* generate selector-based CFG for analysis *)
   do (entry, cfg) <- generate_cfg f.(fn_body);
   let initMap := DS.fixpoint cfg successors_instr (transfer whole true f cfg) entry maybeInit in
