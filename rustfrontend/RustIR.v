@@ -145,15 +145,35 @@ Definition get_stmt (stmt: statement) (cfg: rustcfg) (pc: node) : option stateme
 
 (* Change in place the statement resided in this selector to an another
 statement. And return the modified statement *)
-Fixpoint update_stmt (root: statement) (sel: selector) (stmt: statement): statement :=
+Fixpoint update_stmt (root: statement) (sel: selector) (stmt: statement): option statement :=
   match sel, root with
-  | nil, _ => stmt
-  | Selseqleft :: sel', Ssequence s1 s2 => update_stmt s1 sel' stmt
-  | Selseqright :: sel', Ssequence s1 s2 => update_stmt s2 sel' stmt
-  | Selifthen :: sel', Sifthenelse _ s1 s2 => update_stmt s1 sel' stmt
-  | Selifelse :: sel', Sifthenelse _ s1 s2 => update_stmt s2 sel' stmt
-  | Selloop :: sel', Sloop s => update_stmt s sel' stmt
-  | _, _ => root  (* FIXME: may be this is a partial function *)
+  | nil, _ => Some stmt
+  | Selseqleft :: sel', Ssequence s1 s2 =>
+      match (update_stmt s1 sel' stmt) with
+      | Some s1' => Some (Ssequence s1' s2)
+      | None => None
+      end
+  | Selseqright :: sel', Ssequence s1 s2 =>      
+      match (update_stmt s2 sel' stmt) with
+      | Some s2' => Some (Ssequence s1 s2')
+      | None => None
+      end
+  | Selifthen :: sel', Sifthenelse e s1 s2 =>
+      match (update_stmt s1 sel' stmt) with
+      | Some s1' => Some (Sifthenelse e s1' s2)
+      | None => None
+      end
+  | Selifelse :: sel', Sifthenelse e s1 s2 =>
+      match (update_stmt s2 sel' stmt) with
+      | Some s2' => Some (Sifthenelse e s1 s2')
+      | None => None
+      end
+  | Selloop :: sel', Sloop s =>
+      match (update_stmt s sel' stmt) with
+      | Some s' => Some (Sloop s')
+      | None => None
+      end
+  | _, _ => None
   end.
 
 (** ** Genenrate CFG from a statement *)

@@ -88,12 +88,16 @@ Definition gensym (ty: type) (p: place) : mon ident :=
 
 Definition set_stmt (sel: selector) (stmt: statement) : mon unit :=
   fun (g: generator) =>
-    Res tt
-      (mkgenerator (gen_next g)
-         (gen_trail g)
-         (gen_map g)
-         (update_stmt (gen_stmt g) sel stmt))
-      (Ple_refl (gen_next g)).
+    match (update_stmt (gen_stmt g) sel stmt) with
+    | Some stmt' =>
+        Res tt
+          (mkgenerator (gen_next g)
+             (gen_trail g)
+             (gen_map g)
+             stmt')
+          (Ple_refl (gen_next g))
+    | None => Err (msg "Set statement errors.")
+    end.
 
 
 Local Open Scope gensym_monad_scope.
@@ -124,7 +128,7 @@ Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (c
             (** TODO: we need to check if p is fully owned, in order
             to just use one function to drop all its successor *)
             (* first drop *p if necessary *)
-            if Paths.is_empty (Paths.filter (fun elt => is_prefix p elt) universe) then (* p fully owns *)
+            if Paths.is_empty (Paths.filter (fun elt => is_prefix (Pderef p ty) elt) universe) then (* p fully owns *)
               if Paths.mem p mayinit then
                 if Paths.mem p mayuninit then (* need drop flag *)
                   do drop_flag <- gensym type_bool p;
@@ -204,24 +208,24 @@ Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instructi
       | Some (Sdrop p) =>
           let mayinit := maybeInit!!pc in
           let mayuninit := maybeUninit!!pc in
-          if  PathsMap.beq mayinit PathsMap.bot && PathsMap.beq mayuninit PathsMap.bot then
-            error (msg "No initialized information: collect_elaborate_drops")
-          else
-            let id := local_of_place p in
-            let init := PathsMap.get id mayinit in
-            let uninit := PathsMap.get id mayuninit in
-            let universe := Paths.union init uninit in
-            (* drops are the list of to-drop places and their drop flags *)
-            do drops <- elaborate_drop_for init uninit universe own_fuel ce p;            
-            let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
-            set_stmt sel (makeseq drop_stmts)
+          (* if  PathsMap.beq mayinit PathsMap.bot && PathsMap.beq mayuninit PathsMap.bot then *)
+          (*   error (msg "No initialized information: collect_elaborate_drops") *)
+          (* else *)
+          let id := local_of_place p in
+          let init := PathsMap.get id mayinit in
+          let uninit := PathsMap.get id mayuninit in
+          let universe := Paths.union init uninit in
+          (* drops are the list of to-drop places and their drop flags *)
+          do drops <- elaborate_drop_for init uninit universe own_fuel ce p;
+          let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
+          set_stmt sel (makeseq drop_stmts)
       | _ => ret tt
       end
   | _ => ret tt
   end.
 
 Definition elaborate_drop (ce: composite_env) (f: function) (cfg: rustcfg) : mon unit :=
-  PTree.fold (fun _ pc elt => elaborate_drop_at ce f elt pc) cfg (ret tt).
+  PTree.fold (fun acc pc elt => do _ <- acc; elaborate_drop_at ce f elt pc) cfg (ret tt).
 
 End INIT_UNINIT.
 
