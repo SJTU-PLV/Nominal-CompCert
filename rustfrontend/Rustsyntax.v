@@ -178,7 +178,7 @@ Definition init_test2 :=
   {| fn_return := Tunit;
     fn_callconv := cc_default;
     fn_params := (C, box_int) :: nil;
-    fn_body := init_test1_body |}.
+    fn_body := init_test2_body |}.
 
 
 (* Example 1 *)

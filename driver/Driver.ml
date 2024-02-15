@@ -402,7 +402,7 @@ let cmdline_actions =
 
 let debug_rust = true
 
-let test_case = Rustsyntax.init_test1 
+let test_case = Rustsyntax.ex1
 
 let fun_atom = BinNums.Coq_xH
 
@@ -433,6 +433,13 @@ let _ =
       | Errors.OK rustir_func_drop ->
         Format.fprintf stdout_format "@.Elaborate Drop: @.";
         PrintRustIR.print_function stdout_format fun_atom rustir_func_drop;
+      (* Print Clight after generating drop glue *)
+        begin match Clightgen.transl_function Rustlightgen.empty_ce Clightgen.empty_ce Maps.PTree.empty rustir_func_drop with
+        | Errors.OK clight_func ->
+          Format.fprintf stdout_format "@.Clightgen: @.";
+        PrintClight.print_function PrintClight.Clight1 stdout_format fun_atom clight_func;
+        | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
+        end;
       | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
       end;
     | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;

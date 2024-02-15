@@ -524,6 +524,9 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       end
 end.
 
+(* empty Ctypes.composite_env *)
+
+Definition empty_ce := PTree.empty Ctypes.composite.
 
 (* step 3: translate a single function *)
 Definition transl_function (f: function) : Errors.res Clight.function :=
