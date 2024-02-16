@@ -260,7 +260,7 @@ Module DS := Dataflow_Solver(PathsMap)(NodeSetForward).
 Local Open Scope error_monad_scope.
 
 (* The analyze returns the MaybeInit and MaybeUninit sets *)
-Definition analyze (ce: composite_env) (f: function) : Errors.res (PMap.t PathsMap.t * PMap.t PathsMap.t) :=
+Definition analyze (ce: composite_env) (f: function) : Errors.res (PTree.t PathsMap.t * PTree.t PathsMap.t) :=
   (* collect the whole set in order to simplify the gen and kill operation *)
   do whole <- collect_func ce f;
   (* initialize maybeInit set with parameters *)
@@ -277,7 +277,9 @@ Definition analyze (ce: composite_env) (f: function) : Errors.res (PMap.t PathsM
   let initMap := DS.fixpoint cfg successors_instr (transfer whole true f cfg) entry maybeInit in
   let uninitMap := DS.fixpoint cfg successors_instr (transfer whole false f cfg) entry maybeUninit in
   match initMap, uninitMap with
-  | Some initMap, Some uninitMap => Errors.OK (initMap, uninitMap)
+  (* we only want the PTree because [None] represent the unreachable
+  node *)
+  | Some (_, initMap), Some (_, uninitMap) => Errors.OK (initMap, uninitMap)
   | _, _ => Errors.Error (msg "Error in initialize analysis")
   end.
   

@@ -214,14 +214,21 @@ Definition fact (n: Z) :=
      let A : type_int32s in
      do (A#type_int32s) := $1;
      let B : box_int in
-     do (B#box_int) := Box(!A#type_int32s);
+     do (B#box_int) := Box(A#type_int32s);
      while (($0) < (N#type_int32s)) do
        let C : box_int in
        do (C#box_int) := Box(!B#box_int); (* comment it to check the init analysis *)
-       do (!C#box_int) := Box(!B#box_int) * (N#type_int32s);
+       do (!(C#box_int)) := (!(B#box_int)) * (N#type_int32s);
        do (N#type_int32s) := (N#type_int32s) - $1;
        do (B#box_int) := (C#box_int)
-       end                       
-     end
+       end
+     end;
+     return (B#box_int)
      end end end
     }>.
+
+Definition ex2 : function :=
+  {| fn_return := box_int;
+    fn_callconv := cc_default;
+    fn_params := nil;
+    fn_body := fact 10 |}.

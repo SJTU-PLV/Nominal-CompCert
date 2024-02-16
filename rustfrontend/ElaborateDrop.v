@@ -10,6 +10,8 @@ Require Import Cop.
 Require Import RustlightBase RustIR.
 Require Import InitAnalysis.
 
+Import ListNotations.
+
 Local Open Scope error_monad_scope.
 
 (** Use the analysis from InitAnalysis.v to elaborate the drop
@@ -166,8 +168,8 @@ Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (c
                 fold_right rec (ret nil) children
             | None => error (msg "Unfound struct id in composite_env: elaborate_drop_for")
             end
-        | Tbox _ _ => error (msg "Box does not exist in the universe set: elaborate_drop_for")
-        | Tvariant _ _ => error (msg "Variant cannot be split: elaborate_drop_for")
+        | Tbox _ _ => error ([CTX (local_of_place p); MSG ": Box does not exist in the universe set: elaborate_drop_for"])
+        | Tvariant _ _ => error ([CTX (local_of_place p); MSG ": Variant cannot be split: elaborate_drop_for"])
         | _ => ret nil
         end
   end.
@@ -175,7 +177,7 @@ Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (c
 
 Section INIT_UNINIT.
 
-Variable (maybeInit maybeUninit: PMap.t PathsMap.t).
+Variable (maybeInit maybeUninit: PTree.t PathsMap.t).
 
 Fixpoint drop_fully_own (ce: composite_env) (p: place) (ty: type) :=
   match ty with
@@ -206,19 +208,23 @@ Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instructi
   | Isel sel _ =>
       match select_stmt f.(fn_body) sel with
       | Some (Sdrop p) =>
-          let mayinit := maybeInit!!pc in
-          let mayuninit := maybeUninit!!pc in
-          (* if  PathsMap.beq mayinit PathsMap.bot && PathsMap.beq mayuninit PathsMap.bot then *)
-          (*   error (msg "No initialized information: collect_elaborate_drops") *)
-          (* else *)
-          let id := local_of_place p in
-          let init := PathsMap.get id mayinit in
-          let uninit := PathsMap.get id mayuninit in
-          let universe := Paths.union init uninit in
-          (* drops are the list of to-drop places and their drop flags *)
-          do drops <- elaborate_drop_for init uninit universe own_fuel ce p;
-          let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
-          set_stmt sel (makeseq drop_stmts)
+          let mayinit := maybeInit!pc in
+          let mayuninit := maybeUninit!pc in
+          match mayinit, mayuninit with
+          | Some mayinit, Some mayuninit =>
+              let id := local_of_place p in
+              let init := PathsMap.get id mayinit in
+              let uninit := PathsMap.get id mayuninit in
+              let universe := Paths.union init uninit in
+              (* drops are the list of to-drop places and their drop flags *)
+              do drops <- elaborate_drop_for init uninit universe own_fuel ce p;
+              let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
+              set_stmt sel (makeseq drop_stmts)
+          | _, _ =>
+          (* this pc has no information of initialized variables (it
+          may be unreachable), so we do not elaborate it *)
+              ret tt
+          end
       | _ => ret tt
       end
   | _ => ret tt

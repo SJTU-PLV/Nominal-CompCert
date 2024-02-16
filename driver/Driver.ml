@@ -402,7 +402,7 @@ let cmdline_actions =
 
 let debug_rust = true
 
-let test_case = Rustsyntax.ex1
+let test_case = Rustsyntax.ex2
 
 let fun_atom = BinNums.Coq_xH
 

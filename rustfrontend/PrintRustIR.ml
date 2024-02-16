@@ -183,7 +183,7 @@ let print_cfg_debug pp id f ce =
     (match analyze ce f with
     | Errors.OK (mayinit, mayuninit) ->
       fprintf pp "%s(%a) {\n" (extern_atom id) print_params f.fn_params;
-      print_cfg_body_debug pp (f.fn_body, entry, cfg) (snd mayinit) (snd mayuninit)
+      print_cfg_body_debug pp (f.fn_body, entry, cfg) mayinit mayuninit
     | Errors.Error msg ->
       Diagnostics.fatal_error Diagnostics.no_loc "Error in InitAnalysis")
   | Errors.Error msg ->

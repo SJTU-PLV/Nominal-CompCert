@@ -13,7 +13,7 @@ Require Import RustlightBase RustIR.
 (** Translation from Rustlight to RustIR. The main step is to generate
 the drop operations and lifetime annotations in the end of a
 variable. We also need to insert drops for those out-of-scope variable
-in [break] and [continue] *)
+in [break], [continue] and [return] *)
 
 
 Definition list_list_cons {A: Type} (e: A) (l: list (list A)) :=
@@ -30,9 +30,17 @@ Definition gen_drops (l: list (ident * type)) : statement :=
   let drops := fold_right
                  (fun elt acc =>
                     if own_type ce (snd elt) then
-                      (Sdrop (Plocal (fst elt) (snd elt))) :: acc
+                      (Ssequence (Sdrop (Plocal (fst elt) (snd elt))) (Sstoragedead (fst elt))) :: acc
                     else acc) nil l in                
   makeseq drops.
+
+Definition gen_lives (l: list (ident * type)) : statement :=
+  let lives := fold_right
+                 (fun elt acc =>
+                    if own_type ce (snd elt) then
+                      (Sstoragelive (fst elt)) :: acc
+                    else acc) nil l in
+  makeseq lives.
 
 (* [vars] is a stack of variable list. Eack stack frame corresponds to
 a loop where these variables are declared. [params_drops] are the
@@ -72,7 +80,8 @@ Fixpoint transl_stmt (params_drops: statement) (stmt: RustlightBase.statement) (
       let drops := gen_drops (hd nil vars) in
       Ssequence drops Scontinue
   | RustlightBase.Sreturn e =>
-      makeseq (params_drops :: (Sreturn e) :: nil)
+      let drops := gen_drops (concat vars) in
+      makeseq (drops :: params_drops :: (Sreturn e) :: nil)
   end.
 
 
@@ -100,16 +109,20 @@ Fixpoint elaborate_return (stmt: RustlightBase.statement) : RustlightBase.statem
 
 
 (* The main job is to extract the variables and translate the statement *)
+
 Definition transl_function (f: RustlightBase.function) : function :=
   let vars := extract_vars f.(RustlightBase.fn_body) in
   (* drop statements for parameters *)
   let params_drops := gen_drops f.(RustlightBase.fn_params) in
+  let params_live := gen_lives f.(RustlightBase.fn_params) in
   let body := elaborate_return f.(RustlightBase.fn_body) in
+  let stmt' := transl_stmt params_drops body nil in
+  let stmt'' := Ssequence params_live stmt' in
   mkfunction f.(RustlightBase.fn_return)
              f.(RustlightBase.fn_callconv)
              vars
              f.(RustlightBase.fn_params)
-             (transl_stmt params_drops body nil).
+             stmt''.
 
 Definition transl_fundef (fd: RustlightBase.fundef) : fundef :=
   match fd with
