@@ -34,19 +34,11 @@ Definition gen_drops (l: list (ident * type)) : statement :=
                     else acc) nil l in                
   makeseq drops.
 
-Definition gen_lives (l: list (ident * type)) : statement :=
-  let lives := fold_right
-                 (fun elt acc =>
-                    if own_type ce (snd elt) then
-                      (Sstoragelive (fst elt)) :: acc
-                    else acc) nil l in
-  makeseq lives.
-
 (* [vars] is a stack of variable list. Eack stack frame corresponds to
 a loop where these variables are declared. [params_drops] are the
 statement for dropping the parameters *)
-Fixpoint transl_stmt (params_drops: statement) (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
-  let transl_stmt := transl_stmt params_drops in
+Fixpoint transl_stmt (params_drops: statement) (oretv: option (ident * type)) (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
+  let transl_stmt := transl_stmt params_drops oretv in
   match stmt with
   | RustlightBase.Sskip => Sskip
   | Slet id ty stmt' =>
@@ -81,9 +73,14 @@ Fixpoint transl_stmt (params_drops: statement) (stmt: RustlightBase.statement) (
       Ssequence drops Scontinue
   | RustlightBase.Sreturn e =>
       let drops := gen_drops (concat vars) in
-      makeseq (drops :: params_drops :: (Sreturn e) :: nil)
+      match oretv, e with
+      | Some (retv, retty), Some e =>
+          let s := Sassign (Plocal retv retty) e in                    
+          makeseq (s :: drops :: params_drops :: (Sreturn (Some retv)) :: nil)
+      | _, _ =>
+          makeseq (drops :: params_drops :: (Sreturn None) :: nil)
+      end
   end.
-
 
 
 Fixpoint extract_vars (stmt: RustlightBase.statement) : list (ident * type) :=
@@ -107,6 +104,8 @@ Fixpoint elaborate_return (stmt: RustlightBase.statement) : RustlightBase.statem
   | _ => RustlightBase.Ssequence stmt (RustlightBase.Sreturn None)
   end.
 
+Definition ret_var (ty: type) (v: ident) : option (ident * type) :=
+  if type_eq ty Tunit then None else Some (v, ty).
 
 (* The main job is to extract the variables and translate the statement *)
 
@@ -114,15 +113,18 @@ Definition transl_function (f: RustlightBase.function) : function :=
   let vars := extract_vars f.(RustlightBase.fn_body) in
   (* drop statements for parameters *)
   let params_drops := gen_drops f.(RustlightBase.fn_params) in
-  let params_live := gen_lives f.(RustlightBase.fn_params) in
-  let body := elaborate_return f.(RustlightBase.fn_body) in
-  let stmt' := transl_stmt params_drops body nil in
-  let stmt'' := Ssequence params_live stmt' in
+  (* generate the return variable *)
+  let locals := var_names (vars ++ f.(RustlightBase.fn_params)) in
+  let retv := Pos.succ (fold_left (fun acc elt => Pos.max acc elt) locals 1%positive) in
+  let oretv := ret_var f.(RustlightBase.fn_return) retv in
+  (* no need to insert return *)
+  (* let body := elaborate_return f.(RustlightBase.fn_body) in *)
+  let stmt' := transl_stmt params_drops oretv f.(RustlightBase.fn_body) nil in
   mkfunction f.(RustlightBase.fn_return)
              f.(RustlightBase.fn_callconv)
              vars
              f.(RustlightBase.fn_params)
-             stmt''.
+             stmt'.
 
 Definition transl_fundef (fd: RustlightBase.fundef) : fundef :=
   match fd with

@@ -30,7 +30,10 @@ lifetime of a local variable, because all the variables are declared
 in the entry of function which is different from Rustlight. For now,
 this two statements have no semantics. They are used for borrow
 checking. We use [drop(p)] statement to indicate that we may need to
-drop the content of [p] depending on the ownership environment. *)
+drop the content of [p] depending on the ownership environment. The
+[Sreturn] returns the a predefined return variable instead of an
+expression because we need to insert drop between the evaluation of
+the returned expression and the return statement *)
 
 Inductive statement : Type :=
 | Sskip: statement                   (**r do nothing *)
@@ -45,7 +48,7 @@ Inductive statement : Type :=
 | Sloop: statement -> statement (**r infinite loop *)
 | Sbreak: statement                      (**r [break] statement *)
 | Scontinue: statement                   (**r [continue] statement *)
-| Sreturn: option expr -> statement.      (**r [return] statement *)
+| Sreturn: option ident -> statement.      (**r [return] statement *)
 
 
 Record function : Type := mkfunction {
