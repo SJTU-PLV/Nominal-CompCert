@@ -120,9 +120,11 @@ Definition transl_function (f: RustlightBase.function) : function :=
   (* no need to insert return *)
   (* let body := elaborate_return f.(RustlightBase.fn_body) in *)
   let stmt' := transl_stmt params_drops oretv f.(RustlightBase.fn_body) nil in
+  (* add the return variable to variable list *)
+  let vars' := match oretv with | Some v => v :: vars | None => vars end in
   mkfunction f.(RustlightBase.fn_return)
              f.(RustlightBase.fn_callconv)
-             vars
+             vars'
              f.(RustlightBase.fn_params)
              stmt'.
 

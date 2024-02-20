@@ -19,7 +19,7 @@ let rec name_rust_decl id ty =
   | Rusttypes.Tlong(sg, a) ->
       name_longtype sg ^ attributes a ^ name_optid id
   | Tbox(t, a) ->
-      "Box<" ^ (name_rust_decl ""  t) ^ ">"
+      "Box<" ^ (name_rust_decl ""  t) ^ ">" ^ name_optid id
   | Tfunction(args, res, cconv) ->
       let b = Buffer.create 20 in
       if id = ""

@@ -10,6 +10,8 @@ Require Import Clight.
 Require Import RustlightBase RustIR.
 Require Import Errors.
 
+Import ListNotations.
+
 (** The generation from RustIR to Clight contains three steps:
 1. translate the rust composite type (e.g., variant) to C composite
 (variant is represented by a structure where the first field is tag
@@ -455,10 +457,33 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
 Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
   match stmt with
   | Sskip => ret Clight.Sskip
-  | Sassign p e =>      
+  | Sassign p e =>
+      (* we have to consider assignment of variants *)
       do e' <- expr_to_cexpr e;
-      let assign := Clight.Sassign (place_to_cexpr p) e' in
-      ret assign
+      let lhs := place_to_cexpr p in
+      let ty := typeof e in
+      match typeof_place p with
+      | Tvariant id _ =>
+          (* lhs.1 = tag;
+             lhs.2 = e'; *)
+          match ce!id with
+          | Some co =>
+              match type_tag ty co.(co_members) with
+              | Some (_, tagz) =>
+                  match get_variant_tag tce id, get_variant_body tce id with
+                  | Some tag_id, Some body_id =>
+                      let assign_tag := Clight.Sassign (Efield lhs tag_id Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) in
+                      let assign_body := Clight.Sassign (Efield lhs body_id (to_ctype ty)) e' in
+                      ret (Clight.Ssequence assign_tag assign_body)
+                  | _, _ => error [CTX id; MSG ": cannot get its tag and body id when translating the variant assignement"]
+                  end
+              | _ => error [CTX id; MSG ": cannot get its tag value from the Rust composite environment"]
+              end
+          | _ => error [CTX id; MSG ": cannot get its composite definition from the environment"]
+          end
+      | _ =>
+          ret (Clight.Sassign lhs e')
+      end
   | Sbox p e =>
       (* temp = malloc(sizeof(e));
        *temp = e;
