@@ -37,18 +37,20 @@ ancestor is in the collection, add the siblings and the siblings of
 [p]'s parents to the collection until this ancestor; if [p] and all
 its parent are not in the collection, just add [p] to the
 collection. *)
-
-Definition places_of_members (p: place) (mems: members) :=
-  fold_left (fun acc elt =>
-               let elt' := match elt with
-                           | Member_plain fid ty =>
-                               Pfield p fid ty
-                           end in
-               Paths.add elt' acc) mems Paths.empty.
             
 Section COMP_ENV.
 
 Variable ce : composite_env.
+
+(* get { p.1, p.2 ...} which are own types *)
+Definition places_of_members (p: place) (mems: members) :=
+  fold_left (fun acc elt =>
+               match elt with
+               | Member_plain fid ty =>
+                   if own_type ce ty then
+                     Paths.add (Pfield p fid ty) acc
+                   else acc
+               end) mems Paths.empty.
 
 (* siblings of p *)
 Definition siblings (p: place) : Paths.t :=

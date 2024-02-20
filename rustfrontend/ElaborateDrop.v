@@ -109,11 +109,11 @@ drop flag, and whether it is fully own. Each place is used to generate
 a deterministic drop statement. For now, we do not distinguish fully
 owned or partial moved Box types, i.e., we do not use a single
 drop_in_place function to recursively drop the fully owned box *)
-Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (ce: composite_env) (p: place) : mon (list (place * option ident * bool)) :=
+Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fuel: nat) (ce: composite_env) (p: place) : mon (list (place * option ident * bool)) :=
   match fuel with
   | O => error (msg "Running out of fuel in elaborate_drop_for")
   | S fuel' =>
-      let elaborate_drop_for := elaborate_drop_for mayinit mayuninit universe fuel' ce in
+      let elaborate_drop_for := elaborate_drop_for pc mayinit mayuninit universe fuel' ce in
       if Paths.mem p universe then
         match typeof_place p with        
         | Tstruct _ _
@@ -150,7 +150,7 @@ Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (c
                   ret ((p, None, false) :: drops)
               else                (* must uninitialized *)
                 ret drops              
-        | _ => error (msg "Normal types do not need drop: elaborate_drop_for")
+        | _ => error [CTX pc; MSG ": Normal types do not need drop: elaborate_drop_for"]
         end
       else (* split p into its children and drop them *)
         match typeof_place p with
@@ -166,10 +166,10 @@ Fixpoint elaborate_drop_for (mayinit mayuninit universe: Paths.t) (fuel: nat) (c
                   do drops' <- elaborate_drop_for elt;
                   ret (drops' ++ drops) in
                 fold_right rec (ret nil) children
-            | None => error (msg "Unfound struct id in composite_env: elaborate_drop_for")
+            | None => error [CTX pc; MSG ": Unfound struct id in composite_env: elaborate_drop_for"]
             end
-        | Tbox _ _ => error ([CTX (local_of_place p); MSG ": Box does not exist in the universe set: elaborate_drop_for"])
-        | Tvariant _ _ => error ([CTX (local_of_place p); MSG ": Variant cannot be split: elaborate_drop_for"])
+        | Tbox _ _ => error ([CTX pc ; MSG ": place is "; CTX (local_of_place p); MSG ": Box does not exist in the universe set: elaborate_drop_for"])
+        | Tvariant _ _ => error ([CTX pc ; MSG ": place is "; CTX (local_of_place p); MSG ": Variant cannot be split: elaborate_drop_for"])
         | _ => ret nil
         end
   end.
@@ -217,7 +217,7 @@ Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instructi
               let uninit := PathsMap.get id mayuninit in
               let universe := Paths.union init uninit in
               (* drops are the list of to-drop places and their drop flags *)
-              do drops <- elaborate_drop_for init uninit universe own_fuel ce p;
+              do drops <- elaborate_drop_for pc init uninit universe own_fuel ce p;
               let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
               set_stmt sel (makeseq drop_stmts)
           | _, _ =>
