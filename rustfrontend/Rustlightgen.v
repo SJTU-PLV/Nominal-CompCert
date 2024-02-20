@@ -407,25 +407,31 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
 
 with transl_arm_statements (sl: arm_statements) (p: place) (moved: bool) (co: composite) : mon statement :=
   match sl with
-  | ASnil => ret Sskip
+  | ASnil => ret Sskip      
   | AScons ids arm sl' =>
       do arm' <- transl_stmt arm;
       match ids with
       | Some (fid, temp_id) =>
           match find (fun elt => ident_eq (name_member elt) fid) co.(co_members) with
-          | Some m =>              
-              (* if cond then
-                   let temp: ty;
-                   temp = Eget(p, fid, ty);
-                   arm'
-                else else_stmt *)
-              do else_stmt <- transl_arm_statements sl' p moved co;
+          | Some m =>
               let ty := type_member m in
               let cond := Ecktag p fid type_bool in                              
               let destruct_place := if moved then Emoveget p fid ty else (Epure (Eget p fid ty)) in
               let assign_temp := Sassign (Plocal temp_id ty) destruct_place in
-              let then_stmt := Slet temp_id ty (Ssequence assign_temp arm') in              
-              ret (Sifthenelse cond then_stmt else_stmt)
+              let then_stmt := Slet temp_id ty (Ssequence assign_temp arm') in
+              match sl' with
+              | ASnil =>
+                  (* Some optimization: the last branch, no need to check the tag*)
+                  ret then_stmt
+              | AScons _ _ _ =>
+              (* if cond then
+                   let temp: ty;
+                   temp = Eget(p, fid, ty);
+                   arm'
+                else else_stmt *)              
+                  do else_stmt <- transl_arm_statements sl' p moved co;
+                  ret (Sifthenelse cond then_stmt else_stmt)
+              end
           | _ => error (msg "Cannot find the member: Rustlightgen.transl_arm_statements")
           end
       | None =>

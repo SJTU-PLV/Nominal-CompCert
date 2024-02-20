@@ -206,12 +206,12 @@ Definition generate_drop (ce: composite_env) (p: place) (flag: option ident) (fu
 Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instruction) (pc: node) : mon unit :=
   match instr with
   | Isel sel _ =>
-      match select_stmt f.(fn_body) sel with
-      | Some (Sdrop p) =>
-          let mayinit := maybeInit!pc in
-          let mayuninit := maybeUninit!pc in
-          match mayinit, mayuninit with
-          | Some mayinit, Some mayuninit =>
+      let mayinit := maybeInit!pc in
+      let mayuninit := maybeUninit!pc in
+      match mayinit, mayuninit with
+      | Some mayinit, Some mayuninit =>
+          match select_stmt f.(fn_body) sel with
+          | Some (Sdrop p) =>
               let id := local_of_place p in
               let init := PathsMap.get id mayinit in
               let uninit := PathsMap.get id mayuninit in
@@ -220,12 +220,13 @@ Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instructi
               do drops <- elaborate_drop_for pc init uninit universe own_fuel ce p;
               let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
               set_stmt sel (makeseq drop_stmts)
-          | _, _ =>
-          (* this pc has no information of initialized variables (it
-          may be unreachable), so we do not elaborate it *)
-              ret tt
+          | _ => ret tt
           end
-      | _ => ret tt
+      | _, _ =>
+          (** FIXME: this pc has no information of initialized
+              variables (it may be unreachable), so we do not
+              elaborate it and set it to Sskip (may be wrong?) *)
+          set_stmt sel Sskip
       end
   | _ => ret tt
   end.
@@ -306,6 +307,20 @@ End DROP_FLAGS.
   
 Local Open Scope error_monad_scope.
 
+Definition init_drop_flag (mayinit: PathsMap.t) (mayuninit: PathsMap.t) (elt: place * ident) : statement :=
+  let (p, flag) := elt in
+  let id := local_of_place p in
+  match mayinit!id, mayuninit!id with
+  | Some init, Some uninit =>
+      if Paths.mem p init then
+        set_dropflag flag true
+      else
+        if Paths.mem p uninit then
+          set_dropflag flag false
+        else Sskip
+  | _, _ => Sskip
+  end.                          
+  
 Definition transf_function (ce: composite_env) (f: function) : Errors.res function :=
   do (mayinit, mayuninit) <- analyze ce f;
   let vars := var_names (f.(fn_vars) ++ f.(fn_params)) in
@@ -316,13 +331,21 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   (* step 1 and step 2 *)
   match elaborate_drop mayinit mayuninit ce f cfg init_state with
   | Res _ st _ =>
-      (* step 3: update drop flag *)          
-      let stmt' := transl_stmt (snd st.(gen_map)) st.(gen_stmt) in
-      Errors.OK (mkfunction f.(fn_return)
+      (* step 3: initialize and update drop flag *)
+      let flags := concat (snd (split (PTree.elements (snd st.(gen_map))))) in
+      match mayinit!entry, mayuninit!entry with
+      | Some entry_init, Some entry_uninit =>
+          (* init drop flags *)
+          let init_stmt := makeseq (map (init_drop_flag entry_init entry_uninit) flags) in
+          (* update drop flags when encountering assginment *)
+          let stmt' := transl_stmt (snd st.(gen_map)) st.(gen_stmt) in
+          Errors.OK (mkfunction f.(fn_return)
                         f.(fn_callconv)                        
                         (f.(fn_vars) ++ st.(gen_trail))
                         f.(fn_params)
-                        stmt')      
+                        (Ssequence init_stmt stmt'))      
+      | _, _ => Errors.Error (msg "There is no init information in the entry node")
+      end
   | Err msg =>
       Errors.Error msg
   end.
