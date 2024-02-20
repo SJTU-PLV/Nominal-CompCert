@@ -402,7 +402,7 @@ let cmdline_actions =
 
 let debug_rust = true
 
-let test_case = Rustsyntax.ex2
+let test_case = Rustsyntax.pop_and_push_prog
 
 let fun_atom = BinNums.Coq_xH
 
@@ -412,6 +412,39 @@ let stdout_format = Format.formatter_of_out_channel stdout
 
 let _ =
   if debug_rust then
+    (* Print Rustlight *)
+    match Rustlightgen.transl_program test_case with
+    | Errors.OK rustlight_prog ->
+      Format.fprintf stdout_format "Rustlight: @.";
+      PrintRustlight.print_program stdout_format rustlight_prog;
+      (* Print RustIR *)
+      Format.fprintf stdout_format "@.RustIR: @.";
+      let rustir_prog = RustIRgen.transl_program rustlight_prog in
+      PrintRustIR.print_program stdout_format rustir_prog;
+      (* Print CFG *)
+      Format.fprintf stdout_format "@.Rust CFG: @.";
+      PrintRustIR.print_cfg_program stdout_format rustir_prog;
+      (* Print the result of InitAnalysis *)
+      Format.fprintf stdout_format "@.Initialized Analysis: @.";
+      PrintRustIR.print_cfg_program_debug stdout_format rustir_prog;
+      (* Print RustIR after the drop elaboration *)
+      begin match ElaborateDrop.transl_program rustir_prog with
+      | Errors.OK rustir_prog_drop ->
+        Format.fprintf stdout_format "@.Elaborate Drop: @.";
+        PrintRustIR.print_program stdout_format rustir_prog_drop;
+      (* Print Clight after generating drop glue *)
+        begin match Clightgen.transl_program rustir_prog_drop with
+        | Errors.OK clight_prog ->
+          Format.fprintf stdout_format "@.Clightgen: @.";
+        PrintClight.print_program PrintClight.Clight1 stdout_format clight_prog;
+        | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
+        end;
+      | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
+      end;
+    | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
+  else
+  (* The following code is the debug code for a single function *)
+  (* if debug_rust then
     let rustlight_func = Rustlightgen.transl_function Rustlightgen.empty_ce test_case in
     (* Print Rustlight *)
     match rustlight_func with
@@ -443,7 +476,7 @@ let _ =
       | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
       end;
     | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
-  else
+  else *)
   try
     Gc.set { (Gc.get()) with
                 Gc.minor_heap_size = 524288; (* 512k *)

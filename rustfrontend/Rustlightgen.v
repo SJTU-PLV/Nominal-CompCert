@@ -162,7 +162,22 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
         let s := Sassign p e' in
         ret (sl2 ++ sl1 ++ (s :: nil), dummy_expr)
       else
-        error (msg "Type mismatch between LHS and RHS in assignment: transl_expr")
+        match ty1 with
+        (* assign value to a variant *)
+        | Tvariant id _ =>
+            match ce!id with
+            | Some co =>
+                if in_dec type_eq ty2 (map type_member co.(co_members)) then
+                  do (sl1, p) <- transl_place_expr l;
+                  do (sl2, e') <- transl_value_expr r;
+                  let s := Sassign p e' in
+                  ret (sl2 ++ sl1 ++ (s :: nil), dummy_expr)
+                else
+                  error (msg "In assignment, LHS has type variant but the type of RHS is no in the fields of this variant")
+            | _ => error (msg "In assignment, LHS has type variant but does not exist in the composite environment")
+            end
+        | _ => error (msg "Type mismatch between LHS and RHS in assignment: transl_expr")
+        end
   | Ecall ef el ty =>
       do (sl1, ef') <- transl_value_expr ef;
       do (sl2, el') <- transl_exprlist el;

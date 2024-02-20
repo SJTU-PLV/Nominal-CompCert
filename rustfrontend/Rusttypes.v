@@ -154,7 +154,7 @@ Definition composite_env : Type := PTree.t composite.
 
 Definition complete_type (env: composite_env) (t: type) : bool :=
   match t with
-  | Tunit => false
+  | Tunit => true
   | Tint _ _ _ => true
   | Tlong _ _ => true
   | Tfloat _ _ => true

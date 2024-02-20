@@ -177,7 +177,7 @@ let print_cfg_body_debug pp (body, entry, cfg) mayinit mayuninit =
   List.iter (print_instruction_debug pp body) instrs;
   fprintf pp "}\n\n"
 
-let print_cfg_debug pp id f ce =
+let print_cfg_debug ce pp id f  =
   match generate_cfg f.fn_body with
   | Errors.OK(entry, cfg) ->
     (match analyze ce f with
@@ -192,12 +192,12 @@ let print_cfg_debug pp id f ce =
 (* Print program *)
 
 
-let print_fundef p id fd =
+let print_fundef p id fd print =
   match fd with
   | Rusttypes.External(_, _, _, _) ->
       ()
   | Internal f ->
-      print_function p id f
+      print p id f
 
 let print_fundecl p id fd =
   match fd with
@@ -210,9 +210,9 @@ let print_fundecl p id fd =
       fprintf p "%s;@ "
                 (name_rust_decl (extern_atom id) (RustIR.type_of_function f))
 
-let print_globdef p (id, gd) =
+let print_globdef p print (id, gd)  =
   match gd with
-  | AST.Gfun f -> print_fundef p id f
+  | AST.Gfun f -> print_fundef p id f print
   | AST.Gvar v -> PrintRustsyntax.print_globvar p id v  (* from PrintRustsyntax.ml *)
 
 let print_globdecl p (id, gd) =
@@ -225,7 +225,23 @@ let print_program p prog =
   List.iter (PrintRustsyntax.declare_composite p) prog.prog_types;
   List.iter (PrintRustsyntax.define_composite p) prog.prog_types;
   List.iter (print_globdecl p) prog.prog_defs;
-  List.iter (print_globdef p) prog.prog_defs;
+  List.iter (print_globdef p print_function) prog.prog_defs;
+  fprintf p "@]@."
+
+let print_cfg_program p prog =
+  fprintf p "@[<v 0>";
+  List.iter (PrintRustsyntax.declare_composite p) prog.prog_types;
+  List.iter (PrintRustsyntax.define_composite p) prog.prog_types;
+  List.iter (print_globdecl p) prog.prog_defs;
+  List.iter (print_globdef p print_cfg) prog.prog_defs;
+  fprintf p "@]@."
+
+let print_cfg_program_debug p prog =
+  fprintf p "@[<v 0>";
+  List.iter (PrintRustsyntax.declare_composite p) prog.prog_types;
+  List.iter (PrintRustsyntax.define_composite p) prog.prog_types;
+  List.iter (print_globdecl p) prog.prog_defs;
+  List.iter (print_globdef p (print_cfg_debug prog.prog_comp_env)) prog.prog_defs;
   fprintf p "@]@."
 
 let destination : string option ref = ref None
