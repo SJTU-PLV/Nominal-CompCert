@@ -24,7 +24,7 @@ Inductive type : Type :=
 | Tfunction: typelist -> type -> calling_convention -> type    (**r function types *)
 | Tbox: type -> attr -> type                                         (**r unique pointer  *)
 | Tstruct: ident -> attr -> type                              (**r struct types  *)
-| Tvariant: ident -> attr -> type                             (**r tagged union types *)
+| Tvariant: ident -> attr -> type                             (**r tagged variant types *)
 with typelist : Type :=
 | Tnil: typelist
 | Tcons: type -> typelist -> typelist.
@@ -148,7 +148,7 @@ Definition composite_env : Type := PTree.t composite.
 (** ** Complete types *)
 
 (** A type is complete if it fully describes an object.
-  All struct and union names appearing in the type must be defined,
+  All struct and variant names appearing in the type must be defined,
   unless they occur under a pointer or function type.  [void] and
   function types are incomplete types. *)
 
@@ -615,7 +615,7 @@ Qed.
 (** Type ranks *)
 
 (** The rank of a type is a nonnegative integer that measures the direct nesting
-  of arrays, struct and union types.  It does not take into account indirect
+  of arrays, struct and variant types.  It does not take into account indirect
   nesting such as a struct type that appears under a pointer or function type.
   Type ranks ensure that type expressions (ignoring pointer and function types)
   have an inductive structure. *)
@@ -723,9 +723,9 @@ Program Definition composite_of_def
      : res composite :=
   match env!id, complete_members env m return _ with
   | Some _, _ =>
-      Error (MSG "Multiple definitions of struct or union " :: CTX id :: nil)
+      Error (MSG "Multiple definitions of struct or variant " :: CTX id :: nil)
   | None, false =>
-      Error (MSG "Incomplete struct or union " :: CTX id :: nil)
+      Error (MSG "Incomplete struct or variant " :: CTX id :: nil)
   | None, true =>
       let al := align_attr a (alignof_composite env m) in
       OK {| co_sv := su;
@@ -940,8 +940,8 @@ Proof.
   intros. exploit field_offset_aligned_gen; eauto.
 Qed.
 
-(** [union_field_offset env id ms] returns the byte offset (plus 4 bytes) and
-    bitfield designator for accessing a member named [id] of a union
+(** [variant_field_offset env id ms] returns the byte offset (plus 4 bytes) and
+    bitfield designator for accessing a member named [id] of a variant
     whose members are [ms].  The byte offset is always 0. *)
 
 Fixpoint variant_field_offset (env: composite_env) (id: ident) (ms: members)
@@ -955,8 +955,8 @@ Fixpoint variant_field_offset (env: composite_env) (id: ident) (ms: members)
   end.
 
 
-(** Some sanity checks about union field offsets.  First, field offsets
-    fit within the size of the union. *)
+(** Some sanity checks about variant field offsets.  First, field offsets
+    fit within the size of the variant. *)
 
 Set Implicit Arguments.
 

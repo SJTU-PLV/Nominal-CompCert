@@ -432,7 +432,13 @@ let _ =
       | Errors.OK rustir_prog_drop ->
         Format.fprintf stdout_format "@.Elaborate Drop: @.";
         PrintRustIR.print_program stdout_format rustir_prog_drop;
-      (* Print Clight after generating drop glue *)
+      (* Print Clight composites *)
+        let clight_composites = Clightgen.transl_composites rustir_prog_drop.Rusttypes.prog_types in
+        Format.fprintf stdout_format "@.Clightgen Composites: @.";
+        Format.fprintf stdout_format "@[<v 0>"; 
+        List.iter (PrintCsyntax.define_composite stdout_format) clight_composites;
+        Format.fprintf stdout_format "@]@.";
+        (* Print Clight after generating drop glue *)
         begin match Clightgen.transl_program rustir_prog_drop with
         | Errors.OK clight_prog ->
           Format.fprintf stdout_format "@.Clightgen: @.";

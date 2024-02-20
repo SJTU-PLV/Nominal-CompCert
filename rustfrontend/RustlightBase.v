@@ -97,7 +97,7 @@ Fixpoint typeof_boxexpr (r: boxexpr) : type :=
 Option<reference> -> C pointer *)
 Fixpoint to_ctype (ty: type) : Ctypes.type :=
   match ty with
-  | Tunit => Tvoid 
+  | Tunit => Ctypes.type_int32s  (* unit is set to zero *)
   (* | Tbox _  => None *)
   | Tint sz si attr => Ctypes.Tint sz si attr
   | Tlong si attr => Ctypes.Tlong si attr

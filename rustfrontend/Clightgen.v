@@ -34,49 +34,43 @@ Definition transl_composite_member (m: member) : Ctypes.member :=
   end.
           
 (* Variant {a, b, c} => Struct {tag_fid: int; union_fid: {a,b,c}} *)
-Definition transl_composite_def (union_map: PTree.t (ident * attr)) (co: composite_definition) :res Ctypes.composite_definition :=
+Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: composite_definition) :(Ctypes.composite_definition * option Ctypes.composite_definition) :=
   match co with
   | Composite id Struct ms attr =>
-      OK (Ctypes.Composite id Ctypes.Struct (map transl_composite_member ms) attr)
+      (Ctypes.Composite id Ctypes.Struct (map transl_composite_member ms) attr, None)
   | Composite id TaggedUnion ms attr =>
       (* generate a Struct with two fields, one for the tag field and
       the other for the union *)
       let tag_fid := first_unused_ident tt in
       let tag_member := Ctypes.Member_plain tag_fid Ctypes.type_int32s in
       let union_fid := first_unused_ident tt in
-      match union_map ! id with
-      | Some (id',attr) =>
-          let union_member := Ctypes.Member_plain tag_fid (Tunion id' attr) in
-          (** TODO: specify the attribute *)
-          OK (Ctypes.Composite id Ctypes.Struct (tag_member :: union_member :: nil) noattr)
-      | _ =>
-          Error (msg "No corresponded union for the variant: transl_composite_def")
-      end
-  end.
-
-
-Definition variant_to_union (co: composite_definition) : option (Ctypes.composite_definition * (ident * (ident * attr))) :=
-  match co with
-  | Composite id Struct ms attr => None
-  | Composite id TaggedUnion ms attr =>
+      (* generate the union *)
       let union_id := first_unused_ident tt in
       (** TODO: specify the attr  *)
-      Some ((Ctypes.Composite union_id Union (map transl_composite_member ms) noattr), (id,(union_id, noattr)))
+      let union := (Ctypes.Composite union_id Union (map transl_composite_member ms) noattr) in
+      let union_member := Ctypes.Member_plain tag_fid (Tunion union_id noattr) in     
+      (Ctypes.Composite id Ctypes.Struct (tag_member :: union_member :: nil) noattr, Some union)
   end.
 
 
-Definition transl_composites (l: list composite_definition) : res (list Ctypes.composite_definition) :=
-  (* generate an union definition for each variant *)
-  let (unions, idpairs) := split (fold_right (fun elt acc => match variant_to_union elt with
-                                        | Some co_id => co_id :: acc
-                                        | None => acc
-                                        end) nil l) in
-  let union_map := fold_left (fun acc elt => PTree.set (fst elt) (snd elt) acc) idpairs (PTree.empty (ident * attr)) in
+(* Definition variant_to_union (co: composite_definition) : option (Ctypes.composite_definition * (ident * (ident * attr))) := *)
+(*   match co with *)
+(*   | Composite id Struct ms attr => None *)
+(*   | Composite id TaggedUnion ms attr => *)
+(*       let union_id := first_unused_ident tt in *)
+(*       (** TODO: specify the attr  *) *)
+(*       Some ((Ctypes.Composite union_id Union (map transl_composite_member ms) noattr), (id,(union_id, noattr))) *)
+(*   end. *)
+
+
+Definition transl_composites (l: list composite_definition) : list Ctypes.composite_definition :=
   (* translate rust composite to C composite *)
-  do composites <- fold_right (fun elt acc => do acc' <- acc;
-                                          do def <- transl_composite_def union_map elt;
-                                          OK (def :: acc')) (OK nil) l;
-  OK (composites ++ unions).
+  fold_right (fun elt acc =>
+                let (def, optunion) := transl_composite_def elt in
+                match optunion with
+                | Some union => union :: def :: acc
+                | None => def :: acc
+                end) nil l.
 
 
 
@@ -595,7 +589,7 @@ Local Open Scope error_monad_scope.
 
 Definition transl_program (p: program) : res Clight.program :=
   (* step 1: rust composite to c composite: generate union for each variant *)
-  do co_defs <- transl_composites p.(prog_types);  
+  let co_defs := transl_composites p.(prog_types) in
   let tce := Ctypes.build_composite_env co_defs in
   (match tce as m return (tce = m) -> res Clight.program with
    | OK tce =>            
