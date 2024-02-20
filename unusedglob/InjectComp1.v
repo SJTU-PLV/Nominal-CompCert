@@ -44,7 +44,7 @@ Section CONSTR_PROOF.
   Definition m2'2 := Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 (Mem.support m2) m2'1.
   (** step4 *)
   Definition m2' := Mem.set_empty_sup m1 j1 j2 gs2 m2'2.
-  
+
   Lemma INJNOLAP1' : Mem.meminj_no_overlap j1' m1'.
   Proof. eapply update_meminj_no_overlap1; eauto. Qed.
 
@@ -139,7 +139,7 @@ Qed.
     congruence.
   Qed.
 
-    Lemma unchanged_on_copy_block1 : forall m m' b,
+  Lemma unchanged_on_copy_block1 : forall m m' b,
       Mem.copy_block m1 m2 m1' j1 j2 j1' INJ12 b m = m' ->
       Mem.unchanged_on (loc_out_of_reach j1 m1) m m'.
   Proof.
@@ -1571,10 +1571,9 @@ Lemma valid_global_dom : forall f se m,
 Proof.
   intros. red in *. intros.
   exploit H; eauto. unfold valid_memval.
-  destruct (mem_memval m b ofs); eauto.
-  destruct v; eauto.
-  unfold valid_b, meminj_dom. destruct (f b0); eauto.
+  unfold meminj_dom in H2. destruct (f b); eauto. congruence.
 Qed.
+
 (* injp' ⋅ injp ⊑ injp' *)
 Theorem injp'_injp_ref1:
   ccref'  (cc_c' injp') (cc_compose_2 (cc_c' injp') (cc_c injp)).
@@ -1628,6 +1627,24 @@ Proof.
     + constructor; cbn; eauto with mem.
       eapply Values.val_inject_compose; eauto.
       constructor; eauto.
+      red. intros. red.
+      red in H33. exploit H33; eauto.
+      destruct (f12' b) as [[b2 d]|] eqn: Hj1; eauto.
+      exfalso. unfold compose_meminj in H8. rewrite Hj1 in H8.
+      destruct (f23' b2) as [[b3 d']|] eqn:Hj2; eauto. congruence.
+      eapply Genv.match_stbls_incr' in Hse1; eauto.
+      2: { intros. exploit H23; eauto. intros [A B]. split.
+           intuition eauto. apply A. apply H0. eauto.
+           intro. apply B. eapply se2_sup in H12; eauto.
+           apply H0. apply H12.
+      }
+      eapply Genv.match_stbls_incr in Hse2; eauto.
+      erewrite Genv.mge_separated' in H6; eauto.
+      eapply Genv.mge_dom in H6; eauto. destruct H6 as [b3 A]. congruence.
+      intros. exploit H31; eauto. intros [A B]. split.
+      intro. eapply se2_sup in H12; eauto. apply A. apply H0. apply H12.
+      intro. apply B. apply H1. eauto.
+Qed.
 
       (*
       [] []          []  []         []    []       []    []
@@ -1676,8 +1693,6 @@ Proof.
       *)
       
       (*TODO: A lemma here*)
-      admit.
-Admitted.
 
 Theorem injp'_injp_ref2:
   ccref' (cc_compose_2 (cc_c' injp') (cc_c injp)) (cc_c' injp') .
@@ -1705,12 +1720,13 @@ Proof.
      constructor; eauto.
      red. red in H3.
      intros. exploit H3; eauto.
-     destruct (mem_memval m1 b ofs); eauto.
-     destruct v; eauto. unfold compose_meminj.
-     cbn. unfold valid_b. destruct (j12 b0) as [[b2 d]|] eqn:Hj1; eauto.
-     inv MSTBL12. inv MSTBL23.
-     admit. (*seems wrong here*)
-
+     unfold compose_meminj in H5.
+     destruct (j12 b) as [[b2 d]|] eqn:Hj1; eauto.
+     exfalso. destruct (j23 b2) as [[b3 d']|] eqn:Hj2; eauto. congruence.
+     inv MSTBL12. inv MSTBL23. subst gs0 gs4. rename gs2 into gs3.
+     rename gs1 into gs2.
+     erewrite Genv.mge_separated' in H1; eauto.
+     inv H19. exploit mge_dom; eauto. intros [a c]. congruence.
   - intros r1 r3 [w13' [INCR13' Hr13]].
     inv Hr13. inv H4. cbn in H1. rename f into j13'. rename Hm3 into INJ13'.
     cbn in INCR13'. rename m2'0 into m3'.
@@ -1750,13 +1766,14 @@ Proof.
       intros. destruct H4. split; eauto. red. unfold compose_meminj.
       rewrite H4. reflexivity.
       constructor; eauto. constructor; eauto.
-      admit.
+      red. intros.
+      red in H5. exploit H5; eauto. unfold compose_meminj. rewrite H8. reflexivity.
     +
       exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
       eapply MAXPERM2; eauto.
       eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
       econstructor; eauto. constructor; eauto.
-Admitted.
+Qed.
 
 Theorem injp'_injp_c_equiv:
   cceqv' (cc_c' injp') (cc_compose_2 (cc_c' injp') (cc_c injp)).

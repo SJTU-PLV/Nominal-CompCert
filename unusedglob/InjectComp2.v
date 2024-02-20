@@ -7,6 +7,199 @@ Require Import InjectFootprint.
 
 Require Import Callconv.
 
+Definition source_inj (gs : sup) (f : meminj) :=
+  fun b => if Mem.sup_dec b gs  then
+        Some (b,0) else meminj_dom f b.
+
+Lemma source_inj_meminj_dom_incr : forall se f,
+    inject_incr (meminj_dom f) (source_inj se f).
+Proof.
+  intros. intro. intros.
+  unfold source_inj.
+  unfold meminj_dom in *.
+  destruct (f b); try discriminate. inv H.
+  destruct Mem.sup_dec; eauto.
+Qed.
+
+Global Instance source_inj_incr se:
+  Monotonic (@source_inj se) (inject_incr ++> inject_incr).
+Proof.
+  intros f g Hfg b b' delta Hb.
+  unfold source_inj in *.
+  destruct (Mem.sup_dec). eauto.
+  eapply meminj_dom_incr; eauto.
+Qed.
+
+Lemma source_inj_compose se f:
+  compose_meminj (source_inj se f) f = f.
+Proof.
+  apply Axioms.functional_extensionality; intros b.
+  unfold compose_meminj, source_inj, meminj_dom.
+  destruct (Mem.sup_dec).
+  destruct (f b) as [[b' ofs] | ] eqn:Hfb; eauto.
+  destruct (f b) as [[b' ofs] | ] eqn:Hfb; eauto.
+  rewrite Hfb.
+  replace (0 + ofs) with ofs by extlia.
+  reflexivity.
+Qed.
+
+Lemma block_inject_dom se f b1 b2:
+  block_inject f b1 b2 ->
+  block_inject (source_inj se f) b1 b1.
+Proof.
+  unfold source_inj,meminj_dom.
+  intros (delta & Hb).
+  exists 0.
+  rewrite Hb; eauto.
+  destruct Mem.sup_dec; eauto.
+Qed.
+
+Lemma val_inject_dom se f v1 v2:
+  Val.inject f v1 v2 ->
+  Val.inject (source_inj se f) v1 v1.
+Proof.
+  destruct 1; econstructor.
+  - unfold source_inj, meminj_dom.
+    rewrite H. destruct Mem.sup_dec; eauto.
+  - rewrite Ptrofs.add_zero.
+    reflexivity.
+Qed.
+
+Lemma memval_inject_dom se f v1 v2:
+  memval_inject f v1 v2 ->
+  memval_inject (source_inj se f) v1 v1.
+Proof.
+  destruct 1; econstructor.
+  eapply val_inject_dom; eauto.
+Qed.
+
+Lemma val_inject_list_dom se f vs1 vs2:
+  Val.inject_list f vs1 vs2 ->
+  Val.inject_list (source_inj se f) vs1 vs1.
+Proof.
+  induction 1; constructor; eauto using val_inject_dom.
+Qed.
+
+Lemma memval_valid_inject : forall mv f gs,
+    valid_memval mv gs ->
+    memval_inject (source_inj gs f) mv mv.
+Proof.
+  intros. destruct mv; simpl in *; constructor; eauto.
+  destruct v; simpl in *; try constructor; eauto.
+  unfold source_inj. econstructor; eauto.
+  destruct Mem.sup_dec; eauto. inv H. rewrite Ptrofs.add_zero.
+  reflexivity.
+Qed.
+
+Lemma mem_mem_inj_dom se f m1 m2:
+  valid_global m1 f se ->
+  Mem.mem_inj f m1 m2 ->
+  Mem.mem_inj (source_inj se f) m1 m1.
+Proof.
+  intros H.
+  split.
+  - unfold source_inj, meminj_dom. intros b1 b2 delta ofs k p Hb1 Hp.
+    destruct Mem.sup_dec; destruct (f b1); inv Hb1;
+    replace (ofs + 0) with ofs by extlia; auto.
+  - unfold source_inj, meminj_dom. intros b1 b2 delta chunk ofs p Hb1 Hrp.
+    destruct (Mem.sup_dec); destruct (f b1) as [[b1' delta'] | ]; inv Hb1;
+    eauto using Z.divide_0_r.
+  - unfold source_inj, meminj_dom at 1. intros b1 ofs b2 delta Hb1 Hp.
+    destruct (Mem.sup_dec) ; destruct (f b1) as [[b1' delta'] | ] eqn:Hb1'; inv Hb1;
+      replace (ofs + 0) with ofs by extlia.
+    + eapply memval_inject_dom.
+      eapply Mem.mi_memval; eauto.
+    + eapply memval_valid_inject. eapply H; eauto.
+    + eapply memval_inject_dom.
+      eapply Mem.mi_memval; eauto.
+Qed.
+
+Lemma mem_source_inj gs f m1 m2:
+  valid_global m1 f gs ->
+  Mem.sup_include gs (Mem.support m1) ->
+  Mem.inject f m1 m2 ->
+  Mem.inject (source_inj gs f) m1 m1.
+Proof.
+  intros H.
+  split.
+  - eapply mem_mem_inj_dom; eauto.
+    eapply Mem.mi_inj; eauto.
+  - unfold source_inj, meminj_dom. intros.
+    erewrite Mem.mi_freeblocks; eauto.
+    rewrite pred_dec_false; eauto.
+    intro. apply H2. apply H0. eauto.
+  - unfold source_inj, meminj_dom; intros.
+    destruct Mem.sup_dec; eauto. inv H2. apply H0; eauto.
+    destruct (f b) as [[b'' delta'] | ] eqn:Hb; inv H2.
+    eapply Mem.valid_block_inject_1; eauto.
+  - red. unfold source_inj, meminj_dom. intros.
+    destruct Mem.sup_dec; inv H3; eauto.
+    destruct Mem.sup_dec; inv H4; eauto.
+    destruct (f b2); inv H7; eauto.
+    destruct Mem.sup_dec; inv H4; eauto.
+    destruct (f b1); inv H8; eauto.                              
+    destruct (f b1); inv H8.
+    destruct (f b2); inv H7.
+    eauto.
+  - unfold source_inj, meminj_dom. intros.
+    destruct (Mem.sup_dec); eauto. inv H2.
+    split; try extlia. rewrite Z.add_0_r.
+    apply Ptrofs.unsigned_range_2.
+    destruct (f b); inv H2.
+    split; try extlia.
+    rewrite Z.add_0_r.
+    apply Ptrofs.unsigned_range_2.
+  - unfold source_inj, meminj_dom. intros.
+    destruct Mem.sup_dec; inv H2.
+    rewrite Z.add_0_r in H3; eauto.
+    destruct (f b1); inv H5.
+    rewrite Z.add_0_r in H3; eauto.
+Qed.
+
+Lemma match_stbls'_dom f se1 se2:
+  Genv.match_stbls' f se1 se2 ->
+  Genv.match_stbls' (source_inj (Genv.genv_sup se1) f) se1 se1.
+Proof.
+  intros Hse. unfold source_inj, meminj_dom. split; eauto; intros.
+  - rewrite pred_dec_true in H0; eauto. inv H0. reflexivity.
+  - eexists. rewrite pred_dec_true; eauto.
+  - destruct (Mem.sup_dec); eauto; inv H. reflexivity.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H1. reflexivity.
+  - destruct (Mem.sup_dec); eauto; inv H. reflexivity.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H1. reflexivity.
+  - destruct (Mem.sup_dec); eauto; inv H. reflexivity.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H1. reflexivity.
+Qed.
+
+Lemma loc_unmapped_dom f b ofs:
+  loc_unmapped (meminj_dom f) b ofs <->
+  loc_unmapped f b ofs.
+Proof.
+  unfold meminj_dom, loc_unmapped.
+  destruct (f b) as [[b' delta] | ].
+  - split; discriminate.
+  - reflexivity.
+Qed.
+
+Definition source_world f m1 m2 (Hm: Mem.inject f m1 m2) (se:Genv.symtbl) (Hse: Mem.sup_include (Genv.genv_sup se) (Mem.support m1)) (Hv: valid_global m1 f (Genv.genv_sup se)) :=
+  let gs := Genv.genv_sup se in
+      injpw (source_inj gs f) gs gs m1 m1 (mem_source_inj gs f m1 m2 Hv Hse Hm).
+
+Lemma match_stbls_dom' f se1 se2:
+  Genv.match_stbls' f se1 se2 ->
+  Genv.match_stbls (source_inj (Genv.genv_sup se1) f) se1 se1.
+Proof.
+  intros Hse. unfold source_inj. unfold meminj_dom. split; eauto; intros.
+  - destruct Mem.sup_dec; try congruence. eauto.
+  - inv Hse. exists b2. destruct Mem.sup_dec; try congruence.
+  - destruct Mem.sup_dec. inv H. reflexivity.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
+  - destruct Mem.sup_dec. inv H. reflexivity.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
+  - destruct Mem.sup_dec. inv H. reflexivity.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
+Qed.
+
 Section CONSTR_PROOF.
   Variable m1 m2 m3 m1' m3': mem.
   Variable j1 j2 j1' j2': meminj.
@@ -22,7 +215,7 @@ Section CONSTR_PROOF.
   Hypothesis INJ12 Hm1: Mem.inject j1 m1 m2.
   Hypothesis INJ23 Hm2: Mem.inject j2 m2 m3.
   Hypothesis MSTBL12: injp_match_stbls (injpw j1 gs1 gs2 m1 m2 Hm1) se1 se2.
-  Hypothesis MSTBL23 : injp_match_stbls (injpw j2 gs2 gs3 m2 m3 Hm2) se2 se3.
+  Hypothesis MSTBL23 : injp_match_stbls' (injpw j2 gs2 gs3 m2 m3 Hm2) se2 se3.
   Hypothesis INJ13': Mem.inject (compose_meminj j1' j2') m1' m3'.
   Hypothesis SUPINCL2 : Mem.sup_include (Mem.support m2) s2'.
   Hypothesis SUPINCL3 : Mem.sup_include (Mem.support m3) (Mem.support m3').
@@ -1168,14 +1361,14 @@ Qed.
     intros. exploit step2_perm; eauto.
     intro HH. eapply HH; eauto.
   Qed.
-
-    Lemma m2_notglobal : forall b2, j2 b2 = None -> ~ sup_In b2 gs2.
+  (* wrong here
+  Lemma m2_notglobal : forall b2, j2 b2 = None -> ~ sup_In b2 gs2.
   Proof.
     inv MSTBL23. intros.
-    intro. inv H6. exploit mge_dom; eauto.
+    intro. inv H6. exploit mge_dom'; eauto.
     intros [b3 A]. congruence.
   Qed.
-  
+  *)
 
   (** Lemma C.10 *)
   
@@ -1193,7 +1386,8 @@ Qed.
         intro PERM1.
         replace o2 with (o1 + (o2 - o1)) by lia.
         eapply Mem.perm_inject; eauto.
-      + generalize (UNCHANGE22). intro UNC2.
+      + 
+        generalize (UNCHANGE22). intro UNC2.
         inversion UNC2. eapply unchanged_on_perm; eauto.
         split. eauto. apply m2_notglobal. eauto.
     - generalize (UNCHANGE21'). intro UNC1.

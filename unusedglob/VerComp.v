@@ -1171,17 +1171,14 @@ Proof.
 Qed.
 
 Lemma memval_valid_inject : forall mv f gs,
-    valid_memval f mv gs ->
+    valid_memval mv gs ->
     memval_inject (source_inj gs f) mv mv.
 Proof.
   intros. destruct mv; simpl in *; constructor; eauto.
   destruct v; simpl in *; try constructor; eauto.
-  unfold valid_b in H. unfold source_inj.
-  destruct (f b) as [[b' d]|] eqn: Hj; try congruence.
-  - econstructor. destruct Mem.sup_dec; eauto. unfold meminj_dom. rewrite Hj. eauto.
-    rewrite Ptrofs.add_zero. reflexivity.
-  - econstructor. destruct Mem.sup_dec; eauto. inv H.
-    rewrite Ptrofs.add_zero. reflexivity.
+  unfold source_inj. econstructor; eauto.
+  destruct Mem.sup_dec; eauto. inv H. rewrite Ptrofs.add_zero.
+  reflexivity.
 Qed.
 
 Lemma mem_mem_inj_dom se f m1 m2:
@@ -1363,7 +1360,7 @@ Proof.
         edestruct H30; eauto.
     + constructor; cbn; eauto with mem.
       eapply Values.val_inject_compose; eauto.
-      constructor; eauto.
+      constructor; eauto. 
       (* The validity of source memory after external calls *)
       (* TODO: define this into a lemma *)
       red. intros. red.
@@ -1371,31 +1368,29 @@ Proof.
       set (mv2 := mem_memval m2' b ofs).
       assert (source_inj gs1 f b = Some (b,0)).
       unfold source_inj. rewrite pred_dec_true. reflexivity. eauto.
-      apply H21 in H8.
+      apply H21 in H10.
       assert (MVALINJ12: memval_inject f12' mv1 mv2).      
       inv Hm'0. inv mi_inj. exploit mi_memval; eauto.
       rewrite Z.add_0_r. eauto.
       destruct mv1 eqn: Hv1; eauto.
       destruct v; eauto.
-      inv MVALINJ12. inv H11.
+      inv MVALINJ12. inv H12.
       rename b into bg. rename b0 into b1.
-      unfold valid_b. 
-      unfold compose_meminj. rewrite H13.
-      destruct (f23' b2) as [[b3 d3]|] eqn:Hj3; eauto.
-      destruct (Mem.sup_dec); eauto.
+      unfold compose_meminj in H8. rewrite H10 in H8.
+      destruct (f23' bg) as [[b3 d3]|] eqn:Hj3; try congruence.
       exploit H31; eauto. eapply Mem.perm_inject; eauto.
-      intro. red in H10. unfold mv2 in H23.
-      replace ofs with (ofs + 0) in H23 by lia.
-      rewrite <- H23 in H10.
-      unfold valid_b in H10. rewrite Hj3 in H10.
-      rewrite pred_dec_false in H10. eauto.
+      intro. red in H11. unfold mv2 in H32.
+      replace (ofs + 0) with ofs in H11 by lia.
+      rewrite <- H32 in H11.
+      destruct (Mem.sup_dec b2 (Genv.genv_sup se1)); try congruence.
+      rewrite pred_dec_true. eauto.
       assert (Genv.match_stbls (source_inj gs1 f) se1 se1).
       eapply match_stbls_dom'; eauto.
-      eapply Genv.match_stbls_incr in H11; eauto.
-      inv H11. rewrite <- mge_separated; eauto.
+      eapply Genv.match_stbls_incr in H12; eauto.
+      inv H12. rewrite mge_separated; eauto.
       intros. exploit H22; eauto. intros [A B].
       split; eauto. intro. eapply A. apply H0. eauto.
-      intro. eapply B. apply H0. eauto.
+      intro. eapply B. apply H0. eauto. inv H11.
 Qed.
 
 Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
@@ -1444,11 +1439,13 @@ Proof.
     red. intros.
     red.
     red in H1.
-    inv MSTBL12. inv H15.
+    inv MSTBL12. inv H16.
     exploit mge_dom; eauto.
     intros [b2 Hj1]. rename b into b1.
     eapply mge_separated in H3 as HSUP2; eauto.
     exploit H1; eauto. eapply Mem.perm_inject; eauto.
+    unfold compose_meminj in H5. rewrite Hj1 in H5.
+    destruct (j23 b2) as [[a c]|]; try congruence.
     rewrite Z.add_0_r. intro Hmv2. red in Hmv2.
     destruct (mem_memval m1 b1 ofs) eqn:Hmv1; eauto.
     destruct v; eauto.
@@ -1456,15 +1453,13 @@ Proof.
     exploit mi_memval; eauto.
     intro Hmvinject.
     setoid_rewrite Hmv1 in Hmvinject.
-    inv Hmvinject. inv H7.
-    rewrite Z.add_0_r in H12.
-    symmetry in H12. unfold mem_memval in Hmv2.
-    rewrite H12 in Hmv2. unfold compose_meminj.
-    unfold valid_b in *. rewrite H11.
-    destruct (j23 b3). destruct p. eauto.
-    rewrite pred_dec_true. eauto.
-    destruct (Mem.sup_dec b3 gs4); try inv Hmv2.
-    eapply mge_separated; eauto.
+    inv Hmvinject. inv H9.
+    rewrite Z.add_0_r in H13.
+    symmetry in H13. unfold mem_memval in Hmv2.
+    rewrite H13 in Hmv2.
+    clear - Hmv2 H12 mge_separated.
+    destruct (Mem.sup_dec b3 gs4). rewrite pred_dec_true; eauto.
+    eapply mge_separated; eauto. inv Hmv2.
   - intros r1 r3 [w13' [INCR13' Hr13]].
     inv Hr13. inv H4. cbn in H3. rename f into j13'. rename Hm3 into INJ13'.
     cbn in INCR13'. rename m2' into m3'.

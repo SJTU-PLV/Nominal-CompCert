@@ -419,32 +419,19 @@ Inductive injp_match_stbls': injp_world -> relation Genv.symtbl :=
     Mem.sup_include (Genv.genv_sup se2) (Mem.support m2) ->
     injp_match_stbls' (injpw f (Genv.genv_sup se1) (Genv.genv_sup se2) m1 m2 Hm) se1 se2.
 
+(*
 Definition valid_b (j:meminj) b gs : bool := if j b then true
                                           else if Mem.sup_dec b gs then true else false.
-
-Definition valid_memval (j: meminj) (mv: memval) (gs : sup) : Prop :=
+*)
+Definition valid_memval (mv: memval) (gs : sup) : Prop :=
   match mv with
-  |Fragment (Vptr b ofs) _ _ => if valid_b j b gs then True else False
+  |Fragment (Vptr b ofs) _ _ => if Mem.sup_dec b gs then True else False
   |_ => True
   end.
 
-Definition valid_global m j gs: Prop :=
-  forall b ofs, sup_In b gs  -> Mem.perm m b ofs Cur Readable ->
-           valid_memval j (mem_memval m b ofs) gs.
-
-(* To be moved to proof
- 
- Lemma memval_compose_3:
-  forall mv j,
-    valid_memval j mv ->
-    memval_inject j mv (Mem.memval_map j mv).
-Proof.
-  intros. destruct mv; cbn; try constructor.
-  destruct v; cbn; repeat constructor.
-  simpl in H. destruct (j b) as [[b' ofs]|] eqn:Hj; try inv H.
-  constructor. econstructor. eauto. reflexivity.
-Qed.
-*)
+Definition valid_global m (j: meminj) gs: Prop :=
+  forall b ofs, sup_In b gs -> Mem.perm m b ofs Cur Readable -> j b = None ->
+           valid_memval (mem_memval m b ofs) gs.
 
 Inductive injp_match_mem': injp_world -> relation mem :=
   injp_match_mem_intro' f gs1 gs2 m1 m2 Hm:
@@ -489,10 +476,10 @@ Qed.
 Next Obligation.
   destruct H. inv H0. auto.
 Qed.
-
+(*
 Lemma valid_memval_incr : forall f f' mv gs,
     inject_incr f f' ->
-    valid_memval f mv gs ->
+    valid_memval mv gs ->
     valid_memval f' mv gs.
 Proof.
   intros.
@@ -502,7 +489,7 @@ Proof.
   erewrite H; eauto.
   destruct Mem.sup_dec; destruct (f' b); eauto.
 Qed.
-
+*)
 Lemma valid_global_alloc:
   forall m lo hi b m' f f' gs,
     Mem.alloc m lo hi = (m', b) ->
@@ -514,8 +501,8 @@ Proof.
    red. intros. destruct (eq_block b b0).
   - subst. red. unfold mem_memval. erewrite Mem.memval_alloc_new; eauto.
   - exploit H1; eauto. eapply Mem.perm_alloc_4; eauto.
+    destruct (f b0) as [[a c]|] eqn:Hf. apply H0 in Hf. congruence. reflexivity.
     intros. unfold mem_memval. erewrite Mem.memval_alloc_other; eauto.
-    eapply valid_memval_incr; eauto.
 Qed.
 
 Next Obligation. (* Mem.alloc *)
@@ -527,7 +514,7 @@ Next Obligation. (* Mem.alloc *)
   rewrite Hm2'.
   exists (injpw f' gs1 gs2 m1' m2' Hm'); split; repeat rstep; eauto.
   eapply injp_acc_alloc; eauto.
-  constructor; eauto. eapply valid_global_alloc; eauto.
+  constructor. eapply valid_global_alloc; eauto.
 Qed.
 
 Lemma valid_global_free : forall m b lo hi m' f gs,
@@ -550,7 +537,7 @@ Next Obligation. (* Mem.free *)
   rewrite Hm2'. repeat rstep.
   exists (injpw f gs1 gs2 m1' m2' Hm'); split; repeat rstep; eauto.
   eapply injp_acc_free; eauto.
-  constructor; eauto. eapply valid_global_free; eauto.
+  constructor. eapply valid_global_free; eauto.
 Qed.
 
 Next Obligation. (* Mem.load *)
@@ -561,19 +548,10 @@ Next Obligation. (* Mem.load *)
   rewrite Hv2. rauto.
 Qed.
 
-Lemma memval_inject_valid: forall mv mv' f gs,
-    memval_inject f mv mv' ->
-    valid_memval f mv gs.
-Proof.
-  intros. destruct mv; simpl in *; eauto.
-  destruct v; simpl in *; eauto. unfold valid_b.
-  inv H. inv H4. rewrite H1. eauto.
-Qed.
-
-Lemma valid_global_storebytes: forall m b ofs vs m' f gs tvs,
+Lemma valid_global_storebytes: forall m b ofs m' vs f gs,
     Mem.storebytes m b ofs vs = Some m' ->
     valid_global m f gs ->
-    list_forall2 (memval_inject f) vs tvs ->
+    f b <> None ->
     valid_global m' f gs.
 Proof.
   intros.
@@ -583,31 +561,19 @@ Proof.
   unfold mem_memval.
   erewrite Mem.storebytes_mem_contents; eauto.
   destruct (eq_block b b0).
-  - subst. rewrite NMap.gss.
-    destruct (zlt ofs0 ofs).
-    + rewrite Mem.setN_outside. eauto. lia.
-    + destruct (zle (ofs + Z.of_nat (length vs)) ofs0).
-      rewrite Mem.setN_outside. eauto.
-      right. lia.
-      assert (ofs <= ofs0 < ofs + Z.of_nat (Datatypes.length vs)).
-      split; lia.
-      exploit Mem.setN_in; eauto. instantiate (1:= (NMap.get b0 (Mem.mem_contents m))).
-      intro IN.
-      exploit list_forall2_in_left; eauto.
-      intros [x2 [A B]].
-      eapply memval_inject_valid; eauto.
+  - subst. congruence.
   -  rewrite NMap.gso; eauto.
 Qed.
 
-Lemma valid_global_store : forall m chunk b ofs m' f gs v tv,
+
+Lemma valid_global_store : forall m chunk b ofs m' f gs v,
     Mem.store chunk m b ofs v = Some m' ->
     valid_global m f gs ->
-    Val.inject f v tv ->
+    f b <> None ->
     valid_global m' f gs.
 Proof.
   intros. apply Mem.store_storebytes in H as H'; eauto.
   eapply valid_global_storebytes; eauto.
-  eapply encode_val_inject; eauto.
 Qed.                         
 
 Next Obligation. (* Mem.store *)
@@ -618,7 +584,7 @@ Next Obligation. (* Mem.store *)
   rewrite Hm2'. repeat rstep.
   exists (injpw f gs1 gs2 m1' m2' Hm'); split; repeat rstep; eauto.
   eapply injp_acc_store; eauto.
-  econstructor; eauto. eapply valid_global_store; eauto.
+  constructor. eapply valid_global_store; eauto. congruence.
 Qed.
 
 Next Obligation. (* Mem.loadbytes *)
@@ -654,7 +620,9 @@ Next Obligation. (* Mem.storebytes *)
       * eapply Mem.storebytes_unchanged_on; eauto.
         simpl. intro. extlia.
       * apply inject_separated_refl.
-    + constructor; eauto. apply Mem.storebytes_empty in Hm1'; eauto. subst. eauto.
+    + constructor; eauto.
+      exploit Mem.storebytes_empty. apply Hm1'. eauto.
+      intro. subst. eauto.
   - assert (ptr_inject f (b1, ofs1) (b2, ofs2)) as Hptr'.
     {
       destruct Hptr as [Hptr|Hptr]; eauto.
@@ -689,8 +657,7 @@ Next Obligation. (* Mem.storebytes *)
       extlia.
     + apply inject_incr_refl.
     + apply inject_separated_refl.
-    + constructor; eauto. eapply valid_global_storebytes; eauto.
-      eapply CKLR.list_rel_forall2; eauto.
+    + constructor. eapply valid_global_storebytes; eauto. congruence.
 Qed.
 
 Next Obligation. (* Mem.perm *)

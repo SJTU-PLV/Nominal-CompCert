@@ -1338,11 +1338,10 @@ Lemma valid_global_external:
         valid_global m' j' gs.
 Proof.             
   red. intros. destruct (j b) as [[b' d]|] eqn: Hinj.
-  * eapply memval_inject_valid. inv H1.
-    inv mi_inj. eapply mi_memval; eauto.
+  
+  * apply H2 in Hinj. congruence.
   * inv H0. apply unchanged_on_perm in H5 as H5'; eauto.
     setoid_rewrite unchanged_on_contents; eauto.
-    eapply valid_memval_incr; eauto.
     apply H3. eauto.
 Qed.
       
@@ -1407,7 +1406,7 @@ Proof.
   econstructor; eauto. instantiate (1:= E).
   etransitivity. eauto. eapply injp_acc_storev; eauto.
   unfold Mem.storev in H1. destruct a; try congruence.
-  eapply valid_global_store; eauto.
+  eapply valid_global_store; eauto. inv C. congruence.
   erewrite <- Mem.support_storev; eauto.
   erewrite <- Mem.support_storev; eauto.
 
