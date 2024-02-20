@@ -27,6 +27,8 @@ Local Open Scope error_monad_scope.
 
 Parameter first_unused_ident: unit -> ident.
 
+Parameter create_union_idents: ident -> (ident * ident * ident).
+
 Definition transl_composite_member (m: member) : Ctypes.member :=
   match m with
   | Member_plain fid ty =>
@@ -41,14 +43,12 @@ Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: c
   | Composite id TaggedUnion ms attr =>
       (* generate a Struct with two fields, one for the tag field and
       the other for the union *)
-      let tag_fid := first_unused_ident tt in
+      let '(union_id, tag_fid, union_fid) := create_union_idents id in
       let tag_member := Ctypes.Member_plain tag_fid Ctypes.type_int32s in
-      let union_fid := first_unused_ident tt in
       (* generate the union *)
-      let union_id := first_unused_ident tt in
       (** TODO: specify the attr  *)
       let union := (Ctypes.Composite union_id Union (map transl_composite_member ms) noattr) in
-      let union_member := Ctypes.Member_plain tag_fid (Tunion union_id noattr) in     
+      let union_member := Ctypes.Member_plain union_fid (Tunion union_id noattr) in     
       (Ctypes.Composite id Ctypes.Struct (tag_member :: union_member :: nil) noattr, Some union)
   end.
 

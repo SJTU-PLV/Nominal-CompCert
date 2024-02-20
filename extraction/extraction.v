@@ -128,6 +128,7 @@ Extract Constant Compiler.time  => "Timing.time_coq".
 
 (* Rust Compiler *)
 Extract Constant Clightgen.create_dropglue_ident => "Dropglue.create_dropglue_ident".
+Extract Constant Clightgen.create_union_idents => "Dropglue.create_union_idents".
 Extract Constant Clightgen.first_unused_ident => "Camlcoq.first_unused_ident".
 
 (* Initializers *)
