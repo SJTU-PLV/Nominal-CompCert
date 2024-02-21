@@ -88,9 +88,8 @@ Definition makeseq (l: list Clight.statement) : Clight.statement :=
 
 
 (* To specify *)
-(* Parameter (malloc_id free_id: ident). *)
-Definition malloc_id : ident := 42%positive.
-Definition free_id : ident := 53%positive.
+Parameter (malloc_id free_id: ident).
+
 
 Definition free_fun_expr (ty: Ctypes.type) : Clight.expr :=
   let argty := (Ctypes.Tpointer ty noattr) in
@@ -113,8 +112,9 @@ Fixpoint drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) : l
       let cty' := (to_ctype ty') in
       (* free(arg) *)
       let stmt := call_free cty' arg in
-      (* return [free(arg); free(deref arg); ...] *)
-      stmt :: drop_glue_for_type m (Ederef arg cty') ty'
+      (* return [...; ... ; drop_in_place(deref arg); free(arg)] *)
+      (** TODO: it is time consuming, we can just generate a sequence statement *)
+      drop_glue_for_type m (Ederef arg cty') ty' ++ [stmt]
   | Tstruct id attr
   | Tvariant id attr =>
       match m ! id with
@@ -188,7 +188,7 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition)
               let drops_list := fold_right (fun elt acc => (drop_glue_for_member m deref_param elt) :: acc) (@nil (list Clight.statement)) ms in
               let (_, switch_branches) := make_labelled_stmts drops_list in
               (* generate function *)
-              let stmt := (Clight.Sswitch get_tag switch_branches) in
+              let stmt := (Clight.Ssequence (Clight.Sswitch get_tag switch_branches) (Clight.Sreturn None)) in
               OK (Some (Clight.mkfunction Tvoid cc_default ((param, param_ty)::nil) nil nil stmt))
           | _, _ => Error (msg "Variant is not correctly converted to C struct: drop_glue_for_composite")
           end

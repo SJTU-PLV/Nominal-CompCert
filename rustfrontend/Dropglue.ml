@@ -33,3 +33,9 @@ let create_union_idents (a: positive) : (positive * positive) * positive =
     Hashtbl.add union_tbl tag_id true;
     Hashtbl.add union_tbl body_id true;
   ((union_id, tag_id), body_id)
+
+let malloc_id =
+  intern_string "malloc"
+
+let free_id =
+  intern_string "free"

@@ -283,7 +283,7 @@ type atom = positive
 let atom_of_string = (Hashtbl.create 17 : (string, atom) Hashtbl.t)
 let string_of_atom = (Hashtbl.create 17 : (atom, string) Hashtbl.t)
 let next_atom = ref Coq_xH
-let use_canonical_atoms = ref false
+let use_canonical_atoms = ref true
 
 (* If [use_canonical_atoms] is false, strings are numbered from 1 up
    in the order in which they are encountered.  This produces small

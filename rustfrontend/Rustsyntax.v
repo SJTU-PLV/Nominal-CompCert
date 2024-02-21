@@ -400,6 +400,9 @@ Definition pop_and_push_fundef : globdef (Rusttypes.fundef function) type :=
 Definition pop_and_push_comp_env : composite_env :=
   PTree.set list_id list_composite (PTree.set pair_id pair_composite (PTree.empty composite)).
 
+(* main function *)
+
+
 Program Definition pop_and_push_prog : program :=
   {| prog_defs := (300%positive, pop_and_push_fundef) :: nil;
     prog_public := 300%positive :: nil;
