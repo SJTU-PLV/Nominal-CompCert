@@ -861,14 +861,14 @@ Lemma external_call_parallel_rule:
   /\ Mem.support m1' = Mem.support m2'
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m2
-  /\ inject_external j' m1 m1'
+  (* /\ inject_external j' m1 m1' *)
   /\ Mem.inject j' m1' m2'.
 Proof.
   intros until vargs2; intros CALL SEP ARGS SUP.
   destruct SEP as (A & B & C). simpl in A.
   exploit external_call_mem_inject'; eauto.
   eapply globalenv_inject_preserves_globals. eapply sep_pick1; eauto.
-  intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & INCR &INCRG& ISEP & IEXT).
+  intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & INCR &INCRG& ISEP).
   assert (MAXPERMS: forall b ofs p,
             Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p).
   { intros. eapply external_call_max_perm; eauto. }
@@ -886,14 +886,14 @@ Proof.
   eelim C; eauto. simpl. exists b0, delta; split; auto. apply MAXPERMS; auto.
   eapply Mem.valid_block_inject_1; eauto.
 + exploit ISEP; eauto. intros (X & Y). elim Y. eapply m_valid; eauto.
-- exploit external_call_mem_inject_stackeq.
+(* - exploit external_call_mem_inject_stackeq.
   eapply globalenv_inject_preserves_globals; eauto. eapply sep_pick1; eauto.
   apply CALL. all: eauto. congruence. intro.
   apply external_call_global in CALL as CA. apply external_call_global in CALL' as CA'.
   apply external_call_astack in CALL. apply external_call_astack in CALL'.
-  destruct (Mem.support m1'). destruct (Mem.support m2'). simpl in *. congruence.
-- apply IEXT. unfold Mem.stackseq. rewrite SUP. apply struct_eq_refl.
-Qed.
+  destruct (Mem.support m1'). destruct (Mem.support m2'). simpl in *. congruence. *)
+- admit. (* apply IEXT. unfold Mem.stackseq. rewrite SUP. apply struct_eq_refl. *)
+Admitted.
 
 Lemma alloc_parallel_rule_2:
   forall (F V: Type) (ge: Genv.t F V) m1 sz1 m1' b1 m2 sz2 m2' b2 P j lo hi delta,
@@ -929,92 +929,6 @@ Proof.
   rewrite sep_swap4 in A. rewrite sep_swap4. apply globalenv_inject_incr with j1 m1; auto.
 - red; unfold j1; intros. destruct (eq_block b b1). congruence. rewrite D; auto.
 - red; unfold j1; intros. destruct (eq_block b0 b1). congruence. rewrite D in H9 by auto. congruence.
-Qed.
-
-Lemma alloc_frame_unchanged_on:
-  forall P m m' id path,
-    Mem.alloc_frame m id = (m',path) ->
-    Mem.unchanged_on P m m'.
-Proof.
-  intros.
-  constructor; simpl; eauto.
-  - intro. eapply Mem.support_alloc_frame_1 in H. apply H.
-  - intros. eapply Mem.perm_alloc_frame; eauto.
-  - intros. inv H. reflexivity.
-Qed.
-
-Lemma return_frame_unchanged_on:
-  forall P m m',
-    Mem.return_frame m = Some m' ->
-    Mem.unchanged_on P m m'.
-Proof.
-  intros.
-  constructor; simpl.
-  - apply Mem.sup_include_return_frame; eauto.
-  - intros. erewrite Mem.perm_return_frame; eauto. reflexivity.
-  - intros. unfold Mem.return_frame in H. destr_in H. inv H. reflexivity.
-Qed.
-
-Lemma alloc_frame_rule:
-  forall j m1 m2 P m1' m2' id1 id2 path1 path2,
-    m2 |= minjection j m1 ** P ->
-    Mem.alloc_frame m1 id1 = (m1',path1) ->
-    Mem.alloc_frame m2 id2 = (m2',path2) ->
-    m2' |= minjection j m1' ** P.
-Proof.
-  intros j m1 m2 P m1' m2' id1 id2 path1 path2 (INJ & RP & DISJ) H1 H2.
-  split;[|split].
-  - inv H1. inv H2. inv INJ. constructor; eauto.
-    inv mi_inj. constructor; eauto.
-    intros. apply mi_freeblocks. unfold Mem.valid_block in *; simpl in *.
-    eauto. intro. apply H. apply Mem.sup_incr_frame_in. auto.
-    intros.  unfold Mem.valid_block in *; simpl in *.
-    apply Mem.sup_incr_frame_in. eauto.
-  - eapply m_invar. eauto. eapply alloc_frame_unchanged_on; eauto.
-  - red; simpl; intros.
-    destruct H as (b0 & delta & JB & PERM).
-    eapply DISJ; eauto.
-    exists b0, delta; split; eauto.
-    rewrite Mem.perm_alloc_frame; eauto.
-Qed.
-
-Lemma alloc_frame_rule_2:
-  forall j m1 m2 P Q id m1' m2' path1 path2,
-    m2 |= mconj (minjection j m1) Q ** P ->
-    Mem.alloc_frame m1 id = (m1',path1) ->
-    Mem.alloc_frame m2 id = (m2',path2) ->
-    m2' |= mconj (minjection j m1') Q ** P.
-Proof.
-  intros j m1 m2 P Q id m1' m2' path1 path2 SEP H1 H2.
-  eapply frame_mconj. apply SEP.
-  apply mconj_proj1 in SEP.
-  eapply alloc_frame_rule in SEP; eauto.
-  eapply m_invar. apply mconj_proj2 in SEP. apply SEP.
-  eapply alloc_frame_unchanged_on; eauto.
-Qed.
-
-Lemma return_frame_parallel_rule:
-  forall m1 m1' m2 j P,
-    m2 |= minjection j m1 ** P ->
-    Mem.return_frame m1 = Some m1' ->
-    Memory.is_active (Mem.stack(Mem.support m2)) ->
-    exists m2', Mem.return_frame m2 = Some m2' /\
-    m2' |= minjection j m1' ** P.
-Proof.
-  intros m1 m1' m2  j P MINJ POP1 POP2.
-  exploit Mem.return_frame_parallel_inject. apply MINJ. eauto. eauto.
-  intros (m2' & POP & INJ). exists m2'.
-  destruct MINJ as (MINJ & PM & DISJ).
-  split. auto.
-  split; [|split].
-  - simpl in *. auto.
-  - eapply m_invar. eauto.
-    exploit return_frame_unchanged_on. eauto.
-    intros. apply H.
-  - red; intros. eapply DISJ. 2: eauto. simpl in H |- *.
-    decompose [ex and] H.
-    repeat eexists; eauto.
-    eapply Mem.perm_return_frame; eauto.
 Qed.
 
 Lemma push_stage_unchanged_on:

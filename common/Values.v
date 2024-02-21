@@ -29,10 +29,6 @@ Parameter eq_block : forall (x y:block),{x=y}+{x<>y}.
 
 End BLOCK.
 
-Definition path := list nat.
-
-Definition fid := option ident. (*None means external function*)
-
 Lemma nat_eq: forall n1 n2 :nat, {n1=n2} + {n1<>n2}.
 Proof.
   intros.
@@ -49,20 +45,8 @@ Proof.
   rewrite eqb_false_iff in Heqb. auto.
 Qed.
 
-Definition eq_path := list_eq_dec nat_eq.
-
-Definition fid_eq : forall fi1 fi2 : fid, {fi1=fi2} + {fi1<>fi2}.
-Proof.
-  intros.
-  destruct fi1; destruct fi2.
-  + destruct (peq i i0). left. congruence. right. congruence.
-  + right. congruence.
-  + right. congruence.
-  + left. congruence.
-Qed.
-
 Inductive block' :=
-  |Stack : fid -> path -> positive -> block'
+  |Stack : ident -> block'
   |Global : ident -> block'.
 
 Module Block <: BLOCK.
@@ -72,9 +56,7 @@ Definition block := block'.
 Theorem eq_block : forall (x y:block),{x=y}+{x<>y}.
 Proof.
   intros. destruct x; destruct y; try(right; congruence).
-  - (destruct (eq_path p p1)); try (right; congruence).
-    destruct (peq p0 p2); try (right; congruence).
-    destruct (fid_eq f f0). left. congruence. right. congruence.
+  - destruct (peq i i0). left. congruence. right. congruence.
   - destruct (peq i i0). left. congruence. right. congruence.
 Qed.
 
@@ -85,7 +67,7 @@ Definition eq_block := Block.eq_block.
 
 Definition is_stack (b:block) : Prop :=
   match b with
-    | Stack _ _ _ => True
+    | Stack _ => True
     |  _ => False
   end.
 

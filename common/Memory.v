@@ -100,576 +100,6 @@ Proof.
 Qed.
 End NMap.
 
-Section STREE.
-
-Fixpoint fresh_pos (l: list positive) : positive :=
-  match l with
-  |nil => 1
-  |hd::tl => let m' := fresh_pos tl in
-             match plt hd m' with
-             |left _ => m'
-             |right _ => hd +1
-             end
-  end.
-
-Lemma Lessthan: forall b l, In b l -> Plt b (fresh_pos l).
-Proof.
-  intros.
-  induction l.
-  destruct H.
-  destruct H;simpl.
-  - destruct (plt a (fresh_pos l)); subst a.
-    auto.
-    apply Pos.lt_add_r.
-  - destruct (plt a (fresh_pos l)); apply IHl in H.
-    + auto.
-    + eapply Plt_trans. eauto.
-      apply Pos.le_nlt in n.
-
-      apply Pos.le_lteq in n. destruct n.
-      eapply Plt_trans. eauto.
-      apply Pos.lt_add_r.
-      subst.
-      apply Pos.lt_add_r.
-Qed.
-
-
-Lemma fresh_notin : forall l, ~In (fresh_pos l) l.
-Proof.
-  intros. intro. apply Lessthan in H.
-  unfold fresh_pos in H. extlia.
-Qed.
-
-Import List.ListNotations.
-
-Inductive stree : Type :=
-  |Node : fid -> (list positive)  -> list stree -> option stree -> stree.
-
-Fixpoint cdepth (t:stree) : nat :=
-  match t with
-    |Node fid bl tl (Some hd) => S (cdepth hd)
-    |Node fid bl tl None => O
-  end.
-
-(* well-founded induction *)
-
-Fixpoint depth (t:stree) : nat :=
-  match t with
-    |Node fid bl tl head =>
-     let d_head := option_map depth head in
-     let d_list := map depth tl in
-     let f := (fun n1 n2 => if Nat.leb n1 n2 then n2 else n1) in
-     match d_head with
-       |None => fold_right f O d_list + 1
-       |Some n => fold_right f n d_list + 1
-     end
-  end.
-
-Definition substree (t1 t2 : stree) : Prop :=
-  match t2 with
-    |Node fid bl tl head => head = Some t1 \/ In t1 tl end.
-
-Lemma substree_depth : forall t1 t2, substree t1 t2 ->
-                                ((depth t1) < (depth t2))%nat.
-Proof.
-  intros. unfold substree in H. destruct t2.
-  inv H.
-  - simpl. induction l0.
-    + simpl. lia.
-    + simpl. destr. apply Nat.leb_gt in Heqb. lia.
-  - induction l0.
-    + inv H0.
-    + inv H0.
-      simpl. repeat destr.
-      apply Nat.leb_le in Heqb. lia.
-      apply Nat.leb_gt in Heqb. lia.
-      apply Nat.leb_le in Heqb. lia.
-      apply Nat.leb_gt in Heqb. lia.
-      apply IHl0 in H. simpl in *.
-      repeat destr.
-      apply Nat.leb_gt in Heqb. lia.
-      apply Nat.leb_gt in Heqb. lia.
-Qed.
-
-Lemma substree_wf' : forall n t, (depth t <= n)%nat -> Acc substree t.
-  unfold substree; induction n; intros.
-  - destruct t.
-    destruct o; destruct l0.
-    + simpl in H. extlia.
-    + simpl in H. extlia.
-    + constructor. intros. inv H0; inv H1.
-    + simpl in H. extlia.
-  - constructor.
-    intros.
-    apply substree_depth in H0.
-    apply IHn. lia.
-Defined.
-
-Lemma substree_wf : well_founded substree.
-  red; intro. eapply substree_wf'; eauto.
-Defined.
-
-Definition stree_ind := well_founded_induction substree_wf.
-
-(* operations *)
-Definition empty_stree := Node None [] [] None.
-
-Fixpoint next_stree (t: stree) (id:ident) : (stree * path) :=
-  match t with
-  | Node b bl l None =>
-    let idx := length l in
-    ((Node b bl l (Some (Node (Some id) [] [] None))), [idx])
-  | Node b bl l (Some t') =>
-    let (t'', p) := next_stree t' id in
-    (Node b bl l (Some t''), (length l) :: p)
-  end.
-
-Fixpoint next_block_stree (t:stree) : (fid * positive * path * stree) :=
-  match t with
-  |Node b bl l None =>
-   (b, (fresh_pos bl), nil, Node b ((fresh_pos bl)::bl) l None)
-  |Node b bl l (Some t') =>
-   match next_block_stree t' with (pos,path,t'')
-    => (pos, (length l)::path, Node b bl l (Some t''))
-   end
-  end.
-
-Fixpoint return_stree (t: stree) : option (stree * path):=
-  match t with
-  | Node _ bl l None =>
-    None
-  | Node b bl l (Some t) =>
-    let idx := length l in
-    match return_stree t with
-    | None => Some ((Node b bl (l ++ [t]) None),[idx])
-    | Some (t',p') => Some ((Node b bl l (Some t')),(idx::p'))
-    end
-  end.
-
-Fixpoint stree_In (fid:option ident)(p:path) (pos:positive) (t:stree) :=
-  match p,t with
-    |nil , Node b' bl dt _ => fid = b' /\ In pos bl
-    |n::p' , Node b' bl dt None =>
-     match nth_error dt n with
-       |Some t' => stree_In fid p' pos t'
-       |None => False
-     end
-    |n::p',Node b' bl dt (Some t') =>
-     if (n =? (length dt))%nat then stree_In fid p' pos t' else
-     match nth_error dt n with
-       |Some t'' => stree_In fid p' pos t''
-       |None => False
-     end
-  end.
-
-Lemma node_Indec :
-  forall (f f0:fid) (p:positive) (l: list positive), {f=f0 /\ In p l}+{~(f=f0/\ In p l)}.
-Proof.
-  intros.
-  destruct (fid_eq f f0) eqn:?.
-  destruct (In_dec peq p l).
-  subst. auto.
-  right. intro. inv H. congruence.
-  right. intro. inv H. congruence.
-Qed.
-
-(* properties of the operations above *)
-
-Definition cpath (s:stree) : path :=
-  match next_block_stree s with
-    |(f,pos,path,_) => path
-  end.
-
-Definition npath (s:stree)(id:ident) : path :=
-  let (t,p) := next_stree s id in p.
-
-Lemma next_stree_cdepth: forall p t t' id,
-    next_stree t id = (t',p) -> cdepth t' = S (cdepth t).
-Proof.
-  induction p; (intros; destruct t; destruct o; simpl in H).
-  destr_in H. inv H. destr_in H. inv H.
-  simpl. exploit IHp; eauto. inv H. simpl. auto.
-Qed.
-
-Lemma next_block_stree_cdepth : forall p pos fid t t',
-    next_block_stree t = (fid,pos,p,t') -> cdepth t' = cdepth t.
-Proof.
-  induction p; (intros; destruct t; destruct o; inv H; repeat destr_in H1).
-  auto. simpl. exploit IHp; eauto.
-Qed.
-
-Lemma return_stree_cdepth : forall p t t',
-    return_stree t = Some (t',p) -> S (cdepth t') = (cdepth t).
-Proof.
-  induction p; (intros; destruct t; destruct o; inv H; repeat destr_in H1).
-  simpl. exploit IHp; eauto. simpl. destruct s. destruct o.
-  simpl in Heqo. repeat destr_in Heqo. reflexivity.
-Qed.
-
-Lemma next_stree_cpath :
-  forall p t t' id,
-    next_stree t id = (t',p) ->  cpath t' = p.
-Proof.
-  induction p.
-  - intros. destruct t. destruct o.
-    simpl in H. destruct (next_stree s id). inv H.
-    simpl in H. inv H.
-  - intros. destruct t. destruct o.
-    simpl in H. destruct (next_stree s id) eqn:?. inv H.
-    apply IHp in Heqp0.
-    unfold cpath in *. simpl in *.
-    destruct (next_block_stree s0) eqn:?.
-    destruct p0 eqn:?.
-    destruct p1 eqn:?.
-    congruence. simpl in H. inv H.
-    unfold cpath. simpl. auto.
-Qed.
-
-Lemma next_stree_next_block_stree :
-  forall t t' t'' id p f pos path,
-    next_stree t id = (t',p) ->
-    next_block_stree t' = (f,pos,path,t'') ->
-    f = Some id /\ pos = 1%positive /\ path = p.
-Proof.
-  induction t using stree_ind. intros. destruct t. destruct o.
-  - simpl in H0. destruct (next_stree s id) eqn:?. inv H0. simpl in H1.
-    destruct (next_block_stree s0) eqn:?. destruct p. destruct p.
-    exploit H. instantiate (1:=s). simpl. auto. eauto. eauto. inv H1.
-    intros [A [B C]]. split. auto. split. auto. congruence.
-  - simpl in H0. inv H0. simpl in H1. inv H1. auto.
-Qed.
-
-Lemma next_block_stree_next_block : forall s1 s2 s3 fid1 fid2 pos1 pos2 path1 path2,
-      next_block_stree s1 = (fid1,pos1,path1,s2) ->
-      next_block_stree s2 = (fid2,pos2,path2,s3) ->
-      fid1 = fid2 /\ path1 = path2 /\ pos2 = Pos.succ pos1.
-Proof.
-  induction s1 using stree_ind. intros. destruct s1. destruct o.
-  - simpl in H0. destruct (next_block_stree s) eqn:?. destruct p. destruct p.
-    inv H0. simpl in H1.
-    destruct (next_block_stree s0) eqn:?. destruct p. destruct p. inv H1.
-    exploit H. instantiate (1:=s). simpl. auto. eauto. eauto.
-    intros [A [B C]]. split. auto. split. rewrite B. auto. auto.
-  - simpl in H0. inv H0. simpl in H1. inv H1. split. auto.
-    split. auto. rewrite pred_dec_false. lia. extlia.
-Qed.
-
-Definition stree_Indec :forall tree f path p , {stree_In f path p tree}+{~stree_In f path p tree}.
-Proof.
-  induction tree using (well_founded_induction substree_wf ); intros.
-  destruct tree; destruct path.
-  - simpl. apply node_Indec.
-  - destruct o; destruct l0; simpl; repeat destr.
-    + apply H. simpl. auto.
-    + rewrite nth_error_nil in Heqo. congruence.
-    + apply H. simpl. auto.
-    + apply nth_error_in in Heqo.
-      apply H. simpl. auto.
-    + rewrite nth_error_nil in Heqo. congruence.
-    + apply nth_error_in in Heqo.
-      apply H. simpl. auto.
-Qed.
-
-Lemma stree_freshness : forall b p pos t t', next_block_stree t = (b,pos,p,t')
-  -> ~ stree_In b p pos t.
-Proof.
-  induction p.
-  - intros. destruct t. simpl in *.
-    destruct o.
-    destruct (next_block_stree s).
-    destruct p. inv H.
-    inv H.
-    intro. inv H. apply fresh_notin in H1. auto.
-  - intros. destruct t. simpl in *.
-    destruct o.
-    destruct (next_block_stree s) eqn:?.
-    destruct p0. inv H.
-    rewrite <- beq_nat_refl. eauto.
-    inv H.
-Qed.
-
-Lemma next_block_stree_in : forall t t' path pos path' pos' f f',
-        next_block_stree t = (f,pos,path,t') ->
-        stree_In f' path' pos' t' <->
-        ((f',path',pos') = (f,path,pos)
-        \/ stree_In f' path' pos' t).
-Proof.
-  induction t using stree_ind. intros.
-  destruct t.
-  - destruct path; destruct path';
-    simpl in H0; repeat destr_in H0; simpl.
-    + split; intros; inv H0.
-      inv H2; auto.
-      inv H1; auto. inv H1; auto.
-    + split; intros; auto.
-      destruct H0. inv H0. auto.
-    + split; intros; auto.
-      destruct H0. inv H0. auto.
-    + destr.
-      *
-      apply beq_nat_true in Heqb. subst.
-      exploit H; eauto. simpl. auto.
-      intros.
-      split; intros. apply H0 in H1.
-      inv H1. left. inv H2. auto.
-      right. auto.
-      apply H0. inv H1. inv H2. auto.
-      auto.
-      *
-      apply beq_nat_false in Heqb.
-      destr.
-Qed.
-
-Lemma next_stree_in : forall p p' t t' pos b id,
-    next_stree t id = (t',p') ->
-    stree_In b p pos t <-> stree_In b p pos t'.
-Proof.
-  induction p.
-  - intros. destruct t. destruct o.
-    simpl in H. destruct (next_stree s). inv H.
-    simpl. reflexivity.
-    simpl in H. inv H.
-    simpl. reflexivity.
-  - intros. destruct t. destruct o.
-    * simpl in H. destruct (next_stree s) eqn:?. inv H.
-      eapply IHp in Heqp0.
-      simpl.
-      destruct (a =? Datatypes.length l0)%nat. eauto.
-      destruct (nth_error l0 a). reflexivity. split; auto.
-    * simpl in H. inv H. simpl.
-      destruct (a =? Datatypes.length l0)%nat eqn:H.
-      assert (nth_error l0 a = None).
-      apply nth_error_None. apply beq_nat_true in H.
-      subst. lia. rewrite H0. destruct p.
-      simpl. split. intro. inv H1. intros [H1 H2]. congruence.
-      simpl. destruct n; reflexivity.
-      destruct (nth_error l0 a); reflexivity.
-Qed.
-
-Lemma return_stree_in : forall s s' path p pos b,
-    return_stree s = Some (s',path) ->
-    stree_In b p pos s <-> stree_In b p pos s'.
-Proof.
-  induction s using stree_ind. intros.
-  destruct s. destruct o.
-  - simpl in H0. repeat destr_in H0;
-    destruct p; simpl. reflexivity.
-    destr. eapply H; eauto. simpl. auto. reflexivity.
-    destr. apply beq_nat_true in Heqb0. subst.
-    rewrite nth_error_app2. rewrite Nat.sub_diag.
-    reflexivity. lia.
-    apply beq_nat_false in Heqb0.
-    destruct (n <? Datatypes.length l0)%nat eqn:H1.
-    rewrite nth_error_app1. destr; auto.
-    apply Nat.ltb_lt. auto.
-    apply Nat.ltb_ge in H1.
-    assert (nth_error (l0++[s]) n = None).
-    apply nth_error_None.
-    rewrite app_length. simpl. lia. rewrite H0.
-    assert (nth_error l0 n = None).
-    apply nth_error_None. lia. rewrite H2.
-    reflexivity.
-  - inv H0.
-Qed.
-
-(* sp from stree *)
-
-Fixpoint top_sp' (st:stree): fid * path :=
-  match st with
-    |Node f bl l (Some t') =>
-     let (fid,path) := top_sp' t' in
-     (fid, (Datatypes.length l)::path)
-    |Node f bl l None => (f,[])
-  end.
-
-Fixpoint parent_sp' (st:stree) : option (fid * path) :=
-  match st with
-    |Node f bl l (Some st') =>
-     let idx := Datatypes.length l in
-     match parent_sp' st' with
-       |Some (fid,path) => Some (fid,idx::path)
-       |None => Some (f,[])
-     end
-    |Node f bl l None => None
-  end.
-
-Inductive struct_eq : stree -> stree -> Prop :=
-  |struct_eq_leaf : forall fi bl1 bl2,
-      struct_eq (Node fi bl1 nil None) (Node fi bl2 nil None)
-  |struct_eq_dead_node :
-     forall fi bl1 bl2 tl1 tl2,
-       list_forall2 struct_eq tl1 tl2 ->
-       struct_eq (Node fi bl1 tl1 None) (Node fi bl2 tl2 None)
-  |struct_eq_active_node :
-     forall fi bl1 bl2 tl1 tl2 head1 head2,
-       list_forall2 struct_eq tl1 tl2 ->
-       struct_eq head1 head2 ->
-       struct_eq (Node fi bl1 tl1 (Some head1)) (Node fi bl2 tl2 (Some head2)).
-
-Theorem struct_eq_refl : forall s , struct_eq s s.
-Proof.
-  induction s using stree_ind.
-  intros. destruct s.
-  destruct o; destruct l0.
-  - apply struct_eq_active_node. constructor.
-    apply H. simpl. left. auto.
-  - apply struct_eq_active_node.
-    {
-      constructor. apply H. simpl. auto.
-      induction l0. constructor.
-      constructor. apply H. simpl. auto.
-      apply IHl0. intros. apply H.
-      simpl in H0. simpl. inv H0. auto. inv H1; auto.
-    }
-    apply H. simpl. auto.
-  - constructor.
-  - apply struct_eq_dead_node.
-    constructor. apply H. simpl. auto.
-    induction l0. constructor.
-    constructor. apply H. simpl. auto.
-    apply IHl0. intros.
-    apply H. simpl. simpl in H0.
-    destruct H0. inv H0. destruct H0; auto.
-Qed.
-
-Lemma list_forall2_struct_eq_refl : forall l,
-    list_forall2 struct_eq l l.
-Proof.
-  induction l; constructor.
-  apply struct_eq_refl. auto.
-Qed.
-
-Theorem struct_eq_comm : forall s1 s2, struct_eq s1 s2 -> struct_eq s2 s1.
-Proof.
-  induction s1 using stree_ind.
-  intros. inv H0.
-  constructor.
-  constructor.
-   eapply list_forall2_ind with (P:= fun t1 t2 => In t1 tl1 /\ struct_eq t1 t2) (P0:= fun l1 l2 => list_forall2 struct_eq l2 l1 ).
-   constructor.
-   intros. inv H0. constructor; auto. apply H. simpl. auto. auto.
-   eapply list_forall2_imply; eauto.
-  constructor.
-   eapply list_forall2_ind with (P:= fun t1 t2 => In t1 tl1 /\ struct_eq t1 t2) (P0:= fun l1 l2 => list_forall2 struct_eq l2 l1 ).
-   constructor.
-   intros. inv H0. constructor; auto. apply H. simpl. auto. auto.
-   eapply list_forall2_imply; eauto.
-   apply H. simpl. auto. auto.
-Qed.
-
-Theorem list_forall2_trans : forall {A:Type} (l2 l1 l3 : list A) (P: A -> A -> Prop),
-    (forall a1 a2 a3, In a1 l1 -> P a1 a2 -> P a2 a3 -> P a1 a3) ->
-    list_forall2 P l1 l2 ->
-    list_forall2 P l2 l3 ->
-    list_forall2 P l1 l3.
-Proof.
-  induction l2; intros; inv H0; inv H1; constructor.
-  eapply H. left. auto. all: eauto.
-  eapply IHl2. intros. exploit H. right. eauto. all: eauto.
-Qed.
-
-Theorem struct_eq_trans : forall s1 s2 s3, struct_eq s1 s2 -> struct_eq s2 s3 -> struct_eq s1 s3.
-Proof.
-  induction s1 using stree_ind.
-  intros. inv H0. inv H1.
-  - constructor.
-  - inv H5. constructor.
-  - destruct s3. inv H1. inv H2. constructor.
-    constructor.
-    eapply list_forall2_trans.
-    intros. eapply H. simpl. auto. all : eauto.
-  - destruct s3. inv H1. inv H2. constructor. inv H5. constructor.
-    eapply H; eauto. simpl. auto.
-    constructor. inv H5. constructor. eapply H; eauto. simpl. auto.
-    eapply list_forall2_trans.
-    intros. eapply H. simpl. auto. all : eauto.
-    eapply H; eauto. simpl. auto.
-Qed.
-
-Lemma next_block_stree_struct_eq: forall s path s' f pos,
-    next_block_stree s = (f,pos,path,s') -> struct_eq s s'.
-Proof.
-  induction s. intros. destruct s. destruct s'.
-  inv H0. destr_in H2.
-  destruct (next_block_stree s) eqn:?.
-  destruct p. inv H2.
-  constructor. apply list_forall2_struct_eq_refl.
-  eapply H; eauto. simpl. auto.
-  inv H2. constructor. apply list_forall2_struct_eq_refl.
-Qed.
-
-
-Definition is_active (s:stree) : Prop :=
-  match s with
-    |Node _ _ _ (Some _) => True
-    |_ => False
-  end.
-
-Lemma active_struct_eq : forall s1 s2,
-    struct_eq s1 s2 ->
-    is_active s1 <-> is_active s2.
-Proof.
-  intros. inv H; reflexivity.
-Qed.
-
-Lemma next_stree_struct_eq: forall s1 s2 id p1 p2 s1' s2',
-    struct_eq s1 s2 ->
-    next_stree s1 id = (s1',p1) ->
-    next_stree s2 id = (s2',p2) ->
-    p1 = p2 /\ struct_eq s1' s2'.
-Proof.
-  induction s1. intros.
-  destruct s1; destruct s2. inv H0.
-  - inv H1. inv H2. split. auto. constructor. constructor. constructor.
-  - inv H1. inv H2. split.
-    apply list_forall2_length in H4. congruence.
-    constructor. auto. constructor.
-  - inv H1. inv H2. destr_in H3. destr_in H1.
-    inv H3. inv H1.
-    apply list_forall2_length in H5 as H6.
-    exploit H; eauto. simpl. auto. intros [H1 H2].
-    split. congruence. constructor. auto. auto.
-Qed.
-
-Lemma return_stree_struct_eq: forall s1 s2 s1' p,
-    struct_eq s1 s2 ->
-    return_stree s1 = Some (s1',p) ->
-    exists s2',
-    return_stree s2 = Some (s2',p) /\
-    struct_eq s1' s2'.
-Proof.
-  induction s1. intros.
-  destruct s1; destruct s2. inv H0; inv H1.
-  repeat destr_in H2.
-  + exploit H; eauto. simpl. auto. intros (head2' & H5 & H6).
-    exists (Node f0 l1 l2 (Some head2')). split. simpl. rewrite H5.
-    apply list_forall2_length in H4 as H7. rewrite H7. auto.
-    constructor. auto. auto.
-  + exists (Node f0 l1 (l2++[head2]) None). split.
-    simpl. destruct head1. inv Heqo. repeat destr_in H1.
-    inv H11. simpl. apply list_forall2_length in H4 as H7. rewrite H7. auto.
-    simpl. apply list_forall2_length in H4 as H7. rewrite H7. auto.
-    constructor. apply list_forall2_app. auto.
-    constructor. auto. constructor.
-Qed.
-
-Lemma struct_eq_next_block_stree : forall s1 s2 fid1 fid2 p1 p2 pos1 pos2 s1' s2',
-    struct_eq s1 s2 ->
-    next_block_stree s1 = (fid1,pos1,p1,s1') ->
-    next_block_stree s2 = (fid2,pos2,p2,s2') ->
-    fid1=fid2 /\ p1 = p2.
-Proof.
-  induction s1. intros.
-  destruct s1. destruct s2. inv H0.
-  - inv H1. inv H2. auto.
-  - inv H1. inv H2. auto.
-  - inv H1. inv H2.  repeat destr_in H3.  repeat destr_in H1.
-    exploit H; eauto. simpl. auto. intros [X Y].
-    split. auto. subst. erewrite list_forall2_length; eauto.
-Qed.
-
-End STREE.
-
 Section STACKADT.
 
 Record frame : Type :=
@@ -758,57 +188,71 @@ End STACKADT.
 Module Sup <: SUP.
 
 Record sup' : Type := mksup {
-  stack : stree;
+  stack : list ident;
   astack : stackadt;
   global : list ident;
 }.
 
 Definition sup := sup'.
 
-Definition sup_empty : sup := mksup empty_stree nil nil.
-
-Definition sup_cpath (s:sup) := cpath (stack s).
-
-Definition sup_npath (s:sup) := npath (stack s).
-
-Definition sup_depth (s:sup) := depth (stack s).
+Definition sup_empty : sup := mksup nil nil nil.
 
 Definition sup_In(b:block)(s:sup) : Prop :=
   match b with
-  | Stack fid path pos => stree_In fid path pos (stack s)
+  | Stack id => In id (stack s)
   | Global id => In id (global s)
   end.
 
 Definition empty_in: forall b, ~ sup_In b sup_empty.
 Proof.
   intros. destruct b; simpl in *; try congruence.
-  destruct p; unfold stree_In; simpl; auto. intro. inv H. auto.
-  destruct n; auto.
 Qed.
 
 Definition sup_dec : forall b s, {sup_In b s}+{~sup_In b s}.
 Proof.
-  intros. destruct b.
-  apply stree_Indec.
-  apply In_dec. apply peq.
+  intros. destruct b; apply In_dec; apply peq.
 Qed.
 
-Definition fresh_block (s:sup): block :=
-  match next_block_stree (stack s) with
-    |(f,pos,path,_) =>  Stack f path pos
+Fixpoint find_max_pos (l: list positive) : positive :=
+  match l with
+  |nil => 1
+  |hd::tl => let m' := find_max_pos tl in
+             match plt hd m' with
+             |left _ => m'
+             |right _ => hd
+             end
   end.
+
+Theorem Lessthan: forall p l, In p l -> Ple p (find_max_pos l).
+Proof.
+  intros.
+  induction l.
+  destruct H.
+  destruct H;simpl.
+  - destruct (plt a (find_max_pos l)); subst a.
+    + apply Plt_Ple. assumption.
+    + apply Ple_refl.
+  - destruct (plt a (find_max_pos l)); apply IHl in H.
+    + auto.
+    + eapply Ple_trans. eauto.  apply Pos.le_nlt. apply n.
+Qed.
+
+Definition fresh_id (s: list ident) := Pos.succ (find_max_pos s).
+Definition fresh_block (s:sup) : block := Stack (fresh_id (stack s)).
 
 Theorem freshness : forall s, ~sup_In (fresh_block s) s.
 Proof.
   intros. unfold fresh_block.
-  destruct (next_block_stree (stack s)) eqn:?.
-  destruct p. destruct p.
-  eapply stree_freshness; eauto.
+  intro.
+  apply Lessthan in H.
+  assert (Plt (find_max_pos (stack s)) (Pos.succ (find_max_pos (stack s)))). apply Plt_succ.
+  assert (Plt (find_max_pos (stack s)) (find_max_pos (stack s))). eapply Plt_Ple_trans. eauto. auto.
+  apply Plt_strict in H1.
+  auto.
 Qed.
 
 Definition sup_incr (s:sup):sup :=
-  let (pp,t') := next_block_stree (stack s) in
-  mksup t' (astack s) (global s).
+  mksup ((fresh_id (stack s)) :: (stack s)) (astack s) (global s).
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
@@ -817,17 +261,11 @@ Theorem sup_incr_in : forall b s,
 Proof.
   intros. unfold sup_In. destruct b.
   - unfold sup_incr. unfold fresh_block.
-    destruct (next_block_stree) eqn:?. simpl.
-    destruct p1. destruct p1.
-    eapply next_block_stree_in in Heqp1.
-    split. intro. apply Heqp1 in H. destruct H.
-    inv H. auto. auto.
-    intro. apply Heqp1. destruct H.
-    inv H. auto. auto.
-  - unfold sup_incr. unfold fresh_block.
-    destruct (next_block_stree) eqn:?. simpl.
-    destruct p. destruct p. split.
-    auto. intros [H|H]. inv H. auto.
+    simpl. split; intros [|]; eauto.
+    left. f_equal. eauto. inv H. eauto.
+  - unfold sup_incr. unfold fresh_block. simpl.
+    split; intros; eauto.
+    destruct H. inv H. auto.
 Qed.
 
 Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
@@ -848,73 +286,6 @@ Lemma sup_include_incr:
   forall s, sup_include s (sup_incr s).
 Proof.
   intros. apply sup_incr_in2.
-Qed.
-
-(* sup_incr_frame *)
-Definition sup_incr_frame (s:sup)(id:ident):sup :=
-  let (t',p) := next_stree (stack s) id in
-  mksup t' (astack s)(global s).
-
-Theorem sup_incr_frame_in : forall s b id,
-    sup_In b s <-> sup_In b (sup_incr_frame s id).
-Proof.
-  intros. unfold sup_In. destruct b.
-  - unfold sup_incr_frame.
-    destruct (next_stree (stack s)) eqn:?.
-    simpl.
-    eapply next_stree_in. eauto.
-  - unfold sup_incr_frame.
-    destruct (next_stree (stack s)).
-    reflexivity.
-Qed.
-
-(* sup_return_frame *)
-Definition sup_return_frame (s:sup) : option sup :=
-  match return_stree (stack s) with
-    |Some (t',p) => Some (mksup t' (astack s)(global s))
-    |None => None
-  end.
-
-Definition sup_return_frame' (s:sup) : sup :=
-  match sup_return_frame s with
-    |Some s' => s'
-    |None => sup_empty
-  end.
-
-Lemma sup_return_refl : forall s s', is_active (stack s) ->
-    sup_return_frame s = Some s' <-> sup_return_frame' s = s'.
-Proof.
-  intros.
-  unfold sup_return_frame'. destruct (sup_return_frame s) eqn:?.
-  split;  congruence.
-  unfold sup_return_frame in Heqo.
-  destruct (return_stree (stack s)) eqn:?. destruct p.
-  inv Heqo.
-  unfold is_active in H. destruct (stack s).
-  destruct o.
-  inv Heqo0. destr_in H1. destruct p. inv H1.
-  destruct H.
-Qed.
-
-Lemma sup_return_refl' : forall s , is_active (stack s) ->
-    sup_return_frame s = Some (sup_return_frame' s).
-Proof.
-  intros. apply sup_return_refl; auto.
-Qed.
-
-Theorem sup_return_frame_in : forall s s',
-    sup_return_frame s = Some (s') ->
-    (forall b, sup_In b s <-> sup_In b s').
-Proof.
-  intros.
-  destruct b; unfold sup_return_frame in H;
-  destruct (return_stree (stack s)) eqn:?.
-  - destruct p1. inv H.
-    simpl.
-    eapply return_stree_in; eauto.
-  - inv H.
-  - destruct p. inv H. reflexivity.
-  - inv H.
 Qed.
 
 (* sup_incr_glob *)
@@ -1019,21 +390,10 @@ Definition mem := mem'.
 
 Definition nextblock (m:mem) := fresh_block (support m).
 
-Definition sdepth (m:mem) := cdepth (stack (support m)).
-
-Lemma sdepth_active : forall m, sdepth m <> O -> is_active (stack (support m)).
-Proof.
-  intros. unfold sdepth in H. simpl in H.
-  destruct (stack (support m)). destruct o; simpl in *.
-  auto. extlia.
-Qed.
-
-Lemma nextblock_stack : forall m, exists f path pos,
-      nextblock m = Stack f path pos.
+Lemma nextblock_stack : forall m, exists id,
+      nextblock m = Stack id.
 Proof.
   intros. unfold nextblock. unfold fresh_block.
-  destruct (next_block_stree (stack (support m))).
-  destruct p. destruct p.
   eauto.
 Qed.
 
@@ -1047,7 +407,7 @@ Qed.
 
 Definition empty_stack (m:mem) : Prop :=
   match stack (support m) with
-    |Node _ _ _ None => True
+    |nil => True
     |_ => False
   end.
 
@@ -1393,41 +753,6 @@ Next Obligation.
 Qed.
 Next Obligation.
   rewrite NMap.gsspec. destruct (NMap.elt_eq b (Global i)). auto. apply contents_default.
-Qed.
-
-Program Definition alloc_frame (m:mem)(id:ident) :=
-  ((mkmem (m.(mem_contents)) (m.(mem_access)) (sup_incr_frame (m.(support)) id) _ _ _), sup_npath (m.(support)) id).
-Next Obligation.
-  apply access_max.
-Qed.
-Next Obligation.
-  apply nextblock_noaccess.
-  intro. apply H.
-  eapply sup_incr_frame_in in H0. eauto.
-Qed.
-Next Obligation.
-  apply contents_default.
-Qed.
-
-Lemma is_active_dec : forall s, {is_active s} + {~ is_active s}.
-Proof. intros. destruct s. destruct o; simpl; auto. Qed.
-
-Program Definition return_frame (m:mem) : option mem :=
-  if is_active_dec (stack(support m)) then
-     Some (mkmem (m.(mem_contents))
-                 (m.(mem_access))
-                 (sup_return_frame' (support m))
-                 (m.(access_max))
-                 _
-                 (m.(contents_default))
-         )
-     else None.
-Next Obligation.
-  apply nextblock_noaccess.
-  eapply sup_return_refl' in H.
-  intro. apply H0.
-  eapply sup_return_frame_in in H.
-  apply H. auto.
 Qed.
 
 Program Definition alloc_block (m: mem) (lo hi: Z) :=
@@ -2826,271 +2151,6 @@ Axiom loadv_val_storev:
     v <> Vundef -> (align_chunk Mptr | Ptrofs.unsigned ofs) ->
     (forall o k p, perm m b o k p -> perm m b o k Writable) ->
     storev Mptr m (Vptr b ofs) v = Some m.
-(** ** Properties related to [alloc_frame]. *)
-
-Section ALLOC_FRAME.
-Variable m1: mem.
-Variable m2: mem.
-Variable id: ident.
-Variable path: path.
-Hypothesis ALLOC_FRAME: alloc_frame m1 id = (m2,path).
-
-Lemma support_alloc_frame :
-    support m2 = sup_incr_frame (support m1) id.
-Proof.
-  intros. inv ALLOC_FRAME. reflexivity. Qed.
-
-Lemma support_alloc_frame_1 :
-  forall b, sup_In b (support m1) <-> sup_In b (support m2).
-Proof.
-  generalize support_alloc_frame. intro.
-  rewrite H. intro.
-  apply sup_incr_frame_in.
-Qed.
-
-Lemma stack_alloc_frame :
-    (stack(support m2), path) = next_stree (stack (support m1)) id.
-Proof.
-  intros. inv ALLOC_FRAME. simpl.
-  unfold sup_incr_frame. unfold sup_npath. unfold npath.
-  destruct (next_stree (stack (support m1))).
-  reflexivity.
-Qed.
-
-Lemma astack_alloc_frame:
-  astack (support m1) = astack (support m2).
-Proof.
-  rewrite support_alloc_frame. unfold sup_incr_frame.
-  destr.
-Qed.
-
-Lemma sdepth_alloc_frame :
-  sdepth m2 = S (sdepth m1).
-Proof.
-  unfold sdepth. generalize stack_alloc_frame.
-  intro. eapply next_stree_cdepth; eauto.
-Qed.
-
-Lemma path_alloc_frame:
-    path = sup_npath (support m1) id.
-Proof.
-  intros. inv ALLOC_FRAME. reflexivity. Qed.
-
-Lemma cpath_alloc_frame:
-   path = cpath (stack (support m2)).
-Proof.
-  exploit next_stree_cpath; eauto.
-  rewrite stack_alloc_frame. eauto.
-Qed.
-
-Theorem valid_block_alloc_frame_1:
-  forall b, valid_block m1 b -> valid_block m2 b.
-Proof.
-  unfold valid_block. rewrite support_alloc_frame.
-  intro. eapply sup_incr_frame_in.
-Qed.
-
-Theorem valid_block_alloc_frame_2:
-  forall b, valid_block m2 b -> valid_block m1 b.
-Proof.
-  unfold valid_block. rewrite support_alloc_frame.
-  intro. eapply sup_incr_frame_in.
-Qed.
-
-Local Hint Resolve valid_block_alloc_frame_1 valid_block_alloc_frame_2: mem.
-
-Theorem perm_alloc_frame:
-  forall b ofs k p,
-  perm m1 b ofs k p <->
-  perm m2 b ofs k p.
-Proof.
-  inv ALLOC_FRAME. simpl. unfold perm. simpl.
-  reflexivity.
-Qed.
-
-Theorem valid_access_alloc_frame:
-  forall chunk b ofs p,
-  valid_access m1 chunk b ofs p <->
-  valid_access m2 chunk b ofs p.
-Proof.
-  inv ALLOC_FRAME. unfold valid_access. unfold range_perm.
-  unfold perm. simpl. reflexivity.
-Qed.
-
-Theorem load_alloc_frame:
-  forall chunk b ofs,
-  load chunk m2 b ofs = load chunk m1 b ofs.
-Proof.
-  intros. unfold load.
-  destruct (valid_access_dec m2 chunk b ofs Readable).
-  rewrite pred_dec_true.
-  inv ALLOC_FRAME. simpl. reflexivity.
-  apply valid_access_alloc_frame. auto.
-  rewrite pred_dec_false; auto.
-  red; intro; elim n. eapply valid_access_alloc_frame; eauto.
-Qed.
-
-Theorem load_alloc_frame_2:
-  forall chunk b ofs v,
-  load chunk m2 b ofs = Some v -> load chunk m1 b ofs = Some v.
-Proof.
-  intros.
-  unfold load. rewrite pred_dec_true.
-  rewrite (load_result _ _ _ _ _ H).
-  inv ALLOC_FRAME. reflexivity.
-  apply valid_access_alloc_frame. eauto with mem.
-Qed.
-
-Theorem loadbytes_alloc_frame:
-  forall b ofs n,
-  loadbytes m2 b ofs n = loadbytes m1 b ofs n.
-Proof.
-  intros. unfold loadbytes.
-  destruct (range_perm_dec m2 b ofs (ofs + n) Cur Readable).
-  rewrite pred_dec_true.
-  inv ALLOC_FRAME. reflexivity.
-  red; intros. eapply perm_alloc_frame; eauto.
-  rewrite pred_dec_false; auto.
-  red; intros. elim n0; red; intros.
-  eapply perm_alloc_frame; eauto.
-Qed.
-
-End ALLOC_FRAME.
-
-(** ** Properties related to [return_frame]. *)
-
-Lemma active_return_frame : forall m,
-    is_active(stack (support m)) -> {m'|return_frame m = Some m'}.
-Proof.
-  intros; unfold return_frame.
-  destruct (is_active_dec (stack(support m))).
-  econstructor; eauto.
-  congruence.
-Qed.
-
-Section RETURN_FRAME.
-
-Variable m1: mem.
-Variable m2: mem.
-Hypothesis RETURN_FRAME: return_frame m1 = Some m2.
-
-Lemma return_frame_active : forall m m',
-    return_frame m = Some m' ->
-    is_active (stack (support m)).
-Proof.
-  intros. unfold return_frame in H.
-  destr_in H.
-Qed.
-
-Lemma support_return_frame :
-    sup_return_frame (support m1) = Some (support m2).
-Proof.
-  unfold return_frame in RETURN_FRAME.
-  destr_in RETURN_FRAME. inv RETURN_FRAME.
-  simpl.
-  apply sup_return_refl'. auto.
-Qed.
-
-Lemma support_return_frame_1:
-  forall b, (sup_In b (support m1)) <-> (sup_In b (support m2)).
-Proof.
-  intros. generalize support_return_frame. intro.
-  apply sup_return_frame_in. eauto.
-Qed.
-
-Lemma stack_return_frame:
-  exists path,
-  return_stree (stack(support m1)) = Some (stack (support m2),path).
-Proof.
-  intros.
-  generalize support_return_frame.
-  intro. unfold sup_return_frame in H.
-  destr_in H. destruct p. inv H. eauto.
-Qed.
-
-Lemma astack_return_frame:
-  astack (support m1) = astack (support m2).
-Proof.
-  generalize support_return_frame.
-  intro. unfold sup_return_frame in H.
-  repeat destr_in H. inv H1. simpl. congruence.
-Qed.
-
-Lemma sdepth_return_frame :
-  S (sdepth m2) = sdepth m1.
-Proof.
-  generalize stack_return_frame. intros [pa H].
-  eapply return_stree_cdepth; eauto.
-Qed.
-
-Lemma sup_include_return_frame :
-  sup_include (support m1) (support m2).
-Proof.
-  unfold sup_include. apply support_return_frame_1.
-Qed.
-
-Theorem valid_block_return_frame_1:
-  forall b, valid_block m1 b -> valid_block m2 b.
-Proof.
-  unfold valid_block. apply support_return_frame_1.
-Qed.
-
-Theorem valid_block_return_frame_2:
-  forall b, valid_block m2 b -> valid_block m1 b.
-Proof.
-    unfold valid_block. apply support_return_frame_1.
-Qed.
-
-Local Hint Resolve valid_block_return_frame_1 valid_block_return_frame_2: mem.
-
-Theorem perm_return_frame:
-  forall b ofs k p,
-  perm m1 b ofs k p <->
-  perm m2 b ofs k p.
-Proof.
-  inv RETURN_FRAME.
-  unfold return_frame in H0. destr_in H0.
-  inv H0. intros.
-  reflexivity.
-Qed.
-
-Theorem valid_access_return_frame:
-  forall chunk b ofs p,
-  valid_access m1 chunk b ofs p <->
-  valid_access m2 chunk b ofs p.
-Proof.
-  split.
-  intros. inv H. constructor; auto with mem.
-  red; intros. eapply perm_return_frame; eauto.
-  intros. inv H. constructor; auto with mem.
-  red; intros. eapply perm_return_frame; eauto.
-Qed.
-
-Theorem load_return_frame:
-  forall chunk b ofs,
-  load chunk m2 b ofs = load chunk m1 b ofs.
-Proof.
-  inv RETURN_FRAME.
-  unfold return_frame in H0. destr_in H0.
-  inv H0. intros.
-  reflexivity.
-Qed.
-
-Theorem loadbytes_return_frame:
-  forall b ofs n,
-  loadbytes m2 b ofs n = loadbytes m1 b ofs n.
-Proof.
-  inv RETURN_FRAME.
-  unfold return_frame in H0. destr_in H0.
-  inv H0. intros.
-  reflexivity.
-Qed.
-
-End RETURN_FRAME.
-
-Local Hint Resolve valid_block_return_frame_1 valid_block_return_frame_2
-             perm_return_frame
-             valid_access_return_frame: mem.
 
 (** ** Properties related to [alloc]. *)
 
@@ -3120,27 +2180,18 @@ Proof.
   rewrite support_alloc. intro. apply mem_incr_2.
 Qed.
 
-Theorem sdepth_alloc:
-  sdepth m2 = sdepth m1.
-Proof.
-  generalize support_alloc. unfold sup_incr.
-  destr. intro. unfold sdepth. rewrite H. simpl.
-  destruct p. destruct p.
-  eapply next_block_stree_cdepth; eauto.
-Qed.
-
 Theorem astack_alloc:
   astack (support m2) = astack (support m1).
 Proof.
   generalize support_alloc. unfold sup_incr.
-  destr. intro. rewrite H. reflexivity.
+  intro. rewrite H. reflexivity.
 Qed.
 
 Theorem stack_alloc :
-  stack (support m2) = snd (next_block_stree (stack (support m1))).
+  stack (support m2) = fresh_id (stack (support m1)) :: stack (support m1).
 Proof.
   generalize support_alloc. unfold sup_incr.
-  destr. simpl. intro. rewrite H. reflexivity.
+  simpl. intro. rewrite H. reflexivity.
 Qed.
 
 Theorem alloc_result:
@@ -3154,7 +2205,7 @@ Theorem alloc_result_stack:
 Proof.
   rewrite alloc_result.
   generalize (nextblock_stack m1).
-  intros (f & p & p' & H). rewrite H. auto.
+  intros (id & H). rewrite H. auto.
   simpl. auto.
 Qed.
 
@@ -3354,7 +2405,7 @@ End ALLOC.
 
 Local Hint Resolve valid_block_alloc fresh_block_alloc valid_new_block: mem.
 Local Hint Resolve valid_access_alloc_other valid_access_alloc_same: mem.
-
+(*
 Section ALLOCF_ALLOC.
 Local Set Elimination Schemes.
 
@@ -3470,7 +2521,7 @@ Proof.
       intro. subst. rewrite Pos.of_nat_succ. reflexivity.
 Qed.
 End ALLOCF_ALLOC.
-
+*)
 (** ** Properties related to [alloc_glob]. *)
 Section ALLOCGLOB.
 
@@ -3600,13 +2651,6 @@ Proof.
   destruct b; reflexivity.
 Qed.
 
-Theorem sdepth_push_stage:
-  sdepth m2 = sdepth m1.
-Proof.
-  unfold sdepth. rewrite support_push_stage.
-  reflexivity.
-Qed.
-
 Theorem nextblock_push_stage:
   nextblock m2 = nextblock m1.
 Proof.
@@ -3732,12 +2776,6 @@ Lemma stack_pop_stage :
 Proof.
   unfold pop_stage in POP_STAGE. destruct (astack (support m1)).
   discriminate. inv POP_STAGE. auto.
-Qed.
-
-Lemma sdepth_pop_stage :
-  sdepth m2 = sdepth m1.
-Proof.
-  unfold sdepth. rewrite stack_pop_stage. reflexivity.
 Qed.
 
 Lemma global_pop_stage :
@@ -3887,12 +2925,6 @@ Proof.
   repeat destr_in RECORD_FRAME. reflexivity.
 Qed.
 
-Lemma sdepth_record_frame :
-  sdepth m2 = sdepth m1.
-Proof.
-  unfold sdepth. rewrite stack_record_frame. reflexivity.
-Qed.
-
 Lemma global_record_frame :
   global (support m1) = global (support m2).
 Proof.
@@ -4015,12 +3047,6 @@ Theorem support_free:
   support m2 = support m1.
 Proof.
   rewrite free_result; reflexivity.
-Qed.
-
-Lemma sdepth_free:
-  sdepth m2 = sdepth m1.
-Proof.
-  unfold sdepth. rewrite support_free. auto.
 Qed.
 
 Theorem valid_block_free_1:
@@ -5211,47 +4237,6 @@ Proof.
   intros. eauto using perm_storebytes_2.
 Qed.
 
-Theorem alloc_frame_extends:
-  forall m1 m2 m1' id path,
-    extends m1 m2 ->
-    alloc_frame m1 id = (m1',path) ->
-    exists m2',
-      alloc_frame m2 id = (m2',path)
-      /\ extends m1' m2'.
-Proof.
-  intros. inv H.
-  case_eq (alloc_frame m2 id). intros m2' p H1.
-  exists m2'. split.
-  apply path_alloc_frame in H0.
-  apply path_alloc_frame in H1.
-  subst. congruence.
-  inv H0. inv H1.
-  constructor; eauto.
-  - simpl. congruence.
-  - inv mext_inj0. constructor;auto.
-Qed.
-
-Theorem return_frame_parallel_extends:
-  forall m1 m2 m1',
-    extends m1 m2 ->
-    return_frame m1 = Some m1' ->
-    exists m2',
-      return_frame m2 = Some m2'
-      /\extends m1' m2'.
-Proof.
-  intros. inv H.
-  apply return_frame_active in H0 as H1.
-  rewrite mext_sup0 in H1.
-  apply active_return_frame in H1. destruct H1 as (m2' & H1).
-  exists m2'. split. auto.
-  unfold return_frame in *. destr_in H0. destr_in H1.
-  inv H0. inv H1.
-  constructor; simpl.
-  - congruence.
-  - inv mext_inj0. constructor; eauto.
-  - eauto.
-Qed.
-
 Theorem push_stage_extends:
   forall m1 m2,
   extends m1 m2 ->
@@ -5528,110 +4513,6 @@ Proof.
   intros []; eauto using valid_pointer_extends.
 Qed.
 
-(** * Stack Structure Equality *)
-
-Definition stackseq (m1 m2:mem) :Prop :=
-  struct_eq (m1.(support).(stack)) (m2.(support).(stack)).
-
-Theorem alloc_stackseq : forall m1 lo hi b m1',
-    alloc m1 lo hi = (m1',b) ->
-    stackseq m1 m1'.
-Proof.
-  intros. inv H. unfold stackseq. simpl.
-  unfold sup_incr. destruct (next_block_stree (stack(support m1))) eqn:?.
-  destruct p. destruct p.
-  apply next_block_stree_struct_eq in Heqp. auto.
-Qed.
-
-Theorem store_stackseq : forall chunk m1 b ofs v m2,
-    store chunk m1 b ofs v = (Some m2) ->
-    stackseq m1 m2.
-Proof.
-  intros. unfold stackseq.
-  rewrite (support_store _ _ _ _ _ _ H).
-  apply struct_eq_refl.
-Qed.
-
-Theorem store_parallel_stackseq :
-  forall chunk1 m1 b1 ofs1 v1 m1' chunk2 m2 b2 ofs2 v2 m2',
-    store chunk1 m1 b1 ofs1 v1 = Some m1' ->
-    store chunk2 m2 b2 ofs2 v2 = Some m2' ->
-    stackseq m1 m2 ->
-    stackseq m1' m2'.
-Proof.
-  intros. unfold stackseq in *.
-  rewrite (support_store _ _ _ _ _ _ H).
-  rewrite (support_store _ _ _ _ _ _ H0).
-  congruence.
-Qed.
-
-Theorem alloc_parallel_stackseq :
-  forall m1 m2 lo1 hi1 lo2 hi2 b1 b2 m1' m2',
-    alloc m1 lo1 hi1 = (m1',b1) ->
-    alloc m2 lo2 hi2 = (m2',b2) ->
-    stackseq m1 m2 ->
-    stackseq m1' m2'.
-Proof.
-  intros.
-  apply alloc_stackseq in H.
-  apply alloc_stackseq in H0.
-  eapply struct_eq_trans; eauto.
-  eapply struct_eq_trans; eauto.
-  eapply struct_eq_comm; eauto.
-Qed.
-
-Theorem alloc_frame_parallel_stackseq :
-  forall m1 m2 m1' m2' id p1 p2,
-    stackseq m1 m2 ->
-    alloc_frame m1 id = (m1',p1) ->
-    alloc_frame m2 id = (m2',p2) ->
-    p1 = p2 /\
-    stackseq m1'  m2'.
-Proof.
-  intros.
-  apply support_alloc_frame in H0 as H2.
-  apply support_alloc_frame in H1 as H3.
-  unfold sup_incr_frame in *. destr_in H2. destr_in H3.
-  exploit next_stree_struct_eq; eauto.
-  intros [A B]. split.
-  - rewrite (path_alloc_frame _ _ _ _ H0).
-    rewrite (path_alloc_frame _ _ _ _ H1).
-    unfold sup_npath. unfold npath. repeat destr.
-  - unfold stackseq. rewrite H2. rewrite H3. simpl. auto.
-Qed.
-
-Theorem return_frame_parallel_stackseq :
-  forall m1 m2 m1',
-    stackseq m1 m2 ->
-    return_frame m1 = Some m1' ->
-    exists m2',
-    return_frame m2 = Some m2' /\
-    stackseq m1' m2'.
-Proof.
-  intros.
-  apply support_return_frame in H0 as H1. unfold sup_return_frame in H1.
-  repeat destr_in H1. exploit return_stree_struct_eq; eauto.
-  intros (s2' & A & B).
-  unfold return_frame. apply return_frame_active in H0.
-  apply active_struct_eq in H. apply H in H0.
-  destr. eexists. split. eauto. unfold stackseq.
-  simpl. unfold sup_return_frame'. unfold sup_return_frame.
-  rewrite A. inv H3. simpl. auto.
-Qed.
-
-Lemma stackseq_id_path : forall m1 m2 fid1 p1 pos1 fid2 p2 pos2,
-    stackseq m1 m2 ->
-    nextblock m1 = Stack fid1 p1 pos1 ->
-    nextblock m2 = Stack fid2 p2 pos2 ->
-    fid1 = fid2 /\ p1 = p2.
-Proof.
-  intros. unfold nextblock in *. unfold fresh_block in *.
-  destruct (next_block_stree (stack (support m1))) eqn:?.
-  destruct p. destruct p. inv H0.
-  destruct (next_block_stree (stack (support m2))) eqn:?.
-  destruct p. destruct p. inv H1.
-  exploit struct_eq_next_block_stree; eauto.
-Qed.
 
 (** * Memory injections *)
 
@@ -6370,116 +5251,6 @@ Proof.
   intros. unfold f'; apply dec_eq_false; auto.
 Qed.
 
-Theorem alloc_frame_parallel_inject :
-  forall f m1 m2 id m1' p1,
-    inject f m1 m2 ->
-    alloc_frame m1 id = (m1',p1) ->
-    exists m2' p2, alloc_frame m2 id = (m2',p2) /\
-    inject f m1' m2'.
-Proof.
-  intros. case_eq (alloc_frame m2 id). intros. exists m,p.
-  split. auto.
-  inv H0. inv H1. inv H.
-  constructor; eauto.
-  - inv mi_inj0. constructor; eauto.
-  - unfold valid_block. simpl. intros.
-    apply mi_freeblocks0. intro. apply H.
-    apply sup_incr_frame_in. auto.
-  - unfold valid_block in *. simpl.
-    intros. exploit mi_mappedblocks0; eauto.
-    apply sup_incr_frame_in.
-Qed.
-
-Theorem alloc_frame_left_inject :
-  forall f m1 m2 m1' id p1,
-    inject f m1 m2 ->
-    alloc_frame m1 id = (m1',p1) ->
-    inject f m1' m2.
-Proof.
-  intros. inv H. inv H0.
-  constructor; eauto.
-  - inv mi_inj0. constructor; eauto.
-  - unfold valid_block. simpl. intros.
-    apply mi_freeblocks0. intro. apply H.
-    apply sup_incr_frame_in. auto.
-Qed.
-
-Theorem return_frame_inject :
-  forall f m1 m2 m1' m2',
-    inject f m1 m2 ->
-    return_frame m1 = Some m1' ->
-    return_frame m2 = Some m2' ->
-    inject f m1' m2'.
-Proof.
-  intros. unfold return_frame in *.
-  destr_in H0. inv H0. destr_in H1. inv H1.
-  inv H. inv mi_inj0.
-  constructor; eauto.
-  constructor; eauto.
-  unfold valid_block in *. simpl in *. eauto. intros. eapply mi_freeblocks0.
-  intro. apply H. apply sup_return_frame_in with (s := support m1); eauto.
-  apply sup_return_refl'. auto.
-  unfold valid_block in *. simpl in *. eauto. intros. exploit mi_mappedblocks0.
-  apply H. apply sup_return_frame_in with (s := support m2); eauto.
-  apply sup_return_refl'. auto.
-Qed.
-
-Theorem return_frame_right_inject :
-  forall f m1 m2 m2',
-    inject f m1 m2 ->
-    return_frame m2 = Some m2' ->
-    inject f m1 m2'.
-Proof.
-  intros.
-  unfold return_frame in H0.
-  destr_in H0. inversion H0. inversion H.
-  constructor; auto.  inv mi_inj0.
-  constructor; eauto.
-  unfold valid_block in *. simpl in *. eauto. intros. exploit mi_mappedblocks0.
-  apply H1. apply sup_return_frame_in with (s := support m2); eauto.
-  apply sup_return_refl'. auto.
-Qed.
-
-Theorem return_frame_left_inject :
-  forall f m1 m2 m1',
-    inject f m1 m2 ->
-    return_frame m1 = Some m1' ->
-    inject f m1' m2.
-Proof.
-  intros.
-  unfold return_frame in H0.
-  destr_in H0. inversion H0. inversion H.
-  constructor; auto.  inv mi_inj0.
-  constructor; eauto.
-  unfold valid_block in *. simpl in *. eauto. intros. eapply mi_freeblocks0.
-  intro. apply H1. apply sup_return_frame_in with (s := support m1); eauto.
-  apply sup_return_refl'. auto.
-Qed.
-
-Theorem return_frame_parallel_inject :
-  forall f m1 m2 m1',
-    inject f m1 m2 ->
-    return_frame m1 = Some m1' ->
-    is_active (stack(support m2)) ->
-    exists m2',
-      return_frame m2 = Some m2' /\ inject f m1' m2'.
-Proof.
-  intros.
-  apply active_return_frame in H1. destruct H1 as [m2' H1].
-  exists m2'. split. auto. unfold return_frame in *.
-  destr_in H0. inv H0. destr_in H1. inv H1.
-  inv H. constructor; eauto.
-  - inv mi_inj0. constructor; eauto.
-  - unfold valid_block. simpl. intros.
-    apply mi_freeblocks0. intro. apply H.
-    apply sup_return_frame_in with (s := support m1); eauto.
-    apply sup_return_refl'. auto.
-  - unfold valid_block in *. simpl.
-    intros. exploit mi_mappedblocks0; eauto.
-    apply sup_return_frame_in with (s := support m2); eauto.
-    apply sup_return_refl'. auto.
-Qed.
-
 Theorem alloc_parallel_stackeq :
   forall m1 m2 lo1 hi1 lo2 hi2 b1 b2 m1' m2',
     alloc m1 lo1 hi1 = (m1',b1) ->
@@ -6490,7 +5261,6 @@ Theorem alloc_parallel_stackeq :
 Proof.
   intros. inv H. inv H0.
   simpl. unfold sup_incr. rewrite H1. simpl. split.
-  destruct (next_block_stree (stack(support m2))).
   reflexivity. apply stackeq_nextblock.
   auto.
 Qed.
@@ -6502,70 +5272,7 @@ Theorem alloc_parallel_astackeq:
     astack(support m1) = astack(support m2) ->
     astack(support m1') = astack (support m2').
 Proof.
-  intros. inv H; inv H0. simpl. unfold sup_incr. simpl.
-  destr; destr; reflexivity.
-Qed.
-
-Theorem alloc_frame_parallel_stackeq :
-  forall m1 m2 id m1' m2' p1 p2,
-    stack (support m1) = stack (support m2) ->
-    alloc_frame m1 id = (m1',p1) ->
-    alloc_frame m2 id = (m2',p2) ->
-    p1 = p2 /\
-    stack (support m1') = stack (support m2').
-Proof.
-  intros. split.
-  rewrite (path_alloc_frame _ _ _ _ H0).
-  rewrite (path_alloc_frame _ _ _ _ H1).
-  unfold sup_npath. unfold npath. rewrite H. reflexivity.
-  rewrite (support_alloc_frame _ _ _ _ H0).
-  rewrite (support_alloc_frame _ _ _ _ H1).
-  unfold sup_incr_frame.
-  rewrite H. destruct (next_stree (stack (support m2))).
-  reflexivity.
-Qed.
-
-Theorem return_frame_parallel_stackeq :
-  forall m1 m2 m1' m2',
-    return_frame m1 = Some m1' ->
-    return_frame m2 = Some m2' ->
-    stack (support m1) = stack (support m2) ->
-    stack (support m1') = stack (support m2').
-Proof.
-  intros.
-  apply support_return_frame in H.
-  apply support_return_frame in H0.
-  unfold sup_return_frame in *.
-  rewrite H1 in H.
-  destruct (return_stree (stack(support m2))).
-  destruct p. inv H. inv H0. reflexivity.
-  inv H.
-Qed.
-
-Theorem alloc_frame_parallel_astackeq :
-  forall m1 m2 id m1' m2' p1 p2,
-    astack (support m1) = astack (support m2) ->
-    alloc_frame m1 id = (m1',p1) ->
-    alloc_frame m2 id = (m2',p2) ->
-    astack (support m1') = astack (support m2').
-Proof.
-  intros. inv H0; inv H1; simpl. unfold sup_incr_frame.
-  destr; destr; reflexivity.
-Qed.
-
-Theorem return_frame_parallel_astackeq :
-  forall m1 m2 m1' m2',
-    return_frame m1 = Some m1' ->
-    return_frame m2 = Some m2' ->
-    astack (support m1) = astack (support m2) ->
-    astack (support m1') = astack (support m2').
-Proof.
-  intros.
-  apply support_return_frame in H.
-  apply support_return_frame in H0.
-  unfold sup_return_frame in *.
-  repeat destr_in H. repeat destr_in H0. simpl in *.
-  congruence.
+  intros. inv H; inv H0. simpl. unfold sup_incr. simpl. eauto.
 Qed.
 
 Theorem alloc_parallel_inject:
@@ -7403,39 +6110,6 @@ Proof.
   rewrite access_iff0. eauto.
 Qed.
 
-Lemma alloc_frame_iff :
-  forall m1 m2 m1' id path,
-    iff m1 m2 ->
-    alloc_frame m1 id = (m1',path) ->
-    exists m2', alloc_frame m2 id = (m2',path) /\ iff m1' m2'.
-Proof.
-  intros. inversion H. caseEq (alloc_frame m2 id). intros.
-  exists m. split. apply path_alloc_frame in H0.
-  apply path_alloc_frame in H1. unfold sup_npath in *. congruence.
-  inv H0. inv H1.
-  constructor; simpl; auto; unfold sup_incr_frame; rewrite stack_iff0; destr.
-Qed.
-
-Lemma return_frame_iff :
-  forall m1 m2 m1',
-  iff m1 m2 ->
-  return_frame m1 = Some m1' ->
-  exists m2', return_frame m2 = Some m2' /\ iff m1' m2'.
-Proof.
-  intros. inversion H.
-  apply return_frame_active in H0 as H1. rewrite stack_iff0 in H1.
-  apply active_return_frame in H1 as H2. destruct H2 as [m2' H3].
-  exists m2'. split. eauto. unfold return_frame in *. destr_in H0.
-  destr_in H3. inv H0. inv H3.
-  constructor; simpl; auto.
-  unfold sup_return_frame'.
-  unfold sup_return_frame.
-  rewrite stack_iff0. destruct (return_stree (stack (support m2))) eqn:?. destruct p. simpl. auto. auto.
-unfold sup_return_frame'.
-  unfold sup_return_frame.
-  rewrite stack_iff0. destruct (return_stree (stack (support m2))) eqn:?. destruct p. simpl. auto. auto.
-Qed.
-
 Lemma alloc_parallel_iff:
   forall m1 m2 m1' lo hi b,
     iff m1 m2 ->
@@ -7453,9 +6127,10 @@ Proof.
   rewrite stack_iff0 in H0. congruence.
   subst.
   exists m. split. auto.
-  unfold alloc in *. inv H0. inv H1.
-  constructor; simpl; try congruence; unfold sup_incr;
-  rewrite stack_iff0; destr.
+  unfold alloc in *. inv H0. inv H1. simpl.
+  econstructor; simpl; try congruence; unfold sup_incr; eauto.
+  unfold nextblock,fresh_block. congruence.
+  unfold nextblock,fresh_block. congruence. 
 Qed.
 
 Lemma pop_stage_safe_iff:

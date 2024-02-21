@@ -1428,7 +1428,7 @@ Qed.
 Lemma init_mem_stack:
   forall (p: AST.program F V) m,
     init_mem p = Some m ->
-    Mem.stack (Mem.support m) = (Node None nil nil None).
+    Mem.stack (Mem.support m) = nil.
 Proof.
   unfold init_mem. intros.
   exploit alloc_globals_stack; eauto. intros [A B].
