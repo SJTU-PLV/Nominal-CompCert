@@ -1093,7 +1093,7 @@ Definition callconv_gen (R : cklr) : cklr' :=
     match_mem w := (CKLR.match_mem R) w;
   |}.
 *)
-
+(*
 
 (** * hard part : compose injp ⋅ injp' ≡ injp' *)
 
@@ -1541,7 +1541,7 @@ Admitted.
 Theorem refinement_injp_injp'_c:
   cceqv' (cc_c' injp') (cc_compose_1 (cc_c injp) (cc_c' injp')).
 Proof. split. eapply injp_injp'_ref1. apply injp_injp'_ref2. Qed.
-
+*)
 
 
 

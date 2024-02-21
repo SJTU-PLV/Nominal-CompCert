@@ -1694,6 +1694,24 @@ Qed.
       
       (*TODO: A lemma here*)
 
+Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
+    Val.inject (compose_meminj j1 j2) v1 v3 ->
+    exists v2, Val.inject j1 v1 v2 /\ Val.inject j2 v2 v3.
+Proof.
+  intros. inv H.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  unfold compose_meminj in H0.
+  destruct (j1 b1) as [[b2' d1]|] eqn:M1; try congruence.
+  destruct (j2 b2') as [[b3' d2]|] eqn:M2; inv H0.
+  eexists. split. econstructor; eauto.
+  econstructor; eauto. rewrite add_repr.
+  rewrite Ptrofs.add_assoc. auto.
+  exists Vundef. split; constructor.
+Qed.
+
 Theorem injp'_injp_ref2:
   ccref' (cc_compose_2 (cc_c' injp') (cc_c injp)) (cc_c' injp') .
 Proof.

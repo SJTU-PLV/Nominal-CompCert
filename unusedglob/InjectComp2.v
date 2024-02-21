@@ -200,6 +200,99 @@ Proof.
     destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb; inv H. reflexivity.
 Qed.
 
+Require Import VerComp.
+Theorem injp_injp'_ref1:
+  ccref'  (cc_c' injp') (cc_compose_1 (cc_c injp) (cc_c' injp')).
+Proof.
+  red. intros w se1 se3 q1 q2 Hse Hq.
+  inv Hse. inv Hq. cbn in H2, H3. inv H4. rename m0 into m1. rename m3 into m2.
+  rename H13 into Hv.
+  set (gs1 := Genv.genv_sup se1).
+  exists (se1, (injpw (source_inj gs1 f) gs1 gs1 m1 m1 (mem_source_inj gs1 f m1 m2 Hv H0 Hm)),
+      (injpw f (Genv.genv_sup se1) (Genv.genv_sup se3) m1 m2 Hm)).
+  repeat apply conj.
+  - split. constructor; eauto. eapply match_stbls_dom'; eauto.
+    constructor; eauto.
+  - exists (cq vf1 sg vargs1 m1). split.
+    constructor; cbn; eauto.
+    eapply val_inject_dom; eauto. eapply val_inject_list_dom; eauto.
+    constructor; cbn; eauto.
+    constructor; eauto.
+  - intros r1 r3 [r2 [Hr1 Hr2]].
+    destruct Hr1 as [w12' [Hw12 Hr1]]. destruct Hr2 as [w23' [Hw23 Hr2]].
+    destruct w12' as [f12' ? ? m1' m2' Hm12']. destruct w23' as [f23' ? ? m2'' m3' Hm23'].
+    inv Hw12. inv Hw23. cbn in *.
+    inv Hr1. inv Hr2. cbn in *. inv H6. inv H11.
+    rename m1'0 into m1'. rename m2'0 into m2'. rename m2'1 into m3'.
+    eexists (injpw (compose_meminj f12' f23') (Genv.genv_sup se1) (Genv.genv_sup se3) m1' m3'
+               (Mem.inject_compose f12' f23' _ _ _ Hm12' Hm23')
+            ).
+    repeat apply conj.
+    + constructor; eauto.
+      * eapply Mem.unchanged_on_implies; eauto.
+        intros. destruct H6. split. red. unfold source_inj.
+        rewrite pred_dec_false. unfold meminj_dom. rewrite H6. reflexivity. eauto. eauto.
+      * red. intros. unfold compose_meminj.
+        erewrite H21. erewrite H29; eauto.
+        2: { unfold source_inj, meminj_dom. destruct Mem.sup_dec. reflexivity.
+             rewrite H6. reflexivity. }
+        rewrite Z.add_0_l. reflexivity.
+      * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
+        destruct (f12' b1) as [[bi delta12] | ] eqn:Hb1; try discriminate.
+        destruct (f23' bi) as [[xb2 delta23] | ] eqn:Hb2; try discriminate.
+        inv Hb'.
+        edestruct H22; eauto. unfold source_inj, meminj_dom.
+        rewrite pred_dec_false.
+        rewrite Hb. auto.
+        {
+          intro.
+          erewrite H21 in Hb1.
+          2: { unfold source_inj.  rewrite pred_dec_true. eauto.  eauto. }
+          inv Hb1.
+          exploit H30; eauto. intros [A B].
+          apply A. eapply H0; eauto.
+        }
+        destruct (f bi) as [[? ?] | ] eqn:Hfbi.
+        {
+          eapply Mem.valid_block_inject_1 in Hfbi; eauto.
+        }
+        edestruct H30; eauto.
+    + constructor; cbn; eauto with mem.
+      eapply Values.val_inject_compose; eauto.
+      constructor; eauto. 
+      (* The validity of source memory after external calls *)
+      (* TODO: define this into a lemma *)
+      red. intros. red.
+      set (mv1 := mem_memval m1' b ofs).
+      set (mv2 := mem_memval m2' b ofs).
+      assert (source_inj gs1 f b = Some (b,0)).
+      unfold source_inj. rewrite pred_dec_true. reflexivity. eauto.
+      apply H21 in H10.
+      assert (MVALINJ12: memval_inject f12' mv1 mv2).      
+      inv Hm'0. inv mi_inj. exploit mi_memval; eauto.
+      rewrite Z.add_0_r. eauto.
+      destruct mv1 eqn: Hv1; eauto.
+      destruct v; eauto.
+      inv MVALINJ12. inv H12.
+      rename b into bg. rename b0 into b1.
+      unfold compose_meminj in H8. rewrite H10 in H8.
+      destruct (f23' bg) as [[b3 d3]|] eqn:Hj3; try congruence.
+      exploit H31; eauto. eapply Mem.perm_inject; eauto.
+      intro. red in H11. unfold mv2 in H32.
+      replace (ofs + 0) with ofs in H11 by lia.
+      rewrite <- H32 in H11.
+      destruct (Mem.sup_dec b2 (Genv.genv_sup se1)); try congruence.
+      rewrite pred_dec_true. eauto.
+      assert (Genv.match_stbls (source_inj gs1 f) se1 se1).
+      eapply match_stbls_dom'; eauto.
+      eapply Genv.match_stbls_incr in H12; eauto.
+      inv H12. rewrite mge_separated; eauto.
+      intros. exploit H22; eauto. intros [A B].
+      split; eauto. intro. eapply A. apply H0. eauto.
+      intro. eapply B. apply H0. eauto. inv H11.
+Qed.
+
+
 Section CONSTR_PROOF.
   Variable m1 m2 m3 m1' m3': mem.
   Variable j1 j2 j1' j2': meminj.
@@ -1836,3 +1929,152 @@ Qed.
 Qed.
 
 End CONSTR_PROOF.
+
+Lemma compose_meminj_midvalue: forall j1 j2 v1 v3,
+    Val.inject (compose_meminj j1 j2) v1 v3 ->
+    exists v2, Val.inject j1 v1 v2 /\ Val.inject j2 v2 v3.
+Proof.
+  intros. inv H.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  eexists. split; econstructor; eauto.
+  unfold compose_meminj in H0.
+  destruct (j1 b1) as [[b2' d1]|] eqn:M1; try congruence.
+  destruct (j2 b2') as [[b3' d2]|] eqn:M2; inv H0.
+  eexists. split. econstructor; eauto.
+  econstructor; eauto. rewrite add_repr.
+  rewrite Ptrofs.add_assoc. auto.
+  exists Vundef. split; constructor.
+Qed.
+
+Theorem injp_injp'_ref2:
+  ccref' (cc_compose_1 (cc_c injp) (cc_c' injp')) (cc_c' injp') .
+Proof.
+  red.
+  intros w se1 se3 q1 q3 MSTBL13 MMEM13.
+  destruct w as [[se2 w12] w23].
+  destruct MSTBL13 as [MSTBL12 MSTBL23].
+  destruct MMEM13 as [q2 [MMEM12 MMEM23]].
+  inv MMEM12. inv H1. rename f into j12. rename Hm0 into INJ12. clear Hm1.
+  inv MMEM23. inv H9. rename f into j23. rename Hm1 into INJ23. clear Hm2.
+  cbn in H8, H6, MSTBL23, MSTBL12, H, H0.
+  assert (gs0 = gs2).
+  inv MSTBL12. inv MSTBL23. eauto. subst gs0.                
+  exists ((injpw (compose_meminj j12 j23) gs1 gs3
+          m1 m3 (Mem.inject_compose _ _ _ _ _ INJ12 INJ23))).
+  simpl. repeat apply conj.
+  - inv MSTBL12. inv MSTBL23.
+    econstructor; simpl; auto.
+    eapply Genv.match_stbls_stbls'_compose; eauto.
+  - constructor; cbn; eauto.
+    eapply val_inject_compose; eauto.
+    eapply CKLRAlgebra.val_inject_list_compose.
+    econstructor; eauto.
+    constructor; eauto.
+    (* TODO : define this into a lemma *)
+    red. intros.
+    red.
+    red in H1.
+    inv MSTBL12. inv H16.
+    exploit mge_dom; eauto.
+    intros [b2 Hj1]. rename b into b1.
+    eapply mge_separated in H3 as HSUP2; eauto.
+    exploit H1; eauto. eapply Mem.perm_inject; eauto.
+    unfold compose_meminj in H5. rewrite Hj1 in H5.
+    destruct (j23 b2) as [[a c]|]; try congruence.
+    rewrite Z.add_0_r. intro Hmv2. red in Hmv2.
+    destruct (mem_memval m1 b1 ofs) eqn:Hmv1; eauto.
+    destruct v; eauto.
+    inv INJ12. inv mi_inj.
+    exploit mi_memval; eauto.
+    intro Hmvinject.
+    setoid_rewrite Hmv1 in Hmvinject.
+    inv Hmvinject. inv H9.
+    rewrite Z.add_0_r in H13.
+    symmetry in H13. unfold mem_memval in Hmv2.
+    rewrite H13 in Hmv2.
+    clear - Hmv2 H12 mge_separated.
+    destruct (Mem.sup_dec b3 gs4). rewrite pred_dec_true; eauto.
+    eapply mge_separated; eauto. inv Hmv2.
+  - intros r1 r3 [w13' [INCR13' Hr13]].
+    inv Hr13. inv H4. cbn in H3. rename f into j13'. rename Hm3 into INJ13'.
+    cbn in INCR13'. rename m2' into m3'.
+    inversion INCR13' as [? ? ? ? ? ? ? ? ? ?  RO1 RO3 MAXPERM1 MAXPERM3 UNCHANGE1 UNCHANGE3 INCR13 DISJ13]. subst.
+    generalize (inject_implies_image_in _ _ _ INJ12).
+    intros IMGIN12.
+    generalize (inject_implies_image_in _ _ _ INJ23).
+    intros IMGIN23.
+    generalize (inject_implies_dom_in _ _ _ INJ12).
+    intros DOMIN12.
+    generalize (inject_implies_dom_in _ _ _ INJ23).
+    intros DOMIN23.
+    generalize (inject_implies_dom_in _ _ _ INJ13').
+    intros DOMIN13'.
+    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE1).
+    intros SUPINCL1.
+    generalize (Mem.unchanged_on_support _ _ _ UNCHANGE3).
+    intros SUPINCL3.
+    generalize (inject_incr_inv _ _ _ _ _ _ _ DOMIN12 IMGIN12 DOMIN23 DOMIN13' SUPINCL1 INCR13 DISJ13).
+    intros (j12' & j23' & m2'_sup & JEQ & INCR12 & INCR23 & SUPINCL2 & DOMIN12' & IMGIN12' & DOMIN23' & INCRDISJ12 & INCRDISJ23 & INCRNOLAP & ADDZERO & ADDEXISTS & ADDSAME).
+    subst. cbn in *.
+    set (m2' := m2' m1 m2 m1' j12 j23 j12' gs2 m2'_sup INJ12).
+    assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
+    admit.
+    assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
+    admit.
+    rename gs0 into gs1. rename gs4 into gs3.
+    set (w1' := injpw j12' gs1 gs2 m1' m2' INJ12').
+    set (w2' := injpw j23' gs2 gs3 m2' m3' INJ23').
+    rename vres2 into vres3.
+    exploit compose_meminj_midvalue; eauto.
+    intros [vres2 [RES1 RES2]].
+    assert (UNC21:Mem.unchanged_on (fun b z => loc_out_of_reach j12 m1 b z /\ ~ sup_In b gs2) m2 m2').
+    eapply UNCHANGE21; eauto.
+    exists (cr vres2 m2'). split.
+    + exists w1'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
+      admit.
+      eapply MAXPERM2; eauto.
+      admit.
+      eapply Mem.unchanged_on_implies; eauto.
+      intros. destruct H4. split; eauto. red. unfold compose_meminj.
+      rewrite H4. reflexivity.
+      constructor; eauto. constructor; eauto.
+    +
+      exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto. admit.
+      eapply MAXPERM2; eauto. admit.
+      eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
+      econstructor; eauto. constructor; eauto.
+      (*TODO: the third valid_global*)
+      red. intros. red.
+      inv MSTBL12. subst gs5 gs6.
+      exploit Genv.mge_img; eauto. intros [b1 Hj1].
+      exploit Genv.mge_separated; eauto. intro SEP.
+      apply SEP in H4 as HSUP1.
+
+      (*
+
+      [] []     []  []         []  []      []  []
+
+      [] [] =>           -->           =>  []  [?]
+
+      []        []             []          []
+
+
+
+      *It's meaningless to discuss such things here when the composition of comp2 is unfinished*
+      if m2'[b2] contains ill pointer Vptr b2' ofs
+      then we need to derive that m1' is not valid
+
+      1) there exists b1, s.t. j12 b1 = Some (b2,0)
+      2) it is possible that (b1,o1) have no permission in m1
+           a) if it has permission, then m2'[b2,o2] is a copied value from m1'.
+       *)
+      (*question: the corresponding position in m1' may have no permission? *)
+      admit.
+Admitted.
+
+
+Theorem refinement_injp_injp'_c:
+  cceqv' (cc_c' injp') (cc_compose_1 (cc_c injp) (cc_c' injp')).
+Proof. split. eapply injp_injp'_ref1. apply injp_injp'_ref2. Qed.
