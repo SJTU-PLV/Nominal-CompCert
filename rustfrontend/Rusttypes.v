@@ -39,6 +39,12 @@ Definition deref_type (ty: type) : type :=
   | _ => Tunit
   end.
 
+Definition return_type (ty: type) : type :=
+  match ty with
+  | Tfunction _ ty _ => ty
+  | _ => Tunit
+  end.
+
 Lemma type_eq: forall (ty1 ty2: type), {ty1=ty2} + {ty1<>ty2}
 with typelist_eq: forall (tyl1 tyl2: typelist), {tyl1=tyl2} + {tyl1<>tyl2}.
 Proof.

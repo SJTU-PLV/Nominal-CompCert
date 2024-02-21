@@ -111,6 +111,7 @@ Local Notation "( x ,, y )" := (@pair (list statement) place x y).
 
 Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
   match e with
+  | Rustsyntax.Eunit => ret (nil, Eunit)
   | Rustsyntax.Eval (Vint n) ty =>
       ret (nil, Econst_int n ty)
   | Rustsyntax.Eval (Vfloat n) ty =>
@@ -253,6 +254,7 @@ End NOTATION.
 
 Definition value_or_place (e: Rustsyntax.expr) : bool :=
   match e with
+  | Rustsyntax.Eunit => true
   | Rustsyntax.Eval _ _ => true
   | Rustsyntax.Evar _ _ => false
   | Rustsyntax.Ebox _ _ => true

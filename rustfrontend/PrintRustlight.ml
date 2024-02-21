@@ -26,6 +26,7 @@ let rec print_place out (p: place) =
 (* Precedences and associativity (copy from PrintClight.ml) *)
 
 let precedence' = function
+  | Eunit -> (16, NA)
   | Econst_int _ -> (16, NA)
   | Econst_float _ -> (16, NA)
   | Econst_single _ -> (16, NA)
@@ -60,6 +61,7 @@ let rec pexpr p (prec, e) =
   then fprintf p "@[<hov 2>("
   else fprintf p "@[<hov 2>";
   begin match e with
+  | Eunit ->  fprintf p "tt"
   | Eplace(v, _) ->
     fprintf p "%a" print_place v
   | Econst_int(n, Rusttypes.Tint(I32, Unsigned, _)) ->

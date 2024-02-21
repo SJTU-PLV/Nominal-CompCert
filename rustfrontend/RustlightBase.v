@@ -42,6 +42,7 @@ Definition typeof_place p :=
 (** ** Expression *)
 
 Inductive pexpr : Type :=
+| Eunit                                 (**r unit value  *)
 | Econst_int: int -> type -> pexpr       (**r integer literal *)
 | Econst_float: float -> type -> pexpr   (**r double float literal *)
 | Econst_single: float32 -> type -> pexpr (**r single float literal *)
@@ -67,6 +68,7 @@ Inductive boxexpr : Type :=
 
 Definition typeof_pexpr (pe: pexpr) : type :=
   match pe with
+  | Eunit => Tunit
   | Econst_int _ ty
   | Econst_float _ ty
   | Econst_single _ ty

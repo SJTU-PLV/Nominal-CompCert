@@ -324,6 +324,7 @@ Variable dropm: PTree.t ident.  (* map from composite id to its drop glue id *)
 
 Fixpoint pexpr_to_cexpr (e: pexpr) : mon Clight.expr :=
   match e with
+  | Eunit => ret (Clight.Econst_int Int.zero Ctypes.type_int32s)
   | Econst_int i ty => ret (Clight.Econst_int i (to_ctype ty))
   | Econst_float f ty => ret (Clight.Econst_float f (to_ctype ty))
   | Econst_single f ty => ret (Clight.Econst_single f (to_ctype ty))

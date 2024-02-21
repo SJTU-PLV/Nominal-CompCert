@@ -17,6 +17,7 @@ Require Import LanguageInterface.
 
 Inductive expr : Type :=
 | Eval (v: val) (ty: type)                                  (**r constant *)
+| Eunit                     (**r unit expression which evaluated to zero  *)
 | Evar (x: ident) (ty: type)                                (**r variable *)
 | Ebox (r: expr) (ty: type)                                 (**r allocate a heap block *)
 | Efield (l: expr) (f: ident) (ty: type) (**r access to a member of a struct *)
@@ -34,6 +35,7 @@ with exprlist : Type :=
 
 Definition typeof (e: expr) : type :=
   match e with
+  | Eunit => Tunit
   | Eval _ ty
   | Evar _ ty
   | Ebox _ ty
@@ -135,10 +137,13 @@ Notation "'Box' ( e )" := (Ebox e (Tbox (typeof e) noattr)) (in custom rustsynta
 Notation " ! e " := (Ederef e (deref_type (typeof e))) (in custom rustsyntax at level 10, e at level 20) : rustsyntax_scope.
 Notation " 'field' '(' e ',' x ',' t ')' " := (Efield e x t) (in custom rustsyntax at level 10, x global, t global, e at level 20) : rustsyntax_scope.
 Notation " l := r " := (Eassign l r Tunit) (in custom rustsyntax at level 17, r at level 20) : rustsyntax_scope.
+Notation " { } " := Enil (in custom rustsyntax at level 20) : rustsyntax_scope.
+Notation " { x } " := (Econs x Enil ) (in custom rustsyntax at level 20) : rustsyntax_scope.
 Notation " { x , .. , y } " := (Econs x .. (Econs y Enil) .. ) (in custom rustsyntax at level 20) : rustsyntax_scope.
-Notation " f @ l " := (Ecall f l) (in custom rustsyntax at level 10, l at level 10) : rustsyntax_scope.
+Notation "'Call' f @ l " := (Ecall f l (return_type (typeof f))) (in custom rustsyntax at level 10, l at level 20, f at level 20) : rustsyntax_scope.
 Notation " e1 < e2 " := (Ebinop Ole e1 e2 type_bool) (in custom rustsyntax at level 15, e2 at level 20, left associativity) : rustsyntax_scope.
 Notation " $ k " := (Eval (Vint (Int.repr k)) type_int32s) (in custom rustsyntax at level 10, k constr) : rustsyntax_scope.
+Notation " 'tt' " := (Eunit) (in custom rustsyntax at level 10) : rustsyntax_scope.
 Notation " e1 * e2 " := (Ebinop Omul e1 e2 (typeof e1))  (in custom rustsyntax at level 15, e2 at level 20, left associativity) : rustsyntax_scope.
 Notation " e1 - e2 " := (Ebinop Osub e1 e2 (typeof e1))  (in custom rustsyntax at level 15, e2 at level 20, left associativity) : rustsyntax_scope.
 
@@ -400,13 +405,37 @@ Definition pop_and_push_fundef : globdef (Rusttypes.fundef function) type :=
 Definition pop_and_push_comp_env : composite_env :=
   PTree.set list_id list_composite (PTree.set pair_id pair_composite (PTree.empty composite)).
 
-(* main function *)
+Definition pop_and_push_ident : ident := 300%positive.
+Definition pop_and_push_ty : type := Tfunction (Tcons box_list (Tcons type_int32s Tnil)) box_list cc_default.
 
+(* main function *)
+Definition main_body :=
+  <{ let A : list_ty in
+     do (A#list_ty) := tt;
+     let B : pair_ty in
+     do (field(B#pair_ty, first_id, type_int32s)) := $42;
+     do (field(B#pair_ty, second_id, box_list)) := Box(A#list_ty);
+     do (A#list_ty) := (B#pair_ty);
+     let C : box_list in
+     do (C#box_list) := Box(A#list_ty);
+     do (C#box_list) := Call (pop_and_push_ident#pop_and_push_ty) @ {(C#box_list)};
+     return ($0)
+     endlet endlet endlet }>.
+
+Definition main_func : function :=
+    {| fn_return := type_int32s;
+    fn_callconv := cc_default;
+    fn_params := nil;
+    fn_body := main_body |}.
+
+Definition main_fundef : globdef (Rusttypes.fundef function) type := Gfun (Internal main_func).
+
+Definition main_ident : ident := 301%positive.
 
 Program Definition pop_and_push_prog : program :=
-  {| prog_defs := (300%positive, pop_and_push_fundef) :: nil;
-    prog_public := 300%positive :: nil;
-    prog_main := 42%positive;
+  {| prog_defs := (pop_and_push_ident, pop_and_push_fundef) :: (main_ident, main_fundef) :: nil;
+    prog_public := pop_and_push_ident :: main_ident :: nil;
+    prog_main := main_ident;
     prog_types := (pair_codef :: list_codef :: nil);
     prog_comp_env := pop_and_push_comp_env;
     prog_comp_env_eq := _ |}.
