@@ -36,6 +36,55 @@ let object_filename sourcename =
   else
     tmp_file ".o"
 
+(* From Clight to asm *)
+
+let compile_clight prog name =
+  (* Print all the intermediate programs *)
+  option_dprepro := true;
+  option_dparse := true;
+  option_dcmedium := true;
+  option_dclight := true;
+  option_dcminor := true;
+  option_drtl := true;
+  option_dltl := true;
+  option_dalloctrace := true;
+  option_dmach := true;
+  option_dasm := true;
+  let set_dest dst opt ext =
+    dst := if !opt then Some (output_filename name ~suffix:ext)
+      else None in
+  set_dest Cprint.destination option_dparse ".parsed.c";
+  set_dest PrintCsyntax.destination option_dcmedium ".compcert.c";
+  set_dest PrintClight.destination option_dclight ".light.c";
+  set_dest PrintCminor.destination option_dcminor ".cm";
+  set_dest PrintRTL.destination option_drtl ".rtl";
+  set_dest Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
+  set_dest PrintLTL.destination option_dltl ".ltl";
+  set_dest PrintMach.destination option_dmach ".mach";
+  set_dest AsmToJSON.destination option_sdump !sdump_suffix;
+  (* Compile the Clight program *)
+  let asm =
+    match Compiler.apply_partial
+               (Compiler.transf_clight_program prog)
+               Asmexpand.expand_program with
+    | Errors.OK asm ->
+        asm
+    | Errors.Error msg ->
+      let loc = file_loc name in
+        fatal_error loc "%a"  print_error msg in
+  (* Dump Asm in binary and JSON format *)
+  AsmToJSON.print_if asm name;
+  (* Print Asm in text form *)
+  let ofile = output_filename name ~suffix:".s" in
+  let oc = open_out ofile in
+  PrintAsm.print_program oc asm;
+  close_out oc;
+  (* invoke assembler *)
+  let objname = object_filename name in
+  assemble ofile objname;
+  objname
+
+
 (* From CompCert C AST to asm *)
 
 let compile_c_file sourcename ifile ofile =
@@ -412,8 +461,10 @@ let stdout_format = Format.formatter_of_out_channel stdout
 
 let _ =
   if debug_rust then
+  try     
+  let clight_prog = 
     (* Print Rustlight *)
-    match Rustlightgen.transl_program test_case with
+    (match Rustlightgen.transl_program test_case with
     | Errors.OK rustlight_prog ->
       Format.fprintf stdout_format "Rustlight: @.";
       PrintRustlight.print_program stdout_format rustlight_prog;
@@ -442,13 +493,26 @@ let _ =
         begin match Clightgen.transl_program rustir_prog_drop with
         | Errors.OK clight_prog ->
           Format.fprintf stdout_format "@.Clightgen: @.";
-        PrintClight.print_program PrintClight.Clight1 stdout_format clight_prog;
+          PrintClight.print_program PrintClight.Clight1 stdout_format clight_prog;
+          clight_prog
         | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
         end;
       | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
       end;
-    | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
-  else
+    | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg)
+  in
+  (* The following code compiles the generated Clight program  *)
+  let name = "test_rust" in
+  let objfile = compile_clight clight_prog name in
+  (* invoke the linker *)
+  linker (name) [objfile];
+  check_errors ()
+  with
+  | Sys_error msg
+  | CmdError msg -> error no_loc "%s" msg; exit 2
+  | Abort -> error_summary (); exit 2
+  | e -> crash e;
+
   (* The following code is the debug code for a single function *)
   (* if debug_rust then
     let rustlight_func = Rustlightgen.transl_function Rustlightgen.empty_ce test_case in
