@@ -1325,14 +1325,13 @@ Proof.
   assert ((fn_code tf)!ncont = Some(Ireturn rret)
           /\ match_stacks k cs).
     inv TK; simpl in H; try contradiction; auto.
-  destruct H3.
+  destruct H2.
   assert (fn_stacksize tf = fn_stackspace f).
     inv TF. auto.
   edestruct Mem.free_parallel_extends as [tm' []]; eauto.
-  edestruct Mem.return_frame_parallel_extends as [tm'' []]; eauto.
   econstructor; split.
   left; apply plus_one. eapply exec_Ireturn. eauto.
-  rewrite H5. eauto. eauto. inv H9. congruence.
+  rewrite H4. eauto. eauto. inv H6. congruence.
   constructor; auto.
 
   (* assign *)
@@ -1402,8 +1401,7 @@ Proof.
   exploit match_stacks_call_cont; eauto. intros [U V].
   assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
   edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
-  edestruct Mem.return_frame_parallel_extends as [tm'''' []]; eauto.
-  inversion H11. rewrite mext_sup in H6.
+  inversion H8. rewrite mext_sup in H5.
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
   eapply exec_Itailcall; eauto. simpl. rewrite J. rewrite H3. auto. left. auto.
@@ -1419,17 +1417,16 @@ Proof.
   exploit match_stacks_call_cont; eauto. intros [U V].
   assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
   edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
-  edestruct Mem.return_frame_parallel_extends as [tm'''' []]; eauto.
-  inversion H9. rewrite mext_sup in H6.
+  inversion H3. rewrite mext_sup in H5.
   econstructor; split.
   left; eapply plus_right. eexact E.
   eapply exec_Itailcall; eauto. simpl. reflexivity. simpl.
-  rewrite symbols_preserved. rewrite H8.
+  rewrite symbols_preserved. rewrite H7.
   rewrite Genv.find_funct_find_funct_ptr in P. eauto.
   apply sig_transl_function; auto.
   rewrite H; eauto.
   traceEq.
-  apply Genv.genv_vars_eq in H8. inv H8.
+  apply Genv.genv_vars_eq in H7. inv H7.
   constructor; auto.
 
   (* builtin *)
@@ -1512,10 +1509,9 @@ Proof.
   exploit match_stacks_call_cont; eauto. intros [U V].
   inversion TF.
   edestruct Mem.free_parallel_extends as [tm' []]; eauto.
-  edestruct Mem.return_frame_parallel_extends as [tm'' []]; eauto.
   econstructor; split.
-  left; apply plus_one. eapply exec_Ireturn; eauto.
-  rewrite H4; eauto. inv H8. congruence.
+  left; apply plus_one. eapply exec_Ireturn. eauto.
+  rewrite H3; eauto. inv H5. congruence.
   constructor; auto.
 
   (* return some *)
@@ -1525,10 +1521,9 @@ Proof.
   exploit match_stacks_call_cont; eauto. intros [U V].
   inversion TF.
   edestruct Mem.free_parallel_extends as [tm'' []]; eauto.
-  edestruct Mem.return_frame_parallel_extends as [tm''' []]; eauto.
   econstructor; split.
-  left; eapply plus_right. eexact A. eapply exec_Ireturn; eauto.
-  rewrite H6; eauto. inv H10. congruence. traceEq.
+  left; eapply plus_right. eexact A. eapply exec_Ireturn. eauto.
+  rewrite H5; eauto. inv H7. congruence. traceEq.
   simpl. constructor; auto.
 
   (* label *)
@@ -1556,9 +1551,8 @@ Proof.
     assert (map_valid init_mapping s0) by apply init_mapping_valid.
     exploit (add_vars_valid (CminorSel.fn_params f)); eauto. intros [A B].
     eapply add_vars_wf; eauto. eapply add_vars_wf; eauto. apply init_mapping_wf.
-  edestruct Mem.alloc_frame_extends as [tm' []]; eauto.
-  edestruct Mem.alloc_extends as [tm'' []]; eauto; try apply Z.le_refl.
-  edestruct Mem.record_frame_extends as [tm''' []]; eauto.
+  edestruct Mem.alloc_extends as [tm' []]; eauto; try apply Z.le_refl.
+  edestruct Mem.record_frame_extends as [tm'' []]; eauto.
   econstructor; split.
   left; apply plus_one. eapply exec_function_internal; simpl; eauto.
   simpl. econstructor; eauto.

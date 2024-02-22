@@ -655,7 +655,7 @@ Proof.
 - inv WT_STMT. econstructor; eauto.
   eapply wt_find_funct; eauto.
   eapply wt_eval_exprlist; eauto.
-  rewrite H10; eapply call_cont_wt; eauto.
+  rewrite H9; eapply call_cont_wt; eauto.
 - inv WT_STMT. exploit external_call_well_typed; eauto. intros TRES.
   econstructor; eauto using wt_Sskip.
   destruct optid; auto. apply wt_env_assign; auto. rewrite <- H6; auto.
@@ -677,10 +677,10 @@ Proof.
   { constructor. eapply call_cont_wt; eauto. }
   generalize (wt_find_label _ _ lbl _ _ H2 WT_CK).
   rewrite H. intros [WT_STMT' WT_CONT']. econstructor; eauto.
-- inv WT_FD. inversion H3; subst. econstructor; eauto.
+- inv WT_FD. inversion H2; subst. econstructor; eauto.
   constructor; auto.
-  apply wt_env_set_locals. apply wt_env_set_params. rewrite H4; auto.
-  red; intros. apply def_set_locals. destruct H6; auto. left; apply def_set_params; auto.
+  apply wt_env_set_locals. apply wt_env_set_params. rewrite H3; auto.
+  red; intros. apply def_set_locals. destruct H5; auto. left; apply def_set_params; auto.
 - exploit external_call_well_typed; eauto. intros.
   econstructor; eauto.
 - inv WT_CONT. econstructor; eauto using wt_Sskip.
@@ -803,5 +803,6 @@ Proof.
     destruct b; discriminate.
   - discriminate.
 Qed.
+
 
 

@@ -1298,10 +1298,9 @@ Proof.
   inv H.
 - (* skip call *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
-  exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [C D]].
   left; econstructor; split.
   apply plus_one; econstructor. eapply match_is_call_cont; eauto.
-  erewrite stackspace_function_translated; eauto. eauto.  inv D. congruence.
+  erewrite stackspace_function_translated; eauto. eauto. inv B. congruence.
   econstructor; eauto. eapply match_is_call_cont; eauto.
 - (* assign *)
   exploit sel_expr_correct; eauto. intros [v' [A B]].
@@ -1344,13 +1343,12 @@ Proof.
   right; left; split. simpl; lia. split; auto. econstructor; eauto.
 - (* Stailcall *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
-  exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [P' Q']].
   erewrite <- stackspace_function_translated in P by eauto.
   exploit sel_expr_correct; eauto. intros [vf' [A B]]. inv B.
   exploit sel_exprlist_correct; eauto. intros [vargs' [C D]].
   exploit functions_translated; eauto. intros (cunit' & fd' & E & F & G).
-  assert (I : Mem.astack (Mem.support m2'') <> nil).
-  inv Q'. rewrite <- mext_sup; eauto.
+  assert (I : Mem.astack (Mem.support m2') <> nil).
+  inv Q. rewrite <- mext_sup; eauto.
   left; econstructor; split.
   apply plus_one.
   exploit classify_call_correct. eexact LINK. eauto. eauto.
@@ -1411,18 +1409,16 @@ Proof.
   econstructor; eauto.
 - (* Sreturn None *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
-  exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [P' Q']].
   erewrite <- stackspace_function_translated in P by eauto.
   left; econstructor; split.
-  apply plus_one; econstructor. simpl; eauto. eauto. inv Q'. congruence.
+  apply plus_one; econstructor. simpl; eauto. eauto. inv Q. congruence.
   econstructor; eauto. eapply call_cont_commut; eauto.
 - (* Sreturn Some *)
   exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
-  exploit Mem.return_frame_parallel_extends; eauto. intros [m2'' [P' Q']].
   erewrite <- stackspace_function_translated in P by eauto.
   exploit sel_expr_correct; eauto. intros [v' [A B]].
   left; econstructor; split.
-  apply plus_one; econstructor; eauto. eauto. inv Q'. congruence.
+  apply plus_one; econstructor; eauto. eauto. inv Q. congruence.
   econstructor; eauto. eapply call_cont_commut; eauto.
 - (* Slabel *)
   left; econstructor; split. apply plus_one; constructor. econstructor; eauto.
@@ -1441,11 +1437,10 @@ Proof.
 - (* internal function *)
   destruct TF as (hf & HF & TF).
   monadInv TF. generalize EQ; intros TF; monadInv TF.
-  exploit Mem.alloc_frame_extends; eauto. intros [m2' [A B]].
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
-  intros [m2'' [A' B']].
+  intros [m2' [A B]].
   exploit Mem.record_frame_extends; eauto.
-  intros [m2''' [A'' B'']].
+  intros [m2'' [A' B']].
   left; econstructor; split.
   apply plus_one; econstructor; simpl; eauto.
   econstructor; simpl; eauto.
