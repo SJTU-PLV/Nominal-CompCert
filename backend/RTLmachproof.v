@@ -168,14 +168,12 @@ Proof.
     eapply Mem.push_stage_left_iff; eauto.
     simpl. reflexivity.
   - edestruct Mem.free_parallel_iff as [m1' []]; eauto.
-    inv H14. erewrite <- Mem.astack_return_frame in H7; eauto.
-    erewrite Mem.support_free in H7; eauto. congruence.
-    edestruct Mem.return_frame_iff as [m'2 []]; eauto.
-    assert ({m'3:mem|Mem.pop_stage m'2= Some m'3}).
+    inv H13. 
+    erewrite <- Mem.support_free in H7; eauto. congruence.
+    assert ({m2':mem|Mem.pop_stage m1'= Some m2'}).
       apply Mem.nonempty_pop_stage.
-      erewrite <- Mem.astack_return_frame. 2: eauto.
       erewrite Mem.support_free. 2: eauto. congruence.
-    destruct X as [m'3 POP].
+    destruct X as [m'2 POP].
     apply Mem.astack_pop_stage in POP as STKm2'.
     destruct STKm2' as [hd STKm2'].
     econstructor; eauto. split.
@@ -183,10 +181,8 @@ Proof.
     eapply exec_Itailcall; eauto.
     econstructor; eauto.
     eapply Mem.pop_stage_right_iff; eauto.
-    erewrite <- Mem.astack_return_frame. 2: eauto.
     erewrite Mem.support_free. 2: eauto. eauto.
-    erewrite <- Mem.support_free in H8; eauto.
-    erewrite Mem.astack_return_frame in H8; eauto.
+    erewrite <- Mem.support_free in H7; eauto.
     congruence.
   - exploit Mem.push_stage_left_iff; eauto. intro.
     exploit external_call_mem_iff; eauto. intros (m'1 & EXT &IFF').
@@ -210,40 +206,32 @@ Proof.
     eapply exec_Ijumptable; eauto.
     econstructor; eauto.
   - edestruct Mem.free_parallel_iff as [m'1[]]; eauto.
-    edestruct Mem.return_frame_iff as [m'2[]]; eauto.
     apply Mem.support_free in H2 as SFREE.
     apply Mem.support_free in H as SFREE'.
-    apply Mem.astack_return_frame in H3 as ARET.
-    apply Mem.astack_return_frame in H5 as ARET'.
-    inv H12. congruence.
-    assert ({m'3:mem|Mem.pop_stage m'2= Some m'3}).
+    inv H11. congruence.
+    assert ({m'2:mem|Mem.pop_stage m'1= Some m'2}).
       apply Mem.nonempty_pop_stage. congruence.
-    destruct X as [m'3 POP].
+    destruct X as [m'2 POP].
     econstructor; eauto. split.
     eapply exec_Ireturn; eauto.
     econstructor; eauto.
     eapply Mem.pop_stage_right_iff; eauto.
-    rewrite <- ARET. rewrite SFREE. eauto.
+    rewrite SFREE. eauto.
     apply Mem.astack_pop_stage in POP. destruct POP. congruence.
-  - edestruct Mem.alloc_frame_iff as [m'1 []]; eauto.
-    edestruct Mem.alloc_parallel_iff as [m'2 []]; eauto.
-    apply Mem.astack_alloc_frame in H1 as SAF.
-    apply Mem.astack_alloc_frame in H as SAF'.
-    apply Mem.support_alloc in H2 as SAL.
-    apply Mem.support_alloc in H4 as SAL'.
-    exploit Mem.push_stage_right_iff. apply H5. intro.
-    apply Mem.astack_record_frame in H3 as ASTK.
-    apply Mem.record_frame_size1 in H3 as SIZE. simpl in SIZE.
+  - edestruct Mem.alloc_parallel_iff as [m'2 []]; eauto.
+    apply Mem.support_alloc in H1 as SAL.
+    apply Mem.support_alloc in H as SAL'.
+    exploit Mem.push_stage_right_iff. apply H0. intro.
+    apply Mem.astack_record_frame in H2 as ASTK.
+    apply Mem.record_frame_size1 in H2 as SIZE. simpl in SIZE.
     destruct ASTK as (hd' & tl' & ASTKm' & ASTKm''). rewrite ASTKm' in SIZE.
     rewrite SAL in ASTKm'.
-    unfold sup_incr in ASTKm'. destr_in ASTKm'. simpl in ASTKm'.
-    rewrite <- SAF in ASTKm'.
-    rewrite H10 in ASTKm'. inv ASTKm'.
+    simpl in ASTKm'.
+    rewrite H9 in ASTKm'. inv ASTKm'.
     assert ({m'3:mem|Mem.record_frame (Mem.push_stage m'2) (Memory.mk_frame (fn_stack_requirements id)) = Some m'3}).
       apply Mem.request_record_frame. simpl. congruence.
-      simpl. rewrite SAL'. unfold sup_incr. destr. simpl.
-      rewrite <- SAF'.
-      apply match_stackadt_size in H11. simpl in *.
+      simpl. rewrite SAL'. simpl.
+      apply match_stackadt_size in H10. simpl in *.
       generalize (size_of_all_frames_pos hd'). lia.
     destruct X as [m'3 RECORD].
     econstructor; eauto. split.
@@ -254,7 +242,7 @@ Proof.
     destruct ASTK as (hd''&tl''&STKm'1&STKm'2).
     rewrite STKm'2. simpl in STKm'1. inv STKm'1.
     rewrite ASTKm''. econstructor. 2:eauto.
-    rewrite SAL'. unfold sup_incr. destr. simpl. rewrite <- SAF'. auto.
+    rewrite SAL'. unfold sup_incr. simpl. auto.
   - exploit external_call_mem_iff; eauto.
     intros (m2' & H1'& IFF).
     econstructor; eauto. split.

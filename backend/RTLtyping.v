@@ -962,7 +962,7 @@ Proof.
     discriminate.
   econstructor; eauto.
   inv WTI. apply wt_stackframes_change_sig with (fn_sig f); auto.
-  inv WTI. rewrite <- H10. apply wt_regset_list. auto.
+  inv WTI. rewrite <- H9. apply wt_regset_list. auto.
   (* Ibuiltin *)
   econstructor; eauto. eapply wt_exec_Ibuiltin; eauto.
   (* Icond *)
@@ -971,11 +971,11 @@ Proof.
   econstructor; eauto.
   (* Ireturn *)
   econstructor; eauto.
-  inv WTI; simpl. auto. rewrite <- H5. auto.
+  inv WTI; simpl. auto. rewrite <- H4. auto.
   (* internal function *)
-  simpl in *. inv H8.
+  simpl in *. inv H7.
   econstructor; eauto.
-  inv H3. apply wt_init_regs; auto. rewrite wt_params0. auto.
+  inv H2. apply wt_init_regs; auto. rewrite wt_params0. auto.
   (* external function *)
   econstructor; eauto.
   eapply external_call_well_typed; eauto.

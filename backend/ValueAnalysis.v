@@ -1414,7 +1414,6 @@ Proof.
   apply sound_stack_ext with m. auto.
   intros.
   erewrite Mem.loadbytes_free_2; eauto.
-  erewrite <- Mem.loadbytes_return_frame. 2: eauto.
   erewrite <- Mem.loadbytes_pop_stage; eauto.
   intros. apply C. intro. eapply freshness.
   subst. eauto.
@@ -1422,17 +1421,13 @@ Proof.
   eapply Mem.sup_include_trans; eauto.
   rewrite <- (Mem.support_free _ _ _ _ _ H3).
   intro.
-  apply Mem.support_return_frame_1 with (b:=b) in H4.
   intro. eapply Mem.sup_include_pop_stage; eauto.
-  apply H4. auto.
 (*  eapply mmatch_below; eauto. congruence. *)
   intros. exploit list_in_map_inv; eauto. intros (r & P & Q). subst v.
   apply D with (areg ae r). auto with va.
   eapply romatch_pop_stage; eauto.
-  eapply romatch_return_frame; eauto.
   eapply romatch_free; eauto.
   eapply mmatch_pop_stage; eauto.
-  eapply mmatch_return_frame; eauto.
   eapply mmatch_free; eauto.
 - (* builtin *)
   assert (SPVALID: sup_In (fresh_block sps) (Mem.support m)) by (eapply mmatch_below; eauto with va).
@@ -1581,41 +1576,35 @@ Proof.
   apply sound_stack_exten with bc.
   apply sound_stack_ext with m. auto.
   intros. erewrite Mem.loadbytes_free_2; eauto.
-  erewrite <- Mem.loadbytes_return_frame. 2: eauto.
   erewrite <- Mem.loadbytes_pop_stage; eauto.
   intros. apply C. intro. eapply freshness.
   subst. eauto.
   eapply Mem.sup_include_trans; eauto.
   eapply Mem.sup_include_trans; eauto.
   rewrite <- (Mem.support_free _ _ _ _ _ H0).
-  intro. apply Mem.support_return_frame_1 with (b:=b) in H1.
-  intro. eapply Mem.sup_include_pop_stage; eauto. apply H1. auto.
+  intro.
+  intro. eapply Mem.sup_include_pop_stage; eauto.
   destruct or; simpl. eapply D; eauto. constructor.
   eapply romatch_pop_stage; eauto.
-  eapply romatch_return_frame; eauto. eapply romatch_free; eauto.
+  eapply romatch_free; eauto.
   eapply mmatch_pop_stage; eauto.
-  eapply mmatch_return_frame; eauto. eapply mmatch_free; eauto.
+  eapply mmatch_free; eauto.
 
 - (* internal function *)
   exploit allocate_stack; eauto.
-  eapply romatch_alloc_frame; eauto.
-  eapply mmatch_alloc_frame; eauto.
   intros (bc' & A & B & C & D & E & F & G).
-  exploit (analyze_entrypoint rm f args m'' bc'); eauto.
+  exploit (analyze_entrypoint rm f args m' bc'); eauto.
   intros (ae & am & AN & EM & MM').
   econstructor; eauto.
   eapply Mem.alloc_result. eauto.
   eapply Mem.sup_include_trans. 2: eapply Mem.sup_include_record_frame; eauto.
   simpl.
-  rewrite Mem.support_alloc with m' 0 (fn_stacksize f) m'' stk.
+  rewrite Mem.support_alloc with m 0 (fn_stacksize f) m' stk.
   intro. unfold Mem.sup_push_stage. destruct b; simpl; auto.
   eauto.
   apply sound_stack_exten with bc; auto.
   apply sound_stack_inv with m; auto.
-  apply sound_stack_new_bound with (Mem.support m); eauto.
-  intro. eapply Mem.support_alloc_frame_1 in H. apply H.
   intros.
-  erewrite <- (Mem.loadbytes_alloc_frame _ _ _ _ H).
   erewrite Mem.loadbytes_record_frame. 2: eauto.
   erewrite Mem.loadbytes_push_stage. 2: eauto.
   eapply Mem.loadbytes_alloc_unchanged; eauto.

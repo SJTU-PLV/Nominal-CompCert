@@ -1652,16 +1652,14 @@ Proof.
   right. split. simpl. lia. split. auto.
   econstructor; eauto.
   eapply match_stacks_inside_invariant; eauto.
-    intros. eapply Mem.perm_free_3; eauto. eapply Mem.perm_return_frame; eauto.
+    intros. eapply Mem.perm_free_3; eauto.
   destruct or; simpl. apply agree_val_reg; auto. auto.
-  eapply Mem.return_frame_left_inject. 2: eauto.
   eapply Mem.free_left_inject; eauto.
-  erewrite Mem.sdepth_return_frame. 2:eauto. erewrite Mem.sdepth_free; eauto.
-  erewrite <- Mem.astack_return_frame. 2: eauto. erewrite Mem.support_free; eauto.
-  inv FB. rewrite H6 in PRIV.
+  erewrite Mem.support_free; eauto.
+  inv FB. rewrite H5 in PRIV.
   eapply range_private_invariant.
   eapply range_private_free_left; eauto.
-  intros. split. auto. rewrite Mem.perm_return_frame; eauto. auto.
+  intros. split; auto. auto.
 
 - (* internal function, not inlined *)
   assert (A: exists f', tr_function cunit f f' /\ fd' = Internal f').
@@ -1670,79 +1668,70 @@ Proof.
   assert (TR: tr_function prog f f').
   { eapply tr_function_linkorder; eauto. }
   inversion TR; subst.
-  exploit Mem.alloc_frame_parallel_inject; eauto. intros (m1' & p2 & ALLOCF & INJ).
   exploit Mem.alloc_parallel_inject. eauto. eauto. apply Z.le_refl.
-    instantiate (1 := fn_stacksize f'). inv H3. extlia.
+    instantiate (1 := fn_stacksize f'). inv H2. extlia.
   intros [F' [m2' [sp' [A [B [C [D E]]]]]]].
   exploit Mem.record_frame_parallel_inject; eauto.
   inv SIZES. apply Mem.support_alloc in A. rewrite A.
-  apply Mem.astack_alloc_frame in ALLOCF. unfold sup_incr.
-  destr. simpl. congruence.
+  unfold sup_incr. simpl. congruence.
   apply inline_sizes_le in SIZES.
-    erewrite astack_alloc_frame_alloc; eauto.
-    erewrite astack_alloc_frame_alloc with (m3:=m''); eauto.
+  erewrite Mem.astack_alloc; eauto.
+  erewrite Mem.astack_alloc with (m2:= m'); eauto.
   intros [m3'[RECORD INJ']].
   left; econstructor; split.
   eapply plus_one. eapply exec_function_internal; eauto.
-  rewrite H8. econstructor.
+  rewrite H7. econstructor.
   eapply Mem.alloc_result. eauto.
   instantiate (3 := F'). apply match_stacks_inside_base.
-  assert (SPS: sp' = fresh_block (Mem.support m1')) by (eapply Mem.alloc_result; eauto).
-  exploit match_stacks_support. eauto.
+  assert (SPS: sp' = fresh_block (Mem.support m'0)) by (eapply Mem.alloc_result; eauto).
+  (* exploit match_stacks_support. eauto.
   intro.   eapply Mem.support_alloc_frame_1 in ALLOCF as SAF. eapply SAF.
-  intro STK.
+  intro STK. *)
   eapply match_stacks_invariant; eauto.
     intros. destruct (eq_block b1 stk).
-    subst b1. rewrite D in H10; inv H10. eelim freshness; eauto.
-    rewrite E in H10; auto.
+    subst b1. rewrite D in H9; inv H9. eelim freshness; eauto.
+    rewrite E in H9; auto.
     intros.
-    erewrite Mem.perm_alloc_frame. 2: eauto.
-    erewrite <- Mem.perm_record_frame in H12. 2: eauto.
-    exploit Mem.perm_alloc_inv. eexact H0. eauto.
+    erewrite <- Mem.perm_record_frame in H11. 2: eauto.
+    exploit Mem.perm_alloc_inv. eexact H. eauto.
     destruct (eq_block b1 stk); intros; auto.
-    subst b1. rewrite D in H10; inv H10. eelim freshness; eauto.
+    subst b1. rewrite D in H9; inv H9. eelim freshness; eauto.
     intros.
     erewrite <- Mem.perm_record_frame. 2: eauto.
     eapply Mem.perm_alloc_1; eauto.
-    erewrite <- Mem.perm_alloc_frame; eauto.
-    intros. erewrite Mem.perm_alloc_frame. 2: eauto.
-    erewrite <- Mem.perm_record_frame in H11. 2: eauto.
+   intros. 
+    erewrite <- Mem.perm_record_frame in H10. 2: eauto.
     exploit Mem.perm_alloc_inv. eexact A. eauto.
     rewrite dec_eq_false; auto with ordered_type.
-  intro. subst b. eelim freshness. rewrite SPS in H10. eauto.
+  intro. subst b. eelim freshness. rewrite SPS in H9. eauto.
   auto. auto. auto. eauto. auto.
-  rewrite H7. apply agree_regs_init_regs. eauto. auto. inv H3; auto. congruence.
+  rewrite H6. apply agree_regs_init_regs. eauto. auto. inv H2; auto. congruence.
   eapply meminj_global_invariant; eauto.
   intro. intros. destruct (eq_block b stk).
-  subst. rewrite D in H11. inv H11.
-  apply Mem.alloc_result_stack in H0. apply Mem.alloc_result_stack in A. auto.
-  rewrite E in H11. congruence. auto. auto.
-  erewrite Mem.sdepth_record_frame; eauto.
-  erewrite Mem.sdepth_alloc; eauto. erewrite Mem.sdepth_alloc_frame; eauto.
-  apply Mem.sdepth_record_frame in RECORD.
-  apply Mem.sdepth_alloc in A. apply Mem.sdepth_alloc_frame in ALLOCF. congruence.
-  apply Mem.astack_record_frame in H1.
+  subst. rewrite D in H10. inv H10.
+  apply Mem.alloc_result_stack in H. apply Mem.alloc_result_stack in A. auto.
+  rewrite E in H10. congruence. auto. auto.
+  apply Mem.astack_record_frame in H0.
   apply Mem.astack_record_frame in RECORD as Y.
-  destruct H1 as (hd & tl & Stk1 & Stk2).
+  destruct H0 as (hd & tl & Stk1 & Stk2).
   destruct Y as (hd' & tl' & Stk1' & Stk2').
   rewrite Stk2. rewrite Stk2'.
-  apply Mem.support_alloc in A. unfold sup_incr in A. destr_in A.
-  rewrite A in Stk1'.
-  apply Mem.support_alloc in H0. unfold sup_incr in H0. destr_in H0.
-  rewrite H0 in Stk1. simpl in *.
-  apply Mem.astack_alloc_frame in H. apply Mem.astack_alloc_frame in ALLOCF.
+  apply Mem.support_alloc in A.
+  rewrite A in Stk1'. simpl in Stk1'.
+  apply Mem.support_alloc in H.
+  rewrite H in Stk1. simpl in *.
   eapply inline_sizes_record; eauto. congruence.
-  rewrite <- Mem.support_alloc with m1' 0 (fn_stacksize f') m2' sp'.
+  rewrite <- Mem.support_alloc with m'0 0 (fn_stacksize f') m2' sp'.
   intro. eapply Mem.support_record_frame_1 in RECORD. apply RECORD. auto.
   red; intros. split.
   erewrite <- Mem.perm_record_frame. 2: eauto.
-  eapply Mem.perm_alloc_2; eauto. inv H3; extlia.
+  eapply Mem.perm_alloc_2; eauto. inv H2; extlia.
   intros; red; intros.
-  exploit Mem.perm_alloc_inv. eexact H0.
+  exploit Mem.perm_alloc_inv. eexact H.
   eapply Mem.perm_record_frame; eauto.
   destruct (eq_block b stk); intros.
-  subst. rewrite D in H11; inv H11. inv H3; extlia.
-  rewrite E in H11; auto. eelim Mem.fresh_block_alloc. eexact A. eapply Mem.mi_mappedblocks; eauto.
+  subst. rewrite D in H10; inv H10. inv H2; extlia.
+  rewrite E in H10; auto. eelim Mem.fresh_block_alloc. eexact A. eapply Mem.mi_mappedblocks; eauto.
   auto.
   intros. exploit Mem.perm_alloc_inv; eauto.
   eapply Mem.perm_record_frame; eauto.
@@ -1750,7 +1739,6 @@ Proof.
 
 - (* internal function, inlined *)
   inversion FB; subst.
-  exploit Mem.alloc_frame_left_inject; eauto. intro.
   exploit Mem.alloc_left_mapped_inject.
     eauto.
     eauto.
@@ -1771,7 +1759,6 @@ Proof.
     intros [A B]. eelim B; eauto.
     replace (ofs + delta' - delta') with ofs by lia.
     apply Mem.perm_max with k. apply Mem.perm_implies with p; auto with mem.
-    erewrite Mem.perm_alloc_frame; eauto.
   intros [F' [A [B [C D]]]].
   exploit Mem.record_frame_left_inject; eauto. intro.
   exploit tr_moves_init_regs; eauto. intros [rs'' [P [Q R]]].
@@ -1781,39 +1768,33 @@ Proof.
   eapply match_stacks_inside_record_frame_left; eauto.
   eapply match_stacks_inside_alloc_left; eauto.
   eapply match_stacks_inside_invariant; eauto.
-  intros. erewrite Mem.perm_alloc_frame; eauto.
   lia.
   eauto. auto.
   apply agree_regs_incr with F; auto.
   auto.
   eapply meminj_global_invariant; eauto.
   intro. intros. destruct (eq_block b stk).
-  subst. rewrite C in H11. inv H11.
-  apply Mem.alloc_result_stack in H0.
-  unfold fresh_block. destr. destr. destr. split. auto.
-  constructor. rewrite D in H11. congruence. auto. auto.
-  erewrite Mem.sdepth_record_frame; eauto.
-  erewrite Mem.sdepth_alloc; eauto. erewrite Mem.sdepth_alloc_frame; eauto.
-  apply Mem.astack_record_frame in H1.
-  destruct H1 as (hd&tl&Hstk&Hstk').
-  rewrite Hstk'. apply Mem.support_alloc in H0. unfold sup_incr in H0.
-  destr_in H0. simpl in H0.
-  rewrite H0 in Hstk. simpl in Hstk.
-  eapply inline_sizes_record_left; eauto.
-  apply Mem.astack_alloc_frame in H. congruence.
+  subst. rewrite C in H9. inv H9.
+  apply Mem.alloc_result_stack in H.
+  unfold fresh_block. simpl. auto. rewrite D in H9. congruence. auto. auto.
+  apply Mem.astack_record_frame in H0.
+  destruct H0 as (hd&tl&Hstk&Hstk').
+  rewrite Hstk'. apply Mem.support_alloc in H. unfold sup_incr in H.
+  simpl in H.
+  rewrite H in Hstk. simpl in Hstk.
+  eapply inline_sizes_record_left; eauto. congruence.
   auto.
-  eapply range_private_invariant. rewrite H4.
+  eapply range_private_invariant. rewrite H3.
   eapply range_private_alloc_left.
   eapply range_private_invariant. eauto.
   3: eauto. all: eauto.
-  intros. split. auto. erewrite Mem.perm_alloc_frame; eauto.
   intros. split. auto. erewrite Mem.perm_record_frame; eauto.
 
 - (* external function *)
   exploit match_stacks_globalenvs; eauto. intros [support MG].
   exploit external_call_mem_inject'; eauto.
     eapply match_globalenvs_preserves_globals; eauto.
-  intros [F1 [v1 [m1' [A [B [C [D [E [J [K [L M]]]]]]]]]]].
+  intros [F1 [v1 [m1' [A [B [C [D [E [J [K L]]]]]]]]]].
   simpl in FD. inv FD.
   left; econstructor; split.
   eapply plus_one. eapply exec_function_external; eauto.
@@ -1826,7 +1807,6 @@ Proof.
     apply Mem.sup_include_refl.
     eapply external_call_support; eauto. auto.
     eapply meminj_global_invariant; eauto. auto.
-    apply external_call_sdepth in H. apply external_call_sdepth in A. congruence.
     apply external_call_astack in H. apply external_call_astack in A. congruence.
 - (* return from noninlined function *)
   inv MS0.
@@ -1844,8 +1824,6 @@ Proof.
   intros. apply P2. auto.
   intros. apply P2. auto.
   apply agree_set_reg; auto.
-  inv STREE. simpl in H3. rewrite Nat.sub_0_r in H3.
-  apply Mem.sdepth_pop_stage in H. apply Mem.sdepth_pop_stage in A. congruence.
   inv SIZES. apply Mem.astack_pop_stage in H. apply Mem.astack_pop_stage in A.
   destruct H. destruct A. rewrite H in H3. rewrite H0 in H2. inv H2.
   simpl in H3. auto.
@@ -1870,8 +1848,7 @@ Proof.
   intros. apply P2. auto.
   eauto. auto.
   apply agree_set_reg; auto.
-  auto. auto. auto. inv STREE. simpl in H3. rewrite Nat.sub_0_r in H3.
-  apply Mem.sdepth_pop_stage in A. apply Mem.sdepth_pop_stage in H. congruence.
+  auto. auto. auto.
   inv SIZES. apply Mem.astack_pop_stage in H. apply Mem.astack_pop_stage in A.
   destruct H. destruct A. rewrite H in H3. rewrite H0 in H2. inv H2.
   simpl in H3. auto.
@@ -1901,8 +1878,6 @@ Proof.
   eapply match_stacks_inside_invariant; eauto. intros. apply P1. auto.
   apply agree_set_reg; auto.
   eapply Mem.pop_stage_left_inject; eauto.
-  apply Mem.sdepth_pop_stage in H.
-  inv STREE. constructor. simpl in *. congruence.
   apply Mem.astack_pop_stage in H. destruct H. rewrite H in SIZES. simpl in *.
   inv SIZES. simpl in *. econstructor; eauto.
 + (* without a result *)
@@ -1913,8 +1888,6 @@ Proof.
   erewrite Mem.perm_pop_stage; eauto.
   subst vres. apply agree_set_reg_undef'; auto.
   eapply Mem.pop_stage_left_inject; eauto.
-  apply Mem.sdepth_pop_stage in H.
-  inv STREE. constructor. simpl in *. congruence.
   apply Mem.astack_pop_stage in H. destruct H. rewrite H in SIZES. simpl in *.
   inv SIZES. simpl in *. econstructor; eauto.
 Qed.
@@ -1960,10 +1933,6 @@ Proof.
     intro. eapply Mem.valid_block_push_stage_1; eauto.
   intro. unfold Mem.flat_inj. intro. intros. destr_in H5.
   eapply Mem.push_stage_inject; eauto.
-  constructor. simpl. rewrite Nat.sub_0_r. erewrite Mem.sdepth_push_stage; eauto.
-  erewrite Mem.sdepth_alloc; eauto.
-  unfold Mem.sdepth.
-  simpl. erewrite Genv.init_mem_stack; eauto. simpl. constructor.
   simpl. erewrite Mem.astack_alloc; eauto.
   econstructor; simpl; eauto. erewrite Genv.init_mem_astack; eauto.
   constructor. simpl. lia.

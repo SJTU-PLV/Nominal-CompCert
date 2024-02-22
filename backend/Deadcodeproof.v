@@ -298,20 +298,6 @@ Proof.
   simpl. eapply ma_support; eauto.
 Qed.
 
-Lemma magree_return_frame:
-  forall m1 m2 (P : locset) m1',
-  magree m1 m2 P ->
-  Mem.return_frame m1 = Some m1' ->
-  exists m2', Mem.return_frame m2 = Some m2' /\ magree m1' m2' P.
-Proof.
-  intros. inv H. apply Mem.return_frame_active in H0 as H1.
-  rewrite <- ma_support0 in H1. apply Mem.active_return_frame in H1.
-  destruct H1 as (m2' & H1). exists m2'. split. auto.
-  unfold Mem.return_frame in *.
-  destr_in H0. inv H0. destr_in H1. inv H1.
-  constructor; eauto. simpl. congruence.
-Qed.
-
 Lemma magree_valid_access:
   forall m1 m2 (P: locset) chunk b ofs p,
   magree m1 m2 P ->
@@ -931,7 +917,6 @@ Ltac UseTransfer :=
   instantiate (1 := nlive ge stk nmem_all).
   intros; eapply nlive_dead_stack; eauto.
   intros (tm' & C & D).
-  exploit magree_return_frame; eauto. intros (tm'' & E & F).
   exploit magree_pop_stage; eauto. intros (tm''' & G & I).
   econstructor; split.
   eapply exec_Itailcall; eauto.
@@ -1131,7 +1116,6 @@ Ltac UseTransfer :=
   TransfInstr; UseTransfer.
   exploit magree_free. eauto. eauto. instantiate (1 := nlive ge stk nmem_all).
   intros; eapply nlive_dead_stack; eauto. intros (tm' & A & B).
-  exploit magree_return_frame; eauto. intros (tm'' & C & D).
   exploit magree_pop_stage; eauto. intros (tm''' & E & F).
   econstructor; split.
   eapply exec_Ireturn; eauto.
@@ -1143,7 +1127,6 @@ Ltac UseTransfer :=
 - (* internal function *)
   monadInv FUN. generalize EQ. unfold transf_function. fold (vanalyze cu f). intros EQ'.
   destruct (analyze (vanalyze cu f) f) as [an|] eqn:AN; inv EQ'.
-  exploit Mem.alloc_frame_extends; eauto. intros (tm' & A & B).
   exploit Mem.alloc_extends; eauto. apply Z.le_refl. apply Z.le_refl.
   intros (tm'' & C & D).
   exploit Mem.push_stage_extends; eauto. intro.
