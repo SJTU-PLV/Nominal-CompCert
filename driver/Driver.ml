@@ -501,9 +501,20 @@ let _ =
       end;
     | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg)
   in
+  (* Set config *)
+  Machine.config := Machine.x86_64;
+  (* add helper functions which is required by Selection pass *)
+  let gl = C2C.add_helper_functions clight_prog.Ctypes.prog_defs in
+  let clight_prog' =
+    { Ctypes.prog_defs = gl;
+      Ctypes.prog_public = C2C.public_globals gl;
+      Ctypes.prog_main = clight_prog.Ctypes.prog_main;
+      Ctypes.prog_types = clight_prog.Ctypes.prog_types;
+      Ctypes.prog_comp_env = clight_prog.Ctypes.prog_comp_env;
+    } in
   (* The following code compiles the generated Clight program  *)
   let name = "test_rust" in
-  let objfile = compile_clight clight_prog name in
+  let objfile = compile_clight clight_prog' name in
   (* invoke the linker *)
   linker (name) [objfile];
   check_errors ()

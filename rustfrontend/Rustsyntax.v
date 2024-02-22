@@ -432,15 +432,33 @@ Definition main_fundef : globdef (Rusttypes.fundef function) type := Gfun (Inter
 
 Definition main_ident : ident := 301%positive.
 
-Program Definition pop_and_push_prog : program :=
+Definition pop_and_push_comp_defs := (pair_codef :: list_codef :: nil).
+
+Definition wf_composites (types: list composite_definition) : Prop :=
+  match build_composite_env types with OK _ => True | Error _ => False end.
+
+Definition build_composite_env' (types: list composite_definition)
+                                (WF: wf_composites types)
+                             : { ce | build_composite_env types  = OK ce }.
+Proof.
+  revert WF. unfold wf_composites. case (build_composite_env types); intros.
+- exists c; reflexivity.
+- contradiction.
+Defined.
+
+Definition wf_pop_and_push_types : wf_composites pop_and_push_comp_defs.
+Proof.
+  unfold wf_composites. simpl. auto.
+Defined.
+    
+Definition pop_and_push_prog : program :=
+  let (ce, EQ) := build_composite_env' pop_and_push_comp_defs wf_pop_and_push_types in
   {| prog_defs := (pop_and_push_ident, pop_and_push_fundef) :: (main_ident, main_fundef) :: nil;
     prog_public := pop_and_push_ident :: main_ident :: nil;
     prog_main := main_ident;
-    prog_types := (pair_codef :: list_codef :: nil);
-    prog_comp_env := pop_and_push_comp_env;
-    prog_comp_env_eq := _ |}.
-Next Obligation.
-Admitted.
+    prog_types := pop_and_push_comp_defs;
+    prog_comp_env := ce;
+    prog_comp_env_eq := EQ |}.
 
 
   

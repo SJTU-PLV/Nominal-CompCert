@@ -34,8 +34,12 @@ Definition transl_composite_member (m: member) : Ctypes.member :=
   | Member_plain fid ty =>
       Ctypes.Member_plain fid (to_ctype ty)
   end.
-          
-(* Variant {a, b, c} => Struct {tag_fid: int; union_fid: {a,b,c}} *)
+
+
+
+(* Variant {a, b, c} => Struct {tag_fid: int; union_fid: {a,b,c}} . In
+other word, the variant name is used as the tagged union struct name,
+the constructor name (a,b,c) are used in the generated union *)
 Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: composite_definition) :(Ctypes.composite_definition * option Ctypes.composite_definition) :=
   match co with
   | Composite id Struct ms attr =>
@@ -335,11 +339,16 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : mon Clight.expr :=
       (** FIXME: how to translate the get expression? *)
       match typeof_place p with
       | Tvariant id _ =>
-          match get_variant_body tce id with
-          | Some id' =>
-              (* p.id'.fid *)
-              ret (Efield (Efield (place_to_cexpr p) id' (Ctypes.Tunion id noattr)) fid (to_ctype ty))
-          | _ => error (msg "Cannot find the body of variant in C composite environment: expr_to_cexpr")
+          match tce!id with
+          | Some tco =>
+              (** FIXME: the following code appears multiple times *)
+              match tco.(co_su), tco.(Ctypes.co_members) with
+              | Ctypes.Struct, Ctypes.Member_plain _ _ :: Ctypes.Member_plain union_id union_ty :: nil =>
+              (* p.union_id.fid *)
+                  ret (Efield (Efield (place_to_cexpr p) union_id union_ty) fid (to_ctype ty))
+              | _, _ => error [CTX id; MSG ": it is not a correct tagged union"]
+              end
+          | _ => error [CTX id; MSG ": Cannot find its composite in C composite environment : expr_to_cexpr"]
           end
       | _ => error (msg "Type error in Eget: expr_to_cexpr ")
       end
