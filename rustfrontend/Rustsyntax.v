@@ -418,7 +418,7 @@ Definition main_body :=
      do (A#list_ty) := (B#pair_ty);
      let C : box_list in
      do (C#box_list) := Box(A#list_ty);
-     do (C#box_list) := Call (pop_and_push_ident#pop_and_push_ty) @ {(C#box_list)};
+     do (C#box_list) := Call (pop_and_push_ident#pop_and_push_ty) @ {(C#box_list), ($-2)};
      return ($0)
      endlet endlet endlet }>.
 

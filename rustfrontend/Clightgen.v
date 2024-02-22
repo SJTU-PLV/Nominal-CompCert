@@ -138,12 +138,12 @@ drop_in_place_xxx(&Struct{a,b,c} param) {
 } *)
 
 (* we assume deref_param is the dereference of the parameter *)
-Definition drop_glue_for_member (m: PTree.t ident) (deref_param: Clight.expr) (memb: member) : list Clight.statement :=
+Definition drop_glue_for_member (m: PTree.t ident) (p: Clight.expr) (memb: member) : list Clight.statement :=
   match memb with
   | Member_plain fid ty =>      
       if own_type ce ty then
         let cty := (to_ctype ty) in
-        let arg := Efield deref_param fid cty in
+        let arg := Efield p fid cty in
         drop_glue_for_type m arg ty
       else
         nil
@@ -175,17 +175,18 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition)
   | Composite co_id TaggedUnion ms attr =>
       let co_ty := (Ctypes.Tstruct co_id attr) in
       let param_ty := Tpointer co_ty noattr in
-      let deref_param := Ederef (Evar param param_ty) co_ty in
+      let deref_param := Ederef (Evar param param_ty) co_ty in (* *p *)
       (* check tag and then call corresponded drop glue *)
       match tce ! co_id with
       | Some tco =>
           match tco.(co_su), tco.(Ctypes.co_members) with
-          | Ctypes.Struct, Ctypes.Member_plain tag_id tag_ty :: Ctypes.Member_plain union_id _ :: nil =>
-              (* get tag expr *)
+          | Ctypes.Struct, Ctypes.Member_plain tag_id tag_ty :: Ctypes.Member_plain union_id union_ty :: nil =>
+              (* get tag expr: *p.tag_id *)
               let get_tag := Efield deref_param tag_id tag_ty in
+              let get_union := Efield deref_param union_id union_ty in
               (* use switch statements to model the pattern match? *)
               (* drops_list is [[case 0: drop(m1)];[case 1: drop(m2)]]*)
-              let drops_list := fold_right (fun elt acc => (drop_glue_for_member m deref_param elt) :: acc) (@nil (list Clight.statement)) ms in
+              let drops_list := fold_right (fun elt acc => (drop_glue_for_member m get_union elt) :: acc) (@nil (list Clight.statement)) ms in
               let (_, switch_branches) := make_labelled_stmts drops_list in
               (* generate function *)
               let stmt := (Clight.Ssequence (Clight.Sswitch get_tag switch_branches) (Clight.Sreturn None)) in
@@ -460,21 +461,24 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       match typeof_place p with
       | Tvariant id _ =>
           (* lhs.1 = tag;
-             lhs.2 = e'; *)
-          match ce!id with
-          | Some co =>
+             lhs.2. = e'; *)
+          match ce!id, tce!id with
+          | Some co, Some tco =>
               match type_tag ty co.(co_members) with
-              | Some (_, tagz) =>
-                  match get_variant_tag tce id, get_variant_body tce id with
-                  | Some tag_id, Some body_id =>
+              (* an invariant: arm_id in co is the same as the field
+              of type ty in generated union in C code *)
+              | Some (arm_id, tagz) =>
+                  match tco.(co_su), tco.(Ctypes.co_members) with
+                  | Ctypes.Struct, Ctypes.Member_plain tag_id type_int32s :: Ctypes.Member_plain body_id (Tunion union_id attr) :: nil =>
                       let assign_tag := Clight.Sassign (Efield lhs tag_id Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) in
-                      let assign_body := Clight.Sassign (Efield lhs body_id (to_ctype ty)) e' in
+                      let lhs' := (Efield (Efield lhs body_id (Tunion union_id attr)) arm_id (to_ctype ty)) in
+                      let assign_body := Clight.Sassign lhs' e' in
                       ret (Clight.Ssequence assign_tag assign_body)
                   | _, _ => error [CTX id; MSG ": cannot get its tag and body id when translating the variant assignement"]
                   end
               | _ => error [CTX id; MSG ": cannot get its tag value from the Rust composite environment"]
               end
-          | _ => error [CTX id; MSG ": cannot get its composite definition from the environment"]
+          | _, _ => error [CTX id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
           end
       | _ =>
           ret (Clight.Sassign lhs e')
@@ -593,7 +597,7 @@ Definition transl_program (p: program) : res Clight.program :=
   let co_defs := transl_composites p.(prog_types) in
   let tce := Ctypes.build_composite_env co_defs in
   (match tce as m return (tce = m) -> res Clight.program with
-   | OK tce =>            
+   | OK tce =>
        fun Hyp =>
          let ce := p.(prog_comp_env) in
          (* step 2: generate drop glue *)
