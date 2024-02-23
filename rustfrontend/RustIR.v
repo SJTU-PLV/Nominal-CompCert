@@ -48,7 +48,7 @@ Inductive statement : Type :=
 | Sloop: statement -> statement (**r infinite loop *)
 | Sbreak: statement                      (**r [break] statement *)
 | Scontinue: statement                   (**r [continue] statement *)
-| Sreturn: option ident -> statement.      (**r [return] statement *)
+| Sreturn: option expr -> statement.      (**r [return] statement *)
 
 
 Record function : Type := mkfunction {

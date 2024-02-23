@@ -37,7 +37,7 @@ Definition gen_drops (l: list (ident * type)) : statement :=
 (* [vars] is a stack of variable list. Eack stack frame corresponds to
 a loop where these variables are declared. [params_drops] are the
 statement for dropping the parameters *)
-Fixpoint transl_stmt (params_drops: statement) (oretv: option (ident * type)) (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
+Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
   let transl_stmt := transl_stmt params_drops oretv in
   match stmt with
   | RustlightBase.Sskip => Sskip
@@ -74,9 +74,11 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option (ident * type)) (s
   | RustlightBase.Sreturn e =>
       let drops := gen_drops (concat vars) in
       match oretv, e with
-      | Some (retv, retty), Some e =>
-          let s := Sassign (Plocal retv retty) e in                    
-          makeseq (s :: drops :: params_drops :: (Sreturn (Some retv)) :: nil)
+      | Some retv, Some e =>
+          let s := Sassign retv e in
+          let ty := typeof_place retv in
+          let rete := if own_type ce ty then Emoveplace retv ty else (Epure (Eplace retv ty)) in
+          makeseq (s :: drops :: params_drops :: (Sreturn (Some rete)) :: nil)
       | _, _ =>
           makeseq (drops :: params_drops :: (Sreturn None) :: nil)
       end
@@ -104,8 +106,8 @@ Fixpoint elaborate_return (stmt: RustlightBase.statement) : RustlightBase.statem
   | _ => RustlightBase.Ssequence stmt (RustlightBase.Sreturn None)
   end.
 
-Definition ret_var (ty: type) (v: ident) : option (ident * type) :=
-  if type_eq ty Tunit then None else Some (v, ty).
+Definition ret_var (ty: type) (v: ident) : option place :=
+  if type_eq ty Tunit then None else Some (Plocal v ty).
 
 (* The main job is to extract the variables and translate the statement *)
 
@@ -121,7 +123,7 @@ Definition transl_function (f: RustlightBase.function) : function :=
   (* let body := elaborate_return f.(RustlightBase.fn_body) in *)
   let stmt' := transl_stmt params_drops oretv f.(RustlightBase.fn_body) nil in
   (* add the return variable to variable list *)
-  let vars' := match oretv with | Some v => v :: vars | None => vars end in
+  let vars' := match oretv with | Some v => (local_of_place v, typeof_place v)  :: vars | None => vars end in
   mkfunction f.(RustlightBase.fn_return)
              f.(RustlightBase.fn_callconv)
              vars'
