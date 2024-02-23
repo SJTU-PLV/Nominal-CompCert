@@ -241,7 +241,7 @@ Definition definitive_initializer (init: list init_data) : bool :=
   | _ => true
   end.
 
-Definition alloc_global (rm: romem) (idg: ident * globdef fundef unit): romem :=
+Definition alloc_global {F V} (rm: romem) (idg: ident * globdef F V): romem :=
   match idg with
   | (id, Gfun f) =>
       PTree.remove id rm
@@ -251,7 +251,7 @@ Definition alloc_global (rm: romem) (idg: ident * globdef fundef unit): romem :=
       else PTree.remove id rm
   end.
 
-Definition romem_for (p: program) : romem :=
+Definition romem_for {F V} (p: AST.program F V) : romem :=
   List.fold_left alloc_global p.(prog_defs) (PTree.empty _).
 
 (** * Soundness proof *)
@@ -1071,7 +1071,7 @@ Qed.
 
 (** romem derived from symtbl *)
 
-Definition romem_consistent (defmap: PTree.t (globdef fundef unit)) (rm: romem) :=
+Definition romem_consistent {F V} (defmap: PTree.t (globdef F V)) (rm: romem) :=
   forall id ab,
   rm!id = Some ab ->
   exists v,
@@ -1081,10 +1081,10 @@ Definition romem_consistent (defmap: PTree.t (globdef fundef unit)) (rm: romem) 
   /\ definitive_initializer v.(gvar_init) = true
   /\ ab = store_init_data_list (ablock_init Pbot) 0 v.(gvar_init).
 
-Lemma alloc_global_consistent:
+Lemma alloc_global_consistent {F V}:
   forall dm rm idg,
   romem_consistent dm rm ->
-  romem_consistent (PTree.set (fst idg) (snd idg) dm) (alloc_global rm idg).
+  romem_consistent (PTree.set (fst idg) (snd idg) dm) (@alloc_global F V rm idg).
 Proof.
   intros; red; intros. destruct idg as [id1 [f1 | v1]]; simpl in *.
 - rewrite PTree.grspec in H0. destruct (PTree.elt_eq id id1); try discriminate.
@@ -1098,13 +1098,13 @@ Proof.
   rewrite PTree.gso by auto. apply H; auto.
 Qed.
 
-Lemma romem_for_consistent:
-  forall cunit, romem_consistent (prog_defmap cunit) (romem_for cunit).
+Lemma romem_for_consistent {F V}:
+  forall cunit, @romem_consistent F V (prog_defmap cunit) (romem_for cunit).
 Proof.
   assert (REC: forall l dm rm,
             romem_consistent dm rm ->
             romem_consistent (fold_left (fun m idg => PTree.set (fst idg) (snd idg) m) l dm)
-                             (fold_left alloc_global l rm)).
+                             (fold_left (@alloc_global F V) l rm)).
   { induction l; intros; simpl; auto. apply IHl. apply alloc_global_consistent; auto. }
   intros. apply REC.
   red; intros. rewrite PTree.gempty in H; discriminate.
@@ -1149,7 +1149,7 @@ Proof.
   rewrite PTree.gro; eauto.
 Qed.
 
-Lemma romem_for_in : forall l se b (F:Type) (g0: globdef F unit) (v: globvar unit) g id,
+Lemma romem_for_in {F V} : forall l se b (g0: globdef F V) (v: globvar V) g id,
       In b l ->
       Genv.find_symbol se id = Some b ->
       Genv.find_info se b = Some g ->
@@ -1198,9 +1198,9 @@ Proof.
       erewrite check_add_global_diff; eauto.
 Qed.
 
-Lemma romem_symtbl_prog : forall se prog id ab,
+Lemma romem_symtbl_prog {F V} : forall se prog id ab,
     Genv.valid_for (erase_program prog) se ->
-    (romem_for prog) ! id = Some ab ->
+    (@romem_for F V prog) ! id = Some ab ->
     (romem_for_symtbl se) ! id = Some ab.
 Proof.
   intros. red in H.
@@ -1215,11 +1215,11 @@ Proof.
   subst ab. eapply romem_for_in; eauto.
   eapply Genv.genv_info_range; eauto.
 Qed.
-  
-Theorem romatch_symtbl_prog : forall bc se prog m,
+
+Theorem romatch_symtbl_prog {F V} : forall bc se prog m,
     Genv.valid_for (erase_program prog) se ->
     romatch bc m (romem_for_symtbl se) ->
-    romatch bc m (romem_for prog).
+    romatch bc m (@romem_for F V prog).
 Proof.
   intros. red in H. red in H0.
   constructor.
@@ -2201,7 +2201,8 @@ Require Import Axioms.
 
 Section INITIAL.
 
-Variable prog: program.
+Context {F V: Type} {LF: Linker F} {LV: Linker V}.
+Variable prog: @AST.program F V.
 
 Let ge := Genv.globalenv (Genv.symboltbl (erase_program prog)) prog.
 
@@ -2261,6 +2262,73 @@ Proof.
 - intros; simpl. unfold ge; erewrite Genv.init_mem_genv_sup by eauto.
   rewrite pred_dec_true by assumption.
   destruct (Genv.invert_symbol _ b); congruence.
+Qed.
+
+Lemma symboltbl_genv_sup:
+  forall b,
+  sup_In b (Genv.genv_sup (Genv.symboltbl (erase_program prog))) ->
+  exists id, Genv.invert_symbol (Genv.symboltbl (erase_program prog)) b = Some id.
+Proof.
+  unfold sup_In, Genv.symboltbl.
+  remember (Genv.empty_stbl (prog_public (erase_program prog))) as empty_stbl.
+  intros.
+  assert (EMPTY: ~ sup_In b (Genv.genv_sup empty_stbl)). {
+    intros. subst. simpl. auto.
+  }
+  clear Heqempty_stbl.
+  remember (prog_defs (erase_program prog)) as defs. clear Heqdefs.
+  revert empty_stbl b EMPTY H.
+  induction defs; intros. tauto.
+  simpl in H.
+  destruct (Mem.sup_dec b (Genv.genv_sup (Genv.add_global empty_stbl a))).
+  2:apply IHdefs in H; auto.
+  simpl in s. destruct s; eauto. clear IHdefs.
+  induction defs; simpl.
+  exists (fst a). apply Genv.find_invert_symbol.
+  unfold Genv.find_symbol, Genv.add_global. simpl.
+  rewrite PTree.gss. rewrite H0. auto.
+  give_up.
+Admitted.
+
+Lemma initial_block_classification':
+  forall m,
+  Genv.init_mem (erase_program prog) = Some m ->
+  let bc := bc_of_symtbl (Genv.symboltbl (erase_program prog)) in
+     genv_match bc ge
+  /\ bc_below bc (Mem.support m)
+  /\ bc_nostack bc
+  /\ (forall b id, bc b = BCglob id -> Genv.find_symbol ge id = Some b)
+  /\ (forall b, Mem.valid_block m b -> bc b <> BCinvalid).
+Proof.
+  intros. splitall.
+- split; simpl; intros.
+  + split; intros.
+    * erewrite Genv.find_invert_symbol; eauto.
+    * apply Genv.invert_find_symbol.
+      destruct (Genv.invert_symbol _ b); congruence.
+  + destruct (Genv.invert_symbol) eqn:?; split; try congruence.
+    pose proof symboltbl_genv_sup _ H0 as (id & INV). congruence.
+- red; simpl; intros.
+  destruct (Genv.invert_symbol (Genv.symboltbl (erase_program prog)) b) eqn:?.
+  eapply Genv.invert_find_symbol, Genv.find_symbol_not_fresh in Heqo; eauto.
+  congruence.
+  (* destruct (Mem.sup_dec b (Genv.genv_sup _)); try congruence.
+  erewrite <- Genv.init_mem_genv_sup by eauto. auto. *)
+- red; simpl; intros.
+  (* destruct (Mem.sup_dec b (Genv.genv_sup _)). *)
+  destruct (Genv.invert_symbol _ b); congruence.
+  (* congruence. *)
+- simpl; intros.
+  (* destruct (Mem.sup_dec b (Genv.genv_sup _)); try discriminate. *)
+  destruct (Genv.invert_symbol _ b) as [id' | ] eqn:IS; inv H0.
+  apply Genv.invert_find_symbol; auto.
+- intros; simpl.
+  (* unfold ge; erewrite Genv.init_mem_genv_sup by eauto.
+  rewrite pred_dec_true by assumption. *)
+  destruct (Genv.invert_symbol _ b) eqn:?; try congruence.
+  unfold Mem.valid_block in H0.
+  erewrite <- Genv.init_mem_genv_sup in H0 by eauto.
+  apply symboltbl_genv_sup in H0 as []. congruence.
 Qed.
 
 Section INIT.
@@ -2382,8 +2450,8 @@ Proof.
 Qed.
 
 Definition initial_mem_match (bc: block_classification) (m: mem) (g: Genv.symtbl) :=
-  forall id b v,
-  Genv.find_symbol g id = Some b -> Genv.find_var_info g b = Some v ->
+  forall id b V (v: globvar V),
+  Genv.find_symbol g id = Some b -> Genv.find_var_info g b = Some (erase_globvar v) ->
   v.(gvar_volatile) = false -> v.(gvar_readonly) = true ->
   bmatch bc m b (store_init_data_list (ablock_init Pbot) 0 v.(gvar_init)).
 
@@ -2418,7 +2486,7 @@ Proof.
   unfold Genv.find_var_info, Genv.find_info in H3; simpl in H3.
   rewrite PTree.gsspec in H2. destruct (peq id id1).
 + injection H2; clear H2; intro EQ.
-  rewrite EQ in H3. setoid_rewrite NMap.gss in H3. injection H3; clear H3; intros EQ'; subst v.
+  rewrite EQ in H3. setoid_rewrite NMap.gss in H3. injection H3; clear H3; intros EQ'; subst gv.
   assert (b = b1).
   { erewrite Mem.alloc_result by eauto.
     rewrite H in EQ. auto. }
@@ -2428,10 +2496,10 @@ Proof.
   apply ablock_init_sound.
   eapply store_zeros_same; eauto.
   split; intros.
-  exploit Mem.load_alloc_same; eauto. intros EQ; subst v; constructor.
+  exploit Mem.load_alloc_same; eauto. intros EQ; subst v0; constructor.
   exploit Mem.loadbytes_alloc_same; eauto with coqlib. congruence.
   intros. eapply Mem.loadbytes_drop; eauto.
-  right; right; right. unfold Genv.perm_globvar. rewrite H4, H5. constructor.
+  right; right; right. unfold Genv.perm_globvar. simpl. rewrite H4, H5. constructor.
 + assert (sup_In b (Genv.genv_sup g)) by (eapply Genv.genv_symb_range; eauto).
   setoid_rewrite NMap.gso in H3.
   assert (Mem.valid_block m b) by (red; rewrite <- H; auto).
@@ -2464,21 +2532,24 @@ Qed.
 
 
 Lemma romem_for_consistent_2:
+  (forall info1 info2, @linkorder V LV info1 info2 -> info1 = info2) ->
   forall cunit, linkorder cunit prog -> romem_consistent (prog_defmap prog) (romem_for cunit).
 Proof.
   intros; red; intros.
   exploit (romem_for_consistent cunit); eauto. intros (v & DM & RO & VO & DEFN & AB).
-  destruct (prog_defmap_linkorder _ _ _ _ H DM) as (gd & P & Q).
+  destruct (prog_defmap_linkorder _ _ _ _ H0 DM) as (gd & P & Q).
   assert (gd = Gvar v).
-  { inv Q. inv H2. simpl in *. f_equal. f_equal.
-    destruct info1, info2; auto.
-    inv H3; auto; discriminate. }
+  { inv Q. inv H3. simpl in *. f_equal. f_equal.
+    apply H in H2. auto.
+    inv H4; auto; discriminate. }
   subst gd. exists v; auto.
 Qed.
 
 End INIT.
 
 Theorem initial_mem_matches:
+  forall
+  (LINKORDER: forall info1 info2, @linkorder V LV info1 info2 -> info1 = info2),
   forall m,
   Genv.init_mem (erase_program prog) = Some m ->
   exists bc,
@@ -2501,8 +2572,8 @@ Proof.
   assert (B: romem_consistent (prog_defmap prog) (romem_for cunit)) by (apply romem_for_consistent_2; auto).
   red; intros.
   exploit B; eauto. intros (v & DM & RO & NVOL & DEFN & EQ).
-  assert (DM': (prog_defmap (erase_program prog)) ! id = Some (Gvar v)).
-  { rewrite erase_program_defmap, DM. cbn. destruct v as [[] ]; auto. }
+  assert (DM': (prog_defmap (erase_program prog)) ! id = Some (Gvar (erase_globvar v))).
+  { rewrite erase_program_defmap, DM. cbn. auto. }
   rewrite Genv.find_info_symbol in DM'. destruct DM' as (b1 & FS & FD).
   rewrite <- Genv.find_var_info_iff in FD.
   assert (b1 = b). { apply INV in H1. cbn in *; congruence. }
@@ -2511,8 +2582,54 @@ Proof.
   split. subst ab. eapply A; eauto.
   exploit Genv.init_mem_characterization; eauto.
   intros (P & Q & R).
-  intros; red; intros. exploit Q; eauto. intros [U V].
-  unfold Genv.perm_globvar in V; rewrite RO, NVOL in V. inv V.
+  intros; red; intros. exploit Q; eauto. intros [U V0].
+  unfold Genv.perm_globvar in V0. simpl in V0. rewrite RO, NVOL in V0. inv V0.
+  apply mmatch_inj_top with m.
+  replace (inj_of_bc bc) with (Mem.flat_inj (Mem.support m)).
+  eapply Genv.initmem_inject; eauto.
+  symmetry; apply extensionality; unfold Mem.flat_inj; intros x.
+  destruct (Mem.sup_dec x (Mem.support m)).
+  apply inj_of_bc_valid; auto.
+  unfold inj_of_bc. erewrite bc_below_invalid; eauto.
+Qed.
+
+Theorem initial_mem_matches':
+  forall
+  (LINKORDER: forall info1 info2, @linkorder V LV info1 info2 -> info1 = info2),
+  forall m,
+  Genv.init_mem (erase_program prog) = Some m ->
+  let bc := bc_of_symtbl (Genv.symboltbl (erase_program prog)) in
+     genv_match bc ge
+  /\ bc_below bc (Mem.support m)
+  /\ bc_nostack bc
+  /\ (forall cunit, linkorder cunit prog -> romatch bc m (romem_for cunit))
+  /\ (forall b, Mem.valid_block m b -> bc b <> BCinvalid)
+  /\ mmatch bc m mtop.
+Proof.
+  intros.
+  exploit initial_block_classification'; eauto. intros (GE & BELOW & NOSTACK & INV & VALID).
+  splitall; auto.
+  intros.
+  assert (A: initial_mem_match bc m ge).
+  {
+    apply alloc_globals_match with (m := Mem.empty); auto.
+    red. unfold Genv.find_symbol; simpl; intros. rewrite PTree.gempty in H1; discriminate.
+  }
+  assert (B: romem_consistent (prog_defmap prog) (romem_for cunit)) by (apply romem_for_consistent_2; auto).
+  red; intros.
+  exploit B; eauto. intros (v & DM & RO & NVOL & DEFN & EQ).
+  assert (DM': (prog_defmap (erase_program prog)) ! id = Some (Gvar (erase_globvar v))).
+  { rewrite erase_program_defmap, DM. cbn. auto. }
+  rewrite Genv.find_info_symbol in DM'. destruct DM' as (b1 & FS & FD).
+  rewrite <- Genv.find_var_info_iff in FD.
+  assert (b1 = b). { apply INV in H1. cbn in *; congruence. }
+  subst b1.
+  split. subst ab. apply store_init_data_list_summary. constructor.
+  split. subst ab. eapply A; eauto.
+  exploit Genv.init_mem_characterization; eauto.
+  intros (P & Q & R).
+  intros; red; intros. exploit Q; eauto. intros [U V0].
+  unfold Genv.perm_globvar in V0. simpl in V0. rewrite RO, NVOL in V0. inv V0.
   apply mmatch_inj_top with m.
   replace (inj_of_bc bc) with (Mem.flat_inj (Mem.support m)).
   eapply Genv.initmem_inject; eauto.
