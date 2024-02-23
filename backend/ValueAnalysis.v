@@ -2263,7 +2263,7 @@ Proof.
   rewrite pred_dec_true by assumption.
   destruct (Genv.invert_symbol _ b); congruence.
 Qed.
-
+(* 
 Lemma symboltbl_genv_sup:
   forall b,
   sup_In b (Genv.genv_sup (Genv.symboltbl (erase_program prog))) ->
@@ -2329,7 +2329,7 @@ Proof.
   unfold Mem.valid_block in H0.
   erewrite <- Genv.init_mem_genv_sup in H0 by eauto.
   apply symboltbl_genv_sup in H0 as []. congruence.
-Qed.
+Qed. *)
 
 Section INIT.
 
@@ -2593,7 +2593,7 @@ Proof.
   unfold inj_of_bc. erewrite bc_below_invalid; eauto.
 Qed.
 
-Theorem initial_mem_matches':
+(* Theorem initial_mem_matches':
   forall
   (LINKORDER: forall info1 info2, @linkorder V LV info1 info2 -> info1 = info2),
   forall m,
@@ -2637,7 +2637,7 @@ Proof.
   destruct (Mem.sup_dec x (Mem.support m)).
   apply inj_of_bc_valid; auto.
   unfold inj_of_bc. erewrite bc_below_invalid; eauto.
-Qed.
+Qed. *)
 
 End INITIAL.
 
