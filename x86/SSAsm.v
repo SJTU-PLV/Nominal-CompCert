@@ -3,7 +3,7 @@ Require Import AST Integers Floats Values Memory Events Globalenvs Smallstep.
 Require Import Locations Conventions.
 Require Import Asm.
 
-Definition stkblock := Stack None nil 1.
+Definition stkblock := Stack 1%positive.
 
 Section INSTRSIZE.
 

@@ -376,6 +376,7 @@ Definition check_topframe (sz:Z)(astack:stackadt) : bool :=
               end
   end.
 
+(*
 Fixpoint sp_of_stack' (s:stree) : list fid * path :=
   match s with
    |Node fid bl l None => (fid::nil,nil)
@@ -407,6 +408,19 @@ Definition top_sp_stree (st:stree) : val :=
     | (((Some id)::tl), (_::_)) =>
      Vptr (Stack (Some id) path 1%positive) Ptrofs.zero
     |_ => Vptr (Stack None nil 1) Ptrofs.zero
+  end.
+ *)
+
+Definition top_sp_stack (s: list positive): val :=
+  match s with
+  |hd :: tl => Vptr (Stack hd) Ptrofs.zero
+  |_ => Vptr (Stack 1%positive) Ptrofs.zero
+  end.
+
+Definition parent_sp_stack (s: list positive) : val :=
+  match s with
+  |hd :: pa :: tl => Vptr (Stack pa) Ptrofs.zero
+  |_ => Vptr (Stack 1%positive) Ptrofs.zero
   end.
 
 Section INSTRSIZE.
@@ -1205,8 +1219,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
     match rs # PC with
     |Vptr (Global id) _
      =>
-     let (m0,path) := Mem.alloc_frame m id in
-     let (m1, stk) := Mem.alloc m0 0 fsz in
+     let (m1, stk) := Mem.alloc m 0 fsz in
      match Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame fsz) with
      |None => Stuck
      |Some m2 =>
@@ -1233,20 +1246,16 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
               match rs#RSP with
               | Vptr stk ofs =>
                   if check_topframe fsz (Mem.astack (Mem.support m)) then
-                  if Val.eq sp (parent_sp_stree (Mem.stack (Mem.support m))) then
-                  if Val.eq (Vptr stk ofs) (top_sp_stree (Mem.stack (Mem.support m))) then
+                  if Val.eq sp (parent_sp_stack (Mem.stack (Mem.support m))) then
+                  if Val.eq (Vptr stk ofs) (top_sp_stack (Mem.stack (Mem.support m))) then
                   match Mem.free m stk 0 fsz with
                   | None => Stuck
                   | Some m' =>
-                    match Mem.return_frame m' with
-                    | None => Stuck
-                    | Some m'' =>
-                      match Mem.pop_stage m'' with
+                      match Mem.pop_stage m' with
                         | None => Stuck
                         | Some m''' =>
                         Next (nextinstr (rs#RSP <- sp #RA <- ra)) m'''
                       end
-                    end
                   end else Stuck else Stuck else Stuck
               | _ => Stuck
               end
@@ -1438,7 +1447,7 @@ Inductive initial_state (p: program): state -> Prop :=
         (Pregmap.init Vundef)
         # PC <- (Vptr bmain Ptrofs.zero)
         # RA <- Vnullptr
-        # RSP <- (Vptr (Stack None nil 1) Ptrofs.zero) in
+        # RSP <- (Vptr (Stack 1%positive) Ptrofs.zero) in
       initial_state p (State rs0 m1).
 
 Inductive final_state: state -> int -> Prop :=
@@ -1588,137 +1597,3 @@ Proof.
   - simpl. auto.
   - simpl. auto.
 Qed.
-
-Lemma sp_of_stack_pspnull : forall st fid idx,
-    sp_of_stack st = (fid::nil,idx::nil) -> parent_sp_stree st = Vptr (Stack None nil 1) Ptrofs.zero.
-Proof.
-  intros. unfold parent_sp_stree. rewrite H. auto.
-Qed.
-
-Lemma append_nil_right : forall A (l:list A),
-    l++nil = l.
-Proof.
-  induction l. auto. simpl. congruence.
-Qed.
-
-Lemma sp_of_stack_pspsome : forall st f1 lf path idx2 idx1 id,
-    sp_of_stack st = (f1::(Some id)::lf, (path++(idx2::nil))++(idx1::nil)) ->
-    parent_sp_stree st = Vptr (Stack (Some id) (path++(idx2::nil)) 1%positive) Ptrofs.zero.
-Proof.
-  intros. unfold parent_sp_stree. rewrite H. simpl.
-  destruct path. auto. destruct path. auto. rewrite removelast_app. simpl.
-  rewrite append_nil_right. auto. congruence.
-Qed.
-
-Lemma sp_of_stack_tspsome : forall st id lf path idx,
-    sp_of_stack st = ((Some id)::lf,path++(idx::nil)) ->
-    top_sp_stree st = Vptr (Stack (Some id) (path++(idx::nil)) 1%positive) Ptrofs.zero.
-Proof.
-  intros. unfold top_sp_stree. rewrite H. simpl.
-  destr. destruct path; inv Heql.
-Qed.
-
-Lemma sp_of_stack_return' : forall st st' p' fid lf path idx root,
-    return_stree st = Some (st',p') ->
-    sp_of_stack' st = (fid::lf++(root::nil),path++(idx::nil)) ->
-    sp_of_stack' st' = (lf++(root::nil),path).
-Proof.
-  induction st. intros. destruct st. destruct o.
-  - destruct st'. destruct s. destruct o0.
-    + remember (Node f1 l3 l4 (Some s)) as st1.
-      simpl in H0. destr_in H0. destr_in H0. subst p.
-      simpl in H1. destr_in H1. inv H1.
-      destruct l5. inv H3. destruct lf; inv H5.
-      assert (l5<>nil).
-      {destruct l5.
-      simpl in Heqp. destr_in Heqp. destruct s. destruct o0; simpl in Heqp1.
-      -- destr_in Heqp1. inv Heqp1. destruct l8; inv Heqp. simpl in H5. destruct l8; inv H5.
-      -- inv Heqp1. inv Heqp.
-      -- congruence.
-      }
-      apply exists_last in H1. destruct H1 as (l' & root' & H1). subst.
-      assert (p<> nil).
-      {
-        simpl in Heqp. destr_in Heqp.
-      }
-      apply exists_last in H1. destruct H1 as (path0 & idx' & H1). subst.
-      exploit H; eauto. simpl. auto. intro.
-      inv H0. simpl. rewrite H1.
-      assert (removelast ((Datatypes.length l2 :: path0) ++ idx'::nil) = removelast (path++idx::nil)).
-      setoid_rewrite H4. auto.
-      rewrite removelast_app in H0. simpl in H0. rewrite removelast_app in H0. simpl in H0.
-      repeat rewrite append_nil_right in H0. subst.
-      assert (tl ((f2::l'++root'::nil)++f0::nil) = tl (fid::lf++root::nil)).
-      setoid_rewrite H3. auto. simpl in H0. rewrite H0. auto. congruence. congruence.
-      rewrite Heqst1 in Heqo0. inv Heqo0. repeat destr_in H3.
-    + simpl in H1. simpl in H0. inv H0.
-      simpl in *.  inv H1. destruct path; inv H4. auto.
-      destruct path; inv H2.
-  - inv H1. destruct lf; inv H4.
-Qed.
-
-Lemma sp_of_stack_return : forall m1 m2 fid lf path idx,
-    Mem.return_frame m1 = Some m2 ->
-    sp_of_stack (Mem.stack (Mem.support m1)) = (fid::lf,path++(idx::nil)) ->
-    sp_of_stack (Mem.stack (Mem.support m2)) = (lf,path).
-Proof.
-  intros. apply Mem.support_return_frame in H. unfold Mem.sup_return_frame in H.
-  destr_in H. destr_in H. unfold sp_of_stack in *. destr_in H0. inv H0.
-  destruct l. inv H2. assert (l<>nil).
-  destruct (Mem.stack (Mem.support m1)). destruct o.
-  simpl in Heqp1. destr_in Heqp1. inv Heqp1. apply sp_of_stack'_nonempty in Heqp.
-  destruct l2. congruence. inv H1. intro. destruct l2; inv H0.
-  inv Heqo.
-  apply exists_last in H0. destruct H0 as (l' & idx' & H0). subst.
-  exploit sp_of_stack_return'; eauto. intro. inv H. simpl. rewrite H0.
-  simpl in H2. destr_in H2. inv H2. auto.
-Qed.
-
-Lemma sp_of_stack_alloc' : forall st st' st'' path path0 path1 f lf pos id root,
-    next_stree st id = (st',path) ->
-    next_block_stree st' = (f,pos,path0,st'') ->
-    sp_of_stack' st = (lf++root::nil,path1) ->
-    exists idx,
-    sp_of_stack' st'' = (f::lf++root::nil,path0) /\ path0 = path1 ++ (idx::nil).
-Proof.
-  induction st. intros. destruct st. destruct o.
-  - simpl in H0. destr_in H0. inv H0. simpl in H1. repeat destr_in H1.
-    simpl in H2. destr_in H2.
-    apply sp_of_stack'_nonempty in Heqp1 as H0.
-    apply exists_last in H0. destruct H0 as (l' & a & H0). subst.
-    exploit H; eauto. simpl. auto.
-    intros (idx & A & B). exists idx. split. simpl. rewrite A.
-    inv H2. auto. inv H2. auto.
-  - simpl in H0. inv H0. simpl in H1. inv H1. simpl in H2. inv H2. simpl.
-    exists (length l0). auto.
-Qed.
-
-Lemma sp_of_stack_alloc : forall m1 m2 m3 id path lo hi b lf path',
-    Mem.alloc_frame m1 id = (m2,path) ->
-    Mem.alloc m2 lo hi = (m3,b) ->
-    sp_of_stack (Mem.stack (Mem.support m1)) = (lf,path') ->
-    exists idx, b = Stack (Some id) (path'++(idx::nil)) 1%positive /\
-    sp_of_stack (Mem.stack (Mem.support m3)) = ((Some id)::lf,path'++(idx::nil)).
-Proof.
-  intros.
-  exploit Mem.alloc_frame_alloc; eauto. intro.
-  apply Mem.path_alloc_frame in H as H'. unfold Mem.sup_npath in H'. unfold npath in H'.
-  apply Mem.support_alloc_frame in H. unfold Mem.sup_incr_frame in H.
-  destr_in H.
-  apply Mem.support_alloc in H0. unfold Mem.sup_incr in H0. destr_in H0.
-  rewrite H in Heqp0. simpl in Heqp0. destruct p0. destruct p0.
-  unfold sp_of_stack in *. destr_in H1.
-  apply sp_of_stack'_nonempty in Heqp2 as H3.
-  edestruct (exists_last H3) as (a & l' & H4). subst.
-  exploit sp_of_stack_alloc'; eauto. intros (idx & A& B).
-  exploit next_stree_next_block_stree; eauto. intros (X & Y & Z).
-  subst.
-  exists idx. split. inv H1. auto.
-  rewrite H0. simpl. rewrite A. simpl. inv H1. destr.
-Qed.
-
-(* external call will not change the active stack frames*)
-Axiom sp_of_stack_external : forall m1 m2 ge ef vargs t vres,
-      external_call ef ge vargs m1 t vres m2 ->
-      sp_of_stack (Mem.stack (Mem.support m2)) = sp_of_stack (Mem.stack (Mem.support m1)).
-

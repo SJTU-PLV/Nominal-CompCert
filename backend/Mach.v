@@ -279,7 +279,7 @@ Inductive state: Type :=
 
 Definition parent_sp (s: list stackframe) : val :=
   match s with
-  | nil => Vptr (Stack None nil 1) Ptrofs.zero
+  | nil => Vptr (Stack 1%positive) Ptrofs.zero
   | Stackframe f sp ra c :: s' => sp
   end.
 
@@ -350,7 +350,7 @@ Inductive step: state -> trace -> state -> Prop :=
         E0 (Callstate (Stackframe fb sp (Vptr fb ra) c :: s)
                        f' rs m id)
   | exec_Mtailcall:
-      forall s fb stk soff sig ros c rs m f f' m' m'' id m''',
+      forall s fb stk soff sig ros c rs m f f' m' m'' id,
       f' = Global id ->
       find_function_ptr ge ros rs = Some f' ->
       (exists fd, Genv.find_funct_ptr ge f' = Some fd) ->
@@ -358,10 +358,9 @@ Inductive step: state -> trace -> state -> Prop :=
       load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra s) ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      Mem.return_frame m' = Some m'' ->
-      Mem.pop_stage m'' = Some m''' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State s fb (Vptr stk soff) (Mtailcall sig ros :: c) rs m)
-        E0 (Callstate s f' rs m''' id)
+        E0 (Callstate s f' rs m'' id)
   | exec_Mbuiltin:
       forall s f sp rs m ef args res b vargs t vres rs' m',
       eval_builtin_args ge rs sp m args vargs ->
@@ -399,20 +398,18 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s fb sp (Mjumptable arg tbl :: c) rs m)
         E0 (State s fb sp c' rs' m)
   | exec_Mreturn:
-      forall s fb stk soff c rs m f m' m'' m''',
+      forall s fb stk soff c rs m f m' m'',
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
       load_stack m (Vptr stk soff) Tptr f.(fn_retaddr_ofs) = Some (parent_ra s) ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      Mem.return_frame m' = Some m'' ->
-      Mem.pop_stage m'' = Some m''' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State s fb (Vptr stk soff) (Mreturn :: c) rs m)
-        E0 (Returnstate s rs m''')
+        E0 (Returnstate s rs m'')
   | exec_function_internal:
-      forall s fb rs m f m0 m1 m2 m3 m4 stk rs' path id,
+      forall s fb rs m f m1 m2 m3 m4 stk rs' id,
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
-      Mem.alloc_frame m id = (m0,path) ->
-      Mem.alloc m0 0 f.(fn_stacksize) = (m1, stk) ->
+      Mem.alloc m 0 f.(fn_stacksize) = (m1, stk) ->
       Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stacksize f)) = Some m2 ->
       let sp := Vptr stk Ptrofs.zero in
       store_stack m2 sp Tptr f.(fn_retaddr_ofs) (parent_ra s) = Some m3 ->

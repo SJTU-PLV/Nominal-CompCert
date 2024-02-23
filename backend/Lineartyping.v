@@ -348,8 +348,8 @@ Local Opaque mreg_type.
   econstructor; eauto.
   eapply wt_find_function; eauto.
   apply wt_return_regs; auto. apply wt_parent_locset; auto.
-  red; simpl; intros. destruct l; simpl in *. rewrite H6; auto. destruct sl; auto; congruence.
-  red; simpl; intros. apply zero_size_arguments_tailcall_possible in H. apply H in H6. contradiction.
+  red; simpl; intros. destruct l; simpl in *. rewrite H5; auto. destruct sl; auto; congruence.
+  red; simpl; intros. apply zero_size_arguments_tailcall_possible in H. apply H in H5. contradiction.
 - (* builtin *)
   simpl in *; InvBooleans.
   econstructor; eauto.
@@ -372,7 +372,7 @@ Local Opaque mreg_type.
   simpl in *. InvBooleans.
   econstructor; eauto.
   apply wt_return_regs; auto. apply wt_parent_locset; auto.
-  red; simpl; intros. destruct l; simpl in *. rewrite H2; auto. destruct sl; auto; congruence.
+  red; simpl; intros. destruct l; simpl in *. rewrite H1; auto. destruct sl; auto; congruence.
   red; simpl; intros. auto.
 - (* internal function *)
   simpl in WTFD.

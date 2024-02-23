@@ -925,12 +925,9 @@ Proof.
     rewrite (Mem.support_store _ _ _ _ _ _ Heqo0).
     eapply Mem.sup_include_trans. 2: eapply Mem.sup_include_record_frame; eauto.
     apply Mem.sup_include_alloc in Heqp. simpl in Heqp.
-    eapply Mem.sup_include_trans. eapply Mem.sup_include_trans. 2:apply Heqp.
-    intro. eapply Mem.sup_incr_frame_in.
+    eapply Mem.sup_include_trans. eauto.
     simpl. unfold Mem.sup_push_stage.  intro. destruct b; simpl; auto.
   + erewrite <- Mem.support_free; eauto.
-    eapply Mem.sup_include_trans.
-    intro. eapply Mem.support_return_frame_1 in Heqo2. apply Heqo2.
     eapply Mem.sup_include_pop_stage; eauto.
 Qed.
 

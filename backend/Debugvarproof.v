@@ -514,11 +514,11 @@ Proof.
   apply plus_one. econstructor. inv TRF; eauto. eauto. eauto. traceEq.
   rewrite (parent_locset_match _ _ STACKS). constructor; auto.
 - (* internal function *)
-  monadInv H10. rename x into tf.
+  monadInv H9. rename x into tf.
   assert (MF: match_function f tf) by (apply transf_function_match; auto).
   inversion MF; subst.
   econstructor; split.
-  apply plus_one. econstructor. simpl; eauto. eauto. eauto. reflexivity.
+  apply plus_one. econstructor. simpl; eauto. eauto. reflexivity.
   constructor; auto.
 - (* external function *)
   monadInv H9. econstructor; split.

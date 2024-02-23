@@ -620,7 +620,6 @@ Proof.
   constructor; auto.
 - (* Ltailcall *)
   exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM').
-  exploit Mem.return_frame_parallel_extends; eauto. intros (tm'' & RET & MEM'').
   exploit Mem.pop_stage_extends; eauto. intros (tm''' & POP & MEM''').
   left; simpl; econstructor; split.
   eapply exec_Ltailcall with (fd := tunnel_fundef fd); eauto.
@@ -673,13 +672,11 @@ Proof.
   econstructor; eauto using locmap_undef_regs_lessdef.
 - (* Lreturn *)
   exploit Mem.free_parallel_extends. eauto. eauto. intros (tm' & FREE & MEM').
-  exploit Mem.return_frame_parallel_extends; eauto. intros (tm'' & RET & MEM'').
   exploit Mem.pop_stage_extends; eauto. intros (tm''' & POP & MEM''').
   left; simpl; econstructor; split.
   eapply exec_Lreturn; eauto.
   constructor; eauto using return_regs_lessdef, match_parent_locset.
 - (* internal function *)
-  exploit Mem.alloc_frame_extends; eauto. intros (tm' & ALLOCF & MEM').
   exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros (tm'' & ALLOC & MEM'').
   apply Mem.push_stage_extends in MEM''.

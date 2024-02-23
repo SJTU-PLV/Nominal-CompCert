@@ -182,7 +182,7 @@ Qed.
 
 Definition perm_type :=
   block -> Z -> perm_kind -> permission -> Prop.
-
+(*
 Fixpoint in_stack' (f:fid) (p:path) (lf : list fid) (pall:path) : Prop :=
   match lf,pall with
   |fid::lf',idx::p' => (f = fid /\ p = pall) \/ (in_stack' f p lf' (removelast pall))
@@ -250,6 +250,8 @@ Lemma inject_stack_incr:
 Proof.
   induction 2; econstructor; eauto.
 Qed.
+
+*)
 (*
 Lemma inject_stack_more_perm:
   forall j (P P': perm_type) (INCR: forall b o k p, P b o k p -> P' b o k p)
@@ -258,7 +260,8 @@ Lemma inject_stack_more_perm:
 Proof.
   induction 2; econstructor; eauto.
 Qed.
-*)
+ *)
+(*
 Lemma inject_stack_inv:
   forall j (P P': perm_type)
     s l (IS: inject_stack j P s l)
@@ -273,7 +276,7 @@ Proof.
   - intros. etransitivity. 2: eapply INCR; eauto. eauto. simpl. rewrite H0. simpl.
     split. auto. destr. destruct p; inv Heql.
 Qed.
-
+*)
 (** matching state *)
 Inductive match_states: meminj -> state -> state -> Prop :=
 | match_states_intro:

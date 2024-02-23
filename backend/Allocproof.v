@@ -2345,7 +2345,6 @@ Proof.
 - set (sg := RTL.funsig fd) in *.
   set (args' := loc_arguments sg) in *.
   exploit Mem.free_parallel_extends; eauto. intros [m'1 [P Q]].
-  exploit Mem.return_frame_parallel_extends; eauto. intros [m'2 [P' Q']].
   exploit Mem.pop_stage_extends; eauto. intros [m'3 [P'' Q'']].
   exploit (exec_moves mv); eauto. intros [ls1 [A1 B1]].
   exploit find_function_translated. eauto. eauto. eapply add_equations_args_satisf; eauto.
@@ -2376,9 +2375,9 @@ Proof.
   eapply match_stackframes_change_sig; eauto. rewrite SIG. rewrite e0. decEq.
   destruct (transf_function_inv _ _ FUN); auto.
   rewrite SIG. rewrite return_regs_arg_values; auto. eapply add_equations_args_lessdef; eauto.
-  inv WTI. rewrite <- H9. apply wt_regset_list; auto.
+  inv WTI. rewrite <- H8. apply wt_regset_list; auto.
   apply return_regs_agree_callee_save.
-  rewrite SIG. inv WTI. rewrite <- H9. apply wt_regset_list; auto.
+  rewrite SIG. inv WTI. rewrite <- H8. apply wt_regset_list; auto.
 
 (* builtin *)
 - exploit (exec_moves mv1); eauto. intros [ls1 [A1 B1]].
@@ -2434,8 +2433,7 @@ Proof.
 
 (* return *)
 - destruct (transf_function_inv _ _ FUN).
-  exploit Mem.free_parallel_extends; eauto. rewrite H12. intros [m'1 [P Q]].
-  exploit Mem.return_frame_parallel_extends; eauto. intros [m'2 [P' Q']].
+  exploit Mem.free_parallel_extends; eauto. rewrite H11. intros [m'1 [P Q]].
   exploit Mem.pop_stage_extends; eauto. intros [m'3 [P'' Q'']].
   inv WTI; MonadInv.
 + (* without an argument *)
@@ -2453,29 +2451,28 @@ Proof.
   eapply plus_left. econstructor; eauto.
   eapply star_right. eexact A1.
   econstructor. eauto. eauto. eauto. eauto. traceEq.
-  simpl. econstructor; eauto. rewrite <- H13.
+  simpl. econstructor; eauto. rewrite <- H12.
   replace (Locmap.getpair (map_rpair R (loc_result (RTL.fn_sig f)))
                           (return_regs (parent_locset ts) ls1))
   with (Locmap.getpair (map_rpair R (loc_result (RTL.fn_sig f))) ls1).
   eapply add_equations_res_lessdef; eauto.
-  rewrite <- H16. apply WTRS.
+  rewrite <- H15. apply WTRS.
   generalize (loc_result_caller_save (RTL.fn_sig f)).
   destruct (loc_result (RTL.fn_sig f)); simpl.
   intros A; rewrite A; auto.
   intros [A B]; rewrite A, B; auto.
   apply return_regs_agree_callee_save.
-  rewrite <- H13, <- H16. apply WTRS.
+  rewrite <- H12, <- H15. apply WTRS.
 
 (* internal function *)
 - monadInv FUN. simpl in *.
   destruct (transf_function_inv _ _ EQ).
-  exploit Mem.alloc_frame_extends; eauto. intros [m'1 [U V]].
   exploit Mem.alloc_extends; eauto. apply Z.le_refl.
-  rewrite H10; apply Z.le_refl. intros [m'2 [U' V']].
+  rewrite H9; apply Z.le_refl. intros [m'2 [U' V']].
   exploit Mem.push_stage_extends. apply V'. intro.
-  exploit Mem.record_frame_extends. apply H12. eauto. intros [m'3 [U'' V'']].
+  exploit Mem.record_frame_extends. apply H11. eauto. intros [m'3 [U'' V'']].
   assert (WTRS: wt_regset env (init_regs args (fn_params f))).
-  { apply wt_init_regs. inv H0. rewrite wt_params. rewrite H11. auto. auto. }
+  { apply wt_init_regs. inv H0. rewrite wt_params. rewrite H10. auto. auto. }
   exploit (exec_moves mv). eauto. eauto.
     eapply can_undef_satisf; eauto. eapply compat_entry_satisf; eauto.
     rewrite call_regs_param_values. eexact ARGS.
