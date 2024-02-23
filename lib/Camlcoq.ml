@@ -346,7 +346,7 @@ let extern_atom a =
   try
     Hashtbl.find string_of_atom a
   with Not_found ->
-    Printf.sprintf "$%d" (P.to_int a)
+    Printf.sprintf "_%d" (P.to_int a)
 
 (* Ignoring the terminating "1" bit, canonical encodings of strings can
    be viewed as lists of bits, formed by concatenation of 6-bit fragments

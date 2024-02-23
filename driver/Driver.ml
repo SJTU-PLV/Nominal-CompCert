@@ -501,6 +501,9 @@ let _ =
       end;
     | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg)
   in
+  (* Set main id *)
+  Hashtbl.add Camlcoq.atom_of_string "main" Rustsyntax.main_ident;
+  Hashtbl.add Camlcoq.string_of_atom Rustsyntax.main_ident "main";
   (* Set config *)
   Machine.config := Machine.x86_64;
   (* add helper functions which is required by Selection pass *)
