@@ -585,7 +585,7 @@ Qed.
 Hint Resolve compat_cenv_union_l compat_cenv_union_r compat_cenv_empty: compat.
 
 (** Allocation and initialization of parameters *)
-
+(*
 Lemma alloc_variables_stackseq:
   forall ge e m vars e' m',
   alloc_variables ge e m vars e' m' ->
@@ -609,7 +609,7 @@ Proof.
   eapply struct_eq_trans. eapply struct_eq_comm; eauto.
   eapply struct_eq_trans; eauto.
 Qed.
-
+*)
 Lemma alloc_variables_astackeq:
   forall ge e m vars e' m',
   alloc_variables ge e m vars e' m' ->
@@ -617,7 +617,7 @@ Lemma alloc_variables_astackeq:
 Proof.
   induction 1. congruence.
   apply Mem.support_alloc in H. unfold sup_incr in H. destr_in H.
-  rewrite <- IHalloc_variables. rewrite H. simpl. auto.
+  rewrite <- IHalloc_variables. rewrite H2. simpl. auto.
 Qed.
 
 Lemma alloc_variables_parallel_astackeq :
@@ -684,7 +684,8 @@ Proof.
   exploit H2; eauto. eapply Mem.valid_block_alloc; eauto.
 Qed.
 
-Section SINJ.
+
+(*Section SINJ.
 Definition posenv := PTree.t positive.
 Definition empty_posenv : posenv := PTree.empty positive.
 
@@ -826,7 +827,8 @@ Proof.
 Qed.
 
 End SINJ.
-
+ *)
+(*
 Definition nextblock_pos (m:mem) (p:positive) : Prop :=
   exists id path, Mem.nextblock m = Stack id path p.
 
@@ -887,17 +889,19 @@ Proof.
     eapply IHalloc_variables' in H2. destruct H2 as (p' & A & B).
     exists p'. split. eauto. lia. auto.
 Qed.
-
+ *)
+(*
 Lemma match_alloc_variables':
   forall cenv e m vars blocks e' m',
   alloc_variables' ge e m vars blocks e' m' ->
   forall j tm te pe idx1 idx2,
   list_norepet (var_names vars) ->
   Mem.inject j m tm ->
-  Mem.stackseq m tm ->
+(*  Mem.stackseq m tm ->
   pe = build_penv cenv vars idx1 idx2 ->
   nextblock_pos m idx1 ->
   nextblock_pos tm idx2 ->
+*)
   exists j', exists te', exists tm',
       alloc_variables tge te tm (remove_lifted cenv vars) te' tm'
   /\ Mem.inject j' m' tm'
@@ -912,8 +916,8 @@ Lemma match_alloc_variables':
        /\ if VSet.mem id cenv
           then te'!id = te!id /\ j' b = None
           else exists tb, te'!id = Some(tb, ty) /\ j' b = Some(tb, 0))
-  /\ (forall id, ~In id (var_names vars) -> e'!id = e!id /\ te'!id = te!id)
-  /\ (forall b, In b blocks -> match_penv_meminj b pe j').
+  /\ (forall id, ~In id (var_names vars) -> e'!id = e!id /\ te'!id = te!id).
+(*  /\ (forall b, In b blocks -> match_penv_meminj b pe j').*)
 Proof.
   induction 1; intros.
   (* base case *)
@@ -1036,7 +1040,7 @@ Proof.
   exploit nextblock_alloc_vars; eauto. intros (p' & X' & Y').
   rewrite X in X'. inv X'. lia. lia.
 Qed.
-
+*)
 Lemma alloc_variables_load:
   forall e m vars e' m',
   alloc_variables ge e m vars e' m' ->
@@ -1200,7 +1204,7 @@ Proof.
   rewrite filter_charact in H1. destruct H1. apply C; auto.
   apply H0; auto.
 Qed.
-
+(*
 Theorem match_envs_alloc_variables:
   forall cenv m vars e m' temps j tm blocks pe idx1 idx2,
   alloc_variables' ge empty_env m vars blocks e m' ->
@@ -1307,7 +1311,7 @@ Proof.
   intuition auto. edestruct F as (b & X & Y); eauto. rewrite H10 in Y.
   destruct Y as (tb & U & V). exists tb; auto.
 Qed.
-
+*)
 Lemma assign_loc_inject:
   forall f ty m loc ofs bf v m' tm loc' ofs' v',
   assign_loc ge ty m loc ofs bf v m' ->
@@ -2087,8 +2091,8 @@ Inductive match_states: state -> state -> Prop :=
         (MENV: match_envs j (cenv_for f) e le m lo hi te tle tlo thi)
         (MCONT: match_cont j (cenv_for f) k tk m lo tlo)
         (MINJ: Mem.inject j m tm)
-        (VINJ: j = struct_meminj (Mem.support m))
-        (MSTK: Mem.stackseq m tm)
+        (* (VINJ: j = struct_meminj (Mem.support m)) *)
+        (* (MSTK: Mem.stackseq m tm) *)
         (MASTK: Mem.astack (Mem.support m) = Mem.astack (Mem.support tm))
         (COMPAT: compat_cenv (addr_taken_stmt s) (cenv_for f))
         (BOUND: Mem.sup_include hi (Mem.support m))
@@ -2101,8 +2105,8 @@ Inductive match_states: state -> state -> Prop :=
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (FIND: Genv.find_funct_ptr ge (Global id) = Some fd)
         (MINJ: Mem.inject j m tm)
-        (VINJ: j = struct_meminj (Mem.support m))
-        (MSTK: Mem.stackseq m tm)
+        (* (VINJ: j = struct_meminj (Mem.support m))
+        (MSTK: Mem.stackseq m tm) *)
         (MASTK: Mem.astack (Mem.support m) = Mem.astack (Mem.support tm))
         (AINJ: Val.inject_list j vargs tvargs)
         (FUNTY: type_of_fundef fd = Tfunction targs tres cconv)
@@ -2113,8 +2117,8 @@ Inductive match_states: state -> state -> Prop :=
       forall v k m tv tk tm j
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (MINJ: Mem.inject j m tm)
-        (VINJ: j = struct_meminj (Mem.support m))
-        (MSTK: Mem.stackseq m tm)
+        (* (VINJ: j = struct_meminj (Mem.support m))
+        (MSTK: Mem.stackseq m tm) *)
         (MASTK: Mem.astack (Mem.support m) = Mem.astack (Mem.support tm))
         (RINJ: Val.inject j v tv),
       match_states (Returnstate v k m)

@@ -169,17 +169,15 @@ Inductive exec_stmt: env -> temp_env -> mem -> statement -> trace -> temp_env ->
   by the call.  *)
 
 with eval_funcall: mem -> fundef -> list val -> trace -> mem -> val -> ident -> Prop :=
-  | eval_funcall_internal: forall le m f vargs t e m0 m1 m1' m2 m3 out vres m4 m5 id path m6,
-      Mem.alloc_frame m id = (m0,path) ->
-      alloc_variables ge empty_env m0 (f.(fn_params) ++ f.(fn_vars)) e m1 ->
+  | eval_funcall_internal: forall le m f vargs t e m1 m1' m2 m3 out vres m4 id m6,
+      alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
       list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
       Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id)) = Some m1'->
       bind_parameters ge e m1' f.(fn_params) vargs m2 ->
       exec_stmt e (create_undef_temps f.(fn_temps)) m2 f.(fn_body) t le m3 out ->
       outcome_result_value out f.(fn_return) vres m3 ->
       Mem.free_list m3 (blocks_of_env ge e) = Some m4 ->
-      Mem.return_frame m4 = Some m5 ->
-      Mem.pop_stage m5 = Some m6 ->
+      Mem.pop_stage m4 = Some m6 ->
       eval_funcall m (Internal f) vargs t m6 vres id
   | eval_funcall_external: forall m ef targs tres cconv vargs t vres m' id,
       external_call ef ge vargs m t vres m' ->
@@ -242,9 +240,8 @@ CoInductive execinf_stmt: env -> temp_env -> mem -> statement -> traceinf -> Pro
     [fd] on arguments [args] diverges, with observable trace [t]. *)
 
 with evalinf_funcall: mem -> fundef -> list val -> traceinf -> ident -> Prop :=
-  | evalinf_funcall_internal: forall m f vargs t e m0 id path m1 m1' m2,
-      Mem.alloc_frame m id = (m0,path) ->
-      alloc_variables ge empty_env m0 (f.(fn_params) ++ f.(fn_vars)) e m1 ->
+  | evalinf_funcall_internal: forall m f vargs t e id m1 m1' m2,
+      alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
       list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
       Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id)) = Some m1'->
       bind_parameters ge e m1' f.(fn_params) vargs m2 ->
@@ -465,23 +462,23 @@ Proof.
   unfold S2. inv B1; simpl; econstructor; eauto.
 
 (* call internal *)
-  destruct (H5 f k) as [S1 [A1 B1]].
+  destruct (H4 f k) as [S1 [A1 B1]].
   eapply star_left. eapply step_internal_function; eauto. econstructor; eauto.
   eapply star_right. eexact A1.
    inv B1; simpl in H5; try contradiction.
   (* Out_normal *)
   assert (fn_return f = Tvoid /\ vres = Vundef).
     destruct (fn_return f); auto || contradiction.
-  destruct H11. subst vres. eapply step_skip_call; eauto.
+  destruct H9. subst vres. eapply step_skip_call; eauto.
   (* Out_return None *)
   assert (fn_return f = Tvoid /\ vres = Vundef).
     destruct (fn_return f); auto || contradiction.
-  destruct H12. subst vres.
-  rewrite <- (is_call_cont_call_cont k H10). rewrite <- H11.
+  destruct H10. subst vres.
+  rewrite <- (is_call_cont_call_cont k H8). rewrite <- H9.
   eapply step_return_0; eauto.
   (* Out_return Some *)
-  destruct H6.
-  rewrite <- (is_call_cont_call_cont k H10). rewrite <- H11.
+  destruct H5.
+  rewrite <- (is_call_cont_call_cont k H8). rewrite <- H9.
   eapply step_return_1; eauto.
   reflexivity. traceEq.
 

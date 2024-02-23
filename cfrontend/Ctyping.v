@@ -2227,7 +2227,7 @@ Proof.
 - inv WTS; eauto with ty.
 - exploit wt_find_label. eexact WTB. eauto. eapply call_cont_wt'; eauto.
   intros [A B]. eauto with ty.
-- inv WTFD. inv H5. econstructor; eauto. apply wt_call_cont_stmt_cont; auto.
+- inv WTFD. inv H4. econstructor; eauto. apply wt_call_cont_stmt_cont; auto.
 - inv WTFD. econstructor; eauto.
   apply has_rettype_wt_val. simpl; rewrite <- H1.
   eapply external_call_well_typed_gen; eauto.

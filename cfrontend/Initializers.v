@@ -358,7 +358,7 @@ Definition transl_init_single (ce: composite_env) (ty: type) (a: expr) : res ini
   | Vptr (Global id) ofs, Tint I32 sg _ => assertion (negb Archi.ptr64); OK(Init_addrof id ofs)
   | Vptr (Global id) ofs, Tlong _ _ => assertion (Archi.ptr64); OK(Init_addrof id ofs)
   | Vptr (Global id) ofs, Tpointer _ _ => OK(Init_addrof id ofs)
-  | Vptr (Stack _ _ _) ofs,_ => Error (msg "stack pointer in initializer")
+  | Vptr (Stack __) ofs,_ => Error (msg "stack pointer in initializer")
   | Vundef, _ => Error(msg "undefined operation in initializer")
   | _, _ => Error (msg "type mismatch in initializer")
   end.

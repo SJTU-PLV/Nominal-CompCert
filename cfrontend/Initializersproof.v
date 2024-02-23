@@ -331,7 +331,7 @@ Definition inj (b: block) :=
                    |Some b' => Some (b',0)
                    |None => None
                  end
-    |Stack _ _ _ => None
+    |Stack _  => None
   end.
 
 Lemma mem_empty_not_valid_pointer:

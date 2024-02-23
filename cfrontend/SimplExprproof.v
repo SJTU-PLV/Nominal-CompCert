@@ -2362,12 +2362,12 @@ Proof.
   left. apply plus_one. econstructor; eauto.
   econstructor; eauto.
 - (* internal function *)
-  inv TR. inversion H5; subst.
+  inv TR. inversion H4; subst.
   econstructor; split.
   left; apply plus_one. eapply step_internal_function. econstructor.
-  rewrite H8; rewrite H9; eauto. eauto.
-  rewrite H8; rewrite H9. eapply alloc_variables_preserved; eauto. eauto.
-  rewrite H8. eapply bind_parameters_preserved; eauto.
+  rewrite H7; rewrite H8; eauto. eauto.
+  rewrite H7; rewrite H8. eapply alloc_variables_preserved; eauto. eauto.
+  rewrite H7. eapply bind_parameters_preserved; eauto.
   eauto.
   econstructor; eauto.
 

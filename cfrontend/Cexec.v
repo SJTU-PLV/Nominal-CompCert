@@ -2081,9 +2081,8 @@ Definition do_step (w: world) (s: state) : list transition :=
         | Kreturn k =>
             do v' <- sem_cast v ty f.(fn_return) m;
             do m' <- Mem.free_list m (blocks_of_env ge e);
-            do m'' <- Mem.return_frame m';
-            do m''' <- Mem.pop_stage m'';
-            ret "step_return_2" (Returnstate v' (call_cont k) m''')
+            do m'' <- Mem.pop_stage m';
+            ret "step_return_2" (Returnstate v' (call_cont k) m'')
         | Kswitch1 sl k =>
             do n <- sem_switch_arg v ty;
             ret "step_expr_switch" (State f (seq_of_labeled_statement (select_switch n sl)) (Kswitch2 k) e m)
@@ -2135,16 +2134,14 @@ Definition do_step (w: world) (s: state) : list transition :=
 
   | State f (Sreturn None) k e m =>
       do m' <- Mem.free_list m (blocks_of_env ge e);
-      do m'' <- Mem.return_frame m';
-      do m''' <- Mem.pop_stage m'';
-      ret "step_return_0" (Returnstate Vundef (call_cont k) m''')
+      do m'' <- Mem.pop_stage m';
+      ret "step_return_0" (Returnstate Vundef (call_cont k) m'')
   | State f (Sreturn (Some x)) k e m =>
       ret "step_return_1" (ExprState f x (Kreturn k) e m)
   | State f Sskip ((Kstop | Kcall _ _ _ _ _) as k) e m =>
       do m' <- Mem.free_list m (blocks_of_env ge e);
-      do m'' <- Mem.return_frame m';
-      do m''' <- Mem.pop_stage m'';
-      ret "step_skip_call" (Returnstate Vundef k m''')
+      do m'' <- Mem.pop_stage m';
+      ret "step_skip_call" (Returnstate Vundef k m'')
 
   | State f (Sswitch x sl) k e m =>
       ret "step_switch" (ExprState f x (Kswitch1 sl k) e m)
@@ -2163,8 +2160,7 @@ Definition do_step (w: world) (s: state) : list transition :=
 
   | Callstate (Internal f) vargs k m id =>
       check (list_norepet_dec ident_eq (var_names (fn_params f) ++ var_names (fn_vars f)));
-      let (m0,path) := Mem.alloc_frame m id in
-      let (e,m1) := do_alloc_variables empty_env m0 (f.(fn_params) ++ f.(fn_vars)) in
+      let (e,m1) := do_alloc_variables empty_env m (f.(fn_params) ++ f.(fn_vars)) in
       do m2 <- Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id));
       do m3 <- sem_bind_parameters w e m2 f.(fn_params) vargs;
       ret "step_internal_function" (State f f.(fn_body) k e m3)
@@ -2197,7 +2193,6 @@ Ltac myinv :=
   end.
 
 Local Hint Extern 3 => exact I : core.
-Local Opaque Mem.alloc_frame.
 
 Theorem do_step_sound:
   forall w S rule t S',
@@ -2239,12 +2234,11 @@ Proof with try (left; right; econstructor; eauto; fail).
 (* callstate *)
   destruct fd; myinv.
   (* internal *)
-  destruct (Mem.alloc_frame m id) as [m0 path] eqn:?.
-  destruct (do_alloc_variables empty_env m0 (fn_params f ++ fn_vars f)) as [e m1] eqn:?.
+  destruct (do_alloc_variables empty_env m (fn_params f ++ fn_vars f)) as [e m1] eqn:?.
   destruct (Mem.record_frame (Mem.push_stage m1) (mk_frame (fn_stack_requirements id))) eqn:?.
   myinv. left; right; eapply step_internal_function. eauto. eauto.
   instantiate (1:= m1).
-  change e with (fst (e,m1)). change m1 with (snd (e,m1)) at 2. rewrite <- Heqp0.
+  change e with (fst (e,m1)). change m1 with (snd (e,m1)) at 2. rewrite <- Heqp.
   apply do_alloc_variables_sound. eauto. eapply sem_bind_parameters_sound; eauto.
   myinv...
   (* external *)
@@ -2327,19 +2321,20 @@ Proof with (unfold ret; eauto with coqlib).
   rewrite H0...
   rewrite H0...
   destruct H0; subst x...
+  rewrite H0; rewrite H1...
   rewrite H0; rewrite H1; rewrite H2...
-  rewrite H0; rewrite H1; rewrite H2; rewrite H3...
-  rewrite H1. rewrite H2. rewrite H3. red in H0. destruct k; try contradiction...
+  rewrite H1. rewrite H2. red in H0. destruct k; try contradiction...
   rewrite H0...
   destruct H0; subst x...
   rewrite H0...
+  
+
 
   (* Call step *)
   rewrite pred_dec_true; auto.
-  rewrite H1.
-  rewrite (do_alloc_variables_complete _ _ _ _ _ H2).
-  rewrite H3.
-  rewrite (sem_bind_parameters_complete _ _ _ _ _ _ H4)...
+  rewrite (do_alloc_variables_complete _ _ _ _ _ H1).
+  rewrite H2.
+  rewrite (sem_bind_parameters_complete _ _ _ _ _ _ H3)...
   exploit do_ef_external_complete; eauto. intro EQ; rewrite EQ. auto with coqlib.
 Qed.
 
