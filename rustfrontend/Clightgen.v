@@ -94,6 +94,13 @@ Definition makeseq (l: list Clight.statement) : Clight.statement :=
 (* To specify *)
 Parameter (malloc_id free_id: ident).
 
+Require Ctyping.
+
+Definition malloc_decl : globdef (Ctypes.fundef Clight.function) Ctypes.type :=
+   Gfun (Ctypes.External EF_malloc (Ctypes.Tcons Ctyping.size_t Ctypes.Tnil) (Tpointer Ctypes.Tvoid noattr) cc_default).
+
+Definition free_decl : globdef (Ctypes.fundef Clight.function) Ctypes.type :=
+  Gfun (Ctypes.External EF_free (Ctypes.Tcons (Tpointer Ctypes.Tvoid noattr) Ctypes.Tnil) Tvoid cc_default).
 
 Definition free_fun_expr (ty: Ctypes.type) : Clight.expr :=
   let argty := (Ctypes.Tpointer ty noattr) in
@@ -613,7 +620,9 @@ Definition transl_program (p: program) : res Clight.program :=
          do (drops, dropm) <- generate_drops ce tce p.(prog_types);
          (* step 3: translate the statement *)
          do p1 <- transform_partial_program2 (transl_fundef ce tce dropm) transl_globvar p;
-         OK {| Ctypes.prog_defs := AST.prog_defs p1 ++ drops;
+         (* generate malloc and free declabration *)
+         let malloc_free := [(malloc_id, malloc_decl); (free_id, free_decl)] in
+         OK {| Ctypes.prog_defs := AST.prog_defs p1 ++ drops ++ malloc_free;
               Ctypes.prog_public := AST.prog_public p1;
               Ctypes.prog_main := AST.prog_main p1;
               Ctypes.prog_types := co_defs;
