@@ -408,10 +408,11 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
       (* simple type checking *)
       if type_eq ty rhs_ty then        
         do (sl1, e') <- transl_value_expr e;
-        do sl1' <- finish_stmt sl1;
-        do sl2 <- transl_stmt stmt';
-        let s := Sassign (Plocal id ty) e' in        
-        ret (Ssequence sl1' (Slet id ty (Ssequence s sl2)))
+        let s := Sassign (Plocal id ty) e' in
+        (* Important: the lifetime of the temporary variable generated in [e] must exceed the assignment [s] *)
+        do sl1' <- finish_stmt (sl1 ++ [s]);
+        do sl2 <- transl_stmt stmt';        
+        ret (Slet id ty (Ssequence sl1' sl2))
       else
         error (msg "Type mismatch between LHS and RHS in let initialization: transl_stmt")
   | Rustsyntax.Ssequence s1 s2 =>

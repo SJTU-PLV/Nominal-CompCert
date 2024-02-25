@@ -439,7 +439,7 @@ Definition main_body :=
      let B : list_node_ty := struct(list_node_id, [first_id;second_id], {$42, Box(A#list_ty)}, list_node_ty) in
      do (A#list_ty) := enum(list_id, cons_id, B#list_node_ty, list_ty);
      let C : box_list := Box(A#list_ty) in
-     do (C#box_list) := Call (pop_and_push_ident#pop_and_push_ty) @ {(C#box_list), ($-2)}; 
+     do (C#box_list) := Call (pop_and_push_ident#pop_and_push_ty) @ {(C#box_list), ($-2)};
      return ($0)
      endlet endlet endlet }>.
 
