@@ -412,7 +412,7 @@ Definition pop_and_push :=
        case cons_id as arm2 =>
        (* C.2 = Box(cons(arm2)) *)
        do (field(C#list_node_ty, second_id, box_list)) := Box(enum(list_id, cons_id, arm2#list_node_ty, list_ty))
-      endmatch;
+     endmatch;
      return Box(enum(list_id, cons_id, C#list_node_ty, list_ty))
      endlet }>.
             

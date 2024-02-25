@@ -387,6 +387,7 @@ Definition makeif (a: expr) (s1 s2: statement) : statement :=
 
 Definition transl_if (r: Rustsyntax.expr) (s1 s2: statement) : mon statement :=
   do (sl, a) <- transl_value_expr r;
+  (**TODO: check the usage of finish_stmt *)
   do s <- finish_stmt sl;
   ret (Ssequence s (makeif a s1 s2)).
 
@@ -421,6 +422,7 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
       ret (Ssequence s1' s2')
   | Rustsyntax.Sifthenelse e s1 s2 =>
       do (sl, e') <- transl_value_expr e;
+      (* e is in temporary scope *)
       do s' <- finish_stmt sl;
       do s1' <- transl_stmt s1;
       do s2' <- transl_stmt s2;
@@ -436,8 +438,9 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
       match e with
       | Some e =>
           do (sl, e') <- transl_value_expr e;
-          do s' <- finish_stmt sl;
-          ret (Ssequence s' (Sreturn (Some e')))
+          (* The lifetime of the temporary variable must exceed the return statement *)
+          do s' <- finish_stmt (sl ++ [Sreturn (Some e')]);
+          ret s'
       | None =>
           ret (Sreturn None)
       end
@@ -464,7 +467,8 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
                 do (cond_sl, e') <- transl_value_expr e;
                 let eval_cond := makeseq cond_sl in
                 let assign_temp := Sassign temp e' in
-                (* clear the temps in state *)
+                (* temps are the generated variable in match scrutinee
+                whose scope contains the entire match *)
                 do temps <- extract_temps;
                 do arm_stmt <- transl_arm_statements arm_body temp (own_type ce ty) co;
                 (* concat the condition statements and generate let stmts *)
