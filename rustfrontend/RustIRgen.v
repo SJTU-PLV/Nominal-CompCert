@@ -50,6 +50,8 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: Rust
         Ssequence (Sstoragelive id) s
   | RustlightBase.Sassign p e =>
       Sassign p e
+  | RustlightBase.Sassign_variant p fid e =>
+      Sassign_variant p fid e
   | RustlightBase.Sbox p e =>
       Sbox p e
   | RustlightBase.Scall p e el =>

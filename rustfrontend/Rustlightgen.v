@@ -9,7 +9,7 @@ Require Import Cop.
 Require Import Rustsyntax RustlightBase.
 Require Import Errors.
 
-
+Import ListNotations.
 (** * Rustsyntax to Rustlight *)
 
 
@@ -99,6 +99,23 @@ Definition finish (dst: destination) (sl: list statement) (a: expr) :=
   end.
 
 
+(* generate assign fields statement lists *)
+Fixpoint fields_assign (p: place) (ids : list ident) (args: list expr) (membs: members) {struct ids}: mon (list statement) :=
+  match ids, args, membs with
+  | nil, nil, nil => ret nil
+  | id :: ids', arg :: args', (Member_plain fid fty) :: membs' =>
+      if ident_eq id fid then
+        if type_eq (typeof arg) fty then
+          do stmts <- fields_assign p ids' args' membs';
+          ret (Sassign (Pfield p fid fty) arg :: stmts)
+        else
+          error [CTX (local_of_place p); CTX id; CTX fid; MSG ": have different type in fiedls_assign"]
+      else
+        error [CTX (local_of_place p); CTX id; CTX fid; MSG ": have different ident in fiedls_assign"]
+  | _, _ , _ =>
+      error [CTX (local_of_place p); MSG ": inconsistent number of fields ident, arg idents and members in fiedls_assign"]
+  end.
+
 Definition dummy_expr := Econst_int Int.zero type_int32s.
 
 (** ** Translate expression  *)
@@ -122,6 +139,48 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
       ret (nil, Econst_long n ty)
   | Rustsyntax.Eval _ ty =>
       error (msg "Rustlightgen.transl_expr: Eval")
+  | Rustsyntax.Estruct id fids args ty =>
+      (* let temp : ty in
+         temp.fid1 := arg1;
+         temp.fid2 := agr2;
+         ... *)
+      match ty with
+      | Tstruct struct_id _ =>
+          if ident_eq struct_id id then
+            (* evaluate the structure arguments *)
+            match ce!id with
+            | Some co =>
+                do temp_id <- gensym ty;
+                let temp := Plocal temp_id ty in
+                do (args_stmts, args_exprs) <- transl_exprlist args;
+                do fields_assign_stmts <- fields_assign temp fids args_exprs co.(co_members);
+                let ret_expr := if own_type ce ty then Emoveplace temp ty else Eplace temp ty in
+                ret (args_stmts ++ fields_assign_stmts, ret_expr)
+            | _ =>
+                error [CTX id; MSG ": there is no composite for it in transl_value_expr"]
+            end
+          else error [CTX id; CTX struct_id; MSG ": structure construction has inconsistent structure identifiers in transl_value_expr"]
+      | _ =>
+          error [CTX id; MSG ": structure construction type error in transl_value_expr"]
+      end
+  | Eenum id fid e ty =>
+      match ty with
+      | Tvariant variant_id _ =>
+          if ident_eq variant_id id then
+            match ce!id with
+            | Some co =>
+                do (stmt, rhs) <- transl_value_expr e;
+                do temp_id <- gensym ty;
+                let temp := Plocal temp_id ty in
+                let ret_expr := if own_type ce ty then Emoveplace temp ty else Eplace temp ty in
+                ret (stmt ++ [Sassign_variant temp fid rhs], ret_expr)
+            | _ =>
+                error [CTX id; MSG ": there is no composite for it in transl_value_expr"]
+            end
+          else
+            error [CTX id; CTX variant_id; MSG ": variant construction has inconsistent structure identifiers in transl_value_expr"]
+      | _ => error [CTX id; MSG ": variant construction type error in transl_value_expr"]
+      end
   | Rustsyntax.Evar id ty =>
       (* use id as value *)
       let p := Plocal id ty in
@@ -163,22 +222,24 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
         let s := Sassign p e' in
         ret (sl2 ++ sl1 ++ (s :: nil), dummy_expr)
       else
-        match ty1 with
-        (* assign value to a variant *)
-        | Tvariant id _ =>
-            match ce!id with
-            | Some co =>
-                if in_dec type_eq ty2 (map type_member co.(co_members)) then
-                  do (sl1, p) <- transl_place_expr l;
-                  do (sl2, e') <- transl_value_expr r;
-                  let s := Sassign p e' in
-                  ret (sl2 ++ sl1 ++ (s :: nil), dummy_expr)
-                else
-                  error (msg "In assignment, LHS has type variant but the type of RHS is no in the fields of this variant")
-            | _ => error (msg "In assignment, LHS has type variant but does not exist in the composite environment")
-            end
-        | _ => error (msg "Type mismatch between LHS and RHS in assignment: transl_expr")
-        end
+        error (msg "Type mismatch between LHS and RHS in assignment: transl_expr")
+        (* The following code is about the assignment of variant based on type *)
+        (* match ty1 with *)
+        (* (* assign value to a variant *) *)
+        (* | Tvariant id _ => *)
+        (*     match ce!id with *)
+        (*     | Some co => *)
+        (*         if in_dec type_eq ty2 (map type_member co.(co_members)) then *)
+        (*           do (sl1, p) <- transl_place_expr l; *)
+        (*           do (sl2, e') <- transl_value_expr r; *)
+        (*           let s := Sassign p e' in *)
+        (*           ret (sl2 ++ sl1 ++ (s :: nil), dummy_expr) *)
+        (*         else *)
+        (*           error (msg "In assignment, LHS has type variant but the type of RHS is no in the fields of this variant") *)
+        (*     | _ => error (msg "In assignment, LHS has type variant but does not exist in the composite environment") *)
+        (*     end *)
+        (* | _ => error (msg "Type mismatch between LHS and RHS in assignment: transl_expr") *)
+        (* end *)
   | Ecall ef el ty =>
       do (sl1, ef') <- transl_value_expr ef;
       do (sl2, el') <- transl_exprlist el;
@@ -208,7 +269,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
       | _, _ =>
           error (msg "Move in binop: Rustlightgen.transl_expr")
       end      
-  end
+ end
   
 with transl_place_expr (e: Rustsyntax.expr) : mon (list statement * place) :=
   match e with
@@ -255,6 +316,8 @@ End NOTATION.
 Definition value_or_place (e: Rustsyntax.expr) : bool :=
   match e with
   | Rustsyntax.Eunit => true
+  | Rustsyntax.Estruct _ _ _ _ => true
+  | Rustsyntax.Eenum _ _ _ _ => true
   | Rustsyntax.Eval _ _ => true
   | Rustsyntax.Evar _ _ => false
   | Rustsyntax.Ebox _ _ => true
@@ -337,9 +400,20 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
       do (sl, _) <- transl_value_expr e;
       (* insert let statements *)
       finish_stmt sl
-  | Rustsyntax.Slet id ty stmt' =>
+  | Rustsyntax.Slet id ty None stmt' =>
       do s <- transl_stmt stmt';
       ret (Slet id ty s)
+  | Rustsyntax.Slet id ty (Some e) stmt' =>
+      let rhs_ty := Rustsyntax.typeof e in
+      (* simple type checking *)
+      if type_eq ty rhs_ty then        
+        do (sl1, e') <- transl_value_expr e;
+        do sl1' <- finish_stmt sl1;
+        do sl2 <- transl_stmt stmt';
+        let s := Sassign (Plocal id ty) e' in        
+        ret (Ssequence sl1' (Slet id ty (Ssequence s sl2)))
+      else
+        error (msg "Type mismatch between LHS and RHS in let initialization: transl_stmt")
   | Rustsyntax.Ssequence s1 s2 =>
       do s1' <- transl_stmt s1;
       do s2' <- transl_stmt s2;
@@ -445,7 +519,7 @@ with transl_arm_statements (sl: arm_statements) (p: place) (moved: bool) (co: co
 (* Extract the let declared variables *)
 Fixpoint extract_vars (stmt: Rustsyntax.statement) : list (ident * type) :=
   match stmt with
-  | Rustsyntax.Slet id ty s =>
+  | Rustsyntax.Slet id ty _ s =>
       (id,ty) :: extract_vars s
   | Rustsyntax.Ssequence s1 s2 =>
       extract_vars s1 ++ extract_vars s2

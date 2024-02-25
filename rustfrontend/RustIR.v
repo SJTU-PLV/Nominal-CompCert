@@ -38,6 +38,7 @@ the returned expression and the return statement *)
 Inductive statement : Type :=
 | Sskip: statement                   (**r do nothing *)
 | Sassign: place -> expr -> statement (**r assignment [place = rvalue] *)
+| Sassign_variant : place -> ident -> expr -> statement (**r [place] = [ident(expr)] *)
 | Sbox: place -> expr -> statement       (**r [place = Box::new(expr)]  *)
 | Sstoragelive: ident -> statement       (**r id becomes avalible *)
 | Sstoragedead: ident -> statement       (**r id becomes un-avalible *)
@@ -397,6 +398,8 @@ Fixpoint transl_stmt (end_node: node) (stmt: statement) (sel: selector) (succ: n
   | Sskip =>
       add_instr (Isel sel succ)
   | Sassign p e =>
+      add_instr (Isel sel succ)
+  | Sassign_variant p id e =>
       add_instr (Isel sel succ)
   | Sbox p e =>
       add_instr (Isel sel succ)

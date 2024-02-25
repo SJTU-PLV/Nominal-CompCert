@@ -39,6 +39,7 @@ Definition typeof_place p :=
   | Pderef _ ty => ty
   end.
 
+
 (** ** Expression *)
 
 Inductive pexpr : Type :=
@@ -59,12 +60,6 @@ Inductive expr : Type :=
 | Emoveget: place -> ident -> type -> expr
 | Epure: pexpr -> expr.
 
-(* evaluate an expr has no side effect. But evaluate a boxexpr may
-allocate a new block *)
-(** Unused  *)
-Inductive boxexpr : Type :=
-| Bexpr: expr -> boxexpr
-| Box: boxexpr -> boxexpr.
 
 Definition typeof_pexpr (pe: pexpr) : type :=
   match pe with
@@ -86,12 +81,6 @@ Definition typeof (e: expr) : type :=
   | Emoveget _ _ ty => ty
   | Epure pe => typeof_pexpr pe
     end.
-
-Fixpoint typeof_boxexpr (r: boxexpr) : type :=
-  match r with
-  | Bexpr e => typeof e
-  | Box r' => Tbox (typeof_boxexpr r') noattr
-  end.
 
 
 (* What Tbox corresponds to? *)
@@ -123,12 +112,13 @@ with to_ctypelist (tyl: typelist) : Ctypes.typelist :=
        | Tcons ty tyl =>
            Ctypes.Tcons (to_ctype ty) (to_ctypelist tyl)
        end.
-                                    
+                                   
 
 Inductive statement : Type :=
 | Sskip : statement                   (**r do nothing *)
 | Slet : ident -> type -> statement -> statement (**r declare a variable. let ident: type in *)
 | Sassign : place -> expr -> statement (**r assignment [place = rvalue] *)
+| Sassign_variant : place -> ident -> expr -> statement (**r assign variant to a place *)
 | Sbox: place -> expr -> statement        (**r box assignment [place = Box::new(expr)]  *)
 | Scall: place -> expr -> list expr -> statement (**r function call, p =
   f(...). The assignee is mandatory, because we need to ensure that
@@ -480,26 +470,6 @@ Definition moved_place_list (el: list expr) : list place :=
        | None => acc
        end) nil el.
 
-(** Unused  *)
-(* Fixpoint moved_place_boxexpr (be: boxexpr) : option place := *)
-(*   match be with *)
-(*   | Box be' => moved_place_boxexpr be' *)
-(*   | Bexpr e => moved_place e *)
-(*   end. *)
-
-
-(* Inductive eval_boxexpr : boxexpr -> val -> mem -> Prop := *)
-(* | eval_Bexpr: forall e v, *)
-(*     eval_expr e v -> *)
-(*     eval_boxexpr (Bexpr e) v m *)
-(* | eval_Box: forall r v m' m'' m''' b ty chunk, *)
-(*     typeof_boxexpr r = ty -> *)
-(*     eval_boxexpr r v m' -> *)
-(*     Mem.alloc m' 0 (sizeof ce ty) = (m'', b) -> *)
-(*     access_mode ty = By_value chunk -> *)
-(*     Mem.store chunk m'' b 0 v = Some m''' -> *)
-(*     eval_boxexpr (Box r) (Vptr b Ptrofs.zero) m'''. *)
-
 End EXPR.
 
 
@@ -829,8 +799,8 @@ Inductive step : state -> trace -> state -> Prop :=
     (* note that the type is the expreesion type, consider [a = 1]
     where a is [variant{int,float} *)
     assign_loc ge ty m2 b ofs v m3 ->
-    step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m3)
-
+    step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m3) 
+         
 | step_assign_variant: forall f e p ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid attr ,
     typeof_place p = ty ->
     typeof e = ty ->
@@ -851,13 +821,13 @@ Inductive step : state -> trace -> state -> Prop :=
     (* assign to p  *)
     (** different from normal assignment: update the tag and assign value *)
     ge.(genv_cenv) ! id = Some co ->
-    type_tag ty co.(co_members) = Some (fid,tag) ->
+    field_tag fid co.(co_members) = Some tag ->
     (* set the tag *)
     Mem.storev Mint32 m2 (Vptr b ofs) (Vint (Int.repr tag)) = Some m3 ->
     field_offset ge fid co.(co_members) = OK (ofs', bf) ->
     (* set the value *)
     assign_loc ge ty m3 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m4 ->
-    step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m4)
+    step (State f (Sassign_variant p fid e) k le own m1) E0 (State f Sskip k le own'' m4)
 
 | step_box: forall f e p ty op k le own1 own2 own3 m1 m2 m3 b v,
     typeof e = ty ->

@@ -470,7 +470,11 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
   match stmt with
   | Sskip => ret Clight.Sskip
   | Sassign p e =>
-      (* we have to consider assignment of variants *)
+      do e' <- expr_to_cexpr e;
+      let lhs := place_to_cexpr p in
+      let ty := typeof e in
+      ret (Clight.Sassign lhs e')      
+  | Sassign_variant p arm_id e =>
       do e' <- expr_to_cexpr e;
       let lhs := place_to_cexpr p in
       let ty := typeof e in
@@ -480,10 +484,10 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
              lhs.2. = e'; *)
           match ce!id, tce!id with
           | Some co, Some tco =>
-              match type_tag ty co.(co_members) with
+              match field_tag arm_id co.(co_members) with
               (* an invariant: arm_id in co is the same as the field
               of type ty in generated union in C code *)
-              | Some (arm_id, tagz) =>
+              | Some tagz =>
                   match tco.(co_su), tco.(Ctypes.co_members) with
                   | Ctypes.Struct, Ctypes.Member_plain tag_id type_int32s :: Ctypes.Member_plain body_id (Tunion union_id attr) :: nil =>
                       let assign_tag := Clight.Sassign (Efield lhs tag_id Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) in
@@ -496,8 +500,7 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
               end
           | _, _ => error [CTX id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
           end
-      | _ =>
-          ret (Clight.Sassign lhs e')
+      | _ => error [CTX (local_of_place p); MSG ": assign a variant to a non variant place "]
       end
   | Sbox p e =>
       (* temp = malloc(sizeof(e));

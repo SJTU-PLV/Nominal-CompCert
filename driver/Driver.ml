@@ -561,6 +561,7 @@ let _ =
       end;
     | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
   else *)
+else
   try
     Gc.set { (Gc.get()) with
                 Gc.minor_heap_size = 524288; (* 512k *)

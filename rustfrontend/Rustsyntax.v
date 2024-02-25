@@ -18,6 +18,8 @@ Require Import LanguageInterface.
 Inductive expr : Type :=
 | Eval (v: val) (ty: type)                                  (**r constant *)
 | Eunit                     (**r unit expression which evaluated to zero  *)
+| Estruct (id: ident) (fl: list ident) (l: exprlist) (ty: type) (**r structure construction  *)
+| Eenum (id: ident) (fid: ident) (e: expr) (ty: type)       (**r enum construction  *)
 | Evar (x: ident) (ty: type)                                (**r variable *)
 | Ebox (r: expr) (ty: type)                                 (**r allocate a heap block *)
 | Efield (l: expr) (f: ident) (ty: type) (**r access to a member of a struct *)
@@ -35,22 +37,25 @@ with exprlist : Type :=
 
 Definition typeof (e: expr) : type :=
   match e with
-  | Eunit => Tunit
+  | Eunit
+  | Eassign _ _ _ =>
+      Tunit
+  | Estruct _ _ _ ty
+  | Eenum _ _ _ ty
   | Eval _ ty
   | Evar _ ty
   | Ebox _ ty
   | Efield _ _ ty
   | Ederef _ ty
   | Eunop _ _ ty
-  | Ebinop _ _ _ ty                  
-  | Eassign _ _ ty
+  | Ebinop _ _ _ ty
   | Ecall _ _ ty => ty
 end.
 
 Inductive statement : Type :=
 | Sskip : statement                   (**r do nothing *)
 | Sdo : expr -> statement            (**r evaluate expression for side effects *)
-| Slet: ident -> type -> statement -> statement  (**r [Slet id ty] opens a new scope with one variable of type ty *)
+| Slet: ident -> type -> option expr -> statement -> statement  (**r [Slet id ty := e] opens a new scope with one variable of type ty *)
 | Ssequence : statement -> statement -> statement  (**r sequence *)
 | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
 | Swhile : expr -> statement -> statement   (**r [while] loop *)
@@ -121,7 +126,8 @@ Notation "'break'" := Sbreak (in custom rustsyntax at level 0) : rustsyntax_scop
 Notation "'continue'" := Scontinue (in custom rustsyntax at level 0) : rustsyntax_scope.
 Notation "'return0'" := (Sreturn None) (in custom rustsyntax at level 0) : rustsyntax_scope.
 Notation "'return' e" := (Sreturn (@Some expr e)) (in custom rustsyntax at level 80, e at level 20) : rustsyntax_scope.
-Notation "'let' x : t 'in' s 'endlet' " := (Slet x t s) (in custom rustsyntax at level 80, s at level 99, x global, t global) : rustsyntax_scope.
+Notation "'let' x : t 'in' s 'endlet' " := (Slet x t None s) (in custom rustsyntax at level 80, s at level 99, x global, t global) : rustsyntax_scope.
+Notation "'let' x : t ':=' e 'in' s 'endlet' " := (Slet x t (Some e) s) (in custom rustsyntax at level 80, s at level 99, x global, t global, e at level 20) : rustsyntax_scope.
 Notation "'loop' s 'endloop'" := (Sloop s) (in custom rustsyntax at level 80, s at level 99) : rustsyntax_scope.
 Notation "'while' e 'do' s 'endwhile'" := (Swhile e s) (in custom rustsyntax at level 80, e at level 20, s at level 99) : rustsyntax_scope.
 Notation "'match' e 'with' 'case' fid 'as' id '=>' stmt 'endmatch' " := (Smatch e (AScons (Some (fid,id)) stmt ASnil)) (in custom rustsyntax at level 80, fid global, id global) : rustsyntax_scope.
@@ -140,6 +146,8 @@ Notation " l := r " := (Eassign l r Tunit) (in custom rustsyntax at level 17, r 
 Notation " { } " := Enil (in custom rustsyntax at level 20) : rustsyntax_scope.
 Notation " { x } " := (Econs x Enil ) (in custom rustsyntax at level 20) : rustsyntax_scope.
 Notation " { x , .. , y } " := (Econs x .. (Econs y Enil) .. ) (in custom rustsyntax at level 20) : rustsyntax_scope.
+Notation " 'struct' '(' s ',' fids ',' args ',' ty ')' " := (Estruct s fids args ty) (in custom rustsyntax at level 10, s global, fids constr, args at level 20, ty global) : rustsyntax_scope.
+Notation " 'enum' '(' s ',' fid ',' arg ',' ty ')' " := (Eenum s fid arg ty) (in custom rustsyntax at level 10, s global, fid global, arg at level 20, ty global) : rustsyntax_scope.
 Notation "'Call' f @ l " := (Ecall f l (return_type (typeof f))) (in custom rustsyntax at level 10, l at level 20, f at level 20) : rustsyntax_scope.
 Notation " e1 < e2 " := (Ebinop Ole e1 e2 type_bool) (in custom rustsyntax at level 15, e2 at level 20, left associativity) : rustsyntax_scope.
 Notation " $ k " := (Eval (Vint (Int.repr k)) type_int32s) (in custom rustsyntax at level 10, k constr) : rustsyntax_scope.
@@ -295,20 +303,20 @@ Definition box_list := Tbox list_ty noattr.
 
 (* Define [pair] composite *)
 
-Definition pair_id := 110%positive.
+Definition list_node_id := 110%positive.
 
 Definition first_id := 111%positive.
 
 Definition second_id := 112%positive.
 
-Definition pair_first := Member_plain first_id type_int32s.
+Definition list_node_first := Member_plain first_id type_int32s.
 
-Definition pair_second_ty := box_list.
+Definition list_node_second_ty := box_list.
 
-Definition pair_second := Member_plain second_id pair_second_ty.
+Definition list_node_second := Member_plain second_id list_node_second_ty.
 
-Definition pair_codef : composite_definition :=
-  Composite pair_id Struct (pair_first :: pair_second :: nil) noattr.
+Definition list_node_codef : composite_definition :=
+  Composite list_node_id Struct (list_node_first :: list_node_second :: nil) noattr.
 
 Definition nil_id := 100%positive.
 
@@ -318,19 +326,19 @@ Definition cons_id := 101%positive.
 
 Definition rcons (ty: type) := Member_plain cons_id ty.
 
-Definition pair_ty := (Tstruct pair_id noattr).
+Definition list_node_ty := (Tstruct list_node_id noattr).
 
 Definition list_codef : composite_definition :=
-  Composite list_id TaggedUnion (rnil :: rcons pair_ty :: nil) noattr.
+  Composite list_id TaggedUnion (rnil :: rcons list_node_ty :: nil) noattr.
 
 Definition list_comp_env : res composite_env :=
-  build_composite_env (pair_codef :: list_codef :: nil).
+  build_composite_env (list_node_codef :: list_codef :: nil).
 
 (* Compute list_comp_env. *)
 
-Program Definition pair_composite : composite :=
+Program Definition list_node_composite : composite :=
   {| co_sv := Struct;
-    co_members := (pair_first :: pair_second :: nil);
+    co_members := (list_node_first :: list_node_second :: nil);
     co_attr := noattr;
     co_sizeof := 16;
     co_alignof := 8;
@@ -345,7 +353,7 @@ Defined.
 
 Program Definition list_composite : composite :=
   {| co_sv := TaggedUnion;
-    co_members := (rnil :: rcons pair_ty :: nil);
+    co_members := (rnil :: rcons list_node_ty :: nil);
     co_attr := noattr;
     co_sizeof := 24;
     co_alignof := 8;
@@ -365,34 +373,49 @@ Definition arm2 := 202%positive.
 
 (* A: box_list, B: int, pop an element and push B, if it is empty, just
 push B, return type is box_list *)
-Definition pop_and_push :=
-  <{ let C: pair_ty in          (* to push *)
-     let D: box_list in          (* return value *)
-     (* C.1 = B *)
-     do (field(C#pair_ty, first_id, type_int32s)) := B#type_int32s;
-     match (!(A#box_list)) with
-     case nil_id as arm1 =>
-       let E: list_ty in       (* convert arm1 to list *)
-       let F: box_list in
-       do (E#list_ty) := (arm1#Tunit); (* variant assignment *)
-       do (F#box_list) := Box(E#list_ty);
-       (* C.2 = F *)
-       do (field(C#pair_ty, second_id, box_list)) := F#box_list
-       endlet
-       endlet                                               
-     case cons_id as arm2 =>
-       (* arm2 has type pair_ty *)
-       (* C.2 = arm.2 *)
-       do (field(C#pair_ty, second_id, box_list)) := (field(arm2#pair_ty, second_id, box_list))
-       (* how to release the popped element *)
-      endmatch;
-      let G: list_ty in
-      do (G#list_ty) := C#pair_ty;
-      do (D#box_list) := Box(G#list_ty);
-      return (D#box_list)
-      endlet endlet endlet
-        }>.
+(* Definition pop_and_push := *)
+(*   <{ let C: list_node_ty in          (* to push *) *)
+(*      let D: box_list in          (* return value *) *)
+(*      (* C.1 = B *) *)
+(*      do (field(C#list_node_ty, first_id, type_int32s)) := B#type_int32s; *)
+(*      match (!(A#box_list)) with *)
+(*      case nil_id as arm1 => *)
+(*        let E: list_ty in       (* convert arm1 to list *) *)
+(*        let F: box_list in *)
+(*        do (E#list_ty) := (arm1#Tunit); (* variant assignment *) *)
+(*        do (F#box_list) := Box(E#list_ty); *)
+(*        (* C.2 = F *) *)
+(*        do (field(C#list_node_ty, second_id, box_list)) := F#box_list *)
+(*        endlet *)
+(*        endlet                                                *)
+(*      case cons_id as arm2 => *)
+(*        (* arm2 has type list_node_ty *) *)
+(*        (* C.2 = arm.2 *) *)
+(*        do (field(C#list_node_ty, second_id, box_list)) := (field(arm2#list_node_ty, second_id, box_list)) *)
+(*        (* how to release the popped element *) *)
+(*       endmatch; *)
+(*       let G: list_ty in *)
+(*       do (G#list_ty) := C#list_node_ty; *)
+(*       do (D#box_list) := Box(G#list_ty); *)
+(*       return (D#box_list) *)
+(*       endlet endlet endlet *)
+(*         }>. *)
 
+Definition pop_and_push :=
+  <{ let C: list_node_ty in     (* C is head *)
+     (* C.1 = B *)
+     do (field(C#list_node_ty, first_id, type_int32s)) := B#type_int32s;
+     match (!(A#box_list)) with
+       case nil_id as arm1 =>       
+       (* C.2 = Box(nil(arm1)) *)
+       do (field(C#list_node_ty, second_id, box_list)) := Box(enum(list_id, nil_id, arm1#Tunit, list_ty))
+       case cons_id as arm2 =>
+       (* C.2 = Box(cons(arm2)) *)
+       do (field(C#list_node_ty, second_id, box_list)) := Box(enum(list_id, cons_id, arm2#list_node_ty, list_ty))
+      endmatch;
+     return Box(enum(list_id, cons_id, C#list_node_ty, list_ty))
+     endlet }>.
+            
 Definition pop_and_push_func : function :=
   {| fn_return := box_list;
     fn_callconv := cc_default;
@@ -403,22 +426,20 @@ Definition pop_and_push_fundef : globdef (Rusttypes.fundef function) type :=
   Gfun (Internal pop_and_push_func).
 
 Definition pop_and_push_comp_env : composite_env :=
-  PTree.set list_id list_composite (PTree.set pair_id pair_composite (PTree.empty composite)).
+  PTree.set list_id list_composite (PTree.set list_node_id list_node_composite (PTree.empty composite)).
 
 Definition pop_and_push_ident : ident := 300%positive.
 Definition pop_and_push_ty : type := Tfunction (Tcons box_list (Tcons type_int32s Tnil)) box_list cc_default.
 
+Import ListNotations.
+
 (* main function *)
 Definition main_body :=
-  <{ let A : list_ty in
-     do (A#list_ty) := tt;
-     let B : pair_ty in
-     do (field(B#pair_ty, first_id, type_int32s)) := $42;
-     do (field(B#pair_ty, second_id, box_list)) := Box(A#list_ty);
-     do (A#list_ty) := (B#pair_ty);
-     let C : box_list in
-     do (C#box_list) := Box(A#list_ty);
-     do (C#box_list) := Call (pop_and_push_ident#pop_and_push_ty) @ {(C#box_list), ($-2)};
+  <{ let A : list_ty := enum(list_id, nil_id, tt, list_ty) in     
+     let B : list_node_ty := struct(list_node_id, [first_id;second_id], {$42, Box(A#list_ty)}, list_node_ty) in
+     do (A#list_ty) := enum(list_id, cons_id, B#list_node_ty, list_ty);
+     let C : box_list := Box(A#list_ty) in
+     do (C#box_list) := Call (pop_and_push_ident#pop_and_push_ty) @ {(C#box_list), ($-2)}; 
      return ($0)
      endlet endlet endlet }>.
 
@@ -432,7 +453,7 @@ Definition main_fundef : globdef (Rusttypes.fundef function) type := Gfun (Inter
 
 Definition main_ident : ident := 301%positive.
 
-Definition pop_and_push_comp_defs := (pair_codef :: list_codef :: nil).
+Definition pop_and_push_comp_defs := (list_node_codef :: list_codef :: nil).
 
 Definition wf_composites (types: list composite_definition) : Prop :=
   match build_composite_env types with OK _ => True | Error _ => False end.

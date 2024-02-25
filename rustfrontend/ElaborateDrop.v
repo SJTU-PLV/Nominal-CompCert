@@ -284,6 +284,7 @@ Definition add_dropflag_list (l: list place) (flag: bool) : statement :=
 Fixpoint transl_stmt (stmt: statement) : statement :=
   match stmt with
   | Sassign p e
+  | Sassign_variant p _ e
   | Sbox p e =>
       let deinit := moved_place e in
       let stmt1 := add_dropflag_option deinit false in

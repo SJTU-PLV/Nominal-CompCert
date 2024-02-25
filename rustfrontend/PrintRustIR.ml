@@ -17,6 +17,8 @@ let rec print_stmt p (s: RustIR.statement) =
     fprintf p "/*skip*/"
   | Sassign(v, e) ->
     fprintf p "@[<hv 2>%a =@ %a;@]" print_place v print_expr e
+  | Sassign_variant (v, id, e) ->
+    fprintf p "@[<hv 2>%a =@ %s(%a);@]" print_place v (extern_atom id) print_expr e
   | Scall(v, e1, el) ->
     fprintf p "@[<hv 2>%a =@ %a@,(@[<hov 0>%a@]);@]"
               print_place v
