@@ -369,13 +369,12 @@ Inductive step: state -> trace -> state -> Prop :=
   | step_skip_block: forall f k e le m,
       step (State f Sskip (Kblock k) e le m)
         E0 (State f Sskip k e le m)
-  | step_skip_call: forall f k e le m m' m'' m''',
+  | step_skip_call: forall f k e le m m' m'',
       is_call_cont k ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
-      Mem.return_frame m' = Some m'' ->
-      Mem.pop_stage m'' = Some m''' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State f Sskip k e le m)
-        E0 (Returnstate Vundef k m''')
+        E0 (Returnstate Vundef k m'')
 
   | step_set: forall f id a k e le m v,
       eval_expr e le m a v ->
@@ -438,19 +437,17 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sswitch islong a cases) k e le m)
         E0 (State f (seq_of_lbl_stmt (select_switch n cases)) k e le m)
 
-  | step_return_0: forall f k e le m m' m'' m''',
+  | step_return_0: forall f k e le m m' m'',
       Mem.free_list m (blocks_of_env e) = Some m' ->
-      Mem.return_frame m' = Some m'' ->
-      Mem.pop_stage m'' = Some m''' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State f (Sreturn None) k e le m)
-        E0 (Returnstate Vundef (call_cont k) m''')
-  | step_return_1: forall f a k e le m v m' m'' m''',
+        E0 (Returnstate Vundef (call_cont k) m'')
+  | step_return_1: forall f a k e le m v m' m'',
       eval_expr e le m a v ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
-      Mem.return_frame m' = Some m'' ->
-      Mem.pop_stage m'' = Some m''' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State f (Sreturn (Some a)) k e le m)
-        E0 (Returnstate v (call_cont k) m''')
+        E0 (Returnstate v (call_cont k) m'')
   | step_label: forall f lbl s k e le m,
       step (State f (Slabel lbl s) k e le m)
         E0 (State f s k e le m)
@@ -460,12 +457,11 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k e le m)
         E0 (State f s' k' e le m)
 
-  | step_internal_function: forall f vargs k m m0 m1 m2 e le id path,
+  | step_internal_function: forall f vargs k m m1 m2 e le id,
       list_norepet (map fst f.(fn_vars)) ->
       list_norepet f.(fn_params) ->
       list_disjoint f.(fn_params) f.(fn_temps) ->
-      Mem.alloc_frame m id = (m0,path) ->
-      alloc_variables empty_env m0 (fn_vars f) e m1 ->
+      alloc_variables empty_env m (fn_vars f) e m1 ->
       Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id )) = Some m2 ->
       bind_parameters f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
       step (Callstate (Internal f) vargs k m id)
