@@ -859,6 +859,7 @@ Lemma external_call_parallel_rule:
   /\ m2' |= minjection j' m1' ** globalenv_inject ge j' ** P
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m2
+  /\ incr_without_glob j j'
   /\ Mem.inject j' m1' m2'.
 Proof.
   intros until vargs2; intros CALL SEP ARGS.

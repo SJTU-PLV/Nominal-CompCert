@@ -684,224 +684,12 @@ Proof.
   exploit H2; eauto. eapply Mem.valid_block_alloc; eauto.
 Qed.
 
-
-(*Section SINJ.
-Definition posenv := PTree.t positive.
-Definition empty_posenv : posenv := PTree.empty positive.
-
-Fixpoint build_penv (ce:compilenv) (vars:list (ident*type)) (idx1 idx2 : positive) : posenv :=
-  match vars with
-    |nil => empty_posenv
-    |(id,ty)::l0 => if VSet.mem id ce then build_penv ce l0 (Pos.succ idx1) (idx2)
-                   else (PTree.set idx1 idx2 (build_penv ce l0 (Pos.succ idx1) (Pos.succ idx2)))
-  end.
-
-Lemma build_penv_low : forall ce vars idx1 idx2 id,
-    (id < idx1)%positive ->
-    PTree.get id (build_penv ce vars idx1 idx2) = None.
-Proof.
-  induction vars; intros; simpl. apply PTree.gempty.
-  simpl. destr. destr. apply IHvars. lia.
-  rewrite PTree.gso. apply IHvars. lia. lia.
-Qed.
-
-Definition find_func_pos (fid:ident)( pos: positive) : option positive:=
-  match Genv.find_funct_ptr ge (Global fid) with
-    |Some ((Internal f)) =>
-  let cenv := cenv_for f in
-  let penv := build_penv cenv ((f.(fn_params) ++ f.(fn_vars))) 1%positive 1%positive  in
-    PTree.get pos penv
-    |_ => None
-  end.
-
-Definition unchecked_meminj : meminj :=
-  fun b => match b with
-    |Stack (Some id) path pos =>
-      match find_func_pos id pos with
-        | Some pos' => Some(Stack (Some id) path pos',0)
-        | None => None
-      end
-    |_ => Some (b,0)
-    end.
-
-Definition struct_meminj (s:sup) : meminj :=
-  fun b => if Mem.sup_dec b s then
-           unchecked_meminj b else None.
-
-Lemma sinj_refl:
-  forall s1 s2, (forall b, sup_In b s1 <-> sup_In b s2) ->
-           struct_meminj s1= struct_meminj s2.
-Proof.
-  intros.
-  apply Axioms.extensionality.
-  intros. destruct x; unfold struct_meminj; simpl.
-  destruct (Mem.sup_dec (Stack f p p0) s1);
-  destruct (Mem.sup_dec (Stack f p p0) s2).
-  auto. apply H in s. congruence.
-  apply H in s. congruence. auto.
-  destr; destr. apply H in s. congruence.
-  apply H in s. congruence.
-Qed.
-
-Lemma sinj_include_incr :forall s1 s2, Mem.sup_include s1 s2 -> inject_incr (struct_meminj s1) (struct_meminj s2).
-Proof.
-  intros. intro. intros. unfold struct_meminj in *.
-  destruct b; simpl in *.
-  destruct (Mem.sup_dec (Stack f p p0) s1);
-  destruct (Mem.sup_dec (Stack f p p0) s2).
-  auto. apply H in s. congruence. inv H0. inv H0.
-  destr. destr_in H0. destr_in H0.
-  inv H0. apply H in s. congruence.
-Qed.
-
-Inductive alloc_variables' (ge:genv): env -> mem -> list (ident * type) -> list block -> env -> mem -> Prop :=
-  |av_nil : forall e m, alloc_variables' ge e m nil nil e m
-  |av_cons : forall e m id ty vars m1 b1 m2 e2 blocks,
-      Mem.alloc m 0 (sizeof ge ty) = (m1,b1) ->
-      alloc_variables' ge (PTree.set id (b1,ty) e) m1 vars blocks e2 m2 ->
-      alloc_variables' ge e m ((id,ty)::vars) (b1::blocks) e2 m2.
-
-
-Lemma alloc_vars_fresh' : forall ge e1 m1 vars blocks e2 m2 b ,
-    alloc_variables' ge e1 m1 vars blocks e2 m2 ->
-    In b blocks -> ~ sup_In b (Mem.support m1).
-Proof.
-  intros. induction H. inv H0.
-  inv H0. eapply Mem.fresh_block_alloc; eauto.
-  intro. apply IHalloc_variables'. auto.
-  eapply Mem.valid_block_alloc; eauto.
-Qed.
-
-Lemma valid_block_alloc_vars' : forall ge e1 m1 vars blocks e2 m2 b,
-    alloc_variables' ge e1 m1 vars blocks e2 m2 ->
-    sup_In b (Mem.support m1) -> sup_In b (Mem.support m2).
-Proof.
-  intros. induction H. auto.
-  eapply Mem.valid_block_alloc in H; eauto.
-Qed.
-
-Lemma alloc_vars_valid' : forall ge e1 m1 vars blocks e2 m2 b ,
-    alloc_variables' ge e1 m1 vars blocks e2 m2 ->
-    In b blocks -> sup_In b (Mem.support m2).
-Proof.
-  intros. induction H. inv H0.
-  inv H0.
-  eapply valid_block_alloc_vars' in H1; eauto.
-  eapply Mem.valid_new_block; eauto.
-  eauto.
-Qed.
-
-Lemma alloc_vars_inv'  : forall ge e1 m1 vars blocks e2 m2 b ,
-    alloc_variables' ge e1 m1 vars blocks e2 m2 ->
-    sup_In b (Mem.support m1) \/In b blocks <-> sup_In b (Mem.support m2).
-Proof.
-  intros. split. intros [A|B].
-  eapply valid_block_alloc_vars'; eauto.
-  eapply alloc_vars_valid'; eauto.
-  intros. induction H. eauto.
-  apply IHalloc_variables' in H0. inv H0.
-  destruct (eq_block b b1). right. left. auto.
-  left. exploit Mem.valid_block_alloc_inv; eauto.
-  intros. inv H0. congruence. auto. right. right. auto.
-Qed.
-
-Lemma alloc_var_var' : forall ge e1 m1 vars e2 m2,
-    alloc_variables ge e1 m1 vars e2 m2 ->
-    exists blocks, alloc_variables' ge e1 m1 vars blocks e2 m2 /\
-               list_norepet blocks.
-Proof.
-  intros. induction H.
-  exists nil. split. constructor. constructor.
-  destruct IHalloc_variables as (blocks & A & B).
-  exists (b1::blocks). split. econstructor; eauto.
-  constructor; auto. intro. apply alloc_vars_fresh' with (b:=b1)in A; auto.
-  apply A. eapply Mem.valid_new_block; eauto.
-Qed.
-
-Lemma alloc_var'_var : forall ge e1 m1 vars blocks e2 m2,
-    alloc_variables' ge e1 m1 vars blocks e2 m2 ->
-    alloc_variables ge e1 m1 vars e2 m2.
-Proof.
-  intros. induction H. constructor.
-  econstructor; eauto.
-Qed.
-
-End SINJ.
- *)
-(*
-Definition nextblock_pos (m:mem) (p:positive) : Prop :=
-  exists id path, Mem.nextblock m = Stack id path p.
-
-Definition match_penv_meminj (b:block) (pe:posenv) (f:meminj) : Prop :=
-  exists id path pos, b = Stack id path pos /\
-                 (f b = match pe ! pos with
-                          |Some pos' => Some ((Stack id path pos'),0)
-                          |None => None
-                 end ).
-
-Lemma nextblock_pos_succ : forall m m1 lo hi p b,
-    nextblock_pos m p ->
-    Mem.alloc m lo hi = (m1,b) ->
-    nextblock_pos m1 (Pos.succ p).
-Proof.
-  intros.
-  caseEq (Mem.alloc m1 lo hi). intros.
-  destruct H as (id & path & H). apply Mem.alloc_result in H0 as H0'. subst.
-  exploit Mem.alloc_alloc. apply H0. apply H1. eauto. intro.
-  exists id,path.
-  apply Mem.alloc_result in H1 as H1'. subst. eauto.
-Qed.
-
-Lemma nextblock_pos_1 : forall m m1 id path,
-    Mem.alloc_frame m id = (m1,path) ->
-    nextblock_pos m1 1.
-Proof.
-  intros. caseEq (Mem.alloc m1 1 1). intros.
-  exploit Mem.alloc_frame_alloc; eauto. intro.
-  apply Mem.alloc_result in H0. exists (Some id),path. congruence.
-Qed.
-
-Lemma alloc_nextblock : forall m m1 lo hi b id path p,
-    Mem.nextblock m = Stack id path p ->
-    Mem.alloc m lo hi = (m1,b) ->
-    Mem.nextblock m1 = Stack id path (Pos.succ p).
-Proof.
-  intros. caseEq (Mem.alloc m1 0 0). intros.
-  exploit Mem.alloc_alloc. apply H0. eauto.
-  apply Mem.alloc_result in H0. subst. eauto. intro.
-  apply Mem.alloc_result in H1. congruence.
-Qed.
-
-Lemma nextblock_alloc_vars :
-  forall m1 m2 ge e1 e2 vars blocks,
-    alloc_variables' ge e1 m1 vars blocks e2 m2 ->
-    forall id path p,
-    Mem.nextblock m1 = Stack id path p ->
-    (forall b, In b blocks ->
-          exists p', b = Stack id path p' /\ (p <= p')%positive).
-Proof.
-  induction 1.
-  intros. inv H0.
-  intros. inv H2.
-  - apply Mem.alloc_result in H. subst. rewrite H1.
-    exists p. split. auto. lia.
-  - exploit alloc_nextblock; eauto. intro.
-    eapply IHalloc_variables' in H2. destruct H2 as (p' & A & B).
-    exists p'. split. eauto. lia. auto.
-Qed.
- *)
-
 Lemma match_alloc_variables:
   forall cenv e m vars e' m',
   alloc_variables ge e m vars e' m' ->
   forall j tm te,
   list_norepet (var_names vars) ->
   Mem.inject j m tm ->
-(*  Mem.stackseq m tm ->
-  pe = build_penv cenv vars idx1 idx2 ->
-  nextblock_pos m idx1 ->
-  nextblock_pos tm idx2 ->
-*)
   exists j', exists te', exists tm',
       alloc_variables tge te tm (remove_lifted cenv vars) te' tm'
   /\ Mem.inject j' m' tm'
@@ -916,8 +704,8 @@ Lemma match_alloc_variables:
        /\ if VSet.mem id cenv
           then te'!id = te!id /\ j' b = None
           else exists tb, te'!id = Some(tb, ty) /\ j' b = Some(tb, 0))
-  /\ (forall id, ~In id (var_names vars) -> e'!id = e!id /\ te'!id = te!id).
-(*  /\ (forall b, In b blocks -> match_penv_meminj b pe j').*)
+  /\ (forall id, ~In id (var_names vars) -> e'!id = e!id /\ te'!id = te!id)
+  /\ incr_without_glob j j'.
 Proof.
   induction 1; intros.
   (* base case *)
@@ -925,7 +713,7 @@ Proof.
   split. constructor.
   split. auto. split. auto. split. auto.  split. auto.
   split. intros. elim H2. eapply Mem.mi_mappedblocks; eauto.
-  split. tauto. tauto.
+  split. tauto. split. tauto. red. intros. congruence.
 
   (* inductive case *)
   simpl in H1. inv H1. simpl.
@@ -936,7 +724,7 @@ Proof.
   intros [j1 [A [B [C D]]]].
   exploit IHalloc_variables; eauto.
   instantiate (1 := te).
-  intros [j' [te' [tm' [J [K [L [M [N [Q [O P]]]]]]]]]].
+  intros [j' [te' [tm' [J [K [L [M [N [O [P [Q R]]]]]]]]]]].
   exists j'; exists te'; exists tm'.
   split. auto.
   split. auto.
@@ -947,41 +735,33 @@ Proof.
     destruct (eq_block b b1); auto. subst.
     assert (j' b1 = j1 b1). apply M. eapply Mem.valid_new_block; eauto.
     congruence.
-  split. exact Q.
+  split. exact O.
   split. intros. destruct (ident_eq id0 id).
     (* same var *)
     subst id0.
     assert (ty0 = ty).
       destruct H1. congruence. elim H5. unfold var_names. change id with (fst (id, ty0)). apply in_map; auto.
     subst ty0.
-    exploit P; eauto. intros [X Y]. rewrite Heqb. rewrite X. rewrite Y.
+    exploit Q; eauto. intros [X Y]. rewrite Heqb. rewrite X. rewrite Y.
     exists b1. split. apply PTree.gss.
     split. auto.
     rewrite M. auto. eapply Mem.valid_new_block; eauto.
     (* other vars *)
-    eapply O; eauto. destruct H1. congruence. auto.
-   intros. exploit (P id0). tauto. intros [X Y]. rewrite X; rewrite Y.
+    eapply P; eauto. destruct H1. congruence. auto.
+    split.
+    intros. exploit (Q id0). tauto. intros [X Y]. rewrite X; rewrite Y.
     split; auto. apply PTree.gso. intuition.
- (* intros. inv H1. unfold match_penv_meminj.
-  exploit Mem.alloc_result; eauto. intro.
-  destruct H5 as (fid & path & H5). rewrite H5 in H1.
-  exists fid,path,idx1. split. congruence.
-  rewrite M. rewrite C. rewrite build_penv_low. auto. lia.
-  eapply Mem.valid_new_block. eauto.
-  eauto. *)
+    (* incr without glob*)
+    red. intros. destruct (eq_block b b1). subst.
+    eapply R; eauto. eapply R; eauto. erewrite D; eauto.
 -
   (* variable is not lifted out of memory *)
   exploit Mem.alloc_parallel_inject.
     eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros [j1 [tm1 [tb1 [A [B [C [D E]]]]]]].
   exploit IHalloc_variables; eauto.
-  (* eapply struct_eq_trans. eapply struct_eq_comm.
-  eapply Mem.alloc_stackseq; eauto.
-  eapply struct_eq_trans; eauto. eapply Mem.alloc_stackseq; eauto.
-  eapply nextblock_pos_succ. apply H5. eauto.
-  eapply nextblock_pos_succ. apply H6. eauto. *)
   instantiate (1 := PTree.set id (tb1, ty) te).
-  intros [j' [te' [tm' [J [K [L [M [N [Q [O P]]]]]]]]]].
+  intros [j' [te' [tm' [J [K [L [M [N [O [P [Q R]]]]]]]]]]].
   exists j'; exists te'; exists tm'.
   split. simpl. econstructor; eauto. rewrite comp_env_preserved; auto.
   split. auto.
@@ -994,12 +774,12 @@ Proof.
     rewrite H4 in H1. rewrite D in H1. inv H1. eelim Mem.fresh_block_alloc; eauto.
   split. intros. destruct (eq_block b' tb1).
     subst b'. rewrite (N _ _ _ H1) in H1.
-    destruct (eq_block b b1). subst b. rewrite D in H1; inv H1.
-    exploit (P id); auto. intros [X Y]. exists id; exists ty.
+    destruct (eq_block b b1). subst b. rewrite D in H1; inv H1. 
+    exploit (Q id); eauto. intros [X Y]. exists id; exists ty.
     rewrite X; rewrite Y. repeat rewrite PTree.gss. auto.
     rewrite E in H1; auto. elim H3. eapply Mem.mi_mappedblocks; eauto.
     eapply Mem.valid_new_block; eauto.
-    eapply Q; eauto. unfold Mem.valid_block in *.
+    eapply O; eauto. unfold Mem.valid_block in *.
     intro. eapply Mem.valid_block_alloc_inv in H4. destruct H4. eauto.
     eauto. eauto.
   split. intros. destruct (ident_eq id0 id).
@@ -1008,34 +788,21 @@ Proof.
     assert (ty0 = ty).
       destruct H1. congruence. elim H5. unfold var_names. change id with (fst (id, ty0)). apply in_map; auto.
     subst ty0.
-    exploit P; eauto. intros [X Y]. rewrite Heqb. rewrite X. rewrite Y.
+    exploit Q; eauto. intros [X Y]. rewrite Heqb. rewrite X. rewrite Y.
     exists b1. split. apply PTree.gss.
     exists tb1; split.
     apply PTree.gss.
     rewrite M. auto. eapply Mem.valid_new_block; eauto.
     (* other vars *)
-    exploit (O id0 ty0). destruct H1. congruence. auto.
+    exploit (P id0 ty0). destruct H1. congruence. auto.
     rewrite PTree.gso; auto.
-  intros. exploit (P id0). tauto. intros [X Y]. rewrite X; rewrite Y.
+    split.
+    intros. exploit (Q id0). tauto. intros [X Y]. rewrite X; rewrite Y.
     split; apply PTree.gso; intuition.
-(*  intros. inv H1. unfold match_penv_meminj.
-  exploit Mem.alloc_result. apply H. intro.
-  exploit Mem.alloc_result. apply A. intro.
-  destruct H5 as (id0 & path0 & H5).
-  destruct H6 as (id1 & path1 & H6).
-  exploit Mem.stackseq_id_path; eauto. intros. inv H7.
-  exists id1 ,path1,idx1. split. congruence.
-  rewrite PTree.gss. rewrite M. rewrite D. rewrite H6. auto.
-  eapply Mem.valid_new_block. eauto.
-  exploit R; eauto. intros. unfold match_penv_meminj in H1.
-  destruct H1 as (id1 & path1 & pos1 & X & Y).
-  unfold match_penv_meminj. exists id1,path1,pos1. split. auto.
-  rewrite PTree.gso. eauto.
-  exploit nextblock_pos_succ. apply H5. eauto. intro.
-  assert (pos1 >= Pos.succ idx1)%positive.
-  destruct H1 as (id0 &path0 & H1).
-  exploit nextblock_alloc_vars; eauto. intros (p' & X' & Y').
-  rewrite X in X'. inv X'. lia. lia. *)
+    red. intros. destruct (eq_block b b1). subst. erewrite L in H3; eauto.
+    inv H3.
+    split; eapply Mem.alloc_result_stack; eauto.
+    eapply R; eauto. erewrite E; eauto.
 Qed.
 
 Lemma alloc_variables_load:
@@ -1222,12 +989,12 @@ Theorem match_envs_alloc_variables:
   /\ inject_incr j j'
   /\ (forall b, Mem.valid_block m b -> j' b = j b)
   /\ (forall b b' delta, j' b = Some(b', delta) -> Mem.valid_block tm b' -> j' b = j b)
-  /\ (forall id ty, In (id, ty) vars -> VSet.mem id cenv = false -> exists b, te!id = Some(b, ty)).
-(*  /\ (forall b, In b blocks -> match_penv_meminj b pe j'). *)
+  /\ (forall id ty, In (id, ty) vars -> VSet.mem id cenv = false -> exists b, te!id = Some(b, ty))
+  /\ incr_without_glob j j'. 
 Proof.
   intros.
   exploit (match_alloc_variables cenv); eauto. instantiate (1 := empty_env).
-  intros [j' [te [tm' [A [B [C [D [E [K [F G]]]]]]]]]].
+  intros [j' [te [tm' [A [B [C [D [E [K [F [G I]]]]]]]]]]].
   exists j'; exists te; exists tm'.
   split. auto. split; auto.
   constructor; intros.
@@ -2079,6 +1846,10 @@ Qed.
 
 (** Relating execution states *)
 
+Definition meminj_global (j:meminj) : Prop :=
+  forall id b delta, j (Global id) = Some (b,delta) ->
+                b = Global id /\ delta = 0.
+
 Inductive match_states: state -> state -> Prop :=
   | match_regular_states:
       forall f s k e le m tf ts tk te tle tm j lo hi tlo thi
@@ -2087,8 +1858,7 @@ Inductive match_states: state -> state -> Prop :=
         (MENV: match_envs j (cenv_for f) e le m lo hi te tle tlo thi)
         (MCONT: match_cont j (cenv_for f) k tk m lo tlo)
         (MINJ: Mem.inject j m tm)
-        (* (VINJ: j = struct_meminj (Mem.support m)) *)
-        (* (MSTK: Mem.stackseq m tm) *)
+        (INJG: meminj_global j)
         (MASTK: Mem.astack (Mem.support m) = Mem.astack (Mem.support tm))
         (COMPAT: compat_cenv (addr_taken_stmt s) (cenv_for f))
         (BOUND: Mem.sup_include hi (Mem.support m))
@@ -2101,8 +1871,7 @@ Inductive match_states: state -> state -> Prop :=
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (FIND: Genv.find_funct_ptr ge (Global id) = Some fd)
         (MINJ: Mem.inject j m tm)
-        (* (VINJ: j = struct_meminj (Mem.support m))
-        (MSTK: Mem.stackseq m tm) *)
+        (INJG: meminj_global j)
         (MASTK: Mem.astack (Mem.support m) = Mem.astack (Mem.support tm))
         (AINJ: Val.inject_list j vargs tvargs)
         (FUNTY: type_of_fundef fd = Tfunction targs tres cconv)
@@ -2113,8 +1882,7 @@ Inductive match_states: state -> state -> Prop :=
       forall v k m tv tk tm j
         (MCONT: forall cenv, match_cont j cenv k tk m (Mem.support m) (Mem.support tm))
         (MINJ: Mem.inject j m tm)
-        (* (VINJ: j = struct_meminj (Mem.support m))
-        (MSTK: Mem.stackseq m tm) *)
+        (INJG: meminj_global j)
         (MASTK: Mem.astack (Mem.support m) = Mem.astack (Mem.support tm))
         (RINJ: Val.inject j v tv),
       match_states (Returnstate v k m)
@@ -2344,20 +2112,18 @@ Qed.
 
 End FIND_LABEL.
 
-(*
-Lemma sinj_external_call :
-  forall m m' tm tm' f f' vargs tvargs vres tvres ef ge t,
-    Mem.inject f m tm ->
-    Mem.stackseq m tm ->
-    external_call ef ge vargs m t vres m' ->
-    external_call ef ge tvargs tm t tvres tm' ->
-    Val.inject_list f vargs tvargs ->
-    Mem.inject f' m' tm' ->
-    f = struct_meminj (Mem.support m) ->
-    Mem.stackseq m' tm' /\
-    f' = struct_meminj (Mem.support m').
+Lemma meminj_global_incr : forall j j',
+    meminj_global j ->
+    inject_incr j j' ->
+    incr_without_glob j j' ->
+    meminj_global j'.
 Proof.
-*)
+  intros.
+  unfold meminj_global in *. intros.
+  destruct (j (Global id)) as [[b' d]|] eqn:Hj.
+  eapply H; eauto. erewrite H0 in H2; eauto. inv H2. eauto.
+  exploit H1; eauto. intros [A B]. inv A.
+Qed.
 
 Lemma step_simulation:
   forall S1 t S2, step1 fn_stack_requirements ge S1 t S2 ->
@@ -2422,9 +2188,8 @@ Proof.
   rewrite typeof_simpl_expr. eauto.
   instantiate (1:=id).
   instantiate (1:=tvf).
-  admit.
-  (*inv B. unfold struct_meminj in H6. destr_in H6. simpl in H6. inv H6.
-  auto. *)
+  inv B. exploit INJG; eauto. intros [X Y].
+  subst. reflexivity.
   eauto. eauto. eauto.
   erewrite type_of_fundef_preserved; eauto.
   econstructor; eauto.
@@ -2434,7 +2199,6 @@ Proof.
   exploit eval_simpl_exprlist; eauto with compat. intros [CASTED [tvargs [C D]]].
   exploit external_call_mem_inject'; eauto. apply match_globalenvs_preserves_globals; eauto with compat.
   intros [j' [tvres [tm' [P [Q [R [S [T [U [V W]]]]]]]]]].
-  (* exploit sinj_external_call. apply MINJ. all: eauto. intros [Y Z]. *)
   econstructor; split.
   apply plus_one. econstructor; eauto. eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   econstructor; eauto with compat.
@@ -2443,7 +2207,7 @@ Proof.
   eapply match_cont_extcall; eauto.
   inv MENV. eapply Mem.sup_include_trans. eauto. eauto.
   inv MENV; eapply Mem.sup_include_trans. eauto. eauto.
-(*  eapply external_call_mem_inject_stackseq; eauto. eapply match_globalenvs_preserves_globals. eauto with compat. *)
+  eapply meminj_global_incr; eauto.
   eapply external_call_astack in P.
   eapply external_call_astack in H0. congruence.
   eapply Mem.sup_include_trans; eauto. eapply external_call_support; eauto.
@@ -2507,11 +2271,6 @@ Proof.
   intro. eapply Mem.support_pop_stage_1 in P''. apply P''.
   intros. erewrite Mem.load_pop_stage. 2: eauto.
   eauto. eauto. eauto. eauto.
-(*  eapply sinj_refl. erewrite <- free_list_support; eauto.
-  etransitivity.
-  eapply Mem.support_return_frame_1 in H0. apply H0.
-  eapply Mem.support_pop_stage_1; eauto.
-  unfold Mem.stackseq in *. congruence. *)
   apply Mem.astack_pop_stage in H0. apply Mem.astack_pop_stage in P''.
   destruct H0 as [a b]. destruct P'' as [c d]. congruence.
 
@@ -2536,11 +2295,6 @@ Proof.
   intro. eapply Mem.support_pop_stage_1 in P''. apply P''.
   intros. erewrite Mem.load_pop_stage. 2: eauto.
   eauto. eauto. eauto. eauto.
-  (* eapply sinj_refl. erewrite <- free_list_support; eauto.
-  etransitivity.
-  eapply Mem.support_return_frame_1 in H2. apply H2.
-  eapply Mem.support_pop_stage_1; eauto.
-  unfold Mem.stackseq in *. congruence. *)
   apply Mem.astack_pop_stage in H2. apply Mem.astack_pop_stage in P''.
   destruct H2 as [a' b]. destruct P'' as [c d]. congruence.
 
@@ -2564,11 +2318,6 @@ Proof.
   intro. eapply Mem.support_pop_stage_1 in P''. apply P''.
   intros. erewrite Mem.load_pop_stage. 2: eauto.
   eauto. eauto. eauto. eauto.
-(*  eapply sinj_refl. erewrite <- free_list_support; eauto.
-  etransitivity.
-  eapply Mem.support_return_frame_1 in H1. apply H1.
-  eapply Mem.support_pop_stage_1; eauto.
-  unfold Mem.stackseq in *. congruence. *)
   apply Mem.astack_pop_stage in H1. apply Mem.astack_pop_stage in P''.
   destruct H1. destruct P''. congruence.
 
@@ -2618,7 +2367,7 @@ Proof.
     instantiate (1 := cenv_for_gen (addr_taken_stmt f.(fn_body)) (fn_params f ++ fn_vars f)).
     intros. eapply cenv_for_gen_by_value; eauto. rewrite VSF.mem_iff. eexact H5.
     intros. eapply cenv_for_gen_domain. rewrite VSF.mem_iff. eexact H4.
-  intros [j' [te [tm2 [A [B [C [D [E [F G]]]]]]]]].
+  intros [j' [te [tm2 [A [B [C [D [E [F [G I]]]]]]]]]].
   exploit alloc_variables_parallel_astackeq. apply H1. apply A. eauto. intro.
   exploit Mem.push_stage_inject; eauto. intro.
   exploit Mem.record_frame_parallel_inject; eauto. simpl. congruence.
@@ -2661,6 +2410,7 @@ Proof.
   exploit alloc_variables_range. eexact H1. eauto.
   unfold empty_env. rewrite PTree.gempty. intros [?|?]. congruence.
   red; intros; subst b'. destruct H10. congruence.
+  eapply meminj_global_incr; eauto.
   rewrite T. rewrite (bind_parameters_support _ _ _ _ _ _ H3).
   apply Mem.astack_record_frame in H2. apply Mem.astack_record_frame in L.
   destruct H2 as [a [b [c d]]]. destruct L as [h [i [l' k']]]. simpl in *.
@@ -2674,7 +2424,6 @@ Proof.
   exploit external_call_mem_inject'; eauto. apply match_globalenvs_preserves_globals.
   eapply match_cont_globalenv. eexact (MCONT VSet.empty).
   intros [j' [tvres [tm' [P [Q [R [S [T [U [V W]]]]]]]]]].
-(*  exploit sinj_external_call. apply MINJ. all: eauto. intros [X Y]. *)
   econstructor; split.
   apply plus_one. econstructor; eauto. eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   econstructor; eauto.
@@ -2683,6 +2432,7 @@ Proof.
   apply Mem.sup_include_refl. apply Mem.sup_include_refl.
   eapply external_call_support; eauto.
   eapply external_call_support; eauto.
+  eapply meminj_global_incr; eauto.
   eapply external_call_astack in H.
   eapply external_call_astack in P. congruence.
 
@@ -2692,7 +2442,7 @@ Proof.
   apply plus_one. econstructor.
   econstructor; eauto with compat.
   eapply match_envs_set_opttemp; eauto.
-Admitted.
+Qed.
 
 Lemma initial_states_simulation:
   forall S, initial_state prog S ->
@@ -2728,6 +2478,7 @@ Proof.
   eapply Genv.find_var_info_not_fresh; eauto.
   apply Mem.sup_include_refl. apply Mem.sup_include_refl.
   apply Genv.genv_vars_eq in H1. subst. auto.
+  unfold Mem.flat_inj. red. intros. destr_in H.
   constructor.
   generalize (match_program_main (proj1 TRANSF)). simpl; auto.
 Qed.

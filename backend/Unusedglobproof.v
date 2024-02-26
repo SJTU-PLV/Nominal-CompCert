@@ -509,6 +509,9 @@ Qed.
 (** Injections that preserve used globals. *)
 
 Record meminj_preserves_globals (f: meminj) : Prop := {
+  symbols_inject_0: forall id b' delta,
+    f (Global id) = Some (b', delta) -> sup_In (Global id) (Genv.genv_sup ge) ->
+      b' = Global id /\ delta = 0;  
   symbols_inject_1: forall id b b' delta,
     f b = Some(b', delta) -> Genv.find_symbol ge id = Some b ->
     delta = 0 /\ Genv.find_symbol tge id = Some b';
@@ -561,6 +564,10 @@ Lemma init_meminj_preserves_globals:
   meminj_preserves_globals init_meminj.
 Proof.
   constructor; intros.
+- unfold init_meminj in H. repeat destr_in H.
+  apply Genv.invert_find_symbol in Heqo.
+  apply Genv.genv_vars_eq in Heqo.
+  apply Genv.genv_vars_eq in Heqo0. split; congruence.
 - exploit init_meminj_invert; eauto. intros (A & id1 & B & C).
   assert (id1 = id) by (eapply (Genv.genv_vars_inj ge); eauto). subst id1.
   auto.
@@ -729,6 +736,7 @@ Proof.
     exploit H3; eauto. intros [A B].
     apply H2 in H4. congruence. }
   constructor; auto.  constructor; intros.
+  + exploit symbols_inject_0; eauto.
   + exploit symbols_inject_1; eauto. apply SAME; auto.
     eapply Genv.genv_symb_range; eauto.
   + exploit symbols_inject_2; eauto. intros (b' & A & B).
@@ -896,6 +904,26 @@ Proof.
   exists (v1' :: vl'); split; constructor; auto.
 Qed.
 
+Lemma ros_is_ident_transf:
+    forall ros rs trs j id fd,
+      ros_is_ident ros rs id ->
+      find_function ge ros rs = Some fd ->
+      meminj_preserves_globals j ->
+      regset_inject j rs trs ->
+      ros_is_ident ros trs id.
+Proof.
+  intros.
+  destruct ros; simpl in *.  generalize (H2 r).
+  intro. inv H3; (try congruence).
+  rewrite H in H4. inv H4.
+  rewrite H in H0. simpl in H0.
+  destr_in H0. subst. unfold Genv.find_funct_ptr in H0.
+  destr_in H0. inv H0. inv H1.
+  exploit symbols_inject_4; eauto. eapply Genv.genv_defs_range; eauto.
+  intros [C D]. subst. intros. eauto.
+  eauto.
+Qed.
+
 Theorem step_simulation:
   forall S1 t S2, step fn_stack_requirements ge S1 t S2 ->
   forall S1' (MS: match_states S1 S1'),
@@ -964,11 +992,7 @@ Proof.
   destruct ros as [r|id']. eauto. apply KEPT. red. econstructor; econstructor; split; eauto. simpl; auto.
   intros (A & B).
   econstructor; split. eapply exec_Icall; eauto.
-  {instantiate (1:= id). admit.
-(*   destruct ros; simpl in *. generalize (REGINJ r).
-   intro. inv H2; (try congruence).  unfold struct_meminj in H5.
-   destr_in H5. inv H5. rewrite Ptrofs.add_zero in H4.
-   rewrite Ptrofs.add_zero. congruence. auto. *) }
+  eapply ros_is_ident_transf; eauto. eapply match_stacks_preserves_globals; eauto.
   econstructor; eauto.
   econstructor; eauto.
   intro. intro. apply Mem.sup_incr_in in H2. destruct H2.
@@ -990,11 +1014,7 @@ Proof.
   intros (tm''' & G & I).
   econstructor; split.
   eapply exec_Itailcall; eauto.
-  {instantiate (1:= id). admit.
-(*   destruct ros; simpl in *. generalize (REGINJ r).
-   intro. inv H2; (try congruence).  unfold struct_meminj in H8.
-   destr_in H8. inv H8. rewrite Ptrofs.add_zero in H7.
-   rewrite Ptrofs.add_zero. congruence. auto. *) }
+  eapply ros_is_ident_transf; eauto. eapply match_stacks_preserves_globals; eauto.
   econstructor; eauto.
   apply match_stacks_bound with sps tsps; auto.
   eapply Mem.sup_include_trans; eauto.
@@ -1107,7 +1127,7 @@ Proof.
   econstructor; eauto. apply set_reg_inject; auto.
   intro. intro. apply BELOW. apply Mem.sup_incr_in2. auto.
   intro. intro. apply TBELOW. apply Mem.sup_incr_in2. auto.
-Admitted.
+Qed.
 
 (** Relating initial memory states *)
 

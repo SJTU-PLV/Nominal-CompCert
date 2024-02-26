@@ -486,17 +486,6 @@ Proof.
     exploit H1; eauto. intros [A B]. inv A.
   - eapply regset_inject_incr; eauto.
 Qed.
-(*
-Inductive match_depth :
-  nat -> list nat -> nat -> nat -> Prop :=
-  | match_depth_nil : match_depth 0 nil 0 0
-  | match_depth_left : forall l d1 d2 n,
-      match_depth n l d1 d2 ->
-      match_depth (S n) l (S d1) d2
-  | match_depth_cons : forall l d1 d2 n,
-      match_depth n l d1 d2 ->
-      match_depth 0 ((S n)::l) (S d1) (S d2).
-*)
 
 Inductive tc_depth : list nat -> nat -> nat -> Prop :=
   | depth_nil : tc_depth nil 0 0
@@ -666,7 +655,6 @@ Inductive match_states: state -> state -> Prop :=
   | match_states_normal:
       forall s sp pc rs m s' rs' m' f j sp' n l
              (STACKS: match_stackframes j n l s s')
-             (* (STREE: tc_depth ((S n)::l) (Mem.sdepth m) (Mem.sdepth m')) *)
              (ASTK: tc_sizes ((S n)::l)(Mem.astack (Mem.support m)) (Mem.astack(Mem.support m')))
              (RINJ: regset_inject j rs rs')
              (MINJ: Mem.inject j m m')
@@ -676,7 +664,6 @@ Inductive match_states: state -> state -> Prop :=
   | match_states_call:
       forall s f args m s' args' m' id j n l,
       match_stackframes j n l s s' ->
-     (* tc_depth ((S n)::l)(S (Mem.sdepth m))(S (Mem.sdepth m')) -> *)
       tc_sizes ((S n)::l)(Mem.astack (Mem.support m)) (Mem.astack(Mem.support m')) ->
       Val.inject_list j args args' ->
       Mem.inject j m m' ->
@@ -685,7 +672,6 @@ Inductive match_states: state -> state -> Prop :=
   | match_states_return:
       forall s v m s' v' m' j n l,
       match_stackframes j n l s s' ->
-     (*  tc_depth (S n::l) (S(Mem.sdepth m)) (S(Mem.sdepth m')) -> *)
       tc_sizes l (drop (S n)(Mem.astack (Mem.support m)))(tl (Mem.astack(Mem.support m'))) ->
       Val.inject j v v' ->
       Mem.inject j m m' ->
@@ -694,9 +680,6 @@ Inductive match_states: state -> state -> Prop :=
   | match_states_interm:
       forall s sp pc rs m s' m' f r v' j n l
              (STACKS: match_stackframes j n l s s')
-(*             (STREE: tc_depth (S n::l)
-                              (Mem.sdepth m)
-                              (S(Mem.sdepth m'))) *)
              (STK: tc_sizes l (drop (S n)(Mem.astack (Mem.support m)))
                             (tl (Mem.astack(Mem.support m'))))
              (MLD: Mem.inject j m m'),
