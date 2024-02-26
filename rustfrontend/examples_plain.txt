@@ -117,18 +117,18 @@ struct S1 {
 }
 
 struct S2 {
-    f: Box<Box<B>>,
+    f: Box<Box<S1>>,
     g: Box<i32>,
     h: i32
 }
 
 
 fn main(){
-    let a = A {
+    let a = S2 {
         f: Box::new(Box::new(
-            B {l: Box::new(1), 
-               m: Box::new(2), 
-               n: 3}
+            S1 {l: Box::new(1), 
+                m: Box::new(2), 
+                n: 3}
             )),
         g: Box::new(4), 
         h: 5

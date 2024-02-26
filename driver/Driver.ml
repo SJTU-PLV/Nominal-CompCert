@@ -451,7 +451,7 @@ let cmdline_actions =
 
 let debug_rust = true
 
-let test_case = Rustsyntax.pop_and_push_prog
+let test_case = Rustsyntax.ex5_prog
 
 let fun_atom = BinNums.Coq_xH
 

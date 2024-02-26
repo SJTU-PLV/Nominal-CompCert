@@ -157,7 +157,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
                 let ret_expr := if own_type ce ty then Emoveplace temp ty else Eplace temp ty in
                 ret (args_stmts ++ fields_assign_stmts, ret_expr)
             | _ =>
-                error [CTX id; MSG ": there is no composite for it in transl_value_expr"]
+                error [CTX id; MSG ": there is no composite for it (triggered in transl_value_expr) "]
             end
           else error [CTX id; CTX struct_id; MSG ": structure construction has inconsistent structure identifiers in transl_value_expr"]
       | _ =>
