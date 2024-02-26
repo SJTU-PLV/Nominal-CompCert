@@ -272,23 +272,18 @@ Inductive assign_loc (ce: composite_env) (ty: type) (m: mem) (b: block) (ofs: pt
 
 (** Prefix of a place  *)
 
-Fixpoint is_prefix (p1 p2: place) : bool :=
-  match p1, p2 with
-  | Plocal id1 _, Plocal id2 _ => Pos.eqb id1 id2
-  | Plocal id1 _, Pfield p2' _ _ => is_prefix p1 p2'
-  | Pfield p1' _ _, Pfield p2' _ _ => is_prefix p1' p2'
-  | Plocal id1 _, Pderef p2' _ => is_prefix p1 p2'
-  | Pderef p1' _, Pderef p2' _ => is_prefix p1' p2'
-  | _ ,_ => false
+Fixpoint parent_paths (p: place) : list place :=
+  match p with
+  | Plocal _ _ => nil
+  | Pfield p' _ _ => p' :: parent_paths p'
+  | Pderef p' _ => p' :: parent_paths p'
   end.
+
+Definition is_prefix (p1 p2: place) : bool :=
+  place_eq p1 p2 || in_dec place_eq p1 (parent_paths p2).
 
 Definition is_prefix_strict (p1 p2: place) : bool :=
-  match p2 with
-  | Plocal _ _ => false
-  | Pfield p2' _ _ => is_prefix p1 p2'
-  | Pderef p2' _  => is_prefix p1 p2'
-  end.
-
+  in_dec place_eq p1 (parent_paths p2).
 
 Fixpoint local_of_place (p: place) :=
   match p with

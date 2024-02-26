@@ -145,9 +145,9 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
               if Paths.mem p mayinit then
                 if Paths.mem p mayuninit then (* need drop flag *)
                   do drop_flag <- gensym type_bool p;
-                  ret ((p, Some drop_flag, false) :: drops)
+                  ret (drops ++ [(p, Some drop_flag, false)])
                 else                         (* must initialized *)
-                  ret ((p, None, false) :: drops)
+                  ret (drops ++ [(p, None, false)])
               else                (* must uninitialized *)
                 ret drops              
         | _ => error [CTX pc; MSG ": Normal types do not need drop: elaborate_drop_for"]
