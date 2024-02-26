@@ -617,18 +617,7 @@ Definition inject_separated (f f': meminj) (m1 m2: mem): Prop :=
   forall b1 b2 delta,
   f b1 = None -> f' b1 = Some(b2, delta) ->
   ~Mem.valid_block m1 b1 /\ ~Mem.valid_block m2 b2.
-(*
-Definition external_block (b:block) : Prop :=
-  match b with
-    |Stack None _ _ => True
-    |_ => False
-  end.
 
-Definition inject_external (f: meminj) (m1 m2: mem): Prop :=
-  forall b,
-  ~ Mem.valid_block m1 b -> Mem.valid_block m2 b ->
-  external_block b /\ f b = Some (b,0).
-*)
 Record extcall_properties (sem: extcall_sem) (sg: signature) : Prop :=
   mk_extcall_properties {
 
