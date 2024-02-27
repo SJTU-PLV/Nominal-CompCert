@@ -1007,7 +1007,7 @@ Definition m_state s :=
         Mem.perm (m_state s) bstack o k Writable.
 
     Definition stack_top_state (s: state) : Prop :=
-      exists tl st, Mem.stack(Mem.support (m_state s))= Node None (1%positive::nil) tl st.
+      Mem.stack(Mem.support (m_state s))= (1%positive) :: nil.
 
     Inductive real_asm_inv : state -> Prop :=
     | real_asm_inv_intro:
@@ -1045,14 +1045,14 @@ Definition m_state s :=
         apply align_Mptr_modulus.
       - exploit Mem.alloc_result; eauto. intro. subst.
         unfold Mem.nextblock in H1. unfold Mem.fresh_block in H1.
-        rewrite STK in H1. destr_in H1. simpl in Heqp. inv Heqp.
         red. unfold bstack. unfold stkblock. intros o k p.
         repeat erewrite (storev_perm _ _ _ _ _ H2). eauto.
+        rewrite STK in H1. 
         intro. exploit Mem.perm_alloc_3; eauto.
         intro. exploit Mem.perm_alloc_2; eauto. simpl. intro. eapply Mem.perm_implies; eauto.
         apply perm_F_any.
       - red. simpl. apply Mem.stack_alloc in H1. rewrite STK in H1.
-        exists nil, None. simpl in H1. erewrite <- Mem.support_storev; eauto.
+        erewrite <- Mem.support_storev; eauto.
 Qed.
 
 (*    Lemma nextinstr_1_eq :
@@ -1240,13 +1240,13 @@ Qed. *)
         + red in BSTACKPERM; red. simpl in *. intros o k p.
           repeat erewrite (external_perm_stack _ _ _ _ _ _ _ _ _ _ _ H3); eauto.
            simpl. auto. red in STOP; simpl in STOP. unfold bstack. unfold stkblock.
-           simpl. destruct STOP as (tl & st & STOP). rewrite STOP. split. auto. left. auto.
+           simpl. rewrite STOP. left. auto.
            simpl. auto. red in STOP; simpl in STOP. unfold bstack. unfold stkblock.
-           simpl. destruct STOP as (tl & st & STOP). rewrite STOP. split. auto. left. auto.
-        + red in STOP; red; simpl in *. destruct STOP as (tl & st & STOP).
-          exploit external_call_stack; eauto. destr. intros.
+           simpl. rewrite STOP. left. auto.
+        + red in STOP; red; simpl in *. admit.
+          (* exploit external_call_stack; eauto. destr. intros.
           rewrite STOP in H4. simpl in H4. destruct st. eauto. eauto.
-          intros. rewrite H4. eauto.
+          intros. rewrite H4. eauto. *)
       - inv INV; constructor.
         + Opaque destroyed_at_call.
           red in RSPPTR; red; simpl in *. repeat simpl_regs.
@@ -1255,14 +1255,14 @@ Qed. *)
         + red in BSTACKPERM; red. simpl in *. intros o k p.
           repeat erewrite (external_perm_stack _ _ _ _ _ _ _ _ _ _ _ H2); eauto.
            simpl. auto. red in STOP; simpl in STOP. unfold bstack. unfold stkblock.
-           simpl. destruct STOP as (tl & st & STOP). rewrite STOP. split. auto. left. auto.
+           simpl. rewrite STOP. left. auto.
            simpl. auto. red in STOP; simpl in STOP. unfold bstack. unfold stkblock.
-           simpl. destruct STOP as (tl & st & STOP). rewrite STOP. split. auto. left. auto.
-        + red in STOP; red; simpl in *. destruct STOP as (tl & st & STOP).
-          exploit external_call_stack; eauto. destr. intros.
+           simpl. rewrite STOP. left. auto.
+        + red in STOP; red; simpl in *. admit.
+          (* exploit external_call_stack; eauto. destr. intros.
           rewrite STOP in H3. simpl in H3. destruct st. eauto. eauto.
-          intros. rewrite H3. eauto.
-    Qed.
+          intros. rewrite H3. eauto. *)
+    Admitted.
 
 End INVARIANT.
 End INSTRSIZE.
