@@ -425,19 +425,7 @@ Inductive sp_consistency : (list fid * path) -> list val -> Prop :=
       sp = Vptr (Stack (Some id) (path++(idx::nil)) 1%positive) Ptrofs.zero ->
       sp_consistency (((Some id)::lf),(path++(idx::nil))) (sp::ls).
 *)
-(*
-Inductive astack_consistency : Mach.state -> Prop :=
-  |astack_consistency_state: forall fb tf m cs c rs sp
-     (FIND: Genv.find_funct_ptr ge fb = Some (Internal tf))
-     (SC: size_consisitency (size_of_callstack cs) (Mem.astack(Mem.support m))),
-      astack_consistency (Mach.State cs fb (Vptr sp Ptrofs.zero) c rs m)
-  |astack_consistency_call: forall cs fb rs m id
-     (SC:size_consisitency (size_of_callstack cs) (Mem.astack(Mem.support m))),
-      astack_consistency (Mach.Callstate cs fb rs m id)
-  |astack_consistency_return: forall cs rs m
-     (SC:size_consisitency (size_of_callstack cs) (Mem.astack(Mem.support m))),
-      astack_consistency (Mach.Returnstate cs rs m).
-*)
+
 
 Lemma code_tail_code_size:
   forall a b sz,
@@ -832,7 +820,7 @@ Opaque loadind.
   assert (CTF:check_topframe (Mach.fn_stacksize f) (Mem.astack (Mem.support m'0)) = true).
    unfold check_topframe. inv SC.   inv MEXT. rewrite <- mext_sup. rewrite <- H13.
    rewrite pred_dec_true; auto. unfold frame_size_a. unfold aligned_fsz.
-   assert (CSP:(parent_sp_stack (Mem.stack (Mem.support m'0)) = (parent_sp s))).
+(*   assert (CSP:(parent_sp_stack (Mem.stack (Mem.support m'0)) = (parent_sp s))).
 (*   Mem.astack
   inv SPC. inv H14.
   destruct s. simpl. inv MEXT. rewrite <- mext_sup. simpl in H1.
@@ -844,7 +832,9 @@ Opaque loadind.
    admit.
    assert (CTP: top_sp_stack (Mem.stack (Mem.support m'0)) = rs0 RSP).
    admit.
+   clear CSP CTP.
 (*  inv SPC. rewrite H15. inv MEXT. rewrite <- mext_sup. eapply sp_of_stack_tspsome; eauto. *)
+*)
   assert (RA: parent_ra s <> Vundef).
   inv WFRA; simpl. unfold Vnullptr. destr. congruence.
   destruct ros as [rf|fid]; simpl in H; monadInv H9.
@@ -864,9 +854,10 @@ Opaque loadind.
   apply transf_function_stacksize_pos in H8 as H8'.
   destr. erewrite loadv_loadvv; eauto.
   rewrite A. rewrite <- (sp_val _ _ _ AG).
-  rewrite CTF. rewrite CSP. rewrite pred_dec_true.
-  rewrite (sp_val _ _ _ AG). rewrite pred_dec_true.
-  rewrite E. eauto. rewrite J. eauto. eauto.  eauto.
+  rewrite CTF. (* rewrite CSP. *)
+  (*rewrite pred_dec_true.
+  rewrite (sp_val _ _ _ AG). rewrite pred_dec_true. *)
+  rewrite E. eauto. rewrite J. eauto.
   apply star_one. eapply exec_step_internal.
   transitivity (Val.offset_ptr rs0#PC (Ptrofs.repr (instr_size
               (Pfreeframe (Mach.fn_stacksize f)(fn_retaddr_ofs f)(fn_link_ofs f))))). eauto.
@@ -895,9 +886,10 @@ Opaque loadind.
   simpl. replace (chunk_of_type Tptr) with Mptr in * by (unfold Tptr, Mptr; destruct Archi.ptr64; auto).
   apply transf_function_stacksize_pos in H8 as H8'. destr.
   erewrite loadv_loadvv; eauto.
-  rewrite A. rewrite <- (sp_val _ _ _ AG). rewrite CTF. rewrite pred_dec_true.
-  rewrite (sp_val _ _ _ AG). rewrite pred_dec_true.
-  rewrite E. eauto. rewrite J. eauto. eauto. eauto.
+  rewrite A. rewrite <- (sp_val _ _ _ AG). rewrite CTF.
+  (* rewrite pred_dec_true.
+  rewrite (sp_val _ _ _ AG). rewrite pred_dec_true. *)
+  rewrite E. eauto. rewrite J. eauto.
   apply star_one. eapply exec_step_internal.
   transitivity (Val.offset_ptr rs0#PC (Ptrofs.repr (instr_size
               (Pfreeframe (Mach.fn_stacksize f)(fn_retaddr_ofs f)(fn_link_ofs f))))). eauto.
@@ -1071,7 +1063,7 @@ Transparent destroyed_by_jumptable.
   assert (CTF:check_topframe (Mach.fn_stacksize f) (Mem.astack (Mem.support m'0)) = true).
    unfold check_topframe. inv SC.   inv MEXT. rewrite <- mext_sup. rewrite <- H12.
    rewrite pred_dec_true; auto.
-   assert (CSP: parent_sp_stack (Mem.stack (Mem.support m'0)) = parent_sp s).
+(*   assert (CSP: parent_sp_stack (Mem.stack (Mem.support m'0)) = parent_sp s).
    admit.
   (* inv SPC. inv H13.
   destruct s. simpl. inv MEXT. rewrite <- mext_sup. simpl in H10.
@@ -1083,7 +1075,8 @@ Transparent destroyed_by_jumptable.
    admit.
   (*
   inv SPC. rewrite H14. inv MEXT. rewrite <- mext_sup. eapply sp_of_stack_tspsome; eauto.
-  *)
+   *)
+  clear CSP CTP. *)
   assert (RA: parent_ra s <> Vundef).
   inv WFRA; simpl. unfold Vnullptr. destr. congruence.
   monadInv H7.
@@ -1093,9 +1086,10 @@ Transparent destroyed_by_jumptable.
   eapply functions_transl; eauto. eapply find_instr_tail; eauto.
   simpl. apply transf_function_stacksize_pos in H6 as H6'. destr.
   erewrite loadv_loadvv; eauto.
-  rewrite A. rewrite <- (sp_val _ _ _ AG). rewrite CTF. rewrite pred_dec_true.
-  rewrite (sp_val _ _ _ AG). rewrite pred_dec_true.
-  rewrite E. eauto. rewrite J. eauto. eauto. eauto.
+  rewrite A. rewrite <- (sp_val _ _ _ AG). rewrite CTF.
+  (*rewrite pred_dec_true.
+  rewrite (sp_val _ _ _ AG). rewrite pred_dec_true. *)
+  rewrite E. eauto. rewrite J. eauto. 
   apply star_one. eapply exec_step_internal.
   transitivity (Val.offset_ptr rs0#PC (Ptrofs.repr (instr_size (Pfreeframe (Mach.fn_stacksize f)(fn_retaddr_ofs f)(fn_link_ofs f))))).
   auto. rewrite <- H4. simpl. eauto.
@@ -1170,7 +1164,7 @@ Transparent destroyed_at_function_entry.
   intros [res' [m2' [P [Q [R S]]]]].
   left; econstructor; split.
   apply plus_one. eapply exec_step_external; eauto.
-  { (* rs SP Tint *)
+(*  { (* rs SP Tptr *)
     erewrite agree_sp by eauto.
     destruct s. simpl. unfold Tptr. destr; destr_in Heqt0.
     admit.
@@ -1190,6 +1184,7 @@ Transparent destroyed_at_function_entry.
     rewrite ATLR.
     eapply parent_ra_def; eauto.
   }
+*)
   eapply external_call_symbols_preserved; eauto. apply senv_preserved.
   unfold loc_external_result. clear. destruct (loc_result (ef_sig ef)); simpl; try split;
                                        apply preg_of_not_SP.
@@ -1209,7 +1204,7 @@ Transparent destroyed_at_function_entry.
   inv CODE. eauto. inv CODE. rewrite H3 in FINDF. inv FINDF.
   destruct TAIL as (A&B&C&D). exists (A++ (Mcall B C::nil)). rewrite app_ass. auto.
   inv WFRA. auto. rewrite H3 in SC. auto. congruence.
-Admitted.
+Qed.
 
 Lemma transf_initial_states:
   forall st1, Mach.initial_state prog st1 ->

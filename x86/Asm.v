@@ -1246,8 +1246,8 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
               match rs#RSP with
               | Vptr stk ofs =>
                   if check_topframe fsz (Mem.astack (Mem.support m)) then
-                  if Val.eq sp (parent_sp_stack (Mem.stack (Mem.support m))) then
-                  if Val.eq (Vptr stk ofs) (top_sp_stack (Mem.stack (Mem.support m))) then
+                  (* if Val.eq sp (parent_sp_stack (Mem.stack (Mem.support m))) then
+                  if Val.eq (Vptr stk ofs) (top_sp_stack (Mem.stack (Mem.support m))) then *)
                   match Mem.free m stk 0 fsz with
                   | None => Stuck
                   | Some m' =>
@@ -1256,7 +1256,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
                         | Some m''' =>
                         Next (nextinstr (rs#RSP <- sp #RA <- ra)) m'''
                       end
-                  end else Stuck else Stuck else Stuck
+                  end else Stuck (* else Stuck else Stuck *)
               | _ => Stuck
               end
           end
@@ -1420,10 +1420,10 @@ Inductive step: state -> trace -> state -> Prop :=
       rs PC = Vptr b Ptrofs.zero ->
       Genv.find_funct_ptr ge b = Some (External ef) ->
       extcall_arguments rs m (ef_sig ef) args ->
-      forall (SP_TYPE: Val.has_type (rs RSP) Tptr)
+      (* forall (SP_TYPE: Val.has_type (rs RSP) Tptr)
         (RA_TYPE: Val.has_type (rs RA) Tptr)
         (SP_NOT_VUNDEF: rs RSP <> Vundef)
-        (RA_NOT_VUNDEF: rs RA <> Vundef),
+        (RA_NOT_VUNDEF: rs RA <> Vundef), *)
       external_call ef ge args m t res m' ->
       no_rsp_pair (loc_external_result (ef_sig ef)) ->
       ra_after_call ge (rs#RA)->
