@@ -586,7 +586,6 @@ Proof.
   eapply sd_traces.
   eapply Asm.semantics_determinate.
   eapply SSAsmproof.transf_program_correct.
-  eapply instr_size_bound.
   eapply match_prog_wf; eauto.
   apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
   apply SSAsm.semantics_determinate.
@@ -727,4 +726,3 @@ Proof.
   destruct H2 as (asm_program & P & Q).
   exists asm_program; split; auto. apply c_semantic_preservation_real; auto.
 Qed.
-
