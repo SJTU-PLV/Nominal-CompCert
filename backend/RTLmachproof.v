@@ -228,7 +228,7 @@ Proof.
     rewrite SAL in ASTKm'.
     simpl in ASTKm'.
     rewrite H9 in ASTKm'. inv ASTKm'.
-    assert ({m'3:mem|Mem.record_frame (Mem.push_stage m'2) (Memory.mk_frame stk (fn_stack_requirements id)) = Some m'3}).
+    assert ({m'3:mem|Mem.record_frame (Mem.push_stage m'2) (Memory.mk_frame (Stack 1%positive) (fn_stack_requirements id)) = Some m'3}).
       apply Mem.request_record_frame. simpl. congruence.
       simpl. rewrite SAL'. simpl.
       apply match_stackadt_size in H10. simpl in *.

@@ -1912,7 +1912,7 @@ with eval_funcall: mem -> fundef -> list val -> trace -> mem -> val -> ident -> 
   | eval_funcall_internal: forall m f vargs t e m1 m1' m2 m3 out vres m4 m6 id ,
       list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
       alloc_variables ge empty_env m  (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id )) = Some m1' ->
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (Stack 1%positive)(fn_stack_requirements id )) = Some m1' ->
       bind_parameters ge e m1' f.(fn_params) vargs m2 ->
       exec_stmt e m2 f.(fn_body) t m3 out ->
       outcome_result_value out f.(fn_return) vres m3 ->
@@ -2137,7 +2137,7 @@ with evalinf_funcall: mem -> fundef -> list val -> traceinf -> ident -> Prop :=
   | evalinf_funcall_internal: forall m f vargs t e m1 m2 m3 id ,
       list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
       alloc_variables ge empty_env m  (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id )) = Some m2 ->
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (Stack 1%positive)(fn_stack_requirements id )) = Some m2 ->
       bind_parameters ge e m2 f.(fn_params) vargs m3 ->
       execinf_stmt e m3 f.(fn_body) t ->
       evalinf_funcall m (Internal f) vargs t id.

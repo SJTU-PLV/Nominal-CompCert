@@ -907,7 +907,7 @@ Proof.
   apply stack_tc_size_vm in H8.
   erewrite Mem.support_alloc; eauto. apply Mem.support_alloc in H.
   unfold sup_incr in *. simpl in *.
-  rewrite H. simpl. lia. instantiate (1:= b2).
+  rewrite H. simpl. lia. instantiate (1:= Stack 1%positive).
   intros (m'2 & RECORD & INJ'').
   assert (fn_stacksize (transf_function f) = fn_stacksize f /\
           fn_entrypoint (transf_function f) = fn_entrypoint f /\

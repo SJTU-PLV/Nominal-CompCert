@@ -645,20 +645,22 @@ Proof.
 Qed.
 
 Lemma match_callstack_push_left_record_frame:
-  forall f m tm m' cs fr,
+  forall f m tm m' cs b size,
   Mem.inject f m tm ->
   match_callstack f m tm cs (Mem.support m) (Mem.support tm) ->
-  Mem.record_frame (Mem.push_stage m) fr = Some m' ->
+  Mem.record_frame (Mem.push_stage m) (mk_frame b size) = Some m' ->
   nil :: Mem.astack (Mem.support m) = Mem.astack (Mem.support tm) ->
-  exists tm', Mem.record_frame tm fr = Some tm'
+  exists tm', Mem.record_frame tm (mk_frame b size) = Some tm'
   /\ match_callstack f m' tm' cs (Mem.support m') (Mem.support tm')
   /\ Mem.inject f m' tm'
   /\ Mem.astack (Mem.support m') = Mem.astack (Mem.support tm').
 Proof.
   intros.
   exploit Mem.push_stage_left_inject; eauto. intro.
-  exploit Mem.record_frame_parallel_inject; eauto. simpl. congruence.
-  rewrite <- H2. simpl. lia. intros (tm' & A & B).
+  exploit Mem.record_frame_parallel_inject; eauto. simpl.
+  congruence.
+  rewrite <- H2. simpl. lia. instantiate (1:= b).
+  intros (tm' & A & B).
   exists tm'. split. auto. split.
     apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
   apply match_callstack_invariant with f m tm; auto.
@@ -668,7 +670,7 @@ Proof.
   rewrite <- Mem.perm_record_frame. 2: eauto. eauto.
   intro. eapply Mem.support_record_frame_1 in H1. apply H1.
   intro. eapply Mem.support_record_frame_1 in A. apply A.
-  split. auto. apply Mem.astack_record_frame in H1. destruct H1 as [a [b[c d]]].
+  split. auto. apply Mem.astack_record_frame in H1. destruct H1 as [a [b'[c d]]].
   apply Mem.astack_record_frame in A. destruct A as [o [p [q r]]].
   simpl in *. congruence.
 Qed.

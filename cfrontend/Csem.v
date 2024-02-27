@@ -810,7 +810,8 @@ Inductive sstep: state -> trace -> state -> Prop :=
   | step_internal_function: forall f vargs k m e m1 m2 id m3,
       list_norepet (var_names (fn_params f) ++ var_names (fn_vars f)) ->
       alloc_variables empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id)) = Some m2 ->
+      (*we do not need the block name in front end*)
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (Stack 1%positive) (fn_stack_requirements id)) = Some m2 ->
       bind_parameters e m2 f.(fn_params) vargs m3 ->
       sstep (Callstate (Internal f) vargs k m id)
          E0 (State f f.(fn_body) k e m3)

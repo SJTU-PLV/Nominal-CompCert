@@ -2161,7 +2161,7 @@ Definition do_step (w: world) (s: state) : list transition :=
   | Callstate (Internal f) vargs k m id =>
       check (list_norepet_dec ident_eq (var_names (fn_params f) ++ var_names (fn_vars f)));
       let (e,m1) := do_alloc_variables empty_env m (f.(fn_params) ++ f.(fn_vars)) in
-      do m2 <- Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stack_requirements id));
+      do m2 <- Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (Stack 1%positive) (fn_stack_requirements id));
       do m3 <- sem_bind_parameters w e m2 f.(fn_params) vargs;
       ret "step_internal_function" (State f f.(fn_body) k e m3)
   | Callstate (External ef _ _ _) vargs k m id =>
@@ -2235,7 +2235,7 @@ Proof with try (left; right; econstructor; eauto; fail).
   destruct fd; myinv.
   (* internal *)
   destruct (do_alloc_variables empty_env m (fn_params f ++ fn_vars f)) as [e m1] eqn:?.
-  destruct (Mem.record_frame (Mem.push_stage m1) (mk_frame (fn_stack_requirements id))) eqn:?.
+  destruct (Mem.record_frame (Mem.push_stage m1) (mk_frame (Stack 1%positive)(fn_stack_requirements id))) eqn:?.
   myinv. left; right; eapply step_internal_function. eauto. eauto.
   instantiate (1:= m1).
   change e with (fst (e,m1)). change m1 with (snd (e,m1)) at 2. rewrite <- Heqp.

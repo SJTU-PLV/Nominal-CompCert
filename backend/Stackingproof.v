@@ -1077,7 +1077,7 @@ Lemma function_prologue_correct:
   rs1 = undef_regs destroyed_at_function_entry rs ->
   Genv.find_funct_ptr ge (Global id) = Some (Internal f) ->
   Mem.alloc m0 0 f.(Linear.fn_stacksize) = (m2, sp) ->
-  Mem.record_frame (Mem.push_stage m2) (mk_frame sp size) = Some m3 ->
+  Mem.record_frame (Mem.push_stage m2) (mk_frame (Stack 1%positive) size) = Some m3 ->
   Val.has_type parent Tptr -> Val.has_type ra Tptr ->
   m0' |= minjection j m0 ** globalenv_inject ge j ** P ->
   astackseq (Mem.astack (Mem.support m0)) (Mem.astack (Mem.support m0')) ->
