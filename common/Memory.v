@@ -104,13 +104,15 @@ Section STACKADT.
 
 Record frame : Type :=
   {
+    frame_block : block;
     frame_size : Z;
     frame_size_pos:
       (0 <= frame_size)%Z;
   }.
 
-Definition mk_frame (sz:Z) :=
+Definition mk_frame (b: block) (sz:Z) :=
   {|
+   frame_block := b;
    frame_size := Z.max 0 sz;
    frame_size_pos := Z.le_max_l _ _
   |}.
@@ -5400,12 +5402,12 @@ Proof.
 Qed.
 
 Theorem record_frame_parallel_inject:
-  forall f m1 m2 m1' fr ,
+  forall f m1 m2 m1' b1 b2 size,
   inject f m1 m2 ->
-  record_frame m1 fr = Some m1' ->
+  record_frame m1 (mk_frame b1 size) = Some m1' ->
   astack(support m2) <> nil ->
   stack_size (astack(support m2)) <= stack_size(astack(support m1)) ->
-  exists m2', record_frame m2 fr = Some m2' /\
+  exists m2', record_frame m2 (mk_frame b2 size) = Some m2' /\
   inject f m1' m2'.
 Proof.
   intros. inversion H.
@@ -5427,7 +5429,8 @@ Proof.
     rewrite <- perm_record_frame in H3; eauto. intros [A|A].
     left. rewrite <- perm_record_frame; eauto.
     right. rewrite <- perm_record_frame; eauto.
-  - apply record_frame_size1 in H0. lia.
+  - apply record_frame_size1 in H0. unfold frame_size_a in *. simpl in *.
+    lia.
 Qed.
 
 

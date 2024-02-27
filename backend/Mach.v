@@ -410,7 +410,7 @@ Inductive step: state -> trace -> state -> Prop :=
       forall s fb rs m f m1 m2 m3 m4 stk rs' id,
       Genv.find_funct_ptr ge fb = Some (Internal f) ->
       Mem.alloc m 0 f.(fn_stacksize) = (m1, stk) ->
-      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (fn_stacksize f)) = Some m2 ->
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame stk (fn_stacksize f)) = Some m2 ->
       let sp := Vptr stk Ptrofs.zero in
       store_stack m2 sp Tptr f.(fn_retaddr_ofs) (parent_ra s) = Some m3 ->
       store_stack m3 sp Tptr f.(fn_link_ofs) (parent_sp s) = Some m4 ->

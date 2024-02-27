@@ -1042,24 +1042,14 @@ Proof.
 Qed.
 
 Lemma inline_sizes_record:
-  forall g t1 s1 t2 s2 fr
+  forall g t1 s1 t2 s2 size b1 b2
     (SZ: inline_sizes (1%nat::g) (t1 :: s1) (t2 :: s2)),
-    inline_sizes (1%nat::g) ((fr::t1) :: s1) ((fr::t2) :: s2).
+    inline_sizes (1%nat::g) (((mk_frame b1 size)::t1) :: s1) (((mk_frame b2 size)::t2) :: s2).
 Proof.
   intros. inv SZ.
   simpl in *. inv H5.
   econstructor; simpl; eauto. simpl.
-  lia.
-Qed.
-
-Lemma inline_sizes_record':
-  forall g t1 s1 t2 s2 fr
-    (SZ: inline_sizes (1%nat::g) (t1 :: s1) (t2 :: s2)),
-    inline_sizes (1%nat::g) ((fr:: t1) :: s1) ((fr:: t2) :: s2).
-Proof.
-  intros. inv SZ.
-  simpl in *. inv H5.
-  econstructor; simpl; eauto. simpl. lia.
+  unfold frame_size_a. simpl. lia.
 Qed.
 
 Lemma inline_sizes_record_left:

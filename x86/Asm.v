@@ -411,17 +411,29 @@ Definition top_sp_stree (st:stree) : val :=
   end.
  *)
 
-Definition top_sp_stack (s: list positive): val :=
+Fixpoint sp_of_astack (astk : stackadt) : list block :=
+  match astk with
+  | (hd :: t) :: tl => (frame_block hd) :: sp_of_astack tl
+  |_ => nil
+  end.
+  
+Definition top_sp_stack' (s: list block): val :=
   match s with
-  |hd :: tl => Vptr (Stack hd) Ptrofs.zero
+  |hd :: tl => Vptr hd Ptrofs.zero
   |_ => Vptr (Stack 1%positive) Ptrofs.zero
   end.
 
-Definition parent_sp_stack (s: list positive) : val :=
+Definition top_sp_stack (astk : stackadt) : val :=
+  top_sp_stack' (sp_of_astack astk).
+
+Definition parent_sp_stack' (s: list block) : val :=
   match s with
-  |hd :: pa :: tl => Vptr (Stack pa) Ptrofs.zero
+  |hd :: pa :: tl => Vptr pa Ptrofs.zero
   |_ => Vptr (Stack 1%positive) Ptrofs.zero
   end.
+
+Definition parent_sp_stack (astk : stackadt) : val :=
+  parent_sp_stack' (sp_of_astack astk).
 
 Section INSTRSIZE.
 (** Since we need to eliminate the pseudo instructions to get real assembly programs, it is
@@ -1220,7 +1232,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
     |Vptr (Global id) _
      =>
      let (m1, stk) := Mem.alloc m 0 fsz in
-     match Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame fsz) with
+     match Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame stk fsz) with
      |None => Stuck
      |Some m2 =>
       let sp := Vptr stk Ptrofs.zero in
@@ -1246,8 +1258,8 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
               match rs#RSP with
               | Vptr stk ofs =>
                   if check_topframe fsz (Mem.astack (Mem.support m)) then
-                  (* if Val.eq sp (parent_sp_stack (Mem.stack (Mem.support m))) then
-                  if Val.eq (Vptr stk ofs) (top_sp_stack (Mem.stack (Mem.support m))) then *)
+                  if Val.eq sp (parent_sp_stack (Mem.astack (Mem.support m))) then
+                  if Val.eq (Vptr stk ofs) (top_sp_stack (Mem.astack (Mem.support m))) then
                   match Mem.free m stk 0 fsz with
                   | None => Stuck
                   | Some m' =>
@@ -1256,7 +1268,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
                         | Some m''' =>
                         Next (nextinstr (rs#RSP <- sp #RA <- ra)) m'''
                       end
-                  end else Stuck (* else Stuck else Stuck *)
+                  end else Stuck else Stuck else Stuck
               | _ => Stuck
               end
           end
@@ -1420,10 +1432,10 @@ Inductive step: state -> trace -> state -> Prop :=
       rs PC = Vptr b Ptrofs.zero ->
       Genv.find_funct_ptr ge b = Some (External ef) ->
       extcall_arguments rs m (ef_sig ef) args ->
-      (* forall (SP_TYPE: Val.has_type (rs RSP) Tptr)
+      forall (SP_TYPE: Val.has_type (rs RSP) Tptr)
         (RA_TYPE: Val.has_type (rs RA) Tptr)
         (SP_NOT_VUNDEF: rs RSP <> Vundef)
-        (RA_NOT_VUNDEF: rs RA <> Vundef), *)
+        (RA_NOT_VUNDEF: rs RA <> Vundef),
       external_call ef ge args m t res m' ->
       no_rsp_pair (loc_external_result (ef_sig ef)) ->
       ra_after_call ge (rs#RA)->

@@ -29,6 +29,9 @@ Require Import Op Registers RTL.
     Which is precisely the machine deals with tailcalls.
 *)
 
+(** Technically the difference is we do [Mem.pop_stage] for Itailcall here
+
+*)
 Section ORACLE.
 
 Variable fn_stack_requirements : ident -> Z.
@@ -116,7 +119,7 @@ Inductive step: state -> trace -> state -> Prop :=
   | exec_function_internal:
       forall s f args m m' m'' stk id,
       Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
-      Mem.record_frame (Mem.push_stage m')(Memory.mk_frame (fn_stack_requirements id)) = Some m'' ->
+      Mem.record_frame (Mem.push_stage m')(Memory.mk_frame stk (fn_stack_requirements id)) = Some m'' ->
       step (Callstate s (Internal f) args m id)
         E0 (State s
                   f

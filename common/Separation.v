@@ -1042,17 +1042,18 @@ Qed.
 *)
 
 Lemma record_frame_parallel_rule:
-  forall m1 m1' m2  j P fr ,
+  forall m1 m1' m2  j P size b1 b2,
     m2 |= minjection j  m1 ** P ->
-    Mem.record_frame m1 fr = Some m1' ->
+    Mem.record_frame m1 (mk_frame b1 size) = Some m1' ->
     Memory.stack_size (Mem.astack(Mem.support m2)) <=
     Memory.stack_size (Mem.astack(Mem.support m1)) ->
     Mem.astack (Mem.support m2) <> nil ->
-    exists m2', Mem.record_frame m2 fr = Some m2' /\
+    exists m2', Mem.record_frame m2 (mk_frame b2 size) = Some m2' /\
     m2' |= minjection j  m1' ** P.
 Proof.
-  intros m1 m1' m2  j P fa MINJ RECORD1 SIZE NE.
-  exploit Mem.record_frame_parallel_inject; eauto. apply MINJ. eauto.
+  intros m1 m1' m2  j P size b1 b2 MINJ RECORD1 SIZE NE.
+  exploit Mem.record_frame_parallel_inject; eauto. apply MINJ.
+  instantiate (1:=b2).
   intros (m2' & RECORD & INJ).
   destruct MINJ as (MINJ & PM & DISJ).
   exists m2'. split. auto.

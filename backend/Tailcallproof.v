@@ -628,14 +628,14 @@ Proof.
 Qed.
 
 Lemma tc_sizes_record:
-  forall g t1 s1 t2 s2 f
+  forall g t1 s1 t2 s2 b1 b2 size
     (SZ: tc_sizes g (t1 :: s1) (t2 :: s2)),
-    tc_sizes g ((f::t1):: s1) ((f::t2) :: s2).
+    tc_sizes g (((mk_frame b1 size)::t1):: s1) (((mk_frame b2 size)::t2) :: s2).
 Proof.
   intros. inv SZ.
   simpl in *. repeat destr_in H4.
   econstructor; simpl; auto. rewrite Heqo. eauto.
-  simpl in *. lia.
+  simpl in *. unfold frame_size_a. simpl. lia.
 Qed.
 
 Theorem stack_tc_size_vm: forall l stk stk',
@@ -907,7 +907,7 @@ Proof.
   apply stack_tc_size_vm in H8.
   erewrite Mem.support_alloc; eauto. apply Mem.support_alloc in H.
   unfold sup_incr in *. simpl in *.
-  rewrite H. simpl. lia.
+  rewrite H. simpl. lia. instantiate (1:= b2).
   intros (m'2 & RECORD & INJ'').
   assert (fn_stacksize (transf_function f) = fn_stacksize f /\
           fn_entrypoint (transf_function f) = fn_entrypoint f /\
