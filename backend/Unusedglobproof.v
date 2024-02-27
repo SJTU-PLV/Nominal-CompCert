@@ -1367,7 +1367,7 @@ Proof.
   constructor. auto.
   erewrite <- Genv.init_mem_genv_sup by eauto. apply Mem.sup_include_refl.
   erewrite <- Genv.init_mem_genv_sup by eauto. apply Mem.sup_include_refl.
-  intros. destruct (eq_block b1 (Stack (Mem.fresh_id nil))). subst. rewrite X in H5. inv H5.
+  intros. destruct (eq_block b1 (Stack 1%positive)). subst. rewrite X in H5. inv H5.
   simpl. rewrite STK1. rewrite STK2. simpl. split. lia. lia. rewrite Y in H5. congruence. auto.
   erewrite Mem.astack_alloc. 2: eauto. apply Mem.astack_alloc in U. rewrite U.
   erewrite Genv.init_mem_astack; eauto. erewrite Genv.init_mem_astack; eauto. constructor.

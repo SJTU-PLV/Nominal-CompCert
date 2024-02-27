@@ -239,16 +239,24 @@ Proof.
     + eapply Ple_trans. eauto.  apply Pos.le_nlt. apply n.
 Qed.
 
-Definition fresh_id (s: list ident) := Pos.succ (find_max_pos s).
+Definition fresh_id (s: list ident) :=
+  match s with
+  |nil => 1%positive
+  |_ => Pos.succ (find_max_pos s)
+  end.
 Definition fresh_block (s:sup) : block := Stack (fresh_id (stack s)).
 
 Theorem freshness : forall s, ~sup_In (fresh_block s) s.
 Proof.
   intros. unfold fresh_block.
-  intro.
+  intro. destruct s. simpl in H. destruct stack0.
+  - simpl in H. eauto.
+  - 
   apply Lessthan in H.
-  assert (Plt (find_max_pos (stack s)) (Pos.succ (find_max_pos (stack s)))). apply Plt_succ.
-  assert (Plt (find_max_pos (stack s)) (find_max_pos (stack s))). eapply Plt_Ple_trans. eauto. auto.
+  assert (Plt (find_max_pos (i::stack0)) (Pos.succ (find_max_pos (i::stack0)))). apply Plt_succ.
+  assert (Plt (find_max_pos (i::stack0)) (find_max_pos (i::stack0))).
+  eapply Plt_Ple_trans.
+  eauto. auto.
   apply Plt_strict in H1.
   auto.
 Qed.
