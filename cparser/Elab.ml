@@ -375,7 +375,7 @@ let elab_int_constant loc s0 =
     try List.find (fun ty -> integer_representable v ty)
                   (if base = 10 then dec_kinds else hex_kinds)
     with Not_found ->
-      error loc "integer literal '%s' cannot be represented" s0;
+      error loc "integer literal '%s' is too large to be represented in a signed integer type.  Consider marking it as unsigned, or writing it in hexadecimal." s0;
       IInt
   in
   (v, ty)
@@ -395,48 +395,75 @@ let elab_float_constant f =
   in
   (v, ty)
 
-let elab_char_constant loc wide chars =
-  let len = List.length chars in
-  let nbits = if wide then 8 * !config.sizeof_wchar else 8 in
-  let max_digit = Int64.shift_left 1L nbits in
-  (* Treat multi-character constants as a number in base 2^nbits.
-     It must fit in type int for a normal constant and in type wchar_t
-     for a wide constant. *)
-  let v =
-    if len > (if wide then 1 else !config.sizeof_int) then begin
-      error loc "%d-character constant too long for its type" len;
-      0L
-    end else
-      List.fold_left
-        (fun acc d ->
-          if d < 0L || d >= max_digit then
-            error loc "escape sequence is out of range (code 0x%LX)" d;
-          Int64.add (Int64.shift_left acc nbits) d)
-        0L chars in
-  (* C99 6.4.4.4 items 10 and 11:
-       single-character constant -> represent at type char
-       multi-character constant -> represent at type int
-       wide character constant -> represent at type wchar_t *)
-  Ceval.normalize_int v
-    (if wide then wchar_ikind() else if len = 1 then IChar else IInt)
-
-let elab_string_literal loc wide chars =
-  let nbits = if wide then 8 * !config.sizeof_wchar else 8 in
-  let char_max = Int64.shift_left 1L nbits in
+let check_char_range loc ikind chars =
+  let max = Int64.shift_left 1L (sizeof_ikind ikind * 8) in
   List.iter
     (fun c ->
-      if c < 0L || c >= char_max
-      then error loc "escape sequence is out of range (code 0x%LX)" c)
-    chars;
-  if wide then
-    CWStr chars
-  else begin
-    let res = Bytes.create (List.length chars) in
-    List.iteri
-      (fun i c -> Bytes.set res i (Char.unsafe_chr (Int64.to_int c)))
-      chars;
-    CStr (Bytes.to_string res)
-  end
+      if c >= max then error loc "escape sequence 0x%LX is out of range" c)
+    chars
+
+let ikind_of_encoding = function
+  | EncNone -> IChar
+  | EncWide -> wchar_ikind()
+  | EncU16 -> IUShort
+  | EncU32 -> IUInt
+  | EncUTF8 -> IChar
+
+let elab_char_constant loc enc chars =
+  let len = List.length chars in
+  (* We support multi-character constants for EncNone character literals only.
+     We treat them as big-endian numbers in base 256. *)
+  let v =
+    match chars, enc with
+    | [], _ -> error loc "empty character constant"; 0L
+    | [c], _ -> c
+    | _, EncNone ->
+      if len > !config.sizeof_int then begin
+        error loc "%d-character constant too long, overflows its type" len;
+        0L
+      end else begin
+        check_char_range loc IUChar chars;
+        List.fold_left
+          (fun acc d -> Int64.(add (shift_left acc 8) d))
+          0L chars
+      end
+    | _, _ ->
+      error loc "%d-character constant not supported" len; 0L in
+  (* C11 6.4.4.4 items 10 and 11:
+       normal single-character constant -> represent at type char
+       multi-character constant -> represent at type int
+       L character constant -> represent at type wchar_t
+       u character constant -> represent at type char16_t
+       U character constant -> represent at type char32_t *)
+  let ik =
+    if enc = EncNone && len > 1 then IInt else ikind_of_encoding enc in
+  let v' = Ceval.normalize_int v ik in
+  if v' <> v then
+    warning loc Constant_conversion
+      "overflow in character constant, changes value from %Ld to %Ld" v v';
+  v'
+
+let elab_string_literal loc enc chars =
+  let ik = ikind_of_encoding enc in
+  check_char_range loc ik chars;
+  match enc with
+  | EncNone | EncUTF8 ->
+      let res = Bytes.create (List.length chars) in
+      List.iteri
+        (fun i c -> Bytes.set res i (Char.unsafe_chr (Int64.to_int c)))
+        chars;
+      CStr (Bytes.to_string res)
+  | EncWide | EncU16 | EncU32 -> 
+      CWStr(chars, ik)
+
+let warn_C11_literals loc enc kind =
+  let warn enc =
+    warning loc Celeven_extension "'%s' %s are a C11 extension" enc kind in
+  match enc with
+  | EncNone | EncWide -> ()
+  | EncUTF8 -> warn "u8"
+  | EncU16 -> warn "u"
+  | EncU32 -> warn "U"
 
 let elab_constant loc = function
   | CONST_INT s ->
@@ -445,14 +472,22 @@ let elab_constant loc = function
   | CONST_FLOAT f ->
       let (v, fk) = elab_float_constant f in
       CFloat(v, fk)
-  | CONST_CHAR(wide, s) ->
-      let ikind = if wide then wchar_ikind () else IInt in
-      CInt(elab_char_constant loc wide s, ikind, "")
+  | CONST_CHAR(enc, s) ->
+      warn_C11_literals loc enc "character constants";
+      let ikind =
+        match enc with
+        | EncNone -> IInt
+        | EncWide -> wchar_ikind ()
+        | EncU16 -> IUShort
+        | EncU32 -> IUInt
+        | EncUTF8 -> assert false in
+      CInt(elab_char_constant loc enc s, ikind, "")
   | CONST_STRING(wide, s) ->
+      warn_C11_literals loc wide "string literals";
       elab_string_literal loc wide s
 
-let elab_simple_string loc wide chars =
-  match elab_string_literal loc wide chars with
+let elab_simple_string loc enc chars =
+  match elab_string_literal loc enc chars with
   | CStr s -> s
   | _ -> error loc "cannot use wide string literal in 'asm'"; ""
 
@@ -1586,6 +1621,7 @@ and elab_item zi item il =
      | COMPOUND_INIT [_, SINGLE_INIT(CONSTANT (CONST_STRING(w, s)))]),
     TArray(ty_elt, sz, _)
     when is_integer_type env ty_elt ->
+      warn_C11_literals loc w "string literals";
       begin match elab_string_literal loc w s, unroll env ty_elt with
       | CStr s, TInt((IChar | ISChar | IUChar), _) ->
           if not (I.index_below (Int64.of_int(String.length s - 1)) sz) then
@@ -1594,12 +1630,12 @@ and elab_item zi item il =
       | CStr _, _ ->
           error loc "initialization of an array of non-char elements with a string literal";
           elab_list zi il false
-      | CWStr s, TInt(_, _) when compatible_types AttrIgnoreTop env ty_elt (TInt(wchar_ikind(), [])) ->
+      | CWStr(s, ik), TInt(_, _) when compatible_types AttrIgnoreTop env ty_elt (TInt(ik, [])) ->
           if not (I.index_below (Int64.of_int(List.length s - 1)) sz) then
             warning loc Unnamed "initializer string for array of wide chars %s is too long" (I.name zi);
           elab_list (I.set zi (init_int_array_wstring sz s)) il false
       | CWStr _, _ ->
-          error loc "initialization of an array of non-wchar_t elements with a wide string literal";
+          error loc "type mismatch between array destination and wide string literal";
           elab_list zi il false
       | _ -> assert false
       end
@@ -1764,6 +1800,33 @@ let elab_expr ctx loc env a =
   | CONSTANT cst ->
       let cst' = elab_constant loc cst in
       { edesc = EConst cst'; etyp = type_of_constant cst' },env
+
+(* 6.5.1.1 Generic selection *)
+
+  | GENERIC(a1, assoc) ->
+      warning Celeven_extension "'_Generic' is a C11 extension";
+      let b1,env = elab env a1 in
+      let bssoc,env = elab_generic_association env assoc in
+      let ty = erase_attributes_type env (pointer_decay env b1.etyp) in
+      let exact_match = function
+        | (None, _) -> false
+        | (Some ty', _) -> compatible_types AttrCompat env ty ty'
+      and default_match = function
+        | (None, _) -> true
+        | (Some _, _) -> false in
+      begin match List.filter exact_match bssoc with
+      | (_, b) :: others ->
+          if others <> [] then
+            error "'_Generic' selector of type %a is compatible with several associations"
+                  (print_typ env) ty;
+          (b,env)
+      | [] ->
+          match List.find_opt default_match bssoc with
+          | Some (_, b) -> (b,env)
+          | None ->
+              fatal_error "'_Generic' selector of type %a is not compatible with any association"
+                          (print_typ env) ty
+      end
 
 (* 6.5.2 Postfix expressions *)
 
@@ -2449,6 +2512,36 @@ let elab_expr ctx loc env a =
         end;
         let rest,env = elab_arguments (argno + 1) (argl,env) paraml vararg in
         arg1 :: rest,env
+
+  (* Elaboration of _Generic association lists *)
+  and elab_generic_association env assoc =
+    let rec elab_gen env accu = function
+      | [] -> (List.rev accu, env)
+      | (None, a) :: l ->
+          if List.exists (fun (oty, _) -> oty = None) accu then
+            error "duplicate default generic association";
+          let b,env = elab env a in
+          elab_gen env ((None, b) :: accu) l
+      | (Some(spec, dcl), a) :: l ->
+          let ty,env = elab_type loc env spec dcl in
+          if wrap is_function_type loc env ty then
+            error "function type %a in generic association"
+              (print_typ env) ty
+          else if wrap incomplete_type loc env ty then
+            error "incomplete type %a in generic association"
+              (print_typ env) ty;
+          List.iter
+            (function
+            | (None, _) -> ()
+            | (Some ty', _) ->
+                if compatible_types AttrCompat env ty ty' then
+                  error "type %a in generic association compatible with previously specified type %a"
+                    (print_typ env) ty (print_typ env) ty')
+            accu;
+          let b,env = elab env a in
+          elab_gen env ((Some ty, b) :: accu) l
+    in elab_gen env [] assoc
+
   in elab env a
 
 (* Filling in forward declaration *)
@@ -2711,30 +2804,38 @@ let elab_fundef genv spec name defs body loc =
         the structs and unions defined in the parameter list. *)
   let (ty, extra_decls, lenv) =
     match ty, kr_params with
-    | TFun(ty_ret, None, vararg, attr), None ->
-        (TFun(ty_ret, Some [], vararg, attr), [], lenv)
-    | ty, None ->
+    | TFun(ty_ret, Some proto, vararg, attr), None ->
+        (ty, [], lenv)
+    | TFun(ty_ret, None, false, attr), None ->
+        let ty = TFun(ty_ret, Some [], inherit_vararg genv s sto ty, attr) in
+        warning loc CompCert_conformance "function definition without a prototype, converting to prototype form.@ New type is '%a'"
+          Cprint.simple_decl (fun_id, ty);
         (ty, [], lenv)
     | TFun(ty_ret, None, false, attr), Some params ->
-        warning loc CompCert_conformance "non-prototype, pre-standard function definition, converting to prototype form";
         let (params', extra_decls, lenv) =
           elab_KR_function_parameters lenv params defs loc in
-        (TFun(ty_ret, Some params', inherit_vararg genv s sto ty, attr), extra_decls, lenv)
-    | _, Some params ->
-        assert false
+        let ty =
+          TFun(ty_ret, Some params', inherit_vararg genv s sto ty, attr) in
+        warning loc CompCert_conformance "function definition without a prototype, converting to prototype form.@ New type is '%a'"
+          Cprint.simple_decl (fun_id, ty);
+        (ty, extra_decls, lenv)
+    | _, _ ->
+        fatal_error loc "wrong type for function definition"
   in
-  (* Extract infos from the type of the function.
-     Checks on the return type must be done in the global environment. *)
+  (* Add the noreturn to the function type since for calls we only check for noreturn
+      attributes in the type of the function call. *)
+  let ty = if noret then add_attributes_type [Attr("noreturn",[])] ty else ty in
+  (* Extract infos from the type of the function. *)
   let (ty_ret, params, vararg, attr) =
     match ty with
-    | TFun(ty_ret, Some params, vararg, attr) ->
-         if has_std_alignas genv ty then
-           error loc "alignment specified for function '%s'" s;
-         if wrap incomplete_type loc genv ty_ret && not (is_void_type genv ty_ret) then
-           fatal_error loc "incomplete result type %a in function definition"
-             (print_typ genv) ty_ret;
-        (ty_ret, params, vararg, attr)
-    | _ -> fatal_error loc "wrong type for function definition" in
+    | TFun(ty_ret, Some params, vararg, attr) -> (ty_ret, params, vararg, attr)
+    | _ -> assert false in
+  (* Checks on the return type must be done in the global environment. *)
+  if has_std_alignas genv ty then
+    error loc "alignment specified for function '%s'" s;
+  if wrap incomplete_type loc genv ty_ret && not (is_void_type genv ty_ret) then
+    fatal_error loc "incomplete result type %a in function definition"
+                (print_typ genv) ty_ret;
   (* Enter function in the global environment *)
   let (fun_id, sto1, genv, new_ty, _) =
     enter_or_refine_function loc genv fun_id sto ty in

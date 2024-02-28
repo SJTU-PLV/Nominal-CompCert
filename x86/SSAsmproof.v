@@ -1252,6 +1252,12 @@ Proof.
     rewrite Heqo.
     eapply goto_label_inject; eauto. eapply globinj_to_funinj. auto.
     repeat simpl_inject.
+  + generalize (RINJ rd). intro A.
+    generalize (RINJ r2). intro B.
+    unfold Op.maxf. repeat destr; try congruence; try inv A; try inv B; constructor.
+  + generalize (RINJ rd). intro A.
+    generalize (RINJ r2). intro B.
+    unfold Op.minf. repeat destr; try congruence; try inv A; try inv B; constructor.
 Qed.
 
 Lemma allocframe_inject:

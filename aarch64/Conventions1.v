@@ -38,7 +38,7 @@ Definition is_callee_save (r: mreg): bool :=
   | R17 => false
   | R19 | R20 | R21 |  R22 | R23 => true
   | R24 | R25 | R26 | R27 | R28 => true
-  | R29 => false
+  | R29 => true
   | F0  | F1  | F2  | F3  | F4  | F5  | F6  | F7 => false
   | F8  | F9  | F10 | F11 | F12 | F13 | F14 | F15 => true
   | F16 | F17 | F18 | F19 | F20 | F21 | F22 | F23 => false
@@ -48,7 +48,7 @@ Definition is_callee_save (r: mreg): bool :=
 Definition int_caller_save_regs :=
      R0  :: R1  :: R2  :: R3  :: R4  :: R5  :: R6  :: R7
   :: R8  :: R9  :: R10 :: R11 :: R12 :: R13 :: R14 :: R15
-  :: R17 :: R29 :: nil.
+  :: R17 :: nil.
 
 Definition float_caller_save_regs :=
      F0  :: F1  :: F2  :: F3  :: F4  :: F5  :: F6  :: F7
@@ -57,7 +57,7 @@ Definition float_caller_save_regs :=
 
 Definition int_callee_save_regs :=
      R19 :: R20 :: R21 ::  R22 :: R23
-  :: R24 :: R25 :: R26 :: R27 :: R28 :: nil.
+  :: R24 :: R25 :: R26 :: R27 :: R28 :: R29 :: nil.
 
 Definition float_callee_save_regs :=
      F8  :: F9  :: F10 :: F11 :: F12 :: F13 :: F14 :: F15 :: nil.
@@ -82,6 +82,23 @@ Definition is_float_reg (r: mreg): bool :=
   | F16 | F17 | F18 | F19 | F20 | F21 | F22 | F23
   | F24 | F25 | F26 | F27 | F28 | F29 | F30 | F31 => true
   end.
+
+(** How to use registers for register allocation.
+    We favor the use of caller-save registers, using callee-save registers
+    only when no caller-save is available. *)
+
+Record alloc_regs := mk_alloc_regs {
+  preferred_int_regs: list mreg;
+  remaining_int_regs: list mreg;
+  preferred_float_regs: list mreg;
+  remaining_float_regs: list mreg
+}.
+
+Definition allocatable_registers (_: unit) :=
+  {| preferred_int_regs := int_caller_save_regs;
+     remaining_int_regs := int_callee_save_regs;
+     preferred_float_regs := float_caller_save_regs;
+     remaining_float_regs := float_callee_save_regs |}.
 
 (** * Function calling conventions *)
 

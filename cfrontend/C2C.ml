@@ -287,98 +287,6 @@ let attributes = [
 ]
 
 
-(** ** Functions used to handle string literals *)
-
-let stringNum = ref 0   (* number of next global for string literals *)
-let stringTable : (string, AST.ident) Hashtbl.t = Hashtbl.create 47
-let wstringTable : (int64 list, AST.ident) Hashtbl.t = Hashtbl.create 47
-
-let name_for_string_literal s =
-  try
-    Hashtbl.find stringTable s
-  with Not_found ->
-    incr stringNum;
-    let name = Printf.sprintf "__stringlit_%d" !stringNum in
-    let id = intern_string name in
-    Hashtbl.add decl_atom id
-      { a_storage = C.Storage_static;
-        a_alignment = Some 1;
-        a_size = Some (Int64.of_int (String.length s + 1));
-        a_sections = [Sections.for_stringlit()];
-        a_access = Sections.Access_default;
-        a_inline = No_specifier;
-        a_loc = Cutil.no_loc };
-    Hashtbl.add stringTable s id;
-    id
-
-let typeStringLiteral s =
-  let sg = if Machine.((!config).char_signed) then Signed else Unsigned in
-  Tarray(Tint(I8, sg, noattr), Z.of_uint (String.length s + 1), noattr)
-
-let global_for_string s id =
-  let init = ref [] in
-  let add_char c =
-    init := AST.Init_int8(Z.of_uint(Char.code c)) :: !init in
-  add_char '\000';
-  for i = String.length s - 1 downto 0 do add_char s.[i] done;
-  (id, AST.Gvar { AST.gvar_info = typeStringLiteral s;  AST.gvar_init = !init;
-              AST.gvar_readonly = true;  AST.gvar_volatile = false})
-
-let name_for_wide_string_literal s =
-  try
-    Hashtbl.find wstringTable s
-  with Not_found ->
-    incr stringNum;
-    let name = Printf.sprintf "__stringlit_%d" !stringNum in
-    let id = intern_string name in
-    let wchar_size = Machine.((!config).sizeof_wchar) in
-    Hashtbl.add decl_atom id
-      { a_storage = C.Storage_static;
-        a_alignment = Some wchar_size;
-        a_size = Some (Int64.(mul (of_int (List.length s + 1))
-                                  (of_int wchar_size)));
-        a_sections = [Sections.for_stringlit()];
-        a_access = Sections.Access_default;
-        a_inline = No_specifier;
-        a_loc = Cutil.no_loc };
-    Hashtbl.add wstringTable s id;
-    id
-
-let typeWideStringLiteral s =
-  let sz =
-    match Machine.((!config).sizeof_wchar) with
-    | 2 -> I16
-    | 4 -> I32
-    | _ -> assert false in
-  let sg =
-    if Machine.((!config).wchar_signed) then Signed else Unsigned in
-  Tarray(Tint(sz, sg, noattr), Z.of_uint (List.length s + 1), noattr)
-
-let global_for_wide_string s id =
-  let init = ref [] in
-  let init_of_char =
-    match Machine.((!config).sizeof_wchar) with
-    | 2 -> (fun z -> AST.Init_int16 z)
-    | 4 -> (fun z -> AST.Init_int32 z)
-    | _ -> assert false in
-  let add_char c =
-    init := init_of_char(Z.of_uint64 c) :: !init in
-  List.iter add_char s;
-  add_char 0L;
-   AST.(id,  Gvar { gvar_info = typeWideStringLiteral s;  gvar_init = List.rev !init;
-             gvar_readonly = true; gvar_volatile = false})
-
-let globals_for_strings globs =
-  let globs1 =
-    Hashtbl.fold
-      (fun s id l -> global_for_wide_string s id :: l)
-      wstringTable globs in
-  let globs2 =
-    Hashtbl.fold
-      (fun s id l -> global_for_string s id :: l)
-      stringTable globs1 in
-  globs2
-
 (** ** Handling of inlined memcpy functions *)
 
 let constant_size_t a =
@@ -520,19 +428,21 @@ let convertFkind k a : coq_type =
       if not !Clflags.option_flongdouble then unsupported "'long double' type";
       Tfloat (F64, a)
 
+let checkResultType env ty =
+  if (not !Clflags.option_fstruct_passing) && Cutil.is_composite_type env ty
+  then unsupported "function returning a struct or union \
+                    (consider adding option [-fstruct-passing])"
+
+let checkArgumentType env ty =
+  if (not !Clflags.option_fstruct_passing) && Cutil.is_composite_type env ty
+  then unsupported "function parameter of struct or union type \
+                    (consider adding option [-fstruct-passing])"
+
 let checkFunctionType env tres targs =
-  if not !Clflags.option_fstruct_passing then begin
-    if Cutil.is_composite_type env tres then
-      unsupported "function returning a struct or union (consider adding option [-fstruct-passing])";
-    begin match targs with
-    | None -> ()
-    | Some l ->
-        List.iter
-          (fun (id, ty) ->
-            if Cutil.is_composite_type env ty then
-              unsupported "function parameter of struct or union type (consider adding option [-fstruct-passing])")
-          l
-    end
+  checkResultType env tres;
+  begin match targs with
+  | None -> ()
+  | Some l -> List.iter (fun (id, ty) -> checkArgumentType env ty) l
   end
 
 let rec convertTyp env ?bitwidth t =
@@ -560,7 +470,7 @@ let rec convertTyp env ?bitwidth t =
                 convertTyp env tres,
                 convertCallconv tres targs va a)
   | C.TNamed _ ->
-      convertTyp env (Cutil.unroll env t)
+      convertTyp env ?bitwidth (Cutil.unroll env t)
   | C.TStruct(id, a) ->
       Ctypes.Tstruct(intern_string id.name, convertAttr a)
   | C.TUnion(id, a) ->
@@ -615,9 +525,10 @@ let rec convertTypAnnotArgs env = function
       Tcons(convertTyp env (Cutil.unary_conversion env e1.etyp),
             convertTypAnnotArgs env el)
 
-let convertField env f =
+let convertField env sid f =
   let id = intern_string f.fld_name
   and ty = convertTyp env ?bitwidth: f.fld_bitfield f.fld_typ in
+  Debug.set_member_atom ~str_id:sid f.fld_name ~fld_id:id;
   match f.fld_bitfield with
   | None -> Member_plain(id, ty)
   | Some w ->
@@ -630,17 +541,13 @@ let convertField env f =
 let convertCompositedef env su id attr members =
   if Cutil.find_custom_attributes ["packed";"__packed__"] attr <> [] then
     unsupported "packed struct (consider adding option [-fpacked-structs])";
-  let t = match su with
-  | C.Struct ->
-      let layout = Cutil.struct_layout env attr members in
-      List.iter (fun (a,b) -> Debug.set_member_offset id a b) layout;
-      TStruct (id,attr)
-  | C.Union -> TUnion (id,attr) in
-  Debug.set_composite_size id su (Cutil.sizeof env t);
-  Composite(intern_string id.name,
-            begin match su with C.Struct -> Ctypes.Struct | C.Union -> Ctypes.Union end,
-            List.map (convertField env) members,
-            convertAttr attr)
+  let intern_name = intern_string id.name in
+  let (t, su') = match su with
+    | C.Struct -> TStruct (id, attr), Ctypes.Struct
+    | C.Union -> TUnion (id, attr), Ctypes.Union in
+  Debug.set_composite_size id intern_name su (Cutil.sizeof env t);
+  let ms = List.map (convertField env intern_name) members in
+  Composite(intern_name, su', ms, convertAttr attr)
 
 let rec projFunType env ty =
   match Cutil.unroll env ty with
@@ -660,6 +567,98 @@ let is_int64 env ty =
   | C.TInt(k, _) -> Cutil.sizeof_ikind k = 8
   | C.TEnum(_, _) -> false
   | _ -> assert false
+
+(** String literals *)
+
+let stringNum = ref 0   (* number of next global for string literals *)
+let stringTable : (string, AST.ident) Hashtbl.t = Hashtbl.create 47
+let wstringTable : (int64 list * ikind, AST.ident) Hashtbl.t = Hashtbl.create 47
+
+let is_C_string s = not (String.contains s '\000')
+
+let name_for_string_literal s =
+  try
+    Hashtbl.find stringTable s
+  with Not_found ->
+    incr stringNum;
+    let name = Printf.sprintf "__stringlit_%d" !stringNum in
+    let id = intern_string name in
+    let mergeable = if is_C_string s then 1 else 0 in
+    Hashtbl.add decl_atom id
+      { a_storage = C.Storage_static;
+        a_alignment = Some 1;
+        a_size = Some (Int64.of_int (String.length s + 1));
+        a_sections = [Sections.for_stringlit mergeable];
+        a_access = Sections.Access_default;
+        a_inline = No_specifier;
+        a_loc = Cutil.no_loc };
+    Hashtbl.add stringTable s id;
+    id
+
+let typeStringLiteral s =
+  let sg = if Machine.((!config).char_signed) then Signed else Unsigned in
+  Tarray(Tint(I8, sg, noattr), Z.of_uint (String.length s + 1), noattr)
+
+let global_for_string s id =
+  let init = ref [] in
+  let add_char c =
+    init := AST.Init_int8(Z.of_uint(Char.code c)) :: !init in
+  add_char '\000';
+  for i = String.length s - 1 downto 0 do add_char s.[i] done;
+  AST.(id, Gvar { gvar_info = typeStringLiteral s;  gvar_init = !init;
+                  gvar_readonly = true;  gvar_volatile = false})
+
+let is_C_wide_string s = not (List.mem 0L s)
+
+let name_for_wide_string_literal s ik =
+  try
+    Hashtbl.find wstringTable (s, ik)
+  with Not_found ->
+    incr stringNum;
+    let name = Printf.sprintf "__stringlit_%d" !stringNum in
+    let id = intern_string name in
+    let wchar_size = Cutil.sizeof_ikind ik in
+    let mergeable = if is_C_wide_string s then wchar_size else 0 in
+    Hashtbl.add decl_atom id
+      { a_storage = C.Storage_static;
+        a_alignment = Some wchar_size;
+        a_size = Some (Int64.(mul (of_int (List.length s + 1))
+                                  (of_int wchar_size)));
+        a_sections = [Sections.for_stringlit mergeable];
+        a_access = Sections.Access_default;
+        a_inline = No_specifier;
+        a_loc = Cutil.no_loc };
+    Hashtbl.add wstringTable (s, ik) id;
+    id
+
+let typeWideStringLiteral s ik =
+  Tarray(convertIkind ik noattr, Z.of_uint (List.length s + 1), noattr)
+
+let global_for_wide_string (s, ik) id =
+  let init = ref [] in
+  let init_of_char =
+    match Cutil.sizeof_ikind ik with
+    | 2 -> (fun z -> AST.Init_int16 z)
+    | 4 -> (fun z -> AST.Init_int32 z)
+    | _ -> assert false in
+  let add_char c =
+    init := init_of_char(Z.of_uint64 c) :: !init in
+  List.iter add_char s;
+  add_char 0L;
+  AST.(id, Gvar { gvar_info = typeWideStringLiteral s ik;
+                  gvar_init = List.rev !init;
+                  gvar_readonly = true; gvar_volatile = false})
+
+let globals_for_strings globs =
+  let globs1 =
+    Hashtbl.fold
+      (fun s id l -> global_for_wide_string s id :: l)
+      wstringTable globs in
+  let globs2 =
+    Hashtbl.fold
+      (fun s id l -> global_for_string s id :: l)
+      stringTable globs1 in
+  globs2
 
 (** Floating point constants *)
 
@@ -931,8 +930,8 @@ let rec convertExpr env e =
   | C.ECall({edesc = C.EVar {name = "__builtin_va_arg"}}, [arg1; arg2]) ->
       make_builtin_va_arg env (convertTyp env e.etyp) (convertExpr env arg1)
 
-  | C.ECall({edesc = C.EVar {name = "__builtin_va_end"}}, _) ->
-      Ecast (ezero, Tvoid)
+  | C.ECall({edesc = C.EVar {name = "__builtin_va_end"}}, [arg]) ->
+      Ecast (convertExpr env arg, Tvoid)
 
   | C.ECall({edesc = C.EVar {name = "__builtin_va_copy"}}, [arg1; arg2]) ->
       let dst = convertExpr env arg1 in
@@ -965,12 +964,13 @@ let rec convertExpr env e =
       | None ->
           error "wrong type for function part of a call"
       | Some(tres, targs, va) ->
-          checkFunctionType env tres targs;
           if targs = None && not !Clflags.option_funprototyped then
             unsupported "call to unprototyped function (consider adding option [-funprototyped])";
           if va && not !Clflags.option_fvararg_calls then
             unsupported "call to variable-argument function (consider adding option [-fvararg-calls])"
       end;
+      checkResultType env e.etyp;
+      List.iter (fun arg -> checkArgumentType env arg.etyp) args;
       ewrap (Ctyping.ecall (convertExpr env fn) (convertExprList env args))
 
 and convertLvalue env e =
@@ -993,9 +993,9 @@ and convertLvalue env e =
   | C.EConst(C.CStr s) ->
       let ty = typeStringLiteral s in
       Evar(name_for_string_literal s, ty)
-  | C.EConst(C.CWStr s) ->
-      let ty = typeWideStringLiteral s in
-      Evar(name_for_wide_string_literal s, ty)
+  | C.EConst(C.CWStr(s, ik)) ->
+      let ty = typeWideStringLiteral s ik in
+      Evar(name_for_wide_string_literal s ik, ty)
   | _ ->
       error "illegal lvalue"; ezero
 
@@ -1027,61 +1027,6 @@ let convertAsm loc env txt outputs inputs clobber =
   match output' with
   | None -> e
   | Some lhs -> Eassign (convertLvalue env lhs, e, typeof e)
-
-(* Separate the cases of a switch statement body *)
-
-type switchlabel =
-  | Case of C.exp
-  | Default
-
-type switchbody =
-  | Label of switchlabel
-  | Stmt of C.stmt
-
-let rec flattenSwitch = function
-  | {sdesc = C.Sseq(s1, s2)} ->
-      flattenSwitch s1 @ flattenSwitch s2
-  | {sdesc = C.Slabeled(C.Scase(e, _), s1)} ->
-      Label(Case e) :: flattenSwitch s1
-  | {sdesc = C.Slabeled(C.Sdefault, s1)} ->
-      Label Default :: flattenSwitch s1
-  | {sdesc = C.Slabeled(C.Slabel lbl, s1); sloc = loc} ->
-      Stmt {sdesc = C.Slabeled(C.Slabel lbl, Cutil.sskip); sloc = loc}
-      :: flattenSwitch s1
-  | s ->
-      [Stmt s]
-
-let rec groupSwitch = function
-  | [] ->
-      (Cutil.sskip, [])
-  | Label case :: rem ->
-      let (fst, cases) = groupSwitch rem in
-      (Cutil.sskip, (case, fst) :: cases)
-  | Stmt s :: rem ->
-      let (fst, cases) = groupSwitch rem in
-      (Cutil.sseq s.sloc s fst, cases)
-
-(* Test whether the statement contains case and give an *)
-let rec contains_case s =
-  match s.sdesc with
-  | C.Sskip
-  | C.Sdo _
-  | C.Sbreak
-  | C.Scontinue
-  | C.Sswitch _ (* Stop at a switch *)
-  | C.Sgoto _
-  | C.Sreturn _
-  | C.Sdecl _
-  | C.Sasm _ ->  ()
-  | C.Sseq (s1,s2)
-  | C.Sif(_,s1,s2) -> contains_case s1; contains_case s2
-  | C.Swhile (_,s1)
-  | C.Sdowhile (s1,_) -> contains_case s1
-  | C.Sfor (s1,e,s2,s3) ->  contains_case s1; contains_case s2; contains_case s3
-  | C.Slabeled(C.Scase _, _) ->
-      unsupported "'case' statement not in 'switch' statement"
-  | C.Slabeled(_,s) -> contains_case s
-  | C.Sblock b -> List.iter contains_case b
 
 (** Annotations for line numbers *)
 
@@ -1122,20 +1067,8 @@ let rec convertStmt env s =
   | C.Scontinue ->
       Csyntax.Scontinue
   | C.Sswitch(e, s1) ->
-      let (init, cases) = groupSwitch (flattenSwitch s1) in
-      let rec init_debug s =
-        match s.sdesc with
-        | Sseq (a,b) -> init_debug a && init_debug b
-        | C.Sskip -> true
-        | _ -> Cutil.is_debug_stmt s in
-      if init.sdesc <> C.Sskip && not (init_debug init) then
-        begin
-          warning Diagnostics.Unnamed "ignored code at beginning of 'switch'";
-          contains_case init
-        end;
       let te = convertExpr env e in
-      swrap (Ctyping.sswitch te
-               (convertSwitch env (is_int64 env e.etyp) cases))
+      swrap (Ctyping.sswitch te (convertSwitch env (is_int64 env e.etyp) s1))
   | C.Slabeled(C.Slabel lbl, s1) ->
       Csyntax.Slabel(intern_string lbl, convertStmt env s1)
   | C.Slabeled(C.Scase _, _) ->
@@ -1158,23 +1091,24 @@ let rec convertStmt env s =
       Csyntax.Sdo (convertAsm s.sloc env txt outputs inputs clobber)
 
 and convertSwitch env is_64 = function
-  | [] ->
+  | {sdesc = C.Sskip} ->
       LSnil
-  | (lbl, s) :: rem ->
-      updateLoc s.sloc;
-      let lbl' =
-        match lbl with
-        | Default ->
-            None
-        | Case e ->
-            match Ceval.integer_expr env e with
-            | None -> unsupported "expression is not an integer constant expression";
-                      None
-            | Some v -> Some (if is_64
-                              then Z.of_uint64 v
-                              else Z.of_uint32 (Int64.to_int32 v))
-      in
-      LScons(lbl', convertStmt env s, convertSwitch env is_64 rem)
+  | {sdesc = C.Slabeled(lbl, s)} ->
+      convertSwitchCase env is_64 lbl s LSnil
+  | {sdesc = C.Sseq ({sdesc = C.Slabeled(lbl, s)}, rem)} ->
+      convertSwitchCase env is_64 lbl s (convertSwitch env is_64 rem)
+  | _ ->
+      assert false
+
+and convertSwitchCase env is_64 lbl s k =
+  let lbl' =
+    match lbl with
+    | C.Sdefault ->
+        None
+    | C.Scase(e, v) ->
+        Some (if is_64 then Z.of_uint64 v else Z.of_uint32 (Int64.to_int32 v))
+    | _ -> assert false in
+  LScons(lbl', convertStmt env s, k)
 
 (** Function definitions *)
 
@@ -1517,6 +1451,41 @@ let public_globals gl =
     (fun accu (id, g) -> if atom_is_static id then accu else id :: accu)
     [] gl
 
+(** Complete the debug information of struct/unions *)
+
+(* [debug_set_struct_mem_ofs sid ((id,byte_ofs), bits)] sets the
+   byte and bit offset information of the member [id] of the struct
+   [sid] *)
+let debug_set_struct_mem_ofs sid ((id, byte_ofs), bits) =
+  let byte_ofs = Z.to_int byte_ofs in
+  match bits with
+  | Full ->
+    Debug.set_member_offset ~str_id:sid ~fld_id:id byte_ofs
+  | Bits (sz, sg, bit_pos, width) ->
+    let bit_pos = Z.to_int bit_pos in
+    let sz = Z.to_int (bitalignof_intsize sz) in
+    let bit_pos = if not !Machine.config.Machine.bitfields_msb_first then
+        sz - bit_pos - (Z.to_int width)
+      else
+        bit_pos in
+    let size = sz / 8 in
+    Debug.set_bitfield_offset ~str_id:sid ~fld_id:id ~bit_ofs:bit_pos ~byte_ofs:byte_ofs ~size:size
+
+(* [debug_set_struct_ofs env types] sets the missing offset information
+   of all structs in the list of composites in [types] if we compile
+   with debug information. *)
+let debug_set_struct_ofs env typs =
+  if !Clflags.option_g then
+    List.iter (function
+        | Composite (sid, Ctypes.Struct, ms, a) ->
+          let layout = Ctypes.layout_struct env ms in
+          begin match layout with
+            | Errors.OK layout ->
+              List.iter (debug_set_struct_mem_ofs sid) layout
+            | Errors.Error _ -> ()
+          end
+        | _ -> ()) typs
+
 (** Convert a [C.program] into a [Csyntax.program] *)
 
 let convertProgram p =
@@ -1545,6 +1514,7 @@ let convertProgram p =
             prog_main = intern_string !Clflags.main_function_name;
             prog_types = typs;
             prog_comp_env = ce } in
+        debug_set_struct_ofs ce typs;
         Diagnostics.check_errors ();
         p'
   with Env.Error msg ->

@@ -329,6 +329,7 @@ Module Pregmap := EMap(PregEq).
 Definition regset := Pregmap.t val.
 Definition genv := Genv.t fundef unit.
 
+Declare Scope asm.
 Notation "a # b" := (a b) (at level 1, only parsing) : asm.
 Notation "a # b <- c" := (Pregmap.set b c a) (at level 1, b at next level) : asm.
 
@@ -1143,6 +1144,10 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
       Next (nextinstr (compare_floats (rs r1) (rs r2) rs)) m
   | Pxorpd_f rd =>
       Next (nextinstr_nf (rs#rd <- (Vfloat Float.zero))) m
+  | Pmaxsd rd r1 =>
+      Next (nextinstr (rs#rd <- (Op.maxf rs#rd rs#r1))) m
+  | Pminsd rd r1 =>
+      Next (nextinstr (rs#rd <- (Op.minf rs#rd rs#r1))) m
   (** Arithmetic operations over single-precision floats *)
   | Padds_ff rd r1 =>
       Next (nextinstr (rs#rd <- (Val.addfs rs#rd rs#r1))) m
@@ -1301,8 +1306,6 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pfnmsub132 _ _ _
   | Pfnmsub213 _ _ _
   | Pfnmsub231 _ _ _
-  | Pmaxsd _ _
-  | Pminsd _ _
   | Pmovb_rm _ _
   | Pmovq_rf _ _
   | Pmovsq_rm _ _

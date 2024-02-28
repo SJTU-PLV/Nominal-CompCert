@@ -57,6 +57,7 @@ type warning_type =
   | Tentative_incomplete_static    (** static tentative definition with incomplete type *)
   | Reduced_alignment              (** alignment reduction *)
   | Non_linear_cond_expr           (** condition that cannot be linearized *)
+  | Invalid_UTF8                   (** invalid UTF-8 encoding *)
 
 val warning  : (string * int) -> warning_type -> ('a, Format.formatter, unit, unit, unit, unit) format6 -> 'a
 (** [warning (f,c) w fmt arg1 ... argN] formats the arguments [arg1] to [argN] as warining according to
@@ -100,3 +101,16 @@ val error_summary : unit -> unit
 
 val active_warning : warning_type -> bool
 (** Test whether a warning is active to avoid costly checks *)
+
+val activate_warning : warning_type -> unit -> unit
+(** Turn the given warning on *)
+
+val deactivate_warning : warning_type -> unit -> unit
+(** Turn the given warning off *)
+
+val warning_as_error : warning_type -> unit -> unit
+(** Turn the given warning on and report it as an error *)
+
+val warning_not_as_error : warning_type -> unit -> unit
+(** Do not report the given warning as an error *)
+

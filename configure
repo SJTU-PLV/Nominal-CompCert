@@ -20,6 +20,7 @@ prefix='/usr/local'
 bindir='$(PREFIX)/bin'
 libdir='$(PREFIX)/lib/compcert'
 mandir='$(PREFIX)/share/man'
+sharedir=''  # determined later based on $bindir and -sharedir option
 coqdevdir='$(PREFIX)/lib/compcert/coq'
 toolprefix=''
 target=''
@@ -28,6 +29,7 @@ has_standard_headers=true
 clightgen=false
 install_coqdev=false
 ignore_coq_version=false
+ignore_ocaml_version=false
 library_Flocq=local
 library_MenhirLib=local
 
@@ -51,7 +53,6 @@ Supported targets:
   armeb-hardfloat      (ARM, EABI using hardware FP registers, big endian)
   x86_32-linux         (x86 32 bits, Linux)
   x86_32-bsd           (x86 32 bits, BSD)
-  x86_32-cygwin        (x86 32 bits, Cygwin environment under Windows)
   x86_64-linux         (x86 64 bits, Linux)
   x86_64-bsd           (x86 64 bits, BSD)
   x86_64-macos         (x86 64 bits, MacOS X)
@@ -65,6 +66,7 @@ Supported targets:
 For x86 targets, the "x86_32-" prefix can also be written "ia32-" or "i386-".
 For x86 targets, the "x86_64-" prefix can also be written "amd64-".
 For AArch64 targets, the "aarch64-" prefix can also be written "arm64-".
+For RISC-V targets, the "rv32-" or "rv64-" prefix can also be written "riscv32-" or "riscv64-".
 
 For PowerPC targets, the "ppc-" prefix can be refined into:
   ppc64-               PowerPC 64 bits
@@ -87,6 +89,7 @@ Options:
   -prefix <dir>        Install in <dir>/bin and <dir>/lib/compcert
   -bindir <dir>        Install binaries in <dir>
   -libdir <dir>        Install libraries in <dir>
+  -sharedir <dir>      Install configuration file in <dir>
   -mandir <dir>        Install man pages in <dir>
   -coqdevdir <dir>     Install Coq development (.vo files) in <dir>
   -toolprefix <pref>   Prefix names of tools ("gcc", etc) with <pref>
@@ -97,6 +100,7 @@ Options:
   -clightgen           Also compile and install the clightgen tool
   -install-coqdev      Also install the Coq development (implied by -clightgen)
   -ignore-coq-version  Accept to use experimental or unsupported versions of Coq
+  -ignore-ocaml-version Accept to use experimental or unsupported versions of OCaml
 '
 
 #
@@ -119,6 +123,8 @@ while : ; do
         libdir="$2"; shift;;
     -mandir|--mandir)
         mandir="$2"; shift;;
+    -sharedir|--sharedir)
+        sharedir="$2"; shift;;
     -coqdevdir|--coqdevdir)
         coqdevdir="$2"; install_coqdev=true; shift;;
     -toolprefix|--toolprefix)
@@ -132,6 +138,8 @@ while : ; do
         install_coqdev=true;;
     -ignore-coq-version|--ignore-coq-version)
         ignore_coq_version=true;;
+    -ignore-ocaml-version|--ignore-ocaml-version)
+        ignore_ocaml_version=true;;
     -install-coqdev|--install-coqdev|-install-coq-dev|--install-coq-dev)
         install_coqdev=true;;
     -use-external-Flocq|--use-external-Flocq)
@@ -186,9 +194,9 @@ case "$target" in
       arch="powerpc"; model="ppc64"; endianness="big"; bitsize=32;;
   e5500-*)
       arch="powerpc"; model="e5500"; endianness="big"; bitsize=32;;
-  rv32-*)
+  riscv32-*|rv32-*)
       arch="riscV"; model="32"; endianness="little"; bitsize=32;;
-  rv64-*)
+  riscv64-*|rv64-*)
       arch="riscV"; model="64"; endianness="little"; bitsize=64;;
   aarch64-*|arm64-*)
       arch="aarch64"; model="default"; endianness="little"; bitsize=64;;
@@ -247,7 +255,7 @@ if test "$arch" = "arm"; then
         exit 2;;
   esac
 
-  cprepro_options="-std=c99 -U__GNUC__ '-D__REDIRECT(name,proto,alias)=name proto' '-D__REDIRECT_NTH(name,proto,alias)=name proto' -E"
+  cprepro_options="-U__GNUC__ '-D__REDIRECT(name,proto,alias)=name proto' '-D__REDIRECT_NTH(name,proto,alias)=name proto' -E"
   system="linux"
 fi
 
@@ -292,7 +300,7 @@ if test "$arch" = "powerpc"; then
         ;;
     *)
         casmruntime="${toolprefix}gcc -c -Wa,-mregnames"
-        cprepro_options="-std=c99 -U__GNUC__ -E"
+        cprepro_options="-U__GNUC__ -E"
         system="linux"
         ;;
   esac
@@ -310,23 +318,15 @@ if test "$arch" = "x86" -a "$bitsize" = "32"; then
         cc_options="-m32"
         casm_options="-m32 -c"
         clinker_options="-m32"
-        cprepro_options="-std=c99 -m32 -U__GNUC__ -E"
+        cprepro_options="-m32 -U__GNUC__ -E"
         system="bsd"
-        ;;
-    cygwin)
-        abi="standard"
-        cc_options="-m32"
-        casm_options="-m32 -c"
-        clinker_options="-m32"
-        cprepro_options="-std=c99 -m32 -U__GNUC__ '-D__attribute__(x)=' -E"
-        system="cygwin"
         ;;
     linux)
         abi="standard"
         cc_options="-m32"
         casm_options="-m32 -c"
         clinker_options="-m32"
-        cprepro_options="-std=c99 -m32 -U__GNUC__ -E"
+        cprepro_options="-m32 -U__GNUC__ -E"
         system="linux"
         ;;
     *)
@@ -347,7 +347,7 @@ if test "$arch" = "x86" -a "$bitsize" = "64"; then
         cc_options="-m64"
         casm_options="-m64 -c"
         clinker_options="-m64"
-        cprepro_options="-std=c99 -m64 -U__GNUC__ -U__SIZEOF_INT128__ -E"
+        cprepro_options="-m64 -U__GNUC__ -U__SIZEOF_INT128__ -E"
         system="bsd"
         ;;
     linux)
@@ -355,7 +355,7 @@ if test "$arch" = "x86" -a "$bitsize" = "64"; then
         cc_options="-m64"
         casm_options="-m64 -c"
         clinker_options="-m64"
-        cprepro_options="-std=c99 -m64 -U__GNUC__ -U__SIZEOF_INT128__ -E"
+        cprepro_options="-m64 -U__GNUC__ -U__SIZEOF_INT128__ -E"
         system="linux"
         ;;
     macos|macosx)
@@ -364,7 +364,7 @@ if test "$arch" = "x86" -a "$bitsize" = "64"; then
         casm_options="-arch x86_64 -c"
         clinker_options="-arch x86_64"
         clinker_needs_no_pie=false
-        cprepro_options="-std=c99 -arch x86_64 -U__GNUC__ -U__SIZEOF_INT128__ -U__clang__ -U__BLOCKS__ '-D__attribute__(x)=' '-D__asm(x)=' '-D_Nullable=' '-D_Nonnull=' '-D__DARWIN_OS_INLINE=static inline' -Wno-\\#warnings -E"
+        cprepro_options="-arch x86_64 -U__GNUC__ -U__SIZEOF_INT128__ -U__clang__ -U__BLOCKS__ '-D__attribute__(x)=' '-D__asm(x)=' '-D_Nullable=' '-D_Nonnull=' '-D__DARWIN_OS_INLINE=static inline' -Wno-\\#warnings -E"
         libmath=""
         system="macos"
         ;;
@@ -373,7 +373,7 @@ if test "$arch" = "x86" -a "$bitsize" = "64"; then
         cc_options="-m64"
         casm_options="-m64 -c"
         clinker_options="-m64"
-        cprepro_options="-std=c99 -m64 -U__GNUC__ -U__SIZEOF_INT128__ '-D__attribute__(x)=' -E"
+        cprepro_options="-m64 -U__GNUC__ -U__SIZEOF_INT128__ '-D__attribute__(x)=' -E"
         system="cygwin"
         ;;
     *)
@@ -397,7 +397,7 @@ if test "$arch" = "riscV"; then
   cc_options="$model_options"
   casm_options="$model_options -c"
   clinker_options="$model_options"
-  cprepro_options="$model_options -std=c99 -U__GNUC__ -E"
+  cprepro_options="$model_options -U__GNUC__ -E"
   system="linux"
 fi
 
@@ -408,7 +408,7 @@ if test "$arch" = "aarch64"; then
   case "$target" in
     linux)
         abi="standard"
-        cprepro_options="-std=c99 -U__GNUC__ -E"
+        cprepro_options="-U__GNUC__ -E"
         system="linux";;
     macos|macosx)
         abi="apple"
@@ -418,7 +418,7 @@ if test "$arch" = "aarch64"; then
         clinker="${toolprefix}cc"
         clinker_needs_no_pie=false
         cprepro="${toolprefix}cc"
-        cprepro_options="-std=c99 -arch arm64 -U__GNUC__ -U__clang__ -U__BLOCKS__ '-D__attribute__(x)=' '-D__asm(x)=' '-D_Nullable=' '-D_Nonnull=' '-D__DARWIN_OS_INLINE=static inline' -Wno-\\#warnings -E"
+        cprepro_options="-arch arm64 -U__GNUC__ -U__clang__ -U__BLOCKS__ '-D__attribute__(x)=' '-D__asm(x)=' '-D_Nullable=' '-D_Nonnull=' '-D__DARWIN_OS_INLINE=static inline' -Wno-\\#warnings -E"
         libmath=""
         system="macos"
         ;;
@@ -502,16 +502,16 @@ fi
 missingtools=false
 
 echo "Testing Coq... " | tr -d '\n'
-coq_ver=$(${COQBIN}coqc -v 2>/dev/null | sed -n -e 's/The Coq Proof Assistant, version \([^ ]*\).*$/\1/p')
+coq_ver=$(${COQBIN}coqc -v 2>/dev/null | tr -d '\r' | sed -n -e 's/The Coq Proof Assistant, version \([^ ]*\).*$/\1/p')
 case "$coq_ver" in
-  8.9.0|8.9.1|8.10.0|8.10.1|8.10.2|8.11.0|8.11.1|8.11.2|8.12.0|8.12.1|8.12.2|8.13.0|8.13.1|8.13.2|8.14.0)
+  8.12.0|8.12.1|8.12.2|8.13.0|8.13.1|8.13.2|8.14.0|8.14.1|8.15.0|8.15.1|8.15.2|8.16.0|8.16.1)
         echo "version $coq_ver -- good!";;
   ?*)
         echo "version $coq_ver -- UNSUPPORTED"
         if $ignore_coq_version; then
             echo "Warning: this version of Coq is unsupported, proceed at your own risks."
         else
-            echo "Error: CompCert requires a version of Coq between 8.9.0 and 8.14.0"
+            echo "Error: CompCert requires a version of Coq between 8.12.0 and 8.16.1"
             missingtools=true
         fi;;
   "")
@@ -521,26 +521,25 @@ case "$coq_ver" in
 esac
 
 echo "Testing OCaml... " | tr -d '\n'
-ocaml_ver=`ocamlc -version 2>/dev/null`
+ocaml_ver=`ocamlc -version 2>/dev/null | tr -d '\r'`
 case "$ocaml_ver" in
-  4.00.*|4.01.*| 4.02.*|4.03.*|4.04.*)
-        echo "version $ocaml_ver -- UNSUPPORTED"
-        echo "Error: CompCert requires OCaml version 4.05 or later."
-        missingtools=true;;
-  4.*)
+  4.0[5-9].*|4.1?.*)
         echo "version $ocaml_ver -- good!";;
   ?.*)
         echo "version $ocaml_ver -- UNSUPPORTED"
-        echo "Error: CompCert requires OCaml version 4.05 or later."
-        missingtools=true;;
+        if $ignore_ocaml_version; then
+            echo "Warning: this version of OCaml is unsupported, proceed at your own risks."
+        else
+            echo "Error: make sure OCaml version 4.05 to 4.14 is installed."
+            missingtools=true
+        fi;;
   *)
         echo "NOT FOUND"
-        echo "Error: make sure OCaml version 4.05 or later is installed."
         missingtools=true;;
 esac
 
-echo "Testing OCaml native-code compiler..." | tr -d '\n'
-ocamlopt_ver=`ocamlopt -version 2>/dev/null`
+echo "Testing OCaml native-code compiler... " | tr -d '\n'
+ocamlopt_ver=`ocamlopt -version 2>/dev/null | tr -d '\r'`
 if test "$ocamlopt_ver" = "$ocaml_ver"; then
   echo "yes"
   ocaml_native_comp=true
@@ -550,7 +549,7 @@ else
 fi
 
 echo "Testing OCaml .opt compilers... " | tr -d '\n'
-ocamlopt_opt_ver=`ocamlopt.opt -version 2>/dev/null`
+ocamlopt_opt_ver=`ocamlopt.opt -version 2>/dev/null | tr -d '\r'`
 if test "$ocamlopt_opt_ver" = "$ocaml_ver"; then
   echo "yes"
   ocaml_opt_comp=true
@@ -590,7 +589,7 @@ esac
 echo "Testing GNU make... " | tr -d '\n'
 make=''
 for mk in make gmake gnumake; do
-  make_ver=`$mk -v 2>/dev/null | head -1 | sed -n -e 's/^GNU Make //p'`
+  make_ver=`$mk -v 2>/dev/null | tr -d '\r' | head -1 | sed -n -e 's/^GNU Make //p'`
   case "$make_ver" in
     3.8*|3.9*|[4-9].*)
         echo "version $make_ver (command '$mk') -- good!"
@@ -610,9 +609,35 @@ if $missingtools; then
 fi
 
 #
+# Determine $sharedir or check that user-provided $sharedir is valid
+#
+
+expandprefix() {
+  echo "$1" | sed -e "s|\\\$(PREFIX)|$prefix|"
+}
+
+if test -z "$sharedir"; then
+  sharedir=$(dirname "$bindir")/share
+else
+  expsharedir=$(expandprefix "$sharedir")
+  expbindir=$(expandprefix "$bindir")
+  expbindirshare=$(dirname "$expbindir")/share
+  if test "$expsharedir" = "$expbindirshare/compcert" \
+  || test "$expsharedir" = "$expbindirshare" \
+  || test "$expsharedir" = "$expbindir"
+  then : ; # ok!
+  else
+    echo "Wrong -sharedir option. The share directory must be one of"
+    echo "  $expbindirshare/compcert"
+    echo "  $expbindirshare"
+    echo "  $expbindir"
+    exit 2
+  fi
+fi
+
+#
 # Generate Makefile.config
 #
-sharedir="$(dirname "$bindir")"/share
 
 rm -f Makefile.config
 cat > Makefile.config <<EOF
@@ -804,10 +829,6 @@ Please finish the configuration by editing file ./Makefile.config.
 EOF
 else
 
-expandprefix() {
-  echo "$1" | sed -e "s|\\\$(PREFIX)|$prefix|"
-}
-
 cat <<EOF
 
 CompCert configuration:
@@ -829,6 +850,7 @@ CompCert configuration:
     The Flocq library............. $library_Flocq
     The MenhirLib library......... $library_MenhirLib
     Binaries installed in......... $(expandprefix $bindir)
+    Shared config installed in.... $(expandprefix $sharedir)
     Runtime library provided...... $has_runtime_lib
     Library files installed in.... $(expandprefix $libdir)
     Man pages installed in........ $(expandprefix $mandir)

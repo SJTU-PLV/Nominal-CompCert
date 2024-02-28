@@ -732,7 +732,7 @@ Proof.
   eapply agree_regs_incr; eauto.
   eapply range_private_invariant; eauto.
   intros. exploit Mem.perm_alloc_inv; eauto. destruct (eq_block b0 b); intros.
-  subst b0. rewrite H3 in H0; inv H0. elimtype False; extlia.
+  subst b0. rewrite H3 in H0; inv H0. exfalso; extlia.
   rewrite H4 in H0; auto.
 Qed.
 

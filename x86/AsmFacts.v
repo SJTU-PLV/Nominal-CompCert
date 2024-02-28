@@ -258,7 +258,9 @@ Definition written_regs i : list preg :=
     | Padds_ff   rd _  
     | Psubs_ff   rd _  
     | Pmuls_ff   rd _  
-    | Pdivs_ff   rd _  
+    | Pdivs_ff   rd _
+    | Pmaxsd rd _
+    | Pminsd rd _
     | Pnegs rd          
     | Pabss rd          => FR rd :: nil
     | Pcomiss_ff r1 r2  => nil
@@ -334,7 +336,7 @@ Definition written_regs i : list preg :=
     simpl in NIN.
     simpl_not_in NIN. rename H7 into NIN.
     destruct i; simpl in *; repeat destr_in EI;
-      unfold nextinstr_nf, compare_ints, compare_longs, compare_floats, compare_floats32; simpl; simpl_not_in NIN;
+      unfold nextinstr_nf, compare_ints, compare_longs, compare_floats, compare_floats32, Op.maxf, Op.minf; simpl; simpl_not_in NIN;
         simpl_regs; eauto;
           match goal with
             H: exec_load _ _ _ _ _ _ _  = _ |- _ =>
@@ -576,6 +578,8 @@ Proof.
   - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
   - unfold mk_shrxlimm. destr. eauto. eauto.
   - monadInv H0. rewrite EQ, EQ1. simpl. repeat destr; eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
+  - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
   - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
   - monadInv H0. rewrite EQ, EQ1. simpl. eauto.
   - monadInv H0. rewrite EQ, EQ1. simpl. eauto.

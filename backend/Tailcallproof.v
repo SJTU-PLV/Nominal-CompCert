@@ -169,7 +169,8 @@ Lemma transf_instr_lookup:
   exists i',  (transf_function f).(fn_code)!pc = Some i' /\ transf_instr_spec f i i'.
 Proof.
   intros. unfold transf_function.
-  destruct (zeq (fn_stacksize f) 0).
+  destruct (zeq (fn_stacksize f) 0 && option_eq zeq (cc_vararg (sig_cc (fn_sig f))) None) eqn:B.
+  InvBooleans.
   simpl. rewrite PTree.gmap. rewrite H. simpl.
   exists (transf_instr f pc i); split. auto. apply transf_instr_charact; auto.
   exists i; split. auto. constructor.
@@ -241,14 +242,14 @@ Lemma sig_preserved:
   forall f, funsig (transf_fundef f) = funsig f.
 Proof.
   destruct f; auto. simpl. unfold transf_function.
-  destruct (zeq (fn_stacksize f) 0); auto.
+  destruct (zeq (fn_stacksize f) 0 && option_eq zeq (cc_vararg (sig_cc (fn_sig f))) None); auto.
 Qed.
 
 Lemma stacksize_preserved:
   forall f, fn_stacksize (transf_function f) = fn_stacksize f.
 Proof.
   unfold transf_function. intros.
-  destruct (zeq (fn_stacksize f) 0); auto.
+  destruct (zeq (fn_stacksize f) 0 && option_eq zeq (cc_vararg (sig_cc (fn_sig f))) None); auto.
 Qed.
 
 Definition regset_inject (f: meminj) (rs rs': regset): Prop :=
@@ -912,7 +913,7 @@ Proof.
   assert (fn_stacksize (transf_function f) = fn_stacksize f /\
           fn_entrypoint (transf_function f) = fn_entrypoint f /\
           fn_params (transf_function f) = fn_params f).
-    unfold transf_function. destruct (zeq (fn_stacksize f) 0); auto.
+    unfold transf_function. destruct (zeq (fn_stacksize f) 0 && option_eq zeq (cc_vararg (sig_cc (fn_sig f))) None); auto.
   destruct H1 as [EQ1 [EQ2 EQ3]].
   left. econstructor; split.
   simpl. eapply exec_function_internal; eauto. rewrite EQ1; eauto.

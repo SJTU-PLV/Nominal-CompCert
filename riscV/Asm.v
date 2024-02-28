@@ -93,6 +93,7 @@ Module Pregmap := EMap(PregEq).
 
 (** Conventional names for stack pointer ([SP]) and return address ([RA]). *)
 
+Declare Scope asm.
 Notation "'SP'" := X2 (only parsing) : asm.
 Notation "'RA'" := X1 (only parsing) : asm.
 
@@ -751,7 +752,7 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
   | Pj_l l =>
       goto_label f l rs m
   | Pj_s s sg =>
-      Next (rs#PC <- (Genv.symbol_address ge s Ptrofs.zero)) m
+      Next (rs#PC <- (Genv.symbol_address ge s Ptrofs.zero) #X31 <- Vundef) m
   | Pj_r r sg =>
       Next (rs#PC <- (rs#r)) m
   | Pjal_s s sg =>

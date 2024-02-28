@@ -817,29 +817,39 @@ Qed.
 Definition no_callee_saves (l: list mreg) : Prop :=
   existsb is_callee_save l = false.
 
+Ltac ByCases :=
+  reflexivity ||
+  match goal with
+  | |- no_callee_saves (match ?x with _ => _ end) => destruct x; ByCases
+  | _ => idtac
+  end.
+
 Remark destroyed_by_op_caller_save:
   forall op, no_callee_saves (destroyed_by_op op).
 Proof.
-  unfold no_callee_saves; destruct op; (reflexivity || destruct c; reflexivity).
+Local Transparent destroyed_by_op.
+  intros; unfold destroyed_by_op; ByCases.
 Qed.
 
 Remark destroyed_by_load_caller_save:
   forall chunk addr, no_callee_saves (destroyed_by_load chunk addr).
 Proof.
-  unfold no_callee_saves; destruct chunk; reflexivity.
+Local Transparent destroyed_by_load.
+  intros; unfold destroyed_by_load; ByCases.
 Qed.
 
 Remark destroyed_by_store_caller_save:
   forall chunk addr, no_callee_saves (destroyed_by_store chunk addr).
 Proof.
 Local Transparent destroyed_by_store.
-  unfold no_callee_saves, destroyed_by_store; intros; destruct chunk; try reflexivity; destruct Archi.ptr64; reflexivity.
+  intros; unfold destroyed_by_store; ByCases.
 Qed.
 
 Remark destroyed_by_cond_caller_save:
   forall cond, no_callee_saves (destroyed_by_cond cond).
 Proof.
-  unfold no_callee_saves; destruct cond; reflexivity.
+Local Transparent destroyed_by_cond.
+  intros; unfold destroyed_by_cond; ByCases.
 Qed.
 
 Remark destroyed_by_jumptable_caller_save:
@@ -947,7 +957,7 @@ Local Opaque mreg_type.
   apply range_contains in SEP; auto.
   exploit (contains_set_stack (fun v' => Val.inject j (ls (R r)) v') (rs r)).
   eexact SEP.
-  apply load_result_inject; auto. apply wt_ls.
+  apply load_result_inject; [auto|apply wt_ls].
   clear SEP; intros (m1 & STORE & SEP).
   set (rs1 := undef_regs (destroyed_by_setstack ty) rs).
   assert (AG1: agree_regs j ls rs1).

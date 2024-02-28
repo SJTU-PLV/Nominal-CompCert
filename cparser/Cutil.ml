@@ -320,6 +320,8 @@ let packing_parameters al =
 
 (* Type compatibility *)
 
+let enum_ikind = IInt
+
 exception Incompat
 
 type attr_handling =
@@ -400,8 +402,8 @@ let combine_types mode env t1 t2 =
         TUnion(comp_base s1 s2, comp_attr m a1 a2)
     | TEnum(s1, a1), TEnum(s2, a2) ->
         TEnum(comp_base s1 s2, comp_attr m a1 a2)
-    | TEnum(s,a1), TInt(enum_ikind,a2)
-    | TInt(enum_ikind,a2), TEnum (s,a1) ->
+    | TEnum(s,a1), TInt(ik,a2)
+    | TInt(ik,a2), TEnum (s,a1) when ik = enum_ikind ->
         TEnum(s,comp_attr m a1 a2)
     | _, _ ->
         raise Incompat
@@ -464,8 +466,6 @@ let alignof_fkind = function
   | FLongDouble -> !config.alignof_longdouble
 
 (* Return natural alignment of given type, or None if the type is incomplete *)
-
-let enum_ikind = IInt
 
 let rec alignof env t =
   let a = alignas_attribute (attributes_of_type env t) in
@@ -1008,10 +1008,7 @@ let find_matching_signed_ikind sz =
   else if sz = !config.sizeof_longlong then ILongLong
   else assert false
 
-let wchar_ikind () =
-  if !config.wchar_signed
-  then find_matching_signed_ikind !config.sizeof_wchar
-  else find_matching_unsigned_ikind !config.sizeof_wchar
+let wchar_ikind () = !config.wchar_ikind
 let size_t_ikind () = find_matching_unsigned_ikind !config.sizeof_size_t
 let ptr_t_ikind () = find_matching_unsigned_ikind !config.sizeof_ptr
 let ptrdiff_t_ikind () = find_matching_signed_ikind !config.sizeof_ptrdiff_t
@@ -1024,9 +1021,9 @@ let type_of_constant = function
   | CStr s ->
     let size = Int64.of_int (String.length s + 1) in
     TArray(TInt(IChar,[]), Some size, [])
-  | CWStr s ->
+  | CWStr(s, ik) ->
     let size = Int64.of_int (List.length s + 1) in
-    TArray(TInt(wchar_ikind(), []), Some size, [])
+    TArray(TInt(ik, []), Some size, [])
   | CEnum(_, _) -> TInt(IInt, [])
 
 (* Check that a C expression is a lvalue *)

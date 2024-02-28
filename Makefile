@@ -44,28 +44,19 @@ endif
 
 # Notes on silenced Coq warnings:
 #
-# undeclared-scope:
-#    warning introduced in 8.12
-#    suggested change (use `Declare Scope`) supported since 8.12
 # unused-pattern-matching-variable:
 #    warning introduced in 8.13
 #    the code rewrite that avoids the warning is not desirable
 # deprecated-ident-entry:
 #    warning introduced in 8.13
 #    suggested change (use `name` instead of `ident`) supported since 8.13
-# deprecated-hint-rewrite-without-locality:
-#    warning introduced in 8.14
-#    suggested change (add Global or Local or [#export] modifier)
-#    is not supported in 8.13 nor in 8.11, but was supported in 8.9 (go figure)
 # deprecated-instance-without-locality:
 #    warning introduced in 8.14
 #    triggered by Menhir-generated files, to be solved upstream in Menhir
 
 COQCOPTS ?= \
-  -w -undeclared-scope \
   -w -unused-pattern-matching-variable \
-  -w -deprecated-ident-entry \
-  -w -deprecated-hint-rewrite-without-locality
+  -w -deprecated-ident-entry
 
 cparser/Parser.vo: COQCOPTS += -w -deprecated-instance-without-locality
 
@@ -84,13 +75,12 @@ GPATH=$(DIRS)
 
 ifeq ($(LIBRARY_FLOCQ),local)
 FLOCQ=\
-  SpecFloatCompat.v \
   Raux.v Zaux.v Defs.v Digits.v Float_prop.v FIX.v FLT.v FLX.v FTZ.v \
   Generic_fmt.v Round_pred.v Round_NE.v Ulp.v Core.v \
-  Bracket.v Div.v Operations.v Round.v Sqrt.v \
+  Bracket.v Div.v Operations.v Plus.v Round.v Sqrt.v \
   Div_sqrt_error.v Mult_error.v Plus_error.v \
   Relative.v Sterbenz.v Round_odd.v Double_rounding.v \
-  Binary.v Bits.v
+  BinarySingleNaN.v Binary.v Bits.v
 else
 FLOCQ=
 endif
@@ -206,14 +196,22 @@ endif
 
 proof: $(FILES:.v=.vo)
 
-# Turn off some warnings for compiling Flocq
-flocq/%.vo: COQCOPTS+=-w -compatibility-notation
+# Turn off some warnings for Flocq and Menhirlib
+# These warnings can only be addressed upstream
+
+flocq/%.vo: COQCOPTS+=-w -deprecated-syntactic-definition
+MenhirLib/%.vo: COQCOPTS+=-w -deprecated-syntactic-definition
 
 extraction: extraction/STAMP
 
 extraction/STAMP: $(FILES:.v=.vo) extraction/extraction.v $(ARCH)/extractionMachdep.v
 	rm -f extraction/*.ml extraction/*.mli
 	$(COQEXEC) extraction/extraction.v
+	@if grep 'AXIOM TO BE REALIZED' extraction/*.ml; then \
+            echo "An error occured during extraction to OCaml code."; \
+            echo "Check the versions of Flocq and MenhirLib used."; \
+            exit 2; \
+         fi
 	touch extraction/STAMP
 
 .depend.extr: extraction/STAMP tools/modorder driver/Version.ml
@@ -334,8 +332,13 @@ endif
 ifeq ($(INSTALL_COQDEV),true)
 	install -d $(DESTDIR)$(COQDEVDIR)
 	for d in $(DIRS); do \
-          install -d $(DESTDIR)$(COQDEVDIR)/$$d && \
+          set -e; \
+          install -d $(DESTDIR)$(COQDEVDIR)/$$d; \
           install -m 0644 $$d/*.vo $(DESTDIR)$(COQDEVDIR)/$$d/; \
+          if test -d $$d/.coq-native; then \
+            install -d $(DESTDIR)$(COQDEVDIR)/$$d/.coq-native; \
+            install -m 0644 $$d/.coq-native/* $(DESTDIR)$(COQDEVDIR)/$$d/.coq-native/; \
+          fi \
 	done
 	install -m 0644 ./VERSION $(DESTDIR)$(COQDEVDIR)
 	install -m 0644 ./compcert.config $(DESTDIR)$(COQDEVDIR)

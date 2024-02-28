@@ -54,11 +54,11 @@ Proof.
   intros until r0. repeat rewrite PTree.gsspec.
   destruct (peq id1 name); destruct (peq id2 name).
   congruence.
-  intros. inv H. elimtype False.
+  intros. inv H. exfalso.
   apply valid_fresh_absurd with r0 s1.
   apply H1. left; exists id2; auto.
   eauto with rtlg.
-  intros. inv H2. elimtype False.
+  intros. inv H2. exfalso.
   apply valid_fresh_absurd with r0 s1.
   apply H1. left; exists id1; auto.
   eauto with rtlg.
@@ -398,9 +398,8 @@ Lemma sig_transl_function:
 Proof.
   intros until tf. unfold transl_fundef, transf_partial_fundef.
   case f; intro.
-  unfold transl_function.
-  destruct (reserve_labels (fn_body f0) (PTree.empty node, init_state)) as [ngoto s0].
-  case (transl_fun f0 ngoto s0); simpl; intros.
+  unfold transl_function. 
+  case (transl_fun f0 (init_state)); simpl; intros.
   discriminate.
   destruct p. simpl in H. inversion H. reflexivity.
   intro. inversion H. reflexivity.

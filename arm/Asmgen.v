@@ -93,20 +93,20 @@ In particular, if [n] is a representable immediate argument, we should have
 *)
 
 Definition mk_immed_mem_word (x: int): int :=
-  if Int.ltu x Int.zero then
+  if Int.lt x Int.zero then
     Int.neg (Int.zero_ext (if thumb tt then 8 else 12) (Int.neg x))
   else
     Int.zero_ext 12 x.
 
 Definition mk_immed_mem_small (x: int): int :=
-  if Int.ltu x Int.zero then
+  if Int.lt x Int.zero then
     Int.neg (Int.zero_ext 8 (Int.neg x))
   else
     Int.zero_ext 8 x.
 
 Definition mk_immed_mem_float (x: int): int :=
   let x := Int.and x (Int.repr (-4)) in   (**r mask low 2 bits off *)
-  if Int.ltu x Int.zero then
+  if Int.lt x Int.zero then
     Int.neg (Int.zero_ext 10 (Int.neg x))
   else
     Int.zero_ext 10 x.
@@ -417,15 +417,23 @@ Definition transl_op
       do r <- ireg_of res; do r1 <- ireg_of a1; do r2 <- ireg_of a2;
       OK (Pumull IR14 r r1 r2 :: k)
   | Odiv, a1 :: a2 :: nil =>
-      assertion (mreg_eq res R0);
-      assertion (mreg_eq a1 R0);
-      assertion (mreg_eq a2 R1);
-      OK (Psdiv :: k)
+      do r <- ireg_of res; do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      if Archi.hardware_idiv tt then
+        OK (Psdiv r r1 r2 :: k)
+      else
+        assertion (mreg_eq res R0);
+        assertion (mreg_eq a1 R0);
+        assertion (mreg_eq a2 R1);
+        OK (Psdiv r r1 r2 :: k)
   | Odivu, a1 :: a2 :: nil =>
-      assertion (mreg_eq res R0);
-      assertion (mreg_eq a1 R0);
-      assertion (mreg_eq a2 R1);
-      OK (Pudiv :: k)
+      do r <- ireg_of res; do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      if Archi.hardware_idiv tt then
+        OK (Pudiv r r1 r2 :: k)
+      else
+        assertion (mreg_eq res R0);
+        assertion (mreg_eq a1 R0);
+        assertion (mreg_eq a2 R1);
+        OK (Pudiv r r1 r2 :: k)
   | Oand, a1 :: a2 :: nil =>
       do r <- ireg_of res; do r1 <- ireg_of a1; do r2 <- ireg_of a2;
       OK (Pand r r1 (SOreg r2) :: k)

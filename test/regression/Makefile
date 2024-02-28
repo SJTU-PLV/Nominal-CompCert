@@ -15,15 +15,17 @@ TESTS=int32 int64 floats floats-basics floats-lit \
   volatile1 volatile2 volatile3 volatile4 \
   funct3 expr5 struct7 struct8 struct11 struct12 casts1 casts2 char1 \
   sizeof1 sizeof2 binops bool for1 for2 switch switch2 compound \
-  decl1 bitfields9 ptrs3 \
-  parsing krfun ifconv
+  decl1 bitfields9 ptrs3 telescopes \
+  parsing krfun ifconv generic
+
+# stringlit charlit # temporarily removed
 
 # Can run, but only in compiled mode, and have reference output in Results
 
 TESTS_COMP=attribs1 bitfields1 bitfields2 bitfields3 bitfields4 \
   bitfields5 bitfields6 bitfields7 bitfields8 bitfields_uint_t bitfields10 \
   builtins-common builtins-$(ARCH) packedstruct1 packedstruct2 alignas \
-  varargs1 varargs2 varargs3 sections alias aligned
+  varargs1 varargs2 varargs3 sections alias aligned switch3
 
 # Can run, both in compiled mode and in interpreter mode,
 # but produce processor-dependent results, so no reference output in Results

@@ -81,11 +81,14 @@ Definition fma_invalid_mul_is_nan := true.
 
 Definition float_of_single_preserves_sNaN := false.
 
+Definition float_conversion_default_nan := false.
+
 Global Opaque ptr64 big_endian splitlong
               default_nan_64 choose_nan_64
               default_nan_32 choose_nan_32
               fma_order fma_invalid_mul_is_nan
-              float_of_single_preserves_sNaN.
+              float_of_single_preserves_sNaN
+              float_conversion_default_nan.
 
 (** Which ABI to use: either the standard ARM EABI with floats passed
   in integer registers, or the "hardfloat" variant of the EABI
@@ -97,3 +100,6 @@ Parameter abi: abi_kind.
 (** Whether instructions added with Thumb2 are supported. True for ARMv6T2
   and above. *)
 Parameter thumb2_support: bool.
+
+(** Whether the hardware supports sdiv and udiv *)
+Parameter hardware_idiv : unit -> bool.
