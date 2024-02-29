@@ -22,6 +22,7 @@ Inductive expr : Type :=
 | Eenum (id: ident) (fid: ident) (e: expr) (ty: type)       (**r enum construction  *)
 | Evar (x: ident) (ty: type)                                (**r variable *)
 | Ebox (r: expr) (ty: type)                                 (**r allocate a heap block *)
+| Eref (l: expr) (mut: mutkind) (ty: type)                  (**r &[mut] e *)
 | Efield (l: expr) (f: ident) (ty: type) (**r access to a member of a struct *)
 | Ederef (r: expr) (ty: type)        (**r pointer dereference (unary [*]) *)
 | Eunop (op: unary_operation) (r: expr) (ty: type)
@@ -38,13 +39,13 @@ with exprlist : Type :=
 Definition typeof (e: expr) : type :=
   match e with
   | Eunit
-  | Eassign _ _ _ =>
-      Tunit
+  | Eassign _ _ _ => Tunit
   | Estruct _ _ _ ty
   | Eenum _ _ _ ty
   | Eval _ ty
   | Evar _ ty
   | Ebox _ ty
+  | Eref _ _ ty
   | Efield _ _ ty
   | Ederef _ ty
   | Eunop _ _ ty
@@ -140,6 +141,8 @@ Notation "'match' e 'with' 'case' fid1 'as' id1 '=>' stmt1 'case' fid2 'as' id2 
 Notation " ( x ) " := x (in custom rustsyntax at level 20) : rustsyntax_scope.
 Notation " x # t " := (Evar x t) (in custom rustsyntax at level 0, x global, t global)  : rustsyntax_scope.
 Notation "'Box' ( e )" := (Ebox e (Tbox (typeof e) noattr)) (in custom rustsyntax at level 10, e at level 20)  : rustsyntax_scope.
+Notation " '&' 'mut' e " := (Eref e Mutable (Treference (typeof e) Mutable noattr)) (in custom rustsyntax at level 10, e at level 20)  : rustsyntax_scope.
+Notation " '&'  e " := (Eref e Immutable (Treference (typeof e) Immutable noattr)) (in custom rustsyntax at level 10, e at level 20)  : rustsyntax_scope.
 Notation " ! e " := (Ederef e (deref_type (typeof e))) (in custom rustsyntax at level 10, e at level 20) : rustsyntax_scope.
 Notation " 'field' '(' e ',' x ',' t ')' " := (Efield e x t) (in custom rustsyntax at level 10, x global, t global, e at level 20) : rustsyntax_scope.
 Notation " l := r " := (Eassign l r Tunit) (in custom rustsyntax at level 17, r at level 20) : rustsyntax_scope.

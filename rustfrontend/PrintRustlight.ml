@@ -43,6 +43,7 @@ let precedence' = function
   | Eplace(_, _) -> (16,NA)
   | Ecktag(_, _, _) -> (15, RtoL)
   | Eget(_, _, _) -> (15, RtoL)
+  | Eref(_, _, _) -> (15, RtoL)
 
 let precedence = function
   | Emoveplace(_,_) -> (16,NA)
@@ -87,6 +88,8 @@ let rec pexpr p (prec, e) =
     fprintf p "%s(%a, %s)" "cktag" print_place v (extern_atom fid)
   | Eget(v, fid, _) ->
     fprintf p "%s(%a, %s)" "get" print_place v (extern_atom fid)
+  | Eref(v, mut, _) ->
+    fprintf p "& %s %a" (string_of_mut mut) print_place v
   end;
   if prec' < prec then fprintf p ")@]" else fprintf p "@]"
 

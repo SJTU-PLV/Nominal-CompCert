@@ -51,6 +51,7 @@ Inductive pexpr : Type :=
 | Eplace: place -> type -> pexpr (**r use of a variable, the only lvalue expression *)
 | Eget: place -> ident -> type -> pexpr (**r get<fid>(a), variant get operation *)
 | Ecktag: place -> ident -> type -> pexpr           (**r check the tag of variant, e.g. [Ecktag p.(fid)] *)
+| Eref: place -> mutkind -> type -> pexpr     (**r &[mut] p  *)
 | Eunop: unary_operation -> pexpr -> type -> pexpr  (**r unary operation *)
 | Ebinop: binary_operation -> pexpr -> pexpr -> type -> pexpr. (**r binary operation *)
 
@@ -71,6 +72,7 @@ Definition typeof_pexpr (pe: pexpr) : type :=
   | Eplace _ ty
   | Ecktag _ _ ty
   | Eget _ _ ty
+  | Eref _ _ ty
   | Eunop _ _ ty
   | Ebinop _ _ _ ty => ty
   end.
@@ -96,6 +98,7 @@ Fixpoint to_ctype (ty: type) : Ctypes.type :=
   | Tstruct id attr => Ctypes.Tstruct id attr
   (* variant = Struct {tag: .. ; f: union} *)
   | Tvariant id attr => Ctypes.Tstruct id attr
+  | Treference ty _ attr
   | Tbox ty attr => Tpointer (to_ctype ty) attr
       (* match (to_ctype ty) with *)
       (* | Some ty' =>  *)
@@ -421,7 +424,10 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
     typeof_place p = Tvariant id attr ->
     ce ! id = Some co ->
     field_tag fid co.(co_members) = Some tagz ->
-    eval_pexpr (Ecktag p fid ty) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz)).
+    eval_pexpr (Ecktag p fid ty) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz))
+| eval_Eref: forall p b ofs mut ty,
+    eval_place p b ofs ->
+    eval_pexpr (Eref p mut ty) (Vptr b ofs).
 
 (* expression evaluation has two phase: evaluate the value and produce
 the moved-out place *)

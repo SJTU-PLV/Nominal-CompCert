@@ -205,6 +205,9 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
       let temp := Plocal temp_id ty in
       let box_stmt := Sbox temp e' in
       ret (sl ++ (box_stmt :: nil), Emoveplace temp ty)
+  | Rustsyntax.Eref e mut ty =>
+      do (sl, p) <- transl_place_expr e;
+      ret (sl, Eref p mut ty)
   | Efield e fid ty =>
       do (sl, p) <- transl_place_expr e;
       let p' := Pfield p fid ty in
@@ -321,6 +324,7 @@ Definition value_or_place (e: Rustsyntax.expr) : bool :=
   | Rustsyntax.Eval _ _ => true
   | Rustsyntax.Evar _ _ => false
   | Rustsyntax.Ebox _ _ => true
+  | Rustsyntax.Eref _ _ _ => true
   | Rustsyntax.Efield _ _ _ => false
   | Rustsyntax.Ederef _ _ => false
   | Rustsyntax.Eunop _ _ _ => true

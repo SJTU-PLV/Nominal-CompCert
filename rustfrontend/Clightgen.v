@@ -342,6 +342,7 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : mon Clight.expr :=
   | Econst_single f ty => ret (Clight.Econst_single f (to_ctype ty))
   | Econst_long l ty => ret (Clight.Econst_long l (to_ctype ty))
   | Eplace p _ => ret (place_to_cexpr p)
+  | Eref p _ ty => ret (Clight.Eaddrof (place_to_cexpr p) (to_ctype ty))
   | Eget p fid ty =>
       (** FIXME: how to translate the get expression? *)
       match typeof_place p with

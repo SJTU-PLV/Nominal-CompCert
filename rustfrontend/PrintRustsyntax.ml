@@ -7,6 +7,10 @@ open! Rusttypes
 (* open Rustsyntax *)
 open PrintCsyntax
 
+let string_of_mut mut =
+  match mut with
+  | Mutable -> "mut"
+  | Immutable -> ""
 
 let rec name_rust_decl id ty =
   match ty with
@@ -18,6 +22,8 @@ let rec name_rust_decl id ty =
       name_floattype sz ^ attributes a ^ name_optid id
   | Rusttypes.Tlong(sg, a) ->
       name_longtype sg ^ attributes a ^ name_optid id
+  | Rusttypes.Treference(t, mut, a) ->
+      "& " ^ string_of_mut mut ^ " " ^ (name_rust_decl ""  t) ^ name_optid id
   | Tbox(t, a) ->
       "Box<" ^ (name_rust_decl ""  t) ^ ">" ^ name_optid id
   | Tfunction(args, res, cconv) ->
