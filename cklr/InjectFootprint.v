@@ -638,6 +638,24 @@ Definition inject_incr_disjoint_bl1 (j j':meminj) (bl1: list block) (s2: sup) :=
   forall b b' o, j b = None -> j' b = Some (b',o) ->
             ~ In b bl1 /\ ~ sup_In b' s2.
 
+Lemma inject_dom_in_eqv: forall f s,
+    inject_dom_in_bl f (Mem.sup_list s) <-> inject_dom_in f s.
+Proof.
+  intros. split; intro; red; intros.
+  erewrite Mem.sup_list_in; eauto.
+  erewrite <- Mem.sup_list_in; eauto.
+Qed.
+
+Lemma inject_incr_disjoint_eqv : forall j j' s1 s2,
+    inject_incr_disjoint_bl1 j j' (Mem.sup_list s1) s2 <-> inject_incr_disjoint j j' s1 s2.
+Proof.
+  intros. split; intro; red; intros.
+  exploit H. eauto. eauto. intros [A B].
+  erewrite <- Mem.sup_list_in in A. auto.
+  exploit H. eauto. eauto. intros [A B].
+  erewrite Mem.sup_list_in in A. auto.
+Qed.
+  
 Lemma update_properties': forall s1' bl1 j1 j2 s2 s2' j1' j2' j' s3,
     update_meminj12 s1' j1 j2 j' s2 = (j1',j2',s2') ->
     inject_dom_in_bl j1 bl1 ->
@@ -773,6 +791,7 @@ Proof.
     }
 Qed.
 
+(*
 Lemma update_properties: forall s1' s1 j1 j2 s2 s2' j1' j2' j' s3,
     update_meminj12 s1' j1 j2 j' s2 = (j1',j2',s2') ->
     inject_dom_in j1 s1 ->
@@ -804,6 +823,7 @@ Proof.
   red. intros. exploit F; eauto. intros [X Y].
   split. rewrite Mem.sup_list_in. auto. auto.*)
 Qed.
+ *)
 
 (** Lemmas to prove j' = compose_meminj j1' j2' *)
 Fixpoint update_meminj sd1' j j':=
@@ -1059,10 +1079,14 @@ Proof.
   intros.
   destruct (update_meminj12 (Mem.sup_list s1') j1 j2 j' s2) as [[j1' j2'] s2'] eqn: UPDATE.
   exists j1' ,j2' ,s2'.
+  apply inject_dom_in_eqv in H as H'.
+  apply inject_dom_in_eqv in H2 as H2'.
+  apply inject_incr_disjoint_eqv in H5 as H5'.
   exploit update_compose; eauto.
-  (* red; intros; apply Mem.sup_list_in; eapply H2; eauto. *)
   intro COMPOSE.
-  exploit update_properties; eauto. intros (A & B & C & D & E & F & G & I & J & K & L).
+  exploit update_properties'; eauto.
+  rewrite inject_incr_disjoint_eqv.
+  intros (A & B & C & D & E & F & G & I & J & K & L).
   repeat apply conj; eauto. eapply add_from_to_dom_in; eauto.
 Qed.
 
@@ -1501,8 +1525,8 @@ Qed.
         Mem.support m = s2' ->
         Mem.perm (Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 s m) b2 o2 k p <-> Mem.perm m1' b1 o1 k p.
   Proof.
-    intros. unfold Mem.copy_sup. eapply copy_sup_perm'; eauto.
-    (* apply Mem.sup_list_in; eauto. *)
+    intros. apply Mem.sup_list_in in H2 as H2'.
+    unfold Mem.copy_sup. eapply copy_sup_perm'; eauto.
   Qed.
 
   Lemma copy_perm: forall b1 o1 b2 o2 k p,
@@ -1630,8 +1654,8 @@ Qed.
         Mem.support m = s2' ->
         mem_memval (Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 s m) b2 o2 = Mem.memval_map j1' (mem_memval m1' b1 o1).
   Proof.
-    intros. eapply copy_sup_content'; eauto.
-    (* eapply Mem.sup_list_in; eauto. *)
+    intros. apply Mem.sup_list_in in H3 as H3'.
+    eapply copy_sup_content'; eauto.
   Qed.
   
   Lemma copy_sup_content_2: forall bl m b1 o1 b2 o2,
@@ -1771,10 +1795,11 @@ Qed.
       Mem.copy_sup m1 m2 m1' j1 j2 j1' INJ12 s m = m' ->
       Mem.unchanged_on (fun b o => ~ sup_In b s) m m'.
   Proof.
-    intros. unfold Mem.copy_sup in H.
+    intros.
+    unfold Mem.copy_sup in H.
     apply unchanged_on_copy_sup_old' in H.
-    eapply Mem.unchanged_on_implies; eauto.
-    (* intros. red. intro. apply H0. eapply Mem.sup_list_in; eauto. *)
+    eapply Mem.unchanged_on_implies. apply H.
+    intros. red. intro. apply H0. eapply Mem.sup_list_in; eauto.
   Qed.
 
   (*TODO: to mem*)
@@ -1925,7 +1950,7 @@ Qed.
            unfold Mem.perm in n. exfalso. apply n. eauto.
   Qed.
   
-  Lemma map_sup_rev : forall s m m' b2 o2 k p,
+  (*Lemma map_sup_rev : forall s m m' b2 o2 k p,
       Mem.map_sup m1 m1' j1' s m = m' ->
       Mem.support m = s2' ->
       ~ Mem.perm m b2 o2 Max Nonempty ->
@@ -1940,7 +1965,7 @@ Qed.
     (* intros (b1 & o1 & A & B & C & D).
     exists b1, o1. repeat apply conj; eauto. apply Mem.sup_list_in; eauto. *)
   Qed.
-        
+   *)    
   Lemma map_sup_1 : forall s m m' b2 o2 b1 o1 k p,
       Mem.map_sup m1 m1' j1' s m = m' ->
       sup_In b1 s ->
@@ -1950,10 +1975,9 @@ Qed.
       j1' b1 = Some (b2, o2 - o1) ->
       Mem.perm m1' b1 o1 k p <-> Mem.perm m' b2 o2 k p.
   Proof.
-    intros. split; intro.
+    intros. apply Mem.sup_list_in in H0 as H0'. split; intro.
     eapply map_sup_1'; eauto with mem.
-    (* apply Mem.sup_list_in. eauto. *)
-    exploit map_sup_rev; eauto.
+    exploit map_sup_rev'; eauto.
     intros (b1' & o1' & A & B & C & D).
     assert (b1 = b1').
     { destruct (eq_block b1 b1'). auto.
