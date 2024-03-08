@@ -173,9 +173,14 @@ Qed.
 Lemma reply_sound2: forall s r, Smallstep.final_state lts2' s r -> exists i, reply2 i r.
 Proof.
   unfold lts2', s2, se2. simpl. intros. destruct s.
-  inversion H.
-  give_up.
+  inversion H. eexists. econstructor.
+  admit.
 Admitted.
+(*
+1. rs#RAX should be a integer
+2. rs#PC should be Vnullptr
+
+ *)
 
 Lemma romem_for_symtbl_sound:
   ValueAnalysis.romem_for_symtbl se = ValueAnalysis.romem_for p.
@@ -194,7 +199,7 @@ Proof.
   specialize (ROM p ltac:(apply Linking.linkorder_refl)). *)
   admit.
   erewrite Genv.init_mem_genv_sup; eauto.
-Admitted.
+Admitted. (*should be correct, just need to be proved*)
 
 Lemma main_block_genv: Genv.find_symbol se (prog_main tp) = Some main_block_c.
 Proof.
@@ -227,7 +232,7 @@ Proof.
   intros. inv H.
   cbn. unfold Vnullptr, Tptr. destruct Archi.ptr64; simpl; auto.
   cbn. unfold Vnullptr, Tptr. destruct Archi.ptr64; simpl; auto.
-  give_up. (* rs0 RSP = Vnullptr *)
+  admit. (* rs0 RSP = Vnullptr *)
   econstructor.
   unfold Conventions.tailcall_possible, Conventions.size_arguments, Conventions1.loc_arguments. simpl.
   destruct Archi.ptr64, Archi.win64; simpl; auto.
@@ -251,6 +256,45 @@ Proof.
   rewrite Pregmap.gss.
   unfold ge_asm. simpl. unfold Genv.symbol_address. rewrite main_block_genv. discriminate.
   rewrite <- m0_same at 2. constructor.
+Admitted. (*ok, just nullptr issue*)
+
+Lemma Hmatch_reply1 : forall r r1 r2,
+    match_reply ccB wB r1 r2 ->
+    reply1 r r1 -> reply2 r r2.
+Proof.
+  intros. destruct H as [r_c [Hro [r_c' [Hwt [r_a [Hca Hasm]]]]]].
+  inv H0. inv Hro. inv Hwt. inv Hca.
+  destruct Hasm as [wj [Hw Hr]].
+  destruct r2. inv Hr.
+  constructor.
+  (*r0 PC -> rs' PC -> rs0 RA : the initial return address should be a valid pointer*)
+  admit.
+  (*r0 RAX -> rs' RAX -> Vint r via the signature sg*)
+  assert (tres = rs' RAX).
+  { unfold tres. unfold sg. unfold CA.rs_getpair.
+    unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32. simpl. destruct Archi.ptr64; reflexivity.
+  }
+  inv H8. generalize (H1 RAX).
+  intro. simpl in H4. rewrite <- H3 in H4. rewrite <- H6 in H4.
+  inv H4. reflexivity.
+Admitted.
+
+Lemma Hmatch_reply2 : forall r r1 r2,
+    match_reply ccB wB r1 r2 ->
+    reply2 r r2 ->
+    reply1 r r1.
+Proof.
+  intros. destruct H as [r_c [Hro [r_c' [Hwt [r_a [Hca Hasm]]]]]].
+  inv H0. inv Hro. inv Hwt. inv Hca.
+  destruct Hasm as [wj [Hw Hr]].
+  unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32 in tres. unfold sg in tres.
+  assert (Archi.ptr64 = true). admit.
+  unfold CA.rs_getpair in tres. simpl in tres.
+  unfold map_rpair in tres. simpl in tres.
+  assert (tres = rs' RAX).
+  unfold tres. rewrite H3. simpl. reflexivity.
+  rewrite H4 in H8.
+  admit. (*problem: res can be Vundef*)
 Admitted.
 
 Lemma Hmatch_reply : forall r r1 r2,
@@ -284,17 +328,17 @@ Proof.
     unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32 in tres.
     subst tres. destr_in H15; simpl in H15.
     rewrite <- H8 in H15. inv H15. auto.
-    give_up. (* Vundef *)
+    admit. (* Vundef *)
     rewrite <- H8 in H15. inv H15. auto.
-    give_up.
+    admit.
   }
   subst res. constructor.
   inv H1. destruct r1.
   inv H. inv H0.
   unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32 in tres.
   subst tres. destr_in H15; simpl in H15; rewrite <- H8 in H15; inv H15.
-  give_up.
-  give_up.
+  admit.
+  admit.
 Admitted.
 
 Lemma Hmatch_senv : match_senv ccB wB se1 se2.
@@ -335,8 +379,16 @@ Lemma compcert_close_sound :
   backward_simulation (L1 query1 reply1 s1 se1) (L2 query2 reply2 s2 se2).
 Proof.
   eapply close_sound_backward; eauto using
-    closed2, reply_sound2, Hvalid, Hmatch_query, Hmatch_reply, Hmatch_senv, open_simulation.
-  intros. rewrite Hmatch_reply; eauto.
+    closed2, reply_sound2, Hvalid, Hmatch_query, Hmatch_senv, open_simulation.
+  intros. eapply Hmatch_reply2; eauto.
 Qed.
 
+Lemma compcert_close_sound_forward : 
+  forward_simulation (L1 query1 reply1 s1 se2) (L2 query2 reply2 s2 se2).
+Proof.
+  eapply close_sound_forward; eauto.
+  exact Hvalid. eapply Hmatch_query; eauto. exact Hmatch_senv.
+  intros. eapply Hmatch_reply1; eauto.
+  admit.
+Abort.
 End CLOSE_COMPCERT.
