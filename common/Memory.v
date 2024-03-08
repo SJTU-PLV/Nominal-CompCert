@@ -115,20 +115,48 @@ End NMap.
 
 Module Sup <: SUP.
 
-Definition sup := list block.
+Record sup' : Type :=
+  mksup
+    {
+      stacks : list (list positive);
+      tid : nat;
+      
+      tid_valid: (0 < tid < (length stacks))%nat;
+    }.
 
-Definition sup_empty : sup := nil.
+Definition sup := sup'.
 
-Definition sup_In(b:block)(s:sup) : Prop := In b s.
+Program Definition sup_empty : sup :=
+  mksup (nil :: nil :: nil) (1%nat) _.
+
+Inductive sup_In' : block -> sup -> Prop :=
+|sup_in_intro : forall (tid:nat) pos s pl,
+    nth_error (stacks s) tid = Some pl ->
+    In pos pl ->
+    sup_In' (tid,pos) s.
+
+Definition sup_In (b:block) (s:sup) := sup_In' b s.
+
 Definition empty_in: forall b, ~ sup_In b sup_empty.
-Proof. intros. auto. Qed.
+Proof.
+  intros. intro. inv H.
+  simpl in H0. destruct tid0; inv H0. inv H1.
+  destruct tid0; inv H2. inv H1. destruct tid0; inv H0.
+Qed.
 
 Definition sup_dec : forall b s, {sup_In b s}+{~sup_In b s}.
-Proof. intros. unfold sup_In. apply In_dec. apply eq_block. Qed.
-(*
-Parameter fresh_block : sup -> block.
-Parameter freshness : forall s, ~sup_In (fresh_block s) s.
-*)
+Proof.
+  intros. destruct b as [tid pos].
+  destruct (le_lt_dec (length (stacks s)) tid).
+  - right. intro. inv H.
+    apply nth_error_None in l. congruence.
+  - destruct (nth_error (stacks s) tid) eqn:NTH.
+    + 
+      destruct (in_dec peq pos l0).
+      -- left. econstructor; eauto.
+      -- right. intro. inv H. rewrite NTH in H2. inv H2. congruence.
+    + exfalso. apply nth_error_Some in l. congruence.
+Qed.
 
 Fixpoint find_max_pos (l: list positive) : positive :=
   match l with
@@ -154,37 +182,89 @@ Proof.
     + eapply Ple_trans. eauto.  apply Pos.le_nlt. apply n.
 Qed.
 
-
-Definition fresh_block (s:sup) := Pos.succ (find_max_pos s).
-Theorem freshness : forall s, ~sup_In (fresh_block s) s.
+Definition fresh_pos (pl : list positive) := Pos.succ (find_max_pos pl).
+Lemma freshness_pos : forall pl, ~ In (fresh_pos pl) pl.
 Proof.
-  intros. unfold fresh_block.
+  intros. unfold fresh_pos.
   intro.
   apply Lessthan in H.
-  assert (Plt (find_max_pos s) (Pos.succ (find_max_pos s))). apply Plt_succ.
-  assert (Plt (find_max_pos s) (find_max_pos s)). eapply Plt_Ple_trans. eauto. auto.
+  assert (Plt (find_max_pos pl) (Pos.succ (find_max_pos pl))). apply Plt_succ.
+  assert (Plt (find_max_pos pl) (find_max_pos pl)). eapply Plt_Ple_trans. eauto. auto.
   apply Plt_strict in H1.
   auto.
 Qed.
 
-Definition sup_incr(s:sup) := (fresh_block s) :: s.
+(* This will result in a opaque fresh_block *)
+(*
+Program Definition fresh_block (s:sup) : block.
+Proof.
+  destruct s as [stacks tid].
+  destruct (nth_error stacks tid) as [pl|] eqn:NTH.
+  exact (tid, fresh_pos pl).
+  apply nth_error_None in NTH. extlia.
+Qed.
+ *)
+
+Definition fresh_block (s : sup) : block :=
+  let pl := nth (tid s) (stacks s) nil in
+  ((tid s), fresh_pos pl).
+
+Theorem freshness : forall s, ~sup_In (fresh_block s) s.
+Proof.
+  intros. destruct s as [stacks tid].
+  intro. inv H. simpl in H2.
+  erewrite nth_error_nth in H4; eauto.
+  apply freshness_pos in H4. eauto.
+Qed.
+
+Search list.
+Search list.
+
+Fixpoint update_list {A: Type} (n: nat) (l: list A) (a : A):=
+  match n,l with
+  | O, hd :: tl => a :: tl
+  | S n' , hd :: tl => hd :: (update_list n tl a)
+  | _, list => list
+  end.
+
+Lemma update_list_length : forall {A:Type} n l (a:A),
+    length (update_list n l a) = length l.
+Proof.
+  induction n; induction l; intros; simpl.
+  - reflexivity.
+  - reflexivity.
+  - reflexivity.
+  - rewrite IHl. reflexivity.
+Qed.
+
+Program Definition sup_incr(s:sup) :=
+  let tid := tid s in let stacks := stacks s in
+  let pl := nth tid stacks nil in
+  mksup (update_list tid stacks ((fresh_pos pl) :: pl)) tid _.
+Next Obligation.
+  rewrite update_list_length. destruct s. auto.
+Qed.
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
 Theorem sup_include_dec : forall s1 s2, {sup_include s1 s2} + {~sup_include s1 s2}.
 Proof.
+  (*
   induction s1. left. unfold sup_include. intro. intro. inv H.
   intro s2. destruct (sup_dec a s2).
   - destruct (IHs1 s2).
     + left. intro. intros. inv H; auto.
     + right. intro. apply n. intro. intro. apply H. right. auto.
   - right. intro. apply n. apply H. left. auto.
-Qed.
+   *)
+Admitted.
 
 Theorem sup_incr_in : forall b s, sup_In b (sup_incr s) <-> b = (fresh_block s) \/ sup_In b s.
 Proof.
-  split; intro; inv H; simpl in *; auto.
+Admitted.
+(*  split; intro; inv H; simpl in *; auto.
 Qed.
+ *)
 
 Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
 Proof. intros. apply sup_incr_in. left. auto. Qed.
@@ -210,12 +290,17 @@ Qed.
 
 (* for iteration of all valid blocks *)
 
-Definition sup_list (s:sup):= s.
+Fixpoint concat_stacks (stacks: list (list positive)) (tid: nat) : list block :=
+  match stacks with
+  | nil => nil
+  | hd :: tl => (map (fun pos => (tid, pos)) hd) ++ (concat_stacks tl (tid + 1))
+  end.
+
+Definition sup_list (s:sup) : list block := concat_stacks (stacks s) O.
 
 Lemma sup_list_in : forall b s, sup_In b s <-> In b (sup_list s).
 Proof.
-  intros. simpl. reflexivity.
-Qed.
+Admitted.
 
 End Sup.
 

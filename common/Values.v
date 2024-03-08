@@ -32,8 +32,20 @@ End BLOCK.
 (* Declare Module Block : BLOCK. *)
 
 Module Block <: BLOCK.
-Definition block := positive.
-Definition eq_block := peq.
+
+(* (tid,block_num), tid = 0 means global blocks for now *)
+Definition block : Type := (nat * positive).
+
+Theorem eq_block : forall (x y :block) , {x = y} + { x <> y}.
+Proof.
+  intros. destruct x, y.
+  destruct (Nat.eq_dec n n0); destruct (peq p p0).
+  left. congruence.
+  right. congruence.
+  right. congruence.
+  right. congruence.
+Qed.
+
 End Block.
 
 Definition block := Block.block.
