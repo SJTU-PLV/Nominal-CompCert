@@ -1042,7 +1042,7 @@ Definition source_mem (w: injp_world) := match w with injpw _ m1 _ _ => m1 end.
 Require Import Maps.
 
 Lemma fold_right_get : forall bl se id b vdef,
-    sup_In b bl ->
+    In b bl ->
     Genv.find_symbol se id = Some b ->
     Genv.find_info se b = Some (Gvar vdef) ->
     gvar_readonly vdef && negb (gvar_volatile vdef) && definitive_initializer (gvar_init vdef) = true ->
@@ -1081,7 +1081,7 @@ Lemma romem_for_ablock : forall se id b vdef,
     Maps.PTree.get id (romem_for_symtbl se) = Some (store_init_data_list (ablock_init Pbot) 0 (gvar_init vdef)).
 Proof.
   intros. unfold romem_for_symtbl.
-  eapply fold_right_get; eauto.
+  eapply fold_right_get; eauto. apply Mem.sup_list_in.
   eapply Genv.genv_symb_range; eauto.
 Qed.
 

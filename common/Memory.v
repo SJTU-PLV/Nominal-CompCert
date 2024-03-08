@@ -111,8 +111,8 @@ Qed.
 End NMap.
 
 
-Declare Module Sup: SUP.
-(*
+(* Declare Module Sup: SUP. *)
+
 Module Sup <: SUP.
 
 Definition sup := list block.
@@ -218,7 +218,7 @@ Proof.
 Qed.
 
 End Sup.
-*)
+
 Module Mem <: MEM.
 Include Sup.
 Local Notation "a # b" := (NMap.get _ b a) (at level 1).
@@ -6861,6 +6861,7 @@ Global Opaque Mem.alloc Mem.free Mem.store Mem.load Mem.storebytes Mem.loadbytes
 Global Hint Resolve
   Mem.sup_incr_in1
   Mem.sup_incr_in2
+  Mem.sup_list_in
   Mem.sup_include_refl
   Mem.sup_include_trans
   Mem.sup_include_incr

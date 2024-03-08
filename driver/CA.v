@@ -369,21 +369,21 @@ Lemma inject_unchanged_on_inject:
     (forall b ofs, ~ P b ofs -> loc_out_of_reach j m1 b ofs) ->
     Mem.inject j m1 m3.
 Proof.
-  intros. inversion H. inversion H0.
+  intros until P. intros INJ UNC DEC OUT. inversion INJ. inversion UNC.
   intros. constructor; eauto.
   - inversion mi_inj. constructor; eauto.
     + intros. eapply unchanged_on_perm; eauto.
-      edestruct H1; eauto. apply H2 in n. red in n. exfalso.
+      edestruct DEC; eauto. apply OUT in n. red in n. exfalso.
       eapply n; eauto. replace (ofs + delta - delta) with ofs by lia. eauto with mem.
     + intros. erewrite unchanged_on_contents; eauto.
-      edestruct H1; eauto. apply H2 in n. red in n. exfalso.
+      edestruct DEC; eauto. apply OUT in n. red in n. exfalso.
       eapply n; eauto. replace (ofs + delta - delta) with ofs by lia. eauto with mem.
   - intros. unfold Mem.valid_block in *. eauto with mem.
   - intros. destruct (Mem.perm_dec m1 b1 ofs Max Nonempty); eauto.
-    left. eapply unchanged_on_perm in H4; eauto.
+    left. eapply unchanged_on_perm in H0; eauto.
     exploit mi_perm_inv; eauto.
     intros [A|B]. auto. congruence.
-    edestruct H1; eauto. apply H2 in n. red in n. exfalso.
+    edestruct DEC; eauto. apply OUT in n. red in n. exfalso.
     eapply n; eauto. replace (ofs + delta - delta) with ofs by lia.
     auto.
 Qed.
