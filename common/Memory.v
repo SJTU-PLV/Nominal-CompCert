@@ -115,6 +115,8 @@ End NMap.
 
 Module Sup <: SUP.
 
+  (* thread_destroy may be burdensome, use PMap? or
+     a fixed size of threads, like 100 threads, use bool flags to indicate liveness *)
 Record sup' : Type :=
   mksup
     {
@@ -216,9 +218,6 @@ Proof.
   erewrite nth_error_nth in H4; eauto.
   apply freshness_pos in H4. eauto.
 Qed.
-
-Search list.
-Search list.
 
 Fixpoint update_list {A: Type} (n: nat) (l: list A) (a : A):=
   match n,l with
