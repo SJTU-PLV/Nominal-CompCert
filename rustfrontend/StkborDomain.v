@@ -13,7 +13,7 @@ Open Scope error_monad_scope.
 (* map from a place (with primitive type) to element *)
 
 (** TODO: implement this placemap  *)
-Declare Module PlaceMap : TREE.
+(* Declare Module PlaceMap : TREE. *)
 
 (* Module PlaceMap <: TREE. *)
 (*   Definition elt := place. *)
@@ -138,6 +138,10 @@ Inductive aval : Type :=
 
 (* borrow stack *)
 
+Inductive access_kind : Type :=
+| Aread
+| Awrite.
+
 Inductive bor_item : Type :=
 | Share (t: tag)
 | Unique (t: tag)
@@ -148,7 +152,7 @@ Definition borstk : Type := list bor_item.
 (* The borrow stacks inside one abstract block *)
 Inductive block_borstk : Type :=
 | Batomic (stk: borstk)
-| Bstruct (stkl: PTree.t borstk).
+| Bstruct (stkl: PTree.t block_borstk).
 
 
 (* abstract memory *)
@@ -156,6 +160,7 @@ Inductive block_borstk : Type :=
 Record amem : Type := build_amem
   { am_contents : PTree.t aval;
     am_borstk : PTree.t block_borstk;
+    am_nextblock : ablock;
     am_nexttag : tag }.
 
 
@@ -196,24 +201,135 @@ Definition divide_places (p: place) :=
   divide_places' (PTree_Properties.cardinal ce) (typeof_place p) p.
   
 
-Fixpoint load_path (p: path) (v: aval) : option aval :=
+Fixpoint load_path (p: path) (v: aval) : res aval :=
   match p, v with
-  | [], _ => Some v
+  | [], _ => OK v
   | (Rfield fid) :: p', Vstruct t =>
       match PTree.get fid t with
       | Some v' => load_path p' v'
-      | None => None
+      | None => Error [CTX fid; MSG ": location in this field id has no valid value, load path"]
       end
-  | _, _ => None
+  | _, _ =>  Error [MSG "Path and anstract value mismatches, load path"]
   end.
-
+              
 (* load the avals from a place *)
-Definition load (m: amem) (p: aptr) : option aval :=
-  (** TODO: get permission from the borrow stack  *)
+Definition load (m: amem) (p: aptr) : res aval :=
   let (b, ph) := p in
   match PTree.get b m.(am_contents) with
   | Some v =>
       load_path ph v
   | None =>
-      None
-  end.       
+      Error [CTX b; MSG ": this block is unallocated, load"]
+  end.
+
+
+Fixpoint update_path (p: path) (m: aval) (v: aval): res aval :=
+  match p, m with
+  | [], _ => OK v
+  | (Rfield fid) :: p', Vstruct t =>
+      match PTree.get fid t with
+      | Some t' =>
+          (* replace p' in t' with v *)
+          do m' <- update_path p' t' v;
+          OK (Vstruct (PTree.set fid m' t))
+      | None =>
+          match p' with
+          | [] => OK (Vstruct (PTree.set fid v t))
+          (* access undefined value *)
+          | _ => Error [CTX fid; MSG ": this field has no valid abstract value, update_path"]
+          end
+      end
+  | _, _ => Error [MSG "Path and anstract value mismatches, load path"]
+  end.
+
+Definition store (m: amem) (p: aptr) (v: aval) : res amem :=
+  let (b, ph) := p in
+  match PTree.get b m.(am_contents) with
+  | Some bv =>
+      do bv' <- update_path ph bv v;
+      OK (build_amem (PTree.set b bv' m.(am_contents))
+              m.(am_borstk)
+                  m.(am_nextblock)
+                      m.(am_nexttag))
+  | None => Error [CTX b; MSG ": this block is unallocated, store"]
+  end.
+
+Fixpoint init_aval_and_borstk' (fuel: nat) (ty: type) : res (aval * block_borstk) :=
+  match fuel with
+  | O => Error [MSG "Running out of fuel in aval_of_type'"]
+  | S fuel' =>
+      let rec := init_aval_and_borstk' fuel' in
+      match ty with
+      | Tstruct id _ =>
+          match ce!id with
+          | Some co =>              
+              let f memb acc :=
+                match memb with
+                | Member_plain fid ty' =>
+                    do (val_tree, bor_tree) <- acc;
+                    do (v', stk') <- rec ty';
+                    OK (PTree.set fid v' val_tree, PTree.set fid stk' bor_tree)
+                end in
+              do (v, sb) <- fold_right f (OK (PTree.empty aval, PTree.empty block_borstk)) co.(co_members);
+              OK (Vstruct v, Bstruct sb)
+          | None => Error [CTX id; MSG ": no such composite, init_avl_of_type'"]
+          end
+      | _ =>
+          OK (Vbot, Batomic [])
+      end
+  end.
+                
+Definition init_aval_and_borstk (ty: type) : res (aval * block_borstk) :=
+  init_aval_and_borstk' (PTree_Properties.cardinal ce) ty.
+
+(* alloc a new block with type [ty] *)
+Definition alloc (m: amem) (ty: type) : res (ablock * amem) :=
+  do (v, stk) <- init_aval_and_borstk ty;
+  let b := m.(am_nextblock) in
+  OK (b, build_amem (PTree.set b v m.(am_contents)) (PTree.set b stk m.(am_borstk)) (Pos.succ b) m.(am_nexttag)).
+
+                             
+(* free an abstract block *)
+Definition free (m: amem) (b: ablock) : amem :=
+  build_amem (PTree.remove b m.(am_contents)) (PTree.remove b m.(am_borstk)) m.(am_nextblock) m.(am_nexttag).
+
+
+(** Some definitions for stacked borrow rules *)
+
+Fixpoint find_granting_aux (stk: list bor_item) (access: access_kind) (t: tag) (idx: nat) : res nat :=
+  match stk with
+  | [] => Error [MSG "There is no such tag in this borrow stack (find_granting_aux): "; CTX t]
+  | i :: stk' =>
+      match i, access with
+      | Share t', Aread
+      | Unique t', _ =>
+          if Pos.eqb t t' then OK idx
+          else find_granting_aux stk' access t (S idx)
+      (** TODO: how to handle when encounting barrier in the borrow
+      stack. We treat it as a protected item for now, so popping
+      [Barrier] would cause error *)
+      | _ , _ => find_granting_aux stk' access t (S idx)
+      end
+  end.
+
+Definition find_granting (stk: list bor_item) (access: access_kind) (t: tag) : res nat :=
+  find_granting_aux stk access t O.
+
+Fixpoint pop_until (stk: list bor_item) (idx: nat) (access: access_kind) : res (list bor_item) :=
+  match stk, idx with
+  | _, O => OK stk
+  | i :: stk', S idx' =>
+      match i, access with
+      | Barrier, _ => Error [MSG "Cannot pop a barrier while accessing a memory location"]
+      (** FIXME: If access is read, do not pop the share tag *)
+      | Share _, Aread => OK stk
+      | _, _ => pop_until stk' idx' access
+      end
+  | _, _ => Error [MSG "Pop an empty stack in pop_until"]
+  end.
+      
+(* access the memory location and update the borrow stack *)
+(** TODO: consider ownership access  *)
+Definition access (stk: list bor_item) (access: access_kind) (t: tag) : res (list bor_item) :=
+  do idx <- find_granting stk access t;
+  pop_until stk idx access.
