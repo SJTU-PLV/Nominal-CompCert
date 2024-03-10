@@ -13,7 +13,7 @@ Open Scope error_monad_scope.
 (* map from a place (with primitive type) to element *)
 
 (** TODO: implement this placemap  *)
-(* Declare Module PlaceMap : TREE. *)
+Declare Module PlaceMap : TREE.
 
 (* Module PlaceMap <: TREE. *)
 (*   Definition elt := place. *)
@@ -145,7 +145,7 @@ Inductive access_kind : Type :=
 Inductive bor_item : Type :=
 | Share (t: tag)
 | Unique (t: tag)
-| Barrier.
+| Bopaque.
 
 Definition borstk : Type := list bor_item.
 
@@ -306,8 +306,7 @@ Fixpoint find_granting_aux (stk: list bor_item) (access: access_kind) (t: tag) (
           if Pos.eqb t t' then OK idx
           else find_granting_aux stk' access t (S idx)
       (** TODO: how to handle when encounting barrier in the borrow
-      stack. We treat it as a protected item for now, so popping
-      [Barrier] would cause error *)
+      stack. *)
       | _ , _ => find_granting_aux stk' access t (S idx)
       end
   end.
@@ -320,8 +319,6 @@ Fixpoint pop_until (stk: list bor_item) (idx: nat) (access: access_kind) : res (
   | _, O => OK stk
   | i :: stk', S idx' =>
       match i, access with
-      | Barrier, _ => Error [MSG "Cannot pop a barrier while accessing a memory location"]
-      (** FIXME: If access is read, do not pop the share tag *)
       | Share _, Aread => OK stk
       | _, _ => pop_until stk' idx' access
       end
@@ -333,3 +330,16 @@ Fixpoint pop_until (stk: list bor_item) (idx: nat) (access: access_kind) : res (
 Definition access (stk: list bor_item) (access: access_kind) (t: tag) : res (list bor_item) :=
   do idx <- find_granting stk access t;
   pop_until stk idx access.
+
+(* push item *)
+Definition push_item (stk: list bor_item) (t: tag) (access: access_kind) : list bor_item :=
+  match access with
+  | Aread =>
+      Share t :: stk
+  | Awrite =>
+      Unique t :: stk
+  end.
+
+(** Update borrow stacks while creating new reference *)
+
+(* How to handle the merge of abstract memory? *)
