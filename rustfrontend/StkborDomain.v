@@ -2,7 +2,10 @@ Require Import Coqlib.
 Require Import Maps.
 Require Import Errors.
 Require Import AST.
+Require Import FSetWeakList DecidableType.
+Require Import Lattice.
 Require Import Rusttypes RustlightBase.
+Require Import RustIR.
 
 Import ListNotations.
 Scheme Equality for list.
@@ -106,35 +109,189 @@ Declare Module PlaceMap : TREE.
 (* End PlaceMap. *)
 
 (* block id *)
-Definition ablock : Type := positive.
+Definition ablock : Type := PlaceMap.elt.
 
-Definition tag : Type := positive.
+Inductive tag : Type :=
+| Tintern (pc: node)       (**r internal tag created in location [pc] *)
+| Textern (t: positive)         (**r external tag for function arguments *)
+.
+
+Lemma tag_eq : forall (t1 t2 : tag), {t1 = t2} + {t1 <> t2}.
+Proof.
+  generalize Pos.eq_dec. intros.
+  decide equality.
+Qed.
 
 (* Definition of path *)
 Inductive refseg : Type :=
 | Rfield (fid: ident).
 
+Lemma refseg_eq: forall (r1 r2: refseg), {r1 = r2} + {r1 <> r2}.
+Proof.
+  generalize ident_eq. intros.
+  decide equality.
+Qed.
+
 Definition path : Type := list refseg.
 
+Definition path_eq := List.list_eq_dec refseg_eq.
+
 (* abstract pointer *)
-Definition aptr : Type := ablock * path.
+Definition aptr : Type := (ablock * path) * tag.
+
+Lemma aptr_eq : forall (p1 p2 : aptr), {p1 = p2} + {p1 <> p2}.
+Proof.
+  generalize PlaceMap.elt_eq path_eq tag_eq. intros.
+  decide equality.
+  decide equality.
+Qed.
+
+Module APTR <: DecidableType.DecidableType.
+  Definition t := aptr.
+  Definition eq := @eq t.
+  Definition eq_dec := aptr_eq.
+  Definition eq_refl: forall x, eq x x := (@eq_refl t).
+  Definition eq_sym: forall x y, eq x y -> eq y x := (@eq_sym t).
+  Definition eq_trans: forall x y z, eq x y -> eq y z -> eq x z := (@eq_trans t).
+End APTR.
+
+Module Aptrs := FSetWeakList.Make(APTR).
+
+(* It represent a set of abstract pointers, which is used to indicate
+the possible values *)
+Module LAptrs := LFSet(Aptrs).
+
+Module IDENT <: DecidableType.DecidableType.
+  Definition t := ident.
+  Definition eq := @eq t.
+  Definition eq_dec := ident_eq.
+  Definition eq_refl: forall x, eq x x := (@eq_refl t).
+  Definition eq_sym: forall x y, eq x y -> eq y x := (@eq_sym t).
+  Definition eq_trans: forall x y z, eq x y -> eq y z -> eq x z := (@eq_trans t).
+End IDENT.
+
+Module Idents := FSetWeakList.Make(APTR).
+
+(* It represent a set of abstract pointers, which is used to indicate
+the possible values *)
+Module LIdents := LFSet(Aptrs).
 
 (* abstract value *)
 
 Inductive aval : Type :=
 | Vbot
 | Scalar
-| Ptr (l: list (aptr * tag))
+| Ptr (l: LAptrs.t)
 | Vstruct (t: PTree.t aval)
-| Venum (l: list ident) (t: PTree.t aval)
+| Venum (l: LIdents.t) (t: PTree.t aval)
 .
 
-(* abstract block *)
 
-(* Record ablock : Set := mkablock *)
-(*   { ab_contents : ZTree.t aval; *)
-(*     ab_borstk : ZTree borstk }. *)
+Module LAval <: SEMILATTICE.
+  
+  Definition t := aval.
+  
+  Inductive eq' : aval -> aval -> Prop :=    
+  | Ebot : eq' Vbot Vbot
+  | Escalar : eq' Scalar Scalar
+  | Eptr : forall l1 l2, LAptrs.eq l1 l2 -> eq' (Ptr l1) (Ptr l2)
+  | Estruct : forall t1 t2 p v1 v2,
+      t1 ! p = Some v1 ->
+      t2 ! p = Some v2 ->
+      eq' v1 v2 ->
+      eq' (Vstruct t1) (Vstruct t2)
+  | Eenum : forall t1 t2 p v1 v2 l1 l2,
+      t1 ! p = Some v1 ->
+      t2 ! p = Some v2 ->
+      eq' v1 v2 ->
+      LIdents.eq l1 l2 ->
+      eq' (Venum l1 t1) (Venum l2 t2).
 
+  Definition eq := eq'.
+  
+  Axiom eq_refl: forall x, eq x x.
+  Axiom eq_sym: forall x y, eq x y -> eq y x.
+  Axiom eq_trans: forall x y z, eq x y -> eq y z -> eq x z.
+
+  Fixpoint beq (x y : aval) : bool :=
+    match x,y with
+    | Vbot, Vbot => true
+    | Scalar, Scalar => true
+    | Ptr l1, Ptr l2 => LAptrs.beq l1 l2
+    | Vstruct t1, Vstruct t2 =>
+        PTree.beq beq t1 t2
+    | Venum l1 t1, Venum l2 t2 =>
+        LIdents.beq l1 l2 && PTree.beq beq t1 t2
+    | _, _ => false
+    end.
+  
+  Axiom beq_correct: forall x y, beq x y = true -> eq x y.
+
+  Inductive ge' : aval -> aval -> Prop :=
+  | Gbot : forall v, ge' v Vbot
+  | Gscalar: ge' Scalar Scalar
+  | Gptr: forall l1 l2,
+      LAptrs.ge l1 l2 ->
+      ge' (Ptr l1) (Ptr l2)
+  | Gstruct: forall t1 t2 p v1 v2,
+      t1 ! p = Some v1 ->
+      t2 ! p = Some v2 ->
+      ge' v1 v2 ->
+      ge' (Vstruct t1) (Vstruct t2)
+  | Genum: forall t1 t2 l1 l2 v1 v2 p,
+      t1 ! p = Some v1 ->
+      t2 ! p = Some v2 ->
+      ge' v1 v2 ->
+      LIdents.ge l1 l2 ->
+      ge' (Venum l1 t1) (Venum l2 t2).
+
+  Definition ge := ge'.
+  
+  Axiom ge_refl: forall x y, eq x y -> ge x y.
+  Axiom ge_trans: forall x y z, ge x y -> ge y z -> ge x z.
+
+  Definition bot := Vbot.
+
+  Axiom ge_bot: forall x, ge x bot.
+  
+  Fixpoint lub (x y: aval) : aval :=
+    let rec (x y : option aval) : option aval :=
+      match x, y with
+      | Some x, Some y => Some (lub x y)
+      | _, _ => None
+      end in
+    match x,y with
+    | Vbot, Vbot => Vbot
+    | Scalar, Scalar => Scalar
+    | Ptr l1, Ptr l2 => Ptr (LAptrs.lub l1 l2)
+    | Vstruct t1, Vstruct t2 =>
+        Vstruct (PTree.combine rec t1 t2)
+    | Venum l1 t1, Venum l2 t2 =>
+        Venum (LIdents.lub l1 l2) (PTree.combine rec t1 t2)
+    | _, _ => Vbot
+    end.
+  
+  Axiom ge_lub_left: forall x y, ge (lub x y) x.
+  Axiom ge_lub_right: forall x y, ge (lub x y) y.  
+
+End LAval.
+
+
+Module TAG <: DecidableType.DecidableType.
+  Definition t := tag.
+  Definition eq := @eq t.
+  Definition eq_dec := tag_eq.
+  Definition eq_refl: forall x, eq x x := (@eq_refl t).
+  Definition eq_sym: forall x y, eq x y -> eq y x := (@eq_sym t).
+  Definition eq_trans: forall x y z, eq x y -> eq y z -> eq x z := (@eq_trans t).
+End TAG.
+
+Module Tags := FSetWeakList.Make(TAG).
+
+(** Unused  *)
+(* It represent a set of abstract pointers, which is used to indicate
+the possible values *)
+Module LTags := LFSet(Tags).
 
 (* borrow stack *)
 
@@ -143,25 +300,70 @@ Inductive access_kind : Type :=
 | Awrite.
 
 Inductive bor_item : Type :=
-| Share (t: tag)
+| Share (l: Tags.t)             (**r set of tags  *)
 | Unique (t: tag)
-| Bopaque.
+.
 
-Definition borstk : Type := list bor_item.
+Definition bor_item_eqb (i1 i2: bor_item) : bool :=
+  match i1, i2 with
+  | Share t1, Share t2 => Tags.equal t1 t2
+  | Unique t1, Unique t2 => tag_eq t1 t2
+  | _, _ => false
+  end.
+
+
+(* borrow tree which represents conditional branch *)
+Inductive bor_tree : Type :=
+| Bleaf
+| Bnode (i: bor_item) (t: bor_tree)
+| Bcond (t1 t2: bor_tree).
+
+Fixpoint combine_bor_tree (t1 t2: bor_tree) :=
+  match t1, t2 with
+  | Bleaf, _ => Bleaf
+  | _, Bleaf => Bleaf
+  | Bnode i1 t1, Bnode i2 t2 =>
+      if bor_item_eqb i1 i2 then
+        Bnode i1 (combine_bor_tree t1 t2)
+      else
+        (* two items are not equal, so we create a condition node *)
+        Bcond t1 t2
+  | Bcond t11 t12, Bcond t21 t22 =>
+      Bcond (combine_bor_tree t11 t21) (combine_bor_tree t12 t22)
+  | _, _ => Bleaf                (** TODO  *)
+  end.
+        
+Definition borstk : Type := list LBorItems.t.
+
+Fixpoint combine_borstk' (s1 s2: borstk) : borstk :=
+  match s1, s2 with
+  | i1 :: s1', i2 :: s2' =>
+      if BorItems.eq_dec i1 i2 then i1 :: combine_borstk' s1' s2'
+      else BorItems.union i1 i2 :: combine_borstk' s1' s2'
+  | [], _ => s2
+  | _, [] => s1
+  end.
+
+Definition combine_borstk (s1 s2: borstk) : borstk :=
+  rev (combine_borstk' (rev s1) (rev s2)).
+
+(** TODO *)
+Declare Module LBorstk : SEMILATTICE.
+
 
 (* The borrow stacks inside one abstract block *)
 Inductive block_borstk : Type :=
 | Batomic (stk: borstk)
 | Bstruct (stkl: PTree.t block_borstk).
 
+(** TODO  *)
+Declare Module LBlockStk : SEMILATTICE.
 
 (* abstract memory *)
 
 Record amem : Type := build_amem
   { am_contents : PTree.t aval;
-    am_borstk : PTree.t block_borstk;
-    am_nextblock : ablock;
-    am_nexttag : tag }.
+    am_borstk : PTree.t block_borstk }.
 
 
 Section COMPOSITE_ENV.
