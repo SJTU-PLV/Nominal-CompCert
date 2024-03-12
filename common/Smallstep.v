@@ -551,9 +551,10 @@ Record semantics liA liB := {
 
 (** Handy notations. *)
 
-Notation Semantics_gen step initial_state at_ext after_ext final_state globalenv p :=
+Notation Semantics_gen memory_of_state step initial_state at_ext after_ext final_state globalenv p :=
   {|
     skel := AST.erase_program p;
+    memory_of_state := memory_of_state;
     activate se :=
       let ge := globalenv se p in
       {|
@@ -567,8 +568,8 @@ Notation Semantics_gen step initial_state at_ext after_ext final_state globalenv
       |};
   |}.
 
-Notation Semantics step initial_state at_ext after_ext final_state p :=
-  (Semantics_gen step initial_state at_ext (fun _ => after_ext) (fun _ => final_state) (@Genv.globalenv _ _) p).
+Notation Semantics memory_of_state step initial_state at_ext after_ext final_state p :=
+  (Semantics_gen memory_of_state step initial_state at_ext (fun _ => after_ext) (fun _ => final_state) (@Genv.globalenv _ _) p).
 
 Declare Scope smallstep_scope.
 

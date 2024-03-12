@@ -7,6 +7,7 @@ Require Import Globalenvs.
 Require Import LanguageInterface.
 Require Import Integers.
 Require Import Smallstep.
+Require Import SmallstepClosed.
 Import Values Maps Memory AST.
 
 Section MultiThread.
@@ -15,8 +16,24 @@ Section MultiThread.
 
   Context {OS : semantics liA liB}.
 
-  Definition state := state OS.
+  Definition local_state := state OS.
 
+  Variable initial_query : query liB.
+
+  
   (* The global state of concurrent semantics *)
+
+  (* problem : how to deal with "thread variable" *)
+
+  Definition state := list local_state.
+
+  Closed.semantics
+  (** Initial state of Concurrent semantics *)
+
+  (* We need a "query" to the main function of the semantics *)
+  (* Including the initial global memory*)
+
+
+  
 
   

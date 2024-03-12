@@ -1,6 +1,7 @@
 Require Import Coqlib.
 Require Import List.
 Require Import Events.
+Require Import Memory.
 Require Import Globalenvs.
 Require Import LanguageInterface.
 Require Import Smallstep.
@@ -70,12 +71,19 @@ Section LINK.
     Definition valid_query q :=
       valid_query (L true se) q || valid_query (L false se) q.
 
+    Definition memory_of_state (s: state) : mem :=
+      match s with
+      |nil => Mem.empty
+      |(st i ss) :: _ => (memory_of_state (L i)) ss
+      end.
+    
   End WITH_SE.
 
   Context (sk: AST.program unit unit).
 
   Definition semantics: semantics li li :=
     {|
+      Smallstep.memory_of_state := memory_of_state;
       activate se :=
         {|
           Smallstep.step ge := step se;
