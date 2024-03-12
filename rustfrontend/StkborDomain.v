@@ -1,11 +1,11 @@
 Require Import Coqlib.
 Require Import Maps.
-Require Import Errors.
 Require Import AST.
 Require Import FSetWeakList DecidableType.
 Require Import Lattice.
-Require Import Rusttypes RustlightBase.
-Require Import RustIR.
+Require Import Rusttypes RustlightBase RustIR.
+Require Import Errors.
+
 
 Import ListNotations.
 Scheme Equality for list.
@@ -109,7 +109,7 @@ Declare Module PlaceMap : TREE.
 (* End PlaceMap. *)
 
 (* block id *)
-Definition ablock : Type := PlaceMap.elt.
+Definition ablock : Type := positive.
 
 Inductive tag : Type :=
 | Tintern (pc: node)       (**r internal tag created in location [pc] *)
@@ -121,6 +121,12 @@ Proof.
   generalize Pos.eq_dec. intros.
   decide equality.
 Qed.
+
+Definition ident_of_tag (t: tag) :=
+  match t with
+  | Tintern pc => pc
+  | Textern t => t
+  end.
 
 (* Definition of path *)
 Inductive refseg : Type :=
@@ -141,7 +147,7 @@ Definition aptr : Type := (ablock * path) * tag.
 
 Lemma aptr_eq : forall (p1 p2 : aptr), {p1 = p2} + {p1 <> p2}.
 Proof.
-  generalize PlaceMap.elt_eq path_eq tag_eq. intros.
+  generalize Pos.eq_dec path_eq tag_eq. intros.
   decide equality.
   decide equality.
 Qed.
@@ -300,70 +306,164 @@ Inductive access_kind : Type :=
 | Awrite.
 
 Inductive bor_item : Type :=
-| Share (l: Tags.t)             (**r set of tags  *)
+| Share (t: tag)
 | Unique (t: tag)
+| Disable (t: tag) 
 .
+
+Definition bor_item_tag (i: bor_item) : tag :=
+  match i with
+  | Share t
+  | Unique t
+  | Disable t => t
+  end.
+
+Definition combine_bor_item (i1 i2 : bor_item) : option bor_item :=
+  if tag_eq (bor_item_tag i1) (bor_item_tag i2) then    
+    match i1, i2 with
+    | Disable t1, _ => Some (Disable t1)
+    | _, Disable t2 => Some (Disable t2)
+    | Share t1, _ => Some (Share t1)
+    | _, Share t2 => Some (Share t2)
+    | _, _ => Some i1
+    end
+  else None.
 
 Definition bor_item_eqb (i1 i2: bor_item) : bool :=
   match i1, i2 with
-  | Share t1, Share t2 => Tags.equal t1 t2
+  | Share t1, Share t2 => tag_eq t1 t2
   | Unique t1, Unique t2 => tag_eq t1 t2
+  | Disable t1, Disable t2 => tag_eq t1 t2
   | _, _ => false
   end.
 
+Inductive bor_item_ge : bor_item -> bor_item -> Prop :=
+| BIdisable : forall i t, 
+    bor_item_tag i = t ->
+    bor_item_ge (Disable t) i
+| BIshare : forall i t,
+    (i = Share t \/ i = Unique t) ->
+    bor_item_ge (Share t) i
+| BIunique : forall t,
+    bor_item_ge (Unique t) (Unique t).
+    
+    
+(* borrow tree represents all the possiblity of the execution of
+programs *)
+Inductive bor_tree' : Type :=
+| Bnode (i: bor_item) (children: list bor_tree').
 
-(* borrow tree which represents conditional branch *)
 Inductive bor_tree : Type :=
-| Bleaf
-| Bnode (i: bor_item) (t: bor_tree)
-| Bcond (t1 t2: bor_tree).
+| Broot (t: list bor_tree').
 
-Fixpoint combine_bor_tree (t1 t2: bor_tree) :=
+
+Fixpoint combine_bor_tree' (t1 t2: bor_tree') : list bor_tree' := 
   match t1, t2 with
-  | Bleaf, _ => Bleaf
-  | _, Bleaf => Bleaf
-  | Bnode i1 t1, Bnode i2 t2 =>
-      if bor_item_eqb i1 i2 then
-        Bnode i1 (combine_bor_tree t1 t2)
-      else
-        (* two items are not equal, so we create a condition node *)
-        Bcond t1 t2
-  | Bcond t11 t12, Bcond t21 t22 =>
-      Bcond (combine_bor_tree t11 t21) (combine_bor_tree t12 t22)
-  | _, _ => Bleaf                (** TODO  *)
-  end.
-        
-Definition borstk : Type := list LBorItems.t.
-
-Fixpoint combine_borstk' (s1 s2: borstk) : borstk :=
-  match s1, s2 with
-  | i1 :: s1', i2 :: s2' =>
-      if BorItems.eq_dec i1 i2 then i1 :: combine_borstk' s1' s2'
-      else BorItems.union i1 i2 :: combine_borstk' s1' s2'
-  | [], _ => s2
-  | _, [] => s1
+  | Bnode i1 l1, Bnode i2 l2 =>
+      (* try to combine i1 and i2 *)
+      match combine_bor_item i1 i2 with
+      | Some i' =>
+          let children :=
+            (fix combine_bor_tree_list' (l1 l2: list bor_tree') : list bor_tree' :=
+               match l1, l2 with
+               | [], _ => l2
+               | _, [] => l1
+               | t1 :: l1', t2 :: l2' =>
+                   combine_bor_tree' t1 t2 ++ combine_bor_tree_list' l1' l2'
+               end) l1 l2 in                                
+          [Bnode i' children]
+      | None =>          
+          [t1; t2]
+      end
   end.
 
-Definition combine_borstk (s1 s2: borstk) : borstk :=
-  rev (combine_borstk' (rev s1) (rev s2)).
+Fixpoint combine_bor_tree_list' (l1 l2: list bor_tree') : list bor_tree' :=
+  match l1, l2 with
+  | [], _ => l2
+  | _, [] => l1
+  | t1 :: l1', t2 :: l2' =>
+      combine_bor_tree' t1 t2 ++ combine_bor_tree_list' l1' l2'
+  end.
+
+Definition combine_bor_tree (t1 t2: bor_tree) : bor_tree :=
+  match t1, t2 with
+  | Broot t1, Broot t2 =>
+      Broot (combine_bor_tree_list' t1 t2)
+  end.
+
 
 (** TODO *)
-Declare Module LBorstk : SEMILATTICE.
+Module LBorTree <: SEMILATTICE.
 
+  Definition t := bor_tree.
 
+  (** TODO: Is it correct?  *)
+  Definition eq := @eq bor_tree.
+
+  Fixpoint bor_tree_beq' (t1 t2: bor_tree') : bool :=
+    match t1, t2 with
+    | Bnode i1 l1, Bnode i2 l2 =>
+        bor_item_eqb i1 i2 &&  list_beq bor_tree' bor_tree_beq' l1 l2
+    end.
+                                        
+  Definition beq (t1 t2 : bor_tree) : bool :=
+    match t1, t2 with
+    | Broot l1, Broot l2 =>
+        list_beq bor_tree' bor_tree_beq' l1 l2
+    end.
+
+  Inductive bor_tree_ge' : bor_tree' -> bor_tree' -> Prop :=
+  | Bt_ge : forall i1 i2 l1 l2 n t1 t2,
+      bor_item_ge i1 i2 ->
+      (nth_error l2 n = Some t2 -> nth_error l1 n = Some t1 /\ bor_tree_ge' t1 t2) ->
+      bor_tree_ge' (Bnode i1 l1) (Bnode i2 l2)
+  .
+
+  Definition bor_tree_ge_list' (l1 l2: list bor_tree') : Prop :=
+    forall t1 t2 n,
+      nth_error l2 n = Some t2 ->
+      nth_error l1 n = Some t1 /\ bor_tree_ge' t1 t2.
+  
+  Definition ge (t1 t2: bor_tree) : Prop :=
+    match t1, t2 with
+    | Broot l1, Broot l2 =>
+        bor_tree_ge_list' l1 l2
+    end.
+  
+  Definition bot := Broot nil.
+  
+  Definition lub := combine_bor_tree.
+
+  (** TODO  *)
+  Axiom eq_refl: forall x, eq x x.
+  Axiom eq_sym: forall x y, eq x y -> eq y x.
+  Axiom eq_trans: forall x y z, eq x y -> eq y z -> eq x z.
+
+  Axiom beq_correct: forall x y, beq x y = true -> eq x y.
+
+  Axiom ge_refl: forall x y, eq x y -> ge x y.
+  Axiom ge_trans: forall x y z, ge x y -> ge y z -> ge x z.
+
+  Axiom ge_bot: forall x, ge x bot.
+
+  Axiom ge_lub_left: forall x y, ge (lub x y) x.
+  Axiom ge_lub_right: forall x y, ge (lub x y) y.
+
+End LBorTree.
+  
 (* The borrow stacks inside one abstract block *)
-Inductive block_borstk : Type :=
-| Batomic (stk: borstk)
-| Bstruct (stkl: PTree.t block_borstk).
+Inductive block_bortree : Type :=
+| Batomic (stk: bor_tree)
+| Bstruct (stkl: PTree.t block_bortree).
 
 (** TODO  *)
-Declare Module LBlockStk : SEMILATTICE.
+Declare Module LBlkBorTree : SEMILATTICE.
 
 (* abstract memory *)
 
 Record amem : Type := build_amem
   { am_contents : PTree.t aval;
-    am_borstk : PTree.t block_borstk }.
+    am_borstk : PTree.t block_bortree }.
 
 
 Section COMPOSITE_ENV.
@@ -413,15 +513,38 @@ Fixpoint load_path (p: path) (v: aval) : res aval :=
       end
   | _, _ =>  Error [MSG "Path and anstract value mismatches, load path"]
   end.
-              
+
+
+Fixpoint load_path_bortree (p: path) (bb: block_bortree) : res block_bortree :=
+  match p, bb with
+  | [], _ => OK bb
+  | (Rfield fid) :: p', Bstruct t =>
+      match PTree.get fid t with
+      | Some bb' => load_path_bortree p' bb'
+      | None => Error [CTX fid; MSG ": location in this field id has no valid block_bortree (load_path_bortree)"]
+      end
+  | _, _ =>  Error [MSG "Path and anstract value mismatches (load_path_bortree)"]
+  end.
+
+
 (* load the avals from a place *)
 Definition load (m: amem) (p: aptr) : res aval :=
-  let (b, ph) := p in
+  let '(b, ph, _) := p in
   match PTree.get b m.(am_contents) with
   | Some v =>
       load_path ph v
   | None =>
       Error [CTX b; MSG ": this block is unallocated, load"]
+  end.
+
+(* load the block borrow tree from a place *)
+Definition load_bortree (m: amem) (p: aptr) : res block_bortree :=
+  let '(b, ph, _) := p in
+  match PTree.get b m.(am_borstk) with
+  | Some bb =>
+      load_path_bortree ph bb
+  | None =>
+      Error [CTX b; MSG ": this block is unallocated (load_bortree)"]
   end.
 
 
@@ -441,26 +564,55 @@ Fixpoint update_path (p: path) (m: aval) (v: aval): res aval :=
           | _ => Error [CTX fid; MSG ": this field has no valid abstract value, update_path"]
           end
       end
-  | _, _ => Error [MSG "Path and anstract value mismatches, load path"]
+  | _, _ => Error [MSG "Path and anstract value mismatches (update_path)"]
   end.
 
+
+Fixpoint update_path_bortree (p: path) (m: block_bortree) (v: block_bortree): res block_bortree :=
+  match p, m with
+  | [], _ => OK v
+  | (Rfield fid) :: p', Bstruct t =>
+      match PTree.get fid t with
+      | Some t' =>
+          (* replace p' in t' with v *)
+          do m' <- update_path_bortree p' t' v;
+          OK (Bstruct (PTree.set fid m' t))
+      | None =>
+          match p' with
+          | [] => OK (Bstruct (PTree.set fid v t))
+          (* access undefined value *)
+          | _ => Error [CTX fid; MSG ": this field has no valid borrow tree (update_path_bortree)"]
+          end
+      end
+  | _, _ => Error [MSG "Path and anstract value mismatches (update_path_bortree)"]
+  end.
+
+
 Definition store (m: amem) (p: aptr) (v: aval) : res amem :=
-  let (b, ph) := p in
+  let '(b, ph, _) := p in
   match PTree.get b m.(am_contents) with
   | Some bv =>
       do bv' <- update_path ph bv v;
       OK (build_amem (PTree.set b bv' m.(am_contents))
-              m.(am_borstk)
-                  m.(am_nextblock)
-                      m.(am_nexttag))
-  | None => Error [CTX b; MSG ": this block is unallocated, store"]
+            m.(am_borstk))
+  | None => Error [CTX b; MSG ": this block is unallocated (store) "]
   end.
 
-Fixpoint init_aval_and_borstk' (fuel: nat) (ty: type) : res (aval * block_borstk) :=
+Definition store_bortree (m: amem) (p: aptr) (v: block_bortree) : res amem :=
+  let '(b, ph, _) := p in
+  match PTree.get b m.(am_borstk) with
+  | Some bb =>
+      do bb' <- update_path_bortree ph bb v;
+      OK (build_amem m.(am_contents) (PTree.set b bb' m.(am_borstk)))
+  | None => Error [CTX b; MSG ": this block is unallocated (store_bortree) "]
+  end.
+
+
+Fixpoint init_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bortree) :=
   match fuel with
   | O => Error [MSG "Running out of fuel in aval_of_type'"]
   | S fuel' =>
-      let rec := init_aval_and_borstk' fuel' in
+      let rec := init_aval_and_bortree' fuel' in
       match ty with
       | Tstruct id _ =>
           match ce!id with
@@ -468,80 +620,241 @@ Fixpoint init_aval_and_borstk' (fuel: nat) (ty: type) : res (aval * block_borstk
               let f memb acc :=
                 match memb with
                 | Member_plain fid ty' =>
-                    do (val_tree, bor_tree) <- acc;
-                    do (v', stk') <- rec ty';
-                    OK (PTree.set fid v' val_tree, PTree.set fid stk' bor_tree)
+                    do (val_tree, struct_tree) <- acc;
+                    do (v', bbt) <- rec ty';
+                    OK (PTree.set fid v' val_tree, PTree.set fid bbt struct_tree)
                 end in
-              do (v, sb) <- fold_right f (OK (PTree.empty aval, PTree.empty block_borstk)) co.(co_members);
+              do (v, sb) <- fold_right f (OK (PTree.empty aval, PTree.empty block_bortree)) co.(co_members);
               OK (Vstruct v, Bstruct sb)
           | None => Error [CTX id; MSG ": no such composite, init_avl_of_type'"]
           end
       | _ =>
-          OK (Vbot, Batomic [])
+          (* init an empty borrow tree *)
+          OK (Vbot, Batomic (Broot nil))
       end
   end.
                 
-Definition init_aval_and_borstk (ty: type) : res (aval * block_borstk) :=
-  init_aval_and_borstk' (PTree_Properties.cardinal ce) ty.
+Definition init_aval_and_bortree (ty: type) : res (aval * block_bortree) :=
+  init_aval_and_bortree' (PTree_Properties.cardinal ce) ty.
 
-(* alloc a new block with type [ty] *)
-Definition alloc (m: amem) (ty: type) : res (ablock * amem) :=
-  do (v, stk) <- init_aval_and_borstk ty;
-  let b := m.(am_nextblock) in
-  OK (b, build_amem (PTree.set b v m.(am_contents)) (PTree.set b stk m.(am_borstk)) (Pos.succ b) m.(am_nexttag)).
-
-                             
-(* free an abstract block *)
-Definition free (m: amem) (b: ablock) : amem :=
-  build_amem (PTree.remove b m.(am_contents)) (PTree.remove b m.(am_borstk)) m.(am_nextblock) m.(am_nexttag).
+Definition init_ablock (m: amem) (ty: type) (b: ablock) : res amem :=
+  do (v, stk) <- init_aval_and_bortree ty;
+  OK (build_amem (PTree.set b v m.(am_contents)) (PTree.set b stk m.(am_borstk))).
 
 
-(** Some definitions for stacked borrow rules *)
+(** Some definitions for "stacked borrow" rules *)
 
-Fixpoint find_granting_aux (stk: list bor_item) (access: access_kind) (t: tag) (idx: nat) : res nat :=
-  match stk with
-  | [] => Error [MSG "There is no such tag in this borrow stack (find_granting_aux): "; CTX t]
-  | i :: stk' =>
-      match i, access with
-      | Share t', Aread
-      | Unique t', _ =>
-          if Pos.eqb t t' then OK idx
-          else find_granting_aux stk' access t (S idx)
-      (** TODO: how to handle when encounting barrier in the borrow
-      stack. *)
-      | _ , _ => find_granting_aux stk' access t (S idx)
-      end
-  end.
+Definition tree_path := list nat.
 
-Definition find_granting (stk: list bor_item) (access: access_kind) (t: tag) : res nat :=
-  find_granting_aux stk access t O.
-
-Fixpoint pop_until (stk: list bor_item) (idx: nat) (access: access_kind) : res (list bor_item) :=
-  match stk, idx with
-  | _, O => OK stk
-  | i :: stk', S idx' =>
-      match i, access with
-      | Share _, Aread => OK stk
-      | _, _ => pop_until stk' idx' access
-      end
-  | _, _ => Error [MSG "Pop an empty stack in pop_until"]
-  end.
-      
-(* access the memory location and update the borrow stack *)
-(** TODO: consider ownership access  *)
-Definition access (stk: list bor_item) (access: access_kind) (t: tag) : res (list bor_item) :=
-  do idx <- find_granting stk access t;
-  pop_until stk idx access.
-
-(* push item *)
-Definition push_item (stk: list bor_item) (t: tag) (access: access_kind) : list bor_item :=
+Definition granting_item (access: access_kind) (t: tag) (i: bor_item) : bool :=
   match access with
   | Aread =>
-      Share t :: stk
+      match i with
+      | Unique t' | Share t' => tag_eq t t'
+      | _ => false
+      end
   | Awrite =>
-      Unique t :: stk
+      match i with
+      | Unique t' => tag_eq t t'
+      | _ => false
+      end
   end.
+
+Fixpoint find_granting_aux (access: access_kind) (t: tag) (p: tree_path) (bt: bor_tree') : option tree_path :=
+  match bt with
+  | Bnode i l =>
+      if granting_item access t i then Some p
+      else
+        let f (acc: option tree_path * nat) elt :=          
+          let (opt_p, idx) := acc in
+          match opt_p with
+          | Some p' => (Some p', S idx)
+          (* If we do not find the granting in the former borrow trees *)
+          | None =>
+              (find_granting_aux access t (idx :: p) elt, S idx)
+          end in
+        fst (fold_left f l (None, O))
+  end.
+
+Definition find_granting_list_acc (access: access_kind) (t: tag) (p: tree_path) (acc: option tree_path * nat) elt : (option tree_path * nat) :=
+  let (opt_p, idx) := acc in
+  match opt_p with
+  | Some p' => (Some p', S idx)
+  (* If we do not find the granting in the former borrow trees *)
+  | None =>
+      (find_granting_aux access t (idx :: p) elt, S idx)
+  end.
+
+Definition find_granting_list (access: access_kind) (t: tag) (l: list bor_tree') : option tree_path :=
+  fst (fold_left (find_granting_list_acc access t []) l (None, O)).
+
+(* remember to reverse the tree_path *)
+Definition find_granting (access: access_kind) (t: tag) (bt: bor_tree) : option tree_path :=
+  match bt with
+  | Broot l =>      
+      match find_granting_list access t l with
+      | Some p => Some (rev p)
+      | None => None
+      end
+  end.
+
+
+(* change the state for each item according to the access type. *)
+Fixpoint update_subtree_rec (access: access_kind) (bt: bor_tree') : bor_tree' :=
+  match bt with
+  | Bnode i l =>
+      let i' :=
+        match i, access with
+        | Unique t, Aread
+        | Share t, Aread => Share t
+        | Unique t, Awrite
+        | Share t, Awrite => Disable t
+        | Disable _, _ => i
+        end in
+      Bnode i' (map (update_subtree_rec access) l)
+  end.
+
+Definition update_subtree (access: access_kind) (bt: bor_tree') : bor_tree' :=
+  (* we do not change the state of the granting item [i] *)
+  match bt with
+  | Bnode i l => Bnode i (map (update_subtree_rec access) l)
+  end.
+        
+(* It uses the [update] function to transform the found subtree *)
+Fixpoint update_subtree_at' (p: tree_path) (l: list bor_tree') (update: bor_tree' -> bor_tree') : option (list bor_tree') :=
+  match p with
+  | [] => None
+  | [idx] =>      
+      match nth_error l idx with
+      (* replace the idx-th element *)
+      | Some t => Some ((firstn idx l) ++ (update t :: (skipn (S idx) l)))
+      | None => None
+      end
+  | idx :: p' =>
+      match nth_error l idx with
+      | Some (Bnode i l') =>
+          match update_subtree_at' p' l' update with
+          | Some l'' =>
+              (* replace the idx-th element *)
+              Some ((firstn idx l) ++ (Bnode i l'' :: (skipn (S idx) l)))
+          | None => None
+          end
+      | None => None
+      end
+  end.
+
+Definition access_subtree_at (access: access_kind) (p: tree_path) (bt: bor_tree) : res bor_tree :=
+  match bt with
+  | Broot l =>
+      match update_subtree_at' p l (update_subtree access) with
+      | Some l' =>
+          OK (Broot l')
+      | None =>
+          Error [MSG "Unable to find the subtree (access_subtree_at)"]
+      end
+  end.
+
+(** TODO: consider ownership access  *)
+Definition access (access: access_kind) (t: option tag) (bt: bor_tree) : res bor_tree :=
+  match t with
+  | Some t =>
+      (* access by tag [t] *)
+      match find_granting access t bt with
+      | Some tp =>
+          access_subtree_at access tp bt
+      | None =>
+          Error [CTX (ident_of_tag t); MSG ": Unable to find the granting item for this tag (access)"]
+      end
+  | None =>
+      (* access by the owner *)
+      match bt with
+      | Broot l => OK (Broot (map (update_subtree_rec access) l))
+      end
+  end.
+
 
 (** Update borrow stacks while creating new reference *)
 
-(* How to handle the merge of abstract memory? *)
+Definition access_of_mutkind (mut: mutkind) : access_kind :=
+  match mut with
+  | Mutable => Awrite
+  | Immutable => Aread
+  end.
+
+Definition item_of_mutkind (mut: mutkind) (t: tag) : bor_item :=
+  match mut with
+  | Mutable => Unique t
+  | Immutable => Share t
+  end.
+  
+(* insert a bor_tree' in the end of [bt]'s children nodes *)
+Definition insert_bor_tree (insert: bor_tree') (bt: bor_tree') : bor_tree' :=
+  match bt with
+  | Bnode i l => Bnode i (l ++ [insert])
+  end.
+
+(* update the borrow tree when creating a reference with mutkind [mut] *)
+Definition create_reference (mut: mutkind) (t: option tag) (fresh_tag: tag) (bt: bor_tree): res bor_tree :=
+  let access := access_of_mutkind mut in
+  (* new sub bor_tree for fresh_tag *)
+  let it := item_of_mutkind mut fresh_tag in
+  let new_tree := Bnode it nil in
+  match t with
+  | Some t =>
+      match find_granting access t bt with
+      | Some tp =>
+          (* perform an access *)
+          do bt' <- access_subtree_at access tp bt;          
+          match bt' with
+          | Broot l =>
+              match update_subtree_at' tp l (insert_bor_tree new_tree) with
+              | Some l' => OK (Broot l')
+              | None => Error [CTX (ident_of_tag t); CTX (ident_of_tag fresh_tag); MSG "Unable to update the subtree (create_reference)"]
+              end
+          end
+      | None => Error [CTX (ident_of_tag t); MSG ": Unable to find the granting item for this tag (create_reference)"]
+      end
+  | None =>
+      (* owner access *)
+      match bt with
+      | Broot l =>
+          (* perform accesses to the owner's children *)
+          let l' := map (update_subtree_rec access) l in
+          OK (Broot (l ++ [new_tree]))
+      end
+  end.
+
+(* update the block borrow tree when creating reference for this whole block *)
+Fixpoint update_block_bortree (mut: mutkind) (t: option tag) (fresh_tag: tag) (bbt: block_bortree) {struct bbt} : res block_bortree :=
+  match bbt with
+  | Batomic bt =>
+      do bt' <- create_reference mut t fresh_tag bt;
+      OK (Batomic bt')
+  | Bstruct st =>
+      let foldf acc id elt :=
+        do acc' <- acc;
+        do bbt <- update_block_bortree mut t fresh_tag elt;
+        OK (PTree.set id bbt acc') in
+      do st' <- PTree.fold foldf st (OK (PTree.empty block_bortree));
+      OK (Bstruct st')
+  end.
+
+
+(* update the memory when creating reference from a pointer *)    
+Definition create_reference_from_ptr (mut: mutkind) (p: aptr) (fresh_tag: tag) (m: amem) : res amem :=
+  let '(b, ph, t) := p in
+  do bbt <- load_bortree m p;
+  match bbt with
+  | Batomic bt =>
+      do bt' <- create_reference mut (Some t) bt fresh_tag;
+      store_bortree m p (Batomic bt')
+  | Bstruct t =>
+      (* we need to update all the borrow tree in the struct *)
+      let foldf acc elt :=
+        do acc' <- acc;
+        do 
+        
+      PTree.fold
+          
+(**   *)
+        
