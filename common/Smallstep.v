@@ -23,6 +23,7 @@
 Require Import Relations.
 Require Import Wellfounded.
 Require Import Coqlib.
+Require Import Memory.
 Require Import Events.
 Require Import Globalenvs.
 Require Import LanguageInterface.
@@ -544,6 +545,7 @@ Record lts liA liB state: Type := {
 Record semantics liA liB := {
   skel: AST.program unit unit;
   state: Type;
+  memory_of_state : state -> mem;
   activate :> Genv.symtbl -> lts liA liB state;
 }.
 
@@ -2335,6 +2337,7 @@ Definition atomic : semantics liA liB :=
 {|
   skel := skel L;
   state := trace * state L;
+  memory_of_state := fun s => (memory_of_state L) (snd s);
   activate se := {|
     genvtype := genvtype (L se);
     step := atomic_step se;
