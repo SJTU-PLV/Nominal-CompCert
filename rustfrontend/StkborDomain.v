@@ -188,11 +188,29 @@ Inductive aval : Type :=
 | Vbot
 | Scalar
 | Ptr (l: LAptrs.t)
-| Vstruct (t: PTree.t aval)
-| Venum (l: LIdents.t) (t: PTree.t aval)
+(* we use list of ident and aval to represent the fields of struct and
+enum instead of PTree because the it is hard to implement nested
+recursion with PTree.fold *)
+| Vstruct (t: list (ident * aval))
+| Venum (l: LIdents.t) (t: list (ident * aval))
 .
 
+Definition field_name {A: Type} (l: list (ident * A)) : list ident :=
+  map fst l.
 
+Definition field_aval {A: Type} (l: list (ident * A)) : list A :=
+  map snd l.
+
+Definition find_elt {A: Type} (id: ident) (l: list (ident * A)) : option A :=
+  match find (fun '(id', v) => ident_eq id id') l with
+  | Some (_, v) => Some v
+  | None => None
+  end.
+
+Definition set_elt {A: Type} (id: ident) (v: A) (l: list (ident * A)) : list (ident * A) :=
+  map (fun '(id', v') => if ident_eq id id' then (id, v) else (id', v')) l.
+  
+  
 Module LAval <: SEMILATTICE.
   
   Definition t := aval.
@@ -201,15 +219,13 @@ Module LAval <: SEMILATTICE.
   | Ebot : eq' Vbot Vbot
   | Escalar : eq' Scalar Scalar
   | Eptr : forall l1 l2, LAptrs.eq l1 l2 -> eq' (Ptr l1) (Ptr l2)
-  | Estruct : forall t1 t2 p v1 v2,
-      t1 ! p = Some v1 ->
-      t2 ! p = Some v2 ->
-      eq' v1 v2 ->
+  | Estruct : forall t1 t2,
+      field_name t1 = field_name t2 ->
+      list_forall2 eq' (field_aval t1) (field_aval t2) ->
       eq' (Vstruct t1) (Vstruct t2)
-  | Eenum : forall t1 t2 p v1 v2 l1 l2,
-      t1 ! p = Some v1 ->
-      t2 ! p = Some v2 ->
-      eq' v1 v2 ->
+  | Eenum : forall t1 t2 l1 l2,
+      field_name t1 = field_name t2 ->
+      list_forall2 eq' (field_aval t1) (field_aval t2) ->
       LIdents.eq l1 l2 ->
       eq' (Venum l1 t1) (Venum l2 t2).
 
@@ -225,9 +241,13 @@ Module LAval <: SEMILATTICE.
     | Scalar, Scalar => true
     | Ptr l1, Ptr l2 => LAptrs.beq l1 l2
     | Vstruct t1, Vstruct t2 =>
-        PTree.beq beq t1 t2
+        let beq' '(id1, v1) '(id2, v2) :=
+          ident_eq id1 id2 && beq v1 v2 in
+        list_beq (ident * aval) beq' t1 t2
     | Venum l1 t1, Venum l2 t2 =>
-        LIdents.beq l1 l2 && PTree.beq beq t1 t2
+        let beq' '(id1, v1) '(id2, v2) :=
+          ident_eq id1 id2 && beq v1 v2 in
+        LIdents.beq l1 l2 && list_beq (ident * aval) beq' t1 t2
     | _, _ => false
     end.
   
@@ -239,15 +259,14 @@ Module LAval <: SEMILATTICE.
   | Gptr: forall l1 l2,
       LAptrs.ge l1 l2 ->
       ge' (Ptr l1) (Ptr l2)
-  | Gstruct: forall t1 t2 p v1 v2,
-      t1 ! p = Some v1 ->
-      t2 ! p = Some v2 ->
-      ge' v1 v2 ->
+  | Gstruct: forall t1 t2,
+      (* the list elements are equivalent *)
+      field_name t1 = field_name t2 ->
+      list_forall2 ge' (field_aval t1) (field_aval t2) ->
       ge' (Vstruct t1) (Vstruct t2)
-  | Genum: forall t1 t2 l1 l2 v1 v2 p,
-      t1 ! p = Some v1 ->
-      t2 ! p = Some v2 ->
-      ge' v1 v2 ->
+  | Genum: forall t1 t2 l1 l2,
+      field_name t1 = field_name t2 ->
+      list_forall2 ge' (field_aval t1) (field_aval t2) ->
       LIdents.ge l1 l2 ->
       ge' (Venum l1 t1) (Venum l2 t2).
 
@@ -259,21 +278,25 @@ Module LAval <: SEMILATTICE.
   Definition bot := Vbot.
 
   Axiom ge_bot: forall x, ge x bot.
-  
-  Fixpoint lub (x y: aval) : aval :=
-    let rec (x y : option aval) : option aval :=
-      match x, y with
-      | Some x, Some y => Some (lub x y)
-      | _, _ => None
-      end in
+
+    
+  Fixpoint lub (x y: aval) {struct x}: aval :=
+    (* why we have to define this function inside lub. But it is ok to
+    use map. *)
+    let recf :=
+      fix merge_field_aval (l1 l2: list (ident * aval)) : list (ident * aval) :=
+        match l1, l2 with
+        | (id1, v1) :: l1', (id2, v2) :: l2' => (id1, lub v1 v2) :: merge_field_aval l1' l2'
+        | _, _ => []
+        end in
     match x,y with
     | Vbot, Vbot => Vbot
     | Scalar, Scalar => Scalar
     | Ptr l1, Ptr l2 => Ptr (LAptrs.lub l1 l2)
     | Vstruct t1, Vstruct t2 =>
-        Vstruct (PTree.combine rec t1 t2)
+        Vstruct (recf t1 t2)
     | Venum l1 t1, Venum l2 t2 =>
-        Venum (LIdents.lub l1 l2) (PTree.combine rec t1 t2)
+        Venum (LIdents.lub l1 l2) (recf t1 t2)
     | _, _ => Vbot
     end.
   
@@ -453,8 +476,8 @@ End LBorTree.
   
 (* The borrow stacks inside one abstract block *)
 Inductive block_bortree : Type :=
-| Batomic (stk: bor_tree)
-| Bstruct (stkl: PTree.t block_bortree).
+| Batomic (t: bor_tree)
+| Bstruct (tl: list (ident * block_bortree)).
 
 (** TODO  *)
 Declare Module LBlkBorTree : SEMILATTICE.
@@ -501,13 +524,13 @@ Fixpoint divide_places' (fuel: nat) (ty: type) (p: place) : res (list place) :=
             
 Definition divide_places (p: place) :=
   divide_places' (PTree_Properties.cardinal ce) (typeof_place p) p.
-  
+
 
 Fixpoint load_path (p: path) (v: aval) : res aval :=
   match p, v with
   | [], _ => OK v
   | (Rfield fid) :: p', Vstruct t =>
-      match PTree.get fid t with
+      match find_elt fid t with
       | Some v' => load_path p' v'
       | None => Error [CTX fid; MSG ": location in this field id has no valid value, load path"]
       end
@@ -519,7 +542,7 @@ Fixpoint load_path_bortree (p: path) (bb: block_bortree) : res block_bortree :=
   match p, bb with
   | [], _ => OK bb
   | (Rfield fid) :: p', Bstruct t =>
-      match PTree.get fid t with
+      match find_elt fid t with
       | Some bb' => load_path_bortree p' bb'
       | None => Error [CTX fid; MSG ": location in this field id has no valid block_bortree (load_path_bortree)"]
       end
@@ -528,8 +551,7 @@ Fixpoint load_path_bortree (p: path) (bb: block_bortree) : res block_bortree :=
 
 
 (* load the avals from a place *)
-Definition load (m: amem) (p: aptr) : res aval :=
-  let '(b, ph, _) := p in
+Definition load (m: amem) (b: ablock) (ph: path) : res aval :=
   match PTree.get b m.(am_contents) with
   | Some v =>
       load_path ph v
@@ -538,8 +560,7 @@ Definition load (m: amem) (p: aptr) : res aval :=
   end.
 
 (* load the block borrow tree from a place *)
-Definition load_bortree (m: amem) (p: aptr) : res block_bortree :=
-  let '(b, ph, _) := p in
+Definition load_bortree (m: amem) (b: ablock) (ph: path) : res block_bortree :=
   match PTree.get b m.(am_borstk) with
   | Some bb =>
       load_path_bortree ph bb
@@ -552,14 +573,14 @@ Fixpoint update_path (p: path) (m: aval) (v: aval): res aval :=
   match p, m with
   | [], _ => OK v
   | (Rfield fid) :: p', Vstruct t =>
-      match PTree.get fid t with
+      match find_elt fid t with
       | Some t' =>
           (* replace p' in t' with v *)
           do m' <- update_path p' t' v;
-          OK (Vstruct (PTree.set fid m' t))
+          OK (Vstruct (set_elt fid m' t))
       | None =>
           match p' with
-          | [] => OK (Vstruct (PTree.set fid v t))
+          | [] => OK (Vstruct (set_elt fid v t))
           (* access undefined value *)
           | _ => Error [CTX fid; MSG ": this field has no valid abstract value, update_path"]
           end
@@ -572,14 +593,14 @@ Fixpoint update_path_bortree (p: path) (m: block_bortree) (v: block_bortree): re
   match p, m with
   | [], _ => OK v
   | (Rfield fid) :: p', Bstruct t =>
-      match PTree.get fid t with
+      match find_elt fid t with
       | Some t' =>
           (* replace p' in t' with v *)
           do m' <- update_path_bortree p' t' v;
-          OK (Bstruct (PTree.set fid m' t))
+          OK (Bstruct (set_elt fid m' t))
       | None =>
           match p' with
-          | [] => OK (Bstruct (PTree.set fid v t))
+          | [] => OK (Bstruct (set_elt fid v t))
           (* access undefined value *)
           | _ => Error [CTX fid; MSG ": this field has no valid borrow tree (update_path_bortree)"]
           end
@@ -588,8 +609,7 @@ Fixpoint update_path_bortree (p: path) (m: block_bortree) (v: block_bortree): re
   end.
 
 
-Definition store (m: amem) (p: aptr) (v: aval) : res amem :=
-  let '(b, ph, _) := p in
+Definition store (m: amem) (b: ablock) (ph: path) (v: aval) : res amem :=
   match PTree.get b m.(am_contents) with
   | Some bv =>
       do bv' <- update_path ph bv v;
@@ -598,8 +618,7 @@ Definition store (m: amem) (p: aptr) (v: aval) : res amem :=
   | None => Error [CTX b; MSG ": this block is unallocated (store) "]
   end.
 
-Definition store_bortree (m: amem) (p: aptr) (v: block_bortree) : res amem :=
-  let '(b, ph, _) := p in
+Definition store_bortree (m: amem) (b: ablock) (ph: path) (v: block_bortree) : res amem :=
   match PTree.get b m.(am_borstk) with
   | Some bb =>
       do bb' <- update_path_bortree ph bb v;
@@ -616,16 +635,14 @@ Fixpoint init_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bortr
       match ty with
       | Tstruct id _ =>
           match ce!id with
-          | Some co =>              
-              let f memb acc :=
-                match memb with
-                | Member_plain fid ty' =>
-                    do (val_tree, struct_tree) <- acc;
-                    do (v', bbt) <- rec ty';
-                    OK (PTree.set fid v' val_tree, PTree.set fid bbt struct_tree)
-                end in
-              do (v, sb) <- fold_right f (OK (PTree.empty aval, PTree.empty block_bortree)) co.(co_members);
-              OK (Vstruct v, Bstruct sb)
+          | Some co =>
+              let f '(Member_plain fid ty') := rec ty' in
+              (* compute the list of aval for each fields *)
+              do l <- fold_right_bind co.(co_members) f;
+              let (v, sb) := split l in
+              (* get the idents of each field *)
+              let ids := map (fun '(Member_plain fid ty') => fid) co.(co_members) in
+              OK (Vstruct (combine ids v), Bstruct (combine ids sb))
           | None => Error [CTX id; MSG ": no such composite, init_avl_of_type'"]
           end
       | _ =>
@@ -825,36 +842,32 @@ Definition create_reference (mut: mutkind) (t: option tag) (fresh_tag: tag) (bt:
   end.
 
 (* update the block borrow tree when creating reference for this whole block *)
-Fixpoint update_block_bortree (mut: mutkind) (t: option tag) (fresh_tag: tag) (bbt: block_bortree) {struct bbt} : res block_bortree :=
+Fixpoint update_block_bortree (mut: mutkind) (t: option tag) (fresh_tag: tag) (bbt: block_bortree) : res block_bortree :=
   match bbt with
   | Batomic bt =>
       do bt' <- create_reference mut t fresh_tag bt;
       OK (Batomic bt')
   | Bstruct st =>
-      let foldf acc id elt :=
-        do acc' <- acc;
-        do bbt <- update_block_bortree mut t fresh_tag elt;
-        OK (PTree.set id bbt acc') in
-      do st' <- PTree.fold foldf st (OK (PTree.empty block_bortree));
-      OK (Bstruct st')
+      (* fold function that update each block_bortree in each field *)
+      let f '(id, elt) := do bbt' <- update_block_bortree mut t fresh_tag elt; OK (id, bbt') in
+      do bbt'' <- fold_right_bind st f;
+      OK (Bstruct bbt'')
   end.
 
 
 (* update the memory when creating reference from a pointer *)    
 Definition create_reference_from_ptr (mut: mutkind) (p: aptr) (fresh_tag: tag) (m: amem) : res amem :=
   let '(b, ph, t) := p in
-  do bbt <- load_bortree m p;
-  match bbt with
-  | Batomic bt =>
-      do bt' <- create_reference mut (Some t) bt fresh_tag;
-      store_bortree m p (Batomic bt')
-  | Bstruct t =>
-      (* we need to update all the borrow tree in the struct *)
-      let foldf acc elt :=
-        do acc' <- acc;
-        do 
-        
-      PTree.fold
-          
-(**   *)
-        
+  do bbt <- load_bortree m b ph;
+  (* update the block borrow tree by pushing some new tag *)
+  do bbt' <- update_block_bortree mut (Some t) fresh_tag bbt;
+  (* store this updated bortree in the abstract memory *)
+  store_bortree m b ph bbt'.
+
+(* (b,p) is the location of the owner *)
+Definition create_reference_from_owner (mut: mutkind) (b: ablock) (ph: path) (fresh_tag: tag) (m: amem) : res amem :=
+  do bbt <- load_bortree m b ph;
+  (* update the block borrow tree by pushing some new tag *)
+  do bbt' <- update_block_bortree mut None fresh_tag bbt;
+  (* store this updated bortree in the abstract memory *)
+  store_bortree m b ph bbt'.
