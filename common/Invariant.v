@@ -243,7 +243,7 @@ Section RESTRICT.
     {|
       skel := skel L;
       state := state L;
-      memory_of_state := memory_of_state L;
+      (* memory_of_state := memory_of_state L; *)
       activate se := restrict_lts se;
     |}.
 
@@ -310,7 +310,7 @@ Section EXPAND.
     {|
       skel := skel L;
       state := state L;
-      memory_of_state := memory_of_state L;
+      (* memory_of_state := memory_of_state L; *)
       activate se := expand_lts se;
     |}.
 

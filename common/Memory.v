@@ -128,6 +128,8 @@ Record sup' : Type :=
 
 Definition sup := sup'.
 
+Definition next_tid (s:sup) := length (stacks s).
+
 Program Definition sup_empty : sup :=
   mksup (nil :: nil :: nil) (1%nat) _.
 
@@ -301,6 +303,49 @@ Lemma sup_list_in : forall b s, sup_In b s <-> In b (sup_list s).
 Proof.
 Admitted.
 
+Definition range_prop (t: nat) (s : sup) :=
+  (1 < t < next_tid s)%nat.
+
+Program Definition sup_yield (s: sup)(n:nat) (p: range_prop n s) :=
+  mksup (stacks s) n _.
+Next Obligation.
+  unfold range_prop,next_tid in p. lia.
+Qed.
+
+Lemma sup_yield_in : forall b s n p,
+    sup_In b s <-> sup_In b (sup_yield s n p).
+Proof.
+  intros. unfold sup_In. split; intro.
+  inv H. econstructor; eauto.
+  inv H. econstructor; eauto.
+Qed.
+  
+Program Definition sup_create (s: sup) :=
+  mksup ((stacks s) ++ (nil :: nil)) (tid s) _.
+Next Obligation.
+  generalize (tid_valid s).
+  intro.
+  rewrite app_length. simpl. lia.
+Qed.
+
+Lemma sup_create_in : forall b s,
+    sup_In b s <-> sup_In b (sup_create s).
+Proof.
+  intros. split; intro. 
+  inv H. econstructor; eauto. unfold sup_create. simpl.
+  rewrite nth_error_app1. eauto.
+  apply nth_error_Some. congruence.
+  inv H. simpl in H0.
+  destruct (Nat.eq_dec tid0 (length (stacks s))).
+  - rewrite nth_error_app2 in H0. 2: lia. subst. simpl in H0.
+    rewrite Nat.sub_diag in H0. simpl in H0. inv H0. inv H1.
+  - econstructor; eauto.
+    rewrite nth_error_app1 in H0. eauto.
+    assert (tid0 < length (stacks s ++ nil :: nil))%nat.
+    apply nth_error_Some. congruence. rewrite app_length in H. simpl in H.
+    lia.
+Qed.
+    
 End Sup.
 
 Module Mem <: MEM.
@@ -732,6 +777,39 @@ Remark setpermN_default:
 Proof.
   intros.
   eapply setpermN'_default; eauto.
+Qed.
+
+
+Program Definition yield (m:mem) (n: nat) (p : range_prop n (Mem.support m)) :=
+  mkmem m.(mem_contents) m.(mem_access) (sup_yield m.(support) n p) _ _ _ _.
+Next Obligation.
+  apply access_max.
+Qed.
+Next Obligation.
+  apply nextblock_noaccess.
+  rewrite <- sup_yield_in in H. auto.
+Qed.
+Next Obligation.
+  apply contents_default.
+Qed.
+Next Obligation.
+  apply access_default.
+Qed.
+
+Program Definition thread_create (m:mem) :=
+  mkmem m.(mem_contents) m.(mem_access) (sup_create m.(support)) _ _ _ _.
+Next Obligation.
+  apply access_max.
+Qed.
+Next Obligation.
+  apply nextblock_noaccess.
+  rewrite <- sup_create_in in H. auto.
+Qed.
+Next Obligation.
+  apply contents_default.
+Qed.
+Next Obligation.
+  apply access_default.
 Qed.
 
 Program Definition alloc (m: mem) (lo hi: Z) :=
