@@ -69,9 +69,7 @@ Section MultiThread.
   Variable final_reply : int -> reply li_c -> Prop.
 
   (* should be derived from skel of OpenS
-
-     and allocate blocks for pthread primitives
-  *)
+     and allocate blocks for pthread primitives *)
   Variable initial_se : Genv.symtbl.
   
   Definition OpenLTS := activate OpenS initial_se.
@@ -82,14 +80,6 @@ Section MultiThread.
 
   (*Variable get_gmem : local_state -> mem.
   Variable set_gmem : mem -> local_state -> local_state. *)
-
-  (*
-  Definition tid_mem (m:mem) : nat :=
-    Mem.tid (Mem.support m).
-
-  Definition stacks_mem (m:mem) :=
-    Mem.stacks (Mem.support m).
-   *)
   
   (** * Definition and operations of global state *)
 
@@ -151,7 +141,7 @@ Section MultiThread.
   (** Initial state of Concurrent semantics *)
 
   (* We need a "query" to the main function of the semantics *)
-  (* Including the initial global memory*)
+  (* Including the initial global memory *)
 
   Inductive initial_state : state -> Prop :=
   |initial_state_intro : forall ls s,
@@ -173,9 +163,6 @@ Section MultiThread.
   Definition yield_id := 1001%positive.
   Definition yield_sig := mksignature nil Tvoid cc_default.
 
-  (* Definition func_yield_external : fundef :=
-    External (EF_external "yield" yield_sig).  *)
-  
   Inductive query_is_yield : query li_c -> Prop :=
   |yield_intro : forall b m,
     Genv.find_symbol initial_se yield_id = Some b ->
@@ -185,8 +172,9 @@ Section MultiThread.
 
   Definition pthread_create_id := 1002%positive.
   
-  (* int pthread_create (void * (*start_routine) (void*), void* arg) *)
+
   (* TODO: not quite sure to use Tlong or Tany64 here, we used Tlong for function pointer in the Client-Server example *)
+  (** int pthread_create (void * (*start_routine) (void*), void* arg) *)
   Definition pthread_create_sig := mksignature (Tlong :: Tlong :: nil) Tint cc_default.
 
   
