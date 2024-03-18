@@ -28,7 +28,7 @@ else
 ARCHDIRS=$(ARCH)_$(BITSIZE) $(ARCH)
 endif
 
-DIRS := lib common $(ARCHDIRS) backend cfrontend driver export cparser cklr demo
+DIRS := lib common $(ARCHDIRS) backend cfrontend driver export cparser cklr demo close concur
 
 COQINCLUDES := $(foreach d, $(DIRS), -R $(d) compcert.$(d)) -R $(COQREL) coqrel
 
@@ -102,7 +102,6 @@ COMMON=Errors.v AST.v Linking.v \
   SmallstepLinking.v \
   Invariant.v \
   CallconvAlgebra.v \
-  SmallstepClosed.v \
 
 # Behaviors.v
 # Determinism.v
@@ -178,11 +177,23 @@ else
 MENHIRLIB=
 endif
 
+
+
 # Putting everything together (in driver/)
 
 DRIVER=Compopts.v CallConv.v CA.v Compiler.v
 
 # Complements.v
+
+
+# Closes semantics
+
+CLOSE=SmallstepClosed.v CompilerClosed.v
+
+# Concurrent semantics
+
+CONCUR=SmallstepMulti.v AsmMulti.v
+
 
 DEMO= Demo.v Demospec.v Demoproof.v\
   DemoCspec.v Demotopspec.v\
@@ -201,7 +212,7 @@ EXPORTLIB= Ctypesdefs.v Clightdefs.v Csyntaxdefs.v
 
 # All source files
 
-FILES=$(VLIB) $(COMMON) $(CKLR) $(BACKEND) $(CFRONTEND) $(DRIVER) $(DEMO) $(FLOCQ) \
+FILES=$(VLIB) $(COMMON) $(CKLR) $(BACKEND) $(CFRONTEND) $(CLOSE) $(CONCUR) $(DRIVER) $(DEMO) $(FLOCQ) \
   $(MENHIRLIB) $(PARSER) $(EXPORTLIB)
 
 # Generated source files
