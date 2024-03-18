@@ -227,7 +227,7 @@ recursion with PTree.fold *)
 Definition field_name {A: Type} (l: list (ident * A)) : list ident :=
   map fst l.
 
-Definition field_aval {A: Type} (l: list (ident * A)) : list A :=
+Definition field_val {A: Type} (l: list (ident * A)) : list A :=
   map snd l.
 
 Definition find_elt {A: Type} (id: ident) (l: list (ident * A)) : option A :=
@@ -250,11 +250,11 @@ Module LAval <: SEMILATTICE.
   | Eptr : forall l1 l2, LAptrs.eq l1 l2 -> eq' (Ptr l1) (Ptr l2)
   | Estruct : forall t1 t2,
       field_name t1 = field_name t2 ->
-      list_forall2 eq' (field_aval t1) (field_aval t2) ->
+      list_forall2 eq' (field_val t1) (field_val t2) ->
       eq' (Vstruct t1) (Vstruct t2)
   | Eenum : forall t1 t2 l1 l2,
       field_name t1 = field_name t2 ->
-      list_forall2 eq' (field_aval t1) (field_aval t2) ->
+      list_forall2 eq' (field_val t1) (field_val t2) ->
       LIdents.eq l1 l2 ->
       eq' (Venum l1 t1) (Venum l2 t2).
 
@@ -291,11 +291,11 @@ Module LAval <: SEMILATTICE.
   | Gstruct: forall t1 t2,
       (* the list elements are equivalent *)
       field_name t1 = field_name t2 ->
-      list_forall2 ge' (field_aval t1) (field_aval t2) ->
+      list_forall2 ge' (field_val t1) (field_val t2) ->
       ge' (Vstruct t1) (Vstruct t2)
   | Genum: forall t1 t2 l1 l2,
       field_name t1 = field_name t2 ->
-      list_forall2 ge' (field_aval t1) (field_aval t2) ->
+      list_forall2 ge' (field_val t1) (field_val t2) ->
       LIdents.ge l1 l2 ->
       ge' (Venum l1 t1) (Venum l2 t2).
 
@@ -505,18 +505,93 @@ End LBorTree.
   
 (* The borrow stacks inside one abstract block *)
 Inductive block_bortree : Type :=
+| Bbot                          (* necessary for semi-lattice *)
 | Batomic (t: bor_tree)
 | Bstruct (tl: list (ident * block_bortree)).
 
 (** TODO  *)
-Declare Module LBlkBorTree : SEMILATTICE.
+Module LBlkBorTree <: SEMILATTICE.
+  
+  Definition t := block_bortree.
 
+  Inductive eq' : t -> t -> Prop :=
+  | Eqbot : eq' Bbot Bbot
+  | Eqatomic : forall t1 t2,
+      LBorTree.eq t1 t2 ->
+      eq' (Batomic t1) (Batomic t2)
+  | Eqstruct : forall l1 l2,
+      field_name l1 = field_name l2 ->
+      list_forall2 eq' (field_val l1) (field_val l2) ->
+      eq' (Bstruct l1) (Bstruct l2).
+
+  Definition eq := eq'.
+  
+  Fixpoint beq (x y : t) : bool :=
+    match x, y with
+    | Bbot, Bbot => true
+    | Batomic t1, Batomic t2 => LBorTree.beq t1 t2
+    | Bstruct l1, Bstruct l2 =>
+        let beq' '(id1, v1) '(id2, v2) :=
+          ident_eq id1 id2 && beq v1 v2 in
+        list_beq (ident * block_bortree) beq' l1 l2
+    | _, _ => false
+    end.
+
+  Inductive ge' : t -> t -> Prop :=
+  | Gbot : forall t, ge' t Bbot
+  | Gatomic : forall t1 t2,
+      LBorTree.ge t1 t2 ->
+      ge' (Batomic t1) (Batomic t2)
+  | Gstruct : forall l1 l2,
+      field_name l1 = field_name l2 ->
+      list_forall2 ge' (field_val l1) (field_val l2) ->
+      ge' (Bstruct l1) (Bstruct l2).
+
+  Definition ge := ge'.
+  
+  Definition bot := Bbot.
+  
+  Fixpoint lub (x y: block_bortree) : block_bortree :=
+    let recf :=
+      fix merge_field_blkbortree (l1 l2: list (ident * block_bortree)) : list (ident * block_bortree) :=
+        match l1, l2 with
+        | (id1, t1) :: l1', (id2, t2) :: l2' => (id1, lub t1 t2) :: merge_field_blkbortree l1' l2'
+        | _, _ => []
+        end in
+    match x,y with
+    | Bbot, Bbot => Bbot
+    | Batomic t1, Batomic t2 => Batomic (LBorTree.lub t1 t2)
+    | Bstruct l1, Bstruct l2 =>
+        Bstruct (recf l1 l2)
+    | _, _ => Bbot
+    end.
+       
+  
+  (** TODO  *)
+  Axiom eq_refl: forall x, eq x x.
+  Axiom eq_sym: forall x y, eq x y -> eq y x.
+  Axiom eq_trans: forall x y z, eq x y -> eq y z -> eq x z.
+
+  Axiom beq_correct: forall x y, beq x y = true -> eq x y.
+
+  Axiom ge_refl: forall x y, eq x y -> ge x y.
+  Axiom ge_trans: forall x y z, ge x y -> ge y z -> ge x z.
+
+  Axiom ge_bot: forall x, ge x bot.
+
+  Axiom ge_lub_left: forall x y, ge (lub x y) x.
+  Axiom ge_lub_right: forall x y, ge (lub x y) y.
+
+  
+End LBlkBorTree.  
+  
 (* abstract memory *)
 
 Record amem : Type := build_amem
   { am_contents : PTree.t aval;
     am_borstk : PTree.t block_bortree }.
 
+Definition init_amem := build_amem (PTree.empty aval) (PTree.empty block_bortree).
 
 Section COMPOSITE_ENV.
 
@@ -874,6 +949,7 @@ Definition create_reference (mut: mutkind) (t: option tag) (fresh_tag: tag) (bt:
 (* update the block borrow tree when creating reference for this whole block *)
 Fixpoint update_block_bortree (mut: mutkind) (t: option tag) (fresh_tag: tag) (bbt: block_bortree) : res block_bortree :=
   match bbt with
+  | Bbot => Error [MSG "Updating a invalid block borrow tree (update_block_bortree)"]
   | Batomic bt =>
       do bt' <- create_reference mut t fresh_tag bt;
       OK (Batomic bt')
@@ -903,3 +979,85 @@ Definition create_reference_from_owner (mut: mutkind) (b: ablock) (ph: path) (fr
   store_bortree m b ph bbt'.
 
 End COMPOSITE_ENV.
+
+(** Lattice for dataflow analysis *)
+
+Module AM <: SEMILATTICE.
+  
+  Inductive t' := | Bot | State (m: amem).
+  
+  Definition t := t'.
+
+  Definition get_aval (m: amem) (b: ablock) :=
+     match m.(am_contents)!b with | None => LAval.bot | Some v => v end.
+
+  Definition get_bt (m: amem) (b: ablock) :=
+    match m.(am_borstk)!b with | None => LBlkBorTree.bot | Some bt => bt end.
+  
+  Definition eq (x y : t) : Prop :=
+    match x, y with
+    | Bot, Bot => True
+    | State m1, State m2 =>
+        PTree.beq LAval.beq m1.(am_contents) m2.(am_contents) = true /\
+          PTree.beq LBlkBorTree.beq m1.(am_borstk) m2.(am_borstk) = true
+    | _, _ => False
+    end.
+
+  Definition beq (x y : t) : bool :=
+    match x, y with
+    | Bot, Bot => true
+    | State m1, State m2 =>
+        PTree.beq LAval.beq m1.(am_contents) m2.(am_contents) &&
+          PTree.beq LBlkBorTree.beq m1.(am_borstk) m2.(am_borstk)
+    | _, _ => false
+    end.
+      
+  Definition ge (x y : t) : Prop :=      
+    match x, y with
+    | _, Bot => True
+    | Bot, _ => False
+    | State m1, State m2 =>          
+        forall b, LAval.ge (get_aval m1 b) (get_aval m2 b) /\
+               LBlkBorTree.ge (get_bt m1 b) (get_bt m2 b)
+    end.
+
+  Definition bot := Bot.
+
+  Definition combine_aval (v1 v2: option aval) : option aval :=
+    match v1, v2 with    
+    | Some v1, Some v2 => Some (LAval.lub v1 v2)
+    | _, _ => None
+    end.
+
+  Definition combine_bt (v1 v2: option block_bortree) : option block_bortree :=
+    match v1, v2 with    
+    | Some v1, Some v2 => Some (LBlkBorTree.lub v1 v2)
+    | _, _ => None
+    end.
+  
+  Definition lub (x y: t) :=
+    match x,y with
+    | _, Bot => x
+    | Bot, _ => y
+    | State m1, State m2 =>
+        State (build_amem
+                 (PTree.combine combine_aval m1.(am_contents) m2.(am_contents)) 
+                 (PTree.combine combine_bt m1.(am_borstk) m2.(am_borstk)))
+    end.
+
+  (** TODO  *)
+  Axiom eq_refl: forall x, eq x x.
+  Axiom eq_sym: forall x y, eq x y -> eq y x.
+  Axiom eq_trans: forall x y z, eq x y -> eq y z -> eq x z.
+
+  Axiom beq_correct: forall x y, beq x y = true -> eq x y.
+
+  Axiom ge_refl: forall x y, eq x y -> ge x y.
+  Axiom ge_trans: forall x y z, ge x y -> ge y z -> ge x z.
+
+  Axiom ge_bot: forall x, ge x bot.
+
+  Axiom ge_lub_left: forall x y, ge (lub x y) x.
+  Axiom ge_lub_right: forall x y, ge (lub x y) y.
+
+End AM.               
