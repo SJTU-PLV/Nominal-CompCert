@@ -16,97 +16,126 @@ Open Scope error_monad_scope.
 (* map from a place (with primitive type) to element *)
 
 (** TODO: implement this placemap  *)
-Declare Module PlaceMap : TREE.
 
-(* Module PlaceMap <: TREE. *)
-(*   Definition elt := place. *)
-(*   Definition elt_eq := place_eq. *)
+Module PlaceMap <: MAP.
+  Definition elt := place.
+  Definition elt_eq := place_eq.
  
-(*   Definition t (A: Type) : Type := PTree.t (list (place * A)). *)
+  Definition t (A: Type) : Type := (A * PTree.t (list (place * A))).
 
-(*   Definition empty (A: Type) := PTree.empty (list (place * A)). *)
+  Definition init {A: Type} (x: A) := (x, PTree.empty (list (place * A))).
 
-(*   Definition get {A} (p: place) (m: t A) : option A := *)
-(*     match PTree.get (local_of_place p) m with *)
-(*     | Some l => *)
-(*         match find (fun elt => place_eq p (fst elt)) l with *)
-(*         | Some (_, a) => Some a *)
-(*         | None => None *)
-(*         end *)
-(*     | None => None *)
-(*     end. *)
-
-(*   Definition set {A} (p: place) (x: A) (m: t A) : t A := *)
-(*     let id := (local_of_place p) in *)
-(*     let l' := *)
-(*       match PTree.get id m with *)
-(*       | Some l => *)
-(*           if in_dec place_eq p (fst (split l)) then *)
-(*             map (fun '(p', a) => if place_eq p p' then (p, x) else (p, a)) l *)
-(*           else *)
-(*             (p, x) :: l *)
-(*       | None => *)
-(*           (p, x) :: nil *)
-(*       end in *)
-(*     PTree.set id l' m. *)
-        
-(*   Definition remove {A} (p: place) (m: t A) : t A := *)
-(*     let id := (local_of_place p) in *)
-(*     match PTree.get id m with *)
-(*     | Some l => *)
-(*         let l' := filter (fun '(p', a) => if place_eq p p' then false else true) l in *)
-(*         PTree.set id l' m *)
-(*     | None => *)
-(*         m *)
-(*     end. *)
-
-(*   (** TODO  *) *)
-(*   Axiom gempty: *)
-(*     forall (A: Type) (i: elt), get i (empty A) = None. *)
-(*   Axiom gss: *)
-(*     forall (A: Type) (i: elt) (x: A) (m: t A), get i (set i x m) = Some x. *)
-(*   Axiom gso: *)
-(*     forall (A: Type) (i j: elt) (x: A) (m: t A), *)
-(*     i <> j -> get i (set j x m) = get i m. *)
-(*   Axiom gsspec: *)
-(*     forall (A: Type) (i j: elt) (x: A) (m: t A), *)
-(*     get i (set j x m) = if elt_eq i j then Some x else get i m. *)
-(*   Axiom grs: *)
-(*     forall (A: Type) (i: elt) (m: t A), get i (remove i m) = None. *)
-(*   Axiom gro: *)
-(*     forall (A: Type) (i j: elt) (m: t A), *)
-(*     i <> j -> get i (remove j m) = get i m. *)
-(*   Axiom grspec: *)
-(*     forall (A: Type) (i j: elt) (m: t A), *)
-(*     get i (remove j m) = if elt_eq i j then None else get i m. *)
-
-
-(*   Section BOOLEAN_EQUALITY. *)
-    
-(*     Variable A: Type. *)
-(*     Variable beqA: A -> A -> bool. *)
-
-(*     Definition beq_listA (l1 l2 : list (place * A)) : bool := *)
-(*       list_beq (place * A) (fun '(p1, a1) '(p2, a2) => if place_eq p1 p2 then beqA a1 a2 else false) l1 l2. *)
-    
-(*     Definition beq (m1 m2: t A) : bool := *)
-(*       PTree.beq beq_listA m1 m2. *)
-
-(*     Axiom beq_correct: *)
-(*       forall m1 m2, *)
-(*       beq m1 m2 = true <-> *)
-(*       (forall (x: elt), *)
-(*        match get x m1, get x m2 with *)
-(*        | None, None => True *)
-(*        | Some y1, Some y2 => beqA y1 y2 = true *)
-(*        | _, _ => False *)
-(*        end). *)
-
-(*   End BOOLEAN_EQUALITY. *)
-
-
+  Definition find_elt {A} (p:place) (l: list (place * A)) :=
+    find (fun elt => place_eq p (fst elt)) l.
   
-(* End PlaceMap. *)
+  Definition get {A} (p: place) (m: t A) : A :=
+    match PTree.get (local_of_place p) (snd m) with
+    | Some l =>
+        match find_elt p l with
+        | Some (_, a) => a
+        | None => fst m
+        end
+    | None => fst m
+    end.
+
+  Definition set {A} (p: place) (x: A) (m: t A) : t A :=
+    let id := (local_of_place p) in
+    let l' :=
+      match PTree.get id (snd m) with
+      | Some l =>
+          if in_dec place_eq p (fst (split l)) then
+            map (fun '(p', a) => if place_eq p p' then (p, x) else (p, a)) l
+          else
+            (p, x) :: l
+      | None =>
+          (p, x) :: nil
+      end in
+    (fst m, PTree.set id l' (snd m)).
+
+
+  Axiom gi:
+    forall (A: Type) (i: elt) (x: A), get i (init x) = x.
+  Axiom gss:
+    forall (A: Type) (i: elt) (x: A) (m: t A), get i (set i x m) = x.
+  Axiom gso:
+    forall (A: Type) (i j: elt) (x: A) (m: t A),
+    i <> j -> get i (set j x m) = get i m.
+  Axiom gsspec:
+    forall (A: Type) (i j: elt) (x: A) (m: t A),
+    get i (set j x m) = if elt_eq i j then x else get i m.
+  Axiom gsident:
+    forall (A: Type) (i j: elt) (m: t A), get j (set i (get i m) m) = get j m.
+
+  (** The following code is required when we implement PlaceMap as a Tree *)
+  (* Definition remove {A} (p: place) (m: t A) : t A := *)
+  (*   let id := (local_of_place p) in *)
+  (*   match PTree.get id m with *)
+  (*   | Some l => *)
+  (*       let l' := filter (fun '(p', a) => if place_eq p p' then false else true) l in *)
+  (*       PTree.set id l' m *)
+  (*   | None => *)
+  (*       m *)
+  (*   end. *)
+
+  (* (** TODO  *) *)
+  (* Axiom gempty: *)
+  (*   forall (A: Type) (i: elt), get i (empty A) = None. *)
+  (* Axiom gss: *)
+  (*   forall (A: Type) (i: elt) (x: A) (m: t A), get i (set i x m) = Some x. *)
+  (* Axiom gso: *)
+  (*   forall (A: Type) (i j: elt) (x: A) (m: t A), *)
+  (*   i <> j -> get i (set j x m) = get i m. *)
+  (* Axiom gsspec: *)
+  (*   forall (A: Type) (i j: elt) (x: A) (m: t A), *)
+  (*   get i (set j x m) = if elt_eq i j then Some x else get i m. *)
+  (* Axiom grs: *)
+  (*   forall (A: Type) (i: elt) (m: t A), get i (remove i m) = None. *)
+  (* Axiom gro: *)
+  (*   forall (A: Type) (i j: elt) (m: t A), *)
+  (*   i <> j -> get i (remove j m) = get i m. *)
+  (* Axiom grspec: *)
+  (*   forall (A: Type) (i j: elt) (m: t A), *)
+  (*   get i (remove j m) = if elt_eq i j then None else get i m. *)
+
+
+  (* Section BOOLEAN_EQUALITY. *)
+    
+  (*   Variable A: Type. *)
+  (*   Variable beqA: A -> A -> bool. *)
+
+  (*   Definition beq_listA (l1 l2 : list (place * A)) : bool := *)
+  (*     list_beq (place * A) (fun '(p1, a1) '(p2, a2) => if place_eq p1 p2 then beqA a1 a2 else false) l1 l2. *)
+    
+  (*   Definition beq (m1 m2: t A) : bool := *)
+  (*     PTree.beq beq_listA m1 m2. *)
+
+  (*   Axiom beq_correct: *)
+  (*     forall m1 m2, *)
+  (*     beq m1 m2 = true <-> *)
+  (*     (forall (x: elt), *)
+  (*      match get x m1, get x m2 with *)
+  (*      | None, None => True *)
+  (*      | Some y1, Some y2 => beqA y1 y2 = true *)
+  (*      | _, _ => False *)
+  (*      end). *)
+
+  (* End BOOLEAN_EQUALITY. *)
+
+  (* Definition map {A B} (f: place -> A -> B) (m: t A) := *)
+  (*   PTree.map1 (fun l => List.map (fun '(p, elt) => (p, f p elt)) l) am. *)
+
+  (* Axiom gmap: *)
+  (*   forall (A B: Type) (f: elt -> A -> B) (i: elt) (m: t A), *)
+  (*     get i (map f m) = option_map (f i) (get i m). *)
+  
+  Definition map {A B} (f: A -> B) (m: t A) :=
+    (f (fst m), PTree.map1 (fun (l : list (place * A)) => List.map (fun '(p, elt) => (p, f elt)) l) (snd m)).
+  
+  Axiom gmap:
+    forall (A B: Type) (f: A -> B) (i: elt) (m: t A),
+    get i (map f m) = f(get i m).
+  
+End PlaceMap.
 
 (* block id *)
 Definition ablock : Type := positive.
@@ -626,12 +655,12 @@ Definition store_bortree (m: amem) (b: ablock) (ph: path) (v: block_bortree) : r
   | None => Error [CTX b; MSG ": this block is unallocated (store_bortree) "]
   end.
 
-
-Fixpoint init_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bortree) :=
+(* this initialization is for uninit variables such as local variables *)
+Fixpoint uninit_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bortree) :=
   match fuel with
   | O => Error [MSG "Running out of fuel in aval_of_type'"]
   | S fuel' =>
-      let rec := init_aval_and_bortree' fuel' in
+      let rec := uninit_aval_and_bortree' fuel' in
       match ty with
       | Tstruct id _ =>
           match ce!id with
@@ -651,12 +680,13 @@ Fixpoint init_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bortr
       end
   end.
                 
-Definition init_aval_and_bortree (ty: type) : res (aval * block_bortree) :=
-  init_aval_and_bortree' (PTree_Properties.cardinal ce) ty.
+Definition uninit_aval_and_bortree (ty: type) : res (aval * block_bortree) :=
+  uninit_aval_and_bortree' (PTree_Properties.cardinal ce) ty.
 
-Definition init_ablock (m: amem) (ty: type) (b: ablock) : res amem :=
-  do (v, stk) <- init_aval_and_bortree ty;
-  OK (build_amem (PTree.set b v m.(am_contents)) (PTree.set b stk m.(am_borstk))).
+(* allocate a block [b] *)
+Definition allocate_ablock (m: amem) (ty: type) (b: ablock) : res amem :=
+  do (v, stk) <- uninit_aval_and_bortree ty;
+  OK (build_amem (PTree.set b v m.(am_contents)) (PTree.set b stk m.(am_borstk))).  
 
 
 (** Some definitions for "stacked borrow" rules *)
@@ -855,7 +885,7 @@ Fixpoint update_block_bortree (mut: mutkind) (t: option tag) (fresh_tag: tag) (b
   end.
 
 
-(* update the memory when creating reference from a pointer *)    
+(* update the memory when creating reference from a pointer (reborrow) *)    
 Definition create_reference_from_ptr (mut: mutkind) (p: aptr) (fresh_tag: tag) (m: amem) : res amem :=
   let '(b, ph, t) := p in
   do bbt <- load_bortree m b ph;
@@ -871,3 +901,5 @@ Definition create_reference_from_owner (mut: mutkind) (b: ablock) (ph: path) (fr
   do bbt' <- update_block_bortree mut None fresh_tag bbt;
   (* store this updated bortree in the abstract memory *)
   store_bortree m b ph bbt'.
+
+End COMPOSITE_ENV.

@@ -169,6 +169,7 @@ RUSTFRONTENT=Rusttypes.v Rustsyntax.v RustlightBase.v RustIR.v\
   Rustlightgen.v\
   RustIRgen.v \
   InitAnalysis.v ElaborateDrop.v\
+  StkborDomain.v BorrowCheck.v\
   Clightgen.v 
 
 # Parser
