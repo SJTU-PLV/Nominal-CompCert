@@ -11,6 +11,8 @@ Require Import SmallstepClosed.
 Require Import Values Maps Memory AST.
 
 Require Import Asm SmallstepMulti.
+Require Import Conventions1.
+  
 
 Section MultiThread.
   
@@ -18,7 +20,12 @@ Section MultiThread.
 
   Definition local_state := Smallstep.state OpenS.
 
-  Definition thread_state : Type := local_state + regset.
+  
+  (* Definition thread_state : Type := local_state + regset. *)
+  Inductive thread_state : Type :=
+  |Local : forall (ls : local_state), thread_state
+  |Initial : forall (rs : regset), thread_state
+  |Return : forall (ls : local_state) (rs : regset), thread_state.
 
   Variable initial_query : query li_asm.
   Variable final_reply : int -> reply li_asm -> Prop.
@@ -59,17 +66,26 @@ Section MultiThread.
   Variable yield_strategy : state -> nat.
   Axiom yield_strategy_range : forall s, (1 < yield_strategy s < (next_tid s))%nat.
 
-  Definition yield_state (s: state) (ls: thread_state): state :=
+  (** Here we need to update both the states of current thread and target thread *)
+  (** 
+      For target thread, the new local_state should come from [initial_state] or [after_external]
+      For current thread, we should record the current regset and local_state as 
+      [Return rs ls], therefore we can do [after_external ls (rs,m) ls'] using returned global memory
+      [m] to get an updated local state ls'.
+
+   *)
+  Definition yield_state_asm (s: state) (ls_cur ls_new: thread_state): state :=
     let tid' := yield_strategy s in
-    let s' := update_cur_tid s tid' in
-    update_thread s' tid' ls.
+    let s' := update_cur_thread s ls_cur in
+    let s'' := update_cur_tid s' tid' in
+    update_thread s'' tid' ls_new.
 
   (* We add a new thread with its initial query without memory,
       we also update the running memory by adding a new list of positives *)
   Definition pthread_create_state (s: state) (regs: regset) (ls' : thread_state): state :=
     let ntid := (next_tid s) in let ctid := (cur_tid s) in
     let s' := update_next_tid s (S ntid) in
-    let s'' := update_thread s' ntid (inr regs) in
+    let s'' := update_thread s' ntid (Initial regs) in
     update_thread s'' ctid ls'.
     
   Definition genvtype := Smallstep.genvtype OpenLTS.
@@ -77,7 +93,7 @@ Section MultiThread.
   Inductive initial_state : state -> Prop :=
   |initial_state_intro : forall ls s,
       cur_tid s = 1%nat -> next_tid s = 2%nat ->
-      get_cur_thread s = Some (inl ls) ->
+      get_cur_thread s = Some (Local ls) ->
       (Closed.initial_state ClosedS) ls ->
       initial_state s.
 
@@ -85,7 +101,7 @@ Section MultiThread.
   Inductive final_state : state -> int -> Prop :=  
   |final_state_intro : forall ls i s,
       cur_tid s = 1%nat ->
-      get_cur_thread s = Some (inl ls) ->
+      get_cur_thread s = Some (Local ls) ->
       (Closed.final_state ClosedS) ls i->
       final_state s i.
 
@@ -117,8 +133,6 @@ Section MultiThread.
      : signature
  *)
 
-  Require Import Conventions1.
-  
   Axiom not_win : Archi.win64 = false.
   
   (* the ptr to start_routine is in RDI, the pointer to its argument is in RSI *)
@@ -154,40 +168,44 @@ Section MultiThread.
   
   Inductive step : genvtype -> state -> trace -> state -> Prop :=
   |step_local : forall ge ls1 t ls2 s s',
-      get_cur_thread s = Some (inl ls1) ->
+      get_cur_thread s = Some (Local ls1) ->
       Smallstep.step OpenLTS ge ls1 t ls2 ->
-      update_thread s (cur_tid s) (inl ls2) = s' ->
+      update_thread s (cur_tid s) (Local ls2) = s' ->
       step ge s t s'
   |step_thread_create : forall ge s s' q_ptc rs_str gmem ls ls',
-      get_cur_thread s = Some (inl ls) -> (* get the current local state *)
+      get_cur_thread s = Some (Local ls) -> (* get the current local state *)
       Smallstep.at_external OpenLTS ls q_ptc -> (* get the query to pthread_create *)
       query_is_pthread_create_asm q_ptc (rs_str, gmem) -> (* get the query to start_routine *)
       Smallstep.after_external OpenLTS ls (fst q_ptc, gmem) ls' ->
       (* the current thread completes the primitive, regsets are unchanged *)
-      pthread_create_state s rs_str (inl ls') = s' ->
-      step ge s E0 s'.
+      pthread_create_state s rs_str (Local ls') = s' ->
+      step ge s E0 s'
   (** yield to a thread which is waiting for the reply of its own [yield()] *)
-  |step_thread_yield_to_yield : forall ge s s' tid' q gmem' p ls ls1 ls1',
-      get_cur_thread s = Some (inl ls) ->
-      Smallstep.at_external OpenLTS ls q ->
-      query_is_yield q ->
+  |step_thread_yield_to_yield : forall ge s s' tid' rs_q m_q gmem' p ls ls1 ls1' rs1 rs',
+      get_cur_thread s = Some (Local ls) ->
+      Smallstep.at_external OpenLTS ls (rs_q,m_q) ->
+      query_is_yield_asm (rs_q,m_q) ->
       yield_strategy s = tid' ->
       (*the proof p may be a problem, provided from the invariant between state and the support in gmem *)
-      Mem.yield (cq_mem q) tid' p = gmem' ->
-      get_thread s (tid') = Some (inl ls1) -> (* the target thread is waiting for reply *)
-      Smallstep.after_external OpenLTS ls1 (cr Vundef gmem') ls1' ->
-      yield_state s (inl ls1') = s' ->
+      Mem.yield m_q tid' p = gmem' ->
+      get_thread s (tid') = Some (Return ls1 rs1) -> (* the target thread is waiting for reply *)
+      Smallstep.after_external OpenLTS ls1 (rs1, gmem') ls1' ->
+      (* Caution: it seems not correct here to directly use rs1, some RA -> PC things should be done *)
+      (** Maybe we need more operations here *)
+      rs' = Pregmap.set RA (rs_q PC) rs_q ->
+      yield_state_asm s (Return ls rs_q) (Local ls1') = s' ->
       step ge s E0 s'
   (** yield to a thread which has not been initialized from a query *)
-  |step_thread_yield_to_initial : forall ge s s' tid' q gmem' p ls cqv ls1',
-      get_cur_thread s = Some (inl ls) ->
-      Smallstep.at_external OpenLTS ls q ->
-      query_is_yield q ->
+  |step_thread_yield_to_initial : forall ge s s' tid' rs_q m_q gmem' p ls rs0 ls1' rs',
+      get_cur_thread s = Some (Local ls) ->
+      Smallstep.at_external OpenLTS ls (rs_q, m_q) ->
+      query_is_yield_asm (rs_q, m_q) ->
       yield_strategy s = tid' ->
-      Mem.yield (cq_mem q) tid' p = gmem' ->
-      get_thread s (tid') = Some (inr cqv) -> (* the target thread is waiting for reply *)
-      Smallstep.initial_state OpenLTS (get_query cqv gmem') ls1' ->
-      yield_state s (inl ls1') = s' ->
+      Mem.yield m_q tid' p = gmem' ->
+      get_thread s (tid') = Some (Initial rs0) -> (* the target thread is just created *)
+      Smallstep.initial_state OpenLTS (rs0, gmem') ls1' ->
+      rs' = Pregmap.set RA (rs_q PC) rs_q ->
+      yield_state_asm s (Return ls rs_q) (Local ls1') = s' ->
       step ge s E0 s'.
   
 End MultiThread.   
