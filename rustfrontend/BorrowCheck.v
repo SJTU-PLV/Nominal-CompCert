@@ -191,11 +191,114 @@ Definition allocate_params (m: amem) (params: list (ident * type)) :=
   do l <- fold_right_bind params (owner_place false);
   fold_left allocate_place_acc (concat l) (OK m).
 
-(** transfer function *)
+(** transfer function (place, pure expression, expression and statement *)
+
+(* the returned place must own a whole memory block and the path is
+the the location of p in p' *)
+Fixpoint owner_path (p: place) : place * path :=
+  match p with
+  | Pfield p' fid _ =>
+      let (p'', ph) := owner_path p' in
+      (p'', ph ++ [Rfield fid])
+  | _ => (p, [])
+  end.
+
+Definition aptr_of_aval (v: aval) : option LAptrs.t :=
+  match v with
+  | Ptr l => Some l
+  | _ => None
+  end.
+  
+
+(* there may be many possiblity for the memory location of a place *)
+Fixpoint transfer_place (pc: node) (p: place) (m: amem) : res ((LAptrs.t + (ablock * path)) * amem) :=
+  match p with
+  | Plocal id ty =>
+      (* p is an owner *)
+      match PlaceMap.get p e.(aenv_symbtbl) with
+      | Some b =>
+          OK (inr (b,[]), m)
+      | None =>
+          Error [MSG "error at "; CTX pc; MSG ": cannot get the memory block of place "; CTX id]
+      end
+  | Pderef p' ty =>
+      (* get the (block,path) of p' *)
+      do (l, m') <- transfer_place pc p' m;
+      match l with
+      | inl ptrs =>
+          (* load values from all the abstract pointers *)
+          do (ptrs', m'') <-
+               Aptrs.fold (fun p acc =>
+                             do (ptrs, m) <- acc;
+                             do (v, m') <- load_aptr m p;
+                             match aptr_of_aval v with
+                             | Some l => OK (Aptrs.union ptrs l, m')
+                             (* We can also ignore this error, but for now, we report it *)
+                             | None => Error [MSG "error at "; CTX pc; MSG ": expected abstract pointer (transfer_place)"]
+                             end) ptrs (OK (Aptrs.empty, m'));
+          OK (inl ptrs', m'')
+      | inr (b, ph) =>
+          (* It means that p' is an owner *)
+          do (v, m'') <- load_owner m' b ph;
+          match aptr_of_aval v with
+          | Some l => OK (inl l, m'')
+          | None => Error [MSG "error at "; CTX pc; MSG ": expected abstract pointer (transfer_place)"]
+          end
+      end
+  | Pfield p' fid ty =>
+      (* we do not perform access when evaluating field *)
+      do (l, m') <- transfer_place pc p' m;
+      match l with
+      | inl ptrs =>
+          (* we want to update the path in each pointer but we have no
+          map function for Aptrs.t, so we use fold function *)
+          let ptrs' := Aptrs.fold (fun '(b, ph, t) ptrs => Aptrs.add (b, ph ++ [Rfield fid], t) ptrs) ptrs Aptrs.empty in
+          OK (inl ptrs', m')
+      | inr (b, ph) =>
+          OK (inr (b, ph ++ [Rfield fid]), m')
+      end
+  end.
+
+(* return an abstract value and the updated abstract memory *)
+Fixpoint transfer_pure_expr (pc: node) (pe: pexpr) (m: amem) : res (aval * amem) :=
+  match pe with
+  | Eunit
+  | Econst_int _ _
+  | Econst_float _ _
+  | Econst_single _ _
+  | Econst_long _ _ => OK (Scalar, m)
+  | Eplace p ty =>
+      (* get its parent whose owns a memory block *)
+      let (owner, ph) := owner_path p in
+      (* get the memory block *)
+      match PlaceMap.get owner e.(aenv_symbtbl) with
+      | Some b =>
+          (* read access of this place *)
+          access Aread 
+      
 
 
-
-
+Definition transfer (f: function) (cfg: rustcfg) (pc: node) (before: AM.t) : AM.t :=
+  match before with
+  (* If pred is unreacable, so this pc is unreacable, set to Bot *)
+  | AM.Bot => AM.Bot
+  | AM.Err msg => AM.Err msg     (* Error propagation *)
+  | AM.State m =>                (* Update the abstract state *)
+      match cfg ! pc with
+      | None => AM.bot
+      | Some (Inop _) => before
+      | Some (Icond _ _ _) => before
+      | Some Iend => before
+      | Some (Isel sel _) =>
+          match select_stmt f.(fn_body) sel with
+          | None => AM.bot
+          | Some s =>
+              match s with
+              | Sassign p e =>
+                  
+        end
+    end.
+            
 End AENV.
 
 Definition borrow_check (f: function) : res unit :=
@@ -212,3 +315,5 @@ Definition borrow_check (f: function) : res unit :=
 
 
 End COMPOSITE_ENV.
+
+

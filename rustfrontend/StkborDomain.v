@@ -664,12 +664,12 @@ Definition load (m: amem) (b: ablock) (ph: path) : res aval :=
   end.
 
 (* load the block borrow tree from a place *)
-Definition load_bortree (m: amem) (b: ablock) (ph: path) : res block_bortree :=
+Definition load_block_bortree (m: amem) (b: ablock) (ph: path) : res block_bortree :=
   match PTree.get b m.(am_borstk) with
   | Some bb =>
       load_path_bortree ph bb
   | None =>
-      Error [CTX b; MSG ": this block is unallocated (load_bortree)"]
+      Error [CTX b; MSG ": this block is unallocated (load_block_bortree)"]
   end.
 
 
@@ -722,12 +722,12 @@ Definition store (m: amem) (b: ablock) (ph: path) (v: aval) : res amem :=
   | None => Error [CTX b; MSG ": this block is unallocated (store) "]
   end.
 
-Definition store_bortree (m: amem) (b: ablock) (ph: path) (v: block_bortree) : res amem :=
+Definition store_block_bortree (m: amem) (b: ablock) (ph: path) (v: block_bortree) : res amem :=
   match PTree.get b m.(am_borstk) with
   | Some bb =>
       do bb' <- update_path_bortree ph bb v;
       OK (build_amem m.(am_contents) (PTree.set b bb' m.(am_borstk)))
-  | None => Error [CTX b; MSG ": this block is unallocated (store_bortree) "]
+  | None => Error [CTX b; MSG ": this block is unallocated (store_block_bortree) "]
   end.
 
 (* this initialization is for uninit variables such as local variables *)
@@ -877,7 +877,7 @@ Definition access_subtree_at (access: access_kind) (p: tree_path) (bt: bor_tree)
   end.
 
 (** TODO: consider ownership access  *)
-Definition access (access: access_kind) (t: option tag) (bt: bor_tree) : res bor_tree :=
+Definition access_bortree (access: access_kind) (t: option tag) (bt: bor_tree) : res bor_tree :=
   match t with
   | Some t =>
       (* access by tag [t] *)
@@ -893,6 +893,27 @@ Definition access (access: access_kind) (t: option tag) (bt: bor_tree) : res bor
       | Broot l => OK (Broot (map (update_subtree_rec access) l))
       end
   end.
+
+Fixpoint access_block_bortree (access: access_kind) (t: option tag) (bbt: block_bortree) : res block_bortree :=
+  match bbt with
+  | Bbot => Error [MSG "Access an undefined block borrow tree (access_block_bortree)"]
+  | Batomic bt =>
+      do bt <- access_bortree access t bt;
+      OK (Batomic bt)
+  | Bstruct l =>
+      (* fold function that update each block_bortree in each field *)
+      let f '(id, elt) := do bbt' <- access_block_bortree access t elt; OK (id, bbt') in
+      do bbt'' <- fold_right_bind l f;
+      OK (Bstruct bbt'')
+  end.
+
+      
+(* update block borrow tree while accessing by read or write *)
+
+Definition access (access: access_kind) (b: ablock) (ph: path) (t: option tag) (m: amem) : res amem :=
+  do bbt <- load_block_bortree m b ph;
+  do bbt' <- access_block_bortree access t bbt;
+  store_block_bortree m b ph bbt'.
 
 
 (** Update borrow stacks while creating new reference *)
@@ -925,8 +946,9 @@ Definition create_reference (mut: mutkind) (t: option tag) (fresh_tag: tag) (bt:
   | Some t =>
       match find_granting access t bt with
       | Some tp =>
-          (* perform an access *)
-          do bt' <- access_subtree_at access tp bt;          
+          (* perform an access: why don't we use [access_bortree]?
+             Because we need the tree path to update the borrow tree  *)
+          do bt' <- access_subtree_at access tp bt;
           match bt' with
           | Broot l =>
               match update_subtree_at' tp l (insert_bor_tree new_tree) with
@@ -964,19 +986,35 @@ Fixpoint update_block_bortree (mut: mutkind) (t: option tag) (fresh_tag: tag) (b
 (* update the memory when creating reference from a pointer (reborrow) *)    
 Definition create_reference_from_ptr (mut: mutkind) (p: aptr) (fresh_tag: tag) (m: amem) : res amem :=
   let '(b, ph, t) := p in
-  do bbt <- load_bortree m b ph;
+  do bbt <- load_block_bortree m b ph;
   (* update the block borrow tree by pushing some new tag *)
   do bbt' <- update_block_bortree mut (Some t) fresh_tag bbt;
   (* store this updated bortree in the abstract memory *)
-  store_bortree m b ph bbt'.
+  store_block_bortree m b ph bbt'.
 
 (* (b,p) is the location of the owner *)
 Definition create_reference_from_owner (mut: mutkind) (b: ablock) (ph: path) (fresh_tag: tag) (m: amem) : res amem :=
-  do bbt <- load_bortree m b ph;
+  do bbt <- load_block_bortree m b ph;
   (* update the block borrow tree by pushing some new tag *)
   do bbt' <- update_block_bortree mut None fresh_tag bbt;
   (* store this updated bortree in the abstract memory *)
-  store_bortree m b ph bbt'.
+  store_block_bortree m b ph bbt'.
+
+
+(** read access with permission checking *)
+
+(* Do we need a mutable load? *)
+Definition load_aptr (m: amem) (p: aptr) : res (aval * amem) :=
+  let '(b, ph , t) := p in
+  do m' <- access Aread b ph (Some t) m;
+  do v <- load m' b ph;
+  OK (v, m').
+
+Definition load_owner (m: amem) (b: ablock) (ph: path) : res (aval * amem) :=  
+  do m' <- access Aread b ph None m;
+  do v <- load m' b ph;
+  OK (v, m').
+
 
 End COMPOSITE_ENV.
 
@@ -984,7 +1022,7 @@ End COMPOSITE_ENV.
 
 Module AM <: SEMILATTICE.
   
-  Inductive t' := | Bot | State (m: amem).
+  Inductive t' := | Bot | Err (msg: errmsg) | State (m: amem).
   
   Definition t := t'.
 
@@ -1012,10 +1050,13 @@ Module AM <: SEMILATTICE.
     | _, _ => false
     end.
       
-  Definition ge (x y : t) : Prop :=      
+  Definition ge (x y : t) : Prop :=
     match x, y with
     | _, Bot => True
     | Bot, _ => False
+    (* Err is the top *)
+    | Err _, _ => True
+    | _, Err _ => False
     | State m1, State m2 =>          
         forall b, LAval.ge (get_aval m1 b) (get_aval m2 b) /\
                LBlkBorTree.ge (get_bt m1 b) (get_bt m2 b)
@@ -1039,6 +1080,10 @@ Module AM <: SEMILATTICE.
     match x,y with
     | _, Bot => x
     | Bot, _ => y
+    | Err _, State _ => x
+    | State _, Err _ => y
+    | Err msg1, Err msg2 =>
+        Err ((MSG "Error 1: ") :: msg1 ++ (MSG "; Error 2: " :: msg2))
     | State m1, State m2 =>
         State (build_amem
                  (PTree.combine combine_aval m1.(am_contents) m2.(am_contents)) 
