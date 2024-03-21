@@ -16,7 +16,7 @@ Require Import Conventions1.
 
 Section MultiThread.
   
-  Context {OpenS: Smallstep.semantics li_asm li_asm}.
+  Variable OpenS: Smallstep.semantics li_asm li_asm.
 
   Definition local_state := Smallstep.state OpenS.
 
@@ -58,10 +58,22 @@ Section MultiThread.
 
   Definition update_next_tid (s: state) (tid: nat) :=
     mk_gstate_asm (threads s) (cur_tid s) tid.
-  
-  Variable yield_strategy : state -> nat.
-  Axiom yield_strategy_range : forall s, (1 < yield_strategy s < (next_tid s))%nat.
 
+  Fixpoint yield_strategy' (threads: NatMap.t (option thread_state)) (next: nat) :=
+    match next with
+    |O | S O => 1%nat (*next should be >= 2, this is meaningless*)
+    |S n => (* n is the max valid thread id*)
+       match NatMap.get n threads with
+       | Some (Initial _) | Some (Return _ _) => n
+       | _ => yield_strategy' threads n
+       end
+    end.
+  
+  Definition yield_strategy (s:state) := yield_strategy' (threads s) (next_tid s).
+  
+(*  Variable yield_strategy : state -> nat.
+  Axiom yield_strategy_range : forall s, (1 < yield_strategy s < (next_tid s))%nat.
+*)
   (** Here we need to update both the states of current thread and target thread *)
   (** 
       For target thread, the new local_state should come from [initial_state] or [after_external]

@@ -3,7 +3,7 @@ Require Import LanguageInterface.
 Require Import Smallstep SmallstepClosed.
 Require Import ValueAnalysis.
 Require Import CMulti AsmMulti.
-Require Import CA Compiler.
+Require Import InjectFootprint CA Compiler.
 
 Section ConcurSim.
 
@@ -14,37 +14,29 @@ Section ConcurSim.
 
   Hypothesis OpenSim : forward_simulation cc_c_asm_injp cc_c_asm_injp OpenC OpenA.
 
-  (** * Get the concurrent semantics *)
   
-  (** In order to construct a concurrent semantics from open semantics, we need to provide :
-      (1) the query to its main function, including initial memory
-      (2) A relation for the final state as the return state of main function, with a integer as return value
-      (3) A symtbl table
-      (4) A yield strategy for chosing target thread
-   *)
+  (** * Get the concurrent semantics *)
 
-  (** We start from symboltbl *)
+  Let ConcurC := Concur_sem_c OpenC.
+  Let ConcurA := Concur_sem_asm OpenA.
 
-  Definition se := Genv.symboltbl (skel OpenC).
-  Definition LTSC := activate OpenC se.
-  Definition ge := Smallstep.globalenv LTSC.
+  (** * Initialization *)
+  Let se := CMulti.initial_se OpenC.
+  Let tse := initial_se OpenA.
 
-  Definition main_id := prog_main (skel OpenC).
+  Definition main_id := prog_main (skel OpenA).
+  
+  Definition rs0 :=
+    (Pregmap.init Vundef) # PC <- (Genv.symbol_address tse (main_id) Ptrofs.zero)
+                          # RA <- Vnullptr
+                          # RSP <- Vnullptr.
 
-  (** * Hypothesis1 about OpenC: it contains a main function *)
-  Variable main_b : block.
-  Hypothesis find_main : Genv.find_symbol se main_id = Some main_b.
-
-  Variable m0 : mem.
-  Hypothesis init_mem : Genv.init_mem (skel OpenC) = Some m0.
-  Definition main_sig := AST.mksignature nil (AST.Tret AST.Tint) AST.cc_default.
-  Definition main_vf := Vptr main_b Ptrofs.zero.
-  Definition main_qc := cq main_vf main_sig nil m0.
-
-  Inductive main_reply : int -> c_reply -> Prop :=
-  |reply_int : forall r m, main_reply r (cr (Vint r) m).
-
-  (*Variable yield_s : (state -> nat) 
-  Definition ConcurC := Concur_sem *)
-    
-  Theorem
+  
+  (** we cannot get the initial world if init_mem returns false, should we add it? *)
+  Let w0 := cajw (injpw ) main_sig rs0.
+  (** problem : do we need to change the index? *)
+  
+  Theorem ConcurSim : Closed.forward_simulation ConcurC ConcurA.
+  Proof.
+    inv OpenSim. inv X.
+    econstructor. 
