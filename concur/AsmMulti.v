@@ -10,7 +10,7 @@ Require Import Smallstep.
 Require Import SmallstepClosed.
 Require Import Values Maps Memory AST.
 
-Require Import Asm SmallstepMulti.
+Require Import Asm CMulti.
 Require Import Conventions1.
   
 
@@ -207,5 +207,10 @@ Section MultiThread.
       rs' = Pregmap.set RA (rs_q PC) rs_q ->
       yield_state_asm s (Return ls rs_q) (Local ls1') = s' ->
       step ge s E0 s'.
+
+  Definition globalenv := Smallstep.globalenv OpenLTS.
+  
+  Definition Concur_sem_asm : Closed.semantics :=
+    Closed.ClosedSemantics_gen step initial_state final_state globalenv initial_se.
   
 End MultiThread.   

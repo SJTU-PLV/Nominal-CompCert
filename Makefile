@@ -192,7 +192,7 @@ CLOSE=SmallstepClosed.v CompilerClosed.v
 
 # Concurrent semantics
 
-CONCUR=SmallstepMulti.v AsmMulti.v
+CONCUR=CMulti.v AsmMulti.v
 
 
 DEMO= Demo.v Demospec.v Demoproof.v\

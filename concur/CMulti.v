@@ -234,6 +234,11 @@ Section MultiThread.
       Smallstep.initial_state OpenLTS (get_query cqv gmem') ls1' ->
       yield_state s (inl ls1') = s' ->
       step ge s E0 s'.
+
+  Definition globalenv := Smallstep.globalenv OpenLTS.
   
+  Definition Concur_sem : Closed.semantics :=
+    Closed.ClosedSemantics_gen step initial_state final_state globalenv initial_se.
+
 End MultiThread.   
 
