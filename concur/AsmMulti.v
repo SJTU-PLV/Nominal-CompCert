@@ -27,13 +27,9 @@ Section MultiThread.
   |Initial : forall (rs : regset), thread_state
   |Return : forall (ls : local_state) (rs : regset), thread_state.
 
-  Variable initial_query : query li_asm.
-  Variable final_reply : int -> reply li_asm -> Prop.
-
-  Variable initial_se : Genv.symtbl.
+  Definition initial_se := Genv.symboltbl (skel OpenS).
 
   Definition OpenLTS := activate OpenS initial_se.
-  Definition ClosedS := Closed.close_semantics initial_query final_reply OpenS initial_se.
 
   Record state : Type := mk_gstate_asm
       {
@@ -89,20 +85,36 @@ Section MultiThread.
     update_thread s'' ctid ls'.
     
   Definition genvtype := Smallstep.genvtype OpenLTS.
-  
+
+  (*Variable initial_query : query li_asm.
+  Variable final_reply : int -> reply li_asm -> Prop. *)
+
+
+  (** maybe we should change Vnullptr*)
+  Definition main_id := prog_main (skel OpenS).
+  Definition initial_regset (pc : val) :=
+    (Pregmap.init Vundef) # PC <- pc
+                          # RA <- Vnullptr
+                          # RSP <- Vnullptr.
+                                            
   Inductive initial_state : state -> Prop :=
-  |initial_state_intro : forall ls s,
+  |initial_state_intro : forall ls s main_b m0 rs0,
       cur_tid s = 1%nat -> next_tid s = 2%nat ->
       get_cur_thread s = Some (Local ls) ->
-      (Closed.initial_state ClosedS) ls ->
+      Genv.find_symbol initial_se main_id = Some main_b ->
+      Genv.init_mem (skel OpenS) = Some m0 ->
+      rs0 = initial_regset (Vptr main_b Ptrofs.zero) ->
+      (Smallstep.initial_state OpenLTS) (rs0,m0) ls ->
       initial_state s.
 
   (** Final state of Concurrent semantics *)
   Inductive final_state : state -> int -> Prop :=  
-  |final_state_intro : forall ls i s,
+  |final_state_intro : forall ls i s rs m,
       cur_tid s = 1%nat ->
       get_cur_thread s = Some (Local ls) ->
-      (Closed.final_state ClosedS) ls i->
+      rs # PC = Vnullptr ->
+      rs # RAX = Vint i ->
+      (Smallstep.final_state OpenLTS) ls (rs,m)->
       final_state s i.
 
   

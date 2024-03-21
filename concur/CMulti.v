@@ -64,17 +64,11 @@ Section MultiThread.
   
   Definition thread_state :Type := local_state + cq_vals.
   
-  (* Maybe should be somehow added into open semantics *)
-  Variable initial_query : query li_c.
-  Variable final_reply : int -> reply li_c -> Prop.
-
-  (* should be derived from skel of OpenS
-     and allocate blocks for pthread primitives *)
-  Variable initial_se : Genv.symtbl.
+  Definition initial_se := Genv.symboltbl (skel OpenS).
+  (* Variable initial_se : Genv.symtbl. *)
   
   Definition OpenLTS := activate OpenS initial_se.
-  Definition ClosedS := Closed.close_semantics initial_query final_reply OpenS initial_se.
-
+  
   (* We need an interface to get and set global memory from local_state *)
   (* Not sure if this is proper, maybe need some lemmas about these operations *)
 
@@ -140,22 +134,31 @@ Section MultiThread.
   
   (** Initial state of Concurrent semantics *)
 
-  (* We need a "query" to the main function of the semantics *)
-  (* Including the initial global memory *)
+  (*Variable initial_query : query li_c.
+    Variable final_reply : int -> reply li_c -> Prop. *)
+  (* Definition ClosedS := Closed.close_semantics initial_query final_reply OpenS initial_se. *)
 
+  (** Construct the initial memory *)
+  Definition main_id := prog_main (skel OpenS).
+  Definition main_sig := AST.mksignature nil (AST.Tret AST.Tint) AST.cc_default.
+  
   Inductive initial_state : state -> Prop :=
-  |initial_state_intro : forall ls s,
+  |initial_state_intro : forall ls s main_b m0,
       cur_tid s = 1%nat -> next_tid s = 2%nat ->
       get_cur_thread s = Some (inl ls) ->
-      (Closed.initial_state ClosedS) ls ->
+      Genv.find_symbol initial_se main_id = Some main_b ->
+      Genv.init_mem (skel OpenS) = Some m0 ->
+      (Smallstep.initial_state OpenLTS)
+        (cq (Vptr main_b Ptrofs.zero) main_sig nil m0) ls ->
+      (* (Closed.initial_state ClosedS) ls -> *)
       initial_state s.
 
   (** Final state of Concurrent semantics *)
   Inductive final_state : state -> int -> Prop :=  
-  |final_state_intro : forall ls i s,
+  |final_state_intro : forall ls i s m,
       cur_tid s = 1%nat ->
       get_cur_thread s = Some (inl ls) ->
-      (Closed.final_state ClosedS) ls i->
+      (Smallstep.final_state OpenLTS) ls (cr (Vint i) m)->
       final_state s i.
 
   (** * Definitions about the primitive yield *)
@@ -237,8 +240,8 @@ Section MultiThread.
 
   Definition globalenv := Smallstep.globalenv OpenLTS.
   
-  Definition Concur_sem : Closed.semantics :=
+  Definition Concur_sem_c : Closed.semantics :=
     Closed.ClosedSemantics_gen step initial_state final_state globalenv initial_se.
 
-End MultiThread.   
+End MultiThread.
 
