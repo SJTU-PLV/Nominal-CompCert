@@ -214,7 +214,7 @@ Module LIdents := LFSet(Aptrs).
 (* abstract value *)
 
 Inductive aval : Type :=
-| Vbot
+| Vbot                        (**r no defined value  *)
 | Scalar
 | Ptr (l: LAptrs.t)
 (* we use list of ident and aval to represent the fields of struct and
@@ -222,6 +222,7 @@ enum instead of PTree because the it is hard to implement nested
 recursion with PTree.fold *)
 | Vstruct (t: list (ident * aval))
 | Venum (l: LIdents.t) (t: list (ident * aval))
+| Vtop                        (**r undefined value *)
 .
 
 Definition field_name {A: Type} (l: list (ident * A)) : list ident :=
@@ -240,7 +241,7 @@ Definition set_elt {A: Type} (id: ident) (v: A) (l: list (ident * A)) : list (id
   map (fun '(id', v') => if ident_eq id id' then (id, v) else (id', v')) l.
   
   
-Module LAval <: SEMILATTICE.
+Module LAval <: SEMILATTICE_WITH_TOP.
   
   Definition t := aval.
   
@@ -284,6 +285,7 @@ Module LAval <: SEMILATTICE.
 
   Inductive ge' : aval -> aval -> Prop :=
   | Gbot : forall v, ge' v Vbot
+  | Gtop : forall v, ge' Vtop v
   | Gscalar: ge' Scalar Scalar
   | Gptr: forall l1 l2,
       LAptrs.ge l1 l2 ->
@@ -305,9 +307,11 @@ Module LAval <: SEMILATTICE.
   Axiom ge_trans: forall x y z, ge x y -> ge y z -> ge x z.
 
   Definition bot := Vbot.
-
+  
   Axiom ge_bot: forall x, ge x bot.
 
+  Definition top := Vtop.
+  Axiom ge_top: forall x, ge top x.
     
   Fixpoint lub (x y: aval) {struct x}: aval :=
     (* why we have to define this function inside lub. But it is ok to
@@ -319,7 +323,10 @@ Module LAval <: SEMILATTICE.
         | _, _ => []
         end in
     match x,y with
-    | Vbot, Vbot => Vbot
+    | Vbot, _ => y
+    | _, Vbot => x
+    | _, Vtop => Vtop
+    | Vtop, _ => Vtop
     | Scalar, Scalar => Scalar
     | Ptr l1, Ptr l2 => Ptr (LAptrs.lub l1 l2)
     | Vstruct t1, Vstruct t2 =>
@@ -481,7 +488,8 @@ Module LBorTree <: SEMILATTICE.
     | Broot l1, Broot l2 =>
         bor_tree_ge_list' l1 l2
     end.
-  
+
+  (** Is it correct?  *)
   Definition bot := Broot nil.
   
   Definition lub := combine_bor_tree.
@@ -559,7 +567,8 @@ Module LBlkBorTree <: SEMILATTICE.
         | _, _ => []
         end in
     match x,y with
-    | Bbot, Bbot => Bbot
+    | Bbot, _ => y
+    | _, Bbot => x
     | Batomic t1, Batomic t2 => Batomic (LBorTree.lub t1 t2)
     | Bstruct l1, Bstruct l2 =>
         Bstruct (recf l1 l2)
@@ -731,11 +740,11 @@ Definition store_block_bortree (m: amem) (b: ablock) (ph: path) (v: block_bortre
   end.
 
 (* this initialization is for uninit variables such as local variables *)
-Fixpoint uninit_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bortree) :=
+Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bortree) :=
   match fuel with
-  | O => Error [MSG "Running out of fuel in aval_of_type'"]
+  | O => Error [MSG "Running out of fuel in alloc_aval_and_bortree'"]
   | S fuel' =>
-      let rec := uninit_aval_and_bortree' fuel' in
+      let rec := alloc_aval_and_bortree' fuel' in
       match ty with
       | Tstruct id _ =>
           match ce!id with
@@ -751,16 +760,16 @@ Fixpoint uninit_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bor
           end
       | _ =>
           (* init an empty borrow tree *)
-          OK (Vbot, Batomic (Broot nil))
+          OK (Vtop, Batomic (Broot nil))
       end
   end.
                 
-Definition uninit_aval_and_bortree (ty: type) : res (aval * block_bortree) :=
-  uninit_aval_and_bortree' (PTree_Properties.cardinal ce) ty.
+Definition alloc_aval_and_bortree (ty: type) : res (aval * block_bortree) :=
+  alloc_aval_and_bortree' (PTree_Properties.cardinal ce) ty.
 
 (* allocate a block [b] *)
 Definition allocate_ablock (m: amem) (ty: type) (b: ablock) : res amem :=
-  do (v, stk) <- uninit_aval_and_bortree ty;
+  do (v, stk) <- alloc_aval_and_bortree ty;
   OK (build_amem (PTree.set b v m.(am_contents)) (PTree.set b stk m.(am_borstk))).  
 
 
@@ -896,7 +905,7 @@ Definition access_bortree (access: access_kind) (t: option tag) (bt: bor_tree) :
 
 Fixpoint access_block_bortree (access: access_kind) (t: option tag) (bbt: block_bortree) : res block_bortree :=
   match bbt with
-  | Bbot => Error [MSG "Access an undefined block borrow tree (access_block_bortree)"]
+  | Bbot => Error [MSG "Access a non-defined block borrow tree (access_block_bortree)"]
   | Batomic bt =>
       do bt <- access_bortree access t bt;
       OK (Batomic bt)
@@ -984,37 +993,77 @@ Fixpoint update_block_bortree (mut: mutkind) (t: option tag) (fresh_tag: tag) (b
 
 
 (* update the memory when creating reference from a pointer (reborrow) *)    
-Definition create_reference_from_ptr (mut: mutkind) (p: aptr) (fresh_tag: tag) (m: amem) : res amem :=
+Definition create_reference_from_ptr (mut: mutkind) (p: aptr) (fresh_tag: tag) (m: amem) : res (aptr * amem) :=
   let '(b, ph, t) := p in
   do bbt <- load_block_bortree m b ph;
   (* update the block borrow tree by pushing some new tag *)
   do bbt' <- update_block_bortree mut (Some t) fresh_tag bbt;
   (* store this updated bortree in the abstract memory *)
-  store_block_bortree m b ph bbt'.
+  do m' <- store_block_bortree m b ph bbt';
+  OK (b, ph, fresh_tag, m').
+
+Definition create_reference_from_ptrs (mut: mutkind) (ptrs: Aptrs.t) (fresh_tag: tag) (m: amem) : res (Aptrs.t * amem) :=
+  Aptrs.fold (fun ptr acc =>
+                do (ptrs, m) <- acc;
+                do (ptr', m') <- create_reference_from_ptr mut ptr fresh_tag m;
+                OK (Aptrs.add ptr' ptrs, m')) ptrs (OK (Aptrs.empty, m)).
 
 (* (b,p) is the location of the owner *)
-Definition create_reference_from_owner (mut: mutkind) (b: ablock) (ph: path) (fresh_tag: tag) (m: amem) : res amem :=
+Definition create_reference_from_owner (mut: mutkind) (b: ablock) (ph: path) (fresh_tag: tag) (m: amem) : res (aptr * amem) :=
   do bbt <- load_block_bortree m b ph;
   (* update the block borrow tree by pushing some new tag *)
   do bbt' <- update_block_bortree mut None fresh_tag bbt;
   (* store this updated bortree in the abstract memory *)
-  store_block_bortree m b ph bbt'.
+  do m' <- store_block_bortree m b ph bbt';
+  OK ((b, ph, fresh_tag), m').
 
 
 (** read access with permission checking *)
 
-(* Do we need a mutable load? *)
-Definition load_aptr (m: amem) (p: aptr) : res (aval * amem) :=
+(* Do we need a mutable load? When creating a mutable reference, the loading is considered as a write action *)
+Definition load_aptr (m: amem) (p: aptr) (a: access_kind) : res (aval * amem) :=
   let '(b, ph , t) := p in
-  do m' <- access Aread b ph (Some t) m;
+  do m' <- access a b ph (Some t) m;
   do v <- load m' b ph;
   OK (v, m').
 
-Definition load_owner (m: amem) (b: ablock) (ph: path) : res (aval * amem) :=  
-  do m' <- access Aread b ph None m;
+(* load an abstract pointer with multiple possiblity *)
+Definition load_aptrs (m: amem) (ptrs: Aptrs.t) (a: access_kind) : res (aval * amem) :=
+  Aptrs.fold (fun elt acc => do (v, m) <- acc; do (v', m') <- load_aptr m elt a; OK (LAval.lub v v', m')) ptrs (OK (LAval.bot, m)).
+
+Definition load_owner (m: amem) (b: ablock) (ph: path) (a: access_kind) : res (aval * amem) :=  
+  do m' <- access a b ph None m;
   do v <- load m' b ph;
   OK (v, m').
 
+(* permission checking (these functions are not used for now *)
+
+Definition check_perm_bortree (bt: bor_tree) (t: tag) (a: access_kind) : bool :=
+  match find_granting a t bt with
+  | Some _ => true
+  | None => false
+  end.
+
+Fixpoint check_perm_block_bortree (bbt: block_bortree) (t: tag) (a: access_kind) : bool :=
+  match bbt with
+  | Bbot => false
+  | Batomic bt => check_perm_bortree bt t a
+  | Bstruct l =>
+      (* do we need to consider l is empty? *)
+      fold_left (fun acc elt => andb acc (check_perm_block_bortree (snd elt) t a)) l true
+  end.
+
+Definition check_perm_aptr (m: amem) (p: aptr) (a: access_kind) : res unit :=
+  let '(b, ph, t) := p in
+  do bbt <- load_block_bortree m b ph;
+  if check_perm_block_bortree bbt t a then
+    OK tt
+  else
+    Error [CTX (ident_of_tag t); MSG ": cannot find its permission"].
+
+
+Definition check_perm_aptrs (m: amem) (ptrs: Aptrs.t) (a: access_kind) : res unit :=
+  Aptrs.fold (fun elt acc => do _ <- acc; check_perm_aptr m elt a) ptrs (OK tt).
 
 End COMPOSITE_ENV.
 
@@ -1105,4 +1154,4 @@ Module AM <: SEMILATTICE.
   Axiom ge_lub_left: forall x y, ge (lub x y) x.
   Axiom ge_lub_right: forall x y, ge (lub x y) y.
 
-End AM.               
+End AM.

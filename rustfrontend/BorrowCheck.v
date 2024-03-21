@@ -87,6 +87,9 @@ Definition add_params (env: aenv) (params : list (ident * type)) :=
 
 (** Initialize the abstract memory from parameters *)
 
+Definition error_msg (pc: node) : errmsg :=
+  [MSG "error at "; CTX pc; MSG " : "].
+
 Section AENV.
 
 Variable e: aenv.
@@ -210,44 +213,45 @@ Definition aptr_of_aval (v: aval) : option LAptrs.t :=
   end.
   
 
-(* there may be many possiblity for the memory location of a place *)
-Fixpoint transfer_place (pc: node) (p: place) (m: amem) : res ((LAptrs.t + (ablock * path)) * amem) :=
+(* There may be many possiblity for the memory location of a place.
+[access] is the later action (e.g., the case that [p] in the RHS of a
+assignment, [access] would be Awrite) for p *)
+Fixpoint transfer_place (pc: node) (access: access_kind) (p: place) (m: amem) : res ((LAptrs.t + (ablock * path)) * amem) :=
   match p with
   | Plocal id ty =>
-      (* p is an owner *)
+      (* p is an owner, we do not need to check its permission *)
       match PlaceMap.get p e.(aenv_symbtbl) with
       | Some b =>
           OK (inr (b,[]), m)
       | None =>
-          Error [MSG "error at "; CTX pc; MSG ": cannot get the memory block of place "; CTX id]
+          Error (error_msg pc ++ [MSG "cannot get the memory block of place "; CTX id])
       end
   | Pderef p' ty =>
       (* get the (block,path) of p' *)
-      do (l, m') <- transfer_place pc p' m;
+      do (l, m') <- transfer_place pc access p' m;
       match l with
       | inl ptrs =>
-          (* load values from all the abstract pointers *)
-          do (ptrs', m'') <-
-               Aptrs.fold (fun p acc =>
-                             do (ptrs, m) <- acc;
-                             do (v, m') <- load_aptr m p;
-                             match aptr_of_aval v with
-                             | Some l => OK (Aptrs.union ptrs l, m')
-                             (* We can also ignore this error, but for now, we report it *)
-                             | None => Error [MSG "error at "; CTX pc; MSG ": expected abstract pointer (transfer_place)"]
-                             end) ptrs (OK (Aptrs.empty, m'));
-          OK (inl ptrs', m'')
+          (* It means that [p'] is accessed by these pointers, if we
+          want to write [p], these pointers must have writable
+          permission for [p']. So the we load values (by checking the
+          permissin [access]) from all the abstract pointers. *)
+          do (v, m'') <- load_aptrs m' ptrs access;
+          match aptr_of_aval v with
+          | Some ptrs' => OK (inl ptrs', m'')
+          (* We can also ignore this error, but for now, we report it *)
+          | None => Error (error_msg pc ++ [MSG "expected abstract pointer (transfer_place)"])
+          end            
       | inr (b, ph) =>
           (* It means that p' is an owner *)
-          do (v, m'') <- load_owner m' b ph;
+          do (v, m'') <- load_owner m' b ph access;
           match aptr_of_aval v with
           | Some l => OK (inl l, m'')
-          | None => Error [MSG "error at "; CTX pc; MSG ": expected abstract pointer (transfer_place)"]
+          | None => Error (error_msg pc ++ [MSG "expected abstract pointer (transfer_place)"])
           end
       end
   | Pfield p' fid ty =>
       (* we do not perform access when evaluating field *)
-      do (l, m') <- transfer_place pc p' m;
+      do (l, m') <- transfer_place pc access p' m;
       match l with
       | inl ptrs =>
           (* we want to update the path in each pointer but we have no
@@ -259,6 +263,7 @@ Fixpoint transfer_place (pc: node) (p: place) (m: amem) : res ((LAptrs.t + (ablo
       end
   end.
 
+
 (* return an abstract value and the updated abstract memory *)
 Fixpoint transfer_pure_expr (pc: node) (pe: pexpr) (m: amem) : res (aval * amem) :=
   match pe with
@@ -268,16 +273,45 @@ Fixpoint transfer_pure_expr (pc: node) (pe: pexpr) (m: amem) : res (aval * amem)
   | Econst_single _ _
   | Econst_long _ _ => OK (Scalar, m)
   | Eplace p ty =>
-      (* get its parent whose owns a memory block *)
-      let (owner, ph) := owner_path p in
-      (* get the memory block *)
-      match PlaceMap.get owner e.(aenv_symbtbl) with
-      | Some b =>
-          (* read access of this place *)
-          access Aread 
+      (** Do we need to check that whether we should move this place
+      instead of copy it, e.g., p is of box type *)
+      (* evaluate this place *)
+      do (r, m') <- transfer_place pc p m;
+      match r with
+      | inl ptrs =>
+          (* the location of p is obtained from pointers *)
+          match load_aptrs m' ptrs with
+          | OK (v, m'') => OK (v, m'')
+          | Error msg => Error (error_msg pc ++ msg)
+          end
+      | inr (b,ph) =>
+          (* p is an owner *)
+          match load_owner m' b ph with
+          | OK (v, m'') => OK (v, m'')
+          | Error msg => Error (error_msg pc ++ msg)
+          end
+      end
+  | Eref p mut ty =>
+      (* create a reference with tag [Tintern pc], so it means that
+      there must be at most one reference be created in a pc *)
+      (* evaluate place with access [mut] *)
+      do (r, m') <- transfer_place pc (access_of_mutkind mut) p m;
+      let new_tag := Tintern pc in
+      match r with
+      | inl ptrs =>
+          (* for each (b,ph,t) ∈ ptrs, create a new ptr (b,ph,new_tag)
+          from tag [t] *)
+          do (ptrs', m'') <- create_reference_from_ptrs mut ptrs new_tag m';
+          OK (Ptr ptrs', m'')
+      | inr (b, ph) =>
+          (* create a pointer (b,ph, new_tag) *)
+          do (ptr, m'') <- create_reference_from_owner mut b ph new_tag m';
+          OK (Ptr (Aptrs.singleton ptr), m'')
+      end
+  | Eget p fid ty =>
       
 
-
+  end
 Definition transfer (f: function) (cfg: rustcfg) (pc: node) (before: AM.t) : AM.t :=
   match before with
   (* If pred is unreacable, so this pc is unreacable, set to Bot *)
