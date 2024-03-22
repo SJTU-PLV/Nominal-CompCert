@@ -98,13 +98,37 @@ Section ConcurSim.
         match_thread_states w i (CMulti.Return OpenC sc) (Return OpenA sa rs).
 
     (* Definition worlds : Type := NatMap.t (option cc_cainjp_world). *)
+
+    Section Initial.
+
+      Variable m0 : mem.
+      Variable main_b : block.
+
+      Definition main_id := prog_main (skel OpenC).
+      
+      Hypothesis INITM: Genv.init_mem (skel OpenC) = Some m0.
+      Hypothesis FINDMAIN: Genv.find_symbol se main_id = Some main_b.
+
+      Let j0 := Mem.flat_inj (Mem.support m0).
+      Let Hm0 := Genv.initmem_inject (skel OpenC) INITM.
+      Definition wj0 := injpw j0 m0 m0 Hm0.
+      Let rs0 := initial_regset (Vptr main_b Ptrofs.zero).
+      Definition init_w := cajw wj0 main_sig rs0.
+
+    End Initial.
+                              
+      
     Definition empty_worlds : NatMap.t (option cc_cainjp_world) := NatMap.init None.
     Definition initial_worlds (w: cc_cainjp_world) := NatMap.set 1%nat (Some w) empty_worlds.
 
     (** * We shall add more and more invariants about global states here *)
     Inductive match_states : fsim_index -> CMulti.state OpenC -> state OpenA -> Prop :=
-    |global_match_intro : forall threadsC threadsA i cur next worlds
+    |global_match_intro : forall threadsC threadsA i cur next worlds w0 m0 main_b
       (CUR_VALID: (1 <= cur < next)%nat)
+      (INITMEM: Genv.init_mem (skel OpenC) = Some m0)
+      (FINDMAIN: Genv.find_symbol se main_id = Some main_b)
+      (INITW: w0 = init_w m0 main_b INITMEM)
+      (MAIN_THREAD_INITW: NatMap.get 1%nat worlds = Some w0)
       (THREADS: forall n, (1 <= n < next)%nat -> exists w lsc lsa i',
               NatMap.get n worlds = Some w /\
               injp_match_stbls (cajw_injp w) se tse /\
@@ -128,17 +152,17 @@ Section ConcurSim.
         (* Genv.initmem_inject. *)
         apply Genv.initmem_inject in H1 as Hm0.
         exploit Genv.init_mem_genv_sup; eauto. intro SUP.
-        set (j0 := Mem.flat_inj (Mem.support m0)).
-        set (wj0 := injpw j0 m0 m0 Hm0).
-        set (rs0 := initial_regset (Vptr main_b Ptrofs.zero)).
-        set (w0 := cajw wj0 main_sig rs0).
+        (* set (j0 := Mem.flat_inj (Mem.support m0)).
+        set (wj0 := injpw j0 m0 m0 Hm0). *)
+        set (w0 := init_w m0 main_b H1). unfold init_w, wj0 in w0.
         generalize valid_se. intro VALID.
         simpl in fsim_lts.
-        assert (MSE': injp_match_stbls wj0 se tse).
+        assert (MSE': injp_match_stbls (cajw_injp w0) se tse).
         constructor.  rewrite <- MSE. apply match_se_initial; eauto.
         unfold se, CMulti.initial_se. rewrite SUP. eauto with mem. rewrite <- MSE.
         unfold se, CMulti.initial_se. rewrite SUP. eauto with mem.
         specialize (fsim_lts se tse w0 MSE' VALID) as FSIM.
+        set (rs0 := initial_regset (Vptr main_b Ptrofs.zero)).
         set (q2 := (rs0,m0)).
         set (q1 := {| cq_vf := Vptr main_b Ptrofs.zero; cq_sg := main_sig; cq_args := nil; cq_mem := m0 |}).
         assert (MQ: match_query cc_c_asm_injp w0 q1 q2).
@@ -148,7 +172,7 @@ Section ConcurSim.
           destruct Archi.win64; simpl; eauto.
           econstructor.
           - rewrite NONEARG. simpl. constructor.
-          - econstructor. unfold j0. unfold Mem.flat_inj. rewrite pred_dec_true.
+          - econstructor. unfold Mem.flat_inj. rewrite pred_dec_true.
             reflexivity.  rewrite <- SUP.
             eapply Genv.genv_symb_range; eauto. reflexivity.
           - intros. unfold Conventions.size_arguments in H.
@@ -165,12 +189,14 @@ Section ConcurSim.
         eapply fsim_match_initial_states in FSIM as FINI; eauto.
         destruct FINI as [i [ls2 [A B]]].
         exists i. eexists. split.
-        + econstructor. unfold main_id, initial_se.
+        + econstructor. unfold AsmMulti.main_id, initial_se.
           unfold CMulti.initial_se, CMulti.main_id in H0.
           rewrite <- fsim_skel. eauto. rewrite <- fsim_skel. eauto.
           reflexivity.  eauto. 
-        + econstructor. lia. intros.
-          assert (n=1)%nat. lia. subst. instantiate (1:= initial_worlds w0).
+        + econstructor; eauto. instantiate (3:= initial_worlds w0).
+          instantiate (1:= H1). reflexivity.
+          intros.
+          assert (n=1)%nat. lia. subst. 
           exists w0, (CMulti.Local OpenC ls), (Local OpenA ls2), i.
           repeat apply conj; eauto. simpl.
           constructor. unfold match_local_states. eauto.
@@ -189,7 +215,11 @@ Section ConcurSim.
         inv MR.
         econstructor; eauto. admit. (*the same as initial*)
         simpl.
-        assert (sg = main_sig). admit.
+        assert (sg = main_sig).
+        {
+          rewrite GETW in MAIN_THREAD_INITW.
+          inv MAIN_THREAD_INITW. reflexivity.
+        }
         subst. unfold tres in H6. simpl in H6.
         unfold Conventions1.loc_result, main_sig in H6. simpl in H6.
         destruct Archi.ptr64; simpl in H6. inv H6. eauto. inv H6. eauto.
