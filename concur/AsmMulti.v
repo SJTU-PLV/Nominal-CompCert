@@ -39,6 +39,9 @@ Section MultiThread.
       }.
 
   Definition empty_threads : NatMap.t (option thread_state) := NatMap.init None.
+
+  Definition initial_gstate (s : local_state) :=
+    mk_gstate_asm (NatMap.set 1%nat (Some (Local s)) empty_threads) 1 2.
   
   Definition update_threads (s: state) (t: NatMap.t (option thread_state)) :=
     mk_gstate_asm t (cur_tid s) (next_tid s) .
@@ -110,14 +113,12 @@ Section MultiThread.
                           # RSP <- Vnullptr.
                                             
   Inductive initial_state : state -> Prop :=
-  |initial_state_intro : forall ls s main_b m0 rs0,
-      cur_tid s = 1%nat -> next_tid s = 2%nat ->
-      get_cur_thread s = Some (Local ls) ->
+  |initial_state_intro : forall ls main_b m0 rs0,
       Genv.find_symbol initial_se main_id = Some main_b ->
       Genv.init_mem (skel OpenS) = Some m0 ->
       rs0 = initial_regset (Vptr main_b Ptrofs.zero) ->
       (Smallstep.initial_state OpenLTS) (rs0,m0) ls ->
-      initial_state s.
+      initial_state (initial_gstate ls).
 
   (** Final state of Concurrent semantics *)
   Inductive final_state : state -> int -> Prop :=  
