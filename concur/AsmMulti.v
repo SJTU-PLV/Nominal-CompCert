@@ -161,7 +161,7 @@ Section MultiThread.
   Axiom not_win : Archi.win64 = false.
   
   (* the ptr to start_routine is in RDI, the pointer to its argument is in RSI *)
-  Theorem pthread_create_locs :
+  Lemma pthread_create_locs :
     loc_arguments pthread_create_sig = One (Locations.R Machregs.DI) :: One (Locations.R Machregs.SI) :: nil.
   Proof.
     simpl. unfold pthread_create_sig. unfold loc_arguments.
@@ -197,11 +197,11 @@ Section MultiThread.
       Smallstep.step OpenLTS ge ls1 t ls2 ->
       update_thread s (cur_tid s) (Local ls2) = s' ->
       step ge s t s'
-  |step_thread_create : forall ge s s' q_ptc rs_str gmem ls ls',
+  |step_thread_create : forall ge s s' q_ptc rs_str rs gm0 gmem ls ls',
       get_cur_thread s = Some (Local ls) -> (* get the current local state *)
-      Smallstep.at_external OpenLTS ls q_ptc -> (* get the query to pthread_create *)
+      Smallstep.at_external OpenLTS ls (rs, gm0) -> (* get the query to pthread_create *)
       query_is_pthread_create_asm q_ptc (rs_str, gmem) -> (* get the query to start_routine *)
-      Smallstep.after_external OpenLTS ls (fst q_ptc, gmem) ls' ->
+      Smallstep.after_external OpenLTS ls ((rs # PC <- (rs RA) # RAX <- (Vint (Int.one))), gmem) ls' ->
       (* the current thread completes the primitive, regsets are unchanged *)
       pthread_create_state s rs_str (Local ls') = s' ->
       step ge s E0 s'
