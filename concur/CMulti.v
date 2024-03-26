@@ -199,8 +199,9 @@ Section MultiThread.
   (* turns a call to pthread_create into a call to the start_routine, the initial memory is updated in 2nd query *)
   Inductive query_is_pthread_create : query li_c -> query li_c -> Prop :=
   |pthread_create_intro :
-    forall m arglist b_ptc b_start b_arg ofs m'
+    forall m arglist b_ptc b_start b_arg ofs m' start_id
       (FINDPTC: Genv.find_symbol initial_se pthread_create_id = Some b_ptc)
+      (FINDSTR: Genv.find_symbol initial_se start_id = Some b_start)
       (ARGLIST: arglist = (Vptr b_start Ptrofs.zero) :: (Vptr b_arg ofs) :: nil)
       (MEM_CREATE: Mem.thread_create m = m'),
       query_is_pthread_create

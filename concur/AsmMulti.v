@@ -180,8 +180,9 @@ Section MultiThread.
   
   Inductive query_is_pthread_create_asm : query li_asm -> query li_asm -> Prop :=
   |pthread_create_intro :
-    forall m b_ptc b_start b_arg ofs m' rs rs'
+    forall m b_ptc b_start b_arg ofs m' rs rs' start_id
       (FINDPTC: Genv.find_symbol initial_se pthread_create_id = Some b_ptc)
+      (FINDSTR: Genv.find_symbol initial_se start_id = Some b_start)
       (RS_PC: rs # PC = Vptr b_ptc Ptrofs.zero)
       (RS_RDI : rs # RDI = Vptr b_start Ptrofs.zero)
       (RS_RSI : rs # RSI = Vptr b_arg ofs)

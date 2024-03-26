@@ -49,7 +49,7 @@ Section ConcurSim.
     (** Utilizing above properties *)
     Definition match_local_states := fsim_match_states se tse.
 
-    Lemma MSE : se = tse.
+    Lemma SE_eq : se = tse.
     Proof.
       unfold se, tse. destruct OpenC, OpenA.
       unfold CMulti.initial_se. unfold initial_se.
@@ -108,34 +108,6 @@ Section ConcurSim.
     |gorder_hd : forall fi1 fi2 tl, fsim_order fi1 fi2 -> global_order (fi1 :: tl) (fi2 :: tl)
     |gorder_tl : forall fi tl1 tl2, global_order tl1 tl2 -> global_order (fi :: tl1) (fi :: tl2).
 
-    (*      Lemma global_cons_Acc : forall gi, Acc global_order gi -> forall fi, Acc global_order (fi :: gi).
-    Proof.
-      induction 1. constructor. intros.
-      inv H1.
-      - destruct (fsim_order_wf fi).
-        + eapply H2; eauto.        +
-      - eapply H0. eauto.
-        
-    Lemma global_cons_Acc : forall gi, Acc global_order gi -> forall fi, Acc global_order (fi :: gi).
-    Proof.
-      induction 1. constructor. intros.
-      inv H1.
-      - destruct (fsim_order_wf fi).
-        + eapply H2; eauto.        +
-      - eapply H0. eauto.
-
-
-
-
-
-
-      destruct y. inv H0. 
-      - 
-      induction 1. eapply c
-      intros. induction H. constructor. intros.
-      inv H1. eapply H0.
-      inv H.
-     *)
     Theorem global_index_wf : well_founded global_order.
     Proof.
       constructor. intros. 
@@ -203,8 +175,8 @@ Section ConcurSim.
         generalize valid_se. intro VALID.
         simpl in fsim_lts.
         assert (MSE': injp_match_stbls (cajw_injp w0) se tse).
-        constructor.  rewrite <- MSE. apply match_se_initial; eauto.
-        unfold se, CMulti.initial_se. rewrite SUP. eauto with mem. rewrite <- MSE.
+        constructor.  rewrite <- SE_eq. apply match_se_initial; eauto.
+        unfold se, CMulti.initial_se. rewrite SUP. eauto with mem. rewrite <- SE_eq.
         unfold se, CMulti.initial_se. rewrite SUP. eauto with mem.
         specialize (fsim_lts se tse w0 MSE' VALID) as FSIM.
         set (rs0 := initial_regset (Vptr main_b Ptrofs.zero)).
@@ -349,28 +321,48 @@ Section ConcurSim.
     Lemma trans_pthread_create__start_routine: forall q_ptc q_str qa_ptc wA,
         query_is_pthread_create OpenC q_ptc q_str ->
         match_query cc_c_asm_injp wA q_ptc qa_ptc ->
+        injp_match_stbls (cajw_injp wA) se tse ->
         exists wA' qa_str, query_is_pthread_create_asm OpenA qa_ptc qa_str /\
                         match_query cc_c_asm_injp wA' q_str qa_str /\
                         worlds_ptc_str wA wA'.
     Proof.
-      intros.
+      intros until wA. intros H H0 MSE.
       inv H. inv H0.
       subst tvf targs. rewrite pthread_create_locs in H4. simpl in H4.
       inv H4. inv H9. inv H11. inv H3.
       set (rs' := rs # PC <- (rs RDI) # RDI <- (rs RSI)).
-      assert (INJPTC: j b_ptc = Some (b_ptc, 0)). admit.
+      assert (INJPTC: j b_ptc = Some (b_ptc, 0)).
+      {
+        inv MSE. inv H9.
+        exploit mge_dom; eauto. eapply Genv.genv_symb_range. apply FINDPTC.
+        intros (b3 & INJ).
+        exploit mge_symb; eauto.
+        intro HH. apply HH in FINDPTC as FINDPTC'.
+        rewrite <- SE_eq in FINDPTC'. fold se in FINDPTC. setoid_rewrite FINDPTC in FINDPTC'.
+        inv FINDPTC'. eauto.
+      }
       assert (PC: rs PC = Vptr b_ptc Ptrofs.zero).
       inv H5. rewrite H9 in INJPTC. inv INJPTC. reflexivity.
-      assert (INJSTR: j b_start = Some (b_start, 0)). admit.
+      assert (INJSTR: j b_start = Some (b_start, 0)).
+      {
+        inv MSE. inv H9.
+        exploit mge_dom; eauto. eapply Genv.genv_symb_range. apply FINDSTR. eauto.
+        intros (b3 & INJ).
+        exploit mge_symb; eauto.
+        intro HH. apply HH in FINDSTR as FINDSTR'.
+        rewrite <- SE_eq in FINDSTR'. fold se in FINDSTR. setoid_rewrite FINDSTR in FINDSTR'.
+        inv FINDSTR'. eauto.
+      }
       assert (RSI: rs RDI = Vptr b_start Ptrofs.zero).
       inv H2. rewrite H9 in INJSTR. inv INJSTR. reflexivity.
       exploit thread_create_inject; eauto.
       intros Hm1.
       exists (cajw (injpw j (Mem.thread_create m) (Mem.thread_create tm) Hm1) start_routine_sig rs').
       eexists. repeat apply conj.
-      -
-        econstructor. eauto. generalize MSE. intro. fold se in FINDPTC.
-        rewrite H in FINDPTC. eapply FINDPTC. eauto. eauto. eauto.
+      - fold se in FINDPTC. rewrite SE_eq in FINDPTC.
+        fold se in FINDSTR. rewrite SE_eq in FINDSTR.
+        econstructor. 
+        eapply FINDPTC. eapply FINDSTR.  eauto. eauto. eauto.
         instantiate (1:= rs'). unfold rs'. rewrite Pregmap.gso. rewrite Pregmap.gss.
         eauto. congruence.
         unfold rs'. rewrite Pregmap.gss. eauto. eauto.
@@ -379,11 +371,13 @@ Section ConcurSim.
         constructor. unfold rs'. rewrite Pregmap.gss. rewrite <- H1.
         econstructor; eauto. constructor. unfold Conventions.size_arguments.
         rewrite start_routine_loc. simpl. intros. inv H. extlia.
-        admit. (** ok*)
+        unfold rs'. repeat rewrite Pregmap.gso.
+        subst tsp. inv H10. constructor. simpl. rewrite <- Mem.sup_create_in. auto.
+        congruence. congruence.
         econstructor. unfold Conventions.tailcall_possible, Conventions.size_arguments.
         rewrite start_routine_loc. simpl. reflexivity. congruence.
       - constructor.
-    Admitted. (** Need another invariant for all [w]s s.t. they relate all global blocks by partial identity*)
+    Qed.
 
     Theorem Concur_Sim : Closed.forward_simulation ConcurC ConcurA.
     Proof.
