@@ -347,7 +347,14 @@ Section ConcurSim.
             Mem.inject j (Mem.thread_create m) (Mem.thread_create tm).
     Proof.
       intros. inv H. constructor; eauto.
-    Admitted. (** ok, *)
+      - clear - mi_inj.
+        inv mi_inj. constructor; eauto.
+      - intros. eapply mi_freeblocks. unfold Mem.valid_block in *.
+        simpl in H.
+        rewrite Mem.sup_create_in. eauto.
+      - intros. unfold Mem.valid_block. simpl. rewrite <- Mem.sup_create_in.
+        eapply mi_mappedblocks; eauto.
+    Qed.
 
     Inductive worlds_ptc_str : cc_cainjp_world -> cc_cainjp_world -> Prop :=
     | ptc_str_intro : forall j m tm Hm0 Hm1 rs,
@@ -504,12 +511,19 @@ Section ConcurSim.
             replace Archi.ptr64 with true by reflexivity. simpl. instantiate (1:= j).
             unfold rs'. rewrite Pregmap.gss. constructor.
             instantiate (1:= Hm5).
-            admit. 
-            admit.
-            admit.
-            admit.
-            (** all correct here, implement them later *)
-            unfold rs'. rewrite Pregmap.gso. rewrite Pregmap.gss. reflexivity. congruence.
+            { constructor; try red; intros; eauto.
+            - constructor. red. simpl. intros. rewrite <- Mem.sup_create_in. eauto.
+              intros. simpl. reflexivity. intros. reflexivity.
+            - constructor. red. simpl. intros. rewrite <- Mem.sup_create_in. eauto.
+              intros. simpl. reflexivity. intros. reflexivity.
+            - congruence. }
+            intros. unfold rs'.
+            destruct r; simpl in H; inv H; repeat rewrite Pregmap.gso;
+              simpl; try congruence; try reflexivity.
+            intros. unfold Conventions.size_arguments in H. rewrite pthread_create_locs in H.
+            simpl in H. inv H. extlia.
+            unfold rs'. repeat rewrite Pregmap.gso; try congruence.
+            unfold rs'. rewrite Pregmap.gso; try congruence. rewrite Pregmap.gss. reflexivity.
           }
           exploit MR; eauto. intros (li' & lsa' & AFTERa & MSla).
           specialize (get_nth_set (cur-1) i li li' GETi).
@@ -535,7 +549,10 @@ Section ConcurSim.
                rewrite nth_error_app2. rewrite app_length.
                simpl. replace (Datatypes.length i' + 1 - 1 - Datatypes.length i')%nat with 0%nat by lia.
                reflexivity. rewrite app_length. simpl. lia.
-               admit. (** ok*)
+               simpl in MS. unfold wA'. simpl.
+               clear - MS. inv MS. constructor; eauto.
+               red. intros. simpl. rewrite <- Mem.sup_create_in. eauto.
+               red. intros. simpl. rewrite <- Mem.sup_create_in. eauto.
                rewrite NatMap.gso. rewrite NatMap.gss. reflexivity. lia.
                rewrite NatMap.gso. rewrite NatMap.gss. reflexivity. lia.
                econstructor.
