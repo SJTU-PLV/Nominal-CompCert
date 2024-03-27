@@ -5,6 +5,34 @@ Require Import ValueAnalysis.
 Require Import CMulti AsmMulti.
 Require Import InjectFootprint CA Compiler.
 
+
+
+(** * TODOs after completing this : Generalization *)
+
+(**
+  1. generalize the callconv in this file :
+  forall cc : lic <-> liasm , sim cc cc OpenC OpenA -> concur_sim OpenC OpenA
+
+  2. generalize the language interface? can we?
+
+  3. Implementing the primitives using assembly code... do a semantics -> syntantic sim
+
+    [|a.asm|]_O -> [|a.asm]_G
+
+    sim?
+
+    [|a.asm + pthreads.asm|]_Closed
+
+  4. Complete coroutine, non-preemptive, thread_join (thread variable), lock, unlock, condition variable
+
+  5. preeptive, more primitives
+
+  6. C++ atomics, SC consistency, Concurrent things
+
+ *)
+
+(** Good point : we can allow 'public' stack-allocated data shared between threads *)
+
 Section ConcurSim.
 
   (** Hypothesis *)
@@ -81,7 +109,8 @@ Section ConcurSim.
     (** Definition of match_state *)
     Let thread_state_C := CMulti.thread_state OpenC.
     Let thread_state_A := AsmMulti.thread_state OpenA.
-    
+
+    (** Maybe the thread_state needs to be further extended *)
     Inductive match_thread_states : cc_cainjp_world -> fsim_index -> thread_state_C -> thread_state_A -> Prop :=
     |match_local : forall w i sc sa,
         match_local_states w i sc sa ->
@@ -138,6 +167,14 @@ Section ConcurSim.
     Definition initial_indexs (i: fsim_index) := i :: nil.
     
     (** * We shall add more and more invariants about global states here *)
+
+    (** Discuss : we may need to store [two] worlds for each thread, one is the
+        initial wB, the another is for the latest (if exists) [yield], is the wA,
+        waiting for replies related by wA's accessibility.
+
+        The current world should be [legal] accessibility of all threads waiting
+        at [yield()], therefore they can be resumed.
+     *)
     Inductive match_states : global_index -> CMulti.state OpenC -> state OpenA -> Prop :=
     |global_match_intro : forall threadsC threadsA cur next worlds gi w0 m0 main_b
       (CUR_VALID: (1 <= cur < next)%nat)
