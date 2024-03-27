@@ -123,7 +123,8 @@ Section ConcurSim.
 
     Theorem global_index_wf : well_founded global_order.
     Proof.
-      constructor. intros. 
+      red.
+      eapply (well_founded_induction fsim_order_wf).
     Admitted. (** Should be correct, but how to prove...*)
 
 
@@ -160,37 +161,43 @@ Section ConcurSim.
         at [yield()], therefore they can be resumed.
      *)
 
-            (** Maybe the thread_state needs to be further extended *)
-    Inductive match_thread_states : cc_cainjp_world -> fsim_index -> thread_state_C -> thread_state_A -> Prop :=
-    |match_local : forall w i sc sa,
-        match_local_states w i sc sa ->
-        match_thread_states w i (CMulti.Local OpenC sc) (Local OpenA sa)
-    |match_initial : forall w i cqv rs m tm,
-        match_query cc_c_asm_injp w (get_query cqv m) (rs,tm) ->
-        match_thread_states w i (CMulti.Initial OpenC cqv) (Initial OpenA rs)
-    |match_return : forall w i sc sa qc rs tm,
-        match_local_states w i sc sa ->
+            (** Maybe the thread_state needs to be further extended fsim_match_external *)
+    Inductive match_thread_states : cc_cainjp_world -> (option cc_cainjp_world) -> fsim_index -> thread_state_C -> thread_state_A -> Prop :=
+    |match_local : forall wB i sc sa,
+        match_local_states wB i sc sa ->
+        match_thread_states wB None i (CMulti.Local OpenC sc) (Local OpenA sa)
+    |match_initial : forall wB i cqv rs m tm,
+        match_query cc_c_asm_injp wB (get_query cqv m) (rs,tm) ->
+        match_thread_states wB None i (CMulti.Initial OpenC cqv) (Initial OpenA rs)
+    |match_return : forall wB wA i sc sa rs
+        (M_STATES: match_local_states wB i sc sa)
+        (M_REPLIES: forall r1 r2 sc', match_reply cc_c_asm_injp wA r1 r2 ->
+                                 (after_external (OpenC se)) sc r1 sc' ->
+                                 exists i' sa', (after_external (OpenA tse)) sa r2 sa' /\
+                                            match_local_states wB i' sc' sa'),
         (* match_query cc_c_asm_injp w ( )-> *)
-        query_is_yield OpenC qc ->
+        (* query_is_yield OpenC qc ->
         query_is_yield_asm OpenA (rs, tm) ->
-        match_query cc_c_asm_injp w qc (rs, tm) ->
-        match_thread_states w i (CMulti.Return OpenC sc) (Return OpenA sa rs).
+        match_query cc_c_asm_injp w qc (rs, tm) -> *)
+        
+        match_thread_states wB (Some wA) i (CMulti.Return OpenC sc) (Return OpenA sa rs).
 
     Inductive match_states : global_index -> CMulti.state OpenC -> state OpenA -> Prop :=
-    |global_match_intro : forall threadsC threadsA cur next worlds gi w0 m0 main_b
+    |global_match_intro : forall threadsC threadsA cur next worldsA worldsB gi w0 m0 main_b
       (CUR_VALID: (1 <= cur < next)%nat)
       (INDEX_LENGTH : length gi = (next -1)%nat)                      
       (INITMEM: Genv.init_mem (skel OpenC) = Some m0)
       (FINDMAIN: Genv.find_symbol se main_id = Some main_b)
       (INITW: w0 = init_w m0 main_b INITMEM)
-      (MAIN_THREAD_INITW: NatMap.get 1%nat worlds = Some w0)
-      (THREADS: forall n, (1 <= n < next)%nat -> exists w lsc lsa i,
-            NatMap.get n worlds = Some w /\
+      (MAIN_THREAD_INITW: NatMap.get 1%nat worldsB = Some w0)
+      (THREADS: forall n, (1 <= n < next)%nat -> exists wB owA lsc lsa i,
+            NatMap.get n worldsB = Some wB /\
               nth_error gi (n-1)%nat = Some i /\
-              injp_match_stbls (cajw_injp w) se tse /\
+              injp_match_stbls (cajw_injp wB) se tse /\
               NatMap.get n threadsC = Some lsc /\
               NatMap.get n threadsA = Some lsa /\
-              match_thread_states w i lsc lsa),
+              NatMap.get n worldsA = owA /\
+              match_thread_states wB owA i lsc lsa),
         match_states gi (mk_gstate OpenC threadsC cur next) (mk_gstate_asm OpenA threadsA cur next).
 
     Lemma foo {A: Type} (n: nat) (map : NatMap.t (option A)) (a b: A) :
@@ -249,10 +256,10 @@ Section ConcurSim.
           rewrite <- fsim_skel. eauto. rewrite <- fsim_skel. eauto.
           reflexivity.  eauto. 
         + econstructor; eauto. instantiate (3:= initial_worlds w0).
-          instantiate (1:= H1). reflexivity.
+          instantiate (1:= H1). reflexivity. instantiate (1:= empty_worlds).
           intros.
           assert (n=1)%nat. lia. subst. 
-          exists w0, (CMulti.Local OpenC ls), (Local OpenA ls2), i.
+          exists w0, None, (CMulti.Local OpenC ls), (Local OpenA ls2), i.
           repeat apply conj; eauto. simpl.
           constructor. unfold match_local_states. eauto.
     Admitted. (** The Vunllptr issue *)
@@ -264,11 +271,11 @@ Section ConcurSim.
         simpl in *. subst cur.
         unfold CMulti.get_cur_thread, CMulti.get_thread in H2. simpl in H2.
         specialize (THREADS 1%nat CUR_VALID).
-        destruct THREADS as (w & lsc & lsa & i' & GETW & GETi & MSEw & GETC & GETA & MS).
+        destruct THREADS as (wB & owA & lsc & lsa & i' & GETWB & GETi & MSEw & GETC & GETA & GETWA & MS).
         assert (lsc = CMulti.Local OpenC ls).
         eapply foo; eauto. subst lsc. inv MS.
-        specialize (fsim_lts se tse w MSEw valid_se) as FSIM.
-        inversion FSIM. unfold match_local_states in H4.
+        specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
+        inversion FSIM. unfold match_local_states in H5.
         exploit fsim_match_final_states. eauto.
         eauto. intros [r2 [FIN MR]]. destruct r2.
         inv MR.
@@ -276,12 +283,12 @@ Section ConcurSim.
         simpl.
         assert (sg = main_sig).
         {
-          rewrite GETW in MAIN_THREAD_INITW.
+          rewrite GETWB in MAIN_THREAD_INITW.
           inv MAIN_THREAD_INITW. reflexivity.
         }
-        subst. unfold tres in H6. simpl in H6.
-        unfold Conventions1.loc_result, main_sig in H6. simpl in H6.
-        destruct Archi.ptr64; simpl in H6. inv H6. eauto. inv H6. eauto.
+        subst. unfold tres in H7. simpl in H7.
+        unfold Conventions1.loc_result, main_sig in H7. simpl in H7.
+        destruct Archi.ptr64; simpl in H7. inv H7. eauto. inv H7. eauto.
     Admitted. (** The Vnullptr issue*)
 
 
@@ -437,10 +444,10 @@ Section ConcurSim.
         + (* Local *)
           inversion H0. subst. simpl in *.
           specialize (THREADS cur CUR_VALID) as THR_CUR.
-          destruct THR_CUR as (w & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA & MS).
+          destruct THR_CUR as (wB & owA & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA & GETWa & MS).
           assert (lsc = CMulti.Local OpenC ls1).
           eapply foo; eauto. subst lsc. inv MS.
-          specialize (fsim_lts se tse w MSEw valid_se) as FSIM.
+          specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
           inversion FSIM.
           clear fsim_match_valid_query fsim_match_initial_states
             fsim_match_final_states fsim_match_external.
@@ -456,12 +463,12 @@ Section ConcurSim.
                eauto. eauto. intros.
                destruct (Nat.eq_dec n cur).
                - subst.
-                 exists w, (CMulti.Local OpenC ls2), (Local OpenA s2'), li'.
+                 exists wB, None, (CMulti.Local OpenC ls2), (Local OpenA s2'), li'.
                  repeat apply conj; eauto. rewrite NatMap.gss. reflexivity.
                  rewrite NatMap.gss. reflexivity. simpl. constructor. eauto.
                - (* clear - THREADS H3 OTHERi n0. *)
-                 destruct (THREADS n H3) as (wn & lscn & lsan & lin & A & B & C & D & E & F).
-                 exists wn,lscn,lsan,lin. repeat apply conj; eauto. rewrite <- OTHERi; eauto. lia.
+                 destruct (THREADS n H3) as (wn & owan & lscn & lsan & lin & A & B & C & D & E & F & G).
+                 exists wn, owan, lscn,lsan,lin. repeat apply conj; eauto. rewrite <- OTHERi; eauto. lia.
                  rewrite NatMap.gso. simpl. eauto. lia.
                  rewrite NatMap.gso. simpl. eauto. lia.
              }
@@ -473,22 +480,22 @@ Section ConcurSim.
                eauto. eauto. eauto. intros.
                destruct (Nat.eq_dec n cur).
                - subst.
-                 exists w, (CMulti.Local OpenC ls2), (Local OpenA s2'), li'.
+                 exists wB, None, (CMulti.Local OpenC ls2), (Local OpenA s2'), li'.
                  repeat apply conj; eauto. rewrite NatMap.gss. reflexivity.
                  rewrite NatMap.gss. reflexivity. simpl. constructor. eauto.
                - (* clear - THREADS H3 OTHERi n0. *)
-                 destruct (THREADS n H4) as (wn & lscn & lsan & lin & A & B & C & D & E & F).
-                 exists wn,lscn,lsan,lin. repeat apply conj; eauto. rewrite <- OTHERi; eauto. lia.
+                 destruct (THREADS n H5) as (wn & ownA & lscn & lsan & lin & A & B & C & D & E & F & G).
+                 exists wn, ownA, lscn,lsan,lin. repeat apply conj; eauto. rewrite <- OTHERi; eauto. lia.
                  rewrite NatMap.gso. simpl. eauto. lia.
                  rewrite NatMap.gso. simpl. eauto. simpl. lia.
              }
         + (* pthread_create *)
           inversion H0. subst.
           specialize (THREADS cur CUR_VALID) as THR_CUR.
-          destruct THR_CUR as (w & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA & MS).
+          destruct THR_CUR as (wB & owA & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA &GETWa& MS).
           assert (lsc = CMulti.Local OpenC ls).
           eapply foo; eauto. subst lsc. inv MS.
-          specialize (fsim_lts se tse w MSEw valid_se) as FSIM.
+          specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
           inversion FSIM.
           clear fsim_match_valid_query fsim_match_initial_states
             fsim_match_final_states fsim_simulation.
@@ -533,7 +540,7 @@ Section ConcurSim.
           exists i''. eexists. split.
           -- left. eapply plus_one.
              eapply step_thread_create; eauto.
-          -- simpl. set (worlds' := NatMap.set next (Some wA') worlds).
+          -- simpl. set (worlds' := NatMap.set next (Some wA') worldsB).
              assert (LENGTHi'' :Datatypes.length i'' = next).
              unfold i''. rewrite app_length.
              simpl. erewrite set_nth_error_length; eauto. lia.
@@ -544,7 +551,8 @@ Section ConcurSim.
              rewrite NatMap.gso. eauto. lia.
              simpl. intros. destruct (Nat.eq_dec n next).
              ++ (* the new thread *) subst.
-               exists wA'. eexists. eexists. eexists. repeat apply conj.
+                instantiate (1:= NatMap.set (Datatypes.length i'') None worldsA).
+               exists wA'. exists None. eexists. eexists. eexists. repeat apply conj.
                unfold worlds'. rewrite NatMap.gss. reflexivity.
                unfold i''.
                rewrite nth_error_app2. rewrite app_length.
@@ -556,56 +564,53 @@ Section ConcurSim.
                red. intros. simpl. rewrite <- Mem.sup_create_in. eauto.
                rewrite NatMap.gso. rewrite NatMap.gss. reflexivity. lia.
                rewrite NatMap.gso. rewrite NatMap.gss. reflexivity. lia.
+               rewrite NatMap.gss. reflexivity.
                econstructor.
                instantiate (1:= Mem.thread_create tm).
                instantiate (1:= Mem.thread_create m).
                unfold get_cqv, get_query. simpl. eauto.
              ++ destruct (Nat.eq_dec n cur).
           * (*the executing thread *) subst.
-            exists w, (CMulti.Local OpenC ls'),(Local OpenA lsa'), li'.
+            exists wB, None, (CMulti.Local OpenC ls'),(Local OpenA lsa'), li'.
             repeat apply conj; eauto.
             unfold worlds'. rewrite NatMap.gso. eauto. lia.
             unfold i''. rewrite nth_error_app1. eauto. unfold i'' in CUR_VALID.
             rewrite app_length in CUR_VALID. simpl in CUR_VALID. lia.
             rewrite NatMap.gss. reflexivity.
             rewrite NatMap.gss. reflexivity.
+            rewrite NatMap.gso. eauto. congruence.
             constructor. eauto.
           * (* uneffected threads *)
             assert (Hr: (1 <= n < next)%nat). lia.
-            destruct (THREADS n Hr) as (wn & lscn & lsan & lin & A & B & C & D & E & F).
-            exists wn,lscn,lsan,lin. repeat apply conj; eauto.
+            destruct (THREADS n Hr) as (wn & owan & lscn & lsan & lin & A & B & C & D & E & F & G).
+            exists wn, owan,lscn,lsan,lin. repeat apply conj; eauto.
             unfold worlds'. rewrite NatMap.gso. eauto. lia.
             unfold i''. rewrite nth_error_app1.
             rewrite <- OTHERi; eauto. lia. erewrite set_nth_error_length; eauto. lia.
             repeat rewrite NatMap.gso; eauto.
             repeat rewrite NatMap.gso; eauto.
+            repeat rewrite NatMap.gso; eauto. congruence.
         + (* yield_to_yield *)
           unfold Mem.range_prop in p. rename p into yield_range.
           set (target :=  CMulti.yield_strategy OpenC s1).
           assert ( NEXT_EQ: Mem.next_tid (Mem.support (cq_mem q)) = CMulti.next_tid OpenC s1).
           admit. (* to be added in query_is_yield or some invariant in match_states *)
-          
           inversion H0. subst.
           specialize (THREADS cur CUR_VALID) as THR_CUR.
-          destruct THR_CUR as (w & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA & MS).
+          destruct THR_CUR as (wB & owA & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA & GETWa& MS).
           assert (lsc = CMulti.Local OpenC ls).
           eapply foo; eauto. subst lsc. inv MS.
-          specialize (fsim_lts se tse w MSEw valid_se) as FSIM.
+          specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
           inversion FSIM.
           clear fsim_match_valid_query fsim_match_initial_states
             fsim_match_final_states fsim_simulation.
           exploit fsim_match_external. eauto. eauto.
-          intros (wA & qa & AT_YIE & MQ_YIE & MS & MR).
+          intros (w_CUR & qa & AT_YIE & MQ_YIE & MS & MR).
           assert (TAR_VALID:(1 <= target < next)%nat). admit.
           specialize (THREADS target TAR_VALID) as THR_TAR.
-          destruct THR_TAR as (wT & lscT & lsaT & liT & GETWT & GETiT & MSEwT & GETCT & GETAT & MST).
+          destruct THR_TAR as (wBt & wAt & lscT & lsaT & liT & GETWT & GETiT & MSEwT & GETCT & GETAT & GETWaT & MST).
           assert (lscT = (CMulti.Return OpenC) ls1).
-          eapply foo; eauto. subst lscT. inv MST.
-          (*tobe added in match_thread_state*)
-          assert (MRT: forall )
-          eapply foo.
-          (*need to change yield?*)
-          
+          eapply foo; eauto. subst lscT. inv MST. rename wA into wAt.
           admit.
         + (* yield_to_initial *)
           admit.
