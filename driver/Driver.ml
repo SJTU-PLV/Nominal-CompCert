@@ -451,7 +451,7 @@ let cmdline_actions =
 
 let debug_rust = true
 
-let test_case = Rustsyntax.ex5_prog
+let test_case = "rustexamples/test/example_test/control_flow/04factorial.rs"
 
 let fun_atom = BinNums.Coq_xH
 
@@ -463,47 +463,56 @@ let _ =
   if debug_rust then
   try     
   let clight_prog = 
-    (* Print Rustlight *)
-    (match Rustlightgen.transl_program test_case with
-    | Errors.OK rustlight_prog ->
-      Format.fprintf stdout_format "Rustlight: @.";
-      PrintRustlight.print_program stdout_format rustlight_prog;
-      (* Print RustIR *)
-      Format.fprintf stdout_format "@.RustIR: @.";
-      let rustir_prog = RustIRgen.transl_program rustlight_prog in
-      PrintRustIR.print_program stdout_format rustir_prog;
-      (* Print CFG *)
-      Format.fprintf stdout_format "@.Rust CFG: @.";
-      PrintRustIR.print_cfg_program stdout_format rustir_prog;
-      (* Print the result of InitAnalysis *)
-      Format.fprintf stdout_format "@.Initialized Analysis: @.";
-      PrintRustIR.print_cfg_program_debug stdout_format rustir_prog;
-      (* Print RustIR after the drop elaboration *)
-      begin match ElaborateDrop.transl_program rustir_prog with
-      | Errors.OK rustir_prog_drop ->
-        Format.fprintf stdout_format "@.Elaborate Drop: @.";
-        PrintRustIR.print_program stdout_format rustir_prog_drop;
-      (* Print Clight composites *)
-        let clight_composites = Clightgen.transl_composites rustir_prog_drop.Rusttypes.prog_types in
-        Format.fprintf stdout_format "@.Clightgen Composites: @.";
-        Format.fprintf stdout_format "@[<v 0>"; 
-        List.iter (PrintCsyntax.define_composite stdout_format) clight_composites;
-        Format.fprintf stdout_format "@]@.";
-        (* Print Clight after generating drop glue *)
-        begin match Clightgen.transl_program rustir_prog_drop with
-        | Errors.OK clight_prog ->
-          Format.fprintf stdout_format "@.Clightgen: @.";
-          PrintClight.print_program PrintClight.Clight1 stdout_format clight_prog;
-          clight_prog
+    let items = RustsurfaceDriver.parse test_case in
+    let module R = Rustsurface in
+    let m_syntax = items |> R.prog_of_items |> R.To_syntax.transl_prog in
+    let (syntax_result, symmap) = R.To_syntax.(run_monad m_syntax skeleton_st) in
+    (match syntax_result with
+     | Result.Ok syntax ->
+       let open Rusttypes in
+       Hashtbl.add Camlcoq.atom_of_string "main" syntax.prog_main;
+       Hashtbl.add Camlcoq.string_of_atom syntax.prog_main "main";
+       (* Print Rustlight *)
+      (match Rustlightgen.transl_program syntax with
+      | Errors.OK rustlight_prog ->
+        Format.fprintf stdout_format "Rustlight: @.";
+        PrintRustlight.print_program stdout_format rustlight_prog;
+        (* Print RustIR *)
+        Format.fprintf stdout_format "@.RustIR: @.";
+        let rustir_prog = RustIRgen.transl_program rustlight_prog in
+        PrintRustIR.print_program stdout_format rustir_prog;
+        (* Print CFG *)
+        Format.fprintf stdout_format "@.Rust CFG: @.";
+        PrintRustIR.print_cfg_program stdout_format rustir_prog;
+        (* Print the result of InitAnalysis *)
+        Format.fprintf stdout_format "@.Initialized Analysis: @.";
+        PrintRustIR.print_cfg_program_debug stdout_format rustir_prog;
+        (* Print RustIR after the drop elaboration *)
+        begin match ElaborateDrop.transl_program rustir_prog with
+        | Errors.OK rustir_prog_drop ->
+          Format.fprintf stdout_format "@.Elaborate Drop: @.";
+          PrintRustIR.print_program stdout_format rustir_prog_drop;
+        (* Print Clight composites *)
+          let clight_composites = Clightgen.transl_composites rustir_prog_drop.Rusttypes.prog_types in
+          Format.fprintf stdout_format "@.Clightgen Composites: @.";
+          Format.fprintf stdout_format "@[<v 0>"; 
+          List.iter (PrintCsyntax.define_composite stdout_format) clight_composites;
+          Format.fprintf stdout_format "@]@.";
+          (* Print Clight after generating drop glue *)
+          begin match Clightgen.transl_program rustir_prog_drop with
+          | Errors.OK clight_prog ->
+            Format.fprintf stdout_format "@.Clightgen: @.";
+            PrintClight.print_program PrintClight.Clight1 stdout_format clight_prog;
+            clight_prog
+          | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
+          end;
         | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
         end;
-      | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
-      end;
-    | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg)
+      | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg)
+    | Result.Error e ->
+      Rustsurface.To_syntax.pp_print_error Format.err_formatter e symmap;
+      raise Abort)
   in
-  (* Set main id *)
-  Hashtbl.add Camlcoq.atom_of_string "main" Rustsyntax.main_ident;
-  Hashtbl.add Camlcoq.string_of_atom Rustsyntax.main_ident "main";
   (* Set config *)
   Machine.config := Machine.x86_64;
   (* add helper functions which is required by Selection pass *)

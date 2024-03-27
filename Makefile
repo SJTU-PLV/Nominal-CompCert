@@ -28,7 +28,7 @@ else
 ARCHDIRS=$(ARCH)_$(BITSIZE) $(ARCH)
 endif
 
-DIRS := lib common $(ARCHDIRS) backend cfrontend driver export cparser cklr demo rustfrontend
+DIRS := lib common $(ARCHDIRS) backend cfrontend driver export cparser cklr demo rustfrontend rustparser
 
 COQINCLUDES := $(foreach d, $(DIRS), -R $(d) compcert.$(d)) -R $(COQREL) coqrel
 
@@ -169,7 +169,6 @@ RUSTFRONTENT=Rusttypes.v Rustsyntax.v RustlightBase.v RustIR.v\
   Rustlightgen.v\
   RustIRgen.v \
   InitAnalysis.v ElaborateDrop.v\
-  StkborDomain.v BorrowCheck.v\
   Clightgen.v 
 
 # Parser
