@@ -110,22 +110,6 @@ Section ConcurSim.
     Let thread_state_C := CMulti.thread_state OpenC.
     Let thread_state_A := AsmMulti.thread_state OpenA.
 
-    (** Maybe the thread_state needs to be further extended *)
-    Inductive match_thread_states : cc_cainjp_world -> fsim_index -> thread_state_C -> thread_state_A -> Prop :=
-    |match_local : forall w i sc sa,
-        match_local_states w i sc sa ->
-        match_thread_states w i (CMulti.Local OpenC sc) (Local OpenA sa)
-    |match_initial : forall w i cqv rs m tm,
-        match_query cc_c_asm_injp w (get_query cqv m) (rs,tm) ->
-        match_thread_states w i (CMulti.Initial OpenC cqv) (Initial OpenA rs)
-    |match_return : forall w i sc sa qc rs tm,
-        match_local_states w i sc sa ->
-        (* match_query cc_c_asm_injp w ( )-> *)
-        query_is_yield OpenC qc ->
-        query_is_yield_asm OpenA (rs, tm) ->
-        match_query cc_c_asm_injp w qc (rs, tm) ->
-        match_thread_states w i (CMulti.Return OpenC sc) (Return OpenA sa rs).
-
     (* Definition worlds : Type := NatMap.t (option cc_cainjp_world). *)
 
 
@@ -160,8 +144,8 @@ Section ConcurSim.
       Definition init_w := cajw wj0 main_sig rs0.
 
     End Initial.
-                              
-      
+
+
     Definition empty_worlds : NatMap.t (option cc_cainjp_world) := NatMap.init None.
     Definition initial_worlds (w: cc_cainjp_world) := NatMap.set 1%nat (Some w) empty_worlds.
     Definition initial_indexs (i: fsim_index) := i :: nil.
@@ -175,6 +159,23 @@ Section ConcurSim.
         The current world should be [legal] accessibility of all threads waiting
         at [yield()], therefore they can be resumed.
      *)
+
+            (** Maybe the thread_state needs to be further extended *)
+    Inductive match_thread_states : cc_cainjp_world -> fsim_index -> thread_state_C -> thread_state_A -> Prop :=
+    |match_local : forall w i sc sa,
+        match_local_states w i sc sa ->
+        match_thread_states w i (CMulti.Local OpenC sc) (Local OpenA sa)
+    |match_initial : forall w i cqv rs m tm,
+        match_query cc_c_asm_injp w (get_query cqv m) (rs,tm) ->
+        match_thread_states w i (CMulti.Initial OpenC cqv) (Initial OpenA rs)
+    |match_return : forall w i sc sa qc rs tm,
+        match_local_states w i sc sa ->
+        (* match_query cc_c_asm_injp w ( )-> *)
+        query_is_yield OpenC qc ->
+        query_is_yield_asm OpenA (rs, tm) ->
+        match_query cc_c_asm_injp w qc (rs, tm) ->
+        match_thread_states w i (CMulti.Return OpenC sc) (Return OpenA sa rs).
+
     Inductive match_states : global_index -> CMulti.state OpenC -> state OpenA -> Prop :=
     |global_match_intro : forall threadsC threadsA cur next worlds gi w0 m0 main_b
       (CUR_VALID: (1 <= cur < next)%nat)
@@ -579,6 +580,32 @@ Section ConcurSim.
             repeat rewrite NatMap.gso; eauto.
             repeat rewrite NatMap.gso; eauto.
         + (* yield_to_yield *)
+          unfold Mem.range_prop in p. rename p into yield_range.
+          set (target :=  CMulti.yield_strategy OpenC s1).
+          assert ( NEXT_EQ: Mem.next_tid (Mem.support (cq_mem q)) = CMulti.next_tid OpenC s1).
+          admit. (* to be added in query_is_yield or some invariant in match_states *)
+          
+          inversion H0. subst.
+          specialize (THREADS cur CUR_VALID) as THR_CUR.
+          destruct THR_CUR as (w & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA & MS).
+          assert (lsc = CMulti.Local OpenC ls).
+          eapply foo; eauto. subst lsc. inv MS.
+          specialize (fsim_lts se tse w MSEw valid_se) as FSIM.
+          inversion FSIM.
+          clear fsim_match_valid_query fsim_match_initial_states
+            fsim_match_final_states fsim_simulation.
+          exploit fsim_match_external. eauto. eauto.
+          intros (wA & qa & AT_YIE & MQ_YIE & MS & MR).
+          assert (TAR_VALID:(1 <= target < next)%nat). admit.
+          specialize (THREADS target TAR_VALID) as THR_TAR.
+          destruct THR_TAR as (wT & lscT & lsaT & liT & GETWT & GETiT & MSEwT & GETCT & GETAT & MST).
+          assert (lscT = (CMulti.Return OpenC) ls1).
+          eapply foo; eauto. subst lscT. inv MST.
+          (*tobe added in match_thread_state*)
+          assert (MRT: forall )
+          eapply foo.
+          (*need to change yield?*)
+          
           admit.
         + (* yield_to_initial *)
           admit.
