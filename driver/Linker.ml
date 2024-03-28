@@ -11,7 +11,7 @@
 (*                                                                     *)
 (* *********************************************************************)
 
-open Clflags
+(* open Clflags *)
 open Commandline
 open Driveraux
 
@@ -25,7 +25,8 @@ let linker exe_name files =
     ["-o"; exe_name];
     files;
     (if Configuration.has_runtime_lib
-     then ["-L" ^ !stdlib_path; "-lcompcert"]
+     (* then ["-L" ^ !stdlib_path; "-lcompcert"] *)
+     then []
      else [])
   ] in
   let exc = command cmd in
