@@ -41,17 +41,20 @@ include Makefile.menhir
 cparser/pre_parser_messages.ml:
 	$(MAKE) -C cparser correct
 
+rustparser/RustsurfaceParserM.ml:
+	$(MAKE) -C rustparser correct
+
 # Directories containing plain Caml code
 
 DIRS=extraction \
-  lib common $(ARCH) backend cfrontend cparser driver rustfrontend\
+  lib common $(ARCH) backend cfrontend cparser driver rustfrontend rustparser \
   export debug
 
 INCLUDES=$(patsubst %,-I %, $(DIRS))
 
 # Control of warnings:
 
-WARNINGS=-w +a-4-9-27-70
+WARNINGS=-w +a-4-9-27-70-42
 extraction/%.cmx: WARNINGS +=-w -20-27-32..34-39-41-44..45-60-67
 extraction/%.cmo: WARNINGS +=-w -20-27-32..34-39-41-44..45-60-67
 cparser/pre_parser.cmx: WARNINGS += -w -41
@@ -84,15 +87,15 @@ OCAMLLEX=ocamllex -q
 MODORDER=tools/modorder .depend.extr
 COPY=cp
 
-PARSERS=cparser/pre_parser.mly
+PARSERS=cparser/pre_parser.mly rustparser/RustsurfaceParser.mly
 LEXERS=cparser/Lexer.mll lib/Tokenize.mll \
-	     lib/Readconfig.mll lib/Responsefile.mll
+	     lib/Readconfig.mll lib/Responsefile.mll rustparser/RustsurfaceLexer.mll
 
 LIBS=str.cmxa unix.cmxa $(MENHIR_LIBS)
 LIBS_BYTE=$(patsubst %.cmxa,%.cma,$(patsubst %.cmx,%.cmo,$(LIBS)))
 
 EXECUTABLES=ccomp ccomp.byte cchecklink cchecklink.byte clightgen clightgen.byte
-GENERATED=$(PARSERS:.mly=.mli) $(PARSERS:.mly=.ml) $(LEXERS:.mll=.ml) cparser/pre_parser_messages.ml
+GENERATED=$(PARSERS:.mly=.mli) $(PARSERS:.mly=.ml) $(LEXERS:.mll=.ml) cparser/pre_parser_messages.ml rustparser/RustsurfaceParserM.ml
 
 # Beginning of part that assumes .depend.extr already exists
 
@@ -154,6 +157,7 @@ clean:
 	rm -f $(GENERATED)
 	for d in $(DIRS); do rm -f $$d/*.cm[iotx] $$d/*cmti $$d/*.o; done
 	$(MAKE) -C cparser clean
+	$(MAKE) -C rustparser clean
 
 # Generation of .depend.extr
 

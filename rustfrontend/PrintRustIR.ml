@@ -125,7 +125,7 @@ let print_cfg pp id f =
     fprintf pp "%s(%a) {\n" (extern_atom id) print_params f.fn_params;
     print_cfg_body pp (f.fn_body, entry, cfg)
   | Errors.Error msg ->
-    Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG"
+    Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG: %a" Driveraux.print_error msg
  
 (* Print CFG with MaybeInit and MaybeUninit *)
 
@@ -187,9 +187,9 @@ let print_cfg_debug ce pp id f  =
       fprintf pp "%s(%a) {\n" (extern_atom id) print_params f.fn_params;
       print_cfg_body_debug pp (f.fn_body, entry, cfg) mayinit mayuninit
     | Errors.Error msg ->
-      Diagnostics.fatal_error Diagnostics.no_loc "Error in InitAnalysis")
+      Diagnostics.fatal_error Diagnostics.no_loc "Error in InitAnalysis: %a" Driveraux.print_error msg)
   | Errors.Error msg ->
-    Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG"
+    Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG: %a" Driveraux.print_error msg
 
 (* Print program *)
 

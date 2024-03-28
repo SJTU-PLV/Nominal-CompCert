@@ -536,6 +536,8 @@ Fixpoint extract_vars (stmt: Rustsyntax.statement) : list (ident * type) :=
       extract_vars s1 ++ extract_vars s2
   | Rustsyntax.Sloop s =>
       extract_vars s
+  | Rustsyntax.Swhile _ s =>
+      extract_vars s
   | _ => nil
   end.
 
