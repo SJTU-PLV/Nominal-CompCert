@@ -295,6 +295,11 @@ Fixpoint transl_stmt (stmt: statement) : statement :=
       let stmt1 := add_dropflag_list mvpaths false in
       let stmt2 := add_dropflag p true in
       makeseq (stmt1 :: stmt :: stmt2 :: nil)
+  | Sbuiltin p ef tyl el =>
+      let mvpaths := moved_place_list el in
+      let stmt1 := add_dropflag_list mvpaths false in
+      let stmt2 := add_dropflag p true in
+      makeseq (stmt1 :: stmt :: stmt2 :: nil)
   | Ssequence s1 s2 =>
       Ssequence (transl_stmt s1) (transl_stmt s2)
   | Sifthenelse e s1 s2 =>

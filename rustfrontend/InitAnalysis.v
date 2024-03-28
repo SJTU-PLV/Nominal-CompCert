@@ -168,6 +168,10 @@ Fixpoint collect_stmt (s: statement) (m: PathsMap.t) : PathsMap.t :=
       let pl := moved_place_list al in
       let m' := fold_right collect_place m pl in
       collect_place p m'
+  | Sbuiltin p _ _ al =>
+      let pl := moved_place_list al in
+      let m' := fold_right collect_place m pl in
+      collect_place p m'
   | Sreturn (Some e) =>
       collect_option_place (moved_place e) m
   | Ssequence s1 s2 =>

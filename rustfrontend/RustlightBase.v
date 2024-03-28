@@ -126,6 +126,7 @@ Inductive statement : Type :=
 | Scall: place -> expr -> list expr -> statement (**r function call, p =
   f(...). The assignee is mandatory, because we need to ensure that
   the return value (may be a box) is received *)
+| Sbuiltin: place -> external_function -> typelist -> list expr -> statement (**r builtin invocation *)
 | Ssequence : statement -> statement -> statement  (**r sequence *)
 | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
 | Sloop: statement -> statement (**r infinite loop *)

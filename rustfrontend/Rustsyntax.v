@@ -31,6 +31,7 @@ Inductive expr : Type :=
                                            (**r binary arithmetic operation *)
 | Eassign (l: expr) (r: expr) (ty: type)          (**r assignment [l = r] *)
 | Ecall (r1: expr) (rargs: exprlist) (ty: type)
+| Ebuiltin (ef: external_function) (tyargs: typelist) (rargs: exprlist) (ty: type) (**r builtin function call *)
 
 with exprlist : Type :=
   | Enil
@@ -51,6 +52,7 @@ Definition typeof (e: expr) : type :=
   | Eunop _ _ ty
   | Ebinop _ _ _ ty
   | Ecall _ _ ty => ty
+  | Ebuiltin _ _ _ ty => ty
 end.
 
 Inductive statement : Type :=
@@ -82,6 +84,15 @@ Record function : Type := mkfunction {
 Definition fundef := Rusttypes.fundef function.
 
 Definition program := Rusttypes.program function.
+
+
+(** External function examples  *)
+
+(* printf : args are arguments, targs are the types of arguments *)
+Definition printf_builtin (args: exprlist) (targs: typelist) :=
+  let callcc := mkcallconv (Some 1) false false in
+  Ebuiltin (EF_builtin "printf" (signature_of_type targs type_int32s callcc)) targs args type_int32s.
+
 
 (* Type of function *)
 

@@ -56,6 +56,8 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: Rust
       Sbox p e
   | RustlightBase.Scall p e el =>
       Scall p e el
+  | RustlightBase.Sbuiltin p ef tyl el =>
+      Sbuiltin p ef tyl el            
   | RustlightBase.Ssequence s1 s2 =>
       let s1' := transl_stmt s1 vars in
       let s2' := transl_stmt s2 vars in

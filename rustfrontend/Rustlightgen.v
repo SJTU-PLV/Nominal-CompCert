@@ -243,8 +243,8 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
         (*     end *)
         (* | _ => error (msg "Type mismatch between LHS and RHS in assignment: transl_expr") *)
         (* end *)
-  | Ecall ef el ty =>
-      do (sl1, ef') <- transl_value_expr ef;
+  | Ecall e el ty =>
+      do (sl1, ef') <- transl_value_expr e;
       do (sl2, el') <- transl_exprlist el;
       (* use a temp to store the result of this call *)
       do temp_id <- gensym ty;
@@ -254,7 +254,18 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
         (* if this call is used for effects, the returned expr is useless *)
         ret (sl1 ++ sl2 ++ (call_stmt :: nil), Emoveplace temp ty)
       else
-        ret (sl1 ++ sl2 ++ (call_stmt :: nil), Eplace temp ty)      
+        ret (sl1 ++ sl2 ++ (call_stmt :: nil), Eplace temp ty)
+  | Ebuiltin ef tyl el ty =>
+      do (sl', el') <- transl_exprlist el;
+      (* use a temp to store the result of this call *)
+      do temp_id <- gensym ty;
+      let temp := Plocal temp_id ty in
+      let call_stmt := Sbuiltin temp ef tyl el' in
+      if own_type ce ty then
+        (* if this call is used for effects, the returned expr is useless *)
+        ret (sl' ++ (call_stmt :: nil), Emoveplace temp ty)
+      else
+        ret (sl' ++ (call_stmt :: nil), Eplace temp ty)
   | Rustsyntax.Eunop uop e ty =>
       do (sl, e') <- transl_value_expr e;
       match e' with
@@ -331,6 +342,7 @@ Definition value_or_place (e: Rustsyntax.expr) : bool :=
   | Rustsyntax.Ebinop _ _ _ _ => true
   | Rustsyntax.Eassign _ _ _ => true
   | Rustsyntax.Ecall _ _ _ => true
+  | Rustsyntax.Ebuiltin _ _ _ _ => true
   end.
            
 Fixpoint generate_lets (l: list (ident * type)) (body: statement) : statement :=

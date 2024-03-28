@@ -524,7 +524,20 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       let cty := to_ctype ty in
       do temp <- gensym cty;
       let assign := Clight.Sassign (place_to_cexpr p) (Etempvar temp cty) in
-      ret (Clight.Ssequence (Clight.Scall (Some temp) e' el') assign)      
+      ret (Clight.Ssequence (Clight.Scall (Some temp) e' el') assign)
+  | Sbuiltin p ef tyl el =>
+      do el' <- fold_right (fun elt acc =>
+                             do acc' <- acc;
+                             do e' <- expr_to_cexpr elt;
+                             ret (e' :: acc')) (ret nil) el;
+      let tyl' := to_ctypelist tyl in
+      (* temp = f();
+         p = temp *)
+      let ty := typeof_place p in
+      let cty := to_ctype ty in
+      do temp <- gensym cty;
+      let assign := Clight.Sassign (place_to_cexpr p) (Etempvar temp cty) in
+      ret (Clight.Ssequence (Clight.Sbuiltin (Some temp) ef tyl' el') assign)
   | Ssequence s1 s2 =>
       do s1' <- transl_stmt s1;
       do s2' <- transl_stmt s2;

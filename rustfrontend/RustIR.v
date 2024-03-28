@@ -44,6 +44,7 @@ Inductive statement : Type :=
 | Sstoragedead: ident -> statement       (**r id becomes un-avalible *)
 | Sdrop: place -> statement             (**r conditionally drop the place [p] *)
 | Scall: place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
+| Sbuiltin: place -> external_function -> typelist -> list expr -> statement (**r builtin invocation *)
 | Ssequence: statement -> statement -> statement  (**r sequence *)
 | Sifthenelse: expr  -> statement -> statement -> statement (**r conditional *)
 | Sloop: statement -> statement (**r infinite loop *)
@@ -438,6 +439,8 @@ Fixpoint transl_stmt (end_node: node) (stmt: statement) (sel: selector) (succ: n
   | Sdrop p =>
       add_instr (Isel sel succ)
   | Scall p a al =>
+      add_instr (Isel sel succ)
+  | Sbuiltin p ef tys args =>
       add_instr (Isel sel succ)
   | Sreturn e =>
       add_instr (Isel sel end_node)
