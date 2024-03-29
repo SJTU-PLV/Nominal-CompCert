@@ -133,10 +133,11 @@ Section MultiThread.
   (* We transfer to thread tid' and update
      its local_state with an updated memory *)
 
-  Definition yield_state (s: state) (ls: thread_state): state :=
+  Definition yield_state (s: state) (ls_cur ls_new: thread_state): state :=
     let tid' := yield_strategy s in
-    let s' := update_cur_tid s tid' in
-    update_thread s' tid' ls.
+    let s' := update_cur_thread s ls_cur in
+    let s'' := update_cur_tid s' tid' in
+    update_thread s'' tid' ls_new.
 
   (* We add a new thread with its initial query without memory,
       we also update the running memory by adding a new list of positives *)
@@ -235,7 +236,7 @@ Section MultiThread.
       Mem.yield (cq_mem q) tid' p = gmem' ->
       get_thread s (tid') = Some (Return ls1) -> (* the target thread is waiting for reply *)
       Smallstep.after_external OpenLTS ls1 (cr Vundef gmem') ls1' ->
-      yield_state s (Local ls1') = s' ->
+      yield_state s (Return ls) (Local ls1') = s' ->
       step ge s E0 s'
   (** yield to a thread which has not been initialized from a query *)
   |step_thread_yield_to_initial : forall ge s s' tid' q gmem' p ls cqv ls1',
@@ -246,7 +247,7 @@ Section MultiThread.
       Mem.yield (cq_mem q) tid' p = gmem' ->
       get_thread s (tid') = Some (Initial cqv) -> (* the target thread is waiting for reply *)
       Smallstep.initial_state OpenLTS (get_query cqv gmem') ls1' ->
-      yield_state s (Local ls1') = s' ->
+      yield_state s (Return ls) (Local ls1') = s' ->
       step ge s E0 s'.
 
   Definition globalenv := Smallstep.globalenv OpenLTS.

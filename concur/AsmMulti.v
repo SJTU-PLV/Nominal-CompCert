@@ -177,6 +177,14 @@ Section MultiThread.
     replace Archi.ptr64 with true by reflexivity.
     rewrite not_win. simpl. reflexivity.
   Qed.
+
+  Theorem yield_loc :
+    loc_arguments yield_sig = nil.
+  Proof.
+    simpl.  simpl. unfold yield_sig. unfold loc_arguments.
+    replace Archi.ptr64 with true by reflexivity.
+    rewrite not_win. simpl. reflexivity.
+  Qed.
   
   Inductive query_is_pthread_create_asm : query li_asm -> query li_asm -> Prop :=
   |pthread_create_intro :
@@ -207,7 +215,7 @@ Section MultiThread.
       pthread_create_state s rs_str (Local ls') = s' ->
       step ge s E0 s'
   (** yield to a thread which is waiting for the reply of its own [yield()] *)
-  |step_thread_yield_to_yield : forall ge s s' tid' rs_q m_q gmem' p ls ls1 ls1' rs1 rs',
+  |step_thread_yield_to_yield : forall ge s s' tid' rs_q m_q gmem' p ls ls1 ls1' rs1 rs1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls (rs_q,m_q) ->
       query_is_yield_asm (rs_q,m_q) ->
@@ -215,14 +223,14 @@ Section MultiThread.
       (*the proof p may be a problem, provided from the invariant between state and the support in gmem *)
       Mem.yield m_q tid' p = gmem' ->
       get_thread s (tid') = Some (Return ls1 rs1) -> (* the target thread is waiting for reply *)
-      Smallstep.after_external OpenLTS ls1 (rs1, gmem') ls1' ->
+      Smallstep.after_external OpenLTS ls1 (rs1', gmem') ls1' ->
       (* Caution: it seems not correct here to directly use rs1, some RA -> PC things should be done *)
       (** Maybe we need more operations here *)
-      rs' = Pregmap.set RA (rs_q PC) rs_q ->
+      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
       yield_state_asm s (Return ls rs_q) (Local ls1') = s' ->
       step ge s E0 s'
   (** yield to a thread which has not been initialized from a query *)
-  |step_thread_yield_to_initial : forall ge s s' tid' rs_q m_q gmem' p ls rs0 ls1' rs',
+  |step_thread_yield_to_initial : forall ge s s' tid' rs_q m_q gmem' p ls rs0 ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls (rs_q, m_q) ->
       query_is_yield_asm (rs_q, m_q) ->
@@ -230,7 +238,6 @@ Section MultiThread.
       Mem.yield m_q tid' p = gmem' ->
       get_thread s (tid') = Some (Initial rs0) -> (* the target thread is just created *)
       Smallstep.initial_state OpenLTS (rs0, gmem') ls1' ->
-      rs' = Pregmap.set RA (rs_q PC) rs_q ->
       yield_state_asm s (Return ls rs_q) (Local ls1') = s' ->
       step ge s E0 s'.
 
