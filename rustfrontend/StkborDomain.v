@@ -137,9 +137,14 @@ Module PlaceMap <: MAP.
   
 End PlaceMap.
 
-(* block id *)
-Definition ablock : Type := positive.
-
+(* block id: an abstract block may corresponds to multiple concrete
+block *)
+Inductive ablock : Type :=
+| Stack (var : ident)
+| Heap (loc: node)              (**r the heap block created in [loc] of the CFG  *)
+| Extern (id: positive)         (**r external block which is passed from the environment  *)
+.
+  
 Inductive tag : Type :=
 | Tintern (pc: node)       (**r internal tag created in location [pc] *)
 | Textern (t: positive)         (**r external tag for function arguments *)
@@ -177,6 +182,7 @@ Definition aptr : Type := (ablock * path) * tag.
 Lemma aptr_eq : forall (p1 p2 : aptr), {p1 = p2} + {p1 <> p2}.
 Proof.
   generalize Pos.eq_dec path_eq tag_eq. intros.
+  decide equality.
   decide equality.
   decide equality.
 Qed.
@@ -221,14 +227,14 @@ Inductive aval : Type :=
 enum instead of PTree because the it is hard to implement nested
 recursion with PTree.fold *)
 | Vstruct (t: list (ident * aval))
-| Venum (l: LIdents.t) (t: list (ident * aval))
+| Venum (t: list (ident * aval)) (**r if (id, Vtop), it means that id is undefined  *)
 | Vtop                        (**r undefined value *)
 .
 
-Definition field_name {A: Type} (l: list (ident * A)) : list ident :=
+Definition field_names {A: Type} (l: list (ident * A)) : list ident :=
   map fst l.
 
-Definition field_val {A: Type} (l: list (ident * A)) : list A :=
+Definition field_vals {A: Type} (l: list (ident * A)) : list A :=
   map snd l.
 
 Definition find_elt {A: Type} (id: ident) (l: list (ident * A)) : option A :=
@@ -250,14 +256,13 @@ Module LAval <: SEMILATTICE_WITH_TOP.
   | Escalar : eq' Scalar Scalar
   | Eptr : forall l1 l2, LAptrs.eq l1 l2 -> eq' (Ptr l1) (Ptr l2)
   | Estruct : forall t1 t2,
-      field_name t1 = field_name t2 ->
-      list_forall2 eq' (field_val t1) (field_val t2) ->
+      field_names t1 = field_names t2 ->
+      list_forall2 eq' (field_vals t1) (field_vals t2) ->
       eq' (Vstruct t1) (Vstruct t2)
-  | Eenum : forall t1 t2 l1 l2,
-      field_name t1 = field_name t2 ->
-      list_forall2 eq' (field_val t1) (field_val t2) ->
-      LIdents.eq l1 l2 ->
-      eq' (Venum l1 t1) (Venum l2 t2).
+  | Eenum : forall t1 t2,
+      field_names t1 = field_names t2 ->
+      list_forall2 eq' (field_vals t1) (field_vals t2) ->
+      eq' (Venum t1) (Venum t2).
 
   Definition eq := eq'.
   
@@ -274,10 +279,10 @@ Module LAval <: SEMILATTICE_WITH_TOP.
         let beq' '(id1, v1) '(id2, v2) :=
           ident_eq id1 id2 && beq v1 v2 in
         list_beq (ident * aval) beq' t1 t2
-    | Venum l1 t1, Venum l2 t2 =>
+    | Venum t1, Venum t2 =>
         let beq' '(id1, v1) '(id2, v2) :=
           ident_eq id1 id2 && beq v1 v2 in
-        LIdents.beq l1 l2 && list_beq (ident * aval) beq' t1 t2
+        list_beq (ident * aval) beq' t1 t2
     | _, _ => false
     end.
   
@@ -292,14 +297,13 @@ Module LAval <: SEMILATTICE_WITH_TOP.
       ge' (Ptr l1) (Ptr l2)
   | Gstruct: forall t1 t2,
       (* the list elements are equivalent *)
-      field_name t1 = field_name t2 ->
-      list_forall2 ge' (field_val t1) (field_val t2) ->
+      field_names t1 = field_names t2 ->
+      list_forall2 ge' (field_vals t1) (field_vals t2) ->
       ge' (Vstruct t1) (Vstruct t2)
-  | Genum: forall t1 t2 l1 l2,
-      field_name t1 = field_name t2 ->
-      list_forall2 ge' (field_val t1) (field_val t2) ->
-      LIdents.ge l1 l2 ->
-      ge' (Venum l1 t1) (Venum l2 t2).
+  | Genum: forall t1 t2,
+      field_names t1 = field_names t2 ->
+      list_forall2 ge' (field_vals t1) (field_vals t2) ->
+      ge' (Venum t1) (Venum t2).
 
   Definition ge := ge'.
   
@@ -312,7 +316,7 @@ Module LAval <: SEMILATTICE_WITH_TOP.
 
   Definition top := Vtop.
   Axiom ge_top: forall x, ge top x.
-    
+
   Fixpoint lub (x y: aval) {struct x}: aval :=
     (* why we have to define this function inside lub. But it is ok to
     use map. *)
@@ -331,8 +335,8 @@ Module LAval <: SEMILATTICE_WITH_TOP.
     | Ptr l1, Ptr l2 => Ptr (LAptrs.lub l1 l2)
     | Vstruct t1, Vstruct t2 =>
         Vstruct (recf t1 t2)
-    | Venum l1 t1, Venum l2 t2 =>
-        Venum (LIdents.lub l1 l2) (recf t1 t2)
+    | Venum t1, Venum t2 =>
+        Venum (recf t1 t2)
     | _, _ => Vbot
     end.
   
@@ -528,8 +532,8 @@ Module LBlkBorTree <: SEMILATTICE.
       LBorTree.eq t1 t2 ->
       eq' (Batomic t1) (Batomic t2)
   | Eqstruct : forall l1 l2,
-      field_name l1 = field_name l2 ->
-      list_forall2 eq' (field_val l1) (field_val l2) ->
+      field_names l1 = field_names l2 ->
+      list_forall2 eq' (field_vals l1) (field_vals l2) ->
       eq' (Bstruct l1) (Bstruct l2).
 
   Definition eq := eq'.
@@ -551,8 +555,8 @@ Module LBlkBorTree <: SEMILATTICE.
       LBorTree.ge t1 t2 ->
       ge' (Batomic t1) (Batomic t2)
   | Gstruct : forall l1 l2,
-      field_name l1 = field_name l2 ->
-      list_forall2 ge' (field_val l1) (field_val l2) ->
+      field_names l1 = field_names l2 ->
+      list_forall2 ge' (field_vals l1) (field_vals l2) ->
       ge' (Bstruct l1) (Bstruct l2).
 
   Definition ge := ge'.
@@ -593,14 +597,22 @@ Module LBlkBorTree <: SEMILATTICE.
 
   
 End LBlkBorTree.  
-  
+
+Module LAvalMap := LPMap1(LAval).
+Module LBorMap := LPMap1(LBlkBorTree).
+
 (* abstract memory *)
-
+(* There are three regions of memory: stack, heap and external blocks *)
 Record amem : Type := build_amem
-  { am_contents : PTree.t aval;
-    am_borstk : PTree.t block_bortree }.
+  { am_stack : LAvalMap.t;
+    am_stack_bortree : LBorMap.t;
+    am_heap : LAvalMap.t;
+    am_heap_bortree : LBorMap.t;
+    am_external : LAvalMap.t;
+    am_external_bortree : LBorMap.t;
+  }.
 
-Definition init_amem := build_amem (PTree.empty aval) (PTree.empty block_bortree).
+Definition init_amem := build_amem LAvalMap.bot LBorMap.bot LAvalMap.bot LBorMap.bot LAvalMap.bot LBorMap.bot.
 
 Section COMPOSITE_ENV.
 
@@ -663,22 +675,36 @@ Fixpoint load_path_bortree (p: path) (bb: block_bortree) : res block_bortree :=
   end.
 
 
-(* load the avals from a place *)
+Local Open Scope string_scope.
+
+(* load the avals from (b,ph) *)
 Definition load (m: amem) (b: ablock) (ph: path) : res aval :=
-  match PTree.get b m.(am_contents) with
-  | Some v =>
-      load_path ph v
-  | None =>
-      Error [CTX b; MSG ": this block is unallocated, load"]
+  let load' m id msg :=
+    match m!id with
+    | Some v =>
+        load_path ph v
+    | None =>
+        Error [CTX id; MSG msg; MSG ": this block is unallocated (load)"]
+    end in
+  match b with
+  | Stack id => load' m.(am_stack) id "stack block"
+  | Heap pc => load' m.(am_heap) pc "heap block"
+  | Extern id => load' m.(am_external) id "external block"
   end.
 
 (* load the block borrow tree from a place *)
 Definition load_block_bortree (m: amem) (b: ablock) (ph: path) : res block_bortree :=
-  match PTree.get b m.(am_borstk) with
-  | Some bb =>
-      load_path_bortree ph bb
-  | None =>
-      Error [CTX b; MSG ": this block is unallocated (load_block_bortree)"]
+  let load_block_bortree' m id msg :=
+    match m!id with
+    | Some bb =>
+        load_path_bortree ph bb
+    | None =>
+        Error [CTX id; MSG msg; MSG ": this block is unallocated (load_block_bortree)"]
+    end in   
+  match b with
+  | Stack id => load_block_bortree' m.(am_stack_bortree) id "stack block"
+  | Heap pc => load_block_bortree' m.(am_heap_bortree) pc "heap block"
+  | Extern id => load_block_bortree' m.(am_external_bortree) id "external block"
   end.
 
 
@@ -723,21 +749,47 @@ Fixpoint update_path_bortree (p: path) (m: block_bortree) (v: block_bortree): re
 
 
 Definition store (m: amem) (b: ablock) (ph: path) (v: aval) : res amem :=
-  match PTree.get b m.(am_contents) with
-  | Some bv =>
-      do bv' <- update_path ph bv v;
-      OK (build_amem (PTree.set b bv' m.(am_contents))
-            m.(am_borstk))
-  | None => Error [CTX b; MSG ": this block is unallocated (store) "]
+  let store' m id msg :=
+    match m!id with
+    | Some bv =>
+        do bv' <- update_path ph bv v;
+        OK (PTree.set id bv' m)
+    | None => Error [CTX id; MSG msg; MSG ": this block is unallocated (store) "]
+    end in
+  match b with
+  | Stack id =>
+      do stack' <- store' m.(am_stack) id "stack block";
+      OK (build_amem stack' m.(am_stack_bortree) m.(am_heap) m.(am_heap_bortree) m.(am_external) m.(am_external_bortree))      
+  | Heap pc =>
+      do heap' <- store' m.(am_heap) pc "heap block";
+      OK (build_amem m.(am_stack) m.(am_stack_bortree) heap' m.(am_heap_bortree) m.(am_external) m.(am_external_bortree))
+  | Extern id =>
+      do extern' <- store' m.(am_external) id "heap block";
+      OK (build_amem m.(am_stack) m.(am_stack_bortree) m.(am_heap) m.(am_heap_bortree) extern' m.(am_external_bortree))
   end.
 
+
 Definition store_block_bortree (m: amem) (b: ablock) (ph: path) (v: block_bortree) : res amem :=
-  match PTree.get b m.(am_borstk) with
-  | Some bb =>
-      do bb' <- update_path_bortree ph bb v;
-      OK (build_amem m.(am_contents) (PTree.set b bb' m.(am_borstk)))
-  | None => Error [CTX b; MSG ": this block is unallocated (store_block_bortree) "]
+  let store_block_bortree' m id msg :=
+    match m!id with
+    | Some bb =>
+        do bb' <- update_path_bortree ph bb v;
+        OK (PTree.set id bb' m)
+    | None => Error [CTX id; MSG msg; MSG ": this block is unallocated (store_block_bortree) "]
+    end in
+  match b with
+  | Stack id =>
+      do stack' <- store_block_bortree' m.(am_stack_bortree) id "stack block";
+      OK (build_amem m.(am_stack) stack' m.(am_heap) m.(am_heap_bortree) m.(am_external) m.(am_external_bortree))      
+  | Heap pc =>
+      do heap' <- store_block_bortree' m.(am_heap_bortree) pc "heap block";
+      OK (build_amem m.(am_stack) m.(am_stack_bortree) m.(am_heap) heap' m.(am_external) m.(am_external_bortree))
+  | Extern id =>
+      do extern' <- store_block_bortree' m.(am_external_bortree) id "heap block";
+      OK (build_amem m.(am_stack) m.(am_stack_bortree) m.(am_heap) m.(am_heap_bortree) m.(am_external) extern')
   end.
+
+Local Close Scope string_scope.
 
 (* this initialization is for uninit variables such as local variables *)
 Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bortree) :=
@@ -746,7 +798,7 @@ Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bort
   | S fuel' =>
       let rec := alloc_aval_and_bortree' fuel' in
       match ty with
-      | Tstruct id _ =>
+      | Tstruct id _ | Tvariant id _  =>
           match ce!id with
           | Some co =>
               let f '(Member_plain fid ty') := rec ty' in
@@ -767,10 +819,18 @@ Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bort
 Definition alloc_aval_and_bortree (ty: type) : res (aval * block_bortree) :=
   alloc_aval_and_bortree' (PTree_Properties.cardinal ce) ty.
 
-(* allocate a block [b] *)
-Definition allocate_ablock (m: amem) (ty: type) (b: ablock) : res amem :=
+(* allocate a stack block [b] *)
+Definition alloc_stack_block (m: amem) (ty: type) (id: ident) : res (ablock * amem) :=
   do (v, stk) <- alloc_aval_and_bortree ty;
-  OK (build_amem (PTree.set b v m.(am_contents)) (PTree.set b stk m.(am_borstk))).  
+  OK (Stack id, (build_amem (PTree.set id v m.(am_stack)) (PTree.set id stk m.(am_stack_bortree)) m.(am_heap) m.(am_heap_bortree) m.(am_external) m.(am_external_bortree))).
+
+Definition alloc_heap_block (m: amem) (ty: type) (pc: node) : res (ablock * amem) :=
+  do (v, stk) <- alloc_aval_and_bortree ty;
+  OK (Heap pc, (build_amem m.(am_stack) m.(am_stack_bortree) (PTree.set pc v m.(am_heap)) (PTree.set pc stk m.(am_heap_bortree)) m.(am_external) m.(am_external_bortree))).
+
+Definition alloc_external_block (m: amem) (ty: type) (id: positive) : res (ablock * amem) :=
+  do (v, stk) <- alloc_aval_and_bortree ty;
+  OK (Extern id, (build_amem m.(am_stack) m.(am_stack_bortree) m.(am_heap) m.(am_heap_bortree) (PTree.set id v m.(am_external)) (PTree.set id stk m.(am_external_bortree)))).
 
 
 (** Some definitions for "stacked borrow" rules *)
@@ -850,7 +910,8 @@ Definition update_subtree (access: access_kind) (bt: bor_tree') : bor_tree' :=
   match bt with
   | Bnode i l => Bnode i (map (update_subtree_rec access) l)
   end.
-        
+
+
 (* It uses the [update] function to transform the found subtree *)
 Fixpoint update_subtree_at' (p: tree_path) (l: list bor_tree') (update: bor_tree' -> bor_tree') : option (list bor_tree') :=
   match p with
@@ -1076,17 +1137,35 @@ Module AM <: SEMILATTICE.
   Definition t := t'.
 
   Definition get_aval (m: amem) (b: ablock) :=
-     match m.(am_contents)!b with | None => LAval.bot | Some v => v end.
+    match b with
+    | Stack id =>
+        match m.(am_stack)!id with | None => LAval.bot | Some v => v end
+    | Heap pc =>
+        match m.(am_heap)!pc with | None => LAval.bot | Some v => v end
+    | Extern id =>
+        match m.(am_external)!id with | None => LAval.bot | Some v => v end
+    end.
 
   Definition get_bt (m: amem) (b: ablock) :=
-    match m.(am_borstk)!b with | None => LBlkBorTree.bot | Some bt => bt end.
+    match b with
+    | Stack id =>
+        match m.(am_stack_bortree)!id with | None => LBlkBorTree.bot | Some v => v end
+    | Heap pc =>      
+        match m.(am_heap_bortree)!pc with | None => LBlkBorTree.bot | Some v => v end
+    | Extern id =>
+        match m.(am_external_bortree)!id with | None => LBlkBorTree.bot | Some v => v end
+    end.
   
   Definition eq (x y : t) : Prop :=
     match x, y with
     | Bot, Bot => True
     | State m1, State m2 =>
-        PTree.beq LAval.beq m1.(am_contents) m2.(am_contents) = true /\
-          PTree.beq LBlkBorTree.beq m1.(am_borstk) m2.(am_borstk) = true
+        LAvalMap.eq m1.(am_stack) m2.(am_stack) /\
+        LBorMap.eq  m1.(am_stack_bortree) m2.(am_stack_bortree) /\
+        LAvalMap.eq m1.(am_heap) m2.(am_heap) /\
+        LBorMap.eq m1.(am_heap_bortree) m2.(am_heap_bortree) /\
+        LAvalMap.eq m1.(am_external) m2.(am_external) /\
+        LBorMap.eq m1.(am_external_bortree) m2.(am_external_bortree)
     | _, _ => False
     end.
 
@@ -1094,8 +1173,12 @@ Module AM <: SEMILATTICE.
     match x, y with
     | Bot, Bot => true
     | State m1, State m2 =>
-        PTree.beq LAval.beq m1.(am_contents) m2.(am_contents) &&
-          PTree.beq LBlkBorTree.beq m1.(am_borstk) m2.(am_borstk)
+        LAvalMap.beq m1.(am_stack) m2.(am_stack) &&
+        LBorMap.beq  m1.(am_stack_bortree) m2.(am_stack_bortree) &&
+        LAvalMap.beq m1.(am_heap) m2.(am_heap) &&
+        LBorMap.beq m1.(am_heap_bortree) m2.(am_heap_bortree) &&
+        LAvalMap.beq m1.(am_external) m2.(am_external) &&
+        LBorMap.beq m1.(am_external_bortree) m2.(am_external_bortree)
     | _, _ => false
     end.
       
@@ -1107,23 +1190,15 @@ Module AM <: SEMILATTICE.
     | Err _, _ => True
     | _, Err _ => False
     | State m1, State m2 =>          
-        forall b, LAval.ge (get_aval m1 b) (get_aval m2 b) /\
-               LBlkBorTree.ge (get_bt m1 b) (get_bt m2 b)
+        LAvalMap.ge m1.(am_stack) m2.(am_stack) /\
+        LBorMap.ge  m1.(am_stack_bortree) m2.(am_stack_bortree) /\
+        LAvalMap.ge m1.(am_heap) m2.(am_heap) /\
+        LBorMap.ge m1.(am_heap_bortree) m2.(am_heap_bortree) /\
+        LAvalMap.ge m1.(am_external) m2.(am_external) /\
+        LBorMap.ge m1.(am_external_bortree) m2.(am_external_bortree)
     end.
 
   Definition bot := Bot.
-
-  Definition combine_aval (v1 v2: option aval) : option aval :=
-    match v1, v2 with    
-    | Some v1, Some v2 => Some (LAval.lub v1 v2)
-    | _, _ => None
-    end.
-
-  Definition combine_bt (v1 v2: option block_bortree) : option block_bortree :=
-    match v1, v2 with    
-    | Some v1, Some v2 => Some (LBlkBorTree.lub v1 v2)
-    | _, _ => None
-    end.
   
   Definition lub (x y: t) :=
     match x,y with
@@ -1135,8 +1210,12 @@ Module AM <: SEMILATTICE.
         Err ((MSG "Error 1: ") :: msg1 ++ (MSG "; Error 2: " :: msg2))
     | State m1, State m2 =>
         State (build_amem
-                 (PTree.combine combine_aval m1.(am_contents) m2.(am_contents)) 
-                 (PTree.combine combine_bt m1.(am_borstk) m2.(am_borstk)))
+                 (LAvalMap.lub m1.(am_stack) m2.(am_stack)) 
+                 (LBorMap.lub m1.(am_stack_bortree) m2.(am_stack_bortree))
+                 (LAvalMap.lub m1.(am_heap) m2.(am_heap)) 
+                 (LBorMap.lub m1.(am_heap_bortree) m2.(am_heap_bortree))
+                 (LAvalMap.lub m1.(am_external) m2.(am_external)) 
+                 (LBorMap.lub m1.(am_external_bortree) m2.(am_external_bortree)))
     end.
 
   (** TODO  *)
