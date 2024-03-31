@@ -12,14 +12,6 @@ Open Scope error_monad_scope.
 
 (** ** Borrow checking based on abstract interpretation *)
 
-(** Unused: Abstract symbol environment *)
-
-(* Record aenv := build_aenv *)
-(* { aenv_symbtbl: PlaceMap.t (option ablock); *)
-(*   aenv_nextblock: ablock; }. *)
-
-(* Definition init_aenv := build_aenv (PlaceMap.init (@None ablock)) 1%positive. *)
-
 Module RUST_TYPE <: EQUALITY_TYPE.
   Definition t := type.
   Definition eq := type_eq.
@@ -27,175 +19,11 @@ End RUST_TYPE.
   
 Module TyMap := EMap(RUST_TYPE).
 
-
-(* (* case1: [p] is an owner or a slice of an owner. If [p] stores a location to *)
-(* another owner (memory block) then add [*p] to the result *) *)
-(* (* case2: [p] is a parameter or a slice of a paramerer. If [p] stores a *)
-(* location (box or reference) to another place (memory block) then add *)
-(* [*p] to the result *) *)
-(* Fixpoint owner_places' (fuel: nat) (var_or_param: bool) (p: place) : res (list place) := *)
-(*   match fuel with *)
-(*   | O => Error [CTX (local_of_place p); MSG ": running out of fuel (owenr_places')"] *)
-(*   | S fuel' => *)
-(*       let rec := owner_places' fuel' var_or_param in *)
-(*       match typeof_place p with *)
-(*       | Tbox ty' _ => *)
-(*           (* [*p] is also an owner *) *)
-(*           let p' := Pderef p ty' in *)
-(*           do l <- rec p'; *)
-(*           OK (p' :: l) *)
-(*       | Tstruct id _ => *)
-(*           match ce!id with *)
-(*           | Some co => *)
-(*               let fields := map (fun '(Member_plain fid ty') => Pfield p fid ty') co.(co_members) in *)
-(*               do l <- fold_right_bind fields rec; *)
-(*               OK (concat l) *)
-(*           | None => Error [CTX id; MSG ": there is no struct with this ident (owner_place')"] *)
-(*           end *)
-(*       | Treference ty' _ _ => *)
-(*           if var_or_param then *)
-(*             OK nil *)
-(*           else *)
-(*             (* this place is parameter, so we allocate ablock for it *) *)
-(*             let p' := Pderef p ty' in *)
-(*             do l <- rec p'; *)
-(*             OK (p' :: l) *)
-(*       | _ => OK nil *)
-(*       end *)
-(*   end. *)
-
-(* Definition owner_place (var_or_param: bool) (var: ident * type) := *)
-(*   let (id, ty) := var in *)
-(*   let p := Plocal id ty in *)
-(*   do l <- owner_places' (PTree_Properties.cardinal ce) var_or_param p; *)
-(*   OK (p :: l). *)
+Definition error_msg (pc: node) : errmsg :=
+  [MSG "error at "; CTX pc; MSG " : "].
 
 
-(* (* add a place which occupies a memory block *) *)
-(* Definition add_place (env: aenv) (p: place) : aenv := *)
-(*   build_aenv (PlaceMap.set p (Some env.(aenv_nextblock)) env.(aenv_symbtbl)) (Pos.succ env.(aenv_nextblock)). *)
-
-(* Definition add_variable (var_or_param: bool) (env: aenv) (var : ident * type) := *)
-(*   do places <- owner_place var_or_param var; *)
-(*   OK (fold_left add_place places env). *)
-
-(* (* allocate ablocks for all variables *) *)
-(* Definition add_variables (env: aenv) (vars : list (ident * type)) := *)
-(*   fold_left (fun acc elt => do acc' <- acc; add_variable true acc' elt) vars (OK env). *)
-
-(* (* allocate ablocks for all parameters *) *)
-(* Definition add_params (env: aenv) (params : list (ident * type)) := *)
-(*   fold_left (fun acc elt => do acc' <- acc; add_variable false acc' elt) params (OK env). *)
-
-
-(* (** Initialize the abstract memory from parameters *) *)
-
-(* Definition error_msg (pc: node) : errmsg := *)
-(*   [MSG "error at "; CTX pc; MSG " : "]. *)
-
-(* Section AENV. *)
-
-(* Variable e: aenv. *)
-
-(* (* initialize an ablock: set the init aval and update the bor_tree the place points to *) *)
-(* (* [p] is related to (b,ph) *) *)
-(* Fixpoint init_place (fuel: nat) (p: place) (b: ablock) (ph: path) (m: amem) (next_tag: positive) : res (amem * positive) := *)
-(*   match fuel with *)
-(*   | O => Error [CTX (local_of_place p); MSG ": running out of fuel (init_place)"] *)
-(*   | S fuel' => *)
-(*       match typeof_place p with *)
-(*       | Tstruct id _ => *)
-(*           match ce!id with *)
-(*           | Some co => *)
-(*               (* accumulate the next tag *)               *)
-(*               let f acc '(Member_plain fid ty') := *)
-(*                 do (m, nt) <- acc; *)
-(*                 do (m', nt') <- init_place fuel' (Pfield p fid ty') b (ph ++ [Rfield fid]) m nt; *)
-(*                 OK (m', nt') in *)
-(*               (* init all fields *) *)
-(*               fold_left f co.(co_members) (OK (m, next_tag)) *)
-(*           | None => Error [CTX id; MSG ": no such composite (init_place) "] *)
-(*           end *)
-(*       | Tvariant id _ => *)
-(*           (* we do not know the discriminate of this variant *) *)
-(*           let v := Venum LIdents.bot nil in *)
-(*           do m' <- store m b ph v; *)
-(*           OK (m', next_tag) *)
-(*       | Tbox ty' _  | Treference ty' Mutable _ => *)
-(*           (* generate a abstract pointer with next_tag *) *)
-(*           let p' := Pderef p ty' in *)
-(*           (* find the ablock of p' *) *)
-(*           match PlaceMap.get p' e.(aenv_symbtbl) with *)
-(*           | Some b' => *)
-(*               (* update the borrow tree in b' (push next_tag) *) *)
-(*               let t := Textern next_tag in *)
-(*               do m' <- create_reference_from_owner Mutable b' nil t m; *)
-(*               let v := Ptr (Aptrs.singleton (b', nil, t)) in *)
-(*               (* store the abstract pointer to (b, ph) *) *)
-(*               do m'' <- store m b ph v; *)
-(*               OK (m'', Pos.succ next_tag) *)
-(*           | None => *)
-(*               Error [CTX (local_of_place p); MSG ": there is no abstract block for this place (init_place)"] *)
-(*           end *)
-(*       | Treference ty' Immutable _ => *)
-(*           (* generate a abstract pointer with next_tag *) *)
-(*           let p' := Pderef p ty' in *)
-(*           (* find the ablock of p' *) *)
-(*           match PlaceMap.get p' e.(aenv_symbtbl) with *)
-(*           | Some b' => *)
-(*               (* update the borrow tree in b' (push next_tag) *) *)
-(*               let t := Textern next_tag in *)
-(*               do m' <- create_reference_from_owner Immutable b' nil t m; *)
-(*               let v := Ptr (Aptrs.singleton (b', nil, t)) in *)
-(*               (* store the abstract pointer to (b, ph) *) *)
-(*               do m'' <- store m b ph v; *)
-(*               OK (m'', Pos.succ next_tag) *)
-(*           | None => *)
-(*               Error [CTX (local_of_place p); MSG ": there is no abstract block for this place (init_place)"] *)
-(*           end *)
-(*       | Tfunction _ _ _ => Error [CTX (local_of_place p); MSG ": unsupported function type (init_place)"] *)
-(*       | _ => *)
-(*           (* store scalar to (b,ph) *) *)
-(*           do m' <- store m b ph Scalar; *)
-(*           OK (m', next_tag) *)
-(*       end *)
-(*   end. *)
-
-(* Definition init_places_acc (acc: res (amem * positive)) (p: place) : res (amem * positive) := *)
-(*   do (m, nt) <- acc; *)
-(*   match PlaceMap.get p e.(aenv_symbtbl) with *)
-(*   | Some b => *)
-(*       init_place (PTree_Properties.cardinal ce) p b [] m nt *)
-(*   | None => *)
-(*       Error [CTX (local_of_place p); MSG ": there is no abstract block for this place (init_place_acc)"] *)
-(*   end. *)
-
-
-(* (** The analysis ASSUME that the parameters are all initialized values (i.e., not Vbot) *) *)
-(* Definition init_params (m: amem) (params : list (ident * type)) : res amem := *)
-(*   (* get all the places from parameters list *) *)
-(*   do l <- fold_right_bind params (owner_place false); *)
-(*   do (m, nt) <- fold_left init_places_acc (concat l) (OK (m, 1%positive)); *)
-(*   OK m. *)
-
-(* Definition allocate_place_acc (acc: res amem) (p: place) : res amem := *)
-(*   do m <- acc; *)
-(*   match PlaceMap.get p e.(aenv_symbtbl) with *)
-(*   | Some b => *)
-(*       allocate_ablock ce m (typeof_place p) b *)
-(*   | None => *)
-(*       Error [CTX (local_of_place p); MSG ": there is no abstract block for the place with this id (allocate_vars)"] *)
-(*   end. *)
-
-(* (* allocate blocks for variables *) *)
-(* Definition allocate_vars (m: amem) (vars: list (ident * type)) := *)
-(*   do l <- fold_right_bind vars (owner_place true); *)
-(*   fold_left allocate_place_acc (concat l) (OK m). *)
-
-(* (* allocate blocks for parameters *) *)
-(* Definition allocate_params (m: amem) (params: list (ident * type)) := *)
-(*   do l <- fold_right_bind params (owner_place false); *)
-(*   fold_left allocate_place_acc (concat l) (OK m). *)
+Section SHALLOW_INIT.
 
 Let t := TyMap.t (option ablock) ->
          type ->
@@ -205,9 +33,7 @@ Let t := TyMap.t (option ablock) ->
          positive ->
          positive ->
          res (amem * positive * positive * TyMap.t (option ablock) * list (ablock * type)).
-
-Section SHALLOW_INIT.
-
+  
 Variable ce: composite_env.
   
 Variable rec: forall (ce': composite_env), (PTree_Properties.cardinal ce' < PTree_Properties.cardinal ce)%nat -> t.
@@ -271,16 +97,36 @@ Definition shallow_initialize' (shr_map: TyMap.t (option ablock)) (ty: type) (b:
             OK (m2, next_extern2, next_tag2, shr_map2, l1 ++ l2) in
           fold_left f co.(co_members) (OK (m, next_extern, next_tag, shr_map, []))
       | co_none _ =>
-          Error [CTX id; MSG ": cannot get this composite type, maybe it is used in a wrong recursive manner? (shallow initialize)"]
+          Error [CTX id; MSG ": cannot get this struct type, maybe it is used in a wrong recursive manner? (shallow initialize)"]
       end
-  | _ => Error [MSG "TODO (shallow initialize)"]
+  | Tvariant id _ =>
+      match @get_composite ce id with
+      | co_some _ i co P =>
+          let f acc '(Member_plain fid ty') :=
+            do r1 <- acc;              
+            let '(m1, next_extern1, next_tag1, shr_map1, l1) := r1 in
+            (* shallow initialize this field *)
+            do r2 <- rec (PTree.remove i ce) (PTree_Properties.cardinal_remove P) shr_map ty' b (ph ++ [Renum fid]) m1 next_extern1 next_tag1;
+            let '(m2, next_extern2, next_tag2, shr_map2, l2) := r2 in
+            OK (m2, next_extern2, next_tag2, shr_map2, l1 ++ l2) in
+          fold_left f co.(co_members) (OK (m, next_extern, next_tag, shr_map, []))
+      | co_none _ =>
+          Error [CTX id; MSG ": cannot get this enum type, maybe it is used in a wrong recursive manner? (shallow initialize)"]
+      end
   end.          
 
 End SHALLOW_INIT.
 
 Import Wfsimpl.
 
-Definition shallow_initialize ce : t :=
+Definition shallow_initialize ce : TyMap.t (option ablock) ->
+                                   type ->
+                                   ablock ->
+                                   path ->
+                                   amem ->
+                                   positive ->
+                                   positive ->
+                                   res (amem * positive * positive * TyMap.t (option ablock) * list (ablock * type)) :=
   Fixm (@PTree_Properties.cardinal composite) shallow_initialize' ce.
 
 Section COMPOSITE_ENV.
@@ -347,16 +193,6 @@ Definition init_params (m: amem) (params: list (ident * type)) : res amem :=
 
 (** transfer function (place, pure expression, expression and statement *)
 
-(* the returned place must own a whole memory block and the path is
-the the location of p in p' *)
-Fixpoint owner_path (p: place) : place * path :=
-  match p with
-  | Pfield p' fid _ =>
-      let (p'', ph) := owner_path p' in
-      (p'', ph ++ [Rfield fid])
-  | _ => (p, [])
-  end.
-
 Definition aptr_of_aval (v: aval) : option LAptrs.t :=
   match v with
   | Ptr l => Some l
@@ -366,54 +202,87 @@ Definition aptr_of_aval (v: aval) : option LAptrs.t :=
 
 (* There may be many possiblity for the memory location of a place.
 [access] is the later action (e.g., the case that [p] in the RHS of a
-assignment, [access] would be Awrite) for p *)
-Fixpoint transfer_place (pc: node) (access: access_kind) (p: place) (m: amem) : res ((LAptrs.t + (ablock * path)) * amem) :=
+assignment, [access] would be Awrite) for Print -. *)
+(* The return abstract value may be Vtop (an example is that a field
+of a enum is not initialized but in fact it is impossible to evaluate
+this branch) but we do not report use of undefined value in the
+bastract interpretation, because it is irrelevant issue *)
+(** After investigating Miri, I find that the evaluation of place is
+considered a read access *)
+Fixpoint transfer_place' (pc: node) (p: place') (m: amem) : res ((aval + (ablock * path)) * amem) :=
   match p with
   | Plocal id ty =>
       (* p is an owner, we do not need to check its permission *)
-      match PlaceMap.get p e.(aenv_symbtbl) with
-      | Some b =>
-          OK (inr (b,[]), m)
-      | None =>
-          Error (error_msg pc ++ [MSG "cannot get the memory block of place "; CTX id])
-      end
+      (* The block local variable is always stack block *)
+      OK (inr (Stack id,[]), m)
   | Pderef p' ty =>
       (* get the (block,path) of p' *)
-      do (l, m') <- transfer_place pc access p' m;
+      do (l, m') <- transfer_place' pc p' m;
       match l with
-      | inl ptrs =>
-          (* It means that [p'] is accessed by these pointers, if we
-          want to write [p], these pointers must have writable
-          permission for [p']. So the we load values (by checking the
-          permissin [access]) from all the abstract pointers. *)
-          do (v, m'') <- load_aptrs m' ptrs access;
-          match aptr_of_aval v with
-          | Some ptrs' => OK (inl ptrs', m'')
-          (* We can also ignore this error, but for now, we report it *)
-          | None => Error (error_msg pc ++ [MSG "expected abstract pointer (transfer_place)"])
-          end            
+      | inl v =>
+          (* It means that [p'] is accessed by these pointers (an
+          example is [**a], here *a is an abstract pointer, its
+          evaluation return ptrs). If we want to write [p], these
+          pointers must have writable permission for [p']. So the we
+          load values (by checking the permissin [access]) from all
+          the abstract pointers. *)
+          (** Follow Miri: read access  *)
+          do (v', m'') <- load_aval m' v Aread;
+          OK (inl v', m'')
+          (* match aptr_of_aval v with *)
+          (* | Some ptrs' => OK (inl ptrs', m'') *)
+          (* (* We can also ignore this error, but for now, we report it *) *)
+          (* | None => Error (error_msg pc ++ [MSG "expected abstract pointer (transfer_place)"]) *)
+          (* end *)
       | inr (b, ph) =>
           (* It means that p' is an owner *)
-          do (v, m'') <- load_owner m' b ph access;
-          match aptr_of_aval v with
-          | Some l => OK (inl l, m'')
-          | None => Error (error_msg pc ++ [MSG "expected abstract pointer (transfer_place)"])
-          end
+          do (v, m'') <- load_owner m' b ph Aread;
+          OK (inl v, m'')
+          (* match aptr_of_aval v with *)
+          (* | Some l => OK (inl l, m'') *)
+          (* | None => Error (error_msg pc ++ [MSG "expected abstract pointer (transfer_place)"]) *)
+          (* end *)
       end
   | Pfield p' fid ty =>
       (* we do not perform access when evaluating field *)
-      do (l, m') <- transfer_place pc access p' m;
+      do (l, m') <- transfer_place' pc p' m;
       match l with
-      | inl ptrs =>
-          (* we want to update the path in each pointer but we have no
-          map function for Aptrs.t, so we use fold function *)
-          let ptrs' := Aptrs.fold (fun '(b, ph, t) ptrs => Aptrs.add (b, ph ++ [Rfield fid], t) ptrs) ptrs Aptrs.empty in
-          OK (inl ptrs', m')
+      | inl v =>
+          match v with
+          | Ptr ptrs =>
+              (* we want to update the path in each pointer but we have no *)
+              (* map function for Aptrs.t, so we use fold function *)
+              let ptrs' := Aptrs.fold (fun '(b, ph, t) ptrs => Aptrs.add (b, ph ++ [Rfield fid], t) ptrs) ptrs Aptrs.empty in
+              OK (inl (Ptr ptrs'), m')
+          | _ =>
+              OK (inl Vtop, m')
+          end
       | inr (b, ph) =>
           OK (inr (b, ph ++ [Rfield fid]), m')
       end
   end.
 
+Definition transfer_place (pc: node) (p: place) (m: amem) : res ((aval + (ablock * path)) * amem) :=
+  match p with
+  | Place p' =>
+      transfer_place' pc p' m
+  | Pdowncast p' fid ty =>
+      do (l, m') <- transfer_place' pc p' m;
+      match l with
+      | inl v =>
+          match v with
+          | Ptr ptrs =>
+              (* we want to update the path in each pointer but we have no *)
+              (* map function for Aptrs.t, so we use fold function *)
+              let ptrs' := Aptrs.fold (fun '(b, ph, t) ptrs => Aptrs.add (b, ph ++ [Renum fid], t) ptrs) ptrs Aptrs.empty in
+              OK (inl (Ptr ptrs'), m')
+          | _ =>
+              OK (inl Vtop, m')
+          end
+      | inr (b, ph) =>
+          OK (inr (b, ph ++ [Renum fid]), m')
+      end
+  end.
 
 (* return an abstract value and the updated abstract memory *)
 Fixpoint transfer_pure_expr (pc: node) (pe: pexpr) (m: amem) : res (aval * amem) :=
@@ -425,19 +294,17 @@ Fixpoint transfer_pure_expr (pc: node) (pe: pexpr) (m: amem) : res (aval * amem)
   | Econst_long _ _ => OK (Scalar, m)
   | Eplace p ty =>
       (** Do we need to check that whether we should move this place
-      instead of copy it, e.g., p is of box type *)
-      (* evaluate this place *)
+      instead of copy it, e.g., p is of box type. Or it requires a
+      separate checking? *)
+      (* evaluate this place. Why the access is read? *)
       do (r, m') <- transfer_place pc p m;
       match r with
-      | inl ptrs =>
+      | inl v =>
           (* the location of p is obtained from pointers *)
-          match load_aptrs m' ptrs with
-          | OK (v, m'') => OK (v, m'')
-          | Error msg => Error (error_msg pc ++ msg)
-          end
+          load_aval m' v Aread
       | inr (b,ph) =>
           (* p is an owner *)
-          match load_owner m' b ph with
+          match load_owner m' b ph Aread with
           | OK (v, m'') => OK (v, m'')
           | Error msg => Error (error_msg pc ++ msg)
           end
@@ -446,23 +313,71 @@ Fixpoint transfer_pure_expr (pc: node) (pe: pexpr) (m: amem) : res (aval * amem)
       (* create a reference with tag [Tintern pc], so it means that
       there must be at most one reference be created in a pc *)
       (* evaluate place with access [mut] *)
-      do (r, m') <- transfer_place pc (access_of_mutkind mut) p m;
+      do (r, m') <- transfer_place pc p m;
       let new_tag := Tintern pc in
       match r with
-      | inl ptrs =>
-          (* for each (b,ph,t) ∈ ptrs, create a new ptr (b,ph,new_tag)
-          from tag [t] *)
-          do (ptrs', m'') <- create_reference_from_ptrs mut ptrs new_tag m';
-          OK (Ptr ptrs', m'')
+      | inl v =>
+          (* if v is not pointer, the Eref is evaluated to Vtop *)
+          match v with
+          | Ptr ptrs =>
+              (* for each (b,ph,t) ∈ ptrs, create a new ptr (b,ph,new_tag)
+                 from tag [t] *)
+              do (ptrs', m'') <- create_reference_from_ptrs mut ptrs new_tag m';
+              OK (Ptr ptrs', m'')
+          | _ =>
+              OK (Vtop, m')
+          end
       | inr (b, ph) =>
           (* create a pointer (b,ph, new_tag) *)
           do (ptr, m'') <- create_reference_from_owner mut b ph new_tag m';
           OK (Ptr (Aptrs.singleton ptr), m'')
       end
-  | Eget p fid ty =>
-      
+  | Ecktag p _ _ =>
+      (** Is match statement is considered an access to the place? The
+      answer is yes in Rust borrow checker (see borrowck_enum.rs). But
+      here we do not consider it be a read access. *)
+      OK (Scalar, m)
+  | Eunop uop pe _ =>
+      do (v, m') <- transfer_pure_expr pc pe m;
+      (* uop can only be applied to scalar *)
+      match v with
+      | Scalar => OK (Scalar, m')
+      | _ => OK (Vtop, m')
+      end
+  | Ebinop binop pe1 pe2 _ =>
+      do (v1, m1) <- transfer_pure_expr pc pe1 m;
+      do (v2, m2) <- transfer_pure_expr pc pe2 m1;
+      match v1, v2 with
+      | Scalar, Scalar => OK (Scalar, m2)
+      | _, _ => OK (Vtop, m2)
+      end          
+  end.
 
-  end
+
+Definition transfer_expr (pc: node) (e: expr) (m: amem) : res (aval * amem) :=
+  match e with
+  | Epure pe =>
+      transfer_pure_expr pc pe m
+  | Emoveplace p ty =>
+      (* In the abstract interpretation, move is considered a normal
+      copy operation and we do not perform any operation in its
+      children. We do not have retag like stacked borrow, does it
+      matter? *)
+      do (r, m') <- transfer_place pc p m;
+      match r with
+      | inl v =>
+          (* the location of p is obtained from pointers *)
+          load_aval m' v Aread
+      | inr (b,ph) =>
+          (* p is an owner *)
+          match load_owner m' b ph Aread with
+          | OK (v, m'') => OK (v, m'')
+          | Error msg => Error (error_msg pc ++ msg)
+          end
+      end
+  end.
+
+
 Definition transfer (f: function) (cfg: rustcfg) (pc: node) (before: AM.t) : AM.t :=
   match before with
   (* If pred is unreacable, so this pc is unreacable, set to Bot *)
@@ -483,18 +398,14 @@ Definition transfer (f: function) (cfg: rustcfg) (pc: node) (before: AM.t) : AM.
                   
         end
     end.
-            
-End AENV.
+
 
 Definition borrow_check (f: function) : res unit :=
-  (* init abstract environment *)
-  do env0 <- add_params init_aenv f.(fn_params);
-  do env1 <- add_variables env0 f.(fn_vars);
   (* allocate ablocks *)
   do m0 <- allocate_params env1 init_amem f.(fn_params); 
   do m1 <- allocate_vars env1 m0 f.(fn_vars);
   (* initialize amem *)
-  do m2 <- init_params env1 m1 f.(fn_params);
+  do m2 <- init_params m1 f.(fn_params);
   (* forward dataflow *)
   OK tt.
 

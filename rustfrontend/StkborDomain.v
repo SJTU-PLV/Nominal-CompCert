@@ -164,12 +164,13 @@ Definition ident_of_tag (t: tag) :=
 
 (* Definition of path *)
 Inductive refseg : Type :=
-| Rfield (fid: ident).
+| Rfield (fid: ident)
+| Renum (fid: ident).
 
 Lemma refseg_eq: forall (r1 r2: refseg), {r1 = r2} + {r1 <> r2}.
 Proof.
   generalize ident_eq. intros.
-  decide equality.
+  decide equality.  
 Qed.
 
 Definition path : Type := list refseg.
@@ -622,34 +623,6 @@ Variable ce: composite_env.
 Definition fold_right_bind {A B: Type} (l: list B) (f: B -> res A) : res (list A) :=
   fold_right (fun elt acc => do acc' <- acc; do r <- f elt; OK (r :: acc')) (OK nil) l.
   
-(* Divide the place [p] into the smallest place which is primitive
-type. The choose of fuel is the length of the composite environment *)
-Fixpoint divide_places' (fuel: nat) (ty: type) (p: place) : res (list place) :=
-  match fuel with
-  | O => Error [CTX (local_of_place p);  MSG ": running out of fuel in children_places'"]
-  | S fuel' =>
-      let rec := divide_places' fuel' in
-      match ty with
-      | Tstruct id _ =>
-          match ce ! id with
-          | Some co =>
-              let f memb := match memb with
-                            | Member_plain fid ty' =>
-                                rec ty' (Pfield p fid ty')    
-                            end in
-              do l' <- fold_right_bind co.(co_members) f;
-              OK (concat l')
-          | None =>
-              Error [CTX id; MSG ": unknown struct identifier in children_places'"]
-          end
-      | _ => OK [p]
-      end
-  end.
-          
-            
-Definition divide_places (p: place) :=
-  divide_places' (PTree_Properties.cardinal ce) (typeof_place p) p.
-
 
 Fixpoint load_path (p: path) (v: aval) : res aval :=
   match p, v with
@@ -657,7 +630,12 @@ Fixpoint load_path (p: path) (v: aval) : res aval :=
   | (Rfield fid) :: p', Vstruct t =>
       match find_elt fid t with
       | Some v' => load_path p' v'
-      | None => Error [CTX fid; MSG ": location in this field id has no valid value, load path"]
+      | None => Error [CTX fid; MSG ": location in this struct field id has no valid value, load path"]
+      end
+  | (Renum fid) :: p', Venum t =>
+      match find_elt fid t with
+      | Some v' => load_path p' v'
+      | None => Error [CTX fid; MSG ": location in this enum field id has no valid value, load path"]
       end
   | _, _ =>  Error [MSG "Path and anstract value mismatches, load path"]
   end.
@@ -666,6 +644,8 @@ Fixpoint load_path (p: path) (v: aval) : res aval :=
 Fixpoint load_path_bortree (p: path) (bb: block_bortree) : res block_bortree :=
   match p, bb with
   | [], _ => OK bb
+  (* downcast borrow tree is the whole borrow tree *)
+  | (Renum fid) :: _, _ => OK bb
   | (Rfield fid) :: p', Bstruct t =>
       match find_elt fid t with
       | Some bb' => load_path_bortree p' bb'
@@ -718,12 +698,17 @@ Fixpoint update_path (p: path) (m: aval) (v: aval): res aval :=
           do m' <- update_path p' t' v;
           OK (Vstruct (set_elt fid m' t))
       | None =>
-          match p' with
-          | [] => OK (Vstruct (set_elt fid v t))
           (* access undefined value *)
-          | _ => Error [CTX fid; MSG ": this field has no valid abstract value, update_path"]
-          end
+          Error [CTX fid; MSG ": this struct field has no valid abstract value, update_path"]
       end
+  | (Renum fid) :: p', Venum t =>
+      match find_elt fid t with
+      | Some t' =>
+          (* replace p' in t' with v *)
+          do m' <- update_path p' t' v;
+          OK (Venum (set_elt fid m' t))
+      | None =>
+          Error [CTX fid; MSG ": this enum field has no valid abstract value, update_path"]      end
   | _, _ => Error [MSG "Path and anstract value mismatches (update_path)"]
   end.
 
@@ -731,6 +716,8 @@ Fixpoint update_path (p: path) (m: aval) (v: aval): res aval :=
 Fixpoint update_path_bortree (p: path) (m: block_bortree) (v: block_bortree): res block_bortree :=
   match p, m with
   | [], _ => OK v
+  (* downcast borrow tree is the whole borrow tree *)
+  | (Renum fid) :: _, _ => OK v
   | (Rfield fid) :: p', Bstruct t =>
       match find_elt fid t with
       | Some t' =>
@@ -738,11 +725,8 @@ Fixpoint update_path_bortree (p: path) (m: block_bortree) (v: block_bortree): re
           do m' <- update_path_bortree p' t' v;
           OK (Bstruct (set_elt fid m' t))
       | None =>
-          match p' with
-          | [] => OK (Bstruct (set_elt fid v t))
           (* access undefined value *)
-          | _ => Error [CTX fid; MSG ": this field has no valid borrow tree (update_path_bortree)"]
-          end
+          Error [CTX fid; MSG ": this struct field has no valid borrow tree (update_path_bortree)"]
       end
   | _, _ => Error [MSG "Path and anstract value mismatches (update_path_bortree)"]
   end.
@@ -798,7 +782,7 @@ Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bort
   | S fuel' =>
       let rec := alloc_aval_and_bortree' fuel' in
       match ty with
-      | Tstruct id _ | Tvariant id _  =>
+      | Tstruct id _ =>
           match ce!id with
           | Some co =>
               let f '(Member_plain fid ty') := rec ty' in
@@ -808,6 +792,19 @@ Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bort
               (* get the idents of each field *)
               let ids := map (fun '(Member_plain fid ty') => fid) co.(co_members) in
               OK (Vstruct (combine ids v), Bstruct (combine ids sb))
+          | None => Error [CTX id; MSG ": no such composite, init_avl_of_type'"]
+          end
+      | Tvariant id _  =>
+          match ce!id with
+          | Some co =>
+              let f '(Member_plain fid ty') := rec ty' in
+              (* compute the list of aval for each fields *)
+              do l <- fold_right_bind co.(co_members) f;
+              let (v, _) := split l in
+              (* get the idents of each field *)
+              let ids := map (fun '(Member_plain fid ty') => fid) co.(co_members) in
+              (* the borrow tree in variant is unsplitable *)
+              OK (Venum (combine ids v), Batomic (Broot nil))
           | None => Error [CTX id; MSG ": no such composite, init_avl_of_type'"]
           end
       | _ =>
@@ -1091,6 +1088,14 @@ Definition load_aptr (m: amem) (p: aptr) (a: access_kind) : res (aval * amem) :=
 (* load an abstract pointer with multiple possiblity *)
 Definition load_aptrs (m: amem) (ptrs: Aptrs.t) (a: access_kind) : res (aval * amem) :=
   Aptrs.fold (fun elt acc => do (v, m) <- acc; do (v', m') <- load_aptr m elt a; OK (LAval.lub v v', m')) ptrs (OK (LAval.bot, m)).
+
+(* load the location pointed by v, if v is not a pointer, return Vtop *)
+Definition load_aval (m: amem) (v: aval) (a: access_kind) : res (aval * amem) :=
+  match v with
+  | Ptr ptrs =>
+      load_aptrs m ptrs a
+  | _ => OK (Vtop, m)
+  end.
 
 Definition load_owner (m: amem) (b: ablock) (ph: path) (a: access_kind) : res (aval * amem) :=  
   do m' <- access a b ph None m;
