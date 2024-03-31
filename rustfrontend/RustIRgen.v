@@ -37,7 +37,7 @@ Definition gen_drops (l: list (ident * type)) : statement :=
 (* [vars] is a stack of variable list. Eack stack frame corresponds to
 a loop where these variables are declared. [params_drops] are the
 statement for dropping the parameters *)
-Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
+Fixpoint transl_stmt (params_drops: statement) (oretv: option place') (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
   let transl_stmt := transl_stmt params_drops oretv in
   match stmt with
   | RustlightBase.Sskip => Sskip
@@ -110,7 +110,7 @@ Fixpoint elaborate_return (stmt: RustlightBase.statement) : RustlightBase.statem
   | _ => RustlightBase.Ssequence stmt (RustlightBase.Sreturn None)
   end.
 
-Definition ret_var (ty: type) (v: ident) : option place :=
+Definition ret_var (ty: type) (v: ident) : option place' :=
   if type_eq ty Tunit then None else Some (Plocal v ty).
 
 (* The main job is to extract the variables and translate the statement *)

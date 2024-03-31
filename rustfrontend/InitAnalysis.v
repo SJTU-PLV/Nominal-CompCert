@@ -17,9 +17,9 @@ Admitted.
 
 
 Module Place <: DecidableType.DecidableType.
-  Definition t := place.
+  Definition t := place'.
   Definition eq := @eq t.
-  Definition eq_dec := place_eq.
+  Definition eq_dec := place'_eq.
   Definition eq_refl: forall x, eq x x := (@eq_refl t).
   Definition eq_sym: forall x y, eq x y -> eq y x := (@eq_sym t).
   Definition eq_trans: forall x y z, eq x y -> eq y z -> eq x z := (@eq_trans t).
@@ -43,7 +43,7 @@ Section COMP_ENV.
 Variable ce : composite_env.
 
 (* get { p.1, p.2 ...} which are own types *)
-Definition places_of_members (p: place) (mems: members) :=
+Definition places_of_members (p: place') (mems: members) :=
   fold_left (fun acc elt =>
                match elt with
                | Member_plain fid ty =>
@@ -53,7 +53,7 @@ Definition places_of_members (p: place) (mems: members) :=
                end) mems Paths.empty.
 
 (* siblings of p *)
-Definition siblings (p: place) : Paths.t :=
+Definition siblings (p: place') : Paths.t :=
   match p with
   | Plocal _ _ => Paths.empty
   | Pfield p' fid _ =>
@@ -72,7 +72,7 @@ Definition siblings (p: place) : Paths.t :=
   end.
                                                         
 
-Fixpoint parents (p: place) : Paths.t :=
+Fixpoint parents (p: place') : Paths.t :=
   match p with
   | Plocal _ _ => Paths.empty
   | Pfield p' _ _ => Paths.add p' (parents p')
@@ -97,7 +97,7 @@ Fixpoint parents (p: place) : Paths.t :=
    in [S]. [p'] must be not in [S] to avoid ambiguity.
 
    The complicated case is that if [p] is [**a.f] which means that
-   [**a.g] and [**a.h] are in [S], but what about [*a]?
+    [**a.g] and [**a.h] are in [S], but what about [*a]?
 
 3. If [p] is [Pderef p' ty], it means that [p'] is also in [S],
    because we have to consider how to drop [p']. If [p'] is not in
@@ -107,7 +107,7 @@ Fixpoint parents (p: place) : Paths.t :=
 Note: if [p] ∉ [S] then [p] must not be mentioned in the function. *)
 
 
-Fixpoint own_path_box (p: place) (ty: type) :=
+Fixpoint own_path_box (p: place') (ty: type) :=
   match ty with
   | Tbox ty' _ =>
       let p' := Pderef p ty' in
@@ -115,11 +115,12 @@ Fixpoint own_path_box (p: place) (ty: type) :=
   | _ => Paths.empty
   end.
 
+
 (** The core function of adding a place [p] to the whole set [l] *)
 (* add [p] to the paths [l]: If [p] is [Pderef p' ty], then
 recursively add p' and its parents to paths [l]; If [p] is [Pfield p'
 fid ty], then add [p']'s siblings and [p']'s parent to paths [l]*)
-Fixpoint collect (p: place) (l: Paths.t) : Paths.t :=
+Fixpoint collect (p: place') (l: Paths.t) : Paths.t :=
   if own_type ce (typeof_place p) then
     (** FIXME: WHY? If there are some children of [p] in [l], do
     nothing. *)
@@ -145,12 +146,12 @@ Fixpoint collect (p: place) (l: Paths.t) : Paths.t :=
   else l.
 
     
-Definition collect_place (p: place) (m: PathsMap.t) : PathsMap.t :=
+Definition collect_place (p: place') (m: PathsMap.t) : PathsMap.t :=
   let id := local_of_place p in
   let l := PathsMap.get id m in
   PathsMap.set id (collect p l) m.
 
-Definition collect_option_place (p: option place) (m: PathsMap.t) : PathsMap.t :=
+Definition collect_option_place (p: option place') (m: PathsMap.t) : PathsMap.t :=
   match p with
   | Some p => collect_place p m
   | None => m
@@ -196,13 +197,13 @@ Definition collect_func (f: function) : Errors.res PathsMap.t :=
 End COMP_ENV.
 
 (* Kill function *)
-Definition remove_place (p: place) (m: PathsMap.t) : PathsMap.t :=
+Definition remove_place (p: place') (m: PathsMap.t) : PathsMap.t :=
   let id := local_of_place p in
   let l := PathsMap.get id m in  
   let rm := Paths.filter (fun elt => is_prefix p elt) l in
   PathsMap.set id (Paths.diff l rm) m.
 
-Definition remove_option (p: option place) (m: PathsMap.t) : PathsMap.t :=
+Definition remove_option (p: option place') (m: PathsMap.t) : PathsMap.t :=
   match p with 
   | Some p => remove_place p m
   | None => m
@@ -210,14 +211,14 @@ Definition remove_option (p: option place) (m: PathsMap.t) : PathsMap.t :=
 
 (* Gen function: it add {p' | is_prefix p p' /\ p' ∈ S} to m[id]. Here
 [S] is the whole set *)
-Definition add_place (S: PathsMap.t) (p: place) (m: PathsMap.t) : PathsMap.t :=
+Definition add_place (S: PathsMap.t) (p: place') (m: PathsMap.t) : PathsMap.t :=
   let id := local_of_place p in
   let l := PathsMap.get id m in
   let whole := PathsMap.get id S in
   let add := Paths.filter (fun elt => is_prefix p elt) whole in
   PathsMap.set id (Paths.union l add) m.
 
-Definition add_option (S: PathsMap.t) (p: option place) (m: PathsMap.t) : PathsMap.t :=
+Definition add_option (S: PathsMap.t) (p: option place') (m: PathsMap.t) : PathsMap.t :=
   match p with
   | Some p => add_place S p m
   | None => m

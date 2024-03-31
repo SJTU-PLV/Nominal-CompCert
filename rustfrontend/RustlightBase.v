@@ -18,27 +18,46 @@ Require Import LanguageInterface.
 
 (** ** Place (used to build lvalue expression) *)
 
-Inductive place : Type :=
-| Plocal : ident -> type -> place
-| Pfield : place -> ident -> type -> place (**r access a field of struct: p.(id)  *)
-| Pderef : place -> type -> place
+Inductive place' : Type :=
+| Plocal : ident -> type -> place'
+| Pfield : place' -> ident -> type -> place' (**r access a field of struct: p.(id)  *)
+| Pderef : place' -> type -> place'
 .
 
-Lemma place_eq: forall (p1 p2: place), {p1=p2} + {p1<>p2}.
+Inductive place : Type :=
+| Pdowncast: place' -> ident -> type -> place (**r represent the location of a constructor *)
+| Place: place' -> place. 
+
+Coercion Place : place' >-> place.
+
+Lemma place'_eq: forall (p1 p2: place'), {p1=p2} + {p1<>p2}.
 Proof.
   generalize type_eq ident_eq. intros.
   decide equality.
 Qed.
 
+Lemma place_eq: forall (p1 p2: place), {p1=p2} + {p1<>p2}.
+Proof.
+  generalize type_eq ident_eq. intros.
+  decide equality.
+  decide equality.
+  decide equality.
+Qed.
+
 Global Opaque place_eq.
 
-Definition typeof_place p :=
+Definition typeof_place' p :=
   match p with
   | Plocal _ ty => ty
   | Pfield _ _ ty => ty
   | Pderef _ ty => ty
   end.
 
+Definition typeof_place p :=
+  match p with
+  | Pdowncast _ _ ty => ty
+  | Place p => typeof_place' p
+  end.
 
 (** ** Expression *)
 
@@ -49,8 +68,7 @@ Inductive pexpr : Type :=
 | Econst_single: float32 -> type -> pexpr (**r single float literal *)
 | Econst_long: int64 -> type -> pexpr    (**r long integer literal *)
 | Eplace: place -> type -> pexpr (**r use of a variable, the only lvalue expression *)
-| Eget: place -> ident -> type -> pexpr (**r get<fid>(a), variant get operation *)
-| Ecktag: place -> ident -> type -> pexpr           (**r check the tag of variant, e.g. [Ecktag p.(fid)] *)
+| Ecktag: place' -> ident -> type -> pexpr           (**r check the tag of variant, e.g. [Ecktag p.(fid)]. We cannot check a downcast *)
 | Eref: place -> mutkind -> type -> pexpr     (**r &[mut] p  *)
 | Eunop: unary_operation -> pexpr -> type -> pexpr  (**r unary operation *)
 | Ebinop: binary_operation -> pexpr -> pexpr -> type -> pexpr. (**r binary operation *)
@@ -58,7 +76,6 @@ Inductive pexpr : Type :=
 (* The evaluaiton of expr may produce a moved-out place *)
 Inductive expr : Type :=
 | Emoveplace: place -> type -> expr
-| Emoveget: place -> ident -> type -> expr
 | Epure: pexpr -> expr.
 
 
@@ -71,7 +88,6 @@ Definition typeof_pexpr (pe: pexpr) : type :=
   | Econst_long _ ty                
   | Eplace _ ty
   | Ecktag _ _ ty
-  | Eget _ _ ty
   | Eref _ _ ty
   | Eunop _ _ ty
   | Ebinop _ _ _ ty => ty
@@ -80,7 +96,6 @@ Definition typeof_pexpr (pe: pexpr) : type :=
 Definition typeof (e: expr) : type :=
   match e with
   | Emoveplace _ ty => ty
-  | Emoveget _ _ ty => ty
   | Epure pe => typeof_pexpr pe
     end.
 
@@ -120,13 +135,13 @@ with to_ctypelist (tyl: typelist) : Ctypes.typelist :=
 Inductive statement : Type :=
 | Sskip : statement                   (**r do nothing *)
 | Slet : ident -> type -> statement -> statement (**r declare a variable. let ident: type in *)
-| Sassign : place -> expr -> statement (**r assignment [place = rvalue] *)
-| Sassign_variant : place -> ident -> expr -> statement (**r assign variant to a place *)
-| Sbox: place -> expr -> statement        (**r box assignment [place = Box::new(expr)]  *)
-| Scall: place -> expr -> list expr -> statement (**r function call, p =
+| Sassign : place' -> expr -> statement (**r assignment [place' = rvalue]. Downcast cannot appear in LHS *)
+| Sassign_variant : place' -> ident -> expr -> statement (**r assign variant to a place *)
+| Sbox: place' -> expr -> statement        (**r box assignment [place = Box::new(expr)]  *)
+| Scall: place' -> expr -> list expr -> statement (**r function call, p =
   f(...). The assignee is mandatory, because we need to ensure that
   the return value (may be a box) is received *)
-| Sbuiltin: place -> external_function -> typelist -> list expr -> statement (**r builtin invocation *)
+| Sbuiltin: place' -> external_function -> typelist -> list expr -> statement (**r builtin invocation *)
 | Ssequence : statement -> statement -> statement  (**r sequence *)
 | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
 | Sloop: statement -> statement (**r infinite loop *)
@@ -188,9 +203,10 @@ Definition empty_env: env := (PTree.empty (block * type)).
 
 (** ** Ownership environment  *)
 
-Definition own_env := PTree.t (list place).
+(* Only place' can own a memory location *)
+Definition own_env := PTree.t (list place').
 
-Definition empty_own_env : own_env := PTree.empty (list place).
+Definition empty_own_env : own_env := PTree.empty (list place').
 
 (** TODO: Ownership type-state  *)
 
@@ -276,11 +292,17 @@ Inductive assign_loc (ce: composite_env) (ty: type) (m: mem) (b: block) (ofs: pt
 
 (** Prefix of a place  *)
 
-Fixpoint parent_paths (p: place) : list place :=
+Fixpoint parent_paths' (p: place') : list place :=
   match p with
   | Plocal _ _ => nil
-  | Pfield p' _ _ => p' :: parent_paths p'
-  | Pderef p' _ => p' :: parent_paths p'
+  | Pfield p' _ _ => Place p' :: parent_paths' p'
+  | Pderef p' _ => Place p' :: parent_paths' p'
+  end.
+
+Definition parent_paths (p: place) : list place :=
+  match p with
+  | Place p => parent_paths' p
+  | Pdowncast p _ _ => Place p :: parent_paths' p
   end.
 
 Definition is_prefix (p1 p2: place) : bool :=
@@ -289,11 +311,17 @@ Definition is_prefix (p1 p2: place) : bool :=
 Definition is_prefix_strict (p1 p2: place) : bool :=
   in_dec place_eq p1 (parent_paths p2).
 
-Fixpoint local_of_place (p: place) :=
+Fixpoint local_of_place' (p: place') :=
   match p with
   | Plocal id _ => id
-  | Pfield p' _ _ => local_of_place p'
-  | Pderef p' _ => local_of_place p'
+  | Pfield p' _ _ => local_of_place' p'
+  | Pderef p' _ => local_of_place' p'
+  end.
+
+Definition local_of_place (p: place) :=
+  match p with
+  | Place p => local_of_place' p
+  | Pdowncast p _ _ => local_of_place' p
   end.
 
 Definition is_sibling (p1 p2: place) : bool :=
@@ -301,23 +329,23 @@ Definition is_sibling (p1 p2: place) : bool :=
   && negb (is_prefix p1 p2 && is_prefix p2 p1).
 
 
-Definition remove_own (own: own_env) (p: place) : option own_env :=
+Definition remove_own (own: own_env) (p: place') : option own_env :=
   let id := local_of_place p in
   match PTree.get id own with
   | Some own_path =>
-      let erased := filter (fun p1 => negb (is_prefix p p1)) own_path in
+      let erased := filter (fun (p1: place') => negb (is_prefix p p1)) own_path in
       Some (PTree.set id erased own)
   | None => None
   end.
 
-Definition remove_own_option (own: own_env) (op: option place) : option own_env :=
+Definition remove_own_option (own: own_env) (op: option place') : option own_env :=
   match op with
   | None => Some own
   | Some p => remove_own own p
   end.
   
 
-Fixpoint remove_own_list (own: own_env) (pl: list place) : option own_env :=
+Fixpoint remove_own_list (own: own_env) (pl: list place') : option own_env :=
   match pl with
   | p :: pl' =>
       match remove_own own p with
@@ -352,22 +380,28 @@ Variable e: env.
 Variable m: mem.
 
 (* similar to eval_lvalue in Clight.v *)
-Inductive eval_place : place -> block -> ptrofs -> Prop :=
+Inductive eval_place' : place' -> block -> ptrofs -> Prop :=
 | eval_Plocal: forall id b ty,
     (** TODO: there is no global variable, so we do not consider the
     gloabl environment *)
     e!id = Some (b, ty) ->
-    eval_place (Plocal id ty) b Ptrofs.zero
+    eval_place' (Plocal id ty) b Ptrofs.zero
 | eval_Pfield_struct: forall p ty b ofs delta id i co bf attr,
-    eval_place p b ofs ->
+    eval_place' p b ofs ->
     ty = Tstruct id attr ->
     ce ! id = Some co ->
     field_offset ce i (co_members co) = OK (delta, bf) ->
-    eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
+    eval_place' (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
 | eval_Pderef: forall p ty l ofs l' ofs',
-    eval_place p l ofs ->
+    eval_place' p l ofs ->
     deref_loc ty m l ofs (Vptr l' ofs') ->
-    eval_place (Pderef p ty) l' ofs'.
+    eval_place' (Pderef p ty) l' ofs'.
+
+Inductive eval_place : place -> block -> ptrofs -> Prop :=
+(** TODO: evaluation of Pdowncast  *)
+| eval_Place: forall p b ofs,
+    eval_place' p b ofs ->
+    eval_place p b ofs.
 
 Inductive eval_place_list : list place -> list block -> list ptrofs -> Prop :=
 | eval_Pnil: eval_place_list nil nil nil
@@ -408,17 +442,17 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
     eval_place p b ofs ->
     deref_loc ty m b ofs v ->
     eval_pexpr (Eplace p ty) v
-| eval_Eget: forall p b ofs ofs' ty m v id fid attr co bf,
-    typeof_place p = Tvariant id attr ->
-    ce ! id = Some co ->
-    eval_place p b ofs ->
-    variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
-    (* load the value *)
-    deref_loc ty m b (Ptrofs.add ofs (Ptrofs.repr ofs')) v ->
-    (** what if p is an own type? *)
-    eval_pexpr (Eget p fid ty) v
+(* | eval_Eget: forall p b ofs ofs' ty m v id fid attr co bf, *)
+(*     typeof_place p = Tvariant id attr -> *)
+(*     ce ! id = Some co -> *)
+(*     eval_place p b ofs -> *)
+(*     variant_field_offset ce fid co.(co_members) = OK (ofs', bf) -> *)
+(*     (* load the value *) *)
+(*     deref_loc ty m b (Ptrofs.add ofs (Ptrofs.repr ofs')) v -> *)
+(*     (** what if p is an own type? *) *)
+(*     eval_pexpr (Eget p fid ty) v *)
 
-| eval_Ecktag: forall p b ofs ty m tag tagz id fid attr co,
+| eval_Ecktag: forall (p: place') b ofs ty m tag tagz id fid attr co,
     eval_place p b ofs ->
     (* load the tag *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
@@ -436,9 +470,9 @@ Inductive eval_expr: expr -> val -> Prop :=
 | eval_Emoveplace: forall p ty v,
     eval_pexpr (Eplace p ty) v ->
     eval_expr (Emoveplace p ty) v
-| eval_Emoveget: forall p fid ty v,
-    eval_pexpr (Eget p fid ty) v ->
-    eval_expr (Emoveget p fid ty) v
+(* | eval_Emoveget: forall p fid ty v, *)
+(*     eval_pexpr (Eget p fid ty) v -> *)
+(*     eval_expr (Emoveget p fid ty) v *)
 | eval_Epure: forall pe v,
     eval_pexpr pe v ->
     eval_expr (Epure pe) v.
@@ -456,17 +490,20 @@ Inductive eval_exprlist : list expr -> typelist -> list val -> Prop :=
 
 (* The second phase of evaluation of expression *)
 
-Definition moved_place (e: expr) : option place :=
+(* if [move (downcast p fid)] it means that p is moved *)
+Definition moved_place (e: expr) : option place' :=
   match e with
-  | Emoveplace p _
-  | Emoveget p _ _ =>
-      Some p
+  | Emoveplace p _ =>
+      match p with
+      | Pdowncast p' _ _
+      | Place p' => Some p'
+      end
   | _ => None
   end.
 
-Definition moved_place_list (el: list expr) : list place :=
+Definition moved_place_list (el: list expr) : list place' :=
   fold_right
-    (fun (elt : expr) (acc : list place) =>
+    (fun (elt : expr) (acc : list place') =>
        match moved_place elt with
        | Some p => p :: acc
        | None => acc
@@ -582,8 +619,8 @@ with drop_in_place_list (ce: composite_env) : list type -> mem -> list block -> 
     drop_in_place_list ce (ty :: tys') m (b :: lb') (ofs :: lofs') m''.
 
 (* It drop the resource assuming there may be partial moved paths *)
-Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> block -> ptrofs -> mem -> Prop :=
-| drop_base: forall ty p m b ofs,
+Inductive drop_place' (ce: composite_env) (owned: list place') : place' -> mem -> block -> ptrofs -> mem -> Prop :=
+| drop_base: forall ty (p: place') m b ofs,
     typeof_place p = ty ->
     (* It is not of type [Tbox] *)
     definite_copy_type ty = true ->
@@ -591,7 +628,7 @@ Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> 
 | drop_moved: forall  p m b ofs,
     not (In p owned) ->
     drop_place' ce owned p m b ofs m
-| drop_struct: forall p m b ofs id attr co m' lb lofs lofsbit fields,
+| drop_struct: forall (p: place') m b ofs id attr co m' lb lofs lofsbit fields,
     (* recursively drop all the fields *)
     typeof_place p = Tstruct id attr ->
     ce ! id = Some co ->
@@ -602,13 +639,13 @@ Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> 
     lb = repeat b (length co.(co_members)) ->
     drop_place_list' ce owned fields m lb lofs m' ->
     drop_place' ce owned p m b ofs m'
-| drop_variant: forall p m b ofs id attr m',
+| drop_variant: forall (p: place') m b ofs id attr m',
     (* select the type based on the tag value *)
     typeof_place p = Tvariant id attr ->
     (* p is in owned, so we just use type to destruct the variant *)
     drop_in_place ce (Tvariant id attr) m b ofs m' ->
     drop_place' ce owned p m b ofs m'
-| drop_box: forall p attr ty m m' m'' b' b ofs ofs',
+| drop_box: forall (p: place') attr ty m m' m'' b' b ofs ofs',
     typeof_place p = Tbox ty attr ->
     (* The contents in [p] is (Vptr b' ofs') *)
     Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
@@ -617,7 +654,7 @@ Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> 
     Mem.free m' b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ce ty) = Some m'' ->
     drop_place' ce owned p m b ofs m''
 
-with drop_place_list' (ce: composite_env) (owned: list place) : list place -> mem -> list block -> list ptrofs -> mem -> Prop :=
+with drop_place_list' (ce: composite_env) (owned: list place') : list place' -> mem -> list block -> list ptrofs -> mem -> Prop :=
 | drop_list_nil: forall m,
     drop_place_list' ce owned nil m nil nil m
 | drop_list_cons: forall p lp' b lb' ofs lofs' m m' m'',
@@ -628,11 +665,12 @@ with drop_place_list' (ce: composite_env) (owned: list place) : list place -> me
   
 (** Free {*p, **p ,... } according to me  *)
 Inductive drop_place (ce: composite_env) (e: env) (ie: own_env) (p: place) (m: mem) : mem -> Prop :=
-| drop_gen: forall b ofs m' id owned,
+| drop_gen: forall b ofs m' id owned p',
     eval_place ce e m p b ofs ->
     local_of_place p = id ->
     PTree.get id ie = Some owned ->
-    drop_place' ce owned p m b ofs m' ->
+    p = Place p' ->
+    drop_place' ce owned p' m b ofs m' ->
     drop_place ce e ie p m m'.
 
 Inductive drop_place_list (ce: composite_env) (e: env) (own: own_env) (m: mem) : list place -> mem -> Prop :=
@@ -684,7 +722,7 @@ Inductive drop_place_list (ce: composite_env) (e: env) (own: own_env) (m: mem) :
 
 (** Ownership path  *)
 
-Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place) (ty: type) : list place :=
+Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place') (ty: type) : list place' :=
   match fuel with
   | O => nil
   | S fuel' =>
@@ -759,7 +797,7 @@ Definition blocks_of_env (ce: composite_env) (e: env) : list (block * Z * Z) :=
 (** Return the list of places in local environment  *)
 
 Definition place_of_binding (id_b_ty: ident * (block * type)) :=
-  match id_b_ty with (id, (b, ty)) => Plocal id ty end.
+  match id_b_ty with (id, (b, ty)) => Place (Plocal id ty) end.
 
 Definition places_of_env (e:env) : list place :=
   List.map place_of_binding (PTree.elements e).
@@ -779,7 +817,7 @@ Variable ge: genv.
 
 Inductive step : state -> trace -> state -> Prop :=
 
-| step_assign: forall f e p ty op k le own own' own'' m1 m2 m3 b ofs v id attr,
+| step_assign: forall f e (p: place') ty op k le own own' own'' m1 m2 m3 b ofs v id attr,
     (** FIXME: some ugly restriction  *)
     typeof_place p = ty ->
     typeof e = ty ->
@@ -803,7 +841,7 @@ Inductive step : state -> trace -> state -> Prop :=
     assign_loc ge ty m2 b ofs v m3 ->
     step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m3) 
          
-| step_assign_variant: forall f e p ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid attr ,
+| step_assign_variant: forall f e (p: place') ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid attr ,
     typeof_place p = ty ->
     typeof e = ty ->
     ty = Tvariant id attr ->
@@ -831,7 +869,7 @@ Inductive step : state -> trace -> state -> Prop :=
     assign_loc ge ty m3 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m4 ->
     step (State f (Sassign_variant p fid e) k le own m1) E0 (State f Sskip k le own'' m4)
 
-| step_box: forall f e p ty op k le own1 own2 own3 m1 m2 m3 b v,
+| step_box: forall f e (p: place') ty op k le own1 own2 own3 m1 m2 m3 b v,
     typeof e = ty ->
     typeof_place p = ty ->
     eval_expr ge le m1 e v ->
@@ -947,7 +985,7 @@ can initialize struct *)
          
 (* | step_returnstate_0: forall v m e me f k, *)
 (*     step (Returnstate v (Kcall None f e me k) m) E0 (State f Sskip k e me m) *)
-| step_returnstate_1: forall p v b ofs ty m m' m'' e own own' f k,
+| step_returnstate_1: forall (p: place') v b ofs ty m m' m'' e own own' f k,
     (* drop and replace *)
     drop_place ge e own p m m' ->
     (* update the ownership environment *)

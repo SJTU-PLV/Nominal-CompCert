@@ -14,7 +14,7 @@ let temp_name (id: AST.ident) =
   with Not_found ->
     Printf.sprintf "$%d" (P.to_int id)
 
-let rec print_place out (p: place) =
+let rec print_place out (p: place') =
   match p with
   | Plocal(id, _) ->
     fprintf out "%s" (extern_atom id)
@@ -22,6 +22,13 @@ let rec print_place out (p: place) =
     fprintf out "*%a" print_place p'
   | Pfield(p', fid, _) ->
     fprintf out "%a.%s" print_place p' (extern_atom fid)
+
+let print_downcast out (p: place) =
+  match p with
+  | Place p' ->
+    print_place out p'
+  | Pdowncast(p',fid, _) ->
+    fprintf out "(%a as %s)" print_place p' (extern_atom fid)
 
 (* Precedences and associativity (copy from PrintClight.ml) *)
 
@@ -42,12 +49,10 @@ let precedence' = function
   | Ebinop(Oor, _, _, _) -> (6, LtoR)
   | Eplace(_, _) -> (16,NA)
   | Ecktag(_, _, _) -> (15, RtoL)
-  | Eget(_, _, _) -> (15, RtoL)
   | Eref(_, _, _) -> (15, RtoL)
 
 let precedence = function
   | Emoveplace(_,_) -> (16,NA)
-  | Emoveget(_, _, _) -> (15, RtoL)
   | Epure pe -> precedence' pe
 
 (* Expressions *)
@@ -64,7 +69,7 @@ let rec pexpr p (prec, e) =
   begin match e with
   | Eunit ->  fprintf p "tt"
   | Eplace(v, _) ->
-    fprintf p "%a" print_place v
+    fprintf p "%a" print_downcast v
   | Econst_int(n, Rusttypes.Tint(I32, Unsigned, _)) ->
     fprintf p "%luU" (camlint_of_coqint n)
   | Econst_int(n, _) ->
@@ -86,10 +91,8 @@ let rec pexpr p (prec, e) =
       pexpr (prec1, a1) (name_binop op) pexpr (prec2, a2)
   | Ecktag(v, fid, _) ->
     fprintf p "%s(%a, %s)" "cktag" print_place v (extern_atom fid)
-  | Eget(v, fid, _) ->
-    fprintf p "%s(%a, %s)" "get" print_place v (extern_atom fid)
   | Eref(v, mut, _) ->
-    fprintf p "& %s %a" (string_of_mut mut) print_place v
+    fprintf p "& %s %a" (string_of_mut mut) print_downcast v
   end;
   if prec' < prec then fprintf p ")@]" else fprintf p "@]"
 
@@ -100,10 +103,8 @@ let expr p (prec, e) =
   else fprintf p "@[<hov 2>";
   begin match e with
   | Epure pe -> pexpr p (prec, pe)
-  | Emoveplace(v, _) -> fprintf p "move %a" print_place v
-  | Emoveget(v, fid, _) ->
-    fprintf p "%s(move %a, %s)" "get" print_place v (extern_atom fid)
-  end;
+  | Emoveplace(v, _) -> fprintf p "move %a" print_downcast v
+   end;
   if prec' < prec then fprintf p ")@]" else fprintf p "@]"
 
 let print_expr p e = expr p (0, e)

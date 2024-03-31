@@ -89,7 +89,7 @@ of the value expression *)
 Inductive destination : Type :=
 | For_val
 | For_effects
-| For_set (p: place).
+| For_set (p: place').
 
 Definition finish (dst: destination) (sl: list statement) (a: expr) :=
   match dst with
@@ -100,7 +100,7 @@ Definition finish (dst: destination) (sl: list statement) (a: expr) :=
 
 
 (* generate assign fields statement lists *)
-Fixpoint fields_assign (p: place) (ids : list ident) (args: list expr) (membs: members) {struct ids}: mon (list statement) :=
+Fixpoint fields_assign (p: place') (ids : list ident) (args: list expr) (membs: members) {struct ids}: mon (list statement) :=
   match ids, args, membs with
   | nil, nil, nil => ret nil
   | id :: ids', arg :: args', (Member_plain fid fty) :: membs' =>
@@ -124,7 +124,7 @@ Definition dummy_expr := Econst_int Int.zero type_int32s.
 Section NOTATION.
 (* Some ad-hoc solution to utilize the coercion from pexpr(place) to expr *)
 Local Notation "( x , y )" := (@pair (list statement) expr x y).
-Local Notation "( x ,, y )" := (@pair (list statement) place x y).
+Local Notation "( x ,, y )" := (@pair (list statement) place' x y).
 
 Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
   match e with
@@ -285,7 +285,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
       end      
  end
   
-with transl_place_expr (e: Rustsyntax.expr) : mon (list statement * place) :=
+with transl_place_expr (e: Rustsyntax.expr) : mon (list statement * place') :=
   match e with
   | Rustsyntax.Evar id ty =>
       ret (nil,, Plocal id ty)
@@ -502,7 +502,8 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
       end        
   end
 
-with transl_arm_statements (sl: arm_statements) (p: place) (moved: bool) (co: composite) : mon statement :=
+(** TODO: support match a reference of a enum  *)
+with transl_arm_statements (sl: arm_statements) (p: place') (moved: bool) (co: composite) : mon statement :=
   match sl with
   | ASnil => ret Sskip      
   | AScons ids arm sl' =>
@@ -512,8 +513,10 @@ with transl_arm_statements (sl: arm_statements) (p: place) (moved: bool) (co: co
           match find (fun elt => ident_eq (name_member elt) fid) co.(co_members) with
           | Some m =>
               let ty := type_member m in
-              let cond := Ecktag p fid type_bool in                              
-              let destruct_place := if moved then Emoveget p fid ty else (Epure (Eget p fid ty)) in
+              let cond := Ecktag p fid type_bool in
+              let p' := Pdowncast p fid ty in
+              (* move p' or copy p'. TODO: support [&mut] p' *)
+              let destruct_place := if moved then Emoveplace p' ty else (Epure (Eplace p' ty)) in
               let assign_temp := Sassign (Plocal temp_id ty) destruct_place in
               let then_stmt := Slet temp_id ty (Ssequence assign_temp arm') in
               match sl' with
