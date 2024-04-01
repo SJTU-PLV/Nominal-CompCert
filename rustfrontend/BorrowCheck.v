@@ -2,7 +2,7 @@ Require Import Coqlib.
 Require Import Maps.
 Require Import AST.
 Require Import FSetWeakList DecidableType.
-Require Import Lattice.
+Require Import Lattice Kildall.
 Require Import Rusttypes RustlightBase RustIR.
 Require Import Errors.
 Require Import StkborDomain.
@@ -190,6 +190,10 @@ Definition init_params (m: amem) (params: list (ident * type)) : res amem :=
   let '(m', _, _, _) := r in
   OK m'.
 
+(* allocation of abstract stack blocks with undefined values *)
+
+Definition allocate_vars (m: amem) (vars: list (ident * type)) : res amem :=
+  fold_left (fun acc '(id, ty) => do m <- acc; do (_, m') <- alloc_stack_block ce m ty id; OK m') vars (OK m).
 
 (** transfer function (place, pure expression, expression and statement *)
 
@@ -202,7 +206,7 @@ Definition aptr_of_aval (v: aval) : option LAptrs.t :=
 
 (* There may be many possiblity for the memory location of a place.
 [access] is the later action (e.g., the case that [p] in the RHS of a
-assignment, [access] would be Awrite) for Print -. *)
+assignment, [access] would be Awrite) for Print . *)
 (* The return abstract value may be Vtop (an example is that a field
 of a enum is not initialized but in fact it is impossible to evaluate
 this branch) but we do not report use of undefined value in the
@@ -377,17 +381,156 @@ Definition transfer_expr (pc: node) (e: expr) (m: amem) : res (aval * amem) :=
       end
   end.
 
+(* Store the value [rhs] to a location (either abstract pointers or an
+owner) plus an offset, treated as a write access *)
+Definition storev (pc: node) (lhs: aval + (ablock * path)) (ofs: path) (rhs: aval) (m: amem) : res amem :=
+  match lhs with
+  | inl v =>
+      (* write to the abstract pointers *)
+      match v with
+      | Ptr ptrs =>
+          let f '(b, ph, t) acc :=
+            do m <- acc;
+            (* write access *)
+            do m1 <- access Awrite b (ph ++ ofs) (Some t) m;
+            (* store rhs to (b,ph) *)
+            do m2 <- store m1 b (ph ++ ofs) rhs;
+            OK m2 in
+          do m' <- Aptrs.fold f ptrs (OK m);
+          OK m'
+      | Vtop =>
+          (** Undefined behavior because we store a aval to a
+              non-pointer. But in match statement, some unreachable
+              branch may cause such error *)
+          OK m
+      | _ =>
+          Error [CTX pc; MSG ": the evaluation of a place is neither a pointer or a undefined value"]                                   
+      end
+  | inr (b, ph) =>
+      (* write to the owner *)
+      do m' <- access Awrite b (ph ++ ofs) None m;
+      do m'' <- store m' b (ph ++ ofs) rhs;
+      OK m''
+  end.
+
+
+Definition transfer_assign (pc: node) (p: place') (e: expr) (m: amem) : res amem :=
+  (* a simple type checking *)
+  if type_eq (typeof_place' p) (typeof e) then
+    (* evaluate the expression *)
+    do (rhs, m1) <- transfer_expr pc e m;     
+    (* evaluate the place *)
+    do (lhs, m2) <- transfer_place' pc p m1;
+    storev pc lhs [] rhs m2
+  else
+    Error [CTX pc; MSG ": mismatch type of lhs and rhs in assignment"]
+.
+
+Definition transfer_assign_variant (pc: node) (p: place') (fid: ident) (e: expr) (m: amem) : res amem :=
+  (* evaluate the expression *)
+  do (rhs, m1) <- transfer_expr pc e m;     
+  (* evaluate the place *)
+  do (lhs, m2) <- transfer_place' pc p m1;
+  storev pc lhs [Renum fid] rhs m2
+.
+
+Definition transfer_box (pc: node) (p: place') (e: expr) (m: amem) : res amem :=
+  (* a simple type checking *)
+  match typeof_place' p with
+  | Tbox ty1 _ =>
+      if type_eq ty1 (typeof e) then
+        (* evaluate the expression *)
+        do (rhs, m1) <- transfer_expr pc e m;
+        (* allocate a heap block with id [Heap pc], so this block may
+           have been allocated in the last iteration.  *)
+        (** This allocation would clear the value and borrow tree in
+        [Heap pc], is it correct?  *)
+        do (b, m2) <- alloc_heap_block ce m1 (typeof e) pc;        
+        (* store rhs to (b,[]) *)
+        do m3 <- store m2 b [] rhs;
+        (* evaluate the place *)
+        do (lhs, m4) <- transfer_place' pc p m3;
+        (* store (b, [], Tintern pc) to lhs *)
+        (** FIXME: If [e] is also a reference (e.g., p = Box(&v)). The
+        tag of p and &v are the same!! So how to generate a new tag?
+        Or we can let the expression in the box statement contains no
+        reference *)
+        storev pc lhs [] (Ptr (Aptrs.singleton (b, [], Tintern pc))) m4
+      else
+        Error [CTX pc; MSG ": mismatch type of lhs and rhs in Sbox"]
+  | _ =>
+      Error [CTX pc; MSG ": The type of LHS is not a Tbox (Sbox)"]
+  end.
+
+(* perform write access to p *)
+Definition transfer_drop (pc: node) (p: place') (m: amem) : res amem :=
+  do (lhs, m1) <- transfer_place' pc p m;
+  match lhs with
+  | inl v =>
+      match v with
+      | Ptr ptrs =>
+          let f '(b, ph, t) acc :=
+            do m <- acc;
+            (* write access *)
+            do m1 <- access Awrite b ph (Some t) m;
+            OK m1 in
+          do m' <- Aptrs.fold f ptrs (OK m);
+          OK m'
+      | Vtop =>
+          (** Undefined behavior because we store a aval to a
+          non-pointer. But in match statement, some unreachable
+          branch may cause such error *)
+          OK m
+      | _ =>
+          Error [CTX pc; MSG ": the evaluation of a place is neither a pointer or a undefined value (transfer_drop) "]                                   
+      end
+  | inr (b, ph) =>
+      (* write to the owner *)
+      do m' <- access Awrite b ph None m;
+      OK m'
+  end.
+
+(** TODO: the alias of the return value depends on the annotated
+origins and the types. For example, f: &'a mut i32 -> &'b mut i32 ->
+&'c mut i32, it is not well formed, 'c must be related to 'a and 'b
+because they may alias. For other example, g: &'a mut i32 -> &'b mut S
+-> &'c mut i32, the second argument must not alias with the return
+value. [tyf] is the type of this function (internal or external) *)
+Definition transfer_call (pc: node) (p: place') (tyf: type) (al: list expr) (m: amem) : res amem :=
+  (* evaluate the argument list *)
+  do (l, m1) <- fold_right (fun elt acc => do (l, m) <- acc; do (v, m') <- transfer_expr pc elt m; OK (v::l, m')) (OK ([], m)) al;
+  (* evaluate the [p] *)
+  do (lhs, m2) <- transfer_place' pc p m1;
+  (* Because we need to guess the alias relation between the return
+  value and the arguments based on their type (type-based alias
+  analysis!), the difficult part is the generation of the return
+  value. It is the rely condition. *)
+  (** TODO: specify the return value (Vtop for now) *)
+  storev pc lhs [] Vtop m2.
+  
+Definition finish_transfer (pc: node) (r: res amem) : AM.t :=
+  match r with
+  | OK m => AM.State m
+  | Error msg => AM.Err pc msg
+  end.
 
 Definition transfer (f: function) (cfg: rustcfg) (pc: node) (before: AM.t) : AM.t :=
   match before with
   (* If pred is unreacable, so this pc is unreacable, set to Bot *)
   | AM.Bot => AM.Bot
-  | AM.Err msg => AM.Err msg     (* Error propagation *)
-  | AM.State m =>                (* Update the abstract state *)
+  | AM.Err pc' msg =>
+      (* Error propagation: pc' is the source of this error *)
+      AM.Err pc' msg
+  | AM.State m =>
+      (* Update the abstract state *)
       match cfg ! pc with
       | None => AM.bot
       | Some (Inop _) => before
-      | Some (Icond _ _ _) => before
+      | Some (Icond e _ _) =>
+          match transfer_expr pc e m with
+          | OK (_, m') => AM.State m'
+          | Error msg => AM.Err pc msg
+          end
       | Some Iend => before
       | Some (Isel sel _) =>
           match select_stmt f.(fn_body) sel with
@@ -395,21 +538,79 @@ Definition transfer (f: function) (cfg: rustcfg) (pc: node) (before: AM.t) : AM.
           | Some s =>
               match s with
               | Sassign p e =>
-                  
-        end
-    end.
-
-
-Definition borrow_check (f: function) : res unit :=
-  (* allocate ablocks *)
-  do m0 <- allocate_params env1 init_amem f.(fn_params); 
-  do m1 <- allocate_vars env1 m0 f.(fn_vars);
-  (* initialize amem *)
-  do m2 <- init_params m1 f.(fn_params);
-  (* forward dataflow *)
-  OK tt.
-
+                  finish_transfer pc (transfer_assign pc p e m)
+              | Sassign_variant p fid e =>
+                  finish_transfer pc  (transfer_assign_variant pc p fid e m)
+              | Sbox p e =>
+                  finish_transfer pc (transfer_box pc p e m)
+              | Sstoragedead id =>
+                  (* ownership write access to the stack block [Stack id] *)
+                  finish_transfer pc (access Awrite (Stack id) [] None m)
+              | Sdrop p =>
+                  (* ownership write access to the location of this place *)
+                  finish_transfer pc (transfer_drop pc p m)
+              | Scall p f al =>
+                  finish_transfer pc (transfer_call pc p (typeof f) al m)
+              | Sbuiltin p ef tyl al =>
+                  (** TODO *)
+                  before
+              | Sreturn (Some e) =>
+                  match transfer_expr pc e m with
+                  | OK (_, m') => AM.State m'
+                  | Error msg => AM.Err pc msg
+                  end
+              | _ => before
+              end
+          end
+      end
+  end.
 
 End COMPOSITE_ENV.
 
+Module DS := Dataflow_Solver(AM)(NodeSetForward).
 
+Definition borrow_check (ce: composite_env) (f: function) : res unit :=
+  (* initialize amem *)
+  do m1 <- init_params ce init_amem f.(fn_params);
+  (* allocate stack block for undefined variables *)
+  do m2 <- allocate_vars ce m1 f.(fn_vars);
+  (* generate cfg *)
+  do (entry, cfg) <- generate_cfg f.(fn_body);
+  (** forward dataflow *)
+  match DS.fixpoint cfg successors_instr (transfer ce f cfg) entry (AM.State m2) with
+  | Some r =>
+      let (_, t) := r in
+      let l := PTree.elements t in
+      (* find the first error message *)
+      match find (fun '(pc, am) => match am with | AM.Err _ _ => true | _ => false end) l with
+      | Some (_, AM.Err _ msg) =>
+          Error msg
+      | _ => OK tt
+      end
+  | None =>
+      Error [MSG "The borrow check fails with unknown reason"]
+  end.
+
+
+Definition transf_fundef (ce: composite_env) (id: ident) (fd: fundef) : Errors.res fundef :=
+  match fd with
+  | Internal f =>
+      match borrow_check ce f with
+      | OK _ => OK (Internal f)
+      | Error msg => Error ([MSG "In function "; CTX id; MSG " , in pc "] ++ msg)
+      end
+  | External _ ef targs tres cconv => Errors.OK (External function ef targs tres cconv)
+  end.
+
+Definition transl_globvar (id: ident) (ty: type) := OK ty.
+
+(* borrow check the whole module *)
+
+Definition transl_program (p: program) : res program :=
+  do p1 <- transform_partial_program2 (transf_fundef p.(prog_comp_env)) transl_globvar p;
+  Errors.OK {| prog_defs := AST.prog_defs p1;
+              prog_public := AST.prog_public p1;
+              prog_main := AST.prog_main p1;
+              prog_types := prog_types p;
+              prog_comp_env := prog_comp_env p;
+              prog_comp_env_eq := prog_comp_env_eq p |}.

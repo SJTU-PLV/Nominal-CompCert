@@ -1133,11 +1133,21 @@ Definition check_perm_aptrs (m: amem) (ptrs: Aptrs.t) (a: access_kind) : res uni
 
 End COMPOSITE_ENV.
 
+
+(* Define equality for errcode *)
+
+Lemma errcode_eq : forall (c1 c2: errcode), {c1 = c2} + {c1 <> c2}.
+  generalize string_dec Pos.eq_dec.
+  decide equality.
+Qed.
+
+
+
 (** Lattice for dataflow analysis *)
 
 Module AM <: SEMILATTICE.
   
-  Inductive t' := | Bot | Err (msg: errmsg) | State (m: amem).
+  Inductive t' := | Bot | Err (loc: node) (msg: errmsg) | State (m: amem).
   
   Definition t := t'.
 
@@ -1170,7 +1180,9 @@ Module AM <: SEMILATTICE.
         LAvalMap.eq m1.(am_heap) m2.(am_heap) /\
         LBorMap.eq m1.(am_heap_bortree) m2.(am_heap_bortree) /\
         LAvalMap.eq m1.(am_external) m2.(am_external) /\
-        LBorMap.eq m1.(am_external_bortree) m2.(am_external_bortree)
+          LBorMap.eq m1.(am_external_bortree) m2.(am_external_bortree)
+    | Err pc1 msg1, Err pc2 msg2 =>
+        Pos.eq pc1 pc2 /\ list_forall2 eq msg1 msg2
     | _, _ => False
     end.
 
@@ -1183,7 +1195,9 @@ Module AM <: SEMILATTICE.
         LAvalMap.beq m1.(am_heap) m2.(am_heap) &&
         LBorMap.beq m1.(am_heap_bortree) m2.(am_heap_bortree) &&
         LAvalMap.beq m1.(am_external) m2.(am_external) &&
-        LBorMap.beq m1.(am_external_bortree) m2.(am_external_bortree)
+          LBorMap.beq m1.(am_external_bortree) m2.(am_external_bortree)
+    | Err pc1 msg1, Err pc2 msg2 =>
+        Pos.eqb pc1 pc2 && List.list_eq_dec errcode_eq msg1 msg2
     | _, _ => false
     end.
       
@@ -1192,8 +1206,9 @@ Module AM <: SEMILATTICE.
     | _, Bot => True
     | Bot, _ => False
     (* Err is the top *)
-    | Err _, _ => True
-    | _, Err _ => False
+    | Err pc1 _, Err pc2 _ => Pos.ge pc1 pc2
+    | Err _ _, _ => True
+    | _, Err _ _ => False
     | State m1, State m2 =>          
         LAvalMap.ge m1.(am_stack) m2.(am_stack) /\
         LBorMap.ge  m1.(am_stack_bortree) m2.(am_stack_bortree) /\
@@ -1209,10 +1224,10 @@ Module AM <: SEMILATTICE.
     match x,y with
     | _, Bot => x
     | Bot, _ => y
-    | Err _, State _ => x
-    | State _, Err _ => y
-    | Err msg1, Err msg2 =>
-        Err ((MSG "Error 1: ") :: msg1 ++ (MSG "; Error 2: " :: msg2))
+    | Err pc1 msg1, Err pc2 msg2 =>
+        if Pos.ltb pc1 pc2 then Err pc2 msg2 else Err pc1 msg1
+    | Err _ _, State _ => x
+    | State _, Err _ _ => y
     | State m1, State m2 =>
         State (build_amem
                  (LAvalMap.lub m1.(am_stack) m2.(am_stack)) 

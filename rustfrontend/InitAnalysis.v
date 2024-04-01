@@ -284,7 +284,7 @@ Definition analyze (ce: composite_env) (f: function) : Errors.res (PTree.t Paths
   (* generate selector-based CFG for analysis *)
   do (entry, cfg) <- generate_cfg f.(fn_body);
   let initMap := DS.fixpoint cfg successors_instr (transfer whole true f cfg) entry maybeInit in
-  let uninitMap := DS.fixpoint cfg successors_instr (transfer whole false f cfg) entry maybeUninit in
+let uninitMap := DS.fixpoint cfg successors_instr (transfer whole false f cfg) entry maybeUninit in
   match initMap, uninitMap with
   (* we only want the PTree because [None] represent the unreachable
   node *)
