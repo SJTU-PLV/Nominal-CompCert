@@ -304,13 +304,10 @@ Proof.
 Admitted.
 
 Definition range_prop (t: nat) (s : sup) :=
-  (1 < t < next_tid s)%nat.
+  (1 <= t < next_tid s)%nat.
 
 Program Definition sup_yield (s: sup)(n:nat) (p: range_prop n s) :=
   mksup (stacks s) n _.
-Next Obligation.
-  unfold range_prop,next_tid in p. lia.
-Qed.
 
 Lemma sup_yield_in : forall b s n p,
     sup_In b s <-> sup_In b (sup_yield s n p).

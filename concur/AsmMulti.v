@@ -146,11 +146,12 @@ Section MultiThread.
      : signature
    *)
 
-  Inductive query_is_yield_asm : query li_asm -> Prop :=
-  |yield_intro_asm : forall rs m b,
+  Inductive query_is_yield_asm : query li_asm -> nat -> Prop :=
+  |yield_intro_asm : forall rs m b next,
       Genv.find_symbol initial_se yield_id = Some b ->
       rs # PC = Vptr b Ptrofs.zero ->
-      query_is_yield_asm (rs, m).
+      Mem.next_tid (Mem.support m) = next ->
+      query_is_yield_asm (rs, m) next.
 
   (*
   pthread_create_sig = 
@@ -218,7 +219,7 @@ Section MultiThread.
   |step_thread_yield_to_yield : forall ge s s' tid' rs_q m_q gmem' p ls ls1 ls1' rs1 rs1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls (rs_q,m_q) ->
-      query_is_yield_asm (rs_q,m_q) ->
+      query_is_yield_asm (rs_q,m_q) (next_tid s)->
       yield_strategy s = tid' ->
       (*the proof p may be a problem, provided from the invariant between state and the support in gmem *)
       Mem.yield m_q tid' p = gmem' ->
@@ -233,7 +234,7 @@ Section MultiThread.
   |step_thread_yield_to_initial : forall ge s s' tid' rs_q m_q gmem' p ls rs0 ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls (rs_q, m_q) ->
-      query_is_yield_asm (rs_q, m_q) ->
+      query_is_yield_asm (rs_q, m_q) (next_tid s)->
       yield_strategy s = tid' ->
       Mem.yield m_q tid' p = gmem' ->
       get_thread s (tid') = Some (Initial rs0) -> (* the target thread is just created *)

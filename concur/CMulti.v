@@ -177,10 +177,11 @@ Section MultiThread.
   Definition yield_id := 1001%positive.
   Definition yield_sig := mksignature nil Tvoid cc_default.
 
-  Inductive query_is_yield : query li_c -> Prop :=
-  |yield_intro : forall b m,
+  Inductive query_is_yield : query li_c -> nat -> Prop :=
+  |yield_intro : forall b m next,
     Genv.find_symbol initial_se yield_id = Some b ->
-    query_is_yield (cq (Vptr b Ptrofs.zero) yield_sig nil m).
+    Mem.next_tid (Mem.support m) = next ->
+    query_is_yield (cq (Vptr b Ptrofs.zero) yield_sig nil m) next.
 
   (** * Definitions about the primitive pthread_create *)
 
@@ -230,7 +231,7 @@ Section MultiThread.
   |step_thread_yield_to_yield : forall ge s s' tid' q gmem' p ls ls1 ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls q ->
-      query_is_yield q ->
+      query_is_yield q (next_tid s) ->
       yield_strategy s = tid' ->
       (*the proof p may be a problem, provided from the invariant between state and the support in gmem *)
       Mem.yield (cq_mem q) tid' p = gmem' ->
@@ -242,7 +243,7 @@ Section MultiThread.
   |step_thread_yield_to_initial : forall ge s s' tid' q gmem' p ls cqv ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls q ->
-      query_is_yield q ->
+      query_is_yield q (next_tid s)->
       yield_strategy s = tid' ->
       Mem.yield (cq_mem q) tid' p = gmem' ->
       get_thread s (tid') = Some (Initial cqv) -> (* the target thread is waiting for reply *)
