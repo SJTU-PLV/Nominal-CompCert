@@ -207,7 +207,7 @@ Definition aptr_of_aval (v: aval) : option LAptrs.t :=
 (* There may be many possiblity for the memory location of a place.
 [access] is the later action (e.g., the case that [p] in the RHS of a
 assignment, [access] would be Awrite) for Print . *)
-(* The return abstract value may be Vtop (an example is that a field
+(* The return abstract value may beV top (an example is that a field
 of a enum is not initialized but in fact it is impossible to evaluate
 this branch) but we do not report use of undefined value in the
 bastract interpretation, because it is irrelevant issue *)
@@ -259,7 +259,8 @@ Fixpoint transfer_place' (pc: node) (p: place') (m: amem) : res ((aval + (ablock
               let ptrs' := Aptrs.fold (fun '(b, ph, t) ptrs => Aptrs.add (b, ph ++ [Rfield fid], t) ptrs) ptrs Aptrs.empty in
               OK (inl (Ptr ptrs'), m')
           | _ =>
-              OK (inl Vtop, m')
+              (* Impossible ! Type error or enter dead code. *)
+              OK (inl Vbot, m')
           end
       | inr (b, ph) =>
           OK (inr (b, ph ++ [Rfield fid]), m')
@@ -281,7 +282,8 @@ Definition transfer_place (pc: node) (p: place) (m: amem) : res ((aval + (ablock
               let ptrs' := Aptrs.fold (fun '(b, ph, t) ptrs => Aptrs.add (b, ph ++ [Renum fid], t) ptrs) ptrs Aptrs.empty in
               OK (inl (Ptr ptrs'), m')
           | _ =>
-              OK (inl Vtop, m')
+              (* Impossible ! Type error or enter dead code. *)
+              OK (inl Vbot, m')
           end
       | inr (b, ph) =>
           OK (inr (b, ph ++ [Renum fid]), m')
@@ -321,7 +323,7 @@ Fixpoint transfer_pure_expr (pc: node) (pe: pexpr) (m: amem) : res (aval * amem)
       let new_tag := Tintern pc in
       match r with
       | inl v =>
-          (* if v is not pointer, the Eref is evaluated to Vtop *)
+          (* if v is not pointer, the Eref is evaluated to Vbot *)
           match v with
           | Ptr ptrs =>
               (* for each (b,ph,t) ∈ ptrs, create a new ptr (b,ph,new_tag)
@@ -329,7 +331,8 @@ Fixpoint transfer_pure_expr (pc: node) (pe: pexpr) (m: amem) : res (aval * amem)
               do (ptrs', m'') <- create_reference_from_ptrs mut ptrs new_tag m';
               OK (Ptr ptrs', m'')
           | _ =>
-              OK (Vtop, m')
+              (* Impossible ! Type error or enter dead code. *)
+              OK (Vbot, m')
           end
       | inr (b, ph) =>
           (* create a pointer (b,ph, new_tag) *)
@@ -346,14 +349,17 @@ Fixpoint transfer_pure_expr (pc: node) (pe: pexpr) (m: amem) : res (aval * amem)
       (* uop can only be applied to scalar *)
       match v with
       | Scalar => OK (Scalar, m')
-      | _ => OK (Vtop, m')
+      | _ =>
+          (* if we enter an dead branch, we may get a Vbot and
+          evaluate it *)
+          OK (Vbot, m')
       end
   | Ebinop binop pe1 pe2 _ =>
       do (v1, m1) <- transfer_pure_expr pc pe1 m;
       do (v2, m2) <- transfer_pure_expr pc pe2 m1;
       match v1, v2 with
       | Scalar, Scalar => OK (Scalar, m2)
-      | _, _ => OK (Vtop, m2)
+      | _, _ => OK (Vbot, m2)
       end          
   end.
 
@@ -398,13 +404,13 @@ Definition storev (pc: node) (lhs: aval + (ablock * path)) (ofs: path) (rhs: ava
             OK m2 in
           do m' <- Aptrs.fold f ptrs (OK m);
           OK m'
-      | Vtop =>
-          (** Undefined behavior because we store a aval to a
-              non-pointer. But in match statement, some unreachable
-              branch may cause such error *)
+      | Vbot =>
+          (** Impossible behavior because we store a aval to a
+              Vbot. But in match statement, some unreachable branch
+              may cause such error *)
           OK m
       | _ =>
-          Error [CTX pc; MSG ": the evaluation of a place is neither a pointer or a undefined value"]                                   
+          Error [CTX pc; MSG ": the evaluation of a place is not a pointer"]                                   
       end
   | inr (b, ph) =>
       (* write to the owner *)
@@ -476,13 +482,13 @@ Definition transfer_drop (pc: node) (p: place') (m: amem) : res amem :=
             OK m1 in
           do m' <- Aptrs.fold f ptrs (OK m);
           OK m'
-      | Vtop =>
-          (** Undefined behavior because we store a aval to a
-          non-pointer. But in match statement, some unreachable
-          branch may cause such error *)
+      | Vbot =>
+          (** Impossible behavior because we store a aval to a
+              Vbot. But in match statement, some unreachable branch
+              may cause such error *)
           OK m
       | _ =>
-          Error [CTX pc; MSG ": the evaluation of a place is neither a pointer or a undefined value (transfer_drop) "]                                   
+          Error [CTX pc; MSG ": the evaluation of a place is not a pointer (transfer_drop) "]
       end
   | inr (b, ph) =>
       (* write to the owner *)

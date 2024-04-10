@@ -728,7 +728,7 @@ Fixpoint update_path_bortree (p: path) (m: block_bortree) (v: block_bortree): re
           (* access undefined value *)
           Error [CTX fid; MSG ": this struct field has no valid borrow tree (update_path_bortree)"]
       end
-  | _, _ => Error [MSG "Path and anstract value mismatches (update_path_bortree)"]
+  | _, _ => Error [MSG "Path and abstract value mismatches (update_path_bortree)"]
   end.
 
 
@@ -775,8 +775,10 @@ Definition store_block_bortree (m: amem) (b: ablock) (ph: path) (v: block_bortre
 
 Local Close Scope string_scope.
 
-(* this initialization is for uninit variables such as local variables *)
-Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bortree) :=
+(* this initialization is for uninit variables such as local
+variables. The initialization of variant is bot because all its
+branches are impossible. *)
+Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) (bot: bool) : res (aval * block_bortree) :=
   match fuel with
   | O => Error [MSG "Running out of fuel in alloc_aval_and_bortree'"]
   | S fuel' =>
@@ -785,7 +787,7 @@ Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bort
       | Tstruct id _ =>
           match ce!id with
           | Some co =>
-              let f '(Member_plain fid ty') := rec ty' in
+              let f '(Member_plain fid ty') := rec ty' bot in
               (* compute the list of aval for each fields *)
               do l <- fold_right_bind co.(co_members) f;
               let (v, sb) := split l in
@@ -797,7 +799,7 @@ Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bort
       | Tvariant id _  =>
           match ce!id with
           | Some co =>
-              let f '(Member_plain fid ty') := rec ty' in
+              let f '(Member_plain fid ty') := rec ty' true in
               (* compute the list of aval for each fields *)
               do l <- fold_right_bind co.(co_members) f;
               let (v, _) := split l in
@@ -809,12 +811,15 @@ Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) : res (aval * block_bort
           end
       | _ =>
           (* init an empty borrow tree *)
-          OK (Vtop, Batomic (Broot nil))
+          if bot then
+            OK (Vbot, Batomic (Broot nil))
+          else
+            OK (Vtop, Batomic (Broot nil))
       end
   end.
                 
 Definition alloc_aval_and_bortree (ty: type) : res (aval * block_bortree) :=
-  alloc_aval_and_bortree' (PTree_Properties.cardinal ce) ty.
+  alloc_aval_and_bortree' (PTree_Properties.cardinal ce) ty false.
 
 (* allocate a stack block [b] *)
 Definition alloc_stack_block (m: amem) (ty: type) (id: ident) : res (ablock * amem) :=
@@ -893,9 +898,10 @@ Fixpoint update_subtree_rec (access: access_kind) (bt: bor_tree') : bor_tree' :=
   | Bnode i l =>
       let i' :=
         match i, access with
-        | Unique t, Aread
         | Share t, Aread => Share t
-        | Unique t, Awrite
+        (* either a foreign read or a foreign write access to a Unique
+        tag disables this tag. We cannot use the method in Tree-borrow *)
+        | Unique t, _
         | Share t, Awrite => Disable t
         | Disable _, _ => i
         end in
@@ -1089,12 +1095,13 @@ Definition load_aptr (m: amem) (p: aptr) (a: access_kind) : res (aval * amem) :=
 Definition load_aptrs (m: amem) (ptrs: Aptrs.t) (a: access_kind) : res (aval * amem) :=
   Aptrs.fold (fun elt acc => do (v, m) <- acc; do (v', m') <- load_aptr m elt a; OK (LAval.lub v v', m')) ptrs (OK (LAval.bot, m)).
 
-(* load the location pointed by v, if v is not a pointer, return Vtop *)
+(* load the location pointed by v. If v is not a pointer, it is an
+impossible value and we treat it as Vbot *)
 Definition load_aval (m: amem) (v: aval) (a: access_kind) : res (aval * amem) :=
   match v with
   | Ptr ptrs =>
       load_aptrs m ptrs a
-  | _ => OK (Vtop, m)
+  | _ => OK (Vbot, m)
   end.
 
 Definition load_owner (m: amem) (b: ablock) (ph: path) (a: access_kind) : res (aval * amem) :=  
