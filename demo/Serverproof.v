@@ -437,7 +437,6 @@ Proof.
     intros s1 s2 r1 Hms Hf1. inv Hf1. inv Hms. inv H. cbn in *.
     exists (rs, m2''). split. constructor.
     econstructor; eauto.
-    intros. inv H. rewrite size_int_fptr__void_sg_0 in H9. extlia.
   - (* at_external*)
     intros s1 s2 q1 MS EXT1. cbn. inv EXT1. inv MS.
     inv H. cbn in *. inv H12. cbn in *.
@@ -478,60 +477,60 @@ Proof.
       rename m into m1'.
       inv H39. rename m' into m1''. rename tm' into m2''.
       exists ((Mem.support m2), (State rs' m2'' true)). repeat apply conj.
-      -- constructor. inversion H47; eauto.
+      -- constructor. inversion H46; eauto.
          unfold inner_sp. cbn.
-         rewrite H42. subst tsp. rewrite H7.
+         rewrite H41. subst tsp. rewrite H7.
          rewrite pred_dec_false; eauto.
       -- reflexivity.
       -- assert ( RANGEPERM1: Mem.range_perm m2'' tsb 0 8 Cur Freeable). 
          { red. intros.
-           inversion H47.
+           inversion H46.
            eapply unchanged_on_perm; eauto.
          }
          assert ( RANGEPERM2: Mem.range_perm m2'' tsb 16 24 Cur Freeable). 
          { red. intros.
-           inversion H47.
+           inversion H46.
            eapply unchanged_on_perm; eauto.
          }
          econstructor; cbn.
-         rewrite H42. eauto.
+         rewrite H41. eauto.
          reflexivity. 
          instantiate (1:= j'0).
          {
            intros. red. intros. destruct (j' b0) as [[tsb' d']|] eqn:Hinj.
-           apply H48 in Hinj as EQ. rewrite H0 in EQ. inv EQ.
+           apply H47 in Hinj as EQ. rewrite H0 in EQ. inv EQ.
            intro. apply H9 in H.
            red in H.  eapply H in Hinj as Hp. apply Hp.
-           apply H44; eauto.
+           apply H43; eauto.
            apply inject_implies_dom_in in Hm9.
            eapply Hm9; eauto.
-           exploit H49; eauto. intros [A B].
+           exploit H48; eauto. intros [A B].
            exfalso. apply B. eauto.
          }
          eauto. eauto. instantiate (1:= Hm'5). all: eauto.
          ++ etransitivity. instantiate (1:= injpw j' m1' m2' Hm'1).
             constructor; eauto.
             constructor; eauto.
-         ++ rewrite H43. eauto.
+         ++ rewrite H42. eauto.
          ++ intros. destruct (j' b0) as [[tsb' d']|] eqn:Hj'.
-            apply H48 in Hj' as EQ. rewrite H in EQ. inv EQ.
-            eauto. exploit H49; eauto. intros [A B].
+            apply H47 in Hj' as EQ. rewrite H in EQ. inv EQ.
+            eauto. exploit H48; eauto. intros [A B].
             exfalso. apply B. eauto.
-         ++ rewrite H42. subst tsp. rewrite H7 in *. cbn in *.
-            eapply Mem.load_unchanged_on. apply H47. 2: eauto.
+         ++ rewrite H41. subst tsp. rewrite H7 in *. cbn in *.
+            eapply Mem.load_unchanged_on. apply H46. 2: eauto.
             intros. eapply H9. right.
             rewrite Ptrofs.add_zero_l in H.
             rewrite Ptrofs.unsigned_repr in H.
             rewrite size_chunk_Mptr in H. Ap64_in H. lia.
             Plia.
-         ++ rewrite H42. subst tsp. rewrite H7 in *. cbn in *.
-            eapply Mem.load_unchanged_on. apply H47. 2: eauto.
+         ++ rewrite H41. subst tsp. rewrite H7 in *. cbn in *.
+            eapply Mem.load_unchanged_on. apply H46. 2: eauto.
             intros. eapply H9. left.
             rewrite Ptrofs.add_zero_l in H.
             rewrite Ptrofs.unsigned_zero in H.
             rewrite size_chunk_Mptr in H. Ap64_in H. lia.
          ++ intros. rewrite H40; eauto.
-         ++ inversion H47. eauto with mem.
+         ++ inversion H46. eauto with mem.
       -- reflexivity.
   - (*internal_steps*)
     Local Opaque undef_regs.
@@ -1131,7 +1130,6 @@ Proof.
     exists (cr Vundef m). split. constructor. constructor.
     inv H3. constructor; eauto. inversion H17. eauto.
     econstructor; eauto.
-    intros. inv H. rewrite size_int_fptr__void_sg_0 in H1. extlia.
   - (* at_external*)
     intros s1 s2 q1 MS EXT1. cbn. inv EXT1. inv MS.
     inv H. cbn in *. inv H13. cbn in *.
@@ -1176,57 +1174,57 @@ Proof.
       inv H0.
       inv H42. rename m' into m1''. rename tm' into m2''.
       exists ((Mem.support m2), (State rs' m2'' true)). repeat apply conj.
-      -- constructor. inversion H49; eauto.
+      -- constructor. inversion H48; eauto.
          unfold inner_sp.  cbn.
-         rewrite H45. subst tsp. rewrite H8.
+         rewrite H44. subst tsp. rewrite H8.
          rewrite pred_dec_false; eauto.
       -- reflexivity.
       -- assert ( RANGEPERM1: Mem.range_perm m2'' tsb 0 8 Cur Freeable). 
-         { red. intros. inversion H49.
+         { red. intros. inversion H48.
            eapply unchanged_on_perm; eauto.
          }
          assert ( RANGEPERM2: Mem.range_perm m2'' tsb 16 24 Cur Freeable). 
-         { red. intros. inversion H49.
+         { red. intros. inversion H48.
            eapply unchanged_on_perm; eauto.
          }
          econstructor; cbn.
-         rewrite H45. eauto.
+         rewrite H44. eauto.
          reflexivity.
          instantiate (1:= j'0).
          {
            intros. red. intros. destruct (j' b0) as [[tsb' d']|] eqn:Hinj.
-           apply H50 in Hinj as EQ. rewrite H0 in EQ. inv EQ.
+           apply H49 in Hinj as EQ. rewrite H0 in EQ. inv EQ.
            intro. apply H10 in H.
            red in H.  eapply H in Hinj as Hp. apply Hp.
-           apply H41; eauto.
+           apply H40; eauto.
            apply inject_implies_dom_in in Hm9.
            eapply Hm9; eauto.
-           exploit H51; eauto. intros [A B].
+           exploit H50; eauto. intros [A B].
            exfalso. apply B. eauto.
          }
          eauto. eauto. instantiate (1:= Hm'5). all: eauto.
          ++ etransitivity. instantiate (1:= injpw j' m1' m2' Hm'1).
             constructor; eauto.
             constructor; eauto.
-         ++ rewrite H46. eauto.
+         ++ rewrite H45. eauto.
          ++ intros. destruct (j' b0) as [[tsb' d']|] eqn: Hf.
-            * apply H50 in Hf as Hf'. rewrite H in Hf'. inv Hf'. eauto.
-            * exploit H51; eauto. intros [A B]. exfalso. apply B; eauto.
-         ++ rewrite H45. subst tsp. rewrite H8 in *. cbn in *.
-            eapply Mem.load_unchanged_on. apply H49. 2: eauto.
+            * apply H49 in Hf as Hf'. rewrite H in Hf'. inv Hf'. eauto.
+            * exploit H50; eauto. intros [A B]. exfalso. apply B; eauto.
+         ++ rewrite H44. subst tsp. rewrite H8 in *. cbn in *.
+            eapply Mem.load_unchanged_on. apply H48. 2: eauto.
             intros. eapply H10. right.
             rewrite Ptrofs.add_zero_l in H.
             rewrite Ptrofs.unsigned_repr in H.
             rewrite size_chunk_Mptr in H. Ap64_in H. lia.
             Plia.
-         ++ rewrite H45. subst tsp. rewrite H8 in *. cbn in *.
-            eapply Mem.load_unchanged_on. apply H49. 2: eauto.
+         ++ rewrite H44. subst tsp. rewrite H8 in *. cbn in *.
+            eapply Mem.load_unchanged_on. apply H48. 2: eauto.
             intros. eapply H10. left.
             rewrite Ptrofs.add_zero_l in H.
             rewrite Ptrofs.unsigned_zero in H.
             rewrite size_chunk_Mptr in H. Ap64_in H. lia.
          ++ intros. rewrite H43; eauto.
-         ++ inversion H49. eauto with mem.
+         ++ inversion H48. eauto with mem.
      -- reflexivity.
      -- reflexivity.            
   - (*internal_steps*)
