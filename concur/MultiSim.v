@@ -631,8 +631,6 @@ Section ConcurSim.
             intros. unfold rs'.
             destruct r; simpl in H; inv H; repeat rewrite Pregmap.gso;
               simpl; try congruence; try reflexivity.
-            intros. unfold Conventions.size_arguments in H. rewrite pthread_create_locs in H.
-            simpl in H. inv H. extlia.
             unfold rs'. repeat rewrite Pregmap.gso; try congruence.
             unfold rs'. rewrite Pregmap.gso; try congruence. rewrite Pregmap.gss. reflexivity.
           }
@@ -772,8 +770,6 @@ Section ConcurSim.
             intros. unfold rs'.
             destruct r; simpl in H; inv H; repeat rewrite Pregmap.gso;
               simpl; try congruence; try reflexivity.
-            intros. unfold Conventions.size_arguments in H. rewrite WA_SIG in H.
-            rewrite yield_loc in H.  simpl in H. inv H. extlia.
           }
           exploit M_REPLIES; eauto.
           intros (liT' & sa' & AFTERa & MSaT).

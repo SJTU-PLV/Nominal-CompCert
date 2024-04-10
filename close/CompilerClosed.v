@@ -274,7 +274,7 @@ Proof.
   { unfold tres. unfold sg. unfold CA.rs_getpair.
     unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32. simpl. destruct Archi.ptr64; reflexivity.
   }
-  inv H8. generalize (H1 RAX).
+  inv H9. generalize (H1 RAX).
   intro. simpl in H4. rewrite <- H3 in H4. rewrite <- H6 in H4.
   inv H4. reflexivity.
 Admitted.
@@ -307,17 +307,17 @@ Proof.
 
   inv H. inv H0. inv H1. inv H2. destruct r2.
   inv H0. simpl in H2. inv H2.
-  unfold rs0 in H16.
-  rewrite Pregmap.gso in H16; [|discriminate]. rewrite Pregmap.gss in H16.
+  unfold rs0 in H15.
+  rewrite Pregmap.gso in H15; [|discriminate]. rewrite Pregmap.gss in H15.
   assert (r0 PC = Vnullptr). {
-    pose proof (INJ := H0 PC). rewrite H16 in INJ.
+    pose proof (INJ := H0 PC). rewrite H15 in INJ.
     unfold Vnullptr. unfold Vnullptr in INJ.
     destruct Archi.ptr64; inv INJ; auto.
   }
   constructor; auto.
   unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32 in tres.
   subst tres.
-  destr_in H10; simpl in H10; inv H10;
+  destr_in H11; simpl in H11; inv H11;
   specialize (H0 RAX); rewrite <- H7 in H0; inv H0; auto.
 
   inv H2. inv H5. destruct x1. simpl in H6. inv H6.
@@ -326,17 +326,17 @@ Proof.
   inv H. destruct H1. inv H0. unfold sg, proj_sig_res in H5. simpl in H5.
   assert (res = Vint r). {
     unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32 in tres.
-    subst tres. destr_in H15; simpl in H15.
-    rewrite <- H8 in H15. inv H15. auto.
+    subst tres. destr_in H14; simpl in H14.
+    rewrite <- H8 in H14. inv H14. auto.
     admit. (* Vundef *)
-    rewrite <- H8 in H15. inv H15. auto.
+    rewrite <- H8 in H14. inv H14. auto.
     admit.
   }
   subst res. constructor.
   inv H1. destruct r1.
   inv H. inv H0.
   unfold Conventions1.loc_result, Conventions1.loc_result_64, Conventions1.loc_result_32 in tres.
-  subst tres. destr_in H15; simpl in H15; rewrite <- H8 in H15; inv H15.
+  subst tres. destr_in H14; simpl in H14; rewrite <- H8 in H14; inv H14.
   admit.
   admit.
 Admitted.
