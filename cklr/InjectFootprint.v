@@ -48,6 +48,8 @@ Inductive injp_acc: relation injp_world :=
     injp_max_perm_decrease m2 m2' ->
     Mem.unchanged_on (loc_unmapped f) m1 m1' ->
     Mem.unchanged_on (loc_out_of_reach f m1) m2 m2' ->
+    Mem.astack (Mem.support m1) = Mem.astack (Mem.support m1') ->
+    Mem.astack (Mem.support m2) = Mem.astack (Mem.support m2') ->
     inject_incr f f' ->
     inject_separated f f' m1 m2 ->
     injp_acc (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
@@ -57,7 +59,10 @@ Definition injp_mi :=
 
 Inductive injp_match_mem: injp_world -> relation mem :=
   injp_match_mem_intro f m1 m2 Hm:
-    injp_match_mem (injpw f m1 m2 Hm) m1 m2.
+    forall
+      (INJG : meminj_global f)
+      (ASTK : match_astack (Mem.astack (Mem.support m1)) (Mem.astack (Mem.support m2))),
+      injp_match_mem (injpw f m1 m2 Hm) m1 m2.
 
 Inductive injp_match_stbls: injp_world -> relation Genv.symtbl :=
   injp_match_stbls_intro f m1 m2 Hm se1 se2:
@@ -104,18 +109,15 @@ Global Instance injp_acc_preo:
 Proof.
   split.
   - intros [f m1 m2].
-    constructor.
-    + red. eauto.
-    + red. eauto.
+    constructor; auto.
     + red. eauto.
     + red. eauto.
     + apply Mem.unchanged_on_refl.
     + apply Mem.unchanged_on_refl.
-    + apply inject_incr_refl.
     + intros b ofs. congruence.
   - intros w1 w2 w3 H12 H23.
-    destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hr1 Hr2 Hp1 Hp2 H1 H2 Hf Hs].
-    inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hr1' Hr2' Hp1' Hp2' H1' H2' Hf' Hs']; subst.
+    destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hr1 Hr2 Hp1 Hp2 H1 H2 Ha1 Ha2 Hf Hs].
+    inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hr1' Hr2' Hp1' Hp2' H1' H2' Ha1' Ha2' Hf' Hs']; subst.
     constructor.
     + red. intros. eapply Hr1; eauto. eapply Hr1'; eauto.
       inversion H1. apply unchanged_on_support; eauto.
@@ -141,6 +143,8 @@ Proof.
         eapply Hptr2; eauto.
         eapply Hp1; eauto. eapply Mem.valid_block_inject_1; eauto.
       * edestruct Hs; eauto.
+    + rewrite Ha1, Ha1'. auto.
+    + rewrite Ha2, Ha2'. auto.
     + eapply inject_incr_trans; eauto.
     + intros b1 b2 delta Hb Hb''.
       destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
@@ -188,6 +192,8 @@ Proof.
     eelim (Mem.fresh_block_alloc m2); eauto.
   - eapply Mem.alloc_unchanged_on; eauto.
   - eapply Mem.alloc_unchanged_on; eauto.
+  - erewrite <- Mem.astack_alloc; eauto.
+  - erewrite <- Mem.astack_alloc; eauto.
   - assumption.
   - red. intros b b' delta Hb Hb'.
     assert (b = b1).
@@ -223,6 +229,8 @@ Proof.
     eapply Mem.perm_implies; [ | eapply perm_any_N].
     eapply Mem.free_range_perm; eauto.
     extlia.
+  - erewrite <- Mem.support_free; eauto.
+  - erewrite <- Mem.support_free; eauto.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
 Qed.
@@ -251,6 +259,8 @@ Proof.
     eapply Mem.perm_implies; [ | eapply perm_any_N].
     eapply H3; eauto.
     extlia.
+  - erewrite <- Mem.support_store; eauto.
+  - erewrite <- Mem.support_store; eauto.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
 Qed.
@@ -286,7 +296,7 @@ Next Obligation.
   inv H0.
   unfold inject_separated in *.
   intros b1 b2 delta Hw Hw'.
-  destruct (H8 _ _ _ Hw Hw') as [Hm1 Hm2].
+  destruct (H10 _ _ _ Hw Hw') as [Hm1 Hm2].
   inv H.
   tauto.
 Qed.
@@ -296,8 +306,8 @@ Next Obligation. (* ~> vs. match_stbls *)
   destruct Hse as [f m1 m2 se1 se2 Hse Hnb1 Hnb2]. inv Hw'.
   constructor.
   - eapply Genv.match_stbls_incr; eauto.
-    intros b1 b2 delta Hb Hb'. specialize (H11 b1 b2 delta Hb Hb').
-    unfold Mem.valid_block in H11. split; inv H11; eauto.
+    intros b1 b2 delta Hb Hb'. specialize (H13 b1 b2 delta Hb Hb').
+    unfold Mem.valid_block in H13. split; inv H13; eauto.
   - apply Mem.unchanged_on_support in H7. eauto.
   - apply Mem.unchanged_on_support in H8. eauto.
 Qed.
@@ -319,6 +329,13 @@ Next Obligation. (* Mem.alloc *)
   rewrite Hm2'.
   exists (injpw f' m1' m2' Hm'); split; repeat rstep; eauto.
   eapply injp_acc_alloc; eauto.
+  constructor. red. intros. rewrite Hff' in H.
+  apply INJG. auto.
+  clear Hm2'. exploit Mem.alloc_result_stack; eauto. intro.
+  red in H0. destr_in H0.
+  erewrite Mem.astack_alloc; [|exact Hm1'].
+  erewrite (Mem.astack_alloc m2 _ _ m2'); [|exact Hm2'].
+  auto.
 Qed.
 
 Next Obligation. (* Mem.free *)
@@ -331,6 +348,8 @@ Next Obligation. (* Mem.free *)
   rewrite Hm2'. repeat rstep.
   exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
   eapply injp_acc_free; eauto.
+  erewrite <- Mem.support_free in ASTK; eauto.
+  erewrite <- (Mem.support_free m2 _ _ _ m2') in ASTK; eauto.
 Qed.
 
 Next Obligation. (* Mem.load *)
@@ -349,6 +368,8 @@ Next Obligation. (* Mem.store *)
   rewrite Hm2'. repeat rstep.
   exists (injpw f m1' m2' Hm'); split; repeat rstep; eauto.
   eapply injp_acc_store; eauto.
+  erewrite <- Mem.support_store in ASTK; eauto.
+  erewrite <- (Mem.support_store _ m2 _ _ _ m2') in ASTK; eauto.
 Qed.
 
 Next Obligation. (* Mem.loadbytes *)
@@ -383,8 +404,12 @@ Next Obligation. (* Mem.storebytes *)
         simpl. intro. extlia.
       * eapply Mem.storebytes_unchanged_on; eauto.
         simpl. intro. extlia.
+      * erewrite <- Mem.support_storebytes; eauto.
+      * erewrite <- Mem.support_storebytes; eauto.
       * apply inject_separated_refl.
     + constructor; eauto.
+      erewrite Mem.support_storebytes; eauto.
+      erewrite (Mem.support_storebytes m2 _ _ _ m2'); eauto.
   - assert (ptr_inject f (b1, ofs1) (b2, ofs2)) as Hptr'.
     {
       destruct Hptr as [Hptr|Hptr]; eauto.
@@ -417,8 +442,13 @@ Next Obligation. (* Mem.storebytes *)
       eapply Mem.storebytes_range_perm; eauto.
       red in Hvs. rewrite Hvs.
       extlia.
+    + erewrite <- Mem.support_storebytes; eauto.
+    + erewrite <- Mem.support_storebytes; eauto.
     + apply inject_incr_refl.
     + apply inject_separated_refl.
+    + constructor; eauto.
+      erewrite Mem.support_storebytes; eauto.
+      erewrite (Mem.support_storebytes m2 _ _ _ m2'); eauto.
 Qed.
 
 Next Obligation. (* Mem.perm *)
@@ -478,26 +508,29 @@ Proof.
   repeat apply conj.
   - exists se1. split; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
-  - exists m1; split; repeat rstep; eauto using inj_mem_intro, mem_inject_dom.
+  - exists m1; split; repeat rstep; eauto.
+    constructor; eauto using inj_mem_intro, mem_inject_dom, meminj_global_dom.
+    apply match_astack_refl. inv ASTK. congruence.
   - rewrite meminj_dom_compose.
     apply inject_incr_refl.
   - intros [w12' w23'] m1' m3' (m2' & H12' & H23') [Hw12' Hw23']. cbn in *.
     destruct H12' as [f12' m1' m2' Hm12'].
     inversion H23' as [f23' xm2' xm3' Hm23']. clear H23'; subst.
-    inversion Hw12' as [? ? ? ? ? ? ? ? ? ? ? ? UNMAP1 ? Hf12' SEP12']. clear Hw12'; subst.
-    inversion Hw23' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
+    inversion Hw12' as [? ? ? ? ? ? ? ? ? ? ? ? UNMAP1 ? ? ? Hf12' SEP12']. clear Hw12'; subst.
+    inversion Hw23' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
     eexists (injpw (compose_meminj f12' f23') m1' m3'
                (Mem.inject_compose f12' f23' _ _ _ Hm12' Hm23')
             ).
     repeat apply conj.
-    + constructor; auto.
+    + constructor; auto. apply meminj_global_compose; auto.
+      etransitivity; eauto.
     + constructor; auto.
       *
         generalize (loc_unmapped_dom f). intros.
         inv UNMAP1. constructor; eauto.
-        intros. apply unchanged_on_perm. apply H10. eauto.
+        intros. apply unchanged_on_perm. apply H14. eauto.
         eauto.
-        intros. apply unchanged_on_contents. apply H10. eauto.
+        intros. apply unchanged_on_contents. apply H14. eauto.
         eauto.
       * rewrite <- (meminj_dom_compose f). rauto.
       * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
@@ -676,9 +709,10 @@ Proof.
     }
     exploit IHs1'. eauto.
     (* rebuild preconditions for induction step *)
-    + instantiate (1:= (a :: s1)).
-      red. intros b0 b' o. unfold meminj_add. destruct eq_block.
-      left. auto. right. eauto.
+    + instantiate (1 := Mem.sup_add_block s1 a).
+      red. intros b0 b' o. unfold meminj_add. destruct eq_block; intros.
+      subst. apply Mem.sup_add_block_in.
+      apply Mem.sup_add_block_in_preserve. eauto.
     + red. intros b0 b' o. unfold meminj_add. destruct eq_block.
       subst. intro INJ. inv INJ. eapply Mem.sup_incr_in1. intro. apply Mem.sup_incr_in2. eauto.
     + red. intros b0 b' o. unfold meminj_add. destruct eq_block.
@@ -688,7 +722,7 @@ Proof.
     + instantiate (1:= s3). rewrite meminj_add_compose.
       red. intros b0 b' o INJ1 INJ2. unfold meminj_add in INJ1. destruct (eq_block b0 a).
       congruence. exploit INCRDISJ13; eauto. intros [A B]. split.
-      intros [H|H]; congruence.
+      intro. apply Mem.sup_in_add_block in H as [|]; congruence.
       auto.
       intros. intro. apply IMGIN12 in H. eapply freshness; eauto.
     +
@@ -706,7 +740,9 @@ Proof.
     + subst. generalize (meminj_add_new j1 a (fresh_block s2,0)). intro INJadd.
       apply incr1 in INJadd. rewrite INJ2 in INJadd. inv INJadd. split. auto. apply freshness.
     + exploit disjoint1. unfold meminj_add. rewrite pred_dec_false; eauto. eauto.
-      intros [A B]. split. intro. apply A. right. auto. intro. apply B. apply Mem.sup_incr_in2. auto.
+      intros [A B]. split.
+      intro. apply A. apply Mem.sup_add_block_in_preserve. auto.
+      intro. apply B. apply Mem.sup_incr_in2. auto.
     }
     (*disjoint2*)
     {
@@ -826,7 +862,7 @@ Proof.
   - simpl. destruct (j a) eqn: Hja. eauto.
     destruct (eq_block a0 a).
     + subst. unfold meminj_sub. rewrite pred_dec_true; eauto.
-      replace (fun b0 : positive => if eq_block a b0 then None else j' b0) with (meminj_sub j' a); eauto.
+      replace (fun b0 : Block.block => if eq_block a b0 then None else j' b0) with (meminj_sub j' a); eauto.
       rewrite IHs. destruct (j' a).
       -- destruct p. erewrite update_meminj_diff1; eauto.
       -- auto.
@@ -837,13 +873,13 @@ Proof.
 Qed.
 
 Lemma inject_dom_in_sub: forall j a s,
-    inject_dom_in j (a::s) ->
+    inject_dom_in j (Mem.sup_add_block s a) ->
     inject_dom_in (meminj_sub j a) s.
 Proof.
   intros.
   red. red in H. intros. unfold meminj_sub in H0.
   destruct eq_block in H0. congruence. exploit H; eauto.
-  intros [A|A]. congruence. auto.
+  intros. apply Mem.sup_in_add_block in H1 as [|]; congruence.
 Qed.
 
 
@@ -859,6 +895,7 @@ Proof.
   intros. unfold meminj_sub. destruct eq_block; congruence.
 Qed.
 
+(*
 Lemma update_meminj_new: forall s j j' b b' ofs,
   j b = None ->
   j' b = Some (b',ofs) ->
@@ -2494,7 +2531,7 @@ Proof.
   - inv MSTBL13. inv H. inv H0. inv H1.
     econstructor; simpl; auto.
     eapply Genv.match_stbls_compose; eauto.
-  - constructor.
+  - constructor. apply meminj_global_compose; auto. etransitivity; eauto.
   - apply inject_incr_refl.
   - intros w13' m1' m3' MMEM13' INCR13'.
     unfold rel_compose.
@@ -2659,3 +2696,4 @@ Proof.
         intros [E F]. split; eauto.
     + repeat rstep; eauto.
 Qed.
+*)

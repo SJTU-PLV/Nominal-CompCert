@@ -353,7 +353,6 @@ Fixpoint classify_stmt (s: Cminor.stmt) : stmt_class :=
       | Cminor.Evar id2 => if ident_eq id id2 then SCskip else SCassign id a
       | _ =>  SCassign id a
       end
-  | Cminor.Sbuiltin None (EF_debug _ _ _) _ => SCskip
   | Cminor.Sseq s1 s2 =>
       match classify_stmt s1, classify_stmt s2 with
       | SCskip, c2 => c2

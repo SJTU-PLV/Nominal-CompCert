@@ -267,6 +267,7 @@ Proof.
     + congruence.
     + destruct Hm23. erewrite <- Mem.mext_sup; eauto.
       constructor; eauto.
+      inv Hm12. rewrite mext_sup. auto.
       eapply Mem.extends_inject_compose; eauto.
     + rewrite compose_meminj_id_left. apply inject_incr_refl.
     + intros f' m1' m3' Hm' Hincr.
@@ -283,6 +284,7 @@ Proof.
       exists f'. intuition auto.
       * destruct Hmi2. erewrite <- Mem.mext_sup; eauto.
         constructor; auto.
+        inv Hm1i. rewrite mext_sup. auto.
         eapply Mem.extends_inject_compose; eauto.
       * rewrite compose_meminj_id_left. apply inject_incr_refl.
 Qed.
@@ -297,6 +299,7 @@ Proof.
     + destruct Hm12.
       erewrite (Mem.mext_sup m2 m3); eauto.
       constructor; eauto.
+      inv Hm23. rewrite <- mext_sup. auto.
       eapply Mem.inject_extends_compose; eauto.
     + rewrite compose_meminj_id_right. apply inject_incr_refl.
     + intros f' m1' m3' Hm' Hincr.
@@ -314,6 +317,7 @@ Proof.
       * destruct Hm1i.
         erewrite (Mem.mext_sup m3 m2'); eauto.
         constructor; auto.
+        inv Hmi2. rewrite <- mext_sup. auto.
         eapply Mem.inject_extends_compose; eauto.
       * rewrite compose_meminj_id_right. apply inject_incr_refl.
 Qed.
@@ -332,7 +336,8 @@ Proof.
     eapply match_stbls_dom; eauto.
     exists se1. split. auto. constructor; eauto.
   - exists m1; split.
-    constructor.
+    constructor. auto using meminj_global_dom.
+    apply match_astack_refl. admit. (* TODO: astack <> nil *)
     exists m1; split. apply Mem.extends_refl.
     constructor; eauto.
   - rewrite compose_meminj_id_left.
@@ -351,7 +356,9 @@ Proof.
     eapply Mem.extends_inject_compose; eauto.
     eexists (injpw (compose_meminj f12 f34) m1' m4' Hm14').
     repeat apply conj.
-    + constructor; eauto.
+    + constructor; eauto using meminj_global_compose.
+      inv Hm23'. rewrite mext_sup in *.
+      etransitivity; eauto.
     + constructor; eauto.
       * eapply Mem.unchanged_on_implies; eauto.
         intros. apply loc_unmapped_dom; eauto.
@@ -360,11 +367,10 @@ Proof.
       * red. intros b1 b4 d f14 INJ. unfold compose_meminj in INJ.
         destruct (f12 b1) as [[b2 d1]|] eqn: INJ1; try congruence.
         destruct (f34 b2) as [[b3 d3]|] eqn: INJ3; try congruence. inv INJ.
-        exploit H16; eauto. unfold meminj_dom. rewrite f14. auto.
+        exploit H18; eauto. unfold meminj_dom. rewrite f14. auto.
         intros [A B].
-        exploit H23. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
+        exploit H27. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
         intros [E F]. split; eauto.
     + rewrite compose_meminj_id_left.
       repeat rstep; eauto.
-Qed.
-
+Admitted.

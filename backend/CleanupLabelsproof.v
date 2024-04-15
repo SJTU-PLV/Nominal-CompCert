@@ -32,6 +32,7 @@ Qed.
 
 Section CLEANUP.
 
+Variables fn_stack_requirements: ident -> Z.
 Variables prog tprog: program.
 Hypothesis TRANSL: match_prog prog tprog.
 Variable se: Genv.symtbl.
@@ -186,10 +187,17 @@ Inductive match_states: state -> state -> Prop :=
       match_states (State s f sp c ls m)
                    (State ts (transf_function f) sp (remove_unused_labels (labels_branched_to f.(fn_code)) c) ls m)
   | match_states_call:
+<<<<<<< HEAD
       forall s vf ls m ts,
       list_forall2 match_stackframes s ts ->
       match_states (Callstate s vf ls m)
                    (Callstate ts vf ls m)
+=======
+      forall s f ls m ts id,
+      list_forall2 match_stackframes s ts ->
+      match_states (Callstate s f ls m id)
+                   (Callstate ts (transf_fundef f) ls m id)
+>>>>>>> origin/StackAware-new
   | match_states_return:
       forall s ls m ts,
       list_forall2 match_stackframes s ts ->
@@ -211,9 +219,9 @@ Proof.
 Qed.
 
 Theorem transf_step_correct:
-  forall s1 t s2, step ge s1 t s2 ->
+  forall s1 t s2, step fn_stack_requirements ge s1 t s2 ->
   forall s1' (MS: match_states s1 s1'),
-  (exists s2', step tge s1' t s2' /\ match_states s2 s2')
+  (exists s2', step fn_stack_requirements tge s1' t s2' /\ match_states s2 s2')
   \/ (measure s2 < measure s1 /\ t = E0 /\ match_states s2 s1')%nat.
 Proof.
   induction 1; intros; inv MS; try rewrite remove_unused_labels_cons.
@@ -239,14 +247,24 @@ Proof.
   econstructor; eauto with coqlib.
 (* Lcall *)
   left; econstructor; split.
+<<<<<<< HEAD
   econstructor. eapply functions_translated; eauto.
+=======
+  econstructor. eauto.
+  eapply find_function_translated; eauto.
+>>>>>>> origin/StackAware-new
   symmetry; apply sig_function_translated.
   econstructor; eauto. constructor; auto. constructor; eauto with coqlib.
 (* Ltailcall *)
   left; econstructor; split.
+<<<<<<< HEAD
   econstructor. erewrite match_parent_locset; eauto. eapply functions_translated; eauto.
+=======
+  econstructor. erewrite match_parent_locset; eauto. eauto.
+  eapply find_function_translated; eauto.
+>>>>>>> origin/StackAware-new
   symmetry; apply sig_function_translated.
-  simpl. eauto.
+  simpl. eauto. eauto. eauto.
   econstructor; eauto.
 (* Lbuiltin *)
   left; econstructor; split.
@@ -304,6 +322,7 @@ Lemma transf_initial_states q:
 Proof.
   intros. inv H.
   econstructor; split.
+<<<<<<< HEAD
   - apply functions_translated in H0.
     setoid_rewrite <- (sig_function_translated (Internal f)).
     constructor; eauto.
@@ -320,13 +339,37 @@ Proof.
   pose proof (functions_translated _ _ H).
   split. econstructor; eauto. intros r S' HS'. inv HS'. rewrite H8 in H; inv H.
   eexists. split; econstructor; eauto.
+=======
+  eapply initial_state_intro with (f := transf_fundef f).
+  eapply (Genv.init_mem_transf TRANSL); eauto.
+  rewrite (match_program_main TRANSL), symbols_preserved; eauto.
+  apply function_ptr_translated; auto.
+  rewrite sig_function_translated. auto. eauto.
+  rewrite (match_program_main TRANSL).
+  constructor; auto. constructor.
+>>>>>>> origin/StackAware-new
 Qed.
 
 Lemma transf_final_states:
   forall st1 st2 r,
   match_states st1 st2 -> final_state st1 r -> final_state st2 r.
 Proof.
+<<<<<<< HEAD
   intros. inv H0. inv H. inv H4. inv H1. econstructor; eauto.
+=======
+  intros. inv H0. inv H. inv H5. econstructor; eauto.
+Qed.
+
+Theorem transf_program_correct:
+  forward_simulation (Linear.semantics fn_stack_requirements prog)
+                     (Linear.semantics fn_stack_requirements tprog).
+Proof.
+  eapply forward_simulation_opt.
+  apply senv_preserved.
+  eexact transf_initial_states.
+  eexact transf_final_states.
+  eexact transf_step_correct.
+>>>>>>> origin/StackAware-new
 Qed.
 
 End CLEANUP.

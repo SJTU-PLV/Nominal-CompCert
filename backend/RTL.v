@@ -171,7 +171,8 @@ Inductive state : Type :=
       forall (stack: list stackframe) (**r call stack *)
              (vf: val)                (**r function to call *)
              (args: list val)         (**r arguments to the call *)
-             (m: mem),                (**r memory state *)
+             (m: mem)                 (**r memory state *)
+             (id: ident),
       state
   | Returnstate:
       forall (stack: list stackframe) (**r call stack *)
@@ -185,9 +186,29 @@ Definition ros_address ge (ros: reg + ident) (rs: regset) : val :=
   | inr symb => Genv.symbol_address ge symb Ptrofs.zero
   end.
 
+Section ORACLE.
+
+Variable fn_stack_requirements : ident -> Z.
 Section RELSEM.
 
 Variable ge: genv.
+
+Definition find_function
+      (ros: reg + ident) (rs: regset) : option fundef :=
+  match ros with
+  | inl r => Genv.find_funct ge rs#r
+  | inr symb =>
+      match Genv.find_symbol ge symb with
+      | None => None
+      | Some b => Genv.find_funct_ptr ge b
+      end
+  end.
+
+Definition ros_is_ident (ros: reg + ident) (rs: regset) (i: ident) : Prop :=
+  match ros with
+  | inl r => rs # r = Vptr (Global i) Ptrofs.zero
+  | inr symb => i = symb
+  end.
 
 (** The transitions are presented as an inductive predicate
   [step ge st1 t st2], where [ge] is the global environment,
@@ -221,29 +242,33 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State s f sp pc rs m)
         E0 (State s f sp pc' rs m')
   | exec_Icall:
-      forall s f sp pc rs m sig ros args res pc' fd,
+      forall s f sp pc rs m sig ros args res pc' fd id,
       let vf := ros_address ge ros rs in
       (fn_code f)!pc = Some(Icall sig ros args res pc') ->
+      ros_is_ident ros rs id ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (State s f sp pc rs m)
-        E0 (Callstate (Stackframe res f sp pc' rs :: s) vf rs##args m)
+        E0 (Callstate (Stackframe res f sp pc' rs :: s) vf rs##args (Mem.push_stage m) id)
   | exec_Itailcall:
-      forall s f stk pc rs m sig ros args fd m',
+      forall s f stk pc rs m sig ros args fd m' id,
       let vf := ros_address ge ros rs in
       (fn_code f)!pc = Some(Itailcall sig ros args) ->
+      ros_is_ident ros rs id ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      Mem.astack (Mem.support m') <> nil ->
       step (State s f (Vptr stk Ptrofs.zero) pc rs m)
-        E0 (Callstate s vf rs##args m')
+        E0 (Callstate s vf rs##args m' id)
   | exec_Ibuiltin:
-      forall s f sp pc rs m ef args res pc' vargs t vres m',
+      forall s f sp pc rs m ef args res pc' vargs t vres m' m'',
       (fn_code f)!pc = Some(Ibuiltin ef args res pc') ->
       eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
-      external_call ef ge vargs m t vres m' ->
+      external_call ef ge vargs (Mem.push_stage m) t vres m' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State s f sp pc rs m)
-         t (State s f sp pc' (regmap_setres res vres rs) m')
+         t (State s f sp pc' (regmap_setres res vres rs) m'')
   | exec_Icond:
       forall s f sp pc rs m cond args ifso ifnot b pc',
       (fn_code f)!pc = Some(Icond cond args ifso ifnot) ->
@@ -262,29 +287,32 @@ Inductive step: state -> trace -> state -> Prop :=
       forall s f stk pc rs m or m',
       (fn_code f)!pc = Some(Ireturn or) ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      Mem.astack (Mem.support m') <> nil ->
       step (State s f (Vptr stk Ptrofs.zero) pc rs m)
         E0 (Returnstate s (regmap_optget or Vundef rs) m')
   | exec_function_internal:
-      forall s vf f args m m' stk,
+      forall s vf f args m m' m'' stk id,
       forall FIND: Genv.find_funct ge vf = Some (Internal f),
       Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
-      step (Callstate s vf args m)
+      Mem.record_frame m' (Memory.mk_frame (Stack 1%positive) (fn_stack_requirements id)) = Some m'' ->
+      step (Callstate s vf args m id)
         E0 (State s
                   f
                   (Vptr stk Ptrofs.zero)
                   f.(fn_entrypoint)
                   (init_regs args f.(fn_params))
-                  m')
+                  m'')
   | exec_function_external:
-      forall s vf ef args res t m m',
+      forall s vf ef args res t m m' id,
       forall FIND: Genv.find_funct ge vf = Some (External ef),
       external_call ef ge args m t res m' ->
-      step (Callstate s vf args m)
+      step (Callstate s vf args m id)
          t (Returnstate s res m')
   | exec_return:
-      forall res f sp pc rs s vres m,
+      forall res f sp pc rs s vres m m',
+      Mem.pop_stage m = Some m' ->
       step (Returnstate (Stackframe res f sp pc rs :: s) vres m)
-        E0 (State s f sp pc (rs#res <- vres) m).
+        E0 (State s f sp pc (rs#res <- vres) m').
 
 Lemma exec_Iop':
   forall s f sp pc rs m op args res pc' rs' v,
@@ -317,28 +345,35 @@ End RELSEM.
   without arguments and with an empty call stack. *)
 
 Inductive initial_state (ge: genv): c_query -> state -> Prop :=
-  | initial_state_intro: forall vf f vargs m,
+  | initial_state_intro: forall vf f vargs m id,
       Genv.find_funct ge vf = Some (Internal f) ->
+      vf = Vptr (Global id) Ptrofs.zero ->
+      Mem.astack (Mem.support m) <> nil ->
       initial_state ge
         (cq vf (fn_sig f) vargs m)
-        (Callstate nil vf vargs m).
+        (Callstate nil vf vargs m id).
 
 Inductive at_external (ge: genv): state -> c_query -> Prop :=
-  | at_external_intro s vf name sg vargs m:
+  | at_external_intro s vf name sg vargs m id:
       Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
+      vf = Vptr (Global id) Ptrofs.zero ->
+      Mem.astack (Mem.support m) <> nil ->
       at_external ge
-        (Callstate s vf vargs m)
+        (Callstate s vf vargs m id)
         (cq vf sg vargs m).
 
 Inductive after_external: state -> c_reply -> state -> Prop :=
-  | after_external_intro s vf vargs m vres m':
+  | after_external_intro s vf vargs m vres m' id:
+      vf = Vptr (Global id) Ptrofs.zero ->
+      Mem.astack (Mem.support m) <> nil ->
       after_external
-        (Callstate s vf vargs m)
+        (Callstate s vf vargs m id)
         (cr vres m')
         (Returnstate s vres m').
 
 Inductive final_state: state -> c_reply -> Prop :=
   | final_state_intro: forall r m,
+      Mem.astack (Mem.support m) <> nil ->
       final_state
        (Returnstate nil r m)
        (cr r m).
@@ -359,7 +394,12 @@ Proof.
     intros. subst. inv H0. exists s1; auto.
   inversion H; subst; auto.
   exploit external_call_receptive; eauto. intros [vres2 [m2 EC2]].
-  exists (State s0 f sp pc' (regmap_setres res vres2 rs) m2). eapply exec_Ibuiltin; eauto.
+  assert ({m3:mem | Mem.pop_stage m2 = Some m3}).
+  apply Mem.nonempty_pop_stage.
+    eapply external_call_astack in EC2.
+    rewrite <- EC2. simpl.  congruence.
+  destruct X as [m3 POP_STAGE].
+  exists (State s0 f sp pc' (regmap_setres res vres2 rs) m3). eapply exec_Ibuiltin; eauto.
   exploit external_call_receptive; eauto. intros [vres2 [m2 EC2]].
   exists (Returnstate s0 vres2 m2). econstructor; eauto.
 (* trace length *)
@@ -368,6 +408,7 @@ Proof.
   eapply external_call_trace_length; eauto.
 Qed.
 
+End ORACLE.
 (** * Operations on RTL abstract syntax *)
 
 (** Transformation of a RTL function instruction by instruction.

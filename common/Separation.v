@@ -879,12 +879,14 @@ Lemma external_call_parallel_rule:
   /\ Mem.unchanged_on (loc_unmapped j) m1 m1'
   /\ m2' |= minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
   /\ inject_incr j j'
-  /\ inject_separated j j' m1 m2.
+  /\ inject_separated j j' m1 m2
+  /\ incr_without_glob j j'
+  /\ Mem.inject j' m1' m2'.
 Proof.
   intros until vargs2; intros CALL SEP ARGS.
   destruct SEP as (A & B & C). simpl in A.
-  exploit external_call_mem_inject; eauto. apply B.
-  intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & INCR & ISEP).
+  exploit external_call_mem_inject'; eauto. apply B.
+  intros (j' & vres2 & m2' & CALL' & RES & INJ' & UNCH1 & UNCH2 & ASTK1 & ASTK2 & INCR & INCRG & ISEP).
   assert (MAXPERMS: forall b ofs p,
             Mem.valid_block m1 b -> Mem.perm m1' b ofs Max p -> Mem.perm m1 b ofs Max p).
   { intros. eapply external_call_max_perm; eauto. }
@@ -919,7 +921,8 @@ Lemma alloc_parallel_rule_2:
      m2' |= range b2 0 lo ** range b2 hi sz2 ** minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
   /\ inject_incr j j'
   /\ j' b1 = Some(b2, delta)
-  /\ inject_separated j j' m1 m2 .
+  /\ inject_separated j j' m1 m2
+  /\ (forall b, b <> b1 -> j' b = j b).
 Proof.
   intros.
   set (j1 := fun b => if eq_block b b1 then Some(b2, delta) else j b).
@@ -942,10 +945,157 @@ Proof.
 - rewrite (Mem.support_alloc m1 0 sz1 m1' b1); eauto.
 - split; auto.
   split; auto.
+  split; auto.
   red. intros b0 b3 delta0 H8 H9.
   destruct (eq_block b0 b1).
   + subst.
     rewrite C in H9. inversion H9. subst delta0 b3.
     eauto with mem.
   + rewrite D in H9; congruence.
+Qed.
+
+Lemma push_stage_unchanged_on:
+  forall P m,
+    Mem.unchanged_on P m (Mem.push_stage m).
+Proof.
+  intros.
+  constructor; simpl; eauto. unfold Mem.sup_push_stage.
+  unfold Mem.sup_include. unfold Mem.sup_In. auto.
+  intros. unfold Mem.push_stage. split.
+  eauto. eauto.
+Qed.
+
+Lemma pop_stage_unchanged_on:
+  forall P m m',
+    Mem.pop_stage m = Some m' ->
+    Mem.unchanged_on P m m'.
+Proof.
+  intros.
+  constructor; simpl.
+  - apply Mem.sup_include_pop_stage; eauto.
+  - intros. erewrite Mem.perm_pop_stage; eauto. reflexivity.
+  - intros. unfold Mem.pop_stage in H. destruct (Mem.astack(Mem.support m)). discriminate.
+    inv H. auto.
+Qed.
+
+Lemma record_frame_unchanged_on:
+  forall P m m' fr,
+    Mem.record_frame m fr = Some m' ->
+    Mem.unchanged_on P m m'.
+Proof.
+  intros.
+  constructor; simpl.
+  - eapply Mem.sup_include_record_frame; eauto.
+  - intros. eapply Mem.perm_record_frame. eauto.
+  - intros. unfold Mem.record_frame in H.
+    destruct (zle (Memory.frame_size_a fr + Memory.stack_size (Mem.astack(Mem.support m)))). 2:discriminate.
+    destruct (Mem.astack(Mem.support m)). discriminate.
+    inv H. auto.
+Qed.
+
+Lemma push_rule:
+  forall j m1 m2 P,
+    m2 |= minjection j m1 ** P ->
+    Mem.push_stage m2 |= minjection j (Mem.push_stage m1) ** P.
+Proof.
+  intros j m1 m2 P (INJ & RP & DISJ).
+  split;[|split].
+  apply Mem.push_stage_inject.
+  apply INJ.
+  eapply m_invar. eauto.
+  generalize (push_stage_unchanged_on (m_footprint P) m2).
+  congruence.
+  red; simpl; intros.
+  destruct H as (b0 & delta & JB & PERM).
+  eapply DISJ; eauto.
+  exists b0, delta; split; eauto.
+Qed.
+
+Lemma push_rule_2:
+  forall j m1 m2 P Q,
+    m2 |= mconj (minjection j m1) Q ** P ->
+    Mem.push_stage m2 |= mconj (minjection j (Mem.push_stage m1)) Q ** P.
+Proof.
+  intros j m1 m2 P Q SEP.
+  eapply frame_mconj. apply SEP.
+  apply mconj_proj1 in SEP.
+  apply push_rule in SEP.
+  eapply sep_imp. apply SEP.
+  red; split; auto. split; auto. auto.
+  eapply m_invar. apply mconj_proj2 in SEP. apply SEP.
+  eapply push_stage_unchanged_on.
+Qed.
+
+Lemma pop_stage_parallel_rule:
+  forall m1 m1' m2 j P,
+    m2 |= minjection j m1 ** P ->
+    Mem.pop_stage m1 = Some m1' ->
+    Mem.astack(Mem.support m2) <> nil ->
+    exists m2', Mem.pop_stage m2 = Some m2' /\
+    m2' |= minjection j m1' ** P.
+Proof.
+  intros m1 m1' m2  j P MINJ POP1 POP2.
+  exploit Mem.pop_stage_parallel_inject. apply MINJ. eauto. eauto.
+  intros (m2' & POP & INJ). exists m2'.
+  destruct MINJ as (MINJ & PM & DISJ).
+  split. auto.
+  split; [|split].
+  - simpl in *. auto.
+  - eapply m_invar. eauto.
+    exploit pop_stage_unchanged_on. eauto.
+    intros. apply H.
+  - red; intros. eapply DISJ. 2: eauto. simpl in H |- *.
+    decompose [ex and] H.
+    repeat eexists; eauto.
+    eapply Mem.perm_pop_stage; eauto.
+Qed.
+(*
+Lemma pop_frame_parallel_rule:
+  forall (j : meminj)(m1 : mem) (b1 : block) (sz1 sz2 : Z) (m2 m3 m1' : mem) (b2 : block) (lo hi delta n : Z) (P : massert),
+    m1' |= range b2 0 lo ** range b2 hi sz2 ** minjection j m1 ** P ->
+    Mem.free m1 b1 0 sz1 = Some m2 ->
+    Mem.pop_stage m2 = Some m3 ->
+    j b1 = Some (b2, delta) ->
+    lo = delta -> hi = delta + Z.max 0 sz1 ->
+    exists m2' m3',
+      Mem.free m1' b2 0 sz2 = Some m2' /\
+      Mem.pop_stage m2' = Some m3'
+      /\ m3' |= minjection j  m3 ** P.
+Proof.
+  intros j m1 b1 sz1 sz2 m2 m3 m1' b2 lo hi delta n P SEP FREE UNRECORD JB LOEQ HIEQ.
+  exploit free_parallel_rule; eauto.
+  simpl. auto.
+  intros (m2' & FREE' & SEP').
+  exploit pop_stage_parallel_rule; eauto.
+  repeat rewrite_stack_blocks. auto.
+  intros (m2'0 & UNRECORD' & SEP'').
+  eexists; eexists; eauto.
+Qed.
+*)
+
+Lemma record_frame_parallel_rule:
+  forall m1 m1' m2  j P size b1 b2,
+    m2 |= minjection j  m1 ** P ->
+    Mem.record_frame m1 (mk_frame b1 size) = Some m1' ->
+    Memory.stack_size (Mem.astack(Mem.support m2)) <=
+    Memory.stack_size (Mem.astack(Mem.support m1)) ->
+    Mem.astack (Mem.support m2) <> nil ->
+    exists m2', Mem.record_frame m2 (mk_frame b2 size) = Some m2' /\
+    m2' |= minjection j  m1' ** P.
+Proof.
+  intros m1 m1' m2  j P size b1 b2 MINJ RECORD1 SIZE NE.
+  exploit Mem.record_frame_parallel_inject; eauto. apply MINJ.
+  instantiate (1:=b2).
+  intros (m2' & RECORD & INJ).
+  destruct MINJ as (MINJ & PM & DISJ).
+  exists m2'. split. auto.
+  split; [|split].
+  - simpl in *. auto.
+  - eapply m_invar. eauto.
+    exploit record_frame_unchanged_on. eauto.
+    intros. apply H.
+  - red; intros. eapply DISJ. 2: eauto. simpl in H |- *.
+    decompose [ex and] H.
+    repeat eexists; eauto.
+    eapply Mem.perm_record_frame; eauto.
 Qed.

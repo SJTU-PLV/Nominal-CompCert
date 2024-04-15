@@ -17,7 +17,7 @@
 Require Import Coqlib Maps Integers Floats Lattice Kildall.
 Require Import AST Linking Builtins.
 Require Compopts Machregs.
-Require Import Op Registers RTL.
+Require Import Op Registers RTL RTLmach.
 Require Import Liveness ValueDomain ValueAOp ValueAnalysis.
 Require Import ConstpropOp.
 

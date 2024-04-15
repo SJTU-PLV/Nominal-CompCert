@@ -14,7 +14,7 @@ Require Import FunInd.
 Require Import Zwf Coqlib Maps Zbits Integers Floats Lattice.
 Require Import Compopts AST.
 Require Import Values Memory Globalenvs Builtins Events.
-Require Import Registers RTL.
+Require Import Registers RTL RTLmach.
 
 (** The abstract domains for value analysis *)
 
@@ -3812,6 +3812,36 @@ Proof.
   intros. eauto with mem.
 Qed.
 
+Lemma romatch_pop_stage:
+  forall m m' rm,
+  Mem.pop_stage m  = Some m' ->
+  romatch m rm ->
+  romatch m' rm.
+Proof.
+  intros. apply romatch_ext with m; auto.
+  intros. erewrite <- Mem.loadbytes_pop_stage; eauto.
+  intros. erewrite Mem.perm_pop_stage; eauto.
+Qed.
+
+Lemma romatch_record_frame:
+  forall m m' fi rm,
+  Mem.record_frame m fi = Some m' ->
+  romatch m rm ->
+  romatch m' rm.
+Proof.
+  intros. apply romatch_ext with m; auto.
+  intros. erewrite <- Mem.loadbytes_record_frame; eauto.
+  intros. erewrite Mem.perm_record_frame; eauto.
+Qed.
+
+Lemma romatch_push_stage:
+  forall m rm,
+  romatch m rm ->
+  romatch (Mem.push_stage m) rm.
+Proof.
+  intros. apply romatch_ext with m; auto.
+Qed.
+
 Lemma romatch_alloc:
   forall m b lo hi m' rm,
   Mem.alloc m lo hi = (m', b) ->
@@ -4211,6 +4241,41 @@ Proof.
   intros. apply mmatch_ext with m; auto.
   intros. eapply Mem.loadbytes_free_2; eauto.
   erewrite <- Mem.support_free by eauto. apply Mem.sup_include_refl.
+Qed.
+
+Lemma mmatch_pop_stage:
+  forall m m' rm,
+  Mem.pop_stage m  = Some m' ->
+  mmatch m rm ->
+  mmatch m' rm.
+Proof.
+  intros. apply mmatch_ext with m; auto.
+  intros. erewrite <- Mem.loadbytes_pop_stage; eauto.
+  unfold Mem.sup_include. unfold Mem.sup_In.
+  erewrite Mem.stack_pop_stage; eauto.
+  erewrite Mem.global_pop_stage; eauto.
+Qed.
+
+Lemma mmatch_record_frame:
+  forall m m' fi rm,
+  Mem.record_frame m fi = Some m' ->
+  mmatch m rm ->
+  mmatch m' rm.
+Proof.
+  intros. apply mmatch_ext with m; auto.
+  intros. erewrite <- Mem.loadbytes_record_frame; eauto.
+  unfold Mem.sup_include. unfold Mem.sup_In.
+  erewrite Mem.stack_record_frame; eauto.
+  erewrite Mem.global_record_frame; eauto.
+Qed.
+
+Lemma mmatch_push_stage:
+  forall m rm,
+  mmatch m rm ->
+  mmatch (Mem.push_stage m) rm.
+Proof.
+  intros. apply mmatch_ext with m; auto.
+  unfold Mem.sup_include. unfold Mem.sup_In. auto.
 Qed.
 
 Lemma mmatch_top':

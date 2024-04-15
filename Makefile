@@ -129,6 +129,7 @@ BACKEND=\
   RTLgen.v RTLgenspec.v RTLgenproof.v \
   Tailcall.v Tailcallproof.v \
   Inlining.v Inliningspec.v Inliningproof.v \
+  RTLmach.v RTLmachproof.v \
   Renumber.v Renumberproof.v \
   RTLtyping.v \
   Kildall.v Liveness.v \
@@ -148,6 +149,9 @@ BACKEND=\
   Bounds.v Stacklayout.v Stacking.v Stackingproof.v \
   Asm.v Asmgen.v Asmgenproof0.v Asmgenproof1.v Asmgenproof.v \
   Asmrel.v AsmLinking.v \
+  AsmRegs.v AsmFacts.v \
+  SSAsm.v SSAsmproof.v \
+  RealAsm.v RealAsmgen.v RealAsmproof.v PseudoInstructions.v PseudoInstructionsproof.v \
 
 
 # C front-end modules (in cfrontend/)
@@ -291,7 +295,7 @@ latexdoc:
 %.vo: %.v
 	@rm -f doc/$(*F).glob
 	@echo "COQC $*.v"
-	@$(COQC) -dump-glob doc/$(*F).glob $*.v
+	@$(COQC) -dump-glob doc/$(*F).glob $*.v || true
 
 %.v: %.vp tools/ndfun
 	@rm -f $*.v

@@ -201,6 +201,7 @@ Qed.
 
 Section CONSTRUCTORS.
 
+Variables fn_stack_requirements: ident -> Z.
 Variables cunit prog: Clight.program.
 Hypothesis LINK: linkorder cunit prog.
 Variable ge: genv.
@@ -987,7 +988,7 @@ Lemma make_store_bitfield_correct:
   eval_expr ge e le m src v ->
   assign_loc prog.(prog_comp_env) ty m b ofs (Bits sz sg pos width) v m' ->
   make_store_bitfield sz sg pos width dst src = OK s ->
-  step ge (State f s k e le m) E0 (State f Sskip k e le m').
+  step fn_stack_requirements ge (State f s k e le m) E0 (State f Sskip k e le m').
 Proof.
   intros until s; intros DST SRC ASG MK.
   inv ASG. inv H5. unfold make_store_bitfield in MK.
@@ -1007,7 +1008,7 @@ Lemma make_memcpy_correct:
   assign_loc prog.(prog_comp_env) ty m b ofs Full v m' ->
   access_mode ty = By_copy ->
   make_memcpy cunit.(prog_comp_env) dst src ty = OK s ->
-  step ge (State f s k e le m) E0 (State f Sskip k e le m').
+  step fn_stack_requirements ge (State f s k e le m) E0 (State f Sskip k e le m').
 Proof.
   intros. inv H1; try congruence.
   monadInv H3.
@@ -1027,7 +1028,7 @@ Lemma make_store_correct:
   eval_expr ge e le m addr (Vptr b ofs) ->
   eval_expr ge e le m rhs v ->
   assign_loc prog.(prog_comp_env) ty m b ofs bf v m' ->
-  step ge (State f code k e le m) E0 (State f Sskip k e le m').
+  step fn_stack_requirements ge (State f code k e le m) E0 (State f Sskip k e le m').
 Proof.
   unfold make_store. intros until k; intros MKSTORE EV1 EV2 ASSIGN.
   inversion ASSIGN; subst.
@@ -1067,6 +1068,7 @@ End CONSTRUCTORS.
 
 Section CORRECTNESS.
 
+Variables fn_stack_requirements: ident -> Z.
 Variable prog: Clight.program.
 Variable tprog: Csharpminor.program.
 Hypothesis TRANSL: match_prog prog tprog.
@@ -1420,7 +1422,7 @@ Inductive match_transl: stmt -> cont -> stmt -> cont -> Prop :=
 Lemma match_transl_step:
   forall ts tk ts' tk' f te le m,
   match_transl (Sblock ts) tk ts' tk' ->
-  star step tge (State f ts' tk' te le m) E0 (State f ts (Kblock tk) te le m).
+  star (step fn_stack_requirements)  tge (State f ts' tk' te le m) E0 (State f ts (Kblock tk) te le m).
 Proof.
   intros. inv H.
   apply star_one. constructor.
@@ -1487,16 +1489,25 @@ Inductive match_states: Clight.state -> Csharpminor.state -> Prop :=
       match_states (Clight.State f s k e le m)
                    (State tf ts' tk' te le m)
   | match_callstate:
+<<<<<<< HEAD
       forall vf fd args k m tfd tk targs tres cconv cu ce
           (FS: Genv.find_funct ge vf = Some fd)
           (FT: Genv.find_funct tge vf = Some tfd)
+=======
+      forall fd args k m tfd tk targs tres cconv cu ce id
+>>>>>>> origin/StackAware-new
           (LINK: linkorder cu prog)
           (TR: match_fundef cu fd tfd)
           (MK: match_cont ce tres 0%nat 0%nat k tk)
           (ISCC: Clight.is_call_cont k)
           (TY: type_of_fundef fd = Tfunction targs tres cconv),
+<<<<<<< HEAD
       match_states (Clight.Callstate vf args k m)
                    (Callstate vf args tk m)
+=======
+      match_states (Clight.Callstate fd args k m id)
+                   (Callstate tfd args tk m id)
+>>>>>>> origin/StackAware-new
   | match_returnstate:
       forall res tres k m tk ce
           (MK: match_cont ce tres 0%nat 0%nat k tk),
@@ -1647,9 +1658,9 @@ Qed.
 (** The simulation proof *)
 
 Lemma transl_step:
-  forall S1 t S2, Clight.step2 ge S1 t S2 ->
+  forall S1 t S2, Clight.step2 fn_stack_requirements ge S1 t S2 ->
   forall T1, match_states S1 T1 ->
-  exists T2, plus step tge T1 t T2 /\ match_states S2 T2.
+  exists T2, plus (step fn_stack_requirements) tge T1 t T2 /\ match_states S2 T2.
 Proof.
   induction 1; intros T1 MST; inv MST.
 
@@ -1687,8 +1698,13 @@ Proof.
                 sig_cc := cc |}) in *.
   assert (SIG: funsig tfd = sg).
   { unfold sg; erewrite typlist_of_arglist_eq by eauto.
+<<<<<<< HEAD
     eapply transl_fundef_sig1; eauto. rewrite H3; auto. }
 (*  assert (EITHER: tk' = tk /\ ts' = Scall optid sg x x0).
+=======
+    eapply transl_fundef_sig1; eauto. rewrite H4; auto. }
+  assert (EITHER: tk' = tk /\ ts' = Scall optid sg x x0
+>>>>>>> origin/StackAware-new
                \/ exists id, optid = Some id /\
                   tk' = tk /\ ts' = Sseq (Scall optid sg x x0)
                                          (Sset id (make_normalization tres (Evar id)))).
@@ -1697,9 +1713,13 @@ Proof.
     inv MTR. right; exists i; auto.
     inv MTR; auto.
     inv MTR; auto. }
+<<<<<<< HEAD
   destruct EITHER as [(EK & ES) | (id & EI & EK & ES)]; rewrite EK, ES.
   *)
   unfold make_funcall in MTR. inv MTR.
+=======
+  destruct EITHER as [(EK & ES) | (id' & EI & EK & ES)]; rewrite EK, ES.
+>>>>>>> origin/StackAware-new
   + (* without normalization of return value *)
     econstructor; split.
     apply plus_one. eapply step_call; eauto.
@@ -1811,7 +1831,7 @@ Proof.
 - (* return none *)
   monadInv TR. inv MTR.
   econstructor; split.
-  apply plus_one. constructor.
+  apply plus_one. econstructor; eauto.
   eapply match_env_free_blocks; eauto.
   eapply match_returnstate with (ce := prog_comp_env cu); eauto.
   eapply match_cont_call_cont. eauto.
@@ -1820,7 +1840,7 @@ Proof.
 - (* return some *)
   monadInv TR. inv MTR.
   econstructor; split.
-  apply plus_one. constructor.
+  apply plus_one. econstructor; eauto.
   eapply make_cast_correct; eauto. eapply transl_expr_correct; eauto.
   eapply match_env_free_blocks; eauto.
   eapply match_returnstate with (ce := prog_comp_env cu); eauto.
@@ -1831,8 +1851,8 @@ Proof.
   monadInv TR. inv MTR.
   exploit match_cont_is_call_cont; eauto. intros [A B].
   econstructor; split.
-  apply plus_one. apply step_skip_call. auto.
-  eapply match_env_free_blocks; eauto.
+  apply plus_one. eapply step_skip_call. eauto.
+  eapply match_env_free_blocks; eauto. eauto. eauto.
   eapply match_returnstate with (ce := prog_comp_env cu); eauto.
   (* constructor. *)
 
@@ -1883,8 +1903,12 @@ Proof.
   econstructor; eauto. constructor.
 
 - (* internal function *)
+<<<<<<< HEAD
   rewrite FS in FIND. inv FIND.
   inv H. inv TR. monadInv H5.
+=======
+  inv H. inv TR. monadInv H6.
+>>>>>>> origin/StackAware-new
   exploit match_cont_is_call_cont; eauto. intros [A B].
   exploit match_env_alloc_variables; eauto.
   apply match_env_empty.
@@ -1892,12 +1916,19 @@ Proof.
   econstructor; split.
   apply plus_one. eapply step_internal_function; eauto.
   simpl. erewrite transl_vars_names by eauto. assumption.
+<<<<<<< HEAD
+=======
+  simpl. assumption.
+  simpl. assumption.
+  eauto. eauto.
+  simpl; eauto.
+>>>>>>> origin/StackAware-new
   simpl. rewrite create_undef_temps_match. eapply bind_parameter_temps_match; eauto.
   simpl. econstructor; eauto.
   unfold transl_function. rewrite EQ; simpl. rewrite EQ1; simpl. auto.
   constructor.
   replace (fn_return f) with tres. eassumption.
-  simpl in TY. unfold type_of_function in TY. congruence. 
+  simpl in TY. unfold type_of_function in TY. congruence.
 
 - (* external function *)
   rewrite FS in FIND. inv FIND.
@@ -1906,7 +1937,11 @@ Proof.
   econstructor; split.
   apply plus_one. econstructor; eauto.
   eapply match_returnstate with (ce := ce); eauto.
+<<<<<<< HEAD
   (* apply has_rettype_wt_val. 
+=======
+  apply has_rettype_wt_val.
+>>>>>>> origin/StackAware-new
   replace (rettype_of_type tres0) with (sig_res (ef_sig ef)).
   eapply external_call_well_typed_gen; eauto.
   rewrite H5. simpl. simpl in TY. congruence. *)
@@ -1931,6 +1966,7 @@ Lemma transl_initial_states:
   exists R, initial_state tge q R /\ match_states S R.
 Proof.
   intros. inv H.
+<<<<<<< HEAD
   exploit functions_translated; eauto. intros (cu & tf & A & B & C).
   eexists. split.
   - erewrite <- transl_fundef_sig2 by eauto. inv B. econstructor; eauto.
@@ -1948,6 +1984,17 @@ Proof.
   split. econstructor; eauto. intros r S' HS'. inv HS'.
   eexists. split. econstructor; eauto.
   econstructor; eauto.
+=======
+  exploit function_ptr_translated; eauto. intros (cu & tf & A & B & C).
+  assert (D: Genv.find_symbol tge (AST.prog_main tprog) = Some b).
+  { destruct TRANSL as (P & Q & R). rewrite Q. rewrite symbols_preserved. auto. }
+  assert (E: funsig tf = signature_of_type Tnil type_int32s cc_default).
+  { eapply transl_fundef_sig2; eauto. }
+  econstructor; split.
+  econstructor; eauto. apply (Genv.init_mem_match TRANSL). eauto.
+  destruct TRANSL as (P & Q & R). rewrite Q.
+  econstructor; eauto. instantiate (1 := prog_comp_env cu). constructor; auto. exact I.
+>>>>>>> origin/StackAware-new
 Qed.
 
 Lemma transl_final_states:
@@ -1957,6 +2004,20 @@ Proof.
   intros. inv H0. inv H. inv MK. constructor.
 Qed.
 
+<<<<<<< HEAD
+=======
+Theorem transl_program_correct:
+  forward_simulation (Clight.semantics2 fn_stack_requirements prog)
+                     (Csharpminor.semantics fn_stack_requirements tprog).
+Proof.
+  eapply forward_simulation_plus.
+  apply senv_preserved.
+  eexact transl_initial_states.
+  eexact transl_final_states.
+  eexact transl_step.
+Qed.
+
+>>>>>>> origin/StackAware-new
 End CORRECTNESS.
 
 Theorem transl_program_correct prog tprog:

@@ -15,8 +15,12 @@
 Require Import Coqlib Maps Errors Integers Floats Lattice Kildall.
 Require Import AST Linking.
 Require Import Values Memory Builtins Events Globalenvs Smallstep.
+<<<<<<< HEAD
 Require Import LanguageInterface Invariant InjectFootprint.
 Require Import Op Registers RTL.
+=======
+Require Import Op Registers RTL RTLmach.
+>>>>>>> origin/StackAware-new
 Require Import ValueDomain ValueAOp ValueAnalysis.
 Require Import CSEdomain CombineOp CombineOpproof CSE.
 
@@ -811,6 +815,7 @@ Qed.
 
 Section PRESERVATION.
 
+Variable fn_stack_requirements : ident -> Z.
 Variable prog: program.
 Variable tprog : program.
 Variable se: Genv.symtbl.
@@ -1007,6 +1012,7 @@ Inductive match_states: state -> state -> Prop :=
       match_states (State s f (Vptr sp Ptrofs.zero) pc rs m)
                    (State s' (transf_function' f approx) (Vptr sp' Ptrofs.zero) pc rs' m')
   | match_states_call:
+<<<<<<< HEAD
       forall s vf vf' args m s' args' m' j MEM
              (STACKS: match_stackframes j s s')
              (VF: Val.inject j vf vf')
@@ -1014,6 +1020,16 @@ Inductive match_states: state -> state -> Prop :=
              (INCR: injp_acc w (injpw j m m' MEM)),
       match_states (Callstate s vf args m)
                    (Callstate s' vf' args' m')
+=======
+      forall s f tf args m s' args' m' cu id
+             (LINK: linkorder cu prog)
+             (STACKS: match_stackframes s s')
+             (TFD: transf_fundef (romem_for cu) f = OK tf)
+             (ARGS: Val.lessdef_list args args')
+             (MEXT: Mem.extends m m'),
+      match_states (Callstate s f args m id)
+                   (Callstate s' tf args' m' id)
+>>>>>>> origin/StackAware-new
   | match_states_return:
       forall s s' v v' m m' j MEM
              (STACK: match_stackframes j s s')
@@ -1056,9 +1072,15 @@ Ltac TransfInstr :=
   in the source code. *)
 
 Lemma transf_step_correct:
+<<<<<<< HEAD
   forall s1 t s2, step ge s1 t s2 ->
   forall s1' (MS: match_states s1 s1') (SOUND: sound_state prog se s1),
   exists s2', step tge s1' t s2' /\ match_states s2 s2'.
+=======
+  forall s1 t s2, step fn_stack_requirements ge s1 t s2 ->
+  forall s1' (MS: match_states s1 s1') (SOUND: sound_state prog s1),
+  exists s2', step fn_stack_requirements tge s1' t s2' /\ match_states s2 s2'.
+>>>>>>> origin/StackAware-new
 Proof.
   induction 1; intros; inv MS; try (TransfInstr; intro C).
 
@@ -1182,23 +1204,33 @@ Proof.
   intros (tf & FIND' & TRANSF').
   econstructor; split.
   eapply exec_Icall; eauto.
+  destruct ros; simpl in *; auto.
+  generalize (RLD r). intro. inv H2. eauto. congruence. auto.
   eapply sig_preserved; eauto.
   econstructor; eauto.
   eapply match_stackframes_cons; eauto.
   intros. eapply analysis_correct_1; eauto. simpl; auto.
-  unfold transfer; rewrite H.
+  unfold transfer; rewrite H0.
   exists (fun _ => Vundef); apply empty_numbering_holds.
   eapply ros_address_translated; eauto.
   apply regs_inject; auto.
 
 - (* Itailcall *)
+<<<<<<< HEAD
   exploit match_stbls_incr; eauto. intro GE'.
   exploit functions_translated; eauto. eapply ros_address_translated; eauto.
   intros (tf & FIND' & TRANSF').
   exploit Mem.free_parallel_inject; eauto. intros [m'' [A B]].
   simpl in A. rewrite Z.add_0_r in A.
+=======
+  exploit find_function_translated; eauto. intros (cu' & tf & FIND' & TRANSF' & LINK').
+  exploit Mem.free_parallel_extends; eauto. intros [m'1 [A B]].
+  exploit Mem.pop_stage_extends; eauto. intros [m'3 [A'' B'']].
+>>>>>>> origin/StackAware-new
   econstructor; split.
   eapply exec_Itailcall; eauto.
+  destruct ros; simpl in *; auto.
+  generalize (RLD r). intro. inv H2. eauto. congruence. auto.
   eapply sig_preserved; eauto.
   econstructor; eauto.
   eapply ros_address_translated; eauto.
@@ -1284,7 +1316,12 @@ Proof.
   unfold transfer; rewrite H; auto.
 
 - (* Ireturn *)
+<<<<<<< HEAD
   exploit Mem.free_parallel_inject; eauto. intros [m'' [A B]].
+=======
+  exploit Mem.free_parallel_extends; eauto. intros [m'1 [A B]].
+  exploit Mem.pop_stage_extends; eauto. intros [m'3 [A'' B'']].
+>>>>>>> origin/StackAware-new
   econstructor; split.
   eapply exec_Ireturn; eauto. simpl in A. rewrite Z.add_0_r in A.
   simpl. eauto.
@@ -1293,12 +1330,21 @@ Proof.
   etransitivity. eauto. eapply injp_acc_free with (lo1 := 0); cbn; eauto.
 
 - (* internal function *)
+<<<<<<< HEAD
   exploit match_stbls_incr; eauto. intro GE'.
   exploit functions_translated; eauto. cbn. intros (tf & FIND' & TFD).
   monadInv TFD. unfold transf_function in EQ. fold (analyze prog f) in EQ.
   destruct (analyze prog f) as [approx|] eqn:?; inv EQ.
   exploit Mem.alloc_parallel_inject; eauto. apply Z.le_refl. apply Z.le_refl.
   intros (j' & m'' & b2 & A & B & C & D & E).
+=======
+  monadInv TFD. unfold transf_function in EQ. fold (analyze cu f) in EQ.
+  destruct (analyze cu f) as [approx|] eqn:?; inv EQ.
+  exploit Mem.alloc_extends; eauto. apply Z.le_refl. apply Z.le_refl.
+  intros (m'2 & A' & B').
+  exploit Mem.push_stage_extends; eauto. intros.
+  exploit Mem.record_frame_extends; eauto. intros (m'3 & A'' & B'').
+>>>>>>> origin/StackAware-new
   econstructor; split.
   eapply exec_function_internal; simpl; eauto.
   simpl. econstructor. 5: eapply match_stackframes_incr; eauto. all: eauto.
@@ -1340,6 +1386,7 @@ Lemma transf_initial_states:
   forall q1 q2 st1, match_query  (ro @ cc_c injp) ro_w q1 q2 -> initial_state ge q1 st1 ->
   exists st2, initial_state tge q2 st2 /\ match_states st1 st2 /\ sound_state prog ge st1.
 Proof.
+<<<<<<< HEAD
   intros. destruct H as [x [H1 H2]]. inv H0. inv H1. inv H2. cbn in *. inv H0. inv H9.
   cbn in *. clear Hm1 Hm0.
   exploit functions_translated; eauto. inversion GE. eauto.
@@ -1351,6 +1398,19 @@ Proof.
     constructor. eauto. eauto.
   - rewrite <- H0 in *. cbn in *.
     eapply sound_memory_ro_sound_state; eauto. inversion GE. eauto.
+=======
+  intros. inversion H.
+  exploit funct_ptr_translated; eauto. intros (cu & tf & A & B & C).
+  exists (Callstate nil tf nil m1 (prog_main tprog)); split.
+  econstructor; eauto.
+  eapply (Genv.init_mem_match TRANSF); eauto.
+  replace (prog_main tprog) with (prog_main prog).
+  rewrite symbols_preserved. eauto.
+  symmetry. eapply match_program_main; eauto.
+  rewrite <- H3. eapply sig_preserved; eauto.
+  rewrite (match_program_main TRANSF).
+  econstructor. eauto. constructor. auto. auto. apply Mem.extends_refl.
+>>>>>>> origin/StackAware-new
 Qed.
 
 Lemma transf_final_states:
@@ -1368,6 +1428,7 @@ Proof.
   econstructor; eauto. constructor.
 Qed.
 
+<<<<<<< HEAD
 Lemma transf_external_states:
   forall st1 st2 q1, match_states st1 st2 -> sound_state prog ge st1 -> at_external ge st1 q1 ->
   exists w' q2, at_external tge st2 q2 /\ match_query (ro @ cc_c injp) w' q1 q2 /\ match_senv (ro @ cc_c injp) w' se tse /\
@@ -1713,6 +1774,21 @@ Proof.
         red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
         apply NOSTK; auto.
         destruct (j' b); congruence.
+=======
+Theorem transf_program_correct:
+  forward_simulation (RTLmach.semantics fn_stack_requirements prog)
+                     (RTLmach.semantics fn_stack_requirements tprog).
+Proof.
+  eapply forward_simulation_step with
+    (match_states := fun s1 s2 => sound_state prog s1 /\ match_states s1 s2).
+- apply senv_preserved.
+- intros. exploit transf_initial_states; eauto. intros [s2 [A B]].
+  exists s2. split. auto. split. apply sound_initial; auto. auto.
+- intros. destruct H. eapply transf_final_states; eauto.
+- intros. destruct H0. exploit transf_step_correct; eauto.
+  intros [s2' [A B]]. exists s2'; split. auto. split. eapply sound_step; eauto.
+  apply H. eauto.
+>>>>>>> origin/StackAware-new
 Qed.
 
 End PRESERVATION.

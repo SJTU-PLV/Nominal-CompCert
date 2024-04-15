@@ -19,6 +19,9 @@ Require Import Initializers.
 
 Open Scope error_monad_scope.
 
+Section ORACLE.
+
+Variable fn_stack_requirements: ident -> Z.
 Section SOUNDNESS.
 
 Variable ge: genv.
@@ -254,7 +257,7 @@ Qed.
 
 Lemma compat_eval_steps_aux f r e m r' m' s2 :
   simple r ->
-  star step ge s2 nil (ExprState f r' Kstop e m') ->
+  star (step fn_stack_requirements) ge s2 nil (ExprState f r' Kstop e m') ->
   estep ge (ExprState f r Kstop e m) nil s2 ->
   exists r1,
     s2 = ExprState f r1 Kstop e m /\
@@ -283,7 +286,7 @@ Qed.
 
 Lemma compat_eval_steps:
   forall f r e m  r' m',
-  star step ge (ExprState f r Kstop e m) E0 (ExprState f r' Kstop e m') ->
+  star (step fn_stack_requirements) ge (ExprState f r Kstop e m) E0 (ExprState f r' Kstop e m') ->
   simple r ->
   m' = m /\ compat_eval RV e r r' m.
 Proof.
@@ -308,7 +311,7 @@ Qed.
 
 Theorem eval_simple_steps:
   forall f r e m v ty m',
-  star step ge (ExprState f r Kstop e m) E0 (ExprState f (Eval v ty) Kstop e m') ->
+  star (step fn_stack_requirements) ge (ExprState f r Kstop e m) E0 (ExprState f (Eval v ty) Kstop e m') ->
   simple r ->
   m' = m /\ ty = typeof r /\ eval_simple_rvalue e m r v.
 Proof.
@@ -323,9 +326,12 @@ Qed.
   [Vptr b ofs] where [Genv.find_symbol ge id = Some b]. *)
 
 Definition inj (b: block) :=
-  match Genv.find_symbol ge (block_to_ident b) with
-  | Some b' => Some (b', 0)
-  | None => None
+  match b with
+    |Global id => match Genv.find_symbol ge id with
+                   |Some b' => Some (b',0)
+                   |None => None
+                 end
+    |Stack _  => None
   end.
 
 Lemma mem_empty_not_valid_pointer:
@@ -458,7 +464,7 @@ Proof.
   (* var local *)
   split; auto. unfold empty_env in H. rewrite PTree.gempty in H. congruence.
   split. auto.
-  econstructor. unfold inj. rewrite ident_to_block_to_ident. rewrite H0. eauto. auto.
+  econstructor. unfold inj. rewrite H0. eauto. auto.
   (* deref *)
   split; eauto.
   (* field struct *)
@@ -489,7 +495,7 @@ Qed.
 
 Theorem constval_steps:
   forall f r m v v' ty m',
-  star step ge (ExprState f r Kstop empty_env m) E0 (ExprState f (Eval v' ty) Kstop empty_env m') ->
+  star (step fn_stack_requirements) ge (ExprState f r Kstop empty_env m) E0 (ExprState f (Eval v' ty) Kstop empty_env m') ->
   constval ge r = OK v ->
   m' = m /\ ty = typeof r /\ Val.inject inj v v'.
 Proof.
@@ -1238,7 +1244,7 @@ Inductive exec_assign: mem -> block -> Z -> bitfield -> type -> val -> mem -> Pr
 Lemma transl_init_single_sound:
   forall ty a data f m v1 ty1 m' v b ofs m'',
   transl_init_single ge ty a = OK data ->
-  star step ge (ExprState f a Kstop empty_env m) E0 (ExprState f (Eval v1 ty1) Kstop empty_env m') ->
+  star (step fn_stack_requirements) ge (ExprState f a Kstop empty_env m) E0 (ExprState f (Eval v1 ty1) Kstop empty_env m') ->
   sem_cast v1 ty1 ty m' = Some v ->
   exec_assign m' b ofs Full ty v m'' ->
   Genv.store_init_data ge m b ofs data = Some m''
@@ -1268,22 +1274,131 @@ Proof.
   destruct ty; try discriminate.
   destruct f1; inv EQ0; simpl in A; inv A; auto.
 - (* pointer *)
-  unfold inj in H.
-  assert (data = Init_addrof (block_to_ident b1) ofs1 /\ chunk = Mptr).
+  unfold inj in H. destr_in H. destr_in H. inv H.
+  assert (data = Init_addrof i ofs1 /\ chunk = Mptr).
   { remember Archi.ptr64 as ptr64.
     destruct ty; inversion EQ0.
-    - destruct i; monadInv H2. unfold Mptr. rewrite <- Heqptr64. inv A; auto.
-    - monadInv H2. unfold Mptr. rewrite <- Heqptr64. inv A; auto.
+    - destruct i0; monadInv H1. unfold Mptr. rewrite <- Heqptr64. inv A; auto.
+    - monadInv H1. unfold Mptr. rewrite <- Heqptr64. inv A; auto.
     - inv A; auto.
-  }
-  destruct H1; subst. destruct (Genv.find_symbol ge (block_to_ident b1)); inv H.
+   }
+  destruct H; subst. rewrite Heqo.
   rewrite Ptrofs.add_zero in H0. auto.
 - (* undef *)
   discriminate.
 Qed.
 
-(* Hypothesis ce_consistent: composite_env_consistent ge. *)
+(*
+(** Size properties for initializers. *)
 
+Lemma transl_init_single_size:
+  forall ty a data,
+  transl_init_single ge ty a = OK data ->
+  init_data_size data = sizeof ge ty.
+Proof.
+  intros. monadInv H. monadInv EQ. remember Archi.ptr64 as ptr64. destruct x.
+- monadInv EQ0.
+- destruct ty; try discriminate.
+  destruct i0; inv EQ0; auto.
+  destruct ptr64; inv EQ0.
+Local Transparent sizeof.
+  unfold sizeof. rewrite <- Heqptr64; auto.
+- destruct ty; inv EQ0; auto.
+  unfold sizeof. destruct Archi.ptr64; inv H0; auto.
+- destruct ty; try discriminate.
+  destruct f0; inv EQ0; auto.
+- destruct ty; try discriminate.
+  destruct f0; inv EQ0; auto.
+- destruct ty; destruct b; try discriminate.
+  destruct i0; inv EQ0; auto.
+  destruct Archi.ptr64 eqn:SF; inv H0. simpl. rewrite SF; auto.
+  destruct ptr64; inv EQ0. simpl. rewrite <- Heqptr64; auto.
+  inv EQ0. unfold init_data_size, sizeof. auto.
+Qed.
+
+Notation idlsize := init_data_list_size.
+
+Remark padding_size:
+  forall frm to, frm <= to -> idlsize (tr_padding frm to) = to - frm.
+Proof.
+  unfold tr_padding; intros. destruct (zlt frm to).
+  simpl. extlia.
+  simpl. lia.
+Qed.
+
+Remark idlsize_app:
+  forall d1 d2, idlsize (d1 ++ d2) = idlsize d1 + idlsize d2.
+Proof.
+  induction d1; simpl; intros.
+  auto.
+  rewrite IHd1. lia.
+Qed.
+
+Remark union_field_size:
+  forall f ty fl, field_type f fl = OK ty -> sizeof ge ty <= sizeof_union ge fl.
+Proof.
+  induction fl as [|[i t]]; simpl; intros.
+- inv H.
+- destruct (ident_eq f i).
+  + inv H. extlia.
+  + specialize (IHfl H). extlia.
+Qed.
+
+Hypothesis ce_consistent: composite_env_consistent ge.
+
+Lemma tr_init_size:
+  forall i ty data,
+  tr_init ty i data ->
+  idlsize data = sizeof ge ty
+with tr_init_array_size:
+  forall ty il sz data,
+  tr_init_array ty il sz data ->
+  idlsize data = sizeof ge ty * sz
+with tr_init_struct_size:
+  forall ty fl il pos data,
+  tr_init_struct ty fl il pos data ->
+  sizeof_struct ge pos fl <= sizeof ge ty ->
+  idlsize data + pos = sizeof ge ty.
+Proof.
+Local Opaque sizeof.
+- destruct 1; simpl.
++ erewrite transl_init_single_size by eauto. lia.
++ Local Transparent sizeof. simpl. eapply tr_init_array_size; eauto.
++ replace (idlsize d) with (idlsize d + 0) by lia.
+  eapply tr_init_struct_size; eauto. simpl.
+  unfold lookup_composite in H. destruct (ge.(genv_cenv)!id) as [co'|] eqn:?; inv H.
+  erewrite co_consistent_sizeof by (eapply ce_consistent; eauto).
+  unfold sizeof_composite. rewrite H0. apply align_le.
+  destruct (co_alignof_two_p co) as [n EQ]. rewrite EQ. apply two_power_nat_pos.
++ rewrite idlsize_app, padding_size.
+  exploit tr_init_size; eauto. intros EQ; rewrite EQ. lia.
+  simpl. unfold lookup_composite in H. destruct (ge.(genv_cenv)!id) as [co'|] eqn:?; inv H.
+  apply Z.le_trans with (sizeof_union ge (co_members co)).
+  eapply union_field_size; eauto.
+  erewrite co_consistent_sizeof by (eapply ce_consistent; eauto).
+  unfold sizeof_composite. rewrite H0. apply align_le.
+  destruct (co_alignof_two_p co) as [n EQ]. rewrite EQ. apply two_power_nat_pos.
+
+- destruct 1; simpl.
++ lia.
++ rewrite Z.mul_comm.
+  assert (0 <= sizeof ge ty * sz).
+  { apply Zmult_gt_0_le_0_compat. lia. generalize (sizeof_pos ge ty); lia. }
+  extlia.
++ rewrite idlsize_app. 
+  erewrite tr_init_size by eauto. 
+  erewrite tr_init_array_size by eauto.
+  ring.
+
+- destruct 1; simpl; intros.
++ rewrite padding_size by auto. lia.
++ rewrite ! idlsize_app, padding_size. 
+  erewrite tr_init_size by eauto. 
+  rewrite <- (tr_init_struct_size _ _ _ _ _ H0 H1). lia.
+  unfold pos1. apply align_le. apply alignof_pos. 
+Qed.
+>>>>>>> 6032d11
+*)
 (** A semantics for general initializers *)
 
 Definition dummy_function := mkfunction Tvoid cc_default nil nil Sskip.
@@ -1304,8 +1419,9 @@ Fixpoint initialized_fields_of_struct (ms: members) (pos: Z) : res (list (Z * bi
 
 Inductive exec_init: mem -> block -> Z -> bitfield -> type -> initializer -> mem -> Prop :=
   | exec_init_single_: forall m b ofs bf ty a v1 ty1 m' v m'',
-      star step ge (ExprState dummy_function a Kstop empty_env m)
-                E0 (ExprState dummy_function (Eval v1 ty1) Kstop empty_env m') ->
+      star (step fn_stack_requirements)
+           ge (ExprState dummy_function a Kstop empty_env m)
+           E0 (ExprState dummy_function (Eval v1 ty1) Kstop empty_env m') ->
       sem_cast v1 ty1 ty m' = Some v ->
       exec_assign m' b ofs bf ty v m'' ->
       exec_init m b ofs bf ty (Init_single a) m''
@@ -1445,4 +1561,4 @@ Proof.
   { change sz with s0.(total_size). eapply total_size_transl_init_rec; eauto. }
   rewrite <- H4. eapply init_data_list_of_state_correct; eauto; rewrite H4; auto.
 Qed.
-
+End ORACLE.

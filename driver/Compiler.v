@@ -41,10 +41,13 @@ Require Csharpminor.
 Require Cminor.
 Require CminorSel.
 Require RTL.
+Require RTLmach.
 Require LTL.
 Require Linear.
 Require Mach.
 Require Asm.
+Require SSAsm.
+Require RealAsm.
 (** Translation passes. *)
 Require Initializers.
 Require SimplExpr.
@@ -67,6 +70,8 @@ Require CleanupLabels.
 Require Debugvar.
 Require Stacking.
 Require Asmgen.
+Require RealAsmgen.
+Require PseudoInstructions.
 (** Proofs of semantic preservation. *)
 Require SimplExprproof.
 Require SimplLocalsproof.
@@ -76,6 +81,7 @@ Require Selectionproof.
 Require RTLgenproof.
 Require Tailcallproof.
 Require Inliningproof.
+Require RTLmachproof.
 Require Renumberproof.
 Require Constpropproof.
 Require CSEproof.
@@ -89,6 +95,9 @@ Require CleanupLabelsproof.
 Require Debugvarproof.
 Require Stackingproof.
 Require Asmgenproof.
+Require SSAsmproof.
+Require RealAsmproof.
+Require PseudoInstructionsproof.
 (** Command-line flags. *)
 Require Import Compopts.
 
@@ -136,12 +145,17 @@ Definition partial_if {A: Type}
   RTL program.  The three translations produce Asm programs ready for
   pretty-printing and assembling. *)
 
+
+Definition instr_size := Asm.instr_size_real.
+Definition instr_size_bound := Asm.instr_size_bound_real.
+
 Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
    OK f
   !@@ print (print_RTL 0)
   !@@ total_if Compopts.optim_tailcalls (time "Tail calls" Tailcall.transf_program)
   !@@ print (print_RTL 1)
   @@@ time "Inlining" Inlining.transf_program
+<<<<<<< HEAD
   !@@ print (print_RTL 2)
   !@@ time "Renumbering" Renumber.transf_program
   !@@ print (print_RTL 3)
@@ -149,6 +163,16 @@ Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
   !@@ print (print_RTL 4)
   !@@ total_if Compopts.optim_constprop (time "Renumbering" Renumber.transf_program)
   !@@ print (print_RTL 5)
+=======
+   @@ time "RTLmach" RTLmachproof.transf_program
+   @@ print (print_RTL 2)
+   @@ time "Renumbering" Renumber.transf_program
+   @@ print (print_RTL 3)
+   @@ total_if Compopts.optim_constprop (time "Constant propagation" Constprop.transf_program)
+   @@ print (print_RTL 4)
+   @@ total_if Compopts.optim_constprop (time "Renumbering" Renumber.transf_program)
+   @@ print (print_RTL 5)
+>>>>>>> origin/StackAware-new
   @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
   !@@ print (print_RTL 6)
   @@@ partial_if Compopts.optim_redundancy (time "Redundancy elimination" Deadcode.transf_program)
@@ -162,8 +186,13 @@ Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
   !@@ time "Label cleanup" CleanupLabels.transf_program
   @@@ partial_if Compopts.debug (time "Debugging info for local variables" Debugvar.transf_program)
   @@@ time "Mach generation" Stacking.transf_program
+<<<<<<< HEAD
   !@@ print print_Mach
   @@@ time "Asm generation" Asmgen.transf_program.
+=======
+   @@ print print_Mach
+  @@@ time "Asm generation" Asmgen.transf_program instr_size.
+>>>>>>> origin/StackAware-new
 
 Definition transf_cminor_program (p: Cminor.program) : res Asm.program :=
    OK p
@@ -184,6 +213,12 @@ Definition transf_c_program (p: Csyntax.program) : res Asm.program :=
   OK p
   @@@ time "Clight generation" SimplExpr.transl_program
   @@@ transf_clight_program.
+
+ Definition transf_c_program_real p: res Asm.program :=
+  transf_c_program p
+  @@ time "SSAsm" SSAsmproof.transf_program
+  @@@ time "Translation from SSAsm to RealAsm" RealAsmgen.transf_program instr_size
+  @@ time "Elimination of pseudo instruction" PseudoInstructions.transf_program.
 
 (** Force [Initializers] and [Cexec] to be extracted as well. *)
 
@@ -257,6 +292,7 @@ Definition CompCertO's_passes :=
   ::: mkpass RTLgenproof.match_prog
   ::: mkpass (match_if Compopts.optim_tailcalls Tailcallproof.match_prog)
   ::: mkpass Inliningproof.match_prog
+  ::: mkpass RTLmachproof.match_prog
   ::: mkpass Renumberproof.match_prog
   ::: mkpass (match_if Compopts.optim_constprop Constpropproof.match_prog)
   ::: mkpass (match_if Compopts.optim_constprop Renumberproof.match_prog)
@@ -269,9 +305,14 @@ Definition CompCertO's_passes :=
   ::: mkpass CleanupLabelsproof.match_prog
   ::: mkpass (match_if Compopts.debug Debugvarproof.match_prog)
   ::: mkpass Stackingproof.match_prog
-  ::: mkpass Asmgenproof.match_prog
+  ::: mkpass (Asmgenproof.match_prog instr_size)
   ::: pass_nil _.
 
+ Definition real_asm_passes :=
+      mkpass SSAsmproof.match_prog
+  ::: mkpass (RealAsmproof.match_prog instr_size)
+  ::: mkpass (PseudoInstructionsproof.match_prog )
+  ::: pass_nil _.
 (** Composing the [match_prog] relations above, we obtain the relation
   between CompCert C sources and Asm code that characterize CompCert's
   compilation. *)
@@ -287,6 +328,15 @@ Definition CompCert's_passes :=
 
 Definition match_c_prog: Csyntax.program -> Asm.program -> Prop :=
   pass_match (compose_passes CompCert's_passes).
+
+Fixpoint passes_app {A B C} (l1: Passes A B) (l2: Passes B C) : Passes A C :=
+  match l1 in (Passes AA BB) return (Passes BB C -> Passes AA C) with
+  | pass_nil _ => fun l3 => l3
+  | pass_cons  P1 l1 => fun l2 => P1 ::: passes_app l1 l2
+  end l2.
+
+ Definition match_prog_real :=
+  pass_match (compose_passes (passes_app CompCert's_passes real_asm_passes)).
 
 (** The [transf_c_program] function, when successful, produces
   assembly code that is in the [match_prog] relation with the source C program. *)
@@ -307,7 +357,8 @@ Proof.
   unfold transf_rtl_program, time in T. rewrite ! compose_print_identity in T. simpl in T.
   set (p7 := total_if optim_tailcalls Tailcall.transf_program p6) in *.
   destruct (Inlining.transf_program p7) as [p8|e] eqn:P8; simpl in T; try discriminate.
-  set (p9 := Renumber.transf_program p8) in *.
+  set (p8' := RTLmachproof.transf_program p8) in *.
+  set (p9 := Renumber.transf_program p8') in *.
   set (p10 := total_if optim_constprop Constprop.transf_program p9) in *.
   set (p11 := total_if optim_constprop Renumber.transf_program p10) in *.
   destruct (partial_if optim_CSE CSE.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
@@ -319,6 +370,7 @@ Proof.
   set (p18 := CleanupLabels.transf_program p17) in *.
   destruct (partial_if debug Debugvar.transf_program p18) as [p19|e] eqn:P19; simpl in T; try discriminate.
   destruct (Stacking.transf_program p19) as [p20|e] eqn:P20; simpl in T; try discriminate.
+  destruct (Asmgen.transf_program instr_size p20) as [p21|e] eqn:P21; simpl in T; try discriminate. inv T.
   unfold match_prog; simpl.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
   exists p3; split. apply Cshmgenproof.transf_program_match; auto.
@@ -327,6 +379,7 @@ Proof.
   exists p6; split. apply RTLgenproof.transf_program_match; auto.
   exists p7; split. apply total_if_match. apply Tailcallproof.transf_program_match.
   exists p8; split. apply Inliningproof.transf_program_match; auto.
+  exists p8'; split. apply RTLmachproof.transf_program_match; auto.
   exists p9; split. apply Renumberproof.transf_program_match; auto.
   exists p10; split. apply total_if_match. apply Constpropproof.transf_program_match.
   exists p11; split. apply total_if_match. apply Renumberproof.transf_program_match.
@@ -340,9 +393,11 @@ Proof.
   exists p19; split. eapply partial_if_match; eauto. apply Debugvarproof.transf_program_match.
   exists p20; split. apply Stackingproof.transf_program_match; auto.
   exists tp; split. apply Asmgenproof.transf_program_match; auto.
+(*  exists p21; split. eapply SSAsmproof.transf_program_match; auto. *)
   reflexivity.
 Qed.
 
+<<<<<<< HEAD
 Theorem transf_c_program_match:
   forall p tp,
   transf_c_program p = OK tp ->
@@ -355,6 +410,37 @@ Proof.
   inv T. unfold match_c_prog. cbn -[CompCertO's_passes].
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
   apply transf_clight_program_match; auto.
+=======
+Lemma compose_passes_app:
+  forall {l1 l2} (A: Passes l1 l2) {l3} (B: Passes l2 l3) p tp,
+    compose_passes (passes_app A B) p tp <->
+    exists pi, compose_passes A p pi /\ compose_passes B pi tp.
+Proof.
+  induction A; simpl; intros. split. eexists; split; eauto.
+  intros (pi & EQ & CP); inv EQ; auto.
+  setoid_rewrite IHA. split; intro H; decompose [ex and] H; eauto.
+Qed.
+
+Theorem transf_c_program_real_match:
+  forall p tp,
+    transf_c_program_real p = OK tp ->
+    match_prog_real p tp.
+Proof.
+  intros p tp T. unfold transf_c_program_real in T.
+  destruct (transf_c_program p) as [p1|e] eqn:TP; simpl in T; try discriminate.
+  unfold time in T. unfold SSAsmproof.transf_program in T.
+  destruct (RealAsmgen.transf_program instr_size p1) eqn:RTP; simpl in T; try discriminate; inv T.
+(*  destruct (PseudoInstructions.check_program p0) eqn:CHK; simpl in T; try discriminate. inv T. *)
+  unfold match_prog_real. unfold real_asm_passes.
+  rewrite compose_passes_app.
+  fold match_prog. exists p1; split.
+  eapply transf_c_program_match; eauto.
+  simpl. eexists; split; eauto. reflexivity.
+  eexists; split; eauto.
+  eapply RealAsmproof.transf_program_match; eauto.
+  eexists; split; eauto.
+  eapply PseudoInstructionsproof.transf_program_match; eauto.
+>>>>>>> origin/StackAware-new
 Qed.
 
 (** * Semantic preservation *)
@@ -426,6 +512,7 @@ Proof.
   reflexivity.
 Qed.
 
+<<<<<<< HEAD
 (** The first expand of cc_compcert for both directions *)
 Theorem cc_compcert_merge:
   forall p tp,
@@ -758,6 +845,64 @@ Theorem clight_semantic_preservation:
   match_prog p tp ->
   forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp)
   /\ backward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics tp).
+=======
+Definition fn_stack_requirements (tp: Asm.program) (id: ident) : Z :=
+    match Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv tp) (Values.Global id) with
+    | Some (Internal f) => Asm.fn_stacksize f
+    | _ => 0
+    end.
+
+Lemma match_program_no_more_functions:
+  forall {F1 V1 F2 V2}
+         `{Linker F1} `{Linker V1}
+         Mf Mv
+         (p1: program F1 V1) (p2: program F2 V2),
+    match_program Mf Mv p1 p2 ->
+    forall b,
+    Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p1) b = None ->
+    Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p2) b = None.
+Proof.
+  intros.
+  generalize (Globalenvs.Genv.find_def_match_2 H1 b).
+  inversion 1.
+  - destruct (Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p2) b) eqn:?; auto.
+    apply Globalenvs.Genv.find_funct_ptr_iff in Heqo. congruence.
+  - destruct (Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv p2) b) eqn:?; auto.
+    apply Globalenvs.Genv.find_funct_ptr_iff in Heqo. rewrite Heqo in H5. inv H5.
+    inv H6.
+    symmetry in H4.
+    apply Globalenvs.Genv.find_funct_ptr_iff in H4. congruence.
+Qed.
+
+Lemma Asmgen_fn_stack_requirements_match: forall  mp ap isz,
+    Asmgenproof.match_prog isz mp ap->
+    Stackingproof.fn_stack_requirements mp = fn_stack_requirements ap.
+Proof.
+  intros.
+  unfold fn_stack_requirements.
+  unfold Stackingproof.fn_stack_requirements.
+  apply Axioms.extensionality. intro i.
+  destruct (Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv mp)) eqn:FF.
+  exploit Asmgenproof.functions_translated; eauto.
+  intros (tf & FF' & TF).
+  rewrite FF'.
+  unfold Asmgen.transf_fundef in TF.
+  unfold transf_partial_fundef in TF.
+  destr_in TF. unfold bind in TF. destr_in TF. inv TF.
+  unfold Asmgen.transf_function in Heqr. unfold bind in Heqr.
+  repeat destr_in Heqr.
+  apply Asmgen.transl_function_stacksize. apply Heqr0.
+  inv TF. auto.
+  eapply match_program_no_more_functions in FF; eauto.
+  rewrite FF. auto.
+Qed.
+
+Theorem cstrategy_semantic_preservation:
+  forall p tp,
+  match_prog p tp ->
+  forward_simulation (Cstrategy.semantics (fn_stack_requirements tp) p) (Asm.semantics instr_size tp)
+  /\ backward_simulation (atomic (Cstrategy.semantics (fn_stack_requirements tp) p)) (Asm.semantics instr_size tp).
+>>>>>>> origin/StackAware-new
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
 Ltac DestructM :=
@@ -767,7 +912,11 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
+<<<<<<< HEAD
   assert (F: forward_simulation cc_compcert cc_compcert (Clight.semantics1 p) (Asm.semantics p20)).
+=======
+  assert (F: forward_simulation (Cstrategy.semantics (fn_stack_requirements p22) p) (Asm.semantics instr_size p22)).
+>>>>>>> origin/StackAware-new
   {
   eapply cc_compcert_merge; eauto.
   rewrite cc_expand. rewrite <- cc_collapse at 1.
@@ -784,6 +933,7 @@ Ltac DestructM :=
   eapply compose_forward_simulations.
     eapply RTLgenproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
+<<<<<<< HEAD
     eapply RTLrel.semantics_rel.
   eapply compose_forward_simulations.
     unfold match_if in M4. destruct (optim_tailcalls tt).
@@ -812,6 +962,21 @@ Ltac DestructM :=
     eapply deadcode_va_correct.
     eapply Deadcodeproof.transf_program_correct'; eassumption.
     subst. apply va_interface_selfsim. }
+=======
+    eapply match_if_simulation. eassumption. eapply Tailcallproof.transf_program_correct.
+  eapply compose_forward_simulations.
+    eapply Inliningproof.transf_program_correct; eassumption.
+ eapply compose_forward_simulations. eapply RTLmachproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations. eapply Renumberproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption. eapply Constpropproof.transf_program_correct.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption. eapply Renumberproof.transf_program_correct.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption. eapply CSEproof.transf_program_correct.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption. eapply Deadcodeproof.transf_program_correct; eassumption.
+>>>>>>> origin/StackAware-new
   eapply compose_forward_simulations.
     eapply Unusedglobproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
@@ -825,6 +990,7 @@ Ltac DestructM :=
   eapply compose_optional_pass; eauto using compose_identity_pass.
     exact Debugvarproof.transf_program_correct.
   eapply compose_forward_simulations.
+<<<<<<< HEAD
     rewrite <- cc_stacking_lm, cc_lm_stacking.
     eapply Stackingproof.transf_program_correct with (rao := Asmgenproof0.return_address_offset).
     exact Asmgenproof.return_address_exists.
@@ -836,11 +1002,27 @@ Ltac DestructM :=
   split. auto.
   apply forward_to_backward_simulation. auto.
   apply Clight.semantics_receptive.
+=======
+    eapply match_if_simulation. eassumption. eapply Debugvarproof.transf_program_correct.
+  eapply compose_forward_simulations.
+    replace (fn_stack_requirements p22) with (Stackingproof.fn_stack_requirements p21).
+    eapply Stackingproof.transf_program_correct with (return_address_offset := Asmgenproof0.return_address_offset instr_size).
+    eapply Asmgenproof.return_address_exists. eapply instr_size_bound.
+    eassumption.
+    eapply Asmgen_fn_stack_requirements_match; eauto.
+  eapply Asmgenproof.transf_program_correct. eapply instr_size_bound. eassumption. }
+  split. auto.
+  apply forward_to_backward_simulation.
+  apply factor_forward_simulation. auto. eapply sd_traces.
+  eapply Asm.semantics_determinate.
+  apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
+>>>>>>> origin/StackAware-new
   apply Asm.semantics_determinate.
 Qed.
 
 Theorem c_semantic_preservation:
   forall p tp,
+<<<<<<< HEAD
   match_c_prog p tp ->
   backward_simulation cc_compcert cc_compcert (Csem.semantics p) (Asm.semantics tp).
 Proof.
@@ -862,6 +1044,117 @@ Proof.
       apply Cstrategy.semantics_strongly_receptive.
     + apply Asm.semantics_determinate.
   - intros. eapply sd_traces. apply Asm.semantics_determinate.
+=======
+  match_prog p tp ->
+  backward_simulation (Csem.semantics (fn_stack_requirements tp) p) (Asm.semantics instr_size tp).
+Proof.
+  intros.
+  apply compose_backward_simulation with (atomic (Cstrategy.semantics (fn_stack_requirements tp) p)).
+  eapply sd_traces; eapply Asm.semantics_determinate.
+  apply factor_backward_simulation.
+  apply Cstrategy.strategy_simulation.
+  apply Csem.semantics_single_events.
+  eapply ssr_well_behaved; eapply Cstrategy.semantics_strongly_receptive.
+  exact (proj2 (cstrategy_semantic_preservation _ _ H)).
+>>>>>>> origin/StackAware-new
+Qed.
+
+Lemma match_prog_wf:
+  forall p tp,
+    match_prog p tp ->
+    AsmFacts.asm_prog_unchange_rsp instr_size (Globalenvs.Genv.globalenv tp).
+Proof.
+  intros p tp M. unfold match_prog, pass_match in M; simpl in M.
+  repeat DestructM. subst tp.
+  eapply Asmgenproof.transf_program_unchange_rsp; eauto.
+  eapply match_program_no_more_functions; eauto.
+Qed.
+
+Theorem c_semantic_preservation_SS:
+  forall p tp,
+  match_prog p tp ->
+  backward_simulation (Csem.semantics (fn_stack_requirements tp) p) (SSAsm.semantics instr_size tp).
+Proof.
+  intros.
+  apply compose_backward_simulation with (atomic (Cstrategy.semantics (fn_stack_requirements tp) p)).
+  eapply sd_traces; eapply SSAsm.semantics_determinate.
+  apply factor_backward_simulation.
+  apply Cstrategy.strategy_simulation.
+  apply Csem.semantics_single_events.
+  eapply ssr_well_behaved; eapply Cstrategy.semantics_strongly_receptive.
+  apply forward_to_backward_simulation.
+  eapply compose_forward_simulations. instantiate (1:= (Asm.semantics instr_size tp)).
+  apply factor_forward_simulation.
+  exploit cstrategy_semantic_preservation; eauto.
+  intros [A B]. apply A.
+  eapply sd_traces.
+  eapply Asm.semantics_determinate.
+  eapply SSAsmproof.transf_program_correct.
+  eapply match_prog_wf; eauto.
+  apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
+  apply SSAsm.semantics_determinate.
+Qed.
+
+Lemma Pseudo_fn_stack_requirements_match: forall  mp ap,
+    PseudoInstructionsproof.match_prog mp ap->
+    fn_stack_requirements mp = fn_stack_requirements ap.
+Proof.
+  intros.
+  unfold fn_stack_requirements.
+  apply Axioms.extensionality. intro i.
+  destruct (Globalenvs.Genv.find_funct_ptr (Globalenvs.Genv.globalenv mp)) eqn:FF.
+  exploit PseudoInstructionsproof.functions_translated; eauto. intro TF.
+  unfold PseudoInstructions.transf_fundef in TF.
+  unfold transf_fundef in TF.
+  destr_in TF.  inv TF. rewrite H1. auto. rewrite TF. auto.
+  eapply match_program_no_more_functions in FF; eauto.
+  setoid_rewrite FF. auto.
+Qed.
+
+Theorem c_semantic_preservation_real:
+  forall p tp,
+  match_prog_real p tp ->
+  backward_simulation (Csem.semantics (fn_stack_requirements tp) p) (RealAsm.semantics instr_size tp).
+Proof.
+  intros.
+  unfold match_prog_real in H.
+  rewrite compose_passes_app in H.
+  fold match_prog in H.
+  destruct H as (p1 & MP1 & P).
+  simpl in P. destruct P as (p2 & MP2 & P'). inv MP2.
+  simpl in P'. destruct P' as (p3 & MP3 & p4 & MP4 & EQ).
+  exploit RealAsmproof.match_prog_inv; eauto. intro EQ'. inv EQ'.
+  apply compose_backward_simulation with (SSAsm.semantics instr_size p3).
+  apply RealAsm.real_asm_single_events.
+  replace (fn_stack_requirements tp) with (fn_stack_requirements p3).
+  eapply c_semantic_preservation_SS; eauto.
+  apply Pseudo_fn_stack_requirements_match; eauto.
+  eapply compose_backward_simulation; eauto.
+  apply RealAsm.real_asm_single_events.
+  apply RealAsmproof.real_asm_correct'; eauto.
+  eapply instr_size_bound.
+  exploit match_prog_wf; eauto.
+  intros (A&B&C). red in A. red. intros.
+  red. intros. exploit AsmFacts.in_find_instr; eauto.
+  instantiate (1 := instr_size).
+  eapply instr_size_bound.
+  intros [ofs H2]. eapply A; eauto.
+  apply forward_to_backward_simulation.
+  eapply PseudoInstructionsproof.pseudo_instructions_correct; eauto.
+  eapply instr_size_bound.
+  intros. destruct i; simpl; auto.
+  intros. red. intros. exploit (Globalenvs.Genv.find_funct_ptr_transf_partial MP3); eauto.
+  intros (tf & FFP & TF).
+  simpl in TF; monadInv  TF. unfold RealAsmgen.transf_function in EQ. destr_in EQ.
+  eapply RealAsm.wf_asm_function_check_correct; eauto. eapply instr_size_bound.
+  exploit match_prog_wf; eauto.
+  intros (A&B&C). red in A. red. intros.
+  red. intros. exploit AsmFacts.in_find_instr; eauto.
+  instantiate (1 := instr_size).
+  eapply instr_size_bound.
+  intros [ofs H2]. eapply A; eauto.
+  apply RealAsm.real_asm_receptive.
+  apply RealAsm.real_asm_determinate.
 Qed.
 
 (** * Correctness of the CompCert compiler *)
@@ -879,12 +1172,27 @@ Qed.
 Theorem transf_c_program_correct:
   forall p tp,
   transf_c_program p = OK tp ->
+<<<<<<< HEAD
   backward_simulation cc_compcert cc_compcert (Csem.semantics p) (Asm.semantics tp).
+=======
+  backward_simulation (Csem.semantics (fn_stack_requirements tp) p) (Asm.semantics instr_size tp).
+>>>>>>> origin/StackAware-new
 Proof.
   intros. apply c_semantic_preservation. apply transf_c_program_match; auto.
 Qed.
 
+<<<<<<< HEAD
 (*
+=======
+Theorem transf_c_program_correct_real:
+  forall p tp,
+  transf_c_program_real p = OK tp ->
+  backward_simulation (Csem.semantics (fn_stack_requirements tp) p) (RealAsm.semantics instr_size tp).
+Proof.
+  intros. apply c_semantic_preservation_real. apply transf_c_program_real_match; auto.
+Qed.
+
+>>>>>>> origin/StackAware-new
 (** Here is the separate compilation case.  Consider a nonempty list [c_units]
   of C source files (compilation units), [C1 ,,, Cn].  Assume that every
   C compilation unit [Ci] is successfully compiled by CompCert, obtaining
@@ -903,7 +1211,11 @@ Theorem separate_transf_c_program_correct:
   link_list c_units = Some c_program ->
   exists asm_program,
       link_list asm_units = Some asm_program
+<<<<<<< HEAD
    /\ backward_simulation cc_compcert cc_compcert (Clight.semantics1 c_program) (Asm.semantics asm_program).
+=======
+   /\ backward_simulation (Csem.semantics (fn_stack_requirements asm_program) c_program) (Asm.semantics instr_size asm_program).
+>>>>>>> origin/StackAware-new
 Proof.
   intros.
   assert (nlist_forall2 match_prog c_units asm_units).
@@ -943,4 +1255,21 @@ Proof.
   unfold compose. cbn.
   apply link_erase_program in H2. rewrite H2. cbn. f_equal. f_equal.
   apply Axioms.functional_extensionality. intros [|]; auto.
+Qed.
+
+Theorem separate_transf_c_program_correct_real:
+  forall c_units asm_units c_program,
+  nlist_forall2 (fun cu tcu => transf_c_program_real cu = OK tcu) c_units asm_units ->
+  link_list c_units = Some c_program ->
+  exists asm_program,
+      link_list asm_units = Some asm_program
+   /\ backward_simulation (Csem.semantics (fn_stack_requirements asm_program) c_program) (RealAsm.semantics instr_size asm_program).
+Proof.
+  intros.
+  assert (nlist_forall2 match_prog_real c_units asm_units).
+  { eapply nlist_forall2_imply. eauto. simpl; intros. apply transf_c_program_real_match; auto. }
+  assert (exists asm_program, link_list asm_units = Some asm_program /\ match_prog_real c_program asm_program).
+  { eapply link_list_compose_passes; eauto. }
+  destruct H2 as (asm_program & P & Q).
+  exists asm_program; split; auto. apply c_semantic_preservation_real; auto.
 Qed.

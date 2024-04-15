@@ -286,6 +286,7 @@ Qed.
 
 Section PRESERVATION.
 
+Variable fn_stack_requirements: ident -> Z.
 Variable prog: program.
 Variable tprog: program.
 
@@ -330,7 +331,8 @@ Qed.
 
 Lemma eval_add_delta_ranges:
   forall s f sp c rs m before after,
-  star step tge (State s f sp (add_delta_ranges before after c) rs m)
+  star (step fn_stack_requirements)
+       tge (State s f sp (add_delta_ranges before after c) rs m)
              E0 (State s f sp c rs m).
 Proof.
   intros. unfold add_delta_ranges.
@@ -379,10 +381,18 @@ Inductive match_states: Linear.state ->  Linear.state -> Prop :=
       match_states (State s f sp c rs m)
                    (State ts tf sp tc rs m)
   | match_states_call:
+<<<<<<< HEAD
       forall s vf rs m ts,
       list_forall2 match_stackframes s ts ->
       match_states (Callstate s vf rs m)
                    (Callstate ts vf rs m)
+=======
+      forall s f rs m tf ts id,
+      list_forall2 match_stackframes s ts ->
+      transf_fundef f = OK tf ->
+      match_states (Callstate s f rs m id)
+                   (Callstate ts tf rs m id)
+>>>>>>> origin/StackAware-new
   | match_states_return:
       forall s rs m ts,
       list_forall2 match_stackframes s ts ->
@@ -400,9 +410,9 @@ Qed.
 (** The simulation diagram. *)
 
 Theorem transf_step_correct:
-  forall s1 t s2, step ge s1 t s2 ->
+  forall s1 t s2, step fn_stack_requirements ge s1 t s2 ->
   forall ts1 (MS: match_states s1 ts1),
-  exists ts2, plus step tge ts1 t ts2 /\ match_states s2 ts2.
+  exists ts2, plus (step fn_stack_requirements) tge ts1 t ts2 /\ match_states s2 ts2.
 Proof.
   induction 1; intros ts1 MS; inv MS; try (inv TRC).
 - (* getstack *)
@@ -435,16 +445,19 @@ Proof.
   exploit functions_translated; eauto. intros (tf' & A & B).
   econstructor; split.
   apply plus_one.
-  econstructor. eexact A. symmetry; apply sig_preserved; auto. traceEq.
+  econstructor. eauto. eexact A. symmetry; apply sig_preserved; auto. traceEq.
   constructor; auto. constructor; auto. constructor; auto.
 - (* tailcall *)
   exploit functions_translated; eauto. intros (tf' & A & B).
   exploit parent_locset_match; eauto. intros PLS.
   econstructor; split.
   apply plus_one.
-  econstructor. eauto. rewrite PLS. eexact A.
+  econstructor. eauto.
+  destruct ros; simpl in *; eauto. rewrite PLS. eauto.
+  eauto. rewrite PLS.
+  eexact A.
   symmetry; apply sig_preserved; auto.
-  inv TRF; eauto. traceEq.
+  inv TRF; eauto. eauto. eauto. traceEq.
   rewrite PLS. constructor; auto.
 - (* builtin *)
   econstructor; split.
@@ -478,9 +491,10 @@ Proof.
   constructor; auto.
 - (* return *)
   econstructor; split.
-  apply plus_one.  constructor. inv TRF; eauto. traceEq.
+  apply plus_one. econstructor. inv TRF; eauto. eauto. eauto. traceEq.
   rewrite (parent_locset_match _ _ STACKS). constructor; auto.
 - (* internal function *)
+<<<<<<< HEAD
   apply functions_translated in FIND as (tf & FIND & MATCH).
   monadInv MATCH. rename x into tf.
   assert (MF: match_function f tf) by (apply transf_function_match; auto).
@@ -491,6 +505,16 @@ Proof.
 - (* external function *)
   apply functions_translated in FIND as (tf & FIND & MATCH).
   monadInv MATCH. econstructor; split.
+=======
+  monadInv H9. rename x into tf.
+  assert (MF: match_function f tf) by (apply transf_function_match; auto).
+  inversion MF; subst.
+  econstructor; split.
+  apply plus_one. econstructor. simpl; eauto. eauto. reflexivity.
+  constructor; auto.
+- (* external function *)
+  monadInv H9. econstructor; split.
+>>>>>>> origin/StackAware-new
   apply plus_one. econstructor; eauto.
   constructor; auto.
 - (* return *)
@@ -504,6 +528,7 @@ Lemma transf_initial_states q:
   forall st1, initial_state ge q st1 ->
   exists st2, initial_state tge q st2 /\ match_states st1 st2.
 Proof.
+<<<<<<< HEAD
   intros. inversion H. subst rs0.
   exploit functions_translated; eauto. intros [tf [A B]].
   pose proof (sig_preserved _ _ B) as SIG. monadInv B. cbn in SIG. rewrite <- SIG.
@@ -521,13 +546,37 @@ Proof.
   edestruct functions_translated as (tf & FIND & TF); eauto. monadInv TF.
   split. econstructor; eauto. intros r S' HS'. inv HS'. rewrite H7 in H; inv H.
   eexists. split; econstructor; eauto.
+=======
+  intros. inversion H.
+  exploit function_ptr_translated; eauto. intros [tf [A B]].
+  exists (Callstate nil tf (Locmap.init Vundef) m1 (prog_main tprog)); split.
+  econstructor; eauto. eapply (Genv.init_mem_transf_partial TRANSF); eauto.
+  rewrite (match_program_main TRANSF), symbols_preserved. auto.
+  rewrite <- H3. apply sig_preserved. auto.
+  rewrite (match_program_main TRANSF).
+  constructor. constructor. auto.
+>>>>>>> origin/StackAware-new
 Qed.
 
 Lemma transf_final_states:
   forall st1 st2 r,
   match_states st1 st2 -> final_state st1 r -> final_state st2 r.
 Proof.
+<<<<<<< HEAD
   intros. inv H0. inv H. inv H4. inv H1. econstructor; eauto.
+=======
+  intros. inv H0. inv H. inv H5. econstructor; eauto.
+Qed.
+
+Theorem transf_program_correct:
+  forward_simulation (semantics fn_stack_requirements prog) (semantics fn_stack_requirements tprog).
+Proof.
+  eapply forward_simulation_plus.
+  apply senv_preserved.
+  eexact transf_initial_states.
+  eexact transf_final_states.
+  eexact transf_step_correct.
+>>>>>>> origin/StackAware-new
 Qed.
 
 End PRESERVATION.

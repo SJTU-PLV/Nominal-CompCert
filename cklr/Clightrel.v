@@ -17,7 +17,7 @@ Require Import LogicalRelations.
 Require Import OptionRel.
 Require Import KLR.
 Require Export Clight.
-Require Import SimplLocalsproof.
+(* Require Import SimplLocalsproof. *)
 Require Import Linking.
 
 Section PROG.
@@ -601,6 +601,7 @@ Inductive state_match R w: rel state state :=
          list_rel (Val.inject (mi R w)) ++>
          cont_match R w ++>
          match_mem R w ++>
+         eq ++>
          state_match R w)
   | Returnstate_rel:
       Monotonic

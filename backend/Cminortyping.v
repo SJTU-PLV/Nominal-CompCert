@@ -450,12 +450,13 @@ Inductive wt_state (ge: genv) (ttop: rettype): state -> Prop :=
         (WT_ENV: wt_env env e)
         (DEF_ENV: def_env f e),
       wt_state ge ttop (State f s k sp e m)
-  | wt_call_state: forall vf f args k m
+  | wt_call_state: forall vf f args k m id
         (WT_FD: wt_fundef f)
         (WT_ARGS: Val.has_type_list args (funsig f).(sig_args))
         (WT_CONT: wt_cont_call ttop k (funsig f).(sig_res))
+        (WT_ID: vf = Vptr (Global id) Ptrofs.zero)
         (WT_FIND: Genv.find_funct ge vf = Some f),
-      wt_state ge ttop (Callstate vf args k m)
+      wt_state ge ttop (Callstate vf args k m id)
   | wt_return_state: forall v k m tret
         (WT_RES: Val.has_type v (proj_rettype tret))
         (WT_CONT: wt_cont_call ttop k tret),
@@ -636,8 +637,11 @@ Proof.
   intros. eapply Genv.find_funct_prop; eauto.
 Qed.
 
+Section ORACLE.
+Variable fn_stack_requirements : ident -> Z.
+
 Lemma subject_reduction:
-  forall st1 t st2, step ge st1 t st2 ->
+  forall st1 t st2, step fn_stack_requirements ge st1 t st2 ->
   forall ttop (WT: wt_state ge ttop st1), wt_state ge ttop st2.
 Proof.
   destruct 1; intros; inv WT.
@@ -655,10 +659,10 @@ Proof.
 - inv WT_STMT. econstructor; eauto.
   eapply wt_find_funct; eauto.
   eapply wt_eval_exprlist; eauto.
-  rewrite H8; eapply call_cont_wt; eauto.
+  rewrite H9; eapply call_cont_wt; eauto.
 - inv WT_STMT. exploit external_call_well_typed; eauto. intros TRES.
   econstructor; eauto using wt_Sskip.
-  destruct optid; auto. apply wt_env_assign; auto. rewrite <- H5; auto.
+  destruct optid; auto. apply wt_env_assign; auto. rewrite <- H6; auto.
   destruct optid; auto. apply def_env_assign; auto.
 - inv WT_STMT. econstructor; eauto. econstructor; eauto.
 - inv WT_STMT. destruct b; econstructor; eauto.
@@ -678,10 +682,10 @@ Proof.
   generalize (wt_find_label _ _ _ lbl _ _ H2 WT_CK).
   rewrite H. intros [WT_STMT' WT_CONT']. econstructor; eauto.
 - rewrite WT_FIND in FIND. inv FIND.
-  inv WT_FD. inversion H1; subst. econstructor; eauto.
+  inv WT_FD. inversion H2; subst. econstructor; eauto.
   constructor; auto.
-  apply wt_env_set_locals. apply wt_env_set_params. rewrite H2; auto.
-  red; intros. apply def_set_locals. destruct H4; auto. left; apply def_set_params; auto.
+  apply wt_env_set_locals. apply wt_env_set_params. rewrite H3; auto.
+  red; intros. apply def_set_locals. destruct H5; auto. left; apply def_set_params; auto.
 - rewrite WT_FIND in FIND. inv FIND.
   exploit external_call_well_typed; eauto. intros.
   econstructor; eauto.
@@ -692,20 +696,29 @@ Proof.
 Qed.
 
 Lemma subject_reduction_star:
-  forall st1 t st2, star step ge st1 t st2 ->
+  forall st1 t st2, star (step fn_stack_requirements) ge st1 t st2 ->
   forall ttop (WT: wt_state ge ttop st1), wt_state ge ttop st2.
 Proof.
   induction 1; eauto using subject_reduction.
 Qed.
 
+End ORACLE.
 End SUBJECT_REDUCTION.
 
-Lemma cminor_wt prog:
+(* Lemma wt_initial_state:
+  forall S, initial_state p S -> wt_state S.
+Proof.
+  intros. inv H. constructor. eapply Genv.find_funct_ptr_prop; eauto.
+  rewrite H3; constructor.
+  rewrite H3; constructor.
+Qed. *)
+
+Lemma cminor_wt fn_stack_requirements prog:
   wt_program prog ->
-  preserves (semantics prog) wt_c wt_c
+  preserves (semantics fn_stack_requirements prog) wt_c wt_c
     (fun '(se, sg) => wt_state (Genv.globalenv se prog) (sig_res sg)).
 Proof.
-  intros PROG_WT [se sg] xse SE_VALID Hxse. destruct Hxse.
+  intros PROG_WT [se' sg] xse SE_VALID Hxse. destruct Hxse.
   split; cbn.
   - intros. eapply subject_reduction; eauto.
   - intros q s [Hsg Hwt] Hq. subst. destruct Hq as [vf f vargs m Hvf]. cbn in *.
@@ -716,7 +729,7 @@ Proof.
   - intros s q Hs Hq. destruct Hq. inv Hs.
     assert (f = External (EF_external name sg0)) by congruence. subst. cbn in *.
     eexists (_, _); cbn. intuition eauto.
-    inv H1. econstructor; eauto.
+    inv H2. econstructor; eauto.
   - intros s r Hs Hr. destruct Hr. inv Hs. cbn.
     unfold proj_sig_res in *. inv WT_CONT. auto.
 Qed.
@@ -817,5 +830,6 @@ Proof.
     destruct b; discriminate.
   - discriminate.
 Qed.
+
 
 

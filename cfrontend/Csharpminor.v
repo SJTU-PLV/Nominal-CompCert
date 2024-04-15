@@ -160,7 +160,8 @@ Inductive state: Type :=
       forall (vf: val)                  (**r function to invoke *)
              (args: list val)           (**r arguments provided by caller *)
              (k: cont)                  (**r what to do next  *)
-             (m: mem),                  (**r memory state *)
+             (m: mem)                   (**r memory state *)
+             (id: ident),
       state
   | Returnstate:                (**r Return from a function *)
       forall (v: val)                   (**r Return value *)
@@ -287,6 +288,10 @@ Definition block_of_binding (id_b_sz: ident * (block * Z)) :=
 Definition blocks_of_env (e: env) : list (block * Z * Z) :=
   List.map block_of_binding (PTree.elements e).
 
+Section ORACLE.
+
+Variable fn_stack_requirements : ident -> Z.
+
 Section RELSEM.
 
 Variable ge: genv.
@@ -365,11 +370,12 @@ Inductive step: state -> trace -> state -> Prop :=
   | step_skip_block: forall f k e le m,
       step (State f Sskip (Kblock k) e le m)
         E0 (State f Sskip k e le m)
-  | step_skip_call: forall f k e le m m',
+  | step_skip_call: forall f k e le m m' m'',
       is_call_cont k ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State f Sskip k e le m)
-        E0 (Returnstate Vundef k m')
+        E0 (Returnstate Vundef k m'')
 
   | step_set: forall f id a k e le m v,
       eval_expr e le m a v ->
@@ -383,13 +389,18 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sstore chunk addr a) k e le m)
         E0 (State f Sskip k e le m')
 
-  | step_call: forall f optid sig a bl k e le m vf vargs fd,
+  | step_call: forall f optid sig a bl k e le m vf vargs fd id,
+      vf = Vptr (Global id) Ptrofs.zero ->
       eval_expr e le m a vf ->
       eval_exprlist e le m bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (State f (Scall optid sig a bl) k e le m)
+<<<<<<< HEAD
         E0 (Callstate vf vargs (Kcall optid f e le k) m)
+=======
+        E0 (Callstate fd vargs (Kcall optid f e le k) m id)
+>>>>>>> origin/StackAware-new
 
   | step_builtin: forall f optid ef bl k e le m vargs t vres m',
       eval_exprlist e le m bl vargs ->
@@ -431,15 +442,17 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sswitch islong a cases) k e le m)
         E0 (State f (seq_of_lbl_stmt (select_switch n cases)) k e le m)
 
-  | step_return_0: forall f k e le m m',
+  | step_return_0: forall f k e le m m' m'',
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State f (Sreturn None) k e le m)
-        E0 (Returnstate Vundef (call_cont k) m')
-  | step_return_1: forall f a k e le m v m',
+        E0 (Returnstate Vundef (call_cont k) m'')
+  | step_return_1: forall f a k e le m v m' m'',
       eval_expr e le m a v ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State f (Sreturn (Some a)) k e le m)
-        E0 (Returnstate v (call_cont k) m')
+        E0 (Returnstate v (call_cont k) m'')
   | step_label: forall f lbl s k e le m,
       step (State f (Slabel lbl s) k e le m)
         E0 (State f s k e le m)
@@ -449,13 +462,19 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k e le m)
         E0 (State f s' k' e le m)
 
+<<<<<<< HEAD
   | step_internal_function: forall vf f vargs k m m1 e le,
       forall FIND: Genv.find_funct ge vf = Some (Internal f),
+=======
+  | step_internal_function: forall f vargs k m m1 m2 e le id,
+>>>>>>> origin/StackAware-new
       list_norepet (map fst f.(fn_vars)) ->
       list_norepet f.(fn_params) ->
       list_disjoint f.(fn_params) f.(fn_temps) ->
       alloc_variables empty_env m (fn_vars f) e m1 ->
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (Stack 1%positive) (fn_stack_requirements id )) = Some m2 ->
       bind_parameters f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
+<<<<<<< HEAD
       step (Callstate vf vargs k m)
         E0 (State f f.(fn_body) k e le m1)
 
@@ -463,6 +482,14 @@ Inductive step: state -> trace -> state -> Prop :=
       forall FIND: Genv.find_funct ge vf = Some (External ef),
       external_call ef ge vargs m t vres m' ->
       step (Callstate vf vargs k m)
+=======
+      step (Callstate (Internal f) vargs k m id)
+        E0 (State f f.(fn_body) k e le m2)
+
+  | step_external_function: forall ef vargs k m t vres m' id,
+      external_call ef ge vargs m t vres m' ->
+      step (Callstate (External ef) vargs k m id)
+>>>>>>> origin/StackAware-new
          t (Returnstate vres k m')
 
   | step_return: forall v optid f e le k m,
@@ -476,12 +503,24 @@ End RELSEM.
   corresponding to the invocation of the ``main'' function of the program
   without arguments and with an empty continuation. *)
 
+<<<<<<< HEAD
 Inductive initial_state (ge: genv): c_query -> state -> Prop :=
   | initial_state_intro: forall vf f vargs m,
       Genv.find_funct ge vf = Some (Internal f) ->
       initial_state ge
         (cq vf (fn_sig f) vargs m)
         (Callstate vf vargs Kstop m).
+=======
+Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall b f m0 m1 b0,
+      let ge := Genv.globalenv p in
+      Genv.init_mem p = Some m0 ->
+      Genv.find_symbol ge p.(prog_main) = Some b ->
+      Genv.find_funct_ptr ge b = Some f ->
+      funsig f = signature_main ->
+      Mem.alloc m0 0 0 = (m1,b0) ->
+      initial_state p (Callstate f nil Kstop m1 p.(prog_main)).
+>>>>>>> origin/StackAware-new
 
 Inductive at_external (ge: genv): state -> c_query -> Prop :=
   | at_external_intro vf name sg vargs k m:
@@ -506,4 +545,9 @@ Inductive final_state: state -> c_reply -> Prop :=
 (** Wrapping up these definitions in a small-step semantics. *)
 
 Definition semantics (p: program) :=
+<<<<<<< HEAD
   Semantics step initial_state at_external after_external final_state p.
+=======
+  Semantics step (initial_state p) final_state (Genv.globalenv p).
+End ORACLE.
+>>>>>>> origin/StackAware-new

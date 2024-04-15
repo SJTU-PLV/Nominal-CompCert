@@ -8,6 +8,53 @@ Require Import LanguageInterface.
 
 (** * [Mem.inject] as a CKLR *)
 
+(* Memory properties *)
+
+Definition meminj_global (j:meminj) : Prop :=
+  forall id b delta, j (Global id) = Some (b,delta) ->
+                b = Global id /\ delta = 0.
+
+Lemma meminj_global_incr : forall j j',
+    meminj_global j ->
+    inject_incr j j' ->
+    incr_without_glob j j' ->
+    meminj_global j'.
+Proof.
+  intros.
+  unfold meminj_global in *. intros.
+  destruct (j (Global id)) as [[b' d]|] eqn:Hj.
+  eapply H; eauto. erewrite H0 in H2; eauto. inv H2. eauto.
+  exploit H1; eauto. intros [A B]. inv A.
+Qed.
+
+Lemma meminj_global_compose : forall j j',
+    meminj_global j ->
+    meminj_global j' ->
+    meminj_global (compose_meminj j j').
+Proof.
+  unfold compose_meminj. red. intros. do 3 destr_in H1.
+  destruct p0. inv H1. apply H in Heqo. inv Heqo. apply H0 in Heqo0. inv Heqo0.
+  auto.
+Qed.
+
+Inductive match_astack (s1 s2 : stackadt) : Prop :=
+  match_astack_intro: forall
+    (CONS1: s1 <> nil)
+    (CONS2: s2 <> nil)
+    (SIZE: stack_size s1 >= stack_size s2),
+    match_astack s1 s2.
+
+Lemma match_astack_refl: forall s, s <> nil -> match_astack s s.
+Proof.
+  intros. constructor; auto. lia.
+Qed.
+
+Instance match_astack_trans: Transitive match_astack.
+Proof.
+  red. intros. inv H. inv H0. constructor; auto. lia.
+Qed.
+
+
 (** ** Separated injections *)
 
 Record inj_world :=
@@ -40,7 +87,9 @@ Record inj_stbls (w: inj_world) (se1 se2: Genv.symtbl): Prop :=
   }.
 
 Variant inj_mem: klr inj_world mem mem :=
-  inj_mem_intro f m1 m2:
+  inj_mem_intro f m1 m2: forall
+    (INJG : meminj_global f)
+    (ASTK : match_astack (Mem.astack (Mem.support m1)) (Mem.astack (Mem.support m2))),
     Mem.inject f m1 m2 ->
     inj_mem (injw f (Mem.support m1) (Mem.support m2)) m1 m2.
 
@@ -157,7 +206,12 @@ Proof.
     + specialize (Hf'2 _ n). congruence.
     + erewrite (Mem.support_alloc m1 _ _ m1'); eauto.
     + erewrite (Mem.support_alloc m2 _ _ m2'); eauto.
-  - econstructor; eauto; erewrite Mem.support_alloc by eauto; extlia.
+  - econstructor; eauto.
+    red. intros. rewrite Hf'2 in H. auto.
+    apply Mem.alloc_result in Hm1'. subst.
+    destruct (Mem.nextblock_stack m1). intro. discriminate.
+    erewrite Mem.support_alloc by eauto.
+    erewrite (Mem.support_alloc _ _ _ _ _ Hm2'). auto.
   - cbn. red. auto.
 Qed.
 
@@ -173,9 +227,13 @@ Next Obligation. (* Mem.free *)
   edestruct Mem.free_parallel_inject as (m2' & Hm2' & Hm'); eauto.
   replace (lo1 + delta + sz) with (lo1 + sz + delta) by extlia.
   rewrite Hm2'.
-  repeat (econstructor; eauto); try congruence.
+  econstructor. econstructor. split. econstructor. eauto. congruence.
+  1,2:red; intros; exact H.
   erewrite <- Mem.support_free; eauto.
-  erewrite <- Mem.support_free; eauto.
+  erewrite <- (Mem.support_free _ _ _ _ _ Hm2'); eauto.
+  constructor; auto.
+  erewrite Mem.support_free; eauto.
+  erewrite (Mem.support_free _ _ _ _ _ Hm2'); eauto.
 Qed.
 
 Next Obligation. (* Mem.load *)
@@ -192,9 +250,13 @@ Next Obligation. (* Mem.store *)
   destruct (Mem.store chunk m1 b1 ofs1 v1) as [m1'|] eqn:Hm1'; [|rauto].
   edestruct Mem.store_mapped_inject as (m2' & Hm2' & Hm'); eauto.
   rewrite Hm2'.
-  repeat (econstructor; eauto); try congruence.
+  econstructor. econstructor. split. econstructor. eauto. congruence.
+  1,2:red; intros; exact H.
   erewrite <- Mem.support_store; eauto.
-  erewrite <- Mem.support_store; eauto.
+  erewrite <- (Mem.support_store _ _ _ _ _ _ Hm2'); eauto.
+  constructor; auto.
+  erewrite Mem.support_store; eauto.
+  erewrite (Mem.support_store _ _ _ _ _ _ Hm2'); eauto.
 Qed.
 
 Next Obligation. (* Mem.loadbytes *)
@@ -222,7 +284,10 @@ Next Obligation. (* Mem.storebytes *)
     constructor; eauto. red. congruence.
     erewrite <- (Mem.support_storebytes m1); eauto.
     erewrite <- (Mem.support_storebytes m2); eauto.
-    constructor. eapply Mem.storebytes_empty_inject; eauto.
+    constructor; auto.
+    erewrite Mem.support_storebytes; eauto.
+    erewrite (Mem.support_storebytes _ _ _ _ _ Hm2'); eauto.
+    eapply Mem.storebytes_empty_inject; eauto.
   - assert (ptr_inject f (b1, ofs1) (b2, ofs2)) as Hptr'.
     {
       destruct Hptr as [Hptr|Hptr]; eauto.
@@ -237,9 +302,13 @@ Next Obligation. (* Mem.storebytes *)
     inv Hptr'.
     edestruct Mem.storebytes_mapped_inject as (m2' & Hm2' & Hm'); eauto. rauto.
     rewrite Hm2'.
-    repeat (econstructor; eauto); try congruence;
-      try (erewrite <- Mem.support_storebytes; eauto);
-        (red; intros; eapply Mem.perm_storebytes_2; eauto).
+  econstructor. econstructor. split. econstructor. eauto. congruence.
+  1,2:red; intros; exact H.
+  erewrite <- Mem.support_storebytes; eauto.
+  erewrite <- (Mem.support_storebytes _ _ _ _ _ Hm2'); eauto.
+  constructor; auto.
+  erewrite Mem.support_storebytes; eauto.
+  erewrite (Mem.support_storebytes _ _ _ _ _ Hm2'); eauto.
 Qed.
 
 Next Obligation. (* Mem.perm *)
@@ -389,6 +458,14 @@ Proof.
 Qed.
 *)
 
+Lemma meminj_global_dom : forall j,
+    meminj_global j ->
+    meminj_global (meminj_dom j).
+Proof.
+  unfold compose_meminj. red. intros.
+  unfold meminj_dom in H0. destr_in H0.
+Qed.
+
 Lemma block_inject_dom f b1 b2:
   block_inject f b1 b2 ->
   block_inject (meminj_dom f) b1 b1.
@@ -505,7 +582,9 @@ Proof.
   repeat apply conj.
   - exists se1. split; eauto.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
-  - exists m1; split; repeat rstep; eauto using inj_mem_intro, mem_inject_dom.
+  - exists m1; split; repeat rstep; eauto.
+    constructor; eauto using inj_mem_intro, mem_inject_dom, meminj_global_dom.
+    apply match_astack_refl. inv ASTK. auto.
   - rewrite meminj_dom_compose.
     apply inject_incr_refl.
   - intros [w12' w23'] m1' m3' (m2' & H12' & H23') [Hw12' Hw23']. cbn in *.
@@ -515,7 +594,8 @@ Proof.
     inversion Hw23' as [? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
     eexists (injw (compose_meminj f12' f23') _ _).
     repeat apply conj.
-    + constructor; auto. eapply Mem.inject_compose; eauto.
+    + constructor; eauto using meminj_global_compose, Mem.inject_compose.
+      etransitivity; eauto.
     + constructor; auto.
       * rewrite <- (meminj_dom_compose f). rauto.
       * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.

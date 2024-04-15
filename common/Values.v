@@ -31,14 +31,48 @@ End BLOCK.
 (*
 Declare Module Block : BLOCK.
 *)
+
+Lemma nat_eq: forall n1 n2 :nat, {n1=n2} + {n1<>n2}.
+Proof.
+  intros.
+  destruct (Nat.eqb n1 n2) eqn:?.
+  apply Nat.eqb_eq in Heqb. left. auto.
+  apply Nat.eqb_neq in Heqb. right. auto.
+Qed.
+
+Lemma beq : forall b1 b2:bool, {b1=b2}+{b1<>b2}.
+Proof.
+  intros.
+  destruct (eqb b1 b2) eqn:?.
+  rewrite eqb_true_iff in Heqb. auto.
+  rewrite eqb_false_iff in Heqb. auto.
+Qed.
+
+Inductive block' :=
+  |Stack : ident -> block'
+  |Global : ident -> block'.
+
 Module Block <: BLOCK.
-Definition block := positive.
-Definition eq_block := peq.
+
+Definition block := block'.
+
+Theorem eq_block : forall (x y:block),{x=y}+{x<>y}.
+Proof.
+  intros. destruct x; destruct y; try(right; congruence).
+  - destruct (peq i i0). left. congruence. right. congruence.
+  - destruct (peq i i0). left. congruence. right. congruence.
+Qed.
+
 End Block.
 
 Definition block := Block.block.
 Definition eq_block := Block.eq_block.
 
+Definition is_stack (b:block) : Prop :=
+  match b with
+    | Stack _ => True
+    |  _ => False
+  end.
 
 (** A value is either:
 - a machine integer;
@@ -2644,6 +2678,10 @@ Notation meminj := Val.meminj.
 
 Definition inject_incr (f1 f2: meminj) : Prop :=
   forall b b' delta, f1 b = Some(b', delta) -> f2 b = Some(b', delta).
+
+Definition incr_without_glob (j j' : meminj) : Prop :=
+  forall b b' delta, j b = None -> j' b = Some (b',delta) ->
+       is_stack b /\ is_stack b'.
 
 Lemma inject_incr_refl :
    forall f , inject_incr f f .

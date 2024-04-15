@@ -248,6 +248,10 @@ Inductive assign_loc (ce: composite_env) (ty: type) (m: mem) (b: block) (ofs: pt
       store_bitfield ty sz sg pos width m (Vptr b ofs) v m' v' ->
       assign_loc ce ty m b ofs (Bits sz sg pos width) v m'.
 
+Section ORACLE.
+
+Variable fn_stack_requirements : ident -> Z.
+
 Section SEMANTICS.
 
 Variable ge: genv.
@@ -486,6 +490,27 @@ Definition is_call_cont (k: cont) : Prop :=
   | _ => False
   end.
 
+Remark call_cont_idempotent: forall k,
+    call_cont k = call_cont (call_cont k).
+Proof. induction k; simpl; auto. Qed.
+
+Remark call_cont_is_call_cont: forall k, is_call_cont (call_cont k).
+Proof. induction k; simpl; auto. Qed.
+
+Fixpoint call_depth (k: cont) : nat :=
+  match k with
+  | Kseq s k => call_depth k
+  | Kloop1 s1 s2 k => call_depth k
+  | Kloop2 s1 s2 k => call_depth k
+  | Kswitch k => call_depth k
+  | Kstop => 0%nat
+  | Kcall _ _ _ _ k => S (call_depth k)
+  end.
+
+Remark call_cont_depth: forall k,
+    call_depth k = call_depth (call_cont k).
+Proof. induction k; simpl; auto. Qed.
+
 (** States *)
 
 Inductive state: Type :=
@@ -500,7 +525,8 @@ Inductive state: Type :=
       (vf: val)
       (args: list val)
       (k: cont)
-      (m: mem) : state
+      (m: mem)
+      (id: ident) : state
   | Returnstate
       (res: val)
       (k: cont)
@@ -545,6 +571,20 @@ with find_label_ls (lbl: label) (sl: labeled_statements) (k: cont)
       end
   end.
 
+Remark find_label_cont: forall lbl s k s' k',
+    find_label lbl s k = Some (s', k') ->
+    call_cont k = call_cont k'.
+Proof.
+  intros ?. fix IH 1.
+  destruct s; intros; simpl in H; try discriminate; try destr_in H; eauto.
+  - inv H. eapply (IH s1 (Kseq s2 k)). eauto.
+  - inv H. eapply (IH s1). eauto.
+  - inv H. apply (IH s1) in Heqo. auto.
+  - apply (IH s2) in H. auto.
+  - induction l. discriminate. simpl in H1.
+    destr_in H1. inv H1. apply IH in Heqo0. auto.
+Qed.
+
 (** Semantics for allocation of variables and binding of parameters at
   function entry.  Two semantics are supported: one where
   parameters are local variables, reside in memory, and can have their address
@@ -553,7 +593,7 @@ with find_label_ls (lbl: label) (sl: labeled_statements) (k: cont)
   parameter binding semantics, then instantiate it later to give the two
   semantics described above. *)
 
-Variable function_entry: function -> list val -> mem -> env -> temp_env -> mem -> Prop.
+Variable function_entry: function -> list val -> mem -> env -> temp_env -> mem -> ident -> Prop.
 
 (** Transition relation *)
 
@@ -572,14 +612,15 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sset id a) k e le m)
         E0 (State f Sskip k e (PTree.set id v le) m)
 
-  | step_call:   forall f optid a al k e le m tyargs tyres cconv vf vargs fd,
+  | step_call:   forall f optid a al k e le m tyargs tyres cconv vf vargs fd id,
       classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
+      vf = Vptr (Global id) Ptrofs.zero ->
       eval_expr e le m a vf ->
       eval_exprlist e le m al tyargs vargs ->
       Genv.find_funct ge vf = Some fd ->
       type_of_fundef fd = Tfunction tyargs tyres cconv ->
       step (State f (Scall optid a al) k e le m)
-        E0 (Callstate vf vargs (Kcall optid f e le k) m)
+        E0 (Callstate vf vargs (Kcall optid f e le k) m id)
 
   | step_builtin:   forall f optid ef tyargs al k e le m vargs t vres m',
       eval_exprlist e le m al tyargs vargs ->
@@ -623,21 +664,24 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f Sbreak (Kloop2 s1 s2 k) e le m)
         E0 (State f Sskip k e le m)
 
-  | step_return_0: forall f k e le m m',
+  | step_return_0: forall f k e le m m' m'',
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State f (Sreturn None) k e le m)
-        E0 (Returnstate Vundef (call_cont k) m')
-  | step_return_1: forall f a k e le m v v' m',
+        E0 (Returnstate Vundef (call_cont k) m'')
+  | step_return_1: forall f a k e le m v v' m' m'',
       eval_expr e le m a v ->
       sem_cast v (typeof a) f.(fn_return) m = Some v' ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State f (Sreturn (Some a)) k e le m)
-        E0 (Returnstate v' (call_cont k) m')
-  | step_skip_call: forall f k e le m m',
+        E0 (Returnstate v' (call_cont k) m'')
+  | step_skip_call: forall f k e le m m' m'',
       is_call_cont k ->
       Mem.free_list m (blocks_of_env e) = Some m' ->
+      Mem.pop_stage m' = Some m'' ->
       step (State f Sskip k e le m)
-        E0 (Returnstate Vundef k m')
+        E0 (Returnstate Vundef k m'')
 
   | step_switch: forall f a sl k e le m v n,
       eval_expr e le m a v ->
@@ -661,16 +705,16 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k e le m)
         E0 (State f s' k' e le m)
 
-  | step_internal_function: forall vf f vargs k m e le m1,
+  | step_internal_function: forall vf f vargs k m e le m1 id,
       forall FIND: Genv.find_funct ge vf = Some (Internal f),
-      function_entry f vargs m e le m1 ->
-      step (Callstate vf vargs k m)
+      function_entry f vargs m e le m1 id ->
+      step (Callstate vf vargs k m id)
         E0 (State f f.(fn_body) k e le m1)
 
-  | step_external_function: forall vf ef targs tres cconv vargs k m vres t m',
+  | step_external_function: forall vf ef targs tres cconv vargs k m vres t m' id,
       forall FIND: Genv.find_funct ge vf = Some (External ef targs tres cconv),
       external_call ef ge vargs m t vres m' ->
-      step (Callstate vf vargs k m)
+      step (Callstate vf vargs k m id)
          t (Returnstate vres k m')
 
   | step_returnstate: forall v optid f e le k m,
@@ -685,27 +729,29 @@ Inductive step: state -> trace -> state -> Prop :=
   without arguments and with an empty continuation. *)
 
 Inductive initial_state: c_query -> state -> Prop :=
-  | initial_state_intro: forall vf f targs tres tcc vargs m,
+  | initial_state_intro: forall (vf : val) f targs tres tcc vargs m vf id,
+      vf = Vptr (Global id) Ptrofs.zero ->
       Genv.find_funct ge vf = Some (Internal f) ->
       type_of_function f = Tfunction targs tres tcc ->
       val_casted_list vargs targs ->
       Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
       initial_state
         (cq vf (signature_of_type targs tres tcc) vargs m)
-        (Callstate vf vargs Kstop m).
+        (Callstate vf vargs Kstop m id).
 
 Inductive at_external: state -> c_query -> Prop :=
-  | at_external_intro name sg targs tres cconv vf vargs k m:
+  | at_external_intro name sg targs tres cconv vf vargs k m id:
       let f := External (EF_external name sg) targs tres cconv in
+      vf = Vptr (Global id) Ptrofs.zero ->
       Genv.find_funct ge vf = Some f ->
       at_external
-        (Callstate vf vargs k m)
+        (Callstate vf vargs k m id)
         (cq vf sg vargs m).
 
 Inductive after_external: state -> c_reply -> state -> Prop :=
-  | after_external_intro vf vargs k m vres m':
+  | after_external_intro vf vargs k m vres m' id:
       after_external
-        (Callstate vf vargs k m)
+        (Callstate vf vargs k m id)
         (cr vres m')
         (Returnstate vres k m').
 
@@ -719,26 +765,28 @@ End SEMANTICS.
 
 (** The two semantics for function parameters.  First, parameters as local variables. *)
 
-Inductive function_entry1 (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (le: temp_env) (m': mem) : Prop :=
-  | function_entry1_intro: forall m1,
+Inductive function_entry1 (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (le: temp_env) (m': mem) (id:ident) : Prop :=
+  | function_entry1_intro: forall m1 m2,
       list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
       alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-      bind_parameters ge e m1 f.(fn_params) vargs m' ->
+      Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (Stack 1%positive)(fn_stack_requirements id )) = Some m2 ->
+      bind_parameters ge e m2 f.(fn_params) vargs m' ->
       le = create_undef_temps f.(fn_temps) ->
-      function_entry1 ge f vargs m e le m'.
+      function_entry1 ge f vargs m e le m' id.
 
 Definition step1 (ge: genv) := step ge (function_entry1 ge).
 
 (** Second, parameters as temporaries. *)
 
-Inductive function_entry2 (ge: genv)  (f: function) (vargs: list val) (m: mem) (e: env) (le: temp_env) (m': mem) : Prop :=
-  | function_entry2_intro:
+Inductive function_entry2 (ge: genv)  (f: function) (vargs: list val) (m: mem) (e: env) (le: temp_env) (m'': mem) (id:ident): Prop :=
+  | function_entry2_intro: forall m',
       list_norepet (var_names f.(fn_vars)) ->
       list_norepet (var_names f.(fn_params)) ->
       list_disjoint (var_names f.(fn_params)) (var_names f.(fn_temps)) ->
       alloc_variables ge empty_env m f.(fn_vars) e m' ->
+      Mem.record_frame (Mem.push_stage m') (Memory.mk_frame ((Stack 1%positive)) (fn_stack_requirements id )) = Some m'' ->
       bind_parameter_temps f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
-      function_entry2 ge f vargs m e le m'.
+      function_entry2 ge f vargs m e le m'' id.
 
 Definition step2 (ge: genv) := step ge (function_entry2 ge).
 
@@ -772,3 +820,5 @@ Proof.
   eapply external_call_trace_length; eauto.
   eapply external_call_trace_length; eauto.
 Qed.
+
+End ORACLE.

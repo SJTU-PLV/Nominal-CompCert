@@ -360,6 +360,7 @@ Qed.
 
 Section CORRECTNESS.
 
+Variable fn_stack_requirements : ident -> Z.
 Variable prog: CminorSel.program.
 Variable tprog: RTL.program.
 Hypothesis TRANSL: match_prog prog tprog.
@@ -402,7 +403,7 @@ Lemma tr_move_correct:
   forall r1 ns r2 nd cs f sp rs m,
   tr_move f.(fn_code) ns r1 nd r2 ->
   exists rs',
-  star step tge (State cs f sp ns rs m) E0 (State cs f sp nd rs' m) /\
+  star (step fn_stack_requirements) tge (State cs f sp ns rs m) E0 (State cs f sp nd rs' m) /\
   rs'#r2 = rs#r1 /\
   (forall r, r <> r2 -> rs'#r = rs#r).
 Proof.
@@ -460,7 +461,7 @@ Definition transl_expr_prop
     (ME: match_env map e le rs)
     (EXT: Mem.extends m tm),
   exists rs', exists tm',
-     star step tge (State cs f sp ns rs tm) E0 (State cs f sp nd rs' tm')
+      star (step fn_stack_requirements) tge (State cs f sp ns rs tm) E0 (State cs f sp nd rs' tm')
   /\ match_env map (set_optvar dst v e) le rs'
   /\ Val.lessdef v rs'#rd
   /\ (forall r, In r pr -> rs'#r = rs#r)
@@ -474,7 +475,7 @@ Definition transl_exprlist_prop
     (ME: match_env map e le rs)
     (EXT: Mem.extends m tm),
   exists rs', exists tm',
-     star step tge (State cs f sp ns rs tm) E0 (State cs f sp nd rs' tm')
+      star (step fn_stack_requirements) tge (State cs f sp ns rs tm) E0 (State cs f sp nd rs' tm')
   /\ match_env map e le rs'
   /\ Val.lessdef_list vl rs'##rl
   /\ (forall r, In r pr -> rs'#r = rs#r)
@@ -488,7 +489,7 @@ Definition transl_condexpr_prop
     (ME: match_env map e le rs)
     (EXT: Mem.extends m tm),
   exists rs', exists tm',
-     plus step tge (State cs f sp ns rs tm) E0 (State cs f sp (if v then ntrue else nfalse) rs' tm')
+      plus (step fn_stack_requirements) tge (State cs f sp ns rs tm) E0 (State cs f sp (if v then ntrue else nfalse) rs' tm')
   /\ match_env map e le rs'
   /\ (forall r, In r pr -> rs'#r = rs#r)
   /\ Mem.extends m tm'.
@@ -681,14 +682,17 @@ Lemma transl_expr_Ebuiltin_correct:
   forall le ef al vl v,
   eval_exprlist ge sp e m le al vl ->
   transl_exprlist_prop le al vl ->
-  external_call ef ge vl m E0 v m ->
+  external_call ef ge vl (Mem.push_stage m) E0 v (Mem.push_stage m) ->
   transl_expr_prop le (Ebuiltin ef al) v.
 Proof.
   intros; red; intros. inv TE.
   exploit H0; eauto. intros [rs1 [tm1 [EX1 [ME1 [RR1 [RO1 EXT1]]]]]].
   exploit external_call_mem_extends; eauto.
+  eapply Mem.push_stage_extends; eauto.
   intros [v' [tm2 [A [B [C D]]]]].
-  exists (rs1#rd <- v'); exists tm2.
+  edestruct Mem.pop_stage_extends as (tm2' & USB & EXT'). apply C.
+  apply Mem.pop_push_stage.
+  exists (rs1#rd <- v'); exists tm2'.
 (* Exec *)
   split. eapply star_right. eexact EX1.
   change (rs1#rd <- v') with (regmap_setres (BR rd) v' rs1).
@@ -712,25 +716,41 @@ Lemma transl_expr_Eexternal_correct:
   ef_sig ef = sg ->
   eval_exprlist ge sp e m le al vl ->
   transl_exprlist_prop le al vl ->
-  external_call ef ge vl m E0 v m ->
+  external_call ef ge vl (Mem.push_stage m) E0 v (Mem.push_stage m) ->
   transl_expr_prop le (Eexternal id sg al) v.
 Proof.
   intros; red; intros. inv TE.
   exploit H3; eauto. intros [rs1 [tm1 [EX1 [ME1 [RR1 [RO1 EXT1]]]]]].
   exploit external_call_mem_extends; eauto.
+  eapply Mem.push_stage_extends; eauto.
   intros [v' [tm2 [A [B [C D]]]]].
+<<<<<<< HEAD
   rewrite <- Genv.find_funct_find_funct_ptr in H0.
   exploit functions_translated; eauto. simpl. intros [tf [P Q]]. inv Q.
   exists (rs1#rd <- v'); exists tm2.
+=======
+  edestruct Mem.pop_stage_extends as (tm2' & USB & EXT'). apply C.
+  apply Mem.pop_push_stage.
+  exploit function_ptr_translated; eauto. simpl. intros [tf [P Q]]. inv Q.
+  exists (rs1#rd <- v'); exists tm2'.
+>>>>>>> origin/StackAware-new
 (* Exec *)
   exploit (functions_translated (Vptr b Ptrofs.zero)); eauto. cbn.
   destruct Ptrofs.eq_dec; try congruence. intros (tf & TFIND & TF). inv TF.
   split. eapply star_trans. eexact EX1.
+<<<<<<< HEAD
   eapply star_left. eapply exec_Icall; eauto.
   cbn. unfold Genv.symbol_address. cbn in H. rewrite H. eauto. auto.
   eapply star_left. eapply exec_function_external.
   cbn. unfold Genv.symbol_address. cbn in H. rewrite H. eauto. eauto.
   apply star_one. apply exec_return.
+=======
+  eapply star_left. eapply exec_Icall; eauto. reflexivity.
+  simpl. rewrite symbols_preserved. rewrite H. eauto. auto.
+  eapply star_left. eapply exec_function_external.
+  eapply external_call_symbols_preserved; eauto. apply senv_preserved.
+  apply star_one. apply exec_return. eauto.
+>>>>>>> origin/StackAware-new
   reflexivity. reflexivity. reflexivity.
 (* Match-env *)
   split. eauto with rtlg.
@@ -934,7 +954,7 @@ Definition transl_exitexpr_prop
     (ME: match_env map e le rs)
     (EXT: Mem.extends m tm),
   exists nd, exists rs', exists tm',
-     star step tge (State cs f sp ns rs tm) E0 (State cs f sp nd rs' tm')
+     star (step fn_stack_requirements) tge (State cs f sp ns rs tm) E0 (State cs f sp nd rs' tm')
   /\ nth_error nexits x = Some nd
   /\ match_env map e le rs'
   /\ Mem.extends m tm'.
@@ -997,9 +1017,15 @@ Lemma invert_eval_builtin_arg:
   /\ Events.eval_builtin_arg ge (fun v => v) sp m (fst (convert_builtin_arg a vl)) v
   /\ (forall vl', convert_builtin_arg a (vl ++ vl') = (fst (convert_builtin_arg a vl), vl')).
 Proof.
+<<<<<<< HEAD
   induction 1; simpl. 2-8: try (econstructor; intuition eauto with evalexpr barg; fail).
 - econstructor; split; eauto with evalexpr. split. constructor. auto. 
 - econstructor; split; eauto with evalexpr. split. repeat constructor. auto.
+=======
+  induction 1; simpl; try (econstructor; intuition eauto with evalexpr barg; fail).
+- econstructor; split; eauto with evalexpr. split. constructor. auto.
+- econstructor; split; eauto with evalexpr. split. constructor. auto.
+>>>>>>> origin/StackAware-new
 - econstructor; split; eauto with evalexpr. split. repeat constructor. auto.
 - destruct IHeval_builtin_arg1 as (vl1 & A1 & B1 & C1).
   destruct IHeval_builtin_arg2 as (vl2 & A2 & B2 & C2).
@@ -1007,7 +1033,7 @@ Proof.
   destruct (convert_builtin_arg a2 vl2) as [a2' rl2] eqn:E2; simpl in *.
   exists (vl1 ++ vl2); split.
   apply eval_exprlist_append; auto.
-  split. rewrite C1, E2. constructor; auto. 
+  split. rewrite C1, E2. constructor; auto.
   intros. rewrite app_ass, !C1, C2, E2. auto.
 Qed.
 
@@ -1215,13 +1241,23 @@ Inductive match_states: CminorSel.state -> RTL.state -> Prop :=
       match_states (CminorSel.State f s k sp e m)
                    (RTL.State cs tf sp ns rs tm)
   | match_callstate:
+<<<<<<< HEAD
       forall vf args targs k m tm cs tvf
+=======
+      forall f args targs k m tm cs tf id
+        (TF: transl_fundef f = OK tf)
+>>>>>>> origin/StackAware-new
         (MS: match_stacks k cs)
         (LF: Val.lessdef vf tvf)
         (LD: Val.lessdef_list args targs)
         (MEXT: Mem.extends m tm),
+<<<<<<< HEAD
       match_states (CminorSel.Callstate vf args k m)
                    (RTL.Callstate cs tvf targs tm)
+=======
+      match_states (CminorSel.Callstate f args k m id)
+                   (RTL.Callstate cs tf targs tm id)
+>>>>>>> origin/StackAware-new
   | match_returnstate:
       forall v tv k m tm cs
         (MS: match_stacks k cs)
@@ -1282,10 +1318,10 @@ Proof.
 Qed.
 
 Theorem transl_step_correct:
-  forall S1 t S2, CminorSel.step ge S1 t S2 ->
+  forall S1 t S2, CminorSel.step fn_stack_requirements ge S1 t S2 ->
   forall R1, match_states S1 R1 ->
   exists R2,
-  (plus RTL.step tge R1 t R2 \/ (star RTL.step tge R1 t R2 /\ lt_state S2 S1))
+  (plus (RTL.step fn_stack_requirements) tge R1 t R2 \/ (star (RTL.step fn_stack_requirements) tge R1 t R2 /\ lt_state S2 S1))
   /\ match_states S2 R2.
 Proof.
   induction 1; intros R1 MSTATE; inv MSTATE.
@@ -1305,13 +1341,13 @@ Proof.
   assert ((fn_code tf)!ncont = Some(Ireturn rret)
           /\ match_stacks k cs).
     inv TK; simpl in H; try contradiction; auto.
-  destruct H1.
+  destruct H2.
   assert (fn_stacksize tf = fn_stackspace f).
     inv TF. auto.
   edestruct Mem.free_parallel_extends as [tm' [ ]]; eauto.
   econstructor; split.
   left; apply plus_one. eapply exec_Ireturn. eauto.
-  rewrite H3. eauto.
+  rewrite H4. eauto. eauto. inv H6. congruence.
   constructor; auto.
 
   (* assign *)
@@ -1340,47 +1376,75 @@ Proof.
   econstructor; eauto. constructor.
 
   (* call *)
-  inv TS; inv H.
+  inv TS; inv H0.
   (* indirect *)
   exploit transl_expr_correct; eauto.
-  intros [rs' [tm' [A [B [C [D X]]]]]].
+  intros [rs' [tm' [A [B [C [D X]]]]]]. inv C.
   exploit transl_exprlist_correct; eauto.
   intros [rs'' [tm'' [E [F [G [J Y]]]]]].
   exploit functions_translated; eauto. intros [tf' [P Q]].
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
+<<<<<<< HEAD
   eapply exec_Icall; eauto. simpl. rewrite J. eauto. simpl; auto.
   apply sig_transl_function; auto.
   traceEq.
   constructor; auto. econstructor; eauto.
   simpl. rewrite J. eauto. simpl; auto.
+=======
+  eapply exec_Icall; eauto. simpl. rewrite J. rewrite <- H3. auto. left. auto.
+  simpl. rewrite J. rewrite <- H3. eauto. left. auto.
+  apply sig_transl_function; auto.
+  traceEq.
+  constructor; auto. econstructor; eauto. eapply Mem.push_stage_extends; eauto.
+>>>>>>> origin/StackAware-new
   (* direct *)
   exploit transl_exprlist_correct; eauto.
   intros [rs'' [tm'' [E [F [G [J Y]]]]]].
   exploit functions_translated; eauto. intros [tf' [P Q]].
   econstructor; split.
   left; eapply plus_right. eexact E.
+<<<<<<< HEAD
   eapply exec_Icall; eauto. simpl.
     unfold Genv.symbol_address. cbn in H4. rewrite H4. eauto.
+=======
+  eapply exec_Icall; eauto. simpl. reflexivity. simpl.
+  rewrite symbols_preserved. rewrite H5.
+    rewrite Genv.find_funct_find_funct_ptr in P. eauto.
+>>>>>>> origin/StackAware-new
   apply sig_transl_function; auto.
   traceEq.
+  apply Genv.genv_vars_eq in H5 as H6. inv H6.
   constructor; auto. econstructor; eauto.
+<<<<<<< HEAD
   cbn. unfold Genv.symbol_address. cbn in H4. rewrite H4. auto.
+=======
+  eapply Mem.push_stage_extends; eauto.
+>>>>>>> origin/StackAware-new
 
   (* tailcall *)
-  inv TS; inv H.
+  inv TS; inv H0.
   (* indirect *)
   exploit transl_expr_correct; eauto.
-  intros [rs' [tm' [A [B [C [D X]]]]]].
+  intros [rs' [tm' [A [B [C [D X]]]]]]. inv C.
   exploit transl_exprlist_correct; eauto.
   intros [rs'' [tm'' [E [F [G [J Y]]]]]].
   exploit functions_translated; eauto. intros [tf' [P Q]].
   exploit match_stacks_call_cont; eauto. intros [U V].
   assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
+<<<<<<< HEAD
   edestruct Mem.free_parallel_extends as [tm''' [ ]]; eauto.
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
   eapply exec_Itailcall; eauto. simpl. rewrite J. eauto. simpl; auto.
+=======
+  edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
+  inversion H8. rewrite mext_sup in H5.
+  econstructor; split.
+  left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
+  eapply exec_Itailcall; eauto. simpl. rewrite J. rewrite H3. auto. left. auto.
+  simpl. rewrite J. rewrite <- H3. eauto. left. auto.
+>>>>>>> origin/StackAware-new
   apply sig_transl_function; auto.
   rewrite H; eauto.
   traceEq.
@@ -1392,14 +1456,25 @@ Proof.
   exploit functions_translated; eauto. intros [tf' [P Q]].
   exploit match_stacks_call_cont; eauto. intros [U V].
   assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
+<<<<<<< HEAD
   edestruct Mem.free_parallel_extends as [tm''' [ ]]; eauto.
   econstructor; split.
   left; eapply plus_right. eexact E.
   eapply exec_Itailcall; eauto.
   simpl. unfold Genv.symbol_address. cbn in H5. rewrite H5. eauto.
+=======
+  edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
+  inversion H3. rewrite mext_sup in H5.
+  econstructor; split.
+  left; eapply plus_right. eexact E.
+  eapply exec_Itailcall; eauto. simpl. reflexivity. simpl.
+  rewrite symbols_preserved. rewrite H7.
+  rewrite Genv.find_funct_find_funct_ptr in P. eauto.
+>>>>>>> origin/StackAware-new
   apply sig_transl_function; auto.
   rewrite H; eauto.
   traceEq.
+  apply Genv.genv_vars_eq in H7. inv H7.
   constructor; auto.
   simpl. unfold Genv.symbol_address. cbn in H5. rewrite H5. eauto.
 
@@ -1414,9 +1489,17 @@ Proof.
   intros (vargs'' & X & Y).
   assert (Z: Val.lessdef_list vl vargs'') by (eapply Val.lessdef_list_trans; eauto).
   edestruct external_call_mem_extends as [tv [tm'' [A [B [C D]]]]]; eauto.
+  eapply Mem.push_stage_extends; eauto.
+  exploit Mem.pop_stage_extends; eauto. intros (tm''' & A' & B').
   econstructor; split.
   left. eapply plus_right. eexact E.
+<<<<<<< HEAD
   eapply exec_Ibuiltin; eauto.
+=======
+  eapply exec_Ibuiltin. eauto.
+  eapply eval_builtin_args_preserved with (ge1 := ge); eauto. exact symbols_preserved.
+  eapply external_call_symbols_preserved. apply senv_preserved. eauto. eauto.
+>>>>>>> origin/StackAware-new
   traceEq.
   econstructor; eauto. constructor.
   eapply match_env_update_res; eauto.
@@ -1480,8 +1563,8 @@ Proof.
   inversion TF.
   edestruct Mem.free_parallel_extends as [tm' [ ]]; eauto.
   econstructor; split.
-  left; apply plus_one. eapply exec_Ireturn; eauto.
-  rewrite H2; eauto.
+  left; apply plus_one. eapply exec_Ireturn. eauto.
+  rewrite H3; eauto. inv H5. congruence.
   constructor; auto.
 
   (* return some *)
@@ -1492,8 +1575,8 @@ Proof.
   inversion TF.
   edestruct Mem.free_parallel_extends as [tm'' [ ]]; eauto.
   econstructor; split.
-  left; eapply plus_right. eexact A. eapply exec_Ireturn; eauto.
-  rewrite H4; eauto. traceEq.
+  left; eapply plus_right. eexact A. eapply exec_Ireturn. eauto.
+  rewrite H5; eauto. inv H7. congruence. traceEq.
   simpl. constructor; auto.
 
   (* label *)
@@ -1522,7 +1605,12 @@ Proof.
     assert (map_valid init_mapping s0) by apply init_mapping_valid.
     exploit (add_vars_valid (CminorSel.fn_params f)); eauto. intros [A B].
     eapply add_vars_wf; eauto. eapply add_vars_wf; eauto. apply init_mapping_wf.
+<<<<<<< HEAD
   edestruct Mem.alloc_extends as [tm' [ ]]; eauto; try apply Z.le_refl.
+=======
+  edestruct Mem.alloc_extends as [tm' []]; eauto; try apply Z.le_refl.
+  edestruct Mem.record_frame_extends as [tm'' []]; eauto.
+>>>>>>> origin/StackAware-new
   econstructor; split.
   left; apply plus_one. eapply exec_function_internal; simpl; eauto.
   simpl. econstructor; eauto.
@@ -1539,8 +1627,9 @@ Proof.
 
   (* return *)
   inv MS.
+  edestruct Mem.pop_stage_extends as [tm' []]; eauto.
   econstructor; split.
-  left; apply plus_one; constructor.
+  left; apply plus_one; constructor. eauto.
   econstructor; eauto. constructor.
   eapply match_env_update_dest; eauto.
 Qed.
@@ -1554,8 +1643,19 @@ Proof.
   setoid_rewrite <- (sig_transl_function (Internal f)); eauto.
   monadInv B.
   econstructor; split.
+<<<<<<< HEAD
   - econstructor; eauto.
   - econstructor; eauto. constructor.
+=======
+  econstructor. apply (Genv.init_mem_transf_partial TRANSL); eauto.
+  replace (prog_main tprog) with (prog_main prog). rewrite symbols_preserved; eauto.
+  symmetry; eapply match_program_main; eauto.
+  eexact A.
+  rewrite <- H2. apply sig_transl_function; auto. eauto.
+  setoid_rewrite (match_program_main TRANSL).
+  constructor. auto. constructor.
+  constructor. apply Mem.extends_refl.
+>>>>>>> origin/StackAware-new
 Qed.
 
 Lemma transl_final_states:
@@ -1567,11 +1667,17 @@ Proof.
   exists tt. split; constructor; uncklr; auto.
 Qed.
 
+<<<<<<< HEAD
 Lemma transl_external_states:
   forall S R q1, match_states S R -> CminorSel.at_external ge S q1 ->
   exists q2, RTL.at_external tge R q2 /\ match_query (cc_c ext) tt q1 q2 /\ se = se /\
   forall r1 r2 S', match_reply (cc_c ext) tt r1 r2 -> CminorSel.after_external S r1 S' ->
   exists R', RTL.after_external R r2 R' /\ match_states S' R'.
+=======
+Theorem transf_program_correct:
+  forward_simulation (CminorSel.semantics fn_stack_requirements prog)
+                     (RTL.semantics fn_stack_requirements tprog).
+>>>>>>> origin/StackAware-new
 Proof.
   intros. inv H0. inv H.
   exploit functions_translated; eauto. intros [tf' [P TF]].

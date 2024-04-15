@@ -16,7 +16,7 @@ Require Import Coqlib Maps Integers Floats Lattice Kildall.
 Require Import AST Linking.
 Require Import Values Builtins Events Memory Globalenvs Smallstep Invariant.
 Require Compopts Machregs.
-Require Import Op Registers RTL.
+Require Import Op Registers RTL RTLmach.
 Require Import Liveness ValueDomain ValueAOp ValueAnalysis.
 Require Import ConstpropOp ConstpropOpproof Constprop.
 Require Import LanguageInterface Inject InjectFootprint.
@@ -32,6 +32,7 @@ Qed.
 
 Section PRESERVATION.
 
+Variable fn_stack_requirements : ident -> Z.
 Variable prog: program.
 Variable tprog: program.
 Variable se: Genv.symtbl.
@@ -341,6 +342,7 @@ Inductive match_states: nat -> state -> state -> Prop :=
       match_states n (State s f (Vptr sp Ptrofs.zero) pc rs m)
                     (State s' (transf_function (romem_for prog) f) (Vptr sp' Ptrofs.zero) pc' rs' m')
   | match_states_call:
+<<<<<<< HEAD
       forall s vf args m s' vf' args' m' j MEM
            (STACKS: list_forall2 (match_stackframes j) s s')
            (VF: Val.inject j vf vf')
@@ -349,6 +351,15 @@ Inductive match_states: nat -> state -> state -> Prop :=
            (RO: ro_acc m01 m),
       match_states O (Callstate s vf args m)
                      (Callstate s' vf' args' m')
+=======
+      forall s f args m s' args' m' cu id
+           (LINK: linkorder cu prog)
+           (STACKS: list_forall2 match_stackframes s s')
+           (ARGS: Val.lessdef_list args args')
+           (MEM: Mem.extends m m'),
+      match_states O (Callstate s f args m id)
+                     (Callstate s' (transf_fundef (romem_for cu) f) args' m' id)
+>>>>>>> origin/StackAware-new
   | match_states_return:
       forall s v m s' v' m' j MEM
            (STACKS: list_forall2 (match_stackframes j) s s')
@@ -412,9 +423,15 @@ Ltac TransfInstr :=
 
 Lemma transf_step_correct:
   forall s1 t s2,
+<<<<<<< HEAD
   step ge s1 t s2 ->
   forall n1 s1' (SS: sound_state prog se s1) (MS: match_states n1 s1 s1'),
   (exists n2, exists s2', step tge s1' t s2' /\ match_states n2 s2 s2')
+=======
+  step fn_stack_requirements ge s1 t s2 ->
+  forall n1 s1' (SS: sound_state prog s1) (MS: match_states n1 s1 s1'),
+  (exists n2, exists s2', step fn_stack_requirements tge s1' t s2' /\ match_states n2 s2 s2')
+>>>>>>> origin/StackAware-new
   \/ (exists n2, n2 < n1 /\ t = E0 /\ match_states n2 s2 s1')%nat.
 Proof.
   induction 1; intros; inv MS; try InvSoundState; try (inv PC; try congruence).
@@ -544,27 +561,71 @@ Proof.
   eapply ros_address_translated; eauto.
   intro FIND. TransfInstr; intro.
   left; econstructor; econstructor; split.
+<<<<<<< HEAD
   eapply exec_Icall; eauto. apply sig_function_translated; auto.
   econstructor; eauto. constructor; auto.
+=======
+  eapply exec_Icall; eauto.
+  {
+    destruct ros; simpl in *.
+    + generalize  (REGS r). intro.
+      destruct (areg ae r) eqn:?; simpl in *; inv H3; eauto; (try congruence).
+      destruct p; simpl in *; eauto; (try congruence).
+      destr; simpl in *.
+      apply areg_sound with (r := r) in EM. inv EM; (try congruence).
+      rewrite Heqa in H4. inv H4. inv H5.
+      destruct GE. apply H4 in H7. apply Genv.genv_vars_eq in H7.
+      congruence.
+    + auto.
+  }
+  apply sig_function_translated; auto.
+  constructor; auto. constructor; auto.
+>>>>>>> origin/StackAware-new
   econstructor; eauto.
   apply regs_inject; auto.
 
+<<<<<<< HEAD
   - (* Itailcall *)
   exploit match_stbls_incr; eauto. intro MSTB.
   exploit Mem.free_parallel_inject; eauto. intros [m2' [A B]]. simpl in A. rewrite Z.add_0_r in A.
   exploit (ros_address_translated j ros); eauto. intros FEXT.
   exploit functions_translated; eauto using ros_address_translated. intro FIND.
+=======
+- (* Itailcall *)
+  exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
+  exploit Mem.pop_stage_extends; eauto. intros [m2''' [A'' B'']].
+  exploit transf_ros_correct; eauto. intros (cu' & FIND & LINK').
+>>>>>>> origin/StackAware-new
   TransfInstr; intro.
   assert (INCR0 : injp_acc (injpw j m m'0 MEM) (injpw j m' m2' B)).
   eapply injp_acc_free with (lo1 := 0); eauto.
   replace (0+0) with 0 by lia.
   replace (0 + fn_stacksize f + 0) with (fn_stacksize f) by lia. eauto.
   left; econstructor; econstructor; split.
+<<<<<<< HEAD
   eapply exec_Itailcall; eauto. apply sig_function_translated; auto.
   econstructor; eauto.
   apply regs_inject; auto. instantiate (1:= B).
   etransitivity; eauto. inv INCR0.
   eapply ro_acc_trans; eauto. eapply ro_acc_free; eauto.
+=======
+  eapply exec_Itailcall; eauto.
+  {
+    destruct ros; simpl in *.
+    + generalize  (REGS r). intro.
+      destruct (areg ae r) eqn:?; simpl in *; inv H5; eauto; (try congruence).
+      destruct p; simpl in *; eauto; (try congruence).
+      destr; simpl in *.
+      apply areg_sound with (r := r) in EM. inv EM; (try congruence).
+      rewrite Heqa in H6. inv H6. inv H7.
+      destruct GE. apply H6 in H9. apply Genv.genv_vars_eq in H9.
+      congruence.
+    + auto.
+  }
+  apply sig_function_translated; auto.
+  constructor; auto.
+  apply regs_lessdef_regs; auto.
+>>>>>>> origin/StackAware-new
 
 - (* Ibuiltin *)
   rename pc'0 into pc. TransfInstr; intros.
@@ -575,8 +636,13 @@ Opaque builtin_strength_reduction.
   eapply romatch_symtbl_prog in SEVALID as RO'; eauto.
   assert (DFL: (fn_code (transf_function rm f))!pc = Some dfl ->
           exists (n2 : nat) (s2' : state),
+<<<<<<< HEAD
             step tge
              (State s' (transf_function rm f) (Vptr sp' Ptrofs.zero) pc rs' m'0) t s2' /\
+=======
+            step fn_stack_requirements tge
+             (State s' (transf_function rm f) (Vptr (fresh_block sps) Ptrofs.zero) pc rs' m'0) t s2' /\
+>>>>>>> origin/StackAware-new
             match_states n2
              (State s f (Vptr (fresh_block sps) Ptrofs.zero) pc' (regmap_setres res vres rs) m') s2').
   {
@@ -654,23 +720,37 @@ Opaque builtin_strength_reduction.
   eapply match_states_succ; eauto.
 
 - (* Ireturn *)
+<<<<<<< HEAD
   exploit Mem.free_parallel_inject; eauto. intros [m2' [A B]]. simpl in A. rewrite Z.add_0_r in A.
   assert (INCR0 : injp_acc (injpw j m m'0 MEM) (injpw j m' m2' B)).
   eapply injp_acc_free with (lo1 := 0); eauto.
   replace (0+0) with 0 by lia.
   replace (0 + fn_stacksize f + 0) with (fn_stacksize f) by lia. eauto.
   left; exists O; exists (Returnstate s' (regmap_optget or Vundef rs') m2'); split.
+=======
+  exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
+  exploit Mem.pop_stage_extends; eauto. intros [m2''' [A'' B'']].
+  left; exists O; exists (Returnstate s' (regmap_optget or Vundef rs') m2'''); split.
+>>>>>>> origin/StackAware-new
   eapply exec_Ireturn; eauto. TransfInstr; auto.
   econstructor; eauto.
   destruct or; simpl; auto. instantiate (1:= B).
   etransitivity; eauto. eapply ro_acc_trans; eauto.
   eapply ro_acc_free; eauto.
 
+<<<<<<< HEAD
   - (* internal function *)
   exploit match_stbls_incr; eauto. intro MSTB.  
   exploit functions_translated; eauto. intro FIND'.
   exploit Mem.alloc_parallel_inject. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros (f' & m2' & b2 & A & B & C & D & E).
+=======
+- (* internal function *)
+  exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
+  intros [m2'' [A' B']].
+  exploit Mem.push_stage_extends; eauto. intro.
+  exploit Mem.record_frame_extends; eauto. intros [m2''' [A'' B'']].
+>>>>>>> origin/StackAware-new
   simpl. unfold transf_function.
   assert (INCR0 :injp_acc (injpw j m m'0 MEM) (injpw f' m' m2' B)).
   eapply injp_acc_alloc; eauto.
@@ -715,6 +795,7 @@ Lemma transf_initial_states:
   forall q1 q2 st1, match_query  (ro @ cc_c injp) ro_w q1 q2 -> initial_state ge q1 st1 ->
   exists n, exists st2, initial_state tge q2 st2 /\ match_states n st1 st2 /\ sound_state prog ge st1.
 Proof.
+<<<<<<< HEAD
   intros. destruct H as [x [H1 H2]]. inv H0. inv H1. inv H2. cbn in *. inv H0. inv H9.
   cbn in *. clear Hm1 Hm0.
   exploit functions_translated; eauto. inversion GE. eauto.
@@ -728,6 +809,19 @@ Proof.
     eapply ro_acc_refl.
   - rewrite <- H0 in *. cbn in *. eapply sound_memory_ro_sound_state; eauto.
     inversion GE. eauto.
+=======
+  intros. inversion H.
+  exploit function_ptr_translated; eauto. intros (cu & FIND & LINK).
+  exists O; exists (Callstate nil (transf_fundef (romem_for cu) f) nil m1 tprog.(prog_main)); split.
+  econstructor; eauto.
+  apply (Genv.init_mem_match TRANSL); auto. eauto.
+  replace (prog_main tprog) with (prog_main prog).
+  rewrite symbols_preserved. eauto.
+  symmetry; eapply match_program_main; eauto.
+  rewrite <- H3. apply sig_function_translated.
+  rewrite (match_program_main TRANSL).
+  constructor. auto. constructor. constructor. apply Mem.extends_refl.
+>>>>>>> origin/StackAware-new
 Qed.
 
 Lemma transf_final_states:
@@ -1097,11 +1191,16 @@ End PRESERVATION.
 (** The preservation of the observable behavior of the program then
   follows. *)
 
+<<<<<<< HEAD
 
 Theorem transf_program_correct prog tprog:
   match_prog prog tprog ->
   forward_simulation (ro @ cc_c injp) (ro @ cc_c injp)
     (RTL.semantics prog) (RTL.semantics tprog).
+=======
+Theorem transf_program_correct:
+  forward_simulation (RTLmach.semantics fn_stack_requirements prog) (RTLmach.semantics fn_stack_requirements tprog).
+>>>>>>> origin/StackAware-new
 Proof.
   fsim (eapply Build_fsim_properties with (order := lt)
                                           (match_states := fun i s1 s2 => match_states prog (snd w) i s1 s2
