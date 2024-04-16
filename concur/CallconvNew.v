@@ -40,16 +40,19 @@ Class World (T: Type) :=
   {
     w_state : Type;
     w_lens : Lens T w_state;
-    w_acc : w_state -> w_state -> Prop;
-    w_acc_trans : PreOrder  w_acc;
+    w_acci : w_state -> w_state -> Prop;
+    w_acce : w_state -> w_state -> Prop;
+    w_acci_trans : PreOrder w_acci;
   }.
 
 Existing Instance w_lens.
-Existing Instance w_acc_trans.
+Existing Instance w_acci_trans.
 Arguments w_state {_} _.
-Arguments w_acc {_ _}.
-Infix "*->" := w_acc (at level 60, no associativity).
+Arguments w_acci {_ _}.
+Arguments w_acce {_ _}.
 
+Infix "*->" := w_acci (at level 60, no associativity).
+Infix "o->" := w_acce (at level 55, no associativity).
 Module GS.
 
   Record callconv {li1 li2} :=
@@ -102,7 +105,7 @@ Section FSIM.
           forall gw i s1 s2 q1, match_states gw i s1 s2 -> at_external L1 s1 q1 ->
           exists wa q2 , at_external L2 s2 q2 /\ exists gw', gw *-> gw' /\ get wa = gw' /\
           match_query cc wa q1 q2 /\ match_senv cc wa se1 se2 /\
-          forall r1 r2 s1' gw'', gw' *-> gw'' -> match_reply cc (set wa gw'') r1 r2 ->
+          forall r1 r2 s1' gw'', gw' o-> gw'' -> match_reply cc (set wa gw'') r1 r2 ->
           after_external L1 s1 r1 s1' ->
           exists i' s2', after_external L2 s2 r2 s2' /\
           exists gw''' , gw'' *-> gw''' /\ match_states gw''' i' s1' s2';
@@ -204,6 +207,8 @@ Program Instance lens_injp : Lens (cc_cainjp_world) injp_world :=
 Next Obligation. destruct t. reflexivity. Qed.
 Next Obligation. destruct t. reflexivity. Qed.
 Next Obligation. destruct t. reflexivity. Qed.
+
+(* injp_acc *)
 
 Program Instance CAworld : World cc_cainjp_world :=
     {
