@@ -1107,8 +1107,8 @@ Lemma external_call_inject:
     external_call ef tge vargs' m1' t vres' m2'
     /\ Val.inject f' vres vres'
     /\ Mem.inject f' m2 m2'
-    /\ Mem.unchanged_on (loc_unmapped f) m1 m2
-    /\ Mem.unchanged_on (loc_out_of_reach f m1) m1' m2'
+    /\ Mem.unchanged_on_t (loc_unmapped f) m1 m2
+    /\ Mem.unchanged_on_t (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
     /\ inject_separated f f' m1 m1'.
 Proof.
@@ -1352,8 +1352,8 @@ Proof.
     intro. apply U. apply SUPINC; eauto.
     intro. apply V. apply TSUPINC; eauto.
   + apply set_res_inject; auto. apply regset_inject_incr with j; auto.
-  + inversion D. eauto with mem.
-  + inversion E. eauto with mem.
+  + destruct D as [_ D]. inversion D. eauto with mem.
+  + destruct E as [_ E]. inversion E. eauto with mem.
 
 - (* cond *)
   assert (C: eval_condition cond trs##args tm = Some b).
@@ -1420,7 +1420,8 @@ Proof.
   apply match_stacks_bound with (Mem.support m) (Mem.support tm).
   apply match_stacks_incr 
     with j (Mem.support m) (Mem.support tm); auto.
-  inversion D. eauto. inversion E. eauto.
+  destruct D as [_ D]. inversion D. eauto.
+  destruct E as [_ E]. inversion E. eauto.
 
 - (* return *)
   inv STACKS. econstructor; split.

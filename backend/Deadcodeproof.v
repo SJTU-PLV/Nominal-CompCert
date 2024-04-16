@@ -39,6 +39,7 @@ Qed.
 Definition locset := block -> Z -> Prop.
 
 Record magree (f:meminj) (m1 m2: mem) (P: locset) : Prop := mk_magree {
+  ma_thread : Mem.match_sup (Mem.support m1) (Mem.support m2);             
   ma_perm:
     forall b1 b2 ofs delta k p,
       f b1 = Some (b2,delta) -> Mem.perm m1 b1 ofs k p -> Mem.perm m2 b2 (ofs + delta) k p;
@@ -174,6 +175,8 @@ Proof.
     eapply Mem.storebytes_range_perm; eauto. lia. }
   exists m2'; split; auto.
   constructor; intros.
+- erewrite (Mem.support_storebytes _ _ _ _ _ H0).
+  erewrite (Mem.support_storebytes _ _ _ _ _ ST2). inv H. eauto.
 - eapply Mem.perm_storebytes_1; eauto. eapply ma_perm; eauto.
   eapply Mem.perm_storebytes_2; eauto.
 - exploit ma_align; eauto. red. eauto using Mem.perm_storebytes_2.
@@ -237,6 +240,7 @@ Lemma magree_storebytes_left:
   magree j m1' m2 P.
 Proof.
   intros. constructor; intros.
+  - erewrite (Mem.support_storebytes _ _ _ _ _ H0). inv H. auto.
   - eapply ma_perm; eauto. eapply Mem.perm_storebytes_2; eauto.
   - eapply ma_align; eauto. red. intros. eauto using Mem.perm_storebytes_2.
   - exploit ma_perm_inv; eauto.
@@ -284,6 +288,8 @@ Proof.
   eapply ma_perm; eauto. eapply Mem.free_range_perm; eauto. lia.
   exists m2'; split; auto.
   constructor; intros.
+- rewrite (Mem.support_free _ _ _ _ _ H0).
+  rewrite (Mem.support_free _ _ _ _ _ FREE). inv H. auto.
 - (* permissions *)
   assert (Mem.perm m2 b3 (ofs + delta0) k p). { eapply ma_perm; eauto. eapply Mem.perm_free_3; eauto. }
   exploit Mem.perm_free_inv; eauto. intros [[A B] | A]; auto.
@@ -1373,7 +1379,9 @@ Ltac UseTransfer :=
   apply eagree_set_res; auto. eapply eagree_incr; eauto.
   eapply minject_agree; eauto.
   eapply ro_acc_trans. eauto. eapply ro_acc_external; eauto.
-  etransitivity. eauto. constructor; eauto. inv S. eauto. inv T. eauto.
+  etransitivity. eauto. constructor; eauto.
+  destruct S as [_ S]. inv S. eauto.
+  destruct T as [_ T]. inv T. eauto.
 
 - (* conditional *)
   TransfInstr; UseTransfer. destruct (peq ifso ifnot).
@@ -1552,6 +1560,7 @@ Proof.
     eexists (Returnstate ts vres2 m2'); split.
     econstructor; eauto. split.
     + (*match_states*)
+      destruct H11 as [S11 H11]. destruct H12 as [S12 H12].
       set (j'' := fun b => match bc b with
                         |BCinvalid =>
                            if j b then j b else j' b
@@ -1757,6 +1766,7 @@ Proof.
         congruence.
       }
   (* Part 3: injection wrt j' implies matching with top wrt bc' *)
+  destruct H11 as [S11 H11]. destruct H12 as [S12 H12].
   assert (PMTOP: forall b b' delta ofs, j' b = Some (b', delta) -> pmatch bc' b ofs Ptop).
   {
     intros. constructor. simpl; unfold f.

@@ -902,7 +902,7 @@ Proof.
   - destruct H as (Hk & sb1 & sofs1 & Hsp1). subst. inv Hsp.
     assert (Mem.mixable m1'_ sb1 m1). {
       split.
-      + destruct Hm, Hm'_. inv Hw. inversion H10. auto.
+      + destruct Hm, Hm'_. inv Hw. destruct H10 as [_ H10]. inversion H10. auto.
       + assert (SZ: k * 2 > 0) by extlia.
         specialize (VB SZ). inv VB. auto.
     }
@@ -932,7 +932,8 @@ Proof.
         eapply Mem.perm_max, H; eauto; unfold offset_sarg in *; cbn in Hofs; extlia.
     }
     exists (injpw f0 m1' m2' Hm''), m1'. repeat apply conj.
-    + apply Mem.mix_updated in Hm1' as UNCm1tom1'.
+    + destruct H10 as [S10 H10]. destruct H11 as [S11 H11].
+      apply Mem.mix_updated in Hm1' as UNCm1tom1'.
       apply Mem.mix_unchanged in Hm1' as UNCm1'_tom1'.
       constructor; eauto.
       * cbn in *. apply Mem.ro_unchanged_memval_bytes.
@@ -973,10 +974,11 @@ Proof.
         -- eapply H9; eauto.
            inversion UNCH. eapply unchanged_on_perm; eauto.
            inversion H11. unfold Mem.valid_block in *. eauto.
-      * eapply Mem.unchanged_on_trans; eauto.
+      * split. erewrite (Mem.support_mix _ _ _ _ _ _ Hm1'). eauto.
+        eapply Mem.unchanged_on_trans; eauto.
         eapply Mem.unchanged_on_implies; eauto.
         intros _ ofs NIA _ [<- Hofs]. red in NIA. cbn in H1. congruence.
-      * constructor.
+      * split. inv EXT. rewrite <- mext_sup. eauto. constructor.
         -- inversion UPD. eauto.
         -- intros.
            destruct (loc_init_args_dec (k*2) (Vptr b2 (Ptrofs.add sofs1 (Ptrofs.repr delta))) b ofs).
@@ -1000,8 +1002,10 @@ Proof.
     + eapply Mem.support_mix; eauto.
   - inv Hm. inv Hm'_. inv Hw. cbn in *.
     assert (Hm'' : Mem.inject f0 m1'_ m2'). eapply Mem.inject_extends_compose; eauto.
+    destruct H10 as [S10 H10]. destruct H11 as [S11 H11].
     eexists (injpw f0 m1'_ m2' Hm''), m1'_. repeat apply conj.
-    + constructor; eauto.
+    + 
+      constructor; eauto.
       * apply Mem.ro_unchanged_memval_bytes. apply Mem.ro_unchanged_memval_bytes in H7.
         red. intros. destruct (loc_init_args_dec (k*2) sp2 b ofs).
         -- inversion UPD.
@@ -1016,7 +1020,8 @@ Proof.
          -- inversion UPD. eapply unchanged_on_perm; eauto.
          -- eapply H9; eauto. inversion UNCH. eapply unchanged_on_perm; eauto.
             eapply Mem.valid_block_extends; eauto. eapply Mem.perm_valid_block; eauto.
-      * constructor. inversion UPD. eauto.
+      * split. eauto. eauto.
+      * split. inv EXT. rewrite <- mext_sup. eauto. constructor. inversion UPD. eauto.
          -- intros.
             destruct (loc_init_args_dec (k*2) sp2 b ofs).
             ++ inversion UPD. eauto.
@@ -1341,7 +1346,7 @@ Proof.
     rename m1'0 into m1'. rename m2'0 into m2'_. rename m' into m2'.
     assert (Hm'' : Mem.inject f' m1' m2'). {
       change (m_pred (minjection f' m1') m2').
-      eapply m_invar; cbn; eauto.
+      eapply m_invar; cbn; eauto. split. rewrite H28. eauto.
       eapply Mem.unchanged_on_implies; eauto.
       intros b2 ofs2 (b1 & delta & Hb & Hp) Hb2 Harg. inv Harg.
       eapply inject_incr_separated_inv in Hb; [eapply H4 | .. ]; eauto.
@@ -1355,6 +1360,7 @@ Proof.
            eapply Mem.perm_valid_block; eauto.
     }
     exists (injpw f' m1' m2' Hm''); cbn.
+    destruct H15 as [S15 H15]. destruct H16 as [S16 H16].
     + constructor; eauto.
       * apply Mem.ro_unchanged_memval_bytes. apply Mem.ro_unchanged_memval_bytes in H10.
         red. intros. destruct (loc_init_args_dec (size_arguments sg) sp2 b ofs).
@@ -1387,7 +1393,10 @@ Proof.
            ++ eapply H14; eauto.
               eapply Mem.valid_block_unchanged_on in H16; eauto.
               eapply Mem.perm_unchanged_on_2; eauto.
-      * eapply unchanged_on_combine; eauto.
+      * split. eauto. eauto.
+      * split. rewrite <- H28. inv Hm2_. eauto.
+        erewrite <- Mem.support_free; eauto.
+        eapply unchanged_on_combine; eauto.
         apply Mem.unchanged_on_trans with m2_.
         { destruct Hm2_; eauto using Mem.unchanged_on_refl.
           eapply Mem.free_unchanged_on; eauto.
@@ -1679,7 +1688,8 @@ Proof.
             ).
     repeat apply conj.
     + constructor; eauto.
-      * eapply Mem.unchanged_on_implies; eauto.
+      * destruct H15 as [S15 H15].
+        split. eauto. eapply Mem.unchanged_on_implies; eauto.
         intros. red. unfold meminj_dom. rewrite H0. reflexivity.
       * red. intros. unfold compose_meminj.
         erewrite H17. erewrite H25; eauto.
@@ -1729,7 +1739,7 @@ Proof.
   - intros r1 r3 [r2 [Hi2 [w13' [INCR13' Hr13]]]].
     inv Hr13. inv H1. rename f into j13'. rename Hm3 into INJ13'.
     cbn in INCR13'. rename m2' into m3'.
-    inversion INCR13' as [? ? ? ? ? ? ? ? RO1 RO3 MAXPERM1 MAXPERM3 UNCHANGE1 UNCHANGE3 INCR13 DISJ13]. subst.
+    inversion INCR13' as [? ? ? ? ? ? ? ? RO1 RO3 MAXPERM1 MAXPERM3 [S1 UNCHANGE1] [S3 UNCHANGE3] INCR13 DISJ13]. subst.
     generalize (inject_implies_image_in _ _ _ INJ12).
     intros IMGIN12.
     generalize (inject_implies_image_in _ _ _ INJ23).
@@ -1750,6 +1760,9 @@ Proof.
     set (m2' := m2' m1 m2 m1' j12 j23 j12' m2'_sup INJ12 ).
     assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
     assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
+    assert (S2: Mem.match_sup (Mem.support m2) (Mem.support m2')).
+    eapply Mem.match_sup_trans. eapply Mem.match_sup_symm. inversion INJ12. apply mi_thread.
+    eapply Mem.match_sup_trans. eauto. inversion INJ12'. eauto.
     set (w1' := injpw j12' m1' m2' INJ12').
     set (w2' := injpw j23' m2' m3' INJ23').
     rename vres2 into vres3.
@@ -1761,18 +1774,18 @@ Proof.
     + 
       exists (cr vres1 m1'). split. cbn. auto.
       exists w1'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
-      eapply MAXPERM2; eauto.
+      eapply MAXPERM2; eauto. split. eauto.
       eapply Mem.unchanged_on_implies; eauto.
       intros. red. unfold compose_meminj.
-      rewrite H1. reflexivity.
+      rewrite H1. reflexivity. split; eauto.
       constructor; eauto. constructor; eauto.
     + exists (cr vres2 m2'). split. cbn. econstructor. constructor.
       constructor. eapply ROUNC2; eauto.
       inversion UNC21. eauto.
       eapply MAXPERM2; eauto.
       exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
-      eapply MAXPERM2; eauto.
-      eapply UNCHANGE22; eauto. eapply out_of_reach_trans; eauto.
+      eapply MAXPERM2; eauto. split. eauto.
+      eapply UNCHANGE22; eauto. split. eauto. eapply out_of_reach_trans; eauto.
       econstructor; eauto. constructor; eauto.
 Qed.
 
@@ -1836,9 +1849,10 @@ Proof.
     eapply Mem.inject_compose; eauto.
     exists (cr vres1 m1'). split. constructor; eauto.
     exists (injpw (compose_meminj f12 (compose_meminj f23 f34)) m1' m4' Hm14').
+    destruct H23 as [S23 H23].    destruct H24 as [S24 H24].
     repeat apply conj.
     + constructor; eauto.
-      * eapply Mem.unchanged_on_implies; eauto.
+      * split. eauto. eapply Mem.unchanged_on_implies; eauto.
         intros. apply loc_unmapped_dom; eauto.
       * rewrite <- (meminj_dom_compose f).
         rewrite <- (meminj_dom_compose f) at 2.

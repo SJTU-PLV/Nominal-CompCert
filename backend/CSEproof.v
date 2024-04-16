@@ -1362,7 +1362,7 @@ Proof.
   exists (cr v' m'). split. constructor; eauto.  
   eexists; split. constructor; eauto.
   constructor; eauto. unfold m01. rewrite <- H7. constructor; eauto.
-  inversion H6. eauto.
+  destruct H6 as [S6 H6]. inversion H6. eauto.
   exists (injpw j m m' Hm'0).
   split; eauto. rewrite <- H7. econstructor; eauto.
   econstructor; eauto. constructor.
@@ -1405,9 +1405,8 @@ Proof.
       intro. apply  H in Hinv. congruence.
       split. intro. congruence. intro. apply H in H1.
       apply Genv.find_invert_symbol in H1. cbn in *. congruence.
-      inv GE. inversion INCR. inversion H14. eauto.
+      inv GE. inversion INCR. destruct H14 as [_ H14]. inversion H14. eauto.
     }
-    
     eexists. split. constructor. constructor; eauto.
     econstructor; eauto.
     + cbn. destruct VF; try discriminate. cbn.
@@ -1425,7 +1424,8 @@ Proof.
   - inv GE. inversion INCR. constructor.
     eapply Genv.match_stbls_compose.
     eapply inj_of_bc_preserves_globals; eauto.
-    apply MSTB. inversion H14. eauto. inversion H15. eauto.
+    apply MSTB. destruct H14 as [_ H14]. inversion H14. eauto.
+    destruct H15 as [_ H15]. inversion H15. eauto.
   - inv H2. destruct H1 as (r3 & Hr1& Hr2). inv Hr1. inv H1. rename H3 into ROACC.
     destruct Hr2 as ([j' s1 s2 MEM''] & Hw' & Hr).
     inv Hw'.
@@ -1433,6 +1433,7 @@ Proof.
     eexists (Returnstate s' vres2 m2'); split.
     econstructor; eauto. split.
     + (*match_states*)
+      destruct H11 as [S11 H11]. destruct H12 as [S12 H12].
       set (j'' := fun b => match bc b with
                         |BCinvalid =>
                            if j b then j b else j' b
@@ -1574,10 +1575,11 @@ Proof.
       * eapply match_stackframes_incr; eauto.
       * eauto.
       * etransitivity; eauto. instantiate (1:= MEM'''). econstructor; eauto.
+        split. eauto.
         eapply Mem.unchanged_on_implies; eauto.
         intros. red. red in H1. unfold compose_meminj, inj_of_bc.
         destruct (bc b); simpl; try (rewrite H1); eauto.
-        eapply Mem.unchanged_on_implies; eauto.
+        split. eauto. eapply Mem.unchanged_on_implies; eauto.
         intros. red. red in H1. intros. eapply H1; eauto.
         unfold compose_meminj,inj_of_bc in H4.
         destruct (bc b0); simpl in H4; try congruence;
@@ -1632,6 +1634,7 @@ Proof.
         congruence.
       }
   (* Part 3: injection wrt j' implies matching with top wrt bc' *)
+  destruct H11 as [_ H11]. destruct H12 as [_ H12].
   assert (PMTOP: forall b b' delta ofs, j' b = Some (b', delta) -> pmatch bc' b ofs Ptop).
   {
     intros. constructor. simpl; unfold f.

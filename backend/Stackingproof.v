@@ -225,6 +225,7 @@ Program Definition contains_locations (j: meminj) (sp: block) (pos bound: Z) (sl
     b = sp /\ pos <= ofs < pos + 4 * bound
 |}.
 Next Obligation.
+  destruct H0 as [S0 H0].
   intuition auto.
 - red; intros. eapply Mem.perm_unchanged_on; eauto. simpl; auto.
 - exploit H4; eauto. intros (v & A & B). exists v; split; auto.
@@ -300,7 +301,7 @@ Proof.
   apply Mem.valid_access_implies with Writable; auto with mem.
   eapply valid_access_location; eauto.
   exists v''; auto.
-+ apply (m_invar P) with m; auto.
++ apply (m_invar P) with m; auto. split. erewrite <- Mem.support_store; eauto.
   eapply Mem.store_unchanged_on; eauto.
   intros i; rewrite size_type_chunk, typesize_typesize. intros; red; intros.
   eelim C; eauto. simpl. split; auto. lia.
@@ -2218,7 +2219,7 @@ Proof.
   rewrite <- sep_assoc, sep_comm, sep_assoc in SEP.
   econstructor; split.
   apply plus_one. econstructor; eauto.
-  eapply match_states_intro with (j := j'); eauto with coqlib.
+  eapply match_states_intro with (j := j'); eauto with coqlib. destruct UNCH as [_ UNCH].
   apply Mem.unchanged_on_support in UNCH. eauto.
   eapply match_stacks_change_meminj; eauto.
   eapply stack_contents_support; eauto. apply SEP'.
@@ -2325,7 +2326,7 @@ Proof.
   intros (j' & res' & m1' & A & B & C & D & E & F).
   econstructor; split.
   apply plus_one. eapply exec_function_external; eauto.
-  eapply match_states_return with (j := j').
+  eapply match_states_return with (j := j'). destruct C as [_ C].
   apply Mem.unchanged_on_support in C; eauto.
   (*eauto using external_call_max_perm.*)
   eapply match_stacks_change_meminj; eauto.
@@ -2454,7 +2455,7 @@ Proof.
     eexists. split.
     + econstructor; eauto.
     + eapply match_states_return with (j := f'); eauto.
-      * eauto.
+      * eauto. destruct H12 as [_ H12].
         apply Mem.unchanged_on_support in H12; eauto.
       * eapply match_stacks_change_meminj; eauto.
         eapply stack_contents_support; eauto. apply SEP.
@@ -2464,7 +2465,7 @@ Proof.
         rewrite sep_comm, sep_assoc in SEP |- *.
         eapply minjection_incr; eauto.
         rewrite sep_comm, sep_assoc in SEP |- *.
-        eapply globalenv_inject_incr; eauto.
+        eapply globalenv_inject_incr; eauto. destruct H12.
         eapply Mem.unchanged_on_support; eauto.
 Qed.
 

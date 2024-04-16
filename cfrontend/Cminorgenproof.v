@@ -2010,7 +2010,7 @@ Proof.
                  (Frame cenv tfn e le te (fresh_block sps) sps bes es :: cs)
                  (Mem.support m') (Mem.support tm')).
     apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
-    eapply match_callstack_external_call; eauto.
+    eapply match_callstack_external_call; eauto. apply UNMAPPED. apply OUTOFREACH.
     intros. eapply external_call_max_perm; eauto.
     eapply external_call_support; eauto.
     eapply external_call_support; eauto.
@@ -2163,7 +2163,7 @@ Opaque PTree.set.
   apply plus_one. econstructor; eauto.
   econstructor; eauto.
   apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
-  eapply match_callstack_external_call; eauto.
+  eapply match_callstack_external_call; eauto. apply UNMAPPED. apply OUTOFREACH.
   intros. eapply external_call_max_perm; eauto.
   eapply external_call_support; eauto.
   eapply external_call_support; eauto.
@@ -2230,9 +2230,9 @@ Proof.
     + econstructor; eauto.
     + inv H11. econstructor; eauto.
       apply match_callstack_incr_bound with (Mem.support m) (Mem.support tm).
-      eapply match_callstack_external_call; eauto.
-      eapply Mem.unchanged_on_support; eauto.
-      eapply Mem.unchanged_on_support; eauto.
+      eapply match_callstack_external_call; eauto. apply H9. apply H10.
+      eapply Mem.unchanged_on_support; eauto. apply H9.
+      eapply Mem.unchanged_on_support; eauto. apply H10.
 Qed.
 End TRANSLATION.
 

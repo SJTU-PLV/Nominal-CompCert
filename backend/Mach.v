@@ -603,6 +603,7 @@ Program Definition contains_init_args sg j ls m0 sp : massert :=
     m_footprint := loc_init_args sz sp;
   |}.
 Next Obligation.
+  destruct H0 as [S0 H0].
   repeat apply conj.
   - eapply Mem.unchanged_on_trans; eauto.
   - intros Hsz. edestruct H1 as (sb & sofs & Hsp & PERM & FITS); eauto.

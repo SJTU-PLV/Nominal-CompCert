@@ -452,6 +452,7 @@ Lemma mem_inject_dom f m1 m2:
 Proof.
   intros H.
   split.
+  - eauto.
   - eapply mem_mem_inj_dom.
     eapply Mem.mi_inj; eauto.
   - unfold meminj_dom. intros.

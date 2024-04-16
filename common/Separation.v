@@ -50,7 +50,7 @@ notion of splitting a memory state into two disjoint halves).  *)
 Record massert : Type := {
   m_pred : mem -> Prop;
   m_footprint: block -> Z -> Prop;
-  m_invar: forall m m', m_pred m -> Mem.unchanged_on m_footprint m m' -> m_pred m';
+  m_invar: forall m m', m_pred m -> Mem.unchanged_on_t m_footprint m m' -> m_pred m';
   m_valid: forall m b ofs, m_pred m -> m_footprint b ofs -> Mem.valid_block m b
 }.
 
@@ -128,8 +128,10 @@ Program Definition sepconj (P Q: massert) : massert := {|
 |}.
 Next Obligation.
   repeat split; auto.
-  apply (m_invar P) with m; auto. eapply Mem.unchanged_on_implies; eauto. simpl; auto.
-  apply (m_invar Q) with m; auto. eapply Mem.unchanged_on_implies; eauto. simpl; auto.
+  apply (m_invar P) with m; auto. inv H0. constructor. auto.
+  eapply Mem.unchanged_on_implies; eauto. simpl; auto.
+  apply (m_invar Q) with m; auto. inv H0. constructor. auto.
+  eapply Mem.unchanged_on_implies; eauto. simpl; auto.
 Qed.
 Next Obligation.
   destruct H0; [eapply (m_valid P) | eapply (m_valid Q)]; eauto.
@@ -326,7 +328,8 @@ Program Definition range (b: block) (lo hi: Z) : massert := {|
   m_footprint := fun b' ofs' => b' = b /\ lo <= ofs' < hi
 |}.
 Next Obligation.
-  split; auto. split; auto. intros. eapply Mem.perm_unchanged_on; eauto. simpl; auto.
+  split; auto. split; auto. intros.
+  inv H0. eapply Mem.perm_unchanged_on; eauto. simpl; auto.
 Qed.
 Next Obligation.
   apply Mem.perm_valid_block with ofs Cur Freeable; auto.
@@ -343,7 +346,10 @@ Proof.
 - split; auto. split; auto. intros.
   apply Mem.perm_implies with Freeable; auto with mem.
   eapply Mem.perm_alloc_2; eauto.
-- apply (m_invar P) with m; auto. eapply Mem.alloc_unchanged_on; eauto.
+- apply (m_invar P) with m; auto. constructor.
+  erewrite (Mem.support_alloc _ _ _ _ _ H).
+  red. simpl. rewrite Mem.update_list_length. auto.
+  eapply Mem.alloc_unchanged_on; eauto.
 - red; simpl. intros. destruct H3; subst b0.
   eelim Mem.fresh_block_alloc; eauto. eapply (m_valid P); eauto.
 Qed.
@@ -423,8 +429,9 @@ Program Definition contains (chunk: memory_chunk) (b: block) (ofs: Z) (spec: val
 Next Obligation.
   rename H2 into v. split;[|split].
 - auto.
-- destruct H1; split; auto. red; intros; eapply Mem.perm_unchanged_on; eauto. simpl; auto.
-- exists v. split; auto. eapply Mem.load_unchanged_on; eauto. simpl; auto.
+- destruct H1; split; auto. inv H0.
+  red; intros; eapply Mem.perm_unchanged_on; eauto. simpl; auto.
+- exists v. split; auto. inv H0. eapply Mem.load_unchanged_on; eauto. simpl; auto.
 Qed.
 Next Obligation.
   eauto with mem.
@@ -469,7 +476,8 @@ Proof.
   exists m'; split; auto. simpl. intuition auto.
 - eapply Mem.store_valid_access_1; eauto.
 - exists (Val.load_result chunk v); split; auto. eapply Mem.load_store_same; eauto.
-- apply (m_invar P) with m; auto.
+- apply (m_invar P) with m; auto. constructor. erewrite (Mem.support_store _ _ _ _ _ _ STORE).
+  red. auto.
   eapply Mem.store_unchanged_on; eauto.
   intros; red; intros. apply (C b i); simpl; auto.
 Qed.
@@ -545,8 +553,10 @@ Program Definition mconj (P Q: massert) : massert := {|
 |}.
 Next Obligation.
   split.
-  apply (m_invar P) with m; auto. eapply Mem.unchanged_on_implies; eauto. simpl; auto.
-  apply (m_invar Q) with m; auto. eapply Mem.unchanged_on_implies; eauto. simpl; auto.
+  apply (m_invar P) with m; auto. inv H0. constructor. auto.
+  eapply Mem.unchanged_on_implies; eauto. simpl; auto.
+  apply (m_invar Q) with m; auto. inv H0. constructor. auto.
+  eapply Mem.unchanged_on_implies; eauto. simpl; auto.
 Qed.
 Next Obligation.
   destruct H0; [eapply (m_valid P) | eapply (m_valid Q)]; eauto.
@@ -620,7 +630,9 @@ Next Obligation.
   { intros. red. exists b1, delta; split; auto.
     replace (ofs + delta - delta) with ofs by lia.
     eauto with mem. }
+  destruct H0 as [MSUP H0].
   destruct H. constructor.
+- eapply Mem.match_sup_trans; eauto.
 - destruct mi_inj. constructor; intros.
 + eapply Mem.perm_unchanged_on; eauto.
 + eauto.
@@ -640,8 +652,8 @@ Qed.
 Lemma minjection_incr j m1 m2 j' m1' m2' P:
   m2 |= minjection j m1 ** P ->
   Mem.inject j' m1' m2' ->
-  Mem.unchanged_on (loc_unmapped j) m1 m1' ->
-  Mem.unchanged_on (loc_out_of_reach j m1) m2 m2' ->
+  Mem.unchanged_on_t (loc_unmapped j) m1 m1' ->
+  Mem.unchanged_on_t (loc_out_of_reach j m1) m2 m2' ->
   inject_incr j j' ->
   inject_separated j j' m1 m2 ->
   (forall b ofs p,
@@ -656,7 +668,8 @@ Proof.
   - exact INJ'.
   - apply m_invar with (m0 := m2).
     + assumption.
-    + eapply Mem.unchanged_on_implies; eauto.
+    + destruct UNCH2. constructor. auto.
+      eapply Mem.unchanged_on_implies; eauto.
       intros; red; intros; red; intros.
       eelim C; eauto. simpl. exists b0, delta; auto.
   - red; intros. destruct H as (b0 & delta & J' & E).
@@ -696,6 +709,7 @@ Proof.
   split; [|split].
 - exact INJ.
 - apply (m_invar P) with m2; auto.
+  constructor. erewrite (Mem.support_store _ _ _ _ _ _ STORE); eauto.
   eapply Mem.store_unchanged_on; eauto.
   intros; red; intros. eelim C; eauto. simpl.
   exists b1, delta; split; auto. destruct VALID as [V1 V2].
@@ -755,7 +769,9 @@ Proof.
   destruct (eq_block b0 b1).
   subst b0. rewrite J2 in D. inversion D; clear D; subst delta0. extlia.
   rewrite J3 in D by auto. elim FRESH2. eapply Mem.valid_block_inject_2; eauto.
-+ apply (m_invar P) with m2; auto. eapply Mem.alloc_unchanged_on; eauto.
++ apply (m_invar P) with m2; auto. constructor. erewrite (Mem.support_alloc _ _ _ _ _ ALLOC2).
+  red. simpl. rewrite Mem.update_list_length. eauto.
+  eapply Mem.alloc_unchanged_on; eauto.
 + red; simpl; intros.
   assert (VALID: Mem.valid_block m2 b) by (eapply (m_valid P); eauto).
   destruct H as [A | (b0 & delta0 & A & B)].
@@ -812,7 +828,7 @@ Proof.
   replace (ofs + delta0 - delta0) with ofs by lia.
   apply Mem.perm_max with k. apply Mem.perm_implies with p; auto with mem.
   eapply Mem.perm_free_3; eauto.
-- apply (m_invar P) with m2; auto.
+- apply (m_invar P) with m2; auto. constructor. erewrite (Mem.support_free _ _ _ _ _ FREE); eauto.
   eapply Mem.free_unchanged_on; eauto.
   intros; red; intros. eelim C; eauto. simpl.
   destruct (zlt i lo). intuition auto.
@@ -836,6 +852,7 @@ Program Definition globalenv_inject (ge1 ge2: Genv.symtbl) (j: meminj) (m1: mem)
   m_footprint := fun b ofs => False
 |}.
 Next Obligation.
+  inv H0.
   intuition auto. eapply Mem.sup_include_trans; eauto. eapply Mem.unchanged_on_support; eauto.
 Qed.
 Next Obligation.
@@ -876,7 +893,7 @@ Lemma external_call_parallel_rule:
   exists j' vres2 m2',
      external_call ef ge2 vargs2 m2 t vres2 m2'
   /\ Val.inject j' vres1 vres2
-  /\ Mem.unchanged_on (loc_unmapped j) m1 m1'
+  /\ Mem.unchanged_on_t (loc_unmapped j) m1 m1'
   /\ m2' |= minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m2.
@@ -893,8 +910,9 @@ Proof.
 - exact INJ'.
 - apply (m_invar _ m2).
 + apply globalenv_inject_incr with j m1; auto.
-  eapply Mem.unchanged_on_support; eauto.
-+ eapply Mem.unchanged_on_implies; eauto.
+  inv UNCH1. eapply Mem.unchanged_on_support; eauto. 
++ destruct UNCH2. split. eauto.
+  eapply Mem.unchanged_on_implies; eauto.
   intros; red; intros; red; intros.
   eelim C; eauto. simpl. exists b0, delta; auto.
 - red; intros. destruct H as (b0 & delta & J' & E).

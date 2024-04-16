@@ -1145,13 +1145,13 @@ Proof.
     eapply match_stacks_inside_set_res.
     eapply match_stacks_inside_extcall with (F1 := F) (F2 := F1) (m1 := m) (m1' := m'0); eauto.
     intros; eapply external_call_max_perm; eauto.
-    intros; eapply external_call_max_perm; eauto.
+    intros; eapply external_call_max_perm; eauto. apply E.
     eapply external_call_support; eauto.
   auto. eauto. auto.
   destruct res; simpl; [apply agree_set_reg;auto|idtac|idtac]; eapply agree_regs_incr; eauto.
-  auto. auto. eapply Mem.sup_include_trans; eauto. eapply Mem.unchanged_on_support. eauto.
+  auto. auto. eapply Mem.sup_include_trans; eauto. eapply Mem.unchanged_on_support. apply E.
   eapply range_private_extcall; eauto.
-    intros; eapply external_call_max_perm; eauto.
+    intros; eapply external_call_max_perm; eauto. apply E.
   auto. apply VB. auto. auto.
   intros. apply SSZ2. eapply external_call_max_perm; eauto.
   apply VB.  auto.
@@ -1316,7 +1316,7 @@ Proof.
     eapply match_stacks_sup_include with (Mem.support m'0).
     eapply match_stacks_extcall with (F1 := F) (F2 := F1) (m1 := m) (m1' := m'0); eauto.
     intros; eapply external_call_max_perm; eauto.
-    intros; eapply external_call_max_perm; eauto.
+    intros; eapply external_call_max_perm; eauto. apply E.
     eapply external_call_support; eauto.
     eapply external_call_support; eauto.
     auto. auto.
@@ -1410,9 +1410,9 @@ Proof.
   - inv H1. destruct H0 as (w' & Hw' & H0). inv Hw'. inv H0. inv H13.
     eexists; split; econstructor; eauto.
     eapply match_stacks_sup_include with (Mem.support m').
-    eapply match_stacks_extcall with (F1 := F) (F2 := f') (m1 := m) (m1' := m'); eauto.
-    eapply Mem.unchanged_on_support; eauto.
-    eapply Mem.unchanged_on_support; eauto.
+    eapply match_stacks_extcall with (F1 := F) (F2 := f') (m1 := m) (m1' := m'); eauto. apply H9.
+    eapply Mem.unchanged_on_support; eauto. apply H8.
+    eapply Mem.unchanged_on_support; eauto. apply H9.
 Qed.
 
 End INLINING.

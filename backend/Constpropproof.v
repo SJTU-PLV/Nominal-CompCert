@@ -781,7 +781,7 @@ Proof.
       split. intro. congruence. intro. apply H in H1.
       apply Genv.find_invert_symbol in H1. cbn in *. congruence.
       inv GE. rewrite <- H4 in INCR.
-      inversion INCR. inversion H15. eauto.
+      inversion INCR. destruct H15 as [_ H15]. inversion H15. eauto.
     }
     eexists. split. constructor. constructor; eauto.
     econstructor; eauto.
@@ -801,7 +801,8 @@ Proof.
     eapply Genv.match_stbls_compose.
     eapply inj_of_bc_preserves_globals; eauto.
     apply MSTB.
-    inversion H15. eauto. inversion H16. eauto.
+    destruct H15 as [X Y]. inversion Y. eauto.
+    destruct H16 as [_ Y]. inversion Y. eauto.
   - inv H2. destruct H1 as (r3 & Hr1& Hr2). inv Hr1. inv H1. rename H3 into ROACC.
     destruct Hr2 as ([j' s1 s2 MEM''] & Hw' & Hr).
     inv Hw'.
@@ -809,6 +810,7 @@ Proof.
     eexists _, (Returnstate s' vres2 m2'); split.
     econstructor; eauto. split.
     + (*match_states*)
+      destruct H12 as [S12 H12]. destruct H11 as [S11 H11].
       set (j'' := fun b => match bc b with
                         |BCinvalid =>
                            if j b then j b else j' b
@@ -880,11 +882,11 @@ Proof.
               destruct (j b1) as [[b2' d']|] eqn:Hjb1; eauto.
               assert (P1: Mem.perm m b1 ofs k p).
               {
-                inversion H11. apply unchanged_on_perm; eauto.
+                inversion H11. eapply Mem.unchanged_on_perm; eauto.
                 inv MEM. destruct (Mem.sup_dec b1 (Mem.support m)).
                 eauto. exploit mi_freeblocks0; eauto. congruence.
               }
-              inv H. inversion H12. eapply unchanged_on_perm; eauto.
+              inv H.  inversion H12. eapply unchanged_on_perm; eauto.
               inv MEM. eauto.
               eapply Mem.perm_inject; eauto.
            ++ intros. destruct (bc b1) eqn:BC; unfold j'' in H; rewrite BC in H; eauto.
@@ -893,18 +895,19 @@ Proof.
               red. intros. exploit H0; eauto.
               intro. inv H11. eapply unchanged_on_perm; eauto with mem.
               eapply Mem.valid_block_inject_1; eauto.
-           ++ intros. destruct (bc b1) eqn:BC; unfold j'' in H; rewrite BC in H.
+           ++ 
+              intros. destruct (bc b1) eqn:BC; unfold j'' in H; rewrite BC in H.
               destruct (j b1) as [[b2' d']|] eqn:Hjb1; eauto.
               inv H.
               assert (P1: Mem.perm m b1 ofs Cur Readable).
               {
-                inversion H11. apply unchanged_on_perm; eauto.
+                inversion H11. eapply unchanged_on_perm; eauto.
                 inv MEM. destruct (Mem.sup_dec b1 (Mem.support m)).
                 eauto. exploit mi_freeblocks0; eauto. congruence.
               }
               erewrite Mem.unchanged_on_contents; eauto.
               inv H12.
-              rewrite unchanged_on_contents; eauto.
+              erewrite unchanged_on_contents; eauto.
               2: eapply Mem.perm_inject; eauto. inv MEM. inv mi_inj.
               all: (eapply memval_inject_incr; eauto).
         -- (* source_range *)
@@ -950,10 +953,10 @@ Proof.
       * eapply match_stackframes_incr; eauto.
       * eauto.
       * etransitivity; eauto. instantiate (1:= MEM'''). econstructor; eauto.
-        eapply Mem.unchanged_on_implies; eauto.
+        split. eauto. eapply Mem.unchanged_on_implies; eauto.
         intros. red. red in H1. unfold compose_meminj, inj_of_bc.
         destruct (bc b); simpl; try (rewrite H1); eauto.
-        eapply Mem.unchanged_on_implies; eauto.
+        split. eauto. eapply Mem.unchanged_on_implies; eauto.
         intros. red. red in H1. intros. eapply H1; eauto.
         unfold compose_meminj,inj_of_bc in H4.
         destruct (bc b0); simpl in H4; try congruence;
@@ -1008,7 +1011,8 @@ Proof.
         exists b', delta; auto.
         congruence.
       }
-  (* Part 3: injection wrt j' implies matching with top wrt bc' *)
+      (* Part 3: injection wrt j' implies matching with top wrt bc' *)
+  destruct H11 as [S11 H11]. destruct H12 as [S12 H12].
   assert (PMTOP: forall b b' delta ofs, j' b = Some (b', delta) -> pmatch bc' b ofs Ptop).
   {
     intros. constructor. simpl; unfold f.

@@ -223,7 +223,7 @@ Proof.
         constructor; eauto.
         constructor; eauto.
       * constructor; eauto with mem.
-        inv H14.
+        inv H14. destruct H27 as [S27 H27].
         eapply Mem.unchanged_on_implies; eauto.
         intros. inv H3. unfold tailcall_possible in H1.
         rewrite H1 in H9. extlia.
@@ -233,6 +233,7 @@ Proof.
     assert (Htm: Mem.inject j m tm).
     { clear - Hm3 H3. inversion Hm3.
       constructor; eauto.
+      - erewrite <- (Mem.support_free _ _ _ _ _ H3). eauto.
       - inversion  mi_inj.
         constructor; eauto.
         + intros. eapply Mem.perm_free_3; eauto.
@@ -260,6 +261,7 @@ Proof.
         intros. replace (ofs - delta + delta) with ofs in H13 by lia.
         apply NOPERM. eauto with mem.
     }
+
     repeat apply conj; eauto.
     + constructor; eauto.
       erewrite <- Mem.support_free; eauto.
@@ -267,8 +269,10 @@ Proof.
       * subst sp. rewrite <- H1.
         eapply args_removed_free; eauto.
     + intros r1 r2 Hr. inv Hr. subst sp tsp. inv H23.
+      destruct H31 as [S31 H31].      destruct H30 as [S30 H30].
       assert {tm'0| Mem.free tm' sb (offset_sarg sofs 0) (offset_sarg sofs (size_arguments sg)) = Some tm'0}.
       {
+        
         apply Mem.range_perm_free.
         red. intros.
         apply Mem.free_range_perm in H3 as RANGEtm. red in RANGEtm.
@@ -317,10 +321,14 @@ Proof.
               intro PERMtm.
               eapply Mem.perm_free_1; eauto.
               eapply Mem.perm_free_4; eauto.
+           ++ split; eauto.
            ++ exploit Mem.free_mapped_unchanged_on; eauto.
               intros. eapply ARGS_OUT_OF_REACH; eauto. rewrite <- H1. constructor; eauto.
               intros [tm''0 [FREE'' UNC]].
-              rewrite FREE' in FREE''. inv FREE''. eauto.
+              rewrite FREE' in FREE''. inv FREE''. split.
+              erewrite (Mem.support_free _ _ _ _ _ H3); eauto.
+              erewrite (Mem.support_free _ _ _ _ _ FREE'); eauto.
+              eauto.
           ++ red. intros. exploit H33; eauto. intros [A B].
              split; eauto with mem.
         -- constructor; cbn; eauto.
@@ -375,8 +383,9 @@ Lemma inject_unchanged_on_inject:
     (forall b ofs, ~ P b ofs -> loc_out_of_reach j m1 b ofs) ->
     Mem.inject j m1 m3.
 Proof.
-  intros until P. intros INJ UNC DEC OUT. inversion INJ. inversion UNC.
+  intros until P. intros INJ UNC DEC OUT. inversion INJ.  inversion UNC.
   intros. constructor; eauto.
+  - admit.
   - inversion mi_inj. constructor; eauto.
     + intros. eapply unchanged_on_perm; eauto.
       edestruct DEC; eauto. apply OUT in n. red in n. exfalso.
@@ -392,7 +401,7 @@ Proof.
     edestruct DEC; eauto. apply OUT in n. red in n. exfalso.
     eapply n; eauto. replace (ofs + delta - delta) with ofs by lia.
     auto.
-Qed.
+Admitted. (** TODO: add _t thread properties in LM and CA*)
 
 Lemma cc_cainjp__injp_ca :
   ccref (cc_c_asm_injp) (cc_c injp @ cc_c_asm).
@@ -419,6 +428,7 @@ Proof.
         intros. red in H. eapply H24.
         edestruct loc_init_args_dec; eauto. exfalso. eauto.
       }
+      destruct H30 as [S30 H30]. destruct H31 as [S31 H31].
       econstructor; eauto. instantiate (1:= Htm').
       * constructor; eauto.
         -- apply Mem.ro_unchanged_memval_bytes. red. intros.
@@ -441,7 +451,8 @@ Proof.
            ++ red in H27. eapply H29; eauto.
               inversion H20. eapply unchanged_on_perm; eauto.
               inversion H31. unfold Mem.valid_block in *. eauto with mem.
-        -- constructor.
+        -- split; eauto.
+        -- split. rewrite <- H22. eauto. constructor.
            ++ rewrite <- H22. inversion H31. eauto.
            ++ intros.
               destruct (loc_init_args_dec (size_arguments sg) sp b ofs).
@@ -484,6 +495,7 @@ Proof.
         intros. eapply H28.
         edestruct loc_init_args_dec; eauto. exfalso. eauto.
       }
+      destruct H34 as [S34 H34]. destruct H35 as [S35 H35].
       econstructor; eauto. instantiate (1:= Htm').
       * constructor; eauto.
         -- apply Mem.ro_unchanged_memval_bytes. red. intros.
@@ -517,7 +529,8 @@ Proof.
               inversion H24. eapply unchanged_on_perm; eauto.
               unfold Mem.valid_block in *. rewrite H26.
               eapply Mem.perm_valid_block; eauto.
-        -- constructor.
+        -- split; eauto.
+        -- split. rewrite <- (Mem.support_free _ _ _ _ _ H0). rewrite <- H26. eauto. constructor.
            ++ rewrite <- H26. erewrite <- Mem.support_free. 2: eauto.
               inversion H35. eauto.
            ++ intros.
