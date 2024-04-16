@@ -41,6 +41,12 @@ Hint Resolve max_perm_decrease_refl max_perm_decrease_trans : core.
     [Mem.ro_unchanged] and [injp_max_perm_decrease] which correspond to 
     [ec_readonly] and [ec_max_perm]. *)
 
+Definition loc_unmapped_thread (f : meminj) (m : mem) :=
+  fun b ofs => loc_unmapped f b ofs /\ fst b = (Mem.tid (Mem.support m)).
+
+Definition loc_out_of_reach_thread (f: meminj) (m : mem) :=
+  fun b ofs => loc_out_of_reach f m b ofs /\ fst b = (Mem.tid (Mem.support m)).
+
 Inductive injp_acc: relation injp_world :=
   injp_acc_intro f m1 m2 Hm f' m1' m2' Hm':
     Mem.ro_unchanged m1 m1' -> Mem.ro_unchanged m2 m2' ->
@@ -51,6 +57,7 @@ Inductive injp_acc: relation injp_world :=
     inject_incr f f' ->
     inject_separated f f' m1 m2 ->
     injp_acc (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+
 
 Definition injp_mi :=
   fun '(injpw f _ _ _) => f.
