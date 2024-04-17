@@ -32,35 +32,6 @@ Require Import CallconvNew.
  *)
 
 
-(** Properties about outgoing_argument *)
-Lemma argument_size_range : forall ofsl ofs ty sig i,                      
-    In (Locations.S Locations.Outgoing ofs ty) (regs_of_rpairs (Conventions1.loc_arguments sig)) ->
-    Ptrofs.unsigned (Ptrofs.add ofsl (Ptrofs.repr (Stacklayout.fe_ofs_arg + 4 * ofs))) <= i <
-      Ptrofs.unsigned (Ptrofs.add ofsl (Ptrofs.repr (Stacklayout.fe_ofs_arg + 4 * ofs))) +
-        size_chunk (chunk_of_type ty) ->
-    Mach.offset_sarg ofsl 0 <= i < Mach.offset_sarg ofsl (Conventions.size_arguments sig).
-Admitted. (** ok *)
-
-
-Lemma outgoing_arguments_injp_valid: forall j sig j' args Vsp m tm tm' rs,
-                    Val.inject_list j args
-                      (map (fun p : rpair Locations.loc => Locations.Locmap.getpair p (make_locset_rs rs tm Vsp))
-                         (Conventions1.loc_arguments sig)) ->
-                       inject_incr j j' ->
-                       Mem.unchanged_on (loc_out_of_reach j m) tm tm' ->
-                       (forall b ofs, Mach.loc_init_args (Conventions.size_arguments sig) Vsp b ofs ->
-                                 loc_out_of_reach j m b ofs) ->
-                       Val.inject_list j' args
-                         (map (fun p : rpair Locations.loc => Locations.Locmap.getpair p (make_locset_rs rs tm' Vsp))
-                            (Conventions1.loc_arguments sig)).
-Admitted. (** ok but annoying *)
-
-
-
-(** Good point : we can allow 'public' stack-allocated data shared between threads *)
-
-
-
 Section ConcurSim.
 
   (** Hypothesis *)
@@ -249,11 +220,12 @@ GS.fsim_lts.
 
    (** Maybe the thread_state needs to be further extended fsim_match_external *)
     Inductive match_thread_states : cc_cainjp_world -> (option cc_cainjp_world) -> injp_world -> fsim_index -> thread_state_C -> thread_state_A -> Prop :=
-    |match_local : forall wB i sc sa wp,
-        match_local_states wB wp i sc sa ->
+    |match_local : forall wB i sc sa wp
+        (M_STATES: match_local_states wB wp i sc sa),
         match_thread_states wB None wp i (CMulti.Local OpenC sc) (Local OpenA sa)
-    |match_initial : forall wB i cqv rs m tm,
-        match_query cc_c_asm_injp wB (get_query cqv m) (rs,tm) ->
+    |match_initial : forall wB i cqv rs m tm
+        (M_QUERIES: match_query cc_c_asm_injp wB (get_query cqv m) (rs,tm))
+        (SG_STR: cqv_sg cqv = start_routine_sig),
         match_thread_states wB None (get wB)i (CMulti.Initial OpenC cqv) (Initial OpenA rs)
     |match_return : forall wB wA i sc sa wp wp'
         (M_STATES: match_local_states wB wp i sc sa)
@@ -379,7 +351,7 @@ GS.fsim_lts.
       assert (lsc = CMulti.Local OpenC ls).
       eapply foo; eauto. subst lsc. inv MS.
       specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
-      inversion FSIM. unfold match_local_states in H6.
+      inversion FSIM. unfold match_local_states in M_STATES.
       exploit fsim_match_final_states. eauto.
       eauto. intros [r2 [FIN [ACCE MR]]]. destruct r2.
       inv MR.
@@ -392,9 +364,9 @@ GS.fsim_lts.
         simpl in H. inv H.
         reflexivity.
       }
-      subst. unfold tres in H8. simpl in H8.
-      unfold Conventions1.loc_result, main_sig in H8. simpl in H8.
-      destruct Archi.ptr64; simpl in H8. inv H8. eauto. inv H8. eauto.
+      subst. unfold tres in H7. simpl in H7.
+      unfold Conventions1.loc_result, main_sig in H7. simpl in H7.
+      destruct Archi.ptr64; simpl in H7. inv H7. eauto. inv H7. eauto.
     Admitted. (** The Vnullptr issue*)
 
 
@@ -639,7 +611,7 @@ GS.fsim_lts.
                  rewrite NatMap.gss. reflexivity. simpl. constructor. eauto.
                  unfold worldsP'. rewrite NatMap.gss. eauto. simpl. congruence.
                - (* clear - THREADS H3 OTHERi n0. *)
-                 destruct (THREADS n H3) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
+                 destruct (THREADS n H4) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
                  exists wn, owan, wnp, lscn,lsan,lin. repeat apply conj; eauto. rewrite <- OTHERi; eauto. lia.
                  rewrite NatMap.gso. simpl. eauto. lia.
                  rewrite NatMap.gso. simpl. eauto. lia.
@@ -770,7 +742,7 @@ GS.fsim_lts.
                econstructor.
                instantiate (1:= Mem.thread_create tm).
                instantiate (1:= Mem.thread_create m).
-               unfold get_cqv, get_query. simpl. eauto.
+               unfold get_cqv, get_query. simpl. eauto. reflexivity.
                unfold worldsP'. rewrite NatMap.gss. reflexivity.
                admit. (** we should give the new thread a world such that has its own threadid in memory? check this again in yield_to_initial branch*)
              ++ destruct (Nat.eq_dec n cur).
@@ -798,7 +770,7 @@ GS.fsim_lts.
             repeat rewrite NatMap.gso; eauto. congruence.
             unfold worldsP'. repeat rewrite NatMap.gso; eauto.
             assert (wP = wPcur). congruence. subst wP.
-            intros. specialize (J H4). admit.
+            intros. specialize (J H5). admit.
             (** this can be proved*)
         + (* yield_to_yield *)
           unfold Mem.range_prop in p. rename p into yield_range.
@@ -838,7 +810,7 @@ GS.fsim_lts.
                    {| threads := threadsA; cur_tid := cur; next_tid := next |} <
                                      Mem.next_tid (Mem.support (snd qa)))%nat).
           {
-            rewrite <- H4. rewrite NEXT_EQ. simpl.
+            rewrite <- H. rewrite NEXT_EQ. simpl.
             apply yield_range_asm.
           }
           assert (targeteq: target = yield_strategy OpenA
@@ -891,10 +863,10 @@ GS.fsim_lts.
             (* clear - H3 MQ_YIE. *)
             inv MQ_YIE. inv H3. econstructor; eauto.
             instantiate (1:= b). fold tse. rewrite <- SE_eq. eauto.
-            subst tvf. inv H12.
-            exploit match_senv_id; eauto. inv MS. rewrite <- SE_eq in H19.
+            subst tvf. inv H11.
+            exploit match_senv_id; eauto. inv MS. rewrite <- SE_eq in H18.
             eauto. intros [A B]. subst. reflexivity.
-            simpl in H4. rewrite <- H4. simpl. eauto.
+            simpl in H. rewrite <- H. simpl. eauto.
           }
           instantiate (1:= target). eauto. instantiate (1:= yield_range_a). reflexivity.
           unfold get_thread. simpl. eauto. reflexivity. reflexivity.
@@ -986,7 +958,7 @@ GS.fsim_lts.
                    {| threads := threadsA; cur_tid := cur; next_tid := next |} <
                                      Mem.next_tid (Mem.support (snd qa)))%nat).
            {
-            rewrite <- H4. rewrite NEXT_EQ. simpl.
+            rewrite <- H. rewrite NEXT_EQ. simpl.
             apply yield_range_asm.
           }
           assert (targeteq: target = yield_strategy OpenA
@@ -1016,67 +988,33 @@ GS.fsim_lts.
             congruence.
           } *)
           set (w_CURt := set wBt wP'' ).
-          assert (ACCT_CUR: injp_acc (get wBt) wP'').
-          etransitivity. eauto. etransitivity. eauto. eauto.
+          (* assert (ACCT_CUR: injp_acc (get wBt) wP'').
+          etransitivity. eauto. etransitivity. eauto. eauto. *)
           assert (MATCH_NEWQ: GS.match_query cc_c_asm_injp_new w_CURt (get_query cqv m_t) (rs, tm_t)
                               /\ GS.match_senv cc_c_asm_injp_new w_CURt se tse).
           {
-            clear - H12 MS ACCT_CUR.
+            clear - M_QUERIES SG_STR MS.
             destruct wBt.
-            inv H12. unfold w_CURt. simpl.
+            inv M_QUERIES. unfold w_CURt. simpl.
             unfold get_query. simpl. split. subst tra tvf tsp0.
-            inv ACCT_CUR.
-            inv H15.
+            rewrite SG_STR in *.
+            (* inv ACCT_CUR. *)
+            inv H14.
             - (* without stack_allocated argument *)
               red in H.
               econstructor; eauto.
               + (*initial arguments*)
+                subst targs. rewrite SG_STR in H8.
                 eapply outgoing_arguments_injp_valid; eauto.
+                admit. admit. (** going to change the outgoing arguments lemmas: we do not need them. *)
+              + admit.
               + intros. rewrite H in H0. simpl in H0. inv H0. extlia.
-              + inv H14. constructor.
-                inversion H19. eauto.
+              + inv H13. constructor.
+                admit.
               + constructor. eauto.
-            -
-              apply Mem.free_range_perm in H0 as PERM.
-              assert (PERMtm_t: Mem.range_perm tm_t sb (Mach.offset_sarg sofs 0)
-                                  (Mach.offset_sarg sofs (Conventions.size_arguments (cqv_sg cqv))) Cur Freeable).
-                {
-                  red. red in PERM. intros.
-                  assert (RANGE: Mach.loc_init_args (Conventions.size_arguments (cqv_sg cqv)) (rs RSP) sb ofs).
-                  rewrite <- H. constructor; eauto.
-                  specialize (H10 _ _ RANGE) as HH.
-                  exploit PERM; eauto. intro PERMtm.
-                  erewrite <- Mem.unchanged_on_perm; eauto. eauto with mem.
-                }
-                apply Mem.range_perm_free in PERMtm_t. destruct PERMtm_t as [tm_t' FREE].
-
-              econstructor; eauto.
-              + (*initial arguments*)
-                eapply outgoing_arguments_injp_valid; eauto.
-              + clear - H10 H7 H18 H20 H21 Hm6 Hm'1 H14.
-                intros. specialize (H10 _ _ H).
-                red in H10.
-                red. intros.
-                destruct (j0 b0) as [[b' d']|] eqn:Hj.
-                -- erewrite H20 in H0; eauto. inv H0.
-                   specialize (H10 _ _ Hj). intro. apply H10.
-                   apply H7. inv Hm6. destruct (Mem.sup_dec b0 (Mem.support m)).
-                   auto. exploit mi_freeblocks; eauto. intro. congruence.
-                   unfold m_t in H0. unfold Mem.perm in H0. simpl in H0. eauto.
-                -- exploit H21; eauto. intros [A B].
-                   inv H. rewrite <- H1 in H14. inv H14.
-                   exfalso. apply B. eauto.
-              + inv H14. constructor.
-                inversion H19. eauto.
-              + rewrite <- H.
-                eapply CallConv.args_removed_free; eauto.
-                intros. exploit H3; eauto. intros [v LOAD].
-                exists v. unfold Mach.load_stack in *. unfold Mem.loadv in *.
-                unfold Val.offset_ptr in *.
-                eapply Mem.load_unchanged_on; eauto.
-                intros. eapply H10; eauto.
-                rewrite <- H. econstructor.
-                eapply argument_size_range; eauto.
+            - clear - H2. exfalso.
+              unfold Conventions.size_arguments in H2.
+              rewrite start_routine_loc in H2. simpl in H2. extlia.
             - inv MS. constructor. eauto.
               unfold m_t. unfold Mem.yield. simpl.
               red. intros. rewrite <- Mem.sup_yield_in. eauto.
@@ -1101,8 +1039,8 @@ GS.fsim_lts.
             (* clear - H3 MQ_YIE. *)
             inv MQ_YIE. inv H3. econstructor; eauto.
             instantiate (1:= b). fold tse. rewrite <- SE_eq. eauto.
-            subst tvf. inv H13. exploit match_senv_id; eauto.
-            inv MS. rewrite <- SE_eq in H20. eauto.
+            subst tvf. inv H11. exploit match_senv_id; eauto.
+            inv MS. rewrite <- SE_eq in H18. eauto.
             intros [A B]. subst. reflexivity.
           }
           instantiate (1:= target). eauto. instantiate (1:= yield_range_a). reflexivity.
@@ -1140,7 +1078,7 @@ GS.fsim_lts.
                constructor. eauto.
                unfold worldsP'. rewrite NatMap.gss. unfold w_CURt.
                destruct wBt. simpl. reflexivity. unfold w_CURt.
-               destruct wBt. reflexivity.
+               destruct wBt. congruence.
              ++ destruct (Nat.eq_dec n cur).
           * (*the executing thread *) subst.
             exists wB, (Some w_CUR). do 4  eexists. 
@@ -1153,8 +1091,10 @@ GS.fsim_lts.
             econstructor. eauto. inv H3. reflexivity. eauto. eauto. eauto.
             unfold worldsP'. rewrite NatMap.gso. rewrite NatMap.gss. reflexivity.
             lia.
+            intros. simpl. fold wP'.
+            admit. (** trivial, lemma5 *)
           * (* uneffected threads *)
-            destruct (THREADS n H5) as (wn & owan & wpn & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
+            destruct (THREADS n H8) as (wn & owan & wpn & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
             exists wn, owan, wpn, lscn,lsan,lin. repeat apply conj; eauto.
             unfold worldsB'. rewrite NatMap.gso. eauto. lia.
             rewrite <- OTHERiT; eauto. lia.
@@ -1162,9 +1102,10 @@ GS.fsim_lts.
             repeat rewrite NatMap.gso; eauto.
             unfold worldsA'. rewrite NatMap.gso. eauto. lia.
             unfold worldsP'. repeat rewrite NatMap.gso; eauto.
-            etransitivity. eauto. etransitivity. eauto. eauto.
+            intros. specialize (J n1).
+            admit. (*lemma6*)
           }
-Qed.
+Admitted.
 
   End FSIM.
 
