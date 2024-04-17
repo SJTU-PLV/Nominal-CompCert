@@ -99,7 +99,7 @@ Section FSIM.
           exists i, exists s2, initial_state L2 q2 s2 /\ match_states (get wb) i s1 s2;
         fsim_match_final_states:
           forall gw i s1 s2 r1, match_states gw i s1 s2 -> final_state L1 s1 r1 ->
-          exists r2, final_state L2 s2 r2 /\
+          exists r2, final_state L2 s2 r2 /\ (get wb) o-> gw /\
           match_reply cc (set wb gw) r1 r2;
         fsim_match_external:
           forall gw i s1 s2 q1, match_states gw i s1 s2 -> at_external L1 s1 q1 ->

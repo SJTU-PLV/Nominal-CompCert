@@ -372,29 +372,29 @@ GS.fsim_lts.
             match_states i s1 s2 -> Closed.final_state ConcurC s1 r -> Closed.final_state ConcurA s2 r.
     Proof.
       intros. inv H0. inv H.
-        simpl in *. subst cur.
-        unfold CMulti.get_cur_thread, CMulti.get_thread in H2. simpl in H2.
-        specialize (THREADS 1%nat CUR_VALID).
-        destruct THREADS as (wB & owA & wP & lsc & lsa & i' & GETWB & GETi & MSEw & GETC & GETA & GETWA & MS & GETP).
-        assert (lsc = CMulti.Local OpenC ls).
-        eapply foo; eauto. subst lsc. inv MS.
-        specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
-        inversion FSIM. unfold match_local_states in H6.
-        exploit fsim_match_final_states. eauto.
-        eauto. intros [r2 [FIN MR]]. destruct r2.
-        inv MR.
-        econstructor; eauto. admit. (*the same as initial*)
-        simpl.
-        assert (sg = main_sig).
-        {
-          rewrite GETWB in MAIN_THREAD_INITW.
-          inv MAIN_THREAD_INITW. unfold set_injp in H.
-          simpl in H. inv H.
-          reflexivity.
-        }
-        subst. unfold tres in H8. simpl in H8.
-        unfold Conventions1.loc_result, main_sig in H8. simpl in H8.
-        destruct Archi.ptr64; simpl in H8. inv H8. eauto. inv H8. eauto.
+      simpl in *. subst cur.
+      unfold CMulti.get_cur_thread, CMulti.get_thread in H2. simpl in H2.
+      specialize (THREADS 1%nat CUR_VALID).
+      destruct THREADS as (wB & owA & wP & lsc & lsa & i' & GETWB & GETi & MSEw & GETC & GETA & GETWA & MS & GETP).
+      assert (lsc = CMulti.Local OpenC ls).
+      eapply foo; eauto. subst lsc. inv MS.
+      specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
+      inversion FSIM. unfold match_local_states in H6.
+      exploit fsim_match_final_states. eauto.
+      eauto. intros [r2 [FIN [ACCE MR]]]. destruct r2.
+      inv MR.
+      econstructor; eauto. admit. (*the same as initial*)
+      simpl.
+      assert (sg = main_sig).
+      {
+        rewrite GETWB in MAIN_THREAD_INITW.
+        inv MAIN_THREAD_INITW. unfold set_injp in H.
+        simpl in H. inv H.
+        reflexivity.
+      }
+      subst. unfold tres in H8. simpl in H8.
+      unfold Conventions1.loc_result, main_sig in H8. simpl in H8.
+      destruct Archi.ptr64; simpl in H8. inv H8. eauto. inv H8. eauto.
     Admitted. (** The Vnullptr issue*)
 
 
@@ -537,10 +537,9 @@ GS.fsim_lts.
     Lemma match_q_nid: forall qc qa w,
         GS.match_query cc_c_asm_injp_new w qc qa ->
         Mem.next_tid (Mem.support (cq_mem qc)) = Mem.next_tid (Mem.support (snd qa)).
-    Admitted.
-
-
-
+    Proof. intros. inv H. inv Hm. inv mi_thread.
+           simpl. eauto.
+    Qed.
     
     Lemma match_senv_id : forall j b b' d id, Genv.match_stbls j se se ->
                                          j b = Some (b',d) ->
