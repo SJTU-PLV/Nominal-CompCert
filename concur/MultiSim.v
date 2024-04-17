@@ -394,6 +394,8 @@ Section ConcurSim.
             Mem.inject j (Mem.thread_create m) (Mem.thread_create tm).
     Proof.
       intros. inv H. constructor; eauto.
+      - simpl. unfold Mem.sup_create. red. simpl. inv mi_thread.
+        split; eauto. rewrite ! app_length. simpl. congruence.
       - clear - mi_inj.
         inv mi_inj. constructor; eauto.
       - intros. eapply mi_freeblocks. unfold Mem.valid_block in *.
@@ -409,6 +411,8 @@ Section ConcurSim.
     Proof.
       intros. unfold Mem.yield. inv H.
       constructor; simpl; eauto.
+      - simpl. red. unfold Mem.sup_yield. simpl. inv mi_thread.
+        eauto.
       - inv mi_inj.
         constructor; eauto.
       - unfold Mem.valid_block. simpl.
@@ -623,9 +627,9 @@ Section ConcurSim.
             unfold rs'. rewrite Pregmap.gss. constructor.
             instantiate (1:= Hm5).
             { constructor; try red; intros; eauto.
-            - constructor. red. simpl. intros. rewrite <- Mem.sup_create_in. eauto.
+            - split. admit. constructor. red. simpl. intros. rewrite <- Mem.sup_create_in. eauto.
               intros. simpl. reflexivity. intros. reflexivity.
-            - constructor. red. simpl. intros. rewrite <- Mem.sup_create_in. eauto.
+            - split. admit. constructor. red. simpl. intros. rewrite <- Mem.sup_create_in. eauto.
               intros. simpl. reflexivity. intros. reflexivity.
             - congruence. }
             intros. unfold rs'.
@@ -756,17 +760,18 @@ Section ConcurSim.
             assert (Hm1' : Mem.inject j' m_t tm_t).
             eapply yield_inject; eauto.
             econstructor; eauto. instantiate (1:= Hm1').
-            { inv WORLD_ACC_HYPOTHESIS.
+            admit.
+            (* { inv WORLD_ACC_HYPOTHESIS.
               constructor; try red; intros; eauto.
-              - eapply Mem.unchanged_on_trans. eauto.
+              - split. admit. eapply Mem.unchanged_on_trans. eauto.
                 unfold m_t. constructor; simpl; eauto.
                 red. intros. rewrite <- Mem.sup_yield_in. auto.
                 unfold Mem.yield, Mem.perm. simpl. intros. reflexivity.
-              - eapply Mem.unchanged_on_trans. eauto.
+              - split. admit. eapply Mem.unchanged_on_trans. eauto.
                 unfold m_t. constructor; simpl; eauto.
                 red. intros. rewrite <- Mem.sup_yield_in. auto.
                 unfold Mem.yield, Mem.perm. simpl. intros. reflexivity.
-            }
+            } *)
             intros. unfold rs'.
             destruct r; simpl in H; inv H; repeat rewrite Pregmap.gso;
               simpl; try congruence; try reflexivity.
@@ -888,7 +893,8 @@ Section ConcurSim.
             inv H11.
             destruct wpC as [j' m' tm' Hm'].
             inv MQ_YIE. simpl in *.
-            assert (Hm1' : Mem.inject j' m_t tm_t).
+            assert (Hm1' : Mem.inject j' m_t tm_t). admit.
+            (*
             {
               unfold m_t. unfold Mem.yield. simpl.
               unfold tm_t. unfold Mem.yield. simpl.
@@ -901,7 +907,7 @@ Section ConcurSim.
               - unfold Mem.valid_block. simpl.
                 intros. rewrite <- Mem.sup_yield_in.
                 eapply mi_mappedblocks; eauto.
-            }
+            }*)
             exists (cajw (injpw j' m_t tm_t Hm1') (cqv_sg cqv) rs).
             unfold get_query. simpl. split. subst tra tvf tsp0.
             inv WORLD_ACC_HYPOTHESIS.

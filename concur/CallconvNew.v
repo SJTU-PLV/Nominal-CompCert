@@ -210,12 +210,128 @@ Next Obligation. destruct t. reflexivity. Qed.
 
 (* injp_acc *)
 
+(*injp_acc*)
+
+Inductive injp_acci : relation injp_world :=
+    injp_acci_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
+                       (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2'),
+                     Mem.ro_unchanged m1 m1' ->
+                     Mem.ro_unchanged m2 m2' ->
+                     injp_max_perm_decrease m1 m1' ->
+                     injp_max_perm_decrease m2 m2' ->
+                     Mem.unchanged_on_i (loc_unmapped f) m1 m1' ->
+                     Mem.unchanged_on_i (loc_out_of_reach f m1) m2 m2' ->
+                     inject_incr f f' ->
+                     inject_separated f f' m1 m2 ->
+                     injp_acci (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+
+Inductive injp_acce :  relation injp_world :=
+    injp_acce_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
+                       (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2'),
+                     Mem.ro_unchanged m1 m1' ->
+                     Mem.ro_unchanged m2 m2' ->
+                     injp_max_perm_decrease m1 m1' ->
+                     injp_max_perm_decrease m2 m2' ->
+                     Mem.unchanged_on_e (loc_unmapped f) m1 m1' ->
+                     Mem.unchanged_on_e (loc_out_of_reach f m1) m2 m2' ->
+                     inject_incr f f' ->
+                     inject_separated f f' m1 m2 ->
+                     injp_acce (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+
+Record unchanged_on_g (P : block -> Z -> Prop) (m_before m_after : mem) : Prop := mk_unchanged_on_g
+  { unchanged_on_thread_g : Mem.tid (Mem.support m_before) <> Mem.tid (Mem.support m_after);
+    unchanged_on_g' : Mem.unchanged_on (Mem.thread_internal_P P m_before) m_before m_after }.
+
+
+Inductive injp_accg : relation injp_world :=
+    injp_accg_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
+                       (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2'),
+                     Mem.ro_unchanged m1 m1' ->
+                     Mem.ro_unchanged m2 m2' ->
+                     injp_max_perm_decrease m1 m1' ->
+                     injp_max_perm_decrease m2 m2' ->
+                     unchanged_on_g (loc_unmapped f) m1 m1' ->
+                     unchanged_on_g (loc_out_of_reach f m1) m2 m2' ->
+                     inject_incr f f' ->
+                     inject_separated f f' m1 m2 ->
+                     injp_accg (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+
+
+Instance injp_acci_preo : PreOrder injp_acci.
+Proof.
+  split.
+  - intros [f m1 m2].
+    constructor.
+    + red. eauto.
+    + red. eauto.
+    + red. eauto.
+    + red. eauto.
+    + split. eauto. apply Mem.unchanged_on_refl.
+    + split. eauto. apply Mem.unchanged_on_refl.
+    + apply inject_incr_refl.
+    + intros b ofs. congruence.
+  - intros w1 w2 w3 H12 H23.
+    destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hr1 Hr2 Hp1 Hp2 [S1 H1] [S2 H2] Hf Hs].
+    inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hr1' Hr2' Hp1' Hp2' [S1' H1'] [S2' H2'] Hf' Hs']; subst.
+    constructor.
+    + red. intros. eapply Hr1; eauto. eapply Hr1'; eauto.
+      inversion H1. apply unchanged_on_support; eauto.
+      intros. intro. eapply H3; eauto.
+    + red. intros. eapply Hr2; eauto. eapply Hr2'; eauto.
+      inversion H2. apply unchanged_on_support; eauto.
+      intros. intro. eapply H3; eauto.
+    + intros b ofs p Hb ?.
+      eapply Hp1, Hp1'; eauto using Mem.valid_block_unchanged_on.
+    + intros b ofs p Hb ?.
+      eapply Hp2, Hp2'; eauto using Mem.valid_block_unchanged_on.
+    + split. eauto.
+      eapply mem_unchanged_on_trans_implies_valid; eauto.
+      unfold loc_unmapped, Mem.thread_external_P. simpl.
+      intros b1 _ [Hb Hb0] Hb1. split.
+      destruct (f' b1) as [[b2 delta] | ] eqn:Hb'; eauto.
+      edestruct Hs; eauto. contradiction. auto.
+      inv S1. congruence.
+    + split. eauto.
+      eapply mem_unchanged_on_trans_implies_valid; eauto.
+      unfold loc_out_of_reach, Mem.thread_external_P. simpl.
+      intros b2 ofs2 [Hb2 Hb2'] Hv. split. intros b1 delta Hb'.
+      destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+      * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
+            by (eapply Hf in Hb; split; congruence); subst.
+        specialize (Hb2 b1 delta Hb). intro. apply Hb2.
+        eapply Hp1; eauto. eapply Mem.valid_block_inject_1; eauto.
+      * edestruct Hs; eauto.
+      * inv S2. congruence.
+    + eapply inject_incr_trans; eauto.
+    + intros b1 b2 delta Hb Hb''.
+      destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
+      * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
+          by (eapply Hf' in Hb'; split; congruence); subst.
+        eapply Hs; eauto.
+      * edestruct Hs'; eauto.
+        intuition eauto using Mem.valid_block_unchanged_on.
+Qed.
+
+(*
+Instance injp_accg_refl : Reflexive injp_accg.
+Proof.
+  intros [f m1 m2].
+    constructor; auto.
+    + red. eauto.
+    + red. eauto.
+    + split. auto. apply Mem.unchanged_on_refl.
+    + apply Mem.unchanged_on_refl.
+    + intros b ofs. congruence.
+Qed.
+*)
+
 Program Instance CAworld : World cc_cainjp_world :=
     {
       w_state := injp_world;
       w_lens := lens_injp;
-      w_acc := injp_acc;
-      w_acc_trans := injp_acc_preo;
+      w_acci := injp_acci;
+      w_acce := injp_acce;
+      w_acci_trans := injp_acci_preo;
     }.
      
 Inductive cc_c_asm_injp_mr : cc_cainjp_world -> c_reply -> reply li_asm -> Prop :=
