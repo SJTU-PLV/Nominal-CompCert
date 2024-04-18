@@ -421,19 +421,35 @@ GS.fsim_lts.
 
 
     (** Seems straight forward *)
-    Lemma local_plus : forall gs t sa1 sa2,
-        Plus (OpenA tse) sa1 t sa2 ->
-        NatMap.get (cur_tid OpenA gs) (threads OpenA gs)  = Some (Local OpenA sa1) ->
-        plus (step OpenA) (globalenv OpenA) gs t (update_cur_thread OpenA gs (Local OpenA sa2)).
-    Proof.
-    Admitted.
 
+    
     Lemma local_star : forall gs t sa1 sa2,
         Star (OpenA tse) sa1 t sa2 ->
         NatMap.get (cur_tid OpenA gs) (threads OpenA gs)  = Some (Local OpenA sa1) ->
         star (step OpenA) (globalenv OpenA) gs t (update_cur_thread OpenA gs (Local OpenA sa2)).
     Proof.
+      induction 1; intros.
+      - unfold update_cur_thread, update_thread.
+        destruct gs. simpl. Search NatMap.get.
+        rewrite NatMap.t set3.
+      - eapply star_step; eauto.
+        eapply step_local. eauto. eauto. eauto.
+        unfold update_cur_thread, update_thread in *.
+        simpl. destruct gs.
+        simpl in *.
+        eapply IHstar.
     Admitted.
+
+    
+    Lemma local_plus : forall gs t sa1 sa2,
+        Plus (OpenA tse) sa1 t sa2 ->
+        NatMap.get (cur_tid OpenA gs) (threads OpenA gs)  = Some (Local OpenA sa1) ->
+        plus (step OpenA) (globalenv OpenA) gs t (update_cur_thread OpenA gs (Local OpenA sa2)).
+    Proof.
+      intros. induction H.
+      -
+    Admitted.
+
 
 
     Lemma thread_create_inject : forall j m tm,

@@ -1358,6 +1358,22 @@ Module PMap <: MAP.
     intros. unfold set. simpl. decEq. apply PTree.set2.
   Qed.
 
+  Theorem set3:
+    forall (A:Type) (i:elt) (x:A) (m: t A),
+      get i m = x -> x <> fst m ->
+      set i x m = m.
+  Proof.
+    intros. unfold get in H. simpl. unfold set.
+    destruct m. simpl. f_equal. simpl in H.
+    destruct PTree.get eqn:Pgi. inv H.
+    apply PTree.extensionality.
+    intros. destruct (peq i0 i).
+    subst.
+    setoid_rewrite PTree.gss. auto.
+    rewrite PTree.gso. reflexivity. auto.
+    subst. simpl in H0. congruence.
+Qed.
+
 End PMap.
 
 (** * An implementation of maps over any type that injects into type [positive] *)
@@ -1524,6 +1540,14 @@ Module IRMap(X: INDEXED_REV_TYPE).
     intros. unfold set. apply PMap.set2.
   Qed.
 
+  Theorem set3:
+    forall (A:Type) (i:elt) (x:A) (m: t A),
+      get i m = x -> x <> fst m ->
+      set i x m = m.
+  Proof.
+    intros. apply PMap.set3; eauto.
+  Qed.
+    
   Theorem elements_correct :
     forall (A: Type) (i: elt) (v: A) (m: t A),
       get i m = v -> v <> fst m ->
