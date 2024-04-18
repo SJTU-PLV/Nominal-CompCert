@@ -428,7 +428,8 @@ Proof.
          subst ra. rewrite H11. constructor.
          subst sp. rewrite H4. constructor; eauto.
          subst ra. rewrite H11. congruence.
-    + constructor. apply H3.
+    + constructor. apply H3. destruct H32 as [S32 H32].
+      destruct H33 as [S33 H33].
       inversion H32. eauto with mem.
       inversion H33. eauto with mem.
     + reflexivity.
@@ -445,7 +446,7 @@ Proof.
          rewrite pred_dec_false; eauto.
       -- reflexivity.
       -- assert ( RANGEPERM: Mem.range_perm m2'' sb 0 24 Cur Freeable). 
-         { red. intros. red in H7. inversion H49.
+         { red. intros. red in H7. destruct H49 as [S49 H49]. inversion H49.
            eapply unchanged_on_perm; eauto.
            red. intros. exploit H16; eauto.
          }
@@ -629,7 +630,13 @@ Proof.
              subst. congruence.
           -- red. intros. inversion UNC. eapply unchanged_on_perm; eauto.
           -- eauto with mem.
-          -- eapply Mem.unchanged_on_implies; eauto.
+          -- split. rewrite (Mem.support_free _ _ _ _ _ FREE); eauto.
+             rewrite (Mem.support_store _ _ _ _ _ _ STORE3); eauto.
+             rewrite (Mem.support_store _ _ _ _ _ _ STORE2); eauto.
+             rewrite (Mem.support_store _ _ _ _ _ _ STORE1); eauto.
+             rewrite (Mem.support_alloc _ _ _ _ _ ALLOC); eauto.
+             red. simpl. rewrite Mem.update_list_length. eauto.
+             eapply Mem.unchanged_on_implies; eauto.
              intros. cbn. eauto.
           -- red. intros. congruence.
         + eauto with mem.
@@ -811,7 +818,13 @@ Proof.
              subst. congruence.
           -- red. intros. inversion UNC. eapply unchanged_on_perm; eauto.
           -- eauto with mem.
-          -- eapply Mem.unchanged_on_implies; eauto.
+          -- split. rewrite (Mem.support_free _ _ _ _ _ FREE); eauto.
+             rewrite (Mem.support_store _ _ _ _ _ _ STORE3); eauto.
+             rewrite (Mem.support_store _ _ _ _ _ _ STORE2); eauto.
+             rewrite (Mem.support_store _ _ _ _ _ _ STORE1); eauto.
+             rewrite (Mem.support_alloc _ _ _ _ _ ALLOC); eauto.
+             red. simpl. rewrite Mem.update_list_length. eauto.
+             eapply Mem.unchanged_on_implies; eauto.
              intros. cbn. eauto.
           -- red. intros. congruence.
         + eauto with mem.
@@ -957,7 +970,13 @@ Proof.
           -- red. intros.
              inversion UNC. eapply unchanged_on_perm; eauto.
           -- eauto with mem.
-          -- eapply Mem.unchanged_on_implies; eauto.
+          -- split.
+             rewrite (Mem.support_store _ _ _ _ _ _ STORE3); eauto.
+             rewrite (Mem.support_store _ _ _ _ _ _ STORE2); eauto.
+             rewrite (Mem.support_store _ _ _ _ _ _ STORE1); eauto.
+             rewrite (Mem.support_alloc _ _ _ _ _ ALLOC); eauto.
+             red. simpl. rewrite Mem.update_list_length. eauto.
+             eapply Mem.unchanged_on_implies; eauto.
              intros. cbn. eauto.
           -- red. intros. congruence.
         + assert
@@ -1094,7 +1113,8 @@ Proof.
         find_instr. simpl. cbn. unfold inner_sp. rewrite <- H.
         rewrite pred_dec_true; eauto.
         apply star_refl. traceEq.
-        - econstructor; eauto.
+        - destruct H31 as [S31 H31]. destruct H32 as [S32 H32].
+          econstructor; eauto.
           econstructor. instantiate (1:= INJ''').
           all: eauto.
           + cbn. constructor; eauto.
@@ -1115,7 +1135,7 @@ Proof.
                red. eauto using Mem.perm_store_2.
                erewrite <- Mem.support_store; eauto.
                red. eauto using Mem.perm_store_2.
-               inv H32. eauto.
+                inv H32. eauto.
             -- eapply max_perm_decrease_trans. eauto.
                red. intros. eapply Mem.perm_store_2; eauto.
                eapply Mem.perm_store_2; eauto. inversion H31. eauto.
@@ -1124,14 +1144,20 @@ Proof.
                eapply Mem.perm_store_2; eauto.
                eapply Mem.perm_free_3; eauto.
                inversion H32. eauto.
-            --
+            -- split.
+               erewrite (Mem.support_store _ _ _ _ _ _ STORE1).
+               erewrite (Mem.support_store _ _ _ _ _ _ STORE0).
+                eauto.
             eapply Mem.unchanged_on_trans; eauto.
             eapply Mem.unchanged_on_trans.
             eapply Mem.store_unchanged_on; eauto.
             intros. red. intro. red in H2. congruence.
             eapply Mem.store_unchanged_on; eauto.
             intros. red. intro. red in H2. congruence.
-            --
+            -- split. erewrite (Mem.support_free _ _ _ _ _ FREE').
+               erewrite (Mem.support_store _ _ _ _ _ _ STORE1').
+               erewrite (Mem.support_store _ _ _ _ _ _ STORE0').
+               eauto.
               eapply mem_unchanged_on_trans_implies_valid. eauto.
               instantiate (1 := fun b ofs => loc_out_of_reach f m1 b ofs /\ b <> sb).
               eapply Mem.unchanged_on_trans.

@@ -284,13 +284,43 @@ GS.fsim_lts.
     Qed.
 
 
+    Lemma advance_next_tid : forall gl s s',
+        Genv.advance_next gl s = s' ->
+        Mem.tid s' = Mem.tid s.
+    Proof.
+      induction gl. intros.
+      inv H. simpl. reflexivity.
+      intros. simpl in H. apply IHgl in H. simpl in H. congruence.
+    Qed.
+      
+    Lemma advance_next_nexttid : forall gl s s',
+        Genv.advance_next gl s = s' ->
+        Mem.next_tid s' = Mem.next_tid s.
+    Proof.
+      induction gl. intros.
+      inv H. simpl. reflexivity.
+      intros. simpl in H. apply IHgl in H. simpl in H.
+      unfold Mem.next_tid in *. simpl in H. rewrite Mem.update_list_length in H.
+      congruence.
+    Qed.
+                               
     Lemma init_mem_tid : forall sk m, Genv.init_mem sk = Some m ->
                                  Mem.tid (Mem.support m) = 1%nat.
-    Proof. Admitted.
+    Proof.
+      intros. unfold Genv.init_mem in H.
+      apply Genv.alloc_globals_support in H.
+      rewrite H. erewrite advance_next_tid; eauto. unfold Mem.empty.
+      reflexivity.
+    Qed.
 
     Lemma init_mem_nexttid : forall sk m, Genv.init_mem sk = Some m ->
                                      Mem.next_tid (Mem.support m) = 2%nat.
-    Proof. Admitted.
+    Proof.
+      intros. unfold Genv.init_mem in H.
+      apply Genv.alloc_globals_support in H.
+      rewrite H. erewrite advance_next_nexttid; eauto. unfold Mem.empty.
+      reflexivity.
+    Qed.
     
     Lemma concur_initial_states :
       forall s1, Closed.initial_state ConcurC s1 ->
@@ -449,21 +479,9 @@ GS.fsim_lts.
      injp_yield : forall j m1 m2 (n: nat) p tp m1' m2' Hm Hm',
          m1' = Mem.yield m1 n p ->
          m2' = Mem.yield m2 n tp ->
+         Mem.tid (Mem.support m1) <> n ->
          injp_acc_yield (injpw j m1 m2 Hm) (injpw j m1' m2' Hm').
 
-   Lemma yield_world_create : forall j m1 m2 n p tp m1' m2'
-       (Hm : Mem.inject j m1 m2),
-       m1' = Mem.yield m1 n p ->
-       m2' = Mem.yield m2 n tp ->
-       exists Hm', injp_acc_yield (injpw j m1 m2 Hm) (injpw j m1' m2' Hm').
-   Proof.
-     intros.
-     specialize (yield_inject j m1 m2 n p tp Hm).
-     intro X. rewrite <- H in X. rewrite <- H0 in X.
-     exists X. econstructor; eauto.
-   Qed.
-
-   
    Inductive worlds_ptc_str : cc_cainjp_world -> cc_cainjp_world -> Prop :=
     | ptc_str_intro : forall j m tm Hm0 Hm1 rs,
         worlds_ptc_str
@@ -571,6 +589,41 @@ GS.fsim_lts.
       intros [b2 A]. rewrite H0 in A. inv A. reflexivity.
     Qed.
 
+
+    (** Lemma about different accessibility relations *)
+    Lemma injp_acci_tid : forall w1 w2, injp_acci w1 w2 -> injp_tid w2 = injp_tid w1.
+    Proof.
+      intros. inv H. inv H4. simpl. inv unchanged_on_thread_i. auto.
+    Qed.
+
+    Lemma injp_acci_nexttid : forall w1 w2, injp_acci w1 w2 -> injp_nexttid w2 = injp_nexttid w1.
+    Proof.
+      intros. inv H. inv H4. simpl. inv unchanged_on_thread_i. auto.
+    Qed.
+
+     Lemma injp_acce_tid : forall w1 w2, injp_acce w1 w2 -> injp_tid w2 = injp_tid w1.
+    Proof.
+      intros. inv H. inv H4. simpl. auto.
+    Qed.
+
+    Lemma injp_acc_thc_tid : forall w1 w2, injp_acc_thc w1 w2 -> injp_tid w2 = injp_tid w1.
+    Proof.
+      intros. inv H. simpl. auto.
+    Qed.
+
+    Lemma injp_acc_thc_nexttid : forall w1 w2, injp_acc_thc w1 w2 -> injp_nexttid w2 = S (injp_nexttid w1).
+    Proof.
+      intros. inv H. simpl. unfold Mem.sup_create. unfold Mem.next_tid.
+      simpl. rewrite app_length. simpl. lia.
+    Qed.
+
+    Lemma injp_acc_yield_nexttid : forall w1 w2, injp_acc_yield w1 w2 -> injp_nexttid w2 = injp_nexttid w1.
+    Proof.
+      intros. inv H. simpl. eauto.
+    Qed.
+
+
+
     Lemma injp_accg_acci_accg : forall w1 w2 w3,
         injp_accg w1 w2 -> injp_acci w2 w3 -> injp_accg w1 w3.
     Proof.
@@ -612,69 +665,209 @@ GS.fsim_lts.
         intuition eauto using Mem.valid_block_unchanged_on.
     Qed.
 
-    Lemma injp_acci_tid : forall w1 w2, injp_acci w1 w2 -> injp_tid w2 = injp_tid w1.
+    Lemma injp_acc_yield_accg : forall w1 w2, injp_acc_yield w1 w2 -> injp_accg w1 w2.
     Proof.
-      intros. inv H. inv H4. simpl. inv unchanged_on_thread_i. auto.
+      intros. inv H. 
+      constructor; try red; intros; eauto.
+      split. simpl. congruence.
+      constructor; try red; intros; eauto.
+      simpl. rewrite <- Mem.sup_yield_in; eauto.
+      split. simpl. inv Hm.  inv mi_thread. congruence.
+      constructor; try red; intros; eauto.
+      simpl. rewrite <- Mem.sup_yield_in; eauto.
+      congruence.
     Qed.
-
-    Lemma injp_acci_nexttid : forall w1 w2, injp_acci w1 w2 -> injp_nexttid w2 = injp_nexttid w1.
-    Proof.
-      intros. inv H. inv H4. simpl. inv unchanged_on_thread_i. auto.
-    Qed.
-
-    Lemma injp_acce_tid : forall w1 w2, injp_acce w1 w2 -> injp_tid w2 = injp_tid w1.
-    Proof.
-      intros. inv H. inv H4. simpl. auto.
-    Qed.
-
-    Lemma injp_acc_thc_tid : forall w1 w2, injp_acc_thc w1 w2 -> injp_tid w2 = injp_tid w1.
-    Proof.
-      intros. inv H. simpl. auto.
-    Qed.
-
-    Lemma injp_acc_thc_nexttid : forall w1 w2, injp_acc_thc w1 w2 -> injp_nexttid w2 = S (injp_nexttid w1).
-    Proof.
-      intros. inv H. simpl. unfold Mem.sup_create. unfold Mem.next_tid.
-      simpl. rewrite app_length. simpl. lia.
-    Qed.
-
-    Lemma injp_acc_yield_nexttid : forall w1 w2, injp_acc_yield w1 w2 -> injp_nexttid w2 = injp_nexttid w1.
-    Proof.
-      intros. inv H. simpl. eauto.
-    Qed.
-
+        
     Lemma pthread_create_accg1 : forall w1 w2 w3,
-       injp_acc_yield w1 w2 -> injp_acci w1 w3 -> injp_accg w2 w3.
-   Admitted.
-   
+        injp_acc_yield w1 w2 -> injp_acci w1 w3 -> injp_accg w2 w3.
+    Proof.
+      intros. inv H.
+      inv H0.
+      assert (VALID1: forall b, Mem.valid_block m1 b <-> Mem.valid_block (Mem.yield m1 n p) b).
+      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
+      assert (VALID2: forall b, Mem.valid_block m2 b <-> Mem.valid_block (Mem.yield m2 n tp) b).
+      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
+      constructor; eauto.
+      - red. intros. exploit H4; eauto. apply VALID1. auto.
+      - red. intros. exploit H5; eauto. apply VALID2. eauto.
+      - red. intros. exploit H6; eauto. apply VALID1. auto.
+      - red. intros. exploit H7; eauto. apply VALID2. auto.
+      - destruct H8 as [S8 H8]. inv S8. split. simpl. congruence.
+        inv H8. constructor.
+        + red. intros. eauto. apply unchanged_on_support. apply VALID1. auto.
+        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
+          reflexivity. eapply unchanged_on_perm; eauto.
+          red. split. auto. simpl in B. congruence. apply VALID1. auto.
+        + intros b ofs [A B] Hp. simpl.
+          eapply unchanged_on_contents; eauto. split. auto. simpl in B. congruence.
+      - destruct H9 as [S9 H9]. inv S9. apply Mem.mi_thread in Hm as Hs. destruct Hs as [X Y].
+        split. simpl. congruence.
+        inv H9. constructor.
+        + red. intros. eauto. apply unchanged_on_support. apply VALID2. auto.
+        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
+          reflexivity. eapply unchanged_on_perm; eauto.
+          red. split. auto. simpl in B. congruence. apply VALID2. auto.
+        + intros b ofs [A B] Hp. simpl.
+          eapply unchanged_on_contents; eauto. split. auto. simpl in B. congruence.
+      - red. intros. rewrite <- VALID1, <- VALID2. eauto.
+    Qed.
+
    Lemma pthread_create_accg2 : forall w1 w2 w3 w4 w5,
        injp_accg w1 w2 -> injp_acci w2 w3 -> injp_acc_thc w3 w4 ->
        injp_acci w4 w5 ->
        injp_accg w1 w5.
-   Admitted.
+   Proof.
+     intros. eapply injp_accg_acci_accg.
+     2: eauto.
+     exploit injp_accg_acci_accg. eauto. eauto.
+     intro. clear - H1 H3.
+     inv H1. inv H3.
+     assert (VALID1: forall b, Mem.valid_block m1 b <-> Mem.valid_block (Mem.thread_create m1) b).
+     intros. unfold Mem.valid_block. simpl. apply Mem.sup_create_in.
+     assert (VALID2: forall b, Mem.valid_block m2 b <-> Mem.valid_block (Mem.thread_create m2) b).
+     intros. unfold Mem.valid_block. simpl. apply Mem.sup_create_in.
+     constructor; eauto.
+     - destruct H7 as [S7 H7]. split. simpl. congruence.
+       inv H7. constructor.
+       + red. intros. apply VALID1. eapply unchanged_on_support; eauto.
+       + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
+         eapply unchanged_on_perm; eauto.
+         red. split; auto. simpl. reflexivity.
+       + intros b ofs [A B] Hp. simpl.
+         eapply unchanged_on_contents; eauto. split; auto.
+      - destruct H9 as [S9 H9]. apply Mem.mi_thread in Hm as Hs. destruct Hs as [X Y].
+        split. simpl. congruence.
+        inv H9. constructor.
+        + red. intros. eauto. apply VALID2. apply unchanged_on_support. auto.
+        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
+          eapply unchanged_on_perm; eauto.
+          red. split; auto. reflexivity.
+        + intros b ofs [A B] Hp. simpl.
+          eapply unchanged_on_contents; eauto. split; auto.
+   Qed.
 
    Lemma yield_to_yield_acce: forall w1 w2 w3 w4,
        injp_accg w1 w2 -> injp_acci w2 w3 -> injp_acc_yield w3 w4 ->
        injp_tid w4 = injp_tid w1 -> injp_acce w1 w4.
-   Admitted.
+   Proof.
+     intros. exploit injp_accg_acci_accg; eauto. intro.
+     clear H H0. inv H3. inv H1. simpl in H2.
+     assert (VALID1: forall b, Mem.valid_block m1' b <-> Mem.valid_block (Mem.yield m1' n p) b).
+     intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
+     assert (VALID2: forall b, Mem.valid_block m2' b <-> Mem.valid_block (Mem.yield m2' n tp) b).
+     intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
+     apply Mem.mi_thread in Hm as Hmi. destruct Hmi as [X Y].
+     constructor; eauto.
+     - destruct H6 as [S6 H6]. split. simpl. congruence.
+        inv H6. constructor.
+        + red. intros.  apply VALID1. apply unchanged_on_support. auto.
+        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1' b ofs k p0).
+          eapply unchanged_on_perm; eauto.
+          red. split. auto. congruence. reflexivity.
+        + intros b ofs [A B] Hp. simpl.
+          eapply unchanged_on_contents; eauto. split. auto. auto.
+      - destruct H7 as [S7 H7]. 
+        split. simpl. congruence.
+        inv H7. constructor.
+        + red. intros. apply VALID2. apply unchanged_on_support. auto.
+        + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
+          reflexivity. eapply unchanged_on_perm; eauto.
+          red. split. auto. simpl in B. congruence.
+        + intros b ofs [A B] Hp. simpl.
+          eapply unchanged_on_contents; eauto. split; auto.
+   Qed.
 
    Lemma yield_to_yield_accg1 : forall w1 w2 w3,
        injp_acc_yield w1 w2 -> injp_acci w2 w3 -> injp_accg w1 w3.
-   Admitted.
+   Proof.
+     intros. inv H. inv H0.
+     assert (VALID1: forall b, Mem.valid_block m1 b <-> Mem.valid_block (Mem.yield m1 n p) b).
+     intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
+     assert (VALID2: forall b, Mem.valid_block m2 b <-> Mem.valid_block (Mem.yield m2 n tp) b).
+     intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
+     apply Mem.mi_thread in Hm as Hmi. destruct Hmi as [X Y].
+     constructor; eauto.
+     - red. intros. exploit H4; eauto. apply VALID1. auto.
+     - red. intros. exploit H5; eauto. apply VALID2. eauto.
+     - red. intros. exploit H6; eauto. apply VALID1. auto.
+     - red. intros. exploit H7; eauto. apply VALID2. auto.
+     - destruct H8 as [S8 H8]. inv S8. simpl in H0. split. simpl. congruence.
+       inv H8. constructor.
+       + red. intros. eauto. apply unchanged_on_support. apply VALID1. auto.
+       + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
+         reflexivity. eapply unchanged_on_perm; eauto.
+         red. split. auto. simpl in B. simpl. congruence. apply VALID1. auto.
+       + intros b ofs [A B] Hp. simpl.
+         eapply unchanged_on_contents; eauto. split. auto. simpl in B. simpl. congruence.
+     - destruct H9 as [S9 H9]. inv S9. apply Mem.mi_thread in Hm as Hs. destruct Hs as [Z Z'].
+       split. simpl in *. congruence.
+       inv H9. constructor.
+       + red. intros. eauto. apply unchanged_on_support. apply VALID2. auto.
+       + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
+         reflexivity. eapply unchanged_on_perm; eauto.
+         red. split. auto. simpl in *. congruence. apply VALID2. auto.
+       + intros b ofs [A B] Hp. simpl.
+         eapply unchanged_on_contents; eauto. split. auto. simpl in *. congruence.
+     - red. intros. rewrite VALID1,VALID2. eauto.
+   Qed.
 
+
+
+   Lemma injp_accg_yield_accg : forall w1 w2 w3,
+       injp_accg w1 w2 -> injp_acc_yield w2 w3 ->
+       injp_tid w3 <> injp_tid w1 ->
+       injp_accg w1 w3.
+   Proof.
+     intros. rename H1 into Hid. inv H0. inv H.
+     assert (VALID1: forall b, Mem.valid_block m1 b <-> Mem.valid_block (Mem.yield m1 n p) b).
+     intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
+     assert (VALID2: forall b, Mem.valid_block m2 b <-> Mem.valid_block (Mem.yield m2 n tp) b).
+     intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
+     apply Mem.mi_thread in Hm as Hmi. destruct Hmi as [X Y]. simpl in Hid.
+     constructor; eauto.
+     - destruct H8 as [S8 H8]. split. simpl. congruence.
+       inv H8. constructor.
+       + red. intros. apply VALID1. apply unchanged_on_support. auto.
+       + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
+         eapply unchanged_on_perm; eauto.
+         red. split; auto. reflexivity.
+       + intros b ofs [A B] Hp. simpl.
+         eapply unchanged_on_contents; eauto. split; auto.
+     - destruct H10 as [S10 H10]. split. apply Mem.mi_thread in Hm0 as Hs. destruct Hs as [Z Z'].
+       simpl in *. congruence.
+       inv H10. constructor.
+       + red. intros. apply VALID2. apply unchanged_on_support. auto.
+       + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
+         eapply unchanged_on_perm; eauto.
+         red. split; auto. reflexivity.
+       + intros b ofs [A B] Hp. simpl.
+         eapply unchanged_on_contents; eauto. split; auto.
+   Qed.
+   
    Lemma yield_to_yield_accg2 : forall w1 w2 w3 w4 w5,
        injp_accg w1 w2 -> injp_acci w2 w3 -> injp_acc_yield w3 w4 -> injp_acci w4 w5 ->
+       injp_tid w4 <> injp_tid w1 ->
        injp_accg w1 w5.
-   Admitted.
-
+   Proof.
+     intros. eapply injp_accg_acci_accg. 2: eauto.
+     eapply injp_accg_yield_accg.
+     eapply injp_accg_acci_accg; eauto. eauto. eauto.
+   Qed.
+   
    Lemma yield_to_initial_accg1 : forall w1 w2,
        injp_acc_yield w1 w2 -> injp_accg w1 w2.
-   Admitted.
+   Proof.
+     apply injp_acc_yield_accg.
+   Qed.
    
    Lemma yield_to_initial_accg2 : forall w1 w2 w3 w4,
-         injp_accg w1 w2 -> injp_acci w2 w3 -> injp_acc_yield w3 w4 ->
-         injp_accg w1 w4.
-   Admitted.
+       injp_accg w1 w2 -> injp_acci w2 w3 -> injp_acc_yield w3 w4 ->
+       injp_tid w4 <> injp_tid w1 ->
+       injp_accg w1 w4.
+   Proof.
+     intros. eapply injp_accg_yield_accg.
+     eapply injp_accg_acci_accg; eauto. eauto. eauto.
+   Qed.
 
     Theorem Concur_Sim : Closed.forward_simulation ConcurC ConcurA.
     Proof.
@@ -861,7 +1054,9 @@ GS.fsim_lts.
           specialize (yield_inject j (Mem.thread_create m) (Mem.thread_create tm) next p tp Hm1) as Hm1'.
           set (wP''n := injpw j nm ntm Hm1').
           assert (ACCY: injp_acc_yield wP'' wP''n).
-          unfold wP'', wP''n. econstructor; eauto. reflexivity. reflexivity.
+          unfold wP'', wP''n. econstructor. reflexivity. reflexivity. simpl.
+          apply injp_acci_tid in APP. simpl in APP. rewrite APP.
+          destruct CUR_INJP_TID as [Z _]. lia.
           set (wA_str := {|
              cajw_injp := wP''n;
              cajw_sg := start_routine_sig;
@@ -1031,6 +1226,9 @@ GS.fsim_lts.
           assert (ACCY: injp_acc_yield wP' wP'').
           {
             econstructor. reflexivity. reflexivity.
+            simpl. fold target.
+            apply injp_acci_tid in ACC1. simpl in ACC1.
+            rewrite ACC1. destruct CUR_INJP_TID as [Z _]. lia.
           }
           assert (ACCE: injp_acce (get wAt) wP'').
           eapply yield_to_yield_acce; eauto.
@@ -1142,6 +1340,7 @@ GS.fsim_lts.
             unfold worldsP'. repeat rewrite NatMap.gso; eauto.
             intros. specialize (J n1).
             eapply yield_to_yield_accg2; eauto.
+            simpl. erewrite FIND_TID. 2: eauto. lia.
           }
         + (** yield_to_initial *)
           unfold Mem.range_prop in p. rename p into yield_range.
@@ -1196,6 +1395,9 @@ GS.fsim_lts.
           assert (ACCY: injp_acc_yield wP' wP'').
           {
             econstructor. reflexivity. reflexivity.
+            simpl. fold target.
+            apply injp_acci_tid in ACC1. simpl in ACC1.
+            rewrite ACC1. destruct CUR_INJP_TID as [Z _]. lia.
           }
           set (w_CURt := set wBt wP'' ).
           assert (ACCT_CUR: injp_accg (get wBt) wPcur).
@@ -1338,8 +1540,16 @@ GS.fsim_lts.
             unfold worldsP'. repeat rewrite NatMap.gso; eauto.
             intros. specialize (J n1).
             eapply yield_to_initial_accg2; eauto.
+            simpl. erewrite FIND_TID. 2: eauto. lia.
           }
-Qed.
+    Qed.
+
+
+
+
+
+
+    
 
   End FSIM.
 
