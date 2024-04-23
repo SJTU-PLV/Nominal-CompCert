@@ -197,7 +197,7 @@ Section MultiThread.
   (** Maybe we have to do sth more to support such void* (*f) (void*) prototype, maybe not using cc_default *)
   Definition start_routine_sig := mksignature (Tlong :: nil) Tlong cc_default.
 
-
+  
   (* turns a call to pthread_create into a call to the start_routine, the initial memory is updated in 2nd query *)
   Inductive query_is_pthread_create : query li_c -> query li_c -> Prop :=
   |pthread_create_intro :
@@ -210,6 +210,23 @@ Section MultiThread.
         (cq (Vptr b_ptc Ptrofs.zero) pthread_create_sig arglist m)
         (cq (Vptr b_start Ptrofs.zero) start_routine_sig ((Vptr b_arg ofs)::nil) m').
 
+  (** Definitions about the primitive join *)
+
+  (** int pthread_join (pthread_t * thread, void ** value_ptr)
+      if we do not use pthread_t * thread now, it should be what? how to describe the thread we want to wait?
+
+   *)
+
+  (** Definitions about the primitives lock and unlock *)
+
+  (** 1. Shound we define these [funciions] as primitives here? or we should use EntAtom and ExtAtom similar to
+      CASCC
+
+      2. Whether we try to define a lock/unlock or EntAtom/ExtAtom here, does it matter? The only difference is that
+      a yield function in critical section will become STUCK, right?
+
+   
+   *)
   
   Inductive step : genvtype -> state -> trace -> state -> Prop :=
   |step_local : forall ge ls1 t ls2 s s',
