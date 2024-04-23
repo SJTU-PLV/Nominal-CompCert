@@ -264,6 +264,7 @@ GS.fsim_lts.
       (CUR_INJP_WORLD: NatMap.get cur worldsP = Some wPcur)
       (CUR_INJP_TID: cur = injp_tid wPcur /\ next = injp_nexttid wPcur)
       (FIND_TID: forall n wp, NatMap.get n worldsP = Some wp -> injp_tid wp = n)
+      (THREADS_DEFAULT: fst threadsA = None)
       (THREADS: forall n, (1 <= n < next)%nat -> exists wB owA wP lsc lsa i,
             NatMap.get n worldsB = Some wB /\
               nth_error gi (n-1)%nat = Some i /\
@@ -425,32 +426,44 @@ GS.fsim_lts.
     
     Lemma local_star : forall gs t sa1 sa2,
         Star (OpenA tse) sa1 t sa2 ->
+        fst (threads OpenA gs) = None ->
         NatMap.get (cur_tid OpenA gs) (threads OpenA gs)  = Some (Local OpenA sa1) ->
         star (step OpenA) (globalenv OpenA) gs t (update_cur_thread OpenA gs (Local OpenA sa2)).
     Proof.
-      induction 1; intros.
+      intros. generalize dependent gs.
+      induction H; intros.
       - unfold update_cur_thread, update_thread.
-        destruct gs. simpl. Search NatMap.get.
-        rewrite NatMap.t set3.
+        destruct gs. simpl.
+        rewrite NatMap.set3. eapply star_refl. eauto.
+        simpl in H0. congruence.
       - eapply star_step; eauto.
         eapply step_local. eauto. eauto. eauto.
-        unfold update_cur_thread, update_thread in *.
-        simpl. destruct gs.
-        simpl in *.
-        eapply IHstar.
-    Admitted.
+        set (gs' := (update_thread OpenA gs (cur_tid OpenA gs) (Local OpenA s2))).
+        assert (EQ: update_cur_thread OpenA gs (Local OpenA s3) = update_cur_thread OpenA gs' (Local OpenA s3)).
+        unfold gs'. unfold update_cur_thread. simpl. unfold update_thread.
+        simpl. rewrite NatMap.set2. reflexivity.
+        rewrite EQ.
+        eapply IHstar; eauto.
+        unfold gs'. simpl. rewrite NatMap.gss. reflexivity.
+    Qed.        
 
-    
     Lemma local_plus : forall gs t sa1 sa2,
         Plus (OpenA tse) sa1 t sa2 ->
+        fst (threads OpenA gs) = None ->
         NatMap.get (cur_tid OpenA gs) (threads OpenA gs)  = Some (Local OpenA sa1) ->
         plus (step OpenA) (globalenv OpenA) gs t (update_cur_thread OpenA gs (Local OpenA sa2)).
     Proof.
-      intros. induction H.
-      -
-    Admitted.
-
-
+      intros. inv H.
+      econstructor; eauto.
+      econstructor. eauto. eauto. eauto.
+      set (gs' := update_thread OpenA gs (cur_tid OpenA gs) (Local OpenA s2)).
+      assert (EQ: update_cur_thread OpenA gs (Local OpenA sa2) = update_cur_thread OpenA gs' (Local OpenA sa2)).
+      unfold gs', update_cur_thread, update_thread. simpl. rewrite NatMap.set2.
+      reflexivity.
+      rewrite EQ.
+      eapply local_star; eauto.
+      unfold gs'. simpl. rewrite NatMap.gss. reflexivity.
+    Qed.
 
     Lemma thread_create_inject : forall j m tm,
             Mem.inject j m tm ->
@@ -935,7 +948,7 @@ GS.fsim_lts.
                  inv H. eauto.
                  rewrite NatMap.gso in H. eapply FIND_TID; eauto. lia.
                }
-               intros.
+               intros. simpl. eauto.
                intros. instantiate (1:= worldsA).
                destruct (Nat.eq_dec n cur).
                - subst.
@@ -975,7 +988,8 @@ GS.fsim_lts.
                  destruct (Nat.eq_dec cur n). subst. rewrite NatMap.gss in H.
                  inv H. eauto.
                  rewrite NatMap.gso in H. eapply FIND_TID; eauto. lia.
-               }
+                }
+                simpl. eauto.
                intros.
                destruct (Nat.eq_dec n cur).
                - subst.
@@ -1123,7 +1137,7 @@ GS.fsim_lts.
                  rewrite NatMap.gso in H. inv H.
                  eapply FIND_TID; eauto. lia.
              }
-             simpl. intros. destruct (Nat.eq_dec n next).
+             simpl. eauto. simpl. intros. destruct (Nat.eq_dec n next).
              ++ (* the new thread *) subst.
                 instantiate (1:= NatMap.set (Datatypes.length i'') None worldsA).
                exists wA_str. exists None. exists wP''n. eexists. eexists. eexists. repeat apply conj.
@@ -1321,7 +1335,7 @@ GS.fsim_lts.
              }
             intros.
             (** the invariants for each thread *)
-            simpl. intros. destruct (Nat.eq_dec n target).
+            simpl. eauto. simpl. intros. destruct (Nat.eq_dec n target).
              ++ (* the target thread *) subst.
                instantiate (1:=  worldsA').
                exists wBt. exists None. eexists. eexists. eexists. eexists.
@@ -1520,7 +1534,7 @@ GS.fsim_lts.
              }
             intros.
             (** the invariants for each thread *)
-            simpl. intros. destruct (Nat.eq_dec n target).
+            simpl. eauto. simpl. intros. destruct (Nat.eq_dec n target).
              ++ (* the target thread *) subst.
                instantiate (1:=  worldsA').
                exists w_CURt. exists None. do 4 eexists. repeat apply conj.
