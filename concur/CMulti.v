@@ -115,38 +115,6 @@ Section MultiThread.
   Definition update_next_tid (s: state) (tid: nat) :=
     mk_gstate (threads s) (cur_tid s) tid.
 
-  Fixpoint yield_strategy' (threads: NatMap.t (option thread_state)) (next: nat) :=
-    match next with
-    |O | S O => 1%nat (*next should be >= 2, this is meaningless*)
-    |S n => (* n is the max valid thread id*)
-       match NatMap.get n threads with
-       | Some (Initial _) | Some (Return _) => n
-       | _ => yield_strategy' threads n
-       end
-    end.
-  
-  Definition yield_strategy (s:state) := yield_strategy' (threads s) (next_tid s).
-  
-  (* Axiom yield_strategy_range : forall s, (1 < yield_strategy s < (next_tid s))%nat. *)
-  (*some other properties may be added here, such as only point to active threads *)
-
-  (* We transfer to thread tid' and update
-     its local_state with an updated memory *)
-
-  Definition yield_state (s: state) (ls_cur ls_new: thread_state): state :=
-    let tid' := yield_strategy s in
-    let s' := update_cur_thread s ls_cur in
-    let s'' := update_cur_tid s' tid' in
-    update_thread s'' tid' ls_new.
-
-  (* We add a new thread with its initial query without memory,
-      we also update the running memory by adding a new list of positives *)
-  Definition pthread_create_state (s: state) (cqv : cq_vals) (ls' : thread_state): state :=
-    let ntid := (next_tid s) in let ctid := (cur_tid s) in
-    let s' := update_next_tid s (S ntid) in
-    let s'' := update_thread s' ntid (Initial cqv) in
-    update_thread s'' ctid ls'.
-    
   Definition genvtype := Smallstep.genvtype OpenLTS.
   
   (** Initial state of Concurrent semantics *)
@@ -183,14 +151,39 @@ Section MultiThread.
     Mem.next_tid (Mem.support m) = next ->
     query_is_yield (cq (Vptr b Ptrofs.zero) yield_sig nil m) next.
 
+    Fixpoint yield_strategy' (threads: NatMap.t (option thread_state)) (next: nat) :=
+    match next with
+    |O | S O => 1%nat (*next should be >= 2, this is meaningless*)
+    |S n => (* n is the max valid thread id*)
+       match NatMap.get n threads with
+       | Some (Initial _) | Some (Return _) => n
+       | _ => yield_strategy' threads n
+       end
+    end.
+  
+  Definition yield_strategy (s:state) := yield_strategy' (threads s) (next_tid s).
+  
+  (* Axiom yield_strategy_range : forall s, (1 < yield_strategy s < (next_tid s))%nat. *)
+  (*some other properties may be added here, such as only point to active threads *)
+
+  (* We transfer to thread tid' and update
+     its local_state with an updated memory *)
+
+  Definition yield_state (s: state) (ls_cur ls_new: thread_state): state :=
+    let tid' := yield_strategy s in
+    let s' := update_cur_thread s ls_cur in
+    let s'' := update_cur_tid s' tid' in
+    update_thread s'' tid' ls_new.
+
+
   (** * Definitions about the primitive pthread_create *)
 
   Definition pthread_create_id := 1002%positive.
   
 
   (* TODO: not quite sure to use Tlong or Tany64 here, we used Tlong for function pointer in the Client-Server example *)
-  (** int pthread_create (void * (*start_routine) (void*), void* arg) *)
-  Definition pthread_create_sig := mksignature (Tlong :: Tlong :: nil) Tint cc_default.
+  (** int pthread_create (int * thread, void * (*start_routine) (void*), void* arg) *)
+  Definition pthread_create_sig := mksignature (Tlong :: Tlong :: Tlong :: nil) Tint cc_default.
 
   
   (** Problem here: the type of start_routine here may not be accecpted by [initial_state] in Clight semantics. *)
@@ -199,30 +192,63 @@ Section MultiThread.
 
   
   (* turns a call to pthread_create into a call to the start_routine, the initial memory is updated in 2nd query *)
+
+  (* trans between Vint and nat *)
+
+  Definition int_to_nat (i : int) := Z.to_nat (Int.intval i).
+  
+  Program Definition nat_to_int (n : nat) (nmax: (n < 1000)%nat) : int := Int.mkint (Z.of_nat n) _.
+  Next Obligation.
+    change Int.modulus with 4294967296.
+    split. lia. lia.
+  Qed.
+
+  
   Inductive query_is_pthread_create : query li_c -> query li_c -> Prop :=
   |pthread_create_intro :
-    forall m arglist b_ptc b_start b_arg ofs m' start_id
+    forall m arglist b_ptc b_start b_arg ofs_arg b_t ofs_t m' start_id tid m''
       (FINDPTC: Genv.find_symbol initial_se pthread_create_id = Some b_ptc)
       (FINDSTR: Genv.find_symbol initial_se start_id = Some b_start)
-      (ARGLIST: arglist = (Vptr b_start Ptrofs.zero) :: (Vptr b_arg ofs) :: nil)
-      (MEM_CREATE: Mem.thread_create m = m'),
+      (ARGLIST: arglist = (Vptr b_t ofs_t) :: (Vptr b_start Ptrofs.zero) :: (Vptr b_arg ofs_arg) :: nil)
+      (MEM_CREATE: Mem.thread_create m = (m', tid))
+      (NMAX: (tid < 1000)%nat)
+      (THREAD_V: Mem.storev Mint64 m' (Vptr b_t ofs_t) (Vint (nat_to_int tid NMAX)) = Some m''),
       query_is_pthread_create
         (cq (Vptr b_ptc Ptrofs.zero) pthread_create_sig arglist m)
-        (cq (Vptr b_start Ptrofs.zero) start_routine_sig ((Vptr b_arg ofs)::nil) m').
+        (cq (Vptr b_start Ptrofs.zero) start_routine_sig ((Vptr b_arg ofs_arg)::nil) m').
 
-  (** Definitions about the primitive join *)
+  (* We add a new thread with its initial query without memory,
+     we also update the running memory by adding a new list of positives *)
+  Definition pthread_create_state (s: state) (cqv : cq_vals) (ls' : thread_state): state :=
+    let ntid := (next_tid s) in let ctid := (cur_tid s) in
+    let s' := update_next_tid s (S ntid) in
+    let s'' := update_thread s' ntid (Initial cqv) in
+    update_thread s'' ctid ls'.
+    
 
-  (** int pthread_join (pthread_t * thread, void ** value_ptr)
-      if we do not use pthread_t * thread now, it should be what? how to describe the thread we want to wait?
+  (** * Definitions about the primitive join *)
 
-   *)
+  Definition pthread_join_id := 1003%positive.
+  (** int pthread_join (int * thread, void ** value_ptr) *)
+  Definition pthread_join_sig := mksignature (Tint :: Tlong :: nil) Tint cc_default.
+
+  Inductive query_is_pthread_join : query li_c -> nat -> val -> Prop :=
+  |pthread_join_intro :
+    forall m arglist b_ptj target_id b_vptr ofs_vptr i
+      (FINDPTJ: Genv.find_symbol initial_se pthread_create_id = Some b_ptj)
+      (ARGLIST: arglist = (Vint i) :: (Vptr b_vptr ofs_vptr) :: nil)
+      (TARGETID: target_id = int_to_nat i),
+      query_is_pthread_join
+        (cq (Vptr b_ptj Ptrofs.zero) pthread_join_sig arglist m) target_id (Vptr b_vptr ofs_vptr).
 
   (** Definitions about the primitives lock and unlock *)
 
-  (** 1. Shound we define these [funciions] as primitives here? or we should use EntAtom and ExtAtom similar to
+  (** 1. Shound we define these [functions] as primitives here? 
+      or we should use EntAtom and ExtAtom similar to
       CASCC
 
-      2. Whether we try to define a lock/unlock or EntAtom/ExtAtom here, does it matter? The only difference is that
+      2. Whether we try to define a lock/unlock or EntAtom/ExtAtom here,
+      does it matter? The only difference is that
       a yield function in critical section will become STUCK, right?
 
    
@@ -239,7 +265,7 @@ Section MultiThread.
       Smallstep.at_external OpenLTS ls q_ptc -> (* get the query to pthread_create *)
       query_is_pthread_create q_ptc q_str -> (* get the query to start_routine *)
       (* The global memory is already updated from q_ptc to q_str *)
-      cq_mem q_str = gmem -> (* the updated memory, only difference is the #threads *)
+      cq_mem q_str = gmem -> (* the updated memory, difference is the #threads and the thread variable *)
       get_cqv q_str = cqv -> (*the initial query without memory, is stored as initial state in new thread *)
       Smallstep.after_external OpenLTS ls (cr (Vint Int.one) gmem) ls' -> (* the current thread completes the primitive*)
       pthread_create_state s cqv (Local ls') = s' ->
@@ -266,7 +292,12 @@ Section MultiThread.
       get_thread s (tid') = Some (Initial cqv) -> (* the target thread is waiting for reply *)
       Smallstep.initial_state OpenLTS (get_query cqv gmem') ls1' ->
       yield_state s (Return ls) (Local ls1') = s' ->
-      step ge s E0 s'.
+      step ge s E0 s'
+  (** successfully get return value from another thread which is finished *)
+  |step_join_1 : forall gs s s' q,
+      get_cur_thread s = Some (Local ls) ->
+      Smallstep.at_external OpenLTS ls q ->
+
 
   Definition globalenv := Smallstep.globalenv OpenLTS.
   

@@ -806,7 +806,7 @@ Next Obligation.
 Qed.
 
 Program Definition thread_create (m:mem) :=
-  mkmem m.(mem_contents) m.(mem_access) (sup_create m.(support)) _ _ _ _.
+  ((mkmem m.(mem_contents) m.(mem_access) (sup_create m.(support)) _ _ _ _), next_tid m.(support)).
 Next Obligation.
   apply access_max.
 Qed.
