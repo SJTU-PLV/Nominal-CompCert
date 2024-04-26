@@ -236,7 +236,7 @@ Section MultiThread.
   Inductive query_is_pthread_join : query li_c -> nat -> val -> Prop :=
   |pthread_join_intro :
     forall m arglist b_ptj target_id b_vptr ofs_vptr i
-      (FINDPTJ: Genv.find_symbol initial_se pthread_create_id = Some b_ptj)
+      (FINDPTJ: Genv.find_symbol initial_se pthread_join_id = Some b_ptj)
       (ARGLIST: arglist = (Vint i) :: (Vptr b_vptr ofs_vptr) :: nil)
       (TARGETID: target_id = int_to_nat i),
       query_is_pthread_join
@@ -388,4 +388,3 @@ Section MultiThread.
     Closed.ClosedSemantics_gen step initial_state final_state globalenv initial_se.
 
 End MultiThread.
-
