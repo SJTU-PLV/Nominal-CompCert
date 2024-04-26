@@ -66,7 +66,7 @@ Section MultiThread.
   |Local : forall (ls : local_state), thread_state
   |Initial : forall (cqv : cq_vals), thread_state
   |Returny : forall (ls : local_state), thread_state
-  |Returnj : forall (ls : local_state) (vptr : val) (target: nat), thread_state
+  |Returnj : forall (ls : local_state) (target: nat)(vptr : val) , thread_state
   |Final : forall (res : val), thread_state.
     
   Definition initial_se := Genv.symboltbl (skel OpenS).
@@ -171,11 +171,10 @@ Section MultiThread.
   (* We transfer to thread tid' and update
      its local_state with an updated memory *)
 
-  Definition yield_state (s: state) (ls_cur ls_new: thread_state) (target: nat): state :=
+  Definition yield_state (s: state) (ls_new: thread_state) (target: nat): state :=
     (* let tid' := yield_strategy s in *)
-    let s' := update_cur_thread s ls_cur in
-    let s'' := update_cur_tid s' target in
-    update_thread s'' target ls_new.
+    let s' := update_cur_tid s target in
+    update_thread s' target ls_new.
 
 
   (** * Definitions about the primitive pthread_create *)
@@ -273,7 +272,7 @@ Section MultiThread.
       pthread_create_state s cqv (Local ls') = s' ->
       step ge s E0 s'
   (** yield to a thread which is waiting for the reply of its own [yield()] *)
-  |step_thread_yield_to_yield : forall ge s s' target q gmem' p ls ls1 ls1',
+  |step_thread_yield_to_yield : forall ge s s' s'' target q gmem' p ls ls1 ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls q ->
       query_is_yield q (next_tid s) ->
@@ -281,100 +280,107 @@ Section MultiThread.
      (*  yield_strategy s = tid' -> *)
       (*the proof p may be a problem, provided from the invariant between state and the support in gmem *)
       Mem.yield (cq_mem q) target p = gmem' ->
-      get_thread s target = Some (Returny ls1) -> (* the target thread is waiting for reply *)
+      update_cur_thread s (Returny ls) = s' ->
+      get_thread s' target = Some (Returny ls1) -> (* the target thread is waiting for reply *)
       Smallstep.after_external OpenLTS ls1 (cr Vundef gmem') ls1' ->
-      yield_state s (Returny ls) (Local ls1') target = s' ->
-      step ge s E0 s'
-    |step_thread_yield_to_join : forall ge s s' target tar' vptr res q gmem' gmem'' p ls ls1 ls1',
+      yield_state s' (Local ls1') target = s'' ->
+      step ge s E0 s''
+    |step_thread_yield_to_join : forall ge s s' s'' target tar' vptr res q gmem' gmem'' p ls ls1 ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls q ->
       query_is_yield q (next_tid s) ->
       Mem.yield (cq_mem q) target p = gmem' ->
+      update_cur_thread s (Returny ls) = s' ->
       (* the target thread is waiting for a target thread to finish *)
-      get_thread s target = Some (Returnj ls1 vptr tar') ->
+      get_thread s' target = Some (Returnj ls1 tar' vptr) ->
       (* and the tar' thread is finished already *)
-      get_thread s tar' = Some (Final res) ->
+      get_thread s' tar' = Some (Final res) ->
       (* store the return value of tar' thread *)
       Mem.storev Many64 gmem' vptr res = Some gmem'' ->
       Smallstep.after_external OpenLTS ls1 (cr (Vint Int.one) gmem'') ls1' ->
-      yield_state s (Returny ls) (Local ls1') target = s' ->
-      step ge s E0 s'
+      yield_state s' (Local ls1') target = s' ->
+      step ge s E0 s''
   (** yield to a thread which has not been initialized from a query *)
-  |step_thread_yield_to_initial : forall ge s s' target q gmem' p ls cqv ls1',
+  |step_thread_yield_to_initial : forall ge s s' s'' target q gmem' p ls cqv ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls q ->
       query_is_yield q (next_tid s)->
+      update_cur_thread s (Returny ls) = s' ->
       (* yield_strategy s = tid' -> *)
       Mem.yield (cq_mem q) target p = gmem' ->
-      get_thread s target = Some (Initial cqv) -> (* the target thread is waiting for reply *)
+      get_thread s' target = Some (Initial cqv) -> (* the target thread is waiting for reply *)
       Smallstep.initial_state OpenLTS (get_query cqv gmem') ls1' ->
-      yield_state s (Returny ls) (Local ls1') target = s' ->
-      step ge s E0 s'
-  |step_thread_join_to_yield : forall ge s s' target q gmem' p ls ls1 ls1' wait vptr,
+      yield_state s' (Local ls1') target = s'' ->
+      step ge s E0 s''
+  |step_thread_join_to_yield : forall ge s s' s'' target q gmem' p ls ls1 ls1' wait vptr,
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls q ->
       query_is_pthread_join q wait vptr ->
+      update_cur_thread s (Returnj ls wait vptr) = s'->
       Mem.yield (cq_mem q) target p = gmem' ->
-      get_thread s target = Some (Returny ls1) -> (* the target thread is waiting for reply *)
+      get_thread s' target = Some (Returny ls1) -> (* the target thread is waiting for reply *)
       Smallstep.after_external OpenLTS ls1 (cr Vundef gmem') ls1' ->
-      yield_state s (Returnj ls vptr wait) (Local ls1') target = s' ->
-      step ge s E0 s'
-    (* this step can not handle a direct "successful" join which does not switch out *)
-    |step_thread_join_to_join : forall ge s s' target tar' vptr res q gmem' gmem'' p ls ls1 ls1',
+      yield_state s' (Local ls1') target = s'' ->
+      step ge s E0 s''
+    (* this step can handle a direct "successful" join which does not switch out *)
+    |step_thread_join_to_join : forall ge s s' s'' wait target tar' vptr res' vptr' q gmem' gmem'' p ls ls1 ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls q ->
-      query_is_yield q (next_tid s) ->
+      query_is_pthread_join q wait vptr->
       Mem.yield (cq_mem q) target p = gmem' ->
+      update_cur_thread s (Returnj ls wait vptr) = s' ->
       (* the target thread is waiting for a target thread to finish *)
-      get_thread s target = Some (Returnj ls1 vptr tar') ->
+      get_thread s' target = Some (Returnj ls1 tar' vptr') ->
       (* and the tar' thread is finished already *)
-      get_thread s tar' = Some (Final res) ->
+      get_thread s' tar' = Some (Final res') ->
       (* store the return value of tar' thread *)
-      Mem.storev Many64 gmem' vptr res = Some gmem'' ->
+      Mem.storev Many64 gmem' vptr' res' = Some gmem'' ->
       Smallstep.after_external OpenLTS ls1 (cr (Vint Int.one) gmem'') ls1' ->
-      yield_state s (Returny ls) (Local ls1') target = s' ->
-      step ge s E0 s'
+      yield_state s' (Local ls1') target = s'' ->
+      step ge s E0 s''
   (** yield to a thread which has not been initialized from a query *)
-  |step_thread_join_to_initial : forall ge s s' vptr wait target q gmem' p ls cqv ls1',
+  |step_thread_join_to_initial : forall ge s s' s'' vptr wait target q gmem' p ls cqv ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.at_external OpenLTS ls q ->
       query_is_pthread_join q wait vptr ->
       (* yield_strategy s = tid' -> *)
       Mem.yield (cq_mem q) target p = gmem' ->
-      get_thread s target = Some (Initial cqv) -> (* the target thread is waiting for reply *)
+      update_cur_thread s (Returnj ls wait vptr) = s'->
+      get_thread s' target = Some (Initial cqv) -> (* the target thread is waiting for reply *)
       Smallstep.initial_state OpenLTS (get_query cqv gmem') ls1' ->
-      yield_state s (Returnj ls vptr wait) (Local ls1') target = s' ->
-      step ge s E0 s'
-  |step_final_to_initial : forall ge s s' target res gmem gmem' p ls cqv ls1',
+      yield_state s' (Local ls1') target = s'' ->
+      step ge s E0 s''
+  |step_final_to_initial : forall ge s s' s'' target res gmem gmem' p ls cqv ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.final_state OpenLTS ls (cr res gmem) ->
       Mem.yield gmem target p = gmem' ->
-      get_thread s target = Some (Initial cqv) -> (* the target thread is waiting for reply *)
+      update_cur_thread s (Final res) = s' ->
+      get_thread s' target = Some (Initial cqv) -> (* the target thread is waiting for reply *)
       Smallstep.initial_state OpenLTS (get_query cqv gmem') ls1' ->
-      yield_state s (Final res) (Local ls1') target = s' ->
-      step ge s E0 s'
-  |step_final_to_yield : forall ge s s' target res gmem gmem' p ls ls1 ls1',
+      yield_state s' (Local ls1') target = s'' ->
+      step ge s E0 s''
+  |step_final_to_yield : forall ge s s' s'' target res gmem gmem' p ls ls1 ls1',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.final_state OpenLTS ls (cr res gmem) ->
       Mem.yield gmem target p = gmem' ->
-      get_thread s target = Some (Returny ls1) -> (* the target thread is waiting for reply *)
+      update_cur_thread s (Final res) = s' ->
+      get_thread s' target = Some (Returny ls1) -> (* the target thread is waiting for reply *)
       Smallstep.after_external OpenLTS ls1 (cr Vundef gmem') ls1' ->
-      yield_state s (Final res) (Local ls1') target = s' ->
-      step ge s E0 s'
-    (* this step can not handle a direct "successful" join which does not switch out *)
-    |step_final_to_join : forall ge s s' target tar' vptr (res: val) gmem res gmem' gmem'' p ls ls1 ls1' res',
+      yield_state s' (Local ls1') target = s'' ->
+      step ge s E0 s''
+    |step_final_to_join : forall ge s s' s'' target tar' vptr (res: val) gmem res gmem' gmem'' p ls ls1 ls1' res',
       get_cur_thread s = Some (Local ls) ->
       Smallstep.final_state OpenLTS ls (cr res gmem) ->
       Mem.yield gmem target p = gmem' ->
-      (* the target thread is waiting for a target thread to finish *)
-      get_thread s target = Some (Returnj ls1 vptr tar') ->
+      update_cur_thread s (Final res) = s' ->
+      get_thread s' target = Some (Returnj ls1 tar' vptr) ->
       (* and the tar' thread is finished already *)
-      get_thread s tar' = Some (Final res') ->
+      get_thread s' tar' = Some (Final res') ->
       (* store the return value of tar' thread *)
       Mem.storev Many64 gmem' vptr res' = Some gmem'' ->
       Smallstep.after_external OpenLTS ls1 (cr (Vint Int.one) gmem'') ls1' ->
-      yield_state s (Final res) (Local ls1') target = s' ->
-      step ge s E0 s'.
+      yield_state s' (Local ls1') target = s'' ->
+      step ge s E0 s''.
   
   Definition globalenv := Smallstep.globalenv OpenLTS.
   
