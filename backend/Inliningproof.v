@@ -2079,19 +2079,18 @@ Proof.
   eapply functions_translated in H as (cu & tf & FIND & TR & LINK); eauto.
   setoid_rewrite <- (sig_function_translated _ _ _ TR).
   simpl in TR. destruct transf_function eqn:Hf; try discriminate. cbn in TR. inv TR.
-  exists (Callstate nil vf2 vargs2 m2 id); split.
+  exists (Callstate nil vf2 vargs2 (Mem.push_stage m2) id); split.
   econstructor; eauto.
-  inv H6. inv H9. apply INJG in H1 as []. subst. auto using Ptrofs.add_zero_l.
-  inv H9. inv ASTK. auto.
+  inv H5. inv H8. apply INJG in H1 as []. subst. auto using Ptrofs.add_zero_l.
+  inv H8. inv ASTK. auto.
   econstructor; eauto.
   apply match_stacks_nil; auto.
   destruct w. constructor; auto.
-  red. intros. simpl in *. rewrite H in H0. discriminate.
-  all:inv H9; auto.
-  inv ASTK.
-  destruct (Mem.astack (Mem.support m)) eqn:?. congruence.
-  destruct (Mem.astack (Mem.support m2)) eqn:?. congruence.
-  econstructor; simpl; eauto. constructor. auto.
+  red. intros. simpl in *. congruence.
+  all:inv H0; auto.
+  1,2,3:red; intros; erewrite <- Mem.support_push_stage_1; eauto.
+  apply Mem.push_stage_inject. auto.
+  simpl. econstructor; simpl; eauto. constructor. auto.
 Qed.
   (* intros. inv H1. inv H0. inv H9; cbn in *.
   assert (Genv.match_stbls w se tse) by (inv H; auto).
@@ -2155,9 +2154,14 @@ Lemma transf_final_states:
 Proof.
   intros. inv H0. inv H.
   - exploit match_stacks_empty; eauto. intros EQ; subst. inv MS.
-    eexists. split. econstructor; eauto. inv SIZES. congruence.
-    eexists. split; eauto. constructor; auto. constructor; auto.
-    inv SIZES. simpl in NTH. destr_in NTH. inv NTH.
+    inv SIZES. assert (Mem.astack (Mem.support m'0) <> nil) by congruence.
+    apply Mem.nonempty_pop_stage in H0 as (m'1 & POP).
+    eexists. split. econstructor; eauto.
+    inv MG. eexists. split.
+    econstructor. eauto. eauto.
+    1,2:red; intros; erewrite <- Mem.support_pop_stage_1; eauto.
+    constructor; auto. constructor; auto.
+    simpl in NTH. destr_in NTH. inv NTH.
     simpl in IHsize. apply inline_sizes_head_le in IHsize.
     constructor; try congruence. lia.
   - exploit match_stacks_inside_empty; eauto. intros [A B]. congruence.

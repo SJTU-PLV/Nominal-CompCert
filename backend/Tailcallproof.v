@@ -15,7 +15,7 @@
 Require Import Coqlib Maps Integers AST Linking.
 Require Import Values Memory Events Globalenvs LanguageInterface Smallstep.
 Require Import Op Registers RTL Conventions Tailcall.
-Require Import cklr.Inject.
+Require Import cklr.Inject cklr.InjectFootprint.
 
 (** * Syntactic properties of the code transformation *)
 
@@ -531,6 +531,39 @@ Proof.
   - eapply regset_inject_incr; eauto.
 Qed.
 
+Lemma match_stackframes_incr' : forall j j' stk stk' n l,
+    match_stackframes j n l stk stk' ->
+    inject_incr j j' ->
+    meminj_global j' ->
+    match_stackframes j' n l stk stk'.
+Proof.
+  intros.
+  induction H; constructor; auto.
+  - inversion H. inv H4.
+    split. eauto.
+    split. intros.
+    apply Genv.find_var_info_iff in H4 as A.
+    apply Genv.genv_info_range in A.
+    (* apply Genv.genv_defs_range in A. *)
+    apply Genv.genv_sup_glob in A. destruct A. subst. eauto.
+    intros.
+    destruct (j b1) eqn:?.
+    + destruct p. apply H0 in Heqo as H8. rewrite H7 in H8.
+      inv H8.
+      exploit H6. eauto. eauto. auto.
+    + apply Genv.find_var_info_iff in H4 as A. apply Genv.genv_info_range in A.
+      apply Genv.genv_sup_glob in A. destruct A. subst.
+Abort.
+    (* intros [A B]. inv B.
+  - unfold meminj_global in *. intros.
+    destruct (j (Global id)) eqn:?. destruct p.
+    apply H0 in Heqo as H4. rewrite H3 in H4. inv H4.
+    apply H2 in Heqo. inv Heqo. auto.
+    exploit H1; eauto. intros [A B]. inv A.
+  - eapply regset_inject_incr; eauto.
+Qed. *)
+
+
 Inductive tc_depth : list nat -> nat -> nat -> Prop :=
   | depth_nil : tc_depth nil 0 0
   | depth_cons l d1 d2 n:
@@ -660,14 +693,9 @@ Section TAKEDROP.
 End TAKEDROP.
 
 Inductive tc_sizes : list nat -> stackadt -> stackadt -> Prop :=
-| sizes_nil: forall hd1 tl1 hd2 tl2
-    (IHsize: stack_size (hd1 :: tl1) >= stack_size (hd2 :: tl2)),
-    tc_sizes nil (hd1 :: tl1) (hd2 :: tl2)
-| sizes_nil_cons: forall t1 t1' hd1 tl1 t2 hd2 tl2 n
-    (IHsize: stack_size (hd1 :: tl1) >= stack_size (hd2 :: tl2))
-    (LENGTH: length t1 = n)
-    (SIZE: stack_size t1 + size_of_all_frames t1' = size_of_all_frames t2),
-    tc_sizes (S n :: nil) (t1 ++ (t1' ++ hd1) :: tl1) ((t2 ++ hd2) :: tl2)
+| sizes_nil: forall a1 a2
+    (IHsize: stack_size a1 >= stack_size a2),
+    tc_sizes nil a1 a2
 | sizes_cons: forall l s1 s2 t1 n t2
     (IHsize: tc_sizes l (drop (S n) s1) s2)
     (TAKE: take (S n) s1 = Some t1)
@@ -675,55 +703,12 @@ Inductive tc_sizes : list nat -> stackadt -> stackadt -> Prop :=
     tc_sizes (S n :: l) s1 (t2 :: s2)
 .
 
-Variant tc_sizes_tail : list nat -> stackadt -> stackadt -> Prop :=
-| sizes_tail_nil: forall hd1 tl1 hd2 tl2
-    (IHsize: stack_size (hd1 :: tl1) >= stack_size (hd2 :: tl2)),
-    tc_sizes_tail nil (hd1 :: tl1) (hd2 :: tl2)
-| sizes_tail_nil_cons: forall t1 t1' hd1 tl1 t2 hd2 tl2 n
-    (IHsize: stack_size (hd1 :: tl1) >= stack_size (hd2 :: tl2))
-    (LENGTH: length t1 = n),
-    tc_sizes_tail (S n :: nil) (t1 ++ (t1' ++ hd1) :: tl1) ((t2 ++ hd2) :: tl2)
-| sizes_tail_cons: forall l s1 s2 t1 n t2
-    (IHsize: tc_sizes l (drop (S n) s1) s2)
-    (TAKE: take (S n) s1 = Some t1),
-    tc_sizes_tail (S n :: l) s1 (t2 :: s2)
-.
-
-Remark tc_sizes_weakening: forall l s1 s2,
-    tc_sizes l s1 s2 -> tc_sizes_tail l s1 s2.
-Proof.
-  intros. destruct H; econstructor; eauto.
-Qed.
-
-Remark tc_sizes_not_nil: forall l s1 s2,
-    tc_sizes l s1 s2 ->
-    s1 <> nil /\ s2 <> nil.
-Proof.
-  intros. destruct H; split; try congruence.
-  destruct t1; simpl; congruence.
-  intro. subst. simpl in TAKE. congruence.
-Qed.
-
-Remark tc_sizes_weakening': forall n l s1 s2,
-    tc_sizes l (drop (S n) s1) (tl s2) -> tc_sizes_tail (S n :: l) s1 s2.
-Proof.
-  intros.
-  destruct s1. rewrite drop_nil in H.
-  apply tc_sizes_not_nil in H as []. congruence. simpl in H.
-  destruct s2. simpl in H.
-  apply tc_sizes_not_nil in H as []. congruence. simpl in H.
-  apply tc_sizes_not_nil in H as ?. destruct H0.
-  apply drop_take in H0 as (t1 & TAKE).
-  eapply sizes_tail_cons; simpl; auto. rewrite TAKE. eauto.
-Qed.
-
 Lemma tc_sizes_upstar:
   forall n g s1 s2,
     tc_sizes (n :: g) s1 s2 ->
     tc_sizes (S n :: g) ((nil) :: s1) s2.
 Proof.
   intros n g s1 s2 SZ. inv SZ; simpl in *.
-  rewrite app_comm_cons. econstructor; simpl; auto.
   repeat destr_in TAKE.
   econstructor; simpl; auto. rewrite Heqo. eauto. simpl. auto.
 Qed.
@@ -734,7 +719,6 @@ Lemma tc_sizes_upstar':
     tc_sizes (S n :: g) ((f::nil) :: s1) ((f::t)::s2).
 Proof.
   intros n g s1 s2 t f SZ. inv SZ; simpl in *.
-  rewrite ! app_comm_cons. econstructor; simpl; auto. lia.
   repeat destr_in TAKE.
   econstructor; simpl; auto.
   rewrite Heqo. eauto.
@@ -758,15 +742,6 @@ Proof.
 
   constructor. simpl in *. unfold frame_size_a. simpl. lia.
 
-  destruct t0.
-  simpl in *. inv H1.
-  replace ((mk_frame b1 _ :: _) :: _) with (nil ++ (mk_frame b1 size :: t1' ++ hd1) :: s1) by (simpl; auto).
-  rewrite ! app_comm_cons.
-  constructor; simpl; auto. unfold frame_size_a. simpl. lia.
-  rewrite <- app_comm_cons in H1. inv H1.
-  rewrite ! app_comm_cons.
-  constructor; simpl; auto. unfold frame_size_a. simpl in *. lia.
-
   simpl in *. repeat destr_in TAKE.
   econstructor; simpl; auto.
   rewrite Heqo. eauto.
@@ -784,7 +759,6 @@ Theorem stack_tc_size_vm: forall l stk stk',
     stack_size stk >= stack_size stk'.
 Proof.
   intros. induction H. auto.
-  rewrite stack_size_app. simpl in *. rewrite ! size_of_all_frames_app. lia.
   apply take_drop in TAKE as ?. rewrite H0.
   rewrite stack_size_app. simpl in *. lia.
 Qed.
@@ -806,26 +780,27 @@ Inductive match_states: state -> state -> Prop :=
       match_states (State s f (Vptr sp Ptrofs.zero) pc rs m)
                    (State s' (transf_function f) (Vptr sp' Ptrofs.zero) pc rs' m')
   | match_states_call:
-      forall s vf args m s' vf' args' m' id j n l,
-      match_stackframes j n l s s' ->
-      Val.inject j vf vf' ->
-      Val.inject_list j args args' ->
-      Mem.inject j m m' ->
-      tc_sizes ((S n)::l) (Mem.astack (Mem.support m)) (Mem.astack (Mem.support m')) ->
-      inj_incr w (injw j (Mem.support m) (Mem.support m')) ->
+      forall s vf args m s' vf' args' m' id j n l
+      (STACKS: match_stackframes j n l s s')
+      (FINJ: Val.inject j vf vf')
+      (AINJ: Val.inject_list j args args')
+      (MINJ: Mem.inject j m m')
+      (STK: tc_sizes ((S n)::l) (Mem.astack (Mem.support m)) (Mem.astack (Mem.support m')))
+      (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m'))),
       match_states (Callstate s vf args m id)
                    (Callstate s' vf' args' m' id)
   | match_states_return:
-      forall s v m s' v' m' j n l,
-      match_stackframes j n l s s' ->
+      forall s v m s' v' m' j n l
+      (STACKS: match_stackframes j n l s s')
       (* take (S n) (Mem.astack (Mem.support m)) = Some t1 ->
       Mem.astack (Mem.support m') = t2 :: s2 ->
       tc_sizes_head t1 t2 l (drop (S n) (Mem.astack (Mem.support m))) s2 -> *)
       (* tc_sizes (S n :: l) (Mem.astack (Mem.support m)) (Mem.astack (Mem.support m')) -> *)
-      tc_sizes l (drop (S n) (Mem.astack (Mem.support m))) (tl (Mem.astack (Mem.support m'))) ->
-      Val.inject j v v' ->
-      Mem.inject j m m' ->
-      inj_incr w (injw j (Mem.support m) (Mem.support m')) ->
+      (CONS: Mem.astack (Mem.support m') <> nil)
+      (STK: tc_sizes l (drop (S n) (Mem.astack (Mem.support m))) (tl (Mem.astack (Mem.support m'))))
+      (VINJ: Val.inject j v v')
+      (MINJ: Mem.inject j m m')
+      (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m'))),
       match_states (Returnstate s v m)
                    (Returnstate s' v' m')
   | match_states_interm:
@@ -835,6 +810,7 @@ Inductive match_states: state -> state -> Prop :=
              (CONS: Mem.astack (Mem.support m') = t2 :: s2)
              (STK: tc_sizes_head t1 t2 l (drop (S n) (Mem.astack (Mem.support m))) s2) *)
              (* (STK: exists hd, tc_sizes (S (S n) :: l) (hd :: Mem.astack (Mem.support m)) (Mem.astack (Mem.support m'))) *)
+             (CONS: Mem.astack (Mem.support m') <> nil)
              (STK: tc_sizes l (drop (S n) (Mem.astack (Mem.support m)))
                             (tl (Mem.astack (Mem.support m'))))
              (MLD: Mem.inject j m m'),
@@ -861,6 +837,19 @@ Inductive match_states: state -> state -> Prop :=
   measure over states, which will decrease strictly whenever
   the original code makes a transition but the transformed code
   does not. *)
+
+Lemma inj_incr_clearstage:
+  forall j m m' m'' s,
+  inj_incr w (injw j (Mem.support m) s) ->
+  Mem.support m = Mem.support m' ->
+  Mem.pop_stage m' = Some m'' ->
+  inj_incr w (injw j (Mem.support (Mem.push_stage m'')) s).
+Proof.
+  intros. inv H. constructor; eauto. red. intros.
+  rewrite <- Mem.support_push_stage_1. 2:reflexivity.
+  rewrite <- Mem.support_pop_stage_1. 2:eauto.
+  rewrite <- H0. auto.
+Qed.
 
 Definition measure (st: state) : nat :=
   match st with
@@ -963,7 +952,6 @@ Proof.
   apply sig_preserved.
   inv ASTK. 
   erewrite Mem.support_free; eauto. congruence.
-  apply Mem.support_free in FREE. congruence.
   econstructor. eapply match_stackframes_tail; eauto.
   apply ros_address_translated; eauto.
   eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
@@ -1000,7 +988,7 @@ Proof.
   apply sig_preserved.
   rewrite stacksize_preserved; eauto. simpl in FREE.
   rewrite Z.add_0_r in FREE. auto.
-  inv ASTK. congruence. erewrite Mem.support_free. 2:eauto. congruence.
+  inv ASTK. congruence.
   econstructor. eauto.
   apply ros_address_translated; eauto.
   eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
@@ -1057,24 +1045,29 @@ Proof.
   TransfInstr.
   left. exists (Returnstate s' (regmap_optget or Vundef rs') m'1); split.
   eapply exec_Ireturn; auto. rewrite stacksize_preserved; eauto. simpl in FREE.
-  rewrite Z.add_0_r in FREE. eauto.
-  inv ASTK. congruence. erewrite Mem.support_free. 2:eauto. congruence.
-  econstructor. eauto. rewrite SF, SF'. admit. (*apply tc_sizes_weakening.*) auto.
-  destruct or; simpl. apply RINJ. constructor. auto.
-  rewrite SF, SF'. auto.
+  rewrite Z.add_0_r in FREE. eauto. inv ASTK. rewrite SF'. congruence.
+  econstructor. eauto.
+  inv ASTK. congruence.
+  inv ASTK.
+  simpl in IHsize. rewrite SF, SF', <- H6. simpl. auto.
+  destruct or; simpl. apply RINJ. constructor.
+  exact INJ.
+  inv INCR. constructor; auto.
+  red. intros. rewrite SF. auto.
+  red. intros. rewrite SF'. auto.
 
 - (* eliminated return None *)
   assert (or = None) by congruence. subst or.
   right. split. simpl. lia. split. auto.
-  econstructor. eauto.
-  apply Mem.support_free in H0. rewrite H0. admit. (*apply tc_sizes_weakening'.*) eauto. eauto.
+  econstructor. eauto. auto.
+  erewrite <- Mem.support_free in STK. 2:eauto. auto. auto.
   eapply Mem.free_left_inject; eauto.
   apply Mem.support_free in H0. rewrite H0. auto.
 - (* eliminated return Some *)
   assert (or = Some r) by congruence. subst or.
   right. split. simpl. lia. split. auto.
-  econstructor. eauto.
-  apply Mem.support_free in H0. rewrite H0. admit. (*apply tc_sizes_weakening'.*) eauto. eauto.
+  econstructor. eauto. auto.
+  erewrite <- Mem.support_free in STK. 2:eauto. auto. auto.
   eapply Mem.free_left_inject; eauto.
   apply Mem.support_free in H0. rewrite H0. auto.
 
@@ -1085,12 +1078,11 @@ Proof.
   exploit Mem.alloc_parallel_inject; eauto.
     instantiate (1 := 0). lia.
     instantiate (1 := fn_stacksize f). lia.
-  intros (f' & m'1 & b2 & ALLOC & INJ' & INCR & TSP & INC).
+  intros (f' & m'1 & b2 & ALLOC & INJ' & INCR' & TSP & INC).
   exploit Mem.record_frame_parallel_inject; eauto.
-  inv H11. erewrite Mem.support_alloc; eauto. unfold sup_incr.
+  inv STK. erewrite Mem.support_alloc; eauto. unfold sup_incr.
   simpl. congruence.
-  apply Mem.support_alloc in ALLOC. rewrite ALLOC. simpl. congruence.
-  apply stack_tc_size_vm in H11.
+  apply stack_tc_size_vm in STK.
   erewrite Mem.support_alloc; eauto. apply Mem.support_alloc in H.
   unfold sup_incr in *. simpl in *.
   rewrite H. simpl. lia. instantiate (1:= Stack 1%positive).
@@ -1118,15 +1110,15 @@ Proof.
   apply init_regs_inject.
   eapply val_inject_list_incr; eauto. auto. auto.
   assert (SPS: b2 = fresh_block (Mem.support m'0)) by (eapply Mem.alloc_result; eauto).
-  eapply mit_incr_invariant. apply INCR.
+  eapply mit_incr_invariant. apply INCR'.
   instantiate (1 := (Mem.support m'0)).
-  inv H12. simpl.
+  inv INCR. simpl.
   intros. destruct (eq_block b1 stk).
     subst b1. rewrite TSP in H1; inv H1.
       apply Mem.alloc_result in H. subst.
       exfalso. destruct H2; eapply freshness; eauto.
     rewrite INC in H1; auto.
-  inv H12. simpl. auto.
+  inv INCR. simpl. auto.
   eauto.
   red. intros. rewrite <- Mem.support_record_frame_1. 2:eauto.
   apply Mem.support_alloc in H. rewrite H.
@@ -1145,8 +1137,9 @@ Proof.
   left. exists (Returnstate s' res' m2'); split.
   simpl. econstructor; eauto.
   econstructor. eapply match_stackframes_incr; eauto.
+  rewrite <- G. inv STK. congruence.
   erewrite <- external_call_astack; eauto.
-  rewrite <- G. admit. (*apply tc_sizes_weakening.*) auto.
+  rewrite <- G. inv STK. simpl. auto.
   auto. auto.
   etransitivity; eauto.
   apply Mem.unchanged_on_support in D.
@@ -1154,19 +1147,20 @@ Proof.
   constructor; auto.
 
 - (* returnstate *)
-  inv H3.
+  inv STACKS.
 + (* synchronous return in both programs *)
   exploit Mem.pop_stage_parallel_inject; eauto.
-  apply tc_sizes_not_nil in H4 as []. intro. rewrite H2 in H1. simpl in H1. congruence.
+  (* inv H4. intro. rewrite H0 in H6. simpl in H6. congruence. *)
+  (* apply tc_sizes_not_nil in H4 as []. intro. rewrite H2 in H1. simpl in H1. congruence. *)
   intros (m'1 & POP & INJ).
   left. econstructor; split.
   apply exec_return. eauto.
   econstructor; eauto.
   apply Mem.astack_pop_stage in H. apply Mem.astack_pop_stage in POP.
   destruct H. destruct POP.
-  rewrite H, H0 in H4. simpl in H4. auto.
+  rewrite H, H0 in STK. simpl in STK. auto.
   apply set_reg_inject; auto.
-  destruct w. inv H8. constructor; auto; red; intros.
+  destruct w. inv INCR. constructor; auto; red; intros.
   erewrite <- Mem.support_pop_stage_1. 2:eauto. auto.
   erewrite <- Mem.support_pop_stage_1. 2:eauto. auto.
 + (* return instr in source program, eliminated because of tailcall *)
@@ -1176,16 +1170,10 @@ Proof.
   generalize (return_measure_bounds (fn_code f) pc). lia.
   split. auto.
   econstructor; eauto.
-  apply Mem.astack_pop_stage in H. destruct H. rewrite H in H4.
-  exists x. auto.
-  inv H4.
-  destruct t1; simpl in LENGTH. congruence. inv LENGTH.
-  simpl in H3. inv H3. constructor; auto.
-  simpl in *. rewrite <- SIZE. destr_in TAKE. repeat destr_in Heqo. simpl in *.
-  econstructor; simpl. auto. rewrite Heqo0. eauto.
+  apply Mem.astack_pop_stage in H as []. rewrite H in STK. simpl in STK. simpl. auto.
   eapply Mem.pop_stage_left_inject; eauto.
   rewrite Regmap.gss. auto.
-  destruct w. inv H8. constructor; auto; red; intros.
+  destruct w. inv INCR. constructor; auto; red; intros.
   erewrite <- Mem.support_pop_stage_1. 2:eauto. auto.
 Qed.
 
@@ -1196,110 +1184,136 @@ Proof.
   intros. destruct H. inv H0.
   exploit functions_translated; eauto. apply GE. intro FIND. cbn in FIND.
   setoid_rewrite <- (sig_preserved (Internal f)).
-  exists (Callstate nil vf2 vargs2 m2 id); split.
+  exists (Callstate nil vf2 vargs2 (Mem.push_stage m2) id); split.
   econstructor; eauto.
   inv H. inv H2. apply INJG in H5 as []. subst. auto using Ptrofs.add_zero_l.
-  inv H2. inv ASTK. auto.
+  inv H2. inv ASTK.
   econstructor; eauto. constructor.
   red. split; [|split]; intros; simpl.
 
   inv GE. inv inj_stbls_match.
-  apply Genv.genv_symb_range in H0 as ?.
+  apply Genv.genv_symb_range in H2 as ?.
   apply mge_dom in H4 as [b' ?].
-  eapply mge_symb in H4 as ?. destruct H5. specialize (H5 H0). clear H6.
-  apply Genv.genv_vars_eq in H0. apply Genv.genv_vars_eq in H5. subst. auto.
+  eapply mge_symb in H4 as ?. destruct H5. specialize (H5 H2). clear H6.
+  apply Genv.genv_vars_eq in H2. apply Genv.genv_vars_eq in H5. subst. auto.
 
   inv GE. inv inj_stbls_match.
-  rewrite Genv.find_var_info_iff in H0.
-  apply Genv.genv_info_range in H0 as ?.
+  rewrite Genv.find_var_info_iff in H2.
+  apply Genv.genv_info_range in H2 as ?.
   apply Genv.genv_sup_glob in H4 as ?. destruct H5 as (id' & ?). subst.
   apply mge_dom in H4 as [b' ?].
   inv H2. apply INJG in H4 as ?. destruct H2. subst. rewrite H4. auto.
 
   inv GE. inv inj_stbls_match.
-  rewrite Genv.find_var_info_iff in H0.
-  apply Genv.genv_info_range in H0 as ?.
-  apply Genv.genv_sup_glob in H5 as ?. destruct H6 as (id' & ?). subst.
-  apply mge_dom in H5 as [b' ?].
-  inv H2. apply INJG in H5 as ?. destruct H2. subst. simpl in *.
-  apply mge_separated in H4 as ?.
-  setoid_rewrite mge_info in H0. 2:eauto.
-  apply Genv.genv_info_range in H0. rewrite <- H2 in H0.
-  apply Genv.genv_sup_glob in H0 as [id'' ?]. subst.
-  apply INJG in H4 as []. subst. auto.
+  rewrite Genv.find_var_info_iff in H2.
+  apply Genv.genv_info_range in H2 as ?.
+  apply Genv.genv_sup_glob in H4 as ?. destruct H6 as (id' & ?). subst.
+  apply mge_dom in H4 as [b' ?].
+  apply INJG in H4 as ?. destruct H6. subst. simpl in *.
+  apply mge_separated in H5 as ?.
+  setoid_rewrite mge_info in H2. 2:eauto.
+  apply Genv.genv_info_range in H2. rewrite <- H6 in H2.
+  apply Genv.genv_sup_glob in H2 as [id'' ?]. subst.
+  apply INJG in H5 as []. subst. auto.
 
-  inv H2. auto.
+  subst. auto.
 
-  inv H2. inv ASTK. clear H11.
-  destruct (Mem.astack (Mem.support m1)) eqn:?. congruence.
-  destruct (Mem.astack (Mem.support m2)) eqn:?. congruence.
-  clear CONS1 CONS2.
-  replace (s :: s0) with (nil ++ (nil ++ s) :: s0) by (simpl; auto).
-  replace s1 with (nil ++ s1) by (simpl; auto).
-  constructor; auto.
+  apply Mem.push_stage_inject. subst. auto.
 
-  inv H2. constructor; simpl in *; auto.
-  red. intros. congruence.
+  econstructor; simpl; auto. constructor. auto.
+
+  subst. constructor; simpl in *; auto.
+  all:red; intros. congruence.
+  all:
+    (erewrite <- Mem.support_push_stage; [|eauto]);
+    (rewrite <- Mem.support_push_stage_1; [|eauto]);
+    auto.
 Qed.
 
 Lemma transf_final_states:
   forall st1 st2 r1, match_states st1 st2 -> final_state st1 r1 ->
   exists r2, final_state st2 r2 /\ match_reply (cc_c inj) w r1 r2.
 Proof.
-  intros. inv H0. inv H. inv H4. inv H9.
+  intros. inv H0. inv H. inv STACKS. inv INCR.
+  apply Mem.nonempty_pop_stage in CONS as []. eauto.
   eexists; split.
-  - constructor. inv H5; congruence.
-  - econstructor. split; constructor; eauto. constructor; auto.
-    constructor. 1,2:inv H5; congruence.
-    inv H5.
-  - exists tt. split; constructor; CKLR.uncklr; cbn; auto.
-<<<<<<< HEAD
-  intros. inv H0. inv H. inv H3.
-  eexists; split.
-  - constructor.
-  - exists tt. split; constructor; CKLR.uncklr; cbn; auto.
-=======
-  intros. inv H0. inv H. inv H6. inv H3. constructor.
->>>>>>> origin/StackAware-new
+  - constructor. eauto.
+  - econstructor.
+    split; constructor.
+    1,2,5:eauto.
+    1,2:red; intros; rewrite <- Mem.support_pop_stage_1; eauto.
+    constructor; auto.
+    constructor; auto.
+    inv STK.
+    apply Mem.astack_pop_stage in H1 as [].
+    apply Mem.astack_pop_stage in e as [].
+    rewrite H1, H2 in IHsize. simpl in IHsize. auto.
+    exploit Mem.pop_stage_parallel_inject; eauto.
+    apply Mem.astack_pop_stage in e as []. congruence.
+    intros (m'1 & POP & INJ). rewrite POP in e. inv e. auto.
 Qed.
 
 Lemma transf_external_states:
   forall st1 st2 q1, match_states st1 st2 -> at_external ge st1 q1 ->
-  exists q2, at_external tge st2 q2 /\ match_query (cc_c ext) tt q1 q2 /\ se = se /\
-  forall r1 r2 st1', match_reply (cc_c ext) tt r1 r2 -> after_external st1 r1 st1' ->
+  exists wx q2, at_external tge st2 q2 /\ match_query (cc_c injp) wx q1 q2 /\ match_senv (cc_c injp) wx se tse /\
+  forall r1 r2 st1', match_reply (cc_c injp) wx r1 r2 -> after_external st1 r1 st1' ->
   exists st2', after_external st2 r2 st2' /\ match_states st1' st2'.
 Proof.
   intros st1 st2 q1 Hst Hq1. destruct Hq1. inv Hst.
-  exploit functions_translated; eauto. intro FIND'.
-  eexists. intuition idtac.
+  assert (GE0: Genv.match_stbls j se tse). {
+    inv GE. inv INCR. eapply Genv.match_stbls_incr; eauto. simpl.
+    split; intro; (exploit H5; eauto); intros [].
+    apply inj_stbls_next_l in H2. auto.
+    apply inj_stbls_next_r in H2. auto.
+  }
+  assert (VF: vf' = Vptr (Global id) Ptrofs.zero). {
+    inv FINJ. rewrite Ptrofs.add_zero_l.
+    apply match_stackframes_global in STACKS as []. apply H1 in H2 as []. subst. auto.
+  }
+  exploit functions_translated; eauto.
+  intro FIND'.
+  exists (injpw j m m' MINJ). eexists. intuition idtac.
   - econstructor; eauto.
-  - destruct H6; try discriminate.
-    constructor; CKLR.uncklr; auto.
-    destruct v; cbn in *; congruence.
-  - inv H1. destruct H0 as ([ ] & [ ] & H0). inv H0. CKLR.uncklr.
-    exists (Returnstate s' vres2 m2'); split; constructor; eauto.
-Qed.
+  - constructor; simpl; auto. constructor; auto.
+    apply match_stackframes_global in STACKS as []. auto.
+    constructor. eapply stack_tc_size_vm. eauto.
+    congruence.
+  - inv GE. inv INCR. simpl in *. constructor; simpl. auto.
+    red. red in inj_stbls_next_l. auto.
+    red. red in inj_stbls_next_r. auto.
+  - inv H2. destruct H1 as (w' & ACC & CR). inv CR.
+    destruct w'. simpl in ACC, H3, H5. inv H5.
+    (* destruct H0 as ([ ] & [ ] & H0). inv H0. CKLR.uncklr. *)
+    exists (Returnstate s' vres2 m2'). split.
+    constructor; auto.
+    econstructor.
+    inv ACC. eapply match_stackframes_incr; eauto.
+    admit.
+    inv ACC. rewrite <- H16. inv STK. congruence.
+    inv ACC. rewrite <- H15, <- H16. inv STK. simpl. auto.
+    auto. auto.
+    inv INCR. constructor.
+    inv ACC. eapply inject_incr_trans; eauto.
+    admit.
+    inv ACC. inv H17. red. red in unchanged_on_support. red in H8. auto.
+    inv ACC. inv H18. red. red in unchanged_on_support. red in H9. auto.
+Admitted.
 
 End PRESERVATION.
 
 (** The preservation of the observable behavior of the program then
   follows. *)
 
-<<<<<<< HEAD
-Theorem transf_program_correct prog tprog:
+Theorem transf_program_correct prog tprog fn_stack_requirements:
   match_prog prog tprog ->
-  forward_simulation (cc_c ext) (cc_c ext) (RTL.semantics prog) (RTL.semantics tprog).
-=======
-Theorem transf_program_correct:
-  forward_simulation (RTL.semantics fn_stack_requirements prog)
-                     (RTL.semantics fn_stack_requirements tprog).
->>>>>>> origin/StackAware-new
+  forward_simulation (cc_c injp) (cc_c inj) (RTL.semantics fn_stack_requirements prog) (RTL.semantics fn_stack_requirements tprog).
 Proof.
-  fsim eapply forward_simulation_opt with (measure := measure); destruct Hse.
-  - destruct 1. CKLR.uncklr. destruct H; try congruence.
-    eapply (Genv.is_internal_transf_id MATCH). intros [|]; auto.
+  fsim eapply forward_simulation_opt with (measure := measure); destruct Hse;
+  assert (CKLR.match_stbls inj w se1 se2) by (simpl; constructor; eauto).
+  - destruct 1. simpl.
+    eapply (Genv.is_internal_transf MATCH); eauto. intros [|]; auto.
   - eapply transf_initial_states; eauto.
   - eapply transf_final_states; eauto.
-  - exists tt. eapply transf_external_states; eauto.
+  - intros. eapply transf_external_states; eauto.
   - eapply transf_step_correct; eauto.
 Qed.

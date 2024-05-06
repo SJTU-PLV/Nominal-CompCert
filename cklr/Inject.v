@@ -39,14 +39,12 @@ Qed.
 
 Inductive match_astack (s1 s2 : stackadt) : Prop :=
   match_astack_intro: forall
-    (CONS1: s1 <> nil)
-    (CONS2: s2 <> nil)
     (SIZE: stack_size s1 >= stack_size s2),
     match_astack s1 s2.
 
-Lemma match_astack_refl: forall s, s <> nil -> match_astack s s.
+Instance match_astack_refl: Reflexive match_astack.
 Proof.
-  intros. constructor; auto. lia.
+  red. intros. constructor; auto. lia.
 Qed.
 
 Instance match_astack_trans: Transitive match_astack.
@@ -584,7 +582,7 @@ Proof.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
   - exists m1; split; repeat rstep; eauto.
     constructor; eauto using inj_mem_intro, mem_inject_dom, meminj_global_dom.
-    apply match_astack_refl. inv ASTK. auto.
+    reflexivity.
   - rewrite meminj_dom_compose.
     apply inject_incr_refl.
   - intros [w12' w23'] m1' m3' (m2' & H12' & H23') [Hw12' Hw23']. cbn in *.

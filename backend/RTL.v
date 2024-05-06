@@ -348,16 +348,14 @@ Inductive initial_state (ge: genv): c_query -> state -> Prop :=
   | initial_state_intro: forall vf f vargs m id,
       Genv.find_funct ge vf = Some (Internal f) ->
       vf = Vptr (Global id) Ptrofs.zero ->
-      Mem.astack (Mem.support m) <> nil ->
       initial_state ge
         (cq vf (fn_sig f) vargs m)
-        (Callstate nil vf vargs m id).
+        (Callstate nil vf vargs (Mem.push_stage m) id).
 
 Inductive at_external (ge: genv): state -> c_query -> Prop :=
   | at_external_intro s vf name sg vargs m id:
       Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
       vf = Vptr (Global id) Ptrofs.zero ->
-      Mem.astack (Mem.support m) <> nil ->
       at_external ge
         (Callstate s vf vargs m id)
         (cq vf sg vargs m).
@@ -365,18 +363,17 @@ Inductive at_external (ge: genv): state -> c_query -> Prop :=
 Inductive after_external: state -> c_reply -> state -> Prop :=
   | after_external_intro s vf vargs m vres m' id:
       vf = Vptr (Global id) Ptrofs.zero ->
-      Mem.astack (Mem.support m) <> nil ->
       after_external
         (Callstate s vf vargs m id)
         (cr vres m')
         (Returnstate s vres m').
 
 Inductive final_state: state -> c_reply -> Prop :=
-  | final_state_intro: forall r m,
-      Mem.astack (Mem.support m) <> nil ->
+  | final_state_intro: forall r m m',
+      Mem.pop_stage m = Some m' ->
       final_state
        (Returnstate nil r m)
-       (cr r m).
+       (cr r m').
 
 (** The small-step semantics for a program. *)
 

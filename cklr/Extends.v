@@ -337,7 +337,7 @@ Proof.
     exists se1. split. auto. constructor; eauto.
   - exists m1; split.
     constructor. auto using meminj_global_dom.
-    apply match_astack_refl. admit. (* TODO: astack <> nil *)
+    reflexivity.
     exists m1; split. apply Mem.extends_refl.
     constructor; eauto.
   - rewrite compose_meminj_id_left.
@@ -373,4 +373,4 @@ Proof.
         intros [E F]. split; eauto.
     + rewrite compose_meminj_id_left.
       repeat rstep; eauto.
-Admitted.
+Qed.

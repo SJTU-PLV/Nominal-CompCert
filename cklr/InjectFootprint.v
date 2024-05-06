@@ -510,7 +510,7 @@ Proof.
     inv Hse. econstructor; auto. eapply match_stbls_dom; eauto.
   - exists m1; split; repeat rstep; eauto.
     constructor; eauto using inj_mem_intro, mem_inject_dom, meminj_global_dom.
-    apply match_astack_refl. inv ASTK. congruence.
+    reflexivity.
   - rewrite meminj_dom_compose.
     apply inject_incr_refl.
   - intros [w12' w23'] m1' m3' (m2' & H12' & H23') [Hw12' Hw23']. cbn in *.
