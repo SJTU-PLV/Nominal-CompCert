@@ -1288,15 +1288,15 @@ Proof.
     constructor; auto.
     econstructor.
     inv ACC. eapply match_stackframes_incr; eauto.
-    admit.
+    {
+      (*incr_without_glob should be added in injp_acc and inj_acc *)
+    }
     inv ACC. rewrite <- H16. inv STK. congruence.
     inv ACC. rewrite <- H15, <- H16. inv STK. simpl. auto.
     auto. auto.
-    inv INCR. constructor.
-    inv ACC. eapply inject_incr_trans; eauto.
-    admit.
-    inv ACC. inv H17. red. red in unchanged_on_support. red in H8. auto.
-    inv ACC. inv H18. red. red in unchanged_on_support. red in H9. auto.
+    etransitivity. eauto.
+    inv ACC. econstructor; eauto.
+    inv H13. eauto. inv H14. eauto.
 Admitted.
 
 End PRESERVATION.
