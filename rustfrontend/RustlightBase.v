@@ -301,17 +301,57 @@ Fixpoint parent_paths' (p: place') : list place :=
   | Pderef p' _ => Place p' :: parent_paths' p'
   end.
 
+Fixpoint shallow_parent_paths' (p: place') : list place :=
+  match p with
+  | Plocal _ _ => nil
+  | Pfield p' _ _ => Place p' :: shallow_parent_paths' p'
+  | Pderef _ _ => nil
+  end.
+
+Fixpoint support_parent_paths' (p: place') : list place :=
+  match p with
+  | Plocal _ _ => nil
+  | Pfield p' _ _ => Place p' :: support_parent_paths' p'
+  | Pderef p' ty =>
+      match ty with
+      | Treference _ Mutable _ _ =>
+          Place p' :: support_parent_paths' p'
+      | _ => nil
+      end
+  end.
+
 Definition parent_paths (p: place) : list place :=
   match p with
   | Place p => parent_paths' p
   | Pdowncast p _ _ => Place p :: parent_paths' p
   end.
 
+Definition shallow_parent_paths (p: place) : list place :=
+  match p with
+  | Place p => shallow_parent_paths' p
+  (* FIXME: how to handle downcast? *)
+  | Pdowncast p _ _ => Place p :: shallow_parent_paths' p
+  end.
+
+Definition support_parent_paths (p: place) : list place :=
+  match p with
+  | Place p => support_parent_paths' p
+  | Pdowncast p _ _ => Place p :: support_parent_paths' p
+  end.
+
+
 Definition is_prefix (p1 p2: place) : bool :=
   place_eq p1 p2 || in_dec place_eq p1 (parent_paths p2).
 
+Definition is_shallow_prefix (p1 p2: place) : bool :=
+  place_eq p1 p2 || in_dec place_eq p1 (shallow_parent_paths p2).
+
+Definition is_support_prefix (p1 p2: place) : bool :=
+  place_eq p1 p2 || in_dec place_eq p1 (support_parent_paths p2).
+
 Definition is_prefix_strict (p1 p2: place) : bool :=
   in_dec place_eq p1 (parent_paths p2).
+
 
 Fixpoint local_of_place' (p: place') :=
   match p with
@@ -329,6 +369,19 @@ Definition local_of_place (p: place) :=
 Definition is_sibling (p1 p2: place) : bool :=
   Pos.eqb (local_of_place p1) (local_of_place p2)
   && negb (is_prefix p1 p2 && is_prefix p2 p1).
+
+Fixpoint local_type_of_place' (p: place') :=
+  match p with
+  | Plocal id ty => ty
+  | Pfield p' ty _ => local_type_of_place' p'
+  | Pderef p' ty => local_type_of_place' p'
+  end.
+
+Definition local_type_of_place (p: place) :=
+  match p with
+  | Place p => local_type_of_place' p
+  | Pdowncast p _ _ => local_type_of_place' p
+  end.
 
 
 Definition remove_own (own: own_env) (p: place') : option own_env :=

@@ -36,6 +36,7 @@ Module Loan <: DecidableType.DecidableType.
   Definition eq_trans: forall x y z, eq x y -> eq y z -> eq x z := (@eq_trans t).
 End Loan.
 
+(* May-live loan set *)
 Module LoanSet := FSetWeakList.Make(Loan).
 
 Module LoanSetL := LFSet(LoanSet).
@@ -195,3 +196,135 @@ Module AE <: SEMILATTICE.
   Axiom ge_lub_right: forall x y, ge (lub x y) y.
 
 End AE.
+
+
+(** Auxilary defintions and functions *)
+
+Inductive access_kind : Type :=
+| Aread
+| Awrite.
+
+Definition conflict_access (a: access_kind) (mut: mutkind) : bool :=
+  match a, mut with
+  | Awrite, _ => true
+  | Aread, Mutable => true
+  | Aread, Immutable => false
+  end.
+
+(* Access loan [l] with [a] would invalidate [ls] *)
+Definition conflict_loan (ls: LoanSet.t) (a: access_kind) (l: loan) : bool :=
+  if LoanSet.mem l ls then
+    match l with
+    | Lintern mut _ =>
+        conflict_access a mut
+    | Lextern _ =>
+        (* It is impossible to access a external loan *)
+        false
+    end
+  else false.
+
+(* Access ls1 with [a] as access kind, if there is any loan in ls2
+that is conflict with this access, return true *)
+Definition conflict (ls1 ls2 : LoanSet.t) (a: access_kind) : bool :=
+  LoanSet.fold (fun elt acc => orb acc (conflict_loan ls2 a elt)) ls1 false.
+
+(* Invalidate an origin *)
+Definition invalidate_origin (ls1: LoanSet.t) (a: access_kind) (os: origin_state) : origin_state :=
+  match os with
+  | Live ls2 =>
+      if conflict ls1 ls2 a then Dead
+      else os
+  | Dead => Dead
+  end.
+
+(* Check whether we should invalidate each origin in the origin
+environment *)
+Definition invalidate_origins (ls: LoanSet.t) (a: access_kind) (oe: LOrgEnv.t) : LOrgEnv.t :=
+  match oe with
+  | LOrgEnv.Bot => LOrgEnv.Bot
+  | LOrgEnv.Top_except t =>
+      LOrgEnv.Top_except (PTree.map1 (invalidate_origin ls a) t)
+  end.
+
+(* All the origins appear in the type [ty] *)
+Fixpoint origins_of_type (ty: type) : list origin :=
+  match ty with
+  | Tbox ty _ => origins_of_type ty
+  | Treference org _ ty _ => org :: origins_of_type ty
+  | Tstruct orgs _ _ _ => orgs
+  | Tvariant orgs _ _ _ => orgs
+  | _ => []
+  end.       
+
+(* Definition of valid access of a place: check whether there is any
+dead origin in the type of the place. Return an error report if
+invalid access happens *)
+Definition valid_access (oe: LOrgEnv.t) (p: place) : res unit :=
+  match oe with
+  | LOrgEnv.Bot => Error (msg "It is impossible to pass an invalid origin environment to valid_access")
+  | LOrgEnv.Top_except t =>
+      let ty := local_type_of_place p in
+      let orgs := origins_of_type ty in
+      let check acc org :=
+        do acc' <- acc;
+        match t!org with
+        | Some (Live _) => OK tt
+        | Some Dead => Error [CTX org; MSG ": access a place with this dead origin (valid_access)"]
+        | None => Error [CTX org; MSG ": no such origin in the origin environment (valid_access)"]
+        end in
+      fold_left check orgs (OK tt)
+  end.
+
+
+(* Relevant loans for a place [p] in the live loan set. The result
+depends on the access access_mode *)
+
+Inductive access_mode := Ashallow | Adeep.
+
+(* relevant borrows as shown in NLL *)
+Definition relevant_place (p: place) (am: access_mode) (p': place) : bool :=
+  match am with
+  | Ashallow =>
+      is_prefix p' p || is_shallow_prefix p p'
+  | Adeep =>
+      is_prefix p' p || is_support_prefix p p'
+  end.
+  
+Definition relevant_loan (p: place) (am: access_mode) (l: loan) : bool :=
+  match l with
+  | Lintern mut p' =>
+      relevant_place p am p'
+  | Lextern _ =>
+      false
+  end.
+
+Definition relevant_loans (live_loans: LoanSet.t) (p: place) (am: access_mode) : LoanSet.t :=
+  LoanSet.fold (fun elt acc => if relevant_loan p am elt then LoanSet.add elt acc else acc) LoanSet.empty live_loans.
+
+
+(* Update Alias graph *)
+
+Definition set_alias (org1 org2: origin) (g: LAliasGraph.t) : LAliasGraph.t :=
+  match g!org1, g!org2 with
+  | Some ls1, Some ls2 =>
+      (* merge two clique *)
+      let ls := OriginSet.add org2 (OriginSet.add org1 (OriginSet.union ls1 ls2)) in
+      PTree.map (fun id ls' => if OriginSet.mem id ls then
+                              OriginSet.union ls' (OriginSet.remove id ls)
+                            else ls') g
+  | Some ls1, None =>
+      let ls := OriginSet.add org2 (OriginSet.add org1 ls1) in
+      let g0 := PTree.set org2 OriginSet.empty g in
+      PTree.map (fun id ls' => if OriginSet.mem id ls then
+                              OriginSet.union ls' (OriginSet.remove id ls)
+                            else ls') g0                          
+  | None, Some ls2 =>
+      let ls := OriginSet.add org2 (OriginSet.add org1 ls2) in
+      let g0 := PTree.set org1 OriginSet.empty g in
+      PTree.map (fun id ls' => if OriginSet.mem id ls then
+                              OriginSet.union ls' (OriginSet.remove id ls)
+                            else ls') g0
+  | None, None =>
+      let g0 := PTree.set org1 (OriginSet.singleton org2) g in
+      PTree.set org2 (OriginSet.singleton org1) g0
+  end.
