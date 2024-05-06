@@ -715,6 +715,135 @@ Inductive final_state: state -> c_reply -> Prop :=
         (Returnstate r Kstop m)
         (cr r m).
 
+(** Try to define the memory error state  *)
+
+Inductive eval_expr_mem_error (e : env) (le : temp_env) (m : mem) : expr -> Prop :=
+| eval_Eunop_mem_error: forall op a ty,
+    eval_expr_mem_error e le m a ->
+    eval_expr_mem_error e le m (Eunop op a ty)
+| eval_Ebinop_mem_error: forall op a1 a2 ty,
+    eval_expr_mem_error e le m a1 ->
+    eval_expr_mem_error e le m a2 ->
+    eval_expr_mem_error e le m (Ebinop op a1 a2 ty)
+| eval_Ecase_mem_error: forall a ty,
+    eval_expr_mem_error e le m a ->
+    eval_expr_mem_error e le m (Ecast a ty)
+| eval_Elvalue_mem_error: forall a,
+    eval_lvalue_mem_error e le m a ->
+    eval_expr_mem_error e le m a
+with eval_lvalue_mem_error (e : env) (le : temp_env) (m : mem) : expr -> Prop :=
+| eval_Ederef_mem_error: forall a ty,
+    eval_expr_mem_error e le m a ->
+    eval_lvalue_mem_error e le m (Ederef a ty)
+| eval_Efield_struct_mem_error: forall a i ty id att,
+    typeof a = Tstruct id att ->
+    eval_expr_mem_error e le m a ->
+    eval_lvalue_mem_error e le m (Efield a i ty)
+| eval_Efield_union_mem_error: forall a i ty id att,
+    typeof a = Tunion id att ->
+    eval_expr_mem_error e le m a ->
+    eval_lvalue_mem_error e le m (Efield a i ty).
+
+Inductive eval_exprlist_mem_error (e : env) (le : temp_env) (m : mem) : list expr -> typelist -> Prop :=
+| eval_Econs_mem_error1: forall a ty,
+    eval_expr_mem_error e le m a ->
+    eval_exprlist_mem_error e le m (a::nil) (Tcons ty Tnil)
+| eval_Econs_mem_error2: forall a bl ty tyl v1 v2,
+    eval_expr e le m a v1 ->
+    sem_cast v1 (typeof a) ty m = Some v2 ->
+    eval_exprlist_mem_error e le m bl tyl ->
+    eval_exprlist_mem_error e le m (a :: bl) (Tcons ty tyl)
+.
+
+(* For now, we ignore the assign_loc_bitfield errors *)
+Inductive assign_loc_mem_error (ce : composite_env) (ty : type) (m : mem) (b : block) (ofs : ptrofs) : bitfield -> val -> Prop :=
+| assign_loc_value_mem_error: forall v chunk,
+    access_mode ty = By_value chunk ->
+    ~ Mem.valid_access m chunk b (Ptrofs.unsigned ofs) Writable ->
+    assign_loc_mem_error ce ty m  b ofs Full v
+| assign_loc_copy_mem_error1: forall b' ofs',
+    (* the memory location of the struct to be copied is not readable *)
+    access_mode ty = By_copy ->
+    ~ Mem.range_perm m b' (Ptrofs.unsigned ofs') ((Ptrofs.unsigned ofs') + (sizeof ce ty)) Cur Readable ->
+    assign_loc_mem_error ce ty m b ofs Full (Vptr b' ofs')
+| assign_loc_copy_mem_error2: forall v,
+    (* the memory location of the struct to be stored is not writable *)
+    access_mode ty = By_copy ->
+    Mem.range_perm m b (Ptrofs.unsigned ofs) ((Ptrofs.unsigned ofs) + (sizeof ce ty)) Cur Writable ->
+    assign_loc_mem_error ce ty m b ofs Full v.
+
+Inductive bind_parameters_mem_error (e: env) : mem -> list (ident * type) -> list val -> Prop :=
+| bind_parameters_mem_error_one: forall m id ty v b,
+    e ! id = Some (b, ty) ->
+    assign_loc_mem_error ge ty m b Ptrofs.zero Full v ->
+    bind_parameters_mem_error e m ((id, ty) :: nil) (v :: nil)
+| bind_parameters_mem_error_cons: forall m id ty params v1 vl b m1,
+    e ! id = Some (b, ty) ->
+    assign_loc ge ty m b Ptrofs.zero Full v1 m1 ->
+    bind_parameters_mem_error e m1 params vl ->
+    bind_parameters_mem_error e m ((id, ty) :: params) (v1 :: vl).
+
+    
+Inductive function_entry_mem_error1 (f: function) (vargs: list val) (m: mem) (e: env) : Prop :=
+  | function_entry_mem_error1_intro: forall m1,
+      list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
+      alloc_variables empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
+      bind_parameters_mem_error e m1 f.(fn_params) vargs ->
+      function_entry_mem_error1 f vargs m e.
+
+
+Inductive memory_error : state -> Prop :=
+| memory_error_assign_1: forall f a1 a2 k e le m,
+    (* error in evaluating lhs *)
+    eval_lvalue_mem_error e le m a1 ->
+    memory_error (State f (Sassign a1 a2) k e le m)
+| memory_error_assign_2: forall f a1 a2 k e le m,
+    (* error in evaluating rhs *)
+    eval_expr_mem_error e le m a2 ->
+    memory_error (State f (Sassign a1 a2) k e le m)
+| memory_error_assign_3: forall f a1 a2 k e le m loc ofs bf v2 v,
+    (* error in assigning rhs to lhs *)
+    eval_lvalue e le m a1 loc ofs bf ->
+    eval_expr e le m a2 v2 ->
+    sem_cast v2 (typeof a2) (typeof a1) m = Some v ->
+    assign_loc_mem_error ge (typeof a1) m loc ofs bf v ->
+    memory_error (State f (Sassign a1 a2) k e le m)
+| memory_error_set: forall f id a k e le m,
+    eval_expr_mem_error e le m a ->
+    memory_error (State f (Sset id a) k e le m)
+| memory_error_call: forall f optid a al k e le m tyargs,
+    eval_exprlist_mem_error e le m al tyargs ->
+    memory_error (State f (Scall optid a al) k e le m)
+| memory_error_builtin: forall f optid ef tyargs al k e le m ,
+    eval_exprlist_mem_error e le m al tyargs ->
+    memory_error (State f (Sbuiltin optid ef tyargs al) k e le m)
+| memory_error_ifthenelse: forall f a s1 s2 k e le m,
+    eval_expr_mem_error e le m a ->
+    memory_error (State f (Sifthenelse a s1 s2) k e le m)
+| memory_error_return_0: forall f k e le m,
+    Mem.free_list m (blocks_of_env e) = None ->
+    memory_error (State f (Sreturn None) k e le m)
+| memory_error_return_1: forall f a k e le m,
+    eval_expr_mem_error e le m a ->
+    memory_error (State f (Sreturn (Some a)) k e le m)
+| memory_error_return_2: forall f a k e le m v v',
+    eval_expr e le m a v ->
+    sem_cast v (typeof a) (fn_return f) m = Some v' ->
+    Mem.free_list m (blocks_of_env e) = None ->
+    memory_error (State f (Sreturn (Some a)) k e le m)
+| memory_error_skip_call: forall f k e le m,
+    is_call_cont k ->
+    Mem.free_list m (blocks_of_env e) = None ->
+    memory_error (State f Sskip k e le m)
+| memory_error_switch: forall f a sl k e le m,
+    eval_expr_mem_error e le m a ->
+    memory_error (State f (Sswitch a sl) k e le m)
+| memory_error_internal_function: forall vf f vargs k m e,
+    Genv.find_funct ge vf = Some (Internal f) ->
+    function_entry_mem_error1 f vargs m e ->
+    memory_error (Callstate vf vargs k m)
+.
+
 End SEMANTICS.
 
 (** The two semantics for function parameters.  First, parameters as local variables. *)

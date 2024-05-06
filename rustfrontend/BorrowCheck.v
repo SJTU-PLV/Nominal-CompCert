@@ -23,9 +23,74 @@ Definition error_msg (pc: node) : errmsg :=
   [MSG "error at "; CTX pc; MSG " : "].
 
 
+(** Abstract environment which records the block id for each owner place *)
+
+Record aenv := build_aenv
+{ aenv_symbtbl: PlaceMap.t (option positive);
+  aenv_nextblock: positive; }.
+
+Definition init_aenv := build_aenv (PlaceMap.init (@None positive)) 1%positive.
+
+Section COMPOSITE_ENV.
+
+Variable ce: composite_env.
+
+(* [p] is an owner or a slice of an owner. If [p] stores a location to
+another owner (heap memory block in our setting) then add [*p] to the
+result *)
+Fixpoint owner_places' (fuel: nat) (p: place) : res (list place) :=
+  match fuel with
+  | O => Error [CTX (local_of_place p); MSG ": running out of fuel (owenr_places')"]
+  | S fuel' =>
+      let rec := owner_places' fuel' in
+      match typeof_place p with
+      | Tbox ty' _ =>
+          (* [*p] is an owner *)
+          let p' := Pderef p ty' in
+          do l <- rec p';
+          OK (p' :: l)
+      | Tstruct id _ =>
+          match ce!id with
+          | Some co =>
+              let fields := map (fun '(Member_plain fid ty') => Pfield p fid ty') co.(co_members) in
+              do l <- fold_right_bind fields rec;
+              OK (concat l)
+          | None => Error [CTX id; MSG ": there is no struct with this ident (owner_place')"]
+          end
+      | _ => OK nil
+      end
+  end.
+
+Definition owner_place (var: ident * type) :=
+  let (id, ty) := var in
+  let p := Plocal id ty in
+  do l <- owner_places' (PTree_Properties.cardinal ce) p;
+  OK (p :: l).
+
+
+(* add a place which occupies a heap memory block *)
+Definition add_place (env: aenv) (p: place') : aenv :=
+  build_aenv (PlaceMap.set p (Some env.(aenv_nextblock)) env.(aenv_symbtbl)) (Pos.succ env.(aenv_nextblock)).
+
+Definition add_variable (env: aenv) (var : ident * type) :=
+  do places <- owner_place var;
+  OK (fold_left add_place places env).
+
+(* allocate ablocks for all variables *)
+Definition add_variables (env: aenv) (vars : list (ident * type)) :=
+  fold_left (fun acc elt => do acc' <- acc; add_variable acc' elt) vars (OK env).
+
+End COMPOSITE_ENV.
+
+
+Section ANEV.
+
+Variable (ae: aenv).  
+
 Section SHALLOW_INIT.
 
 Let t := TyMap.t (option ablock) ->
+         place' ->
          type ->
          ablock ->
          path ->
@@ -38,7 +103,7 @@ Variable ce: composite_env.
   
 Variable rec: forall (ce': composite_env), (PTree_Properties.cardinal ce' < PTree_Properties.cardinal ce)%nat -> t.
 
-Definition shallow_initialize' (shr_map: TyMap.t (option ablock)) (ty: type) (b: ablock) (ph: path) (m: amem) (next_extern: positive) (next_tag: positive) :  res (amem * positive * positive * TyMap.t (option ablock) * list (ablock * type)) :=
+Definition shallow_initialize' (shr_map: TyMap.t (option ablock)) (p: place') (ty: type) (b: ablock) (ph: path) (m: amem) (next_extern: positive) (next_tag: positive) :  res (amem * positive * positive * TyMap.t (option ablock) * list (ablock * type)) :=
   match ty with
   | Tunit
   | Tint _ _ _
@@ -47,7 +112,20 @@ Definition shallow_initialize' (shr_map: TyMap.t (option ablock)) (ty: type) (b:
   | Tfunction _ _ _ =>
       do m' <- store m b ph Scalar;
       OK (m', next_extern, next_tag, shr_map, [])
-  | Tbox ty' _
+  | Tbox ty' _ =>
+      (* Find the Heap block id for [*p] *)
+      match PlaceMap.get (Pderef p ty') ae.(aenv_symbtbl) with
+      | Some heap_id =>
+          (* allocate the [Heap id] *)
+          do (b', m1) <- alloc_heap_block ce m ty' heap_id;
+          (* the abstract owned pointer is (b', []) *)
+          let av := Own b' in
+          do m2 <- store m1 b ph av;
+          (* initialize b' *)
+          OK (m2, next_extern, next_tag, shr_map, [(b', ty')])          
+      | None =>
+          Error [CTX (local_of_place' p); MSG ": cannot find the heap block for this place (shallow_initialize')"]
+      end      
   | Treference ty' Mutable _ =>
       (* allocate an external block for ty' *)
       do (b', m1) <- alloc_external_block ce m ty' next_extern;
@@ -92,7 +170,7 @@ Definition shallow_initialize' (shr_map: TyMap.t (option ablock)) (ty: type) (b:
             do r1 <- acc;              
             let '(m1, next_extern1, next_tag1, shr_map1, l1) := r1 in
             (* shallow initialize this field *)
-            do r2 <- rec (PTree.remove i ce) (PTree_Properties.cardinal_remove P) shr_map ty' b (ph ++ [Rfield fid]) m1 next_extern1 next_tag1;
+            do r2 <- rec (PTree.remove i ce) (PTree_Properties.cardinal_remove P) shr_map (Pfield p fid ty') ty' b (ph ++ [Rfield fid]) m1 next_extern1 next_tag1;
             let '(m2, next_extern2, next_tag2, shr_map2, l2) := r2 in
             OK (m2, next_extern2, next_tag2, shr_map2, l1 ++ l2) in
           fold_left f co.(co_members) (OK (m, next_extern, next_tag, shr_map, []))
@@ -120,6 +198,7 @@ End SHALLOW_INIT.
 Import Wfsimpl.
 
 Definition shallow_initialize ce : TyMap.t (option ablock) ->
+                                   place' ->
                                    type ->
                                    ablock ->
                                    path ->
@@ -136,7 +215,7 @@ Variable ce: composite_env.
 (** Deeply initialize an abstract block [b] for a function parameter
 with type [ty]. Do not know how to specify the recursive parameters *)
 
-Fixpoint deep_initialize (fuel: nat) (shr_map: TyMap.t (option ablock)) (rec_map: TyMap.t (option aval)) (ty: type) (b: ablock) (m: amem) (next_extern: positive) (next_tag: positive) : res (amem * positive * positive * TyMap.t (option ablock)) :=
+Fixpoint deep_initialize (fuel: nat) (shr_map: TyMap.t (option ablock)) (rec_map: TyMap.t (option aval)) (p: place') (ty: type) (b: ablock) (m: amem) (next_extern: positive) (next_tag: positive) : res (amem * positive * positive * TyMap.t (option ablock)) :=
   match fuel with
   | O => Error [MSG "Running out of fuel (deep_initialize)"]
   | S fuel' =>
@@ -342,7 +421,8 @@ Fixpoint transfer_pure_expr (pc: node) (pe: pexpr) (m: amem) : res (aval * amem)
   | Ecktag p _ _ =>
       (** Is match statement is considered an access to the place? The
       answer is yes in Rust borrow checker (see borrowck_enum.rs). But
-      here we do not consider it be a read access. *)
+      here we do not consider it be a read access to the field. And we
+      assume that the tag is a defined value. *)      
       OK (Scalar, m)
   | Eunop uop pe _ =>
       do (v, m') <- transfer_pure_expr pc pe m;
@@ -434,7 +514,7 @@ Definition transfer_assign (pc: node) (p: place') (e: expr) (m: amem) : res amem
 
 Definition transfer_assign_variant (pc: node) (p: place') (fid: ident) (e: expr) (m: amem) : res amem :=
   (* evaluate the expression *)
-  do (rhs, m1) <- transfer_expr pc e m;     
+  do (rhs, m1) <- transfer_expr pc e m;
   (* evaluate the place *)
   do (lhs, m2) <- transfer_place' pc p m1;
   storev pc lhs [Renum fid] rhs m2

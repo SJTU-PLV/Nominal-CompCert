@@ -141,12 +141,18 @@ End PlaceMap.
 block *)
 Inductive ablock : Type :=
 | Stack (var : ident)
-| Heap (loc: node)              (**r the heap block created in [loc] of the CFG  *)
+| Heap (id: positive)              (**r the heap block for an owner *)
 | Extern (id: positive)         (**r external block which is passed from the environment  *)
 .
-  
+
+Lemma ablock_eq : forall (b1 b2: ablock), {b1 = b2} + {b1 <> b2}.
+Proof.
+  generalize Pos.eq_dec. intros.
+  decide equality.
+Qed.
+
 Inductive tag : Type :=
-| Tintern (pc: node)       (**r internal tag created in location [pc] *)
+| Tintern (pc: node)      (**r internal tag created in location [pc] *)
 | Textern (t: positive)         (**r external tag for function arguments *)
 .
 
@@ -223,6 +229,7 @@ Module LIdents := LFSet(Aptrs).
 Inductive aval : Type :=
 | Vbot                        (**r no defined value  *)
 | Scalar
+| Own (b: ablock)               (**r owned pointer. [b] must be a heap block? *)
 | Ptr (l: LAptrs.t)
 (* we use list of ident and aval to represent the fields of struct and
 enum instead of PTree because the it is hard to implement nested
@@ -255,6 +262,7 @@ Module LAval <: SEMILATTICE_WITH_TOP.
   Inductive eq' : aval -> aval -> Prop :=    
   | Ebot : eq' Vbot Vbot
   | Escalar : eq' Scalar Scalar
+  | Eown: forall b, eq' (Own b) (Own b)
   | Eptr : forall l1 l2, LAptrs.eq l1 l2 -> eq' (Ptr l1) (Ptr l2)
   | Estruct : forall t1 t2,
       field_names t1 = field_names t2 ->
@@ -275,6 +283,7 @@ Module LAval <: SEMILATTICE_WITH_TOP.
     match x,y with
     | Vbot, Vbot => true
     | Scalar, Scalar => true
+    | Own b1, Own b2 => ablock_eq b1 b2
     | Ptr l1, Ptr l2 => LAptrs.beq l1 l2
     | Vstruct t1, Vstruct t2 =>
         let beq' '(id1, v1) '(id2, v2) :=
@@ -293,6 +302,7 @@ Module LAval <: SEMILATTICE_WITH_TOP.
   | Gbot : forall v, ge' v Vbot
   | Gtop : forall v, ge' Vtop v
   | Gscalar: ge' Scalar Scalar
+  | Gown: forall b, ge' (Own b) (Own b)
   | Gptr: forall l1 l2,
       LAptrs.ge l1 l2 ->
       ge' (Ptr l1) (Ptr l2)
@@ -331,8 +341,12 @@ Module LAval <: SEMILATTICE_WITH_TOP.
     | Vbot, _ => y
     | _, Vbot => x
     | _, Vtop => Vtop
-    | Vtop, _ => Vtop
+    | Vtop, _ => Vtop                 
     | Scalar, Scalar => Scalar
+    | Own b1, Own b2 =>
+        (* Is it correct?  *)
+        if ablock_eq b1 b2 then Own b1
+        else Vbot
     | Ptr l1, Ptr l2 => Ptr (LAptrs.lub l1 l2)
     | Vstruct t1, Vstruct t2 =>
         Vstruct (recf t1 t2)
@@ -821,14 +835,17 @@ Fixpoint alloc_aval_and_bortree' (fuel: nat) (ty: type) (bot: bool) : res (aval 
 Definition alloc_aval_and_bortree (ty: type) : res (aval * block_bortree) :=
   alloc_aval_and_bortree' (PTree_Properties.cardinal ce) ty false.
 
-(* allocate a stack block [b] *)
+(* allocate a stack block [b]. If the block [b] has been existed, what
+do we need to do? Actually, in our setting, all blocks are allocated
+in the function entry (including heap blocks), so we just assume that
+[b] does not exist in the memory *)
 Definition alloc_stack_block (m: amem) (ty: type) (id: ident) : res (ablock * amem) :=
   do (v, stk) <- alloc_aval_and_bortree ty;
   OK (Stack id, (build_amem (PTree.set id v m.(am_stack)) (PTree.set id stk m.(am_stack_bortree)) m.(am_heap) m.(am_heap_bortree) m.(am_external) m.(am_external_bortree))).
 
-Definition alloc_heap_block (m: amem) (ty: type) (pc: node) : res (ablock * amem) :=
+Definition alloc_heap_block (m: amem) (ty: type) (id: positive) : res (ablock * amem) :=
   do (v, stk) <- alloc_aval_and_bortree ty;
-  OK (Heap pc, (build_amem m.(am_stack) m.(am_stack_bortree) (PTree.set pc v m.(am_heap)) (PTree.set pc stk m.(am_heap_bortree)) m.(am_external) m.(am_external_bortree))).
+  OK (Heap id, (build_amem m.(am_stack) m.(am_stack_bortree) (PTree.set id v m.(am_heap)) (PTree.set id stk m.(am_heap_bortree)) m.(am_external) m.(am_external_bortree))).
 
 Definition alloc_external_block (m: amem) (ty: type) (id: positive) : res (ablock * amem) :=
   do (v, stk) <- alloc_aval_and_bortree ty;
@@ -1010,6 +1027,7 @@ Definition insert_bor_tree (insert: bor_tree') (bt: bor_tree') : bor_tree' :=
   end.
 
 (* update the borrow tree when creating a reference with mutkind [mut] *)
+(* GrantTag in stacked borrow *)
 Definition create_reference (mut: mutkind) (t: option tag) (fresh_tag: tag) (bt: bor_tree): res bor_tree :=
   let access := access_of_mutkind mut in
   (* new sub bor_tree for fresh_tag *)
@@ -1024,6 +1042,7 @@ Definition create_reference (mut: mutkind) (t: option tag) (fresh_tag: tag) (bt:
           do bt' <- access_subtree_at access tp bt;
           match bt' with
           | Broot l =>
+              (*** FIXME : we need to check if fresh_tag is in the borrow tree!!  *)
               match update_subtree_at' tp l (insert_bor_tree new_tree) with
               | Some l' => OK (Broot l')
               | None => Error [CTX (ident_of_tag t); CTX (ident_of_tag fresh_tag); MSG "Unable to update the subtree (create_reference)"]
@@ -1095,19 +1114,21 @@ Definition load_aptr (m: amem) (p: aptr) (a: access_kind) : res (aval * amem) :=
 Definition load_aptrs (m: amem) (ptrs: Aptrs.t) (a: access_kind) : res (aval * amem) :=
   Aptrs.fold (fun elt acc => do (v, m) <- acc; do (v', m') <- load_aptr m elt a; OK (LAval.lub v v', m')) ptrs (OK (LAval.bot, m)).
 
-(* load the location pointed by v. If v is not a pointer, it is an
-impossible value and we treat it as Vbot *)
-Definition load_aval (m: amem) (v: aval) (a: access_kind) : res (aval * amem) :=
-  match v with
-  | Ptr ptrs =>
-      load_aptrs m ptrs a
-  | _ => OK (Vbot, m)
-  end.
-
 Definition load_owner (m: amem) (b: ablock) (ph: path) (a: access_kind) : res (aval * amem) :=  
   do m' <- access a b ph None m;
   do v <- load m' b ph;
   OK (v, m').
+
+(* load the location pointed by v. If v is neither a pointer or an
+owner, it is an impossible value and we treat it as Vbot *)
+Definition load_aval (m: amem) (v: aval) (a: access_kind) : res (aval * amem) :=
+  match v with
+  | Ptr ptrs =>
+      load_aptrs m ptrs a
+  | Own b =>
+      load_owner m b [] a
+  | _ => OK (Vbot, m)
+  end.
 
 (* permission checking (these functions are not used for now *)
 
