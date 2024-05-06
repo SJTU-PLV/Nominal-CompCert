@@ -30,7 +30,8 @@ Proof.
   generalize Pos.eq_dec. intros.
   decide equality.
 Qed.  
-  
+
+
 (** ** Types  *)
 
 Inductive type : Type :=
