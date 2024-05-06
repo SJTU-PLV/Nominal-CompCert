@@ -102,7 +102,7 @@ Require Rustlightgen.
 Require RustIRgen.
 Require InitAnalysis.
 Require ElaborateDrop.
-Require BorrowCheck.
+(* Require BorrowCheck. *)
 Require Clightgen.
 
 (** Pretty-printers (defined in Caml). *)

@@ -18,6 +18,19 @@ Inductive mutkind : Type :=
 | Mutable
 | Immutable.
 
+(** ** Origins  *)
+
+Definition origin : Type := positive.
+
+Definition origin_rel : Type := origin * origin.
+
+Lemma origin_rel_eq_dec : forall (p1 p2 : origin_rel) , {p1 = p2} + {p1 <> p2}.
+Proof.
+  destruct p1, p2.
+  generalize Pos.eq_dec. intros.
+  decide equality.
+Qed.  
+  
 (** ** Types  *)
 
 Inductive type : Type :=
@@ -25,11 +38,11 @@ Inductive type : Type :=
 | Tint: intsize -> signedness -> attr -> type       (**r integer types *)
 | Tlong : signedness -> attr -> type
 | Tfloat : floatsize -> attr -> type
-| Tfunction: typelist -> type -> calling_convention -> type    (**r function types *)
+| Tfunction: list origin -> list origin_rel -> typelist -> type -> calling_convention -> type    (**r function types *)
 | Tbox: type -> attr -> type                                         (**r unique pointer  *)
-| Treference: type -> mutkind -> attr -> type (**r reference type  *)
-| Tstruct: ident -> attr -> type                              (**r struct types  *)
-| Tvariant: ident -> attr -> type                             (**r tagged variant types *)
+| Treference: origin -> mutkind -> type -> attr -> type (**r reference type  *)
+| Tstruct: list origin -> list origin_rel -> ident -> attr -> type                              (**r struct types  *)
+| Tvariant: list origin -> list origin_rel -> ident -> attr -> type                             (**r tagged variant types *)
 with typelist : Type :=
 | Tnil: typelist
 | Tcons: type -> typelist -> typelist.
@@ -41,13 +54,13 @@ Definition type_bool := Tint IBool Signed noattr.
 Definition deref_type (ty: type) : type :=
   match ty with
   | Tbox ty' attr => ty'
-  | Treference ty' _ _ => ty'
+  | Treference _ _ ty' _ => ty'
   | _ => Tunit
   end.
 
 Definition return_type (ty: type) : type :=
   match ty with
-  | Tfunction _ ty _ => ty
+  | Tfunction _ _ _ ty _ => ty
   | _ => Tunit
   end.
 
@@ -55,7 +68,7 @@ Lemma type_eq: forall (ty1 ty2: type), {ty1=ty2} + {ty1<>ty2}
 with typelist_eq: forall (tyl1 tyl2: typelist), {tyl1=tyl2} + {tyl1<>tyl2}.
 Proof.
   assert (forall (x y: floatsize), {x=y} + {x<>y}) by decide equality.
-  generalize ident_eq zeq bool_dec ident_eq intsize_eq signedness_eq attr_eq; intros.
+  generalize list_eq_dec Pos.eq_dec origin_rel_eq_dec ident_eq zeq bool_dec ident_eq intsize_eq signedness_eq attr_eq; intros.
   decide equality.
   decide equality.
   decide equality.
@@ -71,11 +84,11 @@ Definition attr_of_type (ty: type) :=
   | Tint sz si a => a
   | Tlong si a => a
   | Tfloat sz a => a
-  | Tfunction args res cc => noattr
+  | Tfunction _ _ args res cc => noattr
   | Tbox p a => a
-  | Treference ty mut a => a
-  | Tstruct id a => a
-  | Tvariant id a => a
+  | Treference _ mut ty a => a
+  | Tstruct _ _ id a => a
+  | Tvariant _ _ id a => a
   end.
 
 (** access mode for Rust types  *)
@@ -91,11 +104,11 @@ Definition access_mode (ty: type) : mode :=
   | Tfloat F32 _ => By_value Mfloat32
   | Tfloat F64 _ => By_value Mfloat64                                   
   | Tunit => By_nothing
-  | Tfunction _ _ _ => By_reference
+  | Tfunction _ _ _ _ _ => By_reference
   | Tbox _ _ => By_value Mptr
-  | Treference _ _ _ => By_value Mptr
-  | Tstruct _ _ => By_copy
-  | Tvariant _ _ => By_copy
+  | Treference _ _ _ _ => By_value Mptr
+  | Tstruct _ _ _ _ => By_copy
+  | Tvariant _ _ _ _ => By_copy
 end.
 
 
@@ -109,7 +122,7 @@ Inductive member : Type :=
 Definition members : Type := list member.
 
 Inductive composite_definition : Type :=
-  Composite (id: ident) (su: struct_or_variant) (m: members) (a: attr).
+  Composite (id: ident) (su: struct_or_variant) (m: members) (a: attr) (orgs: list origin) (org_rels: list origin_rel).
 
 Definition name_member (m: member) : ident :=
   match m with
@@ -127,16 +140,19 @@ Definition member_is_padding (m: member) : bool :=
   end.
 
 Definition name_composite_def (c: composite_definition) : ident :=
-  match c with Composite id su m a => id end.
+  match c with Composite id su m a _ _ => id end.
 
 Definition composite_def_eq (x y: composite_definition): {x=y} + {x<>y}.
 Proof.
+  generalize Pos.eq_dec origin_rel_eq_dec. intros.
+  decide equality.
+  decide equality.
   decide equality.
 - decide equality. decide equality. apply N.eq_dec. apply bool_dec.
 - apply list_eq_dec. decide equality.
-  apply type_eq. apply ident_eq.
+  apply type_eq. (* apply ident_eq. *)
 - decide equality.
-- apply ident_eq.
+(* - apply ident_eq. *)
 Defined.
 
 Global Opaque composite_def_eq. 
@@ -147,6 +163,8 @@ Global Opaque composite_def_eq.
   the [composite_definition], such as size and alignment information. *)
 
 Record composite : Type := {
+  co_generic_origins: list origin;
+  co_origin_relations: list origin_rel;
   co_sv: struct_or_variant;
   co_members: members;
   co_attr: attr;
@@ -173,16 +191,16 @@ Definition complete_type (env: composite_env) (t: type) : bool :=
   | Tint _ _ _ => true
   | Tlong _ _ => true
   | Tfloat _ _ => true
-  | Tfunction _ _ _ => false
+  | Tfunction _ _ _ _ _ => false
   | Tbox _ _ => true
-  | Treference _ _ _ => true
-  | Tstruct id _ | Tvariant id _ =>
+  | Treference _ _ _ _ => true
+  | Tstruct _ _ id _ | Tvariant _ _ id _ =>
       match env!id with Some co => true | None => false end
   end.
 
 Definition complete_or_function_type (env: composite_env) (t: type) : bool :=
   match t with
-  | Tfunction _ _ _ => true
+  | Tfunction _ _ _ _ _ => true
   | _ => complete_type env t
   end.
 
@@ -210,10 +228,10 @@ Definition alignof (env: composite_env) (t: type) : Z :=
     | Tlong _ _ => Archi.align_int64
     | Tfloat F32 _ => 4
     | Tfloat F64 _ => Archi.align_float64
-    | Tfunction _ _ _ => 1
-    | Treference _ _ _
+    | Tfunction _ _ _ _ _ => 1
+    | Treference _ _ _ _
     | Tbox _ _ => if Archi.ptr64 then 8 else 4                      
-      | Tstruct id _ | Tvariant id _ =>
+      | Tstruct _ _ id _ | Tvariant _ _ id _ =>
           match env!id with Some co => co_alignof co | None => 1 end
     end).
 
@@ -303,8 +321,8 @@ Program Definition get_composite (id: ident) : composite_result :=
 
 Definition own_type' (ty: type) : bool :=
   match ty with
-  | Tstruct id _
-  | Tvariant id _ =>
+  | Tstruct _ _ id _
+  | Tvariant _ _ id _ =>
       match get_composite id with
       | co_some i co P =>
           let acc res m :=
@@ -373,11 +391,11 @@ Definition sizeof (env: composite_env) (t: type) : Z :=
   | Tint IBool _ _ => 1
   | Tlong _ _
   | Tfloat F64 _ => 8
-  | Tfunction _ _ _ => 1
-  | Treference _ _ _
+  | Tfunction _ _ _ _ _ => 1
+  | Treference _ _ _ _
   | Tbox _ _ => if Archi.ptr64 then 8 else 4
-  | Tstruct id _
-  | Tvariant id _ =>
+  | Tstruct _ _ id _
+  | Tvariant _ _ id _ =>
       match env!id with
       | Some co => co_sizeof co
       | None => 0
@@ -409,11 +427,11 @@ Definition alignof_blockcopy (env: composite_env) (t: type) : Z :=
   | Tlong _ _
   | Tfloat F64 _ => 8
   | Tint IBool _ _ => 1
-  | Tfunction _ _ _ => 1
-  | Treference _ _ _
+  | Tfunction _ _ _ _ _ => 1
+  | Treference _ _ _ _
   | Tbox _ _ => if Archi.ptr64 then 8 else 4
-  | Tstruct id _
-  | Tvariant id _ =>
+  | Tstruct _ _ id _
+  | Tvariant _ _ id _ =>
       match env!id with
       | Some co => Z.min 8 (co_alignof co)
       | None => 1
@@ -645,7 +663,7 @@ Qed.
 
 Definition rank_type (ce: composite_env) (t: type) : nat :=
   match t with
-  | Tstruct id _ | Tvariant id _ =>
+  | Tstruct _ _ id _ | Tvariant _ _ id _ =>
       match ce!id with
       | None => O
       | Some co => S (co_rank co)
@@ -679,7 +697,7 @@ Definition typ_of_type (t: type) : AST.typ :=
   | Tlong _ _ => AST.Tlong
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
-  | Tfunction _ _ _ | Treference _ _ _ | Tbox _ _ | Tstruct _ _ | Tvariant _ _ => AST.Tptr
+  | Tfunction _ _ _ _ _ | Treference _ _ _ _ | Tbox _ _ | Tstruct _ _ _ _ | Tvariant _ _ _ _ => AST.Tptr
   end.
 
 Definition rettype_of_type (t: type) : AST.rettype :=
@@ -694,8 +712,8 @@ Definition rettype_of_type (t: type) : AST.rettype :=
   | Tlong _ _ => AST.Tlong
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
-  | Tbox _ _ | Treference _ _ _ => Tptr
-  | Tfunction _ _ _ | Tstruct _ _ | Tvariant _ _ => AST.Tvoid
+  | Tbox _ _ | Treference _ _ _ _ => Tptr
+  | Tfunction _ _ _ _ _ | Tstruct _ _ _ _ | Tvariant _ _ _ _ => AST.Tvoid
   end.
 
 Fixpoint typlist_of_typelist (tl: typelist) : list AST.typ :=
@@ -742,7 +760,7 @@ Proof.
 Qed.
 
 Program Definition composite_of_def
-     (env: composite_env) (id: ident) (su: struct_or_variant) (m: members) (a: attr)
+     (env: composite_env) (id: ident) (su: struct_or_variant) (m: members) (a: attr) (orgs: list origin) (org_rels: list origin_rel)
      : res composite :=
   match env!id, complete_members env m return _ with
   | Some _, _ =>
@@ -751,7 +769,9 @@ Program Definition composite_of_def
       Error (MSG "Incomplete struct or variant " :: CTX id :: nil)
   | None, true =>
       let al := align_attr a (alignof_composite env m) in
-      OK {| co_sv := su;
+      OK {| co_generic_origins := orgs;
+            co_origin_relations := org_rels;
+            co_sv := su;
             co_members := m;
             co_attr := a;
             co_sizeof := align (sizeof_composite env su m) al;
@@ -781,8 +801,8 @@ Defined.
 Fixpoint add_composite_definitions (env: composite_env) (defs: list composite_definition) : res composite_env :=
   match defs with
   | nil => OK env
-  | Composite id su m a :: defs =>
-      do co <- composite_of_def env id su m a;
+  | Composite id su m a orgs org_rels :: defs =>
+      do co <- composite_of_def env id su m a orgs org_rels;
       add_composite_definitions (PTree.set id co env) defs
   end.
 
@@ -990,7 +1010,7 @@ Variable F: Type.
 
 Inductive fundef : Type :=
 | Internal: F -> fundef
-| External: external_function -> typelist -> type -> calling_convention -> fundef.
+| External: list origin -> list origin_rel -> external_function -> typelist -> type -> calling_convention -> fundef.
 
 Global Instance rustlight_fundef_is_internal : FundefIsInternal fundef :=
   fun f =>

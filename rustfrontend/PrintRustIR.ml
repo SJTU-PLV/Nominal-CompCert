@@ -201,14 +201,14 @@ let print_cfg_debug ce pp id f  =
 
 let print_fundef p id fd print =
   match fd with
-  | Rusttypes.External(_, _, _, _) ->
+  | Rusttypes.External(_,_,_, _, _, _) ->
       ()
   | Internal f ->
       print p id f
 
 let print_fundecl p id fd =
   match fd with
-  | External((AST.EF_external _ | AST.EF_runtime _ | AST.EF_malloc | AST.EF_free), args, res, cconv) ->
+  | External((AST.EF_external _ | AST.EF_runtime _ | AST.EF_malloc | AST.EF_free), _, _, args, res, cconv) ->
       fprintf p "extern %s;@ "
                 (name_rust_decl (extern_atom id) (Tfunction(args, res, cconv)))
   | External(_, _, _, _) ->

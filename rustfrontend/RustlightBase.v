@@ -69,7 +69,7 @@ Inductive pexpr : Type :=
 | Econst_long: int64 -> type -> pexpr    (**r long integer literal *)
 | Eplace: place -> type -> pexpr (**r use of a variable, the only lvalue expression *)
 | Ecktag: place' -> ident -> type -> pexpr           (**r check the tag of variant, e.g. [Ecktag p.(fid)]. We cannot check a downcast *)
-| Eref: place -> mutkind -> type -> pexpr     (**r &[mut] p  *)
+| Eref:  origin -> mutkind -> place -> type -> pexpr     (**r &[mut] p  *)
 | Eunop: unary_operation -> pexpr -> type -> pexpr  (**r unary operation *)
 | Ebinop: binary_operation -> pexpr -> pexpr -> type -> pexpr. (**r binary operation *)
 
@@ -88,7 +88,7 @@ Definition typeof_pexpr (pe: pexpr) : type :=
   | Econst_long _ ty                
   | Eplace _ ty
   | Ecktag _ _ ty
-  | Eref _ _ ty
+  | Eref _ _ _ ty
   | Eunop _ _ ty
   | Ebinop _ _ _ ty => ty
   end.
@@ -110,17 +110,17 @@ Fixpoint to_ctype (ty: type) : Ctypes.type :=
   | Tint sz si attr => Ctypes.Tint sz si attr
   | Tlong si attr => Ctypes.Tlong si attr
   | Tfloat fz attr => Ctypes.Tfloat fz attr
-  | Tstruct id attr => Ctypes.Tstruct id attr
+  | Tstruct _ _ id attr => Ctypes.Tstruct id attr
   (* variant = Struct {tag: .. ; f: union} *)
-  | Tvariant id attr => Ctypes.Tstruct id attr
-  | Treference ty _ attr
+  | Tvariant _ _ id attr => Ctypes.Tstruct id attr
+  | Treference _ _ ty attr
   | Tbox ty attr => Tpointer (to_ctype ty) attr
       (* match (to_ctype ty) with *)
       (* | Some ty' =>  *)
       (*     Some (Ctypes.Tpointer ty' attr) *)
       (* | _ => None *)
       (* end *)
-  | Tfunction tyl ty cc =>
+  | Tfunction _ _ tyl ty cc =>
       Ctypes.Tfunction (to_ctypelist tyl) (to_ctype ty) cc
   end
     
@@ -151,6 +151,8 @@ Inductive statement : Type :=
 
 
 Record function : Type := mkfunction {
+  fn_generic_origins : list origin;
+  fn_origins_relation: list (origin * origin);                              
   fn_return: type;
   fn_callconv: calling_convention;
   fn_params: list (ident * type); 
@@ -172,13 +174,13 @@ Fixpoint type_of_params (params: list (ident * type)) : typelist :=
 
 
 Definition type_of_function (f: function) : type :=
-  Tfunction (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
+  Tfunction (fn_generic_origins f) (fn_origins_relation f) (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
 
 Definition type_of_fundef (f: fundef) : type :=
   match f with
   | Internal fd => type_of_function fd
-  | External _ ef typs typ cc =>     
-      Tfunction typs typ cc                
+  | External _ orgs org_rels ef typs typ cc =>
+      Tfunction orgs org_rels typs typ cc
   end.
 
 
@@ -363,7 +365,7 @@ Inductive classify_fun_cases : Type :=
 
 Definition classify_fun (ty: type) :=
   match ty with
-  | Tfunction args res cc => fun_case_f args res cc
+  | Tfunction _ _ args res cc => fun_case_f args res cc
   (** TODO: do we allow function pointer?  *)
   (* | Treference (Tfunction args res cc) _ => fun_case_f args res cc *)
   | _ => fun_default
@@ -386,9 +388,9 @@ Inductive eval_place' : place' -> block -> ptrofs -> Prop :=
     gloabl environment *)
     e!id = Some (b, ty) ->
     eval_place' (Plocal id ty) b Ptrofs.zero
-| eval_Pfield_struct: forall p ty b ofs delta id i co bf attr,
+| eval_Pfield_struct: forall p ty b ofs delta id i co bf attr orgs org_rels,
     eval_place' p b ofs ->
-    ty = Tstruct id attr ->
+    ty = Tstruct orgs org_rels id attr ->
     ce ! id = Some co ->
     field_offset ce i (co_members co) = OK (delta, bf) ->
     eval_place' (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
@@ -452,17 +454,17 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
 (*     (** what if p is an own type? *) *)
 (*     eval_pexpr (Eget p fid ty) v *)
 
-| eval_Ecktag: forall (p: place') b ofs ty m tag tagz id fid attr co,
+| eval_Ecktag: forall (p: place') b ofs ty m tag tagz id fid attr co orgs org_rels,
     eval_place p b ofs ->
     (* load the tag *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
-    typeof_place p = Tvariant id attr ->
+    typeof_place p = Tvariant orgs org_rels id attr ->
     ce ! id = Some co ->
     field_tag fid co.(co_members) = Some tagz ->
     eval_pexpr (Ecktag p fid ty) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz))
-| eval_Eref: forall p b ofs mut ty,
+| eval_Eref: forall p b ofs mut ty org,
     eval_place p b ofs ->
-    eval_pexpr (Eref p mut ty) (Vptr b ofs).
+    eval_pexpr (Eref org mut p ty) (Vptr b ofs).
 
 (* expression evaluation has two phase: evaluate the value and produce
 the moved-out place *)
@@ -569,7 +571,7 @@ Definition definite_copy_type (ty: type) :=
   | Tint _ _ _
   | Tlong _ _
   | Tfloat _ _
-  | Tfunction _ _ _ => true
+  | Tfunction _ _ _ _ _ => true
   | _ => false
   end.
 
@@ -580,7 +582,7 @@ Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> 
 | drop_in_base: forall m b ofs ty,
     definite_copy_type ty = true ->
     drop_in_place ce ty m b ofs m
-| drop_in_struct: forall m b ofs id attr co m' lb lofs lofsbit lty,
+| drop_in_struct: forall m b ofs id attr co m' lb lofs lofsbit lty orgs org_rels,
     ce ! id = Some co ->
     (* do not use eval_place_list, directly compute the field offset *)
     field_offset_all ce co.(co_members) = OK lofsbit ->
@@ -588,8 +590,8 @@ Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> 
     lb = repeat b (length co.(co_members)) ->
     lty = map type_member co.(co_members) ->
     drop_in_place_list ce lty m lb lofs m' ->
-    drop_in_place ce (Tstruct id attr) m b ofs m'
-| drop_in_variant: forall m b ofs id attr co m' tag memb fid ofs' bf,
+    drop_in_place ce (Tstruct orgs org_rels id attr) m b ofs m'
+| drop_in_variant: forall m b ofs id attr co m' tag memb fid ofs' bf orgs org_rels,
     ce ! id = Some co ->
     (* load tag  *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
@@ -599,7 +601,7 @@ Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> 
     variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
     (* drop the selected type *)
     drop_in_place ce (type_member memb) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) m' ->
-    drop_in_place ce (Tvariant id attr) m b ofs m
+    drop_in_place ce (Tvariant orgs org_rels id attr) m b ofs m
 | drop_in_box: forall ty ty' attr m m' m'' b ofs b' ofs',
     ty = Tbox ty' attr ->
     (* The contents in [p] is (Vptr b' ofs') *)
@@ -628,9 +630,9 @@ Inductive drop_place' (ce: composite_env) (owned: list place') : place' -> mem -
 | drop_moved: forall  p m b ofs,
     not (In p owned) ->
     drop_place' ce owned p m b ofs m
-| drop_struct: forall (p: place') m b ofs id attr co m' lb lofs lofsbit fields,
+| drop_struct: forall (p: place') m b ofs id attr co m' lb lofs lofsbit fields orgs org_rels,
     (* recursively drop all the fields *)
-    typeof_place p = Tstruct id attr ->
+    typeof_place p = Tstruct orgs org_rels id attr ->
     ce ! id = Some co ->
     fields = map (fun memb => match memb with | Member_plain fid fty => Pfield p fid fty end) co.(co_members) ->
     (* do not use eval_place_list, directly compute the field offset *)
@@ -639,11 +641,11 @@ Inductive drop_place' (ce: composite_env) (owned: list place') : place' -> mem -
     lb = repeat b (length co.(co_members)) ->
     drop_place_list' ce owned fields m lb lofs m' ->
     drop_place' ce owned p m b ofs m'
-| drop_variant: forall (p: place') m b ofs id attr m',
+| drop_variant: forall (p: place') m b ofs id attr m' orgs org_rels,
     (* select the type based on the tag value *)
-    typeof_place p = Tvariant id attr ->
+    typeof_place p = Tvariant orgs org_rels id attr ->
     (* p is in owned, so we just use type to destruct the variant *)
-    drop_in_place ce (Tvariant id attr) m b ofs m' ->
+    drop_in_place ce (Tvariant orgs org_rels id attr) m b ofs m' ->
     drop_place' ce owned p m b ofs m'
 | drop_box: forall (p: place') attr ty m m' m'' b' b ofs ofs',
     typeof_place p = Tbox ty attr ->
@@ -733,7 +735,7 @@ Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place') (ty: type) : list 
       (* | Treference ty' Mutable _ => *)
       (*     let deref := Pderef p ty' in *)
       (*     p :: init_path deref ty' *)
-      | Tstruct id _ =>
+      | Tstruct _ _ id _ =>
           match ce ! id with
           | Some co =>
               let acc flds m :=
@@ -748,7 +750,7 @@ Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place') (ty: type) : list 
               end
           | _ => p :: nil
           end
-      | Tvariant _ _ =>
+      | Tvariant _ _ _ _ =>
           if own_type ce ty then p :: nil
           else nil
       | _ => nil
@@ -817,11 +819,11 @@ Variable ge: genv.
 
 Inductive step : state -> trace -> state -> Prop :=
 
-| step_assign: forall f e (p: place') ty op k le own own' own'' m1 m2 m3 b ofs v id attr,
+| step_assign: forall f e (p: place') ty op k le own own' own'' m1 m2 m3 b ofs v id attr orgs org_rels,
     (** FIXME: some ugly restriction  *)
     typeof_place p = ty ->
     typeof e = ty ->
-    ty <> Tvariant id attr ->
+    ty <> Tvariant orgs org_rels id attr ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr, return the value and the moved place (optional) *)
@@ -841,10 +843,10 @@ Inductive step : state -> trace -> state -> Prop :=
     assign_loc ge ty m2 b ofs v m3 ->
     step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m3) 
          
-| step_assign_variant: forall f e (p: place') ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid attr ,
+| step_assign_variant: forall f e (p: place') ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid attr orgs org_rels,
     typeof_place p = ty ->
     typeof e = ty ->
-    ty = Tvariant id attr ->
+    ty = Tvariant orgs org_rels id attr ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
@@ -919,7 +921,7 @@ can initialize struct *)
 (*     Genv.find_funct ge vf = Some fd -> *)
 (*     type_of_fundef fd = Tfunction tyargs tyres cconv -> *)
 (*     step (State f (Scall None a al) k le own1 m) E0 (Callstate vf vargs (Kcall None f le own2 k) m) *)
-| step_call_1: forall f a al optlp k le le' own1 own2 m vargs tyargs vf fd cconv tyres p,
+| step_call_1: forall f a al optlp k le le' own1 own2 m vargs tyargs vf fd cconv tyres p orgs org_rels,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist ge le m al tyargs vargs ->
@@ -927,7 +929,7 @@ can initialize struct *)
     (* CHECKME: update the move environment *)
     remove_own_list own1 optlp = Some own2 ->
     Genv.find_funct ge vf = Some fd ->
-    type_of_fundef fd = Tfunction tyargs tyres cconv ->
+    type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
     step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le' own2 k) m)
                  
 (* End of a let statement, free the place and its drop obligations *)
@@ -948,8 +950,8 @@ can initialize struct *)
     function_entry ge f vargs m e me m' ->
     step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e me m')
 
-| step_external_function: forall vf vargs k m m' cc ty typs ef v t
-    (FIND: Genv.find_funct ge vf = Some (External function ef typs ty cc)),
+| step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels
+    (FIND: Genv.find_funct ge vf = Some (External function orgs org_rels ef typs ty cc)),
     external_call ef ge vargs m t v m' ->
     step (Callstate vf vargs k m) t (Returnstate v k m')
 
@@ -1032,17 +1034,17 @@ can initialize struct *)
 (** IDEAS: can we check the validity of the input values based on the
 function types?  *)
 Inductive initial_state: c_query -> state -> Prop :=
-| initial_state_intro: forall vf f targs tres tcc ctargs ctres vargs m,
+| initial_state_intro: forall vf f targs tres tcc ctargs ctres vargs m orgs org_rels,
     Genv.find_funct ge vf = Some (Internal f) ->
-    type_of_function f = Tfunction targs tres tcc ->
+    type_of_function f = Tfunction orgs org_rels targs tres tcc ->
     (** TODO: val_casted_list *)
     Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
     initial_state (cq vf (signature_of_type ctargs ctres tcc) vargs m)
                   (Callstate vf vargs Kstop m).
     
 Inductive at_external: state -> c_query -> Prop:=
-| at_external_intro: forall vf name sg args k m targs tres cconv,
-    Genv.find_funct ge vf = Some (External function (EF_external name sg) targs tres cconv) ->    
+| at_external_intro: forall vf name sg args k m targs tres cconv orgs org_rels,
+    Genv.find_funct ge vf = Some (External function orgs org_rels (EF_external name sg) targs tres cconv) ->    
     at_external (Callstate vf args k m) (cq vf sg args m).
 
 Inductive after_external: state -> c_reply -> state -> Prop:=

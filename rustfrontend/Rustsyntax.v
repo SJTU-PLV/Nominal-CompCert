@@ -22,7 +22,7 @@ Inductive expr : Type :=
 | Eenum (id: ident) (fid: ident) (e: expr) (ty: type)       (**r enum construction  *)
 | Evar (x: ident) (ty: type)                                (**r variable *)
 | Ebox (r: expr) (ty: type)                                 (**r allocate a heap block *)
-| Eref (l: expr) (mut: mutkind) (ty: type)                  (**r &[mut] e *)
+| Eref (org: origin) (mut: mutkind) (l: expr) (ty: type)                  (**r &[mut] e *)
 | Efield (l: expr) (f: ident) (ty: type) (**r access to a member of a struct *)
 | Ederef (r: expr) (ty: type)        (**r pointer dereference (unary [*]) *)
 | Eunop (op: unary_operation) (r: expr) (ty: type)
@@ -46,7 +46,7 @@ Definition typeof (e: expr) : type :=
   | Eval _ ty
   | Evar _ ty
   | Ebox _ ty
-  | Eref _ _ ty
+  | Eref _ _ _ ty
   | Efield _ _ ty
   | Ederef _ ty
   | Eunop _ _ ty
@@ -75,6 +75,8 @@ with arm_statements : Type :=            (**r cases of a [match] *)
 
 
 Record function : Type := mkfunction {
+  fn_generic_origins : list origin;
+  fn_origins_relation: list (origin * origin);
   fn_return: type;
   fn_callconv: calling_convention;
   fn_params: list (ident * type); 
@@ -97,13 +99,13 @@ Definition printf_builtin (args: exprlist) (targs: typelist) :=
 (* Type of function *)
 
 Definition type_of_function (f: function) : type :=
-  Tfunction (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
+  Tfunction (fn_generic_origins f) (fn_origins_relation f) (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
 
 Definition type_of_fundef (f: fundef) : type :=
   match f with
   | Internal fd => type_of_function fd
-  | External _ ef typs typ cc =>     
-      Tfunction typs typ cc                
+  | External _ orgs org_rels ef typs typ cc =>
+      Tfunction orgs org_rels typs typ cc                
   end.
 
 (** Notations for Rustsyntax programs *)
@@ -204,7 +206,9 @@ Definition init_test1_body :=
      endlet }>.
 
 Definition init_test1 :=
-  {| fn_return := Tunit;
+  {|fn_generic_origins := nil;
+    fn_origins_relation := nil;
+    fn_return := Tunit;
     fn_callconv := cc_default;
     fn_params := nil;
     fn_body := init_test1_body |}.
@@ -220,7 +224,9 @@ Definition init_test2_body :=
      endlet }>.
 
 Definition init_test2 :=
-  {| fn_return := Tunit;
+  {|fn_generic_origins := nil;
+    fn_origins_relation := nil;
+    fn_return := Tunit;
     fn_callconv := cc_default;
     fn_params := (C, box_int) :: nil;
     fn_body := init_test2_body |}.
@@ -240,7 +246,9 @@ Definition ex1_body :=
     }>.
 
 Definition ex1 : function :=
-  {| fn_return := Tunit;
+  {|fn_generic_origins := nil;
+    fn_origins_relation := nil;
+    fn_return := Tunit;
     fn_callconv := cc_default;
     fn_params := (A , type_int32s) :: (B , box_int) :: nil;
     fn_body := ex1_body |}.
@@ -273,7 +281,9 @@ Definition fact (n: Z) :=
     }>.
 
 Definition ex2 : function :=
-  {| fn_return := box_int;
+  {|fn_generic_origins := nil;
+    fn_origins_relation := nil;
+    fn_return := box_int;
     fn_callconv := cc_default;
     fn_params := nil;
     fn_body := fact 10 |}.
@@ -305,14 +315,16 @@ Definition fact1 (n: Z) :=
     }>.
 
 Definition ex3 : function :=
-  {| fn_return := box_int;
+  {|fn_generic_origins := nil;
+    fn_origins_relation := nil;
+    fn_return := box_int;
     fn_callconv := cc_default;
     fn_params := nil;
     fn_body := fact1 10 |}.
 
 (* [list] type *)
 Definition list_id := 102%positive.
-Definition list_ty := Tvariant list_id noattr.
+Definition list_ty := Tvariant nil nil list_id noattr.
 Definition box_list := Tbox list_ty noattr.
 
 (* Define [pair] composite *)
@@ -330,7 +342,7 @@ Definition list_node_second_ty := box_list.
 Definition list_node_second := Member_plain second_id list_node_second_ty.
 
 Definition list_node_codef : composite_definition :=
-  Composite list_node_id Struct (list_node_first :: list_node_second :: nil) noattr.
+  Composite list_node_id Struct (list_node_first :: list_node_second :: nil) noattr nil nil.
 
 Definition nil_id := 100%positive.
 
@@ -340,10 +352,10 @@ Definition cons_id := 101%positive.
 
 Definition rcons (ty: type) := Member_plain cons_id ty.
 
-Definition list_node_ty := (Tstruct list_node_id noattr).
+Definition list_node_ty := (Tstruct nil nil list_node_id noattr).
 
 Definition list_codef : composite_definition :=
-  Composite list_id TaggedUnion (rnil :: rcons list_node_ty :: nil) noattr.
+  Composite list_id TaggedUnion (rnil :: rcons list_node_ty :: nil) noattr nil nil.
 
 Definition list_comp_env : res composite_env :=
   build_composite_env (list_node_codef :: list_codef :: nil).
@@ -351,7 +363,9 @@ Definition list_comp_env : res composite_env :=
 (* Compute list_comp_env. *)
 
 Program Definition list_node_composite : composite :=
-  {| co_sv := Struct;
+  {|co_generic_origins := nil;
+    co_origin_relations := nil;
+    co_sv := Struct;
     co_members := (list_node_first :: list_node_second :: nil);
     co_attr := noattr;
     co_sizeof := 16;
@@ -366,7 +380,9 @@ eapply Z.divide_factor_r.
 Defined.
 
 Program Definition list_composite : composite :=
-  {| co_sv := TaggedUnion;
+  {|co_generic_origins := nil;
+    co_origin_relations := nil;
+    co_sv := TaggedUnion;
     co_members := (rnil :: rcons list_node_ty :: nil);
     co_attr := noattr;
     co_sizeof := 24;
@@ -431,7 +447,9 @@ Definition pop_and_push :=
      endlet }>.
             
 Definition pop_and_push_func : function :=
-  {| fn_return := box_list;
+  {|fn_generic_origins := nil;
+    fn_origins_relation := nil;
+    fn_return := box_list;
     fn_callconv := cc_default;
     fn_params := (A, box_list) :: (B, type_int32s) :: nil;
     fn_body := pop_and_push |}.
@@ -443,7 +461,7 @@ Definition pop_and_push_comp_env : composite_env :=
   PTree.set list_id list_composite (PTree.set list_node_id list_node_composite (PTree.empty composite)).
 
 Definition pop_and_push_ident : ident := 300%positive.
-Definition pop_and_push_ty : type := Tfunction (Tcons box_list (Tcons type_int32s Tnil)) box_list cc_default.
+Definition pop_and_push_ty : type := Tfunction nil nil (Tcons box_list (Tcons type_int32s Tnil)) box_list cc_default.
 
 Import ListNotations.
 
@@ -458,7 +476,9 @@ Definition main_body :=
      endlet endlet endlet }>.
 
 Definition main_func : function :=
-    {| fn_return := type_int32s;
+  {|fn_generic_origins := nil;
+    fn_origins_relation := nil;
+    fn_return := type_int32s;
     fn_callconv := cc_default;
     fn_params := nil;
     fn_body := main_body |}.
@@ -507,8 +527,8 @@ Definition l_ty : type := box_int.
 Definition m_ty : type := box_int.
 Definition n_ty : type := type_int32s.
 Definition S1 : composite_definition :=
-  Composite S1_id Struct ([Member_plain l_id l_ty; Member_plain m_id m_ty; Member_plain n_id n_ty]) noattr.
-Definition S1_ty : type := Tstruct S1_id noattr.
+  Composite S1_id Struct ([Member_plain l_id l_ty; Member_plain m_id m_ty; Member_plain n_id n_ty]) noattr nil nil.
+Definition S1_ty : type := Tstruct nil nil S1_id noattr.
 
 Definition f_id : ident := 111%positive.
 Definition g_id : ident := 112%positive.
@@ -519,8 +539,8 @@ Definition f_ty : type := box_box_S1.
 Definition g_ty : type := box_int.
 Definition h_ty : type := type_int32s.
 Definition S2 : composite_definition :=
-  Composite S2_id Struct ([Member_plain f_id f_ty; Member_plain g_id g_ty; Member_plain h_id h_ty]) noattr.
-Definition S2_ty := Tstruct S2_id noattr.
+  Composite S2_id Struct ([Member_plain f_id f_ty; Member_plain g_id g_ty; Member_plain h_id h_ty]) noattr nil nil.
+Definition S2_ty := Tstruct nil nil S2_id noattr.
 
 Definition ex5_comp_defs := [S1; S2].
 
@@ -534,7 +554,9 @@ Definition ex5_main_body :=
      endlet endlet }>.
                     
 Definition ex5_main_func : function :=
-    {| fn_return := type_int32s;
+  {|fn_generic_origins := nil;
+    fn_origins_relation := nil;
+    fn_return := type_int32s;
     fn_callconv := cc_default;
     fn_params := nil;
     fn_body := ex5_main_body |}.

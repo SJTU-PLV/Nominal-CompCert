@@ -22,11 +22,11 @@ let rec name_rust_decl id ty =
       name_floattype sz ^ attributes a ^ name_optid id
   | Rusttypes.Tlong(sg, a) ->
       name_longtype sg ^ attributes a ^ name_optid id
-  | Rusttypes.Treference(t, mut, a) ->
-      "& " ^ string_of_mut mut ^ " " ^ (name_rust_decl ""  t) ^ name_optid id
+  | Rusttypes.Treference(org, mut, t, a) ->
+      "& '" ^ (extern_atom org) ^" "^  string_of_mut mut ^ " " ^ (name_rust_decl ""  t) ^ name_optid id
   | Tbox(t, a) ->
       "Box<" ^ (name_rust_decl ""  t) ^ ">" ^ name_optid id
-  | Tfunction(args, res, cconv) ->
+  | Tfunction( _, _, args, res, cconv) ->
       let b = Buffer.create 20 in
       if id = ""
       then Buffer.add_string b "(*)"
@@ -48,9 +48,9 @@ let rec name_rust_decl id ty =
       if not cconv.cc_unproto then add_args true args;
       Buffer.add_char b ')';
       name_rust_decl (Buffer.contents b) res
-  | Tstruct(name, a) ->
+  | Tstruct(_, _, name, a) ->
       "struct " ^ extern_atom name ^ attributes a ^ name_optid id
-  | Tvariant(name, a) ->
+  | Tvariant(_, _, name, a) ->
       "variant " ^ extern_atom name ^ attributes a ^ name_optid id
 
 (* Type *)
@@ -131,14 +131,14 @@ let print_globdecl p (id,gd) =
 
 let struct_or_variant = function Struct -> "struct" | TaggedUnion -> "variant"
 
-let declare_composite p (Composite(id, su, m, a)) =
+let declare_composite p (Composite(id, su, m, a, _, _)) =
   fprintf p "%s %s;@ " (struct_or_variant su) (extern_atom id)
 
 let print_member p = function
   | Member_plain(id, ty) ->
       fprintf p "@ %s;" (name_rust_decl (extern_atom id) ty)
 
-let define_composite p (Composite(id, su, m, a)) =
+let define_composite p (Composite(id, su, m, a, _, _)) =
   fprintf p "@[<v 2>%s %s%s {"
           (struct_or_variant su) (extern_atom id) (attributes a);
   List.iter (print_member p) m;

@@ -42,9 +42,9 @@ other word, the variant name is used as the tagged union struct name,
 the constructor name (a,b,c) are used in the generated union *)
 Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: composite_definition) :(Ctypes.composite_definition * option Ctypes.composite_definition) :=
   match co with
-  | Composite id Struct ms attr =>
+  | Composite id Struct ms attr _ _ =>
       (Ctypes.Composite id Ctypes.Struct (map transl_composite_member ms) attr, None)
-  | Composite id TaggedUnion ms attr =>
+  | Composite id TaggedUnion ms attr _ _ =>
       (* generate a Struct with two fields, one for the tag field and
       the other for the union *)
       let '(union_id, tag_fid, union_fid) := create_union_idents id in
@@ -126,8 +126,8 @@ Fixpoint drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) : l
       (* return [...; ... ; drop_in_place(deref arg); free(arg)] *)
       (** TODO: it is time consuming, we can just generate a sequence statement *)
       drop_glue_for_type m (Ederef arg cty') ty' ++ [stmt]
-  | Tstruct id attr
-  | Tvariant id attr =>
+  | Tstruct _ _ id attr
+  | Tvariant _ _ id attr =>
       match m ! id with
       | None => nil
       | Some id' =>
@@ -171,7 +171,7 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition)
   (* The only function parameter *)
   let param := first_unused_ident tt in
   match co with
-  | Composite co_id Struct ms attr =>
+  | Composite co_id Struct ms attr _ _ =>
       let co_ty := (Ctypes.Tstruct co_id attr) in
       let param_ty := Tpointer co_ty noattr in
       let deref_param := Ederef (Evar param param_ty) co_ty in
@@ -183,7 +183,7 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition)
           let stmt := (Clight.Ssequence (makeseq stmt_list) (Clight.Sreturn None)) in
           OK (Some (Clight.mkfunction Tvoid cc_default ((param, param_ty)::nil) nil nil stmt))
       end
-  | Composite co_id TaggedUnion ms attr =>
+  | Composite co_id TaggedUnion ms attr _ _ =>
       let co_ty := (Ctypes.Tstruct co_id attr) in
       let param_ty := Tpointer co_ty noattr in
       let deref_param := Ederef (Evar param param_ty) co_ty in (* *p *)
@@ -220,7 +220,7 @@ Definition drop_glue_globdef (f: Clight.function) : globdef (Ctypes.fundef Cligh
 (* also return the map from composite id to drop glue id *)
 Definition generate_drops (l: list composite_definition) : res ((list (ident * globdef (Ctypes.fundef Clight.function) Ctypes.type)) * PTree.t ident) :=
   (* first build the mapping from composite id to function id *)
-  let ids := map (fun elt => match elt with | Composite id _ _ _ => (id, create_dropglue_ident id) end) l in
+  let ids := map (fun elt => match elt with | Composite id _ _ _ _ _ => (id, create_dropglue_ident id) end) l in
   let m := fold_left (fun acc elt => PTree.set (fst elt) (snd elt) acc) ids (PTree.empty ident) in   
   (* how to construct the string of this fuction  *)        
   do globs <- fold_right (fun elt acc => do acc' <- acc;
@@ -342,7 +342,7 @@ Definition place_to_cexpr (p: place) : mon Clight.expr :=
   | Pdowncast p fid ty =>
       (** FIXME: how to translate the get expression? *)
       match typeof_place p with
-      | Tvariant id _ =>
+      | Tvariant _ _ id _ =>
           match tce!id with
           | Some tco =>
               (** FIXME: the following code appears multiple times *)
@@ -367,13 +367,13 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : mon Clight.expr :=
   | Econst_single f ty => ret (Clight.Econst_single f (to_ctype ty))
   | Econst_long l ty => ret (Clight.Econst_long l (to_ctype ty))
   | Eplace p _ => (place_to_cexpr p)
-  | Eref p _ ty =>
+  | Eref _ _ p ty =>
       do e <- place_to_cexpr p;
       ret (Clight.Eaddrof e (to_ctype ty)) 
   | Ecktag p fid ty =>
       (** TODO: how to get the tagz from ctypes composite env? or still use Rust composite env? *)
       match typeof_place p with
-      | Tvariant id _ =>
+      | Tvariant _ _ id _ =>
           match ce!id with
           | Some co =>
               match field_tag fid co.(co_members), get_variant_tag tce id with
@@ -459,8 +459,8 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
       let cty' := to_ctype ty' in
       let deref_temp := Ederef (Clight.Etempvar temp (Tpointer cty noattr)) cty in
       Some (call_free cty' deref_temp)
-  | Tstruct id attr
-  | Tvariant id attr =>
+  | Tstruct _ _ id attr
+  | Tvariant _ _ id attr =>
       match dropm ! id with
       | None => None
       | Some id' =>
@@ -488,7 +488,7 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       let lhs := place_to_cexpr' p in
       let ty := typeof e in
       match typeof_place p with
-      | Tvariant id _ =>
+      | Tvariant _ _ id _ =>
           (* lhs.1 = tag;
              lhs.2. = e'; *)
           match ce!id, tce!id with
@@ -620,7 +620,7 @@ Definition transl_fundef (_: ident) (fd: fundef) : Errors.res Clight.fundef :=
   | Internal f =>
       do tf <- transl_function f;
       Errors.OK (Ctypes.Internal tf)
-  | External _ ef targs tres cconv =>
+  | External _ orgs org_rels ef targs tres cconv =>
       Errors.OK (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv)
   end.
 

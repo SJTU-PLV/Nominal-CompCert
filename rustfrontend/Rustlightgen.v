@@ -145,7 +145,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
          temp.fid2 := agr2;
          ... *)
       match ty with
-      | Tstruct struct_id _ =>
+      | Tstruct _ _ struct_id _ =>
           if ident_eq struct_id id then
             (* evaluate the structure arguments *)
             match ce!id with
@@ -165,7 +165,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
       end
   | Eenum id fid e ty =>
       match ty with
-      | Tvariant variant_id _ =>
+      | Tvariant _ _ variant_id _ =>
           if ident_eq variant_id id then
             match ce!id with
             | Some co =>
@@ -205,9 +205,9 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
       let temp := Plocal temp_id ty in
       let box_stmt := Sbox temp e' in
       ret (sl ++ (box_stmt :: nil), Emoveplace temp ty)
-  | Rustsyntax.Eref e mut ty =>
+  | Rustsyntax.Eref org mut e ty =>
       do (sl, p) <- transl_place_expr e;
-      ret (sl, Eref p mut ty)
+      ret (sl, Eref org mut p ty)
   | Efield e fid ty =>
       do (sl, p) <- transl_place_expr e;
       let p' := Pfield p fid ty in
@@ -335,7 +335,7 @@ Definition value_or_place (e: Rustsyntax.expr) : bool :=
   | Rustsyntax.Eval _ _ => true
   | Rustsyntax.Evar _ _ => false
   | Rustsyntax.Ebox _ _ => true
-  | Rustsyntax.Eref _ _ _ => true
+  | Rustsyntax.Eref _ _ _ _ => true
   | Rustsyntax.Efield _ _ _ => false
   | Rustsyntax.Ederef _ _ => false
   | Rustsyntax.Eunop _ _ _ => true
@@ -469,7 +469,7 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
       (* we want to store e into a place *)
       let ty := Rustsyntax.typeof e in
       match ty with
-      | Tvariant id _ =>
+      | Tvariant _ _ id _ =>
           match ce!id with
           | Some co =>
               if value_or_place e then
@@ -565,7 +565,9 @@ Definition transl_function (f: Rustsyntax.function) : Errors.res function :=
   let init_gen := initial_generator next_temp in
   match transl_stmt f.(Rustsyntax.fn_body) init_gen with
   | Res stmt _ _ =>
-      Errors.OK (mkfunction f.(Rustsyntax.fn_return)
+      Errors.OK (mkfunction f.(Rustsyntax.fn_generic_origins)
+                            f.(Rustsyntax.fn_origins_relation)
+                            f.(Rustsyntax.fn_return)
                             f.(Rustsyntax.fn_callconv)
                             f.(Rustsyntax.fn_params)
                             stmt)
@@ -577,8 +579,8 @@ Definition transl_fundef (fd: Rustsyntax.fundef) : Errors.res fundef :=
   | Internal f =>
       do tf <- transl_function f;
       Errors.OK (Internal tf)
-  | External _ ef targs tres cconv =>
-      Errors.OK (External _ ef targs tres cconv)
+  | External _ orgs org_rels ef targs tres cconv =>
+      Errors.OK (External _ orgs org_rels ef targs tres cconv)
   end.
 
 End SIMPL_EXPR.

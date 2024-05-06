@@ -128,7 +128,9 @@ Definition transl_function (f: RustlightBase.function) : function :=
   let stmt' := transl_stmt params_drops oretv f.(RustlightBase.fn_body) nil in
   (* add the return variable to variable list *)
   let vars' := match oretv with | Some v => (local_of_place v, typeof_place v)  :: vars | None => vars end in
-  mkfunction f.(RustlightBase.fn_return)
+  mkfunction f.(RustlightBase.fn_generic_origins)
+             f.(RustlightBase.fn_origins_relation)
+             f.(RustlightBase.fn_return)
              f.(RustlightBase.fn_callconv)
              vars'
              f.(RustlightBase.fn_params)
@@ -137,7 +139,7 @@ Definition transl_function (f: RustlightBase.function) : function :=
 Definition transl_fundef (fd: RustlightBase.fundef) : fundef :=
   match fd with
   | Internal f => (Internal (transl_function f))
-  | External _ ef targs tres cconv => External function ef targs tres cconv
+  | External _ orgs org_rels ef targs tres cconv => External function orgs org_rels ef targs tres cconv
   end.
 
 End COMPOSITE_ENV.

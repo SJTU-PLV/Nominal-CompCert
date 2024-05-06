@@ -54,6 +54,8 @@ Inductive statement : Type :=
 
 
 Record function : Type := mkfunction {
+  fn_generic_origins : list origin;
+  fn_origins_relation: list (origin * origin);
   fn_return: type;
   fn_callconv: calling_convention;
   fn_vars: list (ident * type);
@@ -72,13 +74,13 @@ Fixpoint type_of_params (params: list (ident * type)) : typelist :=
   end.
 
 Definition type_of_function (f: function) : type :=
-  Tfunction (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
+  Tfunction (fn_generic_origins f) (fn_origins_relation f) (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
 
 Definition type_of_fundef (f: fundef) : type :=
   match f with
   | Internal fd => type_of_function fd
-  | External _ ef typs typ cc =>     
-      Tfunction typs typ cc                
+  | External _ orgs org_rels ef typs typ cc =>
+      Tfunction orgs org_rels typs typ cc
   end.
 
 (* some helper function *)
