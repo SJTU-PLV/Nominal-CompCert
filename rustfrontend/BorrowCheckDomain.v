@@ -307,7 +307,7 @@ Definition relevant_loans (live_loans: LoanSet.t) (p: place) (am: access_mode) :
 Definition set_alias (org1 org2: origin) (g: LAliasGraph.t) : LAliasGraph.t :=
   match g!org1, g!org2 with
   | Some ls1, Some ls2 =>
-      (* merge two clique *)
+      (* merge two cliques *)
       let ls := OriginSet.add org2 (OriginSet.add org1 (OriginSet.union ls1 ls2)) in
       PTree.map (fun id ls' => if OriginSet.mem id ls then
                               OriginSet.union ls' (OriginSet.remove id ls)
@@ -327,4 +327,27 @@ Definition set_alias (org1 org2: origin) (g: LAliasGraph.t) : LAliasGraph.t :=
   | None, None =>
       let g0 := PTree.set org1 (OriginSet.singleton org2) g in
       PTree.set org2 (OriginSet.singleton org1) g0
+  end.
+
+(* Set loans to an origin and then update all the alias origin *)
+
+Definition set_loans_with_alias (org: origin) (ls: LoanSet.t) (oe: LOrgEnv.t) (a: LAliasGraph.t) : LOrgEnv.t :=
+  let os := Live ls in
+  let oe1 := LOrgEnv.set org os oe in
+  match a!org with
+  | Some orgs =>
+      OriginSet.fold (fun elt oe' => LOrgEnv.set elt os oe') orgs oe1
+  | None =>
+      oe1
+  end.
+  
+(* Remove alias of org in the alias graph, i.e., remove a node in a clique *)
+Definition remove_alias (org: origin) (g: LAliasGraph.t) : LAliasGraph.t :=
+  match g!org with
+  | Some orgs =>
+      let g' := PTree.map (fun id s => if OriginSet.mem id orgs then
+                                      OriginSet.remove org s
+                                    else s) g in
+      PTree.remove org g'
+  | _ => g
   end.

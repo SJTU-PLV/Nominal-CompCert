@@ -18,6 +18,12 @@ Inductive mutkind : Type :=
 | Mutable
 | Immutable.
 
+Lemma mutkind_eq : forall (mut1 mut2 : mutkind), {mut1 = mut2} + {mut1 <> mut2}.
+Proof.
+  decide equality.
+Defined.
+
+
 (** ** Origins  *)
 
 Definition origin : Type := positive.
@@ -78,6 +84,22 @@ Proof.
 Defined.
 
 Global Opaque type_eq typelist_eq.
+
+(* type equal except origins *)
+
+Fixpoint type_eq_except_origins (ty1 ty2: type) : bool :=
+  match ty1, ty2 with
+  | Treference _ mut1 ty1 a1, Treference _ mut2 ty2 a2 =>
+      match mut1, mut2 with
+      | Mutable, Mutable => type_eq_except_origins ty1 ty2 && attr_eq a1 a2
+      | Immutable, Immutable => type_eq_except_origins ty1 ty2 && attr_eq a1 a2
+      | _, _ => false
+      end
+  | Tstruct _ _ id1 a1, Tstruct _ _ id2 a2
+  | Tvariant _ _ id1 a1, Tvariant _ _ id2 a2 =>
+      ident_eq id1 id2 && attr_eq a1 a2
+  | _, _ => type_eq ty1 ty2
+  end.
 
 Definition attr_of_type (ty: type) :=
   match ty with
