@@ -227,7 +227,7 @@ GS.fsim_lts.
         (M_QUERIES: match_query cc_c_asm_injp wB (get_query cqv m) (rs,tm))
         (SG_STR: cqv_sg cqv = start_routine_sig),
         match_thread_states wB None (get wB)i (CMulti.Initial OpenC cqv) (Initial OpenA rs)
-    |match_return : forall wB wA i sc sa wp wp'
+    |match_returny : forall wB wA i sc sa wp wp'
         (M_STATES: match_local_states wB wp i sc sa)
         (WA_SIG : cajw_sg wA = yield_sig)
         (GET: get wA = wp')
@@ -239,12 +239,23 @@ GS.fsim_lts.
             exists i' sa', (after_external (OpenA tse)) sa r2 sa' /\
                         (exists wp''', wp'' *-> wp''' /\
                                     match_local_states wB wp''' i' sc' sa')),
-        (* match_query cc_c_asm_injp w ( )-> *)
-        (* query_is_yield OpenC qc ->
-        query_is_yield_asm OpenA (rs, tm) ->
-        match_query cc_c_asm_injp w qc (rs, tm) -> *)
-        
-        match_thread_states wB (Some wA) wp' i (CMulti.Return OpenC sc) (Return OpenA sa (cajw_rs wA)).
+        match_thread_states wB (Some wA) wp' i (CMulti.Returny OpenC sc) (Returny OpenA sa (cajw_rs wA))
+    |match_returnj : forall wB wA i sc sa wp wp' wait vptr int rs
+        (RS: rs = cajw_rs wA)                     
+        (M_STATES: match_local_states wB wp i sc sa)
+        (WAIT: rs # RDI = Vint int /\ int_to_nat int = wait)
+        (VPTR: Val.inject (injp_mi (cajw_injp wA)) vptr (rs # RDX))
+        (WA_SIG : cajw_sg wA = pthread_join_sig)
+        (GET: get wA = wp')
+        (ACC1: wp *-> wp')
+        (M_REPLIES: forall r1 r2 sc' wp'',
+            get wA o-> wp'' ->
+            GS.match_reply cc_c_asm_injp_new (set wA wp'') r1 r2 ->
+            (after_external (OpenC se)) sc r1 sc' ->
+            exists i' sa', (after_external (OpenA tse)) sa r2 sa' /\
+                        (exists wp''', wp'' *-> wp''' /\
+                                    match_local_states wB wp''' i' sc' sa')),
+        match_thread_states wB (Some wA) wp' i (CMulti.Returnj OpenC sc wait vptr) (Returny OpenA sa rs).
 
 
     Definition injp_tid (w: injp_world) : nat :=
@@ -252,6 +263,7 @@ GS.fsim_lts.
                      
     Definition injp_nexttid (w: injp_world) : nat :=
       match w with injpw j m tm Hm => Mem.next_tid (Mem.support m) end.
+    
     Inductive match_states : global_index -> CMulti.state OpenC -> state OpenA -> Prop :=
     |global_match_intro : forall threadsC threadsA cur next worldsA worldsB worldsP gi w0 m0 main_b wPcur
       (CUR_VALID: (1 <= cur < next)%nat)
@@ -465,12 +477,16 @@ GS.fsim_lts.
       unfold gs'. simpl. rewrite NatMap.gss. reflexivity.
     Qed.
 
-    Lemma thread_create_inject : forall j m tm,
-            Mem.inject j m tm ->
-            Mem.inject j (Mem.thread_create m) (Mem.thread_create tm).
+    Lemma thread_create_inject : forall j m tm m' tm' id tid,
+        Mem.inject j m tm ->
+        Mem.thread_create m = (m', id) ->
+        Mem.thread_create tm = (tm', tid) ->
+        Mem.inject j m' tm' /\ id = tid.
     Proof.
-      intros. inv H. constructor; eauto.
-      - inv mi_thread. simpl. red. unfold Mem.sup_create. simpl.
+      intros. inv H. inv H0. inv H1.
+      split. constructor; eauto.
+      - inv mi_thread. simpl. red.
+        simpl. unfold Mem.sup_create. simpl.
         rewrite !app_length. split; congruence.
       - clear - mi_inj.
         inv mi_inj. constructor; eauto.
@@ -479,6 +495,7 @@ GS.fsim_lts.
         rewrite Mem.sup_create_in. eauto.
       - intros. unfold Mem.valid_block. simpl. rewrite <- Mem.sup_create_in.
         eapply mi_mappedblocks; eauto.
+      - inv mi_thread. unfold Mem.next_tid. eauto.
     Qed.
 
     Lemma yield_inject : forall j m tm n p tp,
@@ -499,9 +516,9 @@ GS.fsim_lts.
 
 
    Inductive injp_acc_thc : injp_world -> injp_world -> Prop :=
-     injp_thread_create: forall j m1 m2 Hm m1' m2' Hm',
-         m1' = Mem.thread_create m1 ->
-         m2' = Mem.thread_create m2 ->
+     injp_thread_create: forall j m1 m2 Hm m1' m2' Hm' id1 id2
+         (Htc1: (m1', id1) = Mem.thread_create m1)
+         (Htc2: (m2', id2) = Mem.thread_create m2),
          injp_acc_thc (injpw j m1 m2 Hm) (injpw j m1' m2' Hm').
 
    Inductive injp_acc_yield : injp_world -> injp_world -> Prop :=
@@ -512,10 +529,12 @@ GS.fsim_lts.
          injp_acc_yield (injpw j m1 m2 Hm) (injpw j m1' m2' Hm').
 
    Inductive worlds_ptc_str : cc_cainjp_world -> cc_cainjp_world -> Prop :=
-    | ptc_str_intro : forall j m tm Hm0 Hm1 rs,
-        worlds_ptc_str
-        (cajw (injpw j m tm Hm0) pthread_create_sig rs)
-        (cajw (injpw j (Mem.thread_create m) (Mem.thread_create tm) Hm1) start_routine_sig (rs # PC <- (rs RDI) # RDI <- (rs RSI))).
+   | ptc_str_intro : forall j m tm id m' tm' Hm0 Hm1 rs
+       (Htc1: (m', id) = Mem.thread_create m)
+       (Htc2: (tm', id) = Mem.thread_create tm),
+       worlds_ptc_str
+         (cajw (injpw j m tm Hm0) pthread_create_sig rs)
+         (cajw (injpw j m' tm' Hm1) start_routine_sig (rs # PC <- (rs RSI) # RDI <- (rs RDX))).
         
     Lemma trans_pthread_create__start_routine: forall q_ptc q_str qa_ptc wA,
         query_is_pthread_create OpenC q_ptc q_str ->
@@ -528,11 +547,11 @@ GS.fsim_lts.
       intros until wA. intros H H0 MSE.
       inv H. inv H0.
       subst tvf targs. rewrite pthread_create_locs in H4. simpl in H4.
-      inv H4. inv H9. inv H11. inv H3.
-      set (rs' := rs # PC <- (rs RDI) # RDI <- (rs RSI)).
+      inv H4. inv H9. inv H11. inv H5.
+      set (rs' := rs # PC <- (rs RSI) # RDI <- (rs RDX)).
       assert (INJPTC: j b_ptc = Some (b_ptc, 0)).
       {
-        inv MSE. inv H9.
+        inv MSE. inv H11.
         exploit mge_dom; eauto. eapply Genv.genv_symb_range. apply FINDPTC.
         intros (b3 & INJ).
         exploit mge_symb; eauto.
@@ -540,11 +559,11 @@ GS.fsim_lts.
         rewrite <- SE_eq in FINDPTC'. fold se in FINDPTC. setoid_rewrite FINDPTC in FINDPTC'.
         inv FINDPTC'. eauto.
       }
-      assert (PC: rs PC = Vptr b_ptc Ptrofs.zero).
-      inv H5. rewrite H9 in INJPTC. inv INJPTC. reflexivity.
+      assert (PCVAL: rs PC = Vptr b_ptc Ptrofs.zero).
+      inv H1. rewrite H9 in INJPTC. inv INJPTC. reflexivity.
       assert (INJSTR: j b_start = Some (b_start, 0)).
       {
-        inv MSE. inv H9.
+        inv MSE. inv H11.
         exploit mge_dom; eauto. eapply Genv.genv_symb_range. apply FINDSTR. eauto.
         intros (b3 & INJ).
         exploit mge_symb; eauto.
@@ -552,53 +571,54 @@ GS.fsim_lts.
         rewrite <- SE_eq in FINDSTR'. fold se in FINDSTR. setoid_rewrite FINDSTR in FINDSTR'.
         inv FINDSTR'. eauto.
       }
-      assert (RSI: rs RDI = Vptr b_start Ptrofs.zero).
-      inv H2. rewrite H9 in INJSTR. inv INJSTR. reflexivity.
-      exploit thread_create_inject; eauto.
-      intros Hm1.
-      exists (cajw (injpw j (Mem.thread_create m) (Mem.thread_create tm) Hm1) start_routine_sig rs').
+      assert (RSIVAL: rs RSI = Vptr b_start Ptrofs.zero).
+      inv H3. rewrite H11 in INJSTR. inv INJSTR. reflexivity.
+      case (Mem.thread_create tm) as [tm' id] eqn:MEM_CREATE'.
+      exploit thread_create_inject; eauto. intros [Hm1 eqid]. subst id.
+      assert (exists b_t' ofs_t', rs RDI = Vptr b_t' ofs_t').
+      inv H2. eauto. destruct H as [b_t' [ofs_t' RDIVAL]].
+      assert (exists b_arg' ofs_arg', rs RDX = Vptr b_arg' ofs_arg').
+      inv H4. eauto. destruct H as [b_arg' [ofs_arg' RDXVAL]].
+      exists (cajw (injpw j m' tm' Hm1) start_routine_sig rs').
       eexists. repeat apply conj.
       - fold se in FINDPTC. rewrite SE_eq in FINDPTC.
         fold se in FINDSTR. rewrite SE_eq in FINDSTR.
-        econstructor. 
-        eapply FINDPTC. eapply FINDSTR.  eauto. eauto. eauto.
+        econstructor.
+        eapply FINDPTC. eapply FINDSTR. eauto. eauto. eauto. eauto.
         instantiate (1:= rs'). unfold rs'. rewrite Pregmap.gso. rewrite Pregmap.gss.
         eauto. congruence.
         unfold rs'. rewrite Pregmap.gss. eauto. eauto.
       -
         econstructor; eauto. rewrite start_routine_loc. simpl.
-        constructor. unfold rs'. rewrite Pregmap.gss. rewrite <- H1.
-        econstructor; eauto. constructor. unfold Conventions.size_arguments.
+        constructor. unfold rs'. rewrite Pregmap.gss. eauto.
+        constructor. unfold Conventions.size_arguments.
         rewrite start_routine_loc. simpl. intros. inv H. extlia.
         unfold rs'. repeat rewrite Pregmap.gso.
-        subst tsp. inv H10. constructor. simpl. rewrite <- Mem.sup_create_in. auto.
+        subst tsp. inv H10. constructor. simpl.
+        inv MEM_CREATE'. simpl.
+        rewrite <- Mem.sup_create_in. auto.
         congruence. congruence.
         econstructor. unfold Conventions.tailcall_possible, Conventions.size_arguments.
         rewrite start_routine_loc. simpl. reflexivity. congruence.
-      - constructor.
+      - econstructor; eauto.
     Qed.
 
+    (* 
     (** Properties of yield strategy *)
 
     Lemma yield_range_c : forall gsc, (1 <= CMulti.yield_strategy OpenC gsc < (CMulti.next_tid OpenC gsc))%nat.
-    Admitted.
 
     Lemma yield_range_asm : forall gsa, (1 <= yield_strategy OpenA gsa < (next_tid OpenA gsa))%nat.
-    Admitted.
 
     Lemma yield_target_ms : forall i gsc gsa, match_states i gsc gsa ->
                                          CMulti.yield_strategy OpenC gsc = yield_strategy OpenA gsa.
-    Admitted.
 
     (** maybe should be released, add a yield_to_self which is similar to pthread create *)
     Lemma yield_not_cur_c : forall gsc, CMulti.yield_strategy OpenC gsc <> (CMulti.cur_tid OpenC gsc).
-    Admitted.
 
     Lemma yield_not_cur_asm : forall gsa, yield_strategy OpenA gsa <> (cur_tid OpenA gsa).
-    Admitted.
-
+     *)
       
-    (** Properties need to be added in SIMCONV *)
     Lemma match_q_nid: forall qc qa w,
         GS.match_query cc_c_asm_injp_new w qc qa ->
         Mem.next_tid (Mem.support (cq_mem qc)) = Mem.next_tid (Mem.support (snd qa)).
@@ -637,13 +657,14 @@ GS.fsim_lts.
 
     Lemma injp_acc_thc_tid : forall w1 w2, injp_acc_thc w1 w2 -> injp_tid w2 = injp_tid w1.
     Proof.
-      intros. inv H. simpl. auto.
+      intros. inv H.
+      simpl. inv Htc1. reflexivity.
     Qed.
 
     Lemma injp_acc_thc_nexttid : forall w1 w2, injp_acc_thc w1 w2 -> injp_nexttid w2 = S (injp_nexttid w1).
     Proof.
       intros. inv H. simpl. unfold Mem.sup_create. unfold Mem.next_tid.
-      simpl. rewrite app_length. simpl. lia.
+      inv Htc1. simpl. rewrite app_length. simpl. lia.
     Qed.
 
     Lemma injp_acc_yield_nexttid : forall w1 w2, injp_acc_yield w1 w2 -> injp_nexttid w2 = injp_nexttid w1.
@@ -741,6 +762,19 @@ GS.fsim_lts.
       - red. intros. rewrite <- VALID1, <- VALID2. eauto.
     Qed.
 
+    Lemma thread_create_inject' : forall j m1 m2,
+        Mem.inject j m1 m2 -> exists m1' m2' tid,
+          Mem.thread_create m1 = (m1', tid) /\
+          Mem.thread_create m2 = (m2', tid) /\
+            Mem.inject j m1' m2'.
+    Proof.
+      intros.
+      case (Mem.thread_create m1) as [m1' id1] eqn:H1.
+      case (Mem.thread_create m2) as [m2' id2] eqn:H2.
+      exploit thread_create_inject; eauto.
+      intros [X Y]. subst. exists m1', m2', id2. split; eauto.
+    Qed.
+    
    Lemma pthread_create_accg2 : forall w1 w2 w3 w4 w5,
        injp_accg w1 w2 -> injp_acci w2 w3 -> injp_acc_thc w3 w4 ->
        injp_acci w4 w5 ->
@@ -751,10 +785,11 @@ GS.fsim_lts.
      exploit injp_accg_acci_accg. eauto. eauto.
      intro. clear - H1 H3.
      inv H1. inv H3.
-     assert (VALID1: forall b, Mem.valid_block m1 b <-> Mem.valid_block (Mem.thread_create m1) b).
-     intros. unfold Mem.valid_block. simpl. apply Mem.sup_create_in.
-     assert (VALID2: forall b, Mem.valid_block m2 b <-> Mem.valid_block (Mem.thread_create m2) b).
-     intros. unfold Mem.valid_block. simpl. apply Mem.sup_create_in.
+     assert (VALID1: forall b, Mem.valid_block m1 b <-> Mem.valid_block m1' b).
+     intros. unfold Mem.valid_block. inv Htc1. simpl. apply Mem.sup_create_in.
+     assert (VALID2: forall b, Mem.valid_block m2 b <-> Mem.valid_block m2' b).
+     intros. unfold Mem.valid_block. inv Htc2. simpl. apply Mem.sup_create_in.
+     inv Htc1. inv Htc2. simpl in *.
      constructor; eauto.
      - destruct H7 as [S7 H7]. split. simpl. congruence.
        inv H7. constructor.
@@ -898,7 +933,39 @@ GS.fsim_lts.
      eapply injp_accg_acci_accg; eauto. eauto. eauto.
    Qed.
 
-    Theorem Concur_Sim : Closed.forward_simulation ConcurC ConcurA.
+   Lemma substep_switch_out : forall i s1 s2 s1' target gmem',
+       match_states i s1 s2 ->
+       CMulti.switch_out OpenC s1 s1' target gmem' -> exists s2' gtmem',
+           AsmMulti.switch_out OpenA s2 s2' target gtmem' /\
+             match_states i s1' s2'.
+   Proof.
+     intros until gmem'. intros MS SWITCH.
+     inv MS.
+     inv SWITCH.
+     - (* yield *)
+       (* specialize (THREADS cur CUR_VALID) as THR_CUR.
+       destruct THR_CUR as (wB & owA & wP & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA & GETWa & MS & GETWp & ACC).
+       assert (lsc = CMulti.Local OpenC ls).
+       eapply foo; eauto. subst lsc. inv MS.
+       specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
+       (* inversion FSIM.
+       clear fsim_simulation fsim_match_initial_states
+            fsim_match_final_states.
+          exploit fsim_match_external; eauto. intros (li' & s2' & STEP & wp' & GW_ACC & MATCH). *)
+         
+       specialize (ident term+) *)
+   Admitted.
+   
+
+   Lemma substep_switch_in : forall i s1' s2' s1'' target gmem' gtmem',
+            (*sth more about gtmem'*)
+            match_states i s1' s2' ->
+            CMulti.switch_in OpenC s1' s1'' target gmem' -> exists s2'',
+            AsmMulti.switch_in OpenA s2' s2'' target gtmem' /\
+              match_states i s1'' s2''.
+   Admitted.
+   
+   Theorem Concur_Sim : Closed.forward_simulation ConcurC ConcurA.
     Proof.
       econstructor. instantiate (3:= global_index). instantiate (2:= global_order).
       instantiate (1:= match_states).
@@ -1023,10 +1090,11 @@ GS.fsim_lts.
           inv WORLDS.
           set (wP' := injpw j m tm Hm0).
           set (wA_ptc :=  {| cajw_injp := wP'; cajw_sg := pthread_create_sig; cajw_rs := rs |}).
-          set (wP'' := injpw j (Mem.thread_create m) (Mem.thread_create tm) Hm1).
+          set (wP'' := injpw j m' tm' Hm1).
           assert (wP = wPcur). congruence. subst wP.
           assert (ACC2: injp_acce wP' wP'').
           {
+            inv Htc1. inv Htc2.
             unfold wP', wP''.
             econstructor; try red; intros; eauto.
             - split. simpl. eauto.
@@ -1041,10 +1109,10 @@ GS.fsim_lts.
           set (rs' := rs # PC <- (rs RA) # RAX <- (Vint Int.one)).
           set (ra_ptc := (rs', m_qastr)).
           inversion MQ_PTC. subst. inversion MQ_STR. subst.
-          assert (MR_PTC : GS.match_reply cc_c_asm_injp_new (set wA_ptc wP'') (cr (Vint Int.one) (Mem.thread_create m)) ra_ptc).
+          assert (MR_PTC : GS.match_reply cc_c_asm_injp_new (set wA_ptc wP'') (cr (Vint Int.one) m') ra_ptc).
           {
             econstructor. unfold Conventions1.loc_result. unfold pthread_create_sig.
-            replace Archi.ptr64 with true by reflexivity. simpl. 
+            replace Archi.ptr64 with true by reflexivity. simpl.
             unfold rs'. rewrite Pregmap.gss. constructor.
             intros. unfold rs'.
             destruct r; simpl in H; inv H; repeat rewrite Pregmap.gso;
@@ -1071,30 +1139,31 @@ GS.fsim_lts.
             split. auto. inv Hm0. inv mi_thread. setoid_rewrite <- H.
             eauto.
           }
-          assert (p : Mem.range_prop next (Mem.support (Mem.thread_create m))).
+          assert (p : Mem.range_prop next (Mem.support m')).
           destruct NEXTTID as [X Y].
-          red. simpl. unfold Mem.sup_create, Mem.next_tid. simpl.
-          split. lia. rewrite app_length. simpl. setoid_rewrite X. lia.
-          assert (tp : Mem.range_prop next (Mem.support (Mem.thread_create tm))).
+          red. split. lia.
+          inv Htc1. simpl. unfold Mem.sup_create, Mem.next_tid. simpl.
+          rewrite app_length. simpl. lia.
+          assert (tp : Mem.range_prop next (Mem.support m_qastr)).
           destruct NEXTTID as [X Y].
-          red. simpl. unfold Mem.sup_create, Mem.next_tid. simpl.
-          split. lia. rewrite app_length. simpl. setoid_rewrite Y. lia.
-          set (nm := Mem.yield (Mem.thread_create m) next p).
-          set (ntm := Mem.yield (Mem.thread_create tm) next tp).
-          specialize (yield_inject j (Mem.thread_create m) (Mem.thread_create tm) next p tp Hm1) as Hm1'.
+          red. split. lia. inv Htc2.
+          simpl. unfold Mem.sup_create, Mem.next_tid. simpl.
+          rewrite app_length. simpl. setoid_rewrite <- Y. unfold Mem.next_tid. lia.
+          set (nm := Mem.yield m' next p).
+          set (ntm := Mem.yield m_qastr next tp).
+          specialize (yield_inject j m' m_qastr next p tp Hm1) as Hm1'.
           set (wP''n := injpw j nm ntm Hm1').
           assert (ACCY: injp_acc_yield wP'' wP''n).
           unfold wP'', wP''n. econstructor. reflexivity. reflexivity. simpl.
-          apply injp_acci_tid in APP. simpl in APP. rewrite APP.
+          apply injp_acci_tid in APP. simpl in APP. inv Htc1. simpl. rewrite APP.
           destruct CUR_INJP_TID as [Z _]. lia.
           set (wA_str := {|
              cajw_injp := wP''n;
              cajw_sg := start_routine_sig;
-             cajw_rs := (rs # PC <- (rs RDI)) # RDI <- (rs RSI) |}).
+             cajw_rs := (rs # PC <- (rs RSI)) # RDI <- (rs RDX) |}).
           assert (ACCT: injp_acc_thc wP' wP'').
           unfold wP', wP''. econstructor; eauto.
           simpl.
-          
           exists i''. eexists. split.
           -- left. eapply plus_one.
              eapply step_thread_create; eauto. 
@@ -1148,10 +1217,10 @@ GS.fsim_lts.
                replace (Datatypes.length i' + 1 - 1 - Datatypes.length i')%nat with 0%nat by lia.
                reflexivity. rewrite app_length. simpl. lia.
                simpl in MS. unfold wA_str. simpl.
-               clear - MS. inv MS. constructor; eauto.
-               red. intros. simpl.
+               clear - MS Htc1 Htc2. inv MS. constructor; eauto.
+               red. intros. inv Htc1. simpl. 
                rewrite <- Mem.sup_yield_in, <- Mem.sup_create_in. eauto.
-               red. intros. simpl.
+               red. intros. inv Htc2. simpl.
                rewrite <- Mem.sup_yield_in, <- Mem.sup_create_in. eauto.
                rewrite NatMap.gso. rewrite NatMap.gss. reflexivity. lia.
                rewrite NatMap.gso. rewrite NatMap.gss. reflexivity. lia.
@@ -1197,7 +1266,33 @@ GS.fsim_lts.
             unfold worldsP'. repeat rewrite NatMap.gso; eauto.
             intros. specialize (J H5).
             eapply pthread_create_accg2; eauto.
-        + (*** yield_to_yield *)
+        + (** step_switch *)
+          rename s1' into s1''. rename s' into s1'.
+          (*
+            Lemma substep_switch_out : forall i s1 s2 s1',
+            match_states i s1 s2 ->
+            CMulti.switch_out OpenC s1 s1' target gmem' -> exists s2' gtmem',
+            AsmMulti.switch_out OpenA s2 s2' target gtmem' /\
+            match_states i s1' s2'.
+            (*sth more*)
+           *)
+          assert (exists s2' gtmem', AsmMulti.switch_out OpenA s2 s2' target gtmem' /\ match_states i s1' s2').
+          eapply substep_switch_out; eauto.
+          destruct H as [s2' [gtmem' [A B]]].
+          (*
+            Lemma substep_switch_in : forall i s1' s2' s1'' gmem',
+            (*sth more about gtmem'*)
+            match_states i s1' s2' ->
+            CMulti.switch_in OpenC s1' s2'' target gmem' -> exists s2'',
+            AsmMulti.switch_in OpenA s2' s2'' target gtmem' /\
+            match_states i s1'' s2''.
+          *)
+          assert (exists s2'', AsmMulti.switch_in OpenA s2' s2'' target gtmem' /\ match_states i s1'' s2'').
+          eapply substep_switch_in; eauto.
+          destruct H as [s2'' [C D]].
+          exists i, s2''. split. left. eapply plus_one. eapply step_switch; eauto. eauto.
+Qed.
+(*            
           unfold Mem.range_prop in p. rename p into yield_range.
           set (target :=  CMulti.yield_strategy OpenC s1).
           assert ( NEXT_EQ: Mem.next_tid (Mem.support (cq_mem q)) = CMulti.next_tid OpenC s1).
@@ -1357,6 +1452,7 @@ GS.fsim_lts.
             econstructor. 3: reflexivity. eauto. inv H3. reflexivity.
             unfold w_CUR. simpl. eauto.
             eauto. unfold worldsP'.
+
             rewrite NatMap.gso. rewrite NatMap.gss. reflexivity. lia.
             intros. simpl. fold wP'.
             eapply yield_to_yield_accg1; eauto.
@@ -1372,6 +1468,8 @@ GS.fsim_lts.
             eapply yield_to_yield_accg2; eauto.
             simpl. erewrite FIND_TID. 2: eauto. lia.
           }
+
+
         + (** yield_to_initial *)
           unfold Mem.range_prop in p. rename p into yield_range.
           set (target :=  CMulti.yield_strategy OpenC s1).
@@ -1573,7 +1671,7 @@ GS.fsim_lts.
             simpl. erewrite FIND_TID. 2: eauto. lia.
           }
     Qed.
-
+*)
 
 
 

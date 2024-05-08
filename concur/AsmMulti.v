@@ -214,51 +214,51 @@ Section MultiThread.
   Qed.
 
   Inductive switch_out : state -> state -> nat -> mem -> Prop :=
-  |switch_out_yield : forall s s' ls rs_q m_q target p gmem',
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.at_external OpenLTS ls (rs_q,m_q) ->
-      query_is_yield_asm (rs_q,m_q) (next_tid s)->
-      Mem.yield m_q target p = gmem' ->
-      update_cur_thread s (Returny ls rs_q) = s' ->
+  |switch_out_yield : forall s s' ls rs_q m_q target p gmem'
+      (GET_C: get_cur_thread s = Some (Local ls))
+      (AT_E: Smallstep.at_external OpenLTS ls (rs_q,m_q))
+      (Q_YIE: query_is_yield_asm (rs_q,m_q) (next_tid s))
+      (MEM_YIELD: Mem.yield m_q target p = gmem')
+      (SET_C: update_cur_thread s (Returny ls rs_q) = s'),
       switch_out s s' target gmem'
-  |switch_out_join : forall s s' ls rs_q m_q wait vptr target p gmem',
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.at_external OpenLTS ls (rs_q,m_q) ->
-      query_is_pthread_join_asm (rs_q,m_q) wait vptr ->
-      Mem.yield m_q target p = gmem' ->
-      update_cur_thread s (Returnj ls rs_q) = s' ->
+  |switch_out_join : forall s s' ls rs_q m_q wait vptr target p gmem'
+      (GET_C: get_cur_thread s = Some (Local ls))
+      (AT_E: Smallstep.at_external OpenLTS ls (rs_q,m_q))
+      (Q_JOIN: query_is_pthread_join_asm (rs_q,m_q) wait vptr)
+      (MEM_YIELD: Mem.yield m_q target p = gmem')
+      (SET_C: update_cur_thread s (Returnj ls rs_q) = s'),
       switch_out s s' target gmem'
-  |switch_out_final : forall s s' ls res (rs_r : regset) gmem target p gmem',
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.final_state OpenLTS ls (rs_r,gmem) ->
-      res = rs_r # RAX ->
-      Mem.yield gmem target p = gmem' ->
-      update_cur_thread s (Final res) = s' ->
+  |switch_out_final : forall s s' ls res (rs_r : regset) gmem target p gmem'
+      (GET_C: get_cur_thread s = Some (Local ls))
+      (FINAL: Smallstep.final_state OpenLTS ls (rs_r,gmem))
+      (RETVAL: res = rs_r # RAX)
+      (MEM_YIELD: Mem.yield gmem target p = gmem')
+      (SET_C: update_cur_thread s (Final res) = s'),
       switch_out s s' target gmem'.
 
   Inductive switch_in : state -> state -> nat -> mem -> Prop :=
-  |switch_in_yield : forall s' s'' target gmem' ls1 ls1' rs1 rs1',
-      get_thread s' target = Some (Returny ls1 rs1) -> (* the target thread is waiting for reply *)
-      Smallstep.after_external OpenLTS ls1 (rs1', gmem') ls1' ->
+  |switch_in_yield : forall s' s'' target gmem' ls1 ls1' rs1 rs1'
+      (GET_T: get_thread s' target = Some (Returny ls1 rs1))
+      (AFT_E: Smallstep.after_external OpenLTS ls1 (rs1', gmem') ls1')
       (** Maybe we need more operations here *)
-      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
-      yield_state_asm s' (Local ls1') target = s'' ->
+      (SET_RS: rs1' = Pregmap.set PC (rs1 RA) rs1)
+      (YIELD_ST: yield_state_asm s' (Local ls1') target = s''),
      switch_in s' s'' target gmem'
-  |switch_in_join : forall s' s'' target gmem' ls1 ls1' wait gmem'' rs1 i res rs1',
-      get_thread s' target = Some (Returnj ls1 rs1) ->
-      rs1 # RDI = Vint i ->
-      int_to_nat i = wait -> (* the thread [target] is waiting for thread [wait] *)
+  |switch_in_join : forall s' s'' target gmem' ls1 ls1' wait gmem'' rs1 i res rs1'
+      (GET_T: get_thread s' target = Some (Returnj ls1 rs1))
+      (WAIT_THE: rs1 # RDI = Vint i /\ int_to_nat i = wait)
+      (* the thread [target] is waiting for thread [wait] *)
       (* the "wait" thread is already finished *)
-      get_thread s' wait = Some (Final res) ->
-      Mem.storev Many64 gmem' (rs1 # RDX) res = Some gmem'' ->
-      Smallstep.after_external OpenLTS ls1 (rs1', gmem'') ls1' ->
-      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
-      yield_state_asm s' (Local ls1') target = s'' ->
+      (GET_WAIT: get_thread s' wait = Some (Final res))
+      (MEM_RES: Mem.storev Many64 gmem' (rs1 # RDX) res = Some gmem'')
+      (AFT_E: Smallstep.after_external OpenLTS ls1 (rs1', gmem'') ls1')
+      (SET_RS: rs1' = Pregmap.set PC (rs1 RA) rs1)
+      (YIELD_ST: yield_state_asm s' (Local ls1') target = s''),
       switch_in s' s'' target gmem'
-  |switch_in_initial : forall s' s'' rs0 ls1' target gmem',
-      get_thread s' target = Some (Initial rs0) -> (* the target thread is just created *)
-      Smallstep.initial_state OpenLTS (rs0, gmem') ls1' ->
-      yield_state_asm s' (Local ls1') target = s'' ->
+  |switch_in_initial : forall s' s'' rs0 ls1' target gmem'
+      (GET_T: get_thread s' target = Some (Initial rs0)) (* the target thread is just created *)
+      (INITIAL: Smallstep.initial_state OpenLTS (rs0, gmem') ls1')
+      (YIELD_ST: yield_state_asm s' (Local ls1') target = s''),
      switch_in s' s'' target gmem'.
 
   Inductive step : genvtype -> state -> trace -> state -> Prop :=
