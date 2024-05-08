@@ -212,7 +212,55 @@ Section MultiThread.
     replace Archi.ptr64 with true by reflexivity.
     rewrite not_win. simpl. reflexivity.
   Qed.
-  
+
+  Inductive switch_out : state -> state -> nat -> mem -> Prop :=
+  |switch_out_yield : forall s s' ls rs_q m_q target p gmem',
+      get_cur_thread s = Some (Local ls) ->
+      Smallstep.at_external OpenLTS ls (rs_q,m_q) ->
+      query_is_yield_asm (rs_q,m_q) (next_tid s)->
+      Mem.yield m_q target p = gmem' ->
+      update_cur_thread s (Returny ls rs_q) = s' ->
+      switch_out s s' target gmem'
+  |switch_out_join : forall s s' ls rs_q m_q wait vptr target p gmem',
+      get_cur_thread s = Some (Local ls) ->
+      Smallstep.at_external OpenLTS ls (rs_q,m_q) ->
+      query_is_pthread_join_asm (rs_q,m_q) wait vptr ->
+      Mem.yield m_q target p = gmem' ->
+      update_cur_thread s (Returnj ls rs_q) = s' ->
+      switch_out s s' target gmem'
+  |switch_out_final : forall s s' ls res (rs_r : regset) gmem target p gmem',
+      get_cur_thread s = Some (Local ls) ->
+      Smallstep.final_state OpenLTS ls (rs_r,gmem) ->
+      res = rs_r # RAX ->
+      Mem.yield gmem target p = gmem' ->
+      update_cur_thread s (Final res) = s' ->
+      switch_out s s' target gmem'.
+
+  Inductive switch_in : state -> state -> nat -> mem -> Prop :=
+  |switch_in_yield : forall s' s'' target gmem' ls1 ls1' rs1 rs1',
+      get_thread s' target = Some (Returny ls1 rs1) -> (* the target thread is waiting for reply *)
+      Smallstep.after_external OpenLTS ls1 (rs1', gmem') ls1' ->
+      (** Maybe we need more operations here *)
+      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
+      yield_state_asm s' (Local ls1') target = s'' ->
+     switch_in s' s'' target gmem'
+  |switch_in_join : forall s' s'' target gmem' ls1 ls1' wait gmem'' rs1 i res rs1',
+      get_thread s' target = Some (Returnj ls1 rs1) ->
+      rs1 # RDI = Vint i ->
+      int_to_nat i = wait -> (* the thread [target] is waiting for thread [wait] *)
+      (* the "wait" thread is already finished *)
+      get_thread s' wait = Some (Final res) ->
+      Mem.storev Many64 gmem' (rs1 # RDX) res = Some gmem'' ->
+      Smallstep.after_external OpenLTS ls1 (rs1', gmem'') ls1' ->
+      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
+      yield_state_asm s' (Local ls1') target = s'' ->
+      switch_in s' s'' target gmem'
+  |switch_in_initial : forall s' s'' rs0 ls1' target gmem',
+      get_thread s' target = Some (Initial rs0) -> (* the target thread is just created *)
+      Smallstep.initial_state OpenLTS (rs0, gmem') ls1' ->
+      yield_state_asm s' (Local ls1') target = s'' ->
+     switch_in s' s'' target gmem'.
+
   Inductive step : genvtype -> state -> trace -> state -> Prop :=
   |step_local : forall ge ls1 t ls2 s s',
       get_cur_thread s = Some (Local ls1) ->
@@ -227,130 +275,9 @@ Section MultiThread.
       (* the current thread completes the primitive, regsets are unchanged *)
       pthread_create_state s rs_str (Local ls') = s' ->
       step ge s E0 s'
-  (** yield to a thread which is waiting for the reply of its own [yield()] *)
-  |step_thread_yield_to_yield : forall ge s s' s'' tid' rs_q m_q gmem' p ls ls1 ls1' rs1 rs1',
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.at_external OpenLTS ls (rs_q,m_q) ->
-      query_is_yield_asm (rs_q,m_q) (next_tid s)->
-      (*the proof p may be a problem, provided from the invariant between state and the support in gmem *)
-      Mem.yield m_q tid' p = gmem' ->
-      update_cur_thread s (Returny ls rs_q) = s' ->
-      get_thread s' (tid') = Some (Returny ls1 rs1) -> (* the target thread is waiting for reply *)
-      Smallstep.after_external OpenLTS ls1 (rs1', gmem') ls1' ->
-      (** Maybe we need more operations here *)
-      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
-      yield_state_asm s' (Local ls1') tid' = s'' ->
-      step ge s E0 s''
-  (** yield to a thread which has not been initialized from a query *)
-  |step_thread_yield_to_initial : forall ge s s' s'' tid' rs_q m_q gmem' p ls rs0 ls1',
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.at_external OpenLTS ls (rs_q, m_q) ->
-      query_is_yield_asm (rs_q, m_q) (next_tid s)->
-      Mem.yield m_q tid' p = gmem' ->
-      update_cur_thread s (Returny ls rs_q) = s' ->
-      get_thread s' (tid') = Some (Initial rs0) -> (* the target thread is just created *)
-      Smallstep.initial_state OpenLTS (rs0, gmem') ls1' ->
-      yield_state_asm s' (Local ls1') tid' = s'' ->
-      step ge s E0 s''
-  |step_thread_yield_to_join : forall ge s s' s'' tid' rs_q m_q gmem' p ls ls1 rs1 ls1' i wait rs1' gmem'' res,
-      (*current is calling [yield] *)
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.at_external OpenLTS ls (rs_q, m_q) ->
-      query_is_yield_asm (rs_q, m_q) (next_tid s)->
-      Mem.yield m_q tid' p = gmem' ->
-      update_cur_thread s (Returny ls rs_q) = s' ->
-      (* target thread is waiting [join]*)
-      get_thread s' (tid') = Some (Returnj ls1 rs1) ->
-      rs1 # RDI = Vint i ->
-      int_to_nat i = wait ->
-      (* the "wait" thread is already finished *)
-      get_thread s' wait = Some (Final res) ->
-      Mem.storev Many64 gmem' (rs1 # RDX) res = Some gmem'' ->
-      Smallstep.after_external OpenLTS ls1 (rs1', gmem'') ls1' ->
-      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
-      yield_state_asm s' (Local ls1') tid' = s'' ->
-      step ge s E0 s''
-  |step_thread_join_to_yield : forall ge s s' s'' tid' rs_q m_q gmem' p ls ls1 ls1' rs1 rs1' wait vptr,
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.at_external OpenLTS ls (rs_q,m_q) ->
-      query_is_pthread_join_asm (rs_q,m_q) wait vptr ->
-      Mem.yield m_q tid' p = gmem' ->
-      update_cur_thread s (Returnj ls rs_q) = s' ->
-      get_thread s' (tid') = Some (Returny ls1 rs1) -> (* the target thread is waiting for reply *)
-      Smallstep.after_external OpenLTS ls1 (rs1', gmem') ls1' ->
-      (** Maybe we need more operations here *)
-      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
-      yield_state_asm s' (Local ls1') tid' = s'' ->
-      step ge s E0 s''
-  (** yield to a thread which has not been initialized from a query *)
-  |step_thread_join_to_initial : forall ge s s' s'' tid' rs_q m_q gmem' p ls rs0 ls1' wait vptr,
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.at_external OpenLTS ls (rs_q, m_q) ->
-      query_is_pthread_join_asm (rs_q, m_q) wait vptr->
-      Mem.yield m_q tid' p = gmem' ->
-      update_cur_thread s (Returnj ls rs_q) = s' ->
-      get_thread s' (tid') = Some (Initial rs0) -> (* the target thread is just created *)
-      Smallstep.initial_state OpenLTS (rs0, gmem') ls1' ->
-      yield_state_asm s' (Local ls1') tid' = s'' ->
-      step ge s E0 s''
-  |step_thread_join_to_join : forall ge s s' s'' tid' rs_q m_q gmem' p ls ls1 rs1 ls1' i wait rs1' gmem'' res wait' vptr,
-      (*current is calling [join] *)
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.at_external OpenLTS ls (rs_q, m_q) ->
-      query_is_pthread_join_asm (rs_q, m_q) wait vptr ->
-      Mem.yield m_q tid' p = gmem' ->
-      update_cur_thread s (Returny ls rs_q) = s' ->
-      (* target thread is waiting [join]*)
-      get_thread s' (tid') = Some (Returnj ls1 rs1) ->
-      rs1 # RDI = Vint i ->
-      int_to_nat i = wait' ->
-      (* the "wait" thread is already finished *)
-      get_thread s' wait' = Some (Final res) ->
-      Mem.storev Many64 gmem' (rs1 # RDX) res = Some gmem'' ->
-      Smallstep.after_external OpenLTS ls1 (rs1', gmem'') ls1' ->
-      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
-      yield_state_asm s' (Local ls1') tid' = s'' ->
-      step ge s E0 s''
-  |step_final_to_yield : forall ge s s' s'' tid' rs_r m_r res gmem' p ls ls1 ls1' rs1 rs1',
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.final_state OpenLTS ls (rs_r,m_r) ->
-      res = rs_r # RAX ->
-      Mem.yield m_r tid' p = gmem' ->
-      update_cur_thread s (Final res) = s' ->
-      get_thread s' (tid') = Some (Returny ls1 rs1) -> (* the target thread is waiting for reply *)
-      Smallstep.after_external OpenLTS ls1 (rs1', gmem') ls1' ->
-      (** Maybe we need more operations here *)
-      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
-      yield_state_asm s' (Local ls1') tid' = s'' ->
-      step ge s E0 s''
-  (** yield to a thread which has not been initialized from a query *)
-  |step_final_to_initial : forall ge s s' s'' tid' rs_r m_r res gmem' p ls rs0 ls1',
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.final_state OpenLTS ls (rs_r, m_r) ->
-      res = rs_r RAX ->
-      Mem.yield m_r tid' p = gmem' ->
-      update_cur_thread s (Final res) = s' ->
-      get_thread s' (tid') = Some (Initial rs0) -> (* the target thread is just created *)
-      Smallstep.initial_state OpenLTS (rs0, gmem') ls1' ->
-      yield_state_asm s' (Local ls1') tid' = s'' ->
-      step ge s E0 s''
-  |step_final_to_join : forall ge s s' s'' tid' rs_r m_r gmem' p ls ls1 rs1 ls1' i rs1' gmem'' res res' wait',
-      (*current is calling [join] *)
-      get_cur_thread s = Some (Local ls) ->
-      Smallstep.final_state OpenLTS ls (rs_r, m_r) ->
-      res = rs_r RAX ->
-      Mem.yield m_r tid' p = gmem' ->
-      update_cur_thread s (Final res) = s' ->
-      (* target thread is waiting [join]*)
-      get_thread s' (tid') = Some (Returnj ls1 rs1) ->
-      rs1 # RDI = Vint i ->
-      int_to_nat i = wait' ->
-      (* the "wait" thread is already finished *)
-      get_thread s' wait' = Some (Final res') ->
-      Mem.storev Many64 gmem' (rs1 # RDX) res' = Some gmem'' ->
-      Smallstep.after_external OpenLTS ls1 (rs1', gmem'') ls1' ->
-      rs1' = Pregmap.set PC (rs1 RA) rs1 ->
-      yield_state_asm s' (Local ls1') tid' = s'' ->
+  |step_switch : forall ge s s' s'' target gmem',
+      switch_in s s' target gmem' ->
+      switch_out s' s'' target gmem' ->
       step ge s E0 s''.
 
   Definition globalenv := Smallstep.globalenv OpenLTS.
