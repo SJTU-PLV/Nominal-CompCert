@@ -276,8 +276,8 @@ Section MultiThread.
       pthread_create_state s rs_str (Local ls') = s' ->
       step ge s E0 s'
   |step_switch : forall ge s s' s'' target gmem',
-      switch_in s s' target gmem' ->
-      switch_out s' s'' target gmem' ->
+      switch_out s s' target gmem' ->
+      switch_in s' s'' target gmem' ->
       step ge s E0 s''.
 
   Definition globalenv := Smallstep.globalenv OpenLTS.
