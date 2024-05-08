@@ -1211,6 +1211,7 @@ Axiom alloc_parallel_inject:
   alloc m2 lo2 hi2 = (m2', b2)
   /\ inject f' m1' m2'
   /\ inject_incr f f'
+  /\ incr_without_glob f f'
   /\ f' b1 = Some(b2, 0)
   /\ (forall b, b <> b1 -> f' b = f b).
 

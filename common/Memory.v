@@ -5554,6 +5554,7 @@ Theorem alloc_parallel_inject:
   alloc m2 lo2 hi2 = (m2', b2)
   /\ inject f' m1' m2'
   /\ inject_incr f f'
+  /\ incr_without_glob f f'
   /\ f' b1 = Some(b2, 0)
   /\ (forall b, b <> b1 -> f' b = f b).
 Proof.
@@ -5570,7 +5571,10 @@ Proof.
   red; intros. apply Z.divide_0_r.
   intros. apply (valid_not_valid_diff m2 b2 b2); eauto with mem.
   intros [f' [A [B [C D]]]].
-  exists f'; exists m2'; exists b2; auto.
+  exists f'. exists m2'. exists b2. intuition idtac.
+  red. intros. destruct (Block.eq_block b b1).
+  subst. rewrite H4 in C. inv C. intuition eauto using Mem.alloc_result_stack.
+  specialize (D _ n). congruence.
 Qed.
 
 (* Preservation of [pop_stage] operations *)

@@ -21,6 +21,7 @@ Require Import Coqlib.
 Require Import AST.
 Require Import Integers.
 Require Import Floats.
+From Coq Require Import RelationClasses.
 
 Module Type BLOCK.
 
@@ -2692,6 +2693,23 @@ Lemma inject_incr_trans :
   inject_incr f1 f2 -> inject_incr f2 f3 -> inject_incr f1 f3 .
 Proof.
   unfold inject_incr; intros. eauto.
+Qed.
+
+Instance incr_without_glob_refl : Reflexive incr_without_glob.
+Proof. red. red. intros. congruence. Qed.
+
+Lemma incr_without_glob_trans:
+  forall j j' j'',
+    inject_incr j j' ->
+    incr_without_glob j j' ->
+    inject_incr j' j'' ->
+    incr_without_glob j' j'' ->
+    incr_without_glob j j''.
+Proof.
+  red. intros. destruct (j' b) eqn:?.
+  destruct p. exploit H0; eauto. exploit H1; eauto.
+  intuition auto. rewrite H5 in H4. inv H4. auto.
+  exploit H2; eauto.
 Qed.
 
 Lemma val_inject_incr:

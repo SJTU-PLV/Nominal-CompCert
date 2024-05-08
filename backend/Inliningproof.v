@@ -561,6 +561,7 @@ Qed.
 Variable F1: meminj.
 Variables m1 m1': mem.
 Hypothesis INCR: inject_incr F F1.
+Hypothesis GLOB: incr_without_glob F F1.
 
 Lemma mit_incr_invariant bound s1 s2 s1' s2':
   (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> sup_In b1 (injw_sup_l w) \/ sup_In b2 bound ->
@@ -579,6 +580,7 @@ Proof.
   - destruct (Mem.sup_dec b1 s0); try (erewrite INJ in Hb1''; eauto; discriminate).
     destruct (Mem.sup_dec b2 bound); try (erewrite INJ in Hb1''; eauto; discriminate).
     split; eauto.
+  - eauto using incr_without_glob_trans.
 Qed.
 
 Lemma match_stacks_invariant:
@@ -703,7 +705,7 @@ Lemma match_stacks_inside_set_reg:
   match_stacks_inside F m m' n l stk stk' f' ctx sp' rs' ->
   match_stacks_inside F m m' n l stk stk' f' ctx sp' (rs'#(sreg ctx r) <- v).
 Proof.
-  intros. eapply match_stacks_inside_invariant; eauto.
+  intros. eapply match_stacks_inside_invariant; eauto. reflexivity.
   intros. apply Regmap.gso. zify. unfold sreg; rewrite shiftpos_eq. extlia.
 Qed.
 
@@ -727,6 +729,7 @@ Lemma match_stacks_inside_store:
 Proof.
   intros.
   eapply match_stacks_inside_invariant; eauto with mem.
+  reflexivity.
   rewrite (Mem.support_store _ _ _ _ _ _ H0). eauto.
   rewrite (Mem.support_store _ _ _ _ _ _ H1). eauto.
 (*
@@ -738,15 +741,16 @@ Qed.
 (** Preservation by an allocation *)
 
 Lemma match_stacks_inside_alloc_left:
-  forall F m m' stk stk' f' ctx sps' sp' rs' n l,
-  match_stacks_inside F m m' n l stk stk' f' ctx sps' rs' ->
-  sp' = fresh_block sps' ->
-  forall sz m1 b F1 delta,
-  Mem.alloc m 0 sz = (m1, b) ->
-  inject_incr F F1 ->
-  F1 b = Some(sp', delta) ->
-  (forall b1, b1 <> b -> F1 b1 = F b1) ->
-  delta >= ctx.(dstk) ->
+  forall F m m' stk stk' f' ctx sps' sp' rs' n l
+  (INSIDE: match_stacks_inside F m m' n l stk stk' f' ctx sps' rs')
+  (FRESH: sp' = fresh_block sps')
+  sz m1 b F1 delta
+  (ALLOC: Mem.alloc m 0 sz = (m1, b))
+  (INCR: inject_incr F F1)
+  (GLOB: incr_without_glob F F1)
+  (INJ: F1 b = Some(sp', delta))
+  (CHANGE: (forall b1, b1 <> b -> F1 b1 = F b1))
+  (RANGE: delta >= ctx.(dstk)),
   match_stacks_inside F1 m1 m' n l stk stk' f' ctx sps' rs'.
 Proof.
   induction 1; intros.
@@ -755,25 +759,25 @@ Proof.
   eapply match_stacks_invariant; eauto.
 
   intros. destruct (eq_block b1 b).
-  subst b1. rewrite H2 in H5; inv H5.
+  subst b1. rewrite INJ in H; inv H.
     exfalso.
-    apply Mem.alloc_result in H0. subst.
+    apply Mem.alloc_result in ALLOC. subst.
     apply match_stacks_support in MS. eauto.
     destruct MS.
-    destruct H6; eapply freshness; eauto.
-  rewrite H3 in H5; auto.
-  rewrite (Mem.support_alloc _ _ _ _ _ H0). eauto.
+    destruct H0; eapply freshness; eauto.
+  rewrite CHANGE in H; auto.
+  rewrite (Mem.support_alloc _ _ _ _ _ ALLOC). eauto.
   intros. exploit Mem.perm_alloc_inv; eauto. destruct (eq_block b1 b); intros; auto.
-  subst b1. rewrite H2 in H5. inv H5. eelim freshness; eauto.
+  subst b1. rewrite INJ in H. inv H. eelim freshness; eauto.
   (* inlined *)
   subst sp'0. subst sp'.
   eapply match_stacks_inside_inlined; eauto.
-  eapply IHmatch_stacks_inside; eauto. destruct SBELOW. lia.
+  eapply IHINSIDE; eauto. destruct SBELOW. lia.
   eapply agree_regs_incr; eauto.
   eapply range_private_invariant; eauto.
   intros. exploit Mem.perm_alloc_inv; eauto. destruct (eq_block b0 b); intros.
-  subst b0. rewrite H3 in H0; inv H0. exfalso; extlia.
-  rewrite H4 in H0; auto.
+  subst b0. rewrite INJ in H; inv H. exfalso; extlia.
+  rewrite CHANGE in H; auto.
 Qed.
 
 Lemma match_stacks_record_frame_left:
@@ -785,6 +789,7 @@ Lemma match_stacks_record_frame_left:
 Proof.
   intros.
   eapply match_stacks_invariant; eauto.
+  reflexivity.
   intro. rewrite Mem.support_record_frame_1; eauto.
   intros. eapply Mem.perm_record_frame; eauto.
 Qed.
@@ -798,6 +803,7 @@ Lemma match_stacks_inside_record_frame_left:
 Proof.
   intros.
   eapply match_stacks_inside_invariant; eauto.
+  reflexivity.
   intro. rewrite Mem.support_record_frame_1; eauto.
   intros. eapply Mem.perm_record_frame; eauto.
 Qed.
@@ -812,6 +818,7 @@ Lemma match_stacks_free_left:
   match_stacks F m1 m' l stk stk' sp.
 Proof.
   intros. eapply match_stacks_invariant; eauto.
+  reflexivity.
   rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
   red. intros. eapply Mem.perm_free_3; eauto.
 (*  intros. eapply Mem.perm_free_3; eauto. *)
@@ -825,6 +832,7 @@ Lemma match_stacks_free_right:
   match_stacks F m m1' l stk stk' sps.
 Proof.
   intros. eapply match_stacks_invariant; eauto.
+  reflexivity.
   rewrite (Mem.support_free _ _ _ _ _ H1). eauto.
 (*  red. intros. eapply Mem.perm_free_3; eauto. *)
   intros. eapply Mem.perm_free_1; eauto with ordered_type.
@@ -869,6 +877,7 @@ Hypothesis MAXPERM': forall b ofs p, Mem.valid_block m1' b -> Mem.perm m2' b ofs
 Hypothesis UNCHANGED: Mem.unchanged_on (loc_out_of_reach F1 m1) m1' m2'.
 Hypothesis INJ: Mem.inject F1 m1 m1'.
 Hypothesis INCR: inject_incr F1 F2.
+Hypothesis GLOB: incr_without_glob F1 F2.
 Hypothesis SEP: inject_separated F1 F2 m1 m1'.
 
 Lemma match_stacks_extcall:
@@ -1053,27 +1062,21 @@ End TAKEDROP.
 Section INLINE_SIZES.
 
 Inductive inline_sizes : list nat -> Memory.stackadt -> Memory.stackadt -> Prop :=
-| inline_sizes_cons: forall g s1 s2 t1 n t2
-    (IHsize: inline_sizes_head g (drop n s1) (t2 :: s2))
-    (NTH: nth_error s1 n = Some t1),
-    inline_sizes (S n::g) s1 (t2 :: s2)
-with inline_sizes_head: list nat -> stackadt -> stackadt -> Prop :=
 | inline_sizes_nil: forall a1 a2
     (ASTK: stack_size a1 >= stack_size a2),
-    inline_sizes_head nil a1 a2
-| inline_sizes_first: forall g h1 t1 h2 t2
-    (IHsize: inline_sizes g t1 t2)
-    (SIZE: size_of_all_frames h1 >= size_of_all_frames h2),
-    inline_sizes_head g (h1 :: t1) (h2 :: t2)
-.
+    inline_sizes nil a1 a2
+| inline_sizes_cons: forall g s1 s2 t1 n t2
+    (IHsize: inline_sizes g (drop (S n) s1) s2)
+    (NTH: nth_error s1 n = Some t1)
+    (SIZE: size_of_all_frames t2 <= size_of_all_frames t1),
+    inline_sizes (S n::g) s1 (t2 :: s2).
 
 Lemma inline_sizes_up:
   forall g s1 s2,
     inline_sizes g s1 s2 ->
     inline_sizes (1%nat :: g) (nil::s1) (nil::s2).
 Proof.
-  intros. econstructor; simpl; eauto.
-  constructor; simpl; auto. lia.
+  intros. econstructor; simpl; eauto. simpl. lia.
 Qed.
 
 Lemma inline_sizes_upstar:
@@ -1094,18 +1097,7 @@ Proof.
   intros g n f1 s1 s2 IS. inv IS.
   simpl in *. repeat destr_in H2.
   repeat econstructor; eauto. simpl.
-  pose proof Memory.size_of_all_frames_pos f1. lia.
-Qed.
-
-Lemma inline_sizes_head_replace:
-  forall g h1 h1' t1 h2 h2' t2,
-  size_of_all_frames h1' >= size_of_all_frames h1 ->
-  size_of_all_frames h2 >= size_of_all_frames h2' ->
-  inline_sizes_head g (h1::t1) (h2::t2) ->
-  inline_sizes_head g (h1'::t1) (h2'::t2).
-Proof.
-  intros. inv H1; constructor; simpl; auto.
-  simpl in ASTK. lia. lia.
+  apply Memory.size_of_all_frames_pos.
 Qed.
 
 Lemma inline_sizes_record:
@@ -1115,9 +1107,8 @@ Lemma inline_sizes_record:
 Proof.
   intros. inv SZ.
   simpl in *. inv NTH.
-  econstructor; simpl; eauto.
-  inv IHsize; constructor; simpl; auto;
-  unfold frame_size_a; simpl; try simpl in ASTK; lia.
+  econstructor; simpl; eauto. simpl.
+  unfold frame_size_a. simpl. lia.
 Qed.
 
 Lemma inline_sizes_record_left:
@@ -1126,33 +1117,27 @@ Lemma inline_sizes_record_left:
     (SIZES: inline_sizes g (t1 :: s1) s2),
     inline_sizes g ((fr:: t1) :: s1) s2.
 Proof.
-  intros. inv SIZES.
-  destruct n; simpl in *.
-  inv NTH. econstructor; simpl; auto.
-  inv IHsize; constructor; simpl; unfold frame_size_a; simpl; auto.
-  simpl in ASTK.
-  pose proof frame_size_pos fr. pose proof align_le (frame_size fr) 8 ltac:(lia).
-  lia.
-  pose proof frame_size_pos fr. pose proof align_le (frame_size fr) 8 ltac:(lia).
-  lia.
+  intros. inv SIZES. congruence.
+  destruct n; simpl in *. inv NTH.
+  econstructor; simpl; auto. etransitivity. apply SIZE.
+  simpl. generalize (Memory.frame_size_a_pos fr). intro. lia.
   econstructor; simpl; eauto.
 Qed.
 
-(* Lemma inline_sizes_down:
+Lemma inline_sizes_down:
   forall g s1 s2,
     inline_sizes (1%nat::g) s1 s2 ->
     inline_sizes g (tl s1) (tl s2).
 Proof.
   intros. inv H. simpl in *; auto.
-  destr_in NTH. inv NTH. simpl.
-Qed. *)
+Qed.
 
 Lemma inline_sizes_downstar:
   forall g n s1 s2,
     inline_sizes (S (S n) :: g) s1 s2 ->
     inline_sizes (S n :: g) (tl s1) s2.
 Proof.
-  intros. inv H. simpl in *. repeat destr_in H3. destr_in NTH.
+  intros. inv H. simpl in *. repeat destr_in NTH.
   econstructor; simpl; eauto.
 Qed.
 
@@ -1183,27 +1168,21 @@ Qed.
 Lemma inline_sizes_le:
   forall g s1 s2
     (SIZES: inline_sizes g s1 s2),
-    Memory.stack_size s2 <= Memory.stack_size s1
-with inline_sizes_head_le:
-  forall g s1 s2
-    (SIZES: inline_sizes_head g s1 s2),
     Memory.stack_size s2 <= Memory.stack_size s1.
 Proof.
-  intros. destruct SIZES eqn:EQ. simpl.
-  (* induction 1; simpl; intros; eauto. *)
-  assert (S n <= Datatypes.length s1)%nat.
+  induction 1; simpl; intros; eauto. lia.
+  destruct (take_succeeds (S n) s1) as (t & TAKE).
   eapply nth_error_Some; eauto. congruence.
-  destruct (take_succeeds n s1) as (t & TAKE). lia.
   rewrite (take_drop _ _ _ TAKE).
   rewrite Memory.stack_size_app.
-  specialize (inline_sizes_head_le _ _ _ IHsize). simpl in *.
-  pose proof stack_size_pos t. lia.
-
-  intros. destruct SIZES eqn:EQ; simpl. lia.
-  specialize (inline_sizes_le _ _ _ IHsize). lia.
+  cut (Memory.size_of_all_frames t2 <= Memory.stack_size t). intros; lia.
+  etransitivity. apply SIZE.
+  eapply stage_size_le_stack_size; eauto.
+  eapply nth_error_take in TAKE; eauto.
+  eapply nth_error_In; eauto.
 Qed.
 
-(* Lemma inline_sizes_tl_le:
+Lemma inline_sizes_tl_le:
   forall g s1 s2,
     inline_sizes (1%nat::g) s1 s2 ->
     Memory.stack_size (tl s2) <= Memory.stack_size (tl s1).
@@ -1211,7 +1190,7 @@ Proof.
   intros g s1 s2 SZ.
   eapply inline_sizes_le.
   apply inline_sizes_down. eauto.
-Qed. *)
+Qed.
 
 End INLINE_SIZES.
 
@@ -1363,6 +1342,7 @@ Lemma match_stacks_push_l:
 Proof.
   intros.
   eapply match_stacks_invariant; eauto.
+  reflexivity.
   red. intros. erewrite <- Mem.support_push_stage_1; eauto.
 Qed.
 
@@ -1373,6 +1353,7 @@ Lemma match_stacks_push_r:
 Proof.
   intros.
   eapply match_stacks_invariant; eauto.
+  reflexivity.
   red. intros. erewrite <- Mem.support_push_stage_1; eauto.
 Qed.
 
@@ -1393,6 +1374,7 @@ Lemma match_stacks_inside_push_l:
 Proof.
   intros.
   eapply match_stacks_inside_invariant; eauto.
+  reflexivity.
   red. intros. erewrite <- Mem.support_push_stage_1; eauto.
 Qed.
 
@@ -1403,6 +1385,7 @@ Lemma match_stacks_inside_push_r:
 Proof.
   intros.
   eapply match_stacks_inside_invariant; eauto.
+  reflexivity.
   red. intros. erewrite <- Mem.support_push_stage_1; eauto.
 Qed.
 
@@ -1424,10 +1407,9 @@ Lemma inline_sizes_same_top:
     Memory.size_of_all_frames f1 = Memory.size_of_all_frames f2 ->
     inline_sizes g (f2::s1) s2.
 Proof.
-  intros g f1 f2 s1 s2 CONS SZ EQ; inv SZ; simpl in *.
+  intros g f1 f2 s1 s2 CONS SZ EQ; inv SZ; simpl in *. congruence.
   destruct n; simpl in *.
-  inv NTH. econstructor; simpl; eauto.
-  eapply inline_sizes_head_replace. 3:exact IHsize. 1,2:lia.
+  inv NTH. econstructor; simpl; eauto. lia.
   econstructor; simpl; eauto.
 Qed.
 
@@ -1538,7 +1520,7 @@ Proof.
   eapply ros_address_agree; eauto.
   eapply agree_val_regs; eauto.
   eapply Mem.push_stage_inject; eauto.
-  econstructor; simpl; eauto. constructor. auto. simpl. lia.
+  econstructor; simpl; eauto. simpl. lia.
 + (* inlined *)
   assert (EQ: fd = Internal f0) by (eapply ros_address_inlined with (rs:=rs); eauto).
   subst fd.
@@ -1583,6 +1565,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_sup_include with (support := sps').
   eapply match_stacks_invariant; eauto.
+  reflexivity.
   rewrite (Mem.support_free _ _ _ _ _ H3). eauto.
   rewrite (Mem.support_free _ _ _ _ _ FREE). eauto.
 (*
@@ -1606,6 +1589,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_untailcall; eauto.
   eapply match_stacks_inside_invariant; eauto.
+  reflexivity.
   rewrite (Mem.support_free _ _ _ _ _ H3). eauto.
   red. intros. eapply Mem.support_push_stage_1; eauto.
   (* red. intros. eapply Mem.perm_free_3; eauto. *)
@@ -1629,6 +1613,7 @@ Proof.
   econstructor; eauto.
   eapply match_stacks_inside_inlined_tailcall; eauto.
   eapply match_stacks_inside_invariant; eauto.
+  reflexivity.
   rewrite (Mem.support_free _ _ _ _ _ H3). eauto.
   (* red. intros. eapply Mem.perm_free_3; eauto. *)
   intros. eapply Mem.perm_free_3; eauto.
@@ -1757,6 +1742,7 @@ exploit external_call_mem_inject'; eauto.
   econstructor; eauto.
   eapply match_stacks_sup_include with (support := sps').
   eapply match_stacks_invariant; eauto.
+    reflexivity.
     rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
     rewrite (Mem.support_free _ _ _ _ _ FREE). eauto.
 (*    red. intros. eapply Mem.perm_free_3; eauto. 
@@ -1773,6 +1759,7 @@ exploit external_call_mem_inject'; eauto.
   right. split. simpl. lia. split. auto.
   econstructor; eauto.
   eapply match_stacks_inside_invariant; eauto.
+    reflexivity.
     rewrite (Mem.support_free _ _ _ _ _ H0). eauto.
 (*    red. intros. eapply Mem.perm_free_3; eauto. *)
     intros. eapply Mem.perm_free_3; eauto.
@@ -1795,7 +1782,7 @@ exploit external_call_mem_inject'; eauto.
   inversion TR; subst.
   exploit Mem.alloc_parallel_inject. eauto. eauto. apply Z.le_refl.
     instantiate (1 := fn_stacksize f'). inv H2. extlia.
-  intros [F' [m2' [sp' [A [B [C [D E]]]]]]].
+  intros [F' [m2' [sp' [A [B [C [D [E G]]]]]]]].
   exploit Mem.record_frame_parallel_inject; eauto.
   inv SIZES. apply Mem.support_alloc in A. rewrite A.
   unfold sup_incr. simpl. congruence.
@@ -1814,12 +1801,12 @@ exploit external_call_mem_inject'; eauto.
   intro STK. *)
   eapply match_stacks_invariant; eauto.
     intros. destruct (eq_block b1 stk).
-    subst b1. rewrite D in H9; inv H9.
+    subst b1. rewrite E in H9; inv H9.
       apply Mem.alloc_result in H. subst.
       apply match_stacks_support in MS0.
       exfalso. destruct MS0.
       destruct H10; eapply freshness; eauto.
-    rewrite E in H9; auto.
+    rewrite G in H9; auto.
     eapply Mem.sup_include_trans. instantiate (1 := (Mem.support m')).
     rewrite (Mem.support_alloc _ _ _ _ _ H). eauto.
     red. intros. rewrite <- Mem.support_record_frame_1; eauto.
@@ -1845,7 +1832,7 @@ exploit external_call_mem_inject'; eauto.
     erewrite <- Mem.perm_record_frame in H11. 2: eauto.
     exploit Mem.perm_alloc_inv. eexact H. eauto. *)
     destruct (eq_block b1 stk); intros; auto.
-    subst b1. rewrite D in H9; inv H9. eelim freshness; eauto.
+    subst b1. rewrite E in H9; inv H9. eelim freshness; eauto.
     intros.
     erewrite <- Mem.perm_record_frame. 2: eauto.
     eapply Mem.perm_alloc_1; eauto.
@@ -1857,10 +1844,7 @@ exploit external_call_mem_inject'; eauto.
   auto. auto. auto. eauto. auto.
   rewrite H6. apply agree_regs_init_regs. eauto. auto. inv H2; auto. congruence.
   eapply meminj_global_invariant; eauto.
-  intro. intros. destruct (eq_block b stk).
-  subst. rewrite D in H10. inv H10.
-  apply Mem.alloc_result_stack in H. apply Mem.alloc_result_stack in A. auto.
-  rewrite E in H10. congruence. auto. auto.
+  auto.
   apply Mem.astack_record_frame in H0.
   apply Mem.astack_record_frame in RECORD as Y.
   destruct H0 as (hd & tl & Stk1 & Stk2).
@@ -1880,8 +1864,8 @@ exploit external_call_mem_inject'; eauto.
   exploit Mem.perm_alloc_inv. eexact H.
   eapply Mem.perm_record_frame; eauto.
   destruct (eq_block b stk); intros.
-  subst. rewrite D in H10; inv H10. inv H2; extlia.
-  rewrite E in H10; auto. eelim Mem.fresh_block_alloc. eexact A. eapply Mem.mi_mappedblocks; eauto.
+  subst. rewrite E in H10; inv H10. inv H2; extlia.
+  rewrite G in H10; auto. eelim Mem.fresh_block_alloc. eexact A. eapply Mem.mi_mappedblocks; eauto.
   auto.
   intros. exploit Mem.perm_alloc_inv; eauto.
   eapply Mem.perm_record_frame; eauto.
@@ -1919,11 +1903,16 @@ exploit external_call_mem_inject'; eauto.
   eapply match_stacks_inside_record_frame_left; eauto.
   eapply match_stacks_inside_alloc_left; eauto.
   eapply match_stacks_inside_invariant; eauto.
+  reflexivity.
+  red. intros. destruct (eq_block b stk).
+  subst. rewrite C in H9. inv H9.
+  apply Mem.alloc_result_stack in H.
+  unfold fresh_block. simpl. auto. rewrite D in H9. congruence. auto.
   lia. eauto. eauto.
   apply agree_regs_incr with F; auto.
   auto.
   eapply meminj_global_invariant; eauto.
-  intro. intros. destruct (eq_block b stk).
+  red. intros. destruct (eq_block b stk).
   subst. rewrite C in H9. inv H9.
   apply Mem.alloc_result_stack in H.
   unfold fresh_block. simpl. auto. rewrite D in H9. congruence. auto. auto.
@@ -1987,6 +1976,7 @@ exploit external_call_mem_inject'; eauto.
   eapply plus_one. eapply exec_return. eauto.
   econstructor; eauto.
   eapply match_stacks_inside_invariant. eauto.
+  reflexivity.
   apply match_stacks_inside_set_reg; eauto. all: eauto.
   red. intros. rewrite <- Mem.support_pop_stage_1; eauto.
   red. intros. rewrite <- Mem.support_pop_stage_1; eauto.
@@ -1997,7 +1987,7 @@ exploit external_call_mem_inject'; eauto.
   inv SIZES. apply Mem.astack_pop_stage in H. apply Mem.astack_pop_stage in A.
   destruct H. destruct A.
   rewrite H in IHsize. rewrite H0 in H4. inv H4. simpl in IHsize.
-  inv IHsize. auto.
+  auto.
   eapply Mem.sup_include_trans; eauto. intro.
   eapply Mem.support_pop_stage_1 in A. apply A.
   eapply range_private_invariant; eauto. intros.
@@ -2015,6 +2005,7 @@ exploit external_call_mem_inject'; eauto.
   eapply match_regular_states. auto.
   eapply match_stacks_inside_set_reg; eauto.
   eapply match_stacks_inside_invariant; eauto.
+  reflexivity.
   red. intros. rewrite <- Mem.support_pop_stage_1; eauto.
   red. intros. rewrite <- Mem.support_pop_stage_1; eauto.
   intros. apply P1. auto. intros. apply P2. auto.
@@ -2025,7 +2016,7 @@ exploit external_call_mem_inject'; eauto.
   inv SIZES. apply Mem.astack_pop_stage in H. apply Mem.astack_pop_stage in A.
   destruct H. destruct A.
   rewrite H in IHsize. rewrite H0 in H4. inv H4. simpl in IHsize.
-  inv IHsize. auto.
+  auto.
   eapply Mem.sup_include_trans; eauto. intro.
   eapply Mem.support_pop_stage_1 in A. apply A.
   eapply range_private_invariant.
@@ -2050,6 +2041,7 @@ exploit external_call_mem_inject'; eauto.
   econstructor; eauto.
   apply match_stacks_inside_set_reg; eauto.
   eapply match_stacks_inside_invariant; eauto.
+  reflexivity.
   red. intros. rewrite <- Mem.support_pop_stage_1; eauto.
   intros. apply P1. auto.
   apply agree_set_reg; auto.
@@ -2061,6 +2053,7 @@ exploit external_call_mem_inject'; eauto.
   eapply plus_one. eapply exec_Inop; eauto.
   econstructor; eauto.
   eapply match_stacks_inside_invariant; eauto.
+  reflexivity.
   red. intros. rewrite <- Mem.support_pop_stage_1; eauto.
   intros.
   erewrite Mem.perm_pop_stage; eauto.
@@ -2087,10 +2080,11 @@ Proof.
   apply match_stacks_nil; auto.
   destruct w. constructor; auto.
   red. intros. simpl in *. congruence.
+  simpl. reflexivity.
   all:inv H0; auto.
   1,2,3:red; intros; erewrite <- Mem.support_push_stage_1; eauto.
   apply Mem.push_stage_inject. auto.
-  simpl. econstructor; simpl; eauto. constructor. auto.
+  simpl. econstructor; simpl; eauto. constructor. auto. simpl. lia.
 Qed.
   (* intros. inv H1. inv H0. inv H9; cbn in *.
   assert (Genv.match_stbls w se tse) by (inv H; auto).
@@ -2158,12 +2152,18 @@ Proof.
     apply Mem.nonempty_pop_stage in H0 as (m'1 & POP).
     eexists. split. econstructor; eauto.
     inv MG. eexists. split.
-    econstructor. eauto. eauto.
+    econstructor. eauto. eauto. auto.
     1,2:red; intros; erewrite <- Mem.support_pop_stage_1; eauto.
     constructor; auto. constructor; auto.
     simpl in NTH. destr_in NTH. inv NTH.
-    simpl in IHsize. apply inline_sizes_head_le in IHsize.
-    constructor; try congruence. lia.
+    simpl in IHsize. apply inline_sizes_le in IHsize.
+    constructor; try congruence.
+    apply Mem.astack_pop_stage in H1 as []. rewrite H0 in Heqs. inv Heqs.
+    apply Mem.astack_pop_stage in POP as []. rewrite H1 in H. inv H.
+    lia.
+    exploit Mem.pop_stage_parallel_inject. 2:exact H1. eauto.
+    apply Mem.astack_pop_stage in POP as []. congruence.
+    intros (m'1' & POP' & INJ). rewrite POP' in POP. inv POP. auto.
   - exploit match_stacks_inside_empty; eauto. intros [A B]. congruence.
 Qed.
 
@@ -2180,28 +2180,26 @@ Proof.
   simpl in FD. inv FD.
   eexists (injpw _ _ _ MINJ), _. intuition idtac.
   - econstructor; eauto.
-    inv FINJ. apply GLOB in H4. inv H4. rewrite Ptrofs.add_zero_l. auto.
-    inv SIZES. congruence.
+    inv FINJ. apply GLOB in H3. inv H3. rewrite Ptrofs.add_zero_l. auto.
   - econstructor; eauto. constructor; auto.
     destruct FINJ; cbn in *; try congruence.
     pose proof inline_sizes_le _ _ _ SIZES.
     inv SIZES. simpl in NTH. destr_in NTH. inv NTH.
     constructor; try congruence.
-    simpl in IHsize. apply inline_sizes_head_le in IHsize. lia.
+    simpl in IHsize. apply inline_sizes_le in IHsize. simpl. lia.
     congruence.
   - constructor.
     + eapply match_stacks_globalenvs; eauto.
     + eapply match_stacks_support in MS; eauto. destruct MS. inv GE. eauto.
     + eapply match_stacks_support in MS; eauto. destruct MS. inv GE. eauto.
-  - inv H3. destruct H2 as (w' & Hw' & H2). inv Hw'. inv H2. inv H19.
+  - inv H2. destruct H1 as (w' & Hw' & H1). inv Hw'. inv H1. inv H6.
     eexists; split; econstructor; eauto.
-    inv FINJ. apply GLOB in H4. inv H4. rewrite Ptrofs.add_zero_l. auto.
-    inv SIZES. congruence.
+    inv FINJ. apply GLOB in H3. inv H3. rewrite Ptrofs.add_zero_l. auto.
     eapply match_stacks_sup_include with (Mem.support m').
     eapply match_stacks_extcall with (F1 := F) (F2 := f') (m1 := m) (m1' := m'); eauto.
     eapply Mem.unchanged_on_support; eauto.
     eapply Mem.unchanged_on_support; eauto.
-    rewrite <- H14, <- H15. auto.
+    rewrite <- ASTK1, <- ASTK2. auto.
 Qed.
 
 End INLINING.

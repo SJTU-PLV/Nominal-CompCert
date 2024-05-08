@@ -42,16 +42,18 @@ Hint Resolve max_perm_decrease_refl max_perm_decrease_trans : core.
     [ec_readonly] and [ec_max_perm]. *)
 
 Inductive injp_acc: relation injp_world :=
-  injp_acc_intro f m1 m2 Hm f' m1' m2' Hm':
-    Mem.ro_unchanged m1 m1' -> Mem.ro_unchanged m2 m2' ->
-    injp_max_perm_decrease m1 m1' ->
-    injp_max_perm_decrease m2 m2' ->
-    Mem.unchanged_on (loc_unmapped f) m1 m1' ->
-    Mem.unchanged_on (loc_out_of_reach f m1) m2 m2' ->
-    Mem.astack (Mem.support m1) = Mem.astack (Mem.support m1') ->
-    Mem.astack (Mem.support m2) = Mem.astack (Mem.support m2') ->
-    inject_incr f f' ->
-    inject_separated f f' m1 m2 ->
+  injp_acc_intro: forall f m1 m2 Hm f' m1' m2' Hm'
+    (RO1: Mem.ro_unchanged m1 m1')
+    (RO2: Mem.ro_unchanged m2 m2')
+    (PERM1: injp_max_perm_decrease m1 m1')
+    (PERM2: injp_max_perm_decrease m2 m2')
+    (UNMAPPED: Mem.unchanged_on (loc_unmapped f) m1 m1')
+    (UNREACH: Mem.unchanged_on (loc_out_of_reach f m1) m2 m2')
+    (ASTK1: Mem.astack (Mem.support m1) = Mem.astack (Mem.support m1'))
+    (ASTK2: Mem.astack (Mem.support m2) = Mem.astack (Mem.support m2'))
+    (INCR: inject_incr f f')
+    (SEP: inject_separated f f' m1 m2)
+    (GLOB: incr_without_glob f f'),
     injp_acc (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
 Definition injp_mi :=
@@ -115,6 +117,7 @@ Proof.
     + apply Mem.unchanged_on_refl.
     + apply Mem.unchanged_on_refl.
     + intros b ofs. congruence.
+    + reflexivity.
   - intros w1 w2 w3 H12 H23.
     destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hr1 Hr2 Hp1 Hp2 H1 H2 Ha1 Ha2 Hf Hs].
     inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hr1' Hr2' Hp1' Hp2' H1' H2' Ha1' Ha2' Hf' Hs']; subst.
@@ -153,6 +156,7 @@ Proof.
         eapply Hs; eauto.
       * edestruct Hs'; eauto.
         intuition eauto using Mem.valid_block_unchanged_on.
+    + eauto using incr_without_glob_trans.
 Qed.
 
 Global Instance injp_mi_acc:
@@ -205,6 +209,10 @@ Proof.
     assert (b' = b2) by congruence.
     subst.
     split; eauto using Mem.fresh_block_alloc.
+  - red. intros. destruct (Block.eq_block b b1).
+    subst. rewrite H5 in H2. inv H2.
+    eauto using Mem.alloc_result_stack.
+    exploit H3; eauto. congruence.
 Qed.
 
 
@@ -233,6 +241,7 @@ Proof.
   - erewrite <- Mem.support_free; eauto.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
+  - reflexivity.
 Qed.
 
 
@@ -263,6 +272,7 @@ Proof.
   - erewrite <- Mem.support_store; eauto.
   - apply inject_incr_refl.
   - apply inject_separated_refl.
+  - reflexivity.
 Qed.
 
 Lemma injp_acc_storev : forall f chunk v1 v2 a1 a2 m1 m2 m1' m2' Hm Hm',
@@ -296,7 +306,7 @@ Next Obligation.
   inv H0.
   unfold inject_separated in *.
   intros b1 b2 delta Hw Hw'.
-  destruct (H10 _ _ _ Hw Hw') as [Hm1 Hm2].
+  destruct (SEP _ _ _ Hw Hw') as [Hm1 Hm2].
   inv H.
   tauto.
 Qed.
@@ -306,10 +316,10 @@ Next Obligation. (* ~> vs. match_stbls *)
   destruct Hse as [f m1 m2 se1 se2 Hse Hnb1 Hnb2]. inv Hw'.
   constructor.
   - eapply Genv.match_stbls_incr; eauto.
-    intros b1 b2 delta Hb Hb'. specialize (H13 b1 b2 delta Hb Hb').
-    unfold Mem.valid_block in H13. split; inv H13; eauto.
-  - apply Mem.unchanged_on_support in H7. eauto.
-  - apply Mem.unchanged_on_support in H8. eauto.
+    intros b1 b2 delta Hb Hb'. specialize (SEP b1 b2 delta Hb Hb').
+    unfold Mem.valid_block in SEP. split; inv SEP; eauto.
+  - apply Mem.unchanged_on_support in UNMAPPED. eauto.
+  - apply Mem.unchanged_on_support in UNREACH. eauto.
 Qed.
 
 Next Obligation. (* match_stbls vs. Genv.match_stbls *)
@@ -324,7 +334,7 @@ Next Obligation. (* Mem.alloc *)
   intros _ _ _ [f m1 m2 Hm] lo hi.
   destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:Hm1'.
   edestruct Mem.alloc_parallel_inject
-    as (f' & m2' & b2 & Hm2' & Hm' & Hf' & Hb2 & Hff');
+    as (f' & m2' & b2 & Hm2' & Hm' & Hf' & Hf'1 & Hb2 & Hff');
     eauto using Z.le_refl.
   rewrite Hm2'.
   exists (injpw f' m1' m2' Hm'); split; repeat rstep; eauto.
@@ -407,6 +417,7 @@ Next Obligation. (* Mem.storebytes *)
       * erewrite <- Mem.support_storebytes; eauto.
       * erewrite <- Mem.support_storebytes; eauto.
       * apply inject_separated_refl.
+      * reflexivity.
     + constructor; eauto.
       erewrite Mem.support_storebytes; eauto.
       erewrite (Mem.support_storebytes m2 _ _ _ m2'); eauto.
@@ -446,6 +457,7 @@ Next Obligation. (* Mem.storebytes *)
     + erewrite <- Mem.support_storebytes; eauto.
     + apply inject_incr_refl.
     + apply inject_separated_refl.
+    + reflexivity.
     + constructor; eauto.
       erewrite Mem.support_storebytes; eauto.
       erewrite (Mem.support_storebytes m2 _ _ _ m2'); eauto.
@@ -516,8 +528,8 @@ Proof.
   - intros [w12' w23'] m1' m3' (m2' & H12' & H23') [Hw12' Hw23']. cbn in *.
     destruct H12' as [f12' m1' m2' Hm12'].
     inversion H23' as [f23' xm2' xm3' Hm23']. clear H23'; subst.
-    inversion Hw12' as [? ? ? ? ? ? ? ? ? ? ? ? UNMAP1 ? ? ? Hf12' SEP12']. clear Hw12'; subst.
-    inversion Hw23' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
+    inversion Hw12' as [? ? ? ? ? ? ? ? ? ? ? ? UNMAP1 ? ? ? Hf12' SEP12' GLOB12']. clear Hw12'; subst.
+    inversion Hw23' as [? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? Hf23' SEP23' GLOB23']. clear Hw23'; subst.
     eexists (injpw (compose_meminj f12' f23') m1' m3'
                (Mem.inject_compose f12' f23' _ _ _ Hm12' Hm23')
             ).
@@ -528,9 +540,9 @@ Proof.
       *
         generalize (loc_unmapped_dom f). intros.
         inv UNMAP1. constructor; eauto.
-        intros. apply unchanged_on_perm. apply H14. eauto.
+        intros. apply unchanged_on_perm. apply H. eauto.
         eauto.
-        intros. apply unchanged_on_contents. apply H14. eauto.
+        intros. apply unchanged_on_contents. apply H. eauto.
         eauto.
       * rewrite <- (meminj_dom_compose f). rauto.
       * intros b1 b2 delta Hb Hb'. unfold compose_meminj in Hb'.
@@ -543,6 +555,12 @@ Proof.
           eapply Mem.valid_block_inject_1 in Hfbi; eauto.
         }
         edestruct SEP23'; eauto.
+      * red. intros. unfold compose_meminj in H0. repeat destr_in H0.
+        exploit GLOB12'. unfold meminj_dom. rewrite H. auto. eauto.
+        intuition. destruct (f b0) eqn:?. destruct p.
+        eapply Mem.valid_block_inject_1 in Heqo1; eauto.
+        exploit SEP12'. unfold meminj_dom. rewrite H. auto. eauto. intuition.
+        exploit GLOB23'. unfold meminj_dom. rewrite Heqo1. auto. eauto. intuition.
     + cbn. rstep; auto.
 Qed.
 

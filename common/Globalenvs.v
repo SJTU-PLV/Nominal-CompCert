@@ -1603,11 +1603,11 @@ Lemma init_mem_init_sp_inject: forall p m0 m1 b0,
       Mem.inject (Mem.flat_inj (Mem.support m1)) m1 m1.
 Proof.
   intros. exploit Mem.alloc_parallel_inject; eauto. apply Z.le_refl. apply Z.le_refl.
-  intros (f' & m1' & b0'&A& B &C& E & G). rewrite A in H0. inv H0.
+  intros (f' & m1' & b0'&A& B &C& E & G & I). rewrite A in H0. inv H0.
   assert (f' = Mem.flat_inj (Mem.support m1)).
   apply Axioms.extensionality. intro b. destruct (eq_block b b0). subst.
   unfold Mem.flat_inj. apply Mem.valid_new_block in A. destr. apply n in A. inv A.
-  rewrite G. unfold Mem.flat_inj. destr. eapply Mem.valid_block_alloc in A.
+  rewrite I. unfold Mem.flat_inj. destr. eapply Mem.valid_block_alloc in A.
   destr. apply n0 in A. inv A. auto. destr. eapply Mem.valid_block_alloc_inv in A; eauto.
   inv A. congruence. apply n0 in H0. inv H0. auto. subst. auto.
 Qed.

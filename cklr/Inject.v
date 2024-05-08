@@ -70,11 +70,12 @@ Definition inject_incr_disjoint (j j':meminj) (sd si:sup) :=
     ~sup_In b sd /\ ~sup_In b' si.
 
 Variant inj_incr: relation inj_world :=
-  inj_incr_intro f f' s1 s2 s1' s2':
-    inject_incr f f' ->
-    inject_incr_disjoint f f' s1 s2 ->
-    Mem.sup_include s1 s1' ->
-    Mem.sup_include s2 s2' ->
+  inj_incr_intro: forall f f' s1 s2 s1' s2'
+    (INCR: inject_incr f f')
+    (DISJOINT: inject_incr_disjoint f f' s1 s2)
+    (GLOB: incr_without_glob f f')
+    (INCL1: Mem.sup_include s1 s1')
+    (INCL2: Mem.sup_include s2 s2'),
     inj_incr (injw f s1 s2) (injw f' s1' s2').
 
 Record inj_stbls (w: inj_world) (se1 se2: Genv.symtbl): Prop :=
@@ -110,12 +111,14 @@ Proof.
   - intros [f s1 s2].
     constructor; auto using inject_incr_refl, Pos.le_refl.
     congruence.
+    reflexivity.
   - intros w w' w'' H H'. destruct H. inv H'.
     constructor; eauto using inject_incr_trans, Pos.le_trans.
     intros b1 b2 delta Hb Hb''.
     destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
-    + rewrite (H6 _ _ _ Hb') in Hb''. inv Hb''. eauto.
-    + edestruct H7; eauto. split; eauto.
+    + rewrite (INCR0 _ _ _ Hb') in Hb''. inv Hb''. eauto.
+    + edestruct DISJOINT0; eauto. split; eauto.
+    + eapply incr_without_glob_trans; eauto.
 Qed.
 
 Global Instance inj_stbls_subrel:
@@ -125,7 +128,7 @@ Proof.
   destruct Hse; inv Hw. cbn in *.
   constructor; cbn; try extlia.
   eapply Genv.match_stbls_incr; eauto.
-  intros. edestruct H0; eauto. split; eauto. eauto. eauto.
+  intros. edestruct DISJOINT; eauto. split; eauto. eauto. eauto.
 Qed.
 
 Instance inj_proj_incr:
@@ -169,7 +172,7 @@ Proof.
   intros Hm Hw b1 b2 delta Hnone Hsome.
   inv Hm. inv Hw.
   unfold Mem.valid_block.
-  eapply H4; eauto.
+  eapply DISJOINT; eauto.
 Qed.
 
 Next Obligation. (* mi_acc_separated *)
@@ -190,7 +193,7 @@ Proof.
   intros [f s1 s2] m1 m2 Hm lo hi. cbn in *. inv Hm.
   destruct (Mem.alloc m1 lo hi) as [m1' b1] eqn:Hm1'.
   edestruct Mem.alloc_parallel_inject
-    as (f' & m2' & b2 & Hm2' & Hm' & Hf'1 & Hb2 & Hf'2);
+    as (f' & m2' & b2 & Hm2' & Hm' & Hf'1 & Hf'3 & Hb2 & Hf'2);
     eauto using Z.le_refl.
   rewrite Hm2'.
   exists (injw f' (Mem.support m1') (Mem.support m2')); split; repeat rstep.
@@ -226,6 +229,7 @@ Next Obligation. (* Mem.free *)
   replace (lo1 + delta + sz) with (lo1 + sz + delta) by extlia.
   rewrite Hm2'.
   econstructor. econstructor. split. econstructor. eauto. congruence.
+  reflexivity.
   1,2:red; intros; exact H.
   erewrite <- Mem.support_free; eauto.
   erewrite <- (Mem.support_free _ _ _ _ _ Hm2'); eauto.
@@ -249,6 +253,7 @@ Next Obligation. (* Mem.store *)
   edestruct Mem.store_mapped_inject as (m2' & Hm2' & Hm'); eauto.
   rewrite Hm2'.
   econstructor. econstructor. split. econstructor. eauto. congruence.
+  reflexivity.
   1,2:red; intros; exact H.
   erewrite <- Mem.support_store; eauto.
   erewrite <- (Mem.support_store _ _ _ _ _ _ Hm2'); eauto.
@@ -280,6 +285,7 @@ Next Obligation. (* Mem.storebytes *)
     constructor.
     exists (injw f (Mem.support m1') (Mem.support m2')); split; repeat rstep.
     constructor; eauto. red. congruence.
+    reflexivity.
     erewrite <- (Mem.support_storebytes m1); eauto.
     erewrite <- (Mem.support_storebytes m2); eauto.
     constructor; auto.
@@ -301,6 +307,7 @@ Next Obligation. (* Mem.storebytes *)
     edestruct Mem.storebytes_mapped_inject as (m2' & Hm2' & Hm'); eauto. rauto.
     rewrite Hm2'.
   econstructor. econstructor. split. econstructor. eauto. congruence.
+  reflexivity.
   1,2:red; intros; exact H.
   erewrite <- Mem.support_storebytes; eauto.
   erewrite <- (Mem.support_storebytes _ _ _ _ _ Hm2'); eauto.
@@ -588,8 +595,8 @@ Proof.
   - intros [w12' w23'] m1' m3' (m2' & H12' & H23') [Hw12' Hw23']. cbn in *.
     destruct H12' as [f12' m1' m2' Hm12'].
     inversion H23' as [f23' xm2' xm3' Hm23']. clear H23'; subst.
-    inversion Hw12' as [? ? ? ? ? ? Hf12' SEP12']. clear Hw12'; subst.
-    inversion Hw23' as [? ? ? ? ? ? Hf23' SEP23']. clear Hw23'; subst.
+    inversion Hw12' as [? ? ? ? ? ? Hf12' SEP12' GLOB12']. clear Hw12'; subst.
+    inversion Hw23' as [? ? ? ? ? ? Hf23' SEP23' GLOB23']. clear Hw23'; subst.
     eexists (injw (compose_meminj f12' f23') _ _).
     repeat apply conj.
     + constructor; eauto using meminj_global_compose, Mem.inject_compose.
@@ -606,5 +613,11 @@ Proof.
           eapply Mem.valid_block_inject_1 in Hfbi; eauto.
         }
         edestruct SEP23'; eauto.
+      * red. intros. unfold compose_meminj in H3. repeat destr_in H3.
+        exploit GLOB12'. unfold meminj_dom. rewrite H2. auto. eauto.
+        intuition. destruct (f b0) eqn:?. destruct p.
+        eapply Mem.valid_block_inject_1 in Heqo1; eauto.
+        exploit SEP12'. unfold meminj_dom. rewrite H2. auto. eauto. intuition.
+        exploit GLOB23'. unfold meminj_dom. rewrite Heqo1. auto. eauto. intuition.
     + cbn. rstep; auto.
 Qed.

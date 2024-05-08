@@ -996,18 +996,18 @@ Proof.
   { unfold Vptrofs in *. destruct Archi.ptr64; inv H6; auto. }
   subst v'.
   exploit Mem.alloc_parallel_inject; eauto. apply Z.le_refl. apply Z.le_refl.
-  intros [f' [m3' [b' [ALLOC [A [B [C D]]]]]]].
+  intros [f' [m3' [b' [ALLOC [A [B [C [D E]]]]]]]].
   exploit Mem.store_mapped_inject. eexact A. eauto. eauto.
   instantiate (1 := Vptrofs sz). unfold Vptrofs; destruct Archi.ptr64; constructor.
-  rewrite Z.add_0_r. intros [m2' [E G]].
+  rewrite Z.add_0_r. intros [m2' [F G]].
   exists f'; exists (Vptr b' Ptrofs.zero); exists m2'; intuition auto.
   econstructor; eauto.
   econstructor. eauto. auto.
   eapply UNCHANGED; eauto.
   eapply UNCHANGED; eauto.
   red; intros. destruct (eq_block b1 b).
-  subst b1. rewrite C in H2. inv H2. eauto with mem.
-  rewrite D in H2 by auto. congruence.
+  subst b1. rewrite D in H2. inv H2. eauto with mem.
+  rewrite E in H2 by auto. congruence.
 (* trace length *)
 - inv H; simpl; lia.
 (* receptive *)

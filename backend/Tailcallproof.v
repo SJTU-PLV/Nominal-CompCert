@@ -212,7 +212,8 @@ Qed.
 
 
 Lemma mit_incr_invariant w F F1 bound s1 s2 s1' s2'
-  (INCR: inject_incr F F1):
+  (INCR: inject_incr F F1)
+  (GLOB: incr_without_glob F F1):
   (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> sup_In b1 (injw_sup_l w) \/ sup_In b2 bound ->
                        F b1 = Some(b2, delta)) ->
   Mem.sup_include (injw_sup_r w) bound ->
@@ -229,6 +230,7 @@ Proof.
   - destruct (Mem.sup_dec b1 s0); try (erewrite INJ in Hb1''; eauto; discriminate).
     destruct (Mem.sup_dec b2 bound); try (erewrite INJ in Hb1''; eauto; discriminate).
     split; eauto.
+  - eauto using incr_without_glob_trans.
 Qed.
 
 Section PRESERVATION.
@@ -1078,7 +1080,7 @@ Proof.
   exploit Mem.alloc_parallel_inject; eauto.
     instantiate (1 := 0). lia.
     instantiate (1 := fn_stacksize f). lia.
-  intros (f' & m'1 & b2 & ALLOC & INJ' & INCR' & TSP & INC).
+  intros (f' & m'1 & b2 & ALLOC & INJ' & INCR' & GLOB' & TSP & INC).
   exploit Mem.record_frame_parallel_inject; eauto.
   inv STK. erewrite Mem.support_alloc; eauto. unfold sup_incr.
   simpl. congruence.
@@ -1096,11 +1098,6 @@ Proof.
   simpl. eapply exec_function_internal; eauto. rewrite EQ1; eauto.
   rewrite EQ2. rewrite EQ3. econstructor. 2: eauto.
   eapply match_stackframes_incr; eauto.
-  intro. intros. destruct (eq_block b stk).
-  subst. rewrite TSP in H2. inv H2.
-  apply Mem.alloc_result_stack in H.
-  apply Mem.alloc_result_stack in ALLOC. auto.
-  apply INC in n0. congruence.
   apply Mem.support_alloc in H. apply Mem.support_alloc in ALLOC.
   apply Mem.astack_record_frame in H0. apply Mem.astack_record_frame in RECORD.
   destruct H0 as (a&b&c&d). destruct RECORD as (w'&x&y&z).
@@ -1111,6 +1108,7 @@ Proof.
   eapply val_inject_list_incr; eauto. auto. auto.
   assert (SPS: b2 = fresh_block (Mem.support m'0)) by (eapply Mem.alloc_result; eauto).
   eapply mit_incr_invariant. apply INCR'.
+  auto.
   instantiate (1 := (Mem.support m'0)).
   inv INCR. simpl.
   intros. destruct (eq_block b1 stk).
@@ -1224,6 +1222,7 @@ Proof.
 
   subst. constructor; simpl in *; auto.
   all:red; intros. congruence.
+  congruence.
   all:
     (erewrite <- Mem.support_push_stage; [|eauto]);
     (rewrite <- Mem.support_push_stage_1; [|eauto]);
@@ -1240,7 +1239,7 @@ Proof.
   - constructor. eauto.
   - econstructor.
     split; constructor.
-    1,2,5:eauto.
+    1,2,3,6:eauto.
     1,2:red; intros; rewrite <- Mem.support_pop_stage_1; eauto.
     constructor; auto.
     constructor; auto.
@@ -1262,7 +1261,7 @@ Proof.
   intros st1 st2 q1 Hst Hq1. destruct Hq1. inv Hst.
   assert (GE0: Genv.match_stbls j se tse). {
     inv GE. inv INCR. eapply Genv.match_stbls_incr; eauto. simpl.
-    split; intro; (exploit H5; eauto); intros [].
+    split; intro; (exploit DISJOINT; eauto); intros [].
     apply inj_stbls_next_l in H2. auto.
     apply inj_stbls_next_r in H2. auto.
   }
@@ -1288,16 +1287,13 @@ Proof.
     constructor; auto.
     econstructor.
     inv ACC. eapply match_stackframes_incr; eauto.
-    {
-      (*incr_without_glob should be added in injp_acc and inj_acc *)
-    }
-    inv ACC. rewrite <- H16. inv STK. congruence.
-    inv ACC. rewrite <- H15, <- H16. inv STK. simpl. auto.
+    inv ACC. rewrite <- ASTK2. inv STK. congruence.
+    inv ACC. rewrite <- ASTK1, <- ASTK2. inv STK. simpl. auto.
     auto. auto.
     etransitivity. eauto.
     inv ACC. econstructor; eauto.
-    inv H13. eauto. inv H14. eauto.
-Admitted.
+    inv UNMAPPED. eauto. inv UNREACH. eauto.
+Qed.
 
 End PRESERVATION.
 
