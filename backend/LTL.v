@@ -239,38 +239,23 @@ Inductive step: state -> trace -> state -> Prop :=
       rs' = undef_regs (destroyed_by_store chunk addr) rs ->
       step (Block s f sp (Lstore chunk addr args src :: bb) rs m)
         E0 (Block s f sp bb rs' m')
-<<<<<<< HEAD
-  | exec_Lcall: forall s f sp sig ros bb rs m fd,
+  | exec_Lcall: forall s f sp sig ros bb rs m fd id,
       let vf := ros_address ros rs in
       Genv.find_funct ge vf = Some fd ->
+      ros_is_ident ros rs id ->
       funsig fd = sig ->
       step (Block s f sp (Lcall sig ros :: bb) rs m)
-        E0 (Callstate (Stackframe f sp rs bb :: s) vf rs m)
-  | exec_Ltailcall: forall s f sp sig ros bb rs m fd rs' m',
+        E0 (Callstate (Stackframe f sp rs bb :: s) vf rs m id)
+  | exec_Ltailcall: forall s f sp sig ros bb rs m fd rs' m' m'' id,
       let vf := ros_address ros rs' in
       rs' = return_regs (parent_locset s) rs ->
       Genv.find_funct ge vf = Some fd ->
-=======
-  | exec_Lcall: forall s f sp sig ros bb rs m fd id,
-      ros_is_ident ros rs id ->
-      find_function ros rs = Some fd ->
-      funsig fd = sig ->
-      step (Block s f sp (Lcall sig ros :: bb) rs m)
-        E0 (Callstate (Stackframe f sp rs bb :: s) fd rs m id)
-  | exec_Ltailcall: forall s f sp sig ros bb rs m fd rs' m' m'' id,
-      rs' = return_regs (parent_locset s) rs ->
       ros_is_ident ros rs' id ->
-      find_function ros rs' = Some fd ->
->>>>>>> origin/StackAware-new
       funsig fd = sig ->
       Mem.free m sp 0 f.(fn_stacksize) = Some m' ->
       Mem.pop_stage m' = Some m'' ->
       step (Block s f (Vptr sp Ptrofs.zero) (Ltailcall sig ros :: bb) rs m)
-<<<<<<< HEAD
-        E0 (Callstate s vf rs' m')
-=======
-        E0 (Callstate s fd rs' m'' id)
->>>>>>> origin/StackAware-new
+        E0 (Callstate s vf rs' m'' id)
   | exec_Lbuiltin: forall s f sp ef args res bb rs m vargs t vres rs' m',
       eval_builtin_args ge rs sp m args vargs ->
       external_call ef ge vargs m t vres m' ->
@@ -296,35 +281,20 @@ Inductive step: state -> trace -> state -> Prop :=
       Mem.free m sp 0 f.(fn_stacksize) = Some m' ->
       Mem.pop_stage m' = Some m'' ->
       step (Block s f (Vptr sp Ptrofs.zero) (Lreturn :: bb) rs m)
-<<<<<<< HEAD
-        E0 (Returnstate s (return_regs (parent_locset s) rs) m')
-  | exec_function_internal: forall s vf f rs m m' sp rs',
-      forall FIND: Genv.find_funct ge vf = Some (Internal f),
-=======
         E0 (Returnstate s (return_regs (parent_locset s) rs) m'')
-  | exec_function_internal: forall s f rs m m' sp rs' m'' id,
->>>>>>> origin/StackAware-new
+  | exec_function_internal: forall s vf f rs m m' m'' sp rs' id,
+      forall FIND: Genv.find_funct ge vf = Some (Internal f),
       Mem.alloc m 0 f.(fn_stacksize) = (m', sp) ->
       Mem.record_frame (Mem.push_stage m') (Memory.mk_frame  (Stack 1%positive) (fn_stack_requirements id)) = Some m'' ->
       rs' = undef_regs destroyed_at_function_entry (call_regs rs) ->
-<<<<<<< HEAD
-      step (Callstate s vf rs m)
-        E0 (State s f (Vptr sp Ptrofs.zero) f.(fn_entrypoint) rs' m')
-  | exec_function_external: forall s vf ef t args res rs m rs' m',
+      step (Callstate s vf rs m id)
+        E0 (State s f (Vptr sp Ptrofs.zero) f.(fn_entrypoint) rs' m'')
+  | exec_function_external: forall s vf ef t args res rs m rs' m' id,
       forall FIND: Genv.find_funct ge vf = Some (External ef),
       args = map (fun p => Locmap.getpair p rs) (loc_arguments (ef_sig ef)) ->
       external_call ef ge args m t res m' ->
       rs' = Locmap.setpair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs) ->
-      step (Callstate s vf rs m)
-=======
-      step (Callstate s (Internal f) rs m id)
-        E0 (State s f (Vptr sp Ptrofs.zero) f.(fn_entrypoint) rs' m'')
-  | exec_function_external: forall s ef t args res rs m rs' m' id,
-      args = map (fun p => Locmap.getpair p rs) (loc_arguments (ef_sig ef)) ->
-      external_call ef ge args m t res m' ->
-      rs' = Locmap.setpair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs) ->
-      step (Callstate s (External ef) rs m id)
->>>>>>> origin/StackAware-new
+      step (Callstate s vf rs m id)
          t (Returnstate s rs' m')
   | exec_return: forall f sp rs1 bb s rs m,
       step (Returnstate (Stackframe f sp rs1 bb :: s) rs m)
@@ -337,38 +307,29 @@ End RELSEM.
   main function, to be found in the machine register dictated
   by the calling conventions. *)
 
-<<<<<<< HEAD
 Inductive initial_state (ge: genv): locset_query -> state -> Prop :=
-  | initial_state_intro: forall vf f rs m,
+  | initial_state_intro: forall vf f rs m id,
       Genv.find_funct ge vf = Some (Internal f) ->
+      vf = Vptr (Global id) Ptrofs.zero ->
       let rs0 := initial_regs (fn_sig f) rs in
       initial_state ge
         (lq vf (fn_sig f) rs m)
-        (Callstate (Stackbase rs0 :: nil) vf rs0 m).
-=======
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0 m1 b0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      funsig f = signature_main ->
-      Mem.alloc m0 0 0 = (m1,b0) ->
-      initial_state p (Callstate nil f (Locmap.init Vundef) m1 p.(prog_main)).
->>>>>>> origin/StackAware-new
+        (Callstate (Stackbase rs0 :: nil) vf rs0 m id).
 
 Inductive at_external (ge: genv): state -> locset_query -> Prop :=
-  | at_external_intro vf name sg s rs m:
+  | at_external_intro vf name sg s rs m id:
       Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
+      vf = Vptr (Global id) Ptrofs.zero ->
       at_external ge
-        (Callstate s vf rs m)
+        (Callstate s vf rs m id)
         (lq vf sg rs m).
 
 Inductive after_external (ge: genv): state -> locset_reply -> state -> Prop :=
-  | after_external_intro vf name sg s rs m rs' m':
+  | after_external_intro vf name sg s rs m rs' m' id:
       Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
+      vf = Vptr (Global id) Ptrofs.zero ->
       after_external ge
-        (Callstate s vf rs m)
+        (Callstate s vf rs m id)
         (lr rs' m')
         (Returnstate s (result_regs sg rs rs') m').
 

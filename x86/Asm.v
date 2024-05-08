@@ -526,25 +526,6 @@ Fixpoint label_pos (lbl: label) (pos: Z) (c: code) {struct c} : option Z :=
       if is_label lbl instr then Some (pos + instr_size instr) else label_pos lbl (pos + instr_size instr) c'
   end.
 
-<<<<<<< HEAD
-(** The semantics is parametrized over the value of the stack pointer
-    at module entry, which controls the behavior of the [Pret]
-    instruction.  When [RSP <> init_nb], we interpret [Pret] as a
-    usual, internal return and jump to the location pointed to by
-    [RA]. However, when [RSP = init_nb], we intepret [Pret] as a
-    top-level return to the environment, expressed as a final state
-    rather than a step.
-*)
-
-Variable init_sup: sup.
-Variable ge: Genv.symtbl.
-
-Definition inner_sp (sp: val) : option bool :=
-  match sp with
-    | Vptr sb _ => Some (if Mem.sup_dec sb init_sup then false else true)
-    | _ => None
-  end.
-=======
 Lemma code_size_non_neg: forall c, 0 <= code_size c.
 Proof.
   intros. induction c; simpl. lia. generalize (instr_size_bound a); lia.
@@ -637,8 +618,23 @@ Proof.
   rewrite <- H3. intro. f_equal. lia.
 Qed.
 
+(** The semantics is parametrized over the value of the stack pointer
+    at module entry, which controls the behavior of the [Pret]
+    instruction.  When [RSP <> init_nb], we interpret [Pret] as a
+    usual, internal return and jump to the location pointed to by
+    [RA]. However, when [RSP = init_nb], we intepret [Pret] as a
+    top-level return to the environment, expressed as a final state
+    rather than a step.
+*)
+
+Variable init_sup: sup.
 Variable ge: genv.
->>>>>>> origin/StackAware-new
+
+Definition inner_sp (sp: val) : option bool :=
+  match sp with
+    | Vptr sb _ => Some (if Mem.sup_dec sb init_sup then false else true)
+    | _ => None
+  end.
 
 (** Evaluating an addressing mode *)
 
@@ -831,7 +827,7 @@ Definition goto_label (f: function) (lbl: label) (rs: regset) (m: mem) :=
   | Some pos =>
       match rs#PC with
       | Vptr b ofs =>
-        match Genv.find_funct_ptr ge b with
+        match Genv.find_funct ge (Vptr b ofs) with
         | Some _ => Next (rs#PC <- (Vptr b (Ptrofs.repr pos))) m
         | None => Stuck
         end
@@ -1247,14 +1243,12 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
     | _ => Stuck
     end
   | Pret =>
-<<<<<<< HEAD
-    match inner_sp rs#SP with
+    (* match inner_sp rs#SP with
     | Some b => Next' (rs#PC <- (rs#RA)) m b
     | None => Stuck
     end
-=======
+======= *)
     if check_ra_after_call ge (rs#RA) then Next (rs#PC <- (rs#RA) #RA <- Vundef) m else Stuck
->>>>>>> origin/StackAware-new
   (** Saving and restoring registers *)
   | Pmov_rm_a rd a =>
       exec_load (if Archi.ptr64 then Many64 else Many32) m a rs rd
@@ -1298,14 +1292,11 @@ Definition exec_instr (f: function) (i: instruction) (rs: regset) (m: mem) : out
           | Some sp =>
               match rs#RSP with
               | Vptr stk ofs =>
-<<<<<<< HEAD
-                  match free' m stk (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sz) with
-=======
+                  (* match free' m stk (Ptrofs.unsigned ofs) (Ptrofs.unsigned ofs + sz) with *)
                   if check_topframe fsz (Mem.astack (Mem.support m)) then
                   if Val.eq sp (parent_sp_stack (Mem.astack (Mem.support m))) then
                   if Val.eq (Vptr stk ofs) (top_sp_stack (Mem.astack (Mem.support m))) then
-                  match Mem.free m stk 0 fsz with
->>>>>>> origin/StackAware-new
+                  match free' m stk 0 fsz with
                   | None => Stuck
                   | Some m' =>
                       match Mem.pop_stage m' with
@@ -1447,9 +1438,6 @@ Notation Next rs m := (Next' rs m true).
 Inductive state: Type :=
   | State: regset -> mem -> bool -> state.
 
-<<<<<<< HEAD
-Inductive step (init_sup: sup) (ge: genv): state -> trace -> state -> Prop :=
-=======
 Fixpoint in_builtin_res (b:builtin_res preg) (r:preg) :=
   match b with
     |BR b => b =r
@@ -1457,46 +1445,49 @@ Fixpoint in_builtin_res (b:builtin_res preg) (r:preg) :=
     |BR_splitlong hi lo => in_builtin_res hi r \/ in_builtin_res lo r
   end.
 
-Inductive step: state -> trace -> state -> Prop :=
->>>>>>> origin/StackAware-new
+Inductive step (init_sup: sup) (ge: genv): state -> trace -> state -> Prop :=
   | exec_step_internal:
       forall b ofs f i rs m rs' m' live,
       rs PC = Vptr b ofs ->
       forall FIND: Genv.find_funct_ptr ge b = Some (Internal f),
       forall INSTR: find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some i,
-      forall EXEC: exec_instr init_sup ge f i rs m = Next' rs' m' live,
+      forall EXEC: exec_instr ge f i rs m = Next' rs' m' live,
       step init_sup ge (State rs m true) E0 (State rs' m' live)
   | exec_step_builtin:
       forall b ofs f ef args res rs m vargs t vres rs' m',
       rs PC = Vptr b ofs ->
-<<<<<<< HEAD
       forall FIND: Genv.find_funct_ptr ge b = Some (Internal f),
       forall INSTR: find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some (Pbuiltin ef args res),
       forall EVAL: eval_builtin_args ge rs (rs RSP) m args vargs,
       forall CALL: external_call ef ge vargs m t vres m',
-      rs' = nextinstr_nf
-=======
+      ~ in_builtin_res res RSP ->
+      rs' = nextinstr_nf (Ptrofs.repr (instr_size (Pbuiltin ef args res)))
+(* =======
       Genv.find_funct_ptr ge b = Some (Internal f) ->
       find_instr (Ptrofs.unsigned ofs) f.(fn_code) = Some (Pbuiltin ef args res) ->
       eval_builtin_args ge rs (rs RSP) m args vargs ->
       external_call ef ge vargs m t vres m' ->
       ~ in_builtin_res res RSP ->
-      rs' = nextinstr_nf (Ptrofs.repr (instr_size (Pbuiltin ef args res)))
->>>>>>> origin/StackAware-new
+      rs' = nextinstr_nf (Ptrofs.repr (instr_size (Pbuiltin ef args res))) *)
              (set_res res vres
                (undef_regs (map preg_of (destroyed_by_builtin ef)) rs)) ->
       step init_sup ge (State rs m true) t (State rs' m' true)
   | exec_step_external:
       forall b ef args res rs m t rs' m' live,
       rs PC = Vptr b Ptrofs.zero ->
-<<<<<<< HEAD
       forall FIND: Genv.find_funct_ptr ge b = Some (External ef),
       forall ARGS: extcall_arguments rs m (ef_sig ef) args,
+      forall (SP_TYPE: Val.has_type (rs RSP) Tptr)
+        (RA_TYPE: Val.has_type (rs RA) Tptr)
+        (SP_NOT_VUNDEF: rs RSP <> Vundef)
+        (RA_NOT_VUNDEF: rs RA <> Vundef),
       forall CALL: external_call ef ge args m t res m',
+      no_rsp_pair (loc_external_result (ef_sig ef)) ->
+      ra_after_call ge (rs#RA)->
       rs' = (set_pair (loc_external_result (ef_sig ef)) res (undef_caller_save_regs rs)) #PC <- (rs RA) ->
       forall ISP: inner_sp init_sup rs#SP = Some live,
       step init_sup ge (State rs m true) t (State rs' m' live).
-=======
+(* =======
       Genv.find_funct_ptr ge b = Some (External ef) ->
       extcall_arguments rs m (ef_sig ef) args ->
       forall (SP_TYPE: Val.has_type (rs RSP) Tptr)
@@ -1510,8 +1501,7 @@ Inductive step: state -> trace -> state -> Prop :=
               #PC <- (rs RA)
               #RA <- Vundef
       ->
-      step (State rs m) t (State rs' m').
->>>>>>> origin/StackAware-new
+      step (State rs m) t (State rs' m'). *)
 
 (** Since Asm does not have an explicit stack, the queries and replies
   for assembly modules simply pass the current state across modules. *)
@@ -1519,27 +1509,12 @@ Inductive step: state -> trace -> state -> Prop :=
 Definition asm_entry (q: regset * mem) :=
   (fst q) # PC.
 
-<<<<<<< HEAD
 Canonical Structure li_asm :=
   {|
     query := regset * mem;
     reply := regset * mem;
     entry := asm_entry;
   |}.
-=======
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall m0 m1 b0 bmain,
-      Genv.init_mem p = Some m0 ->
-      Mem.alloc m0 0 0 = (m1,b0) ->
-      let ge := Genv.globalenv p in
-      Genv.find_symbol ge p.(prog_main) = Some bmain ->
-      let rs0 :=
-        (Pregmap.init Vundef)
-        # PC <- (Vptr bmain Ptrofs.zero)
-        # RA <- Vnullptr
-        # RSP <- (Vptr (Stack 1%positive) Ptrofs.zero) in
-      initial_state p (State rs0 m1).
->>>>>>> origin/StackAware-new
 
 (** Asm does not really have a notion of control stack. However, to
   establish the simulation with Mach, we still need to distinguish
@@ -1634,17 +1609,10 @@ Ltac Equalities :=
 + discriminate.
 + discriminate.
 + assert (vargs0 = vargs) by (eapply eval_builtin_args_determ; eauto). subst vargs0.
-<<<<<<< HEAD
   exploit external_call_determ. eexact CALL. eexact CALL0. intros [A B].
   split. auto. intros. destruct B; auto. subst. auto.
 + assert (args0 = args) by (eapply extcall_arguments_determ; eauto). subst args0.
   exploit external_call_determ. eexact CALL. eexact CALL0. intros [A B].
-=======
-  exploit external_call_determ. eexact H5. eexact H12. intros [A B].
-  split. auto. intros. destruct B; auto. subst. auto.
-+ assert (args0 = args) by (eapply extcall_arguments_determ; eauto). subst args0.
-  exploit external_call_determ. eexact H4. eexact H11. intros [A B].
->>>>>>> origin/StackAware-new
   split. auto. intros. destruct B; auto. subst. auto.
 - (* trace length *)
   red; cbn. intros [nb s] t [nb' s'] [H Hnb]. inv H; simpl.
@@ -1652,7 +1620,6 @@ Ltac Equalities :=
   eapply external_call_trace_length; eauto.
   eapply external_call_trace_length; eauto.
 - (* initial states *)
-<<<<<<< HEAD
   destruct s1 as [nb1 s1], s2 as [nb2 s2], H, H0; subst.
   inv H; inv H0. reflexivity.
 - (* external no step *)
@@ -1669,10 +1636,6 @@ Ltac Equalities :=
 - (* after_external determ *)
   destruct s as [nb s], s1 as [nb1 s1], s2 as [nb2 s2], H, H0. subst.
   inv H; inv H0; f_equal; f_equal. rewrite H2 in H8. inv H8; auto.
-=======
-  inv H; inv H0. f_equal. subst ge. subst ge0. rewrite H3 in H5. inv H5. reflexivity.
-  congruence.
->>>>>>> origin/StackAware-new
 - (* final no step *)
   destruct s as [nb s].
   inv H. red; intros; red; intros. destruct s', H. inv H.
@@ -1716,7 +1679,6 @@ Definition data_preg (r: preg) : bool :=
   | RA => false
   end.
 
-<<<<<<< HEAD
 (** * Simulation conventions *)
 
 Unset Program Cases.
@@ -1853,7 +1815,7 @@ Proof.
     + cbn. eauto.
     + apply match_asm_query_compose; eauto.
     + apply match_asm_reply_compose.
-=======
+Qed.
 
 Definition instr_invalid (i: instruction) :=
   match i with
@@ -1899,5 +1861,4 @@ Proof.
     + simpl. auto.
   - simpl. auto.
   - simpl. auto.
->>>>>>> origin/StackAware-new
 Qed.
