@@ -138,7 +138,7 @@ Inductive statement : Type :=
 | Sassign : place' -> expr -> statement (**r assignment [place' = rvalue]. Downcast cannot appear in LHS *)
 | Sassign_variant : place' -> ident -> expr -> statement (**r assign variant to a place *)
 | Sbox: place' -> expr -> statement        (**r box assignment [place = Box::new(expr)]  *)
-| Scall: place' -> expr -> list expr -> statement (**r function call, p =
+| Scall: place' -> place' -> list expr -> statement (**r function call, p =
   f(...). The assignee is mandatory, because we need to ensure that
   the return value (may be a box) is received *)
 | Sbuiltin: place' -> external_function -> typelist -> list expr -> statement (**r builtin invocation *)

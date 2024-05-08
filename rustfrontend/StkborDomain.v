@@ -249,7 +249,7 @@ Definition find_elt {A: Type} (id: ident) (l: list (ident * A)) : option A :=
   match find (fun '(id', v) => ident_eq id id') l with
   | Some (_, v) => Some v
   | None => None
-  end.
+  end.`
 
 Definition set_elt {A: Type} (id: ident) (v: A) (l: list (ident * A)) : list (ident * A) :=
   map (fun '(id', v') => if ident_eq id id' then (id, v) else (id', v')) l.
