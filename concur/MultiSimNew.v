@@ -244,7 +244,7 @@ GS.fsim_lts.
         (RS: rs = cajw_rs wA)                     
         (M_STATES: match_local_states wB wp i sc sa)
         (WAIT: rs # RDI = Vint int /\ int_to_nat int = wait)
-        (VPTR: Val.inject (injp_mi (cajw_injp wA)) vptr (rs # RDX))
+        (VPTR: Val.inject (injp_mi (cajw_injp wA)) vptr (rs # RSI))
         (WA_SIG : cajw_sg wA = pthread_join_sig)
         (GET: get wA = wp')
         (ACC1: wp *-> wp')
@@ -255,7 +255,7 @@ GS.fsim_lts.
             exists i' sa', (after_external (OpenA tse)) sa r2 sa' /\
                         (exists wp''', wp'' *-> wp''' /\
                                     match_local_states wB wp''' i' sc' sa')),
-        match_thread_states wB (Some wA) wp' i (CMulti.Returnj OpenC sc wait vptr) (Returny OpenA sa rs).
+        match_thread_states wB (Some wA) wp' i (CMulti.Returnj OpenC sc wait vptr) (Returnj OpenA sa rs).
 
 
     Definition injp_tid (w: injp_world) : nat :=
@@ -943,17 +943,167 @@ GS.fsim_lts.
      inv MS.
      inv SWITCH.
      - (* yield *)
-       (* specialize (THREADS cur CUR_VALID) as THR_CUR.
+       specialize (THREADS cur CUR_VALID) as THR_CUR.
        destruct THR_CUR as (wB & owA & wP & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA & GETWa & MS & GETWp & ACC).
        assert (lsc = CMulti.Local OpenC ls).
        eapply foo; eauto. subst lsc. inv MS.
        specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
-       (* inversion FSIM.
+       inversion FSIM.
        clear fsim_simulation fsim_match_initial_states
             fsim_match_final_states.
-          exploit fsim_match_external; eauto. intros (li' & s2' & STEP & wp' & GW_ACC & MATCH). *)
-         
-       specialize (ident term+) *)
+       exploit fsim_match_external; eauto. intros (wA & [rs_q tm_q] & HX & wp' & GW_ACC & GETwp & MQ & MS & MR).
+       assert (wP = wPcur). congruence. subst wP.
+       eexists. eexists. split.
+       + (*step*)
+         eapply switch_out_yield. eauto. eauto.
+         { inv Q_YIE. inv MQ. red in MS. inv MS.
+           econstructor. fold tse. rewrite <- SE_eq. eauto.
+           subst tvf. inv H9.
+           rewrite <- SE_eq in H5.
+           exploit match_senv_id. eauto. apply H6. eauto. intros [X Y].
+           subst b delta. reflexivity.
+           simpl. simpl in H1. inv Hm0. inv mi_thread. unfold Mem.next_tid. auto.
+         }
+         eauto. reflexivity.
+       + (*match_states*)
+         apply injp_acci_nexttid in GW_ACC as NTID. apply injp_acci_tid in GW_ACC as TID.
+         econstructor. 7:{ instantiate (2:= NatMap.set cur (Some wp') worldsP). rewrite NatMap.gss. reflexivity. }.
+         all : simpl; eauto.
+         -- simpl. intros. destruct (Nat.eq_dec 1 cur).
+            subst. rewrite NatMap.gss. congruence.
+            rewrite NatMap.gso; eauto.
+         -- destruct CUR_INJP_TID. split; congruence.
+         -- destruct CUR_INJP_TID.
+            intros. destruct (Nat.eq_dec n cur). subst. rewrite NatMap.gss in H2. inv H2.
+            apply TID. eapply FIND_TID. rewrite NatMap.gso in H2. eauto. eauto.
+         -- intros.
+            instantiate (1:= NatMap.set cur (Some wA) worldsA).
+            destruct (Nat.eq_dec n cur).
+            ++ subst n.
+               exists wB, (Some wA), wp'. eexists. eexists. exists li.
+               repeat apply conj; eauto. rewrite NatMap.gss. reflexivity.
+               rewrite NatMap.gss. reflexivity. rewrite NatMap.gss. reflexivity.
+               simpl. simpl in wp'. assert (HRS: rs_q = cajw_rs wA). inv MQ. reflexivity.
+               rewrite HRS.
+               eapply match_returny; eauto. inv Q_YIE. inv MQ. eauto. simpl in MR. simpl.
+               setoid_rewrite GETwp. eauto.
+               rewrite NatMap.gss. eauto. simpl. congruence.
+            ++ (* clear - THREADS H3 OTHERi n0. *)
+               destruct (THREADS n H) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
+               exists wn, owan, wnp, lscn,lsan,lin. repeat apply conj; eauto.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               simpl. intros. specialize (J H1).
+               eapply injp_accg_acci_accg; eauto.
+     - (*join*)
+       specialize (THREADS cur CUR_VALID) as THR_CUR.
+       destruct THR_CUR as (wB & owA & wP & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA & GETWa & MS & GETWp & ACC).
+       assert (lsc = CMulti.Local OpenC ls).
+       eapply foo; eauto. subst lsc. inv MS.
+       specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
+       inversion FSIM.
+       clear fsim_simulation fsim_match_initial_states
+            fsim_match_final_states.
+       exploit fsim_match_external; eauto. intros (wA & [rs_q tm_q] & HX & wp' & GW_ACC & GETwp & MQ & MS & MR).
+       assert (wP = wPcur). congruence. subst wP.
+       inv Q_JOIN. inv MQ. red in MS. inv MS.
+       subst targs tvf.
+       setoid_rewrite pthread_join_locs in H6. simpl in H6.
+       inv H6. inv H17. inv H18.
+       assert (HPC: rs_q PC = Vptr b_ptj Ptrofs.zero).
+       inv H7. rewrite <- SE_eq in H3. exploit match_senv_id; eauto. intros [X Y].
+       subst b2 delta. reflexivity.
+       assert (HRDI: rs_q RDI = Vint i0). inv H4. eauto.
+       assert (HRSI: exists b_vptr' ofs_vptr', rs_q RSI = Vptr b_vptr' ofs_vptr').
+       inv H5. eauto. destruct HRSI as [b_vptr' [ofs_vptr' HRSI]].
+       eexists. eexists. split.
+       + (*step*)
+         eapply switch_out_join. eauto. eauto.
+         econstructor; eauto.
+         fold tse. rewrite <- SE_eq. eauto. eauto. reflexivity.
+       + (*match_states*)
+         apply injp_acci_nexttid in GW_ACC as NTID. apply injp_acci_tid in GW_ACC as TID.
+         set (wA := {| cajw_injp := injpw j m tm_q Hm; cajw_sg := pthread_join_sig; cajw_rs := rs_q |}).
+         set (wp' := injpw j m tm_q Hm). simpl in *.
+         econstructor. 7:{ instantiate (2:= NatMap.set cur (Some wp') worldsP). rewrite NatMap.gss. reflexivity. }.
+         all : simpl; eauto.
+         -- simpl. intros. destruct (Nat.eq_dec 1 cur).
+            subst. rewrite NatMap.gss. congruence.
+            rewrite NatMap.gso; eauto.
+         -- destruct CUR_INJP_TID. split; congruence.
+         -- destruct CUR_INJP_TID.
+            intros. destruct (Nat.eq_dec n cur). subst. rewrite NatMap.gss in H2. inv H2.
+            apply TID. eapply FIND_TID. rewrite NatMap.gso in H2. eauto. eauto.
+         -- intros.
+            instantiate (1:= NatMap.set cur (Some wA) worldsA).
+            destruct (Nat.eq_dec n cur).
+            ++ subst n.
+               exists wB, (Some wA), wp'. eexists. eexists. exists li.
+               repeat apply conj; eauto. rewrite NatMap.gss. reflexivity.
+               rewrite NatMap.gss. reflexivity. rewrite NatMap.gss. reflexivity.
+               simpl. simpl in wp'. assert (HRS: rs_q = cajw_rs wA). reflexivity.
+               rewrite HRS.
+               eapply match_returnj; eauto. simpl.
+               rewrite NatMap.gss. eauto. simpl. congruence.
+            ++ (* clear - THREADS H3 OTHERi n0. *)
+               destruct (THREADS n H) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
+               exists wn, owan, wnp, lscn,lsan,lin. repeat apply conj; eauto.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               simpl. intros. specialize (J H1).
+               eapply injp_accg_acci_accg; eauto.
+     - (*final*)
+       specialize (THREADS cur CUR_VALID) as THR_CUR.
+       destruct THR_CUR as (wB & owA & wP & lsc & lsa & li & GETW & GETi & MSEw & GETC & GETA & GETWa & MS & GETWp & ACC).
+       assert (lsc = CMulti.Local OpenC ls).
+       eapply foo; eauto. subst lsc. inv MS.
+       specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
+       inversion FSIM.
+       clear fsim_simulation fsim_match_initial_states fsim_match_external.
+       exploit fsim_match_final_states; eauto.
+       intros ([rs_r tm_r] & FINAL' & GW_ACC_BIG & MR).
+       assert (wP = wPcur). congruence. subst wP.
+       eexists. eexists. split.
+       + (*step*)
+         eapply switch_out_final. eauto. eauto. reflexivity. eauto.
+         econstructor; eauto.
+       + (*match_states*)
+         set (wp' := injpw j m tm_q Hm). simpl in *.
+         econstructor. 7:{ instantiate (2:= NatMap.set cur (Some wp') worldsP). rewrite NatMap.gss. reflexivity. }.
+         all : simpl; eauto.
+         -- simpl. intros. destruct (Nat.eq_dec 1 cur).
+            subst. rewrite NatMap.gss. congruence.
+            rewrite NatMap.gso; eauto.
+         -- destruct CUR_INJP_TID. split; congruence.
+         -- destruct CUR_INJP_TID.
+            intros. destruct (Nat.eq_dec n cur). subst. rewrite NatMap.gss in H2. inv H2.
+            apply TID. eapply FIND_TID. rewrite NatMap.gso in H2. eauto. eauto.
+         -- intros.
+            instantiate (1:= NatMap.set cur (Some wA) worldsA).
+            destruct (Nat.eq_dec n cur).
+            ++ subst n.
+               exists wB, (Some wA), wp'. eexists. eexists. exists li.
+               repeat apply conj; eauto. rewrite NatMap.gss. reflexivity.
+               rewrite NatMap.gss. reflexivity. rewrite NatMap.gss. reflexivity.
+               simpl. simpl in wp'. assert (HRS: rs_q = cajw_rs wA). reflexivity.
+               rewrite HRS.
+               eapply match_returnj; eauto. simpl.
+               rewrite NatMap.gss. eauto. simpl. congruence.
+            ++ (* clear - THREADS H3 OTHERi n0. *)
+               destruct (THREADS n H) as (wn & owan & wnp & lscn & lsan & lin & A & B & C & D & E & F & G & I & J).
+               exists wn, owan, wnp, lscn,lsan,lin. repeat apply conj; eauto.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               rewrite NatMap.gso. simpl. eauto. lia.
+               simpl. intros. specialize (J H1).
+               eapply injp_accg_acci_accg; eauto.       
+            
+
    Admitted.
    
 
