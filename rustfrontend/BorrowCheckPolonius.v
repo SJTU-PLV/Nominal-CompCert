@@ -5,26 +5,16 @@ Require Import FSetWeakList DecidableType.
 Require Import Lattice Kildall.
 Require Import Rusttypes RustlightBase RustIR.
 Require Import Errors.
-Require Import BorrowCheckDomain.
+Require Import BorrowCheckDomain ReplaceOrigins.
 
 Import ListNotations.
 Open Scope error_monad_scope.
-
-Definition find_elt {A: Type} (id: ident) (l: list (ident * A)) : option A :=
-  match find (fun '(id', v) => ident_eq id id') l with
-  | Some (_, v) => Some v
-  | None => None
-  end.
-
 
 (** ** Borrow checking based on Polonius (dataflow analysis) *)
 
 Definition error_msg (pc: node) : errmsg :=
   [MSG "error at "; CTX pc; MSG " : "].
 
-(** Replace origins in RustIR *)
-
-(* TODO  *)
 
 (** Initialization *)
 
@@ -288,33 +278,7 @@ Definition check_assignment (f: function) (pc: node) (live: LoanSet.t) (oe: LOrg
     OK (live2, oe3, ag2)
   else
     Error (error_msg pc ++ [MSG "type checking error in assignment"])
-.
-
-Definition replace_origin (rels: list origin_rel) (org: origin) : origin :=
-  match find_elt org rels with
-  | Some org' =>
-      org'
-  | None =>
-      org
-  end.
-
-Fixpoint replace_origin_in_type (ty: type) (rels: list origin_rel) : type :=
-  match ty with
-  | Treference org mut ty a =>
-      let ty' := replace_origin_in_type ty rels in
-      Treference (replace_origin rels org) mut ty' a
-  | Tbox ty a =>
-      let ty' := replace_origin_in_type ty rels in
-      Tbox ty' a
-  | Tstruct orgs id a =>
-      let orgs' := map (replace_origin rels) orgs in
-      Tstruct orgs' id a
-  | Tvariant orgs id a =>
-      let orgs' := map (replace_origin rels) orgs in
-      Tvariant orgs' id a
-  | _ => ty
-  end.
-      
+.      
 
 
 Definition check_assign_variant (ce: composite_env) (f: function) (pc: node) (live: LoanSet.t) (oe: LOrgEnv.t) (ag: LAliasGraph.t) (p: place') (fid: ident) (e: expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
@@ -605,6 +569,8 @@ Definition transfer (ce: composite_env) (f: function) (cfg: rustcfg) (pc: node) 
 Module DS := Dataflow_Solver(AE)(NodeSetForward).
 
 Definition borrow_check_fun (ce: composite_env) (f: function) : res unit :=
+  (* replace origins with fresh origins in the function body *)
+  do f <- replace_origin_function ce f;  
   let ae := init_function f in
   let ae' := init_variables ae f in
   (* generate cfg *)
