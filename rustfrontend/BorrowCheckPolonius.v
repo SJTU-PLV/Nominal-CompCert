@@ -10,6 +10,13 @@ Require Import BorrowCheckDomain.
 Import ListNotations.
 Open Scope error_monad_scope.
 
+Definition find_elt {A: Type} (id: ident) (l: list (ident * A)) : option A :=
+  match find (fun '(id', v) => ident_eq id id') l with
+  | Some (_, v) => Some v
+  | None => None
+  end.
+
+
 (** ** Borrow checking based on Polonius (dataflow analysis) *)
 
 Definition error_msg (pc: node) : errmsg :=
@@ -62,6 +69,23 @@ Definition aggregate_origin_states (e: LOrgEnv.t) (orgs: list origin) : LOrgSt.t
                
 (* Transition of pure expression *)
 
+Fixpoint mutable_place' (p: place') :=
+  match p with
+  | Plocal _ _ => true
+  | Pfield p' _ _ => mutable_place' p'
+  | Pderef p' _ =>
+      match typeof_place' p' with
+      | Treference _ Mutable _ _ => mutable_place' p'
+      | _ => false
+      end
+  end.
+
+Definition mutable_place (p: place) :=
+  match p with
+  | Place p => mutable_place' p
+  | Pdowncast p _ _ => mutable_place' p
+  end.
+
 Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pexpr) : res (LoanSet.t * LOrgEnv.t) :=
   match pe with
   | Eplace p ty =>
@@ -82,29 +106,31 @@ Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pex
       match ty with
       | Treference org' mut' ty' _ =>
           if Pos.eqb org org' && mutkind_eq mut mut' && type_eq ty ty' then
-            let ak := match mut with | Mutable => Awrite | Immutable => Aread end in
-            (* check all the loans in this place are not invalidated *)
-            if valid_access e p then
-              (* invalide origins contain loans relevant to [p] *)
-              let ls := relevant_loans live p Adeep in
-              let e' := invalidate_origins ls ak e in
-              (* add Lintern(mut,p) to live loans *)
-              let live' := LoanSet.add (Lintern mut p) live in
-              (* handle reborrow: add all the loans in the support
+            if mutkind_eq mut' Mutable && mutable_place p then
+              let ak := match mut with | Mutable => Awrite | Immutable => Aread end in
+              (* check all the loans in this place are not invalidated *)
+              if valid_access e p then
+                (* invalide origins contain loans relevant to [p] *)
+                let ls := relevant_loans live p Adeep in
+                let e' := invalidate_origins ls ak e in
+                (* add Lintern(mut,p) to live loans *)
+                let live' := LoanSet.add (Lintern mut p) live in
+                (* handle reborrow: add all the loans in the support
               prefix to org *)
-              let support_orgs := support_origins p in
-              (* aggregate the loans in the support origins *)
-              let org_st := aggregate_origin_states e' support_orgs in
-              match org_st with
-              | Dead => Error (error_msg pc ++ [MSG "there is invalid origin in the support prefixes of ";CTX (local_of_place p)])
-              | Live s =>
-                  (* Don't forget to add {Lintern mut p} *)
-                  let s' := LoanSet.add (Lintern mut p) s in
-                  let e'' := LOrgEnv.set org (Live s') e' in
-                  OK (live', e'')
-              end
-            else
-              Error (error_msg pc ++ [MSG "access an invalidated place "; CTX (local_of_place p)])
+                let support_orgs := support_origins p in
+                (* aggregate the loans in the support origins *)
+                let org_st := aggregate_origin_states e' support_orgs in
+                match org_st with
+                | Dead => Error (error_msg pc ++ [MSG "there is invalid origin in the support prefixes of ";CTX (local_of_place p)])
+                | Live s =>
+                    (* Don't forget to add {Lintern mut p} *)
+                    let s' := LoanSet.add (Lintern mut p) s in
+                    let e'' := LOrgEnv.set org (Live s') e' in
+                    OK (live', e'')
+                end
+              else
+                Error (error_msg pc ++ [MSG "access an invalidated place "; CTX (local_of_place p)])
+            else Error (error_msg pc ++ [MSG "mutable reference a immutable place (transfer_pure_expr)"])
           else
             Error (error_msg pc ++ [MSG "mismatch between expression type and place type in Eref"])
       | _ => Error (error_msg pc ++ [MSG "reference expression is not of reference type in Eref"])
@@ -112,7 +138,7 @@ Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pex
   | Ecktag p id _ =>
       (* simple type check *)
       match typeof_place' p with
-      | Tvariant _ _ _ _ =>
+      | Tvariant _ _ _ =>
           if valid_access e p then
             (* invalide origins contain loans relevant to [p] *)
             let ls := relevant_loans live p Ashallow in
@@ -182,8 +208,8 @@ Fixpoint flow_loans (pc: node) (e: LOrgEnv.t) (g: LAliasGraph.t) (s d: type) (k:
       end
   | Tbox ty1 _, Tbox ty2 _ =>
       flow_loans pc e g ty1 ty2 ByRef
-  | Tstruct orgs1 _ id1 _, Tstruct orgs2 _ id2 _
-  | Tvariant orgs1 _ id1 _, Tvariant orgs2 _ id2 _ =>
+  | Tstruct orgs1 id1 _, Tstruct orgs2 id2 _
+  | Tvariant orgs1 id1 _, Tvariant orgs2 id2 _ =>
       if Nat.eqb (length orgs1) (length orgs2) then
         let orgs := combine orgs1 orgs2 in
         (* set alias between orgs1 and orgs2 *)
@@ -238,18 +264,6 @@ Definition shallow_write_place (f: function) (pc: node) (live: LoanSet.t) (e: LO
 
 (* Auxilary functions for transition of statements *)
 
-Fixpoint mutable_place (p: place') :=
-  match p with
-  | Plocal _ _ => true
-  | Pfield p' _ _ => mutable_place p'
-  | Pderef p' _ =>
-      match typeof_place' p' with
-      | Treference _ Mutable _ _ => mutable_place p'
-      | _ => false
-      end
-  end.
-
-
 Definition kill_loans (live: LoanSet.t) (p: place) : LoanSet.t :=
   LoanSet.filter (fun elt => match elt with
                           | Lintern _ p' => negb (is_prefix p p')
@@ -276,6 +290,69 @@ Definition check_assignment (f: function) (pc: node) (live: LoanSet.t) (oe: LOrg
     Error (error_msg pc ++ [MSG "type checking error in assignment"])
 .
 
+Definition replace_origin (rels: list origin_rel) (org: origin) : origin :=
+  match find_elt org rels with
+  | Some org' =>
+      org'
+  | None =>
+      org
+  end.
+
+Fixpoint replace_origin_in_type (ty: type) (rels: list origin_rel) : type :=
+  match ty with
+  | Treference org mut ty a =>
+      let ty' := replace_origin_in_type ty rels in
+      Treference (replace_origin rels org) mut ty' a
+  | Tbox ty a =>
+      let ty' := replace_origin_in_type ty rels in
+      Tbox ty' a
+  | Tstruct orgs id a =>
+      let orgs' := map (replace_origin rels) orgs in
+      Tstruct orgs' id a
+  | Tvariant orgs id a =>
+      let orgs' := map (replace_origin rels) orgs in
+      Tvariant orgs' id a
+  | _ => ty
+  end.
+      
+
+
+Definition check_assign_variant (ce: composite_env) (f: function) (pc: node) (live: LoanSet.t) (oe: LOrgEnv.t) (ag: LAliasGraph.t) (p: place') (fid: ident) (e: expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
+  match typeof_place p with
+  | Tvariant orgs_dest vid _ =>
+      match ce!vid with
+      | Some co =>
+          match find (fun '(Member_plain fid' _) => Pos.eqb fid fid') co.(co_members) with
+          | Some memb =>
+              let ty_i := type_member memb in
+              let ty_src := typeof e in
+              if type_eq_except_origins ty_src ty_i then
+                let orgs_src := co.(co_generic_origins) in
+                let ty_dest := replace_origin_in_type ty_i (combine orgs_src orgs_dest) in
+                if mutable_place p then
+                  (* check the expression *)
+                  do (live1, oe1) <- transfer_expr pc live oe e;
+                  (* shallow write to the place, it will check the validity of p *)
+                  do (oe2, ag1) <- shallow_write_place f pc live1 oe1 ag p;
+                  (* kill the loans of which [p] is prefix *)
+                  let live2 := kill_loans live1 p in
+                  (* flows the loans from src type to dest type *)
+                  do (oe3, ag2) <- flow_loans pc oe2 ag1 ty_src ty_dest ByVal;
+                  OK (live2, oe3, ag2)
+                else
+                  Error (error_msg pc ++ [MSG "place is not mutable in check_assign_variant"])
+              else
+                Error (error_msg pc ++ [MSG "type checking error in check_assign_variant"])
+          | _ =>
+              Error (error_msg pc ++ [MSG "cannot find the field of this variant (check_assign_variant)"])
+          end
+      | _ =>
+          Error (error_msg pc ++ [MSG "cannot find the variant (check_assign_variant)"])
+      end
+  | _ =>
+      Error (error_msg pc ++ [MSG "target is not a variant (check_assign_variant)"])
+  end.
+  
 
 Fixpoint type_list_of_typelist (tl: typelist) : list type :=
   match tl with
@@ -292,8 +369,8 @@ Fixpoint bind_type_origins (pc: node) (ty1 ty2: type) (fk: flow_kind) : res (lis
       OK ((org1, org2, fk) :: l')
   | Tbox ty1 _, Tbox ty2 _ =>
       bind_type_origins pc ty1 ty2 ByRef
-  | Tstruct orgs1 _ id1 _, Tstruct orgs2 _ id2 _
-  | Tvariant orgs1 _ id1 _, Tvariant orgs2 _ id2 _ =>
+  | Tstruct orgs1 id1 _, Tstruct orgs2 id2 _
+  | Tvariant orgs1 id1 _, Tvariant orgs2 id2 _ =>
       if Nat.eqb (length orgs1) (length orgs2) then
         let len := length orgs1 in
         OK (combine (combine orgs1 orgs2) (repeat fk len))
@@ -407,7 +484,20 @@ Definition check_drop (f: function) (pc: node) (live1: LoanSet.t) (oe1: LOrgEnv.
 call must be declared in the function sigature *)
 
 Definition check_generic_origins_relations (f: function) (e: LOrgEnv.t) : bool :=
-  true.
+  forallb (fun org1 =>
+             forallb (fun org2 =>
+                        if Pos.eqb org1 org2 then true
+                        else match LOrgEnv.get org1 e, LOrgEnv.get org2 e with
+                             | Live ls1, Live ls2 =>
+                                 if LoanSet.subset ls1 ls2 then
+                                   in_dec origin_rel_eq_dec (org1, org2) f.(fn_origins_relation)
+                                 else if LoanSet.subset ls2 ls1 then
+                                        in_dec origin_rel_eq_dec (org2, org1) f.(fn_origins_relation)
+                                      else true
+                             (* generic origins must be live *)
+                             | _, _ => false
+                             end) f.(fn_generic_origins)) f.(fn_generic_origins).
+  
 
 Definition check_return_expr (pc: node) (live1: LoanSet.t) (oe1: LOrgEnv.t) (ag1: LAliasGraph.t) (e: expr) (rety: type) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
   let ty_src := typeof e in
@@ -423,28 +513,16 @@ Definition check_return (f: function) (pc: node) (live1: LoanSet.t) (oe1: LOrgEn
   match e with
   | Some e =>      
       do r <- check_return_expr pc live1 oe1 ag1 e rety;
-      let '(live2, oe2, ag2) := r in
-      if check_generic_origins_relations f oe2 then
-        OK (live2, oe2, ag2)
-      else
-        Error (error_msg pc ++ [MSG "some relations in function return are not declared in the function sigature"])
+      let '(live2, oe2, ag2) := r in     
+      OK (live2, oe2, ag2)
   | None =>
       (* simple type checking *)
       if type_eq Tunit f.(fn_return) then
-        if check_generic_origins_relations f oe1 then
         OK (live1, oe1, ag1)
-      else
-        Error (error_msg pc ++ [MSG "some relations in function return are not declared in the function sigature"])
       else
         Error (error_msg pc ++ [MSG "no return value but return type is not Tunit!"])
   end.
 
-
-Definition find_elt {A: Type} (id: ident) (l: list (ident * A)) : option A :=
-  match find (fun '(id', v) => ident_eq id id') l with
-  | Some (_, v) => Some v
-  | None => None
-  end.
 
 Definition finish_check (pc: node) (r: res (LoanSet.t * LOrgEnv.t * LAliasGraph.t)) : AE.t :=
   match r with
@@ -455,7 +533,7 @@ Definition finish_check (pc: node) (r: res (LoanSet.t * LOrgEnv.t * LAliasGraph.
 
 (* Transition of statements *)
         
-Definition transfer (f: function) (cfg: rustcfg) (pc: node) (before: AE.t) : AE.t :=
+Definition transfer (ce: composite_env) (f: function) (cfg: rustcfg) (pc: node) (before: AE.t) : AE.t :=
   match before with
   | AE.Bot => AE.Bot
   | AE.Err pc' msg =>
@@ -472,7 +550,12 @@ Definition transfer (f: function) (cfg: rustcfg) (pc: node) (before: AE.t) : AE.
           | Error msg =>
               AE.Err pc msg
           end
-      | Some Iend => before
+      | Some Iend =>
+          (* check the generic origins relations *)
+          if check_generic_origins_relations f oe then
+            before
+          else
+            AE.Err pc [MSG "some relations in function return are not declared in the function sigature"]
       | Some (Isel sel _) =>
           match select_stmt f.(fn_body) sel with
           | None => AE.bot
@@ -482,8 +565,8 @@ Definition transfer (f: function) (cfg: rustcfg) (pc: node) (before: AE.t) : AE.
                   let check_result := check_assignment f pc live oe ag p e in
                   finish_check pc check_result
               | Sassign_variant p fid e =>
-                  (* TODO: assign variant, it may be a little difficult *)
-                  before
+                  let check_result := check_assign_variant ce f pc live oe ag p fid e in
+                  finish_check pc check_result
               | Scall p e l =>
                   match e with
                   | Epure (Eplace (Plocal fid fty) _) =>
@@ -521,13 +604,13 @@ Definition transfer (f: function) (cfg: rustcfg) (pc: node) (before: AE.t) : AE.
 
 Module DS := Dataflow_Solver(AE)(NodeSetForward).
 
-Definition borrow_check (f: function) : res unit :=
+Definition borrow_check_fun (ce: composite_env) (f: function) : res unit :=
   let ae := init_function f in
   let ae' := init_variables ae f in
   (* generate cfg *)
   do (entry, cfg) <- generate_cfg f.(fn_body);
   (** forward dataflow *)
-  match DS.fixpoint cfg successors_instr (transfer f cfg) entry ae' with
+  match DS.fixpoint cfg successors_instr (transfer ce f cfg) entry ae' with
   | Some r =>
       let (_, t) := r in
       let l := PTree.elements t in
@@ -546,7 +629,7 @@ Definition borrow_check (f: function) : res unit :=
 Definition transf_fundef (ce: composite_env) (id: ident) (fd: fundef) : Errors.res fundef :=
   match fd with
   | Internal f =>
-      match borrow_check f with
+      match borrow_check_fun ce f with
       | OK _ => OK (Internal f)
       | Error msg => Error ([MSG "In function "; CTX id; MSG " , in pc "] ++ msg)
       end

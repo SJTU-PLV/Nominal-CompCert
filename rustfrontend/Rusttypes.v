@@ -48,8 +48,8 @@ Inductive type : Type :=
 | Tfunction: list origin -> list origin_rel -> typelist -> type -> calling_convention -> type    (**r function types *)
 | Tbox: type -> attr -> type                                         (**r unique pointer  *)
 | Treference: origin -> mutkind -> type -> attr -> type (**r reference type  *)
-| Tstruct: list origin -> list origin_rel -> ident -> attr -> type                              (**r struct types  *)
-| Tvariant: list origin -> list origin_rel -> ident -> attr -> type                             (**r tagged variant types *)
+| Tstruct: list origin -> ident -> attr -> type                              (**r struct types  *)
+| Tvariant: list origin -> ident -> attr -> type                             (**r tagged variant types *)
 with typelist : Type :=
 | Tnil: typelist
 | Tcons: type -> typelist -> typelist.
@@ -95,8 +95,8 @@ Fixpoint type_eq_except_origins (ty1 ty2: type) : bool :=
       | Immutable, Immutable => type_eq_except_origins ty1 ty2 && attr_eq a1 a2
       | _, _ => false
       end
-  | Tstruct _ _ id1 a1, Tstruct _ _ id2 a2
-  | Tvariant _ _ id1 a1, Tvariant _ _ id2 a2 =>
+  | Tstruct _ id1 a1, Tstruct _ id2 a2
+  | Tvariant _ id1 a1, Tvariant _ id2 a2 =>
       ident_eq id1 id2 && attr_eq a1 a2
   | _, _ => type_eq ty1 ty2
   end.
@@ -110,8 +110,8 @@ Definition attr_of_type (ty: type) :=
   | Tfunction _ _ args res cc => noattr
   | Tbox p a => a
   | Treference _ mut ty a => a
-  | Tstruct _ _ id a => a
-  | Tvariant _ _ id a => a
+  | Tstruct _ id a => a
+  | Tvariant _ id a => a
   end.
 
 (** access mode for Rust types  *)
@@ -130,8 +130,8 @@ Definition access_mode (ty: type) : mode :=
   | Tfunction _ _ _ _ _ => By_reference
   | Tbox _ _ => By_value Mptr
   | Treference _ _ _ _ => By_value Mptr
-  | Tstruct _ _ _ _ => By_copy
-  | Tvariant _ _ _ _ => By_copy
+  | Tstruct _ _ _ => By_copy
+  | Tvariant _ _ _ => By_copy
 end.
 
 
@@ -217,7 +217,7 @@ Definition complete_type (env: composite_env) (t: type) : bool :=
   | Tfunction _ _ _ _ _ => false
   | Tbox _ _ => true
   | Treference _ _ _ _ => true
-  | Tstruct _ _ id _ | Tvariant _ _ id _ =>
+  | Tstruct _ id _ | Tvariant _ id _ =>
       match env!id with Some co => true | None => false end
   end.
 
@@ -254,7 +254,7 @@ Definition alignof (env: composite_env) (t: type) : Z :=
     | Tfunction _ _ _ _ _ => 1
     | Treference _ _ _ _
     | Tbox _ _ => if Archi.ptr64 then 8 else 4                      
-      | Tstruct _ _ id _ | Tvariant _ _ id _ =>
+      | Tstruct _ id _ | Tvariant _ id _ =>
           match env!id with Some co => co_alignof co | None => 1 end
     end).
 
@@ -344,8 +344,8 @@ Program Definition get_composite (id: ident) : composite_result :=
 
 Definition own_type' (ty: type) : bool :=
   match ty with
-  | Tstruct _ _ id _
-  | Tvariant _ _ id _ =>
+  | Tstruct _ id _
+  | Tvariant _ id _ =>
       match get_composite id with
       | co_some i co P =>
           let acc res m :=
@@ -417,8 +417,8 @@ Definition sizeof (env: composite_env) (t: type) : Z :=
   | Tfunction _ _ _ _ _ => 1
   | Treference _ _ _ _
   | Tbox _ _ => if Archi.ptr64 then 8 else 4
-  | Tstruct _ _ id _
-  | Tvariant _ _ id _ =>
+  | Tstruct _ id _
+  | Tvariant _ id _ =>
       match env!id with
       | Some co => co_sizeof co
       | None => 0
@@ -453,8 +453,8 @@ Definition alignof_blockcopy (env: composite_env) (t: type) : Z :=
   | Tfunction _ _ _ _ _ => 1
   | Treference _ _ _ _
   | Tbox _ _ => if Archi.ptr64 then 8 else 4
-  | Tstruct _ _ id _
-  | Tvariant _ _ id _ =>
+  | Tstruct _ id _
+  | Tvariant _ id _ =>
       match env!id with
       | Some co => Z.min 8 (co_alignof co)
       | None => 1
@@ -686,7 +686,7 @@ Qed.
 
 Definition rank_type (ce: composite_env) (t: type) : nat :=
   match t with
-  | Tstruct _ _ id _ | Tvariant _ _ id _ =>
+  | Tstruct _ id _ | Tvariant _ id _ =>
       match ce!id with
       | None => O
       | Some co => S (co_rank co)
@@ -720,7 +720,7 @@ Definition typ_of_type (t: type) : AST.typ :=
   | Tlong _ _ => AST.Tlong
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
-  | Tfunction _ _ _ _ _ | Treference _ _ _ _ | Tbox _ _ | Tstruct _ _ _ _ | Tvariant _ _ _ _ => AST.Tptr
+  | Tfunction _ _ _ _ _ | Treference _ _ _ _ | Tbox _ _ | Tstruct _ _ _ | Tvariant _ _ _ => AST.Tptr
   end.
 
 Definition rettype_of_type (t: type) : AST.rettype :=
@@ -736,7 +736,7 @@ Definition rettype_of_type (t: type) : AST.rettype :=
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
   | Tbox _ _ | Treference _ _ _ _ => Tptr
-  | Tfunction _ _ _ _ _ | Tstruct _ _ _ _ | Tvariant _ _ _ _ => AST.Tvoid
+  | Tfunction _ _ _ _ _ | Tstruct _ _ _ | Tvariant _ _ _ => AST.Tvoid
   end.
 
 Fixpoint typlist_of_typelist (tl: typelist) : list AST.typ :=

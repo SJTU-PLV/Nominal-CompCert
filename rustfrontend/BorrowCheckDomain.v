@@ -251,8 +251,8 @@ Fixpoint origins_of_type (ty: type) : list origin :=
   match ty with
   | Tbox ty _ => origins_of_type ty
   | Treference org _ ty _ => org :: origins_of_type ty
-  | Tstruct orgs _ _ _ => orgs
-  | Tvariant orgs _ _ _ => orgs
+  | Tstruct orgs _ _ => orgs
+  | Tvariant orgs _ _ => orgs
   | _ => []
   end.       
 

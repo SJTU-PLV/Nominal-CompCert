@@ -110,9 +110,9 @@ Fixpoint to_ctype (ty: type) : Ctypes.type :=
   | Tint sz si attr => Ctypes.Tint sz si attr
   | Tlong si attr => Ctypes.Tlong si attr
   | Tfloat fz attr => Ctypes.Tfloat fz attr
-  | Tstruct _ _ id attr => Ctypes.Tstruct id attr
+  | Tstruct _ id attr => Ctypes.Tstruct id attr
   (* variant = Struct {tag: .. ; f: union} *)
-  | Tvariant _ _ id attr => Ctypes.Tstruct id attr
+  | Tvariant _ id attr => Ctypes.Tstruct id attr
   | Treference _ _ ty attr
   | Tbox ty attr => Tpointer (to_ctype ty) attr
       (* match (to_ctype ty) with *)
@@ -138,7 +138,7 @@ Inductive statement : Type :=
 | Sassign : place' -> expr -> statement (**r assignment [place' = rvalue]. Downcast cannot appear in LHS *)
 | Sassign_variant : place' -> ident -> expr -> statement (**r assign variant to a place *)
 | Sbox: place' -> expr -> statement        (**r box assignment [place = Box::new(expr)]  *)
-| Scall: place' -> place' -> list expr -> statement (**r function call, p =
+| Scall: place' -> expr -> list expr -> statement (**r function call, p =
   f(...). The assignee is mandatory, because we need to ensure that
   the return value (may be a box) is received *)
 | Sbuiltin: place' -> external_function -> typelist -> list expr -> statement (**r builtin invocation *)
@@ -441,9 +441,9 @@ Inductive eval_place' : place' -> block -> ptrofs -> Prop :=
     gloabl environment *)
     e!id = Some (b, ty) ->
     eval_place' (Plocal id ty) b Ptrofs.zero
-| eval_Pfield_struct: forall p ty b ofs delta id i co bf attr orgs org_rels,
+| eval_Pfield_struct: forall p ty b ofs delta id i co bf attr orgs,
     eval_place' p b ofs ->
-    ty = Tstruct orgs org_rels id attr ->
+    ty = Tstruct orgs id attr ->
     ce ! id = Some co ->
     field_offset ce i (co_members co) = OK (delta, bf) ->
     eval_place' (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
@@ -507,11 +507,11 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
 (*     (** what if p is an own type? *) *)
 (*     eval_pexpr (Eget p fid ty) v *)
 
-| eval_Ecktag: forall (p: place') b ofs ty m tag tagz id fid attr co orgs org_rels,
+| eval_Ecktag: forall (p: place') b ofs ty m tag tagz id fid attr co orgs,
     eval_place p b ofs ->
     (* load the tag *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
-    typeof_place p = Tvariant orgs org_rels id attr ->
+    typeof_place p = Tvariant orgs id attr ->
     ce ! id = Some co ->
     field_tag fid co.(co_members) = Some tagz ->
     eval_pexpr (Ecktag p fid ty) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz))
@@ -635,7 +635,7 @@ Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> 
 | drop_in_base: forall m b ofs ty,
     definite_copy_type ty = true ->
     drop_in_place ce ty m b ofs m
-| drop_in_struct: forall m b ofs id attr co m' lb lofs lofsbit lty orgs org_rels,
+| drop_in_struct: forall m b ofs id attr co m' lb lofs lofsbit lty orgs,
     ce ! id = Some co ->
     (* do not use eval_place_list, directly compute the field offset *)
     field_offset_all ce co.(co_members) = OK lofsbit ->
@@ -643,8 +643,8 @@ Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> 
     lb = repeat b (length co.(co_members)) ->
     lty = map type_member co.(co_members) ->
     drop_in_place_list ce lty m lb lofs m' ->
-    drop_in_place ce (Tstruct orgs org_rels id attr) m b ofs m'
-| drop_in_variant: forall m b ofs id attr co m' tag memb fid ofs' bf orgs org_rels,
+    drop_in_place ce (Tstruct orgs id attr) m b ofs m'
+| drop_in_variant: forall m b ofs id attr co m' tag memb fid ofs' bf orgs,
     ce ! id = Some co ->
     (* load tag  *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
@@ -654,7 +654,7 @@ Inductive drop_in_place (ce: composite_env) : type -> mem -> block -> ptrofs -> 
     variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
     (* drop the selected type *)
     drop_in_place ce (type_member memb) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) m' ->
-    drop_in_place ce (Tvariant orgs org_rels id attr) m b ofs m
+    drop_in_place ce (Tvariant orgs id attr) m b ofs m
 | drop_in_box: forall ty ty' attr m m' m'' b ofs b' ofs',
     ty = Tbox ty' attr ->
     (* The contents in [p] is (Vptr b' ofs') *)
@@ -683,9 +683,9 @@ Inductive drop_place' (ce: composite_env) (owned: list place') : place' -> mem -
 | drop_moved: forall  p m b ofs,
     not (In p owned) ->
     drop_place' ce owned p m b ofs m
-| drop_struct: forall (p: place') m b ofs id attr co m' lb lofs lofsbit fields orgs org_rels,
+| drop_struct: forall (p: place') m b ofs id attr co m' lb lofs lofsbit fields orgs,
     (* recursively drop all the fields *)
-    typeof_place p = Tstruct orgs org_rels id attr ->
+    typeof_place p = Tstruct orgs id attr ->
     ce ! id = Some co ->
     fields = map (fun memb => match memb with | Member_plain fid fty => Pfield p fid fty end) co.(co_members) ->
     (* do not use eval_place_list, directly compute the field offset *)
@@ -694,11 +694,11 @@ Inductive drop_place' (ce: composite_env) (owned: list place') : place' -> mem -
     lb = repeat b (length co.(co_members)) ->
     drop_place_list' ce owned fields m lb lofs m' ->
     drop_place' ce owned p m b ofs m'
-| drop_variant: forall (p: place') m b ofs id attr m' orgs org_rels,
+| drop_variant: forall (p: place') m b ofs id attr m' orgs,
     (* select the type based on the tag value *)
-    typeof_place p = Tvariant orgs org_rels id attr ->
+    typeof_place p = Tvariant orgs id attr ->
     (* p is in owned, so we just use type to destruct the variant *)
-    drop_in_place ce (Tvariant orgs org_rels id attr) m b ofs m' ->
+    drop_in_place ce (Tvariant orgs id attr) m b ofs m' ->
     drop_place' ce owned p m b ofs m'
 | drop_box: forall (p: place') attr ty m m' m'' b' b ofs ofs',
     typeof_place p = Tbox ty attr ->
@@ -788,7 +788,7 @@ Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place') (ty: type) : list 
       (* | Treference ty' Mutable _ => *)
       (*     let deref := Pderef p ty' in *)
       (*     p :: init_path deref ty' *)
-      | Tstruct _ _ id _ =>
+      | Tstruct _ id _ =>
           match ce ! id with
           | Some co =>
               let acc flds m :=
@@ -803,7 +803,7 @@ Fixpoint own_path (fuel: nat) (ce: composite_env) (p: place') (ty: type) : list 
               end
           | _ => p :: nil
           end
-      | Tvariant _ _ _ _ =>
+      | Tvariant _ _ _ =>
           if own_type ce ty then p :: nil
           else nil
       | _ => nil
@@ -872,11 +872,11 @@ Variable ge: genv.
 
 Inductive step : state -> trace -> state -> Prop :=
 
-| step_assign: forall f e (p: place') ty op k le own own' own'' m1 m2 m3 b ofs v id attr orgs org_rels,
+| step_assign: forall f e (p: place') ty op k le own own' own'' m1 m2 m3 b ofs v id attr orgs,
     (** FIXME: some ugly restriction  *)
     typeof_place p = ty ->
     typeof e = ty ->
-    ty <> Tvariant orgs org_rels id attr ->
+    ty <> Tvariant orgs id attr ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr, return the value and the moved place (optional) *)
@@ -896,10 +896,10 @@ Inductive step : state -> trace -> state -> Prop :=
     assign_loc ge ty m2 b ofs v m3 ->
     step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m3) 
          
-| step_assign_variant: forall f e (p: place') ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid attr orgs org_rels,
+| step_assign_variant: forall f e (p: place') ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid attr orgs,
     typeof_place p = ty ->
     typeof e = ty ->
-    ty = Tvariant orgs org_rels id attr ->
+    ty = Tvariant orgs id attr ->
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the boxexpr, return the value and the moved place (optional) *)
