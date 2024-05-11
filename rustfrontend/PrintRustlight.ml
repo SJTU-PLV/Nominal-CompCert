@@ -49,7 +49,7 @@ let precedence' = function
   | Ebinop(Oor, _, _, _) -> (6, LtoR)
   | Eplace(_, _) -> (16,NA)
   | Ecktag(_, _, _) -> (15, RtoL)
-  | Eref(_, _, _) -> (15, RtoL)
+  | Eref(_, _, _, _) -> (15, RtoL)
 
 let precedence = function
   | Emoveplace(_,_) -> (16,NA)
@@ -91,8 +91,8 @@ let rec pexpr p (prec, e) =
       pexpr (prec1, a1) (name_binop op) pexpr (prec2, a2)
   | Ecktag(v, fid, _) ->
     fprintf p "%s(%a, %s)" "cktag" print_place v (extern_atom fid)
-  | Eref(v, mut, _) ->
-    fprintf p "& %s %a" (string_of_mut mut) print_downcast v
+  | Eref(org, mut, v, _) ->
+    fprintf p "& '%s %s %a" (extern_atom org) (string_of_mut mut) print_downcast v
   end;
   if prec' < prec then fprintf p ")@]" else fprintf p "@]"
 
@@ -186,17 +186,17 @@ let print_function p id f =
 
 let print_fundef p id fd =
   match fd with
-  | Rusttypes.External(_, _, _, _) ->
+  | Rusttypes.External(_, _, _, _, _, _) ->
       ()
   | Rusttypes.Internal f ->
       print_function p id f
 
 let print_fundecl p id fd =
   match fd with
-  | Rusttypes.External((AST.EF_external _ | AST.EF_runtime _ | AST.EF_malloc | AST.EF_free), args, res, cconv) ->
+  | Rusttypes.External(_, _, (AST.EF_external _ | AST.EF_runtime _ | AST.EF_malloc | AST.EF_free), args, res, cconv) ->
       fprintf p "extern %s;@ "
-                (name_rust_decl (extern_atom id) (Rusttypes.Tfunction(args, res, cconv)))
-  | Rusttypes.External(_, _, _, _) ->
+                (name_rust_decl (extern_atom id) (Rusttypes.Tfunction([], [], args, res, cconv)))
+  | Rusttypes.External(_, _ ,_, _, _, _) ->
       ()
   | Rusttypes.Internal f ->
       fprintf p "%s;@ "

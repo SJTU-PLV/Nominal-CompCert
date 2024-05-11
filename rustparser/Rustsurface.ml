@@ -1,6 +1,8 @@
 
 type id = string
 
+let dummy_origin = BinNums.Coq_xH
+
 type ty = | Tunit
           | Tint of Ctypes.intsize * Ctypes.signedness * Ctypes.attr
           | Tlong of Ctypes.signedness * Ctypes.attr
@@ -162,7 +164,7 @@ module To_syntax = struct
       pp_print_string pp (match si with
       | Ctypes.F32 -> "32"
       | Ctypes.F64 -> "64")
-    | T.Tfunction (tl, r, _) ->
+    | T.Tfunction (_, _, tl, r, _) ->
       pp_print_string pp "fn(";
       pp_print_space pp ();
       let _ = List.map
@@ -178,12 +180,14 @@ module To_syntax = struct
       pp_print_string pp "Box(";
       pp_print_rust_type symmap  pp t ;
       pp_print_string pp ")";
-    | T.Tstruct (id, _) ->
+    | T.Tstruct (_, id, _) ->
       pp_print_string pp (IdentMap.find id symmap);
-    | T.Tvariant (id, _) ->
+    | T.Tvariant (_, id, _) ->
       pp_print_string pp (IdentMap.find id symmap);
-    | T.Treference (t, m, _) ->
+    | T.Treference (org, m, t, _) ->
       pp_print_string pp "&";
+      (* print origin *)
+      pp_print_string pp (" '" ^ Camlcoq.extern_atom org);
       if m = T.Mutable then
         pp_print_string pp "mut";
       pp_print_rust_type symmap pp t 
@@ -222,7 +226,8 @@ module To_syntax = struct
       symmap
 
   let pp_print_composite (symmap: id IdentMap.t) pp (c: Rusttypes.composite_definition) =
-    let Rusttypes.Composite (i, s_or_v, members, _) = c in
+    (* TODO: consider generic origins *)
+    let Rusttypes.Composite (i, s_or_v, members, _, _, _) = c in
     let s_or_v =  match s_or_v with
       | Rusttypes.Struct -> "struct"
       | Rusttypes.TaggedUnion -> "enum"
@@ -265,10 +270,10 @@ module To_syntax = struct
       pp_print_string pp x
     | S.Ebox (e, _) ->
       fprintf pp "Box(%a)" (pp_print_expr symmap) e
-    | S.Eref (l, T.Mutable, _) ->
-      fprintf pp "&mut %a" (pp_print_expr symmap) l
-    | S.Eref (l, T.Immutable, _) ->
-      fprintf pp "& %a" (pp_print_expr symmap) l
+    | S.Eref (org, T.Mutable, l, _) ->
+      fprintf pp "& %s mut %a" ("'" ^ Camlcoq.extern_atom org) (pp_print_expr symmap) l
+    | S.Eref (org, T.Immutable, l, _) ->
+      fprintf pp "& %s %a" ("'" ^ Camlcoq.extern_atom org) (pp_print_expr symmap) l
     | S.Efield (l, i, _) ->
       let x = IdentMap.find i symmap in
       fprintf pp "%a.%s" (pp_print_expr symmap) l x
@@ -535,18 +540,22 @@ module To_syntax = struct
       in
       map_m params transl_ty  >>= fun args' ->
       transl_ty ret >>= fun ret' ->
-      return (T.Tfunction (typelist_of args', ret', AST.cc_default))
+      (* TODO: support generic origins *)
+      return (T.Tfunction ([], [], typelist_of args', ret', AST.cc_default))
     | Tbox (t, attr) ->
       transl_ty t >>= fun t' ->
       return (T.Tbox (t', attr))
     | Tadt (x, attr) ->
-      get_composite x >>= fun (i, T.Composite (_, sv, _, _)) ->
+      get_composite x >>= fun (i, T.Composite (_, sv, _, _, _, _)) ->
       (match sv with
-        | T.Struct -> return (T.Tstruct (i, attr))
-        | T.TaggedUnion -> return (T.Tvariant (i, attr)))
+        (* TODO: support generic origins *)
+        | T.Struct -> return (T.Tstruct ([], i, attr))
+        | T.TaggedUnion -> return (T.Tvariant ([], i, attr)))
     | Treference (t, m, attr) ->
       transl_ty t >>= fun t' ->
-      return (T.Treference (t', m, attr))
+      (* We just give it a dummy origin which will be replaced in the
+       borrow checker  *)
+      return (T.Treference (dummy_origin, m, t', attr))
 
 
   let add_composite_struc (x: id) (c: comp_struc) : unit monad =
@@ -556,7 +565,8 @@ module To_syntax = struct
          get_or_new_ident x >>= fun i ->
          transl_ty t >>= fun t' ->
          return (Rusttypes.Member_plain (i, t'))) >>= fun members' ->
-    let c' = Rusttypes.Composite (i, Rusttypes.Struct, members', noattr) in
+    (* TODO: support generic origins *)
+    let c' = Rusttypes.Composite (i, Rusttypes.Struct, members', noattr, [], []) in
     get_st >>= fun st ->
     let cos' = IdentMap.add i c' st.composites in
     set_st { st with composites = cos' }
@@ -578,19 +588,28 @@ module To_syntax = struct
          return (ivar, ts')
       )
 
+  let type_of_variant_constructor (x: id) (xvar: string) (i: ident) (ts: ty list) : Rusttypes.coq_type monad =
+    match ts with
+     | [] ->  return Rusttypes.Tunit
+     | t :: [] -> transl_ty t
+     | _ ->
+       let variant_struc_id = variant_struc_id x xvar in
+       let variant_struc = composite_stru_for_variant ts 0 in
+       add_composite_struc variant_struc_id variant_struc >>= fun _ ->
+       get_or_new_ident variant_struc_id >>= fun variant_struc_ident ->
+        (* TODO: support generic origins *)
+       return (Rusttypes.Tstruct ([], i, noattr))
+
   let add_composite_enum (x: id) (c: comp_enum) : unit monad =
     get_or_new_ident x >>= fun i ->
     map_m c
       (fun (xvar, ts) ->
          get_or_new_ident xvar >>= fun i ->
-         let variant_struc = composite_stru_for_variant ts 0 in
-         let variant_struc_id = variant_struc_id x xvar in
-         add_composite_struc variant_struc_id variant_struc >>= fun _ ->
-         get_or_new_ident variant_struc_id >>= fun variant_struc_ident ->
-         let t' = Rusttypes.Tvariant (variant_struc_ident, Ctypes.noattr) in
+         type_of_variant_constructor x xvar i ts>>= fun t' ->
          return (Rusttypes.Member_plain (i, t'))) >>= fun members' ->
     lower_comp_enum c >>= fun ce' ->
-    let c' = Rusttypes.Composite (i, Rusttypes.TaggedUnion, members', noattr) in
+    (* TODO: support generic origins *)
+    let c' = Rusttypes.Composite (i, Rusttypes.TaggedUnion, members', noattr, [], []) in
     get_st >>= fun st ->
     let cos' = IdentMap.add i c' st.composites in
     set_st { st with composites = cos'
@@ -698,7 +717,7 @@ module To_syntax = struct
        : (ident * Rusttypes.coq_type list) option =
        let t = Rustsyntax.typeof (List.hd header) in
        match t with
-       | Rusttypes.Tvariant (ienum, _) ->
+       | Rusttypes.Tvariant (_, ienum, _) ->
           let (patterns, _) = row in
           (match List.hd patterns with
           | Pconstructor' (ivar, args) ->
@@ -731,7 +750,7 @@ module To_syntax = struct
      let skeleton_groups (header: Rustsyntax.expr list): groups monad =
        let head = List.hd header in
        match Rustsyntax.typeof head with
-       | Rusttypes.Tvariant (ienum, _) ->
+       | Rusttypes.Tvariant (_, ienum, _) ->
          get_enums >>= fun enums ->
          let enum = IdentMap.find ienum enums in
          let var_idents = List.map fst enum in
@@ -774,7 +793,8 @@ module To_syntax = struct
        match row_head_args_types (List.hd grp_rows) header enums with
        | Some (ienum, args_types) ->
          variant_struc_name ienum grp_ivar >>= fun vsn ->
-         let as_var_typ = Rusttypes.Tvariant (vsn, Ctypes.noattr) in
+          (* TODO *)
+         let as_var_typ = Rusttypes.Tvariant ([], vsn, Ctypes.noattr) in
          con_header_with_field_access
              (Rustsyntax.Evar (as_var, as_var_typ)) (List.tl header) args_types 0
              >>= fun header' ->
@@ -866,7 +886,7 @@ module To_syntax = struct
      match p with
      | Pconstructor (x, args) ->
        (match t with
-        | Rusttypes.Tvariant (ienum, _) ->
+        | Rusttypes.Tvariant (_, ienum, _) ->
           get_enums >>= fun enums ->
           (match IdentMap.find_opt ienum enums with
            | Some enum ->
@@ -911,7 +931,8 @@ module To_syntax = struct
         let targs = List.map snd f.params in
         map_m targs transl_ty >>= fun targs' ->
         let targs'' = typelist_of targs' in
-        let tf' = Rusttypes.Tfunction (targs'', tr', AST.cc_default) in
+        (* TODO: added generic origins information to state *)
+        let tf' = Rusttypes.Tfunction ([], [], targs'', tr', AST.cc_default) in
         return (Rustsyntax.Evar (ix, tf'))
       )
     | Ebox e ->
@@ -922,9 +943,9 @@ module To_syntax = struct
       transl_expr e >>= fun e' ->
       let te = Rustsyntax.typeof e' in
       (match te with
-      | Rusttypes.Tstruct (ist, _) ->
+      | Rusttypes.Tstruct ([], ist, _) ->
         get_st >>= fun st ->
-        let Rusttypes.Composite (_, _, members, _) =
+        let Rusttypes.Composite (_, _, members, _, _, _) =
           IdentMap.find ist st.composites
         in
         get_or_new_ident x >>= fun ix ->
@@ -936,9 +957,9 @@ module To_syntax = struct
           return (Rustsyntax.Efield (e', ix, Rusttypes.type_member tm))
         | Option.None -> throw (Efield_not_found x)
         )
-      | Rusttypes.Treference (Rusttypes.Tstruct (ist, _) as ts, _, _) ->
+      | Rusttypes.Treference (org, _, (Rusttypes.Tstruct (_, ist, _) as ts), _) ->
         get_st >>= fun st ->
-        let Rusttypes.Composite (_, _, members, _) =
+        let Rusttypes.Composite (_, _, members, _, _, _) =
           IdentMap.find ist st.composites
         in
         get_or_new_ident x >>= fun ix ->
@@ -959,7 +980,7 @@ module To_syntax = struct
       let te = Rustsyntax.typeof e' in
       (match te with
        | Rusttypes.Tbox (t, _) -> return (Rustsyntax.Ederef (e', t))
-       | Rusttypes.Treference (t, _, _) -> return (Rustsyntax.Ederef (e', t))
+       | Rusttypes.Treference (_, _, t, _) -> return (Rustsyntax.Ederef (e', t))
        | _ -> throw (Ederef_non_box te)
       )
     | Eunop (op, e) ->
@@ -980,8 +1001,8 @@ module To_syntax = struct
       map_m xfl get_or_new_ident >>= fun ifl ->
       map_m es transl_expr >>= fun es' ->
       get_composite xstruct >>=
-      fun (istruct, Rusttypes.Composite (_, _, _, attr)) ->
-      let t = Rusttypes.Tstruct (istruct, attr) in
+      fun (istruct, Rusttypes.Composite (_, _, _, attr, _, _)) ->
+      let t = Rusttypes.Tstruct ([], istruct, attr) in
       return (Rustsyntax.Estruct (istruct, ifl, exprlist_of es', t))
     | Ecall (callee, args) ->
       (match callee with
@@ -997,7 +1018,7 @@ module To_syntax = struct
          | arg::nil ->
            transl_expr arg >>= fun e' ->
            return (Rustsyntax.Eenum
-                     (ienum, ivar, e', Rusttypes.Tvariant (ienum, noattr)))
+                     (ienum, ivar, e', Rusttypes.Tvariant ([], ienum, noattr)))
          | _ -> throw (Emulti_args_to_constructor (args, xenum, xvar)))
 
       | _ ->
@@ -1005,14 +1026,15 @@ module To_syntax = struct
         map_m args (fun arg -> transl_expr arg)
         >>= fun args' ->
         (match Rustsyntax.typeof callee' with
-         | Rusttypes.Tfunction (_, tr, _) ->
+         | Rusttypes.Tfunction ([], [], _, tr, _) ->
            let args'' = exprlist_of args' in
            return (Rustsyntax.Ecall (callee', args'', tr))
          | t -> throw (Enot_callable t)))
     | Eref (e, m) ->
       transl_expr e >>= fun e' ->
       let t' = Rustsyntax.typeof e' in
-      return (Rustsyntax.Eref (e', m, t'))
+      (* TODO *)
+      return (Rustsyntax.Eref (dummy_origin, m, e', t'))
     | Estr s ->
       let t_byte = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned, Ctypes.noattr) in
       let init = Seq.fold_left
@@ -1021,14 +1043,15 @@ module To_syntax = struct
                    []
                    (String.to_seq s)
       in
+      (* TODO: what is the origin of static string *)
       let global_var = AST.({ gvar_info = Rusttypes.Treference
-                                  (t_byte, Rusttypes.Immutable, Ctypes.noattr)
+                                  (dummy_origin, Rusttypes.Immutable, t_byte, Ctypes.noattr)
                             ; gvar_init = init
                             ; gvar_readonly = true
                             ; gvar_volatile = false })
       in
       add_gvar global_var >>= fun i ->
-      let t' = Rusttypes.Treference (t_byte, Rusttypes.Immutable, Ctypes.noattr) in
+      let t' = Rusttypes.Treference (dummy_origin, Rusttypes.Immutable, t_byte, Ctypes.noattr) in
       return (Rustsyntax.Evar (i, t'))
 
 
@@ -1134,7 +1157,8 @@ module To_syntax = struct
     transl_stmt f.body >>= fun fn_body ->
     restore_locals old_locals >>= fun _ ->
     let open Rustsyntax in
-    return ({ fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
+    (* TODO *)
+    return ({fn_generic_origins = []; fn_origins_relation = []; fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
 
   let transl_prog (p: prog) : (Rustsyntax.coq_function Rusttypes.program) monad =
     map_m p.funcs

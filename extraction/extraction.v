@@ -183,7 +183,7 @@ Separate Extraction
    Rustsyntax.ex1 Rustsyntax.ex2 Rustsyntax.ex3 Rustsyntax.pop_and_push_prog
    Rustsyntax.fact Rustsyntax.init_test1 Rustsyntax.init_test2 Rustsyntax.ex5_prog
    Rustlightgen.empty_ce Rustlightgen.init_gen
-   Rustsyntax.type_of_function
+   Rustsyntax.type_of_function Rustsyntax.printf_builtin
    RustlightBase.type_of_function
    RustIR.type_of_function
    Clightgen.empty_ce
