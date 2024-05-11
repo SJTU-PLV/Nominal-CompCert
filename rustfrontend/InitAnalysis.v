@@ -58,7 +58,7 @@ Definition siblings (p: place') : Paths.t :=
   | Plocal _ _ => Paths.empty
   | Pfield p' fid _ =>
       match typeof_place p' with
-      | Tstruct _ _ id _ =>
+      | Tstruct _ id _ =>
           match ce!id with
           | Some co =>
               let siblings := places_of_members p' co.(co_members) in

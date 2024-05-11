@@ -126,8 +126,8 @@ Fixpoint drop_glue_for_type (m: PTree.t ident) (arg: Clight.expr) (ty: type) : l
       (* return [...; ... ; drop_in_place(deref arg); free(arg)] *)
       (** TODO: it is time consuming, we can just generate a sequence statement *)
       drop_glue_for_type m (Ederef arg cty') ty' ++ [stmt]
-  | Tstruct _ _ id attr
-  | Tvariant _ _ id attr =>
+  | Tstruct _ id attr
+  | Tvariant _ id attr =>
       match m ! id with
       | None => nil
       | Some id' =>
@@ -342,7 +342,7 @@ Definition place_to_cexpr (p: place) : mon Clight.expr :=
   | Pdowncast p fid ty =>
       (** FIXME: how to translate the get expression? *)
       match typeof_place p with
-      | Tvariant _ _ id _ =>
+      | Tvariant _ id _ =>
           match tce!id with
           | Some tco =>
               (** FIXME: the following code appears multiple times *)
@@ -373,7 +373,7 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : mon Clight.expr :=
   | Ecktag p fid ty =>
       (** TODO: how to get the tagz from ctypes composite env? or still use Rust composite env? *)
       match typeof_place p with
-      | Tvariant _ _ id _ =>
+      | Tvariant _ id _ =>
           match ce!id with
           | Some co =>
               match field_tag fid co.(co_members), get_variant_tag tce id with
@@ -459,8 +459,8 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
       let cty' := to_ctype ty' in
       let deref_temp := Ederef (Clight.Etempvar temp (Tpointer cty noattr)) cty in
       Some (call_free cty' deref_temp)
-  | Tstruct _ _ id attr
-  | Tvariant _ _ id attr =>
+  | Tstruct _ id attr
+  | Tvariant _ id attr =>
       match dropm ! id with
       | None => None
       | Some id' =>
@@ -488,7 +488,7 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       let lhs := place_to_cexpr' p in
       let ty := typeof e in
       match typeof_place p with
-      | Tvariant _ _ id _ =>
+      | Tvariant _ id _ =>
           (* lhs.1 = tag;
              lhs.2. = e'; *)
           match ce!id, tce!id with

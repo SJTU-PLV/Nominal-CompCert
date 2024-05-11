@@ -324,7 +324,7 @@ Definition ex3 : function :=
 
 (* [list] type *)
 Definition list_id := 102%positive.
-Definition list_ty := Tvariant nil nil list_id noattr.
+Definition list_ty := Tvariant nil list_id noattr.
 Definition box_list := Tbox list_ty noattr.
 
 (* Define [pair] composite *)
@@ -352,7 +352,7 @@ Definition cons_id := 101%positive.
 
 Definition rcons (ty: type) := Member_plain cons_id ty.
 
-Definition list_node_ty := (Tstruct nil nil list_node_id noattr).
+Definition list_node_ty := (Tstruct nil list_node_id noattr).
 
 Definition list_codef : composite_definition :=
   Composite list_id TaggedUnion (rnil :: rcons list_node_ty :: nil) noattr nil nil.
@@ -528,7 +528,7 @@ Definition m_ty : type := box_int.
 Definition n_ty : type := type_int32s.
 Definition S1 : composite_definition :=
   Composite S1_id Struct ([Member_plain l_id l_ty; Member_plain m_id m_ty; Member_plain n_id n_ty]) noattr nil nil.
-Definition S1_ty : type := Tstruct nil nil S1_id noattr.
+Definition S1_ty : type := Tstruct nil S1_id noattr.
 
 Definition f_id : ident := 111%positive.
 Definition g_id : ident := 112%positive.
@@ -540,7 +540,7 @@ Definition g_ty : type := box_int.
 Definition h_ty : type := type_int32s.
 Definition S2 : composite_definition :=
   Composite S2_id Struct ([Member_plain f_id f_ty; Member_plain g_id g_ty; Member_plain h_id h_ty]) noattr nil nil.
-Definition S2_ty := Tstruct nil nil S2_id noattr.
+Definition S2_ty := Tstruct nil S2_id noattr.
 
 Definition ex5_comp_defs := [S1; S2].
 

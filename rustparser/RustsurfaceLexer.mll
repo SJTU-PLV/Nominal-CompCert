@@ -6,8 +6,8 @@ let white = [' ' '\t' '\n']+
 let digit = ['0' - '9']
 let int = '-' ? digit+
 let float = '-' ? digit+ "." digit+
-let letter = ['a' - 'z' 'A' - 'Z']
-let letter_num = ['a' - 'z' 'A' - 'Z' '0' - '9']
+let letter = ['a' - 'z' 'A' - 'Z' '_']
+let letter_num = ['a' - 'z' 'A' - 'Z' '0' - '9' '_']
 let id = letter ? letter_num+
 
 rule read = 
@@ -27,6 +27,9 @@ rule read =
  | "||" { OR }
  | "&&" { AND }
  | "&" { REF }
+
+ | '"' _* '"' { let s = Lexing.lexeme lexbuf in
+                STR_LITERAL (String.sub s 1 (String.length s - 2)) }
 
  | "=" { ASSIGN }
  | "*" { ASTERISK }
@@ -85,3 +88,4 @@ rule read =
  | id { ID (Lexing.lexeme lexbuf) }
  | eof { EOF }
 
+ | _ as c { failwith (Printf.sprintf "unexpected character: %C" c) }

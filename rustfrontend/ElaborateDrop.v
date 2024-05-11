@@ -116,8 +116,8 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
       let elaborate_drop_for := elaborate_drop_for pc mayinit mayuninit universe fuel' ce in
       if Paths.mem p universe then
         match typeof_place' p with        
-        | Tstruct _ _ _ _
-        | Tvariant _ _ _ _ => (* use drop function of this Tstruct (Tvariant) to drop p *)
+        | Tstruct _ _ _
+        | Tvariant _ _ _ => (* use drop function of this Tstruct (Tvariant) to drop p *)
             if Paths.mem p mayinit then
               if Paths.mem p mayuninit then (* need drop flag *)
                 do drop_flag <- gensym type_bool p;
@@ -154,7 +154,7 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
         end
       else (* split p into its children and drop them *)
         match typeof_place p with
-        | Tstruct _ _ id attr =>
+        | Tstruct _ id attr =>
             match ce!id with
             | Some co =>
                 let children := map (fun elt => match elt with
@@ -169,7 +169,7 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
             | None => error [CTX pc; MSG ": Unfound struct id in composite_env: elaborate_drop_for"]
             end
         | Tbox _ _ => error ([CTX pc ; MSG ": place is "; CTX (local_of_place p); MSG ": Box does not exist in the universe set: elaborate_drop_for"])
-        | Tvariant _ _ _ _ => error ([CTX pc ; MSG ": place is "; CTX (local_of_place p); MSG ": Variant cannot be split: elaborate_drop_for"])
+        | Tvariant _ _ _ => error ([CTX pc ; MSG ": place is "; CTX (local_of_place p); MSG ": Variant cannot be split: elaborate_drop_for"])
         | _ => ret nil
         end
   end.
@@ -183,8 +183,8 @@ Fixpoint drop_fully_own (ce: composite_env) (p: place') (ty: type) :=
   match ty with
   | Tbox ty' _ =>
       Ssequence (drop_fully_own ce (Pderef p ty') ty') (Sdrop p)
-  | Tstruct _ _ _ _
-  | Tvariant _ _ _ _ =>
+  | Tstruct _ _ _
+  | Tvariant _ _ _ =>
       if own_type ce ty then
         Sdrop p
       else Sskip

@@ -5,6 +5,8 @@ open Rustsurface
 %token <string> ID
 
 %token <int> INT
+%token <string> STR_LITERAL
+
 %token TRUE
 %token FALSE
 
@@ -92,10 +94,14 @@ open Rustsurface
 %type <id list * expr list> struct_fields
 %type <ty> ty
 %type <(id * ty) list> composite_fields
-%type <id * comp> enum
-%type <id * comp> struct_
+%type <ty list> non_empty_ty_sequence
+%type <(id * (ty list)) list> enum_fields
+%type <id * comp_enum> enum
+%type <id * comp_struc> struct_
 %type <id * fn> fn
 %type <prog_item list> prog
+%type <pat> pattern
+%type <pat list> args_pattern
 
 %%
 
@@ -103,11 +109,11 @@ prog_eof:
   | p = prog; EOF { p }
 
 prog:
-  | c = enum { [Pcomp (fst c, snd c)] }
-  | c = struct_ { [Pcomp (fst c, snd c)] }
+  | c = enum { [Penum (fst c, snd c)] }
+  | c = struct_ { [Pstruc (fst c, snd c)] }
   | f = fn { [Pfn (fst f, snd f)] }
-  | c = enum; p = prog { (Pcomp (fst c, snd c))::p }
-  | c = struct_; p = prog { (Pcomp (fst c, snd c))::p }
+  | c = enum; p = prog { (Penum (fst c, snd c))::p }
+  | c = struct_; p = prog { (Pstruc (fst c, snd c))::p }
   | f = fn; p = prog { (Pfn (fst f, snd f))::p }
 
 composite_fields:
@@ -115,13 +121,23 @@ composite_fields:
   | x = ID; COLON; t = ty { [(x, t)] }
   | x = ID; COLON; t = ty; COMMA; flds = composite_fields { (x, t)::flds }
 
+non_empty_ty_sequence:
+  | t = ty { [t] }
+  | t = ty; COMMA; ts = non_empty_ty_sequence { t :: ts }
+
+enum_fields:
+  | x = ID; LPAREN; ts = non_empty_ty_sequence; RPAREN;
+    { [(x, ts)] }
+  | x = ID; LPAREN; ts = non_empty_ty_sequence; RPAREN; COMMA; flds = enum_fields
+    { (x, ts) :: flds }
+
 enum:
-  | ENUM; x = ID; LBRACE; flds = composite_fields; RBRACE
-    { (x, { su = Rusttypes.TaggedUnion; members = flds }) }
+  | ENUM; x = ID; LBRACE; flds = enum_fields; RBRACE
+    { (x, flds) }
 
 struct_:
   | STRUCT; x = ID; LBRACE; flds = composite_fields; RBRACE
-    { (x, { su = Rusttypes.Struct; members = flds }) }
+    { (x, flds) }
 
 fn:
   | FN; x = ID; LPAREN; p = composite_fields; RPAREN; LBRACE; s = stmt; RBRACE
@@ -173,6 +189,16 @@ expr:
   | e1 = expr; OR; e2 = expr { Ebinop (Cop.Oor, e1, e2) }
   | e1 = expr; AND; e2 = expr { Ebinop (Cop.Oand, e1, e2) }
   | callee = expr ; LPAREN; args = args_expr; RPAREN { Ecall (callee, args) }
+  | lit = STR_LITERAL { Estr lit }
+
+args_pattern:
+  | { [] }
+  | p = pattern; { [p] }
+  | p = pattern; COMMA; args = args_pattern { p :: args }
+
+pattern:
+  | x = ID; LPAREN; args = args_pattern; RPAREN { Pconstructor (x, args) }
+  | x = ID { Pbind x }
 
 params_ty:
   | { [] }
@@ -197,8 +223,8 @@ ty:
   | x = ID { Tadt (x, Ctypes.noattr) }
 
 match_arm:
-  | CASE; var = ID; AS; bind = ID; RARROWW; LBRACE; s = stmt; RBRACE
-    { { variant_name = var; bind_to = bind; body = s } }
+  | p = pattern; RARROWW; LBRACE; s = stmt; RBRACE
+    { { pattern = p ; body = s } }
 
 match_arms:
   | arm = match_arm { [arm] }

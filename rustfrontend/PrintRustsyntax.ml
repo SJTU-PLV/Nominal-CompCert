@@ -12,6 +12,17 @@ let string_of_mut mut =
   | Mutable -> "mut"
   | Immutable -> ""
 
+let rec print_origins_aux (orgs : origin list) =
+  match orgs with
+  | [] -> ""
+  | org :: orgs' -> extern_atom org ^ print_origins_aux orgs'
+
+let print_origins (orgs : origin list) =
+  match orgs with
+  | [] -> ""
+  | _ -> "<" ^ print_origins_aux orgs^ ">"
+  
+
 let rec name_rust_decl id ty =
   match ty with
   | Rusttypes.Tunit ->
@@ -48,10 +59,10 @@ let rec name_rust_decl id ty =
       if not cconv.cc_unproto then add_args true args;
       Buffer.add_char b ')';
       name_rust_decl (Buffer.contents b) res
-  | Tstruct(_, _, name, a) ->
-      "struct " ^ extern_atom name ^ attributes a ^ name_optid id
-  | Tvariant(_, _, name, a) ->
-      "variant " ^ extern_atom name ^ attributes a ^ name_optid id
+  | Tstruct(orgs, name, a) ->
+      "struct" ^ print_origins orgs ^ " " ^ extern_atom name ^ attributes a ^ name_optid id
+  | Tvariant(orgs, name, a) ->
+      "variant" ^ print_origins orgs ^ " " ^ extern_atom name ^ attributes a ^ name_optid id
 
 (* Type *)
 
