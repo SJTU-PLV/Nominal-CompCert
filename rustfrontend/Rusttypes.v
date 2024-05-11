@@ -782,6 +782,14 @@ Proof.
   InvBooleans; eauto.
 Qed.
 
+Definition check_comp_defs_complete (env: composite_env) : res composite_env :=
+  PTree.fold (fun acc id comp =>
+    do ce <- acc;
+    match complete_members env comp.(co_members) with
+    | false => Error (MSG "Incomplete struct or variant " :: CTX id :: nil)
+    | true => OK ce
+    end) env (OK env).
+
 Program Definition composite_of_def
      (env: composite_env) (id: ident) (su: struct_or_variant) (m: members) (a: attr) (orgs: list origin) (org_rels: list origin_rel)
      : res composite :=
@@ -826,7 +834,8 @@ Fixpoint add_composite_definitions (env: composite_env) (defs: list composite_de
   | nil => OK env
   | Composite id su m a orgs org_rels :: defs =>
       do co <- composite_of_def env id su m a orgs org_rels;
-      add_composite_definitions (PTree.set id co env) defs
+      do ce <- add_composite_definitions (PTree.set id co env) defs;
+      check_comp_defs_complete ce
   end.
 
 Definition build_composite_env (defs: list composite_definition) :=

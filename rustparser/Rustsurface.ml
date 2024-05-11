@@ -1191,10 +1191,15 @@ module To_syntax = struct
            Format.eprintf "\n"
          | _ -> failwith "unreachable")
       fun_defs;
-    return ({ Rusttypes.prog_defs = List.concat [var_defs; fun_defs]
-            ; Rusttypes.prog_public = [main_ident]
-            ; Rusttypes.prog_main = main_ident
-            ; Rusttypes.prog_types = comp_defs
-            ; Rusttypes.prog_comp_env = (Rustsyntax.build_composite_env' comp_defs) })
+    (* generate prog_comp_env *)
+    match Rusttypes.build_composite_env comp_defs with
+    | Errors.OK comp_env ->
+      return ({ Rusttypes.prog_defs = List.concat [var_defs; fun_defs]
+              ; Rusttypes.prog_public = [main_ident]
+              ; Rusttypes.prog_main = main_ident
+              ; Rusttypes.prog_types = comp_defs
+              ; Rusttypes.prog_comp_env = comp_env })
+    | Errors.Error msg ->
+      Diagnostics.fatal_error Diagnostics.no_loc "%a" Driveraux.print_error msg
 end
 
