@@ -24,7 +24,3 @@ fn example3() -> Box<i32> {
     printf("%d", *b);
 	return b;
 }
-
-// printf("%d", *b) should be parsed to (Rustsyntax.printf_builtin
-// [string_id1; deref *b] [Treference; Tint]. string_id1 is the name
-// of a global constant "%d".

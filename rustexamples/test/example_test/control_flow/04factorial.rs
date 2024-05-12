@@ -8,7 +8,7 @@ fn example3() -> Box<i32> {
 	let a : i32 = 1;
     let b : Box<i32> = Box(1);
 
-	while (true) {
+	while true {
 		let c : Box<i32> = Box(*b);
 		if 0 < n {
 			*c = (*b) * n;

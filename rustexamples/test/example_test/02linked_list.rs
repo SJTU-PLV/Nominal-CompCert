@@ -16,8 +16,8 @@ fn pop_and_push(l: Box<list>, v: i32) -> Box<list> {
     head.first = v;
     match *l {
         list::nil => {      
-            let tl' : list  = tl;
-            head.second = Box(tl');
+            let tl1 : list  = tl;
+            head.second = Box(tl1);
         } 
         list::cons => {
             head.second = tl.second;
@@ -33,5 +33,5 @@ fn main(){
     head.first = 42;
     head.second = Box(l);
     l = head;
-    let l' : Box<list> = push_and_pop(Box(l), -2);  
+    let l1 : Box<list> = push_and_pop(Box(l), -2);  
 }

@@ -1,8 +1,8 @@
 enum Coin {
-    Penny,
-    Nickel,
-    Dime,
-    Quarter,
+    Penny(()),
+    Nickel(()),
+    Dime(()),
+    Quarter(())
 }
 
 fn value_in_cents(coin: Coin) -> u8 {
@@ -23,11 +23,7 @@ fn value_in_cents(coin: Coin) -> u8 {
 }
 
 
-
 fn main() {
-	let x : u8 = value_in_cents(Coin::Quarter);
+	let x : u8 = his_money_in_cents(Person::A(Coin::Quarter(())));
 }
-
-
-
 

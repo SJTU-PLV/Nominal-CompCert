@@ -4,7 +4,7 @@ struct Rectangle {
 }
 
 fn main() {
-    let rect1: Rectangle = Rectangle {
+    let rect1 : Rectangle = Rectangle {
         width: 30,
         height: 50,
     };
