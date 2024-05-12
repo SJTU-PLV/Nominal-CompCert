@@ -6,17 +6,17 @@ enum Coin {
 }
 
 fn value_in_cents(coin: Coin) -> u8 {
-    match coin with {
-        case Coin::Penny as c => {
+    match coin {
+        Coin::Penny => {
 			return 1;
 		}
-		case Coin::Nickel as c => {
+		Coin::Nickel => {
 			return 5;
 		}
-		case Coin::Dime as c => {
+		Coin::Dime => {
 			return 10;
 		}
-		case Coin::Quarter as c => {
+		Coin::Quarter => {
 			return 25;
 		}
     }

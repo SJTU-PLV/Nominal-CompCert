@@ -2,8 +2,8 @@ fn main() {
     let number : i32 = 3;
 
     if number < 5 {
-        println!("successful!");
+        printf("successful!");
     } else {
-        println!("wrong");
+        printf("wrong");
     }
 }
