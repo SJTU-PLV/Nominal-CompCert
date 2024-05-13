@@ -20,6 +20,8 @@ Definition find_elt {A: Type} (id: ident) (l: list (ident * A)) : option A :=
 
 (** State and error monad for generating fresh identifiers. *)
 
+Parameter first_unused_ident: unit -> ident.
+
 Record generator : Type := mkgenerator {
   gen_next: origin;
 }.
@@ -62,8 +64,9 @@ Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
    (at level 200, X ident, Y ident, A at level 100, B at level 200)
     : gensym_monad_scope.
 
-Definition initial_generator (x: ident) : generator :=
-  mkgenerator x.
+Definition initial_generator (x: unit) : generator :=
+  let fresh_id := first_unused_ident x in
+  mkgenerator fresh_id.
 
 Definition gensym : mon ident :=
   fun (g: generator) =>
@@ -311,8 +314,8 @@ Open Scope error_monad_scope.
 
 Definition replace_origin_function (ce: composite_env) (f: function) : Errors.res function :=
   let generic_orgs := f.(fn_generic_origins) in
-  let next_org := Pos.succ (fold_left Pos.max generic_orgs 1%positive) in
-  let gen := initial_generator next_org in
+  (* let next_org := Pos.succ (fold_left Pos.max generic_orgs 1%positive) in *)
+  let gen := initial_generator tt in
   match replace_origin_vars f.(fn_vars) gen with
   | Err msg => Errors.Error msg
   | Res vars g _ =>

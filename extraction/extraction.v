@@ -132,6 +132,9 @@ Extract Constant Clightgen.create_union_idents => "Dropglue.create_union_idents"
 Extract Constant Clightgen.malloc_id => "Dropglue.malloc_id".
 Extract Constant Clightgen.free_id => "Dropglue.free_id".
 Extract Constant Clightgen.first_unused_ident => "Camlcoq.first_unused_ident".
+Extract Constant ElaborateDrop.first_unused_ident => "Camlcoq.first_unused_ident".
+Extract Constant Rustlightgen.first_unused_ident => "Camlcoq.first_unused_ident".
+Extract Constant ReplaceOrigins.first_unused_ident => "Camlcoq.first_unused_ident".
 
 (* Initializers *)
 
@@ -182,11 +185,9 @@ Separate Extraction
    (* Test cases *)
    Rustsyntax.ex1 Rustsyntax.ex2 Rustsyntax.ex3 Rustsyntax.pop_and_push_prog
    Rustsyntax.fact Rustsyntax.init_test1 Rustsyntax.init_test2 Rustsyntax.ex5_prog
-   Rustlightgen.empty_ce Rustlightgen.init_gen
    Rustsyntax.type_of_function Rustsyntax.printf_builtin
    RustlightBase.type_of_function
    RustIR.type_of_function
-   Clightgen.empty_ce
    (* Cexec.do_initial_state Cexec.do_step Cexec.at_final_state *)
    Ctypes.merge_attributes Ctypes.remove_attributes 
    Ctypes.build_composite_env Ctypes.layout_struct

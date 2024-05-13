@@ -70,12 +70,13 @@ Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
    (at level 200, X ident, Y ident, A at level 100, B at level 200)
    : gensym_monad_scope.
 
-(* Parameter first_unusead_ident: unit -> ident. *)
+Parameter first_unused_ident: unit -> ident.
 
 (* for now we just use the maximum ident of parameters and variables
 as the initial ident *)
-Definition initial_generator (x: ident) (stmt: statement) : generator :=
-  mkgenerator x nil (nil, PTree.empty (list (place' * ident))) stmt.
+Definition initial_generator (x: unit) (stmt: statement) : generator :=
+  let fresh_id := first_unused_ident x in
+  mkgenerator fresh_id nil (nil, PTree.empty (list (place' * ident))) stmt.
 
 (* generate a new drop flag with type ty (always bool) and map [p] to this flag *)
 Definition gensym (ty: type) (p: place') : mon ident :=
@@ -330,8 +331,8 @@ Definition init_drop_flag (mayinit: PathsMap.t) (mayuninit: PathsMap.t) (elt: pl
 Definition transf_function (ce: composite_env) (f: function) : Errors.res function :=
   do (mayinit, mayuninit) <- analyze ce f;
   let vars := var_names (f.(fn_vars) ++ f.(fn_params)) in
-  let next_flag := Pos.succ (fold_left Pos.max vars 1%positive) in
-  let init_state := initial_generator next_flag f.(fn_body) in
+  (* let next_flag := Pos.succ (fold_left Pos.max vars 1%positive) in *)
+  let init_state := initial_generator tt f.(fn_body) in
   (** FIXME: we generate cfg twice *)
   do (entry, cfg) <- generate_cfg f.(fn_body);
   (* step 1 and step 2 *)

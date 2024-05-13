@@ -284,8 +284,9 @@ Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
 
 Local Open Scope gensym_monad_scope.
 
-Definition initial_generator (x: ident) : generator :=
-  mkgenerator x nil.
+Definition initial_generator (x: unit) : generator :=
+  let fresh_id := first_unused_ident x in
+  mkgenerator fresh_id nil.
 
 Definition gensym (ty: Ctypes.type): mon ident :=
   fun (g: generator) =>
@@ -598,7 +599,7 @@ Definition transl_function (f: function) : Errors.res Clight.function :=
   (** FIXME: we can use first_unused_ident from CamlCoq.ml to get a fresh identifier  *)
   let vars := var_names (f.(fn_vars) ++ f.(fn_params)) in
   let next_temp := Pos.succ (fold_left Pos.max vars 1%positive) in
-  let gen := initial_generator next_temp in
+  let gen := initial_generator tt in
   match transl_stmt f.(fn_body) gen with
   | Err msg => Errors.Error msg
   | Res stmt' g _ =>

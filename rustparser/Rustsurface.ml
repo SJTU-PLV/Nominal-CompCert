@@ -493,10 +493,12 @@ module To_syntax = struct
     let funcs' = IdentMap.add i f st.funcs in
     set_st { st with funcs = funcs' }
 
-  let add_gvar (v: Rusttypes.coq_type AST.globvar) : ident monad =
+  let add_gvar (name: string) (v: Rusttypes.coq_type AST.globvar) : ident monad =
     fun st ->
       let i = st.next_ident in
-      (Result.Ok i, { st with next_ident = Camlcoq.P.succ i
+      (Result.Ok i, { st with symmap = IdMap.add name i st.symmap
+                             ; rev_symmap = IdentMap.add i name st.rev_symmap
+                             ;next_ident = Camlcoq.P.succ i
                              ; gvars = (i, v) :: st.gvars })
 
   let get_composite (x: id) : (ident * Rusttypes.composite_definition) monad =
@@ -912,6 +914,15 @@ module To_syntax = struct
       return (Pbind' i)
 
 
+  (* String literals *)
+
+  let stringNum = ref 0   (* number of next global for string literals *)
+  let name_for_string_literal s =
+    incr stringNum;
+    let name = Printf.sprintf "__stringlit_%d" !stringNum in
+    name
+
+
    let rec transl_expr (e: expr) : Rustsyntax.expr monad =
     match e with
     | Eunit -> return (Rustsyntax.Eunit)
@@ -1050,7 +1061,8 @@ module To_syntax = struct
                             ; gvar_readonly = true
                             ; gvar_volatile = false })
       in
-      add_gvar global_var >>= fun i ->
+      let str_lit = name_for_string_literal s in
+      add_gvar str_lit global_var >>= fun i ->
       let t' = Rusttypes.Treference (dummy_origin, Rusttypes.Immutable, t_byte, Ctypes.noattr) in
       return (Rustsyntax.Evar (i, t'))
 
@@ -1160,6 +1172,16 @@ module To_syntax = struct
     (* TODO *)
     return ({fn_generic_origins = []; fn_origins_relation = []; fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
 
+  (* Convert state to string tables (Camlcoq.atom_of_string and
+  Camcoq.string_of_atom) which are used in the pretty printing in the
+  following passes *)
+  
+  let convect_strtbls (st: state) =
+      IdMap.fold (fun str i _ -> Hashtbl.add Camlcoq.atom_of_string str i) st.symmap ();
+      (* set ident -> string tables  *)
+      IdentMap.fold (fun i str _ -> Hashtbl.add Camlcoq.string_of_atom i str) st.rev_symmap ();
+      Camlcoq.next_atom := st.next_ident
+
   let transl_prog (p: prog) : (Rustsyntax.coq_function Rusttypes.program) monad =
     map_m p.funcs
       (fun (x, f) -> add_fn x f) >>= fun _ ->
@@ -1174,6 +1196,8 @@ module To_syntax = struct
          return (i, (AST.Gfun (Rusttypes.Internal f')))) >>= fun fun_defs ->
     get_or_new_ident "main" >>= fun main_ident ->
     get_st >>= fun st ->
+    (* convert string tables *)
+    convect_strtbls st;
     let var_defs = List.map (fun (ident, gvar) -> (ident, AST.Gvar gvar)) st.gvars in
     let comp_defs = IdentMap.fold
                       (fun _ c cs -> c::cs)

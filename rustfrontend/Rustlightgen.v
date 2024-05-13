@@ -64,8 +64,11 @@ Variable ce: composite_env.
   
 Local Open Scope gensym_monad_scope.
 
-Definition initial_generator (x: ident) : generator :=
-  mkgenerator x nil.
+Parameter first_unused_ident: unit -> ident.
+
+Definition initial_generator (x: unit) : generator :=
+  let fresh_id := first_unused_ident x in
+  mkgenerator fresh_id nil.
 
 Definition gensym (ty: type): mon ident :=
   fun (g: generator) =>
@@ -562,8 +565,7 @@ Open Scope error_monad_scope.
 Definition transl_function (f: Rustsyntax.function) : Errors.res function :=
   let vars := var_names (f.(Rustsyntax.fn_params) ++ (extract_vars f.(Rustsyntax.fn_body))) in
   let next_temp := Pos.succ (fold_left (fun acc elt => Pos.max acc elt) vars 1%positive) in
-  let init_gen := initial_generator next_temp in
-  match transl_stmt f.(Rustsyntax.fn_body) init_gen with
+  match transl_stmt f.(Rustsyntax.fn_body) (initial_generator Datatypes.tt) with
   | Res stmt _ _ =>
       Errors.OK (mkfunction f.(Rustsyntax.fn_generic_origins)
                             f.(Rustsyntax.fn_origins_relation)
@@ -596,12 +598,3 @@ Definition transl_program (p: Rustsyntax.program) : Errors.res program :=
     prog_types := p.(prog_types);
     prog_comp_env := p.(prog_comp_env);
     prog_comp_env_eq := p.(prog_comp_env_eq) |}.
-
-
-(** TO DELETE  *)
-
-(* Definitions for compilation *)
-
-Definition empty_ce := PTree.empty composite.
-
-Definition init_gen := initial_generator 10%positive.
