@@ -112,7 +112,8 @@ module To_syntax = struct
                ; funcs: fn IdentMap.t
                ; enums: comp_enum' IdentMap.t
                ; composites: Rusttypes.composite_definition IdentMap.t
-               ; gvars: (ident * (Rusttypes.coq_type AST.globvar)) list }
+               ; gvars: (ident * (Rusttypes.coq_type AST.globvar)) list 
+               ; external_funs: (ident * (Rustsyntax.fundef, Rusttypes.coq_type) AST.globdef) list}
 
   type error = Efield_of_non_struct of Rusttypes.coq_type
              | Efield_not_found of id
@@ -455,7 +456,8 @@ module To_syntax = struct
                             ; funcs = IdentMap.empty
                             ; enums = IdentMap.empty
                             ; composites = IdentMap.empty
-                            ; gvars = [] }
+                            ; gvars = [] 
+                            ; external_funs = []}
 
 
   let new_ident (x: id): ident monad =
@@ -500,6 +502,19 @@ module To_syntax = struct
                              ; rev_symmap = IdentMap.add i name st.rev_symmap
                              ;next_ident = Camlcoq.P.succ i
                              ; gvars = (i, v) :: st.gvars })
+
+  let add_external_fun (name: string) (sg: AST.signature) targs tres: ident monad =
+    fun st ->
+      match IdMap.find_opt name st.symmap with
+      | Option.None ->
+        let i = st.next_ident in
+        let i'' = Camlcoq.coqstring_of_camlstring name in
+        (Result.Ok i, 
+        { st with symmap = IdMap.add name i st.symmap
+        ; rev_symmap = IdentMap.add i name st.rev_symmap
+        ; next_ident = Camlcoq.P.succ i
+        ; external_funs = (i, AST.Gfun (Rusttypes.External([],[], AST.EF_external(i'',sg), targs, tres, sg.AST.sig_cc))) :: st.external_funs })
+      | Option.Some i -> (Result.Ok i, st)
 
   let get_composite (x: id) : (ident * Rusttypes.composite_definition) monad =
     get_or_new_ident x >>= fun i ->
@@ -1017,11 +1032,20 @@ module To_syntax = struct
       return (Rustsyntax.Estruct (istruct, ifl, exprlist_of es', t))
     | Ecall (callee, args) ->
       (match callee with
+      (* TODO: support external call *)
       | Evar "printf" ->
         map_m args (fun arg -> transl_expr arg)
         >>= fun args' ->
-        let targs' = List.map Rustsyntax.typeof args' in
-        return (Rustsyntax.printf_builtin (exprlist_of args') (typelist_of targs'))
+        (* Refer to C2C.ml *)
+        let targs' = typelist_of (List.map Rustsyntax.typeof args') in
+        let tres =  Rusttypes.type_int32s in
+        let sg =
+          Rusttypes.signature_of_type targs' tres
+             { AST.cc_vararg = Some (Camlcoq.coqint_of_camlint 1l); cc_unproto = false; cc_structret = false} in
+        add_external_fun "printf" sg targs' tres >>= fun i ->
+        let fty = (Rusttypes.Tfunction([],[],targs',tres,sg.AST.sig_cc)) in
+        let fid = Rustsyntax.Evar(i,fty) in
+        return (Rustsyntax.Ecall(fid, exprlist_of args', tres))
       | Eaccess (xenum, xvar) ->
         get_or_new_ident xenum >>= fun ienum ->
         get_or_new_ident xvar >>= fun ivar ->
@@ -1218,7 +1242,7 @@ module To_syntax = struct
     (* generate prog_comp_env *)
     match Rusttypes.build_composite_env comp_defs with
     | Errors.OK comp_env ->
-      return ({ Rusttypes.prog_defs = List.concat [var_defs; fun_defs]
+    return ({ Rusttypes.prog_defs = List.concat [var_defs; fun_defs; st.external_funs]
               ; Rusttypes.prog_public = [main_ident]
               ; Rusttypes.prog_main = main_ident
               ; Rusttypes.prog_types = comp_defs

@@ -93,7 +93,7 @@ Definition program := Rusttypes.program function.
 (* printf : args are arguments, targs are the types of arguments *)
 Definition printf_builtin (args: exprlist) (targs: typelist) :=
   let callcc := mkcallconv (Some 1) false false in
-  Ebuiltin (EF_builtin "printf" (signature_of_type targs type_int32s callcc)) targs args type_int32s.
+  Ebuiltin (EF_external "printf" (signature_of_type targs type_int32s callcc)) targs args type_int32s.
 
 
 (* Type of function *)
