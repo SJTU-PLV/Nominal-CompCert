@@ -131,10 +131,10 @@ Extract Constant Clightgen.create_dropglue_ident => "Dropglue.create_dropglue_id
 Extract Constant Clightgen.create_union_idents => "Dropglue.create_union_idents".
 Extract Constant Clightgen.malloc_id => "Dropglue.malloc_id".
 Extract Constant Clightgen.free_id => "Dropglue.free_id".
-Extract Constant Clightgen.first_unused_ident => "Camlcoq.first_unused_ident".
-Extract Constant ElaborateDrop.first_unused_ident => "Camlcoq.first_unused_ident".
-Extract Constant Rustlightgen.first_unused_ident => "Camlcoq.first_unused_ident".
-Extract Constant ReplaceOrigins.first_unused_ident => "Camlcoq.first_unused_ident".
+Extract Constant Clightgen.fresh_atom => "Camlcoq.fresh_atom".
+Extract Constant ElaborateDrop.fresh_atom => "Camlcoq.fresh_atom".
+Extract Constant Rustlightgen.fresh_atom => "Camlcoq.fresh_atom".
+Extract Constant ReplaceOrigins.fresh_atom => "Camlcoq.fresh_atom".
 
 (* Initializers *)
 

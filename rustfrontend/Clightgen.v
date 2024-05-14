@@ -25,7 +25,8 @@ Local Open Scope error_monad_scope.
 
 (** ** Step 1: Translate composite definitions *)
 
-Parameter first_unused_ident: unit -> ident.
+(* get a fresh atom and update the next atom *)
+Parameter fresh_atom: unit -> ident.
 
 Parameter create_union_idents: ident -> (ident * ident * ident).
 
@@ -169,7 +170,7 @@ Definition make_labelled_stmts (drops_list: list (list Clight.statement)) :=
 (* m: maps composite id to drop function id *)
 Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition) : res (option Clight.function) :=
   (* The only function parameter *)
-  let param := first_unused_ident tt in
+  let param := fresh_atom tt in
   match co with
   | Composite co_id Struct ms attr _ _ =>
       let co_ty := (Ctypes.Tstruct co_id attr) in
@@ -239,13 +240,13 @@ End COMPOSITE_ENV.
 (** State and error monad for generating fresh identifiers. *)
 
 Record generator : Type := mkgenerator {
-  gen_next: ident;
+  (* gen_next: ident; *)
   gen_trail: list (ident * Ctypes.type)
 }.
 
 Inductive result (A: Type) (g: generator) : Type :=
   | Err: Errors.errmsg -> result A g
-  | Res: A -> forall (g': generator), Ple (gen_next g) (gen_next g') -> result A g.
+  | Res: A -> forall (g': generator), (* Ple (gen_next g) (gen_next g') -> *) result A g.
 
 
 Arguments Err [A g].
@@ -254,7 +255,7 @@ Arguments Res [A g].
 Definition mon (A: Type) := forall (g: generator), result A g.
 
 Definition ret {A: Type} (x: A) : mon A :=
-  fun g => Res x g (Ple_refl (gen_next g)).
+  fun g => Res x g.
 
 Definition error {A: Type} (msg: Errors.errmsg) : mon A :=
   fun g => Err msg.
@@ -263,10 +264,10 @@ Definition bind {A B: Type} (x: mon A) (f: A -> mon B) : mon B :=
   fun g =>
     match x g with
       | Err msg => Err msg
-      | Res a g' i =>
+      | Res a g' =>
           match f a g' with
           | Err msg => Err msg
-          | Res b g'' i' => Res b g'' (Ple_trans _ _ _ i i')
+          | Res b g'' => Res b g''
       end
     end.
 
@@ -284,15 +285,14 @@ Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
 
 Local Open Scope gensym_monad_scope.
 
-Definition initial_generator (x: unit) : generator :=
-  let fresh_id := first_unused_ident x in
-  mkgenerator fresh_id nil.
+Definition initial_generator : generator :=
+  mkgenerator nil.
 
 Definition gensym (ty: Ctypes.type): mon ident :=
   fun (g: generator) =>
-    Res (gen_next g)
-        (mkgenerator (Pos.succ (gen_next g)) ((gen_next g, ty) :: gen_trail g))
-        (Ple_succ (gen_next g)).
+    let fresh_id := fresh_atom tt in
+    Res fresh_id
+        (mkgenerator ((fresh_id, ty) :: gen_trail g)).
   
 
 Fixpoint place_to_cexpr' (p: place') : Clight.expr :=
@@ -527,6 +527,7 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
                              do e' <- expr_to_cexpr elt;
                              ret (e' :: acc')) (ret nil) el;
       do e' <- expr_to_cexpr e;
+      (** TODO: if p is a local, do not generate a new temp  *)
       (* temp = f();
          p = temp *)
       let ty := typeof_place p in
@@ -540,6 +541,7 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
                              do e' <- expr_to_cexpr elt;
                              ret (e' :: acc')) (ret nil) el;
       let tyl' := to_ctypelist tyl in
+      (** TODO: if p is a local, do not generate a new temp  *)
       (* temp = f();
          p = temp *)
       let ty := typeof_place p in
@@ -599,12 +601,12 @@ Definition transl_function (f: function) : Errors.res Clight.function :=
   (** FIXME: we can use first_unused_ident from CamlCoq.ml to get a fresh identifier  *)
   let vars := var_names (f.(fn_vars) ++ f.(fn_params)) in
   let next_temp := Pos.succ (fold_left Pos.max vars 1%positive) in
-  let gen := initial_generator tt in
-  match transl_stmt f.(fn_body) gen with
+  match transl_stmt f.(fn_body) initial_generator with
   | Err msg => Errors.Error msg
-  | Res stmt' g _ =>
+  | Res stmt' g =>
       let params := map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) in
       let vars := map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) in
+      (* update the next atom *)
       Errors.OK (Clight.mkfunction
             (to_ctype f.(fn_return))
             f.(fn_callconv)

@@ -374,6 +374,11 @@ let first_unused_ident () =
   then P.of_int 128
   else !next_atom
 
+(* Set next atom to a+1 *)
+let update_atom (a: atom) =
+  next_atom := a;
+  a
+
 (* Strings *)
 
 let camlstring_of_coqstring (s: char list) =

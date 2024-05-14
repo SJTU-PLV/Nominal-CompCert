@@ -27,7 +27,7 @@ occurence of ownership transfer *)
 (** State and error monad for generating fresh identifiers. *)
 
 Record generator : Type := mkgenerator {
-  gen_next: ident;
+  (* gen_next: ident; *)
   gen_trail: list (ident * type);
   gen_map: PMap.t (list (place' * ident));
   gen_stmt: statement (* It is used for elaborating the drops when collecting drop flags *)
@@ -35,7 +35,7 @@ Record generator : Type := mkgenerator {
 
 Inductive result (A: Type) (g: generator) : Type :=
   | Err: Errors.errmsg -> result A g
-  | Res: A -> forall (g': generator), Ple (gen_next g) (gen_next g') -> result A g.
+  | Res: A -> forall (g': generator), (* Ple (gen_next g) (gen_next g') -> *) result A g.
 
 Arguments Err [A g].
 Arguments Res [A g].
@@ -43,7 +43,7 @@ Arguments Res [A g].
 Definition mon (A: Type) := forall (g: generator), result A g.
 
 Definition ret {A: Type} (x: A) : mon A :=
-  fun g => Res x g (Ple_refl (gen_next g)).
+  fun g => Res x g (* (Ple_refl (gen_next g)) *).
 
 Definition error {A: Type} (msg: Errors.errmsg) : mon A :=
   fun g => Err msg.
@@ -52,10 +52,10 @@ Definition bind {A B: Type} (x: mon A) (f: A -> mon B) : mon B :=
   fun g =>
     match x g with
       | Err msg => Err msg
-      | Res a g' i =>
+      | Res a g' =>
           match f a g' with
           | Err msg => Err msg
-          | Res b g'' i' => Res b g'' (Ple_trans _ _ _ i i')
+          | Res b g'' => Res b g''
       end
     end.
 
@@ -70,35 +70,34 @@ Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
    (at level 200, X ident, Y ident, A at level 100, B at level 200)
    : gensym_monad_scope.
 
-Parameter first_unused_ident: unit -> ident.
+
+Parameter fresh_atom: unit -> ident.
 
 (* for now we just use the maximum ident of parameters and variables
 as the initial ident *)
-Definition initial_generator (x: unit) (stmt: statement) : generator :=
-  let fresh_id := first_unused_ident x in
-  mkgenerator fresh_id nil (nil, PTree.empty (list (place' * ident))) stmt.
+Definition initial_generator (stmt: statement) : generator :=
+  mkgenerator nil (nil, PTree.empty (list (place' * ident))) stmt.
 
 (* generate a new drop flag with type ty (always bool) and map [p] to this flag *)
 Definition gensym (ty: type) (p: place') : mon ident :=
   let id := local_of_place p in
+  let fresh_id := fresh_atom tt in
   fun (g: generator) =>
-    Res (gen_next g)
-      (mkgenerator (Pos.succ (gen_next g))
-         ((gen_next g, ty) :: gen_trail g)
-         (PMap.set id ((p, (gen_next g)) :: (gen_map g) !! id) (gen_map g))
-         (gen_stmt g))
-      (Ple_succ (gen_next g)).
+    Res fresh_id
+      (mkgenerator
+         ((fresh_id, ty) :: gen_trail g)
+         (PMap.set id ((p, fresh_id) :: (gen_map g) !! id) (gen_map g))
+         (gen_stmt g)).
 
 Definition set_stmt (sel: selector) (stmt: statement) : mon unit :=
   fun (g: generator) =>
     match (update_stmt (gen_stmt g) sel stmt) with
     | Some stmt' =>
         Res tt
-          (mkgenerator (gen_next g)
+          (mkgenerator
              (gen_trail g)
              (gen_map g)
              stmt')
-          (Ple_refl (gen_next g))
     | None => Err (msg "Set statement errors.")
     end.
 
@@ -332,12 +331,12 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
   do (mayinit, mayuninit) <- analyze ce f;
   let vars := var_names (f.(fn_vars) ++ f.(fn_params)) in
   (* let next_flag := Pos.succ (fold_left Pos.max vars 1%positive) in *)
-  let init_state := initial_generator tt f.(fn_body) in
+  let init_state := initial_generator f.(fn_body) in
   (** FIXME: we generate cfg twice *)
   do (entry, cfg) <- generate_cfg f.(fn_body);
   (* step 1 and step 2 *)
   match elaborate_drop mayinit mayuninit ce f cfg init_state with
-  | Res _ st _ =>
+  | Res _ st =>
       (* step 3: initialize and update drop flag *)
       let flags := concat (snd (split (PTree.elements (snd st.(gen_map))))) in
       match mayinit!entry, mayuninit!entry with

@@ -16,13 +16,13 @@ Import ListNotations.
 (** State and error monad for generating fresh identifiers. *)
 
 Record generator : Type := mkgenerator {
-  gen_next: ident;
+  (* gen_next: ident; *)
   gen_trail: list (ident * type)
 }.
 
 Inductive result (A: Type) (g: generator) : Type :=
   | Err: Errors.errmsg -> result A g
-  | Res: A -> forall (g': generator), Ple (gen_next g) (gen_next g') -> result A g.
+  | Res: A -> forall (g': generator), (* Ple (gen_next g) (gen_next g') -> *) result A g.
 
 
 Arguments Err [A g].
@@ -31,7 +31,7 @@ Arguments Res [A g].
 Definition mon (A: Type) := forall (g: generator), result A g.
 
 Definition ret {A: Type} (x: A) : mon A :=
-  fun g => Res x g (Ple_refl (gen_next g)).
+  fun g => Res x g (* (Ple_refl (gen_next g)) *).
 
 Definition error {A: Type} (msg: Errors.errmsg) : mon A :=
   fun g => Err msg.
@@ -40,10 +40,10 @@ Definition bind {A B: Type} (x: mon A) (f: A -> mon B) : mon B :=
   fun g =>
     match x g with
       | Err msg => Err msg
-      | Res a g' i =>
+      | Res a g' =>
           match f a g' with
           | Err msg => Err msg
-          | Res b g'' i' => Res b g'' (Ple_trans _ _ _ i i')
+          | Res b g'' => Res b g''
       end
     end.
 
@@ -64,17 +64,17 @@ Variable ce: composite_env.
   
 Local Open Scope gensym_monad_scope.
 
-Parameter first_unused_ident: unit -> ident.
 
-Definition initial_generator (x: unit) : generator :=
-  let fresh_id := first_unused_ident x in
-  mkgenerator fresh_id nil.
+Parameter fresh_atom : unit -> ident.
+
+Definition initial_generator : generator :=
+  mkgenerator nil.
 
 Definition gensym (ty: type): mon ident :=
   fun (g: generator) =>
-    Res (gen_next g)
-        (mkgenerator (Pos.succ (gen_next g)) ((gen_next g, ty) :: gen_trail g))
-        (Ple_succ (gen_next g)).
+    let fresh_id := (fresh_atom Datatypes.tt) in
+    Res fresh_id
+      (mkgenerator ((fresh_id, ty) :: gen_trail g)).
 
 (** Use mode of an l-value  *)
 
@@ -368,14 +368,12 @@ Definition finish_stmt (sl: list statement) : mon statement :=
   fun (g: generator) =>
     let s := makeseq sl in
     Res (generate_lets (gen_trail g) s)
-      (mkgenerator (gen_next g) nil)
-      (Ple_refl (gen_next g)).
+      (mkgenerator nil).
 
 Definition extract_temps : mon (list (ident * type)) :=
   fun (g: generator) =>
     Res (gen_trail g)
-      (mkgenerator (gen_next g) nil)
-      (Ple_refl (gen_next g)).
+      (mkgenerator nil).
 
 
 (** Smart constructor for [if ... then ... else]. (copy from SimplExpr.v) *)
@@ -565,8 +563,8 @@ Open Scope error_monad_scope.
 Definition transl_function (f: Rustsyntax.function) : Errors.res function :=
   let vars := var_names (f.(Rustsyntax.fn_params) ++ (extract_vars f.(Rustsyntax.fn_body))) in
   let next_temp := Pos.succ (fold_left (fun acc elt => Pos.max acc elt) vars 1%positive) in
-  match transl_stmt f.(Rustsyntax.fn_body) (initial_generator Datatypes.tt) with
-  | Res stmt _ _ =>
+  match transl_stmt f.(Rustsyntax.fn_body) initial_generator with
+  | Res stmt g =>
       Errors.OK (mkfunction f.(Rustsyntax.fn_generic_origins)
                             f.(Rustsyntax.fn_origins_relation)
                             f.(Rustsyntax.fn_return)

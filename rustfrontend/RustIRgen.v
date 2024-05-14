@@ -47,7 +47,7 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place') (stmt: Rus
       if own_type ce ty then
         Ssequence (Sstoragelive id) (Ssequence s (Ssequence drop (Sstoragedead id)))
       else
-        Ssequence (Sstoragelive id) s
+        Ssequence (Sstoragelive id) (Ssequence s (Sstoragedead id))
   | RustlightBase.Sassign p e =>
       Sassign p e
   | RustlightBase.Sassign_variant p fid e =>
