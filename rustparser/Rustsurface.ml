@@ -191,7 +191,10 @@ module To_syntax = struct
       pp_print_string pp (" '" ^ Camlcoq.extern_atom org);
       if m = T.Mutable then
         pp_print_string pp "mut";
-      pp_print_rust_type symmap pp t 
+      pp_print_rust_type symmap pp t
+    | T.Tarray (ty, sz, _) ->
+      pp_print_rust_type symmap pp ty;
+      Format.fprintf pp "[%ld]" (Camlcoq.camlint_of_coqint sz)
 
 
   let pp_print_unop pp (op: Cop.unary_operation) =
@@ -1037,13 +1040,14 @@ module To_syntax = struct
         map_m args (fun arg -> transl_expr arg)
         >>= fun args' ->
         (* Refer to C2C.ml *)
-        let targs' = typelist_of (List.map Rustsyntax.typeof args') in
+        let t_byte = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned, Ctypes.noattr) in
+        let targs = typelist_of [Rusttypes.Treference(dummy_origin, Rusttypes.Immutable, t_byte, Ctypes.noattr)] in
         let tres =  Rusttypes.type_int32s in
         let sg =
-          Rusttypes.signature_of_type targs' tres
+          Rusttypes.signature_of_type targs tres
              { AST.cc_vararg = Some (Camlcoq.coqint_of_camlint 1l); cc_unproto = false; cc_structret = false} in
-        add_external_fun "printf" sg targs' tres >>= fun i ->
-        let fty = (Rusttypes.Tfunction([],[],targs',tres,sg.AST.sig_cc)) in
+        add_external_fun "printf" sg targs tres >>= fun i ->
+        let fty = (Rusttypes.Tfunction([],[],targs,tres,sg.AST.sig_cc)) in
         let fid = Rustsyntax.Evar(i,fty) in
         return (Rustsyntax.Ecall(fid, exprlist_of args', tres))
       | Eaccess (xenum, xvar) ->
@@ -1078,17 +1082,16 @@ module To_syntax = struct
                    []
                    (String.to_seq s)
       in
+      let var_ty = Rusttypes.Tarray(t_byte, (Camlcoq.Z.of_uint (List.length init)), Ctypes.noattr) in
       (* TODO: what is the origin of static string *)
-      let global_var = AST.({ gvar_info = Rusttypes.Treference
-                                  (dummy_origin, Rusttypes.Immutable, t_byte, Ctypes.noattr)
+      let global_var = AST.({ gvar_info = var_ty
                             ; gvar_init = init
                             ; gvar_readonly = true
                             ; gvar_volatile = false })
       in
       let str_lit = name_for_string_literal s in
       add_gvar str_lit global_var >>= fun i ->
-      let t' = Rusttypes.Treference (dummy_origin, Rusttypes.Immutable, t_byte, Ctypes.noattr) in
-      return (Rustsyntax.Evar (i, t'))
+      return (Rustsyntax.Evar (i, var_ty))
 
 
 

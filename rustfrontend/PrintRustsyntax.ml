@@ -63,6 +63,8 @@ let rec name_rust_decl id ty =
       "struct" ^ print_origins orgs ^ " " ^ extern_atom name ^ attributes a ^ name_optid id
   | Tvariant(orgs, name, a) ->
       "variant" ^ print_origins orgs ^ " " ^ extern_atom name ^ attributes a ^ name_optid id
+  | Tarray(ty, sz, a) ->
+    name_rust_decl (sprintf "%s[%ld]" id (camlint_of_coqint sz)) ty
 
 (* Type *)
 

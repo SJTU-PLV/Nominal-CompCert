@@ -48,6 +48,7 @@ Inductive type : Type :=
 | Tfunction: list origin -> list origin_rel -> typelist -> type -> calling_convention -> type    (**r function types *)
 | Tbox: type -> attr -> type                                         (**r unique pointer  *)
 | Treference: origin -> mutkind -> type -> attr -> type (**r reference type  *)
+| Tarray: type -> Z -> attr -> type                    (**r array type, just used for constant string for now *)
 | Tstruct: list origin -> ident -> attr -> type                              (**r struct types  *)
 | Tvariant: list origin -> ident -> attr -> type                             (**r tagged variant types *)
 with typelist : Type :=
@@ -110,6 +111,7 @@ Definition attr_of_type (ty: type) :=
   | Tfunction _ _ args res cc => noattr
   | Tbox p a => a
   | Treference _ mut ty a => a
+  | Tarray _ _ a => a
   | Tstruct _ id a => a
   | Tvariant _ id a => a
   end.
@@ -130,6 +132,7 @@ Definition access_mode (ty: type) : mode :=
   | Tfunction _ _ _ _ _ => By_reference
   | Tbox _ _ => By_value Mptr
   | Treference _ _ _ _ => By_value Mptr
+  | Tarray _ _ _ => By_reference
   | Tstruct _ _ _ => By_copy
   | Tvariant _ _ _ => By_copy
 end.
@@ -208,7 +211,7 @@ Definition composite_env : Type := PTree.t composite.
   unless they occur under a pointer or function type.  [void] and
   function types are incomplete types. *)
 
-Definition complete_type (env: composite_env) (t: type) : bool :=
+Fixpoint complete_type (env: composite_env) (t: type) : bool :=
   match t with
   | Tunit => true
   | Tint _ _ _ => true
@@ -217,6 +220,7 @@ Definition complete_type (env: composite_env) (t: type) : bool :=
   | Tfunction _ _ _ _ _ => false
   | Tbox _ _ => true
   | Treference _ _ _ _ => true
+  | Tarray t' _ _ => complete_type env t'
   | Tstruct _ id _ | Tvariant _ id _ =>
       match env!id with Some co => true | None => false end
   end.
@@ -240,7 +244,7 @@ Definition align_attr (a: attr) (al: Z) : Z :=
   | None => al
   end.
 
-Definition alignof (env: composite_env) (t: type) : Z :=
+Fixpoint alignof (env: composite_env) (t: type) : Z :=
   align_attr (attr_of_type t)
    (match t with
     | Tunit => 1
@@ -253,7 +257,8 @@ Definition alignof (env: composite_env) (t: type) : Z :=
     | Tfloat F64 _ => Archi.align_float64
     | Tfunction _ _ _ _ _ => 1
     | Treference _ _ _ _
-    | Tbox _ _ => if Archi.ptr64 then 8 else 4                      
+    | Tbox _ _ => if Archi.ptr64 then 8 else 4
+    | Tarray t' _ _ => alignof env t'
       | Tstruct _ id _ | Tvariant _ id _ =>
           match env!id with Some co => co_alignof co | None => 1 end
     end).
@@ -285,6 +290,7 @@ Proof.
     exists 0%nat; auto.
     destruct Archi.ptr64; ((exists 2%nat; reflexivity) || (exists 3%nat; reflexivity)).
     destruct Archi.ptr64; ((exists 2%nat; reflexivity) || (exists 3%nat; reflexivity)).
+    apply IHt.
     destruct (env!i). apply co_alignof_two_p. exists 0%nat; auto.
     destruct (env!i). apply co_alignof_two_p. exists 0%nat; auto.
 Qed.
@@ -404,7 +410,7 @@ Definition own_type (ce: composite_env) : type -> bool :=
 
 (** Size of a type  *)
 
-Definition sizeof (env: composite_env) (t: type) : Z :=
+Fixpoint sizeof (env: composite_env) (t: type) : Z :=
   match t with
   | Tunit => 1
   | Tint I8 _ _ => 1
@@ -417,6 +423,7 @@ Definition sizeof (env: composite_env) (t: type) : Z :=
   | Tfunction _ _ _ _ _ => 1
   | Treference _ _ _ _
   | Tbox _ _ => if Archi.ptr64 then 8 else 4
+  | Tarray t' n _ => sizeof env t' * Z.max 0 n
   | Tstruct _ id _
   | Tvariant _ id _ =>
       match env!id with
@@ -436,11 +443,12 @@ Proof.
 - destruct Archi.ptr64; lia.
 - destruct Archi.ptr64; lia.
 - destruct Archi.ptr64; lia.
+- change 0 with (0 * Z.max 0 z) at 2. apply Zmult_ge_compat_r. auto. lia.
 - destruct (env!i). apply co_sizeof_pos. lia.
 - destruct (env!i). apply co_sizeof_pos. lia.
 Qed.
 
-Definition alignof_blockcopy (env: composite_env) (t: type) : Z :=
+Fixpoint alignof_blockcopy (env: composite_env) (t: type) : Z :=
   match t with
   | Tunit => 1
   | Tint I8 _ _ => 1
@@ -453,6 +461,7 @@ Definition alignof_blockcopy (env: composite_env) (t: type) : Z :=
   | Tfunction _ _ _ _ _ => 1
   | Treference _ _ _ _
   | Tbox _ _ => if Archi.ptr64 then 8 else 4
+  | Tarray t' _ _ => alignof_blockcopy env t'
   | Tstruct _ id _
   | Tvariant _ id _ =>
       match env!id with
@@ -720,7 +729,7 @@ Definition typ_of_type (t: type) : AST.typ :=
   | Tlong _ _ => AST.Tlong
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
-  | Tfunction _ _ _ _ _ | Treference _ _ _ _ | Tbox _ _ | Tstruct _ _ _ | Tvariant _ _ _ => AST.Tptr
+  | Tfunction _ _ _ _ _ | Treference _ _ _ _ | Tbox _ _ | Tarray _ _ _ | Tstruct _ _ _ | Tvariant _ _ _ => AST.Tptr
   end.
 
 Definition rettype_of_type (t: type) : AST.rettype :=
@@ -736,7 +745,7 @@ Definition rettype_of_type (t: type) : AST.rettype :=
   | Tfloat F32 _ => AST.Tsingle
   | Tfloat F64 _ => AST.Tfloat
   | Tbox _ _ | Treference _ _ _ _ => Tptr
-  | Tfunction _ _ _ _ _ | Tstruct _ _ _ | Tvariant _ _ _ => AST.Tvoid
+  | Tarray _ _ _ | Tfunction _ _ _ _ _ | Tstruct _ _ _ | Tvariant _ _ _ => AST.Tvoid
   end.
 
 Fixpoint typlist_of_typelist (tl: typelist) : list AST.typ :=

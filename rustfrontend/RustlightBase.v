@@ -119,7 +119,8 @@ Fixpoint to_ctype (ty: type) : Ctypes.type :=
       (* | Some ty' =>  *)
       (*     Some (Ctypes.Tpointer ty' attr) *)
       (* | _ => None *)
-      (* end *)
+  (* end *)
+  | Tarray ty sz a => Ctypes.Tarray (to_ctype ty) sz a
   | Tfunction _ _ tyl ty cc =>
       Ctypes.Tfunction (to_ctypelist tyl) (to_ctype ty) cc
   end
