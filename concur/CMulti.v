@@ -88,6 +88,8 @@ Section MultiThread.
       next_tid : nat;
       (* atom_bit : bool; *)
 
+
+      (* *)
       (* tid_gmem : exists ls, NatMap.get cur_tid threads = Some ls /\
                          tid_mem (get_gmem ls) = cur_tid /\
                          length (stacks_mem (get_gmem ls)) = next_tid; *)
@@ -305,7 +307,7 @@ Section MultiThread.
       (* store the return value of tar' thread *)
      (MEM_RES: Mem.storev Many64 gmem' vptr res = Some gmem'')
      (AFT_E: Smallstep.after_external OpenLTS ls1 (cr (Vint Int.one) gmem'') ls1')
-     (YIELD_ST: yield_state s' (Local ls1') target = s'),
+     (YIELD_ST: yield_state s' (Local ls1') target = s''),
       switch_in s' s'' target gmem'
   |switch_in_initial : forall s' s'' cqv ls1' target gmem'
      (GET_T: get_thread s' target = Some (Initial cqv)) 

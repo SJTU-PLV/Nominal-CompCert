@@ -251,9 +251,9 @@ Section MultiThread.
       (* the thread [target] is waiting for thread [wait] *)
       (* the "wait" thread is already finished *)
       (GET_WAIT: get_thread s' wait = Some (Final res))
-      (MEM_RES: Mem.storev Many64 gmem' (rs1 # RDX) res = Some gmem'')
+      (MEM_RES: Mem.storev Many64 gmem' (rs1 # RSI) res = Some gmem'')
       (AFT_E: Smallstep.after_external OpenLTS ls1 (rs1', gmem'') ls1')
-      (SET_RS: rs1' = Pregmap.set PC (rs1 RA) rs1)
+      (SET_RS: rs1' = Pregmap.set RAX (Vint Int.one)(Pregmap.set PC (rs1 RA) rs1))
       (YIELD_ST: yield_state_asm s' (Local ls1') target = s''),
       switch_in s' s'' target gmem'
   |switch_in_initial : forall s' s'' rs0 ls1' target gmem'
