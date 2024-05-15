@@ -285,6 +285,7 @@ Section MultiThread.
       (SET_C: update_cur_thread s (Returnj ls wait vptr) = s'),
       switch_out s s' target gmem'
   |switch_out_final : forall s s' ls res gmem target p gmem'
+      (SUB_THREAD: (cur_tid s <> 1)%nat)
       (GET_C: get_cur_thread s = Some (Local ls))
       (FINAL: Smallstep.final_state OpenLTS ls (cr res gmem))
       (MEM_YIELD: Mem.yield gmem target p = gmem')
