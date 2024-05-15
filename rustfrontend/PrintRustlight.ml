@@ -14,21 +14,21 @@ let temp_name (id: AST.ident) =
   with Not_found ->
     Printf.sprintf "$%d" (P.to_int id)
 
-let rec print_place out (p: place') =
+let rec print_place' out (p: place') =
   match p with
   | Plocal(id, _) ->
     fprintf out "%s" (extern_atom id)
   | Pderef(p', _) ->
-    fprintf out "*%a" print_place p'
+    fprintf out "*%a" print_place' p'
   | Pfield(p', fid, _) ->
-    fprintf out "%a.%s" print_place p' (extern_atom fid)
+    fprintf out "%a.%s" print_place' p' (extern_atom fid)
 
-let print_downcast out (p: place) =
+let print_place out (p: place) =
   match p with
   | Place p' ->
-    print_place out p'
+    print_place' out p'
   | Pdowncast(p',fid, _) ->
-    fprintf out "(%a as %s)" print_place p' (extern_atom fid)
+    fprintf out "(%a as %s)" print_place' p' (extern_atom fid)
 
 (* Precedences and associativity (copy from PrintClight.ml) *)
 
@@ -69,7 +69,7 @@ let rec pexpr p (prec, e) =
   begin match e with
   | Eunit ->  fprintf p "tt"
   | Eplace(v, _) ->
-    fprintf p "%a" print_downcast v
+    fprintf p "%a" print_place v
   | Econst_int(n, Rusttypes.Tint(I32, Unsigned, _)) ->
     fprintf p "%luU" (camlint_of_coqint n)
   | Econst_int(n, _) ->
@@ -90,9 +90,9 @@ let rec pexpr p (prec, e) =
     fprintf p "%a@ %s %a"
       pexpr (prec1, a1) (name_binop op) pexpr (prec2, a2)
   | Ecktag(v, fid, _) ->
-    fprintf p "%s(%a, %s)" "cktag" print_place v (extern_atom fid)
+    fprintf p "%s(%a, %s)" "cktag" print_place' v (extern_atom fid)
   | Eref(org, mut, v, _) ->
-    fprintf p "& '%s %s %a" (extern_atom org) (string_of_mut mut) print_downcast v
+    fprintf p "& '%s %s %a" (extern_atom org) (string_of_mut mut) print_place v
   end;
   if prec' < prec then fprintf p ")@]" else fprintf p "@]"
 
@@ -103,7 +103,7 @@ let expr p (prec, e) =
   else fprintf p "@[<hov 2>";
   begin match e with
   | Epure pe -> pexpr p (prec, pe)
-  | Emoveplace(v, _) -> fprintf p "move %a" print_downcast v
+  | Emoveplace(v, _) -> fprintf p "move %a" print_place v
    end;
   if prec' < prec then fprintf p ")@]" else fprintf p "@]"
 
@@ -124,17 +124,17 @@ let rec print_stmt p (s: RustlightBase.statement) =
     (* comment *)
     fprintf p "/*skip*/"
   | Sassign(v, e) ->
-    fprintf p "@[<hv 2>%a =@ %a;@]" print_place v print_expr e
+    fprintf p "@[<hv 2>%a =@ %a;@]" print_place' v print_expr e
   | Sassign_variant (v, id, e) ->
-    fprintf p "@[<hv 2>%a =@ %s(%a);@]" print_place v (extern_atom id) print_expr e
+    fprintf p "@[<hv 2>%a =@ %s(%a);@]" print_place' v (extern_atom id) print_expr e
   | Scall(v, e1, el) ->
     fprintf p "@[<hv 2>%a =@ %a@,(@[<hov 0>%a@]);@]"
-              print_place v
+              print_place' v
               expr (15, e1)
               print_expr_list (true, el)
   | Sbuiltin(v, ef, tyargs, el) ->
       fprintf p "@[<hv 2>%a =@ builtin %s@,(@[<hov 0>%a@]);@]"
-                print_place v
+                print_place' v
                 (PrintAST.name_of_external ef)
                 print_expr_list (true, el)
   | Ssequence(Sskip, s2) ->
@@ -168,7 +168,7 @@ let rec print_stmt p (s: RustlightBase.statement) =
   | Sreturn (Some e) ->
     fprintf p "return %a;" print_expr e
   | Sbox(v, e) ->
-    fprintf p "@[<hv 2>%a =@ Box::new(%a);@]" print_place v print_expr e
+    fprintf p "@[<hv 2>%a =@ Box::new(%a);@]" print_place' v print_expr e
   | Slet(id, ty, s) ->
     fprintf p "@[<v 2>let %s : %s in {@ %a@;<0 -2>}@]"
             (extern_atom id)

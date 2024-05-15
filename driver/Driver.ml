@@ -493,6 +493,9 @@ let _ =
         | Errors.OK rustir_prog_drop ->
           Format.fprintf stdout_format "@.Elaborate Drop: @.";
           PrintRustIR.print_program stdout_format rustir_prog_drop;
+          (* Print the result of borrow check (how to avoid the result
+          of replace origins affect the actual borrow check?) *)
+          PrintBorrowCheck.print_cfg_program_borrow_check stdout_format rustir_prog_drop;
         (* Print Clight composites *)
           let clight_composites = Clightgen.transl_composites rustir_prog_drop.Rusttypes.prog_types in
           Format.fprintf stdout_format "@.Clightgen Composites: @.";

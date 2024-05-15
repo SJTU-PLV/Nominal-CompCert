@@ -568,7 +568,7 @@ Definition transfer (ce: composite_env) (f: function) (cfg: rustcfg) (pc: node) 
 
 Module DS := Dataflow_Solver(AE)(NodeSetForward).
 
-Definition borrow_check_fun (ce: composite_env) (f: function) : res unit :=
+Definition borrow_check (ce: composite_env) (f: function) : res (PTree.t AE.t) :=
   (* replace origins with fresh origins in the function body *)
   do f <- replace_origin_function ce f;  
   let ae := init_function f in
@@ -577,21 +577,25 @@ Definition borrow_check_fun (ce: composite_env) (f: function) : res unit :=
   do (entry, cfg) <- generate_cfg f.(fn_body);
   (** forward dataflow *)
   match DS.fixpoint cfg successors_instr (transfer ce f cfg) entry ae' with
-  | Some r =>
-      let (_, t) := r in
-      let l := PTree.elements t in
-      (* find the first error message *)
-      match find (fun '(pc, am) => match am with | AE.Err _ _ => true | _ => false end) l with
-      | Some (_, AE.Err _ msg) =>
-          Error msg
-      | _ =>
-          OK tt
-      end
+  | Some (_, r) =>
+      OK r
   | None =>
       Error [MSG "The borrow check fails with unknown reason"]
   end.
 
 
+Definition borrow_check_fun (ce: composite_env) (f: function) : res unit :=
+  do t <- borrow_check ce f;
+  let l := PTree.elements t in
+  (* find the first error message *)
+  match find (fun '(pc, am) => match am with | AE.Err _ _ => true | _ => false end) l with
+  | Some (_, AE.Err _ msg) =>
+      Error msg
+  | _ =>
+      OK tt
+  end.
+
+                                   
 Definition transf_fundef (ce: composite_env) (id: ident) (fd: fundef) : Errors.res fundef :=
   match fd with
   | Internal f =>

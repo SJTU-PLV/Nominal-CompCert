@@ -16,17 +16,17 @@ let rec print_stmt p (s: RustIR.statement) =
     (* comment *)
     fprintf p "/*skip*/"
   | Sassign(v, e) ->
-    fprintf p "@[<hv 2>%a =@ %a;@]" print_place v print_expr e
+    fprintf p "@[<hv 2>%a =@ %a;@]" print_place' v print_expr e
   | Sassign_variant (v, id, e) ->
-    fprintf p "@[<hv 2>%a =@ %s(%a);@]" print_place v (extern_atom id) print_expr e
+    fprintf p "@[<hv 2>%a =@ %s(%a);@]" print_place' v (extern_atom id) print_expr e
   | Scall(v, e1, el) ->
     fprintf p "@[<hv 2>%a =@ %a@,(@[<hov 0>%a@]);@]"
-              print_place v
+              print_place' v
               expr (15, e1)
               print_expr_list (true, el)
   | Sbuiltin(v, ef, tyargs, el) ->
       fprintf p "@[<hv 2>%a =@ builtin %s@,(@[<hov 0>%a@]);@]"
-                print_place v
+                print_place' v
                 (PrintAST.name_of_external ef)
                 print_expr_list (true, el)
   | Ssequence(Sskip, s2) ->
@@ -60,13 +60,13 @@ let rec print_stmt p (s: RustIR.statement) =
   | Sreturn (Some e) ->
     fprintf p "return %a;" print_expr e
   | Sbox(v, e) ->
-    fprintf p "@[<hv 2>%a =@ Box::new(%a);@]" print_place v   print_expr e
+    fprintf p "@[<hv 2>%a =@ Box::new(%a);@]" print_place' v   print_expr e
   | Sstoragelive id ->
     fprintf p "storagelive %s;" (extern_atom id)
   | Sstoragedead id ->
     fprintf p "storagedead %s;" (extern_atom id)
   | Sdrop v ->
-    fprintf p "drop(%a of %s);" print_place v (name_rust_type (RustlightBase.typeof_place' v))
+    fprintf p "drop(%a of %s);" print_place' v (name_rust_type (RustlightBase.typeof_place' v))
     
 
 (* Print cfg of RustIR *)
@@ -139,7 +139,7 @@ let print_paths_map pp (name, (pathmap: InitAnalysis.PathsMap.t)) =
   let l = List.concat l' in
   fprintf pp "%s: {@[<hov>%a@]}@ "
     name
-    (pp_print_list ~pp_sep: (fun out () -> fprintf out ";@ ") print_place) l
+    (pp_print_list ~pp_sep: (fun out () -> fprintf out ";@ ") print_place') l
 
 let print_instruction_debug pp prog (pc, (i, (mayinit, mayuninit))) =
   fprintf pp "%5d:\t" pc;
