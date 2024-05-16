@@ -569,8 +569,6 @@ Definition transfer (ce: composite_env) (f: function) (cfg: rustcfg) (pc: node) 
 Module DS := Dataflow_Solver(AE)(NodeSetForward).
 
 Definition borrow_check (ce: composite_env) (f: function) : res (PTree.t AE.t) :=
-  (* replace origins with fresh origins in the function body *)
-  do f <- replace_origin_function ce f;  
   let ae := init_function f in
   let ae' := init_variables ae f in
   (* generate cfg *)
@@ -584,7 +582,7 @@ Definition borrow_check (ce: composite_env) (f: function) : res (PTree.t AE.t) :
   end.
 
 
-Definition borrow_check_fun (ce: composite_env) (f: function) : res unit :=
+Definition do_borrow_check (ce: composite_env) (f: function) : res unit :=
   do t <- borrow_check ce f;
   let l := PTree.elements t in
   (* find the first error message *)
@@ -595,12 +593,19 @@ Definition borrow_check_fun (ce: composite_env) (f: function) : res unit :=
       OK tt
   end.
 
-                                   
+(* The origins of the return function are fresh *)
+Definition borrow_check_fun (ce: composite_env) (f: function) : res function :=
+  (* replace origins with fresh origins in the function body *)
+  do f <- replace_origin_function ce f;  
+  (* do _ <- do_borrow_check ce f; *)
+  OK f.
+
+
 Definition transf_fundef (ce: composite_env) (id: ident) (fd: fundef) : Errors.res fundef :=
   match fd with
   | Internal f =>
       match borrow_check_fun ce f with
-      | OK _ => OK (Internal f)
+      | OK f' => OK (Internal f')
       | Error msg => Error ([MSG "In function "; CTX id; MSG " , in pc "] ++ msg)
       end
   | External _ orgs rels ef targs tres cconv => Errors.OK (External function orgs rels ef targs tres cconv)

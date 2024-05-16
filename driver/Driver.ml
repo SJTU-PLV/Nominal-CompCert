@@ -449,15 +449,75 @@ let cmdline_actions =
 
 (* Debug the Rust compiler *)
 
+let stdout_format = Format.formatter_of_out_channel stdout
+
+let debug_Rustlightgen (syntax: Rustsyntax.program) =
+  match Rustlightgen.transl_program syntax with
+  | Errors.OK rustlight_prog ->
+    Format.fprintf stdout_format "Rustlight: @.";
+    PrintRustlight.print_program stdout_format rustlight_prog;
+    rustlight_prog
+  | Errors.Error msg ->
+    fatal_error no_loc "%a"  print_error msg
+
+let debug_RustIRgen (rustlight_prog: RustlightBase.program) =
+  Format.fprintf stdout_format "@.RustIR: @.";
+  let rustir_prog = RustIRgen.transl_program rustlight_prog in
+  PrintRustIR.print_program stdout_format rustir_prog;
+  rustir_prog
+
+let debug_RustCFG rustir_prog =
+  Format.fprintf stdout_format "@.Rust CFG: @.";
+  PrintRustIR.print_cfg_program stdout_format rustir_prog;
+  rustir_prog
+
+let debug_InitAnalysis rustir_prog =
+  Format.fprintf stdout_format "@.Initialized Analysis: @.";
+  PrintRustIR.print_cfg_program_debug stdout_format rustir_prog;
+  rustir_prog
+
+let debug_ElaborateDrop rustir_prog =
+  match ElaborateDrop.transl_program rustir_prog with
+  | Errors.OK rustir_prog_drop ->
+   Format.fprintf stdout_format "@.Elaborate Drop: @.";
+   PrintRustIR.print_program stdout_format rustir_prog_drop;
+   rustir_prog_drop
+  | Errors.Error msg ->
+    fatal_error no_loc "%a"  print_error msg
+
+let debug_BorrowCheck (prog: RustIR.program) =
+  match BorrowCheckPolonius.borrow_check_program prog with
+  | Errors.OK rustir_after_borrow_check ->
+    Format.fprintf stdout_format "@.After Replacing Origins: @.";
+    PrintRustIR.print_program stdout_format rustir_after_borrow_check;
+    rustir_after_borrow_check
+  | Errors.Error msg ->
+    fatal_error no_loc "%a"  print_error msg
+
+let debug_ClightComposite prog =
+  let clight_composites = Clightgen.transl_composites prog.Rusttypes.prog_types in
+  Format.fprintf stdout_format "@.Clightgen Composites: @.";
+  Format.fprintf stdout_format "@[<v 0>"; 
+  List.iter (PrintCsyntax.define_composite stdout_format)clight_composites;
+  Format.fprintf stdout_format "@]@.";
+  prog
+
+let debug_Clightgen prog =
+  match Clightgen.transl_program prog with
+  | Errors.OK clight_prog ->
+    Format.fprintf stdout_format "@.Clightgen: @.";
+    PrintClight.print_program PrintClight.Clight1 stdout_format clight_prog;
+    clight_prog
+  | Errors.Error msg -> fatal_error no_loc "%a" print_error msg
+
+let (>>=) (x: 'a) (f: 'a -> 'b) : 'b =
+    f x
+
 let debug_rust = true
 
 (* let test_case = "rustexamples/test/example_test/control_flow/05match_test.rs" *)
 
-let fun_atom = BinNums.Coq_xH
 
-let print_to_stdout print input = Format.fprintf (Format.formatter_of_out_channel stdout) "@[<v 0>%a@]" print input
-
-let stdout_format = Format.formatter_of_out_channel stdout
 
 let _ =
   if debug_rust then
@@ -474,45 +534,16 @@ let _ =
        Hashtbl.add Camlcoq.atom_of_string "main" syntax.prog_main;
        Hashtbl.add Camlcoq.string_of_atom syntax.prog_main "main";
        (* Print Rustlight *)
-      (match Rustlightgen.transl_program syntax with
-      | Errors.OK rustlight_prog ->
-        Format.fprintf stdout_format "Rustlight: @.";
-        PrintRustlight.print_program stdout_format rustlight_prog;
-        (* Print RustIR *)
-        Format.fprintf stdout_format "@.RustIR: @.";
-        let rustir_prog = RustIRgen.transl_program rustlight_prog in
-        PrintRustIR.print_program stdout_format rustir_prog;
-        (* Print CFG *)
-        Format.fprintf stdout_format "@.Rust CFG: @.";
-        PrintRustIR.print_cfg_program stdout_format rustir_prog;
-        (* Print the result of InitAnalysis *)
-        Format.fprintf stdout_format "@.Initialized Analysis: @.";
-        PrintRustIR.print_cfg_program_debug stdout_format rustir_prog;
-        (* Print RustIR after the drop elaboration *)
-        begin match ElaborateDrop.transl_program rustir_prog with
-        | Errors.OK rustir_prog_drop ->
-          Format.fprintf stdout_format "@.Elaborate Drop: @.";
-          PrintRustIR.print_program stdout_format rustir_prog_drop;
-          (* Print the result of borrow check (how to avoid the result
-          of replace origins affect the actual borrow check?) *)
-          (* PrintBorrowCheck.print_cfg_program_borrow_check stdout_format rustir_prog_drop; *)
-        (* Print Clight composites *)
-          let clight_composites = Clightgen.transl_composites rustir_prog_drop.Rusttypes.prog_types in
-          Format.fprintf stdout_format "@.Clightgen Composites: @.";
-          Format.fprintf stdout_format "@[<v 0>"; 
-          List.iter (PrintCsyntax.define_composite stdout_format) clight_composites;
-          Format.fprintf stdout_format "@]@.";
-          (* Print Clight after generating drop glue *)
-          begin match Clightgen.transl_program rustir_prog_drop with
-          | Errors.OK clight_prog ->
-            Format.fprintf stdout_format "@.Clightgen: @.";
-            PrintClight.print_program PrintClight.Clight1 stdout_format clight_prog;
-            clight_prog
-          | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
-          end;
-        | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg;
-        end;
-      | Errors.Error msg -> fatal_error no_loc "%a"  print_error msg)
+       let clight_prog = syntax
+                        >>= debug_Rustlightgen
+                        >>= debug_RustIRgen
+                        >>= debug_RustCFG
+                        >>= debug_InitAnalysis
+                        >>= debug_ElaborateDrop
+                        >>= debug_BorrowCheck
+                        >>= debug_ClightComposite
+                        >>= debug_Clightgen in
+       clight_prog
     | Result.Error e ->
       Rustsurface.To_syntax.pp_print_error Format.err_formatter e symmap;
       raise Abort)
