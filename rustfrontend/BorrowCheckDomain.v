@@ -45,6 +45,7 @@ Module LoanSetL := LFSet(LoanSet).
 (** Origin state *)
 
 Inductive origin_state : Type :=
+| Obot
 | Live (ls: LoanSetL.t)
 | Dead.
 
@@ -70,6 +71,8 @@ Axiom beq_correct: forall x y, beq x y = true -> eq x y.
 
 Definition ge (x y: t) : Prop :=
   match x, y with
+  | Obot, _ => False
+  | _, Obot => True
   | Dead, _ => True
   | _, Dead => False
   | Live ls1, Live ls2 => LoanSetL.ge ls1 ls2
@@ -79,7 +82,7 @@ Axiom ge_refl: forall x y, eq x y -> ge x y.
 
 Axiom ge_trans: forall x y z, ge x y -> ge y z -> ge x z.
 
-Definition bot := Live(LoanSetL.bot).
+Definition bot := Obot.
 
 Axiom ge_bot: forall x, ge x bot.
 
@@ -89,6 +92,8 @@ Axiom ge_top: forall x, ge top x.
 
 Definition lub (x y: t) :=
   match x, y with
+  | Obot, _ => y
+  | _, Obot => x
   | Dead, _ => Dead
   | _, Dead => Dead
   | Live ls1, Live ls2 => Live(LoanSetL.lub ls1 ls2)
@@ -231,6 +236,7 @@ Definition conflict (ls1 ls2 : LoanSet.t) (a: access_kind) : bool :=
 (* Invalidate an origin *)
 Definition invalidate_origin (ls1: LoanSet.t) (a: access_kind) (os: origin_state) : origin_state :=
   match os with
+  | Obot => Obot
   | Live ls2 =>
       if conflict ls1 ls2 a then Dead
       else os
@@ -259,21 +265,17 @@ Fixpoint origins_of_type (ty: type) : list origin :=
 (* Definition of valid access of a place: check whether there is any
 dead origin in the type of the place. Return an error report if
 invalid access happens *)
-Definition valid_access (oe: LOrgEnv.t) (p: place) : res unit :=
-  match oe with
-  | LOrgEnv.Bot => Error (msg "It is impossible to pass an invalid origin environment to valid_access")
-  | LOrgEnv.Top_except t =>
-      let ty := local_type_of_place p in
-      let orgs := origins_of_type ty in
-      let check acc org :=
-        do acc' <- acc;
-        match t!org with
-        | Some (Live _) => OK tt
-        | Some Dead => Error [CTX org; MSG ": access a place with this dead origin (valid_access)"]
-        | None => Error [CTX org; MSG ": no such origin in the origin environment (valid_access)"]
-        end in
-      fold_left check orgs (OK tt)
-  end.
+Definition valid_access (oe: LOrgEnv.t) (p: place) : bool :=
+  let ty := local_type_of_place p in
+  let orgs := origins_of_type ty in
+  let check org :=    
+    match LOrgEnv.get org oe with
+    (* It is impossible that an origin has not origin state *)
+    | Obot => false
+    | Live _ => true
+    | Dead => false
+    end in
+  forallb check orgs.
 
 
 (* Relevant loans for a place [p] in the live loan set. The result

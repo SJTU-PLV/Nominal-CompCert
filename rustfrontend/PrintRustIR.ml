@@ -133,6 +133,10 @@ let print_cfg pp id f =
   match generate_cfg f.fn_body with
   | Errors.OK(entry, cfg) ->
     fprintf pp "%s(%a) {\n" (extern_atom id) print_params f.fn_params;
+    (* Print variables and their types *)
+    List.iter
+    (fun (id, ty) ->
+      fprintf pp "%s;@ " (name_rust_decl (extern_atom id) ty)) f.fn_vars;
     print_cfg_body pp (f.fn_body, entry, cfg)
   | Errors.Error msg ->
     Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG: %a" Driveraux.print_error msg
@@ -195,6 +199,10 @@ let print_cfg_debug ce pp id f  =
     (match analyze ce f with
     | Errors.OK (mayinit, mayuninit) ->
       fprintf pp "%s(%a) {\n" (extern_atom id) print_params f.fn_params;
+      (* Print variables and their types *)
+      List.iter
+      (fun (id, ty) ->
+        fprintf pp "%s;@ " (name_rust_decl (extern_atom id) ty)) f.fn_vars;
       print_cfg_body_debug pp (f.fn_body, entry, cfg) mayinit mayuninit
     | Errors.Error msg ->
       Diagnostics.fatal_error Diagnostics.no_loc "Error in InitAnalysis: %a" Driveraux.print_error msg)

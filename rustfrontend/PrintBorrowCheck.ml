@@ -33,6 +33,7 @@ let print_dead_origin pp (org: origin) =
 let print_origin_state pp (org_st: origin * LOrgSt.t) =
   let (org, st) = org_st in
   match st with
+  | Obot -> fprintf pp "%s: Bot@ " (extern_atom org)
   | Live(ls) ->
     fprintf pp "%s: {@[<hov>%a@]}@ " (extern_atom org) print_loanset ls
   | Dead ->
@@ -41,16 +42,16 @@ let print_origin_state pp (org_st: origin * LOrgSt.t) =
 let print_origin_env pp (e: LOrgEnv.t) =
   match e with
   | LOrgEnv.Bot ->
-    fprintf pp "Bot"
+    fprintf pp "OrgEnv: Bot"
   | LOrgEnv.Top_except t ->
+    fprintf pp "OrgEnv: ";
     let l = (PTree.elements t) in
     List.iter (print_origin_state pp) l
 
 let print_live_loans pp (ls: LoanSet.t) =
   fprintf pp "Live Loans: {@[<hov>%a@]}@ " print_loanset ls
 
-let print_instruction_debug pp prog (pc, (i, ae)) =
-  PrintRustIR.print_instruction pp prog (pc,i);
+let print_ae pp ae =
   match ae with
   | AE.Err(pc', msg) ->
     fprintf pp "Error found in %d: %a" (P.to_int pc') print_error msg
@@ -59,6 +60,10 @@ let print_instruction_debug pp prog (pc, (i, ae)) =
   | AE.State(live_loans, org_env, alias_graph) ->
     (* TODO: print alias graph *)
     fprintf pp "%a@ %a@." print_live_loans live_loans print_origin_env org_env
+
+let print_instruction_debug pp prog (pc, (i, ae)) =
+  PrintRustIR.print_instruction pp prog (pc,i);
+  print_ae pp ae
 
 let print_cfg_body_borrow_check pp (body, entry, cfg) ae =
   let cfg' = PTree.combine PrintRustIR.combine cfg ae in

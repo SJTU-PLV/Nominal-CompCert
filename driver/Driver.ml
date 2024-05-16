@@ -485,14 +485,17 @@ let debug_ElaborateDrop rustir_prog =
   | Errors.Error msg ->
     fatal_error no_loc "%a"  print_error msg
 
+let debug_borrow_check = true
+
 let debug_BorrowCheck (prog: RustIR.program) =
-  match BorrowCheckPolonius.borrow_check_program prog with
-  | Errors.OK rustir_after_borrow_check ->
+  match ReplaceOrigins.transl_program prog with
+  | Errors.OK rustir_after_replace_origins ->
     Format.fprintf stdout_format "@.After Replacing Origins: @.";
-    (* PrintRustIR -> PrintBorrowCheck *)
-    PrintBorrowCheck.print_cfg_program_borrow_check
-     stdout_format rustir_after_borrow_check;
-    rustir_after_borrow_check
+    PrintRustIR.print_cfg_program stdout_format rustir_after_replace_origins;
+    (if debug_borrow_check then
+      Format.fprintf stdout_format "@.Borrow Check: @.";
+      PrintBorrowCheck.print_cfg_program_borrow_check stdout_format rustir_after_replace_origins);
+    rustir_after_replace_origins
   | Errors.Error msg ->
     fatal_error no_loc "%a"  print_error msg
 

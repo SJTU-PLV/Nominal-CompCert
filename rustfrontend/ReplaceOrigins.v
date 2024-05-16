@@ -279,4 +279,28 @@ Definition replace_origin_function (ce: composite_env) (gvars: list ident) (f: f
                  stmt)
   else Errors.Error [MSG "repeated idents in vars and params (replace_origin_function)"]
 .
-        
+
+
+Definition transf_fundef (ce: composite_env) (gvars: list ident) (id: ident) (fd: fundef) : Errors.res fundef :=
+  match fd with
+  | Internal f =>
+      match replace_origin_function ce gvars f with
+      | OK f' => OK (Internal f')
+      | Error msg => Error ([MSG "In function "; CTX id; MSG " : "] ++ msg)
+      end
+  | External _ orgs rels ef targs tres cconv => Errors.OK (External function orgs rels ef targs tres cconv)
+  end.
+
+Definition transl_globvar (id: ident) (ty: type) := OK ty.
+
+(* borrow check the whole module *)
+
+Definition transl_program (p: program) : res program :=
+  let gvars := map fst p.(prog_defs) in
+  do p1 <- transform_partial_program2 (transf_fundef p.(prog_comp_env) gvars) transl_globvar p;
+  Errors.OK {| prog_defs := AST.prog_defs p1;
+              prog_public := AST.prog_public p1;
+              prog_main := AST.prog_main p1;
+              prog_types := prog_types p;
+              prog_comp_env := prog_comp_env p;
+              prog_comp_env_eq := prog_comp_env_eq p |}.

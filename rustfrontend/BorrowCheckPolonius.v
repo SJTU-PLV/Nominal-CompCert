@@ -27,16 +27,21 @@ Definition init_function (f: function) : AE.t :=
 
 (* initialize the variable origins *)
 
-Definition init_variables (ae: AE.t) (f: function) : AE.t :=
+Definition init_variables (ae: AE.t) (f: function) : res AE.t :=
   match ae with
-  | AE.Bot
-  | AE.Err _ _ => ae
+  | AE.Err _ _ => Error (msg "Unknown error occurs before initialize variables' origin environment")
+  | AE.Bot =>
+      let tys := map snd f.(fn_vars) in
+      (* For all origins in the variable type, set its state to Live(∅) *)
+      let orgs := concat (map origins_of_type tys) in
+      let oe := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs (LOrgEnv.Top_except (PTree.empty LOrgSt.t)) in
+      OK (AE.State LoanSet.empty oe LAliasGraph.bot)
   | AE.State ls oe a =>
       let tys := map snd f.(fn_vars) in
       (* For all origins in the variable type, set its state to Live(∅) *)
       let orgs := concat (map origins_of_type tys) in
-      let oe' := fold_left (fun acc elt => LOrgEnv.set elt LOrgSt.bot acc) orgs oe in
-      AE.State ls oe' a
+      let oe' := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs oe in
+      OK (AE.State ls oe' a)
   end.
 
 (** Transition *)
@@ -110,14 +115,18 @@ Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pex
                 let support_orgs := support_origins p in
                 (* aggregate the loans in the support origins *)
                 let org_st := aggregate_origin_states e' support_orgs in
-                match org_st with
-                | Dead => Error (error_msg pc ++ [MSG "there is invalid origin in the support prefixes of ";CTX (local_of_place p)])
-                | Live s =>
-                    (* Don't forget to add {Lintern mut p} *)
-                    let s' := LoanSet.add (Lintern mut p) s in
-                    let e'' := LOrgEnv.set org (Live s') e' in
-                    OK (live', e'')
-                end
+                (* FIXME: is it correct to just combine two state? *)
+                let s' := LOrgSt.lub org_st (Live (LoanSet.singleton (Lintern mut p))) in
+                let e'' := LOrgEnv.set org s' e' in
+                OK (live', e'')
+                (* match org_st with *)
+                (* | Dead => Error (error_msg pc ++ [MSG "there is invalid origin in the support prefixes of ";CTX (local_of_place p)]) *)
+                (* | Live s => *)
+                (*     (* Don't forget to add {Lintern mut p} *) *)
+                (*     let s' := LoanSet.add (Lintern mut p) s in *)
+                (*     let e'' := LOrgEnv.set org (Live s') e' in *)
+                (*     OK (live', e'') *)
+                (* end *)
               else
                 Error (error_msg pc ++ [MSG "access an invalidated place "; CTX (local_of_place p)])
             else Error (error_msg pc ++ [MSG "mutable reference a immutable place (transfer_pure_expr)"])
@@ -570,7 +579,7 @@ Module DS := Dataflow_Solver(AE)(NodeSetForward).
 
 Definition borrow_check (ce: composite_env) (f: function) : res (PTree.t AE.t) :=
   let ae := init_function f in
-  let ae' := init_variables ae f in
+  do ae' <- init_variables ae f;
   (* generate cfg *)
   do (entry, cfg) <- generate_cfg f.(fn_body);
   (** forward dataflow *)
@@ -593,20 +602,11 @@ Definition do_borrow_check (ce: composite_env) (f: function) : res unit :=
       OK tt
   end.
 
-(* The origins of the return function are fresh *)
-Definition borrow_check_fun (ce: composite_env) (gvars: list ident) (f: function) : res function :=
-  (* replace origins with fresh origins in the function body *)
-  do f <- replace_origin_function ce gvars f;
-  (* Run the borrow checker! *)
-  do _ <- do_borrow_check ce f;
-  OK f.
-
-
-Definition transf_fundef (ce: composite_env) (gvars: list ident) (id: ident) (fd: fundef) : Errors.res fundef :=
+Definition transf_fundef (ce: composite_env) (id: ident) (fd: fundef) : Errors.res fundef :=
   match fd with
   | Internal f =>
-      match borrow_check_fun ce gvars f with
-      | OK f' => OK (Internal f')
+      match do_borrow_check ce f with
+      | OK _ => OK (Internal f)
       | Error msg => Error ([MSG "In function "; CTX id; MSG " : "] ++ msg)
       end
   | External _ orgs rels ef targs tres cconv => Errors.OK (External function orgs rels ef targs tres cconv)
@@ -617,8 +617,9 @@ Definition transl_globvar (id: ident) (ty: type) := OK ty.
 (* borrow check the whole module *)
 
 Definition borrow_check_program (p: program) : res program :=
-  let gvars := map fst p.(prog_defs) in
-  do p1 <- transform_partial_program2 (transf_fundef p.(prog_comp_env) gvars) transl_globvar p;
+  (* replace origins with fresh origins *)
+  do p <- ReplaceOrigins.transl_program p;
+  do p1 <- transform_partial_program2 (transf_fundef p.(prog_comp_env)) transl_globvar p;
   Errors.OK {| prog_defs := AST.prog_defs p1;
               prog_public := AST.prog_public p1;
               prog_main := AST.prog_main p1;
