@@ -13,7 +13,7 @@ Open Scope error_monad_scope.
 (** ** Borrow checking based on Polonius (dataflow analysis) *)
 
 Definition error_msg (pc: node) : errmsg :=
-  [MSG "error at "; CTX pc; MSG " : "].
+  [MSG "error at pc "; POS pc; MSG " : "].
 
 
 (** Initialization *)
@@ -249,7 +249,7 @@ Definition shallow_write_place (f: function) (pc: node) (live: LoanSet.t) (e: LO
           OK (e', g)
     | _ => OK (e', g)
     end    
-  else  Error (error_msg pc ++ [MSG "access an invalidated place "; CTX (local_of_place p); MSG "in (shallow_write_place)"]).
+  else  Error (error_msg pc ++ [MSG "access an invalidated place "; CTX (local_of_place p); MSG " in (shallow_write_place)"]).
 
 
 (* Auxilary functions for transition of statements *)
@@ -596,8 +596,9 @@ Definition do_borrow_check (ce: composite_env) (f: function) : res unit :=
 (* The origins of the return function are fresh *)
 Definition borrow_check_fun (ce: composite_env) (gvars: list ident) (f: function) : res function :=
   (* replace origins with fresh origins in the function body *)
-  do f <- replace_origin_function ce gvars f;  
-  (* do _ <- do_borrow_check ce f; *)
+  do f <- replace_origin_function ce gvars f;
+  (* Run the borrow checker! *)
+  do _ <- do_borrow_check ce f;
   OK f.
 
 
@@ -606,7 +607,7 @@ Definition transf_fundef (ce: composite_env) (gvars: list ident) (id: ident) (fd
   | Internal f =>
       match borrow_check_fun ce gvars f with
       | OK f' => OK (Internal f')
-      | Error msg => Error ([MSG "In function "; CTX id] ++ msg)
+      | Error msg => Error ([MSG "In function "; CTX id; MSG " : "] ++ msg)
       end
   | External _ orgs rels ef targs tres cconv => Errors.OK (External function orgs rels ef targs tres cconv)
   end.

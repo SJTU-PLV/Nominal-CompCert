@@ -490,7 +490,8 @@ let debug_BorrowCheck (prog: RustIR.program) =
   | Errors.OK rustir_after_borrow_check ->
     Format.fprintf stdout_format "@.After Replacing Origins: @.";
     (* PrintRustIR -> PrintBorrowCheck *)
-    PrintRustIR.print_program stdout_format rustir_after_borrow_check;
+    PrintBorrowCheck.print_cfg_program_borrow_check
+     stdout_format rustir_after_borrow_check;
     rustir_after_borrow_check
   | Errors.Error msg ->
     fatal_error no_loc "%a"  print_error msg

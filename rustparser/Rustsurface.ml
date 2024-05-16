@@ -318,7 +318,7 @@ module To_syntax = struct
     | S.Ssequence (s1, s2) ->
       fprintf pp "%a@ %a" (pp_print_stmt symmap) s1 (pp_print_stmt symmap) s2
     | S.Sifthenelse (test, s1, s2) ->
-      fprintf pp "@[<v 2>if (%a) {@ %a@;<0 -2>} else {@ %a@;<0 -2}@]"
+      fprintf pp "@[<v 2>if (%a) {@ %a@;<0 -2>} else {@ %a@;<0 -2>}@]"
         (pp_print_expr symmap) test
         (pp_print_stmt symmap) s1
         (pp_print_stmt symmap) s2
@@ -470,6 +470,14 @@ module To_syntax = struct
                 ; rev_symmap = IdentMap.add st.next_ident x st.rev_symmap
                 ; next_ident = Camlcoq.P.succ st.next_ident }
       )
+
+  let fresh_ident: ident monad =
+    fun st -> (
+      Result.Ok st.next_ident,
+      { st with symmap = IdMap.add (Int.to_string (Camlcoq.P.to_int st.next_ident)) st.next_ident st.symmap
+              ; rev_symmap = IdentMap.add st.next_ident (Int.to_string (Camlcoq.P.to_int st.next_ident)) st.rev_symmap
+              ; next_ident = Camlcoq.P.succ st.next_ident }
+    )
 
   let rev_ident (i: ident): id monad =
     fun st -> (Result.Ok (IdentMap.find i st.rev_symmap), st)
@@ -808,7 +816,7 @@ module To_syntax = struct
      let table_for_variant_group (grp_ivar: ident)
          (grp_rows: pat_row list) (header: Rustsyntax.expr list)
        : (pat_table * ident) monad =
-       get_or_new_ident "<temp>" >>= fun as_var ->
+       fresh_ident >>= fun as_var ->
        get_enums >>= fun enums ->
        match row_head_args_types (List.hd grp_rows) header enums with
        | Some (ienum, args_types) ->
@@ -1076,12 +1084,13 @@ module To_syntax = struct
       return (Rustsyntax.Eref (dummy_origin, m, e', t'))
     | Estr s ->
       let t_byte = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned, Ctypes.noattr) in
-      let init = Seq.fold_left
+      let init_body = Seq.fold_left
                    (fun lst c ->
-                     (AST.Init_int8 (Camlcoq.Z.of_uint (Char.code c))) :: lst)
+                     (List.append lst [AST.Init_int8 (Camlcoq.Z.of_uint (Char.code c))]))
                    []
                    (String.to_seq s)
       in
+      let init = List.append init_body [AST.Init_int8 (Camlcoq.Z.Z0)]  in
       let var_ty = Rusttypes.Tarray(t_byte, (Camlcoq.Z.of_uint (List.length init)), Ctypes.noattr) in
       (* TODO: what is the origin of static string *)
       let global_var = AST.({ gvar_info = var_ty
@@ -1149,9 +1158,9 @@ module To_syntax = struct
       )
     | Sifthenelse (e, s1, s2) ->
       transl_expr e >>= fun e' ->
-      get_st >>= fun old_st ->
-      transl_stmt s1 >>= fun s1' ->
       backup_locals >>= fun old_locals ->
+      transl_stmt s1 >>= fun s1' ->
+      restore_locals old_locals >>= fun _ ->
       transl_stmt s2 >>= fun s2' ->
       restore_locals old_locals >>= fun _ ->
       return (S.Sifthenelse (e', s1', s2'))

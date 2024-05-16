@@ -183,11 +183,8 @@ Separate Extraction
    (* rust *)
    Compiler.transf_rust_program 
    (* Test cases *)
-   Rustsyntax.ex1 Rustsyntax.ex2 Rustsyntax.ex3 Rustsyntax.pop_and_push_prog
-   Rustsyntax.fact Rustsyntax.init_test1 Rustsyntax.init_test2 Rustsyntax.ex5_prog
-   Rustsyntax.type_of_function Rustsyntax.printf_builtin
-   RustlightBase.type_of_function
-   RustIR.type_of_function
+   Rusttypes.signature_of_type Rusttypes.build_composite_env
+   Rustsyntax.type_of_function RustlightBase.type_of_function RustIR.type_of_function
    (* Cexec.do_initial_state Cexec.do_step Cexec.at_final_state *)
    Ctypes.merge_attributes Ctypes.remove_attributes 
    Ctypes.build_composite_env Ctypes.layout_struct

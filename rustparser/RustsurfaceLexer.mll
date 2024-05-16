@@ -9,6 +9,7 @@ let float = '-' ? digit+ "." digit+
 let letter = ['a' - 'z' 'A' - 'Z' '_']
 let letter_num = ['a' - 'z' 'A' - 'Z' '0' - '9' '_']
 let id = letter ? letter_num+
+let string_literal = [^'"']*
 
 rule read = 
 	parse
@@ -28,7 +29,7 @@ rule read =
  | "&&" { AND }
  | "&" { REF }
 
- | '"' _* '"' { let s = Lexing.lexeme lexbuf in
+ | '"' string_literal '"' { let s = Lexing.lexeme lexbuf in
                 STR_LITERAL (String.sub s 1 (String.length s - 2)) }
 
  | "=" { ASSIGN }
