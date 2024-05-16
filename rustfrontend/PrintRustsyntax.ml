@@ -9,7 +9,7 @@ open PrintCsyntax
 
 let string_of_mut mut =
   match mut with
-  | Mutable -> "mut"
+  | Mutable -> "mut "
   | Immutable -> ""
 
 let rec print_origins_aux (orgs : origin list) =
@@ -34,7 +34,7 @@ let rec name_rust_decl id ty =
   | Rusttypes.Tlong(sg, a) ->
       name_longtype sg ^ attributes a ^ name_optid id
   | Rusttypes.Treference(org, mut, t, a) ->
-      "& '" ^ (extern_atom org) ^" "^  string_of_mut mut ^ " " ^ (name_rust_decl ""  t) ^ name_optid id
+      "&'" ^ (extern_atom org) ^" "^  string_of_mut mut ^ (name_rust_decl ""  t) ^ name_optid id
   | Tbox(t, a) ->
       "Box<" ^ (name_rust_decl ""  t) ^ ">" ^ name_optid id
   | Tfunction( _, _, args, res, cconv) ->

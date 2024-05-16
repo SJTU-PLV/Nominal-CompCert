@@ -92,7 +92,7 @@ let rec pexpr p (prec, e) =
   | Ecktag(v, fid, _) ->
     fprintf p "%s(%a, %s)" "cktag" print_place' v (extern_atom fid)
   | Eref(org, mut, v, _) ->
-    fprintf p "& '%s %s %a" (extern_atom org) (string_of_mut mut) print_place v
+    fprintf p "&'%s %s%a" (extern_atom org) (string_of_mut mut) print_place v
   end;
   if prec' < prec then fprintf p ")@]" else fprintf p "@]"
 

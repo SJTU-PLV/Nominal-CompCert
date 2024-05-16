@@ -101,6 +101,7 @@ Definition finish (dst: destination) (sl: list statement) (a: expr) :=
   | For_set sd => (sl ++ (Sassign sd a :: nil), a)
   end.
 
+Let type_eq := type_eq_except_origins.
 
 (* generate assign fields statement lists *)
 Fixpoint fields_assign (p: place') (ids : list ident) (args: list expr) (membs: members) {struct ids}: mon (list statement) :=
@@ -432,7 +433,7 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
         do sl2 <- transl_stmt stmt';        
         ret (Slet id ty (Ssequence sl1' sl2))
       else
-        error (msg "Type mismatch between LHS and RHS in let initialization: transl_stmt")
+        error [CTX id; MSG ": Type mismatch between LHS and RHS in let initialization: transl_stmt"]
   | Rustsyntax.Ssequence s1 s2 =>
       do s1' <- transl_stmt s1;
       do s2' <- transl_stmt s2;

@@ -1,7 +1,7 @@
 
 type id = string
 
-let dummy_origin = BinNums.Coq_xH
+let dummy_origin = Camlcoq.intern_string "dummy_origin"
 
 type ty = | Tunit
           | Tint of Ctypes.intsize * Ctypes.signedness * Ctypes.attr
@@ -188,9 +188,9 @@ module To_syntax = struct
     | T.Treference (org, m, t, _) ->
       pp_print_string pp "&";
       (* print origin *)
-      pp_print_string pp (" '" ^ Camlcoq.extern_atom org);
+      pp_print_string pp ("'" ^ Camlcoq.extern_atom org ^ " ");
       if m = T.Mutable then
-        pp_print_string pp "mut";
+        pp_print_string pp "mut ";
       pp_print_rust_type symmap pp t
     | T.Tarray (ty, sz, _) ->
       pp_print_rust_type symmap pp ty;
@@ -276,8 +276,8 @@ module To_syntax = struct
       fprintf pp "Box(%a)" (pp_print_expr symmap) e
     | S.Eref (org, T.Mutable, l, _) ->
       fprintf pp "& %s mut %a" ("'" ^ Camlcoq.extern_atom org) (pp_print_expr symmap) l
-    | S.Eref (org, T.Immutable, l, _) ->
-      fprintf pp "& %s %a" ("'" ^ Camlcoq.extern_atom org) (pp_print_expr symmap) l
+    | S.Eref (org, T.Immutable, l, ty) ->
+      fprintf pp "&%s %a" ("'" ^ Camlcoq.extern_atom org) (pp_print_expr symmap) l
     | S.Efield (l, i, _) ->
       let x = IdentMap.find i symmap in
       fprintf pp "%a.%s" (pp_print_expr symmap) l x
@@ -455,7 +455,7 @@ module To_syntax = struct
   let skeleton_st : state = { symmap = IdMap.empty
                             ; rev_symmap = IdentMap.empty
                             ; local_types = IdentMap.empty
-                            ; next_ident = Camlcoq.P.one
+                            ; next_ident = !Camlcoq.next_atom
                             ; funcs = IdentMap.empty
                             ; enums = IdentMap.empty
                             ; composites = IdentMap.empty
@@ -1071,7 +1071,7 @@ module To_syntax = struct
          | t -> throw (Enot_callable t)))
     | Eref (e, m) ->
       transl_expr e >>= fun e' ->
-      let t' = Rustsyntax.typeof e' in
+      let t' = Rusttypes.Treference(dummy_origin, m, Rustsyntax.typeof e', Ctypes.noattr) in      
       (* TODO *)
       return (Rustsyntax.Eref (dummy_origin, m, e', t'))
     | Estr s ->
