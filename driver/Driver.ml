@@ -489,6 +489,7 @@ let debug_BorrowCheck (prog: RustIR.program) =
   match BorrowCheckPolonius.borrow_check_program prog with
   | Errors.OK rustir_after_borrow_check ->
     Format.fprintf stdout_format "@.After Replacing Origins: @.";
+    (* PrintRustIR -> PrintBorrowCheck *)
     PrintRustIR.print_program stdout_format rustir_after_borrow_check;
     rustir_after_borrow_check
   | Errors.Error msg ->
@@ -510,9 +511,6 @@ let debug_Clightgen prog =
     clight_prog
   | Errors.Error msg -> fatal_error no_loc "%a" print_error msg
 
-let (>>=) (x: 'a) (f: 'a -> 'b) : 'b =
-    f x
-
 let debug_rust = true
 
 (* let test_case = "rustexamples/test/example_test/control_flow/05match_test.rs" *)
@@ -530,19 +528,16 @@ let _ =
     let (syntax_result, symmap) = R.To_syntax.(run_monad m_syntax skeleton_st) in
     (match syntax_result with
      | Result.Ok syntax ->
-       let open Rusttypes in
-       Hashtbl.add Camlcoq.atom_of_string "main" syntax.prog_main;
-       Hashtbl.add Camlcoq.string_of_atom syntax.prog_main "main";
        (* Print Rustlight *)
        let clight_prog = syntax
-                        >>= debug_Rustlightgen
-                        >>= debug_RustIRgen
-                        >>= debug_RustCFG
-                        >>= debug_InitAnalysis
-                        >>= debug_ElaborateDrop
-                        >>= debug_BorrowCheck
-                        >>= debug_ClightComposite
-                        >>= debug_Clightgen in
+                        |> debug_Rustlightgen
+                        |> debug_RustIRgen
+                        |> debug_RustCFG
+                        |> debug_InitAnalysis
+                        |> debug_ElaborateDrop
+                        |> debug_BorrowCheck
+                        |> debug_ClightComposite
+                        |> debug_Clightgen in
        clight_prog
     | Result.Error e ->
       Rustsurface.To_syntax.pp_print_error Format.err_formatter e symmap;

@@ -594,19 +594,19 @@ Definition do_borrow_check (ce: composite_env) (f: function) : res unit :=
   end.
 
 (* The origins of the return function are fresh *)
-Definition borrow_check_fun (ce: composite_env) (f: function) : res function :=
+Definition borrow_check_fun (ce: composite_env) (gvars: list ident) (f: function) : res function :=
   (* replace origins with fresh origins in the function body *)
-  do f <- replace_origin_function ce f;  
+  do f <- replace_origin_function ce gvars f;  
   (* do _ <- do_borrow_check ce f; *)
   OK f.
 
 
-Definition transf_fundef (ce: composite_env) (id: ident) (fd: fundef) : Errors.res fundef :=
+Definition transf_fundef (ce: composite_env) (gvars: list ident) (id: ident) (fd: fundef) : Errors.res fundef :=
   match fd with
   | Internal f =>
-      match borrow_check_fun ce f with
+      match borrow_check_fun ce gvars f with
       | OK f' => OK (Internal f')
-      | Error msg => Error ([MSG "In function "; CTX id; MSG " , in pc "] ++ msg)
+      | Error msg => Error ([MSG "In function "; CTX id] ++ msg)
       end
   | External _ orgs rels ef targs tres cconv => Errors.OK (External function orgs rels ef targs tres cconv)
   end.
@@ -616,7 +616,8 @@ Definition transl_globvar (id: ident) (ty: type) := OK ty.
 (* borrow check the whole module *)
 
 Definition borrow_check_program (p: program) : res program :=
-  do p1 <- transform_partial_program2 (transf_fundef p.(prog_comp_env)) transl_globvar p;
+  let gvars := map fst p.(prog_defs) in
+  do p1 <- transform_partial_program2 (transf_fundef p.(prog_comp_env) gvars) transl_globvar p;
   Errors.OK {| prog_defs := AST.prog_defs p1;
               prog_public := AST.prog_public p1;
               prog_main := AST.prog_main p1;

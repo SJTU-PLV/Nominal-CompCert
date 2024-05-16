@@ -21,13 +21,11 @@ Definition find_elt {A: Type} (id: ident) (l: list (ident * A)) : option A :=
 
 Parameter fresh_atom: unit -> ident.
 
-Definition gensym : ident := fresh_atom tt.
-
 Fixpoint gensym_list (n: nat) : list ident :=
   match n with
   | O =>  nil
   | S n' =>
-      let id := gensym in
+      let id := fresh_atom tt in
       let l := gensym_list n' in
       (id :: l)
   end.
@@ -38,7 +36,7 @@ Fixpoint replace_origin_type (ty: type) : type :=
   match ty with
   | Treference _ mut ty' a =>
       let ty'' := replace_origin_type ty' in
-      let org := gensym in
+      let org := fresh_atom tt in
       Treference org mut ty'' a
   | Tbox ty' a =>
       let ty'' := replace_origin_type ty' in
@@ -93,6 +91,8 @@ Fixpoint replace_origin_in_type (ty: type) (rels: list origin_rel) : type :=
 Section TYPE_ENV.
 
   Variable ce: composite_env.
+  (* global variabes: do not replace their origin *)
+  Variable gvars: list ident.
   (* map from var/param to its type *)
   Variable e : PTree.t type.
 
@@ -101,7 +101,7 @@ Section TYPE_ENV.
     | Plocal id ty =>
         match e!id with
         | Some ty' => OK (Plocal id ty')
-        | None => Error [CTX id; MSG "this variable has unknown type"]
+        | None => Error [CTX id; MSG ": this variable has unknown type"]
         end
     | Pderef p ty =>
         do p' <- replace_origin_place' p;
@@ -138,6 +138,9 @@ Section TYPE_ENV.
     end.
 
   Definition replace_origin_place (p: place) : res place :=
+    (* check whether this place is global *)
+    if in_dec ident_eq (local_of_place p) gvars then OK p
+    else
     match p with
     | Place p =>
         do p' <- replace_origin_place' p;
@@ -171,7 +174,7 @@ Section TYPE_ENV.
   Fixpoint replace_origin_pure_expr (pe: pexpr) : res pexpr :=
     match pe with
     | Eref _ mut p ty =>
-        let org := gensym in
+        let org := fresh_atom tt in
         do p' <- replace_origin_place p;
         let ty' := Treference org mut (typeof_place p) (attr_of_type ty) in
         OK (Eref org mut p' ty')
@@ -258,22 +261,22 @@ End TYPE_ENV.
 
 Open Scope error_monad_scope.
 
-Definition replace_origin_function (ce: composite_env) (f: function) : Errors.res function :=
+Definition replace_origin_function (ce: composite_env) (gvars: list ident) (f: function) : Errors.res function :=
   let generic_orgs := f.(fn_generic_origins) in
   let vars := replace_origin_vars f.(fn_vars) in
   let locals := f.(fn_params) ++ vars in
   if list_norepet_dec ident_eq (map fst vars) then
     let type_env := PTree_Properties.of_list locals in
-    do stmt <- replace_origin_statement ce type_env f.(fn_body);
+    do stmt <- replace_origin_statement ce gvars type_env f.(fn_body);
     (* we need to check origins are no repeated *)
     Errors.OK (RustIR.mkfunction
                  f.(fn_generic_origins)
-                     f.(fn_origins_relation)                                  
-                         f.(fn_return)
-                             f.(fn_callconv)
-                                 f.(fn_params)
-                                     vars                             
-                                     stmt)
-  else Errors.Error [MSG "repeated idents in vars and params (replace_origin_function"]
+                 f.(fn_origins_relation)                                  
+                 f.(fn_return)
+                 f.(fn_callconv)
+                 vars
+                 f.(fn_params)      
+                 stmt)
+  else Errors.Error [MSG "repeated idents in vars and params (replace_origin_function)"]
 .
         
