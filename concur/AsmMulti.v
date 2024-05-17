@@ -248,8 +248,10 @@ Section MultiThread.
   |switch_in_join : forall s' s'' target gmem' ls1 ls1' wait gmem'' rs1 i res rs1'
       (GET_T: get_thread s' target = Some (Returnj ls1 rs1))
       (WAIT_THE: rs1 # RDI = Vint i /\ int_to_nat i = wait)
+      
       (* the thread [target] is waiting for thread [wait] *)
       (* the "wait" thread is already finished *)
+      (RNG_WAIT: (1 <= wait < next_tid s') %nat)
       (GET_WAIT: get_thread s' wait = Some (Final res))
       (MEM_RES: Mem.storev Many64 gmem' (rs1 # RSI) res = Some gmem'')
       (AFT_E: Smallstep.after_external OpenLTS ls1 (rs1', gmem'') ls1')

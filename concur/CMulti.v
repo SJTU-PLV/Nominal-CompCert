@@ -303,6 +303,7 @@ Section MultiThread.
      switch_in s' s'' target gmem'
   |switch_in_join : forall s' s'' target gmem' ls1 ls1' tar' vptr res gmem''
      (GET_T: get_thread s' target = Some (Returnj ls1 tar' vptr))
+     (RNG_WAIT: (1 <= tar' < next_tid s') %nat)
      (GET_WAIT: get_thread s' tar' = Some (Final res))
       (* store the return value of tar' thread *)
      (MEM_RES: Mem.storev Many64 gmem' vptr res = Some gmem'')
