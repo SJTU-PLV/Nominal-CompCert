@@ -81,3 +81,11 @@ fn no_dangle() -> i32 {
     a
 }
 ```
+9. classic borrow check
+10. disjoint origins cannot affect each other
+11. A little complicated reference to reference. An assignment to a
+    dereference does not kill the lifetime of the local variable
+12. Test alias graph: copy and modified from
+    `assign_deref_weak_update.rs`. The key point is that *x indirectly
+    changes p so that tmp and *p alias. It test the functionality of
+    alias graph.

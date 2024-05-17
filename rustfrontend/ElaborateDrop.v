@@ -341,7 +341,7 @@ Definition transf_function (ce: composite_env) (f: function) : Errors.res functi
       let flags := concat (snd (split (PTree.elements (snd st.(gen_map))))) in
       match mayinit!entry, mayuninit!entry with
       | Some entry_init, Some entry_uninit =>
-          (* init drop flags *)
+          (* init drop flags: if no flags, it would be a Sskip *)
           let init_stmt := makeseq (map (init_drop_flag entry_init entry_uninit) flags) in
           (* update drop flags when encountering assginment *)
           let stmt' := transl_stmt (snd st.(gen_map)) st.(gen_stmt) in

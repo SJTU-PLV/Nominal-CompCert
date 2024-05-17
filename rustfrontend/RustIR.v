@@ -88,11 +88,21 @@ Definition type_of_fundef (f: fundef) : type :=
 Fixpoint makeseq_rec (s: statement) (l: list statement) : statement :=
   match l with
   | nil => s
-  | s' :: l' => makeseq_rec (Ssequence s s') l'
+  | s' :: l' =>
+      match s' with
+      | Sskip => makeseq_rec s l'
+      | _ =>
+          makeseq_rec (Ssequence s s') l'
+      end
   end.
 
+(* optimized version. But we do not consider the difficulty of simulation proof *)
 Definition makeseq (l: list statement) : statement :=
-  makeseq_rec Sskip l.
+  let s := makeseq_rec Sskip l in
+  match s with
+  | Ssequence Sskip s' => s'
+  | _ => s
+  end.
 
 
 (** ** Definition of selector. It is the program pointer in AST-like program.  *)

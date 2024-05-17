@@ -176,7 +176,7 @@ Section TYPE_ENV.
     | Eref _ mut p ty =>
         let org := fresh_atom tt in
         do p' <- replace_origin_place p;
-        let ty' := Treference org mut (typeof_place p) (attr_of_type ty) in
+        let ty' := Treference org mut (typeof_place p') (attr_of_type ty) in
         OK (Eref org mut p' ty')
     | Eplace p _ =>
         do p' <- replace_origin_place p;

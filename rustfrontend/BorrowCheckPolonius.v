@@ -194,18 +194,18 @@ Inductive flow_kind : Type := ByVal | ByRef.
 Fixpoint flow_loans (pc: node) (e: LOrgEnv.t) (g: LAliasGraph.t) (s d: type) (k: flow_kind) : res (LOrgEnv.t * LAliasGraph.t) :=
   match s,d with
   | Treference org1 _ ty1 _, Treference org2 _ ty2 _ =>
-      do (e', g') <- flow_loans pc e g ty1 ty2 ByRef;      
-      let g'' := match k with | ByVal => g' | ByRef => set_alias org1 org2 g' end in
+      do (e', g1) <- flow_loans pc e g ty1 ty2 ByRef;      
+      let g2 := match k with | ByVal => g1 | ByRef => set_alias org1 org2 g1 end in
       let st := LOrgSt.lub (LOrgEnv.get org1 e') (LOrgEnv.get org2 e') in
       (* flow st1 to st2 *)
       match st with
       | Live ls =>
-          let e'' := set_loans_with_alias org2 ls e' g' in
-          OK (e'', g')
+          let e'' := set_loans_with_alias org2 ls e' g2 in
+          OK (e'', g2)
       | Obot =>
-          Error (error_msg pc ++ [MSG "the src/dest origin is bot in flow_loans"])
+          Error (error_msg pc ++ [MSG "the src/dest origin is bot in flow_loans: source org is "; CTX org1; MSG " target org is "; CTX org2])
       | Dead =>
-          Error (error_msg pc ++ [MSG "the src/dest origin is invalid in flow_loans"])
+          Error (error_msg pc ++ [MSG "the src/dest origin is invalid in flow_loans: source org is "; CTX org1; MSG " target org is "; CTX org2])
       end
   | Tbox ty1 _, Tbox ty2 _ =>
       flow_loans pc e g ty1 ty2 ByRef
@@ -230,7 +230,7 @@ Fixpoint flow_loans (pc: node) (e: LOrgEnv.t) (g: LAliasGraph.t) (s d: type) (k:
                        | Live ls =>
                            OK (set_loans_with_alias org ls acc' g')
                        | _ =>
-                           Error (error_msg pc ++ [CTX org; MSG "the src/dest origin is invalid in flow_loans"])
+                           Error (error_msg pc ++ [CTX org; MSG "the src/dest origin is invalid in (flow_loans Tvariant/Tstruct): target org is "; CTX org])
                        end) (combine orgs2 stl) (OK e);
         OK (e', g')
       else Error (error_msg pc ++ [MSG "mismatch between the length of origins in type"; CTX id1])
@@ -285,7 +285,6 @@ Definition check_assignment (f: function) (pc: node) (live: LoanSet.t) (oe: LOrg
     do (live1, oe1) <- transfer_expr pc live oe e;
     (* shallow write to the place, it will check the validity of p *)
     do (oe2, ag1) <- shallow_write_place f pc live1 oe1 ag p;
-    (* Debug: let (oe2, ag1) := (oe1, ag) in *)
     (* kill the loans of which [p] is prefix *)
     let live2 := kill_loans live1 p in
     (* flows the loans from src type to dest type *)

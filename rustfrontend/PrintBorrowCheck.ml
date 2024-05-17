@@ -27,6 +27,13 @@ let print_loanset pp (ls: LoanSet.t) =
   let l = LoanSet.elements ls in
   pp_print_list ~pp_sep: (fun out () -> fprintf out ";@ ") print_loan pp l
 
+let print_origin pp org =
+  fprintf pp "%s" (extern_atom org)
+
+let print_originset pp (ls: OriginSet.t) =
+  let l = OriginSet.elements ls in
+  pp_print_list ~pp_sep: (fun out () -> fprintf out ";@ ") print_origin pp l
+
 let print_dead_origin pp (org: origin) =
   fprintf pp "%s: Dead@ " (extern_atom org)
 
@@ -51,15 +58,24 @@ let print_origin_env pp (e: LOrgEnv.t) =
 let print_live_loans pp (ls: LoanSet.t) =
   fprintf pp "Live Loans: {@[<hov>%a@]}@ " print_loanset ls
 
+let print_alias_graph pp (ag: LAliasGraph.t) =
+  let l = PTree.elements ag in
+  match l with
+  | [] -> fprintf pp "Alias Graph is empty "
+  | _ ->
+    fprintf pp "Alias Graph: ";
+    List.iter
+        (fun (org, ls) -> fprintf pp "%s: {@[<hov>%a@]}@ " (extern_atom org) print_originset ls) l
+
 let print_ae pp ae =
   match ae with
   | AE.Err(pc', msg) ->
-    fprintf pp "Error found in %d: %a" (P.to_int pc') print_error msg
+    fprintf pp "Error found in %d: %a@.@." (P.to_int pc') print_error msg
   | AE.Bot ->
-    fprintf pp "Unreachable point"
+    fprintf pp "Unreachable point@.@."
   | AE.State(live_loans, org_env, alias_graph) ->
     (* TODO: print alias graph *)
-    fprintf pp "%a@ %a@." print_live_loans live_loans print_origin_env org_env
+    fprintf pp "%a@ %a@ %a@.@." print_live_loans live_loans print_origin_env org_env print_alias_graph alias_graph
 
 let print_instruction_debug pp prog (pc, (i, ae)) =
   PrintRustIR.print_instruction pp prog (pc,i);
@@ -84,11 +100,15 @@ let print_cfg_borrow_check ce pp id f  =
     (match borrow_check ce f with
     | Errors.OK ae ->
       fprintf pp "%s(%a) {\n" (extern_atom id) PrintRustIR.print_params f.fn_params;
+      (* Print variables and their types *)
+      List.iter
+      (fun (id, ty) ->
+        fprintf pp "%s;@ " (PrintRustsyntax.name_rust_decl (extern_atom id) ty)) f.fn_vars;
       print_cfg_body_borrow_check pp (f.fn_body, entry, cfg) ae
     | Errors.Error msg ->
-      Diagnostics.fatal_error Diagnostics.no_loc "Error in borrow check: %a" Driveraux.print_error msg)
+      Diagnostics.fatal_error Diagnostics.no_loc "Error in borrow check: %a@ " Driveraux.print_error msg)
   | Errors.Error msg ->
-    Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG (borrow check): %a" Driveraux.print_error msg
+    Diagnostics.fatal_error Diagnostics.no_loc "Error in generating CFG (borrow check): %a@ " Driveraux.print_error msg
 
 let print_cfg_program_borrow_check p (prog: RustIR.coq_function Rusttypes.program) =
   fprintf p "@[<v 0>";
