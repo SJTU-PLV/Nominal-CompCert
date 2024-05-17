@@ -313,10 +313,11 @@ Fixpoint support_parent_paths' (p: place') : list place :=
   match p with
   | Plocal _ _ => nil
   | Pfield p' _ _ => Place p' :: support_parent_paths' p'
-  | Pderef p' ty =>
-      match ty with
+  | Pderef p' _ =>
+      match typeof_place' p' with
+      | Tbox _ _
       | Treference _ Mutable _ _ =>
-          Place p' :: support_parent_paths' p'
+          Place p' :: support_parent_paths' p'      
       | _ => nil
       end
   end.

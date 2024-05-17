@@ -71,6 +71,7 @@ Fixpoint mutable_place' (p: place') :=
   | Pderef p' _ =>
       match typeof_place' p' with
       | Treference _ Mutable _ _ => mutable_place' p'
+      | Tbox _ _ => true
       | _ => false
       end
   end.
@@ -101,7 +102,8 @@ Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pex
       match ty with
       | Treference org' mut' _ _ =>
           if Pos.eqb org org' && mutkind_eq mut mut' then
-            if mutkind_eq mut' Mutable && mutable_place p then
+            (* mut' = Mutable implies (mutable_place p) *)
+            if negb (mutkind_eq mut' Mutable) || mutable_place p then
               let ak := match mut with | Mutable => Awrite | Immutable => Aread end in
               (* check all the loans in this place are not invalidated *)
               if valid_access e p then

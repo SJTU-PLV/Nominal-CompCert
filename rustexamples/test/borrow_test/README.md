@@ -91,3 +91,4 @@ fn no_dangle() -> i32 {
     alias graph.
 13. A normal re-borrow test
 14. A test that is not compiled in NLL but can be compiled Polonius
+15. Borrow from a box
