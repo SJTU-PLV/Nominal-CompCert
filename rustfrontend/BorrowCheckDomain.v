@@ -301,8 +301,7 @@ Definition relevant_loan (p: place) (am: access_mode) (l: loan) : bool :=
   end.
 
 Definition relevant_loans (live_loans: LoanSet.t) (p: place) (am: access_mode) : LoanSet.t :=
-  LoanSet.fold (fun elt acc => if relevant_loan p am elt then LoanSet.add elt acc else acc) LoanSet.empty live_loans.
-
+  LoanSet.filter (fun elt => relevant_loan p am elt) live_loans.
 
 (* Update Alias graph *)
 

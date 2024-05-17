@@ -99,8 +99,8 @@ Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pex
   | Eref org mut p ty =>
       (* simple type check *)
       match ty with
-      | Treference org' mut' ty' _ =>
-          if Pos.eqb org org' && mutkind_eq mut mut' && type_eq ty ty' then
+      | Treference org' mut' _ _ =>
+          if Pos.eqb org org' && mutkind_eq mut mut' then
             if mutkind_eq mut' Mutable && mutable_place p then
               let ak := match mut with | Mutable => Awrite | Immutable => Aread end in
               (* check all the loans in this place are not invalidated *)
@@ -197,12 +197,14 @@ Fixpoint flow_loans (pc: node) (e: LOrgEnv.t) (g: LAliasGraph.t) (s d: type) (k:
       do (e', g') <- flow_loans pc e g ty1 ty2 ByRef;      
       let g'' := match k with | ByVal => g' | ByRef => set_alias org1 org2 g' end in
       let st := LOrgSt.lub (LOrgEnv.get org1 e') (LOrgEnv.get org2 e') in
-      (* flow st2 to st1 *)
+      (* flow st1 to st2 *)
       match st with
       | Live ls =>
-          let e'' := set_loans_with_alias org1 ls e' g' in
+          let e'' := set_loans_with_alias org2 ls e' g' in
           OK (e'', g')
-      | _ =>
+      | Obot =>
+          Error (error_msg pc ++ [MSG "the src/dest origin is bot in flow_loans"])
+      | Dead =>
           Error (error_msg pc ++ [MSG "the src/dest origin is invalid in flow_loans"])
       end
   | Tbox ty1 _, Tbox ty2 _ =>
@@ -229,7 +231,7 @@ Fixpoint flow_loans (pc: node) (e: LOrgEnv.t) (g: LAliasGraph.t) (s d: type) (k:
                            OK (set_loans_with_alias org ls acc' g')
                        | _ =>
                            Error (error_msg pc ++ [CTX org; MSG "the src/dest origin is invalid in flow_loans"])
-                       end) (combine orgs1 stl) (OK e);
+                       end) (combine orgs2 stl) (OK e);
         OK (e', g')
       else Error (error_msg pc ++ [MSG "mismatch between the length of origins in type"; CTX id1])
   (* scalar type *)
@@ -240,25 +242,28 @@ Fixpoint flow_loans (pc: node) (e: LOrgEnv.t) (g: LAliasGraph.t) (s d: type) (k:
 (* Shallow write a place *)
 
 Definition shallow_write_place (f: function) (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (g: LAliasGraph.t) (p: place) : res (LOrgEnv.t * LAliasGraph.t) :=
-  if valid_access e p then
-    let ls := relevant_loans live p Ashallow in
-    let e' := invalidate_origins ls Awrite e in
-    match p with
-    | Place (Plocal id ty) =>
-        if in_dec ident_eq id (var_names f.(fn_vars)) then
-          (* this place is a local variable, we can kill its loans *)          
-          (* remove the loans and alias edges for the origin in the type of p *)
-          let orgs := origins_of_type ty in
-          (* remove loans *)
-          let e'' := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs e' in
-          (* remove alias *)
-          let g' := fold_left (fun acc elt => remove_alias elt acc) orgs g in
-          OK (e'', g')
-        else
-          OK (e', g)
-    | _ => OK (e', g)
-    end    
-  else  Error (error_msg pc ++ [MSG "access an invalidated place "; CTX (local_of_place p); MSG " in (shallow_write_place)"]).
+  let ls := relevant_loans live p Ashallow in
+  let e' := invalidate_origins ls Awrite e in
+  (* let e' := e in *)
+  match p with
+  | Place (Plocal id ty) =>
+      (* no need to check the valid access, because id will be overwrited *)
+      if in_dec ident_eq id (var_names f.(fn_vars)) then
+        (* this place is a local variable, we can kill its loans *)          
+        (* remove the loans and alias edges for the origin in the type of p *)
+        let orgs := origins_of_type ty in
+        (* remove loans *)
+        let e'' := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs e' in
+        (* remove alias *)
+        let g' := fold_left (fun acc elt => remove_alias elt acc) orgs g in
+        OK (e'', g')
+      else
+        OK (e', g)
+  | _ =>
+      if valid_access e p then
+        OK (e', g)
+      else  Error (error_msg pc ++ [MSG "access an invalidated place "; CTX (local_of_place p); MSG " in (shallow_write_place)"])    
+  end.
 
 
 (* Auxilary functions for transition of statements *)
@@ -280,6 +285,7 @@ Definition check_assignment (f: function) (pc: node) (live: LoanSet.t) (oe: LOrg
     do (live1, oe1) <- transfer_expr pc live oe e;
     (* shallow write to the place, it will check the validity of p *)
     do (oe2, ag1) <- shallow_write_place f pc live1 oe1 ag p;
+    (* Debug: let (oe2, ag1) := (oe1, ag) in *)
     (* kill the loans of which [p] is prefix *)
     let live2 := kill_loans live1 p in
     (* flows the loans from src type to dest type *)
@@ -419,28 +425,32 @@ Definition check_function_call (f: function) (pc: node) (live1: LoanSet.t) (oe1:
       let sig_tyl := type_list_of_typelist tyl in
       let arg_tyl := map typeof args in
       let tgt_rety := (typeof_place' p) in
-      if Nat.eqb (length sig_tyl) (length arg_tyl) then
-        if forallb (fun '(ty1, ty2) => type_eq_except_origins ty1 ty2) (combine arg_tyl sig_tyl) && type_eq_except_origins tgt_rety rty then
-          (* check the arguments *)
-          do (live2, oe2) <- transfer_exprlist pc live1 oe1 args;
-          (* construct empty origin environments for function origins *)
-          let foe1 := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs (LOrgEnv.Top_except (PTree.empty LOrgSt.t)) in
-          do (foe2, rels) <- bind_param_origins pc oe2 foe1 arg_tyl sig_tyl;
-          (* use the origin relation to simulate the flow of loans in
+      (* check the arguments *)
+      do (live2, oe2) <- transfer_exprlist pc live1 oe1 args;
+      (* consider variant argument length function (just printf for now) *)
+      match cc.(cc_vararg) with
+      | Some _ =>
+          (* Adhoc: If this function has variant-length arguments, we ignore it *)
+          OK (live2, oe2, ag1)
+      | None =>
+          if forallb (fun '(ty1, ty2) => type_eq_except_origins ty1 ty2) (combine arg_tyl sig_tyl) && type_eq_except_origins tgt_rety rty then
+            (* construct empty origin environments for function origins *)
+            let foe1 := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs (LOrgEnv.Top_except (PTree.empty LOrgSt.t)) in
+            do (foe2, rels) <- bind_param_origins pc oe2 foe1 arg_tyl sig_tyl;
+            (* use the origin relation to simulate the flow of loans in
           the caller *)
-          do foe3 <- after_call pc foe2 org_rels;
-          (* shallow write to p *)
-          do (oe3, ag2) <- shallow_write_place f pc live2 oe2 ag1 p;
-          (* kill relevant loans *)
-          let live3 := kill_loans live2 p in
-          (* flow loans to the return type and update alias *)
-          do oe4 <- flow_alias_after_call pc ag2 rels foe3 oe3;
-          do oe5 <- flow_return_after_call pc ag2 foe3 oe4 rty tgt_rety;
-          OK (live3, oe5, ag2)
-        else
-          Error (error_msg pc ++ [MSG "type checking fails in check_function_call"])
-      else
-        Error (error_msg pc ++ [MSG "mismatch between lengths of function parameter types and arguments"])
+            do foe3 <- after_call pc foe2 org_rels;
+            (* shallow write to p *)
+            do (oe3, ag2) <- shallow_write_place f pc live2 oe2 ag1 p;
+            (* kill relevant loans *)
+            let live3 := kill_loans live2 p in
+            (* flow loans to the return type and update alias *)
+            do oe4 <- flow_alias_after_call pc ag2 rels foe3 oe3;
+            do oe5 <- flow_return_after_call pc ag2 foe3 oe4 rty tgt_rety;
+            OK (live3, oe5, ag2)
+          else
+            Error (error_msg pc ++ [MSG "type checking fails in check_function_call"])
+      end
   | _ => Error (error_msg pc ++ [MSG "it is not a function type in check_function_call"])      
   end.
           
