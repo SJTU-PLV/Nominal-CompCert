@@ -89,3 +89,5 @@ fn no_dangle() -> i32 {
     `assign_deref_weak_update.rs`. The key point is that *x indirectly
     changes p so that tmp and *p alias. It test the functionality of
     alias graph.
+13. A normal re-borrow test
+14. A test that is not compiled in NLL but can be compiled Polonius
