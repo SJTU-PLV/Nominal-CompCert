@@ -127,7 +127,7 @@ module To_syntax = struct
              | Econstructor_wrong_arity of ident * ident * int
              | Emulti_args_to_constructor of expr list * id * id
              | Enot_a_composite of id
-             | Enot_a_function of id
+             | Ename_not_found of id
              | Eno_variant of ident * ident
              | Enot_a_enum of Rusttypes.coq_type
              | Eduplicated_patterns
@@ -398,8 +398,8 @@ module To_syntax = struct
       Format.fprintf pp "Too many arguments to constructo %s::%s" xenum xvar
     | Enot_a_composite x ->
       Format.fprintf pp "%s is not a composite type" x
-    | Enot_a_function x ->
-      Format.fprintf pp "%s is not a function" x
+    | Ename_not_found x ->
+      Format.fprintf pp "%s is neither variable nor function" x
     | Eno_variant (ienum, ivar) ->
       let xenum = IdentMap.find ienum symmap in
       let xvar = IdentMap.find ivar symmap in
@@ -536,7 +536,7 @@ module To_syntax = struct
   let get_fn (x: id) : (ident * fn) monad =
     get_or_new_ident x >>= fun i ->
     fun st -> match IdentMap.find_opt i st.funcs with
-      | Option.None -> (Result.Error (Enot_a_function x), st)
+      | Option.None -> (Result.Error (Ename_not_found x), st)
       | Option.Some f -> (Result.Ok (i, f), st)
 
   let reg_local_type (x: id) (t: Rusttypes.coq_type): ident monad =
