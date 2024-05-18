@@ -107,7 +107,7 @@ End LOrgSt.
   
 (** Origin environment *)
 
-Module LOrgEnv := LPMap(LOrgSt).
+Module LOrgEnv := LPMap1(LOrgSt).
 
 (** Alias graph *)
 
@@ -246,11 +246,8 @@ Definition invalidate_origin (ls1: LoanSet.t) (a: access_kind) (os: origin_state
 (* Check whether we should invalidate each origin in the origin
 environment *)
 Definition invalidate_origins (ls: LoanSet.t) (a: access_kind) (oe: LOrgEnv.t) : LOrgEnv.t :=
-  match oe with
-  | LOrgEnv.Bot => LOrgEnv.Bot
-  | LOrgEnv.Top_except t =>
-      LOrgEnv.Top_except (PTree.map1 (invalidate_origin ls a) t)
-  end.
+  PTree.map1 (invalidate_origin ls a) oe.
+
 
 (* All the origins appear in the type [ty] *)
 Fixpoint origins_of_type (ty: type) : list origin :=

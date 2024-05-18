@@ -22,7 +22,7 @@ Definition init_function (f: function) : AE.t :=
   let live_loans := fold_left (fun acc elt => LoanSet.add (Lextern elt) acc) f.(fn_generic_origins) LoanSet.empty in
   let init_origin_env := fold_left (fun acc elt =>
                                 let os := Live (LoanSet.singleton (Lextern elt)) in
-                                LOrgEnv.set elt os acc) f.(fn_generic_origins) (LOrgEnv.Top_except (PTree.empty LOrgSt.t)) in
+                                LOrgEnv.set elt os acc) f.(fn_generic_origins) (PTree.empty LOrgSt.t) in
   AE.State live_loans init_origin_env LAliasGraph.bot.
 
 (* initialize the variable origins *)
@@ -34,7 +34,7 @@ Definition init_variables (ae: AE.t) (f: function) : res AE.t :=
       let tys := map snd f.(fn_vars) in
       (* For all origins in the variable type, set its state to Live(∅) *)
       let orgs := concat (map origins_of_type tys) in
-      let oe := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs (LOrgEnv.Top_except (PTree.empty LOrgSt.t)) in
+      let oe := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs (PTree.empty LOrgSt.t) in
       OK (AE.State LoanSet.empty oe LAliasGraph.bot)
   | AE.State ls oe a =>
       let tys := map snd f.(fn_vars) in
@@ -436,7 +436,7 @@ Definition check_function_call (f: function) (pc: node) (live1: LoanSet.t) (oe1:
       | None =>
           if forallb (fun '(ty1, ty2) => type_eq_except_origins ty1 ty2) (combine arg_tyl sig_tyl) && type_eq_except_origins tgt_rety rty then
             (* construct empty origin environments for function origins *)
-            let foe1 := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs (LOrgEnv.Top_except (PTree.empty LOrgSt.t)) in
+            let foe1 := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs (PTree.empty LOrgSt.t) in
             do (foe2, rels) <- bind_param_origins pc oe2 foe1 arg_tyl sig_tyl;
             (* use the origin relation to simulate the flow of loans in
           the caller *)

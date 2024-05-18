@@ -47,16 +47,12 @@ let print_origin_state pp (org_st: origin * LOrgSt.t) =
     print_dead_origin pp org
 
 let print_origin_env pp (e: LOrgEnv.t) =
-  match e with
-  | LOrgEnv.Bot ->
-    fprintf pp "OrgEnv: Bot"
-  | LOrgEnv.Top_except t ->
-    fprintf pp "OrgEnv: ";
-    let l = (PTree.elements t) in
-    List.iter (print_origin_state pp) l
+  fprintf pp "OrgEnv: ";
+  let l = (PTree.elements e) in
+  List.iter (print_origin_state pp) l
 
 let print_live_loans pp (ls: LoanSet.t) =
-  fprintf pp "Live Loans: {@[<hov>%a@]}@ " print_loanset ls
+  fprintf pp "May-Live Loans: {@[<hov>%a@]}@ " print_loanset ls
 
 let print_alias_graph pp (ag: LAliasGraph.t) =
   let l = PTree.elements ag in

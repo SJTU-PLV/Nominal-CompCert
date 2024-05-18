@@ -426,24 +426,26 @@ Fixpoint transl_stmt (end_node: node) (stmt: statement) (sel: selector) (succ: n
       do n3 <- add_instr (Icond e n1 n2);
       ret n3
   | Sloop stmt =>
-        do loop_start <- reserve_instr;
-        do body_start <- transl_stmt stmt (sel ++ [Selloop]) succ (Some loop_start) (Some succ);
-        do _ <- update_instr loop_start (Inop body_start);
-        ret loop_start
-    | Sbreak =>
-        match brk with
-        | None =>
-            error (Errors.msg "No loop outside the break: transl_stmt")
-        | Some brk =>
-            add_instr (Inop brk)
-        end
-    | Scontinue =>
-        match cont with
-        | None =>
-            error (Errors.msg "No loop outside the continue")
-        | Some cont =>
-            add_instr (Inop cont)
-        end
+      do loop_jump_node <- reserve_instr;
+      (* The succ in function body is loop_start *)
+      do body_start <- transl_stmt stmt (sel ++ [Selloop]) loop_jump_node (Some loop_jump_node) (Some succ);
+      do _ <- update_instr loop_jump_node (Inop body_start);
+      (* return loop_jump_node and return body_start are equivalent *)
+      ret body_start
+  | Sbreak =>
+      match brk with
+      | None =>
+          error (Errors.msg "No loop outside the break: transl_stmt")
+      | Some brk =>
+          add_instr (Inop brk)
+      end
+  | Scontinue =>
+      match cont with
+      | None =>
+          error (Errors.msg "No loop outside the continue")
+      | Some cont =>
+          add_instr (Inop cont)
+      end
   | Sstoragelive id =>
       add_instr (Isel sel succ)
   | Sstoragedead id =>
