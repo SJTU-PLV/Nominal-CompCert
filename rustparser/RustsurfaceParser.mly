@@ -105,6 +105,7 @@ open Rustsurface
 %type <pat> pattern
 %type <pat list> args_pattern
 %type <id list> generic_origins
+%type <(id * id) list> origin_relations
 
 %%
 
@@ -135,6 +136,15 @@ generic_origins:
   | { [] }
   | LANGLE; l = generic_origins_; RANGLE { l }
 
+origin_relations_:
+  | { [] }
+  | x = ORIGIN; COLON; y = ORIGIN { [(x,y)] }
+  | x = ORIGIN; COLON; y = ORIGIN; rels = origin_relations { (x, y)::rels }
+
+origin_relations:
+  | { [] }
+  | WHERE; rels = origin_relations_ { rels }
+
 composite_fields:
   | { [] }
   | x = ID; COLON; t = ty { [(x, t)] }
@@ -159,11 +169,11 @@ struct_:
     { (x, flds) }
 
 fn:
-  | FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; LBRACE; s = stmt; RBRACE
-    { (x, { generic_origins = orgs; return = Tunit; params = p; body = s }) }
-  | FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; RARROW; tr = ty; LBRACE;
+  | FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; rels = origin_relations; LBRACE; s = stmt; RBRACE
+    { (x, { generic_origins = orgs; origin_relations = rels; return = Tunit; params = p; body = s }) }
+  | FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; RARROW; tr = ty; rels = origin_relations; LBRACE;
     s = stmt; RBRACE
-    { (x, { generic_origins = orgs; return = tr; params = p; body = s }) }
+    { (x, { generic_origins = orgs; origin_relations = rels; return = tr; params = p; body = s }) }
 
 args_expr:
   | { [] }

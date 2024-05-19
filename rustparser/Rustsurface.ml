@@ -60,6 +60,7 @@ and case = { pattern: pat
 type case' = { pattern': pat'; body': Rustsyntax.statement }
 
 type fn = { generic_origins: id list
+          ; origin_relations: (id * id) list
           ; return: ty
           ; params: (id * ty) list
           ; body: stmt }
@@ -235,11 +236,21 @@ module To_syntax = struct
   let pp_print_origin (symmap: id IdentMap.t) pp (org: Rusttypes.origin) =
     Format.fprintf pp "%s" (IdentMap.find org symmap)
 
+  let pp_print_origin_rel (symmap: id IdentMap.t) pp (rel: Rusttypes.origin_rel) =
+    let (org1, org2) = rel in
+    Format.fprintf pp "%s: %s" (IdentMap.find org1 symmap) (IdentMap.find org2 symmap)
+
   let pp_print_origins (symmap: id IdentMap.t) pp (orgs: Rusttypes.origin list) =
     match orgs with
     | [] -> ()
     | _ ->
       Format.fprintf pp "<@[<hov>%a@]>" (Format.pp_print_list ~pp_sep: (fun out () -> Format.fprintf out ",@ ") (pp_print_origin symmap)) orgs
+
+  let pp_print_origin_relations (symmap: id IdentMap.t) pp (rels: Rusttypes.origin_rel list) =
+    match rels with
+    | [] -> ()
+    | _ ->
+      Format.fprintf pp "where @[<hov>%a@]" (Format.pp_print_list ~pp_sep: (fun out () -> Format.fprintf out ",@ ") (pp_print_origin_rel symmap)) rels
 
   let pp_print_composite (symmap: id IdentMap.t) pp (c: Rusttypes.composite_definition) =
     (* TODO: consider generic origins *)
@@ -377,10 +388,10 @@ module To_syntax = struct
     in
     let x = IdentMap.find i symmap in
     let open Rustsyntax in
-    Format.fprintf pp "@[<hv 2>fn %s%a(%a) -> %a {@;%a@;<0 -2>}@]" x
+    Format.fprintf pp "@[<hv 2>fn %s%a(%a) -> %a @ %a {@;%a@;<0 -2>}@]" x
       (pp_print_origins symmap) f.fn_generic_origins
       print_args f.fn_params (pp_print_rust_type symmap) f.fn_return
-      (pp_print_stmt symmap) f.fn_body
+      (pp_print_origin_relations symmap) f.fn_origins_relation (pp_print_stmt symmap) f.fn_body
 
 
   let pp_print_error pp err (symmap: id IdentMap.t)=
@@ -494,6 +505,10 @@ module To_syntax = struct
 
   let rev_ident (i: ident): id monad =
     fun st -> (Result.Ok (IdentMap.find i st.rev_symmap), st)
+
+  (* If no such id in symmap, throws an error *)
+  let get_ident (x: id) : ident monad =
+    fun st -> (Result.Ok (IdMap.find x st.symmap), st)
 
   let get_or_new_ident (x: id): ident monad =
     fun st -> match IdMap.find_opt x st.symmap with
@@ -1212,11 +1227,20 @@ module To_syntax = struct
       get_or_new_ident id >>= fun org ->
       return org)
 
+  let convert_origin_relations (rels: (id * id) list) : (Rusttypes.origin_rel list) monad =
+    map_m rels
+    (fun (id1, id2) ->
+      get_ident id1 >>= fun org1 ->
+      get_ident id2 >>= fun org2 ->
+      return (org1, org2))
+
+
   let transl_fn (f: fn) : Rustsyntax.coq_function monad =
     backup_locals >>= fun old_locals ->
     (* convert origins from string to ident *)
     convert_origins f.generic_origins >>= fun orgs ->
-    (* TODO: convert origin relations, check the binding of the generic origins  *)
+    (* TODO: check the binding of the generic origins  *)
+    convert_origin_relations f.origin_relations >>= fun rels ->
     transl_ty f.return >>= fun fn_return ->
     map_m f.params
       (fun (x, t) ->
@@ -1227,13 +1251,13 @@ module To_syntax = struct
     restore_locals old_locals >>= fun _ ->
     let open Rustsyntax in
     (* TODO *)
-    return ({fn_generic_origins = orgs; fn_origins_relation = []; fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
+    return ({fn_generic_origins = orgs; fn_origins_relation = rels; fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
 
   (* Convert state to string tables (Camlcoq.atom_of_string and
   Camcoq.string_of_atom) which are used in the pretty printing in the
   following passes *)
   
-  let convect_strtbls (st: state) =
+  let convert_strtbls (st: state) =
       IdMap.fold (fun str i _ -> Hashtbl.add Camlcoq.atom_of_string str i) st.symmap ();
       (* set ident -> string tables  *)
       IdentMap.fold (fun i str _ -> Hashtbl.add Camlcoq.string_of_atom i str) st.rev_symmap ();
@@ -1254,7 +1278,7 @@ module To_syntax = struct
     get_or_new_ident "main" >>= fun main_ident ->
     get_st >>= fun st ->
     (* convert string tables *)
-    convect_strtbls st;
+    convert_strtbls st;
     let var_defs = List.map (fun (ident, gvar) -> (ident, AST.Gvar gvar)) st.gvars in
     let comp_defs = IdentMap.fold
                       (fun _ c cs -> c::cs)

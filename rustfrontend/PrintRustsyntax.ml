@@ -15,13 +15,19 @@ let string_of_mut mut =
 let rec print_origins_aux (orgs : origin list) =
   match orgs with
   | [] -> ""
-  | org :: orgs' -> extern_atom org ^ print_origins_aux orgs'
+  | org :: orgs' -> extern_atom org ^ ", " ^ print_origins_aux orgs'
 
 let print_origins (orgs : origin list) =
   match orgs with
   | [] -> ""
   | _ -> "<" ^ print_origins_aux orgs^ ">"
   
+let rec origin_relations_string (rels: origin_rel list) =
+  match rels with
+  | [] -> ""
+  | (org1, org2) :: rels' -> 
+    extern_atom org1 ^ ": " ^ extern_atom org2 ^ ", " ^ origin_relations_string rels'
+
 
 let rec name_rust_decl id ty =
   match ty with
@@ -72,9 +78,10 @@ let name_rust_type ty = name_rust_decl "" ty
 
 (* TODO: print expressions and statements *)
 
-let name_function_parameters name_param fun_name params cconv name_origins =
+let name_function_parameters name_param fun_name params cconv name_origins rels =
     let b = Buffer.create 20 in
     Buffer.add_string b fun_name;
+    (* origins *)
     Buffer.add_string b (print_origins name_origins);
     Buffer.add_char b '(';
     begin match params with
@@ -91,6 +98,8 @@ let name_function_parameters name_param fun_name params cconv name_origins =
         add_params true params
     end;
     Buffer.add_char b ')';
+    Buffer.add_string b "\nwhere ";
+    Buffer.add_string b (origin_relations_string rels);
     Buffer.contents b
 
 let print_fundecl p id fd =

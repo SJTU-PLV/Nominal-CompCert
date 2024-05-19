@@ -19,7 +19,7 @@ let rec print_place' out (p: place') =
   | Plocal(id, _) ->
     fprintf out "%s" (extern_atom id)
   | Pderef(p', _) ->
-    fprintf out "*%a" print_place' p'
+    fprintf out "*%a " print_place' p'
   | Pfield(p', fid, _) ->
     fprintf out "%a.%s" print_place' p' (extern_atom fid)
 
@@ -179,7 +179,7 @@ let print_stmt_direct stmt = print_stmt (formatter_of_out_channel stdout) stmt
 
 let print_function p id f =
   fprintf p "%s@ "
-            (name_rust_decl (PrintRustsyntax.name_function_parameters extern_atom (extern_atom id) f.fn_params f.fn_callconv f.fn_generic_origins) f.fn_return);
+            (name_rust_decl (PrintRustsyntax.name_function_parameters extern_atom (extern_atom id) f.fn_params f.fn_callconv f.fn_generic_origins f.fn_origins_relation) f.fn_return);
   fprintf p "@[<v 2>{@ ";
   print_stmt p f.fn_body;
   fprintf p "@;<0 -2>}@]@ @ "

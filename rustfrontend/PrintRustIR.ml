@@ -108,7 +108,7 @@ let print_succ pp s dfl =
 
 let print_function pp id f =
   fprintf pp "%s@ "
-            (name_rust_decl (PrintRustsyntax.name_function_parameters extern_atom (extern_atom id) f.fn_params f.fn_callconv f.fn_generic_origins) f.fn_return);
+            (name_rust_decl (PrintRustsyntax.name_function_parameters extern_atom (extern_atom id) f.fn_params f.fn_callconv f.fn_generic_origins f.fn_origins_relation) f.fn_return);
   fprintf pp "@[<v 2>{@ ";
   (* Print variables and their types *)
   List.iter
