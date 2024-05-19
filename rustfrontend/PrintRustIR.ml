@@ -82,7 +82,8 @@ let print_instruction pp prog (pc, i) =
   | Isel(sel, s) ->
     (match select_stmt prog sel with
     | Some stmt ->
-      fprintf pp "%a@." print_stmt stmt
+      let s = P.to_int s in
+      fprintf pp "%a%s@." print_stmt stmt (if s <> pc - 1 then (sprintf " goto %d" s) else "")
     | None ->
       fprintf pp "Error: cannot find statement@.")
   | Icond(e, s1, s2) ->

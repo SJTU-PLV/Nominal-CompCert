@@ -94,4 +94,6 @@ fn no_dangle() -> i32 {
 15. Borrow from a box and move that box
 16. Test if statement
 17. Test loop
-18. 
+18. Use after free error
+19. test share reference
+20. Polonius example from [https://smallcultfollowing.com/babysteps/blog/2023/09/29/polonius-part-2/]

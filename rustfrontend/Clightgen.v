@@ -576,13 +576,13 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
   | Sdrop p =>
       (* drop(p) is expanded to
          temp = &p;
-         drop_in_place(&temp)
+         drop_in_place(temp)
        *)
       let ty := (typeof_place p) in
       let cty := (to_ctype ty) in
       let ref_cty := Tpointer cty noattr in
       do temp <- gensym ref_cty;
-      (* [temp=&p] *)
+      (* [temp=*p] *)
       let set_stmt := Clight.Sset temp (Eaddrof (place_to_cexpr' p) ref_cty) in
       match expand_drop temp ty with
       | Some drop_stmt =>
