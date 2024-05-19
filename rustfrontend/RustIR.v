@@ -132,7 +132,7 @@ Fixpoint select_stmt (stmt: statement) (sel: selector) : option statement :=
 
 Definition node := positive.
 
-(* An instruction is either a selector or a control command (e.g., if-then-else) *)
+(* An instruction  is either a selector or a control command (e.g., if-then-else) *)
 Inductive instruction : Type :=
   | Inop: node -> instruction
   | Isel: selector -> node -> instruction

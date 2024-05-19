@@ -9,6 +9,7 @@ let float = '-' ? digit+ "." digit+
 let letter = ['a' - 'z' 'A' - 'Z' '_']
 let letter_num = ['a' - 'z' 'A' - 'Z' '0' - '9' '_']
 let id = letter ? letter_num+
+let origin = ''' id
 let string_literal = [^'"']*
 
 rule read = 
@@ -69,6 +70,7 @@ rule read =
  | "enum" { ENUM }
 
  | "fn" { FN }
+ | "where" { WHERE }
  | "in" { IN }
  | "let" { LET }
 
@@ -86,6 +88,7 @@ rule read =
  | "as" { AS }
  | "mut" { MUT }
 
+ | origin { ORIGIN (Lexing.lexeme lexbuf) }
  | id { ID (Lexing.lexeme lexbuf) }
  | eof { EOF }
 

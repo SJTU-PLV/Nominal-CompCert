@@ -3,6 +3,7 @@ open Rustsurface
 %}
 
 %token <string> ID
+%token <string> ORIGIN
 
 %token <int> INT
 %token <string> STR_LITERAL
@@ -35,6 +36,7 @@ open Rustsurface
 %token STRUCT
 %token ENUM
 %token FN
+%token WHERE
 %token LET
 %token IN
 %token WHILE
@@ -102,6 +104,7 @@ open Rustsurface
 %type <prog_item list> prog
 %type <pat> pattern
 %type <pat list> args_pattern
+%type <id list> generic_origins
 
 %%
 
@@ -115,6 +118,22 @@ prog:
   | c = enum; p = prog { (Penum (fst c, snd c))::p }
   | c = struct_; p = prog { (Pstruc (fst c, snd c))::p }
   | f = fn; p = prog { (Pfn (fst f, snd f))::p }
+
+(* optional origin *)
+origin_opt:
+  | { Rustsurface.dummy_origin_str }
+  | x = ORIGIN { x }
+
+(* list of origins *)
+generic_origins_:
+  | { [] }
+  | x = ORIGIN { [x] }
+  | x = ORIGIN; COMMA; orgs = generic_origins_ { x::orgs }
+
+(* list of origins with angle brackets *)
+generic_origins:
+  | { [] }
+  | LANGLE; l = generic_origins_; RANGLE { l }
 
 composite_fields:
   | { [] }
@@ -140,11 +159,11 @@ struct_:
     { (x, flds) }
 
 fn:
-  | FN; x = ID; LPAREN; p = composite_fields; RPAREN; LBRACE; s = stmt; RBRACE
-    { (x, { return = Tunit; params = p; body = s }) }
-  | FN; x = ID; LPAREN; p = composite_fields; RPAREN; RARROW; tr = ty; LBRACE;
+  | FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; LBRACE; s = stmt; RBRACE
+    { (x, { generic_origins = orgs; return = Tunit; params = p; body = s }) }
+  | FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; RARROW; tr = ty; LBRACE;
     s = stmt; RBRACE
-    { (x, { return = tr; params = p; body = s }) }
+    { (x, { generic_origins = orgs; return = tr; params = p; body = s }) }
 
 args_expr:
   | { [] }
@@ -218,8 +237,8 @@ ty:
   | FLOAT32 { Tfloat (Ctypes.F32, Ctypes.noattr) }
   | FN; LPAREN; pt = params_ty; RPAREN; RARROW; rt = ty { Tfunction (pt, rt) }
   | BOX; LANGLE; t = ty; RANGLE { Tbox (t, Ctypes.noattr) }
-  | REF; MUT; t = ty; { Treference(t, Rusttypes.Mutable, Ctypes.noattr) }
-  | REF; t = ty; { Treference(t, Rusttypes.Immutable, Ctypes.noattr) }
+  | REF; org = origin_opt; MUT; t = ty; { Treference(t, org, Rusttypes.Mutable, Ctypes.noattr) }
+  | REF; org = origin_opt; t = ty; { Treference(t, org, Rusttypes.Immutable, Ctypes.noattr) }
   | x = ID { Tadt (x, Ctypes.noattr) }
 
 match_arm:

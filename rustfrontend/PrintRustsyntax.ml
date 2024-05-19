@@ -34,7 +34,7 @@ let rec name_rust_decl id ty =
   | Rusttypes.Tlong(sg, a) ->
       name_longtype sg ^ attributes a ^ name_optid id
   | Rusttypes.Treference(org, mut, t, a) ->
-      "&'" ^ (extern_atom org) ^" "^  string_of_mut mut ^ (name_rust_decl ""  t) ^ name_optid id
+      "&" ^ (extern_atom org) ^" "^  string_of_mut mut ^ (name_rust_decl ""  t) ^ name_optid id
   | Tbox(t, a) ->
       "Box<" ^ (name_rust_decl ""  t) ^ ">" ^ name_optid id
   | Tfunction( _, _, args, res, cconv) ->
@@ -72,9 +72,10 @@ let name_rust_type ty = name_rust_decl "" ty
 
 (* TODO: print expressions and statements *)
 
-let name_function_parameters name_param fun_name params cconv =
+let name_function_parameters name_param fun_name params cconv name_origins =
     let b = Buffer.create 20 in
     Buffer.add_string b fun_name;
+    Buffer.add_string b (print_origins name_origins);
     Buffer.add_char b '(';
     begin match params with
     | [] ->

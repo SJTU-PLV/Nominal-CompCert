@@ -1,7 +1,9 @@
 
 type id = string
 
-let dummy_origin = Camlcoq.intern_string "dummy_origin"
+let dummy_origin_str = "dummy_origin"
+
+let dummy_origin = Camlcoq.intern_string dummy_origin_str
 
 type ty = | Tunit
           | Tint of Ctypes.intsize * Ctypes.signedness * Ctypes.attr
@@ -10,7 +12,7 @@ type ty = | Tunit
           | Tfunction of (ty list) * ty
           | Tbox of ty * Ctypes.attr
           | Tadt of id* Ctypes.attr
-          | Treference of ty * Rusttypes.mutkind * Ctypes.attr
+          | Treference of ty * id * Rusttypes.mutkind * Ctypes.attr
 
 let bool_ty = Tint (Ctypes.IBool, Ctypes.Unsigned, Ctypes.noattr)
 
@@ -57,7 +59,8 @@ and case = { pattern: pat
 
 type case' = { pattern': pat'; body': Rustsyntax.statement }
 
-type fn = { return: ty
+type fn = { generic_origins: id list
+          ; return: ty
           ; params: (id * ty) list
           ; body: stmt }
 
@@ -188,7 +191,7 @@ module To_syntax = struct
     | T.Treference (org, m, t, _) ->
       pp_print_string pp "&";
       (* print origin *)
-      pp_print_string pp ("'" ^ Camlcoq.extern_atom org ^ " ");
+      pp_print_string pp (Camlcoq.extern_atom org ^ " ");
       if m = T.Mutable then
         pp_print_string pp "mut ";
       pp_print_rust_type symmap pp t
@@ -228,6 +231,15 @@ module To_syntax = struct
          pp_print_string pp "\n"
       )
       symmap
+
+  let pp_print_origin (symmap: id IdentMap.t) pp (org: Rusttypes.origin) =
+    Format.fprintf pp "%s" (IdentMap.find org symmap)
+
+  let pp_print_origins (symmap: id IdentMap.t) pp (orgs: Rusttypes.origin list) =
+    match orgs with
+    | [] -> ()
+    | _ ->
+      Format.fprintf pp "<@[<hov>%a@]>" (Format.pp_print_list ~pp_sep: (fun out () -> Format.fprintf out ",@ ") (pp_print_origin symmap)) orgs
 
   let pp_print_composite (symmap: id IdentMap.t) pp (c: Rusttypes.composite_definition) =
     (* TODO: consider generic origins *)
@@ -275,9 +287,9 @@ module To_syntax = struct
     | S.Ebox (e, _) ->
       fprintf pp "Box(%a)" (pp_print_expr symmap) e
     | S.Eref (org, T.Mutable, l, _) ->
-      fprintf pp "& %s mut %a" ("'" ^ Camlcoq.extern_atom org) (pp_print_expr symmap) l
+      fprintf pp "& %s mut %a" (Camlcoq.extern_atom org) (pp_print_expr symmap) l
     | S.Eref (org, T.Immutable, l, ty) ->
-      fprintf pp "&%s %a" ("'" ^ Camlcoq.extern_atom org) (pp_print_expr symmap) l
+      fprintf pp "&%s %a" (Camlcoq.extern_atom org) (pp_print_expr symmap) l
     | S.Efield (l, i, _) ->
       let x = IdentMap.find i symmap in
       fprintf pp "%a.%s" (pp_print_expr symmap) l x
@@ -365,7 +377,8 @@ module To_syntax = struct
     in
     let x = IdentMap.find i symmap in
     let open Rustsyntax in
-    Format.fprintf pp "@[<hv 2>fn %s(%a) -> %a {@;%a@;<0 -2>}@]" x
+    Format.fprintf pp "@[<hv 2>fn %s%a(%a) -> %a {@;%a@;<0 -2>}@]" x
+      (pp_print_origins symmap) f.fn_generic_origins
       print_args f.fn_params (pp_print_rust_type symmap) f.fn_return
       (pp_print_stmt symmap) f.fn_body
 
@@ -579,11 +592,10 @@ module To_syntax = struct
         (* TODO: support generic origins *)
         | T.Struct -> return (T.Tstruct ([], i, attr))
         | T.TaggedUnion -> return (T.Tvariant ([], i, attr)))
-    | Treference (t, m, attr) ->
+    | Treference (t, org_id, m, attr) ->
       transl_ty t >>= fun t' ->
-      (* We just give it a dummy origin which will be replaced in the
-       borrow checker  *)
-      return (T.Treference (dummy_origin, m, t', attr))
+      get_or_new_ident org_id >>= fun org ->
+      return (T.Treference (org, m, t', attr))
 
 
   let add_composite_struc (x: id) (c: comp_struc) : unit monad =
@@ -1079,8 +1091,8 @@ module To_syntax = struct
          | t -> throw (Enot_callable t)))
     | Eref (e, m) ->
       transl_expr e >>= fun e' ->
+      (* The origin of reference expression is always dummy_origin *)
       let t' = Rusttypes.Treference(dummy_origin, m, Rustsyntax.typeof e', Ctypes.noattr) in      
-      (* TODO *)
       return (Rustsyntax.Eref (dummy_origin, m, e', t'))
     | Estr s ->
       let t_byte = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned, Ctypes.noattr) in
@@ -1194,8 +1206,17 @@ module To_syntax = struct
       restore_locals old_locals >>= fun _ ->
       return s'
 
+  let convert_origins (orgs: id list) : (Rusttypes.origin list) monad =
+    map_m orgs
+    (fun id ->
+      get_or_new_ident id >>= fun org ->
+      return org)
+
   let transl_fn (f: fn) : Rustsyntax.coq_function monad =
     backup_locals >>= fun old_locals ->
+    (* convert origins from string to ident *)
+    convert_origins f.generic_origins >>= fun orgs ->
+    (* TODO: convert origin relations, check the binding of the generic origins  *)
     transl_ty f.return >>= fun fn_return ->
     map_m f.params
       (fun (x, t) ->
@@ -1206,7 +1227,7 @@ module To_syntax = struct
     restore_locals old_locals >>= fun _ ->
     let open Rustsyntax in
     (* TODO *)
-    return ({fn_generic_origins = []; fn_origins_relation = []; fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
+    return ({fn_generic_origins = orgs; fn_origins_relation = []; fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
 
   (* Convert state to string tables (Camlcoq.atom_of_string and
   Camcoq.string_of_atom) which are used in the pretty printing in the
@@ -1240,15 +1261,17 @@ module To_syntax = struct
                       st.composites
                       []
     in
+    (* Print RustAST *)
+    Format.fprintf Format.std_formatter "RustAST: \n";
     List.iter
-      (fun c -> pp_print_composite st.rev_symmap Format.err_formatter c;
-                Format.eprintf "\n")
+      (fun c -> pp_print_composite st.rev_symmap Format.std_formatter c;
+                Format.fprintf Format.std_formatter "\n")
       comp_defs;
     List.iter
       (fun (i, g) -> match g with
          | AST.Gfun (Rusttypes.Internal f) ->
-           pp_print_function st.rev_symmap Format.err_formatter i f;
-           Format.eprintf "\n"
+           pp_print_function st.rev_symmap Format.std_formatter i f;
+           Format.fprintf Format.std_formatter "\n"
          | _ -> failwith "unreachable")
       fun_defs;
     (* generate prog_comp_env *)
