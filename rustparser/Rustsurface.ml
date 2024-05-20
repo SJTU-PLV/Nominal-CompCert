@@ -1,17 +1,16 @@
 
 type id = string
 
-let dummy_origin_str = "dummy_origin"
+let dummy_origin_str = "'0"
 
-let dummy_origin = Camlcoq.intern_string dummy_origin_str
 
 type ty = | Tunit
           | Tint of Ctypes.intsize * Ctypes.signedness * Ctypes.attr
           | Tlong of Ctypes.signedness * Ctypes.attr
           | Tfloat of Ctypes.floatsize * Ctypes.attr
-          | Tfunction of (ty list) * ty
+          | Tfunction of (ty list) * ty * id list * (id * id) list
           | Tbox of ty * Ctypes.attr
-          | Tadt of id* Ctypes.attr
+          | Tadt of id * Ctypes.attr * id list
           | Treference of ty * id * Rusttypes.mutkind * Ctypes.attr
 
 let bool_ty = Tint (Ctypes.IBool, Ctypes.Unsigned, Ctypes.noattr)
@@ -86,23 +85,23 @@ module IdentMap = Map.Make (struct
 end)
 
 type prog_item = Pfn of id * fn
-               | Pstruc of id * comp_struc
-               | Penum of id * comp_enum
+               | Pstruc of id * comp_struc * id list * (id * id) list
+               | Penum of id * comp_enum * id list * (id * id) list
 
 type prog = { funcs: (id * fn) list
-            ; strucs: (id * comp_struc) list
-            ; enums: (id * comp_enum) list }
+            ; strucs: (id * comp_struc * id list * (id * id) list) list
+            ; enums: (id * comp_enum * id list * (id * id) list) list }
 
 let rec prog_of_items (pis: prog_item list): prog = match pis with
   | (Pfn (x, f))::pis ->
     let p = prog_of_items pis in
     { p with funcs = (x, f)::p.funcs }
-  | (Pstruc (x, c))::pis ->
+  | (Pstruc (x, c, orgs, rels))::pis ->
     let p = prog_of_items pis in
-    { p with strucs = (x, c)::p.strucs }
-  | (Penum (x, c)) :: pis ->
+    { p with strucs = (x, c, orgs, rels)::p.strucs }
+  | (Penum (x, c, orgs, rels)) :: pis ->
     let p = prog_of_items pis in
-    { p with enums = (x, c) :: p.enums }
+    { p with enums = (x, c, orgs, rels) :: p.enums }
   | nil -> { funcs = []; strucs = []; enums = [] }
 
 module To_syntax = struct
@@ -143,6 +142,27 @@ module To_syntax = struct
     | T.Tcons (t, tl) -> t::(typelist_to_list tl)
     | T.Tnil -> []
 
+
+  let pp_print_origin (symmap: id IdentMap.t) pp (org: Rusttypes.origin) =
+    Format.fprintf pp "%s" (IdentMap.find org symmap)
+
+  let pp_print_origin_rel (symmap: id IdentMap.t) pp (rel: Rusttypes.origin_rel) =
+    let (org1, org2) = rel in
+    Format.fprintf pp "%s: %s" (IdentMap.find org1 symmap) (IdentMap.find org2 symmap)
+
+  let pp_print_origins (symmap: id IdentMap.t) pp (orgs: Rusttypes.origin list) =
+    match orgs with
+    | [] -> ()
+    | _ ->
+      Format.fprintf pp "<@[<hov>%a@]>" (Format.pp_print_list ~pp_sep: (fun out () -> Format.fprintf out ",@ ") (pp_print_origin symmap)) orgs
+
+  let pp_print_origin_relations (symmap: id IdentMap.t) pp (rels: Rusttypes.origin_rel list) =
+    match rels with
+    | [] -> ()
+    | _ ->
+      Format.fprintf pp "where @[<hov>%a@]" (Format.pp_print_list ~pp_sep: (fun out () -> Format.fprintf out ",@ ") (pp_print_origin_rel symmap)) rels
+
+
   let rec pp_print_rust_type (symmap: id IdentMap.t) pp (t: Rusttypes.coq_type)  =
     let open Format in
     let module T = Rusttypes in
@@ -169,8 +189,8 @@ module To_syntax = struct
       pp_print_string pp (match si with
       | Ctypes.F32 -> "32"
       | Ctypes.F64 -> "64")
-    | T.Tfunction (_, _, tl, r, _) ->
-      pp_print_string pp "fn(";
+    | T.Tfunction (orgs, rels, tl, r, _) ->
+      Format.fprintf pp "fn%a(" (pp_print_origins symmap) orgs;
       pp_print_space pp ();
       let _ = List.map
           (fun t -> pp_print_rust_type symmap pp t ;
@@ -180,15 +200,18 @@ module To_syntax = struct
       in
       pp_print_string pp ")->";
       pp_print_space pp ();
-      pp_print_rust_type symmap pp r 
+      pp_print_rust_type symmap pp r;
+      pp_print_origin_relations symmap pp rels
     | T.Tbox (t, _) ->
       pp_print_string pp "Box(";
       pp_print_rust_type symmap  pp t ;
       pp_print_string pp ")";
-    | T.Tstruct (_, id, _) ->
+    | T.Tstruct (orgs, id, _) ->      
       pp_print_string pp (IdentMap.find id symmap);
-    | T.Tvariant (_, id, _) ->
+      pp_print_origins symmap pp orgs
+    | T.Tvariant (orgs, id, _) ->
       pp_print_string pp (IdentMap.find id symmap);
+      pp_print_origins symmap pp orgs
     | T.Treference (org, m, t, _) ->
       pp_print_string pp "&";
       (* print origin *)
@@ -233,28 +256,8 @@ module To_syntax = struct
       )
       symmap
 
-  let pp_print_origin (symmap: id IdentMap.t) pp (org: Rusttypes.origin) =
-    Format.fprintf pp "%s" (IdentMap.find org symmap)
-
-  let pp_print_origin_rel (symmap: id IdentMap.t) pp (rel: Rusttypes.origin_rel) =
-    let (org1, org2) = rel in
-    Format.fprintf pp "%s: %s" (IdentMap.find org1 symmap) (IdentMap.find org2 symmap)
-
-  let pp_print_origins (symmap: id IdentMap.t) pp (orgs: Rusttypes.origin list) =
-    match orgs with
-    | [] -> ()
-    | _ ->
-      Format.fprintf pp "<@[<hov>%a@]>" (Format.pp_print_list ~pp_sep: (fun out () -> Format.fprintf out ",@ ") (pp_print_origin symmap)) orgs
-
-  let pp_print_origin_relations (symmap: id IdentMap.t) pp (rels: Rusttypes.origin_rel list) =
-    match rels with
-    | [] -> ()
-    | _ ->
-      Format.fprintf pp "where @[<hov>%a@]" (Format.pp_print_list ~pp_sep: (fun out () -> Format.fprintf out ",@ ") (pp_print_origin_rel symmap)) rels
-
   let pp_print_composite (symmap: id IdentMap.t) pp (c: Rusttypes.composite_definition) =
-    (* TODO: consider generic origins *)
-    let Rusttypes.Composite (i, s_or_v, members, _, _, _) = c in
+    let Rusttypes.Composite (i, s_or_v, members, _, orgs, rels) = c in
     let s_or_v =  match s_or_v with
       | Rusttypes.Struct -> "struct"
       | Rusttypes.TaggedUnion -> "enum"
@@ -264,10 +267,10 @@ module To_syntax = struct
       match ms with
       | (Rusttypes.Member_plain (i, t)) :: ms' ->
         let x = IdentMap.find i symmap in
-        Format.fprintf pp "%s: %a,@;%a" x (pp_print_rust_type symmap) t pp_print_members ms'
+        Format.fprintf pp "@ %s: %a,%a" x (pp_print_rust_type symmap) t pp_print_members ms'
       | [] -> ()
     in
-    Format.fprintf pp "@[<h 2>%s %s {@ %a@;<0 -2>}@]" s_or_v x pp_print_members members
+    Format.fprintf pp "@[<v 2>%s %s%a %a {%a@;<0 -2>}@]@ @ " s_or_v x (pp_print_origins symmap) orgs (pp_print_origin_relations symmap) rels  pp_print_members members
 
 
   let rec pp_print_expr (symmap: id IdentMap.t) pp e =
@@ -282,12 +285,12 @@ module To_syntax = struct
         (match fvs with
         | f :: fs' , S.Econs (v, vs') ->
           let fx = IdentMap.find f symmap in
-          fprintf pp "%s: %a,@;%a" fx (pp_print_expr symmap) v pp_print_fields (fs', vs')
+          fprintf pp "@ %s: %a,%a" fx (pp_print_expr symmap) v pp_print_fields (fs', vs')
         | [], S.Enil -> ()
         | _, _ -> failwith "unreachable")
       in
       let x = IdentMap.find i symmap in
-      fprintf pp "@[<v 2>%s {@ %a@;<0 -2>}@]" x pp_print_fields (fields, values)
+      fprintf pp "@[<v 2>%s {%a@;<0 -2>}@]" x pp_print_fields (fields, values)
     | S.Eenum (ie, iv, e, _) ->
       let xe = IdentMap.find ie symmap in
       let xv = IdentMap.find iv symmap in
@@ -388,7 +391,7 @@ module To_syntax = struct
     in
     let x = IdentMap.find i symmap in
     let open Rustsyntax in
-    Format.fprintf pp "@[<hv 2>fn %s%a(%a) -> %a @ %a {@;%a@;<0 -2>}@]" x
+    Format.fprintf pp "@[<hv 2>fn %s%a(%a) -> %a %a {@ %a@;<0 -2>}@]" x
       (pp_print_origins symmap) f.fn_generic_origins
       print_args f.fn_params (pp_print_rust_type symmap) f.fn_return
       (pp_print_origin_relations symmap) f.fn_origins_relation (pp_print_stmt symmap) f.fn_body
@@ -485,8 +488,8 @@ module To_syntax = struct
                             ; composites = IdentMap.empty
                             ; gvars = [] 
                             ; external_funs = []}
-
-
+  
+        
   let new_ident (x: id): ident monad =
     fun st -> (
         Result.Ok st.next_ident,
@@ -520,6 +523,15 @@ module To_syntax = struct
                   ; rev_symmap = IdentMap.add st.next_ident x st.rev_symmap
                   ; next_ident = Camlcoq.P.succ st.next_ident }
         )
+
+  let dummy_origin = get_or_new_ident dummy_origin_str
+  
+  let rec repeat n e =
+    if n = 0 then [] else e :: repeat (n-1) e
+
+  let dummy_origins n =
+    dummy_origin >>= fun org ->
+      return (repeat n org)
 
   let get_st : state monad = fun st -> (Result.Ok st, st)
 
@@ -581,6 +593,20 @@ module To_syntax = struct
         st
       )
 
+  let convert_origins (orgs: id list) : (Rusttypes.origin list) monad =
+    map_m orgs
+    (fun id ->
+      get_or_new_ident id >>= fun org ->
+      return org)
+
+  let convert_origin_relations (rels: (id * id) list) : (Rusttypes.origin_rel list) monad =
+    map_m rels
+    (fun (id1, id2) ->
+      get_ident id1 >>= fun org1 ->
+      get_ident id2 >>= fun org2 ->
+      return (org1, org2))
+
+
   let rec transl_ty (t: ty): Rusttypes.coq_type monad =
     let module T = Rusttypes in
     match t with
@@ -588,7 +614,7 @@ module To_syntax = struct
     | Tint (size, si, attr) -> return (T.Tint (size, si, attr))
     | Tlong (size, attr) -> return (T.Tlong (size, attr))
     | Tfloat (size, attr) -> return (T.Tfloat (size, attr))
-    | Tfunction (params, ret) ->
+    | Tfunction (params, ret, orgs, rels) ->
       let rec typelist_of ts =
         match ts with
         | t::ts -> T.Tcons (t, typelist_of ts)
@@ -596,32 +622,41 @@ module To_syntax = struct
       in
       map_m params transl_ty  >>= fun args' ->
       transl_ty ret >>= fun ret' ->
-      (* TODO: support generic origins *)
-      return (T.Tfunction ([], [], typelist_of args', ret', AST.cc_default))
+      convert_origins orgs >>= fun orgs ->
+      convert_origin_relations rels >>= fun rels ->
+      return (T.Tfunction (orgs, rels, typelist_of args', ret', AST.cc_default))
     | Tbox (t, attr) ->
       transl_ty t >>= fun t' ->
       return (T.Tbox (t', attr))
-    | Tadt (x, attr) ->
-      get_composite x >>= fun (i, T.Composite (_, sv, _, _, _, _)) ->
+    | Tadt (x, attr, org_ids) ->
+      get_composite x >>= fun (i, T.Composite (_, sv, _, _, orgs, rels)) ->
+       (* Use org_ids as the origins notation for this type or
+       generate list of dummy origins *)
+      let org_ids = if List.length org_ids = 0 then 
+        (List.map (fun _ -> dummy_origin_str) orgs) 
+        else if (List.length org_ids) = (List.length orgs) then org_ids 
+        else failwith "unreachable" in
+      convert_origins org_ids >>= fun orgs ->
       (match sv with
-        (* TODO: support generic origins *)
-        | T.Struct -> return (T.Tstruct ([], i, attr))
-        | T.TaggedUnion -> return (T.Tvariant ([], i, attr)))
+        | T.Struct -> return (T.Tstruct (orgs, i, attr))
+        | T.TaggedUnion -> return (T.Tvariant (orgs, i, attr)))
     | Treference (t, org_id, m, attr) ->
       transl_ty t >>= fun t' ->
       get_or_new_ident org_id >>= fun org ->
       return (T.Treference (org, m, t', attr))
 
 
-  let add_composite_struc (x: id) (c: comp_struc) : unit monad =
+
+  let add_composite_struc (x: id) (c: comp_struc) (orgs: id list) (rels: (id * id) list) : unit monad =
     get_or_new_ident x >>= fun i ->
     map_m c
       (fun (x, t) ->
          get_or_new_ident x >>= fun i ->
          transl_ty t >>= fun t' ->
          return (Rusttypes.Member_plain (i, t'))) >>= fun members' ->
-    (* TODO: support generic origins *)
-    let c' = Rusttypes.Composite (i, Rusttypes.Struct, members', noattr, [], []) in
+    convert_origins orgs >>= fun orgs ->
+    convert_origin_relations rels >>= fun rels ->
+    let c' = Rusttypes.Composite (i, Rusttypes.Struct, members', noattr, orgs, rels) in
     get_st >>= fun st ->
     let cos' = IdentMap.add i c' st.composites in
     set_st { st with composites = cos' }
@@ -643,28 +678,53 @@ module To_syntax = struct
          return (ivar, ts')
       )
 
-  let type_of_variant_constructor (x: id) (xvar: string) (i: ident) (ts: ty list) : Rusttypes.coq_type monad =
+  let type_of_variant_constructor (x: id) (xvar: string) (i: ident) (ts: ty list) orgs rels : Rusttypes.coq_type monad =
     match ts with
      | [] ->  return Rusttypes.Tunit
      | t :: [] -> transl_ty t
      | _ ->
        let variant_struc_id = variant_struc_id x xvar in
        let variant_struc = composite_stru_for_variant ts 0 in
-       add_composite_struc variant_struc_id variant_struc >>= fun _ ->
+       add_composite_struc variant_struc_id variant_struc orgs rels >>= fun _ ->
        get_or_new_ident variant_struc_id >>= fun variant_struc_ident ->
-        (* TODO: support generic origins *)
-       return (Rusttypes.Tstruct ([], i, noattr))
+       convert_origins orgs >>= fun orgs ->
+      (* This type is used in composite definition, so the origins are generic *)
+       return (Rusttypes.Tstruct (orgs, variant_struc_ident, noattr))
 
-  let add_composite_enum (x: id) (c: comp_enum) : unit monad =
+  let rec origin_in_ty org ty =
+    match ty with
+    | Treference(ty', org', _, _) ->
+      org = org' || origin_in_ty org ty'
+    | Tbox(ty',_) ->
+      origin_in_ty org ty'
+    | Tadt(i, _, orgs) ->
+      List.mem org orgs
+    | _ -> false
+       
+  let rec origin_in_ty_list l org =
+    match l with
+    | [] -> false
+    | ty :: l' ->
+      origin_in_ty org ty || origin_in_ty_list l' org
+
+  let relation_in_origins orgs (org1, org2) =
+    List.mem org1 orgs && List.mem org2 orgs
+
+  let add_composite_enum (x: id) (c: comp_enum) orgs rels : unit monad =
     get_or_new_ident x >>= fun i ->
     map_m c
       (fun (xvar, ts) ->
+         (* filter origins appear in ts *)
+         let orgs' = List.filter (origin_in_ty_list ts) orgs in
+         (* filter relations whose origins appear in orgs' *)
+         let rels'  = List.filter (relation_in_origins orgs') rels in
          get_or_new_ident xvar >>= fun i ->
-         type_of_variant_constructor x xvar i ts>>= fun t' ->
+         type_of_variant_constructor x xvar i ts orgs' rels' >>= fun t' ->
          return (Rusttypes.Member_plain (i, t'))) >>= fun members' ->
     lower_comp_enum c >>= fun ce' ->
-    (* TODO: support generic origins *)
-    let c' = Rusttypes.Composite (i, Rusttypes.TaggedUnion, members', noattr, [], []) in
+    convert_origins orgs >>= fun orgs ->
+    convert_origin_relations rels >>= fun rels ->
+    let c' = Rusttypes.Composite (i, Rusttypes.TaggedUnion, members', noattr, orgs, rels) in
     get_st >>= fun st ->
     let cos' = IdentMap.add i c' st.composites in
     set_st { st with composites = cos'
@@ -782,14 +842,27 @@ module To_syntax = struct
           )
        | _ -> None
 
-     let rec con_header_with_field_access (e: Rustsyntax.expr) (header: Rustsyntax.expr list) (types: Rusttypes.coq_type list) (n: int) : Rustsyntax.expr list monad =
+     let rec con_header_with_field_access_rec (e: Rustsyntax.expr) (header: Rustsyntax.expr list) (types: Rusttypes.coq_type list) (n: int) : Rustsyntax.expr list monad =
+      (* consider the size of types is one *)
        match types with
        | t :: types' ->
-         con_header_with_field_access e header types' (n + 1) >>= fun header' ->
+        (* The field names of generated struct is ascending numbers *)
+        con_header_with_field_access_rec e header types' (n + 1) >>= fun header' ->
          get_or_new_ident ("_" ^ (Int.to_string) n) >>= fun i ->
          let access_expr = Rustsyntax.Efield (e, i, t) in
          return (access_expr :: header')
        | [] -> return []
+
+      let con_header_with_field_access (e: Rustsyntax.expr) (header: Rustsyntax.expr list) (types: Rusttypes.coq_type list): Rustsyntax.expr list monad =
+       (* consider the size of types is one *)
+        match types with
+        | [] -> failwith "Do not support zero size type"
+        | [t] ->
+          (*  no field access *)
+          return [e]
+        | t :: types' ->
+          con_header_with_field_access_rec e header types 0
+
 
      let skeleton_table (cases: case' list) (header: Rustsyntax.expr) : pat_table =
        let rows = List.map (fun c -> ([c.pattern'], c.body')) cases in
@@ -847,11 +920,26 @@ module To_syntax = struct
        get_enums >>= fun enums ->
        match row_head_args_types (List.hd grp_rows) header enums with
        | Some (ienum, args_types) ->
-         variant_struc_name ienum grp_ivar >>= fun vsn ->
-          (* TODO *)
-         let as_var_typ = Rusttypes.Tvariant ([], vsn, Ctypes.noattr) in
+         (* replace generic origins in args_types with dummy origins *)
+         dummy_origin >>= fun dummy ->
+         let args_types = List.map (Rusttypes.replace_type_with_dummy_origin dummy) args_types in
+         (* consider the size of args_types is 1 *)
+         (match args_types with
+         | [] -> failwith "unreachable"
+         | [t] -> return t
+         | _ -> 
+          (* It depends on the logic that we have generated struct for this enum constructor *)
+          variant_struc_name ienum grp_ivar >>= fun vsn ->
+          get_st >>= fun st ->
+          match IdentMap.find_opt vsn st.composites with
+          | None -> failwith "no struct generated for this enum constructor"
+          | Some(Rusttypes.Composite(struct_id, _, _, a, orgs, _)) ->
+            (* generate dummy origins *)
+            dummy_origins (List.length orgs) >>= fun dummy_origins ->
+            return (Rusttypes.Tstruct (dummy_origins, struct_id, a))
+         ) >>= fun as_var_typ ->
          con_header_with_field_access
-             (Rustsyntax.Evar (as_var, as_var_typ)) (List.tl header) args_types 0
+             (Rustsyntax.Evar (as_var, as_var_typ)) (List.tl header) args_types
              >>= fun header' ->
          let rows' = List.map
                        (fun (patterns, body) ->
@@ -995,8 +1083,9 @@ module To_syntax = struct
         let targs = List.map snd f.params in
         map_m targs transl_ty >>= fun targs' ->
         let targs'' = typelist_of targs' in
-        (* TODO: added generic origins information to state *)
-        let tf' = Rusttypes.Tfunction ([], [], targs'', tr', AST.cc_default) in
+        convert_origins f.generic_origins >>= fun orgs ->
+        convert_origin_relations f.origin_relations >>= fun rels ->
+        let tf' = Rusttypes.Tfunction (orgs, rels, targs'', tr', AST.cc_default) in
         return (Rustsyntax.Evar (ix, tf'))
       )
     | Ebox e ->
@@ -1007,7 +1096,7 @@ module To_syntax = struct
       transl_expr e >>= fun e' ->
       let te = Rustsyntax.typeof e' in
       (match te with
-      | Rusttypes.Tstruct ([], ist, _) ->
+      | Rusttypes.Tstruct (_, ist, _) ->
         get_st >>= fun st ->
         let Rusttypes.Composite (_, _, members, _, _, _) =
           IdentMap.find ist st.composites
@@ -1065,8 +1154,10 @@ module To_syntax = struct
       map_m xfl get_or_new_ident >>= fun ifl ->
       map_m es transl_expr >>= fun es' ->
       get_composite xstruct >>=
-      fun (istruct, Rusttypes.Composite (_, _, _, attr, _, _)) ->
-      let t = Rusttypes.Tstruct ([], istruct, attr) in
+      fun (istruct, Rusttypes.Composite (_, _, _, attr, orgs, rels)) ->
+      (* FIXME: we should generate list of dummy origins with the same length as orgs *)
+      dummy_origins (List.length orgs) >>= fun dummy_orgs ->
+      let t = Rusttypes.Tstruct (dummy_orgs, istruct, attr) in
       return (Rustsyntax.Estruct (istruct, ifl, exprlist_of es', t))
     | Ecall (callee, args) ->
       (match callee with
@@ -1076,6 +1167,7 @@ module To_syntax = struct
         >>= fun args' ->
         (* Refer to C2C.ml *)
         let t_byte = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned, Ctypes.noattr) in
+        dummy_origin >>= fun dummy_origin ->
         let targs = typelist_of [Rusttypes.Treference(dummy_origin, Rusttypes.Immutable, t_byte, Ctypes.noattr)] in
         let tres =  Rusttypes.type_int32s in
         let sg =
@@ -1086,27 +1178,33 @@ module To_syntax = struct
         let fid = Rustsyntax.Evar(i,fty) in
         return (Rustsyntax.Ecall(fid, exprlist_of args', tres))
       | Eaccess (xenum, xvar) ->
-        get_or_new_ident xenum >>= fun ienum ->
+        get_composite xenum >>= fun (ienum, Rusttypes.Composite (_, s_or_v, _, _, orgs, rels)) ->
         get_or_new_ident xvar >>= fun ivar ->
-        (match args with
-         | arg::nil ->
-           transl_expr arg >>= fun e' ->
-           return (Rustsyntax.Eenum
-                     (ienum, ivar, e', Rusttypes.Tvariant ([], ienum, noattr)))
-         | _ -> throw (Emulti_args_to_constructor (args, xenum, xvar)))
-
+        (match s_or_v with
+        | Rusttypes.Struct -> failwith "unreachable"
+        | Rusttypes.TaggedUnion ->
+          (match args with
+          | arg::nil ->
+            transl_expr arg >>= fun e' ->
+            (* construct dummy origins for Eenum type *)
+            dummy_origins (List.length orgs) >>= fun dummy_orgs ->
+            dummy_origins (List.length orgs) >>= fun dummy_orgs ->
+            return (Rustsyntax.Eenum
+                      (ienum, ivar, e', Rusttypes.Tvariant (dummy_orgs, ienum, noattr)))
+          | _ -> throw (Emulti_args_to_constructor (args, xenum, xvar))))
       | _ ->
         transl_expr callee >>= fun callee' ->
         map_m args (fun arg -> transl_expr arg)
         >>= fun args' ->
         (match Rustsyntax.typeof callee' with
-         | Rusttypes.Tfunction ([], [], _, tr, _) ->
+         | Rusttypes.Tfunction (_, _, _, tr, _) ->
            let args'' = exprlist_of args' in
            return (Rustsyntax.Ecall (callee', args'', tr))
          | t -> throw (Enot_callable t)))
     | Eref (e, m) ->
       transl_expr e >>= fun e' ->
       (* The origin of reference expression is always dummy_origin *)
+      dummy_origin >>= fun dummy_origin ->
       let t' = Rusttypes.Treference(dummy_origin, m, Rustsyntax.typeof e', Ctypes.noattr) in      
       return (Rustsyntax.Eref (dummy_origin, m, e', t'))
     | Estr s ->
@@ -1221,19 +1319,6 @@ module To_syntax = struct
       restore_locals old_locals >>= fun _ ->
       return s'
 
-  let convert_origins (orgs: id list) : (Rusttypes.origin list) monad =
-    map_m orgs
-    (fun id ->
-      get_or_new_ident id >>= fun org ->
-      return org)
-
-  let convert_origin_relations (rels: (id * id) list) : (Rusttypes.origin_rel list) monad =
-    map_m rels
-    (fun (id1, id2) ->
-      get_ident id1 >>= fun org1 ->
-      get_ident id2 >>= fun org2 ->
-      return (org1, org2))
-
 
   let transl_fn (f: fn) : Rustsyntax.coq_function monad =
     backup_locals >>= fun old_locals ->
@@ -1250,26 +1335,25 @@ module To_syntax = struct
     transl_stmt f.body >>= fun fn_body ->
     restore_locals old_locals >>= fun _ ->
     let open Rustsyntax in
-    (* TODO *)
     return ({fn_generic_origins = orgs; fn_origins_relation = rels; fn_return = fn_return; fn_params; fn_body; fn_callconv = AST.cc_default })
 
   (* Convert state to string tables (Camlcoq.atom_of_string and
   Camcoq.string_of_atom) which are used in the pretty printing in the
   following passes *)
-  
   let convert_strtbls (st: state) =
       IdMap.fold (fun str i _ -> Hashtbl.add Camlcoq.atom_of_string str i) st.symmap ();
       (* set ident -> string tables  *)
       IdentMap.fold (fun i str _ -> Hashtbl.add Camlcoq.string_of_atom i str) st.rev_symmap ();
       Camlcoq.next_atom := st.next_ident
 
+
   let transl_prog (p: prog) : (Rustsyntax.coq_function Rusttypes.program) monad =
     map_m p.funcs
       (fun (x, f) -> add_fn x f) >>= fun _ ->
     map_m p.strucs
-      (fun (x, c) -> add_composite_struc x c) >>= fun _ ->
+      (fun (x, c, orgs, rels) -> add_composite_struc x c orgs rels) >>= fun _ ->
     map_m p.enums
-      (fun (x, c) -> add_composite_enum x c) >>= fun _ ->
+      (fun (x, c, orgs, rels) -> add_composite_enum x c orgs rels) >>= fun _ ->
     map_m p.funcs
       (fun (x, f) ->
          transl_fn f >>= fun f' ->
@@ -1277,6 +1361,9 @@ module To_syntax = struct
          return (i, (AST.Gfun (Rusttypes.Internal f')))) >>= fun fun_defs ->
     get_or_new_ident "main" >>= fun main_ident ->
     get_st >>= fun st ->
+    (* set dummy origin for other use *)
+    dummy_origin >>= fun dummy ->
+    PrintRustsyntax.dummy_origin_ref := dummy;
     (* convert string tables *)
     convert_strtbls st;
     let var_defs = List.map (fun (ident, gvar) -> (ident, AST.Gvar gvar)) st.gvars in
@@ -1286,11 +1373,9 @@ module To_syntax = struct
                       []
     in
     (* Print RustAST *)
-    Format.fprintf Format.std_formatter "RustAST: \n";
-    List.iter
-      (fun c -> pp_print_composite st.rev_symmap Format.std_formatter c;
-                Format.fprintf Format.std_formatter "\n")
-      comp_defs;
+    Format.fprintf Format.std_formatter "RustAST: @.";
+    Format.fprintf Format.std_formatter "@[<v 0>";
+    List.iter (pp_print_composite st.rev_symmap Format.std_formatter) comp_defs;
     List.iter
       (fun (i, g) -> match g with
          | AST.Gfun (Rusttypes.Internal f) ->
@@ -1298,6 +1383,7 @@ module To_syntax = struct
            Format.fprintf Format.std_formatter "\n"
          | _ -> failwith "unreachable")
       fun_defs;
+    Format.fprintf Format.std_formatter "@]@.";
     (* generate prog_comp_env *)
     match Rusttypes.build_composite_env comp_defs with
     | Errors.OK comp_env ->

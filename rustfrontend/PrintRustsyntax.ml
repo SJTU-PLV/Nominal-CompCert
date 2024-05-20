@@ -7,6 +7,10 @@ open! Rusttypes
 (* open Rustsyntax *)
 open PrintCsyntax
 
+let dummy_origin_ref = ref BinNums.Coq_xH
+
+let dummy_origin () = !dummy_origin_ref
+
 let string_of_mut mut =
   match mut with
   | Mutable -> "mut "
@@ -22,11 +26,17 @@ let print_origins (orgs : origin list) =
   | [] -> ""
   | _ -> "<" ^ print_origins_aux orgs^ ">"
   
-let rec origin_relations_string (rels: origin_rel list) =
+let rec origin_relations_string_aux (rels: origin_rel list) =
   match rels with
   | [] -> ""
   | (org1, org2) :: rels' -> 
-    extern_atom org1 ^ ": " ^ extern_atom org2 ^ ", " ^ origin_relations_string rels'
+    extern_atom org1 ^ ": " ^ extern_atom org2 ^ ", " ^ origin_relations_string_aux rels'
+
+let origin_relations_string (rels: origin_rel list) =
+  match rels with
+  | [] -> ""
+  | _ ->
+    "where " ^ origin_relations_string_aux rels
 
 
 let rec name_rust_decl id ty =
@@ -98,7 +108,7 @@ let name_function_parameters name_param fun_name params cconv name_origins rels 
         add_params true params
     end;
     Buffer.add_char b ')';
-    Buffer.add_string b "\nwhere ";
+    Buffer.add_string b "\n";
     Buffer.add_string b (origin_relations_string rels);
     Buffer.contents b
 
@@ -154,15 +164,15 @@ let print_globdecl p (id,gd) =
 
 let struct_or_variant = function Struct -> "struct" | TaggedUnion -> "variant"
 
-let declare_composite p (Composite(id, su, m, a, _, _)) =
-  fprintf p "%s %s;@ " (struct_or_variant su) (extern_atom id)
+let declare_composite p (Composite(id, su, m, a, orgs, rels)) =
+  fprintf p "%s %s%s %s;@ " (struct_or_variant su) (extern_atom id) (print_origins orgs) (origin_relations_string rels)
 
 let print_member p = function
   | Member_plain(id, ty) ->
       fprintf p "@ %s;" (name_rust_decl (extern_atom id) ty)
 
-let define_composite p (Composite(id, su, m, a, _, _)) =
-  fprintf p "@[<v 2>%s %s%s {"
-          (struct_or_variant su) (extern_atom id) (attributes a);
+let define_composite p (Composite(id, su, m, a, orgs, rels)) =
+  fprintf p "@[<v 2>%s %s%s %s{"
+          (struct_or_variant su) (extern_atom id) (print_origins orgs) (origin_relations_string rels);
   List.iter (print_member p) m;
   fprintf p "@;<0 -2>};@]@ @ "

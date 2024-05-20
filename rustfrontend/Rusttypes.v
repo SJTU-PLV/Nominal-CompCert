@@ -102,6 +102,33 @@ Fixpoint type_eq_except_origins (ty1 ty2: type) : bool :=
   | _, _ => type_eq ty1 ty2
   end.
 
+Fixpoint origin_in_type org ty : bool :=
+  match ty with
+  | Tbox ty _ => origin_in_type org ty
+  | Treference org' _ ty _ =>
+    Pos.eqb org org' || origin_in_type org ty
+  | Tarray ty _ _ => origin_in_type org ty
+  | Tstruct orgs _ _
+  | Tvariant orgs _ _ =>
+      in_dec Pos.eq_dec org orgs
+  | _ => false
+  end.
+
+Fixpoint replace_type_with_dummy_origin (dummy: origin) (ty: type) : type :=
+  match ty with
+  | Tbox ty a => Tbox (replace_type_with_dummy_origin dummy ty) a
+  | Treference _ mut ty a =>
+      Treference dummy mut (replace_type_with_dummy_origin dummy ty) a
+  | Tarray ty sz a =>
+      Tarray (replace_type_with_dummy_origin dummy ty) sz a
+  | Tstruct orgs id a =>
+      Tstruct (map (fun _ => dummy) orgs) id a
+  | Tvariant orgs id a =>
+      Tvariant (map (fun _ => dummy) orgs) id a
+  | _ => ty                      (* Is it correct? *)
+  end.
+
+
 Definition attr_of_type (ty: type) :=
   match ty with
   | Tunit => noattr

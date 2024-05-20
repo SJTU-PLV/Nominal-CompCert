@@ -12,6 +12,7 @@ Require Import Errors.
 Import ListNotations.
 (** * Rustsyntax to Rustlight *)
 
+Parameter dummy_origin : unit -> origin.
 
 (** State and error monad for generating fresh identifiers. *)
 
@@ -515,6 +516,9 @@ with transl_arm_statements (sl: arm_statements) (p: place') (moved: bool) (co: c
           match find (fun elt => ident_eq (name_member elt) fid) co.(co_members) with
           | Some m =>
               let ty := type_member m in
+              (* replace generic origins in ty with dummy origins *)
+              let dummy_org := dummy_origin Datatypes.tt in
+              let ty := replace_type_with_dummy_origin dummy_org ty in
               let cond := Ecktag p fid type_bool in
               let p' := Pdowncast p fid ty in
               (* move p' or copy p'. TODO: support [&mut] p' *)

@@ -134,6 +134,7 @@ Extract Constant Clightgen.free_id => "Dropglue.free_id".
 Extract Constant Clightgen.fresh_atom => "Camlcoq.fresh_atom".
 Extract Constant ElaborateDrop.fresh_atom => "Camlcoq.fresh_atom".
 Extract Constant Rustlightgen.fresh_atom => "Camlcoq.fresh_atom".
+Extract Constant Rustlightgen.dummy_origin => "PrintRustsyntax.dummy_origin".
 Extract Constant ReplaceOrigins.fresh_atom => "Camlcoq.fresh_atom".
 
 (* Initializers *)
@@ -182,7 +183,7 @@ Separate Extraction
    Compiler.transf_c_program Compiler.transf_cminor_program
    (* rust *)
    Compiler.transf_rust_program 
-   (* Test cases *)
+   (* Some functions are needed in Ocaml side *)
    Rusttypes.signature_of_type Rusttypes.build_composite_env
    Rustsyntax.type_of_function RustlightBase.type_of_function RustIR.type_of_function
    (* Cexec.do_initial_state Cexec.do_step Cexec.at_final_state *)

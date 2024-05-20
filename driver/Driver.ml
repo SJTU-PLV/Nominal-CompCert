@@ -528,6 +528,7 @@ let _ =
   let clight_prog =
     let items = RustsurfaceDriver.parse test_case in
     let module R = Rustsurface in
+    Format.fprintf stdout_format "Rustsurface to Rustsyntax@.";
     let m_syntax = items |> R.prog_of_items |> R.To_syntax.transl_prog in
     let (syntax_result, symmap) = R.To_syntax.(run_monad m_syntax skeleton_st) in
     (match syntax_result with

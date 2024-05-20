@@ -98,8 +98,8 @@ open Rustsurface
 %type <(id * ty) list> composite_fields
 %type <ty list> non_empty_ty_sequence
 %type <(id * (ty list)) list> enum_fields
-%type <id * comp_enum> enum
-%type <id * comp_struc> struct_
+%type <id * comp_enum * id list * (id * id) list> enum
+%type <id * comp_struc * id list * (id * id) list> struct_
 %type <id * fn> fn
 %type <prog_item list> prog
 %type <pat> pattern
@@ -113,12 +113,12 @@ prog_eof:
   | p = prog; EOF { p }
 
 prog:
-  | c = enum { [Penum (fst c, snd c)] }
-  | c = struct_ { [Pstruc (fst c, snd c)] }
+  | c = enum { let (x, flds, orgs, rels) = c in [Penum (x, flds, orgs, rels)] }
+  | c = struct_ { let (x, flds, orgs, rels) = c in [Pstruc (x, flds, orgs, rels)] }
   | f = fn { [Pfn (fst f, snd f)] }
-  | c = enum; p = prog { (Penum (fst c, snd c))::p }
-  | c = struct_; p = prog { (Pstruc (fst c, snd c))::p }
-  | f = fn; p = prog { (Pfn (fst f, snd f))::p }
+  | c = enum; p = prog { let (x, flds, orgs, rels) = c in (Penum (x, flds, orgs, rels))::p }
+  | c = struct_; p = prog { let (x, flds, orgs, rels) = c in (Pstruc (x, flds, orgs, rels))::p }
+  | f = fn; p = prog { let (id, f) = f in (Pfn (id, f))::p }
 
 (* optional origin *)
 origin_opt:
@@ -139,7 +139,7 @@ generic_origins:
 origin_relations_:
   | { [] }
   | x = ORIGIN; COLON; y = ORIGIN { [(x,y)] }
-  | x = ORIGIN; COLON; y = ORIGIN; rels = origin_relations { (x, y)::rels }
+  | x = ORIGIN; COLON; y = ORIGIN; COMMA; rels = origin_relations_ { (x, y)::rels }
 
 origin_relations:
   | { [] }
@@ -161,12 +161,12 @@ enum_fields:
     { (x, ts) :: flds }
 
 enum:
-  | ENUM; x = ID; LBRACE; flds = enum_fields; RBRACE
-    { (x, flds) }
+  | ENUM; x = ID; orgs = generic_origins; rels = origin_relations; LBRACE; flds = enum_fields; RBRACE
+    { (x, flds, orgs, rels) }
 
 struct_:
-  | STRUCT; x = ID; LBRACE; flds = composite_fields; RBRACE
-    { (x, flds) }
+  | STRUCT; x = ID; orgs = generic_origins; rels = origin_relations; LBRACE; flds = composite_fields; RBRACE
+    { (x, flds, orgs, rels) }
 
 fn:
   | FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; rels = origin_relations; LBRACE; s = stmt; RBRACE
@@ -226,6 +226,7 @@ args_pattern:
   | p = pattern; COMMA; args = args_pattern { p :: args }
 
 pattern:
+  (* TODO: support path expression instead of raw ID *)
   | x = ID; LPAREN; args = args_pattern; RPAREN { Pconstructor (x, args) }
   | x = ID { Pbind x }
 
@@ -245,11 +246,11 @@ ty:
   | UINT8 { Tint (Ctypes.I8, Ctypes.Unsigned, Ctypes.noattr) }
   | FLOAT64 { Tfloat (Ctypes.F64, Ctypes.noattr) }
   | FLOAT32 { Tfloat (Ctypes.F32, Ctypes.noattr) }
-  | FN; LPAREN; pt = params_ty; RPAREN; RARROW; rt = ty { Tfunction (pt, rt) }
+  | FN; orgs = generic_origins; LPAREN; pt = params_ty; RPAREN; RARROW; rt = ty; rels = origin_relations { Tfunction (pt, rt, orgs, rels) }
   | BOX; LANGLE; t = ty; RANGLE { Tbox (t, Ctypes.noattr) }
   | REF; org = origin_opt; MUT; t = ty; { Treference(t, org, Rusttypes.Mutable, Ctypes.noattr) }
   | REF; org = origin_opt; t = ty; { Treference(t, org, Rusttypes.Immutable, Ctypes.noattr) }
-  | x = ID { Tadt (x, Ctypes.noattr) }
+  | x = ID; orgs = generic_origins { Tadt (x, Ctypes.noattr, orgs) }
 
 match_arm:
   | p = pattern; RARROWW; LBRACE; s = stmt; RBRACE
