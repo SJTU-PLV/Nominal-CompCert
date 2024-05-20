@@ -121,6 +121,9 @@ Fixpoint elaborate_return (stmt: RustlightBase.statement) : RustlightBase.statem
 Definition ret_var (ty: type) (v: ident) : option place' :=
   if type_eq ty Tunit then None else Some (Plocal v ty).
 
+
+Parameter fresh_atom : unit -> ident.
+
 (* The main job is to extract the variables and translate the statement *)
 
 Definition transl_function (f: RustlightBase.function) : function :=
@@ -128,8 +131,7 @@ Definition transl_function (f: RustlightBase.function) : function :=
   (* drop statements for parameters *)
   let params_drops := gen_drops f.(RustlightBase.fn_params) in
   (* generate the return variable *)
-  let locals := var_names (vars ++ f.(RustlightBase.fn_params)) in
-  let retv := Pos.succ (fold_left (fun acc elt => Pos.max acc elt) locals 1%positive) in
+  let retv := fresh_atom tt in
   let oretv := ret_var f.(RustlightBase.fn_return) retv in
   (* no need to insert return *)
   (* let body := elaborate_return f.(RustlightBase.fn_body) in *)
