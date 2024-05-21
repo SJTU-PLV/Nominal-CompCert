@@ -4,5 +4,5 @@ fn main() {
 	let c : &mut i32 = b;
 	*c = *c + 1;
 	*b = *b + 1;
-    println!("{}", a);
+    printf("%d", a);
 }
