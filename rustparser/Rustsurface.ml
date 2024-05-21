@@ -3,6 +3,7 @@ type id = string
 
 let dummy_origin_str = "'0"
 
+let wildcard_id = "_"
 
 type ty = | Tunit
           | Tint of Ctypes.intsize * Ctypes.signedness * Ctypes.attr
@@ -33,13 +34,15 @@ type expr = Eunit
           | Ecall of expr * expr list
           | Estr of string
 
-type pat = Pconstructor of id * (pat list)
-         | Pbind of id
+type ref_mut = RefMut | RefImmut
+
+type pat = Pconstructor of id * id * (pat list)
+         | Pbind of (ref_mut option * id)
 
 type ident = AST.ident
 
-type pat' = Pconstructor' of ident * (pat' list)
-          | Pbind' of ident
+type pat' = Pconstructor' of ident * ident * (pat' list)
+          | Pbind' of (ref_mut option * ident)
 
 
 and stmt = Sskip
@@ -130,14 +133,14 @@ module To_syntax = struct
 
   type error = Efield_of_non_struct of Rusttypes.coq_type
              | Efield_not_found of id
-             | Ederef_non_box of Rusttypes.coq_type
+             | Ederef_non_deref of Rusttypes.coq_type
              | Enot_callable of Rusttypes.coq_type
              | Eunop_type_error of Cop.unary_operation * Rusttypes.coq_type
              | Ebinop_type_error of Cop.binary_operation
                                       * Rusttypes.coq_type
                                       * Rusttypes.coq_type
              | Econstructor_alone of id * id
-             | Econstructor_wrong_arity of ident * ident * int
+             | Econstructor_wrong_arity of ident * ident * int * int
              | Emulti_args_to_constructor of expr list * id * id
              | Enot_a_composite of id
              | Ename_not_found of id
@@ -414,8 +417,8 @@ module To_syntax = struct
       pp_print_string pp "Attempt to read field of non-struct type ";
       pp_print_rust_type symmap pp t 
     | Efield_not_found id -> Format.fprintf pp "Field %s not found" id
-    | Ederef_non_box t ->
-      pp_print_string pp "Dereference on non-box type ";
+    | Ederef_non_deref t ->
+      pp_print_string pp "Dereference a non-dereferencable type ";
       pp_print_rust_type symmap pp t 
     | Enot_callable t -> 
       pp_print_string pp "Not callable type ";
@@ -446,10 +449,10 @@ module To_syntax = struct
       pp_print_string pp " is not a enum"
     | Eduplicated_patterns ->
       pp_print_string pp "duplicated patterns"
-    | Econstructor_wrong_arity (ienum, ivar, got) ->
+    | Econstructor_wrong_arity (ienum, ivar, got, expected) ->
       let xenum = IdentMap.find ienum symmap in
       let xvar = IdentMap.find ivar symmap in
-      Format.fprintf pp "%s::%s does not take %d arguments" xenum xvar got;
+      Format.fprintf pp "%s::%s does not take %d arguments, expected %d" xenum xvar got expected;
 
   type 'a ret = ('a, error) result * state
 
@@ -849,7 +852,7 @@ module To_syntax = struct
      let row_head_variant_ident (row: pat_row) : ident option =
        let (patterns, _) = row in
        match List.hd patterns with
-       | Pconstructor' (ic, _) -> Some ic
+       | Pconstructor' (_, ic, _) -> Some ic
        | Pbind' _ -> None
 
      let row_head_args_types (row: pat_row) (header: Rustsyntax.expr list)
@@ -860,9 +863,11 @@ module To_syntax = struct
        | Rusttypes.Tvariant (_, ienum, _) ->
           let (patterns, _) = row in
           (match List.hd patterns with
-          | Pconstructor' (ivar, args) ->
-            let enum = IdentMap.find ienum enums in
-            Some (ienum, List.assoc ivar enum)
+          | Pconstructor' (ienum', ivar, args) ->
+            if Camlcoq.P.(=) ienum ienum' then
+              let enum = IdentMap.find ienum enums in
+              Some (ienum, List.assoc ivar enum)
+            else failwith "Mismatch enum type in match statement"
           | Pbind' _ -> None
           )
        | _ -> None
@@ -916,7 +921,7 @@ module To_syntax = struct
        match row_head_variant_ident row with
        | Some rhvi ->
          (match variant_groups with
- | g :: groups_left ->
+          | g :: groups_left ->
             let (variant_ident, rows) = g in
             if Camlcoq.P.(=) rhvi variant_ident then
               ((variant_ident, row :: rows) :: groups_left, matchall_groups)
@@ -969,7 +974,7 @@ module To_syntax = struct
          let rows' = List.map
                        (fun (patterns, body) ->
                           match List.hd patterns with
-                          | Pconstructor' (_, args) ->
+                          | Pconstructor' (_, _, args) ->
                             (List.concat [args; (List.tl patterns)], body)
                           | _ -> failwith "unreachable")
                        grp_rows
@@ -977,21 +982,40 @@ module To_syntax = struct
          return ({ header = header'; rows = rows' }, as_var)
        | None -> failwith "unreachable"
 
+    (* Some helper functions for Pbind *)
+    let unwrap_bind_id p =
+      match p with
+      | Pbind'(_, i) -> i
+      | _ -> failwith "unreachable"
+
+    let unwrap_bind_type dummy_org p ty =
+     match p with
+     | Pbind'(None, _) -> ty
+     | Pbind'(Some(RefMut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Mutable, ty, noattr)
+     | Pbind'(Some(RefImmut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Immutable, ty, noattr)
+     | _ -> failwith "unwrap_bind_type error"
+
+    let unwrap_bind_expr_type dummy_org p e =
+     let ty = unwrap_bind_type dummy_org p (Rustsyntax.typeof e) in
+     match p with
+     | Pbind'(None, _) -> (ty, e)
+     | Pbind'(Some(RefMut), _) -> (ty, Rustsyntax.Eref(dummy_org, Rusttypes.Mutable, e, ty))
+     | Pbind'(Some(RefImmut), _) -> (ty, Rustsyntax.Eref(dummy_org, Rusttypes.Immutable, e, ty))
+     | _ -> failwith "unwrap_bind_type error"
+
      let table_for_matchall_group (grp_rows: pat_row list)
          (header: Rustsyntax.expr list)
          : pat_table monad =
          get_enums >>= fun enums ->
-         let unwrap_bind_id p =
-           match p with
-           | Pbind' i -> i
-           | _ -> failwith "unreachable"
-         in
+         dummy_origin >>= fun dummy_org ->
          let rows' = List.map
                        (fun (patterns, body) ->
+                          let (ty, e) = unwrap_bind_expr_type dummy_org (List.hd patterns) (List.hd header) in
                           (List.tl patterns,
+                            (* If Pbind is (ref mut r) then this let stmt is r = &mut ... *)
                              Rustsyntax.Slet (unwrap_bind_id (List.hd patterns),
-                                              Rustsyntax.typeof (List.hd header),
-                                              Some (List.hd header),
+                                              ty,
+                                              Some e,
                                               body
                               )))
                        grp_rows
@@ -1050,24 +1074,35 @@ module To_syntax = struct
           return (Rustsyntax.Smatch (destructed, arms))
    end
 
+   let unwrap_bind_type dummy_org p ty =
+    match p with
+    | Pbind(None, _) -> ty
+    | Pbind(Some(RefMut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Mutable, ty, noattr)
+    | Pbind(Some(RefImmut), _) -> Rusttypes.Treference(dummy_org, Rusttypes.Immutable, ty, noattr)
+    | _ -> failwith "unwrap_bind_type error"
+
    let rec lower_pat (p: pat) (t: Rusttypes.coq_type) : pat' monad =
      match p with
-     | Pconstructor (x, args) ->
+     | Pconstructor (enum_id, constr_id, args) ->
        (match t with
         | Rusttypes.Tvariant (_, ienum, _) ->
           get_enums >>= fun enums ->
+          get_or_new_ident enum_id >>= fun ienum' ->
+          rev_ident ienum >>= fun ienum_str ->
+          if not (Camlcoq.P.(=) ienum ienum') then failwith ("lower_pat: " ^ enum_id ^ " and " ^ ienum_str)
+          else
           (match IdentMap.find_opt ienum enums with
            | Some enum ->
-             get_or_new_ident x >>= fun i ->
+             get_or_new_ident constr_id >>= fun i ->
              (match List.assoc_opt i enum with
               | Some var_args ->
                 if (List.length var_args) <> (List.length args) then
-                  throw (Econstructor_wrong_arity (ienum, i, List.length args))
+                  throw (Econstructor_wrong_arity (ienum, i, List.length args, List.length var_args))
                 else
                   map_m (List.combine args var_args)
                     (fun (arg, t) -> lower_pat arg t)
                   >>= fun args' ->
-                  return (Pconstructor' (i, args'))
+                  return (Pconstructor' (ienum, i, args'))
               | None ->
                 throw (Eno_variant (ienum, i))
              )
@@ -1075,9 +1110,11 @@ module To_syntax = struct
           )
         | _ -> throw (Enot_a_enum t)
        )
-    | Pbind x ->
+    | Pbind(m, x) ->
+      dummy_origin >>= fun dummy_org ->
+      let t = unwrap_bind_type dummy_org p t in
       reg_local_type x t >>= fun i ->
-      return (Pbind' i)
+      return (Pbind'(m,i))
 
 
   (* String literals *)
@@ -1135,6 +1172,7 @@ module To_syntax = struct
           return (Rustsyntax.Efield (e', ix, Rusttypes.type_member tm))
         | Option.None -> throw (Efield_not_found x)
         )
+      (* TODO: why? *)
       | Rusttypes.Treference (org, _, (Rusttypes.Tstruct (_, ist, _) as ts), _) ->
         get_st >>= fun st ->
         let Rusttypes.Composite (_, _, members, _, _, _) =
@@ -1159,7 +1197,7 @@ module To_syntax = struct
       (match te with
        | Rusttypes.Tbox (t, _) -> return (Rustsyntax.Ederef (e', t))
        | Rusttypes.Treference (_, _, t, _) -> return (Rustsyntax.Ederef (e', t))
-       | _ -> throw (Ederef_non_box te)
+       | _ -> throw (Ederef_non_deref te)
       )
     | Eunop (op, e) ->
       transl_expr e >>= fun e' ->
@@ -1376,7 +1414,6 @@ module To_syntax = struct
     (* convert composite declarations to support mutual recursive ADT *)
     map_m p.composite_decls
       (fun (x, s_or_e, orgs, rels) -> add_composite_decl x s_or_e orgs rels) >>= fun _ ->
-    Format.fprintf Format.std_formatter "Added composite declarations: @.";
     map_m p.funcs
       (fun (x, f) -> add_fn x f) >>= fun _ ->
     map_m p.strucs

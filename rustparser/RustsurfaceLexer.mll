@@ -87,6 +87,7 @@ rule read =
  | "case" { CASE }
  | "as" { AS }
  | "mut" { MUT }
+ | "ref" { PREF}
 
  | origin { ORIGIN (Lexing.lexeme lexbuf) }
  | id { ID (Lexing.lexeme lexbuf) }

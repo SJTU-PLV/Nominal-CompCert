@@ -483,6 +483,7 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
                    if cktag(temp,fid1) ...    _|  *)
                 do temp_id <- gensym ty;
                 let temp := Plocal temp_id ty in
+                (* We do not want to move e to temp if e is a l-value *)
                 do (cond_sl, e') <- transl_value_expr e;
                 let eval_cond := makeseq cond_sl in
                 let assign_temp := Sassign temp e' in

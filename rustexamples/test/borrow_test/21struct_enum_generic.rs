@@ -14,10 +14,10 @@ fn main(){
     let a: A = A { x: &v1, y: &v2};
     let b: B = B::f(&v1);
     match b {
-        f(r) => {
+        B::f(r) => {
             printf("%d", *r);
         }
-        g(r1, r2) => {
+        B::g(r1, r2) => {
             printf("%d and %d", *r1, *r2);
         }
     };

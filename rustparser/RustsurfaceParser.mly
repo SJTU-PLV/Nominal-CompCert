@@ -22,6 +22,7 @@ open Rustsurface
 %token OR
 %token AND
 %token REF
+%token PREF
 
 %token ASSIGN
 
@@ -241,10 +242,27 @@ args_pattern:
   | p = pattern; { [p] }
   | p = pattern; COMMA; args = args_pattern { p :: args }
 
+(* Refer to [https://doc.rust-lang.org/reference/patterns.html].*)
+
+path_expr:
+  | x1 = ID; COLON2; x2 = ID { (x1, x2) }
+
+(* Path patterns take precedence over identifier patterns *)
+path_pattern:
+  | p = path_expr { let (x, y) = p in Pconstructor (x, y, [Pbind(Option.None, wildcard_id)])}
+
+identifier_pattern:
+  | PREF; MUT; x = ID { Pbind(Option.Some(RefMut), x) }
+  | PREF; x = ID { Pbind(Option.Some(RefImmut),x) }
+  | x = ID { Pbind(Option.None, x) }
+
+tuple_struct_pattern:
+  | p = path_expr; LPAREN; args = args_pattern; RPAREN { let (x, y) = p in Pconstructor (x, y, args) }
+
 pattern:
-  (* TODO: support path expression instead of raw ID *)
-  | x = ID; LPAREN; args = args_pattern; RPAREN { Pconstructor (x, args) }
-  | x = ID { Pbind x }
+  | p = path_pattern { p }
+  | p = tuple_struct_pattern { p }
+  | p = identifier_pattern { p }
 
 params_ty:
   | { [] }
