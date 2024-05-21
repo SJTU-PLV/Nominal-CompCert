@@ -98,3 +98,5 @@ fn no_dangle() -> i32 {
 19. test share reference
 20. Polonius example from [https://smallcultfollowing.com/babysteps/blog/2023/09/29/polonius-part-2/]
 21. Generic origin in struct and enum
+22. Return dangling pointer
+23. Problem case #4 from NLL RFC

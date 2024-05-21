@@ -100,6 +100,8 @@ open Rustsurface
 %type <(id * (ty list)) list> enum_fields
 %type <id * comp_enum * id list * (id * id) list> enum
 %type <id * comp_struc * id list * (id * id) list> struct_
+%type <id * id list * (id * id) list> enum_decl
+%type <id * id list * (id * id) list> struct_decl
 %type <id * fn> fn
 %type <prog_item list> prog
 %type <pat> pattern
@@ -113,9 +115,13 @@ prog_eof:
   | p = prog; EOF { p }
 
 prog:
+  | d = enum_decl { let (x, orgs, rels) = d in [Pcomp_decl (x, Enum, orgs, rels)] }
+  | d = struct_decl { let (x, orgs, rels) = d in [Pcomp_decl (x, Struct, orgs, rels)] }
   | c = enum { let (x, flds, orgs, rels) = c in [Penum (x, flds, orgs, rels)] }
   | c = struct_ { let (x, flds, orgs, rels) = c in [Pstruc (x, flds, orgs, rels)] }
   | f = fn { [Pfn (fst f, snd f)] }
+  | d = enum_decl; p = prog { let (x, orgs, rels) = d in (Pcomp_decl (x, Enum, orgs, rels)) :: p }
+  | d = struct_decl; p = prog { let (x, orgs, rels) = d in (Pcomp_decl (x, Struct, orgs, rels)) :: p }
   | c = enum; p = prog { let (x, flds, orgs, rels) = c in (Penum (x, flds, orgs, rels))::p }
   | c = struct_; p = prog { let (x, flds, orgs, rels) = c in (Pstruc (x, flds, orgs, rels))::p }
   | f = fn; p = prog { let (id, f) = f in (Pfn (id, f))::p }
@@ -155,6 +161,8 @@ non_empty_ty_sequence:
   | t = ty; COMMA; ts = non_empty_ty_sequence { t :: ts }
 
 enum_fields:
+  | x = ID { [(x, [Tunit])] }
+  | x = ID; COMMA; flds = enum_fields { (x, [Tunit]) :: flds }
   | x = ID; LPAREN; ts = non_empty_ty_sequence; RPAREN;
     { [(x, ts)] }
   | x = ID; LPAREN; ts = non_empty_ty_sequence; RPAREN; COMMA; flds = enum_fields
@@ -164,9 +172,17 @@ enum:
   | ENUM; x = ID; orgs = generic_origins; rels = origin_relations; LBRACE; flds = enum_fields; RBRACE
     { (x, flds, orgs, rels) }
 
+enum_decl:
+  | ENUM; x = ID; orgs = generic_origins; rels = origin_relations; SEMICOLON
+    { (x, orgs, rels) }
+
 struct_:
   | STRUCT; x = ID; orgs = generic_origins; rels = origin_relations; LBRACE; flds = composite_fields; RBRACE
     { (x, flds, orgs, rels) }
+
+struct_decl:
+  | STRUCT; x = ID; orgs = generic_origins; rels = origin_relations; SEMICOLON
+    { (x, orgs, rels) }
 
 fn:
   | FN; x = ID; orgs = generic_origins; LPAREN; p = composite_fields; RPAREN; rels = origin_relations; LBRACE; s = stmt; RBRACE

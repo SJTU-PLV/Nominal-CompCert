@@ -13,6 +13,9 @@ type ty = | Tunit
           | Tadt of id * Ctypes.attr * id list
           | Treference of ty * id * Rusttypes.mutkind * Ctypes.attr
 
+type struct_or_enum =
+  | Struct
+  | Enum
 let bool_ty = Tint (Ctypes.IBool, Ctypes.Unsigned, Ctypes.noattr)
 
 type expr = Eunit
@@ -87,10 +90,14 @@ end)
 type prog_item = Pfn of id * fn
                | Pstruc of id * comp_struc * id list * (id * id) list
                | Penum of id * comp_enum * id list * (id * id) list
+               | Pcomp_decl of id * struct_or_enum * id list * (id * id) list
 
 type prog = { funcs: (id * fn) list
             ; strucs: (id * comp_struc * id list * (id * id) list) list
-            ; enums: (id * comp_enum * id list * (id * id) list) list }
+            ; enums: (id * comp_enum * id list * (id * id) list) list 
+            ; composite_decls: (id * struct_or_enum * id list * (id * id) list) list
+            (* TODO: support function declaration *)
+            }
 
 let rec prog_of_items (pis: prog_item list): prog = match pis with
   | (Pfn (x, f))::pis ->
@@ -102,7 +109,10 @@ let rec prog_of_items (pis: prog_item list): prog = match pis with
   | (Penum (x, c, orgs, rels)) :: pis ->
     let p = prog_of_items pis in
     { p with enums = (x, c, orgs, rels) :: p.enums }
-  | nil -> { funcs = []; strucs = []; enums = [] }
+  | (Pcomp_decl(x, s_or_e, orgs, rels)) :: pis ->
+    let p = prog_of_items pis in
+    { p with composite_decls = (x, s_or_e, orgs, rels) :: p.composite_decls}
+  | nil -> { funcs = []; strucs = []; enums = []; composite_decls = [] }
 
 module To_syntax = struct
 
@@ -645,7 +655,20 @@ module To_syntax = struct
       get_or_new_ident org_id >>= fun org ->
       return (T.Treference (org, m, t', attr))
 
+  let composite_of_decl i s_or_e a orgs rels =
+    match s_or_e with
+    | Struct -> Rusttypes.Composite (i, Rusttypes.Struct, [], noattr, orgs, rels)
+    | Enum -> Rusttypes.Composite (i, Rusttypes.TaggedUnion, [], noattr, orgs, rels)
 
+  (* add composite declaration *)
+  let add_composite_decl (x: id) (s_or_e: struct_or_enum) (orgs: id list) (rels: (id * id) list) : unit monad =
+    get_or_new_ident x >>= fun i ->
+    convert_origins orgs >>= fun orgs ->
+    convert_origin_relations rels >>= fun rels ->
+    let c = composite_of_decl i s_or_e noattr orgs rels in
+    get_st >>= fun st ->
+    let cos = IdentMap.add i c st.composites in
+    set_st { st with composites = cos }
 
   let add_composite_struc (x: id) (c: comp_struc) (orgs: id list) (rels: (id * id) list) : unit monad =
     get_or_new_ident x >>= fun i ->
@@ -656,6 +679,8 @@ module To_syntax = struct
          return (Rusttypes.Member_plain (i, t'))) >>= fun members' ->
     convert_origins orgs >>= fun orgs ->
     convert_origin_relations rels >>= fun rels ->
+    (* FIXME: if this composite has been declared, we just override
+    its origins and relations *)
     let c' = Rusttypes.Composite (i, Rusttypes.Struct, members', noattr, orgs, rels) in
     get_st >>= fun st ->
     let cos' = IdentMap.add i c' st.composites in
@@ -1348,6 +1373,10 @@ module To_syntax = struct
 
 
   let transl_prog (p: prog) : (Rustsyntax.coq_function Rusttypes.program) monad =
+    (* convert composite declarations to support mutual recursive ADT *)
+    map_m p.composite_decls
+      (fun (x, s_or_e, orgs, rels) -> add_composite_decl x s_or_e orgs rels) >>= fun _ ->
+    Format.fprintf Format.std_formatter "Added composite declarations: @.";
     map_m p.funcs
       (fun (x, f) -> add_fn x f) >>= fun _ ->
     map_m p.strucs
