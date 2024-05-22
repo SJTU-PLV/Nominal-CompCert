@@ -404,14 +404,20 @@ GS.fsim_lts.
             eapply Genv.genv_symb_range; eauto. reflexivity.
           - intros. unfold Conventions.size_arguments in H.
             rewrite NONEARG in H. simpl in H. inv H.
-          - admit.
-          - admit.
-          - admit.
+          - simpl. unfold initial_regset.
+            rewrite Pregmap.gss. unfold Vnullptr. replace Archi.ptr64 with true.
+            econstructor. eauto.
+          - simpl. unfold initial_regset. rewrite Pregmap.gso.
+            rewrite Pregmap.gss. unfold Vnullptr. replace Archi.ptr64 with true.
+            econstructor. eauto. congruence.
+          - (** why we need this valid_blockv? for what in which step for DR*)
+            admit.
           - econstructor. simpl. red.
             unfold Conventions.size_arguments. rewrite NONEARG.
             reflexivity.
           - congruence.
-          - admit.
+          - unfold initial_regset. rewrite Pregmap.gso. rewrite Pregmap.gss. unfold Vnullptr.
+            destruct Archi.ptr64; congruence. congruence.
         }
         eapply GS.fsim_match_initial_states in FSIM as FINI; eauto.
         destruct FINI as [i [ls2 [A B]]].
@@ -449,31 +455,24 @@ GS.fsim_lts.
       simpl in *. subst cur.
       unfold CMulti.get_cur_thread, CMulti.get_thread in H2. simpl in H2.
       specialize (THREADS 1%nat CUR_VALID).
-      destruct THREADS as (wB & owA & wP & lsc & lsa & i' & GETWB & GETi & MSEw & GETC & GETA & GETWA & MS & GETP).
+      destruct THREADS as (wB & owA & wP & lsc & lsa & i' & GETWB & GETi & MSEw & GETC & GETA & GETWA & MS & GETP & ACC).
       assert (lsc = CMulti.Local OpenC ls).
-      eapply foo; eauto. subst lsc. inv MS.
+      eapply foo; eauto. subst lsc.
       specialize (fsim_lts se tse wB MSEw valid_se) as FSIM.
-      inversion FSIM. unfold match_local_states in M_STATES.
+      inversion FSIM.
+      assert (wB = init_w m0 main_b INITMEM).
+      eapply foo; eauto. subst wB.
+      inv MS.
+
+      unfold match_local_states in M_STATES.
       exploit fsim_match_final_states. eauto.
       eauto. intros [r2 [FIN [ACCE MR]]]. destruct r2.
       inv MR.
-      econstructor; eauto. admit. (*the same as initial*)
-      simpl.
-      assert (sg = main_sig).
-      {
-        rewrite GETWB in MAIN_THREAD_INITW.
-        inv MAIN_THREAD_INITW. unfold set_injp in H.
-        simpl in H. inv H.
-        reflexivity.
-      }
-      subst. unfold tres in H7. simpl in H7.
-      unfold Conventions1.loc_result, main_sig in H7. simpl in H7.
-      destruct Archi.ptr64; simpl in H7. inv H7. eauto. inv H7. eauto.
-    Admitted. (** The Vnullptr issue*)
-
-
-    (** Seems straight forward *)
-
+      econstructor; eauto.
+      subst. unfold tres in H8. simpl in H8.
+      unfold Conventions1.loc_result, main_sig in H8. simpl in H8.
+      destruct Archi.ptr64; simpl in H8. inv H8. eauto. inv H8. eauto.
+Qed.
     
     Lemma local_star : forall gs t sa1 sa2,
         Star (OpenA tse) sa1 t sa2 ->
@@ -1091,7 +1090,7 @@ GS.fsim_lts.
          reflexivity.
        + (*match_states*)
          apply injp_acci_nexttid in GW_ACC as NTID. apply injp_acci_tid in GW_ACC as TID.
-         econstructor. 8:{ rewrite NatMap.gss. reflexivity. }.
+         econstructor. 8:{ rewrite NatMap.gss. reflexivity. }
          all : simpl; eauto.
          -- simpl. intros. destruct (Nat.eq_dec 1 cur).
             subst. rewrite NatMap.gss. congruence.
@@ -1168,7 +1167,7 @@ GS.fsim_lts.
        + (*match_states*)
          apply injp_acci_nexttid in GW_ACC as NTID. apply injp_acci_tid in GW_ACC as TID.
          simpl in *.
-         econstructor. 8:{ rewrite NatMap.gss. reflexivity. }.
+         econstructor. 8:{ rewrite NatMap.gss. reflexivity. }
          all : simpl; eauto.
          -- simpl. intros. destruct (Nat.eq_dec 1 cur).
             subst. rewrite NatMap.gss. congruence.
@@ -1799,7 +1798,7 @@ GS.fsim_lts.
      (* match_states *)
          econstructor. instantiate (1:= NatMap.set target (Some wp') worldsP).
          econstructor. 6:{ instantiate (2:= NatMap.set target (Some wB') worldsB).
-         rewrite NatMap.gso. eauto. congruence. }.
+         rewrite NatMap.gso. eauto. congruence. }
          all: simpl; eauto. erewrite set_nth_error_length; eauto.
          intros. destruct (Nat.eq_dec 1 target). subst. congruence.
          rewrite NatMap.gso. eauto. eauto.

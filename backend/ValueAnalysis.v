@@ -2289,7 +2289,7 @@ Proof.
   unfold Genv.find_symbol, Genv.add_global. simpl.
   rewrite PTree.gss. rewrite H0. auto.
   give_up.
-Admitted.
+
 
 Lemma initial_block_classification':
   forall m,
