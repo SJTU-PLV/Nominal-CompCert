@@ -26,12 +26,18 @@ Section COMPOSITE_ENV.
 
 Variable ce: composite_env.
 
-Definition gen_drops (l: list (ident * type)) : statement :=
+(* Insert storagedead before drop for local variables *)
+Definition gen_drops (local: bool) (l: list (ident * type)) : statement :=
   let drops := fold_right
-                 (fun elt acc =>
+                 (fun elt acc =>                    
                     if own_type ce (snd elt) then
-                      (Ssequence (Sdrop (Plocal (fst elt) (snd elt))) (Sstoragedead (fst elt))) :: acc
-                    else acc) nil l in                
+                      if local then
+                        (Sdrop (Plocal (fst elt) (snd elt))) :: acc
+                      else (Ssequence (Sdrop (Plocal (fst elt) (snd elt))) (Sstoragedead (fst elt))) :: acc
+                    else
+                      if local then
+                        (Sstoragedead (fst elt)) :: acc
+                      else acc) nil l in
   makeseq drops.
 
 (* [vars] is a stack of variable list. Eack stack frame corresponds to
@@ -78,13 +84,13 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place') (stmt: Rus
       let s := transl_stmt s (nil :: vars) in
       Sloop s        
   | RustlightBase.Sbreak =>
-      let drops := gen_drops (hd nil vars) in
+      let drops := gen_drops true (hd nil vars) in
       Ssequence drops Sbreak
   | RustlightBase.Scontinue =>
-      let drops := gen_drops (hd nil vars) in
+      let drops := gen_drops true (hd nil vars) in
       Ssequence drops Scontinue
   | RustlightBase.Sreturn e =>
-      let drops := gen_drops (concat vars) in
+      let drops := gen_drops true (concat vars) in
       match oretv, e with
       | Some retv, Some e =>
           let s := Sassign retv e in
@@ -129,7 +135,7 @@ Parameter fresh_atom : unit -> ident.
 Definition transl_function (f: RustlightBase.function) : function :=
   let vars := extract_vars f.(RustlightBase.fn_body) in
   (* drop statements for parameters *)
-  let params_drops := gen_drops f.(RustlightBase.fn_params) in
+  let params_drops := gen_drops false f.(RustlightBase.fn_params) in
   (* generate the return variable *)
   let retv := fresh_atom tt in
   let oretv := ret_var f.(RustlightBase.fn_return) retv in

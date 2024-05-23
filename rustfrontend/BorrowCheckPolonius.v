@@ -464,9 +464,11 @@ Definition check_drop (f: function) (pc: node) (live1: LoanSet.t) (oe1: LOrgEnv.
   else Error (error_msg pc ++ [MSG "access an invalidated place "; CTX (local_of_place p); MSG "in (check_drop)"]).
 
 
-(** All the generic origins cannot contain any internal loans when
-returning from a function. Otherwise there may be a dangling pointer
- *)
+(** Unused: All the generic origins cannot contain any internal loans
+(wrong!)  when returning from a function. Otherwise there may be a
+dangling pointer. The functionality of checking dangling pointer is in
+check return. We assume that all storagedeads are placed before return
+statement *)
 
 Definition check_dangle (f: function) (e: LOrgEnv.t) : bool :=
   forallb (fun org => match LOrgEnv.get org e with
@@ -551,13 +553,10 @@ Definition transfer (ce: composite_env) (f: function) (cfg: rustcfg) (pc: node) 
               AE.Err pc msg
           end
       | Some Iend =>
-          if check_dangle f oe then
-            (* check the generic origins relations *)
-            if check_generic_origins_relations f oe then
-              before
-            else
-              AE.Err pc [MSG "some relations in function return are not declared in the function sigature"]
-          else AE.Err pc [MSG "there may be dangling pointer returned from the function"]
+          if check_generic_origins_relations f oe then
+            before
+          else
+            AE.Err pc [MSG "some relations in function return are not declared in the function sigature"]
       | Some (Isel sel _) =>
           match select_stmt f.(fn_body) sel with
           | None => AE.bot
@@ -594,20 +593,17 @@ Definition transfer (ce: composite_env) (f: function) (cfg: rustcfg) (pc: node) 
                   finish_check pc check_result
               | Sreturn e =>
                   let check_result := check_return f pc live oe ag e f.(fn_return) in
-                  (* check dangle and origin relation. We cannot check
+                  (* check  origin relation. We cannot check
                   it in Iend because it would not update the final AE
                   because there is not successor for Iend. Or we can
                   move it the borrow_check function, but for now we
                   want to see the analysis result in CFG *)
                   match check_result with
                   | OK (live, oe, ag) =>
-                      if check_dangle f oe then
-                        (* check the generic origins relations *)
-                        if check_generic_origins_relations f oe then
-                          AE.State live oe ag
-                        else
-                          AE.Err pc [MSG "some relations in function return are not declared in the function sigature"]
-                      else AE.Err pc [MSG "there may be dangling pointer returned from the function"]
+                      if check_generic_origins_relations f oe then
+                        AE.State live oe ag
+                      else
+                        AE.Err pc [MSG "some relations in function return are not declared in the function sigature"]
                   | Error msg =>
                       AE.Err pc msg
                   end

@@ -100,3 +100,4 @@ fn no_dangle() -> i32 {
 21. Generic origin in struct and enum
 22. Return dangling pointer
 23. Problem case #4 from NLL RFC
+24. check the functionality of function call

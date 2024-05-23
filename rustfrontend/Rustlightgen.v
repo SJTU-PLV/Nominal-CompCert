@@ -483,7 +483,6 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
                    if cktag(temp,fid1) ...    _|  *)
                 do temp_id <- gensym ty;
                 let temp := Plocal temp_id ty in
-                (* We do not want to move e to temp if e is a l-value *)
                 do (cond_sl, e') <- transl_value_expr e;
                 let eval_cond := makeseq cond_sl in
                 let assign_temp := Sassign temp e' in
@@ -523,6 +522,7 @@ with transl_arm_statements (sl: arm_statements) (p: place') (moved: bool) (co: c
               let cond := Ecktag p fid type_bool in
               let p' := Pdowncast p fid ty in
               (* move p' or copy p'. TODO: support [&mut] p' *)
+              (** FIXME: We do not want to (p as fid) *)
               let destruct_place := if moved then Emoveplace p' ty else (Epure (Eplace p' ty)) in
               let assign_temp := Sassign (Plocal temp_id ty) destruct_place in
               let then_stmt := Slet temp_id ty (Ssequence assign_temp arm') in
