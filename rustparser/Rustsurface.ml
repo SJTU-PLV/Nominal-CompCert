@@ -300,7 +300,7 @@ module To_syntax = struct
           let fx = IdentMap.find f symmap in
           fprintf pp "@ %s: %a,%a" fx (pp_print_expr symmap) v pp_print_fields (fs', vs')
         | [], S.Enil -> ()
-        | _, _ -> failwith "unreachable")
+        | _, _ -> failwith "unreachable (Estruct in pp_print_expr)")
       in
       let x = IdentMap.find i symmap in
       fprintf pp "@[<v 2>%s {%a@;<0 -2>}@]" x pp_print_fields (fields, values)
@@ -648,7 +648,7 @@ module To_syntax = struct
       let org_ids = if List.length org_ids = 0 then 
         (List.map (fun _ -> dummy_origin_str) orgs) 
         else if (List.length org_ids) = (List.length orgs) then org_ids 
-        else failwith "unreachable" in
+        else failwith "unreachable (transl_ty)" in
       convert_origins org_ids >>= fun orgs ->
       (match sv with
         | T.Struct -> return (T.Tstruct (orgs, i, attr))
@@ -955,7 +955,7 @@ module To_syntax = struct
          let args_types = List.map (Rusttypes.replace_type_with_dummy_origin dummy) args_types in
          (* consider the size of args_types is 1 *)
          (match args_types with
-         | [] -> failwith "unreachable"
+         | [] -> failwith "unreachable (table_for_variant_group)"
          | [t] -> return t
          | _ -> 
           (* It depends on the logic that we have generated struct for this enum constructor *)
@@ -976,17 +976,17 @@ module To_syntax = struct
                           match List.hd patterns with
                           | Pconstructor' (_, _, args) ->
                             (List.concat [args; (List.tl patterns)], body)
-                          | _ -> failwith "unreachable")
+                          | _ -> failwith "unreachable (table_for_variant_group 2)")
                        grp_rows
          in
          return ({ header = header'; rows = rows' }, as_var)
-       | None -> failwith "unreachable"
+       | None -> failwith "unreachable (table_for_variant_group 3) "
 
     (* Some helper functions for Pbind *)
     let unwrap_bind_id p =
       match p with
       | Pbind'(_, i) -> i
-      | _ -> failwith "unreachable"
+      | _ -> failwith "unreachable (unwrap_bind_id)"
 
     let unwrap_bind_type dummy_org p ty =
      match p with
@@ -1106,7 +1106,7 @@ module To_syntax = struct
               | None ->
                 throw (Eno_variant (ienum, i))
              )
-           | None -> failwith "unreachable"
+           | None -> failwith "unreachable (lower_pat)"
           )
         | _ -> throw (Enot_a_enum t)
        )
@@ -1244,7 +1244,7 @@ module To_syntax = struct
         get_composite xenum >>= fun (ienum, Rusttypes.Composite (_, s_or_v, _, _, orgs, rels)) ->
         get_or_new_ident xvar >>= fun ivar ->
         (match s_or_v with
-        | Rusttypes.Struct -> failwith "unreachable"
+        | Rusttypes.Struct -> failwith "unreachable (Eaccess in transl_expr)"
         | Rusttypes.TaggedUnion ->
           (match args with
           | arg::nil ->
@@ -1447,7 +1447,7 @@ module To_syntax = struct
          | AST.Gfun (Rusttypes.Internal f) ->
            pp_print_function st.rev_symmap Format.std_formatter i f;
            Format.fprintf Format.std_formatter "\n"
-         | _ -> failwith "unreachable")
+         | _ -> failwith "unreachable (transl_fn)")
       fun_defs;
     Format.fprintf Format.std_formatter "@]@.";
     (* generate prog_comp_env *)

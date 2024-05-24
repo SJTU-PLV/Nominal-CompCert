@@ -96,7 +96,10 @@ Section TYPE_ENV.
   (* map from var/param to its type *)
   Variable e : PTree.t type.
 
-  Fixpoint replace_origin_place' (p: place') : res place' :=
+  Fixpoint replace_origin_place (p: place) : res place :=
+    (* check whethere this place is global *)
+    if in_dec ident_eq (local_of_place p) gvars then OK p
+    else
     match p with
     | Plocal id ty =>
         match e!id with
@@ -104,17 +107,17 @@ Section TYPE_ENV.
         | None => Error [CTX id; MSG ": this variable has unknown type"]
         end
     | Pderef p ty =>
-        do p' <- replace_origin_place' p;
-        match typeof_place' p' with
+        do p' <- replace_origin_place p;
+        match typeof_place p' with
         | Treference _ _ ty' _
         | Tbox ty' _ =>
             OK (Pderef p' ty')
         | _ =>
-            Error [CTX (local_of_place' p); MSG "dereference a non-deferencable type "]
+            Error [CTX (local_of_place p); MSG "dereference a non-deferencable type "]
         end
     | Pfield p fid ty =>
-        do p' <- replace_origin_place' p;
-        match typeof_place' p' with
+        do p' <- replace_origin_place p;
+        match typeof_place p' with
         | Tstruct orgs id a =>
             match ce!id with
             | Some co =>
@@ -133,21 +136,11 @@ Section TYPE_ENV.
             | None =>
                 Error [CTX id; MSG "no such struct (replace_origin_place')"]
             end
-        | _ => Error [CTX (local_of_place' p); MSG "place is not a struct (replace_origin_place')"]
+        | _ => Error [CTX (local_of_place p); MSG "place is not a struct (replace_origin_place')"]
         end
-    end.
-
-  Definition replace_origin_place (p: place) : res place :=
-    (* check whether this place is global *)
-    if in_dec ident_eq (local_of_place p) gvars then OK p
-    else
-    match p with
-    | Place p =>
-        do p' <- replace_origin_place' p;
-        OK (Place p')
     | Pdowncast p fid ty =>
-        do p' <- replace_origin_place' p;
-        match typeof_place' p' with
+        do p' <- replace_origin_place p;
+        match typeof_place p' with
         | Tvariant orgs id a =>
             match ce!id with
             | Some co =>
@@ -166,7 +159,7 @@ Section TYPE_ENV.
             | None =>
                 Error [CTX id; MSG "no such variant (replace_origin_place)"]
             end
-        | _ => Error [CTX (local_of_place' p); MSG "place is not a variant (replace_origin_place)"]
+        | _ => Error [CTX (local_of_place p); MSG "place is not a variant (replace_origin_place)"]
         end
     end.
 
@@ -182,7 +175,7 @@ Section TYPE_ENV.
         do p' <- replace_origin_place p;
         OK (Eplace p' (typeof_place p'))
     | Ecktag p id ty =>
-        do p' <- replace_origin_place' p;
+        do p' <- replace_origin_place p;
         OK (Ecktag p' id ty)
     | Eunop uop pe ty =>
         do pe' <- replace_origin_pure_expr pe;
@@ -217,26 +210,26 @@ Section TYPE_ENV.
   Fixpoint replace_origin_statement (stmt: statement) : res statement :=
     match stmt with
     | Sassign p e =>
-        do p' <- replace_origin_place' p;
+        do p' <- replace_origin_place p;
         do e' <- replace_origin_expr e;
         OK (Sassign p' e')
     | Sassign_variant p fid e =>
-        do p' <- replace_origin_place' p;
+        do p' <- replace_origin_place p;
         do e' <- replace_origin_expr e;
         OK (Sassign_variant p' fid e')
     | Sbox p e =>
-        do p' <- replace_origin_place' p;
+        do p' <- replace_origin_place p;
         do e' <- replace_origin_expr e;
         OK (Sbox p' e')
     | Sdrop p =>
-        do p' <- replace_origin_place' p;
+        do p' <- replace_origin_place p;
         OK (Sdrop p')
     | Scall p f l =>
-        do p' <- replace_origin_place' p;
+        do p' <- replace_origin_place p;
         do l' <- replace_origin_exprlist l;
         OK (Scall p' f l')
     | Sbuiltin p ef tyl al =>
-        do p' <- replace_origin_place' p;
+        do p' <- replace_origin_place p;
         do al' <- replace_origin_exprlist al;
         OK (Sbuiltin p' ef tyl al')                 
     | Sreturn (Some e) =>

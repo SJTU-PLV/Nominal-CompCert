@@ -51,8 +51,8 @@ Definition init_variables (ae: AE.t) (f: function) : res AE.t :=
 Definition support_origins (p: place) : list origin :=
   let support_prefixes := p :: support_parent_paths p in
   fold_right (fun elt acc => match elt with
-                          | Place (Pderef p' ty) =>
-                              match typeof_place' p' with
+                          | (Pderef p' ty) =>
+                              match typeof_place p' with
                               | Treference org _ _ _ => org :: acc
                               | _ => acc
                               end
@@ -64,23 +64,19 @@ Definition aggregate_origin_states (e: LOrgEnv.t) (orgs: list origin) : LOrgSt.t
                
 (* Transition of pure expression *)
 
-Fixpoint mutable_place' (p: place') :=
+Fixpoint mutable_place (p: place) :=
   match p with
   | Plocal _ _ => true
-  | Pfield p' _ _ => mutable_place' p'
+  | Pfield p' _ _ => mutable_place p'
   | Pderef p' _ =>
-      match typeof_place' p' with
-      | Treference _ Mutable _ _ => mutable_place' p'
+      match typeof_place p' with
+      | Treference _ Mutable _ _ => mutable_place p'
       | Tbox _ _ => true
       | _ => false
       end
+  | Pdowncast p' _ _ => mutable_place p'
   end.
 
-Definition mutable_place (p: place) :=
-  match p with
-  | Place p => mutable_place' p
-  | Pdowncast p _ _ => mutable_place' p
-  end.
 
 Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pexpr) : res (LoanSet.t * LOrgEnv.t) :=
   match pe with
@@ -138,7 +134,7 @@ Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pex
       end
   | Ecktag p id _ =>
       (* simple type check *)
-      match typeof_place' p with
+      match typeof_place p with
       | Tvariant _ _ _ =>
           if valid_access e p then
             (* invalide origins contain loans relevant to [p] *)
@@ -248,7 +244,7 @@ Definition shallow_write_place (f: function) (pc: node) (live: LoanSet.t) (e: LO
   let e' := invalidate_origins ls Awrite e in
   (* let e' := e in *)
   match p with
-  | Place (Plocal id ty) =>
+  | (Plocal id ty) =>
       (* no need to check the valid access, because id will be overwrited *)
       if in_dec ident_eq id (var_names f.(fn_vars)) then
         (* this place is a local variable, we can kill its loans *)          
@@ -278,9 +274,9 @@ Definition kill_loans (live: LoanSet.t) (p: place) : LoanSet.t :=
 
 (* Borrow check an assign statement *)
 
-Definition check_assignment (f: function) (pc: node) (live: LoanSet.t) (oe: LOrgEnv.t) (ag: LAliasGraph.t) (p: place') (e: expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
+Definition check_assignment (f: function) (pc: node) (live: LoanSet.t) (oe: LOrgEnv.t) (ag: LAliasGraph.t) (p: place) (e: expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
   (* simple type checking *)
-  let ty_dest := typeof_place' p in
+  let ty_dest := typeof_place p in
   let ty_src := typeof e in
   if type_eq_except_origins ty_dest ty_src && mutable_place p then
     (* check the expression *)
@@ -297,7 +293,7 @@ Definition check_assignment (f: function) (pc: node) (live: LoanSet.t) (oe: LOrg
 .      
 
 
-Definition check_assign_variant (ce: composite_env) (f: function) (pc: node) (live: LoanSet.t) (oe: LOrgEnv.t) (ag: LAliasGraph.t) (p: place') (fid: ident) (e: expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
+Definition check_assign_variant (ce: composite_env) (f: function) (pc: node) (live: LoanSet.t) (oe: LOrgEnv.t) (ag: LAliasGraph.t) (p: place) (fid: ident) (e: expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
   match typeof_place p with
   | Tvariant orgs_dest vid _ =>
       match ce!vid with
@@ -420,12 +416,12 @@ Definition flow_return_after_call (pc: node) (ag: LAliasGraph.t) (se te: LOrgEnv
   OK te'.
 
 
-Definition check_function_call (f: function) (pc: node) (live1: LoanSet.t) (oe1: LOrgEnv.t) (ag1: LAliasGraph.t) (p: place') (fty: type) (args: list expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
+Definition check_function_call (f: function) (pc: node) (live1: LoanSet.t) (oe1: LOrgEnv.t) (ag1: LAliasGraph.t) (p: place) (fty: type) (args: list expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
   match fty with
   | Tfunction orgs org_rels tyl rty cc =>
       let sig_tyl := type_list_of_typelist tyl in
       let arg_tyl := map typeof args in
-      let tgt_rety := (typeof_place' p) in
+      let tgt_rety := (typeof_place p) in
       (* check the arguments *)
       do (live2, oe2) <- transfer_exprlist pc live1 oe1 args;
       (* consider variant argument length function (just printf for now) *)
@@ -456,7 +452,7 @@ Definition check_function_call (f: function) (pc: node) (live1: LoanSet.t) (oe1:
   end.
           
 
-Definition check_drop (f: function) (pc: node) (live1: LoanSet.t) (oe1: LOrgEnv.t) (ag1: LAliasGraph.t) (p: place') : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
+Definition check_drop (f: function) (pc: node) (live1: LoanSet.t) (oe1: LOrgEnv.t) (ag1: LAliasGraph.t) (p: place) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
   if valid_access oe1 p then
     let ls := relevant_loans live1 p Adeep in
     let oe2 := invalidate_origins ls Awrite oe1 in
@@ -593,17 +589,17 @@ Definition transfer (ce: composite_env) (f: function) (cfg: rustcfg) (pc: node) 
                   finish_check pc check_result
               | Sreturn e =>
                   let check_result := check_return f pc live oe ag e f.(fn_return) in
-                  (* check  origin relation. We cannot check
-                  it in Iend because it would not update the final AE
-                  because there is not successor for Iend. Or we can
-                  move it the borrow_check function, but for now we
-                  want to see the analysis result in CFG *)
+                  (* check origin relation. We cannot check it in Iend
+                  because it would not update the final AE because
+                  there is not successor for Iend. Or we can move it
+                  the borrow_check function, but for now we want to
+                  see the analysis result in CFG *)
                   match check_result with
                   | OK (live, oe, ag) =>
                       if check_generic_origins_relations f oe then
                         AE.State live oe ag
                       else
-                        AE.Err pc [MSG "some relations in function return are not declared in the function sigature"]
+                        AE.Err pc [MSG "some relations in function return are not declared in the function signature"]
                   | Error msg =>
                       AE.Err pc msg
                   end
@@ -626,6 +622,7 @@ Definition borrow_check (ce: composite_env) (f: function) : res (PTree.t AE.t) :
   (** forward dataflow *)
   match DS.fixpoint cfg successors_instr (transfer ce f cfg) entry ae' with
   | Some (_, r) =>
+      (** TODO: check origin relations  *)
       OK r
   | None =>
       Error [MSG "The borrow check fails with unknown reason"]

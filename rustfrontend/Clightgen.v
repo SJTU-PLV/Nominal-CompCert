@@ -295,17 +295,6 @@ Definition gensym (ty: Ctypes.type): mon ident :=
         (mkgenerator ((fresh_id, ty) :: gen_trail g)).
   
 
-Fixpoint place_to_cexpr' (p: place') : Clight.expr :=
-  match p with
-  | Plocal id ty =>      
-      Evar id (to_ctype ty)
-  | Pfield p' fid ty =>
-      Efield (place_to_cexpr' p') fid (to_ctype ty)
-  | Pderef p' ty =>
-      Ederef (place_to_cexpr' p') (to_ctype ty)
-  end.
-      
-
 Definition get_variant_tag (ce: Ctypes.composite_env) (id:ident) : option ident :=
   match ce!id with
   | Some co =>
@@ -337,9 +326,16 @@ Variable tce: Ctypes.composite_env.
 Variable dropm: PTree.t ident.  (* map from composite id to its drop glue id *)
 
 
-Definition place_to_cexpr (p: place) : mon Clight.expr :=
+Fixpoint place_to_cexpr (p: place) : mon Clight.expr :=
   match p with
-  | Place p => ret (place_to_cexpr' p)
+  | Plocal id ty =>      
+      ret (Evar id (to_ctype ty))
+  | Pfield p' fid ty =>
+      do e <- place_to_cexpr p';
+      ret (Efield e fid (to_ctype ty))
+  | Pderef p' ty =>
+      do e <- place_to_cexpr p';
+      ret (Ederef e (to_ctype ty))
   | Pdowncast p fid ty =>
       (** FIXME: how to translate the get expression? *)
       match typeof_place p with
@@ -349,8 +345,9 @@ Definition place_to_cexpr (p: place) : mon Clight.expr :=
               (** FIXME: the following code appears multiple times *)
               match tco.(co_su), tco.(Ctypes.co_members) with
               | Ctypes.Struct, Ctypes.Member_plain _ _ :: Ctypes.Member_plain union_id union_ty :: nil =>
-              (* p.union_id.fid *)
-                  ret (Efield (Efield (place_to_cexpr' p) union_id union_ty) fid (to_ctype ty))
+                  (* pe.union_id.fid *)
+                  do pe <- place_to_cexpr p;
+                  ret (Efield (Efield pe union_id union_ty) fid (to_ctype ty))
               | _, _ => error [CTX id; MSG ": it is not a correct tagged union"]
               end
           | _ => error [CTX id; MSG ": Cannot find its composite in C composite environment : expr_to_cexpr"]
@@ -379,7 +376,8 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : mon Clight.expr :=
           | Some co =>
               match field_tag fid co.(co_members), get_variant_tag tce id with
               | Some tagz, Some tagid =>
-                  ret (Clight.Ebinop Oeq (Clight.Efield (place_to_cexpr' p) tagid Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) Ctypes.type_bool)
+                  do pe <- place_to_cexpr p;
+                  ret (Clight.Ebinop Oeq (Clight.Efield pe tagid Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) Ctypes.type_bool)
               | _, _ => error (msg "Error in Ecktag 1: expr_to_cexpr")
               end
           | _ => error (msg "Error in Ecktag 2: expr_to_cexpr")
@@ -481,12 +479,12 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
   | Sskip => ret Clight.Sskip
   | Sassign p e =>
       do e' <- expr_to_cexpr e;
-      let lhs := place_to_cexpr' p in
+      do lhs <- place_to_cexpr p;
       let ty := typeof e in
       ret (Clight.Sassign lhs e')      
   | Sassign_variant p arm_id e =>
       do e' <- expr_to_cexpr e;
-      let lhs := place_to_cexpr' p in
+      do lhs <- place_to_cexpr p;
       let ty := typeof e in
       match typeof_place p with
       | Tvariant _ id _ =>
@@ -517,7 +515,8 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
        *temp = e;
        p = temp *)       
       do (stmt, e') <- transl_Sbox e;
-      ret (Clight.Ssequence (makeseq stmt) (Clight.Sassign (place_to_cexpr' p) e'))
+      do pe <- place_to_cexpr p;
+      ret (Clight.Ssequence (makeseq stmt) (Clight.Sassign pe e'))
   | Sstoragelive _
   | Sstoragedead _ =>
       ret Clight.Sskip
@@ -533,7 +532,8 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       let ty := typeof_place p in
       let cty := to_ctype ty in
       do temp <- gensym cty;
-      let assign := Clight.Sassign (place_to_cexpr' p) (Etempvar temp cty) in
+      do pe <- place_to_cexpr p;
+      let assign := Clight.Sassign pe (Etempvar temp cty) in
       ret (Clight.Ssequence (Clight.Scall (Some temp) e' el') assign)
   | Sbuiltin p ef tyl el =>
       do el' <- fold_right (fun elt acc =>
@@ -547,7 +547,8 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       let ty := typeof_place p in
       let cty := to_ctype ty in
       do temp <- gensym cty;
-      let assign := Clight.Sassign (place_to_cexpr' p) (Etempvar temp cty) in
+      do pe <- place_to_cexpr p;
+      let assign := Clight.Sassign pe (Etempvar temp cty) in
       ret (Clight.Ssequence (Clight.Sbuiltin (Some temp) ef tyl' el') assign)
   | Ssequence s1 s2 =>
       do s1' <- transl_stmt s1;
@@ -583,7 +584,8 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       let ref_cty := Tpointer cty noattr in
       do temp <- gensym ref_cty;
       (* [temp=*p] *)
-      let set_stmt := Clight.Sset temp (Eaddrof (place_to_cexpr' p) ref_cty) in
+      do pe <- place_to_cexpr p;
+      let set_stmt := Clight.Sset temp (Eaddrof pe ref_cty) in
       match expand_drop temp ty with
       | Some drop_stmt =>
           ret (Clight.Ssequence set_stmt drop_stmt)          

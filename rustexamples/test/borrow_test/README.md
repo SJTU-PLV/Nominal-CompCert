@@ -90,7 +90,7 @@ fn no_dangle() -> i32 {
     changes p so that tmp and *p alias. It test the functionality of
     alias graph.
 13. A normal re-borrow test
-14. A test that is not compiled in NLL but can be compiled Polonius
+14. A test that is not compiled in NLL but can be compiled in Polonius
 15. Borrow from a box and move that box
 16. Test if statement
 17. Test loop
@@ -100,4 +100,4 @@ fn no_dangle() -> i32 {
 21. Generic origin in struct and enum
 22. Return dangling pointer
 23. Problem case #4 from NLL RFC
-24. check the functionality of function call
+24. check the functionality of function call. `assign` is similar to the `assign` function in [https://doc.rust-lang.org/nomicon/subtyping.html#variance]

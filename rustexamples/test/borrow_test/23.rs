@@ -15,7 +15,7 @@ struct list {
 fn sum<'a>(l: &'a mut list) -> i32 {
     let result: i32 = 0;
     loop {
-        result = result + l.value;
+        result = result + *l.value;
         match (*l).next {
             list_node::Some(ref mut r) => {
                 l = &mut **r;

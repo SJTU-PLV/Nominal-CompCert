@@ -43,7 +43,7 @@ Definition gen_drops (local: bool) (l: list (ident * type)) : statement :=
 (* [vars] is a stack of variable list. Eack stack frame corresponds to
 a loop where these variables are declared. [params_drops] are the
 statement for dropping the parameters *)
-Fixpoint transl_stmt (params_drops: statement) (oretv: option place') (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
+Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: RustlightBase.statement) (vars: list (list (ident * type))) : statement :=
   let transl_stmt := transl_stmt params_drops oretv in
   match stmt with
   | RustlightBase.Sskip => Sskip
@@ -56,13 +56,13 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place') (stmt: Rus
         Ssequence (Sstoragelive id) (Ssequence s (Sstoragedead id))
   | RustlightBase.Sassign p e =>
       let drop := Sdrop p in
-      if own_type ce (typeof_place' p) then
+      if own_type ce (typeof_place p) then
         Ssequence drop (Sassign p e)
       else               
         Sassign p e
   | RustlightBase.Sassign_variant p fid e =>
       let drop := Sdrop p in
-      if own_type ce (typeof_place' p) then
+      if own_type ce (typeof_place p) then
         Ssequence drop (Sassign_variant p fid e)
       else               
         Sassign_variant p fid e
@@ -124,7 +124,7 @@ Fixpoint elaborate_return (stmt: RustlightBase.statement) : RustlightBase.statem
   | _ => RustlightBase.Ssequence stmt (RustlightBase.Sreturn None)
   end.
 
-Definition ret_var (ty: type) (v: ident) : option place' :=
+Definition ret_var (ty: type) (v: ident) : option place :=
   if type_eq ty Tunit then None else Some (Plocal v ty).
 
 

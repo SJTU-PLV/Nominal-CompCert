@@ -93,7 +93,7 @@ of the value expression *)
 Inductive destination : Type :=
 | For_val
 | For_effects
-| For_set (p: place').
+| For_set (p: place).
 
 Definition finish (dst: destination) (sl: list statement) (a: expr) :=
   match dst with
@@ -105,7 +105,7 @@ Definition finish (dst: destination) (sl: list statement) (a: expr) :=
 Let type_eq := type_eq_except_origins.
 
 (* generate assign fields statement lists *)
-Fixpoint fields_assign (p: place') (ids : list ident) (args: list expr) (membs: members) {struct ids}: mon (list statement) :=
+Fixpoint fields_assign (p: place) (ids : list ident) (args: list expr) (membs: members) {struct ids}: mon (list statement) :=
   match ids, args, membs with
   | nil, nil, nil => ret nil
   | id :: ids', arg :: args', (Member_plain fid fty) :: membs' =>
@@ -129,7 +129,7 @@ Definition dummy_expr := Econst_int Int.zero type_int32s.
 Section NOTATION.
 (* Some ad-hoc solution to utilize the coercion from pexpr(place) to expr *)
 Local Notation "( x , y )" := (@pair (list statement) expr x y).
-Local Notation "( x ,, y )" := (@pair (list statement) place' x y).
+Local Notation "( x ,, y )" := (@pair (list statement) place x y).
 
 Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
   match e with
@@ -290,7 +290,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
       end      
  end
   
-with transl_place_expr (e: Rustsyntax.expr) : mon (list statement * place') :=
+with transl_place_expr (e: Rustsyntax.expr) : mon (list statement * place) :=
   match e with
   | Rustsyntax.Evar id ty =>
       ret (nil,, Plocal id ty)
@@ -312,25 +312,88 @@ with transl_place_expr (e: Rustsyntax.expr) : mon (list statement * place') :=
       do (sl1, ef') <- transl_value_expr ef;
       do (sl2, el') <- transl_exprlist el;
       (* use a temp to store the result of this call *)
-      do temp_id <- gensym ty;
+       do temp_id <- gensym ty;
       let temp := Plocal temp_id ty in
       let call_stmt := Scall temp ef' el' in
       ret (sl1 ++ sl2,, temp)
   | _ => error (msg "It is impossible that this expression is a place expression: Rustlightgen.transl_expr")
   end
     
-      
+    
 with transl_exprlist (el: Rustsyntax.exprlist) : mon (list statement * list expr) :=
-  match el with
-  | Rustsyntax.Enil =>
-      ret (pair nil nil)
-  | Rustsyntax.Econs r1 rl2 =>
-      do (sl1, a1) <- transl_value_expr r1;
-      do (sl2, al2) <- transl_exprlist rl2;
-      ret (pair (sl1 ++ sl2) (a1 :: al2))
-  end.
+       match el with
+       | Rustsyntax.Enil =>
+           ret (pair nil nil)
+       | Rustsyntax.Econs r1 rl2 =>
+           do (sl1, a1) <- transl_value_expr r1;
+           do (sl2, al2) <- transl_exprlist rl2;
+           ret (pair (sl1 ++ sl2) (a1 :: al2))
+       end.
 
 End NOTATION.
+
+
+(* Replace binder with a place in Rustlight expression and statements *)
+
+Fixpoint replace_binder_in_place (id: ident) (p1: place) (p2: place) : place :=
+  match p2 with
+  | Plocal id' _ =>
+      if ident_eq id id' then p1 else p2
+  | Pderef p' ty =>
+      Pderef (replace_binder_in_place id p1 p') ty
+  | Pfield p' fid ty =>
+      Pfield (replace_binder_in_place id p1 p') fid ty
+  | Pdowncast p' fid ty =>
+      Pdowncast (replace_binder_in_place id p1 p') fid ty
+  end.
+
+Fixpoint replace_binder_in_pexpr (id: ident) (p: place) (e: pexpr) : pexpr :=
+  match e with
+  | Eplace p' ty =>
+      Eplace (replace_binder_in_place id p p') ty
+  | Eref org mut p' ty =>
+      Eref org mut (replace_binder_in_place id p p') ty
+  | Ecktag p' fid ty =>
+      Ecktag (replace_binder_in_place id p p') fid ty
+  | Eunop unop pe ty =>
+      Eunop unop (replace_binder_in_pexpr id p pe) ty
+  | Ebinop bop e1 e2 ty =>
+      Ebinop bop (replace_binder_in_pexpr id p e1) (replace_binder_in_pexpr id p e2) ty
+  | _ => e
+  end.
+
+Definition replace_binder_in_expr (id: ident) (p: place) (e: expr) : expr :=
+  match e with
+  | Emoveplace p' ty =>
+      Emoveplace (replace_binder_in_place id p p') ty
+  | Epure pe =>
+      replace_binder_in_pexpr id p pe
+  end.
+
+Fixpoint replace_binder_in_stmt (id: ident) (p: place) (s: statement) : statement :=
+  match s with
+  | Slet id' ty s' => Slet id' ty (replace_binder_in_stmt id p s')
+  | Sassign p' e =>
+      Sassign (replace_binder_in_place id p p') (replace_binder_in_expr id p e)
+  | Sassign_variant p' fid e =>
+      Sassign_variant (replace_binder_in_place id p p') fid (replace_binder_in_expr id p e)
+  | Sbox p' e =>
+      Sbox (replace_binder_in_place id p p') (replace_binder_in_expr id p e)
+  | Scall p' ef al =>
+      Scall (replace_binder_in_place id p p') (replace_binder_in_expr id p ef) (map (replace_binder_in_expr id p) al)
+  | Sbuiltin p' ef tyl al =>
+      Sbuiltin (replace_binder_in_place id p p') ef tyl (map (replace_binder_in_expr id p) al)
+  | Ssequence s1 s2 =>
+      Ssequence (replace_binder_in_stmt id p s1) (replace_binder_in_stmt id p s2)
+  | Sifthenelse e s1 s2 =>
+      Sifthenelse e (replace_binder_in_stmt id p s1) (replace_binder_in_stmt id p s2)
+  | Sloop s =>
+      Sloop (replace_binder_in_stmt id p s)
+  | Sreturn (Some e) =>
+      Sreturn (Some (replace_binder_in_expr id p e))
+  | _ => s
+  end.
+         
 
 Definition value_or_place (e: Rustsyntax.expr) : bool :=
   match e with
@@ -489,7 +552,7 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
                 (* temps are the generated variable in match scrutinee
                 whose scope contains the entire match *)
                 do temps <- extract_temps;
-                do arm_stmt <- transl_arm_statements arm_body temp (own_type ce ty) co;
+                do arm_stmt <- transl_arm_statements arm_body temp co;
                 (* concat the condition statements and generate let stmts *)
                 let temp_decl_arm := Slet temp_id ty (Ssequence assign_temp arm_stmt) in
                 ret (generate_lets temps temp_decl_arm)
@@ -497,7 +560,7 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
                 do (cond_sl, p) <- transl_place_expr e;
                 let eval_cond := makeseq cond_sl in
                 do temps <- extract_temps;
-                do arm_stmt <- transl_arm_statements arm_body p (own_type ce ty) co;
+                do arm_stmt <- transl_arm_statements arm_body p  co;
                 ret (generate_lets temps (Ssequence eval_cond arm_stmt))                
           | None => error (msg "Variant type does not exist: Rustlightgen.simpl_stmt")
           end
@@ -506,13 +569,14 @@ Fixpoint transl_stmt (stmt: Rustsyntax.statement) : mon statement :=
   end
 
 (** TODO: support match a reference of a enum  *)
-with transl_arm_statements (sl: arm_statements) (p: place') (moved: bool) (co: composite) : mon statement :=
+with transl_arm_statements (sl: arm_statements) (p: place) (co: composite) : mon statement :=
   match sl with
   | ASnil => ret Sskip      
   | AScons ids arm sl' =>
       do arm' <- transl_stmt arm;
       match ids with
       | Some (fid, temp_id) =>
+          (* Replace temp_id with (p as fid) in [arm] *)
           match find (fun elt => ident_eq (name_member elt) fid) co.(co_members) with
           | Some m =>
               let ty := type_member m in
@@ -522,21 +586,20 @@ with transl_arm_statements (sl: arm_statements) (p: place') (moved: bool) (co: c
               let cond := Ecktag p fid type_bool in
               let p' := Pdowncast p fid ty in
               (* move p' or copy p'. TODO: support [&mut] p' *)
-              (** FIXME: We do not want to (p as fid) *)
-              let destruct_place := if moved then Emoveplace p' ty else (Epure (Eplace p' ty)) in
-              let assign_temp := Sassign (Plocal temp_id ty) destruct_place in
-              let then_stmt := Slet temp_id ty (Ssequence assign_temp arm') in
+              let then_stmt := replace_binder_in_stmt temp_id p' arm' in
+              (* (** FIXME: We do not want to (p as fid) *) *)
+              (* let destruct_place := if moved then Emoveplace p' ty else (Epure (Eplace p' ty)) in *)
+              (* let assign_temp := Sassign (Plocal temp_id ty) destruct_place in *)
+              (* let then_stmt := Slet temp_id ty (Ssequence assign_temp arm') in *)
               match sl' with
               | ASnil =>
                   (* Some optimization: the last branch, no need to check the tag*)
                   ret then_stmt
               | AScons _ _ _ =>
               (* if cond then
-                   let temp: ty;
-                   temp = Eget(p, fid, ty);
-                   arm'
+                   then_stmt
                 else else_stmt *)              
-                  do else_stmt <- transl_arm_statements sl' p moved co;
+                  do else_stmt <- transl_arm_statements sl' p co;
                   ret (Sifthenelse cond then_stmt else_stmt)
               end
           | _ => error (msg "Cannot find the member: Rustlightgen.transl_arm_statements")

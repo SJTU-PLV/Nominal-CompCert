@@ -29,7 +29,7 @@ occurence of ownership transfer *)
 Record generator : Type := mkgenerator {
   (* gen_next: ident; *)
   gen_trail: list (ident * type);
-  gen_map: PMap.t (list (place' * ident));
+  gen_map: PMap.t (list (place * ident));
   gen_stmt: statement (* It is used for elaborating the drops when collecting drop flags *)
 }.
 
@@ -76,10 +76,10 @@ Parameter fresh_atom: unit -> ident.
 (* for now we just use the maximum ident of parameters and variables
 as the initial ident *)
 Definition initial_generator (stmt: statement) : generator :=
-  mkgenerator nil (nil, PTree.empty (list (place' * ident))) stmt.
+  mkgenerator nil (nil, PTree.empty (list (place * ident))) stmt.
 
 (* generate a new drop flag with type ty (always bool) and map [p] to this flag *)
-Definition gensym (ty: type) (p: place') : mon ident :=
+Definition gensym (ty: type) (p: place) : mon ident :=
   let id := local_of_place p in
   let fresh_id := fresh_atom tt in
   fun (g: generator) =>
@@ -109,13 +109,13 @@ drop flag, and whether it is fully own. Each place is used to generate
 a deterministic drop statement. For now, we do not distinguish fully
 owned or partial moved Box types, i.e., we do not use a single
 drop_in_place function to recursively drop the fully owned box *)
-Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fuel: nat) (ce: composite_env) (p: place') : mon (list (place' * option ident * bool)) :=
+Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fuel: nat) (ce: composite_env) (p: place) : mon (list (place * option ident * bool)) :=
   match fuel with
   | O => error (msg "Running out of fuel in elaborate_drop_for")
   | S fuel' =>
       let elaborate_drop_for := elaborate_drop_for pc mayinit mayuninit universe fuel' ce in
       if Paths.mem p universe then
-        match typeof_place' p with        
+        match typeof_place p with        
         | Tstruct _ _ _
         | Tvariant _ _ _ => (* use drop function of this Tstruct (Tvariant) to drop p *)
             if Paths.mem p mayinit then
@@ -179,7 +179,7 @@ Section INIT_UNINIT.
 
 Variable (maybeInit maybeUninit: PTree.t PathsMap.t).
 
-Fixpoint drop_fully_own (ce: composite_env) (p: place') (ty: type) :=
+Fixpoint drop_fully_own (ce: composite_env) (p: place) (ty: type) :=
   match ty with
   | Tbox ty' _ =>
       Ssequence (drop_fully_own ce (Pderef p ty') ty') (Sdrop p)
@@ -192,7 +192,7 @@ Fixpoint drop_fully_own (ce: composite_env) (p: place') (ty: type) :=
   end.
 
 (* create a drop statement using drop flag optionally *)
-Definition generate_drop (ce: composite_env) (p: place') (flag: option ident) (full: bool) : statement :=
+Definition generate_drop (ce: composite_env) (p: place) (flag: option ident) (full: bool) : statement :=
   let drop := if full then
                 drop_fully_own ce p (typeof_place p)
               else Sdrop p in
@@ -218,7 +218,7 @@ Definition elaborate_drop_at (ce: composite_env) (f: function) (instr: instructi
               let universe := Paths.union init uninit in
               (* drops are the list of to-drop places and their drop flags *)
               do drops <- elaborate_drop_for pc init uninit universe own_fuel ce p;
-              let drop_stmts := map (fun (elt: place' * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
+              let drop_stmts := map (fun (elt: place * option ident * bool) => generate_drop ce (fst (fst elt)) (snd (fst elt)) (snd elt)) drops in
               set_stmt sel (makeseq drop_stmts)
           | _ => ret tt
           end
@@ -241,13 +241,13 @@ End INIT_UNINIT.
 Section DROP_FLAGS.
 
 (* map from place to its drop flag *)
-Variable m: PTree.t (list (place' * ident)).
+Variable m: PTree.t (list (place * ident)).
 
-Definition get_dropflag_temp (p: place') : option ident :=
+Definition get_dropflag_temp (p: place) : option ident :=
   let id := local_of_place p in
   match m!id with
   | Some l =>
-      match find (fun elt => place'_eq p (fst elt)) l with
+      match find (fun elt => place_eq p (fst elt)) l with
       | Some (_, fid) => Some fid
       | _ => None
       end
@@ -266,17 +266,17 @@ Definition set_dropflag_option (id: option ident) (flag: bool) : statement :=
   | None => Sskip
   end.
 
-Definition add_dropflag (p: place') (flag: bool) : statement :=
+Definition add_dropflag (p: place) (flag: bool) : statement :=
   set_dropflag_option (get_dropflag_temp p) flag.
 
 
-Definition add_dropflag_option (p: option place') (flag: bool) : statement :=
+Definition add_dropflag_option (p: option place) (flag: bool) : statement :=
   match p with
   | Some p => add_dropflag p flag
   | _ => Sskip
   end.
 
-Definition add_dropflag_list (l: list place') (flag: bool) : statement :=
+Definition add_dropflag_list (l: list place) (flag: bool) : statement :=
   let stmts := fold_right (fun elt acc => add_dropflag elt flag :: acc) nil l in
   makeseq stmts.
 
@@ -313,7 +313,7 @@ End DROP_FLAGS.
   
 Local Open Scope error_monad_scope.
 
-Definition init_drop_flag (mayinit: PathsMap.t) (mayuninit: PathsMap.t) (elt: place' * ident) : statement :=
+Definition init_drop_flag (mayinit: PathsMap.t) (mayuninit: PathsMap.t) (elt: place * ident) : statement :=
   let (p, flag) := elt in
   let id := local_of_place p in
   match mayinit!id, mayuninit!id with
