@@ -101,3 +101,4 @@ fn no_dangle() -> i32 {
 22. Return dangling pointer
 23. Problem case #4 from NLL RFC
 24. check the functionality of function call. `assign` is similar to the `assign` function in [https://doc.rust-lang.org/nomicon/subtyping.html#variance]
+25. List implemented with reference

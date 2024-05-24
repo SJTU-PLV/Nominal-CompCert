@@ -218,6 +218,7 @@ expr:
   | e = expr; DOT; x = ID { Efield (e, x) }
   | ASTERISK; e = expr { Ederef e }
   | e1 = expr; ASSIGN; e2 = expr { Eassign (e1, e2) }
+  (* TODO: support zero-ary constructor*)
   | x1 = ID; COLON2; x2 = ID; LPAREN; e = expr; RPAREN
     { Ecall ((Eaccess (x1, x2)), [e]) }
   | SUBS; e = expr { Eunop (Cop.Oneg, e) }

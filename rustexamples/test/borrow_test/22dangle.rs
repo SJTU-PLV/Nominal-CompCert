@@ -1,5 +1,5 @@
 fn dangle<'a>(x: &'a i32) -> &'a i32{
-    let v: i32 = 1;
+    let v: i32 = 3;
     if v > *x {
         return &v;
     }
