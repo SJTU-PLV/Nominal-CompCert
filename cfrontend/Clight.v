@@ -729,7 +729,7 @@ Inductive step: state -> trace -> state -> Prop :=
   without arguments and with an empty continuation. *)
 
 Inductive initial_state: c_query -> state -> Prop :=
-  | initial_state_intro: forall (vf : val) f targs tres tcc vargs m vf id,
+  | initial_state_intro: forall f targs tres tcc vargs m vf id,
       vf = Vptr (Global id) Ptrofs.zero ->
       Genv.find_funct ge vf = Some (Internal f) ->
       type_of_function f = Tfunction targs tres tcc ->

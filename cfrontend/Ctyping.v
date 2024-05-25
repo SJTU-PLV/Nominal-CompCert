@@ -2099,11 +2099,7 @@ Inductive wt_state: state -> Prop :=
         (WTK: wt_call_cont k (fundef_return fd))
         (WTFD: wt_fundef ge gtenv fd)
         (FIND: Genv.find_funct ge b = Some fd),
-<<<<<<< HEAD
-      wt_state (Callstate b vargs k m)
-=======
-      wt_state (Callstate fd vargs k m id)
->>>>>>> origin/StackAware-new
+      wt_state (Callstate b vargs k m id)
   | wt_return_state: forall v k m ty
         (WTK: wt_call_cont k ty)
         (VAL: wt_val v ty),
@@ -2232,15 +2228,10 @@ Proof.
 - inv WTS; eauto with ty.
 - exploit wt_find_label. eexact WTB. eauto. eapply call_cont_wt'; eauto.
   intros [A B]. eauto with ty.
-<<<<<<< HEAD
 - assert (fd = Internal f) by congruence; subst.
-  inv WTFD. inv H3. econstructor; eauto. apply wt_call_cont_stmt_cont; auto.
+  inv WTFD. inv H4. econstructor; eauto. apply wt_call_cont_stmt_cont; auto.
 - assert (fd = External ef targs tres cc) by congruence; subst.
   inv WTFD. econstructor; eauto.
-=======
-- inv WTFD. inv H4. econstructor; eauto. apply wt_call_cont_stmt_cont; auto.
-- inv WTFD. econstructor; eauto.
->>>>>>> origin/StackAware-new
   apply has_rettype_wt_val. simpl; rewrite <- H1.
   eapply external_call_well_typed_gen; eauto.
 - inv WTK. eauto with ty.
@@ -2255,16 +2246,10 @@ Qed.
 Theorem wt_initial_state:
   forall q S, initial_state ge q S -> wt_state S.
 Proof.
-<<<<<<< HEAD
   intros. inv H. econstructor; eauto. constructor.
+  remember (Vptr _ _) as vf.
   apply Genv.find_funct_prop with (se := se) (p := prog) (v := vf); auto.
-  intros. inv WTPROG. apply H4 with id; auto.
-=======
-  intros. inv H. econstructor. constructor.
-  apply Genv.find_funct_ptr_prop with (p := prog) (b := b); auto.
-  intros. inv WTPROG. apply H5 with id; auto.
-  instantiate (1 := (Vptr b Ptrofs.zero)). rewrite Genv.find_funct_find_funct_ptr. auto.
->>>>>>> origin/StackAware-new
+  intros. inv WTPROG. apply H1 with id0; auto.
 Qed.
 
 End PRESERVATION.

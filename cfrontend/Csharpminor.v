@@ -396,11 +396,7 @@ Inductive step: state -> trace -> state -> Prop :=
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (State f (Scall optid sig a bl) k e le m)
-<<<<<<< HEAD
-        E0 (Callstate vf vargs (Kcall optid f e le k) m)
-=======
-        E0 (Callstate fd vargs (Kcall optid f e le k) m id)
->>>>>>> origin/StackAware-new
+        E0 (Callstate vf vargs (Kcall optid f e le k) m id)
 
   | step_builtin: forall f optid ef bl k e le m vargs t vres m',
       eval_exprlist e le m bl vargs ->
@@ -462,34 +458,21 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sgoto lbl) k e le m)
         E0 (State f s' k' e le m)
 
-<<<<<<< HEAD
-  | step_internal_function: forall vf f vargs k m m1 e le,
+  | step_internal_function: forall vf f vargs k m m1 m2 e le id,
       forall FIND: Genv.find_funct ge vf = Some (Internal f),
-=======
-  | step_internal_function: forall f vargs k m m1 m2 e le id,
->>>>>>> origin/StackAware-new
       list_norepet (map fst f.(fn_vars)) ->
       list_norepet f.(fn_params) ->
       list_disjoint f.(fn_params) f.(fn_temps) ->
       alloc_variables empty_env m (fn_vars f) e m1 ->
       Mem.record_frame (Mem.push_stage m1) (Memory.mk_frame (Stack 1%positive) (fn_stack_requirements id )) = Some m2 ->
       bind_parameters f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
-<<<<<<< HEAD
-      step (Callstate vf vargs k m)
-        E0 (State f f.(fn_body) k e le m1)
-
-  | step_external_function: forall vf ef vargs k m t vres m',
-      forall FIND: Genv.find_funct ge vf = Some (External ef),
-      external_call ef ge vargs m t vres m' ->
-      step (Callstate vf vargs k m)
-=======
-      step (Callstate (Internal f) vargs k m id)
+      step (Callstate vf vargs k m id)
         E0 (State f f.(fn_body) k e le m2)
 
-  | step_external_function: forall ef vargs k m t vres m' id,
+  | step_external_function: forall vf ef vargs k m t vres m' id,
+      forall FIND: Genv.find_funct ge vf = Some (External ef),
       external_call ef ge vargs m t vres m' ->
-      step (Callstate (External ef) vargs k m id)
->>>>>>> origin/StackAware-new
+      step (Callstate vf vargs k m id)
          t (Returnstate vres k m')
 
   | step_return: forall v optid f e le k m,
@@ -503,36 +486,27 @@ End RELSEM.
   corresponding to the invocation of the ``main'' function of the program
   without arguments and with an empty continuation. *)
 
-<<<<<<< HEAD
 Inductive initial_state (ge: genv): c_query -> state -> Prop :=
-  | initial_state_intro: forall vf f vargs m,
+  | initial_state_intro: forall vf f vargs m id,
       Genv.find_funct ge vf = Some (Internal f) ->
+      vf = Vptr (Global id) Ptrofs.zero ->
       initial_state ge
         (cq vf (fn_sig f) vargs m)
-        (Callstate vf vargs Kstop m).
-=======
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0 m1 b0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      funsig f = signature_main ->
-      Mem.alloc m0 0 0 = (m1,b0) ->
-      initial_state p (Callstate f nil Kstop m1 p.(prog_main)).
->>>>>>> origin/StackAware-new
+        (Callstate vf vargs Kstop m id).
 
 Inductive at_external (ge: genv): state -> c_query -> Prop :=
-  | at_external_intro vf name sg vargs k m:
+  | at_external_intro vf name sg vargs k m id:
       Genv.find_funct ge vf = Some (External (EF_external name sg)) ->
+      vf = Vptr (Global id) Ptrofs.zero ->
       at_external ge
-        (Callstate vf vargs k m)
+        (Callstate vf vargs k m id)
         (cq vf sg vargs m).
 
 Inductive after_external: state -> c_reply -> state -> Prop :=
-  | after_external_intro vf vargs k m vres m':
+  | after_external_intro vf vargs k m vres m' id:
+      vf = Vptr (Global id) Ptrofs.zero ->
       after_external
-        (Callstate vf vargs k m)
+        (Callstate vf vargs k m id)
         (cr vres m')
         (Returnstate vres k m').
 
@@ -545,9 +519,6 @@ Inductive final_state: state -> c_reply -> Prop :=
 (** Wrapping up these definitions in a small-step semantics. *)
 
 Definition semantics (p: program) :=
-<<<<<<< HEAD
   Semantics step initial_state at_external after_external final_state p.
-=======
-  Semantics step (initial_state p) final_state (Genv.globalenv p).
+
 End ORACLE.
->>>>>>> origin/StackAware-new

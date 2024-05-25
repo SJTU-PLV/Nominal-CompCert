@@ -378,11 +378,7 @@ Inductive estep: state -> trace -> state -> Prop :=
       Genv.find_funct ge vf = Some fd ->
       type_of_fundef fd = Tfunction targs tres cconv ->
       estep (ExprState f (C (Ecall rf rargs ty)) k e m)
-<<<<<<< HEAD
-         E0 (Callstate vf vargs (Kcall f e C ty k) m)
-=======
-         E0 (Callstate fd vargs (Kcall f e C ty k) m id)
->>>>>>> origin/StackAware-new
+         E0 (Callstate vf vargs (Kcall f e C ty k) m id)
 
   | step_builtin: forall f C ef tyargs rargs ty k e m vargs t vres m',
       leftcontext RV RV C ->
@@ -419,15 +415,10 @@ Local Hint Resolve context_compose contextlist_compose : core.
   if it cannot get stuck by doing silent transitions only. *)
 
 Definition safe (s: Csem.state) : Prop :=
-<<<<<<< HEAD
-  forall s', star Csem.step ge s E0 s' ->
+  forall s', star (Csem.step fn_stack_requirements) ge s E0 s' ->
   (exists r, final_state s' r) \/
   (exists q, at_external ge s' q) \/
-  (exists t, exists s'', Csem.step ge s' t s'').
-=======
-  forall s', star (Csem.step fn_stack_requirements) ge s E0 s' ->
-  (exists r, final_state s' r) \/ (exists t, exists s'', Csem.step fn_stack_requirements ge s' t s'').
->>>>>>> origin/StackAware-new
+  (exists t, exists s'', Csem.step fn_stack_requirements ge s' t s'').
 
 Lemma safe_steps:
   forall s s',
@@ -629,17 +620,12 @@ Proof.
 Qed.
 
 Lemma callred_invert:
-<<<<<<< HEAD
-  forall r vf args ty m,
-  callred ge r m vf args ty ->
-=======
-  forall r fd args ty m id,
-  callred ge r m fd args ty id->
->>>>>>> origin/StackAware-new
+  forall r vf args ty m id,
+  callred ge r m vf args ty id ->
   invert_expr_prop r m.
 Proof.
   intros. inv H. simpl.
-  intros. exists tyargs, tyres, cconv, fd, args,id; auto.
+  intros. exists tyargs, tyres, cconv, fd, args, id; auto.
 Qed.
 
 Scheme context_ind2 := Minimality for context Sort Prop
@@ -1622,12 +1608,7 @@ Qed.
 (** The main simulation result. *)
 
 Theorem strategy_simulation:
-<<<<<<< HEAD
-  forall p, backward_simulation cc_id cc_id (Csem.semantics p) (semantics p).
-=======
-  forall p, backward_simulation (Csem.semantics fn_stack_requirements p)
-                            (semantics p).
->>>>>>> origin/StackAware-new
+  forall p, backward_simulation cc_id cc_id (Csem.semantics fn_stack_requirements p) (semantics p).
 Proof.
   intros. constructor.
   eapply Backward_simulation; auto. intros. cbn in *. subst.
@@ -3105,8 +3086,5 @@ Proof.
   apply lt_wf.
   eapply evalinf_funcall_steps; eauto.
 Qed.
-<<<<<<< HEAD
 *)
-=======
 End ORACLE.
->>>>>>> origin/StackAware-new

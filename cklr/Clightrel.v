@@ -635,11 +635,11 @@ Proof.
   repeat rstep; try (destruct ident_eq; repeat rstep).
 Qed.
 
-Global Instance function_entry1_match R:
+Global Instance function_entry1_match fn_stack_requirements R:
   Monotonic
-    (@function_entry1)
+    (@function_entry1 fn_stack_requirements)
     (|= genv_match R ++> - ==> k1 list_rel (Val.inject @@ [mi R]) ++> match_mem R ++>
-     %% k1 set_le (<> env_match R * temp_env_match R * match_mem R)).
+     %% k1 set_le (<> env_match R * temp_env_match R * match_mem R * k eq)).
 Proof.
   intros w ge1 ge2 Hge f vargs1 vargs2 Hvargs m1 m2 Hm [[e1 le] m1''] H.
   simpl in *.

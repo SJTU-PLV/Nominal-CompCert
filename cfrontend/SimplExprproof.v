@@ -1130,20 +1130,11 @@ Inductive match_states: Csem.state -> state -> Prop :=
       (MK: match_cont cu.(prog_comp_env) k tk),
       match_states (Csem.State f s k e m)
                    (State tf ts tk e le m)
-<<<<<<< HEAD
-  | match_callstates: forall vf args k m tk cu
-=======
-  | match_callstates: forall fd args k m tfd tk cu id
->>>>>>> origin/StackAware-new
+  | match_callstates: forall vf args k m tk cu id
       (LINK: linkorder cu prog)
       (MK: forall ce, match_cont ce k tk),
-<<<<<<< HEAD
-      match_states (Csem.Callstate vf args k m)
-                   (Callstate vf args tk m)
-=======
-      match_states (Csem.Callstate fd args k m id)
-                   (Callstate tfd args tk m id)
->>>>>>> origin/StackAware-new
+      match_states (Csem.Callstate vf args k m id)
+                   (Callstate vf args tk m id)
   | match_returnstates: forall res k m tk
       (MK: forall ce, match_cont ce k tk),
       match_states (Csem.Returnstate res k m)
@@ -2356,22 +2347,14 @@ Proof.
   left. apply plus_one. econstructor; eauto.
   econstructor; eauto.
 - (* internal function *)
-<<<<<<< HEAD
   edestruct functions_translated as (cu' & tfd & FIND' & TF & CU); eauto.
-  inv TF. inversion H3; subst.
+  inv TF. inversion H4; subst.
   econstructor; split.
   left; apply plus_one. eapply step_internal_function; eauto. econstructor.
-  rewrite H6; rewrite H7; auto.
-  rewrite H6; rewrite H7. eapply alloc_variables_preserved; eauto.
-  rewrite H6. eapply bind_parameters_preserved; eauto.
-=======
-  inv TR. inversion H4; subst.
-  econstructor; split.
-  left; apply plus_one. eapply step_internal_function. econstructor.
-  rewrite H7; rewrite H8; eauto. eauto.
-  rewrite H7; rewrite H8. eapply alloc_variables_preserved; eauto. eauto.
+  rewrite H7; rewrite H8; auto.
+  rewrite H7; rewrite H8. eapply alloc_variables_preserved; eauto.
+  eauto.
   rewrite H7. eapply bind_parameters_preserved; eauto.
->>>>>>> origin/StackAware-new
   eauto.
   econstructor; eauto.
 
@@ -2410,12 +2393,11 @@ Lemma transl_initial_states:
   exists S', Clight.initial_state tge q S' /\ match_states S S'.
 Proof.
   intros. inv H.
-<<<<<<< HEAD
   exploit functions_translated; eauto. intros (cu & tf & FIND & TR & L).
   econstructor; split.
   - inversion TR; subst.
     econstructor; eauto.
-    rewrite <- H1. apply (type_of_fundef_preserved cu (Internal f) (Internal tf0)). auto.
+    rewrite <- H2. apply (type_of_fundef_preserved cu (Internal f) (Internal tf0)). auto.
   - econstructor; eauto. constructor.
 Qed.
 
@@ -2429,19 +2411,6 @@ Proof.
   edestruct functions_translated as (cu' & tfd & Htfd & TR & L); eauto. inv TR.
   split. econstructor; eauto. intros r S' HS'. inv HS'.
   eexists. split; econstructor; eauto.
-=======
-  exploit function_ptr_translated; eauto. intros (cu & tf & FIND & TR & L).
-  destruct TRANSL. destruct H as (A & B & C).
-  econstructor; split.
-  econstructor.
-  eapply (Genv.init_mem_match (proj1 TRANSL)); eauto.
-  setoid_rewrite B.
-  rewrite symbols_preserved. eauto.
-  eexact FIND.
-  rewrite <- H3. eapply type_of_fundef_preserved; eauto. eauto.
-  setoid_rewrite B.
-  econstructor; eauto. intros; constructor.
->>>>>>> origin/StackAware-new
 Qed.
 
 Lemma transl_final_states:
@@ -2451,25 +2420,11 @@ Proof.
   intros. inv H0. inv H. specialize (MK (PTree.empty _)). inv MK. constructor.
 Qed.
 
-<<<<<<< HEAD
-=======
-Theorem transl_program_correct:
-  forward_simulation (Cstrategy.semantics fn_stack_requirements prog) (Clight.semantics1 fn_stack_requirements tprog).
-Proof.
-  eapply forward_simulation_star_wf with (order := ltof _ measure).
-  eapply senv_preserved.
-  eexact transl_initial_states.
-  eexact transl_final_states.
-  apply well_founded_ltof.
-  exact simulation.
-Qed.
-
->>>>>>> origin/StackAware-new
 End PRESERVATION.
 
-Theorem transl_program_correct prog tprog:
+Theorem transl_program_correct prog tprog fn_stack_requirements:
   match_prog prog tprog ->
-  forward_simulation cc_id cc_id (Cstrategy.semantics prog) (Clight.semantics1 tprog).
+  forward_simulation cc_id cc_id (Cstrategy.semantics fn_stack_requirements prog) (Clight.semantics1 fn_stack_requirements tprog).
 Proof.
   fsim eapply forward_simulation_star_wf with (order := ltof _ measure); cbn; destruct w, Hse.
   - intros q _ [ ]. eapply (Genv.is_internal_match_id (ctx := prog)); eauto.

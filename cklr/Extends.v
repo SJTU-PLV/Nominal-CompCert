@@ -367,10 +367,16 @@ Proof.
       * red. intros b1 b4 d f14 INJ. unfold compose_meminj in INJ.
         destruct (f12 b1) as [[b2 d1]|] eqn: INJ1; try congruence.
         destruct (f34 b2) as [[b3 d3]|] eqn: INJ3; try congruence. inv INJ.
-        exploit H18; eauto. unfold meminj_dom. rewrite f14. auto.
+        exploit SEP; eauto. unfold meminj_dom. rewrite f14. auto.
         intros [A B].
-        exploit H27. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
+        exploit SEP0. 2: eauto. inversion Hm14. apply mi_freeblocks; eauto.
         intros [E F]. split; eauto.
+      * red. intros. unfold compose_meminj in H0. repeat destr_in H0.
+        exploit GLOB. unfold meminj_dom. rewrite H. auto. eauto.
+        intuition. destruct (f b0) eqn:?. destruct p.
+        eapply Mem.valid_block_inject_1 in Heqo1; eauto.
+        exploit SEP. unfold meminj_dom. rewrite H. auto. eauto. intuition.
+        exploit GLOB0. unfold meminj_dom. rewrite Heqo1. auto. eauto. intuition.
     + rewrite compose_meminj_id_left.
       repeat rstep; eauto.
 Qed.

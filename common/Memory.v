@@ -5805,6 +5805,16 @@ Proof.
   exploit H2; eauto. intros [lo1 [hi1 [C D]]]. eauto.
 Qed.
 
+Remark support_free_list:
+  forall l m m',
+  free_list m l = Some m' ->
+  support m = support m'.
+Proof.
+  induction l; simpl; intros. inv H. auto.
+  repeat destr_in H. apply support_free in Heqo.
+  rewrite <- Heqo. erewrite IHl; eauto.
+Qed.
+
 Theorem free_parallel_inject:
   forall f m1 m2 b lo hi m1' b' delta,
   inject f m1 m2 ->

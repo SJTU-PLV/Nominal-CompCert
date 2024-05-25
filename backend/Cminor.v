@@ -577,7 +577,7 @@ Inductive initial_state (ge: genv): c_query -> state -> Prop :=
       vf = Vptr (Global id) Ptrofs.zero ->
       initial_state ge
         (cq vf (fn_sig f) vargs m)
-        (Callstate vf vargs Kstop m id).
+        (Callstate vf vargs Kstop (Mem.push_stage m) id).
 
 Inductive at_external (ge: genv): state -> c_query -> Prop :=
   | at_external_intro vf name sg vargs k m id:
@@ -596,10 +596,11 @@ Inductive after_external: state -> c_reply -> state -> Prop :=
         (Returnstate vres k m').
 
 Inductive final_state: state -> c_reply -> Prop :=
-  | final_state_intro: forall r m,
+  | final_state_intro: forall r m m'
+      (POP: Mem.pop_stage m = Some m'),
       final_state
        (Returnstate r Kstop m)
-       (cr r m).
+       (cr r m').
 
 (** The corresponding small-step semantics. *)
 
@@ -700,7 +701,7 @@ Proof.
 - (* external/final state *)
   inv H; inv H0; auto.
 - (* final states *)
-  inv H; inv H0; auto.
+  inv H; inv H0; auto. congruence.
 Qed.
 
 End ORACLE.
