@@ -1496,6 +1496,7 @@ Proof.
     inv Hvargs. f_equal.
   - econstructor; eauto.
     constructor.
+    apply Mem.push_stage_extends. auto.
 Qed.
 
 Lemma sel_external_states:
@@ -1524,7 +1525,8 @@ Lemma sel_final_states:
   exists r2, final_state R r2 /\ match_reply (cc_c ext) w r1 r2.
 Proof.
   intros. inv H0. inv H. inv MC.
-  eexists. split. econstructor; eauto.
+  exploit Mem.pop_stage_extends; eauto. intros (m'1 & POP' & EXT').
+  eexists. split. econstructor. eauto.
   exists tt. split; constructor; CKLR.uncklr; auto.
 Qed.
 
