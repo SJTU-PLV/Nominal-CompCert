@@ -1125,8 +1125,7 @@ module To_syntax = struct
     let name = Printf.sprintf "__stringlit_%d" !stringNum in
     name
 
-
-   let rec transl_expr (e: expr) : Rustsyntax.expr monad =
+  let rec transl_expr (e: expr) : Rustsyntax.expr monad =
     match e with
     | Eunit -> return (Rustsyntax.Eunit)
     | Eval (v, t) ->
@@ -1271,6 +1270,7 @@ module To_syntax = struct
       let t' = Rusttypes.Treference(dummy_origin, m, Rustsyntax.typeof e', Ctypes.noattr) in      
       return (Rustsyntax.Eref (dummy_origin, m, e', t'))
     | Estr s ->
+      let s = Scanf.unescaped s in
       let t_byte = Rusttypes.Tint (Ctypes.I8, Ctypes.Unsigned, Ctypes.noattr) in
       let init_body = Seq.fold_left
                    (fun lst c ->
