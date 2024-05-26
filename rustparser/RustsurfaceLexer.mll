@@ -3,6 +3,7 @@ open RustsurfaceParser
 }
 
 let white = [' ' '\t' '\n']+
+let comment = "//" [^'\n']* '\n'
 let digit = ['0' - '9']
 let int = '-' ? digit+
 let float = '-' ? digit+ "." digit+
@@ -14,7 +15,8 @@ let string_literal = [^'"']*
 
 rule read = 
 	parse
-	| white { read lexbuf }
+ | white { read lexbuf }
+ | comment { read lexbuf }
 	| int { INT (int_of_string (Lexing.lexeme lexbuf)) }
 
  | "+" { ADD }
