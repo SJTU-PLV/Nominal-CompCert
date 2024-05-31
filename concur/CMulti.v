@@ -246,17 +246,13 @@ Section MultiThread.
 
   (** Definitions about the primitives lock and unlock *)
 
-  (** 1. Shound we define these [functions] as primitives here? 
-      or we should use EntAtom and ExtAtom similar to
-      CASCC
+  Definition pthread_mutex_lock_id := 1004%positive.
+  (** int lock (int *mutex); *)
+  Definition pthread_mutex_lock_sig := mksignature (Tint :: nil) Tvoid cc_default.
 
-      2. Whether we try to define a lock/unlock or EntAtom/ExtAtom here,
-      does it matter? The only difference is that
-      a yield function in critical section will become STUCK, right?
+  
 
-   
-   *)
-
+  
 
   (*
 
