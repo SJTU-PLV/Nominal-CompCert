@@ -2,7 +2,7 @@ Require Import Coqlib Errors Events Globalenvs Ctypes AST Memory Values Integers
 Require Import LanguageInterface.
 Require Import Smallstep SmallstepClosed.
 Require Import ValueAnalysis.
-Require Import CMulti AsmMulti.
+Require Import MultiLibs CMulti AsmMulti.
 Require Import InjectFootprint CA Compiler.
 Require Import CallconvNew.
 

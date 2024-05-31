@@ -10,41 +10,7 @@ Require Import Smallstep.
 Require Import SmallstepClosed.
 Require Import Values Maps Memory AST.
 
-Module NatIndexed.
-    Definition t := nat.
-
-    Definition index (n : nat) : positive :=
-      match n with
-      |O => 1%positive
-      |_ => 1 + Pos.of_nat n
-      end.
-
-    Definition index_rev (p:positive) : nat :=
-      match p with
-      |xH => O
-      |_ => Pos.to_nat p -1
-    end.
-
-    Lemma t_positive_t : forall (n:nat), index_rev (index n) = n.
-    Proof.
-      intros.
-      destruct (index n) eqn:Hn; unfold index_rev; destruct n; unfold index in *; lia.
-    Qed.
-
-    Lemma positive_t_positive : forall (p:positive), index(index_rev p) = p.
-    Proof.
-      intros. destruct (index_rev p) eqn:Hp; unfold index; destruct p; unfold index_rev in *; lia.
-    Qed.
-
-    Lemma index_inj : forall (x y : nat), index x = index y -> x = y.
-    Proof.
-      destruct x; destruct y; unfold index in *; lia.
-    Qed.
-    
-    Definition eq := Nat.eq_dec.
-End NatIndexed.
-
-Module NatMap := IRMap(NatIndexed).
+Require Import MultiLibs.
 
 (** Unchecked concern: Do we need to define new events for [yield] and [pthread_create] ? Can we keep the internal events?
     Now this two points are implemented differernt with CASCompCert *)
@@ -145,10 +111,6 @@ Section MultiThread.
       final_state s i.
 
   (** * Definitions about the primitive yield *)
-
-  Definition yield_id := 1001%positive.
-  Definition yield_sig := mksignature nil Tvoid cc_default.
-
   Inductive query_is_yield : query li_c -> nat -> Prop :=
   |yield_intro : forall b m next,
     Genv.find_symbol initial_se yield_id = Some b ->
@@ -179,34 +141,7 @@ Section MultiThread.
     update_thread s' target ls_new.
 
 
-  (** * Definitions about the primitive pthread_create *)
-
-  Definition pthread_create_id := 1002%positive.
-  
-
-  (* TODO: not quite sure to use Tlong or Tany64 here, we used Tlong for function pointer in the Client-Server example *)
-  (** int pthread_create (int * thread, void * (*start_routine) (void*), void* arg) *)
-  Definition pthread_create_sig := mksignature (Tlong :: Tlong :: Tlong :: nil) Tint cc_default.
-
-  
-  (** Problem here: the type of start_routine here may not be accecpted by [initial_state] in Clight semantics. *)
-  (** Maybe we have to do sth more to support such void* (*f) (void*) prototype, maybe not using cc_default *)
-  Definition start_routine_sig := mksignature (Tlong :: nil) Tlong cc_default.
-
-  
-  (* turns a call to pthread_create into a call to the start_routine, the initial memory is updated in 2nd query *)
-
-  (* trans between Vint and nat *)
-
-  Definition int_to_nat (i : int) := Z.to_nat (Int.intval i).
-  
-  Program Definition nat_to_int (n : nat) (nmax: (n < 1000)%nat) : int := Int.mkint (Z.of_nat n) _.
-  Next Obligation.
-    change Int.modulus with 4294967296.
-    split. lia. lia.
-  Qed.
-
-  
+   
   Inductive query_is_pthread_create : query li_c -> query li_c -> Prop :=
   |pthread_create_intro :
     forall m arglist b_ptc b_start b_arg ofs_arg b_t ofs_t m' start_id tid m''
@@ -229,12 +164,6 @@ Section MultiThread.
     update_thread s'' ctid ls'.
     
 
-  (** * Definitions about the primitive join *)
-
-  Definition pthread_join_id := 1003%positive.
-  (** int pthread_join (int * thread, void ** value_ptr) *)
-  Definition pthread_join_sig := mksignature (Tint :: Tlong :: nil) Tint cc_default.
-
   Inductive query_is_pthread_join : query li_c -> nat -> val -> Prop :=
   |pthread_join_intro :
     forall m arglist b_ptj target_id b_vptr ofs_vptr i
@@ -244,12 +173,13 @@ Section MultiThread.
       query_is_pthread_join
         (cq (Vptr b_ptj Ptrofs.zero) pthread_join_sig arglist m) target_id (Vptr b_vptr ofs_vptr).
 
+  (*
   (** Definitions about the primitives lock and unlock *)
 
   Definition pthread_mutex_lock_id := 1004%positive.
   (** int lock (int *mutex); *)
   Definition pthread_mutex_lock_sig := mksignature (Tint :: nil) Tvoid cc_default.
-
+  *)
   
 
   

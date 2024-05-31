@@ -10,7 +10,7 @@ Require Import Smallstep.
 Require Import SmallstepClosed.
 Require Import Values Maps Memory AST.
 
-Require Import Asm CMulti.
+Require Import Asm MultiLibs.
 Require Import Conventions1.
   
 
@@ -147,33 +147,6 @@ Section MultiThread.
      : signature
    *)
 
-  Axiom not_win : Archi.win64 = false.
-  
-  (* the ptr to start_routine is in RSI, the pointer to its argument is in RDX *)
-  Lemma pthread_create_locs :
-    loc_arguments pthread_create_sig = One (Locations.R Machregs.DI) :: One (Locations.R Machregs.SI) :: One (Locations.R Machregs.DX) :: nil.
-  Proof.
-    simpl. unfold pthread_create_sig. unfold loc_arguments.
-    replace Archi.ptr64 with true by reflexivity.
-    rewrite not_win. simpl. reflexivity.
-  Qed.
-
-  (* the pointer to the arg of start_routine should be placed in RDI for new thread regs *)
-  Theorem start_routine_loc :
-    loc_arguments start_routine_sig = One (Locations.R Machregs.DI) :: nil.
-  Proof.
-    simpl.  simpl. unfold pthread_create_sig. unfold loc_arguments.
-    replace Archi.ptr64 with true by reflexivity.
-    rewrite not_win. simpl. reflexivity.
-  Qed.
-
-  Theorem pthread_join_locs :
-    loc_arguments pthread_join_sig = One (Locations.R Machregs.DI) :: One (Locations.R Machregs.SI) :: nil.
-  Proof.
-    simpl. unfold pthread_create_sig. unfold loc_arguments.
-    replace Archi.ptr64 with true by reflexivity.
-    rewrite not_win. simpl. reflexivity.
-  Qed.
 
   Inductive query_is_yield_asm : query li_asm -> nat -> Prop :=
   |yield_intro_asm : forall rs m b next,
