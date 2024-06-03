@@ -171,6 +171,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
   | Eenum id fid e ty =>
       match ty with
       | Tvariant _ variant_id _ =>
+          (* a simple type checking *)
           if ident_eq variant_id id then
             match ce!id with
             | Some co =>
@@ -178,7 +179,7 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
                 do temp_id <- gensym ty;
                 let temp := Plocal temp_id ty in
                 let ret_expr := if own_type ce ty then Emoveplace temp ty else Eplace temp ty in
-                ret (stmt ++ [Sassign_variant temp fid rhs], ret_expr)
+                ret (stmt ++ [Sassign_variant temp id fid rhs], ret_expr)
             | _ =>
                 error [CTX id; MSG ": there is no composite for it in transl_value_expr"]
             end
@@ -260,17 +261,6 @@ Fixpoint transl_value_expr (e: Rustsyntax.expr) : mon (list statement * expr) :=
         ret (sl1 ++ sl2 ++ (call_stmt :: nil), Emoveplace temp ty)
       else
         ret (sl1 ++ sl2 ++ (call_stmt :: nil), Eplace temp ty)
-  | Ebuiltin ef tyl el ty =>
-      do (sl', el') <- transl_exprlist el;
-      (* use a temp to store the result of this call *)
-      do temp_id <- gensym ty;
-      let temp := Plocal temp_id ty in
-      let call_stmt := Sbuiltin temp ef tyl el' in
-      if own_type ce ty then
-        (* if this call is used for effects, the returned expr is useless *)
-        ret (sl' ++ (call_stmt :: nil), Emoveplace temp ty)
-      else
-        ret (sl' ++ (call_stmt :: nil), Eplace temp ty)
   | Rustsyntax.Eunop uop e ty =>
       do (sl, e') <- transl_value_expr e;
       match e' with
@@ -375,14 +365,12 @@ Fixpoint replace_binder_in_stmt (id: ident) (p: place) (s: statement) : statemen
   | Slet id' ty s' => Slet id' ty (replace_binder_in_stmt id p s')
   | Sassign p' e =>
       Sassign (replace_binder_in_place id p p') (replace_binder_in_expr id p e)
-  | Sassign_variant p' fid e =>
-      Sassign_variant (replace_binder_in_place id p p') fid (replace_binder_in_expr id p e)
+  | Sassign_variant p' enum_id fid e =>
+      Sassign_variant (replace_binder_in_place id p p') enum_id fid (replace_binder_in_expr id p e)
   | Sbox p' e =>
       Sbox (replace_binder_in_place id p p') (replace_binder_in_expr id p e)
   | Scall p' ef al =>
       Scall (replace_binder_in_place id p p') (replace_binder_in_expr id p ef) (map (replace_binder_in_expr id p) al)
-  | Sbuiltin p' ef tyl al =>
-      Sbuiltin (replace_binder_in_place id p p') ef tyl (map (replace_binder_in_expr id p) al)
   | Ssequence s1 s2 =>
       Ssequence (replace_binder_in_stmt id p s1) (replace_binder_in_stmt id p s2)
   | Sifthenelse e s1 s2 =>
@@ -410,7 +398,6 @@ Definition value_or_place (e: Rustsyntax.expr) : bool :=
   | Rustsyntax.Ebinop _ _ _ _ => true
   | Rustsyntax.Eassign _ _ _ => true
   | Rustsyntax.Ecall _ _ _ => true
-  | Rustsyntax.Ebuiltin _ _ _ _ => true
   end.
            
 Fixpoint generate_lets (l: list (ident * type)) (body: statement) : statement :=

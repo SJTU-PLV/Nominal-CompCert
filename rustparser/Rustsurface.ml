@@ -330,8 +330,7 @@ module To_syntax = struct
       fprintf pp "%a = %a" (pp_print_expr symmap) l (pp_print_expr symmap) r
     | S.Ecall (r1, rargs, _) ->
       fprintf pp "%a(%a)" (pp_print_expr symmap) r1 (pp_print_exprs symmap ", ") rargs
-    | S.Ebuiltin (_, _, rargs, _) ->
-      fprintf pp "<builtin>(%a)" (pp_print_exprs symmap ", ") rargs
+
 
   and pp_print_exprs (symmap: id IdentMap.t) (sep: string) pp es =
     let module S = Rustsyntax in

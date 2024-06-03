@@ -482,15 +482,15 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       do lhs <- place_to_cexpr p;
       let ty := typeof e in
       ret (Clight.Sassign lhs e')      
-  | Sassign_variant p arm_id e =>
+  | Sassign_variant p enum_id arm_id e =>
       do e' <- expr_to_cexpr e;
       do lhs <- place_to_cexpr p;
       let ty := typeof e in
       match typeof_place p with
-      | Tvariant _ id _ =>
+      | Tvariant _ _ _ =>
           (* lhs.1 = tag;
              lhs.2. = e'; *)
-          match ce!id, tce!id with
+          match ce!enum_id, tce!enum_id with
           | Some co, Some tco =>
               match field_tag arm_id co.(co_members) with
               (* an invariant: arm_id in co is the same as the field
@@ -502,11 +502,11 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
                       let lhs' := (Efield (Efield lhs body_id (Tunion union_id attr)) arm_id (to_ctype ty)) in
                       let assign_body := Clight.Sassign lhs' e' in
                       ret (Clight.Ssequence assign_tag assign_body)
-                  | _, _ => error [CTX id; MSG ": cannot get its tag and body id when translating the variant assignement"]
+                  | _, _ => error [CTX enum_id; MSG ": cannot get its tag and body id when translating the variant assignement"]
                   end
-              | _ => error [CTX id; MSG ": cannot get its tag value from the Rust composite environment"]
+              | _ => error [CTX enum_id; MSG ": cannot get its tag value from the Rust composite environment"]
               end
-          | _, _ => error [CTX id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
+          | _, _ => error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
           end
       | _ => error [CTX (local_of_place p); MSG ": assign a variant to a non variant place "]
       end
@@ -535,21 +535,6 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       do pe <- place_to_cexpr p;
       let assign := Clight.Sassign pe (Etempvar temp cty) in
       ret (Clight.Ssequence (Clight.Scall (Some temp) e' el') assign)
-  | Sbuiltin p ef tyl el =>
-      do el' <- fold_right (fun elt acc =>
-                             do acc' <- acc;
-                             do e' <- expr_to_cexpr elt;
-                             ret (e' :: acc')) (ret nil) el;
-      let tyl' := to_ctypelist tyl in
-      (** TODO: if p is a local, do not generate a new temp  *)
-      (* temp = f();
-         p = temp *)
-      let ty := typeof_place p in
-      let cty := to_ctype ty in
-      do temp <- gensym cty;
-      do pe <- place_to_cexpr p;
-      let assign := Clight.Sassign pe (Etempvar temp cty) in
-      ret (Clight.Ssequence (Clight.Sbuiltin (Some temp) ef tyl' el') assign)
   | Ssequence s1 s2 =>
       do s1' <- transl_stmt s1;
       do s2' <- transl_stmt s2;

@@ -60,18 +60,16 @@ Fixpoint transl_stmt (params_drops: statement) (oretv: option place) (stmt: Rust
         Ssequence drop (Sassign p e)
       else               
         Sassign p e
-  | RustlightBase.Sassign_variant p fid e =>
+  | RustlightBase.Sassign_variant p enum_id fid e =>
       let drop := Sdrop p in
       if own_type ce (typeof_place p) then
-        Ssequence drop (Sassign_variant p fid e)
+        Ssequence drop (Sassign_variant p enum_id fid e)
       else               
-        Sassign_variant p fid e
+        Sassign_variant p enum_id fid e
   | RustlightBase.Sbox p e =>
       Sbox p e
   | RustlightBase.Scall p e el =>
-      Scall p e el
-  | RustlightBase.Sbuiltin p ef tyl el =>
-      Sbuiltin p ef tyl el            
+      Scall p e el    
   | RustlightBase.Ssequence s1 s2 =>
       let s1' := transl_stmt s1 vars in
       let s2' := transl_stmt s2 vars in

@@ -293,38 +293,40 @@ Definition check_assignment (f: function) (pc: node) (live: LoanSet.t) (oe: LOrg
 .      
 
 
-Definition check_assign_variant (ce: composite_env) (f: function) (pc: node) (live: LoanSet.t) (oe: LOrgEnv.t) (ag: LAliasGraph.t) (p: place) (fid: ident) (e: expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
+Definition check_assign_variant (ce: composite_env) (f: function) (pc: node) (live: LoanSet.t) (oe: LOrgEnv.t) (ag: LAliasGraph.t) (p: place) (enum_id: ident) (fid: ident) (e: expr) : res (LoanSet.t * LOrgEnv.t * LAliasGraph.t) :=
   match typeof_place p with
   | Tvariant orgs_dest vid _ =>
-      match ce!vid with
-      | Some co =>
-          match find (fun '(Member_plain fid' _) => Pos.eqb fid fid') co.(co_members) with
-          | Some memb =>
-              let ty_i := type_member memb in
-              let ty_src := typeof e in
-              if type_eq_except_origins ty_src ty_i then
-                let orgs_src := co.(co_generic_origins) in
-                let ty_dest := replace_origin_in_type ty_i (combine orgs_src orgs_dest) in
-                if mutable_place p then
-                  (* check the expression *)
-                  do (live1, oe1) <- transfer_expr pc live oe e;
-                  (* shallow write to the place, it will check the validity of p *)
-                  do (oe2, ag1) <- shallow_write_place f pc live1 oe1 ag p;
-                  (* kill the loans of which [p] is prefix *)
-                  let live2 := kill_loans live1 p in
-                  (* flows the loans from src type to dest type *)
-                  do (oe3, ag2) <- flow_loans pc oe2 ag1 ty_src ty_dest ByVal;
-                  OK (live2, oe3, ag2)
+      if Pos.eqb enum_id vid then
+        match ce!vid with
+        | Some co =>
+            match find (fun '(Member_plain fid' _) => Pos.eqb fid fid') co.(co_members) with
+            | Some memb =>
+                let ty_i := type_member memb in
+                let ty_src := typeof e in
+                if type_eq_except_origins ty_src ty_i then
+                  let orgs_src := co.(co_generic_origins) in
+                  let ty_dest := replace_origin_in_type ty_i (combine orgs_src orgs_dest) in
+                  if mutable_place p then
+                    (* check the expression *)
+                    do (live1, oe1) <- transfer_expr pc live oe e;
+                    (* shallow write to the place, it will check the validity of p *)
+                    do (oe2, ag1) <- shallow_write_place f pc live1 oe1 ag p;
+                    (* kill the loans of which [p] is prefix *)
+                    let live2 := kill_loans live1 p in
+                    (* flows the loans from src type to dest type *)
+                    do (oe3, ag2) <- flow_loans pc oe2 ag1 ty_src ty_dest ByVal;
+                    OK (live2, oe3, ag2)
+                  else
+                    Error (error_msg pc ++ [MSG "place is not mutable in check_assign_variant"])
                 else
-                  Error (error_msg pc ++ [MSG "place is not mutable in check_assign_variant"])
-              else
-                Error (error_msg pc ++ [MSG "type checking error in check_assign_variant"])
-          | _ =>
-              Error (error_msg pc ++ [MSG "cannot find the field of this variant (check_assign_variant)"])
-          end
-      | _ =>
-          Error (error_msg pc ++ [MSG "cannot find the variant (check_assign_variant)"])
-      end
+                  Error (error_msg pc ++ [MSG "type checking error in check_assign_variant"])
+            | _ =>
+                Error (error_msg pc ++ [MSG "cannot find the field of this variant (check_assign_variant)"])
+            end
+        | _ =>
+            Error (error_msg pc ++ [MSG "cannot find the variant (check_assign_variant)"])
+        end
+      else Error (error_msg pc ++ [MSG "enum id mismatch between LHS and RHS (check_assign_variant)"])
   | _ =>
       Error (error_msg pc ++ [MSG "target is not a variant (check_assign_variant)"])
   end.
@@ -362,7 +364,7 @@ Definition flow_loans_origin_to_origin (pc: node) (se te: LOrgEnv.t) (src tgt: o
       let te' := LOrgEnv.set tgt (Live (LoanSet.union ls1 ls2)) te in
       OK te'
   | _, _ =>
-      Error (error_msg pc ++ [MSG "flow_loans_origin_to_origin"])
+      Error (error_msg pc ++ [CTX src; CTX tgt; MSG "flow_loans_origin_to_origin"])
   end.
 
 Definition flow_loans_origin_to_origin_with_alias (pc: node) (ag: LAliasGraph.t) (se te: LOrgEnv.t) (src tgt: origin) : res LOrgEnv.t :=
@@ -371,7 +373,7 @@ Definition flow_loans_origin_to_origin_with_alias (pc: node) (ag: LAliasGraph.t)
       let te' := set_loans_with_alias tgt (LoanSet.union ls1 ls2) te ag in
       OK te'
   | _, _ =>
-      Error (error_msg pc ++ [MSG "flow_loans_origin_to_origin"])
+      Error (error_msg pc ++ [CTX src; CTX tgt; MSG "flow_loans_origin_to_origin_with_alias"])
   end.
 
 Definition flow_loans_bind_acc (pc: node) (se: LOrgEnv.t) (acc: res (LOrgEnv.t * list origin_rel)) (elt: origin * origin * flow_kind) : res (LOrgEnv.t * list origin_rel) :=
@@ -434,8 +436,9 @@ Definition check_function_call (f: function) (pc: node) (live1: LoanSet.t) (oe1:
             (* construct empty origin environments for function origins *)
             let foe1 := fold_left (fun acc elt => LOrgEnv.set elt (Live LoanSet.empty) acc) orgs (PTree.empty LOrgSt.t) in
             do (foe2, rels) <- bind_param_origins pc oe2 foe1 arg_tyl sig_tyl;
-            (* use the origin relation to simulate the flow of loans in
-          the caller *)
+            (* use the origin relation to simulate the flow of loans
+               in the caller. foe2 is the initial env in the callee,
+               foe3 is the final env *)
             do foe3 <- after_call pc foe2 org_rels;
             (* shallow write to p *)
             do (oe3, ag2) <- shallow_write_place f pc live2 oe2 ag1 p;
@@ -561,8 +564,8 @@ Definition transfer (ce: composite_env) (f: function) (cfg: rustcfg) (pc: node) 
               | Sassign p e =>
                   let check_result := check_assignment f pc live oe ag p e in
                   finish_check pc check_result
-              | Sassign_variant p fid e =>
-                  let check_result := check_assign_variant ce f pc live oe ag p fid e in
+              | Sassign_variant p enum_id fid e =>
+                  let check_result := check_assign_variant ce f pc live oe ag p enum_id fid e in
                   finish_check pc check_result
               | Scall p e l =>
                   match e with
@@ -571,9 +574,6 @@ Definition transfer (ce: composite_env) (f: function) (cfg: rustcfg) (pc: node) 
                       finish_check pc check_result
                   | _ => AE.Err pc [MSG "unsupported function call"]
                   end
-              | Sbuiltin p ef tyl al =>
-                  (** TODO *)
-                  before
               | Sstoragedead id =>
                   match find_elt id f.(fn_vars) with
                   | Some ty =>

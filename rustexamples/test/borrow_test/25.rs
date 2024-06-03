@@ -28,8 +28,8 @@ fn sum<'a>(l: &'a mut list<'a>) -> i32 {
     return result;
 }
 
-fn add_one<'a>(l: &'a mut list) {
-    loop {
+fn add_one<'a, 'b>(l: &'a mut list<'b>) where 'b: 'a {
+    loop{
         (*l).value = (*l).value + 1;
         match (*l).next {
             list_node::Some(ref mut r) => {
@@ -40,10 +40,11 @@ fn add_one<'a>(l: &'a mut list) {
             }
         }
     }
+    return;
 }
 
 fn main(){
-    let l0: list = list {value: 1, next: list_node::None(())};
+    let l0: list = list {value: 1, next: list_node::None};
     let l1: list = list {value: 2, next: list_node::Some(&mut l0)};
     let l2: list = list {value: 3, next: list_node::Some(&mut l1)};
     add_one(&mut l2);

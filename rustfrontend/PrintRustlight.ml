@@ -120,18 +120,13 @@ let rec print_stmt p (s: RustlightBase.statement) =
     fprintf p "/*skip*/"
   | Sassign(v, e) ->
     fprintf p "@[<hv 2>%a =@ %a;@]" print_place v print_expr e
-  | Sassign_variant (v, id, e) ->
-    fprintf p "@[<hv 2>%a =@ %s(%a);@]" print_place v (extern_atom id) print_expr e
+  | Sassign_variant (v, enum_id, id, e) ->
+    fprintf p "@[<hv 2>%a =@ %s::%s(%a);@]" print_place v (extern_atom enum_id)(extern_atom id) print_expr e
   | Scall(v, e1, el) ->
     fprintf p "@[<hv 2>%a =@ %a@,(@[<hov 0>%a@]);@]"
               print_place v
               expr (15, e1)
               print_expr_list (true, el)
-  | Sbuiltin(v, ef, tyargs, el) ->
-      fprintf p "@[<hv 2>%a =@ builtin %s@,(@[<hov 0>%a@]);@]"
-                print_place v
-                (PrintAST.name_of_external ef)
-                print_expr_list (true, el)
   | Ssequence(Sskip, s2) ->
       print_stmt p s2
   | Ssequence(s1, Sskip) ->

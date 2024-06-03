@@ -284,18 +284,13 @@ Definition add_dropflag_list (l: list place) (flag: bool) : statement :=
 Fixpoint transl_stmt (stmt: statement) : statement :=
   match stmt with
   | Sassign p e
-  | Sassign_variant p _ e
+  | Sassign_variant p _ _ e
   | Sbox p e =>
       let deinit := moved_place e in
       let stmt1 := add_dropflag_option deinit false in
       let stmt2 := add_dropflag p true in
       makeseq (stmt1 :: stmt2 :: stmt :: nil)  
   | Scall p e el =>
-      let mvpaths := moved_place_list el in
-      let stmt1 := add_dropflag_list mvpaths false in
-      let stmt2 := add_dropflag p true in
-      makeseq (stmt1 :: stmt :: stmt2 :: nil)
-  | Sbuiltin p ef tyl el =>
       let mvpaths := moved_place_list el in
       let stmt1 := add_dropflag_list mvpaths false in
       let stmt2 := add_dropflag p true in

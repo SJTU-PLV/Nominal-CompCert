@@ -101,4 +101,4 @@ fn no_dangle() -> i32 {
 22. Return dangling pointer
 23. Problem case #4 from NLL RFC
 24. check the functionality of function call. `assign` is similar to the `assign` function in [https://doc.rust-lang.org/nomicon/subtyping.html#variance]
-25. List implemented with reference
+25. List implemented with reference. An interesting point is that if we change `add_one` to `fn add_one<'a>(l: &'a mut list<'a>)`, this code does not compile because `l2` is borrowed until the end of println which is inferred by the lifetime `'a` of `l2`. And the lifetime of borrow expression `&mut l2` in `add_one` is also `'a`.

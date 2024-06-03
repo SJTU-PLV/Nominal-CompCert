@@ -120,12 +120,11 @@ Inductive statement : Type :=
 | Sskip : statement                   (**r do nothing *)
 | Slet : ident -> type -> statement -> statement (**r declare a variable. let ident: type in *)
 | Sassign : place -> expr -> statement (**r assignment [place' = rvalue]. Downcast cannot appear in LHS *)
-| Sassign_variant : place -> ident -> expr -> statement (**r assign variant to a place *)
+| Sassign_variant : place -> ident -> ident -> expr -> statement (**r assign variant to a place *)
 | Sbox: place -> expr -> statement        (**r box assignment [place = Box::new(expr)]  *)
 | Scall: place -> expr -> list expr -> statement (**r function call, p =
   f(...). The assignee is mandatory, because we need to ensure that
   the return value (may be a box) is received *)
-| Sbuiltin: place -> external_function -> typelist -> list expr -> statement (**r builtin invocation *)
 | Ssequence : statement -> statement -> statement  (**r sequence *)
 | Sifthenelse : expr  -> statement -> statement -> statement (**r conditional *)
 | Sloop: statement -> statement (**r infinite loop *)
@@ -845,7 +844,7 @@ Inductive step : state -> trace -> state -> Prop :=
     assign_loc ge ty m2 b ofs v m3 ->
     step (State f (Sassign p e) k le own m1) E0 (State f Sskip k le own'' m3) 
          
-| step_assign_variant: forall f e (p: place) ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid attr orgs,
+| step_assign_variant: forall f e (p: place) ty op k le own own' own'' m1 m2 m3 m4 b ofs ofs' v tag bf co id fid enum_id attr orgs,
     typeof_place p = ty ->
     typeof e = ty ->
     ty = Tvariant orgs id attr ->
@@ -871,7 +870,7 @@ Inductive step : state -> trace -> state -> Prop :=
     field_offset ge fid co.(co_members) = OK (ofs', bf) ->
     (* set the value *)
     assign_loc ge ty m3 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m4 ->
-    step (State f (Sassign_variant p fid e) k le own m1) E0 (State f Sskip k le own'' m4)
+    step (State f (Sassign_variant p enum_id fid e) k le own m1) E0 (State f Sskip k le own'' m4)
 
 | step_box: forall f e (p: place) ty op k le own1 own2 own3 m1 m2 m3 b v,
     typeof e = ty ->

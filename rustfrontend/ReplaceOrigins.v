@@ -213,10 +213,10 @@ Section TYPE_ENV.
         do p' <- replace_origin_place p;
         do e' <- replace_origin_expr e;
         OK (Sassign p' e')
-    | Sassign_variant p fid e =>
+    | Sassign_variant p enum_id fid e =>
         do p' <- replace_origin_place p;
         do e' <- replace_origin_expr e;
-        OK (Sassign_variant p' fid e')
+        OK (Sassign_variant p' enum_id fid e')
     | Sbox p e =>
         do p' <- replace_origin_place p;
         do e' <- replace_origin_expr e;
@@ -227,11 +227,7 @@ Section TYPE_ENV.
     | Scall p f l =>
         do p' <- replace_origin_place p;
         do l' <- replace_origin_exprlist l;
-        OK (Scall p' f l')
-    | Sbuiltin p ef tyl al =>
-        do p' <- replace_origin_place p;
-        do al' <- replace_origin_exprlist al;
-        OK (Sbuiltin p' ef tyl al')                 
+        OK (Scall p' f l')             
     | Sreturn (Some e) =>
         do e' <- replace_origin_expr e;
         OK (Sreturn (Some e'))
