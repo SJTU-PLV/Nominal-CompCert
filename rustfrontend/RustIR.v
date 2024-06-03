@@ -4,7 +4,7 @@ Require Import Maps.
 Require Import Integers.
 Require Import Floats.
 Require Import Values.
-Require Import AST.
+Require Import AST Errors.
 Require Import Memory.
 Require Import Events.
 Require Import Globalenvs.
@@ -42,7 +42,7 @@ Inductive statement : Type :=
 | Sbox: place -> expr -> statement       (**r [place = Box::new(expr)]  *)
 | Sstoragelive: ident -> statement       (**r id becomes avalible *)
 | Sstoragedead: ident -> statement       (**r id becomes un-avalible *)
-| Sdrop: place -> statement             (**r conditionally drop the place [p] *)
+| Sdrop: place -> statement             (**r conditionally drop the place [p]. [p] must be an ownership pointer. *)
 | Scall: place -> expr -> list expr -> statement (**r function call, p = f(...). It is a abbr. of let p = f() in *)
 | Ssequence: statement -> statement -> statement  (**r sequence *)
 | Sifthenelse: expr  -> statement -> statement -> statement (**r conditional *)
@@ -196,16 +196,16 @@ Fixpoint update_stmt (root: statement) (sel: selector) (stmt: statement): option
 
 (** * Translation state *)
 
-Record state: Type := mkstate {
+Record generator: Type := mkstate {
   st_nextnode: node;
   st_code: rustcfg;
   st_wf: forall (pc: node), Plt pc st_nextnode \/ st_code!pc = None
 }.
 
 
-Inductive state_incr: state -> state -> Prop :=
+Inductive state_incr: generator -> generator -> Prop :=
   state_incr_intro:
-    forall (s1 s2: state),
+    forall (s1 s2: generator),
     Ple s1.(st_nextnode) s2.(st_nextnode) ->
     (forall pc,
         s1.(st_code)!pc = None \/ s2.(st_code)!pc = s1.(st_code)!pc) ->
@@ -227,62 +227,63 @@ Proof.
   intros. generalize (H2 pc) (H3 pc). intuition congruence.
 Qed.
 
-(** ** The state and error monad *)
+(** ** The generator and error monad *)
 
 (* just copy from RTLgen *)
 
-Inductive res (A: Type) (s: state): Type :=
-  | Error: Errors.errmsg -> res A s
-  | OK: A -> forall (s': state), state_incr s s' -> res A s.
+Inductive res (A: Type) (s: generator): Type :=
+  | Err: Errors.errmsg -> res A s
+  | Res: A -> forall (s': generator), state_incr s s' -> res A s.
 
-Arguments OK [A s].
-Arguments Error [A s].
+Arguments Res [A s].
+Arguments Err [A s].
 
-Definition mon (A: Type) : Type := forall (s: state), res A s.
+Definition mon (A: Type) : Type := forall (s: generator), res A s.
 
 Definition ret {A: Type} (x: A) : mon A :=
-  fun (s: state) => OK x s (state_incr_refl s).
+  fun (s: generator) => Res x s (state_incr_refl s).
 
 
-Definition error {A: Type} (msg: Errors.errmsg) : mon A := fun (s: state) => Error msg.
+Definition error {A: Type} (msg: Errors.errmsg) : mon A := fun (s: generator) => Err msg.
 
 Definition bind {A B: Type} (f: mon A) (g: A -> mon B) : mon B :=
-  fun (s: state) =>
+  fun (s: generator) =>
     match f s with
-    | Error msg => Error msg
-    | OK a s' i =>
+    | Err msg => Err msg
+    | Res a s' i =>
         match g a s' with
-        | Error msg => Error msg
-        | OK b s'' i' => OK b s'' (state_incr_trans s s' s'' i i')
+        | Err msg => Err msg
+        | Res b s'' i' => Res b s'' (state_incr_trans s s' s'' i i')
         end
     end.
 
 Definition bind2 {A B C: Type} (f: mon (A * B)) (g: A -> B -> mon C) : mon C :=
   bind f (fun xy => g (fst xy) (snd xy)).
 
+Declare Scope gensym_monad_scope.
 Notation "'do' X <- A ; B" := (bind A (fun X => B))
-   (at level 200, X ident, A at level 100, B at level 200).
+   (at level 200, X ident, A at level 100, B at level 200): gensym_monad_scope.
 Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
-   (at level 200, X ident, Y ident, A at level 100, B at level 200).
+   (at level 200, X ident, Y ident, A at level 100, B at level 200): gensym_monad_scope.
 
 Definition handle_error {A: Type} (f g: mon A) : mon A :=
-  fun (s: state) =>
+  fun (s: generator) =>
     match f s with
-    | OK a s' i => OK a s' i
-    | Error _ => g s
+    | Res a s' i => Res a s' i
+    | Err _ => g s
     end.
 
 
 
-(** ** Operations on state *)
+(** ** Operations on generator *)
 
-(** The initial state (empty CFG). *)
+(** The initial generator (empty CFG). *)
 
 Remark init_state_wf:
   forall pc, Plt pc 1%positive \/ (PTree.empty instruction)!pc = None.
 Proof. intros; right; apply PTree.gempty. Qed.
 
-Definition init_state : state :=
+Definition init_state : generator :=
   mkstate 1%positive (PTree.empty instruction) init_state_wf.
 
 
@@ -314,7 +315,7 @@ Qed.
 Definition add_instr (i: instruction) : mon node :=
   fun s =>
     let n := s.(st_nextnode) in
-    OK n
+    Res n
        (mkstate (Pos.succ n) (PTree.set n i s.(st_code))
                 (add_instr_wf s i))
        (add_instr_incr s i).
@@ -345,9 +346,9 @@ Proof.
 Qed.
 
 Definition reserve_instr: mon node :=
-  fun (s: state) =>
+  fun (s: generator) =>
   let n := s.(st_nextnode) in
-  OK n
+  Res n
      (mkstate (Pos.succ n) s.(st_code) (reserve_instr_wf s))
      (reserve_instr_incr s).
 
@@ -377,7 +378,7 @@ Proof.
 Qed.
 
 Definition check_empty_node:
-  forall (s: state) (n: node), { s.(st_code)!n = None } + { True }.
+  forall (s: generator) (n: node), { s.(st_code)!n = None } + { True }.
 Proof.
   intros. case (s.(st_code)!n); intros. right; auto. left; auto.
 Defined.
@@ -386,15 +387,16 @@ Definition update_instr (n: node) (i: instruction) : mon unit :=
   fun s =>
     match plt n s.(st_nextnode), check_empty_node s n with
     | left LT, left EMPTY =>
-        OK tt
+        Res tt
            (mkstate s.(st_nextnode) (PTree.set n i s.(st_code))
                     (update_instr_wf s n i LT))
            (update_instr_incr s n i LT EMPTY)
     | _, _ =>
-        Error (Errors.msg "RTLgen.update_instr")
+        Err (Errors.msg "RTLgen.update_instr")
     end. 
 
 
+Local Open Scope gensym_monad_scope.
 
 (** Translation of statement *)
 
@@ -464,19 +466,364 @@ Definition generate_cfg' (stmt: statement): mon node :=
 
 Definition generate_cfg (stmt: statement): Errors.res (node * rustcfg) :=  
   match generate_cfg' stmt init_state with
-  | OK start st _ =>
+  | Res start st _ =>
       Errors.OK (start, st.(st_code))
-  | Error msg =>
+  | Err msg =>
       Errors.Error msg
   end.
   
 
 End COMPOSITE_ENV.
 
+Close Scope gensym_monad_scope.
+Local Open Scope error_monad_scope.
 
-(** Operational semantics for RustIR after drop elabration *)
+(** ** Operational semantics for RustIR after drop elabration *)
 
 Section SEMANTICS.
 
+(** Global environment  *)
+
+Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
+  
+Definition globalenv (se: Genv.symtbl) (p: program) :=
+  {| genv_genv := Genv.globalenv se p; genv_cenv := p.(prog_comp_env) |}.
+
+(** Continuation *)
+  
+Inductive cont : Type :=
+| Kstop: cont
+| Kseq: statement -> cont -> cont
+| Kloop: statement -> cont -> cont
+| Kcall: place -> function -> env -> cont -> cont.
+  
+
+(** Pop continuation until a call or stop *)
+
+Fixpoint call_cont (k: cont) : cont :=
+  match k with
+  | Kseq s k => call_cont k
+  | Kloop s k => call_cont k
+  | _ => k
+  end.
+
+Definition is_call_cont (k: cont) : Prop :=
+  match k with
+  | Kstop => True
+  | Kcall _ _ _ _ => True
+  | _ => False
+  end.
+
+(** States *)
+
+Inductive state: Type :=
+  | State
+      (f: function)
+      (s: statement)
+      (k: cont)
+      (e: env)
+      (m: mem) : state
+  | Callstate
+      (vf: val)
+      (args: list val)
+      (k: cont)
+      (m: mem) : state
+  | Returnstate
+      (res: val)
+      (k: cont)
+      (m: mem) : state.
+
+
+(** Allocate memory blocks for function parameters/variables and build
+the local environment *)
+Inductive alloc_variables (ce: composite_env) : env -> mem ->
+                                                list (ident * type) ->
+                                                env -> mem -> Prop :=
+| alloc_variables_nil:
+  forall e m,
+    alloc_variables ce e m nil e m
+| alloc_variables_cons:
+  forall e m id ty vars m1 b1 m2 e2,
+    Mem.alloc m 0 (sizeof ce ty) = (m1, b1) ->
+    alloc_variables ce (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
+    alloc_variables ce e m ((id, ty) :: vars) e2 m2.
+
+
+Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (m': mem) : Prop :=
+| function_entry_intro: forall m1,
+    list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
+    alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
+    bind_parameters ge e m1 f.(fn_params) vargs m' ->
+    function_entry ge f vargs m e m'.
+
+Section SMALLSTEP.
+
+Variable ge: genv.
+
+Inductive step : state -> trace -> state -> Prop :=
+| step_assign: forall f e p ty k le m1 m2 b ofs v,
+    (* get the location of the place *)
+    eval_place ge le m1 p b ofs ->
+    (* evaluate the expr, return the value *)
+    eval_expr ge le m1 e v ->
+    (* assign to p *)
+    assign_loc ge ty m1 b ofs v m2 ->
+    step (State f (Sassign p e) k le m1) E0 (State f Sskip k le m2)
+| step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs ofs' v tag bf co fid enum_id,
+    (* get the location of the place *)
+    eval_place ge le m1 p b ofs ->
+    (* evaluate the expr *)
+    eval_expr ge le m1 e v ->
+    (** different from normal assignment: update the tag and assign value *)
+    ge.(genv_cenv) ! enum_id = Some co ->
+    field_tag fid co.(co_members) = Some tag ->
+    (* set the tag *)
+    Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
+    field_offset ge fid co.(co_members) = OK (ofs', bf) ->
+    (* set the value *)
+    assign_loc ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m3 ->
+    step (State f (Sassign_variant p enum_id fid e) k le m1) E0 (State f Sskip k le m3)
+| step_box: forall f e p ty k le m1 m2 m3 b v,
+    typeof e = ty ->
+    eval_expr ge le m1 e v ->
+    (* allocate the memory block *)
+    Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
+    (* assign the value *)
+    assign_loc ge ty m2 b Ptrofs.zero v m3 ->
+    step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m3)
+| step_drop: forall f p le ty attr m1 m2 m3 b ofs b' ofs' k,
+    (* Do we need to check its type? *)
+    typeof_place p = Tbox ty attr ->
+    (* get the location of the ownership pointer *)
+    eval_place ge le m1 p b ofs ->
+    (* get the content of the ownership pointer *)
+    deref_loc (Tbox ty attr) m1 b ofs (Vptr b' ofs') ->
+    Mem.free m1 b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ge ty) = Some m2 ->
+    step (State f (Sdrop p) k le m1) E0 (State f Sskip k le m3)
+| step_storagelive: forall f k le m id,
+    step (State f (Sstoragelive id) k le m) E0 (State f Sskip k le m)
+| step_storagedead: forall f k le m id,
+    step (State f (Sstoragedead id) k le m) E0 (State f Sskip k le m)
+         
+| step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels,
+    classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
+    eval_expr ge le m a vf ->
+    eval_exprlist ge le m al tyargs vargs ->
+    Genv.find_funct ge vf = Some fd ->
+    type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
+    step (State f (Scall p a al) k le m) E0 (Callstate vf vargs (Kcall p f le k) m)
+
+| step_internal_function: forall vf f vargs k m e m'
+    (FIND: Genv.find_funct ge vf = Some (Internal f)),
+    function_entry ge f vargs m e m' ->
+    step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e m')
+
+| step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels
+    (FIND: Genv.find_funct ge vf = Some (External function orgs org_rels ef typs ty cc)),
+    external_call ef ge vargs m t v m' ->
+    step (Callstate vf vargs k m) t (Returnstate v k m')
+
+(** Return cases *)
+| step_return_0: forall e lb m1 m2 f k ,
+    blocks_of_env ge e = lb ->
+    (* drop the stack blocks *)
+    Mem.free_list m1 lb = Some m2 ->
+    (* return unit or Vundef? *)
+    step (State f (Sreturn None) k e m1) E0 (Returnstate Vundef (call_cont k) m2)
+| step_return_1: forall le a v lb m1 m2 f k ,
+    eval_expr ge le m1 a v ->
+    (* drop the stack blocks *)
+    blocks_of_env ge le = lb ->
+    Mem.free_list m1 lb = Some m2 ->
+    step (State f (Sreturn (Some a)) k le m1) E0 (Returnstate v (call_cont k) m2)
+(* no return statement but reach the end of the function *)
+| step_skip_call: forall e lb m1 m2 f k,
+    is_call_cont k ->
+    blocks_of_env ge e = lb ->
+    Mem.free_list m1 lb = Some m2 ->
+    step (State f Sskip k e m1) E0 (Returnstate Vundef (call_cont k) m2)
+         
+| step_returnstate: forall p v b ofs ty m1 m2 e f k,
+    eval_place ge e m1 p b ofs ->
+    assign_loc ge ty m1 b ofs v m2 ->    
+    step (Returnstate v (Kcall p f e k) m1) E0 (State f Sskip k e m2)
+
+(* Control flow statements *)
+| step_seq:  forall f s1 s2 k e m,
+    step (State f (Ssequence s1 s2) k e m)
+      E0 (State f s1 (Kseq s2 k) e m)
+| step_skip_seq: forall f s k e m,
+    step (State f Sskip (Kseq s k) e m)
+      E0 (State f s k e m)
+| step_continue_seq: forall f s k e m,
+    step (State f Scontinue (Kseq s k) e m)
+      E0 (State f Scontinue k e m)
+| step_break_seq: forall f s k e m,
+    step (State f Sbreak (Kseq s k) e m)
+      E0 (State f Sbreak k e m)
+| step_ifthenelse:  forall f a s1 s2 k e m v1 b ty,
+    (* there is no receiver for the moved place, so it must be None *)
+    eval_expr ge e m a v1 ->
+    to_ctype (typeof a) = ty ->
+    bool_val v1 ty m = Some b ->
+    step (State f (Sifthenelse a s1 s2) k e m)
+      E0 (State f (if b then s1 else s2) k e m)
+| step_loop: forall f s k e m,
+    step (State f (Sloop s) k e m)
+      E0 (State f s (Kloop s k) e m)
+| step_skip_or_continue_loop:  forall f s k e m x,
+    x = Sskip \/ x = Scontinue ->
+    step (State f x (Kloop s k) e m)
+      E0 (State f s (Kloop s k) e m)
+| step_break_loop:  forall f s k e m,
+    step (State f Sbreak (Kloop s k) e m)
+      E0 (State f Sskip k e m)
+.
+
+
+(** Open semantics *)
+
+Inductive initial_state: c_query -> state -> Prop :=
+| initial_state_intro: forall vf f targs tres tcc ctargs ctres vargs m orgs org_rels,
+    Genv.find_funct ge vf = Some (Internal f) ->
+    type_of_function f = Tfunction orgs org_rels targs tres tcc ->
+    (** TODO: val_casted_list *)
+    Mem.sup_include (Genv.genv_sup ge) (Mem.support m) ->
+    initial_state (cq vf (signature_of_type ctargs ctres tcc) vargs m)
+                  (Callstate vf vargs Kstop m).
+    
+Inductive at_external: state -> c_query -> Prop:=
+| at_external_intro: forall vf name sg args k m targs tres cconv orgs org_rels,
+    Genv.find_funct ge vf = Some (External function orgs org_rels (EF_external name sg) targs tres cconv) ->    
+    at_external (Callstate vf args k m) (cq vf sg args m).
+
+Inductive after_external: state -> c_reply -> state -> Prop:=
+| after_external_intro: forall vf args k m m' v,
+    after_external
+      (Callstate vf args k m)
+      (cr v m')
+      (Returnstate v k m').
+
+Inductive final_state: state -> c_reply -> Prop:=
+| final_state_intro: forall v m,
+    final_state (Returnstate v Kstop m) (cr v m).
+
+(* Definition of memory error state in RustIR *)
+
+Inductive function_entry_mem_error (f: function) (vargs: list val) (m: mem) (e: env) : Prop :=
+  | function_entry_mem_error_intro: forall m1,
+      list_norepet (var_names f.(fn_params) ++ var_names f.(fn_vars)) ->
+      alloc_variables ge empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
+      bind_parameters_mem_error ge e m1 f.(fn_params) vargs ->
+      function_entry_mem_error f vargs m e.
+
+Inductive step_mem_error : state -> Prop :=
+| step_assign_error1: forall f e p k le m,
+    eval_place_mem_error ge le m p ->
+    step_mem_error (State f (Sassign p e) k le m)
+| step_assign_error2: forall f e p k le m b ofs,
+    eval_place ge le m p b ofs ->
+    eval_expr_mem_error ge le m e ->
+    step_mem_error (State f (Sassign p e) k le m)
+| step_assign_error3: forall f e p k le m b ofs v ty,
+    eval_place ge le m p b ofs ->
+    eval_expr ge le m e v ->
+    assign_loc_mem_error ge ty m b ofs v ->
+    step_mem_error (State f (Sassign p e) k le m)
+| step_assign_variant_error1: forall f e p k le m enum_id fid,
+    eval_place_mem_error ge le m p ->
+    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m)
+| step_assign_variant_error2: forall f e p k le m b ofs enum_id fid,
+    eval_place ge le m p b ofs ->
+    eval_expr_mem_error ge le m e ->
+    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m)
+| step_assign_variant_error3: forall f e p k le m b ofs enum_id fid v,
+    eval_place ge le m p b ofs ->
+    eval_expr ge le m e v ->
+    ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
+    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m)
+| step_assign_variant_error4: forall f e p k le m1 m2 b ofs ofs' enum_id fid v ty co bf tag,
+    eval_place ge le m1 p b ofs ->
+    eval_expr ge le m1 e v ->
+    ge.(genv_cenv) ! enum_id = Some co ->
+    field_tag fid co.(co_members) = Some tag ->
+    (* set the tag *)
+    Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
+    field_offset ge fid co.(co_members) = OK (ofs', bf) ->
+    (* set the value *)
+    assign_loc_mem_error ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v ->
+    step_mem_error (State f (Sassign_variant p enum_id fid e) k le m1)
+| step_box_error1: forall le e p k m f, 
+    eval_expr_mem_error ge le m e ->
+    step_mem_error (State f (Sbox p e) k le m)
+| step_box_error2: forall le e p k m1 m2 f b ty v, 
+    typeof e = ty ->
+    eval_expr ge le m1 e v ->
+    (* allocate the memory block *)
+    Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
+    assign_loc_mem_error ge ty m2 b Ptrofs.zero v ->
+    step_mem_error (State f (Sbox p e) k le m1)
+| step_drop_error1: forall f p le ty attr m k,
+    typeof_place p = Tbox ty attr ->
+    (* get the location of the ownership pointer *)
+    eval_place_mem_error ge le m p ->
+    step_mem_error (State f (Sdrop p) k le m)
+| step_drop_error2: forall f p le ty attr m k b ofs,
+    typeof_place p = Tbox ty attr ->
+    (* get the location of the ownership pointer *)
+    eval_place ge le m p b ofs ->
+    deref_loc_mem_error (Tbox ty attr) m b ofs ->
+    step_mem_error (State f (Sdrop p) k le m)
+| step_drop_error3: forall f p le ty attr m k b b' ofs ofs',
+    typeof_place p = Tbox ty attr ->
+    (* get the location of the ownership pointer *)
+    eval_place ge le m p b ofs ->
+    deref_loc (Tbox ty attr) m b ofs (Vptr b' ofs') ->
+    ~ Mem.range_perm m b (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ge ty) Cur Freeable ->
+    step_mem_error (State f (Sdrop p) k le m)
+| step_call_error: forall f a al k le m  tyargs vf fd cconv tyres p orgs org_rels,
+    classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
+    eval_expr ge le m a vf ->
+    eval_exprlist_mem_error ge le m al tyargs ->
+    Genv.find_funct ge vf = Some fd ->
+    type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
+    step_mem_error (State f (Scall p a al) k le m)
+| step_internal_function_error: forall vf f vargs k m e
+    (FIND: Genv.find_funct ge vf = Some (Internal f)),
+    function_entry_mem_error f vargs m e ->
+    step_mem_error (Callstate vf vargs k m)
+| step_return_0_error: forall f k le m,
+    Mem.free_list m (blocks_of_env ge le) = None ->
+    step_mem_error (State f (Sreturn None) k le m)
+| step_return_1_error1: forall f a k le m,
+    eval_expr_mem_error ge le m a ->
+    step_mem_error (State f (Sreturn (Some a)) k le m)
+| step_return_2_error2: forall f a k le m v,
+    eval_expr ge le m a v ->    
+    Mem.free_list m (blocks_of_env ge le) = None ->
+    step_mem_error (State f (Sreturn (Some a)) k le m)
+| step_skip_call_error: forall f k le m,
+    is_call_cont k ->
+    Mem.free_list m (blocks_of_env ge le) = None ->
+    step_mem_error (State f Sskip k le m)
+| step_returnstate_error1: forall p v m f k e,
+    eval_place_mem_error ge e m p ->
+    step_mem_error (Returnstate v (Kcall p f e k) m)
+| step_returnstate_error2: forall p v m f k e b ofs ty,
+    ty = typeof_place p ->
+    eval_place ge e m p b ofs ->
+    assign_loc_mem_error ge ty m b ofs v ->
+    step_mem_error (Returnstate v (Kcall p f e k) m)
+| step_ifthenelse_error:  forall f a s1 s2 k e m,
+    eval_expr_mem_error ge e m a ->
+    step_mem_error (State f (Sifthenelse a s1 s2) k e m)
+.                   
+         
+
+End SMALLSTEP.
 
 End SEMANTICS.
+
+Definition semantics (p: program) :=
+  Semantics_gen step initial_state at_external (fun _ => after_external) (fun _ => final_state) globalenv p.
+

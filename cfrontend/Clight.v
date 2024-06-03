@@ -735,6 +735,7 @@ with eval_lvalue_mem_error (e : env) (le : temp_env) (m : mem) : expr -> Prop :=
 | eval_Ederef_mem_error: forall a ty,
     eval_expr_mem_error e le m a ->
     eval_lvalue_mem_error e le m (Ederef a ty)
+    (* FIXME we need to consider the memory error in deref_loc !*)
 | eval_Efield_struct_mem_error: forall a i ty id att,
     typeof a = Tstruct id att ->
     eval_expr_mem_error e le m a ->

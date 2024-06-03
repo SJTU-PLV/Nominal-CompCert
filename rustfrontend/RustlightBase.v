@@ -253,6 +253,14 @@ Inductive deref_loc (ty: type) (m: mem) (b: block) (ofs: ptrofs) : val -> Prop :
       access_mode ty = By_copy ->
       deref_loc ty m b ofs (Vptr b ofs).
 
+(** Memory error in deref_loc  *)
+
+Inductive deref_loc_mem_error (ty: type) (m: mem) (b: block) (ofs: ptrofs) : Prop :=
+  | deref_loc_value_error: forall chunk,
+      access_mode ty = By_value chunk ->
+      ~ Mem.valid_access m chunk b (Ptrofs.unsigned ofs) Readable ->
+      deref_loc_mem_error ty m b ofs.
+
 
 (** Assign a value to a location  *)
 
@@ -274,6 +282,25 @@ Inductive assign_loc (ce: composite_env) (ty: type) (m: mem) (b: block) (ofs: pt
       Mem.loadbytes m b' (Ptrofs.unsigned ofs') (sizeof ce ty) = Some bytes ->
       Mem.storebytes m b (Ptrofs.unsigned ofs) bytes = Some m' ->
       assign_loc ce ty m b ofs (Vptr b' ofs') m'.
+
+(** Memory error in assign_loc  *)
+
+Inductive assign_loc_mem_error (ce : composite_env) (ty : type) (m : mem) (b : block) (ofs : ptrofs) : val -> Prop :=
+| assign_loc_value_mem_error: forall v chunk,
+    access_mode ty = By_value chunk ->
+    ~ Mem.valid_access m chunk b (Ptrofs.unsigned ofs) Writable ->
+    assign_loc_mem_error ce ty m  b ofs v
+| assign_loc_copy_mem_error1: forall b' ofs',
+    (* the memory location of the struct to be copied is not readable *)
+    access_mode ty = By_copy ->
+    ~ Mem.range_perm m b' (Ptrofs.unsigned ofs') ((Ptrofs.unsigned ofs') + (sizeof ce ty)) Cur Readable ->
+    assign_loc_mem_error ce ty m b ofs (Vptr b' ofs')
+| assign_loc_copy_mem_error2: forall v,
+    (* the memory location of the struct to be stored is not writable *)
+    access_mode ty = By_copy ->
+    Mem.range_perm m b (Ptrofs.unsigned ofs) ((Ptrofs.unsigned ofs) + (sizeof ce ty)) Cur Writable ->
+    assign_loc_mem_error ce ty m b ofs v.
+
 
 (** Prefix of a place  *)
 
@@ -406,10 +433,34 @@ Inductive eval_place : place -> block -> ptrofs -> Prop :=
     ce ! id = Some co ->
     field_offset ce i (co_members co) = OK (delta, bf) ->
     eval_place (Pfield p i ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
+| eval_Pdowncast: forall  p ty b ofs delta id fid co bf attr orgs,
+    eval_place p b ofs ->
+    ty = Tvariant orgs id attr ->
+    ce ! id = Some co ->
+    (* Is it considered memory error? No! Because we can write any kind of place to trigger this error. *)
+    variant_field_offset ce fid (co_members co) = OK (delta, bf) ->
+    eval_place (Pdowncast p fid ty) b (Ptrofs.add ofs (Ptrofs.repr delta))
 | eval_Pderef: forall p ty l ofs l' ofs',
     eval_place p l ofs ->
     deref_loc ty m l ofs (Vptr l' ofs') ->
     eval_place (Pderef p ty) l' ofs'.
+
+Inductive eval_place_mem_error : place -> Prop :=
+| eval_Pfield_error: forall p ty i,
+    eval_place_mem_error p ->
+    eval_place_mem_error (Pfield p i ty)
+| eval_Pdowncast_error: forall p ty fid,
+    eval_place_mem_error p ->
+    eval_place_mem_error (Pdowncast p fid ty)
+| eval_Pderef_error1: forall p ty,
+    eval_place_mem_error p ->
+    eval_place_mem_error (Pderef p ty)
+| eval_Pderef_error2: forall p l ofs ty,
+    eval_place p l ofs ->
+    deref_loc_mem_error ty m l ofs ->
+    eval_place_mem_error (Pderef p ty)
+.
+
 
 Inductive eval_place_list : list place -> list block -> list ptrofs -> Prop :=
 | eval_Pnil: eval_place_list nil nil nil
@@ -417,6 +468,7 @@ Inductive eval_place_list : list place -> list block -> list ptrofs -> Prop :=
     eval_place p b ofs ->
     eval_place_list lp lb lofs ->    
     eval_place_list (p :: lp) (b :: lb) (ofs :: lofs).
+
 
 
 (* Evaluation of pure expression *)
@@ -446,7 +498,7 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
 (*     sem_binary_operation ge op v1 ty1 v2 ty2 m = Some v -> *)
 (*     (* For now, we do not return moved place in binary operation *) *)
 (*     eval_expr (Ebinop op a1 a2 ty) v None. *)
-| eval_Eplace: forall p b ofs ty m v,
+| eval_Eplace: forall p b ofs ty v,
     eval_place p b ofs ->
     deref_loc ty m b ofs v ->
     eval_pexpr (Eplace p ty) v
@@ -460,7 +512,7 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
 (*     (** what if p is an own type? *) *)
 (*     eval_pexpr (Eget p fid ty) v *)
 
-| eval_Ecktag: forall (p: place) b ofs ty m tag tagz id fid attr co orgs,
+| eval_Ecktag: forall (p: place) b ofs ty tag tagz id fid attr co orgs,
     eval_place p b ofs ->
     (* load the tag *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
@@ -495,6 +547,59 @@ Inductive eval_exprlist : list expr -> typelist -> list val -> Prop :=
     (* sem_cast v1 (typeof a) ty m = Some v2 -> *) 
     eval_exprlist bl tyl vl ->
     eval_exprlist (a :: bl) (Tcons ty tyl) (v2 :: vl).
+
+(** Memory error in evaluation of expression  *)
+
+
+Inductive eval_pexpr_mem_error: pexpr ->  Prop :=
+| eval_Eunop_error:  forall op a ty,
+    eval_pexpr_mem_error a ->
+    eval_pexpr_mem_error (Eunop op a ty)
+| eval_Ebinop: forall op a1 a2 ty,
+    (eval_pexpr_mem_error a1 \/ eval_pexpr_mem_error a2) ->
+    eval_pexpr_mem_error (Ebinop op a1 a2 ty)
+| eval_Eplace_error1: forall p ty,
+    eval_place_mem_error p ->
+    eval_pexpr_mem_error (Eplace p ty)
+| eval_Eplace_error2: forall p b ofs ty,
+    eval_place p b ofs->
+    deref_loc_mem_error ty m b ofs ->
+    eval_pexpr_mem_error (Eplace p ty)
+| eval_Ecktag_error1: forall p fid ty,
+    eval_place_mem_error p ->
+    eval_pexpr_mem_error (Ecktag p fid ty)
+| eval_Ecktag_error2: forall p b ofs ty fid, 
+    eval_place p b ofs ->
+    (* tag is not readable *)
+    ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
+    eval_pexpr_mem_error (Ecktag p fid ty)
+| eval_Eref_error: forall p org mut ty,
+    eval_place_mem_error p ->
+    eval_pexpr_mem_error (Eref org mut p ty).
+
+Inductive eval_expr_mem_error: expr -> Prop :=
+| eval_Emoveplace_error: forall p ty,
+    eval_pexpr_mem_error (Eplace p ty) ->
+    eval_expr_mem_error (Emoveplace p ty)
+| eval_Epure_mem_error: forall pe,
+    eval_pexpr_mem_error pe ->
+    eval_expr_mem_error (Epure pe).
+
+Inductive eval_exprlist_mem_error : list expr -> typelist -> Prop :=
+| eval_Econs_mem_error1: forall a ty,
+    eval_expr_mem_error a ->
+    eval_exprlist_mem_error (a::nil) (Tcons ty Tnil)
+| eval_Econs_mem_error2: forall a bl ty tyl,
+    eval_expr_mem_error a ->
+    eval_exprlist_mem_error (a :: bl) (Tcons ty tyl)
+| eval_Econs_mem_error3: forall a bl ty tyl v1,
+    eval_expr a v1 ->
+    eval_exprlist_mem_error bl tyl ->
+    eval_exprlist_mem_error (a :: bl) (Tcons ty tyl)
+.
+
+
+
 
 (* The second phase of evaluation of expression *)
 
@@ -789,6 +894,22 @@ Inductive bind_parameters (ce: composite_env) (e: env):
       bind_parameters ce e m1 params vl m2 ->
       bind_parameters ce e m ((id, ty) :: params) (v1 :: vl) m2.
 
+Inductive bind_parameters_mem_error (ce: composite_env) (e: env) : mem -> list (ident * type) -> list val -> Prop :=
+| bind_parameters_mem_error_one: forall m id ty v b,
+    e ! id = Some (b, ty) ->
+    assign_loc_mem_error ce ty m b Ptrofs.zero v ->
+    bind_parameters_mem_error ce e m ((id, ty) :: nil) (v :: nil)
+| bind_parameters_mem_error_cons1: forall m id ty params v1 vl b,
+    e ! id = Some (b, ty) ->
+    assign_loc_mem_error ce ty m b Ptrofs.zero v1 ->
+    bind_parameters_mem_error ce e m ((id, ty) :: params) (v1 :: vl)
+| bind_parameters_mem_error_cons2: forall m id ty params v1 vl b m1,
+    e ! id = Some (b, ty) ->
+    assign_loc ce ty m b Ptrofs.zero v1 m1 ->
+    bind_parameters_mem_error ce e m1 params vl ->
+    bind_parameters_mem_error ce e m ((id, ty) :: params) (v1 :: vl).
+
+
 (** Return the list of blocks in the codomain of [e], with low and high bounds. *)
 
 Definition block_of_binding (ce: composite_env) (id_b_ty: ident * (block * type)) :=
@@ -874,7 +995,7 @@ Inductive step : state -> trace -> state -> Prop :=
 
 | step_box: forall f e (p: place) ty op k le own1 own2 own3 m1 m2 m3 b v,
     typeof e = ty ->
-    typeof_place p = ty ->
+    (* typeof_place p = TSletbox ty attr -> *)
     eval_expr ge le m1 e v ->
     (* allocate the memory block *)
     Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
@@ -922,7 +1043,7 @@ can initialize struct *)
 (*     Genv.find_funct ge vf = Some fd -> *)
 (*     type_of_fundef fd = Tfunction tyargs tyres cconv -> *)
 (*     step (State f (Scall None a al) k le own1 m) E0 (Callstate vf vargs (Kcall None f le own2 k) m) *)
-| step_call_1: forall f a al optlp k le le' own1 own2 m vargs tyargs vf fd cconv tyres p orgs org_rels,
+| step_call_1: forall f a al optlp k le own1 own2 m vargs tyargs vf fd cconv tyres p orgs org_rels,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist ge le m al tyargs vargs ->
@@ -931,7 +1052,7 @@ can initialize struct *)
     remove_own_list own1 optlp = Some own2 ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
-    step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le' own2 k) m)
+    step (State f (Scall p a al) k le own1 m) E0 (Callstate vf vargs (Kcall p f le own2 k) m)
                  
 (* End of a let statement, free the place and its drop obligations *)
 | step_end_let: forall f id k le1 le2 own1 own2 m1 m2 m3 ty b s,
