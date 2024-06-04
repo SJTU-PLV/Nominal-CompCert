@@ -212,6 +212,8 @@ Next Obligation. destruct t. reflexivity. Qed.
 
 (*injp_acc*)
 
+(** injp_acci: the internal transition: thread id remains the same, also no new threads introduced
+               the private(unmapped or outofreach) memory of other threads are unchanged *)
 Inductive injp_acci : relation injp_world :=
     injp_acci_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
                        (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2'),
@@ -225,6 +227,8 @@ Inductive injp_acci : relation injp_world :=
                      inject_separated f f' m1 m2 ->
                      injp_acci (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
+(** injp_acce: the transition for external calls: when the current thread takes the control again (thread id is the same), new threads may be introduced
+               the private memory of the current thread is unchanged by other threads *)
 Inductive injp_acce :  relation injp_world :=
     injp_acce_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
                        (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2'),
@@ -242,7 +246,9 @@ Record unchanged_on_g (P : block -> Z -> Prop) (m_before m_after : mem) : Prop :
   { unchanged_on_thread_g : Mem.tid (Mem.support m_before) <> Mem.tid (Mem.support m_after);
     unchanged_on_g' : Mem.unchanged_on (Mem.thread_internal_P P m_before) m_before m_after }.
 
-
+(** injp_accg: the transition for one thread [t] to another (usually the current running) thread,
+               New threads may be introduced, the thread [t] has switched out and never runs again yet, thus its
+               private memory is unchanged *)
 Inductive injp_accg : relation injp_world :=
     injp_accg_intro : forall (f : meminj) (m1 m2 : mem) (Hm : Mem.inject f m1 m2) (f' : meminj) 
                        (m1' m2' : mem) (Hm' : Mem.inject f' m1' m2'),

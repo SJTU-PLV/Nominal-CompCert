@@ -6,7 +6,6 @@ Require Import MultiLibs CMulti AsmMulti.
 Require Import InjectFootprint CA Compiler.
 Require Import CallconvNew.
 
-
 (** * TODOs after completing this : Generalization *)
 
 (**
@@ -119,18 +118,57 @@ Section ConcurSim.
     (** Global index *)
 
     Definition global_index : Type := list fsim_index.
-    
+    (*
     Inductive global_order : global_index -> global_index -> Prop :=
     |gorder_hd : forall fi1 fi2 tl, fsim_order fi1 fi2 -> global_order (fi1 :: tl) (fi2 :: tl)
     |gorder_tl : forall fi tl1 tl2, global_order tl1 tl2 -> global_order (fi :: tl1) (fi :: tl2).
+     *)
 
+
+    Inductive global_order : global_index -> global_index -> Prop :=
+    |gorder_intro : forall hd tl li1 li2,
+        fsim_order li1 li2 ->
+        global_order (hd ++ (li1 :: nil) ++ tl) (hd ++ (li2 :: nil) ++ tl).
+    
+    Lemma global_index_acc_l : forall n i, (length i < n)%nat -> Acc global_order i.
+    Proof.
+      induction n.
+      - intros. destruct i; inv H.
+      - intros. induction i.
+        + constructor. intros. inv H0. destruct hd; destruct tl; simpl in H1; inv H1.
+        + induction a using (well_founded_induction fsim_order_wf).
+          constructor. intros.
+          inv H1. destruct hd.
+          -- 
+          -- eapply H0. eauto. simpl. simpl in H. lia.
+          -- give_up.
+       
+      - intros. destruct i; inv H.
+      - intros. constructor. intros.
+        
+        induction H0.
+        + induction fi2 using (well_founded_induction fsim_order_wf).
+          eapply H1. eauto.
+        constructor. intros. inv H0.
+        + admit.
+        + 
+    Admitted.
+    *)
     Theorem global_index_wf : well_founded global_order.
     Proof.
-      red.
-      eapply (well_founded_induction fsim_order_wf).
+      red. intros. constructor. intros. inv H.
+      induction li1 using (well_founded_induction fsim_order_wf).
+      eapply H. eauto. eauto.
+      induction
+      eapply global_index_acc_l. eauto.
+    Qed.
+      (* eapply (well_founded_induction fsim_order_wf).*)
     Admitted. (** Should be correct, but how to prove...*)
 
-        (** * Lemmas about nth_error. *)
+
+
+    
+    (** * Lemmas about nth_error. *)
     Fixpoint set_nth_error {A:Type} (l: list A) (n: nat) (a: A) : option (list A) :=
       match n with
       |O => match l with
@@ -179,6 +217,7 @@ Section ConcurSim.
         set_nth_error i n li' = Some i' ->
         fsim_order li' li ->
         global_order i' i.
+    Proof.
     Admitted.
     
     Section Initial.
