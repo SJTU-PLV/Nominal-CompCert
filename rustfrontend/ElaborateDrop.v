@@ -153,6 +153,7 @@ Fixpoint elaborate_drop_for (pc: node) (mayinit mayuninit universe: Paths.t) (fu
         | _ => error [CTX pc; MSG ": Normal types do not need drop: elaborate_drop_for"]
         end
       else (* split p into its children and drop them *)
+        (** p may be partially initialized *)
         match typeof_place p with
         | Tstruct _ id attr =>
             match ce!id with

@@ -260,11 +260,11 @@ Definition bind {A B: Type} (f: mon A) (g: A -> mon B) : mon B :=
 Definition bind2 {A B C: Type} (f: mon (A * B)) (g: A -> B -> mon C) : mon C :=
   bind f (fun xy => g (fst xy) (snd xy)).
 
-Declare Scope gensym_monad_scope.
+Declare Scope cfg_monad_scope.
 Notation "'do' X <- A ; B" := (bind A (fun X => B))
-   (at level 200, X ident, A at level 100, B at level 200): gensym_monad_scope.
+   (at level 200, X ident, A at level 100, B at level 200): cfg_monad_scope.
 Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
-   (at level 200, X ident, Y ident, A at level 100, B at level 200): gensym_monad_scope.
+   (at level 200, X ident, Y ident, A at level 100, B at level 200): cfg_monad_scope.
 
 Definition handle_error {A: Type} (f g: mon A) : mon A :=
   fun (s: generator) =>
@@ -396,7 +396,7 @@ Definition update_instr (n: node) (i: instruction) : mon unit :=
     end. 
 
 
-Local Open Scope gensym_monad_scope.
+Local Open Scope cfg_monad_scope.
 
 (** Translation of statement *)
 
@@ -475,7 +475,7 @@ Definition generate_cfg (stmt: statement): Errors.res (node * rustcfg) :=
 
 End COMPOSITE_ENV.
 
-Close Scope gensym_monad_scope.
+Close Scope cfg_monad_scope.
 Local Open Scope error_monad_scope.
 
 (** ** Operational semantics for RustIR after drop elabration *)
@@ -591,15 +591,12 @@ Inductive step : state -> trace -> state -> Prop :=
     (* assign the value *)
     assign_loc ge ty m2 b Ptrofs.zero v m3 ->
     step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m3)
-| step_drop: forall f p le ty attr m1 m2 m3 b ofs b' ofs' k,
-    (* Do we need to check its type? *)
-    typeof_place p = Tbox ty attr ->
+| step_drop: forall f p le m1 m2 b ofs k,
+    (** Unconditonally drop  *)
     (* get the location of the ownership pointer *)
     eval_place ge le m1 p b ofs ->
-    (* get the content of the ownership pointer *)
-    deref_loc (Tbox ty attr) m1 b ofs (Vptr b' ofs') ->
-    Mem.free m1 b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ge ty) = Some m2 ->
-    step (State f (Sdrop p) k le m1) E0 (State f Sskip k le m3)
+    drop_in_place ge (typeof_place p) m1 b ofs m2 ->
+    step (State f (Sdrop p) k le m1) E0 (State f Sskip k le m2)
 | step_storagelive: forall f k le m id,
     step (State f (Sstoragelive id) k le m) E0 (State f Sskip k le m)
 | step_storagedead: forall f k le m id,
@@ -763,23 +760,14 @@ Inductive step_mem_error : state -> Prop :=
     Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
     assign_loc_mem_error ge ty m2 b Ptrofs.zero v ->
     step_mem_error (State f (Sbox p e) k le m1)
-| step_drop_error1: forall f p le ty attr m k,
-    typeof_place p = Tbox ty attr ->
+| step_drop_error1: forall f p le m k,
     (* get the location of the ownership pointer *)
     eval_place_mem_error ge le m p ->
     step_mem_error (State f (Sdrop p) k le m)
-| step_drop_error2: forall f p le ty attr m k b ofs,
-    typeof_place p = Tbox ty attr ->
+| step_drop_error2: forall f p le  m k b ofs,
     (* get the location of the ownership pointer *)
     eval_place ge le m p b ofs ->
-    deref_loc_mem_error (Tbox ty attr) m b ofs ->
-    step_mem_error (State f (Sdrop p) k le m)
-| step_drop_error3: forall f p le ty attr m k b b' ofs ofs',
-    typeof_place p = Tbox ty attr ->
-    (* get the location of the ownership pointer *)
-    eval_place ge le m p b ofs ->
-    deref_loc (Tbox ty attr) m b ofs (Vptr b' ofs') ->
-    ~ Mem.range_perm m b (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ge ty) Cur Freeable ->
+    drop_in_place_mem_error ge (typeof_place p) m b ofs ->
     step_mem_error (State f (Sdrop p) k le m)
 | step_call_error: forall f a al k le m  tyargs vf fd cconv tyres p orgs org_rels,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->

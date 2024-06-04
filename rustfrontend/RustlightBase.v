@@ -727,6 +727,63 @@ with drop_in_place_list (ce: composite_env) : list type -> mem -> list block -> 
     drop_in_place_list ce tys' m' lb' lofs' m'' ->
     drop_in_place_list ce (ty :: tys') m (b :: lb') (ofs :: lofs') m''.
 
+(** Memory error in drop_in_place  *)
+
+Inductive drop_in_place_mem_error (ce: composite_env) : type -> mem -> block -> ptrofs -> Prop :=
+| drop_in_box_error1: forall ty ty' attr m b ofs,
+    ty = Tbox ty' attr ->
+    (* The contents in [p] is Unreadable. Use signed or unsigned? *)
+    ~ Mem.valid_access m Mptr b (Ptrofs.signed ofs) Readable ->
+    drop_in_place_mem_error ce ty m b ofs
+| drop_in_box_error2: forall ty ty' attr m b ofs b' ofs',
+    ty = Tbox ty' attr ->
+    Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
+    drop_in_place_mem_error ce ty' m b' ofs' ->
+    drop_in_place_mem_error ce ty m b ofs
+| drop_in_box_error3: forall ty ty' attr m m' b ofs b' ofs',
+    ty = Tbox ty' attr ->
+    Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
+    drop_in_place ce ty' m b' ofs' m' ->
+    ~ Mem.range_perm m' b' (Ptrofs.signed ofs') ((Ptrofs.signed ofs') + sizeof ce ty') Cur Freeable ->
+    drop_in_place_mem_error ce ty m b ofs
+| drop_in_struct_error: forall m b ofs id attr co lb lofs lofsbit lty orgs,
+    ce ! id = Some co ->
+    (* do not use eval_place_list, directly compute the field offset *)
+    field_offset_all ce co.(co_members) = OK lofsbit ->
+    lofs = map (fun ofsbit => Ptrofs.add ofs (Ptrofs.repr (fst ofsbit))) lofsbit ->
+    lb = repeat b (length co.(co_members)) ->
+    lty = map type_member co.(co_members) ->
+    drop_in_place_list_mem_error ce lty m lb lofs ->
+    drop_in_place_mem_error ce (Tstruct orgs id attr) m b ofs
+| drop_in_variant_error1: forall m b ofs id attr co orgs,
+    ce ! id = Some co ->
+    ~Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
+    drop_in_place_mem_error ce (Tvariant orgs id attr) m b ofs
+| drop_in_variant_error2: forall m b ofs id attr co tag memb fid ofs' bf orgs,
+    ce ! id = Some co ->
+    (* load tag  *)
+    Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
+    (* use tag to choose the member *)
+    list_nth_z co.(co_members) (Int.unsigned tag) = Some memb ->
+    fid = name_member memb ->
+    variant_field_offset ce fid co.(co_members) = OK (ofs', bf) ->
+    (* drop the selected type *)
+    drop_in_place_mem_error ce (type_member memb) m b (Ptrofs.add ofs (Ptrofs.repr ofs')) ->
+    drop_in_place_mem_error ce (Tvariant orgs id attr) m b ofs
+
+  
+with drop_in_place_list_mem_error (ce: composite_env) : list type -> mem -> list block -> list ptrofs -> Prop :=
+| drop_type_list_cons_error1: forall b ty tys' lb' ofs lofs' m,
+    drop_in_place_mem_error ce ty m b ofs ->
+    drop_in_place_list_mem_error ce (ty :: tys') m (b :: lb') (ofs :: lofs')
+| drop_type_list_cons_error2: forall b ty tys' lb' ofs lofs' m m',
+    drop_in_place ce ty m b ofs m' ->
+    drop_in_place_list_mem_error ce tys' m' lb' lofs' ->
+    drop_in_place_list_mem_error ce (ty :: tys') m (b :: lb') (ofs :: lofs')
+
+.
+
+
 (* It drop the resource assuming there may be partial moved paths *)
 Inductive drop_place' (ce: composite_env) (owned: list place) : place -> mem -> block -> ptrofs -> mem -> Prop :=
 | drop_base: forall ty (p: place) m b ofs,
@@ -895,10 +952,6 @@ Inductive bind_parameters (ce: composite_env) (e: env):
       bind_parameters ce e m ((id, ty) :: params) (v1 :: vl) m2.
 
 Inductive bind_parameters_mem_error (ce: composite_env) (e: env) : mem -> list (ident * type) -> list val -> Prop :=
-| bind_parameters_mem_error_one: forall m id ty v b,
-    e ! id = Some (b, ty) ->
-    assign_loc_mem_error ce ty m b Ptrofs.zero v ->
-    bind_parameters_mem_error ce e m ((id, ty) :: nil) (v :: nil)
 | bind_parameters_mem_error_cons1: forall m id ty params v1 vl b,
     e ! id = Some (b, ty) ->
     assign_loc_mem_error ce ty m b Ptrofs.zero v1 ->
