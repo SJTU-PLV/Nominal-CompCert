@@ -161,11 +161,11 @@ Definition drop_glue_for_member (m: PTree.t ident) (p: Clight.expr) (memb: membe
         nil
   end.
         
-Definition make_labelled_stmts (drops_list: list (list Clight.statement)) :=
-  let branch idx elt ls := LScons (Some idx) (Clight.Ssequence (makeseq elt) Clight.Sbreak) ls in
+Definition make_labelled_drop_stmts (m: PTree.t ident) (p: Clight.expr) (membs: members) :=
+  let branch idx memb ls := LScons (Some idx) (Clight.Ssequence (makeseq (drop_glue_for_member m p memb)) Clight.Sbreak) ls in
   fold_right
     (fun elt acc => let '(idx, ls) := acc in (idx-1, branch idx elt ls))
-    ((list_length_z drops_list) - 1, LSnil) drops_list.
+    ((list_length_z membs) - 1, LSnil) membs.
 
 (* m: maps composite id to drop function id *)
 Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition) : res (option Clight.function) :=
@@ -176,6 +176,7 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition)
       let co_ty := (Ctypes.Tstruct co_id attr) in
       let param_ty := Tpointer co_ty noattr in
       let deref_param := Ederef (Evar param param_ty) co_ty in
+      (** TODO: use map and concat instead of fold_right *)
       let stmt_list := fold_right (fun elt acc => drop_glue_for_member m deref_param elt ++ acc) nil ms in
       match stmt_list with
       | nil => OK None
@@ -198,10 +199,10 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition)
               let get_union := Efield deref_param union_id union_ty in
               (* use switch statements to model the pattern match? *)
               (* drops_list is [[case 0: drop(m1)];[case 1: drop(m2)]]*)
-              let drops_list := fold_right (fun elt acc => (drop_glue_for_member m get_union elt) :: acc) (@nil (list Clight.statement)) ms in
-              let (_, switch_branches) := make_labelled_stmts drops_list in
+              (* let drops_list := fold_right (fun elt acc => (drop_glue_for_member m get_union elt) :: acc) (@nil (list Clight.statement)) ms in *)
+              let (_, drop_switch_branches) := make_labelled_drop_stmts m get_union ms in
               (* generate function *)
-              let stmt := (Clight.Ssequence (Clight.Sswitch get_tag switch_branches) (Clight.Sreturn None)) in
+              let stmt := (Clight.Ssequence (Clight.Sswitch get_tag drop_switch_branches) (Clight.Sreturn None)) in
               OK (Some (Clight.mkfunction Tvoid cc_default ((param, param_ty)::nil) nil nil stmt))
           | _, _ => Error (msg "Variant is not correctly converted to C struct: drop_glue_for_composite")
           end

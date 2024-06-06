@@ -14,6 +14,8 @@ Require Import Cop.
 Require Import LanguageInterface.
 Require Import Clight RustlightBase.
 
+Import ListNotations.
+
 (** * Rust Intermediate Rrepresentation  *)
 
 (** To compile Rustlight to RustIR, we replace the scopes (let stmt)
@@ -495,8 +497,10 @@ Inductive cont : Type :=
 | Kstop: cont
 | Kseq: statement -> cont -> cont
 | Kloop: statement -> cont -> cont
-| Kcall: place -> function -> env -> cont -> cont.
-  
+| Kcall: option place -> function -> env -> cont -> cont
+| Kcalldrop: ident -> env -> cont -> cont
+.
+
 
 (** Pop continuation until a call or stop *)
 
@@ -517,21 +521,35 @@ Definition is_call_cont (k: cont) : Prop :=
 (** States *)
 
 Inductive state: Type :=
-  | State
-      (f: function)
-      (s: statement)
-      (k: cont)
-      (e: env)
-      (m: mem) : state
-  | Callstate
-      (vf: val)
-      (args: list val)
-      (k: cont)
-      (m: mem) : state
-  | Returnstate
-      (res: val)
-      (k: cont)
-      (m: mem) : state.
+| State
+    (f: function)
+    (s: statement)
+    (k: cont)
+    (e: env)
+    (m: mem) : state
+| Callstate
+    (vf: val)
+    (args: list val)
+    (k: cont)
+    (m: mem) : state
+| Returnstate
+    (res: val)
+    (k: cont)
+    (m: mem) : state
+| Calldrop
+    (p: place)
+    (k: cont)
+    (* we need to compute the address of p *)
+    (e: env)
+    (m: mem): state
+| Dropstate
+    (* composite name *)
+    (c: ident)
+    (s: statement)
+    (k: cont)
+    (* we need to compute the address of [p.f] *)
+    (e: env)
+    (m: mem): state.
 
 
 (** Allocate memory blocks for function parameters/variables and build
@@ -559,6 +577,29 @@ Inductive function_entry (ge: genv) (f: function) (vargs: list val) (m: mem) (e:
 Section SMALLSTEP.
 
 Variable ge: genv.
+
+
+(* Some functions similar to Clightgen and are used in semantics  *)
+
+Fixpoint drop_for_place (p: place) (ty: type) : list statement :=
+  match ty with
+  | Tbox ty' attr =>
+      drop_for_place (Pderef p ty') ty' ++ [Sdrop p]
+  | Tstruct _ id attr
+  | Tvariant _ id attr =>
+      [Sdrop p]
+  | _ => nil
+  end.
+
+Definition drop_for_member (p: place) (memb: member) : list statement :=
+  match memb with
+  | Member_plain fid ty =>      
+      if own_type ge ty then
+        drop_for_place (Pfield p fid ty) ty
+      else
+        nil
+  end.
+
 
 Inductive step : state -> trace -> state -> Prop :=
 | step_assign: forall f e p ty k le m1 m2 b ofs v,
@@ -591,12 +632,47 @@ Inductive step : state -> trace -> state -> Prop :=
     (* assign the value *)
     assign_loc ge ty m2 b Ptrofs.zero v m3 ->
     step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m3)
-| step_drop: forall f p le m1 m2 b ofs k,
-    (** Unconditonally drop  *)
-    (* get the location of the ownership pointer *)
-    eval_place ge le m1 p b ofs ->
-    drop_in_place ge (typeof_place p) m1 b ofs m2 ->
-    step (State f (Sdrop p) k le m1) E0 (State f Sskip k le m2)
+
+(** Small-step drop semantics *)
+| step_drop1: forall f p k le m,
+    step (State f (Sdrop p) k le m) E0 (Calldrop p (Kcall None f le k) le m)
+| step_drop2: forall id p k le m,
+    (* drop in Dropstate *)
+    step (Dropstate id (Sdrop p) k le m) E0 (Calldrop p (Kcalldrop id le k) le m)
+| step_drop_seq:  forall id s1 s2 k e m,
+    step (Dropstate id (Ssequence s1 s2) k e m)
+      E0 (Dropstate id s1 (Kseq s2 k) e m)   
+| step_calldrop_box: forall p le m m' k ty attr b b' ofs ofs',
+    (* We assume that drop(p) where p is box type has been expanded in
+    drop elaboration (see drop_fully_own in ElaborateDrop.v) *)
+    typeof_place p = Tbox ty attr ->
+    eval_place ge le m p b ofs ->
+    Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
+    Mem.free m b' (Ptrofs.signed ofs') ((Ptrofs.unsigned ofs') + sizeof ge ty) = Some m' ->
+    step (Calldrop p k le m) E0 (Returnstate Vundef k m')
+| step_calldrop_struct: forall p le m k attr orgs co id drop_stmt,
+    (* It corresponds to the call step to the drop glue of this struct *)
+    typeof_place p = Tstruct orgs id attr ->
+    ge.(genv_cenv) ! id = Some co ->
+    (* expand the drop statement *)
+    drop_stmt = makeseq (concat (map (drop_for_member p) co.(co_members))) ->    
+    step (Calldrop p k le m) E0 (Dropstate id (Ssequence drop_stmt (Sreturn None)) k le m)
+| step_calldrop_enum: forall p le m k attr orgs co id fid fty tag b ofs,
+    typeof_place p = Tvariant orgs id attr ->
+    ge.(genv_cenv) ! id = Some co ->
+    eval_place ge le m p b ofs ->
+    (* big step to evaluate the switch statement *)
+    (* load tag  *)
+    Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
+    (* use tag to choose the member *)
+    list_nth_z co.(co_members) (Int.unsigned tag) = Some (Member_plain fid fty) ->
+    step (Calldrop p k le m) E0 (Dropstate id (Ssequence (Sdrop (Pdowncast p fid fty)) (Sreturn None)) k le m)
+| step_drop_return: forall id k e m,
+    step (Dropstate id (Sreturn None) k e m) E0 (Returnstate Vundef k m)
+| step_returnstate_drop: forall id e k m,
+    (* return to another drop glue *)
+    step (Returnstate Vundef (Kcalldrop id e k) m) E0 (Dropstate id Sskip k e m)
+                               
 | step_storagelive: forall f k le m id,
     step (State f (Sstoragelive id) k le m) E0 (State f Sskip k le m)
 | step_storagedead: forall f k le m id,
@@ -608,7 +684,7 @@ Inductive step : state -> trace -> state -> Prop :=
     eval_exprlist ge le m al tyargs vargs ->
     Genv.find_funct ge vf = Some fd ->
     type_of_fundef fd = Tfunction orgs org_rels tyargs tyres cconv ->
-    step (State f (Scall p a al) k le m) E0 (Callstate vf vargs (Kcall p f le k) m)
+    step (State f (Scall p a al) k le m) E0 (Callstate vf vargs (Kcall (Some p) f le k) m)
 
 | step_internal_function: forall vf f vargs k m e m'
     (FIND: Genv.find_funct ge vf = Some (Internal f)),
@@ -643,7 +719,7 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_returnstate: forall p v b ofs ty m1 m2 e f k,
     eval_place ge e m1 p b ofs ->
     assign_loc ge ty m1 b ofs v m2 ->    
-    step (Returnstate v (Kcall p f e k) m1) E0 (State f Sskip k e m2)
+    step (Returnstate v (Kcall (Some p) f e k) m1) E0 (State f Sskip k e m2)
 
 (* Control flow statements *)
 | step_seq:  forall f s1 s2 k e m,
@@ -760,15 +836,36 @@ Inductive step_mem_error : state -> Prop :=
     Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
     assign_loc_mem_error ge ty m2 b Ptrofs.zero v ->
     step_mem_error (State f (Sbox p e) k le m1)
-| step_drop_error1: forall f p le m k,
-    (* get the location of the ownership pointer *)
+
+| step_calldrop_box_error1: forall p le m k ty attr,
+    typeof_place p = Tbox ty attr ->
     eval_place_mem_error ge le m p ->
-    step_mem_error (State f (Sdrop p) k le m)
-| step_drop_error2: forall f p le  m k b ofs,
-    (* get the location of the ownership pointer *)
+    step_mem_error (Calldrop p k le m)
+| step_calldrop_box_error2: forall p le m k ty attr b ofs,    
+    typeof_place p = Tbox ty attr ->
     eval_place ge le m p b ofs ->
-    drop_in_place_mem_error ge (typeof_place p) m b ofs ->
-    step_mem_error (State f (Sdrop p) k le m)
+    ~ Mem.valid_access m Mptr b (Ptrofs.unsigned ofs) Readable ->
+    step_mem_error (Calldrop p k le m)
+| step_calldrop_box_error3: forall p le m k ty attr b b' ofs ofs',    
+    typeof_place p = Tbox ty attr ->
+    eval_place ge le m p b ofs ->
+    Mem.load Mptr m b (Ptrofs.unsigned ofs) = Some (Vptr b' ofs') ->
+    ~ Mem.range_perm m b' (Ptrofs.unsigned ofs') ((Ptrofs.unsigned ofs') + sizeof ge ty) Cur Freeable ->
+    step_mem_error (Calldrop p k le m)
+
+| step_calldrop_enum_error1: forall p le m k attr orgs co id,
+    typeof_place p = Tvariant orgs id attr ->
+    ge.(genv_cenv) ! id = Some co ->
+    eval_place_mem_error ge le m p ->
+    step_mem_error (Calldrop p k le m)
+| step_calldrop_enum_error2: forall p le m k attr orgs co id b ofs,
+    typeof_place p = Tvariant orgs id attr ->
+    ge.(genv_cenv) ! id = Some co ->
+    eval_place ge le m p b ofs ->
+    ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
+    step_mem_error (Calldrop p k le m)
+
+                   
 | step_call_error: forall f a al k le m  tyargs vf fd cconv tyres p orgs org_rels,
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
@@ -796,12 +893,12 @@ Inductive step_mem_error : state -> Prop :=
     step_mem_error (State f Sskip k le m)
 | step_returnstate_error1: forall p v m f k e,
     eval_place_mem_error ge e m p ->
-    step_mem_error (Returnstate v (Kcall p f e k) m)
+    step_mem_error (Returnstate v (Kcall (Some p) f e k) m)
 | step_returnstate_error2: forall p v m f k e b ofs ty,
     ty = typeof_place p ->
     eval_place ge e m p b ofs ->
     assign_loc_mem_error ge ty m b ofs v ->
-    step_mem_error (Returnstate v (Kcall p f e k) m)
+    step_mem_error (Returnstate v (Kcall (Some p) f e k) m)
 | step_ifthenelse_error:  forall f a s1 s2 k e m,
     eval_expr_mem_error ge e m a ->
     step_mem_error (State f (Sifthenelse a s1 s2) k e m)
