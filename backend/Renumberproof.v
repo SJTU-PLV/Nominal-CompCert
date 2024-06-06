@@ -14,13 +14,8 @@
 
 Require Import Coqlib Maps Postorder.
 Require Import AST Linking.
-<<<<<<< HEAD
 Require Import Values Memory Globalenvs Events LanguageInterface Smallstep.
-Require Import Op Registers RTL Renumber.
-=======
-Require Import Values Memory Globalenvs Events Smallstep.
 Require Import Op Registers RTL RTLmach Renumber.
->>>>>>> origin/StackAware-new
 
 Definition match_prog (p tp: RTL.program) :=
   match_program (fun ctx f tf => tf = transf_fundef f) eq p tp.
@@ -129,17 +124,10 @@ Inductive match_states: RTL.state -> RTL.state -> Prop :=
         (REACH: reach f pc),
       match_states (State stk f sp pc rs m)
                    (State stk' (transf_function f) sp (renum_pc (pnum f) pc) rs m)
-<<<<<<< HEAD
-  | match_callstates: forall stk vf args m stk'
+  | match_callstates: forall stk vf args m stk' id
         (STACKS: list_forall2 match_frames stk stk'),
-      match_states (Callstate stk vf args m)
-                   (Callstate stk' vf args m)
-=======
-  | match_callstates: forall stk f args m stk' id
-        (STACKS: list_forall2 match_frames stk stk'),
-      match_states (Callstate stk f args m id)
-                   (Callstate stk' (transf_fundef f) args m id)
->>>>>>> origin/StackAware-new
+      match_states (Callstate stk vf args m id)
+                   (Callstate stk' vf args m id)
   | match_returnstates: forall stk v m stk'
         (STACKS: list_forall2 match_frames stk stk'),
       match_states (Returnstate stk v m)
@@ -214,36 +202,22 @@ Proof.
   constructor; auto.
 Qed.
 
-<<<<<<< HEAD
 Lemma transf_initial_states q:
-  forall S1, RTL.initial_state ge q S1 ->
-  exists S2, RTL.initial_state tge q S2 /\ match_states S1 S2.
-=======
-Lemma transf_initial_states:
-  forall S1, initial_state prog S1 ->
-  exists S2, initial_state tprog S2 /\ match_states S1 S2.
->>>>>>> origin/StackAware-new
+  forall S1, RTLmach.initial_state ge q S1 ->
+  exists S2, RTLmach.initial_state tge q S2 /\ match_states S1 S2.
 Proof.
   intros. inv H. econstructor; split.
   setoid_rewrite <- (sig_preserved (Internal f)).
   econstructor.
-<<<<<<< HEAD
     eapply (functions_translated _ (Internal f)); eauto.
-=======
-    eapply (Genv.init_mem_transf TRANSL); eauto.
-    rewrite symbols_preserved. rewrite (match_program_main TRANSL). eauto.
-    eapply function_ptr_translated; eauto.
-    rewrite <- H3; apply sig_preserved. eauto.
-    rewrite (match_program_main TRANSL).
->>>>>>> origin/StackAware-new
-  constructor. constructor.
+  constructor. constructor. constructor.
 Qed.
 
 Lemma transf_external:
-  forall S R q, match_states S R -> RTL.at_external ge S q ->
-  RTL.at_external tge R q /\
-  forall r S', RTL.after_external S r S' ->
-  exists R', RTL.after_external R r R' /\ match_states S' R'.
+  forall S R q, match_states S R -> RTLmach.at_external ge S q ->
+  RTLmach.at_external tge R q /\
+  forall r S', RTLmach.after_external S r S' ->
+  exists R', RTLmach.after_external R r R' /\ match_states S' R'.
 Proof.
   intros S R q HSR Hq. destruct Hq; inv HSR.
   eapply functions_translated in H. simpl in H.
@@ -257,25 +231,11 @@ Proof.
   intros. inv H0. inv H. inv STACKS. constructor.
 Qed.
 
-<<<<<<< HEAD
-=======
-Theorem transf_program_correct:
-  forward_simulation (RTLmach.semantics fn_stack_requirements prog)
-                     (RTLmach.semantics fn_stack_requirements tprog).
-Proof.
-  eapply forward_simulation_step.
-  apply senv_preserved.
-  eexact transf_initial_states.
-  eexact transf_final_states.
-  exact step_simulation.
-Qed.
-
->>>>>>> origin/StackAware-new
 End PRESERVATION.
 
-Theorem transf_program_correct prog tprog:
+Theorem transf_program_correct prog tprog fn_stack_requirements:
   match_prog prog tprog ->
-  forward_simulation cc_id cc_id (RTL.semantics prog) (RTL.semantics tprog).
+  forward_simulation cc_id cc_id (RTLmach.semantics fn_stack_requirements prog) (RTLmach.semantics fn_stack_requirements tprog).
 Proof.
   fsim eapply forward_simulation_step; cbn in *; intros; subst.
   - eapply Genv.is_internal_transf_id; eauto. destruct fd; auto.
@@ -284,10 +244,3 @@ Proof.
   - intros. edestruct transf_external; eauto. exists tt, q1. intuition subst; eauto.
   - eauto using step_simulation.
 Qed.
-
-
-
-
-
-
-
