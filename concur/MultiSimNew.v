@@ -130,105 +130,7 @@ Section ConcurSim.
         fsim_order li1 li2 ->
         global_order (hd ++ (li1 :: tl)) (hd ++ (li2 :: tl)).
 
-    Lemma length_1_acc : forall li, (Acc global_order (li:: nil)).
-    Proof.
-      intros. induction li using (well_founded_induction fsim_order_wf).
-      constructor. intros. inv H0.
-      destruct hd.
-      + simpl in *. inv H1.
-        eapply H; eauto.
-      + exfalso. simpl in H1.
-        inv H1. destruct hd; inv H4.
-    Qed.
-
-    Lemma length_2_acc : forall li1 li2, Acc global_order (li1 :: li2 :: nil).
-    Proof.
-      induction li1 using (well_founded_induction fsim_order_wf).
-      induction li2 using (well_founded_induction fsim_order_wf).
-      constructor. intros. inv H1. destruct hd.
-      - simpl in H2. inv H2. simpl. eauto.
-      - destruct hd. simpl in H2. inv H2. simpl. eapply H0; eauto.
-        inv H2. destruct hd; inv H6.
-    Qed.
-    Lemma foo : forall li i, In li i -> Acc global_order i.
-    Proof.
-      induction li using (well_founded_induction fsim_order_wf).
-      intros. constructor. intros. inv H1.
-
-      eapply H.
-    Lemma foo : forall li hd tl, Acc global_order (hd ++ (li :: tl)).
-    Proof.
-      induction li using (well_founded_induction fsim_order_wf).
-      intros. constructor. intros. inv H0.
-      destruct hd0.
-      - simpl in H1. inv H1. simpl. 
-    Lemma foo : forall i, Acc global_order i.
-    Proof.
-      assert (forall li2 li1, fsim_order li1 li2 -> forall hd tl, Acc global_order (hd ++ (li1 :: tl))).
-      induction li2 using (well_founded_induction fsim_order_wf).
-      intros. eapply H.
-      
-      admit.
-      intros. constructor. intros. inv H0. eauto.
-    
-    Lemma gorder_acc_cons : forall hd tl, Acc global_order tl -> Acc global_order (hd :: tl).
-    Proof.
-      induction hd using (well_founded_induction fsim_order_wf).
-(*    Theorem global_index_wf : well_founded global_order.
-    Proof.
-      red. induction a.
-      -  constructor. intros. inv H. destruct hd; inv H0.
-      - 
-*)
-
-
-    Lemma gorder_acc_cons : forall n hd tl, (length tl <= n)%nat ->  Acc global_order tl -> Acc global_order (hd :: tl).
-    Proof.
-      induction n; intros.
-      - destruct tl. eapply length_1_acc; eauto. simpl in H. extlia.
-      - 
-      - 
-      induction hd using (well_founded_induction fsim_order_wf).
-      induction tl.
-      - intros. eapply length_1_acc; eauto.
-      - intros. convert_concl_no_check .
-      intros. constructor. intros. inv H0.
-
-
-    Lemma gorder_acc_cons : forall tl hd, Acc global_order tl -> Acc global_order (hd :: tl).
-   Proof.
-     induction tl. 
-      - intros. eapply length_1_acc; eauto.
-      - intros. induction hd using (well_founded_induction fsim_order_wf).
-        intros. 
-        inv H. constructor. intros. inv H.
-        destruct hd0.
-        + simpl in H2. inv H2. simpl. eapply H0; eauto.
-        + simpl in H2. inv H2. simpl.
-          Admitted.
-
-    Lemma global_index_acc_l : forall n i, (length i <= n)%nat -> Acc global_order i.
-    Proof.
-      induction n.
-      - intros. destruct i; inv H.  constructor. intros. inv H. destruct hd; inv H0.
-      - intros. destruct i. inv H. constructor. intros. inv H. destruct hd; inv H0.
-        simpl in H. exploit IHn. instantiate (1:= i). lia.
-        intro. induction f using (well_founded_induction fsim_order_wf).
-        constructor. intros. inv H2.
-        destruct hd.
-        + simpl in H3. inv H3. simpl. eapply H1; eauto.
-        + simpl in H3. inv H3. simpl. inv H0.
-        constructor. intros.
-    Qed.
-
-    Theorem global_index_wf : well_founded global_order.
-    Proof.
-      red. intros.
-      eapply global_index_acc_l. eauto.
-    Qed.
-
-    
-    (** * Lemmas about nth_error. *)
+      (** * Lemmas about nth_error. *)
     Fixpoint set_nth_error {A:Type} (l: list A) (n: nat) (a: A) : option (list A) :=
       match n with
       |O => match l with
@@ -317,7 +219,150 @@ Section ConcurSim.
       rewrite Heqi, Heqi'.
       constructor. eauto.
     Qed.
+
+        Lemma nil_acc : Acc global_order nil.
+    Proof.
+      constructor. intros. inv H. destruct hd; inv H0.
+    Qed.
+        
+    Lemma length_1_acc : forall li, (Acc global_order (li:: nil)).
+    Proof.
+      intros. induction li using (well_founded_induction fsim_order_wf).
+      constructor. intros. inv H0.
+      destruct hd.
+      + simpl in *. inv H1.
+        eapply H; eauto.
+      + exfalso. simpl in H1.
+        inv H1. destruct hd; inv H4.
+    Qed.
+
+    Lemma length_2_acc : forall li1 li2, Acc global_order (li1 :: li2 :: nil).
+    Proof.
+      induction li1 using (well_founded_induction fsim_order_wf).
+      induction li2 using (well_founded_induction fsim_order_wf).
+      constructor. intros. inv H1. destruct hd.
+      - simpl in H2. inv H2. simpl. eauto.
+      - destruct hd. simpl in H2. inv H2. simpl. eapply H0; eauto.
+        inv H2. destruct hd; inv H6.
+    Qed.
+
     
+    Lemma length_3_acc : forall li1 li2 li3, Acc global_order (li1 :: li2 :: li3 :: nil).
+    Proof.
+      induction li1 using (well_founded_induction fsim_order_wf).
+      induction li2 using (well_founded_induction fsim_order_wf).
+      induction li3 using (well_founded_induction fsim_order_wf).
+      constructor. intros. inv H2. destruct hd.
+      - simpl in H3. inv H3. simpl. eauto.
+      - destruct hd. simpl in H3. inv H3. simpl. eauto.
+        destruct hd. simpl in H3. inv H3. simpl. eauto.
+        destruct hd; inv H3.
+    Qed.
+
+    Lemma length_3_acc' : forall li1 li2 li3, Acc global_order (li1 :: li2 :: li3 :: nil).
+    Proof.
+      intros. generalize dependent li2. generalize dependent li1.
+      induction li3 using (well_founded_induction fsim_order_wf). rename H into IH3.
+      induction li1 using (well_founded_induction fsim_order_wf). rename H into IH1.
+      induction li2 using (well_founded_induction fsim_order_wf). rename H into IH2.
+      constructor. intros. inv H. destruct hd.
+      - simpl in H0. inv H0. simpl. eapply IH1; eauto.
+      - destruct hd. simpl in H0. inv H0. simpl. eauto.
+        destruct hd. simpl in H0. inv H0. simpl. eauto.
+        destruct hd; inv H0.
+    Qed.
+
+    (*
+    Lemma foo : forall i, Acc global_order i.
+    Proof.
+      induction i.
+      - apply nil_acc.
+      - induction a using (well_founded_induction fsim_order_wf).
+        constructor. intros. inv H0.
+        destruct hd.
+        + simpl in H1. inv H1. eapply H; eauto.
+        + simpl in *. inv H1.
+    Abort.
+    
+    Lemma foo: forall i, Acc global_order i.
+    Proof.
+      intros. constructor. intros.
+      assert (exists li1 li2 n, nth_error y n = Some li1 /\
+                set_nth_error y n li2 = Some i).
+      admit.
+      destruct H0 as (li1 & li2 & n & A & B). clear B.
+      induction li1 using (well_founded_induction fsim_order_wf).
+    Abort.
+    
+    Lemma foo : forall li i, In li i -> Acc global_order i.
+    Proof.
+      induction li using (well_founded_induction fsim_order_wf).
+      intros. constructor. intros. inv H1.
+    Abort.
+
+    Lemma foo : forall li hd tl, Acc global_order (hd ++ (li :: tl)).
+    Proof.
+      induction li using (well_founded_induction fsim_order_wf).
+      intros. constructor. intros. inv H0.
+      destruct hd0.
+      - simpl in H1. inv H1. simpl.
+    Abort.
+    
+    Lemma gorder_acc_cons : forall hd tl, Acc global_order tl -> Acc global_order (hd :: tl).
+    Proof.
+      intros. inv H. constructor. intros x GX.
+      induction hd using (well_founded_induction fsim_order_wf).
+      inv GX. destruct hd0.
+      - inv H1. simpl in *. eapply H. eauto. eauto.
+      induction tl.
+      - intros. eapply length_1_acc.
+      - induction a using (well_founded_induction fsim_order_wf).
+    Abort.
+
+
+    Lemma gorder_acc_cons : forall n hd tl, (length tl <= n)%nat ->  Acc global_order tl -> Acc global_order (hd :: tl).
+    Proof.
+      induction n.
+      - intros. destruct tl; simpl in H; inv H0. eapply length_1_acc. extlia.
+      - 
+        intros hd tl Hl. induction hd using (well_founded_induction fsim_order_wf).
+        destruct tl.
+        + intros. eapply length_1_acc.
+        + induction f using (well_founded_induction fsim_order_wf).
+          
+    Abort.
+
+    Lemma gorder_acc_cons : forall tl hd, Acc global_order tl -> Acc global_order (hd :: tl).
+   Proof.
+     induction tl. 
+      - intros. eapply length_1_acc; eauto.
+      - induction hd using (well_founded_induction fsim_order_wf).
+        intros. 
+        inv H. constructor. intros. inv H.
+        destruct hd0.
+        + simpl in H2. inv H2. simpl. eapply H0; eauto.
+        + simpl in H2. inv H2. simpl.
+          Admitted.
+*)
+    Lemma global_index_acc_l : forall n i, (length i <= n)%nat -> Acc global_order i.
+    Proof.
+      induction n.
+      - intros. destruct i; inv H.  constructor. intros. inv H. destruct hd; inv H0.
+      - intros. destruct i. inv H. constructor. intros. inv H. destruct hd; inv H0.
+        simpl in H. exploit IHn. instantiate (1:= i). lia.
+        intro. induction f using (well_founded_induction fsim_order_wf).
+        constructor. intros. inv H2.
+        destruct hd.
+        + simpl in H3. inv H3. simpl. eapply H1; eauto.
+        + simpl in H3. inv H3. simpl. inv H0.
+        constructor. intros. Admitted.
+
+    Theorem global_index_wf : well_founded global_order.
+    Proof.
+      red. intros.
+      eapply global_index_acc_l. eauto.
+    Qed.
+
     Section Initial.
 
       Variable m0 : mem.
