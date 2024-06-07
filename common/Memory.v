@@ -248,24 +248,123 @@ Qed.
 
 Definition sup_include(s1 s2:sup) := forall b, sup_In b s1 -> sup_In b s2.
 
-Theorem sup_include_dec : forall s1 s2, {sup_include s1 s2} + {~sup_include s1 s2}.
+(** proof of sup_include_dec *)
+
+Program Definition sup_tl (s : sup) : sup :=
+  match (tid s) with
+  |O | (S O) => s
+  |_ =>
+     mksup (tl (stacks s)) (tid s -1) _
+  end.
+Next Obligation.
+  generalize (tid_valid s).
+  intros. destruct (stacks s); simpl in *.
+  - extlia.
+  - destruct (tid s); simpl in *. extlia.
+    destruct n; simpl in *. extlia. lia.
+Qed.
+
+
+Lemma incl_dec : forall (l1 l2: list positive), {incl l1 l2} + {~ incl l1 l2}.
 Proof.
-  (*
-  induction s1. left. unfold sup_include. intro. intro. inv H.
-  intro s2. destruct (sup_dec a s2).
-  - destruct (IHs1 s2).
+  induction l1. left. unfold incl. intro. intro. inv H.
+  intro l2. destruct (In_dec peq a l2).
+  - destruct (IHl1 l2).
     + left. intro. intros. inv H; auto.
     + right. intro. apply n. intro. intro. apply H. right. auto.
   - right. intro. apply n. apply H. left. auto.
-   *)
+Qed.
+
+Theorem sup_include_dec' : forall n s1 s2, next_tid s1 = n ->
+                                      {sup_include s1 s2} + {~sup_include s1 s2}.
+Proof.
+  induction n.
+  - intros. left. red. intros. inv H0. unfold next_tid in H.
+    destruct (stacks s1). destruct tid0. inv H1. inv H1. inv H.
+  - intros. destruct n.
+    + (* n = 1, base case*)
+      generalize (tid_valid s1).
+      intros. unfold next_tid in H.
+      destruct s1, s2. simpl in *. destruct stacks0. inv H. destruct stacks0; inv H.
+      destruct stacks1.
+      --  simpl. destruct l. left. red. intros. inv H. simpl in H1. destruct tid2; inv H1. inv H2. destruct tid2; inv H3.
+          right. intro. red in H. specialize (H (O,p)).
+          exploit H. econstructor. simpl. reflexivity. left. auto.
+          intros. inv H1. simpl in H4. inv H4.
+      -- destruct (incl_dec l l0).
+         ++ left. red. intros. inv H. simpl in H1.
+            destruct tid2; simpl in H1; inv H1.
+            econstructor. simpl. reflexivity. eapply i. eauto.
+            destruct tid2; inv H3.
+         ++ right. intro. red in H. apply n.
+            intro. intros. exploit H. instantiate (1:= (O,a)).
+            econstructor. simpl. reflexivity. auto.
+            intro. inv H2. simpl in H5. inv H5. auto.
+    + (* induc case *)
+      set (s1' := sup_tl s1).
+      set (s2' := sup_tl s2).
+      destruct s1, s2. simpl in *.
+      unfold sup_tl in s1'. simpl in s1'. destruct tid0. extlia.
+Admitted.
+
+Theorem sup_include_dec : forall s1 s2, {sup_include s1 s2} + {~sup_include s1 s2}.
+Proof.
+  intro s1. destruct s1. simpl. induction stacks0.
+  - admit.
+  - 
+Admitted.
+
+(* proof sup_incr_in *)
+
+Lemma nth_error_update_list_diff {A: Type}: forall (l : list A) id1 id2 a,
+    (0 < id1 < length l)%nat ->
+    id1 <> id2 ->
+    nth_error (update_list id1 l a) id2 =
+    nth_error l id2.
+Proof.
+Admitted.
+
+Lemma nth_error_update_list_same {A: Type}: forall (l : list A) id a,
+   (0 < id < length l)%nat ->
+   nth_error (update_list id l a) id = Some a.
+Proof.
 Admitted.
 
 Theorem sup_incr_in : forall b s, sup_In b (sup_incr s) <-> b = (fresh_block s) \/ sup_In b s.
 Proof.
-Admitted.
-(*  split; intro; inv H; simpl in *; auto.
+  intros. split.
+  - destruct s. unfold sup_In, sup_incr. simpl.
+  intros. inv H. simpl in *. unfold fresh_block.
+  simpl.
+  destruct (Nat.eq_dec tid1 tid0).
+    + subst.
+
+      (* destruct (peq pos (fresh_pos (nth tid0 stacks0 nil))).
+      -- left. subst. reflexivity.
+      -- right.
+       *)
+      rewrite nth_error_update_list_same in H0; eauto. inv H0. destruct H1.
+      left. subst. reflexivity.
+      right. econstructor; eauto. simpl.
+      erewrite nth_error_nth'; eauto. lia.
+    + right. econstructor. simpl.
+      erewrite <- nth_error_update_list_diff; eauto. auto.
+  - intros. destruct H.
+    destruct s. simpl in *. unfold sup_incr. simpl.
+    unfold fresh_block in H. simpl in *. subst.
+    econstructor; simpl; eauto.
+    apply nth_error_update_list_same; eauto.
+    left. auto.
+    destruct s. unfold sup_incr. inv H. simpl.
+    destruct (Nat.eq_dec tid1 tid0).
+    subst.
+    econstructor; simpl.
+    rewrite nth_error_update_list_same; eauto. simpl in H0.
+    erewrite nth_error_nth; eauto.
+    right. auto.
+    econstructor; simpl in *; eauto.
+    erewrite nth_error_update_list_diff; eauto.
 Qed.
- *)
 
 Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
 Proof. intros. apply sup_incr_in. left. auto. Qed.
