@@ -82,12 +82,10 @@ Inductive match_cont : RustIR.cont -> Clight.cont -> Prop :=
     transl_function ce tce dropm f = OK tf ->
     match_cont k tk ->
     match_cont (RustIR.Kcall None f e k) (Clight.Kcall None tf te le tk)
-| match_Kcalldrop: forall id e te le k tk tf co co_def R,
+| match_Kcalldrop: forall id e te le k tk tf co,
     (* Is it correct? *)
     ce ! id = Some co ->
-    (** TODO  *)
-    R co_def co ->
-    drop_glue_for_composite ce tce dropm co_def = OK (Some tf) ->
+    drop_glue_for_composite ce tce dropm id co.(co_sv) co.(co_members) co.(co_attr)= OK (Some tf) ->
     match_env (mi injp w) e te ->
     match_cont (RustIR.Kcalldrop id e k) (Clight.Kcall None tf te le tk)
 .
@@ -122,7 +120,7 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
 | match_calldrop_box: forall p k e m b ofs tk tm ty a j Hm fb
     (* we can store the address of p in calldrop and build a local env
     in Drop state according to this address *)
-    (VFIND: Genv.find_def tge fb = Some malloc_decl)
+    (VFIND: Genv.find_def tge fb = Some (Gfun malloc_decl))
     (PTY: typeof_place p = Tbox ty a)
     (PADDR: eval_place ce e m p b ofs)
     (MCONT: match_cont k tk)
@@ -139,15 +137,13 @@ Inductive match_states: RustIR.state -> Clight.state -> Prop :=
     (MCONT: match_cont k tk)
     (MINJ: injp_acc w (injpw j m tm Hm)),
     match_states (RustIR.Calldrop p k e m) (Clight.Callstate (Vptr fb Ptrofs.zero) [(Vptr b ofs)] tk tm)
-| match_drop_state: forall id s k e m tf ts tk te le tm j Hm co co_def R
+| match_drop_state: forall id s k e m tf ts tk te le tm j Hm co
     (* How to relate e and te? and le? *)
     (MSTMT: tr_stmt ce tce dropm s ts)
     (MCONT: match_cont k tk)
     (MINJ: injp_acc w (injpw j m tm Hm)),
     ce ! id = Some co ->
-    (** TODO  *)
-    R co_def co ->
-    drop_glue_for_composite ce tce dropm co_def = OK (Some tf) ->
+    drop_glue_for_composite ce tce dropm id co.(co_sv) co.(co_members) co.(co_attr) = OK (Some tf) ->
     match_states (RustIR.Dropstate id s k e m) (Clight.State tf ts tk te le tm)
 .
 

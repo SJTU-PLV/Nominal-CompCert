@@ -624,14 +624,15 @@ Inductive step : state -> trace -> state -> Prop :=
     (* set the value *)
     assign_loc ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m3 ->
     step (State f (Sassign_variant p enum_id fid e) k le m1) E0 (State f Sskip k le m3)
-| step_box: forall f e p ty k le m1 m2 m3 b v,
+| step_box: forall f e p ty k le m1 m2 m3 m4 b v,
     typeof e = ty ->
     eval_expr ge le m1 e v ->
-    (* allocate the memory block *)
-    Mem.alloc m1 0 (sizeof ge ty) = (m2, b) ->
+    (* Simulate malloc semantics to allocate the memory block *)
+    Mem.alloc m1 (- size_chunk Mptr) (sizeof ge ty) = (m2, b) ->
+    Mem.store Mptr m2 b (- size_chunk Mptr) (Vptrofs (Ptrofs.repr (sizeof ge ty))) = Some m3 ->
     (* assign the value *)
-    assign_loc ge ty m2 b Ptrofs.zero v m3 ->
-    step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m3)
+    assign_loc ge ty m3 b Ptrofs.zero v m4 ->
+    step (State f (Sbox p e) k le m1) E0 (State f Sskip k le m4)
 
 (** Small-step drop semantics *)
 | step_drop1: forall f p k le m,
@@ -642,13 +643,17 @@ Inductive step : state -> trace -> state -> Prop :=
 | step_drop_seq:  forall id s1 s2 k e m,
     step (Dropstate id (Ssequence s1 s2) k e m)
       E0 (Dropstate id s1 (Kseq s2 k) e m)   
-| step_calldrop_box: forall p le m m' k ty attr b b' ofs ofs',
+| step_calldrop_box: forall p le m m' k ty attr b b' ofs ofs' sz,
     (* We assume that drop(p) where p is box type has been expanded in
     drop elaboration (see drop_fully_own in ElaborateDrop.v) *)
     typeof_place p = Tbox ty attr ->
     eval_place ge le m p b ofs ->
-    Mem.load Mptr m b (Ptrofs.signed ofs) = Some (Vptr b' ofs') ->
-    Mem.free m b' (Ptrofs.signed ofs') ((Ptrofs.unsigned ofs') + sizeof ge ty) = Some m' ->
+    (* p stores a pointer *)
+    Mem.load Mptr m b (Ptrofs.unsigned ofs) = Some (Vptr b' ofs') ->
+    (* Simulate free semantics *)
+    Mem.load Mptr m b' (Ptrofs.unsigned ofs' - size_chunk Mptr) = Some (Vptrofs sz) ->
+    Ptrofs.unsigned sz > 0 ->
+    Mem.free m b' (Ptrofs.unsigned ofs' - size_chunk Mptr) (Ptrofs.unsigned ofs' + Ptrofs.unsigned sz) = Some m' ->
     step (Calldrop p k le m) E0 (Returnstate Vundef k m')
 | step_calldrop_struct: forall p le m k attr orgs co id drop_stmt,
     (* It corresponds to the call step to the drop glue of this struct *)

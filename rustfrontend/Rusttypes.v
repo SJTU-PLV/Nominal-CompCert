@@ -1092,6 +1092,7 @@ Record program : Type := {
   prog_public: list ident;
   prog_main: ident;
   prog_types: list composite_definition;
+  prog_drop_glue: list (ident * ident);
   prog_comp_env: composite_env;
   prog_comp_env_eq: build_composite_env prog_types = OK prog_comp_env
 }.

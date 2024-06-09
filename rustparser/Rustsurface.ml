@@ -1408,6 +1408,23 @@ module To_syntax = struct
       IdentMap.fold (fun i str _ -> Hashtbl.add Camlcoq.string_of_atom i str) st.rev_symmap ();
       Camlcoq.next_atom := st.next_ident
 
+  let create_dropglue_ident (a: ident) : ident monad =
+    (* use the name of a in the end of drop in place *)
+    rev_ident a  >>= fun str ->
+    let name = Printf.sprintf "__drop_in_place_%s" str in
+    get_or_new_ident name
+
+  let generate_empty_drop_glues  =
+    get_st >>= fun st ->
+    let comp_defs = IdentMap.fold (fun _ c cs -> c::cs) st.composites [] in
+    map_m comp_defs 
+      (fun (Rusttypes.Composite(id,_,_,_,_,_)) -> 
+        create_dropglue_ident id >>= fun drop_id ->
+        return ((id, drop_id), (drop_id, Rustsyntax.empty_globdef))
+      ) >>= fun p ->
+    let (dropm, drops) = List.split p in 
+    return (comp_defs, dropm, drops)
+      
 
   let transl_prog (p: prog) : (Rustsyntax.coq_function Rusttypes.program) monad =
     (* convert composite declarations to support mutual recursive ADT *)
@@ -1425,6 +1442,8 @@ module To_syntax = struct
          get_or_new_ident x >>= fun i ->
          return (i, (AST.Gfun (Rusttypes.Internal f')))) >>= fun fun_defs ->
     get_or_new_ident "main" >>= fun main_ident ->
+    (* generate empty drop glues *)
+    generate_empty_drop_glues >>= fun (comp_defs, dropm, empty_drops) ->
     get_st >>= fun st ->
     (* set dummy origin for other use *)
     dummy_origin >>= fun dummy ->
@@ -1432,11 +1451,9 @@ module To_syntax = struct
     (* convert string tables *)
     convert_strtbls st;
     let var_defs = List.map (fun (ident, gvar) -> (ident, AST.Gvar gvar)) st.gvars in
-    let comp_defs = IdentMap.fold
-                      (fun _ c cs -> c::cs)
-                      st.composites
-                      []
-    in
+    (* malloc and free empty functions *)
+    let empty_malloc = (Dropglue.malloc_id, Rustsyntax.empty_globdef) in
+    let empty_free = (Dropglue.free_id, Rustsyntax.empty_globdef) in
     (* Print RustAST *)
     Format.fprintf Format.std_formatter "RustAST: @.";
     Format.fprintf Format.std_formatter "@[<v 0>";
@@ -1452,10 +1469,11 @@ module To_syntax = struct
     (* generate prog_comp_env *)
     match Rusttypes.build_composite_env comp_defs with
     | Errors.OK comp_env ->
-    return ({ Rusttypes.prog_defs = List.concat [var_defs; fun_defs; st.external_funs]
+    return ({ Rusttypes.prog_defs = List.concat [var_defs; fun_defs; st.external_funs; empty_drops; [empty_malloc; empty_free]]
               ; Rusttypes.prog_public = [main_ident]
               ; Rusttypes.prog_main = main_ident
               ; Rusttypes.prog_types = comp_defs
+              ; Rusttypes.prog_drop_glue = dropm
               ; Rusttypes.prog_comp_env = comp_env })
     | Errors.Error msg ->
       Diagnostics.fatal_error Diagnostics.no_loc "%a" Driveraux.print_error msg

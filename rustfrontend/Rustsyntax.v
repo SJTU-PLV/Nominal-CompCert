@@ -13,10 +13,12 @@ Require Import Ctypes Rusttypes.
 Require Import Cop.
 Require Import LanguageInterface.
 
+Import ListNotations.
+
 (** The rust surface syntax *)
 
 Inductive expr : Type :=
-| Eval (v: val) (ty: type)                                  (**r constant *)
+| Eval ( v: val) (ty: type)                                  (**r constant *)
 | Eunit                     (**r unit expression which evaluated to zero  *)
 | Estruct (id: ident) (fl: list ident) (l: exprlist) (ty: type) (**r structure construction  *)
 | Eenum (id: ident) (fid: ident) (e: expr) (ty: type)       (**r enum construction  *)
@@ -81,7 +83,12 @@ Record function : Type := mkfunction {
   fn_body: statement
 }.  
 
+Definition empty_function := mkfunction [] [] Tunit cc_default [] Sskip.
+
 Definition fundef := Rusttypes.fundef function.
+
+Definition empty_fundef := Internal empty_function.
+Definition empty_globdef : globdef fundef type := Gfun empty_fundef.
 
 Definition program := Rusttypes.program function.
 
@@ -503,75 +510,76 @@ Definition wf_pop_and_push_types : wf_composites pop_and_push_comp_defs.
 Proof.
   unfold wf_composites. simpl. auto.
 Defined.
-    
-Definition pop_and_push_prog : program :=
-  let (ce, EQ) := build_composite_env' pop_and_push_comp_defs wf_pop_and_push_types in
-  {| prog_defs := (pop_and_push_ident, pop_and_push_fundef) :: (main_ident, main_fundef) :: nil;
-    prog_public := pop_and_push_ident :: main_ident :: nil;
-    prog_main := main_ident;
-    prog_types := pop_and_push_comp_defs;
-    prog_comp_env := ce;
-    prog_comp_env_eq := EQ |}.
+
+(* Comment it because we add drop_glue map in program definitions *)
+(* Definition pop_and_push_prog : program := *)
+(*   let (ce, EQ) := build_composite_env' pop_and_push_comp_defs wf_pop_and_push_types in *)
+(*   {| prog_defs := (pop_and_push_ident, pop_and_push_fundef) :: (main_ident, main_fundef) :: nil; *)
+(*     prog_public := pop_and_push_ident :: main_ident :: nil; *)
+(*     prog_main := main_ident; *)
+(*     prog_types := pop_and_push_comp_defs; *)
+(*     prog_comp_env := ce; *)
+(*     prog_comp_env_eq := EQ |}. *)
 
 
   
-(* Example 5: test partial ownership transfer *)
+(* (* Example 5: test partial ownership transfer *) *)
 
-Definition l_id : ident := 101%positive.
-Definition m_id : ident := 102%positive.
-Definition n_id : ident := 103%positive.
-Definition S1_id : ident := 100%positive.
-Definition l_ty : type := box_int.
-Definition m_ty : type := box_int.
-Definition n_ty : type := type_int32s.
-Definition S1 : composite_definition :=
-  Composite S1_id Struct ([Member_plain l_id l_ty; Member_plain m_id m_ty; Member_plain n_id n_ty]) noattr nil nil.
-Definition S1_ty : type := Tstruct nil S1_id noattr.
+(* Definition l_id : ident := 101%positive. *)
+(* Definition m_id : ident := 102%positive. *)
+(* Definition n_id : ident := 103%positive. *)
+(* Definition S1_id : ident := 100%positive. *)
+(* Definition l_ty : type := box_int. *)
+(* Definition m_ty : type := box_int. *)
+(* Definition n_ty : type := type_int32s. *)
+(* Definition S1 : composite_definition := *)
+(*   Composite S1_id Struct ([Member_plain l_id l_ty; Member_plain m_id m_ty; Member_plain n_id n_ty]) noattr nil nil. *)
+(* Definition S1_ty : type := Tstruct nil S1_id noattr. *)
 
-Definition f_id : ident := 111%positive.
-Definition g_id : ident := 112%positive.
-Definition h_id : ident := 113%positive.
-Definition S2_id : ident := 110%positive.
-Definition box_box_S1 : type := Tbox (Tbox S1_ty noattr) noattr.
-Definition f_ty : type := box_box_S1.
-Definition g_ty : type := box_int.
-Definition h_ty : type := type_int32s.
-Definition S2 : composite_definition :=
-  Composite S2_id Struct ([Member_plain f_id f_ty; Member_plain g_id g_ty; Member_plain h_id h_ty]) noattr nil nil.
-Definition S2_ty := Tstruct nil S2_id noattr.
+(* Definition f_id : ident := 111%positive. *)
+(* Definition g_id : ident := 112%positive. *)
+(* Definition h_id : ident := 113%positive. *)
+(* Definition S2_id : ident := 110%positive. *)
+(* Definition box_box_S1 : type := Tbox (Tbox S1_ty noattr) noattr. *)
+(* Definition f_ty : type := box_box_S1. *)
+(* Definition g_ty : type := box_int. *)
+(* Definition h_ty : type := type_int32s. *)
+(* Definition S2 : composite_definition := *)
+(*   Composite S2_id Struct ([Member_plain f_id f_ty; Member_plain g_id g_ty; Member_plain h_id h_ty]) noattr nil nil. *)
+(* Definition S2_ty := Tstruct nil S2_id noattr. *)
 
-Definition ex5_comp_defs := [S1; S2].
+(* Definition ex5_comp_defs := [S1; S2]. *)
 
-Definition ex5_main_body :=
-  <{ let A : S2_ty := struct(S2_id, [f_id;g_id;h_id],                          
-              { Box(Box(struct(S1_id, [l_id;m_id;n_id], {Box($1), Box($2), $3}, S1_ty))),
-                Box($4),
-                $5 }, S2_ty) in
-     let B : box_int := field(! ! field(A#S2_ty, f_id, f_ty), l_id, l_ty) in
-     return $0
-     endlet endlet }>.
+(* Definition ex5_main_body := *)
+(*   <{ let A : S2_ty := struct(S2_id, [f_id;g_id;h_id],                           *)
+(*               { Box(Box(struct(S1_id, [l_id;m_id;n_id], {Box($1), Box($2), $3}, S1_ty))), *)
+(*                 Box($4), *)
+(*                 $5 }, S2_ty) in *)
+(*      let B : box_int := field(! ! field(A#S2_ty, f_id, f_ty), l_id, l_ty) in *)
+(*      return $0 *)
+(*      endlet endlet }>. *)
                     
-Definition ex5_main_func : function :=
-  {|fn_generic_origins := nil;
-    fn_origins_relation := nil;
-    fn_return := type_int32s;
-    fn_callconv := cc_default;
-    fn_params := nil;
-    fn_body := ex5_main_body |}.
+(* Definition ex5_main_func : function := *)
+(*   {|fn_generic_origins := nil; *)
+(*     fn_origins_relation := nil; *)
+(*     fn_return := type_int32s; *)
+(*     fn_callconv := cc_default; *)
+(*     fn_params := nil; *)
+(*     fn_body := ex5_main_body |}. *)
 
-Definition ex5_main_fundef : globdef (Rusttypes.fundef function) type := Gfun (Internal ex5_main_func).
+(* Definition ex5_main_fundef : globdef (Rusttypes.fundef function) type := Gfun (Internal ex5_main_func). *)
 
-Definition wf_ex5_comp_types : wf_composites ex5_comp_defs.
-Proof.
-  unfold wf_composites. simpl. auto.
-Defined.
+(* Definition wf_ex5_comp_types : wf_composites ex5_comp_defs. *)
+(* Proof. *)
+(*   unfold wf_composites. simpl. auto. *)
+(* Defined. *)
 
-Definition ex5_prog : program :=
-  let (ce, EQ) := build_composite_env' ex5_comp_defs wf_ex5_comp_types in
-  {| prog_defs := (main_ident, ex5_main_fundef) :: nil;
-    prog_public := main_ident :: nil;
-    prog_main := main_ident;
-    prog_types := ex5_comp_defs;
-    prog_comp_env := ce;
-    prog_comp_env_eq := EQ |}.
+(* Definition ex5_prog : program := *)
+(*   let (ce, EQ) := build_composite_env' ex5_comp_defs wf_ex5_comp_types in *)
+(*   {| prog_defs := (main_ident, ex5_main_fundef) :: nil; *)
+(*     prog_public := main_ident :: nil; *)
+(*     prog_main := main_ident; *)
+(*     prog_types := ex5_comp_defs; *)
+(*     prog_comp_env := ce; *)
+(*     prog_comp_env_eq := EQ |}. *)
                    

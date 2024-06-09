@@ -650,5 +650,6 @@ Definition transl_program (p: Rustsyntax.program) : Errors.res program :=
     prog_public := p1.(AST.prog_public);
     prog_main := p1.(AST.prog_main);
     prog_types := p.(prog_types);
+    prog_drop_glue := p.(prog_drop_glue); 
     prog_comp_env := p.(prog_comp_env);
     prog_comp_env_eq := p.(prog_comp_env_eq) |}.

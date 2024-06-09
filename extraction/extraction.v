@@ -127,7 +127,6 @@ Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
 Extract Constant Compiler.time  => "Timing.time_coq".
 
 (* Rust Compiler *)
-Extract Constant Clightgen.create_dropglue_ident => "Dropglue.create_dropglue_ident".
 Extract Constant Clightgen.create_union_idents => "Dropglue.create_union_idents".
 Extract Constant Clightgen.malloc_id => "Dropglue.malloc_id".
 Extract Constant Clightgen.free_id => "Dropglue.free_id".
@@ -185,7 +184,7 @@ Separate Extraction
    (* rust *)
    Compiler.transf_rust_program 
    (* Some functions are needed in Ocaml side *)
-   Rusttypes.signature_of_type Rusttypes.build_composite_env
+   Rusttypes.signature_of_type Rusttypes.build_composite_env Rustsyntax.empty_globdef
    Rustsyntax.type_of_function RustlightBase.type_of_function RustIR.type_of_function
    (* Cexec.do_initial_state Cexec.do_step Cexec.at_final_state *)
    Ctypes.merge_attributes Ctypes.remove_attributes 

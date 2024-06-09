@@ -97,11 +97,11 @@ Parameter (malloc_id free_id: ident).
 
 Require Ctyping.
 
-Definition malloc_decl : globdef (Ctypes.fundef Clight.function) Ctypes.type :=
-   Gfun (Ctypes.External EF_malloc (Ctypes.Tcons Ctyping.size_t Ctypes.Tnil) (Tpointer Ctypes.Tvoid noattr) cc_default).
+Definition malloc_decl : (Ctypes.fundef Clight.function) :=
+   (Ctypes.External EF_malloc (Ctypes.Tcons Ctyping.size_t Ctypes.Tnil) (Tpointer Ctypes.Tvoid noattr) cc_default).
 
-Definition free_decl : globdef (Ctypes.fundef Clight.function) Ctypes.type :=
-  Gfun (Ctypes.External EF_free (Ctypes.Tcons (Tpointer Ctypes.Tvoid noattr) Ctypes.Tnil) Tvoid cc_default).
+Definition free_decl : (Ctypes.fundef Clight.function) :=
+  (Ctypes.External EF_free (Ctypes.Tcons (Tpointer Ctypes.Tvoid noattr) Ctypes.Tnil) Tvoid cc_default).
 
 Definition free_fun_expr (ty: Ctypes.type) : Clight.expr :=
   let argty := (Ctypes.Tpointer ty noattr) in
@@ -168,11 +168,11 @@ Definition make_labelled_drop_stmts (m: PTree.t ident) (p: Clight.expr) (membs: 
     ((list_length_z membs) - 1, LSnil) membs.
 
 (* m: maps composite id to drop function id *)
-Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition) : res (option Clight.function) :=
+Definition drop_glue_for_composite (m: PTree.t ident) (co_id: ident) (sv: struct_or_variant) (ms: members) (attr: attr) : res (option Clight.function) :=
   (* The only function parameter *)
   let param := fresh_atom tt in
-  match co with
-  | Composite co_id Struct ms attr _ _ =>
+  match sv with
+  | Struct =>
       let co_ty := (Ctypes.Tstruct co_id attr) in
       let param_ty := Tpointer co_ty noattr in
       let deref_param := Ederef (Evar param param_ty) co_ty in
@@ -185,7 +185,7 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition)
           let stmt := (Clight.Ssequence (makeseq stmt_list) (Clight.Sreturn None)) in
           OK (Some (Clight.mkfunction Tvoid cc_default ((param, param_ty)::nil) nil nil stmt))
       end
-  | Composite co_id TaggedUnion ms attr _ _ =>
+  | TaggedUnion =>
       let co_ty := (Ctypes.Tstruct co_id attr) in
       let param_ty := Tpointer co_ty noattr in
       let deref_param := Ederef (Evar param param_ty) co_ty in (* *p *)
@@ -211,27 +211,22 @@ Definition drop_glue_for_composite (m: PTree.t ident) (co: composite_definition)
   end.
                 
 
-(* take the ident of a composite and return the ident of the drop glue function *)
-Parameter create_dropglue_ident : ident -> ident.
-
-Definition drop_glue_globdef (f: Clight.function) : globdef (Ctypes.fundef Clight.function) Ctypes.type :=
-  Gfun (Ctypes.Internal f).
+Definition drop_glue_fundef (f: Clight.function) : (Ctypes.fundef Clight.function) :=
+  (Ctypes.Internal f).
 
 (** Generate drop glue for each composite that is movable *)
 
-(* also return the map from composite id to drop glue id *)
-Definition generate_drops (l: list composite_definition) : res ((list (ident * globdef (Ctypes.fundef Clight.function) Ctypes.type)) * PTree.t ident) :=
-  (* first build the mapping from composite id to function id *)
-  let ids := map (fun elt => match elt with | Composite id _ _ _ _ _ => (id, create_dropglue_ident id) end) l in
-  let m := fold_left (fun acc elt => PTree.set (fst elt) (snd elt) acc) ids (PTree.empty ident) in   
-  (* how to construct the string of this function  *)        
-  do globs <- fold_right (fun elt acc => do acc' <- acc;
-                                     do glue <- drop_glue_for_composite m elt;
-                                     match glue with
-                                     | Some glue' => OK (drop_glue_globdef glue' :: acc')
-                                     | _ => OK acc'
-                                     end) (OK nil) l;
-  OK ((combine (snd (split ids)) globs), m).
+Definition generate_drops (l: list composite_definition) (dropm: PTree.t ident) : res (list (ident * (Ctypes.fundef Clight.function))) :=
+  do globs <- fold_right (fun '(Composite id sv membs a _ _) acc =>
+                           do acc' <- acc;
+                           do glue <- drop_glue_for_composite dropm id sv membs a;
+                           match glue, dropm!id with
+                           | Some glue', Some glue_id =>
+                               OK ((glue_id, drop_glue_fundef glue') :: acc')
+                           | None, _ => OK acc'
+                           | _, _ => Error [CTX id; MSG " no drop glue or no drop glue ident in generate_drops"]
+                           end) (OK nil) l;
+  OK globs.
                           
 End COMPOSITE_ENV.
 
@@ -599,13 +594,18 @@ Definition transl_function (f: function) : Errors.res Clight.function :=
 
 Local Open Scope error_monad_scope.
 
-Definition transl_fundef (_: ident) (fd: fundef) : Errors.res Clight.fundef :=
-  match fd with
-  | Internal f =>
-      do tf <- transl_function f;
-      Errors.OK (Ctypes.Internal tf)
-  | External _ orgs org_rels ef targs tres cconv =>
-      Errors.OK (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv)
+Definition transl_fundef (glues: PTree.t (Ctypes.fundef Clight.function)) (id: ident) (fd: fundef) : Errors.res Clight.fundef :=
+  (* Check if this fundef is drop glue *)
+  match glues!id with
+  | Some glue => OK glue
+  | None =>
+      match fd with
+      | Internal f =>
+          do tf <- transl_function f;
+          Errors.OK (Ctypes.Internal tf)
+      | External _ orgs org_rels ef targs tres cconv =>
+          Errors.OK (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv)
+      end
   end.
 
 End TRANSL.
@@ -618,6 +618,8 @@ Definition transl_globvar (id: ident) (ty: type) := OK (to_ctype ty).
 Local Open Scope error_monad_scope.
 
 Definition transl_program (p: program) : res Clight.program :=
+  (* generate drop glue map: composite id to drop glue id *)
+  let dropm := PTree_Properties.of_list p.(prog_drop_glue) in
   (* step 1: rust composite to c composite: generate union for each variant *)
   let co_defs := transl_composites p.(prog_types) in
   let tce := Ctypes.build_composite_env co_defs in
@@ -626,12 +628,15 @@ Definition transl_program (p: program) : res Clight.program :=
        fun Hyp =>
          let ce := p.(prog_comp_env) in
          (* step 2: generate drop glue *)
-         do (drops, dropm) <- generate_drops ce tce p.(prog_types);
-         (* step 3: translate the statement *)
-         do p1 <- transform_partial_program2 (transl_fundef ce tce dropm) transl_globvar p;
-         (* generate malloc and free declabration *)
-         let malloc_free := [(malloc_id, malloc_decl); (free_id, free_decl)] in
-         OK {| Ctypes.prog_defs := AST.prog_defs p1 ++ drops ++ malloc_free;
+         do drops <- generate_drops ce tce p.(prog_types) dropm;
+         (* add malloc and free to globs map. Maybe we should check
+         the existence of malloc and free idents *)
+         let globs := PTree_Properties.of_list drops in
+         let globs1 := PTree.set malloc_id malloc_decl globs in
+         let globs2 := PTree.set free_id free_decl globs1 in
+         (* step 3: translate the statement and convert drop glue *)
+         do p1 <- transform_partial_program2 (transl_fundef ce tce dropm globs2) transl_globvar p;
+         OK {| Ctypes.prog_defs := AST.prog_defs p1;
               Ctypes.prog_public := AST.prog_public p1;
               Ctypes.prog_main := AST.prog_main p1;
               Ctypes.prog_types := co_defs;

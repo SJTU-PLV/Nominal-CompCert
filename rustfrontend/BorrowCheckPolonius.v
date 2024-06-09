@@ -662,5 +662,6 @@ Definition borrow_check_program (p: program) : res program :=
               prog_public := AST.prog_public p1;
               prog_main := AST.prog_main p1;
               prog_types := prog_types p;
+              prog_drop_glue := prog_drop_glue p;
               prog_comp_env := prog_comp_env p;
               prog_comp_env_eq := prog_comp_env_eq p |}.
