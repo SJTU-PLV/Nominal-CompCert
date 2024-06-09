@@ -204,62 +204,7 @@ Section ConcurSim.
       constructor. eauto.
     Qed.
 
-
-(*
-    Lemma nil_acc : Acc global_order nil.
-    Proof.
-      constructor. intros. inv H. destruct hd; inv H0.
-    Qed.
-        
-    Lemma length_1_acc : forall li, (Acc global_order (li:: nil)).
-    Proof.
-      intros. induction li using (well_founded_induction fsim_order_wf).
-      constructor. intros. inv H0.
-      destruct hd.
-      + simpl in *. inv H1.
-        eapply H; eauto.
-      + exfalso. simpl in H1.
-        inv H1. destruct hd; inv H4.
-    Qed.
-
-    Lemma length_2_acc : forall li1 li2, Acc global_order (li1 :: li2 :: nil).
-    Proof.
-      induction li1 using (well_founded_induction fsim_order_wf).
-      induction li2 using (well_founded_induction fsim_order_wf).
-      constructor. intros. inv H1. destruct hd.
-      - simpl in H2. inv H2. simpl. eauto.
-      - destruct hd. simpl in H2. inv H2. simpl. eapply H0; eauto.
-        inv H2. destruct hd; inv H6.
-    Qed.
-
-    
-    Lemma length_3_acc : forall li1 li2 li3, Acc global_order (li1 :: li2 :: li3 :: nil).
-    Proof.
-      induction li1 using (well_founded_induction fsim_order_wf).
-      induction li2 using (well_founded_induction fsim_order_wf).
-      induction li3 using (well_founded_induction fsim_order_wf).
-      constructor. intros. inv H2. destruct hd.
-      - simpl in H3. inv H3. simpl. eauto.
-      - destruct hd. simpl in H3. inv H3. simpl. eauto.
-        destruct hd. simpl in H3. inv H3. simpl. eauto.
-        destruct hd; inv H3.
-    Qed.
-
-    Lemma gorder_acc_cons : forall tl hd, Acc global_order tl -> Acc global_order (hd :: tl).
-   Proof.
-     induction tl. 
-      - intros. eapply length_1_acc; eauto.
-      - induction hd using (well_founded_induction fsim_order_wf).
-        intros. 
-        inv H. constructor. intros. inv H.
-        destruct hd0.
-        + simpl in H2. inv H2. simpl. eapply H0; eauto.
-        + simpl in H2. inv H2. simpl.
-          Admitted.
-*)
-
-
-   Inductive global_order_1 : global_index -> global_index -> Prop :=
+    Inductive global_order_1 : global_index -> global_index -> Prop :=
     |gorder_hd : forall fi1 fi2 tl, fsim_order fi1 fi2 -> global_order_1 (fi1 :: tl) (fi2 :: tl)
     |gorder_tl : forall fi tl1 tl2, global_order_1 tl1 tl2 -> global_order_1 (fi :: tl1) (fi :: tl2).
 
@@ -282,21 +227,15 @@ Section ConcurSim.
 
    Lemma global_order1_wf : well_founded global_order_1.
    Proof.
-     red.
-     induction a; constructor; intros.
-     - inversion H.
-     - revert a0 IHa y H.
+     red. induction a.
+     - constructor; intros. inv H.
+     - revert a a0 IHa.
        induction a using (well_founded_induction fsim_order_wf).
-       intros.
-       inversion H0; subst.
-       + 
-       pose proof H _ H3 _ IHa. constructor. auto.
-       + revert tl1 H0 H3. induction IHa. intros.
-         specialize (H1 _ H3).
-         constructor. intros.
-         inversion H4; subst.
-         pose proof H _ H7 _ (H0 _ H3). constructor. auto.
-         apply H1; auto.
+       apply Acc_ind. intros.
+       constructor. intros.
+       inv H2.
+       + apply H. auto. constructor. auto.
+       + apply H1. auto.
    Qed.
 
    Theorem global_index_wf : well_founded global_order.
@@ -307,6 +246,7 @@ Section ConcurSim.
    Qed.
 
    (** another way to prove the well_founded property *)
+   (* 
    Inductive global_order_n : nat -> global_index -> global_index -> Prop :=
    |gon_intro : forall n i1 i2 li1 li2 hd tl,
        length i1 = n -> fsim_order li1 li2 ->
@@ -353,6 +293,7 @@ Section ConcurSim.
      red. intros. eapply well_founed_go'; eauto.
    Qed.
 
+    *)
    
    Section Initial.
      
