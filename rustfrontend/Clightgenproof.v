@@ -3,29 +3,25 @@ Require Import Maps.
 Require Import Integers.
 Require Import Floats.
 Require Import Values Memory Events Globalenvs Smallstep.
-Require Import LanguageInterface.
 Require Import AST Linking.
 Require Import Ctypes Rusttypes.
 Require Import Cop.
 Require Import Clight.
 Require Import RustlightBase RustIR.
 Require Import Errors.
-Require Import Clightgen.
+Require Import Clightgen Clightgenspec.
 Require Import LanguageInterface cklr.CKLR cklr.Inject cklr.InjectFootprint.
 
 Import ListNotations.
 
 (** Correctness proof for the generation of Clight *)
 
-Variable tr_fundef: RustIR.program -> RustIR.fundef -> Clight.fundef -> Prop.
-
-Variable tr_type: Rusttypes.type -> Ctypes.type -> Prop.
 
 Record match_prog (p: RustIR.program) (tp: Clight.program) : Prop := {
     match_prog_types:
     tp.(Ctypes.prog_types) = transl_composites p.(prog_types);
     match_prog_def:    
-    match_program_gen tr_fundef tr_type p p tp;
+    match_program_gen tr_fundef (fun ty ty' => to_ctype ty = ty') p p tp;
     match_prog_skel:
     erase_program tp = erase_program p
   }.
@@ -44,10 +40,6 @@ Variable tse: Genv.symtbl.
 Variable w: world injp.
 Let ge := RustIR.globalenv se prog.
 Let tge := Clight.globalenv tse tprog.
-
-(** TODO: Relational specification of the translation. *)
-
-Variable tr_stmt: composite_env -> Ctypes.composite_env -> PTree.t ident -> RustIR.statement -> Clight.statement -> Prop.
 
 (* Simulation relation *)
 

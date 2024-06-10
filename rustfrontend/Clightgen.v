@@ -281,6 +281,8 @@ Definition bind_res {A B: Type} (x: res A) (f: A -> mon B) : mon B :=
       end
     end.
 
+Definition bind_res2 {A B C: Type} (x: res (A * B)) (f: A -> B -> mon C) : mon C :=
+  bind_res x (fun p => f (fst p) (snd p)).
 
 Declare Scope gensym_monad_scope.
 Notation "'dosym' X <- A ; B" := (bind A (fun X => B))
@@ -292,6 +294,9 @@ Notation "'dosym' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
 Notation "'docomb' X <- A ; B" := (bind_res A (fun X => B))
    (at level 200, X ident, A at level 100, B at level 200)
    : gensym_monad_scope.
+Notation "'docomb' ( X , Y ) <- A ; B" := (bind_res2 A (fun X Y => B))
+   (at level 200, X ident, Y ident, A at level 100, B at level 200)
+    : gensym_monad_scope.
 
 
 Local Open Scope gensym_monad_scope.
@@ -364,9 +369,9 @@ Fixpoint place_to_cexpr (p: place) : res Clight.expr :=
                   OK (Efield (Efield pe union_id union_ty) fid (to_ctype ty))
               | _, _ => Error [CTX id; MSG ": it is not a correct tagged union"]
               end
-          | _ => Error [CTX id; MSG ": Cannot find its composite in C composite environment : expr_to_cexpr"]
+          | _ => Error [CTX id; MSG ": Cannot find its composite in C composite environment : place_to_cexpr"]
           end
-      | _ => Error (msg "Type error in Eget: expr_to_cexpr ")
+      | _ => Error (msg "Type error in Pdowncast: place_to_cexpr ")
       end
   end.
   
@@ -413,27 +418,31 @@ Definition expr_to_cexpr (e: expr) : res Clight.expr :=
       pexpr_to_cexpr (Eplace p ty)
   | Epure pe =>
       pexpr_to_cexpr pe
-end.
+  end.
 
-Definition transl_Sbox (e: expr) : mon (list Clight.statement * Clight.expr) :=
+Fixpoint expr_to_cexpr_list (l: list expr) : res (list Clight.expr) :=
+  match l with
+  | nil => OK nil
+  | e :: l =>
+      do e' <- expr_to_cexpr e;
+      do l' <- expr_to_cexpr_list l;
+      OK (e' :: l')
+  end.
+
+Definition transl_Sbox (temp: ident) (temp_ty: Ctypes.type) (e: expr) : res (Clight.statement * Clight.expr) :=
   (* temp = malloc(sz);
      *temp = e;
      temp *)
-  match expr_to_cexpr e with
-  | OK e' =>
-    let e_ty := Clight.typeof e' in
-    let temp_ty := Tpointer e_ty noattr in
-    dosym temp <- gensym temp_ty;
-    let sz := Ctypes.sizeof tce e_ty in
-    let tempvar := Clight.Etempvar temp temp_ty in
-    let malloc := (Evar malloc_id (Ctypes.Tfunction (Ctypes.Tcons Ctypes.type_int32s Ctypes.Tnil) temp_ty cc_default)) in
-    let sz_expr := Clight.Econst_int (Int.repr sz) Ctypes.type_int32s in
-    let call_malloc:= (Clight.Scall (Some temp) malloc (sz_expr :: nil)) in
-    let assign_deref_temp := Clight.Sassign (Ederef tempvar e_ty) e' in
-    ret ((call_malloc :: assign_deref_temp :: nil), tempvar)
-  | Error msg => error msg
-  end.
-
+  do e' <- expr_to_cexpr e;
+  let e_ty := Clight.typeof e' in
+  let sz := Ctypes.sizeof tce e_ty in
+  let tempvar := Clight.Etempvar temp temp_ty in
+  let malloc := (Evar malloc_id (Ctypes.Tfunction (Ctypes.Tcons Ctypes.type_int32s Ctypes.Tnil) temp_ty cc_default)) in
+  let sz_expr := Clight.Econst_int (Int.repr sz) Ctypes.type_int32s in
+  let call_malloc:= (Clight.Scall (Some temp) malloc (sz_expr :: nil)) in
+  let assign_deref_temp := Clight.Sassign (Ederef tempvar e_ty) e' in
+  OK (Clight.Ssequence call_malloc assign_deref_temp, tempvar)
+.
 
 (* expand drop_in_place(temp), temp is a reference, ty is the type of
 [*temp]. It is different from drop_glue_for_type because the expansion
@@ -505,26 +514,25 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
   | Sbox p e =>
       (* temp = malloc(sizeof(e));
        *temp = e;
-       p = temp *)       
-      dosym (stmt, e') <- transl_Sbox e;
+       p = temp *)
+      let temp_ty := Tpointer (to_ctype (typeof e)) noattr in
+      dosym temp <- gensym temp_ty;
+      docomb (stmt, e') <- transl_Sbox temp temp_ty e;
       docomb pe <- place_to_cexpr p;
-      ret (Clight.Ssequence (makeseq stmt) (Clight.Sassign pe e'))
+      ret (Clight.Ssequence stmt (Clight.Sassign pe e'))
   | Sstoragelive _
   | Sstoragedead _ =>
       ret Clight.Sskip
   | Scall p e el =>
-      docomb el' <- fold_right (fun elt acc =>
-                             do acc' <- acc;
-                             do e' <- expr_to_cexpr elt;
-                             OK (e' :: acc')) (OK nil) el;
+      docomb el' <- expr_to_cexpr_list el;
       docomb e' <- expr_to_cexpr e;
+      docomb pe <- place_to_cexpr p;
       (** TODO: if p is a local, do not generate a new temp  *)
       (* temp = f();
          p = temp *)
       let ty := typeof_place p in
       let cty := to_ctype ty in
-      dosym temp <- gensym cty;
-      docomb pe <- place_to_cexpr p;
+      dosym temp <- gensym cty;      
       let assign := Clight.Sassign pe (Etempvar temp cty) in
       ret (Clight.Ssequence (Clight.Scall (Some temp) e' el') assign)
   | Ssequence s1 s2 =>
@@ -565,7 +573,7 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
       let set_stmt := Clight.Sset temp (Eaddrof pe ref_cty) in
       match expand_drop temp ty with
       | Some drop_stmt =>
-          ret (Clight.Ssequence set_stmt drop_stmt)          
+          ret (Clight.Ssequence set_stmt drop_stmt)
       | None =>
           error (msg "Cannot find drop glue when expanding drop: build_stmt_until_extended_block")
       end
