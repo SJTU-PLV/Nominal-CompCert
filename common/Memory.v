@@ -133,13 +133,21 @@ Definition next_tid (s:sup) := length (stacks s).
 Program Definition sup_empty : sup :=
   mksup (nil :: nil :: nil) (1%nat) _.
 
+(*
 Inductive sup_In' : block -> sup -> Prop :=
 |sup_in_intro : forall (tid:nat) pos s pl,
     nth_error (stacks s) tid = Some pl ->
     In pos pl ->
     sup_In' (tid,pos) s.
+*)
+Inductive stacks_In : block -> list (list positive) -> Prop :=
+|stacksin : forall tid pos pl st,
+    nth_error st tid = Some pl ->
+    In pos pl ->
+    stacks_In (tid,pos) st.
 
-Definition sup_In (b:block) (s:sup) := sup_In' b s.
+
+Definition sup_In (b:block) (s:sup) := stacks_In b (stacks s).
 
 Definition empty_in: forall b, ~ sup_In b sup_empty.
 Proof.
@@ -224,7 +232,7 @@ Qed.
 Fixpoint update_list {A: Type} (n: nat) (l: list A) (a : A):=
   match n,l with
   | O, hd :: tl => a :: tl
-  | S n' , hd :: tl => hd :: (update_list n tl a)
+  | S n' , hd :: tl => hd :: (update_list n' tl a)
   | _, list => list
   end.
 
@@ -235,7 +243,7 @@ Proof.
   - reflexivity.
   - reflexivity.
   - reflexivity.
-  - rewrite IHl. reflexivity.
+  - erewrite IHn; eauto.
 Qed.
 
 Program Definition sup_incr(s:sup) :=
@@ -275,60 +283,99 @@ Proof.
   - right. intro. apply n. apply H. left. auto.
 Qed.
 
-Theorem sup_include_dec' : forall n s1 s2, next_tid s1 = n ->
-                                      {sup_include s1 s2} + {~sup_include s1 s2}.
+Definition stacks_include (st1 st2: list (list positive)) : Prop :=
+  forall b, stacks_In b st1 -> stacks_In b st2.
+
+Lemma stacks_include_dec' : forall n st1 st2, length st1 = n ->
+                                         {stacks_include st1 st2} + { ~stacks_include st1 st2}.
 Proof.
   induction n.
   - intros. left. red. intros. inv H0. unfold next_tid in H.
-    destruct (stacks s1). destruct tid0. inv H1. inv H1. inv H.
-  - intros. destruct n.
-    + (* n = 1, base case*)
-      generalize (tid_valid s1).
-      intros. unfold next_tid in H.
-      destruct s1, s2. simpl in *. destruct stacks0. inv H. destruct stacks0; inv H.
-      destruct stacks1.
-      --  simpl. destruct l. left. red. intros. inv H. simpl in H1. destruct tid2; inv H1. inv H2. destruct tid2; inv H3.
-          right. intro. red in H. specialize (H (O,p)).
-          exploit H. econstructor. simpl. reflexivity. left. auto.
-          intros. inv H1. simpl in H4. inv H4.
-      -- destruct (incl_dec l l0).
-         ++ left. red. intros. inv H. simpl in H1.
-            destruct tid2; simpl in H1; inv H1.
-            econstructor. simpl. reflexivity. eapply i. eauto.
-            destruct tid2; inv H3.
-         ++ right. intro. red in H. apply n.
-            intro. intros. exploit H. instantiate (1:= (O,a)).
-            econstructor. simpl. reflexivity. auto.
-            intro. inv H2. simpl in H5. inv H5. auto.
-    + (* induc case *)
-      set (s1' := sup_tl s1).
-      set (s2' := sup_tl s2).
-      destruct s1, s2. simpl in *.
-      unfold sup_tl in s1'. simpl in s1'. destruct tid0. extlia.
-Admitted.
+    destruct (st1). destruct tid0. inv H1. inv H1. inv H.
+  - intros. destruct st1. inv H. destruct st2.
+    + (*st2 is empty*)
+      destruct l; simpl in *.
+      -- 
+     (*the first list, i.e. global blocks, is empty*)
+        edestruct (IHn st1 nil). lia.
+        ++ 
+          left. red. intros. red in s. inv H0. destruct tid0.
+          inv H1. inv H2. simpl in H1.
+          exploit s. econstructor; eauto. intros. inv H0.
+          destruct tid0; inv H5.
+        ++ right. intro. apply n0.
+           red. intros. red in H0.
+           inv H1. exploit H0. econstructor. instantiate (2:= S tid0).
+           simpl. eauto. eauto. intros.
+           inv H1. inv H6.
+      --  (*the first list is not empty*)
+        right. intro. red in H0. exploit H0.
+        instantiate (1:= (O,p)). econstructor; simpl; eauto.
+        left. auto. intros. inv H1. inv H4.
+    + (*st2 is not empty*)
+      simpl in *.
+      destruct (incl_dec l l0).
+      -- (*the global list is included *)
+        destruct (IHn st1 st2). lia.
+        ++ left.
+           red. intros. inv H0. destruct tid0; simpl in *.
+           inv H1. econstructor; simpl; eauto.
+           exploit s. econstructor; eauto. intros.
+           inv H0.
+           econstructor; simpl; eauto.
+        ++ right.
+           intro. apply n0. red. intros. inv H1.
+           exploit H0. econstructor; eauto. instantiate (1:= S tid0).
+           simpl. eauto.
+           intros. inv H1. simpl in H6. econstructor; eauto.
+      -- right. intro. apply n0.
+         red. intros. exploit H0. instantiate (1:= (O,a)).
+         econstructor; simpl; eauto. intro. inv H2.
+         simpl in H5. inv H5. auto.
+Qed.
+                                                              
+Theorem sup_include_dec' :
+  forall s1 s2,
+    {sup_include s1 s2} + {~sup_include s1 s2}.
+Proof.
+  intros.
+  destruct (stacks_include_dec' (length (stacks s1)) (stacks s1) (stacks s2)).
+  reflexivity.
+  left. red. intros. apply s. auto.
+  right. red. intros. apply n. red. intros. apply H. auto.
+Qed.
+
 
 Theorem sup_include_dec : forall s1 s2, {sup_include s1 s2} + {~sup_include s1 s2}.
 Proof.
-  intro s1. destruct s1. simpl. induction stacks0.
-  - admit.
-  - 
-Admitted.
+  intros. eapply sup_include_dec'; eauto.
+Qed.
+
 
 (* proof sup_incr_in *)
 
 Lemma nth_error_update_list_diff {A: Type}: forall (l : list A) id1 id2 a,
-    (0 < id1 < length l)%nat ->
+    (id1 < length l)%nat ->
     id1 <> id2 ->
     nth_error (update_list id1 l a) id2 =
     nth_error l id2.
 Proof.
-Admitted.
+  induction l; intros; simpl in *.
+  - extlia.
+  - destruct id2; simpl.
+    +  destruct id1; simpl. extlia. auto.
+    + destruct id1; simpl. auto. apply IHl; lia.
+Qed.
 
 Lemma nth_error_update_list_same {A: Type}: forall (l : list A) id a,
-   (0 < id < length l)%nat ->
+   (id < length l)%nat ->
    nth_error (update_list id l a) id = Some a.
 Proof.
-Admitted.
+  induction l; intros.
+  - simpl in H. extlia.
+  - destruct id. simpl; eauto.
+    simpl. eapply IHl. simpl in H. lia.
+Qed.
 
 Theorem sup_incr_in : forall b s, sup_In b (sup_incr s) <-> b = (fresh_block s) \/ sup_In b s.
 Proof.
@@ -338,32 +385,28 @@ Proof.
   simpl.
   destruct (Nat.eq_dec tid1 tid0).
     + subst.
-
-      (* destruct (peq pos (fresh_pos (nth tid0 stacks0 nil))).
-      -- left. subst. reflexivity.
-      -- right.
-       *)
       rewrite nth_error_update_list_same in H0; eauto. inv H0. destruct H1.
       left. subst. reflexivity.
       right. econstructor; eauto. simpl.
       erewrite nth_error_nth'; eauto. lia.
+      lia.
     + right. econstructor. simpl.
-      erewrite <- nth_error_update_list_diff; eauto. auto.
+      erewrite <- nth_error_update_list_diff; eauto. lia. auto.
   - intros. destruct H.
     destruct s. simpl in *. unfold sup_incr. simpl.
     unfold fresh_block in H. simpl in *. subst.
     econstructor; simpl; eauto.
-    apply nth_error_update_list_same; eauto.
+    apply nth_error_update_list_same; eauto. lia.
     left. auto.
     destruct s. unfold sup_incr. inv H. simpl.
     destruct (Nat.eq_dec tid1 tid0).
     subst.
     econstructor; simpl.
-    rewrite nth_error_update_list_same; eauto. simpl in H0.
+    rewrite nth_error_update_list_same; eauto. lia. simpl in H0.
     erewrite nth_error_nth; eauto.
     right. auto.
     econstructor; simpl in *; eauto.
-    erewrite nth_error_update_list_diff; eauto.
+    erewrite nth_error_update_list_diff; eauto. lia.
 Qed.
 
 Theorem sup_incr_in1 : forall s, sup_In (fresh_block s) (sup_incr s).
@@ -398,9 +441,67 @@ Fixpoint concat_stacks (stacks: list (list positive)) (tid: nat) : list block :=
 
 Definition sup_list (s:sup) : list block := concat_stacks (stacks s) O.
 
+
+Lemma concat_stacks_incr : forall st n p m,
+    In (n,p) (concat_stacks st m) ->
+    In (S n,p) (concat_stacks st (S m)).
+Proof.
+  induction st; intros.
+  - inv H.
+  - simpl in *. 
+    apply in_or_app.
+    apply in_app_or in H.
+    destruct H.
+    left. apply in_map_iff. apply in_map_iff in H.
+    destruct H as [x [A B]]. exists x. split; auto. congruence.
+    right. apply IHst; auto.
+Qed.
+
+Lemma concat_stacks_dec : forall st b m,
+    In b (concat_stacks st (S m)) ->
+    exists n p, b = (S n, p) /\ In (n,p) (concat_stacks st m).
+Proof.
+  induction st; intros.
+  - inv H.
+  - simpl in *. 
+    apply in_app_or in H.
+    destruct H.
+    + destruct b. destruct n. exfalso.
+      apply in_map_iff in H. destruct H as [x [A B]]. inv A.
+      exists n, p. split. auto. apply in_or_app. left.
+      apply in_map_iff. apply in_map_iff in H.
+      destruct H as [x [A B]]. exists x. split; eauto. congruence.
+    + exploit IHst; eauto.
+      intros [n [p [A B]]].
+      exists n,p. split. congruence.
+      apply in_or_app. right. auto.
+Qed.
+
+Lemma stacks_list_in : forall st b, stacks_In b st <-> In b (concat_stacks st 0).
+Proof.
+  induction st.
+  - intros. split; intro H; inv H. destruct tid0; inv H0.
+  - intros. split; intro H.
+    + inv H. destruct tid0; simpl in *. inv H0.
+      apply in_or_app. left.
+      rewrite in_map_iff. exists pos. split; auto.
+      apply in_or_app. right.
+      assert (stacks_In (tid0, pos) st). econstructor;eauto.
+      apply IHst in H. apply concat_stacks_incr. auto.
+    + simpl in H.
+      apply in_app_or in H. destruct H.
+      rewrite in_map_iff in H. destruct H as [pos [A B]]. subst b.
+      econstructor; eauto. simpl. reflexivity.
+      apply concat_stacks_dec in H. destruct H as [n [p [A B]]].
+      subst b. 
+      apply IHst in B. inv B.
+      econstructor; simpl; eauto.
+Qed.
+      
 Lemma sup_list_in : forall b s, sup_In b s <-> In b (sup_list s).
 Proof.
-Admitted.
+  intros. apply stacks_list_in.
+Qed.
 
 Definition range_prop (t: nat) (s : sup) :=
   (1 <= t < next_tid s)%nat.
