@@ -4,7 +4,7 @@ Require Import Integers.
 Require Import Floats.
 Require Import Values Memory Events Globalenvs Smallstep.
 Require Import LanguageInterface.
-Require Import AST.
+Require Import AST Linking.
 Require Import Ctypes Rusttypes.
 Require Import Cop.
 Require Import Clight.
@@ -17,13 +17,17 @@ Import ListNotations.
 
 (** Correctness proof for the generation of Clight *)
 
+Variable tr_fundef: RustIR.program -> RustIR.fundef -> Clight.fundef -> Prop.
+
+Variable tr_type: Rusttypes.type -> Ctypes.type -> Prop.
+
 Record match_prog (p: RustIR.program) (tp: Clight.program) : Prop := {
-    match_prog_main:
-    tp.(Ctypes.prog_main) = p.(prog_main);
-    match_prog_public:
-    tp.(Ctypes.prog_public) = p.(prog_public);
     match_prog_types:
-    tp.(Ctypes.prog_types) = transl_composites p.(prog_types)
+    tp.(Ctypes.prog_types) = transl_composites p.(prog_types);
+    match_prog_def:    
+    match_program_gen tr_fundef tr_type p p tp;
+    match_prog_skel:
+    erase_program tp = erase_program p
   }.
 
 Section PRESERVATION.

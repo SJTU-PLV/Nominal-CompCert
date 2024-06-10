@@ -603,7 +603,7 @@ Definition transl_fundef (glues: PTree.t (Ctypes.fundef Clight.function)) (id: i
       | Internal f =>
           do tf <- transl_function f;
           Errors.OK (Ctypes.Internal tf)
-      | External _ orgs org_rels ef targs tres cconv =>
+      | External orgs org_rels ef targs tres cconv =>
           Errors.OK (Ctypes.External ef (to_ctypelist targs) (to_ctype tres) cconv)
       end
   end.

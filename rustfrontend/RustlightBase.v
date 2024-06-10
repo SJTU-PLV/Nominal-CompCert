@@ -162,7 +162,7 @@ Definition type_of_function (f: function) : type :=
 Definition type_of_fundef (f: fundef) : type :=
   match f with
   | Internal fd => type_of_function fd
-  | External _ orgs org_rels ef typs typ cc =>
+  | External orgs org_rels ef typs typ cc =>
       Tfunction orgs org_rels typs typ cc
   end.
 
@@ -1126,7 +1126,7 @@ can initialize struct *)
     step (Callstate vf vargs k m) E0 (State f f.(fn_body) k e me m')
 
 | step_external_function: forall vf vargs k m m' cc ty typs ef v t orgs org_rels
-    (FIND: Genv.find_funct ge vf = Some (External function orgs org_rels ef typs ty cc)),
+    (FIND: Genv.find_funct ge vf = Some (External orgs org_rels ef typs ty cc)),
     external_call ef ge vargs m t v m' ->
     step (Callstate vf vargs k m) t (Returnstate v k m')
 
@@ -1219,7 +1219,7 @@ Inductive initial_state: c_query -> state -> Prop :=
     
 Inductive at_external: state -> c_query -> Prop:=
 | at_external_intro: forall vf name sg args k m targs tres cconv orgs org_rels,
-    Genv.find_funct ge vf = Some (External function orgs org_rels (EF_external name sg) targs tres cconv) ->    
+    Genv.find_funct ge vf = Some (External orgs org_rels (EF_external name sg) targs tres cconv) ->    
     at_external (Callstate vf args k m) (cq vf sg args m).
 
 Inductive after_external: state -> c_reply -> state -> Prop:=
