@@ -617,11 +617,6 @@ Qed.
       - inv mi_thread. simpl. unfold Mem.sup_yield. red. split; eauto.
       - inv mi_inj.
         constructor; eauto.
-      - unfold Mem.valid_block. simpl.
-        intros. rewrite <- Mem.sup_yield_in in H. eauto.
-      - unfold Mem.valid_block. simpl.
-        intros. rewrite <- Mem.sup_yield_in.
-        eapply mi_mappedblocks; eauto.
     Qed.
 
 
@@ -831,10 +826,8 @@ Qed.
       constructor; try red; intros; eauto.
       split. simpl. simpl in H0. congruence.
       constructor; try red; intros; eauto.
-      simpl. rewrite <- Mem.sup_yield_in; eauto.
       split. simpl. simpl in H0.  inv Hm.  inv mi_thread. congruence.
       constructor; try red; intros; eauto.
-      simpl. rewrite <- Mem.sup_yield_in; eauto.
       congruence.
     Qed.
 
@@ -847,10 +840,8 @@ Qed.
       constructor; try red; intros; eauto.
       split. simpl. simpl in H0. congruence.
       constructor; try red; intros; eauto.
-      simpl. rewrite <- Mem.sup_yield_in; eauto.
       split. simpl. simpl in H0.  inv Hm.  inv mi_thread. congruence.
       constructor; try red; intros; eauto.
-      simpl. rewrite <- Mem.sup_yield_in; eauto.
       congruence.
     Qed.
 
@@ -864,11 +855,9 @@ Qed.
       split. simpl. simpl in H0. constructor. reflexivity.
       simpl. eauto.
       constructor; try red; intros; eauto.
-      simpl. rewrite <- Mem.sup_yield_in; eauto.
       split. simpl. simpl in H0.  inv Hm.  inv mi_thread. constructor.
       reflexivity. simpl. eauto.
       constructor; try red; intros; eauto.
-      simpl. rewrite <- Mem.sup_yield_in; eauto.
       congruence.
     Qed.
 
@@ -878,33 +867,24 @@ Qed.
     Proof.
       intros. inv H.
       inv H0. simpl in H1.
-      assert (VALID1: forall b, Mem.valid_block m1 b <-> Mem.valid_block (Mem.yield m1 n p) b).
-      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
-      assert (VALID2: forall b, Mem.valid_block m2 b <-> Mem.valid_block (Mem.yield m2 n tp) b).
-      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
       constructor; eauto.
-      - red. intros. exploit H4; eauto. apply VALID1. auto.
-      - red. intros. exploit H5; eauto. apply VALID2. eauto.
-      - red. intros. exploit H6; eauto. apply VALID1. auto.
-      - red. intros. exploit H7; eauto. apply VALID2. auto.
       - destruct H8 as [S8 H8]. inv S8. simpl in H0. split. simpl. congruence.
         inv H8. constructor.
-        + red. intros. eauto. apply unchanged_on_support. apply VALID1. auto.
+        + red. intros. eauto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
           reflexivity. eapply unchanged_on_perm; eauto.
-          red. split. auto. simpl. congruence. apply VALID1. auto.
+          red. split. auto. simpl. congruence.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl. congruence.
       - destruct H9 as [S9 H9]. inv S9. apply Mem.mi_thread in Hm as Hs. destruct Hs as [X Y].
         split. simpl in H0. congruence.
         inv H9. constructor.
-        + red. intros. eauto. apply unchanged_on_support. apply VALID2. auto.
+        + red. intros. eauto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
           reflexivity. eapply unchanged_on_perm; eauto.
-          red. split. auto. simpl. congruence. apply VALID2. auto.
+          red. split. auto. simpl. congruence.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl. congruence.
-      - red. intros. rewrite VALID1, VALID2. eauto.
     Qed.
     
     Lemma injp_yield_acci_accg' : forall w1 w2 w3,
@@ -912,33 +892,24 @@ Qed.
     Proof.
       intros. inv H.
       inv H0. simpl in H1.
-      assert (VALID1: forall b, Mem.valid_block m1 b <-> Mem.valid_block (Mem.yield m1 n p) b).
-      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
-      assert (VALID2: forall b, Mem.valid_block m2 b <-> Mem.valid_block (Mem.yield m2 n tp) b).
-      intros. unfold Mem.valid_block. simpl. apply Mem.sup_yield_in.
       constructor; eauto.
-      - red. intros. exploit H4; eauto. apply VALID1. auto.
-      - red. intros. exploit H5; eauto. apply VALID2. eauto.
-      - red. intros. exploit H6; eauto. apply VALID1. auto.
-      - red. intros. exploit H7; eauto. apply VALID2. auto.
       - destruct H8 as [S8 H8]. inv S8. split. simpl. congruence.
         inv H8. constructor.
-        + red. intros. eauto. apply unchanged_on_support. apply VALID1. auto.
+        + red. intros. eauto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m1 b ofs k p0).
           reflexivity. eapply unchanged_on_perm; eauto.
-          red. split. auto. simpl in B. congruence. apply VALID1. auto.
+          red. split. auto. simpl in B. congruence.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl in B. congruence.
       - destruct H9 as [S9 H9]. inv S9. apply Mem.mi_thread in Hm as Hs. destruct Hs as [X Y].
         split. simpl. congruence.
         inv H9. constructor.
-        + red. intros. eauto. apply unchanged_on_support. apply VALID2. auto.
+        + red. intros. eauto.
         + intros b ofs k p0 [A B] Hv. transitivity (Mem.perm m2 b ofs k p0).
           reflexivity. eapply unchanged_on_perm; eauto.
-          red. split. auto. simpl in B. congruence. apply VALID2. auto.
+          red. split. auto. simpl in B. congruence.
         + intros b ofs [A B] Hp. simpl.
           eapply unchanged_on_contents; eauto. split. auto. simpl in B. congruence.
-      - red. intros. rewrite <- VALID1, <- VALID2. eauto.
     Qed.
 
     Lemma thread_create_inject' : forall j m1 m2,
