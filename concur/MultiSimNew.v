@@ -204,49 +204,9 @@ Section ConcurSim.
       constructor. eauto.
     Qed.
 
-    Inductive global_order_1 : global_index -> global_index -> Prop :=
-    |gorder_hd : forall fi1 fi2 tl, fsim_order fi1 fi2 -> global_order_1 (fi1 :: tl) (fi2 :: tl)
-    |gorder_tl : forall fi tl1 tl2, global_order_1 tl1 tl2 -> global_order_1 (fi :: tl1) (fi :: tl2).
+    
+   (** prove the well_founded property of global_order*)
 
-   Lemma go_eq_1 : forall i1 i2, global_order i1 i2 <-> global_order_1  i1 i2.
-   Proof.
-     induction i1; intros.
-     - split; intro. inv H. destruct hd; inv H0.
-       inv H.
-     - split; intro. inv H. destruct hd; simpl in H0.
-       simpl. constructor. auto. inv H0. simpl. constructor.
-       eapply IHi1. constructor. auto.
-       inv H. replace (a:: i1) with (nil ++ (a::i1)).
-       replace (fi2::i1) with (nil ++ (fi2 :: i1)). constructor. auto.
-       reflexivity. reflexivity.
-       apply IHi1 in H3. inv H3. simpl.
-       replace (a::hd ++ li1 :: tl) with ((a::hd) ++ li1 :: tl).
-       replace (a::hd ++ li2 :: tl) with ((a::hd) ++ li2 :: tl).
-       constructor. auto. reflexivity. reflexivity.
-   Qed.
-
-   Lemma global_order1_wf : well_founded global_order_1.
-   Proof.
-     red. induction a.
-     - constructor; intros. inv H.
-     - revert a a0 IHa.
-       induction a using (well_founded_induction fsim_order_wf).
-       apply Acc_ind. intros.
-       constructor. intros.
-       inv H2.
-       + apply H. auto. constructor. auto.
-       + apply H1. auto.
-   Qed.
-
-   Theorem global_index_wf : well_founded global_order.
-   Proof.
-     red. intros.
-     induction a using (well_founded_induction global_order1_wf).
-     constructor. intros. apply H. apply go_eq_1. auto.
-   Qed.
-
-   (** another way to prove the well_founded property *)
-   (* 
    Inductive global_order_n : nat -> global_index -> global_index -> Prop :=
    |gon_intro : forall n i1 i2 li1 li2 hd tl,
        length i1 = n -> fsim_order li1 li2 ->
@@ -288,12 +248,10 @@ Section ConcurSim.
      intros. rewrite go_length; eauto. apply global_order_n_wf.
    Qed.
 
-   Theorem well_founded_go : well_founded global_order.
+   Theorem global_index_wf : well_founded global_order.
    Proof.
      red. intros. eapply well_founed_go'; eauto.
    Qed.
-
-    *)
    
    Section Initial.
      
