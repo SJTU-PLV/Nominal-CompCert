@@ -632,13 +632,20 @@ End LAYOUT.
 (** The alignment for a structure or variant is the max of the alignment
   of its members.  Padding bitfields are ignored. *)
 
-Fixpoint alignof_composite (env: composite_env) (ms: members) : Z :=
+Fixpoint alignof_composite' (env: composite_env) (ms: members) : Z :=
   match ms with
   | nil => 1
   | m :: ms => 
      if member_is_padding m
-     then alignof_composite env ms
-     else Z.max (alignof env (type_member m)) (alignof_composite env ms)
+     then alignof_composite' env ms
+     else Z.max (alignof env (type_member m)) (alignof_composite' env ms)
+  end.
+
+Definition alignof_composite (env: composite_env) (sv: struct_or_variant) (ms: members) : Z :=
+  match sv with
+  | Struct => alignof_composite' env ms
+  | TaggedUnion =>
+      Z.max (alignof env type_int32s) (alignof_composite' env ms)
   end.
 
 (** The size of a structure corresponds to its layout: fields are
@@ -667,12 +674,12 @@ Fixpoint sizeof_variant' (env: composite_env) (ms: members) : Z :=
   end).
 
 Definition sizeof_variant (env: composite_env) (ms: members) : Z :=
-  sizeof_variant' env ms + 4.
+  align 4 (sizeof_variant' env ms) + sizeof_variant' env ms.
 
 (** Some properties *)
 
-Lemma alignof_composite_two_p:
-  forall env m, exists n, alignof_composite env m = two_power_nat n.
+Lemma alignof_composite_two_p':
+  forall env m, exists n, alignof_composite' env m = two_power_nat n.
 Proof.
   induction m; simpl.
 - exists 0%nat; auto.
@@ -680,11 +687,21 @@ Proof.
   apply Z.max_case; auto. apply alignof_two_p.
 Qed.
 
+Lemma alignof_composite_two_p:
+  forall env m sv, exists n, alignof_composite env sv m = two_power_nat n.
+Proof.
+  intros. destruct sv.
+  - apply alignof_composite_two_p'.
+  - simpl. apply Z.max_case. exists 2%nat. auto.
+    apply alignof_composite_two_p'.
+Qed.
+
+
 Lemma alignof_composite_pos:
-  forall env m a, align_attr a (alignof_composite env m) > 0.
+  forall env m a sv, align_attr a (alignof_composite env sv m) > 0.
 Proof.
   intros.
-  exploit align_attr_two_p. apply (alignof_composite_two_p env m).
+  exploit align_attr_two_p. apply (alignof_composite_two_p env m sv).
   instantiate (1 := a). intros [n EQ].
   rewrite EQ; apply two_power_nat_pos.
 Qed.
@@ -709,7 +726,12 @@ Lemma sizeof_variant_pos:
 Proof.
   intros. unfold sizeof_variant.
   generalize (sizeof_variant'_pos env m).
+  intros.
+  apply Z.le_lteq in H as LELT. destruct LELT.
+  apply Z.gt_lt_iff in H0.
+  generalize (align_le 4 (sizeof_variant' env m)). intros.
   lia.
+  rewrite <- H0. simpl. lia.
 Qed.
   
 (** Type ranks *)
@@ -835,7 +857,7 @@ Program Definition composite_of_def
   | None, false =>
       Error (MSG "Incomplete struct or variant " :: CTX id :: nil)
   | None, true =>
-      let al := align_attr a (alignof_composite env m) in
+      let al := align_attr a (alignof_composite env su m) in
       OK {| co_generic_origins := orgs;
             co_origin_relations := org_rels;
             co_sv := su;
@@ -1117,11 +1139,19 @@ Proof.
 Qed.
 
 Lemma alignof_composite_stable:
-  forall ms, complete_members env ms = true -> alignof_composite env' ms = alignof_composite env ms.
+  forall ms sv, complete_members env ms = true -> alignof_composite env' sv ms = alignof_composite env sv ms.
 Proof.
+  intros. destruct sv;simpl.
+  generalize dependent ms.
   induction ms as [|m ms]; simpl; intros.
   auto.
-  InvBooleans. rewrite alignof_stable by auto. rewrite IHms by auto. auto.
+  InvBooleans.  
+  rewrite alignof_stable by auto. rewrite IHms by auto. auto.
+  f_equal.   generalize dependent ms.
+  induction ms as [|m ms]; simpl; intros.
+  auto.
+  InvBooleans.  
+  rewrite alignof_stable by auto. rewrite IHms by auto. auto.
 Qed.
 
 Remark next_field_stable: forall pos m,
@@ -1139,15 +1169,21 @@ Proof.
   InvBooleans. rewrite next_field_stable by auto. apply IHms; auto.
 Qed.
 
-Lemma sizeof_variant_stable:
-  forall ms, complete_members env ms = true -> sizeof_variant env' ms = sizeof_variant env ms.
+Lemma sizeof_variant_stable':
+  forall ms, complete_members env ms = true -> sizeof_variant' env' ms = sizeof_variant' env ms.
 Proof.
-  unfold sizeof_variant. intros. apply Z.add_cancel_r.
-  generalize dependent ms.
   induction ms as [|m ms]; simpl; intros.
   auto.
   InvBooleans. rewrite sizeof_stable by auto. rewrite IHms by auto. auto.
 Qed.
+
+Lemma sizeof_variant_stable:
+  forall ms, complete_members env ms = true -> sizeof_variant env' ms = sizeof_variant env ms.
+Proof.
+  unfold sizeof_variant. intros. rewrite sizeof_variant_stable'.
+  auto. auto.
+Qed.
+
 
 Lemma sizeof_composite_stable:
   forall su ms, complete_members env ms = true -> sizeof_composite env' su ms = sizeof_composite env su ms.
@@ -1224,7 +1260,7 @@ Record composite_consistent (env: composite_env) (co: composite) : Prop := {
   co_consistent_complete:
      complete_members env (co_members co) = true;
   co_consistent_alignof:
-     co_alignof co = align_attr (co_attr co) (alignof_composite env (co_members co));
+     co_alignof co = align_attr (co_attr co) (alignof_composite env co.(co_sv) (co_members co));
   co_consistent_sizeof:
      co_sizeof co = align (sizeof_composite env (co_sv co) (co_members co)) (co_alignof co);
   co_consistent_rank:

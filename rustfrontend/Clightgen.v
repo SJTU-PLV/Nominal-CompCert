@@ -54,7 +54,7 @@ Definition transl_composite_def (* (union_map: PTree.t (ident * attr)) *) (co: c
       (** TODO: specify the attr  *)
       let union := (Ctypes.Composite union_id Union (map transl_composite_member ms) noattr) in
       let union_member := Ctypes.Member_plain union_fid (Tunion union_id noattr) in     
-      (Ctypes.Composite id Ctypes.Struct (tag_member :: union_member :: nil) noattr, Some union)
+      (Ctypes.Composite id Ctypes.Struct (tag_member :: union_member :: nil) attr, Some union)
   end.
 
 

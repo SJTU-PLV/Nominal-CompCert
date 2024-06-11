@@ -6,15 +6,54 @@ Require Import Clightgen.
 
 Import ListNotations.
 
+Definition tr_composite_env (ce: composite_env) (tce: Ctypes.composite_env) : Prop :=
+  forall id co, ce!id = Some co ->        
+         match co.(co_sv) with
+         | Struct =>
+             exists tco, tce!id = Some tco /\
+             tco.(Ctypes.co_su) = Ctypes.Struct /\
+             map transl_composite_member co.(co_members) = tco.(Ctypes.co_members) /\
+             co.(co_attr) = tco.(Ctypes.co_attr) /\
+             co.(co_sizeof) = tco.(Ctypes.co_sizeof) /\
+             co.(co_alignof) = tco.(Ctypes.co_alignof) /\
+             co.(co_rank) = tco.(Ctypes.co_rank)
+         | TaggedUnion =>
+             exists tco union_id tag_fid union_fid union,
+             let tag_member := Ctypes.Member_plain tag_fid Ctypes.type_int32s in
+             let union_member := Ctypes.Member_plain union_fid (Tunion union_id noattr) in
+             let m := (map transl_composite_member co.(co_members)) in
+             tce!id = Some tco /\ tce!union_id = Some union /\
+             tco.(Ctypes.co_su) = Ctypes.Struct /\
+             tco.(Ctypes.co_members) = [tag_member; union_member] /\
+             tco.(Ctypes.co_sizeof) = co.(co_sizeof) /\
+             tco.(Ctypes.co_alignof) = co.(co_alignof) /\
+             tco.(Ctypes.co_rank) = co.(co_rank) /\
+             union.(Ctypes.co_su) = Union /\
+             union.(Ctypes.co_members) = m /\
+             (* To specify *)
+             union.(Ctypes.co_sizeof) = align (Ctypes.sizeof_composite tce Union m) (Ctypes.alignof_composite tce m) /\
+             union.(Ctypes.co_alignof) = (Ctypes.alignof_composite tce m) /\
+             union.(Ctypes.co_rank) = Ctypes.rank_members tce m
+         end.
+
+Lemma to_ctype_sizeof: forall ce tce ty cty,
+    to_ctype ty = cty ->
+    tr_composite_env ce tce ->
+    sizeof ce ty = Ctypes.sizeof tce cty.
+Admitted.
+
+Lemma transl_composites_meet_spec: forall co_defs tco_defs ce tce,
+    transl_composites co_defs = tco_defs ->
+    build_composite_env co_defs = OK ce ->
+    Ctypes.build_composite_env tco_defs = OK tce ->
+    tr_composite_env ce tce.
+Admitted.
+
 Section SPEC.
 
 Variable ce: composite_env.
 Variable tce: Ctypes.composite_env.  
 Variable dropm: PTree.t ident.
-
-(** TODO: define some relations between ce and tce *)
-Variable tr_composite: composite_env -> Ctypes.composite_env -> Prop.
-
 
 Inductive tr_stmt : statement -> Clight.statement -> Prop :=
 | tr_trivial: forall s ts g,
