@@ -379,13 +379,15 @@ Lemma inject_unchanged_on_inject:
   forall j m1 m2 m3 P,
     Mem.inject j m1 m2 ->
     Mem.unchanged_on P m2 m3 ->
+    Mem.support m2 = Mem.support m3 ->
     (forall b ofs, {P b ofs} + {~ P b ofs}) ->
     (forall b ofs, ~ P b ofs -> loc_out_of_reach j m1 b ofs) ->
     Mem.inject j m1 m3.
 Proof.
-  intros until P. intros INJ UNC DEC OUT. inversion INJ.  inversion UNC.
+  intros until P. intros INJ UNC SUP DEC OUT. inversion INJ.
+  inversion UNC.
   intros. constructor; eauto.
-  - admit.
+  - rewrite <- SUP. auto.
   - inversion mi_inj. constructor; eauto.
     + intros. eapply unchanged_on_perm; eauto.
       edestruct DEC; eauto. apply OUT in n. red in n. exfalso.
@@ -401,7 +403,7 @@ Proof.
     edestruct DEC; eauto. apply OUT in n. red in n. exfalso.
     eapply n; eauto. replace (ofs + delta - delta) with ofs by lia.
     auto.
-Admitted. (** TODO: add _t thread properties in LM and CA*)
+Qed.
 
 Lemma cc_cainjp__injp_ca :
   ccref (cc_c_asm_injp) (cc_c injp @ cc_c_asm).
@@ -421,7 +423,7 @@ Proof.
       rename m2' into tm'0. inv H1. rename m1' into m'.
       assert (Htm': Mem.inject j' m' tm').
       {
-        clear - H20 Hm11 H24.
+        clear - H20 Hm11 H24 H22.
         eapply inject_unchanged_on_inject; eauto.
         apply not_init_args_dec.
         intros. eapply no_perm_out_of_reach; eauto.

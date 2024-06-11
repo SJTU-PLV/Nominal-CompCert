@@ -629,13 +629,12 @@ Proof.
              intro. apply Mem.fresh_block_alloc in ALLOC.
              subst. congruence.
           -- red. intros. inversion UNC. eapply unchanged_on_perm; eauto.
-          -- eauto with mem.
+          -- split; eauto with mem.
           -- split. rewrite (Mem.support_free _ _ _ _ _ FREE); eauto.
              rewrite (Mem.support_store _ _ _ _ _ _ STORE3); eauto.
              rewrite (Mem.support_store _ _ _ _ _ _ STORE2); eauto.
              rewrite (Mem.support_store _ _ _ _ _ _ STORE1); eauto.
              rewrite (Mem.support_alloc _ _ _ _ _ ALLOC); eauto.
-             red. simpl. rewrite Mem.update_list_length. eauto.
              eapply Mem.unchanged_on_implies; eauto.
              intros. cbn. eauto.
           -- red. intros. congruence.
@@ -817,13 +816,12 @@ Proof.
              intro. apply Mem.fresh_block_alloc in ALLOC.
              subst. congruence.
           -- red. intros. inversion UNC. eapply unchanged_on_perm; eauto.
-          -- eauto with mem.
+          -- split; eauto with mem.
           -- split. rewrite (Mem.support_free _ _ _ _ _ FREE); eauto.
              rewrite (Mem.support_store _ _ _ _ _ _ STORE3); eauto.
              rewrite (Mem.support_store _ _ _ _ _ _ STORE2); eauto.
              rewrite (Mem.support_store _ _ _ _ _ _ STORE1); eauto.
              rewrite (Mem.support_alloc _ _ _ _ _ ALLOC); eauto.
-             red. simpl. rewrite Mem.update_list_length. eauto.
              eapply Mem.unchanged_on_implies; eauto.
              intros. cbn. eauto.
           -- red. intros. congruence.
@@ -969,13 +967,12 @@ Proof.
              subst. congruence.
           -- red. intros.
              inversion UNC. eapply unchanged_on_perm; eauto.
-          -- eauto with mem.
+          -- split; eauto with mem.
           -- split.
              rewrite (Mem.support_store _ _ _ _ _ _ STORE3); eauto.
              rewrite (Mem.support_store _ _ _ _ _ _ STORE2); eauto.
              rewrite (Mem.support_store _ _ _ _ _ _ STORE1); eauto.
              rewrite (Mem.support_alloc _ _ _ _ _ ALLOC); eauto.
-             red. simpl. rewrite Mem.update_list_length. eauto.
              eapply Mem.unchanged_on_implies; eauto.
              intros. cbn. eauto.
           -- red. intros. congruence.

@@ -1760,9 +1760,9 @@ Proof.
     set (m2' := m2' m1 m2 m1' j12 j23 j12' m2'_sup INJ12 ).
     assert (INJ12' :  Mem.inject j12' m1' m2'). eapply INJ12'; eauto.
     assert (INJ23' :  Mem.inject j23' m2' m3'). eapply INJ23'; eauto.
-    assert (S2: Mem.match_sup (Mem.support m2) (Mem.support m2')).
+     (* assert (S2: Mem.match_sup (Mem.support m2) (Mem.support m2')).
     eapply Mem.match_sup_trans. eapply Mem.match_sup_symm. inversion INJ12. apply mi_thread.
-    eapply Mem.match_sup_trans. eauto. inversion INJ12'. eauto.
+    eapply Mem.match_sup_trans. eauto. inversion INJ12'. eauto. *)
     set (w1' := injpw j12' m1' m2' INJ12').
     set (w2' := injpw j23' m2' m3' INJ23').
     rename vres2 into vres3.
@@ -1777,14 +1777,14 @@ Proof.
       eapply MAXPERM2; eauto. split. eauto.
       eapply Mem.unchanged_on_implies; eauto.
       intros. red. unfold compose_meminj.
-      rewrite H1. reflexivity. split; eauto.
+      rewrite H1. reflexivity. split; eauto. eapply tid_s2; eauto.
       constructor; eauto. constructor; eauto.
     + exists (cr vres2 m2'). split. cbn. econstructor. constructor.
       constructor. eapply ROUNC2; eauto.
       inversion UNC21. eauto.
       eapply MAXPERM2; eauto.
       exists w2'. cbn. split. constructor; eauto. eapply ROUNC2; eauto.
-      eapply MAXPERM2; eauto. split. eauto.
+      eapply MAXPERM2; eauto. split. eapply tid_s2; eauto.
       eapply UNCHANGE22; eauto. split. eauto. eapply out_of_reach_trans; eauto.
       econstructor; eauto. constructor; eauto.
 Qed.
