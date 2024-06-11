@@ -20,7 +20,6 @@ Require Import Op Registers RTL RTLmach.
 Require Import Liveness ValueDomain ValueAOp ValueAnalysis.
 Require Import ConstpropOp ConstpropOpproof Constprop.
 Require Import LanguageInterface Inject InjectFootprint.
-Require SimplLocalsproof.
 
 Definition match_prog (prog tprog: program) :=
   match_program (fun _ f tf => tf = transf_fundef (romem_for prog) f) eq prog tprog.
@@ -32,8 +31,6 @@ Proof.
 Qed.
 
 Section PRESERVATION.
-
-Let injpk_acc := SimplLocalsproof.injpk_acc.
 
 Variable fn_stack_requirements : ident -> Z.
 Variable prog: program.
@@ -355,7 +352,7 @@ Inductive match_states: nat -> state -> state -> Prop :=
            (PC: match_pc f rs m n pc pc')
            (REGS: regset_inject j rs rs')
            (SP: j sp = Some (sp',0))
-           (INCR: injpk_acc (S (length s)) w (injpw j m m' MEM))
+           (INCR: injp_acc_local (S (length s)) w (injpw j m m' MEM))
            (INJG: meminj_global j)
            (RO: ro_acc m01 m),
       match_states n (State s f (Vptr sp Ptrofs.zero) pc rs m)
@@ -366,7 +363,7 @@ Inductive match_states: nat -> state -> state -> Prop :=
            (ASTK: match_astack (length s) (Mem.astack (Mem.support m)) (Mem.astack (Mem.support m')))
            (VF: Val.inject j vf vf')
            (ARGS: Val.inject_list j args args')
-           (INCR: injpk_acc (length s) w (injpw j m m' MEM))
+           (INCR: injp_acc_local (length s) w (injpw j m m' MEM))
            (INJG: meminj_global j)
            (RO: ro_acc m01 m),
       match_states O (Callstate s vf args m id)
@@ -376,7 +373,7 @@ Inductive match_states: nat -> state -> state -> Prop :=
            (STACKS: list_forall2 (match_stackframes j) s s')
            (ASTK: match_astack (length s) (Mem.astack (Mem.support m)) (Mem.astack (Mem.support m')))
            (RES: Val.inject j v v')
-           (INCR: injpk_acc (length s) w (injpw j m m' MEM))
+           (INCR: injp_acc_local (length s) w (injpw j m m' MEM))
            (INJG: meminj_global j)
            (RO: ro_acc m01 m),
       match_states O (Returnstate s v m)
@@ -389,7 +386,7 @@ Lemma match_states_succ:
   regset_inject j rs rs' ->
   Mem.inject j m m' ->
   j sp = Some (sp',0) ->
-  injpk_acc (S (length s)) w (injpw j m m' MEM) ->
+  injp_acc_local (S (length s)) w (injpw j m m' MEM) ->
   ro_acc m01 m ->
   meminj_global j ->
   match_states O (State s f (Vptr sp Ptrofs.zero) pc rs m)
@@ -407,10 +404,10 @@ Proof.
 Qed.
 
 Lemma match_stbls_incr : forall j m1 m2 MEM n,
-    injpk_acc n w (injpw j m1 m2 MEM) ->
+    injp_acc_local n w (injpw j m1 m2 MEM) ->
     Genv.match_stbls j ge tge.
 Proof.
-  intros. inv H. inv GE.
+  intros. inv H. inv ACC. inv GE.
   eapply Genv.match_stbls_incr; eauto.
   intros b1 b2 delta Hb Hb'. specialize (SEP b1 b2 delta Hb Hb').
   unfold Mem.valid_block in SEP. split; inv SEP; eauto.
@@ -559,7 +556,7 @@ Proof.
   eapply match_states_succ; eauto.
   erewrite <- Mem.support_storev; eauto.
   erewrite <- (Mem.support_storev _ _ _ _ m2'); eauto.
-  eapply SimplLocalsproof.injpk_injp. eauto. instantiate (1:= Y).
+  eapply injp_local_injp. eauto. instantiate (1:= Y).
   eapply injp_acc_storev; eauto.
   eapply Mem.val_lessdef_inject_compose; eauto.
   eapply ro_acc_trans; eauto.
@@ -637,14 +634,14 @@ Proof.
   auto.
   apply regs_inject; auto. instantiate (1:= B'').
   destruct w.
-  exploit SimplLocalsproof.injpk_injp; eauto. intros INCR1.
-  exploit SimplLocalsproof.injp_acc_return_step2.
+  exploit injp_local_injp; eauto. intros INCR1.
+  exploit injp_acc_pop_stage.
     exact H4. exact A''.
     instantiate (1 := B''). instantiate (1 := B).
   intros INCR2.
-  apply SimplLocalsproof.injpk_acc_remove_astack in INCR1 as INCR1'.
-  exploit SimplLocalsproof.injp_acc_no_astack_trans. exact INCR1'. eauto. intros INCR12.
-  inv INCR12. constructor; eauto; inv INCR1.
+  apply injp_acc_local_remove_astack in INCR1 as INCR1'.
+  exploit injp_acc_without_astack_trans. exact INCR1'. eauto. intros INCR12.
+  inv INCR12. constructor; [constructor| |]; eauto; inv INCR1.
   inv ASTK1. apply Mem.astack_pop_stage in H4 as [hd1 POP1]. rewrite POP1 in H6. inv H6. auto.
   inv ASTK2. apply Mem.astack_pop_stage in A'' as [hd2' POP2]. rewrite POP2 in H6. inv H6. auto.
   eapply ro_acc_trans; eauto. eapply ro_acc_trans; eauto. eapply ro_acc_free; eauto.
@@ -676,7 +673,7 @@ Opaque builtin_strength_reduction.
     congruence.
     apply set_res_inject; auto. red. intros. eauto.
     eauto.
-    eapply SimplLocalsproof.injpk_injp. eauto. instantiate (1:= C).
+    eapply injp_local_injp. eauto. instantiate (1:= C).
     constructor; eauto.
     red. eauto using external_call_readonly.
     red. eauto using external_call_readonly.
@@ -756,14 +753,14 @@ Opaque builtin_strength_reduction.
   apply Mem.astack_pop_stage in A'' as [hd2 POP2]. erewrite <- Mem.support_free in H5; eauto. rewrite POP2 in H5. inv H5.
   auto.
   destruct or; simpl; auto. instantiate (1:= B'').
-  exploit SimplLocalsproof.injpk_injp; eauto. intros INCR1.
-  exploit SimplLocalsproof.injp_acc_return_step2.
+  exploit injp_local_injp; eauto. intros INCR1.
+  exploit injp_acc_pop_stage.
     exact H1. exact A''.
     instantiate (1 := B''). instantiate (1 := B).
   intros INCR2. destruct w.
-  apply SimplLocalsproof.injpk_acc_remove_astack in INCR1 as INCR1'.
-  exploit SimplLocalsproof.injp_acc_no_astack_trans. exact INCR1'. eauto. intros INCR12.
-  inv INCR12. constructor; eauto; inv INCR1.
+  apply injp_acc_local_remove_astack in INCR1 as INCR1'.
+  exploit injp_acc_without_astack_trans. exact INCR1'. eauto. intros INCR12.
+  inv INCR12. constructor. constructor; eauto. 1,2:inv INCR1.
   inv ASTK1. apply Mem.astack_pop_stage in H1 as [hd1 POP1]. rewrite POP1 in H3. inv H3. auto.
   inv ASTK2. apply Mem.astack_pop_stage in A'' as [hd2' POP2]. rewrite POP2 in H3. inv H3. auto.
   eapply ro_acc_trans; eauto. eapply ro_acc_trans; eauto. eapply ro_acc_free; eauto.
@@ -795,40 +792,15 @@ Opaque builtin_strength_reduction.
   simpl. auto.
   constructor.
   apply init_regs_inject; auto. eauto. instantiate (1:= B'').
-  exploit SimplLocalsproof.injpk_injp; eauto. intros INCR1.
-  assert (INCR2 : SimplLocalsproof.injp_acc_no_astack (injpw f' m' m2' B) (injpw f' m'' m2''' B'')). {
-    constructor.
-    - eapply Mem.ro_unchanged_trans; red; intros.
-      erewrite <- Mem.loadbytes_push_stage; eauto.
-      erewrite <- Mem.loadbytes_record_frame; eauto.
-      rewrite <- Mem.support_push_stage_1; eauto.
-      rewrite Mem.perm_push_stage; eauto.
-    - eapply Mem.ro_unchanged_trans; red; intros.
-      erewrite <- Mem.loadbytes_push_stage; eauto.
-      erewrite <- Mem.loadbytes_record_frame; eauto.
-      rewrite <- Mem.support_push_stage_1; eauto.
-      rewrite Mem.perm_push_stage; eauto.
-    - red. intros.
-      erewrite Mem.perm_push_stage. 2:eauto.
-      erewrite Mem.perm_record_frame; eauto.
-    - red. intros.
-      erewrite Mem.perm_push_stage. 2:eauto.
-      erewrite Mem.perm_record_frame; eauto.
-    - eapply Mem.unchanged_on_trans.
-      eapply push_stage_unchanged_on.
-      eapply record_frame_unchanged_on. eauto.
-    - eapply Mem.unchanged_on_trans.
-      eapply push_stage_unchanged_on.
-      eapply record_frame_unchanged_on. eauto.
-    - eapply inject_incr_trans; eauto.
-    - red. intros. congruence.
-    - red. intros. congruence.
+  exploit injp_local_injp; eauto. intros INCR1.
+  assert (INCR2 : injp_acc_without_astack (injpw f' m' m2' B) (injpw f' m'' m2''' B'')). {
+    etransitivity. apply injp_acc_push_stage. instantiate (1 := B'). eapply injp_acc_record_frame; eauto.
   }
-  exploit SimplLocalsproof.injp_acc_no_astack_trans.
-    apply SimplLocalsproof.injpk_acc_remove_astack in INCR1.
+  exploit injp_acc_without_astack_trans.
+    apply injp_acc_local_remove_astack in INCR1.
     exact INCR1. exact INCR2.
   intros INCR12.
-  destruct w. constructor; try (inv INCR12; auto; fail).
+  destruct w. constructor. auto.
   apply Mem.astack_record_frame in H0 as (hd & tl & EQ1 & EQ2). simpl in EQ1. inv EQ1.
   rewrite EQ2. constructor. inv INCR1. auto.
   apply Mem.astack_record_frame in A'' as (hd' & tl' & EQ1' & EQ2'). simpl in EQ1'. inv EQ1'.
@@ -847,7 +819,7 @@ Opaque builtin_strength_reduction.
   econstructor. 3: eauto. all: eauto.
   eapply match_stackframes_incr; eauto.
   rewrite <- F, <- G. auto.
-  instantiate (1 := C). eapply SimplLocalsproof.injpk_injp; eauto.
+  instantiate (1 := C). eapply injp_local_injp; eauto.
   constructor; eauto.
   red. eauto using external_call_readonly.
   red. eauto using external_call_readonly.
@@ -886,7 +858,7 @@ Proof.
       instantiate (1 := Hm). rewrite <- H0. simpl.
       generalize (injpw f0 m01 m2 Hm). intros.
       assert (injp_acc i i) by reflexivity. inv H1.
-      constructor; auto; constructor.
+      constructor; auto; constructor; auto.
     }
     all : eauto. constructor.
     constructor. inv ASTK. auto.
@@ -905,7 +877,7 @@ Proof.
   eexists; split. constructor; eauto.
   constructor; eauto.
   eexists; split; eauto.
-  instantiate (1 := (injpw j m m' MEM)). inv INCR. constructor; auto.
+  instantiate (1 := (injpw j m m' MEM)). inv INCR. inv ACC. constructor; auto.
   inv ASTK1. auto. inv ASTK2. auto.
   econstructor; eauto. constructor; auto. constructor. eapply match_astack_size. eauto.
 Qed.
@@ -948,7 +920,7 @@ Proof.
       split. intro. congruence. intro. apply H in H1.
       apply Genv.find_invert_symbol in H1. cbn in *. congruence.
       inv GE. rewrite <- H5 in INCR.
-      inversion INCR. inversion UNMAPPED. eauto.
+      inv INCR. inv ACC. inv UNCHANGED1. eauto.
     }
     eexists. split. constructor. constructor; eauto.
     econstructor; eauto.
@@ -966,11 +938,11 @@ Proof.
       constructor. eapply match_astack_size. eauto.
     + unfold Genv.find_funct in H. congruence.
   - constructor; eauto.
-  - inv GE. rewrite <- H5 in INCR. inversion INCR. constructor.
+  - inv GE. rewrite <- H5 in INCR. inv INCR. inv ACC. constructor.
     eapply Genv.match_stbls_compose.
     eapply inj_of_bc_preserves_globals; eauto.
     apply MSTB.
-    inversion UNMAPPED. eauto. inversion UNREACH. eauto.
+    inversion UNCHANGED1. eauto. inversion UNCHANGED2. eauto.
   - inv H3. destruct H2 as (r3 & Hr1& Hr2). inv Hr1. inv H2. rename H4 into ROACC.
     destruct Hr2 as ([j' s1 s2 MEM''] & Hw' & Hr).
     inv Hw'.
@@ -1049,30 +1021,30 @@ Proof.
               destruct (j b1) as [[b2' d']|] eqn:Hjb1; eauto.
               assert (P1: Mem.perm m b1 ofs k p).
               {
-                inversion UNMAPPED. apply unchanged_on_perm; eauto.
+                inversion UNCHANGED1. apply unchanged_on_perm; eauto.
                 clear INCR. inv MEM. destruct (Mem.sup_dec b1 (Mem.support m)).
                 eauto. exploit mi_freeblocks0; eauto. congruence.
               }
-              inv H2. inversion UNREACH. eapply unchanged_on_perm; eauto.
+              inv H2. inversion UNCHANGED2. eapply unchanged_on_perm; eauto.
               clear INCR. inv MEM. eauto.
               eapply Mem.perm_inject; eauto.
            ++ intros. destruct (bc b1) eqn:BC; unfold j'' in H2; rewrite BC in H2; eauto.
               destruct (j b1) as [[b2' d']|] eqn:Hjb1; eauto.
               inv H2. inversion MEM. inv mi_inj. eapply mi_align0; eauto.
               red. intros. exploit H3; eauto.
-              intro. inv UNMAPPED. eapply unchanged_on_perm; eauto with mem.
+              intro. inv UNCHANGED1. eapply unchanged_on_perm; eauto with mem.
               eapply Mem.valid_block_inject_1; eauto.
            ++ intros. destruct (bc b1) eqn:BC; unfold j'' in H2; rewrite BC in H2.
               destruct (j b1) as [[b2' d']|] eqn:Hjb1; eauto.
               inv H2.
               assert (P1: Mem.perm m b1 ofs Cur Readable).
               {
-                inversion UNMAPPED. apply unchanged_on_perm; eauto.
+                inversion UNCHANGED1. apply unchanged_on_perm; eauto.
                 clear INCR. inv MEM. destruct (Mem.sup_dec b1 (Mem.support m)).
                 eauto. exploit mi_freeblocks0; eauto. congruence.
               }
               erewrite Mem.unchanged_on_contents; eauto.
-              inv UNREACH.
+              inv UNCHANGED2.
               rewrite unchanged_on_contents; eauto.
               2: eapply Mem.perm_inject; eauto. clear INCR. inv MEM. inv mi_inj.
               all: (eapply memval_inject_incr; eauto).
@@ -1083,7 +1055,7 @@ Proof.
           exfalso. apply H2. eapply Mem.unchanged_on_support; eauto.
         -- intros. unfold j'' in H2. destruct (bc b); eauto.
            destruct (j b) as [[b'' d']|] eqn:Hjb; eauto. inv H2.
-           inv UNMAPPED. exploit Mem.valid_block_inject_2; eauto. intro.
+           inv UNCHANGED1. exploit Mem.valid_block_inject_2; eauto. intro.
            eapply Mem.unchanged_on_support; eauto.
         -- red. intros.
            destruct (j''_INV _ _ _ H3) as [A|[A1 A2]];
@@ -1109,9 +1081,9 @@ Proof.
            destruct (Mem.perm_dec m'0 b1 ofs Max Nonempty); eauto.
            apply PERM1 in p0. left.
            inversion MEM. exploit mi_perm_inv0; eauto.
-           inv UNREACH. eapply unchanged_on_perm; eauto.
+           inv UNCHANGED2. eapply unchanged_on_perm; eauto.
            intros [A|B].
-           inv UNMAPPED. eapply unchanged_on_perm; eauto with mem. congruence.
+           inv UNCHANGED1. eapply unchanged_on_perm; eauto with mem. congruence.
            eapply Mem.valid_block_inject_1; eauto. 
       }
       assert (GLOB0 : incr_without_glob j j''). {
@@ -1125,7 +1097,7 @@ Proof.
       * eapply match_stackframes_incr; eauto.
       * congruence.
       * eauto.
-      * eapply SimplLocalsproof.injpk_injp; eauto. instantiate (1:= MEM'''). econstructor; eauto.
+      * eapply injp_local_injp; eauto. instantiate (1:= MEM'''). econstructor; eauto.
         eapply Mem.unchanged_on_implies; eauto.
         intros. red. red in H2. unfold compose_meminj, inj_of_bc.
         destruct (bc b); simpl; try (rewrite H2); eauto.
@@ -1227,7 +1199,7 @@ Proof.
       econstructor; eauto.
       * (*sound_stack*)
         eapply sound_stack_new_bound.
-        2: inversion UNMAPPED; eauto.
+        2: inversion UNCHANGED1; eauto.
         eapply sound_stack_exten.
         instantiate (1:= bc).
         eapply sound_stack_inv; eauto. intros.
@@ -1253,7 +1225,7 @@ Proof.
         -- apply SMTOP; auto.
         -- apply SMTOP; auto.
         -- red; simpl; intros. destruct (Mem.sup_dec b (Mem.support m)).
-           inv UNMAPPED. eauto.
+           inv UNCHANGED1. eauto.
            destruct (j' b) as [[bx deltax] | ] eqn:J'.
            eapply Mem.valid_block_inject_1; eauto.
            congruence.

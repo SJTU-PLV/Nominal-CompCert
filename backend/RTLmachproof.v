@@ -540,7 +540,7 @@ Proof.
     inv ACC. rewrite <- ASTK2. auto.
     etransitivity. eauto.
     inv ACC. econstructor; eauto.
-    inv UNMAPPED. eauto. inv UNREACH. eauto.
+    inv UNCHANGED1. eauto. inv UNCHANGED2. eauto.
 Qed.
 
 End PRESERVATION.

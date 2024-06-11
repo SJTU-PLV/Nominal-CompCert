@@ -3,7 +3,7 @@ Require Import CallconvAlgebra.
 Require Import CKLR.
 Require Import CKLRAlgebra.
 Require Import Inject.
-
+Require Import Separation.
 
 (** * Memory Injection with protection *)
 
@@ -47,14 +47,42 @@ Inductive injp_acc: relation injp_world :=
     (RO2: Mem.ro_unchanged m2 m2')
     (PERM1: injp_max_perm_decrease m1 m1')
     (PERM2: injp_max_perm_decrease m2 m2')
-    (UNMAPPED: Mem.unchanged_on (loc_unmapped f) m1 m1')
-    (UNREACH: Mem.unchanged_on (loc_out_of_reach f m1) m2 m2')
+    (UNCHANGED1: Mem.unchanged_on (loc_unmapped f) m1 m1')
+    (UNCHANGED2: Mem.unchanged_on (loc_out_of_reach f m1) m2 m2')
     (ASTK1: Mem.astack (Mem.support m1) = Mem.astack (Mem.support m1'))
     (ASTK2: Mem.astack (Mem.support m2) = Mem.astack (Mem.support m2'))
     (INCR: inject_incr f f')
     (SEP: inject_separated f f' m1 m2)
     (GLOB: incr_without_glob f f'),
     injp_acc (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+
+Inductive injp_acc_without_astack: relation injp_world :=
+  injp_acc_without_astack_intro: forall f m1 m2 Hm f' m1' m2' Hm'
+    (RO1: Mem.ro_unchanged m1 m1')
+    (RO2: Mem.ro_unchanged m2 m2')
+    (PERM1: injp_max_perm_decrease m1 m1')
+    (PERM2: injp_max_perm_decrease m2 m2')
+    (UNCHANGED1: Mem.unchanged_on (loc_unmapped f) m1 m1')
+    (UNCHANGED2: Mem.unchanged_on (loc_out_of_reach f m1) m2 m2')
+    (INCR: inject_incr f f')
+    (SEP: inject_separated f f' m1 m2)
+    (GLOB: incr_without_glob f f'),
+    injp_acc_without_astack (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
+
+Inductive injp_local_match_astack: nat -> stackadt -> stackadt -> Prop :=
+  | injp_local_match_astack_zero: forall a,
+      injp_local_match_astack 0 a a
+  | injp_local_match_astack_succ: forall n a1 hd2 tl2,
+      injp_local_match_astack n a1 tl2 ->
+      injp_local_match_astack (S n) a1 (hd2 :: tl2)
+.
+
+Inductive injp_acc_local: nat -> relation injp_world :=
+  injp_acc_local_intro: forall k f m1 m2 Hm f' m1' m2' Hm'
+    (ACC: injp_acc_without_astack (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm'))
+    (ASTK1: injp_local_match_astack k (Mem.astack (Mem.support m1)) (Mem.astack (Mem.support m1')))
+    (ASTK2: injp_local_match_astack k (Mem.astack (Mem.support m2)) (Mem.astack (Mem.support m2'))),
+    injp_acc_local k (injpw f m1 m2 Hm) (injpw f' m1' m2' Hm').
 
 Definition injp_mi :=
   fun '(injpw f _ _ _) => f.
@@ -106,6 +134,59 @@ Proof.
   - eauto.
 Qed.
 
+Instance injp_acc_without_astack_trans: Transitive injp_acc_without_astack.
+Proof.
+  intros w1 w2 w3 H12 H23.
+  destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hr1 Hr2 Hp1 Hp2 H1 H2 Hf Hs Hg].
+  inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hr1' Hr2' Hp1' Hp2' H1' H2' Hf' Hs' Hg']; subst.
+  constructor.
+  + red. intros. eapply Hr1; eauto. eapply Hr1'; eauto.
+    inversion H1. apply unchanged_on_support; eauto.
+    intros. intro. eapply H3; eauto.
+  + red. intros. eapply Hr2; eauto. eapply Hr2'; eauto.
+    inversion H2. apply unchanged_on_support; eauto.
+    intros. intro. eapply H3; eauto.
+  + intros b ofs p Hb ?.
+    eapply Hp1, Hp1'; eauto using Mem.valid_block_unchanged_on.
+  + intros b ofs p Hb ?.
+    eapply Hp2, Hp2'; eauto using Mem.valid_block_unchanged_on.
+  + eapply mem_unchanged_on_trans_implies_valid; eauto.
+    unfold loc_unmapped.
+    intros b1 _ Hb Hb1.
+    destruct (f' b1) as [[b2 delta] | ] eqn:Hb'; eauto.
+    edestruct Hs; eauto. contradiction.
+  + eapply mem_unchanged_on_trans_implies_valid; eauto.
+    unfold loc_out_of_reach.
+    intros b2 ofs2 Hptr2 Hb2 b1 delta Hb' Hperm.
+    destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
+    * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
+        by (eapply Hf in Hb; split; congruence); subst.
+      eapply Hptr2; eauto.
+      eapply Hp1; eauto. eapply Mem.valid_block_inject_1; eauto.
+    * edestruct Hs; eauto.
+  + eapply inject_incr_trans; eauto.
+  + intros b1 b2 delta Hb Hb''.
+    destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
+    * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
+        by (eapply Hf' in Hb'; split; congruence); subst.
+      eapply Hs; eauto.
+    * edestruct Hs'; eauto.
+      intuition eauto using Mem.valid_block_unchanged_on.
+  + eauto using incr_without_glob_trans.
+Qed.
+
+Remark injp_acc_local_remove_astack:
+  forall k w1 w2,
+    injp_acc_local k w1 w2 ->
+    injp_acc_without_astack w1 w2.
+Proof. intros. inv H. auto. Qed.
+
+Remark injp_acc_remove_astack:
+  forall w1 w2,
+    injp_acc w1 w2 ->
+    injp_acc_without_astack w1 w2.
+Proof. intros. inv H. constructor; auto. Qed.
+
 Global Instance injp_acc_preo:
   PreOrder injp_acc.
 Proof.
@@ -119,44 +200,9 @@ Proof.
     + intros b ofs. congruence.
     + reflexivity.
   - intros w1 w2 w3 H12 H23.
-    destruct H12 as [f m1 m2 Hm f' m1' m2' Hm' Hr1 Hr2 Hp1 Hp2 H1 H2 Ha1 Ha2 Hf Hs].
-    inversion H23 as [? ? ? ? f'' m1'' m2'' Hm'' Hr1' Hr2' Hp1' Hp2' H1' H2' Ha1' Ha2' Hf' Hs']; subst.
-    constructor.
-    + red. intros. eapply Hr1; eauto. eapply Hr1'; eauto.
-      inversion H1. apply unchanged_on_support; eauto.
-      intros. intro. eapply H3; eauto.
-    + red. intros. eapply Hr2; eauto. eapply Hr2'; eauto.
-      inversion H2. apply unchanged_on_support; eauto.
-      intros. intro. eapply H3; eauto.
-    + intros b ofs p Hb ?.
-      eapply Hp1, Hp1'; eauto using Mem.valid_block_unchanged_on.
-    + intros b ofs p Hb ?.
-      eapply Hp2, Hp2'; eauto using Mem.valid_block_unchanged_on.
-    + eapply mem_unchanged_on_trans_implies_valid; eauto.
-      unfold loc_unmapped.
-      intros b1 _ Hb Hb1.
-      destruct (f' b1) as [[b2 delta] | ] eqn:Hb'; eauto.
-      edestruct Hs; eauto. contradiction.
-    + eapply mem_unchanged_on_trans_implies_valid; eauto.
-      unfold loc_out_of_reach.
-      intros b2 ofs2 Hptr2 Hb2 b1 delta Hb' Hperm.
-      destruct (f b1) as [[xb2 xdelta] | ] eqn:Hb.
-      * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
-          by (eapply Hf in Hb; split; congruence); subst.
-        eapply Hptr2; eauto.
-        eapply Hp1; eauto. eapply Mem.valid_block_inject_1; eauto.
-      * edestruct Hs; eauto.
-    + rewrite Ha1, Ha1'. auto.
-    + rewrite Ha2, Ha2'. auto.
-    + eapply inject_incr_trans; eauto.
-    + intros b1 b2 delta Hb Hb''.
-      destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
-      * assert (xb2 = b2 /\ xdelta = delta) as [? ?]
-          by (eapply Hf' in Hb'; split; congruence); subst.
-        eapply Hs; eauto.
-      * edestruct Hs'; eauto.
-        intuition eauto using Mem.valid_block_unchanged_on.
-    + eauto using incr_without_glob_trans.
+    exploit injp_acc_without_astack_trans.
+      1,2:apply injp_acc_remove_astack. exact H12. exact H23.
+    intros H13. inv H13. constructor; auto; inv H12; inv H23; congruence.
 Qed.
 
 Global Instance injp_mi_acc:
@@ -290,6 +336,135 @@ Proof.
   apply A. destruct chunk; simpl; lia.
 Qed.
 
+Lemma injp_local_injp:
+  forall k w1 w2 w3,
+    injp_acc_local k w1 w2 ->
+    injp_acc w2 w3 ->
+    injp_acc_local k w1 w3.
+Proof.
+  intros ? ? ? ? H12 H23.
+  apply injp_acc_local_remove_astack in H12 as H12'.
+  apply injp_acc_remove_astack in H23 as H23'.
+  exploit injp_acc_without_astack_trans. exact H12'. eauto. intros H13'.
+  destruct w1, w3. constructor. inv H13'. econstructor; eauto.
+  all:clear H12' H13' H23'; inv H12; inv H23.
+  rewrite <- ASTK0. auto.
+  rewrite <- ASTK3. auto.
+Qed.
+
+Lemma injp_acc_pop_stage:
+  forall m m' tm tm' j Hm Hm',
+    Mem.pop_stage m = Some m' ->
+    Mem.pop_stage tm = Some tm' ->
+    injp_acc_without_astack (injpw j m tm Hm) (injpw j m' tm' Hm').
+Proof.
+  intros.
+  constructor; auto.
+  - unfold Mem.ro_unchanged. intros. erewrite <- Mem.loadbytes_pop_stage; eauto.
+  - unfold Mem.ro_unchanged. intros. erewrite <- Mem.loadbytes_pop_stage; eauto.
+  - unfold injp_max_perm_decrease. intros. erewrite Mem.perm_pop_stage; eauto.
+  - unfold injp_max_perm_decrease. intros. erewrite Mem.perm_pop_stage; eauto.
+  - constructor; intros.
+    + apply Mem.sup_include_pop_stage. auto.
+    + apply Mem.perm_pop_stage. auto.
+    + unfold Mem.pop_stage in H. destr_in H. inv H. simpl. auto.
+  - constructor; intros.
+    + apply Mem.sup_include_pop_stage. auto.
+    + apply Mem.perm_pop_stage. auto.
+    + unfold Mem.pop_stage in H0. destr_in H0. inv H0. simpl. auto.
+  - unfold inject_separated. intros. congruence.
+  - reflexivity.
+Qed.
+
+Lemma injp_acc_push_stage:
+  forall m tm j Hm Hm',
+    injp_acc_without_astack (injpw j m tm Hm) (injpw j (Mem.push_stage m) (Mem.push_stage tm) Hm').
+Proof.
+  constructor; try (red; intros).
+  - erewrite <- Mem.loadbytes_push_stage; eauto.
+  - erewrite <- Mem.loadbytes_push_stage; eauto.
+  - erewrite Mem.perm_push_stage; eauto.
+  - erewrite Mem.perm_push_stage; eauto.
+  - eapply push_stage_unchanged_on.
+  - eapply push_stage_unchanged_on.
+  - auto.
+  - congruence.
+  - congruence.
+Qed.
+
+Lemma injp_acc_record_frame:
+  forall m f m' tm tf tm' j Hm Hm',
+    Mem.record_frame m f = Some m' ->
+    Mem.record_frame tm tf = Some tm' ->
+    injp_acc_without_astack (injpw j m tm Hm) (injpw j m' tm' Hm').
+Proof.
+  constructor; try (red; intros).
+  - erewrite <- Mem.loadbytes_record_frame; eauto.
+  - erewrite <- Mem.loadbytes_record_frame; eauto.
+  - erewrite Mem.perm_record_frame; eauto.
+  - erewrite Mem.perm_record_frame; eauto.
+  - eapply record_frame_unchanged_on; eauto.
+  - eapply record_frame_unchanged_on; eauto.
+  - auto.
+  - congruence.
+  - congruence.
+Qed.
+
+Lemma injp_acc_local_incr :
+  forall k k' f0 wm wtm Htm j1 m1 tm1 Hm1 j2 m2 tm2 Hm2,
+    injp_acc_local k (injpw f0 wm wtm Htm) (injpw j1 m1 tm1 Hm1) ->
+    Mem.ro_unchanged m1 m2 ->
+    Mem.ro_unchanged tm1 tm2 ->
+    injp_max_perm_decrease m1 m2 ->
+    injp_max_perm_decrease tm1 tm2 ->
+    inject_incr j1 j2 ->
+    incr_without_glob j1 j2 ->
+    inject_separated f0 j2 wm wtm ->
+    Mem.unchanged_on (fun b ofs => Mem.valid_block wm b /\ loc_unmapped f0 b ofs) m1 m2 ->
+    Mem.unchanged_on (fun b ofs => Mem.valid_block wtm b /\ loc_out_of_reach f0 wm b ofs) tm1 tm2 ->
+    injp_local_match_astack k' (Mem.astack (Mem.support wm)) (Mem.astack (Mem.support m2)) ->
+    injp_local_match_astack k' (Mem.astack (Mem.support wtm)) (Mem.astack (Mem.support tm2)) ->
+    injp_acc_local k' (injpw f0 wm wtm Htm) (injpw j2 m2 tm2 Hm2).
+Proof.
+  intros. inv H. inv ACC.
+  apply Mem.unchanged_on_support in UNCHANGED1 as SUP.
+  apply Mem.unchanged_on_support in UNCHANGED2 as TSUP.
+  constructor; [constructor| |].
+  - red. intros. eapply RO1; eauto. eapply H0; eauto.
+    eapply SUP; eauto. intros. intro. eapply H12; eauto.
+  - red. intros. eapply RO2; eauto. eapply H1; eauto.
+    eapply TSUP; eauto. intros. intro. eapply H12; eauto.
+  - eapply max_perm_decrease_trans; eauto.
+  - eapply max_perm_decrease_trans; eauto.
+  - inversion UNCHANGED1. inversion H7.
+    constructor; eauto.
+    intros. etransitivity; eauto.
+    eapply unchanged_on_perm0; eauto.
+    unfold Mem.valid_block in *. eauto.
+    intros. etransitivity. eapply unchanged_on_contents0.
+    split; eauto.
+    eapply Mem.perm_valid_block; eauto.
+    eapply unchanged_on_perm; eauto.
+    eapply Mem.perm_valid_block; eauto.
+    eauto.
+  - inversion UNCHANGED2. inversion H8.
+    constructor; eauto.
+    intros. etransitivity; eauto.
+    eapply unchanged_on_perm0; eauto.
+    unfold Mem.valid_block in *. eauto.
+    intros. etransitivity. eapply unchanged_on_contents0.
+    split; eauto.
+    eapply Mem.perm_valid_block; eauto.
+    eapply unchanged_on_perm; eauto.
+    eapply Mem.perm_valid_block; eauto.
+    eauto.
+  - eapply inject_incr_trans; eauto.
+  - eauto.
+  - eauto using incr_without_glob_trans.
+  - auto.
+  - auto.
+Qed.
+
 (** ** The definition of injp *)
 
 Program Definition injp: cklr :=
@@ -318,8 +493,8 @@ Next Obligation. (* ~> vs. match_stbls *)
   - eapply Genv.match_stbls_incr; eauto.
     intros b1 b2 delta Hb Hb'. specialize (SEP b1 b2 delta Hb Hb').
     unfold Mem.valid_block in SEP. split; inv SEP; eauto.
-  - apply Mem.unchanged_on_support in UNMAPPED. eauto.
-  - apply Mem.unchanged_on_support in UNREACH. eauto.
+  - apply Mem.unchanged_on_support in UNCHANGED1. eauto.
+  - apply Mem.unchanged_on_support in UNCHANGED2. eauto.
 Qed.
 
 Next Obligation. (* match_stbls vs. Genv.match_stbls *)
