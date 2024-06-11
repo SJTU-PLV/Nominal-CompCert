@@ -1259,7 +1259,8 @@ Proof.
       red. eauto using external_call_readonly.
       red. intros. eapply external_call_max_perm; eauto.
       red. intros. eapply external_call_max_perm; eauto.
-
+      eapply Mem.unchanged_on_tl_big. auto.
+      eapply Mem.unchanged_on_tl_big. auto.
 - (* Icond *)
   destruct (valnum_regs approx!!pc args) as [n1 vl] eqn:?.
   elim SAT; intros valu1 NH1.
@@ -1321,6 +1322,8 @@ Proof.
   red. eauto using external_call_readonly.
   red. intros. eapply external_call_max_perm; eauto.
   red. intros. eapply external_call_max_perm; eauto.
+  eapply Mem.unchanged_on_tl_big. auto.
+  eapply Mem.unchanged_on_tl_big. auto.
   
 - (* return *)
   inv STACK.

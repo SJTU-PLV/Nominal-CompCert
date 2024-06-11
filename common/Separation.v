@@ -50,7 +50,7 @@ notion of splitting a memory state into two disjoint halves).  *)
 Record massert : Type := {
   m_pred : mem -> Prop;
   m_footprint: block -> Z -> Prop;
-  m_invar: forall m m', m_pred m -> Mem.unchanged_on_t m_footprint m m' -> m_pred m';
+  m_invar: forall m m', m_pred m -> Mem.unchanged_on_tl m_footprint m m' -> m_pred m';
   m_valid: forall m b ofs, m_pred m -> m_footprint b ofs -> Mem.valid_block m b
 }.
 
@@ -346,9 +346,9 @@ Proof.
 - split; auto. split; auto. intros.
   apply Mem.perm_implies with Freeable; auto with mem.
   eapply Mem.perm_alloc_2; eauto.
-- apply (m_invar P) with m; auto. constructor.
+- apply (m_invar P) with m; auto. split. 
   erewrite (Mem.support_alloc _ _ _ _ _ H).
-  red. simpl. rewrite Mem.update_list_length. auto.
+  constructor; simpl; auto. rewrite Mem.update_list_length. auto.
   eapply Mem.alloc_unchanged_on; eauto.
 - red; simpl. intros. destruct H3; subst b0.
   eelim Mem.fresh_block_alloc; eauto. eapply (m_valid P); eauto.
@@ -477,7 +477,7 @@ Proof.
 - eapply Mem.store_valid_access_1; eauto.
 - exists (Val.load_result chunk v); split; auto. eapply Mem.load_store_same; eauto.
 - apply (m_invar P) with m; auto. constructor. erewrite (Mem.support_store _ _ _ _ _ _ STORE).
-  red. auto.
+  auto.
   eapply Mem.store_unchanged_on; eauto.
   intros; red; intros. apply (C b i); simpl; auto.
 Qed.
@@ -652,8 +652,8 @@ Qed.
 Lemma minjection_incr j m1 m2 j' m1' m2' P:
   m2 |= minjection j m1 ** P ->
   Mem.inject j' m1' m2' ->
-  Mem.unchanged_on_t (loc_unmapped j) m1 m1' ->
-  Mem.unchanged_on_t (loc_out_of_reach j m1) m2 m2' ->
+  Mem.unchanged_on_tl (loc_unmapped j) m1 m1' ->
+  Mem.unchanged_on_tl (loc_out_of_reach j m1) m2 m2' ->
   inject_incr j j' ->
   inject_separated j j' m1 m2 ->
   (forall b ofs p,
@@ -893,7 +893,7 @@ Lemma external_call_parallel_rule:
   exists j' vres2 m2',
      external_call ef ge2 vargs2 m2 t vres2 m2'
   /\ Val.inject j' vres1 vres2
-  /\ Mem.unchanged_on_t (loc_unmapped j) m1 m1'
+  /\ Mem.unchanged_on_tl (loc_unmapped j) m1 m1'
   /\ m2' |= minjection j' m1' ** globalenv_inject ge1 ge2 j' m1' ** P
   /\ inject_incr j j'
   /\ inject_separated j j' m1 m2.

@@ -597,6 +597,8 @@ Opaque builtin_strength_reduction.
     red. eauto using external_call_readonly.
     red. intros. eapply external_call_max_perm; eauto.
     red. intros. eapply external_call_max_perm; eauto.
+    eapply Mem.unchanged_on_tl_big. auto.
+    eapply Mem.unchanged_on_tl_big. auto.
     unfold m01 in *. inv INCR. eapply ro_acc_trans. eauto.
     eapply ro_acc_external; eauto.
   }
@@ -697,6 +699,8 @@ Opaque builtin_strength_reduction.
   red. eauto using external_call_readonly.
   red. intros. eapply external_call_max_perm; eauto.
   red. intros. eapply external_call_max_perm; eauto.
+  eapply Mem.unchanged_on_tl_big. auto.
+  eapply Mem.unchanged_on_tl_big. auto.
   eapply ro_acc_trans. eauto. constructor.
   red. intros. eapply external_call_readonly; eauto.
   eapply external_call_support; eauto.

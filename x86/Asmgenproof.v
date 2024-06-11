@@ -783,7 +783,7 @@ Opaque loadind.
   eapply exec_step_builtin. eauto. eauto.
   eapply find_instr_tail; eauto.
   erewrite <- sp_val by eauto.
-  eauto. eauto. eauto.
+  eauto. eauto. eauto. destruct D.
   assert (Mem.sup_include (Mem.support m'0) (Mem.support m2'))
     by eauto using Mem.unchanged_on_support.
   econstructor; eauto.
@@ -1018,7 +1018,7 @@ Transparent destroyed_at_function_entry.
   intros [res' [m2' [P [Q [R S]]]]].
   left; econstructor; split.
   apply plus_one. eapply exec_step_external; eauto.
-  inv ATPC. auto.
+  inv ATPC. auto. destruct S.
   assert (Mem.sup_include (Mem.support m'0) (Mem.support m2'))
     by eauto using Mem.unchanged_on_support.
   econstructor; eauto.

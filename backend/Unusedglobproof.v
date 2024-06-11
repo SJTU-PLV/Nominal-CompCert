@@ -1107,8 +1107,8 @@ Lemma external_call_inject:
     external_call ef tge vargs' m1' t vres' m2'
     /\ Val.inject f' vres vres'
     /\ Mem.inject f' m2 m2'
-    /\ Mem.unchanged_on_t (loc_unmapped f) m1 m2
-    /\ Mem.unchanged_on_t (loc_out_of_reach f m1) m1' m2'
+    /\ Mem.unchanged_on_tl (loc_unmapped f) m1 m2
+    /\ Mem.unchanged_on_tl (loc_out_of_reach f m1) m1' m2'
     /\ inject_incr f f'
     /\ inject_separated f f' m1 m1'.
 Proof.

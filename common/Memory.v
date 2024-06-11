@@ -5432,10 +5432,21 @@ Definition thread_internal_P (m : mem) :=
 Definition thread_external_P (m: mem) :=
   fun b ofs => P b ofs /\ fst b <> tid (support m).
 
-Record unchanged_on_t (m_before m_after: mem) : Prop := mk_unchanged_on_t {
-  unchanged_on_thread_t:
+(** Thread-local accessbility, no more threads are introduced *)
+(** can be used for builtin calls in Events.v *)
+Record unchanged_on_tl (m_before m_after: mem) : Prop := mk_unchanged_on_tl {
+  unchanged_on_thread_tl:
     match_sup (support m_before) (support m_after);
-  unchanged_on_t':
+  unchanged_on_tl':
+    unchanged_on P m_before m_after
+}.
+
+(** A general big_step accessbility, more threads can be introduced. 
+     *)
+Record unchanged_on_big (m_before m_after: mem) : Prop := mk_unchanged_on_big {
+  unchanged_on_thread_big:
+    tid (support m_before) = tid (support m_after);
+  unchanged_on_big':
     unchanged_on P m_before m_after
 }.
 
@@ -5455,81 +5466,90 @@ Record unchanged_on_e (m_before m_after: mem) : Prop := mk_unchanged_on_e {
     unchanged_on (thread_internal_P m_before) m_before m_after
 }.
 
+
 Lemma unchanged_on_refl_i: 
   forall m, unchanged_on_i m m.
 Proof.
   intros; constructor. apply match_sup_refl. apply unchanged_on_refl.
 Qed.
 
-Lemma unchanged_on_refl_t: 
-  forall m, unchanged_on_t m m.
+Lemma unchanged_on_refl_tl: 
+  forall m, unchanged_on_tl m m.
 Proof.
   intros; constructor. apply match_sup_refl. apply unchanged_on_refl.
 Qed.
 
-Lemma store_unchanged_on_t:
+Lemma store_unchanged_on_tl:
   forall chunk m b ofs v m',
   store chunk m b ofs v = Some m' ->
   (forall i, ofs <= i < ofs + size_chunk chunk -> ~ P b i) ->
-  unchanged_on_t m m'.
+  unchanged_on_tl m m'.
 Proof.
   intros; constructor; intros.
   - rewrite (support_store _ _ _ _ _ _ H); eauto. apply match_sup_refl.
   - eapply store_unchanged_on; eauto.
 Qed.
 
-Lemma storebytes_unchanged_on_t:
+Lemma storebytes_unchanged_on_tl:
   forall m b ofs bytes m',
   storebytes m b ofs bytes = Some m' ->
   (forall i, ofs <= i < ofs + Z.of_nat (length bytes) -> ~ P b i) ->
-  unchanged_on_t m m'.
+  unchanged_on_tl m m'.
 Proof.
   intros; constructor; intros.
 - rewrite (support_storebytes _ _ _ _ _ H). red. auto.
 - eapply storebytes_unchanged_on; eauto.
 Qed.
 
-Lemma alloc_unchanged_on_t:
+Lemma alloc_unchanged_on_tl:
   forall m lo hi m' b,
   alloc m lo hi = (m', b) ->
-  unchanged_on_t m m'.
+  unchanged_on_tl m m'.
 Proof.
   intros; constructor; intros.
 - rewrite (support_alloc _ _ _ _ _ H). red. simpl. rewrite update_list_length. auto.
 - eapply alloc_unchanged_on; eauto.
 Qed.
 
-Lemma free_unchanged_on_t:
+Lemma free_unchanged_on_tl:
   forall m b lo hi m',
   free m b lo hi = Some m' ->
   (forall i, lo <= i < hi -> ~ P b i) ->
-  unchanged_on_t m m'.
+  unchanged_on_tl m m'.
 Proof.
   intros; constructor; intros.
 - rewrite (support_free _ _ _ _ _ H). apply match_sup_refl.
 - eapply free_unchanged_on; eauto. 
 Qed.
 
-Lemma free_unchanged_on'_t:
+Lemma free_unchanged_on'_tl:
   forall m b lo hi m',
   free m b lo hi = Some m' ->
   (forall i, lo <= i < hi -> ~ P b i) ->
-  unchanged_on_t m' m.
+  unchanged_on_tl m' m.
 Proof.
   intros; constructor; intros.
 - rewrite (support_free _ _ _ _ _ H). apply match_sup_refl.
 - eapply free_unchanged_on'; eauto.
 Qed.
 
-Lemma drop_perm_unchanged_on_t:
+Lemma drop_perm_unchanged_on_tl:
   forall m b lo hi p m',
   drop_perm m b lo hi p = Some m' ->
   (forall i, lo <= i < hi -> ~ P b i) ->
-  unchanged_on_t m m'.
+  unchanged_on_tl m m'.
 Proof.
   intros; constructor; intros.
 - rewrite (support_drop _ _ _ _ _ _ H). apply match_sup_refl.
 - eapply drop_perm_unchanged_on; eauto.
+Qed.
+
+Lemma unchanged_on_tl_big : forall m1 m2,
+    unchanged_on_tl m1 m2 ->
+    unchanged_on_big m1 m2.
+Proof.
+  intros. inv H. constructor; auto.
+  inv unchanged_on_thread_tl0. auto.
 Qed.
 
 End UNCHANGED_ON_THREAD.
@@ -7445,5 +7465,5 @@ Global Hint Resolve
   Mem.valid_access_free_inv_1
   Mem.valid_access_free_inv_2
   Mem.unchanged_on_refl
-  Mem.unchanged_on_refl_t
+  Mem.unchanged_on_refl_tl
 : mem.

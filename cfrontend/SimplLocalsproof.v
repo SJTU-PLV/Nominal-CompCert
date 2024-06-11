@@ -2280,11 +2280,12 @@ Lemma injp_acc_local :
     injp_max_perm_decrease tm1 tm2 ->
     inject_incr j1 j2 ->
     inject_separated f0 j2 wm wtm ->
-    Mem.unchanged_on_t (fun b ofs => Mem.valid_block wm b /\ loc_unmapped f0 b ofs) m1 m2 ->
-    Mem.unchanged_on_t (fun b ofs => Mem.valid_block wtm b /\ loc_out_of_reach f0 wm b ofs) tm1 tm2 ->
+    Mem.unchanged_on_big (fun b ofs => Mem.valid_block wm b /\ loc_unmapped f0 b ofs) m1 m2 ->
+    Mem.unchanged_on_big (fun b ofs => Mem.valid_block wtm b /\ loc_out_of_reach f0 wm b ofs) tm1 tm2 ->
     injp_acc (injpw f0 wm wtm Htm) (injpw j2 m2 tm2 Hm2).
 Proof.
-  intros.  inv H. destruct H18 as [S18 H18]. destruct H19 as [S19 H19].
+  intros.  inv H.
+  destruct H18 as [S18 H18]. destruct H19 as [S19 H19].
   destruct H6 as [S6 H6]. destruct H7 as [S7 H7].
   apply Mem.unchanged_on_support in H18 as SUP.
   apply Mem.unchanged_on_support in H19 as TSUP.
@@ -2295,7 +2296,7 @@ Proof.
     eapply TSUP; eauto. intros. intro. eapply H9; eauto.
   - eapply max_perm_decrease_trans; eauto.
   - eapply max_perm_decrease_trans; eauto.
-  - split. eauto. inversion H18. inversion H6.
+  - inversion H18. inversion H6. split. congruence.
     constructor; eauto.
     intros. etransitivity; eauto.
     eapply unchanged_on_perm0; eauto.
@@ -2306,7 +2307,7 @@ Proof.
     eapply unchanged_on_perm; eauto.
     eapply Mem.perm_valid_block; eauto.
     eauto.
-  - split. eauto. inversion H19. inversion H7.
+  - inversion H19. inversion H7. split. congruence.
     constructor; eauto.
     intros. etransitivity; eauto.
     eapply unchanged_on_perm0; eauto.
@@ -2428,7 +2429,7 @@ Proof.
     subst b. exfalso. inversion MENV.
     eapply me_initial0; eauto. unfold wm1. rewrite Hw.
     apply H.
-  - eauto with mem.
+  - split; eauto with mem.
   }
   eauto with compat.
   erewrite assign_loc_support; eauto. eauto.
@@ -2611,11 +2612,13 @@ Proof.
   inv MENV; eapply Mem.sup_include_trans. eauto. eauto.
   instantiate (1:= R).
   etransitivity; eauto.
-  constructor; eauto.
+  constructor; eauto with mem.
   red. eauto using external_call_readonly.
   red. eauto using external_call_readonly.
   red. intros. eapply external_call_max_perm; eauto.
   red. intros. eapply external_call_max_perm; eauto.
+  apply Mem.unchanged_on_tl_big. auto.
+  apply Mem.unchanged_on_tl_big. auto.
   eauto with compat.
   eapply Mem.sup_include_trans; eauto. eapply external_call_support; eauto.
   eapply Mem.sup_include_trans; eauto. eapply external_call_support; eauto.
@@ -2852,6 +2855,8 @@ Proof.
   red. eauto using external_call_readonly.
   red. eauto using external_call_max_perm; eauto.
   red. eauto using external_call_max_perm; eauto.
+  apply Mem.unchanged_on_tl_big. auto.
+  apply Mem.unchanged_on_tl_big. auto.
 
 (* return *)
   specialize (MCONT (cenv_for f)). inv MCONT.

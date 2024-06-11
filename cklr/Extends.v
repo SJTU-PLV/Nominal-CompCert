@@ -353,7 +353,7 @@ Proof.
     repeat apply conj.
     + constructor; eauto.
     + constructor; eauto.
-      * destruct H13. split. auto. eapply Mem.unchanged_on_implies; eauto.
+      * inv H13. split. auto. eapply Mem.unchanged_on_implies; eauto.
         intros. apply loc_unmapped_dom; eauto.
       * rewrite <- (meminj_dom_compose f).
         rauto.
