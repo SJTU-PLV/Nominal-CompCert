@@ -215,6 +215,17 @@ Definition sup_In(b:block)(s:sup) : Prop :=
   | Global id => In id (global s)
   end.
 
+Definition sup_blocks (s : sup) : list block :=
+  (map Stack s.(stack)) ++ (map Global s.(global)).
+
+Remark sup_in_blocks: forall b s, sup_In b s <-> In b (sup_blocks s).
+Proof.
+  unfold sup_blocks. intros. rewrite in_app, ! in_map_iff.
+  split; destruct b; simpl; intros.
+  1,2:eauto.
+  1,2:destruct H; destruct H as [? []]; congruence.
+Qed.
+
 Definition empty_in: forall b, ~ sup_In b sup_empty.
 Proof.
   intros. destruct b; simpl in *; try congruence.
