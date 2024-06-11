@@ -4,6 +4,13 @@ Require Import Smallstep SmallstepClosed.
 Require Import ValueAnalysis.
 Require Import Compiler.
 
+Lemma inject_Vnullptr_forward : forall j v,
+    Val.inject j Vnullptr v -> v = Vnullptr.
+Proof.
+  intros. unfold Vnullptr in *.
+  destruct Archi.ptr64; inv H; eauto.
+Qed.
+  
 Section CLOSE_COMPCERT.
 Import Closed.
 
@@ -51,6 +58,7 @@ Let rs0 :=
     # RA <- Vnullptr
     # RSP <- Vnullptr.
 Let query2 := (rs0, m0_asm).
+
 Inductive reply2: int -> (regset * mem) -> Prop :=
   | reply2_intro: forall r rs m,
       rs#PC = Vnullptr ->
@@ -170,18 +178,20 @@ Proof.
   eapply closed; eauto.
 Qed.
 
+(*
 Lemma reply_sound2: forall s r, Smallstep.final_state lts2' s r -> exists i, reply2 i r.
 Proof.
   unfold lts2', s2, se2. simpl. intros. destruct s.
   inversion H. eexists. econstructor.
   admit.
-Admitted.
+Abort
+*)
 (*
 1. rs#RAX should be a integer
 2. rs#PC should be Vnullptr
-
  *)
 
+(*
 Lemma romem_for_symtbl_sound:
   ValueAnalysis.romem_for_symtbl se = ValueAnalysis.romem_for p.
 Proof.
@@ -189,6 +199,7 @@ Proof.
   unfold Genv.symboltbl.
   destruct Hinitial_state_c as (INIT & SYM & FPTR).
 Abort.
+ *)
 
 Lemma sound_memory_ro: ValueAnalysis.sound_memory_ro se m0_c.
 Proof.
@@ -258,6 +269,7 @@ Proof.
   rewrite <- m0_same at 2. constructor.
 Admitted. (*ok, just nullptr issue*)
 
+
 Lemma Hmatch_reply1 : forall r r1 r2,
     match_reply ccB wB r1 r2 ->
     reply1 r r1 -> reply2 r r2.
@@ -268,7 +280,10 @@ Proof.
   destruct r2. inv Hr.
   constructor.
   (*r0 PC -> rs' PC -> rs0 RA : the initial return address should be a valid pointer*)
-  admit.
+  specialize (H1 PC).
+  rewrite H13 in  H1. unfold rs0 in H1.
+  rewrite Pregmap.gso in H1; try congruence. rewrite Pregmap.gss in H1.
+  eapply inject_Vnullptr_forward; eauto.
   (*r0 RAX -> rs' RAX -> Vint r via the signature sg*)
   assert (tres = rs' RAX).
   { unfold tres. unfold sg. unfold CA.rs_getpair.
@@ -277,8 +292,9 @@ Proof.
   inv H9. generalize (H1 RAX).
   intro. simpl in H4. rewrite <- H3 in H4. rewrite <- H6 in H4.
   inv H4. reflexivity.
-Admitted.
+Qed.
 
+(*
 Lemma Hmatch_reply2 : forall r r1 r2,
     match_reply ccB wB r1 r2 ->
     reply2 r r2 ->
@@ -295,8 +311,9 @@ Proof.
   unfold tres. rewrite H3. simpl. reflexivity.
   rewrite H4 in H8.
   admit. (*problem: res can be Vundef*)
-Admitted.
-
+Abort.
+ *)
+(*
 Lemma Hmatch_reply : forall r r1 r2,
   match_reply ccB wB r1 r2 ->
   reply1 r r1 <-> reply2 r r2.
@@ -339,8 +356,8 @@ Proof.
   subst tres. destr_in H14; simpl in H14; rewrite <- H8 in H14; inv H14.
   admit.
   admit.
-Admitted.
-
+Abort.
+*)
 Lemma Hmatch_senv : match_senv ccB wB se1 se2.
 Proof.
   unfold ccB, cc_compcert, se1, se2. simpl.
@@ -375,6 +392,7 @@ Proof.
   apply c_semantic_preservation, transf_c_program_match. auto.
 Qed.
 
+(*
 Lemma compcert_close_sound :
   backward_simulation (L1 query1 reply1 s1 se1) (L2 query2 reply2 s2 se2).
 Proof.
@@ -382,13 +400,13 @@ Proof.
     closed2, reply_sound2, Hvalid, Hmatch_query, Hmatch_senv, open_simulation.
   intros. eapply Hmatch_reply2; eauto.
 Qed.
-
+*)
 Lemma compcert_close_sound_forward : 
   forward_simulation (L1 query1 reply1 s1 se2) (L2 query2 reply2 s2 se2).
 Proof.
-  eapply close_sound_forward; eauto.
+  eapply close_sound_forward; eauto using open_simulation.
   exact Hvalid. eapply Hmatch_query; eauto. exact Hmatch_senv.
   intros. eapply Hmatch_reply1; eauto.
   admit.
-Abort.
+Admitted. (*only valid for Clight -> Asm *)
 End CLOSE_COMPCERT.
