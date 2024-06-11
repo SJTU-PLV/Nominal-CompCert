@@ -6,6 +6,164 @@ Require Import Clightgen.
 
 Import ListNotations.
 
+(* monadInv for bind_res and bind and bind_res *)
+
+(** ** Properties of the monad *)
+
+Remark bind_inversion_sym:
+  forall (A B: Type) (f: mon A) (g: A -> mon B) (y: B) (z1 z3: generator),
+  bind f g z1 = Res y z3 ->
+  exists x, exists z2, 
+  f z1 = Res x z2 /\ g x z2 = Res y z3.
+Proof.
+  intros until z3. unfold bind. destruct (f z1).
+  congruence.
+  caseEq (g a g'); intros; inv H0.
+  econstructor; econstructor; eauto.
+Qed.
+
+Remark bind2_inversion_sym:
+  forall (A B C: Type) (f: mon (A*B)) (g: A -> B -> mon C) (y: C
+    ) (z1 z3: generator),
+  bind2 f g z1 = Res y z3 ->
+  exists x1, exists x2, exists z2,
+  f z1 = Res (x1,x2) z2 /\ g x1 x2 z2 = Res y z3.
+Proof.
+  unfold bind2. intros.
+  exploit bind_inversion_sym; eauto.
+  intros [[x1 x2] [z2]]. 
+  exists x1; exists x2; exists z2; auto.
+Qed.
+
+Ltac monadInv_sym1 H :=
+  match type of H with
+  | (Res _ _ = Res _ _) =>
+      inversion H; clear H; try subst
+  | (@ret _ _ _ = Res _ _) =>
+      inversion H; clear H; try subst
+  | (@error _ _ _ = Res _ _) =>
+      inversion H
+  | (bind ?F ?G ?Z = Res ?X ?Z') =>
+      let x := fresh "x" in (
+      let z := fresh "z" in (                           
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind_inversion_sym _ _ F G X Z Z' H) as [x [z [EQ1 EQ2]]];
+      clear H;
+      try (monadInv1 EQ2)))))
+   | (bind2 ?F ?G ?Z = Res ?X ?Z') =>
+      let x := fresh "x" in (
+      let y := fresh "y" in (
+      let z := fresh "z" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind2_inversion_sym _ _ _ F G X Z Z' H) as [x [y [z [EQ1 EQ2]]]];
+      clear H;
+      try (monadInv1 EQ2))))))
+  end.
+
+Ltac monadInv_sym H :=
+  match type of H with
+  | (@ret _ _ _ = Res _ _) => monadInv_sym1 H
+  | (@error _ _ _ = Res _ _) => monadInv_sym1 H
+  | (bind ?F ?G ?Z = Res ?X ?Z') => monadInv_sym1 H
+  | (bind2 ?F ?G ?Z = Res ?X ?Z') => monadInv_sym1 H
+  | (?F _ _ _ _ _ _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_sym1 H
+  | (?F _ _ _ _ _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_sym1 H
+  | (?F _ _ _ _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_sym1 H
+  | (?F _ _ _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_sym1 H
+  | (?F _ _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_sym1 H
+  | (?F _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_sym1 H
+  | (?F _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_sym1 H
+  | (?F _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_sym1 H
+  end.
+
+
+Remark bind_inversion_comb:
+  forall (A B: Type) (f: Errors.res A) (g: A -> mon B) (y: B) (z1 z3: generator),
+  bind_res f g z1 = Res y z3 ->
+  exists x, 
+  f = OK x /\ g x z1 = Res y z3.
+Proof.
+  intros until z3. unfold bind_res. destruct f.
+  caseEq (g a z1); intros; inv H0.
+  econstructor; econstructor; eauto.
+  congruence.
+Qed.
+
+Remark bind2_inversion_comb:
+  forall (A B C: Type) (f: Errors.res (A*B)) (g: A -> B -> mon C) (y: C
+    ) (z1 z3: generator),
+  bind_res2 f g z1 = Res y z3 ->
+  exists x1, exists x2,
+  f = OK (x1,x2) /\ g x1 x2 z1 = Res y z3.
+Proof.
+  unfold bind_res2. intros.
+  exploit bind_inversion_comb; eauto.
+  intros [[x1 x2]]. 
+  exists x1; exists x2;  auto.
+Qed.
+
+Ltac monadInv_comb1 H :=
+  match type of H with
+  | (Res _ _ = Res _ _) =>
+      inversion H; clear H; try subst
+  | (@ret _ _ _ = Res _ _) =>
+      inversion H; clear H; try subst
+  | (@error _ _ _ = Res _ _) =>
+      inversion H
+  | (bind_res ?F ?G ?Z = Res ?X ?Z') =>
+      let x := fresh "x" in (
+      let z := fresh "z" in (                           
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind_inversion_comb _ _ F G X Z Z' H) as [x [EQ1 EQ2]];
+      clear H;
+      try (monadInv_comb1 EQ2)))))
+  | (bind_res2 ?F ?G ?Z = Res ?X ?Z') =>
+      let x := fresh "x" in (
+      let y := fresh "y" in (
+      let z := fresh "z" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind2_inversion_comb _ _ _ F G X Z Z' H) as [x [y [EQ1 EQ2]]];
+      clear H;
+      try (monadInv_comb1 EQ2))))))
+  end.
+
+Ltac monadInv_comb H :=
+  match type of H with
+  | (@ret _ _ _ = Res _ _) => monadInv_comb1 H
+  | (@error _ _ _ = Res _ _) => monadInv_comb1 H
+  | (bind_res ?F ?G ?Z = Res ?X ?Z') => monadInv_comb1 H
+  | (bind_res2 ?F ?G ?Z = Res ?X ?Z') => monadInv_comb1 H
+  | (?F _ _ _ _ _ _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_comb1 H
+  | (?F _ _ _ _ _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_comb1 H
+  | (?F _ _ _ _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_comb1 H
+  | (?F _ _ _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_comb1 H
+  | (?F _ _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_comb1 H
+  | (?F _ _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_comb1 H
+  | (?F _ _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_comb1 H
+  | (?F _ = Res _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv_comb1 H
+  end.
+
+
 Definition tr_composite_env (ce: composite_env) (tce: Ctypes.composite_env) : Prop :=
   forall id co, ce!id = Some co ->        
          match co.(co_sv) with

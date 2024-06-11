@@ -474,6 +474,37 @@ Definition expand_drop (temp: ident) (ty: type) : option Clight.statement :=
   | _ => None
   end.
 
+Definition transl_assign_variant (p: place) (ty: type) (enum_id arm_id: ident) (e' lhs: Clight.expr) :=
+  match typeof_place p with
+  | Tvariant _ _ _ =>
+      (* lhs.1 = tag;
+             lhs.2. = e'; *)
+      match ce!enum_id, tce!enum_id with
+      | Some co, Some tco =>
+          match field_tag arm_id co.(co_members) with
+          (* an invariant: arm_id in co is the same as the field
+              of type ty in generated union in C code *)
+          | Some tagz =>
+              match tco.(co_su), tco.(Ctypes.co_members) with
+              | Ctypes.Struct, Ctypes.Member_plain tag_id _ :: Ctypes.Member_plain body_id body_ty :: nil =>
+                  match body_ty with
+                  | Tunion union_id attr =>
+                      let assign_tag := Clight.Sassign (Efield lhs tag_id Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) in
+                      let lhs' := (Efield (Efield lhs body_id (Tunion union_id attr)) arm_id (to_ctype ty)) in
+                      let assign_body := Clight.Sassign lhs' e' in
+                      ret (Clight.Ssequence assign_tag assign_body)
+                  | _ => error [CTX enum_id; MSG ": body type error when translating the variant assignement"]
+                  end
+              | _, _ => error [CTX enum_id; MSG ": cannot get its tag and body id when translating the variant assignement"]
+              end
+          | _ => error [CTX enum_id; MSG ": cannot get its tag value from the Rust composite environment"]
+          end
+      | _, _ => error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
+      end
+  | _ => error [CTX (local_of_place p); MSG ": assign a variant to a non variant place "]
+  end.
+
+
 
 Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
   match stmt with
@@ -481,36 +512,12 @@ Fixpoint transl_stmt (stmt: statement) : mon Clight.statement :=
   | Sassign p e =>
       docomb e' <- expr_to_cexpr e;
       docomb lhs <- place_to_cexpr p;
-      let ty := typeof e in
       ret (Clight.Sassign lhs e')      
   | Sassign_variant p enum_id arm_id e =>
       docomb e' <- expr_to_cexpr e;
       docomb lhs <- place_to_cexpr p;
       let ty := typeof e in
-      match typeof_place p with
-      | Tvariant _ _ _ =>
-          (* lhs.1 = tag;
-             lhs.2. = e'; *)
-          match ce!enum_id, tce!enum_id with
-          | Some co, Some tco =>
-              match field_tag arm_id co.(co_members) with
-              (* an invariant: arm_id in co is the same as the field
-              of type ty in generated union in C code *)
-              | Some tagz =>
-                  match tco.(co_su), tco.(Ctypes.co_members) with
-                  | Ctypes.Struct, Ctypes.Member_plain tag_id type_int32s :: Ctypes.Member_plain body_id (Tunion union_id attr) :: nil =>
-                      let assign_tag := Clight.Sassign (Efield lhs tag_id Ctypes.type_int32s) (Clight.Econst_int (Int.repr tagz) Ctypes.type_int32s) in
-                      let lhs' := (Efield (Efield lhs body_id (Tunion union_id attr)) arm_id (to_ctype ty)) in
-                      let assign_body := Clight.Sassign lhs' e' in
-                      ret (Clight.Ssequence assign_tag assign_body)
-                  | _, _ => error [CTX enum_id; MSG ": cannot get its tag and body id when translating the variant assignement"]
-                  end
-              | _ => error [CTX enum_id; MSG ": cannot get its tag value from the Rust composite environment"]
-              end
-          | _, _ => error [CTX enum_id; MSG ": cannot get the composite definition from the composite environment in Rust or C"]
-          end
-      | _ => error [CTX (local_of_place p); MSG ": assign a variant to a non variant place "]
-      end
+      transl_assign_variant p ty enum_id arm_id e' lhs
   | Sbox p e =>
       (* temp = malloc(sizeof(e));
        *temp = e;
@@ -590,14 +597,18 @@ Definition transl_function (f: function) : Errors.res Clight.function :=
   | Res stmt' g =>
       let params := map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_params) in
       let vars := map (fun elt => (fst elt, to_ctype (snd elt))) f.(fn_vars) in
+      (* check that temporaries are not repeated *)
+      if list_norepet_dec ident_eq (Clight.var_names g.(gen_trail)) then
       (* update the next atom *)
-      Errors.OK (Clight.mkfunction
-            (to_ctype f.(fn_return))
-            f.(fn_callconv)
-            params
-            vars
-            g.(gen_trail)
-            stmt')
+        Errors.OK (Clight.mkfunction
+              (to_ctype f.(fn_return))
+              f.(fn_callconv)
+              params
+              vars
+              g.(gen_trail)
+              stmt')
+      else
+        Errors.Error [MSG "repeated temporary variables"]
   end.
 
 Local Open Scope error_monad_scope.

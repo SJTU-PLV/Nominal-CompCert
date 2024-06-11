@@ -602,13 +602,13 @@ Definition drop_for_member (p: place) (memb: member) : list statement :=
 
 
 Inductive step : state -> trace -> state -> Prop :=
-| step_assign: forall f e p ty k le m1 m2 b ofs v,
+| step_assign: forall f e p k le m1 m2 b ofs v,
     (* get the location of the place *)
     eval_place ge le m1 p b ofs ->
     (* evaluate the expr, return the value *)
     eval_expr ge le m1 e v ->
     (* assign to p *)
-    assign_loc ge ty m1 b ofs v m2 ->
+    assign_loc ge (typeof_place p) m1 b ofs v m2 ->
     step (State f (Sassign p e) k le m1) E0 (State f Sskip k le m2)
 | step_assign_variant: forall f e p ty k le m1 m2 m3 b ofs ofs' v tag bf co fid enum_id,
     (* get the location of the place *)
@@ -620,12 +620,11 @@ Inductive step : state -> trace -> state -> Prop :=
     field_tag fid co.(co_members) = Some tag ->
     (* set the tag *)
     Mem.storev Mint32 m1 (Vptr b ofs) (Vint (Int.repr tag)) = Some m2 ->
-    field_offset ge fid co.(co_members) = OK (ofs', bf) ->
+    variant_field_offset ge fid co.(co_members) = OK (ofs', bf) ->
     (* set the value *)
     assign_loc ge ty m2 b (Ptrofs.add ofs (Ptrofs.repr ofs')) v m3 ->
     step (State f (Sassign_variant p enum_id fid e) k le m1) E0 (State f Sskip k le m3)
 | step_box: forall f e p ty k le m1 m2 m3 m4 b v,
-    typeof e = ty ->
     eval_expr ge le m1 e v ->
     (* Simulate malloc semantics to allocate the memory block *)
     Mem.alloc m1 (- size_chunk Mptr) (sizeof ge ty) = (m2, b) ->
@@ -684,6 +683,7 @@ Inductive step : state -> trace -> state -> Prop :=
     step (State f (Sstoragedead id) k le m) E0 (State f Sskip k le m)
          
 | step_call: forall f a al k le m vargs tyargs vf fd cconv tyres p orgs org_rels,
+    
     classify_fun (typeof a) = fun_case_f tyargs tyres cconv ->
     eval_expr ge le m a vf ->
     eval_exprlist ge le m al tyargs vargs ->
