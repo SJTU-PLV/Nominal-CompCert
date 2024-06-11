@@ -410,6 +410,23 @@ Proof.
   - congruence.
 Qed.
 
+Remark injp_acc_local_equiv: forall w w',
+    injp_acc w w' <-> injp_acc_local 0 w w'.
+Proof.
+  split; intros H; inv H.
+  - constructor. constructor; auto.
+    rewrite ASTK1. constructor.
+    rewrite ASTK2. constructor.
+  - inv ACC. inv ASTK1. inv ASTK2. constructor; auto.
+Qed.
+
+Instance injp_acc_local_preo: PreOrder (injp_acc_local 0).
+Proof.
+  split; red; setoid_rewrite <- injp_acc_local_equiv.
+  - reflexivity.
+  - etransitivity; eauto.
+Qed.
+
 Lemma injp_acc_local_incr :
   forall k k' f0 wm wtm Htm j1 m1 tm1 Hm1 j2 m2 tm2 Hm2,
     injp_acc_local k (injpw f0 wm wtm Htm) (injpw j1 m1 tm1 Hm1) ->

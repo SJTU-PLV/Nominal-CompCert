@@ -854,12 +854,7 @@ Proof.
     constructor; auto.
     inv H6. rewrite <- H0 in H4. simpl in H4. apply INJG in H4 as []. subst. auto.
   - rewrite <- H0 in *. cbn in *. econstructor. 
-    5: {
-      instantiate (1 := Hm). rewrite <- H0. simpl.
-      generalize (injpw f0 m01 m2 Hm). intros.
-      assert (injp_acc i i) by reflexivity. inv H1.
-      constructor; auto; constructor; auto.
-    }
+    5: { instantiate (1 := Hm). rewrite <- H0. simpl. reflexivity. }
     all : eauto. constructor.
     constructor. inv ASTK. auto.
     eapply ro_acc_refl.
