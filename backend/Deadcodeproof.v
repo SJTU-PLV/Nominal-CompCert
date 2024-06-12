@@ -603,9 +603,9 @@ Proof.
 Qed.
 
 Inductive match_astack: nat -> stackadt -> stackadt -> Prop :=
-  | match_astack_nil: forall a1 a2
-      (IHastk: stack_size a1 >= stack_size a2),
-      match_astack O a1 a2
+  | match_astack_nil: forall
+      (IHsize: stack_size (Mem.astack (injw_sup_l w)) >= stack_size (Mem.astack (injw_sup_r w))),
+      match_astack O (Mem.astack (injw_sup_l w)) (Mem.astack (injw_sup_r w))
   | match_astack_cons: forall n hd tl1 tl2
       (IHastk: match_astack n tl1 tl2),
       match_astack (S n) (hd :: tl1) (hd :: tl2)
@@ -627,7 +627,7 @@ Inductive match_states: state -> state -> Prop :=
         (MEM: magree j m tm (nlive ge sp (snd (transfer f (vanalyze prog f) pc an!!pc))))
         (SP: j sp = Some (sp',0))
         (RO: ro_acc m0 m)
-        (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
+        (INCR: inj_incr_without_astack w (injw j (Mem.support m) (Mem.support tm)))
         (INJG: meminj_global j),
       match_states (State s f (Vptr sp Ptrofs.zero) pc e m)
                    (State ts tf (Vptr sp' Ptrofs.zero) pc te tm)
@@ -639,7 +639,7 @@ Inductive match_states: state -> state -> Prop :=
         (ARGS: Val.inject_list j args targs)
         (MEM: Mem.inject j m tm)
         (RO: ro_acc m0 m)
-        (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
+        (INCR: inj_incr_without_astack w (injw j (Mem.support m) (Mem.support tm)))
         (INJG: meminj_global j),
       match_states (Callstate s vf args m id)
                    (Callstate ts tvf targs tm id)
@@ -650,7 +650,7 @@ Inductive match_states: state -> state -> Prop :=
         (RES: Val.inject j v tv)
         (MEM: Mem.inject j m tm)
         (RO: ro_acc m0 m)
-        (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
+        (INCR: inj_incr_without_astack w (injw j (Mem.support m) (Mem.support tm)))
         (INJG: meminj_global j),
       match_states (Returnstate s v m)
                    (Returnstate ts tv tm).
@@ -691,7 +691,7 @@ Lemma match_succ_states:
     (MEM: magree j m tm (nlive ge sp nm))
     (SP: j sp = Some (sp',0))
     (RO: ro_acc m0 m)
-    (INCR: inj_incr w (injw j (Mem.support m) (Mem.support tm)))
+    (INCR: inj_incr_without_astack w (injw j (Mem.support m) (Mem.support tm)))
     (INJG: meminj_global j),
   match_states (State s f (Vptr sp Ptrofs.zero) pc' e m)
                (State ts tf (Vptr sp' Ptrofs.zero) pc' te tm).
@@ -1046,7 +1046,7 @@ Ltac UseTransfer :=
 + (* redundant operation *)
   destruct args.
   * (* kept as is because no arguments -- should never happen *)
-  simpl in *. exploit inj_stbls_subrel; eauto. intro GE'. inv GE'.
+  simpl in *. exploit inj_stbls_subrel'; eauto. intro GE'. inv GE'.
   exploit needs_of_operation_sound; eauto.
   eapply symbol_address_inject; eauto.
   intros. eapply ma_perm; eauto. eapply ma_representable; eauto. eapply ma_no_overlap; eauto.
@@ -1065,7 +1065,7 @@ Ltac UseTransfer :=
   eapply match_succ_states; eauto. simpl; auto.
   eapply eagree_update; eauto 2 with na.
 + (* preserved operation *)
-  simpl in *.  exploit inj_stbls_subrel; eauto. intro GE'. inv GE'.
+  simpl in *.  exploit inj_stbls_subrel'; eauto. intro GE'. inv GE'.
   exploit needs_of_operation_sound; eauto.
   eapply symbol_address_inject; eauto.
   intros. eapply ma_perm; eauto. eapply ma_representable; eauto. eapply ma_no_overlap; eauto.
@@ -1094,7 +1094,7 @@ Ltac UseTransfer :=
   rewrite is_int_zero_sound by auto.
   destruct v; simpl; auto. apply iagree_zero.
 + (* preserved *)
-  exploit inj_stbls_subrel; eauto. intro GE'. inv GE'. cbn in *.
+  exploit inj_stbls_subrel'; eauto. intro GE'. inv GE'. cbn in *.
   exploit eval_addressing_inject. eauto. eauto. 2: eauto.
   eapply add_needs_all_inject; eauto.
   intros (ta & U & V). inv V; try discriminate.
@@ -1115,7 +1115,7 @@ Ltac UseTransfer :=
   destruct (nmem_contains nm (aaddressing (vanalyze prog f) # pc addr args)
              (size_chunk chunk)) eqn:CONTAINS.
 + (* preserved *)
-  exploit inj_stbls_subrel; eauto. intro GE'. inv GE'. simpl in *.
+  exploit inj_stbls_subrel'; eauto. intro GE'. inv GE'. simpl in *.
   exploit eval_addressing_inject. eauto. eauto. 2: eauto. eapply add_needs_all_inject; eauto.
   intros (ta & U & V). inv V; try discriminate.
   rewrite eval_shift_stack_addressing in U.
@@ -1156,7 +1156,7 @@ Ltac UseTransfer :=
 
 - (* call *)
   TransfInstr; UseTransfer.
-  exploit inj_stbls_subrel; eauto. intro GE'. inv GE'. simpl in *.
+  exploit inj_stbls_subrel'; eauto. intro GE'. inv GE'. simpl in *.
   exploit functions_translated; eauto.
   eapply ros_address_translated; eauto 2 with na.
   intros (tfd & A & B).
@@ -1179,7 +1179,7 @@ Ltac UseTransfer :=
 
 - (* tailcall *)
   TransfInstr; UseTransfer.
-  exploit inj_stbls_subrel; eauto. intro GE'. inv GE'. simpl in *.
+  exploit inj_stbls_subrel'; eauto. intro GE'. inv GE'. simpl in *.
   exploit functions_translated. eauto. eauto.
   eapply ros_address_translated; eauto 2 with na.
   intros (tfd & A & B).
@@ -1217,7 +1217,7 @@ Ltac UseTransfer :=
 
 - (* builtin *)
   TransfInstr; UseTransfer. revert ENV MEM TI.
-  exploit inj_stbls_subrel; eauto. intro GE'. inv GE'. simpl in *.
+  exploit inj_stbls_subrel'; eauto. intro GE'. inv GE'. simpl in *.
   functional induction (transfer_builtin (vanalyze prog f)#pc ef args res ne nm);
   simpl in *; intros.
 + (* volatile load *)
@@ -1542,7 +1542,7 @@ Ltac UseTransfer :=
   red. intros. erewrite <- Mem.support_pop_stage_1. 2:eauto. erewrite Mem.support_free; eauto.
 
 - (* internal function *)
-  exploit inj_stbls_subrel; eauto. intro GE'. inv GE'.
+  exploit inj_stbls_subrel'; eauto. intro GE'. inv GE'.
   exploit functions_translated; eauto. intros (tf & FIND' & FUN).
   monadInv FUN. generalize EQ. unfold transf_function. fold (vanalyze prog f). intros EQ'.
   destruct (analyze (vanalyze prog f) f) as [an|] eqn:AN; inv EQ'.
@@ -1587,7 +1587,7 @@ Ltac UseTransfer :=
   eapply meminj_global_incr; eauto.
 
 - (* external function *)
-  exploit inj_stbls_subrel; eauto. intro GE'. inv GE'. simpl in *.
+  exploit inj_stbls_subrel'; eauto. intro GE'. inv GE'. simpl in *.
   exploit functions_translated; eauto. intros (tf & FIND' & FUN).
   exploit external_call_mem_inject'; eauto.
   intros (j' & res' & tm' & A & B & C & D & E & F & G & I & J & K).
@@ -1624,7 +1624,10 @@ Proof.
     inv H6. inv H9. simpl in H3. injg H3.
   - cbn in *. econstructor; eauto.
     constructor.
-    constructor. inv H9. inv ASTK. auto.
+    inv H9. simpl in *.
+    replace (Mem.support m0) with (injw_sup_l w).
+    replace (Mem.support m2) with (injw_sup_r w). 2: rewrite <- H1; auto.
+    constructor. inv ASTK. auto.
     eapply ro_acc_refl.
     destruct w. simpl. cbn in *. inv H9. reflexivity.
     inv H9. auto.
@@ -1638,9 +1641,13 @@ Proof.
   intros. inv H0. inv H. inv STACKS.
   exists (cr tv tm). split. constructor.
   exists (cr r m). split. cbn. constructor. constructor. eauto.
+  inv INCR.
   (*we can provide in match_state*)
   exists (injw j (Mem.support m) (Mem.support tm)). split; auto.
-  constructor; eauto. constructor; eauto.
+  inv ASTK. simpl in *.
+  constructor; eauto.
+  constructor; eauto.
+  constructor; eauto.
   constructor. inv ASTK. auto.
 Qed.
 
@@ -1651,7 +1658,7 @@ Lemma transf_external_states:
   exists st2', after_external st2 r2 st2' /\ match_states st1' st2' /\ sound_state prog ge st1'.
 Proof.
   intros st1 st2 q1 Hst Hs Hq1. destruct Hq1. inv Hst.
-  exploit inj_stbls_subrel; eauto. intros [MSTB SUP1 SUP2]. simpl in MSTB,SUP1,SUP2.
+  exploit inj_stbls_subrel'; eauto. intros [MSTB SUP1 SUP2]. simpl in MSTB,SUP1,SUP2.
   exploit functions_translated; eauto. simpl.
   intros (tf & FIND & TFD). monadInv  TFD.
   inv Hs. exploit mmatch_inj; eauto. eapply mmatch_below; eauto.

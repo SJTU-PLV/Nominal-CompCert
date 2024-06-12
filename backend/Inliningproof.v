@@ -454,7 +454,7 @@ Qed.
 Inductive match_stacks (F: meminj) (m m': mem):
              list nat -> list stackframe -> list stackframe -> sup -> Prop :=
   | match_stacks_nil: forall support
-        (MG: inj_incr w (injw F (Mem.support m) (Mem.support m')))
+        (MG: inj_incr_without_astack w (injw F (Mem.support m) (Mem.support m')))
         (BELOW: Mem.sup_include (injw_sup_r w) support),
       match_stacks F m m' nil nil nil support
   | match_stacks_cons: forall res f sp pc rs stk f' sp' sps' rs' stk' support fenv ctx n l
@@ -523,7 +523,7 @@ with match_stacks_inside_globalenvs:
   forall stk stk' f ctx sp rs' n l,
   match_stacks_inside F m m' n l stk stk' f ctx sp rs' -> Genv.match_stbls F se tse.
 Proof.
-  induction 1; eauto. eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  induction 1; eauto. eapply inj_stbls_subrel' in GE; eauto. apply GE.
   induction 1; eauto.
 Qed.
 
@@ -567,10 +567,10 @@ Lemma mit_incr_invariant bound s1 s2 s1' s2':
   (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> sup_In b1 (injw_sup_l w) \/ sup_In b2 bound ->
                        F b1 = Some(b2, delta)) ->
   Mem.sup_include (injw_sup_r w) bound ->
-  inj_incr w (injw F s1 s2) ->
+  inj_incr_without_astack w (injw F s1 s2) ->
   Mem.sup_include s1 s1' ->
   Mem.sup_include s2 s2' ->
-  inj_incr w (injw F1 s1' s2').
+  inj_incr_without_astack w (injw F1 s1' s2').
 Proof.
   intros INJ BELOW H Hs1' Hs2'. inv H. split; cbn in *; eauto; try extlia.
   eapply inject_incr_trans; eauto.
@@ -1062,9 +1062,9 @@ End TAKEDROP.
 Section INLINE_SIZES.
 
 Inductive inline_sizes : list nat -> Memory.stackadt -> Memory.stackadt -> Prop :=
-| inline_sizes_nil: forall a1 a2
-    (ASTK: stack_size a1 >= stack_size a2),
-    inline_sizes nil a1 a2
+| inline_sizes_nil: forall
+    (IHsize: stack_size (Mem.astack (injw_sup_l w)) >= stack_size (Mem.astack (injw_sup_r w))),
+    inline_sizes nil (Mem.astack (injw_sup_l w)) (Mem.astack (injw_sup_r w))
 | inline_sizes_cons: forall g s1 s2 t1 n t2
     (IHsize: inline_sizes g (drop (S n) s1) s2)
     (NTH: nth_error s1 n = Some t1)
@@ -2084,7 +2084,10 @@ Proof.
   all:inv H0; auto.
   1,2,3:red; intros; erewrite <- Mem.support_push_stage_1; eauto.
   apply Mem.push_stage_inject. auto.
-  simpl. econstructor; simpl; eauto. constructor. auto. simpl. lia.
+  simpl. econstructor; simpl; eauto.
+  replace (Mem.support m) with (injw_sup_l w). 2: rewrite <- H1; auto.
+  replace (Mem.support m2) with (injw_sup_r w). 2: rewrite <- H1; auto.
+  constructor. rewrite <- ! H1. auto. simpl. lia.
 Qed.
   (* intros. inv H1. inv H0. inv H9; cbn in *.
   assert (Genv.match_stbls w se tse) by (inv H; auto).
@@ -2151,16 +2154,19 @@ Proof.
     inv SIZES. assert (Mem.astack (Mem.support m'0) <> nil) by congruence.
     apply Mem.nonempty_pop_stage in H0 as (m'1 & POP).
     eexists. split. econstructor; eauto.
-    inv MG. eexists. split.
+    inv MG. eexists.
+    inv IHsize.
+    eapply Mem.astack_pop_stage in H1 as H1'. destruct H1' as [hd1 POP1].
+    rewrite POP1 in H2. simpl in H2.
+    eapply Mem.astack_pop_stage in POP as H2'. destruct H2' as [hd2 POP2].
+    rewrite POP2 in H. simpl in H. inv H.
+    split.
     econstructor. eauto. eauto. auto.
     1,2:red; intros; erewrite <- Mem.support_pop_stage_1; eauto.
+    auto. auto.
     constructor; auto. constructor; auto.
-    simpl in NTH. destr_in NTH. inv NTH.
-    simpl in IHsize. apply inline_sizes_le in IHsize.
-    constructor; try congruence.
-    apply Mem.astack_pop_stage in H1 as []. rewrite H0 in Heqs. inv Heqs.
-    apply Mem.astack_pop_stage in POP as []. rewrite H1 in H. inv H.
-    lia.
+    simpl in NTH. destr_in NTH. inv NTH. inv POP1. simpl in IHsize0.
+    constructor. congruence.
     exploit Mem.pop_stage_parallel_inject. 2:exact H1. eauto.
     apply Mem.astack_pop_stage in POP as []. congruence.
     intros (m'1' & POP' & INJ). rewrite POP' in POP. inv POP. auto.

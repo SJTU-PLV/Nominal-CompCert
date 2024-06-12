@@ -1775,7 +1775,7 @@ Definition injp_inj_world : inj_world :=
 
 Inductive match_cont (f: meminj): compilenv -> cont -> cont -> mem -> sup -> sup -> Prop :=
   | match_Kstop: forall cenv m bound tbound,
-      inj_incr (injp_inj_world) (injw f bound tbound) ->
+      inj_incr_without_astack (injp_inj_world) (injw f bound tbound) ->
       match_cont f cenv Kstop Kstop m bound tbound
   | match_Kseq: forall cenv s k ts tk m bound tbound,
       simpl_stmt cenv s = OK ts ->

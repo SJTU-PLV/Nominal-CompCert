@@ -217,10 +217,10 @@ Lemma mit_incr_invariant w F F1 bound s1 s2 s1' s2'
   (forall b1 b2 delta, F1 b1 = Some(b2, delta) -> sup_In b1 (injw_sup_l w) \/ sup_In b2 bound ->
                        F b1 = Some(b2, delta)) ->
   Mem.sup_include (injw_sup_r w) bound ->
-  inj_incr w (injw F s1 s2) ->
+  inj_incr_without_astack w (injw F s1 s2) ->
   Mem.sup_include s1 s1' ->
   Mem.sup_include s2 s2' ->
-  inj_incr w (injw F1 s1' s2').
+  inj_incr_without_astack w (injw F1 s1' s2').
 Proof.
   intros INJ BELOW H Hs1' Hs2'. inv H. split; cbn in *; eauto; try extlia.
   eapply inject_incr_trans; eauto.
@@ -695,9 +695,9 @@ Section TAKEDROP.
 End TAKEDROP.
 
 Inductive tc_sizes : list nat -> stackadt -> stackadt -> Prop :=
-| sizes_nil: forall a1 a2
-    (IHsize: stack_size a1 >= stack_size a2),
-    tc_sizes nil a1 a2
+| sizes_nil: forall
+    (IHsize: stack_size (Mem.astack (injw_sup_l w)) >= stack_size (Mem.astack (injw_sup_r w))),
+    tc_sizes nil (Mem.astack (injw_sup_l w)) (Mem.astack (injw_sup_r w))
 | sizes_cons: forall l s1 s2 t1 n t2
     (IHsize: tc_sizes l (drop (S n) s1) s2)
     (TAKE: take (S n) s1 = Some t1)
@@ -738,11 +738,12 @@ Qed.
 Lemma tc_sizes_record:
   forall g t1 s1 t2 s2 b1 b2 size
     (SZ: tc_sizes g (t1 :: s1) (t2 :: s2)),
+    g <> nil ->
     tc_sizes g (((mk_frame b1 size)::t1):: s1) (((mk_frame b2 size)::t2) :: s2).
 Proof.
-  intros. inv SZ.
+  intros. inv SZ. congruence.
 
-  constructor. simpl in *. unfold frame_size_a. simpl. lia.
+  (* constructor. simpl in *. unfold frame_size_a. simpl. lia. *)
 
   simpl in *. repeat destr_in TAKE.
   econstructor; simpl; auto.
@@ -778,7 +779,7 @@ Inductive match_states: state -> state -> Prop :=
              (RINJ: regset_inject j rs rs')
              (MINJ: Mem.inject j m m')
              (SP: j sp = Some (sp',0))
-             (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m'))),
+             (INCR: inj_incr_without_astack w (injw j (Mem.support m) (Mem.support m'))),
       match_states (State s f (Vptr sp Ptrofs.zero) pc rs m)
                    (State s' (transf_function f) (Vptr sp' Ptrofs.zero) pc rs' m')
   | match_states_call:
@@ -788,7 +789,7 @@ Inductive match_states: state -> state -> Prop :=
       (AINJ: Val.inject_list j args args')
       (MINJ: Mem.inject j m m')
       (STK: tc_sizes ((S n)::l) (Mem.astack (Mem.support m)) (Mem.astack (Mem.support m')))
-      (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m'))),
+      (INCR: inj_incr_without_astack w (injw j (Mem.support m) (Mem.support m'))),
       match_states (Callstate s vf args m id)
                    (Callstate s' vf' args' m' id)
   | match_states_return:
@@ -802,7 +803,7 @@ Inductive match_states: state -> state -> Prop :=
       (STK: tc_sizes l (drop (S n) (Mem.astack (Mem.support m))) (tl (Mem.astack (Mem.support m'))))
       (VINJ: Val.inject j v v')
       (MINJ: Mem.inject j m m')
-      (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m'))),
+      (INCR: inj_incr_without_astack w (injw j (Mem.support m) (Mem.support m'))),
       match_states (Returnstate s v m)
                    (Returnstate s' v' m')
   | match_states_interm:
@@ -819,7 +820,7 @@ Inductive match_states: state -> state -> Prop :=
       is_return_spec f pc r ->
       f.(fn_stacksize) = 0 ->
       Val.inject j (rs#r) v' ->
-      inj_incr w (injw j (Mem.support m) (Mem.support m')) ->
+      inj_incr_without_astack w (injw j (Mem.support m) (Mem.support m')) ->
       match_states (State s f (Vptr sp Ptrofs.zero) pc rs m)
                    (Returnstate s' v' m').
 
@@ -842,10 +843,10 @@ Inductive match_states: state -> state -> Prop :=
 
 Lemma inj_incr_clearstage:
   forall j m m' m'' s,
-  inj_incr w (injw j (Mem.support m) s) ->
+  inj_incr_without_astack w (injw j (Mem.support m) s) ->
   Mem.support m = Mem.support m' ->
   Mem.pop_stage m' = Some m'' ->
-  inj_incr w (injw j (Mem.support (Mem.push_stage m'')) s).
+  inj_incr_without_astack w (injw j (Mem.support (Mem.push_stage m'')) s).
 Proof.
   intros. inv H. constructor; eauto. red. intros.
   rewrite <- Mem.support_push_stage_1. 2:reflexivity.
@@ -895,7 +896,7 @@ Proof.
   TransfInstr.
   assert (Val.inject_list j (rs##args) (rs'##args)). apply regs_inject; auto.
   exploit eval_operation_inject; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   intros [v' [EVAL' VINJ]].
   left. exists (State s' (transf_function f) (Vptr sp' Ptrofs.zero) pc' (rs'#res <- v') m'); split.
   eapply exec_Iop; eauto.
@@ -909,7 +910,7 @@ Proof.
 - (* load *)
   TransfInstr.
   assert (Val.inject_list j (rs##args) (rs'##args)). apply regs_inject; auto.
-  exploit eval_addressing_inject; eauto. eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  exploit eval_addressing_inject; eauto. eapply inj_stbls_subrel' in GE; eauto. apply GE.
   intros [a' [ADDR' AINJ]].
   exploit Mem.loadv_inject; eauto.
   intros [v' [LOAD' VINJ]].
@@ -922,7 +923,7 @@ Proof.
   TransfInstr.
   assert (Val.inject_list j (rs##args) (rs'##args)). apply regs_inject; auto.
   exploit eval_addressing_inject; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   intros [a' [ADDR' AINJ]].
   exploit Mem.storev_mapped_inject. 2: eexact H1. eauto. eauto. apply RINJ.
   intros [m'1 [STORE' MINJ']].
@@ -938,9 +939,9 @@ Proof.
 - (* call *)
   apply match_stackframes_global in STACKS as GLOB. destruct GLOB.
   exploit functions_translated.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   2:eauto. apply ros_address_translated; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   intro FIND'.
   TransfInstr.
 + (* call turned tailcall *)
@@ -956,7 +957,7 @@ Proof.
   erewrite Mem.support_free; eauto. congruence.
   econstructor. eapply match_stackframes_tail; eauto.
   apply ros_address_translated; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   apply regs_inject. auto.
   apply Mem.push_stage_left_inject. eapply Mem.free_right_inject; eauto.
   rewrite stacksize_preserved. rewrite H10. intros. extlia.
@@ -971,16 +972,16 @@ Proof.
   apply sig_preserved.
   econstructor. constructor; eauto.
   apply ros_address_translated; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   apply regs_inject; auto. eapply Mem.push_stage_inject; eauto.
   apply tc_sizes_up. auto. destruct w. inv INCR. constructor; auto.
 
 - (* tailcall *)
   apply match_stackframes_global in STACKS as GLOB. destruct GLOB.
   exploit functions_translated.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   2:eauto. apply ros_address_translated; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   intro FIND'.
   exploit Mem.free_parallel_inject; eauto. intros [m'1 [FREE INJ]].
   apply Mem.support_free in H3 as SF. apply Mem.support_free in FREE as SF'.
@@ -993,7 +994,7 @@ Proof.
   inv ASTK. congruence.
   econstructor. eauto.
   apply ros_address_translated; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   apply regs_inject. auto.
   auto.
   congruence.
@@ -1002,11 +1003,11 @@ Proof.
 - (* builtin *)
   apply match_stackframes_global in STACKS as GLOB. destruct GLOB.
   TransfInstr. exploit eval_builtin_args_inject; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   intros (vargs' & P & Q).
   exploit Mem.push_stage_inject; eauto. intro.
   exploit external_call_mem_inject'; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   intros [f' [v' [m'1 [A [B [C [D [E [F [G [I [J K]]]]]]]]]]]].
   exploit Mem.pop_stage_parallel_inject; eauto.
   erewrite <- external_call_astack; eauto.
@@ -1075,7 +1076,7 @@ Proof.
 
 - (* internal call *)
   exploit functions_translated; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   intro FIND'.
   exploit Mem.alloc_parallel_inject; eauto.
     instantiate (1 := 0). lia.
@@ -1103,7 +1104,7 @@ Proof.
   destruct H0 as (a&b&c&d). destruct RECORD as (w'&x&y&z).
   rewrite z. rewrite d.  apply tc_sizes_record.
   rewrite H in c. rewrite ALLOC in y. unfold sup_incr in c,y.
-  simpl in c,y. congruence.
+  simpl in c,y. congruence. congruence.
   apply init_regs_inject.
   eapply val_inject_list_incr; eauto. auto. auto.
   assert (SPS: b2 = fresh_block (Mem.support m'0)) by (eapply Mem.alloc_result; eauto).
@@ -1112,10 +1113,10 @@ Proof.
   instantiate (1 := (Mem.support m'0)).
   inv INCR. simpl.
   intros. destruct (eq_block b1 stk).
-    subst b1. rewrite TSP in H1; inv H1.
+    subst b1. rewrite TSP in H2; inv H2.
       apply Mem.alloc_result in H. subst.
-      exfalso. destruct H2; eapply freshness; eauto.
-    rewrite INC in H1; auto.
+      exfalso. destruct H3; eapply freshness; eauto.
+    rewrite INC in H2; auto.
   inv INCR. simpl. auto.
   eauto.
   red. intros. rewrite <- Mem.support_record_frame_1. 2:eauto.
@@ -1127,10 +1128,10 @@ Proof.
 
 - (* external call *)
   exploit functions_translated; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   intro FIND'.
   exploit external_call_mem_inject'; eauto.
-  eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; eauto. apply GE.
   intros (f' & res' & m2' & A & B & C & D & E & F & G & I & J & K).
   left. exists (Returnstate s' res' m2'); split.
   simpl. econstructor; eauto.
@@ -1218,7 +1219,10 @@ Proof.
 
   apply Mem.push_stage_inject. subst. auto.
 
-  econstructor; simpl; auto. constructor. auto.
+  econstructor; simpl; auto.
+  replace (Mem.support m1) with (injw_sup_l w). 2: rewrite <- H4; auto.
+  replace (Mem.support m2) with (injw_sup_r w). 2: rewrite <- H4; auto.
+  constructor. rewrite <- ! H4. auto.
 
   subst. constructor; simpl in *; auto.
   all:red; intros. congruence.
@@ -1238,15 +1242,18 @@ Proof.
   eexists; split.
   - constructor. eauto.
   - econstructor.
-    split; constructor.
-    1,2,3,6:eauto.
-    1,2:red; intros; rewrite <- Mem.support_pop_stage_1; eauto.
-    constructor; auto.
-    constructor; auto.
     inv STK.
-    apply Mem.astack_pop_stage in H1 as [].
-    apply Mem.astack_pop_stage in e as [].
-    rewrite H1, H2 in IHsize. simpl in IHsize. auto.
+    eapply Mem.astack_pop_stage in H1 as H1'. destruct H1' as [hd1 POP1].
+    rewrite POP1 in H3. simpl in H3.
+    eapply Mem.astack_pop_stage in e as H2'. destruct H2' as [hd2 POP2].
+    rewrite POP2 in H4. simpl in H4.
+    split; constructor.
+    1,2,3,8:eauto.
+    1,2:red; intros; rewrite <- Mem.support_pop_stage_1; eauto.
+    1,2:auto.
+    constructor; auto.
+    constructor; auto.
+    rewrite <- H3, <- H4. auto.
     exploit Mem.pop_stage_parallel_inject; eauto.
     apply Mem.astack_pop_stage in e as []. congruence.
     intros (m'1 & POP & INJ). rewrite POP in e. inv e. auto.
@@ -1260,10 +1267,10 @@ Lemma transf_external_states:
 Proof.
   intros st1 st2 q1 Hst Hq1. destruct Hq1. inv Hst.
   assert (GE0: Genv.match_stbls j se tse). {
-    inv GE. inv INCR. eapply Genv.match_stbls_incr; eauto. simpl.
-    split; intro; (exploit DISJOINT; eauto); intros [].
-    apply inj_stbls_next_l in H2. auto.
-    apply inj_stbls_next_r in H2. auto.
+    inv GE. inv INCR. eapply Genv.match_stbls_incr; eauto. rewrite <- H0. simpl. auto.
+    rewrite <- H0 in *. simpl in *. split; intro; (exploit DISJOINT; eauto); intros [].
+    apply inj_stbls_next_l in H3. auto.
+    apply inj_stbls_next_r in H3. auto.
   }
   assert (VF: vf' = Vptr (Global id) Ptrofs.zero). {
     inv FINJ. rewrite Ptrofs.add_zero_l.
@@ -1277,7 +1284,10 @@ Proof.
     apply match_stackframes_global in STACKS as []. auto.
     constructor. eapply stack_tc_size_vm. eauto.
     congruence.
-  - inv GE. inv INCR. simpl in *. constructor; simpl. auto.
+  - inv GE. inv INCR.
+    rewrite <- H1 in inj_stbls_next_l.
+    rewrite <- H1 in inj_stbls_next_r.
+    simpl in *. constructor; simpl. auto.
     red. red in inj_stbls_next_l. auto.
     red. red in inj_stbls_next_r. auto.
   - inv H2. destruct H1 as (w' & ACC & CR). inv CR.

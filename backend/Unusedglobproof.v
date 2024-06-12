@@ -15,6 +15,7 @@
 Require Import FSets Coqlib Maps Ordered Iteration Errors.
 Require Import AST Linking.
 Require Import Integers Values Memory Globalenvs Events Smallstep.
+Require Import LanguageInterface Inject.
 Require Import Op Registers RTL RTLmach.
 Require Import Unusedglob.
 
@@ -408,8 +409,6 @@ Qed.
 (** * Semantic preservation *)
 Section ORACLE.
 Variable fn_stack_requirements : ident -> Z.
-
-Require Import LanguageInterface Inject InjectFootprint.
 
 (** The initial memory injection inferred from global symbol tables *)
 Definition init_meminj (se tse: Genv.symtbl) : meminj :=
@@ -919,9 +918,9 @@ Proof.
 Qed.
 
 Inductive match_astack: nat -> stackadt -> stackadt -> Prop :=
-  | match_astack_nil: forall a1 a2
-      (IHastk: stack_size a1 >= stack_size a2),
-      match_astack O a1 a2
+  | match_astack_nil: forall
+      (IHsize: stack_size (Mem.astack (injw_sup_l w)) >= stack_size (Mem.astack (injw_sup_r w))),
+      match_astack O (Mem.astack (injw_sup_l w)) (Mem.astack (injw_sup_r w))
   | match_astack_cons: forall n tl1 tl2 b1 b2 size
       (IHastk: match_astack n tl1 tl2),
       match_astack (S n) (((mk_frame b1 size) :: nil ) :: tl1) (((mk_frame b2 size) :: nil) :: tl2)
@@ -936,7 +935,7 @@ Inductive match_stacks (j: meminj):
         list stackframe -> list stackframe -> sup -> sup -> Prop :=
   | match_stacks_nil: forall bound tbound,
       meminj_preserves_globals j ->
-      inj_incr w (injw j bound tbound) ->
+      inj_incr_without_astack w (injw j bound tbound) ->
       Mem.sup_include (Genv.genv_sup ge) bound -> Mem.sup_include (Genv.genv_sup tge) tbound ->
       match_stacks j nil nil bound tbound
 | match_stacks_cons: forall res f sp pc rs s tsp trs ts bound tbound sps tsps
@@ -986,7 +985,7 @@ Lemma match_stacks_match_stbls:
     Genv.match_stbls j se tse.
 Proof.
   induction 2; eauto.
-  generalize (CKLR.match_stbls_acc inj). cbn.
+  generalize inj_stbls_subrel'.
   intros MONO.
   repeat red in MONO.
   generalize (MONO _ _ H1 se tse). intros SUB.
@@ -1048,14 +1047,14 @@ Lemma match_stacks_incr_aux:
   forall j bound tbound s ts,
     match_stacks j s ts bound tbound ->
     forall j' bound' tbound',
-      inj_incr (injw j bound tbound) (injw j' bound' tbound') ->
+      inj_incr_without_astack (injw j bound tbound) (injw j' bound' tbound') ->
       match_stacks j' s ts bound' tbound'.
 Proof.
   induction 1; intros.
   inv H3.
 - constructor; auto.
   + eapply meminj_preserves_globals_incr; eauto.
-  + etransitivity. exact H0. auto.
+  + etransitivity. exact H0. constructor; auto.
   + eauto with mem.
   + eauto with mem.
 - inv H0. econstructor; eauto.
@@ -1070,7 +1069,7 @@ Qed.
 
 Lemma match_stacks_incr:
   forall j j' bound bound' tbound tbound' s ts,
-    inj_incr (injw j bound tbound) (injw j' bound' tbound') ->
+    inj_incr_without_astack (injw j bound tbound) (injw j' bound' tbound') ->
     match_stacks j s ts bound tbound ->
     match_stacks j' s ts bound' tbound'.
 Proof.
@@ -1350,10 +1349,10 @@ Proof.
   exploit Mem.storev_mapped_inject; eauto. intros (tm' & D & E).
   econstructor; split. eapply exec_Istore; eauto.
   econstructor; eauto.
-  erewrite <- Mem.support_storev; eauto.
-  erewrite <- (Mem.support_storev _ _ _ _ tm'); eauto.
-  erewrite <- Mem.support_storev; eauto.
-  erewrite <- Mem.support_storev; eauto.
+  + erewrite <- Mem.support_storev; eauto.
+    erewrite <- (Mem.support_storev _ _ _ _ tm'); eauto.
+  + erewrite <- Mem.support_storev; eauto.
+  + erewrite <- Mem.support_storev; eauto.
 
 - (* call *)
   exploit find_function_inject_ros.
@@ -1469,6 +1468,7 @@ Proof.
     apply Mem.astack_pop_stage in H1 as [hd1 POP1]. rewrite POP1 in H4. inv H4.
     apply Mem.astack_pop_stage in G as [hd2 POP2]. rewrite POP2 in H5. inv H5.
     auto.
+
 - (* internal function *)
   exploit Mem.alloc_parallel_inject. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
   intros (j' & tm'' & tstk & C & D & E & F & G & I).
@@ -1531,6 +1531,7 @@ Proof.
   apply match_stacks_bound with (Mem.support m) (Mem.support tm).
   apply match_stacks_incr
     with j (Mem.support m) (Mem.support tm); auto.
+  constructor; auto.
   inversion D. eauto. inversion E. eauto. congruence. eapply meminj_global_incr; eauto.
 
 - (* return *)
@@ -1564,7 +1565,8 @@ Proof.
       ++ inv H1; cbn in *. auto.
     + generalize (find_function_inject _ _ _ _ PRES H H8).
       intros (FINDFUN & KEPT). auto.
-    + simpl. constructor. inv H1. inv ASTK. auto.
+    + destruct w eqn:Hw. exploit match_astack_nil. inv H1. inv ASTK. auto.
+      inv H1. rewrite Hw. auto.
     + inv H1. auto.
 Qed.
 
@@ -1579,7 +1581,7 @@ Proof.
   - unfold cc_c; cbn. red.
     exists (injw j (Mem.support m) (Mem.support tm)).
     split; cbn.
-    + inv H0. constructor; auto.
+    + inv H0. constructor; auto; inv ASTK; simpl; auto.
     + constructor; auto.
       cbn. constructor; auto.
       constructor. inv ASTK. auto.
@@ -1587,8 +1589,8 @@ Qed.
 
 Lemma transf_external_states:
   forall S R q1, match_states S R -> at_external ge S q1 ->
-  exists wx q2, at_external tge R q2 /\ match_query (cc_c injp) wx q1 q2 /\ match_senv (cc_c injp) wx se tse /\
-  forall r1 r2 S', match_reply (cc_c injp) wx r1 r2 -> after_external S r1 S' ->
+  exists wx q2, at_external tge R q2 /\ match_query (cc_c inj) wx q1 q2 /\ match_senv (cc_c inj) wx se tse /\
+  forall r1 r2 S', match_reply (cc_c inj) wx r1 r2 -> after_external S r1 S' ->
   exists R', after_external R r2 R' /\ match_states S' R'.
 Proof.
   intros S R q1 MSTATE AT_EXT.
@@ -1598,7 +1600,7 @@ Proof.
   intros PRES.
   generalize (find_function_inject _ _ _ _ PRES FUNINJ H).
   intros (FIND & KEPT1).
-  eexists (injpw j m tm MEMINJ), _. intuition idtac.
+  eexists (injw j (Mem.support m) (Mem.support tm)), _. intuition idtac.
   - econstructor; eauto.
     inv FUNINJ. injg H3.
   - econstructor; eauto. constructor. auto.
@@ -1616,8 +1618,7 @@ Proof.
         with (Mem.support m) (Mem.support tm); auto.
       apply match_stacks_incr
         with j (Mem.support m) (Mem.support tm); auto.
-      inv UNCHANGED1. auto.
-      inv UNCHANGED2. auto.
+      constructor; auto.
       congruence.
 Qed.
 
@@ -1627,7 +1628,7 @@ End ORACLE.
 
 Theorem transf_program_correct prog tprog fn_stack_requirements:
   match_prog prog tprog ->
-  forward_simulation (cc_c injp) (cc_c inj) (semantics fn_stack_requirements prog) (semantics fn_stack_requirements tprog).
+  forward_simulation (cc_c inj) (cc_c inj) (semantics fn_stack_requirements prog) (semantics fn_stack_requirements tprog).
 Proof.
   intros MATCH.
   inv MATCH. destruct H as (VALID_USED & MATCH1).

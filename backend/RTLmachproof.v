@@ -100,9 +100,9 @@ Proof.
 Qed.
 
 Inductive match_stackadt : nat -> Memory.stackadt -> Memory.stackadt -> Prop :=
-  | match_stackadt_nil: forall a1 a2
-      (IHsize: stack_size a1 >= stack_size a2),
-      match_stackadt 0 a1 a2
+  | match_stackadt_nil: forall
+      (IHsize: stack_size (Mem.astack (injw_sup_l w)) >= stack_size (Mem.astack (injw_sup_r w))),
+      match_stackadt O (Mem.astack (injw_sup_l w)) (Mem.astack (injw_sup_r w))
   | match_stackadt_cons: forall n s1 s2 t1 t1' frame,
      match_stackadt n s1 s2 ->
      t1 = frame::t1' ->
@@ -179,7 +179,7 @@ Inductive match_states: RTL.state -> RTL.state -> Prop :=
         (RINJ: regset_inject j rs rs')
         (MINJ: Mem.inject j m m')
         (SP: j sp = Some (sp', 0))
-        (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m'))),
+        (INCR: inj_incr_without_astack w (injw j (Mem.support m) (Mem.support m'))),
       match_states (State s f (Vptr sp Ptrofs.zero) pc rs m)
                    (State s' f (Vptr sp' Ptrofs.zero) pc rs' m')
   | match_callstates: forall j s s' vf vf' args args' m m' id hd tl n l
@@ -189,7 +189,7 @@ Inductive match_states: RTL.state -> RTL.state -> Prop :=
         (MINJ: Mem.inject j m m')
         (Heqastk: Mem.astack (Mem.support m) = hd :: tl)
         (ASTK: match_stackadt (length s) tl (Mem.astack (Mem.support m')))
-        (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m'))),
+        (INCR: inj_incr_without_astack w (injw j (Mem.support m) (Mem.support m'))),
       match_states (Callstate s vf args m id)
                    (Callstate s' vf' args' m' id)
   | match_returnstates: forall j s s' v v' m m' hd tl n l
@@ -198,7 +198,7 @@ Inductive match_states: RTL.state -> RTL.state -> Prop :=
         (MINJ: Mem.inject j m m')
         (Heqastk: Mem.astack (Mem.support m) = hd :: tl)
         (ASTK: match_stackadt (length s) tl (Mem.astack (Mem.support m')))
-        (INCR: inj_incr w (injw j (Mem.support m) (Mem.support m'))),
+        (INCR: inj_incr_without_astack w (injw j (Mem.support m) (Mem.support m'))),
       match_states (Returnstate s v m)
                    (Returnstate s' v' m').
 
@@ -217,7 +217,7 @@ Proof.
   - (* op *)
     assert (Val.inject_list j (rs##args) (rs'##args)). apply regs_inject; auto.
     exploit eval_operation_inject; eauto.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     intros [v' [EVAL' VINJ]].
     rewrite eval_shift_stack_operation in EVAL'. eauto.
     econstructor; eauto. split.
@@ -226,7 +226,7 @@ Proof.
 
   - (* load *)
     assert (Val.inject_list j (rs##args) (rs'##args)). apply regs_inject; auto.
-    exploit eval_addressing_inject; eauto. eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    exploit eval_addressing_inject; eauto. eapply inj_stbls_subrel' in GE; eauto. apply GE.
     intros [a' [ADDR' AINJ]].
     exploit Mem.loadv_inject; eauto.
     intros [v' [LOAD' VINJ]].
@@ -238,7 +238,7 @@ Proof.
   - (* store *)
     assert (Val.inject_list j (rs##args) (rs'##args)). apply regs_inject; auto.
     exploit eval_addressing_inject; eauto.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     intros [a' [ADDR' AINJ]].
     exploit Mem.storev_mapped_inject. 2: eexact H3. eauto. eauto. apply RINJ.
     intros [m'1 [STORE' MINJ']].
@@ -254,24 +254,24 @@ Proof.
   - (* call *)
     apply match_stackframes_global in STACKS as GLOB. destruct GLOB.
     exploit functions_translated.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     2:eauto. apply ros_address_translated; eauto.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     intro FIND'.
     econstructor; eauto. split.
     eapply exec_Icall; eauto. eapply Tailcallproof.ros_is_ident_translated; eauto.
     econstructor. constructor; eauto.
     apply ros_address_translated; eauto.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     apply regs_inject; auto. eapply Mem.push_stage_left_inject; eauto.
     simpl. eauto. auto. destruct w. inv INCR. constructor; auto.
 
   - (* tailcall *)
     apply match_stackframes_global in STACKS as GLOB. destruct GLOB.
     exploit functions_translated.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     2:eauto. apply ros_address_translated; eauto.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     intro FIND'.
     exploit Mem.free_parallel_inject; eauto. intros [m'1 [FREE INJ]].
     apply Mem.support_free in H5 as SF. apply Mem.support_free in FREE as SF'.
@@ -283,7 +283,7 @@ Proof.
     rewrite ! Z.add_0_r in FREE. eauto.
     econstructor. eauto.
     apply ros_address_translated; eauto.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     apply regs_inject. auto.
     eapply Mem.pop_stage_right_inject; eauto.
     eauto.
@@ -297,11 +297,11 @@ Proof.
   - (* builtin *)
     apply match_stackframes_global in STACKS as GLOB. destruct GLOB.
     exploit Tailcallproof.eval_builtin_args_inject; eauto.
-      eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+      eapply inj_stbls_subrel' in GE; eauto. apply GE.
     intros (vargs' & P & Q).
     exploit Mem.push_stage_inject; eauto. intro.
     exploit external_call_mem_inject'. 2:eauto.
-      eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+      eapply inj_stbls_subrel' in GE; eauto. apply GE.
       apply Mem.push_stage_left_inject. eauto. eauto. simpl.
     intros [f' [v' [m'1 [A [B [C [D [E [F [G [I [J K]]]]]]]]]]]].
     exploit Mem.pop_stage_left_inject; eauto. intros EXT'.
@@ -353,7 +353,7 @@ Proof.
 
   - (* internal call *)
     exploit functions_translated; eauto.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     intro FIND'.
     exploit Mem.alloc_parallel_inject; eauto.
       instantiate (1 := 0). lia.
@@ -386,10 +386,10 @@ Proof.
     instantiate (1 := (Mem.support m'0)).
     inv INCR. simpl.
     intros. destruct (eq_block b1 stk).
-      subst b1. rewrite TSP in H; inv H.
+      subst b1. rewrite TSP in H0; inv H0.
         apply Mem.alloc_result in H1. subst.
-        exfalso. destruct H0; eapply freshness; eauto.
-      rewrite INC in H; auto.
+        exfalso. destruct H3; eapply freshness; eauto.
+      rewrite INC in H0; auto.
     inv INCR. simpl. auto.
     eauto.
     red. intros. rewrite <- Mem.support_record_frame_1. 2:eauto.
@@ -402,10 +402,10 @@ Proof.
 
   - (* external call *)
     exploit functions_translated; eauto.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     intro FIND'.
     exploit external_call_mem_inject'; eauto.
-    eapply CKLR.match_stbls_acc in GE; eauto. apply GE.
+    eapply inj_stbls_subrel' in GE; eauto. apply GE.
     intros (f' & res' & m2' & A & B & C & D & E & F & G & I & J & K).
     exists (Returnstate s' res' m2'); split.
     simpl. econstructor; eauto.
@@ -472,7 +472,9 @@ Proof.
 
   simpl. auto.
 
-  econstructor; simpl; auto.
+  replace (Mem.support m1) with (injw_sup_l w). 2: rewrite <- H4; auto.
+  replace (Mem.support m2) with (injw_sup_r w). 2: rewrite <- H4; auto.
+  constructor. rewrite <- H4. auto.
 
   subst. constructor; simpl in *; auto.
   all:red; intros. congruence.
@@ -490,12 +492,14 @@ Proof.
   intros. inv H0. inv H. inv STACKS. inv INCR.
   eexists; split.
   - constructor.
-  - econstructor.
+  - apply Mem.astack_pop_stage in H1 as H1'. destruct H1' as [hd' POP].
+    rewrite POP in Heqastk. inv Heqastk.
+    econstructor.
     split; constructor.
     4:red; intros; rewrite <- Mem.support_pop_stage_1; eauto. all:eauto.
+    1,2: inv ASTK; auto.
     constructor; auto.
-    inv ASTK. constructor.
-    apply Mem.astack_pop_stage in H1 as [ ]. rewrite H1 in Heqastk. inv Heqastk. auto.
+    inv ASTK. constructor. auto.
     eapply Mem.pop_stage_left_inject; eauto.
 Qed.
 
@@ -507,10 +511,10 @@ Lemma transf_external_states:
 Proof.
   intros st1 st2 q1 Hst Hq1. destruct Hq1. inv Hst.
   assert (GE0: Genv.match_stbls j se tse). {
-    inv GE. inv INCR. eapply Genv.match_stbls_incr; eauto. simpl.
-    split; intro; (exploit DISJOINT; eauto); intros [ ].
-    apply inj_stbls_next_l in H2. auto.
-    apply inj_stbls_next_r in H2. auto.
+    inv GE. inv INCR. eapply Genv.match_stbls_incr; eauto. rewrite <- H0. simpl. auto.
+    rewrite <- H0 in *. simpl in *. split; intro; (exploit DISJOINT; eauto); intros [ ].
+    apply inj_stbls_next_l in H3. auto.
+    apply inj_stbls_next_r in H3. auto.
   }
   assert (VF: vf' = Vptr (Global id) Ptrofs.zero). {
     inv FINJ. rewrite Ptrofs.add_zero_l.
@@ -525,7 +529,7 @@ Proof.
     constructor. apply match_stackadt_size in ASTK. rewrite Heqastk. simpl.
     pose proof size_of_all_frames_pos hd. lia.
     congruence.
-  - inv GE. inv INCR. simpl in *. constructor; simpl. auto.
+  - inv GE. inv INCR. rewrite <- H1 in *. simpl in *. constructor; simpl. auto.
     red. red in inj_stbls_next_l. auto.
     red. red in inj_stbls_next_r. auto.
   - inv H2. destruct H1 as (w' & ACC & CR). inv CR.

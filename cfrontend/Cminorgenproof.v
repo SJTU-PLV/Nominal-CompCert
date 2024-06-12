@@ -464,7 +464,7 @@ Inductive match_callstack (f: meminj) (m: mem) (tm: mem):
                           callstack -> sup -> sup -> Prop :=
   | mcs_nil:
       forall bound tbound,
-      inj_incr w (injw f bound tbound) ->
+      inj_incr_without_astack w (injw f bound tbound) ->
 (*      Mem.sup_include es bound -> Mem.sup_include es tbound -> *)
       match_callstack f m tm nil bound tbound
   | mcs_cons:
@@ -479,9 +479,9 @@ Inductive match_callstack (f: meminj) (m: mem) (tm: mem):
       match_callstack f m tm (Frame cenv tf e le te sp sps bes es :: cs) bound tbound.
 
 Inductive match_astack : nat -> stackadt -> stackadt -> Prop :=
-  | match_astack_zero: forall a1 a2
-      (IHsize: stack_size a1 >= stack_size a2),
-      match_astack O a1 a2
+  | match_astack_zero: forall
+      (IHsize: stack_size (Mem.astack (injw_sup_l w)) >= stack_size (Mem.astack (injw_sup_r w))),
+      match_astack O (Mem.astack (injw_sup_l w)) (Mem.astack (injw_sup_r w))
   | match_astack_succ: forall n hd tl1 tl2
       (IHsize: match_astack n tl1 tl2),
       match_astack (S n) (hd :: tl1) (hd :: tl2)
@@ -501,7 +501,7 @@ Lemma match_callstack_match_globalenvs:
   Genv.match_stbls f se tse.
 Proof.
   induction 1; eauto.
-  eapply match_stbls_acc in GE; cbn; eauto. apply GE.
+  eapply inj_stbls_subrel' in GE; cbn; eauto. apply GE.
 Qed.
 
 (** Invariance properties for [match_callstack]. *)
@@ -2530,7 +2530,10 @@ Proof.
   eapply match_callstate with (f := (mi inj w)) (cs := @nil frame) (cenv := PTree.empty Z); auto.
   - inv Hm. simpl. apply Mem.push_stage_right_inject. auto.
   - inv Hm. simpl. auto.
-  - simpl. constructor. constructor. simpl. inv Hm. inv ASTK. auto.
+  - simpl. constructor. inv Hm.
+    replace (Mem.support m1) with (injw_sup_l w). 2: rewrite <- H1; auto.
+    replace (Mem.support m2) with (injw_sup_r w). 2: rewrite <- H1; auto.
+    constructor. inv ASTK. auto.
   - apply mcs_nil. inv Hm. constructor; simpl; eauto.
     red. congruence. reflexivity.
     red. erewrite <- Mem.support_push_stage. 2:eauto. intros. rewrite <- Mem.support_push_stage_1; eauto.
@@ -2555,6 +2558,9 @@ Proof.
     eapply Mem.pop_stage_right_inject; eauto.
   }
   inv H. constructor; auto. red. intros. rewrite <- Mem.support_pop_stage_1; eauto.
+  inv IHsize. auto.
+  inv IHsize.
+  apply Mem.astack_pop_stage in POP as [hd POP]. rewrite POP in H4. inv H4. auto.
 Qed.
 
 Lemma transl_external_states:

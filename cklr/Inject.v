@@ -75,8 +75,34 @@ Variant inj_incr: relation inj_world :=
     (DISJOINT: inject_incr_disjoint f f' s1 s2)
     (GLOB: incr_without_glob f f')
     (INCL1: Mem.sup_include s1 s1')
-    (INCL2: Mem.sup_include s2 s2'),
+    (INCL2: Mem.sup_include s2 s2')
+    (ASTK1: Mem.astack s1 = Mem.astack s1')
+    (ASTK2: Mem.astack s2 = Mem.astack s2'),
     inj_incr (injw f s1 s2) (injw f' s1' s2').
+
+Inductive inj_incr_without_astack: relation inj_world :=
+  inj_incr_without_astack_intro: forall f f' s1 s2 s1' s2'
+    (INCR: inject_incr f f')
+    (DISJOINT: inject_incr_disjoint f f' s1 s2)
+    (GLOB: incr_without_glob f f')
+    (INCL1: Mem.sup_include s1 s1')
+    (INCL2: Mem.sup_include s2 s2'),
+    inj_incr_without_astack (injw f s1 s2) (injw f' s1' s2').
+
+Inductive inj_local_match_astack: nat -> stackadt -> stackadt -> Prop :=
+  | inj_local_match_astack_zero: forall a,
+      inj_local_match_astack 0 a a
+  | inj_local_match_astack_succ: forall n a1 hd2 tl2,
+      inj_local_match_astack n a1 tl2 ->
+      inj_local_match_astack (S n) a1 (hd2 :: tl2)
+.
+
+Inductive inj_incr_local: nat -> relation inj_world :=
+  inj_incr_local_intro: forall k f f' s1 s2 s1' s2'
+    (ACC: inj_incr_without_astack (injw f s1 s2) (injw f' s1' s2'))
+    (ASTK1: inj_local_match_astack k (Mem.astack s1) (Mem.astack s1'))
+    (ASTK2: inj_local_match_astack k (Mem.astack s2) (Mem.astack s2')),
+    inj_incr_local k (injw f s1 s2) (injw f' s1' s2').
 
 Record inj_stbls (w: inj_world) (se1 se2: Genv.symtbl): Prop :=
   {
@@ -92,6 +118,18 @@ Variant inj_mem: klr inj_world mem mem :=
     Mem.inject f m1 m2 ->
     inj_mem (injw f (Mem.support m1) (Mem.support m2)) m1 m2.
 
+Remark inj_incr_local_remove_astack:
+  forall k w1 w2,
+    inj_incr_local k w1 w2 ->
+    inj_incr_without_astack w1 w2.
+Proof. intros. inv H. auto. Qed.
+
+Remark inj_incr_remove_astack:
+  forall w1 w2,
+    inj_incr w1 w2 ->
+    inj_incr_without_astack w1 w2.
+Proof. intros. inv H. constructor; auto. Qed.
+
 (** ** Properties *)
 
 (*
@@ -103,6 +141,23 @@ Proof.
   repeat rstep. eauto using inj_incr_intro.
 Qed.
 *)
+
+Global Instance inj_incr_without_astack_preo:
+  PreOrder inj_incr_without_astack.
+Proof.
+  split.
+  - intros [f s1 s2].
+    constructor; auto using inject_incr_refl, Pos.le_refl.
+    congruence.
+    reflexivity.
+  - intros w w' w'' H H'. destruct H. inv H'.
+    constructor; eauto using inject_incr_trans, Pos.le_trans.
+    intros b1 b2 delta Hb Hb''.
+    destruct (f' b1) as [[xb2 xdelta] | ] eqn:Hb'.
+    + rewrite (INCR0 _ _ _ Hb') in Hb''. inv Hb''. eauto.
+    + edestruct DISJOINT0; eauto. split; eauto.
+    + eapply incr_without_glob_trans; eauto.
+Qed.
 
 Global Instance inj_incr_preo:
   PreOrder inj_incr.
@@ -119,6 +174,31 @@ Proof.
     + rewrite (INCR0 _ _ _ Hb') in Hb''. inv Hb''. eauto.
     + edestruct DISJOINT0; eauto. split; eauto.
     + eapply incr_without_glob_trans; eauto.
+    + congruence.
+    + congruence.
+Qed.
+
+Lemma inj_local_inj:
+  forall k w1 w2 w3,
+    inj_incr_local k w1 w2 ->
+    inj_incr w2 w3 ->
+    inj_incr_local k w1 w3.
+Proof.
+  destruct w1, w3. constructor.
+  apply inj_incr_local_remove_astack in H.
+  apply inj_incr_remove_astack in H0.
+  etransitivity; eauto.
+  all: inv H; inv H0; congruence.
+Qed.
+
+Global Instance inj_stbls_subrel':
+  Monotonic inj_stbls (inj_incr_without_astack ++> subrel).
+Proof.
+  intros w w' Hw se1 se2 Hse.
+  destruct Hse; inv Hw. cbn in *.
+  constructor; cbn; try extlia.
+  eapply Genv.match_stbls_incr; eauto.
+  intros. edestruct DISJOINT; eauto. split; eauto. eauto. eauto.
 Qed.
 
 Global Instance inj_stbls_subrel:
@@ -207,6 +287,8 @@ Proof.
     + specialize (Hf'2 _ n). congruence.
     + erewrite (Mem.support_alloc m1 _ _ m1'); eauto.
     + erewrite (Mem.support_alloc m2 _ _ m2'); eauto.
+    + erewrite (Mem.support_alloc m1 _ _ m1'); eauto.
+    + erewrite (Mem.support_alloc m2 _ _ m2'); eauto.
   - econstructor; eauto.
     red. intros. rewrite Hf'2 in H. auto.
     apply Mem.alloc_result in Hm1'. subst.
@@ -231,6 +313,7 @@ Next Obligation. (* Mem.free *)
   econstructor. econstructor. split. econstructor. eauto. congruence.
   reflexivity.
   1,2:red; intros; exact H.
+  auto. auto.
   erewrite <- Mem.support_free; eauto.
   erewrite <- (Mem.support_free _ _ _ _ _ Hm2'); eauto.
   constructor; auto.
@@ -255,6 +338,7 @@ Next Obligation. (* Mem.store *)
   econstructor. econstructor. split. econstructor. eauto. congruence.
   reflexivity.
   1,2:red; intros; exact H.
+  auto. auto.
   erewrite <- Mem.support_store; eauto.
   erewrite <- (Mem.support_store _ _ _ _ _ _ Hm2'); eauto.
   constructor; auto.
@@ -288,6 +372,9 @@ Next Obligation. (* Mem.storebytes *)
     reflexivity.
     erewrite <- (Mem.support_storebytes m1); eauto.
     erewrite <- (Mem.support_storebytes m2); eauto.
+    erewrite <- (Mem.support_storebytes m1); eauto.
+    erewrite <- (Mem.support_storebytes m2); eauto.
+    auto. auto.
     constructor; auto.
     erewrite Mem.support_storebytes; eauto.
     erewrite (Mem.support_storebytes _ _ _ _ _ Hm2'); eauto.
@@ -309,6 +396,7 @@ Next Obligation. (* Mem.storebytes *)
   econstructor. econstructor. split. econstructor. eauto. congruence.
   reflexivity.
   1,2:red; intros; exact H.
+  auto. auto.
   erewrite <- Mem.support_storebytes; eauto.
   erewrite <- (Mem.support_storebytes _ _ _ _ _ Hm2'); eauto.
   constructor; auto.
@@ -376,6 +464,63 @@ Next Obligation. (* sup include *)
 Qed.
 
 (** * Useful theorems *)
+
+Lemma inj_incr_pop_stage:
+  forall m m' tm tm' j,
+    Mem.pop_stage m = Some m' ->
+    Mem.pop_stage tm = Some tm' ->
+    inj_incr_without_astack (injw j (Mem.support m) (Mem.support tm)) (injw j (Mem.support m') (Mem.support tm')).
+Proof.
+  constructor.
+  - apply inject_incr_refl.
+  - red. intros. congruence.
+  - reflexivity.
+  - red. intros. erewrite <- Mem.support_pop_stage_1; eauto.
+  - red. intros. erewrite <- Mem.support_pop_stage_1; eauto.
+Qed.
+
+Lemma inj_incr_push_stage:
+  forall m tm j,
+    inj_incr_without_astack (injw j (Mem.support m) (Mem.support tm)) (injw j (Mem.support (Mem.push_stage m)) (Mem.support (Mem.push_stage tm))).
+Proof.
+  constructor.
+  - apply inject_incr_refl.
+  - red. intros. congruence.
+  - reflexivity.
+  - red. intros. erewrite <- Mem.support_push_stage_1; eauto.
+  - red. intros. erewrite <- Mem.support_push_stage_1; eauto.
+Qed.
+
+Lemma inj_incr_record_frame:
+  forall m f m' tm tf tm' j,
+    Mem.record_frame m f = Some m' ->
+    Mem.record_frame tm tf = Some tm' ->
+    inj_incr_without_astack (injw j (Mem.support m) (Mem.support tm)) (injw j (Mem.support m') (Mem.support tm')).
+Proof.
+  constructor.
+  - apply inject_incr_refl.
+  - red. intros. congruence.
+  - reflexivity.
+  - red. intros. erewrite <- Mem.support_record_frame_1; eauto.
+  - red. intros. erewrite <- Mem.support_record_frame_1; eauto.
+Qed.
+
+Remark inj_incr_local_equiv: forall w w',
+    inj_incr w w' <-> inj_incr_local 0 w w'.
+Proof.
+  split; intros H; inv H.
+  - constructor. constructor; auto.
+    rewrite ASTK1. constructor.
+    rewrite ASTK2. constructor.
+  - inv ACC. inv ASTK1. inv ASTK2. constructor; auto.
+Qed.
+
+Instance inj_incr_local_preo: PreOrder (inj_incr_local 0).
+Proof.
+  split; red; setoid_rewrite <- inj_incr_local_equiv.
+  - reflexivity.
+  - etransitivity; eauto.
+Qed.
 
 (** ** Composition lemmas *)
 
