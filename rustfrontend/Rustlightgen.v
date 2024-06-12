@@ -343,8 +343,8 @@ Fixpoint replace_binder_in_pexpr (id: ident) (p: place) (e: pexpr) : pexpr :=
       Eplace (replace_binder_in_place id p p') ty
   | Eref org mut p' ty =>
       Eref org mut (replace_binder_in_place id p p') ty
-  | Ecktag p' fid ty =>
-      Ecktag (replace_binder_in_place id p p') fid ty
+  | Ecktag p' fid =>
+      Ecktag (replace_binder_in_place id p p') fid
   | Eunop unop pe ty =>
       Eunop unop (replace_binder_in_pexpr id p pe) ty
   | Ebinop bop e1 e2 ty =>
@@ -570,7 +570,7 @@ with transl_arm_statements (sl: arm_statements) (p: place) (co: composite) : mon
               (* replace generic origins in ty with dummy origins *)
               let dummy_org := dummy_origin Datatypes.tt in
               let ty := replace_type_with_dummy_origin dummy_org ty in
-              let cond := Ecktag p fid type_bool in
+              let cond := Ecktag p fid in
               let p' := Pdowncast p fid ty in
               (* move p' or copy p'. TODO: support [&mut] p' *)
               let then_stmt := replace_binder_in_stmt temp_id p' arm' in

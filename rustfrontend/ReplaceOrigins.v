@@ -174,9 +174,9 @@ Section TYPE_ENV.
     | Eplace p _ =>
         do p' <- replace_origin_place p;
         OK (Eplace p' (typeof_place p'))
-    | Ecktag p id ty =>
+    | Ecktag p id =>
         do p' <- replace_origin_place p;
-        OK (Ecktag p' id ty)
+        OK (Ecktag p' id)
     | Eunop uop pe ty =>
         do pe' <- replace_origin_pure_expr pe;
         OK (Eunop uop pe' ty)

@@ -13,6 +13,8 @@ Require Import Ctypes Rusttypes.
 Require Import Cop.
 Require Import LanguageInterface.
 
+Local Open Scope error_monad_scope.
+
 (** * High-level Rust-like language  *)
 
 
@@ -51,7 +53,7 @@ Inductive pexpr : Type :=
 | Econst_single: float32 -> type -> pexpr (**r single float literal *)
 | Econst_long: int64 -> type -> pexpr    (**r long integer literal *)
 | Eplace: place -> type -> pexpr (**r use of a variable, the only lvalue expression *)
-| Ecktag: place -> ident -> type -> pexpr           (**r check the tag of variant, e.g. [Ecktag p.(fid)]. We cannot check a downcast *)
+| Ecktag: place -> ident -> pexpr           (**r check the tag of variant, e.g. [Ecktag p.(fid)]. We cannot check a downcast *)
 | Eref:  origin -> mutkind -> place -> type -> pexpr     (**r &[mut] p  *)
 | Eunop: unary_operation -> pexpr -> type -> pexpr  (**r unary operation *)
 | Ebinop: binary_operation -> pexpr -> pexpr -> type -> pexpr. (**r binary operation *)
@@ -65,12 +67,12 @@ Inductive expr : Type :=
 Definition typeof_pexpr (pe: pexpr) : type :=
   match pe with
   | Eunit => Tunit
+  | Ecktag _ _ => type_bool
   | Econst_int _ ty
   | Econst_float _ ty
   | Econst_single _ ty
   | Econst_long _ ty                
   | Eplace _ ty
-  | Ecktag _ _ ty
   | Eref _ _ _ ty
   | Eunop _ _ ty
   | Ebinop _ _ _ ty => ty
@@ -501,35 +503,18 @@ Inductive eval_pexpr: pexpr -> val ->  Prop :=
     eval_place p b ofs ->
     deref_loc ty m b ofs v ->
     eval_pexpr (Eplace p ty) v
-| eval_Ecktag: forall (p: place) b ofs ty tag tagz id fid attr co orgs,
+| eval_Ecktag: forall (p: place) b ofs tag tagz id fid attr co orgs,
     eval_place p b ofs ->
     (* load the tag *)
     Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint tag) ->
     typeof_place p = Tvariant orgs id attr ->
     ce ! id = Some co ->
     field_tag fid co.(co_members) = Some tagz ->
-    eval_pexpr (Ecktag p fid ty) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz))
+    eval_pexpr (Ecktag p fid) (Val.of_bool (Z.eqb (Int.unsigned tag) tagz))
 | eval_Eref: forall p b ofs mut ty org,
     eval_place p b ofs ->
     eval_pexpr (Eref org mut p ty) (Vptr b ofs).
 
-(** Try to prove that evaluaiton of expression produces val_casted value *)
-
-
-(* Lemma eval_pexpr_casted: forall pe v, *)
-(*     (* wt_pexpr pe -> *) *)
-(*     eval_pexpr pe v -> *)
-(*     val_casted v (to_ctype (typeof_pexpr pe)). *)
-(* Proof. *)
-(*   induction pe; intros; simpl.  *)
-(*   1-8: admit. *)
-(*   - inv H. eapply IHpe in H3. *)
-    
-    
-(*     destruct op;simpl in H1. *)
-(*     + unfold sem_notbool, option_map in H1. *)
-(*       destruct (bool_val v1 aty m) eqn: BVAL; inv H1. *)
-(*       bool_val *)
       
 (* expression evaluation has two phase: evaluate the value and produce
 the moved-out place *)
@@ -572,14 +557,14 @@ Inductive eval_pexpr_mem_error: pexpr ->  Prop :=
     eval_place p b ofs->
     deref_loc_mem_error ty m b ofs ->
     eval_pexpr_mem_error (Eplace p ty)
-| eval_Ecktag_error1: forall p fid ty,
+| eval_Ecktag_error1: forall p fid,
     eval_place_mem_error p ->
-    eval_pexpr_mem_error (Ecktag p fid ty)
-| eval_Ecktag_error2: forall p b ofs ty fid, 
+    eval_pexpr_mem_error (Ecktag p fid)
+| eval_Ecktag_error2: forall p b ofs fid, 
     eval_place p b ofs ->
     (* tag is not readable *)
     ~ Mem.valid_access m Mint32 b (Ptrofs.unsigned ofs) Readable ->
-    eval_pexpr_mem_error (Ecktag p fid ty)
+    eval_pexpr_mem_error (Ecktag p fid)
 | eval_Eref_error: forall p org mut ty,
     eval_place_mem_error p ->
     eval_pexpr_mem_error (Eref org mut p ty).

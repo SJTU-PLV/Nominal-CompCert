@@ -132,7 +132,7 @@ Fixpoint transfer_pure_expr (pc: node) (live: LoanSet.t) (e: LOrgEnv.t) (pe: pex
             Error (error_msg pc ++ [MSG "mismatch between expression type and place type in Eref"])
       | _ => Error (error_msg pc ++ [MSG "reference expression is not of reference type in Eref"])
       end
-  | Ecktag p id _ =>
+  | Ecktag p id =>
       (* simple type check *)
       match typeof_place p with
       | Tvariant _ _ _ =>

@@ -43,7 +43,7 @@ let precedence' = function
   | Ebinop(Oxor, _, _, _) -> (7, LtoR)
   | Ebinop(Oor, _, _, _) -> (6, LtoR)
   | Eplace(_, _) -> (16,NA)
-  | Ecktag(_, _, _) -> (15, RtoL)
+  | Ecktag(_, _) -> (15, RtoL)
   | Eref(_, _, _, _) -> (15, RtoL)
 
 let precedence = function
@@ -84,7 +84,7 @@ let rec pexpr p (prec, e) =
   | Ebinop(op, a1, a2, _) ->
     fprintf p "%a@ %s %a"
       pexpr (prec1, a1) (name_binop op) pexpr (prec2, a2)
-  | Ecktag(v, fid, _) ->
+  | Ecktag(v, fid) ->
     fprintf p "%s(%a, %s)" "cktag" print_place v (extern_atom fid)
   | Eref(org, mut, v, _) ->
     fprintf p "&%s %s%a" (extern_atom org) (string_of_mut mut) print_place v

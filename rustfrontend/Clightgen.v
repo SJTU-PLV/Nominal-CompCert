@@ -387,7 +387,7 @@ Fixpoint pexpr_to_cexpr (e: pexpr) : Errors.res Clight.expr :=
   | Eref _ _ p ty =>
       do e <- place_to_cexpr p;
       OK (Clight.Eaddrof e (to_ctype ty)) 
-  | Ecktag p fid ty =>
+  | Ecktag p fid =>
       (** TODO: how to get the tagz from ctypes composite env? or still use Rust composite env? *)
       match typeof_place p with
       | Tvariant _ id _ =>
